@@ -162,17 +162,17 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
   });
 
   test("GPU でエンコードするときはデバイスを先に開け、CPU で作った nv12 を GPU へ上げて渡す", () => {
-    // 画質は ICQ。値はコーデックごと (H.264 は 27、AV1 は 28)
-    for (const [codec, icq] of [
-      ["av1", "28"],
-      ["h264", "27"],
+    // 画質は H.264 が CQP の qp 25、AV1 が ICQ 26
+    for (const [codec, flag, value] of [
+      ["av1", "-global_quality:v", "26"],
+      ["h264", "-qp", "25"],
     ] as const) {
       const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, codec, {
         hardware: { device: "/dev/dri/renderD128", kind: "vaapi" },
       });
       expect(args.indexOf("-init_hw_device")).toBeLessThan(args.indexOf("-i"));
       expect(args).toContain(`${codec}_vaapi`);
-      expect(argValue(args, "-global_quality:v")).toBe(icq);
+      expect(argValue(args, flag)).toBe(value);
       expect(args).not.toContain("libx264");
       expect(args).not.toContain("libsvtav1");
     }
@@ -187,7 +187,7 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
       "bwdif=mode=send_frame,format=nv12,hwupload",
     );
     expect(va).toContain("h264_vaapi");
-    expect(argValue(va, "-rc_mode")).toBe("ICQ");
+    expect(argValue(va, "-rc_mode")).toBe("CQP");
     // 渡さなければソフトウェア。GPU のデバイスも開けない
     expect(buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264")).not.toContain(
       "-init_hw_device",

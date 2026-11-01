@@ -63,8 +63,8 @@ export interface HwDevice {
   /** NVIDIA の GPU の番号 (ffmpeg の `-gpu`。`findNvidia`)。NVIDIA のデバイスにだけある */
   gpu?: number;
   /**
-   * VA-API のうち、**ICQ が通らず CQP でだけエンコードできた**コーデック。
-   * i965 (Gemini Lake などの古いドライバ) は ICQ を持たない (`hwArgs`)
+   * VA-API の AV1 が **ICQ で通らず CQP でだけエンコードできた**とき `["av1"]`。
+   * i965・Mesa は ICQ を持たない (`hwArgs`)。H.264・H.265 はいつも CQP なので入らない
    */
   cqp: HwCodec[];
   /**
@@ -87,7 +87,7 @@ export interface HwEncode {
 export interface HwWay {
   device: string;
   kind: HwKind;
-  /** VA-API を ICQ ではなく CQP で指定する (`HwDevice.cqp`)。試しのエンコードの結果から `hwChain` が付ける */
+  /** VA-API の AV1 を ICQ ではなく CQP で指定する (`HwDevice.cqp`)。試しのエンコードの結果から `hwChain` が付ける */
   cqp?: true;
   /** NVIDIA の GPU の番号 (`HwDevice.gpu`)。NVENC のときだけ */
   gpu?: number;
@@ -130,7 +130,7 @@ export function hwChain(
 }
 
 /**
- * そのデバイスでの方式。ICQ が通らなかった VA-API には CQP の印を付ける (`HwDevice.cqp`)。
+ * そのデバイスでの方式。AV1 の ICQ が通らなかった VA-API には CQP の印を付ける (`HwDevice.cqp`)。
  * NVENC には GPU の番号を添える
  */
 function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
@@ -149,37 +149,35 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  *   揃える。VA-API は自分では上げてくれないので `hwupload` まで
  * - `encoder` … `-c:v` に続くもの
  *
- * **VA-API の画質は ICQ (`-global_quality`)** — ビットレートを決めずに
- * 「この画質」を指定する、x264 の crf に相当するもの。1〜51 の物差し。
- * **値はコーデックごとに、ソフトウェアのエンコードと同じ画質になる所** (`VAAPI_ICQ`)。
- * Arc A310 (iHD) で放送の 1440x1080 を 60 秒ずつ 2 か所エンコードし、Y の PSNR が
- * H.264 と H.265 は x264 crf 23 と、AV1 は svt-av1 crf 35 と揃う値を読んだ (H.265 はソフトウェアのエンコーダが
- * 無いので H.264 と同じ画質に合わせる):
+ * **VA-API の画質は、H.264・H.265 は CQP (`-qp`)、AV1 は ICQ (`-global_quality`)。** どちらも
+ * ビットレートを決めずに画質で指定する。CQP は量子化の幅を固定し (0〜51)、ICQ は x264 の crf に当たる
+ * 「この画質で」の指定 (1〜51)。**値はコーデックごとに、ソフトウェアのエンコードと同じ画質になる所**
+ * (`VAAPI_QP`・`AV1_ICQ`)。Arc A310 (iHD) で放送の 1440x1080 を 60 秒ずつ 2 か所エンコードし、
+ * ソフトウェアの設定を決めたのと同じ XPSNR が、svt-av1 crf 35 と x264 crf 23 の高いほうに 2 か所とも
+ * −0.26 dB 以内で揃う値を選んだ (ソフトウェアどうしは −0.36 dB まで離れていた。H.265 はソフトウェアの
+ * エンコーダが無いので同じ目標に合わせる)。場面の切り替わりの後 4 コマの PSNR の最小も、3 つとも svt-av1 より上:
  *
- * - H.264 は 27.2 と 27.5 → **27**。同じ画質で x264 より 1〜2 割小さい
- * - H.265 は 27.0 と 28.4 → **27** (28 だと 1 か所目で x264 より画質が落ちる)
- * - AV1 は 27.4 と 30 くらい → **28**。場面による揺れが大きいので真ん中寄り。同じ画質でも svt-av1 の 1.3〜1.7 倍の大きさ
+ * - H.264 は **qp 25**。同じ XPSNR で ICQ より 5〜7% 小さい
+ * - H.265 は **qp 25**。同じ XPSNR で ICQ より 9〜17% 小さく、ICQ は 25〜26 で画質が頭打ちになった
+ * - AV1 は **ICQ 26**。AV1 は ICQ のほうがはっきり良い
  *
- * 前は 3 つとも 24 で、どれも目標より 3〜4 段画質を上げていた (1 段で 15% ほど大きくなる)。
+ * ビットレートは 300 秒・600 秒の所で H.264 2347・1472 kbps、H.265 1803・1064、AV1 2182・1262
+ * (前の ICQ では H.264 27 が 1963・1179、H.265 27 が 1977・1108、AV1 28 が 1667・933)。
+ * XPSNR は FFmpeg の vf_xpsnr (輝度) を JS で書き直したものでポッドの中で測り、ffmpeg のフィルタとは突き合わせていない。
  *
  * **`-global_quality` は `:v` を付けて映像にだけ効かせる。** 付けないとどのストリームにも効き、音のエンコーダが
  * 画質での指定として受け取る — libopus は「画質での指定はできない」で開けずに転び、aac は VBR に切り替わる
  * (GPU を挿してエンコードし始めたら、AV1 + Opus の録画とライブが通らなかった)
  *
- * ## ICQ を持たないドライバには CQP で指定する
+ * ## ICQ を持たないドライバの AV1 は CQP で指定する
  *
- * **i965 (Gemini Lake などの VA-API ドライバ) は ICQ を持たない** — 試しのエンコードが落ちて
- * 「エンコードできない」に見えていた (issue #417)。ICQ が落ちたら CQP (量子化の幅を固定)
- * でも試し (`probeOnce`)、通ればそちらでエンコードする (`HwWay.cqp`)。値も ICQ と同じく、
- * A310 の CQP で同じ画質になる所 (`VAAPI_CQP`):
- *
- * - H.264 と H.265 は `-qp 27` (0〜51)。どちらも x264 crf 23 とほぼ同じ画質
- * - **AV1 は `-qp` を受けず、`-global_quality` で量子化の値 (0〜255) を受ける。** `-qp` は黙って無視され、
- *   既定の値で 9〜12 Mbps も出ていた (前の `-qp 120` がそれ。HuC の無い A310 の録画が 2.5GB になった)。
- *   **95** で ICQ 28 と同じ画質
- *
- * i965・Mesa (AMD) の実機では測っていない。CQP は場面に応じて量を変えないので、
- * 動きの多い場面で ICQ より大きく、静かな場面で小さくなる
+ * **i965 (Gemini Lake などの古い Intel)・Mesa (AMD) は ICQ を持たない** — ICQ で試すと落ちて
+ * 「エンコードできない」に見えていた (issue #417)。AV1 は ICQ が落ちたら CQP でも試し (`probeOnce`)、
+ * 通ればそちらでエンコードする (`HwWay.cqp`)。H.264・H.265 は初めから CQP なので落ちない。
+ * **av1_vaapi は `-qp` を受けず、`-global_quality` で量子化の値 (0〜255) を受ける。** `-qp` は黙って無視され、
+ * 既定の値で 9〜12 Mbps も出ていた (前の `-qp 120` がそれ。HuC の無い A310 の録画が 2.5GB になった)。
+ * 値は **75** (`AV1_CQP`)。ICQ 26 と同じ画質になると見込んだ値で、**測っていない**。
+ * CQP は場面に応じて量を変えないので、動きの多い場面で ICQ より大きく、静かな場面で小さくなる
  *
  * ## Rockchip MPP はビットレートで指定する
  *
@@ -234,21 +232,32 @@ export function hwArgs(
   };
 }
 
-/** VA-API の ICQ の値。ソフトウェアのエンコードと同じ画質になる所 (`hwArgs` の説明) */
-const VAAPI_ICQ: Record<HwCodec, number> = { h264: 27, hevc: 27, av1: 28 };
+/**
+ * VA-API の H.264・H.265 の CQP の qp (0〜51)。XPSNR が svt-av1 crf 35・x264 crf 23 の高いほうと揃う所。
+ * 同じ画質で ICQ より H.264 は 5〜7%、H.265 は 9〜17% 小さい (`hwArgs` の説明)
+ */
+const VAAPI_QP: Record<Exclude<HwCodec, "av1">, number> = {
+  h264: 25,
+  hevc: 25,
+};
 
-/** VA-API の CQP の値。H.264・H.265 は qp (0〜51)、AV1 は量子化の値 (0〜255) で、ICQ と同じ画質 */
-const VAAPI_CQP: Record<HwCodec, number> = { h264: 27, hevc: 27, av1: 95 };
+/** VA-API の AV1 の ICQ の値。AV1 は CQP より ICQ のほうがはっきり良い (`hwArgs` の説明) */
+const AV1_ICQ = 26;
 
-/** VA-API の画質の指定方法。ICQ を持たないドライバには CQP (`hwArgs` の説明) */
+/**
+ * ICQ を持たないドライバ (i965・Mesa) で AV1 に渡す CQP の量子化の値 (0〜255)。
+ * ICQ 26 と同じ画質になると見込んだ値で、測っていない (`hwArgs` の説明)
+ */
+const AV1_CQP = 75;
+
+/** VA-API の画質の指定方法。H.264・H.265 は CQP、AV1 は ICQ (持たないドライバには CQP) */
 function vaapiQuality(way: HwWay, codec: HwCodec): string[] {
-  if (way.cqp !== true)
-    return ["-rc_mode", "ICQ", "-global_quality:v", String(VAAPI_ICQ[codec])];
+  if (codec !== "av1")
+    return ["-rc_mode", "CQP", "-qp", String(VAAPI_QP[codec])];
   // AV1 は `-qp` を受けない (黙って無視される)。量子化の値は `-global_quality` で渡す
-  const qp = String(VAAPI_CQP[codec]);
-  return codec === "av1"
-    ? ["-rc_mode", "CQP", "-global_quality:v", qp]
-    : ["-rc_mode", "CQP", "-qp", qp];
+  return way.cqp === true
+    ? ["-rc_mode", "CQP", "-global_quality:v", String(AV1_CQP)]
+    : ["-rc_mode", "ICQ", "-global_quality:v", String(AV1_ICQ)];
 }
 
 /**
@@ -422,7 +431,7 @@ export function liveHw(
  *
  * - `-bf 0` … B フレームを作らない。作ると必ず1枚以上待つ (x264 の `zerolatency` と同じ狙い)
  * - `-async_depth 1` … GPU に先積みしない。既定 (2) のぶんだけ映像が遅れて出る
- * - 画質は録画と同じ ICQ (CQP なら録画と同じ値。`VAAPI_ICQ`・`VAAPI_CQP`)。x264 ultrafast の既定 (crf 23) と
+ * - 画質は録画と同じ値 (`VAAPI_QP`・`AV1_ICQ`・`AV1_CQP`)。x264 ultrafast の既定 (crf 23) と
  *   見比べたのは録画の preset だけで、ライブの ultrafast とは見比べていない
  *
  * `-g` はライブの側 (`live.ts` の `videoArgs`) が足す。
@@ -631,12 +640,14 @@ async function probeOnce(): Promise<HwEncode> {
   for (const path of findDevices()) {
     const device = emptyDevice(path, labelOf(path));
     for (const codec of HW_CODECS) {
+      // H.264・H.265 は初めから CQP で、AV1 は ICQ で試す (`hwArgs` の説明)
       if (await tryWay({ device: path, kind: "vaapi" }, codec)) {
         device.vaapi.push(codec);
       } else if (
-        await tryWay({ device: path, kind: "vaapi", cqp: true }, codec)
+        codec === "av1" &&
+        (await tryWay({ device: path, kind: "vaapi", cqp: true }, codec))
       ) {
-        // ICQ を持たないドライバ (i965)。CQP でエンコードする (`hwArgs` の説明)
+        // ICQ を持たないドライバ (i965・Mesa)。AV1 を CQP でエンコードする
         device.vaapi.push(codec);
         device.cqp.push(codec);
       }
@@ -758,8 +769,8 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
 }
 
 /**
- * デバイスごとの一言。「VA-API: AV1 / H.264 (CQP)」か「GPU でエンコードできません」。
- * ICQ を持たないドライバで CQP に落としたものには (CQP) を添え、デコードから GPU で
+ * デバイスごとの一言。「VA-API: AV1 (CQP) / H.264」か「GPU でエンコードできません」。
+ * ICQ を持たないドライバで AV1 を CQP に落としたときだけ (CQP) を添え (H.264・H.265 はいつも CQP)、デコードから GPU で
  * 通せるもの (ライブで使う) は最後に分けて書く
  */
 export function describeDevice(device: HwDevice): string {
