@@ -144,6 +144,22 @@ export class CommentStore {
     return out.reverse();
   }
 
+  /** `from < at ≤ to` のうち、`keep` を満たす古いほうから `limit` 件 (`latest` の逆向き。一覧の「この先」) */
+  earliest(
+    from: number,
+    to: number,
+    limit: number,
+    keep: (comment: Comment) => boolean = () => true,
+  ): Comment[] {
+    const out: Comment[] = [];
+    const hi = this.after(to);
+    for (let i = this.after(from); i < hi && out.length < limit; i++) {
+      const comment = this.list[i]!;
+      if (keep(comment)) out.push(comment);
+    }
+    return out;
+  }
+
   /** `[from, to)` のうち、まだ埋めていない区間 */
   missing(from: number, to: number): Span[] {
     const gaps: Span[] = [];

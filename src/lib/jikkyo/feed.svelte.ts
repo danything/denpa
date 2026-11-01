@@ -195,6 +195,15 @@ export class JikkyoFeed {
     );
   }
 
+  /**
+   * コメントの一覧の「この先」(録画だけ)。いまの放送時刻 `w` より後、`until` までに書かれたもののうち、古いほうから `limit` 件。
+   * `recent` と同じく何も消費せず、NG ワードを含むものは外す
+   */
+  ahead(w: number, until: number, limit: number): Comment[] {
+    if (!this.active || until <= w) return [];
+    return this.cursor.store.earliest(w, until, limit, (c) => !this.isNg(c));
+  }
+
   private isNg(comment: Comment): boolean {
     let hit = this.ngSeen.get(comment);
     if (hit === undefined) {

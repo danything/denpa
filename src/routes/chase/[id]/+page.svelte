@@ -191,6 +191,11 @@
     const target = data.jikkyo;
     return target === null ? null : target.head + player.chasePosition * 1000;
   }
+  /** 録れているところの端の放送時刻。一覧の「この先」はここまで (まだ無いところは並べない) */
+  function recordedAir(): number | null {
+    const target = data.jikkyo;
+    return target === null ? null : target.head + recorded * 1000;
+  }
   /** 放送時刻 `at` が追っかけのどこか (`airTime` の逆)。録画の頭より前は「開始前」で、飛べない */
   function placeAir(at: number): number | "before" | "cut" {
     const target = data.jikkyo;
@@ -586,6 +591,7 @@
             air={airTime}
             place={placeAir}
             seek={seekTo}
+            edge={recordedAir}
           />
         {/if}
       {/snippet}
