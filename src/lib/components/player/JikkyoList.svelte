@@ -249,7 +249,6 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
   <li
     class="row"
-    class:mine={comment.mine}
     class:seekable={to !== null}
     onclick={to === null ? undefined : () => go(to)}
     data-testid={future ? "jikkyo-list-ahead-row" : "jikkyo-list-row"}
@@ -277,7 +276,7 @@
               : clock(where)}</span
         >
       {/if}
-      <span class="text"
+      <span class="text" class:mine-dot={comment.mine}
         >{comment.text}{#if comment.mine}<span class="visually-hidden"
             >(自分の書き込み)</span
           >{/if}</span
@@ -392,11 +391,6 @@
   .text {
     min-width: 0;
     overflow-wrap: anywhere;
-  }
-  /* この端末から書き込んだもの。字の下に主の色の線 (流れるほうと同じく字の色は替えない) */
-  .mine .text {
-    text-decoration: underline 2px var(--dp-primary-text);
-    text-underline-offset: 3px;
   }
   /* 巻いて離れている間だけ出すので、重なるのは読み返している古い行か、この先の行 (「いま」の行は見えている所の外にある) */
   .latest {
