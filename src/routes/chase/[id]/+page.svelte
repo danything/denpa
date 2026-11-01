@@ -368,6 +368,7 @@
               show={jikkyoActive && data.jikkyo !== null}
               paused={player.paused}
               rate={player.rate}
+              ahead
             />
           {/if}
         {/snippet}

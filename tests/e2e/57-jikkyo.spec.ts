@@ -9,10 +9,12 @@ import { BS11, FUJI, MX } from "../fake/services";
 import {
   expect,
   fakeFrame,
+  flipSetting,
   goto,
   openSettings,
   overlayTroubles,
   pickCodec,
+  pretendGpu,
   recordOne,
   takeClip,
   test,
@@ -101,6 +103,8 @@ async function fakeNx(
     /** 本文を替えて流す (それぞれを同じ時刻に) */
     texts?: string[];
     mail?: string;
+    /** `texts` のそれぞれの `mail` (無いものは `mail`) */
+    mails?: (string | undefined)[];
     quiet?: boolean;
     reply?: () => Reply;
   } = {},
@@ -193,9 +197,9 @@ async function fakeNx(
         timer ??= setInterval(() => {
           for (const offset of [-5_000, 0, 5_000, 10_000, 20_000]) {
             const at = Date.now() + offset;
-            for (const content of opts.texts ?? [
-              opts.text ?? "テストのコメント",
-            ])
+            const texts = opts.texts ?? [opts.text ?? "テストのコメント"];
+            texts.forEach((content, i) => {
+              const mail = opts.mails?.[i] ?? opts.mail;
               ws.send(
                 JSON.stringify({
                   chat: {
@@ -203,11 +207,12 @@ async function fakeNx(
                     date: Math.floor(at / 1000),
                     date_usec: (at % 1000) * 1000,
                     user_id: "fake",
-                    ...(opts.mail === undefined ? {} : { mail: opts.mail }),
+                    ...(mail === undefined ? {} : { mail }),
                     content,
                   },
                 }),
               );
+            });
           }
         }, 500);
       });
@@ -337,6 +342,175 @@ test.describe("ライブの実況の色・位置・大きさ", () => {
       expect(Math.min(...tops) - frame.y).toBeLessThan(frame.height / 4);
       await page.waitForTimeout(1_000);
       await expect(page.getByTestId("jikkyo-comment").first()).toBeVisible();
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+});
+
+/** 枠 (`data-frame`) の位置と大きさ */
+async function frameBox(page: Page): Promise<Box> {
+  return page
+    .locator('[data-testid="jikkyo-layer"] [data-frame]')
+    .evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    });
+}
+
+interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** いちばん新しい流れるコメント (枠の中の1つ) の、流れ始めの位置 (`--from`。枠の左の端から) */
+async function newestFrom(page: Page): Promise<number> {
+  return page.getByTestId("jikkyo-comment").evaluateAll((els) =>
+    parseFloat(
+      els
+        .filter((el) => !el.classList.contains("still"))
+        .at(-1)
+        ?.style.getPropertyValue("--from") ?? "NaN",
+    ),
+  );
+}
+
+test.describe("アンビエントの光の上を流れる実況", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  test("光が枠の外に見えている間は、流れるものは光の範囲の端から端まで流れる。止めるものは枠の中。外が無ければ今までどおり", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page, {
+        texts: ["流れる字", "上の字"],
+        mails: [undefined, "ue"],
+      });
+      await deviceOn(page);
+      await pretendGpu(page);
+      // 枠を高さで抑える広い窓 (二段組で、枠の左右に光の範囲が余る)
+      await page.setViewportSize({ width: 2400, height: 1000 });
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      await wakeControls(page, "live-frame");
+      await pickCodec(page, "live", "mpeg2");
+      const outside = page.getByTestId("live-frame-outside");
+      await expect(outside).toBeAttached({ timeout: 30_000 });
+
+      const frame = await frameBox(page);
+      const room = await outside.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      });
+      // 外の所は窓の端から端まで (右の列の上も通る)。見出しには掛からない
+      const aside = (await page
+        .locator("[data-player-side] > aside")
+        .boundingBox())!;
+      const width = await page.evaluate(
+        () => document.documentElement.clientWidth,
+      );
+      expect(room.left).toBeCloseTo(0, 0);
+      expect(room.right).toBeCloseTo(width, 0);
+      expect(room.right).toBeGreaterThan(aside.x + 100);
+      expect(frame.left - room.left).toBeGreaterThan(100);
+      const header = (await page.locator(".navbar").boundingBox())!;
+      expect(room.top).toBeGreaterThanOrEqual(header.y + header.height - 0.5);
+
+      // 流れるものは外の右の端から流し始める (行は枠のまま)
+      await expect
+        .poll(() => newestFrom(page), { timeout: 20_000 })
+        .toBeCloseTo(room.right - frame.left, -1);
+      // 外の写しが、枠の外 (光の上) に見えている
+      await expect
+        .poll(
+          () =>
+            page.getByTestId("jikkyo-outside-comment").evaluateAll(
+              (els, f) =>
+                els.some((el) => {
+                  const r = el.getBoundingClientRect();
+                  return r.left > f.right + 10 || r.right < f.left - 10;
+                }),
+              frame,
+            ),
+          { timeout: 20_000 },
+        )
+        .toBe(true);
+      // 写しは枠の行と同じ高さ
+      const rows = await page.evaluate(() => {
+        const tops = (testid: string) =>
+          [
+            ...document.querySelectorAll<HTMLElement>(
+              `[data-testid="${testid}"]`,
+            ),
+          ]
+            .filter((el) => !el.classList.contains("still"))
+            .map((el) => Math.round(el.getBoundingClientRect().top));
+        return {
+          inside: tops("jikkyo-comment"),
+          outside: tops("jikkyo-outside-comment"),
+        };
+      });
+      for (const top of rows.outside) expect(rows.inside).toContain(top);
+
+      // 右の列の上を通っている間も、押すのは右の列の中身 (外のコメントは押すものを受けない)
+      await expect
+        .poll(
+          () =>
+            page.getByTestId("jikkyo-outside-comment").evaluateAll(
+              (els, side) =>
+                els.some((el) => {
+                  const r = el.getBoundingClientRect();
+                  const x = Math.max(r.left, side.x + 8);
+                  if (x > r.right - 4 || x > window.innerWidth - 4)
+                    return false;
+                  const hit = document.elementFromPoint(
+                    x,
+                    r.top + r.height / 2,
+                  );
+                  return hit?.closest("[data-player-side]") != null;
+                }),
+              aside,
+            ),
+          { timeout: 20_000 },
+        )
+        .toBe(true);
+
+      // 止めるもの (`ue`) は枠の中だけ。写しは作らない
+      const still = page.locator('[data-testid="jikkyo-comment"].still');
+      await expect(still.first()).toHaveText("上の字", { timeout: 20_000 });
+      const box = await still.first().evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right };
+      });
+      expect(box.left).toBeGreaterThanOrEqual(frame.left - 0.5);
+      expect(box.right).toBeLessThanOrEqual(frame.right + 0.5);
+      await expect(
+        page
+          .getByTestId("jikkyo-outside-comment")
+          .filter({ hasText: "上の字" }),
+      ).toHaveCount(0);
+
+      // 縦に積むと外は無く、枠の右の端から流す (今までどおり)
+      await page.setViewportSize({ width: 900, height: 900 });
+      const narrow = await frameBox(page);
+      await expect
+        .poll(() => newestFrom(page), { timeout: 20_000 })
+        .toBeCloseTo(narrow.right - narrow.left, -1);
+
+      // 広い窓でも、光を消せば枠の中だけ
+      await page.setViewportSize({ width: 2400, height: 1000 });
+      await wakeControls(page, "live-frame");
+      await flipSetting(page, "live", "ambient");
+      await expect(outside).toHaveCount(0);
+      const wide = await frameBox(page);
+      await expect
+        .poll(() => newestFrom(page), { timeout: 20_000 })
+        .toBeCloseTo(wide.right - wide.left, -1);
+      await expect(page.getByTestId("jikkyo-outside-comment")).toHaveCount(0);
     } finally {
       await setJikkyo(page, false);
     }

@@ -1941,6 +1941,7 @@
                 show={jikkyoActive && data.jikkyo !== null && !showData}
                 paused={!playing}
                 rate={speed}
+                ahead
               />
             {/if}
           </div>
