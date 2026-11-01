@@ -65,10 +65,12 @@
 </div>
 
 <style>
+  /* 段は字幕と同じ 9 (実況のコメントを上に流さない。操作列のボタンは上。`ControlBar`) */
   .veil {
     pointer-events: none;
     position: absolute;
     inset: 0;
+    z-index: 9;
     display: flex;
     align-items: center;
     justify-content: center;

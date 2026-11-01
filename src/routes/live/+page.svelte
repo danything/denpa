@@ -1254,11 +1254,13 @@
   .back-live:hover:not(:disabled) {
     background: var(--dp-on-video-hover);
   }
+  /* 押すものなので操作列のボタンと同じ段 (実況のコメントより上。`ControlBar`) */
   .unmute {
     --pico-background-color: var(--dp-video-veil);
     position: absolute;
     top: 0.75rem;
     left: 0.75rem;
+    z-index: 10;
   }
   /* 列の幅いっぱいに伸びるので、タブを均等に広げる。左に寄せると右に溝だけが余った */
   .type-tabs {

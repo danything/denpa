@@ -1436,3 +1436,156 @@ test.describe("「実況」タブ", () => {
     }
   });
 });
+
+/*
+ * **流れるコメントは操作列の影より上、ボタンより下** (`ControlBar`)。影とボタンが1つの段だった頃は、右端の列の所で
+ * コメントが影に潜り、暗く欠けて見えた。重なりの順は当たり判定の順と同じなので、確かめる間だけコメントと影に
+ * 当たり判定を持たせ、`elementFromPoint` で上にあるものを読む
+ */
+test.describe("実況のコメントと操作列の重なり", () => {
+  test.use({ reducedMotion: "no-preference" });
+
+  test("コメントは右端の列と下の操作バーの影より上を通り、ボタンはその上で押せる", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await setJikkyo(page, true);
+    try {
+      await fakeNx(page, {
+        texts: ["右の列の下を通るコメント", "下の字"],
+        mails: [undefined, "shita"],
+      });
+      await deviceOn(page);
+      await page.setViewportSize({ width: 1600, height: 900 });
+      await goto(page, `/live?service=${MX.id}`);
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      await wakeControls(page, "live-frame");
+      await pickCodec(page, "live", "mpeg2");
+      await expect(page.getByTestId("jikkyo-comment").first()).toBeVisible({
+        timeout: 30_000,
+      });
+
+      // 段の数: 影 7 → 実況 8 → 字幕 9 → ボタン 10
+      expect(
+        await page.evaluate(() => {
+          const z = (el: Element | null, pseudo?: string) =>
+            el === null ? null : getComputedStyle(el, pseudo).zIndex;
+          const side = document.querySelector(
+            '[data-testid="live-shot"]',
+          )!.parentElement!;
+          const bottom = document.querySelector(
+            '[data-testid="live-controls"]',
+          )!;
+          return {
+            右の影: z(side.parentElement, "::before"),
+            下の影: z(bottom, "::before"),
+            実況: z(document.querySelector('[data-testid="jikkyo-layer"]')),
+            字幕: z(document.querySelector('[data-testid="live-captions"]')),
+            右のボタン: z(side),
+            下のボタン: z(bottom.querySelector(":scope > [data-bar-items]")),
+            外の箱: [z(side.parentElement), z(bottom)],
+          };
+        }),
+      ).toEqual({
+        右の影: "7",
+        下の影: "7",
+        実況: "8",
+        字幕: "9",
+        右のボタン: "10",
+        下のボタン: "10",
+        外の箱: ["auto", "auto"],
+      });
+
+      // 流れるものが切り抜きのボタンを横切り、下の行に止めたものが下の操作バーの影に掛かったところで止める
+      await expect
+        .poll(
+          async () => {
+            await wakeControls(page, "live-frame");
+            return page.evaluate(() => {
+              const button = document
+                .querySelector('[data-testid="live-shot"]')!
+                .getBoundingClientRect();
+              const comments = [
+                ...document.querySelectorAll('[data-testid="jikkyo-comment"]'),
+              ];
+              const across = comments.some((c) => {
+                const r = c.getBoundingClientRect();
+                return (
+                  r.left < button.left - 60 &&
+                  r.right > button.right + 10 &&
+                  r.top < button.top + button.height / 2 &&
+                  r.bottom > button.top + button.height / 2
+                );
+              });
+              const below = comments.some((c) => c.textContent === "下の字");
+              if (!across || !below) return false;
+              for (const a of document.getAnimations()) a.pause();
+              return true;
+            });
+          },
+          { timeout: 90_000, intervals: [30] },
+        )
+        .toBe(true);
+      await wakeControls(page, "live-frame");
+
+      const hits = await page.evaluate(() => {
+        const button = document.querySelector<HTMLElement>(
+          '[data-testid="live-shot"]',
+        )!;
+        const b = button.getBoundingClientRect();
+        const y = b.top + b.height / 2;
+        const at = (x: number, yy: number) => {
+          const hit = document.elementFromPoint(x, yy);
+          if (hit === null) return "なし";
+          if (button.contains(hit)) return "ボタン";
+          if (hit.closest('[data-testid="jikkyo-comment"]')) return "コメント";
+          if (hit.closest(":has(> [data-bar-items]), [data-bar-items]"))
+            return "操作列";
+          return hit.getAttribute("data-testid") ?? hit.tagName;
+        };
+        const real = at(b.left + b.width / 2, y);
+        // 確かめる間だけ、コメントと影に当たり判定を持たせる
+        const probe = document.createElement("style");
+        probe.textContent =
+          '[data-testid="jikkyo-layer"] * { pointer-events: auto !important; } :has(> [data-bar-items])::before { pointer-events: auto !important; }';
+        document.head.append(probe);
+        const bottom = [
+          ...document.querySelectorAll('[data-testid="jikkyo-comment"]'),
+        ]
+          .find((c) => c.textContent === "下の字")!
+          .getBoundingClientRect();
+        const bar = document
+          .querySelector('[data-testid="live-controls"]')!
+          .getBoundingClientRect();
+        const onButton = at(b.left + b.width / 2, y);
+        // 影の所は、ボタンの並びの箱 (透明) を外して、その下のコメントと影のどちらが上かを読む
+        const items = document.createElement("style");
+        items.textContent =
+          "[data-bar-items], [data-bar-items] * { pointer-events: none !important; }";
+        document.head.append(items);
+        const result = {
+          押すとき: real,
+          ボタンの所: onButton,
+          右の影の所: at(b.left - 30, y),
+          下の行: bottom.bottom > bar.top,
+          下の影の所: at(
+            bottom.left + bottom.width / 2,
+            bottom.top + bottom.height / 2,
+          ),
+        };
+        items.remove();
+        probe.remove();
+        return result;
+      });
+      expect(hits).toEqual({
+        押すとき: "ボタン",
+        ボタンの所: "ボタン",
+        右の影の所: "コメント",
+        下の行: true,
+        下の影の所: "コメント",
+      });
+    } finally {
+      await setJikkyo(page, false);
+    }
+  });
+});
