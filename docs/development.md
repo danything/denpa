@@ -165,10 +165,16 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 
 ### `@danything/arib` を出す
 
-`packages/arib/` は denpa のリリースとは別に npm へ出します。`packages/arib/package.json` の `version` を上げる PR を
-マージしてから、main のそのコミットにタグ `arib-v<バージョン>` を押します (`git tag arib-v0.2.0 <そのコミット> && git push origin arib-v0.2.0`)。
+`packages/arib/` はふだん denpa のリリースといっしょに npm へ出ます。前のタグ `arib-v*` から `packages/arib/` が
+変わっていれば、`.github/workflows/arib-publish.yml` が `packages/arib/package.json` の `version` で出して、
+リリースのコミットにタグ `arib-v<バージョン>` を付けます。変わっていなければ何もしません。
+なので **リリースの前に、`packages/arib/` が変わっていれば `version` を上げておきます** (互換が壊れるなら major、
+機能を足したなら minor、直しだけなら patch)。上げ忘れるとリリースのときにこの workflow が止まります (勝手には上げない)。
+
+リリースを待たずに出すときは、`version` を上げる PR をマージしてから、main のそのコミットにタグを押します
+(`git tag arib-v0.2.0 <そのコミット> && git push origin arib-v0.2.0`)。
 **main の先頭には付けないこと。** マージのあとに `chore: bump image marks [skip ci]` が積まれることが多く、`[skip ci]` のコミットに付けたタグでは Actions が動きません。
-`.github/workflows/arib-publish.yml` がテストとビルドをして、Trusted Publishing で出します (トークンは持たない)。
+どちらもテストとビルドをしてから、Trusted Publishing で出します (トークンは持たない)。
 リポジトリの中では `exports` が TypeScript のまま (`src/*.ts`) を指していて、出すときだけ `scripts/manifest.ts` が
 組んだ `dist/` に向け直します
 
