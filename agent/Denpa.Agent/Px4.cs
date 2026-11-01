@@ -1054,7 +1054,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// (Q3U4 のようにキューが2つある筐体でも、ブリッジをまたいだ選局が少し待つだけ)。
     /// START_STREAM から ATTACH_STREAM までは px4d が 5 秒しか待たないので、その間も放さない。
     /// 閉じるとき (<see cref="Dispose"/>) は並ばない — 答えが来なくても接続を閉じれば px4d が返すし、
-    /// <c>TunerPool</c> の錠を持ったまま呼ばれるので、ほかの受信機の選局を待つと取り合いごと止まる。
+    /// <c>TunerPool</c> のロックを持ったまま呼ばれるので、ほかの受信機の選局を待つと取り合いごと止まる。
     /// カード (Px4Card.cs) は px4d の別のキューなので入れない
     /// </para>
     /// </summary>
@@ -1368,7 +1368,7 @@ public sealed class Px4Tuner : ITuneDevice
     }
 
     /// <summary>
-    /// STATS を1回聞く。**制御ソケットは選局と同じ錠の下で使う** (1本で同時に1つしか送れない)。
+    /// STATS を1回聞く。**制御ソケットは選局と同じロックの下で使う** (1本で同時に1つしか送れない)。
     /// 聞けなくても流れは止めない — 繋がりの不具合なら次の選局が見つける
     /// </summary>
     private void PollStats()
@@ -1596,6 +1596,7 @@ internal sealed class Px4Stream
         catch (Exception error) when (error is IOException or SocketException)
         {
             socket.Dispose();
+            stream._first.Dispose();
             throw new Px4StreamError($"{wire.Daemon} から TS を受け取れません ({error.Message})", stream._attached);
         }
 
@@ -1652,10 +1653,14 @@ internal sealed class Px4Stream
                         End(code == 0 ? $"{_wire.Daemon} が TS を止めました" : $"{_wire.Daemon} が TS を止めました ({Px4Control.Reason(code)})");
                         return;
                     }
+                    End(type == Px4Control.StreamEnd
+                        ? $"{_wire.Daemon} が TS を止めました (STREAM_END が短くて理由が読めません、{length} バイト)"
+                        : $"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
+                    return;
                 }
-                if (type != Px4Control.TsData || flags != 0 || length < TsHeaderSize)
+                if (flags != 0 || length < TsHeaderSize)
                 {
-                    End($"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
+                    End($"{_wire.Daemon} の TS_DATA の枠が崩れています (flags 0x{flags:x4}、{length} バイト)");
                     return;
                 }
                 // u64 sequence, u64 cumulative_drop_count, u32 byte_count, bytes
@@ -1782,6 +1787,8 @@ internal sealed class Px4Stream
             pump.Join(TimeSpan.FromSeconds(1));
         }
         _socket.Dispose();
+        // pump が降りてから閉じる。降りきれずに残っていると最後に Set するので、そのときは閉じない (GC に任せる)
+        if (_pump is not { IsAlive: true }) _first.Dispose();
         Output.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
         Output.Dispose();
         _ended = true;

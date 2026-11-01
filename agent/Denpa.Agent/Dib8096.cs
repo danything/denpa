@@ -538,7 +538,7 @@ public sealed class Dib8096
 
     /// <summary>
     /// チャンネルの中心周波数 (Hz) に合わせる (7.1)。ロックしなかったのは失敗ではなく結果
-    /// (<see cref="DibLock.Failed"/>)。範囲外と、探索が 5 秒で終わらないときは投げる
+    /// (<see cref="DibLock.Failed"/>)。範囲外と、探索が 5 秒で終わらないとき (探索し直すとそこからもう 5 秒) は投げる
     /// </summary>
     public DibLock Tune(uint hz)
     {
@@ -1708,6 +1708,7 @@ public sealed class Dib8096
         }
 
         var started = _time.NowMs;
+        var searchStarted = started;
         var step = Step.Start;
         var readBack = false;
         for (; ; )
@@ -1746,7 +1747,13 @@ public sealed class Dib8096
             }
             if (step == Step.Stop && _demodState is DemodState.Failed or DemodState.Locked or DemodState.DataLocked) break;
             if (step == Step.Stop) throw new IOException("DiB8000 の探索が途中で止まりました");
-            if (_time.NowMs - started > SearchLimitMs) throw new IOException("DiB8000 の探索が 5 秒で終わりませんでした");
+            if (_time.NowMs - started > SearchLimitMs)
+            {
+                // 覚えた値・既定で合わずに探索し直したときは、上限がそこから数え直しになる (合わせて最大およそ 10 秒)
+                throw new IOException(started == searchStarted
+                    ? "DiB8000 の探索が 5 秒で終わりませんでした"
+                    : $"DiB8000 の探索し直しが 5 秒で終わりませんでした (合わせて {(_time.NowMs - searchStarted) / 1000:F1} 秒)");
+            }
             var floor = Floor(step);
             if (floor == FastPollMs) _fastSteps[step] = _fastSteps.GetValueOrDefault(step) + 1;
             Wait(Math.Max(floor, (int)Math.Ceiling(wait * Symbol)));

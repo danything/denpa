@@ -30,7 +30,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **鍵の要らない利用者しかいなければ、カードに聞かない** (<paramref name="keysWanted"/>)。番組表・ロゴ・スキャンが
-/// 読むのは掛かっていない SI だけなので、復号もせず溜めもせずに流す。ライブ視聴や録画とカードの錠
+/// 読むのは掛かっていない SI だけなので、復号もせず溜めもせずに流す。ライブ視聴や録画とカードのロック
 /// (<see cref="BCas"/>) を取り合わない。途中で鍵の要る利用者が来たら、溜め直して最初の鍵から復号する (<see cref="Rehold"/>)。
 /// </para>
 /// </summary>
@@ -127,7 +127,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>最後に答えが来た ECM の PID</summary>
     private int _lastEcm = -1;
     /// <summary>
-    /// 溜めている間に鍵の相手へ聞いた回数・覚えた答えを使った回数・未契約の回数と、往復と錠の待ちの合計・
+    /// 溜めている間に鍵の相手へ聞いた回数・覚えた答えを使った回数・未契約の回数と、往復とロックの待ちの合計・
     /// カードの素を貰うのにかかった時間
     /// </summary>
     private int _asks, _cached, _unentitledAnswers;
@@ -143,7 +143,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         return $"PAT {At(_patMs)} / PMT {At(_pmtMs)} / ECM {At(_ecmMs)}{last}";
     }
 
-    /// <summary>溜めている間に鍵の相手へ聞いた回数と往復の合計 (錠の待ちを含む)。<see cref="HeldAt"/> と同じ1行に足す</summary>
+    /// <summary>溜めている間に鍵の相手へ聞いた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ1行に足す</summary>
     public string CardUse() => !_keys
         ? "カード 聞かない"
         : $"カード {_asks}回 計 {_askMs}ms (待ち {_waitedMs}ms・覚えた答え {_cached}回・未契約 {_unentitledAnswers}回・準備 {At(_initMs)})";
@@ -363,6 +363,11 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// </summary>
     private void Rehold()
     {
+        /*
+         * **内訳 (_patMs・_asks など) は戻さない。** 記録に出すのは選局して最初に送り出したときの1回だけ
+         * (TunerPool.Descramble) で、溜め直しのあとには読まれない。PAT・PMT は覚えたまま来直さないので、
+         * 戻すとそこは「-」のまま残り、かえって分かりにくい
+         */
         _keys = true;
         _holding = true;
         foreach (var ecm in _ecms.Values) Forget(ecm);

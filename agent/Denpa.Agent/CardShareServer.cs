@@ -127,9 +127,14 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
     {
         using var body = new MemoryStream();
         await http.Request.Body.CopyToAsync(body);
-        if (body.Length is 0 or > 4096)
+        if (body.Length == 0)
         {
             await Respond.Error(http, "ECM が入っていません", 400);
+            return;
+        }
+        if (body.Length > 4096)
+        {
+            await Respond.Error(http, $"ECM が長すぎます ({body.Length} バイト。4096 バイトまで)", 400);
             return;
         }
         var ecm = body.ToArray();

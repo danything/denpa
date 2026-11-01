@@ -180,11 +180,13 @@ public static class Card
          */
         var peeking = candidates.Select(Peeking).ToArray();
         if (peeking.Length > 0 && within > TimeSpan.Zero) Task.WaitAll(peeking, within);
+        // 待ったのは渡された残りの時間だけ (ProbeFor より短いこともある)。残っていなければ待っていない
+        var late = within > TimeSpan.Zero ? $"{within.TotalSeconds:0.#} 秒以内に応答しません" : "確認が間に合いません";
         return
         [
             .. candidates.Select((candidate, at) => peeking[at].IsCompletedSuccessfully
                 ? peeking[at].Result
-                : new ReaderState(candidate.Name, null, false, $"{ProbeFor.TotalSeconds:F0} 秒以内に応答しません")),
+                : new ReaderState(candidate.Name, null, false, late)),
         ];
     }
 
