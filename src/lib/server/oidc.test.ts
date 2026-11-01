@@ -99,10 +99,10 @@ describe("設定してあるか", () => {
 });
 
 /*
- * **PKCE。** 合言葉そのものは送らず、SHA-256 を送ってから後で突き合わせる。
+ * **PKCE。** code_verifier そのものは送らず、SHA-256 を送ってから後で突き合わせる。
  * RFC 7636 の付録Aに載っている値で確かめる
  */
-describe("PKCE の合言葉", () => {
+describe("PKCE の code_challenge", () => {
   test("RFC 7636 の例と一致する", async () => {
     expect(
       await challengeOf("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
@@ -137,10 +137,10 @@ describe("ID トークンを確かめる", () => {
   });
 
   /*
-   * **合言葉が「自分が始めたログイン」の証拠。** ここを見ないと、他所で発行された
+   * **nonce が「自分が始めたログイン」の証拠。** ここを見ないと、他所で発行された
    * 同じ相手のトークンを貼られたときに通してしまう
    */
-  test("合言葉が違えば通さない", async () => {
+  test("nonce が違えば通さない", async () => {
     await expect(verify(await idToken(base), "べつの", NOW)).rejects.toThrow(
       "nonce",
     );

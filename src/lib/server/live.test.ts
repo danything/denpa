@@ -481,7 +481,7 @@ describe("音声だけのエンコード方式 (外から使う API の ?audio=o
 
 /**
  * **HTTP の API で音声を選ぶ** (`live?audio=<id>`・`chase?audio=<id>`)。画面の WebSocket と同じ
- * 合言葉 (`AudioTrack.id`) を、同じ `pickTrack` → `encodeArgs` に通す
+ * ID (`AudioTrack.id`) を、同じ `pickTrack` → `encodeArgs` に通す
  */
 describe("外から選ぶ音声 (?audio=<id>)", () => {
   const tracks = audioTracks([{ componentType: 2, langs: ["jpn", "eng"] }]);

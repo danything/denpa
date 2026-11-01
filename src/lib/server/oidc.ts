@@ -92,7 +92,7 @@ export function randomToken(bytes = 32): string {
   return base64Url(crypto.getRandomValues(new Uint8Array(bytes)));
 }
 
-/** PKCE の合言葉。S256 しか使いません (plain は相手が受けても使わない) */
+/** PKCE の code_challenge (code_verifier の SHA-256)。S256 しか使いません (plain は相手が受けても使わない) */
 export async function challengeOf(verifier: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -334,7 +334,7 @@ export async function verify(
   if (claims.nbf !== undefined && claims.nbf - SKEW > seconds) {
     throw new Error("ID トークンがまだ有効ではありません");
   }
-  // 出したときの合言葉と一致すること。これが「自分が始めたログイン」の証拠になる
+  // 出したときの nonce と一致すること。これが「自分が始めたログイン」の証拠になる
   if (claims.nonce !== nonce)
     throw new Error("ID トークンの nonce が合いません");
   if (claims.sub === "") throw new Error("ID トークンに sub がありません");

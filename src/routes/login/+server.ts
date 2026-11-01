@@ -7,7 +7,7 @@ import { PENDING_COOKIE, PENDING_TTL } from "#lib/server/session.js";
 /**
  * ログインを始める。Entra へ送るだけで、こちらでは何も決めない。
  *
- * 途中で使うもの (state / nonce / PKCE の合言葉 / 戻る先) は Cookie に預ける。
+ * 途中で使うもの (state / nonce / PKCE の code_verifier / 戻る先) は Cookie に預ける。
  * DBに置いてもいいが、**捨て忘れが残らない**ぶんこちらが素直 — 期限を切っておけば、
  * 途中でやめたぶんはブラウザが黙って消す。
  */
