@@ -178,6 +178,8 @@ async function learn(
     {
       signal: limits.signal,
       timeoutMs: limits.timeoutMs,
+      // 録ったあとの CM 検出の一部なので、ライブに CPU を譲る (stream.lowerPriority)
+      lowPriority: true,
       stderr: true,
       onStdout: framer(width * band * 2, (bytes) => {
         addFrame(top, bytes, 0, width);

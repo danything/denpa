@@ -86,7 +86,7 @@ import { recordingSummary } from "./recording";
 import { encodeJobs, recordings, services } from "./schema";
 import { descramble, isScrambled } from "./scramble";
 import { settings } from "./settings";
-import { chunks, lines, run } from "./stream";
+import { chunks, lines, lowerPriority, run } from "./stream";
 import { displayTitle } from "./title";
 import { TS_PROBE } from "./ts-probe";
 import { notify } from "./webhook";
@@ -990,6 +990,8 @@ async function runFfmpeg(
       ],
     },
   );
+  // 録画のエンコードは急がない。ライブに CPU を譲る (stream.lowerPriority)
+  lowerPriority(proc.pid);
   const running = procs.get(jobId) ?? new Set<Bun.Subprocess>();
   running.add(proc);
   procs.set(jobId, running);
