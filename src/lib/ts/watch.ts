@@ -43,7 +43,7 @@ export function zoneOf(x: number, width: number): Zone {
   return "center";
 }
 
-export type TapAction =
+type TapAction =
   /** 送る・戻す。`undo` が true なら、直前に切り替えた再生/一時停止も戻す */
   | { kind: "seek"; by: number; undo: boolean }
   /** 再生/一時停止 */

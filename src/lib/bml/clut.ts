@@ -52,12 +52,11 @@ export function readClut(data: Uint8Array): Rgba[] {
   let at = region ? 9 : 1;
   const start = data[at++] ?? 0;
   const end = data[at++] ?? 0;
-  for (let i = start; i <= end && i < 256 && at + 3 < data.length + 1; i++) {
+  for (let i = start; i <= end && i < 256 && at + 4 <= data.length; i++) {
     const [a0, a1, a2, alpha] = data.subarray(at, at + 4);
-    if (alpha === undefined) break;
     at += 4;
     if (rgb) {
-      table[i] = [a0!, a1!, a2!, alpha];
+      table[i] = [a0!, a1!, a2!, alpha!];
       continue;
     }
     const y = a0! - 16;
@@ -69,7 +68,7 @@ export function readClut(data: Uint8Array): Rgba[] {
       clamp(y * 1.16438 + 1.79274 * cr),
       clamp(y * 1.16438 - 0.213249 * cb - 0.532909 * cr),
       clamp(y * 1.16438 + 2.1124 * cb),
-      alpha,
+      alpha!,
     ];
   }
   return table;

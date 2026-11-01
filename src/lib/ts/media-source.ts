@@ -23,7 +23,7 @@ export interface PickedMediaSource {
 }
 
 /** MediaSource のありか。**試しで差し替えられるように**受け取る (既定は `globalThis`) */
-export interface MediaSourceScope {
+interface MediaSourceScope {
   MediaSource?: MediaSourceClass;
   ManagedMediaSource?: MediaSourceClass;
 }

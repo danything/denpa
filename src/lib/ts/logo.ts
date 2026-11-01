@@ -82,7 +82,7 @@ export function replacesLogo(
   return knownType !== PREFERRED_LOGO_TYPE && nextType > knownType;
 }
 
-export interface LogoData {
+interface LogoData {
   logoId: number;
   logoType: number;
   logoVersion: number;
@@ -146,7 +146,7 @@ export function parseLogoLinks(section: Uint8Array): Map<number, number> {
   return links;
 }
 
-export interface CollectedLogo {
+interface CollectedLogo {
   /**
    * その局のネットワーク。
    *

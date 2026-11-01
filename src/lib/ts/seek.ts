@@ -32,7 +32,7 @@ const PRIVATE_1 = 0xbd;
 const BEFORE_HEAD = 600;
 
 /** 見つけた PES の頭 */
-export interface PesMark {
+interface PesMark {
   /** stream_id */
   id: number;
   /** 90kHz。一周の中 */

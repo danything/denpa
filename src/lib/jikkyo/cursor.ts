@@ -13,12 +13,12 @@ import { type Comment, CommentStore } from "./comments";
 /** 届いたのが遅れても出す幅 */
 const LATE_MS = 10_000;
 /** これより大きく W が進んだら、飛んだとみなす (再生の詰まりで 1 回に進む幅より十分大きく) */
-export const JUMP_MS = 10_000;
+const JUMP_MS = 10_000;
 /**
  * これより大きく W が戻ったら、飛んだとみなす。時計の合わせ直し (`clock` の通知) で W は少し戻ることがあり、
  * そのたびに流れているものを消さないように
  */
-export const BACK_MS = 1_000;
+const BACK_MS = 1_000;
 
 /**
  * 放送時刻が飛んだか (シーク・局の切り替え。流すほうの `Cursor` と右の一覧で同じ)。一覧は、飛んだら

@@ -12,7 +12,7 @@ import { ascii } from "@danything/arib/bytes";
 /** [周波数 Hz, 長さ 秒] の並び */
 type Tune = [number, number][];
 
-// 1つの音を1行に
+// 1 つの音を 1 行に
 // prettier-ignore
 const TUNES: Record<number, Tune> = {
   0: [[1318, 0.35], [1046, 0.5]],

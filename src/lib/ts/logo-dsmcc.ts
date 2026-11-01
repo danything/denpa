@@ -84,7 +84,7 @@ function parseLogoEsPids(
   return { serviceId: u16(section, 3), pids };
 }
 
-export interface ModuleLogo {
+interface ModuleLogo {
   logoId: number;
   logoType: number;
   /** そのロゴを使う局。ロゴのほうが「どの局か」を持っている (SDT を待たなくていい) */

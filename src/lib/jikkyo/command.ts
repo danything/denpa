@@ -54,9 +54,9 @@ export const COLOR_VALUES: Readonly<Record<string, string>> = {
 };
 
 export const POSITIONS = ["ue", "naka", "shita"] as const;
-export type Position = (typeof POSITIONS)[number];
+type Position = (typeof POSITIONS)[number];
 export const SIZES = ["big", "medium", "small"] as const;
-export type Size = (typeof SIZES)[number];
+type Size = (typeof SIZES)[number];
 
 /** 流し方。既定 (白・流れる・中) のものは持たない */
 export interface Style {
