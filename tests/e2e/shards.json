@@ -1,51 +1,56 @@
 {
-  "//": "CI の e2e の組分け (test.yml が読む)。playwright の --shard はテスト数で機械的に割るので、重いスペック (録画完了を実時間で待つもの) が同じ組に固まり、28秒の組と3.6分の組ができていた。実測の所要時間で人が割る (割り方は docs/development.md「並べて流す」)。映像を長くデコードし続けるスペック (20-live・22-watch・28-live-raw・38/40/41 の互換モード・43-raw-cadence・44-ambient・57-jikkyo・58-volume) は1つの組に寄せすぎない (混むとどれも遅くなる)。いちばん長い 26-hwenc は軽いスペックの組に置く。50-live-pacing は 6 組に1本だけで置く (再生を始めた瞬間に組の中が混んでいると、貯まりが狙いより多いところで落ち着き、遅延の上限 0.25 秒を超える)。33-recordings-group は 21-onair-fallback と同じ組に入れない (21 が延長して録り終えた録画が、同じワーカーで次に流れた 33 のホームの一覧に入る)。どの組にも入っていないスペックは 5 組で流す — 足したら CI の結果の所要時間を見て、あとでどこかの組に入れ直せばよい。ここに書いた名前のファイルが無い・2つの組に入っている、は CI の「組分けの検算」が落とす",
+  "//": "CI の e2e の組分け (test.yml が読む)。playwright の --shard はテスト数で機械的に割るので、重いスペック (録画完了を実時間で待つもの) が同じ組に固まり、28秒の組と3.6分の組ができていた。実測の所要時間で人が割る (割り方は docs/development.md「並べて流す」)。映像を長くデコードし続けるスペック (20-live・22-watch・28-live-raw・38/40/41 の互換モード・43-raw-cadence・44-ambient・57-jikkyo・58-volume) は1つの組に寄せすぎない (混むとどれも遅くなる)。組の中ではファイル名の順にワーカーへ配られるので、名前が後ろの長いスペック (51-live-gaps・57-jikkyo・57-jikkyo-recorded) は、前に並ぶスペックが少ない組に置く (遅れて始まると、組がそのぶん長くなる)。50-live-pacing は 6 組に1本だけで置く (同じ組でほかのワーカーが動くと、届く間隔が乱れて貯める量がそれを覆う高さへ上がり、「下限のまま」を見るテストが落ちる。デコードが重なると、途中から入ったときにコマも落とす)。33-recordings-group は 21-onair-fallback と同じ組に入れない (21 が延長して録り終えた録画が、同じワーカーで次に流れた 33 のホームの一覧に入る)。どの組にも入っていないスペックは 5 組で流す — 足したら CI の結果の所要時間を見て、あとでどこかの組に入れ直せばよい。ここに書いた名前のファイルが無い・2つの組に入っている、は CI の「組分けの検算」が落とす",
   "1": [
-    "01-dashboard",
+    "04-external-delete",
+    "11-rule-edit",
     "19-reservation-rules",
     "26-hwenc",
     "27-encode-cancel",
+    "29-subpath",
+    "33-recordings-group",
+    "34-live-yield",
     "35-csp",
     "42-copy-never",
     "45-buttons",
+    "46-search",
     "47-search-rule",
     "48-link-hover",
     "49-guide-skeleton",
-    "54-lite"
+    "52-diagnostics",
+    "54-lite",
+    "56-transfer"
   ],
   "2": [
     "20-live",
     "20-onair",
     "22-oidc",
-    "25-chase",
-    "34-live-yield",
     "38-live-compat",
     "51-live-gaps",
-    "52-diagnostics",
     "53-header-float",
-    "55-tabletop",
-    "56-transfer",
+    "57-jikkyo-recorded",
     "59-boot-signal"
   ],
   "3": [
+    "10-webhook",
     "12-encode-failure",
     "15-scramble",
+    "16-scan",
+    "18-pwa",
     "21-onair-fallback",
+    "25-chase",
+    "26-hwenc-hevc",
     "28-live-raw",
     "30-api",
-    "46-home-timeline",
-    "57-jikkyo",
-    "57-jikkyo-recorded",
-    "58-volume"
+    "40-watch-compat",
+    "44-ambient",
+    "46-home-timeline"
   ],
   "4": [
     "02-reservation",
     "05-rules",
     "09-behaviour",
-    "10-webhook",
     "13-migrate",
     "14-serve",
-    "16-scan",
     "17-logo",
     "23-watch-data",
     "24-bml-network",
@@ -55,19 +60,9 @@
     "37-playback",
     "39-watch-stream",
     "41-watch-compat-local",
-    "43-raw-cadence"
+    "43-raw-cadence",
+    "55-tabletop"
   ],
-  "5": [
-    "03-recording",
-    "04-external-delete",
-    "11-rule-edit",
-    "18-pwa",
-    "22-watch",
-    "29-subpath",
-    "33-recordings-group",
-    "40-watch-compat",
-    "44-ambient",
-    "46-search"
-  ],
+  "5": ["01-dashboard", "03-recording", "22-watch", "57-jikkyo", "58-volume"],
   "6": ["50-live-pacing"]
 }
