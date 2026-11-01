@@ -1,5 +1,5 @@
 /**
- * Hybridcast のアプリを中継する合言葉を出す ([hc-relay.ts](../../../../lib/server/hc-relay.ts))。
+ * Hybridcast のアプリを中継するトークンを出す ([hc-relay.ts](../../../../lib/server/hc-relay.ts))。
  * **ここはログインした人だけ** (いつもの守り)。http も https も出す
  */
 

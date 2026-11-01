@@ -539,10 +539,16 @@ export class Renderer {
     const family = s?.fontFamily ?? "";
     const size = s?.fontSize ?? 24;
     const data = node.data;
-    let drcs = false;
-    for (let i = 0; i < data.length && !drcs; i++)
-      drcs = isDrcs(data.charCodeAt(i));
-    const key = drcs ? `${data}\u0000${size}\u0000${family}` : data;
+    // 外字の画像は loadDRCS の後で揃う。画像もキーに入れて、揃ったら描き直す
+    const masks: (string | null)[] = [];
+    for (let i = 0; i < data.length; i++) {
+      const unit = data.charCodeAt(i);
+      if (isDrcs(unit)) masks.push(this.host.drcs(unit, size, family));
+    }
+    const drcs = masks.length > 0;
+    const key = drcs
+      ? `${data}\u0000${size}\u0000${family}\u0000${masks.join("\u0000")}`
+      : data;
     if (key === view.key) return;
     view.key = key;
     const owner = view.container.ownerDocument;
@@ -557,15 +563,15 @@ export class Renderer {
       view.container.append(owner.createTextNode(toDisplay(run)));
       run = "";
     };
+    let next = 0;
     for (let i = 0; i < data.length; i++) {
-      const unit = data.charCodeAt(i);
-      if (!isDrcs(unit)) {
+      if (!isDrcs(data.charCodeAt(i))) {
         run += data[i];
         continue;
       }
       flush();
       const glyph = owner.createElement("span");
-      const mask = this.host.drcs(unit, size, family);
+      const mask = masks[next++] ?? null;
       const css = [
         `display:inline-block;width:${size}px;height:${size}px;vertical-align:text-bottom`,
       ];

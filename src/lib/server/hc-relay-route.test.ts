@@ -4,7 +4,7 @@ import type { Fetched } from "./bml-network";
 import { forgetGrants, grant, relayAsset } from "./hc-relay";
 
 /*
- * 中継の経路。取得する先を差し替え、合言葉の配信元の同じ経路を取ること・返りに sandbox の CSP を付けること・
+ * 中継の経路。取得する先を差し替え、トークンの配信元の同じ経路を取ること・返りに sandbox の CSP を付けること・
  * 失敗の返りを溜めないことを見る
  */
 const fetched: string[] = [];
@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("Hybridcast の中継", () => {
-  test("合言葉の配信元の同じ経路を取り、sandbox の CSP と nosniff を付けて返す", async () => {
+  test("トークンの配信元の同じ経路を取り、sandbox の CSP と nosniff を付けて返す", async () => {
     const response = await relayAsset(
       grant("http://hc.example.jp"),
       "p/index.js",
@@ -84,7 +84,7 @@ describe("Hybridcast の中継", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  test("知らない合言葉では取得しない", async () => {
+  test("知らないトークンでは取得しない", async () => {
     await expect(
       relayAsset("0".repeat(32), "p/index.js", "", fetcher(200)),
     ).rejects.toMatchObject({

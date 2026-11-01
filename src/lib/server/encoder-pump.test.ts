@@ -25,7 +25,7 @@ config.encodeMaxAttempts = 5;
 
 const { orm } = await import("./db");
 const { encodeJobs, recordings } = await import("./schema");
-const { cancel, pump } = await import("./encoder");
+const { cancel, isCanceling, pump } = await import("./encoder");
 
 const now = Date.now();
 
@@ -92,6 +92,8 @@ test("待機中のジョブの中止は、その場で canceled になる", asyn
   const jobId = seedJob(0);
   await cancel(jobId);
   expect(job(jobId).state).toBe("canceled");
+  // pump の finally を通らないので、中止の印もその場で外れる (残るとボタンが回り続ける)
+  expect(isCanceling(jobId)).toBe(false);
 });
 
 test("走り出したジョブの中止は、畳み終わってから返る", async () => {

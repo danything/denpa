@@ -137,7 +137,7 @@ async function markFailed(held: OfflineVideo): Promise<void> {
 
 /**
  * ブラウザが運び終えた。**結果を IndexedDB へ移して初めて「保存済み」になる。**
- * 動画以外の付き添いは無い録画もある (404)。取れたぶんだけ持つ
+ * 動画以外の付属のデータは無い録画もある (404)。取れたぶんだけ持つ
  */
 worker.addEventListener("backgroundfetchsuccess", (event) => {
   event.waitUntil(

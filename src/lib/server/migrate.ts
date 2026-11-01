@@ -1191,6 +1191,8 @@ export async function start(
         message:
           "EPGStation v1 には対応していません。v2 か v3 にしてから実行してください",
       };
+    // 訊いている間に EDCB の引き継ぎが走り出していたら譲る (startEdcb と同じ)
+    if (running()) return { started: false, message: "すでに実行中です" };
     controller = new AbortController();
     void runEpgstation(client, version, options, controller.signal);
     return {
