@@ -372,8 +372,9 @@ FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:d710a5c8bfe4cf7e726d7e1
 # (ffmpeg 段の説明。arm64 の Debian には無い)。libva は arm64 にも入れる。
 # arm64 の Rockchip MPP (librockchip_mpp.so.1) は ffmpeg 段で組んで /usr/local/lib に一緒に来る。
 # libdrm (rkmpp と VA-API が繋ぐ) は libva-drm2 の依存で入り、どちらも下の ldd で /rootfs に運ばれる
-# iHD は Debian の non-free 版 (そのために non-free を足す)。free 版はソースの無い GPU のカーネルを抜いてあり、
-# Arc A310 (DG2) で hevc_qsv が「Invalid FrameType:0」で落ちた。中身のライセンスは free 版と同じ MIT
+# iHD は Debian の non-free 版 (そのために non-free を足す)。free 版はソースの無い GPU のカーネル (シェーダ) を
+# 抜いてあり、シェーダを使うエンコードができない。Skylake〜Comet Lake の H.265 と、Broadwell のエンコードは
+# どれもシェーダを使うので、free 版では GPU でエンコードできない。中身のライセンスは free 版と同じ MIT
 # i965-va-driver は iHD が対応しない古い世代 (Haswell など) の内蔵 GPU 用。
 # AMD の VA-API ドライバ (radeonsi) は `mesa` 段で組んだもの。それが繋ぐライブラリ (libdrm-amdgpu1 など) と、
 # GPU の名前の一覧 (libdrm-common の amdgpu.ids) は Debian から入れる。これも amd64 だけ
