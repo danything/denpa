@@ -181,7 +181,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [@kametani-mikihiro](https://github.com/kametani-mikihiro) ([#437](https://github.com/danything/denpa/issues/437) [#471](https://github.com/danything/denpa/issues/471) [#480](https://github.com/danything/denpa/issues/480) [#481](https://github.com/danything/denpa/issues/481) [#503](https://github.com/danything/denpa/issues/503) [#505](https://github.com/danything/denpa/issues/505) [#509](https://github.com/danything/denpa/issues/509))
 - [@fetburner](https://github.com/fetburner) ([#668](https://github.com/danything/denpa/issues/668))
 - [@shino-zxc](https://github.com/shino-zxc) ([#1210](https://github.com/danything/denpa/issues/1210) [#1713](https://github.com/danything/denpa/issues/1713))
-- [@eggplants](https://github.com/eggplants) ([#1617](https://github.com/danything/denpa/issues/1617) [#1709](https://github.com/danything/denpa/issues/1709))
+- [@eggplants](https://github.com/eggplants) ([#1617](https://github.com/danything/denpa/issues/1617) [#1709](https://github.com/danything/denpa/issues/1709) [#1930](https://github.com/danything/denpa/issues/1930) [#1931](https://github.com/danything/denpa/issues/1931))
 - [@ogatomo21](https://github.com/ogatomo21) ([#1708](https://github.com/danything/denpa/issues/1708))
 - [@yuki-untitled](https://github.com/yuki-untitled) ([#1806](https://github.com/danything/denpa/issues/1806))
 
