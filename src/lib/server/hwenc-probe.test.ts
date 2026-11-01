@@ -10,8 +10,9 @@ import type { HwDevice } from "./hwenc";
  * 起こす `run` だけ差し替えて、ドライバの返事を作って見る。
  *
  * 作る返事は issue #417 の機材 (Gemini Lake・i965) に寄せたもの:
- * VA-API は ICQ を持たず CQP ならエンコードでき、MPEG-2 は GPU でデコードできる。AV1 はエンコードできない。
- * H.265 は H.264 と同じく CQP で通る側にしてある (デコードから GPU は、ライブが使わない H.265 では試さない)
+ * VA-API は ICQ を持たず、MPEG-2 は GPU でデコードできる。AV1 はエンコードできない。
+ * H.264・H.265 はいつも CQP で指定するので通る (デコードから GPU は、ライブが使わない H.265 では試さない)。
+ * AV1 も CQP で通るドライバ (Mesa) は下の `mesa`
  */
 const real = await import("./stream");
 /*
@@ -80,48 +81,94 @@ test("hwReady: まだ確かめていなければ確かめ終わるのを待ち�
   expect(calls).toEqual([]);
 });
 
-test("ICQ が落ちたら CQP で試し、通ったほうを覚える", async () => {
+test("H.264・H.265 は初めから CQP で試し、ICQ では試さない", async () => {
   answer = i965;
   calls.length = 0;
   const { devices } = await probe();
   expect(devices).toHaveLength(1);
   const device = devices[0]!;
   expect(device.vaapi).toEqual(["hevc", "h264"]);
-  expect(device.cqp).toEqual(["hevc", "h264"]);
-  // H.265 の CQP も qp 27 (H.264 と同じ 0〜51 の軸)
-  expect(
-    calls.some((argv) =>
-      argv.join(" ").includes("hevc_vaapi -rc_mode CQP -qp 27"),
-    ),
-  ).toBe(true);
+  // CQP の印は AV1 が ICQ から落ちたときだけ。H.264・H.265 はいつも CQP なので付けない
+  expect(device.cqp).toEqual([]);
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(lines.some((l) => l.includes("hevc_vaapi -rc_mode CQP -qp 25"))).toBe(
+    true,
+  );
+  expect(lines.some((l) => l.includes("h264_vaapi -rc_mode CQP -qp 25"))).toBe(
+    true,
+  );
+  expect(lines.some((l) => /(h264|hevc)_vaapi -rc_mode ICQ/.test(l))).toBe(
+    false,
+  );
   // デコードから GPU の試しは H.264 だけ (ライブは H.265 を出さない)
   expect(
     calls
       .filter((argv) => argv.includes("-hwaccel"))
       .map((argv) => argv.find((a) => a.endsWith("_vaapi"))),
   ).toEqual(["h264_vaapi"]);
-  // デコードから GPU の試しも CQP で指定している (ICQ で指定すると i965 では落ちる)
+  // デコードから GPU の試しも録画と同じ CQP で指定している
   const full = calls.find((argv) => argv.includes("-hwaccel"));
-  expect(full?.join(" ")).toContain("-rc_mode CQP -qp 27");
+  expect(full?.join(" ")).toContain("-rc_mode CQP -qp 25");
   expect(full?.join(" ")).toContain("deinterlace_vaapi=rate=field");
   expect(device.full).toEqual(["h264"]);
   expect(describeDevice(device)).toBe(
-    "VA-API: H.265 (CQP) / H.264 (CQP)、ライブはデコードから GPU: H.264",
+    "VA-API: H.265 / H.264、ライブはデコードから GPU: H.264",
   );
-  // ライブはデコードから GPU の方式を、CQP のまま採る
   expect(liveHw("h264", {}, 0, devices)).toEqual({
-    way: { device: device.path, kind: "vaapi", cqp: true },
+    way: { device: device.path, kind: "vaapi" },
     full: true,
   });
 });
 
-test("ICQ が通れば CQP は試さない", async () => {
+/** Mesa (AMD) らしい返事。ICQ を持たないが、AV1 も CQP ならエンコードできる */
+function mesa(argv: string[]): number {
+  return argv.join(" ").includes("-rc_mode ICQ") ? 1 : 0;
+}
+
+test("AV1 は ICQ が落ちたら CQP (-global_quality 75) で試し、通ったほうを覚える", async () => {
+  answer = mesa;
+  calls.length = 0;
+  const { devices } = await probe();
+  const device = devices[0]!;
+  expect(device.vaapi).toEqual(["av1", "hevc", "h264"]);
+  expect(device.cqp).toEqual(["av1"]);
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(lines.some((l) => l.includes("av1_vaapi -rc_mode ICQ"))).toBe(true);
+  expect(
+    lines.some((l) =>
+      l.includes("av1_vaapi -rc_mode CQP -global_quality:v 75"),
+    ),
+  ).toBe(true);
+  // デコードから GPU の試しも、AV1 は CQP のまま
+  const fullAv1 = calls.find(
+    (argv) => argv.includes("-hwaccel") && argv.includes("av1_vaapi"),
+  );
+  expect(fullAv1?.join(" ")).toContain("-rc_mode CQP -global_quality:v 75");
+  expect(device.full).toEqual(["av1", "h264"]);
+  // (CQP) を添えるのは AV1 の落とした分だけ
+  expect(describeDevice(device)).toBe(
+    "VA-API: AV1 (CQP) / H.265 / H.264、ライブはデコードから GPU: AV1 / H.264",
+  );
+  // ライブはデコードから GPU の方式を、AV1 は CQP のまま採る
+  expect(liveHw("av1", {}, 0, devices)).toEqual({
+    way: { device: device.path, kind: "vaapi", cqp: true },
+    full: true,
+  });
+  expect(liveHw("h264", {}, 0, devices)).toEqual({
+    way: { device: device.path, kind: "vaapi" },
+    full: true,
+  });
+});
+
+test("AV1 の ICQ が通れば CQP は試さない", async () => {
   answer = () => 0;
   calls.length = 0;
   const { devices } = await probe();
   expect(devices[0]!.vaapi).toEqual(["av1", "hevc", "h264"]);
   expect(devices[0]!.cqp).toEqual([]);
-  expect(calls.some((argv) => argv.includes("CQP"))).toBe(false);
+  expect(
+    calls.some((argv) => argv.join(" ").includes("av1_vaapi -rc_mode CQP")),
+  ).toBe(false);
   // QSV は試さない (VA-API だけ)
   expect(calls.some((argv) => argv.join(" ").includes("qsv"))).toBe(false);
 });
