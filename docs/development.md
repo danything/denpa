@@ -191,7 +191,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。
 CI が両方をビルドして `deploy/` の印を書き戻します。**main は直接 push できない**
-(ruleset の必須チェック `check` / `agent` / `e2e (1)`〜`(5)` / `claude-review`) ので、
+(ruleset の必須チェック `check` / `agent` / `e2e (1)`〜`(6)` / `claude-review`) ので、
 書き戻しは bot が PR を出し、必須チェックの status を自分で付けてマージします
 (手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しと README の謝辞の一覧も同じ)。
 release は組み直さず、main で組んだイメージにバージョンを 1 層足します
