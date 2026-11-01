@@ -188,7 +188,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # Toolkit がホストのドライバのライブラリをコンテナに差し込む (docs/encode.md「NVIDIA でエンコードする」)。
 # GPU が無ければ試しのエンコードが落ちて使わないだけなのは VA-API と同じ。
 # clang は CUDA のフィルタ (scale_cuda・bwdif_cuda) を PTX に組むため (`--enable-cuda-llvm`。CUDA の SDK は要らない)
-ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libopus-dev libx264-dev libdav1d-dev libva-dev"
+ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libx264-dev libdav1d-dev libva-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ENV FFMPEG_VERSION=9.0.2
@@ -197,6 +197,12 @@ ENV FFMPEG_VERSION=9.0.2
 # (そのために `-DCMAKE_POSITION_INDEPENDENT_CODE=ON` で組む)
 # renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
 ARG SVT_AV1_VERSION=v4.2.0
+# Opus も**ソースから組んで libavcodec に静的に繋ぐ**。Debian の libopus (1.5) は、パケットの欠けを AI で補う
+# 機能 (deep PLC・DRED・OSCE) の重みを抱えて 3.5MB あり、そのうち 3MB が重み。denpa は Opus をエンコードする
+# だけで (デコードは FFmpeg 自前の opus デコーダ)、どれも使わないので、既定 (どれも切れている) で組むと 0.6MB ほどで済む。
+# 配布物は xiph のもの (GitHub の tar には組むときに生成するファイルが無い)
+# renovate: datasource=github-tags depName=xiph/opus extractVersion=^v(?<version>.*)$
+ARG OPUS_VERSION=1.5.2
 # Rockchip MPP (arm64 だけ。上の説明)。FFmpeg の configure が求めるのは pkg-config で `rockchip_mpp >= 1.3.8`
 # renovate: datasource=github-tags depName=rockchip-linux/mpp
 ARG MPP_VERSION=1.1.0
@@ -256,6 +262,12 @@ RUN case "${TARGETARCH}" in \
       rm /usr/local/lib/librockchip_vpu.* && \
       mkdir -p /out/doc/rockchip-mpp && cp LICENSES/* /out/doc/rockchip-mpp/; \
     fi && \
+    mkdir /tmp/opus && cd /tmp/opus && \
+    $CURL https://downloads.xiph.org/releases/opus/opus-${OPUS_VERSION}.tar.gz | tar -xz --strip-components=1 && \
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF && \
+    cmake --build build -j$(nproc) && cmake --install build && \
+    mkdir -p /out/doc/opus && cp COPYING /out/doc/opus/ && \
     mkdir /tmp/svtav1 && cd /tmp/svtav1 && \
     $CURL https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz | tar -xz --strip-components=1 && \
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF \
@@ -345,7 +357,9 @@ RUN mkdir -p /out/dri /out/doc && \
 FROM deps AS build
 WORKDIR /app
 COPY . .
-RUN bun run build
+# ソースマップ (*.map。サーバの分で 6MB ほど) は本番に入れない。サーバのコードは圧縮していないので、
+# エラーの場所はマップが無くても読める
+RUN bun run build && find build -name "*.map" -delete
 
 # ---------------------------------------------------------------------------
 # 本番イメージの土台 (distroless。Debian 13 = trixie から glibc・ca-certificates・tzdata など
@@ -386,7 +400,7 @@ RUN case "${TARGETARCH}" in \
     sed -i 's/^Components: main$/Components: main non-free/' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     apt-get -y --no-install-recommends install \
-      libopus0 libx264-164 libdav1d7 \
+      libx264-164 libdav1d7 \
       libva2 libva-drm2 $gpu && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -395,7 +409,7 @@ COPY --from=ffmpeg /out/bin/ /usr/local/bin/
 COPY --from=ffmpeg /out/lib/ /usr/local/lib/
 # AMD の VA-API ドライバ (`mesa` 段。arm64 では空)。Debian のパッケージのものではないので、下で別に扱う
 COPY --from=mesa /out/dri/ /usr/local/lib/dri/
-# 自前で組んだもののうち、Debian のパッケージの copyright に載らないもののライセンス (arm64 の Rockchip MPP と amd64 の Mesa)
+# 自前で組んだもののうち、Debian のパッケージの copyright に載らないもののライセンス (Opus・arm64 の Rockchip MPP・amd64 の Mesa)
 COPY --from=ffmpeg /out/doc/ /rootfs/usr/share/doc/
 COPY --from=mesa /out/doc/ /rootfs/usr/share/doc/
 
