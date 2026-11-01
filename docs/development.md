@@ -175,7 +175,10 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 リリースを待たずに出すときは、`version` を上げる PR をマージしてから、main のそのコミットにタグを押します
 (`git tag arib-v1.0.1 <そのコミット> && git push origin arib-v1.0.1`)。
 **main の先頭には付けないこと。** マージのあとに `chore: bump image marks [skip ci]` が積まれることが多く、`[skip ci]` のコミットに付けたタグでは Actions が動きません。
-どちらもテストとビルドをしてから、Trusted Publishing で出します (トークンは持たない)。
+どちらもテストとビルドをしてから、Trusted Publishing (トークンは持たない) で **npm にステージまで置きます**。
+公開されるのは、npmjs.com のパッケージの画面 (または `npm stage approve <id>`) で確定したときです (2FA が要る)。
+乗っ取られた workflow から勝手に公開されないよう、npm 側ではこの workflow に `npm stage publish` だけを許しています。
+ステージに置いた時点で `arib-v<バージョン>` のタグが付くので、確定せずに却下したら、次は `version` を上げて出し直します。
 リポジトリの中では `exports` が TypeScript のまま (`src/*.ts`) を指していて、出すときだけ `scripts/manifest.ts` が
 組んだ `dist/` に向け直します
 
