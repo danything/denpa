@@ -88,10 +88,10 @@ test("ICQ が落ちたら CQP で試し、通ったほうを覚える", async ()
   const device = devices[0]!;
   expect(device.vaapi).toEqual(["hevc", "h264"]);
   expect(device.cqp).toEqual(["hevc", "h264"]);
-  // H.265 の CQP も qp 24 (H.264 と同じ 0〜51 の軸)
+  // H.265 の CQP も qp 27 (H.264 と同じ 0〜51 の軸)
   expect(
     calls.some((argv) =>
-      argv.join(" ").includes("hevc_vaapi -rc_mode CQP -qp 24"),
+      argv.join(" ").includes("hevc_vaapi -rc_mode CQP -qp 27"),
     ),
   ).toBe(true);
   // デコードから GPU の試しは H.264 だけ (ライブは H.265 を出さない)
@@ -102,7 +102,7 @@ test("ICQ が落ちたら CQP で試し、通ったほうを覚える", async ()
   ).toEqual(["h264_vaapi"]);
   // デコードから GPU の試しも CQP で指定している (ICQ で指定すると i965 では落ちる)
   const full = calls.find((argv) => argv.includes("-hwaccel"));
-  expect(full?.join(" ")).toContain("-rc_mode CQP -qp 24");
+  expect(full?.join(" ")).toContain("-rc_mode CQP -qp 27");
   expect(full?.join(" ")).toContain("deinterlace_vaapi=rate=field");
   expect(device.full).toEqual(["h264"]);
   expect(describeDevice(device)).toBe(

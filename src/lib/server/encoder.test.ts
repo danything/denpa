@@ -162,14 +162,17 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
   });
 
   test("GPU でエンコードするときはデバイスを先に開け、CPU で作った nv12 を GPU へ上げて渡す", () => {
-    // 画質は ICQ で、コーデックが違っても同じ 24
-    for (const codec of ["av1", "h264"] as const) {
+    // 画質は ICQ。値はコーデックごと (H.264 は 27、AV1 は 28)
+    for (const [codec, icq] of [
+      ["av1", "28"],
+      ["h264", "27"],
+    ] as const) {
       const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, codec, {
         hardware: { device: "/dev/dri/renderD128", kind: "vaapi" },
       });
       expect(args.indexOf("-init_hw_device")).toBeLessThan(args.indexOf("-i"));
       expect(args).toContain(`${codec}_vaapi`);
-      expect(argValue(args, "-global_quality:v")).toBe("24");
+      expect(argValue(args, "-global_quality:v")).toBe(icq);
       expect(args).not.toContain("libx264");
       expect(args).not.toContain("libsvtav1");
     }
