@@ -273,6 +273,7 @@ RUN case "${TARGETARCH}" in \
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF \
       -DCMAKE_POSITION_INDEPENDENT_CODE=ON && \
     cmake --build build -j$(nproc) && cmake --install build && \
+    mkdir -p /out/doc/svt-av1 && cp LICENSE.md PATENTS.md /out/doc/svt-av1/ && \
     mkdir /tmp/ffmpeg_sources && cd /tmp/ffmpeg_sources && \
     $CURL https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 | tar -xj --strip-components=1 && \
     for p in /patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 --fuzz=0 < "$p"; done && \
@@ -321,7 +322,9 @@ RUN case "${TARGETARCH}" in \
 #
 # **Debian の mesa-va-drivers は使わず、Mesa をソースから組む。** パッケージは全部の GPU のドライバと
 # LLVM (libLLVM 120MB) を引き込み、イメージが展開後で約 170MB 増える。radeonsi と VA-API だけを
-# LLVM 無しで組むと 18MB の1ファイルで済む (radeonsi は Mesa 24.0 から LLVM 無しで組め、シェーダは ACO で組む)。
+# LLVM 無しで組むと1ファイルで済む (radeonsi は Mesa 24.0 から LLVM 無しで組め、シェーダは ACO で組む)。
+# **大きさを優先して組む** (`buildtype=minsize`)。release の 18MB が 13MB になる (LTO を足しても 0.4MB しか減らない)。
+# エンコードは GPU の回路がやり、ドライバの CPU 側は命令を渡すくらいなので、速さへの響きは小さいはず (実機では見ていない)。
 # `video-codecs=all` は、既定では外れる H.264・H.265 のエンコードとデコードを入れるため (AV1 は既定で入る)。
 # ドライバが繋ぐ libdrm_amdgpu・libelf・libexpat・libzstd は Debian のもので、runtime-libs 段が ldd で辿って運ぶ
 #
@@ -341,7 +344,7 @@ RUN mkdir -p /out/dri /out/doc && \
       mkdir /tmp/mesa && cd /tmp/mesa && \
       curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20 \
         "https://archive.mesa3d.org/mesa-${MESA_VERSION}.tar.xz" | tar -xJ --strip-components=1 && \
-      meson setup build --prefix=/usr --buildtype=release -Db_ndebug=true \
+      meson setup build --prefix=/usr --buildtype=minsize -Db_ndebug=true \
         -Dllvm=disabled -Dgallium-drivers=radeonsi -Dvulkan-drivers= -Dplatforms= \
         -Dglx=disabled -Degl=disabled -Dgbm=disabled -Dopengl=false -Dgles1=disabled -Dgles2=disabled \
         -Dgallium-va=enabled -Dvideo-codecs=all && \
@@ -409,7 +412,7 @@ COPY --from=ffmpeg /out/bin/ /usr/local/bin/
 COPY --from=ffmpeg /out/lib/ /usr/local/lib/
 # AMD の VA-API ドライバ (`mesa` 段。arm64 では空)。Debian のパッケージのものではないので、下で別に扱う
 COPY --from=mesa /out/dri/ /usr/local/lib/dri/
-# 自前で組んだもののうち、Debian のパッケージの copyright に載らないもののライセンス (Opus・arm64 の Rockchip MPP・amd64 の Mesa)
+# 自前で組んだもののうち、Debian のパッケージの copyright に載らないもののライセンス (Opus・SVT-AV1・arm64 の Rockchip MPP・amd64 の Mesa)
 COPY --from=ffmpeg /out/doc/ /rootfs/usr/share/doc/
 COPY --from=mesa /out/doc/ /rootfs/usr/share/doc/
 
@@ -472,10 +475,13 @@ RUN --mount=type=bind,from=distroless,target=/distroless \
 # ---------------------------------------------------------------------------
 FROM distroless AS runtime
 WORKDIR /app
+# BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 は、bun が動いている間にコンテナの中 (/root/.bun) へ書く変換のキャッシュを切る
+# (bun の公式イメージと同じ。コンテナを作り直せば消えるので、溜めても得が無い)
 ENV NODE_ENV=production \
     TZ=Asia/Tokyo \
     FFMPEG=/usr/local/bin/ffmpeg \
-    FFPROBE=/usr/local/bin/ffprobe
+    FFPROBE=/usr/local/bin/ffprobe \
+    BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 # NVIDIA の GPU を渡されたとき (ffmpeg 段の説明) に、NVIDIA Container Toolkit が差し込むドライバのライブラリ。
 # 既定 (compute,utility) には NVENC の libnvidia-encode が入らないので video を足す。
 # CUDA の GPU の番号は PCI のバスの順にする — 既定 (速い順) だと、`-gpu N` が /dev/nvidiaN の並びと合わない
