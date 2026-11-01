@@ -21,7 +21,6 @@
     "22-watch",
     "28-live-raw",
     "30-api",
-    "33-recordings-group",
     "34-live-yield",
     "35-csp",
     "37-playback",
@@ -66,6 +65,7 @@
   "5": [
     "03-recording",
     "26-hwenc-hevc",
+    "33-recordings-group",
     "51-live-gaps",
     "52-diagnostics",
     "55-tabletop",
