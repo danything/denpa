@@ -110,4 +110,58 @@ describe("止まれの合図の受け取り", () => {
     // 聞き手がいなくなると Node の既定 (その場で終了) に落ちる
     expect(process.listenerCount("SIGTERM")).toBe(1);
   });
+
+  /*
+   * **起動の途中に来た合図を捨てない** (`hold-signals.ts`)。コンテナの PID 1 では
+   * 受け手のいない SIGTERM が捨てられ、入れ替えの始まった Pod が6時間降りなかった
+   */
+  test("入口が取っておいた合図を、引き取ったところで受け直す", () => {
+    for (const signal of SIGNALS) process.removeAllListeners(signal);
+    const global = globalThis as Record<string, unknown>;
+    global["__denpaHeldSignal"] = "SIGTERM";
+
+    let drains = 0;
+    const received: string[] = [];
+    takeOverSignals((signal) => {
+      drains += 1;
+      received.push(signal);
+    });
+    expect(received).toEqual(["SIGTERM"]);
+    // 受け直すのは1度だけ。あとの引き取りや合図では畳み直さない
+    expect(global["__denpaHeldSignal"]).toBeUndefined();
+    process.emit("SIGTERM");
+    expect(drains).toBe(1);
+  });
+
+  test("取っておいた合図が無ければ、何も受けない", () => {
+    const received: string[] = [];
+    takeOverSignals((signal) => received.push(signal));
+    expect(received).toEqual([]);
+  });
+
+  /*
+   * **すき間を作らない。** 外してから入れると、その間に来た合図は PID 1 では捨てられる
+   */
+  test("ほかを外すときには、もう自分が聞いている", () => {
+    for (const signal of SIGNALS) process.removeAllListeners(signal);
+    process.on("SIGTERM", () => {});
+    process.on("SIGINT", () => {});
+
+    const counts: number[] = [];
+    const remove = process.removeListener;
+    process.removeListener = ((
+      signal: NodeJS.Signals,
+      listener: () => void,
+    ) => {
+      const result = remove.call(process, signal, listener);
+      counts.push(process.listenerCount(signal));
+      return result;
+    }) as typeof process.removeListener;
+    try {
+      expect(takeOverSignals(() => {})).toBe(2);
+    } finally {
+      process.removeListener = remove;
+    }
+    expect(counts).toEqual([1, 1]);
+  });
 });

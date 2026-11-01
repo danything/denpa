@@ -66,6 +66,7 @@
     "38-live-compat",
     "44-ambient",
     "47-search-rule",
-    "46-search"
+    "46-search",
+    "59-boot-signal"
   ]
 }
