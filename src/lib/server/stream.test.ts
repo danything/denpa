@@ -125,6 +125,12 @@ describe("優先度を下げる", () => {
         throw new Error("EACCES");
       }),
     ).not.toThrow();
+    // もう終わっていた (ESRCH) ときも投げない
+    expect(() =>
+      lowerPriority(4242, () => {
+        throw Object.assign(new Error("ESRCH"), { code: "ESRCH" });
+      }),
+    ).not.toThrow();
   });
 
   test("lowPriority で起こすと、動いているうちに 19 になっている", async () => {

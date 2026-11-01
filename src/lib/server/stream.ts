@@ -74,7 +74,8 @@ export function lowerPriority(
   try {
     set(pid, constants.priority.PRIORITY_LOW);
   } catch (error) {
-    if (lowerFailed) return;
+    // もう終わっていた (ESRCH) なら下げる相手がいないだけ。権限不足の知らせを取っておく
+    if ((error as { code?: unknown }).code === "ESRCH" || lowerFailed) return;
     lowerFailed = true;
     console.warn(
       `[encode] 優先度を下げられませんでした。いつもの優先度で続けます: ${String(error)}`,
