@@ -26,7 +26,7 @@ const KEY_SCENE = 8;
  */
 export const KEY_SCDET = `scdet@key=threshold=${KEY_SCENE}`;
 
-export interface Keyframe {
+interface Keyframe {
   /** 見せる時刻 (秒) */
   pts: number;
   /** デコードする時刻 (秒)。B フレームがあると pts より前 (x264 で 2コマ) */
@@ -82,7 +82,7 @@ export async function listKeyframes(
 }
 
 /** 残す1切れ (エンコードしたものの時刻) */
-export interface Piece {
+interface Piece {
   /** 頭のキーフレームの pts */
   start: number;
   /** 尻 (次の CM の頭のキーフレームの pts)。null は終わりまで */
@@ -91,13 +91,13 @@ export interface Piece {
   outpoint: number | null;
 }
 
-export interface CutPlan {
+interface CutPlan {
   pieces: Piece[];
   /** 境目ごとの、切った所 − 決めた所 (秒)。CM 側へ寄せたぶんも入る */
   errors: number[];
 }
 
-export interface CutLimits {
+interface CutLimits {
   /** エンコードしたものの時刻 − 境目の物差しの時刻 (秒)。muxer が頭を数ミリ秒ずらす */
   offset: number;
   /** 同じ境目とみなすずれ (秒)。1コマ半 */

@@ -30,7 +30,7 @@ import { services } from "./schema";
  */
 
 /**
- * 覚えたロゴの置き場。**局ごとに分ける。** 「この画像は違う」で丸ごと捨てられるように
+ * 覚えたロゴの置き場。**局ごとに分ける。** 「覚え直す」で丸ごと捨てられるように
  */
 export function logoRepo(serviceId: number): string {
   return join(config.cmLogoDir, String(serviceId));
@@ -55,7 +55,7 @@ export function forgetLogoData(serviceId: number): void {
   rmSync(logoRepo(serviceId), { recursive: true, force: true });
 }
 
-export interface LearnedLogo {
+interface LearnedLogo {
   /** 覚えている枠。**記録されているコマの座標** (地上波のHDなら 1440×1080 の中) */
   x: number;
   y: number;

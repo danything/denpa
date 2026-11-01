@@ -45,7 +45,7 @@ export const SIDECAR_SUFFIXES = ["-poster.jpg", ".bml.jsonl"] as const;
 const THUMBNAIL_CANDIDATES = 450;
 
 /** サムネを取る位置 (読む入力の時刻) と、そこから読んでよい長さ */
-export interface ThumbnailPlace {
+interface ThumbnailPlace {
   at: number;
   limit?: number;
 }

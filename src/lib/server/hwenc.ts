@@ -153,19 +153,15 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * ビットレートを決めずに画質で指定する。CQP は量子化の幅を固定し (0〜51)、ICQ は x264 の crf に当たる
  * 「この画質で」の指定 (1〜51)。**値はコーデックごとに、ソフトウェアのエンコードと同じ画質になる所**
  * (`VAAPI_QP`・`AV1_ICQ`)。Arc A310 (iHD) で放送の 1440x1080 を 60 秒ずつ 2 か所エンコードし、
- * ソフトウェアの設定を決めたのと同じ XPSNR が、svt-av1 preset 9・crf 35 (前の設定) と x264 crf 23 の高いほうに 2 か所とも
- * −0.26 dB 以内で揃う値を選んだ (ソフトウェアどうしは −0.36 dB まで離れていた。H.265 はソフトウェアの
- * エンコーダが無いので同じ目標に合わせる)。どれも下の `VAAPI_SLOW` を足して測った値:
+ * XPSNR が svt-av1 preset 9・crf 35 (前の設定) と x264 crf 23 の高いほうに 2 か所とも −0.26 dB 以内で
+ * 揃う値を選んだ (H.265 はソフトウェアのエンコーダが無いので同じ目標に合わせる)。どれも下の `VAAPI_SLOW` を足して測った値:
  *
- * - H.264 は **qp 24** (目標との差 −0.12・−0.14 dB)。同じ XPSNR で ICQ より 5〜7% 小さい
- * - H.265 は **qp 24** (−0.21・−0.14 dB)。同じ XPSNR で ICQ より 9〜17% 小さく、ICQ は 25〜26 で画質が頭打ちになった。
- *   25 は B の qp の倍率 1.3 でも −0.38 dB で外れる
- * - AV1 は **ICQ 26** (+0.46・−0.05 dB)。AV1 は ICQ のほうがはっきり良い。27 は −0.26 dB でぎりぎりなので採らない
+ * - H.264 は **qp 24** (目標との差 −0.10・−0.18 dB)。同じ XPSNR で ICQ より 5〜7% 小さい
+ * - H.265 は **qp 24** (−0.20・−0.19 dB)。同じ XPSNR で ICQ より 9〜17% 小さく、ICQ は 25〜26 で画質が頭打ちになった
+ * - AV1 は **ICQ 26** (+0.47・−0.16 dB)。AV1 は ICQ のほうがはっきり良い
  *
- * ビットレートは 300 秒・600 秒の所で H.264 2203・1383 kbps、H.265 1498・988、AV1 2157・1250
- * (前の qp 25・ICQ 26 では H.264 2347・1472、H.265 1803・1064、AV1 2182・1262。2 か所のうち悪いほうの
- * XPSNR は前と同じか上)。XPSNR は FFmpeg の vf_xpsnr (輝度) を JS で書き直したものでポッドの中で測り、
- * ffmpeg のフィルタとは突き合わせていない。
+ * 3 つとも 1 段粗くすると (qp 25・ICQ 27) 目標から外れる。ビットレートと XPSNR の表・測り方は
+ * docs/encode.md「GPU でエンコードする (VA-API)」
  *
  * **`-global_quality` は `:v` を付けて映像にだけ効かせる。** 付けないとどのストリームにも効き、音のエンコーダが
  * 画質での指定として受け取る — libopus は「画質での指定はできない」で開けずに転び、aac は VBR に切り替わる
@@ -209,7 +205,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * **AV1 の CQP は、同じ画質で ICQ より 5 割ほど大きい。** FFmpeg の av1_vaapi は CQP のとき CDEF を使わず
  * (vaapi_encode_av1.c が `enable_cdef` を立てるのは CQP でないときだけ)、ループフィルタの強さも渡さない
  * (ICQ ではドライバのレート制御が決める)。A310 で CQP にすると、CDEF もループフィルタも全部のコマで 0 だった。
- * 300 秒の所で b_qfactor 1.1 の 75 が ICQ 26 とほぼ同じ XPSNR (37.23 と 37.16 dB) で 3368 kbps と、
+ * 300 秒の所で b_qfactor 1.1 の 75 が ICQ 26 とほぼ同じ XPSNR (前の測り方で 37.23 と 37.16 dB) で 3368 kbps と、
  * ICQ の 2182 kbps の 1.5 倍 (既定の b_qfactor の 75 は測っていない)。それでも Mesa (AMD) で AV1 を
  * エンコードできるように残す。**直すには FFmpeg の側を変える必要がある** (CQP でもフィルタを使うように)。
  * CQP は場面に応じて量を変えないので、動きの多い場面で ICQ より大きく、静かな場面で小さくなる
@@ -271,11 +267,7 @@ export function hwArgs(
   };
 }
 
-/**
- * VA-API の H.264・H.265 の録画の CQP の qp (0〜51)。`VAAPI_SLOW` を足したうえで、XPSNR が
- * svt-av1 preset 9・crf 35 (前の設定)・x264 crf 23 の高いほうと揃う所。同じ画質で ICQ より H.264 は 5〜7%、H.265 は 9〜17% 小さい
- * (`hwArgs` の説明)
- */
+/** VA-API の H.264・H.265 の録画の CQP の qp (0〜51)。決め方は `hwArgs` の説明 */
 const VAAPI_QP: Record<Exclude<HwCodec, "av1">, number> = {
   h264: 24,
   hevc: 24,
@@ -295,9 +287,8 @@ const LIVE_QP: Record<Exclude<HwCodec, "av1">, number> = {
  * 録画だけに足す、遅くても小さくなる指定 (`hwArgs` の説明)。`-compression_level` は音のエンコーダも
  * 読むので `:v` を付ける。`-bf`・`-b_depth`・`-b_qfactor` は音のエンコーダが読まない。
  *
- * `-b_qfactor` はコーデックごとに、目標の内でいちばん小さくなる値 (qp 24 で測った):
- * H.264 は 1.3 (−0.12・−0.14 dB、2203・1383 kbps。1.4 は −0.49 dB で外れる)、
- * H.265 は 1.4 (−0.21・−0.14 dB、1498・988 kbps。1.3 は +0.12・−0.03 dB で 1675・1055 kbps)
+ * `-b_qfactor` はコーデックごとに、qp 24 で目標の内でいちばん小さくなる値 (H.264 は 1.3、H.265 は 1.4。
+ * 比べた値は docs/encode.md「GPU でエンコードする (VA-API)」)
  */
 const VAAPI_SLOW: Record<HwCodec, readonly string[]> = {
   h264: [
@@ -352,7 +343,7 @@ function vaapiQuality(
  * 出す映像の大きさとコマ数。Rockchip MPP と NVENC のビットレートを決める (`hwBitrate`)。
  * ほかの方式は画質で指定するので見ない
  */
-export interface Picture {
+interface Picture {
   /** 出す映像の高さ (画素を正方形に直したあと) */
   height: number;
   /** 60コマで出す (`encoder.measureSmoothMotion`)。false なら 30コマ */
@@ -521,7 +512,7 @@ export function liveHw(
  * - `-async_depth 1` … GPU に先積みしない。既定 (2) のぶんだけ映像が遅れて出る
  * - 録画の遅くても小さくする指定 (`VAAPI_SLOW`。`-compression_level 1` と B フレームのピラミッド) は足さない。
  *   B フレームを作らないので qp は録画の 24 ではなく前のままの 25 (`LIVE_QP`)。AV1 は録画と同じ (`AV1_ICQ`・`AV1_CQP`)。
- *   x264 ultrafast の既定 (crf 23) と見比べたのは録画の preset だけで、ライブの ultrafast とは見比べていない
+ *   ライブのソフトウェア (x264 ultrafast・crf 23) とは画質を見比べていない
  *
  * `-g` はライブの側 (`live.ts` の `videoArgs`) が足す。
  *

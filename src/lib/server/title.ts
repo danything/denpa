@@ -183,7 +183,7 @@ export function displayTitle(rawName: string): string {
   return cleaned === "" ? (rawName ?? "").trim() : cleaned;
 }
 
-export interface ParsedTitle {
+interface ParsedTitle {
   /** 作品名。ルールの下書きのキーワード・保存先のフォルダ・録画一覧のまとめに使う */
   series: string;
   /**

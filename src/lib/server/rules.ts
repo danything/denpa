@@ -67,7 +67,7 @@ export function haystack(
  * 判定が番組から読む列。**全列は要らない** — 下見 (`rule-preview.ts`) は
  * 読む列を絞って引くので、ここを `Program` にしていると渡せない
  */
-export type Matchable = Pick<
+type Matchable = Pick<
   Program,
   "service_id" | "is_free" | "genres" | "genre_detail" | "start_at"
 >;

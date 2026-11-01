@@ -15,7 +15,7 @@
  */
 import { connect } from "node:net";
 
-/** 待つ長さと応答の上限。試験は短くする */
+/** 待つ長さと、BUSY のときの送り直し。テストでは短くする */
 export const timing = {
   /** 繋がるまで (EDCB の `CONNECT_TIMEOUT` と同じ) */
   connect: 15_000,

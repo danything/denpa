@@ -18,7 +18,7 @@ import { chunks } from "./stream";
  * スキャンの進み具合は流れてこない — 走らせているのは denpa 自身 (`scan.ts`)。
  */
 
-export interface AgentEvent {
+interface AgentEvent {
   name: string;
   data: Record<string, unknown>;
 }

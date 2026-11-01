@@ -7,7 +7,7 @@ import { statSync } from "node:fs";
  * 録画の字幕 (`api/recordings/<id>/captions.json`) が使う。字幕を抜くには ffmpeg が動画を
  * 頭から尻まで読むので、1時間の録画で1秒ほどかかり、その間は再生のための読み込みとディスクを取り合う
  */
-export interface FileMemo<T> {
+interface FileMemo<T> {
   /** 覚えていればそれを、無ければ `make` で作って返す。ファイルが無ければ覚えずに作る */
   get(path: string, make: () => Promise<T>): Promise<T>;
 }

@@ -23,7 +23,7 @@ import { settings } from "./settings";
  * 録画の実況。チャンネルと、元の TS の頭 (再生位置 0 の手前) の放送時刻、録画の終わりの放送時刻 (unix ms)。
  * 観る画面は `[head, end)` のコメントを過去ログ API から 1 回で取る
  */
-export interface RecordingJikkyo {
+interface RecordingJikkyo {
   channel: string;
   head: number;
   end: number;
@@ -55,7 +55,7 @@ export function recordingJikkyo(recording: Recording): RecordingJikkyo | null {
 }
 
 /** NX-Jikkyo から読んだ勢い (チャンネル → 直近 60 秒のコメント数) */
-export type Forces = ReadonlyMap<string, number>;
+type Forces = ReadonlyMap<string, number>;
 
 /** 中継を読んで持っておく長さ。勢いは 60 秒の窓なので、細かく読んでも変わらない (NX-Jikkyo 自身も 10 秒ごとに作り直している) */
 export const RANKING_TTL = 30_000;
@@ -179,7 +179,7 @@ export class RankingRelay {
 }
 
 /** 勢いの一覧の 1 行。`serviceId` は denpa の局の ID (`services.id`) */
-export interface RankingEntry {
+interface RankingEntry {
   serviceId: number;
   force: number;
 }

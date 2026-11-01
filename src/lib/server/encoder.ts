@@ -671,8 +671,9 @@ export async function cancel(jobId: number): Promise<void> {
     .where(and(eq(encodeJobs.id, jobId), eq(encodeJobs.state, "queued")))
     .returning({ id: encodeJobs.id })
     .get();
-  // まだ始まっていなければここで終わり
+  // まだ始まっていなければここで終わり。pump の finally を通らないので印もここで外す
   if (stopped !== undefined) {
+    canceled.delete(jobId);
     emit("recordings");
     return;
   }
@@ -2121,7 +2122,7 @@ async function runJob(jobId: number): Promise<void> {
  *   (エンコードしたものは映像の大きさが違うので、ロゴは大きさごとに覚えたものを使う。`logo-own.modelFile`)
  * - 境目は入れ物の頭からの秒で覚える (`cm_ranges`。エンコードするときと同じ物差し)。エンコードしたものから読んだなら
  *   エンコードしたときに捨てた頭 (`encode_skip`) を足して直す
- * - エンコードしたものには CM の扱いの設定どおりにチャプターを書き直す: 「チャプター」「切り取る」なら差し替え、
+ * - エンコードしたものには CM の扱いの設定どおりにチャプターを書き直す: 「チャプターを打つだけ」「切り取る」なら差し替え、
  *   「何もしない」なら外す。`-c copy` で写すだけ
  * - **CM を切ってエンコードしたもの (`cm_kept`) は戻せない**ので受けない (ボタンの側で断っている。ここは念のため)
  *

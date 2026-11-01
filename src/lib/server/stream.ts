@@ -185,7 +185,8 @@ export async function run(
 }
 
 /**
- * **ffmpeg の出口をそのまま応答の本文にする** (音声だけ・詰め替え。`stdout` に流させる)。
+ * **ffmpeg の出口をそのまま応答の本文にする** (音声だけの取り出し。`stdout` に流させる)。
+ * 録画のその場の変換・詰め替えは、降りたときの次の手と詰まりの見張りを足した `playback.transcodeBody`
  *
  * - 読まれたぶんしか読み出さない (`pull`)。相手が読まなければ出口が詰まり、ffmpeg も止まる
  * - 閉じられたら (`cancel`) ffmpeg を殺す

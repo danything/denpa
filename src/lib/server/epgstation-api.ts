@@ -25,7 +25,7 @@ import {
   unknown,
 } from "#lib/shape.js";
 
-/** 待つ長さ。試験は短くする */
+/** 待つ長さと取り直し。テストでは短くする */
 export const timing = {
   /** 繋いでヘッダが返るまで */
   header: 10_000,

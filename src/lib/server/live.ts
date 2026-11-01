@@ -870,7 +870,7 @@ class Session {
     /**
      * 入力の差し替え。無ければチューナーから (ライブ)。
      * 追っかけ再生はこれで録画中のファイルを渡す (`openChase`)。
-     * 呼ぶたびに読み直したストリームを返すこと — 字幕なしでの再エンコードに使う
+     * 呼ぶたびに読み直したストリームを返すこと — 起こし直す (字幕なし・ソフトウェア) たびに頭から読む
      */
     private readonly source?: () => ReadableStream<Uint8Array>,
     /**
@@ -1568,10 +1568,7 @@ class Session {
     }
   }
 
-  /**
-   * 選べる字幕を1人に知らせる。**言語はその人に出しているもの** (`Viewer.language`) なので、全員に同じものは送れない。
-   * 言語がまだ分からない (字幕管理データが届いていない) ときは `languages` を省く
-   */
+  /** 選べる字幕を1人に知らせる (`captionsNotice`。言語はその人の `Viewer.language`) */
   private tellCaptions(viewer: Viewer, tracks: CaptionTrack[]): void {
     this.tellOne(
       viewer,

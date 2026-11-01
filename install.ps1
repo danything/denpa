@@ -20,7 +20,7 @@
 #                                         config/・denpa-agent.log
 #   %LOCALAPPDATA%\denpa-agent\           エージェント・px4-userland (px4d.exe・px4ctl.exe・切り出したファームウェア)・
 #                                         siano-userland・起こす .cmd と denpa-start.ps1
-#   C:\denpa-run                          px4d のソケットの置き場 (本人だけが書ける。px4d がそう決めている)
+#   C:\denpa-run                          px4d のソケットの置き場 (本人・SYSTEM・Administrators だけが書ける。px4d がそう決めている)
 #   ~/Videos/denpa/{recorded,library}     元のTS (エージェントとコンテナの両方が見る) と出来上がった録画
 #   wslc のボリューム denpa-data          DB (Windows のフォルダ越しだと SQLite のロックが当てにならない)
 #

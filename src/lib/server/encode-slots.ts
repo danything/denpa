@@ -20,7 +20,7 @@
 /** 返すと枠が空く。何度呼んでも1回だけ */
 export type Release = () => void;
 
-export interface SlotPool {
+interface SlotPool {
   /** 新しいジョブを始めてよいか (空きがあり、待っている人がいない) */
   free(): boolean;
   /** ジョブの持ち枠を取る。取れなければ false */

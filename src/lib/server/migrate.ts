@@ -1,5 +1,5 @@
 /**
- * EPGStation (v2・v3) の録画・ルール・手動予約を、**HTTP API だけで** denpa に引き継ぐ (読み方は
+ * EPGStation (v2・v3) の録画・ルール・手動予約と録画の履歴を、**HTTP API だけで** denpa に引き継ぐ (読み方は
  * `epgstation-api.ts`)。EDCB からの引き継ぎ (`migrate-edcb.ts`) も、進み具合と記録 ({@link status}・
  * {@link record}・{@link track}) と、ルール・予約・履歴の入れ方 ({@link insertRule}・{@link importReservation}・
  * {@link addHistory}・{@link SlotWindows}) はここのものを使う。

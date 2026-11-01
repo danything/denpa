@@ -42,7 +42,7 @@ export function idOf(form: FormData): number | null {
 }
 
 /** 足したルール・直したルール */
-export interface Saved {
+interface Saved {
   id: number;
   name: string;
 }

@@ -99,7 +99,7 @@ export function channelsFor(type: ScanKind): string[] {
   return range.map((ch) => `CS${String(ch).padStart(2, "0")}`);
 }
 
-export interface ScanResult {
+interface ScanResult {
   services: FoundService[] | null;
   error: string | null;
   /** TS が1バイトでも来たか。アンテナの問題と読み取りの問題を分ける手掛かり */
@@ -196,7 +196,7 @@ export function channelEntry(
   };
 }
 
-export interface ScanState {
+interface ScanState {
   state: "idle" | "running" | "done" | "failed" | "canceled";
   /** いま何をしているか。そのまま画面に出す */
   phase: string;

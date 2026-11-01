@@ -104,13 +104,13 @@ export function exact(words: string[]): boolean {
  * 1つの節の結果。`rows` は先頭から `limit` 件まで、`more` はその先にもあるか。
  * `total` は件数を求めたとき (`count`) は当たった数、求めなければ読んだぶんの数 (多くても `limit + 1`)
  */
-export interface Section<T> {
+interface Section<T> {
   total: number;
   rows: T[];
   more: boolean;
 }
 
-export interface SearchOptions {
+interface SearchOptions {
   limit: number;
   /** 当たった数も数えるか。結果の画面だけ。打つそばから出すぶんは数えない */
   count?: boolean;

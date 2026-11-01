@@ -258,7 +258,7 @@ export function ruleValues(conditions: Conditions, form: Fields) {
 }
 
 /** 録画・番組からルールを作るときの元 (`originOf`) */
-export interface Origin {
+interface Origin {
   kind: "recording" | "program";
   id: number;
   name: string;

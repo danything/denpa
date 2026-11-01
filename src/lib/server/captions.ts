@@ -146,7 +146,7 @@ export function rawCaptionArgs(program: number, track: number): string[] {
  *
  * 字幕を持たない局はある (ショッピングやサブチャンネル)。そこに
  * `0:p:X:s:0` を要求すると、ffmpeg は**組み立ての時点で降りる** — つまり
- * **映像も出ない**。そうと分かったら字幕なしで再エンコードする (`Session.run`)。
+ * **映像も出ない**。そうと分かったら字幕なしで起こし直す (`Session.run`)。
  *
  * ffmpeg は `Stream map '' matches no streams.` と言う。**この行は記録に残らない** (`worthLogging` の
  * 言葉を含まない)。残るのはそのあとの `Failed to set value '0:p:X:s:0' for option 'map': Invalid argument`
