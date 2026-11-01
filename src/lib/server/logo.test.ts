@@ -15,7 +15,8 @@ config.dataDir = mkdtempSync(join(tmpdir(), "denpa-logo-"));
 const dir = join(config.dataDir, "logos");
 mkdirSync(dir, { recursive: true });
 
-const { countFree, logoStamps, writtenSince } = await import("./logo");
+const { countFree, logoStamps, shareable, writtenSince } =
+  await import("./logo");
 
 /** 局のロゴを置き、書き込み時刻を `at` (秒) にする */
 function put(serviceId: number, at: number): void {
@@ -86,5 +87,28 @@ describe("空きチューナーの数", () => {
     ];
     expect(countFree(tuners, "CS", ["logo BS/BS03_0"])).toBe(0);
     expect(countFree(tuners, "GR")).toBe(1);
+  });
+});
+
+/**
+ * 共有 (`ride`) しに行く選局 (`shareable`)。
+ *
+ * ロゴの利用者しかいない選局は自分のもの。閉じたのがエージェントに届く前の一覧を見て共有しに行くと、
+ * 閉じた後に自分で開き直して衛星のチューナーを1台塞ぎ、「いますぐ」が CS の空きを0と見て諦めていた
+ */
+describe("共有しに行く選局", () => {
+  const tuner = (channel: string | null, users: string[] = []) => ({
+    channel: channel === null ? null : { type: "BS" as const, channel },
+    users: users.map((use) => ({ use, priority: 1 })),
+  });
+
+  test("ロゴ以外の利用者がいる選局だけ。ロゴの利用者しかいない選局と空きは入れない", () => {
+    const open = shareable([
+      tuner("BS03_0", ["logo BS/BS03_0"]),
+      tuner("BS11_0", ["epg BS11_0", "logo BS/BS11_0"]),
+      tuner("BS15_0", ["rec 3"]),
+      tuner(null),
+    ]);
+    expect([...open].sort()).toEqual(["BS11_0", "BS15_0"]);
   });
 });

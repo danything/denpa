@@ -278,8 +278,12 @@ test.describe("ホームの1本の一覧", () => {
         const label = (await status.locator(".act-text").boundingBox())!;
         expect(now.x).toBeGreaterThan(label.x + label.width);
 
-        // 線のすぐ上 (線の手前の行がこの行)
-        const before = await page.getByTestId("timeline").evaluate((list) => {
+        /*
+         * 線のすぐ上 (線の手前から上へ続く録画中の行に、この行がいる)。
+         * **線の手前の1行だけを見ない。** 同じワーカーの前のスペックが立てた予約が、ちょうど録画中のことがある
+         * (偽の番組は10分。この行より後に始まったので、線の側に並ぶ)。CI で時々落ちていた
+         */
+        const live = await page.getByTestId("timeline").evaluate((list) => {
           const all = [
             ...list.querySelectorAll<HTMLElement>(
               '[data-key], [data-testid="timeline-now"]',
@@ -288,9 +292,20 @@ test.describe("ホームの1本の一覧", () => {
           const at = all.findIndex(
             (node) => node.dataset["testid"] === "timeline-now",
           );
-          return all[at - 1]?.textContent ?? "";
+          const names: string[] = [];
+          for (let i = at - 1; i >= 0; i--) {
+            const node = all[i]!;
+            if (
+              node.querySelector(
+                '[data-testid="row-activity"][data-kind="recording"]',
+              ) === null
+            )
+              break;
+            names.push(node.querySelector(".row-name")?.textContent ?? "");
+          }
+          return names;
         });
-        expect(before).toContain("録画中試験");
+        expect(live.map((name) => name.trim())).toContain("録画中試験");
 
         // 線は次の録画までを言い、録画中とは言わない。目には見せず、時刻は行のバーの先に出る
         const line = page.getByTestId("timeline-now");

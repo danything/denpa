@@ -786,11 +786,24 @@ async function freeTuners(
   }
 }
 
-/** いまエージェントが開けている物理チャンネル */
-function openChannels(tuners: AgentTuner[]): Set<string> {
+/**
+ * 共有できる物理チャンネル。**ロゴ以外の利用者がいる選局だけ** (`ride`)。
+ *
+ * ロゴの利用者しかいない選局は自分のもので、読んでいる最中か、閉じたのがエージェントに
+ * まだ届いていないだけ。それを共有しに行くと、閉じた後に**自分で開き直して**衛星のチューナーを
+ * 1台塞いでいた。外れと分かったばかりの中継まで開き直し、その間に「いますぐ」が CS の空きを
+ * 0 と見て残りを諦めていた (17-logo が CI で時々落ちていた)
+ */
+export function shareable(
+  tuners: readonly Pick<AgentTuner, "channel" | "users">[],
+): Set<string> {
   const open = new Set<string>();
   for (const tuner of tuners) {
-    if (tuner.channel !== null) open.add(tuner.channel.channel);
+    if (
+      tuner.channel !== null &&
+      tuner.users.some((user) => !user.use.startsWith("logo "))
+    )
+      open.add(tuner.channel.channel);
   }
   return open;
 }
@@ -946,7 +959,7 @@ export async function ride(): Promise<number> {
       const need = missing();
       if (need.length === 0) break;
 
-      const open = openChannels(await getTuners());
+      const open = shareable(await getTuners());
       for (const target of need) {
         if (!open.has(target.channel)) continue;
         // 自分で開けたものは共有しない。同じチャンネルを二重に読むことになる
