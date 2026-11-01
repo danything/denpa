@@ -406,13 +406,19 @@ test.describe("アンビエントの光の上を流れる実況", () => {
         const r = el.getBoundingClientRect();
         return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
       });
-      // 外の所は枠より広く、右の列には掛からない
+      // 外の所は窓の端から端まで (右の列の上も通る)。見出しには掛からない
       const aside = (await page
         .locator("[data-player-side] > aside")
         .boundingBox())!;
-      expect(room.right).toBeLessThanOrEqual(aside.x + 0.5);
-      expect(room.right - frame.right).toBeGreaterThan(100);
+      const width = await page.evaluate(
+        () => document.documentElement.clientWidth,
+      );
+      expect(room.left).toBeCloseTo(0, 0);
+      expect(room.right).toBeCloseTo(width, 0);
+      expect(room.right).toBeGreaterThan(aside.x + 100);
       expect(frame.left - room.left).toBeGreaterThan(100);
+      const header = (await page.locator(".navbar").boundingBox())!;
+      expect(room.top).toBeGreaterThanOrEqual(header.y + header.height - 0.5);
 
       // 流れるものは外の右の端から流し始める (行は枠のまま)
       await expect
@@ -450,6 +456,29 @@ test.describe("アンビエントの光の上を流れる実況", () => {
       });
       for (const top of rows.outside) expect(rows.inside).toContain(top);
 
+      // 右の列の上を通っている間も、押すのは右の列の中身 (外のコメントは押すものを受けない)
+      await expect
+        .poll(
+          () =>
+            page.getByTestId("jikkyo-outside-comment").evaluateAll(
+              (els, side) =>
+                els.some((el) => {
+                  const r = el.getBoundingClientRect();
+                  const x = Math.max(r.left, side.x + 8);
+                  if (x > r.right - 4 || x > window.innerWidth - 4)
+                    return false;
+                  const hit = document.elementFromPoint(
+                    x,
+                    r.top + r.height / 2,
+                  );
+                  return hit?.closest("[data-player-side]") != null;
+                }),
+              aside,
+            ),
+          { timeout: 20_000 },
+        )
+        .toBe(true);
+
       // 止めるもの (`ue`) は枠の中だけ。写しは作らない
       const still = page.locator('[data-testid="jikkyo-comment"].still');
       await expect(still.first()).toHaveText("上の字", { timeout: 20_000 });
@@ -465,8 +494,8 @@ test.describe("アンビエントの光の上を流れる実況", () => {
           .filter({ hasText: "上の字" }),
       ).toHaveCount(0);
 
-      // 枠が置き場の幅いっぱいなら外は無く、枠の右の端から流す (今までどおり)
-      await page.setViewportSize({ width: 1280, height: 900 });
+      // 縦に積むと外は無く、枠の右の端から流す (今までどおり)
+      await page.setViewportSize({ width: 900, height: 900 });
       const narrow = await frameBox(page);
       await expect
         .poll(() => newestFrom(page), { timeout: 20_000 })

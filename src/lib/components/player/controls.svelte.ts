@@ -24,7 +24,7 @@ export const PLAYER_STAGE = Symbol("player-stage");
 
 /**
  * 枠の外で実況のコメントを流す所 (`PlayerStage` の `.outside`)。アンビエントの光を枠の外に出している間だけあり、
- * 無ければ null。枠の下・光の上に重なり、置き場 (`.room`) の外へは描かない
+ * 無ければ null。枠の下・光と右の列の上に重なる。横は窓の端から端まで、縦は置き場 (`.room`) の中 (見出しには掛からない)
  */
 export const STAGE_OUTSIDE = Symbol("stage-outside");
 

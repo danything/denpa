@@ -201,8 +201,8 @@ export function commentSpots(
 
 /** 実況の字の透明度。`JikkyoLayer` の `.comment` と同じ */
 const COMMENT_OPACITY = 0.5;
-/** 黒い縁の幅 (CSS px)。`JikkyoLayer` の `text-shadow` と同じく8方向にずらして描く */
-const OUTLINE = 2;
+/** 黒い縁の幅 (CSS px)。`JikkyoLayer` の `text-shadow` と同じく斜め4方向にずらして描く */
+const OUTLINE = 1;
 
 /** 押した瞬間のコメントの枠 (CSS px) と、そこに掛かっているコメント */
 export interface CommentScene {
@@ -273,12 +273,8 @@ export function commentLayer(
 
 const OUTLINE_SHIFTS = [
   [-OUTLINE, -OUTLINE],
-  [0, -OUTLINE],
   [OUTLINE, -OUTLINE],
-  [-OUTLINE, 0],
-  [OUTLINE, 0],
   [-OUTLINE, OUTLINE],
-  [0, OUTLINE],
   [OUTLINE, OUTLINE],
 ] as const;
 

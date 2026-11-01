@@ -66,12 +66,31 @@
 
   /**
    * **枠の外で実況のコメントを流す所** (`STAGE_OUTSIDE`)。光を枠の外に出している間だけ置く (テーブルトップの反射・全画面では置かない)。
-   * 広さは置き場 (`.room`) で、左は `<main>` の余白の外まで。右の列と見出しには掛からない。
-   * 枠が置き場の幅いっぱい (縦に積むとき・幅で抑えた二段組) なら外の幅は 0 で、枠の中だけを流れる
+   * 縦は置き場 (`.room`) の中 (見出しには掛からない)、横は窓の左の端から右の端まで (光と同じく右の列の上も通る)。
+   * 右の列の中身より上に描くが、押すものは何も受けない (`pointer-events: none`)。二段組のときだけ出す (下の style)
    */
   let glowing = $state(false);
+  let room = $state<HTMLElement | null>(null);
   let outside = $state<HTMLElement | null>(null);
   setContext(STAGE_OUTSIDE, () => outside);
+  // 横の位置は窓に合わせる (置き場は `<main>` の余白の内側にあり、右の列は置き場の外なので CSS では届かない)
+  $effect(() => {
+    const target = outside;
+    const box = room;
+    if (target === null || box === null) return;
+    const place = () => {
+      target.style.left = `${-box.getBoundingClientRect().left}px`;
+      target.style.width = `${document.documentElement.clientWidth}px`;
+    };
+    place();
+    const sizes = new ResizeObserver(place);
+    sizes.observe(box);
+    window.addEventListener("resize", place);
+    return () => {
+      sizes.disconnect();
+      window.removeEventListener("resize", place);
+    };
+  });
 
   /**
    * 枠の大きさで操作列の詰め方を変える (操作列は 48px の丸を横に9個並べる作りで、狭い枠では折れて映像を覆った)。
@@ -348,7 +367,7 @@
   />
 {/if}
 <!-- 枠の置き場。二段組では、枠が使える広さをここで測る (下の style の `container-type`) -->
-<div class="room">
+<div class="room" bind:this={room}>
   {#if ambient && !tabletop.current && glowing}
     <!-- 枠より前に置く。位置を持つ枠のほうが後ろなので、外を流れるコメントは枠の下・光の上になる -->
     <div
@@ -405,7 +424,7 @@
     display: contents;
   }
   /*
-   * 枠の外を流れるコメントの所 (`outside`)。二段組 (下) のほかでは出さない — 枠が置き場の幅いっぱいで外が無く、
+   * 枠の外を流れるコメントの所 (`outside`)。二段組 (下) のほかでは出さない — 縦に積むときは枠が窓の幅いっぱいで外が無く、
    * 置き場が箱を持たないので、置くと窓の別の所に出る
    */
   .outside {
@@ -430,14 +449,23 @@
       aspect-ratio: var(--dp-aspect, 16 / 9);
       width: min(100cqw, max(100cqh, 14rem) * var(--dp-aspect, 16 / 9));
     }
-    /* 枠の外を流れるコメント (上の `outside`)。置き場いっぱいに、左は `<main>` の余白の外 (窓の端) まで。はみ出したぶんは切る */
+    /*
+     * 枠の外を流れるコメント (上の `outside`)。縦は置き場の中、横は窓の端から端まで (左と幅は上の `place` が書く)。
+     * はみ出したぶんは切る。右の列 (位置を持つ。`AmbientGlow`) より上に描くため `z-index: 1` にし、
+     * 枠も同じ 1 にして文書の順で上に保つ (外のコメントは枠の下)
+     */
     .room {
       position: relative;
+    }
+    .stage {
+      z-index: 1;
     }
     .outside {
       display: block;
       position: absolute;
-      inset: 0 0 0 calc(-1 * var(--dp-gutter, 1rem));
+      top: 0;
+      bottom: 0;
+      z-index: 1;
       overflow: hidden;
       pointer-events: none;
     }
