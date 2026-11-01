@@ -125,11 +125,10 @@ test.describe("GPU でエンコードする", () => {
     );
     await waitWatchable(page, row);
     let recordingId = await row.getAttribute("data-recording-id");
-    // AV1 は 128、H.264 は 129 の VA-API
-    expect(encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf)).toEqual([
-      "renderD128:av1_vaapi",
-      "renderD129:h264_vaapi",
-    ]);
+    // AV1 は 128、H.264 は 129 の VA-API。2つは同時にエンコードするので、引数を書く順は決まらない
+    expect(
+      encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf).sort(),
+    ).toEqual(["renderD128:av1_vaapi", "renderD129:h264_vaapi"]);
 
     /*
      * **GPU が途中で駄目になっても録画は失敗にならない。** 129 を抜いてから
@@ -185,9 +184,11 @@ test.describe("GPU でエンコードする", () => {
     await waitWatchable(page, row);
     const recordingId = await row.getAttribute("data-recording-id");
     const runs = encodeRuns(stack.encodeArgsFile, recordingId);
-    expect(runs.map(wayOf)).toEqual(["libsvtav1", "h264_rkmpp"]);
+    // 同時にエンコードするので、引数を書く順は決まらない
+    expect(runs.map(wayOf).sort()).toEqual(["h264_rkmpp", "libsvtav1"]);
     // AVBR でビットレートを渡す (hwenc.hwBitrate)
-    expect(runs[1]!.join(" ")).toMatch(
+    const mppRun = runs.find((run) => wayOf(run) === "h264_rkmpp");
+    expect(mppRun!.join(" ")).toMatch(
       /-rc avbr -b:v \d+ -maxrate \d+ -minrate \d+ -g 250/,
     );
   });
