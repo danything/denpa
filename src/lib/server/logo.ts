@@ -146,15 +146,19 @@ interface RelayNotes {
  *
  * `missing()` は局の数だけ引くので (実機で124局)、そのたびにファイルを
  * 読みに行くと、番組表を1回出すだけで何百回も開くことになる。
- * 書くのはこの1プロセスだけなので、書いたときに入れ替えれば足りる
+ * 書くのはこの1プロセスだけなので、書いたときに入れ替えれば足りる。
+ * 置き場が変わったら読み直す (`db.ts` の接続と同じ。テストはファイルごとに置き場を変える)
  */
 let relays: RelayNotes | null = null;
+let relaysFrom = "";
 
 function notes(): RelayNotes {
-  if (relays !== null) return relays;
+  const path = relayPath();
+  if (relays !== null && relaysFrom === path) return relays;
+  relaysFrom = path;
   try {
     const parsed = JSON.parse(
-      readFileSync(relayPath(), "utf8"),
+      readFileSync(path, "utf8"),
     ) as Partial<RelayNotes>;
     relays = {
       noCarousel: parsed.noCarousel ?? {},
@@ -170,6 +174,7 @@ function notes(): RelayNotes {
 
 function save(next: RelayNotes): void {
   relays = next;
+  relaysFrom = relayPath();
   try {
     mkdirSync(logoDir(), { recursive: true });
     writeWhole(relayPath(), JSON.stringify(next));
@@ -1091,11 +1096,16 @@ export async function sweepNow(): Promise<{
   }
   reconcile();
   /*
-   * **押されたら「カルーセルに載っていない」の控えを捨てて当たり直す。** 控えが間違っていると
-   * (読み切る前に見切った、など)、押しても「すべて取得済み」と言われ、取り直せなかった
+   * **押されたら「カルーセルに載っていない」「この中継は外れ」の控えを捨てて当たり直す。** 控えが間違っていると
+   * (読み切る前に見切った、前の選局の PAT を見て当たりの中継を外れとした、など)、押しても「すべて取得済み」と
+   * 言われ、1週間 (`RELAY_RETRY`) は取り直せなかった。外れの中継は PAT で1秒ほどで見切るので、当たり直しても安い
    */
   const known = notes();
-  if (Object.keys(known.absent).length > 0) save({ ...known, absent: {} });
+  if (
+    Object.keys(known.absent).length > 0 ||
+    Object.keys(known.noCarousel).length > 0
+  )
+    save({ ...known, absent: {}, noCarousel: {} });
   const targets = missing();
   if (targets.length === 0) {
     return { started: false, message: "ロゴはすべて取得済みです" };

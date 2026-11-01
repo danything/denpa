@@ -405,6 +405,41 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     }
 
     /// <summary>
+    /// **いま溜まっているぶんを読んで捨てる。待たない** (<c>DvbTuner.Tune</c>。demux を止めてから呼ぶ)。
+    /// 溢れの印 (<c>EOVERFLOW</c>) はカーネルが読んだときに空にするので、そのまま読み続ける。
+    /// fd を持たない読み出し側 (px4d・Windows の pipe) では何もしない
+    /// </summary>
+    /// <returns>捨てたバイト数</returns>
+    public long Discard()
+    {
+        if (_piped is not null || _background is not null) return 0;
+        var fd = (int)handle.DangerousGetHandle();
+        var buffer = new byte[188 * 1024];
+        var descriptor = stackalloc byte[8];
+        long dropped = 0;
+        while (true)
+        {
+            *(int*)descriptor = fd;
+            *(short*)(descriptor + 4) = PollIn;
+            *(short*)(descriptor + 6) = 0;
+            var ready = Sys.Poll(descriptor, 1, 0);
+            if (ready < 0 && Marshal.GetLastPInvokeError() == EIntr) continue;
+            if (ready <= 0) return dropped;
+
+            nint read;
+            fixed (byte* target = buffer) read = Sys.ReadFd(fd, target, (nuint)buffer.Length);
+            if (read > 0)
+            {
+                dropped += read;
+                continue;
+            }
+            if (read == 0) return dropped;
+            var failure = Marshal.GetLastPInvokeError();
+            if (failure != EIntr && failure != EOverflow) return dropped;
+        }
+    }
+
+    /// <summary>
     /// **その選局のぶんだけ数えはじめる** (読み始めるところで。<c>Lease.StartNative</c>)。持ち越すと、
     /// 局を変えている間の時間が「読む側が空いていた時間」として出る (実機で 4.1秒・4.3秒)
     /// </summary>
@@ -669,7 +704,18 @@ public sealed unsafe class DvbTuner : ITuneDevice
     {
         // 選局し直す間は止める。前のチャンネルの残りが混ざったまま流れると、
         // 読む側 (denpa) には途中で中身が変わったようにしか見えない
-        if (_streaming) Sys.Call(_demux, DmxStop, 0, "demux の停止");
+        if (_streaming)
+        {
+            Sys.Call(_demux, DmxStop, 0, "demux の停止");
+            /*
+             * **止めたうえで、dvr に残っている前のチャンネルのぶんを捨てる。** dvr のリングバッファは
+             * DMX_START でも空にならず (カーネルが空にするのは開いたときと溢れを読んだときだけ)、
+             * 前の利用者が抜けてから溢れるまでの数秒の間に次の選局が来ると、前のチャンネルの PAT が
+             * 新しい選局の頭に乗る。衛星の局ロゴはそれを見て、当たりの中継 (BS15_0) を「外れ」と
+             * 1週間控えていた (docs/logo.md)
+             */
+            _dvr.Discard();
+        }
 
         var properties = new List<(uint Command, uint Value)>
         {
