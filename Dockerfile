@@ -202,7 +202,7 @@ ARG SVT_AV1_VERSION=v4.2.0
 # だけで (デコードは FFmpeg 自前の opus デコーダ)、どれも使わないので、既定 (どれも切れている) で組むと 0.6MB ほどで済む。
 # 配布物は xiph のもの (GitHub の tar には組むときに生成するファイルが無い)
 # renovate: datasource=github-tags depName=xiph/opus extractVersion=^v(?<version>.*)$
-ARG OPUS_VERSION=1.5.2
+ARG OPUS_VERSION=1.6.1
 # Rockchip MPP (arm64 だけ。上の説明)。FFmpeg の configure が求めるのは pkg-config で `rockchip_mpp >= 1.3.8`
 # renovate: datasource=github-tags depName=rockchip-linux/mpp
 ARG MPP_VERSION=1.1.0
