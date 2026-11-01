@@ -366,18 +366,19 @@
 }
 
 /*
- * ---- 自分の書き込みの点 (`.mine-dot`)。字と同じ色の小さな丸を字の前に ----
- * 実況の流れるコメントと一覧。形は `.fresh-dot` と同じで、色を字に合わせて「まだ見ていない」(主の色) と分ける
+ * ---- 自分の書き込みの縦線 (`.mine-line`)。字の頭に短い縦線 ----
+ * 実況の流れるコメントと一覧。「いまいる場所」の左の縦線 (`.menu-item` など) と同じ形 (幅 2px・角 1px・主の色) で、
+ * 「自分のもの」も同じ印で示す。映像の上では使う側が `--mine-line` で色を替える (`JikkyoLayer`)
  */
-.mine-dot::before {
+.mine-line::before {
   content: "";
   display: inline-block;
-  width: 0.4em;
-  height: 0.4em;
+  width: 2px;
+  height: 1em;
   margin-inline-end: 0.3em;
-  vertical-align: middle;
-  border-radius: var(--dp-radius-full);
-  background: currentColor;
+  vertical-align: -0.125em;
+  border-radius: 1px;
+  background: var(--mine-line, var(--pico-primary));
 }
 
 /* ---- 読み込めたらふわっと出る画像 (`#lib/motion.svelte.ts` の `fadeIn`。録画のポスターは `Poster.svelte` の `{@attach}` から) ---- */
