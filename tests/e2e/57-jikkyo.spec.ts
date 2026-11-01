@@ -365,6 +365,24 @@ interface Box {
   bottom: number;
 }
 
+/**
+ * 窓の大きさを変えた後の枠。枠は舞台の大きさを `ResizeObserver` で測り直してから動くので、変えた直後に読むと
+ * 前の大きさのことがある (CI で踏んだ)。舞台の幅に揃うまで待つ (縦の端数で 1px ほどずれる)
+ */
+async function settledFrame(page: Page): Promise<Box> {
+  let box = await frameBox(page);
+  await expect
+    .poll(async () => {
+      box = await frameBox(page);
+      const stage = await page
+        .getByTestId("live-frame")
+        .evaluate((el) => el.clientWidth);
+      return Math.abs(box.right - box.left - stage) < 2;
+    })
+    .toBe(true);
+  return box;
+}
+
 /** いちばん新しい流れるコメント (枠の中の1つ) の、流れ始めの位置 (`--from`。枠の左の端から) */
 async function newestFrom(page: Page): Promise<number> {
   return page.getByTestId("jikkyo-comment").evaluateAll((els) =>
@@ -496,7 +514,7 @@ test.describe("アンビエントの光の上を流れる実況", () => {
 
       // 縦に積むと外は無く、枠の右の端から流す (今までどおり)
       await page.setViewportSize({ width: 900, height: 900 });
-      const narrow = await frameBox(page);
+      const narrow = await settledFrame(page);
       await expect
         .poll(() => newestFrom(page), { timeout: 20_000 })
         .toBeCloseTo(narrow.right - narrow.left, -1);
@@ -506,7 +524,7 @@ test.describe("アンビエントの光の上を流れる実況", () => {
       await wakeControls(page, "live-frame");
       await flipSetting(page, "live", "ambient");
       await expect(outside).toHaveCount(0);
-      const wide = await frameBox(page);
+      const wide = await settledFrame(page);
       await expect
         .poll(() => newestFrom(page), { timeout: 20_000 })
         .toBeCloseTo(wide.right - wide.left, -1);
