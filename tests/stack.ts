@@ -48,6 +48,8 @@ export interface Stack {
   edcbControlUrl: string;
   /** これを置くと偽 ffmpeg がエンコードに失敗する */
   failFile: string;
+  /** エンコーダの名前 (`libx264` など) を書いて置くと、偽 ffmpeg はそのエンコーダを使うエンコードだけ失敗する */
+  failEncoderFile: string;
   /**
    * これを置くと偽 ffmpeg のエンコードが長引く (20秒ほど)。
    * **走っている最中に押す**ものを試すのに使う (エンコード中止)
@@ -82,6 +84,8 @@ export interface Stack {
   hwDir: string;
   /** エンコードするときに偽 ffmpeg へ渡された引数 (1回ずつ `---` で区切って足される) */
   encodeArgsFile: string;
+  /** 偽 ffmpeg がエンコードしていた間 (`start`/`end`・ミリ秒・入力・出力をタブで区切った行が1行ずつ足される。`helpers.encodeSpans`) */
+  encodeSpansFile: string;
 }
 
 /** 資格情報を持たずに呼ぶ関数。返るのは素の Response */
@@ -180,6 +184,7 @@ export async function boot(
     rawDir: `${root}/raw`,
     encodedDir: `${root}/encoded`,
     failFile: `${root}/fail-encode`,
+    failEncoderFile: `${root}/fail-encoder`,
     slowFile: `${root}/slow-encode`,
     liveArgsFile: `${root}/live-ffmpeg-args`,
     liveFailFile: `${root}/fail-live`,
@@ -188,6 +193,7 @@ export async function boot(
     liveFmp4File: `${root}/live-fmp4`,
     hwDir: `${root}/gpu`,
     encodeArgsFile: `${root}/encode-ffmpeg-args`,
+    encodeSpansFile: `${root}/encode-ffmpeg-spans`,
   };
 
   rmSync(root, { recursive: true, force: true });
@@ -261,6 +267,8 @@ export async function boot(
       RKMPP_DEVICE: `${stack.hwDir}/mpp_service`,
       NVIDIA_DIR: stack.hwDir,
       FAKE_FFMPEG_ENCODE_ARGS_FILE: stack.encodeArgsFile,
+      FAKE_FFMPEG_ENCODE_SPANS_FILE: stack.encodeSpansFile,
+      FAKE_FFMPEG_FAIL_ENCODER_FILE: stack.failEncoderFile,
       /*
        * 新しいバージョンの通知。GitHub の代わりに偽通知先が「最新のリリース」を返す
        * (既定は無し)。動いているバージョンは古めにして、置いたリリースが必ず新しく見えるように

@@ -1,6 +1,14 @@
 import { existsSync, rmSync, writeFileSync } from "node:fs";
 
-import { expect, goto, reserveSoon, syncEpg, test } from "./helpers";
+import {
+  encodeSpans,
+  expect,
+  goto,
+  reserveSoon,
+  setRecording,
+  syncEpg,
+  test,
+} from "./helpers";
 
 /**
  * エンコードの中止。
@@ -61,5 +69,67 @@ test.describe("エンコードの中止", () => {
     });
     // 中止のボタンは消え、再エンコードできる状態に戻っている
     await expect(row.getByTestId("encode-cancel")).toHaveCount(0);
+  });
+
+  /*
+   * コーデックをいくつも選ぶと、コーデックごとの ffmpeg が同時に走る。**中止はその全部を止める** —
+   * 1本だけ止めて返すと、残りが走り続けて作業ファイルを書き続ける
+   */
+  test("コーデックを同時にエンコードしていても、中止で全部止まって片付く", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(180_000);
+    await syncEpg(request);
+    await setRecording(request, { codecs: ["av1", "h264"] });
+    writeFileSync(stack.slowFile, "1");
+    try {
+      const programId = await reserveSoon(page, request, "BS");
+      const row = page.locator(
+        `[data-testid="recording-row"][data-program-id="${programId}"]`,
+      );
+      await expect(async () => {
+        await goto(page, "/");
+        await expect(row.getByTestId("recording-state")).toHaveText(
+          "エンコード中",
+          { timeout: 1_000 },
+        );
+      }).toPass({ timeout: 120_000, intervals: [500] });
+      const id = (await row.getAttribute("data-recording-id")) ?? "";
+
+      // 2本とも走り出すまで待つ (同時に走っている)
+      await expect
+        .poll(
+          () =>
+            encodeSpans(stack.encodeSpansFile, id).filter((s) => s.end === null)
+              .length,
+          { timeout: 30_000 },
+        )
+        .toBe(2);
+      const working = encodeSpans(stack.encodeSpansFile, id).map(
+        (s) => s.output,
+      );
+
+      const jobId = await row.locator('input[name="id"]').inputValue();
+      const res = await request.post("/?/cancelEncode", {
+        form: { id: jobId },
+      });
+      expect(res.ok()).toBe(true);
+      await goto(page, "/");
+      await expect(row.getByTestId("recording-state")).toHaveText("録画済み", {
+        timeout: 1_000,
+      });
+
+      // どちらも最後まで走らずに止まり (終わりが無い)、作業ファイルも残っていない
+      const spans = encodeSpans(stack.encodeSpansFile, id);
+      expect(spans).toHaveLength(2);
+      expect(spans.every((s) => s.end === null)).toBe(true);
+      for (const file of working) expect(existsSync(file)).toBe(false);
+      expect(await row.getAttribute("data-library-path")).toBeFalsy();
+    } finally {
+      rmSync(stack.slowFile);
+      await setRecording(request);
+    }
   });
 });

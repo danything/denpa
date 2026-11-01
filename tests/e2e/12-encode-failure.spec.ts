@@ -1,9 +1,12 @@
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 import {
+  encodeSpans,
   expect,
   goto,
   reserveSoon,
+  setRecording,
   syncEpg,
   test,
   waitRowState,
@@ -100,5 +103,62 @@ test.describe("エンコードの失敗", () => {
     await expect(page.locator(`[data-recording-id="${id}"]`)).toHaveCount(0);
 
     rmSync(stack.failFile);
+  });
+});
+
+/**
+ * コーデックをいくつも選んだときは、コーデックごとに ffmpeg を1本ずつ同時に走らせる。
+ * **1本が落ちても、ほかは止めずに置く** (観られるものを捨てない)。ジョブは失敗にして理由を残し、
+ * 元のTSは消さない (再エンコードすれば全部作り直せる)
+ */
+test.describe("コーデックの片方だけ失敗する", () => {
+  test.afterAll(async ({ request, stack }) => {
+    if (existsSync(stack.failEncoderFile)) rmSync(stack.failEncoderFile);
+    await setRecording(request);
+  });
+
+  test("H.264 が落ちても AV1 は置かれて観られ、理由は H.264 のぶんとして出る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    test.setTimeout(180_000);
+    await syncEpg(request);
+    await setRecording(request, { codecs: ["av1", "h264"] });
+    // H.264 (libx264) を使うエンコードだけ失敗させる
+    writeFileSync(stack.failEncoderFile, "libx264");
+
+    const programId = await reserveSoon(page, request, "BS");
+    const row = page.locator(
+      `[data-testid="recording-row"][data-program-id="${programId}"]`,
+    );
+    await waitRowState(page, "/", row, "エンコード失敗");
+    await goto(page, "/");
+
+    // AV1 は置かれている (H.264 が落ちても止めていない)。H.264 は置かれない
+    const av1 = (await row.getAttribute("data-library-path")) ?? "";
+    expect(av1).toMatch(/\.mkv$/);
+    expect(existsSync(av1)).toBe(true);
+    expect(await row.getAttribute("data-alt-path")).toBeFalsy();
+    await expect(row.getByTestId("play-hint")).toBeVisible();
+
+    // AV1 は最後までエンコードしている (落ちた H.264 に巻き込まれて止められていない)
+    const id = (await row.getAttribute("data-recording-id")) ?? "";
+    const spans = encodeSpans(stack.encodeSpansFile, id);
+    const done = spans.filter((s) => s.output.endsWith(".av1.encoding"));
+    expect(done).toHaveLength(1);
+    expect(done[0]!.end).not.toBeNull();
+
+    // 理由はどのコーデックが落ちたかを添えて出る
+    await row.getByTestId("detail-button").click();
+    const note = page.getByTestId("program-detail").getByTestId("detail-error");
+    await expect(note).toContainText("H.264:");
+    await expect(note).toContainText("libx264");
+    await page.getByTestId("detail-close").click();
+
+    // 落ちた H.264 の作業ファイルは残さない
+    expect(
+      readdirSync(dirname(av1)).filter((name) => name.endsWith(".encoding")),
+    ).toEqual([]);
   });
 });

@@ -100,6 +100,7 @@ export const config = {
    * /app に被せるため** (中に置くと隠れる)。無ければ放送そのままの経路は使えず、画面はエンコードしたものに戻る
    */
   mpeg2Dir: str("MPEG2_DIR", "/opt/denpa/mpeg2"),
+  /** 録ったあとのエンコードを同時に走らせる本数。**ジョブではなく ffmpeg の本数で数える** (コーデックごとに1本。`encode-slots.ts`) */
   encodeConcurrency: num("ENCODE_CONCURRENCY", 2),
   /** 先頭が壊れていて初期化に失敗したときに頭を捨てて再試行する秒数 (enc.js 由来) */
   encodeRetrySeek: 0.2,
