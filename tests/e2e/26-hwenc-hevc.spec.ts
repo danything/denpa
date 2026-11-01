@@ -24,7 +24,8 @@ test.describe("GPU で H.265 をエンコードする", () => {
     request,
     stack,
   }) => {
-    test.setTimeout(300_000);
+    // 録画を2本録ってエンコードする。CI で 1.2〜1.3分 (2026-11)。その倍あまりを見る
+    test.setTimeout(180_000);
     clearGpus(stack.hwDir);
     await goto(page, "/settings/recording");
     await page.getByTestId("hw-probe").click();

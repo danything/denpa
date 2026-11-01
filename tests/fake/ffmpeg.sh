@@ -4,6 +4,21 @@
 # 開いていなければ stdout) に吐く。
 set -uo pipefail
 
+# **渡された引数を、控えのファイルへ1回ぶん足す** (`---` の行に続けて1行に1つ)。テスト側は `---` で切って読む。
+#
+# **ファイルをロックしてから書く** (flock)。bash は標準出力を行ごとに吐き出すので、printf 1回でも
+# 1行ずつ別の書き込みになる。コーデックを同時にエンコードすると (encoder.ts) 何本もが同時に書き、
+# 行が混ざって1回ぶんが別の回の中に紛れ込んでいた (`26-hwenc` で1本ぶんの引数が時々消えた)
+record_args() {
+    local file="$1"
+    shift
+    {
+        flock 1
+        printf -- '---\n'
+        printf '%s\n' "$@"
+    } >>"$file"
+}
+
 # 最後の引数が出力ファイル。ただし `-` は本物と同じく「ファイルではない」
 # (stdout の意味)。fps の実測が `-f null -` で呼ぶので、素直に書くと
 # リポジトリ直下に `-` という名前のゴミが生える (実際に2度 git に紛れ込んだ)
@@ -38,7 +53,7 @@ fi
 # GPU の方式 (`h264_vaapi` など) を選べているか、落ちたらソフトウェアへ倒れているかを
 # テストから見るため。**どの方式でも、落ちる前に**残す。1回ぶんずつ足す
 if [ -n "${FAKE_FFMPEG_ENCODE_ARGS_FILE:-}" ]; then
-    printf -- '---\n%s\n' "$(printf '%s\n' "$@")" >> "$FAKE_FFMPEG_ENCODE_ARGS_FILE"
+    record_args "$FAKE_FFMPEG_ENCODE_ARGS_FILE" "$@"
 fi
 
 # GPU (VA-API) の方式。`-init_hw_device` が付いていたら、それ。
@@ -166,10 +181,9 @@ if [ "$input" = "pipe:0" ]; then
     # **1回ぶんずつ足していく。** 選局のたびに起きるので、上書きにしていると
     # 前の1回が消える。テスト側は `---` で切って選ぶ
     #
-    # **1回の書き込みで済ませる。** 区切りと中身を別々に書いていた頃は、2本が
-    # 同時に起きると2本ぶんが1回ぶんに見えていた (CI で落ちた)
+    # 2本が同時に起きても混ざらないように、ロックしてから書く (`record_args`)
     if [ -n "${FAKE_FFMPEG_ARGS_FILE:-}" ]; then
-        printf -- '---\n%s\n' "$(printf '%s\n' "$@")" >> "$FAKE_FFMPEG_ARGS_FILE"
+        record_args "$FAKE_FFMPEG_ARGS_FILE" "$@"
     fi
 
     # 字幕を持たない放送 (E2E が偽の放送の PMT から字幕を外すのと一緒に置く)。本物と同じ言い分で、
