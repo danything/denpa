@@ -1,3 +1,5 @@
+import { constants, setPriority } from "node:os";
+
 /**
  * ReadableStream を1チャンクずつ読む。
  *
@@ -48,6 +50,38 @@ export async function* lines(
   if (buffer.trim() !== "") yield buffer.trim();
 }
 
+/** 優先度を下げられなかったことは1度だけ知らせる (コンテナで権限が無いなど) */
+let lowerFailed = false;
+
+/**
+ * **子プロセスを OS のいちばん低い優先度 (nice 19) にする。** 録ったあとのエンコードと、
+ * その中で録画をデコードする CM 検出 (`cm-scan.scan`・ロゴの学習) に使う。
+ *
+ * 非力な機材 (Raspberry Pi 5 など) では、録画のエンコードがライブの変換 (libx264 ultrafast) と
+ * CPU を取り合い、ライブのコマが落ちていた。録画のエンコードは急がないので、ライブに譲る。
+ * 他に何も動いていなければ空いた CPU をそのまま使うので、速さは変わらない。GPU でエンコードするときも
+ * 同じ道を通るが、下がるのは CPU の順番だけなので困らない。
+ *
+ * - Linux では `setpriority`。起こした直後に下げるので、ffmpeg が後から作るスレッドも引き継ぐ
+ * - Windows では libuv が 19 を IDLE_PRIORITY_CLASS に当てる
+ *
+ * 下げられなくても止めない (いつもの優先度で走るだけ)
+ */
+export function lowerPriority(
+  pid: number,
+  set: (pid: number, priority: number) => void = setPriority,
+): void {
+  try {
+    set(pid, constants.priority.PRIORITY_LOW);
+  } catch (error) {
+    if (lowerFailed) return;
+    lowerFailed = true;
+    console.warn(
+      `[encode] 優先度を下げられませんでした。いつもの優先度で続けます: ${String(error)}`,
+    );
+  }
+}
+
 /** `onStderrLine` のとき返す標準エラーの行数 */
 const STDERR_TAIL = 20;
 
@@ -89,6 +123,8 @@ export async function run(
      * `stderr` より優先し、返る `stderr` は末尾の数行だけ (落ちた理由を読むため)
      */
     onStderrLine?: (line: string) => void;
+    /** 起こしたらいちばん低い優先度にする (`lowerPriority`。録ったあとの重い処理だけ) */
+    lowPriority?: boolean;
   } = {},
 ): Promise<RunResult> {
   /*
@@ -116,6 +152,7 @@ export async function run(
   } catch (error) {
     return { code: 127, stdout: new Uint8Array(), stderr: String(error) };
   }
+  if (options.lowPriority === true) lowerPriority(proc.pid);
   const kill = () => proc.kill();
   options.signal?.addEventListener("abort", kill, { once: true });
   const timer =

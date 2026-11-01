@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { run } from "./stream";
+import { lowerPriority, run } from "./stream";
 
 /**
  * 外の道具を起こして読み切るところ (`run`)。
@@ -105,5 +105,35 @@ describe("run の標準エラーを1行ずつ受ける (onStderrLine)", () => {
     expect(seen[0]).toBe("line 1");
     expect(stderr.split("\n").at(-1)).toBe("line 100");
     expect(stderr.split("\n").length).toBeLessThan(100);
+  });
+});
+
+/**
+ * 録ったあとのエンコード・CM 検出はいちばん低い優先度で走らせ、ライブに CPU を譲る
+ * (`lowerPriority`。非力な機材でライブのコマが落ちていた)
+ */
+describe("優先度を下げる", () => {
+  test("起こしたプロセスを nice 19 にする", () => {
+    const calls: [number, number][] = [];
+    lowerPriority(4242, (pid, priority) => calls.push([pid, priority]));
+    expect(calls).toEqual([[4242, 19]]);
+  });
+
+  test("下げられなくても投げない (いつもの優先度で続ける)", () => {
+    expect(() =>
+      lowerPriority(4242, () => {
+        throw new Error("EACCES");
+      }),
+    ).not.toThrow();
+  });
+
+  test("lowPriority で起こすと、動いているうちに 19 になっている", async () => {
+    // 下げるのは起こした直後なので、少し待ってから自分の nice を読む
+    const { code, stdout } = await run(["sh", "-c", "sleep 0.1; nice"], {
+      stdout: true,
+      lowPriority: true,
+    });
+    expect(code).toBe(0);
+    expect(new TextDecoder().decode(stdout).trim()).toBe("19");
   });
 });
