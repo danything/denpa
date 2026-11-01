@@ -49,8 +49,11 @@
     stage,
     fullscreen,
     testid,
+    shown = $bindable(false),
   }: {
     ambient: Ambient;
+    /** 色が枠の外に見えているか (敷いていて、全画面でない)。舞台が実況のコメントを枠の外へも流すのに使う */
+    shown?: boolean;
     /** 映像の枠 (`PlayerStage` の `.stage`) */
     stage: HTMLElement | null;
     /** 全画面か (`StageFullscreen.active`) */
@@ -114,15 +117,16 @@
 
   /** ページの上の端に見える色 (`washTop`)。ブラウザの枠の色にする (下の `toolbar`) */
   let top = $state<Rgb | null>(null);
+  /** 色が枠の外に見えているか。消した・まだ1枚も写していない・全画面 (枠の外が見えない) なら false */
+  const painted = $derived(now !== "off" && loop.lit && !fullscreen);
+  $effect(() => {
+    shown = painted;
+  });
   /**
    * **ブラウザの枠の色** (`theme-color.ts`)。色を敷いている間だけ。消した・全画面 (枠が見えない)・
    * 画面を離れたときはテーマの地に戻す。変わるのは色を入れ替えたときだけ (多くて 1 秒に 5 回)
    */
-  const toolbar = $derived(
-    now !== "off" && loop.lit && !fullscreen && top !== null
-      ? toHex(top)
-      : null,
-  );
+  const toolbar = $derived(painted && top !== null ? toHex(top) : null);
   $effect(() => {
     setAmbientThemeColor(toolbar);
   });

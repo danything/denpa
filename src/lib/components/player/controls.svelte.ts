@@ -22,6 +22,12 @@ export const PLAYER_CONTROLS = Symbol("player-controls");
 /** 舞台の枠そのもの。**メニューを枠の中に収める**のに使う (`stageMenu`) */
 export const PLAYER_STAGE = Symbol("player-stage");
 
+/**
+ * 枠の外で実況のコメントを流す所 (`PlayerStage` の `.outside`)。アンビエントの光を枠の外に出している間だけあり、
+ * 無ければ null。枠の下・光の上に重なり、置き場 (`.room`) の外へは描かない
+ */
+export const STAGE_OUTSIDE = Symbol("stage-outside");
+
 export interface PlayerControls {
   /** いま出ているか */
   readonly shown: boolean;

@@ -172,11 +172,11 @@ export class JikkyoFeed {
 
   /**
    * いまの放送時刻 `w` までに書かれたもののうち、まだ流していないもの。流していないときは何も返さない。
-   * NG ワードを含むものは外す (自分の書き込みも)
+   * 録画は枠の外から流し始めるぶん、`ahead` ms 先まで出す (`cursor.ts`)。NG ワードを含むものは外す (自分の書き込みも)
    */
-  take(w: number): Take {
+  take(w: number, ahead = 0): Take {
     if (!this.active) return { comments: [], jumped: false };
-    const take = this.cursor.take(w);
+    const take = this.cursor.take(w, ahead);
     const comments = take.comments.filter((c) => !this.isNg(c));
     return { comments, jumped: take.jumped };
   }

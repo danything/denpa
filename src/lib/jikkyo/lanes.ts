@@ -2,9 +2,11 @@
  * **コメントを流す行の割り当て** (画面に触らない所。単体テストで見る)。
  *
  * - 行の高さは枠の高さの 1/14 (下限 14px)。上下に余白を残して、およそ 13 行
- * - 1 件は右の端から左の端まで `SPAN_MS` で流れる。長いものも同じ速さで、そのぶん長く流れる
+ * - 1 件は枠の右の端から左の端まで `SPAN_MS` で流れる。長いものも同じ速さで、そのぶん長く流れる
  *   (速さが揃っているので、後から入ったものが前のものに追いつくことはない)
- * - 行が空くのは、前のコメントの尻尾が右の端から入りきったとき。**空いた行が無ければ捨てる** (重ねて描かない)
+ * - アンビエントの光を出している間は、枠の外 (`Outside`) も同じ速さで流れる。道のりが延びるだけで、枠を渡る長さは変わらない
+ * - 行が空くのは、前のコメントの尻尾が枠の右の端を過ぎてから、次のものの頭がそこへ着くとき。
+ *   どちらも同じ速さなので、枠の外から入っても前のものに重ならない。**空いた行が無ければ捨てる** (重ねて描かない)
  * - 上・下に止めるもの (`ue`・`shita`) は `HOLD_MS` 置く。流れるものとは別に、上 (下) の行から空いたところへ積む
  *
  * 時刻はどれも**放送時刻の ms** で数える (再生の速さに合わせて進み、止めれば止まる)。
@@ -45,6 +47,22 @@ export function textWidth(text: string, size: number): number {
   return em * size;
 }
 
+/** 枠の外を流れる幅 (px)。`right` は入ってくる側、`left` は出ていく側。光を出していなければどちらも 0 */
+export interface Outside {
+  right: number;
+  left: number;
+}
+
+export const NO_OUTSIDE: Outside = { right: 0, left: 0 };
+
+/**
+ * 外の右の端から枠の右の端に着くまで (放送時刻の ms)。録画 (コメントが前もって分かる) はこれだけ早く流し始め、
+ * 枠に入る時刻を外が無いときと同じにする
+ */
+export function lead(frameWidth: number, right: number): number {
+  return frameWidth > 0 ? (right / frameWidth) * SPAN_MS : 0;
+}
+
 /** 1 件の流し方 */
 interface Flow {
   lane: number;
@@ -53,7 +71,7 @@ interface Flow {
 }
 
 export class Lanes {
-  /** 行ごとの、次のコメントを入れてよい時刻 */
+  /** 行ごとの、前のコメントの尻尾 (と間) が枠の右の端を過ぎる時刻。次のものの頭がそこへ着くのはこれより後 */
   private freeAt: number[];
   /** 行ごとの、次の止めるものを置いてよい時刻 */
   private heldAt: number[];
@@ -92,19 +110,26 @@ export class Lanes {
    * @param width コメントの幅 (px)
    * @param frameWidth 枠の幅 (px)
    * @param size 字の大きさ (px)
+   * @param outside 枠の外を流れる幅。外の右の端から入り、外の左の端から出ていく
    */
   flow(
     now: number,
     width: number,
     frameWidth: number,
     size: number,
+    outside: Outside = NO_OUTSIDE,
   ): Flow | null {
     const speed = frameWidth / SPAN_MS;
     if (!(speed > 0)) return null;
-    const lane = this.freeAt.findIndex((at) => at <= now);
+    // 頭が枠の右の端に着く時刻
+    const arrive = now + outside.right / speed;
+    const lane = this.freeAt.findIndex((at) => at <= arrive);
     if (lane < 0) return null;
-    this.freeAt[lane] = now + (width + size * GAP_EM) / speed;
-    return { lane, duration: (frameWidth + width) / speed };
+    this.freeAt[lane] = arrive + (width + size * GAP_EM) / speed;
+    return {
+      lane,
+      duration: (outside.right + frameWidth + outside.left + width) / speed,
+    };
   }
 
   /**

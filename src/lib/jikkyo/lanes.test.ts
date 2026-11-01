@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   laneCount,
   Lanes,
+  lead,
   lineHeight,
   sizeScale,
   SPAN_MS,
@@ -47,6 +48,38 @@ describe("Lanes", () => {
     expect(lanes.flow(1, 100, 1000, 20)).toBeNull();
     lanes.clear();
     expect(lanes.flow(1, 100, 1000, 20)?.lane).toBe(0);
+  });
+
+  test("枠の外も同じ速さで流れる。道のりが延びたぶん長く流れ、枠を渡る長さは変わらない", () => {
+    const lanes = new Lanes(1);
+    // 枠 1000px の右に 300px、左に 200px。速さは 1000px / 4 秒のまま
+    const flow = lanes.flow(0, 100, 1000, 20, { right: 300, left: 200 });
+    expect(flow).toEqual({
+      lane: 0,
+      duration: ((300 + 1000 + 200 + 100) / 1000) * SPAN_MS,
+    });
+    // 外の右の端から枠の右の端までは 1.2 秒。録画はこれだけ早く流し始める
+    expect(lead(1000, 300)).toBeCloseTo(1200);
+    expect(lead(1000, 0)).toBe(0);
+    expect(lead(0, 300)).toBe(0);
+  });
+
+  test("行が空くのは、前の尻尾が枠の右の端を過ぎてから次の頭がそこへ着くとき (外から入っても重ならない)", () => {
+    const lanes = new Lanes(1);
+    const outside = { right: 300, left: 300 };
+    // 頭が枠に着くのは 1200ms、尻尾 (200px + 間 20px) が枠の右の端を過ぎるのは 1200 + 880ms
+    lanes.flow(0, 200, 1000, 20, outside);
+    expect(lanes.flow(879, 200, 1000, 20, outside)).toBeNull();
+    expect(lanes.flow(880, 200, 1000, 20, outside)?.lane).toBe(0);
+  });
+
+  test("外が縮んだ (光を消した) 直後は、枠の外にまだいる前のものを待つ", () => {
+    const lanes = new Lanes(1);
+    // 外 300px から入ったもの。尻尾が枠の右の端を過ぎるのは 2080ms
+    lanes.flow(0, 200, 1000, 20, { right: 300, left: 0 });
+    // 外が無くなると、次の頭は流し始めた時刻に枠に着く。それまで待つ
+    expect(lanes.flow(2000, 200, 1000, 20)).toBeNull();
+    expect(lanes.flow(2080, 200, 1000, 20)?.lane).toBe(0);
   });
 
   test("止めるものは 3 秒置いて空ける。上は上の行から、下は下の行から積み、流れるものとは別に数える", () => {

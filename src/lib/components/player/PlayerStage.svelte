@@ -10,6 +10,7 @@
     PLAYER_CONTROLS,
     PLAYER_STAGE,
     type PlayerControls,
+    STAGE_OUTSIDE,
   } from "./controls.svelte";
   import FoldReflection from "./FoldReflection.svelte";
   import type { StageFullscreen } from "./fullscreen.svelte.js";
@@ -36,7 +37,8 @@
     /**
      * アンビエントモード (`ambient.svelte.ts`)。渡すと、映像の周りの地に映像の色を敷く (`AmbientGlow`)。
      * 色は枠の外に出るだけで、枠の中 (映像・字幕・データ放送・操作列・通知) には重ならない。
-     * テーブルトップ (`TABLETOP`) の間は、光の代わりに下の段へ映像の色の反射 (`FoldReflection`) を敷く
+     * テーブルトップ (`TABLETOP`) の間は、光の代わりに下の段へ映像の色の反射 (`FoldReflection`) を敷く。
+     * 光が見えている間は、実況のコメントも枠の外を流れる (下の `outside`)
      */
     ambient?: Ambient;
   }
@@ -61,6 +63,15 @@
 
   // メニューを枠の中に収める先 (`SpeedMenu`・`SettingsMenu`)。bind で入るので取り手で渡す
   setContext(PLAYER_STAGE, () => element);
+
+  /**
+   * **枠の外で実況のコメントを流す所** (`STAGE_OUTSIDE`)。光を枠の外に出している間だけ置く (テーブルトップの反射・全画面では置かない)。
+   * 広さは置き場 (`.room`) で、左は `<main>` の余白の外まで。右の列と見出しには掛からない。
+   * 枠が置き場の幅いっぱい (縦に積むとき・幅で抑えた二段組) なら外の幅は 0 で、枠の中だけを流れる
+   */
+  let glowing = $state(false);
+  let outside = $state<HTMLElement | null>(null);
+  setContext(STAGE_OUTSIDE, () => outside);
 
   /**
    * 枠の大きさで操作列の詰め方を変える (操作列は 48px の丸を横に9個並べる作りで、狭い枠では折れて映像を覆った)。
@@ -332,11 +343,21 @@
     {ambient}
     stage={element}
     fullscreen={fullscreen.active}
+    bind:shown={glowing}
     testid="{testid}-ambient"
   />
 {/if}
 <!-- 枠の置き場。二段組では、枠が使える広さをここで測る (下の style の `container-type`) -->
 <div class="room">
+  {#if ambient && !tabletop.current && glowing}
+    <!-- 枠より前に置く。位置を持つ枠のほうが後ろなので、外を流れるコメントは枠の下・光の上になる -->
+    <div
+      bind:this={outside}
+      class="outside"
+      aria-hidden="true"
+      data-testid="{testid}-outside"
+    ></div>
+  {/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!--
     映像の周りは黒 (letterbox の帯にテーマ色を出さない)。低くしすぎない (224px) — 上下と右に重ねる操作バーどうしが重なる
@@ -384,6 +405,13 @@
     display: contents;
   }
   /*
+   * 枠の外を流れるコメントの所 (`outside`)。二段組 (下) のほかでは出さない — 枠が置き場の幅いっぱいで外が無く、
+   * 置き場が箱を持たないので、置くと窓の別の所に出る
+   */
+  .outside {
+    display: none;
+  }
+  /*
      * 二段組では、枠を映像の形にして使える広さに収める (上の `aspect`)。幅は列の幅 (`100cqw`) と
      * 「高さ × 縦横比」(`100cqh`) の小さいほう。上に寄せて横は真ん中 (E2E の `expectSideFrame`)。
      * 測る箱は `.room` — `<main>` の列にすると `position: absolute` の基準になり、`AmbientGlow` の位置がずれる
@@ -401,6 +429,17 @@
     .stage {
       aspect-ratio: var(--dp-aspect, 16 / 9);
       width: min(100cqw, max(100cqh, 14rem) * var(--dp-aspect, 16 / 9));
+    }
+    /* 枠の外を流れるコメント (上の `outside`)。置き場いっぱいに、左は `<main>` の余白の外 (窓の端) まで。はみ出したぶんは切る */
+    .room {
+      position: relative;
+    }
+    .outside {
+      display: block;
+      position: absolute;
+      inset: 0 0 0 calc(-1 * var(--dp-gutter, 1rem));
+      overflow: hidden;
+      pointer-events: none;
     }
   }
   /*

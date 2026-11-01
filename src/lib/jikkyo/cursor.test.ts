@@ -46,6 +46,27 @@ describe("Cursor", () => {
     expect(texts(cursor.take(T + 20_100))).toEqual(["遅れた"]);
   });
 
+  test("録画は `ahead` だけ先まで出す。縮んでも飛んだことにせず、同じものを 2 度出さない", () => {
+    const cursor = new Cursor();
+    cursor.receive([at(1500), at(2500), at(3500), at(4500)]);
+    cursor.take(T + 1000, 2000);
+    // 最初の 1 回は出さない。次の回に、前の W から今の W の 2 秒先まで
+    expect(texts(cursor.take(T + 1100, 2000))).toEqual(["1500", "2500"]);
+    // 光を消して先の幅が無くなった。W は進んでも、もう出したところまでは出さない
+    expect(cursor.take(T + 2000, 0)).toEqual({ comments: [], jumped: false });
+    expect(texts(cursor.take(T + 3600, 0))).toEqual(["3500"]);
+    expect(texts(cursor.take(T + 3700, 1000))).toEqual(["4500"]);
+  });
+
+  test("先まで出した後に遅れて届いたものも、10 秒以内なら次に出す", () => {
+    const cursor = new Cursor();
+    cursor.take(T, 1000);
+    cursor.take(T + 100, 1000);
+    // 出したところ (W + 1 秒) の手前に届いたもの
+    cursor.receive([at(900, "遅れた")]);
+    expect(texts(cursor.take(T + 200, 1000))).toEqual(["遅れた"]);
+  });
+
   test("オフにしていた間に進んだぶんは出さない", () => {
     const cursor = new Cursor();
     cursor.receive([at(1500), at(2500)]);
