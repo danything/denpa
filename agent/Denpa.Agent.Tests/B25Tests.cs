@@ -26,7 +26,7 @@ public class B25Tests
         public List<byte[]> Asked { get; } = [];
         public Func<byte[], Exception?> Fail { get; set; } = _ => null;
         public int Code { get; set; } = 0x0200;
-        /// <summary>覚えていた答えを返した・錠を待った、と言う (選局の内訳の記録)</summary>
+        /// <summary>覚えていた答えを返した・ロックを待った、と言う (選局の内訳の記録)</summary>
         public bool Cached { get; set; }
         public long WaitedMs { get; set; }
 
@@ -829,7 +829,7 @@ public class B25Tests
 
     /// <summary>
     /// **鍵の要らない利用者だけなら、カードに聞かず、溜めずにそのまま流す。** 番組表・ロゴ・スキャンが
-    /// ライブ視聴や録画とカードの錠を取り合わない
+    /// ライブ視聴や録画とカードのロックを取り合わない
     /// </summary>
     [Test]
     public async Task 鍵の要らない利用者だけならカードに聞かない()
@@ -886,7 +886,7 @@ public class B25Tests
 
     /// <summary>
     /// **溜めていた間の内訳を1行に出せる** (選局して最初に送り出したときの記録。docs/stream.md「本番の記録で割る」)。
-    /// そろった順と、鍵の相手に聞いた回数・覚えた答え・未契約・錠の待ち
+    /// そろった順と、鍵の相手に聞いた回数・覚えた答え・未契約・ロックの待ち
     /// </summary>
     [Test]
     public async Task 溜めていた間の内訳を数える()

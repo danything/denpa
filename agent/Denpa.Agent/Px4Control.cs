@@ -106,7 +106,7 @@ internal sealed class Px4Control : IDisposable
 
     /// <summary>
     /// 繋ぐ。**上限つきで。** Socket.Connect は待つ上限を持たず、px4d が受け付けなくなって
-    /// 待ち行列が埋まると戻らない (選局の錠を握ったまま止まる)。間に合わなければ投げる
+    /// 待ち行列が埋まると戻らない (選局のロックを握ったまま止まる)。間に合わなければ投げる
     /// (ソケットは呼んだ側が閉じる)
     /// </summary>
     public static void ConnectWithin(Socket socket, string socketPath, TimeSpan timeout, Px4Wire? wire = null)

@@ -24,7 +24,7 @@ public sealed record CardInit(byte[] SystemKey, byte[] InitCbc, int CaSystemId, 
 /// カードに聞かず、覚えていた答えを返した (同じ ECM を別のストリームが先に聞いていた)。
 /// 選局の内訳の記録に出すだけで、鍵の扱いは変わらない。拠点のあいだでは運ばない (<see cref="CardWire"/>)
 /// </param>
-/// <param name="WaitedMs">カードを順番に使う錠 (<see cref="BCas"/>) を待った時間 (ミリ秒)。記録に出すだけ</param>
+/// <param name="WaitedMs">カードを順番に使うロック (<see cref="BCas"/>) を待った時間 (ミリ秒)。記録に出すだけ</param>
 public readonly record struct EcmAnswer(byte[] Odd, byte[] Even, int Code, bool Cached = false, long WaitedMs = 0);
 
 /// <summary>
