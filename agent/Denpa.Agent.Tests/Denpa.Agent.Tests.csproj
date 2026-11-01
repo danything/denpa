@@ -54,6 +54,15 @@
         <Compile Include="../Denpa.Agent/IoKitDevice.cs" />
         <Compile Include="../Denpa.Agent/Dib8096.cs" />
         <Compile Include="../Denpa.Agent/Zd1j.cs" />
+        <Compile Include="../Denpa.Agent/Dt295.cs" />
+        <Compile Include="../Denpa.Agent/Dt295Bridge.cs" />
+        <Compile Include="../Denpa.Agent/Dt295Crypto.cs" />
+        <Compile Include="../Denpa.Agent/Dt295Firmware.cs" />
+        <Compile Include="../Denpa.Agent/Dt295Probe.cs" />
+        <Compile Include="../Denpa.Agent/Dt295Routes.cs" />
+        <Compile Include="../Denpa.Agent/Dt295Frontend.cs" />
+        <Compile Include="../Denpa.Agent/Dt295Tuner.cs" />
+        <Compile Include="../Denpa.Agent/Dt295Receive.cs" />
     </ItemGroup>
 
     <ItemGroup>
