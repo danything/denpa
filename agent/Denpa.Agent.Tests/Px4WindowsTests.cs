@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 

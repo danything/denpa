@@ -611,6 +611,7 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
         new UnboundedChannelOptions { SingleReader = true });
     private long _pending;
     private int _left;
+    private int _departed;
 
     public string Use { get; } = use;
     public int Priority { get; } = priority;
@@ -665,15 +666,12 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
         if (Interlocked.Exchange(ref _departed, 1) == 0) onLeave(this);
     }
 
-    private int _departed;
-
-    /// <summary>読み出しを終わらせる。**最初の1回だけ効く** (2回目からは false)</summary>
-    private bool Close(string? reason = null)
+    /// <summary>読み出しを終わらせる。**最初の1回だけ効く**</summary>
+    private void Close(string? reason = null)
     {
-        if (Interlocked.Exchange(ref _left, 1) != 0) return false;
+        if (Interlocked.Exchange(ref _left, 1) != 0) return;
         FailedWith = reason;
         _queue.Writer.TryComplete();
-        return true;
     }
 }
 

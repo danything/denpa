@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.IO.Pipelines;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
-using Denpa.Agent;
 using Microsoft.Win32.SafeHandles;
 using TUnit.Core.Enums;
 
