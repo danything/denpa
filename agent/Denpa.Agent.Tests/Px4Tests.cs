@@ -171,10 +171,10 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 衛星は_TSID_が分かっていれば_stream_id()
+    public async Task 衛星は名前に_TSID_があれば_stream_id()
     {
-        var tuning = ChannelTable.Parse("BS15_1")!;
-        var tune = Tune(Px4Tuner.TuneRequest(7, tuning, 16626, "15v"));
+        var tuning = ChannelTable.Parse("BS15:16626")!;
+        var tune = Tune(Px4Tuner.TuneRequest(7, tuning, tuning.StreamId, "15v"));
         await Assert.That(tune.System).IsEqualTo((byte)2);
         await Assert.That(tune.Khz).IsEqualTo((ulong)tuning.Frequency);
         await Assert.That(tune.StreamId).IsEqualTo((ushort)16626);
@@ -185,15 +185,16 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 衛星で_TSID_が分からなければ_slot()
+    public async Task 衛星で_TSID_が無ければ_slot_0_で先頭の_TS()
     {
-        var tune = Tune(Px4Tuner.TuneRequest(7, ChannelTable.Parse("BS15_2")!, ChannelTable.NoStreamId, null));
-        await Assert.That(tune.Slot).IsEqualTo((ushort)2);
+        // NIT を読む入口 (BS15)。中継器のどの TS にもネットワーク全体の NIT が流れている
+        var tune = Tune(Px4Tuner.TuneRequest(7, ChannelTable.Parse("BS15")!, ChannelTable.NoStreamId, null));
+        await Assert.That(tune.Slot).IsEqualTo((ushort)0);
         await Assert.That(tune.StreamId).IsEqualTo((ushort)0xffff);
         await Assert.That(tune.Lnb).IsEqualTo((byte)0);
 
         // CS は 1 本しか入っていないので slot 0。11v は px4-userland には無い (0V か 15V)。指定しない
-        var cs = Tune(Px4Tuner.TuneRequest(7, ChannelTable.Parse("CS04")!, ChannelTable.NoStreamId, "11v"));
+        var cs = Tune(Px4Tuner.TuneRequest(7, ChannelTable.Parse("CS04:28736")!, ChannelTable.NoStreamId, "11v"));
         await Assert.That(cs.Slot).IsEqualTo((ushort)0);
         await Assert.That(cs.Lnb).IsEqualTo((byte)0);
     }
@@ -202,13 +203,13 @@ public class Px4Tests
     public async Task 受信機の種別と違う方式は選局しない()
     {
         var q3u4 = Receivers(Q3u4List);
-        var error = Assert.Throws<IOException>(() => Px4Tuner.Check(q3u4, 2, ChannelTable.Parse("BS15_0")!));
+        var error = Assert.Throws<IOException>(() => Px4Tuner.Check(q3u4, 2, ChannelTable.Parse("BS15:16625")!));
         await Assert.That(error.Message).Contains("GR 用");
-        Px4Tuner.Check(q3u4, 0, ChannelTable.Parse("BS15_0")!);
+        Px4Tuner.Check(q3u4, 0, ChannelTable.Parse("BS15:16625")!);
 
         // MLT5 系はどの受信機も両方受けられる
         var mlt5 = Receivers(Mlt5List);
-        Px4Tuner.Check(mlt5, 4, ChannelTable.Parse("BS15_0")!);
+        Px4Tuner.Check(mlt5, 4, ChannelTable.Parse("BS15:16625")!);
         Px4Tuner.Check(mlt5, 4, ChannelTable.Parse("T27")!);
     }
 
@@ -222,7 +223,7 @@ public class Px4Tests
     [Test]
     public async Task 受信機を聞けていなければ_px4d_に任せる()
     {
-        Px4Tuner.Check(null, 7, ChannelTable.Parse("BS15_0")!);
+        Px4Tuner.Check(null, 7, ChannelTable.Parse("BS15:16625")!);
         await Task.CompletedTask;
     }
 
@@ -328,7 +329,7 @@ public class Px4Tests
     [Test]
     public async Task _15V_を出せない受信機では_0V_で選局する()
     {
-        var bs = ChannelTable.Parse("BS15_0")!;
+        var bs = ChannelTable.Parse("BS15:16625")!;
         List<Px4Receiver> m1ur = [new(0, true, true, false)];
         List<Px4Receiver> mlt5 = [new(0, true, true, true)];
         List<Px4Receiver> unknown = [new(0, true, true)];

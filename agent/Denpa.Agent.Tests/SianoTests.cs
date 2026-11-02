@@ -154,7 +154,7 @@ public class SianoTests
     [Test]
     public async Task 衛星は受けない()
     {
-        var error = Assert.Throws<IOException>(() => SianoTuner.TuneCommand(ChannelTable.Parse("BS15_0")!));
+        var error = Assert.Throws<IOException>(() => SianoTuner.TuneCommand(ChannelTable.Parse("BS15:16625")!));
         await Assert.That(error.Message).Contains("地上波だけ");
     }
 

@@ -415,7 +415,7 @@ describe("通知 (SSE)", () => {
     expect(res.headers.get("content-type")).toContain("text/event-stream");
     const reader = (res.body as ReadableStream<Uint8Array>).getReader();
 
-    const stream = await open("type=BS&channel=BS11_0&use=epg&priority=3");
+    const stream = await open("type=BS&channel=BS11:18000&use=epg&priority=3");
     const { value } = await reader.read();
     expect(new TextDecoder().decode(value as Uint8Array)).toContain(
       "event: tuners",
@@ -432,8 +432,9 @@ describe("チャンネル", () => {
       await get("/denpa/channels")
     ).json()) as ChannelEntry[];
     expect(found.map((c) => c.channel).sort()).toEqual([
-      "BS03_0",
-      "BS11_0",
+      "BS03:16432",
+      "BS11:18000",
+      "CS02:24608",
       "T16",
       "T21",
     ]);
@@ -468,8 +469,8 @@ describe("チャンネル", () => {
     ]);
     // 地上波だけ差し替えたので、衛星はそのまま残っている
     expect(found.filter((c) => c.type === "BS").map((c) => c.channel)).toEqual([
-      "BS03_0",
-      "BS11_0",
+      "BS03:16432",
+      "BS11:18000",
     ]);
     // 控えのファイルにも書いてある
     expect(readFileSync(paths().channels, "utf8")).toContain("あたらしい局");
@@ -1193,10 +1194,10 @@ describe("止まれと言われたとき", () => {
       await sleep(500);
 
       const second = await openOn(
-        "/denpa/stream?type=BS&channel=BS11_0&use=rec%202&priority=10",
+        "/denpa/stream?type=BS&channel=BS11:18000&use=rec%202&priority=10",
       );
       const live = await openOn(
-        "/denpa/stream?type=BS&channel=BS03_0&use=live&priority=5",
+        "/denpa/stream?type=BS&channel=BS03:16432&use=live&priority=5",
       );
 
       // 前の録画を離しても、あとから来た録画が残っているので落ちない

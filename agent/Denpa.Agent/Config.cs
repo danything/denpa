@@ -221,22 +221,6 @@ public sealed class Config(string tunersFile, string channelsFile)
     public JsonArray LoadChannels() => ReadArray(ChannelsFile, null);
 
     /// <summary>
-    /// チャンネル名から、スキャンで分かった TSID を引く。衛星の選局で相対番号を TSID に直すのに使い、
-    /// 埋め込んだ表より優先する (<see cref="ChannelTable.StreamId"/>)
-    /// </summary>
-    public Func<string, int?> StreamIds()
-    {
-        var table = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var entry in LoadChannels())
-        {
-            var channel = entry?["channel"]?.GetValue<string>();
-            var id = entry?["transportStreamId"]?.GetValue<int>();
-            if (channel is not null && id is > 0) table[channel] = id.Value;
-        }
-        return name => table.TryGetValue(name, out var id) ? id : null;
-    }
-
-    /// <summary>
     /// 預かった顔ぶれで差し替える。
     ///
     /// <para>

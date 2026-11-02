@@ -113,7 +113,6 @@ var sharing = cardLan.Port is { } sharePort ? new CardShareServer(cardLan, share
 var cardUrl = Environment.GetEnvironmentVariable("CARD_URL");
 Keys.Configure(cardUrl, cardLan.Hops);
 var tune = new TuneOptions(
-    name => config.StreamIds()(name),
     Environment.GetEnvironmentVariable("FAKE_TUNE") is { Length: > 0 } fake ? fake : null);
 
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };

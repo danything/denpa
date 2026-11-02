@@ -1146,8 +1146,8 @@ public sealed class Px4Tuner : ITuneDevice
     /// <para>
     /// 周波数は kHz で言う。選局表は DVB の決まりで地上波が Hz・衛星が kHz
     /// なので、地上波だけ 1000 で割る (473142857 Hz → 473142 kHz。端数は切る)。
-    /// 衛星は TSID が分かっていれば <c>stream_id</c>、分からなければ相対番号を
-    /// <c>slot</c> で (CS は 1 本しか入っていないので 0)。使わないほうは 0xffff。
+    /// 衛星は名前に TSID があれば <c>stream_id</c> で、無ければ (NIT を読む入口と CS) <c>slot</c> 0 で
+    /// 中継器の先頭の TS を取る。使わないほうは 0xffff。
     /// 帯域は地上波が 6MHz、衛星は 0 (px4d がこれ以外を断る)。
     /// 15V は設定に <c>15v</c> と書いてあるチューナーだけ指定する (<c>11v</c> は px4-userland に無い)。
     /// </para>
@@ -1161,7 +1161,7 @@ public sealed class Px4Tuner : ITuneDevice
         BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(9), tuning.Satellite ? tuning.Frequency : tuning.Frequency / 1000);
         var byId = tuning.Satellite && streamId != ChannelTable.NoStreamId;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(17), byId ? (ushort)streamId : unused);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(19), tuning.Satellite && !byId ? (ushort)tuning.Slot : unused);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(19), tuning.Satellite && !byId ? (ushort)0 : unused);
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(21), tuning.Satellite ? 0u : 6_000_000u);
         payload[25] = (byte)(tuning.Satellite && lnb == "15v" ? 15 : 0);
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(26), (uint)TuneTimeout.TotalMilliseconds);

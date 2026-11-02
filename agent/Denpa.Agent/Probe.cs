@@ -13,7 +13,7 @@ namespace Denpa.Agent;
 ///
 /// <code>
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27
-/// denpa-agent --tune /dev/dvb/adapter0/frontend0 BS15_0 --lnb 15v
+/// denpa-agent --tune /dev/dvb/adapter0/frontend0 BS15:16625 --lnb 15v
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27,T21   # 確保したまま切り替える
 /// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
@@ -168,8 +168,6 @@ public static class Probe
             return RunZd1j(zd1j, channels, decode ? keys : null, seconds, repeat);
         }
 
-        var known = Config.FromEnvironment().StreamIds();
-
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
@@ -183,7 +181,7 @@ public static class Probe
                 return 1;
             }
 
-            var streamId = ChannelTable.StreamId(name, tuning, known);
+            var streamId = tuning.StreamId;
             var unit = tuning.Satellite ? "kHz" : "Hz";
             var filter = streamId == ChannelTable.NoStreamId ? "" : $" TSID={streamId}";
             Console.WriteLine($"--- {name}  {tuning.Frequency} {unit}{filter}");

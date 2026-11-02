@@ -242,10 +242,10 @@ function tunerStatus() {
     if (busyTuners && tuner.index === 0) {
       return {
         ...tuner,
-        channel: { type: "BS", channel: "BS11_0" },
+        channel: { type: "BS", channel: "BS11:18000" },
         users: [
           { use: "rec 1", priority: 10 },
-          { use: "epg BS11_0", priority: 3 },
+          { use: "epg BS11:18000", priority: 3 },
         ],
         pid: 1234,
         error: null,

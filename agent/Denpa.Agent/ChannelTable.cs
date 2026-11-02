@@ -6,6 +6,12 @@ namespace Denpa.Agent;
 /// 選局表。**チャンネル名を周波数に直す。** 値は <a href="https://github.com/kazuki0824/recisdb-rs">recisdb-rs</a> の
 /// <c>channels.rs</c> から取った。**地上波は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、
 /// 同期しないだけ)。docs/agent.md「選局表」
+///
+/// <para>
+/// **衛星は名前だけで選局できる。** 名前に中継器と TSID が入っている (<c>BS15:16625</c>)。中継器の周波数は規格で
+/// 決まっていて再編でも変わらないので式で出し、TSID はそのまま復調器に渡す。控え (<c>channels.json</c>) は読まない。
+/// どの中継器にどの TSID があるかは denpa が放送の NIT から決める (<c>src/lib/server/satellite.ts</c>)
+/// </para>
 /// </summary>
 public static class ChannelTable
 {
@@ -24,22 +30,21 @@ public static class ChannelTable
     /// <param name="Type">denpa の種別 (GR / BS / CS)</param>
     /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/>)</param>
     /// <param name="Frequency">**地上波は Hz、衛星は kHz**</param>
-    /// <param name="RelativeTs">衛星で同じ周波数に入っている何本目か。無ければ -1</param>
-    /// <param name="Slot">
-    /// 衛星のスロット。TSID が分からないときに px4d の TUNE の <c>slot</c> で渡す
-    /// (<see cref="Px4Tuner.TuneRequest"/>)。BS は相対番号そのもの、CS は 1 つしか入っていないので 0
+    /// <param name="StreamId">
+    /// 復調器に渡す TSID。BS で名前に TSID があるときだけ入る。無ければ <see cref="NoStreamId"/> (選り分けない) で、
+    /// その中継器の先頭の TS が来る (NIT を読む入口の <c>BS15</c> はこれ)
     /// </param>
-    public sealed record Tuning(string Type, int Delivery, uint Frequency, int RelativeTs, int Slot)
+    public sealed record Tuning(string Type, int Delivery, uint Frequency, uint StreamId)
     {
         public bool Satellite => Delivery == SysIsdbs;
     }
 
     /// <summary>
-    /// チャンネル名を読む。**読めなければ null** (総当たりのスキャンが投げてくる
-    /// 名前もここを通る)。
+    /// チャンネル名を読む。**読めなければ null。**
     ///
     /// <para>
-    /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (CATV) / <c>BS01_0</c>–<c>BS23_7</c> / <c>CS02</c>–<c>CS24</c>。
+    /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (CATV) / <c>BS01</c>–<c>BS23</c> / <c>CS02</c>–<c>CS24</c>。
+    /// 衛星は <c>:TSID</c> を付けて TS を指す (<c>BS15:16625</c>)。付けなければ中継器の先頭の TS。
     /// 衛星は BS が奇数、CS が偶数で、**BS-7 と BS-17 だけは受け取らない** —
     /// あそこは 4K/8K (ISDB-S3) で、この構成のチューナーでは復調できない。
     /// </para>
@@ -50,7 +55,7 @@ public static class ChannelTable
         {
             if (!Number(name[1..], out var channel) || channel is < 13 or > 62) return null;
             // UHF 13-62ch。1/7 MHz のずれは放送のとおりで、丸めない
-            return new Tuning("GR", SysIsdbt, (uint)(473142857 + (channel - 13) * 6000000), -1, 0);
+            return new Tuning("GR", SysIsdbt, (uint)(473142857 + (channel - 13) * 6000000), NoStreamId);
         }
 
         if (name.StartsWith("C", StringComparison.Ordinal) && !name.StartsWith("CS", StringComparison.Ordinal))
@@ -62,71 +67,51 @@ public static class ChannelTable
              */
             if (!Number(name[1..], out var channel) || channel is < 13 or > 63) return null;
             var center = channel <= 22 ? 111000000 + (channel - 13) * 6000000 : 225000000 + (channel - 23) * 6000000;
-            return new Tuning("GR", SysIsdbt, (uint)(center + 142857), -1, 0);
+            return new Tuning("GR", SysIsdbt, (uint)(center + 142857), NoStreamId);
         }
 
         if (name.StartsWith("BS", StringComparison.Ordinal))
         {
-            var body = name[2..];
-            var relative = -1;
-            var underscore = body.IndexOf('_');
-            if (underscore >= 0)
-            {
-                if (!Number(body[(underscore + 1)..], out relative) || relative is < 0 or > 7) return null;
-                body = body[..underscore];
-            }
-            if (!Number(body, out var channel)) return null;
+            if (!Satellite(name[2..], out var channel, out var tsid)) return null;
             if (channel is < 1 or > 23 || channel % 2 == 0) return null;
             if (channel is 7 or 17) return null;  // ISDB-S3 (4K/8K)。この復調では受からない
 
             var index = channel / 2;  // BS01 -> 0 … BS23 -> 11
-            return new Tuning("BS", SysIsdbs, (uint)(1049480 + 38360 * index), relative, Math.Max(0, relative));
+            return new Tuning("BS", SysIsdbs, (uint)(1049480 + 38360 * index), tsid);
         }
 
         if (name.StartsWith("CS", StringComparison.Ordinal))
         {
-            if (!Number(name[2..], out var channel)) return null;
+            if (!Satellite(name[2..], out var channel, out _)) return null;
             if (channel is < 2 or > 24 || channel % 2 != 0) return null;
 
-            return new Tuning("CS", SysIsdbs, (uint)(1613000 + 40000 * (channel / 2 - 1)), -1, 0);
+            // CS は 1 つの中継器に 1 本しか入っていない。TSID は名前で TS を見分けるためだけにあり、選り分けない
+            return new Tuning("CS", SysIsdbs, (uint)(1613000 + 40000 * (channel / 2 - 1)), NoStreamId);
         }
 
         return null;
     }
 
     /// <summary>
-    /// DVB に渡す <c>DTV_STREAM_ID</c>。衛星の復調器は **TSID で選り分ける**ので、denpa が言ってくる
-    /// 相対番号 (<c>BS15_0</c>) を TSID に直す。<paramref name="known"/> (自分の <c>channels.json</c>) が勝ち、
-    /// 埋め込んだ表はまだ 1 度もスキャンしていないときだけ
+    /// 衛星の名前の、種別の後ろ (<c>15:16625</c> か <c>15</c>)。TSID は 1〜65535。付いていなければ <see cref="NoStreamId"/>
     /// </summary>
-    public static uint StreamId(string name, Tuning tuning, Func<string, int?>? known = null)
+    private static bool Satellite(string body, out int channel, out uint tsid)
     {
-        // CS は 1 つの中継に 1 つしか入っていない。選り分ける必要が無い
-        if (!tuning.Satellite || tuning.RelativeTs < 0) return NoStreamId;
-
-        var scanned = known?.Invoke(name);
-        if (scanned is > 0) return (uint)scanned.Value;
-
-        return Fallback.TryGetValue(name, out var id) ? id : NoStreamId;
+        tsid = NoStreamId;
+        var colon = body.IndexOf(':');
+        if (colon < 0) return Number(body, out channel);
+        if (!Number(body[..colon], out channel)) return false;
+        var id = body[(colon + 1)..];
+        if (id.Length is 0 or > 5 || !id.All(char.IsAsciiDigit)
+            || !int.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var value)
+            || value is < 1 or > 65535) return false;
+        tsid = (uint)value;
+        return true;
     }
-
-    /// <summary>スキャン前に使う BS の TSID。recisdb の表 (<c>dvbv5_channels_isdbs.conf</c>) と同じ</summary>
-    private static readonly Dictionary<string, uint> Fallback = new(StringComparer.Ordinal)
-    {
-        ["BS01_0"] = 16400, ["BS01_1"] = 16401, ["BS01_2"] = 16402,
-        ["BS03_0"] = 16432, ["BS03_1"] = 17969, ["BS03_2"] = 17970,
-        ["BS05_0"] = 17488, ["BS05_1"] = 17489,
-        ["BS09_0"] = 16528, ["BS09_1"] = 16530,
-        ["BS13_0"] = 16592, ["BS13_1"] = 16593, ["BS13_2"] = 18130,
-        ["BS15_0"] = 16625, ["BS15_1"] = 16626, ["BS15_2"] = 18675,
-        ["BS19_0"] = 18224, ["BS19_1"] = 18225, ["BS19_2"] = 18226, ["BS19_3"] = 18227,
-        ["BS21_0"] = 18256, ["BS21_1"] = 18257, ["BS21_2"] = 18258,
-        ["BS23_0"] = 18288, ["BS23_1"] = 18801, ["BS23_2"] = 18803,
-    };
 
     private static bool Number(string text, out int value)
     {
-        // 0 詰めは許す (`BS01_0` と `BS1_0` は同じもの)。それ以外は受け取らない
+        // 0 詰めは許す (`BS01` と `BS1` は同じもの)。それ以外は受け取らない
         value = 0;
         return text.Length is > 0 and <= 3
             && text.All(char.IsAsciiDigit)

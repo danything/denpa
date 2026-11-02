@@ -125,11 +125,11 @@ public class ChannelStoreTests
         // 地上波だけ探したときに全部を置き換えると BS と CS が設定から消える
         // (実際に消して、BS の予約が録れなくなった)
         var config = Fresh();
-        config.SaveChannels(Entries(("GR", "T16"), ("BS", "BS11_0")), ["GR", "BS"]);
+        config.SaveChannels(Entries(("GR", "T16"), ("BS", "BS11:18000")), ["GR", "BS"]);
 
         var merged = config.SaveChannels(Entries(("GR", "T21")), ["GR"]);
 
-        await Assert.That(merged.Select(entry => entry!["channel"]!.GetValue<string>())).IsEquivalentTo(["T21", "BS11_0"], CollectionOrdering.Matching);
+        await Assert.That(merged.Select(entry => entry!["channel"]!.GetValue<string>())).IsEquivalentTo(["T21", "BS11:18000"], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -137,10 +137,10 @@ public class ChannelStoreTests
     {
         var config = Fresh();
         var merged = config.SaveChannels(
-            Entries(("CS", "CS02"), ("BS", "BS11_0"), ("GR", "T21"), ("GR", "T16"), ("BS", "BS03_0")),
+            Entries(("CS", "CS02:24608"), ("BS", "BS11:18000"), ("GR", "T21"), ("GR", "T16"), ("BS", "BS03:16432")),
             ["GR", "BS", "CS"]);
 
-        await Assert.That(merged.Select(entry => entry!["channel"]!.GetValue<string>())).IsEquivalentTo(["T16", "T21", "BS03_0", "BS11_0", "CS02"], CollectionOrdering.Matching);
+        await Assert.That(merged.Select(entry => entry!["channel"]!.GetValue<string>())).IsEquivalentTo(["T16", "T21", "BS03:16432", "BS11:18000", "CS02:24608"], CollectionOrdering.Matching);
     }
 
     [Test]

@@ -46,7 +46,9 @@ const DESC_TS_INFORMATION = 0xcd;
  * ラジオ (0x02) とデータ (0xc0) も入る。映像の無いものを番組表に並べないのは
  * 取り込むほう (denpa の epg.ts の DIGITAL_TV)
  */
-const SERVICE_TYPES = new Set([0x01, 0x02, 0xa1, 0xa4, 0xa5, 0xad, 0xc0]);
+export const SERVICE_TYPES = new Set([
+  0x01, 0x02, 0xa1, 0xa4, 0xa5, 0xad, 0xc0,
+]);
 
 const CRC32_TABLE = (() => {
   const table = new Uint32Array(256);

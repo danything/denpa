@@ -14,7 +14,7 @@ public class SinkTests
     public async Task 追いつかずに切ったあとでも_去れば抜ける()
     {
         var left = 0;
-        var sink = new Sink("logo BS/BS15_0", 1, _ => left++);
+        var sink = new Sink("logo BS/BS15:16625", 1, _ => left++);
         // 読まないまま溜める。上限を超えたところで切られる
         var chunk = new byte[1024 * 1024];
         for (var i = 0; i * chunk.Length <= TunerPool.MaxLag; i++) sink.Push(chunk);
@@ -31,16 +31,16 @@ public class SinkTests
     [Test]
     public async Task 取り上げられたら相手の名乗りを理由に入れる()
     {
-        var sink = new Sink("logo BS/BS15_0", 4, _ => { });
-        sink.Fail(TunerPool.PreemptedBy("epg BS03_0"));
-        await Assert.That(sink.FailedWith).IsEqualTo("優先度の高い要求 (epg BS03_0) にチューナーを譲りました");
+        var sink = new Sink("logo BS/BS15:16625", 4, _ => { });
+        sink.Fail(TunerPool.PreemptedBy("epg BS03:16432"));
+        await Assert.That(sink.FailedWith).IsEqualTo("優先度の高い要求 (epg BS03:16432) にチューナーを譲りました");
     }
 
     [Test]
     public async Task ふつうに去っても1回だけ抜ける()
     {
         var left = 0;
-        var sink = new Sink("epg BS15_0", 3, _ => left++);
+        var sink = new Sink("epg BS15:16625", 3, _ => left++);
         sink.Leave();
         sink.Leave();
         await Assert.That(left).IsEqualTo(1);
