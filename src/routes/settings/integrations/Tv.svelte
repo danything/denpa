@@ -31,7 +31,7 @@
     {:else}
       <div class="rows">
         {#each data.devices as device (device.id)}
-          <div class="row device item" data-testid="device-row">
+          <div class="device item" data-testid="device-row">
             <div class="grow">
               <div class="small"><strong>{device.name}</strong></div>
               <div class="tiny muted">

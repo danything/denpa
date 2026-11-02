@@ -155,6 +155,7 @@
     playbackAt,
     prevChapterAt,
     resumePoint,
+    type Ruler,
     skipCmAtStart,
     skipTarget,
     toTsTime,
@@ -968,11 +969,14 @@
   function placeAir(at: number): number | "before" | "cut" {
     const target = data.jikkyo;
     if (target === null || info === null) return "before";
-    const ruler =
-      info.axis === "encoded"
-        ? { kept: rec.cm_kept, skip: rec.encode_skip ?? 0 }
-        : null;
-    return playbackAt((at - target.head) / 1000, ruler);
+    return playbackAt((at - target.head) / 1000, ruler(info));
+  }
+
+  /** 観ているものの物差し (`Ruler`)。元の TS なら null */
+  function ruler(plan: PlaybackInfo): Ruler | null {
+    return plan.axis === "encoded"
+      ? { kept: rec.cm_kept, skip: rec.encode_skip ?? 0 }
+      : null;
   }
 
   /**
@@ -982,11 +986,7 @@
   function airTime(): number | null {
     const target = data.jikkyo;
     if (target === null || info === null) return null;
-    const ruler =
-      info.axis === "encoded"
-        ? { kept: rec.cm_kept, skip: rec.encode_skip ?? 0 }
-        : null;
-    return target.head + toTsTime(mediaTime(), ruler) * 1000;
+    return target.head + toTsTime(mediaTime(), ruler(info)) * 1000;
   }
   /** 貼り直しを追わせている映像。二重に回さないための目印 (`follow`) */
   let following: HTMLVideoElement | null = null;
@@ -1035,7 +1035,7 @@
     captions: () => captions && hasCaptions,
   });
 
-  // canvas の音を「再生する音」と言うのは、バックグラウンド再生を入れているときと小窓を開いている間だけ (`raw/engine.ts`)
+  // canvas の音を「再生する音」と言うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
   $effect(() => {
     const on = background.on || pip.active;
     if (drawing) canvas?.background(on);
@@ -1587,8 +1587,7 @@
   }
 
   /**
-   * 字幕を取ってくる (`askCaptions` から1回)。既定で出すので、消していても取る。
-   * 端末に保存したものがあればそちら。字幕を持たない番組は 404 (ボタンを出さないだけ)
+   * 字幕を取ってくる (`askCaptions` から1回)。端末に保存したものがあればそちら。字幕を持たない番組は 404 (ボタンを出さないだけ)
    */
   async function loadCaptions(): Promise<void> {
     if (captionText !== null) return;
@@ -1831,7 +1830,7 @@
     return false;
   }
 
-  /** 断られたときだけ知らせる。消せたときは一覧へ戻るので出す先が無い */
+  /** 削除は断られたときだけ知らせる (消せたら一覧へ戻る) */
   const notices = $derived<Notice[]>([
     ...errorNotice(form, "watch-delete"),
     ...shooter.notices,

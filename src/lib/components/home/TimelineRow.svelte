@@ -51,11 +51,8 @@
   const ctx = home();
 
   /**
-   * 置き場の使用量。**主を先に出し、あるものだけ括弧に添える。**
-   *
-   * `ts_size` が持っているのは主のぶんだけなので、いくつもエンコードした録画では画面の
-   * 数字と実際に使っている量が食い違っていた (H.264 のほうが大きいことも
-   * ある)。「消していいのか、どれだけ空くのか」を1行で読めるようにする
+   * 置き場の使用量。**主を先に出し、あるものだけ括弧に添える** (`ts_size` は主のぶんだけ。
+   * 残りは `+page.server.ts` の `raw_size`・`hevc_size`・`alt_size`)。「消していいのか、どれだけ空くのか」を1行で読めるように
    */
   function sizeLabel(rec: Rec): string {
     const extra = [
@@ -190,7 +187,6 @@
     }
     problems.push(...clipLine(rec, true));
     if (logoUnusable(rec.cm_note) && rec.deleted_at === null) {
-      // 覚えたロゴは設定の「受信できるチャンネル」の「CMロゴ」で確かめられる
       problems.push({
         kind: "logo",
         tone: "warning",
@@ -275,8 +271,7 @@
     </div>
     <!--
       録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは3段目が言う)。
-      **いちばん上の録画中の行は、バーの先に「いま」の時刻を出す** — いまは録っている番組の途中なので、
-      「いま」の線を行の下に別に引かない (線は読み上げの見出しとして残す。`TimelineHeading`)
+      いちばん上の録画中の行は、バーの先に「いま」の時刻を出す (線の代わり。`TimelineHeading`)
     -->
     {#if item.zone === "now" && res.end_at > res.start_at}
       {@const done = Math.min(
@@ -387,7 +382,7 @@
     class="row t-row item playable"
     class:nested
   >
-    <!-- ポスター。無い録画もあるので、読めなければ画像を隠して枠だけ残す。再生の印は観られるものだけ -->
+    <!-- ポスター (読めなければ枠だけ。`Poster`)。再生の印は観られるものだけ -->
     <span
       class="t-thumb"
       data-testid={link === null ? undefined : "play-hint"}
@@ -553,7 +548,7 @@
             </ActionButton>
           {/if}
         {:else}
-          <!-- サーバから消したら、端末に落としてあったコピーも片付ける。狭い画面では「⋯」の中 -->
+          <!-- 狭い画面では「⋯」の中 -->
           <div class="row-wide">
             <ArmedDelete
               deleting={ctx.deleting}

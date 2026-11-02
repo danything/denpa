@@ -102,7 +102,7 @@ function remembered(
 export function load(event) {
   const { url, cookies } = event;
   const at = Date.now();
-  // テレビと同じ並び (SERVICE_TYPE_ORDER / SERVICE_ORDER)。番組表とも揃えてある
+  // テレビと同じ並び (SERVICE_TYPE_ORDER / SERVICE_ORDER)
   const services: Service[] = orm()
     .select()
     .from(stations)

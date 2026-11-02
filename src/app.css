@@ -667,7 +667,7 @@ progress[value]::-webkit-progress-value {
     background-position: 200% 0;
   }
 }
-/* 走っている取り込み・スキャンの状態と記録 */
+/* 走っている取り込み・スキャン・ロゴや番組表の取得の状態と記録 */
 .progress-block {
   display: flex;
   flex-direction: column;

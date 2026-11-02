@@ -194,7 +194,7 @@ export function startOffline(): void {
     const data = event.data as { type?: string; id?: number } | null;
     if (data?.type === "offline-saved" || data?.type === "offline-failed")
       void refresh();
-    // 失敗は黙って控えが消えるだけだと「無かったことになった」ように見える。画面に知らせる
+    // 失敗は画面に知らせる (`failed`)
     if (data?.type === "offline-failed" && typeof data.id === "number")
       failed = data.id;
   });

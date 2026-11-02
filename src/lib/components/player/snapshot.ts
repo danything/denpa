@@ -241,7 +241,7 @@ export function readComments(): CommentScene | null {
 /**
  * **実況のコメントの重ね。** 読んでおいたコメント (`readComments`) を、見えていた位置のまま透明な canvas に描く。
  * 枠の CSS px から映像の画素へ引き伸ばす。字の書体・色・黒い縁・透明度は観ている画面と同じ
- * (この端末で書いたものの下線は描かない)。コメントが無ければ null
+ * (この端末で書いたものの縦線 `mine-line` は描かない)。コメントが無ければ null
  */
 export function commentLayer(
   scene: CommentScene | null,

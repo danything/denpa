@@ -27,7 +27,6 @@
   let { id }: { id: number } = $props();
 </script>
 
-<!-- 読めなければ画像を隠して枠だけ残す (`poster`) -->
 <img
   src={resolve(`api/recordings/${id}/poster`)}
   alt=""

@@ -38,8 +38,7 @@
    *   明るさを抑えてから敷くので、上の字はどちらのテーマでも 4.5:1 以上で読める (`toneFrame`・`WASH_LUMINANCE`)
    * - 色は小さな canvas で作って CSS で引き伸ばす。`filter: blur` は使わない (GPU の無い端末で重かった)
    * - 写す繰り返しと前の色からの入れ替えは、テーブルトップの反射 (`FoldReflection`) と同じ部品 (`glow-loop.svelte.ts`)。
-   *   入れ替えは CSS の `opacity` の transition (下の style)。帯ごとに canvas を2枚重ね、新しい色を裏の1枚に
-   *   描いてから表と裏を入れ替える。ここで動かすのは「どちらが表か」の印だけ
+   *   入れ替えは CSS の `opacity` の transition (下の style)
    * - 色は枠に重ならない4本の帯 (`.band`) にだけ描く (`strips`)。枠の後ろに敷くと映像のコマごとに合成し直す
    * - ブラウザの枠の色 (`theme-color`) もページの上の端の色にする (`washTop`)
    * - 写さないときは `ambient.ts` の `plan`。映像の上には何も重ねない

@@ -16,7 +16,7 @@ export { default as AUDIO } from "~icons/lucide/audio-lines";
 /** 切り抜き (いまの1コマをサーバに保存する) */
 export { default as CAMERA } from "~icons/lucide/camera";
 export { default as CAPTION } from "~icons/lucide/captions";
-/** 聞き返しの2回目 (レ点)。**文字を出さずに「これでいいか」を言う** */
+/** レ点。聞き返しの2回目 (文字を出さずに「これでいいか」を言う)・切り抜きを送れた直後 */
 export { default as CHECK } from "~icons/lucide/check";
 /** 再生の設定 (`SettingsMenu`) の選択肢の並びから戻る / 選択肢の並びに入る */
 export { default as BACK } from "~icons/lucide/chevron-left";
