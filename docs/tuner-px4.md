@@ -17,7 +17,7 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 
 PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px4-userland の対応機種ならそのまま使います ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
 
-Amazon で見る (広告): [PX-Q3U4](https://www.amazon.co.jp/dp/B01MYBITR0?tag=doa08-22)、[PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=doa08-22)、[PX-MLT5PE](https://www.amazon.co.jp/dp/B07MFPVTJY?tag=doa08-22)、[PX-MLT8PE](https://www.amazon.co.jp/dp/B0823M7VQ1?tag=doa08-22)、[PX-M1UR](https://www.amazon.co.jp/dp/B0B6P92K3L?tag=doa08-22)、[PX-S1UR](https://www.amazon.co.jp/dp/B0B6PDPW5L?tag=doa08-22)、[DTV02A-1T1S-U](https://www.amazon.co.jp/dp/B08MTGFV39?tag=doa08-22)
+Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=doa08-22)、[DTV02A-1T1S-U](https://www.amazon.co.jp/dp/B08MTGFV39?tag=doa08-22)
 
 ## 設定
 
