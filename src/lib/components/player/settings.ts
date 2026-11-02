@@ -51,7 +51,7 @@ export interface SettingToggle {
   disabled?: boolean;
 }
 
-/** 押せない形式に添える注記 (docs/writing.md「同じことは同じ文言で」) */
+/** 押せない形式に添える注記 (docs/writing.md「同じ操作・状態の文言」) */
 function unplayable(label: string, disabled: boolean): string {
   return disabled ? `${label} (再生できません)` : label;
 }
