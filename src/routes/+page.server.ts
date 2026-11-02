@@ -339,7 +339,7 @@ export function load({ url, cookies }) {
     capacity: room === null ? null : capacityLabel(room.free, room.hours),
     /** まとめて表示 (`#lib/grouping.ts`)。サーバで描く形を、端末の覚えに合わせる */
     grouped: storedGrouped(cookies.get(GROUPED_COOKIE)),
-    /** 新しい順で表示 (`#lib/timeline.ts`)。まとめて表示と同じく、サーバで描く並びを端末の覚えに合わせる */
+    /** 新しい順で表示 (`#lib/timeline.ts`)。こちらも端末の覚えに合わせる */
     reversed: storedReversed(cookies.get(REVERSED_COOKIE)),
     /** 録画ごとの切り抜きの数。詳細の「この録画の切り抜き (n)」 */
     clipCounts: clipCountsByRecording(),

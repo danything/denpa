@@ -5,7 +5,7 @@ Mirakurun・EPGStation・KonomiTV・EDCB を使っている人向けに、それ
 
 ## 役目の対応
 
-denpa の部品は、チューナーを扱う**チューナーエージェント**と、それ以外を受け持つ **denpa 本体**の2つです
+denpa の部品は、チューナーを扱う**チューナーエージェント**と、それ以外を受け持つ **denpa 本体**の 2 つです
 ([architecture.md](architecture.md))。
 
 | いま使っているもの | 受け持っている役目                                     | denpa では                                                               |

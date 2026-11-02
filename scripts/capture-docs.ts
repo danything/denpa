@@ -256,7 +256,7 @@ async function sweepLogos(): Promise<void> {
     if (html.includes('data-testid="logo-sweep-done"')) return;
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  throw new Error("局ロゴの取得が3分で終わりませんでした");
+  throw new Error("局ロゴの取得が 3 分で終わりませんでした");
 }
 
 async function seed(): Promise<void> {

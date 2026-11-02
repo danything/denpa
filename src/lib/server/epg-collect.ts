@@ -350,11 +350,11 @@ async function collectChannel(
     collected.set(key(channel), Date.now());
     const secs = Math.round((Date.now() - startedAt) / 1000);
     if (reader.complete) {
-      console.log(`[epg] ${label}: 揃ったので ${secs}秒で離しました`);
+      console.log(`[epg] ${label}: 揃ったので ${secs} 秒で離しました`);
     } else {
       const why = reader.shortfall();
       console.warn(
-        `[epg] ${label}: 揃わないまま ${secs}秒で離しました` +
+        `[epg] ${label}: 揃わないまま ${secs} 秒で離しました` +
           `${why.length === 0 ? "" : ` (${why.slice(0, 4).join(" / ")})`}`,
       );
     }
