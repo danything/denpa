@@ -145,7 +145,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>溜めている間に鍵の相手へ聞いた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ1行に足す</summary>
     public string CardUse() => !_keys
-        ? "カード 聞かない"
+        ? "カード 使わない"
         : $"カード {_asks}回 計 {_askMs}ms (待ち {_waitedMs}ms・覚えた答え {_cached}回・未契約 {_unentitledAnswers}回・準備 {At(_initMs)})";
 
     private static string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
