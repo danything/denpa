@@ -4,6 +4,8 @@
 入れ方は [install.md](install.md) (Mac は [install-mac.md](install-mac.md)、Windows は [install-windows.md](install-windows.md))、
 エージェントの作りは [agent.md](agent.md)。
 
+「Amazon で見る」は Amazon のアソシエイトのリンク (広告) です。ここから買っても値段は変わらず、紹介料が denpa の開発を続ける費用になります。どこで買っても動作は同じです。
+
 ## 要るもの
 
 - **チューナー** — 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
@@ -28,6 +30,8 @@
 - あれば Intel か AMD の GPU (`/dev/dri` を渡す) か NVIDIA の GPU (NVIDIA Container Toolkit で渡す。[install.md](install.md#用意するもの))。無ければソフトウェアでエンコードします
 
 機材ごとの入れ方は表のリンク先に。
+
+Amazon で見る (広告): [PT3](https://www.amazon.co.jp/dp/B00857CQAM?tag=doa08-22)、[PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=doa08-22)、[DTV02A-1T1S-U](https://www.amazon.co.jp/dp/B08MTGFV39?tag=doa08-22)、[PX-S1UD](https://www.amazon.co.jp/dp/B006RQLNES?tag=doa08-22)、[CECH-ZD1 J](https://www.amazon.co.jp/dp/B0034KZXBO?tag=doa08-22)
 
 ## 設定の画面
 
@@ -116,6 +120,8 @@ Windows と Mac は実機ではまだ確かめていません)。
 使用中です」と出る)。TPDU 単位のリーダー (Gemalto PC Twin など) には T=1 の枠組みを
 こちらで組み、APDU 単位のリーダーにはそのまま送ります。カードの無いリーダーや INT に
 答えないカードは飛ばし、USB のリーダーを内蔵リーダーより先に試します (`CardLinks.cs`)。
+
+Amazon で見る (広告): [Gemalto PC Twin](https://www.amazon.co.jp/dp/B001NEIRH0?tag=doa08-22)、[IDBridge CT30](https://www.amazon.co.jp/dp/B003XF2JJY?tag=doa08-22) (Mac で読めないときは [install-mac.md](install-mac.md#カードが読めないとき))
 
 動いているエージェントがカードと話せているかは `/denpa/card` で分かります (INT を
 1 回通す)。止めた状態なら `denpa-agent --card` でも確かめられます (リーダーを並べ、

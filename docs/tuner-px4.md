@@ -6,6 +6,8 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 
 チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#px4-userland-の作り)。
 
+「Amazon で見る」は Amazon のアソシエイトのリンク (広告) です。ここから買っても値段は変わらず、紹介料が denpa の開発を続ける費用になります。どこで買っても動作は同じです。
+
 [px4-userland](https://github.com/Khronos31/px4-userland) を**エージェントのイメージに同梱**しています
 (`agent/Dockerfile`)。libusb だけで USB を扱うユーザー空間のドライバで、`/dev/bus/usb` が見えれば動き、
 ホストに `px4_drv` (DKMS) もカーネルモジュールも要りません (`px4_drv` の `/dev/px4video*` には対応していません)。
@@ -14,6 +16,8 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 ## 対応機種
 
 PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px4-userland の対応機種ならそのまま使います ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
+
+Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=doa08-22)、[DTV02A-1T1S-U](https://www.amazon.co.jp/dp/B08MTGFV39?tag=doa08-22)
 
 ## 設定
 
