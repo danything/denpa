@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 
+import { readIndoorHosts } from "../host";
 import { HW_CODECS, type HwAllow, type HwCodec, type HwKind } from "../hw";
 import { readNg } from "../jikkyo/ng";
 import { normalizePrefecture } from "../prefecture";
@@ -103,6 +104,17 @@ interface Settings {
   jikkyo: boolean;
   /** **実況の NG ワード** (世帯で 1 つ)。含むコメントは流さない (`#lib/jikkyo/ng.ts`)。設定の 1 キーに JSON の配列で持つ */
   jikkyoNg: string[];
+  /**
+   * **家の中で使う名前** (世帯で 1 つ。`dp.l.example.com` など)。この名前で開いた画面は、ライブの「自動」で
+   * MPEG-2 (放送のまま) を先に選ぶ (`#lib/host.ts` の `indoorHost`)。プライベートの IP・`localhost`・`.local` などは
+   * 載せなくても家の中。設定の 1 キーに JSON の配列で持つ
+   */
+  indoorHosts: string[];
+  /**
+   * **コーデックのメニューに H.264 と H.265 を出さないか。既定はオフ。** 外すのはメニューだけで、AV1 を再生できない端末には
+   * 自動で H.265 か H.264 を流す (`#lib/live-choice.ts` の `HIDDEN_CODECS`)
+   */
+  hideH264Hevc: boolean;
 }
 
 /** 本数の上限に選べる幅 */
@@ -203,6 +215,8 @@ export function settings(): Settings {
     transcodeLimit: parseTranscodeLimit(stored("transcodeLimit")),
     jikkyo: flag("jikkyo", false),
     jikkyoNg: readNg(stored("jikkyoNg")),
+    indoorHosts: readIndoorHosts(stored("indoorHosts")),
+    hideH264Hevc: flag("hideH264Hevc", false),
   };
 }
 

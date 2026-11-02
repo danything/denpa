@@ -2,6 +2,7 @@ import { basename } from "node:path";
 
 import { fail } from "@sveltejs/kit";
 
+import { parseIndoorHosts } from "#lib/host.js";
 import {
   chooseHw,
   HW_CODECS,
@@ -144,6 +145,21 @@ export const actions = {
   saveReserve: async ({ request }) => {
     saveSettings({
       freeOnly: (await request.formData()).get("freeOnly") === "on",
+    });
+    return { success: true, saved: true };
+  },
+
+  /**
+   * 視聴 (世帯の設定)。家の中の名前 (1 行に 1 つ。ライブの「自動」で MPEG-2 を先に選ぶ。`#lib/host.ts`) と、
+   * コーデックのメニューに H.264 と H.265 を出さないか (`#lib/live-choice.ts` の `HIDDEN_CODECS`)
+   */
+  saveViewing: async ({ request }) => {
+    const form = await request.formData();
+    const parsed = parseIndoorHosts(String(form.get("indoorHosts") ?? ""));
+    if ("error" in parsed) return fail(400, { message: parsed.error });
+    saveSettings({
+      indoorHosts: parsed.hosts,
+      hideH264Hevc: form.get("hideH264Hevc") === "on",
     });
     return { success: true, saved: true };
   },

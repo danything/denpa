@@ -53,6 +53,7 @@
   /** 保存の結果 (`autosave`)。節ごとに見出しの横に出す */
   const encodingSave = new SaveState();
   const cmSave = new SaveState();
+  const viewingSave = new SaveState();
   const reserveSave = new SaveState();
 
   /**
@@ -342,6 +343,68 @@
         use:submitting={keepValues}
         hidden
       ></form>
+    </section>
+  </div>
+</div>
+
+<!--
+    視聴 (世帯の設定)。ライブの「自動」が家の中とみる名前 (`#lib/host.ts` の `indoorHost`) と、コーデックのメニューから
+    H.264 と H.265 を外すか (`#lib/live-choice.ts` の `HIDDEN_CODECS`)。名前の欄は離れたときに保存する (打っている途中では送らない)
+-->
+<div class="part" id="viewing" data-part>
+  <div class="sections readable">
+    <section class="section">
+      <div class="section-head">
+        <h2>視聴</h2>
+        <SaveNote status={viewingSave} />
+      </div>
+      <Lead>この世帯のすべての端末に効きます</Lead>
+      <form
+        method="POST"
+        action="?/saveViewing"
+        use:autosave={viewingSave}
+        class="fields setting-rows"
+      >
+        <div class="field">
+          <label class="field-label" for="indoor-hosts">家の中の名前</label>
+          <textarea
+            id="indoor-hosts"
+            name="indoorHosts"
+            rows="3"
+            spellcheck="false"
+            autocapitalize="off"
+            placeholder="dp.l.example.com"
+            value={recording.indoorHosts.join("\n")}
+            data-testid="indoor-hosts"></textarea>
+          <Lead>
+            この名前で開くと、ライブの「自動」で MPEG-2 を先に選びます。1 行に 1
+            つ
+            {#snippet more()}
+              <p>
+                家の中では放送のまま (MPEG-2)
+                で流すと、サーバがエンコードせずに済み、画質も放送のままです。外からは
+                AV1、再生できなければ H.264 を選びます。
+              </p>
+              <p>
+                家の中かは、開いたアドレスの名前で決めます。192.168.x.x
+                のような家の中の IP アドレス・localhost・.local・.home.arpa
+                で開いたときは、書かなくても家の中です。VPN のアドレス
+                (100.64.0.0/10) は家の中に入れません。
+              </p>
+            {/snippet}
+          </Lead>
+        </div>
+        <div class="field">
+          <span class="field-label">コーデック</span>
+          <CheckRow
+            name="hideH264Hevc"
+            checked={recording.hideH264Hevc}
+            title="コーデックの選択肢に H.264 と H.265 を出さない"
+            hint="AV1 を再生できない端末では、自動で H.265 か H.264 に切り替えます"
+            testid="hide-h264-hevc"
+          />
+        </div>
+      </form>
     </section>
   </div>
 </div>
