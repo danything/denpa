@@ -456,7 +456,16 @@ export async function playbackPlan(
       : (ts?.duration ?? recordedSec(recording));
 
   return {
-    info: { duration, axis, audios, offers },
+    info: {
+      duration,
+      axis,
+      audios,
+      offers,
+      // 物差しを元の TS の時刻に戻す直し方。エンコードしたものの物差しのときだけ (`rulerOf` と同じ中身)
+      ...(axis === "encoded"
+        ? { ruler: { kept: recording.cm_kept, skip } }
+        : {}),
+    },
     encoded,
     ts,
     skip,

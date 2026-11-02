@@ -48,6 +48,8 @@ test.describe("実況の世帯の設定", () => {
       Object.values(await channels(request)).every((c) => c === null),
     ).toBe(true);
     expect((await request.get("/api/jikkyo/ranking")).status()).toBe(403);
+    // テレビのアプリが読む NG ワードも、オフの間は返さない
+    expect((await request.get("/api/jikkyo/ng")).status()).toBe(403);
   });
 
   test("オンにすると、局の一覧に実況のチャンネルが載る", async ({
@@ -59,6 +61,8 @@ test.describe("実況の世帯の設定", () => {
       const list = await channels(request);
       expect(list["ＴＯＫＹＯ　ＭＸ"]).toBe("jk9");
       expect(list["フジテレビ"]).toBe("jk8");
+      // テレビのアプリ向けの NG ワードも読める
+      expect((await request.get("/api/jikkyo/ng")).status()).toBe(200);
     } finally {
       await setJikkyo(page, false);
     }
@@ -547,6 +551,10 @@ test.describe("実況の NG ワード", () => {
       // 空の行は落として保存する
       await goto(page, "/settings/integrations");
       await expect(page.getByTestId("jikkyo-ng")).toHaveValue("ﾈﾀﾊﾞﾚ");
+      // テレビのアプリは同じものを API で読む (比べ方をそろえるのは受け側)
+      expect(await (await page.request.get("/api/jikkyo/ng")).json()).toEqual({
+        words: ["ﾈﾀﾊﾞﾚ"],
+      });
       await fakeNx(page, { texts: ["ねたばれ注意", "ふつうのコメント"] });
       await deviceOn(page);
       await goto(page, `/live?service=${MX.id}`);
