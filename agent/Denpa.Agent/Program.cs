@@ -40,6 +40,8 @@ if (args is ["--version"])
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
 if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
+// PIX-DT295 を確かめる。起動・認証・カード・選局と、受信に要るものがあれば受信の統計だけを出す (Dt295Probe.cs)
+if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295Probe.Run(args);
 /*
  * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ刺さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
@@ -52,6 +54,7 @@ if (args.Length > 0)
     Console.Error.WriteLine($"       {Probe.TuneUsage}");
     Console.Error.WriteLine($"       {Probe.DecodeUsage}");
     Console.Error.WriteLine($"       {Probe.CardUsage}");
+    Console.Error.WriteLine($"       {Dt295Probe.Usage}");
     return 2;
 }
 
@@ -477,6 +480,8 @@ app.Lifetime.ApplicationStopped.Register(() =>
     pool.CloseAll();
     // CECH-ZD1 J は眠らせて LED を緑に戻してから閉じる (カードのために開いていても)
     Zd1jBoard.CloseAll();
+    // PIX-DT295 は idle イメージを書き戻して認証前に戻してから閉じる (認証済みのまま放っておくと約 61 秒でエラーの状態になる)
+    Dt295Board.CloseAll();
     // 利用者を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
     UserlandDaemon.StopAll();
 });
