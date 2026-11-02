@@ -37,7 +37,7 @@ import { run } from "./stream";
  * 覚えたものの置き場です。
  *
  * 1. **覚える** — キーフレームだけ散らして抜き (`-skip_frame nokey`。全部をデコードしないので速い)、
- *    上下の帯で線の向きを足し合わせて在り処を割り出す。局のぶんを覚えていれば飛ばす
+ *    上下 1/5 の範囲で線の向きを足し合わせて在り処を割り出す。局のぶんを覚えていれば飛ばす
  * 2. **当てる** — ロゴの枠を CM 検出の1回のデコード (`cm-scan.ts`) で全部のコマから切り出してもらい、
  *    点を付けて区間にする。ついでに散らしたコマを足して、覚えたものを育てる
  *
@@ -135,14 +135,14 @@ interface Limits {
   timeoutMs: number;
 }
 
-/** キーフレームを散らして抜き、上下の帯で向きを足し合わせて在り処を割り出す */
+/** キーフレームを散らして抜き、上下 1/5 の範囲で向きを足し合わせて在り処を割り出す */
 async function learn(
   input: string,
   video: Video,
   limits: Limits,
 ): Promise<LogoModel | string> {
   const { width, height, duration } = video;
-  // 隅は上下の 1/5 (logo-area の REGION_H)。帯の境目が縦の真ん中で揃うよう偶数に
+  // 隅は上下の 1/5 (logo-area の REGION_H)。並べた2つの境目が縦の真ん中で揃うよう偶数に
   const band = Math.round(height / 5) & ~1;
   const top = emptyOrientation(width, band);
   const bottom = emptyOrientation(width, band);
@@ -164,7 +164,7 @@ async function learn(
       "-sn",
       "-dn",
       "-vf",
-      // 上の帯と下の帯を縦に並べる。境目の行は addFrame が外周として飛ばす
+      // 上と下の範囲を縦に並べる。境目の行は addFrame が外周として飛ばす
       `fps=1/${every.toFixed(3)},split[a][b];` +
         `[a]${cropTo({ x: 0, y: 0, width, height: band }, video)}[t];` +
         `[b]${cropTo({ x: 0, y: height - band, width, height: band }, video)}[u];` +

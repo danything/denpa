@@ -541,7 +541,8 @@ export const recordings = sqliteTable(
     /**
      * 末尾まで観た時刻。NULL なら**まだ観終えていない** (一覧の「未視聴」の印)。
      * `resume_ms` は観終えると消えるので、未視聴と観終えたものを見分けられない。
-     * 書くのは末尾まで来たとき (`api/recordings/<id>/resume`) と、詳細の「視聴済みにする」。
+     * 書くのは末尾まで来たとき (`api/recordings/<id>/resume`)・詳細の「視聴済みにする」・EPGStation からの取り込み
+     * (観たかどうかを持たないので視聴済みで入れる。`migrate.importOne`)。
      * 消すのは「未視聴に戻す」だけ (観直して途中で止めても観終えたまま)
      */
     watched_at: integer("watched_at"),

@@ -218,9 +218,9 @@ function saveRaw(
     .run();
 }
 
-/** `encode` はコーデックの選択から決まるだけなので書かない */
+/** `encode` と `codecs` はコーデックの選択 (`codec` にカンマ区切りで書く) から決まるだけなので書かない */
 export function saveSettings(
-  patch: Partial<Omit<Settings, "encode">>,
+  patch: Partial<Omit<Settings, "encode" | "codecs">>,
 ): Settings {
   const at = now();
   orm().transaction((tx) => {

@@ -98,7 +98,7 @@ export interface RunResult {
 /**
  * 外の道具を1回動かして、終わるまで待つ。
  *
- * ffmpeg / ffprobe / CM検出の道具を呼ぶところで同じ処理をあちこちで書いていた —
+ * ffmpeg / ffprobe を呼ぶところで同じ処理をあちこちで書いていた —
  * 起こす・出力を読み切る・中止 (AbortSignal) や時間切れで殺す・待つ。
  * ここに寄せて、**読み切る前に `exited` を待たない** (パイプが詰まって固まる) など
  * の決まりごとを1箇所で守る。
@@ -120,7 +120,7 @@ export async function run(
      */
     onStdout?: (chunk: Uint8Array) => void;
     /**
-     * 標準エラーを溜めずに1行ずつ渡す。コマごとに1行出させるもの (CM検出の `scdet`) 向け。
+     * 標準エラーを溜めずに1行ずつ渡す。コマごとに行が出るもの (コマ数の実測の `signalstats`・`-progress`) 向け。
      * `stderr` より優先し、返る `stderr` は末尾の数行だけ (落ちた理由を読むため)
      */
     onStderrLine?: (line: string) => void;

@@ -196,7 +196,7 @@ export async function putTuners(tuners: TunerConfig[]): Promise<void> {
  * 画面側でやる (routes/settings/reception/tuners.server.ts)。
  *
  * **頭の語はエージェントも読む。** `epg` `logo` `scan` は掛かっていない SI しか読まないので、それだけの選局は
- * カードに聞かずに流す (docs/agent.md「選局コマンドは画面から渡させない」の節の、用途を名乗る段落とその次の段落)。復号の要る使い方を足すなら別の語にする
+ * カードに聞かずに流す (docs/agent.md「選局コマンドは画面から渡させない」)。復号の要る使い方を足すなら別の語にする
  */
 export type StreamUse =
   | `rec ${number}`

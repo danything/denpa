@@ -166,7 +166,7 @@ type StreamCodec = LiveCodec | "audio";
  *
  * 映像は `pipe:1` に fMP4、字幕は `pipe:3` に Matroska (デコードせずに写したもの。
  * [captions.ts](captions.ts) の `captionOutput`)。**時刻を揃えるにはこうするしか
- * なかった** — 理由と実測、引き換え (選び直すと字幕も再エンコード) は captions.ts の冒頭。
+ * なかった** — 理由と実測は captions.ts の冒頭。引き換えに、字幕を選び直すと映像ごと起こし直しになる。
  *
  * **`-loglevel` は下げない。** 選べる字幕は入口の見出しから読み取っていて
  * (`TrackList`)、あれは info で出る。騒がしいぶんは読む側で落とす (`watch`)。
@@ -1057,7 +1057,7 @@ class Session {
        * ふだんは起こす前に PMT で字幕の有無を見るので (下の `peekCaptions`)、ここへ来るのは
        * 読めなかったときと、ffmpeg が字幕とみなさなかったとき
        */
-      // 音声だけなら字幕はエンコードしない
+      // 音声だけなら字幕は出さない
       let wanted =
         this.codec === "audio" || remembered(captionless, this.serviceId)
           ? null
@@ -1962,7 +1962,7 @@ class RawCaptions {
  * 混ぜると片方が意図しないものを見ることになる。チューナーはエージェント側で
  * 共有になるので、増えるのは ffmpeg だけ。
  *
- * **字幕も入る。** 映像と同じ ffmpeg でエンコードするようになったので、何本目の字幕を
+ * **字幕も入る。** 映像と同じ ffmpeg から写すので、何本目の字幕を
  * 出すかが違えば別のものになる (`encodeArgs`)。言語が複数ある放送でしか
  * 動かないところなので、そのために起こし直すのは年に数回のこと
  */
