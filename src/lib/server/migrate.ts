@@ -452,6 +452,9 @@ async function importOne(
             start_at: recorded.startAt,
             end_at: recorded.endAt,
             finished_at: at,
+            // EPGStation は観たかどうかを持たない。denpa の「未視聴」は denpa で録ってまだ観ていないものだけにする —
+            // 移した何年分もが未視聴に並ぶと、開いたときにいちばん古いものへ送られる (#1930)
+            watched_at: at,
             created_at: at,
             updated_at: at,
           })
