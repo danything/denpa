@@ -615,6 +615,15 @@ type Outcome = "done" | "miss" | "ranOut" | "yielded" | "busy" | "stopped";
 const carouselWatch: CarouselWatch = {};
 
 /**
+ * 自分で開いて待ち始めた時刻を控える (`CarouselWatch.triedAt`。定期チェックと「いますぐ」)。
+ * 開けた回だけ数える。開けなかった回・外れの中継 (1秒ほどで閉じて次へ行く) は数えない
+ */
+function markTried(outcome: Outcome, startedAt: number): void {
+  if (outcome !== "busy" && outcome !== "miss")
+    carouselWatch.triedAt = startedAt;
+}
+
+/**
  * 1つの物理チャンネルを開いて、そこに入っている局のロゴを取得する。
  *
  * **物理チャンネルを丸ごと開く。** 局を選り分けてしまうと、ロゴを載せている
@@ -752,9 +761,7 @@ async function collect(
   const received = (carousel?.progress.received ?? 0) > receivedBefore;
   /*
    * 途中まででも届いていれば・共通データの SDTT が来ていれば、カルーセルは流れている (ダウンロードの期間中)。
-   * 次に空いたときに続きを読む。共有で見たときも控える (前に「来なかった」と控えていても、こちらが新しくなる)
-   */
-  /*
+   * 次に空いたときに続きを読む。共有で見たときも控える (前に「来なかった」と控えていても、こちらが新しくなる)。
    * ただし**上限まで開けて読み進まなかった回は、SDTT が来ていても「来なかった」と控える。** SDTT だけ来てブロックが
    * 増えない中継があると、期間中のまま空くたびに番組表集めより上の優先度で20分ずつ塞ぎ続けてしまう
    */
@@ -969,6 +976,7 @@ async function drain(
       // 衛星のカルーセルは十数分に一度しか来ない。当たりの中継はそれまで待つ
       const limit =
         target.type === "GR" ? SWEEP_TIMEOUT : config.logoCarouselWait;
+      const startedAt = Date.now();
       const { outcome, carrier, received, openedMs, counts } = await collect(
         target,
         limit,
@@ -976,6 +984,8 @@ async function drain(
         left,
         carouselPriority(target),
       );
+      // 記録の「7 時間あけて開き直します」と合わせる。「いますぐ」で開けた回も、定期チェックの間合いはここから数える
+      if (carrier) markTried(outcome, startedAt);
       const note = carrier
         ? carouselMessage(target.channel, outcome, received)
         : "";
@@ -1161,9 +1171,7 @@ async function awaitCarousel(): Promise<number> {
         attempt.period ? carouselPriority(target) : SWEEP_PRIORITY,
       );
       found += result.found;
-      // 開けた回だけ数える。開けなかった回・外れの中継 (1秒ほどで閉じて次へ行く) は数えない
-      if (result.outcome !== "busy" && result.outcome !== "miss")
-        carouselWatch.triedAt = startedAt;
+      markTried(result.outcome, startedAt);
       const line = result.carrier
         ? waitedMessage(
             target.channel,
@@ -1420,7 +1428,7 @@ async function run(
  * カルーセルを読み切った後になお足りない局だけが、本当に取れない局。
  *
  * `satellite` は**衛星でまだ取れていない局の数と、ロゴを積んだ中継** (分かっていなければ null)。
- * 衛星のロゴは十数分に一度しか流れてこず、揃うまで何回か開き直すことがある。黙っていると
+ * 衛星のロゴはダウンロードの期間にしか流れてこず、揃うまで何回か開き直すことがある。黙っていると
  * 止まっているように見えるので、画面で「いつ続きを読むか」を言う
  */
 export function stats(): {
