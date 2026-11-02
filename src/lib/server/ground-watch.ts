@@ -109,11 +109,13 @@ export function alertGround(): void {
  */
 export class GroundWatch {
   readonly sdt = new SdtReader();
-  private readonly until = Date.now() + WATCH_FOR;
+  /** 読むのをやめる時刻。最初の塊が届いた時刻から数える (選局を待つ間は数えない) */
+  private until: number | null = null;
 
   constructor(private readonly channel: AgentChannel) {}
 
   feed(chunk: Uint8Array): void {
+    this.until ??= Date.now() + WATCH_FOR;
     if (Date.now() > this.until || this.sdt.actual !== null) return;
     this.sdt.feed(chunk);
   }
