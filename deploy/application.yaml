@@ -6,7 +6,7 @@
 # chart を展開する。bootstrap 側は触らずに済む。
 #
 # chart に入れていないもの (この家の事情) はこの階層に素のまま残す:
-#   - oidc-secret.yaml  … InfisicalSecret。値は Infisical にあり、この家の事情なので chart に持たない
+#   - secrets.sops.yaml … SopsSecret(Secret denpa-oidc と VolSync の Secret)。値は SOPS で暗号化してあり、この家の事情なので chart に持たない
 #   - namespace.yaml    … PSA を privileged にするラベルだけ (名前空間そのものは CreateNamespace が作る)
 #   - argocd.yaml       … bootstrap の ApplicationSet が読む、この置き場の設定
 #   - network-policy.yaml … CiliumNetworkPolicy。denpa に届く相手を Gateway とノードに絞る (Cilium に頼るので chart に持たない)
@@ -60,7 +60,7 @@ spec:
           trustedProxies: 10.42.0.0/16,fd42::/64
           # 同じ denpa を2つの名前で出しているので、ホーム画面の名前を分ける
           pwaNames: dp.doany.io=denpa,dp.l.doany.io=denpa 宅内
-          # OIDC。中身は InfisicalSecret (deploy/oidc-secret.yaml) が Infisical から作る Secret
+          # OIDC。中身は SopsSecret (deploy/secrets.sops.yaml) が作る Secret
           oidcSecretName: denpa-oidc
 
         persistence:

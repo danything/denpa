@@ -1,54 +1,7 @@
 # このアプリの PVC を VolSync で R2 に取る(リポジトリは PVC ごとに `<bucket>/volsync/denpa/<pvc>`)。
-# 取り方・時刻・Secret の組み方は danything/gitops の deploy/volsync/application.yaml。アプリと一緒に置くので、
+# その Secret(volsync-<pvc>)は secrets.sops.yaml。取り方・時刻は danything/gitops の deploy/volsync/application.yaml。アプリと一緒に置くので、
 # アプリを消せばこれも消える(R2 のリポジトリは残る。要らなければ gitops の deploy/backup/README.md「やめる」)。
-# PVC を足したら、下の managedKubeSecretReferences と ReplicationSource を 1 組足す。
-apiVersion: secrets.infisical.com/v1alpha1
-kind: InfisicalSecret
-metadata:
-  name: volsync
-  namespace: denpa
-spec:
-  hostAPI: http://infisical.infisical.svc:8080/api
-  authentication:
-    kubernetesAuth:
-      identityId: f2bc3416-f196-4626-9bf3-c11693b32cc6
-      autoCreateServiceAccountToken: true
-      serviceAccountRef:
-        name: infisical-auth
-        namespace: infisical
-      secretsScope:
-        projectSlug: doa
-        envSlug: prod
-        secretsPath: /backup/backup
-  managedKubeSecretReferences:
-    - secretName: volsync-agent-config
-      secretNamespace: denpa
-      template:
-        data:
-          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/agent-config"
-          RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
-          AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
-          AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
-          AWS_DEFAULT_REGION: auto
-    - secretName: volsync-denpa-data
-      secretNamespace: denpa
-      template:
-        data:
-          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-data"
-          RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
-          AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
-          AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
-          AWS_DEFAULT_REGION: auto
-    - secretName: volsync-denpa-encoded
-      secretNamespace: denpa
-      template:
-        data:
-          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-encoded"
-          RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
-          AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
-          AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
-          AWS_DEFAULT_REGION: auto
----
+# PVC を足したら、ReplicationSource と secrets.sops.yaml の volsync-<pvc> を 1 組足す。
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
 metadata:

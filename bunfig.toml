@@ -11,4 +11,6 @@ ignorePatterns = [
   "site/public/",
   # 区点と突き合わせる表
   "packages/arib/src/b24-tables.ts",
+  # SOPS が書くファイル (sops edit のたびにインデント 4 で書き直す)
+  "deploy/*.sops.yaml",
 ]
