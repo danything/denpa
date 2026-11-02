@@ -35,7 +35,7 @@
   } from "#lib/components/player/icons.js";
   import { keepOnDevice, shotName } from "#lib/components/player/snapshot.js";
   import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
-  import { date, dateTime, fullDate, size, time } from "#lib/format.js";
+  import { dateTime, fullDate, size, time } from "#lib/format.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { sentinel } from "#lib/paging.svelte.js";
   import { dayName, dayStart } from "#lib/timeline.js";
@@ -700,7 +700,7 @@
               onclick={() => {
                 apply({ day: undefined });
                 filterOpen = false;
-              }}>{date(dayOf(data.query.day))} の絞り込みを外す</button
+              }}>{fullDate(dayOf(data.query.day))} の絞り込みを外す</button
             >
           </div>
         {/if}

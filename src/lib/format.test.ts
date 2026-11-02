@@ -285,5 +285,9 @@ describe("西暦つきの日付", () => {
     expect(fullDate(new Date(2020, 9, 11, 0, 0).getTime())).toBe(
       "2020/10/11(日)",
     );
+    // 月と日は前に 0 を付けない (見出しの「10/11(日)」と同じ形)
+    expect(fullDate(new Date(2027, 0, 5, 12, 0).getTime())).toBe(
+      "2027/1/5(火)",
+    );
   });
 });
