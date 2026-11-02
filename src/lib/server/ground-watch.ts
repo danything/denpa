@@ -40,6 +40,11 @@ export function compareGround(
   ts: TransportInfo | null,
 ): void {
   if (ts === null || ts.transportStreamId !== channel.transportStreamId) return;
+  /*
+   * 局の一覧 (サービス記述子) の無い SDT では比べない。ロゴの対応だけを載せた SDT が先にそろうことがあり
+   * (偽の放送がそう)、比べると局が全部消えたように見える
+   */
+  if (ts.services.length === 0) return;
   const broadcast = shapeOf(
     ts.services
       .filter((service) => service.serviceType === 0x01)
