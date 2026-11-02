@@ -16,6 +16,22 @@ export function encodeSource(recording: {
 }
 
 /**
+ * 元の TS。エンコードせずに置いた録画 (「エンコードしない」) は置き場の TS がそれ。無ければ null。
+ * 録っている最中のものも返す (伸びている)
+ */
+export function tsPathOf(recording: {
+  ts_path: string | null;
+  library_path: string | null;
+}): string | null {
+  return (
+    encodeSource(recording) ??
+    (recording.library_path?.endsWith(".mkv") === false
+      ? recording.library_path
+      : null)
+  );
+}
+
+/**
  * 配るファイルの名指し (`?source=`)。`ts` = 元のTS、`encoded` = 主のエンコード済み
  * (AV1 → H.265 → H.264 の先頭)、`hevc` = H.265 (主でないとき)、`alt` = H.264 (主でないとき)。
  * 名指しが無ければ「今いいほう」。

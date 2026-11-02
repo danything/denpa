@@ -751,7 +751,7 @@ class Session {
    * ので、ここより手前で溜めると、そのぶん遅れて見える
    */
   private readonly clock = new BroadcastClock();
-  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast で分け合う (`tap`) */
+  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f] で分け合う (`tap`) */
   private readonly packets = new PacketStream();
   /** ffmpeg が入口で 0 に寄せたぶん (秒)。`start:` から読み取る */
   private startPts = Number.NaN;
@@ -1334,13 +1334,13 @@ class Session {
 
   /**
    * 届いた塊を1局に絞り (`pump` の説明)、**絞ったあとを** データ放送・時計・
-   * Hybridcast の見張りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
+   * Hybridcast・EIT[p/f] の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
    */
   private tap(filter: ServiceFilter | null, chunk: Uint8Array): Uint8Array {
     const out = filter === null ? chunk : filter.filter(chunk);
     if (filter !== null) this.tsid = filter.transportStreamId;
     if (out.length === 0) return out;
-    // **188 バイトに切るのは1回だけ** (3つのパーサで使い回す。ライブの処理でいちばん重いところ)
+    // **188 バイトに切るのは1回だけ** (4つのパーサで使い回す。ライブの処理でいちばん重いところ)
     const receivedAt = Date.now();
     const data = this.data;
     const ait =

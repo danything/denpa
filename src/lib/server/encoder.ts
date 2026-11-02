@@ -23,7 +23,7 @@ import {
   type HwCodec,
   SOFTWARE_CODECS,
 } from "../hw";
-import { encodeSource } from "../source";
+import { encodeSource, tsPathOf } from "../source";
 import type { EncodeKind, EncodePhase, Recording } from "../types";
 import { programSpec } from "./captions";
 import { fileSize } from "./chase";
@@ -116,6 +116,8 @@ async function measureWindow(
   const diffs: string[] = [];
   const result = await run([config.ffmpeg, ...fpsArgs(input, at)], {
     signal,
+    // 録ったあとのエンコードの一部。ライブに CPU を譲る (stream.lowerPriority)
+    lowPriority: true,
     // 1コマ2行ずつ出るので、差の行だけ溜める
     onStderrLine: (line) => {
       if (line.includes("YDIF=")) diffs.push(line);
@@ -346,7 +348,7 @@ interface EncodeOptions {
    * 読ませる。ロゴの枠は標準出力に来るので、進み具合は fd 3 で受ける (`-progress pipe:3`)
    */
   analysis?: string[];
-  /** 局の番号 (PMT の番組番号)。字幕の筋を名指しする (`captionArgs`)。分からなければ入力の頭の字幕 */
+  /** 局の番号 (PMT の番組番号)。字幕のストリームを名指しする (`captionArgs`)。分からなければ入力の頭の字幕 */
   program?: number | undefined;
   /** 60コマ/秒で出す。滑らかになる代わりに時間もサイズも約2倍 (measureSmoothMotion で決める) */
   smoothMotion?: boolean;
@@ -425,9 +427,9 @@ export function inputSkip(
  * 放送の ARIB 字幕を**そのまま写す** (`-c:s copy`。Matroska では `S_ARIBSUB`、CodecPrivate は ffmpeg が書く)。
  * 観る画面はこれをサーバでデコードして文字の配置で描く (`api/recordings/<id>/captions.json`)。
  *
- * **局と字幕の筋を名指しする** (`0:p:<局>:s:0`。`captions.programSpec`)。名指ししない既定の選び方では ARIB の字幕が落ちる。
+ * **局と字幕のストリームを名指しする** (`0:p:<局>:s:0`。`captions.programSpec`)。名指ししない既定の選び方では ARIB の字幕が落ちる。
  * 局が分からなければ入力の頭の字幕。? は字幕の無い番組でも止めないため。
- * 時刻は映像と同じだけ詰まる (頭捨ての `-ss` も、CM を切る concat も筋ごとに同じ)
+ * 時刻は映像と同じだけ詰まる (頭捨ての `-ss` も、CM を切る concat もストリームごとに同じ)
  */
 function captionArgs(program: number | undefined): string[] {
   return [
@@ -557,7 +559,7 @@ export function buildArgs(
   args.push("-disposition:v:0", "default", "-disposition:a:0", "default");
 
   /*
-   * 進捗を key=value 形式で吐かせる。stderr の人間向けログを目視パースするより確実。
+   * 進捗を key=value 形式で出力させる。stderr の人間向けログを目視パースするより確実。
    *
    * **出口は fd 3 (専用のパイプ)。** 標準出力は CM 検出のロゴの枠が使い (`analysis`)、標準エラーはログで
    * 混み合う (ログと進み具合は別のスレッドが書くので、同じ出力先では行が千切れることがある)。
@@ -565,7 +567,7 @@ export function buildArgs(
    */
   args.push("-nostats", "-progress", "pipe:3");
   /*
-   * 入れ物は名前ではなくここで決める。出力は書いている間だけ別名 (.mkv.encoding) にしており、
+   * 入れ物は名前ではなくここで決める。出力は書いている間だけ別名 (`<名前>.<jobId>.<codec>.encoding`) にしており、
    * ffmpeg は拡張子から入れ物を決めるので、付けないと
    * 「Unable to choose an output format」で始まる前に落ちる
    */
@@ -795,7 +797,7 @@ export function encodeProgress(totalFrames: number, inputBytes: number) {
     /*
      * 前の値より下げない (読み損ねからの復帰で巻き戻って見えないように)。
      * **100% は ffmpeg が終わるまで出さない** — 最後のコマをエンコードしても、
-     * 溜めたぶんの吐き出しと mux の締めが残っている。エンコードし切った時点で
+     * 溜めたフレームの出力と mux の後処理が残っている。エンコードし切った時点で
      * 100.0% と出すと、そこで止まって見える (失敗して頭からやり直す時は
      * 特に、100% → 0% と動いて二度おかしく見えた)
      */
@@ -923,7 +925,7 @@ export function combineProgress(
 }
 
 /**
- * ジョブの進み具合の書き戻し口。コーデックごとの ffmpeg が `part(codec)` に知らせ、まとめたもの (`combineProgress`) を
+ * ジョブの進み具合を DB に書き戻す。コーデックごとの ffmpeg が `part(codec)` に知らせ、まとめたもの (`combineProgress`) を
  * DB に書いて画面に流す。**書くのはジョブで間隔を空けて** (ffmpeg ごとに書くと、同時に走る本数だけ書く回数が増える)
  */
 function progressMeter(jobId: number, recordingId: number, total: number) {
@@ -950,7 +952,7 @@ function progressMeter(jobId: number, recordingId: number, total: number) {
     } satisfies EncodeProgress);
   };
   return {
-    /** そのコーデックの ffmpeg から知らせを受ける。`final` は ffmpeg が終わったとき (間隔を待たずに書く) */
+    /** そのコーデックの ffmpeg から進み具合を受け取る。`final` は ffmpeg が終わったとき (間隔を待たずに書く) */
     part:
       (codec: HwCodec) =>
       (progress: Progress, final: boolean): void => {
@@ -960,7 +962,7 @@ function progressMeter(jobId: number, recordingId: number, total: number) {
   };
 }
 
-/** ffmpeg の進み具合の知らせ先 (`progressMeter` の `part`) */
+/** ffmpeg の進み具合の渡し先 (`progressMeter` の `part`) */
 type ProgressReport = (progress: Progress, final: boolean) => void;
 
 async function runFfmpeg(
@@ -1396,7 +1398,7 @@ async function runJob(jobId: number): Promise<void> {
     }
   }
 
-  // 字幕の筋を局で名指しするための局の番号 (`captionArgs`)
+  // 字幕のストリームを局で名指しするための局の番号 (`captionArgs`)
   encodeOptions.program = orm()
     .select({ program: services.service_id })
     .from(services)
@@ -1525,10 +1527,19 @@ async function runJob(jobId: number): Promise<void> {
 
   /**
    * コーデックごとの作業ファイル。別名に書いてから置き換える (入力と出力が同じ場所でも元を壊さない。失敗しても元が残る)。
-   * 名前はジョブとコーデックで分ける — 番組名だけだと同じ番組の2本が1つの作業ファイルに同時に書いて壊した (実機)
+   * 名前はジョブとコーデックで分ける — 番組名だけだと同じ番組の2本が1つの作業ファイルに同時に書いて壊した (実機)。
+   * 名前は最初に呼んだときに決めて覚える。`encodedPath` は同じ番組の別の録画が先に置き終えると `[録画ID]` を足すので、
+   * 呼ぶたびに作ると、ffmpeg が書いたものと後で開くものの名前がずれる
    */
-  const workingOf = (codec: HwCodec): string =>
-    `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
+  const workingNames = new Map<HwCodec, string>();
+  const workingOf = (codec: HwCodec): string => {
+    let name = workingNames.get(codec);
+    if (name === undefined) {
+      name = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
+      workingNames.set(codec, name);
+    }
+    return name;
+  };
   /** 作業ファイルと、その隣に作る書き直し・切り貼り・チャプターの一時ファイル */
   const removeWorking = (codec: HwCodec): void => {
     const working = workingOf(codec);
@@ -2093,7 +2104,7 @@ async function runJob(jobId: number): Promise<void> {
   const fps = encodeOptions.smoothMotion === true ? 60 : 30;
   /*
    * 切って残した区間と、頭から捨てた長さも書く。CM 検出をやり直すとき (`runCmJob`) に、
-   * 切ったものかどうか・元のTSの時刻をエンコードしたものの時刻へどう直すかを、これで知る
+   * 切ったものかどうか・元のTSの時刻をエンコードしたものの時刻へどう直すかを、これで決める
    */
   const finished = {
     library_path: output,
@@ -2140,12 +2151,8 @@ async function runCmJob(jobId: number): Promise<void> {
     return;
   }
   // 掛かったままの元のTSは復号しない (エンコードするジョブの仕事)。エンコードしたものがあればそちらを読む
-  // エンコードせずに置いた録画 (「エンコードしない」) は、置き場の TS が元のTSそのもの
-  const placedTs =
-    recording.library_path?.endsWith(".mkv") === false
-      ? recording.library_path
-      : null;
-  const raw = encodeSource(recording) ?? placedTs;
+  // エンコードせずに置いた録画 (「エンコードしない」) は、置き場の TS が元のTSそのもの (`tsPathOf`)
+  const raw = tsPathOf(recording);
   const ts = raw !== null && !isScrambled(raw) ? raw : null;
   const files = encodedPaths(recording).filter(
     (path) => path.endsWith(".mkv") && existsSync(path),

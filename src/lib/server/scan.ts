@@ -127,7 +127,7 @@ export async function readServices(
   let bytes = 0;
   let message = "";
 
-  // 打ち切りの合図は走査全体で1つ。局ごとに足した見張りは、読み終えたら外す (100局を超えると積もる)
+  // 打ち切りの合図は走査全体で1つ。局ごとに足したリスナーは、読み終えたら外す (100局を超えると積もる)
   let stop = (): void => {};
   const deadline = new Promise<void>((resolve) => {
     stop = resolve;

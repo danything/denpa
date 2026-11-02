@@ -82,7 +82,7 @@ export const config = {
     /** 人が押して待っている。番組表には譲らせるが、録画からは取り上げない (server/scan.ts が渡す) */
     scan: 5,
     /**
-     * 衛星のロゴを積んだ中継 (当たり) を開いて、カルーセルが流れてくるのを待つとき。**番組表集めにだけ勝つ**
+     * 衛星のロゴを積んだ中継 (当たり) を開いて、カルーセルが流れてくるのを待つとき。**番組表集め (`epg`) とふだんのロゴ (`logo`) にだけ勝つ**
      * (理由は `logo.carouselPriority`。持っていられるのは長くても `logoCarouselWait` まで)
      */
     carousel: 4,
@@ -91,7 +91,7 @@ export const config = {
   },
 
   dbPath,
-  /** DBと並べて置くもの。放送波から取得した局ロゴと、CM検出のために覚えた局ロゴ */
+  /** DBと並べて置くもの。局ロゴと CM 検出のために覚えたロゴ (`logos/`)、別の機械へ移すときの作業場所 (`transfer/`)、ニコニコとの連携の鍵 (`niconico.key`) */
   dataDir,
   /** 元のTSの置き場。エンコード後は (元のTSを残す設定でなければ) 消える作業領域 */
   rawDir: str("RAW_DIR", join(mediaDir, "raw")),

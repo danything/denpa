@@ -14,7 +14,7 @@
  *     docker compose run --rm docs bun scripts/capture-docs.ts ui
  *
  * **`motion` を挙げると、動きを見比べる GIF を撮る** (docs には置かない)。画面の切り替え・メニュー・
- * 保存の知らせ・スクロールしたヘッダーなどを、そのままの速さで `docs/images/.capture/motion/` に置く。
+ * 保存の通知・スクロールしたヘッダーなどを、そのままの速さで `docs/images/.capture/motion/` に置く。
  * 数字の多い画面 (予約と録画・チューナー) の静止画も一緒に撮る
  *
  *     docker compose run --rm docs bun scripts/capture-docs.ts motion
@@ -90,7 +90,7 @@ if (process.env["SKIP_BUILD"] !== "1") {
 const { stack, shutdown } = await boot(0);
 const BASE = stack.appUrl;
 
-/** 画面と同じエンドポイントへ投げる。SvelteKit は Origin の無いフォームを断る */
+/** 画面と同じエンドポイントへ送る。SvelteKit は Origin の無いフォームを断る */
 async function post(
   path: string,
   body: Record<string, string | string[]> | null,
@@ -285,7 +285,7 @@ async function seed(): Promise<void> {
   writeFileSync(join(stack.hwDir, "renderD128"), "");
   await post("/settings/recording?/probeHw", {});
 
-  // ルール (検索の画面の「ルールとして保存」と同じものを投げる)。当てると予約が立つ
+  // ルール (検索の画面の「ルールとして保存」と同じものを送る)。当てると予約が立つ
   for (const rule of [
     { keyword: "星屑ステーション" },
     { keyword: "鉄道でめぐる日本" },

@@ -934,7 +934,7 @@ function needsByFilesystem(pending: { raw: boolean; bytes: number }[]): Need[] {
 
 /**
  * **空きを先に確かめる。** まだ入っていないファイルの合計 (書きかけのぶんを引く) と、置き場の空きを比べる。
- * ディスクの見張り (`disk.ts`) の残す量 (`DISK_LOW_THRESHOLD`) も足す — 取り込みで埋めて録画が書けなく
+ * ディスクの空きの定期チェック (`disk.ts`) が残す量 (`DISK_LOW_THRESHOLD`) も足す — 取り込みで埋めて録画が書けなく
  * なるのを防ぐ。足りなければ取り込みでは投げ (録画には入らない。ルール・予約は入ったまま)、下見では記録に残す
  */
 function checkSpace(

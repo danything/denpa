@@ -330,7 +330,7 @@ export async function probeLeadIn(
 const MAX_LEAD_IN = 5;
 
 /**
- * `ffprobe -show_frames` の吐き出しから、**最初にデコードできたコマの時刻**を読む。
+ * `ffprobe -show_frames` の出力から、**最初にデコードできたコマの時刻**を読む。
  *
  * 頭のほうは参照先が録れていないコマが混ざるので、ffprobe も ffmpeg も
  * 最初の I フレームまで捨てる。ここで返るのは捨て終わったあとの1コマ目。
@@ -464,7 +464,7 @@ export async function openCm(
       /** ロゴが使えなかった理由。呼ぶたびに支度のときの理由から始める */
       let why = opening;
       /*
-       * 尺が ffprobe で測れなかったら、ffmpeg が言ってきた尺 (入れ物の尺)、
+       * 尺が ffprobe で測れなかったら、ffmpeg が出力した尺 (入れ物の尺)、
        * それも無ければ読めた最後のコマで代える。捨てた頭のぶんは引く
        */
       const container = Number.isFinite(measured) ? measured : found.duration;

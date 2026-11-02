@@ -6,12 +6,12 @@ import { expect, test } from "./helpers";
  *
  * ベーシック認証は廃止した。入る方法は **OIDC / TRUSTED_NETWORKS /
  * アクセストークン (ペアリングしたアプリ)** で、OIDC も TRUSTED_NETWORKS も設定していなければ
- * **全部断る**。普段のスタックはローカルを信頼したネットワーク (`TRUSTED_NETWORKS=127.0.0.1`)
+ * **全部断る**。普段のスタックはローカルを信頼するネットワーク (`TRUSTED_NETWORKS=127.0.0.1`)
  * にしてあるので、「何も設定していない」ほうは別の起動 (`bootClosed`) で確かめる。
  */
-test.describe("信頼したネットワークから来たとき", () => {
+test.describe("信頼するネットワークから来たとき", () => {
   test("何も聞かずに通る", async ({ anonymous }) => {
-    // ローカルからの素の fetch = 信頼したネットワークから来た人
+    // ローカルからの素の fetch = 信頼するネットワークから来た人
     const res = await anonymous("/");
     expect(res.status).toBe(200);
   });
@@ -50,9 +50,9 @@ test.describe("接続元のアドレス", () => {
   /*
    * 入口の server.js は、本当の接続元を `x-denpa-remote` に**上書きで**入れて adapter へ渡す
    * (adapter は常にそれを読む)。外から同じ名前を付けて来ても消えるので、
-   * ヘッダを書くだけで信頼したネットワークを名乗ることはできない
+   * ヘッダを書くだけで信頼するネットワークを名乗ることはできない
    */
-  test("外から x-denpa-remote を付けても、信頼したネットワークは名乗れない", async ({
+  test("外から x-denpa-remote を付けても、信頼するネットワークは名乗れない", async ({
     stack,
   }) => {
     const closed = await bootClosed(test.info().workerIndex, stack.root, {

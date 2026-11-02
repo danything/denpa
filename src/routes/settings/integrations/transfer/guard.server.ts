@@ -7,7 +7,7 @@ import { OffsetMismatch, TransferError } from "#lib/server/transfer.js";
  * 「denpa を別の機械へ移す」のエンドポイントの前に見るもの。断るなら返す応答、通すなら null。
  *
  * - **アクセストークン (テレビのアプリ) では断る** (403)。端末に渡した資格で DB を持ち出したり
- *   入れ替えたりさせない (`/device` と同じ考え方)。ブラウザの人 (信頼したネットワーク・OIDC) は使える
+ *   入れ替えたりさせない (`/device` と同じ考え方)。ブラウザの人 (信頼するネットワーク・OIDC) は使える
  * - **同じサイトからの呼び出しだけ通す。** フォームの形でない送信 (`PUT` の `application/octet-stream`・JSON) は
  *   SvelteKit の Origin の確かめが掛からないので、`Sec-Fetch-Site` (無ければ `Origin`) を自分で見る
  */

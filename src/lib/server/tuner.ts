@@ -35,7 +35,7 @@ import type { Busy } from "./conflict";
  */
 const CHANNEL_TYPE: Shape<ChannelType> = literal("GR", "BS", "CS", "SKY");
 
-/** エージェントが知っているチャンネル。スキャンの結果そのもの */
+/** エージェントが持っているチャンネル。スキャンの結果そのもの */
 const AGENT_CHANNEL = object({
   type: CHANNEL_TYPE,
   channel: string,
@@ -223,7 +223,7 @@ export function recordingOf(use: string): number | null {
  * **録画中の予約が、いまどのチューナーにいるか。** 割り振りのなぞり始めの状態になる。
  *
  * 録り始めた予約は割り振り直さない (候補に入れない) が、終わるまでチューナーを塞ぐ。どのチューナーに
- * 入ったかはエージェントが知っているので、一覧の利用者 (`users`) の `rec <録画ID>`
+ * 入ったかはエージェントの一覧に出るので、一覧の利用者 (`users`) の `rec <録画ID>`
  * (`recordingUse`) から読む。利用者のいるチューナーは今まさに録っているチューナーなので、いる場所を取り違えることは無い。
  * ただし録り始めたのに、まだ使えていない (空き待ちで掛け直している) 録画は数えられない。
  *

@@ -29,7 +29,7 @@ import { Carousel } from "#lib/ts/carousel.js";
 export type { ResponseMessage };
 
 /**
- * TS を食わせると、組み立て終わったものを吐く。
+ * TS を渡すと、組み立て終わったものを返す。
  *
  * **1つの選局に1つ。** 局を変えたら作り直す — カルーセルは局ごとに別物で、
  * 覚えているモジュールを持ち越すと前の局の画面が出る。
@@ -52,7 +52,7 @@ export class DataBroadcast {
    * 1局に絞った TS の、切り分け済みのパケットを1つ (`BmlDecoder.feedPacket`)。**転んでも投げ返さない。**
    *
    * データ放送は映像の付け足しなので、デコードする側が転んだらそこで諦めて、映像は
-   * 流し続ける。**投げ返すと TS を送り込んでいるところ (`Session.pump`) ごと
+   * 流し続ける。**投げ返すと TS を送り込んでいるところ (`Session.tap`。`pump` と `runRaw` の両方から呼ぶ) ごと
    * 落ちて、映像まで出なくなる** — 実際に落としたことがある。
    */
   feedPacket(packet: Uint8Array): void {

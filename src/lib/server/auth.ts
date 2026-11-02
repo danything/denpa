@@ -10,7 +10,7 @@ import { enabled as oidcEnabled } from "./oidc";
  *
  * | 方法 | 何者か |
  * | --- | --- |
- * | `TRUSTED_NETWORKS` | 信頼したネットワークから、知っている名前 (`knownHost`) で来た人。何も聞かずに通す |
+ * | `TRUSTED_NETWORKS` | 信頼するネットワークから、知っている名前 (`knownHost`) で来た人。何も聞かずに通す |
  * | OIDC のログイン | 画面から入る人 (`docs/auth.md`)。ブラウザで観る・端末に保存もこの控え (Cookie) で通る |
  * | アクセストークン (`Bearer denpa_…`) | ペアリングしたアプリ (`device-auth.ts`) |
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
@@ -92,9 +92,9 @@ export function denied(address = "", host: string | null = null): Response {
   const text = !configured()
     ? "ログイン方法が設定されていません。OIDC か TRUSTED_NETWORKS を設定してください (docs/auth.md)"
     : host !== null
-      ? `信頼したネットワークの中からでも、「${host || "(名前なし)"}」という名前ではログインなしで開けません。` +
+      ? `信頼するネットワークの中からでも、「${host || "(名前なし)"}」という名前ではログインなしで開けません。` +
         "この名前で開くなら ALLOWED_HOSTS に足してください (docs/auth.md)"
-      : "このページは、信頼したネットワーク (TRUSTED_NETWORKS) の中からでないと開けません" +
+      : "このページは、信頼するネットワーク (TRUSTED_NETWORKS) の中からでないと開けません" +
         ` (接続元: ${address || "不明"})`;
   return new Response(text, {
     status: 403,
@@ -140,7 +140,7 @@ const LOCAL_SUFFIXES = [
 ];
 
 /**
- * **信頼したネットワークから、ログインなしで開いてよい名前か。**
+ * **信頼するネットワークから、ログインなしで開いてよい名前か。**
  *
  * アドレスだけで通すと、DNS リバインディングで抜けられる。悪いサイトが自分の名前を LAN の
  * denpa の IP に向け直すと、そのサイトを開いた LAN の人のブラウザは、denpa を「そのサイトと
@@ -201,7 +201,7 @@ const MAX_REPORTED = 64;
  * `Host` はブラウザのスクリプトから変えられないが、`X-Forwarded-Host` のようなヘッダは
  * 同じオリジンからなら付けられるので、どちらか片方だけでは足りない。
  *
- * 信頼したネットワークの中から知らない名前で来たときに呼ぶ。ログに理由を1度だけ出す
+ * 信頼するネットワークの中から知らない名前で来たときに呼ぶ。ログに理由を1度だけ出す
  */
 export function foreignHost(headers: Headers, address: string): string | null {
   const names = [headers.get("host")];
@@ -215,7 +215,7 @@ export function foreignHost(headers: Headers, address: string): string | null {
   if (!reported.has(host) && reported.size < MAX_REPORTED) {
     reported.add(host);
     console.warn(
-      `[auth] 信頼したネットワーク (${address}) から、知らない名前「${host || "(名前なし)"}」で来たので、ログインなしでは通しません。` +
+      `[auth] 信頼するネットワーク (${address}) から、知らない名前「${host || "(名前なし)"}」で来たので、ログインなしでは通しません。` +
         "この名前で開くなら ALLOWED_HOSTS に足してください (docs/auth.md)",
     );
   }
@@ -265,7 +265,7 @@ export function warnIfProxyHidden(): void {
   console.warn(
     `[boot] TRUSTED_NETWORKS が、このコンテナのネットワーク (${shared.join("・")}) と重なっていて、TRUSTED_PROXIES が空です。\n` +
       "       同じネットワークに前段 (リバースプロキシ・cloudflared など) を置いているなら、TRUSTED_PROXIES に前段のアドレスを書いてください。\n" +
-      "       書かないと、前段越しの人が全員信頼したネットワークから来たことになり、OIDC が掛かりません (docs/auth.md)",
+      "       書かないと、前段越しの人が全員信頼するネットワークから来たことになり、OIDC が掛かりません (docs/auth.md)",
   );
 }
 

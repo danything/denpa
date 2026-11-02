@@ -2,7 +2,7 @@
  * **録画の観方を決めて、流す** (`GET /api/recordings/<id>/playback` と `/stream`。取り決めは `ts/playback.ts`)。
  *
  * サーバが決めるのは「何を出せるか・どの形式で出すか・時刻の物差し」まで。どれを使うかは画面が決める
- * (端末で再生できるか、人が選んだコーデック)。サーバは端末が何かを知らない。
+ * (端末で再生できるか、人が選んだコーデック)。端末の種類では決めない。
  *
  * ## 何を出すか
  *
@@ -47,7 +47,7 @@ import {
 import { encodedCodec } from "#lib/encoded-codec.js";
 import type { HwCodec } from "#lib/hw.js";
 import type { LiveCodec } from "#lib/live.js";
-import type { FileSource } from "#lib/source.js";
+import { type FileSource, tsPathOf } from "#lib/source.js";
 import {
   BUSY,
   type EncodedSource,
@@ -1059,21 +1059,6 @@ export function watchProgress(
       fromTsTime((recording.end_at - recording.start_at) / 1000, ruler) * 1000,
     );
   return { at, length };
-}
-
-/**
- * 元の TS。エンコードせずに置いた録画 (「エンコードしない」) は置き場の TS がそれ。無ければ null。
- * 録っている最中のものも返す (伸びている)
- */
-export function tsPathOf(
-  recording: Pick<Recording, "ts_path" | "library_path">,
-): string | null {
-  return (
-    recording.ts_path ??
-    (recording.library_path?.endsWith(".mkv") === false
-      ? recording.library_path
-      : null)
-  );
 }
 
 /**

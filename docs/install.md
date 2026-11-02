@@ -156,7 +156,7 @@ Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `den
 使えます** (DNS-01 なら外から繋がる必要が無い。`.arpa` のような内側だけの名前は ACME で
 取れない)。ホーム画面に置けるのも全画面にできるのも https のページだけなので、PWA にも要ります。
 外向きと LAN 用の2つの名前で出すなら、ホーム画面の名前を分けられます ([watch.md](watch.md#ホーム画面に置く))。
-その名前で信頼したネットワークからログインなしで開くなら、名前を `ALLOWED_HOSTS` (か `PWA_NAMES`) に書きます
+その名前で信頼するネットワークからログインなしで開くなら、名前を `ALLOWED_HOSTS` (か `PWA_NAMES`) に書きます
 ([auth.md](auth.md#ログインなしで開ける名前-allowed_hosts))。
 
 ## うまくいかないとき

@@ -184,7 +184,7 @@ export function start(): void {
   nowAndEvery(config.reconcileInterval, "reconcile", reconcile);
 
   /*
-   * ディスク残量を見張る。埋まると始まる録画が片っ端から失敗するので、
+   * ディスク残量を定期的に確かめる。埋まると始まる録画が片っ端から失敗するので、
    * 下回ったところで知らせる (disk.ts)。照合と同じ周期でよい
    */
   nowAndEvery(config.reconcileInterval, "disk", checkDisk);

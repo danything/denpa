@@ -328,7 +328,7 @@ export const rules = sqliteTable("rules", {
  * `migrate.ts`・`migrate-edcb.ts`)。
  *
  * 録画の行にはしない — ファイルが無いので、録画の一覧や番組表に出ても開けない。読むのは
- * 「録ったことのある回」(`rules.recordedEpisodes`) だけで、ルールの「同じ回は最初の放送だけ」と
+ * 「録ったことのある回」(`rules.historyEpisodes`) だけで、ルールの「同じ回は最初の放送だけ」と
  * 「前の回は録らない」がそれを見る。denpa が自分で録ったものは `recordings` の行が同じ役をする。
  *
  * 入れるのはどちらも番組名・局・終わりの時刻だけ (EDCB の終わりは録画の開始 + 長さ)。
@@ -344,8 +344,8 @@ export const recordedHistory = sqliteTable("recorded_history", {
 });
 
 /**
- * DB に入る予約の状態。**録り始めてからの状態は持たない** — 録画の行がそれを
- * 知っているので、画面に出す `recording | done | failed` は録画から引く
+ * DB に入る予約の状態。**録り始めてからの状態は持たない** — 録画の行から
+ * 決まるので、画面に出す `recording | done | failed` は録画から引く
  * (`types.ts` の ReservationState、上の `reservationState()`)
  */
 const RESERVATION_STATES = [
@@ -551,7 +551,7 @@ export const recordings = sqliteTable(
     index("recordings_state").on(t.state),
     index("recordings_start").on(sql`${t.start_at} DESC`),
     // 番組表は1マスごとに「この番組で録れたものはあるか」を引く。
-    // 無いと24時間ぶんのマスの数だけ録画一覧を舐めることになる
+    // 無いと24時間ぶんのマスの数だけ録画一覧を全部読むことになる
     index("recordings_program").on(t.program_id),
     // ルールの「前の回は録らない」は、当たった放送のシリーズ名で期間を切らずに引く (`rules.seriesEpisodes`)
     index("recordings_series").on(t.series),
@@ -695,7 +695,7 @@ export const sessions = sqliteTable(
     created_at: integer("created_at").notNull(),
     expires_at: integer("expires_at").notNull(),
   },
-  // 切れたものを片付けるときに舐める
+  // 切れたものを片付けるときに引く
   (t) => [index("sessions_expires").on(t.expires_at)],
 );
 
@@ -750,7 +750,7 @@ export const deviceCodes = sqliteTable(
     ),
     consumed_at: integer("consumed_at"),
   },
-  // 切れたものを片付けるときに舐める
+  // 切れたものを片付けるときに引く
   (t) => [index("device_codes_expires").on(t.expires_at)],
 );
 

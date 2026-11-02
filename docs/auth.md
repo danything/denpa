@@ -23,7 +23,7 @@
 
 **ブラウザは WebSocket の握手に `Authorization` を付けてくれない**ので、画面が先に
 `POST /api/live/ticket` で使い捨てのチケットを取り、URL に付けて繋ぎます。チケットの発行は
-普通の HTTP なので、OIDC も信頼したネットワークもそのまま効きます。チケットは 1 回使ったら
+普通の HTTP なので、OIDC も信頼するネットワークもそのまま効きます。チケットは 1 回使ったら
 消し、寿命は 30 秒 (`src/lib/server/tickets.ts`、詳しくは [stream.md](stream.md#繋ぐときの認証))。
 
 **`/api/health` を守ると Pod が再起動を繰り返します** (Kubernetes の `livenessProbe` が呼ぶため)。
@@ -69,7 +69,7 @@
 > **scheme は `x-forwarded-proto` から読みます** (`server.js` が常に設定する。前段が付けなければ、受けた接続の scheme を入れる)。
 > コールバックの URL も、控えの Cookie に `Secure` を付けるかどうかも、リクエストの
 > scheme で決めます。前段が接頭辞を剥がして渡す構成 (`/denpa` の下など) では、前段が付ける
-> `X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) をコールバックの URL の頭に付けます
+> `X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) をコールバックの URL の先頭に付けます
 > (`paths.ts` の `publicBase`)。登録するリダイレクト URI も接頭辞込みです。
 
 ### ライブラリを入れていません
@@ -193,14 +193,14 @@ Windows (wslc) はこの PC からの接続が `169.254.x.x` に見えるので�
 
 ### ログインなしで開ける名前 (`ALLOWED_HOSTS`)
 
-**信頼したネットワークから来ても、知らない名前ではログインなしで通しません** (DNS リバインディングを防ぐため)。
+**信頼するネットワークから来ても、知らない名前ではログインなしで通しません** (DNS リバインディングを防ぐため)。
 悪いサイトが自分の名前を LAN の denpa の IP に向け直すと、そのサイトを開いた LAN の人のブラウザから、
 denpa をそのサイトの一部として読み書きできてしまいます。攻める側が自分の名前として用意できないものだけを通します。
 
 - IP の直書き (`192.168.1.5:3000`・`[fd00::5]:3000`)、`localhost`、ドットの無い名前 (`nas:3000`)
 - 家の中だけの名前: `.localhost`・`.local`・`.lan`・`.home.arpa`・`.internal` で終わるもの
 - `PWA_NAMES` に書いた名前。Helm では `httpRoute.hostnames` と `ingress.hosts` の名前も (chart が足す)
-- `ALLOWED_HOSTS` に書いた名前 (カンマ区切り)。頭にドットを付けると、その名前とその下の名前全部
+- `ALLOWED_HOSTS` に書いた名前 (カンマ区切り)。先頭にドットを付けると、その名前とその下の名前全部
 
 ```sh
 # 持っているドメインの名前を LAN の IP に向けている
@@ -209,11 +209,11 @@ ALLOWED_HOSTS=denpa.example.com
 ALLOWED_HOSTS=denpa.example.com,.tail1234.ts.net
 ```
 
-それ以外の名前で来たときは、信頼したネットワークの外と同じに扱います。OIDC があればログインを求め、
+それ以外の名前で来たときは、信頼するネットワークの外と同じに扱います。OIDC があればログインを求め、
 無ければ 403 で断ります。ログには 1 度だけ理由が出ます。
 
 ```text
-[auth] 信頼したネットワーク (192.168.1.20) から、知らない名前「denpa.example.com」で来たので、ログインなしでは通しません。この名前で開くなら ALLOWED_HOSTS に足してください (docs/auth.md)
+[auth] 信頼するネットワーク (192.168.1.20) から、知らない名前「denpa.example.com」で来たので、ログインなしでは通しません。この名前で開くなら ALLOWED_HOSTS に足してください (docs/auth.md)
 ```
 
 見るのは `Host` で、`HOST_HEADER` (adapter-bun の設定) を書いていればそのヘッダも見ます。
