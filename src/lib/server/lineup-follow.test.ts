@@ -55,6 +55,9 @@ const {
   seenLineupChanges,
 } = await import("./lineup-follow");
 
+/** 時刻を渡して進める (2 回目に数えるのは 5 分たってから) */
+const T = 1_800_000_000_000;
+const MIN = 60_000;
 const BS3 = 11_765_840;
 const BS15 = 11_996_000;
 
@@ -177,11 +180,16 @@ describe("放送の一覧に付いていく", () => {
 
     // 1 回目は書き換えない (放送に古い情報が混ざることがある)
     let { nit, sdt } = moved();
-    expect(await followLineup("BS", nit, sdt)).toBe(false);
+    expect(await followLineup("BS", nit, sdt, T)).toBe(false);
+    expect(puts).toHaveLength(0);
+
+    // 同じ周回で別の中継器を続けて読んでも、2 回とは数えない
+    ({ nit, sdt } = moved());
+    expect(await followLineup("BS", nit, sdt, T + MIN)).toBe(false);
     expect(puts).toHaveLength(0);
 
     ({ nit, sdt } = moved());
-    expect(await followLineup("BS", nit, sdt)).toBe(true);
+    expect(await followLineup("BS", nit, sdt, T + 5 * MIN)).toBe(true);
     expect(puts).toHaveLength(1);
     expect(puts[0]!.scanned).toEqual(["BS"]);
     expect(saved.map((c) => c.channel).sort()).toEqual([
@@ -201,7 +209,7 @@ describe("放送の一覧に付いていく", () => {
 
     // 同じ version はもう読み比べない
     ({ nit, sdt } = moved());
-    expect(await followLineup("BS", nit, sdt)).toBe(false);
+    expect(await followLineup("BS", nit, sdt, T + 20 * MIN)).toBe(false);
     expect(puts).toHaveLength(1);
   });
 
@@ -217,11 +225,34 @@ describe("放送の一覧に付いていく", () => {
         version,
       );
     let { nit, sdt } = once(7);
-    await followLineup("BS", nit, sdt);
+    await followLineup("BS", nit, sdt, T);
     ({ nit, sdt } = once(8));
-    expect(await followLineup("BS", nit, sdt)).toBe(false);
+    expect(await followLineup("BS", nit, sdt, T + 10 * MIN)).toBe(false);
     ({ nit, sdt } = once(8));
-    expect(await followLineup("BS", nit, sdt)).toBe(true);
+    expect(await followLineup("BS", nit, sdt, T + 20 * MIN)).toBe(true);
+  });
+
+  test("同時に読んでも二重に書き換えない", async () => {
+    saved = [entry("BS15:16625", 16625, [[101, "NHK BS"]])];
+    puts.length = 0;
+    const once = () =>
+      read(
+        [
+          [16625, BS15, [101]],
+          [18675, BS15, [201]],
+        ],
+        11,
+      );
+    const first = once();
+    await followLineup("BS", first.nit, first.sdt, T);
+    const a = once();
+    const b = once();
+    const results = await Promise.all([
+      followLineup("BS", a.nit, a.sdt, T + 6 * MIN),
+      followLineup("BS", b.nit, b.sdt, T + 6 * MIN),
+    ]);
+    expect(results).toEqual([true, false]);
+    expect(puts).toHaveLength(1);
   });
 
   test("変わっていなければ何もしない", async () => {

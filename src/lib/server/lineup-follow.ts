@@ -4,7 +4,7 @@
  *
  * - **NIT は番組表集めのついでに読む** (`epg-collect.ts`)。衛星はどの中継器にもネットワークの全部の TS が載っているので、
  *   どれを開いても分かる。version が前に確かめたものと同じなら何もしない
- * - **書き換えるのは、同じ version の変わった一覧を 2 回読んでから。** 放送に古い情報が混ざることがある
+ * - **書き換えるのは、同じ version の変わった一覧を 5 分以上あけて 2 回読んでから。** 放送に古い情報が混ざることがある
  *   (2026-08、NHK のアップリンクから古いチャンネル情報が送られ、一部の市販機で 6 局が選局できなくなった)。
  *   1 回読んだだけでは書き換えない
  * - 書き換えるのはそのネットワークのチャンネルだけ (CS はネットワークが 2 つある)
@@ -50,8 +50,17 @@ const READ_TIMEOUT = 30_000;
 /** 確かめた version (`種別:ネットワーク ID`)。同じなら読み比べない */
 const checked = new Map<string, number>();
 
-/** 変わった一覧を 1 回読んだ version。もう 1 回読んだら書き換える */
-const sighted = new Map<string, number>();
+/** 変わった一覧を 1 回目に読んだ version と時刻。`CONFIRM_AFTER` たってからもう 1 回読んだら書き換える */
+const sighted = new Map<string, { version: number; at: number }>();
+
+/**
+ * 2 回目に数えるまでの間。同じ周回で別の中継器を続けて読んでも、2 回とは数えない
+ * (放送の古い情報が、どの中継器にも同じように混ざることがある)
+ */
+const CONFIRM_AFTER = 5 * 60_000;
+
+/** 種別ごとに 1 つずつ比べる。番組表集めの中継器と録画の読み直しが同時に来ても、二重に書き換えない */
+const queues = new Map<SatelliteType, Promise<unknown>>();
 
 /** 最後に録画の失敗で読み直した時刻 (種別ごと) */
 const refreshedAt = new Map<SatelliteType, number>();
@@ -124,13 +133,27 @@ export function changeText(type: SatelliteType, diff: LineupDiff): string {
 }
 
 /**
- * 番組表集めで読んだ NIT と SDT を、今の一覧と比べる。**変わっていて、同じものを 2 回読んだら書き換える。**
- * 書き換えたら true
+ * 番組表集めで読んだ NIT と SDT を、今の一覧と比べる。**変わっていて、同じものを間をあけて 2 回読んだら書き換える。**
+ * 書き換えたら true。同じ種別は 1 つずつ比べる
  */
-export async function followLineup(
+export function followLineup(
   type: SatelliteType,
   nit: NitReader,
   sdt: SdtReader,
+  at = Date.now(),
+): Promise<boolean> {
+  const run = (queues.get(type) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => compare(type, nit, sdt, at));
+  queues.set(type, run);
+  return run;
+}
+
+async function compare(
+  type: SatelliteType,
+  nit: NitReader,
+  sdt: SdtReader,
+  at: number,
 ): Promise<boolean> {
   const network = nit.actual;
   if (network === null) return false;
@@ -156,13 +179,15 @@ export async function followLineup(
     sighted.delete(key);
     return false;
   }
-  if (sighted.get(key) !== network.version) {
-    sighted.set(key, network.version);
+  const first = sighted.get(key);
+  if (first?.version !== network.version) {
+    sighted.set(key, { version: network.version, at });
     console.log(
       `[channels] ${type} の放送の一覧が変わっています (ネットワーク ${network.networkId}、version ${network.version})。もう一度読んで確かめてから書き換えます`,
     );
     return false;
   }
+  if (at - first.at < CONFIRM_AFTER) return false;
 
   await putChannels(
     [
