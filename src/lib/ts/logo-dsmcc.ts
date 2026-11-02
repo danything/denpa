@@ -185,8 +185,10 @@ export class CarouselProgress {
   private sections = 0;
 
   /**
-   * **ロゴのカルーセルから受け取ったセクションの数** (ロゴのモジュールを知らせる DII と、組み立て中のロゴのモジュールの DDB)。
-   * 開いている間に増えなければ、その間カルーセルは一度も流れてこなかった (`server/logo.ts` の `carouselRanOutAt`)
+   * **読み進んだ数。** 初めて知らされたロゴのモジュール (DII) と、初めて受け取ったブロック (DDB) だけを数える。
+   * 開いている間に増えなければ、その間カルーセルは一度も流れてこなかった (`server/logo.ts` の `carouselRanOutAt`)。
+   * 同じ DII や受け取り済みのブロックは数えない — 無音の間も DII だけ流し続ける中継があると、毎回「届いた」ことになって
+   * 6時間待ちが掛からず、番組表集めより上の優先度で20分ずつ塞ぎ続けてしまう
    */
   get received(): number {
     return this.sections;
@@ -196,13 +198,6 @@ export class CarouselProgress {
     if (section[0] === TABLE_DII) {
       const dii = parseDii(section);
       if (dii === null) return;
-      if (
-        dii.modules.some(
-          (module) =>
-            module.name !== null && LOGO_MODULE_NAMES.has(module.name),
-        )
-      )
-        this.sections++;
       // 合致するモジュールは全部取得する (`downloadKey` の説明)
       for (const module of dii.modules) {
         if (module.name === null || !LOGO_MODULE_NAMES.has(module.name))
@@ -217,6 +212,7 @@ export class CarouselProgress {
             this.completed.clear();
           }
           this.announced.set(key, module.name);
+          this.sections++;
         }
         const building = this.downloads.get(key);
         // 組み立て中のものを作り直さない (受け取ったブロックが消える)
@@ -249,13 +245,15 @@ export class CarouselProgress {
     const key = downloadKey(ddb.downloadId, ddb.moduleId);
     const download = this.downloads.get(key);
     if (download === undefined) return;
-    this.sections++;
     // バージョンが変わったら組み立て直し。混ぜると壊れた PNG ができる
     if (download.moduleVersion !== ddb.moduleVersion) {
       this.downloads.delete(key);
       return;
     }
-    if (!download.add(ddb.blockNumber, ddb.block)) return;
+    const had = download.blocks;
+    const complete = download.add(ddb.blockNumber, ddb.block);
+    if (download.blocks > had) this.sections++;
+    if (!complete) return;
 
     // 揃った。次の DII でまた組み立て始める (同じバージョンなら同じロゴで上書きするだけ)
     this.downloads.delete(key);

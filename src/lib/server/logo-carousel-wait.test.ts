@@ -205,8 +205,8 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
   });
 
   test("当たりと分かった中継は番組表集めより上の優先度で開く。何も届かずに上限で切れたら、6時間は開き直さない", async () => {
-    // PAT と PMT だけ。カルーセルは流れてこない
-    streams.set("BS15_0", stream(...psi));
+    // 前の回と同じ DII と受け取り済みのブロックだけ。読み進まないので「来なかった」と数える
+    streams.set("BS15_0", stream(...psi, dii, ...bsBlocks.slice(0, 1)));
     const lines = await logged(sweep);
     expect(opened.at(-1)).toEqual({
       channel: "BS15_0",

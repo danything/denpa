@@ -971,7 +971,7 @@ function carouselMessage(
   const minutes = config.logoCarouselWait / 60_000;
   switch (outcome) {
     case "yielded":
-      return `${channel} は録画やライブにチューナーを譲りました。読んだところまでは覚えているので、次に開いたときに続きから読みます`;
+      return `${channel} は優先度の高い選局にチューナーを譲りました。読んだところまでは覚えているので、次に開いたときに続きから読みます`;
     case "ranOut":
       return received
         ? `${channel} を ${minutes} 分開いて途中まで読みました。次に開いたときに続きから読みます`
