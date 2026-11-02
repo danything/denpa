@@ -28,6 +28,9 @@ export type Item = TimelineItem &
 export interface ViewControls {
   grouped: boolean;
   setGrouped: (on: boolean) => void;
+  /** 新しい順で表示 (上下を返す。`#lib/timeline.ts`) */
+  reversed: boolean;
+  setReversed: (on: boolean) => void;
   /** 「完了した予約も表示」「削除済みも表示」の行き先 (入っていれば外した URL) */
   finishedHref: string;
   deletedHref: string;
