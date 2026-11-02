@@ -3,7 +3,7 @@ namespace Denpa.Agent;
 /*
  * B-CAS まわりの境目。**libaribb25 も pcscd も使わない。**
  *
- * 3段に分けてある。上から:
+ * 3 段に分けてある。上から:
  *
  * - Descrambler … TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する (B25.cs / Multi2.cs)
  * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (LocalCard → BCas.cs) か、別の拠点 (RemoteCard)。どちらも CardShare.cs
@@ -12,10 +12,10 @@ namespace Denpa.Agent;
  *                 CECH-ZD1 J の内蔵の差し込み口 (Zd1j.cs の Zd1jCard)
  */
 
-/// <summary>カードの素。**鍵を作るのに要る定数**で、初めに1回だけ貰う</summary>
+/// <summary>カードの素。**鍵を作るのに要る定数**で、初めに 1 回だけ貰う</summary>
 /// <param name="SystemKey">32 バイト</param>
 /// <param name="InitCbc">8 バイト</param>
-/// <param name="Ids">カードの番号 (表示用。10進16桁で見せる)</param>
+/// <param name="Ids">カードの番号 (表示用。10 進 16 桁で見せる)</param>
 public sealed record CardInit(byte[] SystemKey, byte[] InitCbc, int CaSystemId, long[] Ids);
 
 /// <summary>ECM の答え。鍵は奇数・偶数の順に 8 バイトずつ</summary>
@@ -67,7 +67,7 @@ public sealed record CardLinkCandidate(string Name, Func<ICardLink> Open);
 
 /// <summary>
 /// カードとの接続。**APDU の単位**でやり取りする (T=1 の枠組みは接続の側が持つ)。
-/// 1本の接続を同時に2つから使わない (呼ぶ側が順番にする)。
+/// 1 本の接続を同時に 2 つから使わない (呼ぶ側が順番にする)。
 /// </summary>
 public interface ICardLink : IDisposable
 {
@@ -77,6 +77,6 @@ public interface ICardLink : IDisposable
     /// <summary>電源を入れて ATR を返す。カードが無ければ投げる</summary>
     byte[] Reset();
 
-    /// <summary>APDU を1つ送り、SW1 SW2 まで含んだ応答を返す</summary>
+    /// <summary>APDU を 1 つ送り、SW1 SW2 まで含んだ応答を返す</summary>
     byte[] Transmit(ReadOnlySpan<byte> apdu);
 }

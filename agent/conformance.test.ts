@@ -2,7 +2,7 @@
  * エージェントの適合テスト。**本物のエージェントを起こして、HTTP の API に直接当てる。**
  *
  * denpa の E2E は偽エージェント (`tests/fake/agent.ts`) を相手にしているので、
- * 本物の取り合いも総当たりも1行も通らない。ここがその穴を塞ぐ。
+ * 本物の取り合いも総当たりも 1 行も通らない。ここがその穴を塞ぐ。
  *
  * **API に当てているので、中身が何語で書かれていても走る。** bun の実装から .NET に
  * 書き直したときも、`AGENT_CMD` を差し替えて同じものを通した — それが
@@ -42,7 +42,7 @@ import { SYNC } from "@danything/arib/psi";
 import { channels } from "../tests/fake/broadcast";
 import { scenes } from "../tests/fake/tuner-scenes";
 
-/** `/denpa/channels` の1件。ここで見るのは種別とチャンネル名だけ */
+/** `/denpa/channels` の 1 件。ここで見るのは種別とチャンネル名だけ */
 type ChannelEntry = { type: string; channel: string };
 
 /** 既定はビルドしたもの。`bun run test:conformance` ならビルドするところからやる */
@@ -57,9 +57,9 @@ const SHARE_BASE = `http://127.0.0.1:${SHARE_PORT}`;
 const ROOT = resolve(import.meta.dir, "..");
 
 /**
- * 地上波のチューナーは**1台だけ**にしてある。
+ * 地上波のチューナーは**1 台だけ**にしてある。
  *
- * 偽の放送にある地上波は T16 と T21 の2つしかないので、チューナーが2台あると
+ * 偽の放送にある地上波は T16 と T21 の 2 つしかないので、チューナーが 2 台あると
  * 「空きが無い」も「優先度の低い相手に譲らせる」も作れない。総当たりが少し遅くなるだけで
  * 済むほうを取る。
  *
@@ -194,7 +194,7 @@ beforeAll(async () => {
       CHANNELS_FILE: paths().channels,
       RAW_DIR: paths().recorded,
       FAKE_TUNE: TUNE,
-      // 番組を作る本数。総当たりの1チャンネルあたりを軽くする
+      // 番組を作る本数。総当たりの 1 チャンネルあたりを軽くする
       FAKE_SLOTS: "4",
       // 鍵も配る。カードは無いので、配る API は理由を付けて 503 を返す
       CARD_SHARE_PORT: String(SHARE_PORT),
@@ -234,10 +234,10 @@ beforeAll(async () => {
  * 次のテストへ持ち越さない。
  *
  * 読むのをやめても、それが**エージェントに届くのは少しあと**になる (HTTP を
- * 1枚挟んでいるため)。確保したままの状態で次のテストが始まると、取り合いの
+ * 1 枚挟んでいるため)。確保したままの状態で次のテストが始まると、取り合いの
  * 前提が崩れて何を見ているのか分からなくなる。
  *
- * 使っているチャンネル自体は残ってよい — 誰も読まなくなってから5秒は
+ * 使っているチャンネル自体は残ってよい — 誰も読まなくなってから 5 秒は
  * わざと離さない作りで、次に開く人はその選局を共有するのが正しい。
  */
 afterEach(async () => {
@@ -274,7 +274,7 @@ describe("チューナー", () => {
     expect(status.every((t) => t.users.length === 0)).toBe(true);
   });
 
-  test("選局すると素のTSが流れてくる。何も包まない", async () => {
+  test("選局すると素の TS が流れてくる。何も包まない", async () => {
     const aborter = new AbortController();
     const res = await get(
       "/denpa/stream?type=GR&channel=T16&use=test&priority=1",
@@ -286,7 +286,7 @@ describe("チューナー", () => {
     const reader = (res.body as ReadableStream<Uint8Array>).getReader();
     const { value } = await reader.read();
     const chunk = value as Uint8Array;
-    // 188バイト区切りの頭は必ず 0x47。ここが崩れていたら誰も読めない
+    // 188 バイト区切りの頭は必ず 0x47。ここが崩れていたら誰も読めない
     expect(chunk[0]).toBe(SYNC);
     expect(chunk.byteLength % 188).toBe(0);
     aborter.abort();
@@ -306,7 +306,7 @@ describe("チューナー", () => {
     stream.close();
   });
 
-  /** 同じ物理チャンネルなら選局は1本で足りる */
+  /** 同じ物理チャンネルなら選局は 1 本で足りる */
   test("同じチャンネルなら選局を共有する。チューナーは増えない", async () => {
     const a = await open("type=GR&channel=T21&use=rec%201&priority=10");
     const b = await open("type=GR&channel=T21&use=epg%20T21&priority=3");
@@ -326,7 +326,7 @@ describe("チューナー", () => {
    * **チューナーを取り上げられた側は、そこで読めなくなる。**
    *
    * ここで大事なのは「エラーとして伝わること」ではなく **「勝手には終わらない
-   * ものが終わった」こと**。HTTP を1枚挟むと、送っている途中の
+   * ものが終わった」こと**。HTTP を 1 枚挟むと、送っている途中の
    * ReadableStream を `error()` にしても向こうには**正常終了として届く**
    * (Bun は残りの chunk を打ち切って畳むだけで、接続を壊さない)。
    *
@@ -351,7 +351,7 @@ describe("チューナー", () => {
   });
 
   /**
-   * **1バイトも送っていないうちに落ちたなら、まだ理由を返せる。**
+   * **1 バイトも送っていないうちに落ちたなら、まだ理由を返せる。**
    *
    * 落ちた回をどれも接続を壊して知らせていた頃は、状態行すら送る前に
    * 落ちても接続だけ切れていて、呼んだ側に届くのは
@@ -383,7 +383,7 @@ describe("チューナー", () => {
   });
 
   test("無効にしたチューナーは使わない", async () => {
-    // GR で使えるのは gr0 だけ。off0 は無効なので、2つ目は断られる
+    // GR で使えるのは gr0 だけ。off0 は無効なので、2 つ目は断られる
     const a = await open("type=GR&channel=T16&use=a&priority=5");
     await a.reader?.read();
     expect((await open("type=GR&channel=T21&use=b&priority=5")).status).toBe(
@@ -475,7 +475,7 @@ describe("チャンネル", () => {
     expect(readFileSync(paths().channels, "utf8")).toContain("あたらしい局");
   });
 
-  test("1件も無い差し替えは断る。今まで録れていた局を消さない", async () => {
+  test("1 件も無い差し替えは断る。今まで録れていた局を消さない", async () => {
     const before = readFileSync(paths().channels, "utf8");
     const put = await request("PUT", "/denpa/channels", {
       scanned: ["GR"],
@@ -610,7 +610,7 @@ describe("カードとスクランブルの復号", () => {
     // 読めていないときは理由を言う。読めているなら一言は空 (名前と番号は表に出る)
     if (!card.ok) expect(card.message.length).toBeGreaterThan(0);
     for (const reader of card.readers) expectReader(reader);
-    // 使うカードは1枚だけ
+    // 使うカードは 1 枚だけ
     expect(
       card.readers.filter((reader) => reader.active).length,
     ).toBeLessThanOrEqual(1);
@@ -644,7 +644,7 @@ describe("カードとスクランブルの復号", () => {
 
   test("鍵を配る相手から貰うときは、その相手を返す", async () => {
     /*
-     * CARD_URL を立てたもう1つを起こし、こちら (カードの無いエージェント) の
+     * CARD_URL を立てたもう 1 つを起こし、こちら (カードの無いエージェント) の
      * 鍵を配るポートを配り役にする。貰えなくても**形式は同じ**で、手元のリーダーは並べない
      */
     const { card, stop } = await spawnAgent(PORT + 2, { CARD_URL: SHARE_BASE });
@@ -809,7 +809,7 @@ describe("カードとスクランブルの復号", () => {
    * (`recisdb` を起こしていた頃はそこを差し替えて試せた)。復号のしかたそのものは
    * 単体テスト (B25Tests / BCasTests) で、実際に復号できることは実機で確かめる (docs/agent.md)。
    */
-  test("掛かったままのTSは、復号できるか理由が返るかのどちらか", async () => {
+  test("掛かったままの TS は、復号できるか理由が返るかのどちらか", async () => {
     const packet = new Uint8Array(188 * 2);
     for (let i = 0; i < 2; i++) {
       packet[i * 188] = SYNC;
@@ -962,8 +962,8 @@ describe("機材の定義", () => {
   });
 
   /**
-   * **選ぶ順はエージェントが決めて、`rank` で見せる。** 地上波も衛星も受ける1台
-   * (PX-MLT など) は、先に並んでいても地上波専用より後。兼用の1台を地上波で塞ぐと
+   * **選ぶ順はエージェントが決めて、`rank` で見せる。** 地上波も衛星も受ける 1 台
+   * (PX-MLT など) は、先に並んでいても地上波専用より後。兼用の 1 台を地上波で塞ぐと
    * 衛星が録れなくなる。受けられる種別がまったく同じチューナーは同じ順位、無効なチューナーは null。
    *
    * 決まりの中身はエージェントのもの。denpa は順位を読むだけで、自分では決めない
@@ -1084,11 +1084,11 @@ describe("機材の定義", () => {
 /**
  * **止められても、録画 (`use=rec`) の選局が終わるまで畳まない。** ライブ視聴などほかの利用者は待たない
  *
- * ここが既定 (30秒) のままだった頃は、Pod を入れ替えるだけで TS が切れ、
- * 始まって10秒の30分番組が丸ごと失敗した (実機)。denpa 側は録画が終わるまで
+ * ここが既定 (30 秒) のままだった頃は、Pod を入れ替えるだけで TS が切れ、
+ * 始まって 10 秒の 30 分番組が丸ごと失敗した (実機)。denpa 側は録画が終わるまで
  * 待つ作りなので、流しているこちらが先に消えると意味が無い。
  *
- * **別のエージェントを1つ立てて試す。** 上の一式を止めてしまうと、
+ * **別のエージェントを 1 つ立てて試す。** 上の一式を止めてしまうと、
  * 残りのテストが相手を失う。
  */
 describe("止まれと言われたとき", () => {
@@ -1114,7 +1114,7 @@ describe("止まれと言われたとき", () => {
         RAW_DIR: join(room, "recorded"),
         FAKE_TUNE: TUNE,
         FAKE_SLOTS: "4",
-        // 本番は6時間。テストなので短くするが、待つ流れは同じ
+        // 本番は 6 時間。テストなので短くするが、待つ流れは同じ
         SHUTDOWN_WAIT: "30000",
       },
       stdout: "ignore",

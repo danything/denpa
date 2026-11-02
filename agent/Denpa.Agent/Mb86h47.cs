@@ -9,14 +9,14 @@ namespace Denpa.Agent;
  * 節の番号 (「4.2」など) はその仕様書のもの。仕様書が「こちらで決めてよい」とした所 (コア 1 への指示の形など) は
  * Mb86h47Programs.cs に書いた形で決めた。
  *
- * ホストはベンダー要求 0xBC (メモリ要求) でブリッジのレジスタを読み書きする。メモリ要求は全部このロックで1つずつ通す
+ * ホストはベンダー要求 0xBC (メモリ要求) でブリッジのレジスタを読み書きする。メモリ要求は全部このロックで 1 つずつ通す
  * (カードの UART もメモリ要求なので、チューナーとカードが別のスレッドから呼んでも混ざらない)。
  * TS の EP 0x81 の読みはこの外 (IUsbInStream) で並べる。
  *
- * **I2C はコア 1 に任せ、指示は EP 0x02 の bulk の塊で送る (仕様書 5.4・5.5) 形だけ。** 実機で3つの形を比べた結果
+ * **I2C はコア 1 に任せ、指示は EP 0x02 の bulk の塊で送る (仕様書 5.4・5.5) 形だけ。** 実機で 3 つの形を比べた結果
  * (開く・選局からロック・メモリ要求の回数。ホストから直 (5.3) / コア 1 のメモリ要求のリング / コア 1 の bulk の命令):
  * 開く 385 / 167 / 182ms、ロック 3439 / 2730 / 2570ms、メモリ要求 24664 / 2360 / 1083 回。bulk の命令がいちばん速く、
- * 要求もいちばん少ないので、ほかの2つはコードごと外した。コア 1 が起きない・bulk に答えないときは開くのを止める
+ * 要求もいちばん少ないので、ほかの 2 つはコードごと外した。コア 1 が起きない・bulk に答えないときは開くのを止める
  * (仕様書 14 章の「コア 1 が動かない → 開けない」。実機では毎回起きていて、代わりの形を残す理由が無い)。
  */
 
@@ -51,7 +51,7 @@ public sealed class Mb86h47 : II2c
     /// <summary>メモリ要求と bulk の命令の時間切れ (仕様書 3 章「タイムアウトは 1 秒で動いている」)</summary>
     private const int TimeoutMs = 1000;
 
-    /// <summary>1回のメモリ要求の上限 (仕様書 3 章の「最大 64 バイト」)。書き込みで使えるのは 4.2 で広げたあとだけ</summary>
+    /// <summary>1 回のメモリ要求の上限 (仕様書 3 章の「最大 64 バイト」)。書き込みで使えるのは 4.2 で広げたあとだけ</summary>
     private const int MaxWords = 16;
 
     private const uint Core0 = 0x1600000;
@@ -85,7 +85,7 @@ public sealed class Mb86h47 : II2c
     private const uint CardTxLrc = 0xFEA038;
     private const uint CardRxLrc = 0xFEA03C;
 
-    /// <summary>主 CPU の処理の書き換える5語と、電源投入時の値 (4.2)</summary>
+    /// <summary>主 CPU の処理の書き換える 5 語と、電源投入時の値 (4.2)</summary>
     private static readonly uint[] PatchAt = [0xE9AC0, 0xE9AC4, 0xE9E0C, 0xE9E10, 0xE9D94];
 
     private static readonly uint[] PowerOn = [0x9B800000, 0xAA04E40F, 0x9B800000, 0xAA04E40D, 0xB4279F8D];
@@ -110,14 +110,14 @@ public sealed class Mb86h47 : II2c
     private uint _chunkSequence;
     private int _chunkSlot;
 
-    // 流し始めの準備 (9.2)。待ちの間に1つずつ回す
+    // 流し始めの準備 (9.2)。待ちの間に 1 つずつ回す
     private readonly Queue<Action> _prepare = new();
     private bool _prepared;
 
     /// <summary>メモリ要求の数 (速さを測るため)</summary>
     public long Requests { get; private set; }
 
-    /// <summary>I2C のやり取りの数 (書き込み・読み・読みかえ書きを1つずつ)</summary>
+    /// <summary>I2C のやり取りの数 (書き込み・読み・読みかえ書きを 1 つずつ)</summary>
     public long I2cTransfers { get; private set; }
 
     /// <param name="trace">あれば、起動の様子 (アドレスを広げたか) を渡す (<c>--tune</c> のとき)</param>
@@ -164,7 +164,7 @@ public sealed class Mb86h47 : II2c
 
     private void Write32(uint address, uint value) => Write(address, [value]);
 
-    /// <summary>書く。4.2 で広げる前は1語ずつ (複数語だと最初の語しか正しく入らない。3.1)</summary>
+    /// <summary>書く。4.2 で広げる前は 1 語ずつ (複数語だと最初の語しか正しく入らない。3.1)</summary>
     private void Write(uint address, ReadOnlySpan<uint> words)
     {
         Check(address);
@@ -213,18 +213,18 @@ public sealed class Mb86h47 : II2c
         }
     }
 
-    /// <summary>飛ぶ2語: <c>LDI:20 #target, R12</c> と <c>JMP @R12</c> + <c>NOP</c></summary>
+    /// <summary>飛ぶ 2 語: <c>LDI:20 #target, R12</c> と <c>JMP @R12</c> + <c>NOP</c></summary>
     public static (uint First, uint Second) Jump(uint target)
     {
         if (target >= 0x100000) throw new ArgumentOutOfRangeException(nameof(target));
         return ((0x9B0Cu | (((target >> 16) & 0xF) << 4)) << 16 | (target & 0xFFFF), JumpSecond);
     }
 
-    /// <summary>飛ぶ2語の飛び先。飛ぶ語の形でなければ null</summary>
+    /// <summary>飛ぶ 2 語の飛び先。飛ぶ語の形でなければ null</summary>
     private static uint? JumpTarget(uint first, uint second) =>
         (first & 0xFF0F0000) == 0x9B0C0000 && second == JumpSecond ? ((first >> 4) & 0xF0000) | (first & 0xFFFF) : null;
 
-    /// <summary>そのバンクに置いたこちらのルーチンの語の並び (書き換える5語に書く値)</summary>
+    /// <summary>そのバンクに置いたこちらのルーチンの語の並び (書き換える 5 語に書く値)</summary>
     internal static uint[] Patch(int bank)
     {
         var routine = Routines.Value[bank];
@@ -279,7 +279,7 @@ public sealed class Mb86h47 : II2c
         var free = Enumerable.Range(0, Mb86h47Programs.Banks.Length).FirstOrDefault(bank => !used.Contains(bank), -1);
         if (free < 0) throw Unknown();
 
-        // ルーチンを1語ずつ置いて、1語ずつ読み返す。それから飛ぶ語を1語ずつ
+        // ルーチンを 1 語ずつ置いて、1 語ずつ読み返す。それから飛ぶ語を 1 語ずつ
         var place = Routines.Value[free];
         var origin = Mb86h47Programs.Banks[free];
         for (var i = 0; i < place.Words.Length; i++) Write32(origin + (uint)(i * 4), place.Words[i]);
@@ -302,7 +302,7 @@ public sealed class Mb86h47 : II2c
     }
 
     private static IOException Unknown() =>
-        new($"{Zd1j.Model} のブリッジの処理が知らない中身です (仕様書 4.2 の5語が電源投入時の値でもこちらの書いた値でもありません)。抜いて挿し直してください");
+        new($"{Zd1j.Model} のブリッジの処理が知らない中身です (仕様書 4.2 の 5 語が電源投入時の値でもこちらの書いた値でもありません)。抜いて挿し直してください");
 
     /// <summary>4.3 クロックと SDRAM</summary>
     private void Clocks()
@@ -394,13 +394,13 @@ public sealed class Mb86h47 : II2c
         Write32(Box(Mb86h47Programs.BoxBulkEnable), 0);
         Write32(Core1, CoreRun);
         var first = Read32(Box(Mb86h47Programs.BoxAlive));
-        // 仕様書 5.4: 1ms 空けて2回読む
+        // 仕様書 5.4: 1ms 空けて 2 回読む
         Thread.Sleep(1);
         var second = Read32(Box(Mb86h47Programs.BoxAlive));
         if (first == second) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が動いていません");
     }
 
-    /// <summary>5.5 の bulk の経路を用意して、空の塊を1つ送って答えを確かめる。答えなければ開かない</summary>
+    /// <summary>5.5 の bulk の経路を用意して、空の塊を 1 つ送って答えを確かめる。答えなければ開かない</summary>
     private void StartCommandChannel()
     {
         Write32(0xFD8300, 1);
@@ -429,7 +429,7 @@ public sealed class Mb86h47 : II2c
     }
 
     // ---------------------------------------------------------------------
-    // I2C (5)。書き込みと読みかえ書きは1つずつ答えを待たずに塊に溜め、読む前と待つ前 (Flush) にまとめて送る
+    // I2C (5)。書き込みと読みかえ書きは 1 つずつ答えを待たずに塊に溜め、読む前と待つ前 (Flush) にまとめて送る
     // ---------------------------------------------------------------------
 
     public void Write(byte address, ReadOnlySpan<byte> data)
@@ -500,7 +500,7 @@ public sealed class Mb86h47 : II2c
         _commands.AddRange(words);
     }
 
-    /// <summary>溜めた命令を1つの塊で送り、答えを待つ。読んだバイトを返す</summary>
+    /// <summary>溜めた命令を 1 つの塊で送り、答えを待つ。読んだバイトを返す</summary>
     private byte[] SendChunk()
     {
         _chunkSequence = _chunkSequence == uint.MaxValue ? 1 : _chunkSequence + 1;
@@ -630,8 +630,8 @@ public sealed class Mb86h47 : II2c
     }
 
     /// <summary>
-    /// 待ちの間に、積んである流し始めの準備を1つずつ回す。<paramref name="until"/> (Stopwatch の時刻) を過ぎたら戻る。
-    /// 1つ回すごとにロックを外すので、カードの読み書きも挟まる
+    /// 待ちの間に、積んである流し始めの準備を 1 つずつ回す。<paramref name="until"/> (Stopwatch の時刻) を過ぎたら戻る。
+    /// 1 つ回すごとにロックを外すので、カードの読み書きも挟まる
     /// </summary>
     public void Idle(long until)
     {
@@ -768,8 +768,8 @@ public sealed class Mb86h47 : II2c
 
 /// <summary>
 /// 9.4 EP 0x81 から来る「4 バイトの到着時刻 + 188 バイトの TS」の 192 バイトの単位から取り出して、188 バイトのパケットにする。
-/// 読みの区切りは単位と揃わないので、TS の頭 (単位の 5 バイト目) の 0x47 と、192 バイト先の 0x47 の2つで揃える
-/// (TS の中の 0x47 は珍しくないので1つでは信じない)。揃えたあと頭が 0x47 でなくなったら揃え直す
+/// 読みの区切りは単位と揃わないので、TS の頭 (単位の 5 バイト目) の 0x47 と、192 バイト先の 0x47 の 2 つで揃える
+/// (TS の中の 0x47 は珍しくないので 1 つでは信じない)。揃えたあと頭が 0x47 でなくなったら揃え直す
 /// </summary>
 public sealed class Mb86h47Framer
 {

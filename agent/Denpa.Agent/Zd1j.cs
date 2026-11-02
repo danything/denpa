@@ -17,8 +17,8 @@ namespace Denpa.Agent;
 /// <para>
 /// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。Windows と macOS でも同じ形の
 /// 名前を作る (<see cref="UsbDevices.WindowsPort"/>・<see cref="UsbDevices.MacPort"/>)。
-/// 刺さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。設定に1台だけなら、挿すポートを変えても付いていく
-/// (<see cref="Follow(string)"/>)。2台以上はポートで見分けるので、挿すポートを変えると別のチューナーになる。
+/// 刺さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。設定に 1 台だけなら、挿すポートを変えても付いていく
+/// (<see cref="Follow(string)"/>)。2 台以上はポートで見分けるので、挿すポートを変えると別のチューナーになる。
 /// </para>
 /// </summary>
 public static class Zd1j
@@ -102,19 +102,19 @@ public static class Zd1j
             ? UsbFsDevice.Open(UsbSysfs.Devices, DevUsb, port, Vendor, Product)
             : UsbDevices.Open(port, Vendor, Product);
 
-    /// <summary>付いていったことを記録したもの (設定のポート → 使ったポート)。同じ組は1回だけ記録する</summary>
+    /// <summary>付いていったことを記録したもの (設定のポート → 使ったポート)。同じ組は 1 回だけ記録する</summary>
     private static readonly HashSet<(string From, string To)> Followed = [];
 
     /// <summary>
-    /// **1台だけなら、挿し替えたポートに付いていく。** 設定のポートに見当たらず、ほかにちょうど1台挿さっていればそのポート。
-    /// それ以外 (設定のポートにある・1台も無い・2台以上ある) は設定のまま (2台以上はポートでしか見分けられない)
+    /// **1 台だけなら、挿し替えたポートに付いていく。** 設定のポートに見当たらず、ほかにちょうど 1 台挿さっていればそのポート。
+    /// それ以外 (設定のポートにある・1 台も無い・2 台以上ある) は設定のまま (2 台以上はポートでしか見分けられない)
     /// </summary>
     internal static string Follow(string port, IReadOnlyList<string> present) =>
         present.Count == 1 && present[0] != port ? present[0] : port;
 
     /// <summary>
-    /// 挿さっているものを見て <see cref="Follow(string, IReadOnlyList{string})"/>。付いていったら、組ごとに1回記録する。
-    /// 設定に CECH-ZD1 J が1台だけのときに呼ぶ (2台書いてあれば、抜けている1台がもう1台に付いていってしまう)
+    /// 挿さっているものを見て <see cref="Follow(string, IReadOnlyList{string})"/>。付いていったら、組ごとに 1 回記録する。
+    /// 設定に CECH-ZD1 J が 1 台だけのときに呼ぶ (2 台書いてあれば、抜けている 1 台がもう 1 台に付いていってしまう)
     /// </summary>
     public static string Follow(string port)
     {
@@ -131,7 +131,7 @@ public static class Zd1j
     }
 
     /// <summary>
-    /// <c>--card</c> の内蔵の差し込み口の行: ATR と、開いてから ATR までの時間。**見つからなくても1行出す**
+    /// <c>--card</c> の内蔵の差し込み口の行: ATR と、開いてから ATR までの時間。**見つからなくても 1 行出す**
     /// (macOS・Windows で OS に見えていないのか、開けないのかを分けるため)。どんな例外でも行にして次へ進む
     /// </summary>
     public static void DescribeCards(IReadOnlyList<CardLinkCandidate> cards, TextWriter output)
@@ -158,10 +158,10 @@ public static class Zd1j
 }
 
 /// <summary>
-/// CECH-ZD1 J 1台ぶんの持ち主。**USB のハンドルは1台に1つだけ**で、チューナーとカードが取って使う。
+/// CECH-ZD1 J 1 台ぶんの持ち主。**USB のハンドルは 1 台に 1 つだけ**で、チューナーとカードが取って使う。
 ///
 /// <para>
-/// **温めておく。** ブリッジの起動と DiB8096 の初期化は開くときの1回だけ (DiB8096 はチューナーが初めて使うとき)。
+/// **温めておく。** ブリッジの起動と DiB8096 の初期化は開くときの 1 回だけ (DiB8096 はチューナーが初めて使うとき)。
 /// **エージェントが動いている間ずっと開いたまま** (PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱い。
 /// 開き直すとブリッジの起動と DiB8096 の初期化で 1 秒ほどかかり、選局が冷えた状態からになる)。
 /// 閉じるのは、定義が変わってチューナーが捨てられたとき (<see cref="CloseIfIdle"/>)・止めるとき (<see cref="CloseAll"/>)・USB が抜けたとき。
@@ -255,7 +255,7 @@ public sealed class Zd1jBoard : IDibTime
     private static readonly Dictionary<string, string> LastFailure = [];
 
     /// <summary>
-    /// 開けなかったことを、どの段で止まったか付きで1行記録する。カードの確かめや選局のたびに開き直すので、
+    /// 開けなかったことを、どの段で止まったか付きで 1 行記録する。カードの確かめや選局のたびに開き直すので、
     /// 前と同じ理由なら書かない (開けたら忘れる)
     /// </summary>
     private static void Failed(string port, string stage, Exception error)
@@ -378,7 +378,7 @@ public sealed class Zd1jBoard : IDibTime
     }
 }
 
-/// <summary>1回の選局でかかった時間 (ms)。<c>--tune</c> が出す</summary>
+/// <summary>1 回の選局でかかった時間 (ms)。<c>--tune</c> が出す</summary>
 /// <param name="OpenMs">ボードを取って DiB8096 を使えるようにするまで (冷えていればブリッジの起動と DiB8096 の初期化。温かければほぼ 0)</param>
 /// <param name="LockMs">選局からロックまで</param>
 /// <param name="FirstTsMs">ロックから最初の TS まで (まだ来ていなければ -1)</param>
@@ -412,8 +412,8 @@ public sealed class Zd1jTuner : ITuneDevice
 
     /// <param name="port">設定のポート</param>
     /// <param name="follow">
-    /// 設定のポートに見当たらなければ、ほかに1台だけ挿さっているものを使う (<see cref="Zd1j.Follow(string)"/>)。
-    /// 設定に CECH-ZD1 J が1台だけのとき (<see cref="TunerPool"/> が決める)
+    /// 設定のポートに見当たらなければ、ほかに 1 台だけ挿さっているものを使う (<see cref="Zd1j.Follow(string)"/>)。
+    /// 設定に CECH-ZD1 J が 1 台だけのとき (<see cref="TunerPool"/> が決める)
     /// </param>
     public Zd1jTuner(string port, bool follow = false)
     {
@@ -487,7 +487,7 @@ public sealed class Zd1jTuner : ITuneDevice
                 var result = demod.Tune(tuning.Frequency);
                 _lockedAt = Stopwatch.GetTimestamp();
                 _lockMs = (long)Stopwatch.GetElapsedTime(tuneStarted, _lockedAt).TotalMilliseconds;
-                // 選局ごとに1行 (常駐のときも)。仕様書の外の工夫の数字を本番の記録で見直すため
+                // 選局ごとに 1 行 (常駐のときも)。仕様書の外の工夫の数字を本番の記録で見直すため
                 Log.Write($"[{_name}] {demod.LastSummary}");
                 if (result == DibLock.Failed) throw new IOException(ITuneDevice.SyncFailed);
 
@@ -559,7 +559,7 @@ public sealed class Zd1jTuner : ITuneDevice
 }
 
 /// <summary>
-/// TS を1回流すぶん。EP 0x81 の読みを 16 本出しっぱなしにして、192 バイトの単位から取り出し、
+/// TS を 1 回流すぶん。EP 0x81 の読みを 16 本出しっぱなしにして、192 バイトの単位から取り出し、
 /// <see cref="Pipe"/> (8MB) に詰める。読み出し側は <see cref="DeviceStream"/> (px4d から受けるときと同じ形)
 /// </summary>
 internal sealed class Zd1jStream
@@ -567,7 +567,7 @@ internal sealed class Zd1jStream
     private const byte Endpoint = 0x81;
 
     /// <summary>
-    /// 1本の読みの大きさ。仕様書 9.4 の「1536 バイト (192 と 512 の公倍数) の倍数」で、64KB に収まるいちばん大きいもの (64,512 バイト)
+    /// 1 本の読みの大きさ。仕様書 9.4 の「1536 バイト (192 と 512 の公倍数) の倍数」で、64KB に収まるいちばん大きいもの (64,512 バイト)
     /// </summary>
     private const int TransferSize = 42 * 1536;
 
@@ -576,7 +576,7 @@ internal sealed class Zd1jStream
     /// </summary>
     private const int Depth = 16;
 
-    /// <summary>1回の読みの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300ms。読みは裏で出したまま)</summary>
+    /// <summary>1 回の読みの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300ms。読みは裏で出したまま)</summary>
     private const int ReadTimeoutMs = 300;
 
     private readonly Pipe _pipe = Px4Stream.NewBuffer();
@@ -692,7 +692,7 @@ internal sealed class Zd1jStream
 
 /// <summary>
 /// CECH-ZD1 J の内蔵の差し込み口。ブリッジの UART を読み書きし、**T=1 の枠組みはこちらで組む** (<see cref="T1Protocol"/>)。
-/// リセットと IFSD の取り決めは1回だけで、あとはつないだまま。並ぶ順は USB のリーダー → px4d → asicend → これ (CardLinks)
+/// リセットと IFSD の取り決めは 1 回だけで、あとはつないだまま。並ぶ順は USB のリーダー → px4d → asicend → これ (CardLinks)
 /// </summary>
 public sealed class Zd1jCard : ICardLink
 {
@@ -779,7 +779,7 @@ public sealed class Zd1jCard : ICardLink
     private static readonly int[] DiTable = [0, 1, 2, 4, 8, 16, 32, 64, 12, 20, 0, 0, 0, 0, 0, 0];
 
     /// <summary>
-    /// TA1 から UART の4つのレジスタ (仕様書 13.2)。B-CAS は TA1 = 0x12 (F 372 / D 2) で 19200 ボー。
+    /// TA1 から UART の 4 つのレジスタ (仕様書 13.2)。B-CAS は TA1 = 0x12 (F 372 / D 2) で 19200 ボー。
     /// <c>N = F / D</c>、速さ = <c>(N &lt;&lt; 7) | min(N &gt;&gt; 1, 0x7F)</c>、CWT = <c>3 × 2^CWI + 11</c>、
     /// BWT = <c>6,800,000 × D / F</c> (16 ビットまで)、制御 = <c>TC1 &lt;&lt; 16</c> (TC1 が 0xFF なら 1)
     /// </summary>
@@ -834,7 +834,7 @@ public sealed class Zd1jCard : ICardLink
     }
 
     /// <summary>
-    /// T=1 のブロックを1つ送って1つ受ける。受けは「受けた数が 0 でなくなる」だけを合図に頭 3 バイトを読み、
+    /// T=1 のブロックを 1 つ送って 1 つ受ける。受けは「受けた数が 0 でなくなる」だけを合図に頭 3 バイトを読み、
     /// 長さぶんと LRC を読む。時間切れは null (T1Protocol が送り直す)
     /// </summary>
     private byte[]? Exchange(byte[] block, byte wtx)
@@ -869,7 +869,7 @@ public sealed class Zd1jCard : ICardLink
 ///
 /// <para>
 /// 形は <c>{ "version": 1, "boards": { "&lt;USB のポート&gt;": { "&lt;kHz&gt;": { … } } } }</c> (<see cref="DibMemory.ToJson"/>)。
-/// 読めない・壊れている・バージョンが違うときは、警告を1行残して全部捨てる。書くのは値が変わったときだけ
+/// 読めない・壊れている・バージョンが違うときは、警告を 1 行残して全部捨てる。書くのは値が変わったときだけ
 /// (ロックして新しい値になった・合わなかった値を捨てた)。
 /// </para>
 /// </summary>

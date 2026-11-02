@@ -209,7 +209,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         {
             if (SetupDiGetDeviceRegistryPropertyW(set, info, SpdrpLocationPaths, &type, start, required, null) == 0) return null;
         }
-        // REG_MULTI_SZ の最初の1つ
+        // REG_MULTI_SZ の最初の 1 つ
         var text = Encoding.Unicode.GetString(buffer);
         var end = text.IndexOf('\0');
         return end > 0 ? text[..end] : null;

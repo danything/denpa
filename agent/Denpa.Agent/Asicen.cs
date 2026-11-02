@@ -12,8 +12,8 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **USB の serial が無いので、ポートで見分ける。** PX-W3U3 は1つの筐体に USB 機能が2つあり
-/// (内蔵ハブの <c>.1</c> と <c>.2</c>)、それぞれに衛星と地上波の受信機が1つずつ。筐体の名前は
+/// **USB の serial が無いので、ポートで見分ける。** PX-W3U3 は 1 つの筐体に USB 機能が 2 つあり
+/// (内蔵ハブの <c>.1</c> と <c>.2</c>)、それぞれに衛星と地上波の受信機が 1 つずつ。筐体の名前は
 /// 内蔵ハブのポート (<c>1-2</c>) にし、<c>asicend --instance</c> とソケットの置き場にもそのまま使う。
 /// **ポートを変えると別のチューナーになる。** 受信機は上流の決まりどおり <c>0:S, 1:T, 2:S, 3:T</c>。
 /// 設定の <c>device</c> は <c>asicen:&lt;ポート&gt;:&lt;受信機&gt;</c> (<c>asicen:1-2:1</c>)。
@@ -69,7 +69,7 @@ public static class AsicenUserland
     /// <summary>画面に出す名前</summary>
     public static string Name(string model, string id, int receiver) => $"{model} {id} #{receiver}";
 
-    /// <summary>USB 機能1つ (sysfs のデバイス1つ)</summary>
+    /// <summary>USB 機能 1 つ (sysfs のデバイス 1 つ)</summary>
     public sealed record Function(string Usb, int Bus, int Address, string Port, bool Loader)
     {
         /// <summary>内蔵ハブのポート (<c>1-2.1</c> → <c>1-2</c>)。ハブの下に無ければ null</summary>
@@ -83,7 +83,7 @@ public static class AsicenUserland
     }
 
     /// <summary>
-    /// 筐体1台。asicend には USB 機能を2つとも渡す (<c>--primary</c> が内蔵ハブの <c>.1</c>、
+    /// 筐体 1 台。asicend には USB 機能を 2 つとも渡す (<c>--primary</c> が内蔵ハブの <c>.1</c>、
     /// <c>--sibling</c> が <c>.2</c>。上流がこの並び以外を断る)
     /// </summary>
     public sealed record Enclosure(string Id, string Model, Function Primary, Function Sibling, IReadOnlyList<Px4Receiver> Receivers);
@@ -167,12 +167,12 @@ public static class AsicenUserland
     private static readonly TimeSpan Reenumerate = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// ファームウェア待ちの USB 機能に流し込む。**1つずつ、毎回並べ直して。**
+    /// ファームウェア待ちの USB 機能に流し込む。**1 つずつ、毎回並べ直して。**
     ///
     /// <para>
     /// 流し込むと USB のアドレスが変わり、上流の観測では同じ筐体のもう片方まで抜けて出直す
-    /// (HARDWARE-VALIDATION.md「Sibling impact」)。古いアドレスに流さないよう、1つ流すたびに並べ直す。
-    /// 同じポートに2度は流さない (上がらなければ諦めて理由を残す。上流もやり直しはしない)。
+    /// (HARDWARE-VALIDATION.md「Sibling impact」)。古いアドレスに流さないよう、1 つ流すたびに並べ直す。
+    /// 同じポートに 2 度は流さない (上がらなければ諦めて理由を残す。上流もやり直しはしない)。
     /// **ファームウェアが無ければ流さずに「ファームウェアがありません」と残す。**
     /// 流す道具 (<c>asicen-probe</c>) が配布物に無ければ、そう残す。
     /// </para>
@@ -181,7 +181,7 @@ public static class AsicenUserland
     /// **出直しを待つ間もロックは握ったまま。** わざと。流し込みは筐体の両方の USB 機能を揺らすので、
     /// その間に別の経路 (<see cref="Detect"/> や asicend を起こす前の並べ直し) が古いアドレスを読まないよう、
     /// 流し終えて落ち着くまで待たせる。待つのはファームウェア待ちの機材があるときだけで
-    /// (無ければ1回並べて抜ける)、上流はいま1台のホストで1筐体まで。
+    /// (無ければ 1 回並べて抜ける)、上流はいま 1 台のホストで 1 筐体まで。
     /// </para>
     /// </summary>
     internal static void Boot(Action<string> warn)
@@ -236,7 +236,7 @@ public static class AsicenUserland
     /// <summary>設定に出てくる筐体。asicend を起こす相手</summary>
     public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Px4Userland.IdsIn(specs, Parse);
 
-    /// <summary>受信機1つを開く。**受信機の取得・返却と選局は px4d と同じ経路** (<see cref="Px4Tuner"/>)</summary>
+    /// <summary>受信機 1 つを開く。**受信機の取得・返却と選局は px4d と同じ経路** (<see cref="Px4Tuner"/>)</summary>
     public static ITuneDevice Open(string id, int receiver, string? lnb) => new Px4Tuner(
         id, receiver, lnb, RuntimeDir,
         () =>
@@ -256,18 +256,18 @@ public static class AsicenUserland
 }
 
 /// <summary>
-/// <c>asicend</c> 1つ (<see cref="UserlandDaemon"/>。px4d と同じ扱い)。
+/// <c>asicend</c> 1 つ (<see cref="UserlandDaemon"/>。px4d と同じ扱い)。
 ///
 /// <para>
-/// asicend には USB のアドレスとポートを2組とも渡す (<c>--hardware --primary BUS:ADDR --primary-port …
+/// asicend には USB のアドレスとポートを 2 組とも渡す (<c>--hardware --primary BUS:ADDR --primary-port …
 /// --sibling … --sibling-port …</c>)。アドレスは挿し直すたびに変わるので、起こす直前に
 /// sysfs で聞き直す (<see cref="AsicenUserland.Scan"/>)。ready は <c>asicenctl list</c> が通ることで見る
 /// (<c>status</c> はカードの様子も要るので、カードが無いと通らない)。
 /// </para>
 ///
 /// <para>
-/// **上流はいま1台のホストで1筐体まで** (筐体のロックが <c>/tmp/asicen-userland-enclosure.lock</c> の1つ)。
-/// 2台目の asicend は BUSY (exit 4) で終わり、理由は記録に残る。
+/// **上流はいま 1 台のホストで 1 筐体まで** (筐体のロックが <c>/tmp/asicen-userland-enclosure.lock</c> の 1 つ)。
+/// 2 台目の asicend は BUSY (exit 4) で終わり、理由は記録に残る。
 /// </para>
 /// </summary>
 /// <param name="select">
@@ -313,7 +313,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
         if (Running) return;
         var asicend = AsicenUserland.Bin(dir, "asicend");
         if (!File.Exists(asicend)) throw new IOException($"asicen-userland が入っていません: {asicend}");
-        // 機材を並べる (ファームウェアの流し込みは1台30秒かかることがある) のはロックの外で
+        // 機材を並べる (ファームウェアの流し込みは 1 台 30 秒かかることがある) のはロックの外で
         var args = select();
         var listed = "";
         Launch(asicend, [.. args, "--runtime-dir", runtimeDir, "--instance", Id], runtimeDir,

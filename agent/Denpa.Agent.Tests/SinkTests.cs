@@ -5,8 +5,8 @@ namespace Denpa.Agent.Tests;
  *
  * 切ったあと (`Sink.Push` の `MaxLag`) に抜ける知らせが届かず、選局の利用者に残っていた。
  * そのチューナーは誰も読んでいないのに同じ優先度で塞がり続け、実機では番組表集めが
- * 「BS のチューナーに空きがありません」と断られ続け、衛星の局ロゴは残りの1台を
- * 30分ごとに番組表集めに取り上げられて読み切れなかった。
+ * 「BS のチューナーに空きがありません」と断られ続け、衛星の局ロゴは残りの 1 台を
+ * 30 分ごとに番組表集めに取り上げられて読み切れなかった。
  */
 public class SinkTests
 {
@@ -22,7 +22,7 @@ public class SinkTests
 
         sink.Leave();
         await Assert.That(left).IsEqualTo(1);
-        // 2回去っても1回だけ
+        // 2 回去っても 1 回だけ
         sink.Leave();
         await Assert.That(left).IsEqualTo(1);
     }

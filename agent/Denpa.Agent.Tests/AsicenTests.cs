@@ -11,7 +11,7 @@ namespace Denpa.Agent.Tests;
  */
 public class AsicenTests
 {
-    /// <summary>sysfs の USB デバイスを1つ真似る</summary>
+    /// <summary>sysfs の USB デバイスを 1 つ真似る</summary>
     private static void Usb(DirectoryInfo root, string port, string vid, string pid, int bus, int address)
     {
         var dir = Directory.CreateDirectory(Path.Combine(root.FullName, port)).FullName;

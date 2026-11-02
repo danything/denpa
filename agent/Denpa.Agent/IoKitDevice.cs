@@ -17,7 +17,7 @@ namespace Denpa.Agent;
 /// <para>
 /// IOUSBLib のインターフェースは関数の表 (COM に似た形) なので、表の何番目かで関数ポインタを取って呼ぶ
 /// (<c>delegate* unmanaged</c>。リフレクションも <c>Marshal.GetDelegateForFunctionPointer</c> も使わないので Native AOT で通る)。
-/// 表の頭の4つは IUnknown (予約・QueryInterface・AddRef・Release)。番号は IOUSBDeviceInterface182・IOUSBInterfaceInterface182 のもの。
+/// 表の頭の 4 つは IUnknown (予約・QueryInterface・AddRef・Release)。番号は IOUSBDeviceInterface182・IOUSBInterfaceInterface182 のもの。
 /// </para>
 /// </summary>
 [SupportedOSPlatform("macos")]
@@ -418,7 +418,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         return pump.Read(buffer, timeoutMs);
     }
 
-    /// <summary>時間切れの無い読みを1回 (<see cref="UsbReadPump"/> のスレッドから)。取り消されたら 0</summary>
+    /// <summary>時間切れの無い読みを 1 回 (<see cref="UsbReadPump"/> のスレッドから)。取り消されたら 0</summary>
     private int ReadOnce(byte endpoint, byte pipe, byte[] buffer)
     {
         fixed (byte* start = buffer)
@@ -505,7 +505,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
 
     /// <summary>
     /// <c>ReadPipeAsync</c> を何本も出しておく読み。完了は CFRunLoop を回す専用のスレッドで受け、その場で中身を写して同じバッファで
-    /// 出し直す (1本の端点の読みは出した順に済むので、写した順がそのまま届いた順)
+    /// 出し直す (1 本の端点の読みは出した順に済むので、写した順がそのまま届いた順)
     /// </summary>
     private sealed class InStream : IUsbInStream
     {

@@ -24,7 +24,7 @@ public static class SianoUserland
     public const string Scheme = "siano:";
 
     /// <summary>
-    /// 刺さっている1台。<c>Types</c> は受けられる方式 (siano-ts --list の受信機の行)、
+    /// 刺さっている 1 台。<c>Types</c> は受けられる方式 (siano-ts --list の受信機の行)、
     /// <c>Driver</c> はどれかのインターフェースを使っているドライバ (無ければ null)
     /// </summary>
     public sealed record Stick(string Port, string Model, string[] Types, string? Driver);
@@ -66,7 +66,7 @@ public static class SianoUserland
     ///
     /// <para>
     /// **カーネルが使っているかだけは sysfs で見る** (インターフェースの <c>driver</c> のリンク)。
-    /// <c>--list</c> はそこを教えてくれず、並べると同じ機材が DVB と siano の2台になる。
+    /// <c>--list</c> はそこを教えてくれず、並べると同じ機材が DVB と siano の 2 台になる。
     /// 選局のときは siano-ts 自身が断るので (0.1.8。終了コード 4)、ここは並べ方のためだけ。
     /// </para>
     /// </summary>
@@ -183,16 +183,16 @@ public static class SianoUserland
 }
 
 /// <summary>
-/// siano-userland の機材1台。**<c>siano-ts --control</c> を1つ起こしたまま、標準入力で選局し直す。**
+/// siano-userland の機材 1 台。**<c>siano-ts --control</c> を 1 つ起こしたまま、標準入力で選局し直す。**
 ///
 /// <para>
-/// 起こすのは最初の選局のときだけで、以降は <c>tune &lt;Hz&gt;</c> を1行書き、stderr の <c>tuned &lt;Hz&gt;</c>
+/// 起こすのは最初の選局のときだけで、以降は <c>tune &lt;Hz&gt;</c> を 1 行書き、stderr の <c>tuned &lt;Hz&gt;</c>
 /// (駄目なら <c>control: tune failed: …</c>) を待つ。TS は選局を跨いで同じ標準出力に流れ続けるので、
-/// 読み出し側 (<see cref="DeviceStream"/>) も1つを使い回す (DVB と同じ)。
+/// 読み出し側 (<see cref="DeviceStream"/>) も 1 つを使い回す (DVB と同じ)。
 /// </para>
 ///
 /// <para>
-/// **選局し直す間は、標準出力を読んで捨てる。** siano-ts は1本のループで「TS を書く → 標準入力を見る」を
+/// **選局し直す間は、標準出力を読んで捨てる。** siano-ts は 1 本のループで「TS を書く → 標準入力を見る」を
 /// 回していて、pipe が埋まると <c>tune</c> を読みに来ない。読んで捨てれば前のチャンネルの残りも消える
 /// (docs/agent.md「siano-userland の作り」)。
 /// </para>
@@ -213,8 +213,8 @@ public sealed class SianoTuner : ITuneDevice
     private DeviceStream? _stream;
 
     /// <summary>
-    /// siano-ts 1つぶん。stderr の行は <see cref="Lines"/> にも流す (選局の答えを待つため)。
-    /// **印は子ごとに持つ。** 止めたかどうかを1つのフラグで持つと、前の子の後始末が次の子のフラグを読む
+    /// siano-ts 1 つぶん。stderr の行は <see cref="Lines"/> にも流す (選局の答えを待つため)。
+    /// **印は子ごとに持つ。** 止めたかどうかを 1 つのフラグで持つと、前の子の後始末が次の子のフラグを読む
     /// (起こし直した直後に前の子の終了が回ってくる)
     /// </summary>
     private sealed class Child(Process process)
@@ -242,7 +242,7 @@ public sealed class SianoTuner : ITuneDevice
         public System.Threading.Channels.Channel<string> Lines { get; } =
             System.Threading.Channels.Channel.CreateUnbounded<string>();
 
-        /// <summary>標準入力へ書く行。**書くのは <see cref="Feed"/> の1本だけ**</summary>
+        /// <summary>標準入力へ書く行。**書くのは <see cref="Feed"/> の 1 本だけ**</summary>
         public System.Threading.Channels.Channel<string> Commands { get; } =
             System.Threading.Channels.Channel.CreateUnbounded<string>();
 
@@ -294,7 +294,7 @@ public sealed class SianoTuner : ITuneDevice
     public static ProcessStartInfo StartInfo(string port, string dir, string firmware) =>
         new(SianoUserland.Executable(dir), ["--device", port, "--control", "--firmware", firmware]);
 
-    /// <summary>選局を指示する1行。周波数は選局表の Hz のまま (地上波の表は Hz)</summary>
+    /// <summary>選局を指示する 1 行。周波数は選局表の Hz のまま (地上波の表は Hz)</summary>
     public static string TuneCommand(ChannelTable.Tuning tuning)
     {
         if (tuning.Satellite) throw new IOException($"Siano の機材は地上波だけです ({tuning.Type} は受けられません)");
@@ -351,7 +351,7 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>
-    /// 標準入力に書く1本。渡された行を順に書く (0.1.8 までの Windows で要った空行の詰め物は、
+    /// 標準入力に書く 1 本。渡された行を順に書く (0.1.8 までの Windows で要った空行の詰め物は、
     /// 0.1.9 で直ったのでもう無い。siano-userland #13)
     /// </summary>
     private static void Feed(Child child)
@@ -510,7 +510,7 @@ public sealed class SianoTuner : ITuneDevice
             Interop.Terminate(process.Id);
             if (!process.WaitForExit(TimeSpan.FromSeconds(2))) process.Kill();
         }
-        // 書く1本を降ろす。子がいなくなれば pipe が閉じて、書きかけのところからも抜ける
+        // 書く 1 本を降ろす。子がいなくなれば pipe が閉じて、書きかけのところからも抜ける
         child.Commands.Writer.TryComplete();
         child.Feeding.Wait(TimeSpan.FromSeconds(2));
         stream?.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);

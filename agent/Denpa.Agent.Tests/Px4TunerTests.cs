@@ -10,10 +10,10 @@ namespace Denpa.Agent.Tests;
  * px4d は無い。control.sock と stream.sock を開いて px4d のふりをする (Px4CardTests と同じ流儀)。
  * ふりは SPEC 6.3 の決まりだけ守る: 取った lease で TUNE → START_STREAM → stream.sock に
  * ATTACH_STREAM (lease と nonce) で TS_DATA が流れ、STOP_STREAM で STREAM_END。
- * TS の中身は周波数の印 (パケットの2バイト目) にして、どの選局の TS かを見分ける。
+ * TS の中身は周波数の印 (パケットの 2 バイト目) にして、どの選局の TS かを見分ける。
  */
 /*
- * **固まったら失敗にする。** ソケットとスレッドを相手にするので、固まり方を1つ見落とすと
+ * **固まったら失敗にする。** ソケットとスレッドを相手にするので、固まり方を 1 つ見落とすと
  * CI の Unit tests ごと打ち切られ、どのテストかも分からない (Mac で 8 分止まった)。
  * Timeout が効くのはテストが Task を返してから — 各テストは頭で `await Task.Yield()` して、
  * 同期の処理 (Tune・Dispose) を Task の中に入れる。待つところには打ち切りの合図 (cancel) を渡す
@@ -70,7 +70,7 @@ public class Px4TunerTests
         public (int Frames, uint Code)? EndFirstStream { get; init; }
 
         /// <summary>
-        /// TS を流す速さ (バイト/秒)。null なら1枚ごとに 2ms 寝る (今までどおり)、0 なら寝ずに流せるだけ流す
+        /// TS を流す速さ (バイト/秒)。null なら 1 枚ごとに 2ms 寝る (今までどおり)、0 なら寝ずに流せるだけ流す
         /// </summary>
         public double? Rate { get; init; }
 
@@ -109,13 +109,13 @@ public class Px4TunerTests
         }
 
         /// <summary>
-        /// 繋いできたものを1本ずつ専用のスレッドで (Px4CardTests と同じ理由でスレッドプールを使わない)。
+        /// 繋いできたものを 1 本ずつ専用のスレッドで (Px4CardTests と同じ理由でスレッドプールを使わない)。
         ///
         /// <para>
         /// **Accept で待たない。** Poll で 100ms ずつ待ち、来ているときだけ Accept する。
         /// macOS は待ち受けを閉じても Accept が起きず、.NET の Socket.Dispose は Accept が
-        /// 戻るのを待つので、片付け (Dispose) ごと止まる。1本繋いで起こす手 (Px4CardTests) は
-        /// 1本しか受けない偽物なら効くが、ここは受け続けるので、起こしてもすぐ次の Accept に
+        /// 戻るのを待つので、片付け (Dispose) ごと止まる。1 本繋いで起こす手 (Px4CardTests) は
+        /// 1 本しか受けない偽物なら効くが、ここは受け続けるので、起こしてもすぐ次の Accept に
         /// 戻って同じことになる (Mac の CI で Unit tests が 8 分で打ち切られた)
         /// </para>
         /// </summary>
@@ -285,7 +285,7 @@ public class Px4TunerTests
                     frame[20 + i * 188] = 0x47;
                     frame[20 + i * 188 + 1] = Mark(khz);
                 }
-                // 枠は1度だけ作り、番号だけ書き換えて送る (速さを測るテストで、偽物の確保を数に入れない)
+                // 枠は 1 度だけ作り、番号だけ書き換えて送る (速さを測るテストで、偽物の確保を数に入れない)
                 var encoded = Px4Control.Encode(Px4Control.TsData, 0, 0, frame, Wire);
                 var paced = Stopwatch.StartNew();
                 long sent = 0;
@@ -386,7 +386,7 @@ public class Px4TunerTests
     private static Px4Tuner Open(FakePx4d px4d, TimeSpan? stallLimit = null) =>
         new(Id, 2, null, px4d.Runtime.FullName, () => null) { StallLimit = stallLimit ?? Px4Stream.DefaultStallLimit };
 
-    /// <summary>TS を1パケットぶん読んで、その印を返す</summary>
+    /// <summary>TS を 1 パケットぶん読んで、その印を返す</summary>
     internal static byte ReadMark(Stream output)
     {
         var buffer = new byte[188];
@@ -530,7 +530,7 @@ public class Px4TunerTests
         using var tuner = Open(px4d);
         tuner.Tune(T27, ChannelTable.NoStreamId);
 
-        // 2回目の ATTACH_STREAM を断られる。接続が切れたわけではないので、その場では取り直さない (1度で投げる)
+        // 2 回目の ATTACH_STREAM を断られる。接続が切れたわけではないので、その場では取り直さない (1 度で投げる)
         var error = Assert.Throws<IOException>(() => tuner.Tune(T28, ChannelTable.NoStreamId));
         await Assert.That(error.Message).Contains("TS を受け取れません");
         await Assert.That(px4d.Count(Px4Control.StartStream)).IsEqualTo(2);
@@ -582,7 +582,7 @@ public class Px4TunerTests
         await Assert.That(error.Message).Contains("px4d に繋がりません");
     }
 
-    /// <summary>選局し直すたびに stream.sock を作る。閉じ忘れれば fd が1本ずつ増える</summary>
+    /// <summary>選局し直すたびに stream.sock を作る。閉じ忘れれば fd が 1 本ずつ増える</summary>
     [Test]
     [NotInParallel]
     public async Task 何度選局し直してもfdが残らない(CancellationToken cancel)
@@ -598,7 +598,7 @@ public class Px4TunerTests
         for (var i = 0; i < 30; i++) tuner.Tune(i % 2 == 0 ? T28 : T27, ChannelTable.NoStreamId);
         // 偽の px4d の後始末 (閉じた stream.sock を向こうが閉じる) が追いつくのを少し待つ
         await Task.Delay(300, cancel);
-        // 漏れていれば選局1回につき stream.sock で 30 本以上増える。並んで走る他のテストと
+        // 漏れていれば選局 1 回につき stream.sock で 30 本以上増える。並んで走る他のテストと
         // 偽の px4d の揺れは数本 (CI でちょうど 5 本だったことがある) なので、間を大きく取る
         await Assert.That(Fds() - before).IsLessThan(15);
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
@@ -673,7 +673,7 @@ public class Px4TunerTests
         long stoppedAt = 0;
         var reading = Task.Factory.StartNew(() =>
         {
-            // 1枚目を読み切ったら、次は来ない TS を待つ
+            // 1 枚目を読み切ったら、次は来ない TS を待つ
             while (output.Read(buffer, 0, buffer.Length) > 0) { }
             return Stopwatch.GetElapsedTime(Volatile.Read(ref stoppedAt));
         }, cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -722,8 +722,8 @@ public class Px4TunerTests
     }
 
     /// <summary>
-    /// 受信機ごとに接続を持ち、**要求を全部1つのキューで順に片付ける** px4d のふり (#1713)。
-    /// 本物の px4d も同じブリッジの受信機の要求は1つずつ処理する (MLT5 系なら受信機 0〜3)。
+    /// 受信機ごとに接続を持ち、**要求を全部 1 つのキューで順に片付ける** px4d のふり (#1713)。
+    /// 本物の px4d も同じブリッジの受信機の要求は 1 つずつ処理する (MLT5 系なら受信機 0〜3)。
     /// TUNE は <see cref="TuneTakes"/> かけて「同期しませんでした」(TIMEOUT) で答える
     /// </summary>
     private sealed class QueuedPx4d : IDisposable
@@ -855,8 +855,8 @@ public class Px4TunerTests
     /// **同じ筐体の受信機を同時に選局しても、px4d の順番待ちで時間切れにしない** (#1713)。
     ///
     /// <para>
-    /// 複数のチューナーでスキャンすると、4つの TUNE が px4d のキューに並ぶ。同期しないチャンネルは
-    /// 1つ 5 秒かかるので、後ろのほうは答えが来るまでに待つ上限 (7 秒) を過ぎていた。
+    /// 複数のチューナーでスキャンすると、4 つの TUNE が px4d のキューに並ぶ。同期しないチャンネルは
+    /// 1 つ 5 秒かかるので、後ろのほうは答えが来るまでに待つ上限 (7 秒) を過ぎていた。
     /// 時間切れを「接続が切れた」と取って受信機を返し、取り直しは BUSY で断られ、
     /// そのチャンネルがスキャンの結果から落ちていた
     /// </para>

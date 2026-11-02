@@ -55,7 +55,7 @@ public class UsbDeviceTests
         await Assert.That(line).IsEqualTo("EP 0x81 bulk 512 バイト、EP 0x02 bulk 512 バイト、EP 0x83 interrupt 64 バイト");
     }
 
-    /// <summary>時間切れの無い読みの偽物。答えを1つずつ返し、取り消されるまで待つ</summary>
+    /// <summary>時間切れの無い読みの偽物。答えを 1 つずつ返し、取り消されるまで待つ</summary>
     private sealed class FakeEndpoint
     {
         public readonly BlockingCollection<byte[]> Answers = [];
@@ -101,7 +101,7 @@ public class UsbDeviceTests
         await Assert.That(pump.Read(buffer, 1000)).IsEqualTo(4);
         await Assert.That(buffer[0]).IsEqualTo((byte)0xA5);
 
-        // 1回の転送が1つの答え。続けて届いても混ぜない
+        // 1 回の転送が 1 つの答え。続けて届いても混ぜない
         endpoint.Answers.Add([1, 1]);
         endpoint.Answers.Add([2, 2, 2]);
         await Assert.That(pump.Read(buffer, 1000)).IsEqualTo(2);
@@ -121,7 +121,7 @@ public class UsbDeviceTests
         var small = new byte[4];
         await Assert.That(pump.Read(small, 1000)).IsEqualTo(4);
         await Assert.That(small).IsEquivalentTo(new byte[] { 1, 2, 3, 4 });
-        // 残りは捨てる (Linux・Windows の1回の読みと同じ)
+        // 残りは捨てる (Linux・Windows の 1 回の読みと同じ)
         await Assert.That(pump.Read(small, 10)).IsEqualTo(0);
     }
 

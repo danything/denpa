@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 /// エージェント自身のこと (<c>GET /denpa/about</c>)。設定の「その他」の「バージョンと環境」がバージョン・OS・arch と、macOS なら CCID ドライバを出す。
 ///
 /// <para>
-/// **バージョンは2か所から知る。** macOS と Windows の実行ファイルはリリースのときに
+/// **バージョンは 2 か所から知る。** macOS と Windows の実行ファイルはリリースのときに
 /// <c>-p:InformationalVersion=&lt;タグ&gt;</c> で組むので、中に持っている。Linux のイメージは main で組んだものに
 /// 名前を貼るだけで組み直さない (.github/workflows/release.yml) ので、中身は <c>dev</c> のまま。こちらは
 /// denpa と同じく、リリースのときに足す 1 層の <c>DENPA_VERSION</c> で知る (.github/release.Dockerfile)。
@@ -44,7 +44,7 @@ public static class About
 
     /// <summary>
     /// <c>{"version","os","arch","runtime","ccidDriver"}</c>。<c>ccidDriver</c> は macOS だけ (ほかは null)。
-    /// 呼ぶたびに `defaults` を高々1回起こす (<see cref="PcscLink.CcidDriver"/>)
+    /// 呼ぶたびに `defaults` を高々 1 回起こす (<see cref="PcscLink.CcidDriver"/>)
     /// </summary>
     public static JsonObject ToJson() => new()
     {

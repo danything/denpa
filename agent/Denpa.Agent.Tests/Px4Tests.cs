@@ -81,7 +81,7 @@ public class Px4Tests
         await Assert.That(warned[0]).Contains("ISDB-S3");
     }
 
-    /// <summary>同じ鍵が2度ある行は最初の値を採る (<see cref="Px4Receiver.Fields"/>)。投げない</summary>
+    /// <summary>同じ鍵が 2 度ある行は最初の値を採る (<see cref="Px4Receiver.Fields"/>)。投げない</summary>
     [Test]
     public async Task 同じ鍵が2度あれば最初の値()
     {
@@ -95,7 +95,7 @@ public class Px4Tests
     public async Task 筐体と受信機から設定の形式に組み立てる()
     {
         var found = Px4Userland.Specs(Px4Userland.ParseJson(JsonList, _ => { }));
-        // MLT5PE 2つ + Q3U4 2つ + 番号の重なる M1UR / S1UR 1つずつ
+        // MLT5PE 2 つ + Q3U4 2 つ + 番号の重なる M1UR / S1UR 1 つずつ
         await Assert.That(found.Count).IsEqualTo(6);
         await Assert.That(found[0].Device).IsEqualTo("px4:000000000012345:0");
         await Assert.That(found[0].Name).IsEqualTo("PX-MLT5PE-2345 #0");
@@ -124,7 +124,7 @@ public class Px4Tests
         await Assert.That(Px4Userland.Parse("px4:000000000000001_1/2:0")).IsNull();
         await Assert.That(Px4Userland.Name("PX-M1UR", "000000000000001_1-2.3", 0)).IsEqualTo("PX-M1UR-USB 1-2.3 #0");
         await Assert.That(Px4Userland.Name("PX-Q3U4", "00001205000960", 2)).IsEqualTo("PX-Q3U4-0960 #2");
-        // 4桁に満たない番号も通すので、名前でも落ちない
+        // 4 桁に満たない番号も通すので、名前でも落ちない
         await Assert.That(Px4Userland.Parse("px4:12:0")).IsEqualTo(("12", 0));
         await Assert.That(Px4Userland.Name("PX-Q3U4", "12", 0)).IsEqualTo("PX-Q3U4-12 #0");
         using (new Px4Tuner("12", 0, null, Path.GetTempPath(), () => null)) { }
@@ -192,7 +192,7 @@ public class Px4Tests
         await Assert.That(tune.StreamId).IsEqualTo((ushort)0xffff);
         await Assert.That(tune.Lnb).IsEqualTo((byte)0);
 
-        // CS は1本しか入っていないので slot 0。11v は px4-userland には無い (0V か 15V)。指定しない
+        // CS は 1 本しか入っていないので slot 0。11v は px4-userland には無い (0V か 15V)。指定しない
         var cs = Tune(Px4Tuner.TuneRequest(7, ChannelTable.Parse("CS04")!, ChannelTable.NoStreamId, "11v"));
         await Assert.That(cs.Slot).IsEqualTo((ushort)0);
         await Assert.That(cs.Lnb).IsEqualTo((byte)0);
@@ -228,7 +228,7 @@ public class Px4Tests
 
     /// <summary>
     /// px4-userland 0.1.9 の <c>px4d --list-json</c> の形式 (SPEC 4.6 v0.26、px4d_list_format_tests.cpp の期待値)。
-    /// PX-M1UR と PX-S1UR を同時に挿すと、どちらも 000000000000001 で ready の筐体が2つ並ぶ
+    /// PX-M1UR と PX-S1UR を同時に挿すと、どちらも 000000000000001 で ready の筐体が 2 つ並ぶ
     /// </summary>
     private const string JsonList = """
         {"enclosures":[{"serial":"000000000012345","model":"PX-MLT5PE","usb":"0511:024e","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000000000012345","bus":1,"address":5,"port":"1-2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T/S","lnb_15v_supported":true},{"receiver":1,"device":1,"local":1,"system":"ISDB-T/S","lnb_15v_supported":true}]},{"serial":"00001205000960","model":"PX-Q3U4","usb":"0511:084a","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000012050009601","bus":1,"address":8,"port":"1-3.1"},{"device":2,"serial":"000012050009602","bus":1,"address":9,"port":"1-3.2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-S","lnb_15v_supported":true},{"receiver":2,"device":1,"local":2,"system":"ISDB-T","lnb_15v_supported":false}]},{"serial":"000000000000001","model":"PX-M1UR","usb":"0511:0854","status":"ready","serial_unique":false,"devices":[{"device":1,"serial":"000000000000001","bus":1,"address":6,"port":"1-2.3"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T/S","lnb_15v_supported":false}]},{"serial":"000000000000001","model":"PX-S1UR","usb":"0511:0855","status":"ready","serial_unique":false,"devices":[{"device":1,"serial":"000000000000001","bus":1,"address":7,"port":"1-2.4"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T","lnb_15v_supported":false}]},{"serial":"00001205000123","model":"PX-Q3U4","usb":"0511:084a","status":"incomplete","serial_unique":false,"devices":[{"device":1,"serial":"000012050001231","bus":2,"address":3,"port":"2-1"}],"candidates":[],"receivers":[]}],"ungrouped_usb_devices":[{"serial":null,"model":"PX-W3U4","usb":"0511:083f","status":"open_failed","bus":null,"address":null,"port":null}]}
@@ -282,7 +282,7 @@ public class Px4Tests
         await Assert.That(found[0].Receivers.Select(r => (r.Index, r.Lnb15v))).IsEquivalentTo(
             [(0, (bool?)null), (2, (bool?)null)], CollectionOrdering.Matching);
 
-        // 止めるのは番号が読めないものだけ (受信機 "1"・番号の無い筐体)。バージョンのずれは1度だけまとめて言う
+        // 止めるのは番号が読めないものだけ (受信機 "1"・番号の無い筐体)。バージョンのずれは 1 度だけまとめて言う
         await Assert.That(warned.Count(w => w.Contains("受信機が読めません"))).IsEqualTo(1);
         await Assert.That(warned.Count(w => w.Contains("PX-Q3U4 の番号"))).IsEqualTo(1);
         var skew = warned.Single(w => w.Contains("バージョンがずれている"));
