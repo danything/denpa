@@ -6,6 +6,10 @@ Linux (DVB でも siano-userland でも)・Mac (Apple Silicon)・Windows (x64) �
 
 チューナーの一覧は [tuners.md](tuners.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#siano-userland-の作り)。
 
+「Amazon で見る (広告)」は Amazon のアソシエイトのリンクです。Amazon のアソシエイトとして、denpa は適格販売により収入を得ています。
+
+[Amazon で見る (広告)](https://www.amazon.co.jp/dp/B006RQLNES?tag=doa08-22)
+
 PX-S1UD は mainline の `smsusb` + `smsdvb` で Linux DVB になるので、DVB でも使えます
 (ホストに `isdbt_rio.inp` が要る)。別に
 [siano-userland](https://github.com/Khronos31/siano-userland) の `siano-ts` を
