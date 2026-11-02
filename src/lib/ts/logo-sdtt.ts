@@ -28,7 +28,7 @@ const COMMON_MODEL_ID = 0xfe;
 
 /** 中身1つ。ロゴの判断に使うものだけ */
 export interface SdttContent {
-  /** 共通データの版。共通データ全体で1つの番号 (TR-B15 5.1.6.2) */
+  /** 共通データのバージョン。共通データ全体で1つの番号 (TR-B15 5.1.6.2) */
   newVersion: number;
   /** 予定の数。共通データは 0 (TR-B15 5.1.2.2) */
   schedules: number;

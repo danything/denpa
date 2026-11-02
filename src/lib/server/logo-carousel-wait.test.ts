@@ -237,18 +237,27 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
   });
 
   test("期間の外でも、共通データの SDTT を見たら期間中に戻り、次の定期チェックで番組表集めより上の優先度で開く", async () => {
-    // 新しいブロックは無く、SDTT だけ。「いますぐ」で開いて見かける
+    // 新しいブロックは無く、SDTT だけ。「いますぐ」で開いて見かける (上限を待たずに閉じる)
     streams.set("BS15_0", stream(...psi, commonSdtt));
+    holding.delete("BS15_0");
     await sweepNow();
     while (sweepState().running) await Bun.sleep(20);
     const before = opened.length;
-    const lines = await logged(sweep);
+    await sweep();
     expect(opened.slice(before)).toEqual([
       { channel: "BS15_0", priority: config.priority.carousel },
     ]);
-    // 期間中のまま (上限で切れても SDTT が来ていれば「来なかった」とは数えない)
+
+    // SDTT だけ来て読み進まないまま上限で切れたら、期間中のまま開き続けずに7時間あける
+    holding.add("BS15_0");
+    const lines = await logged(sweep);
+    expect(lines.at(-1)).toContain(
+      "ダウンロードは出ていましたが、ロゴは届きませんでした。7 時間あけて開き直します",
+    );
     expect(lines.at(-1)).toContain("共通データの SDTT 1");
-    expect(lines.at(-1)).not.toContain("期間の外");
+    const after = opened.length;
+    await sweep();
+    expect(opened).toHaveLength(after);
   });
 
   test("「いますぐ」も当たりの中継は番組表集めより上の優先度で開き、読み切ったら上限を待たずに手放す", async () => {

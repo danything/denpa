@@ -754,9 +754,14 @@ async function collect(
    * 途中まででも届いていれば・共通データの SDTT が来ていれば、カルーセルは流れている (ダウンロードの期間中)。
    * 次に空いたときに続きを読む。共有で見たときも控える (前に「来なかった」と控えていても、こちらが新しくなる)
    */
-  const onAir = received || (feed?.counts.sdtt ?? 0) > 0;
-  if (carrier && onAir) carouselWatch.seenAt = Date.now();
-  else if (carrier && outcome === "ranOut") carouselWatch.ranOutAt = Date.now();
+  /*
+   * ただし**上限まで開けて読み進まなかった回は、SDTT が来ていても「来なかった」と控える。** SDTT だけ来てブロックが
+   * 増えない中継があると、期間中のまま空くたびに番組表集めより上の優先度で20分ずつ塞ぎ続けてしまう
+   */
+  const sdtt = (feed?.counts.sdtt ?? 0) > 0;
+  if (carrier && outcome === "ranOut" && !received)
+    carouselWatch.ranOutAt = Date.now();
+  else if (carrier && (received || sdtt)) carouselWatch.seenAt = Date.now();
   // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
   if (!satellite && ranOut && timeout >= SWEEP_TIMEOUT)
     markGaveUp(target.channel);
@@ -1043,9 +1048,9 @@ export function waitedMessage(
       case "ranOut":
         if (received)
           return `${opened}途中まで読みました。次に空いたときに続きから読みます`;
-        // SDTT が来ていればダウンロードは出ている (期間中のまま。`collect` の `carouselWatch`)
+        // SDTT が来ていればダウンロードは出ている。それでも読み進まなければ同じく間をあける (`collect` の `carouselWatch`)
         if (counts !== null && counts.sdtt > 0)
-          return `${opened}、ダウンロードは出ていましたが、ロゴは届きませんでした。次に空いたときにまた開きます`;
+          return `${opened}、ダウンロードは出ていましたが、ロゴは届きませんでした。${OFF_PERIOD_RETRY / 3_600_000} 時間あけて開き直します`;
         return `${opened}もロゴが流れてこなかったので、ダウンロードの期間の外とみなして ${OFF_PERIOD_RETRY / 3_600_000} 時間あけて開き直します`;
       default:
         return null;
