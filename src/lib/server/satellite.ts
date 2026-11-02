@@ -304,6 +304,8 @@ export async function readLineup(
     known?: ReadonlyMap<string, string>;
     /** 読んだ番組表を渡す先 (スキャンのついで) */
     onEvents?: (epg: EpgReader) => void;
+    /** 中継器を 1 つ読むたびに、読んだ NIT と SDT を渡す先 (再編に付いていく。`lineup-follow.ts`) */
+    onTables?: (nit: NitReader, sdt: SdtReader) => Promise<unknown>;
   },
 ): Promise<Lineup> {
   const log: string[] = [];
@@ -344,6 +346,7 @@ export async function readLineup(
       continue;
     }
     options.onEvents?.(epg);
+    await options.onTables?.(read.nit, read.sdt);
     networks.set(network.networkId, network);
     tables.push(...read.sdt.tables());
     log.push(

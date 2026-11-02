@@ -12,6 +12,7 @@ import {
   stationsOf,
   WINDOW_HOURS,
 } from "#lib/server/guide.js";
+import { lineupNotice } from "#lib/server/lineup-follow.js";
 import { cancel, reserveFromForm } from "#lib/server/reservations.js";
 import { reservations } from "#lib/server/schema.js";
 import { storedSubchannels, SUBCHANNELS_COOKIE } from "#lib/subchannels.js";
@@ -63,6 +64,7 @@ export function load({ url, cookies }) {
     subchannels: storedSubchannels(cookies.get(SUBCHANNELS_COOKIE)),
     typeEmpty,
     channelNotice: typeEmpty ? null : channelNotice(counts),
+    lineupNotice: lineupNotice(),
   };
 }
 

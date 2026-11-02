@@ -4,6 +4,7 @@ import { count, eq, inArray, or, sql } from "drizzle-orm";
 import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
 import { currentServices, typeRank } from "#lib/server/epg.js";
+import { lineupNotice, seenLineupChanges } from "#lib/server/lineup-follow.js";
 import {
   type Reception,
   receptionOf,
@@ -107,6 +108,8 @@ export function load() {
     channels: coverage(),
     /** 番組表を集めている最中の様子。1チャンネルに数分かかる */
     collect: collectState(),
+    /** チャンネルを書き換えたお知らせが出ているか。出ていれば、画面を開いたところで消す (`seenLineup`) */
+    lineupChanged: lineupNotice() !== null,
   };
 }
 
@@ -141,6 +144,15 @@ export const actions = {
     const result = await start({ types });
     if (!result.started) return fail(409, { message: result.message });
     return { success: true, scan: result.message };
+  },
+
+  /**
+   * チャンネルを書き換えたお知らせを消す。**開いた画面が呼ぶ** (`Channels.svelte`)。load で消すと、
+   * リンクに指を乗せただけの先読みでも消える
+   */
+  seenLineup: async () => {
+    seenLineupChanges();
+    return { success: true };
   },
 
   /** 走っているスキャンを中断する。設定は書き換えないまま止まる */

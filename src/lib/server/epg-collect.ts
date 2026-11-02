@@ -26,6 +26,7 @@ import {
   widenServices,
 } from "./epg";
 import { emit } from "./events";
+import { LineupWatch } from "./lineup-follow";
 import { recordFailed, recordReceived } from "./reception";
 import { resolveConflicts } from "./scheduler";
 import { programs, services } from "./schema";
@@ -268,6 +269,8 @@ async function collectChannel(
   let opened = false;
   /** TS が 1 バイトでも来たか。受信できたかの印 (`reception.ts`) */
   let received = false;
+  /** 衛星なら、ついでに読む放送の一覧 (`lineup-follow.ts`) */
+  let lineup: LineupWatch | null = null;
   /** エージェントが「選局できない」と返したか (空き待ちやエージェントに繋がらないのは入れない) */
   let refused = false;
   /*
@@ -310,8 +313,17 @@ async function collectChannel(
      */
     let sdt: ServiceReader | null = new ServiceReader();
     let sdtBytes = 0;
+    /*
+     * **衛星は放送の一覧 (NIT) も読み、変わっていればチャンネルを書き換える** (`lineup-follow.ts`)。
+     * どの中継器にもネットワークの全部の TS が載っている。読むのは最初の `lineup-follow.ts` の `WATCH_FOR` だけ (SDT[other] がそろうまで)
+     */
+    lineup =
+      channel.type === "BS" || channel.type === "CS"
+        ? new LineupWatch(channel.type)
+        : null;
     for await (const chunk of chunks(stream)) {
       received ||= chunk.length > 0;
+      lineup?.feed(chunk);
       if (sdt !== null) {
         sdt.feed(chunk);
         sdtBytes += chunk.length;
@@ -351,6 +363,7 @@ async function collectChannel(
    * 選局できなかった回も「行った」と覚える (受信できないチャンネルを周回のたびに選び直さない)。
    * 開けたのに何も来ないまま終わった回は、上限まで待ったときだけ数える (録画やライブに譲った・止めたときは数えない)
    */
+  lineup?.follow();
   if (received) {
     recordReceived(channel.type, channel.channel);
   } else if (refused || (opened && timedOut)) {
