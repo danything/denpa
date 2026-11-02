@@ -8,7 +8,12 @@
  * アンテナが衛星だけの家では消えない案内になっていた。種別ごとの空きは番組表が表の場所で言う
  * (`guide/+page.svelte` の `typeEmpty`)
  */
-export type ChannelNotice = "all";
+/**
+ * - `all` … どの種別にも局が無い。スキャンへ案内する
+ * - `changed` … 放送の一覧が変わり、受信できるチャンネルを書き換えた (`server/lineup-follow.ts`)。文は書き換えた中身で、
+ *   設定の「受信」を開くか 24 時間たつと消える
+ */
+export type ChannelNotice = "all" | "changed";
 
 /** いま選局できる局の数 (種別ごと。`server/epg.ts` の `serviceCounts`) */
 type ServiceCounts = Record<string, number>;
@@ -20,4 +25,12 @@ export function channelNotice(counts: ServiceCounts): ChannelNotice | null {
 
 export const CHANNEL_NOTICE_TEXT: Record<ChannelNotice, string> = {
   all: "チャンネルがありません。チャンネルスキャンをしてください",
+  changed:
+    "チャンネルが放送で変わったため、受信できるチャンネルを書き換えました",
+};
+
+/** 文の後ろのボタン。どちらも設定の「受信」の「チャンネル」へ行く */
+export const CHANNEL_NOTICE_ACTION: Record<ChannelNotice, string> = {
+  all: "スキャンへ",
+  changed: "確認",
 };

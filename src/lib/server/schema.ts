@@ -236,6 +236,20 @@ export const channelReception = sqliteTable(
   (t) => [primaryKey({ columns: [t.type, t.channel] })],
 );
 
+/**
+ * 放送の一覧が変わり、受信できるチャンネルを書き換えた記録 (`lineup-follow.ts`)。
+ * 録画・番組表・ライブの上のお知らせの 1 行に出し、設定の「受信」を開いたら消す
+ */
+export const channelChanges = sqliteTable("channel_changes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  type: text("type").$type<ChannelType>().notNull(),
+  /** 人が読む 1 行。お知らせと通知にそのまま出す */
+  text: text("text").notNull(),
+  at: integer("at").notNull(),
+  /** 設定の「受信」を開いた時刻 */
+  seen_at: integer("seen_at"),
+});
+
 export const programs = sqliteTable(
   "programs",
   {

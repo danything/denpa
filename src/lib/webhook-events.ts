@@ -9,6 +9,8 @@ export const EVENTS = [
   "disk.low",
   "agent.down",
   "agent.up",
+  // 放送の一覧が変わり、受信できるチャンネルを書き換えた (BS・CS の再編。lineup-follow.ts)
+  "channels.changed",
 ] as const;
 
 export type WebhookEvent = (typeof EVENTS)[number];
@@ -22,4 +24,5 @@ export const EVENT_LABEL: Record<string, string> = {
   "disk.low": "ディスク残量わずか",
   "agent.down": "チューナーエージェント切断",
   "agent.up": "チューナーエージェント復帰",
+  "channels.changed": "チャンネルの変更",
 };

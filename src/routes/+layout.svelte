@@ -360,6 +360,8 @@
   const notice = $derived(
     (page.data["channelNotice"] ?? null) as NoticeKind | null,
   );
+  /** 放送の一覧が変わってチャンネルを書き換えたときの 1 行。同じ load が渡す (`server/lineup-follow.ts`) */
+  const lineup = $derived((page.data["lineupNotice"] ?? null) as string | null);
   let menuOpen = $state(false);
   /** 行き先を選んだら閉じる。開いたままだと次の画面の頭が隠れる */
   $effect(() => {
@@ -556,6 +558,10 @@
   {#if notice}
     <div class="notice-slot">
       <ChannelNotice kind={notice} />
+    </div>
+  {:else if lineup}
+    <div class="notice-slot">
+      <ChannelNotice kind="changed" text={lineup} />
     </div>
   {/if}
 

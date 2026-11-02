@@ -13,6 +13,7 @@ import {
   SERVICE_TYPE_ORDER,
   serviceCounts,
 } from "#lib/server/epg.js";
+import { lineupNotice } from "#lib/server/lineup-follow.js";
 import { warm } from "#lib/server/live.js";
 import { linkState } from "#lib/server/niconico.js";
 import { recordAiring } from "#lib/server/reservations.js";
@@ -201,6 +202,7 @@ export function load(event) {
     channels,
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
     channelNotice: channelNotice(serviceCounts()),
+    lineupNotice: lineupNotice(),
     start,
     postalCode: current.postalCode,
     prefecture: current.prefecture,

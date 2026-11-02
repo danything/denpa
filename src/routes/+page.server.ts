@@ -33,6 +33,7 @@ import { serviceCounts } from "#lib/server/epg.js";
 import { emit } from "#lib/server/events.js";
 import { deleteRecordingFiles, reconcile } from "#lib/server/files.js";
 import { seriesFolder } from "#lib/server/library.js";
+import { lineupNotice } from "#lib/server/lineup-follow.js";
 import { watchProgress } from "#lib/server/playback.js";
 import { recordingFromForm } from "#lib/server/recording.js";
 import { cancel, restore } from "#lib/server/reservations.js";
@@ -330,6 +331,8 @@ export function load({ url, cookies }) {
   return {
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
     channelNotice: channelNotice(serviceCounts()),
+    /** 放送の一覧が変わってチャンネルを書き換えたときの 1 行 (`server/lineup-follow.ts`) */
+    lineupNotice: lineupNotice(),
     reservations,
     recordings,
     missed,
