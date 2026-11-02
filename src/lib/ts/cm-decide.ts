@@ -466,16 +466,21 @@ const State = {
   Spot: 4,
   /** CM。無音の外の切れ目で終わった告知 (次は番組) */
   Bare: 5,
+  /**
+   * CM。番組より前から録れた録画の頭の CM (尺を問わない)。前の番組のぶんで CM の並びではないので、続けてよいのは
+   * 15 秒の倍数の CM だけ (告知を続けると、番組の冒頭のロゴの無い 5 秒が告知として CM に入る)
+   */
+  Head: 6,
   /** 提供 (番組)。その手前が番組 / 並び / 15 秒の倍数 / それ以外の CM */
-  CreditAfterProgram: 6,
-  CreditAfterChain: 7,
-  CreditAfterFit: 8,
-  CreditAfterOther: 9,
+  CreditAfterProgram: 7,
+  CreditAfterChain: 8,
+  CreditAfterFit: 9,
+  CreditAfterOther: 10,
 } as const;
 type State = (typeof State)[keyof typeof State];
-const STATES = 10;
+const STATES = 11;
 
-const isCm = (s: State) => s >= State.Chain && s <= State.Bare;
+const isCm = (s: State) => s >= State.Chain && s <= State.Head;
 const isCredit = (s: State) => s >= State.CreditAfterProgram;
 
 /**
@@ -798,9 +803,18 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
           continue;
         if (head || tail) {
           if (b.kind === "bare") continue;
-          relax(j, State.Other, base + credit - CM_LOGO * lit, i, s);
+          relax(
+            j,
+            head && !tail && before !== undefined ? State.Head : State.Other,
+            base + credit - CM_LOGO * lit,
+            i,
+            s,
+          );
           continue;
         }
+        const fit = fit15(length);
+        // 録画の頭の CM に続けてよいのは 15 秒の倍数の CM だけ (`State.Head`)
+        if (s === State.Head && (fit === 0 || b.kind === "bare")) continue;
         const spot = fitSpot(length);
         if (b.kind === "bare") {
           // 無音の外の切れ目で終わるのは、CM に挟まれた短い所の頭の告知だけ
@@ -814,7 +828,6 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
             );
           continue;
         }
-        const fit = fit15(length);
         const logoCost = CM_LOGO * lit;
         const cm = CM_FIT * length * fit - CM_MISFIT * (1 - fit) - logoCost;
         const next =

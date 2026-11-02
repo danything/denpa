@@ -51,7 +51,7 @@ export interface CanvasSupport {
 }
 
 /**
- * 問い合わせる形式。サーバがエンコードする形式と同じ (`server/live.ts` の `codecsFor`)。
+ * 問い合わせる形式。サーバがエンコードする形式と同じ (`#lib/live.ts` の `codecsFor`)。
  * 実際にデコードするときは moov から読んだ形式で開く (`ts/fmp4.ts` の `readInit`) — エンコード方式が同じなので同じになる
  */
 const PROBE = { h264: "avc1.640029", av1: "av01.0.08M.08" } as const;

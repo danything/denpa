@@ -502,9 +502,11 @@
             {stage}
             codec={liveCodecs({
               icon: CODEC,
-              codec: player.codec,
+              choice: player.choice,
+              format: player.codec,
+              hidden: data.hidden.length > 0,
               unavailable: player.unavailable,
-              onselect: (key) => player.setCodec(key),
+              onselect: (next) => player.setChoice(next),
             })}
             audio={liveAudio(AUDIO, player)}
             subtitle={liveSubtitle(CAPTION, player)}

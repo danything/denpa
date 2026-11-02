@@ -6,12 +6,11 @@ import {
   audioTracks,
   pickTrack,
 } from "#lib/arib.js";
-import { CHANNEL } from "#lib/live.js";
+import { CHANNEL, codecsFor } from "#lib/live.js";
 
 import {
   blameLiveHw,
   CHASE_STREAM_HOLD,
-  codecsFor,
   encodeArgs,
   key,
   LIVE_STREAM_BACKLOG,
