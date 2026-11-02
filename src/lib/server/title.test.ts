@@ -97,6 +97,18 @@ describe("parseTitle", () => {
     });
     // 作品名そのものの【】は残す
     expect(parseTitle("【推しの子】 #1").series).toBe("【推しの子】");
+    // 副題の後ろの枠の名前も外す。鍵括弧だけの副題は括弧も外す
+    expect(
+      parseTitle("テスト貴族 第３期🈑　＃３０「ハジマリ」【テスト枠】"),
+    ).toEqual({
+      series: "テスト貴族",
+      arc: "第３期",
+      subtitle: "ハジマリ",
+      episode: 30,
+    });
+    expect(parseTitle("テスト番組 #4 ゲスト回【テスト枠】").subtitle).toBe(
+      "ゲスト回",
+    );
   });
 
   test("[無] と頭の <枠の名前> は落とす", () => {
