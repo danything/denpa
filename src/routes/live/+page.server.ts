@@ -14,6 +14,7 @@ import {
   serviceCounts,
 } from "#lib/server/epg.js";
 import { warm } from "#lib/server/live.js";
+import { linkState } from "#lib/server/niconico.js";
 import { recordAiring } from "#lib/server/reservations.js";
 import { programs, services as stations } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
@@ -208,6 +209,8 @@ export function load(event) {
     jikkyo: current.jikkyo,
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
     jikkyoNg: current.jikkyoNg,
+    /** ニコニコと連携しているか (世帯で 1 つ)。しているときは、書き込みを公式のニコニコ実況へ送る (`server/niconico-live.ts`) */
+    niconico: linkState().state === "linked",
   };
 }
 

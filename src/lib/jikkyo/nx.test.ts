@@ -334,4 +334,18 @@ describe("NxJikkyo.post", () => {
     comment.receive({ chat: { date: T / 1000, content: "失敗", yourpost: 1 } });
     expect(h.got.map((c) => c.text)).toEqual(["失敗"]);
   });
+
+  test("公式に書いたもの (expectEcho) は、NX-Jikkyo が取り込んで流してきた同じ本文を yourpost が無くても 1 回だけ捨てる", () => {
+    const { h, comment } = ready();
+    h.nx.expectEcho("公式");
+    const chat = { date: T / 1000, content: "公式", mail: "184" };
+    comment.receive({ chat });
+    comment.receive({ chat });
+    expect(h.got.map((c) => c.text)).toEqual(["公式"]);
+    // 送れなかったら忘れる (戻ってきても捨てない)
+    h.nx.expectEcho("失敗");
+    h.nx.forgetEcho("失敗");
+    comment.receive({ chat: { ...chat, content: "失敗" } });
+    expect(h.got.map((c) => c.text)).toEqual(["公式", "失敗"]);
+  });
 });

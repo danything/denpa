@@ -1,6 +1,7 @@
 import { type Actions, fail } from "@sveltejs/kit";
 
 import { parseNg } from "#lib/jikkyo/ng.js";
+import { niconicoLive } from "#lib/server/niconico-live.js";
 import { linkState, unlink } from "#lib/server/niconico.js";
 import { saveSettings, settings } from "#lib/server/settings.js";
 
@@ -27,6 +28,8 @@ export const actions = {
     const refused = refusal(event);
     if (refused !== null) return fail(403, { message: refused });
     unlink();
+    // 開いている公式の実況への接続も閉じる
+    niconicoLive.closeAll();
     return { success: true, niconicoUnlinked: true };
   },
 } satisfies Actions;
