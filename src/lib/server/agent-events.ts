@@ -115,7 +115,7 @@ export function listen(
       } catch (error) {
         if (stopped) return;
         console.warn(
-          `[agent] 通知に繋げません (${Math.round(retry / 1000)}秒後に再試行): ${error}`,
+          `[agent] 通知に繋げません (${Math.round(retry / 1000)} 秒後に再試行): ${error}`,
         );
       }
       // 繋がらない状態が猶予を超えて続いたら、一度だけ「落ちている」を鳴らす
