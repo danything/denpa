@@ -5,13 +5,13 @@
  * (市販のテレビも「再スキャンしてください」と知らせる)。知らせるのは 2 つ。
  *
  * - **続けて選局できないチャンネル** (`reception.failingGround`)。周波数が変わったなら、スキャンし直せば選局できる
- * - **局の顔ぶれがスキャンの結果と違うチャンネル。** 番組表集めがチャンネルを開いたときに NIT を読み、そのチャンネルに入っている
+ * - **局の顔ぶれがスキャンの結果と違うチャンネル。** 番組表集めがチャンネルを開いたときに SDT を読み、そのチャンネルに入っている
  *   局 (テレビ) をスキャンの結果と比べる。局が増えた・減ったなら、スキャンし直せば入る
  *
  * どちらもお知らせの 1 行 (録画・番組表・ライブの上) に出し、起きたときに通知の「チャンネルの変更」も送る。
  * スキャンし直すか、受信できるようになれば消える
  */
-import { NitReader } from "@danything/arib/psi";
+import { SdtReader, type TransportInfo } from "@danything/arib/psi";
 
 import { failingGround } from "./reception";
 import type { AgentChannel } from "./tuner";
@@ -23,7 +23,7 @@ const mismatched = new Map<string, string>();
 /** 通知を送った文。同じ文は 2 度送らない */
 const notified = new Set<string>();
 
-/** 番組表集めがチャンネルを読むついでに、NIT を読む長さ (地上波の NIT は 10 秒に 1 回は流れる) */
+/** 番組表集めがチャンネルを読むついでに、SDT を読む長さ (SDT は 2 秒に 1 回は流れる) */
 const WATCH_FOR = 15_000;
 
 /** テレビの局のサービス ID を並べた文字列 (比べるため) */
@@ -31,16 +31,15 @@ const shapeOf = (ids: Iterable<number>) =>
   [...ids].sort((a, b) => a - b).join(",");
 
 /**
- * 地上波のチャンネルの NIT を読み、局の顔ぶれをスキャンの結果と比べる。違えば覚え、同じなら忘れる。
- * NIT に自分の TS が無ければ比べない
+ * 地上波のチャンネルの SDT (自分の TS の局の一覧) を、スキャンの結果と比べる。違えば覚え、同じなら忘れる。
+ * **スキャンと同じ SDT で比べる** (スキャンも SDT の局を保存する。NIT と比べると、NIT にだけ載る局で毎回違って見える)。
+ * 読めなかったとき・別の TS の表のときは比べない
  */
-export function compareGround(channel: AgentChannel, nit: NitReader): void {
-  const network = nit.actual;
-  if (network === null) return;
-  const ts = network.transportStreams.find(
-    (candidate) => candidate.transportStreamId === channel.transportStreamId,
-  );
-  if (ts === undefined) return;
+export function compareGround(
+  channel: AgentChannel,
+  ts: TransportInfo | null,
+): void {
+  if (ts === null || ts.transportStreamId !== channel.transportStreamId) return;
   const broadcast = shapeOf(
     ts.services
       .filter((service) => service.serviceType === 0x01)
@@ -105,21 +104,21 @@ export function alertGround(): void {
 }
 
 /**
- * **番組表集めのついでに、地上波の NIT を読む** (`epg-collect.ts`)。開いてから `WATCH_FOR` の間だけ読み、
+ * **番組表集めのついでに、地上波の SDT を読む** (`epg-collect.ts`)。開いてから `WATCH_FOR` の間だけ読み、
  * 閉じたら `compareGround` でスキャンの結果と比べる
  */
 export class GroundWatch {
-  readonly nit = new NitReader();
+  readonly sdt = new SdtReader();
   private readonly until = Date.now() + WATCH_FOR;
 
   constructor(private readonly channel: AgentChannel) {}
 
   feed(chunk: Uint8Array): void {
-    if (Date.now() > this.until || this.nit.actual !== null) return;
-    this.nit.feed(chunk);
+    if (Date.now() > this.until || this.sdt.actual !== null) return;
+    this.sdt.feed(chunk);
   }
 
   compare(): void {
-    compareGround(this.channel, this.nit);
+    compareGround(this.channel, this.sdt.actual);
   }
 }

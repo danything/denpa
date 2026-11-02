@@ -3,13 +3,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { NitReader } from "@danything/arib/psi";
-import { nitSection, packetize } from "@danything/arib/synth";
+import { SdtReader } from "@danything/arib/psi";
+import { packetize, sdtSection } from "@danything/arib/synth";
 
 import type { AgentChannel } from "./tuner";
 
 /**
- * 地上波は付いていかず、知らせるだけ。合成の NIT と受信の記録で、お知らせの 1 行が出ることを見る
+ * 地上波は付いていかず、知らせるだけ。合成の SDT と受信の記録で、お知らせの 1 行が出ることを見る
  */
 const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-ground-")), "denpa.db");
@@ -23,7 +23,7 @@ const { compareGround, forgetGround, groundNotice } =
 const HOUR = 60 * 60_000;
 const T0 = 1_800_000_000_000;
 
-/** TOKYO MX (T16)。控えには MX1 (23608) だけ */
+/** TOKYO MX (T16)。スキャンの結果には MX1 (23608) だけ */
 const MX: AgentChannel = {
   type: "GR",
   channel: "T16",
@@ -36,25 +36,25 @@ const MX: AgentChannel = {
   ],
 };
 
-function nitOf(services: [number, number][]): NitReader {
-  const nit = new NitReader();
-  nit.feed(packetize(0x10, nitSection(32391, 9, [[32391, 32391, services]])));
-  return nit;
+function sdtOf(services: [number, number][]) {
+  const sdt = new SdtReader();
+  sdt.feed(packetize(0x11, sdtSection(32391, 32391, services)));
+  return sdt.actual;
 }
 
 beforeEach(() => {
   orm().delete(channelReception).run();
   forgetGround([]);
-  compareGround(MX, nitOf([[23608, 0x01]]));
+  compareGround(MX, sdtOf([[23608, 0x01]]));
 });
 
 describe("地上波の知らせ", () => {
-  test("局の顔ぶれが控えと違えば知らせ、同じに戻れば消す", () => {
+  test("局の顔ぶれがスキャンの結果と違えば知らせ、同じに戻れば消す", () => {
     expect(groundNotice()).toBeNull();
     // MX2 (23610) が増えた。データ放送の違いは数えない
     compareGround(
       MX,
-      nitOf([
+      sdtOf([
         [23608, 0x01],
         [23610, 0x01],
       ]),
@@ -64,7 +64,7 @@ describe("地上波の知らせ", () => {
     );
     compareGround(
       MX,
-      nitOf([
+      sdtOf([
         [23608, 0x01],
         [23615, 0xc0],
       ]),
@@ -72,10 +72,10 @@ describe("地上波の知らせ", () => {
     expect(groundNotice()).toBeNull();
   });
 
-  test("スキャンし直して控えから消えたチャンネルの違いは忘れる", () => {
+  test("スキャンし直してスキャンの結果から消えたチャンネルの違いは忘れる", () => {
     compareGround(
       MX,
-      nitOf([
+      sdtOf([
         [23608, 0x01],
         [23610, 0x01],
       ]),
@@ -113,7 +113,7 @@ describe("チャンネルのお知らせの順", () => {
     const { channelChanges } = await import("./schema");
     compareGround(
       MX,
-      nitOf([
+      sdtOf([
         [23608, 0x01],
         [23610, 0x01],
       ]),
