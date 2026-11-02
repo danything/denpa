@@ -115,11 +115,7 @@
       {#if coverage.length > 0}
         <div class="cluster section-bar" data-testid="channel-actions">
           {@render scanControl()}
-          <!--
-                        入れたばかりのとき用。普段の周回は録画にもスキャンにも
-                        譲るので、何か動いていると番組表がなかなか埋まらない。
-                        押されている間は録画とライブ視聴以外には譲らせて、全チューナーで回る
-                    -->
+          <!-- 入れたばかりのとき用 (`channels.server.ts` の `collectNow`) -->
           <ActionButton
             action="?/collectNow"
             class="small secondary outline"
@@ -310,7 +306,6 @@
             >で、録画とライブ視聴に使っていないチューナーを全部使って集められます
             (スキャンやロゴの取得は止めます)。
           </p>
-          <!-- 局ロゴ。放送波から取得するしかない。番組表に出ないとき、取れていないのか出し方が悪いのかをここで見分ける -->
           <p>
             <strong>局ロゴ</strong
             >は番組表と一覧に出すもので、番組表を集めるときにあわせて取得します。

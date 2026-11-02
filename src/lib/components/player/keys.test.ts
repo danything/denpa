@@ -1,14 +1,8 @@
-/**
- * 再生画面のキー操作。**3画面 (ライブ・追っかけ・観る画面) で同じ割り当て**にするための共通部品。
- *
- * DOM は要らないので、押されたことだけを作って渡す。
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { playerKeys } from "./keys";
 
-/** 押す。`preventDefault` を呼んだか (= 取ったか) を返す */
+/** 押す (DOM は使わず、イベントの形だけ作る)。`preventDefault` を呼んだか (= 取ったか) を返す */
 function press(
   handler: (event: KeyboardEvent) => void,
   key: string,
@@ -76,11 +70,6 @@ describe("再生画面のキー", () => {
     ]);
   });
 
-  /*
-   * **修飾キー付きは取らない。** Ctrl+C (コピー) を `c` (字幕) として横取りして
-   * いた頃は、観ながら番組名や URL を写せなかった。Shift だけは通す
-   * (`<` `>` は Shift 込みで打つ)
-   */
   test("修飾キー付きと変換中は取らない。Shift だけは通す", () => {
     const { done, press } = harness();
     expect(press("c", { ctrlKey: true })).toBe(false);
@@ -93,7 +82,6 @@ describe("再生画面のキー", () => {
     expect(done).toEqual(["speed 1"]);
   });
 
-  /** 入力欄やボタンの上では取らない — 空白でボタンを押せなくなる */
   test("入力欄・ボタン・リンクの上では取らない", () => {
     const { done, press } = harness();
     expect(press(" ", { target: { closest: () => ({}) } })).toBe(false);

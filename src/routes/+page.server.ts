@@ -169,7 +169,7 @@ interface ReservationRow extends Omit<Reservation, "state"> {
  * 予約と録画を1画面に並べる。
  *
  * 「これから何が録れるか」と「録れたものが今どうなっているか」は続きものなので、
- * 行き来せずに見えるほうがいい。1本の時間軸に並べる (上が予約、下が録れたもの。並べるのは画面の `#lib/timeline.ts`)。
+ * 行き来せずに見えるほうがいい。1本の時間軸に並べる (上が録れたもの、下が予約。並べるのは画面の `#lib/timeline.ts`)。
  *
  * **番組名で探すのはここではない** (全体の検索 `/search?q=`)。ホームは絞り込みのボタンだけで絞る
  */
@@ -334,7 +334,7 @@ export function load({ url, cookies }) {
     missed,
     showFinished,
     showDeleted,
-    /** サイドバーの「今日」に出す空きと、あと何時間録れるかの目安 (`disk.capacity`)。読めなければ null */
+    /** サイドバーの「状態」に出す空きと、あと何時間録れるかの目安 (`disk.capacity`)。読めなければ null */
     capacity: room === null ? null : capacityLabel(room.free, room.hours),
     /** まとめて表示 (`#lib/grouping.ts`)。サーバで描く形を、端末の覚えに合わせる */
     grouped: storedGrouped(cookies.get(GROUPED_COOKIE)),

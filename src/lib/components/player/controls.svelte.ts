@@ -132,7 +132,7 @@ export function playerControls(): PlayerControls {
     },
     stir,
     hide,
-    // 押す前に出ていたかで決める (いまの状態で決めると `wake` が出したものを見て消し、指では出せなかった)
+    // いまの状態で決めると `wake` が出したものを見て消し、指では出せなかった
     toggle(): void {
       if (byTouch && wasShown) hide();
     },

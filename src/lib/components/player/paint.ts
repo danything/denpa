@@ -15,7 +15,7 @@ export interface Rect {
 /**
  * 中身を枠に収めたときの位置と大きさ (`object-fit: contain` と同じ計算)。
  * 映像が出ている場所を出し、字幕の canvas の箱をそこへ重ねる。
- * 箱の中の画素の大きさは `CaptionPainter` が面の縦横比 × DPR で決める
+ * 箱の中の画素の大きさは `CaptionPainter` が見えている大きさ × DPR で決める
  */
 export function fitRect(
   boxWidth: number,

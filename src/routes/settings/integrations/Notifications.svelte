@@ -74,7 +74,7 @@
             -->
       <div class="rows">
         {#each data.webhooks as webhook (webhook.id)}
-          <div class="row webhook item" data-testid="webhook-row">
+          <div class="webhook item" data-testid="webhook-row">
             <div class="url-line">
               <span class="tag {webhook.enabled ? 'success' : ''}">
                 {webhook.enabled ? "有効" : "無効"}
@@ -117,7 +117,6 @@
               >
                 {webhook.enabled ? "無効化" : "有効化"}
               </ActionButton>
-              <!-- 押し間違い防止に2回押させる (録画・ルールの削除と同じ) -->
               <ArmedDelete
                 {deleting}
                 armKey={webhook.id}

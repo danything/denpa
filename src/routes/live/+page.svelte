@@ -449,7 +449,7 @@
     overlay: () => overlay,
     captions: () => player.captions && player.hasCaptions,
   });
-  // MPEG-2 をデコードした音を「再生する音」と言うのは、入れているときと小窓を開いている間だけ (`raw/engine.ts`)
+  // MPEG-2 をデコードした音を「再生する音」と言うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
   $effect(() => {
     player.playback = background.on || pip.active;
   });

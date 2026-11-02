@@ -219,8 +219,6 @@
 
   /**
    * その録画を観る画面。**観られないものには無い。**
-   * 録り終えたものは `/watch`、録っている最中は元のTSを `/chase` で観る (下)。
-   *
    * 消したものと、**録画そのものが失敗したもの**も外す。後者は途中まで書けた
    * ファイルが残っていることはあるが、頭からスクランブルが掛かっていたり
    * 中身が空だったりで、押しても何も映らない
@@ -316,7 +314,7 @@
     return res.end_at > now ? "future" : "past";
   }
 
-  /** 描いた時刻。「いま」の線と予約の側分けの物差し。読み直すたびに取り直す */
+  /** 描いた時刻 (`HomeContext.clock`)。読み直すたびに取り直す */
   const clock = $derived.by(() => {
     void data;
     return Date.now();
@@ -504,7 +502,6 @@
     return Math.max(0, parts.past.length - shown);
   });
 
-  /** エンコードを待っている・している録画 (動いているものが先) */
   const encoding = $derived(
     data.recordings
       .filter((rec) => rec.job_id !== null && rec.deleted_at === null)
@@ -530,7 +527,6 @@
   });
   /** 「いま」の線に添える一言。次の録画まで (絞り込みに関係なく。録画中のあと何分かは行の3段目) */
   const lineStatus = $derived(nowStatus(clock, nextRes));
-  /** 日付の見出しの字。今日・明日・昨日は言葉で、ほかは西暦つきの日付 */
   function dayLabel(at: number): string {
     return dayName(at, clock) ?? fullDate(at);
   }
@@ -659,7 +655,6 @@
     pinned,
     onpick: (day: number) => void pickDay(day),
   });
-  /** 操作の1行 (`TimelineBar`) とサイドバー (`HomeAside`) が同じものを受ける */
   const controls = $derived<HomeControls>({
     filter,
     setFilter,
@@ -833,10 +828,7 @@
 <!--
     予約の詳細から取り消す。**行の「取消」と同じアクション** (`?/cancel`) なので、
     ルールが立てた予約でも作り直されない (戻すのは行の「戻す」から)。
-
-    行にしか無かった頃は、詳細を開いて中身を確かめてから要らないと分かっても、
-    一度閉じて行のボタンを探し直すことになっていた (番組表の詳細には前からある)。
-    **取り消せたら閉じる** — 番組表の詳細で予約・取消したときと同じ。
+    中身を確かめてから、閉じずに取り消せるように。**取り消せたら閉じる** — 番組表の詳細と同じ。
     取り消した行は一覧から消える (完了した予約も出しているときは「戻す」に変わる)
 -->
 {#snippet reservationActions()}

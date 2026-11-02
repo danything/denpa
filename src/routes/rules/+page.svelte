@@ -15,11 +15,6 @@
 
   let { data, form } = $props();
 
-  /**
-   * **ルールの一覧と管理。** 並べて見比べ、スイッチで止める・戻す、2回押しで消す。
-   * 作る・直すのは検索の画面の「ルールとして保存」(行を押すと `/search?rule=<ID>`)
-   */
-
   type Rule = (typeof data.rules)[number];
   type Filter = "all" | "on" | "off" | "idle" | "conflict";
   const FILTERS: {

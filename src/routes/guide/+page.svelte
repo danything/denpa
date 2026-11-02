@@ -471,12 +471,13 @@
     return list;
   });
 
-  /** 「18(日)」。今日はこの前に小さく「今日」を添える (マークアップの `.today-mark`)。土日は字の色 (`.sat`・`.sun`) */
+  /** 「18(日)」。今日はこの前に小さく「今日」を添える (マークアップの `.today-mark`) */
   function dayLabel(start: number): string {
     const text = date(start);
     return text.slice(text.indexOf("/") + 1);
   }
 
+  /** 土日は字の色 (`.sat`・`.sun`) */
   function weekday(start: number): "sat" | "sun" | "" {
     const day = new Date(start).getDay();
     return day === 6 ? "sat" : day === 0 ? "sun" : "";
@@ -1025,7 +1026,7 @@
                 style="display: block; width: 2rem; height: 1.25rem"
                 fallback=""
               />
-              <!-- テレビに出ている番号。ライブの一覧と同じく、バッジにせず小さな控えた字 (format.ts の channelNumber) -->
+              <!-- テレビに出ている番号 (`channelNumber`) -->
               {#if channelNumber(service) !== null}
                 <span class="ch-number">{channelNumber(service)}</span>
               {/if}
@@ -1300,10 +1301,8 @@
 
       {#if canReserve}
         <!--
-                    録画のしかたはここでは選ばせない。設定画面の1箇所で決める
-                    (同じ選択肢を予約・ルール・設定に並べると、どれで決まったのか
-                    分からなくなる)。コピー禁止の番組には出さない — 押しても断るだけ
-                    (`reservations.reserve`)。理由は詳細の「コピー禁止」に添えてある
+                    録画のしかたは選ばせない (`+page.server.ts` の `reserve`)。コピー禁止の番組には出さない —
+                    押しても断るだけ (`reservations.reserve`)。理由は詳細の「コピー禁止」に添えてある
                 -->
         <form method="POST" action="?/reserve" use:submitting={closeOnSuccess}>
           <input type="hidden" name="programId" value={program.id} />

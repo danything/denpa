@@ -348,7 +348,7 @@
    * 「その他」とその中の「設定」、広い形はヘッダーの「設定」
    */
   const fresh = $derived(data.update !== null);
-  /** タブを出すのはナビの画面 (切り抜きも) と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
+  /** タブを出すのはナビの画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
   const showTabbar = $derived(here !== null);
   /**
    * テーブルトップ (`#lib/phone-form.ts`) のライブでは、下のタブは下の段 (舞台の中。黒い地) の下端に浮く。
@@ -998,10 +998,7 @@
   :global(.menu.tab-more-menu) {
     margin-inline-end: 0.75rem;
   }
-  /*
-     * **縦に積む。** Pico のナビの部品を読んでいた頃は `nav ul` が横並び (flex) になり、
-     * 畳んだメニューの中まで横に並んで、箱からはみ出していた。いまの画面の項目は `app.css` の `.menu-item` (左の縦線と主の色の太字)
-     */
+  /* 縦に積む。いまの画面の項目は `app.css` の `.menu-item` (左の縦線と主の色の太字) */
   .more-list {
     display: flex;
     flex-direction: column;
