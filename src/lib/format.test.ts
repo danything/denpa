@@ -7,6 +7,7 @@ import {
   clock,
   duration,
   durationMs,
+  encodeDetail,
   eta,
   fullDate,
   nowStatus,
@@ -120,6 +121,24 @@ describe("残り時間の見込み", () => {
     expect(eta(null)).toBe("");
     expect(eta(0)).toBe("");
     expect(eta(Number.NaN)).toBe("");
+  });
+});
+
+describe("エンコードの進み", () => {
+  const stored = { job_percent: 0.2, job_eta_ms: 5 * MIN };
+
+  test("届いた進みが無ければ DB の値", () => {
+    expect(encodeDetail(undefined, stored)).toBe("20.0%・あと5分00秒");
+  });
+
+  test("届いた進みがあれば、そちらの残り時間", () => {
+    expect(encodeDetail({ percent: 0.45, etaMs: 64_000 }, stored)).toBe(
+      "45.0%・あと1分04秒",
+    );
+  });
+
+  test("届いた残り時間が見積もれない (null) なら、DB の古い値に戻さず出さない", () => {
+    expect(encodeDetail({ percent: 0.45, etaMs: null }, stored)).toBe("45.0%");
   });
 });
 

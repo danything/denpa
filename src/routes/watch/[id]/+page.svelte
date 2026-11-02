@@ -290,7 +290,9 @@
   function startCanvas(codec: CanvasCodec): void {
     const local = localMkv;
     const duration = canvasLength();
-    const fresh = switchAt === null && sceneAt === null;
+    // 選び直し・切り替えは観はじめではない。この場面から観るのは観はじめなので `settle` を通す
+    const fresh = switchAt === null;
+    const scene = sceneAt !== null;
     const from = startFrom(duration);
     let made: CanvasPlayer;
     try {
@@ -343,7 +345,7 @@
     controls.stir();
     if (!fresh || resumed) return;
     resumed = true;
-    if (from !== null) showContinued();
+    if (from !== null && !scene) showContinued();
     settle();
   }
 
@@ -1239,15 +1241,16 @@
     }
     if (resumed || video === null) return;
     resumed = true;
+    // この場面から観るときも `settle` を通す (通らないと蓋が待ちくたびれるまで残る)
     if (sceneAt !== null) {
       video.currentTime = sceneAt;
       sceneAt = null;
-      return;
-    }
-    const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
-    if (at !== null && resumePoint(at, video.duration) !== null) {
-      video.currentTime = at;
-      showContinued();
+    } else {
+      const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
+      if (at !== null && resumePoint(at, video.duration) !== null) {
+        video.currentTime = at;
+        showContinued();
+      }
     }
     settle();
   }

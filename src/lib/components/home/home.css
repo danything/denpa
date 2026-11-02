@@ -165,7 +165,8 @@
 .board .group-chevron {
   display: inline-flex;
   align-self: center;
-  transition: transform var(--dp-duration);
+  /* 開いた・閉じたで向きを変える。スイッチと同じく「場所が動く」の時間 (docs/design.md) */
+  transition: transform var(--dp-duration-move);
 }
 .board .group-chevron.open {
   transform: rotate(90deg);

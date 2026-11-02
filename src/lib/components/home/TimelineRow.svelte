@@ -26,7 +26,7 @@
     date,
     duration,
     durationMs,
-    eta,
+    encodeDetail,
     logoUnusable,
     percent,
     quietState,
@@ -149,7 +149,7 @@
         tone: queued ? "wait" : "busy",
         running: !queued,
         label: shown.label,
-        detail: encoding ? encodeDetail(rec) : queued ? null : rec.job_log,
+        detail: encoding ? encodeLine(rec) : queued ? null : rec.job_log,
         testid: "recording-state",
         detailTestid: encoding ? "encode-progress" : undefined,
       });
@@ -199,11 +199,8 @@
   }
 
   /** 「45.0%・あと3分04秒」。SSE で届く進み (`encode-live`) があればそちら。読み直しを待たずに動く */
-  function encodeDetail(rec: Rec): string {
-    const live = encodeLive.entries[rec.id];
-    const left = eta(live !== undefined ? live.etaMs : rec.job_eta_ms);
-    const done = percent(live?.percent ?? rec.job_percent ?? 0);
-    return left === "" ? done : `${done}・${left}`;
+  function encodeLine(rec: Rec): string {
+    return encodeDetail(encodeLive.entries[rec.id], rec);
   }
 </script>
 
