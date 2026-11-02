@@ -179,6 +179,8 @@ describe("取り込み (v3)", () => {
     expect(first.description).toBe("1話の説明");
     expect(first.extended).toEqual({ 出演者: "作り物の人" });
     expect(first.ts_size).toBe(SIZE_1);
+    // 観たかどうかは移せないので、視聴済みで入れる (開いたときに古い録画へ送られない)
+    expect(first.watched_at).not.toBeNull();
 
     const second = imported(2)!;
     expect(second.library_path).toBeNull();
