@@ -308,7 +308,7 @@ export function canCopyImage(): boolean {
 
 /**
  * PNG をクリップボードに置く。置けたら true、断られた・PNG にできなかったら false。
- * **押した直後に呼ぶ** — Safari は押した直後の `clipboard.write` しか通さないので、中身は Promise のまま渡して後から解決する
+ * **押した直後に呼ぶ。** Safari は押した直後の `clipboard.write` しか通さないので、中身は Promise のまま渡して後から解決する
  */
 export function copyImage(png: Promise<Blob | null>): Promise<boolean> {
   const item = png.then(
