@@ -7,8 +7,6 @@ kind: InfisicalSecret
 metadata:
   name: volsync
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
