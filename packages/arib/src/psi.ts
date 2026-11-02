@@ -703,7 +703,9 @@ export interface Network {
  * 分けて) 集め、そろったものを返す。
  *
  * **version が変わっても、新しい表がそろうまでは前の表を返す。** 読む側が見るのは、いつも 1 つの
- * version でそろった表。読み始めの数秒は何も返らない (NIT は 10 秒に 1 回は流れる)
+ * version でそろった表。全部のセクションが 1 回りするまで (NIT は 10 秒に 1 回は流れるので、長くて 10 秒ほど) は何も返らない。
+ *
+ * 1 つの中継を読む前提で作ってある。別の中継へ移るときは作り直す (`actual` は最初にそろった自分のネットワークの表を返す)
  */
 export class NitReader {
   private readonly assembler = new SectionAssembler(PID_NIT);
@@ -711,23 +713,28 @@ export class NitReader {
   private readonly pending = new Map<string, SectionSet<NitSection>>();
   private readonly done = new Map<string, Network>();
 
-  /** 任意の長さのバイト列を食わせる。そろった表が増えたか変わったら true */
+  /** 任意の長さのバイト列を渡す。そろった表が増えたか変わったら true */
   feed(chunk: Uint8Array): boolean {
     let changed = false;
     for (const packet of this.packets.feed(chunk)) {
       for (const section of this.assembler.feed(packet)) {
+        const tableId = section[0];
+        if (tableId !== TABLE_NIT_ACTUAL && tableId !== TABLE_NIT_OTHER)
+          continue;
+        // current_next_indicator が 0 (これから使う表) のものは読まない
+        if (section.length < 16 || (section[5]! & 0x01) === 0) continue;
+        const key = `${tableId === TABLE_NIT_OTHER ? "other" : "actual"}:${u16(section, 3)}`;
+        // そろっている表と同じ version なら、繰り返し流れてきただけ。中身を読む前に見る (同じものが何度も来る)
+        if (this.done.get(key)?.version === ((section[5]! >> 1) & 0x1f))
+          continue;
         const parsed = parseNitSection(section);
-        if (parsed === null || !parsed.current) continue;
-        if (this.add(parsed)) changed = true;
+        if (parsed !== null && this.add(key, parsed)) changed = true;
       }
     }
     return changed;
   }
 
-  private add(section: NitSection): boolean {
-    const key = `${section.other ? "other" : "actual"}:${section.networkId}`;
-    // そろっている表と同じ version なら、繰り返し流れてきただけ
-    if (this.done.get(key)?.version === section.version) return false;
+  private add(key: string, section: NitSection): boolean {
     const set = this.pending.get(key) ?? new SectionSet<NitSection>();
     this.pending.set(key, set);
     const complete = set.add(
@@ -779,7 +786,7 @@ export interface ServiceTable extends TransportInfo {
  * SDT を TS ごとに**全部のセクション**そろえて読む。自分の TS (actual) とほかの TS (other) の両方。
  *
  * 衛星はほかの TS の局名も流しているので、1 つの TS を開けばネットワークの局名がそろう
- * (そろうかは放送しだい。来なかった TS は返らない)。version の扱いは `NitReader` と同じ
+ * (そろうかは放送しだい。来なかった TS は返らない)。version の扱いと、1 つの中継を読む前提は `NitReader` と同じ
  */
 export class SdtReader {
   private readonly assembler = new SectionAssembler(PID_SDT);
@@ -787,7 +794,7 @@ export class SdtReader {
   private readonly pending = new Map<string, SectionSet<TransportInfo>>();
   private readonly done = new Map<string, ServiceTable>();
 
-  /** 任意の長さのバイト列を食わせる。そろった表が増えたか変わったら true */
+  /** 任意の長さのバイト列を渡す。そろった表が増えたか変わったら true */
   feed(chunk: Uint8Array): boolean {
     let changed = false;
     for (const packet of this.packets.feed(chunk)) {
@@ -804,10 +811,11 @@ export class SdtReader {
   }
 
   private add(section: Uint8Array, other: boolean): boolean {
-    const transport = sdtTransport(section);
     const version = (section[5]! >> 1) & 0x1f;
-    const key = `${other ? "other" : "actual"}:${transport.originalNetworkId}:${transport.transportStreamId}`;
+    const key = `${other ? "other" : "actual"}:${u16(section, 8)}:${u16(section, 3)}`;
+    // そろっている表と同じ version なら、繰り返し流れてきただけ。局名を読む前に見る (2 秒おきに同じものが来る)
     if (this.done.get(key)?.version === version) return false;
+    const transport = sdtTransport(section);
     const set = this.pending.get(key) ?? new SectionSet<TransportInfo>();
     this.pending.set(key, set);
     if (!set.add(version, section[6]!, section[7]!, transport)) return false;
