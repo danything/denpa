@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { error, fail, redirect } from "@sveltejs/kit";
 import { eq, getTableColumns } from "drizzle-orm";
 
+import { HIDDEN_CODECS } from "#lib/live-choice.js";
 import { countClips, sceneTime } from "#lib/server/clips.js";
 import { orm } from "#lib/server/db.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
@@ -74,7 +75,7 @@ export function load({ params, url }) {
       : null;
 
   // 郵便番号と都道府県は、ライブと同じく受信機の設定としてエンジンに渡す (`DataBroadcast`)
-  const { postalCode, prefecture, jikkyo, jikkyoNg } = settings();
+  const { postalCode, prefecture, jikkyo, jikkyoNg, hideH264Hevc } = settings();
   return {
     recording,
     /** 観るものがあるか。エンコード済みか、録り終えた元の TS */
@@ -91,6 +92,8 @@ export function load({ params, url }) {
     scene,
     /** この録画の切り抜きの数 (右の列の「この録画の切り抜き」) */
     clips: countClips({ recording: id }),
+    /** コーデックのメニューから外すもの (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) */
+    hidden: hideH264Hevc ? [...HIDDEN_CODECS] : [],
   };
 }
 
