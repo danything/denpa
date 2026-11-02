@@ -260,6 +260,32 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     expect(opened).toHaveLength(after);
   });
 
+  test("「いますぐ」で開いて来なかった回も、記録のとおり 7 時間は定期チェックで開き直さない", async () => {
+    // 前の回に定期チェックで開いてから 8 時間経ったことにする。間合いは明けている
+    const real = Date.now.bind(Date);
+    const clock = spyOn(Date, "now").mockImplementation(
+      () => real() + 8 * 60 * 60_000,
+    );
+    try {
+      config.logoCarouselWait = 300;
+      streams.set("BS15_0", stream(...psi, dii, ...bsBlocks.slice(0, 1)));
+      holding.add("BS15_0");
+      const lines = await logged(async () => {
+        await sweepNow();
+        while (sweepState().running) await Bun.sleep(20);
+      });
+      expect(lines.at(-1)).toContain("7 時間あけて開き直します");
+      const before = opened.length;
+      await sweep();
+      expect(opened).toHaveLength(before);
+    } finally {
+      clock.mockRestore();
+    }
+    // 先の時刻で控えたものを今の時刻で上書きする (同じプロセスで走るほかのテストファイルへ持ち越さない)
+    await sweepNow();
+    while (sweepState().running) await Bun.sleep(20);
+  });
+
   test("「いますぐ」も当たりの中継は番組表集めより上の優先度で開き、読み切ったら上限を待たずに手放す", async () => {
     config.logoCarouselWait = 60_000;
     // DII は前の回に読んだぶんを覚えている。続きのブロックだけ流して、閉じずに待つ

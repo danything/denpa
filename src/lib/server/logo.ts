@@ -615,6 +615,15 @@ type Outcome = "done" | "miss" | "ranOut" | "yielded" | "busy" | "stopped";
 const carouselWatch: CarouselWatch = {};
 
 /**
+ * 自分で開いて待ち始めた時刻を控える (`CarouselWatch.triedAt`。定期チェックと「いますぐ」)。
+ * 開けた回だけ数える。開けなかった回・外れの中継 (1秒ほどで閉じて次へ行く) は数えない
+ */
+function markTried(outcome: Outcome, startedAt: number): void {
+  if (outcome !== "busy" && outcome !== "miss")
+    carouselWatch.triedAt = startedAt;
+}
+
+/**
  * 1つの物理チャンネルを開いて、そこに入っている局のロゴを取得する。
  *
  * **物理チャンネルを丸ごと開く。** 局を選り分けてしまうと、ロゴを載せている
@@ -967,6 +976,7 @@ async function drain(
       // 衛星のカルーセルは十数分に一度しか来ない。当たりの中継はそれまで待つ
       const limit =
         target.type === "GR" ? SWEEP_TIMEOUT : config.logoCarouselWait;
+      const startedAt = Date.now();
       const { outcome, carrier, received, openedMs, counts } = await collect(
         target,
         limit,
@@ -974,6 +984,8 @@ async function drain(
         left,
         carouselPriority(target),
       );
+      // 記録の「7 時間あけて開き直します」と合わせる。「いますぐ」で開けた回も、定期チェックの間合いはここから数える
+      if (carrier) markTried(outcome, startedAt);
       const note = carrier
         ? carouselMessage(target.channel, outcome, received)
         : "";
@@ -1159,9 +1171,7 @@ async function awaitCarousel(): Promise<number> {
         attempt.period ? carouselPriority(target) : SWEEP_PRIORITY,
       );
       found += result.found;
-      // 開けた回だけ数える。開けなかった回・外れの中継 (1秒ほどで閉じて次へ行く) は数えない
-      if (result.outcome !== "busy" && result.outcome !== "miss")
-        carouselWatch.triedAt = startedAt;
+      markTried(result.outcome, startedAt);
       const line = result.carrier
         ? waitedMessage(
             target.channel,
