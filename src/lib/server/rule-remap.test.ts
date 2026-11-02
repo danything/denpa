@@ -93,3 +93,34 @@ describe("選局できなくなった局を指すルール", () => {
     expect(orphanedRules()).toEqual([]);
   });
 });
+
+describe("候補の出し方", () => {
+  test("ルールがもう指している局は出さず、同じ名前の局も候補にする。止めているルールは出さない", () => {
+    station(400291, "ＷＯＷＯＷ", "BS03:16432", OLD);
+    station(400292, "ＷＯＷＯＷ２", "BS03:16432", NOW);
+    station(400293, "ＷＯＷＯＷ", "BS05:17488", NOW);
+    const make = (name: string, ids: number[], enabled = true) =>
+      Number(
+        orm()
+          .insert(rules)
+          .values({ name, service_ids: ids, enabled, created_at: 0 })
+          .returning({ id: rules.id })
+          .get().id,
+      );
+    const id = make("WOWOW", [400291, 400292]);
+    make("止めたルール", [400291], false);
+    expect(orphanedRules().filter((o) => o.ruleId === id)).toEqual([
+      {
+        ruleId: id,
+        ruleName: "WOWOW",
+        serviceId: 400291,
+        serviceName: "ＷＯＷＯＷ",
+        // 同じチャンネルの 400292 はルールが指しているので出さない。同じ名前の 400293 を出す
+        candidates: [{ id: 400293, name: "ＷＯＷＯＷ" }],
+      },
+    ]);
+    expect(orphanedRules().some((o) => o.ruleName === "止めたルール")).toBe(
+      false,
+    );
+  });
+});

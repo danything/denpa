@@ -4,6 +4,7 @@ import { count, eq, inArray, or, sql } from "drizzle-orm";
 import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
 import { currentServices, typeRank } from "#lib/server/epg.js";
+import { lineupNotice, seenLineupChanges } from "#lib/server/lineup-follow.js";
 import {
   type Reception,
   receptionOf,
@@ -42,7 +43,8 @@ interface Coverage {
  * **受信できないチャンネルの局は出す** (番組表やライブからは外れている。外れた理由をここで言う)
  */
 function coverage(): Coverage[] {
-  const blocked = [...unreceivableChannels()].map((key) =>
+  const unreceivable = unreceivableChannels();
+  const blocked = [...unreceivable].map((key) =>
     key.slice(key.indexOf(":") + 1),
   );
   const rows = orm()
@@ -53,6 +55,9 @@ function coverage(): Coverage[] {
       channel: services.channel,
       programs: count(programs.id),
       until: sql`COALESCE(MAX(${programs.end_at}), 0)`.mapWith(Number),
+      current: sql`CASE WHEN ${currentServices()} THEN 1 ELSE 0 END`.mapWith(
+        Number,
+      ),
     })
     .from(services)
     .leftJoin(programs, eq(programs.service_id, services.id))
@@ -64,7 +69,14 @@ function coverage(): Coverage[] {
     )
     .groupBy(services.id)
     .orderBy(services.service_id)
-    .all();
+    .all()
+    // 名前だけで絞ったぶんを、種別と名前の組で絞り直す (いまの局はそのまま)
+    .filter(
+      (row) =>
+        !blocked.includes(row.channel) ||
+        unreceivable.has(`${row.type}:${row.channel}`) ||
+        row.current === 1,
+    );
 
   const channels = new Map<string, Coverage>();
   for (const { id, name, type, channel, programs, until } of rows) {
@@ -96,6 +108,8 @@ export function load() {
     channels: coverage(),
     /** 番組表を集めている最中の様子。1チャンネルに数分かかる */
     collect: collectState(),
+    /** チャンネルを書き換えたお知らせが出ているか。出ていれば、画面を開いたところで消す (`seenLineup`) */
+    lineupChanged: lineupNotice() !== null,
   };
 }
 
@@ -130,6 +144,15 @@ export const actions = {
     const result = await start({ types });
     if (!result.started) return fail(409, { message: result.message });
     return { success: true, scan: result.message };
+  },
+
+  /**
+   * チャンネルを書き換えたお知らせを消す。**開いた画面が呼ぶ** (`Channels.svelte`)。load で消すと、
+   * リンクに指を乗せただけの先読みでも消える
+   */
+  seenLineup: async () => {
+    seenLineupChanges();
+    return { success: true };
   },
 
   /** 走っているスキャンを中断する。設定は書き換えないまま止まる */

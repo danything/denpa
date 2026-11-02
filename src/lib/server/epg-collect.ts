@@ -251,7 +251,12 @@ async function collectChannel(
     expect: whole ?? [],
   });
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.epgChannelTimeout);
+  /** 上限まで読んだか。開けたのに上限まで何も来なかったら、受信できなかったと数える (`reception.ts`) */
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, config.epgChannelTimeout);
   timer.unref?.();
 
   const label =
@@ -313,7 +318,7 @@ async function collectChannel(
     let sdtBytes = 0;
     /*
      * **衛星は放送の一覧 (NIT) も読み、変わっていればチャンネルを書き換える** (`lineup-follow.ts`)。
-     * どの中継器にもネットワークの全部の TS が載っている。読むのは最初の `LINEUP_FOR` だけ (SDT[other] がそろうまで)
+     * どの中継器にもネットワークの全部の TS が載っている。読むのは最初の `lineup-follow.ts` の `WATCH_FOR` だけ (SDT[other] がそろうまで)
      */
     lineup =
       channel.type === "BS" || channel.type === "CS"
@@ -359,13 +364,14 @@ async function collectChannel(
 
   /*
    * **受信できたかを残す** (`reception.ts`)。BS と CS は放送の一覧から作るので、受信できないチャンネルも入る。
-   * 選局できなかった回も「行った」と覚える (受信できないチャンネルを周回のたびに選び直さない)
+   * 選局できなかった回も「行った」と覚える (受信できないチャンネルを周回のたびに選び直さない)。
+   * 開けたのに何も来ないまま終わった回は、上限まで待ったときだけ数える (録画やライブに譲った・止めたときは数えない)
    */
   lineup?.follow();
   ground?.compare();
   if (received) {
     recordReceived(channel.type, channel.channel);
-  } else if (refused || opened) {
+  } else if (refused || (opened && timedOut)) {
     collected.set(key(channel), Date.now());
     if (recordFailed(channel.type, channel.channel)) {
       console.warn(

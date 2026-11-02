@@ -106,3 +106,31 @@ describe("地上波の知らせ", () => {
     expect(groundNotice()).toBeNull();
   });
 });
+
+describe("チャンネルのお知らせの順", () => {
+  test("BS・CS の書き換えを地上波の知らせより先に出す", async () => {
+    const { channelAlert } = await import("./channel-alert");
+    const { channelChanges } = await import("./schema");
+    compareGround(
+      MX,
+      nitOf([
+        [23608, 0x01],
+        [23610, 0x01],
+      ]),
+    );
+    expect(channelAlert()?.kind).toBe("ground");
+    orm()
+      .insert(channelChanges)
+      .values({
+        type: "BS",
+        text: "BS のチャンネルを書き換えました",
+        at: Date.now(),
+      })
+      .run();
+    expect(channelAlert()).toEqual({
+      kind: "changed",
+      text: "BS のチャンネルを書き換えました",
+    });
+    orm().delete(channelChanges).run();
+  });
+});
