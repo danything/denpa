@@ -301,8 +301,8 @@ interface Lines<T extends TimelineItem> {
 }
 
 /**
- * 描く行に開く。録れたもの、録画中と「いま」の線、予約の3つに分けて返す —
- * 線から遠い所を後から描き足すため (`pageStart`・`pageEnd`)。
+ * 描く行に開く。録れたもの、録画中と「いま」の線、予約の3つに分けて返す。
+ * 線から遠い所は後から描き足す (`pageStart`・`pageEnd`)。
  * ふだんは `past`・`now`・`future` の順に上から描き、`now` は録画中の行 (始まった順) のあとに線を置く。
  *
  * 日ごとのとき、今日の見出しは1つだけ。今日の録画があればその頭 (`past` の中)、無ければ `now` の頭
@@ -462,7 +462,7 @@ export function pageEnd<T extends TimelineItem>(
 }
 
 /**
- * 新しい順で表示 (`LineOptions.reversed`) を端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`) —
+ * 新しい順で表示 (`LineOptions.reversed`) を端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`)。
  * まとめて表示 (`#lib/grouping.ts` の `GROUPED_COOKIE`) と同じく、描く前に向きが分かっていれば最初から正しい並びで描ける
  */
 export const REVERSED_COOKIE = "denpa_recordings_reversed";
