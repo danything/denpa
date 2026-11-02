@@ -506,6 +506,50 @@ describe("番組表の尺で前後の番組を外す", () => {
   });
 });
 
+describe("録画の頭の CM は番組表どおりの頭まで", () => {
+  /*
+   * 本番のテレ東のアニメの並び。番組は 6.1 秒から始まるが、冒頭はロゴの代わりに「解説放送」「字幕」の案内が出ていて、
+   * ロゴの区間は 17.3 秒から。番組表どおりの頭はマージンから測った 9.4 秒
+   */
+  const joints = [6.1, ...every15(467.2, 527.2), ...every15(1621.2, 1801.2)];
+  const logo = [
+    { start: 17.3, end: 466.9 },
+    { start: 527.5, end: 1620.9 },
+  ];
+  const span = { programLength: 1800, programStart: 9.4 };
+
+  test("冒頭のロゴの無い所は番組に残し、番組の始まりの無音で切る", () => {
+    const cm = round(decideCm(recording(1820, joints, logo, span)));
+    expect(cm[0]).toEqual({ start: 0, end: 6.1 });
+    expect(cm[1]).toEqual({ start: 467.2, end: 527.2 });
+  });
+
+  test("番組表どおりの頭のあとに始まる CM は、15 秒の倍数なら CM にする", () => {
+    // 番組表の頭のあとに 60 秒の CM があり、ロゴは 66.6 秒から
+    const after = [...every15(6.1, 66.1), ...joints.slice(1)];
+    const lit = [{ start: 66.6, end: 466.9 }, logo[1]!];
+    const cm = round(decideCm(recording(1820, after, lit, span)));
+    expect(cm[0]).toEqual({ start: 0, end: 66.1 });
+  });
+
+  test("番組の途中から録れた録画は、頭の CM の尺を問わない", () => {
+    // 録画は番組の頭から 30 秒遅れて始まり、番組の中の CM の途中から入った
+    const late = [20, ...joints.slice(1)];
+    const lit = [{ start: 20.3, end: 466.9 }, logo[1]!];
+    const cm = round(
+      decideCm(
+        recording(1820, late, lit, { programLength: 1800, programStart: -30 }),
+      ),
+    );
+    expect(cm[0]).toEqual({ start: 0, end: 20 });
+  });
+
+  test("番組表どおりの頭が分からなければ、頭の CM はロゴが出るまで", () => {
+    const cm = round(decideCm(recording(1820, joints, logo)));
+    expect(cm[0]).toEqual({ start: 0, end: 17.3 });
+  });
+});
+
 describe("CM に挟まれた短い所の頭の告知", () => {
   // 番組 10〜600、CM 600〜675、ロゴの出ている 30 秒 (告知 5 秒・次回予告・提供)、705 から CM が録画の尻まで
   const joints = [10, ...every15(600, 675), ...every15(705, 795)];

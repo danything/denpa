@@ -327,6 +327,17 @@ const EDGE_FLAT_FALL = 5;
 const EDGE_FLAT_RISE = 8;
 /** ロゴの出入りが1つも無いときの減点の上限 */
 const EDGE_CAP = 30;
+/**
+ * **録画の頭の CM (尺を問わない) は、番組表どおりの頭 (`programStart`) からこの秒までに終える。** その先のロゴの無い所は、
+ * ふつうの CM と同じく 15 秒の倍数と無音で決める。番組の冒頭に局ロゴの代わりに別の案内 (「解説放送」「字幕」) が出ると、
+ * ロゴが出るまでの番組が録画の頭の CM に入っていた (本番のテレ東のアニメで 11 秒。ロゴは頭に 1.9 秒出ただけで、
+ * ロゴの区間の最短に届かず消えていた)。
+ *
+ * 番組表どおりの頭は録画の前のマージンから測るので、録画が遅れて始まると実際より後ろになり、前にはずれない
+ * (TDT で頭を測れた本番の録画 21 本で 0.7〜5.8 秒後ろ)。本番の録画 54 本では、番組の頭でロゴが出たのは番組表どおりの頭から
+ * 最大 2.2 秒後で、それより少し長く取る。番組表の頭のあとに始まる CM (TBS の 125 秒など) は、ふつうの CM として見つかる
+ */
+const HEAD_GRACE = 3;
 
 /**
  * 無音1つから採る切れ目の数 (強いほうから)。動いている場面の無音には弱い切れ目がいくつも並ぶので、比べる数を抑える
@@ -639,6 +650,18 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
     rise === undefined || c.kind === "end" ? 0 : rise(c.at),
   );
   const scored = fall !== undefined;
+  /*
+   * 録画の頭が番組より前のときだけ、頭の CM を番組表どおりの頭までにする (`HEAD_GRACE`)。番組の途中から録れた録画の頭の CM は
+   * 番組の中の CM なので尺を問わない。番組表どおりの頭は、番組が始まる所としてロゴの出始めと同じに数える
+   * (ロゴが遅れて出た番組では、頭の CM の終わりがロゴの出始めから遠いぶん減点され、録画の頭の CM が番組に残るため)
+   */
+  const before =
+    input.programStart !== undefined && input.programStart > 0
+      ? input.programStart
+      : undefined;
+  const headLimit =
+    before === undefined ? Number.POSITIVE_INFINITY : before + HEAD_GRACE;
+  const rises = before === undefined ? index.rises : [...index.rises, before];
 
   /**
    * 境目の減点。`starts` は CM の頭か (偽なら CM の終わり)。`also` は提供の反対の端 (近いほうのロゴの出入りで測る)。
@@ -652,7 +675,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
     const c = nodes[i]!;
     if (c.kind === "end") return 0;
     const at = c.at;
-    const edges = starts ? index.falls : index.rises;
+    const edges = starts ? index.falls : rises;
     let distance = also === null ? 0 : nearest(edges, at);
     if (also !== undefined && also !== null)
       distance = Math.min(distance, nearest(edges, also));
@@ -762,6 +785,8 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
         const b = nodes[j]!;
         const length = b.at - a.at;
         const tail = j === n - 1;
+        // 録画の頭の CM (尺を問わない) は番組表の頭まで (`HEAD_GRACE`)。その先はふつうの CM と同じ決まりで決める
+        if (head && b.at > headLimit) break;
         if (!head && !tail && length > 180 + CM_TOLERANCE) {
           // 尻に接する区間だけは長さを問わない
           j = n - 2;
