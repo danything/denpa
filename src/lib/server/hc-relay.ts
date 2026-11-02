@@ -36,7 +36,7 @@ const grants = new Map<string, Grant>();
 /** トークンの形。`auth.ts` の `OPEN_PATHS` も同じ形を別に書いている */
 export const TOKEN = /^[0-9a-f]{32}$/;
 
-/** `origin` (http://host[:port]) へ中継するトークンを出す */
+/** `origin` (`http(s)://host[:port]`) へ中継するトークンを出す */
 export function grant(origin: string, now = Date.now()): string {
   for (const [token, entry] of grants)
     if (entry.until <= now) grants.delete(token);

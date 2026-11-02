@@ -21,7 +21,7 @@ export type DenpaEvent =
   | "logos"
   | "tuners"
   /**
-   * エンコードの進み具合。**これだけ中身 (payload) を運ぶ** — 数秒おきに
+   * エンコードの進み具合。**中身 (`EncodeProgress`) も運ぶ** — 数秒おきに
    * 飛ぶので、そのたびにページ全体を読み直させない。画面は該当行の
    * 数字だけを書き換える (`encode-live.svelte.ts`)
    */

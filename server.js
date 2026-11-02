@@ -29,7 +29,7 @@
  * `hold-signals.ts` が取っておき、アプリが受け直す (PID 1 では、受け手のいない合図は捨てられる)。
  *
  * **`Host` はそのまま扱う。** SvelteKit の CSRF 判定は自分の origin と `Origin` を比べる。
- * denpa は名前を2つ持っていて自分の origin を1つに固定できない (SvelteKit の `paths.origin`。
+ * denpa は名前をいくつも持てるので自分の origin を1つに固定できない (SvelteKit の `paths.origin`。
  * 組むときに決まる) ので、`Host` と `x-forwarded-proto` から毎回組み立てさせる
  * (名前は charts/denpa/values.yaml の httpRoute.hostnames。無ければ ingress.hosts)。
  * そのため名前を偽ると (DNS リバインディング) CSRF の判定は通ってしまう。信頼したネットワークから
