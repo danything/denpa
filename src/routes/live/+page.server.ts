@@ -5,6 +5,7 @@ import { channelNotice } from "#lib/channel-notice.js";
 import { channelNumber } from "#lib/format.js";
 import { jikkyoChannel } from "#lib/jikkyo/channels.js";
 import { LAST_COOKIE, type LiveCodec } from "#lib/live.js";
+import { channelAlert } from "#lib/server/channel-alert.js";
 import { orm } from "#lib/server/db.js";
 import {
   airing,
@@ -13,7 +14,6 @@ import {
   SERVICE_TYPE_ORDER,
   serviceCounts,
 } from "#lib/server/epg.js";
-import { lineupNotice } from "#lib/server/lineup-follow.js";
 import { warm } from "#lib/server/live.js";
 import { linkState } from "#lib/server/niconico.js";
 import { recordAiring } from "#lib/server/reservations.js";
@@ -202,7 +202,7 @@ export function load(event) {
     channels,
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
     channelNotice: channelNotice(serviceCounts()),
-    lineupNotice: lineupNotice(),
+    channelAlert: channelAlert(),
     start,
     postalCode: current.postalCode,
     prefecture: current.prefecture,

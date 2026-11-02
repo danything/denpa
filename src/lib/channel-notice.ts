@@ -12,8 +12,10 @@
  * - `all` … どの種別にも局が無い。スキャンへ案内する
  * - `changed` … 放送の一覧が変わり、受信できるチャンネルを書き換えた (`server/lineup-follow.ts`)。文は書き換えた中身で、
  *   設定の「受信」を開くか 24 時間たつと消える
+ * - `ground` … 地上波のチャンネルを続けて選局できない・局の顔ぶれが控えと違う (`server/ground-watch.ts`)。
+ *   スキャンし直すと消える
  */
-export type ChannelNotice = "all" | "changed";
+export type ChannelNotice = "all" | "changed" | "ground";
 
 /** いま選局できる局の数 (種別ごと。`server/epg.ts` の `serviceCounts`) */
 type ServiceCounts = Record<string, number>;
@@ -27,10 +29,13 @@ export const CHANNEL_NOTICE_TEXT: Record<ChannelNotice, string> = {
   all: "チャンネルがありません。チャンネルスキャンをしてください",
   changed:
     "チャンネルが放送で変わったため、受信できるチャンネルを書き換えました",
+  ground:
+    "地上波のチャンネルが受信できるチャンネルと違います。地上波をスキャンし直してください",
 };
 
-/** 文の後ろのボタン。どちらも設定の「受信」の「チャンネル」へ行く */
+/** 文の後ろのボタン。どれも設定の「受信」の「チャンネル」へ行く */
 export const CHANNEL_NOTICE_ACTION: Record<ChannelNotice, string> = {
   all: "スキャンへ",
   changed: "確認",
+  ground: "スキャンへ",
 };

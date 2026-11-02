@@ -58,7 +58,7 @@ export function recordReceived(
 
 /**
  * 受信できなかった (選局できない・何も流れてこない)。**受信できないと決めたら true**
- * (この回で印が付いた。呼ぶ側が局の一覧を取り込み直す)
+ * (この回で印が付いた。呼ぶ側がログに残す)
  */
 export function recordFailed(
   type: ChannelType,
@@ -182,4 +182,30 @@ export function pruneReception(
       )
       .run();
   }
+}
+
+/**
+ * **続けて選局できない地上波のチャンネル。** 2 回続けて受信できず、その間にほかの地上波のチャンネルは受信できているもの。
+ * 地上波は外さずに知らせる (`ground-watch.ts`)。中継局の周波数が変わったなら、スキャンし直せば選局できる
+ */
+export function failingGround(): string[] {
+  const rows = orm()
+    .select()
+    .from(channelReception)
+    .where(eq(channelReception.type, "GR"))
+    .all();
+  return rows
+    .filter(
+      (row) =>
+        row.failures >= MARK_AFTER &&
+        row.failing_since !== null &&
+        rows.some(
+          (other) =>
+            other.channel !== row.channel &&
+            other.ok_at !== null &&
+            other.ok_at >= row.failing_since!,
+        ),
+    )
+    .map((row) => row.channel)
+    .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
 }
