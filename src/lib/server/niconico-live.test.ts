@@ -325,6 +325,21 @@ describe("書き込む", () => {
     expect(await late).toBe("closed");
   });
 
+  test("繋ぎ始めに 2 台から書いたら、先に送ったほうのあとは wait (送っていないほうは間隔を使わない)", async () => {
+    const h = harness();
+    const a = h.live.post("jk1", "a", DEFAULT_POST_STYLE);
+    const b = h.live.post("jk1", "b", DEFAULT_POST_STYLE);
+    await h.flush();
+    const socket = h.sockets[0]!;
+    socket.open();
+    socket.receive({ type: "seat", data: { keepIntervalSec: 30 } });
+    await h.flush();
+    expect(await b).toBe("wait");
+    expect(socket.posts()).toHaveLength(1);
+    socket.receive({ type: "postCommentResult", data: {} });
+    expect(await a).toBe("sent");
+  });
+
   test("連携していなければ unlinked", async () => {
     const h = harness({ user: null });
     expect(await h.live.post("jk1", "a", DEFAULT_POST_STYLE)).toBe("unlinked");

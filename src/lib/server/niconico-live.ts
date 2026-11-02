@@ -444,8 +444,14 @@ export class NiconicoLive {
     await session.settled(CONNECT_WAIT);
     if (session.state === "unlinked") return "unlinked";
     if (session.state !== "ready") return "closed";
+    // 繋がるのを待っている間に、ほかの端末が書いたかもしれない。確かめ直す
+    const before = this.lastPost;
+    if (this.deps.now() - before < POST_GAP) return "wait";
     this.lastPost = this.deps.now();
-    return session.post(text, style);
+    const result = await session.post(text, style);
+    // 送らなかった (前の書き込みの返事を待っている) なら、間隔は使っていない
+    if (result === "closed") this.lastPost = before;
+    return result;
   }
 
   /** 全部閉じる (連携を外した) */
