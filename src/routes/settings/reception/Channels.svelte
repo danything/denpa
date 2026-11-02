@@ -298,6 +298,12 @@
             画面を閉じてもサーバで続きます。終わると番組表も集め直します。
           </p>
           <p>
+            BS と CS
+            は放送の一覧から作るので、受信できないチャンネルも入ります。番組表を集めるときに確かめ、まだのチャンネルには「確認中」と出します。
+            2
+            回続けて受信できなかったチャンネルは「受信できません」と出し、その局を番組表・ライブ・ルールの対象から外します。受信できるようになれば戻ります。
+          </p>
+          <p>
             番組表はスキャンのあと、局ごとに埋まっていきます。BS の初回は、1
             つの中継から全局の番組名を先に入れ (数分)、
             番組内容などの詳細はそのあと中継ごとに回って足します。
@@ -371,8 +377,16 @@
                     <td
                       class="mono small nowrap num"
                       rowspan={channel.services.length}
+                      data-testid="channel-reception"
+                      data-reception={channel.reception}
                     >
                       {channel.channel}
+                      <!-- 受信できるかは番組表集めのついでに確かめる (reception.ts)。受信できるものには何も付けない -->
+                      {#if channel.reception === "unreceivable"}
+                        <span class="reception tiny muted">受信できません</span>
+                      {:else if channel.reception === "checking"}
+                        <span class="reception tiny faint">確認中</span>
+                      {/if}
                     </td>
                   {/if}
                   <td class="small">
@@ -574,6 +588,11 @@
     image-rendering: pixelated;
     background: var(--dp-line);
   }
+  /* 受信の様子はチャンネルの名前の下に 1 行で (塗らない。字の色だけ) */
+  .reception {
+    display: block;
+  }
+
   /* **狭い幅ではロゴの列をたたみ、局名の前に出す** (表が横にはみ出さないように) */
   @container (max-width: 36rem) {
     .channels-wrap .logo-col {

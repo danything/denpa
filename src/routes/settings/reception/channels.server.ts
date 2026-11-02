@@ -1,9 +1,14 @@
 import { type Actions, fail } from "@sveltejs/kit";
-import { count, eq, sql } from "drizzle-orm";
+import { count, eq, inArray, or, sql } from "drizzle-orm";
 
 import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
 import { currentServices, typeRank } from "#lib/server/epg.js";
+import {
+  type Reception,
+  receptionOf,
+  unreceivableChannels,
+} from "#lib/server/reception.js";
 import {
   SCAN_KINDS,
   type ScanKind,
@@ -18,6 +23,8 @@ import type { ChannelType } from "#lib/types.js";
 interface Coverage {
   type: ChannelType;
   channel: string;
+  /** 受信できるか。受信できないチャンネルも、印を付けて出す (`reception.ts`) */
+  reception: Reception;
   services: { id: number; name: string; programs: number; until: number }[];
 }
 
@@ -32,8 +39,12 @@ interface Coverage {
  *
  * 出すのは**いま選局できる局だけ**。スキャンをやり直すと局は入れ替わり、
  * 前の回の行は残る (録画や過去の予約が辿れなくなるので消せない)。
+ * **受信できないチャンネルの局は出す** (番組表やライブからは外れている。外れた理由をここで言う)
  */
 function coverage(): Coverage[] {
+  const blocked = [...unreceivableChannels()].map((key) =>
+    key.slice(key.indexOf(":") + 1),
+  );
   const rows = orm()
     .select({
       id: services.id,
@@ -46,7 +57,11 @@ function coverage(): Coverage[] {
     .from(services)
     .leftJoin(programs, eq(programs.service_id, services.id))
     // 取り残しの局は出さない
-    .where(currentServices())
+    .where(
+      blocked.length === 0
+        ? currentServices()
+        : or(currentServices(), inArray(services.channel, blocked)),
+    )
     .groupBy(services.id)
     .orderBy(services.service_id)
     .all();
@@ -54,13 +69,23 @@ function coverage(): Coverage[] {
   const channels = new Map<string, Coverage>();
   for (const { id, name, type, channel, programs, until } of rows) {
     const key = `${type}:${channel}`;
-    const entry = channels.get(key) ?? { type, channel, services: [] };
+    const entry = channels.get(key) ?? {
+      type,
+      channel,
+      reception: "ok" as Reception,
+      services: [],
+    };
     entry.services.push({ id, name, programs, until });
     channels.set(key, entry);
   }
-  return [...channels.values()].sort(
+  const list = [...channels.values()];
+  const reception = receptionOf(list);
+  for (const entry of list)
+    entry.reception = reception.get(`${entry.type}:${entry.channel}`) ?? "ok";
+  return list.sort(
     (a, b) =>
-      typeRank(a.type) - typeRank(b.type) || a.channel.localeCompare(b.channel),
+      typeRank(a.type) - typeRank(b.type) ||
+      a.channel.localeCompare(b.channel, "en", { numeric: true }),
   );
 }
 

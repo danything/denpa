@@ -26,6 +26,7 @@ import {
   widenServices,
 } from "./epg";
 import { emit } from "./events";
+import { recordFailed, recordReceived } from "./reception";
 import { resolveConflicts } from "./scheduler";
 import { programs, services } from "./schema";
 import { chunks } from "./stream";
@@ -35,6 +36,7 @@ import {
   getTuners,
   openChannelStream,
   serviceKey,
+  TuneError,
 } from "./tuner";
 
 /**
@@ -259,6 +261,10 @@ async function collectChannel(
    * 開けなかっただけの局まで `epgChannelRetry` で休ませると、番組表が古くなる
    */
   let opened = false;
+  /** TS が 1 バイトでも来たか。受信できたかの印 (`reception.ts`) */
+  let received = false;
+  /** エージェントが「選局できない」と返したか (空き待ちやエージェントに繋がらないのは入れない) */
+  let refused = false;
   /*
    * **読みながら少しずつ保存する。** 揃うまで待ってからまとめて書くと、全局読みの
    * 数分のあいだ画面に何も出ない。今日・明日の番組は先に流れてくるので、開いて
@@ -300,6 +306,7 @@ async function collectChannel(
     let sdt: ServiceReader | null = new ServiceReader();
     let sdtBytes = 0;
     for await (const chunk of chunks(stream)) {
+      received ||= chunk.length > 0;
       if (sdt !== null) {
         sdt.feed(chunk);
         sdtBytes += chunk.length;
@@ -327,10 +334,26 @@ async function collectChannel(
     if (!controller.signal.aborted) {
       console.warn(`[epg] ${label} を集められませんでした: ${error}`);
     }
+    refused = error instanceof TuneError;
   } finally {
     clearTimeout(timer);
     controller.abort();
     update({ active: state.active.filter((name) => name !== label) });
+  }
+
+  /*
+   * **受信できたかを残す** (`reception.ts`)。BS と CS は放送の一覧から作るので、受信できないチャンネルも入る。
+   * 選局できなかった回も「行った」と覚える (受信できないチャンネルを周回のたびに選び直さない)
+   */
+  if (received) {
+    recordReceived(channel.type, channel.channel);
+  } else if (refused || opened) {
+    collected.set(key(channel), Date.now());
+    if (recordFailed(channel.type, channel.channel)) {
+      console.warn(
+        `[epg] ${label} を受信できないチャンネルにしました (続けて選局できませんでした)`,
+      );
+    }
   }
 
   /*

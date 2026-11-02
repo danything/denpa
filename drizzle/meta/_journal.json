@@ -183,6 +183,13 @@
       "when": 1793603035056,
       "tag": "0025_niconico-link",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1793638756376,
+      "tag": "0026_channel-reception",
+      "breakpoints": true
     }
   ]
 }

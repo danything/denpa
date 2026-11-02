@@ -1,0 +1,183 @@
+/**
+ * **チャンネルを受信できるかを、番組表集めのついでに確かめる。**
+ *
+ * BS と CS は放送の一覧 (NIT) から作るので (`satellite.ts`)、「放送されているもの」が全部入る。
+ * その家で受信できるかは別の話で、CATV で一部の中継器しか通らないこともある。確かめるために選局を増やさず、
+ * 番組表集め (`epg-collect.ts`) が中継器を開いたときの成否を記録する。
+ *
+ * - **受信できたら、印を消す。** 1 回でも受信できれば受信できるチャンネル
+ * - **2 回続けて受信できず、その間に同じ種別のほかのチャンネルは受信できていれば、受信できないと決める。**
+ *   1 回の失敗では決めない (一時的な受信の不調がある)。その種別が全部受信できないのは、アンテナか
+ *   チューナーの問題で、チャンネルの問題ではないので決めない (受信できなくなってから、ほかのチャンネルが
+ *   1 つも受信できていなければ決めない)
+ * - 同じ周回の中の失敗は 1 回と数える (`RECOUNT_AFTER`)
+ * - チューナーの空き待ちは失敗に数えない (呼ぶ側が渡さない)
+ *
+ * 受信できないチャンネルの局は、番組表・ライブ・ルールの対象から外す (`epg.syncServices`)。
+ * 番組表集めはそのチャンネルにも行き続けるので、受信できるようになれば戻る
+ */
+import { and, eq, gte, ne } from "drizzle-orm";
+
+import type { ChannelType } from "../types";
+import { now, orm } from "./db";
+import { channelReception } from "./schema";
+
+/** 何回続けて受信できなければ、受信できないと決めるか */
+export const MARK_AFTER = 2;
+
+/** この間の失敗は 1 回と数える。番組表集めの周回 (30 分) より長く、行き直す間隔 (2 時間) より短く */
+export const RECOUNT_AFTER = 60 * 60_000;
+
+export type Reception = "ok" | "checking" | "unreceivable";
+
+const keyOf = (type: string, channel: string) => `${type}:${channel}`;
+
+/** 受信できた。印を消す */
+export function recordReceived(
+  type: ChannelType,
+  channel: string,
+  at = now(),
+): void {
+  orm()
+    .insert(channelReception)
+    .values({
+      type,
+      channel,
+      ok_at: at,
+      failing_since: null,
+      failures: 0,
+      unreceivable: false,
+    })
+    .onConflictDoUpdate({
+      target: [channelReception.type, channelReception.channel],
+      set: { ok_at: at, failing_since: null, failures: 0, unreceivable: false },
+    })
+    .run();
+}
+
+/**
+ * 受信できなかった (選局できない・何も流れてこない)。**受信できないと決めたら true**
+ * (この回で印が付いた。呼ぶ側が局の一覧を取り込み直す)
+ */
+export function recordFailed(
+  type: ChannelType,
+  channel: string,
+  at = now(),
+): boolean {
+  const row = orm()
+    .select()
+    .from(channelReception)
+    .where(
+      and(
+        eq(channelReception.type, type),
+        eq(channelReception.channel, channel),
+      ),
+    )
+    .get();
+  const recount =
+    row?.failed_at === null ||
+    row?.failed_at === undefined ||
+    at - row.failed_at >= RECOUNT_AFTER;
+  const failures = (row?.failures ?? 0) + (recount ? 1 : 0);
+  const since = row?.failing_since ?? at;
+  const others =
+    orm()
+      .select({ channel: channelReception.channel })
+      .from(channelReception)
+      .where(
+        and(
+          eq(channelReception.type, type),
+          ne(channelReception.channel, channel),
+          gte(channelReception.ok_at, since),
+        ),
+      )
+      .get() !== undefined;
+  const unreceivable = failures >= MARK_AFTER && others;
+  orm()
+    .insert(channelReception)
+    .values({
+      type,
+      channel,
+      failed_at: at,
+      failing_since: since,
+      failures,
+      unreceivable,
+    })
+    .onConflictDoUpdate({
+      target: [channelReception.type, channelReception.channel],
+      set: { failed_at: at, failing_since: since, failures, unreceivable },
+    })
+    .run();
+  return unreceivable && row?.unreceivable !== true;
+}
+
+/** 受信できないと決めたチャンネル (`種別:名前`) */
+export function unreceivableChannels(): Set<string> {
+  return new Set(
+    orm()
+      .select({
+        type: channelReception.type,
+        channel: channelReception.channel,
+      })
+      .from(channelReception)
+      .where(eq(channelReception.unreceivable, true))
+      .all()
+      .map((row) => keyOf(row.type, row.channel)),
+  );
+}
+
+/**
+ * チャンネルごとの受信の様子 (設定の「受信」に出す)。
+ * 一度も確かめていない衛星のチャンネルは「確認中」。地上波はスキャンで受信できたものだけが入るので「確認中」にしない
+ */
+export function receptionOf(
+  channels: readonly { type: string; channel: string }[],
+): Map<string, Reception> {
+  const rows = new Map(
+    orm()
+      .select()
+      .from(channelReception)
+      .all()
+      .map((row) => [keyOf(row.type, row.channel), row]),
+  );
+  const out = new Map<string, Reception>();
+  for (const { type, channel } of channels) {
+    const key = keyOf(type, channel);
+    const row = rows.get(key);
+    if (row?.unreceivable === true) out.set(key, "unreceivable");
+    else if (row?.ok_at === null || row?.ok_at === undefined)
+      out.set(key, type === "GR" ? "ok" : "checking");
+    else out.set(key, "ok");
+  }
+  return out;
+}
+
+/**
+ * 控えから消えたチャンネルの記録を捨てる (スキャンし直した・再編で無くなった)。
+ * 残すと、前のチャンネルの局が「受信できない」として設定に出続ける。空の一覧では何もしない
+ * (エージェントが起動直後や不調で空を返すことがある)
+ */
+export function pruneReception(
+  channels: readonly { type: string; channel: string }[],
+): void {
+  if (channels.length === 0) return;
+  const listed = new Set(channels.map((c) => keyOf(c.type, c.channel)));
+  for (const row of orm()
+    .select({
+      type: channelReception.type,
+      channel: channelReception.channel,
+    })
+    .from(channelReception)
+    .all()) {
+    if (listed.has(keyOf(row.type, row.channel))) continue;
+    orm()
+      .delete(channelReception)
+      .where(
+        and(
+          eq(channelReception.type, row.type),
+          eq(channelReception.channel, row.channel),
+        ),
+      )
+      .run();
+  }
+}
