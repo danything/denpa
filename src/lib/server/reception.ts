@@ -58,7 +58,7 @@ export function recordReceived(
 
 /**
  * 受信できなかった (選局できない・何も流れてこない)。**受信できないと決めたら true**
- * (この回で印が付いた。呼ぶ側が局の一覧を取り込み直す)
+ * (この回で印が付いた。局が外れるのは次の局の取り込みのとき)
  */
 export function recordFailed(
   type: ChannelType,
