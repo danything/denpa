@@ -125,7 +125,7 @@ spec:
     capacity: 512Mi
     accessModes: [ReadWriteOnce]
     storageClassName: local-path
-    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
     # 戻した中身はスナップショットに残るので、作業用の PVC は消す
     cleanupTempPVC: true
     cleanupCachePVC: true
@@ -148,7 +148,7 @@ spec:
     capacity: 5Gi
     accessModes: [ReadWriteOnce]
     storageClassName: local-path
-    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
     # 戻した中身はスナップショットに残るので、作業用の PVC は消す
     cleanupTempPVC: true
     cleanupCachePVC: true
@@ -171,7 +171,7 @@ spec:
     capacity: 170Gi
     accessModes: [ReadWriteOnce]
     storageClassName: local-path
-    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
     # 戻した中身はスナップショットに残るので、作業用の PVC は消す
     cleanupTempPVC: true
     cleanupCachePVC: true

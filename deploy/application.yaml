@@ -79,17 +79,32 @@ spec:
           # 新しく作るときは VolSync が R2 の最新から中身を埋める (deploy/volsync.yaml の <PVC>-dst)。
           # raw は取っていないので付けない。今ある PVC には効かない
           data:
-            dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: denpa-data-dst}
+            dataSourceRef:
+              {
+                apiGroup: volsync.backube,
+                kind: ReplicationDestination,
+                name: denpa-data-dst,
+              }
           raw:
             size: 64Gi
           encoded:
             size: 170Gi
-            dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: denpa-encoded-dst}
+            dataSourceRef:
+              {
+                apiGroup: volsync.backube,
+                kind: ReplicationDestination,
+                name: denpa-encoded-dst,
+              }
           # 中身は数 KB だが、StorageClass が xfs で、xfs は 300MB より小さいとフォーマットできない
           # (128Mi だと PV がマウントできず、Pod が ContainerCreating のまま止まる)
           agentConfig:
             size: 512Mi
-            dataSourceRef: {apiGroup: volsync.backube, kind: ReplicationDestination, name: agent-config-dst}
+            dataSourceRef:
+              {
+                apiGroup: volsync.backube,
+                kind: ReplicationDestination,
+                name: agent-config-dst,
+              }
 
         # Cilium Gateway (danything/gitops の bootstrap/gateway/) に付ける。
         # dp.doany.io は `*.doany.io` の、dp.l.doany.io は `*.l.doany.io` の
