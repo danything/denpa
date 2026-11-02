@@ -185,6 +185,11 @@ export const config = {
     "DENPA_GITHUB_API",
     "https://api.github.com/repos/danything/denpa",
   ).replace(/\/+$/, ""),
+  /**
+   * ニコニコの OAuth を中継する denpa-hub (danything/denpa-hub)。連携の入口とトークンの更新に使う (niconico.ts)。
+   * 試験では偽物を指す
+   */
+  hubUrl: str("DENPA_HUB", "https://dh.doany.io").replace(/\/+$/, ""),
   /** 新しいバージョンを見に行く間隔 (ms)。認証なしの GitHub API は 1 時間に 60 回まで */
   updateCheckInterval: num("UPDATE_CHECK_INTERVAL", 60 * MIN),
 

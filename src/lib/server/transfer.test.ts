@@ -96,6 +96,17 @@ function seedOld(where: ReturnType<typeof machine>): void {
       expires_at: now + 600_000,
     })
     .run();
+  orm()
+    .insert(schema.niconicoLink)
+    .values({
+      id: 1,
+      user_id: "12345678",
+      refresh_token: Buffer.from("niconico-refresh-secret"),
+      access_expires_at: now,
+      linked_at: now,
+      linked_by: "trusted-network",
+    })
+    .run();
   mkdirSync(join(where.data, "logos", "cm", "1024"), { recursive: true });
   writeFileSync(join(where.data, "logos", "1024.png"), "png");
   writeFileSync(join(where.data, "logos", "1024.png.writing"), "half");
@@ -150,7 +161,7 @@ beforeEach(() => {
 });
 
 describe("書き出す", () => {
-  test("DB の写しとロゴを書き出し、ログインの控えとペアリングの途中は外す", async () => {
+  test("DB の写しとロゴを書き出し、ログインの控え・ペアリングの途中・ニコニコとの連携は外す", async () => {
     old = machine("old");
     seedOld(old);
     const { stream, filename } = await transfer.exportArchive();
@@ -196,12 +207,17 @@ describe("書き出す", () => {
       (db.query(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
     expect(n("sessions")).toBe(0);
     expect(n("device_codes")).toBe(0);
+    // ニコニコとの連携は移さない (移した先で連携し直す)
+    expect(n("niconico_link")).toBe(0);
     // アクセストークン (ハッシュだけ) は持っていく
     expect(n("api_tokens")).toBe(1);
     expect(n("rules")).toBe(1);
     db.close();
     // 消した行の中身もファイルに残さない
     expect(Buffer.from(exportedDb).includes("cookie-value-secret")).toBe(false);
+    expect(Buffer.from(exportedDb).includes("niconico-refresh-secret")).toBe(
+      false,
+    );
     // 写しは消えている
     expect(
       readdirSync(join(old.data, "transfer")).filter((n) =>

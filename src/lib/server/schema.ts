@@ -753,3 +753,28 @@ export const deviceCodes = sqliteTable(
   // 切れたものを片付けるときに舐める
   (t) => [index("device_codes_expires").on(t.expires_at)],
 );
+
+/**
+ * **ニコニコのアカウントとの連携** (niconico.ts。世帯で 1 つなので行は多くて 1 つ、`id` はいつも 1)。
+ *
+ * - トークンは denpa のサーバだけが持ち、端末には渡さない。**暗号化して置く** (鍵は DB の隣の `niconico.key`)。
+ *   更新に使うトークンは期限が無く、ニコニコに失効のエンドポイントも無いので、DB だけが出回っても使えないようにする
+ * - denpa を別の機械へ移すときの写しからは消す (`transfer.ts`。移したら連携し直す)
+ * - 更新できなくなったら (`invalid_grant`) 行は残してトークンを消し、`lost_at` を付ける (設定の画面で「連携が切れました」と出す)
+ */
+export const niconicoLink = sqliteTable("niconico_link", {
+  id: integer("id").primaryKey(),
+  /** ニコニコのユーザー ID (ID トークンの sub)。設定の画面に出す */
+  user_id: text("user_id").notNull(),
+  /** 暗号化したアクセストークン。切れたら null */
+  access_token: blob("access_token", { mode: "buffer" }),
+  /** 暗号化した更新に使うトークン。切れたら null */
+  refresh_token: blob("refresh_token", { mode: "buffer" }),
+  /** アクセストークンの期限 (unix ms) */
+  access_expires_at: integer("access_expires_at").notNull(),
+  linked_at: integer("linked_at").notNull(),
+  /** 連携した人。OIDC なら sub、信頼するネットワークからなら 'trusted-network' */
+  linked_by: text("linked_by").notNull(),
+  /** 更新できなくなった時刻 */
+  lost_at: integer("lost_at"),
+});

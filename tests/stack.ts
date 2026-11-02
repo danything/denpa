@@ -46,6 +46,8 @@ export interface Stack {
   edcbTarget: string;
   /** 偽の EpgTimerSrv の振る舞いを変える HTTP (`/__control/mode`) */
   edcbControlUrl: string;
+  /** 偽の denpa-hub (`tests/fake/denpa-hub.ts`)。ニコニコとの連携の中継。`/__control/mode` で断らせられる */
+  hubUrl: string;
   /** これを置くと偽 ffmpeg がエンコードに失敗する */
   failFile: string;
   /** エンコーダの名前 (`libx264` など) を書いて置くと、偽 ffmpeg はそのエンコーダを使うエンコードだけ失敗する */
@@ -171,6 +173,7 @@ export async function boot(
   const epgstationPort = WEBHOOK_PORT + index * STRIDE + 1;
   const edcbPort = WEBHOOK_PORT + index * STRIDE + 2;
   const edcbControlPort = WEBHOOK_PORT + index * STRIDE + 3;
+  const hubPort = WEBHOOK_PORT + index * STRIDE + 4;
 
   const root = `${TEST_ROOT}/w${index}`;
   const stack: Stack = {
@@ -181,6 +184,7 @@ export async function boot(
     epgstationUrl: `http://127.0.0.1:${epgstationPort}`,
     edcbTarget: `127.0.0.1:${edcbPort}`,
     edcbControlUrl: `http://127.0.0.1:${edcbControlPort}`,
+    hubUrl: `http://127.0.0.1:${hubPort}`,
     rawDir: `${root}/raw`,
     encodedDir: `${root}/encoded`,
     failFile: `${root}/fail-encode`,
@@ -235,6 +239,11 @@ export async function boot(
     });
     started.push(edcb);
 
+    const hub = start(["bun", "tests/fake/denpa-hub.ts"], {
+      FAKE_HUB_PORT: String(hubPort),
+    });
+    started.push(hub);
+
     const app = start(["bun", "./server.js"], {
       TZ: "Asia/Tokyo",
       HOST: "127.0.0.1",
@@ -275,6 +284,8 @@ export async function boot(
        */
       DENPA_VERSION: "v1.0.0",
       DENPA_GITHUB_API: stack.webhookUrl,
+      // ニコニコとの連携は偽の denpa-hub が中継する
+      DENPA_HUB: stack.hubUrl,
       UPDATE_CHECK_INTERVAL: "1000",
       // 定期処理は止め、テストからボタン/APIで明示的に走らせる(タイミング依存を避ける)
       RECONCILE_INTERVAL: "86400000",
@@ -309,6 +320,7 @@ export async function boot(
         edcb,
         "偽 EpgTimerSrv",
       ),
+      waitFor(`${stack.hubUrl}/__control/state`, hub, "偽 denpa-hub"),
     ]);
     await waitFor(`${stack.appUrl}/api/health`, app, "denpa");
   } catch (error) {
