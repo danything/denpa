@@ -25,7 +25,11 @@ import {
   TABLE_SDT_ACTUAL,
 } from "@danything/arib/psi";
 
-import { type CarouselProgress, DsmccLogoCollector } from "./logo-dsmcc";
+import {
+  type CarouselCounts,
+  type CarouselProgress,
+  DsmccLogoCollector,
+} from "./logo-dsmcc";
 import { withPalette } from "./logo-palette";
 
 const PID_CDT = 0x0029;
@@ -201,6 +205,11 @@ export class LogoCollector {
   /** 衛星のロゴのカルーセルを1回ぶん読み切ったか (`DsmccLogoCollector.carouselRead`) */
   get satelliteCarouselRead(): boolean {
     return this.dsmcc.carouselRead;
+  }
+
+  /** この回に読んだパケットとセクションの数 (`DsmccLogoCollector.counts`) */
+  get satelliteCounts(): Readonly<CarouselCounts> {
+    return this.dsmcc.counts;
   }
 
   feed(chunk: Uint8Array): void {

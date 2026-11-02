@@ -88,6 +88,17 @@ describe("空きチューナーの数", () => {
     expect(countFree(tuners, "CS", ["logo BS/BS03_0"])).toBe(0);
     expect(countFree(tuners, "GR")).toBe(1);
   });
+
+  test("利用者のいない選局 (エージェントが畳むまでの余韻) は空きとして数える", () => {
+    // 外れの中継を閉じた直後と、番組表集めが終わった直後。チャンネルは付いたまま利用者だけが空になる
+    const lingering = {
+      ...tuner(["BS", "CS"]),
+      channel: { type: "BS" as const, channel: "BS01_2" },
+    };
+    const tuners = [lingering, tuner(["BS", "CS"], ["logo BS/BS03_0"])];
+    expect(countFree(tuners, "BS")).toBe(1);
+    expect(countFree(tuners, "CS")).toBe(1);
+  });
 });
 
 /**
