@@ -3,8 +3,10 @@
  * 局の一覧はチャンネルスキャンで「この物理チャンネルに何が入っているか」を知るために使い、
  * 読むのは NIT と SDT の2つ。
  *
- * - NIT (PID 0x0010) … ネットワークID と、地上波ならリモコン番号
- * - SDT (PID 0x0011) … その TS に入っているサービスのIDと種別
+ * - NIT (PID 0x0010) … ネットワークID と、地上波ならリモコン番号。衛星はネットワークの全部の TS
+ *   (TSID・周波数・サービスの一覧) が載っている (`NitReader`)
+ * - SDT (PID 0x0011) … その TS に入っているサービスのIDと種別。衛星はほかの TS のぶん
+ *   (SDT[other]) も流れている (`SdtReader`)
  *
  * 局名も SDT から読む。ARIB の文字符号は独自だが、番組表を自分で集めるなら
  * どのみち要るので [aribtext.ts](aribtext.ts) に寄せてある。
@@ -23,15 +25,19 @@ export function packetPid(packet: Uint8Array): number {
 
 /** PAT。どの PID に PMT があるかを持つ。**入口はいつもここ** */
 export const PID_PAT = 0x0000;
-const PID_NIT = 0x0010;
+export const PID_NIT = 0x0010;
 export const PID_SDT = 0x0011;
 
 export const TABLE_PAT = 0x00;
 export const TABLE_PMT = 0x02;
-const TABLE_NIT_ACTUAL = 0x40;
+export const TABLE_NIT_ACTUAL = 0x40;
+export const TABLE_NIT_OTHER = 0x41;
 export const TABLE_SDT_ACTUAL = 0x42;
+export const TABLE_SDT_OTHER = 0x46;
 
 const DESC_SERVICE_LIST = 0x41;
+const DESC_SATELLITE_DELIVERY = 0x43;
+const DESC_TERRESTRIAL_DELIVERY = 0xfa;
 const DESC_SERVICE = 0x48;
 const DESC_TS_INFORMATION = 0xcd;
 
@@ -424,10 +430,8 @@ export function* sdtServices(
   }
 }
 
-/** SDT からサービスの一覧を読む。自分の TS のものだけ */
-export function parseSdt(section: Uint8Array): TransportInfo | null {
-  if (section[0] !== TABLE_SDT_ACTUAL) return null;
-
+/** SDT のサービスの並び。自分の TS (actual) とほかの TS (other) で形式は同じ */
+function sdtTransport(section: Uint8Array): TransportInfo {
   const services: Service[] = [];
   for (const [serviceId, body] of sdtServices(section)) {
     for (const [tag, descriptor] of descriptors(body)) {
@@ -459,9 +463,127 @@ export function parseSdt(section: Uint8Array): TransportInfo | null {
   };
 }
 
-/** NIT からネットワークIDとリモコン番号、他の TS の顔ぶれを読む */
-export function parseNit(section: Uint8Array): NetworkInfo | null {
-  if (section[0] !== TABLE_NIT_ACTUAL) return null;
+/** SDT からサービスの一覧を読む。自分の TS のものだけ */
+export function parseSdt(section: Uint8Array): TransportInfo | null {
+  return section[0] === TABLE_SDT_ACTUAL ? sdtTransport(section) : null;
+}
+
+/**
+ * SDT[other] からサービスの一覧を読む。**ほかの TS のもの。**
+ *
+ * 衛星は、どの TS にもネットワークのほかの TS の局名を流している (番組表の EIT[other] と同じ考え)。
+ * 開いていない TS の局名をこれで知る。TS ごとに別のセクションで来るので、集めるのは `SdtReader`
+ */
+export function parseSdtOther(section: Uint8Array): TransportInfo | null {
+  return section[0] === TABLE_SDT_OTHER ? sdtTransport(section) : null;
+}
+
+/** 衛星の分配の記述子 (0x43)。どの周波数で流れているか */
+export interface SatelliteDelivery {
+  kind: "satellite";
+  /**
+   * 周波数 (kHz)。**放送の周波数そのもの** (BS-1 は 11727480)。
+   * チューナーに渡す中間周波数は、ここから LNB の局発の周波数 (BS・CS は 10678 MHz) を引いたもの
+   */
+  frequency: number;
+  /** 軌道位置 (0.1 度単位。東経 110 度は 1100) */
+  orbitalPosition: number;
+  /** 東経なら true */
+  east: boolean;
+  /** 偏波。0 水平・1 垂直・2 左旋・3 右旋 */
+  polarization: number;
+  /** 変調方式 (ARIB STD-B10 の値のまま) */
+  modulation: number;
+  /** シンボルレート (シンボル/秒) */
+  symbolRate: number;
+  /** 内符号 (ARIB STD-B10 の値のまま) */
+  fec: number;
+}
+
+/** 地上の分配の記述子 (0xFA)。地上波は自分の TS のぶんしか載らない */
+export interface TerrestrialDelivery {
+  kind: "terrestrial";
+  /** 地域の識別 (ARIB STD-B10 の area_code) */
+  areaCode: number;
+  guardInterval: number;
+  transmissionMode: number;
+  /** 周波数 (Hz)。中継局ごとに並ぶことがある。放送は 1/7 MHz 単位で書く */
+  frequencies: number[];
+}
+
+export type Delivery = SatelliteDelivery | TerrestrialDelivery;
+
+/** NIT の TS の 1 件。サービスの一覧に、どこで流れているかが付く */
+export interface NetworkTransport extends TransportInfo {
+  delivery: Delivery | null;
+}
+
+/** BCD の桁を左から `digits` 桁ぶん読んで、10 進の整数にする */
+function bcdDigits(data: Uint8Array, at: number, digits: number): number {
+  let value = 0;
+  for (let i = 0; i < digits; i++) {
+    const byte = data[at + (i >> 1)] ?? 0;
+    value = value * 10 + ((i & 1) === 0 ? byte >> 4 : byte & 0x0f);
+  }
+  return value;
+}
+
+/**
+ * 衛星の分配の記述子を読む。周波数は 8 桁の BCD で、上から 3 桁が GHz (011.72748 GHz)。
+ * シンボルレートは 7 桁で、上から 3 桁が Msym/s
+ */
+function satelliteDelivery(descriptor: Uint8Array): SatelliteDelivery | null {
+  if (descriptor.length < 11) return null;
+  return {
+    kind: "satellite",
+    frequency: bcdDigits(descriptor, 0, 8) * 10,
+    orbitalPosition: bcdDigits(descriptor, 4, 4),
+    east: (descriptor[6]! & 0x80) !== 0,
+    polarization: (descriptor[6]! >> 5) & 0x03,
+    modulation: descriptor[6]! & 0x1f,
+    symbolRate: bcdDigits(descriptor, 7, 7) * 100,
+    fec: descriptor[10]! & 0x0f,
+  };
+}
+
+/** 地上の分配の記述子を読む。周波数は 16 ビットずつ、1/7 MHz 単位 */
+function terrestrialDelivery(
+  descriptor: Uint8Array,
+): TerrestrialDelivery | null {
+  if (descriptor.length < 2) return null;
+  const head = u16(descriptor, 0);
+  const frequencies: number[] = [];
+  for (let at = 2; at + 2 <= descriptor.length; at += 2) {
+    frequencies.push(Math.round((u16(descriptor, at) * 1_000_000) / 7));
+  }
+  return {
+    kind: "terrestrial",
+    areaCode: head >> 4,
+    guardInterval: (head >> 2) & 0x03,
+    transmissionMode: head & 0x03,
+    frequencies,
+  };
+}
+
+/** NIT のセクション 1 つ。表は何本かのセクションに分かれて来るので、そろえるのは `NitReader` */
+export interface NitSection {
+  /** NIT[other] (ほかのネットワークのもの) なら true */
+  other: boolean;
+  networkId: number;
+  version: number;
+  /** current_next_indicator。0 (これから使う表) のものは `NitReader` が読まない */
+  current: boolean;
+  sectionNumber: number;
+  lastSectionNumber: number;
+  remoteControlKeyId: number | null;
+  transportStreams: NetworkTransport[];
+}
+
+/** NIT のセクションを 1 つ読む。actual (0x40) と other (0x41) のどちらも */
+export function parseNitSection(section: Uint8Array): NitSection | null {
+  const tableId = section[0];
+  if (tableId !== TABLE_NIT_ACTUAL && tableId !== TABLE_NIT_OTHER) return null;
+  if (section.length < 16) return null;
 
   const networkLength = u16(section, 8) & 0x0fff;
   let at = 10 + networkLength;
@@ -469,16 +591,17 @@ export function parseNit(section: Uint8Array): NetworkInfo | null {
   at += 2; // transport_stream_loop_length
 
   let remoteControlKeyId: number | null = null;
-  const transportStreams: TransportInfo[] = [];
+  const transportStreams: NetworkTransport[] = [];
   const end = section.length - 4;
   while (at + 6 <= end) {
     const transportStreamId = u16(section, at);
     const originalNetworkId = u16(section, at + 2);
     const loop = u16(section, at + 4) & 0x0fff;
-    const body = section.subarray(at + 6, at + 6 + loop);
+    const body = section.subarray(at + 6, Math.min(at + 6 + loop, end));
     at += 6 + loop;
 
     const services: Service[] = [];
+    let delivery: Delivery | null = null;
     for (const [tag, descriptor] of descriptors(body)) {
       if (
         tag === DESC_TS_INFORMATION &&
@@ -494,16 +617,228 @@ export function parseNit(section: Uint8Array): NetworkInfo | null {
             name: "",
           });
         }
+      } else if (tag === DESC_SATELLITE_DELIVERY) {
+        delivery = satelliteDelivery(descriptor) ?? delivery;
+      } else if (tag === DESC_TERRESTRIAL_DELIVERY) {
+        delivery = terrestrialDelivery(descriptor) ?? delivery;
       }
     }
-    transportStreams.push({ transportStreamId, originalNetworkId, services });
+    transportStreams.push({
+      transportStreamId,
+      originalNetworkId,
+      services,
+      delivery,
+    });
   }
 
   return {
+    other: tableId === TABLE_NIT_OTHER,
     networkId: u16(section, 3),
+    version: (section[5]! >> 1) & 0x1f,
+    current: (section[5]! & 0x01) !== 0,
+    sectionNumber: section[6]!,
+    lastSectionNumber: section[7]!,
     remoteControlKeyId,
     transportStreams,
   };
+}
+
+/**
+ * NIT からネットワークIDとリモコン番号、他の TS の顔ぶれを読む。**セクション 1 つぶん。**
+ * スキャンで「どのネットワークか」を知るにはこれで足りる。ネットワークの全部の TS が要るなら `NitReader`
+ */
+export function parseNit(section: Uint8Array): NetworkInfo | null {
+  if (section[0] !== TABLE_NIT_ACTUAL) return null;
+  const parsed = parseNitSection(section);
+  if (parsed === null) return null;
+  const { networkId, remoteControlKeyId, transportStreams } = parsed;
+  return { networkId, remoteControlKeyId, transportStreams };
+}
+
+/**
+ * 1 つの表のセクションを集める。**version が変わったら集め直す。**
+ *
+ * 表は何本かのセクション (section_number 0〜last_section_number) に分かれて来る。
+ * 違う version のものを混ぜると、書き換わる前と後の TS が 1 つの表に並ぶ
+ */
+class SectionSet<T> {
+  private version = -1;
+  private last = -1;
+  private parts = new Map<number, T>();
+
+  /** 足す。そろったら true */
+  add(version: number, number: number, last: number, part: T): boolean {
+    if (version !== this.version || last !== this.last) {
+      this.version = version;
+      this.last = last;
+      this.parts = new Map();
+    }
+    if (number <= last) this.parts.set(number, part);
+    return this.parts.size === last + 1;
+  }
+
+  /** section_number の順に */
+  ordered(): T[] {
+    return [...this.parts.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, part]) => part);
+  }
+}
+
+/** そろった NIT。セクションをつないだもの */
+export interface Network {
+  /** NIT[other] なら true */
+  other: boolean;
+  networkId: number;
+  version: number;
+  remoteControlKeyId: number | null;
+  transportStreams: NetworkTransport[];
+}
+
+/**
+ * NIT を**全部のセクション**そろえて読む。
+ *
+ * 衛星の NIT[actual] には、そのネットワークの全部の TS (TSID・周波数・サービスの一覧) が載っている。
+ * TS が多いと 1 セクション (1024 バイトまで) に収まらないので、ネットワークごとに (actual と other を
+ * 分けて) 集め、そろったものを返す。
+ *
+ * **version が変わっても、新しい表がそろうまでは前の表を返す。** 読む側が見るのは、いつも 1 つの
+ * version でそろった表。読み始めの数秒は何も返らない (NIT は 10 秒に 1 回は流れる)
+ */
+export class NitReader {
+  private readonly assembler = new SectionAssembler(PID_NIT);
+  private readonly packets = new PacketStream();
+  private readonly pending = new Map<string, SectionSet<NitSection>>();
+  private readonly done = new Map<string, Network>();
+
+  /** 任意の長さのバイト列を食わせる。そろった表が増えたか変わったら true */
+  feed(chunk: Uint8Array): boolean {
+    let changed = false;
+    for (const packet of this.packets.feed(chunk)) {
+      for (const section of this.assembler.feed(packet)) {
+        const parsed = parseNitSection(section);
+        if (parsed === null || !parsed.current) continue;
+        if (this.add(parsed)) changed = true;
+      }
+    }
+    return changed;
+  }
+
+  private add(section: NitSection): boolean {
+    const key = `${section.other ? "other" : "actual"}:${section.networkId}`;
+    // そろっている表と同じ version なら、繰り返し流れてきただけ
+    if (this.done.get(key)?.version === section.version) return false;
+    const set = this.pending.get(key) ?? new SectionSet<NitSection>();
+    this.pending.set(key, set);
+    const complete = set.add(
+      section.version,
+      section.sectionNumber,
+      section.lastSectionNumber,
+      section,
+    );
+    if (!complete) return false;
+
+    const parts = set.ordered();
+    this.pending.delete(key);
+    this.done.set(key, {
+      other: section.other,
+      networkId: section.networkId,
+      version: section.version,
+      remoteControlKeyId:
+        parts.find((part) => part.remoteControlKeyId !== null)
+          ?.remoteControlKeyId ?? null,
+      transportStreams: parts.flatMap((part) => part.transportStreams),
+    });
+    return true;
+  }
+
+  /** 自分のネットワークの表 (NIT[actual])。まだそろっていなければ null */
+  get actual(): Network | null {
+    for (const network of this.done.values()) {
+      if (!network.other) return network;
+    }
+    return null;
+  }
+
+  /** そろった表を全部。actual が先 */
+  networks(): Network[] {
+    return [...this.done.values()].sort(
+      (a, b) => Number(a.other) - Number(b.other) || a.networkId - b.networkId,
+    );
+  }
+}
+
+/** そろった SDT。TS 1 本ぶん */
+export interface ServiceTable extends TransportInfo {
+  /** SDT[other] (ほかの TS のもの) なら true */
+  other: boolean;
+  version: number;
+}
+
+/**
+ * SDT を TS ごとに**全部のセクション**そろえて読む。自分の TS (actual) とほかの TS (other) の両方。
+ *
+ * 衛星はほかの TS の局名も流しているので、1 つの TS を開けばネットワークの局名がそろう
+ * (そろうかは放送しだい。来なかった TS は返らない)。version の扱いは `NitReader` と同じ
+ */
+export class SdtReader {
+  private readonly assembler = new SectionAssembler(PID_SDT);
+  private readonly packets = new PacketStream();
+  private readonly pending = new Map<string, SectionSet<TransportInfo>>();
+  private readonly done = new Map<string, ServiceTable>();
+
+  /** 任意の長さのバイト列を食わせる。そろった表が増えたか変わったら true */
+  feed(chunk: Uint8Array): boolean {
+    let changed = false;
+    for (const packet of this.packets.feed(chunk)) {
+      for (const section of this.assembler.feed(packet)) {
+        const tableId = section[0];
+        if (tableId !== TABLE_SDT_ACTUAL && tableId !== TABLE_SDT_OTHER)
+          continue;
+        // current_next_indicator が 0 (これから使う表) のものは読まない
+        if (section.length < 15 || (section[5]! & 0x01) === 0) continue;
+        if (this.add(section, tableId === TABLE_SDT_OTHER)) changed = true;
+      }
+    }
+    return changed;
+  }
+
+  private add(section: Uint8Array, other: boolean): boolean {
+    const transport = sdtTransport(section);
+    const version = (section[5]! >> 1) & 0x1f;
+    const key = `${other ? "other" : "actual"}:${transport.originalNetworkId}:${transport.transportStreamId}`;
+    if (this.done.get(key)?.version === version) return false;
+    const set = this.pending.get(key) ?? new SectionSet<TransportInfo>();
+    this.pending.set(key, set);
+    if (!set.add(version, section[6]!, section[7]!, transport)) return false;
+
+    this.pending.delete(key);
+    this.done.set(key, {
+      ...transport,
+      services: set.ordered().flatMap((part) => part.services),
+      other,
+      version,
+    });
+    return true;
+  }
+
+  /** 自分の TS の表 (SDT[actual])。まだそろっていなければ null */
+  get actual(): ServiceTable | null {
+    for (const table of this.done.values()) {
+      if (!table.other) return table;
+    }
+    return null;
+  }
+
+  /** そろった表を全部。actual が先、あとはネットワーク・TSID の順 */
+  tables(): ServiceTable[] {
+    return [...this.done.values()].sort(
+      (a, b) =>
+        Number(a.other) - Number(b.other) ||
+        a.originalNetworkId - b.originalNetworkId ||
+        a.transportStreamId - b.transportStreamId,
+    );
+  }
 }
 
 export interface FoundService extends Service {

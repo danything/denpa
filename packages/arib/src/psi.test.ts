@@ -1,13 +1,24 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  NitReader,
   PacketStream,
   parseNit,
+  parseNitSection,
   parseSdt,
+  parseSdtOther,
+  SdtReader,
   SectionAssembler,
   ServiceReader,
+  withCrc,
 } from "./psi.js";
-import { nitSection, packetize, sdtSection } from "./synth.js";
+import {
+  nitSection,
+  packetize,
+  satelliteDeliveryDescriptor,
+  sdtSection,
+  terrestrialDeliveryDescriptor,
+} from "./synth.js";
 
 /**
  * 実チューナーが無いので、NIT と SDT を組み立てて食わせる。
@@ -306,5 +317,340 @@ describe("パケットの切り分け (塊を写さない)", () => {
     expect(first).toHaveLength(0);
     expect(Object.isFrozen(first)).toBe(true);
     expect(assembler.feed(new Uint8Array(188))).toBe(first);
+  });
+});
+
+/**
+ * 衛星はどの TS にもネットワークの全部の TS の NIT と、ほかの TS の SDT[other] を流している。
+ * 再編に付いていくにはこれを読む。値は BS の実際の割当に合わせる (BS-1 の BS朝日・BS-15 の NHK BS)
+ */
+describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
+  /** BS-1 (11.72748 GHz) と BS-15 (11.99600 GHz) */
+  const BS1 = satelliteDeliveryDescriptor(11_727_480);
+  const BS15 = satelliteDeliveryDescriptor(11_996_000);
+
+  /** current_next_indicator を 0 (これから使う表) にしたセクション */
+  function next(section: Uint8Array): Uint8Array {
+    const body = [...section.subarray(0, -4)];
+    body[5]! &= 0xfe;
+    return withCrc(body);
+  }
+
+  test("衛星の分配の記述子から周波数・軌道・シンボルレートを読む", () => {
+    const parsed = parseNitSection(
+      nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]]),
+    );
+    expect(parsed?.transportStreams[0]?.delivery).toEqual({
+      kind: "satellite",
+      frequency: 11_727_480,
+      orbitalPosition: 1100,
+      east: true,
+      polarization: 3,
+      modulation: 0x08,
+      symbolRate: 28_860_000,
+      fec: 1,
+    });
+  });
+
+  test("地上の分配の記述子から周波数を読む (1/7 MHz 単位)", () => {
+    // T27 は 557.142857 MHz。放送は 1/7 MHz の 3900 と書く
+    const parsed = parseNitSection(
+      nitSection(0x7fe0, 6, [
+        [
+          0x7fe0,
+          0x7fe0,
+          [[1024, 0x01]],
+          terrestrialDeliveryDescriptor(0x5a5, [557_142_857]),
+        ],
+      ]),
+    );
+    expect(parsed?.transportStreams[0]?.delivery).toEqual({
+      kind: "terrestrial",
+      areaCode: 0x5a5,
+      guardInterval: 1,
+      transmissionMode: 2,
+      frequencies: [557_142_857],
+    });
+  });
+
+  test("分配の記述子が無い TS は null", () => {
+    const parsed = parseNitSection(
+      nitSection(0x7fe0, 6, [[0x0408, 0x0004, [[1024, 0x01]]]]),
+    );
+    expect(parsed?.transportStreams[0]?.delivery).toBeNull();
+  });
+
+  test("セクションの頭からバージョンと節の番号を読む", () => {
+    const parsed = parseNitSection(
+      nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]], {
+        version: 7,
+        sectionNumber: 1,
+        lastSectionNumber: 2,
+      }),
+    );
+    expect(parsed).toMatchObject({
+      other: false,
+      networkId: 4,
+      version: 7,
+      current: true,
+      sectionNumber: 1,
+      lastSectionNumber: 2,
+    });
+  });
+
+  test("分配の記述子が付いても parseNit は今までどおり読む", () => {
+    const parsed = parseNit(
+      nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]]),
+    );
+    expect(parsed?.networkId).toBe(4);
+    expect(parsed?.transportStreams[0]?.services[0]?.serviceId).toBe(151);
+    // NIT[other] はスキャンの「どのネットワークか」に使わない
+    expect(
+      parseNit(
+        nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]], { other: true }),
+      ),
+    ).toBeNull();
+  });
+
+  test("全部のセクションがそろうまで返さず、そろったら TS をつなぐ", () => {
+    const reader = new NitReader();
+    const second = nitSection(4, null, [[16625, 4, [[101, 0x01]], BS15]], {
+      sectionNumber: 1,
+      lastSectionNumber: 1,
+    });
+    const first = nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]], {
+      sectionNumber: 0,
+      lastSectionNumber: 1,
+    });
+    // 後ろの節から届いても並びは section_number の順
+    expect(reader.feed(packetize(0x0010, second))).toBe(false);
+    expect(reader.actual).toBeNull();
+    expect(reader.feed(packetize(0x0010, first, 1))).toBe(true);
+    expect(
+      reader.actual?.transportStreams.map((ts) => [
+        ts.transportStreamId,
+        ts.delivery?.kind === "satellite" ? ts.delivery.frequency : null,
+        ts.services.map((s) => s.serviceId),
+      ]),
+    ).toEqual([
+      [16400, 11_727_480, [151]],
+      [16625, 11_996_000, [101]],
+    ]);
+  });
+
+  test("同じ表が繰り返し流れても、変わったとは言わない", () => {
+    const reader = new NitReader();
+    const section = nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]]);
+    expect(reader.feed(packetize(0x0010, section))).toBe(true);
+    expect(reader.feed(packetize(0x0010, section, 1))).toBe(false);
+  });
+
+  test("バージョンが変わったら、新しい表がそろうまで前の表を返す", () => {
+    const reader = new NitReader();
+    reader.feed(
+      packetize(0x0010, nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]])),
+    );
+    expect(reader.actual?.version).toBe(0);
+
+    // 局が BS-15 へ移った表 (2 節)。1 節目だけではまだ前の表
+    const part = { version: 1, lastSectionNumber: 1 };
+    expect(
+      reader.feed(
+        packetize(
+          0x0010,
+          nitSection(4, null, [[16626, 4, [[151, 0x01]], BS15]], {
+            ...part,
+            sectionNumber: 0,
+          }),
+          1,
+        ),
+      ),
+    ).toBe(false);
+    expect(reader.actual?.version).toBe(0);
+    expect(reader.actual?.transportStreams[0]?.transportStreamId).toBe(16400);
+
+    expect(
+      reader.feed(
+        packetize(
+          0x0010,
+          nitSection(4, null, [[16625, 4, [[101, 0x01]], BS15]], {
+            ...part,
+            sectionNumber: 1,
+          }),
+          2,
+        ),
+      ),
+    ).toBe(true);
+    expect(reader.actual?.version).toBe(1);
+    expect(
+      reader.actual?.transportStreams.map((ts) => ts.transportStreamId),
+    ).toEqual([16626, 16625]);
+  });
+
+  test("集めている途中でバージョンが変わったら、古い節を混ぜない", () => {
+    const reader = new NitReader();
+    reader.feed(
+      packetize(
+        0x0010,
+        nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]], {
+          version: 0,
+          sectionNumber: 0,
+          lastSectionNumber: 1,
+        }),
+      ),
+    );
+    // バージョン 1 の 2 節目だけでは、バージョン 0 の 1 節目とつながない
+    reader.feed(
+      packetize(
+        0x0010,
+        nitSection(4, null, [[16625, 4, [[101, 0x01]], BS15]], {
+          version: 1,
+          sectionNumber: 1,
+          lastSectionNumber: 1,
+        }),
+        1,
+      ),
+    );
+    expect(reader.actual).toBeNull();
+  });
+
+  test("これから使う表 (current_next_indicator が 0) は読まない", () => {
+    const reader = new NitReader();
+    reader.feed(
+      packetize(
+        0x0010,
+        next(nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]])),
+      ),
+    );
+    expect(reader.actual).toBeNull();
+  });
+
+  test("NIT[other] はネットワークごとに別に持つ", () => {
+    const reader = new NitReader();
+    reader.feed(
+      packetize(0x0010, nitSection(6, null, [[0x6020, 6, [[55, 0x01]]]])),
+    );
+    reader.feed(
+      packetize(
+        0x0010,
+        nitSection(7, null, [[0x7040, 7, [[296, 0x01]]]], { other: true }),
+        1,
+      ),
+    );
+    expect(reader.actual?.networkId).toBe(6);
+    expect(
+      reader.networks().map((network) => [network.other, network.networkId]),
+    ).toEqual([
+      [false, 6],
+      [true, 7],
+    ]);
+  });
+
+  test("188 の切れ目と無関係に届いても、大きな表を読める", () => {
+    // BS は 26 の TS があり、TS ごとに記述子が付くので 1 節が何パケットにもまたがる
+    const streams: [number, number, [number, number][], number[]][] =
+      Array.from({ length: 26 }, (_, i) => [
+        16400 + i,
+        4,
+        [
+          [100 + i * 3, 0x01],
+          [101 + i * 3, 0x01],
+          [700 + i, 0xc0],
+        ],
+        satelliteDeliveryDescriptor(11_727_480 + 38_360 * (i % 12)),
+      ]);
+    const data = packetize(0x0010, nitSection(4, null, streams));
+    const reader = new NitReader();
+    for (let at = 0; at < data.length; at += 100)
+      reader.feed(data.subarray(at, at + 100));
+    expect(reader.actual?.transportStreams).toHaveLength(26);
+    expect(reader.actual?.transportStreams[25]?.services).toHaveLength(3);
+  });
+
+  test("SDT[other] からほかの TS の局名を読む", () => {
+    const section = sdtSection(16625, 4, [[101, 0x01, "NHK BS"]], {
+      other: true,
+    });
+    expect(parseSdtOther(section)?.services).toEqual([
+      { serviceId: 101, serviceType: 0x01, name: "NHK BS" },
+    ]);
+    // 自分の TS の読み取りは SDT[other] を読まない (スキャンが別の TS の局を自分のものと取り違える)
+    expect(parseSdt(section)).toBeNull();
+    const reader = new ServiceReader();
+    reader.feed(packetize(0x0011, section));
+    expect(reader.transport).toBeNull();
+  });
+
+  test("SDT を TS ごとにそろえる (actual と other)", () => {
+    const reader = new SdtReader();
+    reader.feed(
+      packetize(0x0011, sdtSection(16400, 4, [[151, 0x01, "BS朝日1"]])),
+    );
+    reader.feed(
+      packetize(
+        0x0011,
+        sdtSection(16625, 4, [[101, 0x01, "NHK BS"]], {
+          other: true,
+          sectionNumber: 0,
+          lastSectionNumber: 1,
+        }),
+        1,
+      ),
+    );
+    // 2 節に分かれた TS は、そろうまで返らない
+    expect(reader.tables().map((t) => t.transportStreamId)).toEqual([16400]);
+    reader.feed(
+      packetize(
+        0x0011,
+        sdtSection(16625, 4, [[102, 0x01, "NHK BS"]], {
+          other: true,
+          sectionNumber: 1,
+          lastSectionNumber: 1,
+        }),
+        2,
+      ),
+    );
+    expect(reader.actual?.transportStreamId).toBe(16400);
+    expect(
+      reader
+        .tables()
+        .map((t) => [
+          t.other,
+          t.transportStreamId,
+          t.services.map((s) => [s.serviceId, s.name]),
+        ]),
+    ).toEqual([
+      [false, 16400, [[151, "BS朝日1"]]],
+      [
+        true,
+        16625,
+        [
+          [101, "NHK BS"],
+          [102, "NHK BS"],
+        ],
+      ],
+    ]);
+  });
+
+  test("SDT のバージョンが変わったら局名を書き換える", () => {
+    const reader = new SdtReader();
+    const old = sdtSection(17970, 4, [[251, 0x01, "釣りビジョン"]], {
+      other: true,
+    });
+    expect(reader.feed(packetize(0x0011, old))).toBe(true);
+    expect(reader.feed(packetize(0x0011, old, 1))).toBe(false);
+    expect(
+      reader.feed(
+        packetize(
+          0x0011,
+          sdtSection(17970, 4, [[251, 0x01, "BS12"]], {
+            other: true,
+            version: 1,
+          }),
+          2,
+        ),
+      ),
+    ).toBe(true);
+    expect(reader.tables()[0]?.services[0]?.name).toBe("BS12");
   });
 });

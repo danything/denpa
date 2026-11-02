@@ -14,9 +14,28 @@ export { withCrc };
 const be = (value: number) => [(value >> 8) & 0xff, value & 0xff];
 const be32 = (value: number) => [...be(value >>> 16), ...be(value & 0xffff)];
 
-/** セクションの頭8バイト (長さは `withCrc` が埋める)。バージョン 0・節 0/0 */
-function head(tableId: number, extension: number): number[] {
-  return [tableId, 0x00, 0x00, ...be(extension), 0xc1, 0x00, 0x00];
+/** 表のバージョンと、何本に分けたうちのどれか。指定しなければバージョン 0・節 0/0 */
+export interface SectionPart {
+  version?: number;
+  sectionNumber?: number;
+  lastSectionNumber?: number;
+}
+
+/** セクションの頭8バイト (長さは `withCrc` が埋める) */
+function head(
+  tableId: number,
+  extension: number,
+  part: SectionPart = {},
+): number[] {
+  return [
+    tableId,
+    0x00,
+    0x00,
+    ...be(extension),
+    0xc1 | (((part.version ?? 0) & 0x1f) << 1),
+    part.sectionNumber ?? 0,
+    part.lastSectionNumber ?? 0,
+  ];
 }
 
 /** PCR の基準部 (90kHz) を適応フィールドに書く (旗は呼ぶ側)。拡張部 (27MHz の端数) は読む側が見ていないので 0 */
@@ -104,9 +123,11 @@ export function sdtSection(
   transportStreamId: number,
   originalNetworkId: number,
   services: [number, number, string?][],
+  /** `other` なら SDT[other] (0x46。ほかの TS のもの) */
+  options: SectionPart & { other?: boolean } = {},
 ): Uint8Array {
   const body = [
-    ...head(0x42, transportStreamId),
+    ...head(options.other === true ? 0x46 : 0x42, transportStreamId, options),
     ...be(originalNetworkId),
     0xff,
   ];
@@ -343,21 +364,36 @@ export function eitSection(options: EitOptions): Uint8Array {
   return withCrc(body);
 }
 
+/**
+ * NIT。TS ごとに `[TSID, ONID, [サービスID, 種別][], 足す記述子]`。
+ * 足す記述子は分配の記述子 (`satelliteDeliveryDescriptor`・`terrestrialDeliveryDescriptor`) など
+ */
 export function nitSection(
   networkId: number,
   remoteControlKeyId: number | null,
-  streams: [number, number, [number, number][]][],
+  streams: [number, number, [number, number][], number[]?][],
+  /** `other` なら NIT[other] (0x41。ほかのネットワークのもの) */
+  options: SectionPart & { other?: boolean } = {},
 ): Uint8Array {
-  const body = [...head(0x40, networkId), ...be(0xf000)];
+  const body = [
+    ...head(options.other === true ? 0x41 : 0x40, networkId, options),
+    ...be(0xf000),
+  ];
 
   const loop: number[] = [];
-  for (const [transportStreamId, originalNetworkId, services] of streams) {
+  for (const [
+    transportStreamId,
+    originalNetworkId,
+    services,
+    extra,
+  ] of streams) {
     const descriptors: number[] = [];
     // TS information descriptor (0xCD)
     if (remoteControlKeyId !== null)
       descriptors.push(0xcd, 0x02, remoteControlKeyId, 0x00);
     const serviceList = services.flatMap(([id, type]) => [...be(id), type]);
     descriptors.push(0x41, serviceList.length, ...serviceList);
+    descriptors.push(...(extra ?? []));
 
     loop.push(
       ...be(transportStreamId),
@@ -369,6 +405,50 @@ export function nitSection(
 
   body.push(...be(0xf000 | loop.length), ...loop);
   return withCrc(body);
+}
+
+/** 10 進の整数を `digits` 桁の BCD のバイト列にする (桁が奇数なら最後の半バイトは 0) */
+function bcdBytes(value: number, digits: number): number[] {
+  const text = String(value).padStart(digits, "0");
+  const out: number[] = [];
+  for (let i = 0; i < digits; i += 2) {
+    out.push((Number(text[i]) << 4) | Number(text[i + 1] ?? 0));
+  }
+  return out;
+}
+
+/**
+ * 衛星の分配の記述子 (0x43)。周波数は kHz、シンボルレートはシンボル/秒で渡す
+ * (BS-1 は 11727480 kHz・28860000)。東経 110 度・右旋・ISDB-S (変調 0x08) にしておく
+ */
+export function satelliteDeliveryDescriptor(
+  frequency: number,
+  symbolRate = 28_860_000,
+): number[] {
+  const symbol = bcdBytes(symbolRate / 100, 7);
+  return [
+    0x43,
+    11,
+    ...bcdBytes(frequency / 10, 8),
+    ...bcdBytes(1100, 4),
+    0x80 | (3 << 5) | 0x08,
+    symbol[0]!,
+    symbol[1]!,
+    symbol[2]!,
+    (symbol[3]! & 0xf0) | 0x01,
+  ];
+}
+
+/** 地上の分配の記述子 (0xFA)。周波数は Hz で渡す (1/7 MHz 単位に丸める) */
+export function terrestrialDeliveryDescriptor(
+  areaCode: number,
+  frequencies: number[],
+): number[] {
+  const body = [
+    ...be((areaCode << 4) | (1 << 2) | 0x02),
+    ...frequencies.flatMap((hz) => be(Math.round((hz * 7) / 1_000_000))),
+  ];
+  return [0xfa, body.length, ...body];
 }
 
 /** セクションを TS パケットに詰める。頭のパケットには pointer_field が付く */
