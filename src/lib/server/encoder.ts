@@ -151,7 +151,7 @@ async function measureSmoothMotion(
   const smooth = pickSmooth(windows.map((w) => w.kind));
   // 窓ごとの値も出す。閾値 (fps.ts) を詰め直すときの材料
   console.log(
-    `[fps] フィールドの実測: ${windows.map(windowLabel).join(" / ")} → ${smooth ? "60" : "30"}コマ`,
+    `[fps] フィールドの実測: ${windows.map(windowLabel).join(" / ")} → ${smooth ? "60" : "30"} コマ`,
   );
   return smooth;
 }

@@ -412,7 +412,7 @@ export class CaptionText {
     } catch (error) {
       if (!this.told)
         console.warn(
-          `[captions] 字幕を1コマ読めませんでした: ${String(error)}`,
+          `[captions] 字幕を 1 コマ読めませんでした: ${String(error)}`,
         );
       this.told = true;
       return null;

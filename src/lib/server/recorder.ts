@@ -246,7 +246,7 @@ function extendIfLonger(recording: Recording, endAt: number): void {
       .run();
   }
   const minutes = Math.round((endAt - current.end_at) / 60000);
-  console.log(`[rec] 放送が延びました: ${recording.name} (+${minutes}分)`);
+  console.log(`[rec] 放送が延びました: ${recording.name} (+${minutes} 分)`);
   emit("recordings");
   emit("reservations");
 }
