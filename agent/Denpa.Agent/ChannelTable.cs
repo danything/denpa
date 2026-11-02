@@ -45,7 +45,7 @@ public static class ChannelTable
     /// <para>
     /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (CATV) / <c>BS01</c>–<c>BS23</c> / <c>CS02</c>–<c>CS24</c>。
     /// 衛星は <c>:TSID</c> を付けて TS を指す (<c>BS15:16625</c>)。付けなければ中継器の先頭の TS。
-    /// 衛星は BS が奇数、CS が偶数で、**BS-7 と BS-17 だけは受け取らない** —
+    /// 衛星は BS が奇数、CS が偶数で、**BS-7 と BS-17 だけは受け取らない。**
     /// あそこは 4K/8K (ISDB-S3) で、この構成のチューナーでは復調できない。
     /// </para>
     /// </summary>

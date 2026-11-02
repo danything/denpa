@@ -26,6 +26,7 @@ import {
   getTuners,
   openChannelStream,
   putChannels,
+  TunerBusyError,
 } from "./tuner";
 
 const TYPES: SatelliteType[] = ["BS", "CS"];
@@ -92,6 +93,8 @@ async function fill(
   const known = knownNames(channels);
   const filled: ChannelType[] = [];
   for (const type of wanted.filter((type) => receivable.has(type))) {
+    /** チューナーが塞がっていて開けなかったか。それだけなら 1 時間待たず、次の取り込みで試し直す */
+    let busy = false;
     const lineup = await readLineup(
       type,
       (channel) =>
@@ -101,11 +104,14 @@ async function fill(
           AbortSignal.timeout(READ_TIMEOUT * 4),
           `scan ${channel}`,
           config.priority.scan,
-        ),
+        ).catch((error: unknown) => {
+          if (error instanceof TunerBusyError) busy = true;
+          throw error;
+        }),
       { timeout: READ_TIMEOUT, known },
     );
     if (lineup.channels.length === 0) {
-      failedAt.set(type, now);
+      if (!busy) failedAt.set(type, now);
       console.warn(
         `[channels] ${type} の放送の一覧を読めませんでした (${lineup.log.join(" / ")})`,
       );

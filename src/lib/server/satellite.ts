@@ -56,7 +56,7 @@ const TOLERANCE = 1_000;
 
 /**
  * 周波数から中継器の番号を出す。**その種別の中継器でなければ null。**
- * BS-7 と BS-17 (4K/8K。ISDB-S3) も null — この構成のチューナーでは受からない
+ * BS-7 と BS-17 (4K/8K。ISDB-S3) も null。この構成のチューナーでは受からない
  */
 export function transponderOf(
   type: SatelliteType,
