@@ -68,6 +68,14 @@ describe("受信できないと決める", () => {
     expect(unreceivableChannels().size).toBe(0);
   });
 
+  test("地上波は決めない (スキャンで受信できたものだけが入っている。知らせるだけ)", () => {
+    recordReceived("GR", "T16", T0);
+    recordFailed("GR", "T27", T0 + HOUR);
+    recordReceived("GR", "T16", T0 + 2 * HOUR);
+    expect(recordFailed("GR", "T27", T0 + 3 * HOUR)).toBe(false);
+    expect(unreceivableChannels().size).toBe(0);
+  });
+
   test("ほかの種別が受信できても決めない", () => {
     recordReceived("GR", "T27", T0 + 2 * HOUR);
     recordFailed("CS", "CS02:24608", T0 + HOUR);

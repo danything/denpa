@@ -13,7 +13,8 @@
  * - 同じ周回の中の失敗は 1 回と数える (`RECOUNT_AFTER`)
  * - チューナーの空き待ちは失敗に数えない (呼ぶ側が渡さない)
  *
- * 受信できないチャンネルの局は、番組表・ライブ・ルールの対象から外す (`epg.syncServices`)。
+ * 受信できないチャンネルの局は、番組表・ライブ・ルールの対象から外す (`epg.syncServices`)。**外すのは BS と CS だけ。**
+ * 地上波はスキャンで受信できたものだけが入っているので、続けて選局できなくても外さない (知らせるのは別)。
  * 番組表集めはそのチャンネルにも行き続けるので、受信できるようになれば戻る
  */
 import { and, eq, gte, ne } from "drizzle-orm";
@@ -92,7 +93,8 @@ export function recordFailed(
         ),
       )
       .get() !== undefined;
-  const unreceivable = failures >= MARK_AFTER && others;
+  // 地上波は外さない (スキャンで受信できたものだけが入っている。続けて選局できないときは知らせるだけ)
+  const unreceivable = type !== "GR" && failures >= MARK_AFTER && others;
   orm()
     .insert(channelReception)
     .values({
