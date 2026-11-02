@@ -2127,28 +2127,32 @@ export function chaseStream(
 }
 
 /**
- * **アプリ向けのライブの字幕** (`GET /api/services/<id>/captions`。docs/api.md)。そのままの TS
- * (`liveStream` の `raw`) を観ているアプリに、字幕 (文字の配置 0x22) を放送の PTS のまま流す —
- * ブラウザで放送そのままを送る経路 (stream.md#放送のままのときの字幕) と同じもの。
+ * **アプリ向けのライブの字幕と時計** (`GET /api/services/<id>/captions`。docs/api.md)。ライブの映像 (`liveStream`) を
+ * 観ているアプリに、字幕 (文字の配置 0x22) と時計 (`clock` の通知) を、**その映像と同じ物差しの時刻のまま**流す。
  *
- * **いま流している放送そのままのセッションを脇から共有する**だけで、チューナーは増やさない
- * (ブラウザで同じ局を放送そのままで観ていればそれも共有する)。共有する相手が無ければ null —
- * 映像 (`live?codec=raw`) を先に開いてからリクエストすること。映像が終われば閉じる (`Viewer.side`)
+ * - `raw` (既定) … そのままの TS。時刻は放送の PTS (ブラウザで放送そのままを送る経路と同じ。stream.md#放送のままのときの字幕)
+ * - `h264` / `av1` … 変換したライブ。時刻は ffmpeg が付けた fMP4 の時刻 (ブラウザが MSE に積むものと同じ)。
+ *   `audio` は映像に渡したものと同じものを渡す (同じ局・同じ形式・同じ音声のセッションだけを共有するので、違えば別の映像になる。`key`)
+ *
+ * **いま流しているセッションを脇から共有する**だけで、チューナーもエンコードも増やさない (ブラウザで同じものを観ていればそれも共有する)。
+ * 共有する相手が無ければ null — 映像 (`live`) を先に開いてからリクエストすること。映像が終われば閉じる (`Viewer.side`)
  */
 export function liveCaptions(
   serviceId: number,
   language = 1,
+  form: LiveCodec | "raw" = "raw",
+  audio?: string,
 ): ReadableStream<Uint8Array> | null {
   const row = serviceOf(serviceId);
   if (row === undefined) return null;
-  // 放送そのままの目印は音声で分けない (`key`)。何を渡しても同じ
+  // 放送そのままの目印は音声で分けない (`key`)。変換したものは映像と同じ決め方で音声を選ぶ (`liveStream`)
   const session = sessions.get(
     key(
       row.type,
       row.channel,
       serviceId,
-      nowPlaying(serviceId, undefined).audio,
-      "raw",
+      nowPlaying(serviceId, form === "raw" ? undefined : audio).audio,
+      form,
       0,
     ),
   );

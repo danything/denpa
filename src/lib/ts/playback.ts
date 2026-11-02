@@ -6,6 +6,8 @@
  * 端末が何かを知らない。決め方は `server/playback.ts`
  */
 
+import type { Ruler } from "./watch";
+
 /** 出せる映像の形式。H.265 はエンコード済みがあるときだけ (ファイルそのままと詰め替え。その場の変換では作らない) */
 export type PlayCodec = "h264" | "hevc" | "av1" | "mpeg2";
 
@@ -57,6 +59,12 @@ export interface PlaybackInfo {
   audios: PlayAudio[];
   /** 出せるもの。並びに意味は無い (どれを使うかは画面が決める) */
   offers: PlayOffer[];
+  /**
+   * 物差しの時刻を元の TS の時刻に戻すための情報 (`ts/watch.ts` の `Ruler`。`toTsTime`)。**`axis` が `encoded` のときだけ。**
+   * 元の TS の時刻に録画の頭の放送時刻 (`GET /api/recordings/<id>` の `jikkyo.head`) を足すと、その場面の放送時刻になる
+   * (アプリが実況のコメントを場面に合わせる。docs/api.md)
+   */
+  ruler?: Ruler;
 }
 
 /**
