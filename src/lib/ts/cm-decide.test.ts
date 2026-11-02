@@ -556,6 +556,18 @@ describe("録画の頭の CM は番組表どおりの頭まで", () => {
     expect(cm[0]).toEqual({ start: 0, end: 3 });
   });
 
+  test("頭の CM のあとに続く 15 秒の倍数の CM は、番組表どおりの頭の先でも CM にする", () => {
+    // 番組表どおりの頭のすぐ前に前の番組が終わり、15 秒の CM のあと 18 秒から番組 (ロゴは 18.3 秒から)
+    const fit = [3, 18, ...joints.slice(1)];
+    const lit = [{ start: 18.3, end: 466.9 }, logo[1]!];
+    const cm = round(
+      decideCm(
+        recording(1820, fit, lit, { programLength: 1800, programStart: 2.5 }),
+      ),
+    );
+    expect(cm[0]).toEqual({ start: 0, end: 18 });
+  });
+
   test("番組表どおりの頭が分からなければ、頭の CM はロゴが出るまで", () => {
     const cm = round(decideCm(recording(1820, joints, logo)));
     expect(cm[0]).toEqual({ start: 0, end: 17.3 });
