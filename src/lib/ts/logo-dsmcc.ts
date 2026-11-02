@@ -35,6 +35,7 @@ import {
 } from "@danything/arib/dsmcc";
 import {
   descriptors,
+  packetPid,
   parsePat,
   PID_PAT,
   pmtStreams,
@@ -48,6 +49,8 @@ import { withPalette } from "./logo-palette";
 const ESS_SERVICE_ID = 929;
 
 const DESC_STREAM_IDENTIFIER = 0x52;
+/** DDB (ブロック) の table_id。数えるためだけに持つ (読むのは `parseDdb`) */
+const TABLE_DDB = 0x3c;
 /** ロゴのカルーセルが乗る ES の目印。0x79 が BS、0x7A が CS */
 const LOGO_COMPONENT_TAGS = new Set([0x79, 0x7a]);
 
@@ -82,6 +85,23 @@ function parseLogoEsPids(
     }
   }
   return { serviceId: u16(section, 3), pids };
+}
+
+/** 1 回開いた間に読んだ数 (`DsmccLogoCollector.counts`)。放送の中身は持たない */
+export interface CarouselCounts {
+  /** 読んだ TS パケット */
+  packets: number;
+  /** そのうち誤りの印 (transport_error_indicator) が立っていたもの */
+  errors: number;
+  /** エンジニアリングサービスの PMT を読めたか */
+  pmt: boolean;
+  /** PMT に載っていたロゴの ES の数 */
+  esPids: number;
+  /** ロゴの ES に来たパケット */
+  esPackets: number;
+  /** ロゴの ES に来た DII と DDB のセクション (同じものの繰り返しも数える) */
+  dii: number;
+  ddb: number;
 }
 
 interface ModuleLogo {
@@ -300,14 +320,35 @@ export class DsmccLogoCollector {
   /** PAT を読んだか。読むまでは「この中継にロゴがあるか」を判断できない */
   private sawPat = false;
   private ess = false;
+  /** この回に読んだ数 (`counts`)。読みかけ (`CarouselProgress`) と違って、開くたびに 0 から */
+  private readonly tally: CarouselCounts = {
+    packets: 0,
+    errors: 0,
+    pmt: false,
+    esPids: 0,
+    esPackets: 0,
+    dii: 0,
+    ddb: 0,
+  };
 
   /**
    * @param progress カルーセルの読みかけ。渡せば、前に開いたときの続きから組み立てる
    */
   constructor(private readonly progress = new CarouselProgress()) {}
 
+  /**
+   * この回に読んだパケットとセクションの数。当たりの中継を開いてもロゴが来なかったときに、記録の 1 行に足す
+   * (`server/logo.ts` の `waitedMessage`)。カルーセルが来なかったのか、ロゴの ES を見つけられなかったのか、
+   * 誤りで壊れたのかを、数だけで見分けるため (#1939)
+   */
+  get counts(): Readonly<CarouselCounts> {
+    return this.tally;
+  }
+
   /** パケットを1つ食わせる */
   feed(packet: Uint8Array): void {
+    this.tally.packets++;
+    if (packet[1]! & 0x80) this.tally.errors++;
     for (const section of this.pat.feed(packet)) {
       const pmtPid = parsePat(section).get(ESS_SERVICE_ID);
       this.sawPat = true;
@@ -319,16 +360,22 @@ export class DsmccLogoCollector {
     for (const section of this.pmt?.feed(packet) ?? []) {
       const found = parseLogoEsPids(section);
       if (found === null || found.serviceId !== ESS_SERVICE_ID) continue;
+      this.tally.pmt = true;
       for (const pid of found.pids) {
         // DSM-CC は section_syntax_indicator が立たないことがある (`SectionAssembler` の `crc`)
         if (!this.carousels.has(pid))
           this.carousels.set(pid, new SectionAssembler(pid, "syntax"));
       }
+      this.tally.esPids = this.carousels.size;
     }
 
+    if (this.carousels.has(packetPid(packet))) this.tally.esPackets++;
     for (const carousel of this.carousels.values()) {
-      for (const section of carousel.feed(packet))
+      for (const section of carousel.feed(packet)) {
+        if (section[0] === TABLE_DII) this.tally.dii++;
+        else if (section[0] === TABLE_DDB) this.tally.ddb++;
         this.progress.onSection(section);
+      }
     }
   }
 

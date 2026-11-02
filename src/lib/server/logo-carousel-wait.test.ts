@@ -200,7 +200,7 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     ]);
     expect(logos()).toBe(0);
     expect(lines).toEqual([
-      "[logo] BS15_0 を 0 分開いて途中まで読みました。次に空いたときに続きから読みます",
+      "[logo] BS15_0 を 0 分開いて途中まで読みました。次に空いたときに続きから読みます (TS 4 パケット・誤り 0・PMT あり・ロゴの ES 1 本に 2 パケット・DII 1・DDB 1)",
     ]);
   });
 
@@ -214,8 +214,9 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     });
     expect(config.priority.carousel).toBeGreaterThan(config.priority.epg);
     expect(config.priority.carousel).toBeLessThan(config.priority.scan);
+    // 読んだ数は後ろに足す。同じ DII とブロックが来ていたことが記録から分かる
     expect(lines).toEqual([
-      "[logo] BS15_0 を 0 分開いてもロゴが流れてこなかったので、6 時間あけて開き直します",
+      "[logo] BS15_0 を 0 分開いてもロゴが流れてこなかったので、6 時間あけて開き直します (TS 4 パケット・誤り 0・PMT あり・ロゴの ES 1 本に 2 パケット・DII 1・DDB 1)",
     ]);
 
     await sweep();

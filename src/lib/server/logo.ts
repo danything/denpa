@@ -16,7 +16,7 @@ import {
   PREFERRED_LOGO_TYPE,
   replacesLogo,
 } from "../ts/logo";
-import { CarouselProgress } from "../ts/logo-dsmcc";
+import { type CarouselCounts, CarouselProgress } from "../ts/logo-dsmcc";
 import { withPalette } from "../ts/logo-palette";
 import type { ChannelType } from "../types";
 import { config } from "./config";
@@ -351,6 +351,7 @@ function watch(networkId: number, carousel?: Carousel): Feed {
   Object.defineProperties(feed, {
     hasSatelliteLogo: { get: () => collector.hasSatelliteLogo },
     carouselRead: { get: () => collector.satelliteCarouselRead },
+    counts: { get: () => collector.satelliteCounts },
   });
   return feed as Feed;
 }
@@ -361,6 +362,8 @@ interface Feed {
   readonly hasSatelliteLogo: boolean | null;
   /** 衛星のロゴのカルーセルを1回ぶん読み切ったか */
   readonly carouselRead: boolean;
+  /** この回に読んだパケットとセクションの数 (記録の 1 行に足す。`waitedMessage`) */
+  readonly counts: Readonly<CarouselCounts>;
 }
 
 /**
@@ -617,7 +620,7 @@ let carouselRanOutAt: number | undefined;
  * 十数分に一度しか来ないものを3分で切り上げていると、来る時刻に居合わせる見込みが薄い。
  *
  * 返す `received` は、この回にカルーセルから1つでも受け取ったか (`CarouselProgress.received`)。
- * `openedMs` は開いていた長さ (開けなかったら 0)
+ * `openedMs` は開いていた長さ (開けなかったら 0)。`counts` はこの回に読んだ数 (開けなかったら null)
  */
 async function collect(
   target: Target,
@@ -631,6 +634,7 @@ async function collect(
   carrier: boolean;
   received: boolean;
   openedMs: number;
+  counts: Readonly<CarouselCounts> | null;
 }> {
   const satellite = target.type !== "GR";
   // 衛星は「開いた中継の局」では見ない。開いた中継以外の局も一緒に取得できる (`missingSatellites`)
@@ -661,6 +665,7 @@ async function collect(
   /** ロゴを積んだ中継だったか */
   let carrier = false;
   let openedAt: number | null = null;
+  let feed: Feed | null = null;
   try {
     const stream = await openChannelStream(
       target.type,
@@ -673,7 +678,7 @@ async function collect(
     );
     opened = true;
     openedAt = Date.now();
-    const feed = watch(target.network_id, carousel);
+    feed = watch(target.network_id, carousel);
     for await (const chunk of chunks(stream)) {
       feed(chunk);
       /*
@@ -750,6 +755,7 @@ async function collect(
     carrier,
     received,
     openedMs: openedAt === null ? 0 : Date.now() - openedAt,
+    counts: feed?.counts ?? null,
   };
 }
 
@@ -782,7 +788,13 @@ function logoUse(target: Target): StreamUse {
  * 非同期なので、閉じた直後に訊くとまだ使用中に見える。それを数え損ねると、衛星の
  * 外れの中継 (1秒ほどで閉じる) の次に「CS の空きチューナーが無くなった」と諦めて
  * いた — もう1台は当たりの中継を読んでいる最中なので、空きが0に見える。
- * そこにしかいないなら空きとして数え、開くときに `after` で引き継ぐ
+ * そこにしかいないなら空きとして数え、開くときに `after` で引き継ぐ。
+ *
+ * **利用者のいない選局 (余韻) も空きとして数える。** エージェントは誰も読まなくなった選局を 5 秒畳まずに残し
+ * (`TunerPool.Linger`)、その間に来た要求に使い回す。一覧ではチャンネルが付いたまま利用者が空になる。
+ * これを使用中と数えていた頃は、外れの中継を閉じた直後や番組表集めが終わった直後に空きが 0 に見え、
+ * BS と CS のチューナーが共通の 2 台の環境で、当たりの中継まで行き着かずに「CS の空きチューナーが無くなったため、
+ * 残りは取りやめました」と止まっていた (#1939)
  */
 export function countFree(
   tuners: readonly Pick<
@@ -796,9 +808,7 @@ export function countFree(
     (tuner) =>
       !tuner.disabled &&
       tuner.types.includes(type as ChannelType) &&
-      (tuner.channel === null ||
-        (tuner.users.length > 0 &&
-          tuner.users.every((user) => leaving.includes(user.use)))),
+      tuner.users.every((user) => leaving.includes(user.use)),
   ).length;
 }
 
@@ -918,7 +928,14 @@ async function drain(
       const target = queue.shift();
       if (target === undefined || signal.aborted) return;
       // 諦めたぶんも見終えたものとして数える。進み具合が総数に届かなくなる
-      if (full.has(target.type)) {
+      /*
+       * 衛星は当たりの中継 1 つで BS と CS の全局ぶんが揃う。揃ったあと (読み切ったあと) は、残りの中継を開いて
+       * 当たり外れを確かめても取得できる局は無い
+       */
+      if (
+        full.has(target.type) ||
+        (target.type !== "GR" && missingSatellites() === 0)
+      ) {
         update({ done: state.done + 1 });
         continue;
       }
@@ -934,7 +951,7 @@ async function drain(
       // 衛星のカルーセルは十数分に一度しか来ない。当たりの中継はそれまで待つ
       const limit =
         target.type === "GR" ? SWEEP_TIMEOUT : config.logoCarouselWait;
-      const { outcome, carrier, received } = await collect(
+      const { outcome, carrier, received, openedMs, counts } = await collect(
         target,
         limit,
         signal,
@@ -944,6 +961,11 @@ async function drain(
       const note = carrier
         ? carouselMessage(target.channel, outcome, received)
         : "";
+      // 当たりの中継は、定期チェックで待ったとき (`awaitCarousel`) と同じ 1 行を記録に残す
+      const line = carrier
+        ? waitedMessage(target.channel, outcome, received, openedMs, counts)
+        : null;
+      if (line !== null) console.log(`[logo] ${line}`);
       left = [logoUse(target)];
       update({
         channels: state.channels.filter(
@@ -984,29 +1006,50 @@ function carouselMessage(
 /**
  * 当たりの中継で待ったあと (`awaitCarousel`) の記録の1行。どう終わったかを残す — 残していなかった頃は、
  * 2台の環境で一晩揃わなかったときに、取り上げられ続けたのか来なかったのかが記録から分からなかった (#1939)。
- * 外れの中継 (`miss`) と、開けなかった回 (`busy`) は出さない
+ * 外れの中継 (`miss`) と、開けなかった回 (`busy`) は出さない。
+ *
+ * `counts` を渡すと、この回に読んだ数を後ろに足す (`countsNote`)。20 分開いても何も来なかった報告で、
+ * カルーセルが来なかったのか、ロゴの ES を見つけられなかったのか、誤りで壊れたのかを記録から分けられなかった (#1939)
  */
 export function waitedMessage(
   channel: string,
   outcome: Outcome,
   received: boolean,
   openedMs: number,
+  counts: Readonly<CarouselCounts> | null = null,
 ): string | null {
   const opened = `${channel} を ${Math.round(openedMs / 60_000)} 分開いて`;
-  switch (outcome) {
-    case "done":
-      return `${opened}、カルーセルを読み切りました`;
-    case "yielded":
-      return `${opened}、ほかの選局にチューナーを譲りました。読んだところまでは覚えています`;
-    case "stopped":
-      return `${opened}、「ロゴをいますぐ集める」を先にしました`;
-    case "ranOut":
-      return received
-        ? `${opened}途中まで読みました。次に空いたときに続きから読みます`
-        : `${opened}もロゴが流れてこなかったので、${CAROUSEL_RETRY / 3_600_000} 時間あけて開き直します`;
-    default:
-      return null;
-  }
+  const line = (() => {
+    switch (outcome) {
+      case "done":
+        return `${opened}、カルーセルを読み切りました`;
+      case "yielded":
+        return `${opened}、ほかの選局にチューナーを譲りました。読んだところまでは覚えています`;
+      case "stopped":
+        return `${opened}、「ロゴをいますぐ集める」を先にしました`;
+      case "ranOut":
+        return received
+          ? `${opened}途中まで読みました。次に空いたときに続きから読みます`
+          : `${opened}もロゴが流れてこなかったので、${CAROUSEL_RETRY / 3_600_000} 時間あけて開き直します`;
+      default:
+        return null;
+    }
+  })();
+  return line === null || counts === null
+    ? line
+    : `${line} (${countsNote(counts)})`;
+}
+
+/** 読んだ数の書き出し。数だけで、放送の中身は出さない */
+function countsNote(counts: Readonly<CarouselCounts>): string {
+  return [
+    `TS ${counts.packets} パケット`,
+    `誤り ${counts.errors}`,
+    `PMT ${counts.pmt ? "あり" : "なし"}`,
+    `ロゴの ES ${counts.esPids} 本に ${counts.esPackets} パケット`,
+    `DII ${counts.dii}`,
+    `DDB ${counts.ddb}`,
+  ].join("・");
 }
 
 /**
@@ -1106,6 +1149,7 @@ async function awaitCarousel(): Promise<number> {
             result.outcome,
             result.received,
             result.openedMs,
+            result.counts,
           )
         : null;
       if (line !== null) console.log(`[logo] ${line}`);
@@ -1223,10 +1267,15 @@ export async function sweepNow(): Promise<{
   if ([...free.values()].every((count) => count === 0)) {
     return { started: false, message: "空いているチューナーがありません" };
   }
-  // 地上波を先に回す。中継ごとに違う局が入っているので、数が捌けるのはこちら
-  const ordered = [...targets].sort(
-    (a, b) => Number(b.type === "GR") - Number(a.type === "GR"),
-  );
+  /*
+   * 地上波を先に回す。中継ごとに違う局が入っているので、数が捌けるのはこちら。
+   * 衛星は**当たりと分かっている中継を外れ探しより先に**開く。外れの控えは上で捨てたので、並びのままだと
+   * `BS01_0` から順に当たり直し、途中でチューナーが塞がると当たりの中継 (`BS15_0`) まで行き着かない (#1939)
+   */
+  const carriers = notes().carriers;
+  const order = (target: Target) =>
+    target.type === "GR" ? 0 : carriers[target.channel] !== undefined ? 1 : 2;
+  const ordered = [...targets].sort((a, b) => order(a) - order(b));
   const parallel = Math.min(SWEEP_TUNERS, Math.max(...free.values()));
   // 終わるのは数分後。押した人を待たせず、進み具合は画面へ流す
   void run(ordered, parallel, leaving);
