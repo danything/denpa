@@ -1,13 +1,33 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
+  import { page } from "$app/state";
+  import { onMount } from "svelte";
+
   import { autosave, SaveState } from "#lib/autosave.svelte.js";
+  import ActionButton from "#lib/components/ActionButton.svelte";
   import Lead from "#lib/components/Lead.svelte";
   import SaveNote from "#lib/components/SaveNote.svelte";
+  import { dateTime } from "#lib/format.js";
   import { NG_LENGTH, NG_MAX } from "#lib/jikkyo/ng.js";
+  import { homeHost } from "#lib/niconico.js";
 
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
   const save = new SaveState();
+  /** 連携を始めるリンク (サーバが hub へ送る。`niconico/link`) */
+  const linkHref = resolve("/settings/integrations/niconico/link");
+
+  /** 連携を始められなかったとき (リンクの移動なので、理由は URL に載って戻ってくる) */
+  const linkError = $derived(page.url.searchParams.get("niconico_error"));
+  /**
+   * 名前で開いている (`tv.example.com` など) か。hub はそこへ結果を返さないので、LAN のアドレスで開き直すよう案内する。
+   * 止めはしない (hub を置く人が名前を足していれば通る)。サーバで描くときは分からないので、開いてから見る
+   */
+  let named = $state(false);
+  onMount(() => {
+    named = !homeHost(location.hostname);
+  });
 </script>
 
 <!--
@@ -86,5 +106,70 @@
         >
       </label>
     </form>
+    <!--
+        ニコニコのアカウントとの連携 (世帯で 1 つ。`server/niconico.ts`)。トークンは denpa のサーバだけが持つ。
+        連携は denpa-hub が中継し、結果は `niconico/return` に戻る。外すのは手元のトークンを消すだけで、
+        ニコニコの側の許可はニコニコのアカウント設定から取り消す (ニコニコに失効のエンドポイントが無い)
+    -->
+    <div class="fields niconico" data-testid="niconico">
+      <span class="field-label">ニコニコのアカウント</span>
+      {#if data.niconico.state === "linked"}
+        <div class="niconico-row">
+          <span class="small grow" data-testid="niconico-state"
+            >連携中・ユーザー ID {data.niconico.userId}・{dateTime(
+              data.niconico.linkedAt,
+            )} から</span
+          >
+          <ActionButton
+            action="?/unlinkNiconico"
+            class="small outline danger"
+            testid="niconico-unlink"
+          >
+            連携を外す
+          </ActionButton>
+        </div>
+      {:else}
+        {#if data.niconico.state === "lost"}
+          <div class="notice error" data-testid="niconico-state">
+            連携が切れました。ニコニコで許可が取り消されたか、更新できなくなったためです。もう一度連携してください
+          </div>
+        {/if}
+        <div class="niconico-row">
+          <a
+            class="button small outline"
+            href={linkHref}
+            data-sveltekit-reload
+            data-testid="niconico-link">ニコニコと連携</a
+          >
+        </div>
+        <span class="hint"
+          >ニコニコのアカウントで実況に書き込むための連携です (世帯で 1
+          つ)。トークンは denpa のサーバだけが持ち、端末には渡しません</span
+        >
+        {#if named}
+          <span class="hint" data-testid="niconico-named"
+            >いまの名前で開いていると、連携の結果が戻ってこないことがあります。LAN
+            のアドレス (http://192.168.1.20:3000 など)
+            で開いてから押してください</span
+          >
+        {/if}
+      {/if}
+      {#if linkError !== null}
+        <div class="notice error" data-testid="niconico-error">
+          {linkError}
+        </div>
+      {/if}
+    </div>
   </section>
 </div>
+
+<style>
+  .niconico {
+    margin-top: var(--dp-space-3);
+  }
+  .niconico-row {
+    display: flex;
+    align-items: center;
+    gap: var(--dp-space-3);
+  }
+</style>
