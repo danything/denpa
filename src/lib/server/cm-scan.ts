@@ -67,7 +67,7 @@ export interface Scan {
   silences: Range[];
   /** 届いたロゴの枠の数。`times` と食い違えば読み落としがある */
   logoFrames: number;
-  /** ffmpeg が言ってきた入れ物の尺 (秒)。ffprobe で測れなかったときの代わり。無ければ NaN */
+  /** ffmpeg が出力した入れ物の尺 (秒)。ffprobe で測れなかったときの代わり。無ければ NaN */
   duration: number;
 }
 

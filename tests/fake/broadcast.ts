@@ -115,10 +115,10 @@ export interface Knobs {
    */
   tablesLate: boolean;
   /**
-   * **PMT に字幕の ES を載せる。** denpa は ffmpeg を起こす前に PMT を読み、字幕が無ければ字幕の出口を
-   * 頼まない (`server/captions.ts` の `peekCaptions`)。
+   * **PMT に字幕の ES を載せる。** denpa は ffmpeg を起こす前に PMT を読み、字幕が無ければ字幕の出力を
+   * 指定しない (`server/captions.ts` の `peekCaptions`)。
    *
-   * **既定は載せない。** 部品タグの付いた ES があるとデータ放送の見張りが PMT を画面へ配り
+   * **既定は載せない。** 部品タグの付いた ES があるとデータ放送の処理が PMT を画面へ配り
    * (`packages/arib/src/bml.ts`)、データ放送の E2E が手で流し込む PMT を上書きしてしまう
    */
   captions: boolean;

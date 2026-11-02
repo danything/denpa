@@ -13,7 +13,7 @@ import { createServer, type Socket } from "node:net";
 
 /** 振る舞いを変えるつまみ。テストから途中で変える */
 export interface FakeEdcbMode {
-  /** 応答の ver。null なら頼まれた ver (2 未満は 2。本物と同じ) */
+  /** 応答の ver。null ならリクエストされた ver (2 未満は 2。本物と同じ) */
   ver: number | null;
   /** 一覧の1件ずつの構造体の後ろに、知らない欄としてこのバイト数を足す (新しい EDCB の代わり) */
   extra: number;

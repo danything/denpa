@@ -44,7 +44,7 @@ function database(): Database {
 /**
  * 開いている接続を閉じる。次に使うときに開き直す。
  * 取り込んだ DB に入れ替えるときに使う (transfer.ts の swapAtBoot)。開いたままファイルを差し替えると、
- * 古いファイルを掴んだまま書き続けてしまう
+ * 古いファイルを開いたまま書き続けてしまう
  */
 export function closeDatabase(): void {
   instance?.close();

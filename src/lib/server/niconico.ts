@@ -30,7 +30,7 @@ export const FLOW_TTL = 10 * 60_000;
 /** 同時に持つ連携の途中の上限。押しっぱなしでメモリを使い続けない (超えたら古いものから捨てる) */
 const MAX_FLOWS = 16;
 /** アクセストークンの期限がこれを切っていたら、使う前に更新する (ms) */
-export const REFRESH_BEFORE = 5 * 60_000;
+const REFRESH_BEFORE = 5 * 60_000;
 /** 応答に期限が無かったときのアクセストークンの長さ (秒)。短めに見て早く更新する */
 const DEFAULT_EXPIRES_IN = 30 * 60;
 /** hub を待つ上限 (ms)。hub はニコニコを 15 秒で打ち切る */
@@ -314,6 +314,9 @@ export function linkState(): LinkState {
   return { state: "linked", userId: link.user_id, linkedAt: link.linked_at };
 }
 
+/** 保存したトークンを開けなかったときに記録に書くわけ */
+const UNREADABLE = "保存したトークンを開けません (niconico.key が替わった)";
+
 /** 更新できなくなった。トークンを消して、切れた印を付ける (同じ連携のままなら) */
 function markLost(linkedAt: number, reason: string): void {
   const link = row();
@@ -350,10 +353,7 @@ export async function accessToken(): Promise<string | null> {
     try {
       return unseal(link.access_token, "access_token");
     } catch {
-      markLost(
-        link.linked_at,
-        "保存したトークンを開けません (niconico.key が替わった)",
-      );
+      markLost(link.linked_at, UNREADABLE);
       return null;
     }
   }
@@ -382,10 +382,7 @@ async function refresh(): Promise<string | null> {
   try {
     current = unseal(link.refresh_token, "refresh_token");
   } catch {
-    markLost(
-      link.linked_at,
-      "保存したトークンを開けません (niconico.key が替わった)",
-    );
+    markLost(link.linked_at, UNREADABLE);
     return null;
   }
   const res = await fetch(`${config.hubUrl}/niconico/token`, {

@@ -905,7 +905,7 @@ export function swapAtBoot(): boolean {
     return false;
   }
   const at = readFileSync(join(dir, "stamp"), "utf8").trim() || "unknown";
-  // 先にどこかが開いていても、古いファイルを掴んだままにしない
+  // 先にどこかが開いていても、古いファイルを開いたままにしない
   closeDatabase();
   const logos = join(config.dataDir, LOGOS);
   const aside = (path: string) => {

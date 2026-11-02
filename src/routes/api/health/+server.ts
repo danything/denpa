@@ -8,7 +8,7 @@ import { services } from "#lib/server/schema.js";
 import { updateAvailable } from "#lib/server/update.js";
 
 /**
- * compose の healthcheck と E2E の起動待ちに使う。DBまで触って初めて ok を返す。
+ * Kubernetes の livenessProbe・install.sh と E2E の起動待ち・イメージの確認 (`.github/image-smoke.sh`) が呼ぶ。DBまで触って初めて ok を返す。
  *
  * 録画の本数も返す。入れ替えていいかどうかを外から見たいことがあるため
  * (待つこと自体はアプリ側でやっている。runtime.ts の drain)。

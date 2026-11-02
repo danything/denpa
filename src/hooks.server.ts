@@ -23,7 +23,7 @@ import { COOKIE, find } from "#lib/server/session.js";
 start();
 
 /**
- * 画面の HTML の頭に、スマホの形の条件を差し込む (`#lib/phone-form.ts`。`app.html` の頭のスクリプトが使う)
+ * 画面の HTML の `<head>` に、スマホの形の条件を差し込む (`#lib/phone-form.ts`。`app.html` の `<head>` のスクリプトが使う)
  */
 const PAGE = {
   transformPageChunk: ({ html }: { html: string }) =>
@@ -65,7 +65,7 @@ export async function handle({ event, resolve }) {
    * OIDC も掛からない。
    *
    * **名前も見るのは DNS リバインディングを防ぐため** (`auth.knownHost`)。知らない名前なら
-   * 信頼したネットワークの外と同じに扱う (OIDC があればログインを求め、無ければ断る)
+   * 信頼するネットワークの外と同じに扱う (OIDC があればログインを求め、無ければ断る)
    */
   const address = clientAddress(event);
   const inside = trusted(address);
@@ -146,14 +146,14 @@ function finish(response: Response): Response {
    *
    * 触るのは画面だけ (`x-sveltekit-page`)。`__data.json` は SvelteKit が
    * 自分で `no-store` を付けているし、`_app/immutable/` は名前に指紋が
-   * 入っていて**永く持たせたい**ので、そこへ口を出さない
+   * 入っていて**永く持たせたい**ので、そこにはヘッダを付けない
    */
   if (response.headers.get("x-sveltekit-page") === "true") {
     if (!response.headers.has("cache-control"))
       response.headers.set("cache-control", "no-cache");
     /*
      * **画面を外のサイトの枠に入れさせない。** 今のブラウザは CSP の `frame-ancestors 'self'`
-     * (vite.config.ts) を見るが、それを知らない古いブラウザ向けに同じことを言っておく
+     * (vite.config.ts) を見るが、それに対応していない古いブラウザ向けに同じことを言っておく
      */
     response.headers.set("x-frame-options", "SAMEORIGIN");
   }

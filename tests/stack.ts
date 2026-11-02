@@ -301,7 +301,7 @@ export async function boot(
       // 録画が終わるまで待たれるとテストが終わらない
       SHUTDOWN_WAIT: "0",
       ENCODE_CONCURRENCY: "2",
-      // ローカルからの接続は信頼したネットワークとして素通しにする。
+      // ローカルからの接続は信頼するネットワークとして素通しにする。
       // 認証の手段の無い構成 (全部断る) は 14-serve が別のインスタンスで確かめる
       TRUSTED_NETWORKS: "127.0.0.1",
     });
@@ -428,7 +428,7 @@ export async function bootOidc(
 /**
  * **認証の手段を何も設定していない denpa。** OIDC も TRUSTED_NETWORKS も無ければ
  * **全部のアクセスを断る**ことを確かめるためのインスタンス (`14-serve`・`31-device` が使う)。
- * 普段の `stack` はローカルを信頼したネットワークにしてあるので、これは別に立てる。
+ * 普段の `stack` はローカルを信頼するネットワークにしてあるので、これは別に立てる。
  */
 export async function bootClosed(
   index: number,

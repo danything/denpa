@@ -60,7 +60,7 @@ let lowerFailed = false;
  * 非力な機材 (Raspberry Pi 5 など) では、録画のエンコードがライブの変換 (libx264 ultrafast) と
  * CPU を取り合い、ライブのコマが落ちていた。録画のエンコードは急がないので、ライブに譲る。
  * 他に何も動いていなければ空いた CPU をそのまま使うので、速さは変わらない。GPU でエンコードするときも
- * 同じ道を通るが、下がるのは CPU の順番だけなので困らない。
+ * 同じ処理を通るが、下がるのは CPU の順番だけなので困らない。
  *
  * - Linux では `setpriority`。起こした直後に下げるので、ffmpeg が後から作るスレッドも引き継ぐ
  * - Windows では libuv が 19 を IDLE_PRIORITY_CLASS に当てる
@@ -224,7 +224,7 @@ export async function run(
 
 /**
  * **ffmpeg の出口をそのまま応答の本文にする** (音声だけの取り出し。`stdout` に流させる)。
- * 録画のその場の変換・詰め替えは、降りたときの次の手と詰まりの見張りを足した `playback.transcodeBody`
+ * 録画のその場の変換・詰め替えは、降りたときの次の手と詰まりの検出を足した `playback.transcodeBody`
  *
  * - 読まれたぶんしか読み出さない (`pull`)。相手が読まなければ出口が詰まり、ffmpeg も止まる
  * - 閉じられたら (`cancel`) ffmpeg を殺す

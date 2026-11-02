@@ -9,10 +9,11 @@ import { deleteRecordingFiles } from "#lib/server/files.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { sidecarPaths } from "#lib/server/metadata.js";
 import { relative } from "#lib/server/paths.js";
-import { encodedFile, rulerOf, tsPathOf } from "#lib/server/playback.js";
+import { encodedFile, rulerOf } from "#lib/server/playback.js";
 import { recordingFromForm } from "#lib/server/recording.js";
 import { lastEncodeError, recordings } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
+import { tsPathOf } from "#lib/source.js";
 import { fromTsTime } from "#lib/ts/watch.js";
 import type { Recording } from "#lib/types.js";
 

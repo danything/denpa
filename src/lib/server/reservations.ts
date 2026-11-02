@@ -151,7 +151,7 @@ export async function cancel(reservationId: number): Promise<void> {
   const reservation = byId(reservationId);
   if (reservation === undefined) return;
 
-  // 録っている最中なら止める。使っているかどうかを知っているのは録画の行のほう
+  // 録っている最中なら止める。録っている最中かは録画の行で分かる
   const recording = orm()
     .select({ id: recordings.id })
     .from(recordings)

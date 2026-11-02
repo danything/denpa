@@ -131,7 +131,7 @@ Intel の GPU も VA-API だけで使い、QSV (libvpl) はイメージに入れ
 - **Arc A310 では QSV の H.265・AV1 が落ちました** (`hevc_qsv` は `Invalid FrameType:0`、`av1_qsv` は mkv に書けない)。H.264 は通りましたが、
   同じ素材・同じ ICQ 24 で VA-API のほうが少し画質が上でした (Y の PSNR で 44.87 dB と 44.48 dB)。
 
-**Intel のドライバは Debian の non-free 版です。** free 版はソースの無いシェーダを抜いてあり、シェーダを使うエンコード
+**Intel のドライバは Debian の non-free のパッケージです。** free のパッケージはソースの無いシェーダを抜いてあり、シェーダを使うエンコード
 (Skylake〜Comet Lake の H.265、Broadwell のエンコード全部) ができないためです。
 
 ### ライブも同じエンコーダで GPU に載る

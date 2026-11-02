@@ -1,16 +1,16 @@
 /**
- * **接頭辞の下でも動く URL。** denpa は自分がどの接頭辞の下にいるかを知らない。
+ * **接頭辞の下でも動く URL。** denpa からは、どの接頭辞の下にいるかが分からない。
  *
  * 前段 (Home Assistant の Ingress・k8s の Ingress で `/denpa` を剥がすもの) は接頭辞を
  * 剥がしてから渡してくるので、こちらに見えるのは `/guide` でも、ブラウザは
  * `/api/hassio_ingress/<token>/guide` にいる。接頭辞を設定させない (Ingress の
  * 接頭辞はトークン入りで毎回変わる)。代わりに:
  *
- * - 画面の中は `resolve` (`$app/paths`) で頭を付ける。SvelteKit はこれをブラウザのいる
+ * - 画面の中は `resolve` (`$app/paths`) で先頭に付ける。SvelteKit はこれをブラウザのいる
  *   URL から求めるので、接頭辞がそのまま入る (paths.relative。既定)
  * - 転送 (redirect) は**いまの URL からの相対**にする。ブラウザが接頭辞込みで解決する
- * - 外 (OIDC のリダイレクト URI) に渡す絶対 URL だけは接頭辞を知る必要があるので、前段が付ける
- *   `X-Forwarded-Prefix` か `X-Ingress-Path` (Home Assistant) を頭に付ける
+ * - 外 (OIDC のリダイレクト URI) に渡す絶対 URL だけは接頭辞が要るので、前段が付ける
+ *   `X-Forwarded-Prefix` か `X-Ingress-Path` (Home Assistant) を先頭に付ける
  */
 
 /**
@@ -22,7 +22,7 @@ export function relative(from: URL, to: string): string {
   return (depth > 0 ? "../".repeat(depth) : "./") + to.slice(1);
 }
 
-/** 外に渡す絶対 URL の頭。`https://example.com/denpa` のように、末尾の `/` は付けない */
+/** 外に渡す絶対 URL の先頭部分。`https://example.com/denpa` のように、末尾の `/` は付けない */
 export function publicBase(url: URL, headers: Headers): string {
   const prefix = (
     headers.get("x-forwarded-prefix") ??

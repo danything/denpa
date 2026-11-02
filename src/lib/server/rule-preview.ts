@@ -167,7 +167,7 @@ interface PreviewOptions {
  * 24時間ぶんより重い。画面は書く欄を打ち直すたびに、少し待ってから呼ぶ (`?/preview`)。
  * 同じタブからは1つずつしか送らない (送っている間に変わったぶんは、返ってから最後の条件で1回)。
  *
- * **転んでも投げ返さない。** 理由を `failed` に入れて返す (画面は「数えられませんでした」と出す)
+ * **失敗しても例外にしない。** 理由を `failed` に入れて返す (画面は「数えられませんでした」と出す)
  */
 export async function previewFor(
   conditions: Rule,
@@ -188,7 +188,7 @@ export async function previewFor(
   }
 }
 
-/** 下見を数える本体。転んだら投げる (受け止めるのは `previewFor`) */
+/** 下見を数える本体。失敗したら例外を投げる (受け止めるのは `previewFor`) */
 async function countPreview(
   conditions: Rule,
   { editing, ids = [] }: PreviewOptions,
@@ -368,7 +368,7 @@ async function countPreview(
       reservation_state: held?.state ?? null,
       matched: true,
       // 重なりは出す 100 件にだけ当てる (下)。スケジューラが既にチューナー
-      // 不足と判断していれば、その理由も添える (何台足りないのかはあちらしか知らない)
+      // 不足と判断していれば、その理由も添える (何台足りないかはスケジューラの理由にしか無い)
       conflicts: [],
       conflict_reason: conflictReason(held),
       // 引っ込めない予約 (手動・猶予の内) が立っているなら録る。「録らない」とは言わない
