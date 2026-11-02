@@ -177,10 +177,7 @@
       {/if}
       <span class="num"
         >URL {link.url.length.toLocaleString()} / {URL_LIMIT.toLocaleString()} 字</span
-      >
-      {#if link.dropped > 0}
-        ・長くなったので、ログの頭の {link.dropped} 行を省いて開きます
-      {/if}
+      >{#if link.dropped > 0}・長くなったので、ログの頭の {link.dropped} 行を省いて開きます{/if}
     </p>
 
     <footer class="modal-actions">
