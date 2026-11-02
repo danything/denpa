@@ -21,6 +21,7 @@ import {
   flipSetting,
   goto,
   holdCaptions,
+  keepH264,
   leaveFullscreen,
   oneRowTroubles,
   openSettings,
@@ -1203,7 +1204,7 @@ test.describe("ライブ視聴", () => {
   /*
    * **出せない形式でも、エンコード方式を選び直すボタンは残す。**
    *
-   * 失敗している間は操作列を隠していた頃は、「再生できない形式です」
+   * 失敗している間は操作列を隠していた頃は、「再生できる形式がありません」
    * と出たきり、別の形式 (や放送のままの MPEG-2) へ逃げる手立てが無かった
    */
   test("出せない形式でも、操作列からエンコード方式を選び直せる", async ({
@@ -1216,7 +1217,7 @@ test.describe("ライブ視聴", () => {
     await page.getByTestId("live-channel").first().click();
 
     await expect(page.getByTestId("live-status")).toContainText(
-      "再生できない形式です",
+      "再生できる形式がありません",
       {
         timeout: 15_000,
       },
@@ -1393,9 +1394,11 @@ test.describe("ライブ視聴", () => {
    */
   test("指で触ったら出て、しばらくで消える (マウスと同じ長さ)", async ({
     browser,
+    stack,
   }) => {
     // 指のある端末として開く。既定の枠にはタッチが無く、tap そのものが使えない
     const context = await browser.newContext({ hasTouch: true });
+    await keepH264(context, stack.appUrl);
     const page = await context.newPage();
     await goto(page, "/live");
     const controls = page.getByTestId("live-controls");
@@ -1547,6 +1550,7 @@ test.describe("ライブ視聴", () => {
    */
   test("小窓を出せない端末では、小窓のボタンを出さない", async ({
     browser,
+    stack,
   }) => {
     for (const script of [
       // iPhone のホーム画面から開いた
@@ -1561,6 +1565,7 @@ test.describe("ライブ視聴", () => {
         }),
     ]) {
       const context = await browser.newContext();
+      await keepH264(context, stack.appUrl);
       const page = await context.newPage();
       await page.addInitScript(script);
       await goto(page, "/live");
@@ -1577,6 +1582,7 @@ test.describe("ライブ視聴", () => {
    */
   test("全画面の API が無い端末では、枠を画面いっぱいに広げる", async ({
     browser,
+    stack,
   }) => {
     const context = await browser.newContext({
       viewport: { width: 844, height: 390 },
@@ -1584,6 +1590,7 @@ test.describe("ライブ視聴", () => {
       hasTouch: true,
       isMobile: true,
     });
+    await keepH264(context, stack.appUrl);
     const page = await context.newPage();
     await page.addInitScript(() => {
       for (const proto of [Element.prototype, HTMLElement.prototype]) {
@@ -1863,7 +1870,7 @@ test.describe("ライブ視聴", () => {
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
     await expect(page.getByTestId("live-title")).toBeVisible();
-    // 既定は H.264。どの端末でも出るほうから始める
+    // H.264 を選んだ端末として開く (`keepH264`。自動は `61-live-auto`)
     expect(await ffmpegArgs(stack.liveArgsFile, expect)).toContain("libx264");
 
     await wakeControls(page, "live-frame");
@@ -2014,9 +2021,11 @@ test.describe("ライブ視聴", () => {
    */
   test("字幕の画素は、PC (DPR 1・2) でもスマホでも見えている大きさ × DPR と合う", async ({
     browser,
+    stack,
   }) => {
     for (const [what, options] of CAPTION_SCREENS) {
       const context = await browser.newContext(options);
+      await keepH264(context, stack.appUrl);
       const page = await context.newPage();
       await captureSockets(page);
       await goto(page, "/live");

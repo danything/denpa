@@ -1,6 +1,7 @@
 import { error, redirect } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 
+import { HIDDEN_CODECS } from "#lib/live-choice.js";
 import { orm } from "#lib/server/db.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { relative } from "#lib/server/paths.js";
@@ -58,6 +59,8 @@ export const load: PageServerLoad = ({ params, url }) => {
     jikkyoAllowed: settings().jikkyo,
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
     jikkyoNg: settings().jikkyoNg,
+    /** コーデックのメニューから外すもの (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) */
+    hidden: settings().hideH264Hevc ? [...HIDDEN_CODECS] : [],
     /** 実況のチャンネルと頭・終わりの放送時刻。古いところは過去ログ API、新しいところは NX-Jikkyo から取る */
     jikkyo: recordingJikkyo(rec),
   };
