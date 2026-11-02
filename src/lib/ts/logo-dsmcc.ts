@@ -44,6 +44,7 @@ import {
 } from "@danything/arib/psi";
 
 import { withPalette } from "./logo-palette";
+import { announcesCommonData, parseSdtt, PID_SDTT } from "./logo-sdtt";
 
 /** エンジニアリングサービス。衛星のロゴはこのサービスで運ばれる (ARIB TR-B15) */
 const ESS_SERVICE_ID = 929;
@@ -102,6 +103,11 @@ export interface CarouselCounts {
   /** ロゴの ES に来た DII と DDB のセクション (同じものの繰り返しも数える) */
   dii: number;
   ddb: number;
+  /**
+   * 全受信機共通データのダウンロードを知らせる SDTT (同じものの繰り返しも数える)。カルーセルを流している間だけ
+   * 送られるので、来ていればダウンロードの期間中 (`logo-sdtt.ts`・`server/logo-period.ts`)
+   */
+  sdtt: number;
 }
 
 interface ModuleLogo {
@@ -206,9 +212,9 @@ export class CarouselProgress {
 
   /**
    * **読み進んだ数。** 初めて知らされたロゴのモジュール (DII) と、初めて受け取ったブロック (DDB) だけを数える。
-   * 開いている間に増えなければ、その間カルーセルは一度も流れてこなかった (`server/logo.ts` の `carouselRanOutAt`)。
+   * 開いている間に増えなければ、その間カルーセルは一度も流れてこなかった (`server/logo.ts` の `carouselWatch`)。
    * 同じ DII や受け取り済みのブロックは数えない — 無音の間も DII だけ流し続ける中継があると、毎回「届いた」ことになって
-   * 6時間待ちが掛からず、番組表集めより上の優先度で20分ずつ塞ぎ続けてしまう
+   * ずっとダウンロードの期間中に見え、番組表集めより上の優先度で20分ずつ塞ぎ続けてしまう
    */
   get received(): number {
     return this.sections;
@@ -320,6 +326,8 @@ export class DsmccLogoCollector {
   /** PAT を読んだか。読むまでは「この中継にロゴがあるか」を判断できない */
   private sawPat = false;
   private ess = false;
+  /** SDTT。ESS の載る中継でだけ読む */
+  private readonly sdtt = new SectionAssembler(PID_SDTT);
   /** この回に読んだ数 (`counts`)。読みかけ (`CarouselProgress`) と違って、開くたびに 0 から */
   private readonly tally: CarouselCounts = {
     packets: 0,
@@ -329,6 +337,7 @@ export class DsmccLogoCollector {
     esPackets: 0,
     dii: 0,
     ddb: 0,
+    sdtt: 0,
   };
 
   /**
@@ -355,6 +364,14 @@ export class DsmccLogoCollector {
       this.ess = pmtPid !== undefined;
       if (pmtPid !== undefined && this.pmt === null)
         this.pmt = new SectionAssembler(pmtPid);
+    }
+
+    if (this.ess) {
+      for (const section of this.sdtt.feed(packet)) {
+        const sdtt = parseSdtt(section);
+        if (sdtt !== null && announcesCommonData(sdtt, LOGO_COMPONENT_TAGS))
+          this.tally.sdtt++;
+      }
     }
 
     for (const section of this.pmt?.feed(packet) ?? []) {

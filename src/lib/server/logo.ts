@@ -23,6 +23,11 @@ import { config } from "./config";
 import { orm } from "./db";
 import { currentServices } from "./epg";
 import { emit } from "./events";
+import {
+  type CarouselWatch,
+  nextCarouselAttempt,
+  OFF_PERIOD_RETRY,
+} from "./logo-period";
 import { services } from "./schema";
 import { chunks } from "./stream";
 import {
@@ -38,7 +43,7 @@ import {
  * 放送波の CDT (地上波) とデータカルーセル (衛星) に流れてくるものを取得する。
  * 集め方は Mirakurun と同じで、開いているストリームを共有する。
  *
- * ロゴは滅多に変わらないうえ、放送波に流れてくるのは地上波で数分、衛星で十数分に一度なので、
+ * ロゴは滅多に変わらないうえ、放送波に流れてくるのは地上波で数分に一度、衛星はダウンロードの期間中だけ十数分に一度なので、
  * 番組表集めや録画の選局を共有して取得する (`ride`)。自分でチューナーを開くのは
  * 画面から求められたとき (`sweepNow`) と、衛星のロゴが足りない間にチューナーが空いているとき
  * (`awaitCarousel`。当たりの中継で待ち、分からなければ外れを1秒ほどで見切りながら探す) だけ。
@@ -62,7 +67,7 @@ const RIDE_TIMEOUT = 3 * 60_000;
 /**
  * ロゴを取得するときの優先度。**いちばん下** (並びは `config.priority`)。
  * ロゴが出なくても番組表は読めるが、番組情報が来なければ何も予約できない。
- * 衛星の当たりの中継を自分で開いて待つときだけは `config.priority.carousel` (`carouselPriority`)
+ * 衛星の当たりの中継を、ダウンロードの期間中に自分で開いて待つときと「いますぐ」だけは `config.priority.carousel` (`carouselPriority`)
  */
 const SWEEP_PRIORITY = config.priority.logo;
 /**
@@ -596,13 +601,18 @@ const collecting = new Set<string>();
 type Outcome = "done" | "miss" | "ranOut" | "yielded" | "busy" | "stopped";
 
 /**
- * 当たりの中継を上限 (`config.logoCarouselWait`) まで開けて、**その間カルーセルが一度も流れてこなかった**時刻。
- * 待っても来ないものを、空くたびに開き直さないための控え (`awaitCarousel`)。
- * 譲って切れた回は数えない (読みかけは残っていて、次は続きから読む)。
- * **途中まで届いた回も数えない** — 前は上限で切れたら一律に6時間空けていて、来ているのに読み切れなかった回まで
- * 次の機会を捨てていた (#1939)
+ * 衛星のカルーセルをいつ見たか・いつ待って来なかったか (`logo-period.ts` の `CarouselWatch`)。
+ * ここから、ダウンロードの期間中か、次にいつ自分で開くかを決める (`awaitCarousel`)。
+ *
+ * - `seenAt` は読み進んだ回か、共通データの SDTT を見た回。共有でも控える。同じ DII が繰り返し来るだけでは
+ *   控えない (無音の間も DII だけ流し続ける中継があると、ずっと期間中に見えてしまう)
+ * - `ranOutAt` は上限まで開けて何も来なかった回だけ。譲って切れた回は数えない (読みかけは残っていて、次は続きから読む)。
+ *   **途中まで届いた回も数えない** — 前は上限で切れたら一律に6時間空けていて、来ているのに読み切れなかった回まで
+ *   次の機会を捨てていた (#1939)
+ *
+ * プロセスの中だけに持つ。起動し直したら期間の外とみなし、いちばん下の優先度で一度開くところから始める
  */
-let carouselRanOutAt: number | undefined;
+const carouselWatch: CarouselWatch = {};
 
 /**
  * 1つの物理チャンネルを開いて、そこに入っている局のロゴを取得する。
@@ -741,11 +751,12 @@ async function collect(
     carousels.delete(target.channel);
   const received = (carousel?.progress.received ?? 0) > receivedBefore;
   /*
-   * 途中まででも届いていれば、カルーセルは来ている。次に空いたときに続きを読む (共有で届いたときも、
-   * 前に「来なかった」と控えていたなら外す)
+   * 途中まででも届いていれば・共通データの SDTT が来ていれば、カルーセルは流れている (ダウンロードの期間中)。
+   * 次に空いたときに続きを読む。共有で見たときも控える (前に「来なかった」と控えていても、こちらが新しくなる)
    */
-  if (received) carouselRanOutAt = undefined;
-  else if (carrier && outcome === "ranOut") carouselRanOutAt = Date.now();
+  const onAir = received || (feed?.counts.sdtt ?? 0) > 0;
+  if (carrier && onAir) carouselWatch.seenAt = Date.now();
+  else if (carrier && outcome === "ranOut") carouselWatch.ranOutAt = Date.now();
   // 共有 (RIDE_TIMEOUT) は短いので、来なかったことの証拠にしない
   if (!satellite && ranOut && timeout >= SWEEP_TIMEOUT)
     markGaveUp(target.channel);
@@ -766,7 +777,9 @@ async function collect(
  * 番組表集めは衛星のチューナー2台で次のチャンネルへ移るとき、いちばん優先度の低い選局を取り上げる。
  * いちばん下のままだと、十数分に一度のカルーセルが来る前に取り上げられ続けた (#1939)。
  * 録画・ライブ・スキャン・「番組表をいますぐ集める」には今までどおり譲る。持っているのは読み切るまで、
- * 長くても `config.logoCarouselWait` で、来なければ `CAROUSEL_RETRY` まで開き直さない
+ * 長くても `config.logoCarouselWait`。
+ *
+ * 定期チェック (`awaitCarousel`) では、ダウンロードの期間の外ならこれを使わず、いちばん下で開く (`logo-period.ts`)
  */
 function carouselPriority(target: Target): number {
   return target.type !== "GR" &&
@@ -1028,9 +1041,12 @@ export function waitedMessage(
       case "stopped":
         return `${opened}、「ロゴをいますぐ集める」を先にしました`;
       case "ranOut":
-        return received
-          ? `${opened}途中まで読みました。次に空いたときに続きから読みます`
-          : `${opened}もロゴが流れてこなかったので、${CAROUSEL_RETRY / 3_600_000} 時間あけて開き直します`;
+        if (received)
+          return `${opened}途中まで読みました。次に空いたときに続きから読みます`;
+        // SDTT が来ていればダウンロードは出ている (期間中のまま。`collect` の `carouselWatch`)
+        if (counts !== null && counts.sdtt > 0)
+          return `${opened}、ダウンロードは出ていましたが、ロゴは届きませんでした。次に空いたときにまた開きます`;
+        return `${opened}もロゴが流れてこなかったので、ダウンロードの期間の外とみなして ${OFF_PERIOD_RETRY / 3_600_000} 時間あけて開き直します`;
       default:
         return null;
     }
@@ -1049,6 +1065,7 @@ function countsNote(counts: Readonly<CarouselCounts>): string {
     `ロゴの ES ${counts.esPids} 本に ${counts.esPackets} パケット`,
     `DII ${counts.dii}`,
     `DDB ${counts.ddb}`,
+    `共通データの SDTT ${counts.sdtt}`,
   ].join("・");
 }
 
@@ -1096,14 +1113,6 @@ export async function ride(): Promise<number> {
   return results.reduce((sum, { found }) => sum + found, 0);
 }
 
-/**
- * 当たりの中継を自分で開き直すまでの間隔。上限 (`config.logoCarouselWait`) まで開けても
- * カルーセルが一度も来なかったときにだけ使う (`carouselRanOutAt`)。空くたびに20分開き直すと、
- * 来ないもののためにチューナーを1台塞ぎ続けることになる。番組表集めが同じ中継を開く間隔
- * (`EPG_CHANNEL_INTERVAL` の既定) に揃えてある
- */
-const CAROUSEL_RETRY = 6 * 60 * 60_000;
-
 /** 自分で開いて待っている当たりの中継。「いますぐ」が押されたら畳んで譲る */
 let idle: { use: StreamUse; controller: AbortController } | null = null;
 
@@ -1113,8 +1122,10 @@ let idle: { use: StreamUse; controller: AbortController } | null = null;
  * 共有 (`ride`) だけでは揃わなかった (docs/logo.md「衛星は共有だけでは揃わなかった」)。
  *
  * 待つのは**当たりと分かっている中継だけ** (`carriers`)、**その種別のチューナーが空いているとき**だけ。
- * 優先度は番組表集めの1つ上 (`carouselPriority`)。録画・ライブ・スキャンが来れば取り上げられ、
+ * **ダウンロードの期間中だけ**、優先度は番組表集めの1つ上 (`carouselPriority`) で、空くたびに開く。録画・ライブ・スキャンが来れば取り上げられ、
  * 読みかけは残る (`CarouselProgress`) ので、次に空いたときに続きから読む。どう終わったかは1行残す (`waitedMessage`)。
+ * **期間の外では**いちばん下の優先度で、`OFF_PERIOD_RETRY` おきにだけ開く (`nextCarouselAttempt`)。ロゴは期間の外には
+ * 流れてこないので、番組表集めを押しのけてまで待たない (docs/logo.md「衛星はダウンロードの期間にだけ流れてくる」)。
  *
  * 当たりがまだ分からなければ、確かめていない衛星の中継を順に開いて探す。外れは PAT を見た時点
  * (1秒ほど) で閉じ、1週間は開き直さない (`RELAY_RETRY`)。当たりを控える前のバージョンから
@@ -1122,7 +1133,8 @@ let idle: { use: StreamUse; controller: AbortController } | null = null;
  */
 async function awaitCarousel(): Promise<number> {
   if (missingSatellites() === 0) return 0;
-  if (fresh(carouselRanOutAt, CAROUSEL_RETRY)) return 0;
+  const attempt = nextCarouselAttempt(carouselWatch, Date.now());
+  if (attempt.at > Date.now()) return 0;
   let found = 0;
   /** この手で閉じたばかりの外れの中継。次を開くときに引き継ぐ (`countFree`) */
   let left: StreamUse[] = [];
@@ -1134,15 +1146,19 @@ async function awaitCarousel(): Promise<number> {
     if (collecting.has(target.channel) || state.running) return found;
     const controller = new AbortController();
     idle = { use: logoUse(target), controller };
+    const startedAt = Date.now();
     try {
       const result = await collect(
         target,
         config.logoCarouselWait,
         controller.signal,
         left,
-        carouselPriority(target),
+        attempt.period ? carouselPriority(target) : SWEEP_PRIORITY,
       );
       found += result.found;
+      // 開けた回だけ数える。開けなかった回・外れの中継 (1秒ほどで閉じて次へ行く) は数えない
+      if (result.outcome !== "busy" && result.outcome !== "miss")
+        carouselWatch.triedAt = startedAt;
       const line = result.carrier
         ? waitedMessage(
             target.channel,

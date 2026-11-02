@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { withCrc } from "@danything/arib/psi";
 import {
   ddbSection,
   diiSection,
@@ -18,7 +19,7 @@ import {
  *
  * 実機の報告 (#1939): 衛星のチューナーが2台の環境で、番組表集めが次のチャンネルへ移るたびにロゴの選局を
  * 取り上げ、一晩経っても BS/CS のロゴが揃わなかった。当たりの中継で待つときは番組表集めより上の優先度で開き、
- * 上限で切れても途中まで届いていれば6時間空けずに続きを読む。
+ * 上限で切れても途中まで届いていれば続きを読む。番組表集めより上で待つのはダウンロードの期間中だけ (`logo-period.ts`)。
  *
  * チューナーの API は手元に立てた偽物で、選局は中継ごとに用意した TS を流したあと、`holding` の中継は
  * こちらが閉じるまで開いたままにする (上限 `config.logoCarouselWait` まで待たせるため)。カルーセルは作り物
@@ -64,6 +65,18 @@ const psi = [
   packetize(0x0000, patSection([[ESS, PMT_PID]])),
   packetize(PMT_PID, pmtSection(ESS, ES_PID, 0x79)),
 ];
+/**
+ * 全受信機共通データ (maker_id 0xFF・model_id 0xFE) の SDTT。予定は持たず、download_content_descriptor が
+ * ロゴの ES (component_tag 0x79) を指す。カルーセルを流している間だけ来る (`ts/logo-sdtt.ts`)
+ */
+const commonSdtt = packetize(
+  0x0023,
+  withCrc([
+    0xc3, 0, 0, 0xff, 0xfe, 0xc1, 0, 0, 0x40, 0x31, 0x00, 0x04, 0x03, 0xa1, 1,
+    0x00, 0x01, 0x00, 0x16, 0x01, 0x30, 0x00, 0x00, 0xc9, 17, 0x00, 0, 0, 0, 0,
+    0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0, 0, 0, 0, 0x79,
+  ]),
+);
 const dii = packetize(
   ES_PID,
   diiSection(DOWNLOAD_ID, BLOCK, [
@@ -189,7 +202,7 @@ async function logged(run: () => Promise<unknown>): Promise<string[]> {
 }
 
 describe("ロゴを流す中継でカルーセルを待つ", () => {
-  test("当たりが分かるまではいちばん下の優先度で探す。上限で切れても途中まで届いていれば、6時間空けずに次も開く", async () => {
+  test("当たりが分かるまではいちばん下の優先度で探す。上限で切れても途中まで届いていれば、期間中とみなして次も開く", async () => {
     config.logoCarouselWait = 300;
     // DII と BS のブロックの一部だけ。読み切れないまま上限で切れる
     streams.set("BS15_0", stream(...psi, dii, ...bsBlocks.slice(0, 1)));
@@ -200,11 +213,11 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     ]);
     expect(logos()).toBe(0);
     expect(lines).toEqual([
-      "[logo] BS15_0 を 0 分開いて途中まで読みました。次に空いたときに続きから読みます (TS 4 パケット・誤り 0・PMT あり・ロゴの ES 1 本に 2 パケット・DII 1・DDB 1)",
+      "[logo] BS15_0 を 0 分開いて途中まで読みました。次に空いたときに続きから読みます (TS 4 パケット・誤り 0・PMT あり・ロゴの ES 1 本に 2 パケット・DII 1・DDB 1・共通データの SDTT 0)",
     ]);
   });
 
-  test("当たりと分かった中継は番組表集めより上の優先度で開く。何も届かずに上限で切れたら、6時間は開き直さない", async () => {
+  test("当たりと分かった中継は番組表集めより上の優先度で開く。何も届かずに上限で切れたら、期間の外とみなして7時間は開き直さない", async () => {
     // 前の回と同じ DII と受け取り済みのブロックだけ。読み進まないので「来なかった」と数える
     streams.set("BS15_0", stream(...psi, dii, ...bsBlocks.slice(0, 1)));
     const lines = await logged(sweep);
@@ -216,11 +229,26 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     expect(config.priority.carousel).toBeLessThan(config.priority.scan);
     // 読んだ数は後ろに足す。同じ DII とブロックが来ていたことが記録から分かる
     expect(lines).toEqual([
-      "[logo] BS15_0 を 0 分開いてもロゴが流れてこなかったので、6 時間あけて開き直します (TS 4 パケット・誤り 0・PMT あり・ロゴの ES 1 本に 2 パケット・DII 1・DDB 1)",
+      "[logo] BS15_0 を 0 分開いてもロゴが流れてこなかったので、ダウンロードの期間の外とみなして 7 時間あけて開き直します (TS 4 パケット・誤り 0・PMT あり・ロゴの ES 1 本に 2 パケット・DII 1・DDB 1・共通データの SDTT 0)",
     ]);
 
     await sweep();
     expect(opened).toHaveLength(2);
+  });
+
+  test("期間の外でも、共通データの SDTT を見たら期間中に戻り、次の定期チェックで番組表集めより上の優先度で開く", async () => {
+    // 新しいブロックは無く、SDTT だけ。「いますぐ」で開いて見かける
+    streams.set("BS15_0", stream(...psi, commonSdtt));
+    await sweepNow();
+    while (sweepState().running) await Bun.sleep(20);
+    const before = opened.length;
+    const lines = await logged(sweep);
+    expect(opened.slice(before)).toEqual([
+      { channel: "BS15_0", priority: config.priority.carousel },
+    ]);
+    // 期間中のまま (上限で切れても SDTT が来ていれば「来なかった」とは数えない)
+    expect(lines.at(-1)).toContain("共通データの SDTT 1");
+    expect(lines.at(-1)).not.toContain("期間の外");
   });
 
   test("「いますぐ」も当たりの中継は番組表集めより上の優先度で開き、読み切ったら上限を待たずに手放す", async () => {
