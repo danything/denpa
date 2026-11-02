@@ -843,7 +843,7 @@ public class B25Tests
         await Assert.That(Diff(output, ts.Wire.ToArray())).IsEqualTo(-1);
         await Assert.That(cards.Asked.Count).IsEqualTo(0);
         await Assert.That(descrambler.Undecodable).IsEqualTo(0);
-        await Assert.That(descrambler.CardUse()).IsEqualTo("カード 聞かない");
+        await Assert.That(descrambler.CardUse()).IsEqualTo("カード 使わない");
     }
 
     /// <summary>
