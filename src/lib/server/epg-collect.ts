@@ -272,7 +272,7 @@ async function collectChannel(
   let received = false;
   /** 衛星なら、ついでに読む放送の一覧 (`lineup-follow.ts`) */
   let lineup: LineupWatch | null = null;
-  /** 地上波なら、ついでに読む NIT (局の顔ぶれを控えと比べる。`ground-watch.ts`) */
+  /** 地上波なら、ついでに読む NIT (局の顔ぶれをスキャンの結果と比べる。`ground-watch.ts`) */
   const ground = channel.type === "GR" ? new GroundWatch(channel) : null;
   /** エージェントが「選局できない」と返したか (空き待ちやエージェントに繋がらないのは入れない) */
   let refused = false;
@@ -379,7 +379,7 @@ async function collectChannel(
       );
     }
   }
-  // 地上波は外さずに知らせる (続けて選局できない・局の顔ぶれが控えと違う)
+  // 地上波は外さずに知らせる (続けて選局できない・局の顔ぶれがスキャンの結果と違う)
   if (channel.type === "GR") alertGround();
 
   /*
