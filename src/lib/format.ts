@@ -252,6 +252,19 @@ export function eta(ms: number | null): string {
 }
 
 /**
+ * エンコードの「45.0%・あと3分04秒」。一覧の行も状態の欄もこれを使う。SSE で届いた進み (`encode-live`) があれば
+ * **残り時間もそちらだけ** — 届いた `etaMs` の null は見積もれないということ (docs/api.md) なので、DB の古い値に戻さず出さない
+ */
+export function encodeDetail(
+  live: { percent: number; etaMs: number | null } | undefined,
+  stored: { job_percent: number | null; job_eta_ms: number | null },
+): string {
+  const left = eta(live !== undefined ? live.etaMs : stored.job_eta_ms);
+  const done = percent(live?.percent ?? stored.job_percent ?? 0);
+  return left === "" ? done : `${done}・${left}`;
+}
+
+/**
  * エンコードの段階。ffmpeg が回る前の下ごしらえは進み具合を出せないので、
  * 何をしているところなのかを状態として出す。
  */

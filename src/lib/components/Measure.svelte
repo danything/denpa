@@ -33,7 +33,8 @@
   let scroll = $state(0);
   let units = $state<Units | null>(null);
   let mode = $state("");
-  let wide = $state(false);
+  /** 土台に当たっている組み方 (`take`) */
+  let layout = $state("");
   /**
    * 土台の実際の姿。
    *
@@ -190,8 +191,17 @@
       ["standalone", "fullscreen", "minimal-ui", "browser"].find(
         (m) => matchMedia(`(display-mode: ${m})`).matches,
       ) ?? "?";
-    // 二段組にする線。ここを越えているかで、土台に当たる決まりが変わる
-    wide = matchMedia("(min-width: 1000px)").matches;
+    /*
+     * 土台を画面ぴったりにする線。ここを越えているかで、土台に当たる決まりが変わる。
+     * 二段組の幅 (1000px) のほか、横にしたスマホも 768px から当たる (+layout.svelte の `@media` と同じ条件)
+     */
+    layout = matchMedia("(min-width: 1000px)").matches
+      ? "二段組 (1000px 以上)"
+      : matchMedia(
+            "(min-width: 768px) and (orientation: landscape) and (max-height: 500px) and (pointer: coarse)",
+          ).matches
+        ? "画面ぴったり (横にしたスマホ・768px 以上)"
+        : "一段";
 
     // 土台は印 (`data-root`) で探す。形で採っていた頃は、別のものの数を土台として出していた
     const root = document.querySelector("[data-root]");
@@ -268,7 +278,7 @@
     窓 {width}x{inner} / 枠 {client} / 中身 {scroll} =
     <b class={over > 1 ? "bad" : "good"}>はみ出し {over}</b>
   </div>
-  <div>{base} / {wide ? "二段組 (1000px 以上)" : "一段 (1000px 未満)"}</div>
+  <div>{base} / {layout}</div>
   <div class="wrap">class: {rootClass}</div>
   {#if units !== null}
     <div>

@@ -4,7 +4,7 @@
    * スマホの形は「⋯」の頭に同じものを出す (`where` で testid を分ける)
    */
   import { encodeLive } from "#lib/encode-live.svelte.js";
-  import { eta, percent } from "#lib/format.js";
+  import { encodeDetail } from "#lib/format.js";
 
   import type { HomeControls } from "./context";
 
@@ -18,12 +18,6 @@
 
   const running = $derived(
     encoding.find((rec) => rec.job_state === "running") ?? null,
-  );
-  const live = $derived(
-    running === null ? undefined : encodeLive.entries[running.id],
-  );
-  const left = $derived(
-    running === null ? null : (live?.etaMs ?? running.job_eta_ms),
   );
 </script>
 
@@ -39,9 +33,8 @@
         data-testid={where === "side" ? "aside-encode" : undefined}
       >
         {#if running !== null}
-          {percent(
-            live?.percent ?? running.job_percent ?? 0,
-          )}{#if eta(left)}・{eta(left)}{/if}
+          <!-- 一覧の行と同じ決まりで出す (`encodeDetail`) -->
+          {encodeDetail(encodeLive.entries[running.id], running)}
         {:else}
           待ち
         {/if}
