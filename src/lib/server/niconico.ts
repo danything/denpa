@@ -178,7 +178,7 @@ export function readTokens(
 }
 
 /**
- * ID トークンの `sub` (ニコニコのユーザー ID)。署名は確かめない — トークンのエンドポイントから hub が TLS で受け、
+ * ID トークンの `sub` (ニコニコのユーザー ID)。署名は確かめない。トークンのエンドポイントから hub が TLS で受け、
  * こちらの鍵で暗号化して渡したもの (OIDC Core 3.1.3.7 の 6)。読めなければ null
  */
 export function subjectOf(idToken: string | null): string | null {

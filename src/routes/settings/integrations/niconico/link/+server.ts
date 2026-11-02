@@ -21,6 +21,11 @@ export async function GET(event) {
     );
   const refused = refusal(event);
   if (refused !== null) back(refused);
+  // よそのサイトから踏ませて連携の途中 (サーバのメモリに持つ。上限あり) を積ませない。
+  // 設定の画面のリンクからは same-origin で来る。ヘッダーを付けない古いブラウザは通す
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin")
+    back("設定の「連携」の画面から押してください");
   // hub が返すのは `<オリジン>/settings/…` だけ。前段のパスの下 (Home Assistant の Ingress など) では戻ってこられない
   if (publicBase(url, request.headers) !== url.origin)
     back(

@@ -62,6 +62,15 @@ test.describe("ニコニコとの連携", () => {
     expect((await res.json()).message).toContain("時間が経ったため");
   });
 
+  test("よそのサイトから踏ませても連携を始めない", async ({ request }) => {
+    const res = await request.get("/settings/integrations/niconico/link", {
+      headers: { "sec-fetch-site": "cross-site" },
+      maxRedirects: 0,
+    });
+    expect(res.status()).toBe(303);
+    expect(res.headers()["location"]).toContain("niconico_error=");
+  });
+
   test("アクセストークン (テレビのアプリ) では連携を始められない", async ({
     request,
   }) => {
