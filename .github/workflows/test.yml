@@ -258,6 +258,13 @@ jobs:
           grep -q 'externalTrafficPolicy: Local' out.yaml
           # 知らない type は描かずに止まる
           if helm template denpa charts/denpa --set service.type=LoadBalancer >/dev/null 2>&1; then exit 1; fi
+          # dataSourceRef は渡した置き場の PVC にだけ付く
+          helm template denpa charts/denpa --namespace denpa \
+            --set persistence.data.dataSourceRef.apiGroup=volsync.backube \
+            --set persistence.data.dataSourceRef.kind=ReplicationDestination \
+            --set persistence.data.dataSourceRef.name=denpa-data-dst > ds.yaml
+          [ "$(grep -c 'kind: ReplicationDestination' ds.yaml)" = 1 ]
+          grep -q 'name: denpa-data-dst' ds.yaml
 
   # Mac (Apple Silicon) で動かすエージェント (docs/install-mac.md)。
   #

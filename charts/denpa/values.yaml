@@ -129,6 +129,8 @@ persistence:
   # 外れた時点でボリュームごと消えるので、後ろ盾になるバックアップを用意してから
   # にすること (このリポジトリ自身は日次の restic があるので false — deploy/application.yaml)
   protectFromPruning: true
+  # 各置き場の dataSourceRef: 作るときに中身を埋める元 (例: VolSync の ReplicationDestination。
+  # {apiGroup: volsync.backube, kind: ReplicationDestination, name: denpa-data-dst})。今ある PVC には効かない
   # denpa の DB
   data:
     size: 5Gi
