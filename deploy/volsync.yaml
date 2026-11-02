@@ -1,0 +1,108 @@
+# このアプリの PVC を VolSync で R2 に取る(リポジトリは PVC ごとに `<bucket>/volsync/denpa/<pvc>`)。
+# 取り方・時刻・Secret の組み方は danything/gitops の deploy/volsync/application.yaml。アプリと一緒に置くので、
+# アプリを消せばこれも消える(R2 のリポジトリは残る。要らなければ gitops の deploy/backup/README.md「やめる」)。
+# PVC を足したら、下の managedKubeSecretReferences と ReplicationSource を 1 組足す。
+apiVersion: secrets.infisical.com/v1alpha1
+kind: InfisicalSecret
+metadata:
+  name: volsync
+  namespace: denpa
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
+spec:
+  hostAPI: http://infisical.infisical.svc:8080/api
+  authentication:
+    kubernetesAuth:
+      identityId: f2bc3416-f196-4626-9bf3-c11693b32cc6
+      autoCreateServiceAccountToken: true
+      serviceAccountRef:
+        name: infisical-auth
+        namespace: infisical
+      secretsScope:
+        projectSlug: doa
+        envSlug: prod
+        secretsPath: /backup/backup
+        recursive: false
+  managedKubeSecretReferences:
+    - secretName: volsync-agent-config
+      secretNamespace: denpa
+      creationPolicy: Orphan
+      template:
+        data:
+          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/agent-config"
+          RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
+          AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
+          AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
+          AWS_DEFAULT_REGION: auto
+    - secretName: volsync-denpa-data
+      secretNamespace: denpa
+      creationPolicy: Orphan
+      template:
+        data:
+          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-data"
+          RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
+          AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
+          AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
+          AWS_DEFAULT_REGION: auto
+    - secretName: volsync-denpa-encoded
+      secretNamespace: denpa
+      creationPolicy: Orphan
+      template:
+        data:
+          RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-encoded"
+          RESTIC_PASSWORD: "{{ .repoPassword.Value }}"
+          AWS_ACCESS_KEY_ID: "{{ .accessKeyId.Value }}"
+          AWS_SECRET_ACCESS_KEY: "{{ .secretAccessKey.Value }}"
+          AWS_DEFAULT_REGION: auto
+---
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationSource
+metadata:
+  name: agent-config
+  namespace: denpa
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  sourcePVC: agent-config
+  trigger:
+    schedule: "0 19 * * *"
+  restic:
+    repository: volsync-agent-config
+    copyMethod: Snapshot
+    retain: { daily: 7, weekly: 4, monthly: 6 }
+    moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
+---
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationSource
+metadata:
+  name: denpa-data
+  namespace: denpa
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  sourcePVC: denpa-data
+  trigger:
+    schedule: "0 19 * * *"
+  restic:
+    repository: volsync-denpa-data
+    copyMethod: Snapshot
+    retain: { daily: 7, weekly: 4, monthly: 6 }
+    moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
+---
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationSource
+metadata:
+  name: denpa-encoded
+  namespace: denpa
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  sourcePVC: denpa-encoded
+  trigger:
+    schedule: "0 19 * * *"
+  restic:
+    repository: volsync-denpa-encoded
+    copyMethod: Snapshot
+    # 録画は 1 世代だけ(docs/decisions.md「バックアップに何を含めるか」)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける
+    retain: { last: "1" }
+    moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
