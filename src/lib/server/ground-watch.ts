@@ -5,8 +5,8 @@
  * (市販のテレビも「再スキャンしてください」と知らせる)。知らせるのは 2 つ。
  *
  * - **続けて選局できないチャンネル** (`reception.failingGround`)。周波数が変わったなら、スキャンし直せば選局できる
- * - **局の顔ぶれが控えと違うチャンネル。** 番組表集めがチャンネルを開いたときに NIT を読み、そのチャンネルに入っている
- *   局 (テレビ) を控え (スキャンの結果) と比べる。局が増えた・減ったなら、スキャンし直せば入る
+ * - **局の顔ぶれがスキャンの結果と違うチャンネル。** 番組表集めがチャンネルを開いたときに NIT を読み、そのチャンネルに入っている
+ *   局 (テレビ) をスキャンの結果と比べる。局が増えた・減ったなら、スキャンし直せば入る
  *
  * どちらもお知らせの 1 行 (録画・番組表・ライブの上) に出し、起きたときに通知の「チャンネルの変更」も送る。
  * スキャンし直すか、受信できるようになれば消える
@@ -26,12 +26,12 @@ const notified = new Set<string>();
 /** 番組表集めがチャンネルを読むついでに、NIT を読む長さ (地上波の NIT は 10 秒に 1 回は流れる) */
 const WATCH_FOR = 15_000;
 
-/** テレビの局のサービス ID を並べた印 */
+/** テレビの局のサービス ID を並べた文字列 (比べるため) */
 const shapeOf = (ids: Iterable<number>) =>
   [...ids].sort((a, b) => a - b).join(",");
 
 /**
- * 地上波のチャンネルの NIT を読み、局の顔ぶれを控えと比べる。違えば覚え、同じなら忘れる。
+ * 地上波のチャンネルの NIT を読み、局の顔ぶれをスキャンの結果と比べる。違えば覚え、同じなら忘れる。
  * NIT に自分の TS が無ければ比べない
  */
 export function compareGround(channel: AgentChannel, nit: NitReader): void {
@@ -55,7 +55,7 @@ export function compareGround(channel: AgentChannel, nit: NitReader): void {
   else mismatched.set(channel.channel, broadcast);
 }
 
-/** 控えに無くなったチャンネルの違いを忘れる (スキャンし直した) */
+/** スキャンの結果から無くなったチャンネルの違いを忘れる (スキャンし直した) */
 export function forgetGround(channels: readonly AgentChannel[]): void {
   const listed = new Set(
     channels.filter((c) => c.type === "GR").map((c) => c.channel),
@@ -106,7 +106,7 @@ export function alertGround(): void {
 
 /**
  * **番組表集めのついでに、地上波の NIT を読む** (`epg-collect.ts`)。開いてから `WATCH_FOR` の間だけ読み、
- * 閉じたら `compareGround` で控えと比べる
+ * 閉じたら `compareGround` でスキャンの結果と比べる
  */
 export class GroundWatch {
   readonly nit = new NitReader();
