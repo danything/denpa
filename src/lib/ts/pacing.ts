@@ -319,7 +319,7 @@ export function stepSpeed(speed: number, by: number): number {
  * 読み上げでも同じことが分かるように
  */
 export function speedLabel(label: string, speed: number): string {
-  return speed === 1 ? label : `${label} ${speed}倍`;
+  return speed === 1 ? label : `${label} ${speed} 倍`;
 }
 
 /** 貯める量と、その下限 */

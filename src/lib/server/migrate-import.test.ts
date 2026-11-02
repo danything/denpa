@@ -391,7 +391,7 @@ describe("形の違う応答", () => {
     ).toBe(true);
     expect(
       s.log.some((line) =>
-        line.includes("/api/rulesの1件に id が無いので飛ばします"),
+        line.includes("/api/rules の 1 件に id が無いので飛ばします"),
       ),
     ).toBe(true);
   });

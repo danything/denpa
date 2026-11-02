@@ -403,7 +403,7 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
     // 1件も無いまま上書きすると、今まで録れていた局まで消える
     if (found.Count == 0)
     {
-        await Respond.Error(http, "チャンネルが1件もありません", 400);
+        await Respond.Error(http, "チャンネルが 1 件もありません", 400);
         return;
     }
 

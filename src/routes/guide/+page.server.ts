@@ -72,7 +72,7 @@ export const actions = {
     const form = await request.formData();
     const programId = Number(form.get("programId"));
     if (!Number.isFinite(programId))
-      return fail(400, { message: "番組IDが不正です" });
+      return fail(400, { message: "番組 ID が不正です" });
     const reservation = orm()
       .select({ id: reservations.id })
       .from(reservations)

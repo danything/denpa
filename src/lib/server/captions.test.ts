@@ -338,7 +338,7 @@ describe("TrackList", () => {
     }
     expect(list.tracks.map((t) => t.label)).toEqual([
       "字幕 (日本語)",
-      "字幕2 (英語)",
+      "字幕 2 (英語)",
     ]);
     expect(list.tracks.map((t) => t.index)).toEqual([0, 1]);
   });

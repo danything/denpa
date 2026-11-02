@@ -320,7 +320,7 @@ test.describe("CM検出のロゴ", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(station.locator("td.logo-col").first()).toBeHidden();
     const inline = station.getByRole("button", {
-      name: `${BS11.name} のCMロゴを大きく見る`,
+      name: `${BS11.name} の CM ロゴを大きく見る`,
     });
     await expect(inline).toBeVisible();
     const wrap = page
@@ -343,16 +343,16 @@ test.describe("CM検出のロゴ", () => {
      */
     const zoom = page.getByTestId("logo-zoom");
     await station
-      .getByRole("button", { name: `${BS11.name} のCMロゴを大きく見る` })
+      .getByRole("button", { name: `${BS11.name} の CM ロゴを大きく見る` })
       .click();
     await expect(zoom).toBeVisible();
     await expect(zoom).toContainText(BS11.name);
-    await expect(zoom).toContainText("CMロゴ");
+    await expect(zoom).toContainText("CM ロゴ");
     await expect(zoom.getByTestId("logo-zoom-learned")).toContainText(
       "に覚えました",
     );
     const large = zoom.getByRole("img", {
-      name: `${BS11.name} のCM検出のロゴ`,
+      name: `${BS11.name} の CM 検出のロゴ`,
     });
     await expect(large).toHaveCSS("image-rendering", "pixelated");
     await expect

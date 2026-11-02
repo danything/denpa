@@ -79,7 +79,7 @@ export const ATTENTION_FILTERS = [
   { id: "conflict", label: "競合" },
   { id: "failed", label: "失敗" },
   { id: "missed", label: "録り逃し" },
-  { id: "cmlogo", label: "CMの判定" },
+  { id: "cmlogo", label: "CM の判定" },
 ] as const;
 
 export type Filter =

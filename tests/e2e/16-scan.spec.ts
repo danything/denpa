@@ -192,7 +192,7 @@ test.describe("設定のチューナーとチャンネル", () => {
       card.getByRole("columnheader", { name: "局ロゴ" }),
     ).toBeVisible();
     await expect(
-      card.getByRole("columnheader", { name: "CMロゴ" }),
+      card.getByRole("columnheader", { name: "CM ロゴ" }),
     ).toBeVisible();
     const first = channels.getByTestId("channel-row").first();
     const channel = await first.getAttribute("data-channel");
@@ -323,7 +323,7 @@ test.describe("チューナーの設定", () => {
 
     // その場で保存して断られる。見出しの横に理由を出し、外したチェックは元に戻す
     await expect(card.getByTestId("settings-error")).toContainText(
-      "種別を1つ以上",
+      "種別を 1 つ以上",
     );
     await expect(
       card.locator('input[name^="type.0."]:checked').first(),

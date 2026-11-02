@@ -173,7 +173,7 @@
   function describeDay(day: number): string {
     const d = new Date(day);
     const count = marks.get(day) ?? 0;
-    return `${d.getMonth() + 1}月${d.getDate()}日、${count === 0 ? "なし" : `切り抜き ${count}枚`}`;
+    return `${d.getMonth() + 1}月${d.getDate()}日、${count === 0 ? "なし" : `切り抜き ${count} 枚`}`;
   }
 
   const KINDS: { id: ClipKind | undefined; label: string }[] = [
@@ -567,8 +567,8 @@
                   >{title(clip)}</span
                 >
                 <span class="c-meta tiny muted num"
-                  >{time(clip.takenAt)}{#if clip.programName !== ""}
-                    ・ <span class="broadcast">{clip.serviceName}</span
+                  >{time(clip.takenAt)}{#if clip.programName !== ""}・<span
+                      class="broadcast">{clip.serviceName}</span
                     >{/if}</span
                 >
               </button>
@@ -645,7 +645,7 @@
 
       <h2 class="side-label">使っている量</h2>
       <p class="c-usage small muted num" data-testid="clip-usage">
-        {data.facets.count} 枚 ・ {size(data.facets.bytes)}
+        {data.facets.count} 枚・{size(data.facets.bytes)}
       </p>
     </aside>
   </div>
@@ -705,7 +705,7 @@
           </div>
         {/if}
         <div class="c-menu-head small muted num">
-          {data.facets.count} 枚 ・ {size(data.facets.bytes)}
+          {data.facets.count} 枚・{size(data.facets.bytes)}
         </div>
       </Menu>
     {/if}
@@ -772,9 +772,9 @@
           {title(clip)}
         </p>
         <p class="v-meta small num">
-          {dateTime(clip.takenAt)}{#if clip.programName !== ""}
-            ・ <span class="broadcast">{clip.serviceName}</span>{/if}
-          ・ {clip.place === "live" ? "ライブ" : "録画"}
+          {dateTime(clip.takenAt)}{#if clip.programName !== ""}・<span
+              class="broadcast">{clip.serviceName}</span
+            >{/if}・{clip.place === "live" ? "ライブ" : "録画"}
         </p>
         {#if clip.captions !== ""}
           <p class="v-captions small broadcast">{clip.captions}</p>

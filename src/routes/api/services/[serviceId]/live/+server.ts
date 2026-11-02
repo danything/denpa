@@ -15,7 +15,7 @@ import { liveStream } from "#lib/server/live.js";
  */
 export function GET({ params, url }) {
   const serviceId = Number(params.serviceId);
-  if (!Number.isInteger(serviceId)) error(400, "局IDが不正です");
+  if (!Number.isInteger(serviceId)) error(400, "局 ID が不正です");
   const asked = url.searchParams.get("codec");
   const audio = url.searchParams.get("audio");
   const codec =

@@ -111,12 +111,12 @@ export function parseDateList(dates: readonly EdcbDate[]): DateListResult {
         Array.from({ length: span + 1 }, (_, i) => (startDay + i) % 7),
       );
     } else {
-      return { skip: "2日以上にわたる時間帯は取り込めません" };
+      return { skip: "2 日以上にわたる時間帯は取り込めません" };
     }
   }
   const slot = windows.slot();
   if (slot === null)
-    return { skip: "時刻の違う時間帯が2つ以上あるので取り込めません" };
+    return { skip: "時刻の違う時間帯が 2 つ以上あるので取り込めません" };
   return { slot, widened: crossing && starts.size < 7 };
 }
 
@@ -218,7 +218,7 @@ export function convertRule(
     else serviceIds.add(id);
   }
   if (serviceIds.size === 0)
-    return { skip: "局が1つも見つからないので取り込めません" };
+    return { skip: "局が 1 つも見つからないので取り込めません" };
   if (unknown.length > 0)
     notes.push(`見つからない局を外しました (${unknown.join("・")})`);
 

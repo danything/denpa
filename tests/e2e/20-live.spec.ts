@@ -2145,8 +2145,8 @@ test.describe("ライブ視聴", () => {
     const notice = {
       type: "captions",
       tracks: [
-        { index: 0, lang: "jpn", label: "字幕1" },
-        { index: 1, lang: "jpn", label: "字幕2" },
+        { index: 0, lang: "jpn", label: "字幕 1" },
+        { index: 1, lang: "jpn", label: "字幕 2" },
       ],
       track: 0,
     };

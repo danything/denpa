@@ -1120,7 +1120,7 @@ async function decide(
   video: boolean,
 ): Promise<CmDetection> {
   const none = (note: string) => ({ cm: [], duration: Number.NaN, note });
-  if (found === null) return none("CM検出の読み込みが失敗しました");
+  if (found === null) return none("CM 検出の読み込みが失敗しました");
   try {
     // ロゴを覚え直して枠だけ読み直すときも、エンコードしたときと同じだけ頭を捨てる
     return shiftDetection(
@@ -1129,7 +1129,7 @@ async function decide(
     );
   } catch (error) {
     console.error(`[cm] 検出に失敗しました: ${error}`);
-    return none(`CM検出に失敗しました: ${error}`);
+    return none(`CM 検出に失敗しました: ${error}`);
   }
 }
 
@@ -1256,7 +1256,7 @@ async function runJob(jobId: number): Promise<void> {
   const input = recording === undefined ? null : encodeSource(recording);
 
   if (recording === undefined || input === null) {
-    markFailed(jobId, "元のTSがありません");
+    markFailed(jobId, "元の TS がありません");
     return;
   }
 
@@ -1345,7 +1345,7 @@ async function runJob(jobId: number): Promise<void> {
       });
     } catch (error) {
       console.error(
-        `[cm] 検出の支度に失敗したためCM処理をスキップします: ${error}`,
+        `[cm] 検出の支度に失敗したため CM 処理をスキップします: ${error}`,
       );
     }
   }
@@ -1651,7 +1651,7 @@ async function runJob(jobId: number): Promise<void> {
       !canceled.has(jobId) &&
       (software || plain !== undefined)
     ) {
-      setStep(jobId, `CMを探さずにエンコードし直します (${codec})`);
+      setStep(jobId, `CM を探さずにエンコードし直します (${codec})`);
       skip = inputSkip(null, encodeOptions.videoStart);
       result = await runFfmpeg(
         jobId,
@@ -1837,7 +1837,7 @@ async function runJob(jobId: number): Promise<void> {
       await addChapters(working, made.skip);
       return canceled.has(jobId) ? null : made;
     }
-    stage("cut", "CMを切っています");
+    stage("cut", "CM を切っています");
     let skip = made.skip;
     let outTimeUs = made.outTimeUs;
     let cut = await cutWorking(working, skip);
@@ -1846,7 +1846,7 @@ async function runJob(jobId: number): Promise<void> {
       const again = await encodeInSlot(
         codec,
         { analysis: false, keyframes: cutKeys, software: true },
-        `CMの境目にキーフレームを置いてエンコードし直します (${codec})`,
+        `CM の境目にキーフレームを置いてエンコードし直します (${codec})`,
       );
       if (again === null || canceled.has(jobId)) return null;
       if (again.result.code !== 0) {
@@ -1855,12 +1855,12 @@ async function runJob(jobId: number): Promise<void> {
       }
       outTimeUs = again.result.outTimeUs;
       skip = again.skip;
-      stage("cut", "CMを切っています");
+      stage("cut", "CM を切っています");
       cut = await cutWorking(working, skip);
     }
     if (typeof cut === "string") {
       console.error(
-        `[cm] CMを切れませんでした (${cut === "keys" ? "境目にキーフレームがありません" : "繋ぎ直しに失敗しました"})。CMを残したまま置きます (${codec})`,
+        `[cm] CM を切れませんでした (${cut === "keys" ? "境目にキーフレームがありません" : "繋ぎ直しに失敗しました"})。CM を残したまま置きます (${codec})`,
       );
       if (first) cuttable = false;
       await addChapters(working, skip);
@@ -1884,7 +1884,7 @@ async function runJob(jobId: number): Promise<void> {
     const done = await encodeCodec(lead, true);
     if (done === null) return null;
     if (reading !== null) {
-      stage("cm", "CMの境目を決めています");
+      stage("cm", "CM の境目を決めています");
       detection = await decide(reading, done.found, done.skip, done.video);
       if (detection.material !== undefined)
         saveMaterial(recording.id, detection.material);
@@ -2130,7 +2130,7 @@ async function runJob(jobId: number): Promise<void> {
  */
 async function runCmJob(jobId: number): Promise<void> {
   const { signal, recording } = startJob(jobId);
-  const what = "CM検出";
+  const what = "CM 検出";
   if (recording === undefined) {
     markFailed(jobId, "録画が見つかりません");
     return;
@@ -2152,7 +2152,7 @@ async function runCmJob(jobId: number): Promise<void> {
   );
   const input = ts ?? files[0];
   if (input === undefined) {
-    fail(jobId, recording, "CM検出に使えるファイルがありません", what);
+    fail(jobId, recording, "CM 検出に使えるファイルがありません", what);
     return;
   }
   emit("recordings");
@@ -2211,7 +2211,7 @@ async function runCmJob(jobId: number): Promise<void> {
       if (canceled.has(jobId)) return finishCanceled(jobId, null);
       setStep(
         jobId,
-        `${ts === null ? "エンコード済みの動画" : "元のTS"}から無音・場面の切れ目・ロゴを読み取っています`,
+        `${ts === null ? "エンコード済みの動画から" : "元の TS から"}無音・場面の切れ目・ロゴを読み取っています`,
       );
       const report = progressReporter(jobId, reading.duration);
       const found = await scan(input, {
@@ -2292,7 +2292,7 @@ const CUT_SHORTER = 5;
 
 /** CM を切ってエンコードした録画は、エンコードしたものから CM を戻せない。やり直すなら元のTSから再エンコードする */
 export const CM_CUT_ALREADY =
-  "CMをカットした録画です。CMを検出し直すには再エンコードしてください";
+  "CM をカットした録画です。CM を検出し直すには再エンコードしてください";
 
 /**
  * 段階の中の進み具合 (CM 検出だけやり直すとき)。読んだコマの時刻 ÷ 尺。

@@ -247,7 +247,7 @@ test.describe("ホームの1本の一覧", () => {
                 span.scrollHeight <= span.clientHeight,
             ),
           ),
-          "「録画中・あと21分」が縮んでいる",
+          "「録画中・あと 21 分」が縮んでいる",
         ).toBe(true);
         // 点とバーは画面の外では描かない (動き続けない)。行ではなく、それぞれの小さな箱に付ける
         await expect(status.locator(".act-mark")).toHaveCSS(
@@ -952,7 +952,7 @@ test.describe("ホームの1本の一覧", () => {
           .getByTestId("calendar-day")
           .and(page.locator(`[data-day="${day}"]`));
         await expect(cell).toHaveAttribute("aria-disabled", "false");
-        await expect(cell).toHaveAttribute("aria-label", /録画 1件/);
+        await expect(cell).toHaveAttribute("aria-label", /録画 1 件/);
         await cell.click();
 
         const head = page

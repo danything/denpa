@@ -711,7 +711,8 @@ export function convertRule(
   if (list(search["searchPeriods"]).length > 0)
     return { skip: "検索期間のあるルールは取り込めません" };
   const times = parseTimes(search["times"]);
-  if (times === null) return { skip: "時間帯が2つ以上あるので取り込めません" };
+  if (times === null)
+    return { skip: "時間帯が 2 つ以上あるので取り込めません" };
 
   const types = (["GR", "BS", "CS", "SKY"] as const).filter((type) =>
     flag(search[type]),
@@ -729,7 +730,7 @@ export function convertRule(
   const channels = channelIds.flatMap((id) => serviceOf(id) ?? []);
   // 局を全部外すと全局に当たってしまう
   if (channelIds.length > 0 && channels.length === 0)
-    return { skip: "局が1つも denpa に無いので取り込めません" };
+    return { skip: "局が 1 つも denpa に無いので取り込めません" };
   if (channels.length < channelIds.length)
     notes.push(
       `denpa に無い局を ${channelIds.length - channels.length} 件外しました`,

@@ -506,7 +506,7 @@ async function pump(
   const size = fileSize(path) ?? written;
 
   if (size === 0) {
-    fail(recording.id, "ストリームから1バイトも受信できませんでした");
+    fail(recording.id, "ストリームから 1 バイトも受信できませんでした");
     return;
   }
 

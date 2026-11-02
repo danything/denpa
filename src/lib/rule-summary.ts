@@ -6,7 +6,7 @@ import { dayName } from "./timeline";
 
 /**
  * **ルールの条件を1行で** (ルールの一覧の「条件」の列)。
- * 探す所 ・ 局 ・ ジャンル ・ 時間帯と曜日 ・ 同じ回は1度 ・ 前の回は録らない ・ 除外、の順。キーワードは名前の列に出ているので書かない
+ * 探す所、局、ジャンル、時間帯と曜日、同じ回は 1 度、前の回は録らない、除外の順 (どれも中を「・」で並べるので、あいだは「、」)。キーワードは名前の列に出ているので書かない
  */
 
 interface Summarized extends Slot {
@@ -46,11 +46,11 @@ export function conditionSummary(
     parts.push(rule.genres.map(genreName).join("・"));
   const slot = slotSummary(rule);
   if (slot !== null) parts.push(slot);
-  if (rule.dedupe) parts.push("同じ回は1度");
+  if (rule.dedupe) parts.push("同じ回は 1 度");
   if (rule.skip_earlier) parts.push("前の回は録らない");
   if (rule.ignore_keyword.trim() !== "")
     parts.push(`除外: ${rule.ignore_keyword.trim()}`);
-  return parts.join(" ・ ");
+  return parts.join("、");
 }
 
 /**

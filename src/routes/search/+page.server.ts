@@ -203,7 +203,8 @@ export const actions = {
   cancel: async ({ request }) => {
     const form = await request.formData();
     const id = Number(form.get("reservationId"));
-    if (!Number.isFinite(id)) return fail(400, { message: "予約IDが不正です" });
+    if (!Number.isFinite(id))
+      return fail(400, { message: "予約 ID が不正です" });
     await cancel(id);
     return { success: true };
   },
@@ -248,7 +249,7 @@ export const actions = {
   updateRule: async ({ request }) => {
     const form = await request.formData();
     const id = idOf(form);
-    if (id === null) return fail(400, { message: "ルールIDが不正です" });
+    if (id === null) return fail(400, { message: "ルール ID が不正です" });
     const saved = await updateRule(id, form);
     if ("error" in saved) return fail(400, { message: saved.error });
     return { saved: { ...saved, created: false } };
@@ -257,7 +258,7 @@ export const actions = {
   /** 直しているルールを止める・戻す */
   toggleRule: async ({ request }) => {
     const id = idOf(await request.formData());
-    if (id === null) return fail(400, { message: "ルールIDが不正です" });
+    if (id === null) return fail(400, { message: "ルール ID が不正です" });
     await toggleRule(id);
     return { toggled: true };
   },
@@ -265,7 +266,7 @@ export const actions = {
   /** 直しているルールを消す (2回押し)。消したら画面は `?rule=` を外して出直す */
   deleteRule: async ({ request }) => {
     const id = idOf(await request.formData());
-    if (id === null) return fail(400, { message: "ルールIDが不正です" });
+    if (id === null) return fail(400, { message: "ルール ID が不正です" });
     return { deletedRule: { canceled: await deleteRule(id) } };
   },
 };

@@ -55,7 +55,7 @@
             </label>
           {/each}
         </div>
-        <span class="hint">1つも選ばなければ全部送ります</span>
+        <span class="hint">1 つも選ばなければ全部送ります</span>
       </div>
       <!-- 欄と同じ右の列に置く (`.field` の中身は右の列) -->
       <div class="field">

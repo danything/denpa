@@ -1918,7 +1918,7 @@ button.text-button:hover {
   border-radius: 1px;
   background: currentColor;
 }
-/* 映像の上に出す短い通知 (`StageNote`・追っかけの「続きは観る画面で」・ライブの「録画のため局を切り替えました」) */
+/* 映像の上に出す短い通知 (`StageNote`・追っかけの「続きは観る画面で」・ライブの「録画が始まったため、局を切り替えました」) */
 .stage-note {
   max-width: 100%;
   padding: 0.25rem 0.75rem;

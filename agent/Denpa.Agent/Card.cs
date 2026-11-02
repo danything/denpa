@@ -307,7 +307,7 @@ public static class Scramble
         static JsonObject Failed(string error) => new() { ["ok"] = false, ["error"] = error };
         var source = Inside(recorded, input);
         var target = Inside(recorded, output);
-        if (source is null || target is null) return Failed("元のTSの保存先の外にあるファイルは復号できません");
+        if (source is null || target is null) return Failed("元の TS の保存先の外にあるファイルは復号できません");
         if (!File.Exists(source)) return Failed($"{source} が見つかりません。denpa と同じ保存先をこのコンテナにもマウントしてください");
         // 書き出す先は新しく作る。もうあるファイルは上書きしない (置き場の中の録画を潰させない)
         if (File.Exists(target)) return Failed($"{target} はもうあります。上書きはしません");

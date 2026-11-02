@@ -12,7 +12,7 @@ export const actions = {
   revokeDevice: async ({ request }) => {
     const form = await request.formData();
     const id = Number(form.get("id"));
-    if (!Number.isInteger(id)) return fail(400, { message: "IDが不正です" });
+    if (!Number.isInteger(id)) return fail(400, { message: "ID が不正です" });
     revokeToken(id);
     return { success: true };
   },

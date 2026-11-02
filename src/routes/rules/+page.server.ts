@@ -73,7 +73,7 @@ export const actions = {
   /** 有効と無効を入れ替える (行のスイッチ) */
   toggle: async ({ request }) => {
     const id = idOf(await request.formData());
-    if (id === null) return fail(400, { message: "ルールIDが不正です" });
+    if (id === null) return fail(400, { message: "ルール ID が不正です" });
     await toggleRule(id);
     return { success: true };
   },
@@ -81,7 +81,7 @@ export const actions = {
   /** ルールを消す (行の削除。2回押し) */
   delete: async ({ request }) => {
     const id = idOf(await request.formData());
-    if (id === null) return fail(400, { message: "ルールIDが不正です" });
+    if (id === null) return fail(400, { message: "ルール ID が不正です" });
     return { success: true, canceled: await deleteRule(id) };
   },
 };

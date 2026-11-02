@@ -239,7 +239,7 @@ export async function descramble(
   if (from.startsWith("..") || to.startsWith("..")) {
     return {
       ok: false,
-      error: `元のTSの保存先 (${base}) の外にあるファイルは復号できません`,
+      error: `元の TS の保存先 (${base}) の外にあるファイルは復号できません`,
     };
   }
 

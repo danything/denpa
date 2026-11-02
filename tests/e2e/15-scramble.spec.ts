@@ -85,7 +85,7 @@ test.describe("スクランブルされたまま録れたとき", () => {
        * どれだけ空くのかが画面から分からなかった
        */
       await expect(page.locator(row).getByTestId("row-body")).toContainText(
-        "元のTS",
+        "元の TS",
       );
 
       /*

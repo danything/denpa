@@ -228,7 +228,7 @@ test.describe("ホームの一覧のまとめて表示", () => {
       '[data-testid="recording-group"][data-zone="past"][data-group="グループ試験アニメ"]',
     );
     await expect(anime).toHaveAttribute("aria-expanded", "false");
-    await expect(anime.getByTestId("recording-group-count")).toHaveText("3本");
+    await expect(anime.getByTestId("recording-group-count")).toHaveText("3 本");
 
     // 押すと見出しのすぐ下に、第1話から順に開く
     await anime.click();
@@ -278,8 +278,10 @@ test.describe("ホームの一覧のまとめて表示", () => {
     const behind = page.locator(
       '[data-testid="recording-group"][data-zone="past"][data-group="グループ試験アニメ"]',
     );
-    await expect(ahead.getByTestId("recording-group-count")).toHaveText("2本");
-    await expect(behind.getByTestId("recording-group-count")).toHaveText("3本");
+    await expect(ahead.getByTestId("recording-group-count")).toHaveText("2 本");
+    await expect(behind.getByTestId("recording-group-count")).toHaveText(
+      "3 本",
+    );
 
     // 開くのは側ごと。予約の見出しを開いても、録画の見出しは閉じたまま
     await ahead.click();

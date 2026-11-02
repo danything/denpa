@@ -116,7 +116,7 @@ export const actions = {
   saveCm: async ({ request }) => {
     const cmCut = String((await request.formData()).get("cmCut") ?? "");
     if (!isCmMode(cmCut)) {
-      return fail(400, { message: "CMの指定が不正です" });
+      return fail(400, { message: "CM の指定が不正です" });
     }
     saveSettings({ cmCut });
     return { success: true, saved: true };

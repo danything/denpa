@@ -120,11 +120,9 @@
     </div>
     <!-- 譲り合う順は数字ではなく用途の並びで言う (順番は config.priority から) -->
     <Lead>
-      足りないときにどれが譲るかは、使い方で決まります
+      足りないときは、決まった用途の順に使います
       {#snippet more()}
-        <p>
-          チューナーが足りないときは、上にあるものが先に使い、下のものが譲ります。
-        </p>
+        <p>チューナーが足りないときは、上にある用途から先に使います。</p>
         <ol data-testid="tuner-yield-order">
           {#each data.yieldOrder as use (use)}
             <li>{use}</li>

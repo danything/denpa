@@ -48,14 +48,14 @@ test.describe("ルールの一覧", () => {
     const anime = rows.filter({ hasText: "テストアニメ" });
     const none = rows.filter({ hasText: "どこにも無い番組" });
     // 条件は1行で。局の名前・同じ回・除外
-    await expect(anime).toContainText(`番組名 ・ ${BS11.name}`);
-    await expect(none).toContainText("全局 ・ 同じ回は1度 ・ 除外: 再放送");
+    await expect(anime).toContainText(`番組名、${BS11.name}`);
+    await expect(none).toContainText("全局、同じ回は 1 度、除外: 再放送");
     // 次の放送と予約の数。当たらないルールは「予定なし」
     await expect(anime.getByTestId("rule-next")).toContainText(BS11.name);
     await expect(anime.getByTestId("rule-reservations")).not.toHaveText("0");
     await expect(none.getByTestId("rule-next")).toHaveText("予定なし");
     await expect(page.getByTestId("rule-summary")).toContainText(
-      /これから7日の予約\s*\d+ 件/,
+      /これから 7 日の予約\s*\d+ 件/,
     );
     // 広い画面では絞り込み・並び・集計は右のサイドバー。細い帯は出さない
     await expect(page.getByTestId("rule-sidebar")).toBeVisible();

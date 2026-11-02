@@ -37,7 +37,7 @@ export interface CaptionTrack {
   index: number;
   /** ISO 639-2。放送が名乗っていなければ null */
   lang: string | null;
-  /** 「字幕 (日本語)」「字幕2 (英語)」 */
+  /** 「字幕 (日本語)」「字幕 2 (英語)」 */
   label: string;
 }
 

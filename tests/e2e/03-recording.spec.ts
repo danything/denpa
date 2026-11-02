@@ -104,7 +104,7 @@ test.describe("録画とエンコード", () => {
     const detail = page.getByTestId("program-detail");
     await expect(detail).toBeVisible();
     await expect(detail.getByTestId("detail-video")).toBeVisible();
-    await expect(detail.getByTestId("detail-fps")).toHaveText("60コマ/秒");
+    await expect(detail.getByTestId("detail-fps")).toHaveText("60 コマ/秒");
 
     /*
      * 畳んでいる「その他…」のメニューは display:none であること。

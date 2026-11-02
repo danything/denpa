@@ -58,7 +58,7 @@
     const extra = [
       rec.hevc_size === null ? "" : `H.265 ${size(rec.hevc_size)}`,
       rec.alt_size === null ? "" : `H.264 ${size(rec.alt_size)}`,
-      rec.raw_size === null ? "" : `元のTS ${size(rec.raw_size)}`,
+      rec.raw_size === null ? "" : `元の TS ${size(rec.raw_size)}`,
     ].filter((s) => s !== "");
     return extra.length === 0
       ? size(rec.ts_size)
@@ -190,9 +190,9 @@
       problems.push({
         kind: "logo",
         tone: "warning",
-        label: "ロゴでCMを判定できませんでした",
+        label: "ロゴで CM を判定できませんでした",
         detail:
-          "無音だけで判定。覚えたロゴは設定の「受信できるチャンネル」の「CMロゴ」で確かめられます",
+          "無音だけで判定。覚えたロゴは設定の「受信できるチャンネル」の「CM ロゴ」で確かめられます",
       });
     }
     return statusLines(activities, problems);
@@ -420,7 +420,7 @@
           rec.deleted_at !== null ? `${date(rec.deleted_at)} に削除` : "",
           progress === null
             ? ""
-            : `残り${durationMs(Math.max(0, progress.length - progress.at))}`,
+            : `残り ${durationMs(Math.max(0, progress.length - progress.at))}`,
         ]}
         row={rec}
         rule={rec.from_manual === null

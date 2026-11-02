@@ -26,7 +26,7 @@
     /** 残りの幅を埋める番組の説明の頭 (1行で「…」まで。狭い画面では出さない) */
     excerpt?: string;
   } = $props();
-  const rest = $derived(parts.filter(Boolean).join(" ・ "));
+  const rest = $derived(parts.filter(Boolean).join("・"));
 </script>
 
 <div class="row-meta">
@@ -36,18 +36,13 @@
     style="height: 1rem; margin-right: 0.375rem; vertical-align: -0.1875rem"
   />
   <span
-    ><span class="broadcast">{service}</span>{service && rest
-      ? " ・ "
-      : ""}<span class="num">{rest}</span></span
-  >
-  {#if rule === "manual"}
-    <span class="t-rule">
-      ・ <span data-testid="rule-name">手動予約</span></span
-    >
-  {:else if rule !== null}
-    <span class="t-rule">
-      ・
-      <span data-testid="rule-name">
+    ><span class="broadcast">{service}</span>{service && rest ? "・" : ""}<span
+      class="num">{rest}</span
+    ></span
+  >{#if rule === "manual"}<span class="t-rule"
+      >・<span data-testid="rule-name">手動予約</span></span
+    >{:else if rule !== null}<span class="t-rule"
+      >・<span data-testid="rule-name">
         ルール:
         {#if rule.rule_id !== null}
           <a

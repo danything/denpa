@@ -32,7 +32,7 @@ export const actions = {
     const postalCode = normalizePostalCode(raw);
     if (raw !== "" && postalCode === "") {
       return fail(400, {
-        message: "郵便番号は数字7桁で入れてください (例 1000001)",
+        message: "郵便番号は数字 7 桁で入れてください (例 1000001)",
       });
     }
     // 選ぶ欄なので、表に無い番号は画面の外から来たもの。黙って未設定にせず断る

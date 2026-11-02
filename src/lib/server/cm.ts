@@ -493,7 +493,7 @@ export async function openCm(
       // ロゴの区間を出す (覚えていたものが当たらなければ、覚え直して枠だけ読み直す)
       let lit: CmMaterial["logo"] = null;
       if (current) {
-        step("本編とCMに分けています");
+        step("本編と CM に分けています");
         const result = await current.finish(
           fps,
           async (again) =>
@@ -581,7 +581,7 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
     if (cm.length === 0) why = "ロゴの消えている所がありませんでした";
     // 番組の半分以上がCMになったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
     else if (tooMuchCm(cm, duration))
-      why = `番組の ${cmRatio(cm, duration)}% がCMと判定されたため、この結果は使いません`;
+      why = `番組の ${cmRatio(cm, duration)}% が CM と判定されたため、この結果は使いません`;
     else return { cm, duration, note: LOGO_OK };
   }
 

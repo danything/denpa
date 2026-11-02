@@ -460,13 +460,9 @@
             {#snippet status()}
               <span class="clock num"
                 >{clockLabel(pos)} / {clockLabel(recorded)}</span
-              >
-              {#if line !== null && !line.finished}
-                <!-- 赤いのは点だけ (`.rec-dot`)。字まで赤くすると黒い操作バーの上で沈む -->
-                ・ <span class="rec"><span class="rec-dot"></span>録画中</span>
-              {:else if line !== null}
-                ・ 録画済み
-              {/if}
+              ><!-- 赤いのは点だけ (`.rec-dot`)。字まで赤くすると黒い操作バーの上で沈む -->{#if line !== null && !line.finished}・<span
+                  class="rec"><span class="rec-dot"></span>録画中</span
+                >{:else if line !== null}・録画済み{/if}
             {/snippet}
           </InfoBlock>
 

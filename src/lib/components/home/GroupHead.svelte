@@ -58,11 +58,11 @@
   <span class="row-body">
     <span class="cluster title-line">
       <span class="tiny muted num nowrap" data-testid="recording-group-count"
-        >{group.items.length}本</span
+        >{group.items.length} 本</span
       >
       {#if fresh > 0}
         <span class="group-unwatched tiny">
-          <span class="fresh-dot" aria-hidden="true"></span>未視聴{fresh}
+          <span class="fresh-dot" aria-hidden="true"></span>未視聴 {fresh}
         </span>
       {/if}
       <span class="row-name broadcast" data-testid="recording-group-name"

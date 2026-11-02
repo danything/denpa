@@ -249,7 +249,7 @@ export function audioLabel(audio: Audio): string {
   const type =
     audio.text !== undefined && audio.text !== ""
       ? audio.text
-      : (AUDIO_TYPE[audio.componentType] ?? `種別${audio.componentType}`);
+      : (AUDIO_TYPE[audio.componentType] ?? `種別 ${audio.componentType}`);
   const langs = langNames(audio);
   return langs.length === 0 ? type : `${type} (${langs.join("/")})`;
 }
@@ -305,7 +305,7 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
   audios.forEach((audio, stream) => {
     // 放送が名乗っていれば、何本目かは添えない (「主音声ステレオ」に「音声1」を足しても長いだけ)
     const named = audio.text !== undefined && audio.text !== "";
-    const head = many && !named ? `音声${stream + 1} ` : "";
+    const head = many && !named ? `音声 ${stream + 1} ` : "";
     const langs = langNames(audio);
     const of = (index: number) =>
       langs[index] === undefined ? "" : ` (${langs[index]})`;
@@ -314,7 +314,7 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
 
     if (audio.componentType === DUAL_MONO) {
       // 左右に分かれているので、名前ではなくどちら側かで呼ぶ
-      const index = many ? `音声${stream + 1} ` : "";
+      const index = many ? `音声 ${stream + 1} ` : "";
       const sides: [AudioSide, string][] = [
         ["main", `主音声${of(0)}`],
         ["sub", `副音声${of(1)}`],
@@ -447,11 +447,11 @@ export function seriesLabels(series: {
     const final = episode === last;
     labels.push(
       last === null || final || last < episode
-        ? `第${episode}話`
-        : `第${episode}話 (全${last}話)`,
+        ? `第 ${episode} 話`
+        : `第 ${episode} 話 (全 ${last} 話)`,
     );
     if (final) labels.push("最終回");
-  } else if (last !== null) labels.push(`全${last}話`);
+  } else if (last !== null) labels.push(`全 ${last} 話`);
   if (repeat !== null && repeat !== 0) labels.push("再放送");
   return labels;
 }

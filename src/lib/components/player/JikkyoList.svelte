@@ -180,7 +180,7 @@
   <div class="head">
     <h2 class="title">コメントの一覧</h2>
     <span class="force num" data-testid="jikkyo-list-force"
-      ><span title="1分あたりのコメント数">勢い</span> {force}</span
+      ><span title="1 分あたりのコメント数">勢い</span> {force}</span
     >
   </div>
   <div class="body">
