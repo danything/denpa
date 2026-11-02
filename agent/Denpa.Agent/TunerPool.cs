@@ -188,8 +188,9 @@ public sealed class TunerPool(
                 {
                     return Join(victim, priority, use);
                 }
-                // 取り上げる相手がいれば先に片付ける。同じチューナーを2つの選局が使わないように
-                Release(victim, "優先度の高い要求に譲りました");
+                // 取り上げる相手がいれば先に片付ける。同じチューナーを2つの選局が使わないように。
+                // 誰に譲ったかを言う (記録から、取り上げたのが録画か番組表集めかを追えるように。#1939)
+                Release(victim, PreemptedBy(use));
                 kicked = victim;
             }
 
@@ -422,6 +423,13 @@ public sealed class TunerPool(
         // 読むのをやめろとだけ言う。止まりきるのを待つのはロックの外 (上の説明)
         lease.Stop();
     }
+
+    /// <summary>
+    /// 取り上げられた利用者に返す理由。**取り上げた相手の名乗り (<c>use</c>) を入れる** — 入れていなかった頃は、
+    /// 衛星のロゴの選局が一晩取り上げられ続けたときに、相手が録画か番組表集めかを記録から追えなかった (#1939)。
+    /// 名乗りは denpa が ASCII だけで付ける (<c>rec 12</c> <c>epg BS15_0</c>。番組名は入らない)
+    /// </summary>
+    public static string PreemptedBy(string use) => $"優先度の高い要求 ({use}) に譲りました";
 
     /// <summary>
     /// **選ぶ順** (<c>GET /denpa/tuners</c> の <c>rank</c>)。小さいほど先に使う。無効なチューナーは null。

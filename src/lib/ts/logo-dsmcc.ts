@@ -162,7 +162,7 @@ function logoKey(logo: ModuleLogo): string {
 /**
  * カルーセルの読みかけ。**開き直しても捨てない。**
  *
- * 衛星のロゴは十数分に一度まとめて流れてくるだけで (`server/logo.ts` の `SATELLITE_TIMEOUT`)、
+ * 衛星のロゴは十数分に一度まとめて流れてくるだけで (`server/config.ts` の `logoCarouselWait`)、
  * 開いている間にその一度が来るとは限らない。番組表集めやライブに譲って閉じるたびに
  * 一から読み直していた頃は、衛星のチューナーが2台の環境では途中で取り上げられてばかりで、
  * BS も CS も何日経っても揃わなかった。DII で知ったモジュールと受け取ったブロックを
@@ -182,11 +182,27 @@ export class CarouselProgress {
    */
   private readonly announced = new Map<string, string>();
   private readonly completed = new Set<string>();
+  private sections = 0;
+
+  /**
+   * **ロゴのカルーセルから受け取ったセクションの数** (ロゴのモジュールを知らせる DII と、組み立て中のロゴのモジュールの DDB)。
+   * 開いている間に増えなければ、その間カルーセルは一度も流れてこなかった (`server/logo.ts` の `carouselRanOutAt`)
+   */
+  get received(): number {
+    return this.sections;
+  }
 
   onSection(section: Uint8Array): void {
     if (section[0] === TABLE_DII) {
       const dii = parseDii(section);
       if (dii === null) return;
+      if (
+        dii.modules.some(
+          (module) =>
+            module.name !== null && LOGO_MODULE_NAMES.has(module.name),
+        )
+      )
+        this.sections++;
       // 合致するモジュールは全部取得する (`downloadKey` の説明)
       for (const module of dii.modules) {
         if (module.name === null || !LOGO_MODULE_NAMES.has(module.name))
@@ -233,6 +249,7 @@ export class CarouselProgress {
     const key = downloadKey(ddb.downloadId, ddb.moduleId);
     const download = this.downloads.get(key);
     if (download === undefined) return;
+    this.sections++;
     // バージョンが変わったら組み立て直し。混ぜると壊れた PNG ができる
     if (download.moduleVersion !== ddb.moduleVersion) {
       this.downloads.delete(key);

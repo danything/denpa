@@ -203,4 +203,25 @@ export const scenes: Scene[] = [
       rec("c", "BS", "BS11_0", 1),
     ],
   },
+  {
+    /*
+     * 衛星のロゴを流す中継で待つ選局 (`config.priority.carousel` = 4) は、番組表集め (3) には取り上げられず、
+     * ライブ (9) と録画には取り上げられる。衛星のチューナーが少ない環境で、番組表集めが次のチャンネルへ
+     * 移るたびにロゴの選局を取り上げて、十数分に一度のカルーセルを読み切れなかった (#1939)
+     */
+    name: "ロゴを流す中継で待つ選局は、番組表集めには譲らず、ライブと録画には譲る",
+    tuners: [
+      { name: "gr9", types: ["GR"], rank: 0 },
+      { name: "bs9", types: ["BS", "CS"], rank: 1 },
+    ],
+    steps: [
+      { open: "carousel", type: "BS", channel: "BS11_0", priority: 4, rank: 1 },
+      { open: "epg", type: "BS", channel: "BS03_0", priority: 3, rank: null },
+      { open: "live", type: "BS", channel: "BS03_0", priority: 9, rank: 1 },
+      { close: "live" },
+      { open: "again", type: "BS", channel: "BS11_0", priority: 4, rank: 1 },
+      rec("a", "BS", "BS03_0", 1),
+      { close: "a" },
+    ],
+  },
 ];
