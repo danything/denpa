@@ -26,6 +26,7 @@ import {
   widenServices,
 } from "./epg";
 import { emit } from "./events";
+import { alertGround, forgetGround, GroundWatch } from "./ground-watch";
 import { LineupWatch } from "./lineup-follow";
 import { recordFailed, recordReceived } from "./reception";
 import { resolveConflicts } from "./scheduler";
@@ -271,6 +272,8 @@ async function collectChannel(
   let received = false;
   /** 衛星なら、ついでに読む放送の一覧 (`lineup-follow.ts`) */
   let lineup: LineupWatch | null = null;
+  /** 地上波なら、ついでに読む SDT (局の顔ぶれをスキャンの結果と比べる。`ground-watch.ts`) */
+  const ground = channel.type === "GR" ? new GroundWatch(channel) : null;
   /** エージェントが「選局できない」と返したか (空き待ちやエージェントに繋がらないのは入れない) */
   let refused = false;
   /*
@@ -324,6 +327,7 @@ async function collectChannel(
     for await (const chunk of chunks(stream)) {
       received ||= chunk.length > 0;
       lineup?.feed(chunk);
+      ground?.feed(chunk);
       if (sdt !== null) {
         sdt.feed(chunk);
         sdtBytes += chunk.length;
@@ -364,6 +368,7 @@ async function collectChannel(
    * 開けたのに何も来ないまま終わった回は、上限まで待ったときだけ数える (録画やライブに譲った・止めたときは数えない)
    */
   lineup?.follow();
+  ground?.compare();
   if (received) {
     recordReceived(channel.type, channel.channel);
   } else if (refused || (opened && timedOut)) {
@@ -374,6 +379,8 @@ async function collectChannel(
       );
     }
   }
+  // 地上波は外さずに知らせる (続けて選局できない・局の顔ぶれがスキャンの結果と違う)
+  if (channel.type === "GR") alertGround();
 
   /*
    * **どれだけ使っていたかと、なぜ離したかを残す。**
@@ -527,6 +534,7 @@ async function run(): Promise<number> {
   if (channels.length === 0) return 0;
   // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
   syncServices(channels);
+  forgetGround(channels);
 
   const reach = coverage();
   const at = Date.now();
