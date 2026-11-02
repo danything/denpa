@@ -705,13 +705,17 @@ export interface Network {
  * **version が変わっても、新しい表がそろうまでは前の表を返す。** 読む側が見るのは、いつも 1 つの
  * version でそろった表。全部のセクションが 1 回りするまで (NIT は 10 秒に 1 回は流れるので、長くて 10 秒ほど) は何も返らない。
  *
- * 1 つの中継を読む前提で作ってある。別の中継へ移るときは作り直す (`actual` は最初にそろった自分のネットワークの表を返す)
+ * 置き換えた 1 つ前の version のセクションが遅れて届いても読まない。読むと、そろったときに表が前に戻る。
+ *
+ * 1 つの中継を読む前提で作ってある。別の中継へ移るときは作り直す。`actual` は、最初にそろった自分のネットワークの表を返す
  */
 export class NitReader {
   private readonly assembler = new SectionAssembler(PID_NIT);
   private readonly packets = new PacketStream();
   private readonly pending = new Map<string, SectionSet<NitSection>>();
   private readonly done = new Map<string, Network>();
+  /** 置き換えた表の version (表ごと) */
+  private readonly replaced = new Map<string, number>();
 
   /** 任意の長さのバイト列を渡す。そろった表が増えたか変わったら true */
   feed(chunk: Uint8Array): boolean {
@@ -725,7 +729,11 @@ export class NitReader {
         if (section.length < 16 || (section[5]! & 0x01) === 0) continue;
         const key = `${tableId === TABLE_NIT_OTHER ? "other" : "actual"}:${u16(section, 3)}`;
         // そろっている表と同じ version なら、繰り返し流れてきただけ。中身を読む前に見る (同じものが何度も来る)
-        if (this.done.get(key)?.version === ((section[5]! >> 1) & 0x1f))
+        const version = (section[5]! >> 1) & 0x1f;
+        if (
+          this.done.get(key)?.version === version ||
+          this.replaced.get(key) === version
+        )
           continue;
         const parsed = parseNitSection(section);
         if (parsed !== null && this.add(key, parsed)) changed = true;
@@ -747,6 +755,8 @@ export class NitReader {
 
     const parts = set.ordered();
     this.pending.delete(key);
+    const before = this.done.get(key);
+    if (before !== undefined) this.replaced.set(key, before.version);
     this.done.set(key, {
       other: section.other,
       networkId: section.networkId,
@@ -793,6 +803,8 @@ export class SdtReader {
   private readonly packets = new PacketStream();
   private readonly pending = new Map<string, SectionSet<TransportInfo>>();
   private readonly done = new Map<string, ServiceTable>();
+  /** 置き換えた表の version (TS ごと) */
+  private readonly replaced = new Map<string, number>();
 
   /** 任意の長さのバイト列を渡す。そろった表が増えたか変わったら true */
   feed(chunk: Uint8Array): boolean {
@@ -814,13 +826,19 @@ export class SdtReader {
     const version = (section[5]! >> 1) & 0x1f;
     const key = `${other ? "other" : "actual"}:${u16(section, 8)}:${u16(section, 3)}`;
     // そろっている表と同じ version なら、繰り返し流れてきただけ。局名を読む前に見る (2 秒おきに同じものが来る)
-    if (this.done.get(key)?.version === version) return false;
+    if (
+      this.done.get(key)?.version === version ||
+      this.replaced.get(key) === version
+    )
+      return false;
     const transport = sdtTransport(section);
     const set = this.pending.get(key) ?? new SectionSet<TransportInfo>();
     this.pending.set(key, set);
     if (!set.add(version, section[6]!, section[7]!, transport)) return false;
 
     this.pending.delete(key);
+    const before = this.done.get(key);
+    if (before !== undefined) this.replaced.set(key, before.version);
     this.done.set(key, {
       ...transport,
       services: set.ordered().flatMap((part) => part.services),

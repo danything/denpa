@@ -514,6 +514,21 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
     expect(reader.actual).toBeNull();
   });
 
+  test("置き換えた前のバージョンの節が遅れて届いても、表を前に戻さない", () => {
+    const reader = new NitReader();
+    const old = nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]]);
+    reader.feed(packetize(0x0010, old));
+    reader.feed(
+      packetize(
+        0x0010,
+        nitSection(4, null, [[16626, 4, [[151, 0x01]], BS15]], { version: 1 }),
+        1,
+      ),
+    );
+    expect(reader.feed(packetize(0x0010, old, 2))).toBe(false);
+    expect(reader.actual?.version).toBe(1);
+  });
+
   test("これから使う表 (current_next_indicator が 0) は読まない", () => {
     const reader = new NitReader();
     reader.feed(
