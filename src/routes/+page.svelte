@@ -491,13 +491,13 @@
   /**
    * 線の側から数えて、その行まで描く (開いたとき・絞り込みや向きを替えたときに映したい行)。**切り上げない** —
    * 映す行のまわりに何行か余分に作るだけで、残りは表示したあとで足す (`fillSoon`)。
-   * 新しい順のときは、行の下にも 1 画面ぶん作る (見ていた行を同じ高さに戻せるように)
+   * 新しい順のときは、行の下にも 1 回に足すぶん (`step`) を作る (見ていた行を同じ高さに戻せるように)
    */
   function showPastUpTo(key: string): void {
     const index = lineIndex(lines.past, key);
     if (index < 0) return;
     if (reversed) {
-      if (index >= pastTo) pastPage.showAtLeast(index + 1 + FIRST_ROWS);
+      if (index >= pastTo) pastPage.showAtLeast(index + 1 + pastPage.step);
     } else if (index < pastFrom)
       pastPage.showAtLeast(lines.past.length - index + FIRST_MARGIN);
   }

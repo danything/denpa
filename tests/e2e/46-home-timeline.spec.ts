@@ -1081,42 +1081,51 @@ test.describe("ホームの1本の一覧", () => {
         .addCookies([
           { name: "denpa_recordings_reversed", value: "0", url: stack.appUrl },
         ]);
-      await page.setViewportSize({ width: 1366, height: 768 });
-      await goto(page, "/");
-      await rows(page)
-        .filter({ hasText: "一覧試験の視聴済み" })
-        .evaluate((node) => node.scrollIntoView({ block: "center" }));
-      // 見えている所のいちばん上の行 (貼り付いた見出しの下で、頭から見えている最初の行)
-      const anchor = await page.getByTestId("timeline").evaluate((list) => {
-        const day = list.querySelector<HTMLElement>(".t-day");
-        const top = day ? Number.parseFloat(getComputedStyle(day).top) : 0;
-        for (const row of list.querySelectorAll<HTMLElement>("[data-key]")) {
-          const box = row.getBoundingClientRect();
-          if (box.height === 0 || box.top < top + 32) continue;
-          return { key: row.dataset["key"]!, y: box.top };
-        }
-        return null;
-      });
-      expect(anchor).not.toBeNull();
-      const toggle = page
-        .getByTestId("sidebar")
-        .getByTestId("recordings-reverse-toggle");
-      await expect(toggle).toHaveAccessibleName("新しい順で表示");
-      await expect(toggle).toHaveAttribute("aria-checked", "false");
-      await toggle.click();
-      await expect(toggle).toHaveAttribute("aria-checked", "true");
-      const row = page
-        .getByTestId("timeline")
-        .locator(`[data-key="${anchor!.key}"]`);
-      await expect
-        .poll(async () => Math.abs((await row.boundingBox())!.y - anchor!.y))
-        .toBeLessThan(2);
-      // 並びは返っている (予約が「いま」より上)
-      const now = await page.getByTestId("timeline-now").boundingBox();
-      const reservation = await rows(page)
-        .filter({ hasText: "一覧試験の予約" })
-        .boundingBox();
-      expect(reservation!.y).toBeLessThan(now!.y);
+      // 見ていた行の上下に、どちらの向きでも 1 画面より多くの行があるようにする (送れる所が足りないと同じ高さに戻せない)
+      seedOld(`${stack.root}/denpa.db`, "逆切替試験");
+      try {
+        await page.setViewportSize({ width: 1366, height: 768 });
+        await goto(page, "/");
+        await rows(page)
+          .filter({ hasText: /逆切替試験45(?!\d)/ })
+          .evaluate((node) => node.scrollIntoView({ block: "center" }));
+        // 見えている所のいちばん上の行 (貼り付いた見出しの下で、頭から見えている最初の行)
+        const anchor = await page.getByTestId("timeline").evaluate((list) => {
+          const day = list.querySelector<HTMLElement>(".t-day");
+          const top = day ? Number.parseFloat(getComputedStyle(day).top) : 0;
+          for (const row of list.querySelectorAll<HTMLElement>("[data-key]")) {
+            const box = row.getBoundingClientRect();
+            if (box.height === 0 || box.top < top + 32) continue;
+            return { key: row.dataset["key"]!, y: box.top };
+          }
+          return null;
+        });
+        expect(anchor).not.toBeNull();
+        const toggle = page
+          .getByTestId("sidebar")
+          .getByTestId("recordings-reverse-toggle");
+        await expect(toggle).toHaveAccessibleName("新しい順で表示");
+        await expect(toggle).toHaveAttribute("aria-checked", "false");
+        await toggle.click();
+        await expect(toggle).toHaveAttribute("aria-checked", "true");
+        const row = page
+          .getByTestId("timeline")
+          .locator(`[data-key="${anchor!.key}"]`);
+        await expect
+          .poll(async () => Math.abs((await row.boundingBox())!.y - anchor!.y))
+          .toBeLessThan(2);
+        // 並びは返っている (予約が「いま」より上)
+        const now = await page.getByTestId("timeline-now").boundingBox();
+        const reservation = await rows(page)
+          .filter({ hasText: "一覧試験の予約" })
+          .boundingBox();
+        expect(reservation!.y).toBeLessThan(now!.y);
+      } finally {
+        sqlite(
+          `${stack.root}/denpa.db`,
+          `db.run("DELETE FROM recordings WHERE name LIKE '逆切替試験%'");`,
+        );
+      }
     });
 
     test("古い録画は下へ足し、足しても見ていた行は動かない", async ({
