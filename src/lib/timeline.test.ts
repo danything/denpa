@@ -8,9 +8,11 @@ import {
   dayStart,
   lineIndex,
   mergeRecorded,
+  pageEnd,
   pageStart,
   passes,
   sections,
+  storedReversed,
   type TimelineItem,
   type TimelineLine,
   timelineLines,
@@ -545,5 +547,235 @@ describe("終わった予約と録画をまとめる", () => {
     expect(names.get(100)).toBe("魔法少女 #3「エルマ」");
     // 片方がもう片方を含まないときは録画の名前のまま
     expect(names.has(101)).toBe(false);
+  });
+});
+
+describe("新しい順で表示 (上下を返す)", () => {
+  /** 新しい順に並べ、上から描く順 (予約・線・録れたもの) につなぐ */
+  function reversedLines(list: TimelineItem[], grouped = false) {
+    return timelineLines(sections(list, true), {
+      now: NOW,
+      grouped,
+      reversed: true,
+      isOpen: () => false,
+    });
+  }
+  const top = (lines: ReturnType<typeof reversedLines>) => [
+    ...lines.future,
+    ...lines.now,
+    ...lines.past,
+  ];
+
+  test("どの側も時刻の遅い順 (予約は遠い順、録画中は新しく始まった順、録画は新しい順)", () => {
+    const parts = sections(
+      [
+        item("rec-1", "past", NOW - 3 * H),
+        item("res-2", "future", NOW + 5 * H),
+        item("res-night", "now", NOW - 13 * H),
+        item("res-now", "now", NOW - H),
+        item("res-1", "future", NOW + H),
+        item("rec-2", "past", NOW - 2 * H),
+        item("missed-1", "past", NOW - 26 * H),
+      ],
+      true,
+    );
+    expect(parts.future.map((i) => i.key)).toEqual(["res-2", "res-1"]);
+    expect(parts.now.map((i) => i.key)).toEqual(["res-now", "res-night"]);
+    expect(parts.past.map((i) => i.key)).toEqual([
+      "rec-2",
+      "rec-1",
+      "missed-1",
+    ]);
+  });
+
+  test("日付の見出しは新しい日から並び、今日の見出しは今日の予約・線・録画中・今日の録画をまたいで1つ", () => {
+    const lines = reversedLines([
+      item("rec-old", "past", NOW - 26 * H),
+      item("rec-1", "past", NOW - 3 * H),
+      item("res-now", "now", NOW - H),
+      item("res-1", "future", NOW + H),
+      item("res-next", "future", NOW + 24 * H),
+    ]);
+    expect(
+      blocks(top(lines)).map((block) => [block.key, keys(block.lines)]),
+    ).toEqual([
+      [`day-${tomorrow}`, [`day-${tomorrow}`, "res-next"]],
+      [`day-${today}`, [`day-${today}`, "res-1", "now", "res-now", "rec-1"]],
+      [`day-${yesterday}`, [`day-${yesterday}`, "rec-old"]],
+    ]);
+  });
+
+  test("今日の予約が無ければ、今日の見出しは線のすぐ上に立ち、録画中は線の下 (前の日から録っている行も今日)", () => {
+    const lines = reversedLines([
+      item("rec-1", "past", NOW - 3 * H),
+      item("res-night", "now", NOW - 13 * H),
+      item("res-now", "now", NOW - H),
+      item("res-next", "future", NOW + 24 * H),
+    ]);
+    expect(keys(lines.future)).toEqual([`day-${tomorrow}`, "res-next"]);
+    expect(keys(lines.now)).toEqual([
+      `day-${today}`,
+      "now",
+      "res-now",
+      "res-night",
+    ]);
+    // 録れたものの側の今日には見出しを立てない
+    expect(keys(lines.past)).toEqual(["rec-1"]);
+  });
+
+  test("何も無くても「いま」の線は残し、今日の見出しは線の上に立てる", () => {
+    const lines = reversedLines([]);
+    expect(keys(top(lines))).toEqual([`day-${today}`, "now"]);
+  });
+
+  test("日付が先の録れたもの (時計のずれ) があっても、見出しの鍵は重ならない", () => {
+    const lines = top(
+      reversedLines([
+        item("rec-1", "past", NOW - 3 * H),
+        item("rec-ahead", "past", NOW + 24 * H),
+        item("res-next", "future", NOW + 24 * H),
+      ]),
+    );
+    expect(keys(lines)).toEqual([
+      `day-${tomorrow}`,
+      "res-next",
+      `day-${today}`,
+      "now",
+      `day-past-${tomorrow}`,
+      "rec-ahead",
+      `day-past-${today}`,
+      "rec-1",
+    ]);
+    const days = lines
+      .filter((line) => line.kind === "day")
+      .map((line) => line.key);
+    expect(new Set(days).size).toBe(days.length);
+  });
+
+  test("まとめて表示は「これからの予約」・線・「録画」の順に包み、録画中は「録画」の頭に置く", () => {
+    const lines = reversedLines(
+      [
+        item("rec-1", "past", NOW - 3 * H, "a"),
+        item("res-now", "now", NOW - H, "a"),
+        item("res-1", "future", NOW + H),
+      ],
+      true,
+    );
+    expect(
+      blocks(top(lines)).map((block) => [block.key, keys(block.lines)]),
+    ).toEqual([
+      ["side-future", ["side-future", "res-1"]],
+      ["now", ["now"]],
+      ["side-past", ["side-past", "res-now", "rec-1"]],
+    ]);
+  });
+
+  test("まとめて表示は番組どうしを新しい順に並べ、番組の中は放送順のまま", () => {
+    const items = [
+      item("res-a2", "future", NOW + 30 * H, "アニメ"),
+      item("res-a1", "future", NOW + 2 * H, "アニメ"),
+      item("res-d1", "future", NOW + 10 * H, "ドラマ"),
+      item("res-d2", "future", NOW + 20 * H, "ドラマ"),
+      item("res-x", "future", NOW + 5 * H, "単発"),
+      item("rec-a1", "past", NOW - 20 * H, "アニメ"),
+      item("rec-a2", "past", NOW - 2 * H, "アニメ"),
+      item("rec-n", "past", NOW - 5 * H, "ニュース"),
+    ];
+    const { past, now, future } = timelineLines(sections(items, true), {
+      now: NOW,
+      grouped: true,
+      reversed: true,
+      isOpen: (_zone, group) => group === "アニメ",
+    });
+    // 予約は次の回が遠い番組が上。次に録る番組 (アニメ) が線のすぐ上
+    expect(keys(future)).toEqual([
+      "side-future",
+      "future-group-ドラマ",
+      "res-x",
+      "future-group-アニメ",
+      "res-a1",
+      "res-a2",
+    ]);
+    expect(keys(now)).toEqual(["now", "side-past"]);
+    expect(keys(past)).toEqual([
+      "past-group-アニメ",
+      "rec-a1",
+      "rec-a2",
+      "rec-n",
+    ]);
+  });
+
+  test("録れたものを線の側 (頭) から描く終わり: 開いた番組と日付の見出しの途中で切らない", () => {
+    const list = [
+      item("rec-1", "past", NOW - 50 * H),
+      item("rec-2", "past", NOW - 49 * H),
+      item("rec-3", "past", NOW - 26 * H),
+      item("rec-4", "past", NOW - 3 * H),
+      item("rec-5", "past", NOW - 2 * H),
+    ];
+    const { past } = reversedLines(list);
+    expect(keys(past)).toEqual([
+      "rec-5",
+      "rec-4",
+      `day-${yesterday}`,
+      "rec-3",
+      `day-${dayStart(NOW - 49 * H)}`,
+      "rec-2",
+      "rec-1",
+    ]);
+    expect(pageEnd(past, 0)).toBe(0);
+    expect(pageEnd(past, 2)).toBe(2);
+    // 見出しだけを末尾に残さない
+    expect(pageEnd(past, 3)).toBe(4);
+    expect(pageEnd(past, 5)).toBe(6);
+    expect(pageEnd(past, 100)).toBe(7);
+
+    const grouped = timelineLines(
+      sections(
+        [
+          ...list,
+          item("rec-a1", "past", NOW - 40 * H, "A"),
+          item("rec-a2", "past", NOW - 30 * H, "A"),
+        ],
+        true,
+      ),
+      { now: NOW, grouped: true, reversed: true, isOpen: () => true },
+    ).past;
+    expect(keys(grouped)).toEqual([
+      "rec-5",
+      "rec-4",
+      "rec-3",
+      "past-group-A",
+      "rec-a1",
+      "rec-a2",
+      "rec-2",
+      "rec-1",
+    ]);
+    expect(pageEnd(grouped, 3)).toBe(3);
+    expect(pageEnd(grouped, 4)).toBe(6);
+    expect(pageEnd(grouped, 5)).toBe(6);
+  });
+
+  test("予約は線の側 (末尾) から描き、見出しの途中から描かない", () => {
+    const { future } = reversedLines([
+      item("res-1", "future", NOW + H),
+      item("res-2", "future", NOW + 2 * H),
+      item("res-next", "future", NOW + 24 * H),
+    ]);
+    expect(keys(future)).toEqual([
+      `day-${tomorrow}`,
+      "res-next",
+      `day-${today}`,
+      "res-2",
+      "res-1",
+    ]);
+    expect(pageStart(future, 1)).toBe(2);
+    expect(pageStart(future, 4)).toBe(0);
+  });
+
+  test("覚えていなければ逆にしない", () => {
+    expect(storedReversed(undefined)).toBe(false);
+    expect(storedReversed("0")).toBe(false);
+    expect(storedReversed("1")).toBe(true);
   });
 });

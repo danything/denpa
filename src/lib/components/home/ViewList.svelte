@@ -2,7 +2,7 @@
   import ArrowRight from "~icons/lucide/arrow-right";
 
   /**
-   * 表示の切り替え (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合)。
+   * 表示の切り替え (まとめて表示・新しい順で表示・完了した予約も表示・削除済みも表示・ファイルと照合)。
    * オン・オフの印 (`aria-checked`) 付き。操作の1行の「⋯」(`TimelineBar`) とサイドバーの「表示」(`HomeAside`) の中身
    */
   import { submitting } from "#lib/actions.js";
@@ -13,6 +13,8 @@
   let {
     grouped,
     setGrouped,
+    reversed,
+    setReversed,
     finishedHref,
     deletedHref,
     showFinished,
@@ -49,6 +51,16 @@
   data-testid="recordings-group-toggle"
 >
   {@render toggle("まとめて表示", grouped)}
+</button>
+<button
+  type="button"
+  {role}
+  class={item}
+  aria-checked={reversed}
+  onclick={() => setReversed(!reversed)}
+  data-testid="recordings-reverse-toggle"
+>
+  {@render toggle("新しい順で表示", reversed)}
 </button>
 <!-- URL で切り替えるのでリンク -->
 <a {role} class={item} aria-checked={showFinished} href={finishedHref}>

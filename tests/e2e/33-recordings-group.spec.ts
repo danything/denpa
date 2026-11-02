@@ -473,4 +473,174 @@ test.describe("ホームの一覧のまとめて表示", () => {
       );
     }
   });
+
+  /** 新しい順で表示を切り替える (「表示の切り替え」の中) */
+  async function toggleReversed(page: Page): Promise<void> {
+    await (
+      await homeTools(page)
+    )
+      .getByTestId("recordings-reverse-toggle")
+      .click();
+  }
+  /** この試験で入れた行だけ */
+  const ours = (names: string[]) =>
+    names.filter(
+      (name) =>
+        name.startsWith("グループ試験") ||
+        name.startsWith("group:グループ試験"),
+    );
+
+  /**
+   * **新しい順で表示 (issue #1930) は端末に覚える。** 覚えはサーバが読む cookie で、まとめて表示と同じ仕組み。
+   * 上下を返し、「いま」の上に予約 (遠い順)、下に録画 (新しい順)。まとめて表示でも番組どうしは新しい順で、中は放送順
+   */
+  test("新しい順で表示は上下を返し、端末に覚える", async ({ page }) => {
+    await open(page);
+    const tools = await homeTools(page);
+    const toggle = tools.getByTestId("recordings-reverse-toggle");
+    await expect(toggle).toHaveAccessibleName("新しい順で表示");
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await toggleReversed(page);
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("view-toggle")).toHaveAttribute("data-on");
+
+    const expectReversed = async () => {
+      // 「いま」の上 (予約) は遠い順
+      await expect
+        .poll(async () => ours(await listed(page)))
+        .toEqual([
+          "グループ試験アニメ #5",
+          "グループ試験特番",
+          "グループ試験アニメ #4",
+        ]);
+      // 「いま」の下 (録画) は新しい順
+      await expect
+        .poll(async () => ours(await listed(page, "future")).slice(0, 6))
+        .toEqual([
+          "グループ試験アニメ #3",
+          "グループ試験ドラマ",
+          "グループ試験アニメ #2",
+          "グループ試験ニュース 第2回",
+          "グループ試験アニメ #1",
+          "グループ試験ニュース 第1回",
+        ]);
+    };
+    await expectReversed();
+    expect(await page.context().cookies()).toContainEqual(
+      expect.objectContaining({
+        name: "denpa_recordings_reversed",
+        value: "1",
+      }),
+    );
+
+    // 開き直しても新しい順のまま (描いた時点でもう返っている)
+    await open(page);
+    await expectReversed();
+
+    // まとめて表示でも、番組どうしは新しい順。中は放送順のまま
+    await toggleGrouped(page);
+    await expect
+      .poll(async () => ours(await listed(page, "future")).slice(0, 4))
+      .toEqual([
+        "group:グループ試験アニメ",
+        "グループ試験ドラマ",
+        "group:グループ試験ニュース",
+        "グループ試験単発1",
+      ]);
+    const anime = page.locator(
+      '[data-testid="recording-group"][data-zone="past"][data-group="グループ試験アニメ"]',
+    );
+    await anime.click();
+    await expect
+      .poll(async () => ours(await listed(page, "future")).slice(0, 4))
+      .toEqual([
+        "group:グループ試験アニメ",
+        "グループ試験アニメ #1",
+        "グループ試験アニメ #2",
+        "グループ試験アニメ #3",
+      ]);
+    await toggleGrouped(page);
+
+    // 戻すと次に開いたときも古い順
+    await toggleReversed(page);
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await open(page);
+    await expect
+      .poll(async () => ours(await listed(page, "future")))
+      .toEqual([
+        "グループ試験アニメ #4",
+        "グループ試験特番",
+        "グループ試験アニメ #5",
+      ]);
+  });
+
+  /** 新しい順で表示の覚えもサーバが読むので、JS が無くても返った並びで出る */
+  test("JS が無くても、新しい順で表示の覚えが効く", async ({
+    browser,
+    stack,
+  }) => {
+    const context = await browser.newContext({
+      baseURL: stack.appUrl,
+      javaScriptEnabled: false,
+    });
+    try {
+      await context.addCookies([
+        { name: "denpa_recordings_reversed", value: "1", url: stack.appUrl },
+      ]);
+      const page = await context.newPage();
+      await page.goto("/");
+      const now = await page.getByTestId("timeline-now").boundingBox();
+      const reservation = await page
+        .getByTestId("reservation-row")
+        .filter({ hasText: "グループ試験アニメ #4" })
+        .boundingBox();
+      expect(reservation!.y).toBeLessThan(now!.y);
+    } finally {
+      await context.close();
+    }
+  });
+
+  /**
+   * **新しい順のときは、観終えていない録画を探さずに「いま」を映す。** すぐ下に新しい録画が並ぶ。
+   * 古い未視聴へ送ると、新しいものがすべて上に残る
+   */
+  test("新しい順で開くと、古い未視聴があっても「いま」と新しい録画を映す", async ({
+    page,
+    stack,
+  }) => {
+    const db = `${stack.root}/denpa.db`;
+    seed(db, [
+      {
+        name: "逆位置試験",
+        series: "逆位置試験",
+        at: BASE - 200 * DAY,
+        playable: true,
+      },
+    ]);
+    try {
+      await page
+        .context()
+        .addCookies([
+          { name: "denpa_recordings_reversed", value: "1", url: stack.appUrl },
+        ]);
+      await open(page);
+      await expect
+        .poll(() => inView(page, '[data-testid="timeline-now"]'))
+        .toBe(true);
+      // 「いま」の下でいちばん新しい録画も見えている
+      await expect
+        .poll(() => inView(page, '[data-testid="recording-row"]'))
+        .toBe(true);
+      // 古い未視聴へは送らない (描いていなければ数えない)
+      const old = page
+        .getByTestId("recording-row")
+        .filter({ hasText: "逆位置試験" });
+      if ((await old.count()) > 0) await expect(old).not.toBeInViewport();
+    } finally {
+      sqlite(
+        db,
+        "db.run(\"DELETE FROM recordings WHERE name = '逆位置試験'\")",
+      );
+    }
+  });
 });
