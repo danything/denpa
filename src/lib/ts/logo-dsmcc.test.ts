@@ -394,6 +394,7 @@ describe("読んだ数 (counts)", () => {
       esPackets: (total - 2) * 2,
       dii: 2,
       ddb: (total - 3) * 2,
+      sdtt: 0,
     });
   });
 
@@ -412,6 +413,7 @@ describe("読んだ数 (counts)", () => {
       esPackets: 0,
       dii: 0,
       ddb: 0,
+      sdtt: 0,
     });
   });
 });
