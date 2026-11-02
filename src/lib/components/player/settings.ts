@@ -70,7 +70,7 @@ const AUTO = "auto";
  *
  * `raw` を渡すと (ライブだけ) 末尾に **MPEG-2** が並ぶ。エンコードせずに放送そのままを
  * この端末でデコードする経路 (docs/stream.md#放送そのままmpeg-2を送る)。
- * `hidden` (世帯の設定。H.264 と H.265 を出さない) なら H.264 は並べない — 自動で H.264 になっているのは出す。
+ * `hidden` (世帯の設定。H.264 と H.265 を出さない) なら H.264 は並べない。自動で H.264 になっているのは値に出す。
  * `unavailable` に挙げた形式は、並べるが押せない (`live-player.svelte.ts` の `unavailable`)
  */
 export function liveCodecs(opts: {

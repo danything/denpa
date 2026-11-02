@@ -1,7 +1,7 @@
 /**
  * **開いているホスト名 (`location.hostname`・`URL.hostname`) が家の中のものか。** 画面とサーバの両方が使う。
  *
- * 決めるのは名前だけで、相手の IP は見ない — VPN (NetBird・Tailscale) は相手のアドレスを書き換えることがあり、
+ * 決めるのは名前だけで、相手の IP は見ない。VPN (NetBird・Tailscale) は相手のアドレスを書き換えることがあり、
  * 家の中だけの名前が外からも引けることもあるので、IP では家の中かを決められない (docs/stream.md「どの形式で流すか」)。
  * 使うのは連携の戻り先 (`niconico.ts` の `homeHost`。CGNAT も家の中に入れる) と、ライブの自動の形式 (`indoorHost`。入れない)
  */
@@ -73,7 +73,7 @@ export function normalHost(hostname: string): string {
  *
  * 世帯の設定の「家の中の名前」(`indoorHosts`) に載っている名前なら家の中。載っていなくても、
  * プライベートの IP をそのまま打って開いた・`localhost`・`.local`・`.home.arpa` なら家の中。
- * **CGNAT (100.64.0.0/10) は入れない** — VPN 越し (外から) のことが多い
+ * **CGNAT (100.64.0.0/10) は入れない。** VPN 越し (外から) のことが多い
  */
 export function indoorHost(
   hostname: string,

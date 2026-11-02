@@ -187,7 +187,7 @@ const HOLD_DATA = 300;
 
 /**
  * 見ている局を覚える。置き場は cookie 1つで、読むのはサーバ (`LAST_COOKIE` の説明)。
- * 音声も覚える — 番組が変わって無くなっても、サーバは主音声に落とす (`arib.pickTrack`)。
+ * 音声も覚える。番組が変わって無くなっても、サーバは主音声に落とす (`arib.pickTrack`)。
  * 形式は**メニューで選んだもの** (`choice`) を覚え、自動で決まった形式は覚えない (開いた場所で変わる)
  */
 function remember(target: Tuned, choice: LiveChoice): void {
@@ -300,7 +300,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** いまエンコードしてもらっているコーデック。**サーバが返してきたものを持つ** */
   let codec = $state<LiveCodec>("h264");
   /**
-   * コーデックのメニューで選んだもの。**リクエストする形式の元** — 実際の形式は選ぶたびに決める (`pickFormat`)。
+   * コーデックのメニューで選んだもの。**リクエストする形式の元**で、実際の形式は選ぶたびに決める (`pickFormat`)。
    * 自動なら端末と開いた場所に合わせ (`autoCodec`)、選んだものは家の中でも外でもそのまま使う
    */
   let choice = $state<LiveChoice>(options.choice ?? "auto");
@@ -1784,7 +1784,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 互換モードの支度 (`begin` の頭)。**入っていなければ何もしない。**
    *
    * 運転中の注意をまだ見せていなければ見せて、押されるまで待つ。描ける形式と MPEG-2 をデコードできるかを調べる
-   * (どの形式にするかは `pickFormat`。**`<video>` には戻らない** — どれも描けなければ理由を出してリクエストしない)
+   * (どの形式にするかは `pickFormat`。**`<video>` には戻らない**。どれも描けなければ理由を出してリクエストしない)
    */
   async function prepareCompat(): Promise<void> {
     compat = canvasVideo();

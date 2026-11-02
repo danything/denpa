@@ -242,7 +242,7 @@ export function streamForAudio(
 /**
  * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → H.265 → AV1)。
  * H.265 はエンコード済みがある録画にだけある (その場の変換では作らない)。`hidden` (世帯の設定。
- * `#lib/live-choice.ts` の `HIDDEN_CODECS`) は並べない — 外すのはメニューだけで、自動 (`pickOffer`) は今までどおり選ぶ
+ * `#lib/live-choice.ts` の `HIDDEN_CODECS`) は並べない。外すのはメニューだけで、自動 (`pickOffer`) は今までどおり選ぶ
  */
 export function codecChoices(
   info: PlaybackInfo,

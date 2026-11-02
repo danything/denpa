@@ -23,7 +23,7 @@ import type { AudioTrack } from "./arib";
  */
 export type LiveCodec = "h264" | "av1";
 
-/** 選べるエンコード方式。コーデックのメニューに並べる順そのまま (「自動」のあと。説明は付けない — 選ぶのは端末の相性だけ) */
+/** 選べるエンコード方式。コーデックのメニューに並べる順そのまま (「自動」のあと。選ぶのは端末の相性だけなので、説明は付けない) */
 export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
   { id: "av1", label: "AV1" },
   { id: "h264", label: "H.264" },
@@ -335,7 +335,7 @@ export interface Tuned {
 /**
  * 前回見ていた局を覚えておく cookie (`/live` にだけ付ける。中身は局・音声と、コーデックのメニューで選んだもの (`choice`。
  * `#lib/live-choice.ts`) の JSON。前の形式の `codec`・`raw` は読まない)。サーバが読んで、繋いでくる前に
- * エンコードし始める (`server/live.ts` の `warm`)。どの局を開くかはサーバ側1箇所で決める (`server/viewing.ts` の `liveStart`) —
+ * エンコードし始める (`server/live.ts` の `warm`)。どの局を開くかはサーバ側1箇所で決める (`server/viewing.ts` の `liveStart`)。
  * localStorage と二重に持つと、先にエンコードしたものが使われず別の局が開いていた
  */
 export const LAST_COOKIE = "denpa_live_last";
