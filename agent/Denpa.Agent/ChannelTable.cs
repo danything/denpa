@@ -19,7 +19,7 @@ public static class ChannelTable
     public const uint NoStreamId = ~0U;
 
     /// <summary>
-    /// 1つの物理チャンネルを選局するのに要るもの、全部。
+    /// 1 つの物理チャンネルを選局するのに要るもの、全部。
     /// </summary>
     /// <param name="Type">denpa の種別 (GR / BS / CS)</param>
     /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/>)</param>
@@ -27,7 +27,7 @@ public static class ChannelTable
     /// <param name="RelativeTs">衛星で同じ周波数に入っている何本目か。無ければ -1</param>
     /// <param name="Slot">
     /// 衛星のスロット。TSID が分からないときに px4d の TUNE の <c>slot</c> で渡す
-    /// (<see cref="Px4Tuner.TuneRequest"/>)。BS は相対番号そのもの、CS は1つしか入っていないので 0
+    /// (<see cref="Px4Tuner.TuneRequest"/>)。BS は相対番号そのもの、CS は 1 つしか入っていないので 0
     /// </param>
     public sealed record Tuning(string Type, int Delivery, uint Frequency, int RelativeTs, int Slot)
     {
@@ -97,11 +97,11 @@ public static class ChannelTable
     /// <summary>
     /// DVB に渡す <c>DTV_STREAM_ID</c>。衛星の復調器は **TSID で選り分ける**ので、denpa が言ってくる
     /// 相対番号 (<c>BS15_0</c>) を TSID に直す。<paramref name="known"/> (自分の <c>channels.json</c>) が勝ち、
-    /// 埋め込んだ表はまだ1度もスキャンしていないときだけ
+    /// 埋め込んだ表はまだ 1 度もスキャンしていないときだけ
     /// </summary>
     public static uint StreamId(string name, Tuning tuning, Func<string, int?>? known = null)
     {
-        // CS は1つの中継に1つしか入っていない。選り分ける必要が無い
+        // CS は 1 つの中継に 1 つしか入っていない。選り分ける必要が無い
         if (!tuning.Satellite || tuning.RelativeTs < 0) return NoStreamId;
 
         var scanned = known?.Invoke(name);
@@ -126,7 +126,7 @@ public static class ChannelTable
 
     private static bool Number(string text, out int value)
     {
-        // 0詰めは許す (`BS01_0` と `BS1_0` は同じもの)。それ以外は受け取らない
+        // 0 詰めは許す (`BS01_0` と `BS1_0` は同じもの)。それ以外は受け取らない
         value = 0;
         return text.Length is > 0 and <= 3
             && text.All(char.IsAsciiDigit)

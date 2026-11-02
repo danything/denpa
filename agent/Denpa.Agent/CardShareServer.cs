@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 鍵を配る API。**カードを1枚だけ置いて、LAN の中の他の拠点にも使わせる** (受け取る側は CardShare.cs)。
+/// 鍵を配る API。**カードを 1 枚だけ置いて、LAN の中の他の拠点にも使わせる** (受け取る側は CardShare.cs)。
 ///
 /// <para>
 /// **普通の API (<c>AGENT_PORT</c>) とは別のポートで受ける** (<see cref="CardLanPolicy.Port"/>)。

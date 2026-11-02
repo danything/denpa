@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 /// <para>
 /// 経路は PAT → PMT → CA 記述子。CA 記述子 (番組全体、または ES ごと) が「この ES の鍵は
 /// この PID の ECM から」を教えてくれるので、ES の PID から ECM を引く表を作る。
-/// **libaribb25 と同じく、ストリームの順に1パケットずつ読み、ECM の中身が変わったらその場で鍵を貰う**
+/// **libaribb25 と同じく、ストリームの順に 1 パケットずつ読み、ECM の中身が変わったらその場で鍵を貰う**
 /// (<see cref="IKeySource.Ecm"/>)。後ろのパケットはその鍵で復号する。答えを待つあいだ次のパケットへ
 /// 進まないので、鍵とストリームの位置が食い違いようがない。カードが固まっても読み出しを止めないのは
 /// 呼ぶ側の仕事 (TunerPool.cs は読み出しと別のスレッドで復号する)。
@@ -23,8 +23,8 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// 1つの実体は**1本のストリームからだけ**呼ぶ。実体どうしで共有するものは無いので、チューナーが
-/// 何台あっても壊し合わない (libaribb25 の頃は1つの実体に2本入ってプロセスごと落ちた)。
+/// 1 つの実体は**1 本のストリームからだけ**呼ぶ。実体どうしで共有するものは無いので、チューナーが
+/// 何台あっても壊し合わない (libaribb25 の頃は 1 つの実体に 2 本入ってプロセスごと落ちた)。
 /// 数え (<see cref="Decoded"/> など) だけは他のスレッドから覗いてよい。
 /// </para>
 ///
@@ -76,17 +76,17 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private byte[]? _patLast;
     /// <summary>program_number → PMT の PID</summary>
     private readonly Dictionary<int, int> _programs = [];
-    /// <summary>PMT の PID → 組み立て中のセクション (1つの PID に複数の番組が入ることもある)</summary>
+    /// <summary>PMT の PID → 組み立て中のセクション (1 つの PID に複数の番組が入ることもある)</summary>
     private readonly Dictionary<int, Section> _pmtSections = [];
     /// <summary>program_number → 最後に受けた PMT。CA の方式が変わったら読み直せるように丸ごと持つ</summary>
     private readonly Dictionary<int, byte[]> _pmts = [];
-    /// <summary>PAT の PMT がみな来た / PAT が変わってから同じ PMT がもう一度来た (1周で来ない PMT は来ない)</summary>
+    /// <summary>PAT の PMT がみな来た / PAT が変わってから同じ PMT がもう一度来た (1 周で来ない PMT は来ない)</summary>
     private bool _allPmts, _pmtRepeated;
     private readonly Dictionary<int, Ecm> _ecms = [];
     /// <summary>ES の PID → 鍵。表を引くだけにして、パケットごとの手間を無くす</summary>
     private readonly Ecm?[] _route = new Ecm?[8192];
     /// <summary>
-    /// ECM が1本だけなら、PMT に載っていない PID もそれで復号する。**PAT の PMT がみな来てから** —
+    /// ECM が 1 本だけなら、PMT に載っていない PID もそれで復号する。**PAT の PMT がみな来てから** —
     /// 来ていない番組の ES を別の ECM の鍵で復号しない
     /// </summary>
     private Ecm? _only;
@@ -134,7 +134,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private long _askMs, _waitedMs, _initMs = -1;
 
     /// <summary>
-    /// **頭で溜めていた間の内訳。** 選局して最初に送り出したときの1行に足す (docs/stream.md「本番の記録で割る」)。
+    /// **頭で溜めていた間の内訳。** 選局して最初に送り出したときの 1 行に足す (docs/stream.md「本番の記録で割る」)。
     /// 時刻は渡された時計から。数えるのは溜めている間だけ
     /// </summary>
     public string HeldAt()
@@ -143,7 +143,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         return $"PAT {At(_patMs)} / PMT {At(_pmtMs)} / ECM {At(_ecmMs)}{last}";
     }
 
-    /// <summary>溜めている間に鍵の相手へ聞いた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ1行に足す</summary>
+    /// <summary>溜めている間に鍵の相手へ聞いた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ 1 行に足す</summary>
     public string CardUse() => !_keys
         ? "カード 使わない"
         : $"カード {_asks}回 計 {_askMs}ms (待ち {_waitedMs}ms・覚えた答え {_cached}回・未契約 {_unentitledAnswers}回・準備 {At(_initMs)})";
@@ -198,7 +198,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         return written + decoded.WrittenCount;
     }
 
-    /// <summary>溜めているぶんを吐き出す。**終わりに1回**。尻尾の半端なバイトは捨てる</summary>
+    /// <summary>溜めているぶんを吐き出す。**終わりに 1 回**。尻尾の半端なバイトは捨てる</summary>
     public void Flush(IBufferWriter<byte> output)
     {
         var whole = _carryLength >= PacketSize && _carry[0] == SyncByte;
@@ -220,7 +220,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
                 at += PacketSize;
                 continue;
             }
-            // 並びが崩れた。**0x47 が 188 バイトおきに2つ続くところ**で合わせ直す (1つだけだと中身の 0x47 に釣られる)
+            // 並びが崩れた。**0x47 が 188 バイトおきに 2 つ続くところ**で合わせ直す (1 つだけだと中身の 0x47 に釣られる)
             _synced = false;
             var found = at;
             while (found + PacketSize < data.Length && (data[found] != SyncByte || data[found + PacketSize] != SyncByte)) found++;
@@ -234,7 +234,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// 1 パケット。セクションを読み (ECM ならここで鍵を貰う)、溜めている間は溜めの後ろへ、
-    /// そうでなければ出口へ写してその場で復号する (**写すのは1回だけ**)
+    /// そうでなければ出口へ写してその場で復号する (**写すのは 1 回だけ**)
     /// </summary>
     private void Take(ReadOnlySpan<byte> packet, IBufferWriter<byte> output)
     {
@@ -288,9 +288,9 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// 溜めるのをやめてよいか。**PAT と、その PMT がみな来て、どの ECM も1回は答えを貰った** (libaribb25 と同じ)
-    /// うえで、ECM のあとにその鍵の ES のパケットが1つ来た (<see cref="Settle"/>)。
-    /// 来ない PMT は1周で見切り、同じ ECM が2回来たら来ない ECM も見切る (<see cref="OnEcm"/>)
+    /// 溜めるのをやめてよいか。**PAT と、その PMT がみな来て、どの ECM も 1 回は答えを貰った** (libaribb25 と同じ)
+    /// うえで、ECM のあとにその鍵の ES のパケットが 1 つ来た (<see cref="Settle"/>)。
+    /// 来ない PMT は 1 周で見切り、同じ ECM が 2 回来たら来ない ECM も見切る (<see cref="OnEcm"/>)
     /// </summary>
     private bool Ready()
     {
@@ -310,7 +310,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// 溜めたぶんを最初の鍵で復号しておく (出すのは <see cref="Release"/>)。溜めている間に来る中身は
-    /// ECM ごとに1つだけ (2つ目が来る前にここへ来る) なので、鍵は取り違えない。
+    /// ECM ごとに 1 つだけ (2 つ目が来る前にここへ来る) なので、鍵は取り違えない。
     ///
     /// <para>
     /// **ECM より前のパケットは、ECM を挟んで続いている偶奇の並びだけ復号する。** ECM が持つのは今と次の
@@ -364,7 +364,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private void Rehold()
     {
         /*
-         * **内訳 (_patMs・_asks など) は戻さない。** 記録に出すのは選局して最初に送り出したときの1回だけ
+         * **内訳 (_patMs・_asks など) は戻さない。** 記録に出すのは選局して最初に送り出したときの 1 回だけ
          * (TunerPool.Descramble) で、溜め直しのあとには読まれない。PAT・PMT は覚えたまま来直さないので、
          * 戻すとそこは「-」のまま残り、かえって分かりにくい
          */
@@ -460,7 +460,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// パケットの中身をセクションに組み立てる。セクションはパケットを跨ぐし、1つのパケットに
+    /// パケットの中身をセクションに組み立てる。セクションはパケットを跨ぐし、1 つのパケットに
     /// 幾つも入ることもある (pointer_field が次のセクションの頭を指す)
     /// </summary>
     private void Feed(Section section, int pid, ReadOnlySpan<byte> payload, bool unitStart)
@@ -621,7 +621,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>
     /// ECM を受けた。**中身が変わっていたら、その場で鍵を貰う。** 同じ中身なら、貰えなかったものだけ
     /// 少し置いて聞き直す。溜めている間に同じ PID の ECM がもう一度来たら、そこで溜めるのをやめる —
-    /// 1周しても来ない ECM は来ないし、中身が変わる前に溜めを最初の鍵で復号しておく (<see cref="Settle"/>)
+    /// 1 周しても来ない ECM は来ないし、中身が変わる前に溜めを最初の鍵で復号しておく (<see cref="Settle"/>)
     /// </summary>
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
     {
@@ -723,7 +723,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         return crc;
     }).ToArray();
 
-    /// <summary>1本の ECM と、その鍵</summary>
+    /// <summary>1 本の ECM と、その鍵</summary>
     private sealed class Ecm
     {
         public Ecm(int pid)

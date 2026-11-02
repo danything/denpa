@@ -5,7 +5,7 @@ namespace Denpa.Agent.Tests;
 /*
  * 選局表。
  *
- * ここは**数字が1つ違っても ioctl は通り、ただ同期しないだけ**という出方を
+ * ここは**数字が 1 つ違っても ioctl は通り、ただ同期しないだけ**という出方を
  * するので、値そのものを押さえておく。当てているのは recisdb が持っている表と
  * 同じ数字で、いま実機で選局できているものと揃っているかどうかがすべて
  * (実際に受信できるかは `--tune` で実機に当てる。Probe.cs)。
@@ -51,7 +51,7 @@ public class ChannelTableTests
         await Assert.That(bs.Delivery).IsEqualTo(ChannelTable.SysIsdbs);
         await Assert.That(bs.Frequency).IsEqualTo(1_049_480u);
 
-        // 中継は 38.36 MHz 刻み。BS03 は BS01 の1つ隣
+        // 中継は 38.36 MHz 刻み。BS03 は BS01 の 1 つ隣
         await Assert.That(ChannelTable.Parse("BS03_0")!.Frequency).IsEqualTo(1_087_840u);
         await Assert.That(ChannelTable.Parse("BS23_0")!.Frequency).IsEqualTo(1_471_440u);
 
@@ -72,7 +72,7 @@ public class ChannelTableTests
     [Test]
     public async Task 衛星のスロットは相対番号そのもの()
     {
-        // TSID が分からないときに px4d の TUNE の slot で渡す (Px4.cs)。CS は1本しか入っていない
+        // TSID が分からないときに px4d の TUNE の slot で渡す (Px4.cs)。CS は 1 本しか入っていない
         await Assert.That(ChannelTable.Parse("BS01_2")!.Slot).IsEqualTo(2);
         await Assert.That(ChannelTable.Parse("BS23_0")!.Slot).IsEqualTo(0);
         await Assert.That(ChannelTable.Parse("BS15")!.Slot).IsEqualTo(0);
@@ -108,7 +108,7 @@ public class ChannelTableTests
     public async Task ISDB_S3_の中継は受け取らない(string name)
     {
         // BS-7 と BS-17 は 4K/8K。この復調器では受からないので、総当たりの
-        // スキャンでも試させない (実機に投げれば「同期しない」で5秒溶ける)
+        // スキャンでも試させない (実機に投げれば「同期しない」で 5 秒溶ける)
         await Assert.That(ChannelTable.Parse(name)).IsNull();
     }
 }
@@ -125,7 +125,7 @@ public class StreamIdTests
     [Test]
     public async Task CS_も選り分けない()
     {
-        // 1つの中継に1本しか入っていない
+        // 1 つの中継に 1 本しか入っていない
         var cs = ChannelTable.Parse("CS02")!;
         await Assert.That(ChannelTable.StreamId("CS02", cs, null)).IsEqualTo(ChannelTable.NoStreamId);
     }
@@ -133,7 +133,7 @@ public class StreamIdTests
     [Test]
     public async Task スキャン結果が埋め込んだ表に勝つ()
     {
-        // BS は再編がある。1度でもスキャンしていれば、そちらが必ず新しい
+        // BS は再編がある。1 度でもスキャンしていれば、そちらが必ず新しい
         var bs = ChannelTable.Parse("BS15_0")!;
         await Assert.That(ChannelTable.StreamId("BS15_0", bs, null)).IsEqualTo(16625u);
         await Assert.That(ChannelTable.StreamId("BS15_0", bs, _ => 9999)).IsEqualTo(9999u);

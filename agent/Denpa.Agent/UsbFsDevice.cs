@@ -210,7 +210,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
         }
     }
 
-    /// <summary>IN を1回。時間切れは 0</summary>
+    /// <summary>IN を 1 回。時間切れは 0</summary>
     private int Transfer(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
         fixed (byte* start = buffer)
@@ -248,7 +248,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
 
     /// <summary>
     /// URB を出しっぱなしにする読み。URB とバッファはアンマネージドのメモリに置く (カーネルが書き込むあいだ動かないように)。
-    /// 1本の端点の URB は出した順に済むので、先頭の URB から順に詰めて出し直す
+    /// 1 本の端点の URB は出した順に済むので、先頭の URB から順に詰めて出し直す
     /// </summary>
     private sealed class InStream : IUsbInStream
     {
@@ -298,7 +298,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
             _done[i] = false;
         }
 
-        /// <summary>済んだ URB を全部回収する。1つでも回収したら true</summary>
+        /// <summary>済んだ URB を全部回収する。1 つでも回収したら true</summary>
         private bool Reap()
         {
             var any = false;

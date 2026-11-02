@@ -304,7 +304,7 @@ public class BCasTests
         await Task.WhenAll(Enumerable.Range(0, 64).Select(n => Task.Run(() => card.Ecm(ecms[n % ecms.Length]))));
 
         await Assert.That(link.Overlapped).IsEqualTo(0);
-        // 同じ ECM を同時に聞かれても、カードに聞くのは1回ずつ
+        // 同じ ECM を同時に聞かれても、カードに聞くのは 1 回ずつ
         await Assert.That(EcmsSent(link)).IsEqualTo(ecms.Length);
     }
 

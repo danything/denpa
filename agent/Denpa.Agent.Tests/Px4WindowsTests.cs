@@ -53,7 +53,7 @@ public class Px4WindowsTests
         {
             await Assert.That(Px4Userland.RuntimeProblem(shortRoot, "00001205000960")).IsNull();
         }
-        // 日本語のユーザー名は1文字3バイト。ユーザーのフォルダの下だとすぐ溢れる
+        // 日本語のユーザー名は 1 文字 3 バイト。ユーザーのフォルダの下だとすぐ溢れる
         var longRoot = Path.Combine(OperatingSystem.IsWindows() ? @"C:\Users" : "/home",
             "とても長い日本語のユーザー名です", "AppData", "Local", "denpa-agent", "run");
         await Assert.That(Px4Userland.RuntimeProblem(longRoot, "000000000000001_5-1.4.1")).Contains("長すぎます");

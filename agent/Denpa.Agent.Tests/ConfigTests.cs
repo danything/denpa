@@ -39,7 +39,7 @@ public class TunerSpecTests
     [Test]
     public async Task 空を渡すと定義を消す()
     {
-        // 「1台も無い」を書き込むより、**無い=自分で探す**のほうが後で困らない
+        // 「1 台も無い」を書き込むより、**無い=自分で探す**のほうが後で困らない
         var config = Fresh();
         config.SaveTuners([new TunerSpec("a", ["GR"], false, "/dev/null")]);
         await Assert.That(File.Exists(config.TunersFile)).IsTrue();
@@ -147,8 +147,8 @@ public class ChannelStoreTests
     public async Task 局名は逃がさずそのまま書く()
     {
         /*
-         * `channels.json` は人が開いて確かめるもの。既定のエンコーダは非ASCIIを
-         * 全部エスケープするので、局名が1つも読めなくなる。
+         * `channels.json` は人が開いて確かめるもの。既定のエンコーダは非 ASCII を
+         * 全部エスケープするので、局名が 1 つも読めなくなる。
          *
          * **全角空白 (U+3000) だけはエスケープされたままになる。** .NET のどのエンコーダも
          * ASCII でない空白は必ずエスケープする作りで、`JSON.stringify` と揃わない。
@@ -185,7 +185,7 @@ public class DeviceProbeTests
         // 実機の PT3。adapter0/2 が ISDB-S(9)、adapter1/3 が ISDB-T(8)
         await Assert.That(DeviceProbe.TypesFor([8])).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
         await Assert.That(DeviceProbe.TypesFor([9])).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
-        // 1台でどちらも受けられるものもある
+        // 1 台でどちらも受けられるものもある
         await Assert.That(DeviceProbe.TypesFor([8, 9])).IsEquivalentTo(["GR", "BS", "CS"], CollectionOrdering.Matching);
     }
 

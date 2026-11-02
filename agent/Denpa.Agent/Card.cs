@@ -14,9 +14,9 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **使うカードは1枚。** 鍵の出どころはプロセスで1つ (<see cref="Keys"/>) で、
+/// **使うカードは 1 枚。** 鍵の出どころはプロセスで 1 つ (<see cref="Keys"/>) で、
 /// INT に答えた最初のリーダーのカードを全部のチューナーで使い回す。カードに聞くのは
-/// ECM の中身が変わったときだけなので、1枚で何台でも足りる。残りのリーダーは**予備** —
+/// ECM の中身が変わったときだけなので、1 枚で何台でも足りる。残りのリーダーは**予備** —
 /// 使っているカードが答えなくなったら、繋ぎ直すときに探し直して使う (<see cref="BCas"/>)。
 /// チューナーごとにカードを割り当てることはしない。
 /// </para>
@@ -32,7 +32,7 @@ public static class Card
     private static Task<CardSurvey>? _checking;
 
     /// <summary>
-    /// 走っている確かめの結果を共有する。**同時に1本だけ** — 切り上げたあとも確かめは
+    /// 走っている確かめの結果を共有する。**同時に 1 本だけ** — 切り上げたあとも確かめは
     /// 走り続けるので、画面を開き直すたびに足すとロックの前に溜まっていく
     /// </summary>
     private static Task<CardSurvey> Checking()
@@ -42,7 +42,7 @@ public static class Card
             if (_checking is { IsCompleted: false } running) return running;
             return _checking = Task.Run(() => Keys.Source is RemoteCard remote
                 ? Remote(remote.Url, remote.Check)
-                // 切り上げる前に答えを返せるよう、1秒残して覗き終える
+                // 切り上げる前に答えを返せるよう、1 秒残して覗き終える
                 : Local(Keys.Local.Check, () => Keys.Local.Name, CardLinks.Find, CheckFor - TimeSpan.FromSeconds(1)));
         }
     }
@@ -105,7 +105,7 @@ public static class Card
     /// 片方が開けずに終わる。繋ぎ直しは 10 秒後にまた探すので、そこで見つけ直す。
     /// </para>
     /// </summary>
-    /// <param name="check">鍵の出どころに INT を1回通させる</param>
+    /// <param name="check">鍵の出どころに INT を 1 回通させる</param>
     /// <param name="active">鍵の出どころが使っているリーダーの名前</param>
     /// <param name="find">見えているリーダー</param>
     /// <param name="within">覗き終えるまでの時間 (INT を通すのに掛かったぶんも含めて)</param>
@@ -170,12 +170,12 @@ public static class Card
 
     /// <summary>
     /// 予備のリーダーを並べて同時に覗く。**間に合わなかったものは待たない** —
-    /// 固まったリーダー1つのせいで表ごと出なくなるより、その行だけ理由を出す
+    /// 固まったリーダー 1 つのせいで表ごと出なくなるより、その行だけ理由を出す
     /// </summary>
     internal static ReaderState[] Probe(IReadOnlyList<CardLinkCandidate> candidates, TimeSpan within)
     {
         /*
-         * **1つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用のスレッドプールから
+         * **1 つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用のスレッドプールから
          * 借りるとプールが増えるまで他の覗きも待たされ、答えられるものまで「応答しません」になる
          */
         var peeking = candidates.Select(Peeking).ToArray();
@@ -270,7 +270,7 @@ public static class Card
         error is AggregateException { InnerException: { } inner } ? inner : error;
 }
 
-/// <summary>1つのリーダーの様子</summary>
+/// <summary>1 つのリーダーの様子</summary>
 /// <param name="Ids">カードの番号。**カードが読めなければ null**</param>
 /// <param name="Active">鍵の出どころが使っているリーダー</param>
 /// <param name="Error">覗けなかった理由 (挿さっていないだけなら null)</param>
@@ -283,7 +283,7 @@ public sealed record ReaderState(string Name, long[]? Ids, bool Active, string? 
 public sealed record CardSurvey(bool Ok, string Message, IReadOnlyList<ReaderState> Readers, long[] Ids, string? Remote);
 
 /// <summary>
-/// 掛かったまま録れたTSを復号する。
+/// 掛かったまま録れた TS を復号する。
 ///
 /// <para>
 /// **こちらの返事だけでは足りない。** 復号できたつもりで掛かったままのものが出来る経路が

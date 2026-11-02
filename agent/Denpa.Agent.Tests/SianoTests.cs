@@ -160,7 +160,7 @@ public class SianoTests
 
     /// <summary>
     /// 偽の siano-ts --control。起きたらまず前の選局の残りに見立てて **pipe より多く** 書き、
-    /// それから標準入力を読む (本物も「書く → 標準入力を見る」の1本のループ)。
+    /// それから標準入力を読む (本物も「書く → 標準入力を見る」の 1 本のループ)。
     /// <c>tune 1</c> は同期しない。<c>tune 2</c> は前の選局の答え (別の周波数の <c>tuned</c>) を
     /// 先に吐く。<c>tune 3</c> は答えない。それ以外は少し待ってから (本物の同期待ち)
     /// <c>tuned</c> を返し、次のコマンドが来るまで <c>NEW&lt;Hz&gt;</c> を書き続ける
@@ -192,7 +192,7 @@ public class SianoTests
 
     /// <summary>
     /// 選局のあと最初に届いた <c>NEW…</c> の行。読み捨てが行の途中で止まるので、
-    /// 頭の欠けた1行目は飛ばす。**前の選局の残り (0 の詰め物) が混じっていれば落とす**
+    /// 頭の欠けた 1 行目は飛ばす。**前の選局の残り (0 の詰め物) が混じっていれば落とす**
     /// </summary>
     private static string ReadLine(Stream stream)
     {
@@ -246,7 +246,7 @@ public class SianoTests
     public async Task 子が死んでいれば起こし直す()
     {
         if (!OperatingSystem.IsLinux()) return;
-        // 1回目の子は、1行読まれたところで (印のファイルができたら) 終わる。USB が抜けた、に見立てる。
+        // 1 回目の子は、1 行読まれたところで (印のファイルができたら) 終わる。USB が抜けた、に見立てる。
         // 時間で終わらせると、遅い機械では読む前に終わってしまう
         var die = Path.Combine(Path.GetTempPath(), $"denpa-siano-die-{Guid.NewGuid():N}");
         var starts = 0;

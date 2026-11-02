@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// ソケットの置き場は <see cref="Px4Control"/> と同じ。1本の接続で送れる要求は同時に1つだけで、順番は <see cref="BCas"/> が守る。
+/// ソケットの置き場は <see cref="Px4Control"/> と同じ。1 本の接続で送れる要求は同時に 1 つだけで、順番は <see cref="BCas"/> が守る。
 /// </para>
 /// </summary>
 public sealed class Px4Card : ICardLink
@@ -20,7 +20,7 @@ public sealed class Px4Card : ICardLink
     private const uint CardCapability = 1 << 1;
 
     /// <summary>
-    /// 1回のやり取りの上限。px4d は APDU 1つを 3 秒で打ち切る (SPEC 5.3) ので、
+    /// 1 回のやり取りの上限。px4d は APDU 1 つを 3 秒で打ち切る (SPEC 5.3) ので、
     /// それより長く待ってから諦める
     /// </summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
@@ -92,7 +92,7 @@ public sealed class Px4Card : ICardLink
     }
 
     /// <summary>
-    /// 1回目は CARD_CONNECT、2回目からは CARD_RESET。**どちらも ATR が返る。**
+    /// 1 回目は CARD_CONNECT、2 回目からは CARD_RESET。**どちらも ATR が返る。**
     ///
     /// <para>
     /// 繋ぐのは共有 (share mode 1)。B-CAS は APDU を跨いだ状態を持たないので、
@@ -121,7 +121,7 @@ public sealed class Px4Card : ICardLink
     }
 
     /// <summary>
-    /// APDU を1つ。**失敗は全部 <see cref="IOException"/>** (Px4Control.Request) —
+    /// APDU を 1 つ。**失敗は全部 <see cref="IOException"/>** (Px4Control.Request) —
     /// 繋ぎ直すかどうかを決めるのは <see cref="BCas"/> で、そちらは IOException だけを見る。
     /// </summary>
     public byte[] Transmit(ReadOnlySpan<byte> apdu)

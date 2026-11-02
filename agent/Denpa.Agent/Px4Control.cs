@@ -5,14 +5,14 @@ using System.Text;
 namespace Denpa.Agent;
 
 /// <summary>
-/// px4d の制御ソケット1本 (px4-userland SPEC 6 節の portable IPC)。
+/// px4d の制御ソケット 1 本 (px4-userland SPEC 6 節の portable IPC)。
 /// **カード (Px4Card.cs) も受信機 (Px4Tuner) もここで話す。**
 /// asicen-userland の asicend も同じ IPC を話す (違うのは枠の頭とソケットの置き場だけ。<see cref="Px4Wire"/>)。
 ///
 /// <para>
 /// ソケットは <c>&lt;ランタイムディレクトリ&gt;/px4-userland/&lt;筐体の名前&gt;/control.sock</c>
 /// (名前は筐体の番号。番号が重なる筐体は番号と USB ポート)。
-/// 1本の接続で送れる要求は同時に1つだけ (SPEC 6.2)。順番は使う側が守る。
+/// 1 本の接続で送れる要求は同時に 1 つだけ (SPEC 6.2)。順番は使う側が守る。
 /// 接続を閉じれば、その接続で取ったもの (受信機の lease・カードの handle) は px4d が返す。
 /// </para>
 /// </summary>
@@ -70,7 +70,7 @@ internal sealed class Px4Control : IDisposable
 
     /// <summary>
     /// 繋いで HELLO まで済ませる。**繋がらなければ「px4d に繋がりません」で投げる。**
-    /// <paramref name="timeout"/> は1回のやり取りを待つ上限 (長く待つものは <see cref="Request"/> に言う)
+    /// <paramref name="timeout"/> は 1 回のやり取りを待つ上限 (長く待つものは <see cref="Request"/> に言う)
     /// </summary>
     public static Px4Control Connect(string socketPath, uint capabilities, TimeSpan timeout, Px4Wire? wire = null)
     {
@@ -124,7 +124,7 @@ internal sealed class Px4Control : IDisposable
     }
 
     /// <summary>
-    /// 1つ送って答えを1つ受ける (SPEC 6.2)。**失敗は全部 <see cref="IOException"/> にする。**
+    /// 1 つ送って答えを 1 つ受ける (SPEC 6.2)。**失敗は全部 <see cref="IOException"/> にする。**
     /// px4d がエラーで答えたときは <see cref="Px4Error"/> (理由の番号つき)、接続が切れた・崩れたときは
     /// ただの IOException。<paramref name="timeout"/> は同期を待つ TUNE のように長く待つときだけ
     /// </summary>
@@ -166,7 +166,7 @@ internal sealed class Px4Control : IDisposable
         return payload;
     }
 
-    /// <summary>1枚ぶんのバイト列 (20 バイトの頭 + 中身)</summary>
+    /// <summary>1 枚ぶんのバイト列 (20 バイトの頭 + 中身)</summary>
     public static byte[] Encode(ushort type, ushort flags, uint requestId, ReadOnlySpan<byte> payload, Px4Wire? wire = null)
     {
         var frame = new byte[HeaderSize + payload.Length];
@@ -188,7 +188,7 @@ internal sealed class Px4Control : IDisposable
     }
 
     /// <summary>
-    /// 1枚読む。**長さは受ける前に見る** (崩れた長さのまま確保しない)。
+    /// 1 枚読む。**長さは受ける前に見る** (崩れた長さのまま確保しない)。
     /// 頭が崩れている・バージョンが違う・途中で切れた、は IOException
     /// </summary>
     public static (ushort Type, ushort Flags, uint RequestId, byte[] Payload) ReadFrame(
@@ -353,7 +353,7 @@ internal readonly record struct Px4Counters(
     }
 
     /// <summary>
-    /// 前回から増えた誤りを1行にする。**増えていなければ null** (記録を埋めない)。
+    /// 前回から増えた誤りを 1 行にする。**増えていなければ null** (記録を埋めない)。
     /// <paramref name="before"/> が null なら 0 から数える。数え直された (前より減った) ものは今の値をそのまま増えた分とみなす
     /// </summary>
     public static string? Describe(Px4Counters? before, Px4Counters now)

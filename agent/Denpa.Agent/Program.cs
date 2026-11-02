@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Http.Features;
 /*
  * チューナーエージェント。**機材に触るのはここだけ。**
  *
- * denpa から触れないものが3つある。
+ * denpa から触れないものが 3 つある。
  *
  * - B-CASカード … USB のリーダーも px4d / asicend の内蔵リーダーも、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
@@ -71,8 +71,8 @@ if (Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } hostText
     return 2;
 }
 /*
- * 元のTSの置き場。**denpa と同じ変数で決める** (`RAW_DIR`、無ければ `MEDIA_DIR/raw`、どちらも無ければ
- * `/media/raw`)。掛かったまま録れたTSを後から復号する (/denpa/decode) ときに読むので、denpa と
+ * 元の TS の置き場。**denpa と同じ変数で決める** (`RAW_DIR`、無ければ `MEDIA_DIR/raw`、どちらも無ければ
+ * `/media/raw`)。掛かったまま録れた TS を後から復号する (/denpa/decode) ときに読むので、denpa と
  * 同じ実体を同じ名前で見せる。ここの外のファイルは求められても触らない
  */
 var recorded = Path.GetFullPath(
@@ -246,7 +246,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     http.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
 
     /*
-     * 1バイトでも送ったか。**送る前に落ちたなら、まだ理由を返せる。**
+     * 1 バイトでも送ったか。**送る前に落ちたなら、まだ理由を返せる。**
      *
      * 落ちた回をどれも接続を壊して知らせていた頃は、選局が始まった直後に
      * 落ちると**本文どころか状態行すら送っていない**のに接続だけ切れていて、
@@ -400,7 +400,7 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
         await Respond.Error(http, "channels と scanned が必要です", 400);
         return;
     }
-    // 1件も無いまま上書きすると、今まで録れていた局まで消える
+    // 1 件も無いまま上書きすると、今まで録れていた局まで消える
     if (found.Count == 0)
     {
         await Respond.Error(http, "チャンネルが 1 件もありません", 400);
@@ -525,7 +525,7 @@ internal static class Respond
 /// <para>
 /// **合図をこちらで受け取る。** 既定の受け取り役 (ConsoleLifetime) に任せると、
 /// その場でホストが畳みに入り、**Kestrel が開いている応答への書き込みを止める**
-/// (実測: 合図の直後からバイトが1つも進まなくなる)。止めるかどうかを決める前に
+/// (実測: 合図の直後からバイトが 1 つも進まなくなる)。止めるかどうかを決める前に
 /// 止まってしまうので、受け取り役ごと差し替える。
 /// </para>
 ///

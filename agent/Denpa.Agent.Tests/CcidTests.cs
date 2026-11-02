@@ -157,7 +157,7 @@ public class CcidTests
         public void Dispose() => Disposed = true;
     }
 
-    /// <summary>応答の形式は命令と同じ (頭 10 バイトの 8〜10 バイト目が bmStatus / bError / 3つめ)</summary>
+    /// <summary>応答の形式は命令と同じ (頭 10 バイトの 8〜10 バイト目が bmStatus / bError / 3 つめ)</summary>
     private static byte[] Reply(byte type, byte seq, byte status, byte error, ReadOnlySpan<byte> data, byte chain = 0) =>
         CcidMessage.Command(type, seq, data, status, error, chain);
 
@@ -259,7 +259,7 @@ public class CcidTests
     [Test]
     public async Task APDU_単位のリーダーは連結して送り受ける()
     {
-        // メッセージ 20 バイトまで = 1回に 10 バイト。15 バイトの APDU は 10 + 5
+        // メッセージ 20 バイトまで = 1 回に 10 バイト。15 バイトの APDU は 10 + 5
         var info = Twin with { Features = CcidInterface.ExtendedApduLevel | CcidInterface.AutoParameters | CcidInterface.AutoVoltage, MaxMessage = 20 };
         var reader = new FakeReader(command => command.Type switch
         {

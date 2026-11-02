@@ -72,7 +72,7 @@ public class Multi2Tests
         await Assert.That(Decrypt(even: false, 183)).IsEqualTo(OddDecrypted[..352] + "3f9f4389a742a6");
     }
 
-    /// <summary>丸ごとのブロックが1つも無いと、CBC の初期値を暗号化して XOR するだけ</summary>
+    /// <summary>丸ごとのブロックが 1 つも無いと、CBC の初期値を暗号化して XOR するだけ</summary>
     [Test]
     public async Task 短い中身も復号できる()
     {
@@ -94,7 +94,7 @@ public class Multi2Tests
             .IsEqualTo(EvenEncrypted[..352] + "5e7511322ca057");
     }
 
-    /// <summary>SIMD で並べる経路と1つずつの経路の境目 (長さ) を跨いでも、掛けて復号すれば戻る</summary>
+    /// <summary>SIMD で並べる経路と 1 つずつの経路の境目 (長さ) を跨いでも、掛けて復号すれば戻る</summary>
     [Test]
     public async Task どの長さでも掛けて復号すれば戻る()
     {

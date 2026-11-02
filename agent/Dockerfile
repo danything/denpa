@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # チューナーエージェント (.NET)。
 #
-# **Native AOT で実行ファイル1個** (外せないわけは Denpa.Agent.csproj)。
+# **Native AOT で実行ファイル 1 個** (外せないわけは Denpa.Agent.csproj)。
 #
 # denpa から見える API は agent/conformance.test.ts が押さえている
 # (本物を起こして HTTP で当てる)。入れ替えはイメージのタグを変えるだけ。
@@ -31,7 +31,7 @@ RUN case "${TARGETARCH}" in \
     dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
 
 # ---------------------------------------------------------------------------
-# 外から取ってくるもの (3つの userland)。**取ってくる道具は実行イメージに残さない**
+# 外から取ってくるもの (3 つの userland)。**取ってくる道具は実行イメージに残さない**
 # (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
 # 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る。
 # 土台は digest で留める (Dockerfile の ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
@@ -86,7 +86,7 @@ RUN set -eu && cd /tmp && \
 # そこで初めて取ってくる (自動では入れない。renovate.json)。
 #
 # 取ってくるのは px4-userland と同じ名前の付け方を見込んだ配布アーカイブ (上流の
-# scripts/package-linux-variant.py の形式: 頭に1段のディレクトリ、bin/ にコマンド3つ、musl の
+# scripts/package-linux-variant.py の形式: 頭に 1 段のディレクトリ、bin/ にコマンド 3 つ、musl の
 # 完全静的 ELF)。名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、
 # コマンドはどちらも同じ musl の静的 ELF。名前や形式が違えば、バージョンを上げる PR の CI (イメージをビルドする) で落ちて分かる
 # (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。

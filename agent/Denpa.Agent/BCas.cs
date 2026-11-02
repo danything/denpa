@@ -8,21 +8,21 @@ namespace Denpa.Agent;
 /// 手元の B-CAS カード。**カードに送る APDU はここで組み立てる。**
 ///
 /// <para>
-/// 使うコマンドは3つ。初期設定条件 (INT, <c>90 30</c>) で鍵を作るための定数を、
+/// 使うコマンドは 3 つ。初期設定条件 (INT, <c>90 30</c>) で鍵を作るための定数を、
 /// カード ID 情報 (IDI, <c>90 32</c>) でカードの番号を、ECM 受信 (<c>90 34</c>) で
 /// スクランブル鍵を貰う。**応答の読み方は libaribb25 と同じにしてある** —
 /// 番号の出し方も鍵の順も、前と同じ値が出ないと画面の番号が変わって見える。
 /// </para>
 ///
 /// <para>
-/// **1枚のカードを全部のチューナーで使い回す。** カードに触るのは順番に
+/// **1 枚のカードを全部のチューナーで使い回す。** カードに触るのは順番に
 /// (<see cref="_gate"/>)。カードに聞くのは ECM の中身が変わったとき (鍵が変わるとき) だけなので、待たされても僅か。
 /// </para>
 ///
 /// <para>
 /// **接続が切れたら繋ぎ直す。** カードを抜き差しした・リーダーを挿し直した・
 /// px4d を起こし直した、のどれでも、次の ECM で探し直して INT からやり直す。
-/// 1回繋ぎ直して駄目なら理由を添えて投げる。
+/// 1 回繋ぎ直して駄目なら理由を添えて投げる。
 /// </para>
 /// </summary>
 public sealed class BCas : IKeySource, IDisposable
@@ -68,7 +68,7 @@ public sealed class BCas : IKeySource, IDisposable
     ///
     /// <para>
     /// 録画・ライブ・番組表が同じ局にいれば、同じ ECM が同じ時刻に何本も来る。
-    /// カードに聞くのは最初の1本だけで、残りはロックの外で答えを持っていく。
+    /// カードに聞くのは最初の 1 本だけで、残りはロックの外で答えを持っていく。
     /// </para>
     /// </summary>
     private readonly ConcurrentDictionary<string, (EcmAnswer Answer, DateTimeOffset At)> _cache = new();
@@ -85,7 +85,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// 見つかったリーダーを順に試し、**カードが刺さっていて INT に答えた最初の1つ**で開く。
+    /// 見つかったリーダーを順に試し、**カードが刺さっていて INT に答えた最初の 1 つ**で開く。
     /// どれも駄目なら理由を並べて投げる。
     /// </summary>
     /// <param name="find">
@@ -109,7 +109,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// **いまカードと話せるか**、INT を1回通して確かめる (画面の「カードリーダー」行)。
+    /// **いまカードと話せるか**、INT を 1 回通して確かめる (画面の「カードリーダー」行)。
     /// 切れていれば繋ぎ直し、駄目なら投げる
     /// </summary>
     public CardInit Check()
@@ -132,7 +132,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// ECM を1つ復号して鍵を返す。
+    /// ECM を 1 つ復号して鍵を返す。
     ///
     /// <para>
     /// 渡すのは **ECM セクションの中身**: 8 バイトの見出しの後ろから、末尾の CRC32 の
@@ -192,7 +192,7 @@ public sealed class BCas : IKeySource, IDisposable
         _cache.TryGetValue(name, out var cached) && _clock.GetUtcNow() - cached.At < CacheFor ? cached.Answer : null;
 
     /// <summary>
-    /// カードに1つ要求を送る。**接続が切れていたら1回だけ繋ぎ直して送り直す。**
+    /// カードに 1 つ要求を送る。**接続が切れていたら 1 回だけ繋ぎ直して送り直す。**
     /// <see cref="_gate"/> を握ったまま呼ぶ
     /// </summary>
     private T Run<T>(Func<ICardLink, T> command)
@@ -239,9 +239,9 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// リーダーを探して、カードが答えた最初の1つを使う。INT と IDI もここで読む。
-    /// **駄目だったリーダーの理由は全部残す** — 1つ目が空で2つ目が壊れている、を
-    /// 「カードが読めません」の1行で済ませると、どこを見ればよいか分からない
+    /// リーダーを探して、カードが答えた最初の 1 つを使う。INT と IDI もここで読む。
+    /// **駄目だったリーダーの理由は全部残す** — 1 つ目が空で 2 つ目が壊れている、を
+    /// 「カードが読めません」の 1 行で済ませると、どこを見ればよいか分からない
     /// </summary>
     private void Connect()
     {
@@ -315,7 +315,7 @@ public sealed class BCas : IKeySource, IDisposable
     /// IDI (カード ID 情報)。**番号は libaribb25 と同じ読み方。**
     ///
     /// <para>
-    /// 7 バイト目が番号の数で、その後ろに 10 バイトずつ並ぶ。1つの 10 バイトのうち
+    /// 7 バイト目が番号の数で、その後ろに 10 バイトずつ並ぶ。1 つの 10 バイトのうち
     /// **3〜8 バイト目の 48 ビットを、そのまま符号なしの数として**読む
     /// (頭の 2 バイトと後ろのチェックコードは見ない)。画面にはこれを 10 進 16 桁で出す
     /// (<c>ToString("D16")</c>)。

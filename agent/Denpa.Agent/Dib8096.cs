@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Denpa.Agent;
 
 /*
- * DiBcom DiB8096 (DiB8000 の ISDB-T 復調器と DiB0090 のチューナーを1つにしたもの)。CECH-ZD1 J の中身。
+ * DiBcom DiB8096 (DiB8000 の ISDB-T 復調器と DiB0090 のチューナーを 1 つにしたもの)。CECH-ZD1 J の中身。
  *
  * **仕様書 (機材の事実を書き出したもの) だけから書いた。** Linux のドライバも、それを移した実装も見ていない
  * (Linux のドライバは GPL-2.0-only で、denpa には取り込めないため)。節の番号 (「6.2」など) はその仕様書のもの。
@@ -42,7 +42,7 @@ public enum DibLock
 /// <param name="CnDb">C/N。ロックしていないか測れなければ null</param>
 public sealed record DibSignal(bool Locked, double StrengthDbm, double? CnDb, ushort Status);
 
-/// <summary>DiB8000 + DiB0090 (CECH-ZD1 J の中身)。**同時に1本からだけ呼ぶ** (呼ぶ側が順番にする)</summary>
+/// <summary>DiB8000 + DiB0090 (CECH-ZD1 J の中身)。**同時に 1 本からだけ呼ぶ** (呼ぶ側が順番にする)</summary>
 public sealed class Dib8096
 {
     public const byte DemodAddress = 0x12;
@@ -62,8 +62,8 @@ public sealed class Dib8096
      * - 温度の較正 (7.3.3。約 44ms) は直前に測ってから TemperatureReuseMs 以内なら飛ばす
      * - 復調器の探索で、シンボルの数の時間切れに関わらない段は FastPollMs ごとに見る (Floor)
      *
-     * 3 つの数字 (60 秒・3ms・許容値 50) は、実機 (CECH-ZD1 J、T27・T21、2026-10-26) で 13 回選局して1回も同期を落とさず、
-     * 覚えた値での選局が中央 800ms → 617ms になった値。本番の記録 (選局ごとの1行。LastSummary) でも、2026-10-26〜27 の 17 回で
+     * 3 つの数字 (60 秒・3ms・許容値 50) は、実機 (CECH-ZD1 J、T27・T21、2026-10-26) で 13 回選局して 1 回も同期を落とさず、
+     * 覚えた値での選局が中央 800ms → 617ms になった値。本番の記録 (選局ごとの 1 行。LastSummary) でも、2026-10-26〜27 の 17 回で
      * 同期を落とさず、キャパシタを使い回したときの ADC のずれは -39〜0 (許容 +50 に届かない)、温度は 60 秒あまりで ±2 (2532 秒で +14)
      * だった。覚えた値で合わせた選局は 481〜791ms
      */
@@ -80,8 +80,8 @@ public sealed class Dib8096
     public const int FastPollMs = 3;
 
     /// <summary>
-    /// 覚えたキャパシタで ADC を1回読んだとき、覚えたときの差 (dmin) からここまでのずれなら合っているとみる。
-    /// 二分探索の最後の1段 (キャパシタ 1 つぶん) の ADC の差より十分小さい値 (根拠は上)
+    /// 覚えたキャパシタで ADC を 1 回読んだとき、覚えたときの差 (dmin) からここまでのずれなら合っているとみる。
+    /// 二分探索の最後の 1 段 (キャパシタ 1 つぶん) の ADC の差より十分小さい値 (根拠は上)
     /// </summary>
     private const int CapacitorTolerance = 50;
 
@@ -193,7 +193,7 @@ public sealed class Dib8096
     /// </summary>
     public void Initialize()
     {
-        // 4.7 アドレスの確定 (復調器は1つなので既定の 0x12 のまま)
+        // 4.7 アドレスの確定 (復調器は 1 つなので既定の 0x12 のまま)
         D(1287, 0x0003);
         InitializeDemod();
         // 6.1 DiB0090 への経路 (I2C のゲート)。開けっぱなしでよい (DiB8000 は自分のアドレスで答え続ける)
@@ -221,7 +221,7 @@ public sealed class Dib8096
         }
     }
 
-    /// <summary>D[896] と D[897] を確かめる。D[896] は電源投入直後の1回目が化けることがあるので2回読む</summary>
+    /// <summary>D[896] と D[897] を確かめる。D[896] は電源投入直後の 1 回目が化けることがあるので 2 回読む</summary>
     private void Identify()
     {
         D(896);
@@ -377,7 +377,7 @@ public sealed class Dib8096
         D(1291, 0x0205);
     }
 
-    /// <summary>6.7 DiB8000 の GPIO を1本、出力にして値を決める。読みかえ書きなので、ほかのピンはそのまま残る</summary>
+    /// <summary>6.7 DiB8000 の GPIO を 1 本、出力にして値を決める。読みかえ書きなので、ほかのピンはそのまま残る</summary>
     private void Gpio(int pin, bool high)
     {
         Modify(1029, ~(1 << pin), 0);
@@ -595,7 +595,7 @@ public sealed class Dib8096
     }
 
     /// <summary>
-    /// 最後の選局の要約の1行。常駐のときも記録に出し (Zd1jTuner)、3 つの数字 (60 秒・3ms・許容値 50) を本番の記録で見直すのに使う。
+    /// 最後の選局の要約の 1 行。常駐のときも記録に出し (Zd1jTuner)、3 つの数字 (60 秒・3ms・許容値 50) を本番の記録で見直すのに使う。
     /// 形: <c>選局 &lt;Hz&gt; Hz: &lt;経路&gt;、ロックまで &lt;ms&gt;ms、キャパシタ: &lt;…&gt;、温度: &lt;…&gt;、&lt;同期した / ロックしたがデータはまだ / 同期しなかった&gt;</c>
     /// </summary>
     public string LastSummary { get; private set; } = "";
@@ -612,7 +612,7 @@ public sealed class Dib8096
         return $"選局 {hz} Hz: {LastPath}、ロックまで {lockMs:F0}ms、{Pick("キャパシタ: ", "-")}、{Pick("温度: ", "-")}、{sync}";
     }
 
-    /// <summary>ロックまでの内訳の1つ (段の名前・かかった時間・そのうち眠った時間・歩数)</summary>
+    /// <summary>ロックまでの内訳の 1 つ (段の名前・かかった時間・そのうち眠った時間・歩数)</summary>
     private sealed class Part(string name)
     {
         public string Name { get; } = name;
@@ -734,7 +734,7 @@ public sealed class Dib8096
         }
     }
 
-    /// <summary>1歩。待ち (0.1ms) を返す</summary>
+    /// <summary>1 歩。待ち (0.1ms) を返す</summary>
     private int TunerStep()
     {
         if (_tunerState == TunerStart && (_wbdPending || _tempPending)) T(0x23, T(0x23) & ~0x4000);
@@ -964,7 +964,7 @@ public sealed class Dib8096
     private const int EnableVhf = 0x44E9;
     private const int EnableUhf = 0x22E9;
 
-    /// <summary>選局の表の1行 (上限 kHz・切替の調整値・LNA の調整・LNA のバイアス・V2I・ミキサー・負荷・有効化)</summary>
+    /// <summary>選局の表の 1 行 (上限 kHz・切替の調整値・LNA の調整・LNA のバイアス・V2I・ミキサー・負荷・有効化)</summary>
     private readonly record struct TuneRow(uint Upper, int Switch, int LnaTune, int LnaBias, int V2i, int Mixer, int Load, int Enable);
 
     private static readonly TuneRow[] TuneNormal =
@@ -1128,7 +1128,7 @@ public sealed class Dib8096
                 T(0x1E, 0x0032);
                 if (_capacitors.TryGetValue(_tunerKhz, out _capKnown))
                 {
-                    // 覚えた値を置いて ADC を1回だけ見る (仕様書に無い。合わなければ下の二分探索から)
+                    // 覚えた値を置いて ADC を 1 回だけ見る (仕様書に無い。合わなければ下の二分探索から)
                     _cap = _capBest = _capKnown.Cap;
                     T(0x18, 0xE900 | (_cap & 0xFF));
                     _tunerState = 15;
@@ -1364,7 +1364,7 @@ public sealed class Dib8096
     }
 
     /// <summary>
-    /// 段 0 以降の1歩。**段 1 の歩数 (stepCount) は段 1 を1回回るごとに 1 増やす** — 仕様書は
+    /// 段 0 以降の 1 歩。**段 1 の歩数 (stepCount) は段 1 を 1 回回るごとに 1 増やす** — 仕様書は
     /// 「5 を超えたら」とだけ書き、増やす所を書いていない (増えなければ終わらないので、こう読んだ)
     /// </summary>
     private int SoftAgcStep()
@@ -1673,7 +1673,7 @@ public sealed class Dib8096
     private const double SearchLimitMs = 5000;
 
     /// <summary>
-    /// 7.5 の状態の機械を回す。**1歩の間は仕様書では最低 10ms** (7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
+    /// 7.5 の状態の機械を回す。**1 歩の間は仕様書では最低 10ms** (7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
     /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)。それに関わらない段だけ 3ms に詰める (<see cref="Floor"/>)
     /// </summary>
     private DibLock Search()
@@ -1790,7 +1790,7 @@ public sealed class Dib8096
     private int Floor(Step next) =>
         next is not (Step.Step4 or Step.Step5 or Step.Step6 or Step.Step7 or Step.Step8) ? FastPollMs : 10;
 
-    /// <summary>1歩。次の段と待ち (0.1ms)</summary>
+    /// <summary>1 歩。次の段と待ち (0.1ms)</summary>
     private (Step Next, int Wait) DemodStep(Step step)
     {
         switch (step)
@@ -2278,7 +2278,7 @@ public sealed class Dib8096
         External,
     }
 
-    /// <summary>7.5.7 ダイバーシティの入力。バージョン 0x8002 は D[903] のビット 3 を 30ms 落とす (選局ごとに3回)</summary>
+    /// <summary>7.5.7 ダイバーシティの入力。バージョン 0x8002 は D[903] のビット 3 を 30ms 落とす (選局ごとに 3 回)</summary>
     private void Diversity(DiversityMode mode)
     {
         var sw = D(273) & 0xFFF0;
@@ -2436,7 +2436,7 @@ public sealed class DibMemory
         return json;
     }
 
-    /// <summary>ファイルの中身から。**どれか1つでも形が違えば投げる** (呼ぶ側が全部捨てて探索から)</summary>
+    /// <summary>ファイルの中身から。**どれか 1 つでも形が違えば投げる** (呼ぶ側が全部捨てて探索から)</summary>
     public static DibMemory FromJson(JsonObject json)
     {
         var memory = new DibMemory();

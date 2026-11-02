@@ -18,7 +18,7 @@ public static partial class Interop
     /// **プロセスグループごと**終わらせる。偽の選局 (適合テストの <c>FAKE_TUNE</c>) だけ。
     ///
     /// <para>
-    /// <c>sh -c</c> 越しなので、sh を1つ殺すだけでは中身が生き残る。<c>setsid</c> で
+    /// <c>sh -c</c> 越しなので、sh を 1 つ殺すだけでは中身が生き残る。<c>setsid</c> で
     /// 起こしてあるので子の PID がそのままグループ ID で、負の PID で送ればグループ全体に届く。
     /// </para>
     /// </summary>
@@ -31,7 +31,7 @@ public static partial class Interop
     }
 
     /// <summary>
-    /// 1つのプロセスに SIGTERM。**待たない。**
+    /// 1 つのプロセスに SIGTERM。**待たない。**
     ///
     /// <para>
     /// px4-userland の <c>px4d</c> は SIGTERM で LNB を 0V に戻してから終わるので、

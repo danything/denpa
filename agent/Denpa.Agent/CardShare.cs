@@ -7,7 +7,7 @@ using System.Text.Json.Nodes;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 鍵をどこから貰うか。**プロセスで1つ**で、どのチューナーのストリームもここに聞く。
+/// 鍵をどこから貰うか。**プロセスで 1 つ**で、どのチューナーのストリームもここに聞く。
 ///
 /// <para>
 /// 手元にカードがあれば自分で読み (<see cref="LocalCard"/>)、無い拠点は別の拠点に
@@ -25,7 +25,7 @@ public static class Keys
     public static IKeySource Source => _source ?? Local;
 
     /// <summary>
-    /// CARD_URL が書いてあれば、そちらから貰う。**起動したときに1回。**
+    /// CARD_URL が書いてあれば、そちらから貰う。**起動したときに 1 回。**
     /// <paramref name="hops"/> は貰いに行く接続の TTL (<c>CARD_TTL</c>。<see cref="CardLanPolicy"/>)
     /// </summary>
     public static void Configure(string? cardUrl, int hops) =>
@@ -80,7 +80,7 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
 
     /// <summary>
     /// **起動したときに開いておく。** 開くのはリーダーを探して電源を入れ、INT と IDI を読むことで、
-    /// 最初の選局でこれを待つと、起こし直した直後の1回目だけ送り出しが 0.25〜0.45 秒遅れていた。
+    /// 最初の選局でこれを待つと、起こし直した直後の 1 回目だけ送り出しが 0.25〜0.45 秒遅れていた。
     ///
     /// <para>
     /// 開けなくても<b>断った印は残さない</b> — 起動の直後は px4d がまだ起きていないことがあり、
@@ -110,12 +110,12 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
 
     public EcmAnswer Ecm(ReadOnlySpan<byte> ecm) => Card().Ecm(ecm);
 
-    /// <summary>いまカードと話せるか。INT を1回通す (<see cref="BCas.Check"/>)</summary>
+    /// <summary>いまカードと話せるか。INT を 1 回通す (<see cref="BCas.Check"/>)</summary>
     public CardInit Check() => Card().Check();
 }
 
 /// <summary>
-/// **カードを持っていない拠点。** ECM を投げて鍵だけ貰いに行く (docs/agent.md「カードは1枚でいい」)。
+/// **カードを持っていない拠点。** ECM を投げて鍵だけ貰いに行く (docs/agent.md「カードは 1 枚でいい」)。
 /// 拠点にカードがあるならそちらが速いし落ちないので、既定にはしない。
 ///
 /// <para>
@@ -140,7 +140,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
     /// <summary>配り役の URL (画面に出す)</summary>
     public string Url { get; } = url.TrimEnd('/');
 
-    /// <summary>素は1回貰えば変わらない。**貰えなかったら次に要ったときにまた聞く**</summary>
+    /// <summary>素は 1 回貰えば変わらない。**貰えなかったら次に要ったときにまた聞く**</summary>
     public CardInit Init() => _init ?? Check();
 
     /// <summary>いま配り役と話せるか。**覚えている素を使わずに聞き直す** (画面の「カードリーダー」行)</summary>
