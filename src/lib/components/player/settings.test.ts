@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { captionLanguage } from "@danything/arib/caption-text";
 
-import { subtitles } from "./settings";
+import { liveCodecs, subtitles } from "./settings";
 
 const JPN = captionLanguage(1, "jpn");
 const ENG = captionLanguage(2, "eng");
@@ -79,5 +79,67 @@ describe("⚙ の字幕の行", () => {
     ]);
     made.pick("1:0");
     expect(calls).toEqual(["on", "track 1"]);
+  });
+});
+
+describe("⚙ のコーデックの行 (ライブ・追っかけ)", () => {
+  function codecs(over: Partial<Parameters<typeof liveCodecs>[0]> = {}) {
+    const picked: string[] = [];
+    const made = liveCodecs({
+      icon,
+      choice: "auto",
+      format: "raw",
+      raw: true,
+      unavailable: [],
+      onselect: (next) => picked.push(next),
+      ...over,
+    });
+    return { made, picked };
+  }
+
+  test("自動を先頭に、AV1・H.264・MPEG-2 と並べ、自動の値にいまの形式を添える", () => {
+    const { made } = codecs();
+    expect(made.options.map((o) => o.label)).toEqual([
+      "自動",
+      "AV1",
+      "H.264",
+      "MPEG-2",
+    ]);
+    expect(made.value).toBe("自動 (MPEG-2)");
+    expect(made.options.find((o) => o.active)?.key).toBe("auto");
+    expect(codecs({ format: "h264" }).made.value).toBe("自動 (H.264)");
+  });
+
+  test("選んだものはその名前だけを値に出す", () => {
+    const { made } = codecs({ choice: "av1", format: "av1" });
+    expect(made.value).toBe("AV1");
+    expect(made.options.find((o) => o.active)?.key).toBe("av1");
+    expect(codecs({ choice: "raw" }).made.value).toBe("MPEG-2");
+  });
+
+  test("押したものを選択として渡す (MPEG-2 は raw)", () => {
+    const { made, picked } = codecs();
+    made.pick("mpeg2");
+    made.pick("auto");
+    made.pick("h264");
+    expect(picked).toEqual(["raw", "auto", "h264"]);
+  });
+
+  test("追っかけには MPEG-2 が無い", () => {
+    const { made } = codecs({ raw: false, format: "av1" });
+    expect(made.options.map((o) => o.key)).toEqual(["auto", "av1", "h264"]);
+  });
+
+  test("H.264 を出さない設定では H.264 を並べない。自動で H.264 になっていれば値には出す", () => {
+    const { made } = codecs({ hidden: true, format: "h264" });
+    expect(made.options.map((o) => o.key)).toEqual(["auto", "av1", "mpeg2"]);
+    expect(made.value).toBe("自動 (H.264)");
+  });
+
+  test("互換モードで描けない形式は、並べるが押せない", () => {
+    const { made } = codecs({ unavailable: ["av1"] });
+    const av1 = made.options.find((o) => o.key === "av1");
+    expect(av1?.disabled).toBe(true);
+    expect(av1?.label).toBe("AV1 (再生できません)");
   });
 });
