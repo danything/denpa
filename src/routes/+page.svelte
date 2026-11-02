@@ -70,8 +70,10 @@
     type Filter,
     lineIndex,
     mergeRecorded,
+    pageEnd,
     pageStart,
     passes,
+    REVERSED_COOKIE,
     sections,
     timelineLines,
     type Traits,
@@ -392,7 +394,14 @@
   const shownItems = $derived(
     items.filter((item) => passes(filter, item, traitsOf(item))),
   );
-  const parts = $derived(sections(shownItems));
+  /**
+   * **新しい順で表示 (issue #1930)。** 上下を返し、上から予約 (遠い順)・「いま」・録画中・録れたもの (新しい順) に並べる。
+   * まとめて表示と同じく端末ごとに cookie で覚え、**サーバが読む** (`+page.server.ts`)。逆にするのは並べる所
+   * (`sections`・`timelineLines`) だけで、ここでは線より上と下のどちらに描くかを替える
+   */
+  // svelte-ignore state_referenced_locally
+  let reversed = $state(data.reversed);
+  const parts = $derived(sections(shownItems, reversed));
 
   /** 「削除済みも表示」「完了した予約も表示」の行き先。入っていれば外した URL へ (ほかの指定は残す) */
   function toggleHref(name: "deleted" | "all", on: boolean): string {
@@ -422,50 +431,74 @@
     if (openedGroups.has(key)) openedGroups.delete(key);
     else openedGroups.add(key);
   }
+  /** 端末に覚える (サーバが読む)。パスは接頭辞込み (`live-player.svelte.ts` の `remember` と同じ) */
+  function remember(name: string, on: boolean): void {
+    document.cookie = `${name}=${on ? "1" : "0"}; path=${resolve("")}; max-age=31536000; samesite=lax`;
+  }
   function setGrouped(on: boolean): void {
     grouped = on;
     pastPage.reset();
     fillSoon();
-    // パスは接頭辞込み (`live-player.svelte.ts` の `remember` と同じ)
-    document.cookie = `${GROUPED_COOKIE}=${on ? "1" : "0"}; path=${resolve("")}; max-age=31536000; samesite=lax`;
+    remember(GROUPED_COOKIE, on);
   }
 
-  const lines = $derived(timelineLines(parts, { now: clock, grouped, isOpen }));
+  const lines = $derived(
+    timelineLines(parts, { now: clock, grouped, reversed, isOpen }),
+  );
   /** 開いた瞬間に作る行数 (線の上と下それぞれ)。1 画面に収まるくらい。残りは表示したあとで足す (`fillSoon`) */
   const FIRST_ROWS = 15;
   /** 映したい行の上に余分に作る行数 (見出しの貼り付きと、上に少し送ったときのため) */
   const FIRST_MARGIN = 4;
   /*
-   * **線より上 (録れたもの) だけ少しずつ描く** (`#lib/paging.svelte.js`)。300 件を一度に描くと、
+   * **録れたものは少しずつ描く** (`#lib/paging.svelte.js`)。300 件を一度に描くと、
    * 開いた直後に一瞬止まって見えた。描くのは線の側 (新しいほう) から `pastPage.shown` 行で、
-   * 古いほうは一覧の頭に近づいたら上へ足す。足しても読んでいる所は動かさない (`holdPlace`)。
-   * 録画中と線より下 (予約) は全部描く
+   * 古いほうは一覧の端 (ふだんは頭、新しい順のときは末尾) に近づいたら足す。上へ足しても読んでいる所は動かさない (`holdPlace`)。
+   * 録画中は全部描く
    */
   const pastPage = new Paged(() => lines.past, 60, FIRST_ROWS);
   /**
-   * 線より下 (予約) を何行描くか。**開いた瞬間は頭の数行だけ** — 残りは表示したあとで足す (`fillSoon`)。
+   * 予約を線の側から何行描くか。**開いた瞬間は線に近い数行だけ**で、残りは表示したあとで足す (`fillSoon`)。
    * 予約が多いと、画面の外の行まで作るぶん開くのが一コマ重くなっていた
    */
   let futureShown = $state(FIRST_ROWS);
+  /*
+   * 線より上の側 (ふだんは録れたもの、新しい順のときは予約) は末尾から描き、見出しの途中から描かないよう見出しまで戻す
+   * (`pageStart`)。下の側は頭から描き、開いた番組の途中で切らない (`pageEnd`)
+   */
   const futureRows = $derived(
-    lines.future.length <= futureShown
-      ? lines.future
+    reversed
+      ? lines.future.slice(pageStart(lines.future, futureShown))
       : lines.future.slice(0, futureShown),
   );
-  /** 描く頭の行。見出しの途中から描かないよう、見出しまで戻す (`pageStart`) */
-  const pastStart = $derived(pageStart(lines.past, pastPage.shown));
-  const pastRows = $derived(lines.past.slice(pastStart));
-  /** 描く行を見出しごとに包む (`blocks`)。今日の包みは線と今日の予約まで抱える */
+  /** 描いている録れたものの範囲 (`lines.past` の [pastFrom, pastTo)) */
+  const pastFrom = $derived(
+    reversed ? 0 : pageStart(lines.past, pastPage.shown),
+  );
+  const pastTo = $derived(
+    reversed ? pageEnd(lines.past, pastPage.shown) : lines.past.length,
+  );
+  const pastRows = $derived(lines.past.slice(pastFrom, pastTo));
+  /** 録れたものを描き切ったか (300 件の頭打ちの案内を出す) */
+  const pastDone = $derived(pastFrom === 0 && pastTo === lines.past.length);
+  /** 描く行を見出しごとに包む (`blocks`)。今日の包みは線と今日の予約 (新しい順のときは今日の録画) まで抱える */
   const shownBlocks = $derived(
-    blocks([...pastRows, ...lines.now, ...futureRows]),
+    blocks(
+      reversed
+        ? [...futureRows, ...lines.now, ...pastRows]
+        : [...pastRows, ...lines.now, ...futureRows],
+    ),
   );
   /**
-   * 線の側から数えて、その行まで描く (開いたとき・絞り込みを替えたときに映したい行)。**切り上げない** —
-   * 映す行の上に何行か余分に作るだけで、残りは表示したあとで足す (`fillSoon`)
+   * 線の側から数えて、その行まで描く (開いたとき・絞り込みや向きを替えたときに映したい行)。**切り上げない。**
+   * 映す行のまわりに何行か余分に作るだけで、残りは表示したあとで足す (`fillSoon`)。
+   * 新しい順のときは、行の下にも 1 回に足すぶん (`step`) を作る (見ていた行を同じ高さに戻せるように)
    */
   function showPastUpTo(key: string): void {
     const index = lineIndex(lines.past, key);
-    if (index >= 0 && index < pastStart)
+    if (index < 0) return;
+    if (reversed) {
+      if (index >= pastTo) pastPage.showAtLeast(index + 1 + pastPage.step);
+    } else if (index < pastFrom)
       pastPage.showAtLeast(lines.past.length - index + FIRST_MARGIN);
   }
 
@@ -536,17 +569,19 @@
    *
    * **観終えていない録画があれば、いちばん古いものを映す** — 溜まったぶんを古い順に片付けられるように。
    * 無ければ「いま」の線。まだ描いていない所にあれば、そこまで描いてから送る。
+   * **新しい順のときは探さず、「いま」の線を上のほうに映す** (線のすぐ下に新しい録画が並ぶ。古い未視聴へ送ると、
+   * 新しいものがすべて上に残り、読む向きと逆になる)。
    * 並べ替えや絞り込みのたびには動かさない (開いたときの1回だけ)
    */
   let listBox: HTMLElement | undefined = $state();
   let placed = false;
   async function place(): Promise<void> {
-    const target = catchUp(parts.past, unfinished);
+    const target = reversed ? null : catchUp(parts.past, unfinished);
     if (target !== null) showPastUpTo(target.key);
     await tick();
     if (listBox === undefined) return;
     const list = listBox;
-    placeTimeline(list, target?.key ?? null);
+    placeTimeline(list, target?.key ?? null, reversed);
     // 字 (放送の字は後から届く) とポスターで行の高さが変わると、映した行がずれ、見出しの下で行が半分に切れる。
     // 届いてから、映した行 (無ければ線) を元の高さに戻して合わせ直す。その間に自分で動かしていたら触らない (動かした所を奪わない)
     const before = window.scrollY;
@@ -563,7 +598,7 @@
   }
 
   /**
-   * **絞り込みを替えても、見ていた行をその場に残す。** 替える前に見えている所のいちばん上の行を覚え、
+   * **絞り込みや並びの向きを替えても、見ていた行をその場に残す。** 替える前に見えている所のいちばん上の行を覚え、
    * 替えたあともその行があれば同じ高さに戻す (無くなっていれば「いま」)。
    * 絞り込みは画面の中だけで替える (URL も読み込みも動かさない)。広い画面はページの位置合わせを自分でする
    * (`overflow-anchor: none`) ので、何もしないと「すべて」に戻したとき頭まで飛んでいた
@@ -571,23 +606,32 @@
   let filtering: Promise<void> = Promise.resolve();
   /** 続けて押されたら順に替える (前の位置合わせが済んでから、次の「見ていた行」を覚える) */
   function setFilter(next: Filter): Promise<void> {
-    filtering = filtering.then(() => applyFilter(next));
+    filtering = filtering.then(() =>
+      next === filter ? undefined : keepRow(() => (filter = next)),
+    );
     return filtering;
   }
-  async function applyFilter(next: Filter): Promise<void> {
-    if (next === filter) return;
+  function setReversed(on: boolean): Promise<void> {
+    remember(REVERSED_COOKIE, on);
+    filtering = filtering.then(() =>
+      on === reversed ? undefined : keepRow(() => (reversed = on)),
+    );
+    return filtering;
+  }
+  /** 見えている所のいちばん上の行を覚えてから `change` で替え、その行を同じ高さに戻す */
+  async function keepRow(change: () => void): Promise<void> {
     const anchor = listBox === undefined ? null : topRow(listBox);
-    filter = next;
+    change();
     pastPage.reset();
     // 予約の行は戻さない (深く送っているときに、見ていた行が一度消えて位置が飛ぶ)
     if (anchor !== null) showPastUpTo(anchor.key);
     await tick();
-    if (listBox !== undefined) restoreRow(listBox, anchor);
+    if (listBox !== undefined) restoreRow(listBox, anchor, reversed);
     fillSoon();
   }
 
   /**
-   * 古い録画を上へ足す (一覧の頭の「残り N 件」が見えたとき)。**開いたときの位置に送り終えるまでは足さない** —
+   * 古い録画を足す (一覧の端の「残り N 件」が見えたとき。ふだんは頭、新しい順のときは末尾)。**開いたときの位置に送り終えるまでは足さない。**
    * 送っている途中に足すと、送った先がずれる。待っている間も印は見張り直すので、送り終えたら足す (`sentinel`)
    */
   let ready = false;
@@ -633,17 +677,20 @@
 
   /**
    * その日の見出しを頭に送る。**まだ描いていない古い日なら、そこまで描いてから** (`showPastUpTo` と同じ数え方)。
-   * 足すのは上なので、足す間は読んでいる所を動かさず (`holdPlace`)、描き終えてから送る — 足したぶん飛んでから送り直す、
-   * という2段の動きを見せない
+   * 上へ足すときは、足す間は読んでいる所を動かさず (`holdPlace`)、描き終えてから送る。足したぶん飛んでから送り直す、
+   * という2段の動きを見せない。新しい順のときは見出しの下にも 1 回に足すぶんを描く (見出しを頭まで送れるように)
    */
   async function pickDay(day: number): Promise<void> {
     if (listBox === undefined) return;
     const index = lines.past.findIndex(
       (line) => line.kind === "day" && line.at === day,
     );
-    if (index >= 0 && index < pastStart) {
+    const hidden = reversed ? index >= pastTo : index < pastFrom;
+    if (index >= 0 && hidden) {
       const restore = holdPlace(listBox);
-      pastPage.showUpTo(lines.past.length - index);
+      pastPage.showUpTo(
+        reversed ? index + 1 + pastPage.step : lines.past.length - index,
+      );
       await tick();
       restore();
     }
@@ -661,6 +708,8 @@
     counts,
     grouped,
     setGrouped,
+    reversed,
+    setReversed,
     finishedHref,
     deletedHref,
     showFinished: data.showFinished,
@@ -747,26 +796,30 @@
     >
       <!--
                 **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って消え、「消えた」ように見える。
-                上限に当たっていたら、いちばん古い録画の上 (一覧の頭) に検索へ誘う一行を出す (`+page.server.ts` の `.limit(300)`)
+                上限に当たっていたら、いちばん古い録画の隣 (一覧の端。新しい順のときは末尾) に検索へ誘う一行を出す (`+page.server.ts` の `.limit(300)`)。
+                描き切っていなければ、代わりに残りの件数を出し、近づいたら古いほうを足す (`sentinel`・`revealOlder`)。残りが無くなれば消える
             -->
-      {#if data.recordings.length >= 300 && pastStart === 0}
-        <div class="row-empty muted small">
-          新しい順に 300 件まで表示しています。古いものは検索で探してください。
-        </div>
-      {/if}
-      {#if pastStart > 0}
-        <!-- 頭に近づいたら古いほうを上へ足す (`sentinel`・`revealOlder`)。残りが無くなれば消える -->
-        <div
-          class="row-empty muted small num"
-          use:sentinel={() => void revealOlder()}
-          data-testid="recording-more"
-        >
-          残り {pastRest} 件
-        </div>
-      {/if}
+      {#snippet older()}
+        {#if data.recordings.length >= 300 && pastDone}
+          <div class="row-empty muted small">
+            新しい順に 300
+            件まで表示しています。古いものは検索で探してください。
+          </div>
+        {/if}
+        {#if !pastDone}
+          <div
+            class="row-empty muted small num"
+            use:sentinel={() => void revealOlder()}
+            data-testid="recording-more"
+          >
+            残り {pastRest} 件
+          </div>
+        {/if}
+      {/snippet}
+      {#if !reversed}{@render older()}{/if}
       <!--
                 見出しごとに包む。見出しは包みの中だけで貼り付くので、前の日の見出しが次の日に残らない。
-                今日の包みは線と今日の予約まで抱えるので、線をまたいでも「今日」が頭に残る
+                今日の包みは線と今日の予約 (新しい順のときは今日の録画) まで抱えるので、線をまたいでも「今日」が頭に残る
             -->
       <div class="t-rows">
         {#each shownBlocks as block (block.key)}
@@ -777,6 +830,7 @@
           </div>
         {/each}
       </div>
+      {#if reversed}{@render older()}{/if}
       {#if shownItems.length === 0}
         {#if items.length === 0}
           <!-- 空のときは次に何をすればよいかまで言う -->

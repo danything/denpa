@@ -7,8 +7,6 @@ kind: InfisicalSecret
 metadata:
   name: volsync
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -22,11 +20,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /backup/backup
-        recursive: false
   managedKubeSecretReferences:
     - secretName: volsync-agent-config
       secretNamespace: denpa
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/agent-config"
@@ -36,7 +32,6 @@ spec:
           AWS_DEFAULT_REGION: auto
     - secretName: volsync-denpa-data
       secretNamespace: denpa
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-data"
@@ -46,7 +41,6 @@ spec:
           AWS_DEFAULT_REGION: auto
     - secretName: volsync-denpa-encoded
       secretNamespace: denpa
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-encoded"
@@ -60,8 +54,6 @@ kind: ReplicationSource
 metadata:
   name: agent-config
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: agent-config
   trigger:
@@ -77,8 +69,6 @@ kind: ReplicationSource
 metadata:
   name: denpa-data
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: denpa-data
   trigger:
@@ -94,8 +84,6 @@ kind: ReplicationSource
 metadata:
   name: denpa-encoded
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: denpa-encoded
   trigger:
@@ -114,8 +102,6 @@ kind: ReplicationDestination
 metadata:
   name: agent-config-dst
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once
@@ -137,8 +123,6 @@ kind: ReplicationDestination
 metadata:
   name: denpa-data-dst
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once
@@ -160,8 +144,6 @@ kind: ReplicationDestination
 metadata:
   name: denpa-encoded-dst
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once

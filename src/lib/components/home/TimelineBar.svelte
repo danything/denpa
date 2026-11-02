@@ -74,7 +74,10 @@
         type="button"
         class="ghost icon t-more"
         title="状態と表示の切り替え"
-        data-on={view.grouped || view.showDeleted || view.showFinished
+        data-on={view.grouped ||
+        view.reversed ||
+        view.showDeleted ||
+        view.showFinished
           ? ""
           : undefined}
         data-testid="view-toggle"

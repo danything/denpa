@@ -1002,6 +1002,235 @@ test.describe("ホームの1本の一覧", () => {
     });
   });
 
+  /*
+   * **新しい順で表示 (issue #1930)。** 上下を返し、上から予約 (遠い順)・「いま」・録画中・録れたもの (新しい順)。
+   * 覚えはサーバが読む cookie なので、cookie を入れてから開く
+   */
+  test.describe("新しい順で表示", () => {
+    test.beforeEach(async ({ page, stack }) => {
+      await page
+        .context()
+        .addCookies([
+          { name: "denpa_recordings_reversed", value: "1", url: stack.appUrl },
+        ]);
+    });
+
+    /** 録画を 90 本、2099 年の 40 日前から 1 日ずつ古く足す (観終えたもの) */
+    function seedOld(db: string, prefix: string): void {
+      const now = Date.now();
+      sqlite(
+        db,
+        `const rec = db.prepare('INSERT INTO recordings (service_id, service_name, name, series, start_at, end_at, finished_at, library_path, watched_at, created_at, updated_at) VALUES (211, ?, ?, ?, ?, ?, ?, ?, ${now}, ${now}, ${now})');
+                for (let i = 0; i < 90; i++) rec.run('BS11', '${prefix}' + i, '${prefix}' + i, ${BASE} - (40 + i) * ${DAY}, ${BASE} - (40 + i) * ${DAY} + 1800000, ${BASE} - (40 + i) * ${DAY} + 1800000, '/media/encoded/seed/${prefix}' + i + '.mkv');`,
+      );
+    }
+
+    test("予約は「いま」の上、録画は下に、日付の見出しを挟んで新しい順に並ぶ", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1366, height: 768 });
+      await goto(page, "/");
+      const names = await rows(page).locator(".row-name").allInnerTexts();
+      const order = [
+        "一覧試験の予約",
+        "一覧試験の未視聴",
+        "一覧試験の視聴済み",
+        "一覧試験の失敗",
+      ].map((n) => names.findIndex((name) => name.trim() === n));
+      expect(order.every((i) => i >= 0)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+
+      const now = await page.getByTestId("timeline-now").boundingBox();
+      const reservation = await rows(page)
+        .filter({ hasText: "一覧試験の予約" })
+        .boundingBox();
+      const recording = await rows(page)
+        .filter({ hasText: "一覧試験の未視聴" })
+        .boundingBox();
+      expect(reservation!.y).toBeLessThan(now!.y);
+      expect(recording!.y).toBeGreaterThan(now!.y);
+
+      // 線の上も下も、日付の見出しは新しい日から並ぶ
+      const days = await page.getByTestId("timeline").evaluate((list) => {
+        const line = list.querySelector('[data-testid="timeline-now"]')!;
+        const above: number[] = [];
+        const below: number[] = [];
+        for (const head of list.querySelectorAll<HTMLElement>(
+          '[data-testid="timeline-day"]',
+        )) {
+          const after =
+            line.compareDocumentPosition(head) &
+            Node.DOCUMENT_POSITION_FOLLOWING;
+          (after ? below : above).push(Number(head.dataset["day"]));
+        }
+        return { above, below };
+      });
+      for (const side of [days.above, days.below])
+        expect([...side].sort((a, b) => b - a)).toEqual(side);
+      expect(days.above.length).toBeGreaterThan(0);
+      expect(days.below.length).toBeGreaterThan(0);
+    });
+
+    test("切り替えても、見ていた行は同じ高さに残る", async ({
+      page,
+      stack,
+    }) => {
+      // ふだんの並びから切り替える
+      await page
+        .context()
+        .addCookies([
+          { name: "denpa_recordings_reversed", value: "0", url: stack.appUrl },
+        ]);
+      // 見ていた行の上下に、どちらの向きでも 1 画面より多くの行があるようにする (送れる所が足りないと同じ高さに戻せない)
+      seedOld(`${stack.root}/denpa.db`, "逆切替試験");
+      try {
+        await page.setViewportSize({ width: 1366, height: 768 });
+        await goto(page, "/");
+        await rows(page)
+          .filter({ hasText: /逆切替試験45(?!\d)/ })
+          .evaluate((node) => node.scrollIntoView({ block: "center" }));
+        // 見えている所のいちばん上の行 (貼り付いた見出しの下で、頭から見えている最初の行)
+        const anchor = await page.getByTestId("timeline").evaluate((list) => {
+          const day = list.querySelector<HTMLElement>(".t-day");
+          const top = day ? Number.parseFloat(getComputedStyle(day).top) : 0;
+          for (const row of list.querySelectorAll<HTMLElement>("[data-key]")) {
+            const box = row.getBoundingClientRect();
+            if (box.height === 0 || box.top < top + 32) continue;
+            return { key: row.dataset["key"]!, y: box.top };
+          }
+          return null;
+        });
+        expect(anchor).not.toBeNull();
+        const toggle = page
+          .getByTestId("sidebar")
+          .getByTestId("recordings-reverse-toggle");
+        await expect(toggle).toHaveAccessibleName("新しい順で表示");
+        await expect(toggle).toHaveAttribute("aria-checked", "false");
+        await toggle.click();
+        await expect(toggle).toHaveAttribute("aria-checked", "true");
+        const row = page
+          .getByTestId("timeline")
+          .locator(`[data-key="${anchor!.key}"]`);
+        await expect
+          .poll(async () => Math.abs((await row.boundingBox())!.y - anchor!.y))
+          .toBeLessThan(2);
+        // 並びは返っている (予約が「いま」より上)
+        const now = await page.getByTestId("timeline-now").boundingBox();
+        const reservation = await rows(page)
+          .filter({ hasText: "一覧試験の予約" })
+          .boundingBox();
+        expect(reservation!.y).toBeLessThan(now!.y);
+      } finally {
+        sqlite(
+          `${stack.root}/denpa.db`,
+          `db.run("DELETE FROM recordings WHERE name LIKE '逆切替試験%'");`,
+        );
+      }
+    });
+
+    test("古い録画は下へ足し、足しても見ていた行は動かない", async ({
+      page,
+      stack,
+    }) => {
+      seedOld(`${stack.root}/denpa.db`, "逆足し試験");
+      try {
+        await page.setViewportSize({ width: 1366, height: 768 });
+        // 全部描かせる `goto` は使わない (足すところを見る)
+        await page.goto("/");
+        await page.locator('[data-hydrated="true"]').waitFor();
+        const more = page.getByTestId("recording-more");
+        await expect(more).toBeVisible();
+        const list = page.getByTestId("timeline");
+        // 開いたあとに描き足すぶん (1 回に足す 60 行) が描き終わるまで待つ
+        await expect.poll(() => rows(page).count()).toBeGreaterThan(20);
+        // 残りの件数は一覧の末尾 (描いたうちでいちばん古い行の下)
+        const last = list.locator("[data-key]").last();
+        const key = await last.getAttribute("data-key");
+        expect((await more.boundingBox())!.y).toBeGreaterThan(
+          (await last.boundingBox())!.y,
+        );
+        const count = await rows(page).count();
+        const pageTop = (node: Element) =>
+          node.getBoundingClientRect().top + window.scrollY;
+        const y = await last.evaluate(pageTop);
+        await more.evaluate((node) => node.scrollIntoView({ block: "end" }));
+        await expect.poll(() => rows(page).count()).toBeGreaterThan(count);
+        // 足したぶんは下に入り、見ていた行はページの同じ位置のまま
+        await expect(list.locator("[data-key]").last()).not.toHaveAttribute(
+          "data-key",
+          key!,
+        );
+        const row = list.locator(`[data-key="${key}"]`);
+        await expect
+          .poll(async () => Math.abs((await row.evaluate(pageTop)) - y))
+          .toBeLessThan(2);
+      } finally {
+        sqlite(
+          `${stack.root}/denpa.db`,
+          `db.run("DELETE FROM recordings WHERE name LIKE '逆足し試験%'");`,
+        );
+      }
+    });
+
+    test("カレンダーでまだ描いていない古い日を押すと、そこまで描いて見出しを頭に出す", async ({
+      page,
+      stack,
+    }) => {
+      seedOld(`${stack.root}/denpa.db`, "逆暦試験");
+      try {
+        await page.setViewportSize({ width: 1366, height: 768 });
+        await page.goto("/");
+        await page.locator('[data-hydrated="true"]').waitFor();
+        await expect(page.getByTestId("recording-more")).toBeVisible();
+        // 下に 1 画面より多くの行が残る日を選ぶ (いちばん古い日は一覧の末尾なので頭まで送れない)
+        const target = rows(page).filter({ hasText: /逆暦試験60(?!\d)/ });
+        await expect(target).toHaveCount(0);
+
+        const day = await page.evaluate(
+          (t) => new Date(t).setHours(0, 0, 0, 0),
+          BASE - 100 * DAY,
+        );
+        const calendar = page.getByTestId("home-calendar");
+        const want = await page.evaluate((at) => {
+          const d = new Date(at);
+          return d.getFullYear() * 12 + d.getMonth();
+        }, day);
+        for (let i = 0; i < 60; i++) {
+          const label = await calendar
+            .getByTestId("calendar-month")
+            .innerText();
+          const [, y, m] = label.match(/(\d+)年(\d+)月/) ?? [];
+          const at = Number(y) * 12 + Number(m) - 1;
+          if (at === want) break;
+          await calendar
+            .getByTestId(at > want ? "calendar-prev" : "calendar-next")
+            .click();
+        }
+        await page
+          .getByTestId("calendar-day")
+          .and(page.locator(`[data-day="${day}"]`))
+          .click();
+
+        const head = page
+          .getByTestId("timeline-day")
+          .and(page.locator(`[data-day="${day}"]`));
+        await expect(head).toBeInViewport();
+        await expect(target).toBeInViewport();
+        const top = await head.evaluate(
+          (node) => Number.parseFloat(getComputedStyle(node).top) || 0,
+        );
+        await expect
+          .poll(async () => Math.abs((await head.boundingBox())!.y - top))
+          .toBeLessThan(2);
+      } finally {
+        sqlite(
+          `${stack.root}/denpa.db`,
+          `db.run("DELETE FROM recordings WHERE name LIKE '逆暦試験%'");`,
+        );
+      }
+    });
+  });
+
   test.describe("タブレットの縦", () => {
     test.use({
       hasTouch: true,

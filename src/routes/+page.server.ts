@@ -49,6 +49,7 @@ import {
 import { settings } from "#lib/server/settings.js";
 import { parseTitle } from "#lib/server/title.js";
 import { cmRedo, encodeSource } from "#lib/source.js";
+import { REVERSED_COOKIE, storedReversed } from "#lib/timeline.js";
 import type {
   EncodeJob,
   Recording,
@@ -169,7 +170,7 @@ interface ReservationRow extends Omit<Reservation, "state"> {
  * 予約と録画を1画面に並べる。
  *
  * 「これから何が録れるか」と「録れたものが今どうなっているか」は続きものなので、
- * 行き来せずに見えるほうがいい。1本の時間軸に並べる (上が録れたもの、下が予約。並べるのは画面の `#lib/timeline.ts`)。
+ * 行き来せずに見えるほうがいい。1本の時間軸に並べる (ふだんは上が録れたもの、下が予約で、新しい順で表示では上下を返す。並べるのは画面の `#lib/timeline.ts`)。
  *
  * **番組名で探すのはここではない** (全体の検索 `/search?q=`)。ホームは絞り込みのボタンだけで絞る
  */
@@ -338,6 +339,8 @@ export function load({ url, cookies }) {
     capacity: room === null ? null : capacityLabel(room.free, room.hours),
     /** まとめて表示 (`#lib/grouping.ts`)。サーバで描く形を、端末の覚えに合わせる */
     grouped: storedGrouped(cookies.get(GROUPED_COOKIE)),
+    /** 新しい順で表示 (`#lib/timeline.ts`)。まとめて表示と同じく、サーバで描く並びを端末の覚えに合わせる */
+    reversed: storedReversed(cookies.get(REVERSED_COOKIE)),
     /** 録画ごとの切り抜きの数。詳細の「この録画の切り抜き (n)」 */
     clipCounts: clipCountsByRecording(),
   };
