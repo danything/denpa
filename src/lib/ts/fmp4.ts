@@ -7,7 +7,7 @@
  *
  *     ftyp moov | moof mdat | moof mdat | ...
  *     ~~~~~~~~~   ~~~~~~~~~
- *     init        媒体 (0.05秒ぶん。`live.ts` の `-frag_duration`)
+ *     init        媒体 (0.05秒ぶん。`server/live.ts` の `-frag_duration`)
  *
  * **途中から入ってきた人のために init は取っておく** ([stream.md](../../../docs/stream.md#websocket-プロトコル))。
  * ライブは誰がいつ繋いでくるか分からないので、最初の1回だけ流して終わりにはできない。
@@ -22,7 +22,7 @@ import { ADTS_RATES } from "@danything/arib/pes";
 /** 箱の頭。大きさと種別で8バイト */
 const HEADER = 8;
 
-export type Segment =
+type Segment =
   { kind: "init"; data: Uint8Array } | { kind: "media"; data: Uint8Array };
 
 /**

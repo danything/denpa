@@ -76,7 +76,7 @@ import { type Realm, Vm } from "./vm";
 import { parseXml } from "./xml";
 
 export type { BmlIp } from "./browser";
-/** Hybridcast のアプリへ写す NVRAM を選ぶ (画面はエンジンと一緒に読む。`hybridcast/compat.ts`) */
+/** Hybridcast のアプリへ写す NVRAM を選ぶ (`DataBroadcast.svelte` がエンジンと一緒に読む) */
 export { visibleFrom } from "./nvram";
 export type { Rect } from "./render";
 

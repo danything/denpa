@@ -102,7 +102,7 @@ interface Scope {
 }
 
 interface Breakable {
-  kind: "loop" | "forin" | "switch";
+  kind: "loop" | "switch";
   breaks: number[];
   continues: number[];
 }
@@ -426,7 +426,7 @@ class FunctionCompiler {
         const top = this.code.ops.length;
         this.expression(stmt.test);
         const exit = this.jump(OP.JUMP_FALSE);
-        const loop = this.loop("loop", stmt.body);
+        const loop = this.loop(stmt.body);
         this.patch(loop.continues, top);
         this.emit(OP.JUMP, top);
         this.land(exit);
@@ -435,7 +435,7 @@ class FunctionCompiler {
       }
       case "do": {
         const top = this.code.ops.length;
-        const loop = this.loop("loop", stmt.body);
+        const loop = this.loop(stmt.body);
         this.landAll(loop.continues);
         this.expression(stmt.test);
         this.emit(OP.JUMP_TRUE, top);
@@ -450,7 +450,7 @@ class FunctionCompiler {
           this.expression(stmt.test);
           exit = this.jump(OP.JUMP_FALSE);
         }
-        const loop = this.loop("loop", stmt.body);
+        const loop = this.loop(stmt.body);
         this.landAll(loop.continues);
         if (stmt.update !== null) {
           this.expression(stmt.update);
@@ -468,7 +468,7 @@ class FunctionCompiler {
         const exit = this.jump(OP.NEXT);
         // 名前が 1 つ積まれている。左辺へ入れる
         this.assignTop(stmt.target);
-        const loop = this.loop("forin", stmt.body);
+        const loop = this.loop(stmt.body);
         this.patch(loop.continues, top);
         this.emit(OP.JUMP, top);
         this.land(exit);
@@ -518,7 +518,7 @@ class FunctionCompiler {
         return;
       }
       case "continue": {
-        // 間にある switch / for-in の積んだものを降ろしてから、いちばん内側のループへ
+        // 間にある switch の積んだ値を降ろしてから、いちばん内側のループ (for-in も) へ
         for (let i = this.breakables.length - 1; i >= 0; i--) {
           const target = this.breakables[i]!;
           if (target.kind === "switch") {
@@ -540,8 +540,8 @@ class FunctionCompiler {
     }
   }
 
-  private loop(kind: "loop" | "forin", body: Stmt): Breakable {
-    const entry: Breakable = { kind, breaks: [], continues: [] };
+  private loop(body: Stmt): Breakable {
+    const entry: Breakable = { kind: "loop", breaks: [], continues: [] };
     this.breakables.push(entry);
     this.statement(body);
     this.breakables.pop();
