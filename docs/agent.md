@@ -649,8 +649,8 @@ denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode --card-url http://�
    **CGNAT (`100.64.0.0/10`) は入れません。** Tailscale などは拠点の外を同じ網に見せるからです。
 3. **TTL (IPv6 は hop limit) を 1 にします。** ルーターを 1 つも越えません。配る側は待ち受けと
    受けた接続の両方に付け (受けたあとにも付け直して読み直し、付かなければ何も答えずに切る)、
-   受け取る側も繋ぐ前に付けます (SYN から)。IPv4 と IPv6 は別々のソケットで待ち受けます —
-   1 つで両方を受けると、IPv4 の相手には IPv6 の hop limit が効かないためです
+   受け取る側も繋ぐ前に付けます (SYN から)。IPv4 と IPv6 は別々のソケットで待ち受けます。
+   1 つで両方を受けると、IPv4 の相手には IPv6 の hop limit が効かないためです。
 
 ほかに、**往復時間の上限**を選べます (DTCP-IP と同じ考え。既定はオフ)。測るのは OS が TCP の
 ACK から測っている往復時間 (Linux は `TCP_INFO`、macOS は `TCP_CONNECTION_INFO`、Windows は
