@@ -461,7 +461,7 @@ export async function playbackPlan(
       axis,
       audios,
       offers,
-      // 物差しを元の TS の時刻に戻す直し方。エンコードしたものの物差しのときだけ (`rulerOf` と同じ中身)
+      // 物差しの時刻を元の TS の時刻に戻すための情報。エンコードしたものの物差しのときだけ (`rulerOf` と同じ中身)
       ...(axis === "encoded"
         ? { ruler: { kept: recording.cm_kept, skip } }
         : {}),

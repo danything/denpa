@@ -60,7 +60,7 @@ export interface PlaybackInfo {
   /** 出せるもの。並びに意味は無い (どれを使うかは画面が決める) */
   offers: PlayOffer[];
   /**
-   * 物差しを元の TS の時刻に戻す直し方 (`ts/watch.ts` の `Ruler`。`toTsTime`)。**`axis` が `encoded` のときだけ。**
+   * 物差しの時刻を元の TS の時刻に戻すための情報 (`ts/watch.ts` の `Ruler`。`toTsTime`)。**`axis` が `encoded` のときだけ。**
    * 元の TS の時刻に録画の頭の放送時刻 (`GET /api/recordings/<id>` の `jikkyo.head`) を足すと、その場面の放送時刻になる
    * (アプリが実況のコメントを場面に合わせる。docs/api.md)
    */
