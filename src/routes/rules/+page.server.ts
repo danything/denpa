@@ -4,6 +4,7 @@ import { orm } from "#lib/server/db.js";
 import { relative } from "#lib/server/paths.js";
 import { deleteRule, idOf, toggleRule } from "#lib/server/rule-actions.js";
 import { listRules, ruleSummary } from "#lib/server/rule-list.js";
+import { orphanedRules, remapRule } from "#lib/server/rule-remap.js";
 import { services as serviceTable } from "#lib/server/schema.js";
 
 /**
@@ -66,7 +67,13 @@ export function load({ url }) {
     .select({ id: serviceTable.id, name: serviceTable.name })
     .from(serviceTable)
     .all();
-  return { rules: listRules(), summary: ruleSummary(), services };
+  return {
+    rules: listRules(),
+    summary: ruleSummary(),
+    services,
+    // 選局できなくなった局を指すルールのうち、付け替える候補があるもの (`rule-remap.ts`)
+    orphans: orphanedRules().filter((orphan) => orphan.candidates.length > 0),
+  };
 }
 
 export const actions = {
@@ -76,6 +83,21 @@ export const actions = {
     if (id === null) return fail(400, { message: "ルール ID が不正です" });
     await toggleRule(id);
     return { success: true };
+  },
+
+  /**
+   * 選局できなくなった局を、選んだ局に付け替える (`rule-remap.ts`)。付け替え先は候補に出ているものだけ
+   */
+  remap: async ({ request }) => {
+    const form = await request.formData();
+    const id = idOf(form);
+    const from = Number(form.get("from"));
+    const to = Number(form.get("to"));
+    if (id === null || !Number.isInteger(from) || !Number.isInteger(to))
+      return fail(400, { message: "付け替える局の指定が不正です" });
+    const error = await remapRule(id, from, to);
+    if (error !== null) return fail(400, { message: error });
+    return { success: true, remapped: true };
   },
 
   /** ルールを消す (行の削除。2回押し) */
