@@ -1,8 +1,8 @@
 {
+  "id": "8f169a27-1568-4416-bc33-c1385e251357",
+  "prevId": "f87db477-16ae-4e48-ae7a-a634bfda84ba",
   "version": "6",
   "dialect": "sqlite",
-  "id": "98940849-d3bc-476d-9dd7-ecf787a746df",
-  "prevId": "f87db477-16ae-4e48-ae7a-a634bfda84ba",
   "tables": {
     "api_tokens": {
       "name": "api_tokens",
@@ -68,75 +68,6 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "channel_reception": {
-      "name": "channel_reception",
-      "columns": {
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "channel": {
-          "name": "channel",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "ok_at": {
-          "name": "ok_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "failed_at": {
-          "name": "failed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "failing_since": {
-          "name": "failing_since",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "failures": {
-          "name": "failures",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "unreceivable": {
-          "name": "unreceivable",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "0"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "channel_reception_type_channel_pk": {
-          "columns": [
-            "type",
-            "channel"
-          ],
-          "name": "channel_reception_type_channel_pk"
-        }
-      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -358,15 +289,15 @@
         "cm_materials_recording_id_recordings_id_fk": {
           "name": "cm_materials_recording_id_recordings_id_fk",
           "tableFrom": "cm_materials",
-          "tableTo": "recordings",
           "columnsFrom": [
             "recording_id"
           ],
+          "tableTo": "recordings",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -489,15 +420,15 @@
         "device_codes_approved_token_id_api_tokens_id_fk": {
           "name": "device_codes_approved_token_id_api_tokens_id_fk",
           "tableFrom": "device_codes",
-          "tableTo": "api_tokens",
           "columnsFrom": [
             "approved_token_id"
           ],
+          "tableTo": "api_tokens",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1172,8 +1103,8 @@
           "notNull": true,
           "autoincrement": false,
           "generated": {
-            "as": "(\n        CASE\n            WHEN deleted_at IS NOT NULL THEN 'deleted'\n            WHEN error IS NOT NULL THEN 'failed'\n            WHEN finished_at IS NULL THEN 'recording'\n            WHEN library_path IS NOT NULL THEN 'available'\n            ELSE 'recorded'\n        END)",
-            "type": "virtual"
+            "type": "virtual",
+            "as": "(\n        CASE\n            WHEN deleted_at IS NOT NULL THEN 'deleted'\n            WHEN error IS NOT NULL THEN 'failed'\n            WHEN finished_at IS NULL THEN 'recording'\n            WHEN library_path IS NOT NULL THEN 'available'\n            ELSE 'recorded'\n        END)"
           }
         },
         "cm_note": {
@@ -1799,9 +1730,9 @@
   "views": {},
   "enums": {},
   "_meta": {
+    "columns": {},
     "schemas": {},
-    "tables": {},
-    "columns": {}
+    "tables": {}
   },
   "internal": {
     "indexes": {

@@ -58,6 +58,20 @@ test.describe("GPU でエンコードする", () => {
     await goto(page, "/settings/recording");
     await expect(page.getByTestId("hw-av1")).toHaveValue(d128 as string);
     await expect(page.getByTestId("hw-h264")).toHaveValue(d129 as string);
+
+    // ライブは録画と別に選ぶ (列の見出し「ライブ」)。録画の割り振りはライブに効かない
+    await expect(page.getByTestId("live-hw-av1")).toHaveValue("every");
+    await expect(page.getByTestId("live-hw-h264")).toHaveValue("every");
+    // ライブが出さない H.265 には、ライブの欄が無い
+    await expect(page.getByTestId("live-hw-hevc")).toHaveCount(0);
+    await page.getByTestId("live-hw-av1").selectOption(d129 as string);
+    await page.getByTestId("live-hw-h264").selectOption("software");
+    await expect(page.getByTestId("saved-result")).toBeVisible();
+    await goto(page, "/settings/recording");
+    await expect(page.getByTestId("live-hw-av1")).toHaveValue(d129 as string);
+    await expect(page.getByTestId("live-hw-h264")).toHaveValue("software");
+    await expect(page.getByTestId("hw-av1")).toHaveValue(d128 as string);
+    await expect(page.getByTestId("hw-h264")).toHaveValue(d129 as string);
   });
 
   test("割り振ったデバイスでエンコードし、落ちたらソフトウェアへ倒れる", async ({

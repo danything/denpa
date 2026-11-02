@@ -44,6 +44,7 @@ import {
 import {
   type CaptionTrack,
   CHANNEL,
+  codecsFor,
   type HybridcastLink,
   type LiveCodec,
   type Notice,
@@ -82,7 +83,14 @@ import { orm } from "./db";
 import { deinterlace } from "./encoder";
 import { followOnAir } from "./epg";
 import { emit, type Yielded } from "./events";
-import { type LiveHw, liveHw, liveHwArgs, nvencBusy } from "./hwenc";
+import {
+  type HwDevice,
+  hwEncode,
+  type LiveHw,
+  liveHw,
+  liveHwArgs,
+  nvencBusy,
+} from "./hwenc";
 import { tunerOf, yieldedTo } from "./live-yield";
 import { programs, recordings, services } from "./schema";
 import { settings } from "./settings";
@@ -483,25 +491,6 @@ export function audioArgs(codec: StreamCodec): string[] {
 }
 
 /**
- * ブラウザに渡す codecs 文字列。**MSE はこれが合っていないと受け取らない。**
- *
- * 中身から起こすのが本筋だが (moov を読めば分かる)、エンコード方式はこちらで決めて
- * いるので、その組に対応する値を返す。
- *
- * - `avc1.640029` … High profile / Level 4.1。1080p60 まで
- * - `av01.0.08M.08` … Main profile / Level 4.0 / 8bit。同じく 1080p60 まで
- * - `Opus` … MP4 での Opus の名前 (中の箱の名前と同じく大文字の O)。Safari は小文字の `opus` を断る
- *   (Chromium は両方受け取る)。入れ物が WebM なら小文字が正しいので、エンコード済みのファイルは `opus` のまま
- *
- * **音声も組で決まる** (`audioArgs`)。AV1 は Opus、H.264 は AAC
- */
-export function codecsFor(codec: LiveCodec): string {
-  return codec === "av1"
-    ? 'video/mp4; codecs="av01.0.08M.08,Opus"'
-    : 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
-}
-
-/**
  * 「放送休止」と読める番組名。
  *
  * 番組表がそう言っている局は、**電波そのものを止めていることがある**。
@@ -612,12 +601,17 @@ function hwKey(codec: StreamCodec, hw: LiveHw): string {
 }
 
 /**
- * このセッションを GPU でエンコードするか。設定の印と試しのエンコード (`hwenc.liveHw`)、最近落ちたか。
- * 録画のその場の変換 (`server/playback.ts`) も使う — 元がエンコード済みなら `interlaced` を false
- * (復号からは GPU に載せない。`videoArgs`)
+ * このセッションを GPU でエンコードするか。ライブの印 (`liveHwAllow`。録画の `hwAllow` は見ない) と
+ * 試しのエンコード (`hwenc.liveHw`)、最近落ちたか。
+ * 追っかけと録画のその場の変換 (`server/playback.ts`) も使う — 元がエンコード済みなら `interlaced` を false
+ * (復号からは GPU に載せない。`videoArgs`)。`devices` は試験で差し替えるときだけ渡す
  */
-export function pickLiveHw(codec: LiveCodec, interlaced = true): LiveHw | null {
-  const found = liveHw(codec, settings().hwAllow, liveTurn++);
+export function pickLiveHw(
+  codec: LiveCodec,
+  interlaced = true,
+  devices: HwDevice[] = hwEncode().devices,
+): LiveHw | null {
+  const found = liveHw(codec, settings().liveHwAllow, liveTurn++, devices);
   if (found === null) return null;
   const hw = interlaced ? found : { ...found, full: false };
   return liveHwFailed(codec, hw) ? null : hw;

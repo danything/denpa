@@ -495,11 +495,13 @@
   onMount(() => {
     localLookup = loadOffline(rec.id).catch(() => null);
     const asked = stored(CODEC_KEY);
+    // メニューから外したコーデック (世帯の設定) を選んでいた端末は、自動として扱う
     choice =
-      asked === "h264" ||
-      asked === "hevc" ||
-      asked === "av1" ||
-      asked === "mpeg2"
+      (asked === "h264" ||
+        asked === "hevc" ||
+        asked === "av1" ||
+        asked === "mpeg2") &&
+      !data.hidden.some((codec) => codec === asked)
         ? asked
         : "auto";
     void (async () => {
@@ -696,7 +698,7 @@
   /**
    * メニューに並べるもの。この端末で観られる方式があるコーデックが 2 つ以上あるときだけ出す。
    * 互換モードは流せるもの (H.264・AV1・MPEG-2) を並べて描けない形式は押せなくし (ライブと同じ)、
-   * 端末に保存したものを描いている間は出さない
+   * 端末に保存したものを描いている間は出さない。世帯の設定で外したもの (H.264・H.265。`data.hidden`) は並べない (自動では選ぶ)
    */
   const codecMenu = $derived.by(
     (): { key: string; label: string; disabled?: boolean }[] => {
@@ -704,12 +706,16 @@
       if (compat && (canvasAbility === null || drawingLocal)) return [];
       const items =
         compat && canvasAbility !== null
-          ? canvasChoices(info, canvasAbility).map((item) => ({
-              key: item.codec,
-              label: codecLabel(item.codec),
-              disabled: !item.drawable,
-            }))
-          : codecChoices(info, ability()).map((codec) => ({
+          ? canvasChoices(info, canvasAbility)
+              .filter(
+                (item) => !data.hidden.some((codec) => codec === item.codec),
+              )
+              .map((item) => ({
+                key: item.codec,
+                label: codecLabel(item.codec),
+                disabled: !item.drawable,
+              }))
+          : codecChoices(info, ability(), data.hidden).map((codec) => ({
               key: codec,
               label: CODEC_LABEL[codec],
             }));

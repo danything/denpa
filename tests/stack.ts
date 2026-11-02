@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 
-import { test as base } from "@playwright/test";
+import { type BrowserContext, test as base } from "@playwright/test";
 
 /**
  * ワーカーごとに1式ずつ、denpa と偽チューナーエージェント / 偽通知先を立てる。
@@ -537,6 +537,27 @@ export async function bootSpare(
 }
 
 /**
+ * **ライブを H.264 を選んだ端末として開く** (`LAST_COOKIE` の `choice`)。E2E は 127.0.0.1 で開くので家の中で、
+ * 「自動」なら MPEG-2 (放送のまま) になる (`#lib/live-choice.ts`)。ライブの試験の多くは `<video>` (MSE) で
+ * 観ることを前提にしているので、既定のページはこれを置いてから始める。自動を見る試験は cookie を消す
+ * (`61-live-auto`)。自分で作る文脈 (`browser.newContext`) にも呼ぶ
+ */
+export async function keepH264(
+  context: BrowserContext,
+  appUrl: string,
+): Promise<void> {
+  const { hostname } = new URL(appUrl);
+  await context.addCookies([
+    {
+      name: "denpa_live_last",
+      value: encodeURIComponent(JSON.stringify({ choice: "h264" })),
+      domain: hostname,
+      path: "/live",
+    },
+  ]);
+}
+
+/**
  * `stack` はワーカーに1つ。`auto` にしてあるので、明示的に受け取らないテストでも
  * 立ち上がった状態で始まる (`baseURL` がこれに乗っているため)。
  */
@@ -550,6 +571,11 @@ export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
     },
     { scope: "worker", auto: true },
   ],
+  // ライブは H.264 を選んだ端末として開く (`keepH264`)
+  context: async ({ context, stack }, use) => {
+    await keepH264(context, stack.appUrl);
+    await use(context);
+  },
   // page.goto('/') や request.post('/api/sync') の宛先。ワーカーごとに違う
   baseURL: async ({ stack }, use) => {
     await use(stack.appUrl);

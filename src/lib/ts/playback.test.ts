@@ -192,6 +192,11 @@ describe("コーデックのメニュー (codecChoices)", () => {
     expect(codecChoices(av1Only, iphone)).toEqual(["h264", "av1"]);
     expect(codecChoices(tsOnly, browser([], [AV1_MP4]))).toEqual(["av1"]);
   });
+
+  test("世帯の設定で外したもの (H.264・H.265) は並べない", () => {
+    expect(codecChoices(av1Only, chrome, ["h264", "hevc"])).toEqual(["av1"]);
+    expect(codecChoices(av1Only, chrome, [])).toEqual(["h264", "av1"]);
+  });
 });
 
 describe("溜まり方 (aheadOf / covers)", () => {
