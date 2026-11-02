@@ -36,6 +36,27 @@ test.describe("設定のチューナーとチャンネル", () => {
   });
 
   /**
+   * **BS は総当たりせず、放送の一覧 (NIT) から作る。** 偽の放送の BS は BS-3 と BS-11 の 2 つの TS で、
+   * 入口の BS-15・BS-1 には何も無い。3 つ目の入口 (BS-3) の NIT に、両方の TS が周波数付きで載っている
+   */
+  test("BS は放送の一覧からチャンネルを作る", async ({ page, request }) => {
+    await syncEpg(request);
+    await goto(page, "/settings/reception");
+
+    const card = page.getByTestId("channel-section");
+    await card.getByLabel("スキャンする種別").selectOption("BS");
+    await card.getByTestId("scan-start").click();
+
+    await expect(card.getByTestId("scan-state")).toHaveText("完了", {
+      timeout: 60_000,
+    });
+    await expect(card.getByTestId("scan-found")).toContainText("2");
+    await expect(card.getByTestId("scan-log")).toContainText(
+      "放送の一覧から 2 チャンネル",
+    );
+  });
+
+  /**
    * 入れたばかりのとき用のボタン。
    *
    * 普段の周回は録画にもスキャンにもロゴにも譲るので、何か動いていると
@@ -142,11 +163,11 @@ test.describe("設定のチューナーとチャンネル", () => {
     /*
      * 使っている相手が何をしているのか分かるようにする。
      *
-     * エージェントが持っているのは短い印だけ (`rec 1` / `epg BS11_0`) なので、
+     * エージェントが持っているのは短い印だけ (`rec 1` / `epg BS11:18000`) なので、
      * 番組名に開くのは画面側の仕事。**何を使っているか**も一緒に出す
      */
     const using = tuners.getByTestId("tuner-row").nth(0);
-    await expect(using).toContainText("BS11_0");
+    await expect(using).toContainText("BS11:18000");
     await expect(using.getByTestId("tuner-user").first()).toContainText("録画");
     // 録画と番組表が同じ選局を共有している。チューナーは増えない
     await expect(using.getByTestId("tuner-user").nth(1)).toContainText(

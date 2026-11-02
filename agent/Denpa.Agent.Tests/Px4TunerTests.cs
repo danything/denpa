@@ -622,7 +622,7 @@ public class Px4TunerTests
         // PX-M1UR のような受信機 (衛星も受けるが 15V は出せない)。設定には 15v と書いてある
         IReadOnlyList<Px4Receiver> receivers = [new(2, true, true, false)];
         var tuner = new Px4Tuner(Id, 2, "15v", px4d.Runtime.FullName, () => receivers);
-        var bs = ChannelTable.Parse("BS15_0")!;
+        var bs = ChannelTable.Parse("BS15:16625")!;
 
         tuner.Tune(bs, ChannelTable.NoStreamId);
         tuner.Tune(bs, ChannelTable.NoStreamId);
@@ -871,7 +871,7 @@ public class Px4TunerTests
             .ToList();
         try
         {
-            var bs = ChannelTable.Parse("BS15_0")!;
+            var bs = ChannelTable.Parse("BS15:16625")!;
             var tuning = tuners.Select(tuner => Task.Factory.StartNew(() =>
             {
                 try

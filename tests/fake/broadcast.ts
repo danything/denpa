@@ -26,6 +26,7 @@ import {
   patSection,
   pmtSection,
   programMap,
+  satelliteDeliveryDescriptor,
   sdtSection,
   type SynthEvent,
   withCrc,
@@ -223,9 +224,48 @@ function programsFor(service: FakeService): SynthEvent[] {
   return programs;
 }
 
-/** その物理チャンネルに入っている局 */
+/**
+ * その物理チャンネルに入っている局。
+ *
+ * 衛星の中継器だけの名前 (`BS11`。NIT を読む入口) は、本物の復調器と同じくその中継器の先頭の TS
+ * (TSID のいちばん小さいもの)
+ */
 export function on(type: string, channel: string): FakeService[] {
-  return SERVICES.filter((s) => s.type === type && s.channel === channel);
+  const exact = SERVICES.filter(
+    (s) => s.type === type && s.channel === channel,
+  );
+  if (exact.length > 0 || channel.includes(":")) return exact;
+  const first = SERVICES.filter(
+    (s) => s.type === type && s.channel.startsWith(`${channel}:`),
+  ).sort((a, b) => tsidOf(a) - tsidOf(b))[0];
+  return first === undefined ? [] : on(type, first.channel);
+}
+
+/**
+ * TS の TSID。衛星は名前に入っている (`BS11:18000`)。地上波はネットワーク ID と同じ値
+ * (ARIB TR-B14: 地上波の transport_stream_id は network_id と同じ)
+ */
+export function tsidOf(service: FakeService): number {
+  const at = service.channel.indexOf(":");
+  return at < 0 ? service.networkId : Number(service.channel.slice(at + 1));
+}
+
+/** 衛星の中継器の周波数 (kHz)。BS は奇数で 38.36 MHz、CS は偶数で 40 MHz 刻み */
+function frequencyOf(type: string, channel: string): number {
+  const transponder = Number(/^(?:BS|CS)(\d+)/.exec(channel)?.[1] ?? 0);
+  return type === "BS"
+    ? 11_727_480 + 19_180 * (transponder - 1)
+    : 12_291_000 + 20_000 * (transponder - 2);
+}
+
+/** その種別・ネットワークの TS ごとの局 (NIT に並べる順。TSID の順) */
+function transportsOf(type: string, networkId: number): FakeService[][] {
+  const map = new Map<string, FakeService[]>();
+  for (const service of SERVICES) {
+    if (service.type !== type || service.networkId !== networkId) continue;
+    map.set(service.channel, [...(map.get(service.channel) ?? []), service]);
+  }
+  return [...map.values()].sort((a, b) => tsidOf(a[0]!) - tsidOf(b[0]!));
 }
 
 const serviceOf = (service: FakeService) => ({
@@ -238,7 +278,7 @@ const channelOf = (service: FakeService) => ({
   type: service.type,
   channel: service.channel,
   networkId: service.networkId,
-  transportStreamId: service.networkId,
+  transportStreamId: tsidOf(service),
   remoteControlKeyId: service.type === "GR" ? (service.remoteKey ?? 9) : null,
   services: [serviceOf(service)],
 });
@@ -278,7 +318,7 @@ function scheduleSections(
     eitSection({
       tableId,
       serviceId: service.serviceId,
-      transportStreamId: service.networkId,
+      transportStreamId: tsidOf(service),
       originalNetworkId: service.networkId,
       sectionNumber: index,
       lastSectionNumber: last,
@@ -346,7 +386,7 @@ const ENGINEERING = { service: 929, pmt: 0x1f0, es: 0x1f1 };
 
 function carouselPackets(services: FakeService[]): Uint8Array {
   /*
-   * **BS (ネットワーク4) は `LOGO-05`、CS は `CS_LOGO-05` に分け、DII も別々に流す。** 本物の BS15_0 も
+   * **BS (ネットワーク4) は `LOGO-05`、CS は `CS_LOGO-05` に分け、DII も別々に流す。** 本物の BS15:16625 も
    * 2つのモジュールで流れてくる。1つにまとめていると、片方だけ揃った時点で読み切ったと決める
    * 誤り (`DsmccLogoCollector.carouselRead`) がテストで見えない
    */
@@ -545,32 +585,47 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
   }
 
   const first = services[0]!;
-  parts.push(
-    ...packetize(
-      0x0011,
-      sdtSection(
-        first.networkId,
-        first.networkId,
-        services.map(
-          (s) =>
-            [s.serviceId, s.serviceType, s.name] as [number, number, string],
-        ),
+  const sdtOf = (members: FakeService[], other = false) =>
+    sdtSection(
+      tsidOf(members[0]!),
+      members[0]!.networkId,
+      members.map(
+        (s) => [s.serviceId, s.serviceType, s.name] as [number, number, string],
       ),
-    ),
-  );
+      { other },
+    );
+  parts.push(...packetize(0x0011, sdtOf(services)));
+  /*
+   * **衛星は、同じネットワークの全部の TS を NIT に載せ、ほかの TS の局名を SDT[other] で流す。**
+   * 本物の BS と同じ。denpa は中継器を 1 つ開いて、これで一覧を作る (`satellite.ts`)
+   */
+  const network =
+    first.type === "GR"
+      ? [services]
+      : transportsOf(first.type, first.networkId);
+  if (first.type !== "GR") {
+    let counter = 1;
+    for (const members of network) {
+      if (members[0]!.channel === first.channel) continue;
+      parts.push(...packetize(0x0011, sdtOf(members, true), counter++));
+    }
+  }
   parts.push(
     ...packetize(
       0x0010,
       nitSection(
         first.networkId,
         first.type === "GR" ? (first.remoteKey ?? 9) : null,
-        [
-          [
-            first.networkId,
-            first.networkId,
-            services.map((s) => [s.serviceId, s.serviceType]),
-          ],
-        ],
+        network.map((members) => [
+          tsidOf(members[0]!),
+          members[0]!.networkId,
+          members.map((s) => [s.serviceId, s.serviceType]),
+          members[0]!.type === "GR"
+            ? []
+            : satelliteDeliveryDescriptor(
+                frequencyOf(members[0]!.type, members[0]!.channel),
+              ),
+        ]),
       ),
     ),
   );
@@ -623,7 +678,7 @@ function nowOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
         eitSection({
           tableId: 0x4e,
           serviceId: service.serviceId,
-          transportStreamId: service.networkId,
+          transportStreamId: tsidOf(service),
           originalNetworkId: service.networkId,
           sectionNumber,
           lastSectionNumber: 1,

@@ -35,7 +35,6 @@ import {
   getTuners,
   openChannelStream,
   serviceKey,
-  withoutTwins,
 } from "./tuner";
 
 /**
@@ -482,13 +481,10 @@ export function networkSweeps(
 }
 
 async function run(): Promise<number> {
-  const all = await getChannels().catch(() => [] as AgentChannel[]);
-  if (all.length === 0) return 0;
+  const channels = await getChannels().catch(() => [] as AgentChannel[]);
+  if (channels.length === 0) return 0;
   // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
-  syncServices(all);
-
-  // **同じ TS を指す枠は1回だけ開く** (`tuner.withoutTwins`。実機の BS は 35 枠で実体 26 TS)
-  const channels = withoutTwins(all);
+  syncServices(channels);
 
   const reach = coverage();
   const at = Date.now();

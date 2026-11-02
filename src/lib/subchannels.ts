@@ -25,7 +25,7 @@ function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
 export interface Station {
   id: number;
   service_id: number;
-  /** 物理チャンネル (`T27`、`BS01_3`)。選局に使う名前で、1つの TS を指す */
+  /** 物理チャンネル (`T27`、`BS01:16400`)。選局に使う名前で、1つの TS を指す */
   channel: string;
   type: string;
 }
@@ -51,13 +51,13 @@ export interface Airing {
  * - **地上波**は1放送局が1つの TS (TR-B14 第四編 5.3: transport_stream_id は
  *   network_id と同じ値)。チャンネルで束ねても、ネットワークID で束ねていた頃と同じ
  * - **BS** はネットワークID が全局で同じ (4) なので、チャンネル (= TS) で見る。
- *   BS朝日1・2・3 は3つとも `BS01_3`。WOWOW のプライム・ライブ・シネマ (191〜193) は
- *   同じ会社でも TS が別々 (`BS03_3` / `BS05_3` / `BS05_1`) で、それぞれが本チャンネル。
+ *   BS朝日1・2・3 は3つとも `BS01:16400`。WOWOW のプライム・ライブ・シネマ (191〜193) は
+ *   同じ会社でも TS が別々 (`BS03:16432` / `BS05:17488` / `BS05:17489`) で、それぞれが本チャンネル。
  *   サービスID の番号の範囲や事業者 (broadcaster_id) で束ねると、ここを取り違える
  * - **CS と SKY は束ねない。** 1つの TS に別々の会社の局が入っていて、同じ TS でも
  *   同じ番組を流す仲間とは限らない
  *
- * チャンネルの名前は TS ごとに1つ (同じ TS を指す写しはスキャンで落とす。`tuner.twinOf`)
+ * チャンネルの名前は TS ごとに1つ (衛星は名前に TSID が入っている。`satellite.ts`)
  */
 export function mainOf(services: Station[]): Map<number, number> {
   const tsOf = (service: Station) =>

@@ -8,16 +8,15 @@ namespace Denpa.Agent;
 /// <summary>
 /// 選局の仕方。
 /// </summary>
-/// <param name="StreamIds">チャンネル名から TSID を引く。衛星の選局に要る</param>
 /// <param name="FakeTune">
 /// **適合テスト専用。** 自分で選局する代わりに、このコマンドに
 /// <c>&lt;種別&gt; &lt;チャンネル&gt;</c> を足して起こし、標準出力を読む
 /// (<c>tests/fake/tune.ts</c>)。環境変数 <c>FAKE_TUNE</c> からだけ入る —
 /// 設定ファイルにも画面にも、コマンドを書く場所は無い。
 /// </param>
-public sealed record TuneOptions(Func<string, int?> StreamIds, string? FakeTune = null)
+public sealed record TuneOptions(string? FakeTune = null)
 {
-    public static TuneOptions None => new(_ => null);
+    public static TuneOptions None => new();
 }
 
 /// <summary>
@@ -237,7 +236,7 @@ public sealed class TunerPool(
                             ?? throw new IOException($"{channel} は選局表にありません");
                         // 途中で落ちたら「どこにも合っていない」。次は必ず選局し直す
                         held.Channel = null;
-                        held.Device.Tune(tuning, ChannelTable.StreamId(channel, tuning, _tune.StreamIds));
+                        held.Device.Tune(tuning, tuning.StreamId);
                         held.Channel = channel;
                         lease.TunedMs = lease.Clock.ElapsedMilliseconds;
                     }
@@ -427,7 +426,7 @@ public sealed class TunerPool(
     /// <summary>
     /// 取り上げられた利用者に返す理由。**取り上げた相手の名乗り (<c>use</c>) を入れる** — 入れていなかった頃は、
     /// 衛星のロゴの選局が一晩取り上げられ続けたときに、相手が録画か番組表集めかを記録から追えなかった (#1939)。
-    /// 名乗りは denpa が ASCII だけで付ける (<c>rec 12</c> <c>epg BS15_0</c>。番組名は入らない)
+    /// 名乗りは denpa が ASCII だけで付ける (<c>rec 12</c> <c>epg BS15:16625</c>。番組名は入らない)
     /// </summary>
     public static string PreemptedBy(string use) => $"優先度の高い要求 ({use}) にチューナーを譲りました";
 

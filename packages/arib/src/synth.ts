@@ -636,7 +636,7 @@ export interface DiiModuleSpec {
  * DII。「このモジュールは何バイトで、名前は何か」を伝える。
  *
  * **複数のモジュールを載せられる。** 本物の BS はここに `LOGO-05` と
- * `CS_LOGO-05` を並べて流していて (実機の `BS15_0` で確認)、1つしか
+ * `CS_LOGO-05` を並べて流していて (実機の `BS15:16625` で確認)、1つしか
  * 載せられない作りでは CS を取りこぼす経路を試せない。
  */
 export function diiSection(

@@ -183,7 +183,7 @@ public class AsicenTests
 public class AsicenTunerTests
 {
     private static readonly ChannelTable.Tuning T27 = ChannelTable.Parse("T27")!;
-    private static readonly ChannelTable.Tuning Bs15 = ChannelTable.Parse("BS15_0")!;
+    private static readonly ChannelTable.Tuning Bs15 = ChannelTable.Parse("BS15:16625")!;
 
     private static Px4Tuner Open(Px4TunerTests.FakePx4d asicend, int receiver, string? lnb) => new(
         "1-2", receiver, lnb, asicend.Runtime.FullName, () => AsicenUserland.Receivers(4),
