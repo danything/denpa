@@ -20,11 +20,9 @@ spec:
         projectSlug: doa
         envSlug: prod
         secretsPath: /backup/backup
-        recursive: false
   managedKubeSecretReferences:
     - secretName: volsync-agent-config
       secretNamespace: denpa
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/agent-config"
@@ -34,7 +32,6 @@ spec:
           AWS_DEFAULT_REGION: auto
     - secretName: volsync-denpa-data
       secretNamespace: denpa
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-data"
@@ -44,7 +41,6 @@ spec:
           AWS_DEFAULT_REGION: auto
     - secretName: volsync-denpa-encoded
       secretNamespace: denpa
-      creationPolicy: Orphan
       template:
         data:
           RESTIC_REPOSITORY: "s3:{{ .endpoint.Value }}/{{ .bucket.Value }}/volsync/denpa/denpa-encoded"
