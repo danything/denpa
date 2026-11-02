@@ -35,9 +35,16 @@ import {
 import { eachFrame } from "#lib/components/player/frames.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
+  autoCodec,
+  formatLabel,
+  type LiveChoice,
+  type LiveFormat,
+} from "#lib/live-choice.js";
+import {
   type CaptionTrack,
   CHANNEL,
   CHASE_EDGE,
+  codecsFor,
   type Command,
   type HybridcastLink,
   LAST_COOKIE,
@@ -180,10 +187,19 @@ const HOLD_DATA = 300;
 
 /**
  * 見ている局を覚える。置き場は cookie 1つで、読むのはサーバ (`LAST_COOKIE` の説明)。
- * 音声も覚える — 番組が変わって無くなっても、サーバは主音声に落とす (`arib.pickTrack`)
+ * 音声も覚える — 番組が変わって無くなっても、サーバは主音声に落とす (`arib.pickTrack`)。
+ * 形式は**メニューで選んだもの** (`choice`) を覚え、自動で決まった形式は覚えない (開いた場所で変わる)
  */
-function remember(target: Tuned): void {
-  const value = encodeURIComponent(JSON.stringify(target));
+function remember(target: Tuned, choice: LiveChoice): void {
+  const value = encodeURIComponent(
+    JSON.stringify({
+      channelType: target.channelType,
+      channel: target.channel,
+      serviceId: target.serviceId,
+      ...(target.audio === undefined ? {} : { audio: target.audio }),
+      choice,
+    }),
+  );
   // パスは接頭辞込み。`/live` と決め打ちすると、前段の接頭辞の下では読む画面に届かない
   document.cookie = `${LAST_COOKIE}=${value}; path=${resolve("live")}; max-age=31536000; samesite=lax`;
 }
@@ -231,6 +247,13 @@ interface LivePlayerOptions {
    * ライブ画面だけが渡す。渡さない画面 (追っかけ・観る画面) は従来のまま
    */
   separateAudio?: () => boolean;
+  /**
+   * コーデックのメニューで選んでいるもの (`#lib/live-choice.ts`)。ライブは覚えている選択 (`LAST_COOKIE`。読むのはサーバ)、
+   * 追っかけは覚えないので省く (自動)
+   */
+  choice?: LiveChoice;
+  /** 開いた名前が家の中か (サーバが決める。`server/viewing.ts`)。「自動」の形式を決めるのに使う */
+  indoor?: boolean;
 }
 
 export function livePlayer(options: LivePlayerOptions = {}) {
@@ -276,6 +299,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let audio = $state("");
   /** いまエンコードしてもらっているコーデック。**サーバが返してきたものを持つ** */
   let codec = $state<LiveCodec>("h264");
+  /**
+   * コーデックのメニューで選んだもの。**リクエストする形式の元** — 実際の形式は選ぶたびに決める (`pickFormat`)。
+   * 自動なら端末と開いた場所に合わせ (`autoCodec`)、選んだものは家の中でも外でもそのまま使う
+   */
+  let choice = $state<LiveChoice>(options.choice ?? "auto");
+  /** AV1 を受け取れなかった (`start`)。**この画面を開いている間は**自動で AV1 を選ばない。選び直せば試し直す */
+  let av1GaveUp = false;
   /**
    * 断り書き。失敗ではないが、リクエストされたとおりにできなかったとき (AV1 を出せないので H.264 に戻した・
    * サーバの `notice`)。`message` と違って選局で消さない — 戻した先が映っても理由が残っているように
@@ -1428,7 +1458,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (raw && engine !== null && tuned !== null) {
       audio = id;
       tuned = { ...tuned, audio: id };
-      remember(tuned);
+      remember(tuned, choice);
       pickAudio();
       return;
     }
@@ -1443,35 +1473,90 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * エンコード方式を選び直す。音声と同じ扱い (`setAudio`)。受け取れない端末では `start` が H.264 に戻す
+   * コーデックのメニューで選ぶ (自動・AV1・H.264・MPEG-2)。音声と同じ扱い (`setAudio`) で、選んだものは
+   * **この端末に覚える** (`LAST_COOKIE`。ライブだけ)。選び直したなら前の断り書きは用済みで、諦めていた形式も試し直す。
+   * 決まる形式が今と同じならリクエストし直さない (自動で AV1 になっていて AV1 を選んだ、など)
    */
-  function setCodec(next: LiveCodec): void {
-    // 互換モードで描けない形式は選ばせない (切り替えにも出さない。`unavailable`)
-    if (unavailable().includes(next)) return;
-    // 選び直したなら、前の断り書きは用済み。諦めていた互換モードも試し直す
+  function setChoice(next: LiveChoice): void {
+    // 互換モードで描けない形式は選ばせない (並べるが押せない。`unavailable`)
+    if ((next === "av1" || next === "h264") && unavailable().includes(next))
+      return;
+    const before: LiveFormat = rawChosen && raw ? "raw" : codec;
+    choice = next;
     warning = "";
     compatGaveUp = false;
-    // MPEG-2 からエンコードしたものへ。同じエンコード方式でもリクエストし直す (`swapCodec` は同じなら何もしない)
-    if (rawChosen) {
-      rawChosen = false;
-      if (element !== null && tuned !== null) {
-        void tune(element, { ...tuned, codec: next, raw: false }, true);
-        return;
-      }
+    av1GaveUp = false;
+    rawGaveUp = false;
+    if (element === null) return;
+    if (tuned !== null) remember(tuned, choice);
+    // MPEG-2 をデコードできるかをまだ確かめていなければ、決まる形式が分からない。リクエストし直して確かめる
+    const unknown = rawProblem === undefined && needsRawCheck();
+    if (!unknown && decideFormat() === before && state !== "error") return;
+    if (chase !== null) {
+      reopenChase();
+      return;
     }
-    swapCodec(next);
+    if (tuned === null) return;
+    void tune(element, tuned, true);
+  }
+
+  /** 選んでいるものから決まる形式が、MPEG-2 になりうるか (デコードできるかを確かめる要るか) */
+  function needsRawCheck(): boolean {
+    if (chase !== null) return false;
+    return choice === "raw" || (choice === "auto" && options.indoor === true);
+  }
+
+  /** MSE で受け取れるか (`#lib/live.ts` の `codecsFor` で問い合わせる。サーバが渡すものと同じ) */
+  function mseCan(next: LiveCodec): boolean {
+    return pickMediaSource()?.Source.isTypeSupported(codecsFor(next)) ?? false;
   }
 
   /**
-   * MPEG-2 で見る (コーデックのメニューの末尾)。エンコード方式と同じく**この端末に覚える** (`LAST_COOKIE`)。
-   * 前に諦めていても、選び直したなら試し直す
+   * **選んでいるものから、リクエストする形式を決める。** 自動なら `autoCodec`。選んだものは使えればそのまま、
+   * 使えなければ外と同じ順 (AV1 → H.264、互換モードは MPEG-2 まで) で代わりを探す。何も使えなければ null。
+   * 使えるかは、MPEG-2 はデコードできて諦めていないか、AV1・H.264 は受け取れて (互換モードなら描けて) 諦めていないか
    */
-  function setRaw(): void {
-    if (rawChosen && raw) return;
-    warning = "";
-    rawGaveUp = false;
-    if (element !== null && tuned !== null)
-      void tune(element, { ...tuned, raw: true }, true);
+  function decideFormat(): LiveFormat | null {
+    const forChase = chase !== null;
+    const can = {
+      rawOk: !forChase && rawProblem === null && !rawGaveUp,
+      av1: compat
+        ? !compatGaveUp && compatSupport?.av1 === true
+        : !av1GaveUp && mseCan("av1"),
+      h264: compat
+        ? !compatGaveUp && compatSupport?.h264 === true
+        : mseCan("h264"),
+      compat,
+      chase: forChase,
+    };
+    if (choice === "auto")
+      return autoCodec({ ...can, indoor: options.indoor === true });
+    const ok = choice === "raw" ? can.rawOk : can[choice];
+    return ok ? choice : autoCodec({ ...can, indoor: false });
+  }
+
+  /**
+   * 形式を決めて (`decideFormat`)、リクエストする形 (`codec`・`rawChosen`) に移す。選んだものと違う形式になったら
+   * 理由を断り書きに出す (先に出ている理由があればそちら)。何も使えなければ理由を出して false
+   */
+  function pickFormat(): boolean {
+    // MPEG-2 を選んでいてもデコードできない端末では、選択を自動に戻して覚え直す (開くたびに断り書きが出る)
+    if (choice === "raw" && typeof rawProblem === "string") {
+      warning = `MPEG-2 を再生できません: ${rawProblem}`;
+      choice = "auto";
+      if (tuned !== null) remember(tuned, choice);
+    }
+    const next = decideFormat();
+    if (next === null) {
+      fail("再生できる形式がありません");
+      return false;
+    }
+    if (choice !== "auto" && next !== choice && warning === "")
+      warning = `${formatLabel(choice)} を再生できないため、${formatLabel(next)} に切り替えました`;
+    rawChosen = next === "raw";
+    if (next !== "raw") codec = next;
+    if (tuned !== null) tuned = { ...tuned, codec, raw: rawChosen };
+    return true;
   }
 
   /**
@@ -1575,10 +1660,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     chaseTimeline = null;
     tuned = target;
     audio = target.audio ?? "";
-    codec = target.codec ?? "h264";
-    // MPEG-2 で見るかは局を変えても引き継ぐ (エンコード方式と同じ)。覚えておくと次に開いたときサーバが先回りする (`warm`)
+    /*
+     * 形式はメニューの選択 (`choice`) から `begin` が決め直す (`pickFormat`)。局を変えても選択は引き継ぐ (その端末で出るかの話)。
+     * 覚えておくと次に開いたときサーバが同じ決め方で先回りする (`warm`)
+     */
+    if (target.codec !== undefined) codec = target.codec;
     rawChosen = target.raw ?? rawChosen;
-    remember({ ...target, raw: rawChosen });
+    remember(target, choice);
     await begin(video, keepList);
   }
 
@@ -1695,40 +1783,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /**
    * 互換モードの支度 (`begin` の頭)。**入っていなければ何もしない。**
    *
-   * 運転中の注意をまだ見せていなければ見せて、押されるまで待つ。描ける形式を調べ、選んでいる形式が
-   * 描けなければ描けるほうへ寄せる (H.264 → AV1 → MPEG-2)。**`<video>` には戻らない** —
-   * どれも描けなければ理由を出して false (リクエストしない)
+   * 運転中の注意をまだ見せていなければ見せて、押されるまで待つ。描ける形式と MPEG-2 をデコードできるかを調べる
+   * (どの形式にするかは `pickFormat`。**`<video>` には戻らない** — どれも描けなければ理由を出してリクエストしない)
    */
-  async function prepareCompat(): Promise<boolean> {
+  async function prepareCompat(): Promise<void> {
     compat = canvasVideo();
-    if (!compat) return true;
+    if (!compat) return;
     if (!driveNoticeSeen() && options.confirm !== undefined)
       await options.confirm();
     compatSupport ??= await canvasSupport();
     if (rawProblem === undefined) rawProblem = await rawUnsupported();
-    if (wantsRaw()) return true;
-    const usable = (id: LiveCodec) =>
-      !compatGaveUp && compatSupport?.[id] === true;
-    if (usable(codec)) return true;
-    const other = LIVE_CODECS.find((c) => usable(c.id));
-    if (other !== undefined) {
-      const before = LIVE_CODECS.find((c) => c.id === codec)?.label ?? codec;
-      warning = `${before} を再生できないため、${other.label} に切り替えました`;
-      codec = other.id;
-      if (tuned !== null) {
-        tuned = { ...tuned, codec };
-        remember({ ...tuned, raw: rawChosen });
-      }
-      return true;
-    }
-    // エンコードしたものはどちらも描けない。MPEG-2 なら描ける (覚えはしない — 互換モードをオフにすれば元に戻る)。
-    // 追っかけに MPEG-2 は無い (サーバが変換せずには送らない)
-    if (chase === null && rawProblem === null && !rawGaveUp && tuned !== null) {
-      rawChosen = true;
-      return true;
-    }
-    fail("再生できる形式がありません");
-    return false;
   }
 
   /** 繋いでリクエストする。選局 (`tune`) と追っかけ (`openChase`) の共通の後半 */
@@ -1741,19 +1805,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // リクエストし直すのはこれ。観終えるのを待っていたなら、もう待たない (`resumeChase`)
     stopResuming();
     /*
-     * **MPEG-2 を選んでいるなら、デコードできるかを先に確かめる** (1回だけ。`raw/support.ts`)。
-     * デコードできない端末では最初からエンコードしたものをリクエストし、理由を断り書きに出す
+     * **MPEG-2 になりうるなら、デコードできるかを先に確かめる** (1回だけ。`raw/support.ts`)。
+     * MPEG-2 を選んでいる・自動で家の中から開いた (`needsRawCheck`)。デコードできない端末では最初から
+     * エンコードしたものをリクエストする (選んでいたなら理由を断り書きに出す。`pickFormat`)
      */
-    if (rawChosen && rawProblem === undefined) {
+    if (needsRawCheck() && rawProblem === undefined) {
       rawProblem = await rawUnsupported();
     }
-    // デコードできない端末では覚えておかない (開くたびに断り書きが出る)
-    if (rawChosen && typeof rawProblem === "string") {
-      rawChosen = false;
-      if (tuned !== null) remember({ ...tuned, raw: false });
-      warning = `MPEG-2 を再生できません: ${rawProblem}`;
-    }
-    if (!(await prepareCompat())) return;
+    await prepareCompat();
+    if (!pickFormat()) return;
     // 数え直す。再エンコードでも MediaSource から作り直しになるので、前の数は続きではない
     stalls = 0;
     // 字幕は映した1枚ごとに貼り直す (`follow`)。2度目からは何もしない
@@ -2038,6 +2098,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     const picked = pickMediaSource();
     if (picked === null || !picked.Source.isTypeSupported(codecs)) {
       if (baked !== "h264") {
+        // この画面を開いている間は、自動でも AV1 を選ばない (`decideFormat`)
+        av1GaveUp = true;
         warning = "AV1 を再生できないため、H.264 に切り替えました";
         swapCodec("h264");
         return;
@@ -2481,8 +2543,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get warning() {
       return warning;
     },
-    setCodec,
-    setRaw,
+    /** コーデックのメニューで選んでいるもの (自動・AV1・H.264・MPEG-2) */
+    get choice() {
+      return choice;
+    },
+    setChoice,
     /** 前のフレームを貼っているか。**切り替えの間の黒を埋めている** */
     get holding() {
       return holding;

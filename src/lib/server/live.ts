@@ -44,6 +44,7 @@ import {
 import {
   type CaptionTrack,
   CHANNEL,
+  codecsFor,
   type HybridcastLink,
   type LiveCodec,
   type Notice,
@@ -487,25 +488,6 @@ export function audioArgs(codec: StreamCodec): string[] {
   return codec === "av1"
     ? ["-c:a", "libopus", "-b:a", "256k", "-ac", "2"]
     : ["-c:a", "aac", "-b:a", "256k", "-ac", "2"];
-}
-
-/**
- * ブラウザに渡す codecs 文字列。**MSE はこれが合っていないと受け取らない。**
- *
- * 中身から起こすのが本筋だが (moov を読めば分かる)、エンコード方式はこちらで決めて
- * いるので、その組に対応する値を返す。
- *
- * - `avc1.640029` … High profile / Level 4.1。1080p60 まで
- * - `av01.0.08M.08` … Main profile / Level 4.0 / 8bit。同じく 1080p60 まで
- * - `Opus` … MP4 での Opus の名前 (中の箱の名前と同じく大文字の O)。Safari は小文字の `opus` を断る
- *   (Chromium は両方受け取る)。入れ物が WebM なら小文字が正しいので、エンコード済みのファイルは `opus` のまま
- *
- * **音声も組で決まる** (`audioArgs`)。AV1 は Opus、H.264 は AAC
- */
-export function codecsFor(codec: LiveCodec): string {
-  return codec === "av1"
-    ? 'video/mp4; codecs="av01.0.08M.08,Opus"'
-    : 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 }
 
 /**

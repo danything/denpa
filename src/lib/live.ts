@@ -16,17 +16,37 @@ import type { CaptionLanguage } from "@danything/arib/caption-text";
 import type { AudioTrack } from "./arib";
 
 /**
- * エンコード方式 ([stream.md](../../docs/stream.md#エンコード))。`h264` は速さを採り、どの端末でも出るので既定。
- * `av1` は量を採るが、SVT-AV1 が溜め込むぶん放送の今から1秒ほど離れる (`server/live.ts` の `videoArgs`)。
+ * エンコード方式 ([stream.md](../../docs/stream.md#エンコード))。`av1` は量を採るが、SVT-AV1 が溜め込むぶん放送の今から
+ * 1秒ほど離れる (`server/live.ts` の `videoArgs`)。`h264` は速さを採り、どの端末でも出る。
+ * **画面の既定は「自動」** (`#lib/live-choice.ts` の `autoCodec`)。指示で省かれたときの既定は `h264` のまま (テレビのアプリ)。
  * MPEG-2 (放送のまま) は「エンコードしない」なのでここに並べない (`TuneCommand.raw`)
  */
 export type LiveCodec = "h264" | "av1";
 
-/** 選べるエンコード方式。コーデックのメニューに並べる順そのまま (説明は付けない — 選ぶのは端末の相性だけ) */
+/** 選べるエンコード方式。コーデックのメニューに並べる順そのまま (「自動」のあと。説明は付けない — 選ぶのは端末の相性だけ) */
 export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
-  { id: "h264", label: "H.264" },
   { id: "av1", label: "AV1" },
+  { id: "h264", label: "H.264" },
 ];
+
+/**
+ * ブラウザに渡す codecs 文字列。**MSE はこれが合っていないと受け取らない。**
+ *
+ * 画面も MSE で受け取れるかを先に確かめるのに使う (`live-player.svelte.ts`)。中身から起こすのが本筋だが (moov を読めば分かる)、エンコード方式はこちらで決めて
+ * いるので、その組に対応する値を返す。
+ *
+ * - `avc1.640029` … High profile / Level 4.1。1080p60 まで
+ * - `av01.0.08M.08` … Main profile / Level 4.0 / 8bit。同じく 1080p60 まで
+ * - `Opus` … MP4 での Opus の名前 (中の箱の名前と同じく大文字の O)。Safari は小文字の `opus` を断る
+ *   (Chromium は両方受け取る)。入れ物が WebM なら小文字が正しいので、エンコード済みのファイルは `opus` のまま
+ *
+ * **音声も組で決まる** (`server/live.ts` の `audioArgs`)。AV1 は Opus、H.264 は AAC
+ */
+export function codecsFor(codec: LiveCodec): string {
+  return codec === "av1"
+    ? 'video/mp4; codecs="av01.0.08M.08,Opus"'
+    : 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
+}
 
 /**
  * 選べる字幕1つぶん。**取り決めなので、ここに置く** — 組み立てるのは
@@ -289,7 +309,7 @@ type TuneCommand = {
   /**
    * **エンコードせずに元の TS で欲しい** ([stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
    *
-   * コーデックのメニューで MPEG-2 を選び (`player/settings.ts` の `liveCodecs` の `onraw`)、ブラウザがデコードできる (`raw/support.ts`) ときに画面がリクエストする。
+   * コーデックのメニューで MPEG-2 を選ぶか、自動で家の中から開き (`#lib/live-choice.ts`)、ブラウザがデコードできる (`raw/support.ts`) ときに画面がリクエストする。
    * 変換せずに送ると音声は画面が選ぶので、`audio` は選び直しても再エンコードにならない
    */
   raw?: boolean;
@@ -313,8 +333,9 @@ export interface Tuned {
 }
 
 /**
- * 前回見ていた局を覚えておく cookie (`/live` にだけ付ける。中身は `Tuned` の JSON)。サーバが読んで、繋いでくる前に
- * エンコードし始める (`server/live.ts` の `warm`)。どの局を開くかはサーバ側1箇所で決める (`live/+page.server.ts`) —
+ * 前回見ていた局を覚えておく cookie (`/live` にだけ付ける。中身は局・音声と、コーデックのメニューで選んだもの (`choice`。
+ * `#lib/live-choice.ts`) の JSON。前の形式の `codec`・`raw` は読まない)。サーバが読んで、繋いでくる前に
+ * エンコードし始める (`server/live.ts` の `warm`)。どの局を開くかはサーバ側1箇所で決める (`server/viewing.ts` の `liveStart`) —
  * localStorage と二重に持つと、先にエンコードしたものが使われず別の局が開いていた
  */
 export const LAST_COOKIE = "denpa_live_last";

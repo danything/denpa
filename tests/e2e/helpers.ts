@@ -7,11 +7,11 @@ import type {
   Page,
 } from "@playwright/test";
 
-import { expect, test } from "../stack";
+import { expect, keepH264, test } from "../stack";
 
 // テストは必ずここから test / expect を取る。素の @playwright/test から取ると
 // ワーカーごとのアプリ (tests/stack.ts) が立たず、宛先も決まらない
-export { expect, test };
+export { expect, keepH264, test };
 
 /**
  * ページを開いてハイドレーション完了まで待つ。

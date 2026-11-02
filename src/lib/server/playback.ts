@@ -46,7 +46,7 @@ import {
 } from "#lib/arib.js";
 import { encodedCodec } from "#lib/encoded-codec.js";
 import type { HwCodec } from "#lib/hw.js";
-import type { LiveCodec } from "#lib/live.js";
+import { codecsFor, type LiveCodec } from "#lib/live.js";
 import { type FileSource, tsPathOf } from "#lib/source.js";
 import {
   BUSY,
@@ -75,7 +75,6 @@ import {
   aribServiceId,
   audioArgs,
   blameLiveHw,
-  codecsFor,
   panArgs,
   pickLiveHw,
   videoArgs,
@@ -285,7 +284,7 @@ function streamAudio(codec: HwCodec): string {
   return codec === "av1" ? "Opus" : "mp4a.40.2";
 }
 
-/** 変換したときの codecs (`live.codecsFor` の中身) */
+/** 変換したときの codecs (`#lib/live.ts` の `codecsFor` の中身) */
 function transcodedCodecs(codec: LiveCodec): string {
   return /codecs="([^"]+)"/.exec(codecsFor(codec))?.[1] ?? "";
 }
