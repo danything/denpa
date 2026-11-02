@@ -25,6 +25,7 @@
     CAPTION,
     CHECK,
     CLOSE,
+    COPY,
     DOWNLOAD,
     JIKKYO,
     OVERLAY,
@@ -33,7 +34,14 @@
     PLAY,
     TRASH,
   } from "#lib/components/player/icons.js";
-  import { keepOnDevice, shotName } from "#lib/components/player/snapshot.js";
+  import { SAVED_MS } from "#lib/components/player/shot.svelte.js";
+  import {
+    canCopyImage,
+    copyImage,
+    keepOnDevice,
+    pngFromImage,
+    shotName,
+  } from "#lib/components/player/snapshot.js";
   import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
   import { dateTime, fullDate, size, time } from "#lib/format.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
@@ -48,7 +56,7 @@
    *   「絞り込み」のメニュー。言葉で探すのはヘッダーの検索で、その結果の「切り抜き」から `?q=` 付きで来たときは
    *   一覧の上に探した言葉と外すボタンを出す
    * - 1枚を開くと一覧の上に浮かぶ箱。右端の縦の列に閉じる・この場面から観る・字幕とコメントの出し入れ (撮ったときに出していたものだけ)・
-   *   端末に保存・削除 (2回押し。いちばん下)。
+   *   クリップボードにコピー・端末に保存・削除 (2回押し。いちばん下)。
    *   列は観る画面と同じ部品 (`ControlBar`・`ControlButton`)
    * - 選び方は写真のサービスと同じ。マウスでは乗せた1枚の左上に丸が出て、押すと選ぶ形に入る。指の端末は長押しで入る。
    *   選ぶ形の間は1枚を押すと選ぶ・外す (開かない)。Shift を押しながらなら、前に押した1枚までをまとめて選ぶ。
@@ -225,19 +233,57 @@
   const notices = $derived(notice === null ? [] : [notice]);
 
   /**
+   * いま見せている重ねの1枚 (サーバが重ねた AVIF)。出し入れを送っている途中なら、済むのを待ってから取る
+   * (先に取ると、押す前の重ねの画像が来る)
+   */
+  async function shownImage(clip: Clip): Promise<Blob> {
+    await sending.get(clip.id);
+    const shown = { layers: layersShown(clip) };
+    const res = await fetch(
+      `${resolve(`api/clips/${clip.id}/image`)}${clipVersionQuery(shown)}`,
+    );
+    if (!res.ok) throw new Error(String(res.status));
+    return res.blob();
+  }
+
+  /**
+   * 「クリップボードにコピー」を出すか。画像を置けるブラウザなら指の端末にも出す。撮ったときに PC でだけコピーするのは
+   * 押した人に聞かずに置くからで (`shot.svelte.ts`)、このボタンは置きたい人が押すもの
+   */
+  const copyable = canCopyImage();
+  /** コピーできた直後の1枚 (ボタンを一瞬チェックの形にする。長さは撮るボタンと同じ) */
+  let copiedId = $state<number | null>(null);
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * いま見せている重ねの1枚を PNG にしてクリップボードに置く (置けるのは PNG だけ)。
+   * Safari は押した直後の `clipboard.write` しか通さないので、画像を取る前に書き始め、中身は後から渡す。
+   * うまくいったときはこの画面の保存・削除と同じくトーストを出さず (ボタンがチェックになるだけ)、失敗だけ通知する
+   */
+  function copy(clip: Clip): void {
+    void copyImage(shownImage(clip).then(pngFromImage)).then((ok) => {
+      if (ok) {
+        copiedId = clip.id;
+        clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => (copiedId = null), SAVED_MS);
+        return;
+      }
+      notice = {
+        key: `clip-copy-${Date.now()}`,
+        kind: "error",
+        text: "コピーできませんでした",
+      };
+    });
+  }
+
+  /**
    * 端末に保存 (指の端末は共有シート、PC はファイル)。名前は `番組名_YYYYMMDD-HHMMSS.avif`。
-   * 保存するのはサーバが重ねた AVIF なので、出し入れを送っている途中なら済むのを待ってから取る (いま見せている重ねで保存する)
+   * 保存するのはいま見せている重ねの AVIF (`shownImage`)
    */
   async function save(clip: Clip): Promise<void> {
     try {
-      await sending.get(clip.id);
-      const shown = { layers: layersShown(clip) };
-      const res = await fetch(
-        `${resolve(`api/clips/${clip.id}/image`)}${clipVersionQuery(shown)}`,
-      );
-      if (!res.ok) throw new Error(String(res.status));
       await keepOnDevice(
-        await res.blob(),
+        await shownImage(clip),
         shotName(title(clip), new Date(clip.takenAt), "avif"),
       );
     } catch {
@@ -817,6 +863,14 @@
             onclick={() => toggleLayer(clip, "comments")}
           />
         {/if}
+        {#if copyable}
+          <ControlButton
+            icon={copiedId === clip.id ? CHECK : COPY}
+            label="クリップボードにコピー"
+            testid="clip-copy"
+            onclick={() => copy(clip)}
+          />
+        {/if}
         <ControlButton
           icon={DOWNLOAD}
           label="端末に保存"
@@ -1172,7 +1226,7 @@
   /*
    * 1枚を開いた所。**画面を覆わず、一覧の上に浮かぶ箱** (ダイアログと同じく後ろは幕 `--dp-backdrop`、幕を押すと閉じる)。
    * 箱は 16:9 の黒い舞台 (テーマにかかわらず。映像の上と同じ色の決まり) で、画面に収まる大きさまで。
-   * 縦は右端の列 (6 つ) が1列に収まる高さを下限にする (スマホの縦の 16:9 では低すぎて列が折り返す)。
+   * 縦は右端の列 (7 つ) が1列に収まる高さ (48px の丸 7 つ、8px の間 6 つ、上下の余白 8px ずつで 25rem) を下限にする。スマホの縦の 16:9 では低すぎて列が折り返す。
    * 並べ方 (真ん中に置く) は Pico の dialog のまま。ここで `display` を書くと閉じた幕が消えずに一覧を塞ぐ。
    * 開き方もダイアログの箱と同じ (少し縮んだ姿からばねで。app.css の `dialog > article`)
    */
@@ -1187,7 +1241,7 @@
     justify-content: center;
     width: min(calc(100vw - 2rem), calc((100svh - 2rem) * 16 / 9), 80rem);
     aspect-ratio: 16 / 9;
-    min-height: min(24rem, calc(100svh - 2rem));
+    min-height: min(25rem, calc(100svh - 2rem));
     overflow: hidden;
     container-type: size;
     border-radius: var(--dp-radius-lg);
