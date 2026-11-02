@@ -828,7 +828,8 @@ test.describe("ホームの1本の一覧", () => {
           .filter({ hasText: /^今日/ });
         await expect(today).toHaveCount(1);
         // 予約か録画かは書かない (線の上下で分かる)
-        await expect(today).toHaveText(/^今日\s*\d{1,2}\/\d{1,2}\(.\)$/);
+        // 年をまたいで溜まった録画を見分けられるように、西暦も出す (#1931)
+        await expect(today).toHaveText(/^今日\s*\d{4}\/\d{1,2}\/\d{1,2}\(.\)$/);
         // 今日の録画・線・今日の予約が、同じ見出しの包みに入る
         const block = page.locator(".t-block").filter({ has: today });
         await expect(block.getByTestId("timeline-now")).toHaveCount(1);

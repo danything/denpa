@@ -4,7 +4,7 @@
    * どれも `h2` なので、読み上げの見出し移動で辿れる
    */
   import NowLine from "#lib/components/NowLine.svelte";
-  import { date, time } from "#lib/format.js";
+  import { fullDate, time } from "#lib/format.js";
   import { dayName, type TimelineLine } from "#lib/timeline.js";
 
   import { home, type Item } from "./context";
@@ -22,7 +22,7 @@
     <span class="t-day-chip">
       <span class="t-day-name">{ctx.dayLabel(entry.at)}</span>
       {#if dayName(entry.at, ctx.clock) !== null}<span class="t-day-date num"
-          >{date(entry.at)}</span
+          >{fullDate(entry.at)}</span
         >{/if}
     </span>
   </h2>

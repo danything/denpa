@@ -35,7 +35,7 @@
   } from "#lib/components/player/icons.js";
   import { keepOnDevice, shotName } from "#lib/components/player/snapshot.js";
   import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
-  import { date, dateTime, size, time } from "#lib/format.js";
+  import { dateTime, fullDate, size, time } from "#lib/format.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { sentinel } from "#lib/paging.svelte.js";
   import { dayName, dayStart } from "#lib/timeline.js";
@@ -133,7 +133,7 @@
   });
   const now = Date.now();
   function dayLabel(day: number): string {
-    return dayName(day, now) ?? date(day);
+    return dayName(day, now) ?? fullDate(day);
   }
 
   /** 条件を替える。URL を書き換えて load を回し直す (戻るボタンの履歴は積まない) */
@@ -528,7 +528,7 @@
           <span class="c-day-chip">
             <span class="c-day-name">{dayLabel(group.day)}</span>
             {#if dayName(group.day, now) !== null}<span class="c-day-date num"
-                >{date(group.day)}</span
+                >{fullDate(group.day)}</span
               >{/if}
           </span>
         </h2>
@@ -700,7 +700,7 @@
               onclick={() => {
                 apply({ day: undefined });
                 filterOpen = false;
-              }}>{date(dayOf(data.query.day))} の絞り込みを外す</button
+              }}>{fullDate(dayOf(data.query.day))} の絞り込みを外す</button
             >
           </div>
         {/if}

@@ -8,6 +8,7 @@ import {
   duration,
   durationMs,
   eta,
+  fullDate,
   nowStatus,
   percent,
   recordedDuration,
@@ -272,5 +273,21 @@ describe("録画中の行のあと何分か", () => {
 
   test("終わりの時刻を過ぎても止まりきるまでは録画中なので、あと何分かは言わない", () => {
     expect(recordingLeft(now, at(18, 0))).toBeNull();
+  });
+});
+
+describe("西暦つきの日付", () => {
+  // 年をまたいで溜まった録画で、同じ「10/11(日)」を見分けられる (#1931)
+  test("年を前に付ける", () => {
+    expect(fullDate(new Date(2026, 9, 11, 21, 0).getTime())).toBe(
+      "2026/10/11(日)",
+    );
+    expect(fullDate(new Date(2020, 9, 11, 0, 0).getTime())).toBe(
+      "2020/10/11(日)",
+    );
+    // 月と日は前に 0 を付けない (見出しの「10/11(日)」と同じ形)
+    expect(fullDate(new Date(2027, 0, 5, 12, 0).getTime())).toBe(
+      "2027/1/5(火)",
+    );
   });
 });
