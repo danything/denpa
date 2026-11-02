@@ -69,8 +69,8 @@ spec:
   restic:
     repository: volsync-agent-config
     copyMethod: Snapshot
-    retain: {daily: 7, weekly: 4, monthly: 6}
-    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    retain: { daily: 7, weekly: 4, monthly: 6 }
+    moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
 ---
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
@@ -86,8 +86,8 @@ spec:
   restic:
     repository: volsync-denpa-data
     copyMethod: Snapshot
-    retain: {daily: 7, weekly: 4, monthly: 6}
-    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    retain: { daily: 7, weekly: 4, monthly: 6 }
+    moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
 ---
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
@@ -104,5 +104,5 @@ spec:
     repository: volsync-denpa-encoded
     copyMethod: Snapshot
     # 録画は 1 世代だけ(docs/decisions.md「バックアップに何を含めるか」)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける
-    retain: {last: "1"}
-    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    retain: { last: "1" }
+    moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
