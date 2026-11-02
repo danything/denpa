@@ -1,6 +1,5 @@
 using TUnit.Assertions.Enums;
 using System.Text.Json.Nodes;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 

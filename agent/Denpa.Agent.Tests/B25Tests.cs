@@ -1,5 +1,4 @@
 using System.Buffers;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 

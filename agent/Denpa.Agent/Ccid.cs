@@ -111,7 +111,7 @@ public static class CcidMessage
 ///
 /// <para>
 /// 失敗はすべて <see cref="IOException"/>。抜かれた・カードが抜けたあとは使えないので、
-/// 呼んだ側が捨てて <see cref="Ccid.Find"/> から開き直す (繋ぎ直しは B-CAS の側)。
+/// 呼んだ側が捨てて <see cref="Ccid.Find()"/> から開き直す (繋ぎ直しは B-CAS の側)。
 /// </para>
 /// </summary>
 public sealed class CcidLink : ICardLink

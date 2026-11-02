@@ -1,4 +1,3 @@
-using Denpa.Agent;
 using static Denpa.Agent.Fr30Reg;
 
 namespace Denpa.Agent.Tests;

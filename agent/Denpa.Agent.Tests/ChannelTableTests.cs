@@ -1,4 +1,3 @@
-using Denpa.Agent;
 using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;

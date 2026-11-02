@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 

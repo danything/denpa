@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using TUnit.Assertions.Enums;
 using TUnit.Core.Enums;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 

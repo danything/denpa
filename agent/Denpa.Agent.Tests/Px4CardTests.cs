@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Net.Sockets;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 
