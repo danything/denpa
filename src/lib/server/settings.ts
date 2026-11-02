@@ -34,9 +34,16 @@ interface Settings {
   /**
    * **デバイス (GPU) と方式ごとに、GPU でエンコードしてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
    * 別 (`server/hwenc.ts`) で、エンコードするのは「使える かつ 許されている」もの。いま使えない
-   * GPU の印も保存で消さない (挿し直せばそのまま効く。`chooseHw`)。設定の 1 キーに JSON で持つ
+   * GPU の印も保存で消さない (挿し直せばそのまま効く。`chooseHw`)。設定の 1 キーに JSON で持つ。
+   * **録画のエンコードだけが読む** — ライブ・追っかけ・その場の変換は `liveHwAllow`
    */
   hwAllow: HwAllow;
+  /**
+   * **ライブ・追っかけ・録画のその場の変換で、GPU でエンコードしてよいコーデック。** 持ち方は `hwAllow` と同じ。
+   * 録画と分けてあるのは、録画とライブで使う GPU を分けられるようにするため (`server/live.ts` の `pickLiveHw`)。
+   * ライブが出すのは AV1 と H.264 だけなので、H.265 の印は何にも効かない
+   */
+  liveHwAllow: HwAllow;
   /** CMの扱い。off / chapter / cut */
   cmCut: CmMode;
   /** エンコードするか。**コーデックの選択から決まる** (`none` 以外なら する) */
@@ -142,7 +149,7 @@ export function parseCodecs(value: string | undefined): HwCodec[] {
 }
 
 /**
- * `hwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ vaapi: [...], rkmpp: [...], nvenc: [...] }`。
+ * `hwAllow`・`liveHwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ vaapi: [...], rkmpp: [...], nvenc: [...] }`。
  * 書かれていない方式は空 — 方式はデバイスごとに決まっていて (`/dev/dri/*` は VA-API、
  * `/dev/mpp_service` は Rockchip MPP、`/dev/nvidia0` などは NVENC)、そのデバイスで使えない方式の印は何にも効かない
  */
@@ -183,6 +190,7 @@ export function settings(): Settings {
     codec: primary,
     codecs,
     hwAllow: parseHwAllow(stored("hwAllow")),
+    liveHwAllow: parseHwAllow(stored("liveHwAllow")),
     cmCut: isCmMode(cmCut) ? cmCut : config.cmCutDefault,
     encode: codecs.length > 0,
     keepOriginal: flag("keepOriginal", false),

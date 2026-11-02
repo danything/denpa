@@ -9,7 +9,7 @@ config.dbPath = join(
   "denpa.db",
 );
 
-const { normalizePostalCode, parseCodecs, saveSettings, settings } =
+const { normalizePostalCode, parseCodecs, saveSettings, settings, store } =
   await import("./settings");
 
 /*
@@ -83,5 +83,34 @@ describe("都道府県の保存", () => {
   test("置き場に表に無い値があっても未設定として読む", () => {
     saveSettings({ prefecture: 99 });
     expect(settings().prefecture).toBe(255);
+  });
+});
+
+/*
+ * **GPU のエンコーダは録画 (`hwAllow`) とライブ (`liveHwAllow`) で別々に持つ。** 持ち方は同じで、
+ * 片方を保存してももう片方は変わらない。壊れた値は空 (= 全部よい) と読む
+ */
+describe("録画とライブのエンコーダ", () => {
+  const device = "/dev/dri/renderD128";
+
+  test("入れるまではどちらも空 (全部よい)", () => {
+    expect(settings().hwAllow).toEqual({});
+    expect(settings().liveHwAllow).toEqual({});
+  });
+
+  test("別々に保存して読み返す", () => {
+    saveSettings({
+      hwAllow: { [device]: { vaapi: ["av1"], rkmpp: [], nvenc: [] } },
+    });
+    saveSettings({
+      liveHwAllow: { [device]: { vaapi: ["h264"], rkmpp: [], nvenc: [] } },
+    });
+    expect(settings().hwAllow[device]?.vaapi).toEqual(["av1"]);
+    expect(settings().liveHwAllow[device]?.vaapi).toEqual(["h264"]);
+  });
+
+  test("壊れた値は空として読む", () => {
+    store("liveHwAllow", "{");
+    expect(settings().liveHwAllow).toEqual({});
   });
 });

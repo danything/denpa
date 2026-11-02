@@ -82,7 +82,14 @@ import { orm } from "./db";
 import { deinterlace } from "./encoder";
 import { followOnAir } from "./epg";
 import { emit, type Yielded } from "./events";
-import { type LiveHw, liveHw, liveHwArgs, nvencBusy } from "./hwenc";
+import {
+  type HwDevice,
+  hwEncode,
+  type LiveHw,
+  liveHw,
+  liveHwArgs,
+  nvencBusy,
+} from "./hwenc";
 import { tunerOf, yieldedTo } from "./live-yield";
 import { programs, recordings, services } from "./schema";
 import { settings } from "./settings";
@@ -612,12 +619,17 @@ function hwKey(codec: StreamCodec, hw: LiveHw): string {
 }
 
 /**
- * このセッションを GPU でエンコードするか。設定の印と試しのエンコード (`hwenc.liveHw`)、最近落ちたか。
- * 録画のその場の変換 (`server/playback.ts`) も使う — 元がエンコード済みなら `interlaced` を false
- * (復号からは GPU に載せない。`videoArgs`)
+ * このセッションを GPU でエンコードするか。ライブの印 (`liveHwAllow`。録画の `hwAllow` は見ない) と
+ * 試しのエンコード (`hwenc.liveHw`)、最近落ちたか。
+ * 追っかけと録画のその場の変換 (`server/playback.ts`) も使う — 元がエンコード済みなら `interlaced` を false
+ * (復号からは GPU に載せない。`videoArgs`)。`devices` は試験で差し替えるときだけ渡す
  */
-export function pickLiveHw(codec: LiveCodec, interlaced = true): LiveHw | null {
-  const found = liveHw(codec, settings().hwAllow, liveTurn++);
+export function pickLiveHw(
+  codec: LiveCodec,
+  interlaced = true,
+  devices: HwDevice[] = hwEncode().devices,
+): LiveHw | null {
+  const found = liveHw(codec, settings().liveHwAllow, liveTurn++, devices);
   if (found === null) return null;
   const hw = interlaced ? found : { ...found, full: false };
   return liveHwFailed(codec, hw) ? null : hw;

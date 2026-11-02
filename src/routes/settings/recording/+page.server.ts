@@ -7,8 +7,11 @@ import {
   HW_CODECS,
   HW_EVERY,
   HW_SOFTWARE,
+  type HwAllow,
+  type HwCodec,
   hwUsable,
 } from "#lib/hw.js";
+import { LIVE_CODECS } from "#lib/live.js";
 import { isCmMode } from "#lib/server/cm.js";
 import {
   describeDevice,
@@ -89,24 +92,39 @@ export const actions = {
      * **コーデックごとのエンコーダ** (`hw.av1` / `hw.hevc` / `hw.h264`。ソフトウェア・デバイスの path・順番に使う。H.265 にソフトウェアは無い)。
      * 持ち方はデバイス × 方式 × コーデックのまま (`chooseHw`)。欄が無いコーデック (GPU を
      * 確かめ終わる前に保存した・そのコーデックを使えるデバイスが無い) と、いま見えていないデバイスを
-     * 選んできたもの (画面を開いたあとに確かめ直して GPU が変わった) は前のまま
+     * 選んできたもの (画面を開いたあとに確かめ直して GPU が変わった) は前のまま。
+     * **ライブの列** (`liveHw.av1` / `liveHw.h264`) も同じ読み方で `liveHwAllow` に書く。ライブが出さない H.265 の欄は無い
      */
     const devices = hwEncode().devices;
-    let hwAllow = settings().hwAllow;
-    for (const codec of HW_CODECS) {
-      const choice = String(form.get(`hw.${codec}`) ?? "");
-      const known =
-        choice === HW_SOFTWARE ||
-        choice === HW_EVERY ||
-        hwUsable(devices, codec).some((device) => device.path === choice);
-      if (known) hwAllow = chooseHw(hwAllow, devices, codec, choice);
-    }
+    const choose = (
+      prefix: string,
+      codecs: readonly HwCodec[],
+      from: HwAllow,
+    ): HwAllow => {
+      let allow = from;
+      for (const codec of codecs) {
+        const choice = String(form.get(`${prefix}.${codec}`) ?? "");
+        const known =
+          choice === HW_SOFTWARE ||
+          choice === HW_EVERY ||
+          hwUsable(devices, codec).some((device) => device.path === choice);
+        if (known) allow = chooseHw(allow, devices, codec, choice);
+      }
+      return allow;
+    };
+    const hwAllow = choose("hw", HW_CODECS, settings().hwAllow);
+    const liveHwAllow = choose(
+      "liveHw",
+      LIVE_CODECS.map((codec) => codec.id),
+      settings().liveHwAllow,
+    );
     saveSettings({
       // 並びは HW_CODECS のまま (AV1 → H.265 → H.264)
       codec: (codecs.length > 0 ? codecs.join(",") : "none") as VideoCodec,
       keepOriginal: form.get("keepOriginal") === "on",
       fpsDetect: form.get("fpsDetect") === "on",
       hwAllow,
+      liveHwAllow,
       ...(transcodeLimit === undefined ? {} : { transcodeLimit }),
     });
     return { success: true, saved: true };

@@ -11,9 +11,11 @@
     CODEC_LABEL,
     HW_EVERY,
     HW_SOFTWARE,
+    type HwAllow,
     hwChoice,
     hwUsable,
   } from "#lib/hw.js";
+  import { LIVE_CODECS } from "#lib/live.js";
 
   let { data, form } = $props();
 
@@ -84,9 +86,10 @@
         class="fields setting-rows"
       >
         <!--
-                    **コーデックごとに、エンコーダ (ソフトウェア・GPU) を横に置く。** 選べるのは、そのコーデックを
-                    GPU でエンコードできるデバイスがあるときだけ。持ち方はデバイス × 方式 × コーデックのまま
-                    (`chooseHw`)。チェックを外したコーデックも、ライブと追っかけはこのエンコーダを使うので、
+                    **コーデックごとに、エンコーダ (ソフトウェア・GPU) を横に置く。録画とライブで別々に選ぶ** (列の見出し「録画」「ライブ」)。
+                    選べるのは、そのコーデックを GPU でエンコードできるデバイスがあるときだけ。持ち方はデバイス × 方式 × コーデックのまま
+                    (`chooseHw`。録画は `hwAllow`、ライブは `liveHwAllow`)。ライブの列はライブが出すコーデック (AV1・H.264。`LIVE_CODECS`)
+                    だけで、追っかけと録画のその場の変換もライブの列を使う。チェックを外したコーデックもライブは使うので、
                     選ぶ欄はチェックと関係なく出しておく。
                     **H.265 は GPU でだけエンコードする**ので、行ごと GPU を確かめてから出し、エンコーダに
                     「ソフトウェア」を置かない (外すならチェックを外す)。行を出したときだけ `codecsShown` を送る —
@@ -110,37 +113,63 @@
             </label>
             {#await data.hw then hw}
               {@const usable = hwUsable(hw.devices, codec)}
-              {@const choice = hwChoice(recording.hwAllow, hw.devices, codec)}
-              {#if usable.length > 0}
-                <select
-                  name={`hw.${codec}`}
-                  class="encoder"
-                  aria-label={`${CODEC_LABEL[codec]} のエンコーダ`}
-                  data-testid={`hw-${codec}`}
-                >
-                  {#if !gpuOnly}
-                    <option
-                      value={HW_SOFTWARE}
-                      selected={choice === HW_SOFTWARE}>ソフトウェア</option
+              <!-- 狭い幅では列の見出しが出ないので、欄の前に「録画」「ライブ」を添える (`caption`) -->
+              {#snippet encoder(
+                prefix: string,
+                caption: string,
+                testid: string,
+                allow: HwAllow,
+              )}
+                {@const choice = hwChoice(allow, hw.devices, codec)}
+                {#if usable.length > 0}
+                  <label class="encoder-field">
+                    <span class="encoder-caption">{caption}</span>
+                    <select
+                      name={`${prefix}.${codec}`}
+                      class="encoder"
+                      aria-label={`${CODEC_LABEL[codec]} の${caption}のエンコーダ`}
+                      data-testid={testid}
                     >
-                  {/if}
-                  <!-- GPU だけのコーデックで、どの GPU の印も外れていれば (前の設定) 先頭の GPU を選んで見せる -->
-                  {#each usable as device, i (device.path)}
-                    <option
-                      value={device.path}
-                      selected={choice === device.path ||
-                        (gpuOnly && choice === HW_SOFTWARE && i === 0)}
-                      >{device.label}</option
-                    >
-                  {/each}
-                  {#if usable.length > 1}
-                    <option value={HW_EVERY} selected={choice === HW_EVERY}
-                      >GPU を順番に使う</option
-                    >
-                  {/if}
-                </select>
+                      {#if !gpuOnly}
+                        <option
+                          value={HW_SOFTWARE}
+                          selected={choice === HW_SOFTWARE}>ソフトウェア</option
+                        >
+                      {/if}
+                      <!-- GPU だけのコーデックで、どの GPU の印も外れていれば (前の設定) 先頭の GPU を選んで見せる -->
+                      {#each usable as device, i (device.path)}
+                        <option
+                          value={device.path}
+                          selected={choice === device.path ||
+                            (gpuOnly && choice === HW_SOFTWARE && i === 0)}
+                          >{device.label}</option
+                        >
+                      {/each}
+                      {#if usable.length > 1}
+                        <option value={HW_EVERY} selected={choice === HW_EVERY}
+                          >GPU を順番に使う</option
+                        >
+                      {/if}
+                    </select>
+                  </label>
+                {:else if hw.devices.length > 0}
+                  <span class="hint encoder-field"
+                    ><span class="encoder-caption">{caption}</span
+                    >ソフトウェア</span
+                  >
+                {/if}
+              {/snippet}
+              {@render encoder("hw", "録画", `hw-${codec}`, recording.hwAllow)}
+              {#if LIVE_CODECS.some((live) => live.id === codec)}
+                {@render encoder(
+                  "liveHw",
+                  "ライブ",
+                  `live-hw-${codec}`,
+                  recording.liveHwAllow,
+                )}
               {:else if hw.devices.length > 0}
-                <span class="hint">ソフトウェア</span>
+                <!-- ライブが出さないコーデック (H.265) は、ライブの列を空けておく -->
+                <span class="encoder-gap"></span>
               {/if}
             {/await}
           </div>
@@ -148,6 +177,13 @@
         <fieldset class="field">
           <span class="field-label">映像コーデック</span>
           <div class="codecs">
+            {#await data.hw then hw}
+              {#if hw.devices.length > 0}
+                <span class="encoder-head"></span>
+                <span class="encoder-head">録画</span>
+                <span class="encoder-head">ライブ</span>
+              {/if}
+            {/await}
             {#each CODECS as { codec, label, gpuOnly } (codec)}
               {#if gpuOnly}
                 {#await data.hw then hw}
@@ -189,15 +225,16 @@
                     (H.265 はソフトウェアでエンコードしません)。
                   </p>
                   <p>
-                    ライブと追っかけも、ここで選んだエンコーダを使います
+                    エンコーダは録画とライブで別々に選べます。追っかけと、録画を別の形式で観るときの変換もライブのエンコーダを使います
                     (チェックを外したコーデックも)。MPEG-2 のデコードまで GPU
-                    でできるデバイスでは、デコードとインターレース解除も GPU
-                    で行います。
+                    でできるデバイスでは、ライブはデコードとインターレース解除も
+                    GPU で行います。
                   </p>
                   <p>
-                    GPU が 2 枚あれば「AV1 はこちら、H.264
-                    はあちら」のように分けられます。「GPU を順番に使う」では、
-                    エンコードのたびに使う GPU を入れ替えます。
+                    GPU が 2 枚あれば「録画はこちら、ライブはあちら」「AV1
+                    はこちら、H.264 はあちら」のように分けられます。「GPU
+                    を順番に使う」では、 エンコードのたびに使う GPU
+                    を入れ替えます。
                   </p>
                   {#each hw.devices as device (device.path)}
                     <p data-testid="hw-device">
@@ -374,8 +411,9 @@
 
 <style>
   /*
-     * **チェックと、その横のエンコーダ。** 広い幅ではエンコーダを縦に揃える (行ごとに字の長さが違うので、
-     * 揃えないと欄が左右にずれる)。狭い幅ではチェックの文の下に、文の頭に揃えて置く
+     * **チェックと、その横のエンコーダ (録画・ライブ)。** 広い幅ではエンコーダを列にして縦に揃え、
+     * 上に列の見出し (「録画」「ライブ」) を置く (行ごとに字の長さが違うので、揃えないと欄が左右にずれる)。
+     * 狭い幅では見出しを出さず、チェックの文の下に「録画」「ライブ」を添えた欄を、文の頭に揃えて置く
      */
   .codecs {
     display: flex;
@@ -391,18 +429,43 @@
   .codec-row > :not(.check) {
     margin-inline-start: 1.75rem;
   }
-  @container (min-width: 30rem) {
+  .encoder-head,
+  .encoder-gap {
+    display: none;
+  }
+  .encoder-field {
+    display: flex;
+    align-items: center;
+    gap: var(--dp-space-2);
+  }
+  .encoder-caption,
+  .encoder-head {
+    font-size: var(--dp-text-sm);
+    color: var(--dp-muted);
+  }
+  @container (min-width: 40rem) {
     .codecs {
       display: grid;
-      grid-template-columns: max-content max-content;
+      grid-template-columns: max-content max-content max-content;
       align-items: center;
       gap: var(--dp-space-2) var(--dp-space-3);
     }
     .codec-row {
       display: contents;
     }
+    /* チェックはいつも行の頭から (GPU が無くて欄が無い行が横に並ばないように) */
+    .codec-row > .check {
+      grid-column: 1;
+    }
     .codec-row > :not(.check) {
       margin-inline-start: 0;
+    }
+    .encoder-head,
+    .encoder-gap {
+      display: block;
+    }
+    .encoder-caption {
+      display: none;
     }
   }
   .encoder {
