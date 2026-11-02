@@ -227,11 +227,11 @@ test.describe("ホームの1本の一覧", () => {
         const row = page
           .getByTestId("reservation-row")
           .filter({ hasText: "録画中試験" });
-        // 番組名の下に「● 録画中・あと21分」。番組名の行には何も足さない。狭い画面でも縮めずに入りきる
+        // 番組名の下に「● 録画中・あと 21 分」。番組名の行には何も足さない。狭い画面でも縮めずに入りきる
         const status = row.getByTestId("row-activity");
         await expect(status).toHaveCount(1);
         await expect(status).toHaveAttribute("data-kind", "recording");
-        await expect(status).toHaveText(/録画中・あと\d+分/);
+        await expect(status).toHaveText(/録画中・あと \d+ 分/);
         await expect(row.getByTestId("reservation-state")).toHaveText("録画中");
         await expect(status.locator(".rec-dot")).toBeVisible();
         await expect(
@@ -247,7 +247,7 @@ test.describe("ホームの1本の一覧", () => {
                 span.scrollHeight <= span.clientHeight,
             ),
           ),
-          "「録画中・あと21分」が縮んでいる",
+          "「録画中・あと 21 分」が縮んでいる",
         ).toBe(true);
         // 点とバーは画面の外では描かない (動き続けない)。行ではなく、それぞれの小さな箱に付ける
         await expect(status.locator(".act-mark")).toHaveCSS(
@@ -952,7 +952,7 @@ test.describe("ホームの1本の一覧", () => {
           .getByTestId("calendar-day")
           .and(page.locator(`[data-day="${day}"]`));
         await expect(cell).toHaveAttribute("aria-disabled", "false");
-        await expect(cell).toHaveAttribute("aria-label", /録画 1件/);
+        await expect(cell).toHaveAttribute("aria-label", /録画 1 件/);
         await cell.click();
 
         const head = page
@@ -990,7 +990,7 @@ test.describe("ホームの1本の一覧", () => {
       const cell = page
         .getByTestId("calendar-day")
         .and(page.locator(`[data-day="${day}"]`));
-      await expect(cell).toHaveAttribute("aria-label", /予約 \d+件/);
+      await expect(cell).toHaveAttribute("aria-label", /予約 \d+ 件/);
       await cell.click();
       const head = page
         .getByTestId("timeline-day")

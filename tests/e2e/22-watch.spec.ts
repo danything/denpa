@@ -1177,7 +1177,7 @@ test.describe("録画を観る", () => {
       .click();
     await expect(speed).toHaveText("1.5");
     await expect(speed.locator("svg")).toHaveCount(0);
-    await expect(speed).toHaveAccessibleName("再生の速さ 1.5倍");
+    await expect(speed).toHaveAccessibleName("再生の速さ 1.5 倍");
     await expect(speed).toHaveAttribute("aria-pressed", "true");
     // 選んだ速さは覚える。開き直しても同じ速さで始まる
     await goto(page, `/watch/${id}`);

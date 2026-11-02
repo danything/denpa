@@ -51,6 +51,6 @@ export function cmRedo(recording: {
   if (ts) return { state: "prompt" };
   return {
     state: "disabled",
-    reason: "CMをカットした録画で、元のTSも無いため検出し直せません",
+    reason: "CM をカットした録画で、元の TS も無いため検出し直せません",
   };
 }

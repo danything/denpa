@@ -542,7 +542,7 @@ public sealed class Dib8096
     /// </summary>
     public DibLock Tune(uint hz)
     {
-        if (hz is < 45_000_000 or > 860_000_000) throw new IOException($"{hz} Hz は受けられません (45〜860MHz)");
+        if (hz is < 45_000_000 or > 860_000_000) throw new IOException($"{hz} Hz は受けられません (45〜860 MHz)");
         _khz = hz / 1000;
         _band = BandOf(_khz);
         _breakdown.Clear();

@@ -733,7 +733,7 @@
             {...props}
             type="button"
             class="small secondary outline date-label"
-            title="{shownDate} (4:00〜翌4:00)"
+            title="{shownDate} (4:00〜翌 4:00)"
             data-testid="guide-date">{day}</button
           >
         {/snippet}

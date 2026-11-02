@@ -133,8 +133,10 @@
   <div class="rules-list" data-testid="rule-list">
     <!-- スマホの形の集計。広い形ではサイドバーの「集計」 -->
     <p class="narrow-summary small muted" data-testid="rule-summary-narrow">
-      これから7日の予約 <span class="num">{data.summary.weekReservations}</span>
-      件 ・ この7日で録れた
+      これから 7 日の予約 <span class="num"
+        >{data.summary.weekReservations}</span
+      >
+      件・この 7 日で録れた
       <span class="num">{data.summary.lastWeekRecordings}</span> 本
     </p>
 
@@ -287,11 +289,11 @@
     <h2 class="side-label">集計</h2>
     <dl class="side-list stats" data-testid="rule-summary">
       <div class="side-item static">
-        <dt>これから7日の予約</dt>
+        <dt>これから 7 日の予約</dt>
         <dd class="num">{data.summary.weekReservations} 件</dd>
       </div>
       <div class="side-item static">
-        <dt>この7日で録れた</dt>
+        <dt>この 7 日で録れた</dt>
         <dd class="num">{data.summary.lastWeekRecordings} 本</dd>
       </div>
     </dl>

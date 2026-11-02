@@ -43,12 +43,12 @@ export function dateTime(ms: number): string {
 
 export function durationMs(ms: number): string {
   const min = Math.round(ms / 60000);
-  if (min < 60) return `${min}分`;
+  if (min < 60) return `${min} 分`;
   const rest = min % 60;
   // 「24時間0分」のような書き方は読みにくいので、端数が無いときは時間だけ出す
   return rest === 0
-    ? `${Math.floor(min / 60)}時間`
-    : `${Math.floor(min / 60)}時間${rest}分`;
+    ? `${Math.floor(min / 60)} 時間`
+    : `${Math.floor(min / 60)} 時間 ${rest} 分`;
 }
 
 export function duration(startAt: number, endAt: number): string {
@@ -85,7 +85,7 @@ export function nowStatus(
  * 終わりの時刻を過ぎても止まりきるまでは録画中のまま。そのときはあと何分かは言えないので null (「録画中」だけ)
  */
 export function recordingLeft(now: number, endAt: number): string | null {
-  return endAt <= now ? null : `あと${untilWords(endAt - now)}`;
+  return endAt <= now ? null : `あと ${untilWords(endAt - now)}`;
 }
 
 /** 切り上げた分。過ぎていても 1 分 (「0分」とは言わない) */
@@ -98,15 +98,15 @@ function untilWords(ms: number): string {
   const min = minutesUntil(ms);
   return min < 24 * 60
     ? durationMs(min * 60_000)
-    : `${Math.floor(min / (24 * 60))}日`;
+    : `${Math.floor(min / (24 * 60))} 日`;
 }
 
 /** 狭い幅の形。「3:59」「12分」「3日」 */
 function untilShort(ms: number): string {
   const min = minutesUntil(ms);
-  if (min < 60) return `${min}分`;
+  if (min < 60) return `${min} 分`;
   if (min < 24 * 60) return `${Math.floor(min / 60)}:${pad(min % 60)}`;
-  return `${Math.floor(min / (24 * 60))}日`;
+  return `${Math.floor(min / (24 * 60))} 日`;
 }
 
 /**
@@ -212,13 +212,13 @@ export function capacityLabel(
       ? `${tb.toFixed(1)}TB`
       : free >= 1024 ** 3
         ? `${Math.floor(free / 1024 ** 3)}GB`
-        : "1GB未満";
+        : "1GB 未満";
   if (hours === null) return { free: `空き ${space}`, hours: null };
-  if (hours < 1) return { free: `空き ${space}`, hours: "1時間未満" };
+  if (hours < 1) return { free: `空き ${space}`, hours: "1 時間未満" };
   const step = hours >= 1000 ? 100 : hours >= 100 ? 10 : 1;
   return {
     free: `空き ${space}`,
-    hours: `約${Math.floor(hours / step) * step}時間`,
+    hours: `約 ${Math.floor(hours / step) * step} 時間`,
   };
 }
 
@@ -246,9 +246,9 @@ export function eta(ms: number | null): string {
   const sec = total % 60;
   const min = Math.floor(total / 60) % 60;
   const hour = Math.floor(total / 3600);
-  if (hour > 0) return `あと${hour}時間${pad(min)}分${pad(sec)}秒`;
-  if (min > 0) return `あと${min}分${pad(sec)}秒`;
-  return `あと${sec}秒`;
+  if (hour > 0) return `あと ${hour} 時間 ${pad(min)} 分 ${pad(sec)} 秒`;
+  if (min > 0) return `あと ${min} 分 ${pad(sec)} 秒`;
+  return `あと ${sec} 秒`;
 }
 
 /**
@@ -270,8 +270,8 @@ export function encodeDetail(
  */
 const PHASE_LABEL: Record<string, string> = {
   descramble: "スクランブル復号中",
-  cm: "CM検出中",
-  cut: "CMカット中",
+  cm: "CM 検出中",
+  cut: "CM カット中",
   encode: "エンコード中",
 };
 

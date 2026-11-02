@@ -177,9 +177,12 @@ test.describe("ライブが録画にチューナーを取り上げられたと�
     await recordNow(request, recorded);
     try {
       const note = page.getByTestId("live-yielded");
-      await expect(note).toContainText("録画のため局を切り替えました", {
-        timeout: 30_000,
-      });
+      await expect(note).toContainText(
+        "録画が始まったため、局を切り替えました",
+        {
+          timeout: 30_000,
+        },
+      );
       await expect(note).toContainText("(録画中を再生しています)");
       // チューナーは録画のもの。ライブはリクエストし直したが入れなかった
       const users = await grUsers(stack);

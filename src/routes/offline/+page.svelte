@@ -161,20 +161,13 @@
           <div class="info">
             <div class="name truncate small broadcast">{item.name}</div>
             <div class="tiny muted">
-              <span class="broadcast">{item.serviceName}</span> ・ {dateTime(
+              <span class="broadcast">{item.serviceName}</span>・{dateTime(
                 item.startAt,
-              )}
-              {#if item.durationMs !== null}
-                ・ {durationMs(item.durationMs)}
-              {/if}
-              {#if item.video !== undefined}
-                ・ {size(item.video.size)}
-              {/if}
-              {#if item.source === "hevc"}
-                ・ H.265
-              {:else if item.source === "alt"}
-                ・ H.264
-              {/if}
+              )}{#if item.durationMs !== null}・{durationMs(
+                  item.durationMs,
+                )}{/if}{#if item.video !== undefined}・{size(
+                  item.video.size,
+                )}{/if}{#if item.source === "hevc"}・H.265{:else if item.source === "alt"}・H.264{/if}
             </div>
           </div>
           {#if item.state === "downloading"}

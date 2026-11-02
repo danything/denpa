@@ -144,7 +144,7 @@ export function captionLanguage(index: number, code: string): CaptionLanguage {
   return {
     index,
     code,
-    label: LANGUAGE[code] ?? (code === "" ? `字幕${index}` : code),
+    label: LANGUAGE[code] ?? (code === "" ? `字幕 ${index}` : code),
   };
 }
 

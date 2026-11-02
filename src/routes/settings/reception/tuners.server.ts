@@ -168,7 +168,7 @@ export const actions = {
       );
       if (types.length === 0) {
         return fail(400, {
-          message: `${name}: 受信できる種別を1つ以上選んでください`,
+          message: `${name}: 受信できる種別を 1 つ以上選んでください`,
         });
       }
       const device = String(get("device") ?? "").trim();

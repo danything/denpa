@@ -251,10 +251,10 @@ describe("待ったあとの記録の1行", () => {
       "BS15_0 を 14 分開いて、カルーセルを読み切りました",
     );
     expect(waitedMessage("BS15_0", "yielded", false, 8 * minute)).toBe(
-      "BS15_0 を 8 分開いて、ほかの選局に譲りました。読んだところまでは覚えています",
+      "BS15_0 を 8 分開いて、ほかの選局にチューナーを譲りました。読んだところまでは覚えています",
     );
     expect(waitedMessage("BS15_0", "stopped", false, minute)).toBe(
-      "BS15_0 を 1 分開いて、「ロゴをいますぐ集める」に譲りました",
+      "BS15_0 を 1 分開いて、「ロゴをいますぐ集める」を先にしました",
     );
     expect(waitedMessage("BS15_0", "miss", false, 0)).toBeNull();
     expect(waitedMessage("BS15_0", "busy", false, 0)).toBeNull();

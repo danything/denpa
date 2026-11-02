@@ -19,7 +19,7 @@ export const actions = {
     const url = String(form.get("url") ?? "").trim();
     // 頭の綴りだけでなく URL として読めるかまで見る (`http://` だけ、のようなものを残さない)
     if (!webhookUrl(url)) {
-      return fail(400, { message: "http(s) で始まるURLを入れてください" });
+      return fail(400, { message: "http(s) で始まる URL を入れてください" });
     }
     // 何も選ばなければ全部の通知を受け取る
     const events = form.getAll("events").map(String).filter(Boolean);
@@ -34,7 +34,7 @@ export const actions = {
   toggleWebhook: async ({ request }) => {
     const form = await request.formData();
     const id = Number(form.get("id"));
-    if (!Number.isFinite(id)) return fail(400, { message: "IDが不正です" });
+    if (!Number.isFinite(id)) return fail(400, { message: "ID が不正です" });
     orm()
       .update(webhooks)
       .set({ enabled: not(webhooks.enabled) })
@@ -46,7 +46,7 @@ export const actions = {
   deleteWebhook: async ({ request }) => {
     const form = await request.formData();
     const id = Number(form.get("id"));
-    if (!Number.isFinite(id)) return fail(400, { message: "IDが不正です" });
+    if (!Number.isFinite(id)) return fail(400, { message: "ID が不正です" });
     orm().delete(webhooks).where(eq(webhooks.id, id)).run();
     return { success: true };
   },

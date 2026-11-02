@@ -337,7 +337,7 @@ export class TrackList {
 }
 
 function label(index: number, lang: string | null): string {
-  const head = index === 0 ? "字幕" : `字幕${index + 1}`;
+  const head = index === 0 ? "字幕" : `字幕 ${index + 1}`;
   if (lang === null) return head;
   return `${head} (${LANGUAGE[lang] ?? lang})`;
 }

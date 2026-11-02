@@ -368,7 +368,7 @@ export const actions = {
     // 元になるのは元のTS。エンコード済みを元に録り直しても画質は戻らない
     if (encodeSource(recording) === null) {
       return fail(400, {
-        message: "元のTSが残っていないため再エンコードできません",
+        message: "元の TS が残っていないため再エンコードできません",
       });
     }
     /*
@@ -396,7 +396,7 @@ export const actions = {
       return fail(400, { message: "録画が見つかりません" });
     const redo = cmRedo(recording);
     if (redo.state === "hidden")
-      return fail(400, { message: "CM検出に使えるファイルがありません" });
+      return fail(400, { message: "CM 検出に使えるファイルがありません" });
     if (redo.state === "disabled") return fail(400, { message: redo.reason });
     // 切ったものからは戻せない。元のTSはあるので、再エンコードを促す
     if (redo.state === "prompt") return fail(400, { message: CM_CUT_ALREADY });
@@ -407,7 +407,7 @@ export const actions = {
 
   cancelEncode: async ({ request }) => {
     const id = await formId(request);
-    if (id === null) return fail(400, { message: "ジョブIDが不正です" });
+    if (id === null) return fail(400, { message: "ジョブ ID が不正です" });
     // 畳み終わってから返る。ここで待たないと、この直後の読み直しが
     // まだ「エンコード中」を読んで、押しても何も変わらないように見える
     await cancelEncode(id);
@@ -456,7 +456,7 @@ export const actions = {
    */
   deleteMissed: async ({ request }) => {
     const id = await formId(request);
-    if (id === null) return fail(400, { message: "IDが不正です" });
+    if (id === null) return fail(400, { message: "ID が不正です" });
     // 状態も見て消す。録り逃し以外 (これからの予約など) を同じアクションで消させない
     const gone = orm()
       .delete(reservationTable)
@@ -478,7 +478,7 @@ export const actions = {
   /** 取り消した予約を戻す。ルールは作り直さないので、ここからしか戻せない */
   restore: async ({ request }) => {
     const id = await formId(request);
-    if (id === null) return fail(400, { message: "IDが不正です" });
+    if (id === null) return fail(400, { message: "ID が不正です" });
     try {
       await restore(id);
     } catch (error) {
@@ -491,7 +491,7 @@ export const actions = {
 
   cancel: async ({ request }) => {
     const id = await formId(request);
-    if (id === null) return fail(400, { message: "予約IDが不正です" });
+    if (id === null) return fail(400, { message: "予約 ID が不正です" });
     await cancel(id);
     return { success: true };
   },

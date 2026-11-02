@@ -997,9 +997,9 @@ export function waitedMessage(
     case "done":
       return `${opened}、カルーセルを読み切りました`;
     case "yielded":
-      return `${opened}、ほかの選局に譲りました。読んだところまでは覚えています`;
+      return `${opened}、ほかの選局にチューナーを譲りました。読んだところまでは覚えています`;
     case "stopped":
-      return `${opened}、「ロゴをいますぐ集める」に譲りました`;
+      return `${opened}、「ロゴをいますぐ集める」を先にしました`;
     case "ranOut":
       return received
         ? `${opened}途中まで読みました。次に空いたときに続きから読みます`

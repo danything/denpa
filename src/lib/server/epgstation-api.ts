@@ -203,8 +203,9 @@ export function validItems<T>(
         )
       : [...essentials];
     if (missing.length > 0) {
-      const id = isObject(value) && isId(value["id"]) ? ` #${value["id"]}` : "";
-      skip(`${what}の1件${id}に ${missing.join("・")} が無いので飛ばします`);
+      const id =
+        isObject(value) && isId(value["id"]) ? ` (#${value["id"]})` : "";
+      skip(`${what} の 1 件${id}に ${missing.join("・")} が無いので飛ばします`);
       continue;
     }
     out.push(value);

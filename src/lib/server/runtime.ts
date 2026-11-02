@@ -205,7 +205,7 @@ export function start(): void {
     const result = await restoreWidths();
     if (result.restored > 0 || result.missed > 0) {
       console.log(
-        `[restore-width] 録画 ${result.seen} 件を見ました: 元のTSから戻した ${result.restored} 件 / ` +
+        `[restore-width] 録画 ${result.seen} 件を見ました: 元の TS から戻した ${result.restored} 件 / ` +
           `もとから放送のとおり ${result.already} 件 / 戻せなかった ${result.missed} 件`,
       );
     }

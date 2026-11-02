@@ -802,7 +802,8 @@
       {#snippet older()}
         {#if data.recordings.length >= 300 && pastDone}
           <div class="row-empty muted small">
-            新しい順に300件まで表示しています。古いものは検索で探してください。
+            新しい順に 300
+            件まで表示しています。古いものは検索で探してください。
           </div>
         {/if}
         {#if !pastDone}
@@ -1042,13 +1043,13 @@
               tabindex="-1"
               data-testid="cm-redo-button"
             >
-              CM検出をやり直す
+              CM 検出をやり直す
             </div>
             <div class="menu-note muted small">{redo.reason}</div>
           {:else}
             {@render menuSubmit(
               "?/redetectCm",
-              "CM検出をやり直す",
+              "CM 検出をやり直す",
               "cm-redo-button",
               { id: rec.id },
               detail.close,

@@ -344,15 +344,12 @@
                     <span class="truncate broadcast">{program.name}</span>
                   </span>
                   <span class="hit-meta tiny muted">
-                    {@render service(program)}
-                    <span class="num"
+                    {@render service(program)}<span class="num"
                       >{dateTime(program.start_at)}〜{time(
                         program.end_at,
                       )}</span
-                    >
-                    <!-- 予約が無ければ、書く欄の条件で録るか。事実なので補足の字で (docs/design.md の「印の意味」) -->
-                    {#if program.reservation_state === null && verdict !== null}
-                      ・ <span data-testid="search-verdict"
+                    ><!-- 予約が無ければ、書く欄の条件で録るか。事実なので補足の字で (docs/design.md の「印の意味」) -->{#if program.reservation_state === null && verdict !== null}・<span
+                        data-testid="search-verdict"
                         >{verdict.kind === "record" ? "録る" : "録らない"}</span
                       >
                       {#if verdict.kind === "skip"}
@@ -429,9 +426,8 @@
                     <span class="truncate broadcast">{rec.name}</span>
                   </span>
                   <span class="hit-meta tiny muted">
-                    {@render service(rec)}
-                    <span class="num"
-                      >{dateTime(rec.start_at)} ・ {recordedDuration(rec)}</span
+                    {@render service(rec)}<span class="num"
+                      >{dateTime(rec.start_at)}・{recordedDuration(rec)}</span
                     >
                   </span>
                 </svelte:element>
@@ -529,11 +525,9 @@
                     <span class="truncate broadcast">{res.name}</span>
                   </span>
                   <span class="hit-meta tiny muted">
-                    {@render service(res)}
-                    <span class="num"
+                    {@render service(res)}<span class="num"
                       >{dateTime(res.start_at)}〜{time(res.end_at)}</span
-                    >
-                    ・ {res.manual
+                    >・{res.manual
                       ? "手動予約"
                       : `ルール: ${res.rule_name ?? "(削除済み)"}`}
                   </span>
@@ -588,8 +582,8 @@
                     <span class="truncate">{rule.name}</span>
                   </span>
                   <span class="hit-meta tiny muted">
-                    {#if rule.keyword !== ""}キーワード: {rule.keyword} ・{/if}
-                    優先度 {rule.priority} ・ 予約 {rule.reservations} 件
+                    {#if rule.keyword !== ""}キーワード: {rule.keyword}・{/if}優先度
+                    {rule.priority}・予約 {rule.reservations} 件
                   </span>
                 </a>
               </li>
@@ -643,7 +637,7 @@
     {#if preview === null}
       <p class="none small muted">数えています…</p>
     {:else if preview.programs.length === 0}
-      <p class="none small muted">いまの番組表では1件も一致しません</p>
+      <p class="none small muted">いまの番組表では 1 件も一致しません</p>
     {:else}
       <ul class="hits">
         {#each preview.programs as row (row.id)}
@@ -667,19 +661,13 @@
               </span>
               <!-- 録るかどうかは事実なので補足の字で (docs/design.md の「印の意味」)。録らない行は薄くもなる (`.dim`) -->
               <span class="hit-meta tiny muted">
-                <span class="broadcast">{row.service_name}</span> ・
-                <span class="num"
-                  >{dateTime(row.start_at)}〜{time(row.end_at)}</span
-                >
-                {#if !row.matched}
-                  ・ 録らない (条件から外れました)
-                {:else if row.skip !== null}
-                  ・ 録らない ({SKIP_LABEL[row.skip.kind]})
-                {:else if row.reservation_state === null}
-                  ・ 録る
-                {/if}
-                {#if row.conflicts.length > 0 || row.conflict_reason !== null}
-                  ・ <span class="text-error"
+                <span class="broadcast">{row.service_name}</span>・<span
+                  class="num">{dateTime(row.start_at)}〜{time(row.end_at)}</span
+                >{#if !row.matched}・録らない (条件から外れました){:else if row.skip !== null}・録らない
+                  ({SKIP_LABEL[
+                    row.skip.kind
+                  ]}){:else if row.reservation_state === null}・録る{/if}{#if row.conflicts.length > 0 || row.conflict_reason !== null}・<span
+                    class="text-error"
                     >{row.conflict_reason ??
                       `チューナーの競合 ${row.conflicts.length} 件`}</span
                   >
@@ -731,7 +719,7 @@
     has={row.has_logo}
     style="height: 0.875rem; vertical-align: -0.125rem"
   />
-  <span class="broadcast">{row.service_name}</span> ・
+  <span class="broadcast">{row.service_name}</span>・
 {/snippet}
 {#snippet stateTag(state: string, testid?: string)}
   <span class="tag {badgeClass(state)}" data-testid={testid}

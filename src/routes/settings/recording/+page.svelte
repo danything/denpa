@@ -210,14 +210,14 @@
           </div>
           {#if recording.codecs.length === 0}
             <Lead>
-              選ばないと<strong>エンコードせず</strong>、元のTSのまま残します
+              選ばないと<strong>エンコードせず</strong>、元の TS のまま残します
               {#snippet more()}
                 <p>CM のチャプターや字幕トラックも付きません。</p>
               {/snippet}
             </Lead>
           {:else if recording.codecs.length > 1}
             <Lead>
-              1本の録画を選んだコーデックの数だけエンコードします
+              1 本の録画を選んだコーデックの数だけエンコードします
               {#snippet more()}
                 <p>
                   再生では AV1 → H.265 → H.264
@@ -233,7 +233,7 @@
                 <p>
                   GPU でエンコードできないときは H.265
                   を飛ばし、ほかに選んだコーデックだけエンコードします。H.265
-                  だけを選んでいたらエンコードは失敗し、元のTSが残ります。
+                  だけを選んでいたらエンコードは失敗し、元の TS が残ります。
                 </p>
                 <p>ライブと追っかけは H.265 では流しません。</p>
               {/snippet}
@@ -252,12 +252,12 @@
             aria-label="同時に変換する本数"
           >
             <option value="" selected={recording.transcodeLimit === null}>
-              自動 ({data.transcode.auto}本)
+              自動 ({data.transcode.auto} 本)
             </option>
             {#each data.transcode.choices as n (n)}
               <option
                 value={String(n)}
-                selected={recording.transcodeLimit === n}>{n}本</option
+                selected={recording.transcodeLimit === n}>{n} 本</option
               >
             {/each}
           </select>
@@ -265,20 +265,20 @@
             録画を別の形式で再生するときと、追っかけ再生で使います。ライブは数えません
             {#snippet more()}
               <p>
-                自動では GPU が無ければ 2本、あれば
-                4本です。埋まっているときにリクエストされた再生は断り、
-                エンコード済みの動画か元のTSでの再生を勧めます。
+                自動では GPU が無ければ 2 本、あれば 4
+                本です。埋まっているときにリクエストされた再生は断り、
+                エンコード済みの動画か元の TS での再生を勧めます。
               </p>
             {/snippet}
           </Lead>
         </div>
         <div class="field">
-          <span class="field-label">元のTS</span>
+          <span class="field-label">元の TS</span>
           <CheckRow
             name="keepOriginal"
             checked={recording.keepOriginal}
-            title="元のTSも残す"
-            hint="エンコードしたあとも元のTSを消しません。容量を多く使います"
+            title="元の TS も残す"
+            hint="エンコードしたあとも元の TS を消しません。容量を多く使います"
           />
         </div>
         <!--
@@ -292,8 +292,8 @@
             name="fpsDetect"
             checked={recording.fpsDetect}
             title="コマ数を映像から決める"
-            hint="アニメなどは 30コマにして、時間とサイズを半分にします"
-            detail="同じコマが続く映像 (アニメなど) を見分けて 30コマでエンコードします。外すとすべて 60コマになります。"
+            hint="アニメなどは 30 コマにして、時間とサイズを半分にします"
+            detail="同じコマが続く映像 (アニメなど) を見分けて 30 コマでエンコードします。外すとすべて 60 コマになります。"
           />
         </div>
       </form>
@@ -323,7 +323,7 @@
         class="fields setting-rows"
       >
         <label class="field">
-          <span class="field-label">CMの扱い</span>
+          <span class="field-label">CM の扱い</span>
           <select name="cmCut" class="narrow" data-testid="global-cmcut">
             <option value="chapter" selected={recording.cmCut === "chapter"}>
               チャプターを打つだけ (安全)
@@ -336,7 +336,8 @@
             >
           </select>
           <span class="hint"
-            >局ロゴの消えている所をCMとみます。ロゴが使えなければ無音と長さで決めます</span
+            >局ロゴの消えている所を CM
+            とみます。ロゴが使えなければ無音と長さで決めます</span
           >
         </label>
       </form>

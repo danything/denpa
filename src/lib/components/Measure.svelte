@@ -120,7 +120,7 @@
     )
       .map((link) => link.href.split("/").pop())
       .join(" ");
-    return `決まり ${found ? "有" : "無"} / ${seen}件 / ${href}`;
+    return `決まり ${found ? "有" : "無"} / ${seen} 件 / ${href}`;
   }
 
   /**

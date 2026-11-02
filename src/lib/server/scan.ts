@@ -497,7 +497,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
     // 1件も見つからないまま上書きすると、今まで録れていた局まで消える
     if (found.length === 0) {
       throw new Error(
-        "チャンネルが1件も見つかりませんでした。チューナーとアンテナを確認してください",
+        "チャンネルが 1 件も見つかりませんでした。チューナーとアンテナを確認してください",
       );
     }
 

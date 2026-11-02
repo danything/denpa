@@ -11,7 +11,7 @@ import { recordingCaptions } from "#lib/server/live.js";
  */
 export function GET({ params, url }) {
   const id = Number(params.id);
-  if (!Number.isInteger(id)) error(400, "録画IDが不正です");
+  if (!Number.isInteger(id)) error(400, "録画 ID が不正です");
   const from = Number(url.searchParams.get("from") ?? 0);
   const language = parseCaptionLanguage(url.searchParams.get("language"));
   const stream = recordingCaptions(
@@ -19,7 +19,7 @@ export function GET({ params, url }) {
     Number.isFinite(from) ? Math.max(0, from) : 0,
     language,
   );
-  if (stream === null) error(404, "録画がないか、元のTSがありません");
+  if (stream === null) error(404, "録画がないか、元の TS がありません");
   return new Response(stream, {
     headers: {
       "Content-Type": "application/octet-stream",

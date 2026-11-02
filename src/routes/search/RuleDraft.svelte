@@ -458,7 +458,7 @@
       <label class="row side-item">
         <span
           >前の回は録らない <span class="tiny muted"
-            >(4話まで録ったあとの1〜3話など)</span
+            >(4 話まで録ったあとの 1〜3 話など)</span
           ></span
         >
         <input type="hidden" name="skipEarlier" value="0" />

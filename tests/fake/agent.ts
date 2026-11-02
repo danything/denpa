@@ -117,7 +117,7 @@ function unscramble(
   if (!from.startsWith(`${RECORDED}/`) || !to.startsWith(`${RECORDED}/`)) {
     return {
       ok: false,
-      error: "元のTSの保存先の外にあるファイルは復号できません",
+      error: "元の TS の保存先の外にあるファイルは復号できません",
     };
   }
   if (!existsSync(from))
@@ -577,7 +577,7 @@ const options: Bun.ServeOptions = {
           }
           // 1件も無いまま上書きすると、今まで録れていた局まで消える
           if (body.channels.length === 0)
-            return json({ error: "チャンネルが1件もありません" }, 400);
+            return json({ error: "チャンネルが 1 件もありません" }, 400);
           const scanned = body.scanned as string[];
           saved = sortChannels([
             ...saved.filter((c) => !scanned.includes(c.type)),

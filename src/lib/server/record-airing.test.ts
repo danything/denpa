@@ -171,7 +171,7 @@ describe("いま流れている番組を録る", () => {
     expect(await reserveFromForm(form("6"))).toBe(
       "この番組は放送が終わっています",
     );
-    expect(await reserveFromForm(form("x"))).toBe("番組IDが不正です");
+    expect(await reserveFromForm(form("x"))).toBe("番組 ID が不正です");
   });
 
   test("チューナーが足りなければ競合として返す (予約は残る)", async () => {

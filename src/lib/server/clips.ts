@@ -737,7 +737,8 @@ export async function setClipLayers(
  */
 export function clipOr404(idLike: string): Clip & { file: string } {
   const id = Number(idLike);
-  if (!Number.isSafeInteger(id) || id <= 0) error(400, "切り抜きIDが不正です");
+  if (!Number.isSafeInteger(id) || id <= 0)
+    error(400, "切り抜き ID が不正です");
   const clip = clipById(id);
   if (clip === undefined) error(404, "切り抜きが見つかりません");
   return clip;

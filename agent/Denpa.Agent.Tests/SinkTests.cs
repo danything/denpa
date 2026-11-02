@@ -33,7 +33,7 @@ public class SinkTests
     {
         var sink = new Sink("logo BS/BS15_0", 4, _ => { });
         sink.Fail(TunerPool.PreemptedBy("epg BS03_0"));
-        await Assert.That(sink.FailedWith).IsEqualTo("優先度の高い要求 (epg BS03_0) に譲りました");
+        await Assert.That(sink.FailedWith).IsEqualTo("優先度の高い要求 (epg BS03_0) にチューナーを譲りました");
     }
 
     [Test]

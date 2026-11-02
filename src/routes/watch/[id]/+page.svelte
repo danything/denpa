@@ -2278,7 +2278,7 @@
           <StageNote testid="watch-resumed">続きから再生しています</StageNote>
         {/if}
         {#if skipped}
-          <StageNote testid="watch-skipped">CMを飛ばしました</StageNote>
+          <StageNote testid="watch-skipped">CM を飛ばしました</StageNote>
         {/if}
         {#if warning !== null}
           <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
@@ -2322,7 +2322,7 @@
       />
 
       <div class="small muted meta num" data-testid="watch-meta">
-        {recordedDuration(rec)} ・ {size(rec.ts_size)}
+        {recordedDuration(rec)}・{size(rec.ts_size)}
       </div>
       {#if data.clips > 0}
         <a

@@ -41,7 +41,7 @@ export function recordingFromForm(form: FormData): Recording | undefined {
  */
 export function recordingOr404(idLike: string, deleted = false): Recording {
   const id = Number(idLike);
-  if (!Number.isFinite(id)) error(400, "録画IDが不正です");
+  if (!Number.isFinite(id)) error(400, "録画 ID が不正です");
   const recording = orm()
     .select()
     .from(recordings)

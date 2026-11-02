@@ -56,7 +56,7 @@
 
   {#if recordings && migrate.total > 0}
     <JobProgress {done} total={migrate.total}>
-      {#if migrate.current}— {migrate.current}{/if}
+      {#if migrate.current}・{migrate.current}{/if}
     </JobProgress>
   {/if}
   {#if recordings && migrate.apply && migrate.bytesTotal > 0}
@@ -66,7 +66,7 @@
       unit={bytes.unit}
       testid="migrate-bytes"
     >
-      {#if currentPercent !== null}— いまのファイル {currentPercent}%{/if}
+      {#if currentPercent !== null}・いまのファイル {currentPercent}%{/if}
     </JobProgress>
   {/if}
 

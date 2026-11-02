@@ -179,9 +179,9 @@ describe("ルールの写し方", () => {
           { start: 3, range: 1, week: 1 },
         ],
       }),
-    ).toContain("時間帯が2つ以上");
+    ).toContain("時間帯が 2 つ以上");
     // 局を全部外すと全局に当たる
-    expect(skip({ channelIds: [999] })).toContain("局が1つも");
+    expect(skip({ channelIds: [999] })).toContain("局が 1 つも");
     // 種別が BS4K だけ。外すと全種別に当たる
     expect(skip({ BS4K: true })).toContain("BS4K だけ");
     expect(skip({ keyword: "" })).toContain("条件が空");
