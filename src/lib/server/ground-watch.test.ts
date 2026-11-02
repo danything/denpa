@@ -134,3 +134,10 @@ describe("チャンネルのお知らせの順", () => {
     orm().delete(channelChanges).run();
   });
 });
+
+describe("比べない SDT", () => {
+  test("局の一覧の無い SDT (ロゴの対応だけ) では比べない", () => {
+    compareGround(MX, sdtOf([]));
+    expect(groundNotice()).toBeNull();
+  });
+});
