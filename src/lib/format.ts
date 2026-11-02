@@ -29,6 +29,14 @@ export function date(ms: number): string {
   return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS[d.getDay()]})`;
 }
 
+/**
+ * 西暦つきの日付 (`2026/10/11(日)`)。録画と切り抜きの日付の見出しで使う —
+ * 何年も溜まると同じ「10/11(日)」が並び、カレンダーの無いスマホの形では見分けられない (#1931)
+ */
+export function fullDate(ms: number): string {
+  return `${new Date(ms).getFullYear()}/${date(ms)}`;
+}
+
 export function dateTime(ms: number): string {
   return `${date(ms)} ${time(ms)}`;
 }

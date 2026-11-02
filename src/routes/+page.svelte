@@ -47,7 +47,7 @@
   import { applyEncodeProgress } from "#lib/encode-live.svelte.js";
   import {
     cmNoteWorthShowing,
-    date,
+    fullDate,
     logoUnusable,
     nowStatus,
   } from "#lib/format.js";
@@ -530,9 +530,9 @@
   });
   /** 「いま」の線に添える一言。次の録画まで (絞り込みに関係なく。録画中のあと何分かは行の3段目) */
   const lineStatus = $derived(nowStatus(clock, nextRes));
-  /** 日付の見出しの字。今日・明日・昨日は言葉で、ほかは日付 */
+  /** 日付の見出しの字。今日・明日・昨日は言葉で、ほかは西暦つきの日付 */
   function dayLabel(at: number): string {
-    return dayName(at, clock) ?? date(at);
+    return dayName(at, clock) ?? fullDate(at);
   }
 
   /*
