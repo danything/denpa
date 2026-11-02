@@ -341,7 +341,7 @@ describe("EpgTimerSrv に繋ぐ", () => {
   test("成功でない結果は、コマンドの名前と番号つきで止める", async () => {
     fake.setMode({ result: 0 });
     await expect(client().reserves()).rejects.toThrow(
-      "ENUM_RESERVE2 (2011) に失敗を返しました (結果 0)",
+      "ENUM_RESERVE2 (2011) が失敗しました (結果 0)",
     );
     fake.setMode({ result: 203 });
     await expect(client().reserves()).rejects.toThrow("対応していません");
