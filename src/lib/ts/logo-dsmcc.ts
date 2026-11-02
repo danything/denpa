@@ -162,7 +162,7 @@ function logoKey(logo: ModuleLogo): string {
 /**
  * カルーセルの読みかけ。**開き直しても捨てない。**
  *
- * 衛星のロゴは十数分に一度まとめて流れてくるだけで (`server/logo.ts` の `SATELLITE_TIMEOUT`)、
+ * 衛星のロゴは十数分に一度まとめて流れてくるだけで (`server/config.ts` の `logoCarouselWait`)、
  * 開いている間にその一度が来るとは限らない。番組表集めやライブに譲って閉じるたびに
  * 一から読み直していた頃は、衛星のチューナーが2台の環境では途中で取り上げられてばかりで、
  * BS も CS も何日経っても揃わなかった。DII で知ったモジュールと受け取ったブロックを
@@ -182,6 +182,17 @@ export class CarouselProgress {
    */
   private readonly announced = new Map<string, string>();
   private readonly completed = new Set<string>();
+  private sections = 0;
+
+  /**
+   * **読み進んだ数。** 初めて知らされたロゴのモジュール (DII) と、初めて受け取ったブロック (DDB) だけを数える。
+   * 開いている間に増えなければ、その間カルーセルは一度も流れてこなかった (`server/logo.ts` の `carouselRanOutAt`)。
+   * 同じ DII や受け取り済みのブロックは数えない — 無音の間も DII だけ流し続ける中継があると、毎回「届いた」ことになって
+   * 6時間待ちが掛からず、番組表集めより上の優先度で20分ずつ塞ぎ続けてしまう
+   */
+  get received(): number {
+    return this.sections;
+  }
 
   onSection(section: Uint8Array): void {
     if (section[0] === TABLE_DII) {
@@ -201,6 +212,7 @@ export class CarouselProgress {
             this.completed.clear();
           }
           this.announced.set(key, module.name);
+          this.sections++;
         }
         const building = this.downloads.get(key);
         // 組み立て中のものを作り直さない (受け取ったブロックが消える)
@@ -238,7 +250,10 @@ export class CarouselProgress {
       this.downloads.delete(key);
       return;
     }
-    if (!download.add(ddb.blockNumber, ddb.block)) return;
+    const had = download.blocks;
+    const complete = download.add(ddb.blockNumber, ddb.block);
+    if (download.blocks > had) this.sections++;
+    if (!complete) return;
 
     // 揃った。次の DII でまた組み立て始める (同じバージョンなら同じロゴで上書きするだけ)
     this.downloads.delete(key);

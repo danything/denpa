@@ -29,6 +29,15 @@ public class SinkTests
         await Assert.That(left).IsEqualTo(1);
     }
 
+    /// <summary>取り上げられた利用者には、取り上げた相手の名乗りを返す。記録から相手を追えるように (#1939)</summary>
+    [Test]
+    public async Task 取り上げられたら相手の名乗りを理由に入れる()
+    {
+        var sink = new Sink("logo BS/BS15_0", 4, _ => { });
+        sink.Fail(TunerPool.PreemptedBy("epg BS03_0"));
+        await Assert.That(sink.FailedWith).IsEqualTo("優先度の高い要求 (epg BS03_0) に譲りました");
+    }
+
     [Test]
     public async Task ふつうに去っても1回だけ抜ける()
     {
