@@ -267,6 +267,12 @@ export function recordingHolds(
 export class TunerBusyError extends Error {}
 
 /**
+ * **エージェントが「選局できない」と返した** (同期しない・デバイスが無いなど)。空き待ち (`TunerBusyError`) と、
+ * エージェントに繋がらないのは別。受信できるかの記録 (`reception.ts`) はこれだけを失敗に数える
+ */
+export class TuneError extends Error {}
+
+/**
  * 物理チャンネルを丸ごと開く。**使い方はこれ1つ。**
  *
  * 同じチャンネルを誰かが既に開いていれば、エージェントが選局を共有させる
@@ -298,7 +304,7 @@ export async function openChannelStream(
     const detail = await res.text().catch(() => "");
     if (res.status === 409)
       throw new TunerBusyError(`チューナーに空きがありません ${detail}`);
-    throw new Error(`選局できません (${res.status}) ${detail}`);
+    throw new TuneError(`選局できません (${res.status}) ${detail}`);
   }
   return res.body;
 }

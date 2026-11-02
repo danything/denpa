@@ -20,6 +20,7 @@ import { CHANNEL_TYPES } from "../types";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
+import { pruneReception, unreceivableChannels } from "./reception";
 import { applyRules } from "./rules";
 import { resolveConflicts } from "./scheduler";
 import { programs, recordings, reservations, services } from "./schema";
@@ -179,6 +180,12 @@ export function syncServices(channels: AgentChannel[]): number {
    */
   const seen = new Set<number>();
   let canceled = 0;
+  /*
+   * **受信できないチャンネルの局は見かけなかったことにする** (`reception.ts`)。番組表とライブに出なくなり、
+   * しばらくすると番組と予約も片付く (`forgetMissing`)。受信できれば次の取り込みで戻る
+   */
+  pruneReception(channels);
+  const blocked = unreceivableChannels();
   orm().transaction((tx) => {
     const known = new Map(
       tx
@@ -188,6 +195,7 @@ export function syncServices(channels: AgentChannel[]): number {
         .map((row) => [row.id, row.name]),
     );
     for (const channel of channels) {
+      if (blocked.has(`${channel.type}:${channel.channel}`)) continue;
       for (const service of channel.services) {
         const id = serviceKey(channel.networkId, service.serviceId);
         // 映像の入っていないサービスは録っても仕方がない
@@ -426,16 +434,23 @@ export function syncServicesOnly(channels: AgentChannel[]): number {
  * EIT が持っているのは **ARIB のサービスID**(例: 23608)で、`Service.id` の
  * 内部ID(例: 3239123608)とは別物。そのまま入れると番組表の JOIN が1件も当たらず、
  * 番組が丸ごと出なくなる。networkId と合わせて引き直す。
+ *
+ * **受信できないチャンネルの局は入れない** (`reception.ts`)。衛星はほかの中継器からもその局の番組表が届くので、
+ * 入れるとルールが録れない予約を立てる
  */
 function serviceIdIndex(): Map<string, number> {
+  const blocked = unreceivableChannels();
   const rows = orm()
     .select({
       id: services.id,
       network_id: services.network_id,
       service_id: services.service_id,
+      type: services.type,
+      channel: services.channel,
     })
     .from(services)
-    .all();
+    .all()
+    .filter((s) => !blocked.has(`${s.type}:${s.channel}`));
   return new Map(rows.map((s) => [`${s.network_id}:${s.service_id}`, s.id]));
 }
 

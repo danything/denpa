@@ -428,7 +428,12 @@ public sealed class TunerPool(
     /// 衛星のロゴの選局が一晩取り上げられ続けたときに、相手が録画か番組表集めかを記録から追えなかった (#1939)。
     /// 名乗りは denpa が ASCII だけで付ける (<c>rec 12</c> <c>epg BS15:16625</c>。番組名は入らない)
     /// </summary>
-    public static string PreemptedBy(string use) => $"優先度の高い要求 ({use}) にチューナーを譲りました";
+    public static string PreemptedBy(string use) => $"{Preempted} ({use}) にチューナーを譲りました";
+
+    private const string Preempted = "優先度の高い要求";
+
+    /// <summary>取り上げられた理由か (<see cref="PreemptedBy"/>)。送る前に取り上げられたら 409 で返す (Program.cs)</summary>
+    public static bool IsPreempted(string reason) => reason.StartsWith($"{Preempted} (", StringComparison.Ordinal);
 
     /// <summary>
     /// **選ぶ順** (<c>GET /denpa/tuners</c> の <c>rank</c>)。小さいほど先に使う。無効なチューナーは null。

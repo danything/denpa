@@ -8,6 +8,7 @@ import {
   customType,
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -205,6 +206,35 @@ export const services = sqliteTable("services", {
     .default(sql`0`),
   updated_at: integer("updated_at").notNull(),
 });
+
+/**
+ * チャンネルを受信できたか。**番組表集めのついでに確かめる** (`reception.ts`)。
+ *
+ * BS と CS は放送の一覧 (NIT) から作るので、その家で受信できないチャンネルも入る
+ * (CATV で一部の中継器しか通らない、など)。受信できないと分かったチャンネルの局は、
+ * 番組表・ライブ・ルールの対象から外す
+ */
+export const channelReception = sqliteTable(
+  "channel_reception",
+  {
+    type: text("type").$type<ChannelType>().notNull(),
+    /** チャンネルの名前 (`T27`・`BS15:16625`)。`services.channel` と同じもの */
+    channel: text("channel").notNull(),
+    /** 最後に受信できた時刻。一度も確かめていなければ null */
+    ok_at: integer("ok_at"),
+    /** 最後に受信できなかった時刻 */
+    failed_at: integer("failed_at"),
+    /** 続けて受信できなくなった最初の時刻。受信できたら null */
+    failing_since: integer("failing_since"),
+    /** 続けて受信できなかった回数 (同じ周回の失敗は 1 回と数える) */
+    failures: integer("failures").notNull().default(0),
+    /** 受信できないと決めたか */
+    unreceivable: flag("unreceivable")
+      .notNull()
+      .default(sql`0`),
+  },
+  (t) => [primaryKey({ columns: [t.type, t.channel] })],
+);
 
 export const programs = sqliteTable(
   "programs",
