@@ -12,6 +12,7 @@ import { fetchKakolog, KAKOLOG_LAG } from "./kakolog";
 import { FORCE_SPAN, LIST_SPAN } from "./list";
 import { compileNg } from "./ng";
 import { NxJikkyo } from "./nx";
+import type { OfficialWriter } from "./official";
 import type { PostResult } from "./post";
 
 /** 過去ログ API が読めなかったとき、もう一度試すまで */
@@ -126,20 +127,33 @@ export class JikkyoFeed {
     return this.nx?.ready === true;
   }
 
+  /** いま流している実況のチャンネル (流していなければ null)。公式に書くときの書き先 (`official.ts`) */
+  get current(): string | null {
+    return this.active ? this.channel : null;
+  }
+
   /**
-   * NX-Jikkyo に書き込む (確かめるのは呼ぶ側。`post.ts`)。送れたら、いまの放送時刻 `w` に置いてすぐ流す
-   * (戻ってきた同じものは `nx.ts` が 1 回だけ捨てる)。`w` は返事を受けたときに読み、読めなければ送ったときの値に置く
-   * (どちらも無いと、送れたものがどこにも流れない)
+   * 書き込む (確かめるのは呼ぶ側。`post.ts`)。`official` を渡したら公式のニコニコ実況へ (denpa のサーバ経由)、無ければ NX-Jikkyo へ。
+   * 送れたら、いまの放送時刻 `w` に置いてすぐ流す。戻ってきた同じものは `nx.ts` が 1 回だけ捨てる
+   * (公式に書いたものは NX-Jikkyo が取り込んで流してくるが、自分の印が付かないので本文で見分ける)。
+   * `w` は返事を受けたときに読み、読めなければ送ったときの値に置く (どちらも無いと、送れたものがどこにも流れない)
    */
   async post(
     text: string,
     style: PostStyle,
     w: () => number | null,
+    official?: OfficialWriter,
   ): Promise<PostResult> {
     const nx = this.nx;
     if (nx === null) return "closed";
     const before = w();
-    const result = await nx.post(text, style);
+    let result: PostResult;
+    if (official === undefined) result = await nx.post(text, style);
+    else {
+      nx.expectEcho(text);
+      result = await official.post(text, style);
+      if (result !== "sent") nx.forgetEcho(text);
+    }
     const at = w() ?? before;
     if (result === "sent" && nx === this.nx && at !== null) {
       const own = postStyle(style);

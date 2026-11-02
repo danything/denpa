@@ -175,7 +175,7 @@
 
   /**
    * 実況に書き込む 1 行 (`JikkyoCompose`)。出せるのは流しているときと同じ条件 (世帯と端末の両方がオンで、映している局に
-   * 実況のチャンネルがある) で、書き込み用の設定は無い。置き場はコメントの一覧の下 (下の `canList`)。
+   * 実況のチャンネルがある) で、書き込み用の設定は無い。書き先はニコニコと連携していれば公式のニコニコ実況、ほかは NX-Jikkyo (`data.niconico`)。置き場はコメントの一覧の下 (下の `canList`)。
    * 一覧を出せない形 (横にしたスマホ・全画面) では、右端の列の同じボタンで映像の上 (操作バーのすぐ上) に開き (`writing`)、
    * 開いている間は操作バーを引っ込めない
    */
@@ -672,6 +672,7 @@
               panel={false}
               focus
               bind:text={draft}
+              official={data.niconico}
               onclose={closeWriting}
             />
           {/if}
@@ -986,6 +987,7 @@
             panel
             focus={opened}
             bind:text={draft}
+            official={data.niconico}
             onclose={closeWriting}
           />
         {/if}

@@ -95,7 +95,12 @@ async function fakeNx(
     quiet?: boolean;
     reply?: () => Reply;
   } = {},
-): Promise<{ watched: string[]; posts: Posted[] }> {
+): Promise<{
+  watched: string[];
+  posts: Posted[];
+  /** コメントの WS へ、ほかの人の書き込みの形 (`yourpost` 無し) で流す。`offsets` は書かれた時刻を今からずらす量 (ms) */
+  emit: (content: string, offsets?: number[]) => void;
+}> {
   const watched: string[] = [];
   const posts: Posted[] = [];
   let comments: WebSocketRoute | null = null;
@@ -208,7 +213,24 @@ async function fakeNx(
       });
     },
   );
-  return { watched, posts };
+  const emit = (content: string, offsets = [0]) => {
+    for (const offset of offsets) {
+      const at = Date.now() + offset;
+      comments?.send(
+        JSON.stringify({
+          chat: {
+            thread: "1",
+            date: Math.floor(at / 1000),
+            date_usec: (at % 1000) * 1000,
+            user_id: "official",
+            mail: "184",
+            content,
+          },
+        }),
+      );
+    }
+  };
+  return { watched, posts, emit };
 }
 
 test.describe("ライブの実況", () => {
@@ -571,7 +593,10 @@ async function watchViolations(page: Page): Promise<() => Promise<string[]>> {
 }
 
 /** ライブを MPEG-2 で観て (放送時刻が進むように)、右端の列のボタンでコメントの一覧を開く (下に書き込む 1 行が付く) */
-async function openWriting(page: Page): Promise<void> {
+async function openWriting(
+  page: Page,
+  idle = "NX-Jikkyo に書きます",
+): Promise<void> {
   await deviceOn(page);
   await goto(page, `/live?service=${MX.id}`);
   await expect(page.getByTestId("live-title")).toBeVisible();
@@ -582,10 +607,9 @@ async function openWriting(page: Page): Promise<void> {
   await expect(page.getByTestId("jikkyo-list")).toBeVisible();
   await expect(page.getByTestId("jikkyo-compose-input")).toBeFocused();
   // 映像が出て「いま」に追い付くまで
-  await expect(page.getByTestId("jikkyo-compose-line")).toHaveText(
-    "NX-Jikkyo に書きます",
-    { timeout: 20_000 },
-  );
+  await expect(page.getByTestId("jikkyo-compose-line")).toHaveText(idle, {
+    timeout: 20_000,
+  });
 }
 
 test.describe("ライブで実況に書き込む", () => {
@@ -1371,6 +1395,98 @@ test.describe("実況のコメントと操作列の重なり", () => {
         下の影の所: "コメント",
       });
     } finally {
+      await setJikkyo(page, false);
+    }
+  });
+});
+
+/** 設定の「連携」の「実況」から、偽の denpa-hub でニコニコと連携する (60-niconico と同じ流れ) */
+async function linkNiconico(page: Page): Promise<void> {
+  await goto(page, "/settings/integrations#jikkyo");
+  await page.getByTestId("niconico-link").click();
+  await page.waitForURL(/\/settings\/integrations#jikkyo$/);
+  await expect(page.getByTestId("niconico-state")).toContainText("連携中");
+}
+
+async function unlinkNiconico(page: Page): Promise<void> {
+  await goto(page, "/settings/integrations#jikkyo");
+  const unlink = page.getByTestId("niconico-unlink");
+  if ((await unlink.count()) > 0) await unlink.click();
+  await expect(page.getByTestId("niconico-link")).toBeVisible();
+}
+
+test.describe("ニコニコと連携しているときの書き込み", () => {
+  test("公式のニコニコ実況へ denpa のサーバから送り、すぐ流す。NX-Jikkyo が取り込んで流してきた同じものは 2 度流さない", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await setJikkyo(page, true);
+    try {
+      await linkNiconico(page);
+      const csp = await watchViolations(page);
+      const nx = await fakeNx(page, { quiet: true });
+      await openWriting(page, "ニコニコ実況に書きます");
+
+      const input = page.getByTestId("jikkyo-compose-input");
+      await input.fill("公式への書き込み");
+      await input.press("Enter");
+      await expect(input).toHaveValue("");
+      // NX-Jikkyo には送らず、denpa のサーバが偽の視聴の WebSocket へ送る (いつも 184)
+      expect(nx.posts).toHaveLength(0);
+      const state = (await (
+        await request.get(`${stack.hubUrl}/__control/state`)
+      ).json()) as { posts: Posted[]; watched: string[] };
+      expect(state.watched).toContain("jk9");
+      expect(state.posts.at(-1)).toMatchObject({
+        text: "公式への書き込み",
+        isAnonymous: true,
+      });
+
+      await expect(
+        page
+          .getByTestId("jikkyo-comment")
+          .filter({ hasText: "公式への書き込み" }),
+      ).toHaveClass(/\bmine\b/);
+      // 流れ終わっても残る一覧で数える
+      const comments = page.getByTestId("jikkyo-list-row");
+      const mine = comments.filter({ hasText: "公式への書き込み" });
+      await expect(mine).toHaveCount(1);
+      // NX-Jikkyo が取り込んで流してきた同じ本文は流さない (ほかの人の書き込みは流れる)
+      nx.emit("公式への書き込み");
+      nx.emit("ほかの人の書き込み", [-5_000, 0, 5_000, 10_000, 20_000]);
+      await expect(
+        comments.filter({ hasText: "ほかの人の書き込み" }).first(),
+      ).toBeVisible({ timeout: 25_000 });
+      await page.waitForTimeout(1_000);
+      await expect(mine).toHaveCount(1);
+      // 端末は外 (ニコニコ) へ繋がない
+      expect(await csp()).toEqual([]);
+    } finally {
+      await unlinkNiconico(page);
+      await setJikkyo(page, false);
+    }
+  });
+
+  test("連携が切れていたら、連携し直すよう 1 行で出す", async ({ page }) => {
+    await setJikkyo(page, true);
+    try {
+      await linkNiconico(page);
+      await fakeNx(page, { quiet: true });
+      await openWriting(page, "ニコニコ実況に書きます");
+      // 開いたまま、別のタブで連携を外す
+      const other = await page.context().newPage();
+      await unlinkNiconico(other);
+      await other.close();
+      const input = page.getByTestId("jikkyo-compose-input");
+      await input.fill("届かない書き込み");
+      await input.press("Enter");
+      await expect(page.getByTestId("jikkyo-compose-line")).toHaveText(
+        "ニコニコとの連携が切れました。設定の「連携」で連携し直してください",
+      );
+      await expect(input).toHaveValue("届かない書き込み");
+    } finally {
+      await unlinkNiconico(page);
       await setJikkyo(page, false);
     }
   });
