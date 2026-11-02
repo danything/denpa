@@ -4,7 +4,7 @@
 入れ方は [install.md](install.md) (Mac は [install-mac.md](install-mac.md)、Windows は [install-windows.md](install-windows.md))、
 エージェントの作りは [agent.md](agent.md)。
 
-「Amazon で見る (広告)」は Amazon のアソシエイトのリンクです。Amazon のアソシエイトとして、denpa は適格販売により収入を得ています。
+「Amazon で見る」は Amazon のアソシエイトのリンク (広告) です。ここから買っても値段は変わらず、紹介料が denpa の開発を続ける費用になります。どこで買っても動作は同じです。
 
 ## 要るもの
 

@@ -6,7 +6,7 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 
 チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#px4-userland-の作り)。
 
-「Amazon で見る (広告)」は Amazon のアソシエイトのリンクです。Amazon のアソシエイトとして、denpa は適格販売により収入を得ています。
+「Amazon で見る」は Amazon のアソシエイトのリンク (広告) です。ここから買っても値段は変わらず、紹介料が denpa の開発を続ける費用になります。どこで買っても動作は同じです。
 
 [px4-userland](https://github.com/Khronos31/px4-userland) を**エージェントのイメージに同梱**しています
 (`agent/Dockerfile`)。libusb だけで USB を扱うユーザー空間のドライバで、`/dev/bus/usb` が見えれば動き、

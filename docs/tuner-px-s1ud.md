@@ -6,7 +6,7 @@ Linux (DVB でも siano-userland でも)・Mac (Apple Silicon)・Windows (x64) �
 
 チューナーの一覧は [tuners.md](tuners.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#siano-userland-の作り)。
 
-「Amazon で見る (広告)」は Amazon のアソシエイトのリンクです。Amazon のアソシエイトとして、denpa は適格販売により収入を得ています。
+「Amazon で見る」は Amazon のアソシエイトのリンク (広告) です。ここから買っても値段は変わらず、紹介料が denpa の開発を続ける費用になります。どこで買っても動作は同じです。
 
 [Amazon で見る (広告)](https://www.amazon.co.jp/dp/B006RQLNES?tag=doa08-22)
 
