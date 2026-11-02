@@ -358,7 +358,8 @@ describe("同じ回の見分け", () => {
     // TBS は `#30「副題」【アガルアニメ】`、BS日テレは頭に「アニメ　」で `第30話　副題`
     const tbs = (e: string) =>
       `テスト貴族、鑑定で成り上がる 第３期🈑　＃${e}【テスト枠】`;
-    const bs = (e: string) => `🈑アニメ　テスト貴族、鑑定で成り上がる 第3期　${e}`;
+    const bs = (e: string) =>
+      `🈑アニメ　テスト貴族、鑑定で成り上がる 第3期　${e}`;
     expect(same(tbs("３０「ハジマリ」"), bs("第30話　ハジマリ"))).toBe(true);
     expect(same(tbs("３０「ハジマリ」"), bs("第31話　ハジマリ"))).toBe(false);
     expect(same(tbs("３０「ハジマリ」"), bs("第30話　オワリ"))).toBe(false);
