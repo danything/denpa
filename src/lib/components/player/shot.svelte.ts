@@ -4,6 +4,7 @@ import type { Notice } from "#lib/components/Toasts.svelte";
 
 import type { PlayerControls } from "./controls.svelte";
 import {
+  canCopyImage,
   captionLayer,
   clipForm,
   type ClipLayerCanvases,
@@ -11,14 +12,15 @@ import {
   type ClipWhere,
   commentLayer,
   composeFrame,
+  copyImage,
   type Frame,
   pngOf,
   readComments,
   saveOnDevice,
 } from "./snapshot";
 
-/** 押したあとボタンをチェックの形にしておく長さ (ms) */
-const SAVED_MS = 1500;
+/** 押したあとボタンをチェックの形にしておく長さ (ms)。切り抜きの画面の「クリップボードにコピー」も同じ */
+export const SAVED_MS = 1500;
 
 /**
  * 切り抜きの3点セット (撮る・結果を持つ・トーストに出す)。**3画面 (ライブ・追っかけ・観る画面) で同じ形。**
@@ -47,21 +49,9 @@ export function snapshotter(controls: PlayerControls) {
    * 送る前に始める (中身は後から渡せる)。断られても黙る
    */
   function copy(canvas: HTMLCanvasElement): Promise<boolean> {
-    if (
-      window.matchMedia("(pointer: coarse)").matches ||
-      typeof ClipboardItem === "undefined" ||
-      navigator.clipboard?.write === undefined
-    )
+    if (window.matchMedia("(pointer: coarse)").matches || !canCopyImage())
       return Promise.resolve(false);
-    const png = pngOf(canvas).then(
-      (blob) => blob ?? Promise.reject(new Error("PNG にできませんでした")),
-    );
-    return navigator.clipboard
-      .write([new ClipboardItem({ "image/png": png })])
-      .then(
-        () => true,
-        () => false,
-      );
+    return copyImage(pngOf(canvas));
   }
 
   /**

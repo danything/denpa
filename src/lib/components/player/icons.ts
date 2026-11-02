@@ -16,13 +16,15 @@ export { default as AUDIO } from "~icons/lucide/audio-lines";
 /** 切り抜き (いまの1コマをサーバに保存する) */
 export { default as CAMERA } from "~icons/lucide/camera";
 export { default as CAPTION } from "~icons/lucide/captions";
-/** レ点。聞き返しの2回目 (文字を出さずに「これでいいか」を言う)・切り抜きを送れた直後 */
+/** レ点。聞き返しの2回目 (文字を出さずに「これでいいか」を言う)・切り抜きを送れた直後・コピーできた直後 */
 export { default as CHECK } from "~icons/lucide/check";
 /** 再生の設定 (`SettingsMenu`) の選択肢の並びから戻る / 選択肢の並びに入る */
 export { default as BACK } from "~icons/lucide/chevron-left";
 export { default as FORWARD } from "~icons/lucide/chevron-right";
 /** 録画 (ライブの右上)。押すといま流れている番組の録画が始まる。丸に点 (録画の印) */
 export { default as RECORD } from "~icons/lucide/circle-dot";
+/** クリップボードにコピー (切り抜きの画面で1枚を開いたとき) */
+export { default as COPY } from "~icons/lucide/copy";
 /** 端末に保存 (切り抜きの画面で1枚を開いたとき) */
 export { default as DOWNLOAD } from "~icons/lucide/download";
 /** Hybridcast。別のタブへ出ていくので、denpa の中で開くデータ放送の `d` とは違う形にする */

@@ -282,6 +282,46 @@ export function pngOf(canvas: HTMLCanvasElement): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
 }
 
+/** 画像 (サーバの AVIF など、ブラウザが読める形式) を PNG にし直す。クリップボードに置けるのは PNG だけなので */
+export async function pngFromImage(blob: Blob): Promise<Blob | null> {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    if (ctx === null) return null;
+    ctx.drawImage(bitmap, 0, 0);
+    return await pngOf(canvas);
+  } finally {
+    bitmap.close();
+  }
+}
+
+/** 画像をクリップボードに置けるブラウザか (https か localhost で、`ClipboardItem` があるとき) */
+export function canCopyImage(): boolean {
+  return (
+    typeof ClipboardItem !== "undefined" &&
+    navigator.clipboard?.write !== undefined
+  );
+}
+
+/**
+ * PNG をクリップボードに置く。置けたら true、断られた・PNG にできなかったら false。
+ * **押した直後に呼ぶ** — Safari は押した直後の `clipboard.write` しか通さないので、中身は Promise のまま渡して後から解決する
+ */
+export function copyImage(png: Promise<Blob | null>): Promise<boolean> {
+  const item = png.then(
+    (blob) => blob ?? Promise.reject(new Error("PNG にできませんでした")),
+  );
+  return navigator.clipboard
+    .write([new ClipboardItem({ "image/png": item })])
+    .then(
+      () => true,
+      () => false,
+    );
+}
+
 /** サーバへ送るときの画質 (WebP・JPEG の 0〜1)。上限に収まるまでこの順に下げる */
 const QUALITIES = [0.92, 0.85, 0.75, 0.6];
 
