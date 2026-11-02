@@ -372,6 +372,50 @@ describe("DsmccLogoCollector", () => {
  * 途中で取り上げられる。開くたびに一から読んでいた頃は、DII を見たあとで切れるとそれまでの
  * ブロックが消え、次に開いても DII が来るまで何も組み立てられず、何日経っても揃わなかった
  */
+/**
+ * 1 回開いた間に読んだ数 (`counts`)。20 分開いても何も来なかったときに、カルーセルが来なかったのか、
+ * ロゴの ES を見つけられなかったのか、誤りで壊れたのかを記録から見分けるため (#1939)
+ */
+describe("読んだ数 (counts)", () => {
+  test("パケット・PMT・ロゴの ES・DII・DDB を数える。繰り返しも数える", () => {
+    const module = logoModule(0x05, [
+      { logoId: 1, services: [[4, 211]], data: PNG },
+    ]);
+    const data = carousel(module, 16);
+    const collector = new DsmccLogoCollector();
+    for (const packet of packets(stream(data, data))) collector.feed(packet);
+    const total = data.length / 188;
+    expect(collector.counts).toEqual({
+      packets: total * 2,
+      errors: 0,
+      pmt: true,
+      esPids: 1,
+      // 1 回目の PMT より前の ES は数えない。PAT と PMT のぶんを除いた残り
+      esPackets: (total - 2) * 2,
+      dii: 2,
+      ddb: (total - 3) * 2,
+    });
+  });
+
+  test("PMT が来なければロゴの ES は 0。誤りの印が立ったパケットも数える", () => {
+    const collector = new DsmccLogoCollector();
+    const pat = packetize(0x0000, patSection([[ESS, PMT_PID]]));
+    const broken = Uint8Array.from(pat);
+    broken[1]! |= 0x80;
+    collector.feed(pat);
+    collector.feed(broken);
+    expect(collector.counts).toEqual({
+      packets: 2,
+      errors: 1,
+      pmt: false,
+      esPids: 0,
+      esPackets: 0,
+      dii: 0,
+      ddb: 0,
+    });
+  });
+});
+
 describe("読みかけ (CarouselProgress)", () => {
   const bs = logoModule(0x05, [
     { logoId: 1, services: [[4, 211]], data: PNG },
