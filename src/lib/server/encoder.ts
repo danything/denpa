@@ -116,6 +116,8 @@ async function measureWindow(
   const diffs: string[] = [];
   const result = await run([config.ffmpeg, ...fpsArgs(input, at)], {
     signal,
+    // 録ったあとのエンコードの一部。ライブに CPU を譲る (stream.lowerPriority)
+    lowPriority: true,
     // 1コマ2行ずつ出るので、差の行だけ溜める
     onStderrLine: (line) => {
       if (line.includes("YDIF=")) diffs.push(line);
@@ -1525,10 +1527,19 @@ async function runJob(jobId: number): Promise<void> {
 
   /**
    * コーデックごとの作業ファイル。別名に書いてから置き換える (入力と出力が同じ場所でも元を壊さない。失敗しても元が残る)。
-   * 名前はジョブとコーデックで分ける — 番組名だけだと同じ番組の2本が1つの作業ファイルに同時に書いて壊した (実機)
+   * 名前はジョブとコーデックで分ける — 番組名だけだと同じ番組の2本が1つの作業ファイルに同時に書いて壊した (実機)。
+   * 名前は最初に呼んだときに決めて覚える。`encodedPath` は同じ番組の別の録画が先に置き終えると `[録画ID]` を足すので、
+   * 呼ぶたびに作ると、ffmpeg が書いたものと後で開くものの名前がずれる
    */
-  const workingOf = (codec: HwCodec): string =>
-    `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
+  const workingNames = new Map<HwCodec, string>();
+  const workingOf = (codec: HwCodec): string => {
+    let name = workingNames.get(codec);
+    if (name === undefined) {
+      name = `${encodedPath(recording, codec)}.${jobId}.${codec}.encoding`;
+      workingNames.set(codec, name);
+    }
+    return name;
+  };
   /** 作業ファイルと、その隣に作る書き直し・切り貼り・チャプターの一時ファイル */
   const removeWorking = (codec: HwCodec): void => {
     const working = workingOf(codec);
