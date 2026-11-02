@@ -16,6 +16,19 @@
 
   let { data }: { data: PageData } = $props();
 
+  /*
+   * **チャンネルを書き換えたお知らせは、この画面を開いたら消す** (書き換えたチャンネルはここに並んでいる)。
+   * load で消すと先読みでも消えるので、開いた画面からリクエストする (`channels.server.ts` の `seenLineup`)
+   */
+  $effect(() => {
+    if (!data.lineupChanged) return;
+    void fetch(`${resolve("settings/reception")}?/seenLineup`, {
+      method: "POST",
+      body: new FormData(),
+      headers: { "x-sveltekit-action": "true" },
+    }).catch(() => undefined);
+  });
+
   /**
    * 局ごとのロゴ (`logos.server.ts`)。局ロゴの具合 (`logo`) と、CM検出のロゴを覚えた時刻 (`cm`)。
    * 表は物理チャンネルごとに並ぶので、局の id で引く

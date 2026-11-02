@@ -275,7 +275,11 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
         {
             Log.Write($"{channel} ({use}): {sink.FailedWith}");
             if (sent) http.Abort();
-            else await Respond.Error(http, sink.FailedWith, 500);
+            /*
+             * 送る前に取り上げられたなら **409** (空きが無いのと同じ。呼んだ側は待って掛け直せる)。
+             * 500 は選局できなかったときだけにする。denpa は 500 を「受信できない」の記録に数える (reception.ts)
+             */
+            else await Respond.Error(http, sink.FailedWith, TunerPool.IsPreempted(sink.FailedWith) ? 409 : 500);
         }
     }
     catch (OperationCanceledException)

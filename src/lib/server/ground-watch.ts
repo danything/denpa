@@ -17,7 +17,7 @@ import { failingGround } from "./reception";
 import type { AgentChannel } from "./tuner";
 import { notify } from "./webhook";
 
-/** 局の顔ぶれが控えと違ったチャンネル (名前 → 違いの印。同じ違いは 1 回だけ知らせる) */
+/** 局の顔ぶれがスキャンの結果と違ったチャンネル (名前 → 放送の局のサービス ID の並び) */
 const mismatched = new Map<string, string>();
 
 /** 通知を送った文。同じ文は 2 度送らない */
@@ -65,32 +65,43 @@ export function forgetGround(channels: readonly AgentChannel[]): void {
   }
 }
 
-/** お知らせの 1 行。知らせることが無ければ null */
-export function groundNotice(): string | null {
+/** 知らせること (続けて選局できない・局の顔ぶれが違う)。どちらも無ければ空 */
+function groundTexts(): string[] {
+  const texts: string[] = [];
   const failing = failingGround();
-  const text =
-    failing.length > 0
-      ? `${failing.join("・")} を続けて選局できません。周波数が変わった場合は、地上波をスキャンし直すと選局できます`
-      : mismatched.size > 0
-        ? `${[...mismatched.keys()]
-            .sort((a, b) => a.localeCompare(b, "en", { numeric: true }))
-            .join(
-              "・",
-            )} の局が、受信できるチャンネルと違います。地上波をスキャンし直すと、新しい局を選局できます`
-        : null;
-  return text;
+  if (failing.length > 0)
+    texts.push(
+      `${failing.join("・")} を続けて選局できません。周波数が変わった場合は、地上波をスキャンし直すと選局できます`,
+    );
+  if (mismatched.size > 0) {
+    const channels = [...mismatched.keys()].sort((a, b) =>
+      a.localeCompare(b, "en", { numeric: true }),
+    );
+    texts.push(
+      `${channels.join("・")} の局が、受信できるチャンネルと違います。地上波をスキャンし直すと、新しい局を選局できます`,
+    );
+  }
+  return texts;
+}
+
+/** お知らせの 1 行。両方あれば、選局できないほうを出す。知らせることが無ければ null */
+export function groundNotice(): string | null {
+  return groundTexts()[0] ?? null;
 }
 
 /**
  * 地上波のチャンネルを読み終えたあとに呼ぶ (`epg-collect.ts`)。知らせることが新しく起きていたら、通知を送る。
- * 同じ文は 2 度送らない
+ * 同じ文は続いている間は 2 度送らず、消えたら忘れる (また起きたら送る)。再起動すると、続いているものも 1 度送り直す
  */
 export function alertGround(): void {
-  const text = groundNotice();
-  if (text === null || notified.has(text)) return;
-  notified.add(text);
-  console.warn(`[channels] ${text}`);
-  notify({ event: "channels.changed", text });
+  const texts = groundTexts();
+  for (const text of notified) if (!texts.includes(text)) notified.delete(text);
+  for (const text of texts) {
+    if (notified.has(text)) continue;
+    notified.add(text);
+    console.warn(`[channels] ${text}`);
+    notify({ event: "channels.changed", text });
+  }
 }
 
 /**

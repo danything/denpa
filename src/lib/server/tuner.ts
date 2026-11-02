@@ -304,10 +304,7 @@ export async function openChannelStream(
     const detail = await res.text().catch(() => "");
     if (res.status === 409)
       throw new TunerBusyError(`チューナーに空きがありません ${detail}`);
-    const message = `選局できません (${res.status}) ${detail}`;
-    // 合わせる前にほかの要求にチューナーを譲った (`TunerPool.PreemptedBy`)。受信できなかったのではない
-    if (detail.includes("チューナーを譲りました")) throw new Error(message);
-    throw new TuneError(message);
+    throw new TuneError(`選局できません (${res.status}) ${detail}`);
   }
   return res.body;
 }

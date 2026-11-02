@@ -159,3 +159,48 @@ describe("受信できないチャンネルの局", () => {
     expect(listed).not.toContain(400191);
   });
 });
+
+describe("受信できないチャンネルの局の番組表", () => {
+  test("ほかの中継器から届いても入れない。受信できれば入れる", async () => {
+    const { savePrograms } = await import("./epg");
+    const event = (serviceId: number) =>
+      ({
+        serviceId,
+        transportStreamId: 16432,
+        originalNetworkId: 4,
+        eventId: 7,
+        // 番組の時刻はいまに近くないと取り込まない (`epg.timed`)
+        startAt: Date.now() + HOUR,
+        duration: 1800_000,
+        isFree: true,
+        runningStatus: 0,
+        name: "番組",
+        description: "",
+        extended: {},
+        genres: [],
+        audios: [],
+        video: null,
+        copyNever: false,
+      }) as Parameters<typeof savePrograms>[0][number];
+    // 受信できるうちに局の行を入れておく
+    const { syncServices } = await import("./epg");
+    syncServices([
+      {
+        type: "BS",
+        channel: "BS03:16432",
+        networkId: 4,
+        transportStreamId: 16432,
+        remoteControlKeyId: null,
+        services: [{ serviceId: 191, serviceType: 1, name: "局191" }],
+      },
+    ]);
+    expect(savePrograms([event(191)])).toBe(1);
+    recordReceived("BS", "BS01:16400", T0);
+    recordFailed("BS", "BS03:16432", T0 + HOUR);
+    recordReceived("BS", "BS01:16400", T0 + 2 * HOUR);
+    recordFailed("BS", "BS03:16432", T0 + 3 * HOUR);
+    expect(savePrograms([event(191)])).toBe(0);
+    recordReceived("BS", "BS03:16432", T0 + 4 * HOUR);
+    expect(savePrograms([event(191)])).toBe(1);
+  });
+});

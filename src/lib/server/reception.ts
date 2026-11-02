@@ -58,7 +58,7 @@ export function recordReceived(
 
 /**
  * 受信できなかった (選局できない・何も流れてこない)。**受信できないと決めたら true**
- * (この回で印が付いた。呼ぶ側がログに残す)
+ * (この回で印が付いた。局が外れるのは次の局の取り込みのとき)
  */
 export function recordFailed(
   type: ChannelType,
@@ -81,18 +81,7 @@ export function recordFailed(
     at - row.failed_at >= RECOUNT_AFTER;
   const failures = (row?.failures ?? 0) + (recount ? 1 : 0);
   const since = row?.failing_since ?? at;
-  const others =
-    orm()
-      .select({ channel: channelReception.channel })
-      .from(channelReception)
-      .where(
-        and(
-          eq(channelReception.type, type),
-          ne(channelReception.channel, channel),
-          gte(channelReception.ok_at, since),
-        ),
-      )
-      .get() !== undefined;
+  const others = othersReceived(type, channel, since);
   // 地上波は外さない (スキャンで受信できたものだけが入っている。続けて選局できないときは知らせるだけ)
   const unreceivable = type !== "GR" && failures >= MARK_AFTER && others;
   orm()
@@ -189,23 +178,41 @@ export function pruneReception(
  * 地上波は外さずに知らせる (`ground-watch.ts`)。中継局の周波数が変わったなら、スキャンし直せば選局できる
  */
 export function failingGround(): string[] {
-  const rows = orm()
+  return orm()
     .select()
     .from(channelReception)
     .where(eq(channelReception.type, "GR"))
-    .all();
-  return rows
+    .all()
     .filter(
       (row) =>
         row.failures >= MARK_AFTER &&
         row.failing_since !== null &&
-        rows.some(
-          (other) =>
-            other.channel !== row.channel &&
-            other.ok_at !== null &&
-            other.ok_at >= row.failing_since!,
-        ),
+        othersReceived("GR", row.channel, row.failing_since),
     )
     .map((row) => row.channel)
     .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+}
+
+/**
+ * 同じ種別のほかのチャンネルが、`since` から後に受信できたか。チャンネルの問題か、アンテナやチューナーの問題かを分ける
+ * (`recordFailed` と `failingGround` で同じ決まりにする)
+ */
+function othersReceived(
+  type: ChannelType,
+  channel: string,
+  since: number,
+): boolean {
+  return (
+    orm()
+      .select({ channel: channelReception.channel })
+      .from(channelReception)
+      .where(
+        and(
+          eq(channelReception.type, type),
+          ne(channelReception.channel, channel),
+          gte(channelReception.ok_at, since),
+        ),
+      )
+      .get() !== undefined
+  );
 }
