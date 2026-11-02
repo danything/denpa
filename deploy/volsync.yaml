@@ -8,7 +8,7 @@ metadata:
   name: volsync
   namespace: denpa
   annotations:
-    argocd.argoproj.io/sync-options: Prune=false,SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   hostAPI: http://infisical.infisical.svc:8080/api
   authentication:
@@ -60,8 +60,6 @@ kind: ReplicationSource
 metadata:
   name: agent-config
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: agent-config
   trigger:
@@ -77,8 +75,6 @@ kind: ReplicationSource
 metadata:
   name: denpa-data
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: denpa-data
   trigger:
@@ -94,8 +90,6 @@ kind: ReplicationSource
 metadata:
   name: denpa-encoded
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   sourcePVC: denpa-encoded
   trigger:
@@ -114,8 +108,6 @@ kind: ReplicationDestination
 metadata:
   name: agent-config-dst
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once
@@ -137,8 +129,6 @@ kind: ReplicationDestination
 metadata:
   name: denpa-data-dst
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once
@@ -160,8 +150,6 @@ kind: ReplicationDestination
 metadata:
   name: denpa-encoded-dst
   namespace: denpa
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
   trigger:
     manual: restore-once
