@@ -249,7 +249,22 @@ function stamp(at: number): string {
  * 終わるまで待つ — 集めている間はチューナーが塞がり、ライブが映らない
  */
 async function sweepLogos(): Promise<void> {
-  await post("/settings/reception?/logoSweep", {});
+  // 番組表を集め終えた直後は、衛星のロゴを待つ選局 (`awaitCarousel`) や番組表集めの片付けでチューナーが
+  // まだ空いていないことがあり、押しても「空いているチューナーがありません」と断られる。空くまで押し直す
+  const asked = Date.now() + 60_000;
+  for (;;) {
+    try {
+      await post("/settings/reception?/logoSweep", {});
+      break;
+    } catch (error) {
+      if (
+        Date.now() > asked ||
+        !String(error).includes("空いているチューナーがありません")
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
   const until = Date.now() + 180_000;
   while (Date.now() < until) {
     const html = await (await fetch(`${BASE}/settings/reception`)).text();
