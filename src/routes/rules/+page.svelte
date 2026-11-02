@@ -109,6 +109,12 @@
 
   const notices = $derived.by<Notice[]>(() => {
     const list = errorNotice(form, "rule-error");
+    if (form?.remapped === true)
+      list.push({
+        key: "rule-remapped",
+        kind: "success",
+        text: "ルールの局を付け替えました",
+      });
     if (form?.canceled !== undefined) {
       const text =
         form.canceled > 0
@@ -139,6 +145,49 @@
       件・この 7 日で録れた
       <span class="num">{data.summary.lastWeekRecordings}</span> 本
     </p>
+
+    <!--
+        **選局できなくなった局を指すルール** (局のサービス ID が変わった。`server/rule-remap.ts`)。そのままでは録画しないので、
+        付け替える局を選ばせる。自動では付け替えない (間違えると別の局を録る)
+    -->
+    {#if data.orphans.length > 0}
+      <div class="notice info remap" data-testid="rule-orphans">
+        <p class="small">
+          選局できなくなった局を指しているルールがあります。このままでは録画しません。付け替える局を選ぶと、その局の番組を録画します
+        </p>
+        <ul class="remap-list">
+          {#each data.orphans as orphan (`${orphan.ruleId}:${orphan.serviceId}`)}
+            <li>
+              <form
+                method="POST"
+                action="?/remap"
+                class="remap-row small"
+                use:submitting
+                data-testid="rule-orphan"
+              >
+                <input type="hidden" name="id" value={orphan.ruleId} />
+                <input type="hidden" name="from" value={orphan.serviceId} />
+                <span
+                  >「{orphan.ruleName}」の
+                  <span class="broadcast">{orphan.serviceName}</span></span
+                >
+                <select
+                  name="to"
+                  aria-label="「{orphan.ruleName}」で {orphan.serviceName} の代わりに録る局"
+                >
+                  {#each orphan.candidates as candidate (candidate.id)}
+                    <option value={candidate.id}>{candidate.name}</option>
+                  {/each}
+                </select>
+                <button type="submit" class="small" data-testid="rule-remap"
+                  >付け替え</button
+                >
+              </form>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
 
     {#if data.rules.length === 0}
       <div class="empty glow" data-testid="rule-empty">
@@ -337,6 +386,26 @@
 </div>
 
 <style>
+  /* 付け替えの欄。ページの中の通知 (`.notice.info`) の中に、1 件 1 行で並べる */
+  .remap-list {
+    margin: var(--dp-space-2) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .remap-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--dp-space-2);
+    margin: 0;
+  }
+  .remap-row select {
+    width: auto;
+    margin: 0;
+  }
+  .remap-row button {
+    margin: 0;
+  }
   /*
      * **どの幅でもページごとスクロールする** (ホームと同じ。`+layout.svelte` の `FILLED` に入れない)。広い画面では行が
      * 浮いたヘッダーの裏を流れる。768px からは左右と下を main の余白の外まで広げ、広い形では右にサイドバーを置いて
