@@ -143,7 +143,7 @@ async function connected(h: ReturnType<typeof harness>, channel = "jk1") {
 }
 
 describe("繋ぐ", () => {
-  test("hub から接続先を受け取り、映像は頼まずに視聴を始める。最初の返事で書ける", async () => {
+  test("hub から接続先を受け取り、映像はリクエストせずに視聴を始める。最初の返事で書ける", async () => {
     const h = harness();
     const socket = await connected(h);
     expect(h.asked).toEqual([

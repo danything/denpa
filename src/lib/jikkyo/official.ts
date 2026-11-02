@@ -1,6 +1,6 @@
 /**
  * **公式のニコニコ実況に書く (端末の側)。** ニコニコと連携している世帯で、書き込みの欄 (`JikkyoCompose`) が使う。
- * 端末はトークンも接続先も持たず、denpa のサーバに頼む (`/api/jikkyo/niconico/…`。繋ぐのはサーバ。`server/niconico-live.ts`)。
+ * 端末はトークンも接続先も持たず、denpa のサーバにリクエストする (`/api/jikkyo/niconico/…`。繋ぐのはサーバ。`server/niconico-live.ts`)。
  *
  * - 欄が開いている間、`HEARTBEAT` おきと局が替わったときに `session` を呼んで接続を保ち、状態を受け取る
  * - 書き込みは `comments` に送り、結果 (`PostResult`) を受け取る
@@ -53,7 +53,7 @@ export class OfficialWriter {
   ) {}
 
   /**
-   * 欄が 0.25 秒おきに呼ぶ。局が替わった・`HEARTBEAT` が過ぎたときだけ、サーバに接続を保つよう頼む
+   * 欄が 0.25 秒おきに呼ぶ。局が替わった・`HEARTBEAT` が過ぎたときだけ、サーバに接続を保つようリクエストする
    */
   tick(): void {
     const channel = this.channel();
@@ -70,7 +70,7 @@ export class OfficialWriter {
     void this.ask(channel);
   }
 
-  /** 欄を閉じた。もう頼まない (サーバは呼ばれなくなった接続を閉じる) */
+  /** 欄を閉じた。もうリクエストしない (サーバは呼ばれなくなった接続を閉じる) */
   stop(): void {
     this.stopped = true;
   }
@@ -82,7 +82,7 @@ export class OfficialWriter {
       const got = ((await res.json()) as { state?: unknown }).state;
       if (STATES.includes(got as OfficialState)) state = got as OfficialState;
     } catch {
-      // サーバに届かない。書けない扱い (次の頼みでまた見る)
+      // サーバに届かない。書けない扱い (次のリクエストでまた見る)
     }
     if (this.stopped || this.channel() !== channel) return;
     this.state = state;

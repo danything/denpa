@@ -61,8 +61,7 @@
         <Lead class="indent">
           オンにすると、実況をオンにした端末が外のサービスに直接繋ぎます。<strong
             >相手には端末の IP と、どの局をいつ観ているかが見えます</strong
-          >。ライブでは NX-Jikkyo
-          に、ニコニコと連携していればニコニコ実況に書き込めます。<strong
+          >。ライブでは実況に書き込めます。<strong
             >書いたものは公開され、消せません</strong
           >
           {#snippet more()}
@@ -120,7 +119,7 @@
     </form>
     <!--
         ニコニコのアカウントとの連携 (世帯で 1 つ。`server/niconico.ts`)。トークンは denpa のサーバだけが持つ。
-        連携は denpa-hub が中継し、結果は `niconico/return` に戻る。外すのは手元のトークンを消すだけで、
+        連携は denpa-hub が中継し、結果は `niconico/return` に戻る。外すと手元のトークンを消し、公式の実況への接続を切る。
         ニコニコの側の許可はニコニコのアカウント設定から取り消す (ニコニコに失効のエンドポイントが無い)
     -->
     <div class="fields niconico" data-testid="niconico">
@@ -142,8 +141,8 @@
         </div>
         <span class="hint"
           >ライブの書き込みは、denpa
-          のサーバがこのアカウントで公式のニコニコ実況へ送ります (いつも匿名
-          (184))</span
+          のサーバがこのアカウントで公式のニコニコ実況へ送ります。いつも匿名
+          (184) です</span
         >
       {:else}
         {#if data.niconico.state === "lost"}

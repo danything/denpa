@@ -102,7 +102,7 @@
   let input = $state<HTMLInputElement | null>(null);
   /** 連携が切れている (公式に書くとき) */
   let unlinked = $state(false);
-  /** 公式に書くときの頼み先。欄が開いている間だけ接続を保つ */
+  /** 公式に書くときのリクエスト先。欄が開いている間だけ接続を保つ */
   let writer: OfficialWriter | null = null;
 
   /** 書けるか。公式ならサーバの接続、NX-Jikkyo なら端末の接続 */

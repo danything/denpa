@@ -39,7 +39,7 @@ function harness(answer: (name: string, body: unknown) => unknown) {
 }
 
 describe("接続を保つ", () => {
-  test("開いたとき・HEARTBEAT ごと・局を替えたときだけサーバに頼み、状態を受け取る", async () => {
+  test("開いたとき・HEARTBEAT ごと・局を替えたときだけサーバにリクエストし、状態を受け取る", async () => {
     const h = harness(() => ({ state: "ready" }));
     h.writer.tick();
     await h.flush();
@@ -71,7 +71,7 @@ describe("接続を保つ", () => {
     expect(h.calls).toHaveLength(2);
   });
 
-  test("閉じたらもう頼まない", () => {
+  test("閉じたらもうリクエストしない", () => {
     const h = harness(() => ({ state: "ready" }));
     h.writer.stop();
     h.writer.tick();
