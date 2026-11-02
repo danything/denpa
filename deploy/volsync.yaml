@@ -106,3 +106,72 @@ spec:
     # 録画は 1 世代だけ(docs/decisions.md「バックアップに何を含めるか」)。中身が入れ替わるので世代を持つと消えたファイルを抱え続ける
     retain: { last: "1" }
     moverSecurityContext: { runAsUser: 0, runAsGroup: 0 }
+---
+# 戻す側(populator)。PVC agent-config の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
+# (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationDestination
+metadata:
+  name: agent-config-dst
+  namespace: denpa
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  trigger:
+    manual: restore-once
+  restic:
+    repository: volsync-agent-config
+    copyMethod: Snapshot
+    capacity: 512Mi
+    accessModes: [ReadWriteOnce]
+    storageClassName: local-path
+    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    # 戻した中身はスナップショットに残るので、作業用の PVC は消す
+    cleanupTempPVC: true
+    cleanupCachePVC: true
+---
+# 戻す側(populator)。PVC denpa-data の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
+# (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationDestination
+metadata:
+  name: denpa-data-dst
+  namespace: denpa
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  trigger:
+    manual: restore-once
+  restic:
+    repository: volsync-denpa-data
+    copyMethod: Snapshot
+    capacity: 5Gi
+    accessModes: [ReadWriteOnce]
+    storageClassName: local-path
+    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    # 戻した中身はスナップショットに残るので、作業用の PVC は消す
+    cleanupTempPVC: true
+    cleanupCachePVC: true
+---
+# 戻す側(populator)。PVC denpa-encoded の dataSourceRef がこれを指すので、PVC を新しく作ると R2 の最新から中身を埋めてから渡す
+# (入れ直したクラスタ・PVC を消して作り直したとき)。今ある PVC には効かない。作られたときに 1 回だけ戻す
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationDestination
+metadata:
+  name: denpa-encoded-dst
+  namespace: denpa
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  trigger:
+    manual: restore-once
+  restic:
+    repository: volsync-denpa-encoded
+    copyMethod: Snapshot
+    capacity: 170Gi
+    accessModes: [ReadWriteOnce]
+    storageClassName: local-path
+    moverSecurityContext: {runAsUser: 0, runAsGroup: 0}
+    # 戻した中身はスナップショットに残るので、作業用の PVC は消す
+    cleanupTempPVC: true
+    cleanupCachePVC: true
