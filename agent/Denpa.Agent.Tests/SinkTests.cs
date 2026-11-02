@@ -36,6 +36,14 @@ public class SinkTests
         await Assert.That(sink.FailedWith).IsEqualTo("優先度の高い要求 (epg BS03:16432) にチューナーを譲りました");
     }
 
+    /// <summary>取り上げられたのか、選局できなかったのかを見分ける。送る前に取り上げられたら 409 で返す (Program.cs)</summary>
+    [Test]
+    public async Task 取り上げられた理由を見分ける()
+    {
+        await Assert.That(TunerPool.IsPreempted(TunerPool.PreemptedBy("rec 12"))).IsTrue();
+        await Assert.That(TunerPool.IsPreempted("同期しません")).IsFalse();
+    }
+
     [Test]
     public async Task ふつうに去っても1回だけ抜ける()
     {
