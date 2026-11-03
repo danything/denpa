@@ -544,6 +544,30 @@ public class Dt295Tests
         await Assert.That(usb.Time.Sleeps.Sum()).IsEqualTo(20 + 20 + 100);
     }
 
+    [Test]
+    public async Task 衛星の2回目の選局は初期化を省く()
+    {
+        var usb = new FakeDt295Usb { State = Dt295Device.Authenticated };
+        var count = 0;
+        usb.I2cDevice = (address, write, read) =>
+        {
+            if (write.Length > 0) count++;
+            return new byte[read];
+        };
+        var tuner = new Dt295Frontend(new Dt295Bridge(usb, usb.Time), FakeDt295Material.Create());
+        // ロックの状態を返さない偽の機材なので、選局の最後でロックしないと断られる
+        Assert.Throws<Dt295Exception>(() => tuner.TuneSatellite(1_049_480_000, 0, 16400));
+        var first = count;
+        count = 0;
+        Assert.Throws<Dt295Exception>(() => tuner.TuneSatellite(1_087_840_000, 0, 16432));
+        await Assert.That(count).IsLessThan(first * 2 / 3);
+        // 認証し直したあとは初期化からやり直す
+        tuner.Forget();
+        count = 0;
+        Assert.Throws<Dt295Exception>(() => tuner.TuneSatellite(1_049_480_000, 0, 16400));
+        await Assert.That(count).IsEqualTo(first);
+    }
+
     // ---------------------------------------------------------------------
     // ルート (9.4・11)
     // ---------------------------------------------------------------------
