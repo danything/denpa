@@ -281,7 +281,7 @@
   let visible = $state(false);
   /**
    * 何度も作らないための世代。押して離してを繰り返しても混ざらない。受信したまま閉じたとき (`closed`) も進め、
-   * その前に頼んだ XML の AIT が後から届いても開かない (`startAppFrom`)
+   * その前にリクエストした XML の AIT が後から届いても開かない (`startAppFrom`)
    */
   let generation = 0;
   /** いま何を出しているか (`channel`)。出していなければ `null` */

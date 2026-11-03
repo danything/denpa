@@ -24,7 +24,7 @@ import {
 import { reach } from "#lib/reach.js";
 
 /*
- * **頭 (前段の接頭辞込み。server/paths.ts) は SvelteKit が自分の置き場から求める。**
+ * **接頭辞 (前段のものも込み。server/paths.ts) は SvelteKit が自分の置き場から求める。**
  * Service Worker の中の `$app/paths` は `<接頭辞>/service-worker.js` の置き場を
  * base にするので、`resolve` / `asset` がそのまま接頭辞の下を指す
  */
@@ -32,7 +32,7 @@ import { reach } from "#lib/reach.js";
 const CACHE = `denpa-${version}`;
 /** 殻だけ。ロゴやサムネイルのような「増えるもの」は入れない。パスは base からの相対で来る */
 const SHELL = [
-  // 組んだ JS/CSS はルートでも static でもないので型の付いた `resolve` に渡せない。頭だけ借りる
+  // 組んだ JS/CSS はルートでも static でもないので型の付いた `resolve` に渡せない。接頭辞だけ借りる
   ...immutable.map((file) => `${resolve("")}${file.path}`),
   ...assets
     .filter((file) => !file.path.endsWith("robots.txt"))
