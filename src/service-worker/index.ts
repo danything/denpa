@@ -21,6 +21,7 @@ import {
   storeResponse,
   videos,
 } from "#lib/offline-db.js";
+import { reach } from "#lib/reach.js";
 
 /*
  * **頭 (前段の接頭辞込み。server/paths.ts) は SvelteKit が自分の置き場から求める。**
@@ -44,46 +45,31 @@ const SHELL = [
  */
 const OFFLINE_PAGE = resolve("offline");
 /**
- * 入口が始まるときに読むデータ (共通の枠の `+layout.server.ts`。ログインの控えなど)。
- * **入口は SSR を切った殻なので、開くたびにこれをサーバへ取りに行く** — 控えていなかった頃は
- * 電波が無いとここで転び、真っ白な画面になっていた。入口と一緒に控え、繋がらないときだけ出す
+ * /offline の画面が始まるときに読むデータ (共通の枠の `+layout.server.ts`。ログイン情報など)。
+ * /offline は SSR を切った殻なので、開くたびにこれをサーバへ取得する。
+ * キャッシュしていなかった頃は、電波が無いとここでエラーになり、真っ白な画面になっていた。
+ * /offline と一緒にキャッシュし、繋がらないときだけ返す
  */
 const OFFLINE_DATA = `${OFFLINE_PAGE}/__data.json`;
 
 /**
- * 画面と入口のデータをサーバへ取りに行く。**繋がらないと分かっていれば待たず、返事が来なければ見切る。**
+ * 画面と /offline のデータをサーバへ取得する。繋がらないと分かっていれば待たず、
+ * 返事が無ければ見切る (`#lib/reach.ts`)。
  *
- * iPhone の Safari は機内モードで、取りに行ったものが失敗せずに返事待ちのまま止まることがあり、
- * 入口へ移れずにいつまでも読み込み中になっていた。電波の弱いところで繋がりかけのまま止まるのも同じ。
- * 端末が繋がっていないと言うなら取りに行かず、10秒返事が無ければ繋がらないものとして扱う
- * (ふだんの画面は Celeron でも数秒で返る)。
- *
- * **見切ったら、しばらく (30秒) は取りに行かない。** 開いた画面 → 入口へ移る → 入口のデータ、と
- * 続けて取りに行くので、毎回待つと 10秒 × 3 待たせていた
+ * iPhone の Safari は機内モードで、取得したものが失敗せずに返事待ちのまま止まることがあり、
+ * /offline へ移れずにいつまでも読み込み中になっていた。見切るのは、端末が繋がっていないと言うとき
+ * (すぐ)、または応答のヘッダが 10 秒届かないときだけ。後者で見切ったあとの 5 秒は取得しない
+ * (開いた画面、/offline、/offline のデータと続けて取得するので、毎回 10 秒待たせないため)。
+ * サーバが遅いだけのときにほかの画面まで開けなくならないよう、短くしてある。
+ * 応答が届いたとき、または繋がり直したとき (`online` イベント) は、見切った記憶をすぐ捨てる
  */
-const NETWORK_WAIT = 10_000;
-const GIVE_UP_FOR = 30_000;
-let unreachableUntil = 0;
-function fromNetwork(request: Request): Promise<Response> {
-  if (!worker.navigator.onLine || Date.now() < unreachableUntil)
-    return Promise.reject(new Error("繋がっていません"));
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      unreachableUntil = Date.now() + GIVE_UP_FOR;
-      reject(new Error("返事がありません"));
-    }, NETWORK_WAIT);
-    fetch(request).then(
-      (response) => {
-        clearTimeout(timer);
-        resolve(response);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      },
-    );
-  });
-}
+const fromNetwork = reach({
+  fetch: (request, signal) => fetch(request, { signal }),
+  online: () => worker.navigator.onLine,
+  wait: 10_000,
+  giveUpFor: 5_000,
+});
+worker.addEventListener("online", () => fromNetwork.reset());
 
 worker.addEventListener("install", (event) => {
   event.waitUntil(
@@ -134,8 +120,8 @@ worker.addEventListener("fetch", (event) => {
         const page = await caches.match(OFFLINE_PAGE);
         if (page === undefined) return Response.error();
         /*
-         * **入口へ移す** (その場で入口の HTML を返さない)。殻は開いた URL の画面として
-         * 始まるので、`/` のまま返すと一覧の画面を組もうとしてデータを取りに行き、転んでいた
+         * /offline へ移す (その場で /offline の HTML を返さない)。殻は開いた URL の画面として
+         * 始まるので、`/` のまま返すと一覧の画面を組もうとしてデータを取得し、エラーになっていた
          */
         if (url.pathname !== OFFLINE_PAGE)
           return Response.redirect(new URL(OFFLINE_PAGE, location.origin));
@@ -145,7 +131,7 @@ worker.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 入口のデータはサーバ優先 (ログインの控えが変わる)。繋がらなければ控え
+  // /offline のデータはサーバ優先 (ログイン情報が変わる)。繋がらなければキャッシュ
   if (url.pathname === OFFLINE_DATA) {
     event.respondWith(
       fromNetwork(request).catch(
