@@ -422,7 +422,8 @@ export async function readLineup(
       if (transponder === null) continue;
       listed.add(other.networkId);
       if (networks.has(other.networkId)) continue;
-      queue.push({
+      // 残りの入口より先に開く (目的のネットワークが分かっている)
+      queue.unshift({
         channel: channelName(type, transponder),
         network: other.networkId,
       });
