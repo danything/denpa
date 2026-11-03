@@ -23,6 +23,8 @@ test.describe("設定のチューナーとチャンネル", () => {
     // 何分もかかって空きチューナーを全部使うので、そうと分かるようにしておく (「詳しく」の中)
     await expect(card).toContainText("空いているチューナーを全部使います");
 
+    // 初めの選び方は「すべて」。ここは地上波の総当たりだけを見る
+    await card.getByLabel("スキャンする種別").selectOption("GR");
     await card.getByTestId("scan-start").click();
 
     await expect(card.getByTestId("scan-state")).toHaveText("完了", {
