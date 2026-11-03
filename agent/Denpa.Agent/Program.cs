@@ -399,6 +399,26 @@ JsonObject TunerList() => new() { ["tuners"] = pool.Status(), ["detected"] = poo
 app.MapGet("/denpa/tuners", (HttpContext http) => Respond.Write(http, TunerList()));
 
 /*
+ * 挿さっているのに、書いてある定義に無い機材。**定義を書いてあると、新しく挿した機材は使わない**
+ * (書いた順や設定を勝手に変えない) ので、画面に出して足せるようにする。
+ * 探すのは画面が開いたときだけ (機材を探すのは数百 ms かかり、asicen はファームウェアも流し込む)。
+ * 定義を書いていない (自動で見つけた) ときは、見つけたものを全部使っているので空
+ */
+app.MapGet("/denpa/tuners/unlisted", (HttpContext http) =>
+{
+    var list = new JsonArray();
+    if (!pool.Detected)
+    {
+        var known = pool.Tuners.Select(tuner => tuner.Device).ToHashSet();
+        foreach (var found in DeviceProbe.Detect().Where(found => !known.Contains(found.Device)))
+        {
+            list.Add((JsonNode)new JsonObject { ["name"] = found.Name, ["types"] = Json.Strings(found.Types), ["device"] = found.Device });
+        }
+    }
+    return Respond.Write(http, list);
+});
+
+/*
  * 機材の定義を書き換える。**画面から。**
  *
  * 受け取るのはデバイスと種別と LNB だけで、選局コマンドは受け取らない (TunerSpec)。

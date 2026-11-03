@@ -7,6 +7,7 @@ import { recordings } from "#lib/server/schema.js";
 import { cardStatus } from "#lib/server/scramble.js";
 import {
   type AgentTuner,
+  getUnlistedTuners,
   putTuners,
   recordingOf,
   type TunerConfig,
@@ -113,6 +114,8 @@ export async function load() {
         error: null as string | null,
       }))
       .catch((error: unknown) => ({ list: [], error: String(error) })),
+    // 挿さっているのに定義に無い機材。定義を書いていれば、新しく挿したものは使われないので出して足せるようにする
+    unlisted: getUnlistedTuners().catch(() => []),
     // チューナーを譲り合う順。チューナーの節の「詳しく」に出す
     yieldOrder: yieldOrder(),
     card: cardStatus(),

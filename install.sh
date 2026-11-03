@@ -129,9 +129,21 @@ ensure_genkan() {
     return 1
   fi
   say "genkan を $HOME/genkan に入れます (http://denpa.localhost で開けるように)"
-  (cd "$HOME" && curl -fsSL "${CURL_LIMITS[@]}" https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s) \
-    || { say "genkan を入れられませんでした (ポート 3000 で開きます)"; return 1; }
-  genkan_running
+  # **イメージの取得は、レジストリが一時的に断ることがある** (回数の上限。CI で実際に落ちた)。init.sh は
+  # 何度流しても同じ結果になる (clone 済みなら pull して compose up) ので、間を空けて 3 回まで流し直す
+  local try
+  for try in 1 2 3; do
+    if (cd "$HOME" && curl -fsSL "${CURL_LIMITS[@]}" https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s); then
+      genkan_running
+      return
+    fi
+    if [ "$try" -lt 3 ]; then
+      say "genkan を入れられませんでした。$((try * 10)) 秒後に試し直します"
+      sleep $((try * 10))
+    fi
+  done
+  say "genkan を入れられませんでした (ポート 3000 で開きます)"
+  return 1
 }
 
 # genkan に denpa を登録する断片。**http:// を付けるので HTTPS にせず、証明書の信頼も要らない**
