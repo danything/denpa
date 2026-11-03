@@ -373,7 +373,7 @@ export function panArgs(audio: AudioTrack): string[] {
  * ## H.265
  *
  * **GPU でだけエンコードする** (ソフトウェアのエンコーダを組んでいない。`#lib/hw.ts` の `SOFTWARE_CODECS`)。
- * GPU が無いのに頼まれたら投げる — 選局の指示を受けるところで H.264 に替えてあるので (`attend`)、ふつうは来ない。
+ * GPU が無いのにリクエストされたら投げる。選局の指示を受けるところで H.264 に替えてあるので (`attend`)、ふつうは来ない。
  * 入れ物の中の名前は `hvc1` にする。ffmpeg の既定の `hev1` は Safari が受け取らない (`#lib/live.ts` の `codecsFor`)。
  * 音声は H.264 と同じ AAC (`audioArgs`)
  *
@@ -612,10 +612,10 @@ const GPU_BUSY =
 
 /**
  * H.265 を GPU でエンコードできずに降りたときの文面。画面はこれを受けると H.265 を諦めて次の形式に替える
- * (`live-player.svelte.ts`。文面は見ず、H.265 で頼んでいて降りたことで決める)
+ * (`live-player.svelte.ts`。文面は見ず、H.265 をリクエストしていて降りたことで決める)
  */
 const HEVC_GAVE_UP = "H.265 を GPU でエンコードできませんでした";
-/** H.265 を頼まれたが出せないので H.264 にしたときの断り書き (`attend`) */
+/** H.265 をリクエストされたが出せないので H.264 にしたときの断り書き (`attend`) */
 const HEVC_TO_H264 =
   "H.265 を GPU でエンコードできないため、H.264 に切り替えました";
 

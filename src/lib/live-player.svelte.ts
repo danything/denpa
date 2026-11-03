@@ -1939,7 +1939,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             tuned !== null
           ) {
             /*
-             * H.265 で頼んで降りた (サーバが GPU でエンコードできなかった。ソフトウェアには降りられない)。
+             * H.265 でリクエストして降りた (サーバが GPU でエンコードできなかった。ソフトウェアには降りられない)。
              * この画面を開いている間は H.265 を諦めて、次の形式でリクエストし直す (`decideFormat`)
              */
             hevcGaveUp = true;
