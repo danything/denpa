@@ -883,7 +883,7 @@ compose と Helm は同じ合言葉を環境変数で両方に渡すので、何
 | Windows (`install.ps1`)                      | 全部のインターフェース。WSL のコンテナは vEthernet のアドレスで繋いでくるので、ループバックに絞れない。LAN からは Windows ファイアウォールで守る ([install-windows.md](install-windows.md))                                          |
 | Helm (`charts/denpa` / `charts/denpa-agent`) | Service は ClusterIP。NetworkPolicy も出せる (既定はオフ。CNI が対応していれば効く): `charts/denpa` は `agent.networkPolicy.enabled` で denpa の Pod からだけ、`charts/denpa-agent` は `networkPolicy.from` に書いた相手からだけ通す |
 
-**名前を見る門 (`AGENT_ALLOWED_HOSTS`) と、本文を JSON に限る門は外しました。** どちらもブラウザ越しの攻撃
+**名前を見るチェック (`AGENT_ALLOWED_HOSTS`) と、本文を JSON に限るチェックは外しました。** どちらもブラウザ越しの攻撃
 (DNS リバインディングで読み出す・下調べの要らない `text/plain` の POST で書き込む) を止めるためのもので、
 クライアント証明書を必須にすればブラウザはそもそも繋げません。
 

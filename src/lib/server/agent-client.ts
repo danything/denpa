@@ -5,7 +5,7 @@
  * - エージェントの証明書は、組んだときに覚える (`<dataDir>/tls/agent.crt`)。その証明書そのものを
  *   `ca` にして繋ぐので、`TUNER_AGENT_URL` をどんな名前・IP で書いても通る (名前は見ない)
  * - 組むのは合言葉 (`TUNER_AGENT_URL` の `#pair=…`) を知っている者どうしだけ。覚えた証明書で
- *   繋がらない・エージェントに断られたときは、合言葉があれば組み直してもう1度だけ試す
+ *   繋がらない・エージェントに断られたときは、合言葉があれば組み直してもう 1 度だけ試す
  *
  * 合言葉はログにも不具合報告にも出さない (`agentSecrets`)。
  */
@@ -23,6 +23,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { connect } from "node:tls";
@@ -72,7 +73,7 @@ export function agentHostname(): string | null {
 
 // --- 証明書 -------------------------------------------------------------------
 
-/** 証明書の指紋。DER の SHA-256 を小文字の16進で (エージェントと同じ決まり) */
+/** 証明書の指紋。DER の SHA-256 を小文字の 16 進で (エージェントと同じ決まり) */
 export function fingerprint(der: Uint8Array): string {
   return createHash("sha256").update(der).digest("hex");
 }
@@ -188,9 +189,16 @@ function writeSecret(path: string, text: string): void {
   }
 }
 
-/** こちらの鍵と証明書。無ければ作って残す */
+let own: { dir: string; identity: Identity } | null = null;
+
+/** こちらの鍵と証明書。無ければ作って残す。置き場ごとに 1 度だけ読む */
 export function ownIdentity(): Identity {
   const dir = tlsDir();
+  if (own?.dir !== dir) own = { dir, identity: loadIdentity(dir) };
+  return own.identity;
+}
+
+function loadIdentity(dir: string): Identity {
   const keyPath = `${dir}/denpa.key`;
   const certPath = `${dir}/denpa.crt`;
   if (existsSync(keyPath) && existsSync(certPath)) {
@@ -207,10 +215,21 @@ export function ownIdentity(): Identity {
   return identity;
 }
 
-/** 覚えているエージェントの証明書 (PEM)。まだ組んでいなければ null。小さなファイルなので呼ぶたびに読む */
+let remembered: { path: string; stamp: string; cert: string } | null = null;
+
+/**
+ * 覚えているエージェントの証明書 (PEM)。まだ組んでいなければ null。
+ * ファイルが変わっていなければ前に読んだものを使う (`tls` を毎回作り直さないため)
+ */
 function agentCert(): string | null {
   const path = `${tlsDir()}/agent.crt`;
-  return existsSync(path) ? readFileSync(path, "utf8") : null;
+  if (!existsSync(path)) return null;
+  const { mtimeMs, size } = statSync(path);
+  const stamp = `${mtimeMs}:${size}`;
+  if (remembered?.path !== path || remembered.stamp !== stamp) {
+    remembered = { path, stamp, cert: readFileSync(path, "utf8") };
+  }
+  return remembered.cert;
 }
 
 function rememberAgent(cert: string): void {
@@ -231,7 +250,7 @@ export function pairProof(
     .digest("base64url");
 }
 
-/** 相手の証明書を、確かめずに取ってくる (このあと合言葉で確かめる) */
+/** 相手の証明書を、確かめずに取得する (このあと合言葉で確かめる) */
 function peerCertificate(
   origin: string,
   identity: Identity,
@@ -265,7 +284,22 @@ function peerCertificate(
   });
 }
 
-function tlsOptions(identity: Identity, ca: string) {
+type TlsOptions = ReturnType<typeof makeTlsOptions>;
+const tlsCache = new WeakMap<Identity, Map<string, TlsOptions>>();
+
+/** `fetch` の `tls`。同じ相手には同じものを渡す */
+function tlsOptions(identity: Identity, ca: string): TlsOptions {
+  let byCa = tlsCache.get(identity);
+  if (byCa === undefined) tlsCache.set(identity, (byCa = new Map()));
+  let options = byCa.get(ca);
+  if (options === undefined) {
+    options = makeTlsOptions(identity, ca);
+    byCa.set(ca, options);
+  }
+  return options;
+}
+
+function makeTlsOptions(identity: Identity, ca: string) {
   return {
     ca,
     cert: identity.cert,
@@ -277,7 +311,7 @@ function tlsOptions(identity: Identity, ca: string) {
 
 let pairing: { origin: string; done: Promise<void> } | null = null;
 
-/** 合言葉で組む。同時に呼ばれても1度だけ */
+/** 合言葉で組む。同時に呼ばれても 1 度だけ */
 function pair(target: AgentTarget): Promise<void> {
   if (pairing?.origin === target.origin) return pairing.done;
   const done = (async () => {
@@ -348,7 +382,8 @@ const NOT_PAIRED = "まだ組んでいません";
 
 /**
  * エージェントを呼ぶ。`path` は `/denpa/...`。返すのはふつうの `fetch` の応答。
- * まだ組んでいない・覚えた証明書と合わない・組んでいないと断られた、のどれかなら、合言葉で組み直して1度だけ試し直す
+ * まだ組んでいない・覚えた証明書と合わない・組んでいないと断られた、のどれかなら、合言葉で組み直して 1 度だけ試し直す。
+ * 試し直すので、`init.body` は文字列など何度でも送れるものにする (いまの呼び出し元はどれも JSON の文字列か本文なし)
  */
 export async function agentFetch(
   path: string,

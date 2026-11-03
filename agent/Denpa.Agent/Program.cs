@@ -113,6 +113,14 @@ var recorded = Path.GetFullPath(
 
 // 自分の鍵と証明書、合言葉、組んだ denpa (tuners.json の隣の tls/。AgentTls.cs)
 var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN"));
+/*
+ * 合言葉が短いと、組むやり取りを覗いた人が証し (HMAC) から手元で総当たりできる。インストーラや chart が
+ * 作るもの (43 字) なら当たらない。手で短いものを渡されたときだけ言う
+ */
+if (tls.Token.Length < 32)
+{
+    Log.Write($"AGENT_PAIR_TOKEN が短すぎます ({tls.Token.Length} 字)。推測されないよう 32 字以上の乱数にしてください (docs/agent.md)");
+}
 // CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。Zd1j.cs)
 Zd1jBoard.Locks = new Zd1jLocks(config.Zd1jLocksFile);
 var events = new Events();
@@ -166,7 +174,7 @@ var builder = WebApplication.CreateSlimBuilder(args);
 if (sharing is { } server) builder.WebHost.UseSockets(sockets => sockets.CreateBoundListenSocket = server.Bind);
 /*
  * **普通のポートは HTTPS だけ。クライアント証明書を必須にする** (出さない相手は TLS の段で落ちる。ブラウザはここで止まる)。
- * TLS の段ではどの証明書も受け、見分けるのは下の門 (AgentTls.Decide)。鍵を配るポートは平文のまま (CardShareServer.cs)
+ * TLS の段ではどの証明書も受け、見分けるのは下のチェック (AgentTls.Decide)。鍵を配るポートは平文のまま (CardShareServer.cs)
  */
 var https = new HttpsConnectionAdapterOptions
 {
@@ -208,7 +216,7 @@ var app = builder.Build();
 if (sharing is not null) app.Use(sharing.Serve);
 
 /*
- * **門。組んだ denpa しか通さない** (AgentTls.cs)。相手の証明書の指紋が clients にあれば通し、
+ * **組んだ denpa しか通さない** (AgentTls.cs)。相手の証明書の指紋が clients にあれば通し、
  * 無ければ組む API (POST /denpa/pair) だけ受ける
  */
 app.Use(async (HttpContext http, RequestDelegate next) =>

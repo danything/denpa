@@ -94,7 +94,7 @@ public class AgentTlsTests
     }
 
     [Test]
-    public async Task 門は組んだ相手だけ通し組んでいなければ組むAPIだけ受ける()
+    public async Task 組んだ相手だけ通し組んでいなければ組むAPIだけ受ける()
     {
         var tls = AgentTls.Load(Fresh(), "t");
         tls.Clients.Add(D);

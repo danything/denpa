@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 普通のポート (<c>AGENT_PORT</c>) は HTTPS だけで、クライアント証明書を必須にする。TLS の段ではどの証明書も受け、
-/// 見分けるのは HTTP の門 (<see cref="Decide"/>) で: 証明書の指紋が <c>clients</c> にある相手 (組んだ denpa) だけ通す。
+/// 見分けるのは HTTP の段 (<see cref="Decide"/>)。証明書の指紋が <c>clients</c> にある相手 (組んだ denpa) だけ通す。
 /// 組んでいない相手が使えるのは <c>POST /denpa/pair</c> だけで、合言葉から作った proof を出せば組める (<see cref="Pair"/>)。
 /// </para>
 ///
@@ -98,7 +98,7 @@ public sealed class AgentTls
         return token;
     }
 
-    // --- 門 ------------------------------------------------------------------
+    // --- 通すかどうか ------------------------------------------------------------------
 
     public enum Gate
     {
