@@ -257,11 +257,19 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     var use = query["use"].ToString() is { Length: > 0 } named ? named : "不明";
     // 引き継ぎ。この利用者たちは、もう離れたものとして選ぶ (TunerPool.Open。何度でも書ける)
     var after = query["after"].Where(value => !string.IsNullOrEmpty(value)).Select(value => value!).ToHashSet();
+    // デバッグ用の名指し。指定のデバイスのチューナーだけで選局する (TunerPool.Open の pin)
+    var pin = query["tuner"].ToString() is { Length: > 0 } pinned ? pinned : null;
 
     Sink sink;
     try
     {
-        sink = pool.Open(type, channel, priority, use, after);
+        sink = pool.Open(type, channel, priority, use, after, pin);
+    }
+    catch (TunerPool.TunerPinException error)
+    {
+        // 指定のチューナーが無い・無効・その種別を受けられない。ほかへ振り替えないので 400 で理由を返す
+        await Respond.Error(http, error.Message, 400);
+        return;
     }
     catch (TunerPool.TunerBusyException error)
     {

@@ -61,6 +61,8 @@ const AGENT_TUNER = object({
   rank: nullable(number),
   /** 選局に使うデバイス。エージェントはこれを直に開く */
   device: nullable(string),
+  /** ストリームのリクエストで名指しするときの目印 (`tuner`。デバッグ用)。古いエージェントには無い */
+  pin: optional(string),
   /** 衛星の給電。要る構成だけ */
   lnb: nullable(string),
   /** いま使っているチャンネル。空いていれば null */
@@ -290,6 +292,8 @@ export async function openChannelStream(
   use: StreamUse,
   priority = config.priority.recording,
   after: readonly StreamUse[] = [],
+  /** デバッグ用の名指し。このチューナーだけで選局し、ほかへ振り替えない (docs/agent.md「デバッグ用の名指し」) */
+  pin: string | null = null,
 ): Promise<ReadableStream<Uint8Array>> {
   const query = new URLSearchParams({
     type,
@@ -298,6 +302,7 @@ export async function openChannelStream(
     use,
   });
   for (const leaving of after) query.append("after", leaving);
+  if (pin !== null) query.set("tuner", pin);
   const res = await agentFetch(`/denpa/stream?${query}`, {
     signal,
   });
@@ -335,9 +340,10 @@ export function openWhenFree(
   use: StreamUse,
   priority: number,
   giveUp: () => boolean,
+  pin: string | null = null,
 ): Promise<ReadableStream<Uint8Array>> {
   return retryWhileBusy(
-    () => openChannelStream(type, channel, signal, use, priority),
+    () => openChannelStream(type, channel, signal, use, priority, [], pin),
     giveUp,
   );
 }

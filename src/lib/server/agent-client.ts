@@ -138,7 +138,8 @@ export function selfSignedCertificate(key: KeyObject, name: string): string {
     createPublicKey(key).export({ type: "spki", format: "der" }),
   );
   const serial = crypto.getRandomValues(new Uint8Array(16));
-  serial[0] = (serial[0] ?? 0) & 0x7f; // 正の数にする
+  // 正の数で、先頭のバイトを 0 にしない (0 で始まると DER の整数として余分な 0 になり、BoringSSL が INVALID_INTEGER で断る)
+  serial[0] = ((serial[0] ?? 0) & 0x7f) | 0x40;
   const now = Date.now();
   const tbs = seq(
     der(0xa0, der(0x02, bytes(0x02))), // v3

@@ -909,6 +909,11 @@ class Session {
      * 作り直したところを覚えるのに使う (`chase.ts` の `resumeFrom`)
      */
     private readonly restarted?: (consumed: number) => void,
+    /**
+     * **デバッグ用にチューナーを名指しする** (エージェントの `tuner`)。名指しのセッションは名指しでない人と共有しない (`key`)。
+     * 無ければエージェントが選ぶ
+     */
+    readonly pin: string | null = null,
   ) {
     this.list = new TrackList(program);
     this.id = key(
@@ -918,6 +923,7 @@ class Session {
       audio,
       raw ? "raw" : codec,
       track,
+      pin,
     );
   }
 
@@ -1311,6 +1317,7 @@ class Session {
       this.use,
       config.priority.live,
       () => this.stopped,
+      this.pin,
     );
     this.locating = this.locate();
     return stream;
@@ -2041,8 +2048,10 @@ export const key = (
   form: StreamCodec | "raw",
   track: number,
   // **放送そのままでは音声で分けない** — 全部の音声を送って画面が選ぶ (`TuneCommand.raw`)
+  // **チューナーを名指ししているものは別のセッションにする** — 名指しでない人と混ぜると、指定のチューナーで選局されない
+  pin: string | null = null,
 ) =>
-  `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}`;
+  `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}`;
 const sessions = new Map<string, Session>();
 
 /** エンコードし始めて一覧に載せる。畳むのは見ている人がいなくなったとき。ここでは待たない */
@@ -2054,6 +2063,7 @@ function begin(
   codec: StreamCodec,
   track: number,
   raw: boolean,
+  pin: string | null = null,
 ): Session {
   const session = new Session(
     channelType,
@@ -2064,6 +2074,9 @@ function begin(
     codec,
     track,
     raw,
+    undefined,
+    undefined,
+    pin,
   );
   sessions.set(session.id, session);
   void session.run();
@@ -2080,6 +2093,7 @@ function watch(
   track: number,
   raw: boolean,
   viewer: Viewer,
+  pin: string | null = null,
 ): Session {
   const session =
     sessions.get(
@@ -2090,8 +2104,9 @@ function watch(
         now.audio,
         raw ? "raw" : codec,
         track,
+        pin,
       ),
-    ) ?? begin(channelType, channel, serviceId, now, codec, track, raw);
+    ) ?? begin(channelType, channel, serviceId, now, codec, track, raw, pin);
   session.add(viewer);
   return session;
 }
@@ -2598,6 +2613,8 @@ type Asked =
       language: number | undefined;
       /** 放送そのままで欲しいと言われたか */
       raw: boolean;
+      /** デバッグ用に名指しされたチューナー (エージェントの `tuner`)。無ければ名指ししない */
+      tuner: string | null;
     }
   | ChaseAsked;
 
@@ -2670,6 +2687,10 @@ export function parseCommand(message: Record<string, unknown>): Asked | null {
         caption,
         language,
         raw: message["raw"] === true,
+        tuner:
+          typeof message["tuner"] === "string" && message["tuner"] !== ""
+            ? message["tuner"]
+            : null,
       };
     }
     default:
@@ -2733,7 +2754,8 @@ export function attend(connection: Connection): void {
       current = openChase(asked, viewer);
       return;
     }
-    const { channelType, channel, serviceId, audio, caption, raw } = asked;
+    const { channelType, channel, serviceId, audio, caption, raw, tuner } =
+      asked;
     /*
      * **H.265 を出せなければ H.264 にする** (`liveHevc`。GPU が無い・印を外した・最近落ちた)。画面は答え (`tuned`) の
      * コーデックで受け取るので、そのまま観られる。替えたことは断り書きで言う
@@ -2756,6 +2778,7 @@ export function attend(connection: Connection): void {
       current.channel === channel &&
       current.serviceId === serviceId &&
       current.raw === raw &&
+      current.pin === tuner &&
       (raw || (current.audio.id === now.audio.id && current.codec === codec)) &&
       current.track === caption;
 
@@ -2815,6 +2838,7 @@ export function attend(connection: Connection): void {
       caption,
       raw,
       viewer,
+      tuner,
     );
   };
 
