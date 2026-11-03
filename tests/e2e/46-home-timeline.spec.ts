@@ -589,8 +589,19 @@ test.describe("ホームの1本の一覧", () => {
 
     await row.getByTestId("row-more").click();
     await menu.getByTestId("row-menu-detail").click();
-    await expect(page.getByTestId("program-detail")).toContainText(
-      "一覧試験の視聴済み",
+    const detail = page.getByTestId("program-detail");
+    await expect(detail).toContainText("一覧試験の視聴済み");
+    // 詳細のボタンは全幅で縦に積まない。並びは 2 段 (ボタン 2 つと間) までで、中身を読む所が残る
+    await expect(detail.getByTestId("detail-play")).toBeVisible();
+    const actions = (await detail.locator(".detail-actions").boundingBox())!;
+    const close = (await detail.getByTestId("detail-close").boundingBox())!;
+    // 12 は段の間 (--dp-space-2 = 8px) に丸めの 4px を足した値
+    expect(actions.height).toBeLessThanOrEqual(close.height * 2 + 12);
+    // 「再生」は「閉じる」と同じ下の段の右端
+    const play = (await detail.getByTestId("detail-play").boundingBox())!;
+    expect(Math.round(play.y)).toBe(Math.round(close.y));
+    expect(Math.round(play.x + play.width)).toBe(
+      Math.round(actions.x + actions.width),
     );
   });
 

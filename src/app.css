@@ -2014,8 +2014,10 @@ dialog {
   margin: 0;
 }
 /*
- * **狭い画面では下から出る一枚。** 中央に浮かせた箱だとボタンが2段に折れて、どれを押すのか探すことになった。
- * 下端に付けて角は上だけ丸め、ボタンは全幅で縦に積む。主のボタン (並びの最後) がいちばん上
+ * **狭い画面では下から出る一枚。** 下端に付けて角は上だけ丸める。
+ * ボタンは広い画面と同じ `.modal-actions` のまま (全幅にせず右に寄せて並べ、入りきらなければ折り返す)。
+ * 主のボタン (並びの最後) は下の段の右端に来る。全幅で縦に積んでいた頃は、録画の詳細のようにボタンが
+ * 5 つあると一枚がボタンで埋まり、中身が読めなかった
  */
 @media (max-width: 639.98px) {
   .modal-box {
@@ -2030,18 +2032,6 @@ dialog {
   }
   dialog > article.modal-box {
     margin-top: auto;
-  }
-  .modal-actions {
-    flex-direction: column-reverse;
-    align-items: stretch;
-  }
-  .modal-actions > *,
-  .modal-actions > form > button,
-  .modal-actions > * > :is(button, a.button) {
-    width: 100%;
-  }
-  .modal-actions :is(button, a.button) {
-    justify-content: center;
   }
 }
 
