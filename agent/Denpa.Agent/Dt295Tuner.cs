@@ -748,7 +748,8 @@ public sealed class Dt295Tuner : ITuneDevice
                 if (tuning.Satellite)
                 {
                     int? tsid = streamId == ChannelTable.NoStreamId ? null : (int)streamId;
-                    board.Frontend.TuneSatellite(tuning.Frequency * 1000L, Math.Max(0, tuning.Slot), tsid);
+                    // TSID を指していなければ、その中継器の先頭の TS (スロット 0)
+                    board.Frontend.TuneSatellite(tuning.Frequency * 1000L, 0, tsid);
                 }
                 else
                 {

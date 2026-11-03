@@ -766,7 +766,7 @@ public class Dt295TunerTests
         usb.I2cDevice = (address, write, read) =>
             address == Dt295Frontend.SatelliteDemod && write is [0xC3] ? [0x10] : new byte[read];
         using var tuner = Tuner(usb, "3-3");
-        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("BS01_0")!, 16400));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("BS01:16400")!, 16400));
         await Assert.That(error.Message).IsEqualTo(ITuneDevice.SyncFailed);
         // ロックしないのは機材の失敗ではないので開き直さない
         await Assert.That(usb.State).IsEqualTo(Dt295Device.Authenticated);
