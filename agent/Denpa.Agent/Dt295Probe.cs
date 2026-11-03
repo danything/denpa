@@ -15,7 +15,6 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 段ごとの記録 (時間つき) は標準エラーに、統計は標準出力に出す。**TS はどこにも書かない。**
-/// 受信に要るもの (Dt295Receive) が揃っていなければ、選局までで止めて理由を出す。
 /// 終わるときは idle イメージを書き戻して未認証のアイドル (0x10) に戻す (5.7)。終了コードは、うまくいけば 0、どこかで止まれば 1。
 /// </para>
 /// </summary>
@@ -149,21 +148,11 @@ public static class Dt295Probe
         }
     }
 
-    /// <summary>受信に要るものが揃っていれば、チューナーと同じ手順で決めた秒数だけ受けて数える (9 章)</summary>
+    /// <summary>チューナーと同じ手順で、決めた秒数だけ受けて数える (9 章)</summary>
     private static void Receive(Options options, Dt295Board board, Dt295TsStats stats, Action<string> step)
     {
-        Dt295ReceiveData data;
-        try
-        {
-            data = Dt295Receive.Ensure();
-        }
-        catch (IOException error)
-        {
-            step($"受信はしません: {error.Message}");
-            return;
-        }
         var routes = new Dt295RouteTracker(needCat: options.Kind == 'T');
-        var stream = Dt295Stream.Start(board, data, routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence);
+        var stream = Dt295Stream.Start(board, Dt295Receive.Ensure(), routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence);
         step("受信を始めました (9.2〜9.7)");
         try
         {

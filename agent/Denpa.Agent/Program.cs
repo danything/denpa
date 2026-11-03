@@ -76,7 +76,7 @@ if (args is ["--status"])
 // PIX-DT295 を確かめる。起動・認証・カード・選局と、受信に要るものがあれば受信の統計だけを出す (Dt295Probe.cs)
 if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295Probe.Run(args);
 /*
- * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ刺さっている機材を自分で見つけて使い始めるので、
+ * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
  */
 if (args.Length > 0)
@@ -151,7 +151,7 @@ if (cardLan.Port == port)
 var sharing = cardLan.Port is { } sharePort ? new CardShareServer(cardLan, sharePort) : null;
 
 /*
- * CARD_URL は「手元にカードが無い拠点」だけ。指定しなければ自分に刺さって
+ * CARD_URL は「手元にカードが無い拠点」だけ。指定しなければ自分に挿さって
  * いるカードを読む (CardShare.cs)。
  */
 var cardUrl = Environment.GetEnvironmentVariable("CARD_URL");
@@ -198,9 +198,9 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Logging.ClearProviders();
 
 /*
- * **録画中に止められたら、終わるまで居座る** (denpa の `SHUTDOWN_WAIT` と同じ考え)。
+ * **録画中に止められたら、録画が終わるまで止まらない** (denpa の `SHUTDOWN_WAIT` と同じ考え)。
  *
- * これが無かった頃は、**Pod を入れ替えるだけで録画が落ちた** — denpa 側は録画が
+ * これが無かった頃は、**Pod を入れ替えるだけで録画が落ちた。** denpa 側は録画が
  * 終わるまで待つのに、TS を流しているこちらが先に消える。実機で 30 分番組を
  * 始まって 10 秒で失っている。Kestrel に任せられない理由は Drain。
  *
@@ -368,7 +368,7 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
         /*
          * **止まるときはこちらから閉じる。** Kestrel は開いている応答が終わるのを 30 秒 (既定の ShutdownTimeout)
          * 待ってから止まり、その間は待ち受けだけ閉じている。denpa は通知を開きっぱなしにするので、録画が無いときの
-         * 入れ替えでも古い Pod が 30 秒居残り、その間に始まった録画の頭が欠けていた (実機で約 35 秒。下の Drain)
+         * 入れ替えでも古い Pod が 30 秒残り、その間に始まった録画の頭が欠けていた (実機で約 35 秒。下の Drain)
          */
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted, app.Lifetime.ApplicationStopping);
         var ct = stopping.Token;
@@ -599,7 +599,7 @@ internal static class Respond
 /// **待っている間も、新しい選局は断らない** (denpa の scheduler.ts の「止められている最中でも始める」と同じ考え)。
 /// <c>Recreate</c> なので新しい Pod はこちらが終わるまで立たず、断ってもその間に始まる録画の頭が欠けるだけ。
 /// 来た録画は録り終えるまで待つ (待ちは伸びるが <c>SHUTDOWN_WAIT</c> が歯止め)。ライブや番組表は受けるが
-/// 待たず、録画が終われば一緒に切れる。**録画が無ければすぐ畳む** — 待っても入れ替えの隙間が伸びるだけ。
+/// 待たず、録画が終われば一緒に切れる。**録画が無ければすぐ畳む。** 待っても入れ替えの隙間が伸びるだけ。
 /// </para>
 /// </summary>
 internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetime lifetime)
@@ -619,7 +619,7 @@ internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetim
 
     private void Handle(PosixSignalContext context)
     {
-        // 既定の即死を止める。畳むのはこちらから指示する
+        // 既定ではその場で終了する。それを止め、畳むのはこちらから指示する
         context.Cancel = true;
         if (Interlocked.Exchange(ref _stopping, 1) == 1) return;
         _ = Task.Run(WaitThenStop);

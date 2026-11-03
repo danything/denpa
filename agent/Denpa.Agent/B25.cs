@@ -18,7 +18,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **復号できないものは落とさずに素通しする。** 録れないよりまし、で、復号できなかったことは
-/// <see cref="Undecodable"/> と <see cref="LastError"/> で分かる。鍵の相手が失敗しても投げない —
+/// <see cref="Undecodable"/> と <see cref="LastError"/> で分かる。鍵の相手が失敗しても投げずに、
 /// 鍵を捨てて素通しし (古い鍵で化けたものを「復号できた」として流さない)、少し置いて同じ ECM を聞き直す。
 /// </para>
 ///
@@ -47,7 +47,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private const byte SyncByte = 0x47;
 
     /// <summary>
-    /// 頭で溜める上限。**超えたら揃うのを待たずに流し始める。** PAT・PMT・ECM はどれも 0.1 秒ほどの
+    /// 先頭で溜める上限。**超えたら揃うのを待たずに流し始める。** PAT・PMT・ECM はどれも 0.1 秒ほどの
     /// 間隔で来るので普通は 1MB も溜まらない。揃わないのはカードに合わない局か壊れた TS で、
     /// 待ち続けると何も出てこなくなる。8MB は衛星の中継器まるごと (6MB/秒ほど) でも 1 秒ちょっと
     /// </summary>
@@ -58,7 +58,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// 貰えなかった ECM を同じ中身のまま聞き直すまでのパケット数 (地上波の 2 秒ほど)。**時計ではなく
-    /// 読んだ量で数える** — ファイルは実時間より速く読むので、時計で待つと数分ぶんが掛かったまま残る
+    /// 読んだ量で数える。** ファイルは実時間より速く読むので、時計で待つと数分ぶんが掛かったまま残る
     /// </summary>
     private const long RetryPackets = 25_000;
 
@@ -67,7 +67,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private bool _synced;
     private long _packets;
 
-    /// <summary>頭で溜めている間は true。溜めたパケットは <see cref="_hold"/> に <see cref="_held"/> 個</summary>
+    /// <summary>先頭で溜めている間は true。溜めたパケットは <see cref="_hold"/> に <see cref="_held"/> 個</summary>
     private bool _holding = true;
     private byte[]? _hold;
     private int _held;
@@ -86,13 +86,13 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>ES の PID → 鍵。表を引くだけにして、パケットごとの手間を無くす</summary>
     private readonly Ecm?[] _route = new Ecm?[8192];
     /// <summary>
-    /// ECM が 1 本だけなら、PMT に載っていない PID もそれで復号する。**PAT の PMT がみな来てから** —
+    /// ECM が 1 本だけなら、PMT に載っていない PID もそれで復号する。**PAT の PMT がみな来てから**にして、
     /// 来ていない番組の ES を別の ECM の鍵で復号しない
     /// </summary>
     private Ecm? _only;
 
     /// <summary>
-    /// **PAT・PMT より先に来た ECM** (PID → ECM)。溜めている間だけ、まだ知らない PID のセクションも頭の
+    /// **PAT・PMT より先に来た ECM** (PID → ECM)。溜めている間だけ、まだ知らない PID のセクションも先頭の
     /// table_id を覗き、ECM なら中身を取っておく。**カードに聞くのは PMT がその PID を挙げてから** (<see cref="Rebuild"/>)。
     /// 挙げなければ聞かずに捨てる
     /// </summary>
@@ -134,7 +134,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private long _askMs, _waitedMs, _initMs = -1;
 
     /// <summary>
-    /// **頭で溜めていた間の内訳。** 選局して最初に送り出したときの 1 行に足す (docs/stream.md「本番の記録で割る」)。
+    /// **先頭で溜めていた間の内訳。** 選局して最初に送り出したときの 1 行に足す (docs/stream.md「本番の記録で割る」)。
     /// 時刻は渡された時計から。数えるのは溜めている間だけ
     /// </summary>
     public string HeldAt()
@@ -151,8 +151,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private static string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
 
     /// <summary>
-    /// 読んだぶんを復号して <paramref name="output"/> に書く。入れた長さと出る長さは揃わない —
-    /// 188 バイトに満たない尻尾は次まで残し、頭は揃うまで溜める (<see cref="HoldLimit"/>)
+    /// 読んだぶんを復号して <paramref name="output"/> に書く。188 バイトに満たない尻尾は次まで残し、
+    /// 先頭は揃うまで溜めるので、入れた長さと出る長さは揃わない (<see cref="HoldLimit"/>)
     /// </summary>
     public void Decode(ReadOnlySpan<byte> input, IBufferWriter<byte> output)
     {
@@ -198,7 +198,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         return written + decoded.WrittenCount;
     }
 
-    /// <summary>溜めているぶんを吐き出す。**終わりに 1 回**。尻尾の半端なバイトは捨てる</summary>
+    /// <summary>溜めているぶんを書き出す。**終わりに 1 回**。尻尾の半端なバイトは捨てる</summary>
     public void Flush(IBufferWriter<byte> output)
     {
         var whole = _carryLength >= PacketSize && _carry[0] == SyncByte;
@@ -315,10 +315,10 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <para>
     /// **ECM より前のパケットは、ECM を挟んで続いている偶奇の並びだけ復号する。** ECM が持つのは今と次の
     /// 鍵で、ECM のあとに流れる鍵はそのどちらか。並びが途切れる前は前の鍵かもしれず、復号すると化けたものを
-    /// 「復号できた」として流す (libaribb25 は溜めた頭を丸ごと復号していた)。ECM の手前で途切れた並びも復号しない —
-    /// 切り替わった直後に来た ECM は、もう前の鍵を持っていない。後ろから読み、ECM ごとに「この先で最初に
+    /// 「復号できた」として流す (libaribb25 は溜めた先頭を丸ごと復号していた)。切り替わった直後に来た ECM はもう前の鍵を
+    /// 持っていないので、ECM の手前で途切れた並びも復号しない。後ろから読み、ECM ごとに「この先で最初に
     /// 偶奇が変わる位置」を持って、それが ECM のあとの最初のパケット (<see cref="Ecm.After"/>) より後ろなら
-    /// 復号する。**並びは ES ごとでなく ECM ごとに見る** — 音声のように疎らな ES だけ見ると、偶奇が行って
+    /// 復号する。**並びは ES ごとでなく ECM ごとに見る。** 音声のように疎らな ES だけ見ると、偶奇が行って
     /// 戻ったのを見逃す
     /// </para>
     /// </summary>
@@ -346,7 +346,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// **鍵の要らない利用者だけになった。** 溜めていたら掛かったまま吐き出し、鍵を捨てて、ECM を聞くのをやめる。
+    /// **鍵の要らない利用者だけになった。** 溜めていたら掛かったまま書き出し、鍵を捨てて、ECM を聞くのをやめる。
     /// PAT・PMT は読み続ける (鍵の要る利用者が来たら、すぐ溜め直せるように)
     /// </summary>
     private void StopKeys(IBufferWriter<byte> output)
@@ -358,8 +358,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// **鍵の要る利用者が来た。** 頭と同じように、どの ECM も答えを貰うまで溜め直す (<see cref="Ready"/>)。
-    /// 溜めたぶんは最初の鍵で復号する (<see cref="Settle"/>) ので、来た利用者には頭から復号したものが届く
+    /// **鍵の要る利用者が来た。** 先頭と同じように、どの ECM も答えを貰うまで溜め直す (<see cref="Ready"/>)。
+    /// 溜めたぶんは最初の鍵で復号する (<see cref="Settle"/>) ので、来た利用者には先頭から復号したものが届く
     /// </summary>
     private void Rehold()
     {
@@ -419,7 +419,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// **まだ知らない PID を覗く。** 溜めている間だけ、セクションの頭 (payload_unit_start が立ったもの) の
+    /// **まだ知らない PID を覗く。** 溜めている間だけ、セクションの先頭 (payload_unit_start が立ったもの) の
     /// table_id が ECM (0x82) か、PAT より前なら PMT (0x02) のときに組み立て始める。
     ///
     /// <para>
@@ -435,7 +435,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// </para>
     ///
     /// <para>
-    /// ES の PES は頭が <c>00 00 01</c> なので、pointer_field 0・table_id 0x00 と読めて、ここでは ECM として読まない
+    /// ES の PES は先頭が <c>00 00 01</c> なので、pointer_field 0・table_id 0x00 と読めて、ここでは ECM として読まない
     /// (掛かっている PES はそもそも読まない。<see cref="Take"/>)。
     /// </para>
     /// </summary>
@@ -461,7 +461,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// パケットの中身をセクションに組み立てる。セクションはパケットを跨ぐし、1 つのパケットに
-    /// 幾つも入ることもある (pointer_field が次のセクションの頭を指す)
+    /// 幾つも入ることもある (pointer_field が次のセクションの先頭を指す)
     /// </summary>
     private void Feed(Section section, int pid, ReadOnlySpan<byte> payload, bool unitStart)
     {
@@ -556,7 +556,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// ES → ECM の表を作り直す。PAT か PMT か、カードの方式が変わったとき (まれ) だけ。
-    /// 引き続き要る ECM は鍵ごと残す — 作り直すと次の ECM が来るまで復号できなくなる
+    /// 作り直すと次の ECM が来るまで復号できなくなるので、引き続き要る ECM は鍵ごと残す
     /// </summary>
     private void Rebuild()
     {
@@ -620,7 +620,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// ECM を受けた。**中身が変わっていたら、その場で鍵を貰う。** 同じ中身なら、貰えなかったものだけ
-    /// 少し置いて聞き直す。溜めている間に同じ PID の ECM がもう一度来たら、そこで溜めるのをやめる —
+    /// 少し置いて聞き直す。溜めている間に同じ PID の ECM がもう一度来たら、そこで溜めるのをやめる。
     /// 1 周しても来ない ECM は来ないし、中身が変わる前に溜めを最初の鍵で復号しておく (<see cref="Settle"/>)
     /// </summary>
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
@@ -643,8 +643,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// 鍵を貰って入れる。**失敗したら鍵を捨てる** — 古い鍵で復号し続けると化けたものを流す。
-    /// **渡すのはセクションの頭 8 バイトと末尾の CRC 4 バイトを除いた中身** — libaribb25 と同じ切り方で、
+    /// 鍵を貰って入れる。古い鍵で復号し続けると化けたものを流すので、**失敗したら鍵を捨てる。**
+    /// **渡すのはセクションの先頭 8 バイトと末尾の CRC 4 バイトを除いた中身。** libaribb25 と同じ切り方で、
     /// 拠点を跨いで鍵を貰うとき (CardShare.cs) もこれを運ぶ。変えると古いエージェントと話が通じなくなる
     /// </summary>
     private void Ask(Ecm ecm)
@@ -753,7 +753,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         public int Parity, Next = int.MaxValue, Change = int.MaxValue;
     }
 
-    /// <summary>組み立て中のセクション。長さは頭 3 バイトで決まる (最長 3 + 4095)。長さが -1 なら組み立てていない</summary>
+    /// <summary>組み立て中のセクション。長さは先頭 3 バイトで決まる (最長 3 + 4095)。長さが -1 なら組み立てていない</summary>
     private sealed class Section(Ecm? owner)
     {
         private readonly byte[] _buffer = new byte[3 + 0x0FFF];

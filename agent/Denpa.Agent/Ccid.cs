@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 /*
  * USB の CCID カードリーダーを直接扱う。**pcscd も pcsc-lite も使わない。**
  *
- * 3 段:
+ * 3 段に分けてある。
  *
  * - UsbFs.cs … /dev/bus/usb をバルク転送で読み書きする部分と、ディスクリプタの読み方
  * - Ccid.cs  … CCID の命令 (電源・パラメータ・XfrBlock) と、それを ICardLink にしたもの
@@ -116,7 +116,7 @@ public static class CcidMessage
 /// </summary>
 public sealed class CcidLink : ICardLink
 {
-    /// <summary>応答の読み違いを諦めるまでに読み飛ばす数 (前のプロセスが残した応答など)</summary>
+    /// <summary>番号の合わない応答を、投げるまでに読み飛ばす数 (前のプロセスが残した応答など)</summary>
     private const int MaxStale = 8;
 
     private readonly IBulkPipe _pipe;
@@ -331,8 +331,8 @@ public sealed class CcidLink : ICardLink
     /// 命令を 1 つ送って、**同じ番号の**答えを返す。
     ///
     /// <para>
-    /// 番号の違う応答は読み飛ばす (前のプロセスが途中で死んで残した応答など)。
-    /// 時間延長 (カードがまだ考えている) は来るたびに読み直す。
+    /// 番号の違う応答は読み飛ばす (前のプロセスが途中で終わって残した応答など)。
+    /// 時間延長 (カードがまだ処理している) は来るたびに読み直す。
     /// </para>
     /// </summary>
     private CcidReply Call(byte type, ReadOnlySpan<byte> data, byte p1 = 0, byte p2 = 0, byte p3 = 0, int timeoutMs = 5000)
@@ -423,7 +423,7 @@ public static class Ccid
     private const string DevUsb = "/dev/bus/usb";
 
     /// <summary>
-    /// 刺さっている CCID のインターフェース (bInterfaceClass 0x0b) を並べる。**開かない。**
+    /// 挿さっている CCID のインターフェース (bInterfaceClass 0x0b) を並べる。**開かない。**
     /// sysfs だけを読むので、別のプロセスが使っていても並ぶ (開くときに断られる)
     /// </summary>
     public static IReadOnlyList<CardLinkCandidate> Find() => Find(UsbSysfs.Devices, DevUsb);

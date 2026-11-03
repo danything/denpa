@@ -15,7 +15,7 @@ namespace Denpa.Agent.Tests;
 /*
  * **固まったら失敗にする。** ソケットとスレッドを相手にするので、固まり方を 1 つ見落とすと
  * CI の Unit tests ごと打ち切られ、どのテストかも分からない (Mac で 8 分止まった)。
- * Timeout が効くのはテストが Task を返してから — 各テストは頭で `await Task.Yield()` して、
+ * Timeout が効くのはテストが Task を返してからなので、各テストは最初に `await Task.Yield()` して、
  * 同期の処理 (Tune・Dispose) を Task の中に入れる。待つところには打ち切りの合図 (cancel) を渡す
  */
 [Timeout(60_000)]
@@ -82,7 +82,7 @@ public class Px4TunerTests
 
         private int _statsCalls;
 
-        /// <summary>どちらのふりをするか (asicend は枠の頭とソケットの置き場だけ違う。AsicenTests)</summary>
+        /// <summary>どちらのふりをするか (asicend は枠のヘッダとソケットの置き場だけ違う。AsicenTests)</summary>
         public Px4Wire Wire { get; }
 
         public FakePx4d(Px4Wire? wire = null, string id = Id)

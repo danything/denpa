@@ -17,7 +17,7 @@ namespace Denpa.Agent;
 /// <para>
 /// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。Windows と macOS でも同じ形の
 /// 名前を作る (<see cref="UsbDevices.WindowsPort"/>・<see cref="UsbDevices.MacPort"/>)。
-/// 刺さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。設定に 1 台だけなら、挿すポートを変えても付いていく
+/// 挿さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。設定に 1 台だけなら、挿すポートを変えても付いていく
 /// (<see cref="Follow(string)"/>)。2 台以上はポートで見分けるので、挿すポートを変えると別のチューナーになる。
 /// </para>
 /// </summary>
@@ -43,7 +43,7 @@ public static class Zd1j
     }
 
     /// <summary>
-    /// 刺さっている CECH-ZD1 J のポート。**開かない** (開くと他から使えなくなり、ブリッジの起動もしてしまう)。
+    /// 挿さっている CECH-ZD1 J のポート。**開かない** (開くと他から使えなくなり、ブリッジの起動もしてしまう)。
     /// カーネルのドライバが使っているものは並べない (usbfs はこちらが開いている印なので並べる)
     /// </summary>
     internal static List<string> Ports(string sysfs, Action<string>? warn = null)
@@ -68,7 +68,7 @@ public static class Zd1j
         return found;
     }
 
-    /// <summary>刺さっているポート (OS ごと)。Windows・macOS は OS の並べたもの</summary>
+    /// <summary>挿さっているポート (OS ごと)。Windows・macOS は OS の並べたもの</summary>
     private static List<string> Ports(Action<string>? warn = null)
     {
         try
@@ -161,9 +161,8 @@ public static class Zd1j
 /// CECH-ZD1 J 1 台ぶんの持ち主。**USB のハンドルは 1 台に 1 つだけ**で、チューナーとカードが取って使う。
 ///
 /// <para>
-/// **温めておく。** ブリッジの起動と DiB8096 の初期化は開くときの 1 回だけ (DiB8096 はチューナーが初めて使うとき)。
-/// **エージェントが動いている間ずっと開いたまま** (PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱い。
-/// 開き直すとブリッジの起動と DiB8096 の初期化で 1 秒ほどかかり、選局が冷えた状態からになる)。
+/// **エージェントが動いている間ずっと開いたまま。** ブリッジの起動と DiB8096 の初期化は開くときの 1 回だけ (DiB8096 はチューナーが初めて使うとき)。
+/// PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱いで、開き直すとブリッジの起動と DiB8096 の初期化で 1 秒ほどかかる。
 /// 閉じるのは、定義が変わってチューナーが捨てられたとき (<see cref="CloseIfIdle"/>)・止めるとき (<see cref="CloseAll"/>)・USB が抜けたとき。
 /// </para>
 /// </summary>

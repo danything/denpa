@@ -11,7 +11,7 @@ metadata:
     # 気づかれず置かれていた (2026-09-07)。
     #
     # 入れ替えは strategy: Recreate と grace period 21900s に従うので、
-    # 録画中は古い Pod が録画を終えるまで居座り、そのあと切り替わる。
+    # 録画中は古い Pod が録画を終えるまで残り、そのあと切り替わる。
     # 入れ替えるのは、クラスタに入っているほう(Reloader か Infisical の operator)。入っていなければ何もしない
     reloader.stakater.com/auto: "true"
     secrets.infisical.com/auto-reload: "true"
@@ -35,7 +35,7 @@ spec:
         denpa.doany.io/denpa-image: {{ . | quote }}
       {{- end }}
     spec:
-      # 録画中に入れ替えが来たら、終わるまで居座ってから止まる (SHUTDOWN_WAIT)
+      # 録画中に入れ替えが来たら、終わるまで待ってから止まる (SHUTDOWN_WAIT)
       terminationGracePeriodSeconds: {{ .Values.denpa.terminationGracePeriodSeconds }}
       {{- with .Values.denpa.runtimeClassName }}
       # NVIDIA の GPU を渡すランタイム (values.yaml の説明)
@@ -113,7 +113,7 @@ spec:
             initialDelaySeconds: {{ .Values.denpa.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.denpa.livenessProbe.periodSeconds }}
           volumeMounts:
-            # 置き場は既定のまま (DB は /data、元のTS は /media/raw、エンコードしたものは /media/encoded)。
+            # 置き場は既定のまま (DB は /data、元の TS は /media/raw、エンコードしたものは /media/encoded)。
             # PVC は前と同じものを、繋ぐ先だけ変えて使う
             - name: denpa-data
               mountPath: /data

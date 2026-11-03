@@ -258,7 +258,7 @@ public sealed class Dt295SectionReader
         return Descriptors(section[8..^4], pids, out _, singleEcm: false) ? pids : null;
     }
 
-    /// <summary>記述子の並びから CA 記述子を拾う。範囲の ECM (B-CAS) を返す。不正なら false</summary>
+    /// <summary>記述子の並びから CA 記述子を取り出す。範囲の ECM (B-CAS) を返す。不正なら false</summary>
     private static bool Descriptors(ReadOnlySpan<byte> data, List<int> caPids, out int? ecm, bool singleEcm = true)
     {
         ecm = null;
@@ -303,7 +303,7 @@ public sealed class Dt295SectionReader
 }
 
 /// <summary>
-/// 届いた PSI からルートの計画を育てる (11.2・11.3)。始めは PAT (暗黙) と固定の SI PID。PAT が読めたら NIT とすべての PMT を足し、
+/// 届いた PSI からルートの計画を組み立てる (11.2・11.3)。始めは PAT (暗黙) と固定の SI PID。PAT が読めたら NIT とすべての PMT を足し、
 /// PMT が読めたら PCR・CA 記述子の PID・ES を足す。主番組は PAT の順で最初の、映像と音声を持つ番組で、**一度決めたら替えない** (11.3)。
 /// CAT が読めたら EMM (CA 記述子の PID) を足す。
 /// 読むのは暗号化されていない (transport_scrambling_control = 00) パケットだけ。

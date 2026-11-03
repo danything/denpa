@@ -9,7 +9,7 @@ spec:
   selector:
     app: tuner-agent
   ports:
-    # 選局もスキャンもスクランブルの復号もここ1つ。中身は素のTSと小さなJSON
+    # 選局もスキャンもスクランブルの復号もここ 1 つ。中身は素の TS と小さな JSON
     - name: agent
       port: 25252
       targetPort: 25252

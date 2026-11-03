@@ -78,13 +78,13 @@ public sealed record Dt295ReceiveData(Dt295FieldTable Fields, byte[] TsIv);
 /// <summary>受信に要るもの</summary>
 public static class Dt295Receive
 {
-    /// <summary>TS の IV の確かめ (12.7)。仕様書の値 (IV の SHA-256)</summary>
+    /// <summary>TS の IV を確かめる値 (12.7)。仕様書の値 (IV の SHA-256)</summary>
     internal const string TsIvSha256 = "69a206b3bbcd395b81b201f762355fb224c4e9e16439090663b8dfc1f5b03301";
 
     /// <summary>
     /// TS の IV (12.7)。機材が TS のペイロードをパケットごとに AES-CBC で暗号化するときの、いつも同じ 16 バイト。
     /// 実機 (PIX-DT295) の TS から割り出した: IV を 0 にして復号すると、各パケットの最初の 16 バイトだけが「本当の中身 XOR IV」になって出るので、
-    /// PAT (00 00 B0…、番組番号 0 の NIT は PID 0x0010) と映像の PES の頭 (00 00 01 E0…) の決まった形から引ける。
+    /// PAT (00 00 B0…、番組番号 0 の NIT は PID 0x0010) と映像の PES の先頭 (00 00 01 E0…) の決まった形から引ける。
     /// 地上波 27ch と BS1 のどちらからも同じ値になり、SHA-256 が仕様書の値 (<see cref="TsIvSha256"/>) と一致した
     /// (受信するチャンネルや環境では変わらない。テストで確かめる)
     /// </summary>

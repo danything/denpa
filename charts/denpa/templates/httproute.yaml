@@ -16,7 +16,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  # group / kind / weight は API サーバが既定値を入れる。**明示的に書いておく** —
+  # group / kind / weight は API サーバが既定値を入れる。**明示的に書いておく。**
   # 省くと「書いたもの」と「クラスタにあるもの」が食い違い、ArgoCD が
   # ServerSideApply のとき永久に OutOfSync のままになる
   parentRefs:

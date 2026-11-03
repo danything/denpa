@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# denpa を立てる。**Linux でも Mac でも同じ1行で、ブラウザが開くところまで。**
+# denpa を立てる。**Linux でも Mac でも同じ 1 行で、ブラウザが開くところまで。**
 #
 #   curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
 #   … | bash -s -- --no-open      ブラウザを開かない
@@ -21,7 +21,7 @@
 # **入口は genkan** (https://github.com/danything/genkan。ホスト名でコンテナに振り分けるリバースプロキシ)。
 # 動いていればそれを使い、無ければ 80 と 443 が空いているときだけ ~/genkan に入れて、
 # http://denpa.localhost で開けるようにする (登録は compose.override.yml に書く)。
-# ポート 3000 は残す — denpa.localhost はそのマシンからしか引けないので、LAN のほかの機械は IP:3000。
+# ポート 3000 は残す。denpa.localhost はそのマシンからしか引けないので、LAN のほかの機械は IP:3000。
 #
 # 置き場:
 #   Linux / Mac  ~/denpa (DENPA_HOME で変えられる)    compose.yml (上げ直すたびに上書き)・compose.override.yml
@@ -30,7 +30,7 @@
 #   Mac だけ     ~/Library/Application Support/denpa-agent/  エージェント・px4-userland・siano-userland
 #                ~/Library/LaunchAgents/<LABEL>.plist        ログインしたら起こし、落ちたら起こし直す
 #                ~/Library/Logs/denpa-agent.log              エージェントのログ
-#                ~/Movies/denpa/{recorded,library}           元のTS (エージェントとコンテナの両方が見る) と出来上がった録画
+#                ~/Movies/denpa/{recorded,library}           元の TS (エージェントとコンテナの両方が見る) と出来上がった録画
 #
 # 環境変数: DENPA_VERSION (v1.2.3 のように。既定は最新のリリース。CI はコミットを渡す)、DENPA_HOME、
 # DENPA_AGENT_TARBALL (Mac: 手元でビルドしたエージェントの tar.gz を絶対パスで。CI と開発用)
@@ -47,7 +47,7 @@ PX4_USERLAND_VERSION=0.2.1
 SIANO_USERLAND_VERSION=0.1.10
 ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
 
-# IT930x のファームウェアは PLEX 公式ドライバから切り出す。取ってくる先と3つのハッシュは agent/Denpa.Agent/Px4Firmware.cs・install.ps1 と同じ
+# IT930x のファームウェアは PLEX 公式ドライバから切り出す。取ってくる先と 3 つのハッシュは agent/Denpa.Agent/Px4Firmware.cs・install.ps1 と同じ
 PLEX_DRIVER_SHA256=bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200
 PXW3U4_SYS_SHA256=8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722
 IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484
@@ -56,7 +56,7 @@ REPO=danything/denpa
 URL=http://localhost:3000
 GENKAN_URL=http://denpa.localhost
 DENPA_DIR="${DENPA_HOME:-$HOME/denpa}"
-# install.sh が書いた compose.yml の1行目
+# install.sh が書いた compose.yml の 1 行目 (前のバージョンが書いたものと見分けるので、文言は変えない)
 MARK="# install.sh が置いた (版"
 
 open_browser=yes uninstall=no docker_mode=yes
@@ -102,8 +102,8 @@ docker_ready() {
 }
 
 # genkan が入っているか。**genkan ネットワークがあれば入っている** (genkan だけが作る名前。止まっていても
-# 残る)。止めてあるものは起こし直さない — 意図して止めた人の genkan を上げ直すたびに復活させたり、
-# 別の場所に入れた genkan の横にもう1つ clone したりしない
+# 残る)。止めてあるものは起こし直さない。意図して止めた人の genkan を上げ直すたびに復活させたり、
+# 別の場所に入れた genkan の横にもう 1 つ clone したりしない
 genkan_installed() { docker network inspect genkan >/dev/null 2>&1; }
 # 動いているか (genkan ネットワークに Caddy がいるか)
 genkan_running() {
@@ -169,7 +169,7 @@ genkan_env() {
 }
 
 # denpa とエージェントが組むときの合言葉 (32 バイトの乱数を base64url で。docs/agent.md) を $pair に。
-# ~/denpa/.env に**1度だけ**作り、上げ直しても変えない。compose.prod.yml / compose.mac.yml がそこから読む。
+# ~/denpa/.env に**一度だけ**作り、上げ直しても変えない。compose.prod.yml / compose.mac.yml がそこから読む。
 # .env がもうあれば (手で書いた人もいる) 行を足すだけで、ほかの行には触らない。
 # $1 にファイルを渡すと、.env に無いときはまずそれを使う (Mac: エージェントが自分で作った合言葉を変えない)
 pair_token() {
@@ -193,14 +193,14 @@ pair_token() {
 compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
 
 # 取ってきた compose ($1。compose.prod.yml か compose.mac.yml) を ~/denpa/compose.yml に置いて起こす。
-# **バージョンはタグで揃える** — 取ってきたものの latest をこのバージョンに書き換える (.env は使わない)
+# **バージョンはタグで揃える。** 取ってきたものの latest をこのバージョンに書き換える (.env は使わない)
 start_denpa() {
   say "denpa $2 を $DENPA_DIR に置きます"
   mkdir -p "$DENPA_DIR/config"
   curl -fsSL --retry 3 "${CURL_LIMITS[@]}" -o "$DENPA_DIR/compose.yml.new" "https://raw.githubusercontent.com/$REPO/$2/$1" \
     || die "$2 に $1 がありません。compose.mac.yml は v1.23.0 からなので、それより前のバージョンは Mac に入れられません"
   # 手で置いたもの・手を入れたものは黙って上書きせず、compose.yml.bak に退けてそう言う。
-  # install.sh が書いたものは1行目が印で、残りは前に書いた控え (.compose.yml.orig) と同じはず
+  # install.sh が書いたものは 1 行目が印で、残りは前に書いた控え (.compose.yml.orig) と同じはず
   if [ -f "$DENPA_DIR/compose.yml" ] && ! { head -1 "$DENPA_DIR/compose.yml" | grep -q "^$MARK" \
     && tail -n +2 "$DENPA_DIR/compose.yml" | cmp -s - "$DENPA_DIR/.compose.yml.orig"; }; then
     mv "$DENPA_DIR/compose.yml" "$DENPA_DIR/compose.yml.bak"
@@ -321,14 +321,14 @@ linux_main() {
 # ---------------------------------------------------------------------------
 LABEL=io.github.danything.denpa-agent
 PREFIX="$HOME/Library/Application Support/denpa-agent"
-# px4d の制御ソケットの置き場。**短く保つ** — Unix ソケットのパスは macOS だと 104 バイトまでで、
+# px4d の制御ソケットの置き場。**短く保つ。** Unix ソケットのパスは macOS だと 104 バイトまでで、
 # この下に px4-userland/<筐体の番号>/control.sock (42 文字) が付く。Application Support の下では溢れうる
 RUNTIME="$HOME/Library/Caches/denpa-agent"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/denpa-agent.log"
 # compose.mac.yml の TUNER_AGENT_URL と揃える
 PORT=25252
-# 元のTSはエージェント (後から復号する) とコンテナ (録る) の両方が読み書きするので、Mac のフォルダに置く
+# 元の TS はエージェント (後から復号する) とコンテナ (録る) の両方が読み書きするので、Mac のフォルダに置く
 MEDIA="$HOME/Movies/denpa"
 MAC_DOCKER="Docker Desktop (https://www.docker.com/products/docker-desktop/) か OrbStack (https://orbstack.dev) を入れてから、もう一度流してください"
 
@@ -346,7 +346,7 @@ mac_stop() {
 check() {
   [ "$(shasum -a 256 "$1" | awk '{print $1}')" = "$2" ] || die "$1 のハッシュが合いません (ダウンロード中に壊れた可能性があります。もう一度流してください)"
 }
-# SHA256SUMS から1行引いて確かめる
+# SHA256SUMS から 1 行引いて確かめる
 check_listed() {
   expected=$(awk -v name="$1" '$2 == name || $2 == "*" name {print $1}' "$2")
   [ -n "$expected" ] || die "$2 に $1 が載っていません"

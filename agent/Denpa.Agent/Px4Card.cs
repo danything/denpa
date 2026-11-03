@@ -121,7 +121,7 @@ public sealed class Px4Card : ICardLink
     }
 
     /// <summary>
-    /// APDU を 1 つ。**失敗は全部 <see cref="IOException"/>** (Px4Control.Request) —
+    /// APDU を 1 つ。**失敗は全部 <see cref="IOException"/>** (Px4Control.Request)。
     /// 繋ぎ直すかどうかを決めるのは <see cref="BCas"/> で、そちらは IOException だけを見る。
     /// </summary>
     public byte[] Transmit(ReadOnlySpan<byte> apdu)

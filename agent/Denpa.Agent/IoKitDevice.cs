@@ -17,7 +17,7 @@ namespace Denpa.Agent;
 /// <para>
 /// IOUSBLib のインターフェースは関数の表 (COM に似た形) なので、表の何番目かで関数ポインタを取って呼ぶ
 /// (<c>delegate* unmanaged</c>。リフレクションも <c>Marshal.GetDelegateForFunctionPointer</c> も使わないので Native AOT で通る)。
-/// 表の頭の 4 つは IUnknown (予約・QueryInterface・AddRef・Release)。番号は IOUSBDeviceInterface182・IOUSBInterfaceInterface182 のもの。
+/// 表の先頭の 4 つは IUnknown (予約・QueryInterface・AddRef・Release)。番号は IOUSBDeviceInterface182・IOUSBInterfaceInterface182 のもの。
 /// </para>
 /// </summary>
 [SupportedOSPlatform("macos")]
@@ -182,7 +182,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         _interface = @interface;
     }
 
-    /// <summary>刺さっている機材 (開かない)</summary>
+    /// <summary>挿さっている機材 (開かない)</summary>
     public static IReadOnlyList<UsbLocation> List(int vendor, int product)
     {
         var found = new List<UsbLocation>();
@@ -432,7 +432,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
     }
 
     /// <summary>
-    /// 出している読みを取り消す (閉じるときだけ)。取り消したあと端点を立て直す <c>ClearPipeStall</c> は呼ばない —
+    /// 出している読みを取り消す (閉じるときだけ)。取り消したあと端点を立て直す <c>ClearPipeStall</c> は呼ばない。
     /// このあとインターフェースごと閉じ、次に開くときは代替設定を選び直すので、データトグルはそこで両側とも初めに戻る
     /// </summary>
     private void Abort(byte pipe)

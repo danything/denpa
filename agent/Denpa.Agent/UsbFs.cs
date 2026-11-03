@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 /// CCID のインターフェース 1 つぶんの情報。構成ディスクリプタから読む (<see cref="UsbDescriptors.FindCcid"/>)
 /// </summary>
 /// <param name="Features">CCID クラスディスクリプタの dwFeatures。やり取りの単位 (TPDU / APDU) もここ</param>
-/// <param name="MaxMessage">dwMaxCCIDMessageLength。10 バイトの頭も込み</param>
+/// <param name="MaxMessage">dwMaxCCIDMessageLength。10 バイトのヘッダも込み</param>
 /// <param name="Voltages">bVoltageSupport。bit0 = 5V、bit1 = 3V、bit2 = 1.8V</param>
 public sealed record CcidInterface(
     int Number, byte BulkIn, byte BulkOut, int MaxPacketIn,
