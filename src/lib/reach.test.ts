@@ -21,7 +21,7 @@ describe("reach", () => {
     expect(await (await get(request)).text()).toBe("ok");
   });
 
-  test("繋がっていないと言うなら、取りに行かずにすぐ見切る", async () => {
+  test("繋がっていないと言うなら、取得せずにすぐ見切る", async () => {
     let calls = 0;
     const get = reach({
       fetch: async () => {
@@ -36,7 +36,7 @@ describe("reach", () => {
     expect(calls).toBe(0);
   });
 
-  test("繋がっていないと言う間は覚えない。戻ればすぐ取りに行く", async () => {
+  test("繋がっていないと言う間は覚えない。戻ればすぐ取得する", async () => {
     let online = false;
     const get = reach({
       fetch: async () => new Response("ok"),
@@ -64,7 +64,7 @@ describe("reach", () => {
     expect(aborted).toBe(true);
   });
 
-  test("見切ったあとは giveUpFor のあいだ取りに行かず、過ぎたら取りに行く", async () => {
+  test("見切ったあとは giveUpFor のあいだ取得せず、過ぎたら取得する", async () => {
     let time = 0;
     let calls = 0;
     let silentNow = true;
@@ -85,7 +85,7 @@ describe("reach", () => {
     time = 4000;
     await expect(get(request)).rejects.toThrow();
     expect(calls).toBe(1);
-    // 過ぎたら取りに行く
+    // 過ぎたら取得する
     time = 5000;
     silentNow = false;
     expect(await (await get(request)).text()).toBe("ok");
@@ -130,7 +130,7 @@ describe("reach", () => {
     const response = await get(request);
     expect(response.status).toBe(200);
     await new Promise((r) => setTimeout(r, 30));
-    // 見切っていないので、次もそのまま取りに行く
+    // 見切っていないので、次もそのまま取得する
     expect((await get(request)).status).toBe(200);
   });
 
