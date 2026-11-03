@@ -66,7 +66,7 @@ AV1 を選ばずに H.265 と H.264 を選べば H.265 が主で、`hevc_path` �
 **コンテナの中の場所 (`/media/encoded`) は変えず、外側だけを付け替えます。** DB は録画の場所を
 置き場からの相対で持つので (`schema.ts` の `mediaPath`)、`ENCODED_DIR` を変えても中身ごと写せば辿れますが、外側を付け替えれば変数に触らずに済みます。
 
-Docker Compose なら、録画もエンコードもしていないときに:
+Docker Compose なら、録画もエンコードもしていないときに次の順で付け替えます。
 
 1. **denpa を止める** (`docker compose stop denpa`)。動かしたまま付け替えると、突き合わせ (`files.reconcile`) が
    「保存先から消えた」と読んで、録画を削除済みにします

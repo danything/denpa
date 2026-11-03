@@ -3,7 +3,7 @@
  * 時間軸の両側 (予約と録れたもの) に効かせるのは `#lib/timeline.ts`。
  *
  * まとめる単位は**番組 (シリーズ)**。鍵はサーバが付ける (`+page.server.ts` の
- * `seriesGroup`) — エンコードしたものを置くシリーズのフォルダと同じ名前なので、
+ * `seriesGroup`)。エンコードしたものを置くシリーズのフォルダと同じ名前なので、
  * ディスクで1つのフォルダに並ぶものが一覧でも1つにまとまる。
  *
  * 並びは2段:
@@ -126,7 +126,7 @@ export function groupLines<T extends Groupable>(
 }
 
 /**
- * 端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`) — 描く前に
+ * 端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`)。描く前に
  * どちらの表示か分かっていれば、覚えを読むまで枠を隠さずに済む
  */
 export const GROUPED_COOKIE = "denpa_recordings_grouped";

@@ -47,7 +47,7 @@ export function load() {
     recording: settings(),
     /**
      * GPU でエンコードできるか (server/hwenc.ts)。起動直後の確かめが終わっていなければ
-     * promise のまま渡す — 画面は「確認中」を出して待つ
+     * promise のまま渡す。画面は「確認中」を出して待つ
      */
     hw: hw.probed ? forScreen(hw) : probe().then(forScreen),
     /** その場で変換する本数 (`server/transcode.ts`)。自動のときの本数と、選べる本数 */

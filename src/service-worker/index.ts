@@ -6,7 +6,7 @@
  * 古い一覧を見せるくらいなら、繋がらないと分かるほうがまし。
  * ここで持つのはアプリの殻(JS/CSS/アイコン)と、オフラインの入口 (`/offline`) だけ。
  *
- * オフライン視聴で足すのは **Background Fetch の受け取り**だけ — ブラウザに
+ * オフライン視聴で足すのは **Background Fetch の受け取り**だけ。ブラウザに
  * 預けたダウンロードが終わったら IndexedDB へ移す。配信のキャッシュはしない。
  */
 
@@ -24,7 +24,7 @@ import {
 import { reach } from "#lib/reach.js";
 
 /*
- * **頭 (前段の接頭辞込み。server/paths.ts) は SvelteKit が自分の置き場から求める。**
+ * **接頭辞 (前段のものも込み。server/paths.ts) は SvelteKit が自分の置き場から求める。**
  * Service Worker の中の `$app/paths` は `<接頭辞>/service-worker.js` の置き場を
  * base にするので、`resolve` / `asset` がそのまま接頭辞の下を指す
  */
@@ -32,7 +32,7 @@ import { reach } from "#lib/reach.js";
 const CACHE = `denpa-${version}`;
 /** 殻だけ。ロゴやサムネイルのような「増えるもの」は入れない。パスは base からの相対で来る */
 const SHELL = [
-  // 組んだ JS/CSS はルートでも static でもないので型の付いた `resolve` に渡せない。頭だけ借りる
+  // 組んだ JS/CSS はルートでも static でもないので型の付いた `resolve` に渡せない。接頭辞だけ借りる
   ...immutable.map((file) => `${resolve("")}${file.path}`),
   ...assets
     .filter((file) => !file.path.endsWith("robots.txt"))
@@ -184,7 +184,7 @@ async function tellClients(message: unknown): Promise<void> {
 
 /**
  * 通知の宛先の控え。**画面側の控えが無い (先に消された) か、別の試み
- * (やり直したあとに届いた前回の残骸) なら null** — やり直しの控えを
+ * (やり直したあとに届いた前回の残骸) なら null**。やり直しの控えを
  * 前回の残骸の通知が上書きしないように、印を照合する
  */
 async function heldFor(
@@ -238,7 +238,7 @@ worker.addEventListener("backgroundfetchsuccess", (event) => {
 });
 
 /**
- * 失敗と取り消しは同じ扱い — 途中まで運んだものは使えない。
+ * 失敗と取り消しは同じ扱い。途中まで運んだものは使えない。
  * **控えは消さずに「失敗」として残す。** ネットが遅くて途中で切れたとき、
  * 消してしまうと開き直したときに何も残らず「無かったことになった」ように
  * 見えていた。残った行から、そのままやり直せる

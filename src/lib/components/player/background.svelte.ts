@@ -26,7 +26,7 @@ import { nativeBackgroundRecovery } from "./native-background";
  * 止めない。canvas で描くときの音は「再生する音」として鳴らし (Safari は Audio Session を `playback`、ほかは
  * `<audio>` を通す。Web Audio のままだと裏で止めるブラウザがある)、OS が勝手に小窓にするのも許す。
  *
- * **端末ごとに覚える** (`keep.ts`。速さ・CMスキップと同じ) — 手元のスマホでは裏で
+ * **端末ごとに覚える** (`keep.ts`。速さ・CMスキップと同じ)。手元のスマホでは裏で
  * 聴きたいが、居間のテレビでは要らない、のように端末で変わる
  */
 interface Options {
@@ -36,7 +36,7 @@ interface Options {
   pip: () => boolean;
   /** 止めているか */
   paused: () => boolean;
-  /** 消音にしているか。音を `<video>` と別に鳴らす画面 (ライブ) だけ渡す — `<video>` はわざと消音にしてある */
+  /** 消音にしているか。音を `<video>` と別に鳴らす画面 (ライブ) だけ渡す。`<video>` はわざと消音にしてある */
   muted?: () => boolean;
   /** 裏に回ったので止める */
   pause: () => void;

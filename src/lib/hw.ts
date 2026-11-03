@@ -4,7 +4,7 @@
  */
 
 /**
- * GPU でエンコードできるコーデック。**並びは小さくなる順 (AV1 → H.265 → H.264)** — 主 (`library_path`) を
+ * GPU でエンコードできるコーデック。**並びは小さくなる順 (AV1 → H.265 → H.264)**。主 (`library_path`) を
  * 選ぶ順、端末で観るものを選ぶ順と同じ。**H.265 (`hevc`) は GPU でだけエンコードする** (ソフトウェアの
  * エンコーダを組んでいない。`SOFTWARE_CODECS`)。ライブはライブのエンコーダが GPU のときだけ H.265 を出し、
  * 追っかけは出さない (`#lib/live.ts` の `LiveCodec`)
@@ -32,7 +32,7 @@ export const CODEC_LABEL: Record<HwCodec, string> = {
 };
 
 /**
- * ソフトウェア (CPU) でもエンコードできるコーデック。H.265 は入らない — 録画のエンコードで GPU が全部落ちても
+ * ソフトウェア (CPU) でもエンコードできるコーデック。H.265 は入らない。録画のエンコードで GPU が全部落ちても
  * ソフトウェアには倒れず、設定のエンコーダにも「ソフトウェア」を出さない (docs/encode.md「H.265 は GPU でだけ」)
  */
 export const SOFTWARE_CODECS: readonly HwCodec[] = ["av1", "h264"];
@@ -40,7 +40,7 @@ export const SOFTWARE_CODECS: readonly HwCodec[] = ["av1", "h264"];
 /**
  * **デバイス (GPU) ごとに、GPU でエンコードしてよいコーデック** (設定 `hwAllow` が録画、`liveHwAllow` がライブ・追っかけ・
  * その場の変換。持ち方は同じ)。デバイスの path がキー。
- * **載っていないデバイスは全部よい** — GPU が見つかれば黙って使う (「自動でチェックが入る」)
+ * **載っていないデバイスは全部よい**。GPU が見つかれば黙って使う (「自動でチェックが入る」)
  */
 export type HwAllow = Record<string, Record<HwKind, HwCodec[]>>;
 

@@ -1,6 +1,7 @@
 /**
  * **どの形式で観るか** (コーデックのメニュー)。「自動」の順はライブ・追っかけ・録画の観る画面で同じ関数 (`autoOrder`) から出す。
- * 画面 (`live-player.svelte.ts`・`ts/playback.ts`) とサーバ (`server/viewing.ts` の先回り) が同じ決め方をするので、
+ * 例外は録画の観る画面の互換モードで、`ts/playback.ts` の `pickCanvas` がエンコード済みと同じ形式 → H.264 → AV1 → MPEG-2 の順に選ぶ
+ * (下の `autoOrder` の表)。画面 (`live-player.svelte.ts`・`ts/playback.ts`) とサーバ (`server/viewing.ts` の先回り) が同じ決め方をするので、
  * ここに置く (docs/stream.md「どの形式で流すか」)。
  */
 
@@ -42,8 +43,8 @@ export function readChoice(value: unknown, hidden: boolean): LiveChoice {
 export type EncodedCodec = "av1" | "hevc" | "h264";
 
 /**
- * **「自動」の順。ライブ・追っかけ・録画の観る画面で、この1つで決める。** 画面ごとの例外は作らず、その画面で出せない形式
- * (追っかけの H.265 など) は呼ぶ側が並びから外すだけにする。
+ * **「自動」の順。ライブ・追っかけ・録画の観る画面で、この1つで決める。** その画面で出せない形式
+ * (追っかけの H.265 など) は呼ぶ側が並びから外すだけにする。例外は録画の観る画面の互換モードだけ (表の右下)。
  *
  * | 場面 | 家の中 (`indoor`) | 外 | 互換モード (`compat`。canvas に描く) |
  * | --- | --- | --- | --- |

@@ -24,7 +24,7 @@ export const actions = {
    * データ放送に渡す郵便番号と都道府県。
    *
    * **どちらも空にできる** (「渡さない」という選択。都道府県の未設定は 255)。
-   * 空にしても危なくない — 放送のアプリが地域を決められなくなるだけ
+   * 空にしても危なくない。放送のアプリが地域を決められなくなるだけ
    */
   saveBroadcast: async ({ request }) => {
     const form = await request.formData();

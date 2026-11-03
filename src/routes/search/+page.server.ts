@@ -93,7 +93,7 @@ function ruleById(raw: unknown) {
  *
  * - `?rule=<ID>` そのルールを書く欄に読み込んで直す (URL のまま人に渡せる・戻れる)
  * - `?from=program:<ID>` / `?from=recording:<ID>` 詳細の「ルールを作る」から。シリーズ名を言葉にして出直す
- * - `?keyword=` `?serviceIds=` など書く欄の名前 — その値で書く欄を始める (前のルールの画面のリンク)
+ * - `?keyword=` `?serviceIds=` など書く欄の名前。その値で書く欄を始める (前のルールの画面のリンク)
  */
 export function load({ url }) {
   const params = url.searchParams;

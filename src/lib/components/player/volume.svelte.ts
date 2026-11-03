@@ -122,7 +122,7 @@ export function playerVolume(options: Options): Volume {
       return;
     }
     /*
-     * 音は別に鳴らす (`raw/native-audio.ts`)。`<video>` は通さない — WebKit では通しても無音しか来ない。
+     * 音は別に鳴らす (`raw/native-audio.ts`)。`<video>` は通さない。WebKit では通しても無音しか来ない。
      * 別に鳴らせず `<video>` の音に戻ったとき (`live-player.svelte.ts`) のために、下げるぶんは `video.volume` でも掛ける
      * (macOS の Safari は効く。iOS は `video.volume` を変えられない)
      */

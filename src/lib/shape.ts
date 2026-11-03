@@ -3,13 +3,13 @@
  *
  * `res.json() as X` はキャストで、相手が本当にその形式を返しているかは見ていない。
  * 相手が別のもの (チューナーエージェント、OIDC の相手、取り込み元の DB) なら、
- * 境界で1回だけ形式を確かめて、以降は型のとおりに触る — DB の列を `schema.ts` の
+ * 境界で1回だけ形式を確かめて、以降は型のとおりに触る。DB の列を `schema.ts` の
  * 読み取り関数で読むのと同じ理屈。ライブラリは入れていない。要るのは下のもので足りる。
  *
  * 形式は `object({ ... })` のように書き、型はそこから導く (`Infer<typeof SHAPE>`)。
  * 型と読み取り関数を別々に書くと、片方だけ直したときに TS は何も言わない。
  *
- * 読めなければ `ShapeError` を投げる。どこが違うかをパス (`tuners[0].name`) で言う —
+ * 読めなければ `ShapeError` を投げる。どこが違うかをパス (`tuners[0].name`) で言う。
  * 「形式が違う」だけでは、相手のどのバージョンと噛み合っていないのか分からない
  */
 
@@ -67,7 +67,7 @@ export function literal<const L extends string | number | boolean>(
 
 /**
  * 無くてもよい。`object` の中では、無ければ鍵ごと付けない。
- * **null も「無い」と読む** — 無いクレームを null で送る IdP がある。ログインが
+ * **null も「無い」と読む**。無いクレームを null で送る IdP がある。ログインが
  * そこで止まるのは、こちらの型の都合を相手に押し付けている
  */
 export function optional<T>(shape: Shape<T>): Shape<T | undefined> {
@@ -75,7 +75,7 @@ export function optional<T>(shape: Shape<T>): Shape<T | undefined> {
     value === undefined || value === null ? undefined : shape(value, path);
 }
 
-/** null でもよい。**無いのも null と読む** — null の鍵を省いて書く実装がある (手で書いた設定ファイルも) */
+/** null でもよい。**無いのも null と読む**。null の鍵を省いて書く実装がある (手で書いた設定ファイルも) */
 export function nullable<T>(shape: Shape<T>): Shape<T | null> {
   return (value, path) =>
     value === null || value === undefined ? null : shape(value, path);
@@ -128,7 +128,7 @@ type ObjectOf<F extends Fields> = {
 };
 
 /**
- * 決まった鍵を持つオブジェクト。**知らない鍵は捨てる** — 相手が足したものを
+ * 決まった鍵を持つオブジェクト。**知らない鍵は捨てる**。相手が足したものを
  * こちらの型に混ぜないため。丸ごと要るなら `record(unknown)` で受ける
  */
 export function object<F extends Fields>(fields: F): Shape<ObjectOf<F>> {
@@ -165,7 +165,7 @@ export function read<T>(shape: Shape<T>, value: unknown, what: string): T {
 }
 
 /**
- * 警告を出した相手 (`what`)。同じ相手では繰り返さない — チューナーの状態は何秒か
+ * 警告を出した相手 (`what`)。同じ相手では繰り返さない。チューナーの状態は何秒か
  * おきに読むし、言葉には値が入るので (使っているチャンネルなど)、言葉ごとに
  * 覚えると増え続ける。最初の 1 回で直すべき場所は分かる
  */
@@ -176,7 +176,7 @@ const warned = new Set<string>();
  * (前の `as X` と同じ振る舞い)。
  *
  * 相手 (チューナーエージェント) は別のリポジトリで、バージョンがずれると鍵が増えたり
- * 名前が変わったりする。そのたびに録画が止まるのでは困る — 動いているものは
+ * 名前が変わったりする。そのたびに録画が止まるのでは困る。動いているものは
  * 動かしたまま、**どこが違うかを言う**。直すのは人
  */
 export function tolerate<T>(

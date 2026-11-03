@@ -8,7 +8,7 @@ import type { EncodeProgress } from "#lib/server/events.js";
  * ここで中身ごと受けて、一覧は該当行の数字だけを書き換える。
  *
  * **消さない。** ジョブが終われば `recordings` イベント → 読み直しで行の
- * `job_state` が変わり、表示の入口 (`{#if job_state === 'running'}`) が閉じる —
+ * `job_state` が変わり、表示の入口 (`{#if job_state === 'running'}`) が閉じる。
  * 残った古い数字は誰からも見えないので、掃除は要らない。
  */
 

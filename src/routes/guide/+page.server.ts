@@ -24,7 +24,7 @@ import { CHANNEL_TYPES } from "#lib/types.js";
  *
  * **番組 (マス) はここで返さない。** 画面が `/api/guide` から後で取る (`+page.ts`)。
  * 局の並び・日付・時刻は番組より先に決まるので、局名の行と時刻の列は本物を先に描き、
- * マスのところだけ骨組みにしておける — 届いたときに表の位置が動かない
+ * マスのところだけ骨組みにしておける。届いたときに表の位置が動かない
  */
 export function load({ url, cookies }) {
   const type =
@@ -35,7 +35,7 @@ export function load({ url, cookies }) {
 
   /*
    * 局の数 (種別ごと)。選んでいる種別に局が無ければ、表の真ん中にスキャンの案内を出す。
-   * そのときは上の案内 (`+layout.svelte`) を出さない — 同じことを2度言わない
+   * そのときは上の案内 (`+layout.svelte`) を出さない。同じことを2度言わない
    */
   const counts = serviceCounts();
   const typeEmpty = (counts[type] ?? 0) === 0;

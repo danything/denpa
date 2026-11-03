@@ -4,7 +4,7 @@
   import { denpaFontUrl } from "#lib/font.js";
   /**
    * **画面の d ボタン。テレビと同じ振る舞い。** 出ている文書が d を聞いていれば
-   * (`pressD` が true) 渡して終わり — 局の待機ページはこれでメニューを開く。
+   * (`pressD` が true) 渡して終わり。局の待機ページはこれでメニューを開く。
    * 聞いていなければ入れ物を出し入れする。ライブと録画の両方がここを通る
    */
   export function pressD(
@@ -89,7 +89,7 @@
     tune?: ((service: Service) => boolean) | null;
     /**
      * この番組に載っている Hybridcast (AIT)。文書が起動を求めたら (startAITControlledApp) 映像の上に開く
-     * (`HybridcastFrame`)。双方向がオフ (`network`) なら開かない — 文書の問い合わせにも「無い」と答える
+     * (`HybridcastFrame`)。双方向がオフ (`network`) なら開かない。文書の問い合わせにも「無い」と答える
      */
     apps?: HybridcastLink[];
     /** 局の名前 (Hybridcast のアプリに渡す) */
@@ -158,7 +158,7 @@
   }
 
   /**
-   * XML の AIT から開く (電波に AIT が無い局。`bml/browser.ts` の `startAppFrom`)。**取得を始めたら true** —
+   * XML の AIT から開く (電波に AIT が無い局。`bml/browser.ts` の `startAppFrom`)。**取得を始めたら true**。
    * 文書には待たずに答え、届いたら開く。取れない・開けるアプリが無いときは、何を読もうとしたかをコンソールに残してデータ放送のまま
    */
   function startAppFrom(uri: string, hint: number[]): boolean {
@@ -199,7 +199,7 @@
   }
 
   /**
-   * アプリに渡すデータ放送の Greg と NVRAM (`hybridcast/compat.ts`)。**NVRAM はアプリを起動した局から見える分だけ** —
+   * アプリに渡すデータ放送の Greg と NVRAM (`hybridcast/compat.ts`)。**NVRAM はアプリを起動した局から見える分だけ**。
    * 放送の文書と同じ領域を使わせる (アプリは AIT で局が起動させたもの)
    */
   function broadcastFor(): CompatInit {
@@ -281,7 +281,7 @@
   let visible = $state(false);
   /**
    * 何度も作らないための世代。押して離してを繰り返しても混ざらない。受信したまま閉じたとき (`closed`) も進め、
-   * その前に頼んだ XML の AIT が後から届いても開かない (`startAppFrom`)
+   * その前にリクエストした XML の AIT が後から届いても開かない (`startAppFrom`)
    */
   let generation = 0;
   /** いま何を出しているか (`channel`)。出していなければ `null` */
@@ -294,7 +294,7 @@
   /** まだ電波から取っている最中か。**エンジンが教えてくれる** (`onReceiving`)。テレビの「データ取得中…」と同じ表示 */
   let receiving = $state(false);
   /**
-   * 一度でも出し切ったか。最初の1枚が揃うまでは映像のままにする — 入口の文書はほぼ白紙のまま自分で
+   * 一度でも出し切ったか。最初の1枚が揃うまでは映像のままにする。入口の文書はほぼ白紙のまま自分で
    * `invisible` を外すので、本体が届くまでの数秒が真っ白になる。出し切ったあとは引っ込めない (点滅する)
    */
   let settled = false;
@@ -328,14 +328,14 @@
 
   /**
    * 双方向 (通信系コンテンツ)。中継はサーバがやる (放送局のサーバは CORS を返さない。
-   * [docs/stream.md](../../../../docs/stream.md#双方向通信系コンテンツプロキシ))。送るほうも要る —
+   * [docs/stream.md](../../../../docs/stream.md#双方向通信系コンテンツプロキシ))。送るほうも要る。
    * NHK は `isIPConnected` を信じず、送る API へ一度投げて繋がっているかを決める
    */
   const ip: BmlIp = {
     connected: () => network,
     /**
      * 送る (エンジンが組んだ `Denbun=…` を中継へ素通し)。`resultCode` は 1 が成功で、中継が断った (403/502)
-     * ときだけ NaN — 相手の 404 は「送れた」ので、放送のアプリに判断させる
+     * ときだけ NaN。相手の 404 は「送れた」ので、放送のアプリに判断させる
      */
     transmit: async (uri, body) => {
       const response = await fetch(
@@ -550,7 +550,7 @@
 
   /**
    * 描く入れ物を毎回まっさらに作る (エンジンが張る影 `attachShadow` は外せず、同じ要素に2度目を張ると転ぶ)。
-   * 出せと言われるまでは透明に — `visibility` では子の visible が親の hidden を打ち消す
+   * 出せと言われるまでは透明に。`visibility` では子の visible が親の hidden を打ち消す
    */
   function makeMount(into: HTMLElement): HTMLDivElement {
     const made = document.createElement("div");
@@ -771,7 +771,7 @@
 
   /**
    * リモコンの代わり。**十字・決定・戻る・数字・色・d** をそのまま渡す
-   * (エンジンの `aribKey`)。キーの d は文書へそのまま届く — 入れ物の出し入れは
+   * (エンジンの `aribKey`)。キーの d は文書へそのまま届く。入れ物の出し入れは
    * 画面の d ボタンの側 (`pressD`)
    */
   function key(event: KeyboardEvent, down: boolean): void {
@@ -806,7 +806,7 @@
 />
 
 <!--
-    映像と同じ枠に重ねる。操作列より下に敷く (`z-index: 5` / `ControlBar` は 10) — 上に載せると
+    映像と同じ枠に重ねる。操作列より下に敷く (`z-index: 5` / `ControlBar` は 10)。上に載せると
     d ボタンごと隠れて、出したら消せなくなる
 -->
 <div
