@@ -298,6 +298,7 @@ public sealed class TunerPool(
     /// <item><c>siano:&lt;USB のポート&gt;</c> … siano-userland の機材 (Siano.cs)。カーネルが使っていれば開かない</item>
     /// <item><c>asicen:&lt;USB ポート&gt;:&lt;受信機&gt;</c> … asicen-userland の機材 (Asicen.cs。試験的)</item>
     /// <item><c>zd1j:&lt;USB のポート&gt;</c> … Sony CECH-ZD1 J (Zd1j.cs)。エージェントが USB を直に持つ (Linux・Windows・macOS)</item>
+    /// <item><c>dt295:&lt;USB のポート&gt;</c> … PIXELA PIX-DT295 (Dt295Tuner.cs。試験的)。エージェントが USB を直に持つ</item>
     /// </list>
     ///
     /// <para>それ以外は投げる。<c>px4_drv</c> の chardev はもう受け取らない</para>
@@ -306,21 +307,22 @@ public sealed class TunerPool(
     public static ITuneDevice OpenDevice(string path, string? lnb, bool followZd1j = false)
     {
         /*
-         * **Windows は siano-userland と px4-userland の機材と CECH-ZD1 J だけ。** DVB は無く、asicen-userland は Windows を出していない。
+         * **Windows は siano-userland と px4-userland の機材と CECH-ZD1 J と PIX-DT295 だけ。** DVB は無く、asicen-userland は Windows を出していない。
          * 書いてあっても開かない (開けば libc を呼びにいって落ちる)
          */
-        if (OperatingSystem.IsWindows() && !SianoUserland.Is(path) && !Zd1j.Is(path) && Px4Userland.Parse(path) is null)
+        if (OperatingSystem.IsWindows() && !SianoUserland.Is(path) && !Zd1j.Is(path) && !Dt295.Is(path) && Px4Userland.Parse(path) is null)
         {
             throw new IOException(
-                $"{path} は Windows では使えません (Windows で使えるのは {Px4Userland.Scheme}<筐体の番号>:<受信機> と {SianoUserland.Scheme}<USB のポート> と {Zd1j.Scheme}<USB のポート> だけ)");
+                $"{path} は Windows では使えません (Windows で使えるのは {Px4Userland.Scheme}<筐体の番号>:<受信機> と {SianoUserland.Scheme}<USB のポート> と {Zd1j.Scheme}<USB のポート> と {Dt295.Scheme}<USB のポート> だけ)");
         }
         if (Zd1j.Parse(path) is { } zd1j) return new Zd1jTuner(zd1j, followZd1j);
+        if (Dt295.Parse(path) is { } dt295) return new Dt295Tuner(dt295);
         if (Px4Userland.Parse(path) is { } px4) return new Px4Tuner(px4.Id, px4.Receiver, lnb);
         if (SianoUserland.Parse(path) is { } port) return new SianoTuner(port);
         if (AsicenUserland.Parse(path) is { } asicen) return AsicenUserland.Open(asicen.Id, asicen.Receiver, lnb);
         if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb);
         throw new IOException(
-            $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機> か {SianoUserland.Scheme}<USB のポート> か {AsicenUserland.Scheme}<USB のポート>:<受信機> か {Zd1j.Scheme}<USB のポート>)");
+            $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機> か {SianoUserland.Scheme}<USB のポート> か {AsicenUserland.Scheme}<USB のポート>:<受信機> か {Zd1j.Scheme}<USB のポート> か {Dt295.Scheme}<USB のポート>)");
     }
 
     /// <summary>実体を手放す。**定義が変わったときと、止めるときだけ**</summary>
