@@ -411,8 +411,11 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                     if (WinUsb_GetOverlappedResult(_owner.Handle, (nint)_overlapped[_head], &done, 0) == 0)
                     {
                         var error = Marshal.GetLastPInvokeError();
-                        // 端点の止まりなどは、その読みだけ捨てて出し直す
-                        if (error != ErrorGenFailure) throw Failure(_owner.Name, "TS の読みが失敗しました", error);
+                        // 端点の止まりなどは、その読みだけ捨てて出し直す。読みを出したスレッドが終わると Windows が取り消す
+                        // (ERROR_OPERATION_ABORTED) ので、それも同じに扱う。受信を止めるとき、読み手のスレッドが先に終わり、
+                        // 別のスレッドが読み捨てるので必ず当たる。例外にすると停止の手順 (9.9) が途中で止まり、機材が受信中のまま残って
+                        // 次の受信の先頭に古いデータが混じる
+                        if (error is not (ErrorGenFailure or ErrorOperationAborted)) throw Failure(_owner.Name, "TS の読みが失敗しました", error);
                         done = 0;
                     }
                     _length = (int)done;

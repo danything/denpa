@@ -209,6 +209,54 @@ public class Dt295TunerTests
     }
 
     [Test]
+    public async Task 最初の読みの先頭に混じった古い切れ端は飛ばす()
+    {
+        // 前の受信が途中で終わると、機材に残った切れ端 (パケットの途中の 56 バイト) が次の最初の読みに混じる
+        var output = new ArrayBufferWriter<byte>();
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor());
+        byte[] packets = [.. Dt295Ts.Payload(0x100), .. Dt295Ts.Payload(0x101), .. Dt295Ts.Payload(0x102)];
+        byte[] data = [.. new byte[56].Select(_ => (byte)0x5A), .. packets];
+        await Assert.That(filter.Feed(data, output)).IsEqualTo(3);
+        await Assert.That(output.WrittenSpan.ToArray()).IsEquivalentTo(packets);
+        // そろったあとは探し直さない (途中で狂ったら止める)
+        var bad = Dt295Ts.Payload(0x103);
+        bad[0] = 0x00;
+        Assert.Throws<Dt295Exception>(() => filter.Feed(bad, output));
+    }
+
+    [Test]
+    public async Task 古いパケットのあとに本物が始まるなら_そろった並びから渡す()
+    {
+        // 古い切れ端 56 バイト + 古いパケット 2 つ + 別の切れ端 164 バイトのあとに、本物の並びが始まる
+        var output = new ArrayBufferWriter<byte>();
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor());
+        byte[] real = [.. Enumerable.Range(0, 40).SelectMany(i => Dt295Ts.Payload(0x110 + i))];
+        byte[] data =
+        [
+            .. new byte[56].Select(_ => (byte)0x5A),
+            .. Dt295Ts.Payload(0x100),
+            .. Dt295Ts.Payload(0x101),
+            .. new byte[164].Select(_ => (byte)0x5A),
+            .. real,
+        ];
+        await Assert.That(filter.Feed(data, output)).IsEqualTo(40);
+        await Assert.That(output.WrittenSpan.ToArray()).IsEquivalentTo(real);
+    }
+
+    [Test]
+    public async Task Reset_のあとは先頭を探し直す()
+    {
+        var output = new ArrayBufferWriter<byte>();
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor());
+        await Assert.That(filter.Feed(Dt295Ts.Payload(0x100), output)).IsEqualTo(1);
+        filter.Reset();
+        byte[] packets = [.. Dt295Ts.Payload(0x101), .. Dt295Ts.Payload(0x102)];
+        byte[] data = [.. new byte[20].Select(_ => (byte)0x5A), .. packets];
+        await Assert.That(filter.Feed(data, output)).IsEqualTo(2);
+        await Assert.That(output.WrittenSpan[188..].ToArray()).IsEquivalentTo(packets);
+    }
+
+    [Test]
     public async Task 不正なパケットで止める()
     {
         var bad = Dt295Ts.Payload(0x100);

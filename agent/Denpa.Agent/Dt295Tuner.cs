@@ -34,8 +34,44 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     /// <summary>渡したパケットの数</summary>
     public long Packets { get; private set; }
 
-    /// <summary>端数を捨てる (準備し直したあとは先頭からそろって来る。10.2)</summary>
-    public void Reset() => _carried = 0;
+    /// <summary>端数を捨て、次の最初の読みでパケットの先頭を探し直す (準備し直したあとは先頭からそろって来る。10.2)</summary>
+    public void Reset()
+    {
+        _carried = 0;
+        _synced = false;
+    }
+
+    private bool _synced;
+
+    /// <summary>最初の読みで、先頭に混じった古い切れ端を飛ばす範囲 (パケット数)。見分けに使う並びの長さでもある</summary>
+    private const int AlignSpan = 32;
+
+    /// <summary>
+    /// 最初の読みの、パケットの先頭の位置。188 バイトおきに 0x47 が並ぶ最初の位置 (そろわなければ 0)。
+    /// 前の受信が途中で終わると、機材の中に残ったデータが次の受信の最初に混じる (パケットの途中の切れ端や、古いパケット)。
+    /// 受信の途中では探し直さない (10.2)
+    /// </summary>
+    internal static int Align(ReadOnlySpan<byte> data)
+    {
+        for (var at = 0; at < AlignSpan * PacketSize && at < data.Length; at++)
+        {
+            if (data[at] != 0x47) continue;
+            var confirmed = 0;
+            var aligned = true;
+            for (var next = at + PacketSize; next < data.Length && next <= at + AlignSpan * PacketSize; next += PacketSize)
+            {
+                if (data[next] != 0x47)
+                {
+                    aligned = false;
+                    break;
+                }
+                confirmed++;
+            }
+            // 後ろに確かめるものが無いときは、先頭から始まっているときだけ認める
+            if (aligned && (confirmed > 0 || at == 0)) return at;
+        }
+        return 0;
+    }
 
     /// <summary>
     /// 受け取ったものを渡す。確かめたパケットを <paramref name="output"/> に書き、暗号化されていないものは
@@ -44,6 +80,11 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     public int Feed(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? clear = null)
     {
         var written = 0;
+        if (!_synced && _carried == 0)
+        {
+            data = data[Align(data)..];
+            _synced = true;
+        }
         if (_carried > 0)
         {
             var take = Math.Min(PacketSize - _carried, data.Length);
