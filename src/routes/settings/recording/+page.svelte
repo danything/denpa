@@ -15,7 +15,6 @@
     hwChoice,
     hwUsable,
   } from "#lib/hw.js";
-  import { LIVE_CODECS } from "#lib/live.js";
 
   let { data, form } = $props();
 
@@ -89,11 +88,11 @@
         <!--
                     **コーデックごとに、エンコーダ (ソフトウェア・GPU) を横に置く。録画とライブで別々に選ぶ** (列の見出し「録画」「ライブ」)。
                     選べるのは、そのコーデックを GPU でエンコードできるデバイスがあるときだけ。持ち方はデバイス × 方式 × コーデックのまま
-                    (`chooseHw`。録画は `hwAllow`、ライブは `liveHwAllow`)。ライブの列はライブが出すコーデック (AV1・H.264。`LIVE_CODECS`)
-                    だけで、追っかけと録画のその場の変換もライブの列を使う。チェックを外したコーデックもライブは使うので、
+                    (`chooseHw`。録画は `hwAllow`、ライブは `liveHwAllow`)。追っかけと録画のその場の変換もライブの列を使う。チェックを外したコーデックもライブは使うので、
                     選ぶ欄はチェックと関係なく出しておく。
                     **H.265 は GPU でだけエンコードする**ので、行ごと GPU を確かめてから出し、エンコーダに
-                    「ソフトウェア」を置かない (外すならチェックを外す)。行を出したときだけ `codecsShown` を送る —
+                    「ソフトウェア」を置かない (録画で外すならチェックを外す)。ライブの列は「ソフトウェア」の代わりに「使わない」を置く —
+                    選ぶとライブで H.265 を出さない (`live.liveHevc`)。行を出したときだけ `codecsShown` を送る —
                     確かめている最中や GPU が無いときに保存しても、H.265 のチェックは前のまま (saveEncoding)
                 -->
         {#snippet codecRow(
@@ -120,6 +119,7 @@
                 caption: string,
                 testid: string,
                 allow: HwAllow,
+                off: string | null,
               )}
                 {@const choice = hwChoice(allow, hw.devices, codec)}
                 {#if usable.length > 0}
@@ -131,18 +131,19 @@
                       aria-label={`${CODEC_LABEL[codec]} の${caption}のエンコーダ`}
                       data-testid={testid}
                     >
-                      {#if !gpuOnly}
+                      <!-- `off` はソフトウェアの欄の名前 (GPU だけのコーデックの録画は置かない。ライブは「使わない」) -->
+                      {#if off !== null}
                         <option
                           value={HW_SOFTWARE}
-                          selected={choice === HW_SOFTWARE}>ソフトウェア</option
+                          selected={choice === HW_SOFTWARE}>{off}</option
                         >
                       {/if}
-                      <!-- GPU だけのコーデックで、どの GPU の印も外れていれば (前の設定) 先頭の GPU を選んで見せる -->
+                      <!-- ソフトウェアの欄を置かないときに、どの GPU の印も外れていれば (前の設定) 先頭の GPU を選んで見せる -->
                       {#each usable as device, i (device.path)}
                         <option
                           value={device.path}
                           selected={choice === device.path ||
-                            (gpuOnly && choice === HW_SOFTWARE && i === 0)}
+                            (off === null && choice === HW_SOFTWARE && i === 0)}
                           >{device.label}</option
                         >
                       {/each}
@@ -160,18 +161,20 @@
                   >
                 {/if}
               {/snippet}
-              {@render encoder("hw", "録画", `hw-${codec}`, recording.hwAllow)}
-              {#if LIVE_CODECS.some((live) => live.id === codec)}
-                {@render encoder(
-                  "liveHw",
-                  "ライブ",
-                  `live-hw-${codec}`,
-                  recording.liveHwAllow,
-                )}
-              {:else if hw.devices.length > 0}
-                <!-- ライブが出さないコーデック (H.265) は、ライブの列を空けておく -->
-                <span class="encoder-gap"></span>
-              {/if}
+              {@render encoder(
+                "hw",
+                "録画",
+                `hw-${codec}`,
+                recording.hwAllow,
+                gpuOnly ? null : "ソフトウェア",
+              )}
+              {@render encoder(
+                "liveHw",
+                "ライブ",
+                `live-hw-${codec}`,
+                recording.liveHwAllow,
+                gpuOnly ? "使わない" : "ソフトウェア",
+              )}
             {/await}
           </div>
         {/snippet}
@@ -492,8 +495,7 @@
   .codec-row > :not(.check) {
     margin-inline-start: 1.75rem;
   }
-  .encoder-head,
-  .encoder-gap {
+  .encoder-head {
     display: none;
   }
   .encoder-field {
@@ -523,8 +525,7 @@
     .codec-row > :not(.check) {
       margin-inline-start: 0;
     }
-    .encoder-head,
-    .encoder-gap {
+    .encoder-head {
       display: block;
     }
     .encoder-caption {

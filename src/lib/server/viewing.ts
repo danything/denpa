@@ -15,6 +15,7 @@ import {
   type LiveFormat,
   readChoice,
 } from "../live-choice";
+import { liveHevc } from "./live";
 import { settings } from "./settings";
 
 /** 観るときの決まり。画面の load と `GET /api/playback/options` が同じものを返す */
@@ -23,14 +24,22 @@ export interface ViewingOptions {
   indoor: boolean;
   /** コーデックのメニューから外すもの (世帯の設定。外さないなら空) */
   hidden: (typeof HIDDEN_CODECS)[number][];
+  /**
+   * ライブで H.265 を出せるか。**ライブのエンコーダが GPU のときだけ** (`live.liveHevc`)。出せなければメニューに並べず、
+   * 「自動」でも選ばない
+   */
+  hevc: boolean;
 }
 
-/** リクエストの URL (`event.url`。名前は `Host` か `HOST_HEADER` から) で決める */
-export function viewingOptions(url: URL): ViewingOptions {
+/**
+ * リクエストの URL (`event.url`。名前は `Host` か `HOST_HEADER` から) で決める。`hevc` は試験で差し替えるときだけ渡す
+ */
+export function viewingOptions(url: URL, hevc = liveHevc()): ViewingOptions {
   const current = settings();
   return {
     indoor: indoorHost(url.hostname, current.indoorHosts),
     hidden: current.hideH264Hevc ? [...HIDDEN_CODECS] : [],
+    hevc,
   };
 }
 
@@ -73,6 +82,8 @@ export function warmFormat(choice: LiveChoice, indoor: boolean): LiveFormat {
       indoor,
       rawOk: true,
       av1: true,
+      // AV1 が先なので、自動で H.265 を温めることは無い。選んだ H.265 を出せなければ H.264 で温める (`live.warm`)
+      hevc: true,
       h264: true,
       compat: false,
       chase: false,

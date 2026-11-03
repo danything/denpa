@@ -28,34 +28,38 @@ export function formatLabel(format: LiveFormat): string {
 
 /**
  * 覚えていた選択を読む。**知らない値・前の形式の cookie (`codec`・`raw` だけで `choice` が無い) は自動。**
- * H.264 を外す設定 (`hidden`) なら、H.264 を選んでいた端末も自動として扱う
+ * H.264・H.265 を外す設定 (`hidden`) なら、それを選んでいた端末も自動として扱う。H.265 を選んでいても、ライブの
+ * エンコーダが GPU でなくなっていれば、画面が代わりを選んで断り書きを出す (`live-player.svelte.ts` の `pickFormat`)
  */
 export function readChoice(value: unknown, hidden: boolean): LiveChoice {
   if (value === "av1" || value === "raw") return value;
-  if (value === "h264" && !hidden) return value;
+  if ((value === "h264" || value === "hevc") && !hidden) return value;
   return "auto";
 }
 
 /**
- * **「自動」の形式。** 使えるもの (`rawOk`・`av1`・`h264`) のうち、次の順で先頭のもの。どれも使えなければ null。
+ * **「自動」の形式。** 使えるもの (`rawOk`・`av1`・`hevc`・`h264`) のうち、次の順で先頭のもの。どれも使えなければ null。
  *
  * | 場面 | 順 |
  * | --- | --- |
- * | 家の中 (`indoor`) | MPEG-2 → AV1 → H.264 |
- * | 外 | AV1 → H.264 |
+ * | 家の中 (`indoor`) | MPEG-2 → AV1 → H.265 → H.264 |
+ * | 外 | AV1 → H.265 → H.264 |
  * | 互換モード (`compat`。canvas に描く) | AV1 → H.264 → MPEG-2 |
  * | 追っかけ (`chase`。MPEG-2 は無い) | AV1 → H.264 (家の中でも、互換モードでも) |
  *
  * 家の中で MPEG-2 を先にするのは、サーバがエンコードせずに済み、画質も放送のままだから。外では太すぎる
  * (放送のままは 1局で 15Mbit/s ほど)。互換モードで MPEG-2 を後ろにするのは、エンコードしたものより canvas に描くのが重いから。
+ * H.265 は同じ画質で H.264 より小さいので先にする。互換モードと追っかけでは出さない。
  *
- * `rawOk` は「この端末で MPEG-2 をデコードできて、まだ諦めていない」、`av1`・`h264` は「受け取れて (互換モードなら
- * 描けて)、まだ諦めていない」。どれが諦められたかは呼ぶ側が持つ
+ * `rawOk` は「この端末で MPEG-2 をデコードできて、まだ諦めていない」、`av1`・`hevc`・`h264` は「受け取れて (互換モードなら
+ * 描けて)、まだ諦めていない」。`hevc` はそのうえでライブのエンコーダが GPU のとき (`server/viewing.ts` の
+ * `ViewingOptions.hevc`)。どれが諦められたかは呼ぶ側が持つ
  */
 export function autoCodec(o: {
   indoor: boolean;
   rawOk: boolean;
   av1: boolean;
+  hevc: boolean;
   h264: boolean;
   compat: boolean;
   chase: boolean;
@@ -65,8 +69,8 @@ export function autoCodec(o: {
     : o.compat
       ? ["av1", "h264", "raw"]
       : o.indoor
-        ? ["raw", "av1", "h264"]
-        : ["av1", "h264"];
+        ? ["raw", "av1", "hevc", "h264"]
+        : ["av1", "hevc", "h264"];
   return (
     order.find((format) => (format === "raw" ? o.rawOk : o[format])) ?? null
   );

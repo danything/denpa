@@ -295,6 +295,7 @@ describe("エンコード方式を選ぶ", () => {
   test("ブラウザに渡す名前は方式ごとに変わる", () => {
     expect(codecsFor("h264")).toContain("avc1.");
     expect(codecsFor("av1")).toContain("av01.");
+    expect(codecsFor("hevc")).toContain("hvc1.");
   });
 });
 
@@ -566,6 +567,25 @@ describe("GPU でエンコードする", () => {
     });
     expect(av1.join(" ")).toContain("-c:v av1_vaapi");
     expect(av1.join(" ")).toContain("-c:a libopus");
+  });
+
+  /*
+   * **H.265 は GPU でだけ。** 音声は H.264 と同じ AAC で、入れ物の中の名前は `hvc1` (Safari は `hev1` を受け取らない)。
+   * GPU が無いのに頼まれたら投げる (選局の指示を受けるところで H.264 にしてあるので、ふつうは来ない)
+   */
+  test("H.265 は GPU でだけエンコードし、hvc1 と名乗り、音声は AAC", () => {
+    const args = encodeArgs(1024, stereo, "hevc", 0, {
+      way: { device, kind: "vaapi" },
+      full: false,
+    });
+    expect(args.join(" ")).toContain("-c:v hevc_vaapi");
+    expect(args.join(" ")).toContain("-g 60 -tag:v hvc1");
+    expect(args.join(" ")).toContain("-c:a aac");
+    expect(args).not.toContain("libx264");
+    expect(codecsFor("hevc")).toBe(
+      'video/mp4; codecs="hvc1.1.6.L123.B0,mp4a.40.2"',
+    );
+    expect(() => encodeArgs(1024, stereo, "hevc", 0, null)).toThrow();
   });
 
   test("音声だけなら GPU デバイスも開かない", () => {

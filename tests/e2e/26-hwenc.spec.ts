@@ -62,8 +62,11 @@ test.describe("GPU でエンコードする", () => {
     // ライブは録画と別に選ぶ (列の見出し「ライブ」)。録画の割り振りはライブに効かない
     await expect(page.getByTestId("live-hw-av1")).toHaveValue("every");
     await expect(page.getByTestId("live-hw-h264")).toHaveValue("every");
-    // ライブが出さない H.265 には、ライブの欄が無い
-    await expect(page.getByTestId("live-hw-hevc")).toHaveCount(0);
+    // H.265 のライブの欄は「ソフトウェア」の代わりに「使わない」(ライブで H.265 を出さない)
+    await expect(page.getByTestId("live-hw-hevc")).toHaveValue("every");
+    await expect(
+      page.getByTestId("live-hw-hevc").locator('option[value="software"]'),
+    ).toHaveText("使わない");
     await page.getByTestId("live-hw-av1").selectOption(d129 as string);
     await page.getByTestId("live-hw-h264").selectOption("software");
     await expect(page.getByTestId("saved-result")).toBeVisible();

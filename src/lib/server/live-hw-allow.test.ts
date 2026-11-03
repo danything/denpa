@@ -30,7 +30,7 @@ afterAll(() => {
 });
 
 const { saveSettings, settings } = await import("./settings");
-const { pickLiveHw } = await import("./live");
+const { blameLiveHw, liveHevc, pickLiveHw } = await import("./live");
 const { gpuReady } = await import("./transcode");
 const { bootstrap, MIGRATIONS } = await import("./db");
 
@@ -44,7 +44,7 @@ const A: HwDevice = {
   full: [],
 };
 const B: HwDevice = { ...A, path: "/dev/dri/renderD129", label: "B" };
-const only = (codecs: ("av1" | "h264")[]) => ({
+const only = (codecs: ("av1" | "hevc" | "h264")[]) => ({
   vaapi: codecs,
   rkmpp: [],
   nvenc: [],
@@ -80,6 +80,40 @@ test("録画の印を外しても、ライブの印が付いていれば GPU に
   expect(pickLiveHw("av1", true, [A])).toBeNull();
   expect(gpuReady([A])).toBe(true);
   expect(settings().hwAllow[A.path]?.vaapi).toEqual([]);
+});
+
+/**
+ * **ライブで H.265 を出すのは、ライブのエンコーダが GPU のときだけ** (`liveHevc`)。H.265 はソフトウェアで
+ * エンコードしないので、印を外した (設定の「使わない」)・GPU が無い・最近落ちたなら出さない
+ */
+test("ライブの H.265 は、ライブの印で GPU に載るときだけ出せる", () => {
+  const C: HwDevice = { ...A, path: "/dev/dri/renderD130", vaapi: ["hevc"] };
+  saveSettings({ hwAllow: {}, liveHwAllow: {} });
+  // 印の無いデバイスは全部よい。H.265 をエンコードできない GPU だけなら出せない
+  expect(liveHevc([C])).toBe(true);
+  expect(liveHevc([A])).toBe(false);
+  expect(liveHevc([])).toBe(false);
+  // 録画で H.265 を外していても、ライブの印だけを見る
+  saveSettings({
+    hwAllow: { [C.path]: only([]) },
+    liveHwAllow: { [C.path]: only(["hevc"]) },
+  });
+  expect(liveHevc([C])).toBe(true);
+  // ライブの印を外せば (「使わない」) 出さない
+  saveSettings({ hwAllow: {}, liveHwAllow: { [C.path]: only([]) } });
+  expect(liveHevc([C])).toBe(false);
+});
+
+test("GPU が H.265 をエンコードできずに降りたら、覚えている間は出さない。同時に開ける数を超えただけなら覚えない", () => {
+  const D: HwDevice = { ...A, path: "/dev/dri/renderD131", vaapi: ["hevc"] };
+  saveSettings({ hwAllow: {}, liveHwAllow: {} });
+  const hw = pickLiveHw("hevc", true, [D]);
+  expect(hw?.way.device).toBe(D.path);
+  if (hw === null) return;
+  expect(blameLiveHw("hevc", hw, true)).toBe(false);
+  expect(liveHevc([D])).toBe(true);
+  expect(blameLiveHw("hevc", hw, false)).toBe(true);
+  expect(liveHevc([D])).toBe(false);
 });
 
 /**
