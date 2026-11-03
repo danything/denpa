@@ -666,7 +666,9 @@ describe("チューナー", () => {
   });
 
   test("tuner を指定しても、同じチャンネルをほかのチューナーが読んでいれば共有せず、指定のチューナーで選局する", async () => {
-    const a = await open("type=BS&channel=BS11:18000&use=pin%202&priority=5");
+    const a = await open(
+      "type=BS&channel=BS11:18000&use=pin%202&priority=5&tuner=bs0",
+    );
     await a.reader?.read();
     const b = await open(
       "type=BS&channel=BS11:18000&use=pin%203&priority=5&tuner=bs1",
