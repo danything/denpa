@@ -1,5 +1,5 @@
 # エージェントと組む合言葉 (docs/agent.md)。application.yaml の agent.pairSecret がこの Secret を指す。
-# chart に作らせないのは、この家の ArgoCD が Secret を同期しない (resource.exclusions) ため。
+# chart に作らせないのは、このクラスタの ArgoCD が Secret を同期しない (resource.exclusions) ため。
 # 値は SOPS で暗号化してある (../.sops.yaml)。変えるときは管理者の鍵で `sops edit deploy/pair.sops.yaml` して push する
 # (変えるとエージェントと denpa が入れ替わり、denpa は新しい合言葉で組み直す)。
 apiVersion: isindir.github.com/v1alpha3

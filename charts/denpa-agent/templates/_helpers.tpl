@@ -8,7 +8,7 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 
 {{/*
 denpa と組むときの合言葉 (32 バイトの乱数を base64url で。docs/agent.md)。
-**1 度作ったら変えない** — クラスタにもう Secret があればその値 (lookup)、無ければ作る。
+**1 度作ったら変えない。** クラスタにもう Secret があればその値 (lookup)、無ければ作る。
 描くたびに違う値になるので、呼ぶのは Secret の1か所だけ。lookup はクラスタを見ない描き方 (helm template・ArgoCD) では空
 */}}
 {{- define "denpa-agent.pairToken" -}}
