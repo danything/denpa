@@ -40,7 +40,7 @@ async function liveTuners() {
 export async function load({ cookies, url }) {
   const session = find(cookies.get(COOKIE));
   return {
-    tuners: await liveTuners(),
+    liveTuners: await liveTuners(),
     /** この端末の控えのほかに生きているログインの数。控えで入っていなければ null */
     others: session === null ? null : countOthers(session.id),
     ...diagnostics.load(url),

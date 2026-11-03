@@ -140,7 +140,7 @@
         data-testid="live-tuner-select"
       >
         <option value="" selected={liveTuner.pin === null}>自動</option>
-        {#each data.tuners as tuner (tuner.pin)}
+        {#each data.liveTuners as tuner (tuner.pin)}
           <option value={tuner.pin} selected={liveTuner.pin === tuner.pin}
             >{tuner.name} ({tuner.types.join("・")})</option
           >
