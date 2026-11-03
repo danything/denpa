@@ -78,7 +78,7 @@ function harness() {
 }
 
 const T = Date.UTC(2026, 9, 28, 12, 0, 0);
-/** スレッドの頭 (vpos の基準)。いまの 1 時間前 */
+/** スレッドの始まり (vpos の基準)。いまの 1 時間前 */
 const BASE = T - 3_600_000;
 const COMMENT_URL =
   "wss://nx-jikkyo.tsukumijima.net/api/v1/channels/jk9/ws/comment";
@@ -234,7 +234,7 @@ describe("NxJikkyo.post", () => {
     return { h, watch: h.sockets[0]!, comment };
   }
 
-  test("視聴の WS に postComment を送る。いつも 184、vpos はスレッドの頭からの 1/100 秒", async () => {
+  test("視聴の WS に postComment を送る。いつも 184、vpos はスレッドの始まりからの 1/100 秒", async () => {
     const { h, watch } = ready();
     h.clock.now = T + 1_230;
     const result = h.nx.post("わこつ", STYLE);

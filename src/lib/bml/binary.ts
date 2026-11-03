@@ -300,7 +300,7 @@ export function zipIncludes(ranges: ZipRanges, zip: number): boolean {
   return hit(ranges.include) && !hit(ranges.exclude);
 }
 
-/** 表 (`new BinaryTable(ファイル, 書式)`)。書式の頭は行の長さのバイト数 (0 なら長さ無し) */
+/** 表 (`new BinaryTable(ファイル, 書式)`)。書式の先頭は行の長さのバイト数 (0 なら長さ無し) */
 export class Table {
   readonly rows: Cell[][] = [];
   readonly fields: Field[];
@@ -337,7 +337,7 @@ export class Table {
   /**
    * 検索 (search)。条件は [列, 比べる値, 演算子] の並び、`or` が真なら どれか、偽なら すべて。
    * 見つけた行の郵便番号の列は、その列の条件の結果 (条件が無ければ null) にする (web-bml と同じ)。
-   * 列や演算子が型に合わない・件数が 1 未満なら null (呼び手は NaN を返す)
+   * 列や演算子が型に合わない・件数が 1 未満なら null (呼ぶ側は NaN を返す)
    */
   search(
     start: number,

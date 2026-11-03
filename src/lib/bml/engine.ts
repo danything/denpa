@@ -7,7 +7,7 @@
  *     bml.listens('DataButtonPressed');
  *     bml.destroy();
  *
- * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、置くのは呼び手
+ * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、置くのは呼ぶ側
  * - 文書は自前の XML パーサ → 中身の木 → Shadow DOM の中の絶対配置の div ([render.ts](render.ts))
  * - スクリプトは自前の VM ([vm.ts](vm.ts))。イベントは 1 つずつ順に動かす
  * - **ページを握るのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
@@ -106,13 +106,13 @@ export interface BmlOptions {
   /** 文書が替わった */
   onLoad?: (plane: Plane) => void;
   /**
-   * 文書が別の局へ選局したい (epgTune)。**選局するのは呼び手** — 受けたら true (文書はここで
+   * 文書が別の局へ選局したい (epgTune)。**選局するのは呼ぶ側。** 受けたら true (文書はここで
    * 閉じる)、できなければ false (文書には失敗を返す)。無ければいつも失敗。
    * `transportStreamId` は分からなければ null (録画など)
    */
   onTune?: (service: Service) => boolean;
   /**
-   * Hybridcast (startAITControlledApp)。**開くのは呼び手** — `ready` は開けるか (双方向がオンで、
+   * Hybridcast (startAITControlledApp)。**開くのは呼ぶ側。** `ready` は開けるか (双方向がオンで、
    * AIT にアプリがある)、`start` は開く (開けたら true)。`hint` は文書が渡した数 (どのアプリかの
    * 手がかり)。無ければ AIT の問い合わせに 0 と答え、起動は失敗を返す。
    * `startFrom` は文書が XML の AIT の URL を渡したとき (電波に AIT が無い局。`browser.ts` の `canFetchAit`)
@@ -241,8 +241,8 @@ interface Timer {
 }
 
 /**
- * 通信で取ったものが BML の文書か。`text/X-arib-bml` か、型を付けずに返すサーバ向けに頭に `<bml` が
- * あるか (BML でないもの — 案内の HTML など — を組んで「読めない」から入口へ出直さないため)
+ * 通信で取ったものが BML の文書か。`text/X-arib-bml` か、型を付けずに返すサーバ向けに先頭に `<bml` が
+ * あるか (案内の HTML など BML でないものを組んで「読めない」から入口へ出直さないため)
  */
 function looksLikeBml(file: CarouselFile): boolean {
   if (file.type.type === "text" && file.type.subtype === "x-arib-bml")
@@ -537,7 +537,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   /**
    * 入口を始めてよいか。開いていれば始める。開いていなければ、入口の部品に自動起動の指定
-   * (`auto_start_flag`) があるときだけ — テレビは選局したら入口を裏で動かす (`opened` の説明)
+   * (`auto_start_flag`) があるときだけ始める。テレビは選局したら入口を裏で動かす (`opened` の説明)
    */
   private mayStart(): boolean {
     if (this.options.opened?.() !== false) return true;

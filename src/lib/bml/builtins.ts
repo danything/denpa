@@ -465,7 +465,7 @@ export function createRealm(options: RealmOptions): Realm {
 }
 
 /**
- * 日付の文字列を日本の時刻で読む (`YYYY/MM/DD hh:mm:ss`・`YYYY-MM-DDThh:mm:ss` と、その頭の方だけ)。
+ * 日付の文字列を日本の時刻で読む (`YYYY/MM/DD hh:mm:ss`・`YYYY-MM-DDThh:mm:ss` と、その前のほうだけ)。
  * 端末の時間帯で読む `Date.parse` には任せない。読めなければ NaN
  */
 function parseDate(text: string): number {

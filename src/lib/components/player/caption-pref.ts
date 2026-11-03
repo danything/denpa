@@ -1,16 +1,16 @@
 import type { CaptionLanguage } from "@danything/arib/caption-text";
 
 /**
- * 字幕の出し入れと言語の覚え方 (`caption-pref.test.ts`)。**3画面 (ライブ・追っかけ・観る画面) で同じ。端末ごとに覚える** (`keep.ts`)。
+ * 字幕の出し入れと言語の覚え方 (`caption-pref.test.ts`)。**3 画面 (ライブ・追っかけ・観る画面) で同じ。端末ごとに覚える** (`keep.ts`)。
  *
  * - 出し入れ … 既定は出す。消したことのある端末だけ消して始まる
- * - 言語 … ISO 639 の3文字 (`eng`) で覚える。第何言語かは番組ごとに違う (英語が第2言語とは限らない) ので、
- *   番号ではなく言葉で覚えて、載っている言語から選び直す。載っていなければ第1言語
+ * - 言語 … ISO 639 の 3 文字 (`eng`) で覚える。第何言語かは番組ごとに違う (英語が第 2 言語とは限らない) ので、
+ *   番号ではなく言葉で覚えて、載っている言語から選び直す。載っていなければ第 1 言語
  */
 
-/** 出し入れの鍵。`1` / `0` */
+/** 出し入れのキー。`1` / `0` */
 export const CAPTION_ON_KEY = "caption-on";
-/** 言語の鍵。ISO 639 の3文字 */
+/** 言語のキー。ISO 639 の 3 文字 */
 export const CAPTION_LANGUAGE_KEY = "caption-language";
 
 /** 覚えていた出し入れ。**既定は出す** */
@@ -19,7 +19,7 @@ export function storedCaptionsOn(saved: string | null): boolean {
 }
 
 /**
- * 覚えている言語 (`code`) が載っていればそれ、無ければ第1言語 (載っている中のいちばん若い番号) の番号。
+ * 覚えている言語 (`code`) が載っていればそれ、無ければ第 1 言語 (載っている中のいちばん若い番号) の番号。
  * 何も分かっていなければ 1
  */
 export function pickLanguage(

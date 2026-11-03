@@ -152,7 +152,7 @@ test("画面が渡した WASM の置き場 (置いたパスの下も) を使い�
   expect(context.sources).toHaveLength(1);
   expect(context.sources[0]!.starts[0]![0]).toBeCloseTo(50.1, 8);
 });
-test("頭から読み直したら前の音を止め、前の局から遅れて来たものは捨てる", () => {
+test("先頭から読み直したら前の音を止め、前の局から遅れて来たものは捨てる", () => {
   const { worker, context, audio } = setup();
   worker.pcm(1, 10.1);
   audio.feed(new Uint8Array([2]), true);

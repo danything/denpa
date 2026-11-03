@@ -12,14 +12,14 @@ import { DataBroadcastCapture } from "./data-capture";
 import { TsHead } from "./ts-head";
 
 /*
- * 録画の頭の放送時刻。録っている間 (`recorder.ts`) とエンコードのとき (`data-capture.ts`) で
+ * 録画の先頭の放送時刻。録っている間 (`recorder.ts`) とエンコードのとき (`data-capture.ts`) で
  * 同じ部品を使うので、**どちらで測っても同じ値になる**ことを見る
  */
 
 const { videoPid } = BML_TS;
 const T1 = Date.UTC(2026, 9, 28, 12, 0, 0);
 
-/** 頭の PCR は 1000秒。12秒進んだところで初めて TDT (T1) が来る */
+/** 先頭の PCR は 1000 秒。12 秒進んだところで初めて TDT (T1) が来る */
 const recorded = () =>
   stream(
     pcrPacket(videoPid, 1000),
@@ -46,7 +46,7 @@ describe("TsHead", () => {
     expect(head.head).toBe(capture.head);
   });
 
-  test("細かく分けて食わせても同じ", () => {
+  test("細かく分けて渡しても同じ", () => {
     const whole = recorded();
     const head = new TsHead();
     for (let at = 0; at < whole.length; at += 100)

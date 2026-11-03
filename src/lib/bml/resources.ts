@@ -41,7 +41,7 @@ const KNOWN_SCHEMES = new Set([
 ]);
 
 /**
- * 規格に無いスキームの名前 (`bml://` など) なら、そのスキームを返す。扱えないので呼び手が
+ * 規格に無いスキームの名前 (`bml://` など) なら、そのスキームを返す。扱えないので呼ぶ側が
  * 「扱えない」と知らせて失敗にする
  */
 export function unknownScheme(url: string): string | null {

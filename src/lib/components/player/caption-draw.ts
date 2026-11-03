@@ -142,7 +142,7 @@ function flashes(page: CaptionPage | null): boolean {
 }
 
 /**
- * 1枚を描く。canvas の大きさはそのまま使う (面を canvas いっぱいに伸ばす)。
+ * 1 枚を描く。canvas の大きさはそのまま使う (面を canvas いっぱいに伸ばす)。
  *
  * @param now 点滅の位相を決める時刻 (ms)
  */
@@ -170,7 +170,7 @@ function drawRun(
   metrics: Ink,
   dark: boolean,
 ): void {
-  // 区画ごとの字。`joined` なら text 全体で1区画 (か゚ などはフォントが1字に組む)
+  // 区画ごとの字。`joined` なら text 全体で 1 区画 (か゚ などはフォントが 1 字に組む)
   const chars = run.joined === true ? [run.text] : [...run.text];
   const fontPx = run.size * sy;
   const glyphW = run.size * run.scaleX * sx;
@@ -186,7 +186,7 @@ function drawRun(
     const right = (run.x + (i + 1) * run.w) * sx;
     const bottom = (run.y + run.h) * sy;
     /*
-     * **塗る枠だけ画素の境目にそろえる。** 半端な位置のまま塗ると、隣の字との境の1画素が
+     * **塗る枠だけ画素の境目にそろえる。** 半端な位置のまま塗ると、隣の字との境の 1 画素が
      * 両方から半分ずつしか塗られず、半透明の背景に縦の筋が出ていた。
      * 隣どうしは同じ値に丸まるので、隙間も重なりもできない。字の位置は丸めない (字間が不揃いになる)
      */
@@ -273,7 +273,7 @@ export function inkSpan(page: CaptionPage): [number, number] {
 }
 
 /**
- * 1枚の canvas に字幕を出し続ける係。**出すものが変わったら `show` を呼ぶだけ。**
+ * 1 枚の canvas に字幕を出し続ける係。**出すものが変わったら `show` を呼ぶだけ。**
  *
  * - canvas の大きさを画面の画素に合わせ直す (全画面の出入りで描き直す)
  * - 字がまだ届いていなければ、届いてから描き直す
@@ -316,7 +316,7 @@ export class CaptionPainter {
       this.flashTimer = null;
     }
     this.draw();
-    // まだ読んでいない字 (JIS X 0213 で足された漢字の初めての1字など) があれば、届いてから描き直す
+    // まだ読んでいない字 (JIS X 0213 で足された漢字の初めての 1 字など) があれば、届いてから描き直す
     const text = page?.runs
       .filter((run) => run.drcs === undefined)
       .map((run) => run.text)
@@ -367,8 +367,8 @@ export class CaptionPainter {
     const box = fitRect(cssWidth, cssHeight, page.plane[0], page.plane[1]);
     /*
      * 箱が枠いっぱい (観る画面は `place` が枠を映像に合わせる。小窓の中も面と同じ 16:9)
-     * なら、見えている大きさそのもので描いて `fill` で敷く — 面を縦と横で別々に伸ばして
-     * いても1画素ずつ合う。枠が余る (枠と面の縦横比が違う) ときは `contain` で真ん中に置く
+     * なら、見えている大きさそのもので描いて `fill` で敷く。面を縦と横で別々に伸ばして
+     * いても 1 画素ずつ合う。枠が余る (枠と面の縦横比が違う) ときは `contain` で真ん中に置く
      */
     const fills = box.width >= cssWidth - 1 && box.height >= cssHeight - 1;
     const fit = fills ? "fill" : "contain";

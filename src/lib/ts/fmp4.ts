@@ -1,35 +1,35 @@
 /**
- * ffmpeg が吐く fMP4 を、MSE が食える単位に割る。
+ * ffmpeg が出力する fMP4 を、MSE が受け取れる単位に割る。
  *
  * MSE は**最初に init セグメント (`ftyp` + `moov`) を渡さないと**、そのあとの
- * 中身を1バイトも受け取らない。ffmpeg は1本のストリームとして出してくるので、
+ * 中身を 1 バイトも受け取らない。ffmpeg は 1 本のストリームとして出してくるので、
  * こちらで切れ目を見つける。
  *
  *     ftyp moov | moof mdat | moof mdat | ...
  *     ~~~~~~~~~   ~~~~~~~~~
- *     init        媒体 (0.05秒ぶん。`server/live.ts` の `-frag_duration`)
+ *     init        媒体 (0.05 秒ぶん。`server/live.ts` の `-frag_duration`)
  *
  * **途中から入ってきた人のために init は取っておく** ([stream.md](../../../docs/stream.md#websocket-プロトコル))。
- * ライブは誰がいつ繋いでくるか分からないので、最初の1回だけ流して終わりにはできない。
+ * ライブは誰がいつ繋いでくるか分からないので、最初の 1 回だけ流して終わりにはできない。
  *
  * MP4 の箱は `[4バイト: 大きさ][4バイト: 種別][中身]` の繰り返し。
- * 大きさは箱ぜんぶ (頭の8バイトを含む) を数えた値。
+ * 大きさは箱ぜんぶ (ヘッダの 8 バイトを含む) を数えた値。
  */
 
 import { ascii, concatBytes, joinBytes, u32 } from "@danything/arib/bytes";
 import { ADTS_RATES } from "@danything/arib/pes";
 
-/** 箱の頭。大きさと種別で8バイト */
+/** 箱のヘッダ。大きさと種別で 8 バイト */
 const HEADER = 8;
 
 type Segment =
   { kind: "init"; data: Uint8Array } | { kind: "media"; data: Uint8Array };
 
 /**
- * バイト列を食わせると、組み上がったセグメントを返す。
+ * バイト列を渡すと、組み上がったセグメントを返す。
  *
  * **足りないぶんは持ち越す。** ffmpeg の出力はパイプなので、箱の切れ目で
- * 届くとは限らない。半端なところで切って渡すと MSE がその場で投げる。
+ * 届くとは限らない。半端なところで切って渡すと MSE がその場で例外を出す。
  */
 export class Fmp4Splitter {
   private buffer = new Uint8Array(0);
@@ -45,7 +45,7 @@ export class Fmp4Splitter {
     while (this.buffer.length - at >= HEADER) {
       const size = u32(this.buffer, at);
       /*
-       * 大きさ 0 は「ここから最後まで」、1 は「次の8バイトに本当の大きさ」。
+       * 大きさ 0 は「ここから最後まで」、1 は「次の 8 バイトに本当の大きさ」。
        * ffmpeg の fMP4 では出てこないが、来たら読めないので諦める
        * (黙って詰めると、以降ずっとずれたまま流れ続ける)
        */
@@ -56,8 +56,8 @@ export class Fmp4Splitter {
 
       if (type === "moof") {
         /*
-         * **`moof` が来たら、それまでが init。** 頭の `ftyp` `moov` を
-         * 溜めておいて、ここで1つにして出す
+         * **`moof` が来たら、それまでが init。** 先頭の `ftyp` `moov` を
+         * 溜めておいて、ここで 1 つにして出す
          */
         if (!this.started && this.pending.length > 0) {
           out.push({ kind: "init", data: joinBytes(this.pending) });
@@ -68,12 +68,12 @@ export class Fmp4Splitter {
       this.pending.push(box);
 
       /*
-       * **`mdat` で1つ。** `moof` の次に `mdat` が来たら、その組が
-       * 1フラグメント。次の `moof` を待って区切ると**必ず1つぶん遅れる**ので、
+       * **`mdat` で 1 つ。** `moof` の次に `mdat` が来たら、その組が
+       * 1 フラグメント。次の `moof` を待って区切ると**必ず 1 つぶん遅れる**ので、
        * 細かく出させている (`-frag_duration`) 意味が無くなる。
        *
        * 数で区切らないのは、間に `sidx` などが挟まることがあるため。
-       * 「2つ溜まったら出す」にしていると `moof`+`sidx` を1枚として
+       * 「2 つ溜まったら出す」にしていると `moof`+`sidx` を 1 枚として
        * 出してしまい、中身の無いものを MSE に渡すことになる
        */
       if (this.started && type === "mdat") {
@@ -90,22 +90,22 @@ export class Fmp4Splitter {
  * ---------------------------------------------------------------------------
  * 中身を読む (画面の canvas で描く経路。`raw/fmp4.ts`)。
  *
- * MSE に渡すときは割るだけで済んだが、**自分でデコードするときは中身が要る** — moov から
- * 何の映像・音声か (avcC / av1C / esds / dOps) を、moof から1コマずつの時刻と在りかを
+ * MSE に渡すときは割るだけで済んだが、**自分でデコードするときは中身が要る。** moov から
+ * 何の映像・音声か (avcC / av1C / esds / dOps) を、moof から 1 コマずつの時刻と在りかを
  * (tfdt / trun) 読む。読むのは denpa の ffmpeg が出す形式 (`server/live.ts` の
- * `+empty_moov+default_base_moof`) に要るものだけ:
+ * `+empty_moov+default_base_moof`) に要るものだけ。
  *
- * - 中身の在りかは moof の頭から数える (`default-base-is-moof`)。tfhd の
- *   `base-data-offset` (ストリームの頭から数える) は、途中から繋いだ受け側には読めないので扱わない
- * - 1コマの長さ・大きさ・印は trun → tfhd → trex (moov の mvex) の順に探す
+ * - 中身の在りかは moof の先頭から数える (`default-base-is-moof`)。tfhd の
+ *   `base-data-offset` (ストリームの先頭から数える) は、途中から繋いだ受け側には読めないので扱わない
+ * - 1 コマの長さ・大きさ・印は trun → tfhd → trex (moov の mvex) の順に探す
  * ---------------------------------------------------------------------------
  */
 
-/** moov から読んだ1本 */
+/** moov から読んだ 1 本 */
 export interface Fmp4Track {
   id: number;
   kind: "video" | "audio";
-  /** 時刻の刻み (1秒あたり) */
+  /** 時刻の刻み (1 秒あたり) */
   timescale: number;
   /** WebCodecs の書き方の codec (`avc1.640029` / `av01.0.08M.08` / `mp4a.40.2` / `opus`) */
   codec: string;
@@ -128,7 +128,7 @@ export interface Fmp4Track {
   defaults: { duration: number; size: number; flags: number };
 }
 
-/** moof から読んだ1コマ。時刻はそのトラックの刻み (`Fmp4Track.timescale`) */
+/** moof から読んだ 1 コマ。時刻はそのトラックの刻み (`Fmp4Track.timescale`) */
 export interface Fmp4Sample {
   track: number;
   /** デコードする時刻 */
@@ -143,9 +143,9 @@ export interface Fmp4Sample {
 
 interface Box {
   type: string;
-  /** 中身 (頭の8バイトを除く) */
+  /** 中身 (ヘッダの 8 バイトを除く) */
   body: Uint8Array;
-  /** 渡された範囲の頭から見た、箱の頭の位置 */
+  /** 渡された範囲の先頭から見た、箱の先頭の位置 */
   start: number;
 }
 
@@ -264,7 +264,7 @@ function readEntry(
     sampleRate: 0,
   };
   if (entry.type === "avc1" || entry.type === "av01") {
-    // VisualSampleEntry: 中身の頭から 78 バイトが決まった並び (幅は 24、高さは 26)
+    // VisualSampleEntry: 中身の先頭から 78 バイトが決まった並び (幅は 24、高さは 26)
     if (body.length < 78) return null;
     const inner = body.subarray(78);
     const width = v.getUint16(24);
@@ -328,12 +328,12 @@ function readEntry(
   return null;
 }
 
-/** avcC から `avc1.PPCCLL` を起こす — profile・互換の印・level (avcC の 1〜3 バイト目) */
+/** avcC から `avc1.PPCCLL` を起こす。profile・互換の印・level (avcC の 1〜3 バイト目) */
 export function avcCodec(avcC: Uint8Array): string {
   return `avc1.${hex(avcC[1]!)}${hex(avcC[2]!)}${hex(avcC[3]!)}`;
 }
 
-/** AudioSpecificConfig から `mp4a.40.N` を起こす (N は頭の 5 ビットのオブジェクトの種類) */
+/** AudioSpecificConfig から `mp4a.40.N` を起こす (N は先頭の 5 ビットのオブジェクトの種類) */
 export function aacCodec(asc: Uint8Array): string {
   return `mp4a.40.${asc[0]! >> 3}`;
 }
@@ -368,7 +368,7 @@ function audioSpecificConfig(esds: Uint8Array): Uint8Array<ArrayBuffer> | null {
   };
   const es = descriptor();
   if (es?.tag !== 0x03) return null;
-  // ES_ID(2) 印(1)。印の上3ビットで、後ろに付くものが増える
+  // ES_ID(2) 印(1)。印の上 3 ビットで、後ろに付くものが増える
   const flags = esds[at + 2] ?? 0;
   at += 3;
   if (flags & 0x80) at += 2;
@@ -407,7 +407,7 @@ export function readFragment(
   return out;
 }
 
-/** traf 1つぶん。**壊れていたら false** (呼ぶ側は読むのをやめる) */
+/** traf 1 つぶん。**壊れていたら false** (呼ぶ側は読むのをやめる) */
 function readTraf(
   data: Uint8Array,
   origin: number,
@@ -459,11 +459,11 @@ function readTraf(
       first = r.getUint32(p);
       p += 4;
     }
-    // 1コマぶんの並び (長さ・大きさ・印・合成時刻のずれのうち、書いてあるもの)
+    // 1 コマぶんの並び (長さ・大きさ・印・合成時刻のずれのうち、書いてあるもの)
     const each =
       [0x100, 0x200, 0x400, 0x800].filter((bit) => tflags & bit).length * 4;
     if (p + each * count > body.length) return false;
-    /** 1コマぶんの並びから次の4バイトを読む。バージョン 1 の合成時刻のずれは符号あり (B フレームで負になる) */
+    /** 1 コマぶんの並びから次の 4 バイトを読む。バージョン 1 の合成時刻のずれは符号あり (B フレームで負になる) */
     const next = (signed = false): number => {
       const value = signed ? r.getInt32(p) : r.getUint32(p);
       p += 4;
@@ -494,14 +494,14 @@ function readTraf(
 }
 
 /**
- * **MP4 の AAC の1コマに付ける ADTS の頭。** デコーダ (`wasm/decoder.c` の `aac_open`) は
- * 放送の ADTS を食う作りなので、MP4 の1コマ (頭無し) はそのままでは渡せない。
- * 頭の中身は AudioSpecificConfig (esds) から起こす: 種類 (LC なら 2)・標本化周波数の番号・チャンネル数。
+ * **MP4 の AAC の 1 コマに付ける ADTS のヘッダ。** デコーダ (`wasm/decoder.c` の `aac_open`) は
+ * 放送の ADTS を受け取る作りなので、MP4 の 1 コマ (ヘッダ無し) はそのままでは渡せない。
+ * ヘッダの中身は AudioSpecificConfig (esds) から起こす: 種類 (LC なら 2)・標本化周波数の番号・チャンネル数。
  *
- * 頭は 7 バイト (CRC 無し)。ADTS に書ける種類は 1〜4 (Main / LC / SSR / LTP) だけで、
+ * ヘッダは 7 バイト (CRC 無し)。ADTS に書ける種類は 1〜4 (Main / LC / SSR / LTP) だけで、
  * それ以外 (HE-AAC など) と、標本化周波数を値で書いたもの (番号 15) は null
  *
- * @param payload 1コマの大きさ (頭を除く)
+ * @param payload 1 コマの大きさ (ヘッダを除く)
  */
 export function adtsHeader(
   config: Uint8Array,
@@ -529,7 +529,7 @@ export function adtsHeader(
 /**
  * dOps (MP4 の Opus の設定) を、FFmpeg の Opus デコーダが受け取る OpusHead (Ogg の形式) に
  * 書き換える。並びは同じで、**数の並べ方だけが違う** (dOps は大きい桁が先、OpusHead は
- * 小さい桁が先)。頭に `OpusHead`、バージョンは 1。並べ方が読めなければ null
+ * 小さい桁が先)。先頭に `OpusHead`、バージョンは 1。並べ方が読めなければ null
  */
 export function opusHead(dOps: Uint8Array): Uint8Array | null {
   if (dOps.length < 11) return null;
@@ -541,7 +541,7 @@ export function opusHead(dOps: Uint8Array): Uint8Array | null {
   out.set([0x4f, 0x70, 0x75, 0x73, 0x48, 0x65, 0x61, 0x64]); // OpusHead
   out[8] = 1;
   out[9] = dOps[1]!; // 出すチャンネル数
-  o.setUint16(10, v.getUint16(2), true); // 頭で捨てる標本数
+  o.setUint16(10, v.getUint16(2), true); // 先頭で捨てる標本数
   o.setUint32(12, v.getUint32(4), true); // 元の標本化周波数
   o.setInt16(16, v.getInt16(8), true); // 音量の補正
   out[18] = family;

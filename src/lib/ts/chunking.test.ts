@@ -32,10 +32,10 @@ import { DataBroadcastCapture } from "./data-capture";
  * **塊の切れ目と入れ物の使い回しで、読めるものが変わらないこと。**
  *
  * パケットは届いた塊の上の窓として配っている (写さない。`psi.ts` の `PacketStream`)。
- * 録画のデータ放送は1つの入れ物に読み込み直しながら食わせる (`server/recorded-bml.ts`)
+ * 録画のデータ放送は 1 つの入れ物に読み込み直しながら渡す (`server/recorded-bml.ts`)
  * ので、窓を持ち続けるパーサがいると、次の読み込みで中身が化ける。
- * 局を2つ入れた TS を、丸ごと1回で食わせたときと、半端な大きさに切って
- * 使い回しの入れ物から食わせたときとで、出てくるものを突き合わせる
+ * 局を 2 つ入れた TS を、丸ごと 1 回で渡したときと、半端な大きさに切って
+ * 使い回しの入れ物から渡したときとで、出てくるものを突き合わせる
  */
 
 const ONID = 0x7fe8;
@@ -147,7 +147,7 @@ function broadcast(): Uint8Array {
   );
 
   const parts: Uint8Array[] = [];
-  // 1周だけ。繰り返すと、化けて落ちたセクションを次の周が埋めてしまい、差が見えない
+  // 1 周だけ。繰り返すと、化けて落ちたセクションを次の周が埋めてしまい、差が見えない
   parts.push(
     section(0x0000, pat),
     ...PMT.map((pid, i) => section(pid, pmts[i]!)),
@@ -181,8 +181,8 @@ function broadcast(): Uint8Array {
 const ts = broadcast();
 
 /**
- * 半端な大きさに切り、**1つの入れ物に読み込み直しながら**渡す。
- * 渡し終えたら入れ物を潰す — 窓を持ち続けているパーサがあれば中身が化ける
+ * 半端な大きさに切り、**1 つの入れ物に読み込み直しながら**渡す。
+ * 渡し終えたら入れ物を潰す。窓を持ち続けているパーサがあれば中身が化ける
  */
 function reused(
   data: Uint8Array,
@@ -255,7 +255,7 @@ describe("塊の切れ目と入れ物の使い回し", () => {
   });
 });
 
-describe("ライブの切り分けは1回 (`feedPacket`)", () => {
+describe("ライブの切り分けは 1 回 (`feedPacket`)", () => {
   const only = new ServiceFilter(SERVICES[1]!).filter(ts);
 
   test("データ放送・時計・Hybridcast は、それぞれが切ったときと同じものを出す", () => {

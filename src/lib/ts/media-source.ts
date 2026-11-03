@@ -2,7 +2,7 @@
  * **MSE の実装を選ぶ。** 無ければ `ManagedMediaSource` (iPhone の Safari、iOS 17.1+)。
  *
  * iPhone の Safari には `MediaSource` が無く、代わりに `ManagedMediaSource` だけがある。
- * 使い方はほぼ同じ (`MediaSource` を継いでいる) だが、違いが3つある:
+ * 使い方はほぼ同じ (`MediaSource` を継いでいる) だが、違いが 3 つある。
  *
  * - **`disableRemotePlayback = true` にしないと開かない** (`sourceopen` が来ない)。
  *   AirPlay へ渡せる別の経路 (HLS の `<source>`) を添えない限り要る

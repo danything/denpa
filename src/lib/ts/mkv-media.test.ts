@@ -32,7 +32,7 @@ const h264 = mkvFromClip(
 );
 
 describe("readMkvHead", () => {
-  test("頭からトラックの形式・尺・Cues の在りか・最初の Cluster を読む", () => {
+  test("先頭からトラックの形式・尺・Cues の在りか・最初の Cluster を読む", () => {
     const head = readMkvHead(av1);
     expect(head).not.toBeNull();
     if (head === null) return;
@@ -71,7 +71,7 @@ describe("Cues", () => {
     expect(cues[0]!.time).toBe(0);
     expect(cueBefore(cues, 4.5)!.time).toBeLessThanOrEqual(4.5);
     expect(cueBefore(cues, 4.5)!.time).toBeGreaterThan(3);
-    // 引いた位置は Cluster の頭
+    // 引いた位置は Cluster の先頭
     const cluster = av1.subarray(head.segment + cueBefore(cues, 4.5)!.position);
     expect(Array.from(cluster.subarray(0, 4))).toEqual([
       0x1f, 0x43, 0xb6, 0x75,
@@ -101,7 +101,7 @@ describe("MkvDemuxer", () => {
     expect(blocks.filter((b) => b.track === 2).length).toBeGreaterThan(100);
   });
 
-  test("頭に飛び先の Cluster からを繋いでも読める (飛ぶとき)", () => {
+  test("先頭に飛び先の Cluster からを繋いでも読める (飛ぶとき)", () => {
     const head = readMkvHead(av1)!;
     const at = head.cues!;
     const cues = readCues(

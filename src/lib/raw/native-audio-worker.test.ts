@@ -7,7 +7,7 @@ import type { AudioInput, AudioOutput } from "./native-audio-protocol";
 import * as wasmAudio from "./wasm-audio";
 
 /**
- * **ライブの音だけの worker** (`native-audio-worker.ts`)。E2E は Chromium で流すのでこの経路を通らない —
+ * **ライブの音だけの worker** (`native-audio-worker.ts`)。E2E は Chromium で流すのでこの経路を通らない。
  * ここで worker をそのまま読み込み、デコーダだけ偽物 (`tests/fake/wasm-decoder.ts`) に替えて流す。
  * 流すのは作り置きの fMP4 (本物の ffmpeg が書いた H.264 + AAC)。init と断片は同じファイルを渡す
  */
@@ -64,9 +64,9 @@ test("読み終える前に届いたものは溜め、読み終えたら開い�
   expect(pcm.map((m) => m.type === "pcm" && m.chunk.pts)).toEqual(
     audioSamples.map((s) => s.pts / audioTrack.timescale),
   );
-  // 受け取ったと2回返す (init と断片)
+  // 受け取ったと 2 回返す (init と断片)
   expect(posted.filter((m) => m.type === "ack")).toHaveLength(2);
-  // AAC は ADTS の頭を付けて渡している
+  // AAC は ADTS のヘッダを付けて渡している
   expect([decoder.last[0], decoder.last[1]! & 0xf6]).toEqual([0xff, 0xf0]);
 });
 
@@ -83,7 +83,7 @@ test("前の局 (古い epoch) の断片は捨てる", () => {
 
 test("壊れたコマは飛ばし (放送の取りこぼし)、続けて 20 より多く壊れたら諦める", () => {
   expect(audioSamples.length).toBeGreaterThan(21);
-  // 頭の 20 コマだけ壊れている → 飛ばして続ける
+  // 先頭の 20 コマだけ壊れている → 飛ばして続ける
   posted.length = 0;
   let count = 0;
   decoder.samples = () => (++count <= 20 ? -1 : 1024);
@@ -92,7 +92,7 @@ test("壊れたコマは飛ばし (放送の取りこぼし)、続けて 20 よ�
     audioSamples.length - 20,
   );
   expect(posted.some((m) => m.type === "error")).toBe(false);
-  // ずっと壊れている → 1回だけ諦めを返し、あとは何も返さない
+  // ずっと壊れている → 1 回だけ諦めを返し、あとは何も返さない
   posted.length = 0;
   decoder.samples = () => -1;
   send(segment(false, 2));
