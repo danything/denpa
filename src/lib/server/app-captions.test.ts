@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   captionMkv,
@@ -25,6 +25,8 @@ const dir = mkdtempSync(join(tmpdir(), "denpa-appcap-"));
 
 const { config } = await import("./config");
 config.dbPath = join(dir, "denpa.db");
+// 置き場 (組んだエージェントの証明書など) も同じ一時ディレクトリに。既定の /data は CI では書けない
+config.dataDir = dirname(config.dbPath);
 /* **ほかの試験と同じプロセスで走る。** ffmpeg の差し替えは終わったら戻す */
 const realFfmpeg = config.ffmpeg;
 const realAgent = config.agentUrl;

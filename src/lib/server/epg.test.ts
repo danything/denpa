@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { count, eq, sql } from "drizzle-orm";
 
@@ -18,6 +18,8 @@ import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
  */
 const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-epg-")), "denpa.db");
+// 置き場 (組んだエージェントの証明書など) も同じ一時ディレクトリに。既定の /data は CI では書けない
+config.dataDir = dirname(config.dbPath);
 
 /** 何を取りに来たか。番組表を取得していないことまで見る */
 const asked: string[] = [];
