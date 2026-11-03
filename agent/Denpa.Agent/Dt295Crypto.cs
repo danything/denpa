@@ -121,8 +121,7 @@ public enum Dt295PacketResult
 }
 
 /// <summary>
-/// 機器が TS にかけ直した AES を外す (10.3)。**TS の IV はここで持たず、呼ぶ側が渡す。**
-/// IV は呼ぶ側が渡す (固定値。Dt295Receive.TsIv)。
+/// 機器が TS にかけ直した AES を外す (10.3)。**TS の IV はここで持たず、呼ぶ側が渡す** (固定値は <see cref="Dt295Receive.TsIv"/>)。
 /// </summary>
 public interface IDt295PacketDecryptor
 {
