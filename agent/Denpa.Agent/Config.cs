@@ -192,14 +192,6 @@ public sealed class Config(string tunersFile, string channelsFile)
     }
 
     /// <summary>
-    /// 機材を決める。**書いてあればそれ、無ければ自分で見つける。**
-    ///
-    /// <para>
-    /// 自動で分かるのは「刺さっているデバイスと、それが受けられる方式」だけ。
-    /// LNB を足したい・1 台だけ止めたい、は人にしか決められないので、そのときは画面から書く。
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// 挿した機材のうち、定義に足すもの。**前に探したときに無かった (いま挿された) 機材だけ**を足す。
     /// 挿したままの機材を定義から消したら、挿し直すまで戻さない (消したのに勝手に戻ると、消せない)。
     /// 名前は定義の中で重ならないようにする (チューナーを名前で見分ける。TunerPool.Replace)
@@ -219,6 +211,14 @@ public sealed class Config(string tunersFile, string channelsFile)
         return added;
     }
 
+    /// <summary>
+    /// 機材を決める。**書いてあればそれ、無ければ自分で見つける。**
+    ///
+    /// <para>
+    /// 自動で分かるのは「刺さっているデバイスと、それが受けられる方式」だけ。
+    /// LNB を足したい・1 台だけ止めたい、は人にしか決められないので、そのときは画面から書く。
+    /// </para>
+    /// </summary>
     public (List<TunerSpec> Tuners, bool Detected) ResolveTuners()
     {
         var written = LoadTuners();
