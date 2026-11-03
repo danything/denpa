@@ -63,6 +63,14 @@ describe("自己署名の証明書", () => {
       new Date().getFullYear() + 90,
     );
   });
+
+  test("何度作ってもシリアル番号が DER の整数として正しい (先頭が 0 にならない)", () => {
+    // 乱数の先頭のバイトが 0 だと 128 回に 1 回ほど壊れた証明書になっていた。多めに作って確かめる
+    for (let i = 0; i < 400; i++) {
+      const cert = new X509Certificate(createIdentity("denpa").cert);
+      expect(cert.serialNumber.slice(0, 2)).not.toBe("00");
+    }
+  });
 });
 
 describe("pairProof", () => {
