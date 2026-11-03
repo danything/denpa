@@ -52,12 +52,16 @@
   let pane = $state<HTMLElement | null>(null);
 
   /**
-   * **開くときに上の並びへ戻す** (途中の並びから始まらないように)。閉じるときに戻すと、引っ込む動き
-   * (app.css の `.menu`。150ms) の間に中身だけ上の並びへ替わり、選択肢の並びに合わせて置いた位置のまま
-   * 背の違う枠が一瞬見える。閉じる間は閉じたときの姿のまま引っ込ませる。`pre` なので開いて最初に描く前に替わる
+   * **閉じ終えたら上の並びに戻しておく** (`onclosed`)。次に開いたとき途中から始まらないように。閉じた瞬間に戻すと、
+   * 引っ込む動き (app.css の `.menu`) の間に中身だけ上の並びへ替わり、選択肢の並びに合わせて置いた位置のまま
+   * 背の違う枠が一瞬見える。引っ込む途中で開き直したときは閉じ終えないので、開くときにも戻す
+   * (`pre` なので開いて最初に描く前に替わる)
    */
+  function reset(): void {
+    view = null;
+  }
   $effect.pre(() => {
-    if (open) view = null;
+    if (open) reset();
   });
   /**
    * **開いている選択肢の並びが無くなったら、上の並びへ戻る** (音声が2本から1本に減ったときなど)。
@@ -179,6 +183,7 @@
   side="top"
   align="end"
   boundary={stage}
+  onclosed={reset}
   class="overlay-menu settings-menu"
   testid="{prefix}-settings-menu"
 >

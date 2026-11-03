@@ -80,6 +80,7 @@
     lazy = false,
     class: className = "",
     testid,
+    onclosed,
   }: {
     open?: boolean;
     /** 引き金。渡される属性を `<button>` に広げる */
@@ -102,6 +103,11 @@
     lazy?: boolean;
     class?: string;
     testid?: string | undefined;
+    /**
+     * 閉じ終えたとき (引っ込む動きが済んで、枠が消えてから)。中身を初めの姿に戻すのはここで —
+     * 閉じた瞬間に替えると、引っ込む間に替わった中身が一瞬見える (⚙ の選択肢の並びから閉じたとき)
+     */
+    onclosed?: (() => void) | undefined;
   } = $props();
 
   const uid = $props.id();
@@ -185,6 +191,14 @@
           const target = byPointer ? element : fromEnd ? list.at(-1) : list[0];
           (target ?? element).focus({ preventScroll: true });
         }
+      } else {
+        // 引っ込む動き (app.css の `.menu`) が済むのを待つ。`getAnimations` は動きを始めさせてから返す。
+        // 動きの無いブラウザ・動きを止めた端末ではすぐ
+        void Promise.allSettled(
+          element.getAnimations().map((animation) => animation.finished),
+        ).then(() => {
+          if (!element.matches(":popover-open")) onclosed?.();
+        });
       }
       byPointer = false;
       fromEnd = false;
