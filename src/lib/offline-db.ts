@@ -88,7 +88,7 @@ export interface OfflineVideo {
   video?: Blob;
   /**
    * 動画を塊で持っているときの塊の数 (`parts` の置き場)。**ページで受け取ったもの**
-   * (Background Fetch の無い iPhone の Safari) はこちら — 全部をメモリに抱えると落とされる
+   * (Background Fetch の無い iPhone の Safari) はこちら。全部をメモリに抱えると落とされる
    * (`stream-parts.ts`)。読むときは `videos.get` / `all` が `video` につないで出す
    */
   parts?: number;
@@ -224,7 +224,13 @@ function openDb(): Promise<IDBDatabase> {
       if (!req.result.objectStoreNames.contains("parts"))
         req.result.createObjectStore("parts", { keyPath: ["id", "index"] });
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // 別のタブや SW がバージョンを上げようとしたら、この接続を閉じて譲る
+      // (閉じないと、上げる側の open が待たされる)
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
 }
@@ -276,7 +282,7 @@ export async function clearParts(id: number): Promise<void> {
 }
 
 /**
- * 塊で持っている動画を1本の `video` につなぐ。**中身は写さない** — 置き場から出した
+ * 塊で持っている動画を1本の `video` につなぐ。**中身は写さない。** 置き場から出した
  * Blob はファイルを指しているだけなので、つないでもメモリには載らない。
  * 塊が欠けていたら (書いている途中で落とされた) `video` 無しで返す
  */

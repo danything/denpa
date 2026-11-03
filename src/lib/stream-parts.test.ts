@@ -133,6 +133,65 @@ describe("streamParts", () => {
     expect(told.at(-1)).toBe(1);
   });
 
+  test("受け取りが失敗したら、書きかけの塊が終わってから投げる", async () => {
+    let pulls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls === 1) controller.enqueue(new Uint8Array(4));
+        else controller.error(new Error("aborted"));
+      },
+    });
+    let written = false;
+    await expect(
+      streamParts(
+        body,
+        4,
+        async () => {
+          await new Promise((r) => setTimeout(r, 20));
+          written = true;
+        },
+        null,
+        () => {},
+      ),
+    ).rejects.toThrow("aborted");
+    // 投げた時点で書き終わっている。後始末で塊を消したあとに書かれて残ることがない
+    expect(written).toBe(true);
+  });
+
+  test("止めたあとは onPart を呼ばない", async () => {
+    const control = new AbortController();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        control.signal.addEventListener("abort", () =>
+          controller.error(control.signal.reason),
+        );
+      },
+      async pull(controller) {
+        await new Promise((r) => setTimeout(r, 5));
+        // 止められたあとの pull は何も渡さない
+        if (!control.signal.aborted) controller.enqueue(new Uint8Array(4));
+      },
+    });
+    const written: number[] = [];
+    const run = streamParts(
+      body,
+      4,
+      async (_part, index) => {
+        if (control.signal.aborted) throw control.signal.reason;
+        written.push(index);
+      },
+      null,
+      () => {},
+    );
+    await new Promise((r) => setTimeout(r, 30));
+    control.abort(new Error("stop"));
+    await expect(run).rejects.toThrow("stop");
+    const count = written.length;
+    await new Promise((r) => setTimeout(r, 30));
+    expect(written.length).toBe(count);
+  });
+
   test("全体が分からなければ割合を知らせない", async () => {
     const told: number[] = [];
     await streamParts(

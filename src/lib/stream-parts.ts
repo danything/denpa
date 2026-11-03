@@ -1,7 +1,7 @@
 /**
- * 届いた中身を、決まった大きさの塊に分けて渡す。**全部をメモリに抱えない**ための口。
+ * 届いた中身を、決まった大きさの塊に分けて渡す。**全部をメモリに抱えない**ための関数。
  *
- * 端末に保存するとき (iPhone の Safari のようにページで受け取る道。`offline.svelte.ts`)、
+ * 端末に保存するとき (iPhone の Safari のようにページで受け取る方式。`offline.svelte.ts`)、
  * 900MB の録画を全部メモリに溜めてから1つの Blob にしていた頃は、Safari のタブが
  * だんだん重くなり、最後は落とされて読み込み直しになっていた。塊ごとに置き場
  * (IndexedDB) へ書いて手放せば、抱えるのは数塊ぶんだけになる。
@@ -45,7 +45,7 @@ export async function streamParts(
     parts += 1;
     await writing;
     writing = onPart(part, index);
-    // 失敗は次の await で拾う。それまでの間に「拾われていない」と騒がせない
+    // 失敗は次の await で受け取る。それまでの間、未処理の reject として報告されないようにする
     writing.catch(() => {});
   };
 
