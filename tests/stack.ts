@@ -3,6 +3,8 @@ import { mkdirSync, rmSync } from "node:fs";
 
 import { type BrowserContext, test as base } from "@playwright/test";
 
+import { fakeAgentUrl } from "../src/lib/server/fake-agent";
+
 /**
  * ワーカーごとに1式ずつ、denpa と偽チューナーエージェント / 偽通知先を立てる。
  *
@@ -36,7 +38,10 @@ export interface Stack {
   /** このワーカーの作業領域 */
   root: string;
   appUrl: string;
+  /** 偽エージェントの平文のポート。テストが `/__control/...` を叩く */
   agentUrl: string;
+  /** denpa が繋ぐ偽エージェントの宛先 (TLS。`TUNER_AGENT_URL`) */
+  tunerAgentUrl: string;
   webhookUrl: string;
   rawDir: string;
   encodedDir: string;
@@ -180,6 +185,7 @@ export async function boot(
     root,
     appUrl: `http://127.0.0.1:${appPort}`,
     agentUrl: `http://127.0.0.1:${agentPort}`,
+    tunerAgentUrl: fakeAgentUrl(agentPort + 1),
     webhookUrl: `http://127.0.0.1:${webhookPort}`,
     epgstationUrl: `http://127.0.0.1:${epgstationPort}`,
     edcbTarget: `127.0.0.1:${edcbPort}`,
@@ -257,7 +263,7 @@ export async function boot(
       ENCODED_DIR: stack.encodedDir,
       FFMPEG: "./tests/fake/ffmpeg.sh",
       // 選局もスクランブル解除もスキャンも、窓口はここ1つ
-      TUNER_AGENT_URL: stack.agentUrl,
+      TUNER_AGENT_URL: stack.tunerAgentUrl,
       /*
        * ディスクの残す量 (既定 20GB) を 0 にする。CI の作業機は空きが 10GB を切ることがあり、
        * EPGStation の引き継ぎが「空きが足りません」で録画の前に止まる (13-migrate)。

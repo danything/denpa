@@ -174,8 +174,8 @@ INF ではどれも DT295 と設定が違い (DT295 W・DT420・DT410 は DT295 
 
 Amazon で見る (広告): [Gemalto PC Twin](https://www.amazon.co.jp/dp/B001NEIRH0?tag=doa08-22)、[IDBridge CT30](https://www.amazon.co.jp/dp/B003XF2JJY?tag=doa08-22) (Mac で読めないときは [install-mac.md](install-mac.md#カードが読めないとき))
 
-動いているエージェントがカードと話せているかは `/denpa/card` で分かります (INT を
-1 回通す)。止めた状態なら `denpa-agent --card` でも確かめられます (リーダーを並べ、
+動いているエージェントがカードと話せているかは、設定の「受信」の「チューナー」にある「カードリーダー」の表で分かります
+(denpa がエージェントの `/denpa/card` を呼び、INT を 1 回通す)。止めた状態なら `denpa-agent --card` でも確かめられます (リーダーを並べ、
 ATR とカードの番号を出す。動いているエージェントがリーダーを使っている間は断られます)。
 チューナーを使わずに B25 だけ確かめるなら `denpa-agent --decode-file <in.ts> <out.ts>` (`/denpa/decode`
 と同じことをする。掛かったまま録れてしまったものを救うのにも使える)。
@@ -206,8 +206,8 @@ ATR とカードの番号を出す。動いているエージェントがリー�
 
 ### 直らないとき
 
-まず `/denpa/card` で、見えているリーダーと、カードに INT が通るかを見ます
-(設定の「受信」の「チューナー」にある「カードリーダー」の表と同じもの)。使っているリーダーは鍵の出どころに
+まず設定の「受信」の「チューナー」にある「カードリーダー」の表で、見えているリーダーと、カードに INT が通るかを見ます
+(中身はエージェントの `/denpa/card`)。使っているリーダーは鍵の出どころに
 INT を通させ、他のリーダーは開いて覗いて閉じます (USB のリーダーは使うと他から
 開けないので、使っているリーダーは開き直しません)。
 
@@ -240,10 +240,8 @@ INT を通させ、他のリーダーは開いて覗いて閉じます (USB の�
 `remote` (配り役の URL)・`ids`・`tuners` が付き、`readers` は空です。
 鍵を配る範囲と、断られたときの文は [鍵を配るのは LAN の中だけ](agent.md#鍵を配るのは-lan-の中だけ) にあります。
 
-```sh
-# ホストから呼ぶ (イメージには curl もシェルも無い)。compose は 25252 をホストのループバックにだけ出してある (同じ機械からだけ届く)。Kubernetes は kubectl -n denpa port-forward deploy/tuner-agent 25252 を挟む
-curl -s localhost:25252/denpa/card
-```
+エージェントは組んだ denpa (クライアント証明書) にしか答えないので、curl などで `/denpa/card` を直に呼ぶことはできません
+([agent.md](agent.md))。手元で確かめるならエージェントを止めて `denpa-agent --card` を使います。
 
 - **`readers` が空** — `/dev/bus/usb` がコンテナに見えていない
 - **`card: false` で `error` が無い** — そのリーダーにカードが挿さっていない

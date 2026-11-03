@@ -34,6 +34,8 @@ services:
       # 前段 (genkan) と同じネットワークを信頼するので起動時に警告が出るが、開発ではそのままでよい
       # (開発のサーバは server.js を通らず、TRUSTED_PROXIES を読まない)
       TRUSTED_NETWORKS: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      # 偽エージェントの TLS のポートへ、偽の合言葉で組む (src/lib/server/fake-agent.ts)
+      TUNER_AGENT_URL: https://tuner-agent:25253#pair=fake-agent-pair
     volumes:
       - .:/app
       - app-node-modules:/app/node_modules
@@ -56,6 +58,7 @@ services:
     command: bun tests/fake/agent.ts
     environment:
       TZ: Asia/Tokyo
+      # 25252 は平文 (テストと覗く用)、25253 が denpa の繋ぐ TLS
       FAKE_AGENT_PORT: "25252"
       # 開発中に録画完了まで見届けられるよう、番組を多めに出しておく
       FAKE_SLOTS: "120"

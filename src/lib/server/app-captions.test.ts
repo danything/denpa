@@ -12,6 +12,8 @@ import {
 
 import { CHANNEL } from "#lib/live.js";
 
+import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+
 /**
  * アプリ向けの字幕 API (`liveCaptions` / `recordingCaptions`)。
  *
@@ -32,9 +34,11 @@ const realAgent = config.agentUrl;
  */
 const agent = Bun.serve({
   port: 0,
+  tls: fakeAgentTls(),
   fetch: () => new Response(new ReadableStream({ start() {} })),
 });
-config.agentUrl = `http://127.0.0.1:${agent.port}`;
+config.agentUrl = fakeAgentUrl(agent.port!);
+trustFakeAgent();
 afterAll(() => {
   config.ffmpeg = realFfmpeg;
   config.agentUrl = realAgent;

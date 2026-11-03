@@ -2,6 +2,7 @@ import { arch, release, type } from "node:os";
 
 import { type AgentAbout, guessLevel, type LogLine } from "../issue-report";
 import { type Known, MASK, redact } from "../redact";
+import { agentFetch, agentHostname, agentSecrets } from "./agent-client";
 import { config } from "./config";
 import { orm } from "./db";
 import { serverLogs } from "./log-buffer";
@@ -45,7 +46,7 @@ function readAgentLogs(raw: unknown): LogLine[] {
 
 export async function agentLogs(known: Known): Promise<AgentLogs> {
   try {
-    const res = await fetch(`${config.agentUrl}/denpa/logs`, {
+    const res = await agentFetch("/denpa/logs", {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
@@ -107,7 +108,7 @@ function readAgentAbout(raw: unknown): AgentAbout {
 /** エージェントのバージョン・OS・arch と、macOS なら CCID ドライバ (`GET /denpa/about`) */
 export async function agentAbout(known: Known): Promise<AgentAboutResult> {
   try {
-    const res = await fetch(`${config.agentUrl}/denpa/about`, {
+    const res = await agentFetch("/denpa/about", {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
@@ -142,7 +143,7 @@ export function knownValues(requestHost: string): {
   secrets: string[];
   hosts: string[];
 } {
-  const secrets = [config.oidcClientSecret];
+  const secrets = [config.oidcClientSecret, ...agentSecrets()];
   try {
     for (const row of orm().select({ url: webhooks.url }).from(webhooks).all())
       secrets.push(row.url);
@@ -150,11 +151,8 @@ export function knownValues(requestHost: string): {
     // DB が読めなくても、形で伏せるぶんは効く
   }
   const hosts = [requestHost];
-  try {
-    hosts.push(new URL(config.agentUrl).hostname);
-  } catch {
-    // 宛先が URL の形でなければ使わない
-  }
+  const agentHost = agentHostname();
+  if (agentHost !== null) hosts.push(agentHost);
   for (const pair of config.pwaNames.split(",")) {
     const host = pair.split("=")[0]?.trim();
     if (host) hosts.push(host);

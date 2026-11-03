@@ -13,6 +13,7 @@ import {
   string,
   tolerate,
 } from "../shape";
+import { agentFetch } from "./agent-client";
 import { config } from "./config";
 
 /**
@@ -199,7 +200,7 @@ const DECODED = object({ ok: optional(boolean), error: optional(string) });
  */
 export async function cardStatus(): Promise<CardStatus> {
   try {
-    const res = await fetch(`${config.agentUrl}/denpa/card`, {
+    const res = await agentFetch("/denpa/card", {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
@@ -245,7 +246,7 @@ export async function descramble(
 
   try {
     // 復号は数十分かかることがある。中止を押されたらここで切る
-    const res = await fetch(`${config.agentUrl}/denpa/decode`, {
+    const res = await agentFetch("/denpa/decode", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input: from, output: to }),

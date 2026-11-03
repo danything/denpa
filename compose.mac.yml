@@ -24,7 +24,8 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       TZ: Asia/Tokyo
-      TUNER_AGENT_URL: http://host.docker.internal:25252
+      # 合言葉 (#pair=) は install.sh が同じ場所の .env に作り、エージェントの置き場 (config/tls/pair-token) にも同じものを書く (docs/agent.md)
+      TUNER_AGENT_URL: "https://host.docker.internal:25252#pair=${AGENT_PAIR_TOKEN:?同じ場所の .env に AGENT_PAIR_TOKEN (合言葉) がありません。install.sh を流し直してください}"
       ENCODE_CONCURRENCY: "2"
       # **誰を通すか (docs/auth.md)。** compose.prod.yml と同じ家の中のネットワーク。
       # Mac のブラウザから localhost で入ったときの送信元は Docker の作りで変わる (Docker Desktop なら 192.168.65.x で、これで通る)。

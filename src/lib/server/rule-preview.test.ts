@@ -16,7 +16,7 @@ config.dbPath = join(
 );
 // エージェントには繋がない (チューナーの台数は空 = 競合は出さない)
 const realAgent = config.agentUrl;
-config.agentUrl = "http://127.0.0.1:9";
+config.agentUrl = "https://127.0.0.1:9";
 
 const { now, orm } = await import("./db");
 const { clockOf, jstOf } = await import("../rule-time");
