@@ -142,6 +142,17 @@ public class Dt295Tests
         await Assert.That(Dt295Bridge.I2cValue(0x20, 64)).IsEqualTo((ushort)0x2040);
     }
 
+    [Test]
+    public async Task I2C_は_0x90074_の読み直しを省く()
+    {
+        var usb = new FakeDt295Usb();
+        usb.I2cDevice = (_, _, read) => new byte[read];
+        var bridge = new Dt295Bridge(usb, usb.Time);
+        bridge.I2c(0x22, [0xFE, 0xC0, 0x09, 0x58], []);
+        // 前の結果の確認 1 回、完了の待ち 1 回、完了コード 1 回、結果 (66 バイトは 2 回に分かれる) 2 回
+        await Assert.That(usb.ControlReads).IsEqualTo(5);
+    }
+
     // ---------------------------------------------------------------------
     // セキュアコマンド (3.11)
     // ---------------------------------------------------------------------
