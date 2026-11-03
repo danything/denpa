@@ -136,7 +136,7 @@ test.describe("追っかけを MPEG-2 のまま観る", () => {
     await play.click();
     await expect(play).toHaveAttribute("aria-label", "一時停止");
     await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan(paused + 10);
-    // 手元が 10 秒を切ったら送り直させる (`holdFeed`)
+    // 受信バッファが 10 秒を切ったら送り直させる (`holdFeed`)
     await expect
       .poll(async () => (await commands(page, "hold")).at(-1), {
         timeout: 30_000,
