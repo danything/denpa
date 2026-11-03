@@ -452,6 +452,9 @@ async function importOne(
             start_at: recorded.startAt,
             end_at: recorded.endAt,
             finished_at: at,
+            // EPGStation は観たかどうかを持たない。denpa の「未視聴」は denpa で録ってまだ観ていないものだけにする —
+            // 移した何年分もが未視聴に並ぶと、開いたときにいちばん古いものへ送られる (#1930)
+            watched_at: at,
             created_at: at,
             updated_at: at,
           })
@@ -708,7 +711,8 @@ export function convertRule(
   if (list(search["searchPeriods"]).length > 0)
     return { skip: "検索期間のあるルールは取り込めません" };
   const times = parseTimes(search["times"]);
-  if (times === null) return { skip: "時間帯が2つ以上あるので取り込めません" };
+  if (times === null)
+    return { skip: "時間帯が 2 つ以上あるので取り込めません" };
 
   const types = (["GR", "BS", "CS", "SKY"] as const).filter((type) =>
     flag(search[type]),
@@ -726,7 +730,7 @@ export function convertRule(
   const channels = channelIds.flatMap((id) => serviceOf(id) ?? []);
   // 局を全部外すと全局に当たってしまう
   if (channelIds.length > 0 && channels.length === 0)
-    return { skip: "局が1つも denpa に無いので取り込めません" };
+    return { skip: "局が 1 つも denpa に無いので取り込めません" };
   if (channels.length < channelIds.length)
     notes.push(
       `denpa に無い局を ${channelIds.length - channels.length} 件外しました`,
@@ -930,7 +934,7 @@ function needsByFilesystem(pending: { raw: boolean; bytes: number }[]): Need[] {
 
 /**
  * **空きを先に確かめる。** まだ入っていないファイルの合計 (書きかけのぶんを引く) と、置き場の空きを比べる。
- * ディスクの見張り (`disk.ts`) の残す量 (`DISK_LOW_THRESHOLD`) も足す — 取り込みで埋めて録画が書けなく
+ * ディスクの空きの定期チェック (`disk.ts`) が残す量 (`DISK_LOW_THRESHOLD`) も足す — 取り込みで埋めて録画が書けなく
  * なるのを防ぐ。足りなければ取り込みでは投げ (録画には入らない。ルール・予約は入ったまま)、下見では記録に残す
  */
 function checkSpace(

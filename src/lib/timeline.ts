@@ -29,6 +29,15 @@
  * 線から離れても、いまどちらの側を読んでいるかを見せる。
  * 録画中の行は「録画」の側の末尾 (線のすぐ上) に、番組でまとめずにそのまま並べる —
  * 閉じた番組の中に入ると、いま録っていることが見えなくなるため
+ *
+ * **新しい順で表示** (`LineOptions.reversed`。issue #1930) は、この並びを上下に返す。上から予約 (遠い順)、
+ * 「いま」の線、録画中 (新しく始まった順)、録れたもの (新しい順)。逆にするのは並べる所 (`sections`・`timelineLines`) だけで、
+ * 包み (`blocks`) と画面の部品は向きを知らない。見出しは逆のときもその日の頭 (いちばん新しい行の上) に立つ
+ * (今日と「録画」の見出しの位置は `timelineLines`)。まとめて表示では番組どうしも新しい順にし
+ * (予約は次の回が遠い番組が上)、番組の中の回は放送順のまま (開いた番組を上から読めば話が進む)。
+ *
+ * 線から遠いほうを後から描き足すのはどちらの向きも同じで、線より上の側 (ふだんは録れたもの、逆のときは予約) は
+ * `pageStart`、下の側は `pageEnd` で描く範囲を決める
  */
 
 import {
@@ -79,7 +88,7 @@ export const ATTENTION_FILTERS = [
   { id: "conflict", label: "競合" },
   { id: "failed", label: "失敗" },
   { id: "missed", label: "録り逃し" },
-  { id: "cmlogo", label: "CMの判定" },
+  { id: "cmlogo", label: "CM の判定" },
 ] as const;
 
 export type Filter =
@@ -128,23 +137,29 @@ export function countFilters<T extends TimelineItem>(
   return counts;
 }
 
-/** 側ごとに分けて並べたもの */
+/** 側ごとに分けて並べたもの (どの側も描く順) */
 interface Sections<T extends TimelineItem> {
-  /** 録れたもの。古い順 (描く順) */
+  /** 録れたもの。古い順 (逆のときは新しい順) */
   past: T[];
-  /** 録画中。始まった順 (線のすぐ上) */
+  /** 録画中。始まった順 (逆のときは新しく始まった順) */
   now: T[];
-  /** これからの予約。近い順 */
+  /** これからの予約。近い順 (逆のときは遠い順) */
   future: T[];
 }
 
 /**
- * 側ごとに分けて、描く順 (どの側も時刻の早い順) に並べる。渡す順は問わない。
- * 同じ時刻どうしは渡した順を保つ (並べ替えは安定)
+ * 側ごとに分けて、描く順に並べる。ふだんはどの側も時刻の早い順、`reversed` (新しい順で表示) のときは遅い順。
+ * 渡す順は問わない。同じ時刻どうしは渡した順を保つ (並べ替えは安定)
  */
-export function sections<T extends TimelineItem>(items: T[]): Sections<T> {
+export function sections<T extends TimelineItem>(
+  items: T[],
+  reversed = false,
+): Sections<T> {
+  const sign = reversed ? -1 : 1;
   const byTime = (zone: Zone) =>
-    items.filter((item) => item.zone === zone).sort((a, b) => a.at - b.at);
+    items
+      .filter((item) => item.zone === zone)
+      .sort((a, b) => sign * (a.at - b.at));
   return { past: byTime("past"), now: byTime("now"), future: byTime("future") };
 }
 
@@ -195,20 +210,24 @@ export function dayName(
 }
 
 /**
- * 日付の見出しを挟んで並べる。見出しの鍵は `day-<その日の 0 時>` で、1日に1つ。
+ * 日付の見出しを挟んで並べる。見出しの鍵は `day-<その日の 0 時>` で、1日に1つ。見出しは並びの中で日が替わる所
+ * (その日の頭) に立てるので、逆の並び (`reversed`) も同じ作りで並ぶ。
  *
- * - 予約の側には今日の見出しを立てない (今日の見出しは線の上に立つ)。放送が始まったのに録画に入っていない
- *   予約 (日付が今日より前) も今日に入れる — 線の下に前の日の見出しが立たないように
+ * - 線の下の側の今日には見出しを立てない (今日の見出しは線の上に立つ)。ふだんは予約の側、逆のときは録れたものの側
+ * - 放送が始まったのに録画に入っていない予約 (日付が今日より前) も今日に入れる。予約の側に前の日の見出しが立たないようにするため
  * - 録れたものの日付が今日より先 (時計のずれ) なら、その日の見出しは側を付けた鍵にする。予約の側の
- *   同じ日の見出しと鍵が重ならないように (線の上と下に1つずつ立つ)
+ *   同じ日の見出しと鍵が重ならないように (線の上と下に1つずつ立つ)。逆のときは、そのあとに続く今日の録画の見出しも
+ *   側を付けた鍵にする (今日の見出しは線の上にもう1つある)
  */
 function byDay<T extends TimelineItem>(
   items: T[],
   zone: "future" | "past",
   today: number,
+  reversed: boolean,
 ): TimelineLine<T>[] {
   const lines: TimelineLine<T>[] = [];
-  let last: number | null = zone === "future" ? today : null;
+  const below = reversed ? "past" : "future";
+  let last: number | null = zone === below ? today : null;
   for (const item of items) {
     const day =
       zone === "future"
@@ -216,7 +235,9 @@ function byDay<T extends TimelineItem>(
         : dayStart(item.at);
     if (day !== last) {
       const key =
-        zone === "past" && day > today ? `day-past-${day}` : `day-${day}`;
+        zone === "past" && (day > today || (reversed && day === today))
+          ? `day-past-${day}`
+          : `day-${day}`;
       lines.push({ kind: "day", key, at: day });
       last = day;
     }
@@ -227,27 +248,29 @@ function byDay<T extends TimelineItem>(
 
 /**
  * 番組ごとに並べる。見出しの鍵に側を付ける (同じ番組が両側に立つため)。
- * `groupBySeries` は遅い順に返すので、逆にして早い順にする
+ * `groupBySeries` は遅い順に返すので、ふだんは逆にして早い順にする (逆の並びのときはそのまま)。
+ * 番組の中の回はどちらも放送順
  */
 function bySeries<T extends TimelineItem>(
   items: T[],
   zone: "future" | "past",
   isOpen: (zone: "future" | "past", group: string) => boolean,
+  reversed: boolean,
 ): TimelineLine<T>[] {
   if (items.length === 0) return [];
-  const entries: GroupEntry<T>[] = groupBySeries(
+  const series = groupBySeries(
     items,
     zone === "future" ? "earliest" : "latest",
-  )
-    .reverse()
-    .map((entry) =>
+  );
+  const entries: GroupEntry<T>[] = (reversed ? series : series.reverse()).map(
+    (entry) =>
       entry.kind === "group"
         ? {
             kind: "group",
             group: { ...entry.group, key: `${zone}-${entry.group.key}` },
           }
         : entry,
-    );
+  );
   const lines: TimelineLine<T>[] = [
     { kind: "side", key: `side-${zone}`, zone },
   ];
@@ -263,61 +286,99 @@ interface LineOptions {
   now: number;
   /** まとめて表示 */
   grouped: boolean;
+  /** 新しい順で表示 (上下を返す)。`parts` も同じ向きで並べて渡す (`sections`) */
+  reversed?: boolean;
   /** その側のその番組を開いているか (まとめて表示のとき) */
   isOpen: (zone: "future" | "past", group: string) => boolean;
 }
 
+/** 描く行を、録れたもの・録画中と線・予約の3つに分けたもの */
+interface Lines<T extends TimelineItem> {
+  past: TimelineLine<T>[];
+  now: TimelineLine<T>[];
+  future: TimelineLine<T>[];
+}
+
 /**
- * 描く行に開く。上の側 (録れたもの)、録画中と「いま」の線、下の側 (予約) の3つに分けて返す —
- * 上の側だけ、線の側から古いほうへ少しずつ描くため (`pageStart`)。録画中と予約は全部描く。
- * `now` は録画中の行 (始まった順) のあとに線を置く。
+ * 描く行に開く。録れたもの、録画中と「いま」の線、予約の3つに分けて返す。
+ * 線から遠い所は後から描き足す (`pageStart`・`pageEnd`)。
+ * ふだんは `past`・`now`・`future` の順に上から描き、`now` は録画中の行 (始まった順) のあとに線を置く。
  *
  * 日ごとのとき、今日の見出しは1つだけ。今日の録画があればその頭 (`past` の中)、無ければ `now` の頭
  * (録画中の行の上)。前の日から続けて録っている行も、いま録っているので今日の見出しの下に置く。
  * 予約の側には今日の見出しを立てない (今日の予約は線の下にそのまま続く)。
  *
- * まとめて表示のとき、録画中の行は「録画」の側の末尾。録れたものが無ければ `now` の頭に「録画」の見出しを立てる
+ * まとめて表示のとき、録画中の行は「録画」の側の末尾。録れたものが無ければ `now` の頭に「録画」の見出しを立てる。
+ *
+ * 逆のとき (`reversed`) は `future`・`now`・`past` の順に上から描き、`now` は線、録画中の行 (新しく始まった順) の順。
+ * 今日の見出しは今日の予約があればその頭 (`future` の中)、無ければ `now` の頭 (線の上)。
+ * まとめて表示では「録画」の見出しを線のすぐ下 (`now` の中) に立て、録画中の行をその下、録れた番組を `past` に続ける
  */
 export function timelineLines<T extends TimelineItem>(
   parts: Sections<T>,
   options: LineOptions,
-): {
-  past: TimelineLine<T>[];
-  now: TimelineLine<T>[];
-  future: TimelineLine<T>[];
-} {
-  const now: TimelineLine<T>[] = [
-    ...parts.now.map((item) => ({
-      kind: "row" as const,
-      key: item.key,
-      item,
-      nested: false,
-    })),
-    { kind: "now", key: "now" },
-  ];
+): Lines<T> {
+  const live: TimelineLine<T>[] = parts.now.map((item) => ({
+    kind: "row" as const,
+    key: item.key,
+    item,
+    nested: false,
+  }));
+  const line: TimelineLine<T> = { kind: "now", key: "now" };
+  if (options.reversed === true)
+    return reversedLines(parts, options, live, line);
+  const now: TimelineLine<T>[] = [...live, line];
   if (options.grouped) {
-    const past = bySeries(parts.past, "past", options.isOpen);
+    const past = bySeries(parts.past, "past", options.isOpen, false);
     if (past.length === 0 && parts.now.length > 0)
       now.unshift({ kind: "side", key: "side-past", zone: "past" });
     return {
       past,
       now,
-      future: bySeries(parts.future, "future", options.isOpen),
+      future: bySeries(parts.future, "future", options.isOpen, false),
     };
   }
   const today = dayStart(options.now);
-  const past = byDay(parts.past, "past", today);
-  const heads = past.filter((line) => line.kind === "day");
+  const past = byDay(parts.past, "past", today, false);
+  const heads = past.filter((entry) => entry.kind === "day");
   if (heads.at(-1)?.key !== `day-${today}`) {
     // 今日の録画のあとに日付が先の録れたもの (時計のずれ) が挟まったときだけ、線の上にもう1つ立てる
-    const again = heads.some((line) => line.key === `day-${today}`);
+    const again = heads.some((entry) => entry.key === `day-${today}`);
     now.unshift({
       kind: "day",
       key: again ? `day-now-${today}` : `day-${today}`,
       at: today,
     });
   }
-  return { past, now, future: byDay(parts.future, "future", today) };
+  return { past, now, future: byDay(parts.future, "future", today, false) };
+}
+
+/** 逆の並び (新しい順で表示) の `timelineLines` */
+function reversedLines<T extends TimelineItem>(
+  parts: Sections<T>,
+  options: LineOptions,
+  live: TimelineLine<T>[],
+  line: TimelineLine<T>,
+): Lines<T> {
+  if (options.grouped) {
+    // 「録画」の見出しは録画中の行の上に立てるので、`past` の頭から `now` へ移す
+    const past = bySeries(parts.past, "past", options.isOpen, true).slice(1);
+    const now: TimelineLine<T>[] = [line];
+    if (parts.past.length > 0 || live.length > 0)
+      now.push({ kind: "side", key: "side-past", zone: "past" });
+    now.push(...live);
+    return {
+      past,
+      now,
+      future: bySeries(parts.future, "future", options.isOpen, true),
+    };
+  }
+  const today = dayStart(options.now);
+  const future = byDay(parts.future, "future", today, true);
+  const now: TimelineLine<T>[] = [line, ...live];
+  if (!future.some((entry) => entry.key === `day-${today}`))
+    now.unshift({ kind: "day", key: `day-${today}`, at: today });
+  return { past: byDay(parts.past, "past", today, true), now, future };
 }
 
 /** 画面で1つに包む行 (見出しは包みの中だけで貼り付く) */
@@ -359,7 +420,7 @@ export function blocks<T extends TimelineItem>(
 }
 
 /**
- * 録れたものを末尾 (線の側) から `count` 行だけ描くとき、何行目から描くか。
+ * 線より上の側 (ふだんは録れたもの、逆の並びは予約) を末尾 (線の側) から `count` 行だけ描くとき、何行目から描くか。
  * 頭が日付の見出しの途中 (見出しより下の行) や開いた番組の中に落ちたら、その見出しまで戻す —
  * 頭の行が見出し無しで描かれないように
  */
@@ -376,6 +437,38 @@ export function pageStart<T extends TimelineItem>(
   }
   // 残りが側の見出し (「録画」) だけなら、それも描く
   return at === 1 && grouped ? 0 : at;
+}
+
+/**
+ * 線より下の側 (逆の並びの録れたもの) を頭 (線の側) から `count` 行だけ描くとき、何行目の手前まで描くか。
+ * 開いた番組の途中に落ちたら、その番組の終わりまで描く。見出しが末尾に残るなら、その下の行も1つ描く
+ * (見出しだけを描かないように)
+ */
+export function pageEnd<T extends TimelineItem>(
+  lines: TimelineLine<T>[],
+  count: number,
+): number {
+  let end = Math.min(lines.length, Math.max(0, count));
+  while (end < lines.length && end > 0) {
+    const next = lines[end]!;
+    const prev = lines[end - 1]!;
+    const inGroup = next.kind === "row" && next.nested;
+    // 見出しだけが末尾に残る (日付の見出し) か、開いた番組の途中で切れるなら、もう1行描く
+    if (!inGroup && prev.kind !== "day") break;
+    end += 1;
+  }
+  return end;
+}
+
+/**
+ * 新しい順で表示 (`LineOptions.reversed`) を端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`)。
+ * まとめて表示 (`#lib/grouping.ts` の `GROUPED_COOKIE`) と同じく、描く前に向きが分かっていれば最初から正しい並びで描ける
+ */
+export const REVERSED_COOKIE = "denpa_recordings_reversed";
+
+/** 覚えていた値。**既定は逆にしない** (今までどおりの古い順) */
+export function storedReversed(saved: string | undefined): boolean {
+  return saved === "1";
 }
 
 /**

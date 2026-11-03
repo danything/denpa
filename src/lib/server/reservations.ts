@@ -97,7 +97,7 @@ export async function reserve(programId: number): Promise<Reservation> {
 /** 画面の「予約」のアクション (番組表・検索)。フォームの `programId` を予約し、断ったときはその理由を返す */
 export async function reserveFromForm(form: FormData): Promise<string | null> {
   const programId = Number(form.get("programId"));
-  if (!Number.isFinite(programId)) return "番組IDが不正です";
+  if (!Number.isFinite(programId)) return "番組 ID が不正です";
   try {
     await reserve(programId);
     return null;
@@ -151,7 +151,7 @@ export async function cancel(reservationId: number): Promise<void> {
   const reservation = byId(reservationId);
   if (reservation === undefined) return;
 
-  // 録っている最中なら止める。使っているかどうかを知っているのは録画の行のほう
+  // 録っている最中なら止める。録っている最中かは録画の行で分かる
   const recording = orm()
     .select({ id: recordings.id })
     .from(recordings)

@@ -6,8 +6,8 @@
 
 ### どのチューナーが使えますか
 
-PT3 (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、PX-S1UD、Sony CECH-ZD1 J です。
-ほかに、PT1 / PT2・PX-BCUD・Friio (白) など、実機では確かめていないものの Linux DVB で動くはずの機材があります
+PT3 (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、Sony CECH-ZD1 J です。
+ほかに、PX-S1UD・PT1 / PT2・PX-BCUD・Friio (白) など、実機では確かめていないものの Linux DVB で動くはずの機材があります
 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))。使ってみたら、動いたかどうかを [Issue](https://github.com/danything/denpa/issues) で教えてください。
 挿してあれば自動で見つけ、地上波か衛星かも見分けます。
 一覧は [tuners.md](tuners.md#要るもの)。
@@ -119,5 +119,3 @@ OIDC も `TRUSTED_NETWORKS` も無いと、全部断ります。OIDC が無い�
 前段 (リバースプロキシ) の後ろなら、`TRUSTED_PROXIES` も要ります。
 `TRUSTED_NETWORKS` の中からでも、自分のドメインなどの名前で開くなら `ALLOWED_HOSTS` に書きます。断られた画面に、接続元か名前が出ます。
 [install.md](install.md#誰を通すか)・[auth.md](auth.md#ログイン方法が無ければ全部断る)。
-
-動いた/動かなかったを [Issue](https://github.com/danything/denpa/issues) で教えてもらえると助かります。

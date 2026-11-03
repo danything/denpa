@@ -458,7 +458,6 @@ export function defineBrowser(host: BrowserHost): HostObject {
       canStartApp(),
       canFetchAit(),
     );
-    // Hybridcast について何を訊かれたかを残す (局が何を見て案内を出し分けているかが分かる)
     if (
       AIT_QUERIES.has(name) ||
       (name === "APIGroup" && info[0] === "AITControlledApp.Start")

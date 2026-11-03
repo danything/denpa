@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 /// <para>
 /// B-CAS カードの鍵を使えるのは、カードの持ち主と同じ世帯の機器だけ (使用許諾契約)。
 /// LAN の中に限るのはその近似 (Discussion #760)。
-/// そこで3つ重ねる。どれも設定で変えられるが、既定は安全側で、LAN の外へは広げられない
+/// そこで 3 つ重ねる。どれも設定で変えられるが、既定は安全側で、LAN の外へは広げられない
 /// (アドレスは既定の範囲の中だけ、TTL は <see cref="MaxHops"/> まで)。
 /// </para>
 ///
@@ -31,7 +31,7 @@ namespace Denpa.Agent;
 /// <param name="MaxRoundTrip">往復時間の上限 (<c>CARD_SHARE_MAX_RTT</c>)。null なら測らない</param>
 public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks, int Hops, TimeSpan? MaxRoundTrip)
 {
-    /// <summary>ルーターを1つも越えない</summary>
+    /// <summary>ルーターを 1 つも越えない</summary>
     private const int DefaultHops = 1;
 
     /// <summary>
@@ -80,7 +80,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         if (Given(env("CARD_SHARE_NETWORKS")) is { } networksText)
         {
             networks = [.. networksText.Split([',', ' ', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(Network)];
-            if (networks.Count == 0) throw new ArgumentException("CARD_SHARE_NETWORKS に範囲が1つもありません");
+            if (networks.Count == 0) throw new ArgumentException("CARD_SHARE_NETWORKS に範囲が 1 つもありません");
             // IPNetwork は struct なので、FirstOrDefault では「無い」が 0.0.0.0/0 になる。null にできる形で探す
             if (networks.Where(network => !Inside(network)).Cast<IPNetwork?>().FirstOrDefault() is { } outside)
             {
@@ -118,7 +118,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     /// 範囲がまるごと既定の範囲 (<see cref="DefaultNetworks"/>) のどれかに収まるか。同じ種類のアドレスで、
     /// 既定と同じかより狭く (接頭辞が長い)、先頭のアドレスが既定の中にあれば収まる。
     /// **IPv4 射影の範囲 (::ffff:0:0/96 など) は書けない** — 相手のアドレスは IPv4 に直して比べるので
-    /// 当たることが無く、IPNetwork.Contains の射影の扱いにも頼らない (アドレス1つなら IPv4 に直して読む)。
+    /// 当たることが無く、IPNetwork.Contains の射影の扱いにも頼らない (アドレス 1 つなら IPv4 に直して読む)。
     /// 比べるのはビット列そのもの
     /// </summary>
     public static bool Inside(IPNetwork network)
@@ -145,7 +145,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         return (a[bits / 8] & mask) == (b[bits / 8] & mask);
     }
 
-    /// <summary><c>10.0.0.0/8</c> の形式か、アドレス1つ (<c>192.168.1.20</c>)</summary>
+    /// <summary><c>10.0.0.0/8</c> の形式か、アドレス 1 つ (<c>192.168.1.20</c>)</summary>
     private static IPNetwork Network(string text)
     {
         if (text.Contains('/'))
@@ -158,7 +158,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
             return new IPNetwork(address, address.AddressFamily == AddressFamily.InterNetwork ? 32 : 128);
         }
         throw new ArgumentException(
-            $"CARD_SHARE_NETWORKS の「{text}」が読めません。10.0.0.0/8 のような範囲か、アドレス1つをカンマで区切って書きます");
+            $"CARD_SHARE_NETWORKS の「{text}」が読めません。10.0.0.0/8 のような範囲か、アドレス 1 つをカンマで区切って書きます");
     }
 
     /// <summary>
@@ -245,7 +245,7 @@ public static class CardLan
         && socket.RemoteEndPoint is IPEndPoint { Address.IsIPv4MappedToIPv6: true };
 
     /// <summary>
-    /// 鍵を配るポートの待ち受け。**IPv4 と IPv6 を別々のソケットで**受ける — 両方を1つで受けると
+    /// 鍵を配るポートの待ち受け。**IPv4 と IPv6 を別々のソケットで**受ける — 両方を 1 つで受けると
     /// IPv4 の相手には IPv6 の hop limit ではなく IPv4 の TTL が効き、OS によってはそれを付けられない。
     /// 待ち受けにも TTL を付けておくと、SYN-ACK からルーターを越えない
     /// </summary>
@@ -301,7 +301,7 @@ public static class CardLan
     /// <summary>
     /// TCP の往復時間を **OS から**読む (カーネルが ACK から測っている平滑化した値)。
     /// 相手が遅らせて大きく見せることはできても、小さく見せることはできない。
-    /// 測れなければ null (まだ1回も測っていない・OS が教えない)
+    /// 測れなければ null (まだ 1 回も測っていない・OS が教えない)
     /// </summary>
     public static TimeSpan? RoundTrip(Socket socket)
     {

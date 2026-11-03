@@ -257,7 +257,7 @@ describe("時間帯と曜日", () => {
   test("時刻の違う時間帯が2つ、2日以上にわたる途中からの時間帯は写せない", () => {
     expect(
       parseDateList([span(1, 19, 0, 1, 20, 0), span(2, 21, 0, 2, 22, 0)]),
-    ).toEqual({ skip: "時刻の違う時間帯が2つ以上あるので取り込めません" });
+    ).toEqual({ skip: "時刻の違う時間帯が 2 つ以上あるので取り込めません" });
     expect(parseDateList([span(1, 20, 0, 3, 21, 0)])).toHaveProperty("skip");
     // 日 0:00〜土 23:59 は毎日
     expect(parseDateList([span(0, 0, 0, 6, 23, 59)])).toEqual({
@@ -379,7 +379,7 @@ describe("ルールに写す", () => {
     });
     expect(
       convertRule(rule({ andKey: "テスト", services: [UNKNOWN] }), known),
-    ).toEqual({ skip: "局が1つも見つからないので取り込めません" });
+    ).toEqual({ skip: "局が 1 つも見つからないので取り込めません" });
   });
 });
 

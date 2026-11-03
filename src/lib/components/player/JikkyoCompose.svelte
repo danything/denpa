@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { onMount } from "svelte";
 
   import {
@@ -11,6 +12,7 @@
     SIZES,
   } from "#lib/jikkyo/command.js";
   import type { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
+  import { OfficialWriter } from "#lib/jikkyo/official.js";
   import {
     caughtUp,
     graphemes,
@@ -25,9 +27,10 @@
   import { CLOSE, PALETTE } from "./icons";
 
   /**
-   * **NX-Jikkyo に書き込む 1 行** (ライブだけ。決まりは docs/watch.md の「実況に書き込む」、送り方は `nx.ts`)。
+   * **実況に書き込む 1 行** (ライブだけ。決まりは docs/watch.md の「実況に書き込む」)。ニコニコと連携している世帯 (`official`) では
+   * 公式のニコニコ実況へ (denpa のサーバ経由。`official.ts`)、ほかは NX-Jikkyo へ (`nx.ts`) 送る。書き先を選ぶ設定は無い
    *
-   * - 「NX-Jikkyo に書きます」・入力欄・色などを選ぶボタン・「送る」・✕ を 1 つのカプセルに並べる。書けないときと失敗したときは、
+   * - 「ニコニコ実況に書きます」か「NX-Jikkyo に書きます」・入力欄・色などを選ぶボタン・「送る」・✕ を 1 つのカプセルに並べる。書けないときと失敗したときは、
    *   頭の字をその理由 1 行に替える (トーストは出さない)
    * - Enter で送る (変換中は送らない)。Esc か ✕ で閉じる (一覧の下では一覧ごとしまう)。送れたら欄を空にし、失敗したら残す。自動で送り直さない
    * - 色・位置・大きさは、パレットのボタンで開く選択の行で選ぶ。端末ごとに覚える (`JIKKYO_STYLE_KEY`)
@@ -47,6 +50,8 @@
     focus: boolean;
     /** 書きかけ。画面が持つ (列を入れ替えて描き直しても消えない) */
     text: string;
+    /** 公式のニコニコ実況に書く (世帯がニコニコと連携している) */
+    official: boolean;
     onclose: () => void;
   }
   let {
@@ -57,6 +62,7 @@
     panel,
     focus,
     text = $bindable(),
+    official,
     onclose,
   }: Props = $props();
 
@@ -76,9 +82,13 @@
   const POSITION_NAMES = { ue: "上", naka: "流れる", shita: "下" } as const;
   const SIZE_NAMES = { big: "大", medium: "中", small: "小" } as const;
   /** 頭の 1 行のいつもの表示と、書けない理由 (何か所かで出す) */
-  const IDLE = "NX-Jikkyo に書きます";
+  const IDLE = $derived(
+    official ? "ニコニコ実況に書きます" : "NX-Jikkyo に書きます",
+  );
   const BEHIND = "ライブに戻ると書けます";
   const CLOSED = "(いまは書けません)";
+  const UNLINKED =
+    "ニコニコとの連携が切れました。設定の「連携」で連携し直してください";
 
   let busy = $state(false);
   /** 送った結果・送れなかった理由。打ち直したら消す */
@@ -90,13 +100,39 @@
   /** 繋がっているかは $state ではないので、0.25 秒おきに読み直す */
   let ready = $state(false);
   let input = $state<HTMLInputElement | null>(null);
+  /** 連携が切れている (公式に書くとき) */
+  let unlinked = $state(false);
+  /** 公式に書くときのリクエスト先。欄が開いている間だけ接続を保つ */
+  let writer: OfficialWriter | null = null;
+
+  /** 書けるか。公式ならサーバの接続、NX-Jikkyo なら端末の接続 */
+  function writable(): boolean {
+    return writer === null ? feed.writable : writer.state === "ready";
+  }
+
+  function poll(): void {
+    writer?.tick();
+    ready = writable();
+    unlinked = writer?.state === "unlinked";
+  }
 
   onMount(() => {
     style = readPostStyle(read(JIKKYO_STYLE_KEY));
     if (focus) input?.focus();
-    const timer = setInterval(() => (ready = feed.writable), 250);
-    ready = feed.writable;
-    return () => clearInterval(timer);
+    if (official)
+      writer = new OfficialWriter(
+        {
+          session: resolve("api/jikkyo/niconico/session"),
+          comments: resolve("api/jikkyo/niconico/comments"),
+        },
+        () => feed.current,
+      );
+    const timer = setInterval(poll, 250);
+    poll();
+    return () => {
+      clearInterval(timer);
+      writer?.stop();
+    };
   });
 
   const caught = $derived(caughtUp(lag, paused));
@@ -109,7 +145,9 @@
       : !caught
         ? BEHIND
         : !ready && !busy
-          ? CLOSED
+          ? unlinked
+            ? UNLINKED
+            : CLOSED
           : why !== null && why !== ""
             ? why
             : IDLE,
@@ -137,11 +175,16 @@
     if (!caught) return tell(BEHIND);
     const now = Date.now();
     if (spacing.left(now) > 0) return tell("3 秒待ってください");
-    if (!feed.writable) return tell(CLOSED);
+    if (!writable()) return tell(unlinked ? UNLINKED : CLOSED);
     spacing.mark(now);
     busy = true;
     note = "";
-    const result = await feed.post(body, $state.snapshot(style), air);
+    const result = await feed.post(
+      body,
+      $state.snapshot(style),
+      air,
+      writer ?? undefined,
+    );
     busy = false;
     switch (result) {
       case "sent":
@@ -160,6 +203,13 @@
         break;
       case "closed":
         tell(CLOSED);
+        break;
+      case "unlinked":
+        unlinked = true;
+        tell(UNLINKED);
+        break;
+      case "wait":
+        tell("3 秒待ってください");
         break;
     }
   }
@@ -302,7 +352,7 @@
     --c-hover: var(--dp-on-video-hover);
     --c-face: var(--dp-video-menu);
     --c-field: rgb(255 255 255 / 0.12);
-    --c-shadow: 0 2px 6px rgb(0 0 0 / 0.35), 0 18px 40px rgb(0 0 0 / 0.45);
+    --c-shadow: var(--dp-video-shadow);
     display: flex;
     flex-direction: column;
     gap: var(--dp-space-1);

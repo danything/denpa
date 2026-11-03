@@ -17,7 +17,7 @@ import { BUSY } from "#lib/ts/playback.js";
  */
 export function GET({ params, url }) {
   const id = Number(params.id);
-  if (!Number.isInteger(id)) error(400, "録画IDが不正です");
+  if (!Number.isInteger(id)) error(400, "録画 ID が不正です");
   const asked = url.searchParams.get("codec");
   const codec = asked === "av1" || asked === "raw" ? asked : "h264";
   const from = Number(url.searchParams.get("from") ?? 0);

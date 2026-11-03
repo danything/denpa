@@ -29,10 +29,10 @@
  * `hold-signals.ts` が取っておき、アプリが受け直す (PID 1 では、受け手のいない合図は捨てられる)。
  *
  * **`Host` はそのまま扱う。** SvelteKit の CSRF 判定は自分の origin と `Origin` を比べる。
- * denpa は名前を2つ持っていて自分の origin を1つに固定できない (SvelteKit の `paths.origin`。
+ * denpa は名前をいくつも持てるので自分の origin を1つに固定できない (SvelteKit の `paths.origin`。
  * 組むときに決まる) ので、`Host` と `x-forwarded-proto` から毎回組み立てさせる
  * (名前は charts/denpa/values.yaml の httpRoute.hostnames。無ければ ingress.hosts)。
- * そのため名前を偽ると (DNS リバインディング) CSRF の判定は通ってしまう。信頼したネットワークから
+ * そのため名前を偽ると (DNS リバインディング) CSRF の判定は通ってしまう。信頼するネットワークから
  * ログインなしで通すのを、知っている名前のときだけにしてある (`auth.knownHost`)。
  */
 
@@ -45,6 +45,7 @@ import {
   unreadable,
 } from "./src/lib/server/address.ts";
 import { compress } from "./src/lib/server/compress.ts";
+import { freshWorker } from "./src/lib/server/fresh-worker.ts";
 
 /** `src/lib/server/ws.ts` が置く名前 */
 const LIVE = "__denpaLive";
@@ -98,7 +99,7 @@ const upgrading = (request) =>
 const live = () => globalThis[LIVE];
 
 const websocket = {
-  // **死んだ客を畳むための ping/pong を効かせる** (2026-08-14 フリーズの主因)。
+  // **応答の無くなった接続を閉じるための ping/pong を効かせる** (2026-08-14 フリーズの主因)。
   //
   // ライブ視聴の後片付けは `onclose → leave() → ffmpeg kill` に頼っている
   // (`live.ts`)。ところが serve 直下の `idleTimeout: 0` (vite.config.ts) を WebSocket も
@@ -175,7 +176,13 @@ let served = false;
 Bun.serve = (options) => {
   Bun.serve = serve;
   served = true;
-  return serve({ ...options, fetch: front(options.fetch), websocket });
+  return serve({
+    ...options,
+    // サービスワーカーは毎回聞き直させる (`src/lib/server/fresh-worker.ts`)
+    routes: freshWorker(options.routes),
+    fetch: front(options.fetch),
+    websocket,
+  });
 };
 try {
   await import("./build/index.js");

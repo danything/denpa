@@ -1,10 +1,10 @@
 # 開発する
 
 **ホストに bun は入れません。全部コンテナの中で動かします。**
-実チューナーも B-CASカードも ffmpeg も要りません。
+実チューナーも B-CAS カードも ffmpeg も要りません。
 
 入口は [genkan](https://github.com/danything/genkan) (ホスト名でコンテナに振り分ける
-リバースプロキシ)。ポートを公開しないので、他のプロジェクトとぶつかりません。先に1回だけ起こします。
+リバースプロキシ)。ポートを公開しないので、他のプロジェクトとぶつかりません。先に 1 回だけ起こします。
 
 ```sh
 curl -sf https://raw.githubusercontent.com/danything/genkan/main/init.sh | sh -s
@@ -47,7 +47,7 @@ docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前�
 
 撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています — 画面の BIZ UDPゴシック
 (OFL で配られているもの) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
-ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、縮めずに 30fps で組む) は `scripts/capture-docs.ts` の頭に
+ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、縮めずに 30fps で組む) は `scripts/capture-docs.ts` の冒頭に
 あります。見た目を変えたら撮り直してください (古い画像は README を見て入れた人を迷わせます)。
 
 ## README の謝辞
@@ -62,42 +62,50 @@ PR を出して自分でマージします。急ぐときは Actions から手�
 ## テストの方針
 
 **E2E が主で、単体テストは純粋関数の境界条件だけ。** 偽エージェント・偽の通知先・偽の EPGStation・偽の EpgTimerSrv・
-偽ffmpeg を立てて、予約から録画・CM検出・エンコード・保存先への配置・
-視聴済み削除までを通します (`tests/fake/`)。偽エージェントの BS は1番組5秒 (地上波は30分) で、
-録画完了まで待っても30秒です。
+偽 ffmpeg を立てて、予約から録画・CM 検出・エンコード・保存先への配置・
+視聴済み削除までを通します (`tests/fake/`)。偽エージェントの BS は 1 番組 5 秒 (地上波は 30 分) で、
+録画完了まで待っても 30 秒です。
 
 画面まわりの入口は [app.md](app.md#テスト)、置いてあるものの一覧は
 [app.md](app.md#構成) にあります。
 
 ### 並べて流す
 
-**ワーカーごとに denpa と偽エージェントと偽通知先と偽 EPGStation と偽 EpgTimerSrv を1式ずつ立てます** (`tests/stack.ts`)。
-ポートも置き場もDBも別なので、同時に走るファイル同士は互いに見えません (12コアで 2分半 → 50秒)。
+**ワーカーごとに denpa と偽エージェントと偽通知先と偽 EPGStation と偽 EpgTimerSrv を 1 式ずつ立てます** (`tests/stack.ts`)。
+ポートも置き場も DB も別なので、同時に走るファイル同士は互いに見えません (12 コアで 2 分半 → 50 秒)。
 
 - ファイルの中は順番 (`fullyParallel: false`)。前のテストが作った予約や録画を次が当てにしてよい
 - ファイルをまたいでは当てにできない。実体のある録画が要るテストは `recordOne()` で自分のぶんを録る
 - アプリは開発サーバではなく組んだもの (`bun run build` → `adapter-bun`) をワーカーの数だけ
-  動かす。開発サーバを4つ立てるより軽く、本番と同じ出力を試せる
+  動かす。開発サーバを 4 つ立てるより軽く、本番と同じ出力を試せる
 - API へ直接投げるときは `Origin` を付ける。SvelteKit は Origin の無いフォーム形式の POST を
   別サイトからの送信として断る (3 からは Content-Type の無い POST/PUT/PATCH/DELETE も)。
   `tests/stack.ts` が付けている。`x-forwarded-proto` は付けない — 前段の無い平文の接続には
   server.js が `http` を入れるので、本番の `http://<IP>:3000` と同じ経路を試せる
 
-**1台ではこれ以上縮みません。** 中身の合計は約3分で大半は偽の放送を待つ時間、
-下限はいちばん長いファイル1本の時間です。
+**1 台ではこれ以上縮みません。** 中身の合計は約 3 分で大半は偽の放送を待つ時間、
+下限はいちばん長いファイル 1 本の時間です。
 
-CI では5つに割って別のランナーに出し、3ワーカー×5台 = 15ワーカーぶん並べます。
-組の中身は `tests/e2e/shards.json` で、実測の所要時間 (CI の結果に出る1本ずつの秒数) で人が割っています。
+CI では 6 つに割って別のランナーに出し、3 ワーカー×6 台 = 18 ワーカーぶん並べます。
+組の中身は `tests/e2e/shards.json` で、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割っています。
 組ごとにテストの秒数の和がそろうように割り、長いファイルは組の頭のほうに来るように組みます
-(組の中ではファイル名の順にワーカーへ配られるので、遅れて始まらずに済む)。組の時間の下限は、その組でいちばん長いファイル1本です。
+(組の中ではファイル名の順にワーカーへ配られるので、遅れて始まらずに済む)。組の時間の下限は、その組でいちばん長いファイル 1 本です。
 
+- 映像を長くデコードし続けるスペック (20-live・22-watch・互換モードのものなど。一覧は shards.json の注記) は 1 つの組に寄せすぎません。混むとどれも遅くなります
+- 名前が後ろの長いスペック (51-live-gaps・57-jikkyo など) は、前に並ぶスペックが少ない組に置きます。
+  前のスペックがワーカーを埋めていると遅れて始まり、組がそのぶん長くなります
+- 50-live-pacing は 6 組に 1 本だけで置きます。同じ組でほかのワーカーが動くと届く間隔が乱れ、貯める量がその間隔を覆う高さ
+  (`pacing.ts` の `cover`) へ上がって、「下限のまま」を見るテストが落ちるためです (軽いスペックと組ませても 5 回に 2 回落ちた)。
+  デコードが重なると、途中から入ったときにコマも落とします
+- 1 本で 1 分を超えるスペックは、組の時間の下限を押し上げるので分けます (57-jikkyo-recorded・26-hwenc-hevc はそうして分けたもの)。
+  分けられない 51-live-gaps (実時間で 2 分) が、いまの組の時間の下限です
 - どの組にも入れていない新しいスペックは **5 組で流れます** (CI に注記が出る)。あとで所要時間を見て割り直してください
-- shards.json にあるのにファイルが無い・2つの組に入っている、は CI の「組分けの検算」が落とします
+- shards.json にあるのにファイルが無い・2 つの組に入っている、は CI の「組分けの検算」が落とします
 - 組を増やしたら、test.yml の `shard` の並びと検算の組の名前、main の ruleset の必須チェックにも `e2e (n)` を足します
 
-ワーカー数は**手元では CPU の数そのまま (下限2・上限6)、CI (`CI=1`。`docker compose run e2e` も
-そう) では 3 で固定**です (4つ並べるとチューナー待ちで落ちる。実測は `playwright.config.ts` の頭)。
-混み具合でごく稀にブラウザ側が落ちるので、1回だけやり直します (`retries: 1`)。
+ワーカー数は**手元では CPU の数そのまま (下限 2・上限 6)、CI (`CI=1`。`docker compose run e2e` も
+そう) では 3 で固定**です (4 つ並べるとチューナー待ちで落ちる。実測は `playwright.config.ts` の頭)。
+混み具合でごく稀にブラウザ側が落ちるので、1 回だけやり直します (`retries: 1`)。
 
 ## DB の列を足す
 
@@ -118,7 +126,7 @@ CI では5つに割って別のランナーに出し、3ワーカー×5台 = 15�
 JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局など) は `schema.ts` の
 `json(名前, 読み取り関数)` で書く。読み書きのときに変換するので、使う側は `JSON.parse` を書かない。
 読み取り関数は列ごとに書き、壊れた行は「持っていない」(空の並び・NULL) にする
-(1行のせいで一覧ごと出なくなるのを避ける)。
+(1 行のせいで一覧ごと出なくなるのを避ける)。
 
 ## 型の締め方
 
@@ -175,22 +183,25 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 リリースを待たずに出すときは、`version` を上げる PR をマージしてから、main のそのコミットにタグを押します
 (`git tag arib-v1.0.1 <そのコミット> && git push origin arib-v1.0.1`)。
 **main の先頭には付けないこと。** マージのあとに `chore: bump image marks [skip ci]` が積まれることが多く、`[skip ci]` のコミットに付けたタグでは Actions が動きません。
-どちらもテストとビルドをしてから、Trusted Publishing で出します (トークンは持たない)。
-リポジトリの中では `exports` が TypeScript のまま (`src/*.ts`) を指していて、出すときだけ `scripts/manifest.ts` が
+どちらもテストとビルドをしてから、Trusted Publishing (トークンは持たない) で **npm にステージまで置きます**。
+公開されるのは、npmjs.com のパッケージの画面 (または `npm stage approve <id>`) で確定したときです (2FA が要る)。
+乗っ取られた workflow から勝手に公開されないよう、npm 側ではこの workflow に `npm stage publish` だけを許しています。
+ステージに置いた時点で `arib-v<バージョン>` のタグが付くので、確定せずに却下したら、次は `version` を上げて出し直します。
+リポジトリの中では `exports` が TypeScript のまま (`src/*.ts`) を指していて、出すときだけ `packages/arib/scripts/manifest.ts` が
 組んだ `dist/` に向け直します
 
 ## イメージ
 
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。
 CI が両方をビルドして `deploy/` の印を書き戻します。**main は直接 push できない**
-(ruleset の必須チェック `check` / `agent` / `e2e (1)`〜`(5)` / `claude-review`) ので、
+(ruleset の必須チェック `check` / `agent` / `e2e (1)`〜`(6)` / `claude-review`) ので、
 書き戻しは bot が PR を出し、必須チェックの status を自分で付けてマージします
 (手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しと README の謝辞の一覧も同じ)。
 release は組み直さず、main で組んだイメージにバージョンを 1 層足します
 (`.github/release.Dockerfile`。タグの決め方と理由は [architecture.md](architecture.md#イメージのタグ)、
 出し方は `.github/image-tags.sh`)。
 
-**イメージは amd64 と arm64 の2つ**で、同じタグに束ねてあります (理由と組み方は
+**イメージは amd64 と arm64 の 2 つ**で、同じタグに束ねてあります (理由と組み方は
 [architecture.md](architecture.md#イメージのタグ))。Dockerfile は BuildKit の `TARGETARCH`
 で配布物 (px4-userland / siano-ts) の名前と .NET の RID を読み替え、
 Intel と AMD の VA-API ドライバは amd64 だけに入れます
@@ -208,13 +219,11 @@ QEMU が要り、ffmpeg や AOT はかなり遅い)。
 coreutils もありません。どちらも root で動きます。本体の ffmpeg が使うライブラリ
 (libva・Intel と AMD の VA-API ドライバなど) は、Dockerfile の `runtime-libs` 段で
 Debian のパッケージを入れてから要るファイルだけを写しています (dlopen で読むドライバはディレクトリごと)。
-足りないものが無いかは `.github/image-smoke.sh` が ld.so に依存を解かせて確かめます。
+足りないものが無いかは `.github/image-smoke.sh` が ld.so に依存を解決させて確かめます。
 
 denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しません (denpa-aio の入口・Helm の prepull も bun で動かす)。実行ファイルを直に呼ぶことはできます
 (`kubectl exec deploy/denpa -- ffmpeg -hide_banner -hwaccels`、`kubectl exec deploy/tuner-agent -- denpa-agent --tune …`)。
-コンテナの中を見たいときは、`kubectl debug -it <Pod> --image=busybox --target=denpa`
-(エージェントは `--target=tuner-agent`。Docker なら `docker run --rm -it --pid=container:<名前> --network=container:<名前> busybox` で、
-中のファイルは `/proc/1/root/` の下) のようにシェルのあるコンテナを横に付けます。
+コンテナの中を見たいときは、シェルのあるコンテナを横に付けます (手順は [install.md](install.md#うまくいかないとき)。エージェントは `--target=tuner-agent`)。
 
 ### 外から持ってくるものはバージョンで固定する
 

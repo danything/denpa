@@ -39,7 +39,7 @@ function build(): Rgba[] {
 
 export const DEFAULT_CLUT: readonly Rgba[] = build();
 
-/** CLUT ファイルを読む (YCbCr、8 ビット、start_end のみ運用)。読めなければ既定の表 */
+/** CLUT ファイルを読む (運用は YCbCr・8 ビット・start_end だけ。RGB も読む)。読めなければ既定の表 */
 export function readClut(data: Uint8Array): Rgba[] {
   const table = DEFAULT_CLUT.map((c) => [...c] as Rgba);
   if (data.length < 3) return table;

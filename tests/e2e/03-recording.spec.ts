@@ -104,7 +104,7 @@ test.describe("録画とエンコード", () => {
     const detail = page.getByTestId("program-detail");
     await expect(detail).toBeVisible();
     await expect(detail.getByTestId("detail-video")).toBeVisible();
-    await expect(detail.getByTestId("detail-fps")).toHaveText("60コマ/秒");
+    await expect(detail.getByTestId("detail-fps")).toHaveText("60 コマ/秒");
 
     /*
      * 畳んでいる「その他…」のメニューは display:none であること。
@@ -148,7 +148,7 @@ test.describe("録画とエンコード", () => {
     // 対応していないと全部落とし終わるまで早送りできない
     const id = await recording.getAttribute("data-recording-id");
     expect(id).toBeTruthy();
-    // 信頼したネットワーク (E2E はローカル) からは、資格情報なしでそのまま取れる
+    // 信頼するネットワーク (E2E はローカル) からは、資格情報なしでそのまま取れる
     const part = await request.get(`/api/recordings/${id}/file`, {
       headers: { Range: "bytes=0-99" },
     });

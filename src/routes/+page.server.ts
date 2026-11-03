@@ -18,6 +18,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { channelNotice } from "#lib/channel-notice.js";
 import { capacityLabel } from "#lib/format.js";
 import { GROUPED_COOKIE, storedGrouped } from "#lib/grouping.js";
+import { channelAlert } from "#lib/server/channel-alert.js";
 import { fileSize } from "#lib/server/chase.js";
 import { clipCountsByRecording } from "#lib/server/clips.js";
 import { now, orm } from "#lib/server/db.js";
@@ -49,6 +50,7 @@ import {
 import { settings } from "#lib/server/settings.js";
 import { parseTitle } from "#lib/server/title.js";
 import { cmRedo, encodeSource } from "#lib/source.js";
+import { REVERSED_COOKIE, storedReversed } from "#lib/timeline.js";
 import type {
   EncodeJob,
   Recording,
@@ -169,7 +171,7 @@ interface ReservationRow extends Omit<Reservation, "state"> {
  * 予約と録画を1画面に並べる。
  *
  * 「これから何が録れるか」と「録れたものが今どうなっているか」は続きものなので、
- * 行き来せずに見えるほうがいい。1本の時間軸に並べる (上が予約、下が録れたもの。並べるのは画面の `#lib/timeline.ts`)。
+ * 行き来せずに見えるほうがいい。1本の時間軸に並べる (ふだんは上が録れたもの、下が予約で、新しい順で表示では上下を返す。並べるのは画面の `#lib/timeline.ts`)。
  *
  * **番組名で探すのはここではない** (全体の検索 `/search?q=`)。ホームは絞り込みのボタンだけで絞る
  */
@@ -329,15 +331,19 @@ export function load({ url, cookies }) {
   return {
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
     channelNotice: channelNotice(serviceCounts()),
+    /** チャンネルのお知らせの 1 行 (`server/channel-alert.ts`) */
+    channelAlert: channelAlert(),
     reservations,
     recordings,
     missed,
     showFinished,
     showDeleted,
-    /** サイドバーの「今日」に出す空きと、あと何時間録れるかの目安 (`disk.capacity`)。読めなければ null */
+    /** サイドバーの「状態」に出す空きと、あと何時間録れるかの目安 (`disk.capacity`)。読めなければ null */
     capacity: room === null ? null : capacityLabel(room.free, room.hours),
     /** まとめて表示 (`#lib/grouping.ts`)。サーバで描く形を、端末の覚えに合わせる */
     grouped: storedGrouped(cookies.get(GROUPED_COOKIE)),
+    /** 新しい順で表示 (`#lib/timeline.ts`)。こちらも端末の覚えに合わせる */
+    reversed: storedReversed(cookies.get(REVERSED_COOKIE)),
     /** 録画ごとの切り抜きの数。詳細の「この録画の切り抜き (n)」 */
     clipCounts: clipCountsByRecording(),
   };
@@ -365,7 +371,7 @@ export const actions = {
     // 元になるのは元のTS。エンコード済みを元に録り直しても画質は戻らない
     if (encodeSource(recording) === null) {
       return fail(400, {
-        message: "元のTSが残っていないため再エンコードできません",
+        message: "元の TS が残っていないため再エンコードできません",
       });
     }
     /*
@@ -393,7 +399,7 @@ export const actions = {
       return fail(400, { message: "録画が見つかりません" });
     const redo = cmRedo(recording);
     if (redo.state === "hidden")
-      return fail(400, { message: "CM検出に使えるファイルがありません" });
+      return fail(400, { message: "CM 検出に使えるファイルがありません" });
     if (redo.state === "disabled") return fail(400, { message: redo.reason });
     // 切ったものからは戻せない。元のTSはあるので、再エンコードを促す
     if (redo.state === "prompt") return fail(400, { message: CM_CUT_ALREADY });
@@ -404,7 +410,7 @@ export const actions = {
 
   cancelEncode: async ({ request }) => {
     const id = await formId(request);
-    if (id === null) return fail(400, { message: "ジョブIDが不正です" });
+    if (id === null) return fail(400, { message: "ジョブ ID が不正です" });
     // 畳み終わってから返る。ここで待たないと、この直後の読み直しが
     // まだ「エンコード中」を読んで、押しても何も変わらないように見える
     await cancelEncode(id);
@@ -453,7 +459,7 @@ export const actions = {
    */
   deleteMissed: async ({ request }) => {
     const id = await formId(request);
-    if (id === null) return fail(400, { message: "IDが不正です" });
+    if (id === null) return fail(400, { message: "ID が不正です" });
     // 状態も見て消す。録り逃し以外 (これからの予約など) を同じアクションで消させない
     const gone = orm()
       .delete(reservationTable)
@@ -475,7 +481,7 @@ export const actions = {
   /** 取り消した予約を戻す。ルールは作り直さないので、ここからしか戻せない */
   restore: async ({ request }) => {
     const id = await formId(request);
-    if (id === null) return fail(400, { message: "IDが不正です" });
+    if (id === null) return fail(400, { message: "ID が不正です" });
     try {
       await restore(id);
     } catch (error) {
@@ -488,7 +494,7 @@ export const actions = {
 
   cancel: async ({ request }) => {
     const id = await formId(request);
-    if (id === null) return fail(400, { message: "予約IDが不正です" });
+    if (id === null) return fail(400, { message: "予約 ID が不正です" });
     await cancel(id);
     return { success: true };
   },

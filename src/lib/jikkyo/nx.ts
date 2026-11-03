@@ -11,6 +11,8 @@
  * 4. 書き込み (`post`) は視聴の WS に `postComment` を送り、返事 (`postCommentResult` か `error`) を待つ。1 件ずつで、
  *    5 秒返事が無ければ「分からない」。`room` の `yourPostKey` を `thread` の `threadkey` に渡しておくと、自分の書き込みは
  *    コメントの WS から `yourpost: 1` で戻ってくる。送れたものは画面がすぐ流すので、戻ってきたものは 1 回だけ捨てる (`Echoes`)
+ * 5. 公式のニコニコ実況に書いたもの (denpa のサーバが送る。`feed.post`) も NX-Jikkyo が取り込んで流してくる。`yourpost` は付かないので、
+ *    送ってから 60 秒の間に本文が同じものを 1 回だけ捨てる (`expectEcho`。ほかの人の同じ本文を 1 件消すことがある)
  */
 import type { PostStyle } from "./command";
 import { type Comment, toComment } from "./comments";
@@ -82,6 +84,8 @@ export class NxJikkyo {
     done: (result: PostResult) => void;
   } | null = null;
   private readonly echoes = new Echoes();
+  /** 公式のニコニコ実況に書いたもの。NX-Jikkyo が取り込んで流してくるが `yourpost` が付かないので、本文だけで 1 回捨てる */
+  private readonly official = new Echoes();
   /** 遡る起点の時刻 (unix ms)。コメントの WS が開いたら 1 回だけ送る */
   private backfillBefore: number | null = null;
   private backfilled = false;
@@ -143,6 +147,16 @@ export class NxJikkyo {
         }),
       );
     });
+  }
+
+  /** 公式に書く (`feed.post`)。取り込まれて戻ってきた同じ本文を 1 回だけ捨てる */
+  expectEcho(text: string): void {
+    this.official.expect(text, this.deps.now());
+  }
+
+  /** 公式に送れなかった。覚えたものを 1 つ忘れる */
+  forgetEcho(text: string): void {
+    this.official.forget(text);
   }
 
   /** 書き込みの返事が決まった。送れなかったものは、戻ってきても捨てない */
@@ -333,7 +347,8 @@ export class NxJikkyo {
 
   /** 戻ってきた自分の書き込みで、もう流したもの。返事を待っている間なら、送れている印にする */
   private ownEcho(chat: unknown, text: string): boolean {
-    if ((chat as { yourpost?: unknown }).yourpost !== 1) return false;
+    if ((chat as { yourpost?: unknown }).yourpost !== 1)
+      return this.official.take(text, this.deps.now());
     if (!this.echoes.take(text, this.deps.now())) return false;
     if (this.pending?.text === text) this.pending.echoed = true;
     return true;

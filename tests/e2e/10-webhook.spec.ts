@@ -94,7 +94,7 @@ test.describe("通知", () => {
     await page.getByTestId("webhook-url").fill("not-a-url");
     await page.getByTestId("webhook-add").click();
     await expect(page.getByTestId("settings-error")).toContainText(
-      "http(s) で始まるURL",
+      "http(s) で始まる URL",
     );
     await expect(page.getByTestId("webhook-row")).toHaveCount(0);
   });

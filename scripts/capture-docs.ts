@@ -14,7 +14,7 @@
  *     docker compose run --rm docs bun scripts/capture-docs.ts ui
  *
  * **`motion` を挙げると、動きを見比べる GIF を撮る** (docs には置かない)。画面の切り替え・メニュー・
- * 保存の知らせ・スクロールしたヘッダーなどを、そのままの速さで `docs/images/.capture/motion/` に置く。
+ * 保存の通知・スクロールしたヘッダーなどを、そのままの速さで `docs/images/.capture/motion/` に置く。
  * 数字の多い画面 (予約と録画・チューナー) の静止画も一緒に撮る
  *
  *     docker compose run --rm docs bun scripts/capture-docs.ts motion
@@ -90,7 +90,7 @@ if (process.env["SKIP_BUILD"] !== "1") {
 const { stack, shutdown } = await boot(0);
 const BASE = stack.appUrl;
 
-/** 画面と同じエンドポイントへ投げる。SvelteKit は Origin の無いフォームを断る */
+/** 画面と同じエンドポイントへ送る。SvelteKit は Origin の無いフォームを断る */
 async function post(
   path: string,
   body: Record<string, string | string[]> | null,
@@ -249,14 +249,29 @@ function stamp(at: number): string {
  * 終わるまで待つ — 集めている間はチューナーが塞がり、ライブが映らない
  */
 async function sweepLogos(): Promise<void> {
-  await post("/settings/reception?/logoSweep", {});
+  // 番組表を集め終えた直後は、衛星のロゴを待つ選局 (`awaitCarousel`) や番組表集めの片付けでチューナーが
+  // まだ空いていないことがあり、押しても「空いているチューナーがありません」と断られる。空くまで押し直す
+  const asked = Date.now() + 60_000;
+  for (;;) {
+    try {
+      await post("/settings/reception?/logoSweep", {});
+      break;
+    } catch (error) {
+      if (
+        Date.now() > asked ||
+        !String(error).includes("空いているチューナーがありません")
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
   const until = Date.now() + 180_000;
   while (Date.now() < until) {
     const html = await (await fetch(`${BASE}/settings/reception`)).text();
     if (html.includes('data-testid="logo-sweep-done"')) return;
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  throw new Error("局ロゴの取得が3分で終わりませんでした");
+  throw new Error("局ロゴの取得が 3 分で終わりませんでした");
 }
 
 async function seed(): Promise<void> {
@@ -270,7 +285,7 @@ async function seed(): Promise<void> {
   writeFileSync(join(stack.hwDir, "renderD128"), "");
   await post("/settings/recording?/probeHw", {});
 
-  // ルール (検索の画面の「ルールとして保存」と同じものを投げる)。当てると予約が立つ
+  // ルール (検索の画面の「ルールとして保存」と同じものを送る)。当てると予約が立つ
   for (const rule of [
     { keyword: "星屑ステーション" },
     { keyword: "鉄道でめぐる日本" },

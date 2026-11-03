@@ -15,7 +15,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// 方式は4つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
+/// 方式は 4 つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
 /// 違うのは誰がデバイスを持っているか。
 /// </para>
 ///
@@ -163,7 +163,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     ///
     /// <para>
     /// 読みかけの間に読む側が抜けても、待っている読み (<c>ReadAsync</c>) は捨てずに次の読む側が引き継ぐ。
-    /// PipeReader は同時に1つしか読めないので、読む側はロックで1つずつ通す (<see cref="Background"/> と同じ)。
+    /// PipeReader は同時に 1 つしか読めないので、読む側はロックで 1 つずつ通す (<see cref="Background"/> と同じ)。
     /// 溜めにあるぶんは <c>TryRead</c> で待たずに取り、無いときだけ待つ (待たない読みは確保をしない)
     /// </para>
     /// </summary>
@@ -405,8 +405,43 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     }
 
     /// <summary>
+    /// **いま溜まっているぶんを読んで捨てる。待たない** (<c>DvbTuner.Tune</c>。demux を止めてから呼ぶ)。
+    /// 溢れの印 (<c>EOVERFLOW</c>) はカーネルが読んだときに空にするので、そのまま読み続ける。
+    /// fd を持たない読み出し側 (px4d・Windows の pipe) では何もしない
+    /// </summary>
+    /// <returns>捨てたバイト数</returns>
+    public long Discard()
+    {
+        if (_piped is not null || _background is not null) return 0;
+        var fd = (int)handle.DangerousGetHandle();
+        var buffer = new byte[188 * 1024];
+        var descriptor = stackalloc byte[8];
+        long dropped = 0;
+        while (true)
+        {
+            *(int*)descriptor = fd;
+            *(short*)(descriptor + 4) = PollIn;
+            *(short*)(descriptor + 6) = 0;
+            var ready = Sys.Poll(descriptor, 1, 0);
+            if (ready < 0 && Marshal.GetLastPInvokeError() == EIntr) continue;
+            if (ready <= 0) return dropped;
+
+            nint read;
+            fixed (byte* target = buffer) read = Sys.ReadFd(fd, target, (nuint)buffer.Length);
+            if (read > 0)
+            {
+                dropped += read;
+                continue;
+            }
+            if (read == 0) return dropped;
+            var failure = Marshal.GetLastPInvokeError();
+            if (failure != EIntr && failure != EOverflow) return dropped;
+        }
+    }
+
+    /// <summary>
     /// **その選局のぶんだけ数えはじめる** (読み始めるところで。<c>Lease.StartNative</c>)。持ち越すと、
-    /// 局を変えている間の時間が「読む側が空いていた時間」として出る (実機で 4.1秒・4.3秒)
+    /// 局を変えている間の時間が「読む側が空いていた時間」として出る (実機で 4.1 秒・4.3 秒)
     /// </summary>
     public void Begin()
     {
@@ -522,7 +557,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                 if (failure == EAgain || failure == EIntr) continue;
                 if (failure == EOverflow)
                 {
-                    // まだ1バイトも受け取っていないなら、局替えの間に埋まった印 (`_handed`)
+                    // まだ 1 バイトも受け取っていないなら、局替えの間に埋まった印 (`_handed`)
                     if (!_handed)
                     {
                         _stale++;
@@ -530,7 +565,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                         continue;
                     }
                     _overflows++;
-                    // 空いた時間も採る。リングバッファの深さ (3.5秒ぶん) と突き合わせる (`TakeOverflows`)
+                    // 空いた時間も採る。リングバッファの深さ (3.5 秒ぶん) と突き合わせる (`TakeOverflows`)
                     var gap = (int)Stopwatch.GetElapsedTime(_handedAt).TotalMilliseconds;
                     if (gap > _worstGap) _worstGap = gap;
                     // 溢れたぶんは捨てられている。ここからは新しい溜まり方になる
@@ -566,8 +601,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 /// 標準の Linux DVB (v5) で使う。**実機の PT3 はこちら** (<c>earth_pt3</c>)。
 ///
 /// <para>
-/// 開くものが3つある。<c>frontend</c> が選局、<c>demux</c> が「何を流すか」、
-/// <c>dvr</c> が読み出し側。選局し直すのに閉じる必要があるのは1つも無い。
+/// 開くものが 3 つある。<c>frontend</c> が選局、<c>demux</c> が「何を流すか」、
+/// <c>dvr</c> が読み出し側。選局し直すのに閉じる必要があるのは 1 つも無い。
 /// </para>
 ///
 /// <para>
@@ -613,7 +648,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private const ushort AllPids = 0x2000;
 
     /// <summary>
-    /// demux のフィルタの溜め。**いまの流し方 (全PIDを <c>DMX_OUT_TS_TAP</c>) では使われない** —
+    /// demux のフィルタの溜め。**いまの流し方 (全 PID を <c>DMX_OUT_TS_TAP</c>) では使われない** —
     /// 出し方を変えたときに既定 (2KB) まで落ちないよう残してあるだけ
     /// </summary>
     private const int DemuxBuffer = 8 * 1024 * 1024;
@@ -633,7 +668,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// <summary>どのアダプタか。記録に添えるためだけに持つ</summary>
     private readonly string _adapter;
     private readonly int? _voltage;
-    /// <summary>電圧を断られた。以後は送らない (記録も1回だけ)</summary>
+    /// <summary>電圧を断られた。以後は送らない (記録も 1 回だけ)</summary>
     private bool _noVoltage;
     private bool _streaming;
 
@@ -669,7 +704,18 @@ public sealed unsafe class DvbTuner : ITuneDevice
     {
         // 選局し直す間は止める。前のチャンネルの残りが混ざったまま流れると、
         // 読む側 (denpa) には途中で中身が変わったようにしか見えない
-        if (_streaming) Sys.Call(_demux, DmxStop, 0, "demux の停止");
+        if (_streaming)
+        {
+            Sys.Call(_demux, DmxStop, 0, "demux の停止");
+            /*
+             * **止めたうえで、dvr に残っている前のチャンネルのぶんを捨てる。** dvr のリングバッファは
+             * DMX_START でも空にならず (カーネルが空にするのは開いたときと溢れを読んだときだけ)、
+             * 前の利用者が抜けてから溢れるまでの数秒の間に次の選局が来ると、前のチャンネルの PAT が
+             * 新しい選局の頭に乗る。衛星の局ロゴはそれを見て、当たりの中継 (BS15:16625) を「外れ」と
+             * 1 週間控えていた (docs/logo.md)
+             */
+            _dvr.Discard();
+        }
 
         var properties = new List<(uint Command, uint Value)>
         {
@@ -685,7 +731,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         else
         {
             properties.Add((DtvBandwidthHz, 6_000_000));
-            // 地上波は階層が3つある。全部受ける (部分受信=ワンセグだけ、ではない)
+            // 地上波は階層が 3 つある。全部受ける (部分受信=ワンセグだけ、ではない)
             properties.Add((DtvIsdbtPartialReception, 0));
             properties.Add((DtvIsdbtSoundBroadcasting, 0));
             properties.Add((DtvIsdbtLayerEnabled, 0x07));
@@ -697,7 +743,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         SetProperties(properties);
         WaitForLock();
 
-        // 全PID (0x2000) をそのまま dvr へ。選り分けるのは denpa の仕事
+        // 全 PID (0x2000) をそのまま dvr へ。選り分けるのは denpa の仕事
         StartFilter();
         _streaming = true;
     }
@@ -706,7 +752,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// LNB の電源を出す。**選局の property (<c>DTV_VOLTAGE</c>) には入れず、先に別の呼び出しで送る。**
     ///
     /// <para>
-    /// カーネルは <c>FE_SET_PROPERTY</c> の property を前から順に当て、1つでも失敗すると
+    /// カーネルは <c>FE_SET_PROPERTY</c> の property を前から順に当て、1 つでも失敗すると
     /// そこで全体を失敗にする (<c>dvb_frontend.c</c> の <c>dvb_frontend_handle_ioctl</c>)。
     /// <c>DTV_VOLTAGE</c> は中で <c>FE_SET_VOLTAGE</c> を呼ぶだけで、ドライバに
     /// <c>set_voltage</c> が無いと <c>-ENOTSUPP</c> になる。PLEX PX-BCUD (em28xx + tc90522) が
@@ -715,7 +761,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     ///
     /// <para>
     /// 出せない機材 (<c>ENOTSUPP</c> / <c>EOPNOTSUPP</c>) なら記録に残して false を返す。
-    /// 呼ぶ側は以後送らないので、記録は1回で済む。それ以外の失敗は投げる。
+    /// 呼ぶ側は以後送らないので、記録は 1 回で済む。それ以外の失敗は投げる。
     /// </para>
     /// </summary>
     /// <param name="setVoltage"><c>FE_SET_VOLTAGE</c> を呼び、成功なら 0、失敗なら errno を返す</param>

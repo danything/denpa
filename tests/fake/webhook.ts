@@ -1,7 +1,7 @@
 /**
  * 偽の通知先。
  *
- * denpa が Webhook を投げる相手。テストで「何が届いたか」を確かめるためだけのもので、
+ * denpa が Webhook を送る先。テストで「何が届いたか」を確かめるためだけのもので、
  * Discord や Slack の Incoming Webhook の代わりに立てる。
  */
 const PORT = Number(process.env["FAKE_WEBHOOK_PORT"] ?? 8096);

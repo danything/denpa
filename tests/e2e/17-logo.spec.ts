@@ -38,8 +38,8 @@ test.describe("局ロゴ", () => {
     );
 
     /*
-     * **CS の局が入ってから押す。** CS はスキャンしなくても標準の表から入る (`channel-seed.ts`) が、
-     * 入るのは起動のあと。入る前に押すと衛星は BS の2中継だけで終わり、入ったあとだと
+     * **CS の局が入ってから押す。** 偽の放送の CS の局 (`tests/fake/services.ts`) が取り込まれるのは
+     * 起動のあと。入る前に押すと衛星は BS の2中継だけで終わり、入ったあとだと
      * BS の外れの中継を閉じた直後に CS の空きを訊く。閉じたことがエージェントに届く前なので
      * 空きが0に見え、CS を諦めていた (CI で時々落ち、やり直すと通っていた)。
      * どちらになるかを起動からの時間に任せず、いつも後者で確かめる
@@ -320,7 +320,7 @@ test.describe("CM検出のロゴ", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(station.locator("td.logo-col").first()).toBeHidden();
     const inline = station.getByRole("button", {
-      name: `${BS11.name} のCMロゴを大きく見る`,
+      name: `${BS11.name} の CM ロゴを大きく見る`,
     });
     await expect(inline).toBeVisible();
     const wrap = page
@@ -343,16 +343,16 @@ test.describe("CM検出のロゴ", () => {
      */
     const zoom = page.getByTestId("logo-zoom");
     await station
-      .getByRole("button", { name: `${BS11.name} のCMロゴを大きく見る` })
+      .getByRole("button", { name: `${BS11.name} の CM ロゴを大きく見る` })
       .click();
     await expect(zoom).toBeVisible();
     await expect(zoom).toContainText(BS11.name);
-    await expect(zoom).toContainText("CMロゴ");
+    await expect(zoom).toContainText("CM ロゴ");
     await expect(zoom.getByTestId("logo-zoom-learned")).toContainText(
       "に覚えました",
     );
     const large = zoom.getByRole("img", {
-      name: `${BS11.name} のCM検出のロゴ`,
+      name: `${BS11.name} の CM 検出のロゴ`,
     });
     await expect(large).toHaveCSS("image-rendering", "pixelated");
     await expect

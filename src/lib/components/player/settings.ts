@@ -1,5 +1,10 @@
 import type { CaptionLanguage } from "@danything/arib/caption-text";
 
+import {
+  formatLabel,
+  type LiveChoice,
+  type LiveFormat,
+} from "#lib/live-choice.js";
 import { LIVE_CODECS, type LiveCodec } from "#lib/live.js";
 import { SPEEDS } from "#lib/ts/pacing.js";
 
@@ -51,51 +56,69 @@ export interface SettingToggle {
   disabled?: boolean;
 }
 
-/** 押せない形式に添える注記 (docs/writing.md「同じことは同じ文言で」) */
+/** 押せない形式に添える注記 (docs/writing.md「同じ操作・状態の文言」) */
 function unplayable(label: string, disabled: boolean): string {
   return disabled ? `${label} (再生できません)` : label;
 }
 
 const MPEG2 = "mpeg2";
+const AUTO = "auto";
 
 /**
- * ライブと追っかけのコーデック。押すと再エンコードになるので映像が一瞬止まるが、前の映像を貼ったまま差し替わる。
+ * ライブと追っかけのコーデック。並びは **自動 → AV1 → H.265 → H.264 → MPEG-2** (`#lib/live-choice.ts`)。押すと再エンコードに
+ * なるので映像が一瞬止まるが、前の映像を貼ったまま差し替わる。自動の行の値には、いま決まっている形式を添える (「自動 (MPEG-2)」)。
  *
- * `onraw` を渡すと (ライブだけ) 末尾に **MPEG-2** が並ぶ。エンコードせずに放送そのままを
+ * `raw` を渡すと (ライブだけ) 末尾に **MPEG-2** が並ぶ。エンコードせずに放送そのままを
  * この端末でデコードする経路 (docs/stream.md#放送そのままmpeg-2を送る)。
+ * H.265 は `hevc` を渡したときだけ並ぶ (ライブで、ライブのエンコーダが GPU のとき。`server/viewing.ts`)。
+ * `hidden` (世帯の設定。H.264 と H.265 を出さない) なら H.264 と H.265 は並べない。自動でそれになっているのは値に出す。
  * `unavailable` に挙げた形式は、並べるが押せない (`live-player.svelte.ts` の `unavailable`)
  */
 export function liveCodecs(opts: {
   icon: IconShape;
-  codec: LiveCodec;
+  /** メニューで選んでいるもの */
+  choice: LiveChoice;
+  /** いま決まっている形式 (自動の行の値に添える) */
+  format: LiveFormat;
+  /** MPEG-2 を並べるか (ライブだけ。追っかけに放送のままは無い) */
   raw?: boolean;
+  /** H.265 を並べるか (ライブで、ライブのエンコーダが GPU のときだけ。追っかけは出さない) */
+  hevc?: boolean;
+  hidden?: boolean;
   unavailable: LiveCodec[];
-  onselect: (codec: LiveCodec) => void;
-  onraw?: () => void;
+  onselect: (choice: LiveChoice) => void;
 }): SettingChoice {
-  const raw = opts.raw === true;
-  const current = raw ? MPEG2 : opts.codec;
+  const codecs = LIVE_CODECS.filter((c) =>
+    c.id === "hevc"
+      ? opts.hevc === true && opts.hidden !== true
+      : !(opts.hidden === true && c.id === "h264"),
+  );
   return {
     id: "codec",
     label: "コーデック",
     icon: opts.icon,
-    value: raw
-      ? "MPEG-2"
-      : (LIVE_CODECS.find((c) => c.id === current)?.label ?? "H.264"),
+    value:
+      opts.choice === "auto"
+        ? `自動 (${formatLabel(opts.format)})`
+        : formatLabel(opts.choice),
     options: [
-      ...LIVE_CODECS.map((c) => {
+      { key: AUTO, label: "自動", active: opts.choice === "auto" },
+      ...codecs.map((c) => {
         const off = opts.unavailable.includes(c.id);
         return {
           key: c.id as string,
           label: unplayable(c.label, off),
-          active: c.id === current,
+          active: c.id === opts.choice,
           disabled: off,
         };
       }),
-      ...(opts.onraw ? [{ key: MPEG2, label: "MPEG-2", active: raw }] : []),
+      ...(opts.raw === true
+        ? [{ key: MPEG2, label: "MPEG-2", active: opts.choice === "raw" }]
+        : []),
     ],
     pick: (key) => {
-      if (key === MPEG2) opts.onraw?.();
+      if (key === MPEG2) opts.onselect("raw");
+      else if (key === AUTO) opts.onselect("auto");
       else opts.onselect(key as LiveCodec);
     },
   };

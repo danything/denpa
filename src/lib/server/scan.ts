@@ -1,14 +1,15 @@
 /**
- * チャンネルスキャン。物理チャンネルを片端から選局して、ある局を探す。
+ * チャンネルスキャン。地上波は物理チャンネルを片端から選局して、ある局を探す。
+ * **BS と CS は放送の NIT から一覧を作る** (`satellite.ts`。中継器に 1 回合わせれば全部の TS が分かる)。
  *
  * **選局はエージェントに任せ、読むのはこちら。** エージェントは中身を読まないので
  * ([agent.md](../../../docs/agent.md))、NIT と SDT を読み取って局名を取るのは
  * denpa の仕事になる。局名は ARIB の文字符号で入っていて、そのデコーダは
  * `packages/arib/src/aribtext.ts` にしかない。
  *
- * Mirakurun の走査に合わせてある。
+ * 地上波は Mirakurun の走査に合わせてある。
  *
- * - 地上波は 13〜62ch を総当たり (CATV を選ぶと C13〜C63 も)、BS は 01〜23 の各 4 スロット、CS は 02〜24ch
+ * - 地上波は 13〜62ch を総当たり (CATV を選ぶと C13〜C63 も)
  * - 1チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす
  * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入り、
  *   映像の無いものは取り込みで落とす: `epg.DIGITAL_TV`)
@@ -25,14 +26,16 @@ import { config } from "./config";
 import { savePrograms, settle, sync, typeRank } from "./epg";
 import { collectOnce } from "./epg-collect";
 import { emit } from "./events";
+import { knownNames, readLineup, type SatelliteType } from "./satellite";
 import { resolveConflicts } from "./scheduler";
 import {
   type AgentChannel,
+  type AgentTuner,
+  getChannels,
   getTuners,
   openChannelStream,
   putChannels,
   TunerBusyError,
-  twinOf,
 } from "./tuner";
 
 /**
@@ -53,14 +56,11 @@ const LOG_LIMIT = 400;
 /** 総当たりできる種別。`SKY` (スカパー!プレミアム) は持っていないので対象外 */
 type ScannableType = Extract<ChannelType, "GR" | "BS" | "CS">;
 
-const CHANNEL_RANGES: Record<ScannableType, { min: number; max: number }> = {
-  GR: { min: 13, max: 62 },
-  BS: { min: 1, max: 23 },
-  CS: { min: 2, max: 24 },
-};
+/** 地上波の UHF の範囲 */
+const UHF_RANGE = { min: 13, max: 62 };
 
-/** BS は1つの物理チャンネルに最大4本の TS が入っている */
-const BS_SLOTS = 4;
+const isSatellite = (type: ScannableType): type is SatelliteType =>
+  type === "BS" || type === "CS";
 
 /**
  * スキャンの種類。**`CATV` は地上波の局として、UHF に加えて CATV の周波数変換パススルー (C13〜C63) も回す。**
@@ -71,32 +71,22 @@ export type ScanKind = (typeof SCAN_KINDS)[number];
 const CATV_RANGE = { min: 13, max: 63 };
 
 /**
- * 選局する物理チャンネルの一覧。エージェントが受け付ける書き方で返す。
+ * 地上波で選局する物理チャンネルの一覧。エージェントが受け付ける書き方で返す。
  *
  * **範囲は決め打ち。** 放送で使う物理チャンネルは決まっていて、狭めても
  * 総当たりの時間が少し減るだけ。狭めた結果 見つからない局が出るほうが困る
  */
-export function channelsFor(type: ScanKind): string[] {
-  if (type === "CATV") {
-    const { min, max } = CATV_RANGE;
-    return [
-      ...channelsFor("GR"),
-      ...Array.from({ length: max - min + 1 }, (_, i) => `C${min + i}`),
-    ];
-  }
-  const { min, max } = CHANNEL_RANGES[type];
-  const range = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-
-  if (type === "GR") return range.map((ch) => `T${ch}`);
-  if (type === "BS") {
-    return range.flatMap((ch) =>
-      Array.from(
-        { length: BS_SLOTS },
-        (_, slot) => `BS${String(ch).padStart(2, "0")}_${slot}`,
-      ),
-    );
-  }
-  return range.map((ch) => `CS${String(ch).padStart(2, "0")}`);
+export function channelsFor(type: "GR" | "CATV"): string[] {
+  const uhf = Array.from(
+    { length: UHF_RANGE.max - UHF_RANGE.min + 1 },
+    (_, i) => `T${UHF_RANGE.min + i}`,
+  );
+  if (type === "GR") return uhf;
+  const { min, max } = CATV_RANGE;
+  return [
+    ...uhf,
+    ...Array.from({ length: max - min + 1 }, (_, i) => `C${min + i}`),
+  ];
 }
 
 interface ScanResult {
@@ -127,7 +117,7 @@ export async function readServices(
   let bytes = 0;
   let message = "";
 
-  // 打ち切りの合図は走査全体で1つ。局ごとに足した見張りは、読み終えたら外す (100局を超えると積もる)
+  // 打ち切りの合図は走査全体で1つ。局ごとに足したリスナーは、読み終えたら外す (100局を超えると積もる)
   let stop = (): void => {};
   const deadline = new Promise<void>((resolve) => {
     stop = resolve;
@@ -267,6 +257,8 @@ class Scanner {
   private readonly tuned = new Map<ScannableType, number>();
   /** 電波は来たのに局情報が揃わなかったチャンネル。1周したあとで回し直す */
   private retry: Job[] = [];
+  /** 放送の一覧を読めた衛星の種別。読めなかった種別は控えを書き換えない (`runScan`) */
+  readonly lineups = new Set<SatelliteType>();
   /**
    * 局を探している間に流れてきた番組表。**ついでに取得しておく。** NIT と SDT を待つ
    * 数秒〜十数秒で「いま・次」と今日ぶんくらいは来るので、スキャンが終わった
@@ -285,19 +277,120 @@ class Scanner {
     return this.aborter.signal.aborted;
   }
 
-  /** targets は [種別, チャンネル一覧] の並び。見つかったチャンネル定義を返す */
+  /**
+   * targets は [種別, チャンネル一覧] の並び。見つかったチャンネル定義を返す。
+   * 衛星 (BS・CS) は総当たりせず、放送の一覧を読む (`satellite`)。地上波の総当たりと同時に進む
+   */
   async run(targets: [ScannableType, string[]][]): Promise<AgentChannel[]> {
     const tuners = (await getTuners().catch(() => [])).filter(
       (tuner) => !tuner.disabled,
     );
+    const satellites = targets
+      .map(([type]) => type)
+      .filter(isSatellite)
+      .map((type) => this.satellite(type, tuners));
+    await Promise.all([
+      this.ground(
+        targets.filter(([type]) => !isSatellite(type)),
+        tuners,
+      ),
+      ...satellites,
+    ]);
 
-    /*
-     * **種別をまたいで1つの列にする。**
-     *
-     * 種別ごとに順に回していた頃は、地上波を50ch 回し終わるまで衛星に
-     * 行かなかった。使うチューナーが別なので、待たせている間ずっと
-     * 衛星のチューナーが遊んでいる。1つの列を全チューナーで引けば同時に進む
-     */
+    return [...this.found.entries()]
+      .sort(([a], [b]) => {
+        const at = (key: string) => key.indexOf(":");
+        const typeA = a.slice(0, at(a));
+        const typeB = b.slice(0, at(b));
+        return (
+          typeRank(typeA) - typeRank(typeB) ||
+          a.slice(at(a) + 1).localeCompare(b.slice(at(b) + 1), "en", {
+            numeric: true,
+          })
+        );
+      })
+      .map(([, entry]) => entry);
+  }
+
+  /**
+   * **衛星の一覧を放送の NIT から作る** (`satellite.readLineup`)。読めなかったら控えはそのまま (`lineups` に入れない)。
+   * 進み具合は 1 種別で 1 つと数える
+   */
+  private async satellite(
+    type: SatelliteType,
+    tuners: AgentTuner[],
+  ): Promise<void> {
+    if (!tuners.some((tuner) => tuner.types.includes(type))) {
+      this.onProgress({
+        line: `${type}: 対応するチューナーがありません`,
+        skipped: 1,
+      });
+      return;
+    }
+    const current = await getChannels().catch(() => []);
+    const known = knownNames(current);
+    const lineup = await readLineup(
+      type,
+      (channel) => this.openWaiting(type, channel),
+      {
+        timeout: TUNE_TIMEOUT,
+        abort: this.aborter.signal,
+        known,
+        // CS で読めなかったネットワークは今のチャンネルを残す (欠けた一覧で置き換えない)
+        previous: current,
+        onEvents: (epg) => this.events.push(...epg.all()),
+      },
+    );
+    for (const line of lineup.log) this.onProgress({ line });
+    if (this.aborted) return;
+    if (lineup.channels.length === 0) {
+      this.onProgress({
+        line: `${type}: 放送の一覧を読めませんでした。今のチャンネルをそのまま使います`,
+        scanned: 1,
+      });
+      return;
+    }
+    for (const entry of lineup.channels)
+      this.found.set(`${type}:${entry.channel}`, entry);
+    this.lineups.add(type);
+    const services = lineup.channels.reduce(
+      (sum, entry) => sum + entry.services.length,
+      0,
+    );
+    this.onProgress({
+      line: `${type}: 放送の一覧から ${lineup.channels.length} チャンネル・${services} 局を入れました`,
+      scanned: 1,
+      channels: lineup.channels.length,
+    });
+  }
+
+  /** 開く。**チューナーが塞がっていれば空くまで待つ** (地上波の総当たりと同じ。録画が終われば空く) */
+  private async openWaiting(
+    type: SatelliteType,
+    channel: string,
+  ): Promise<ReadableStream<Uint8Array>> {
+    for (;;) {
+      try {
+        return await openChannelStream(
+          type,
+          channel,
+          this.aborter.signal,
+          `scan ${channel}`,
+          config.priority.scan,
+        );
+      } catch (error) {
+        if (!(error instanceof TunerBusyError) || this.aborted) throw error;
+        this.onProgress({ line: `${channel}: 空きを待っています` });
+        await Bun.sleep(BUSY_RETRY);
+      }
+    }
+  }
+
+  /** 地上波の総当たり。チューナーの台数ぶん並べる */
+  private async ground(
+    targets: [ScannableType, string[]][],
+    tuners: AgentTuner[],
+  ): Promise<void> {
     const queue: Job[] = [];
     for (const [type, channels] of targets) {
       if (!tuners.some((tuner) => tuner.types.includes(type))) {
@@ -352,16 +445,6 @@ class Scanner {
         line: `${type}: ${channels.length}ch 中 ${tuned}ch で受信、うち ${found}ch で局情報が揃いました`,
       });
     }
-
-    return [...this.found.entries()]
-      .sort(([a], [b]) => {
-        const [typeA = "", channelA = ""] = a.split(":");
-        const [typeB = "", channelB = ""] = b.split(":");
-        return (
-          typeRank(typeA) - typeRank(typeB) || channelA.localeCompare(channelB)
-        );
-      })
-      .map(([, entry]) => entry);
   }
 
   /** そのチューナーで引ける先頭の1件を取り出す。引けないものは飛ばして次を見る */
@@ -448,16 +531,6 @@ class Scanner {
       }
 
       const entry = channelEntry(type, channel, services);
-      const twin = twinOf(this.found.values(), entry);
-      if (twin !== null) {
-        // 無い相対番号を指したので、先頭の TS が返ってきただけ
-        this.onProgress({
-          line: `${channel}: ${twin} と同じ TS (${entry.transportStreamId}) なので使いません`,
-          ...counts,
-        });
-        continue;
-      }
-
       this.found.set(`${type}:${channel}`, entry);
       this.events.push(...epg.all());
       this.onProgress({
@@ -497,14 +570,17 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
     // 1件も見つからないまま上書きすると、今まで録れていた局まで消える
     if (found.length === 0) {
       throw new Error(
-        "チャンネルが1件も見つかりませんでした。チューナーとアンテナを確認してください",
+        "チャンネルが 1 件も見つかりませんでした。チューナーとアンテナを確認してください",
       );
     }
 
     push("チャンネルを保存しています...", {}, { phase: "保存" });
+    // 放送の一覧を読めなかった衛星の種別は置き換えない (今のチャンネルを消さない)
     await putChannels(
       found,
-      targets.map(([type]) => type),
+      targets
+        .map(([type]) => type)
+        .filter((type) => !isSatellite(type) || scanner.lineups.has(type)),
     );
     push(
       "完了しました",
@@ -558,10 +634,13 @@ export function start(options: ScanOptions): {
   if (current.state === "running")
     return { started: false, message: "すでに実行中です" };
 
-  const targets: [ScannableType, string[]][] = types.map((type) => [
-    type === "CATV" ? "GR" : type,
-    channelsFor(type),
-  ]);
+  /*
+   * 衛星は総当たりしないので、チャンネルの一覧は持たない。進み具合では 1 つと数える
+   * (放送の一覧を 1 回読む。CS はネットワークが 2 つなので 2 回選局するが、数は 1 のまま)
+   */
+  const targets: [ScannableType, string[]][] = types.map((type) =>
+    type === "BS" || type === "CS" ? [type, [type]] : ["GR", channelsFor(type)],
+  );
 
   current = {
     ...IDLE,

@@ -63,6 +63,13 @@ const LABELED_EPISODE =
 // 話数の後ろが枠の名前だけ (`第51話【アニメイズム】`) なら副題ではない
 const LABELS_ONLY = /^(?:【[^】]*】\s*)+$/;
 
+// 副題の後ろの枠の名前 (TBS の `#30「副題」【アガルアニメ】`)。副題に入れると、枠の名前を
+// 付けない局 (BS日テレの `第30話 副題`) と副題が食い違い、同じ回と見なされない
+const TRAILING_LABELS = /\s*(?:【[^】]*】\s*)+$/;
+
+// 枠の名前を外した残りが鍵括弧の副題だけ (`「副題」`) なら、括弧は外す
+const WHOLE_BRACKET = /^[「『]([^「『」』]+)[」』]$/;
+
 // 名前の後ろに残る区切り記号 (`番組名 - ` や、`作品名 編▼第52話` の ▼。外字の ⛊⛉ も)
 const TRAILING_SEPARATOR = /[\s\-~〜:：|｜▼▽⛊⛉]+$/u;
 
@@ -241,8 +248,14 @@ export function parseTitle(rawName: string): ParsedTitle {
     const at = ep.index ?? 0;
     // 話数以降(「番組名 #12 サブタイトル」の後半)はサブタイトル扱いにして series からは落とす
     const tail = series.slice(at + ep[0].length).trim();
-    if (subtitle === "" && tail.key !== "" && !LABELS_ONLY.test(tail.key))
-      subtitle = tail.raw;
+    if (subtitle === "" && tail.key !== "" && !LABELS_ONLY.test(tail.key)) {
+      const body = tail.remove(TRAILING_LABELS).trim();
+      const bracketed = body.match(WHOLE_BRACKET);
+      subtitle =
+        bracketed === null
+          ? body.raw
+          : body.slice(1, 1 + (bracketed[1] ?? "").length).raw;
+    }
     series = series.slice(0, at).trim();
   }
 

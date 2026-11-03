@@ -35,7 +35,7 @@ import type { Busy } from "./conflict";
  */
 const CHANNEL_TYPE: Shape<ChannelType> = literal("GR", "BS", "CS", "SKY");
 
-/** エージェントが知っているチャンネル。スキャンの結果そのもの */
+/** エージェントが持っているチャンネル。スキャンの結果そのもの */
 const AGENT_CHANNEL = object({
   type: CHANNEL_TYPE,
   channel: string,
@@ -196,7 +196,7 @@ export async function putTuners(tuners: TunerConfig[]): Promise<void> {
  * 画面側でやる (routes/settings/reception/tuners.server.ts)。
  *
  * **頭の語はエージェントも読む。** `epg` `logo` `scan` は掛かっていない SI しか読まないので、それだけの選局は
- * カードに聞かずに流す (docs/agent.md「選局コマンドは画面から渡させない」の節の、用途を名乗る段落とその次の段落)。復号の要る使い方を足すなら別の語にする
+ * カードに聞かずに流す (docs/agent.md「選局コマンドは画面から渡させない」)。復号の要る使い方を足すなら別の語にする
  */
 export type StreamUse =
   | `rec ${number}`
@@ -223,7 +223,7 @@ export function recordingOf(use: string): number | null {
  * **録画中の予約が、いまどのチューナーにいるか。** 割り振りのなぞり始めの状態になる。
  *
  * 録り始めた予約は割り振り直さない (候補に入れない) が、終わるまでチューナーを塞ぐ。どのチューナーに
- * 入ったかはエージェントが知っているので、一覧の利用者 (`users`) の `rec <録画ID>`
+ * 入ったかはエージェントの一覧に出るので、一覧の利用者 (`users`) の `rec <録画ID>`
  * (`recordingUse`) から読む。利用者のいるチューナーは今まさに録っているチューナーなので、いる場所を取り違えることは無い。
  * ただし録り始めたのに、まだ使えていない (空き待ちで掛け直している) 録画は数えられない。
  *
@@ -267,6 +267,12 @@ export function recordingHolds(
 export class TunerBusyError extends Error {}
 
 /**
+ * **エージェントが「選局できない」と返した** (同期しない・デバイスが無いなど)。空き待ち (`TunerBusyError`) と、
+ * エージェントに繋がらないのは別。受信できるかの記録 (`reception.ts`) はこれだけを失敗に数える
+ */
+export class TuneError extends Error {}
+
+/**
  * 物理チャンネルを丸ごと開く。**使い方はこれ1つ。**
  *
  * 同じチャンネルを誰かが既に開いていれば、エージェントが選局を共有させる
@@ -298,7 +304,7 @@ export async function openChannelStream(
     const detail = await res.text().catch(() => "");
     if (res.status === 409)
       throw new TunerBusyError(`チューナーに空きがありません ${detail}`);
-    throw new Error(`選局できません (${res.status}) ${detail}`);
+    throw new TuneError(`選局できません (${res.status}) ${detail}`);
   }
   return res.body;
 }
@@ -355,50 +361,4 @@ export async function retryWhileBusy<T>(
       await wait(BUSY_WAIT);
     }
   }
-}
-
-/**
- * **同じ TS を指している枠か。** 指していれば、先に見つけたほうの名前を返す。
- *
- * 衛星は1つの周波数に何本もの TS が入っていて、`BS01_0` のような
- * **相対番号**で選ぶ。ところが実際に何本入っているかは中継ごとに違い、
- * 無い番号を指すと**チューナーは先頭の TS を返す** (断ってはくれない)。
- *
- * その結果、実機では 35 枠のうち **9 枠が既に知っている TS の写し**だった
- * (`BS01_3` = `BS01_0`、`BS05_2` と `BS05_3` = `BS05_0` …)。
- *
- * **中身は1つも減りません。** 実機で見つかった BS の 26 TS は、放送自身が
- * 名乗っている 26 TS と一致していました (docs/data.md「相対番号の穴」)。
- */
-export function twinOf(
-  found: Iterable<AgentChannel>,
-  entry: AgentChannel,
-): string | null {
-  // TSID が分からないものは判断できない。地上波は1周波数1TSなので、そもそも起きない
-  if (entry.transportStreamId <= 0) return null;
-  for (const other of found) {
-    if (
-      other.type === entry.type &&
-      other.transportStreamId === entry.transportStreamId
-    ) {
-      return other.channel;
-    }
-  }
-  return null;
-}
-
-/**
- * 写しを落とした一覧。**先に来たほうを残す** (スキャンと同じ決まり)。
- *
- * スキャンでも落としているが、**控えを書いたのが古いスキャンだと写しが残る。**
- * 実機の `channels.json` がまさにそれで、BS 35 枠のうち 9 枠が写しのまま残り、
- * 番組表集めが**同じ TS を二度開き続けて**いた。開く側でも落としておけば、
- * 控えが何であれ二度は開かない。
- */
-export function withoutTwins(channels: AgentChannel[]): AgentChannel[] {
-  const kept: AgentChannel[] = [];
-  for (const channel of channels) {
-    if (twinOf(kept, channel) === null) kept.push(channel);
-  }
-  return kept;
 }

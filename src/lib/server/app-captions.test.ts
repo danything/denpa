@@ -211,3 +211,18 @@ describe("ライブの字幕 (liveCaptions)", () => {
     expect(liveCaptions(SERVICE)).toBeNull();
   });
 });
+
+describe("変換したライブの字幕と時計 (liveCaptions の codec)", () => {
+  // 時刻は映像と同じ fMP4 の時刻なので、同じ形式のセッションだけを共有する (別の形式の時刻を渡さない)
+  test("同じ形式で流しているセッションだけを共有する。省けば放送そのまま", async () => {
+    const media = liveStream(SERVICE, "h264")!;
+    const encoded = liveCaptions(SERVICE, 1, "h264");
+    expect(encoded).not.toBeNull();
+    expect(liveCaptions(SERVICE)).toBeNull();
+    expect(liveCaptions(SERVICE, 1, "av1")).toBeNull();
+    // 映像が抜けたら畳まれて、こちらも閉じる (読み切れる)
+    await media.cancel();
+    await new Response(encoded!).arrayBuffer();
+    expect(liveCaptions(SERVICE, 1, "h264")).toBeNull();
+  });
+});

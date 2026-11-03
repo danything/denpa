@@ -9,10 +9,10 @@ name: Publish @danything/arib
 # 手で出すときは、main のコミットにタグ `arib-v<バージョン>` を押す。バージョンは package.json と同じにする (違えば止まる)。
 # `[skip ci]` のコミット (main の先頭に積まれる bump image marks) に付けたタグでは、この workflow は動かない
 #
-# npm へはふだん Trusted Publishing (OIDC) で出す。トークンは持たず、provenance も付く。
-# npm 側で、このリポジトリのこの workflow (arib-publish.yml) を信頼する設定が要る。
-# Trusted Publishing はパッケージが npm にあってからしか設定できないので、**最初の1回だけ**は
-# リポジトリの secret `NPM_TOKEN` (npm の granular access token) で出す。出したら secret は消す
+# **npm にはステージまでしか置かない** (`npm stage publish`)。公開するのは、人が npmjs.com で確定 (2FA) したとき。
+# workflow やリポジトリが乗っ取られても、確定しなければ公開されない。
+# 認証は Trusted Publishing (OIDC) で、トークンは持たない。npm 側の信頼する設定 (このリポジトリのこの
+# workflow) は「npm stage publish」だけを許してある
 on:
   push:
     tags: ["arib-v*"]
@@ -99,7 +99,6 @@ jobs:
           bun run build
           bun scripts/manifest.ts
 
-      # Trusted Publishing は npm 11.5.1 から
       - name: Set up Node
         if: steps.decide.outputs.publish == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -108,15 +107,17 @@ jobs:
           check-latest: true
           registry-url: https://registry.npmjs.org
 
-      # npm は OIDC を先に試し、信頼する設定が無ければトークンに戻る (最初の1回)
+      # `npm stage` は npm 12 から (Node 24 に付いてくるのは 11)
+      - name: Set up npm
+        if: steps.decide.outputs.publish == 'true'
+        run: npm install -g npm@12.2.1
+
       - name: Publish
         if: steps.decide.outputs.publish == 'true'
         working-directory: packages/arib
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+        run: npm stage publish --access public --provenance
 
-  # リリースから出したときだけ、そのコミットにタグを付ける (次のリリースで比べる起点になる)。
+  # リリースから出したとき (ステージに置いたとき) だけ、そのコミットにタグを付ける (次のリリースで比べる起点になる)。
   # write が要るのはここだけなので、ジョブを分けてある
   tag:
     needs: publish

@@ -42,7 +42,7 @@ public sealed partial class PcscLink : ICardLink
     private const uint ProtocolT1 = 2;
     private const uint LeaveCard = 0;
 
-    /// <summary><c>SCARD_IO_REQUEST</c> (dwProtocol, cbPciLength)。<c>g_rgSCardT1Pci</c> と同じ中身 (どちらも DWORD 2つ)</summary>
+    /// <summary><c>SCARD_IO_REQUEST</c> (dwProtocol, cbPciLength)。<c>g_rgSCardT1Pci</c> と同じ中身 (どちらも DWORD 2 つ)</summary>
     private static readonly uint[] T1Pci = [ProtocolT1, 8];
 
     /// <summary>macOS。ハンドルは int32、文字列は UTF-8</summary>
@@ -124,7 +124,7 @@ public sealed partial class PcscLink : ICardLink
             ? Win.SCardListReaders(context, 0, readers, ref length)
             : Mac.SCardListReaders((int)context, 0, readers, ref length);
 
-    /// <summary>NUL 区切りで、最後に NUL が2つ。**Windows は長さを UTF-16 の文字で数える。** 読めなければ空</summary>
+    /// <summary>NUL 区切りで、最後に NUL が 2 つ。**Windows は長さを UTF-16 の文字で数える。** 読めなければ空</summary>
     private static List<string> List(nint context)
     {
         uint length = 0;
@@ -179,7 +179,7 @@ public sealed partial class PcscLink : ICardLink
         [.. Readers().Select(name => new CardLinkCandidate(name, () => Open(name)))];
 
     /// <summary>
-    /// リーダーの名前を並べる。リーダーが1つも無いと、macOS は PC/SC のサービスごと閉じていて
+    /// リーダーの名前を並べる。リーダーが 1 つも無いと、macOS は PC/SC のサービスごと閉じていて
     /// <c>SCardEstablishContext</c> から断られる (<c>SCARD_E_NO_SERVICE</c>。Windows も Smart Card
     /// サービスが止まっていれば同じ)。それも空として扱う
     /// </summary>
@@ -205,7 +205,7 @@ public sealed partial class PcscLink : ICardLink
     public byte[] Reset()
     {
         /*
-         * 繋ぐだけで電源が入る。**呼ばれるのは開いた直後の1回だけ** — BCas は失敗したら閉じて開き直す。
+         * 繋ぐだけで電源が入る。**呼ばれるのは開いた直後の 1 回だけ** — BCas は失敗したら閉じて開き直す。
          *
          * macOS の標準の CCID ドライバ (Apple のもの) では B-CAS に繋がらないリーダーがある (IDBridge CT30 の報告)。
          * 怪しいのは速さ — B-CAS は specific mode で ATR の直後から TA1 の速さで話し、PC Twin の系統のリーダーは
@@ -282,7 +282,7 @@ public sealed partial class PcscLink : ICardLink
 
     /// <summary>
     /// macOS の CCID ドライバ。<c>"ifd-ccid"</c> (従来のもの) か <c>"apple"</c> (macOS の標準のもの)。macOS 以外は null。
-    /// 呼ぶたびに `defaults` を1回起こす (上限 5 秒)。<c>--card</c> と <c>GET /denpa/about</c> (About.cs) が使う
+    /// 呼ぶたびに `defaults` を 1 回起こす (上限 5 秒)。<c>--card</c> と <c>GET /denpa/about</c> (About.cs) が使う
     /// (docs/install-mac.md「カードが読めないとき」)
     /// </summary>
     public static string? CcidDriver()

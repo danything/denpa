@@ -37,7 +37,7 @@
    *   透明度 0.5。読み上げには出さない
    * - 動きを減らす設定では流さず、上の行に 3 秒置いて消す (`shita` は下の行)
    *   (長さは `!important` で書く。Pico は動きを減らす設定で `animation-duration` を 1ms にするので、置いたものがすぐ消えていた)
-   * - この端末から書き込んだものは、字の前に字と同じ色の点 (`mine-dot`)
+   * - この端末から書き込んだものは、字の頭に短い縦線 (`mine-line`。映像の上のオンと同じ空色)
    * - 同時に流すのは 60 件まで (`data-lite` の端末では 15 件)。空いた行が無ければ捨てる
    * - 切り抜きは、いま枠に見えているものを見えている位置のまま写す (`snapshot.ts` の `commentLayer`。枠は `data-frame` で探す。
    *   外の写しは入らない)
@@ -255,7 +255,7 @@
   <span
     class="comment"
     class:still={item.still}
-    class:mine-dot={item.mine}
+    class:mine-line={item.mine}
     style:font-size={item.size === size ? undefined : `${item.size}px`}
     style:color={item.color}
     data-testid={testid}
@@ -353,8 +353,14 @@
     will-change: auto;
     animation-name: jikkyo-still;
   }
-  /* 自分の書き込みの点 (`.mine-dot`) にも字と同じ黒い縁 */
-  .comment.mine-dot::before {
+  /*
+   * 自分の書き込みの縦線 (`.mine-line`)。主の色は黒い舞台で沈むので、映像の上の選んでいる印 (`.overlay-menu`) と同じ空色にする。
+   * 明るい場面でも読めるように字と同じ黒い縁
+   */
+  .comment.mine-line {
+    --mine-line: var(--dp-on-video-on);
+  }
+  .comment.mine-line::before {
     box-shadow: 0 0 0 1px #000;
   }
   .jikkyo[data-paused] .comment,

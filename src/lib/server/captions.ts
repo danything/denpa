@@ -337,7 +337,7 @@ export class TrackList {
 }
 
 function label(index: number, lang: string | null): string {
-  const head = index === 0 ? "字幕" : `字幕${index + 1}`;
+  const head = index === 0 ? "字幕" : `字幕 ${index + 1}`;
   if (lang === null) return head;
   return `${head} (${LANGUAGE[lang] ?? lang})`;
 }
@@ -412,7 +412,7 @@ export class CaptionText {
     } catch (error) {
       if (!this.told)
         console.warn(
-          `[captions] 字幕を1コマ読めませんでした: ${String(error)}`,
+          `[captions] 字幕を 1 コマ読めませんでした: ${String(error)}`,
         );
       this.told = true;
       return null;
@@ -494,7 +494,7 @@ export interface CaptionOut {
 /**
  * アプリ向けの字幕 API を作る。中身を作る側 (`open`) は、閉じるときの後始末を返す。
  *
- * 通すのは字幕 (文字の配置 `0x22`) と、選べる字幕の通知 (`0x40` の `captions`) だけ。
+ * 通すのは字幕 (文字の配置 `0x22`) と、選べる字幕の通知 (`0x40` の `captions`)、時計の通知 (`clock`。ライブだけが送る) だけ。
  * `error` / `ended` の通知が来たら閉じる。ほかの通知・データ放送・映像は捨てる
  * (映像は同じ URL の隣のエンドポイント — ライブの `live` や追っかけの `chase` — で受け取っている)
  */
@@ -529,7 +529,7 @@ export function captionFeed(
               ) as Notice;
               if (notice.type === "error" || notice.type === "ended")
                 return out.close();
-              if (notice.type !== "captions") return;
+              if (notice.type !== "captions" && notice.type !== "clock") return;
             } else if (kind !== CHANNEL.captionText) {
               return;
             }

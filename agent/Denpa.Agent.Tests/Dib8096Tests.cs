@@ -1,5 +1,3 @@
-using Denpa.Agent;
-
 namespace Denpa.Agent.Tests;
 
 /*
@@ -69,7 +67,7 @@ public class Dib8096Tests
         var gate = i2c.Log.IndexOf("D1025=C000");
         await Assert.That(gate).IsGreaterThan(i2c.Log.IndexOf("D1028=0000", i2c.Log.IndexOf("D565?")));
         await Assert.That(gate).IsLessThan(i2c.Log.FindIndex(line => line.StartsWith('T')));
-        // ゲートを閉じる書き込み (D[1025] = 0x0100) は初期化の頭の2回だけ
+        // ゲートを閉じる書き込み (D[1025] = 0x0100) は初期化の頭の 2 回だけ
         await Assert.That(i2c.Log.Count(line => line == "D1025=0100")).IsEqualTo(2);
         await Assert.That(i2c.Log.Skip(gate).Any(line => line == "D1025=0100")).IsFalse();
     }
@@ -239,7 +237,7 @@ public class Dib8096Tests
         dib.Initialize();
         time.Sleeps.Clear();
         dib.Tune(557_142_857);
-        // 30ms はダイバーシティの切り替え (バージョン 0x8002)。選局ごとに3回
+        // 30ms はダイバーシティの切り替え (バージョン 0x8002)。選局ごとに 3 回
         await Assert.That(time.Sleeps.Count(ms => ms == 30)).IsEqualTo(3);
         await Assert.That(time.Sleeps.Count(ms => ms >= 10)).IsGreaterThan(5);
     }

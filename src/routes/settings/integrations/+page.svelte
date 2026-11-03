@@ -34,6 +34,12 @@
             : `テスト送信に失敗しました: ${form.tested}`,
       });
     }
+    if (form?.niconicoUnlinked)
+      list.push({
+        key: "niconico-unlinked",
+        kind: "success",
+        text: "連携を外しました。ニコニコの側の許可は、ニコニコのアカウント設定から取り消せます",
+      });
     if (form?.migrate)
       list.push({ key: "migrate-started", kind: "info", text: form.migrate });
     return list;

@@ -153,7 +153,7 @@ test.describe("予約の細かい指定", () => {
       await expect(reservation).toHaveCount(1);
       // 予約の行にコーデックのラベルは出さない。エンコードするときの設定で決まるので、
       // 立てた時点の値を出すと設定を変えたときに嘘になる
-      await expect(reservation).not.toContainText("元のTSも残す");
+      await expect(reservation).not.toContainText("元の TS も残す");
 
       await reservation.getByTestId("cancel-button").click();
       await expect(reservation).toHaveCount(0);

@@ -129,7 +129,7 @@
       <h2 id="logo-zoom-title" class="broadcast">{shown.name}</h2>
       <p class="small muted kind">
         {#if shown.kind === "cm"}
-          CMロゴ (CM検出のために録画から覚えたもの)
+          CM ロゴ (CM 検出のために録画から覚えたもの)
         {:else}
           局ロゴ (放送波から取得したもの)
         {/if}
@@ -142,7 +142,7 @@
         <img
           {src}
           alt={shown.kind === "cm"
-            ? `${shown.name} のCM検出のロゴ`
+            ? `${shown.name} の CM 検出のロゴ`
             : `${shown.name} の局ロゴ`}
           onload={loaded}
           class:ready={scale > 0}
@@ -154,8 +154,9 @@
       {#if shown.kind === "cm" && shown.learnedAt !== null}
         <footer class="modal-actions">
           <span class="small muted learned" data-testid="logo-zoom-learned">
-            {dateTime(shown.learnedAt)} に覚えました
-            {#if scale > 0}<span class="num">・ {scale} 倍</span>{/if}
+            {dateTime(shown.learnedAt)} に覚えました{#if scale > 0}<span
+                class="num">・{scale} 倍</span
+              >{/if}
           </span>
           <!-- 「覚え直す」はこの窓の中だけ (表の行を低く保つ)。消えたら窓も閉じる -->
           <form method="POST" action="?/logoForget" use:submitting>
@@ -163,7 +164,7 @@
             <button
               type="submit"
               class="secondary"
-              aria-label={`${shown.name} のCM検出のロゴを覚え直す`}
+              aria-label={`${shown.name} の CM 検出のロゴを覚え直す`}
               data-testid="logo-zoom-forget"
             >
               覚え直す

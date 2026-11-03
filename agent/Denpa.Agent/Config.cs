@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 繋いである機材1台ぶん。
+/// 繋いである機材 1 台ぶん。
 ///
 /// <para>
 /// **選局コマンドそのものは持たない。** 画面から書き換えられるようにした以上、
@@ -34,7 +34,7 @@ public sealed record TunerSpec(
     }
 
     /// <summary>
-    /// 1台ぶんを読む。名前が無ければ null。**型が違えば <see cref="FormatException"/>** (どの項目かを添える)
+    /// 1 台ぶんを読む。名前が無ければ null。**型が違えば <see cref="FormatException"/>** (どの項目かを添える)
     /// </summary>
     public static TunerSpec? FromJson(JsonNode? node)
     {
@@ -72,7 +72,7 @@ public sealed record TunerSpec(
 }
 
 /// <summary>
-/// 設定ファイル2つ。**どちらも JSON で、どちらも denpa が書く。**
+/// 設定ファイル 2 つ。**どちらも JSON で、どちらも denpa が書く。**
 ///
 /// <list type="bullet">
 /// <item><c>tuners.json</c> … 繋いである機材。画面から編集する</item>
@@ -159,8 +159,8 @@ public sealed class Config(string tunersFile, string channelsFile)
             }
             catch (FormatException error)
             {
-                // 1台の書き損じで全部を捨てない
-                Log.Write($"{TunersFile} の1台を飛ばしました: {error.Message}");
+                // 1 台の書き損じで全部を捨てない
+                Log.Write($"{TunersFile} の 1 台を飛ばしました: {error.Message}");
             }
         }
         return tuners;
@@ -171,7 +171,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     ///
     /// <para>
     /// **空を渡すと設定そのものを消す。** そのまま「自動検出に戻す」になる。
-    /// 1台も無い状態を書き込めるようにしておくより、無い状態=自分で探す、の
+    /// 1 台も無い状態を書き込めるようにしておくより、無い状態=自分で探す、の
     /// ほうが後で困らない。
     /// </para>
     /// </summary>
@@ -193,7 +193,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     ///
     /// <para>
     /// 自動で分かるのは「刺さっているデバイスと、それが受けられる方式」だけ。
-    /// LNB を足したい・1台だけ止めたい、は人にしか決められないので、そのときは画面から書く。
+    /// LNB を足したい・1 台だけ止めたい、は人にしか決められないので、そのときは画面から書く。
     /// </para>
     /// </summary>
     public (List<TunerSpec> Tuners, bool Detected) ResolveTuners()
@@ -219,22 +219,6 @@ public sealed class Config(string tunersFile, string channelsFile)
     };
 
     public JsonArray LoadChannels() => ReadArray(ChannelsFile, null);
-
-    /// <summary>
-    /// チャンネル名から、スキャンで分かった TSID を引く。衛星の選局で相対番号を TSID に直すのに使い、
-    /// 埋め込んだ表より優先する (<see cref="ChannelTable.StreamId"/>)
-    /// </summary>
-    public Func<string, int?> StreamIds()
-    {
-        var table = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var entry in LoadChannels())
-        {
-            var channel = entry?["channel"]?.GetValue<string>();
-            var id = entry?["transportStreamId"]?.GetValue<int>();
-            if (channel is not null && id is > 0) table[channel] = id.Value;
-        }
-        return name => table.TryGetValue(name, out var id) ? id : null;
-    }
 
     /// <summary>
     /// 預かった顔ぶれで差し替える。

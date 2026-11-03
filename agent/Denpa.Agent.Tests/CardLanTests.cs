@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 
@@ -82,7 +81,7 @@ public class CardLanTests
         await Assert.That(policy.Refuse(IPAddress.Parse("192.168.1.21"), null)).IsNotNull();
         await Assert.That(policy.Refuse(IPAddress.Parse("127.0.0.1"), null)).IsNotNull();
 
-        // 既定の範囲そのものや、その中のアドレス1つも書ける
+        // 既定の範囲そのものや、その中のアドレス 1 つも書ける
         var whole = Read(("CARD_SHARE_NETWORKS", "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7,fe80::/10"));
         await Assert.That(whole.Networks.Count).IsEqualTo(CardLanPolicy.DefaultNetworks.Count);
         await Assert.That(Read(("CARD_SHARE_NETWORKS", "::1, fe80::1, ::ffff:10.1.2.3, 172.31.0.0/16")).Networks.Count).IsEqualTo(4);
@@ -102,7 +101,7 @@ public class CardLanTests
     [Arguments("10.0.0.0/7")] // 既定より広い
     [Arguments("172.16.0.0/11")]
     [Arguments("fc00::/6")]
-    [Arguments("192.168.1.0/24, 8.8.8.8")] // 1つでも外があれば断る
+    [Arguments("192.168.1.0/24, 8.8.8.8")] // 1 つでも外があれば断る
     public async Task LAN_の外を含む範囲は書けない(string networks)
     {
         var error = Assert.Throws<ArgumentException>(() => Read(("CARD_SHARE_NETWORKS", networks)));

@@ -3,17 +3,17 @@ using System.Buffers;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 実機で選局を確かめる小道具。**サーバを立てずに1本だけ試す。**
+/// 実機で選局を確かめる小道具。**サーバを立てずに 1 本だけ試す。**
 ///
 /// <para>
-/// デバイスを確保したままの選局は、値が1つ違っても「ioctl は通るが同期しない」という
+/// デバイスを確保したままの選局は、値が 1 つ違っても「ioctl は通るが同期しない」という
 /// 出方をする。単体テストでは踏めないので、実機で当てるための入口を用意した
 /// (チューナー自動検出のときと同じやり方)。
 /// </para>
 ///
 /// <code>
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27
-/// denpa-agent --tune /dev/dvb/adapter0/frontend0 BS15_0 --lnb 15v
+/// denpa-agent --tune /dev/dvb/adapter0/frontend0 BS15:16625 --lnb 15v
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27,T21   # 確保したまま切り替える
 /// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
@@ -26,18 +26,18 @@ namespace Denpa.Agent;
 /// </code>
 ///
 /// <para>
-/// 見るのは3つ。**同期したか・TS の形式になっているか・切り替えに何秒かかるか。**
+/// 見るのは 3 つ。**同期したか・TS の形式になっているか・切り替えに何秒かかるか。**
 /// 最後は取り直すのと比べてどれだけ短いかで、ここでしか測れない。
 /// </para>
 /// </summary>
 public static class Probe
 {
-    // 使い方の1行 (引数が合わないときにここと Program.cs が出す)
+    // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
     public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N]";
     public const string DecodeUsage = "denpa-agent --decode-file <in.ts> <out.ts>";
     public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート>]";
 
-    /// <summary>1チャンネルあたり読む時間</summary>
+    /// <summary>1 チャンネルあたり読む時間</summary>
     private static readonly TimeSpan Read = TimeSpan.FromSeconds(3);
 
     /// <summary>
@@ -58,7 +58,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// ファイルを1つ復号する。**チューナーを使わずに B25 だけ確かめる。**
+    /// ファイルを 1 つ復号する。**チューナーを使わずに B25 だけ確かめる。**
     ///
     /// <para>
     /// 掛かったまま録れてしまったものを救うのにも使える (denpa からは
@@ -168,8 +168,6 @@ public static class Probe
             return RunZd1j(zd1j, channels, decode ? keys : null, seconds, repeat);
         }
 
-        var known = Config.FromEnvironment().StreamIds();
-
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
@@ -183,7 +181,7 @@ public static class Probe
                 return 1;
             }
 
-            var streamId = ChannelTable.StreamId(name, tuning, known);
+            var streamId = tuning.StreamId;
             var unit = tuning.Satellite ? "kHz" : "Hz";
             var filter = streamId == ChannelTable.NoStreamId ? "" : $" TSID={streamId}";
             Console.WriteLine($"--- {name}  {tuning.Frequency} {unit}{filter}");
@@ -344,7 +342,7 @@ public static class Probe
             if (read <= 0) break;
             if (total == 0) first = DateTime.UtcNow - started;
             total += read;
-            // 188バイトごとに 0x47 が来ているか。来ていなければ TS ではない
+            // 188 バイトごとに 0x47 が来ているか。来ていなければ TS ではない
             for (var at = 0; at + 188 <= read; at += 188)
             {
                 packets++;
@@ -370,9 +368,9 @@ public static class Probe
         var mbps = total * 8.0 / duration.TotalSeconds / 1_000_000;
         var ratio = packets == 0 ? 0 : 100.0 * sync / packets;
         Console.WriteLine(
-            $"    最初の1バイト {first.TotalMilliseconds:F0} ms  "
+            $"    最初の 1 バイト {first.TotalMilliseconds:F0} ms  "
             + $"{total / 1024} KiB  {mbps:F2} Mbps  同期バイト {ratio:F1}%");
-        if (total == 0) Console.Error.WriteLine($"    {name}: 1バイトも来ていません");
+        if (total == 0) Console.Error.WriteLine($"    {name}: 1 バイトも来ていません");
 
         var before = packets == 0 ? 0 : 100.0 * scrambledIn / packets;
         if (b25 is null)
@@ -396,7 +394,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// スクランブルが掛かっているか。**4バイト目の上2ビット** (transport_scrambling_control)。
+    /// スクランブルが掛かっているか。**4 バイト目の上 2 ビット** (transport_scrambling_control)。
     /// 復号できていれば 0 になる
     /// </summary>
     private static bool Scrambled(ReadOnlySpan<byte> packet) => (packet[3] & 0xC0) != 0;

@@ -155,6 +155,7 @@
     playbackAt,
     prevChapterAt,
     resumePoint,
+    type Ruler,
     skipCmAtStart,
     skipTarget,
     toTsTime,
@@ -289,7 +290,9 @@
   function startCanvas(codec: CanvasCodec): void {
     const local = localMkv;
     const duration = canvasLength();
-    const fresh = switchAt === null && sceneAt === null;
+    // 選び直し・切り替えは観はじめではない。この場面から観るのは観はじめなので `settle` を通す
+    const fresh = switchAt === null;
+    const scene = sceneAt !== null;
     const from = startFrom(duration);
     let made: CanvasPlayer;
     try {
@@ -302,6 +305,10 @@
             ? Promise.resolve(local.request(at))
             : fetch(streamUrl(codec, at, audio), { signal }),
         duration,
+        // 端末に保存した録画の Blob は読むのが速すぎる。観ている位置の少し先までしか読まない (`canvas-player.ts` の `room`)
+        ...(local !== null && localCopy?.video !== undefined && duration > 0
+          ? { bytesPerSecond: localCopy.video.size / duration }
+          : {}),
         start: from ?? 0,
         audio: streamAudio(audioIndex),
         background: background.on || pip.active,
@@ -342,7 +349,7 @@
     controls.stir();
     if (!fresh || resumed) return;
     resumed = true;
-    if (from !== null) showContinued();
+    if (from !== null && !scene) showContinued();
     settle();
   }
 
@@ -492,11 +499,13 @@
   onMount(() => {
     localLookup = loadOffline(rec.id).catch(() => null);
     const asked = stored(CODEC_KEY);
+    // メニューから外したコーデック (世帯の設定) を選んでいた端末は、自動として扱う
     choice =
-      asked === "h264" ||
-      asked === "hevc" ||
-      asked === "av1" ||
-      asked === "mpeg2"
+      (asked === "h264" ||
+        asked === "hevc" ||
+        asked === "av1" ||
+        asked === "mpeg2") &&
+      !data.hidden.some((codec) => codec === asked)
         ? asked
         : "auto";
     void (async () => {
@@ -693,7 +702,7 @@
   /**
    * メニューに並べるもの。この端末で観られる方式があるコーデックが 2 つ以上あるときだけ出す。
    * 互換モードは流せるもの (H.264・AV1・MPEG-2) を並べて描けない形式は押せなくし (ライブと同じ)、
-   * 端末に保存したものを描いている間は出さない
+   * 端末に保存したものを描いている間は出さない。世帯の設定で外したもの (H.264・H.265。`data.hidden`) は並べない (自動では選ぶ)
    */
   const codecMenu = $derived.by(
     (): { key: string; label: string; disabled?: boolean }[] => {
@@ -701,12 +710,16 @@
       if (compat && (canvasAbility === null || drawingLocal)) return [];
       const items =
         compat && canvasAbility !== null
-          ? canvasChoices(info, canvasAbility).map((item) => ({
-              key: item.codec,
-              label: codecLabel(item.codec),
-              disabled: !item.drawable,
-            }))
-          : codecChoices(info, ability()).map((codec) => ({
+          ? canvasChoices(info, canvasAbility)
+              .filter(
+                (item) => !data.hidden.some((codec) => codec === item.codec),
+              )
+              .map((item) => ({
+                key: item.codec,
+                label: codecLabel(item.codec),
+                disabled: !item.drawable,
+              }))
+          : codecChoices(info, ability(), data.hidden).map((codec) => ({
               key: codec,
               label: CODEC_LABEL[codec],
             }));
@@ -968,11 +981,14 @@
   function placeAir(at: number): number | "before" | "cut" {
     const target = data.jikkyo;
     if (target === null || info === null) return "before";
-    const ruler =
-      info.axis === "encoded"
-        ? { kept: rec.cm_kept, skip: rec.encode_skip ?? 0 }
-        : null;
-    return playbackAt((at - target.head) / 1000, ruler);
+    return playbackAt((at - target.head) / 1000, ruler(info));
+  }
+
+  /** 観ているものの物差し (`Ruler`)。元の TS なら null */
+  function ruler(plan: PlaybackInfo): Ruler | null {
+    return plan.axis === "encoded"
+      ? { kept: rec.cm_kept, skip: rec.encode_skip ?? 0 }
+      : null;
   }
 
   /**
@@ -982,11 +998,7 @@
   function airTime(): number | null {
     const target = data.jikkyo;
     if (target === null || info === null) return null;
-    const ruler =
-      info.axis === "encoded"
-        ? { kept: rec.cm_kept, skip: rec.encode_skip ?? 0 }
-        : null;
-    return target.head + toTsTime(mediaTime(), ruler) * 1000;
+    return target.head + toTsTime(mediaTime(), ruler(info)) * 1000;
   }
   /** 貼り直しを追わせている映像。二重に回さないための目印 (`follow`) */
   let following: HTMLVideoElement | null = null;
@@ -1035,7 +1047,7 @@
     captions: () => captions && hasCaptions,
   });
 
-  // canvas の音を「再生する音」と言うのは、バックグラウンド再生を入れているときと小窓を開いている間だけ (`raw/engine.ts`)
+  // canvas の音を「再生する音」と言うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
   $effect(() => {
     const on = background.on || pip.active;
     if (drawing) canvas?.background(on);
@@ -1239,15 +1251,16 @@
     }
     if (resumed || video === null) return;
     resumed = true;
+    // この場面から観るときも `settle` を通す (通らないと蓋が待ちくたびれるまで残る)
     if (sceneAt !== null) {
       video.currentTime = sceneAt;
       sceneAt = null;
-      return;
-    }
-    const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
-    if (at !== null && resumePoint(at, video.duration) !== null) {
-      video.currentTime = at;
-      showContinued();
+    } else {
+      const at = rec.resume_ms === null ? null : rec.resume_ms / 1000;
+      if (at !== null && resumePoint(at, video.duration) !== null) {
+        video.currentTime = at;
+        showContinued();
+      }
     }
     settle();
   }
@@ -1587,8 +1600,7 @@
   }
 
   /**
-   * 字幕を取ってくる (`askCaptions` から1回)。既定で出すので、消していても取る。
-   * 端末に保存したものがあればそちら。字幕を持たない番組は 404 (ボタンを出さないだけ)
+   * 字幕を取ってくる (`askCaptions` から1回)。端末に保存したものがあればそちら。字幕を持たない番組は 404 (ボタンを出さないだけ)
    */
   async function loadCaptions(): Promise<void> {
     if (captionText !== null) return;
@@ -1831,7 +1843,7 @@
     return false;
   }
 
-  /** 断られたときだけ知らせる。消せたときは一覧へ戻るので出す先が無い */
+  /** 削除は断られたときだけ知らせる (消せたら一覧へ戻る) */
   const notices = $derived<Notice[]>([
     ...errorNotice(form, "watch-delete"),
     ...shooter.notices,
@@ -2276,7 +2288,7 @@
           <StageNote testid="watch-resumed">続きから再生しています</StageNote>
         {/if}
         {#if skipped}
-          <StageNote testid="watch-skipped">CMを飛ばしました</StageNote>
+          <StageNote testid="watch-skipped">CM を飛ばしました</StageNote>
         {/if}
         {#if warning !== null}
           <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
@@ -2320,7 +2332,7 @@
       />
 
       <div class="small muted meta num" data-testid="watch-meta">
-        {recordedDuration(rec)} ・ {size(rec.ts_size)}
+        {recordedDuration(rec)}・{size(rec.ts_size)}
       </div>
       {#if data.clips > 0}
         <a

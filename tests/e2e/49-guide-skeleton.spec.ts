@@ -11,6 +11,16 @@ import { expect, goto, stopGuideClock, syncEpg, test } from "./helpers";
  */
 test.use({ serviceWorkers: "block" });
 
+/*
+ * **終わったら、走りかけの `page.route` を待たずに外す。** 番組表はマスを描き終えて 1 秒ほど後に前日・翌日を
+ * 先読みする (`guide/+page.svelte` の `PREFETCH_DELAY`) ので、見終えた後にも `/api/guide` が来る。その取得を
+ * `route.fetch()` している途中でページが閉じると、届いた応答を読む前に捨てられ (`Response has been disposed`)、
+ * 通っていたテストが CI で時々落ちていた。先読みはこのテストの見るものではない
+ */
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 /** マスの取得を止める。`release` で通し、`rearm` でまた止める */
 async function holdSheets(page: Page) {
   let open = (): void => {};

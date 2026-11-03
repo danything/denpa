@@ -85,7 +85,7 @@ export function toPlaybackTimeline(
 }
 
 /** 再生駆動が「次に何をするか」。`reset` なら入れ物を作り直してから `messages` を流す */
-export interface Feed {
+interface Feed {
   /** 入れ物を作り直すか。**戻ったとき** (先に出した画面を捨てて積み直す) だけ true */
   reset: boolean;
   /** エンジン (`Bml.feed`) に順に流すもの */

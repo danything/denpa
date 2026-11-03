@@ -605,7 +605,7 @@ export class EdcbClient {
       );
     if (reply.result !== RESULT.SUCCESS)
       throw new EdcbError(
-        `EpgTimerSrv が ${label} を断りました (結果 ${reply.result})`,
+        `EpgTimerSrv で ${label} が失敗しました (結果 ${reply.result})`,
       );
     try {
       const reader = Reader.of(reply.body);

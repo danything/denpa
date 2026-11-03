@@ -1,5 +1,3 @@
-using Denpa.Agent;
-
 namespace Denpa.Agent.Tests;
 
 /*
@@ -211,7 +209,7 @@ public class Mb86h47ProgramsTests
         private int _slot;
         private uint _sequence;
 
-        /// <summary>bulk の塊を1つ置いて (ホストの SendChunk と同じ形)、答えを待つ。答えの語を返す</summary>
+        /// <summary>bulk の塊を 1 つ置いて (ホストの SendChunk と同じ形)、答えを待つ。答えの語を返す</summary>
         public uint[] Chunk(int count, params uint[] commands)
         {
             Ram.Write(Mb86h47Programs.Core1Box + Mb86h47Programs.BoxBulkEnable, 4, Mb86h47Programs.BulkEnable);
@@ -250,7 +248,7 @@ public class Mb86h47ProgramsTests
         rig.I2c.Log.Clear();
         reply = rig.Chunk(1, 0x01120202, 0x03800000);
         await Assert.That(reply[2] >> 16).IsEqualTo(0x01B3u);
-        // 繰り返しスタートで 2 バイト。最後の1バイトだけ ACK を返さない
+        // 繰り返しスタートで 2 バイト。最後の 1 バイトだけ ACK を返さない
         await Assert.That(string.Join(" ", rig.I2c.Log)).IsEqualTo("S Sr rA rN P");
 
         // DiB0090 は番号 1 バイト

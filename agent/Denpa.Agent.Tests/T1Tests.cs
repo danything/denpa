@@ -1,5 +1,3 @@
-using Denpa.Agent;
-
 namespace Denpa.Agent.Tests;
 
 /*

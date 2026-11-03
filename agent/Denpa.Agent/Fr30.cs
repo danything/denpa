@@ -50,7 +50,7 @@ public sealed class Fr30Assembler(uint origin)
 
     public void Label(string name)
     {
-        if (!_labels.TryAdd(name, _code.Count)) throw new InvalidOperationException($"ラベル {name} が2回あります");
+        if (!_labels.TryAdd(name, _code.Count)) throw new InvalidOperationException($"ラベル {name} が 2 回あります");
         _listing.Append(CultureInfo.InvariantCulture, $"{name}:\n");
     }
 

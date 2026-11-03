@@ -26,6 +26,6 @@
 <progress value={done} max={Math.max(1, total)} class:running={done < total}
 ></progress>
 <div class="tiny muted num" data-testid={testid}>
-  <span>{done} / {total}{unit === "" ? "" : ` ${unit}`}</span>
-  {#if children}{@render children()}{/if}
+  <span>{done} / {total}{unit === "" ? "" : ` ${unit}`}</span
+  >{#if children}{@render children()}{/if}
 </div>

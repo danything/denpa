@@ -214,7 +214,8 @@ export function status(): TransferStatus {
 /**
  * **DB の写しを取る。** 動いているまま `VACUUM INTO` で、読み取りのトランザクション 1 つぶんの
  * 一貫した写しを取る (録画やエンコードの書き込みは止めない。bun:sqlite は backup API を出していない)。
- * 写しからログインの控え (`sessions`) とペアリングの途中 (`device_codes`) を消し、`secure_delete` と
+ * 写しからログインの控え (`sessions`)・ペアリングの途中 (`device_codes`)・ニコニコとの連携 (`niconico_link`。
+ * トークンを開く鍵は DB の隣のファイルで写しに入らないうえ、移した先では連携し直す) を消し、`secure_delete` と
  * `VACUUM` で消した行の中身もファイルに残さない。
  *
  * **別のプロセスで回す。** 数百 MB の DB だと数秒かかり、その間この (1 本しかない) スレッドが止まると
@@ -233,6 +234,7 @@ copy.exec("PRAGMA journal_mode = DELETE");
 copy.exec("PRAGMA secure_delete = ON");
 copy.exec("DELETE FROM sessions");
 copy.exec("DELETE FROM device_codes");
+copy.exec("DELETE FROM niconico_link");
 copy.exec("VACUUM");
 copy.close();
 `;
@@ -903,7 +905,7 @@ export function swapAtBoot(): boolean {
     return false;
   }
   const at = readFileSync(join(dir, "stamp"), "utf8").trim() || "unknown";
-  // 先にどこかが開いていても、古いファイルを掴んだままにしない
+  // 先にどこかが開いていても、古いファイルを開いたままにしない
   closeDatabase();
   const logos = join(config.dataDir, LOGOS);
   const aside = (path: string) => {

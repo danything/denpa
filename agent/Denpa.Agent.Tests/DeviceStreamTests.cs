@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.IO.Pipelines;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
-using Denpa.Agent;
 using Microsoft.Win32.SafeHandles;
 using TUnit.Core.Enums;
 
@@ -13,7 +12,7 @@ namespace Denpa.Agent.Tests;
  *
  * ここは**電波が来ていないときの振る舞い**が問題になる。デバイスは選局を
  * 跨いで開いたままなので、読む側から抜けられないと、チューナーを取り上げられた読む側が
- * 残ったまま次の選局が始まる。実機では、そのせいで**同じ復号の実体を2本の
+ * 残ったまま次の選局が始まる。実機では、そのせいで**同じ復号の実体を 2 本の
  * ストリームから呼び**、プロセスごと落ちた (`double free or corruption`)。
  *
  * 本物のチューナーは要らない。何も来ないパイプで「来ないときにどうするか」は
@@ -45,7 +44,7 @@ public partial class DeviceStreamTests
         {
             var buffer = new byte[188];
             var clock = Stopwatch.StartNew();
-            // 0.2秒ごとに起きて印を見る。1周ぶんで戻れば十分
+            // 0.2 秒ごとに起きて印を見る。1 周ぶんで戻れば十分
             var read = stream.Read(buffer, 0, buffer.Length, () => true);
             clock.Stop();
 
@@ -112,8 +111,8 @@ public partial class DeviceStreamTests
             var buffer = new byte[188];
             /*
              * **専用のスレッドで読む。** 共用のスレッドプールから借りると、他のテストがプールを塞いでいる間は
-             * 読み始めることすらできず、書いてから 2 秒待っても返らない (CI で1度落ちた。
-             * 手元では2コアに絞っても出ない揺れ)。Px4CardTests の偽の px4d と同じ理由
+             * 読み始めることすらできず、書いてから 2 秒待っても返らない (CI で 1 度落ちた。
+             * 手元では 2 コアに絞っても出ない揺れ)。Px4CardTests の偽の px4d と同じ理由
              */
             var reading = Task.Factory.StartNew(
                 () => stream.Read(buffer, 0, buffer.Length, () => false),
@@ -126,6 +125,35 @@ public partial class DeviceStreamTests
             var payload = new byte[] { 0x47, 0x01, 0x02 };
             await Assert.That(Write(write, payload)).IsEqualTo(payload.Length);
             await Assert.That(await reading.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current!.Execution.CancellationToken)).IsEqualTo(payload.Length);
+        }
+    }
+
+    /*
+     * **選局し直す前に、前のチャンネルの残りを捨てる** (`DvbTuner.Tune`)。dvr は選局を跨いで開いたままで、
+     * 溜まっているぶんは DMX_START でも消えない。残すと前のチャンネルの PAT が次の選局の頭に乗り、
+     * 衛星の局ロゴが当たりの中継を「外れ」と控えていた
+     */
+    [Test]
+    public async Task 捨てると_溜まっていたぶんは読まれず_待たずに戻り_あとから来たものは読める()
+    {
+        var (stream, write) = Silent();
+        using (stream)
+        using (write)
+        {
+            var stale = Enumerable.Repeat((byte)0x11, 188 * 3).ToArray();
+            await Assert.That(Write(write, stale)).IsEqualTo(stale.Length);
+
+            var clock = Stopwatch.StartNew();
+            await Assert.That(stream.Discard()).IsEqualTo(stale.Length);
+            // 空なら待たずに戻る (書き込み側は開いたまま)
+            await Assert.That(stream.Discard()).IsEqualTo(0);
+            await Assert.That(clock.ElapsedMilliseconds < 500).IsTrue().Because($"{clock.ElapsedMilliseconds}ms 掛かった");
+
+            var fresh = new byte[] { 0x47, 0x00, 0x00 };
+            await Assert.That(Write(write, fresh)).IsEqualTo(fresh.Length);
+            var buffer = new byte[188];
+            var read = stream.Read(buffer, 0, buffer.Length, () => false);
+            await Assert.That(buffer.AsSpan(0, read).ToArray()).IsEquivalentTo(fresh);
         }
     }
 
@@ -237,7 +265,7 @@ public class DeviceStreamPipedTests
         using var stream = new DeviceStream(pipe.Reader);
         var buffer = new byte[188];
 
-        // 1回目: 待っている間に届く。合図は溜めたままなので、読む側は 200ms ごとに起きて印を見て読む
+        // 1 回目: 待っている間に届く。合図は溜めたままなので、読む側は 200ms ごとに起きて印を見て読む
         var first = Task.Run(() => stream.Read(buffer, 0, buffer.Length), cancel);
         while (stream.Readers == 0) await Task.Delay(5, cancel);
         await Task.Delay(50, cancel);
@@ -245,7 +273,7 @@ public class DeviceStreamPipedTests
         await Assert.That(await first.WaitAsync(TimeSpan.FromSeconds(5), cancel)).IsEqualTo(2);
         await Assert.That(scheduler.Held).IsEqualTo(1);
 
-        // 2回目の読みが待ちに入ってから、1回目の合図を届ける
+        // 2 回目の読みが待ちに入ってから、1 回目の合図を届ける
         var second = Task.Run(() => stream.Read(buffer, 0, buffer.Length), cancel);
         while (stream.Readers == 0) await Task.Delay(5, cancel);
         await Task.Delay(100, cancel);

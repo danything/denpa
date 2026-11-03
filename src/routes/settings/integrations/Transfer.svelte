@@ -383,7 +383,7 @@
           <div class="cluster small">
             {#if result.manifest !== null}
               <span data-testid="transfer-source">
-                denpa {result.manifest.version} ・ {dateTime(
+                denpa {result.manifest.version}・{dateTime(
                   result.manifest.exportedAt,
                 )} に書き出し
               </span>
@@ -404,7 +404,7 @@
               </span>
             {/if}
             {#if result.files.rawMissing > 0}
-              <span>元のTSが無い {result.files.rawMissing} 件</span>
+              <span>元の TS が無い {result.files.rawMissing} 件</span>
             {/if}
             {#if result.files.outside > 0}
               <span
@@ -413,7 +413,7 @@
             {/if}
             {#if result.files.jobsMissing > 0}
               <span>
-                元のTSが無いエンコード待ち {result.files.jobsMissing} 件
+                元の TS が無いエンコード待ち {result.files.jobsMissing} 件
               </span>
             {/if}
           </div>

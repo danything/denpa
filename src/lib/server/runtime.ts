@@ -4,7 +4,6 @@ import { SOCKET_PATH } from "#lib/live.js";
 
 import { listen } from "./agent-events";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
-import { seedChannels } from "./channel-seed";
 import { config } from "./config";
 import { pruneCodes } from "./device-auth";
 import { checkDisk } from "./disk";
@@ -18,6 +17,7 @@ import { attend } from "./live";
 import { reconcile as logoReconcile, ride, sweep } from "./logo";
 import { activeRecordingIds, recoverOrphanedRecordings } from "./recorder";
 import { restoreWidths } from "./restore-width";
+import { fillSatellites } from "./satellite-lineup";
 import { tick } from "./scheduler";
 import { prune as pruneSessions } from "./session";
 import { beginDraining } from "./shutdown";
@@ -184,7 +184,7 @@ export function start(): void {
   nowAndEvery(config.reconcileInterval, "reconcile", reconcile);
 
   /*
-   * ディスク残量を見張る。埋まると始まる録画が片っ端から失敗するので、
+   * ディスク残量を定期的に確かめる。埋まると始まる録画が片っ端から失敗するので、
    * 下回ったところで知らせる (disk.ts)。照合と同じ周期でよい
    */
   nowAndEvery(config.reconcileInterval, "disk", checkDisk);
@@ -205,7 +205,7 @@ export function start(): void {
     const result = await restoreWidths();
     if (result.restored > 0 || result.missed > 0) {
       console.log(
-        `[restore-width] 録画 ${result.seen} 件を見ました: 元のTSから戻した ${result.restored} 件 / ` +
+        `[restore-width] 録画 ${result.seen} 件を見ました: 元の TS から戻した ${result.restored} 件 / ` +
           `もとから放送のとおり ${result.already} 件 / 戻せなかった ${result.missed} 件`,
       );
     }
@@ -232,14 +232,16 @@ export function start(): void {
 }
 
 /**
- * 局の一覧をエージェントから取り込む。**BS / CS が無ければ、そのついでに標準の表から入れる**
- * (channel-seed.ts)。一覧は1回だけ読んで両方に使う。エージェントが後から起きても、
- * 次の周期 (`CHANNEL_SYNC_INTERVAL`、既定1分) で入る
+ * 局の一覧をエージェントから取り込む。**BS / CS が無ければ、そのついでに放送の一覧から入れる**
+ * (satellite-lineup.ts)。一覧は1回だけ読んで両方に使う。エージェントが後から起きても、
+ * 次の周期 (`CHANNEL_SYNC_INTERVAL`、既定1分) で入る。放送の一覧を読むのは数十秒かかるので待たない
  */
 async function syncChannels(): Promise<void> {
   const channels = await getChannels();
   syncServicesOnly(channels);
-  await seedChannels(channels);
+  void fillSatellites(channels).catch((error: unknown) => {
+    console.warn(`[channels] 衛星の局を入れられませんでした: ${error}`);
+  });
 }
 
 /**

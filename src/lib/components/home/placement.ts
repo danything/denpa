@@ -1,8 +1,7 @@
 /**
- * ホームを開いたときの位置 (`routes/+page.svelte`)。
+ * ホームの一覧の位置合わせ (`routes/+page.svelte`)。開いたとき・絞り込みや向きを替えたとき・行を足したとき・カレンダーで日を押したとき。
  *
- * **観終えていない録画があれば、いちばん古いものを映す** — 溜まったぶんを古い順に片付けられるように。
- * 無ければ「いま」の線。どれを映すかと、まだ描いていない所を描かせるのは呼ぶ側
+ * どれを映すか (理由は `+page.svelte` の「開いたときの位置」) と、まだ描いていない所を描かせるのは呼ぶ側
  * (`#lib/timeline.ts` の `catchUp`・`#lib/paging.svelte.ts` の `Paged.showAtLeast`)。ここは描き終えた一覧を送るだけ。
  * どの幅でもページごとスクロールする (`home.css`) ので、送るのは window
  */
@@ -28,9 +27,16 @@ function bottomCover(): number {
 /**
  * 開いたときの位置に送る。線を見えている所の 7 割ほどの高さに置き (上に新しい録画、下に次の予約が入る)、
  * `target` (映したい録画の行の鍵) があって線のままでは見えなければ、その行が上の端 (貼り付いた日付の見出しの下)
- * に来るまで戻す。閉じた番組の中にあれば、その見出し (`data-group-rows`)
+ * に来るまで戻す。閉じた番組の中にあれば、その見出し (`data-group-rows`)。
+ *
+ * **新しい順で表示 (`reversed`) のときは、線を上から 3 割ほどの高さに置く。** 上に近い予約、下に新しい録画が入る。
+ * 録画中の行は線の下にいる
  */
-export function placeTimeline(list: HTMLElement, target: string | null): void {
+export function placeTimeline(
+  list: HTMLElement,
+  target: string | null,
+  reversed = false,
+): void {
   const now = list.querySelector<HTMLElement>('[data-testid="timeline-now"]');
   if (now === null) return;
   // 貼り付いた日付の見出しの下端。行はその少し下に置く (`alignTop` が見出しの裏へ送らないように)
@@ -42,35 +48,46 @@ export function placeTimeline(list: HTMLElement, target: string | null): void {
   const view = bottom - line;
   /*
    * **録画中は線を見せない** (`TimelineHeading`。読み上げの見出しだけ残す)。見せていない線は流れの外に置かれ、
-   * 包みの頭に来るので、位置は当てにならない。線のある所 (録画中の行のいちばん下の下端) で数える。
+   * 包みの頭に来るので、位置は当てにならない。線のある所 (録画中の行のいちばん下の下端。逆のときはいちばん上の上端) で数える。
    * 線の位置で数えていた頃は、録画中の行が下のタブの裏に入ったままになることがあった
    */
   const lives = list.querySelectorAll<HTMLElement>(".t-row.live");
-  const lastLive = now.classList.contains("visually-hidden")
-    ? (lives[lives.length - 1] ?? null)
-    : null;
-  const lineAt = () =>
-    lastLive === null
-      ? now.getBoundingClientRect()
+  const firstLive = lives[0] ?? null;
+  const lastLive = lives[lives.length - 1] ?? null;
+  const hidden = now.classList.contains("visually-hidden");
+  const lineAt = () => {
+    if (!hidden || firstLive === null || lastLive === null)
+      return now.getBoundingClientRect();
+    return reversed
+      ? { top: firstLive.getBoundingClientRect().top, height: 0 }
       : { top: lastLive.getBoundingClientRect().bottom, height: 0 };
+  };
   /*
-   * **線がもう見えている (上から 4 割より下で、下に被さるものより上) なら動かさない。**
-   * 録れたものが少ないと線は頭の近くにあり、7 割まで下げる余地が無い
+   * **線がもう見えている (ふだんは上から 4 割より下、逆のときは上から 6 割より上で、どちらも下に被さるものより上) なら動かさない。**
+   * 録れたもの (逆のときは予約) が少ないと線は頭の近くにあり、決めた高さまで下げる余地が無い
    */
   const { top: lineY, height: lineHeight } = lineAt();
   const lineTop = lineY - line;
-  if (lineTop < view * 0.4 || lineTop > view - lineHeight)
+  if (reversed) {
+    if (lineTop < 0 || lineTop > Math.min(view * 0.6, view - lineHeight))
+      scrollPage(lineTop - view * 0.3);
+  } else if (lineTop < view * 0.4 || lineTop > view - lineHeight)
     scrollPage(lineTop - view * 0.7);
   /*
-   * **録画中の行は線のすぐ上にいるので、線と一緒に映す。** 何本も録っていて頭が見出しの裏に入るなら、
-   * 線が下の端に掛からない範囲で戻す
+   * **録画中の行は線のすぐ隣にいるので、線と一緒に映す。** 何本も録っていて、ふだんは頭が見出しの裏に入るなら、
+   * 線が下の端に掛からない範囲で戻す。逆のときは末尾が下に被さるものの裏に入るなら、線が上の端に掛からない範囲で送る
    */
-  const live = lives[0] ?? null;
-  if (live !== null) {
-    const short = line + 8 - live.getBoundingClientRect().top;
+  if (firstLive !== null && lastLive !== null) {
     const { top, height } = lineAt();
-    const room = bottom - (top + height);
-    if (short > 0 && room > 0) scrollPage(-Math.min(short, room));
+    if (reversed) {
+      const over = lastLive.getBoundingClientRect().bottom - bottom;
+      const room = top - line - 8;
+      if (over > 0 && room > 0) scrollPage(Math.min(over, room));
+    } else {
+      const short = line + 8 - firstLive.getBoundingClientRect().top;
+      const room = bottom - (top + height);
+      if (short > 0 && room > 0) scrollPage(-Math.min(short, room));
+    }
   }
   const row =
     target === null
@@ -151,26 +168,44 @@ export function topRow(list: HTMLElement): Anchor | null {
 }
 
 /**
- * **絞り込みを替えても、見ていた行をその場に残す。** 覚えた行がまだ一覧にあれば、同じ高さに戻す。
- * 無くなっていれば「いま」の線 (開いたときと同じ置き方)
+ * **絞り込みや並びの向きを替えても、見ていた行をその場に残す。** 覚えた行がまだ一覧にあれば、同じ高さに戻す。
+ * 無くなっていれば「いま」の線 (開いたときと同じ置き方。`reversed` は替えたあとの向き)
  */
-export function restoreRow(list: HTMLElement, anchor: Anchor | null): void {
+export function restoreRow(
+  list: HTMLElement,
+  anchor: Anchor | null,
+  reversed = false,
+): void {
   const row =
     anchor === null
       ? null
       : list.querySelector<HTMLElement>(`[data-key="${anchor.key}"]`);
   if (anchor === null || row === null) {
-    placeTimeline(list, null);
+    placeTimeline(list, null, reversed);
     return;
   }
   scrollPage(row.getBoundingClientRect().top - topEdge(list) - anchor.offset);
 }
 
 /**
+ * 「いま」の目印。見せている線か、録画中で線を見せていないときは、バーの先に時刻を出している録画中の行。
+ * 見せていない線は流れの外に置かれて包みの頭に来るので、同じ包みの中で上に行が足されても動かず、物差しにならない
+ */
+function nowMark(list: HTMLElement): HTMLElement | null {
+  const now = list.querySelector<HTMLElement>('[data-testid="timeline-now"]');
+  if (now === null || !now.classList.contains("visually-hidden")) return now;
+  return (
+    list
+      .querySelector<HTMLElement>('[data-testid="recording-now"]')
+      ?.closest<HTMLElement>(".t-row") ?? now
+  );
+}
+
+/**
  * **上へ行を足しても、読んでいる所を動かさない。** 足す前に呼び、足して描き終えたら返り値を呼ぶ。
  * 768px からはブラウザの位置合わせを切ってある (`home.css` の `overflow-anchor: none`) ので、何もしないと足したぶん中身が下へずれる。
  * それより狭い画面ではブラウザが先に合わせることもあるが、残ったずれを測って送るので二重には動かない。
- * 物差しは `key` の行 (無ければ「いま」の線)。足すのはいつもそれより上なので、ずれたぶんだけ送り直せばよい
+ * 物差しは `key` の行 (無ければ「いま」の目印。`nowMark`)。ずれたぶんだけ送り直す (物差しより下に足したときはずれないので動かない)
  */
 export function holdPlace(
   list: HTMLElement,
@@ -181,7 +216,7 @@ export function holdPlace(
       ? null
       : (list.querySelector<HTMLElement>(`[data-key="${key}"]`) ??
         list.querySelector<HTMLElement>(`[data-group-rows~="${key}"]`))) ??
-    list.querySelector<HTMLElement>('[data-testid="timeline-now"]');
+    nowMark(list);
   const before = mark?.getBoundingClientRect().top ?? 0;
   return () => {
     if (mark === null || !mark.isConnected) return;

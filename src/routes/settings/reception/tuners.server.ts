@@ -66,6 +66,7 @@ const USE_LABEL: Record<keyof typeof config.priority, string> = {
   live: "ライブ視聴",
   epgNow: "番組表の取得 (「番組表をいますぐ集める」を押したとき)",
   scan: "チャンネルスキャン",
+  carousel: "衛星の局ロゴの取得 (ロゴを流す中継で待つとき)",
   epg: "番組表の取得 (ふだん)",
   logo: "局ロゴの取得",
 };
@@ -167,7 +168,7 @@ export const actions = {
       );
       if (types.length === 0) {
         return fail(400, {
-          message: `${name}: 受信できる種別を1つ以上選んでください`,
+          message: `${name}: 受信できる種別を 1 つ以上選んでください`,
         });
       }
       const device = String(get("device") ?? "").trim();

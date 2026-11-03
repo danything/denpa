@@ -3,7 +3,7 @@
  *
  * - NX-Jikkyo (tsukumijima さんが運営する非公式のコメントサーバ。公式のニコニコ実況のコメントも取り込んでいる):
  *   ライブは端末が WebSocket で直接繋ぐ。局の勢いの一覧 (REST) は CORS を許していないので、サーバが中継する
- *   (`server/jikkyo-ranking.ts`)
+ *   (`src/lib/server/jikkyo.ts`)
  * - ニコニコ実況 過去ログ API (同じく tsukumijima さん): 録画のコメントを端末が直接取得する (CORS は `*`)
  *
  * 宛先はホストまで書く (`wss:` や `https:` だけにすると、どこへでも繋げるようになる)

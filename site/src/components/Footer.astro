@@ -1,7 +1,8 @@
 ---
 /*
  * Starlight の既定のフッタ (編集・最終更新・前後のページ) の下に、README の「使ってよい範囲」の要約を出す。
- * 文は scripts/import-docs.ts が README から取ってくる (src/generated/usage.json)。ここには書かない
+ * 文は scripts/import-docs.ts が README から取ってくる (src/generated/usage.json)。ここには書かない。
+ * いちばん下に Amazon のアソシエイトの表示 (トップも含めて全ページ)
  */
 import Default from '@astrojs/starlight/components/Footer.astro';
 import { base } from '../data/pages.ts';
@@ -36,6 +37,8 @@ const isTop = Astro.url.pathname === base;
         </aside>
     )
 }
+{/* Amazon のアソシエイトの表示。規約とステルスマーケティングの規制 (景品表示法) のため、全ページに出す */}
+<p class="affiliate">Amazon のアソシエイトとして、denpa は適格販売により収入を得ています。</p>
 
 <style>
     .usage {
@@ -62,5 +65,11 @@ const isTop = Astro.url.pathname === base;
     }
     .usage a {
         color: var(--sl-color-text-accent);
+    }
+    .affiliate {
+        margin: 1rem 0 0;
+        font-size: var(--sl-text-xs);
+        line-height: 1.7;
+        color: var(--sl-color-gray-3);
     }
 </style>

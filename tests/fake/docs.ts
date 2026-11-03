@@ -54,7 +54,7 @@ function sat(
      * 衛星は種別ごとに1つの中継にまとめる。番組表は中継を1つ読めば全局ぶん揃う作り
      * (本物も他局の番組表が乗っている)。CS も置く — 無いと denpa が標準の表 (本物の局名) から入れる
      */
-    channel: type === "BS" ? "BS01_0" : "CS02",
+    channel: type === "BS" ? "BS01:16400" : "CS02:24608",
     slotMs: 60 * 60_000,
     serviceType: 1,
     carousel: true,

@@ -70,10 +70,7 @@
     font-size: inherit;
     font-weight: var(--dp-weight);
   }
-  /*
-     * 赤い点と赤い太字の時刻。字は淡い地の上で読める濃さの側 (`--dp-rec-text`)。
-     * ホームの一覧では地に置く (貼り付かないので浮かせない。左は日付の字にそろえる)。番組表では時の数字の上に重なるので、操作の層のカプセルに乗せる (下の `.overlay`)
-     */
+  /* 赤い点と赤い太字の時刻。字は淡い地の上で読める濃さの側 (`--dp-rec-text`) */
   .now-time {
     display: inline-flex;
     align-items: center;
@@ -133,7 +130,7 @@
     }
   }
 
-  /* ---- 時の列に置く (番組表)。表を横切る線は引かず、過ぎた所はマスを沈めて見せる (番組表の `.program` の背景の覆い) ---- */
+  /* ---- 時の列に置く (番組表) ---- */
   .overlay {
     position: relative;
     pointer-events: none;

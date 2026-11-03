@@ -94,6 +94,8 @@ export async function result(page: Page, name: string): Promise<Watched> {
     target: median(seen.targets),
     gap: seen.gap,
   };
+  // 落ちた回と比べられるよう、通った回も CI のログに残す
+  console.log(`live-pacing ${name} ${JSON.stringify(watched)}`);
   writeFileSync(
     `test-results/live-pacing-${name}.json`,
     JSON.stringify(watched),

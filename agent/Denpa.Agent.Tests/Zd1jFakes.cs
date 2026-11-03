@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 
@@ -8,7 +7,7 @@ namespace Denpa.Agent.Tests;
  *
  * - DibModel … DiB8000 (0x12) と DiB0090 (0xC0) のレジスタ。書いたものを覚え、確かめの値 (D[896] = 0x01B3、
  *   D[897] = 0x8002、T[0x1A] = 0x0223) と、探索の割り込み (D[1284])・ロックのビット (D[568]) を返す
- * - FakeI2c … DibModel の前に置く II2c。やり取りを1行ずつ控える (D1287=0003、D896? など)
+ * - FakeI2c … DibModel の前に置く II2c。やり取りを 1 行ずつ控える (D1287=0003、D896? など)
  * - FakeBridgeUsb … MB86H47A のメモリを辞書で持ち、メモリ要求を控える。bulk の塊は、コア 1 のプログラムの代わりに
  *   Mb86h47Programs.cs に書いた形どおりに読んで DibModel に届ける (コア 1 の I2C の手順そのものは Mb86h47ProgramsTests.cs が
  *   FR30 の真似で確かめる)。TS の EP 0x81 は与えた 192 バイトの単位を返す
@@ -147,7 +146,7 @@ internal sealed class FakeBridgeUsb : IUsbDevice
 
     public FakeBridgeUsb()
     {
-        // 主 CPU の処理の、電源投入時の5語 (仕様書 4.2)
+        // 主 CPU の処理の、電源投入時の 5 語 (仕様書 4.2)
         Memory[0xE9AC0] = 0x9B800000;
         Memory[0xE9AC4] = 0xAA04E40F;
         Memory[0xE9E0C] = 0x9B800000;

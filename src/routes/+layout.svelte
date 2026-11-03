@@ -348,7 +348,7 @@
    * 「その他」とその中の「設定」、広い形はヘッダーの「設定」
    */
   const fresh = $derived(data.update !== null);
-  /** タブを出すのはナビの画面 (切り抜きも) と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
+  /** タブを出すのはナビの画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
   const showTabbar = $derived(here !== null);
   /**
    * テーブルトップ (`#lib/phone-form.ts`) のライブでは、下のタブは下の段 (舞台の中。黒い地) の下端に浮く。
@@ -359,6 +359,13 @@
   /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
   const notice = $derived(
     (page.data["channelNotice"] ?? null) as NoticeKind | null,
+  );
+  /** チャンネルのお知らせの 1 行 (書き換えた・地上波が変わったかもしれない)。同じ load が渡す (`server/channel-alert.ts`) */
+  const alert = $derived(
+    (page.data["channelAlert"] ?? null) as {
+      kind: NoticeKind;
+      text: string;
+    } | null,
   );
   let menuOpen = $state(false);
   /** 行き先を選んだら閉じる。開いたままだと次の画面の頭が隠れる */
@@ -556,6 +563,10 @@
   {#if notice}
     <div class="notice-slot">
       <ChannelNotice kind={notice} />
+    </div>
+  {:else if alert}
+    <div class="notice-slot">
+      <ChannelNotice kind={alert.kind} text={alert.text} />
     </div>
   {/if}
 
@@ -998,10 +1009,7 @@
   :global(.menu.tab-more-menu) {
     margin-inline-end: 0.75rem;
   }
-  /*
-     * **縦に積む。** Pico のナビの部品を読んでいた頃は `nav ul` が横並び (flex) になり、
-     * 畳んだメニューの中まで横に並んで、箱からはみ出していた。いまの画面の項目は `app.css` の `.menu-item` (左の縦線と主の色の太字)
-     */
+  /* 縦に積む。いまの画面の項目は `app.css` の `.menu-item` (左の縦線と主の色の太字) */
   .more-list {
     display: flex;
     flex-direction: column;

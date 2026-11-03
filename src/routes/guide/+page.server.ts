@@ -2,6 +2,7 @@ import { fail } from "@sveltejs/kit";
 import { and, eq, ne } from "drizzle-orm";
 
 import { channelNotice } from "#lib/channel-notice.js";
+import { channelAlert } from "#lib/server/channel-alert.js";
 import { orm } from "#lib/server/db.js";
 import { serviceCounts, watchableServices } from "#lib/server/epg.js";
 import {
@@ -63,6 +64,7 @@ export function load({ url, cookies }) {
     subchannels: storedSubchannels(cookies.get(SUBCHANNELS_COOKIE)),
     typeEmpty,
     channelNotice: typeEmpty ? null : channelNotice(counts),
+    channelAlert: channelAlert(),
   };
 }
 
@@ -72,7 +74,7 @@ export const actions = {
     const form = await request.formData();
     const programId = Number(form.get("programId"));
     if (!Number.isFinite(programId))
-      return fail(400, { message: "番組IDが不正です" });
+      return fail(400, { message: "番組 ID が不正です" });
     const reservation = orm()
       .select({ id: reservations.id })
       .from(reservations)

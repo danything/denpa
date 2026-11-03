@@ -17,12 +17,18 @@ import { savePrograms } from "./epg";
 import { emit } from "./events";
 import { moveFile } from "./fsx";
 import { libraryPath, recordedPath } from "./library";
+import { refreshLineup } from "./lineup-follow";
 import { writeThumbnail } from "./metadata";
 import { fillTsHead, recordingSummary } from "./recording";
 import { programs, recordings, reservations, services } from "./schema";
 import { chunks } from "./stream";
 import { parseTitle } from "./title";
-import { openChannelStream, recordingUse, type StreamUse } from "./tuner";
+import {
+  openChannelStream,
+  recordingUse,
+  type StreamUse,
+  TuneError,
+} from "./tuner";
 import { notify } from "./webhook";
 
 /**
@@ -246,7 +252,7 @@ function extendIfLonger(recording: Recording, endAt: number): void {
       .run();
   }
   const minutes = Math.round((endAt - current.end_at) / 60000);
-  console.log(`[rec] 放送が延びました: ${recording.name} (+${minutes}分)`);
+  console.log(`[rec] 放送が延びました: ${recording.name} (+${minutes} 分)`);
   emit("recordings");
   emit("reservations");
 }
@@ -366,12 +372,25 @@ async function pump(
             (signal) =>
               openChannelStream(
                 service.type,
-                service.channel,
+                // 掛け直すたびに引き直す。放送の一覧が変わってチャンネルを書き換えたら、新しいほうへ行く
+                channelOf(service.id) ?? service.channel,
                 signal,
                 use,
                 undefined,
                 leaving,
-              ),
+              ).catch((error: unknown) => {
+                /*
+                 * **衛星で選局できなかったら、放送の一覧を読み直す** (`lineup-follow.refreshLineup`)。
+                 * 再編で TS が移ったのなら、書き換えたあとの掛け直しで録れる
+                 */
+                if (
+                  error instanceof TuneError &&
+                  (service.type === "BS" || service.type === "CS")
+                ) {
+                  void refreshLineup(service.type).catch(() => undefined);
+                }
+                throw error;
+              }),
             controller.signal,
           );
         } catch (error) {
@@ -506,7 +525,7 @@ async function pump(
   const size = fileSize(path) ?? written;
 
   if (size === 0) {
-    fail(recording.id, "ストリームから1バイトも受信できませんでした");
+    fail(recording.id, "ストリームから 1 バイトも受信できませんでした");
     return;
   }
 
@@ -656,4 +675,15 @@ export function failStrayRecordings(
     fail(rec.id, "録画が中断されたまま終了時刻を過ぎました");
   }
   return stray.length;
+}
+
+/** 局のいまのチャンネルの名前 (`services.channel`)。局が無ければ null */
+function channelOf(serviceId: number): string | null {
+  return (
+    orm()
+      .select({ channel: services.channel })
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .get()?.channel ?? null
+  );
 }

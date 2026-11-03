@@ -330,7 +330,7 @@ export async function probeLeadIn(
 const MAX_LEAD_IN = 5;
 
 /**
- * `ffprobe -show_frames` の吐き出しから、**最初にデコードできたコマの時刻**を読む。
+ * `ffprobe -show_frames` の出力から、**最初にデコードできたコマの時刻**を読む。
  *
  * 頭のほうは参照先が録れていないコマが混ざるので、ffprobe も ffmpeg も
  * 最初の I フレームまで捨てる。ここで返るのは捨て終わったあとの1コマ目。
@@ -464,7 +464,7 @@ export async function openCm(
       /** ロゴが使えなかった理由。呼ぶたびに支度のときの理由から始める */
       let why = opening;
       /*
-       * 尺が ffprobe で測れなかったら、ffmpeg が言ってきた尺 (入れ物の尺)、
+       * 尺が ffprobe で測れなかったら、ffmpeg が出力した尺 (入れ物の尺)、
        * それも無ければ読めた最後のコマで代える。捨てた頭のぶんは引く
        */
       const container = Number.isFinite(measured) ? measured : found.duration;
@@ -493,7 +493,7 @@ export async function openCm(
       // ロゴの区間を出す (覚えていたものが当たらなければ、覚え直して枠だけ読み直す)
       let lit: CmMaterial["logo"] = null;
       if (current) {
-        step("本編とCMに分けています");
+        step("本編と CM に分けています");
         const result = await current.finish(
           fps,
           async (again) =>
@@ -581,7 +581,7 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
     if (cm.length === 0) why = "ロゴの消えている所がありませんでした";
     // 番組の半分以上がCMになったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
     else if (tooMuchCm(cm, duration))
-      why = `番組の ${cmRatio(cm, duration)}% がCMと判定されたため、この結果は使いません`;
+      why = `番組の ${cmRatio(cm, duration)}% が CM と判定されたため、この結果は使いません`;
     else return { cm, duration, note: LOGO_OK };
   }
 

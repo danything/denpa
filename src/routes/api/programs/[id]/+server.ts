@@ -16,7 +16,7 @@ import type { ProgramDetail } from "#lib/types.js";
  */
 export function GET({ params }) {
   const id = Number(params.id);
-  if (!Number.isFinite(id)) error(400, "番組IDが不正です");
+  if (!Number.isFinite(id)) error(400, "番組 ID が不正です");
 
   const program: ProgramDetail | undefined = orm()
     .select({

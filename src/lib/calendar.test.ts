@@ -115,7 +115,7 @@ describe("日ごとの印", () => {
       today,
     );
     expect(dayAriaLabel(today, marks.get(today), today)).toBe(
-      "10月19日 (今日)、予約 3件",
+      "10月19日 (今日)、予約 3 件",
     );
     expect(dayAriaLabel(day(10, 20), undefined, today)).toBe("10月20日、なし");
     expect(
@@ -124,7 +124,7 @@ describe("日ごとの印", () => {
         { recorded: 2, missed: 1, ended: 0, recording: 0, reserved: 0 },
         today,
       ),
-    ).toBe("10月1日、録画 2件、録り逃し 1件");
+    ).toBe("10月1日、録画 2 件、録り逃し 1 件");
   });
 });
 

@@ -249,7 +249,7 @@ export function audioLabel(audio: Audio): string {
   const type =
     audio.text !== undefined && audio.text !== ""
       ? audio.text
-      : (AUDIO_TYPE[audio.componentType] ?? `種別${audio.componentType}`);
+      : (AUDIO_TYPE[audio.componentType] ?? `種別 ${audio.componentType}`);
   const langs = langNames(audio);
   return langs.length === 0 ? type : `${type} (${langs.join("/")})`;
 }
@@ -275,7 +275,7 @@ export interface AudioTrack {
   /** 何本目の音声か。ffmpeg の `-map 0:a:<これ>` に渡す */
   stream: number;
   side: AudioSide;
-  /** 「主音声 (日本語)」「音声2 ステレオ (英語)」 */
+  /** 「主音声 (日本語)」「音声 2 ステレオ (英語)」 */
   label: string;
   /** 放送が「主音声」と言っているか。**何も指定されなかったときに選ぶ** */
   main?: boolean;
@@ -298,14 +298,14 @@ export interface AudioTrack {
  * 何も出せないより「そのまま出す」1つを置くほうが確か
  */
 export function audioTracks(audios: Audio[]): AudioTrack[] {
-  // 音声が2本以上あるときだけ「音声1/音声2」を添える。1本のときは邪魔なだけ
+  // 音声が2本以上あるときだけ「音声 1/音声 2」を添える。1本のときは邪魔なだけ
   const many = audios.length > 1;
   const tracks: AudioTrack[] = [];
 
   audios.forEach((audio, stream) => {
-    // 放送が名乗っていれば、何本目かは添えない (「主音声ステレオ」に「音声1」を足しても長いだけ)
+    // 放送が名乗っていれば、何本目かは添えない (「主音声ステレオ」に「音声 1」を足しても長いだけ)
     const named = audio.text !== undefined && audio.text !== "";
-    const head = many && !named ? `音声${stream + 1} ` : "";
+    const head = many && !named ? `音声 ${stream + 1} ` : "";
     const langs = langNames(audio);
     const of = (index: number) =>
       langs[index] === undefined ? "" : ` (${langs[index]})`;
@@ -314,7 +314,7 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
 
     if (audio.componentType === DUAL_MONO) {
       // 左右に分かれているので、名前ではなくどちら側かで呼ぶ
-      const index = many ? `音声${stream + 1} ` : "";
+      const index = many ? `音声 ${stream + 1} ` : "";
       const sides: [AudioSide, string][] = [
         ["main", `主音声${of(0)}`],
         ["sub", `副音声${of(1)}`],
@@ -426,11 +426,11 @@ export function videoLabel(
 }
 
 /**
- * シリーズ記述子から出す言葉 (`programs.series_*`)。**「第3話 (全12話)」「最終回」「再放送」。**
+ * シリーズ記述子から出す言葉 (`programs.series_*`)。**「第 3 話 (全 12 話)」「最終回」「再放送」。**
  *
- * - 話数が全何話と同じなら、(全12話) の代わりに「最終回」
+ * - 話数が全何話と同じなら、(全 12 話) の代わりに「最終回」
  * - 「再放送」は再放送の印が 0 でないときだけ。0 は初回とは限らない (`programs.series_repeat`)
- * - 何話目かを言わない局もある。全何話かだけ分かれば「全12話」
+ * - 何話目かを言わない局もある。全何話かだけ分かれば「全 12 話」
  */
 export function seriesLabels(series: {
   series_episode: number | null;
@@ -447,11 +447,11 @@ export function seriesLabels(series: {
     const final = episode === last;
     labels.push(
       last === null || final || last < episode
-        ? `第${episode}話`
-        : `第${episode}話 (全${last}話)`,
+        ? `第 ${episode} 話`
+        : `第 ${episode} 話 (全 ${last} 話)`,
     );
     if (final) labels.push("最終回");
-  } else if (last !== null) labels.push(`全${last}話`);
+  } else if (last !== null) labels.push(`全 ${last} 話`);
   if (repeat !== null && repeat !== 0) labels.push("再放送");
   return labels;
 }

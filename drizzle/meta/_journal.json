@@ -169,6 +169,41 @@
       "when": 1793427097155,
       "tag": "0023_recording-hevc",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1793585482922,
+      "tag": "0024_migrated-watched",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1793603035056,
+      "tag": "0025_niconico-link",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1793640937633,
+      "tag": "0026_live-hw-allow",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1793645222519,
+      "tag": "0027_channel-reception",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1793645354135,
+      "tag": "0028_channel-changes",
+      "breakpoints": true
     }
   ]
 }

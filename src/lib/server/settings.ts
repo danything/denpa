@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 
+import { readIndoorHosts } from "../host";
 import { HW_CODECS, type HwAllow, type HwCodec, type HwKind } from "../hw";
 import { readNg } from "../jikkyo/ng";
 import { normalizePrefecture } from "../prefecture";
@@ -34,9 +35,16 @@ interface Settings {
   /**
    * **デバイス (GPU) と方式ごとに、GPU でエンコードしてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
    * 別 (`server/hwenc.ts`) で、エンコードするのは「使える かつ 許されている」もの。いま使えない
-   * GPU の印も保存で消さない (挿し直せばそのまま効く。`chooseHw`)。設定の 1 キーに JSON で持つ
+   * GPU の印も保存で消さない (挿し直せばそのまま効く。`chooseHw`)。設定の 1 キーに JSON で持つ。
+   * **録画のエンコードだけが読む** — ライブ・追っかけ・その場の変換は `liveHwAllow`
    */
   hwAllow: HwAllow;
+  /**
+   * **ライブ・追っかけ・録画のその場の変換で、GPU でエンコードしてよいコーデック。** 持ち方は `hwAllow` と同じ。
+   * 録画と分けてあるのは、録画とライブで使う GPU を分けられるようにするため (`server/live.ts` の `pickLiveHw`)。
+   * ライブが出すのは AV1 と H.264 だけなので、H.265 の印は何にも効かない
+   */
+  liveHwAllow: HwAllow;
   /** CMの扱い。off / chapter / cut */
   cmCut: CmMode;
   /** エンコードするか。**コーデックの選択から決まる** (`none` 以外なら する) */
@@ -96,6 +104,17 @@ interface Settings {
   jikkyo: boolean;
   /** **実況の NG ワード** (世帯で 1 つ)。含むコメントは流さない (`#lib/jikkyo/ng.ts`)。設定の 1 キーに JSON の配列で持つ */
   jikkyoNg: string[];
+  /**
+   * **家の中で使う名前** (世帯で 1 つ。`dp.l.example.com` など)。この名前で開いた画面は、ライブの「自動」で
+   * MPEG-2 (放送のまま) を先に選ぶ (`#lib/host.ts` の `indoorHost`)。プライベートの IP・`localhost`・`.local` などは
+   * 載せなくても家の中。設定の 1 キーに JSON の配列で持つ
+   */
+  indoorHosts: string[];
+  /**
+   * **コーデックのメニューに H.264 と H.265 を出さないか。既定はオフ。** 外すのはメニューだけで、AV1 を再生できない端末には
+   * 自動で H.265 か H.264 を流す (`#lib/live-choice.ts` の `HIDDEN_CODECS`)
+   */
+  hideH264Hevc: boolean;
 }
 
 /** 本数の上限に選べる幅 */
@@ -142,7 +161,7 @@ export function parseCodecs(value: string | undefined): HwCodec[] {
 }
 
 /**
- * `hwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ vaapi: [...], rkmpp: [...], nvenc: [...] }`。
+ * `hwAllow`・`liveHwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ vaapi: [...], rkmpp: [...], nvenc: [...] }`。
  * 書かれていない方式は空 — 方式はデバイスごとに決まっていて (`/dev/dri/*` は VA-API、
  * `/dev/mpp_service` は Rockchip MPP、`/dev/nvidia0` などは NVENC)、そのデバイスで使えない方式の印は何にも効かない
  */
@@ -183,6 +202,7 @@ export function settings(): Settings {
     codec: primary,
     codecs,
     hwAllow: parseHwAllow(stored("hwAllow")),
+    liveHwAllow: parseHwAllow(stored("liveHwAllow")),
     cmCut: isCmMode(cmCut) ? cmCut : config.cmCutDefault,
     encode: codecs.length > 0,
     keepOriginal: flag("keepOriginal", false),
@@ -195,6 +215,8 @@ export function settings(): Settings {
     transcodeLimit: parseTranscodeLimit(stored("transcodeLimit")),
     jikkyo: flag("jikkyo", false),
     jikkyoNg: readNg(stored("jikkyoNg")),
+    indoorHosts: readIndoorHosts(stored("indoorHosts")),
+    hideH264Hevc: flag("hideH264Hevc", false),
   };
 }
 
@@ -218,9 +240,9 @@ function saveRaw(
     .run();
 }
 
-/** `encode` はコーデックの選択から決まるだけなので書かない */
+/** `encode` と `codecs` はコーデックの選択 (`codec` にカンマ区切りで書く) から決まるだけなので書かない */
 export function saveSettings(
-  patch: Partial<Omit<Settings, "encode">>,
+  patch: Partial<Omit<Settings, "encode" | "codecs">>,
 ): Settings {
   const at = now();
   orm().transaction((tx) => {

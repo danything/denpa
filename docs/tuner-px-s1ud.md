@@ -1,10 +1,12 @@
 # PX-S1UD (siano-userland)
 
-**地上波だけ**の USB チューナーで、1台で1チャンネルを取ります。
+**地上波だけ**の USB チューナーで、1 台で 1 チャンネルを取ります。
 denpa が使える内蔵のカードリーダーは無いので、USB のカードリーダーを別に挿します ([tuners.md](tuners.md#カードリーダー))。
 Linux (DVB でも siano-userland でも)・Mac (Apple Silicon)・Windows (x64) で使えます。
 
 チューナーの一覧は [tuners.md](tuners.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#siano-userland-の作り)。
+
+[Amazon で見る (広告)](https://www.amazon.co.jp/dp/B006RQLNES?tag=doa08-22)
 
 PX-S1UD は mainline の `smsusb` + `smsdvb` で Linux DVB になるので、DVB でも使えます
 (ホストに `isdbt_rio.inp` が要る)。別に
@@ -14,9 +16,8 @@ PX-S1UD は mainline の `smsusb` + `smsdvb` で Linux DVB になるので、DVB
 
 **カーネルが使っている機材には触りません。** 作者自身が「動いている smsusb から
 切り替えるのは安全と判定していない」と書いており (unbind の境目でカーネルの異常を観測)、
-DVB で動いている S1UD を奪うのは論外です。siano-userland 0.1.8 からは
-siano-ts 自身が、カーネルのドライバが使っているデバイスを断ります (終了コード 4。
-以前は黙って奪っていた。Khronos31/siano-userland#9)。
+DVB で動いている S1UD を奪うのは論外です。siano-ts 自身も、
+カーネルのドライバが使っているデバイスを断ります (終了コード 4。Khronos31/siano-userland#9)。
 
 | 機材の様子                                                                  | 使うドライバ                            |
 | --------------------------------------------------------------------------- | --------------------------------------- |

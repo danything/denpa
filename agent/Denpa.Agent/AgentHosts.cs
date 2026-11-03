@@ -30,7 +30,7 @@ public sealed partial class AgentHosts(IReadOnlyList<string> allowed)
     /// </summary>
     private static readonly string[] LocalSuffixes = [".localhost", ".local", ".lan", ".home.arpa", ".internal", ".svc"];
 
-    /// <summary>知らせた名前。同じ名前で何度来ても1度だけ出す (ログを埋めないよう、覚えるのは上限まで)</summary>
+    /// <summary>知らせた名前。同じ名前で何度来ても 1 度だけ出す (ログを埋めないよう、覚えるのは上限まで)</summary>
     private readonly HashSet<string> reported = [];
     private const int MaxReported = 64;
 

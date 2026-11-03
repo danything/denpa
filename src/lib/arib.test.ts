@@ -76,7 +76,7 @@ describe("audioLabel", () => {
 
   test("知らない種別は番号のまま残す", () => {
     expect(audioLabel({ componentType: 99, langs: ["xyz"] })).toBe(
-      "種別99 (xyz)",
+      "種別 99 (xyz)",
     );
   });
 
@@ -162,15 +162,15 @@ describe("audioTracks", () => {
       { componentType: 3, langs: ["eng"] },
     ]);
     expect(tracks.map((track) => track.label)).toEqual([
-      "音声1 ステレオ (日本語)",
-      "音声2 ステレオ (英語)",
+      "音声 1 ステレオ (日本語)",
+      "音声 2 ステレオ (英語)",
     ]);
     expect(tracks.map((track) => track.stream)).toEqual([0, 1]);
   });
 
   /*
    * **名乗っているなら番号は要らない。** 「主音声ステレオ」「解説ステレオ」と
-   * 書いてあるところへ「音声1」「音声2」まで足すと、長いだけで何も増えない
+   * 書いてあるところへ「音声 1」「音声 2」まで足すと、長いだけで何も増えない
    */
   test("放送が名乗っていれば番号は添えない", () => {
     const tracks = audioTracks([
@@ -191,7 +191,7 @@ describe("audioTracks", () => {
     ]);
     expect(tracks).toHaveLength(4);
     expect(tracks.slice(1).every((track) => track.stream === 1)).toBe(true);
-    expect(tracks[1]!.label).toBe("音声2 主音声 (日本語)");
+    expect(tracks[1]!.label).toBe("音声 2 主音声 (日本語)");
   });
 
   /*
@@ -341,7 +341,7 @@ describe("audioTitles", () => {
     ).toEqual(["主音声 (日本語)", "解説 (日本語)"]);
   });
 
-  /** 1本だけのときは「音声1」のような番号を足さない。長いだけで何も増えない */
+  /** 1本だけのときは「音声 1」のような番号を足さない。長いだけで何も増えない */
   test("1本なら番号を足さない", () => {
     expect(audioTitles([{ componentType: 3, langs: ["jpn"] }], false)).toEqual([
       "ステレオ (日本語)",
@@ -372,26 +372,26 @@ describe("seriesLabels", () => {
   ) => seriesLabels({ series_episode, series_last_episode, series_repeat });
 
   test("話数と全何話", () => {
-    expect(labels(3)).toEqual(["第3話"]);
-    expect(labels(3, 12)).toEqual(["第3話 (全12話)"]);
+    expect(labels(3)).toEqual(["第 3 話"]);
+    expect(labels(3, 12)).toEqual(["第 3 話 (全 12 話)"]);
   });
 
   test("全何話と同じなら最終回", () => {
-    expect(labels(12, 12)).toEqual(["第12話", "最終回"]);
+    expect(labels(12, 12)).toEqual(["第 12 話", "最終回"]);
   });
 
   test("全何話を超える話数は、全何話を出さない (放送の数え違い)", () => {
-    expect(labels(13, 12)).toEqual(["第13話"]);
+    expect(labels(13, 12)).toEqual(["第 13 話"]);
   });
 
   test("何話目かが無ければ全何話だけ。どちらも無ければ何も出さない", () => {
-    expect(labels(null, 12)).toEqual(["全12話"]);
+    expect(labels(null, 12)).toEqual(["全 12 話"]);
     expect(labels(null)).toEqual([]);
   });
 
   test("再放送の印が 0 でなければ再放送。0 (オリジナル) と NULL (記述子なし) は何も言わない", () => {
-    expect(labels(3, null, 1)).toEqual(["第3話", "再放送"]);
-    expect(labels(3, null, 0)).toEqual(["第3話"]);
+    expect(labels(3, null, 1)).toEqual(["第 3 話", "再放送"]);
+    expect(labels(3, null, 0)).toEqual(["第 3 話"]);
     expect(labels(null, null, null)).toEqual([]);
   });
 });

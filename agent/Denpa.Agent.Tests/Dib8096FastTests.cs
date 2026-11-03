@@ -1,5 +1,3 @@
-using Denpa.Agent;
-
 namespace Denpa.Agent.Tests;
 
 /*
@@ -31,10 +29,10 @@ public class Dib8096FastTests
         dib.Tune(Uhf13);
         i2c.Log.Clear();
         await Assert.That(dib.Tune(Uhf27)).IsEqualTo(DibLock.DataLocked);
-        // 二分探索 (7 回置いて最後にもう1回) ではなく、覚えた値を1回置いて ADC を1回見るだけ
+        // 二分探索 (7 回置いて最後にもう 1 回) ではなく、覚えた値を 1 回置いて ADC を 1 回見るだけ
         await Assert.That(Capacitor(i2c)).IsEqualTo(1);
 
-        // 初めての周波数は二分探索 (7 回置いて最後にもう1回)
+        // 初めての周波数は二分探索 (7 回置いて最後にもう 1 回)
         i2c.Log.Clear();
         dib.Tune(ChannelTable.Parse("T40")!.Frequency);
         await Assert.That(Capacitor(i2c)).IsEqualTo(8);

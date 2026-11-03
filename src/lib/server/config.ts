@@ -81,12 +81,17 @@ export const config = {
     epgNow: 8,
     /** 人が押して待っている。番組表には譲らせるが、録画からは取り上げない (server/scan.ts が渡す) */
     scan: 5,
+    /**
+     * 衛星のロゴを積んだ中継 (当たり) を開いて、ダウンロードの期間中にカルーセルが流れてくるのを待つときと「いますぐ」。**番組表集め (`epg`) とふだんのロゴ (`logo`) にだけ勝つ**
+     * (理由は `logo.carouselPriority`。持っていられるのは長くても `logoCarouselWait` まで)
+     */
+    carousel: 4,
     epg: 3,
     logo: 1,
   },
 
   dbPath,
-  /** DBと並べて置くもの。放送波から取得した局ロゴと、CM検出のために覚えた局ロゴ */
+  /** DBと並べて置くもの。局ロゴと CM 検出のために覚えたロゴ (`logos/`)、別の機械へ移すときの作業場所 (`transfer/`)、ニコニコとの連携の鍵 (`niconico.key`) */
   dataDir,
   /** 元のTSの置き場。エンコード後は (元のTSを残す設定でなければ) 消える作業領域 */
   rawDir: str("RAW_DIR", join(mediaDir, "raw")),
@@ -180,6 +185,11 @@ export const config = {
     "DENPA_GITHUB_API",
     "https://api.github.com/repos/danything/denpa",
   ).replace(/\/+$/, ""),
+  /**
+   * ニコニコの OAuth を中継する denpa-hub (danything/denpa-hub)。連携の入口とトークンの更新に使う (niconico.ts)。
+   * 試験では偽物を指す
+   */
+  hubUrl: str("DENPA_HUB", "https://dh.doany.io").replace(/\/+$/, ""),
   /** 新しいバージョンを見に行く間隔 (ms)。認証なしの GitHub API は 1 時間に 60 回まで */
   updateCheckInterval: num("UPDATE_CHECK_INTERVAL", 60 * MIN),
 
@@ -262,10 +272,16 @@ export const config = {
   agentDownGrace: num("AGENT_DOWN_GRACE", 3 * MIN),
   /**
    * 局ロゴの定期チェックの間隔。**ほかの選局を共有する** (`logo.sweep`)。自分で開くのは、衛星のロゴが足りない間に
-   * どのチューナーも空いているときに、当たりの中継で待つ (分からなければ探す。`logo.awaitCarousel`)。
+   * 衛星のチューナーが空いているときに、当たりの中継で待つ (分からなければ探す。`logo.awaitCarousel`)。
    * 開いた瞬間の通知 (`tuners`) でも共有するので、これは通知を取りこぼしたときの保険
    */
   logoSweepInterval: 10 * MIN,
+  /**
+   * 衛星の当たりの中継を開いておく上限。**地上波よりずっと長い。** カルーセルはダウンロードの期間中だけ、20 分以内の間隔で
+   * まとまって来る (ARIB TR-B15。実測は docs/logo.md「衛星はダウンロードの期間にだけ流れてくる」)。一度当たれば BS と CS の全局が
+   * まとめて手に入り、外れの中継は PAT を見た時点 (1秒ほど) で切り上げるので、待つのは当たりの1中継だけ (`logo.collect`)
+   */
+  logoCarouselWait: 20 * MIN,
   /** 終了した番組情報をDBに残しておく期間。番組表の遡り表示にしか使わないので短くてよい */
   programRetention: 24 * 60 * MIN,
   /**

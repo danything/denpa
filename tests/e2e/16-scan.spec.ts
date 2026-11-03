@@ -23,6 +23,8 @@ test.describe("設定のチューナーとチャンネル", () => {
     // 何分もかかって空きチューナーを全部使うので、そうと分かるようにしておく (「詳しく」の中)
     await expect(card).toContainText("空いているチューナーを全部使います");
 
+    // 初めの選び方は「すべて」。ここは地上波の総当たりだけを見る
+    await card.getByLabel("スキャンする種別").selectOption("GR");
     await card.getByTestId("scan-start").click();
 
     await expect(card.getByTestId("scan-state")).toHaveText("完了", {
@@ -33,6 +35,27 @@ test.describe("設定のチューナーとチャンネル", () => {
     // 受信できた分だけ数える。信号が無かった分は数に入らない
     await expect(card.getByTestId("scan-found")).toContainText("2");
     await expect(card.getByTestId("scan-log")).toContainText("2 局");
+  });
+
+  /**
+   * **BS は総当たりせず、放送の一覧 (NIT) から作る。** 偽の放送の BS は BS-3 と BS-11 の 2 つの TS で、
+   * 入口の BS-15・BS-1 には何も無い。3 つ目の入口 (BS-3) の NIT に、両方の TS が周波数付きで載っている
+   */
+  test("BS は放送の一覧からチャンネルを作る", async ({ page, request }) => {
+    await syncEpg(request);
+    await goto(page, "/settings/reception");
+
+    const card = page.getByTestId("channel-section");
+    await card.getByLabel("スキャンする種別").selectOption("BS");
+    await card.getByTestId("scan-start").click();
+
+    await expect(card.getByTestId("scan-state")).toHaveText("完了", {
+      timeout: 60_000,
+    });
+    await expect(card.getByTestId("scan-found")).toContainText("2");
+    await expect(card.getByTestId("scan-log")).toContainText(
+      "放送の一覧から 2 チャンネル",
+    );
   });
 
   /**
@@ -142,11 +165,11 @@ test.describe("設定のチューナーとチャンネル", () => {
     /*
      * 使っている相手が何をしているのか分かるようにする。
      *
-     * エージェントが持っているのは短い印だけ (`rec 1` / `epg BS11_0`) なので、
+     * エージェントが持っているのは短い印だけ (`rec 1` / `epg BS11:18000`) なので、
      * 番組名に開くのは画面側の仕事。**何を使っているか**も一緒に出す
      */
     const using = tuners.getByTestId("tuner-row").nth(0);
-    await expect(using).toContainText("BS11_0");
+    await expect(using).toContainText("BS11:18000");
     await expect(using.getByTestId("tuner-user").first()).toContainText("録画");
     // 録画と番組表が同じ選局を共有している。チューナーは増えない
     await expect(using.getByTestId("tuner-user").nth(1)).toContainText(
@@ -192,7 +215,7 @@ test.describe("設定のチューナーとチャンネル", () => {
       card.getByRole("columnheader", { name: "局ロゴ" }),
     ).toBeVisible();
     await expect(
-      card.getByRole("columnheader", { name: "CMロゴ" }),
+      card.getByRole("columnheader", { name: "CM ロゴ" }),
     ).toBeVisible();
     const first = channels.getByTestId("channel-row").first();
     const channel = await first.getAttribute("data-channel");
@@ -323,7 +346,7 @@ test.describe("チューナーの設定", () => {
 
     // その場で保存して断られる。見出しの横に理由を出し、外したチェックは元に戻す
     await expect(card.getByTestId("settings-error")).toContainText(
-      "種別を1つ以上",
+      "種別を 1 つ以上",
     );
     await expect(
       card.locator('input[name^="type.0."]:checked').first(),

@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 /// <para>
 /// 台数はデバイスの数を数えれば分かるが、**種別 (地上波か衛星か) はどこにも
 /// 書かれていない。** sysfs には出ておらず (実機で確認: `dev` `device` `power`
-/// `subsystem` `uevent` しか無く、4つとも同じ PCI デバイスの下にぶら下がる)、
+/// `subsystem` `uevent` しか無く、4 つとも同じ PCI デバイスの下にぶら下がる)、
 /// `recisdb` にも列挙の手段が無い。ioctl で聞くしかない。
 /// </para>
 ///
@@ -95,7 +95,7 @@ public static class DeviceProbe
         if (fd < 0) return [];
         try
         {
-            // struct dtv_properties { u32 num; struct dtv_property *props; } に、DTV_ENUM_DELSYS を1つ
+            // struct dtv_properties { u32 num; struct dtv_property *props; } に、DTV_ENUM_DELSYS を 1 つ
             var property = new byte[DvbTuner.PropertySize];
             BitConverter.TryWriteBytes(property, DtvEnumDelsys);
             var header = new byte[16];
@@ -128,7 +128,7 @@ public static class DeviceProbe
     /// 見つかった機材を、設定に書いたのと同じ形式にして返す。
     ///
     /// <para>
-    /// 分かるのは**デバイスと受けられる方式**だけ。LNB を足したい・1台だけ
+    /// 分かるのは**デバイスと受けられる方式**だけ。LNB を足したい・1 台だけ
     /// 止めたい、は人にしか決められないので、そこは画面から書いてもらう
     /// (書いてあればそちらが勝つ)。
     /// </para>

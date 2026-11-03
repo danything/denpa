@@ -4,7 +4,7 @@
  * docs 側は GitHub で読める形のまま持ち、frontmatter も足さない。ここで足すもの・直すもの:
  *   - frontmatter: title (先頭の H1。本文からは外す)・description (最初の段落)・editUrl・lastUpdated。
  *     src/data/pages.ts で上書きできる
- *   - リンク: 公開する docs はサイト内へ、それ以外 (../src など) は GitHub へ
+ *   - リンク: 公開する docs はサイト内へ、それ以外 (../src など) は GitHub へ。Amazon のリンクには rel="sponsored nofollow"
  *   - 画像: docs/images を src/assets/docs に写し、Astro の画像の最適化が効く相対パスにする。
  *     README の <img> も Markdown の画像に直す。動く画像 (AVIF) は Astro (sharp) が読めないので、
  *     public/images に写して <img> で出す
@@ -180,6 +180,7 @@ function convert(text: string, source: Source, outFile: string): string {
   body = convertReadmeHtml(body);
   body = convertAlerts(body);
   body = rewriteLinks(body, source.path, outFile);
+  body = sponsoredLinks(body);
   body = animImages(body);
   body = addVideoNotes(body);
 
@@ -378,6 +379,22 @@ function rewriteLinks(text: string, fromPath: string, outFile: string): string {
           /\b(href|src)="([^"]+)"/g,
           (_, a: string, t: string) => `${a}="${resolve(t)}"`,
         ),
+    ),
+  );
+}
+
+/**
+ * Amazon のアソシエイトのリンク (`[文字](https://www.amazon.co.jp/…)`) を rel="sponsored nofollow" の <a> にする。
+ * 検索エンジンに広告のリンクだと伝えるため (Astro 7 の Markdown は rehype のプラグインを使えないので、ここで HTML にする)
+ */
+function sponsoredLinks(text: string): string {
+  return mapOutsideFences(text, (line) =>
+    mapOutsideCode(line, (part) =>
+      part.replace(
+        /\[([^\]]+)\]\((https:\/\/www\.amazon\.co\.jp\/[^)\s]+)\)/g,
+        (_, label: string, href: string) =>
+          `<a href="${href.replaceAll("&", "&amp;")}" rel="sponsored nofollow">${label}</a>`,
+      ),
     ),
   );
 }

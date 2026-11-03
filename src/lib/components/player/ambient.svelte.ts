@@ -16,8 +16,7 @@ import type { GlanceReply, GlanceRequest } from "./glance-worker";
  * - canvas に描いているとき (放送のままの MPEG-2・互換モード) … 映像は worker の canvas にあって
  *   画面の側からは読めないので、その worker に縮めたものを1枚もらう (`RawEngine.grab` の `size`)
  *
- * どちらも同じオリジンから流しているので、写しても汚れ (CORS) は付かない。
- * **端末ごとに覚える** (`keep.ts`。バックグラウンド再生と同じ)
+ * どちらも同じオリジンから流しているので、写しても汚れ (CORS) は付かない
  */
 interface Options {
   /** 再生しているか。止めている間は写さない (光は残す) */

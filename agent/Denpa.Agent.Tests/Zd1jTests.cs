@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Buffers.Binary;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 
@@ -64,9 +63,9 @@ public class Zd1jTests
         await Assert.That(readBack).IsGreaterThan(routine);
         await Assert.That(at[0]).IsGreaterThan(readBack);
         for (var i = 1; i < at.Length; i++) await Assert.That(at[i]).IsGreaterThan(at[i - 1]);
-        // 書き換える前は1語ずつ (ルーチンを置くところに 64 バイトの書き込みが無い)
+        // 書き換える前は 1 語ずつ (ルーチンを置くところに 64 バイトの書き込みが無い)
         await Assert.That(usb.Log.Count(line => line.StartsWith("W 000E1", StringComparison.Ordinal))).IsEqualTo(words.Length);
-        // 1語ずつ読み返す
+        // 1 語ずつ読み返す
         await Assert.That(usb.Log.Count(line => line.StartsWith("R 000E1", StringComparison.Ordinal))).IsEqualTo(words.Length);
     }
 
@@ -135,7 +134,7 @@ public class Zd1jTests
     {
         var usb = new FakeBridgeUsb();
         var bridge = Started(usb);
-        // コア 1 を置いて走らせ、生きている印を2回読んだ。bulk の経路は空の塊で確かめた
+        // コア 1 を置いて走らせ、生きている印を 2 回読んだ。bulk の経路は空の塊で確かめた
         await Assert.That(usb.Log).Contains("W 01700000=FFFCFFFF");
         await Assert.That(usb.Log.Count(line => line == "R 017A3C7C")).IsEqualTo(2);
         await Assert.That(usb.Log).Contains($"W 017A3C78={Mb86h47Programs.BulkEnable:X8}");
@@ -253,7 +252,7 @@ public class Zd1jTests
             var unit = new byte[192];
             unit[4] = 0x47;
             unit[5] = marker;
-            // 中身にも 0x47 を混ぜる (1つだけでは単位の頭と信じない)
+            // 中身にも 0x47 を混ぜる (1 つだけでは単位の頭と信じない)
             if (marker == 0) unit[100] = 0x47;
             if (marker == 2) unit[150] = 0x47;
             return unit;
@@ -402,11 +401,11 @@ public class Zd1jTests
     {
         // 設定のポートにあればそのまま
         await Assert.That(Zd1j.Follow("2-1", ["2-1"])).IsEqualTo("2-1");
-        // 抜いてほかのポートに挿した。1台だけなのでそちらを使う
+        // 抜いてほかのポートに挿した。1 台だけなのでそちらを使う
         await Assert.That(Zd1j.Follow("2-1", ["2-2"])).IsEqualTo("2-2");
-        // 1台も無ければ設定のまま (開くときに「見当たりません」と言う)
+        // 1 台も無ければ設定のまま (開くときに「見当たりません」と言う)
         await Assert.That(Zd1j.Follow("2-1", [])).IsEqualTo("2-1");
-        // 2台以上はポートでしか見分けられないので、設定のまま
+        // 2 台以上はポートでしか見分けられないので、設定のまま
         await Assert.That(Zd1j.Follow("2-1", ["2-2", "2-3"])).IsEqualTo("2-1");
         await Assert.That(Zd1j.Follow("2-1", ["2-1", "2-3"])).IsEqualTo("2-1");
     }
@@ -416,7 +415,7 @@ public class Zd1jTests
     [Test]
     public async Task 開けなければ_どこで止まったかを1行記録する()
     {
-        // ポートはテストごとに変える (記録はプロセスで1つ。テストは並んで走る)
+        // ポートはテストごとに変える (記録はプロセスで 1 つ。テストは並んで走る)
         var usbError = new IOException("usb 9-11 を開けません (見当たらないか、IOKit が開かせません)");
         Assert.Throws<IOException>(() => Zd1jBoard.Acquire("9-11", () => throw usbError));
         await Assert.That(Logged($"[Sony CECH-ZD1 J 9-11] 開けません (USB を開くところで): {usbError.Message}")).IsEqualTo(1);

@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 /*
  * USB の CCID カードリーダーを直接扱う。**pcscd も pcsc-lite も使わない。**
  *
- * 3段:
+ * 3 段:
  *
  * - UsbFs.cs … /dev/bus/usb をバルク転送で読み書きする部分と、ディスクリプタの読み方
  * - Ccid.cs  … CCID の命令 (電源・パラメータ・XfrBlock) と、それを ICardLink にしたもの
@@ -18,8 +18,8 @@ namespace Denpa.Agent;
  * T=1 の枠組みも SetParameters もこちらが持つ。
  */
 
-/// <summary>CCID の応答1つ</summary>
-/// <param name="Status">bmStatus。下2bit がカードの状態、上2bit が命令の結果</param>
+/// <summary>CCID の応答 1 つ</summary>
+/// <param name="Status">bmStatus。下 2bit がカードの状態、上 2bit が命令の結果</param>
 /// <param name="Error">bError。失敗のときの理由、時間延長のときは倍率</param>
 /// <param name="Chain">bChainParameter (DataBlock) など、10 バイト目</param>
 public sealed record CcidReply(byte Type, byte Slot, byte Seq, byte Status, byte Error, byte Chain, byte[] Data)
@@ -101,7 +101,7 @@ public static class CcidMessage
 }
 
 /// <summary>
-/// CCID のリーダー1台 (のスロット 0) を <see cref="ICardLink"/> にしたもの。
+/// CCID のリーダー 1 台 (のスロット 0) を <see cref="ICardLink"/> にしたもの。
 ///
 /// <para>
 /// **読み取り機の単位で方式が分かれる。** TPDU 単位なら T=1 のブロックをこちらで組み
@@ -111,7 +111,7 @@ public static class CcidMessage
 ///
 /// <para>
 /// 失敗はすべて <see cref="IOException"/>。抜かれた・カードが抜けたあとは使えないので、
-/// 呼んだ側が捨てて <see cref="Ccid.Find"/> から開き直す (繋ぎ直しは B-CAS の側)。
+/// 呼んだ側が捨てて <see cref="Ccid.Find()"/> から開き直す (繋ぎ直しは B-CAS の側)。
 /// </para>
 /// </summary>
 public sealed class CcidLink : ICardLink
@@ -124,7 +124,7 @@ public sealed class CcidLink : ICardLink
     private T1Protocol? _t1;
     private int _bwtMs = 1500;
 
-    /// <summary>この接続でもうポートをリセットした (固まったリーダーの立て直しは1回だけ)</summary>
+    /// <summary>この接続でもうポートをリセットした (固まったリーダーの立て直しは 1 回だけ)</summary>
     private bool _portReset;
 
     /// <summary>電源を入れた (PowerOn を送った)。閉じるときに切る</summary>
@@ -175,7 +175,7 @@ public sealed class CcidLink : ICardLink
         }
         catch (IOException) when (!_portReset)
         {
-            // 最初の命令から黙るなら、リーダーが固まっている。ポートをリセットして1回だけやり直す
+            // 最初の命令から黙るなら、リーダーが固まっている。ポートをリセットして 1 回だけやり直す
             _portReset = true;
             Log.Write($"{Name} が応えないので、USB のポートをリセットします");
             _pipe.ResetPort();
@@ -212,7 +212,7 @@ public sealed class CcidLink : ICardLink
         if (Interface.Tpdu)
         {
             _t1 = new T1Protocol(atr, Exchange);
-            // 1ブロック = NAD PCB LEN + INF + LRC。CCID の頭 10 バイトと一緒に1メッセージに収まる長さまで
+            // 1 ブロック = NAD PCB LEN + INF + LRC。CCID の頭 10 バイトと一緒に 1 メッセージに収まる長さまで
             var ifsd = Math.Min(Interface.MaxIfsd > 0 ? Interface.MaxIfsd : 254, Interface.MaxMessage - CcidMessage.Header - 4);
             _t1.NegotiateIfsd(ifsd);
         }
@@ -265,7 +265,7 @@ public sealed class CcidLink : ICardLink
     }
 
     /// <summary>
-    /// T=1 のブロックを1つ送って1つ受ける (<see cref="T1Protocol"/> の下の層)。
+    /// T=1 のブロックを 1 つ送って 1 つ受ける (<see cref="T1Protocol"/> の下の層)。
     /// カードが黙った・化けたは null (T=1 の側で送り直す)
     /// </summary>
     private byte[]? Exchange(byte[] block, byte wtx)
@@ -281,7 +281,7 @@ public sealed class CcidLink : ICardLink
     }
 
     /// <summary>
-    /// APDU 単位のリーダー。**1メッセージに収まらなければ wLevelParameter で連結する**
+    /// APDU 単位のリーダー。**1 メッセージに収まらなければ wLevelParameter で連結する**
     /// (extended APDU 単位。送るとき 1 = 始め、3 = 続き、2 = 終わり、受けるとき 0x10 で続きを要求する)
     /// </summary>
     private byte[] TransmitApdu(ReadOnlySpan<byte> apdu)
@@ -328,7 +328,7 @@ public sealed class CcidLink : ICardLink
     }
 
     /// <summary>
-    /// 命令を1つ送って、**同じ番号の**答えを返す。
+    /// 命令を 1 つ送って、**同じ番号の**答えを返す。
     ///
     /// <para>
     /// 番号の違う応答は読み飛ばす (前のプロセスが途中で死んで残した応答など)。
@@ -353,12 +353,12 @@ public sealed class CcidLink : ICardLink
     }
 
     /// <summary>
-    /// CCID のメッセージを1つ読む。
+    /// CCID のメッセージを 1 つ読む。
     ///
     /// <para>
     /// **長さぴったりで要求する。** メッセージがパケットの大きさの倍数で終わるとき、
     /// ZLP を送らないリーダーがあり、大きめのバッファで待つと時間切れまで返らない。
-    /// 先に1パケット読んで頭の dwLength を知り、残りをパケットの倍数に切り上げて要求する。
+    /// 先に 1 パケット読んで頭の dwLength を知り、残りをパケットの倍数に切り上げて要求する。
     /// 前のメッセージのあとの ZLP (0 バイト) は読み飛ばす。
     /// </para>
     /// </summary>
@@ -474,7 +474,7 @@ public static class Ccid
     }
 
     /// <summary>
-    /// 診断用 (<c>denpa-agent --card</c>)。見つかったリーダーを並べ、最初の1台のカードに
+    /// 診断用 (<c>denpa-agent --card</c>)。見つかったリーダーを並べ、最初の 1 台のカードに
     /// 電源を入れて ATR と読み取り機の種類を書く。**実機で最初に当てるのはここ。**
     /// </summary>
     public static string Describe()

@@ -88,7 +88,7 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
 # ---------------------------------------------------------------------------
 FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS denpa-font
 # renovate: datasource=github-releases depName=danything/denpa-font
-ARG DENPA_FONT_VERSION=v3.6
+ARG DENPA_FONT_VERSION=v3.7
 ADD --chmod=644 https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/SHA256SUMS \
     https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/denpa-font.woff2 \
     https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/denpa-font-jisx0213.woff2 \
@@ -196,7 +196,7 @@ ENV FFMPEG_VERSION=9.0.2
 # 3 系以降は速度も画質も別物)。libavcodec の .so に静的に繋ぐので、SVT-AV1 の共有ライブラリは要らない
 # (そのために `-DCMAKE_POSITION_INDEPENDENT_CODE=ON` で組む)
 # renovate: datasource=gitlab-tags depName=AOMediaCodec/SVT-AV1 registryUrl=https://gitlab.com
-ARG SVT_AV1_VERSION=v4.2.0
+ARG SVT_AV1_VERSION=v4.3.0
 # Opus も**ソースから組んで libavcodec に静的に繋ぐ**。Debian の libopus (1.5) は、パケットの欠けを AI で補う
 # 機能 (deep PLC・DRED・OSCE) の重みを抱えて 3.5MB あり、そのうち 3MB が重み。denpa は Opus をエンコードする
 # だけで (デコードは FFmpeg 自前の opus デコーダ)、どれも使わないので、既定 (どれも切れている) で組むと 0.6MB ほどで済む。
@@ -512,7 +512,7 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 # bun の組み込み (`bun:sqlite`) だけ。載せていた頃は playwright も vite も
 # typescript もイメージに入っていて、**312MB がまるごと無駄**だった。
 # 置くのは下のものだけ: build/ (アプリ)、server.js (入口) とそれが読む
-# src/lib/server/address.ts・compress.ts・hold-signals.ts、package.json (`"type": "module"` の宣言)、drizzle/
+# src/lib/server/address.ts・compress.ts・fresh-worker.ts・hold-signals.ts、package.json (`"type": "module"` の宣言)、drizzle/
 # (マイグレーション)。これで起動して /api/health が答えるかは CI で毎回見ている
 # (.github/image-smoke.sh。PR の docker-build-check と、push の前の build-and-deploy)
 #
@@ -530,6 +530,8 @@ COPY --from=build /app/server.js ./server.js
 COPY --from=build /app/src/lib/server/address.ts ./src/lib/server/address.ts
 # 入口が画面の HTML とデータを縮めるのに使う (`src/lib/server/compress.ts`。同じく `node:zlib` しか引かない)
 COPY --from=build /app/src/lib/server/compress.ts ./src/lib/server/compress.ts
+# 入口がサービスワーカーに Cache-Control: no-cache を付けるのに使う (`src/lib/server/fresh-worker.ts`。何も引かない)
+COPY --from=build /app/src/lib/server/fresh-worker.ts ./src/lib/server/fresh-worker.ts
 # 入口がいちばん先に読む。起動の途中に来た止まれの合図を取っておく (`src/lib/server/hold-signals.ts`。何も引かない)
 COPY --from=build /app/src/lib/server/hold-signals.ts ./src/lib/server/hold-signals.ts
 

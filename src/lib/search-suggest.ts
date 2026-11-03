@@ -95,7 +95,7 @@ export function suggestGroups(res: SuggestResponse): SuggestGroup[] {
           p.reservation_state && stateLabel(p.reservation_state),
         ]
           .filter(Boolean)
-          .join(" ・ "),
+          .join("・"),
         hint: "詳細",
         href: resultsHref(q, p.id),
         broadcast: true,
@@ -107,7 +107,7 @@ export function suggestGroups(res: SuggestResponse): SuggestGroup[] {
       items: res.recordings.rows.map((r) => ({
         key: `recording-${r.id}`,
         label: r.name,
-        meta: [r.service_name, dateTime(r.start_at)].join(" ・ "),
+        meta: [r.service_name, dateTime(r.start_at)].join("・"),
         hint:
           r.watch === null
             ? "結果を見る"
@@ -125,7 +125,7 @@ export function suggestGroups(res: SuggestResponse): SuggestGroup[] {
         key: `reservation-${r.id}`,
         label: r.name,
         meta: [r.service_name, dateTime(r.start_at), stateLabel(r.state)].join(
-          " ・ ",
+          "・",
         ),
         hint: r.chase === null ? "詳細" : "追っかけ再生",
         href: r.chase ?? resultsHref(q, r.program_id),

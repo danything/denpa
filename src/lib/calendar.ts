@@ -129,11 +129,11 @@ export function dayAriaLabel(
   const name = `${d.getMonth() + 1}月${d.getDate()}日${day === today ? " (今日)" : ""}`;
   const parts: string[] = [];
   if (mark !== undefined) {
-    if (mark.recorded > 0) parts.push(`録画 ${mark.recorded}件`);
-    if (mark.missed > 0) parts.push(`録り逃し ${mark.missed}件`);
-    if (mark.ended > 0) parts.push(`終わった予約 ${mark.ended}件`);
-    if (mark.recording > 0) parts.push(`録画中 ${mark.recording}件`);
-    if (mark.reserved > 0) parts.push(`予約 ${mark.reserved}件`);
+    if (mark.recorded > 0) parts.push(`録画 ${mark.recorded} 件`);
+    if (mark.missed > 0) parts.push(`録り逃し ${mark.missed} 件`);
+    if (mark.ended > 0) parts.push(`終わった予約 ${mark.ended} 件`);
+    if (mark.recording > 0) parts.push(`録画中 ${mark.recording} 件`);
+    if (mark.reserved > 0) parts.push(`予約 ${mark.reserved} 件`);
   }
   return `${name}、${parts.length === 0 ? "なし" : parts.join("、")}`;
 }

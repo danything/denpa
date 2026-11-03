@@ -93,7 +93,7 @@
 
 <h3 class="title broadcast">{program.name}</h3>
 <p class="meta small muted num">
-  <span class="broadcast">{program.service_name}</span> ・ {dateTime(
+  <span class="broadcast">{program.service_name}</span>・{dateTime(
     program.start_at,
   )} 〜 {time(program.end_at)}
   ({duration(program.start_at, program.end_at)})
@@ -120,7 +120,7 @@
   {/if}
   {#if fps !== null}
     <!-- 実測 (fpsDetect) がどちらに転んだか。ログにしか出ていなかった -->
-    <span class="fact" data-testid="detail-fps">{fps}コマ/秒</span>
+    <span class="fact" data-testid="detail-fps">{fps} コマ/秒</span>
   {/if}
   {#each audios as label, i (i)}
     <span class="fact" data-testid="detail-audio">{label}</span>

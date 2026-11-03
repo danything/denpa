@@ -18,7 +18,7 @@ public static class Mb86h47Programs
     // 主 CPU のルーチン (仕様書 4.2)
     // ---------------------------------------------------------------------
 
-    /// <summary>ルーチンを置ける2つのバンク (SRAM。電源投入時の処理は使っていない)</summary>
+    /// <summary>ルーチンを置ける 2 つのバンク (SRAM。電源投入時の処理は使っていない)</summary>
     public static readonly uint[] Banks = [0xE1000, 0xE1800];
 
     public const int BankSize = 0x800;
@@ -27,7 +27,7 @@ public static class Mb86h47Programs
     public const uint ReadContinue = 0xE9AE6;
     public const uint WriteContinue = 0xE9E2E;
 
-    /// <summary>主 CPU のルーチン1つぶん (読む側と書く側を同じバンクに並べる)</summary>
+    /// <summary>主 CPU のルーチン 1 つぶん (読む側と書く側を同じバンクに並べる)</summary>
     /// <param name="Words">置く語 (バンクの頭から)</param>
     /// <param name="Read">読む側の入口</param>
     /// <param name="Write">書く側の入口</param>
@@ -153,7 +153,7 @@ public static class Mb86h47Programs
         ];
         foreach (var (address, value) in packer) Store32(asm, address, value);
 
-        // 初めに1回満たす。R8 = 満たし中、R9 = 単位の数
+        // 初めに 1 回満たす。R8 = 満たし中、R9 = 単位の数
         Fill(asm);
         asm.Ldi8(1, R8);
         asm.Ldi8(0, R9);
@@ -207,7 +207,7 @@ public static class Mb86h47Programs
         asm.Ldi8(7, R2);
         asm.And(R2, R0);
         asm.Far(Fr30Cond.Ne, "loop", R12);
-        // 5. 1単位 (192 バイト) 送る
+        // 5. 1 単位 (192 バイト) 送る
         Store32(asm, 0x0020, 0x8);
         Store32(asm, 0x200C, 0x01000000);
         Store32(asm, 0x2004, 0xBF);
@@ -558,7 +558,7 @@ public static class Mb86h47Programs
         asm.Ldi8(0x58, R2);                // ACK を返す
         asm.CmpI(1, R3);
         asm.B(Fr30Cond.Ne, "t_read_go");
-        asm.Ldi8(0x50, R2);                // 最後の1バイトは返さない
+        asm.Ldi8(0x50, R2);                // 最後の 1 バイトは返さない
         asm.Label("t_read_go");
         asm.Ldi8(4, R12);
         asm.StAc(R2, R12);
@@ -631,7 +631,7 @@ public static class Mb86h47Programs
     }
 
     /// <summary>
-    /// 1バイト終わるのを待つ: 制御の bit7 ならバスエラー (R0 = 1)、bit0 なら終わり (R0 = 0)。
+    /// 1 バイト終わるのを待つ: 制御の bit7 ならバスエラー (R0 = 1)、bit0 なら終わり (R0 = 0)。
     /// 上限まで読んでも終わらなければ固まった (R0 = 4)。誤りなら <paramref name="fail"/> へ。R0・R1・R12 を壊す
     /// </summary>
     private static void WaitByte(Fr30Assembler asm, string fail)

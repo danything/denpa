@@ -103,7 +103,7 @@
   let narrow = $state(false);
   let short = $state(false);
   const compact = $derived(narrow || short);
-  /** スマホの縦 (幅で狭く、全画面でない)。読みものの上の段を省く (`InfoBlock`) */
+  /** スマホの縦 (幅で狭く、全画面でない) */
   const slim = $derived(narrow && !fullscreen.active);
   $effect(() => {
     const target = element;

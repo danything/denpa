@@ -32,8 +32,8 @@ permissions:
 # 合わせても1分ありません。待っているのは**いちばん遅い1つ**だけでよいので、
 # 中身の関係ないものを、それぞれ別のランナーに出しています。
 #
-# E2E はさらに5つに割ります (組分けは tests/e2e/shards.json)。ランナーは4コアで
-# 1台3ワーカー (playwright.config.ts) なので、5台で15ワーカーぶん並びます
+# E2E はさらに6つに割ります (組分けは tests/e2e/shards.json)。ランナーは4コアで
+# 1台3ワーカー (playwright.config.ts) なので、6台で18ワーカーぶん並びます
 # (中身は待ち時間が大半なので、割った分だけ効く。
 # docs/development.md「並べて流す」)。
 jobs:
@@ -99,7 +99,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "10.0.403"
 
@@ -142,7 +142,7 @@ jobs:
           cmake --build asicen-build --parallel 4 --target asicend asicenctl
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "10.0.403"
 
@@ -258,6 +258,13 @@ jobs:
           grep -q 'externalTrafficPolicy: Local' out.yaml
           # 知らない type は描かずに止まる
           if helm template denpa charts/denpa --set service.type=LoadBalancer >/dev/null 2>&1; then exit 1; fi
+          # dataSourceRef は渡した置き場の PVC にだけ付く
+          helm template denpa charts/denpa --namespace denpa \
+            --set persistence.data.dataSourceRef.apiGroup=volsync.backube \
+            --set persistence.data.dataSourceRef.kind=ReplicationDestination \
+            --set persistence.data.dataSourceRef.name=denpa-data-dst > ds.yaml
+          [ "$(grep -c 'kind: ReplicationDestination' ds.yaml)" = 1 ]
+          grep -q 'name: denpa-data-dst' ds.yaml
 
   # Mac (Apple Silicon) で動かすエージェント (docs/install-mac.md)。
   #
@@ -274,7 +281,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "10.0.403"
 
@@ -386,7 +393,7 @@ jobs:
           key: agent-windows-test-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj') }}
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "10.0.403"
 
@@ -423,7 +430,7 @@ jobs:
           key: agent-windows-publish-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj') }}
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "10.0.403"
 
@@ -531,7 +538,7 @@ jobs:
         # 同じ組に固まり、28秒の組と3.6分の組ができていた
         # **組を増やしたら、main の ruleset の必須チェックにも `e2e (n)` を足すこと** (足さないと
         # 増やした組が落ちていてもマージできてしまう。bump の PR は ruleset から引くので直さなくてよい)
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -592,7 +599,7 @@ jobs:
         run: |
           ls tests/e2e/*.spec.ts | xargs -n1 basename | sed 's/\.spec\.ts$//' | sort > "$RUNNER_TEMP/all"
           jq -r 'del(."//") | .[][]' tests/e2e/shards.json | sort > "$RUNNER_TEMP/listed"
-          jq -e 'del(."//") | keys == ["1","2","3","4","5"]' tests/e2e/shards.json > /dev/null
+          jq -e 'del(."//") | keys == ["1","2","3","4","5","6"]' tests/e2e/shards.json > /dev/null
           dup=$(uniq -d "$RUNNER_TEMP/listed")
           if [ -n "$dup" ]; then echo "::error::2つの組に入っています: $(echo $dup)"; exit 1; fi
           gone=$(comm -13 "$RUNNER_TEMP/all" "$RUNNER_TEMP/listed")

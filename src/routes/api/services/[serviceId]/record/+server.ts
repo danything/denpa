@@ -11,7 +11,7 @@ import { recordAiring } from "#lib/server/reservations.js";
  */
 export async function POST({ params }) {
   const serviceId = Number(params.serviceId);
-  if (!Number.isInteger(serviceId)) error(400, "局IDが不正です");
+  if (!Number.isInteger(serviceId)) error(400, "局 ID が不正です");
 
   const result = await recordAiring(serviceId);
   if (!result.ok) error(result.status, result.message);

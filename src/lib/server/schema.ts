@@ -8,6 +8,7 @@ import {
   customType,
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -206,6 +207,49 @@ export const services = sqliteTable("services", {
   updated_at: integer("updated_at").notNull(),
 });
 
+/**
+ * チャンネルを受信できたか。**番組表集めのついでに確かめる** (`reception.ts`)。
+ *
+ * BS と CS は放送の一覧 (NIT) から作るので、その家で受信できないチャンネルも入る
+ * (CATV で一部の中継器しか通らない、など)。受信できないと分かったチャンネルの局は、
+ * 番組表・ライブ・ルールの対象から外す
+ */
+export const channelReception = sqliteTable(
+  "channel_reception",
+  {
+    type: text("type").$type<ChannelType>().notNull(),
+    /** チャンネルの名前 (`T27`・`BS15:16625`)。`services.channel` と同じもの */
+    channel: text("channel").notNull(),
+    /** 最後に受信できた時刻。一度も確かめていなければ null */
+    ok_at: integer("ok_at"),
+    /** 最後に受信できなかった時刻 */
+    failed_at: integer("failed_at"),
+    /** 続けて受信できなくなった最初の時刻。受信できたら null */
+    failing_since: integer("failing_since"),
+    /** 続けて受信できなかった回数 (同じ周回の失敗は 1 回と数える) */
+    failures: integer("failures").notNull().default(0),
+    /** 受信できないと決めたか */
+    unreceivable: flag("unreceivable")
+      .notNull()
+      .default(sql`0`),
+  },
+  (t) => [primaryKey({ columns: [t.type, t.channel] })],
+);
+
+/**
+ * 放送の一覧が変わり、受信できるチャンネルを書き換えた記録 (`lineup-follow.ts`)。
+ * 録画・番組表・ライブの上のお知らせの 1 行に出し、設定の「受信」を開いたら消す
+ */
+export const channelChanges = sqliteTable("channel_changes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  type: text("type").$type<ChannelType>().notNull(),
+  /** 人が読む 1 行。お知らせと通知にそのまま出す */
+  text: text("text").notNull(),
+  at: integer("at").notNull(),
+  /** 設定の「受信」を開いた時刻 */
+  seen_at: integer("seen_at"),
+});
+
 export const programs = sqliteTable(
   "programs",
   {
@@ -328,7 +372,7 @@ export const rules = sqliteTable("rules", {
  * `migrate.ts`・`migrate-edcb.ts`)。
  *
  * 録画の行にはしない — ファイルが無いので、録画の一覧や番組表に出ても開けない。読むのは
- * 「録ったことのある回」(`rules.recordedEpisodes`) だけで、ルールの「同じ回は最初の放送だけ」と
+ * 「録ったことのある回」(`rules.historyEpisodes`) だけで、ルールの「同じ回は最初の放送だけ」と
  * 「前の回は録らない」がそれを見る。denpa が自分で録ったものは `recordings` の行が同じ役をする。
  *
  * 入れるのはどちらも番組名・局・終わりの時刻だけ (EDCB の終わりは録画の開始 + 長さ)。
@@ -344,8 +388,8 @@ export const recordedHistory = sqliteTable("recorded_history", {
 });
 
 /**
- * DB に入る予約の状態。**録り始めてからの状態は持たない** — 録画の行がそれを
- * 知っているので、画面に出す `recording | done | failed` は録画から引く
+ * DB に入る予約の状態。**録り始めてからの状態は持たない** — 録画の行から
+ * 決まるので、画面に出す `recording | done | failed` は録画から引く
  * (`types.ts` の ReservationState、上の `reservationState()`)
  */
 const RESERVATION_STATES = [
@@ -541,7 +585,8 @@ export const recordings = sqliteTable(
     /**
      * 末尾まで観た時刻。NULL なら**まだ観終えていない** (一覧の「未視聴」の印)。
      * `resume_ms` は観終えると消えるので、未視聴と観終えたものを見分けられない。
-     * 書くのは末尾まで来たとき (`api/recordings/<id>/resume`) と、詳細の「視聴済みにする」。
+     * 書くのは末尾まで来たとき (`api/recordings/<id>/resume`)・詳細の「視聴済みにする」・EPGStation からの取り込み
+     * (観たかどうかを持たないので視聴済みで入れる。`migrate.importOne`)。
      * 消すのは「未視聴に戻す」だけ (観直して途中で止めても観終えたまま)
      */
     watched_at: integer("watched_at"),
@@ -550,7 +595,7 @@ export const recordings = sqliteTable(
     index("recordings_state").on(t.state),
     index("recordings_start").on(sql`${t.start_at} DESC`),
     // 番組表は1マスごとに「この番組で録れたものはあるか」を引く。
-    // 無いと24時間ぶんのマスの数だけ録画一覧を舐めることになる
+    // 無いと24時間ぶんのマスの数だけ録画一覧を全部読むことになる
     index("recordings_program").on(t.program_id),
     // ルールの「前の回は録らない」は、当たった放送のシリーズ名で期間を切らずに引く (`rules.seriesEpisodes`)
     index("recordings_series").on(t.series),
@@ -694,7 +739,7 @@ export const sessions = sqliteTable(
     created_at: integer("created_at").notNull(),
     expires_at: integer("expires_at").notNull(),
   },
-  // 切れたものを片付けるときに舐める
+  // 切れたものを片付けるときに引く
   (t) => [index("sessions_expires").on(t.expires_at)],
 );
 
@@ -749,6 +794,31 @@ export const deviceCodes = sqliteTable(
     ),
     consumed_at: integer("consumed_at"),
   },
-  // 切れたものを片付けるときに舐める
+  // 切れたものを片付けるときに引く
   (t) => [index("device_codes_expires").on(t.expires_at)],
 );
+
+/**
+ * **ニコニコのアカウントとの連携** (niconico.ts。世帯で 1 つなので行は多くて 1 つ、`id` はいつも 1)。
+ *
+ * - トークンは denpa のサーバだけが持ち、端末には渡さない。**暗号化して置く** (鍵は DB の隣の `niconico.key`)。
+ *   更新に使うトークンは期限が無く、ニコニコに失効のエンドポイントも無いので、DB だけが出回っても使えないようにする
+ * - denpa を別の機械へ移すときの写しからは消す (`transfer.ts`。移したら連携し直す)
+ * - 更新できなくなったら (`invalid_grant`) 行は残してトークンを消し、`lost_at` を付ける (設定の画面で「連携が切れました」と出す)
+ */
+export const niconicoLink = sqliteTable("niconico_link", {
+  id: integer("id").primaryKey(),
+  /** ニコニコのユーザー ID (ID トークンの sub)。設定の画面に出す */
+  user_id: text("user_id").notNull(),
+  /** 暗号化したアクセストークン。切れたら null */
+  access_token: blob("access_token", { mode: "buffer" }),
+  /** 暗号化した更新に使うトークン。切れたら null */
+  refresh_token: blob("refresh_token", { mode: "buffer" }),
+  /** アクセストークンの期限 (unix ms) */
+  access_expires_at: integer("access_expires_at").notNull(),
+  linked_at: integer("linked_at").notNull(),
+  /** 連携した人。OIDC なら sub、信頼するネットワークからなら 'trusted-network' */
+  linked_by: text("linked_by").notNull(),
+  /** 更新できなくなった時刻 */
+  lost_at: integer("lost_at"),
+});

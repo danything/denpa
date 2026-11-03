@@ -127,6 +127,10 @@
   const player = livePlayer({
     confirm: drive.confirm,
     separateAudio: separateLiveAudio,
+    // 選んでいるもの (覚えている選択)、開いた名前が家の中か、H.265 を出せるか。どれもサーバが決める (`+page.server.ts`)
+    choice: untrack(() => data.choice),
+    indoor: untrack(() => data.indoor),
+    hevc: untrack(() => data.hevc),
   });
   /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
   let video = $state<HTMLVideoElement | null>(null);
@@ -175,7 +179,7 @@
 
   /**
    * 実況に書き込む 1 行 (`JikkyoCompose`)。出せるのは流しているときと同じ条件 (世帯と端末の両方がオンで、映している局に
-   * 実況のチャンネルがある) で、書き込み用の設定は無い。置き場はコメントの一覧の下 (下の `canList`)。
+   * 実況のチャンネルがある) で、書き込み用の設定は無い。書き先はニコニコと連携していれば公式のニコニコ実況、ほかは NX-Jikkyo (`data.niconico`)。置き場はコメントの一覧の下 (下の `canList`)。
    * 一覧を出せない形 (横にしたスマホ・全画面) では、右端の列の同じボタンで映像の上 (操作バーのすぐ上) に開き (`writing`)、
    * 開いている間は操作バーを引っ込めない
    */
@@ -449,7 +453,7 @@
     overlay: () => overlay,
     captions: () => player.captions && player.hasCaptions,
   });
-  // MPEG-2 をデコードした音を「再生する音」と言うのは、入れているときと小窓を開いている間だけ (`raw/engine.ts`)
+  // MPEG-2 をデコードした音を「再生する音」と言うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
   $effect(() => {
     player.playback = background.on || pip.active;
   });
@@ -672,6 +676,7 @@
               panel={false}
               focus
               bind:text={draft}
+              official={data.niconico}
               onclose={closeWriting}
             />
           {/if}
@@ -762,78 +767,57 @@
               rangeTestid="live-range"
             >
               {#snippet status()}
-                <!-- 放送からの遅れ (`live-player` の `fromAir`。隣のテレビとの差)。出るまでは貯まりだけ -->
-                {#if player.fromAir !== null}
-                  <span>放送から {player.fromAir.toFixed(1)}秒</span>
-                {/if}
-                <!-- 手元の貯まり (`buffered.end - currentTime`)。上流は入っていない -->
-                {#if player.delay !== null}
-                  <span
-                    >{player.fromAir === null ? "遅延" : "・バッファ"}
-                    {player.delay.toFixed(1)}秒</span
-                  >
-                {/if}
                 <!--
-                                    測り直す (`relearn`)。覚えているものがあるときだけ、遅延のすぐ隣に置く。
-                                    読みものの行なので丸いボタンにはしない (操作バーが厚くなる)
-                                -->
-                {#if player.remembered > FLOOR}
-                  <button
+                    項目は「・」で区切り、あいだに空白を入れない (docs/writing.md)。空白が入らないよう {#if} どうしを詰めて書く。
+                    放送からの遅れ (`live-player` の `fromAir`。隣のテレビとの差)。出るまでは貯まりだけ。
+                    手元の貯まり (`buffered.end - currentTime`)。上流は入っていない。
+                    測り直す (`relearn`)。覚えているものがあるときだけ、遅延のすぐ隣に置く。
+                    読みものの行なので丸いボタンにはしない (操作バーが厚くなる)。
+                    途切れは止まったときだけ (`live-player` の `stalls`)。下限は、いま効いている下限と届く間隔のいちばん長いもの。
+                    途切れの報告に添えてもらう (#1210)。コマ落ちは描かれずに捨てられたコマで、映像だけ遅れるときの切り分け
+                    (`live-player` の `dropped`)。映像だけの遅れは開いたままにせず飛び直す (`unslip`) ので、直した回数も出す。
+                    再生の速さは遅延を詰めるのに変えている。Safari は変えるたびにつまずく (`ts/pacing.ts` の `Steering`)。
+                    デコードは MPEG-2 を 1 コマデコードするのに掛かる時間。8 割を 3 秒超え続けたらエンコードしたものに戻る (`raw/budget.ts`)
+                -->
+                {#if player.fromAir !== null}<span
+                    >放送から {player.fromAir.toFixed(1)} 秒</span
+                  >{/if}{#if player.delay !== null}<span
+                    >{player.fromAir === null ? "遅延" : "・バッファ"}
+                    {player.delay.toFixed(1)} 秒</span
+                  >{/if}{#if player.remembered > FLOOR}{" "}<button
                     type="button"
                     class="relearn"
                     onclick={() => player.relearn()}
                     data-testid="live-relearn">測り直す</button
-                  >
-                {/if}
-                <!-- 詰まった回数。止まったときだけ (`live-player` の `stalls`) -->
-                {#if player.stalls > 0}
-                  ・ <span data-testid="live-stalls"
-                    >途切れ {player.stalls}回</span
-                  >
-                {/if}
-                <!-- いま効いている下限と、届く間隔のいちばん長いもの。途切れの報告に添えてもらう (#1210) -->
-                {#if player.stalls > 0 || player.floor > FLOOR}
-                  ・ <span
+                  >{" "}{/if}{#if player.stalls > 0}・<span
+                    data-testid="live-stalls">途切れ {player.stalls} 回</span
+                  >{/if}{#if player.stalls > 0 || player.floor > FLOOR}・<span
                     data-testid="live-floor"
                     data-target={player.target}
                     data-floor={player.floor}
                     data-gap={player.gapMost}
-                    >下限 {player.floor.toFixed(2)}秒 (受信の間隔 最大 {player.gapMost.toFixed(
+                    >下限 {player.floor.toFixed(2)} 秒 (受信の間隔 最大 {player.gapMost.toFixed(
                       2,
-                    )}秒)</span
-                  >
-                {/if}
-                <!-- 描かれずに捨てられたコマ。映像だけ遅れるときの切り分け (`live-player` の `dropped`) -->
-                {#if player.dropped > 0}
-                  ・ <span>コマ落ち {player.dropped}</span>
-                {/if}
-                <!-- 映像だけの遅れ。開いたままにせず飛び直す (`unslip`) ので、直した回数も出す -->
-                {#if player.slipMost > 0}
-                  ・ <span
+                    )} 秒)</span
+                  >{/if}{#if player.dropped > 0}・<span
+                    >コマ落ち {player.dropped}</span
+                  >{/if}{#if player.slipMost > 0}・<span
                     >映像の遅れ 最大 {Math.round(
                       player.slipMost * 1000,
                     )}ms</span
-                  >
-                {/if}
-                {#if player.slips > 0}
-                  ・ <span>映像の遅れを補正 {player.slips}回</span>
-                {/if}
-                <!-- 再生の速さ。遅延を詰めるのに変えている。Safari は変えるたびにつまずく (`ts/pacing.ts` の `Steering`) -->
-                {#if player.rateChanges > 0}
-                  ・ <span data-testid="live-rate"
+                  >{/if}{#if player.slips > 0}・<span
+                    >映像の遅れを補正 {player.slips} 回</span
+                  >{/if}{#if player.rateChanges > 0}・<span
+                    data-testid="live-rate"
                     >{player.rate === 1
                       ? ""
-                      : `速さ ${player.rate}倍 ・ `}速さを変えた回数 {player.rateChanges}回</span
-                  >
-                {/if}
-                <!-- MPEG-2 を1コマデコードするのに掛かる時間。8割を3秒超え続けたらエンコードしたものに戻る (`raw/budget.ts`) -->
-                {#if player.canvas && player.decodeMs > 0}
-                  ・ <span
+                      : `速さ ${player.rate} 倍・`}速さを変えた回数 {player.rateChanges}
+                    回</span
+                  >{/if}{#if player.canvas && player.decodeMs > 0}・<span
                     >デコード {player.decodeMs.toFixed(1)}ms{player.thinned
                       ? " (コマを間引いています)"
                       : ""}</span
-                  >
-                {/if}
+                  >{/if}
               {/snippet}
             </InfoBlock>
 
@@ -898,11 +882,13 @@
                 : undefined}
               codec={liveCodecs({
                 icon: CODEC,
-                codec: player.codec,
-                raw: player.raw,
+                choice: player.choice,
+                format: player.raw ? "raw" : player.codec,
+                raw: true,
+                hevc: data.hevc,
+                hidden: data.hidden.length > 0,
                 unavailable: player.unavailable,
-                onselect: (key) => player.setCodec(key),
-                onraw: () => player.setRaw(),
+                onselect: (next) => player.setChoice(next),
               })}
               audio={liveAudio(AUDIO, player)}
               subtitle={liveSubtitle(CAPTION, player)}
@@ -960,7 +946,7 @@
         {@const yielded = player.yielded}
         <span class="stage-note yielded" data-testid="live-yielded">
           <span>
-            録画のため局を切り替えました: <span class="broadcast"
+            録画が始まったため、局を切り替えました: <span class="broadcast"
               >{yielded.recording.title}</span
             >
             (録画中を再生しています)
@@ -1007,6 +993,7 @@
             panel
             focus={opened}
             bind:text={draft}
+            official={data.niconico}
             onclose={closeWriting}
           />
         {/if}
@@ -1155,7 +1142,7 @@
                       {#if force !== undefined}<span
                           class="force"
                           data-testid="live-force"
-                          ><span title="1分あたりのコメント数">勢い</span>
+                          ><span title="1 分あたりのコメント数">勢い</span>
                           {force}</span
                         >{#if channel.now}・{/if}{/if}{channel.now?.name ?? ""}
                     </span>

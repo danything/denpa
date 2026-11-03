@@ -2,6 +2,7 @@
   import { resolve } from "$app/paths";
 
   import {
+    CHANNEL_NOTICE_ACTION,
     CHANNEL_NOTICE_TEXT,
     type ChannelNotice,
   } from "#lib/channel-notice.js";
@@ -35,7 +36,7 @@
   <a
     href={`${resolve("settings/reception")}#channels`}
     class="button small {variant === 'bar' ? 'secondary outline' : ''}"
-    >スキャンへ</a
+    >{CHANNEL_NOTICE_ACTION[kind]}</a
   >
 </div>
 

@@ -45,7 +45,7 @@ const LIMIT = 4 * 1024 * 1024;
 const TIMEOUT = 10_000;
 /**
  * 同時に中継する上限。データ放送や Hybridcast のアプリは文書を開くと画像や script をまとめて
- * 取りに来る (HTTP/2 の前段ならブラウザは一度に何十本も投げる) ので、ゆとりを持たせて 32。
+ * 取りに来る (HTTP/2 の前段ならブラウザは一度に何十本もリクエストする) ので、ゆとりを持たせて 32。
  * 待たせると溜まるだけなので、あふれたら断る
  */
 const CONCURRENCY = 32;
@@ -69,7 +69,7 @@ export class Refused extends Error {}
 
 /**
  * 断りの言葉。`Refused` ならその理由、それ以外 (繋がらない・切れた) は
- * エンドポイントごとの言い方 (`fallback`)。3 つのエンドポイント (proxy / post / confirm) で同じ形式
+ * エンドポイントごとの言い方 (`fallback`)。4 つのエンドポイント (proxy / post / confirm / hc) で同じ形式
  */
 export function refusalMessage(failure: unknown, fallback: string): string {
   return failure instanceof Refused ? failure.message : fallback;
@@ -246,7 +246,7 @@ export async function allowed(
    * **http も通す。**
    *
    * 最初は https だけにしていた。**放送がそう作られていない。** NHK は
-   * `http://beacon.nhk.jp/` へ投げてくるし、通信系コンテンツはおおむね
+   * `http://beacon.nhk.jp/` へ送ってくるし、通信系コンテンツはおおむね
    * 素の http で組まれている (受信機がそうしているから)。https だけに
    * すると、双方向を入れても「接続されていません」のまま — 実機で
    * そうなった。
@@ -376,7 +376,7 @@ export function fetchForBml(raw: string): Promise<Fetched> {
  *
  * **「応募・投票」の API だと思っていたら、疎通の判定そのものだった。**
  * NHK のデータ放送は `isIPConnected` に 1 と答えても信じず、ここへ一度
- * 投げてみて、返らなければ「インターネットに接続されていません」と案内
+ * 送ってみて、返らなければ「インターネットに接続されていません」と案内
  * します (実機で確かめた。`confirmIPNetwork` は呼びに来もしない)。
  * 実装しないという最初の決めでは、双方向を入れても入っていないのと同じ
  * でした。

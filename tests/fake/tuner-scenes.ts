@@ -8,7 +8,7 @@
  * - `agent/conformance.test.ts` は本物のエージェントに開かせて、入ったチューナーの `rank` を見る
  * - `src/lib/server/conflict.test.ts` は denpa のなぞり方 (`placements`) で同じ答えになるかを見る
  *
- * 偽の放送にいるのは地上波 T16・T21、衛星 BS11_0・BS03_0 だけ (`tests/fake/services.ts`)。
+ * 偽の放送にいるのは地上波 T16・T21、衛星 BS11:18000・BS03:16432 だけ (`tests/fake/services.ts`)。
  */
 
 export interface SceneTuner {
@@ -76,7 +76,7 @@ export const scenes: Scene[] = [
       rec("b", "GR", "T21", 1),
       // gr9 が空いても、T21 は mlt9 から移らない (1回の選局の途中でチューナーを替えない)
       { close: "a" },
-      rec("c", "BS", "BS11_0", null),
+      rec("c", "BS", "BS11:18000", null),
     ],
   },
   {
@@ -89,8 +89,8 @@ export const scenes: Scene[] = [
     ],
     steps: [
       rec("a", "GR", "T16", 0),
-      rec("b", "BS", "BS11_0", 1),
-      rec("c", "BS", "BS03_0", 2),
+      rec("b", "BS", "BS11:18000", 1),
+      rec("c", "BS", "BS03:16432", 2),
       rec("d", "GR", "T21", 0),
     ],
   },
@@ -104,7 +104,7 @@ export const scenes: Scene[] = [
     steps: [
       { open: "epg", type: "GR", channel: "T16", priority: 3, rank: 0 },
       rec("a", "GR", "T21", 0),
-      rec("b", "BS", "BS11_0", 1),
+      rec("b", "BS", "BS11:18000", 1),
     ],
   },
   {
@@ -115,10 +115,10 @@ export const scenes: Scene[] = [
     name: "余韻で残っているだけのチューナーは空いている。それでも順位のいちばん前を使う",
     tuners: MLT9_GR9,
     steps: [
-      rec("a", "BS", "BS11_0", 1),
+      rec("a", "BS", "BS11:18000", 1),
       { close: "a" },
       rec("b", "GR", "T16", 0),
-      rec("c", "BS", "BS03_0", 1),
+      rec("c", "BS", "BS03:16432", 1),
     ],
   },
   {
@@ -143,7 +143,7 @@ export const scenes: Scene[] = [
       rec("a", "GR", "T16", 0),
       rec("b", "GR", "T21", 1),
       { open: "epg", type: "GR", channel: "T21", priority: 3, rank: 1 },
-      rec("c", "BS", "BS11_0", 1, { after: ["b"], ended: ["b"] }),
+      rec("c", "BS", "BS11:18000", 1, { after: ["b"], ended: ["b"] }),
       { close: "b" },
     ],
   },
@@ -165,7 +165,7 @@ export const scenes: Scene[] = [
       { name: "bs9", types: ["BS", "CS"], rank: 1 },
     ],
     steps: [
-      rec("a", "BS", "BS11_0", 1),
+      rec("a", "BS", "BS11:18000", 1),
       rec("b", "GR", "T16", 0, { after: ["a", "nobody"] }),
       { close: "a" },
     ],
@@ -185,7 +185,7 @@ export const scenes: Scene[] = [
       { close: "b" },
       { close: "a" },
       // gr9 が空いても c は mlt9 にいるので、衛星は入れない
-      rec("d", "BS", "BS11_0", null),
+      rec("d", "BS", "BS11:18000", null),
     ],
   },
   {
@@ -200,7 +200,46 @@ export const scenes: Scene[] = [
       { open: "epg", type: "GR", channel: "T16", priority: 3, rank: 1 },
       { close: "a" },
       rec("b", "GR", "T16", 0),
-      rec("c", "BS", "BS11_0", 1),
+      rec("c", "BS", "BS11:18000", 1),
+    ],
+  },
+  {
+    /*
+     * 衛星のロゴを流す中継で待つ選局 (`config.priority.carousel` = 4) は、番組表集め (3) には取り上げられず、
+     * ライブ (9) と録画には取り上げられる。衛星のチューナーが少ない環境で、番組表集めが次のチャンネルへ
+     * 移るたびにロゴの選局を取り上げて、十数分に一度のカルーセルを読み切れなかった (#1939)
+     */
+    name: "ロゴを流す中継で待つ選局は、番組表集めには譲らず、ライブと録画には譲る",
+    tuners: [
+      { name: "gr9", types: ["GR"], rank: 0 },
+      { name: "bs9", types: ["BS", "CS"], rank: 1 },
+    ],
+    steps: [
+      {
+        open: "carousel",
+        type: "BS",
+        channel: "BS11:18000",
+        priority: 4,
+        rank: 1,
+      },
+      {
+        open: "epg",
+        type: "BS",
+        channel: "BS03:16432",
+        priority: 3,
+        rank: null,
+      },
+      { open: "live", type: "BS", channel: "BS03:16432", priority: 9, rank: 1 },
+      { close: "live" },
+      {
+        open: "again",
+        type: "BS",
+        channel: "BS11:18000",
+        priority: 4,
+        rank: 1,
+      },
+      rec("a", "BS", "BS03:16432", 1),
+      { close: "a" },
     ],
   },
 ];

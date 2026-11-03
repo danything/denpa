@@ -95,7 +95,7 @@ export const actions = {
     const form = await request.formData();
     const serviceId = Number(form.get("serviceId"));
     if (!Number.isFinite(serviceId))
-      return fail(400, { message: "局IDが不正です" });
+      return fail(400, { message: "局 ID が不正です" });
     // 同じ映像を映しているサブチャンネルの枠にも配ってある (`logo-data.share`)
     const ids = [serviceId, ...siblings(serviceId)];
     for (const id of ids) forgetLogoData(id);
@@ -114,7 +114,7 @@ export const actions = {
    * 出ない。どこまで進んだかを画面に流すので、押した人は待たなくていい。
    *
    * 衛星も対象にする。ロゴを運ぶ中継は1つだけで、当たればカルーセルが来たところで
-   * BS と CS の全局ぶんが揃い (十数分待つことがある。`logo.SATELLITE_TIMEOUT`)、外れは
+   * BS と CS の全局ぶんが揃い (十数分待つことがある。`config.logoCarouselWait`)、外れは
    * PAT を見た時点 (1秒ほど) で次へ行く。当たり外れは覚えるので、二度目からは当たりだけを開く
    */
   logoSweep: async () => {

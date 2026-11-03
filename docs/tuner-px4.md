@@ -6,6 +6,8 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 
 チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#px4-userland-の作り)。
 
+「Amazon で見る」は広告のリンクです ([tuners.md](tuners.md))。
+
 [px4-userland](https://github.com/Khronos31/px4-userland) を**エージェントのイメージに同梱**しています
 (`agent/Dockerfile`)。libusb だけで USB を扱うユーザー空間のドライバで、`/dev/bus/usb` が見えれば動き、
 ホストに `px4_drv` (DKMS) もカーネルモジュールも要りません (`px4_drv` の `/dev/px4video*` には対応していません)。
@@ -14,6 +16,8 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 ## 対応機種
 
 PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px4-userland の対応機種ならそのまま使います ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
+
+Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=doa08-22)、[DTV02A-1T1S-U](https://www.amazon.co.jp/dp/B08MTGFV39?tag=doa08-22)
 
 ## 設定
 
@@ -26,9 +30,9 @@ PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px
   古い `q3u4:<14桁>:<受信機>` は「知らないデバイス」として断るので、書いてあれば
   `px4:` に書き直してください (番号と受信機はそのまま)
 - **番号が重なる筐体 (`serial_unique=false`) は、USB ポートで見分けます。** PX-M1UR と PX-S1UR は
-  どれも USB の serial が `000000000000001` で、0.1.9 からは同時に挿すと別々の ready な
-  筐体として並びます (0.1.8 までは1つの `duplicate`)。番号のままだと同じ
-  `px4:000000000000001:0` が2つでき、`px4d --device` も番号だけでは1台に決められず断ります。
+  どれも USB の serial が `000000000000001` で、同時に挿すと別々の ready な
+  筐体として並びます。番号のままだと同じ
+  `px4:000000000000001:0` が 2 つでき、`px4d --device` も番号だけでは 1 台に決められず断ります。
   そこで名前を番号と USB ポートにし (`px4:000000000000001_1-2.3:0`)、`px4d` を
   `--device <番号> --usb-path <USBポート> --instance <名前>` で起こし、`px4ctl` やソケットも
   その名前で呼びます (SPEC 4.1)。**挿すポートを変えると別のチューナーになります**
@@ -36,13 +40,13 @@ PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px
 
 ## 衛星の LNB 給電
 
-- **15V は2段階で許可します。** `px4d` には `--allow-lnb-power` を渡し、実際に要求するのは
+- **15V は 2 段階で許可します。** `px4d` には `--allow-lnb-power` を渡し、実際に要求するのは
   設定に `lnb: 15v` と書いたチューナーだけ (TUNE の `lnb_voltage` = 15)。`11v` は
   px4-userland に無い (0V か 15V) ので要求しません
-- **15V を出せない受信機では 0V で選局します** (`Px4Tuner.Lnb`)。px4-userland 0.1.8 から、
-  1受信機の機種 (PX-M1UR / DTV02-1T1S-U / DTV02A-1T1S-U) は 15V の要求を
+- **15V を出せない受信機では 0V で選局します** (`Px4Tuner.Lnb`)。
+  1 受信機の機種 (PX-M1UR / DTV02-1T1S-U / DTV02A-1T1S-U) は 15V の要求を
   `--allow-lnb-power` があっても UNSUPPORTED で断ります (給電の経路が無い)。そのまま要求すると
-  衛星の選局が全部落ちるので、`lnb: 15v` と書いてあっても 0V で合わせ、記録に1度と、
+  衛星の選局が全部落ちるので、`lnb: 15v` と書いてあっても 0V で合わせ、記録に 1 度と、
   設定の「受信」の「チューナー」のそのチューナーの欄 (空いているときの `error`) に理由を出します。0V での衛星受信は
   これらの機種の対応範囲で、アンテナがほかの機器から給電されていれば受かります
   (給電が無ければ「同期しませんでした」)。出せるかどうかは一覧の受信機の
@@ -52,10 +56,10 @@ PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px
 ## ファームウェア
 
 **ファームウェアはイメージに入れず、使う人の機械で取ってきます。** IT930x は挿すたびにホストから RAM へ
-ファームウェアを流し込み、px4-userland は受理するバージョンを SHA-256 で1つに固定して
+ファームウェアを流し込み、px4-userland は受理するバージョンを SHA-256 で 1 つに固定して
 います。PLEX 公式の Windows ドライバ
 (`pxw3u4_BDA_ver1x64.zip` の `PXW3U4.sys`、著作権表示は Digital Warrior Corp.) から
-切り出します (0x287d0 から 2,169 バイト)。配布 zip・`.sys`・切り出したものの3つを
+切り出します (0x287d0 から 2,169 バイト)。配布 zip・`.sys`・切り出したものの 3 つを
 ハッシュで確かめます。PLEX のサイトから取れなければ Internet Archive の写し (同じハッシュ) から取ります。
 
 - **コンテナ** (`denpa-agent` / `denpa-aio`) は、エージェントが初めて px4d を起こすときに取ってきて

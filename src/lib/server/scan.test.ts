@@ -9,7 +9,6 @@ import {
 } from "@danything/arib/synth";
 
 import { channelEntry, channelsFor, readServices } from "./scan";
-import { type AgentChannel, twinOf, withoutTwins } from "./tuner";
 
 /**
  * 総当たりそのもの (`Scanner`) はここでは試さない。**エージェントに選局を
@@ -58,21 +57,7 @@ describe("選局するチャンネル", () => {
     expect(channels).toHaveLength(50);
   });
 
-  test("BSは1chあたり4スロット", () => {
-    const channels = channelsFor("BS");
-    expect(channels.slice(0, 5)).toEqual([
-      "BS01_0",
-      "BS01_1",
-      "BS01_2",
-      "BS01_3",
-      "BS02_0",
-    ]);
-    expect(channels).toHaveLength(23 * 4);
-  });
-
-  test("CSは02chから", () => {
-    expect(channelsFor("CS")[0]).toBe("CS02");
-    // CATV は地上波の UHF に続けて、周波数変換パススルーの C13〜C63
+  test("CATV は UHF に続けて C13〜C63", () => {
     const catv = channelsFor("CATV");
     expect(catv.slice(0, 50)).toEqual(channelsFor("GR"));
     expect(catv.slice(50)).toEqual(
@@ -112,69 +97,6 @@ describe("チャンネル定義の組み立て", () => {
         { serviceId: 1032, serviceType: 1, name: "TOKYO MX2" },
       ],
     });
-  });
-});
-
-/**
- * 衛星は「無い相対番号」を指すと**先頭の TS が返ってくる** (断ってはくれない)。
- * 実機では 35 枠のうち 9 枠がその写しだった。
- */
-describe("同じ TS を指している枠", () => {
-  const entry = (channel: string, tsid: number): AgentChannel => ({
-    type: "BS",
-    channel,
-    networkId: 4,
-    transportStreamId: tsid,
-    remoteControlKeyId: null,
-    services: [{ serviceId: 151, serviceType: 1, name: "BS朝日1" }],
-  });
-
-  test("先に見つけたほうの名前を返す", () => {
-    const found = [entry("BS01_0", 16400), entry("BS01_1", 16401)];
-
-    expect(twinOf(found, entry("BS01_3", 16400))).toBe("BS01_0");
-    expect(twinOf(found, entry("BS01_2", 16402))).toBeNull();
-  });
-
-  test("種別が違えば別物。TSID は種別をまたいで一意ではない", () => {
-    const found = [entry("BS01_0", 16400)];
-    const cs = { ...entry("CS02", 16400), type: "CS" as const };
-
-    expect(twinOf(found, cs)).toBeNull();
-  });
-
-  test("TSID が分からないものは落とさない", () => {
-    // 読めなかったものまで「写し」として捨てると、その中継が丸ごと消える
-    const found = [entry("BS01_0", 0)];
-
-    expect(twinOf(found, entry("BS01_1", 0))).toBeNull();
-  });
-
-  /*
-   * **開く側でも落とす。** スキャンで落としていても、控えを書いたのが
-   * 古いスキャンなら写しが残る。実機の `channels.json` がまさにそれで、
-   * BS 35 枠のうち 9 枠が写しのまま、番組表集めが同じ TS を二度開いていた
-   */
-  test("写しを落とすと、先に来たほうだけ残る", () => {
-    const kept = withoutTwins([
-      entry("BS01_0", 16400),
-      entry("BS01_1", 16401),
-      entry("BS01_3", 16400),
-      entry("BS03_0", 16432),
-      entry("BS03_3", 16432),
-    ]);
-
-    expect(kept.map((channel) => channel.channel)).toEqual([
-      "BS01_0",
-      "BS01_1",
-      "BS03_0",
-    ]);
-  });
-
-  test("TSID が読めないものは残す", () => {
-    const kept = withoutTwins([entry("BS01_0", 0), entry("BS01_1", 0)]);
-
-    expect(kept).toHaveLength(2);
   });
 });
 

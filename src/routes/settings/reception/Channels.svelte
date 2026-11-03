@@ -16,6 +16,19 @@
 
   let { data }: { data: PageData } = $props();
 
+  /*
+   * **チャンネルを書き換えたお知らせは、この画面を開いたら消す** (書き換えたチャンネルはここに並んでいる)。
+   * load で消すと先読みでも消えるので、開いた画面からリクエストする (`channels.server.ts` の `seenLineup`)
+   */
+  $effect(() => {
+    if (!data.lineupChanged) return;
+    void fetch(`${resolve("settings/reception")}?/seenLineup`, {
+      method: "POST",
+      body: new FormData(),
+      headers: { "x-sveltekit-action": "true" },
+    }).catch(() => undefined);
+  });
+
   /**
    * 局ごとのロゴ (`logos.server.ts`)。局ロゴの具合 (`logo`) と、CM検出のロゴを覚えた時刻 (`cm`)。
    * 表は物理チャンネルごとに並ぶので、局の id で引く
@@ -51,15 +64,15 @@
 
   /**
    * スキャンする種別の選び方。値はそのまま `types` で送る (「すべて」はカンマで3つ)。
-   * 入れたばかりのときに要るのは地上波だけなので、それが先頭 (衛星は最初から局が入っている)
+   * 先頭の「すべて」が初めの選び方。衛星は放送の NIT からすぐ作れるので、全部まとめて回しても時間はほぼ地上波のぶんだけ
    */
   const SCAN_CHOICES = [
+    { value: "GR,BS,CS", label: "すべて" },
     { value: "GR", label: SERVICE_TYPE_LABEL["GR"] },
     // CATV の周波数変換パススルー。UHF に加えて C13〜C63 も回す (`scan.ts` の `SCAN_KINDS`)
     { value: "CATV", label: `${SERVICE_TYPE_LABEL["GR"]} (CATV)` },
     { value: "BS", label: SERVICE_TYPE_LABEL["BS"] },
     { value: "CS", label: SERVICE_TYPE_LABEL["CS"] },
-    { value: "GR,BS,CS", label: "すべて" },
   ];
   /*
    * 物理チャンネルと、そこに入っている局。**denpa 自身のDBから来る。**
@@ -115,11 +128,7 @@
       {#if coverage.length > 0}
         <div class="cluster section-bar" data-testid="channel-actions">
           {@render scanControl()}
-          <!--
-                        入れたばかりのとき用。普段の周回は録画にもスキャンにも
-                        譲るので、何か動いていると番組表がなかなか埋まらない。
-                        押されている間は録画とライブ視聴以外には譲らせて、全チューナーで回る
-                    -->
+          <!-- 入れたばかりのとき用 (`channels.server.ts` の `collectNow`) -->
           <ActionButton
             action="?/collectNow"
             class="small secondary outline"
@@ -154,7 +163,7 @@
         (service) => service.programs > 0,
       ).length}
       <!--
-                **入れ子になった3つの数を、その順に並べる。** チャンネル (T19, BS15_0) の中に
+                **入れ子になった3つの数を、その順に並べる。** チャンネル (T19, BS15:16625) の中に
                 局 (TOKYO MX1, MX2) があり、局ごとに番組表がある。「50 / 59 ・ 124 局」とだけ
                 出していた頃は、59 と 124 が同じものの数に見えた。局はスキャンで、番組表は
                 そのあと denpa が集めるもので、埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
@@ -177,7 +186,7 @@
           <strong class="num" data-testid="status-logos">
             {data.logos.have} / {data.logos.total} 局
           </strong>
-          <span class="muted">CMロゴ</span>
+          <span class="muted">CM ロゴ</span>
           <strong class="num" data-testid="status-cm-logos">
             {data.cmLogoStats.have} / {data.cmLogoStats.total} 局
           </strong>
@@ -191,18 +200,18 @@
                 -->
         <div class="tiny muted" data-testid="logo-unavailable">
           <span class="num">{data.logos.unavailable}</span> 局はロゴが放送に載っていないため取れません
-          (1週間後にまた確かめます)
+          (1 週間後にまた確かめます)
         </div>
       {/if}
       {#if data.logos.satellite.missing > 0 && !data.logoSweep.running}
         <!--
-                    衛星のロゴは十数分に一度しか流れてこず、揃うまで何回か開き直すことがある。
+                    衛星のロゴはダウンロードの期間にしか流れてこず、揃うまで何回か開き直すことがある。
                     いつ続きを読むのかを言わないと、止まっているように見える (logo.awaitCarousel)
                 -->
         <div class="tiny muted" data-testid="logo-satellite-waiting">
           BS・CS の <span class="num">{data.logos.satellite.missing}</span>
           局は、{#if data.logos.satellite.carrier !== null}
-            {data.logos.satellite.carrier} に十数分おきにまとめて流れてくるのを待っています。
+            {data.logos.satellite.carrier} にときどきまとめて流れてくるのを待っています。
             番組表集めがこの中継を開いたときと、チューナーが空いているときに、続きから読みます
           {:else}
             ロゴを流している中継をまだ探しています。チューナーが空いているときと、番組表集めが衛星の中継を開いたときに確かめます
@@ -219,10 +228,10 @@
           total={data.logoSweep.total}
           unit="チャンネル"
         >
-          ・ ロゴ <strong>{data.logoSweep.found} 局</strong>
-          {#if data.logoSweep.channels.length > 0}
-            ・ 受信中 {data.logoSweep.channels.join(", ")}
-          {/if}
+          ・ロゴ <strong>{data.logoSweep.found} 局</strong
+          >{#if data.logoSweep.channels.length > 0}・受信中 {data.logoSweep.channels.join(
+              ", ",
+            )}{/if}
         </JobProgress>
         {#if data.logoSweep.message !== ""}
           <div class="tiny muted" data-testid="logo-sweep-done">
@@ -270,7 +279,7 @@
           {data.collect.boosted
             ? "最優先で集めています"
             : "番組表を集めています"}
-          ({data.collect.active.join(", ") || "準備中"}) ・ 残り {data.collect
+          ({data.collect.active.join(", ") || "準備中"})・残り {data.collect
             .pending} チャンネル
         </div>
         <progress
@@ -283,7 +292,7 @@
         {#if data.collect.sweeping}
           <!-- 初回だけ。番組名が先に出て、詳細があとから埋まるのを不具合と思わせない -->
           <div class="tiny muted">
-            BS は、まず1つの中継から全局の番組名を入れています (数分)。
+            BS は、まず 1 つの中継から全局の番組名を入れています (数分)。
             番組内容・出演者などの詳細は、そのあと中継ごとに回って足します
           </div>
         {/if}
@@ -293,7 +302,8 @@
     <!-- **説明は1つだけ。** スキャンと番組表のことは「詳しく」に畳む。まだ1つも無いときは下の1行の案内で足りる -->
     {#if coverage.length > 0}
       <Lead>
-        1つのチャンネルに複数の局が入っているので、チャンネルと局の数はそろいません
+        1
+        つのチャンネルに複数の局が入っているので、チャンネルと局の数はそろいません
         {#snippet more()}
           <p>
             スキャンは空いているチューナーを全部使います
@@ -301,8 +311,14 @@
             画面を閉じてもサーバで続きます。終わると番組表も集め直します。
           </p>
           <p>
-            番組表はスキャンのあと、局ごとに埋まっていきます。BS
-            の初回は、1つの中継から全局の番組名を先に入れ (数分)、
+            BS と CS
+            は放送の一覧から作るので、受信できないチャンネルも入ります。番組表を集めるときに確かめ、まだのチャンネルには「確認中」と出します。
+            2
+            回続けて受信できなかったチャンネルは「受信できません」と出し、その局を番組表・ライブ・ルールの対象から外します。受信できるようになれば戻ります。
+          </p>
+          <p>
+            番組表はスキャンのあと、局ごとに埋まっていきます。BS の初回は、1
+            つの中継から全局の番組名を先に入れ (数分)、
             番組内容などの詳細はそのあと中継ごとに回って足します。
           </p>
           <p>
@@ -310,23 +326,22 @@
             >で、録画とライブ視聴に使っていないチューナーを全部使って集められます
             (スキャンやロゴの取得は止めます)。
           </p>
-          <!-- 局ロゴ。放送波から取得するしかない。番組表に出ないとき、取れていないのか出し方が悪いのかをここで見分ける -->
           <p>
             <strong>局ロゴ</strong
             >は番組表と一覧に出すもので、番組表を集めるときにあわせて取得します。
             放送波に流れるのは数十秒〜数分に一度、<strong
-              >衛星は十数分に一度</strong
-            >で、取れたロゴも1週間ごとに取り直します。
+              >衛星は流れる期間が限られ、その間も十数分に一度</strong
+            >で、取れたロゴも 1 週間ごとに取り直します。
             点線の枠は、まだ取れていない局です。
           </p>
           <p>
             「ロゴをいますぐ集める」では衛星の分も集めます。<strong
-              >BS と CS のロゴは同じ1つの中継で流れる</strong
-            >ため、そこだけ最大20分かかります (他の中継は数秒で終わります)。
+              >BS と CS のロゴは同じ 1 つの中継で流れる</strong
+            >ため、そこだけ最大 20 分かかります (他の中継は数秒で終わります)。
           </p>
           <p>
-            <strong>CMロゴ</strong
-            >は、CM検出のために録画から覚えたロゴの位置と形です。録画をエンコードするときに自動で覚えます。
+            <strong>CM ロゴ</strong>は、CM
+            検出のために録画から覚えたロゴの位置と形です。録画をエンコードするときに自動で覚えます。
             ロゴを押すと大きく見られます。ロゴの形になっていなければ、そこで「覚え直す」で消すと、次の録画で覚え直します。
           </p>
         {/snippet}
@@ -350,7 +365,7 @@
               <th>ch</th>
               <th class="wide">局</th>
               <th class="nowrap logo-col">局ロゴ</th>
-              <th class="nowrap logo-col">CMロゴ</th>
+              <th class="nowrap logo-col">CM ロゴ</th>
               <th class="nowrap">番組表</th>
             </tr>
           </thead>
@@ -375,8 +390,16 @@
                     <td
                       class="mono small nowrap num"
                       rowspan={channel.services.length}
+                      data-testid="channel-reception"
+                      data-reception={channel.reception}
                     >
                       {channel.channel}
+                      <!-- 受信できるかは番組表集めのついでに確かめる (reception.ts)。受信できるものには何も付けない -->
+                      {#if channel.reception === "unreceivable"}
+                        <span class="reception tiny muted">受信できません</span>
+                      {:else if channel.reception === "checking"}
+                        <span class="reception tiny faint">確認中</span>
+                      {/if}
                     </td>
                   {/if}
                   <td class="small">
@@ -457,7 +480,7 @@
       type="button"
       class="zoom"
       onclick={() => (zoom = { id, kind: "cm" })}
-      aria-label={`${name} のCMロゴを大きく見る`}
+      aria-label={`${name} の CM ロゴを大きく見る`}
       data-testid={column ? "logo-zoom-cm" : undefined}
     >
       <img
@@ -578,6 +601,11 @@
     image-rendering: pixelated;
     background: var(--dp-line);
   }
+  /* 受信の様子はチャンネルの名前の下に 1 行で (塗らない。字の色だけ) */
+  .reception {
+    display: block;
+  }
+
   /* **狭い幅ではロゴの列をたたみ、局名の前に出す** (表が横にはみ出さないように) */
   @container (max-width: 36rem) {
     .channels-wrap .logo-col {

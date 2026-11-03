@@ -1,5 +1,4 @@
 using TUnit.Assertions.Enums;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 

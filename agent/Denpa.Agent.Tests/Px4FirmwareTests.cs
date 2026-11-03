@@ -1,6 +1,5 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 
@@ -228,7 +227,7 @@ public class Px4FirmwareTests
     [Test]
     public async Task 出どころの値は_install_sh_と_install_ps1_と同じ()
     {
-        // 3か所に同じ値を持っている (Px4Firmware.Plex)。片方だけ変えると、Mac・Windows とコンテナで受け付けるものが分かれる
+        // 3 か所に同じ値を持っている (Px4Firmware.Plex)。片方だけ変えると、Mac・Windows とコンテナで受け付けるものが分かれる
         var root = AppContext.BaseDirectory;
         while (!File.Exists(Path.Combine(root, "install.sh"))) root = Path.GetDirectoryName(root) ?? throw new FileNotFoundException("install.sh");
         var sh = File.ReadAllText(Path.Combine(root, "install.sh"));

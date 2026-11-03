@@ -117,7 +117,7 @@ function unscramble(
   if (!from.startsWith(`${RECORDED}/`) || !to.startsWith(`${RECORDED}/`)) {
     return {
       ok: false,
-      error: "元のTSの保存先の外にあるファイルは復号できません",
+      error: "元の TS の保存先の外にあるファイルは復号できません",
     };
   }
   if (!existsSync(from))
@@ -242,10 +242,10 @@ function tunerStatus() {
     if (busyTuners && tuner.index === 0) {
       return {
         ...tuner,
-        channel: { type: "BS", channel: "BS11_0" },
+        channel: { type: "BS", channel: "BS11:18000" },
         users: [
           { use: "rec 1", priority: 10 },
-          { use: "epg BS11_0", priority: 3 },
+          { use: "epg BS11:18000", priority: 3 },
         ],
         pid: 1234,
         error: null,
@@ -577,7 +577,7 @@ const options: Bun.ServeOptions = {
           }
           // 1件も無いまま上書きすると、今まで録れていた局まで消える
           if (body.channels.length === 0)
-            return json({ error: "チャンネルが1件もありません" }, 400);
+            return json({ error: "チャンネルが 1 件もありません" }, 400);
           const scanned = body.scanned as string[];
           saved = sortChannels([
             ...saved.filter((c) => !scanned.includes(c.type)),

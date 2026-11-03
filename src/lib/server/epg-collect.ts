@@ -26,6 +26,9 @@ import {
   widenServices,
 } from "./epg";
 import { emit } from "./events";
+import { alertGround, forgetGround, GroundWatch } from "./ground-watch";
+import { LineupWatch } from "./lineup-follow";
+import { checkedAt, recordFailed, recordReceived } from "./reception";
 import { resolveConflicts } from "./scheduler";
 import { programs, services } from "./schema";
 import { chunks } from "./stream";
@@ -35,7 +38,7 @@ import {
   getTuners,
   openChannelStream,
   serviceKey,
-  withoutTwins,
+  TuneError,
 } from "./tuner";
 
 /**
@@ -241,14 +244,19 @@ async function collectChannel(
   channel: AgentChannel,
   /** 全局読みのとき、来るはずの局 (service_id)。普段 (自分の中継だけ) は null */
   whole: number[] | null = null,
-): Promise<{ programs: number; complete: boolean }> {
+): Promise<{ programs: number; complete: boolean; failed: boolean }> {
   const reader = new EpgReader(Date.now, {
     other: whole !== null,
     settle: config.epgSweepSettle,
     expect: whole ?? [],
   });
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.epgChannelTimeout);
+  /** 上限まで読んだか。開けたのに上限まで何も来なかったら、受信できなかったと数える (`reception.ts`) */
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, config.epgChannelTimeout);
   timer.unref?.();
 
   const label =
@@ -260,6 +268,14 @@ async function collectChannel(
    * 開けなかっただけの局まで `epgChannelRetry` で休ませると、番組表が古くなる
    */
   let opened = false;
+  /** TS が 1 バイトでも来たか。受信できたかの印 (`reception.ts`) */
+  let received = false;
+  /** 衛星なら、ついでに読む放送の一覧 (`lineup-follow.ts`) */
+  let lineup: LineupWatch | null = null;
+  /** 地上波なら、ついでに読む SDT (局の顔ぶれをスキャンの結果と比べる。`ground-watch.ts`) */
+  const ground = channel.type === "GR" ? new GroundWatch(channel) : null;
+  /** エージェントが「選局できない」と返したか (空き待ちやエージェントに繋がらないのは入れない) */
+  let refused = false;
   /*
    * **読みながら少しずつ保存する。** 揃うまで待ってからまとめて書くと、全局読みの
    * 数分のあいだ画面に何も出ない。今日・明日の番組は先に流れてくるので、開いて
@@ -300,7 +316,18 @@ async function collectChannel(
      */
     let sdt: ServiceReader | null = new ServiceReader();
     let sdtBytes = 0;
+    /*
+     * **衛星は放送の一覧 (NIT) も読み、変わっていればチャンネルを書き換える** (`lineup-follow.ts`)。
+     * どの中継器にもネットワークの全部の TS が載っている。読むのは最初の `lineup-follow.ts` の `WATCH_FOR` だけ (SDT[other] がそろうまで)
+     */
+    lineup =
+      channel.type === "BS" || channel.type === "CS"
+        ? new LineupWatch(channel.type)
+        : null;
     for await (const chunk of chunks(stream)) {
+      received ||= chunk.length > 0;
+      lineup?.feed(chunk);
+      ground?.feed(chunk);
       if (sdt !== null) {
         sdt.feed(chunk);
         sdtBytes += chunk.length;
@@ -328,11 +355,33 @@ async function collectChannel(
     if (!controller.signal.aborted) {
       console.warn(`[epg] ${label} を集められませんでした: ${error}`);
     }
+    refused = error instanceof TuneError;
   } finally {
     clearTimeout(timer);
     controller.abort();
     update({ active: state.active.filter((name) => name !== label) });
   }
+
+  /*
+   * **受信できたかを残す** (`reception.ts`)。BS と CS は放送の一覧から作るので、受信できないチャンネルも入る。
+   * 選局できなかった回も「行った」と覚える (受信できないチャンネルを周回のたびに選び直さない)。
+   * 開けたのに何も来ないまま終わった回は、上限まで待ったときだけ数える (録画やライブに譲った・止めたときは数えない)
+   */
+  lineup?.follow();
+  ground?.compare();
+  const failed = !received && (refused || (opened && timedOut));
+  if (received) {
+    recordReceived(channel.type, channel.channel);
+  } else if (failed) {
+    collected.set(key(channel), Date.now());
+    if (recordFailed(channel.type, channel.channel)) {
+      console.warn(
+        `[epg] ${label} を受信できないチャンネルにしました (続けて選局できませんでした)`,
+      );
+    }
+  }
+  // 地上波は外さずに知らせる (続けて選局できない・局の顔ぶれがスキャンの結果と違う)
+  if (channel.type === "GR") alertGround();
 
   /*
    * **どれだけ使っていたかと、なぜ離したかを残す。**
@@ -350,11 +399,11 @@ async function collectChannel(
     collected.set(key(channel), Date.now());
     const secs = Math.round((Date.now() - startedAt) / 1000);
     if (reader.complete) {
-      console.log(`[epg] ${label}: 揃ったので ${secs}秒で離しました`);
+      console.log(`[epg] ${label}: 揃ったので ${secs} 秒で離しました`);
     } else {
       const why = reader.shortfall();
       console.warn(
-        `[epg] ${label}: 揃わないまま ${secs}秒で離しました` +
+        `[epg] ${label}: 揃わないまま ${secs} 秒で離しました` +
           `${why.length === 0 ? "" : ` (${why.slice(0, 4).join(" / ")})`}`,
       );
     }
@@ -365,6 +414,7 @@ async function collectChannel(
   return {
     programs: Math.min(saved, reader.all().length),
     complete: opened && reader.complete,
+    failed,
   };
 }
 
@@ -395,8 +445,8 @@ export function collectOnce(): Promise<number> {
 /**
  * **いますぐ、全チューナーで、最優先で集める。**
  *
- * 入れたばかりのときのためのもの。普段の周回 (`collectOnce`) は録画にも
- * スキャンにもロゴにも譲るので、他が動いていると番組表がなかなか埋まらない。
+ * 入れたばかりのときのためのもの。普段の周回 (`collectOnce`) は録画・ライブ・
+ * スキャン・衛星のロゴの当たりの中継 (`config.priority.carousel`) に譲るので、他が動いていると番組表がなかなか埋まらない。
  * 押されている間は**録画とライブ以外には全部譲らせて**取得する (`config.priority.epgNow`)。
  *
  * **既に回っている最中なら、その回の優先度を上げる。** 開くのは1チャンネルずつなので、
@@ -463,32 +513,62 @@ export function firstSweeps(
 
 /**
  * 詳細の無い種別 (`WHOLE_ONLY`) の、この周回で読むべきものを**ネットワークごとに1中継**へまとめる。
- * そのネットワークの中継が1つでも選ばれていれば、いちばん長く行っていない中継で全局を読む
+ * そのネットワークの中継が1つでも選ばれていれば、`sweepOrder` の先頭の中継で全局を読む
  */
 export function networkSweeps(
   targets: AgentChannel[],
   channels: AgentChannel[],
-  lastOf: (channel: AgentChannel) => number,
+  checkedOf: (channel: AgentChannel) => number,
 ): AgentChannel[] {
   const wanted = new Set(
     targets.filter((c) => WHOLE_ONLY.has(c.type)).map((c) => c.networkId),
   );
   return [...wanted].map(
-    (network) =>
-      channels
-        .filter((c) => WHOLE_ONLY.has(c.type) && c.networkId === network)
-        .sort((a, b) => lastOf(a) - lastOf(b))[0]!,
+    (network) => sweepOrder(channels, network, checkedOf)[0]!,
   );
 }
 
-async function run(): Promise<number> {
-  const all = await getChannels().catch(() => [] as AgentChannel[]);
-  if (all.length === 0) return 0;
-  // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
-  syncServices(all);
+/**
+ * 全局読みで開く中継の順。**受信できるかをいちばん長く確かめていない中継から** (一度も確かめていないものが先)。
+ *
+ * 番組の行の時刻では選べない。1中継の全局読みでネットワークの全局の番組が新しくなるので、
+ * どの中継も同じ時刻になり、いつも先頭の中継 (CS02・CS04) ばかり開いていた。受信できたかは
+ * 開いた中継にしか残らないので、ほかの中継がずっと「確認中」のままだった (`reception.ts`)
+ */
+export function sweepOrder(
+  channels: AgentChannel[],
+  network: number,
+  checkedOf: (channel: AgentChannel) => number,
+): AgentChannel[] {
+  return channels
+    .filter((c) => WHOLE_ONLY.has(c.type) && c.networkId === network)
+    .sort((a, b) => checkedOf(a) - checkedOf(b));
+}
 
-  // **同じ TS を指す枠は1回だけ開く** (`tuner.withoutTwins`。実機の BS は 35 枠で実体 26 TS)
-  const channels = withoutTwins(all);
+/**
+ * 詳細の無い種別の全局読みが受信できなかったときに、代わりに読む中継 (`order` の次の中継)。
+ * ネットワークごとに1回まで (`replaced` に足す)。替えないときは undefined
+ */
+export function replacement(
+  job: { channel: AgentChannel; whole: number[] | null },
+  failed: boolean,
+  replaced: Set<number>,
+  order: (network: number) => AgentChannel[],
+): { channel: AgentChannel; whole: number[] } | undefined {
+  const { channel, whole } = job;
+  if (whole === null || !failed || !WHOLE_ONLY.has(channel.type)) return;
+  if (replaced.has(channel.networkId)) return;
+  replaced.add(channel.networkId);
+  const next = order(channel.networkId).find((c) => c !== channel);
+  return next === undefined ? undefined : { channel: next, whole };
+}
+
+async function run(): Promise<number> {
+  const channels = await getChannels().catch(() => [] as AgentChannel[]);
+  if (channels.length === 0) return 0;
+  // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
+  syncServices(channels);
+  forgetGround(channels);
 
   const reach = coverage();
   const at = Date.now();
@@ -526,7 +606,9 @@ async function run(): Promise<number> {
   const first = firstSweeps(channels, reach, lastOf).filter(
     (channel) => at - lastOf(channel) >= config.epgChannelRetry,
   );
-  const sweeps = [...first, ...networkSweeps(targets, channels, lastOf)];
+  const checked = checkedAt();
+  const checkedOf = (channel: AgentChannel) => checked.get(key(channel)) ?? 0;
+  const sweeps = [...first, ...networkSweeps(targets, channels, checkedOf)];
   // 全局ぶんを読んだ中継は、自分の中継の詳細もそこで取れている。続きでは回らない
   const rest = targets.filter(
     (channel) => !sweeps.includes(channel) && !WHOLE_ONLY.has(channel.type),
@@ -575,6 +657,8 @@ async function run(): Promise<number> {
      * 集められないまま落ちる。1つの列を全チューナーで引けば数は合う
      */
     let sweepsLeft = first.length;
+    /** 全局読みが受信できず、この周回でほかの中継に替えたネットワーク */
+    const replaced = new Set<number>();
     // 全局ぶんを読む中継を列の先頭に置く。衛星のチューナーが最初に取る
     const queue: { channel: AgentChannel; whole: number[] | null }[] = [
       ...sweeps.map((channel) => ({ channel, whole: expect(channel) })),
@@ -602,6 +686,20 @@ async function run(): Promise<number> {
           !WHOLE_ONLY.has(job.channel.type)
         ) {
           queue.push({ channel: job.channel, whole: null });
+          update({ pending: state.pending + 1, total: state.total + 1 });
+        }
+        /*
+         * 詳細の無い種別の全局読みが受信できなかったら、**この周回のうちに次の中継で読み直す。**
+         * 受信できない中継の番が来ても、そのネットワークの番組表を止めない
+         * (失敗した中継も「行った」と覚えるので、そのままだと次に集め直すときまで延びる)。
+         * 替えるのはネットワークごとに1回まで。どれも受信できないとき (アンテナの不調) に、
+         * 中継を全部開いて回らない
+         */
+        const next = replacement(job, result.failed, replaced, (network) =>
+          sweepOrder(channels, network, checkedOf),
+        );
+        if (next !== undefined) {
+          queue.push(next);
           update({ pending: state.pending + 1, total: state.total + 1 });
         }
         if (first.includes(job.channel) && --sweepsLeft === 0)

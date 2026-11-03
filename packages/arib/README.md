@@ -3,7 +3,7 @@
 日本のデジタル放送 (ISDB-T / ISDB-S、ARIB 規格) の MPEG-TS を TypeScript で読むライブラリです。
 録画サーバー [denpa](https://github.com/danything/denpa) の中で使っているものを切り出しました。
 
-- **PSI** — パケットの切り出し、セクションの組み立て、PAT / PMT / SDT / NIT (`psi`)
+- **PSI** — パケットの切り出し、セクションの組み立て、PAT / PMT / SDT / NIT (`psi`)。衛星はネットワークの全部の TS の NIT と、ほかの TS の SDT もそろえて読む
 - **PES** — 映像・音声の PES と ADTS (`pes`)
 - **番組表** — EIT[p/f] と EIT[schedule]。ジャンル・音声・拡張形式イベント・シリーズ記述子まで (`eit`)
 - **ARIB の文字** — STD-B24 の8単位符号 (JIS X 0213 の1面・2面まで) と ARIB 外字 (`aribtext`、`aribtext-gaiji`)

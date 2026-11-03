@@ -166,6 +166,7 @@ describe("何を出せるか (playbackPlan)", () => {
         { codec: "h264", way: "stream", codecs: "avc1.640028,mp4a.40.2" },
         { codec: "av1", way: "stream", codecs: "av01.0.08M.08,Opus" },
       ],
+      ruler: { kept: null, skip: 0 },
     });
   });
 
@@ -209,6 +210,28 @@ describe("何を出せるか (playbackPlan)", () => {
     expect(old?.info.offers.some((offer) => offer.codec === "mpeg2")).toBe(
       false,
     );
+  });
+
+  // アプリは再生位置を元の TS の時刻に戻し、録画の頭の放送時刻に足して実況のコメントを合わせる (docs/api.md)
+  test("エンコードした物差しには、元の TS の時刻に戻す直し方 (ruler) を付ける。元の TS の物差しには付けない", async () => {
+    const cut = await playbackPlan(
+      seed({
+        library_path: h264,
+        ts_path: ts,
+        encode_skip: 0.5,
+        cm_kept: [{ start: 3, end: 10 }],
+      }),
+    );
+    expect(cut?.info.ruler).toEqual({
+      kept: [{ start: 3, end: 10 }],
+      skip: 0.5,
+    });
+    const skipped = await playbackPlan(
+      seed({ library_path: h264, ts_path: ts, encode_skip: 0.5 }),
+    );
+    expect(skipped?.info.ruler).toEqual({ kept: null, skip: 0.5 });
+    const tsOnly = await playbackPlan(seed({ ts_path: ts }));
+    expect(tsOnly?.info.ruler).toBeUndefined();
   });
 
   test("元の TS だけ: TS から変換と MPEG-2。物差しは TS の頭、尺は尻の映像まで", async () => {

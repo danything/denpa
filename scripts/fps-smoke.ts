@@ -34,7 +34,7 @@ const cases: { name: string; make: string[]; want: string }[] = [
     want: "24p",
   },
   {
-    // 画面の下に 60i で流れるテロップの帯が乗ったアニメ
+    // 画面の下に 60i のテロップが乗ったアニメ
     name: "telecine-telop",
     make: [
       ...lavfi("24000/1001"),

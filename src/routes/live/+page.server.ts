@@ -4,7 +4,8 @@ import { and, gt, lte, sql } from "drizzle-orm";
 import { channelNotice } from "#lib/channel-notice.js";
 import { channelNumber } from "#lib/format.js";
 import { jikkyoChannel } from "#lib/jikkyo/channels.js";
-import { LAST_COOKIE, type LiveCodec } from "#lib/live.js";
+import { LAST_COOKIE } from "#lib/live.js";
+import { channelAlert } from "#lib/server/channel-alert.js";
 import { orm } from "#lib/server/db.js";
 import {
   airing,
@@ -14,9 +15,11 @@ import {
   serviceCounts,
 } from "#lib/server/epg.js";
 import { warm } from "#lib/server/live.js";
+import { linkState } from "#lib/server/niconico.js";
 import { recordAiring } from "#lib/server/reservations.js";
 import { programs, services as stations } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
+import { liveStart, readKept, viewingOptions } from "#lib/server/viewing.js";
 import type { Service } from "#lib/types.js";
 
 import type { Actions } from "./$types";
@@ -63,46 +66,10 @@ export interface LiveChannel {
   } | null;
 }
 
-/**
- * 画面が覚えている前回の局 (`live-player.svelte.ts` の `remember` が置く cookie)。
- *
- * 壊れていても無視するだけでよい — 覚えていないときと同じで、一覧の先頭が出る
- */
-function remembered(
-  raw: string | undefined,
-  channels: LiveChannel[],
-): {
-  channel: LiveChannel;
-  audio?: string;
-  codec?: LiveCodec;
-  raw?: boolean;
-} | null {
-  if (raw === undefined) return null;
-  try {
-    const saved = JSON.parse(raw) as Record<string, unknown>;
-    const found = channels.find(
-      (channel) =>
-        channel.type === saved["channelType"] &&
-        channel.channel === saved["channel"],
-    );
-    if (found === undefined) return null;
-    return {
-      channel: found,
-      ...(typeof saved["audio"] === "string" ? { audio: saved["audio"] } : {}),
-      // 覚えていない形式を渡さない。知らない値なら既定 (H.264) に落ちる
-      ...(saved["codec"] === "av1" ? { codec: "av1" as const } : {}),
-      // 前回は放送のまま見ていた (`TuneCommand.raw`)。画面はそのまま放送のままでリクエストし、サーバは先回りする
-      ...(saved["raw"] === true ? { raw: true } : {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
 export function load(event) {
   const { url, cookies } = event;
   const at = Date.now();
-  // テレビと同じ並び (SERVICE_TYPE_ORDER / SERVICE_ORDER)。番組表とも揃えてある
+  // テレビと同じ並び (SERVICE_TYPE_ORDER / SERVICE_ORDER)
   const services: Service[] = orm()
     .select()
     .from(stations)
@@ -161,29 +128,20 @@ export function load(event) {
    * どの局で開くかは、ここ1箇所で決める (画面に同じ判断を持たせると、先にエンコードしたものが使われずに壊れた)。
    * 番組表から名指しで来た局 (`?service=`。無い番号は使わない) → 前回の局 (`LAST_COOKIE`) → 一覧の先頭
    */
-  const asked = Number(url.searchParams.get("service"));
-  const named = channels.find((channel) => channel.id === asked);
-  const kept = remembered(cookies.get(LAST_COOKIE), channels);
-  const saved = named === undefined ? kept : null;
-  const target = named ?? saved?.channel ?? channels[0];
-
-  const start =
-    target === undefined
-      ? null
-      : {
-          channelType: target.type,
-          channel: target.channel,
-          serviceId: target.id,
-          // 音声の控えは、同じ局に戻ったときだけ活かす
-          ...(saved?.audio === undefined ? {} : { audio: saved.audio }),
-          // エンコード方式と放送のまま (MPEG-2) かは、局が変わっても引き継ぐ (その端末で出るかの話)
-          ...(kept?.codec === undefined ? {} : { codec: kept.codec }),
-          ...(kept?.raw === true ? { raw: true } : {}),
-        };
+  const viewing = viewingOptions(url);
+  // 選択 (自動・AV1・H.265・H.264・MPEG-2) は局が変わっても引き継ぐ (その端末で出るかの話)。H.264・H.265 を外す設定ならそれは自動
+  const kept = readKept(cookies.get(LAST_COOKIE), viewing.hidden.length > 0);
+  const start = liveStart(
+    channels,
+    Number(url.searchParams.get("service")),
+    kept,
+    viewing.indoor,
+  );
 
   /*
    * 繋いでくる前にエンコードし始める (`live.warm`。WebSocket が繋がるまでの 160ms を ffmpeg の立ち上がりと重ねる)。
-   * 前回が放送のままならそのままで温める (外れても来なければ 8秒で畳む)
+   * 形式は選択と開いた名前から決めたもの (自動なら家の中は放送のまま、外は AV1。`viewing.warmFormat`)。
+   * 画面が別の形式に決めても、温めたものは誰も来なければ 8秒で畳む
    */
   if (start !== null)
     warm(
@@ -200,7 +158,16 @@ export function load(event) {
     channels,
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
     channelNotice: channelNotice(serviceCounts()),
+    channelAlert: channelAlert(),
     start,
+    /** コーデックのメニューで選んでいるもの (端末ごと。`LAST_COOKIE`) */
+    choice: kept.choice,
+    /** 開いた名前が家の中か (`#lib/host.ts` の `indoorHost`)。「自動」の形式を画面が決めるのに使う */
+    indoor: viewing.indoor,
+    /** コーデックのメニューから外すもの (世帯の設定) */
+    hidden: viewing.hidden,
+    /** ライブで H.265 を出せるか (ライブのエンコーダが GPU のときだけ。`viewing.viewingOptions`) */
+    hevc: viewing.hevc,
     postalCode: current.postalCode,
     prefecture: current.prefecture,
     bmlNetwork: current.bmlNetwork,
@@ -208,6 +175,8 @@ export function load(event) {
     jikkyo: current.jikkyo,
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
     jikkyoNg: current.jikkyoNg,
+    /** ニコニコと連携しているか (世帯で 1 つ)。しているときは、書き込みを公式のニコニコ実況へ送る (`server/niconico-live.ts`) */
+    niconico: linkState().state === "linked",
   };
 }
 

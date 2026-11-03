@@ -11,6 +11,7 @@
     CODEC_LABEL,
     HW_EVERY,
     HW_SOFTWARE,
+    type HwAllow,
     hwChoice,
     hwUsable,
   } from "#lib/hw.js";
@@ -51,6 +52,7 @@
   /** 保存の結果 (`autosave`)。節ごとに見出しの横に出す */
   const encodingSave = new SaveState();
   const cmSave = new SaveState();
+  const viewingSave = new SaveState();
   const reserveSave = new SaveState();
 
   /**
@@ -84,12 +86,13 @@
         class="fields setting-rows"
       >
         <!--
-                    **コーデックごとに、エンコーダ (ソフトウェア・GPU) を横に置く。** 選べるのは、そのコーデックを
-                    GPU でエンコードできるデバイスがあるときだけ。持ち方はデバイス × 方式 × コーデックのまま
-                    (`chooseHw`)。チェックを外したコーデックも、ライブと追っかけはこのエンコーダを使うので、
+                    **コーデックごとに、エンコーダ (ソフトウェア・GPU) を横に置く。録画とライブで別々に選ぶ** (列の見出し「録画」「ライブ」)。
+                    選べるのは、そのコーデックを GPU でエンコードできるデバイスがあるときだけ。持ち方はデバイス × 方式 × コーデックのまま
+                    (`chooseHw`。録画は `hwAllow`、ライブは `liveHwAllow`)。追っかけと録画のその場の変換もライブの列を使う。チェックを外したコーデックもライブは使うので、
                     選ぶ欄はチェックと関係なく出しておく。
                     **H.265 は GPU でだけエンコードする**ので、行ごと GPU を確かめてから出し、エンコーダに
-                    「ソフトウェア」を置かない (外すならチェックを外す)。行を出したときだけ `codecsShown` を送る —
+                    「ソフトウェア」を置かない (録画で外すならチェックを外す)。ライブの列は「ソフトウェア」の代わりに「使わない」を置く。
+                    選ぶとライブで H.265 を出さない (`live.liveHevc`)。行を出したときだけ `codecsShown` を送る —
                     確かめている最中や GPU が無いときに保存しても、H.265 のチェックは前のまま (saveEncoding)
                 -->
         {#snippet codecRow(
@@ -110,44 +113,81 @@
             </label>
             {#await data.hw then hw}
               {@const usable = hwUsable(hw.devices, codec)}
-              {@const choice = hwChoice(recording.hwAllow, hw.devices, codec)}
-              {#if usable.length > 0}
-                <select
-                  name={`hw.${codec}`}
-                  class="encoder"
-                  aria-label={`${CODEC_LABEL[codec]} のエンコーダ`}
-                  data-testid={`hw-${codec}`}
-                >
-                  {#if !gpuOnly}
-                    <option
-                      value={HW_SOFTWARE}
-                      selected={choice === HW_SOFTWARE}>ソフトウェア</option
+              <!-- 狭い幅では列の見出しが出ないので、欄の前に「録画」「ライブ」を添える (`caption`) -->
+              {#snippet encoder(
+                prefix: string,
+                caption: string,
+                testid: string,
+                allow: HwAllow,
+                off: string | null,
+              )}
+                {@const choice = hwChoice(allow, hw.devices, codec)}
+                {#if usable.length > 0}
+                  <label class="encoder-field">
+                    <span class="encoder-caption">{caption}</span>
+                    <select
+                      name={`${prefix}.${codec}`}
+                      class="encoder"
+                      aria-label={`${CODEC_LABEL[codec]} の${caption}のエンコーダ`}
+                      data-testid={testid}
                     >
-                  {/if}
-                  <!-- GPU だけのコーデックで、どの GPU の印も外れていれば (前の設定) 先頭の GPU を選んで見せる -->
-                  {#each usable as device, i (device.path)}
-                    <option
-                      value={device.path}
-                      selected={choice === device.path ||
-                        (gpuOnly && choice === HW_SOFTWARE && i === 0)}
-                      >{device.label}</option
-                    >
-                  {/each}
-                  {#if usable.length > 1}
-                    <option value={HW_EVERY} selected={choice === HW_EVERY}
-                      >GPU を順番に使う</option
-                    >
-                  {/if}
-                </select>
-              {:else if hw.devices.length > 0}
-                <span class="hint">ソフトウェア</span>
-              {/if}
+                      <!-- `off` はソフトウェアの欄の名前 (GPU だけのコーデックの録画は置かない。ライブは「使わない」) -->
+                      {#if off !== null}
+                        <option
+                          value={HW_SOFTWARE}
+                          selected={choice === HW_SOFTWARE}>{off}</option
+                        >
+                      {/if}
+                      <!-- ソフトウェアの欄を置かないときに、どの GPU の印も外れていれば (前の設定) 先頭の GPU を選んで見せる -->
+                      {#each usable as device, i (device.path)}
+                        <option
+                          value={device.path}
+                          selected={choice === device.path ||
+                            (off === null && choice === HW_SOFTWARE && i === 0)}
+                          >{device.label}</option
+                        >
+                      {/each}
+                      {#if usable.length > 1}
+                        <option value={HW_EVERY} selected={choice === HW_EVERY}
+                          >GPU を順番に使う</option
+                        >
+                      {/if}
+                    </select>
+                  </label>
+                {:else if hw.devices.length > 0}
+                  <span class="hint encoder-field"
+                    ><span class="encoder-caption">{caption}</span
+                    >ソフトウェア</span
+                  >
+                {/if}
+              {/snippet}
+              {@render encoder(
+                "hw",
+                "録画",
+                `hw-${codec}`,
+                recording.hwAllow,
+                gpuOnly ? null : "ソフトウェア",
+              )}
+              {@render encoder(
+                "liveHw",
+                "ライブ",
+                `live-hw-${codec}`,
+                recording.liveHwAllow,
+                gpuOnly ? "使わない" : "ソフトウェア",
+              )}
             {/await}
           </div>
         {/snippet}
         <fieldset class="field">
           <span class="field-label">映像コーデック</span>
           <div class="codecs">
+            {#await data.hw then hw}
+              {#if hw.devices.length > 0}
+                <span class="encoder-head"></span>
+                <span class="encoder-head">録画</span>
+                <span class="encoder-head">ライブ</span>
+              {/if}
+            {/await}
             {#each CODECS as { codec, label, gpuOnly } (codec)}
               {#if gpuOnly}
                 {#await data.hw then hw}
@@ -189,15 +229,16 @@
                     (H.265 はソフトウェアでエンコードしません)。
                   </p>
                   <p>
-                    ライブと追っかけも、ここで選んだエンコーダを使います
+                    エンコーダは録画とライブで別々に選べます。追っかけと、録画を別の形式で観るときの変換もライブのエンコーダを使います
                     (チェックを外したコーデックも)。MPEG-2 のデコードまで GPU
-                    でできるデバイスでは、デコードとインターレース解除も GPU
-                    で行います。
+                    でできるデバイスでは、ライブはデコードとインターレース解除も
+                    GPU で行います。
                   </p>
                   <p>
-                    GPU が2枚あれば「AV1 はこちら、H.264
-                    はあちら」のように分けられます。「GPU を順番に使う」では、
-                    エンコードのたびに使う GPU を入れ替えます。
+                    GPU が 2 枚あれば「録画はこちら、ライブはあちら」「AV1
+                    はこちら、H.264 はあちら」のように分けられます。「GPU
+                    を順番に使う」では、 エンコードのたびに使う GPU
+                    を入れ替えます。
                   </p>
                   {#each hw.devices as device (device.path)}
                     <p data-testid="hw-device">
@@ -210,14 +251,14 @@
           </div>
           {#if recording.codecs.length === 0}
             <Lead>
-              選ばないと<strong>エンコードせず</strong>、元のTSのまま残します
+              選ばないと<strong>エンコードせず</strong>、元の TS のまま残します
               {#snippet more()}
                 <p>CM のチャプターや字幕トラックも付きません。</p>
               {/snippet}
             </Lead>
           {:else if recording.codecs.length > 1}
             <Lead>
-              1本の録画を選んだコーデックの数だけエンコードします
+              1 本の録画を選んだコーデックの数だけエンコードします
               {#snippet more()}
                 <p>
                   再生では AV1 → H.265 → H.264
@@ -233,7 +274,7 @@
                 <p>
                   GPU でエンコードできないときは H.265
                   を飛ばし、ほかに選んだコーデックだけエンコードします。H.265
-                  だけを選んでいたらエンコードは失敗し、元のTSが残ります。
+                  だけを選んでいたらエンコードは失敗し、元の TS が残ります。
                 </p>
                 <p>ライブと追っかけは H.265 では流しません。</p>
               {/snippet}
@@ -252,12 +293,12 @@
             aria-label="同時に変換する本数"
           >
             <option value="" selected={recording.transcodeLimit === null}>
-              自動 ({data.transcode.auto}本)
+              自動 ({data.transcode.auto} 本)
             </option>
             {#each data.transcode.choices as n (n)}
               <option
                 value={String(n)}
-                selected={recording.transcodeLimit === n}>{n}本</option
+                selected={recording.transcodeLimit === n}>{n} 本</option
               >
             {/each}
           </select>
@@ -265,20 +306,20 @@
             録画を別の形式で再生するときと、追っかけ再生で使います。ライブは数えません
             {#snippet more()}
               <p>
-                自動では GPU が無ければ 2本、あれば
-                4本です。埋まっているときにリクエストされた再生は断り、
-                エンコード済みの動画か元のTSでの再生を勧めます。
+                自動では GPU が無ければ 2 本、あれば 4
+                本です。埋まっているときにリクエストされた再生は断り、
+                エンコード済みの動画か元の TS での再生を勧めます。
               </p>
             {/snippet}
           </Lead>
         </div>
         <div class="field">
-          <span class="field-label">元のTS</span>
+          <span class="field-label">元の TS</span>
           <CheckRow
             name="keepOriginal"
             checked={recording.keepOriginal}
-            title="元のTSも残す"
-            hint="エンコードしたあとも元のTSを消しません。容量を多く使います"
+            title="元の TS も残す"
+            hint="エンコードしたあとも元の TS を消しません。容量を多く使います"
           />
         </div>
         <!--
@@ -292,8 +333,8 @@
             name="fpsDetect"
             checked={recording.fpsDetect}
             title="コマ数を映像から決める"
-            hint="アニメなどは 30コマにして、時間とサイズを半分にします"
-            detail="同じコマが続く映像 (アニメなど) を見分けて 30コマでエンコードします。外すとすべて 60コマになります。"
+            hint="アニメなどは 30 コマにして、時間とサイズを半分にします"
+            detail="同じコマが続く映像 (アニメなど) を見分けて 30 コマでエンコードします。外すとすべて 60 コマになります。"
           />
         </div>
       </form>
@@ -305,6 +346,68 @@
         use:submitting={keepValues}
         hidden
       ></form>
+    </section>
+  </div>
+</div>
+
+<!--
+    視聴 (世帯の設定)。ライブの「自動」が家の中とみる名前 (`#lib/host.ts` の `indoorHost`) と、コーデックのメニューから
+    H.264 と H.265 を外すか (`#lib/live-choice.ts` の `HIDDEN_CODECS`)。名前の欄は離れたときに保存する (打っている途中では送らない)
+-->
+<div class="part" id="viewing" data-part>
+  <div class="sections readable">
+    <section class="section">
+      <div class="section-head">
+        <h2>視聴</h2>
+        <SaveNote status={viewingSave} />
+      </div>
+      <Lead>この世帯のすべての端末に効きます</Lead>
+      <form
+        method="POST"
+        action="?/saveViewing"
+        use:autosave={viewingSave}
+        class="fields setting-rows"
+      >
+        <div class="field">
+          <label class="field-label" for="indoor-hosts">家の中の名前</label>
+          <textarea
+            id="indoor-hosts"
+            name="indoorHosts"
+            rows="3"
+            spellcheck="false"
+            autocapitalize="off"
+            placeholder="dp.l.example.com"
+            value={recording.indoorHosts.join("\n")}
+            data-testid="indoor-hosts"></textarea>
+          <Lead>
+            この名前で開くと、ライブの「自動」で MPEG-2 を先に選びます。1 行に 1
+            つ
+            {#snippet more()}
+              <p>
+                家の中では放送のまま (MPEG-2)
+                で流すと、サーバがエンコードせずに済み、画質も放送のままです。外からは
+                AV1、再生できなければ H.264 を選びます。
+              </p>
+              <p>
+                家の中かは、開いたアドレスの名前で決めます。192.168.x.x
+                のような家の中の IP アドレス・localhost・.local・.home.arpa
+                で開いたときは、書かなくても家の中です。VPN のアドレス
+                (100.64.0.0/10) は家の中に入れません。
+              </p>
+            {/snippet}
+          </Lead>
+        </div>
+        <div class="field">
+          <span class="field-label">コーデック</span>
+          <CheckRow
+            name="hideH264Hevc"
+            checked={recording.hideH264Hevc}
+            title="コーデックの選択肢に H.264 と H.265 を出さない"
+            hint="AV1 を再生できない端末では、自動で H.265 か H.264 に切り替えます"
+            testid="hide-h264-hevc"
+          />
+        </div>
+      </form>
     </section>
   </div>
 </div>
@@ -323,7 +426,7 @@
         class="fields setting-rows"
       >
         <label class="field">
-          <span class="field-label">CMの扱い</span>
+          <span class="field-label">CM の扱い</span>
           <select name="cmCut" class="narrow" data-testid="global-cmcut">
             <option value="chapter" selected={recording.cmCut === "chapter"}>
               チャプターを打つだけ (安全)
@@ -336,7 +439,8 @@
             >
           </select>
           <span class="hint"
-            >局ロゴの消えている所をCMとみます。ロゴが使えなければ無音と長さで決めます</span
+            >局ロゴの消えている所を CM
+            とみます。ロゴが使えなければ無音と長さで決めます</span
           >
         </label>
       </form>
@@ -373,8 +477,9 @@
 
 <style>
   /*
-     * **チェックと、その横のエンコーダ。** 広い幅ではエンコーダを縦に揃える (行ごとに字の長さが違うので、
-     * 揃えないと欄が左右にずれる)。狭い幅ではチェックの文の下に、文の頭に揃えて置く
+     * **チェックと、その横のエンコーダ (録画・ライブ)。** 広い幅ではエンコーダを列にして縦に揃え、
+     * 上に列の見出し (「録画」「ライブ」) を置く (行ごとに字の長さが違うので、揃えないと欄が左右にずれる)。
+     * 狭い幅では見出しを出さず、チェックの文の下に「録画」「ライブ」を添えた欄を、文の頭に揃えて置く
      */
   .codecs {
     display: flex;
@@ -390,18 +495,41 @@
   .codec-row > :not(.check) {
     margin-inline-start: 1.75rem;
   }
-  @container (min-width: 30rem) {
+  .encoder-head {
+    display: none;
+  }
+  .encoder-field {
+    display: flex;
+    align-items: center;
+    gap: var(--dp-space-2);
+  }
+  .encoder-caption,
+  .encoder-head {
+    font-size: var(--dp-text-sm);
+    color: var(--dp-muted);
+  }
+  @container (min-width: 40rem) {
     .codecs {
       display: grid;
-      grid-template-columns: max-content max-content;
+      grid-template-columns: max-content max-content max-content;
       align-items: center;
       gap: var(--dp-space-2) var(--dp-space-3);
     }
     .codec-row {
       display: contents;
     }
+    /* チェックはいつも行の頭から (GPU が無くて欄が無い行が横に並ばないように) */
+    .codec-row > .check {
+      grid-column: 1;
+    }
     .codec-row > :not(.check) {
       margin-inline-start: 0;
+    }
+    .encoder-head {
+      display: block;
+    }
+    .encoder-caption {
+      display: none;
     }
   }
   .encoder {

@@ -44,5 +44,10 @@ spec:
   resources:
     requests:
       storage: {{ $p.size }}
+  {{- with $p.dataSourceRef }}
+  # 作るときに中身を埋める (VolSync の populator など)。PVC の spec は作ったあと変えられないので、今ある PVC には効かない
+  dataSourceRef:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}
 {{- end }}

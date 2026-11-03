@@ -1,7 +1,7 @@
 import type { AudioDecoder } from "../../src/lib/raw/wasm-audio";
 
 /**
- * **WASM のデコーダ (`wasm/decoder.c`) の音の口のふり** (`raw/wasm-audio.ts` の `AudioDecoder`)。
+ * **WASM のデコーダ (`wasm/decoder.c`) の音声デコーダのふり** (`raw/wasm-audio.ts` の `AudioDecoder`)。
  * メモリは 1 枚の ArrayBuffer で、`_malloc` は後ろへ積むだけ。`_audio_push` は `samples` が返す標本数で
  * (負は壊れたコマ、0 は出てこない)、`_audio_peek` の並び (`[本数, 標本化周波数, 標本数, 各面のアドレス…]`) と
  * 面の中身 (面 i は i + 0.5) を書く

@@ -7,7 +7,9 @@ import {
   clock,
   duration,
   durationMs,
+  encodeDetail,
   eta,
+  fullDate,
   nowStatus,
   percent,
   recordedDuration,
@@ -19,20 +21,20 @@ const MIN = 60_000;
 
 describe("長さの表示", () => {
   test("1時間未満は分だけ", () => {
-    expect(durationMs(25 * MIN)).toBe("25分");
+    expect(durationMs(25 * MIN)).toBe("25 分");
   });
 
   test("端数が無ければ時間だけ", () => {
     // 「2時間0分」は読みにくい
-    expect(durationMs(120 * MIN)).toBe("2時間");
+    expect(durationMs(120 * MIN)).toBe("2 時間");
   });
 
   test("端数があれば時間と分", () => {
-    expect(durationMs(95 * MIN)).toBe("1時間35分");
+    expect(durationMs(95 * MIN)).toBe("1 時間 35 分");
   });
 
   test("放送日時からも出せる", () => {
-    expect(duration(0, 30 * MIN)).toBe("30分");
+    expect(duration(0, 30 * MIN)).toBe("30 分");
   });
 });
 
@@ -64,18 +66,18 @@ describe("録画の長さ", () => {
   test("実際に録れた長さがあればそちらを出す", () => {
     // 途中で止めたので12分しか録れていない
     expect(recordedDuration({ ...scheduled, duration_ms: 12 * MIN })).toBe(
-      "12分",
+      "12 分",
     );
   });
 
   test("取れていない古い行は番組表の尺で代用する", () => {
-    expect(recordedDuration({ ...scheduled, duration_ms: null })).toBe("30分");
+    expect(recordedDuration({ ...scheduled, duration_ms: null })).toBe("30 分");
   });
 
   test("0 は取れていないものとして扱う", () => {
     // 1バイトも受信できずに失敗した行が「0分」になると、
     // 長さが取れていないのか本当に0なのか見分けられない
-    expect(recordedDuration({ ...scheduled, duration_ms: 0 })).toBe("30分");
+    expect(recordedDuration({ ...scheduled, duration_ms: 0 })).toBe("30 分");
   });
 });
 
@@ -101,24 +103,42 @@ describe("進み具合", () => {
 
 describe("残り時間の見込み", () => {
   test("1分未満は秒だけ", () => {
-    expect(eta(45_000)).toBe("あと45秒");
-    expect(eta(1_000)).toBe("あと1秒");
+    expect(eta(45_000)).toBe("あと 45 秒");
+    expect(eta(1_000)).toBe("あと 1 秒");
   });
 
   test("1時間未満は分と秒", () => {
-    expect(eta(12 * MIN + 34_000)).toBe("あと12分34秒");
+    expect(eta(12 * MIN + 34_000)).toBe("あと 12 分 34 秒");
     // 秒が1桁でも桁を揃える (数字の位置が動くと読みにくい)
-    expect(eta(2 * MIN + 5_000)).toBe("あと2分05秒");
+    expect(eta(2 * MIN + 5_000)).toBe("あと 2 分 05 秒");
   });
 
   test("1時間以上は時間・分・秒", () => {
-    expect(eta(3600_000 + 2 * MIN + 3_000)).toBe("あと1時間02分03秒");
+    expect(eta(3600_000 + 2 * MIN + 3_000)).toBe("あと 1 時間 02 分 03 秒");
   });
 
   test("見込みが立たないうちは何も出さない", () => {
     expect(eta(null)).toBe("");
     expect(eta(0)).toBe("");
     expect(eta(Number.NaN)).toBe("");
+  });
+});
+
+describe("エンコードの進み", () => {
+  const stored = { job_percent: 0.2, job_eta_ms: 5 * MIN };
+
+  test("届いた進みが無ければ DB の値", () => {
+    expect(encodeDetail(undefined, stored)).toBe("20.0%・あと 5 分 00 秒");
+  });
+
+  test("届いた進みがあれば、そちらの残り時間", () => {
+    expect(encodeDetail({ percent: 0.45, etaMs: 64_000 }, stored)).toBe(
+      "45.0%・あと 1 分 04 秒",
+    );
+  });
+
+  test("届いた残り時間が見積もれない (null) なら、DB の古い値に戻さず出さない", () => {
+    expect(encodeDetail({ percent: 0.45, etaMs: null }, stored)).toBe("45.0%");
   });
 });
 
@@ -143,20 +163,20 @@ describe("欠けの表示", () => {
 
   test("頭を譲ったら、どれだけ欠けるかを言う", () => {
     expect(clipNote({ ...base, record_from: 15 * MIN, record_to: null })).toBe(
-      "冒頭 15分が欠けます (チューナー不足)",
+      "冒頭 15 分が欠けます (チューナー不足)",
     );
   });
 
   test("録れたあとは言い方が変わる", () => {
     expect(
       clipNote({ ...base, record_from: 15 * MIN, record_to: null }, true),
-    ).toBe("冒頭 15分が欠けています (チューナー不足)");
+    ).toBe("冒頭 15 分が欠けています (チューナー不足)");
   });
 
   test("両方譲ったら両方言う", () => {
     expect(
       clipNote({ ...base, record_from: 5 * MIN, record_to: 25 * MIN }),
-    ).toBe("冒頭 5分と末尾 5分が欠けます (チューナー不足)");
+    ).toBe("冒頭 5 分と末尾 5 分が欠けます (チューナー不足)");
   });
 });
 
@@ -190,15 +210,15 @@ describe("空きと残り時間", () => {
   test("1TB からは TB で、時間は桁で丸める", () => {
     expect(capacityLabel(1.25 * 1024 * GB, 937.4)).toEqual({
       free: "空き 1.3TB",
-      hours: "約930時間",
+      hours: "約 930 時間",
     });
     expect(capacityLabel(512.7 * GB, 64.9)).toEqual({
       free: "空き 512GB",
-      hours: "約64時間",
+      hours: "約 64 時間",
     });
     expect(capacityLabel(4 * 1024 * GB, 2345)).toEqual({
       free: "空き 4.0TB",
-      hours: "約2300時間",
+      hours: "約 2300 時間",
     });
   });
 
@@ -208,8 +228,8 @@ describe("空きと残り時間", () => {
       hours: null,
     });
     expect(capacityLabel(0.5 * GB, 0.2)).toEqual({
-      free: "空き 1GB未満",
-      hours: "1時間未満",
+      free: "空き 1GB 未満",
+      hours: "1 時間未満",
     });
   });
 });
@@ -221,38 +241,38 @@ describe("「いま」の線の一言", () => {
 
   test("次の録画まで。録画中でも次の予約を言う。分は線の時刻と食い違わないよう切り上げる", () => {
     expect(nowStatus(now, { start_at: at(22, 0) })).toEqual({
-      text: "次の録画まで 3時間59分",
+      text: "次の録画まで 3 時間 59 分",
       short: "次まで 3:59",
     });
   });
 
   test("1時間を切ると分だけ", () => {
     expect(nowStatus(now, { start_at: at(18, 13) })).toEqual({
-      text: "次の録画まで 12分",
-      short: "次まで 12分",
+      text: "次の録画まで 12 分",
+      short: "次まで 12 分",
     });
   });
 
   test("ちょうどの時間は時間だけ、狭い形は 0 を埋める", () => {
     expect(nowStatus(at(18, 0), { start_at: at(20, 5) })).toEqual({
-      text: "次の録画まで 2時間5分",
+      text: "次の録画まで 2 時間 5 分",
       short: "次まで 2:05",
     });
     expect(nowStatus(at(18, 0), { start_at: at(20, 0) })?.text).toBe(
-      "次の録画まで 2時間",
+      "次の録画まで 2 時間",
     );
   });
 
   test("1日より先は日数で", () => {
     expect(nowStatus(now, { start_at: now + 3 * 24 * 60 * MIN })).toEqual({
-      text: "次の録画まで 3日",
-      short: "次まで 3日",
+      text: "次の録画まで 3 日",
+      short: "次まで 3 日",
     });
   });
 
   test("始まる時刻を過ぎていても「0分」とは言わない", () => {
     expect(nowStatus(now, { start_at: now - MIN })?.text).toBe(
-      "次の録画まで 1分",
+      "次の録画まで 1 分",
     );
   });
 
@@ -266,11 +286,27 @@ describe("録画中の行のあと何分か", () => {
   const at = (h: number, m: number) => new Date(2026, 9, 19, h, m).getTime();
 
   test("分は切り上げ、1時間を越えれば時間も", () => {
-    expect(recordingLeft(now, at(18, 22))).toBe("あと21分");
-    expect(recordingLeft(now, at(19, 30))).toBe("あと1時間29分");
+    expect(recordingLeft(now, at(18, 22))).toBe("あと 21 分");
+    expect(recordingLeft(now, at(19, 30))).toBe("あと 1 時間 29 分");
   });
 
   test("終わりの時刻を過ぎても止まりきるまでは録画中なので、あと何分かは言わない", () => {
     expect(recordingLeft(now, at(18, 0))).toBeNull();
+  });
+});
+
+describe("西暦つきの日付", () => {
+  // 年をまたいで溜まった録画で、同じ「10/11(日)」を見分けられる (#1931)
+  test("年を前に付ける", () => {
+    expect(fullDate(new Date(2026, 9, 11, 21, 0).getTime())).toBe(
+      "2026/10/11(日)",
+    );
+    expect(fullDate(new Date(2020, 9, 11, 0, 0).getTime())).toBe(
+      "2020/10/11(日)",
+    );
+    // 月と日は前に 0 を付けない (見出しの「10/11(日)」と同じ形)
+    expect(fullDate(new Date(2027, 0, 5, 12, 0).getTime())).toBe(
+      "2027/1/5(火)",
+    );
   });
 });

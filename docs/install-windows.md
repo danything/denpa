@@ -20,7 +20,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
    (`conhost --headless`)、落ちたら 5 秒置いて起こし直します (起こすのは `denpa-agent.cmd` のループ。
    タスク スケジューラの「失敗したら再起動」は終了コードでは効かないため)
 2. **denpa 本体** — エージェントと同じバージョンのイメージを `wslc pull` し、ログオン時に起こすタスク (`denpa`) を
-   載せて、いま1度流します。起こすのは `denpa-start.ps1` (install.ps1 が書く)
+   載せて、すぐ起こします。起こすのは `denpa-start.ps1` (install.ps1 が書く)
 
 `denpa-start.ps1` は**起こすたびに、コンテナを作り直すか決めます。** 実機 (wslc 3.0.1) で確かめた wslc の癖に合わせています。
 
@@ -34,7 +34,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 - **この PC のブラウザから入ると、送信元は `169.254.x.x` に見えます** (wslc がポートを中継するため)。
   LAN のほかの機器は本当の IP のまま届きます。なので `TRUSTED_NETWORKS` の既定に `169.254.0.0/16` を足してあります
 - **DB は wslc のボリューム (`denpa-data`) に置きます。** Windows のフォルダ越し (virtiofs) だと SQLite のロックが当てにならないため
-- **compose はまだありません** (Microsoft は次の優先課題と言っている)。Windows で動かすコンテナは本体の1つだけなので、`wslc run` で足ります
+- **wslc に compose はありません。** Windows で動かすコンテナは本体の1つだけなので、`wslc run` で足ります
 - 録画中に上げ直すと、`wslc stop` が録画の終わりを待ってから入れ替えます (`--stop-timeout 21900`)
 
 **前のバージョン (Docker Desktop の compose) から上げるとき**は、install.ps1 が `docker compose down` で止め

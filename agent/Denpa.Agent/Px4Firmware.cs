@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 本体には入っておらず、挿すたびにホストから RAM へ流し込むもの。px4-userland は受理するバージョンを SHA-256 で
-/// 1つに固定していて (SPEC 4.5)、違うものを渡すと <c>FIRMWARE_REJECTED</c> で起動しない。
+/// 1 つに固定していて (SPEC 4.5)、違うものを渡すと <c>FIRMWARE_REJECTED</c> で起動しない。
 /// **再配布の許諾は誰も持っていない**ので、公開しているイメージには入れない。px4d を初めて起こすときに
 /// PLEX 公式の Windows ドライバ (PX-W3U4 BDA Ver.1.0 64bit) を取ってきて <c>PXW3U4.sys</c> から切り出し、
 /// 設定の置き場 (tuners.json の隣) に置いて次からはそれを使う (docs/tuner-px4.md「ファームウェア」)。
@@ -24,7 +24,7 @@ public static class Px4Firmware
     public const string FileName = "it930x-firmware.bin";
 
     /// <summary>
-    /// 取ってくる先と確かめ方。**install.sh / install.ps1 も同じ値を持っている** (変えるときは3つとも)。
+    /// 取ってくる先と確かめ方。**install.sh / install.ps1 も同じ値を持っている** (変えるときは 3 つとも)。
     /// PLEX のサイトが落ちていることがある (2026-10-30 はサーバーの「無効な URL」のページと別の証明書を返した) ので、
     /// 取れなければ Internet Archive の写し (同じハッシュ) から取る
     /// </summary>
@@ -78,7 +78,7 @@ public static class Px4Firmware
     }
 }
 
-/// <summary>ファームウェアの出どころ。配布 zip・<c>.sys</c>・切り出したものの3つをハッシュで確かめる</summary>
+/// <summary>ファームウェアの出どころ。配布 zip・<c>.sys</c>・切り出したものの 3 つをハッシュで確かめる</summary>
 internal sealed record Px4FirmwareSource(
     IReadOnlyList<string> Urls,
     string ZipSha256,
@@ -111,7 +111,7 @@ internal sealed record Px4FirmwareSource(
 }
 
 /// <summary>
-/// ファームウェアの置き場1つ。**置いてあるものが勝ち**、無ければ取ってきて <c>target</c> に置く。
+/// ファームウェアの置き場 1 つ。**置いてあるものが勝ち**、無ければ取ってきて <c>target</c> に置く。
 /// 取れなければ <see cref="Px4Firmware.Backoff"/> のあいだ取得し直さず、同じ理由で断る
 /// </summary>
 /// <param name="existing">先に見る置き場。どれかにあればそれを使い、取得しない</param>
@@ -126,7 +126,7 @@ internal sealed class Px4FirmwareStore(
     public string? Problem { get; private set; }
 
     /// <summary>
-    /// ファームウェアのパス。無ければ取ってくる (筐体が2台でも取得は1度。もう1台は待つ)。
+    /// ファームウェアのパス。無ければ取ってくる (筐体が 2 台でも取得は 1 度。もう 1 台は待つ)。
     /// 取れなければ、または待つ時間のうちなら、理由を添えて <see cref="IOException"/>
     /// </summary>
     public string Ensure()

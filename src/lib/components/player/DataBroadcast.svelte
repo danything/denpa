@@ -163,6 +163,7 @@
    */
   function startAppFrom(uri: string, hint: number[]): boolean {
     if (!network || !on) return false;
+    const mine = generation;
     void (async () => {
       try {
         const response = await fetch(
@@ -171,8 +172,8 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const app = pickApp(hint, parseXmlAit(await response.text()));
         if (app === null) throw new Error("開けるアプリがありません");
-        // 閉じたあとに届いたら開かない
-        if (engine === null) return;
+        // 閉じた・開き直した・選局したあとに届いたら開かない (別の画面で開いてしまう)
+        if (mine !== generation || engine === null || !on) return;
         console.warn(`[bml] XML の AIT から開きます: ${app.url}`);
         openApp(app);
       } catch (failure) {
@@ -278,7 +279,10 @@
   let showing = $state(false);
   /** いま実際に映しているか (`place` が決める)。`showing` との違いは `settled` を見よ */
   let visible = $state(false);
-  /** 何度も作らないための世代。押して離してを繰り返しても混ざらない */
+  /**
+   * 何度も作らないための世代。押して離してを繰り返しても混ざらない。受信したまま閉じたとき (`closed`) も進め、
+   * その前に頼んだ XML の AIT が後から届いても開かない (`startAppFrom`)
+   */
   let generation = 0;
   /** いま何を出しているか (`channel`)。出していなければ `null` */
   let shown = $state<string | null>(null);
@@ -698,6 +702,7 @@
    */
   function closed(): void {
     if (engine === null) return;
+    generation++;
     running = null;
     appVideo = "full";
     press = null;

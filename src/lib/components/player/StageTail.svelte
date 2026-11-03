@@ -155,7 +155,7 @@
       : [
           {
             id: "skip-cm",
-            label: "CMスキップ",
+            label: "CM スキップ",
             icon: CUT,
             on: cm.on,
             toggle: cm.toggle,

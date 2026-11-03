@@ -1,7 +1,7 @@
 namespace Denpa.Agent;
 
 /// <summary>
-/// USB デバイスが並ぶ sysfs (Linux)。USB ポートごとのディレクトリに、属性が1つずつファイルで置かれている。
+/// USB デバイスが並ぶ sysfs (Linux)。USB ポートごとのディレクトリに、属性が 1 つずつファイルで置かれている。
 /// 機材を探すところ (<see cref="AsicenUserland"/>・<see cref="Ccid"/>・<see cref="SianoUserland"/>・<see cref="Zd1j"/>) で同じ読み方をする
 /// </summary>
 public static class UsbSysfs
@@ -35,7 +35,7 @@ public static class UsbSysfs
         return null;
     }
 
-    /// <summary>属性を1つ読む (前後の空白を落とす)。無い・読めなければ null</summary>
+    /// <summary>属性を 1 つ読む (前後の空白を落とす)。無い・読めなければ null</summary>
     public static string? Read(string dir, string name)
     {
         try

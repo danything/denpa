@@ -1,10 +1,9 @@
 using System.Buffers.Binary;
-using Denpa.Agent;
 
 namespace Denpa.Agent.Tests;
 
 /*
- * px4d の数 (SPEC 6.4 の STATS / final counters) を読んで、増えた誤りを1行にするところ (Px4Counters。Px4Control.cs)。
+ * px4d の数 (SPEC 6.4 の STATS / final counters) を読んで、増えた誤りを 1 行にするところ (Px4Counters。Px4Control.cs)。
  * 途切れたときに、受信機の側で落ちていたのか、届き方が揺れただけなのかを記録から見分ける (#1210)
  */
 public class Px4CountersTests

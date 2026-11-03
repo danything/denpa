@@ -960,6 +960,57 @@ test.describe("録画を観る", () => {
   });
 
   /**
+   * **開いた1枚はクリップボードに PNG でコピーできる。** サーバの AVIF を端末で PNG にし直して置く
+   * (クリップボードに置けるのは PNG だけ)。うまくいったらトーストは出さない (ボタンが一瞬チェックになるだけ)
+   */
+  test("切り抜きの開いた1枚をクリップボードに PNG でコピーできる", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const id = await watchable(page, request);
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
+    await goto(page, "/clips");
+    const clip = await putClip(page, request, id, 8);
+    try {
+      await goto(page, "/clips");
+      await page
+        .locator(`[data-testid="clip-card"][data-clip-id="${clip}"]`)
+        .click();
+      const viewer = page.getByTestId("clip-viewer");
+      const copy = viewer.getByTestId("clip-copy");
+      await expect(copy).toHaveAttribute(
+        "aria-label",
+        "クリップボードにコピー",
+      );
+      const { width, height } = (await (
+        await request.get(`/api/clips/${clip}`)
+      ).json()) as { width: number; height: number };
+      await page.evaluate(() => navigator.clipboard.writeText(""));
+      await copy.click();
+      // 置かれたのは PNG で、切り抜きと同じ縦横
+      await expect
+        .poll(() =>
+          page.evaluate(async () => {
+            const items = await navigator.clipboard.read();
+            const item = items.find((i) => i.types.includes("image/png"));
+            if (item === undefined) return null;
+            const bitmap = await createImageBitmap(
+              await item.getType("image/png"),
+            );
+            return `${bitmap.width}x${bitmap.height}`;
+          }),
+        )
+        .toBe(`${width}x${height}`);
+      await expect(page.locator(".toast")).toHaveCount(0);
+    } finally {
+      await request.delete(`/api/clips?ids=${clip}`);
+    }
+  });
+
+  /**
    * **スマホの幅では、絞り込みを下のタブのすぐ上に浮かせ**、開いた1枚の右端の列は 48px の丸
    * (車のタブレットでも指が届く大きさ。観る画面の右の列と同じ)。
    * 指の端末には乗せる操作が無いので、長押しで選ぶ形に入り、下の1行が選んだぶんの操作に替わる
@@ -1003,6 +1054,7 @@ test.describe("録画を観る", () => {
       for (const testid of [
         "clip-close",
         "clip-watch",
+        "clip-copy",
         "clip-save",
         "clip-delete",
       ]) {
@@ -1177,7 +1229,7 @@ test.describe("録画を観る", () => {
       .click();
     await expect(speed).toHaveText("1.5");
     await expect(speed.locator("svg")).toHaveCount(0);
-    await expect(speed).toHaveAccessibleName("再生の速さ 1.5倍");
+    await expect(speed).toHaveAccessibleName("再生の速さ 1.5 倍");
     await expect(speed).toHaveAttribute("aria-pressed", "true");
     // 選んだ速さは覚える。開き直しても同じ速さで始まる
     await goto(page, `/watch/${id}`);

@@ -543,7 +543,7 @@ describe("speedLabel", () => {
     expect(speedLabel("再生の速さ", 1)).toBe("再生の速さ");
   });
   test("速めているときは速さも読む (ボタンは数字だけ)", () => {
-    expect(speedLabel("再生の速さ", 1.25)).toBe("再生の速さ 1.25倍");
-    expect(speedLabel("追っかけの速さ", 2)).toBe("追っかけの速さ 2倍");
+    expect(speedLabel("再生の速さ", 1.25)).toBe("再生の速さ 1.25 倍");
+    expect(speedLabel("追っかけの速さ", 2)).toBe("追っかけの速さ 2 倍");
   });
 });

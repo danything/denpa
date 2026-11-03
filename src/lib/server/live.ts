@@ -44,6 +44,7 @@ import {
 import {
   type CaptionTrack,
   CHANNEL,
+  codecsFor,
   type HybridcastLink,
   type LiveCodec,
   type Notice,
@@ -82,7 +83,14 @@ import { orm } from "./db";
 import { deinterlace } from "./encoder";
 import { followOnAir } from "./epg";
 import { emit, type Yielded } from "./events";
-import { type LiveHw, liveHw, liveHwArgs, nvencBusy } from "./hwenc";
+import {
+  type HwDevice,
+  hwEncode,
+  type LiveHw,
+  liveHw,
+  liveHwArgs,
+  nvencBusy,
+} from "./hwenc";
 import { tunerOf, yieldedTo } from "./live-yield";
 import { programs, recordings, services } from "./schema";
 import { settings } from "./settings";
@@ -166,7 +174,7 @@ type StreamCodec = LiveCodec | "audio";
  *
  * 映像は `pipe:1` に fMP4、字幕は `pipe:3` に Matroska (デコードせずに写したもの。
  * [captions.ts](captions.ts) の `captionOutput`)。**時刻を揃えるにはこうするしか
- * なかった** — 理由と実測、引き換え (選び直すと字幕も再エンコード) は captions.ts の冒頭。
+ * なかった** — 理由と実測は captions.ts の冒頭。引き換えに、字幕を選び直すと映像ごと起こし直しになる。
  *
  * **`-loglevel` は下げない。** 選べる字幕は入口の見出しから読み取っていて
  * (`TrackList`)、あれは info で出る。騒がしいぶんは読む側で落とす (`watch`)。
@@ -362,6 +370,13 @@ export function panArgs(audio: AudioTrack): string[] {
  * 非力な機材 (Celeron J4125) では x264 ultrafast で2本目から追いつかなくなるため (issue #417)。
  * GPU が映像を1つも出さずに降りたら、ソフトウェアで再エンコードする (`Session.run`)
  *
+ * ## H.265
+ *
+ * **GPU でだけエンコードする** (ソフトウェアのエンコーダを組んでいない。`#lib/hw.ts` の `SOFTWARE_CODECS`)。
+ * GPU が無いのにリクエストされたら投げる。選局の指示を受けるところで H.264 に替えてあるので (`attend`)、ふつうは来ない。
+ * 入れ物の中の名前は `hvc1` にする。ffmpeg の既定の `hev1` は Safari が受け取らない (`#lib/live.ts` の `codecsFor`)。
+ * 音声は H.264 と同じ AAC (`audioArgs`)
+ *
  * ## 録画をその場で変換するときも同じエンコード方法
  *
  * `/api/recordings/<id>/stream` (`server/playback.ts`) もここを使う。元がエンコード済み
@@ -385,9 +400,16 @@ export function videoArgs(
         : [...(interlaced ? [deinterlace(true)] : []), ...gpu.filter]
       ).join(","),
       // -g はソフトウェアと揃える。合流の待ちはキーフレームの間隔で決まる
-      encoder: ["-c:v", ...gpu.encoder, "-g", "60"],
+      encoder: [
+        "-c:v",
+        ...gpu.encoder,
+        "-g",
+        "60",
+        ...(codec === "hevc" ? ["-tag:v", "hvc1"] : []),
+      ],
     };
   }
+  if (codec === "hevc") throw new Error("H.265 は GPU でだけエンコードします");
   return {
     input: [],
     filter: interlaced ? deinterlace(true) : "",
@@ -396,7 +418,7 @@ export function videoArgs(
 }
 
 /** ソフトウェアでエンコードするときの `-c:v` から (上の説明) */
-function softwareArgs(codec: LiveCodec): string[] {
+function softwareArgs(codec: Exclude<LiveCodec, "hevc">): string[] {
   if (codec === "av1") {
     // -g は H.264 と揃える。合流の待ちはキーフレームの間隔で決まる
     return [
@@ -480,25 +502,6 @@ export function audioArgs(codec: StreamCodec): string[] {
   return codec === "av1"
     ? ["-c:a", "libopus", "-b:a", "256k", "-ac", "2"]
     : ["-c:a", "aac", "-b:a", "256k", "-ac", "2"];
-}
-
-/**
- * ブラウザに渡す codecs 文字列。**MSE はこれが合っていないと受け取らない。**
- *
- * 中身から起こすのが本筋だが (moov を読めば分かる)、エンコード方式はこちらで決めて
- * いるので、その組に対応する値を返す。
- *
- * - `avc1.640029` … High profile / Level 4.1。1080p60 まで
- * - `av01.0.08M.08` … Main profile / Level 4.0 / 8bit。同じく 1080p60 まで
- * - `Opus` … MP4 での Opus の名前 (中の箱の名前と同じく大文字の O)。Safari は小文字の `opus` を断る
- *   (Chromium は両方受け取る)。入れ物が WebM なら小文字が正しいので、エンコード済みのファイルは `opus` のまま
- *
- * **音声も組で決まる** (`audioArgs`)。AV1 は Opus、H.264 は AAC
- */
-export function codecsFor(codec: LiveCodec): string {
-  return codec === "av1"
-    ? 'video/mp4; codecs="av01.0.08M.08,Opus"'
-    : 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 }
 
 /**
@@ -607,20 +610,44 @@ const GPU_GAVE_UP =
 const GPU_BUSY =
   "GPU が同時にエンコードできる数を超えたため、ソフトウェアでエンコードしています";
 
+/**
+ * H.265 を GPU でエンコードできずに降りたときの文面。画面はこれを受けると H.265 を諦めて次の形式に替える
+ * (`live-player.svelte.ts`。文面は見ず、H.265 をリクエストしていて降りたことで決める)
+ */
+const HEVC_GAVE_UP = "H.265 を GPU でエンコードできませんでした";
+/** H.265 をリクエストされたが出せないので H.264 にしたときの断り書き (`attend`) */
+const HEVC_TO_H264 =
+  "H.265 を GPU でエンコードできないため、H.264 に切り替えました";
+
 function hwKey(codec: StreamCodec, hw: LiveHw): string {
   return `${codec}:${hw.way.device}:${hw.way.kind}:${hw.full}`;
 }
 
 /**
- * このセッションを GPU でエンコードするか。設定の印と試しのエンコード (`hwenc.liveHw`)、最近落ちたか。
- * 録画のその場の変換 (`server/playback.ts`) も使う — 元がエンコード済みなら `interlaced` を false
- * (復号からは GPU に載せない。`videoArgs`)
+ * このセッションを GPU でエンコードするか。ライブの印 (`liveHwAllow`。録画の `hwAllow` は見ない) と
+ * 試しのエンコード (`hwenc.liveHw`)、最近落ちたか。
+ * 追っかけと録画のその場の変換 (`server/playback.ts`) も使う — 元がエンコード済みなら `interlaced` を false
+ * (復号からは GPU に載せない。`videoArgs`)。`devices` は試験で差し替えるときだけ渡す
  */
-export function pickLiveHw(codec: LiveCodec, interlaced = true): LiveHw | null {
-  const found = liveHw(codec, settings().hwAllow, liveTurn++);
+export function pickLiveHw(
+  codec: LiveCodec,
+  interlaced = true,
+  devices: HwDevice[] = hwEncode().devices,
+): LiveHw | null {
+  const found = liveHw(codec, settings().liveHwAllow, liveTurn++, devices);
   if (found === null) return null;
   const hw = interlaced ? found : { ...found, full: false };
   return liveHwFailed(codec, hw) ? null : hw;
+}
+
+/**
+ * **ライブで H.265 を出せるか。** H.265 はソフトウェアでエンコードしないので、ライブの印 (`liveHwAllow`) で GPU に
+ * 載っていて、最近落ちていないときだけ。画面のメニューと「自動」(`viewing.viewingOptions`)、選局の指示を
+ * 受けるところ (`attend`。出せなければ H.264 にする) が使う。順番 (`liveTurn`) は進めない
+ */
+export function liveHevc(devices: HwDevice[] = hwEncode().devices): boolean {
+  const found = liveHw("hevc", settings().liveHwAllow, 0, devices);
+  return found !== null && !liveHwFailed("hevc", found);
 }
 
 /** しばらくソフトウェアにしている (`blameLiveHw` で覚えた) 経路か */
@@ -751,7 +778,7 @@ class Session {
    * ので、ここより手前で溜めると、そのぶん遅れて見える
    */
   private readonly clock = new BroadcastClock();
-  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast で分け合う (`tap`) */
+  /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f] で分け合う (`tap`) */
   private readonly packets = new PacketStream();
   /** ffmpeg が入口で 0 に寄せたぶん (秒)。`start:` から読み取る */
   private startPts = Number.NaN;
@@ -1057,13 +1084,18 @@ class Session {
        * ふだんは起こす前に PMT で字幕の有無を見るので (下の `peekCaptions`)、ここへ来るのは
        * 読めなかったときと、ffmpeg が字幕とみなさなかったとき
        */
-      // 音声だけなら字幕はエンコードしない
+      // 音声だけなら字幕は出さない
       let wanted =
         this.codec === "audio" || remembered(captionless, this.serviceId)
           ? null
           : this.track;
       // GPU でエンコードするか (`pickLiveHw`)。降りたらソフトウェアで再エンコードする (下)
       let hw = this.codec === "audio" ? null : pickLiveHw(this.codec);
+      // H.265 はソフトウェアに降りられない。画面は諦めて次の形式をリクエストし直す (`live-player.svelte.ts`)
+      if (this.codec === "hevc" && hw === null) {
+        this.died(label, "H.265 を GPU でエンコードできない", HEVC_GAVE_UP);
+        return;
+      }
       /*
        * **ライブの TS はリーダーを1つだけ作って、起こし直しても使い回す。**
        *
@@ -1194,6 +1226,19 @@ class Session {
           !this.produced &&
           !(wanted !== null && this.noSubtitle)
         ) {
+          /*
+           * H.265 はソフトウェアに降りられない。覚えて (同時に開ける数を超えただけなら覚えない) 降りる。
+           * 画面は次の形式をリクエストし直し、覚えている間は H.265 の指示を H.264 にする (`liveHevc`)
+           */
+          if (this.codec === "hevc") {
+            blameLiveHw(this.codec, hw, this.busy);
+            this.died(
+              label,
+              `GPU (${hw.way.device} の ${hw.way.kind}) で H.265 をエンコードできなかった`,
+              HEVC_GAVE_UP,
+            );
+            return;
+          }
           console.warn(
             `[live] ${label}: GPU (${hw.way.device} の ${hw.way.kind}${hw.full ? "・復号から" : ""}) でエンコードできなかったので、ソフトウェアで再エンコードします${this.busy ? " (同時に開ける数を超えた。方式は覚えない)" : ""}`,
           );
@@ -1334,13 +1379,13 @@ class Session {
 
   /**
    * 届いた塊を1局に絞り (`pump` の説明)、**絞ったあとを** データ放送・時計・
-   * Hybridcast の見張りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
+   * Hybridcast・EIT[p/f] の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
    */
   private tap(filter: ServiceFilter | null, chunk: Uint8Array): Uint8Array {
     const out = filter === null ? chunk : filter.filter(chunk);
     if (filter !== null) this.tsid = filter.transportStreamId;
     if (out.length === 0) return out;
-    // **188 バイトに切るのは1回だけ** (3つのパーサで使い回す。ライブの処理でいちばん重いところ)
+    // **188 バイトに切るのは1回だけ** (4つのパーサで使い回す。ライブの処理でいちばん重いところ)
     const receivedAt = Date.now();
     const data = this.data;
     const ait =
@@ -1962,7 +2007,7 @@ class RawCaptions {
  * 混ぜると片方が意図しないものを見ることになる。チューナーはエージェント側で
  * 共有になるので、増えるのは ffmpeg だけ。
  *
- * **字幕も入る。** 映像と同じ ffmpeg でエンコードするようになったので、何本目の字幕を
+ * **字幕も入る。** 映像と同じ ffmpeg から写すので、何本目の字幕を
  * 出すかが違えば別のものになる (`encodeArgs`)。言語が複数ある放送でしか
  * 動かないところなので、そのために起こし直すのは年に数回のこと
  */
@@ -2127,28 +2172,32 @@ export function chaseStream(
 }
 
 /**
- * **アプリ向けのライブの字幕** (`GET /api/services/<id>/captions`。docs/api.md)。そのままの TS
- * (`liveStream` の `raw`) を観ているアプリに、字幕 (文字の配置 0x22) を放送の PTS のまま流す —
- * ブラウザで放送そのままを送る経路 (stream.md#放送のままのときの字幕) と同じもの。
+ * **アプリ向けのライブの字幕と時計** (`GET /api/services/<id>/captions`。docs/api.md)。ライブの映像 (`liveStream`) を
+ * 観ているアプリに、字幕 (文字の配置 0x22) と時計 (`clock` の通知) を、**その映像と同じ物差しの時刻のまま**流す。
  *
- * **いま流している放送そのままのセッションを脇から共有する**だけで、チューナーは増やさない
- * (ブラウザで同じ局を放送そのままで観ていればそれも共有する)。共有する相手が無ければ null —
- * 映像 (`live?codec=raw`) を先に開いてからリクエストすること。映像が終われば閉じる (`Viewer.side`)
+ * - `raw` (既定) … そのままの TS。時刻は放送の PTS (ブラウザで放送そのままを送る経路と同じ。stream.md#放送のままのときの字幕)
+ * - `h264` / `av1` … 変換したライブ。時刻は ffmpeg が付けた fMP4 の時刻 (ブラウザが MSE に積むものと同じ)。
+ *   `audio` は映像に渡したものと同じものを渡す (同じ局・同じ形式・同じ音声のセッションだけを共有するので、違えば別の映像になる。`key`)
+ *
+ * **いま流しているセッションを脇から共有する**だけで、チューナーもエンコードも増やさない (ブラウザで同じものを観ていればそれも共有する)。
+ * 共有する相手が無ければ null — 映像 (`live`) を先に開いてからリクエストすること。映像が終われば閉じる (`Viewer.side`)
  */
 export function liveCaptions(
   serviceId: number,
   language = 1,
+  form: LiveCodec | "raw" = "raw",
+  audio?: string,
 ): ReadableStream<Uint8Array> | null {
   const row = serviceOf(serviceId);
   if (row === undefined) return null;
-  // 放送そのままの目印は音声で分けない (`key`)。何を渡しても同じ
+  // 放送そのままの目印は音声で分けない (`key`)。変換したものは映像と同じ決め方で音声を選ぶ (`liveStream`)
   const session = sessions.get(
     key(
       row.type,
       row.channel,
       serviceId,
-      nowPlaying(serviceId, undefined).audio,
-      "raw",
+      nowPlaying(serviceId, form === "raw" ? undefined : audio).audio,
+      form,
       0,
     ),
   );
@@ -2472,6 +2521,8 @@ export function warm(
 ): void {
   if (channelType === "" || channel === "" || !Number.isFinite(serviceId))
     return;
+  // H.265 を出せなければ、選局の指示と同じく H.264 で温める (`attend`)
+  if (codec === "hevc" && !raw && !liveHevc()) codec = "h264";
   /*
    * **誰かがもうこの局を観ていれば温めない。** 画面は番組が切り替わるたびに読み直す
    * (`routes/live/+page.svelte`) ので、観ている最中にも何度もここへ来る。下の目印は
@@ -2546,7 +2597,8 @@ type ChaseAsked = {
 function parseCommand(message: Record<string, unknown>): Asked | null {
   const audio =
     typeof message["audio"] === "string" ? message["audio"] : undefined;
-  const codec: LiveCodec = message["codec"] === "av1" ? "av1" : "h264";
+  const asked = message["codec"];
+  const codec: LiveCodec = asked === "av1" || asked === "hevc" ? asked : "h264";
   // **字幕も映像と同じ ffmpeg**。選び直すと再エンコードになる (`encodeArgs`)
   const caption = Number.isInteger(message["caption"])
     ? Math.max(0, Number(message["caption"]))
@@ -2567,7 +2619,8 @@ function parseCommand(message: Record<string, unknown>): Asked | null {
         recordingId: Number(message["recordingId"]),
         at: Number.isFinite(at) ? Math.max(0, at) : 0,
         audio,
-        codec,
+        // 追っかけは H.265 を出さない (`#lib/live.ts` の `LiveCodec`)
+        codec: codec === "hevc" ? "h264" : codec,
         caption,
         language,
       };
@@ -2643,8 +2696,13 @@ export function attend(connection: Connection): void {
       current = openChase(asked, viewer);
       return;
     }
-    const { channelType, channel, serviceId, audio, codec, caption, raw } =
-      asked;
+    const { channelType, channel, serviceId, audio, caption, raw } = asked;
+    /*
+     * **H.265 を出せなければ H.264 にする** (`liveHevc`。GPU が無い・印を外した・最近落ちた)。画面は答え (`tuned`) の
+     * コーデックで受け取るので、そのまま観られる。替えたことは断り書きで言う
+     */
+    const downgraded = asked.codec === "hevc" && !raw && !liveHevc();
+    const codec = downgraded ? "h264" : asked.codec;
 
     const now = nowPlaying(serviceId, audio);
 
@@ -2686,6 +2744,12 @@ export function attend(connection: Connection): void {
       audios: now.audios,
     };
     connection.send(CHANNEL.control, 0n, json(notice));
+    if (downgraded)
+      connection.send(
+        CHANNEL.control,
+        0n,
+        json({ type: "notice", message: HEVC_TO_H264 } satisfies Notice),
+      );
 
     /*
      * **再エンコードしなくても、リクエストされたら必ず答える。**

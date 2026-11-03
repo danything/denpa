@@ -25,7 +25,7 @@ internal static class ChildTs
     /// <para>
     /// 既定 (64KB) だと地上波の 18Mbit/秒 で **30ms** しか無い。読む側が GC で
     /// 一瞬止まるだけで書き手が詰まり、siano-ts の中の溜めも埋まれば
-    /// 溢れたぶんが捨てられる。DVB のリングバッファ (8MB = 3.5秒) に揃える。
+    /// 溢れたぶんが捨てられる。DVB のリングバッファ (8MB = 3.5 秒) に揃える。
     /// 上限 (<c>/proc/sys/fs/pipe-max-size</c>、既定 1MB) を超えるには CAP_SYS_RESOURCE が要る。
     /// 無ければ 1MB で妥協する
     /// </para>

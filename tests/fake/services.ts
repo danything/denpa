@@ -20,7 +20,7 @@ export interface FakeService {
    * この中継にロゴのデータカルーセルが載っているか (衛星だけ)。
    *
    * **本物は1つの中継にしか載っていない。** 実機の BS はネットワーク4の
-   * 26中継のうち `BS15_0` だけで、CS は12中継のどれにも無かった。
+   * 26中継のうち `BS15:16625` だけで、CS は12中継のどれにも無かった。
    * 全部の中継に載せてしまうと、外れを見切って次へ行く経路が試されない
    */
   carousel?: boolean;
@@ -87,7 +87,7 @@ const TEST_SERVICES: FakeService[] = [
     networkId: 4,
     name: "ＢＳ１１イレブン",
     type: "BS",
-    channel: "BS11_0",
+    channel: "BS11:18000",
     slotMs: 5_000,
     serviceType: 1,
     carousel: true,
@@ -103,7 +103,23 @@ const TEST_SERVICES: FakeService[] = [
     networkId: 4,
     name: "ＢＳテレ東",
     type: "BS",
-    channel: "BS03_0",
+    channel: "BS03:16432",
+    slotMs: 30 * 60_000,
+    serviceType: 1,
+    noPrograms: true,
+  },
+  /*
+   * CS の局。**CS の中継があること**を確かめるテストがある (局ロゴの取得は CS の中継も回る)。
+   * 前は標準の表から本物の CS の局が入っていたが、今は放送の一覧から作るので、偽の放送にも置く。
+   * ロゴも番組表も載せない (CS の中継にロゴは来ない。本物と同じ)
+   */
+  {
+    id: 600296,
+    serviceId: 296,
+    networkId: 6,
+    name: "ＣＳテスト",
+    type: "CS",
+    channel: "CS02:24608",
     slotMs: 30 * 60_000,
     serviceType: 1,
     noPrograms: true,

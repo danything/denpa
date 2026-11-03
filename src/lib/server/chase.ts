@@ -19,7 +19,7 @@ import { open } from "node:fs/promises";
 
 import { PACKET } from "@danything/arib/psi";
 
-/** 1回に読む量。露骨に小さいと read の回数だけ損する */
+/** 1回に読む量。小さすぎると read の回数だけ損する */
 const READ_SIZE = 256 * 1024;
 
 /** 書き足されるのを待つ間隔 (ms)。放送は約2MB/秒なので、これで十分細かい */

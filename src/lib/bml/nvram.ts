@@ -68,7 +68,8 @@ function scopeOf(kind: Scope, who: Who): string {
 
 /**
  * 置き場の名前 (`Nvram` が `store` に使う鍵) が、その局から読み書きできるものか。
- * **Hybridcast のアプリへは、起動した局から見える分だけ写して渡す** (`hybridcast/compat.ts`)。
+ * **Hybridcast のアプリへは、起動した局から見える分だけ写して渡す** (写すのは `DataBroadcast.svelte`、
+ * 受けるのは `hybridcast/compat.ts`)。
  * アプリが書いてきた鍵もこれで確かめるので、`Nvram` が作らない形式 (番号の外など) は通さない
  */
 export function visibleFrom(key: string, who: Who): boolean {

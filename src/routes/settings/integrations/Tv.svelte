@@ -31,11 +31,11 @@
     {:else}
       <div class="rows">
         {#each data.devices as device (device.id)}
-          <div class="row device item" data-testid="device-row">
+          <div class="device item" data-testid="device-row">
             <div class="grow">
               <div class="small"><strong>{device.name}</strong></div>
               <div class="tiny muted">
-                ペアリング {dateTime(device.created_at)} ・ 最後に使った
+                ペアリング {dateTime(device.created_at)}・最後に使った
                 {device.last_used_at === null
                   ? "まだ"
                   : dateTime(device.last_used_at)}
