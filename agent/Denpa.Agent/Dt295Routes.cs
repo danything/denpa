@@ -113,9 +113,10 @@ public static class Dt295Routes
 
     /// <summary>
     /// 計画をレジスターに書く (9.3 の手順 3・4 と 9.5)。全 64 スロットを書き、計画に無いスロットは無効・PID 0・ECM 0 にする
-    /// (参照実装は全部クリアしてから計画を書く。最後に残る値は同じ)
+    /// (参照実装は全部クリアしてから計画を書く。最後に残る値は同じ)。<paramref name="cleared"/> が true なら、領域を 0 で埋めた直後なので計画のスロットだけを書く
+    /// (フィールド表が書くレジスター 0x1002〜0x101B は PID スロットの 0x101E 以降と重ならない)
     /// </summary>
-    public static void Write(Dt295Bridge bridge, IReadOnlyList<Dt295Route> routes, Dt295Program? main)
+    public static void Write(Dt295Bridge bridge, IReadOnlyList<Dt295Route> routes, Dt295Program? main, bool cleared = false)
     {
         var bySlot = routes.ToDictionary(route => route.Slot);
         for (var slot = 0; slot < Slots; slot++)
@@ -126,6 +127,8 @@ public static class Dt295Routes
                 continue;
             }
             var found = bySlot.TryGetValue(slot, out var route);
+            // 領域を 0 で埋めた直後は、計画に無いスロットがすでに 0 なので書かない
+            if (cleared && !found) continue;
             bridge.Modify16(register, 0, 13, found ? route.Pid : 0);
             bridge.Modify16(register, 15, 1, found ? 1 : 0);
             if (EcmField(slot) is { } field) bridge.Modify16(field.Address, field.Shift, 7, found ? route.EcmSlot : 0);

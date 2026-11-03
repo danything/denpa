@@ -522,6 +522,28 @@ public class Dt295Tests
         await Assert.That(usb.Time.Sleeps.Sum()).IsEqualTo(20 + 5 + 100 + 20 + 20 + 20 + 100);
     }
 
+    [Test]
+    public async Task 地上波の2回目の選局は初期化を省く()
+    {
+        var usb = new FakeDt295Usb { State = Dt295Device.Authenticated };
+        List<string> writes = [];
+        usb.I2cDevice = (address, write, read) =>
+        {
+            if (write.Length > 0) writes.Add($"{address:X2}:{Convert.ToHexString(write)}");
+            return new byte[read];
+        };
+        var tuner = new Dt295Frontend(new Dt295Bridge(usb, usb.Time), FakeDt295Material.Create());
+        tuner.TuneTerrestrial(27);
+        var first = writes.Count;
+        usb.Time.Sleeps.Clear();
+        writes.Clear();
+        tuner.TuneTerrestrial(20);
+        await Assert.That(writes.Count).IsLessThan(first / 2);
+        // 初期化の 473 MHz は書かず、選んだ 515 MHz だけを書く
+        await Assert.That(writes).DoesNotContain("20:FEC01176");
+        await Assert.That(usb.Time.Sleeps.Sum()).IsEqualTo(20 + 20 + 100);
+    }
+
     // ---------------------------------------------------------------------
     // ルート (9.4・11)
     // ---------------------------------------------------------------------
@@ -605,6 +627,21 @@ public class Dt295Tests
         await Assert.That(usb.Get16(0x10E0) & 0x7F).IsEqualTo(63);
         await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)0x0400);
         await Assert.That(usb.Get16(0x101C)).IsEqualTo((ushort)0x020F);
+    }
+
+    [Test]
+    public async Task 領域を埋めた直後のルート書き込みは計画のスロットだけを書く()
+    {
+        var usb = new FakeDt295Usb();
+        var bridge = new Dt295Bridge(usb, usb.Time);
+        var main = new Dt295Program(0x0400, 0x1F0, 0x111, 0x111, 0x02, 0x112, 0x0F);
+        var plan = Dt295Routes.Plan(main, [0x0010], new Dictionary<int, int> { [0x111] = 0x901 });
+        // 計画に無いスロットの値が残っていても、cleared では触らない
+        usb.Set16(0x102A, 0x8777);
+        Dt295Routes.Write(bridge, plan, main, cleared: true);
+        await Assert.That(usb.Get16(0x1028)).IsEqualTo((ushort)0x8010);
+        await Assert.That(usb.Get16(0x102A)).IsEqualTo((ushort)0x8777);
+        await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)0x0400);
     }
 
     // ---------------------------------------------------------------------
