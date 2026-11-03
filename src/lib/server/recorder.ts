@@ -2,9 +2,9 @@ import { once } from "node:events";
 import { createWriteStream, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { EpgReader } from "@danything/arib/eit";
+import { type EitEvent, EpgReader } from "@danything/arib/eit";
 import { ServiceFilter } from "@danything/arib/service-filter";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { TsHead } from "#lib/ts/ts-head.js";
 
@@ -15,12 +15,14 @@ import { now, orm } from "./db";
 import { enqueue } from "./encoder";
 import { savePrograms } from "./epg";
 import { emit } from "./events";
-import { moveFile } from "./fsx";
+import { moveFile, removeIfExists } from "./fsx";
 import { libraryPath, recordedPath } from "./library";
 import { refreshLineup } from "./lineup-follow";
 import { writeThumbnail } from "./metadata";
+import { PfEvent } from "./pf-event";
 import { fillTsHead, recordingSummary } from "./recording";
-import { programs, recordings, reservations, services } from "./schema";
+import { duplicateAtStart } from "./rules";
+import { programs, recordings, reservations, rules, services } from "./schema";
 import { chunks } from "./stream";
 import { parseTitle } from "./title";
 import {
@@ -172,23 +174,144 @@ export async function startRecording(
 ): Promise<Recording> {
   const recording = createRecording(reservation);
   emit("recordings");
+  /*
+   * **「同じ回は最初の放送だけ」のルールの予約は、録り始めに同じ回かを見直す** (`pump`)。
+   * やめたものに「録画を開始しました」を送らないよう、知らせは見直したあと
+   */
+  const checks = ruleDedupes(reservation);
+  if (!checks) announce(recording);
+  launch(recording, after, checks);
+  return recording;
+}
+
+/** 録画を開始したと知らせる (`recording.started`) */
+function announce(recording: Recording): void {
   notify({
     event: "recording.started",
     text: `録画を開始しました: ${recording.name} (${recording.service_name})`,
     recording: recordingSummary(recording),
   });
-  launch(recording, after);
-  return recording;
 }
 
-/** 読み出しをバックグラウンドで動かす。止める手段 (`active`) はここで立てる */
-function launch(recording: Recording, after: readonly StreamUse[] = []): void {
+/** 「同じ回は最初の放送だけ」を入れたルールの予約か。手動の予約は見ない */
+function ruleDedupes(reservation: Reservation): boolean {
+  if (reservation.manual || reservation.rule_id === null) return false;
+  return (
+    orm()
+      .select({ dedupe: rules.dedupe })
+      .from(rules)
+      .where(eq(rules.id, reservation.rule_id))
+      .get()?.dedupe === true
+  );
+}
+
+/**
+ * 読み出しをバックグラウンドで動かす。止める手段 (`active`) はここで立てる。
+ * `checks` は録り始めに同じ回かを見直すか (`startRecording`)。見直すものは、開始の知らせも `pump` が送る
+ */
+function launch(
+  recording: Recording,
+  after: readonly StreamUse[] = [],
+  checks = false,
+): void {
   const controller = new AbortController();
   active.set(recording.id, controller);
-  void pump(recording, controller, after).catch((error) => {
+  void pump(recording, controller, after, checks).catch((error) => {
     active.delete(recording.id);
     fail(recording.id, String(error));
   });
+}
+
+/**
+ * **録っている番組の EIT[p/f] で、番組の情報を書き直す** (番組表の行と録画の行)。
+ *
+ * 録画の行は録り始める瞬間の番組表から作る (`createRecording`) が、その番組表は数日前に集めたもので、
+ * 局によっては話数を放送の直前の p/f にしか載せない (実機の BS日テレ。数日前の番組表では概要が空、
+ * p/f の概要に「第5話　副題」)。書き直さないと、あとで別の局に来る同じ回と突き合わせられない
+ * (`rules.recordedEpisodes` は録画の行の名前・概要・詳細から回を読む)。
+ *
+ * **空では塗り潰さない** (`epg.savePrograms` と同じ)。シリーズ記述子は p/f が言っていれば (`series` が
+ * undefined でなければ) その値にする。時刻は書かない (延長の追従は `extendIfLonger`)
+ */
+function refreshFromPf(recording: Recording, event: EitEvent): void {
+  const extended =
+    Object.keys(event.extended).length === 0 ? null : event.extended;
+  const said = event.series !== undefined;
+  /** 中身のあるものだけ書く */
+  const text = {
+    ...(event.name === "" ? {} : { name: event.name }),
+    ...(event.description === "" ? {} : { description: event.description }),
+    ...(extended === null ? {} : { extended }),
+  };
+  const at = now();
+  if (recording.program_id !== null) {
+    orm()
+      .update(programs)
+      .set({
+        ...text,
+        ...(said
+          ? {
+              series_id: event.series?.seriesId ?? null,
+              series_repeat: event.series?.repeatLabel ?? null,
+              series_episode: event.series?.episode ?? null,
+              series_last_episode: event.series?.lastEpisode ?? null,
+              series_name: event.series?.name ?? null,
+            }
+          : {}),
+        updated_at: at,
+      })
+      .where(eq(programs.id, recording.program_id))
+      .run();
+  }
+  const parsed = parseTitle(text.name ?? recording.name);
+  orm()
+    .update(recordings)
+    .set({
+      ...text,
+      series: parsed.series,
+      subtitle: parsed.subtitle,
+      ...(said
+        ? {
+            series_episode: event.series?.episode ?? null,
+            series_last_episode: event.series?.lastEpisode ?? null,
+            series_repeat: event.series?.repeatLabel ?? null,
+          }
+        : {}),
+      updated_at: at,
+    })
+    .where(eq(recordings.id, recording.id))
+    .run();
+}
+
+/**
+ * **録り始めてから同じ回をもう録ってあると分かった録画を、無かったことにする** (`duplicateAtStart`)。
+ *
+ * 書いたのは開始マージンと数秒ぶんだけなので、ファイルも録画の行も消す (失敗にすると、録らないと
+ * 決めたものが一覧に失敗として残る)。予約は「録画しない」(`skipped`) にして理由を持たせる。
+ * **録り始めた時刻 (`started_at`) は消さない。** スケジューラ・チューナーの割り振り・ルールの当て直しは
+ * どれも録り始めていない予約しか拾わないので、もう一度録り始めない。手で予約し直せば録れる
+ * (`reservations.reserve` が録り始めた時刻を空に戻す)
+ */
+function skipDuplicate(recording: Recording, reason: string): void {
+  removeIfExists(recording.ts_path);
+  orm().delete(recordings).where(eq(recordings.id, recording.id)).run();
+  if (recording.reservation_id !== null) {
+    orm()
+      .update(reservations)
+      .set({ state: "skipped", conflict_reason: reason, updated_at: now() })
+      .where(
+        and(
+          eq(reservations.id, recording.reservation_id),
+          eq(reservations.state, "scheduled"),
+        ),
+      )
+      .run();
+  }
+  console.log(
+    `[rec] 録画をやめました: ${recording.name} (${recording.service_name})。${reason}`,
+  );
+  emit("recordings");
+  emit("reservations");
 }
 
 /**
@@ -280,9 +403,18 @@ async function pump(
   recording: Recording,
   controller: AbortController,
   after: readonly StreamUse[],
+  checks = false,
 ): Promise<void> {
   const path = recording.ts_path!;
   mkdirSync(dirname(path), { recursive: true });
+  /** 開始の知らせ。見直すもの (`checks`) は、録ると決まったとき (か終わるとき) に 1 回だけ送る */
+  let announced = !checks;
+  const announceOnce = () => {
+    if (announced) return;
+    announced = true;
+    const row = recordingById(recording.id);
+    if (row !== undefined) announce(row);
+  };
 
   const service = orm()
     .select()
@@ -290,6 +422,7 @@ async function pump(
     .where(eq(services.id, recording.service_id))
     .get();
   if (service === undefined) {
+    announceOnce();
     fail(
       recording.id,
       "局の情報がありません。チャンネルスキャンをやり直してください",
@@ -335,6 +468,22 @@ async function pump(
     recording.ts_head === null && (fileSize(path) ?? 0) === 0
       ? new TsHead()
       : null;
+  /*
+   * **録り始めに、その番組の EIT[p/f] を 1 回読む** (`refreshFromPf`)。局によっては話数を放送の直前の
+   * p/f にしか載せないので、番組の情報を書き直す。続きから録るとき (再起動をまたいだとき) は読まない
+   * (もう読んである)。届かなければ打ち切って、そのまま録る (`PF_WAIT`)
+   */
+  let pf =
+    eventId !== null && (fileSize(path) ?? 0) === 0
+      ? new PfEvent(service.service_id, eventId)
+      : null;
+  // p/f を読まないものは、同じ回を確かめ直せないので録ると決まっている。開始はすぐ知らせる
+  if (pf === null) announceOnce();
+  /**
+   * 書き直した情報で、同じ回をもう録ってあると分かったときの理由 (`rules.duplicateAtStart`)。
+   * 見るのは「同じ回は最初の放送だけ」のルールの予約 (`checks`) だけ
+   */
+  let duplicate: string | null = null;
   // 何を使っているのかが設定の「チューナー」に出る。番組名は載せず、ID だけ渡して表示する側で引く
   const use = recordingUse(recording.id);
 
@@ -413,6 +562,29 @@ async function pump(
 
         try {
           for await (const chunk of chunks(stream)) {
+            if (pf !== null) {
+              const seen = pf.feed(chunk);
+              if (seen !== null) {
+                pf = null;
+                if (seen === "timeout") {
+                  console.warn(
+                    `[recorder] 録画 ${recording.id}: 番組の EIT[p/f] が届かないので、番組表の情報のまま録ります`,
+                  );
+                } else {
+                  refreshFromPf(recording, seen);
+                  if (checks) duplicate = duplicateAtStart(recording.id);
+                }
+                /*
+                 * **同じ回をもう録ってあれば、ここでやめてチューナーを返す。** 書いたのは開始マージンと
+                 * p/f を待った数秒だけ。録る側に倒すので、届かなかったとき・回が読めないときは録る
+                 */
+                if (duplicate !== null) {
+                  controller.abort();
+                  break;
+                }
+                announceOnce();
+              }
+            }
             if (epg.feed(chunk) && eventId !== null) {
               const present = epg.present.get(service.service_id);
               if (
@@ -505,12 +677,20 @@ async function pump(
   } catch (error) {
     // 終了時刻に達して自分で abort した場合は正常終了。それ以外だけ失敗にする
     if (!controller.signal.aborted) {
+      announceOnce();
       fail(recording.id, String(error));
       return;
     }
   } finally {
     active.delete(recording.id);
   }
+
+  if (duplicate !== null) {
+    skipDuplicate(recording, duplicate);
+    return;
+  }
+  // p/f を待っている間に終わった (取り消した・終了時刻が来た) ものも、開始は知らせる
+  announceOnce();
 
   /*
    * 始めから禁止だったものは失敗にする。開始マージンで前の番組のぶんを書いていても、

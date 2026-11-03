@@ -396,6 +396,17 @@ export function stateLabel(state: string): string {
 export const COPY_NEVER_REASON = "コピー禁止の番組なので録画しません";
 
 /**
+ * **録り始めてから、同じ回をもう録ってあると分かった** (ルールの「同じ回は最初の放送だけ」。
+ * docs/data.md「同じ回は最初の放送だけ」)。予約は「録画しない」(`skipped`) になってこの理由を持つ。
+ * 下見の「録らない (録画済み)」と同じ判定で、どこで録ったかを添える (引き継いだ履歴は局が無いことがある)
+ */
+export function duplicateReason(serviceName: string): string {
+  return serviceName === ""
+    ? "同じ回を録画済みなので録画しません"
+    : `同じ回を ${serviceName} で録画済みなので録画しません`;
+}
+
+/**
  * ロゴでの判定が使えなかったときに、CM検出の覚え書き (`recordings.cm_note`) へ
  * 入れる目印。無音検出に落ちた理由はこの後ろに続く。
  */

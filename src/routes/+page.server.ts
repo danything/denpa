@@ -187,7 +187,8 @@ export function load({ url, cookies }) {
    * 出すのはまだ始まっていないものと録っているもの (「完了した予約も表示」なら全部)。
    * - 録り逃し (`missed`) は録画の結果なので、録画の側に出す (下の `missed`)
    * - 取り消したものは既定では出さない (人が押した結果。「完了した予約も表示」では戻すボタンのため出す)
-   * - 録画しない (コピー禁止の `skipped`) は放送が終わるまで。終わっても録り逃しには移さない (意図して録らなかったものを失敗に見せない)
+   * - 録画しない (`skipped`) は放送が終わるまで。終わっても録り逃しには移さない (意図して録らなかったものを失敗に見せない)。
+   *   コピー禁止のものと、録り始めてから同じ回と分かってやめたもの (録り始めた時刻が入っている。`recorder.skipDuplicate`)
    */
   const r = alias(reservationTable, "r");
   const rec = alias(recordingTable, "rec");
@@ -195,7 +196,7 @@ export function load({ url, cookies }) {
     ? not(and(eq(r.state, "missed"), isNull(r.started_at))!)
     : or(
         and(inArray(r.state, ["scheduled", "conflict"]), isNull(r.started_at)),
-        and(eq(r.state, "skipped"), isNull(r.started_at), gt(r.end_at, now())),
+        and(eq(r.state, "skipped"), gt(r.end_at, now())),
         eq(rec.state, "recording"),
       );
   const reservations: ReservationRow[] = orm()

@@ -132,8 +132,12 @@ export function reservationState(
   r: { started_at: AnySQLiteColumn; state: AnySQLiteColumn },
   rec: { state: AnySQLiteColumn },
 ) {
+  /*
+   * 録画の行が無ければ予約の状態のまま。録り始めてから同じ回をもう録ってあると分かってやめたもの
+   * (`skipped`。`recorder.skipDuplicate` が録画の行を消す) と、それを取り消したもの
+   */
   return sql<ReservationState>`CASE
-            WHEN ${r.started_at} IS NULL THEN ${r.state}
+            WHEN ${r.started_at} IS NULL OR ${rec.state} IS NULL THEN ${r.state}
             WHEN ${rec.state} = 'recording' THEN 'recording'
             WHEN ${rec.state} = 'failed' THEN 'failed'
             ELSE 'done'
@@ -426,6 +430,8 @@ export const reservations = sqliteTable(
     /**
      * missed = 始まらないまま放送が終わったもの (アプリが止まっていた等)。
      * skipped = **録らないと決めたもの** (コピー禁止の番組。`scheduler.resolveConflicts`)。
+     * 録り始めてから同じ回をもう録ってあると分かったもの (`recorder.skipDuplicate`) もここ。こちらは
+     * 録り始めた時刻 (`started_at`) が入ったままで、録画の行は無い。
      * 理由は `conflict_reason` に入る。放送が終わっても skipped のまま (録り逃しにしない。意図して録らなかったもの)
      */
     state: text("state", { enum: RESERVATION_STATES })

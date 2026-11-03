@@ -331,10 +331,9 @@ export function searchReservations(q: string, options: SearchOptions) {
   const rec = alias(recordings, "rec");
   const where = and(
     or(
-      and(
-        inArray(r.state, ["scheduled", "conflict", "skipped"]),
-        isNull(r.started_at),
-      ),
+      and(inArray(r.state, ["scheduled", "conflict"]), isNull(r.started_at)),
+      // 録り始めてから同じ回と分かってやめたもの (`recorder.skipDuplicate`) は録り始めた時刻が入っている
+      eq(r.state, "skipped"),
       eq(rec.state, "recording"),
     ),
     gt(r.end_at, now()),

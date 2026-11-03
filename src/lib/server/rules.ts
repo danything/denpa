@@ -6,6 +6,7 @@ import {
   gt,
   inArray,
   isNull,
+  lt,
   ne,
   or,
 } from "drizzle-orm";
@@ -13,6 +14,7 @@ import {
 import { genreMatches } from "#lib/arib.js";
 
 import { globTerms, toHalfWidth } from "../fold";
+import { duplicateReason } from "../format";
 import { hasTime, inTime, jstOf } from "../rule-time";
 import { parseSearchFields, type SearchField } from "../search";
 import type { Program, Rule } from "../types";
@@ -659,6 +661,124 @@ export function previewSkips<T extends Candidate & { service_channel: string }>(
     at,
   );
   return new Map([...earlier, ...dedupe]);
+}
+
+/**
+ * **録り始めた録画が、もう録ってある回か** (ルールの「同じ回は最初の放送だけ」を録り始めにもう一度当てる)。
+ * 録らないなら、その理由 (`format.duplicateReason`。画面にそのまま出す) を返す。録るなら null。
+ *
+ * 局によっては、話数を放送の直前の EIT[p/f] にしか載せない (実機の BS日テレは、数日前の番組表では
+ * タイトルにも概要にも話数が無く、放送の直前の p/f の概要に「第5話　副題」が入る)。予約の時点では
+ * 同じ回と分からないので、録画が p/f を読んで番組の情報を書き直したあと (`recorder.ts`) にここで見直す。
+ *
+ * - **手動の予約と、「同じ回は…」を入れていないルールの予約は見ない。** その番組に当たるルールのうち、
+ *   1 つでも入れていないものがあれば録る (`applyRules` でそのルールが受け持つのと同じ)
+ * - 比べる相手は、予約を立てるときと同じ録ってある回 (直近 30 日の録画と引き継いだ履歴)。
+ *   **録画はこれより先に録り始めたもの (`id` が小さいもの) だけ。** 同時に始まった同じ回どうしが
+ *   互いを録ってある回とみて両方やめないため。同じ番組の録画 (途中で取り消して戻したときの続き) は相手にしない
+ * - 回の読み方は予約を立てるときと同じ (`episode.firstAirings`。録画は書き直したタイトル・概要・詳細を持つ)
+ */
+export function duplicateAtStart(recordingId: number): string | null {
+  const recording = orm()
+    .select({
+      id: recordings.id,
+      reservation_id: recordings.reservation_id,
+      program_id: recordings.program_id,
+      service_id: recordings.service_id,
+      name: recordings.name,
+      description: recordings.description,
+      extended: recordings.extended,
+      series_episode: recordings.series_episode,
+      start_at: recordings.start_at,
+      end_at: recordings.end_at,
+    })
+    .from(recordings)
+    .where(eq(recordings.id, recordingId))
+    .get();
+  if (recording?.reservation_id == null) return null;
+  const reservation = orm()
+    .select({ manual: reservations.manual, rule_id: reservations.rule_id })
+    .from(reservations)
+    .where(eq(reservations.id, recording.reservation_id))
+    .get();
+  if (
+    reservation === undefined ||
+    reservation.manual ||
+    reservation.rule_id === null
+  )
+    return null;
+  const enabled = orm()
+    .select()
+    .from(ruleTable)
+    .where(eq(ruleTable.enabled, true))
+    .all();
+  const owner = enabled.find((rule) => rule.id === reservation.rule_id);
+  if (owner === undefined || !owner.dedupe) return null;
+
+  const service = orm()
+    .select({ type: services.type })
+    .from(services)
+    .where(eq(services.id, recording.service_id))
+    .get();
+  const program =
+    recording.program_id === null
+      ? undefined
+      : orm()
+          .select()
+          .from(programTable)
+          .where(eq(programTable.id, recording.program_id))
+          .get();
+  // 入れていないルールも当たるなら、そちらが受け持って録る (`applyRules` の keeper と同じ)
+  if (program !== undefined) {
+    const freeOnly = settings().freeOnly;
+    const textOf = textCache(program);
+    const others = enabled.filter(
+      (rule) =>
+        !rule.dedupe &&
+        matchesCompiled(
+          compile(rule),
+          program,
+          service?.type,
+          freeOnly,
+          textOf,
+        ),
+    );
+    if (others.length > 0) return null;
+  }
+
+  const rows = orm()
+    .select(TAKEN_COLUMNS)
+    .from(recordings)
+    .where(
+      and(
+        lt(recordings.id, recording.id),
+        gt(recordings.start_at, recording.start_at - TAKEN_WINDOW),
+        ne(recordings.state, "failed"),
+        recording.program_id === null
+          ? undefined
+          : or(
+              isNull(recordings.program_id),
+              ne(recordings.program_id, recording.program_id),
+            ),
+      ),
+    )
+    .all();
+  const airing: Airing = {
+    id: recording.program_id ?? -recording.id,
+    name: recording.name,
+    description: recording.description,
+    extended: recording.extended,
+    series_episode: recording.series_episode,
+    start_at: recording.start_at,
+    end_at: recording.end_at,
+    service_id: recording.service_id,
+    type: service?.type ?? "",
+  };
+  const skip = firstAirings([airing], new Set(), [
+    ...takenOf(rows),
+    ...historyEpisodes(),
+  ]).get(airing.id);
+  return skip?.kind === "recorded" ? duplicateReason(skip.service_name) : null;
 }
 
 /**
