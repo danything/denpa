@@ -78,8 +78,11 @@ internal sealed class FakeDt295Usb : IUsbDevice
 
     private static uint Address(ushort value, ushort index) => ((uint)(value >> 8) << 16) | index;
 
+    public int ControlReads { get; private set; }
+
     public int ControlIn(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)
     {
+        ControlReads++;
         var address = Address(value, index);
         for (var i = 0; i < data.Length; i++) data[i] = Memory.GetValueOrDefault(address + (uint)i);
         return data.Length;
