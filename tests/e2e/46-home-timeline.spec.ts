@@ -595,6 +595,7 @@ test.describe("ホームの1本の一覧", () => {
     await expect(detail.getByTestId("detail-play")).toBeVisible();
     const actions = (await detail.locator(".detail-actions").boundingBox())!;
     const close = (await detail.getByTestId("detail-close").boundingBox())!;
+    // 12 は段の間 (--dp-space-2 = 8px) に丸めの 4px を足した値
     expect(actions.height).toBeLessThanOrEqual(close.height * 2 + 12);
     // 「再生」は「閉じる」と同じ下の段の右端
     const play = (await detail.getByTestId("detail-play").boundingBox())!;

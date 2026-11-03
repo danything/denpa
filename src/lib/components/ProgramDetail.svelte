@@ -100,9 +100,9 @@
     </div>
 
     <!--
-          閉じると、開いた画面が渡す並び (`.modal-actions`) を分けて置く。狭い画面で並びが上の段へ折り返しても、
-          閉じるは下の段の左端に残る
-      -->
+            「閉じる」と、開いた画面が渡す並び (`.modal-actions`) を分けて置く。狭い画面で並びが上の段へ
+            折り返しても、「閉じる」は下の段の左端に残る
+        -->
     <div class="detail-actions" bind:offsetHeight={actionsHeight}>
       <button
         type="button"
