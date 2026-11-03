@@ -147,7 +147,7 @@ export type Notice =
       finished: boolean;
       /**
        * 元の TS で送るとき (`ChaseCommand.raw`)、**録画の先頭の PTS** (90kHz。`ts/seek.ts` の `tsHead`)。画面は届いた
-       * PTS からこれを引いて再生位置を出す (`sinceHead`)。バイト比例の当たり (`at`) より正しい。読めなければ省く
+       * PTS からこれを引いて再生位置を出す (`sinceHead`)。バイト数から割り出した位置 (`at`) より正しい。読めなければ省く
        */
       origin?: number;
     }
@@ -275,7 +275,7 @@ export type Command =
   | { type: "language"; language: number }
   /**
    * **追っかけの元の TS を送るのを止めてほしい・続けてほしいときに、画面が送る** (`ChaseCommand.raw` で受けているときだけ効く)。
-   * 画面は手元が溜まったときと、止めている間に `on: true` を、手元が減ったら `on: false` を送る。サーバは `on: true` の間、
+   * 画面は受信バッファが溜まったときと一時停止している間に `on: true` を、受信バッファが減ったら `on: false` を送る。サーバは `on: true` の間、
    * 録画のファイルを読まずに待つ。サーバは倍速で送り込む (`server/chase.ts`) が、元の TS は捨てると観ていない先が欠けるので、
    * 捨てる代わりにこれで止める
    */
