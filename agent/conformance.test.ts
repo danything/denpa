@@ -1531,4 +1531,21 @@ describe("チューナーの名指し", () => {
     expect((await tuners())[1].users).toEqual([]);
     holder.close();
   });
+
+  test("同じチューナーを名指しして同じチャンネルを見る 2 台目は、優先度が低くても選局を共有する", async () => {
+    const a = await open(
+      "type=BS&channel=BS11:18000&use=pin%206&priority=10&tuner=bs1",
+    );
+    await a.reader?.read();
+    const b = await open(
+      "type=BS&channel=BS11:18000&use=pin%207&priority=5&tuner=bs1",
+    );
+    expect(b.status).toBe(200);
+    await b.reader?.read();
+
+    const status = await tuners();
+    expect(status[2].users.map((u) => u.use)).toEqual(["pin 6", "pin 7"]);
+    a.close();
+    b.close();
+  });
 });

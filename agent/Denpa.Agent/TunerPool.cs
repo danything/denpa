@@ -179,7 +179,7 @@ public sealed class TunerPool(
 
             index = pin is null
                 ? Pick(type, channel, priority, after) ?? throw new TunerBusyException($"{type} のチューナーに空きがありません")
-                : PickPinned(pin, type, priority, after);
+                : PickPinned(pin, type, channel, priority, after);
 
             if (_leases.TryGetValue(index, out var victim))
             {
@@ -544,9 +544,9 @@ public sealed class TunerPool(
     /// <summary>
     /// <paramref name="pin"/> のデバイスのチューナーを返す。**ほかのチューナーへは振り替えない。**
     /// 見つからない・無効・その種別を受けられないときは <see cref="TunerPinException"/>、
-    /// 同じか優先度の高い利用者がいるときは <see cref="TunerBusyException"/>
+    /// 別のチャンネルを同じか優先度の高い利用者が読んでいるときは <see cref="TunerBusyException"/>。同じチャンネルなら共有する
     /// </summary>
-    private int PickPinned(string pin, string type, int priority, IReadOnlySet<string> after)
+    private int PickPinned(string pin, string type, string channel, int priority, IReadOnlySet<string> after)
     {
         var index = -1;
         for (var i = 0; i < Tuners.Count && index < 0; i++)
@@ -557,6 +557,8 @@ public sealed class TunerPool(
         if (!spec.Types.Contains(type)) throw new TunerPinException($"{spec.Name} ({pin}) は {type} を受けられません");
         if (_leases.TryGetValue(index, out var lease))
         {
+            // 同じチャンネルを読んでいる選局には入れる (優先度にかかわらず共有する。Open が Join する)
+            if (lease.Type == type && lease.Channel == channel) return index;
             lock (lease.Sinks)
             {
                 var staying = lease.Sinks.Where(sink => !after.Contains(sink.Use)).ToList();

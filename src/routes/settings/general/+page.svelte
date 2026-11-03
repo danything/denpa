@@ -22,6 +22,12 @@
   // この端末で覚えている名指しを読む (サーバには置かない)
   $effect(() => liveTuner.load());
 
+  // 覚えている名指しが一覧に無い (チューナーを外した、エージェントに繋がらない)
+  const unlisted = $derived(
+    liveTuner.pin !== null &&
+      !data.liveTuners.some((tuner) => tuner.pin === liveTuner.pin),
+  );
+
   const notices = $derived.by(() => {
     const list = errorNotice(form, "settings-error");
     if (form?.loggedOut !== undefined) {
@@ -140,6 +146,12 @@
         data-testid="live-tuner-select"
       >
         <option value="" selected={liveTuner.pin === null}>自動</option>
+        <!-- 覚えている名指しが一覧に無いとき (チューナーを外した、エージェントに繋がらない) は、効いたまま「自動」に見せない -->
+        {#if unlisted}
+          <option value={liveTuner.pin} selected
+            >{liveTuner.pin} (一覧にありません)</option
+          >
+        {/if}
         {#each data.liveTuners as tuner (tuner.pin)}
           <option value={tuner.pin} selected={liveTuner.pin === tuner.pin}
             >{tuner.name} ({tuner.types.join("・")})</option
