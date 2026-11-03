@@ -4,7 +4,7 @@
  * NX-Jikkyo の WebSocket も過去ログ API も、旧ニコ生と同じ形式の `chat` を返す
  * (`{ thread, no, vpos, date, date_usec, mail, user_id, premium, anonymity, content }`)。
  * 値は WebSocket が数、過去ログが文字列なので、どちらでも読む。
- * **`user_id`・`premium`・`no` などは読んだその場で捨てる** — 持つのは本文と投稿時刻と、`mail` のうち色・位置・大きさのコマンドだけ
+ * **`user_id`・`premium`・`no` などは読んだその場で捨てる。** 持つのは本文と投稿時刻と、`mail` のうち色・位置・大きさのコマンドだけ
  * (`command.ts`)
  */
 import { readMail, type Style } from "./command";

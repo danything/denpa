@@ -19,13 +19,13 @@ describe("字幕の覚え方", () => {
     expect(pickLanguage([JPN, ENG], "jpn")).toBe(1);
   });
 
-  test("載っていなければ第1言語", () => {
+  test("載っていなければ第 1 言語", () => {
     expect(pickLanguage([JPN, ENG], "kor")).toBe(1);
     expect(pickLanguage([JPN, ENG], null)).toBe(1);
     expect(pickLanguage([], "eng")).toBe(1);
   });
 
-  test("英語が第1言語の番組でも、言葉で選ぶ", () => {
+  test("英語が第 1 言語の番組でも、言葉で選ぶ", () => {
     expect(
       pickLanguage(
         [captionLanguage(1, "eng"), captionLanguage(2, "jpn")],
