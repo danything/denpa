@@ -14,11 +14,11 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
 `host.docker.internal` でエージェントを呼びます (`compose.mac.yml`。
 compose.prod.yml から tuner-agent を外したもの)。
 
-1. **エージェント** — 最新のリリースから取り、LaunchAgent
+1. **エージェント**: 最新のリリースから取り、LaunchAgent
    (`~/Library/LaunchAgents/io.github.danything.denpa-agent.plist`) に載せます。
    ログインで起き、落ちたら起き直し、止めるときは録画の終わりを待ちます
-   (launchd に殺されないよう、待ちの上限を 6 時間より長くしてある)
-2. **denpa 本体** — エージェントと同じバージョンの compose.mac.yml を `~/denpa/compose.yml` に置いて
+   (launchd に強制終了されないよう、待ちの上限を 6 時間より長くしてある)
+2. **denpa 本体**: エージェントと同じバージョンの compose.mac.yml を `~/denpa/compose.yml` に置いて
    `docker compose up -d`。答えたらブラウザで開きます (`--no-open` で開かない)。genkan が動いているか
    80・443 が空いていれば、Linux と同じく `http://denpa.localhost` で開けるようにします ([install.md](install.md#1行で入れる))
 
@@ -34,7 +34,7 @@ compose.prod.yml から tuner-agent を外したもの)。
 | `~/Library/Application Support/denpa-agent/` | エージェント・px4-userland・siano-userland (プログラムだけ)                                                                                                                                                                            |
 | `~/Movies/denpa/recorded`                    | 元の TS。エージェントとコンテナの両方に見せる (掛かったまま録れたものを後から復号するとき、denpa は相対パスで要求し、エージェントが直に読み書きする)                                                                                   |
 | `~/Movies/denpa/library`                     | 出来上がった録画 (Finder から見える)                                                                                                                                                                                                   |
-| Docker のボリューム `denpa_denpa-data`       | DB。SQLite の錠は Mac から見せたフォルダ越しだと当てにならないので、名前付きボリュームに                                                                                                                                               |
+| Docker のボリューム `denpa_denpa-data`       | DB。SQLite のロックは Mac から見せたフォルダ越しだと当てにならないので、名前付きボリュームに                                                                                                                                           |
 | `~/Library/Logs/denpa-agent.log`             | エージェントのログ                                                                                                                                                                                                                     |
 
 - もう一度流せば上げ直し (エージェントも denpa のイメージも最新のリリースへ)。
@@ -63,9 +63,9 @@ denpa も Docker で動かすときは、もう 1 つ `AGENT_HOST=127.0.0.1` を
 
 **Linux と違うところ。**
 
-- **チューナーは px4-userland と siano-userland の機材と Sony CECH-ZD1 J だけ。** macOS には DVB が無いので、
-  PT2/PT3 のような PCI の機材は使えません。CECH-ZD1 J はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
-  実機ではまだ確かめていません)
+- **チューナーは px4-userland と siano-userland の機材と Sony CECH-ZD1 J・PIXELA PIX-DT295 (試験的) だけ。** macOS には DVB が無いので、
+  PT2/PT3 のような PCI の機材は使えません。CECH-ZD1 J と PIX-DT295 はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
+  Mac の実機ではまだ確かめていません)
 - **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に聞く)。CECH-ZD1 J の差し込み口もエージェントが直に読みます。USB のリーダーは
   usbfs を直接扱えないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に扱います
   (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます ([読めないとき](#カードが読めないとき))。動いている間はリーダーを

@@ -28,7 +28,7 @@ public sealed record Dt295Model(int Vendor, int Product, string Name, string? Un
         $"{Name} ({Vendor:x4}:{Product:x4}、{port}) は未確認なので使いません ({Unconfirmed})。動かせるのはいまは PIX-DT295 だけです";
 }
 
-/// <summary>PIX-DT295 (と同じドライバーの機材) の識別と、刺さっているものを探す・開く</summary>
+/// <summary>PIX-DT295 (と同じドライバーの機材) の識別と、挿さっているものを探す・開く</summary>
 public static class Dt295
 {
     public const int Vendor = 0x06B8;
@@ -53,7 +53,7 @@ public static class Dt295
     public static Dt295Model? Find(int vendor, int product) =>
         Family.FirstOrDefault(model => model.Vendor == vendor && model.Product == product);
 
-    /// <summary>設定の <c>device</c> の頭 (<c>dt295:4-12.1</c>。シリアルは使わずポートで指す。<see cref="Zd1j"/> と同じ形)</summary>
+    /// <summary>設定の <c>device</c> の接頭辞 (<c>dt295:4-12.1</c>。シリアルは使わずポートで指す。<see cref="Zd1j"/> と同じ形)</summary>
     public const string Scheme = "dt295:";
 
     private const string DevUsb = "/dev/bus/usb";
@@ -88,7 +88,7 @@ public static class Dt295
     }
 
     /// <summary>
-    /// 使えるもの (<see cref="Dt295Model.Supported"/>) が刺さっているポート。**開かない**。未確認の機材は <paramref name="warn"/> に出して並べない。
+    /// 使えるもの (<see cref="Dt295Model.Supported"/>) が挿さっているポート。**開かない**。未確認の機材は <paramref name="warn"/> に出して並べない。
     /// Linux はカーネルのドライバが使っているものを並べない
     /// </summary>
     public static List<string> Ports(Action<string>? warn = null) => Usable(Found(warn), warn);
@@ -105,7 +105,7 @@ public static class Dt295
         return [.. found.Where(item => item.Model.Supported).Select(item => item.Port)];
     }
 
-    /// <summary>同じドライバーの機材 (<see cref="Family"/>) が刺さっているポートと、その機材。未確認のものも含む。**開かない**</summary>
+    /// <summary>同じドライバーの機材 (<see cref="Family"/>) が挿さっているポートと、その機材。未確認のものも含む。**開かない**</summary>
     public static List<(string Port, Dt295Model Model)> Found(Action<string>? warn = null) =>
         OperatingSystem.IsLinux()
             ? Found(UsbSysfs.Devices, warn)
@@ -634,7 +634,7 @@ public sealed class Dt295Device
     public void StopReception(ushort pause, Action drain)
     {
         var state = _bridge.State();
-        if (state is not (1 or 2 or 3 or 4 or Authenticated)) throw new Dt295Exception($"知らない状態なので止められません (0x{state:X4}。9.9)");
+        if (state is not (1 or 2 or 3 or 4 or Authenticated)) throw new Dt295Exception($"想定していない状態なので止められません (0x{state:X4}。9.9)");
         if (state == 2)
         {
             _bridge.Command(Dt295Channel.Main, 5, 0, pause);

@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
 /*
  * px4-userland の機材 (PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P …) を使うところ。
  *
- * 本物の筐体は無い。ここで確かめるのは**機材に触らない部分**だけ —
+ * 本物の筐体は無い。ここで確かめるのは**機材に触らない部分**だけで、次のものを見る。
  * px4d --list-json / px4ctl list の読み方、device 文字列の形式、TUNE の中身。
  * 実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` (Probe.cs)。
  */

@@ -120,8 +120,7 @@ public sealed class AgentTls
         /*
          * **自分の証明書で来た相手も通す** (`--status`)。agent.key を読めるのはこの機械の管理者だけなので、組んだ denpa と同じに扱ってよい
          */
-        if (peer is not null && peer == Fingerprint) return Gate.Pass;
-        return peer is not null && Clients.Contains(peer) ? Gate.Pass : Gate.Refuse;
+        return peer is not null && (peer == Fingerprint || Clients.Contains(peer)) ? Gate.Pass : Gate.Refuse;
     }
 
     /// <summary>

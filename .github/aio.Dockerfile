@@ -1,13 +1,13 @@
-# denpa-aio: **本体とチューナーエージェントを1つのコンテナで。**
+# denpa-aio: **本体とチューナーエージェントを 1 つのコンテナで。**
 #
 # チューナーを挿した機械でそのまま全部動かすとき (NAS・Home Assistant のアドオンなど) 用。
-# 組み直さない — main で組んだ `denpa` に、`denpa-agent` の実行ファイルと
+# 組み直さない。main で組んだ `denpa` に、`denpa-agent` の実行ファイルと
 # px4-userland / siano-userland / asicen-userland を写すだけ (増えるのは数 MB)。RUN が無いので、
 # arm64 もエミュレーション無しで数秒で組める。
 #
 # **libssl はエージェントのイメージから写す。** 本体の土台は libssl の無い distroless (base-nossl。
 # Dockerfile の `distroless` 段) で、エージェントの土台 (cc) にはある。エージェントは CARD_URL を https で
-# 指したときと IT930x のファームウェアを取ってくるときに libssl を読む (agent/Dockerfile)。置き場の名前が arch で違い、RUN 無しでは読み替えられないので、
+# 指したときと、IT930x のファームウェア・PIX-DT295 の公式パッケージを取ってくるときに libssl を読む (agent/Dockerfile)。置き場の名前が arch で違い、RUN 無しでは読み替えられないので、
 # arch ごとの段を作って `ssl-${TARGETARCH}` で選ぶ。libssl が繋ぐ libzstd も土台に無いので一緒に写す
 # (zlib は本体の ffmpeg が繋ぐので本体にある)。パッケージの記録と copyright も一緒に写す
 #
@@ -37,7 +37,7 @@ COPY --from=agent /opt/px4-userland /opt/px4-userland
 COPY --from=agent /opt/siano-userland /opt/siano-userland
 COPY --from=agent /opt/asicen-userland /opt/asicen-userland
 COPY .github/aio-entrypoint.ts /usr/local/lib/denpa-aio.ts
-# エージェントは同じコンテナの中。元のTSの置き場は既定が両方 `/media/raw` なので書かない。
+# エージェントは同じコンテナの中。元の TS の置き場は既定が両方 `/media/raw` なので書かない。
 # 組むときの合言葉 (#pair=) は入口 (aio-entrypoint.ts) が `/config` に作って両方へ渡す
 ENV TUNER_AGENT_URL=https://127.0.0.1:25252
 CMD ["bun", "/usr/local/lib/denpa-aio.ts"]

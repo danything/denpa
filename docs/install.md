@@ -8,12 +8,12 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 チューナー・カードリーダー・OS の一覧と機材ごとのページは [tuners.md](tuners.md#要るもの) に。
 
 - イメージは amd64 と arm64 を同じタグにまとめてあり、自分のアーキテクチャのものが降ってきます
-- **Intel・AMD の GPU** — `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
+- **Intel・AMD の GPU**: `/dev/dri` が見えれば起動時に見つけて GPU でエンコードします。compose.prod.yml では渡す行をコメントにしてあるので、
   `compose.override.yml` で渡します (Helm は既定で渡す)。Intel・AMD の GPU を使えるのは amd64 だけです
   ([encode.md](encode.md#gpu-でエンコードする-va-api))
-- **NVIDIA の GPU** — ホストにドライバ (530 以降) と NVIDIA Container Toolkit を入れ、GPU を予約して渡せば、H.264・H.265 と AV1 (RTX 40 以降) を
+- **NVIDIA の GPU**: ホストにドライバ (530 以降) と NVIDIA Container Toolkit を入れ、GPU を予約して渡せば、H.264・H.265 と AV1 (RTX 40 以降) を
   NVENC でエンコードします (amd64。[encode.md](encode.md#nvidia-でエンコードする))
-- **Rockchip (RK3588 / RK3588S)** — BSP カーネルの上で `/dev/mpp_service` と `/dev/dma_heap` を渡せば、H.264 と H.265 を
+- **Rockchip (RK3588 / RK3588S)**: BSP カーネルの上で `/dev/mpp_service` と `/dev/dma_heap` を渡せば、H.264 と H.265 を
   ハードウェアでエンコードします (arm64。[encode.md](encode.md#rockchip-rk3588-でエンコードする))
 
 ## 1行で入れる
@@ -28,10 +28,10 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | b
 irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   # Windows (x64)
 ```
 
-- **Linux** (amd64 / arm64) — 全部 Docker Compose。`~/denpa` に compose.prod.yml を `compose.yml` として置いて起動します
-- **Mac** (Apple Silicon) — エージェントは Mac の上で直接 (LaunchAgent)、denpa 本体は Docker。USB をコンテナに渡せないため ([install-mac.md](install-mac.md))
-- **Windows** (x64) — エージェントは Windows の上で直接 (タスク スケジューラ)、denpa 本体は WSL のコンテナ (`wslc`)。Docker Desktop は要りません。
-  チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
+- **Linux** (amd64 / arm64): 全部 Docker Compose。`~/denpa` に compose.prod.yml を `compose.yml` として置いて起動します
+- **Mac** (Apple Silicon): エージェントは Mac の上で直接 (LaunchAgent)、denpa 本体は Docker。USB をコンテナに渡せないため ([install-mac.md](install-mac.md))
+- **Windows** (x64): エージェントは Windows の上で直接 (タスク スケジューラ)、denpa 本体は WSL のコンテナ (`wslc`)。Docker Desktop は要りません。
+  チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
 - **Docker・WSL は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
   Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux・Mac)。
@@ -47,7 +47,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
   `~/denpa/config/tls/pair-token` にも書きます。上げ直しても変えません
 - もう一度流すと最新のリリースに上がります。`… | bash -s -- --uninstall` で止めて外します
   (`~/denpa`・録画・DB は残す)。ブラウザを開かないなら `--no-open`。Windows は `-Uninstall` / `-NoOpen`
-  (渡し方は install.ps1 の頭)
+  (渡し方は install.ps1 の冒頭)
 
 ### Docker Compose を手で置く
 
@@ -56,7 +56,7 @@ Linux ならこれだけです (エージェントは `tuner-agent` として一
 ```sh
 mkdir denpa && cd denpa
 curl -Lo compose.yml https://raw.githubusercontent.com/danything/denpa/main/compose.prod.yml
-# denpa とエージェントが組むときの合言葉 (agent.md)。1度作ったら変えない
+# denpa とエージェントが組むときの合言葉 (agent.md)。一度作ったら変えない
 echo "AGENT_PAIR_TOKEN=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')" > .env
 docker compose up -d
 ```
@@ -211,4 +211,4 @@ kubectl debug -it deploy/denpa --image=busybox --target=denpa -n denpa
 
 - **`/denpa` のような接頭辞の下にも置けます** (Home Assistant の Ingress など)。接頭辞は denpa に教えません。
   OIDC に渡す絶対 URL にだけ、前段が付ける `X-Forwarded-Prefix` (Home Assistant は `X-Ingress-Path`) を
-  頭に付けます (`paths.ts` の `publicBase`)
+  先頭に付けます (`paths.ts` の `publicBase`)

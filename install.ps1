@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# denpa を Windows (x64) に立てる。**PowerShell の1行で、ブラウザが開くところまで。**
+# denpa を Windows (x64) に立てる。**PowerShell の 1 行で、ブラウザが開くところまで。**
 #
 #   irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall
@@ -9,7 +9,7 @@
 # **エージェントは Windows の上でそのまま動かし** (タスク スケジューラでログオン時に起こす)、**denpa 本体は
 # WSL のコンテナ (wslc) で動かす。** Docker Desktop は要らない (WSL に入っているので `wsl --update` だけで使える)。
 # コンテナには USB を渡せないので、チューナーとカードに触るエージェントはコンテナに入れられない。
-# **Windows で使えるチューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J**
+# **Windows で使えるチューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)**
 # (DVB は無い)。ドライバを WinUSB にするのは人の手で (Zadig。docs/install-windows.md)。
 #
 # **WSL は勝手に入れない。** wslc が無いときはエージェントだけ入れて、入れ方を言って終わる。
@@ -22,7 +22,7 @@
 #   %LOCALAPPDATA%\denpa-agent\           エージェント・px4-userland (px4d.exe・px4ctl.exe・切り出したファームウェア)・
 #                                         siano-userland・起こす .cmd と denpa-start.ps1
 #   C:\denpa-run                          px4d のソケットの置き場 (本人・SYSTEM・Administrators だけが書ける。px4d がそう決めている)
-#   ~/Videos/denpa/{recorded,library}     元のTS (エージェントとコンテナの両方が見る) と出来上がった録画
+#   ~/Videos/denpa/{recorded,library}     元の TS (エージェントとコンテナの両方が見る) と出来上がった録画
 #   wslc のボリューム denpa-data          DB (Windows のフォルダ越しだと SQLite のロックが当てにならない)
 #
 # 環境変数: DENPA_VERSION (v1.2.3 のように。既定は最新のリリース。CI はコミットを渡す)、DENPA_HOME、
@@ -42,7 +42,7 @@ $IsdbtRioSha256 = '054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff
 # 起動の不具合が直ったのが 0.2.1)
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 $Px4UserlandVersion = '0.2.1'
-# IT930x のファームウェアは PLEX 公式ドライバから切り出す。取ってくる先と3つのハッシュは agent/Denpa.Agent/Px4Firmware.cs・install.sh と同じ
+# IT930x のファームウェアは PLEX 公式ドライバから切り出す。取ってくる先と 3 つのハッシュは agent/Denpa.Agent/Px4Firmware.cs・install.sh と同じ
 $PlexDriverSha256 = 'bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200'
 $Pxw3u4SysSha256 = '8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722'
 $It930xFirmwareSha256 = '5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484'
@@ -54,7 +54,7 @@ $Repo = 'danything/denpa'
 $Url = 'http://localhost:3000'
 $DenpaDir = if ($env:DENPA_HOME) { $env:DENPA_HOME } else { Join-Path $env:USERPROFILE 'denpa' }
 $Prefix = Join-Path $env:LOCALAPPDATA 'denpa-agent'
-# px4d のソケットの置き場。**ユーザーのフォルダの下にしない** — ソケットのパスは UTF-8 で 108 バイトまでで、
+# px4d のソケットの置き場。**ユーザーのフォルダの下にしない。** ソケットのパスは UTF-8 で 108 バイトまでで、
 # 日本語のユーザー名だとすぐ溢れる。非 ASCII のパスだと px4d の ready の行も途切れる (px4-userland #52)
 $Px4Runtime = 'C:\denpa-run'
 $Media = Join-Path $env:USERPROFILE 'Videos\denpa'
@@ -96,7 +96,7 @@ function Write-Text([string]$Path, [string]$Text, [Text.Encoding]$Encoding = (Ne
 }
 
 # denpa とエージェントが組むときの合言葉 (32 バイトの乱数を base64url で。docs/agent.md)。
-# **エージェント自身の置き場** (tuners.json の隣の tls\pair-token) に**1度だけ**作り、上げ直しても変えない。
+# **エージェント自身の置き場** (tuners.json の隣の tls\pair-token) に**一度だけ**作り、上げ直しても変えない。
 # エージェントには環境変数で渡さず、そこから読ませる (手で denpa-agent --pair を流しても同じ URL が出るように)。
 # denpa には TUNER_AGENT_URL の #pair= で同じものを渡す。エージェントが先に作っていればそれを使う
 function Get-PairToken {
@@ -148,7 +148,7 @@ function Test-Recording([string]$Exe) {
 # エージェントを止める。**録画中なら終わるまで待つ** (Windows はエージェントに「止まれ」を伝える手が無く、
 # 止めればその場で落ちる。Mac のように録画を待ってから畳むことができないので、ここで待つ)。
 # 起こした conhost・.cmd・エージェント・siano-ts・px4d を、コマンドラインに置き場が入っているもので見つけて落とす
-# (タスクを止めても、.cmd の下で起きたものまでは止まらない)。**px4d は先に落とさない** — エージェントが
+# (タスクを止めても、.cmd の下で起きたものまでは止まらない)。**px4d は先に落とさない。** エージェントが
 # 終われば px4d は標準入力が閉じたのを見て、後片付け (LNB を 0V に戻す・ソケットを消す) をして自分で終わる。
 # 10 秒待っても残っていれば落とす。
 # 録画中かを聞く denpa-agent は $Exe (上げ直すときは取ってきた新しいほう。古いものは --status を知らない)
@@ -173,7 +173,7 @@ function Stop-Agent([string]$Exe) {
 }
 
 # **stderr を捨てる外のコマンドの前に。** PowerShell 5.1 は、止める設定 (Stop) のまま 2>$null すると
-# stderr の1行目で止まる。呼んだ関数の中だけ Continue にする (Set-Variable -Scope 1)
+# stderr の 1 行目で止まる。呼んだ関数の中だけ Continue にする (Set-Variable -Scope 1)
 function Use-Continue { Set-Variable -Scope 1 -Name ErrorActionPreference -Value Continue }
 
 # wslc (WSL のコンテナ) が使えるか。駄目なら理由と入れ方を言って $false (-Quiet なら黙って)
@@ -196,7 +196,7 @@ function Test-Health {
 }
 
 # **前のバージョンは Docker Desktop の compose で動いていた。** DB (Docker のボリューム) を wslc のボリュームへ移して、
-# compose.yml を退ける。1度だけ (退けたあとはここに来ない)。録画中なら compose down が終わるまで待つ
+# compose.yml を退ける。一度だけ (退けたあとはここに来ない)。録画中なら compose down が終わるまで待つ
 function Move-FromDocker {
     Use-Continue
     $compose = Join-Path $DenpaDir 'compose.yml'
@@ -334,7 +334,7 @@ function Start-Denpa([string]$Ref, [string]$Token, [switch]$NoOpen) {
     throw "denpa が応答しません。wslc logs $Container を見てください"
 }
 
-# Siano のチューナーが刺さっていれば、ドライバが WinUSB かを見る (入れ替えは人の手で。Zadig)
+# Siano のチューナーが挿さっていれば、ドライバが WinUSB かを見る (入れ替えは人の手で。Zadig)
 function Show-Tuner {
     try {
         $sticks = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
@@ -354,7 +354,7 @@ function Show-Tuner {
     }
 }
 
-# zip を開く (PowerShell 5.1 でも。中身を1つずつ取り出すのに使う)
+# zip を開く (PowerShell 5.1 でも。中身を 1 つずつ取り出すのに使う)
 function Open-Zip([string]$Path) {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     return [IO.Compression.ZipFile]::OpenRead($Path)
@@ -431,7 +431,7 @@ function Set-Px4Runtime {
     foreach ($sid in $me, (New-Object Security.Principal.SecurityIdentifier 'S-1-5-18'), (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544')) {
         $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule $sid, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))
     }
-    # Set-Acl は SACL まで書きにいって、2回目から SeSecurityPrivilege が要ると断られる。持ち主と DACL だけを書く
+    # Set-Acl は SACL まで書きにいって、2 回目から SeSecurityPrivilege が要ると断られる。持ち主と DACL だけを書く
     # (PowerShell 5.1 は DirectoryInfo のメソッド、7 は拡張メソッド)
     $info = Get-Item -LiteralPath $Px4Runtime
     try {
@@ -443,7 +443,7 @@ function Set-Px4Runtime {
 }
 
 # px4-userland のチューナーが WinUSB で使えるかを、px4d に聞いて言う (機種の表は持たない)。
-# **エージェントを止めている間に** — px4d が使っている機材は開けず、一覧に出ない
+# **エージェントを止めている間に聞く。** px4d が使っている機材は開けず、一覧に出ない
 function Show-Px4 {
     Use-Continue
     $px4d = "$Prefix\px4-userland\px4d.exe"
@@ -476,7 +476,7 @@ function Show-Px4 {
         }
         $why = if ($pnp -and $pnp.Service) { "ドライバが $($pnp.Service) なので" } else { 'ドライバが入っていないので' }
         Say ("$($device.model) (USB $($device.port)): ${why}開けません。Zadig (https://zadig.akeo.ie) で WinUSB にしてください " +
-            '(PX-Q3U4 / PX-W3U4 は USB の機材が2つ並ぶので両方。PLEX のドライバで TVTest などから使っていたなら、そちらからは見えなくなります。docs/install-windows.md)')
+            '(PX-Q3U4 / PX-W3U4 は USB の機材が 2 つ並ぶので両方。PLEX のドライバで TVTest などから使っていたなら、そちらからは見えなくなります。docs/install-windows.md)')
     }
     if ($enclosures.Count -eq 0 -and $devices.Count -eq 0) {
         Say 'px4-userland のチューナー (PX-Q3U4 など) は見当たりません。挿したら、Zadig でドライバを WinUSB にしてください (docs/install-windows.md)'
@@ -539,8 +539,8 @@ function Install-Agent([string]$Ref) {
 
     # 起こす .cmd。環境変数はコンテナで既定にしている置き場を Windows の置き場に向け直すものだけ (Mac の plist と同じ。
     # 合言葉は環境変数で渡さず、エージェントが tls\pair-token から読む。Get-PairToken)。
-    # **落ちたら5秒置いて起こし直す** (タスク スケジューラの「失敗したら再起動」は、終了コードでは効かない)。
-    # ログはここで足していく。**パスに日本語が入りうる**ので、1行目で cmd の文字コードを UTF-8 にしてから読ませる
+    # **落ちたら 5 秒置いて起こし直す** (タスク スケジューラの「失敗したら再起動」は、終了コードでは効かない)。
+    # ログはここで足していく。**パスに日本語が入りうる**ので、1 行目で cmd の文字コードを UTF-8 にしてから読ませる
     # (そのままだとコンソールの文字コードで読み、それはユーザーの設定次第で決め打てない)
     $cmd = "$Prefix\denpa-agent.cmd"
     $vars = [ordered]@{

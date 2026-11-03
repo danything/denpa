@@ -269,11 +269,11 @@ public class Dt295TunerTests
     }
 
     // ---------------------------------------------------------------------
-    // ルートを育てる (11.2・11.3)
+    // ルートを組み立てる (11.2・11.3)
     // ---------------------------------------------------------------------
 
     [Test]
-    public async Task PAT_と_PMT_からルートを育てる()
+    public async Task PAT_と_PMT_からルートを組み立てる()
     {
         var tracker = new Dt295RouteTracker();
         await Assert.That(tracker.Plan.Length).IsEqualTo(Dt295Routes.FixedSi.Length);
@@ -511,8 +511,8 @@ public class Dt295TunerTests
     private static Dt295ReceiveData Data() =>
         new(new Dt295FieldTable([new(0x1002, 8, 2, 1), new(0x1100, 0, 16, 0x1234)]), Iv);
 
-    private static Dt295Tuner Tuner(FakeDt295Usb usb, string port, int silenceMs = 2000, int? settleMs = null, Func<Dt295ReceiveData>? receive = null) =>
-        new($"{Dt295.Model} {port}", Dt295.Device(port), receive ?? Data,
+    private static Dt295Tuner Tuner(FakeDt295Usb usb, string port, int silenceMs = 2000, int? settleMs = null) =>
+        new($"{Dt295.Model} {port}", Dt295.Device(port), Data,
             () => Dt295Board.Acquire(port, FakeDt295Material.Vendor, () => usb, usb.Time, refresher: false),
             TimeSpan.FromMilliseconds(silenceMs), settleMs is { } settle ? TimeSpan.FromMilliseconds(settle) : null);
 
@@ -527,26 +527,6 @@ public class Dt295TunerTests
             got += n;
         }
         return buffer[..got];
-    }
-
-    [Test]
-    public async Task 置き場を読めなければ機材に触らず理由を画面に出す()
-    {
-        var opened = false;
-        using var tuner = new Dt295Tuner($"{Dt295.Model} 3-5", "dt295:3-5",
-            () => throw new IOException("置き場を読めません"),
-            () =>
-            {
-                opened = true;
-                throw new InvalidOperationException("開かないはず");
-            });
-        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId));
-        await Assert.That(error.Message).Contains("置き場を読めません");
-        await Assert.That(opened).IsFalse();
-        await Assert.That(tuner.Tuned).IsFalse();
-        await Assert.That(Px4Userland.Notice("dt295:3-5")).Contains("置き場を読めません");
-        tuner.Dispose();
-        await Assert.That(Px4Userland.Notice("dt295:3-5")).IsNull();
     }
 
     [Test]

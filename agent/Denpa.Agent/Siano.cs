@@ -15,16 +15,16 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 設定の <c>device</c> は <c>siano:&lt;USB のポート&gt;</c> (<c>siano:1-2.3</c>。S1UD にはシリアルが無い)。
-/// 刺さっていれば <see cref="Detect"/> が見つけて組み立てるので、普通は書かなくてよい。
+/// 挿さっていれば <see cref="Detect"/> が見つけて組み立てるので、普通は書かなくてよい。
 /// </para>
 /// </summary>
 public static class SianoUserland
 {
-    /// <summary>設定の <c>device</c> の頭。これで始まっていれば siano-userland で使う</summary>
+    /// <summary>設定の <c>device</c> の接頭辞。これで始まっていれば siano-userland で使う</summary>
     public const string Scheme = "siano:";
 
     /// <summary>
-    /// 刺さっている 1 台。<c>Types</c> は受けられる方式 (siano-ts --list の受信機の行)、
+    /// 挿さっている 1 台。<c>Types</c> は受けられる方式 (siano-ts --list の受信機の行)、
     /// <c>Driver</c> はどれかのインターフェースを使っているドライバ (無ければ null)
     /// </summary>
     public sealed record Stick(string Port, string Model, string[] Types, string? Driver);
@@ -56,7 +56,7 @@ public static class SianoUserland
     public static string Name(string model, string port) => $"{model} {port}";
 
     /// <summary>
-    /// 刺さっている機材。**カーネルが使っているものも挙げる** (<c>Driver</c> で分かる)。
+    /// 挿さっている機材。**カーネルが使っているものも挙げる** (<c>Driver</c> で分かる)。
     ///
     /// <para>
     /// 機材は <c>siano-ts --list</c> に聞く (siano-userland 0.1.7 から)。USB ID の表は持たず、
@@ -173,11 +173,11 @@ public static class SianoUserland
     {
         // Windows は libusb が WinUSB 越しにしか開けない。ドライバが違えば開くところで落ちる
         1 or 4 when OperatingSystem.IsWindows() =>
-            " — チューナーのドライバが WinUSB になっていないか、別のプロセスが使っています (Zadig で WinUSB に。docs/install-windows.md)",
-        3 => " — そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
-        4 => " — カーネルのドライバ (smsusb) か別のプロセスが使っています。/dev/dvb に出ていればそちらで使えます。"
+            "。チューナーのドライバが WinUSB になっていないか、別のプロセスが使っています (Zadig で WinUSB に。docs/install-windows.md)",
+        3 => "。そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
+        4 => "。カーネルのドライバ (smsusb) か別のプロセスが使っています。/dev/dvb に出ていればそちらで使えます。"
             + "siano-userland で使うなら smsusb / smsdvb / smsmdtv を blacklist して再起動してください",
-        10 => " — ファームウェアが無いか壊れています",
+        10 => "。ファームウェアが無いか壊れています",
         _ => "",
     };
 }
@@ -475,7 +475,7 @@ public sealed class SianoTuner : ITuneDevice
     /// **<c>quit</c> を読ませる間は標準出力を読み捨てる** (<see cref="Retune"/> と同じ理由)。
     /// 誰も読まないと siano-ts は書くところで止まって <c>quit</c> を読みに来ない。
     /// Linux / macOS は SIGTERM で抜けられるが、**Windows には SIGTERM が無く**、読まれなければ
-    /// Kill (TerminateProcess) になる — USB は OS が閉じるが、siano-ts の後始末は飛ぶ
+    /// Kill (TerminateProcess) になる。USB は OS が閉じるが、siano-ts の後始末は飛ぶ
     /// </para>
     /// </summary>
     private void Drop()
@@ -523,7 +523,7 @@ public sealed class SianoTuner : ITuneDevice
         }
         catch (IOException)
         {
-            // 子がもういないと、書き残した quit を吐き出すところで投げる
+            // 子がもういないと、書き残した quit を書き出すところで投げる
         }
         process.Dispose();
     }

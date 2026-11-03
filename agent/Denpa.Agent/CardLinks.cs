@@ -10,7 +10,7 @@ public static class CardLinks
     ///
     /// <para>
     /// 内蔵リーダーは px4d の向こうにあり、1 回ごとにソケットを 1 往復する。
-    /// 両方にカードが刺さっているなら、直接扱えるほうを使う。
+    /// 両方にカードが挿さっているなら、直接扱えるほうを使う。
     /// </para>
     ///
     /// <para>
@@ -25,7 +25,7 @@ public static class CardLinks
         : [.. OperatingSystem.IsLinux() ? Ccid.Find() : PcscLink.Find(), .. Px4Card.Find(), .. AsicenUserland.Cards(), .. Zd1j.Cards()];
 
     /// <summary>
-    /// カードが刺さっていて INT に答えた最初のリーダーで B-CAS を開く。どれも駄目なら投げる。
+    /// カードが挿さっていて INT に答えた最初のリーダーで B-CAS を開く。どれも駄目なら投げる。
     /// 繋ぎ直すときも <see cref="Find"/> から探し直す (<see cref="BCas.Open"/>)
     /// </summary>
     public static BCas Open() => BCas.Open(Find);

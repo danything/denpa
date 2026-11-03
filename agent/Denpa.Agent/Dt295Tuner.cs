@@ -5,14 +5,14 @@ using System.IO.Pipelines;
 namespace Denpa.Agent;
 
 /*
- * PIX-DT295 をチューナーとして持つところ (TunerPool から使う)。**試験的。** 節の番号は DT295 の仕様書のもの (Dt295.cs の頭)。
+ * PIX-DT295 をチューナーとして持つところ (TunerPool から使う)。**試験的。** 節の番号は DT295 の仕様書のもの (Dt295.cs の冒頭)。
  *
  * - Dt295Board: 1 台ぶんの USB・ASSP・認証セッション。開くときに起動 (エラーの状態なら復帰) と認証とカードの活性化まで済ませ、
- *   30 秒ごとの更新 (5.6) を専用のスレッドで回す。ASSP の制御 (control 転送) は全部 Gate の中で 1 つずつ。
+ *   30 秒ごとの更新 (5.6) を専用のスレッドで回す。ASSP の制御 (control 転送) は全部 Locked の中で 1 つずつ。
  *   閉じるときは idle イメージを書き戻して未認証のアイドルに戻す (5.7)。
- * - Dt295Stream: TRC で受信する 1 回ぶん (9.2〜9.9)。EP 0x81 を読んで 188 バイトずつ確かめて AES を外し (10.2・10.3)、溜め (Pipe) に詰める。
- *   暗号化されていない PSI からルートの計画を育て (Dt295RouteTracker)、足すだけなら受信中に足し (9.8)、そうでなければ準備し直す (9.10)。
- * - Dt295Tuner: ITuneDevice。受信に要るもの (Dt295Receive) が揃っていなければ、機材に触る前に断る。
+ * - Dt295Stream: TRC で受信する 1 回ぶん (9.2〜9.9)。EP 0x81 を読んで 188 バイトずつ確かめて AES を外し (10.2・10.3)、Pipe に詰める。
+ *   暗号化されていない PSI からルートの計画を組み立て (Dt295RouteTracker)、足すだけなら受信中に足し (9.8)、そうでなければ準備し直す (9.10)。
+ * - Dt295Tuner: ITuneDevice。ボードは初めての選局で開き、手順の途中で失敗したら次の選局で開き直す。
  */
 
 /// <summary>
@@ -31,6 +31,8 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     private readonly byte[] _carry = new byte[PacketSize];
     private int _carried;
 
+    private bool _synced;
+
     /// <summary>渡したパケットの数</summary>
     public long Packets { get; private set; }
 
@@ -40,8 +42,6 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
         _carried = 0;
         _synced = false;
     }
-
-    private bool _synced;
 
     /// <summary>最初の読みで、先頭に混じった古い切れ端を飛ばす範囲 (パケット数)。見分けに使う並びの長さでもある</summary>
     private const int AlignSpan = 32;
@@ -156,7 +156,7 @@ public sealed class Dt295Board : IDisposable
     /// <summary>機器の状態が分からなくなった (更新の失敗・手順の途中の失敗)。もう選局しない。閉じて開き直す</summary>
     public string? Fault { get; private set; }
 
-    /// <summary>受信している (6.4 のカードの見張りは受信していないときだけ)</summary>
+    /// <summary>受信している (6.4 のカードの確認は受信していないときだけ)</summary>
     public bool Receiving { get; internal set; }
 
     /// <summary>冷えた状態から開くのにかかった時間 (ms)</summary>
@@ -363,7 +363,7 @@ public sealed class Dt295Board : IDisposable
 }
 
 /// <summary>
-/// TRC で受信する 1 回ぶん。EP 0x81 の読みを出しっぱなしにして (10.1)、<see cref="Dt295TsFilter"/> を通して溜め (8MB) に詰める。
+/// TRC で受信する 1 回ぶん。EP 0x81 の読みを出しっぱなしにして (10.1)、<see cref="Dt295TsFilter"/> を通して Pipe (8MB) に詰める。
 /// 読み出し側は <see cref="DeviceStream"/> (CECH-ZD1 J・px4d と同じ形)
 /// </summary>
 internal sealed class Dt295Stream
@@ -679,12 +679,10 @@ public sealed class Dt295Tuner : ITuneDevice
         lock (_gate)
         {
             StopStream();
-            Dt295ReceiveData data;
+            var data = _receive();
             Dt295Board board;
             try
             {
-                // 置き場の読み込みに失敗したら、機材に触らずに断る
-                data = _receive();
                 if (_board is { Fault: not null } broken)
                 {
                     broken.Dispose();
@@ -695,29 +693,28 @@ public sealed class Dt295Tuner : ITuneDevice
             }
             catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
             {
-                // 受信に要るもの・メーカーのデータが無い、開けない、認証できない。空いているときも画面に出す
+                // メーカーのデータが無い、開けない、認証できない。空いているときも画面に出す
                 Px4Userland.SetNotice(_device, this, error.Message);
                 throw new IOException(error.Message, error);
             }
 
             var routes = new Dt295RouteTracker(needCat: !tuning.Satellite);
-            void TuneNow() => board.Locked(() =>
-            {
-                board.CheckCard();
-                if (tuning.Satellite)
-                {
-                    int? tsid = streamId == ChannelTable.NoStreamId ? null : (int)streamId;
-                    // TSID を指していなければ、その中継器の先頭の TS (スロット 0)
-                    board.Frontend.TuneSatellite(tuning.Frequency * 1000L, 0, tsid);
-                }
-                else
-                {
-                    board.Frontend.TuneTerrestrialHz(tuning.Frequency);
-                }
-            });
             try
             {
-                TuneNow();
+                board.Locked(() =>
+                {
+                    board.CheckCard();
+                    if (tuning.Satellite)
+                    {
+                        int? tsid = streamId == ChannelTable.NoStreamId ? null : (int)streamId;
+                        // TSID を指していなければ、その中継器の先頭の TS (スロット 0)
+                        board.Frontend.TuneSatellite(tuning.Frequency * 1000L, 0, tsid);
+                    }
+                    else
+                    {
+                        board.Frontend.TuneTerrestrialHz(tuning.Frequency);
+                    }
+                });
                 _stream = Dt295Stream.Start(board, data, routes, _name, () => Task.Run(Stall), _silence, _settle);
             }
             catch (Dt295Exception error) when (error.Message == Dt295Frontend.NoLock)

@@ -28,7 +28,7 @@ public static class Mb86h47Programs
     public const uint WriteContinue = 0xE9E2E;
 
     /// <summary>主 CPU のルーチン 1 つぶん (読む側と書く側を同じバンクに並べる)</summary>
-    /// <param name="Words">置く語 (バンクの頭から)</param>
+    /// <param name="Words">置く語 (バンクの先頭から)</param>
     /// <param name="Read">読む側の入口</param>
     /// <param name="Write">書く側の入口</param>
     public sealed record Routine(uint[] Words, uint Read, uint Write, string Listing);
@@ -49,7 +49,7 @@ public static class Mb86h47Programs
         var asm = new Fr30Assembler(origin);
         asm.Label("read");
         AddressingSide(asm, "r", R8, ReadContinue, clear: false);
-        // 書く側の入口を語の頭に揃える (置くのは 32 ビットずつ)
+        // 書く側の入口を語の先頭に揃える (置くのは 32 ビットずつ)
         if ((asm.Here & 2) != 0) asm.Nop();
         asm.Label("write");
         AddressingSide(asm, "w", R10, WriteContinue, clear: true);
@@ -267,13 +267,13 @@ public static class Mb86h47Programs
      *   〜0xA37FC        スタック (下へ)
      *   0xA3C00 (箱)     +0x78 bulk の塊を見るか (BulkEnable のときだけ見る)、+0x7C 生きている印 (仕様書 5.4)
      *   0xA3C80〜        コア 1 の作業用
-     *   0xA3D00          bulk の答えを組む所 (+0 と +4 が頭、+8 から読んだバイト)
+     *   0xA3D00          bulk の答えを組む所 (+0 と +4 がヘッダ、+8 から読んだバイト)
      *
-     * 指示は bulk の塊だけで受ける (仕様書 5.5。ほかの形をやめた理由は Mb86h47.cs の頭)。EP 0x02 で 512 バイトの塊を送ると、
+     * 指示は bulk の塊だけで受ける (仕様書 5.5。ほかの形をやめた理由は Mb86h47.cs の冒頭)。EP 0x02 で 512 バイトの塊を送ると、
      * ブリッジの DMA が 0x82100000 から順に 16 個置く。
      * 塊 = +0 通し番号 (0 でない)、+4 命令の数、+8 から命令、+508 = 通し番号をもう一度 (最後まで届いた印)。
      * 命令: 0x01 アドレス 書く数 読む数 (+ 書くバイトを語に詰めて) / 0x02 アドレス 番号の上位 番号の下位 + 残す 16・立てる 16
-     * (2 バイトの番号のレジスタの読みかえ書き)。済ませたら塊の頭と終わりを 0 にし、答えを EP 0x83 で返す:
+     * (2 バイトの番号のレジスタの読みかえ書き)。済ませたら塊の先頭と終わりを 0 にし、答えを EP 0x83 で返す:
      * +0 = 0xA5・通し番号の下位 16・誤り、+4 = 済ませた命令の数 16・読んだバイト数 16、+8 から読んだバイト (56 バイトまで)
      *
      * 誤りの番号 (仕様書 5.4 と同じ): 0 = 成功、1 = バスエラー、2 = アドレスに ACK 無し、3 = データに ACK 無し、4 = 固まった。
@@ -284,7 +284,7 @@ public static class Mb86h47Programs
     public const int BoxBulkEnable = 0x78;
     public const int BoxAlive = 0x7C;
 
-    /// <summary>箱の +0x78 にこの値があるときだけ bulk の塊を見る (DMA を用意して塊の頭を消してから書く)</summary>
+    /// <summary>箱の +0x78 にこの値があるときだけ bulk の塊を見る (DMA を用意して塊の先頭を消してから書く)</summary>
     public const uint BulkEnable = 0xB01C0DE5;
 
     /// <summary>bulk の塊を置く所 (512 バイト × 16。仕様書 5.5)</summary>
@@ -337,7 +337,7 @@ public static class Mb86h47Programs
         asm.Lsl(9, R0);
         asm.Ldi(BulkBuffer, R1);
         asm.Add(R1, R0);                   // R0 = 塊
-        asm.Ld(R0, R2);                    // 頭の通し番号
+        asm.Ld(R0, R2);                    // 先頭の通し番号
         asm.CmpI(0, R2);
         asm.Far(Fr30Cond.Eq, "main", R12);
         asm.Mov(R0, R1);
@@ -452,14 +452,14 @@ public static class Mb86h47Programs
         asm.Far(Fr30Cond.Ra, "b_loop", R12);
 
         asm.Label("b_done");
-        // R0 = 誤り。塊の頭と終わりを消す (次の周回で古い塊を新しいものと見ないように)
+        // R0 = 誤り。塊の先頭と終わりを消す (次の周回で古い塊を新しいものと見ないように)
         asm.LdFp(VarChunk, R1);
         asm.Ldi8(0, R2);
         asm.St(R2, R1);
         asm.Ldi(BulkChunk - 4, R3);
         asm.Add(R3, R1);
         asm.St(R2, R1);
-        // 答えの頭
+        // 答えのヘッダ
         asm.LdFp(VarSequence, R2);
         asm.Lsl(16, R2);
         asm.Lsr(8, R2);
@@ -505,7 +505,7 @@ public static class Mb86h47Programs
      *           R0〜R3・R5〜R7・R12・R13 を壊す (R4 は残す)
      * send:     R1 = バイト、R2 = 制御。出 R0 = 0 成功 / 1 バスエラー / 4 固まった / 5 ACK 無し。R1・R12 を壊す
      * idle:     使用中 (状態の bit7) が落ちるまで待つ。出 R0 = 0 / 4
-     * R13 = I2C マスターの頭 (0xFD8FE0)。+0 状態、+4 制御、+0x10 データ
+     * R13 = I2C マスターの先頭アドレス (0xFD8FE0)。+0 状態、+4 制御、+0x10 データ
      */
     private static void I2cRoutines(Fr30Assembler asm)
     {

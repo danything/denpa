@@ -5,7 +5,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// B-CAS は <c>3B F0 12 00 FF 91 81 B1 7C 45 1F 03 99</c>。TA2 (<c>81</c>) があるので
-/// **specific mode** — カードは ATR の直後から TA1 (<c>12</c> = Fi 372 / Di 2) の速さで話す。
+/// **specific mode** で、カードは ATR の直後から TA1 (<c>12</c> = Fi 372 / Di 2) の速さで話す。
 /// PPS は要らないが、読み取り機にその速さを教えないと話が通じない (<see cref="CcidLink"/>)。
 /// T=1 用の値は TD2 が T=1 を示したあとの TA3 (IFSC = 0x7C) と TB3 (BWI 4 / CWI 5)。
 /// </para>
@@ -134,13 +134,13 @@ public sealed record Atr(
 /// </summary>
 public sealed class T1Protocol
 {
-    /// <summary>1 つのブロックを諦めるまでに再送を求める回数</summary>
+    /// <summary>1 つのブロックについて、投げるまでに再送を求める回数</summary>
     private const int MaxRetries = 3;
 
     /// <summary>
     /// 1 つの APDU のあいだに受ける S(WTX) / S(IFS) の上限。**これが無いと、求め続ける
-    /// カードで永久に返らない** — カードは 1 枚を全チューナーで共有しているので、1 本が
-    /// ここで止まると全部の復号が道連れになる。B-CAS の ECM は普通 1〜2 回で済む
+    /// カードで永久に返らない。** カードは 1 枚を全チューナーで共有しているので、1 本が
+    /// ここで止まると全部の復号が止まる。B-CAS の ECM は普通 1〜2 回で済む
     /// </summary>
     private const int MaxSupervisory = 16;
 

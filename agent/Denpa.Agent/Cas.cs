@@ -3,7 +3,7 @@ namespace Denpa.Agent;
 /*
  * B-CAS まわりの境目。**libaribb25 も pcscd も使わない。**
  *
- * 3 段に分けてある。上から:
+ * 上から順に 3 段に分けてある。
  *
  * - Descrambler … TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する (B25.cs / Multi2.cs)
  * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (LocalCard → BCas.cs) か、別の拠点 (RemoteCard)。どちらも CardShare.cs
@@ -32,9 +32,8 @@ public readonly record struct EcmAnswer(byte[] Odd, byte[] Even, int Code, bool 
 /// (順番に通すのは実装の側)。
 ///
 /// <para>
-/// 失敗は投げる (<see cref="IOException"/>)。繋ぎ直せるものは中で繋ぎ直してから
-/// 投げる — カードを抜き差ししたり px4d を起こし直したりしても、次の ECM では
-/// 読めているのが正しい。
+/// 失敗は投げる (<see cref="IOException"/>)。カードを抜き差ししたり px4d を起こし直したりしても
+/// 次の ECM では読めているように、繋ぎ直せるものは中で繋ぎ直してから投げる。
 /// </para>
 /// </summary>
 public interface IKeySource
@@ -50,7 +49,7 @@ public interface IKeySource
 public sealed class CardAbsentException(string message) : IOException(message);
 
 /// <summary>
-/// どのリーダーでもカードを読めなかった。**リーダーごとの理由を持つ** — 画面の表は
+/// どのリーダーでもカードを読めなかった。**リーダーごとの理由を持つ。** 画面の表は
 /// これをそのまま行にする (文を切り分けて読み直さない)
 /// </summary>
 public sealed class CardsUnreadableException(IReadOnlyList<CardsUnreadableException.Reader> readers)

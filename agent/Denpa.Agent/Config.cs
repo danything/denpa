@@ -86,7 +86,7 @@ public sealed record TunerSpec(
 /// <para>
 /// 中身を作るのはどちらもこちらではない。総当たりの選局こそ任されるが、NIT も
 /// SDT も解析しないので「何があったか」は分からない。それでも控えを持つのはこちら側
-/// にする — アンテナに何が映るかも、何台刺さっているかも、機材ごとの話だから。
+/// にする。アンテナに何が映るかも、何台挿さっているかも、機材ごとの話だから。
 /// </para>
 /// </summary>
 public sealed class Config(string tunersFile, string channelsFile)
@@ -112,7 +112,7 @@ public sealed class Config(string tunersFile, string channelsFile)
 
     /// <summary>
     /// 変数が無いときの置き場。Linux はコンテナの <c>/config</c>。Mac と Windows はインストーラと同じ
-    /// <c>DENPA_HOME</c> (既定 <c>~/denpa</c>) の <c>config</c> — 常駐を止めて手で <c>--tune</c> などを流したときに、
+    /// <c>DENPA_HOME</c> (既定 <c>~/denpa</c>) の <c>config</c>。常駐を止めて手で <c>--tune</c> などを流したときに、
     /// 書けない <c>/config</c> を見に行かず、常駐と同じファイルを使う
     /// </summary>
     private static string DefaultDir() => OperatingSystem.IsLinux()
@@ -195,7 +195,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     /// 機材を決める。**書いてあればそれ、無ければ自分で見つける。**
     ///
     /// <para>
-    /// 自動で分かるのは「刺さっているデバイスと、それが受けられる方式」だけ。
+    /// 自動で分かるのは「挿さっているデバイスと、それが受けられる方式」だけ。
     /// LNB を足したい・1 台だけ止めたい、は人にしか決められないので、そのときは画面から書く。
     /// </para>
     /// </summary>
@@ -207,7 +207,7 @@ public sealed class Config(string tunersFile, string channelsFile)
         var found = DeviceProbe.Detect();
         Log.Write(found.Count == 0
             ? $"チューナーが見つかりません ({TunersFile} に書けば、そちらを使います)"
-            : $"{TunersFile} に定義が無いので、刺さっている機材を使います:");
+            : $"{TunersFile} に定義が無いので、挿さっている機材を使います:");
         foreach (var tuner in found) Log.Write($"  {tuner.Name} [{string.Join(", ", tuner.Types)}] {tuner.Device}");
         return (found, true);
     }

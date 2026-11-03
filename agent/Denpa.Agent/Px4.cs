@@ -14,23 +14,23 @@ namespace Denpa.Agent;
 /// <para>
 /// **カーネルドライバを入れてもらわない。** px4-userland は libusb だけで USB を扱うユーザー空間のドライバで、
 /// 同梱すれば <c>/dev/bus/usb</c> が見えるだけで動く。<c>px4d</c> が筐体 (USB 機能・受信機・カード) を持ち、
-/// 受信機は px4d の制御ソケットで直に取って選局する (<see cref="Px4Tuner"/>)。**機種のことは何も持たない** —
-/// 刺さっている筐体と受けられる方式は <c>px4d --list-json</c> に聞く (<see cref="Enclosures"/>)。
+/// 受信機は px4d の制御ソケットで直に取って選局する (<see cref="Px4Tuner"/>)。**機種のことは何も持たない。**
+/// 挿さっている筐体と受けられる方式は <c>px4d --list-json</c> に聞く (<see cref="Enclosures"/>)。
 /// 作りは docs/agent.md「px4-userland の作り」。
 /// </para>
 ///
 /// <para>
 /// 設定の <c>device</c> には <c>px4:&lt;筐体の番号&gt;:&lt;受信機番号&gt;</c> と書く。
-/// 刺さっていれば <see cref="Detect"/> が見つけて組み立てるので、普通は書かなくてよい。
+/// 挿さっていれば <see cref="Detect"/> が見つけて組み立てるので、普通は書かなくてよい。
 /// </para>
 /// </summary>
 public static class Px4Userland
 {
-    /// <summary>設定の <c>device</c> の頭。これで始まっていれば px4-userland で使う</summary>
+    /// <summary>設定の <c>device</c> の接頭辞。これで始まっていれば px4-userland で使う</summary>
     public const string Scheme = "px4:";
 
     /// <summary>
-    /// 刺さっている筐体 1 台。
+    /// 挿さっている筐体 1 台。
     ///
     /// <para>
     /// <c>Id</c> は設定の <c>px4:&lt;Id&gt;:&lt;受信機&gt;</c> に入る名前で、px4d のソケットの置き場の名前でもある。
@@ -176,13 +176,13 @@ public static class Px4Userland
     /// <c>px4:00001205000960:2</c> を割る。形式が違えば null。
     ///
     /// <para>
-    /// 番号の桁数や受信機の上限は見ない。**それを知っているのは px4-userland** で、
+    /// 番号の桁数や受信機の上限は見ない。**それを決めるのは px4-userland** で、
     /// 合わなければ px4d が理由を付けて断る。
     /// </para>
     /// </summary>
     public static (string Id, int Receiver)? Parse(string device) => Parse(device, Scheme, ValidId);
 
-    /// <summary><c>&lt;頭&gt;&lt;筐体&gt;:&lt;受信機&gt;</c> を割る (<c>asicen:</c> も同じ形式)。形式が違えば null</summary>
+    /// <summary><c>&lt;接頭辞&gt;&lt;筐体&gt;:&lt;受信機&gt;</c> を割る (<c>asicen:</c> も同じ形式)。形式が違えば null</summary>
     internal static (string Id, int Receiver)? Parse(string device, string scheme, Func<string, bool> validId)
     {
         if (!device.StartsWith(scheme, StringComparison.Ordinal)) return null;
@@ -220,7 +220,7 @@ public static class Px4Userland
     public static string Name(string model, string id, int receiver) => $"{model}-{Label(id)} #{receiver}";
 
     /// <summary>
-    /// 刺さっている筐体。**<c>px4d --list-json</c> に聞く。**
+    /// 挿さっている筐体。**<c>px4d --list-json</c> に聞く。**
     ///
     /// <para>
     /// 読むだけで筐体を開かないので、px4d が動いていても聞ける。px4-userland が
@@ -258,7 +258,7 @@ public static class Px4Userland
     /// <para>
     /// <c>{"enclosures":[{serial, model, usb, status, serial_unique, devices, candidates, receivers}],
     /// "ungrouped_usb_devices":[…]}</c> の 1 行。<c>schema_version</c> は無く、消費側は知らない鍵を
-    /// 無視する決まり。**形式が違っても止まらない** — 無い鍵・型の違う値は既定で埋めて読み進め、
+    /// 無視する決まり。**形式が違っても止まらない。** 無い鍵・型の違う値は既定で埋めて読み進め、
     /// バージョンのずれを疑う旨を 1 度だけ <paramref name="warn"/> で残す。止めるのは筐体の番号と受信機の番号
     /// (それが無いと <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> が作れない) が読めないときだけで、それも
     /// その筐体・受信機だけを飛ばす。
@@ -333,7 +333,7 @@ public static class Px4Userland
                     : default).ToList();
                 if (places.Count is 0 or > 2 || places.Any(place => place.Path is null))
                 {
-                    warn($"{model} {id} は使えません。同じ番号の筐体がほかにも刺さっていて、USB ポートも分からないので"
+                    warn($"{model} {id} は使えません。同じ番号の筐体がほかにも挿さっていて、USB ポートも分からないので"
                         + $"見分けられません (serial_unique=false{where})");
                     continue;
                 }
@@ -514,16 +514,16 @@ public static class Px4Userland
     /// </summary>
     public static string Hint(int code) => code switch
     {
-        2 => " — 引数かランタイムルートが合いません (同じ番号の筐体が並んでいる・ソケットのパスが長い・権限が合わない)",
-        3 when OperatingSystem.IsWindows() => $" — 筐体が見つからないか開けません。抜けたか、{WinUsbHint}",
-        3 => " — 筐体が見つからないか開けません (抜けたか、別のプロセスが使っている?)",
-        4 => " — 同じ筐体の px4d がほかに動いています",
-        7 => " — USB の読み書きに失敗しました (抜けた?)。次の選局で起こし直します",
-        10 => " — ファームウェアを受け付けません (入れ直してください)",
+        2 => "。引数かランタイムルートが合いません (同じ番号の筐体が並んでいる・ソケットのパスが長い・権限が合わない)",
+        3 when OperatingSystem.IsWindows() => $"。筐体が見つからないか開けません。抜けたか、{WinUsbHint}",
+        3 => "。筐体が見つからないか開けません (抜けたか、別のプロセスが使っている?)",
+        4 => "。同じ筐体の px4d がほかに動いています",
+        7 => "。USB の読み書きに失敗しました (抜けた?)。次の選局で起こし直します",
+        10 => "。ファームウェアを受け付けません (入れ直してください)",
         _ => "",
     };
 
-    /// <summary>刺さっている筐体の受信機を、設定に書いたのと同じ形式で</summary>
+    /// <summary>挿さっている筐体の受信機を、設定に書いたのと同じ形式で</summary>
     public static List<TunerSpec> Detect() => Specs(Enclosures());
 
     /// <summary>筐体の一覧から、設定の形式に組み立てる</summary>
@@ -610,7 +610,7 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bo
     /// <para>
     /// <c>receiver=0 device=1 local=0 system=ISDB-S</c> の行が受信機の数だけ並ぶ。
     /// <c>system</c> は <c>ISDB-T</c> / <c>ISDB-S</c> / <c>ISDB-T/S</c> (どちらも)。
-    /// **知らない値は飛ばして続ける** — px4-userland が新しくなって方式が増えても、
+    /// **知らない値は飛ばして続ける。** px4-userland が新しくなって方式が増えても、
     /// 分かる受信機は使えるように。飛ばしたことは <paramref name="warn"/> で残す。
     /// </para>
     /// </summary>
@@ -897,7 +897,7 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
         if (Running) return;
         /*
          * **15V を出せるかは起こす前に一覧で聞いておく。** px4ctl list (LIST) には載らない。
-         * 一覧は筐体を開かないが、起こしたあとだと OS によっては開けない。ロックの外で聞く —
+         * 一覧は筐体を開かないが、起こしたあとだと OS によっては開けない。ロックの外で聞く。
          * 一覧は最悪 15 秒待つので、ロックの中だとその間 Dispose も選局も待たされる。
          * 使えない筐体の理由は Detect が残すので、ここでは黙る
          */
@@ -1027,7 +1027,7 @@ public sealed class Px4Tuner : ITuneDevice
     private readonly Func<IReadOnlyList<Px4Receiver>?> _prepare;
     private readonly string _name;
 
-    /// <summary>話す相手 (px4d か asicend)。IPC は同じで、枠の頭とソケットの置き場だけ違う</summary>
+    /// <summary>話す相手 (px4d か asicend)。IPC は同じで、枠のヘッダとソケットの置き場だけ違う</summary>
     private readonly Px4Wire _wire;
 
     /// <summary>設定の <c>device</c> (注意書きの鍵。<see cref="Px4Userland.Notice"/>)</summary>
@@ -1053,7 +1053,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// 区切りは筐体 (制御ソケット) 単位。どの受信機が同じキューかは px4d の中の作りなので当てにしない
     /// (Q3U4 のようにキューが 2 つある筐体でも、ブリッジをまたいだ選局が少し待つだけ)。
     /// START_STREAM から ATTACH_STREAM までは px4d が 5 秒しか待たないので、その間も放さない。
-    /// 閉じるとき (<see cref="Dispose"/>) は並ばない — 答えが来なくても接続を閉じれば px4d が返すし、
+    /// 閉じるとき (<see cref="Dispose"/>) は並ばない。答えが来なくても接続を閉じれば px4d が返すし、
     /// <c>TunerPool</c> のロックを持ったまま呼ばれるので、ほかの受信機の選局を待つと取り合いごと止まる。
     /// カード (Px4Card.cs) は px4d の別のキューなので入れない
     /// </para>
@@ -1120,7 +1120,7 @@ public sealed class Px4Tuner : ITuneDevice
     internal TimeSpan StallLimit { get; init; } = Px4Stream.DefaultStallLimit;
 
     /// <summary>
-    /// 流している間に STATS を聞く間隔。**誤りが増えたときだけ記録に残す** — 画面で途切れたとき、
+    /// 流している間に STATS を聞く間隔。**誤りが増えたときだけ記録に残す。** 画面で途切れたとき、
     /// 受信機の側で落ちていたのか、届き方が揺れただけなのかを見分ける (#1210)
     /// </summary>
     internal TimeSpan StatsEvery { get; init; } = TimeSpan.FromSeconds(30);
@@ -1128,7 +1128,7 @@ public sealed class Px4Tuner : ITuneDevice
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
     /// <summary>
-    /// 受信機を取っていて、TS がまだ流れているか。**ロックの下で読む** — <c>Dispose</c> は別の
+    /// 受信機を取っていて、TS がまだ流れているか。**ロックの下で読む。** <c>Dispose</c> は別の
     /// ロック (<c>TunerPool._deviceGate</c>) から来るので、畳んでいる最中のものに触らないように
     /// </summary>
     public bool Tuned
@@ -1174,7 +1174,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// <para>
     /// 取っていたはずの接続が切れていた (px4d が起こし直された・lease が無い) ときは、
     /// その場で 1 度だけ取り直して続ける。同期しなかった (TIMEOUT) ときは受信機を取ったまま
-    /// 投げる — 総当たりのスキャンは同期しないチャンネルのほうが多く、そのたびに返すと
+    /// 投げる。総当たりのスキャンは同期しないチャンネルのほうが多く、そのたびに返すと
     /// 電源の入れ直しからやり直しになる。
     /// </para>
     /// </summary>
@@ -1235,7 +1235,7 @@ public sealed class Px4Tuner : ITuneDevice
 
     /// <summary>
     /// 制御ソケットごと失くした (px4d のエラーの答えではない、または lease がもう無い)。
-    /// **TS のストリームの失敗 (<see cref="Px4StreamError"/>) は入れない** — 制御ソケットは生きていて、
+    /// **TS のストリームの失敗 (<see cref="Px4StreamError"/>) は入れない。** 制御ソケットは生きていて、
     /// 黙って取り直すと「接続が切れていた」と嘘の記録が残る
     /// </summary>
     private static bool Lost(IOException error) => error switch
@@ -1369,7 +1369,7 @@ public sealed class Px4Tuner : ITuneDevice
 
     /// <summary>
     /// STATS を 1 回聞く。**制御ソケットは選局と同じロックの下で使う** (1 本で同時に 1 つしか送れない)。
-    /// 聞けなくても流れは止めない — 繋がりの不具合なら次の選局が見つける
+    /// 聞けなくてもストリームは止めない。接続の不具合なら次の選局が見つける
     /// </summary>
     private void PollStats()
     {
@@ -1426,7 +1426,7 @@ public sealed class Px4Tuner : ITuneDevice
         stream?.Stop();
     }
 
-    /// <summary>受信機を返して閉じる。**失敗しても構わない** — 接続を閉じれば px4d の側で返される (SPEC 6.3)</summary>
+    /// <summary>受信機を返して閉じる。**失敗しても構わない。** 接続を閉じれば px4d の側で返される (SPEC 6.3)</summary>
     private void Close()
     {
         StopStats();
@@ -1464,12 +1464,12 @@ public sealed class Px4Tuner : ITuneDevice
 
 /// <summary>
 /// 受信機を取ったままの間に、TS のストリームが駄目だった (ATTACH を断られた・TS が来なかった)。
-/// **受信機は返さない** — 次の選局で同じ lease のまま STOP_STREAM → TUNE からやり直せる
+/// **受信機は返さない。** 次の選局で同じ lease のまま STOP_STREAM → TUNE からやり直せる
 /// </summary>
 internal sealed class Px4StreamError(string message, bool keepsLease) : IOException(message)
 {
     /// <summary>
-    /// 受信機を取ったまま次に進めるか。**ATTACH_STREAM が通っていれば (ストリームが active) 進める** —
+    /// 受信機を取ったまま次に進めるか。**ATTACH_STREAM が通っていれば (ストリームが active) 進める。**
     /// 次の STOP_STREAM で畳める。通らなかったときは px4d の lease が「armed」のまま残り、
     /// TUNE も START_STREAM も BUSY で返るようになる (px4d は armed の期限切れを ATTACH でしか
     /// 見ない) ので、返して取り直すしかない
@@ -1510,7 +1510,7 @@ internal sealed class Px4Stream
     /// </summary>
     private static readonly TimeSpan SilenceLimit = TimeSpan.FromSeconds(5);
 
-    /// <summary>TS_DATA の中身の頭 (u64 sequence, u64 cumulative_drop_count, u32 byte_count)</summary>
+    /// <summary>TS_DATA の中身の先頭 (u64 sequence, u64 cumulative_drop_count, u32 byte_count)</summary>
     private const int TsHeaderSize = 20;
 
     private readonly Socket _socket;

@@ -16,7 +16,7 @@ services:
   denpa:
     image: ghcr.io/danything/denpa:latest
     restart: unless-stopped
-    # compose.prod.yml と同じ。録画中に止めようとすると、録画が終わるまで居座ってから止まる
+    # compose.prod.yml と同じ。録画中に止めようとすると、録画が終わるまで待ってから止まる
     stop_grace_period: 6h5m
     # Docker Desktop と OrbStack は host.docker.internal を最初から引けるが、colima などは
     # 引けないことがある。host-gateway で OS 自身を指しておけば、どれでも通る
@@ -36,7 +36,7 @@ services:
     volumes:
       # DB は名前付きボリュームに置く (SQLite のロックが、OS から見せたフォルダ越しだと当てにならない)
       - denpa-data:/data
-      # 元のTSの置き場は**エージェントと同じ OS のフォルダ** (エージェントの RAW_DIR)。
+      # 元の TS の置き場は**エージェントと同じ OS のフォルダ** (エージェントの RAW_DIR)。
       # 掛かったまま録れたものを後から復号するとき、エージェントが直に読み書きする
       # (置き場からの相対パスでリクエストされる)。HOME はシェルのものなので .env は要らない
       - ${HOME}/Movies/denpa/recorded:/media/raw

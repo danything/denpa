@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 /// <summary>
 /// px4d の制御ソケット 1 本 (px4-userland SPEC 6 節の portable IPC)。
 /// **カード (Px4Card.cs) も受信機 (Px4Tuner) もここで話す。**
-/// asicen-userland の asicend も同じ IPC を話す (違うのは枠の頭とソケットの置き場だけ。<see cref="Px4Wire"/>)。
+/// asicen-userland の asicend も同じ IPC を話す (違うのは枠のヘッダとソケットの置き場だけ。<see cref="Px4Wire"/>)。
 ///
 /// <para>
 /// ソケットは <c>&lt;ランタイムディレクトリ&gt;/px4-userland/&lt;筐体の名前&gt;/control.sock</c>
@@ -158,7 +158,7 @@ internal sealed class Px4Control : IDisposable
         }
     }
 
-    /// <summary>頭に u64 (lease や handle) を置いた中身。残りは 0</summary>
+    /// <summary>先頭に u64 (lease や handle) を置いた中身。残りは 0</summary>
     public static byte[] WithId(ulong id, int length = 8)
     {
         var payload = new byte[length];
@@ -166,7 +166,7 @@ internal sealed class Px4Control : IDisposable
         return payload;
     }
 
-    /// <summary>1 枚ぶんのバイト列 (20 バイトの頭 + 中身)</summary>
+    /// <summary>1 枚ぶんのバイト列 (20 バイトのヘッダ + 中身)</summary>
     public static byte[] Encode(ushort type, ushort flags, uint requestId, ReadOnlySpan<byte> payload, Px4Wire? wire = null)
     {
         var frame = new byte[HeaderSize + payload.Length];
@@ -189,7 +189,7 @@ internal sealed class Px4Control : IDisposable
 
     /// <summary>
     /// 1 枚読む。**長さは受ける前に見る** (崩れた長さのまま確保しない)。
-    /// 頭が崩れている・バージョンが違う・途中で切れた、は IOException
+    /// ヘッダが崩れている・バージョンが違う・途中で切れた、は IOException
     /// </summary>
     public static (ushort Type, ushort Flags, uint RequestId, byte[] Payload) ReadFrame(
         Socket socket, int maxPayload, Px4Wire? wire = null)
@@ -203,7 +203,7 @@ internal sealed class Px4Control : IDisposable
     }
 
     /// <summary>
-    /// 枠の頭 (<see cref="HeaderSize"/> バイト) だけ読んで確かめる。中身 (<c>Length</c> バイト) はまだソケットに残っている —
+    /// 枠のヘッダ (<see cref="HeaderSize"/> バイト) だけ読んで確かめる。中身 (<c>Length</c> バイト) はまだソケットに残っている。
     /// TS_DATA は中身を呼んだ側の溜めに直に受ける (<see cref="Px4Stream"/>。枠ごとに byte[] を作らない)
     /// </summary>
     public static (ushort Type, ushort Flags, uint RequestId, int Length) ReadHeader(
@@ -213,7 +213,7 @@ internal sealed class Px4Control : IDisposable
         Receive(socket, header, wire);
         if (!header[..4].SequenceEqual(wire.Magic))
         {
-            throw new IOException($"{wire.Daemon} の答えの頭が {Encoding.ASCII.GetString(wire.Magic)} ではありません");
+            throw new IOException($"{wire.Daemon} の答えのヘッダが {Encoding.ASCII.GetString(wire.Magic)} ではありません");
         }
         var major = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
         var minor = BinaryPrimitives.ReadUInt16LittleEndian(header[6..]);
@@ -295,13 +295,13 @@ internal sealed class Px4Control : IDisposable
 }
 
 /// <summary>
-/// どちらのデーモンと話すか。**IPC の中身は同じで、違うのは枠の頭 (magic) とソケットの置き場だけ。**
+/// どちらのデーモンと話すか。**IPC の中身は同じで、違うのは枠のヘッダ (magic) とソケットの置き場だけ。**
 ///
 /// <para>
-/// asicen-userland は px4-userland の portable IPC をそのまま取り込み、頭を <c>ASCN</c>、置き場を
+/// asicen-userland は px4-userland の portable IPC をそのまま取り込み、ヘッダの magic を <c>ASCN</c>、置き場を
 /// <c>&lt;ランタイム&gt;/asicen-userland/&lt;instance&gt;/</c> に変えている (上流の docs/cli-adaptation.md と
 /// userland/include/asicen/product_profile.h)。混線させないために分けてあるので、取り違えると
-/// 最初の枠の頭で断られる。
+/// 最初の枠のヘッダで断られる。
 /// </para>
 /// </summary>
 public sealed record Px4Wire(byte[] Magic, string Product, string Daemon)

@@ -43,15 +43,15 @@ public interface IUsbInStream : IDisposable
 /// <summary>機材が抜けた (挿し直すまで使えない)</summary>
 public sealed class UsbGoneException(string message) : IOException(message);
 
-/// <summary>刺さっている機材の場所。<see cref="Port"/> は Linux の sysfs の名前と同じ形 (<c>1-2.3</c>)</summary>
+/// <summary>挿さっている機材の場所。<see cref="Port"/> は Linux の sysfs の名前と同じ形 (<c>1-2.3</c>)</summary>
 /// <param name="Path">OS が開くときに使う名前 (Windows のデバイスのパス・macOS の locationID)</param>
 public sealed record UsbLocation(string Port, string Path);
 
-/// <summary>OS ごとの、刺さっている機材を並べる・開く</summary>
+/// <summary>OS ごとの、挿さっている機材を並べる・開く</summary>
 public static class UsbDevices
 {
     /// <summary>
-    /// 刺さっている機材を並べる (Windows・macOS)。**開かない。** Windows は WinUSB でないものも並ぶ (開けるかは開くまで分からない)。
+    /// 挿さっている機材を並べる (Windows・macOS)。**開かない。** Windows は WinUSB でないものも並ぶ (開けるかは開くまで分からない)。
     /// Linux は呼ぶ側が sysfs で探すので空 (<see cref="Zd1j.Detect"/>)
     /// </summary>
     public static IReadOnlyList<UsbLocation> List(int vendor, int product)
@@ -137,7 +137,7 @@ public static class UsbDevices
 /// </para>
 ///
 /// <para>
-/// 1 回の転送が 1 つの答え。<see cref="Read"/> は溜めの頭の転送を 1 つ渡し、バッファに入りきらないぶんは捨てる
+/// 1 回の転送が 1 つの答え。<see cref="Read"/> は溜めの先頭の転送を 1 つ渡し、バッファに入りきらないぶんは捨てる
 /// (Linux・Windows の 1 回の interrupt の読みと同じ振る舞い)。
 /// </para>
 /// </summary>
@@ -200,7 +200,7 @@ internal sealed class UsbReadPump : IDisposable
         _chunks.CompleteAdding();
     }
 
-    /// <summary>溜めの頭の転送を 1 つ渡す。<paramref name="timeoutMs"/> の間に何も届かなければ 0。読みが失敗していれば投げる</summary>
+    /// <summary>溜めの先頭の転送を 1 つ渡す。<paramref name="timeoutMs"/> の間に何も届かなければ 0。読みが失敗していれば投げる</summary>
     public int Read(Span<byte> buffer, int timeoutMs)
     {
         ObjectDisposedException.ThrowIf(_closing, _name);

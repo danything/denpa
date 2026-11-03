@@ -113,7 +113,7 @@ public class UsbDeviceTests
     }
 
     [Test]
-    public async Task interrupt_の読みは受け口に入るぶんだけ渡す()
+    public async Task interrupt_の読みはバッファに入るぶんだけ渡す()
     {
         var endpoint = new FakeEndpoint();
         using var pump = new UsbReadPump("test", 64, endpoint.Read, endpoint.Cancelled.Cancel);

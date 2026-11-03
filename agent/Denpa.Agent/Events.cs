@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 流すのは**こちらが持っている事実だけ**。
-/// スキャンの進み具合はここには乗らない — 回しているのは denpa 自身だから。
+/// スキャンを進めているのは denpa 自身なので、スキャンの進み具合はここに入れない。
 /// </para>
 /// </summary>
 public sealed class Events

@@ -24,8 +24,8 @@ spec:
           imagePullPolicy: Always
           command: ['/usr/local/bin/bun', '--version']
 ---
-# エージェントも同じ。入れ替えの隙間に始まる録画の頭が欠けるのは、こちらも同じ (docs/architecture.md)。
-# チューナーの刺さったノードで引かないと意味が無いので、置き場所はエージェントに合わせる。
+# エージェントも同じ。入れ替えの隙間に始まる録画の先頭が欠けるのは、こちらも同じ (docs/architecture.md)。
+# チューナーの挿さったノードで引かないと意味が無いので、置き場所はエージェントに合わせる。
 # 起こさずに `denpa-agent --version` で終わる (機材には触らない)
 apiVersion: batch/v1
 kind: Job

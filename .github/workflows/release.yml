@@ -235,7 +235,7 @@ jobs:
           dotnet-version: "10.0.403"
 
       # 名前はタグから `v` を落としたバージョンで (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
-      # 中身は実行ファイル1個。.sha256 は install.sh が確かめる
+      # 中身は実行ファイル 1 個。.sha256 は install.sh が確かめる
       - name: Build
         id: build
         run: |
@@ -281,7 +281,7 @@ jobs:
         with:
           dotnet-version: "10.0.403"
 
-      # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe 1個) と .sha256 (shasum と同じ形式)
+      # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe 1 個) と .sha256 (shasum と同じ形式)
       - name: Build
         id: build
         shell: bash
@@ -311,7 +311,7 @@ jobs:
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。
   # chart のバージョン (Chart.yaml の version) とアプリのバージョン (appVersion) をリリースの
   # バージョンで揃えてパッケージにし、GHCR の OCI レジストリに push する。イメージと同じく、chart 側の
-  # 既定の image.tag は `latest` なので、chart のバージョンを上げなくても中身は動く —
+  # 既定の image.tag は `latest` なので、chart のバージョンを上げなくても中身は動く。
   # バージョンで固定したい人は values で `image.denpa.tag` を書く。
   #
   # **Chart.yaml のバージョンも main に書き戻す** (最後の段)。パッケージにするときは `--version` で

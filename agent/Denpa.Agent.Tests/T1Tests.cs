@@ -130,7 +130,7 @@ public class T1Tests
     }
 
     [Test]
-    public async Task 化け続けたら諦める()
+    public async Task 化け続けたら投げる()
     {
         var script = new Script(
             (I(0, false, "01"), null),

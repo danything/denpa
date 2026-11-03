@@ -36,14 +36,14 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
 
     /// <summary>
     /// <c>CARD_TTL</c> の上限。Docker のブリッジを両側で使うと 3、Kubernetes でノードをまたぐと
-    /// 3〜4 要る。家の中のルーターを越える余裕を足して 8。**それより大きくは書けない** —
+    /// 3〜4 要る。家の中のルーターを越える余裕を足して 8。**それより大きくは書けない。**
     /// 64 や 255 にすると、TTL で届く先を絞る意味が無くなるため (docs/agent.md「鍵を配るのは LAN の中だけ」)
     /// </summary>
     public const int MaxHops = 8;
 
     /// <summary>
     /// ループバックと、LAN の中でだけ使うアドレス (RFC 1918・IPv6 の ULA とリンクローカル)。
-    /// **CGNAT (100.64.0.0/10) は入れない** — Tailscale などは拠点の外を同じ網に見せる。
+    /// Tailscale などは拠点の外を同じ網に見せるので、**CGNAT (100.64.0.0/10) は入れない。**
     /// <c>CARD_SHARE_NETWORKS</c> に書けるのもこの中の範囲だけ (狭めることはできても、外へは広げられない)
     /// </summary>
     public static IReadOnlyList<IPNetwork> DefaultNetworks { get; } =
@@ -60,7 +60,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     public static CardLanPolicy FromEnvironment() => Parse(Environment.GetEnvironmentVariable);
 
     /// <summary>
-    /// 環境変数から読む。**読めない値は既定に戻さずに断る** — 書き間違えた範囲を黙って
+    /// 環境変数から読む。**読めない値は既定に戻さずに断る。** 書き間違えた範囲を黙って
     /// 広げたり狭めたりしない (起動時に理由を出して止まる)
     /// </summary>
     /// <exception cref="ArgumentException">値が読めない</exception>
@@ -117,7 +117,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     /// <summary>
     /// 範囲がまるごと既定の範囲 (<see cref="DefaultNetworks"/>) のどれかに収まるか。同じ種類のアドレスで、
     /// 既定と同じかより狭く (接頭辞が長い)、先頭のアドレスが既定の中にあれば収まる。
-    /// **IPv4 射影の範囲 (::ffff:0:0/96 など) は書けない** — 相手のアドレスは IPv4 に直して比べるので
+    /// **IPv4 射影の範囲 (::ffff:0:0/96 など) は書けない。** 相手のアドレスは IPv4 に直して比べるので
     /// 当たることが無く、IPNetwork.Contains の射影の扱いにも頼らない (アドレス 1 つなら IPv4 に直して読む)。
     /// 比べるのはビット列そのもの
     /// </summary>
@@ -186,7 +186,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     }
 
     /// <summary>
-    /// 比べる形に揃える。**IPv4 射影アドレス (::ffff:192.168.1.2) は IPv4 として**見る —
+    /// 比べる形に揃える。**IPv4 射影アドレス (::ffff:192.168.1.2) は IPv4 として**見る。
     /// そのままだと IPv4 の範囲に入らず、IPv6 の範囲 (::/0 など) には入ってしまう。スコープ (%eth0) は外す
     /// </summary>
     public static IPAddress Plain(IPAddress address)
@@ -245,7 +245,7 @@ public static class CardLan
         && socket.RemoteEndPoint is IPEndPoint { Address.IsIPv4MappedToIPv6: true };
 
     /// <summary>
-    /// 鍵を配るポートの待ち受け。**IPv4 と IPv6 を別々のソケットで**受ける — 両方を 1 つで受けると
+    /// 鍵を配るポートの待ち受け。**IPv4 と IPv6 を別々のソケットで**受ける。両方を 1 つで受けると
     /// IPv4 の相手には IPv6 の hop limit ではなく IPv4 の TTL が効き、OS によってはそれを付けられない。
     /// 待ち受けにも TTL を付けておくと、SYN-ACK からルーターを越えない
     /// </summary>
