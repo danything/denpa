@@ -17,7 +17,11 @@ import {
   readTables,
   transponderOf,
 } from "./satellite";
-import { leftoverNetworks, needsLineup } from "./satellite-lineup";
+import {
+  goneNetworks,
+  leftoverNetworks,
+  needsLineup,
+} from "./satellite-lineup";
 import type { AgentChannel } from "./tuner";
 
 /**
@@ -523,5 +527,18 @@ describe("一覧から落ちたネットワークを作り直す", () => {
         { type: "CS", network_id: 7, channel: "CS04" },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("放送から無くなったネットワーク", () => {
+  test("NIT[other] に載らず読めてもいないネットワークは、無くなったものとする", () => {
+    expect(goneNetworks([7], { networks: [6], listed: [8] })).toEqual([7]);
+    // NIT[other] に載っている (読めなかっただけ)・読めたものは無くなっていない
+    expect(goneNetworks([7], { networks: [6], listed: [7] })).toEqual([]);
+    expect(goneNetworks([7], { networks: [6, 7], listed: [] })).toEqual([]);
+  });
+
+  test("NIT[other] を読めなければ決めない", () => {
+    expect(goneNetworks([7], { networks: [6], listed: [] })).toEqual([]);
   });
 });

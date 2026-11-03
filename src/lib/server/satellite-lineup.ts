@@ -20,6 +20,7 @@ import { orm } from "./db";
 import {
   isLineupName,
   knownNames,
+  type Lineup,
   readLineup,
   type SatelliteType,
 } from "./satellite";
@@ -43,6 +44,16 @@ const READ_TIMEOUT = 30_000;
 
 /** 最後に試して読めなかった時刻 (種別ごと) */
 const failedAt = new Map<SatelliteType, number>();
+
+/**
+ * 局の表に前の名前で残っていても、放送から無くなったと分かったネットワーク (`種別:ネットワーク ID`)。
+ * 局の表の行は消えないので、覚えておかないと 1 時間ごとに選局し続ける。起動し直すと 1 回だけ確かめ直す
+ */
+const gone = new Set<string>();
+
+/** 無くなったネットワークの行を除く */
+const withoutGone = (stored: readonly StoredService[]) =>
+  stored.filter((row) => !gone.has(`${row.type}:${row.network_id}`));
 
 /** 走っている回。重なった呼び出しは何もしない */
 let running: Promise<ChannelType[]> | null = null;
@@ -118,11 +129,11 @@ export function fillSatellites(
   if (scanState().state === "running") return Promise.resolve([]);
   const wanted = TYPES.filter(
     (type) =>
-      needsLineup(channels, type, stored) &&
+      needsLineup(channels, type, withoutGone(stored)) &&
       now - (failedAt.get(type) ?? -Infinity) >= RETRY_AFTER,
   );
   if (wanted.length === 0) return Promise.resolve([]);
-  running = fill(channels, stored, wanted, now).finally(() => {
+  running = fill(channels, withoutGone(stored), wanted, now).finally(() => {
     running = null;
   });
   return running;
@@ -183,6 +194,11 @@ async function fill(
     // スキャンが始まっていたら書かない (スキャンの結果のほうが新しい)
     if (scanState().state === "running") break;
     await putChannels(lineup.channels, [type]);
+    for (const network of goneNetworks(
+      leftoverNetworks(channels, type, stored),
+      lineup,
+    ))
+      gone.add(`${type}:${network}`);
     filled.push(type);
     /*
      * 作り直してもまだ作り直すべきまま (読めなかったネットワークがある) なら、1 時間待ってから試し直す。
@@ -194,7 +210,8 @@ async function fill(
     ];
     if (
       !busy &&
-      (lineup.missing.length > 0 || needsLineup(rest, type, stored))
+      (lineup.missing.length > 0 ||
+        needsLineup(rest, type, withoutGone(stored)))
     ) {
       failedAt.set(type, now);
       console.warn(
@@ -208,4 +225,19 @@ async function fill(
     }
   }
   return filled;
+}
+
+/**
+ * 局の表に残っていたネットワークのうち、放送から無くなったもの。NIT[other] を読めていて、
+ * そこに載っておらず、読めてもいないネットワーク。NIT[other] を読めなければ決めない (空)
+ */
+export function goneNetworks(
+  leftovers: readonly number[],
+  lineup: Pick<Lineup, "networks" | "listed">,
+): number[] {
+  if (lineup.listed.length === 0) return [];
+  return leftovers.filter(
+    (network) =>
+      !lineup.networks.includes(network) && !lineup.listed.includes(network),
+  );
 }

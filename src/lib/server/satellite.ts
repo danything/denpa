@@ -306,6 +306,8 @@ export interface Lineup {
    * `channels` にそのまま残してある。呼ぶ側は間をあけて読み直す
    */
   missing: number[];
+  /** NIT[other] に載っていた、その種別の中継器を持つネットワーク (CS)。NIT[other] を読めなければ空 */
+  listed: number[];
 }
 
 /** そのネットワークの、その種別の中継器を 1 つ (入口に使う)。載っていなければ null */
@@ -474,5 +476,6 @@ export async function readLineup(
     log,
     networks: [...networks.keys()],
     missing,
+    listed: [...listed].sort((a, b) => a - b),
   };
 }
