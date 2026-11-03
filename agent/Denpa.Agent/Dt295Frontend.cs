@@ -103,6 +103,26 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
 
     private void Demod(byte reg, byte value) => board.I2c(TerrestrialDemod, [reg, value], []);
 
+    /// <summary>
+    /// 復調器の表を書く。**レジスターが続いている所は 1 回の I2C にまとめる** (復調器は 1 バイト書くたびに番地が 1 つ進む。
+    /// 地上波・衛星とも実機で確かめた)。RF は番地が進まないので、この形では書かない
+    /// </summary>
+    private void DemodTable(byte address, IReadOnlyList<(byte Register, byte Value)> table)
+    {
+        var i = 0;
+        while (i < table.Count)
+        {
+            var j = i + 1;
+            // 1 回で送れるのは 64 バイト (先頭のレジスター番号を含む)
+            while (j < table.Count && table[j].Register == table[j - 1].Register + 1 && j - i < 63) j++;
+            var write = new byte[1 + j - i];
+            write[0] = table[i].Register;
+            for (var k = i; k < j; k++) write[1 + k - i] = table[k].Value;
+            board.I2c(address, write, []);
+            i = j;
+        }
+    }
+
     private byte DemodRead(byte reg)
     {
         Span<byte> one = stackalloc byte[1];
@@ -178,7 +198,7 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
         board.Modify16(0x90018, 1, 1, 1);
         Sleep(5);
         // 4〜6
-        foreach (var (reg, value) in material.TerrestrialDemod) Demod(reg, value);
+        DemodTable(TerrestrialDemod, material.TerrestrialDemod);
         Rf(0xFF, 0);
         foreach (var (reg, value) in material.TerrestrialRfA) Rf(reg, value);
         // 7〜16
@@ -301,7 +321,7 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
     {
         if (material.SatelliteMissing) throw new Dt295Exception("衛星復調器の初期化表 (S_DEMOD) がすべて 0 です。素材が欠けています");
         Sat(0x01, 0x90);
-        foreach (var (reg, value) in material.SatelliteDemod) Sat(reg, value);
+        DemodTable(SatelliteDemod, material.SatelliteDemod);
         Sleep(4);
         Srf(0x2A, 0xB9);
         SrfMany(0x06, [0x10, 0x10, 0x00]);
@@ -373,7 +393,13 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
         Sat(0x90, (byte)tsid);
     }
 
-    /// <summary>100 ms おきに最大 3000 ms、条件がそろうまで待つ (8.4 の手順 15・8.6)</summary>
+    /// <summary>
+    /// ロックを確かめる間隔。参照実装は 100 ms だが、確かめるのは I2C の読み 4 回 (数 ms) で済むので、短くして待ちすぎを減らす
+    /// (100 ms では、ロックしてから最大 80 ms 余分に待つ)
+    /// </summary>
+    private const int LockPollMs = 20;
+
+    /// <summary><see cref="LockPollMs"/> おきに最大 3000 ms、条件がそろうまで待つ (8.4 の手順 15・8.6)</summary>
     private bool WaitLock(Func<Dt295SatelliteStatus, bool> done)
     {
         var deadline = board.Time.NowMs + 3000;
@@ -381,7 +407,7 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
         {
             if (done(SatelliteStatus())) return true;
             if (board.Time.NowMs >= deadline) return false;
-            Sleep(100);
+            Sleep(LockPollMs);
         }
     }
 
