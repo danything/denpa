@@ -37,10 +37,10 @@ spec:
           ports:
             - containerPort: 25252
           env:
-            # denpa と組むときの合言葉 (pair.yaml)。答えるのは組んだ denpa (クライアント証明書) だけ
+            # denpa と組むときの合言葉 (values.yaml の agent.pairSecret)。答えるのは組んだ denpa (クライアント証明書) だけ
             - name: AGENT_PAIR_TOKEN
               valueFrom:
-                secretKeyRef: { name: tuner-agent-pair, key: token }
+                secretKeyRef: { name: {{ include "denpa.pairSecretName" . }}, key: token }
           volumeMounts:
             - name: agent-config
               mountPath: /config

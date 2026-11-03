@@ -1,5 +1,7 @@
 # エージェントと組むときの合言葉 (docs/agent.md)。エージェントには AGENT_PAIR_TOKEN、denpa には
-# TUNER_AGENT_URL の #pair= で同じものを渡す。中身は chart が作り、上げ直しても変えない (_helpers.tpl の denpa.pairToken)
+# TUNER_AGENT_URL の #pair= で同じものを渡す。中身は chart が作り、上げ直しても変えない (_helpers.tpl の denpa.pairToken)。
+# agent.pairSecret に名前を書いたときは作らない (その Secret を使う)
+{{- if not .Values.agent.pairSecret }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -10,3 +12,4 @@ metadata:
 type: Opaque
 data:
   token: {{ include "denpa.pairToken" . | b64enc | quote }}
+{{- end }}

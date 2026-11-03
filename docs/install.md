@@ -104,7 +104,9 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 ([agent.md](agent.md#エージェントは別イメージ別プロセス))。`TUNER_AGENT_URL` には `#pair=<合言葉>` を付けます。
 合言葉は chart が Secret `tuner-agent-pair` に作り、読み方は `helm install` のあとに出ます。
 本体の chart はエージェントと組む合言葉を自分で作って両方に渡すので、何も書かなくて構いません
-(ArgoCD で入れるときだけ一手間要ります。values.yaml の `agent` の説明)。値の一覧と意味は
+(ArgoCD などの GitOps で入れるときは、合言葉を SOPS などで別の Secret に持ち、その名前を `agent.pairSecret` に書きます。
+ArgoCD はクラスタを見ずに描くので chart に作らせると値が変わり続け、Secret を同期しない設定ならそもそも作られません。
+`denpa-agent` の chart も同じで `pairSecret`)。値の一覧と意味は
 [charts/denpa/values.yaml](../charts/denpa/values.yaml) のコメントにあります。
 
 ### Talos Linux に OS ごと

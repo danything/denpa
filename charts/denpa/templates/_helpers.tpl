@@ -31,3 +31,8 @@ lookup はクラスタを見ない描き方 (helm template・ArgoCD) では空�
 {{- randBytes 32 | replace "+" "-" | replace "/" "_" | trimSuffix "=" -}}
 {{- end -}}
 {{- end }}
+
+{{/* 合言葉を置く Secret の名前 (values.yaml の agent.pairSecret。空なら chart が作る tuner-agent-pair) */}}
+{{- define "denpa.pairSecretName" -}}
+{{- .Values.agent.pairSecret | default "tuner-agent-pair" -}}
+{{- end }}

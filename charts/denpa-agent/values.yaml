@@ -55,17 +55,16 @@ service:
   port: 25252
   type: ClusterIP
   # 別のクラスタ/機械の denpa から届かせるなら NodePort か LoadBalancer にする。
-  # 答えるのは合言葉 (下の pairToken) で組んだ denpa だけ (docs/agent.md)。
+  # 答えるのは合言葉 (下の pairSecret) で組んだ denpa だけ (docs/agent.md)。
   # 下の networkPolicy で届く相手も絞れる
   nodePort: null
 
 # **denpa と組むときの合言葉** (docs/agent.md)。denpa の TUNER_AGENT_URL に
 # https://<ここに届く名前>:25252#pair=<合言葉> と書く (読み方は helm install のあとに出る NOTES)。
-# 空なら chart が作って Secret `tuner-agent-pair` に置き、上げ直しても変えない (lookup)。
-# ArgoCD はクラスタを見ずに描くので、空のままだと描くたびに新しい値になってずっと差分が出る。
-# ArgoCD ではここに書くか、Application の ignoreDifferences でその Secret の /data を外す
-# (RespectIgnoreDifferences=true も。charts/denpa/values.yaml の agent の説明)
-pairToken: ""
+# 合言葉は Secret の `token` に置く。下の pairSecret が空なら chart が `tuner-agent-pair` に作り、上げ直しても変えない (lookup)。
+# 名前を書いたら chart は作らず、その Secret (キーは `token`。32 字以上の乱数) を使う。GitOps ではこちら
+# (charts/denpa/values.yaml の agent.pairSecret と同じ)
+pairSecret: ""
 
 # **エージェントに繋げる相手を絞る** NetworkPolicy を出す。CNI が NetworkPolicy に対応していないと、
 # 出しても効かない。オンにしたら from に denpa のいる所を書く (NetworkPolicyPeer の並び。

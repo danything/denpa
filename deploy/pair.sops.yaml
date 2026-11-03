@@ -1,0 +1,39 @@
+# エージェントと組む合言葉 (docs/agent.md)。application.yaml の agent.pairSecret がこの Secret を指す。
+# chart に作らせないのは、このクラスタの ArgoCD が Secret を同期しない (resource.exclusions) ため。
+# 値は SOPS で暗号化してある (../.sops.yaml)。変えるときは管理者の鍵で `sops edit deploy/pair.sops.yaml` して push する
+# (変えるとエージェントと denpa が入れ替わり、denpa は新しい合言葉で組み直す)。
+apiVersion: isindir.github.com/v1alpha3
+kind: SopsSecret
+metadata:
+    name: pair
+    namespace: denpa
+spec:
+    secretTemplates:
+        - name: denpa-agent-pair
+          stringData:
+            token: ENC[AES256_GCM,data:6L5sI80g6CYAPPotpvgdaE2mwDnrhtplFDK+wJsd5pSNRrN2dwlhgkmvTA==,iv:MEwfolBjh2DvqKfhLM9lR6b6WeLVdqtdzO6SfG6I7Zc=,tag:7ByiRpA95tJOvwVSUSarXg==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBvVFRENEdKMFQ4TkY4cUlZ
+            TnorWTVQQ2VsazhUaHZQUnhjUzUzQ1Vrd1M0CjJ0OXRhSjQ0ckJyMnJsWFM4a3p4
+            SGZFd3lnVDZUWVVqRG5hU0FFWFg2Sk0KLS0tIDVsRFBHbHljbjZtWFJSV0o0Yk5S
+            TCtJSkxQclFuQU1ib2Voc0hCMWUzLzAKHvHhunAq+t9EFlfHpQCtRmPevLNQqqEB
+            u+FSwPKRURROa70Kv7loLgp4du1ojYONEp1WUynvXt4Z010fKAqIkA==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1sgnnkn67wpt4wgjsff4c36w3cmjkk557ng504e4aczx2lzls9y6ssy0x9r
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBQRC9vL04yMVRHUlpiZ0h6
+            aEFtc01DK092ZGwrb3VFS2V4YS9XNHhFMWpVCnZSWFVya2hKdmR4dERxREtZcFFW
+            Ry9CS2NPWGQrL08wVlJCNHlpU3BrRzQKLS0tIGpYaFNPTTdVTDNadkcwN1QrQUMv
+            ekhpdzV0cGxGakZlK1MxRVhqbExzTnMKPajDwEPoQ0dZ+74HjZZ6XuxKhwlgVKHN
+            CoECYw7kWgJf2pHH5XBdH30uTj0tUV7eJPIkWmmJZlxF9IhlTiiJiw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1z36xmmvjmwg4sus6k8nx6wgp8qyew7tj76077rvv5sagcgudd4tszrmwml
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-11-03T11:17:21Z"
+    mac: ENC[AES256_GCM,data:5dYqtp/1AS5yfIzuTTTsUAxB88W7VRIdnenCKw49fhib5EHGmAuOW4WLov/LWj+azsp5+sUy3S8GtNvHocEO0HcB/6BJohRm/bRwcriR0CC79dbZ7abtyLD2l/de1sSGFn0PG5R999TQM28plsaD6hWW4VCZU61od4KBT8qJBjw=,iv:6LyU3C5JCEwew1Y90lPSB6CJgv9HxGKR9iw59Ng8wiI=,tag:e8mCRKu7yeZmJ1d9FKsibg==,type:str]
+    mac_only_encrypted: true
+    version: 3.13.3
