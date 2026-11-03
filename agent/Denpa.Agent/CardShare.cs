@@ -16,7 +16,7 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Keys
 {
-    /// <summary>自分に刺さっているカード。**鍵を配る API もこれを使う**</summary>
+    /// <summary>自分に挿さっているカード。**鍵を配る API もこれを使う**</summary>
     public static LocalCard Local { get; } = new();
 
     private static IKeySource? _source;
@@ -33,10 +33,10 @@ public static class Keys
 }
 
 /// <summary>
-/// **自分に刺さっているカード。** 起動したときに開いておき (<see cref="Warm"/>)、開けなければ要ったときに探す。
+/// **自分に挿さっているカード。** 起動したときに開いておき (<see cref="Warm"/>)、開けなければ要ったときに探す。
 ///
 /// <para>
-/// 開けなければ投げて、次に要ったときにまた探す — カードを後から挿しても、
+/// 開けなければ投げて、次に要ったときにまた探す。カードを後から挿しても、
 /// px4d が後から起きても、エージェントを入れ直さずに読めるようになる。
 /// 開いたあとの繋ぎ直しは <see cref="BCas"/> がやる。
 /// </para>
@@ -83,7 +83,7 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
     /// 最初の選局でこれを待つと、起こし直した直後の 1 回目だけ送り出しが 0.25〜0.45 秒遅れていた。
     ///
     /// <para>
-    /// 開けなくても<b>断った印は残さない</b> — 起動の直後は px4d がまだ起きていないことがあり、
+    /// 開けなくても<b>断った印は残さない。</b>起動の直後は px4d がまだ起きていないことがあり、
     /// 印を残すと最初の選局が <see cref="BCas.RetryAfter"/> のあいだ探しもせずに断られる。
     /// 開けなかったときは今までどおり、要ったときに探す
     /// </para>

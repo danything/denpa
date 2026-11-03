@@ -25,7 +25,7 @@ hostDevices:
     path: /dev/bus
   - name: dev-dvb
     path: /dev/dvb
-# 録画中に入れ替えが来たら、終わるまで居座ってから止まる
+# 録画中に入れ替えが来たら、終わるまで待ってから止まる
 terminationGracePeriodSeconds: 21900
 resources: {}
 nodeSelector: {}
@@ -43,7 +43,7 @@ persistence:
   config:
     size: 128Mi
     existingClaim: ""
-  # denpa の元のTSの置き場。**denpa と同じ実体を見せる** (上の説明)。
+  # denpa の元の TS の置き場。**denpa と同じ実体を見せる** (上の説明)。
   # existingClaim に denpa 側の PVC を渡す。空なら chart が自分の分を作る
   # (= 別の機械で動かしていて共有できない構成)
   raw:

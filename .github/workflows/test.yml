@@ -110,8 +110,8 @@ jobs:
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed
 
       # エージェントの API に直接当てるテスト。**本物をビルドして起こして**、偽の選局
-      # コマンドで流す (bun で書いたものがあった頃は、同じものを2つの実装に通していた)。
-      # ビルドするところまで含めて1つの script にしてある — 手元で走らせるときに
+      # コマンドで流す (bun で書いたものがあった頃は、同じものを 2 つの実装に通していた)。
+      # ビルドするところまで含めて 1 つの script にしてある。手元で走らせるときに
       # ビルドし忘れると、消えた既定の置き場を読みに行って ENOENT で落ちるだけになる
       - name: Conformance
         run: bun run test:conformance
@@ -166,7 +166,7 @@ jobs:
 
       # install.ps1 (Windows の入れ方) のリントもここで。PSScriptAnalyzer は Linux の pwsh でも同じに見られる
       # 書き方は PowerShell 5.1 (Windows の既定) に合わせて見る (PSUseCompatibleSyntax)。
-      # 読むのは pwsh で — install.ps1 は BOM の無い UTF-8 で、5.1 はそれを ANSI で読む
+      # 読むのは pwsh で。install.ps1 は BOM の無い UTF-8 で、5.1 はそれを ANSI で読む
       # (irm | iex は UTF-8 で受け取るので困らない。-File で 5.1 に渡す入れ方は案内しない)。
       # 外す規則: Write-Host (画面に出す案内)、ShouldProcess (-WhatIf を持つモジュールではない)、BOM (上の理由)。
       - name: Lint install.ps1
@@ -297,7 +297,7 @@ jobs:
           dotnet-version: "10.0.403"
 
       # Linux でしか意味の無いテスト (/proc を数える・Linux の pipe の深さに頼る偽物) は中で飛ばしてある。
-      # 1本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
+      # 1 本ずつ結果を出して上限を切る。Mac でだけ止まるものがあったとき、どれなのかが残るように
       - name: Unit tests (.NET agent)
         timeout-minutes: 8
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
@@ -402,13 +402,13 @@ jobs:
   # ランナーには wslc (WSL のコンテナ) が無いので、denpa 本体は -AgentOnly で外す。
   # **必須チェックにはしない** (agent-macos と同じ理由)
   #
-  # **2つのジョブに分けて同時に流す。** 1本に並べていた頃は平均3分 (遅い回で4分半) で、
+  # **2 つのジョブに分けて同時に流す。** 1 本に並べていた頃は平均 3 分 (遅い回で 4 分半) で、
   # 中身はテスト (agent-windows) と、ビルドして起こす・入れ方を通す (agent-windows-install) の
-  # 関係ない2つだった。install.ps1 のリントは Windows でなくてよいので install-linux へ移した。
+  # 関係ない 2 つだった。install.ps1 のリントは Windows でなくてよいので install-linux へ移した。
   #
   # **SDK と NuGet は D: に置き、actions/cache で戻す。** setup-dotnet で入れる SDK はランナーの
-  # イメージに入っていないので毎回 300MB を落として展開していて、C: への展開だけで20秒かかっていた
-  # (D: なら8秒。ビルドと restore も C: より速い)。キャッシュに当たれば SDK の用意は10秒ほどで済む。
+  # イメージに入っていないので毎回 300MB を落として展開していて、C: への展開だけで 20 秒かかっていた
+  # (D: なら 8 秒。ビルドと restore も C: より速い)。キャッシュに当たれば SDK の用意は 10 秒ほどで済む。
   # 鍵は SDK のバージョンと csproj。バージョンは下の setup-dotnet の行から読む (Renovate が書き換えるのはそこ)
   agent-windows:
     runs-on: windows-latest
@@ -440,7 +440,7 @@ jobs:
           dotnet-version: "10.0.403"
 
       # Linux でしか意味の無いテスト (sysfs・/dev のパス・libc の pipe・/bin/sh の偽物) は中で飛ばしてある。
-      # 測るだけのテスト (Px4StreamBenchTests。並べずに1本で流れる) も Windows では飛ばす (Linux と Mac で流れる)
+      # 測るだけのテスト (Px4StreamBenchTests。並べずに 1 本で流れる) も Windows では飛ばす (Linux と Mac で流れる)
       - name: Unit tests (.NET agent)
         timeout-minutes: 8
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
@@ -542,7 +542,7 @@ jobs:
 
       # 入れ方を通しで。エージェントはいまビルドしたものを zip にして入れ、px4-userland・siano-userland と
       # ファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに載せて API が答えるまで。
-      # 1回目は irm | iex と同じやり方 (取ってきた中身を scriptblock にして) で流す。2回目は上げ直し
+      # 1 回目は irm | iex と同じやり方 (取ってきた中身を scriptblock にして) で流す。2 回目は上げ直し
       # (動いているエージェントを止めて入れ替える)。最後に外す
       - name: install.ps1 end to end
         shell: powershell

@@ -7,7 +7,7 @@ namespace Denpa.Agent.Tests;
 /*
  * siano-userland の機材 (PX-S1UD など) を使うところ。
  *
- * 本物の機材は無い。ここで確かめるのは**機材に触らない部分**だけ —
+ * 本物の機材は無い。ここで確かめるのは**機材に触らない部分**だけで、次のものを見る。
  * siano-ts --list と sysfs の読み方 (とくに「カーネルが使っているものは渡さない」)、device 文字列の形式、
  * siano-ts の起こし方。実機で当てるのは `denpa-agent --tune siano:<ポート> T27` (Probe.cs)。
  */
@@ -116,7 +116,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task 何も刺さっていなければ空()
+    public async Task 何も挿さっていなければ空()
     {
         await Assert.That(SianoUserland.ParseList("", _ => null, _ => { })).IsEmpty();
     }
@@ -162,7 +162,7 @@ public class SianoTests
     /// 偽の siano-ts --control。起きたらまず前の選局の残りに見立てて **pipe より多く** 書き、
     /// それから標準入力を読む (本物も「書く → 標準入力を見る」の 1 本のループ)。
     /// <c>tune 1</c> は同期しない。<c>tune 2</c> は前の選局の答え (別の周波数の <c>tuned</c>) を
-    /// 先に吐く。<c>tune 3</c> は答えない。それ以外は少し待ってから (本物の同期待ち)
+    /// 先に出力する。<c>tune 3</c> は答えない。それ以外は少し待ってから (本物の同期待ち)
     /// <c>tuned</c> を返し、次のコマンドが来るまで <c>NEW&lt;Hz&gt;</c> を書き続ける
     /// (本物の TS も流れ続ける。<c>tuned</c> のあと読み捨てが止まるまでの分は食われるので、
     /// 書く量に限りがあると、込み合ったときに全部食われて届かない)
@@ -192,7 +192,7 @@ public class SianoTests
 
     /// <summary>
     /// 選局のあと最初に届いた <c>NEW…</c> の行。読み捨てが行の途中で止まるので、
-    /// 頭の欠けた 1 行目は飛ばす。**前の選局の残り (0 の詰め物) が混じっていれば落とす**
+    /// 先頭の欠けた 1 行目は飛ばす。**前の選局の残り (0 の詰め物) が混じっていれば落とす**
     /// </summary>
     private static string ReadLine(Stream stream)
     {
@@ -243,7 +243,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task 子が死んでいれば起こし直す()
+    public async Task 子が終了していれば起こし直す()
     {
         if (!OperatingSystem.IsLinux()) return;
         // 1 回目の子は、1 行読まれたところで (印のファイルができたら) 終わる。USB が抜けた、に見立てる。

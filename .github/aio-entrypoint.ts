@@ -18,7 +18,7 @@ import { dirname, join } from "node:path";
 /**
  * 合言葉。渡されていればそれ (`-e AGENT_PAIR_TOKEN=…`)、無ければエージェントが自分で作るのと同じ所
  * (`TUNERS_FILE` の隣の `tls/pair-token`。既定は `/config/tls/pair-token`) から読み、そこにも無ければ作る。
- * **1度作ったら変えない** (置き場は `/config` のボリュームなので、作り直したコンテナでも同じ)
+ * **一度作ったら変えない** (置き場は `/config` のボリュームなので、作り直したコンテナでも同じ)
  */
 function pairToken(): string {
   const given = process.env.AGENT_PAIR_TOKEN?.trim();

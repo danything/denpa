@@ -13,7 +13,7 @@
 #
 # `TARGETARCH` (BuildKit が入れる) から、RID と取ってくる配布物の名前を引く。
 # 名前の付け方は上流ごとにばらばら (amd64 / x86_64 / x64、arm64 / aarch64) なので、
-# 各段の頭で読み替える。それ以外の arch は配布物が無いので、黙って amd64 のものを
+# 各段の冒頭で読み替える。それ以外の arch は配布物が無いので、黙って amd64 のものを
 # 入れずにそこで止める。sdk:10.0 の既定がそのまま trixie (`-trixie` というタグは無い)
 FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS build
 ARG TARGETARCH
@@ -86,7 +86,7 @@ RUN set -eu && cd /tmp && \
 # そこで初めて取ってくる (自動では入れない。renovate.json)。
 #
 # 取ってくるのは px4-userland と同じ名前の付け方を見込んだ配布アーカイブ (上流の
-# scripts/package-linux-variant.py の形式: 頭に 1 段のディレクトリ、bin/ にコマンド 3 つ、musl の
+# scripts/package-linux-variant.py の形式: 先頭に 1 段のディレクトリ、bin/ にコマンド 3 つ、musl の
 # 完全静的 ELF)。名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、
 # コマンドはどちらも同じ musl の静的 ELF。名前や形式が違えば、バージョンを上げる PR の CI (イメージをビルドする) で落ちて分かる
 # (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。
@@ -128,7 +128,7 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 # **土台は distroless (Debian 13 = trixie。組む段の sdk:10.0 と同じバージョンなので glibc も合う)。**
 # 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
 # エージェントが要るのはこれで全部: 実行ファイルが直に繋ぐのは libc と libm だけ、
-# CARD_URL を https で指したときと IT930x のファームウェアを取ってくるときは .NET の HttpClient が libssl を読み、
+# CARD_URL を https で指したときと、IT930x のファームウェア・PIX-DT295 の公式パッケージを取ってくるときは .NET の HttpClient が libssl を読み、
 # 証明書は ca-certificates で確かめる。
 # 子プロセスは px4d / px4ctl / siano-ts / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起こす。
 # シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
@@ -144,11 +144,12 @@ FROM gcr.io/distroless/cc-debian13:latest@sha256:58e12be899275afaa05f1b03051ab19
 COPY --from=fetch /opt/ /opt/
 
 # 設定は PVC (/config) に置く (/config/tuners.json と /config/channels.json はエージェントの既定。Config.cs)。
-# **どちらも denpa の画面が書き、どちらも無くて構わない。** tuners.json が無ければ刺さっている機材を
+# **どちらも denpa の画面が書き、どちらも無くて構わない。** tuners.json が無ければ挿さっている機材を
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
 #
 # px4-userland の機材に流し込む IT930x のファームウェアも、初めて要ったときに
-# エージェントが取ってきてここに置く (/config/it930x-firmware.bin。Px4Firmware.cs)。
+# エージェントが取ってきてここに置く (/config/it930x-firmware.bin。Px4Firmware.cs)。PIX-DT295 のデータ (Dt295Firmware.cs) と、
+# denpa と組むための鍵・証明書・合言葉 (/config/tls。AgentTls.cs) も同じ所に置く。
 COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
 
 EXPOSE 25252

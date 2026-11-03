@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 /// <para>
 /// Linux では usbfs を直接扱っている (Ccid.cs) が、macOS には usbfs が無く、CCID の
 /// リーダーは OS の CCID ドライバ (Apple の標準のものか、従来の ifd-ccid) が先に開く。横取りするより、OS が
-/// 出している PC/SC の API を借りるほうが素直で、入れてもらうものも増えない。
+/// 出している PC/SC の API を使うほうが素直で、入れてもらうものも増えない。
 /// T=1 の枠組みも ATR の読み方も向こうが持つので、ここは APDU を渡すだけ。
 /// </para>
 ///
@@ -205,10 +205,10 @@ public sealed partial class PcscLink : ICardLink
     public byte[] Reset()
     {
         /*
-         * 繋ぐだけで電源が入る。**呼ばれるのは開いた直後の 1 回だけ** — BCas は失敗したら閉じて開き直す。
+         * 繋ぐだけで電源が入る。BCas は失敗したら閉じて開き直すので、**呼ばれるのは開いた直後の 1 回だけ。**
          *
          * macOS の標準の CCID ドライバ (Apple のもの) では B-CAS に繋がらないリーダーがある (IDBridge CT30 の報告)。
-         * 怪しいのは速さ — B-CAS は specific mode で ATR の直後から TA1 の速さで話し、PC Twin の系統のリーダーは
+         * 怪しいのは速さ。B-CAS は specific mode で ATR の直後から TA1 の速さで話し、PC Twin の系統のリーダーは
          * それをドライバに設定してもらう必要がある (Ccid.cs の Reset と SetT1Parameters)。速さは PC/SC からは
          * 変えられない (SCardControl も Apple のドライバは受けない) ので、ここでは手を打たず、失敗したら
          * ドライバを切り替える案内を出す (Check。docs/install-mac.md「カードが読めないとき」)

@@ -7,7 +7,7 @@
         要らないことが条件なので、ここは外せない。
         出来上がるのは 13MB ほどの実行ファイル 1 個。
 
-        依存を 1 つも足していない。JSON は System.Text.Json.Nodes で木を直に組み、読む —
+        依存を 1 つも足していない。JSON は System.Text.Json.Nodes で木を直に組み、読む。
         AOT ではリフレクションを使う方式が素直に動かない (Json.cs)。
     -->
     <PropertyGroup>

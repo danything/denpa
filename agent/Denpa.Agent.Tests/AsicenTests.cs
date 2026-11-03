@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
  * asicen-userland の機材 (Asicen.cs)。
  *
  * 機材は無い。sysfs を真似た木から USB 機能を探すところ、筐体へのまとめ方、device の文字列、
- * IPC の違い (枠の頭とソケットの置き場) を、偽の px4d (Px4TunerTests.FakePx4d を asicend のふりにしたもの) で確かめる。
+ * IPC の違い (フレームのヘッダとソケットの置き場) を、偽の px4d (Px4TunerTests.FakePx4d を asicend のふりにしたもの) で確かめる。
  * 本物の asicend の模擬 (`--mock`) が手元にあれば (ASICEN_USERLAND_DIR)、それとも話す。
  */
 public class AsicenTests
@@ -121,7 +121,7 @@ public class AsicenTests
     }
 
     [Test]
-    public async Task 枠の頭とソケットの置き場が_px4d_と違う()
+    public async Task フレームのヘッダとソケットの置き場が_px4d_と違う()
     {
         var frame = Px4Control.Encode(Px4Control.Hello, 0, 1, [], Px4Wire.Asicen);
         await Assert.That(frame.AsSpan(0, 4).SequenceEqual("ASCN"u8)).IsTrue();
@@ -177,7 +177,7 @@ public class AsicenTests
     }
 }
 
-/// <summary>偽の asicend (px4d のふりを ASCN の頭と asicen-userland の置き場で) と話す</summary>
+/// <summary>偽の asicend (px4d のふりを ASCN のヘッダと asicen-userland の置き場で) と話す</summary>
 [ExcludeOn(OS.Windows)]
 [Timeout(60_000)]
 public class AsicenTunerTests

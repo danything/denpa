@@ -15,11 +15,11 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 要りません (wslc は WSL に入っていて、`wsl --update` で使えるようになる)。コンテナには USB を渡せないので、
 チューナーとカードに触るエージェントはコンテナに入れられません。
 
-1. **エージェント** — 最新のリリースから取り、タスク スケジューラに「ログオンしたら起こす」
+1. **エージェント**: 最新のリリースから取り、タスク スケジューラに「ログオンしたら起こす」
    タスク (`denpa-agent`) を載せます。自分のアカウントのタスクなので管理者は要りません。窓は出さず
    (`conhost --headless`)、落ちたら 5 秒置いて起こし直します (起こすのは `denpa-agent.cmd` のループ。
    タスク スケジューラの「失敗したら再起動」は終了コードでは効かないため)
-2. **denpa 本体** — エージェントと同じバージョンのイメージを `wslc pull` し、ログオン時に起こすタスク (`denpa`) を
+2. **denpa 本体**: エージェントと同じバージョンのイメージを `wslc pull` し、ログオン時に起こすタスク (`denpa`) を
    載せて、すぐ起こします。起こすのは `denpa-start.ps1` (install.ps1 が書く)
 
 2 つが組むときの合言葉 ([agent.md](agent.md)) はエージェント自身の置き場 (`~/denpa/config/tls/pair-token`) に無いときだけ作り、エージェントはそこから読み
@@ -50,7 +50,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 - **WSL は勝手に入れません。** wslc が無いときは、エージェントだけ入れて `wsl --update` (WSL が無ければ
   管理者で `wsl --install --no-distribution`) を流すよう言って終わります
-- ドライバは入れません (下)。刺さっている px4-userland と siano-userland のチューナーが WinUSB でなければ、そう言います
+- ドライバは入れません (下)。挿さっている px4-userland と siano-userland のチューナーが WinUSB でなければ、そう言います
   (px4-userland の機材は `px4d --list-json` に聞くので、機種の表は持ちません)
 - genkan (`http://denpa.localhost`) には繋ぎません (genkan は Docker のネットワークにいて、wslc のコンテナからは入れない)
 - エージェントの zip は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
@@ -74,7 +74,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   入れるのは 0.2.1) は、ドライバを WinUSB にすれば動きます。Linux・Mac と同じく px4d の制御ソケットで
   受信機を使い、内蔵カードリーダーも読みます (IPC は Windows でも AF_UNIX)。配布 zip のうち使うのは
   `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
-  置きません。エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらが読み込まれてしまう。
+  置きません。エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらが読み込まれてしまいます。
   ファームウェアは Mac と同じく PLEX 公式ドライバから切り出します ([tuner-px4.md](tuner-px4.md#ファームウェア))
 - **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 用 (`siano-ts.exe` と libusb) も、
   ドライバを WinUSB にすれば動きます
@@ -83,13 +83,16 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   当てていないか、ほかのソフトが使っていると「ほかのソフトが使っているか、WinUSB になっていません」と返します。
   device の名前 (`zd1j:2-3.2` など) は、挿したポートから Linux と同じ形に作ります (1 台だけなら挿し替えても付いていく。[tuners.md](tuners.md#sony-cech-zd1-j))。
   Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#sony-cech-zd1-j))
+- **PIXELA PIX-DT295** (試験的。地上波・BS・CS)。エージェントが WinUSB で USB を直に持ちます。Zadig で `06b8:103b` に WinUSB を当てます。
+  PIXELA の公式パッケージは初めて使うときにエージェントが取ってきます。Windows の実機で地上波・BS・無料の CS の TS を受けられました
+  ([tuners.md](tuners.md#pixela-pix-dt295-試験的))
 - WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
   **PX-Q3U4 / PX-W3U4 は USB の機材が 2 つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
   機材は、WinUSB にするとそちらからは見えなくなります (戻すときはデバイス マネージャーでドライバを戻す)。
   installer はドライバを入れ替えません (ほかのソフトで使っていた機材を黙って奪わない)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
   (Windows の libusb は WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
-- px4・Siano・CECH-ZD1 J の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
+- px4・Siano・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
   `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーと CECH-ZD1 J の差し込み口も
@@ -115,8 +118,8 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 
 **使えないもの。**
 
-- **PT2/PT3 などの DVB の機材** — Windows に DVB はありません
-- **PX-W3U3 (asicen-userland)** — Windows 用がありません
+- PT2/PT3 などの DVB の機材は使えません。Windows に DVB はありません
+- PX-W3U3 (asicen-userland) は使えません。Windows 用がありません
 - **止めるときに録画を待てません。** Windows には「止まれ」を伝える手 (SIGTERM) が無く、
   止めればその場で落ちます。上げ直し・外すときは install.ps1 が録画の終わりを待ってから止めますが
   (録画中かは `denpa-agent --status` に聞く。エージェントの API は組んだ denpa にしか答えないので、エージェント自身の証明書で呼ぶもの)、
@@ -133,7 +136,7 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
   そのアドレスは起動のたびに変わりうるので、ループバックには絞れません。LAN から届かないようにするのは Windows ファイアウォールの役目です
   (25252 の受信を許さないままにする)。LAN のほかの機械からエージェントに繋ぐとき (`-AgentOnly`) は、ファイアウォールでポート 25252 を
   許します。答えるのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
-- **Windows の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI (`agent-windows`・`agent-windows-install`) で
+- **Windows の実機で確かめたのは、PIX-DT295 で TS を受けるところまでです。** ほかのチューナーとカードは、CI (`agent-windows`・`agent-windows-install`) で
   ビルドして起こし、偽の px4d を相手に IPC と TS の受け渡しを流し、入れ方 (`-AgentOnly`) を最後まで流すところまでです。
   denpa 本体を wslc で起こすところは手元の Windows 11 (wslc 3.0.1) で確かめました (Docker Desktop からの移行は未確認)。
   実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`

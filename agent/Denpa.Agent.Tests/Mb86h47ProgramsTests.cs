@@ -294,7 +294,7 @@ public class Mb86h47ProgramsTests
         await Assert.That(reply[2] >> 16).IsEqualTo(0x01B3u);
         await Assert.That(rig.Dib.Demod[1287]).IsEqualTo((ushort)3);
         await Assert.That(rig.Dib.Demod[285]).IsEqualTo((ushort)0x0061);
-        // 済ませた塊の頭と終わりを消した
+        // 済ませた塊の先頭と終わりを消した
         await Assert.That(rig.Ram.Read(slot, 4)).IsEqualTo(0u);
         await Assert.That(rig.Ram.Read(slot + 508, 4)).IsEqualTo(0u);
 

@@ -146,7 +146,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         _handle = handle;
     }
 
-    /// <summary>刺さっている機材 (WinUSB でないものも並ぶ。開けるかは開いてみるまで分からない)</summary>
+    /// <summary>挿さっている機材 (WinUSB でないものも並ぶ。開けるかは開いてみるまで分からない)</summary>
     public static IReadOnlyList<UsbLocation> List(int vendor, int product)
     {
         var controllers = Interfaces(UsbHostControllerInterface)

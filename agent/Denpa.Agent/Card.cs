@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 /// カードが読めているか。**リーダーごとに**返す (画面の「カードリーダー」の表)。
 ///
 /// <para>
-/// リーダーが見えていてもカードを読めていないことがある (刺さっていない・USB が黙る)。
+/// リーダーが見えていてもカードを読めていないことがある (挿さっていない・USB が黙る)。
 /// そうなると掛かったまま流すので、録画は成功したように見えて中身が全部
 /// スクランブルされたまま、という分かりにくい壊れ方をする。**実際に INT を通して**
 /// 確かめる。
@@ -16,7 +16,7 @@ namespace Denpa.Agent;
 /// <para>
 /// **使うカードは 1 枚。** 鍵の出どころはプロセスで 1 つ (<see cref="Keys"/>) で、
 /// INT に答えた最初のリーダーのカードを全部のチューナーで使い回す。カードに聞くのは
-/// ECM の中身が変わったときだけなので、1 枚で何台でも足りる。残りのリーダーは**予備** —
+/// ECM の中身が変わったときだけなので、1 枚で何台でも足りる。残りのリーダーは**予備**で、
 /// 使っているカードが答えなくなったら、繋ぎ直すときに探し直して使う (<see cref="BCas"/>)。
 /// チューナーごとにカードを割り当てることはしない。
 /// </para>
@@ -32,7 +32,7 @@ public static class Card
     private static Task<CardSurvey>? _checking;
 
     /// <summary>
-    /// 走っている確かめの結果を共有する。**同時に 1 本だけ** — 切り上げたあとも確かめは
+    /// 走っている確認の結果を共有する。**同時に 1 本だけ。** 切り上げたあとも確認は
     /// 走り続けるので、画面を開き直すたびに足すとロックの前に溜まっていく
     /// </summary>
     private static Task<CardSurvey> Checking()
@@ -51,7 +51,7 @@ public static class Card
     public static JsonObject Status(Func<IReadOnlyList<string>> streaming)
     {
         /*
-         * **denpa は 10 秒で諦める。** それより先に切り上げて理由を返す —
+         * **denpa は 10 秒で待つのをやめる。** それより先に切り上げて理由を返す。
          * 間に合わないと、画面には「カードの状態を確かめるエージェントに繋がりません」とエージェントのせいに見える
          */
         CardSurvey survey;
@@ -169,7 +169,7 @@ public static class Card
     }
 
     /// <summary>
-    /// 予備のリーダーを並べて同時に覗く。**間に合わなかったものは待たない** —
+    /// 予備のリーダーを並べて同時に覗く。**間に合わなかったものは待たない。**
     /// 固まったリーダー 1 つのせいで表ごと出なくなるより、その行だけ理由を出す
     /// </summary>
     internal static ReaderState[] Probe(IReadOnlyList<CardLinkCandidate> candidates, TimeSpan within)
@@ -193,7 +193,7 @@ public static class Card
     private static readonly Dictionary<string, Task<ReaderState>> Running = [];
 
     /// <summary>
-    /// そのリーダーの覗き。**前の覗きが終わっていなければ、その結果を共有する** — 固まった
+    /// そのリーダーの覗き。**前の覗きが終わっていなければ、その結果を共有する。** 固まった
     /// リーダーは待つのをやめたあとも開いたままなので、重ねて開くと自分で締め出す
     /// </summary>
     private static Task<ReaderState> Peeking(CardLinkCandidate candidate)
@@ -227,7 +227,7 @@ public static class Card
     }
 
     /// <summary>
-    /// 画面に返す形式。**<c>message</c> は困っているときだけ** — リーダーの名前や
+    /// 画面に返す形式。**<c>message</c> は困っているときだけ。** リーダーの名前や
     /// カードの番号は表 (<c>readers</c>) に出るので繰り返さない
     /// </summary>
     internal static JsonObject Report(CardSurvey survey, IReadOnlyList<string> streaming)

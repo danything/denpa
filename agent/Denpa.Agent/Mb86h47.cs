@@ -408,7 +408,7 @@ public sealed class Mb86h47 : II2c
         Modify(0xFDBC14, 0, 0x00040000);
         Modify(0xFD80B4, 0, 4);
         Write32(0xFD8510, Mb86h47Programs.BulkChunk);
-        // 置き場の塊の頭を消す (電源投入時の SDRAM は不定。頭が 0 の塊は見ない)
+        // 置き場の塊の先頭を消す (電源投入時の SDRAM は不定。先頭が 0 の塊は見ない)
         for (var slot = 0; slot < Mb86h47Programs.BulkSlots; slot++) Write32(Mb86h47Programs.BulkBuffer + (uint)(slot * Mb86h47Programs.BulkChunk), 0);
         ArmCommandDma();
         Write32(Box(Mb86h47Programs.BoxBulkEnable), Mb86h47Programs.BulkEnable);
@@ -534,7 +534,7 @@ public sealed class Mb86h47 : II2c
             if (left <= 0) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が bulk の塊に答えません");
             var got = _usb.InterruptRead(CommandIn, reply, left);
             if (got < 8) continue;
-            // 答えの語の並びは、印 (0xA5) が頭か終わりかで見分ける (FIFO のバイトの並びは仕様書に無い)
+            // 答えの語の並びは、印 (0xA5) が先頭か終わりかで見分ける (FIFO のバイトの並びは仕様書に無い)
             if (reply[0] != Mb86h47Programs.BulkReplyMark && reply[3] == Mb86h47Programs.BulkReplyMark)
             {
                 for (var i = 0; i + 4 <= got; i += 4) reply.AsSpan(i, 4).Reverse();
@@ -768,8 +768,8 @@ public sealed class Mb86h47 : II2c
 
 /// <summary>
 /// 9.4 EP 0x81 から来る「4 バイトの到着時刻 + 188 バイトの TS」の 192 バイトの単位から取り出して、188 バイトのパケットにする。
-/// 読みの区切りは単位と揃わないので、TS の頭 (単位の 5 バイト目) の 0x47 と、192 バイト先の 0x47 の 2 つで揃える
-/// (TS の中の 0x47 は珍しくないので 1 つでは信じない)。揃えたあと頭が 0x47 でなくなったら揃え直す
+/// 読みの区切りは単位と揃わないので、TS の先頭 (単位の 5 バイト目) の 0x47 と、192 バイト先の 0x47 の 2 つで揃える
+/// (TS の中の 0x47 は珍しくないので 1 つでは信じない)。揃えたあと先頭が 0x47 でなくなったら揃え直す
 /// </summary>
 public sealed class Mb86h47Framer
 {
@@ -793,7 +793,7 @@ public sealed class Mb86h47Framer
         {
             if (!_locked)
             {
-                // 頭の候補: そこと 192 バイト先の両方の TS の頭が 0x47。192 バイト先がまだ来ていなければ次を待つ
+                // 先頭の候補: そこと 192 バイト先の両方の TS の先頭が 0x47。192 バイト先がまだ来ていなければ次を待つ
                 var found = -1;
                 for (var i = at; i + Unit + Stamp < length; i++)
                 {

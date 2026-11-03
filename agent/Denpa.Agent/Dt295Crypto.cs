@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /*
  * PIX-DT295 の暗号の部品 (仕様書 5.1)。AES-128 と AES-CMAC だけ。鍵も IV もここには持たず、いつも引数で受け取る。
- * 節の番号は DT295 の仕様書のもの (Dt295.cs の頭)。
+ * 節の番号は DT295 の仕様書のもの (Dt295.cs の冒頭)。
  */
 
 /// <summary>AES-128 の ECB・CBC と AES-CMAC (RFC 4493)、端数付き CBC 復号 (5.1)</summary>

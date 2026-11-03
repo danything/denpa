@@ -5,7 +5,7 @@ namespace Denpa.Agent;
 
 /*
  * PIX-DT295 の ASSP (MB86M01 系) との基本の操作 (仕様書 3 章)。レジスターの読み書き・イベント・状態・コマンド・I2C・
- * セキュアコマンド・イメージの書き込み。節の番号は DT295 の仕様書のもの (Dt295.cs の頭)。
+ * セキュアコマンド・イメージの書き込み。節の番号は DT295 の仕様書のもの (Dt295.cs の冒頭)。
  *
  * **機材への書き込みは全部 Send を通す** (control OUT も bulk OUT も)。--trace のときはそこで 1 行ずつ記録に出し、
  * 書いた回数もそこで数える。
@@ -415,7 +415,7 @@ public sealed class Dt295Bridge : IDt295Board
         return SecureResponse(id, response, key, iv);
     }
 
-    /// <summary>応答の 512 バイトを解く (3.11)。合わなければ投げる</summary>
+    /// <summary>応答の 512 バイトを読み取る (3.11)。合わなければ投げる</summary>
     public static byte[] SecureResponse(uint id, byte[] response, byte[]? key, byte[]? iv)
     {
         if (DecryptsResponse(id)) Dt295Crypto.CbcDecryptWithResidual(key!, iv!, response.AsSpan(CipherAt, CipherLength));

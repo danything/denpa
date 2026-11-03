@@ -27,7 +27,7 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
     /// <summary>地上波のチューナーを初期化済み。認証し直したとき (<see cref="Forget"/>) と衛星を選んだときに false に戻る</summary>
     private bool _terrestrialReady;
 
-    /// <summary>認証し直したあと、次の地上波の選局で初期化をやり直す</summary>
+    /// <summary>認証し直したあと、次の選局 (地上波・衛星とも) で初期化をやり直す</summary>
     public void Forget()
     {
         _terrestrialReady = false;
@@ -249,7 +249,7 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
     }
 
     /// <summary>
-    /// 地上波を選ぶ (7.3 の初期化 → 7.4 の選局)。衛星を選んでいたら先に衛星をスリープさせる (8.7)。
+    /// 地上波を選ぶ (7.3 の初期化 → 7.4 の選局。続けて地上波を選ぶときは初期化を省く)。衛星を選んでいたら先に衛星をスリープさせる (8.7)。
     /// ロックの判定は仕様書に無い (7.5)
     /// </summary>
     public void TuneTerrestrial(int channel) => TuneTerrestrialHz(TerrestrialHz(channel));
@@ -413,7 +413,7 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
 
     /// <summary>
     /// 衛星を選ぶ (8.3 → 8.4)。<paramref name="tsid"/> があればその TSID を選び (8.4 の手順 5・14・15)、無ければスロット番号 (0〜7) で選ぶ (8.6)。選んだ TSID を返す。
-    /// 順序は「地上波チューナーの初期化 → 衛星の初期化 → 地上波側のスリープ → 衛星の選局」
+    /// 順序は「地上波チューナーの初期化 → 衛星の初期化 → 地上波側のスリープ → 衛星の選局」。続けて衛星を選ぶときは初期化の 3 つを省く
     /// </summary>
     public int TuneSatellite(long ifHz, int slot, int? tsid = null)
     {

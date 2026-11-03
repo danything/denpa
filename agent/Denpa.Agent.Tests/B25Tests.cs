@@ -387,7 +387,7 @@ public class B25Tests
     /// <summary>
     /// **ECM より前は、ECM を挟んで続く偶奇の並びだけ復号する。** その前の並びは
     /// 前の鍵かもしれない。復号すると化けたものを「復号できた」として流すので、掛かったまま流す。
-    /// 並びは ECM ごとに見る — 音声だけ見ると奇数が続いていても、その間に映像が偶数へ切り替わっている
+    /// 並びは ECM ごとに見る。音声だけ見ると奇数が続いていても、その間に映像が偶数へ切り替わっている
     /// </summary>
     [Test]
     public async Task 頭はECMを挟んで続く偶奇の並びだけ復号する()
@@ -472,7 +472,7 @@ public class B25Tests
 
         var output = Run(descrambler, wire, flush: false);
 
-        // 上限に達したところで溜めたぶんを吐き、残りは溜めずに出てくる
+        // 上限に達したところで溜めたぶんを書き出し、残りは溜めずに出てくる
         await Assert.That(output.Length).IsEqualTo(wire.Length);
         await Assert.That(Diff(output, wire[..output.Length])).IsEqualTo(-1);
         await Assert.That(descrambler.Undecodable).IsEqualTo(output.Length / 188);
@@ -569,7 +569,7 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **貰えなかった中身は、少し置けば同じ中身でも聞き直す。** すぐには聞き直さない —
+    /// **貰えなかった中身は、少し置けば同じ中身でも聞き直す。** すぐには聞き直さず、
     /// 0.1 秒おきに来る同じ ECM のたびに、固まった相手を待たない
     /// </summary>
     [Test]
@@ -670,7 +670,7 @@ public class B25Tests
         var cards = new Cards();
         var descrambler = new Descrambler(cards);
 
-        // 終わりの吐き出し (Flush) をしなくても、全部が復号されて出てくる
+        // 終わりの書き出し (Flush) をしなくても、全部が復号されて出てくる
         var output = Run(descrambler, ts.Wire.ToArray(), flush: false);
 
         await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);

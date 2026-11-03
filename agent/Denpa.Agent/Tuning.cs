@@ -15,7 +15,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// 方式は 4 つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
+/// 方式は 5 つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
 /// 違うのは誰がデバイスを持っているか。
 /// </para>
 ///
@@ -24,6 +24,7 @@ namespace Denpa.Agent;
 /// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など) と asicen-userland の機材 (PX-W3U3。同じ IPC)。<c>px4d</c> (asicen なら <c>asicend</c>) が持ち、受信機を取ったまま制御ソケットで選局し直す (Px4.cs)</item>
 /// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
 /// <item><see cref="Zd1jTuner"/> … Sony CECH-ZD1 J。エージェントが USB を直に持ち、ボードを開いたまま周波数まわりだけ書き換える (Zd1j.cs)</item>
+/// <item><see cref="Dt295Tuner"/> … PIXELA PIX-DT295 (試験的)。エージェントが USB を直に持ち、ボードを初めての選局で開いたまま選局し直す (Dt295Tuner.cs)</item>
 /// </list>
 ///
 /// <para>
@@ -127,7 +128,7 @@ internal static unsafe partial class Sys
 /// <para>
 /// **Windows には poll が無い。** 子 (siano-ts) の標準出力の pipe は .NET の <see cref="Stream"/> を
 /// 裏のスレッドに読ませ、こちらは同じく 200ms ごとに起きて印を見る (<see cref="Background"/>)。
-/// px4d から受けた TS はどの OS でも fd を使わない (<see cref="Piped"/>)。
+/// px4d・CECH-ZD1 J・DT295 から受けた TS はどの OS でも fd を使わない (<see cref="Piped"/>)。
 /// </para>
 /// </summary>
 /// <param name="handle">読む fd。DVB の dvr でも、子プロセスの標準出力の pipe でも同じ</param>
@@ -151,10 +152,10 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     public DeviceStream(Stream pipe, Func<string?>? ended = null)
         : this(new SafeFileHandle(), ended) => _background = new Background(pipe);
 
-    /// <summary>px4d から受けた TS の読み出し側 (<see cref="Piped"/>)。あれば fd は使わない</summary>
+    /// <summary>Pipe に詰めた TS の読み出し側 (<see cref="Piped"/>)。あれば fd は使わない</summary>
     private readonly Piped? _piped;
 
-    /// <summary>px4d から受けた TS (Px4Stream) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
+    /// <summary>Pipe に詰めた TS (Px4Stream・Zd1jStream・Dt295Stream) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
     public DeviceStream(PipeReader reader, Func<string?>? ended = null)
         : this(new SafeFileHandle(), ended) => _piped = new Piped(reader);
 
@@ -173,7 +174,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         private readonly Lock _gate = new();
 
         /// <summary>
-        /// 待っている読み。**Task にしない** — 待つたびに Task と待ち合わせの入れ物を作ると、
+        /// 待っている読み。**Task にしない。** 待つたびに Task と待ち合わせの入れ物を作ると、
         /// 8 本ぶん流したときに秒あたり数千回の確保になる。読みが済んだら <see cref="_ready"/> を立ててもらい、
         /// それを 200ms ずつ待つ (どちらも使い回す)
         /// </summary>
@@ -192,7 +193,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         /// 待っている読みが済むのを、長くても <see cref="WakeMs"/> 待つ。
         ///
         /// <para>
-        /// **済んだかは <see cref="_pending"/> で見る。<see cref="_ready"/> だけを信じない** —
+        /// **済んだかは <see cref="_pending"/> で見る。<see cref="_ready"/> だけで決めない。**
         /// PipeReader は済んだ印を立ててから、ロックの外で合図を呼ぶ。読む側はその間に印を見て先に読み進め、
         /// 次の読みを待ちはじめることがあるので、**前の読みの合図が遅れて届く**。それを次の読みが済んだと
         /// 取ると、まだ済んでいない読みの結果を取得しようとして投げる (CI でときどき落ちていた)
@@ -275,7 +276,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         }
 
         /// <summary>
-        /// 読むのをやめる。書く側はもう終わっている (Px4Stream が先に閉じる) ので、待っている読みも戻っている。
+        /// 読むのをやめる。書く側はもう終わっている (Px4Stream などが先に閉じる) ので、待っている読みも戻っている。
         /// **読む側がまだ中にいれば触らない** (同時に触ると PipeReader が投げる。溜めは GC に任せる)
         /// </summary>
         public void Complete()
@@ -317,7 +318,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         private int _left;
 
         /// <summary>
-        /// 読めたバイト数。0 は尽きた、null は降りた。**ロックを待つ間も降りる合図を見る** —
+        /// 読めたバイト数。0 は尽きた、null は降りた。**ロックを待つ間も降りる合図を見る。**
         /// 先に読んでいる側が待っている間、後から来た側 (抜けたい側) がロックの手前で止まらないように
         /// </summary>
         public int? Read(Span<byte> target, Func<bool> giveUp)
@@ -407,7 +408,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>
     /// **いま溜まっているぶんを読んで捨てる。待たない** (<c>DvbTuner.Tune</c>。demux を止めてから呼ぶ)。
     /// 溢れの印 (<c>EOVERFLOW</c>) はカーネルが読んだときに空にするので、そのまま読み続ける。
-    /// fd を持たない読み出し側 (px4d・Windows の pipe) では何もしない
+    /// fd を持たない読み出し側 (Pipe に詰めた TS・Windows の pipe) では何もしない
     /// </summary>
     /// <returns>捨てたバイト数</returns>
     public long Discard()
@@ -451,7 +452,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     }
 
     /// <summary>
-    /// 畳む。px4d から受けた TS を待っている読む側は**すぐ起こす** (次に起きる 200ms を待たない。
+    /// 畳む。Pipe に詰めた TS を待っている読む側は**すぐ起こす** (次に起きる 200ms を待たない。
     /// 混んだ CI では 500ms を超えていた)。印を立ててから起こす (起きた側がその印を見て戻る)
     /// </summary>
     public void Stop()
@@ -478,7 +479,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     }
 
     /// <summary>
-    /// **理由の分かる終わり方をする。** 戻らない失敗は 0 (= 終わり) にせず投げる — 0 にしていた頃は、
+    /// **理由の分かる終わり方をする。** 戻らない失敗は 0 (= 終わり) にせず投げる。0 にしていた頃は、
     /// 選局が落ちた記録に理由が残らなかった
     /// </summary>
     public override int Read(byte[] buffer, int offset, int count) => Read(buffer, offset, count, null);
@@ -648,7 +649,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private const ushort AllPids = 0x2000;
 
     /// <summary>
-    /// demux のフィルタの溜め。**いまの流し方 (全 PID を <c>DMX_OUT_TS_TAP</c>) では使われない** —
+    /// demux のフィルタの溜め。**いまの流し方 (全 PID を <c>DMX_OUT_TS_TAP</c>) では使われない。**
     /// 出し方を変えたときに既定 (2KB) まで落ちないよう残してあるだけ
     /// </summary>
     private const int DemuxBuffer = 8 * 1024 * 1024;
@@ -806,7 +807,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     ///
     /// <para>
     /// **待たずに読み始めてはいけない。** 同期前の dvr からは何も出ないか、
-    /// 崩れたものが出る。総当たりのスキャンはここで諦める時間がそのまま
+    /// 崩れたものが出る。総当たりのスキャンはここで待つのをやめる時間がそのまま
     /// 一周の長さになるので、短めにしてある。
     /// </para>
     /// </summary>
@@ -829,7 +830,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     {
         Sys.Call(_demux, DmxSetBufferSize, DemuxBuffer, "demux の溜めの指定");
         /*
-         * 本当に溜まるのは dvr のほう。**断られても続ける** — 大きくできなくても選局は通るので、
+         * 本当に溜まるのは dvr のほう。**断られても続ける。** 大きくできなくても選局は通るので、
          * 投げると「溢れにくくする」ために選局を落とすことになる (古いカーネルや別のドライバが断る目もある)
          */
         if (Sys.Ioctl((int)_dvr.Handle.DangerousGetHandle(), DmxSetBufferSize, DvrBuffer) < 0)
