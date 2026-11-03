@@ -1563,13 +1563,9 @@ describe("定義の書き換えと選局", () => {
       (await request("PUT", "/denpa/tuners", { tuners: FOUR })).status,
     ).toBe(200);
     try {
-      const stream = await open(
-        "type=GR&channel=T16&use=epg%20T16&priority=3",
-      );
+      const stream = await open("type=GR&channel=T16&use=epg%20T16&priority=3");
       await stream.reader?.read();
-      expect((await tuners())[0].users.map((u) => u.use)).toEqual([
-        "epg T16",
-      ]);
+      expect((await tuners())[0].users.map((u) => u.use)).toEqual(["epg T16"]);
 
       const off = FOUR.map((t) =>
         t.name === "gr0" ? { ...t, disabled: true } : t,
