@@ -64,15 +64,15 @@
 
   /**
    * スキャンする種別の選び方。値はそのまま `types` で送る (「すべて」はカンマで3つ)。
-   * 入れたばかりのときに要るのは地上波だけなので、それが先頭 (衛星は最初から局が入っている)
+   * 先頭の「すべて」が初めの選び方。衛星は放送の NIT からすぐ作れるので、全部まとめて回しても時間はほぼ地上波のぶんだけ
    */
   const SCAN_CHOICES = [
+    { value: "GR,BS,CS", label: "すべて" },
     { value: "GR", label: SERVICE_TYPE_LABEL["GR"] },
     // CATV の周波数変換パススルー。UHF に加えて C13〜C63 も回す (`scan.ts` の `SCAN_KINDS`)
     { value: "CATV", label: `${SERVICE_TYPE_LABEL["GR"]} (CATV)` },
     { value: "BS", label: SERVICE_TYPE_LABEL["BS"] },
     { value: "CS", label: SERVICE_TYPE_LABEL["CS"] },
-    { value: "GR,BS,CS", label: "すべて" },
   ];
   /*
    * 物理チャンネルと、そこに入っている局。**denpa 自身のDBから来る。**
