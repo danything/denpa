@@ -17,7 +17,11 @@ import {
   readTables,
   transponderOf,
 } from "./satellite";
-import { needsLineup } from "./satellite-lineup";
+import {
+  goneNetworks,
+  leftoverNetworks,
+  needsLineup,
+} from "./satellite-lineup";
 import type { AgentChannel } from "./tuner";
 
 /**
@@ -310,6 +314,164 @@ describe("入口から一覧を作る", () => {
   });
 });
 
+/** 合成の TS を 1 セクションずつ別のかたまりで返す (実際の放送のように、表が順に届く)。閉じない */
+function inChunks(parts: [number, Uint8Array][]): ReadableStream<Uint8Array> {
+  let i = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      const part = parts[i];
+      if (part === undefined) return new Promise(() => undefined);
+      controller.enqueue(packetize(part[0], part[1], i & 0x0f));
+      i++;
+    },
+  });
+}
+
+/** CS のネットワーク 6 (CS-2)。NIT[other] にネットワーク 7 (CS-4) と BS (エンジニアリング) が載る */
+const cs6Nit = () =>
+  nitSection(6, null, [
+    [24608, 6, [[296, 0x01]], satelliteDeliveryDescriptor(CS2)],
+  ]);
+const cs6Sdt = () => sdtSection(24608, 6, [[296, 0x01, "でんぱシネマ"]]);
+const cs7Other = () =>
+  nitSection(7, null, [[28736, 7, [], satelliteDeliveryDescriptor(CS4)]], {
+    other: true,
+  });
+const bsOther = () =>
+  nitSection(4, null, [[16625, 4, [], satelliteDeliveryDescriptor(BS15)]], {
+    other: true,
+  });
+const cs7 = () =>
+  fromSections([
+    [
+      0x10,
+      nitSection(7, null, [
+        [28736, 7, [[55, 0x01]], satelliteDeliveryDescriptor(CS4)],
+      ]),
+    ],
+    [0x11, sdtSection(28736, 7, [[55, 0x01, "ソラスポーツ"]])],
+  ]);
+
+/** 今の控えのチャンネル (ネットワーク 7 は前のバージョンの名前) */
+const oldCs7: AgentChannel = {
+  type: "CS",
+  channel: "CS04",
+  networkId: 7,
+  transportStreamId: 28736,
+  remoteControlKeyId: null,
+  services: [{ serviceId: 55, serviceType: 1, name: "ソラスポーツ" }],
+};
+
+describe("CS はネットワークを欠かさない", () => {
+  test("NIT[other] が NIT[actual] と局名より後に届いても、待ってもう片方のネットワークを開く", async () => {
+    const opened: string[] = [];
+    const lineup = await readLineup(
+      "CS",
+      async (channel) => {
+        opened.push(channel);
+        if (channel !== "CS02") return cs7();
+        // actual と局名が先にそろい、BS の NIT[other]、CS の NIT[other] の順に届く
+        return inChunks([
+          [0x10, cs6Nit()],
+          [0x11, cs6Sdt()],
+          [0x10, bsOther()],
+          [0x10, cs7Other()],
+        ]);
+      },
+      { timeout: 2_000 },
+    );
+    expect(opened).toEqual(["CS02", "CS04"]);
+    expect(lineup.networks).toEqual([6, 7]);
+    expect(lineup.missing).toEqual([]);
+    expect(lineup.channels.map((c) => c.channel)).toEqual([
+      "CS02:24608",
+      "CS04:28736",
+    ]);
+  });
+
+  test("もう片方のネットワークを読めなければ、今のチャンネルを残す", async () => {
+    const lineup = await readLineup(
+      "CS",
+      async (channel) => {
+        if (channel !== "CS02") throw new Error("チューナーが空いていません");
+        return fromSections([
+          [0x10, cs6Nit()],
+          [0x10, cs7Other()],
+          [0x11, cs6Sdt()],
+        ]);
+      },
+      { timeout: 500, previous: [oldCs7] },
+    );
+    expect(lineup.networks).toEqual([6]);
+    expect(lineup.missing).toEqual([7]);
+    expect(lineup.channels.map((c) => [c.channel, c.networkId])).toEqual([
+      ["CS02:24608", 6],
+      ["CS04", 7],
+    ]);
+    expect(lineup.log.at(-1)).toContain("ネットワーク 7");
+  });
+
+  test("NIT[other] を読めなければ、残りの入口も開く", async () => {
+    const opened: string[] = [];
+    const lineup = await readLineup(
+      "CS",
+      async (channel) => {
+        opened.push(channel);
+        if (channel === "CS04") return cs7();
+        return fromSections([
+          [0x10, cs6Nit()],
+          [0x11, cs6Sdt()],
+        ]);
+      },
+      { timeout: 300 },
+    );
+    expect(opened).toEqual(["CS02", "CS04", "CS08"]);
+    expect(lineup.networks).toEqual([6, 7]);
+    expect(lineup.missing).toEqual([]);
+  });
+
+  test("NIT[other] を読めず、あるはずのネットワークが読めなければ missing に返す", async () => {
+    const lineup = await readLineup(
+      "CS",
+      async () =>
+        fromSections([
+          [0x10, cs6Nit()],
+          [0x11, cs6Sdt()],
+        ]),
+      { timeout: 200, expected: [7] },
+    );
+    expect(lineup.networks).toEqual([6]);
+    expect(lineup.missing).toEqual([7]);
+    // 控えに無いネットワークは残せるチャンネルが無い
+    expect(lineup.channels.map((c) => c.channel)).toEqual(["CS02:24608"]);
+  });
+
+  test("NIT[other] に載っていないネットワークは無くなったものとして残さない", async () => {
+    const lineup = await readLineup(
+      "CS",
+      async () =>
+        fromSections([
+          [0x10, cs6Nit()],
+          [0x10, bsOther()],
+          [
+            0x10,
+            nitSection(
+              8,
+              null,
+              [[30000, 8, [], satelliteDeliveryDescriptor(CS4)]],
+              { other: true },
+            ),
+          ],
+          [0x11, cs6Sdt()],
+        ]),
+      { timeout: 200, previous: [oldCs7] },
+    );
+    // ネットワーク 8 は CS-4 を開いても 7 しか来ないので読めない。7 は NIT[other] に無いので残さない
+    expect(lineup.missing).toEqual([8]);
+    expect(lineup.channels.map((c) => c.networkId)).toEqual([6]);
+  });
+});
+
 describe("放送の一覧から入れるか", () => {
   const entry = (type: "BS" | "CS" | "GR", channel: string) =>
     ({ type, channel, services: [] }) as unknown as AgentChannel;
@@ -325,5 +487,58 @@ describe("放送の一覧から入れるか", () => {
     expect(
       needsLineup([entry("BS", "BS15:16625"), entry("BS", "BS01_0")], "BS"),
     ).toBe(true);
+  });
+});
+
+describe("一覧から落ちたネットワークを作り直す", () => {
+  const cs = (channel: string, networkId: number) =>
+    ({
+      type: "CS",
+      channel,
+      networkId,
+      transportStreamId: 0,
+      remoteControlKeyId: null,
+      services: [],
+    }) satisfies AgentChannel;
+  // エージェントの一覧はネットワーク 6 だけ。局の表にはネットワーク 7 が前の名前で残っている
+  const channels = [cs("CS02:24608", 6), cs("CS08:24704", 6)];
+  const stored = [
+    { type: "CS", network_id: 6, channel: "CS02:24608" },
+    { type: "CS", network_id: 7, channel: "CS04" },
+    { type: "CS", network_id: 7, channel: "CS06" },
+    { type: "BS", network_id: 4, channel: "BS15_0" },
+  ];
+
+  test("局の表に前の名前で残っていて一覧に無いネットワークを、読みに行くネットワークにする", () => {
+    expect(leftoverNetworks(channels, "CS", stored)).toEqual([7]);
+    expect(needsLineup(channels, "CS", stored)).toBe(true);
+  });
+
+  test("一覧にあるネットワークの前の名前と、ほかの種別の行は見ない", () => {
+    expect(
+      needsLineup(
+        [...channels, cs("CS04:28736", 7)],
+        "CS",
+        stored.filter((row) => row.type !== "BS"),
+      ),
+    ).toBe(false);
+    expect(
+      leftoverNetworks([{ ...cs("BS15:16625", 4), type: "BS" }], "BS", [
+        { type: "CS", network_id: 7, channel: "CS04" },
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("放送から無くなったネットワーク", () => {
+  test("NIT[other] に載らず読めてもいないネットワークは、無くなったものとする", () => {
+    expect(goneNetworks([7], { networks: [6], listed: [8] })).toEqual([7]);
+    // NIT[other] に載っている (読めなかっただけ)・読めたものは無くなっていない
+    expect(goneNetworks([7], { networks: [6], listed: [7] })).toEqual([]);
+    expect(goneNetworks([7], { networks: [6, 7], listed: [] })).toEqual([]);
+  });
+
+  test("NIT[other] を読めなければ決めない", () => {
+    expect(goneNetworks([7], { networks: [6], listed: [] })).toEqual([]);
   });
 });
