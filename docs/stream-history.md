@@ -6,7 +6,7 @@
 
 **映像音声 (`ffmpeg → fMP4 → WebSocket → MSE`) → 字幕 (同じ ffmpeg の 2 つ目の出口から
 サイドチャネルへ) → データ放送 (1 局に絞った TS を自前の `BmlDecoder` でデコードする。[データ放送の統合](stream.md#データ放送の統合))
-の順に入れ、どれも入っています。** 低遅延は WebRTC / WHEP にせず ([不採用の理由](#webrtc--whep-による低遅延化--不採用))、エンコードしない放送のままの経路で縮めました ([stream.md](stream.md#放送そのままmpeg-2を送る))。
+の順に入れ、どれも入っています。** 低遅延は WebRTC / WHEP にせず ([不採用の理由](#webrtc--whep-による低遅延化--不採用))、MoQ にもせず ([不採用の理由](#media-over-quic-moq--不採用))、エンコードしない放送のままの経路で縮めました ([stream.md](stream.md#放送そのままmpeg-2を送る))。
 
 ## 採用しなかったもの
 
@@ -59,6 +59,54 @@ H.264 は段階ではなく、既定のコーデックとして残した。
 ([一瞬止まって遅延が増えていく](stream.md#一瞬止まって遅延が増えていく))。1 秒足らずのためにその 2 つを捨てるのは割に合わない。
 **本当に縮めたいなら、エンコードするのをやめるほうが桁違いに効く** ([放送そのまま (MPEG-2) を送る](stream.md#放送そのままmpeg-2を送る))。
 ffmpeg の WHIP muxer も H.264/Opus 固定の experimental で AV1 が使えない。
+
+### Media over QUIC (MoQ) — 不採用
+
+**縮まないのは WHEP と同じで、MoQ が効くのはパケットがよく欠ける回線だけ。家の外から見る経路の多くでは WebSocket か TCP に落ちて、今と変わらない。**
+MoQ は運び方を変えるだけで、エンコードするのに掛かるぶんは残る。受け側の受信バッファも消えない。どれだけ貯めるかは受け側が決める。
+効くのは、パケットが落ちたときに後ろが全部待たないことだ。MoQ はグループごとに別の QUIC ストリームで送り、古いグループは捨てられる。ただし
+それは QUIC (UDP) で繋がったときだけで、Cloudflare Tunnel 越し・UDP を塞ぐ回線・tailscale の DERP では TCP に戻る。
+
+|                                                             | いま (WebSocket + MSE)                                                                                      | MoQ にすると                                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 積むもの                                                    | Bun.serve の WebSocket 1 本                                                                                 | リレー (moq-relay など) がもう 1 プロセス + UDP の 443 番 + 証明書。Bun の HTTP/3 は試験段階で、WebTransport は別の計画 ([Bun v1.3.14](https://bun.com/blog/bun-v1.3.14)、2026-05-13)                                                                                        |
+| 字幕・データ放送                                            | 同じ 1 本で一緒に送る ([WebSocket プロトコル](stream.md#websocket-プロトコル))                              | トラックを分けて載せられる。選局などの双方向の指示 (`0x40`) は購読の仕組みに合わないので、別に組む                                                                                                                                                                           |
+| 止めて見る・追っかけ・5 分戻れる                            | MSE の `buffered` がそのまま                                                                                | 受け側を WebCodecs で書くなら全部作り直し。MSE に流し込めば残るが、その受信バッファのぶん遅延も戻る。過去のグループを取る FETCH はリレーが持っているぶんだけ                                                                                                                 |
+| 音声・エンコード方式の選び直し                              | 再エンコードして繋ぎ直すだけ                                                                                | 別のトラックを購読し直す (今と同じくらい)                                                                                                                                                                                                                                    |
+| 細い回線での振る舞い                                        | TCP 1 本なので、1 つ落ちると再送まで後ろが全部待つ。詰まった客には映像を捨てる (`ws.ts` の `BACKLOG_LIMIT`) | 古いグループを捨てて新しいものを先に送れる。差が出るのはここだけ                                                                                                                                                                                                             |
+| 通る経路 (Cloudflare Tunnel・tailscale・UDP が塞がれる回線) | どれも通る                                                                                                  | Cloudflare は配信元へ HTTP/3 で繋がない ([HTTP/3 の説明](https://developers.cloudflare.com/speed/optimization/protocol/http3/)、2026-08-14 更新) ので、Tunnel 越しは WebSocket に落ちる。tailscale は直結なら通り、DERP では TCP になる。UDP を塞ぐ回線も WebSocket に落ちる |
+| ブラウザ・端末の対応                                        | 全部                                                                                                        | Safari / iOS は 26.4 (2026-03) から。https でしか使えない。denpa-tv の Media3 に MoQ は無い                                                                                                                                                                                  |
+
+**仕様がまだ毎月のように変わる。** moq-transport は 2026-11-02 の draft-23 で、2026 年だけで 8 回 (draft-16〜23) 出ている
+([履歴](https://datatracker.ietf.org/doc/draft-ietf-moq-transport/history/))。draft-23 でも FETCH_OK が REQUEST_OK になり、FORWARD が意味を逆にして PAUSED になるなど、
+前のバージョンと繋がらない変更が入っている。IESG へ出す予定は 2026-12 ([moq WG](https://datatracker.ietf.org/wg/moq/about/))。
+映像の載せ方 (MSF・CMSF は 2026-06 の 01、LOC は 2026-11 の 05) はもっと手前で、moq.dev の moq-lite / hang は個人のドラフト (2026-09-24) のまま
+([WG のドキュメント](https://datatracker.ietf.org/wg/moq/documents/))。Cloudflare のリレーもベータで、対応は draft-14 / 16 ([Cloudflare MoQ](https://developers.cloudflare.com/moq/)、2026-07-31 更新)。
+
+**WebSocket に戻る経路のほうが、外から見る経路の多くを占める。** moq.dev のクライアントも WebTransport と `wss://` を同時に試して先に繋がったほうを使い、
+WebSocket では TCP の詰まりを避けられないと書いている ([WebSocket](https://doc.moq.dev/concept/layer/web-socket)、2026-11-04 に確認)。Safari は 26.4 で入ったが、
+長い接続が止まる WebKit の不具合があるとして WebSocket に留めている (同じページ)。iPhone はどのブラウザも中身が WebKit なのでこちらになる。
+UDP をまるごと塞ぐ回線は 3〜5% ([RFC 9308](https://www.rfc-editor.org/rfc/rfc9308.html)。2016 年の測定) で、携帯の回線と会社の網に分けた新しい数は見つからなかった。
+tailscale の DERP は TCP で、直結できないときは QUIC も TCP の中を通る。結局 WebSocket の経路を残すことになり、運び方が 2 通りに増えるだけになる。
+
+**効きそうなのは、外の細い回線で画質を段階で落とすとき。** 解像度を 720p・540p・360p のように測った帯域で切り替える仕組みを入れる場合、
+解像度ごとにトラックを分けて受け側が選び直す形がよく合う (個人のドラフト [draft-ugur-moq-fast-switching](https://datatracker.ietf.org/doc/draft-ugur-moq-fast-switching/) など)。
+ただ今の WebSocket でも、サーバがキーフレームで切り替え、詰まった客には映像を捨てられる。MoQ でしか作れないものではない。
+放送のままの TS を載せるドラフトもある ([draft-lcurley-moq-mpegts](https://datatracker.ietf.org/doc/draft-lcurley-moq-mpegts/)・[draft-gregoire-moq-msfts](https://datatracker.ietf.org/doc/draft-gregoire-moq-msfts/))
+が、放送のままは家の中から開いたときの経路で、家の中なら欠けはほぼ無い。
+
+リレーで大勢へ配れるのも、セルフホストでは要らない。同じ局を何人で見ても ffmpeg は 1 つで、配る先は数人しかいない。
+ffmpeg の MoQ の muxer は 2026-05-28 に出た PR ([#23263](https://mail-archive.com/ffmpeg-devel@ffmpeg.org/msg189252.html)) で、libmoq に頼り、H.264 と AAC の fMP4 だけ。
+AV1 は載らず、取り込まれたかは確かめていない。
+
+次の 3 つが揃ったら見直す。
+
+- moq-transport が RFC になり、互換の無い変更が止まる
+- Bun が WebTransport を受けられるようになるか、Cloudflare Tunnel が WebTransport を配信元まで通す (今は HTTP/3 で配信元に繋がない)
+- 画質を段階で落とす仕組みを入れたあとも、外の細い回線で WebSocket が詰まって途切れることが実測で残る
+
+Cloudflare Tunnel が WebTransport を通さないことは、配信元へ HTTP/3 で繋がないことからの推定で、確かめていない。
+テスラの車載ブラウザの Chromium のバージョンと WebTransport の有無、Safari の `serverCertificateHashes` (自己署名の証明書で LAN から繋ぐ方法) の対応も確かめていない。
 
 ### mpeg2toh264 で H.264 に書き換える — 不採用
 
