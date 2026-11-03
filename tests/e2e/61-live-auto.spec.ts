@@ -124,7 +124,7 @@ test.describe("ライブの自動", () => {
       // テレビのアプリは同じものを API で読む
       expect(
         await (await page.request.get("/api/playback/options")).json(),
-      ).toEqual({ indoor: true, hidden: ["h264", "hevc"] });
+      ).toEqual({ indoor: true, hidden: ["h264", "hevc"], hevc: false });
 
       // この端末は H.264 を選んでいた (`keepH264`) が、自動として開く
       await goto(page, "/live");
@@ -173,6 +173,6 @@ test.describe("ライブの自動", () => {
   }) => {
     const res = await request.get("/api/playback/options");
     expect(res.headers()["cache-control"]).toBe("no-store");
-    expect(await res.json()).toEqual({ indoor: true, hidden: [] });
+    expect(await res.json()).toEqual({ indoor: true, hidden: [], hevc: false });
   });
 });

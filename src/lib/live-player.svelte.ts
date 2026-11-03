@@ -254,6 +254,11 @@ interface LivePlayerOptions {
   choice?: LiveChoice;
   /** 開いた名前が家の中か (サーバが決める。`server/viewing.ts`)。「自動」の形式を決めるのに使う */
   indoor?: boolean;
+  /**
+   * ライブで H.265 を出せるか (ライブのエンコーダが GPU のときだけ。サーバが決める。`server/viewing.ts`)。
+   * 追っかけは渡しても使わない (追っかけは H.265 を出さない)
+   */
+  hevc?: boolean;
 }
 
 export function livePlayer(options: LivePlayerOptions = {}) {
@@ -306,6 +311,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let choice = $state<LiveChoice>(options.choice ?? "auto");
   /** AV1 を受け取れなかった (`start`)。**この画面を開いている間は**自動で AV1 を選ばない。選び直せば試し直す */
   let av1GaveUp = false;
+  /**
+   * H.265 を受け取れなかった (`start`)、またはサーバが GPU でエンコードできずに降りた (`error`)。AV1 と同じく、
+   * **この画面を開いている間は**自動で H.265 を選ばない。選び直せば試し直す
+   */
+  let hevcGaveUp = false;
   /**
    * 断り書き。失敗ではないが、リクエストされたとおりにできなかったとき (AV1 を出せないので H.264 に戻した・
    * サーバの `notice`)。`message` と違って選局で消さない — 戻した先が映っても理由が残っているように
@@ -1473,19 +1483,20 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * コーデックのメニューで選ぶ (自動・AV1・H.264・MPEG-2)。音声と同じ扱い (`setAudio`) で、選んだものは
+   * コーデックのメニューで選ぶ (自動・AV1・H.265・H.264・MPEG-2)。音声と同じ扱い (`setAudio`) で、選んだものは
    * **この端末に覚える** (`LAST_COOKIE`。ライブだけ)。選び直したなら前の断り書きは用済みで、諦めていた形式も試し直す。
    * 決まる形式が今と同じならリクエストし直さない (自動で AV1 になっていて AV1 を選んだ、など)
    */
   function setChoice(next: LiveChoice): void {
     // 互換モードで描けない形式は選ばせない (並べるが押せない。`unavailable`)
-    if ((next === "av1" || next === "h264") && unavailable().includes(next))
+    if (next !== "auto" && next !== "raw" && unavailable().includes(next))
       return;
     const before: LiveFormat = rawChosen && raw ? "raw" : codec;
     choice = next;
     warning = "";
     compatGaveUp = false;
     av1GaveUp = false;
+    hevcGaveUp = false;
     rawGaveUp = false;
     if (element === null) return;
     if (tuned !== null) remember(tuned, choice);
@@ -1513,8 +1524,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * **選んでいるものから、リクエストする形式を決める。** 自動なら `autoCodec`。選んだものは使えればそのまま、
-   * 使えなければ外と同じ順 (AV1 → H.264、互換モードは MPEG-2 まで) で代わりを探す。何も使えなければ null。
-   * 使えるかは、MPEG-2 はデコードできて諦めていないか、AV1・H.264 は受け取れて (互換モードなら描けて) 諦めていないか
+   * 使えなければ外と同じ順 (AV1 → H.265 → H.264、互換モードは AV1 → H.264 → MPEG-2) で代わりを探す。何も使えなければ null。
+   * 使えるかは、MPEG-2 はデコードできて諦めていないか、AV1・H.265・H.264 は受け取れて (互換モードなら描けて) 諦めていないか。
+   * H.265 はそのうえで、ライブのエンコーダが GPU のときだけ (`options.hevc`)。互換モードと追っかけでは使わない
    */
   function decideFormat(): LiveFormat | null {
     const forChase = chase !== null;
@@ -1523,6 +1535,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       av1: compat
         ? !compatGaveUp && compatSupport?.av1 === true
         : !av1GaveUp && mseCan("av1"),
+      hevc:
+        !compat &&
+        !forChase &&
+        options.hevc === true &&
+        !hevcGaveUp &&
+        mseCan("hevc"),
       h264: compat
         ? !compatGaveUp && compatSupport?.h264 === true
         : mseCan("h264"),
@@ -1777,7 +1795,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function unavailable(): LiveCodec[] {
     const support = compatSupport;
     if (!compat || support === null) return [];
-    return LIVE_CODECS.map((c) => c.id).filter((id) => !support[id]);
+    return LIVE_CODECS.map((c) => c.id).filter((id) => !canvasCan(id));
+  }
+
+  /** 互換モードで描けるか (`raw/support.ts` の `canvasSupport`)。H.265 は互換モードでは使わない */
+  function canvasCan(id: LiveCodec): boolean {
+    return id !== "hevc" && compatSupport?.[id] === true;
   }
 
   /**
@@ -1908,7 +1931,21 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           // リクエストし直しても入れなかった。取り上げた録画か、「ライブに戻る」を試していたなら追っかけへ
           const to = returning ? (yielded?.recording ?? null) : fallback;
           if (to !== null && tuned !== null) giveWay(to, returning);
-          else fail(notice.message);
+          else if (
+            codec === "hevc" &&
+            !raw &&
+            !hevcGaveUp &&
+            chase === null &&
+            tuned !== null
+          ) {
+            /*
+             * H.265 でリクエストして降りた (サーバが GPU でエンコードできなかった。ソフトウェアには降りられない)。
+             * この画面を開いている間は H.265 を諦めて、次の形式でリクエストし直す (`decideFormat`)
+             */
+            hevcGaveUp = true;
+            warning = `${notice.message}。ほかの形式に切り替えました`;
+            void tune(video, tuned, true);
+          } else fail(notice.message);
         } else if (notice.type === "lost") {
           /*
            * チューナーから外された (録画に取り上げられた・エージェントとの接続が切れた)。いつもの繋ぎ直しで
@@ -2098,10 +2135,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     const picked = pickMediaSource();
     if (picked === null || !picked.Source.isTypeSupported(codecs)) {
       if (baked !== "h264") {
-        // この画面を開いている間は、自動でも AV1 を選ばない (`decideFormat`)
-        av1GaveUp = true;
-        warning = "AV1 を再生できないため、H.264 に切り替えました";
-        swapCodec("h264");
+        // この画面を開いている間は、自動でもその形式を選ばない (`decideFormat`)。次の形式へ
+        if (baked === "av1") av1GaveUp = true;
+        else hevcGaveUp = true;
+        const next = decideFormat();
+        const to = next === null || next === "raw" ? "h264" : next;
+        warning = `${formatLabel(baked)} を再生できないため、${formatLabel(to)} に切り替えました`;
+        swapCodec(to);
         return;
       }
       fail("再生できない形式です");
@@ -2194,7 +2234,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 描けない形式なら、MPEG-2 か理由へ (`fallBack`)
    */
   function startCompat(video: HTMLVideoElement, baked: LiveCodec): void {
-    if (compatSupport?.[baked] !== true) {
+    if (!canvasCan(baked)) {
       const label = LIVE_CODECS.find((c) => c.id === baked)?.label ?? baked;
       fallBack(`${label} を再生できません`, "fmp4");
       return;
@@ -2317,10 +2357,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     }
     rawGaveUp = true;
-    if (
-      compat &&
-      (compatGaveUp || !LIVE_CODECS.some((c) => compatSupport?.[c.id] === true))
-    ) {
+    if (compat && (compatGaveUp || !LIVE_CODECS.some((c) => canvasCan(c.id)))) {
       fail("MPEG-2 の再生を続けられませんでした");
       return;
     }
@@ -2543,7 +2580,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get warning() {
       return warning;
     },
-    /** コーデックのメニューで選んでいるもの (自動・AV1・H.264・MPEG-2) */
+    /** コーデックのメニューで選んでいるもの (自動・AV1・H.265・H.264・MPEG-2) */
     get choice() {
       return choice;
     },

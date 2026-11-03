@@ -22,27 +22,42 @@ const { liveStart, readKept, viewingOptions, warmFormat } =
 
 describe("観るときの決まり (画面の load と GET /api/playback/options)", () => {
   test("設定が無ければ、外の名前は外・家の中のアドレスは家の中。外すコーデックは無い", () => {
-    expect(viewingOptions(new URL("https://dp.example.com/live"))).toEqual({
+    expect(
+      viewingOptions(new URL("https://dp.example.com/live"), false),
+    ).toEqual({
       indoor: false,
       hidden: [],
+      hevc: false,
     });
-    expect(viewingOptions(new URL("http://192.168.1.20:3000/"))).toEqual({
-      indoor: true,
-      hidden: [],
-    });
+    expect(viewingOptions(new URL("http://192.168.1.20:3000/"), false)).toEqual(
+      {
+        indoor: true,
+        hidden: [],
+        hevc: false,
+      },
+    );
   });
 
   test("家の中の名前に載せた名前は家の中。H.264 と H.265 を出さない設定なら両方を返す", () => {
     saveSettings({ indoorHosts: ["dp.l.example.com"], hideH264Hevc: true });
-    expect(viewingOptions(new URL("https://dp.l.example.com/live"))).toEqual({
+    expect(
+      viewingOptions(new URL("https://dp.l.example.com/live"), false),
+    ).toEqual({
       indoor: true,
       hidden: ["h264", "hevc"],
+      hevc: false,
     });
     // 同じ家でも、外の名前で開けば外
     expect(viewingOptions(new URL("https://dp.example.com/live")).indoor).toBe(
       false,
     );
     saveSettings({ indoorHosts: [], hideH264Hevc: false });
+  });
+
+  test("ライブで H.265 を出せるか (ライブのエンコーダが GPU か) をそのまま返す", () => {
+    expect(
+      viewingOptions(new URL("https://dp.example.com/live"), true).hevc,
+    ).toBe(true);
   });
 });
 

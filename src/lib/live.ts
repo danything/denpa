@@ -18,14 +18,17 @@ import type { AudioTrack } from "./arib";
 /**
  * エンコード方式 ([stream.md](../../docs/stream.md#エンコード))。`av1` は量を採るが、SVT-AV1 が溜め込むぶん放送の今から
  * 1秒ほど離れる (`server/live.ts` の `videoArgs`)。`h264` は速さを採り、どの端末でも出る。
+ * `hevc` (H.265) は**ライブのエンコーダが GPU のときだけ**出す (ソフトウェアのエンコーダを組んでいない。`#lib/hw.ts` の
+ * `SOFTWARE_CODECS`)。出せるかはサーバが決めて画面に渡す (`server/viewing.ts` の `ViewingOptions.hevc`)。追っかけでは出さない。
  * **画面の既定は「自動」** (`#lib/live-choice.ts` の `autoCodec`)。指示で省かれたときの既定は `h264` のまま (テレビのアプリ)。
  * MPEG-2 (放送のまま) は「エンコードしない」なのでここに並べない (`TuneCommand.raw`)
  */
-export type LiveCodec = "h264" | "av1";
+export type LiveCodec = "h264" | "hevc" | "av1";
 
 /** 選べるエンコード方式。コーデックのメニューに並べる順そのまま (「自動」のあと。選ぶのは端末の相性だけなので、説明は付けない) */
 export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
   { id: "av1", label: "AV1" },
+  { id: "hevc", label: "H.265" },
   { id: "h264", label: "H.264" },
 ];
 
@@ -37,15 +40,18 @@ export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
  *
  * - `avc1.640029` … High profile / Level 4.1。1080p60 まで
  * - `av01.0.08M.08` … Main profile / Level 4.0 / 8bit。同じく 1080p60 まで
+ * - `hvc1.1.6.L123.B0` … Main profile / Level 4.1。同じく 1080p60 まで。入れ物の中の名前も `hvc1` にする
+ *   (`server/live.ts` の `videoArgs`。ffmpeg の既定の `hev1` は Safari が受け取らない)
  * - `Opus` … MP4 での Opus の名前 (中の箱の名前と同じく大文字の O)。Safari は小文字の `opus` を断る
  *   (Chromium は両方受け取る)。入れ物が WebM なら小文字が正しいので、エンコード済みのファイルは `opus` のまま
  *
- * **音声も組で決まる** (`server/live.ts` の `audioArgs`)。AV1 は Opus、H.264 は AAC
+ * **音声も組で決まる** (`server/live.ts` の `audioArgs`)。AV1 は Opus、H.264・H.265 は AAC
+ * (H.265 を受け取りたいのは AV1 をデコードできない端末で、MP4 の Opus を受け取れるとは限らない)
  */
 export function codecsFor(codec: LiveCodec): string {
-  return codec === "av1"
-    ? 'video/mp4; codecs="av01.0.08M.08,Opus"'
-    : 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
+  if (codec === "av1") return 'video/mp4; codecs="av01.0.08M.08,Opus"';
+  if (codec === "hevc") return 'video/mp4; codecs="hvc1.1.6.L123.B0,mp4a.40.2"';
+  return 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 }
 
 /**

@@ -107,19 +107,19 @@ test("H.264・H.265 は初めから CQP で試し、ICQ では試さない", asy
   expect(lines.some((l) => /(h264|hevc)_vaapi -rc_mode ICQ/.test(l))).toBe(
     false,
   );
-  // デコードから GPU の試しは H.264 だけ (ライブは H.265 を出さない)
+  // デコードから GPU の試しは H.265 と H.264 (ライブはどちらも出す)
   expect(
     calls
       .filter((argv) => argv.includes("-hwaccel"))
       .map((argv) => argv.find((a) => a.endsWith("_vaapi"))),
-  ).toEqual(["h264_vaapi"]);
+  ).toEqual(["hevc_vaapi", "h264_vaapi"]);
   // デコードから GPU の試しはライブと同じ引数 (qp 25、ピラミッドなし)
   const full = calls.find((argv) => argv.includes("-hwaccel"));
   expect(full?.join(" ")).toContain("-rc_mode CQP -qp 25 -bf 0 -async_depth 1");
   expect(full?.join(" ")).toContain("deinterlace_vaapi=rate=field");
-  expect(device.full).toEqual(["h264"]);
+  expect(device.full).toEqual(["hevc", "h264"]);
   expect(describeDevice(device)).toBe(
-    "VA-API: H.265 / H.264、ライブはデコードから GPU: H.264",
+    "VA-API: H.265 / H.264、ライブはデコードから GPU: H.265 / H.264",
   );
   expect(liveHw("h264", {}, 0, devices)).toEqual({
     way: { device: device.path, kind: "vaapi" },
@@ -153,10 +153,10 @@ test("AV1 は ICQ が落ちたら CQP (-global_quality 75) で試し、通った
     (argv) => argv.includes("-hwaccel") && argv.includes("av1_vaapi"),
   );
   expect(fullAv1?.join(" ")).toContain("-rc_mode CQP -global_quality:v 75");
-  expect(device.full).toEqual(["av1", "h264"]);
+  expect(device.full).toEqual(["av1", "hevc", "h264"]);
   // (CQP) を添えるのは AV1 の落とした分だけ
   expect(describeDevice(device)).toBe(
-    "VA-API: AV1 (CQP) / H.265 / H.264、ライブはデコードから GPU: AV1 / H.264",
+    "VA-API: AV1 (CQP) / H.265 / H.264、ライブはデコードから GPU: AV1 / H.265 / H.264",
   );
   // ライブはデコードから GPU の方式を、AV1 は CQP のまま採る
   expect(liveHw("av1", {}, 0, devices)).toEqual({

@@ -127,9 +127,10 @@
   const player = livePlayer({
     confirm: drive.confirm,
     separateAudio: separateLiveAudio,
-    // 選んでいるもの (覚えている選択) と、開いた名前が家の中か。どちらもサーバが決める (`+page.server.ts`)
+    // 選んでいるもの (覚えている選択)、開いた名前が家の中か、H.265 を出せるか。どれもサーバが決める (`+page.server.ts`)
     choice: untrack(() => data.choice),
     indoor: untrack(() => data.indoor),
+    hevc: untrack(() => data.hevc),
   });
   /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
   let video = $state<HTMLVideoElement | null>(null);
@@ -884,6 +885,7 @@
                 choice: player.choice,
                 format: player.raw ? "raw" : player.codec,
                 raw: true,
+                hevc: data.hevc,
                 hidden: data.hidden.length > 0,
                 unavailable: player.unavailable,
                 onselect: (next) => player.setChoice(next),

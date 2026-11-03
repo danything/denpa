@@ -130,10 +130,29 @@ describe("⚙ のコーデックの行 (ライブ・追っかけ)", () => {
     expect(made.options.map((o) => o.key)).toEqual(["auto", "av1", "h264"]);
   });
 
-  test("H.264 を出さない設定では H.264 を並べない。自動で H.264 になっていれば値には出す", () => {
-    const { made } = codecs({ hidden: true, format: "h264" });
+  test("H.264 と H.265 を出さない設定では並べない。自動でそれになっていれば値には出す", () => {
+    const { made } = codecs({ hidden: true, hevc: true, format: "h264" });
     expect(made.options.map((o) => o.key)).toEqual(["auto", "av1", "mpeg2"]);
     expect(made.value).toBe("自動 (H.264)");
+    expect(
+      codecs({ hidden: true, hevc: true, format: "hevc" }).made.value,
+    ).toBe("自動 (H.265)");
+  });
+
+  test("H.265 はライブのエンコーダが GPU のとき (`hevc`) だけ、AV1 と H.264 の間に並べる", () => {
+    const { made, picked } = codecs({ hevc: true });
+    expect(made.options.map((o) => o.label)).toEqual([
+      "自動",
+      "AV1",
+      "H.265",
+      "H.264",
+      "MPEG-2",
+    ]);
+    made.pick("hevc");
+    expect(picked).toEqual(["hevc"]);
+    expect(
+      codecs({ choice: "hevc", format: "hevc", hevc: true }).made.value,
+    ).toBe("H.265");
   });
 
   test("互換モードで描けない形式は、並べるが押せない", () => {

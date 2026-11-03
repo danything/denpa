@@ -41,8 +41,9 @@ import { run } from "./stream";
  * ffmpeg は GPU を番号 (`-gpu N`) で受けるので、番号はデバイスファイルの並びから決める (`findNvidia`)。
  * 消費者向けの GPU は同時に開けるエンコードの数に上限がある (`nvencBusy`)。
  *
- * **H.265 (`hevc`) は録画のエンコードでだけ使う。** 試しのエンコードは AV1・H.264 と同じく方式ごとに1コマ行うが、
- * ソフトウェアのエンコーダは無く、ライブと追っかけ・その場の変換は H.265 を出さない (デコードから GPU の試し `probeFull` もしない)。
+ * **H.265 (`hevc`) は GPU でだけエンコードする。** 試しのエンコードは AV1・H.264 と同じく方式ごとに1コマ行う。
+ * ソフトウェアのエンコーダは無いので、ライブはライブのエンコーダが GPU のときだけ H.265 を出す (`live.liveHevc`)。
+ * 追っかけ・その場の変換は H.265 を出さない。
  *
  * **ライブ・追っかけ・その場の変換は、録画と別の設定で GPU に載る** (`liveHw`。設定 `liveHwAllow`)。
  * 録画とライブで使う GPU を分けられ、エンコーダをソフトウェアにすれば CPU に戻る。
@@ -275,7 +276,7 @@ const VAAPI_QP: Record<Exclude<HwCodec, "av1">, number> = {
 };
 
 /**
- * ライブの qp。ライブは H.265 を出さないが、型を録画と揃えて両方置く。**25 のまま** — 25 は B フレームを
+ * ライブの qp。H.265 も H.264 と同じ値 (H.265 では測っていない)。**25 のまま** — 25 は B フレームを
  * 2 枚作る FFmpeg の既定で、目標の XPSNR に揃っていた値 (前の録画の値)。ライブは B フレームを作らず
  * (`liveHwArgs`)、どのコマも P の qp で出るので、それより画質が落ちることはない
  */
@@ -836,8 +837,7 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
       return;
     }
     for (const device of devices) {
-      // ライブは H.265 を出さない (`liveHw`) ので、H.265 は試さない
-      for (const codec of device.vaapi.filter((c) => c !== "hevc")) {
+      for (const codec of device.vaapi) {
         const way = wayOf(device, "vaapi", codec);
         const hw = liveHwArgs({ way, full: true }, codec);
         const ok = await tryEncode([

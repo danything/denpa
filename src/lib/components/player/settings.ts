@@ -65,12 +65,13 @@ const MPEG2 = "mpeg2";
 const AUTO = "auto";
 
 /**
- * ライブと追っかけのコーデック。並びは **自動 → AV1 → H.264 → MPEG-2** (`#lib/live-choice.ts`)。押すと再エンコードに
+ * ライブと追っかけのコーデック。並びは **自動 → AV1 → H.265 → H.264 → MPEG-2** (`#lib/live-choice.ts`)。押すと再エンコードに
  * なるので映像が一瞬止まるが、前の映像を貼ったまま差し替わる。自動の行の値には、いま決まっている形式を添える (「自動 (MPEG-2)」)。
  *
  * `raw` を渡すと (ライブだけ) 末尾に **MPEG-2** が並ぶ。エンコードせずに放送そのままを
  * この端末でデコードする経路 (docs/stream.md#放送そのままmpeg-2を送る)。
- * `hidden` (世帯の設定。H.264 と H.265 を出さない) なら H.264 は並べない。自動で H.264 になっているのは値に出す。
+ * H.265 は `hevc` を渡したときだけ並ぶ (ライブで、ライブのエンコーダが GPU のとき。`server/viewing.ts`)。
+ * `hidden` (世帯の設定。H.264 と H.265 を出さない) なら H.264 と H.265 は並べない。自動でそれになっているのは値に出す。
  * `unavailable` に挙げた形式は、並べるが押せない (`live-player.svelte.ts` の `unavailable`)
  */
 export function liveCodecs(opts: {
@@ -81,12 +82,16 @@ export function liveCodecs(opts: {
   format: LiveFormat;
   /** MPEG-2 を並べるか (ライブだけ。追っかけに放送のままは無い) */
   raw?: boolean;
+  /** H.265 を並べるか (ライブで、ライブのエンコーダが GPU のときだけ。追っかけは出さない) */
+  hevc?: boolean;
   hidden?: boolean;
   unavailable: LiveCodec[];
   onselect: (choice: LiveChoice) => void;
 }): SettingChoice {
-  const codecs = LIVE_CODECS.filter(
-    (c) => !(opts.hidden === true && c.id === "h264"),
+  const codecs = LIVE_CODECS.filter((c) =>
+    c.id === "hevc"
+      ? opts.hevc === true && opts.hidden !== true
+      : !(opts.hidden === true && c.id === "h264"),
   );
   return {
     id: "codec",
