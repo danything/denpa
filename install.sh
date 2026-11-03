@@ -25,7 +25,8 @@
 #
 # 置き場:
 #   Linux / Mac  ~/denpa (DENPA_HOME で変えられる)    compose.yml (上げ直すたびに上書き)・compose.override.yml
-#                                                     (手を入れるならここ。無いときだけ雛形を作り、あれば触らない)・config/
+#                                                     (手を入れるならここ。無いときだけ雛形を作り、あれば触らない)・config/・
+#                                                     .env (denpa とエージェントが組むときの合言葉 AGENT_PAIR_TOKEN。無いときだけ足す)
 #   Mac だけ     ~/Library/Application Support/denpa-agent/  エージェント・px4-userland・siano-userland
 #                ~/Library/LaunchAgents/<LABEL>.plist        ログインしたら起こし、落ちたら起こし直す
 #                ~/Library/Logs/denpa-agent.log              エージェントのログ
@@ -167,6 +168,27 @@ genkan_env() {
     "      TRUSTED_NETWORKS: 192.168.0.0/16,10.0.0.0/8,${net#* }"
 }
 
+# denpa とエージェントが組むときの合言葉 (32 バイトの乱数を base64url で。docs/agent.md) を $pair に。
+# ~/denpa/.env に**1度だけ**作り、上げ直しても変えない。compose.prod.yml / compose.mac.yml がそこから読む。
+# .env がもうあれば (手で書いた人もいる) 行を足すだけで、ほかの行には触らない。
+# $1 にファイルを渡すと、.env に無いときはまずそれを使う (Mac: エージェントが自分で作った合言葉を変えない)
+pair_token() {
+  envfile="$DENPA_DIR/.env"
+  pair=""
+  if [ -f "$envfile" ]; then pair=$(sed -n 's/^AGENT_PAIR_TOKEN=//p' "$envfile" | tail -n 1 | tr -d '\r'); fi
+  [ -z "$pair" ] || return 0
+  if [ -n "${1:-}" ] && [ -s "$1" ]; then pair=$(tr -d '\r\n' < "$1"); fi
+  [ -n "$pair" ] || pair=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')
+  mkdir -p "$DENPA_DIR"
+  # 新しく作るときは本人だけが読めるように (あるファイルの権限は変えない)。
+  # 最後が改行で終わっていなければ、前の行にくっつかないように改行を足してから
+  (
+    umask 077
+    if [ -s "$envfile" ] && [ -n "$(tail -c 1 "$envfile")" ]; then echo >> "$envfile"; fi
+    echo "AGENT_PAIR_TOKEN=$pair" >> "$envfile"
+  )
+}
+
 # ~/denpa で docker compose。-f を付けないので compose.yml と compose.override.yml を Compose が自分で重ねる
 compose() { (cd "$DENPA_DIR" && docker compose "$@"); }
 
@@ -290,6 +312,7 @@ linux_main() {
   ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}' || true)
   [ -n "$ip" ] || ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
   ref=$(version)
+  pair_token
   start_denpa compose.prod.yml "$ref" "${ip:-$(hostname)}"
 }
 
@@ -406,9 +429,18 @@ mac_main() {
   # 短いと、止めたときに録画の途中で SIGKILL される (既定は 20 秒)。
   # ProcessType Interactive は、裏のジョブとして CPU や I/O を絞られないように (TS を流し続けるので)
   #
-  # **エージェントは認証を持たない**ので、denpa を同じ Mac の Docker で動かすならループバックでだけ待ち受ける
-  # (Docker Desktop / OrbStack は host.docker.internal を Mac のループバックへ届ける)。
-  # エージェントだけ入れるとき (--no-docker) は別の機械の denpa から繋ぐので、全部のインターフェースのまま
+  # denpa を同じ Mac の Docker で動かすなら、ループバックでだけ待ち受ける (ほかの機械から繋ぐ相手はいない。
+  # Docker Desktop / OrbStack は host.docker.internal を Mac のループバックへ届ける)。
+  # エージェントだけ入れるとき (--no-docker) は別の機械の denpa から繋ぐので、全部のインターフェースのまま。
+  # どちらでも、答えるのは合言葉で組んだ denpa だけ (docs/agent.md)。
+  # 合言葉は環境変数で渡さず、エージェント自身の置き場 (tuners.json の隣の tls/pair-token) に書く。
+  # 手で denpa-agent --pair を流しても同じ URL が出るように。値は compose.mac.yml (denpa 側) が読む .env と同じ
+  pair_file="$DENPA_DIR/config/tls/pair-token"
+  pair_token "$pair_file"
+  if [ "$(cat "$pair_file" 2>/dev/null || true)" != "$pair" ]; then
+    mkdir -p "$(dirname "$pair_file")"
+    (umask 077 && printf '%s' "$pair" > "$pair_file.new" && mv "$pair_file.new" "$pair_file")
+  fi
   agent_host=""
   if [ "$docker_mode" = yes ]; then
     agent_host="    <key>AGENT_HOST</key><string>127.0.0.1</string>"
@@ -446,10 +478,12 @@ EOF
   launchctl bootstrap "gui/$(id -u)" "$PLIST" \
     || die "LaunchAgent に載せられません。ログを見てください: $LOG (載せ直すなら launchctl bootstrap gui/$(id -u) \"$PLIST\")"
 
+  # API は組んだ denpa (クライアント証明書) にしか答えないので、denpa-agent --status に聞かせる
+  # (エージェント自身の証明書で呼ぶ。置き場とポートは plist と同じものを渡す)
   say "エージェントを起動しました。応答を待ちます"
   answered=no
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if tuners=$(curl -fsS --max-time 5 "http://127.0.0.1:$PORT/denpa/tuners" 2>/dev/null); then
+    if tuners=$(AGENT_PORT="$PORT" TUNERS_FILE="$DENPA_DIR/config/tuners.json" "$PREFIX/bin/denpa-agent" --status 2>/dev/null); then
       echo "$tuners"
       answered=yes
       break
@@ -460,11 +494,12 @@ EOF
 
   host="$(scutil --get LocalHostName 2>/dev/null || hostname).local"
   if [ "$docker_mode" = no ]; then
-    say "エージェントだけ入れました。denpa の TUNER_AGENT_URL に http://$host:$PORT を書いてください"
+    say "エージェントだけ入れました。denpa の TUNER_AGENT_URL に次を書いてください (#pair= の後ろは合言葉。人に見せない):"
+    say "  https://$host:$PORT#pair=$pair"
     return 0
   fi
   docker_ready "$MAC_DOCKER" "Docker Desktop か OrbStack を起こしてから、もう一度流してください" \
-    || { say "エージェントは入っています (http://127.0.0.1:$PORT)"; return 0; }
+    || { say "エージェントは入っています (https://127.0.0.1:$PORT)"; return 0; }
 
   # --- denpa 本体 (Docker)。エージェントと同じバージョンに。手元の tar.gz を入れたときは main と latest ---
   start_denpa compose.mac.yml "${ref:-main}" "$host"

@@ -11,6 +11,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { answerPairing, fakeAgentTls } from "../../src/lib/server/fake-agent";
 import {
   broadcast,
   channels,
@@ -20,7 +21,12 @@ import {
 } from "./broadcast";
 import type { FakeService } from "./services";
 
+/**
+ * ポートは2つ。denpa が繋ぐのは TLS のほう (本物と同じく HTTPS で、合言葉で組む。`FAKE_AGENT_TLS_PORT`、既定は +1)。
+ * 平文のほう (`FAKE_AGENT_PORT`) はテストが `/__control/...` を叩き、API を覗くため
+ */
 const PORT = Number(process.env["FAKE_AGENT_PORT"] ?? 25252);
+const TLS_PORT = Number(process.env["FAKE_AGENT_TLS_PORT"] ?? PORT + 1);
 /** denpa の元のTSの置き場。本物では同じものをエージェント側にも見せてある */
 const RECORDED = resolve(process.env["RAW_DIR"] ?? "/media/raw");
 
@@ -496,6 +502,8 @@ const options: Bun.ServeOptions = {
       setTimeout(() => {
         server.stop(true);
         server = Bun.serve(options);
+        secure.stop(true);
+        secure = Bun.serve(secureOptions);
       }, 50);
       return json({ cut: true });
     }
@@ -646,4 +654,17 @@ const options: Bun.ServeOptions = {
 
 let server = Bun.serve(options);
 
-console.log(`fake tuner agent listening on :${PORT}`);
+/** denpa が繋ぐほう。組む受け答え (`POST /denpa/pair`) を前に挟むだけで、中身は平文のほうと同じ */
+const secureOptions: Bun.ServeOptions = {
+  ...options,
+  port: TLS_PORT,
+  tls: fakeAgentTls(),
+  async fetch(request, srv) {
+    return (
+      (await answerPairing(request)) ?? options.fetch.call(srv, request, srv)
+    );
+  },
+};
+let secure = Bun.serve(secureOptions);
+
+console.log(`fake tuner agent listening on :${PORT} (TLS :${TLS_PORT})`);

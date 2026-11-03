@@ -13,6 +13,8 @@ import {
   stream,
 } from "@danything/arib/synth";
 
+import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+
 /**
  * **当たりの中継を「外れ」と控えてしまっても、「ロゴをいますぐ集める」で当たり直せる** (`logo.sweepNow`)。
  *
@@ -78,6 +80,7 @@ const opened: string[] = [];
 
 const agent = Bun.serve({
   port: 0,
+  tls: fakeAgentTls(),
   fetch: (request) => {
     const url = new URL(request.url);
     if (url.pathname === "/denpa/stream") {
@@ -110,7 +113,8 @@ const { config } = await import("./config");
 const root = mkdtempSync(join(tmpdir(), "denpa-logo-relay-notes-"));
 config.dbPath = join(root, "denpa.db");
 config.dataDir = root;
-config.agentUrl = `http://127.0.0.1:${agent.port}`;
+config.agentUrl = fakeAgentUrl(agent.port!);
+trustFakeAgent();
 
 // 前の選局の PAT を見て、当たりの中継まで外れと控えてしまった後
 mkdirSync(join(root, "logos"), { recursive: true });

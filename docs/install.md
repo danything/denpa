@@ -42,6 +42,9 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
 - 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は更新のたびに上書きするので、
   **変えたいことは同じ場所の `compose.override.yml` に書きます** (Compose が重ねて読み、install.sh は触らない)。
   Windows は `~/denpa/denpa.env`
+- denpa とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、install.sh が `~/denpa/.env` の `AGENT_PAIR_TOKEN` に、
+  install.ps1 が `~/denpa/config/tls/pair-token` (エージェント自身の置き場) に、無いときだけ作って両方へ渡します。Mac は `.env` と同じ値を
+  `~/denpa/config/tls/pair-token` にも書きます。上げ直しても変えません
 - もう一度流すと最新のリリースに上がります。`… | bash -s -- --uninstall` で止めて外します
   (`~/denpa`・録画・DB は残す)。ブラウザを開かないなら `--no-open`。Windows は `-Uninstall` / `-NoOpen`
   (渡し方は install.ps1 の頭)
@@ -53,8 +56,12 @@ Linux ならこれだけです (エージェントは `tuner-agent` として一
 ```sh
 mkdir denpa && cd denpa
 curl -Lo compose.yml https://raw.githubusercontent.com/danything/denpa/main/compose.prod.yml
+# denpa とエージェントが組むときの合言葉 (agent.md)。1度作ったら変えない
+echo "AGENT_PAIR_TOKEN=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')" > .env
 docker compose up -d
 ```
+
+`.env` の `AGENT_PAIR_TOKEN` が無いと compose は止まります (install.sh は無いときだけ作ります)。
 
 ### 1つのコンテナで (`denpa-aio`)
 
@@ -73,6 +80,7 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
 
 - エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、録画は `/media` の下
   (元のTS は `raw`、エンコードしたものは `encoded`)。前のバージョンから上げるときは [config.md](config.md#置き場を変えた-前のバージョンから上げるとき)
+- 本体とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、入口が `/config/tls/pair-token` に無いときだけ作って両方に渡します
 - `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可と、pipe を広げる
   `SYS_RESOURCE` だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
 - 止めるときは録画の終わりを待つので、`--stop-timeout` を長くしておきます (compose の `stop_grace_period` と同じ)。
@@ -93,7 +101,10 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 
 チューナーを挿した機械にエージェントだけ置き、本体を別の所で動かすなら
 `oci://ghcr.io/danything/charts/denpa-agent` を使い、本体側は `TUNER_AGENT_URL` でそこを指します
-([agent.md](agent.md#エージェントは別イメージ別プロセス))。値の一覧と意味は
+([agent.md](agent.md#エージェントは別イメージ別プロセス))。`TUNER_AGENT_URL` には `#pair=<合言葉>` を付けます。
+合言葉は chart が Secret `tuner-agent-pair` に作り、読み方は `helm install` のあとに出ます。
+本体の chart はエージェントと組む合言葉を自分で作って両方に渡すので、何も書かなくて構いません
+(ArgoCD で入れるときだけ一手間要ります。values.yaml の `agent` の説明)。値の一覧と意味は
 [charts/denpa/values.yaml](../charts/denpa/values.yaml) のコメントにあります。
 
 ### Talos Linux に OS ごと

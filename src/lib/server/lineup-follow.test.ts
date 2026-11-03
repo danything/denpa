@@ -11,6 +11,7 @@ import {
   sdtSection,
 } from "@danything/arib/synth";
 
+import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
 import type { AgentChannel } from "./tuner";
 
 /**
@@ -25,6 +26,7 @@ let saved: AgentChannel[] = [];
 const puts: { channels: AgentChannel[]; scanned: string[] }[] = [];
 const server = Bun.serve({
   port: 0,
+  tls: fakeAgentTls(),
   async fetch(request) {
     const path = new URL(request.url).pathname;
     if (path !== "/denpa/channels")
@@ -43,7 +45,8 @@ const server = Bun.serve({
     return Response.json(saved);
   },
 });
-config.agentUrl = `http://127.0.0.1:${server.port}`;
+config.agentUrl = fakeAgentUrl(server.port!);
+trustFakeAgent();
 
 const { orm } = await import("./db");
 const { channelChanges } = await import("./schema");

@@ -31,11 +31,11 @@ spec:
             privileged: {{ .Values.privileged }}
           ports:
             - containerPort: 25252
-          {{- with .Values.allowedHosts }}
           env:
-            - name: AGENT_ALLOWED_HOSTS
-              value: {{ . | quote }}
-          {{- end }}
+            # denpa と組むときの合言葉 (pair.yaml)。答えるのは組んだ denpa (クライアント証明書) だけ
+            - name: AGENT_PAIR_TOKEN
+              valueFrom:
+                secretKeyRef: { name: tuner-agent-pair, key: token }
           volumeMounts:
             - name: agent-config
               mountPath: /config

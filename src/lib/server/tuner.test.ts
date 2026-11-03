@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
 import {
   type AgentTuner,
   openChannelStream,
@@ -189,6 +190,7 @@ describe("openChannelStream の引き継ぎ", () => {
     const asked: URLSearchParams[] = [];
     const agent = Bun.serve({
       port: 0,
+      tls: fakeAgentTls(),
       fetch(request) {
         asked.push(new URL(request.url).searchParams);
         return new Response("");
@@ -196,7 +198,8 @@ describe("openChannelStream の引き継ぎ", () => {
     });
     const { config } = await import("./config");
     const before = config.agentUrl;
-    config.agentUrl = `http://127.0.0.1:${agent.port}`;
+    config.agentUrl = fakeAgentUrl(agent.port!);
+    trustFakeAgent();
     try {
       const aborter = new AbortController();
       await openChannelStream(

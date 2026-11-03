@@ -30,7 +30,7 @@ test.describe("denpa を別の機械へ移す", () => {
   let recordingId = "";
 
   test.beforeAll(async ({ stack }, info) => {
-    spare = await bootSpare(info.workerIndex, stack.root, stack.agentUrl);
+    spare = await bootSpare(info.workerIndex, stack.root, stack.tunerAgentUrl);
   });
   test.afterAll(async () => {
     await spare?.shutdown();

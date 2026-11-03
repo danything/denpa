@@ -709,7 +709,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>MPEG-2 の CRC32。セクションの末尾の CRC まで含めて回すと 0 になる</summary>
-    private static uint Crc32(ReadOnlySpan<byte> data)
+    internal static uint Crc32(ReadOnlySpan<byte> data)
     {
         var crc = 0xFFFFFFFFu;
         foreach (var value in data) crc = (crc << 8) ^ CrcTable[(crc >> 24) ^ value];

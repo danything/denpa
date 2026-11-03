@@ -1,3 +1,4 @@
+import { agentFetch } from "./agent-client";
 import { config } from "./config";
 import { chunks } from "./stream";
 
@@ -91,7 +92,7 @@ export function listen(
   const loop = async () => {
     while (!stopped) {
       try {
-        const res = await fetch(`${config.agentUrl}/denpa/events`, {
+        const res = await agentFetch("/denpa/events", {
           signal: controller.signal,
           headers: { Accept: "text/event-stream" },
         });

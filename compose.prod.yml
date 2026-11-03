@@ -2,9 +2,13 @@
 # 使う人は `compose.yml` として置く (`-f` を書かずに済む)。Linux では
 # install.sh (docs/install.md) が ~/denpa に置いて起動する。手で置くなら
 #
-#   curl -Lo compose.yml .../compose.prod.yml && docker compose up -d
+#   curl -Lo compose.yml .../compose.prod.yml
+#   echo "AGENT_PAIR_TOKEN=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')" > .env
+#   docker compose up -d
 #
-# イメージは公開してあるので、このファイルだけで動く。自分でビルドするなら image: を消して
+# .env の AGENT_PAIR_TOKEN は denpa とエージェントが組むときの合言葉 (docs/agent.md)。1度作ったら変えない
+# (install.sh も無いときだけ作る)。無いと compose が止まる。
+# イメージは公開してあるので、このファイルと .env だけで動く。自分でビルドするなら image: を消して
 # build: を書く。**変えたいことは同じ場所の compose.override.yml に書く**
 # (install.sh は更新のたびにこのファイルを上書きする)。
 #
@@ -34,6 +38,10 @@ services:
     device_cgroup_rules:
       - "c 189:* rmw"
       - "c 212:* rmw"
+    environment:
+      # denpa と組むときの合言葉 (上の .env。denpa には TUNER_AGENT_URL の #pair= で同じものを渡す)。
+      # エージェントは組んだ denpa (クライアント証明書) にしか答えない
+      AGENT_PAIR_TOKEN: "${AGENT_PAIR_TOKEN:?同じ場所の .env に AGENT_PAIR_TOKEN (合言葉) を書きます。作り方はこのファイルの頭にあります}"
     volumes:
       # 設定。チューナーもチャンネルも denpa の画面から書く。
       # スキャンの結果 (channels.json) も同じところへ書き戻される
@@ -44,10 +52,9 @@ services:
       - /dev/bus/usb:/dev/bus/usb
       - /dev/dvb:/dev/dvb
     ports:
-      # denpa は compose のネットワークの中で tuner-agent:25252 に繋ぐので、ホストに出すのは手元から確かめる
-      # (docs/tuners.md の curl) ためだけ。**エージェントは認証を持たないので LAN には出さない**。
+      # denpa は compose のネットワークの中で tuner-agent:25252 に繋ぐので、ホストにはループバックにだけ出す。
       # 別の機械の denpa から繋ぐなら、compose.override.yml で ports: !override ["25252:25252"] と書き直し、
-      # 世帯の外からは届かないようにしておく (docs/agent.md「エージェントは認証を持たない」)
+      # その denpa の TUNER_AGENT_URL に https://<この機械>:25252#pair=<.env の合言葉> を書く (docs/agent.md)
       - "127.0.0.1:25252:25252"
       # 鍵を同じ世帯の別の機器 (LAN の中) へ配るなら (docs/agent.md「鍵を配るのは LAN の中だけ」)、
       # compose.override.yml で鍵を配るポートを IPv4 だけで出し、environment に
@@ -65,8 +72,9 @@ services:
       - tuner-agent
     environment:
       TZ: Asia/Tokyo
-      # エージェントの場所 (tuner-agent:25252) と置き場所は既定値のまま
-      # (src/lib/server/config.ts。同じ値を書き写さない)
+      # エージェントの場所は既定 (https://tuner-agent:25252) と同じで、組むときの合言葉 (.env) を #pair= で足す。
+      # 置き場所は既定値のまま (src/lib/server/config.ts。同じ値を書き写さない)
+      TUNER_AGENT_URL: "https://tuner-agent:25252#pair=${AGENT_PAIR_TOKEN:?同じ場所の .env に AGENT_PAIR_TOKEN (合言葉) を書きます。作り方はこのファイルの頭にあります}"
       ENCODE_CONCURRENCY: "2"
       # **誰を通すか (docs/auth.md)。設定するまで全部のアクセスを断る。**
       # このネットワークからのアクセスはログインなしで通す。自分の LAN に合わせて書き換える。

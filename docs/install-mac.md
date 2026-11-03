@@ -28,35 +28,37 @@ compose.prod.yml から tuner-agent を外したもの)。
 - 入れるのは全部ユーザーの下で、sudo は要りません
 - エージェントの tar.gz は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
 
-| 置き場                                       | 中身                                                                                                                                                                                      |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `~/denpa/` (`DENPA_HOME`)                    | Linux と同じ置き場。`compose.yml` (上げ直すたびに上書き)・`compose.override.yml` (手を入れるならここ。無いときだけ雛形を作る)・`config/` (エージェントの `tuners.json` / `channels.json`) |
-| `~/Library/Application Support/denpa-agent/` | エージェント・px4-userland・siano-userland (プログラムだけ)                                                                                                                               |
-| `~/Movies/denpa/recorded`                    | 元のTS。エージェントとコンテナの両方に見せる (掛かったまま録れたものを後から復号するとき、denpa は相対パスで要求し、エージェントが直に読み書きする)                                       |
-| `~/Movies/denpa/library`                     | 出来上がった録画 (Finder から見える)                                                                                                                                                      |
-| Docker のボリューム `denpa_denpa-data`       | DB。SQLite の錠は Mac から見せたフォルダ越しだと当てにならないので、名前付きボリュームに                                                                                                  |
-| `~/Library/Logs/denpa-agent.log`             | エージェントのログ                                                                                                                                                                        |
+| 置き場                                       | 中身                                                                                                                                                                                                                                   |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `~/denpa/` (`DENPA_HOME`)                    | Linux と同じ置き場。`compose.yml` (上げ直すたびに上書き)・`compose.override.yml` (手を入れるならここ。無いときだけ雛形を作る)・`config/` (エージェントの `tuners.json` / `channels.json`)・`.env` (組むときの合言葉。無いときだけ作る) |
+| `~/Library/Application Support/denpa-agent/` | エージェント・px4-userland・siano-userland (プログラムだけ)                                                                                                                                                                            |
+| `~/Movies/denpa/recorded`                    | 元のTS。エージェントとコンテナの両方に見せる (掛かったまま録れたものを後から復号するとき、denpa は相対パスで要求し、エージェントが直に読み書きする)                                                                                    |
+| `~/Movies/denpa/library`                     | 出来上がった録画 (Finder から見える)                                                                                                                                                                                                   |
+| Docker のボリューム `denpa_denpa-data`       | DB。SQLite の錠は Mac から見せたフォルダ越しだと当てにならないので、名前付きボリュームに                                                                                                                                               |
+| `~/Library/Logs/denpa-agent.log`             | エージェントのログ                                                                                                                                                                                                                     |
 
 - もう一度流せば上げ直し (エージェントも denpa のイメージも最新のリリースへ)。
   消すときは `… | bash -s -- --uninstall`。エージェント・LaunchAgent・キャッシュを外し、
   コンテナを畳みます。`~/denpa` (compose と設定)・録画・DB は残し、消し方を言います (Linux と同じ)
 - denpa 本体は別の Linux で動かし、Mac にはエージェントだけ置くなら `… | bash -s -- --no-docker`。
-  denpa の `TUNER_AGENT_URL` に `http://<Mac の名前>.local:25252` を書きます
+  denpa の `TUNER_AGENT_URL` には、install.sh が最後に出す `https://<Mac の名前>.local:25252#pair=<合言葉>` を書きます
   ([別の所に置く](agent.md#エージェントは別イメージ別プロセス)のと同じ構成)。
-  エージェントは認証を持たないので、その Mac の 25252 には世帯の外から届かないようにします
-  ([エージェントは認証を持たない](agent.md#エージェントは認証を持たない))
+  合言葉は `~/denpa/.env` の `AGENT_PAIR_TOKEN` と同じで、エージェントはそれで組んだ denpa にしか答えません ([agent.md](agent.md))
 - **誰を通すか** (`TRUSTED_NETWORKS`) は compose.prod.yml と同じ `192.168.0.0/16,10.0.0.0/8` です。Mac のブラウザから
   localhost で入ったときの送信元は Docker の作りで変わり、Docker Desktop なら `192.168.65.x` なので通ります。
   断られたら、画面に出る接続元を compose.override.yml の `TRUSTED_NETWORKS` に足します
 
-LaunchAgent の環境変数は、コンテナ既定の置き場を Mac の置き場に向け直すものです
+denpa と組むときの合言葉は、`~/denpa/.env` と同じものをエージェント自身の置き場 (`~/denpa/config/tls/pair-token`) に書きます
+(環境変数では渡さないので、手で `denpa-agent --pair` を流しても同じ URL が出る。denpa には compose.mac.yml が `TUNER_AGENT_URL` の `#pair=` で渡す)。
+LaunchAgent の環境変数は、
+コンテナ既定の置き場を Mac の置き場に向け直すものです
 (`AGENT_PORT` (25252 のまま) `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_FIRMWARE` `PX4_RUNTIME_DIR`
 `SIANO_USERLAND_DIR` `SIANO_FIRMWARE` `RAW_DIR`)。`PX4_RUNTIME_DIR` を
 `~/Library/Caches/denpa-agent` と短くしているのは、px4d の制御ソケットのパスが macOS では
 104 バイトまでだからです。IT930x のファームウェアは install.sh が PLEX のドライバから
 手元で切り出します (ハッシュ3つで確かめる。コンテナではエージェントが初めて使うときに取ってきます)。
 denpa も Docker で動かすときは、もう1つ `AGENT_HOST=127.0.0.1` を書き、エージェントを Mac のループバックでだけ
-待ち受けさせます (認証を持たないため)。コンテナの denpa は `host.docker.internal` 越しにそこへ繋ぎます。
+待ち受けさせます (ほかの機械から繋ぐ相手はいないため)。コンテナの denpa は `host.docker.internal` 越しにそこへ繋ぎます。
 `--no-docker` では書きません (別の機械の denpa から繋ぐため)。
 
 **Linux と違うところ。**
