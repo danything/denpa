@@ -431,10 +431,6 @@ internal sealed class Dt295Stream
         _pump = new Thread(Pump) { IsBackground = true, Name = $"{name} TS" };
     }
 
-    /// <summary>
-    /// 受信を始める: 読みを出してから、準備 (9.2〜9.6) と受信開始 (9.7)。選局は済ませておく。
-    /// 途中で失敗したら止める手順 (9.9) を通して投げる
-    /// </summary>
     /// <summary>TS の IV を割り出せなかった</summary>
     public const string IvNotLearned = "TS の IV を割り出せませんでした (PAT と映像が受けられていません)";
 
@@ -474,6 +470,10 @@ internal sealed class Dt295Stream
 
     private const int PacketSize = 188;
 
+    /// <summary>
+    /// 受信を始める: 読みを出してから、準備 (9.2〜9.6) と受信開始 (9.7)。選局は済ませておく。
+    /// 途中で失敗したら止める手順 (9.9) を通して投げる
+    /// </summary>
     public static Dt295Stream Start(Dt295Board board, Dt295ReceiveData data, Dt295RouteTracker routes, string name, Action stalled, TimeSpan silence, TimeSpan? settle = null)
     {
         var input = board.Usb.OpenInStream(Endpoint, TransferSize, Depth);
@@ -649,7 +649,7 @@ internal sealed class Dt295Stream
         }
     }
 
-    /// <summary>止める。読み手を止めてから、読み捨てながら機材の受信を止め (9.9)、最後に EP 0x81 の読みを止める (手順 6)</summary>
+    /// <summary>止める。読み出しのスレッドを止めてから、読み捨てながら機材の受信を止め (9.9)、最後に EP 0x81 の読みを止める (手順 6)</summary>
     public void Stop()
     {
         _stopping = true;
