@@ -7,6 +7,7 @@
 #
 # chart に入れていないもの (この家の事情) はこの階層に素のまま残す:
 #   - secrets.sops.yaml … SopsSecret(Secret denpa-oidc と VolSync の Secret)。値は SOPS で暗号化してあり、この家の事情なので chart に持たない
+#   - pair.sops.yaml    … SopsSecret(Secret denpa-agent-pair)。エージェントと組む合言葉 (agent.pairSecret がこれを指す)
 #   - namespace.yaml    … PSA を privileged にするラベルだけ (名前空間そのものは CreateNamespace が作る)
 #   - argocd.yaml       … bootstrap の ApplicationSet が読む、この置き場の設定
 #   - network-policy.yaml … CiliumNetworkPolicy。denpa に届く相手を Gateway とノードに絞る (Cilium に頼るので chart に持たない)
