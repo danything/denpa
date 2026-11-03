@@ -148,19 +148,19 @@ export function object<F extends Fields>(fields: F): Shape<ObjectOf<F>> {
 }
 
 /**
- * 読む。**形式が違えば止める。** 失敗の言葉に、何を読んでいたかを添える
- * (`ID トークンの形式が違います: exp は数のはずが 無し`)。
- *
- * 止めてよいのは、違う形式のまま進むと危ないところ (ID トークン) だけ。相手が
- * 別のバージョンで動いているだけなら止めずに通す (`tolerate`)
- */
-/**
  * 「〇〇の」の形にする。名前が英数字で終わるとき (`/api/rules` など) だけ、日本語との間に空白を入れる
  */
 function of(what: string): string {
   return /[!-~]$/.test(what) ? `${what} の` : `${what}の`;
 }
 
+/**
+ * 読む。**形式が違えば止める。** 失敗の言葉に、何を読んでいたかを添える
+ * (`ID トークンの形式が違います: exp は数のはずが 無し`)。
+ *
+ * 止めてよいのは、違う形式のまま進むと危ないところ (ID トークン) だけ。相手が
+ * 別のバージョンで動いているだけなら止めずに通す (`tolerate`)
+ */
 export function read<T>(shape: Shape<T>, value: unknown, what: string): T {
   try {
     return shape(value, "");
