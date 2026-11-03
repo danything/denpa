@@ -1562,9 +1562,9 @@ describe("定義の書き換えと選局", () => {
     expect(
       (await request("PUT", "/denpa/tuners", { tuners: FOUR })).status,
     ).toBe(200);
-    const stream = await open("type=GR&channel=T22&use=epg%20T22&priority=3");
+    const stream = await open("type=GR&channel=T16&use=epg%20T16&priority=3");
     await stream.reader?.read();
-    expect((await tuners())[0].users.map((u) => u.use)).toEqual(["epg T22"]);
+    expect((await tuners())[0].users.map((u) => u.use)).toEqual(["epg T16"]);
 
     const off = FOUR.map((t) =>
       t.name === "gr0" ? { ...t, disabled: true } : t,
