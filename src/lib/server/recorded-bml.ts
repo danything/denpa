@@ -5,12 +5,12 @@
  * あるので、**いつ何が変わったか**を再生位置つきで持っておく必要がある
  * (デコード方法と写し方は [ts/data-timeline.ts](../ts/data-timeline.ts))。
  *
- * ここは**ファイルの出し入れだけ**。エンコードのついでに元TSをもう一度デコードして
- * (`saveRecordedBml`)、再生時に読む (`loadRecordedBml`)。中身は1行1メッセージの
+ * ここは**ファイルの出し入れだけ**。エンコードのついでに元の TS をもう一度デコードして
+ * (`saveRecordedBml`)、再生時に読む (`loadRecordedBml`)。中身は 1 行 1 メッセージの
  * JSONL で、サムネイルと同じ**録画の隣**に置く (`metadata.sidecarPaths`)。
  *
- * **録画のTSは1局に絞ってある** (実機の録画で PAT のプログラムは1つ) ので、
- * ライブのような `ServiceFilter` は要らない — [packages/arib/src/bml.ts](../../../packages/arib/src/bml.ts) の
+ * **録画の TS は 1 局に絞ってある** (実機の録画で PAT のプログラムは 1 つ) ので、
+ * ライブのような `ServiceFilter` は要らず、[packages/arib/src/bml.ts](../../../packages/arib/src/bml.ts) の
  * `BmlDecoder` にそのまま流せる。
  */
 
@@ -34,7 +34,7 @@ import { fillTsHead } from "./recording";
 import { programs, services } from "./schema";
 
 /**
- * **番組の名乗り (`programInfo`)。描く側は局の番号をこれで知る** — `arib-dc://` の名前を
+ * **番組情報 (`programInfo`)。描く側はこれで局の番号を得る。** `arib-dc://` の名前を
  * デコードする・NVRAM を局ごとに分ける (`src/lib/bml/resources.ts`・`nvram.ts`) ので、無いと
  * 他の局を指す名前と区別できず、覚えるものも局の外へ混ざる。TS からは取り出していない (EIT はデコードしない) ので、
  * ライブと同じく DB から組み立てる (`live.ts` の `programInfo`)。局の番号は
@@ -42,7 +42,7 @@ import { programs, services } from "./schema";
  *
  * **中継の番号 (`transportStreamId`) は null のままにします。** ライブでは放送から
  * 読み取って渡していますが (あちらは TVerリンクが訊いてくる)、**放送のアプリは録画の
- * 再生中に双方向をやりません** — テレ朝の TVerリンクは `IsRecorded()` で分かれて
+ * 再生中に双方向通信を使いません。** テレ朝の TVerリンクは `IsRecorded()` で分かれて
  * 「録画再生中は、このサービスをご利用いただけません」を出す。訊かれないものを
  * 録画の行に足しても、確かめようが無い
  */
@@ -79,9 +79,9 @@ function programInfoOf(recording: Recording): ResponseMessage | null {
 }
 
 /**
- * 変化ログの頭に番組の名乗りを足す。**サイドカーに書くときも、読むときも通す** —
+ * 変化ログの頭に番組情報を足す。**サイドカーに書くときも、読むときも通す。**
  * 書く側は `event_id` が番組表から消える前に写し取るため (`epg.ts` の
- * `pruneOldPrograms`)、読む側は名乗りを書いていなかった頃のサイドカーのため
+ * `pruneOldPrograms`)、読む側は番組情報を書いていなかった頃のサイドカーのため
  */
 export function withProgramInfo(
   timeline: PlacedMessage[],
@@ -96,17 +96,17 @@ export function withProgramInfo(
   return info === null ? timeline : [{ at: 0, message: info }, ...timeline];
 }
 
-/** 1回に読む大きさ */
+/** 1 回に読む大きさ */
 const CHUNK = 1 << 20;
 
 /**
- * TS を 1MB ずつ読んでデコードする。**丸ごと抱えない** (録画は数GBになる) し、
- * **読む間も息をつく** (チャンクごとに await)。
+ * TS を 1MB ずつ読んでデコードする。**丸ごと抱えない** (録画は数 GB になる) し、
+ * **読む間もイベントループを止めない** (チャンクごとに await)。
  *
- * 前は同期の `readSync` で回していた — 10GB の録画 (2時間の映画) では
+ * 前は同期の `readSync` で回していて、10GB の録画 (2 時間の映画) では
  * イベントループが数分止まり、その間 `/api/health` が返せず、Kubernetes の
- * 生存確認 (1秒で3回) に落ちて SIGTERM → 再起動 → エンコードのやり直し、
- * を **1周 2時間で 5回** 繰り返した (2026-08-17 実機)。エンコードそのものは
+ * 生存確認 (1 秒で 3 回) に落ちて SIGTERM → 再起動 → エンコードのやり直し、
+ * を **1 周 2 時間で 5 回** 繰り返した (2026-08-17 実機)。エンコードそのものは
  * 終わっていて、最後のこの一手で全部を捨てていた
  */
 async function capture(
@@ -134,9 +134,9 @@ async function capture(
  * 基準は元の TS の頭 (`DataBroadcastCapture.head`) で、番組の始まり (`start_at`) ではない。
  * 測った頭は、録画の行の `ts_head` が空なら書く (`recording.fillTsHead`。実況のコメントを合わせるのに使う)
  *
- * @param tsPath 元のTS (**CMを切る前のほう**。放送の実時刻 (TDT) が続いている)
+ * @param tsPath 元の TS (**CM を切る前のほう**。放送の実時刻 (TDT) が続いている)
  * @param sidecarPath 書き先 (`metadata.sidecarPaths` の `dataBroadcast`)
- * @param recording 録画の行。番組の名乗りに使う
+ * @param recording 録画の行。番組情報に使う
  * @param ruler 元の TS からエンコードしたものへの直し方 (録画の行に書く `cm_kept`・`encode_skip` と同じもの)
  * @returns 書いた変化の数。**0 なら書かない** (データ放送を持たない録画)
  */
@@ -150,8 +150,8 @@ export async function saveRecordedBml(
   // 頭の放送時刻は実況のコメントにも使う。録っている間に測れていなければここで書く (データ放送の有る無しに関わらず)
   if (head !== null) fillTsHead(recording.id, head);
   /*
-   * **描けるモジュールが1つも無ければ書かない。** データ放送の載っていない局でも
-   * `pmt` は必ず1つ出る (timeline は空にならない) ので、それだけでは持たせない —
+   * **描けるモジュールが 1 つも無ければ書かない。** データ放送の載っていない局でも
+   * `pmt` は必ず 1 つ出る (timeline は空にならない) ので、それだけでは持たせない。
    * 実際に画面になるのは `moduleDownloaded`。無ければサイドカーを作らない
    */
   if (!timeline.some((item) => item.message.type === "moduleDownloaded"))

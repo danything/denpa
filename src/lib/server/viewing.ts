@@ -19,7 +19,7 @@ import { liveHevc } from "./live";
 import { settings } from "./settings";
 
 /** 観るときの決まり。画面の load と `GET /api/playback/options` が同じものを返す */
-export interface ViewingOptions {
+interface ViewingOptions {
   /** 開いた名前が家の中か */
   indoor: boolean;
   /** コーデックのメニューから外すもの (世帯の設定。外さないなら空) */
@@ -32,7 +32,7 @@ export interface ViewingOptions {
 }
 
 /**
- * リクエストの URL (`event.url`。名前は `Host` か `HOST_HEADER` から) で決める。`hevc` は試験で差し替えるときだけ渡す
+ * リクエストの URL (`event.url`。名前は `Host` か `HOST_HEADER` から) で決める。`hevc` はテストで差し替えるときだけ渡す
  */
 export function viewingOptions(url: URL, hevc = liveHevc()): ViewingOptions {
   const current = settings();
@@ -44,7 +44,7 @@ export function viewingOptions(url: URL, hevc = liveHevc()): ViewingOptions {
 }
 
 /** 前回の局と選択の控え (`LAST_COOKIE`)。前の形式 (`codec`・`raw`) は読まない */
-export interface Kept {
+interface Kept {
   channelType?: string;
   channel?: string;
   audio?: string;
@@ -91,7 +91,7 @@ export function warmFormat(choice: LiveChoice, indoor: boolean): LiveFormat {
 }
 
 /** 開く局と形式 (`live/+page.server.ts` の `start`)。`Tuned` の形で、`codec`・`raw` は先回りする形式 (`warmFormat`) */
-export interface LiveStart {
+interface LiveStart {
   channelType: string;
   channel: string;
   serviceId: number;

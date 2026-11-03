@@ -91,7 +91,7 @@ describe("run の標準出力を流して受ける (onStdout)", () => {
   });
 });
 
-describe("run の標準エラーを1行ずつ受ける (onStderrLine)", () => {
+describe("run の標準エラーを 1 行ずつ受ける (onStderrLine)", () => {
   test("行ごとに渡し、返る stderr は末尾の数行だけ", async () => {
     const seen: string[] = [];
     const { code, stderr } = await run(

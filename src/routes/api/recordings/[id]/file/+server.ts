@@ -9,7 +9,7 @@ import { type FileSource, parseFileSource } from "#lib/source.js";
 
 /**
  * **音声だけ** (`?audio=only`)。音声だけで鳴らすもの (スマートスピーカーへの Cast など) 向け。
- * 元がどれ (元のTS・AV1・H.265・H.264) でも同じ形式で出せるよう、主音声を AAC に再エンコードして ADTS で流す。
+ * 元がどれ (元の TS・AV1・H.265・H.264) でも同じ形式で出せるよう、主音声を AAC に再エンコードして ADTS で流す。
  * 音声だけなので軽い。閉じられたら ffmpeg も止める
  */
 function audioOnly(path: string, request: Request): Response {
@@ -56,8 +56,8 @@ function respond(
   /*
    * どのファイルを配るか。
    *
-   * 基本はエンコード済み、無ければ元のTS。ただし**エンコードを待っている間・走っている間は
-   * 元のTSのほう**を配る。再エンコードを待っている間は library_path がまだ古いファイルを
+   * 基本はエンコード済み、無ければ元の TS。ただし**エンコードを待っている間・走っている間は
+   * 元の TS のほう**を配る。再エンコードを待っている間は library_path がまだ古いファイルを
    * 指していて、しかもその古いファイルは走り出すときに消える (`encoder.runJob`) ので、
    * 押した瞬間によって出るものが変わっていた
    */
@@ -65,7 +65,7 @@ function respond(
   /*
    * **どれを寄越すか、名指しもできる** (`?source=ts` / `encoded` / `hevc` / `alt`)。
    *
-   * - `ts` … 元のTS
+   * - `ts` … 元の TS
    * - `encoded` … 主のエンコード済み (AV1 → H.265 → H.264 の先頭)
    * - `hevc` … H.265。AV1 と一緒にエンコードした録画でだけ在る (H.265 が主なら `encoded`)
    * - `alt` … H.264。ほかのコーデックと一緒にエンコードした録画でだけ在る。古いテレビはこちら

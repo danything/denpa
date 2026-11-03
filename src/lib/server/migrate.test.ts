@@ -14,7 +14,7 @@ import { chooseFile, convertRule, parseGenres, parseTimes } from "./migrate";
  * EPGStation のジャンル指定 (`searchOption.genres`) の読み取り。
  *
  * ここを取りこぼすと、引き継いだルールのジャンル欄に名前の引けない値が並ぶ。
- * denpa 側は文字列で `"7"`(大分類だけ)と `"7-0"`(中分類まで)を持つ。
+ * denpa 側は文字列で `"7"` (大分類だけ) と `"7-0"` (中分類まで) を持つ。
  */
 describe("ジャンルの引き継ぎ", () => {
   test("中分類まであれば大分類と繋ぐ", () => {
@@ -70,7 +70,7 @@ describe("時間帯と曜日の引き継ぎ", () => {
     });
   });
 
-  test("毎日・時刻なしはいつでも。無いものや形の違うものも", () => {
+  test("毎日・時刻なしはいつでも。無いものや形式の違うものも", () => {
     expect(parseTimes([{ week: 127 }])).toEqual(anytime);
     expect(parseTimes(undefined)).toEqual(anytime);
     expect(parseTimes([])).toEqual(anytime);
@@ -104,7 +104,7 @@ describe("時間帯と曜日の引き継ぎ", () => {
   });
 });
 
-/** ルール1つの写し方 (`convertRule`)。局は denpa にあるもの (1・2) だけを引ける */
+/** ルール 1 つの写し方 (`convertRule`)。局は denpa にあるもの (1・2) だけを引ける */
 describe("ルールの写し方", () => {
   const known = new Set([1, 2]);
   const serviceOf = (id: number) => (known.has(id) ? id : undefined);
@@ -212,7 +212,7 @@ describe("ルールの写し方", () => {
     ]);
   });
 
-  test("形がずれて真偽が 0/1 で来ても読む。searchOption が無ければ条件が空", () => {
+  test("形式がずれて真偽が 0/1 で来ても読む。searchOption が無ければ条件が空", () => {
     const converted = convertRule(
       rule(
         { keyword: "形違い", name: 1, GR: 1 },
@@ -263,7 +263,7 @@ describe("録画のファイルの選び方", () => {
     ).toEqual({ id: 2, size: 5, raw: false, extension: ".mp4" });
   });
 
-  test("元のTSだけなら元のTS。filename が無ければ既定の拡張子", () => {
+  test("元の TS だけなら元の TS。filename が無ければ既定の拡張子", () => {
     expect(chooseFile(recorded([{ id: 1, type: "ts", size: 10 }]))).toEqual({
       id: 1,
       size: 10,
@@ -331,8 +331,8 @@ describe("EPGStation のバージョン", () => {
   });
 });
 
-describe("形の違う応答", () => {
-  test("1回だけ警告して続け、id の無い1件だけ飛ばす", () => {
+describe("形式の違う応答", () => {
+  test("1 回だけ警告して続け、id の無い 1 件だけ飛ばす", () => {
     const warnings: string[] = [];
     const skipped: string[] = [];
     const items = validItems(
@@ -345,7 +345,7 @@ describe("形の違う応答", () => {
     );
     expect(items).toEqual([{ id: 1 }, { id: 3 }]);
     expect(skipped).toHaveLength(3);
-    // 形の違うものは2件あるが、警告は1回
+    // 形式の違うものは 2 件あるが、警告は 1 回
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("試験の一覧の形式が違います");
     expect(skipped[0]).toContain("id が無いので飛ばします");

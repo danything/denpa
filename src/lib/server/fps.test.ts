@@ -9,7 +9,7 @@ import {
 } from "./fps";
 
 describe("コマ数の決め方 (フィールドを比べる)", () => {
-  /** `seconds` 秒ぶんの列。`at` (何番目の値か → 値) で模様を作り、少し揺らす (同じ値が並ぶと中央値の試験にならない) */
+  /** `seconds` 秒ぶんの列。`at` (何番目の値か → 値) で模様を作り、少し揺らす (同じ値が並ぶと中央値のテストにならない) */
   function series(
     seconds: number,
     perSec: number,
@@ -20,7 +20,7 @@ describe("コマ数の決め方 (フィールドを比べる)", () => {
       (_, i) => at(i) * (1 + 0.05 * Math.sin(i)),
     );
   }
-  /** 3:2 のテレシネ: 上フィールドは5回に1回、前と同じ (差がほぼ 0) */
+  /** 3:2 のテレシネ: 上フィールドは 5 回に 1 回、前と同じ (差がほぼ 0) */
   const telecineTop = series(30, 30, (i) => (i % 5 === 4 ? 0.05 : 3));
   /** 60i・30p: 上フィールドは毎回違う */
   const movingTop = series(30, 30, () => 3);
@@ -55,7 +55,7 @@ describe("コマ数の決め方 (フィールドを比べる)", () => {
   });
 
   test("繰り返し (rep): 編集点で位相がずれても、ずれた秒以外は低いまま", () => {
-    // 10.4 秒のところで繰り返しの位相が2つずれる
+    // 10.4 秒のところで繰り返しの位相が 2 つずれる
     const shifted = series(30, 30, (i) =>
       (i < 312 ? i : i + 2) % 5 === 4 ? 0.05 : 3,
     );
@@ -70,7 +70,7 @@ describe("コマ数の決め方 (フィールドを比べる)", () => {
   test("動いていない秒は数えない。足りなければ測れない", () => {
     expect(fpsRepeat(still(30))).toEqual({ value: Number.NaN, seconds: 0 });
     expect(fpsWeave(still(60)).seconds).toBe(0);
-    // 4秒だけ動いた窓は判定しない (5秒から)
+    // 4 秒だけ動いた窓は判定しない (5 秒から)
     const fewTop = [
       ...telecineTop.slice(0, 4 * 30),
       ...still(30).slice(4 * 30),
@@ -103,20 +103,20 @@ describe("コマ数の決め方 (フィールドを比べる)", () => {
     expect(classifyWindow(s(0.9), s(0.49))).toBe("30p");
   });
 
-  test("多数決: 24p 系と 30p は 30コマ、60i は 60コマ", () => {
+  test("多数決: 24p 系と 30p は 30 コマ、60i は 60 コマ", () => {
     expect(pickSmooth(["24p", "24p", "24p", "24p", "24p"])).toBe(false);
     expect(pickSmooth(["30p", "30p", "30p", "30p", "30p"])).toBe(false);
     expect(pickSmooth(["60i", "60i", "60i", "60i", "60i"])).toBe(true);
   });
 
-  test("多数決: CM などに2窓乗っても引きずられない", () => {
-    // アニメの5窓のうち2窓が 60i の CM
+  test("多数決: CM などに 2 窓重なっても引きずられない", () => {
+    // アニメの 5 窓のうち 2 窓が 60i の CM
     expect(pickSmooth(["24p", "60i", "24p", "60i", "24p"])).toBe(false);
-    // 実写の5窓のうち2窓がフィルム撮りの CM と 30p の CM
+    // 実写の 5 窓のうち 2 窓がフィルム撮りの CM と 30p の CM
     expect(pickSmooth(["60i", "24p", "60i", "30p", "60i"])).toBe(true);
   });
 
-  test("迷ったら60コマ: 同数・測れた窓が無いときは 60", () => {
+  test("迷ったら 60 コマ: 同数・測れた窓が無いときは 60", () => {
     expect(pickSmooth(["24p", "60i", null, "60i", "30p"])).toBe(true);
     expect(pickSmooth([null, null, null, null, null])).toBe(true);
     expect(pickSmooth([])).toBe(true);

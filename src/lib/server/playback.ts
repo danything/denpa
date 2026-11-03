@@ -16,8 +16,8 @@
  * | エンコード済みだけ | MPEG-2 | 出さない |
  * | CM を切ってエンコードした録画 | MPEG-2 | 出さない (時刻が合わない) |
  *
- * 時刻の物差しは 1 ページで 1 つ (`PlayAxis`): エンコード済みがあればその時刻、無ければ元の TS の頭を 0。
- * どの出し方でもストリームの時刻はこの物差しに乗せる — 字幕・チャプター・データ放送・続きの位置を
+ * 時刻の物差しは 1 ページで 1 つ (`PlayAxis`)。エンコード済みがあればその時刻、無ければ元の TS の先頭を 0 にする。
+ * どの出し方でもストリームの時刻はこの物差しに乗せる。字幕・チャプター・データ放送・続きの位置を
  * `currentTime` のまま引けるようにするため。
  *
  * ## 飛び方
@@ -84,7 +84,7 @@ import { endInput, run } from "./stream";
 import { holdTranscode } from "./transcode";
 
 /** エンコード済みのファイル 1 本の中身 (ffprobe で読む。`probeMedia`) */
-export interface MediaFile {
+interface MediaFile {
   source: EncodedSource;
   /** 映像の codecs 文字列 (`avc1.640028` / `av01.0.08M.08`)。読めない・無ければ null */
   video: string | null;
@@ -105,7 +105,7 @@ interface ProbedStream {
   tags?: { title?: string; TITLE?: string };
 }
 
-/** H.264 の profile 名 → codecs の頭 (profile_idc と制約の印) */
+/** H.264 の profile 名 → codecs の先頭 (profile_idc と制約の印) */
 const AVC_PROFILES: Record<string, string> = {
   Baseline: "4200",
   "Constrained Baseline": "42e0",
@@ -192,7 +192,7 @@ const probed = new Map<string, { mtime: number; file: MediaFile }>();
 /** 控えの上限。古いものから捨てる */
 const KEEP = 64;
 
-/** 控えに入れる。新しいものを後ろに置き、上限を超えたら古いもの (頭) から捨てる */
+/** 控えに入れる。新しいものを後ろに置き、上限を超えたら古いもの (先頭) から捨てる */
 function keep<T>(memo: Map<string, T>, path: string, value: T): void {
   memo.delete(path);
   memo.set(path, value);
@@ -249,17 +249,17 @@ interface TsFile {
   size: number;
   /** 入れ物の始まり (90kHz。`ts/seek.ts` の `tsHead`) */
   head: number;
-  /** 頭から尻の映像まで (秒)。読めなければ null */
+  /** 先頭から最後の映像まで (秒)。読めなければ null */
   duration: number | null;
 }
 
 /** 決めたこと。画面へ渡すもの (`info`) と、流すときに要るもの */
-export interface PlaybackPlan {
+interface PlaybackPlan {
   info: PlaybackInfo;
   encoded: EncodedFile[];
   /** 元の TS。録り終えていて、読めるときだけ */
   ts: TsFile | null;
-  /** 物差しの 0 が、TS の頭から何秒か (`encode_skip`)。TS が物差しなら 0 */
+  /** 物差しの 0 が、TS の先頭から何秒か (`encode_skip`)。TS が物差しなら 0 */
   skip: number;
   /** TS の音声 (`arib.audioTracks`)。TS から変換するときに使う */
   tracks: AudioTrack[];
@@ -277,7 +277,7 @@ function codecOf(video: string | null): HwCodec | null {
 
 /**
  * fMP4 にしたときの音声の codecs。H.264 は AAC、AV1 は Opus (ライブと同じ組。`live.audioArgs`)。
- * H.265 は AAC — H.265 を MSE で受け取りたいのは AV1 をデコードできない端末 (Safari など) で、MP4 の Opus を
+ * H.265 は AAC。H.265 を MSE で受け取りたいのは AV1 をデコードできない端末 (Safari など) で、MP4 の Opus を
  * 受け取れるとは限らないため
  */
 function streamAudio(codec: HwCodec): string {
@@ -299,13 +299,13 @@ function reader(path: string): ReadAt {
     );
 }
 
-/** 頭と尻を読む量。頭は映像と音声の最初の PES が必ず入る長さ、尻は最後の映像の PES が入る長さ */
+/** 先頭と末尾を読む量。先頭は映像と音声の最初の PES が必ず入る長さ、末尾は最後の映像の PES が入る長さ */
 const PROBE_BYTES = 4 * 1024 * 1024;
 
 /** 読んだ TS の控え。開くたびに聞くので、同じファイル (パス・大きさ・更新時刻) なら読み直さない */
 const tsProbed = new Map<string, { key: string; ts: TsFile | null }>();
 
-/** 元の TS の頭と尺を読む。読めなければ null */
+/** 元の TS の先頭と尺を読む。読めなければ null */
 async function probeTs(path: string): Promise<TsFile | null> {
   let size = 0;
   let mtime = 0;
@@ -405,7 +405,7 @@ export async function playbackPlan(
     });
   }
   /*
-   * H.265 は詰め替えだけ (エンコード済みの H.265 があるときだけ)。その場の変換では H.265 を作らない —
+   * H.265 は詰め替えだけ (エンコード済みの H.265 があるときだけ)。その場の変換では H.265 を作らない。
    * ブラウザの H.265 は端末しだいで、AV1 か H.264 に変換すれば足りる (docs/encode.md「H.265 は GPU でだけ」)
    */
   const hevc = known.find((file) => file.codec === "hevc");
@@ -430,7 +430,7 @@ export async function playbackPlan(
   }
   /*
    * MPEG-2 は元の TS の時刻をそのまま運ぶので、物差しに乗せられるときだけ。CM を切ったものは
-   * 途中が詰まっていて合わない。捨てた頭を覚えていない古い録画も合わせようがない
+   * 途中が詰まっていて合わない。捨てた先頭を覚えていない古い録画も合わせようがない
    */
   if (
     ts !== null &&
@@ -482,7 +482,7 @@ const FMP4_OUT = [
   "mp4",
   "-movflags",
   "+empty_moov+default_base_moof+frag_discont+negative_cts_offsets",
-  // 1秒ずつ。キーフレームごと (数秒) だと、頭の映像が出るまでそのぶん待つ
+  // 1 秒ずつ。キーフレームごと (数秒) だと、最初の映像が出るまでそのぶん待つ
   "-frag_duration",
   "1000000",
   "pipe:1",
@@ -490,8 +490,8 @@ const FMP4_OUT = [
 
 /**
  * **エンコード済みを詰め替える引数** (映像は写すだけ。音声は H.264・H.265 なら AAC、AV1 なら Opus。`streamAudio`)。
- * H.265 は `hvc1` と名乗らせる — mp4 の muxer の既定は `hev1` で、Safari は `hev1` を受け取らない。
- * `hvc1` は「パラメータセットは入れ物の頭に」の印で、GPU のエンコーダがキーフレームごとに中にも
+ * H.265 は `hvc1` と名乗らせる。mp4 の muxer の既定は `hev1` で、Safari は `hev1` を受け取らない。
+ * `hvc1` は「パラメータセットは入れ物の先頭に」の印で、GPU のエンコーダがキーフレームごとに中にも
  * 書いているものはそのまま残るが、ブラウザはそれで断らない前提 (実機では見ていない)。
  * `audio` は入れ物の中の何本目の音声か (主・副で分けてエンコードしてある。`encoder.ts`)。
  *
@@ -499,12 +499,12 @@ const FMP4_OUT = [
  *
  * - `-ss` を `-i` の前に置く。映像は写すので、`from` の手前のキーフレームから始まる
  * - `-copyts` で入口の時刻を出口まで運ぶ
- * - mp4 の muxerは既定で頭を 0 に詰め直す。`frag_discont` で塊の時刻 (tfdt) を
+ * - mp4 の muxer は既定で先頭を 0 に詰め直す。`frag_discont` で塊の時刻 (tfdt) を
  *   そのまま書かせ、`negative_cts_offsets` で B フレームのぶんを編集リストに逃がさせない
- *   (逃がすと頭がずれる。ブラウザの MSE は編集リストを当てにできない)
- * - 頭 (`from` = 0) だけは AAC の前置きと B フレームのぶん時刻が負になり、そのままでは
+ *   (逃がすと先頭がずれる。ブラウザの MSE は編集リストを当てにできない)
+ * - 先頭 (`from` = 0) だけは AAC の前置きと B フレームのぶん時刻が負になり、そのままでは
  *   tfdt が壊れる (負の数が符号なしで書かれる)。`make_non_negative` で全体を揃って
- *   ずらす。ずれは数十ms (手元の試しで 0.067秒) で、映像と音声の間は崩れない
+ *   ずらす。ずれは数十 ms (手元で試して 0.067 秒) で、映像と音声の間は崩れない
  *
  * 手元の ffmpeg (9.x の開発ビルド) で試した tfdt (秒、映像・音声の順):
  *
@@ -588,7 +588,7 @@ export function presented(pts: number): number {
 }
 
 /**
- * **TS から変換するときの `-output_ts_offset`。** 流し込む頭の映像の PES の PTS (`pts`) が、物差しで
+ * **TS から変換するときの `-output_ts_offset`。** 流し込む最初の映像の PES の PTS (`pts`) が、物差しで
  * `at` 秒になるように。ffmpeg は `-copyts` で入口の時刻 (`presented`) をそのまま運ぶので、差を足せば
  * 出口が物差しの時刻になる。一周をまたいでも ffmpeg が増え続ける数にしてくれる。
  *
@@ -596,15 +596,15 @@ export function presented(pts: number): number {
  * 流し込むと (`presented` が負) 映像がまるごと消えた。`-t` を出口に置くと `-copyts` の絶対時刻で数えるので
  * 置かない。
  *
- * ffmpeg 9.0.2 で、120 秒の MPEG-2 の TS (頭の PTS が 1000 秒・一周の 30 秒前・40 秒前の 3 本) を
- * 途中から標準入力へ流して測った頭の tfdt (物差しの時刻からの差):
+ * ffmpeg 9.0.2 で、120 秒の MPEG-2 の TS (先頭の PTS が 1000 秒・一周の 30 秒前・40 秒前の 3 本) を
+ * 途中から標準入力へ流して測った最初の tfdt (物差しの時刻からの差):
  *
  *     要求した位置   映像 (次のキーフレームから)   音声 (映像より先に多重化されている)
  *     20 秒        +0.39〜+0.40 秒             -0.43 秒
  *     70 秒        +0.56〜+0.57 秒             -0.09 秒
  *
  * 3 本とも同じ (差は 1 コマ未満)。一周をまたぐところも隙間なく続いた。`-copyts` を付けずに
- * `-output_ts_offset <物差しの時刻>` だけにすると、映像も音声も 65ms ずれた (流し込んだ頭で変わる)
+ * `-output_ts_offset <物差しの時刻>` だけにすると、映像も音声も 65ms ずれた (流し込んだ位置で変わる)
  */
 export function tsOffset(pts: number, at: number): number {
   return at - presented(pts);
@@ -644,7 +644,7 @@ export function tsTranscodeArgs(
     video.filter,
     ...video.encoder,
     // 時刻を詰め直させない (`tsOffset` の説明)。既定 (mp4 は cfr) だと負の時刻のコマを捨てる。
-    // ライブのようにコマ数の上限 (`-fpsmax`) は付けられない — passthrough と一緒だと ffmpeg が
+    // ライブのようにコマ数の上限 (`-fpsmax`) は付けられない。 passthrough と一緒だと ffmpeg が
     // 「矛盾している」と断って変換が始まらない。探りは既定の大きさなのでコマ数を読み違えない
     "-fps_mode",
     "passthrough",
@@ -652,7 +652,7 @@ export function tsTranscodeArgs(
     ...audioArgs(codec),
     "-output_ts_offset",
     offset.toFixed(6),
-    // 頭から観るときだけ、AAC の前置きのぶん負になる (`copyArgs` の説明)
+    // 先頭から観るときだけ、AAC の前置きのぶん負になる (`copyArgs` の説明)
     "-avoid_negative_ts",
     "make_non_negative",
     ...FMP4_OUT,
@@ -665,7 +665,7 @@ const IDLE_LIMIT = 5 * 60_000;
 const IDLE_CHECK = 30_000;
 
 /** ffmpeg を 1 回起こすぶん */
-export interface Attempt {
+interface Attempt {
   argv: string[];
   /** 標準入力へ流し込むもの (TS が元)。起こすたびに読み直す */
   input?: () => ReadableStream<Uint8Array>;
@@ -677,7 +677,7 @@ export interface Attempt {
 }
 
 /**
- * **ffmpeg の出口を応答の本文にする** (`stream.ffmpegBody` に、降りたときの次の手と詰まりの見張りを足したもの)。
+ * **ffmpeg の出口を応答の本文にする** (`stream.ffmpegBody` に、降りたときの次の手と詰まりの検出を足したもの)。
  *
  * - 読まれたぶんしか読み出さない。相手が読まなければ出口が詰まり、ffmpeg も止まる
  * - 1 バイトも出さずに降りたら、次の手 (GPU → ソフトウェア) で起こし直す。次で出せたら、降りた手の標準エラーを添えて `blame` を呼ぶ
@@ -934,7 +934,7 @@ export async function streamResponse(
 }
 
 /**
- * GPU でエンコードできるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに降りたら覚える —
+ * GPU でエンコードできるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに降りたら覚える。
  * NVENC の同時に開ける数を超えただけなら覚えない (`live.blameLiveHw`)
  */
 function withFallback(
@@ -1043,7 +1043,7 @@ export function rulerOf(
  *   エンコードしたものがあれば、もうその物差し。無い (古い行) ときは番組表の尺を直して代わりにする
  *
  * 元の TS の位置のまま出来上がりの尺から引くと、CM を切ったものでは切った CM のぶん食い違う。
- * 続きが無い・直すと頭になる (捨てた頭の中で止めた) ものは null
+ * 続きが無い・直すと先頭になる (捨てた先頭の中で止めた) ものは null
  */
 export function watchProgress(
   recording: Pick<
@@ -1071,7 +1071,7 @@ export function watchProgress(
 
 /**
  * **エンコード済みが無い録画の、CM 飛ばしのチャプター。** 検出した CM の区間 (`cm_ranges`) は
- * 元の TS の頭からの秒で持っている (`encoder.ts` の `runCmJob`) ので、物差し (`ts`) にそのまま乗る。
+ * 元の TS の先頭からの秒で持っている (`encoder.ts` の `runCmJob`) ので、物差し (`ts`) にそのまま乗る。
  * CM の扱いが「何もしない」なら、エンコード済みにチャプターを書かないのと揃えて出さない
  */
 export async function tsChapters(
@@ -1095,8 +1095,8 @@ export async function tsChapters(
 /**
  * **字幕のストリームだけを抜く引数** (`api/recordings/<id>/captions.json`)。デコードせずに写す (デコードするのは denpa)。
  *
- * エンコード済みがあればそこから。無ければ元の TS から抜き、時刻を物差し (TS の頭を 0) に揃える
- * (`-copyts` で放送の PTS を運び、頭のぶん引く。`presented`)。どちらも無ければ null
+ * エンコード済みがあればそこから。無ければ元の TS から抜き、時刻を物差し (TS の先頭を 0) に揃える
+ * (`-copyts` で放送の PTS を運び、先頭のぶん引く。`presented`)。どちらも無ければ null
  */
 export async function captionArgs(recording: Recording): Promise<{
   argv: string[];

@@ -58,7 +58,7 @@ const { CLIP_BYTES_MOST, CLIP_PAGE } = await import("../clips");
 
 /**
  * 偽 ffmpeg。`-f avif` の次の名前へ、最初の入力 (映像) を写す (`tests/fake/ffmpeg.sh` と同じ振る舞い)。
- * 入力 (`-i`) は1回ぶんずつ `inputs` に残す (重ねを渡したかを見る)。どれかの入力に BROKEN があれば落ちる
+ * 入力 (`-i`) は 1 回ぶんずつ `inputs` に残す (重ねを渡したかを見る)。どれかの入力に BROKEN があれば失敗する
  */
 const fake = join(root, "ffmpeg.sh");
 const inputsLog = join(root, "inputs");
@@ -82,7 +82,7 @@ exit 0
 chmodSync(fake, 0o755);
 config.ffmpeg = fake;
 
-/** 合成の PNG の頭 (縦横だけ読めればよい) */
+/** 合成の PNG の先頭 (縦横だけ読めればよい) */
 function png(
   width: number,
   height: number,
@@ -224,7 +224,7 @@ describe("受ける画像の確かめ", () => {
   });
 });
 
-test("AVIF の引数: SVT-AV1 の静止画を2枚、メタデータは書かない", () => {
+test("AVIF の引数: SVT-AV1 の静止画を 2 枚、メタデータは書かない", () => {
   const args = avifArgs("in.webp", [], "full.avif", "small.avif");
   expect(args).toContain("libsvtav1");
   expect(args.join(" ")).toContain("-map_metadata -1");
@@ -283,7 +283,7 @@ describe("撮った場所から番組を引く", () => {
         name: "夜のニュース",
         start_at: START,
         end_at: START + 3600_000,
-        // TS の頭は番組の 5 秒前。100〜160 秒の CM を切ってエンコードした
+        // TS の先頭は番組の 5 秒前。100〜160 秒の CM を切ってエンコードした
         ts_head: START - 5000,
         library_path: join(config.encodedDir, "x.mkv"),
         cm_kept: [
@@ -312,7 +312,7 @@ describe("撮った場所から番組を引く", () => {
   });
 });
 
-/** 1枚置く (偽 ffmpeg) */
+/** 1 枚置く (偽 ffmpeg) */
 async function put(
   name: string,
   captions = "",
@@ -400,7 +400,7 @@ describe("置く・探す・消す", () => {
     });
   });
 
-  test("局の絞り込みの名前は、局ごとにその局のいちばん新しい1枚の名前", async () => {
+  test("局の絞り込みの名前は、局ごとにその局のいちばん新しい 1 枚の名前", async () => {
     const a = await put("A");
     const b = await put("B", "", SERVICE + 1);
     const c = await put("C");
@@ -419,7 +419,7 @@ describe("置く・探す・消す", () => {
       .set({ service_name: "局その1" })
       .where(eq(clips.id, c))
       .run();
-    // 局の名前を取る副問い合わせが外の行の局を見ていなかった頃は、どの局もいちばん新しい1枚 (局その1) の名前になっていた
+    // 局の名前を取る副問い合わせが外の行の局を見ていなかった頃は、どの局もいちばん新しい 1 枚 (局その1) の名前になっていた
     expect(clipFacets().services).toEqual([
       { id: SERVICE, name: "局その1", count: 2 },
       { id: SERVICE + 1, name: "局その2", count: 1 },
@@ -526,7 +526,7 @@ describe("字幕・コメントを分けて受ける", () => {
       return error instanceof ClipError ? error.status : 500;
     }
   };
-  /** 合成の JPEG の頭 (SOF0 まで) */
+  /** 合成の JPEG の先頭 (SOF0 まで) */
   const jpeg = (width: number, height: number): Uint8Array =>
     new Uint8Array([
       0xff,
@@ -584,7 +584,7 @@ describe("字幕・コメントを分けて受ける", () => {
     expect(readClipForm(text)).rejects.toMatchObject({ status: 400 });
   });
 
-  test("AVIF の引数: 重ねは下から順に RGB で重ねてから2枚に分ける", () => {
+  test("AVIF の引数: 重ねは下から順に RGB で重ねてから 2 枚に分ける", () => {
     const graphOf = (args: string[]) =>
       args[args.indexOf("-filter_complex") + 1]!;
     const args = avifArgs(
@@ -627,7 +627,7 @@ describe("字幕・コメントを分けて受ける", () => {
       "comments.png",
       "frame.png",
     ]);
-    // 大きさは AVIF の2枚と元の3枚
+    // 大きさは AVIF の 2 枚と元の 3 枚
     expect(row.bytes).toBe(33 * 2 + 33 + 41 + 41);
     expect(readdirSync(join(clipsDir(), ".work"))).toEqual([]);
 
@@ -658,7 +658,7 @@ describe("字幕・コメントを分けて受ける", () => {
     const off = await setClipLayers(saved.id, { captions: false });
     expect(off.layers).toEqual({ comments: true, captions: false });
     expect(lastInputs()).toEqual(["frame.jpeg", "comments.png"]);
-    // AVIF の2枚 (偽物は映像を写す) と元の3枚
+    // AVIF の 2 枚 (偽物は映像を写す) と元の 3 枚
     expect(off.bytes).toBe(23 * 2 + 23 + 41 + 41);
 
     const runs = readFileSync(inputsLog, "utf8").split("\n").length;
@@ -745,7 +745,7 @@ describe("字幕・コメントを分けて受ける", () => {
     expect(cache(plain, null)).toBe("private, max-age=86400");
   });
 
-  test("元の画像を1枚ずつ返す。替わらないので端末に持たせ、持っていなければ 404", async () => {
+  test("元の画像を 1 枚ずつ返す。替わらないので端末に持たせ、持っていなければ 404", async () => {
     const layered = await saveClip(
       { frame: jpeg(1920, 1080), captions: png(1920, 1080, "captions") },
       liveScene(SERVICE, START),
@@ -780,7 +780,7 @@ describe("字幕・コメントを分けて受ける", () => {
     expect([...new Uint8Array(await captions.arrayBuffer())]).toEqual([
       ...png(1920, 1080, "captions"),
     ]);
-    // 撮ったときに無かった重ね・元を残さない1枚だけのもの
+    // 撮ったときに無かった重ね・元を残さない 1 枚だけのもの
     expect(status(() => clipLayer(fileOf(layered.id), "comments"))).toBe(404);
     expect(status(() => clipLayer(fileOf(plain.id), "frame"))).toBe(404);
   });
@@ -789,7 +789,7 @@ describe("字幕・コメントを分けて受ける", () => {
 /** 本物の ffmpeg (合成の映像) で AVIF にできるか。入っていない所 (CI の単体) では飛ばす */
 const real = Bun.which("ffmpeg");
 test.skipIf(real === null)(
-  "本物の ffmpeg: 合成の1コマを AVIF と一覧用 (幅 480) にする",
+  "本物の ffmpeg: 合成の 1 コマを AVIF と一覧用 (幅 480) にする",
   async () => {
     config.ffmpeg = real!;
     try {
@@ -837,7 +837,7 @@ test.skipIf(real === null)(
   60_000,
 );
 
-/** 本物の ffmpeg で重ね、出し入れで重ね直せるか。重ねは半分透けた赤の1枚 (合成)。真ん中の1画素の赤みで見る */
+/** 本物の ffmpeg で重ね、出し入れで重ね直せるか。重ねは半分透けた赤の 1 枚 (合成)。真ん中の 1 画素の赤みで見る */
 test.skipIf(real === null)(
   "本物の ffmpeg: 透明な PNG を重ね、外すと元の映像に戻る",
   async () => {
@@ -859,7 +859,7 @@ test.skipIf(real === null)(
       expect(made.exitCode).toBe(0);
       return new Uint8Array(readFileSync(join(root, out)));
     };
-    /** 真ん中の1画素 (RGB) */
+    /** 真ん中の 1 画素 (RGB) */
     const center = (path: string): number[] => {
       const out = Bun.spawnSync([
         real!,

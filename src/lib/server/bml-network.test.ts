@@ -56,7 +56,7 @@ describe("繋いでよいアドレスか", () => {
     expect(isPublicAddress("::ffff:127.0.0.1")).toBe(false);
     expect(isPublicAddress("::ffff:10.1.2.3")).toBe(false);
     expect(isPublicAddress("::ffff:1.1.1.1")).toBe(true);
-    // 16進の綴り (URL が直した後の形式) も同じ
+    // 16 進の綴り (URL が直した後の形式) も同じ
     expect(isPublicAddress("::ffff:7f00:1")).toBe(false); // 127.0.0.1
     expect(isPublicAddress("::ffff:a01:203")).toBe(false); // 10.1.2.3
     expect(isPublicAddress("::ffff:101:101")).toBe(true); // 1.1.1.1
@@ -104,7 +104,7 @@ describe("取得してよい URL か", () => {
 
   /*
    * **IPv6 リテラルの [] は自分で剥がす。** `new URL().hostname` は
-   * `[::1]` を括弧付きのまま返すので、そのまま綴りを見ると1つの判定にも
+   * `[::1]` を括弧付きのまま返すので、そのまま綴りを見ると 1 つの判定にも
    * 掛からず、内側なのに公開扱いで素通りしていた
    */
   test("括弧付きの IPv6 リテラルも中身で断る", async () => {

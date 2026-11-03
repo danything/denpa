@@ -16,7 +16,7 @@ describe("relative", () => {
 });
 
 describe("publicBase", () => {
-  test("前段が付けた接頭辞を頭に付ける", () => {
+  test("前段が付けた接頭辞を先頭に付ける", () => {
     const url = new URL("http://denpa.local:3000/api/x");
     expect(publicBase(url, new Headers())).toBe("http://denpa.local:3000");
     expect(

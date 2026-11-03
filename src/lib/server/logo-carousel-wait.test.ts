@@ -19,9 +19,9 @@ import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
 /**
  * 衛星のロゴを流す中継で、**カルーセルが来るまで待つ** (`logo.awaitCarousel`・「いますぐ」)。
  *
- * 実機の報告 (#1939): 衛星のチューナーが2台の環境で、番組表集めが次のチャンネルへ移るたびにロゴの選局を
- * 取り上げ、一晩経っても BS/CS のロゴが揃わなかった。当たりの中継で待つときは番組表集めより上の優先度で開き、
- * 上限で切れても途中まで届いていれば続きを読む。番組表集めより上で待つのはダウンロードの期間中だけ (`logo-period.ts`)。
+ * 実機の報告 (#1939): 衛星のチューナーが 2 台の環境で、番組表の取得が次のチャンネルへ移るたびにロゴの選局を
+ * 取り上げ、一晩経っても BS/CS のロゴが揃わなかった。当たりの中継で待つときは番組表の取得より上の優先度で開き、
+ * 上限で切れても途中まで届いていれば続きを読む。番組表の取得より上で待つのはダウンロードの期間中だけ (`logo-period.ts`)。
  *
  * チューナーの API は手元に立てた偽物で、選局は中継ごとに用意した TS を流したあと、`holding` の中継は
  * こちらが閉じるまで開いたままにする (上限 `config.logoCarouselWait` まで待たせるため)。カルーセルは作り物
@@ -156,7 +156,7 @@ config.dbPath = join(root, "denpa.db");
 config.dataDir = root;
 config.agentUrl = fakeAgentUrl(agent.port!);
 trustFakeAgent();
-// 同じプロセスで走るほかのテストファイルへ持ち越さない
+// `--isolate` を付けずに動かしたときに、ほかのテストファイルへ持ち越さない
 const wait = config.logoCarouselWait;
 afterAll(() => {
   config.logoCarouselWait = wait;
@@ -221,7 +221,7 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     ]);
   });
 
-  test("当たりと分かった中継は番組表集めより上の優先度で開く。何も届かずに上限で切れたら、期間の外とみなして7時間は開き直さない", async () => {
+  test("当たりと分かった中継は番組表の取得より上の優先度で開く。何も届かずに上限で切れたら、期間の外とみなして 7 時間は開き直さない", async () => {
     // 前の回と同じ DII と受け取り済みのブロックだけ。読み進まないので「来なかった」と数える
     streams.set("BS15_0", stream(...psi, dii, ...bsBlocks.slice(0, 1)));
     const lines = await logged(sweep);
@@ -240,7 +240,7 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     expect(opened).toHaveLength(2);
   });
 
-  test("期間の外でも、共通データの SDTT を見たら期間中に戻り、次の定期チェックで番組表集めより上の優先度で開く", async () => {
+  test("期間の外でも、共通データの SDTT を見たら期間中に戻り、次の定期チェックで番組表の取得より上の優先度で開く", async () => {
     // 新しいブロックは無く、SDTT だけ。「いますぐ」で開いて見かける (上限を待たずに閉じる)
     streams.set("BS15_0", stream(...psi, commonSdtt));
     holding.delete("BS15_0");
@@ -252,7 +252,7 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
       { channel: "BS15_0", priority: config.priority.carousel },
     ]);
 
-    // SDTT だけ来て読み進まないまま上限で切れたら、期間中のまま開き続けずに7時間あける
+    // SDTT だけ来て読み進まないまま上限で切れたら、期間中のまま開き続けずに 7 時間あける
     holding.add("BS15_0");
     const lines = await logged(sweep);
     expect(lines.at(-1)).toContain(
@@ -285,12 +285,12 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
     } finally {
       clock.mockRestore();
     }
-    // 先の時刻で控えたものを今の時刻で上書きする (同じプロセスで走るほかのテストファイルへ持ち越さない)
+    // 先の時刻で控えたものを今の時刻で上書きする (この先のテストへ持ち越さない)
     await sweepNow();
     while (sweepState().running) await Bun.sleep(20);
   });
 
-  test("「いますぐ」も当たりの中継は番組表集めより上の優先度で開き、読み切ったら上限を待たずに手放す", async () => {
+  test("「いますぐ」も当たりの中継は番組表の取得より上の優先度で開き、読み切ったら上限を待たずに手放す", async () => {
     config.logoCarouselWait = 60_000;
     // DII は前の回に読んだぶんを覚えている。続きのブロックだけ流して、閉じずに待つ
     streams.set("BS15_0", stream(...psi, ...bsBlocks.slice(1), ...csBlocks));
@@ -312,7 +312,7 @@ describe("ロゴを流す中継でカルーセルを待つ", () => {
   });
 });
 
-describe("待ったあとの記録の1行", () => {
+describe("待ったあとの記録の 1 行", () => {
   test("読み切った・譲った・止めた・来なかったを言い分ける。外れと開けなかった回は出さない", () => {
     const minute = 60_000;
     expect(waitedMessage("BS15_0", "done", true, 14 * minute)).toBe(

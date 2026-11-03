@@ -55,7 +55,7 @@ function every(
   timers.push(timer);
 }
 
-/** いま1回走らせて、あとは `every` と同じ */
+/** いま 1 回走らせて、あとは `every` と同じ */
 function nowAndEvery(
   ms: number,
   name: string,
@@ -72,7 +72,7 @@ export function start(): void {
   /*
    * **取り込んだ DB に入れ替える** (設定の「連携」の「denpa を別の機械へ移す」。transfer.ts)。
    * DB とロゴに触る前にやる。取り込みはプロセスを終えて、ここで入れ替わる。
-   * **入れ替えられなければ起動を止める** — 入れ替えかけのまま動くより、起き直してやり直すほうがよい
+   * **入れ替えられなければ起動を止める。** 入れ替えかけのまま動くより、起き直してやり直すほうがよい
    * (何度やっても同じ結果になる作り)
    */
   try {
@@ -100,10 +100,10 @@ export function start(): void {
 
   /*
    * **ログインする方法が無ければ、無いことを起動ログに出す。** 何も設定していなければ
-   * 全アクセスを断る作り (auth.configured) なので、閉まっていること自体は安全 —
-   * ただし気付けないと「なぜか入れない」にしか見えない。
+   * 全アクセスを断る作り (auth.configured) なので、閉まっていること自体は安全だが、
+   * 気付けないと「なぜか入れない」にしか見えない。
    *
-   * バックグラウンド処理より先にやる — `DENPA_AUTOSTART=0` でも出すべき
+   * `DENPA_AUTOSTART=0` でも出すように、バックグラウンド処理より先に呼ぶ
    */
   warnIfClosed();
   // 前段と同じネットワークを信頼していそうなら知らせる (auth.sharedNetworks)
@@ -111,14 +111,14 @@ export function start(): void {
 
   /*
    * **GPU でエンコードできるか、ffmpeg に確かめさせておく** (hwenc.ts)。数秒かかるので
-   * 待たずに進む — 設定画面は終わるまで「確認中」を出し、エンコードするときは
-   * そのとき分かっている範囲で決める。`DENPA_AUTOSTART=0` でも回す:
-   * 触るのは ffmpeg だけで、チューナーには行かない
+   * 待たずに進む。設定画面は終わるまで「確認中」を出し、エンコードするときは
+   * そのとき分かっている範囲で決める。触るのは ffmpeg だけでチューナーには行かないので、
+   * `DENPA_AUTOSTART=0` でも回す
    */
   void probe();
 
   /*
-   * **ライブ視聴のエンドポイントを開ける。** ここは `DENPA_AUTOSTART=0` でも開ける —
+   * **ライブ視聴のエンドポイントを開ける。** ここは `DENPA_AUTOSTART=0` でも開ける。
    * 押されたときだけ動くもので、勝手にチューナーを使いはしない。
    *
    * 認証は使い捨てのチケットで見る。ブラウザは WebSocket の握手に `Authorization` を
@@ -142,7 +142,7 @@ export function start(): void {
 
   /*
    * **新しいバージョンが出ていないか、GitHub を見に行く** (update.ts)。起動時に 1 回と
-   * 1 時間おき。`DENPA_AUTOSTART=0` でも回す — チューナーには行かない
+   * 1 時間おき。チューナーには行かないので `DENPA_AUTOSTART=0` でも回す
    */
   nowAndEvery(config.updateCheckInterval, "update", checkForUpdate);
 
@@ -163,7 +163,7 @@ export function start(): void {
   /*
    * **番組表を自分で集める。**
    * チューナーが空いているだけ並列に回し、薄い局から先に行く (epg-collect.ts)。
-   * 起動直後に1回走らせるので、初回は数分で番組表が出る
+   * 起動直後に 1 回走らせるので、初回は数分で番組表が出る
    */
   nowAndEvery(config.epgCollectInterval, "epg-collect", collectOnce);
 
@@ -175,10 +175,10 @@ export function start(): void {
   });
 
   /*
-   * 実体とDBを突き合わせ、外から消されたものを一覧から落とす。
+   * 実体と DB を突き合わせ、外から消されたものを一覧から落とす。
    *
    * inotify (fs.watch) で消した瞬間に気づけないか試したが、この構成では
-   * 最初の1件しかイベントが来ず当てにできなかったので定期実行にしてある。
+   * 最初の 1 件しかイベントが来ず当てにできなかったので定期実行にしてある。
    * すぐ反映したいときは画面の「ファイルと照合」を押す。
    */
   nowAndEvery(config.reconcileInterval, "reconcile", reconcile);
@@ -198,8 +198,8 @@ export function start(): void {
   nowAndEvery(config.reconcileInterval, "transfer", pruneTransfer);
 
   /*
-   * 番組名を半角に寄せて取り込んでいた頃の録画を、元のTSの EIT から放送のとおりの幅に戻す
-   * (restore-width.ts)。見た録画は覚えるので、2回目からは録り終えた新しいぶんだけ見る
+   * 番組名を半角に寄せて取り込んでいた頃の録画を、元の TS の EIT から放送のとおりの幅に戻す
+   * (restore-width.ts)。見た録画は覚えるので、2 回目からは録り終えた新しいぶんだけ見る
    */
   nowAndEvery(config.reconcileInterval, "restore-width", async () => {
     const result = await restoreWidths();
@@ -212,7 +212,7 @@ export function start(): void {
   });
 
   /*
-   * 切れたログインの控えを片付ける。**入れなくなる人はいません** — 切れたものは
+   * 切れたログインの控えを片付ける。**入れなくなる人はいない。** 切れたものは
    * 読む側 (`session.find`) が既に無視しているので、消しているのは行だけ
    */
   nowAndEvery(config.reconcileInterval, "sessions", pruneSessions);
@@ -233,8 +233,8 @@ export function start(): void {
 
 /**
  * 局の一覧をエージェントから取り込む。**BS / CS が無ければ、そのついでに放送の一覧から入れる**
- * (satellite-lineup.ts)。一覧は1回だけ読んで両方に使う。エージェントが後から起きても、
- * 次の周期 (`CHANNEL_SYNC_INTERVAL`、既定1分) で入る。放送の一覧を読むのは数十秒かかるので待たない
+ * (satellite-lineup.ts)。一覧は 1 回だけ読んで両方に使う。エージェントが後から起きても、
+ * 次の周期 (`CHANNEL_SYNC_INTERVAL`、既定 1 分) で入る。放送の一覧を読むのは数十秒かかるので待たない
  */
 async function syncChannels(): Promise<void> {
   const channels = await getChannels();
@@ -319,7 +319,7 @@ const HELD = "__denpaHeldSignal";
  * ArgoCD の同期は待てるが、放送は待ってくれない。
  *
  * **待っている間も、始まる録画は始める** (`scheduler.ts`)。始めないでいた頃は、
- * 居座りの間に始まる番組の頭が丸ごと落ちていた。そのぶん居座りは伸びるが、
+ * 居座りの間に始まる番組の先頭が丸ごと落ちていた。そのぶん居座りは伸びるが、
  * Pod はどのみち残っているので、新しく待たせるものは無い。
  * エンコードは待たない (再起動でやり直せる)。
  *
@@ -330,8 +330,8 @@ const HELD = "__denpaHeldSignal";
  */
 function installShutdownHooks(): void {
   /*
-   * **畳むのは1度だけ。** 引き取りは2度ある (下) ので、`takeOverSignals` の中の印だけでは
-   * 1度目の引き取りのあとに受けた合図と、2度目のあとに受けた合図で2度畳みかねない
+   * **畳むのは 1 度だけ。** 引き取りは 2 度ある (下) ので、`takeOverSignals` の中の印だけでは
+   * 1 度目の引き取りのあとに受けた合図と、2 度目のあとに受けた合図で 2 度畳みかねない
    */
   let draining = false;
   /*
@@ -354,7 +354,7 @@ function installShutdownHooks(): void {
    * `build/index.js` の**いちばん最後**で、こちら (`hooks.server.ts`) はその手前なので、
    * 最初の引き取りでは外す相手がまだいない (外す理由は `takeOverSignals`)。
    * 入口の `server.js` が `build/index.js` を読み終えたところで呼ぶ。
-   * `setImmediate` では足りない — adapter はアプリの初期化を `await` してから登録するので、
+   * `setImmediate` では足りない。adapter はアプリの初期化を `await` してから登録するので、
    * 先に走ることがありうる。
    */
   (globalThis as Record<string, unknown>)[TAKE_OVER] = (): number => {
@@ -370,8 +370,8 @@ function installShutdownHooks(): void {
  *
  * 外す相手は adapter (adapter-bun。前は adapter-node) で、SIGTERM を受けた**その場で listen を閉じる**。
  * 両方残すと、録画が終わるまで居座っている間、プロセスは生きているのにポートだけ
- * 閉じて画面がどこからも開けなかった (実機で34分。`/proc/net/tcp` に listen が
- * 1つも無く、当時の前段 (Traefik) は「no available server」)。
+ * 閉じて画面がどこからも開けなかった (実機で 34 分。`/proc/net/tcp` に listen が
+ * 1 つも無く、当時の前段 (Traefik) は「no available server」)。
  *
  * 落とすのはこちらの `drain` の最後で `process.exit` するときだけにする。
  * 開いている応答は切れるが、これは今までと同じ (以前も待たずに exit していた)。
@@ -379,9 +379,9 @@ function installShutdownHooks(): void {
  * **外れたかどうかは数で分かる。** 0 なら相手がまだ登録していないので、
  * 呼ぶ側があとでもう一度引き取る (`installShutdownHooks`)。
  *
- * **2度目の合図でも落ちないようにする。** `once` にしていた頃は、1度目で
- * 自分の後始末が外れ、2度目は**誰も聞いていない**状態になっていた。そこへ
- * デプロイがもう一度走ると、既定どおりその場で終わる — 録画の途中でも。
+ * **2 度目の合図でも落ちないようにする。** `once` にしていた頃は、1 度目で
+ * 自分の後始末が外れ、2 度目は**誰も聞いていない**状態になっていた。そこへ
+ * デプロイがもう一度走ると、録画の途中でも既定どおりその場で終わる。
  *
  * **自分を先に入れてから、ほかを外す。** 外してから入れると、そのすき間は誰も聞いていない。
  * PID 1 (コンテナ) では、そこへ来た合図は捨てられる (`hold-signals.ts`)。
@@ -395,7 +395,7 @@ export function takeOverSignals(
   let taken = 0;
   let draining = false;
   const receive = (signal: NodeJS.Signals) => {
-    // もう畳んでいる最中。2度目からは受け取るだけで何もしない
+    // もう畳んでいる最中。2 度目からは受け取るだけで何もしない
     if (draining) return;
     draining = true;
     onSignal(signal);
@@ -415,7 +415,7 @@ export function takeOverSignals(
   return taken;
 }
 
-/** 5秒ごとに様子を見る。録画は分単位なので、これ以上細かく見ても意味が無い */
+/** 5 秒ごとに様子を見る。録画は分単位なので、これ以上細かく見ても意味が無い */
 const DRAIN_CHECK = 5000;
 /** 待っている間、これだけおきに「まだ待っている」と残す (ms) */
 const DRAIN_REPORT = 60_000;
@@ -423,15 +423,15 @@ const DRAIN_REPORT = 60_000;
 /**
  * 何があっても降りる。**降り損ねを「ぶら下がったまま」にしない。**
  *
- * 実機で、消しはじめられた Pod が **40分たっても降りてこない**ことがあった
- * (録画はとうに終わり、`activeRecordingIds()` も 0、SIGTERM は捕まえている
- * — `/proc/1/status` の `SigCgt` に 15 が立っている — のに生きている)。
- * こうなると `terminationGracePeriodSeconds` (6時間) を使い切るまで
+ * 実機で、消しはじめられた Pod が **40 分たっても降りてこない**ことがあった
+ * (録画はとうに終わり、`activeRecordingIds()` も 0、SIGTERM は捕まえていて
+ * `/proc/1/status` の `SigCgt` に 15 が立っている。それでも生きている)。
+ * こうなると `terminationGracePeriodSeconds` (6 時間) を使い切るまで
  * **新しい Pod が上がらない**。Recreate なので、その間ずっと古いまま。
  *
- * 待ちの輪を回す前に**先に目覚ましを掛ける**。輪の中で何が起きても、
+ * 待つループを回す前に**先に目覚ましを掛ける**。ループの中で何が起きても、
  * `SHUTDOWN_WAIT` を過ぎたら降りる。原因が分からなくても、
- * 「入れ替えが6時間止まる」だけは起こさない
+ * 「入れ替えが 6 時間止まる」だけは起こさない
  */
 function forceExitAfter(ms: number, why: string): void {
   const timer = setTimeout(() => {
@@ -461,7 +461,7 @@ async function drain(signal: string): Promise<void> {
     process.exit(0);
   }
 
-  // 輪を回す前に掛ける。**この先で何が起きても降りる**
+  // ループを回す前に掛ける。**この先で何が起きても降りる**
   forceExitAfter(config.shutdownWait, "待ち時間を使い切りました");
 
   beginDraining();

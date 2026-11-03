@@ -50,7 +50,7 @@ describe("エージェントの通知", () => {
   });
 
   test("途中で切れたブロックは次の分と繋ぐ", async () => {
-    // TCP の切れ目はイベントの切れ目と関係が無い。持ち越さないと1件落ちる
+    // TCP の切れ目はイベントの切れ目と関係が無い。持ち越さないと 1 件落ちる
     const got: string[] = [];
     for await (const block of blocks(
       streamOf("event: chan", "nels\ndata: {}\n\n"),

@@ -11,15 +11,15 @@ import {
 } from "./oidc";
 
 /*
- * **`config` を直に差し替える。** 環境変数を入れてから import する手は使えない —
- * `config` は読み込んだ一度きりに環境変数を写すので、他の試験が先に読み込んでいると
- * こちらの環境変数は届かない (単体では通るのに、全部走らせると落ちる)
+ * **`config` を直に差し替える。** 環境変数を入れてから import する手は使えない。
+ * `config` は読み込んだときに一度だけ環境変数を写し、import は試験の本文より先に動くので、
+ * 本文で入れた環境変数は届かない
  */
 const ISSUER = "https://login.example/tenant/v2.0";
 const CLIENT_ID = "denpa-test-client";
 const original = { ...config };
 
-/** 署名に使う鍵。1回作って使い回す (作るのが試験の中で一番重い) */
+/** 署名に使う鍵。1 回作って使い回す (作るのがテストの中で一番重い) */
 const pair = await crypto.subtle.generateKey(
   {
     name: "RSASSA-PKCS1-v1_5",
@@ -93,14 +93,14 @@ afterEach(() => {
 });
 
 describe("設定してあるか", () => {
-  test("3つ揃っていれば有効", () => {
+  test("3 つ揃っていれば有効", () => {
     expect(enabled()).toBe(true);
   });
 });
 
 /*
  * **PKCE。** code_verifier そのものは送らず、SHA-256 を送ってから後で突き合わせる。
- * RFC 7636 の付録Aに載っている値で確かめる
+ * RFC 7636 の付録 A に載っている値で確かめる
  */
 describe("PKCE の code_challenge", () => {
   test("RFC 7636 の例と一致する", async () => {
@@ -171,7 +171,7 @@ describe("ID トークンを確かめる", () => {
   });
 
   test("少しの時計のずれは許す", async () => {
-    // 30秒前に切れたもの。ここで弾くと、時計が合っていない端末から入れなくなる
+    // 30 秒前に切れたもの。ここで弾くと、時計が合っていない端末から入れなくなる
     const justExpired = { ...base, exp: Math.floor(NOW / 1000) - 30 };
     expect((await verify(await idToken(justExpired), "nonce-1", NOW)).sub).toBe(
       "user-1",
@@ -205,7 +205,7 @@ describe("ID トークンを確かめる", () => {
 });
 
 /*
- * **通すかどうかはグループかロールで決める。** 誰がログインしたかでは決めない —
+ * **通すかどうかはグループかロールで決める。** 誰がログインしたかでは決めない。
  * 人が増えたときに denpa 側を触らなくて済む
  */
 describe("通していい人か", () => {

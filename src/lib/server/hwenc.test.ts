@@ -36,7 +36,7 @@ const B: HwDevice = {
 };
 
 describe("GPU の方式の選び方", () => {
-  test("載っていないデバイスは全部よい", () => {
+  test("設定に載っていないデバイスは全部使ってよい", () => {
     expect(hwChain("av1", {}, 0, [A, B])).toEqual([
       { device: A.path, kind: "vaapi" },
     ]);
@@ -315,7 +315,7 @@ describe("Rockchip MPP", () => {
     ]);
   });
 
-  test("ライブは 1080 の 60コマの値で、MPP が持たない引数 (-async_depth) を渡さない", () => {
+  test("ライブは 1080 の 60 コマの値で、MPP が持たない引数 (-async_depth) を渡さない", () => {
     const live = liveHwArgs(
       { way: { device: R.path, kind: "rkmpp" }, full: false },
       "h264",
@@ -433,7 +433,7 @@ describe("NVIDIA NVENC", () => {
     }
   });
 
-  test("ライブは低遅延の NVENC の言い方で、-async_depth は渡さない", () => {
+  test("ライブは低遅延の NVENC の引数で、-async_depth は渡さない", () => {
     const live = liveHwArgs(
       { way: { device: N0.path, kind: "nvenc", gpu: 0 }, full: false },
       "h264",
@@ -455,8 +455,8 @@ describe("NVIDIA NVENC", () => {
     });
   });
 
-  test("同時に開ける数を超えて降りたかを、ffmpeg の言い分で見分ける", () => {
-    // 新しいドライバと古いドライバの言い方 (FFmpeg の nvenc.c が出す形)
+  test("同時に開ける数を超えて降りたかを、ffmpeg のエラー文で見分ける", () => {
+    // 新しいドライバと古いドライバのエラー文 (FFmpeg の nvenc.c が出す形式)
     expect(
       nvencBusy(
         "[h264_nvenc @ 0x5581] OpenEncodeSessionEx failed: out of memory (10): (no details)",
@@ -531,7 +531,7 @@ describe("H.265 (GPU でだけ)", () => {
 
   /*
    * **画質の指定は映像にだけ効かせる** (`-global_quality:v`)。付けないと音のエンコーダにも効き、
-   * libopus は開けずに転ぶ (AV1 + Opus の録画とライブ)。録画・ライブのどちらの引数にも素の形を出さない
+   * libopus は開けずに失敗する (AV1 + Opus の録画とライブ)。録画・ライブのどちらの引数にも素の形を出さない
    */
   test("-global_quality は :v 付きで、音のエンコーダに効かせない", () => {
     // `-global_quality` を使うのは AV1 だけ (ICQ・CQP どちらも)。H.264・H.265 は `-qp`

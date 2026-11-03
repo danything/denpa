@@ -8,7 +8,7 @@ import {
 } from "#lib/server/device-auth.js";
 
 /**
- * **ペアリングコードを出す** (device-auth.ts。資格は要らない — テレビはまだ何も持っていない)。
+ * **ペアリングコードを出す** (device-auth.ts。テレビはまだ何も持っていないので、資格は要らない)。
  * URL は denpa の根からの相対。テレビは `verificationUriComplete` を QR にして出す
  */
 export async function POST(event) {
@@ -19,7 +19,7 @@ export async function POST(event) {
   } catch {
     error(400, "リクエストの本文を読めませんでした");
   }
-  // 接続元ごとに数える (1台が呼び続けても、ほかの人のコードは押し出されない)
+  // 接続元ごとに数える (1 台が呼び続けても、ほかの人のコードは押し出されない)
   const issued = issueCode(
     typeof name === "string" ? name : "",
     clientAddress(event),

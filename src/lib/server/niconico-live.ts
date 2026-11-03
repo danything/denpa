@@ -89,7 +89,7 @@ async function hubWatch(
 }
 
 /**
- * 繋いでよい接続先か。`wss:` だけ。試験の偽物 (ループバックのアドレス) だけは `ws:` も通す
+ * 繋いでよい接続先か。`wss:` だけ。テストの偽物 (ループバックのアドレス) だけは `ws:` も通す
  */
 export function allowedSocket(url: string): boolean {
   try {

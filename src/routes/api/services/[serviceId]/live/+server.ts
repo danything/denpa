@@ -8,7 +8,7 @@ import { liveStream } from "#lib/server/live.js";
  *
  * 画面と同じエンコード方式の fragmented MP4 を流し続ける。既定は H.264 / AAC (Cast・テレビ・
  * いちばん広く再生できる)。`?codec=av1` で AV1 / Opus、`?codec=raw` でエンコードせずに
- * 1局に絞っただけの、変換しない TS (MPEG-2。テレビのアプリ向け。Content-Type で分かる)。
+ * 1 局に絞っただけの、変換しない TS (MPEG-2。テレビのアプリ向け。Content-Type で分かる)。
  * `?audio=only` で音声だけ (AAC の fMP4。画面の無いスピーカーへの Cast 向け。録画の API と同じ書き方)。
  * `?audio=<音声ID>` (`now.audios` の `id`。`0:sub` など) でエンコードする音声を選ぶ。知らないものは主音声、変換しないときは効かない。
  * 画面の視聴者と同じチューナーの取り合いに加わり、閉じれば抜ける (live.ts の liveStream)

@@ -2,7 +2,7 @@
  * OIDC (認可コードフロー + PKCE) でのログイン。
  *
  * **ライブラリを入れていません。** 使うエンドポイントは discovery・authorize・token・jwks の
- * 4つだけで、どれも素の HTTP と WebCrypto で足ります。依存を増やすほうが、
+ * 4 つだけで、どれも素の HTTP と WebCrypto で足ります。依存を増やすほうが、
  * 認証まわりで「中で何をしているか分からない」を抱えることになります。
  *
  * 相手は Entra ID を想定していますが、OIDC の標準しか使っていないので
@@ -25,7 +25,7 @@ import {
 } from "../shape";
 import { config } from "./config";
 
-/** 有効かどうか。3つ揃っていなければ、ログインできるのは TRUSTED_NETWORKS だけ (auth.ts) */
+/** 有効かどうか。3 つ揃っていなければ、ログインできるのは TRUSTED_NETWORKS だけ (auth.ts) */
 export function enabled(): boolean {
   return (
     config.oidcIssuer !== "" &&
@@ -82,12 +82,12 @@ function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(binary, (c) => c.charCodeAt(0));
 }
 
-/** ID トークンの1節 (base64url の JSON) を開く */
+/** ID トークンの 1 節 (base64url の JSON) を開く */
 function decodePart(value: string): unknown {
   return JSON.parse(new TextDecoder().decode(decodeBase64Url(value)));
 }
 
-/** 推測できない文字列。state・nonce・セッションIDに使う */
+/** 推測できない文字列。state・nonce・セッション ID に使う */
 export function randomToken(bytes = 32): string {
   return base64Url(crypto.getRandomValues(new Uint8Array(bytes)));
 }
@@ -121,7 +121,7 @@ export function safeReturn(to: string | null): string {
 }
 
 /**
- * 戻ってくる先の URL。**Entra のアプリ登録に、名前ごとに1つずつ足しておくこと。**
+ * 戻ってくる先の URL。**Entra のアプリ登録に、名前ごとに 1 つずつ足しておくこと。**
  *
  * denpa は名前をいくつも持てる (外向けと家の中向けなど) ので、決め打ちにせず
  * 来たリクエストから組み立てる。**認可のときと引き換えのときで同じ値**を渡す
@@ -179,7 +179,7 @@ const TOKEN = object({
 /**
  * 受け取ったコードを ID トークンに換える。
  *
- * **秘密はここでしか使いません。** 本文に入れて (`client_secret_post`) 送ります —
+ * **秘密はここでしか使いません。** 本文に入れて (`client_secret_post`) 送ります。
  * Entra はどちらも受けますが、ヘッダに入れる方式は URL 符号化の解釈が実装で割れるので、
  * 迷いようのないほうにしてあります。
  */
@@ -354,7 +354,7 @@ export function allowed(
 
   /*
    * **`groups` と `roles` のどちらでもいい。** Entra のグループクレーム
-   * (グループのオブジェクトID) でもアプリロールでも、置いた名前が入っていれば通す
+   * (グループのオブジェクト ID) でもアプリロールでも、置いた名前が入っていれば通す
    */
   const held = [...(claims.groups ?? []), ...(claims.roles ?? [])];
 
@@ -383,7 +383,7 @@ export function allowed(
 
 /**
  * 控えに残す名前。無ければ空文字 (誰であるかは `sub` が持っている)。
- * **画面には出しません** — 誰で入っているかでできることは変わらないので。
+ * **画面には出しません。** 誰で入っているかで、できることは変わらないためです。
  */
 export function displayName(claims: Claims): string {
   return claims.name ?? claims.preferred_username ?? claims.email ?? "";

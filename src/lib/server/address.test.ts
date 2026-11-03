@@ -12,7 +12,7 @@ describe("アドレスがネットワークの中か", () => {
   test("CIDR の中と外", () => {
     expect(inNetwork("10.10.0.1", "10.10.0.0/16")).toBe(true);
     expect(inNetwork("10.10.255.254", "10.10.0.0/16")).toBe(true);
-    // 隣の /16。1ビット違いを通してしまわないこと
+    // 隣の /16。1 ビット違いを通してしまわないこと
     expect(inNetwork("10.11.0.1", "10.10.0.0/16")).toBe(false);
     expect(inNetwork("10.9.255.255", "10.10.0.0/16")).toBe(false);
   });
@@ -24,7 +24,7 @@ describe("アドレスがネットワークの中か", () => {
     expect(inNetwork("8.8.8.8", "0.0.0.0/0")).toBe(true);
   });
 
-  test("長さを書かなければ1台だけ", () => {
+  test("長さを書かなければ 1 台だけ", () => {
     expect(inNetwork("10.0.0.1", "10.0.0.1")).toBe(true);
     expect(inNetwork("10.0.0.2", "10.0.0.1")).toBe(false);
   });
@@ -90,7 +90,7 @@ describe("アドレスをそろえる", () => {
 });
 
 /*
- * 本番の構成: 前段 (Cilium Gateway の Envoy) が Pod の網 (10.42.0.0/16) から繋いでくる。
+ * 本番の構成: 前段 (Cilium Gateway の Envoy) が Pod のネットワーク (10.42.0.0/16) から繋いでくる。
  * LAN は 10.10.0.0/16
  */
 describe("本当の接続元を決める", () => {
@@ -102,13 +102,13 @@ describe("本当の接続元を決める", () => {
     expect(resolveClient("203.0.113.9", "10.10.5.9", [])).toBe("203.0.113.9");
   });
 
-  test("前段を1つ挟む", () => {
+  test("前段を 1 つ挟む", () => {
     expect(resolveClient("10.42.0.148", "10.10.5.9", proxies)).toBe(
       "10.10.5.9",
     );
   });
 
-  test("前段を2つ挟む (どちらも信頼した網)", () => {
+  test("前段を 2 つ挟む (どちらも TRUSTED_PROXIES に入っている)", () => {
     expect(resolveClient("10.42.0.148", "10.10.5.9, 10.42.0.7", proxies)).toBe(
       "10.10.5.9",
     );
@@ -190,7 +190,7 @@ describe("ネットワークが重なるか", () => {
   test("片方がもう片方を含めば重なる", () => {
     expect(overlaps("172.16.0.0/12", "172.18.0.3/16")).toBe(true);
     expect(overlaps("172.18.0.3/16", "172.16.0.0/12")).toBe(true);
-    // アドレス1つでも
+    // アドレス 1 つでも
     expect(overlaps("10.0.0.0/8", "10.42.0.7")).toBe(true);
   });
 

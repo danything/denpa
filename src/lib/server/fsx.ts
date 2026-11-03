@@ -11,8 +11,8 @@ import { dirname } from "node:path";
 import { config } from "./config";
 
 /**
- * 元のTSと保存先は別PVCなので rename が EXDEV で失敗する。
- * その場合だけコピー+削除にフォールバックする。
+ * 元の TS と保存先は別の PVC なので rename が EXDEV で失敗する。
+ * そのときだけコピーと削除にフォールバックする。
  */
 export function moveFile(from: string, to: string): void {
   mkdirSync(dirname(to), { recursive: true });

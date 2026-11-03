@@ -13,15 +13,15 @@ import { settings as settingsTable } from "./schema";
 /**
  * 画面から変えられる設定。
  *
- * コーデックとCMの扱いは、番組ごとに変えたくなることが実際にはほとんど無い。
+ * コーデックと CM の扱いは、番組ごとに変えたくなることが実際にはほとんど無い。
  * ルールにも予約にも同じ選択肢を並べると、どこで決まったのか分からなくなるので
- * 全体で1つに寄せてある。初期値は config.ts が持ち、DBに値があればそちらが勝つ。
+ * 全体で 1 つに寄せてある。初期値は config.ts が持ち、DB に値があればそちらが勝つ。
  */
 
 interface Settings {
   /**
    * 録画のエンコードに使う映像コーデック。`none` ならエンコードしない。
-   * **主のほう** — いくつもエンコードするときは AV1 → H.265 → H.264 の先頭 (小さいので既定の再生に向く)
+   * **主のほう。** いくつもエンコードするときは AV1 → H.265 → H.264 の先頭 (小さいので既定の再生に向く)
    */
   codec: VideoCodec;
   /**
@@ -29,14 +29,14 @@ interface Settings {
    *
    * 古いテレビは AV1 をデコードできないので、H.264 も一緒にエンコードしておくと同じ録画を
    * どちらの端末でも観られる (`server/encoder.ts`)。`none` (エンコードしない)
-   * のときは空。並びは AV1 → H.265 → H.264 — 主 (`library_path`) は先頭にする
+   * のときは空。並びは AV1 → H.265 → H.264 で、主 (`library_path`) は先頭にする
    */
   codecs: HwCodec[];
   /**
    * **デバイス (GPU) と方式ごとに、GPU でエンコードしてよいコーデック** (`#lib/hw.js` の HwAllow)。使えるかは
    * 別 (`server/hwenc.ts`) で、エンコードするのは「使える かつ 許されている」もの。いま使えない
    * GPU の印も保存で消さない (挿し直せばそのまま効く。`chooseHw`)。設定の 1 キーに JSON で持つ。
-   * **録画のエンコードだけが読む** — ライブ・追っかけ・その場の変換は `liveHwAllow`
+   * **録画のエンコードだけが読む。** ライブ・追っかけ・その場の変換は `liveHwAllow`
    */
   hwAllow: HwAllow;
   /**
@@ -45,11 +45,11 @@ interface Settings {
    * ライブが出すのは AV1 と H.264 だけなので、H.265 の印は何にも効かない
    */
   liveHwAllow: HwAllow;
-  /** CMの扱い。off / chapter / cut */
+  /** CM の扱い。off / chapter / cut */
   cmCut: CmMode;
   /** エンコードするか。**コーデックの選択から決まる** (`none` 以外なら する) */
   encode: boolean;
-  /** エンコードしたあとも元のTSを残すか */
+  /** エンコードしたあとも元の TS を残すか */
   keepOriginal: boolean;
   /** 自動予約で無料放送だけを対象にするか */
   freeOnly: boolean;
@@ -57,12 +57,12 @@ interface Settings {
    * コマ数 (30/60) を本編映像から実測して決めるか。
    *
    * オン: フィールドを比べて素材を見分け、24p 系 (アニメ・フィルム) と 30p の
-   *       素材は 30コマで出す (`encoder.measureSmoothMotion`)。
-   * オフ: 測らず**全部 60コマ**で出す。時間とサイズはかさむが、動きは絶対に落ちない
+   *       素材は 30 コマで出す (`encoder.measureSmoothMotion`)。
+   * オフ: 測らず**全部 60 コマ**で出す。時間とサイズはかさむが、動きは絶対に落ちない
    */
   fpsDetect: boolean;
   /**
-   * データ放送に渡す郵便番号 (数字7桁。空なら渡さない)。
+   * データ放送に渡す郵便番号 (数字 7 桁。空なら渡さない)。
    *
    * **テレビの初期設定で必ず訊かれるあれ。** 放送のアプリは
    * `nvram://receiverinfo/zipcode` を読んで、天気・地域のニュース・
@@ -70,7 +70,7 @@ interface Settings {
    * **「郵便番号が正しく設定されていません」**と出て、その欄が空のままになる。
    *
    * 受け取るのは端末の中 (localStorage) だが、置き場をここにしてあるのは
-   * **端末ごとに訊き直さずに済ませる**ため — 家の場所は端末では変わらない
+   * **端末ごとに訊き直さずに済ませる**ため。家の場所は端末では変わらない
    */
   postalCode: string;
   /**
@@ -105,8 +105,8 @@ interface Settings {
   /** **実況の NG ワード** (世帯で 1 つ)。含むコメントは流さない (`#lib/jikkyo/ng.ts`)。設定の 1 キーに JSON の配列で持つ */
   jikkyoNg: string[];
   /**
-   * **家の中で使う名前** (世帯で 1 つ。`dp.l.example.com` など)。この名前で開いた画面は、ライブの「自動」で
-   * MPEG-2 (放送のまま) を先に選ぶ (`#lib/host.ts` の `indoorHost`)。プライベートの IP・`localhost`・`.local` などは
+   * **家の中で使う名前** (世帯で 1 つ。`dp.l.example.com` など)。この名前で開いた画面は、ライブと追っかけの「自動」で
+   * MPEG-2 (放送のまま) を先に選ぶ (`#lib/live-choice.ts` の `autoOrder`。家の中かは `#lib/host.ts` の `indoorHost`)。プライベートの IP・`localhost`・`.local` などは
    * 載せなくても家の中。設定の 1 キーに JSON の配列で持つ
    */
   indoorHosts: string[];
@@ -130,17 +130,17 @@ export function parseTranscodeLimit(
 }
 
 /**
- * 数字7桁だけを残す。`123-4567` でも `1234567` でも同じに読む。
+ * 数字 7 桁だけを残す。`123-4567` でも `1234567` でも同じに読む。
  *
- * **7桁でなければ空にする。** 途中まで入った番号を渡すと、放送側は
- * 「入っているが違う場所」として扱う — 入っていないほうがまだ分かりやすい
+ * **7 桁でなければ空にする。** 途中まで入った番号を渡すと、放送側は
+ * 「入っているが違う場所」として扱う。入っていないほうがまだ分かりやすい
  */
 export function normalizePostalCode(value: string): string {
   const digits = value.replace(/[^0-9]/g, "");
   return digits.length === 7 ? digits : "";
 }
 
-/** 設定の表の1つを読む。画面の設定でない控え (`restore-width` の済んだ所) もここ */
+/** 設定の表の 1 つを読む。画面の設定でない控え (`restore-width` の済んだ所) もここ */
 export function stored(key: string): string | undefined {
   return orm()
     .select({ value: settingsTable.value })
@@ -150,10 +150,10 @@ export function stored(key: string): string | undefined {
 }
 
 /**
- * コーデックの選択を読む。**カンマ区切りで、1つだけの古い値も読める。**
+ * コーデックの選択を読む。**カンマ区切りで、1 つだけの古い値も読める。**
  *
  * `av1,h264` → `['av1', 'h264']`、`av1` → `['av1']`、`none` や空 → `[]`。
- * **並びは AV1 → H.265 → H.264 に揃える** — 主 (`library_path`) を先頭にするので、順序を固定する
+ * **並びは AV1 → H.265 → H.264 に揃える。** 主 (`library_path`) を先頭にするので、順序を固定する
  */
 export function parseCodecs(value: string | undefined): HwCodec[] {
   const raw = (value ?? config.encodeCodec).split(",").map((s) => s.trim());
@@ -162,7 +162,7 @@ export function parseCodecs(value: string | undefined): HwCodec[] {
 
 /**
  * `hwAllow`・`liveHwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ vaapi: [...], rkmpp: [...], nvenc: [...] }`。
- * 書かれていない方式は空 — 方式はデバイスごとに決まっていて (`/dev/dri/*` は VA-API、
+ * 書かれていない方式は空。方式はデバイスごとに決まっていて (`/dev/dri/*` は VA-API、
  * `/dev/mpp_service` は Rockchip MPP、`/dev/nvidia0` などは NVENC)、そのデバイスで使えない方式の印は何にも効かない
  */
 function parseHwAllow(value: string | undefined): HwAllow {
@@ -210,7 +210,7 @@ export function settings(): Settings {
     fpsDetect: flag("fpsDetect", true),
     postalCode: normalizePostalCode(stored("postalCode") ?? ""),
     prefecture: normalizePrefecture(stored("prefecture")),
-    // テレビと同じく通信できるのが既定。設定画面の説明の1行目で、視聴の記録が送られうることを出す
+    // テレビと同じく通信できるのが既定。設定画面の説明の 1 行目で、視聴の記録が送られうることを出す
     bmlNetwork: flag("bmlNetwork", true),
     transcodeLimit: parseTranscodeLimit(stored("transcodeLimit")),
     jikkyo: flag("jikkyo", false),
@@ -220,7 +220,7 @@ export function settings(): Settings {
   };
 }
 
-/** 設定の表の1つを書く (`stored` の対) */
+/** 設定の表の 1 つを書く (`stored` の対) */
 export function store(key: string, value: string): void {
   saveRaw(orm(), key, value, now());
 }

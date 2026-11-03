@@ -15,7 +15,7 @@ import { createServer, type Socket } from "node:net";
 export interface FakeEdcbMode {
   /** 応答の ver。null ならリクエストされた ver (2 未満は 2。本物と同じ) */
   ver: number | null;
-  /** 一覧の1件ずつの構造体の後ろに、知らない欄としてこのバイト数を足す (新しい EDCB の代わり) */
+  /** 一覧の 1 件ずつの構造体の後ろに、知らない欄としてこのバイト数を足す (新しい EDCB の代わり) */
   extra: number;
   /** 受けてすぐ何も返さずに切る (アクセス制御から外れた IP の扱い) */
   deny: boolean;
@@ -365,7 +365,7 @@ export const MX: FakeService = {
 
 const START = Date.UTC(2026, 8, 1, 12, 0, 0);
 
-/** e2e で返すもの。1つ目のルールは無効の印付き (予約を立ててほかのテストを乱さない)、2つ目は正規表現なので飛ぶ */
+/** e2e で返すもの。1 つ目のルールは無効の印付き (予約を立ててほかのテストを乱さない)、2 つ目は正規表現なので飛ぶ */
 export const DEFAULT_EDCB_DATA: FakeEdcbData = {
   autoAdd: [
     { id: 1, andKey: "^!{999}引き継ぎテスト", services: [MX] },

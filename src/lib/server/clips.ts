@@ -50,15 +50,15 @@ import { run } from "./stream";
 import { searchable } from "./title";
 
 /**
- * **切り抜き** (観ている1コマを、出していた字幕・実況のコメントごと写した静止画) を受けて置く。
+ * **切り抜き** (観ている 1 コマを、出していた字幕・実況のコメントごと写した静止画) を受けて置く。
  *
- * 画面は撮った1コマを WebP か JPEG で、出していた字幕とコメントはそれぞれ透明な PNG (映像と同じ縦横) で、
+ * 画面は撮った 1 コマを WebP か JPEG で、出していた字幕とコメントはそれぞれ透明な PNG (映像と同じ縦横) で、
  * 分けて送ってくる (`components/player/snapshot.ts`)。ここで ffmpeg に通して重ね、**AVIF** (SVT-AV1 の静止画) にし、
  * 一覧用の小さいもの (幅 480) と一緒に置き場 (`clipsDir()`) に置く。ffmpeg に通すのは、小さくするためと、
  * **画像として読めるかの確認**を兼ねる (読めなければ断る)。
  *
  * **字幕とコメントはあとから出し入れできる** (`setClipLayers`)。受けた元の画像を残しておき、出し入れのたびに
- * 元から重ね直す (AVIF を重ねて作り直すと、そのたびに崩れていくので)。重ねを送らないもの (1枚だけの画像) は元を残さない。
+ * 元から重ね直す (AVIF を重ねて作り直すと、そのたびに崩れていくので)。重ねを送らないもの (1 枚だけの画像) は元を残さない。
  *
  * 番組の情報はサーバが引く。画面が送るのは「どの録画のどこか」か「どの局のいつか」だけで、
  * 番組名・局名・番組の始めからの位置はここで決めて写しておく (番組表は流れ、録画は消える)。
@@ -68,22 +68,22 @@ import { searchable } from "./title";
  * - EXIF などは書かない (`-map_metadata -1`)。ログに番組名を出さない
  */
 
-/** 一覧用の幅 (px)。グリッドの1枚は広い画面でも 240px ほどなので、2倍の密度まで */
+/** 一覧用の幅 (px)。グリッドの 1 枚は広い画面でも 240px ほどなので、2 倍の密度まで */
 const SMALL_WIDTH = 480;
 /**
- * AVIF の画質 (SVT-AV1 の CRF。小さいほどきれいで大きい)。1080 の1コマで数百 KB に収まり、
+ * AVIF の画質 (SVT-AV1 の CRF。小さいほどきれいで大きい)。1080 の 1 コマで数百 KB に収まり、
  * 字幕の縁が崩れない所。一覧用は縮めて見るだけなので粗くてよい
  */
 const FULL_CRF = 28;
 const SMALL_CRF = 36;
-/** SVT-AV1 の速さ。1080 の1枚が1秒ほどで済む所 */
+/** SVT-AV1 の速さ。1080 の 1 枚が 1 秒ほどで済む所 */
 const PRESET = 6;
 /** 受ける縦横の範囲 (px)。SVT-AV1 は小さすぎる画像をエンコードできない。上は 8K まで */
 const SIDE_LEAST = 64;
 const SIDE_MOST = 8192;
-/** ffmpeg 1回の上限 (ms)。固まったものに居座らせない */
+/** ffmpeg 1 回の上限 (ms)。固まった ffmpeg を待ち続けない */
 const CONVERT_TIMEOUT = 60_000;
-/** 字幕の文字の上限 (字)。字幕1枚に収まる量より十分多く */
+/** 字幕の文字の上限 (字)。字幕 1 枚に収まる量より十分多く */
 const CAPTIONS_MOST = 500;
 /** まとめて消す数の上限 */
 export const DELETE_MOST = 500;
@@ -101,7 +101,7 @@ export class ClipError extends Error {
 type ImageType = "png" | "jpeg" | "webp";
 
 /**
- * 送られてきた画像の形式と縦横を頭から読む。**中身で見る** (`Content-Type` は信じない)。
+ * 送られてきた画像の形式と縦横を先頭から読む。**中身で見る** (`Content-Type` は信じない)。
  * PNG・JPEG・WebP のどれでもなければ null
  */
 export function imageInfo(
@@ -190,7 +190,7 @@ export function checkImage(bytes: Uint8Array): {
   return info;
 }
 
-/** 受けた1枚。映像 (`frame`) と、出していた重ね (透明な PNG) */
+/** 受けた 1 枚。映像 (`frame`) と、出していた重ね (透明な PNG) */
 interface ClipParts {
   frame: Uint8Array;
   captions?: Uint8Array | undefined;
@@ -219,7 +219,7 @@ export async function readClipForm(form: FormData): Promise<ClipParts> {
 }
 
 /**
- * 受けた1枚を確かめる。映像は `checkImage` と同じ。重ねは**映像と同じ縦横の PNG** だけ (透けている所が要る)。
+ * 受けた 1 枚を確かめる。映像は `checkImage` と同じ。重ねは**映像と同じ縦横の PNG** だけ (透けている所が要る)。
  * 部分ごとの大きさも `checkImage` の上限で見る (合わせた本文の上限は、読む前に `POST` が見る)
  */
 export function checkParts(parts: ClipParts): {
@@ -256,11 +256,11 @@ const AVIF_COLOR = [
 ];
 
 /**
- * ffmpeg の引数。映像 (`input`) に重ね (`layers`。透明な PNG、下から順に) を重ね、1回の起動で AVIF を2枚
- * (そのままの大きさと一覧用) 書く。4:2:0 は縦横が偶数でないとエンコードできないので、奇数なら1画素削る。
+ * ffmpeg の引数。映像 (`input`) に重ね (`layers`。透明な PNG、下から順に) を重ね、1 回の起動で AVIF を 2 枚
+ * (そのままの大きさと一覧用) 書く。4:2:0 は縦横が偶数でないとエンコードできないので、奇数なら 1 画素削る。
  *
  * 重ねるのは RGB で (`overlay=format=rgb`)。既定の YUV 4:2:0 で重ねると、色を半分の細かさにしてから重ねるので
- * 字の縁の色がにじむ。YUV にするのは最後の1回だけ (重ねないときと同じ)
+ * 字の縁の色がにじむ。YUV にするのは最後の 1 回だけ (重ねないときと同じ)
  */
 export function avifArgs(
   input: string,
@@ -285,7 +285,7 @@ export function avifArgs(
     "avif",
   ];
   const yuv = "out_color_matrix=bt709:out_range=full,format=yuv420p";
-  // 映像に1枚ずつ重ねる。[0:v:0] → [l1] → [l2] …
+  // 映像に 1 枚ずつ重ねる。[0:v:0] → [l1] → [l2] …
   let base = "[0:v:0]";
   let overlays = "";
   layers.forEach((_, i) => {
@@ -318,8 +318,8 @@ export function avifArgs(
 }
 
 /**
- * 切り抜きの画像の置き場。**エンコード済みの置き場の下** — 既定の構成で残る置き場は DB (`/data`。5GB ほどの小さいもの) と
- * 元のTS・エンコード済みだけで、`MEDIA_DIR` そのものはボリュームではない。録画と同じディスクに置けば、
+ * 切り抜きの画像の置き場。**エンコード済みの置き場の下。** 既定の構成で残る置き場は DB (`/data`。5GB ほどの小さいもの) と
+ * 元の TS・エンコード済みだけで、`MEDIA_DIR` そのものはボリュームではない。録画と同じディスクに置けば、
  * 置き場を移すときも一緒に写る
  */
 export function clipsDir(): string {
@@ -358,7 +358,7 @@ function srcFrame(dir: string): string | undefined {
   return readdirSync(dir).find((name) => name.startsWith("frame."));
 }
 
-/** 置き場の1つのフォルダの中の大きさの合計 (元の画像)。無ければ 0 */
+/** 置き場の 1 つのフォルダの中の大きさの合計 (元の画像)。無ければ 0 */
 function dirBytes(dir: string): number {
   if (!existsSync(dir)) return 0;
   return readdirSync(dir).reduce(
@@ -368,8 +368,8 @@ function dirBytes(dir: string): number {
 }
 
 /**
- * **一度に1枚ずつ変換する。** 続けて押されても SVT-AV1 を並べて CPU を取り合わない
- * (録画のエンコードと同じ機械で動く)。1枚は1秒ほど
+ * **一度に 1 枚ずつ変換する。** 続けて押されても SVT-AV1 を並べて CPU を取り合わない
+ * (録画のエンコードと同じ機械で動く)。1 枚は 1 秒ほど
  */
 let line: Promise<unknown> = Promise.resolve();
 function oneAtATime<T>(task: () => Promise<T>): Promise<T> {
@@ -390,7 +390,7 @@ export interface Scene {
   offset_ms: number | null;
 }
 
-/** 番組ID (`tuner.programKey`) から event_id */
+/** 番組 ID (`tuner.programKey`) から event_id */
 function eventOf(programId: number | null): number | null {
   return programId === null ? null : programId % 100000;
 }
@@ -440,7 +440,7 @@ export function liveScene(serviceId: number, aired: number): Scene {
     .from(programs)
     .where(
       and(
-        // 番組の service_id は局の内部ID (services.id) で持っている
+        // 番組の service_id は局の内部 ID (services.id) で持っている
         eq(programs.service_id, serviceId),
         sql`${programs.start_at} <= ${aired}`,
         sql`${programs.end_at} > ${aired}`,
@@ -476,7 +476,7 @@ export function liveScene(serviceId: number, aired: number): Scene {
 
 /**
  * 「この場面から観る」の位置。番組の始めからの位置 (ms) を、観る画面の物差し (`rulerOf(recording, null)`) の秒にする。
- * 録画の頭より前 (頭が欠けた録画) なら 0
+ * 録画の先頭より前 (冒頭が欠けた録画) なら 0
  */
 export function sceneTime(recording: Recording, offsetMs: number): number {
   const tsAt = Math.max(
@@ -486,7 +486,7 @@ export function sceneTime(recording: Recording, offsetMs: number): number {
   return fromTsTime(tsAt, rulerOf(recording, null));
 }
 
-/** 字幕の文字を揃える (改行と続く空白を1つの空白に、長すぎるものは切る) */
+/** 字幕の文字を揃える (改行と続く空白を 1 つの空白に、長すぎるものは切る) */
 function captionsText(raw: string): string {
   return [...raw.replace(/\s+/g, " ").trim()].slice(0, CAPTIONS_MOST).join("");
 }
@@ -555,7 +555,7 @@ function sweepWork(work: string): void {
 }
 
 /**
- * ffmpeg で重ねて AVIF を2枚書く。読めなければ (画像として壊れている) false。理由はログへ (番組名は出さない)
+ * ffmpeg で重ねて AVIF を 2 枚書く。読めなければ (画像として壊れている) false。理由はログへ (番組名は出さない)
  */
 async function encode(
   input: string,
@@ -574,15 +574,15 @@ async function encode(
   return false;
 }
 
-/** 作業の名前 (`.work/<時刻>-<乱数>`)。AVIF の2枚はこれに `.avif`・`-small.avif` を足した名前 */
+/** 作業の名前 (`.work/<時刻>-<乱数>`)。AVIF の 2 枚はこれに `.avif`・`-small.avif` を足した名前 */
 function workStem(): { work: string; stem: string } {
   const work = join(clipsDir(), ".work");
   return { work, stem: join(work, `${Date.now()}-${crypto.randomUUID()}`) };
 }
 
 /**
- * 1枚を受けて置く。画像を確かめ、重ねて AVIF にし、行を足して置き場へ移す。重ねを受けたときは元の画像も残す
- * (撮ったときは受けた重ねをすべて重ねる — 出していたものだけが送られてくる)。
+ * 1 枚を受けて置く。画像を確かめ、重ねて AVIF にし、行を足して置き場へ移す。重ねを受けたときは元の画像も残す
+ * (撮ったときは受けた重ねをすべて重ねる。出していたものだけが送られてくる)。
  * 変換できなかった (画像として読めない) ものは 415
  */
 export async function saveClip(
@@ -620,7 +620,7 @@ export async function saveClip(
       (keepSrc ? dirBytes(src) : 0);
     const has = (layer: ClipLayer) => layered.includes(layer);
     /*
-     * **行を足すのと置き場へ移すのは1つのトランザクションで。** 名前は ID で決まるので行を先に足すが、
+     * **行を足すのと置き場へ移すのは 1 つのトランザクションで。** 名前は ID で決まるので行を先に足すが、
      * 移せなかった (途中で落ちた) ときに、名前の無い行を残さない
      */
     const row = orm().transaction((tx) => {
@@ -667,10 +667,10 @@ export async function saveClip(
 
 /**
  * **字幕・コメントを出し入れする** (`PATCH /api/clips/<id>`)。`patch` は変えたいものだけ。元の画像から重ね直して
- * AVIF の2枚を差し替え、行の `show_*` と大きさを書き換える。1080 で1秒ほど。
+ * AVIF の 2 枚を差し替え、行の `show_*` と大きさを書き換える。1080 で 1 秒ほど。
  *
- * 持っていない重ねを変えようとしたら 400 (字幕を重ねて1枚にした古い切り抜きなど)、元の画像が無ければ 404。
- * 何も変わらなければ作り直さない。**変換と同じ列に並べる** — 続けて押されても、行と画像が食い違わない
+ * 持っていない重ねを変えようとしたら 400 (字幕を重ねて 1 枚にした古い切り抜きなど)、元の画像が無ければ 404。
+ * 何も変わらなければ作り直さない。**変換と同じ列に並べる。** 続けて押されても、行と画像が食い違わない
  */
 export async function setClipLayers(
   id: number,
@@ -733,7 +733,7 @@ export async function setClipLayers(
 }
 
 /**
- * `/api/clips/<id>` 系の前置き。id を確かめて1枚引く。数字でなければ 400、無ければ 404
+ * `/api/clips/<id>` 系の前置き。id を確かめて 1 枚引く。数字でなければ 400、無ければ 404
  */
 export function clipOr404(idLike: string): Clip & { file: string } {
   const id = Number(idLike);
@@ -744,7 +744,7 @@ export function clipOr404(idLike: string): Clip & { file: string } {
   return clip;
 }
 
-/** 1枚引く。無ければ undefined */
+/** 1 枚引く。無ければ undefined */
 function clipById(id: number): (Clip & { file: string }) | undefined {
   const row = orm()
     .select({ ...clipColumns(), alive: ALIVE })
@@ -849,9 +849,9 @@ export function clipFacets(): ClipFacets {
   const byService = orm()
     .select({
       id: clips.service_id,
-      // 局名は撮ったときのもの。いちばん新しい1枚の名前で出す。
+      // 局名は撮ったときのもの。いちばん新しい 1 枚の名前で出す。
       // 外の行の局は "clips"."service_id" と書く。`${clips.service_id}` は表の名前の付かない
-      // "service_id" になり、副問い合わせの中では c2 自身の列と読まれて、どの局も全体の最新の1枚の名前になっていた
+      // "service_id" になり、副問い合わせの中では c2 自身の列と読まれて、どの局も全体の最新の 1 枚の名前になっていた
       name: sql<string>`(SELECT c2.service_name FROM clips c2 WHERE c2.service_id = "clips"."service_id" AND c2.file <> '' ORDER BY c2.id DESC LIMIT 1)`,
       count: sql<number>`count(*)`,
     })
@@ -908,7 +908,7 @@ export function deleteClips(ids: number[]): number {
  * 画像を返す。他の API と同じ認証の内側で、**添付にはしない** (開けばそのまま映る)。
  * 世帯の外の共有のキャッシュには置かせない (`private`)。置き場に無ければ 404。
  *
- * 端末に持たせてよいのは中身が替わらないときだけ: 重ねを持たないもの (ID は使い回さない) と、
+ * 端末に持たせてよいのは中身が替わらないときだけ。重ねを持たないもの (ID は使い回さない) と、
  * いまの重ねのバージョン (`clipVersion`) を `?v=` に付けて開いたもの。重ねを持つものをバージョンなしで (古いバージョンで) 開いたら、
  * 出し入れで替わるので毎回取り直させる
  */
@@ -938,7 +938,7 @@ const SRC_TYPES: Record<string, string> = {
 };
 
 /**
- * 元の画像を1枚返す (`frame` は映像、`captions`・`comments` は透明な PNG)。開いた1枚は画面がこれを重ねて見せ、
+ * 元の画像を 1 枚返す (`frame` は映像、`captions`・`comments` は透明な PNG)。開いた 1 枚は画面がこれを重ねて見せ、
  * 出し入れで待たせない。**元は替わらない** (ID は使い回さない) ので、`?v=` なしでも端末に持たせる。
  * 認証・`private`・添付にしないのは `clipImage` と同じ。持っていなければ 404 (重ねの無い古い切り抜きなど)
  */

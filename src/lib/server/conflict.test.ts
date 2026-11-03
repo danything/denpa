@@ -42,7 +42,7 @@ function res(over: Partial<Assignable> & { id: number }): Assignable {
 }
 
 /**
- * 'GR+BS+CS' のように、1台ずつ受けられる種別を**エージェントが選ぶ順に**並べる。
+ * 'GR+BS+CS' のように、1 台ずつ受けられる種別を**エージェントが選ぶ順に**並べる。
  * 同じ並びのチューナーには同じ順位を付ける (エージェントがそう返す約束。docs/agent.md「選ぶ順の約束」)
  */
 function tuners(...specs: string[]) {
@@ -116,7 +116,7 @@ describe("assign", () => {
     expect(rejected).toHaveLength(0);
   });
 
-  test("種別ごとに台数を数える (GRが埋まっていてもBSは録れる)", () => {
+  test("種別ごとに台数を数える (GR が埋まっていても BS は録れる)", () => {
     const { rejected } = assign(
       [
         res({ id: 1, channel: "T16" }),
@@ -147,9 +147,9 @@ describe("assign", () => {
     expect(rejected.map((r) => r.reservation.id)).toEqual([2]);
   });
 
-  test("地上波も衛星も受けるチューナー (PX-MLT など) は、どちらかで1台", () => {
+  test("地上波も衛星も受けるチューナー (PX-MLT など) は、どちらかで 1 台", () => {
     const mixed = tuners("GR", "GR+BS+CS");
-    // 地上波2つで2台とも埋まるので、衛星は入らない
+    // 地上波 2 つで 2 台とも埋まるので、衛星は入らない
     const full = assign(
       [
         res({ id: 1, channel: "T16" }),
@@ -159,7 +159,7 @@ describe("assign", () => {
       mixed,
     );
     expect(full.rejected.map((r) => r.reservation.id)).toEqual([3]);
-    // 地上波1つなら、兼用の1台が衛星に回る
+    // 地上波 1 つなら、兼用の 1 台が衛星に回る
     const room = assign(
       [
         res({ id: 1, channel: "T16" }),
@@ -180,7 +180,7 @@ describe("assign (前後マージン)", () => {
    * 重ならないが、前は +15 まで録り続け、後は -10 から録り始めるので実際は 25 重なる。
    *
    * 丸ごと落としていた頃は、**隣り合っているというだけで後ろが録れなかった**。
-   * 前のマージンは「延びたときの保険」で、後ろの 15秒 は番組そのものなので、
+   * 前のマージンは「延びたときの保険」で、後ろの 15 秒は番組そのものなので、
    * 前に離してもらう
    */
   test("隣り合う番組は、前がマージンを離して両方録る", () => {
@@ -224,7 +224,7 @@ describe("assign (前後マージン)", () => {
     expect(whole(later!)).toBe(false);
   });
 
-  test("同じチャンネルならマージンが重なってもチューナーは1台で足りる", () => {
+  test("同じチャンネルならマージンが重なってもチューナーは 1 台で足りる", () => {
     const { accepted, rejected } = assign(
       [
         res({ id: 1, start_at: 0, end_at: 100, channel: "T16" }),
@@ -270,15 +270,15 @@ describe("assign (前後マージン)", () => {
   });
 
   /*
-   * **実機で出た例** (2026-09-02 深夜、地上波 2台)。
+   * **実機で出た例** (2026-09-02 深夜、地上波 2 台)。
    *
    *     23:30 ─幼女戦記(MX)─ 00:00
    *     23:45 ────片田舎(テレ朝)──── 00:15
    *     00:00 ────落第賢者(MX)────────────── 00:30
    *     00:00 ────LV999(テレ東)───────────── 00:30
    *
-   * 3チャンネル要るのは **00:00〜00:15 の15分だけ**。丸ごとで判断していた頃は
-   * LV999 (優先度2) がまるまる録れず、落第賢者 (優先度1) だけが残っていた
+   * 3 チャンネル要るのは **00:00〜00:15 の 15 分だけ**。丸ごとで判断していた頃は
+   * LV999 (優先度 2) がまるまる録れず、落第賢者 (優先度 1) だけが残っていた
    */
   test("重なりが番組の一部なら、優先度の低いほうが途中から録る", () => {
     const MIN = 60_000;
@@ -320,9 +320,9 @@ describe("assign (前後マージン)", () => {
     expect(rejected).toHaveLength(0);
     const lv999 = accepted.find((a) => a.reservation.id === 4);
     const low = accepted.find((a) => a.reservation.id === 3);
-    // 優先度2 のほうは丸ごと録れる
+    // 優先度 2 のほうは丸ごと録れる
     expect(whole(lv999!)).toBe(true);
-    // 優先度1 のほうが譲って、相手が離す 45分 から録る
+    // 優先度 1 のほうが譲って、相手が離す 45 分 から録る
     expect(whole(low!)).toBe(false);
     expect(low?.from).toBe(45 * MIN);
   });
@@ -422,13 +422,13 @@ describe("チューナーの取り合い (プレビュー)", () => {
   test("台数に収まっていれば、重なっていても出さない", () => {
     const mine = occ({ programId: 1, channel: "T16" });
     const other = occ({ programId: 2, channel: "T21" });
-    // 地上波2台あるので、別チャンネル2番組は録れる
+    // 地上波 2 台あるので、別チャンネル 2 番組は録れる
     expect(against(mine, [other], tuners("GR", "GR"))).toEqual([]);
-    // 1台しかなければ取り合う
+    // 1 台しかなければ取り合う
     expect(against(mine, [other], tuners("GR"))).toEqual(["番組2 (局)"]);
   });
 
-  test("同じ物理チャンネルは1台で足りるので数にも名前にも入れない", () => {
+  test("同じ物理チャンネルは 1 台で足りるので数にも名前にも入れない", () => {
     const mine = occ({ programId: 1, channel: "T16" });
     const sameCh = occ({ programId: 2, channel: "T16" });
     expect(against(mine, [sameCh], tuners("GR"))).toEqual([]);
@@ -445,7 +445,7 @@ describe("チューナーの取り合い (プレビュー)", () => {
   });
 
   test("互いに重なっていない相手を足し合わせない", () => {
-    // 自分 0-60 / A 0-20 / B 40-60。同時に要るのは常に2チャンネルまで
+    // 自分 0-60 / A 0-20 / B 40-60。同時に要るのは常に 2 チャンネルまで
     const mine = occ({ programId: 1, channel: "T16", start_at: 0, end_at: 60 });
     const a = occ({ programId: 2, channel: "T21", start_at: 0, end_at: 20 });
     const b = occ({ programId: 3, channel: "T25", start_at: 40, end_at: 60 });
@@ -484,7 +484,7 @@ describe("チューナーの取り合い (プレビュー)", () => {
   });
 
   test("名指しするのは、相手がいちばん多い瞬間の相手を開始順に", () => {
-    // 自分 0-60 / 10 分に1本、30 分と 35 分に1本ずつ。いちばん多いのは 35 分の2本
+    // 自分 0-60 / 10 分に 1 本、30 分と 35 分に 1 本ずつ。いちばん多いのは 35 分の 2 本
     const mine = occ({ programId: 1, channel: "T16", start_at: 0, end_at: 60 });
     const early = occ({
       programId: 2,
@@ -575,7 +575,7 @@ describe("兼用のチューナーがあるとき (#668)", () => {
    * T16 を兼用、T21 を専用に入れれば録れるが、エージェントは先の予定を見ずに
    * T16 を専用に入れる。T21 は兼用に入り、23:30 の衛星は兼用を取れない
    */
-  test("エージェントが選ばない割り振りを当てにしない (ケース1)", () => {
+  test("エージェントが選ばない割り振りを当てにしない (ケース 1)", () => {
     const { accepted, rejected } = assign(
       [
         res({ id: 1, channel: "T16", start_at: at(21), end_at: at(23) }),
@@ -606,9 +606,9 @@ describe("兼用のチューナーがあるとき (#668)", () => {
   });
 
   /*
-   * どの瞬間も2台で足りるが、番組の途中でチューナーを替えずに 22:15 の衛星を録る方法が無い
+   * どの瞬間も 2 台で足りるが、番組の途中でチューナーを替えずに 22:15 の衛星を録る方法が無い
    */
-  test("途中で替えずに割り振る方法が無い組は、チューナー不足にする (ケース2)", () => {
+  test("途中で替えずに割り振る方法が無い組は、チューナー不足にする (ケース 2)", () => {
     const { accepted, rejected } = assign(
       [
         res({ id: 1, channel: "T16", start_at: at(21), end_at: at(22) }),
@@ -738,7 +738,7 @@ describe("兼用のチューナーがあるとき (#668)", () => {
 
   /*
    * 割り振りは変わるところだけなぞり直して速くしてある (`Timeline`)。通したものを頭から素直に
-   * なぞり直して (`placements`)、全員が最後まで1台のチューナーを使えることを確かめる
+   * なぞり直して (`placements`)、全員が最後まで 1 台のチューナーを使えることを確かめる
    */
   test("通したものは、約束どおりに頭からなぞっても全員使える", () => {
     const next = random(3);
@@ -889,7 +889,7 @@ describe("専用だけ・兼用だけの構成", () => {
 });
 
 describe("チューナーの取り合い (プレビュー、兼用のチューナー)", () => {
-  test("先に終わった地上波のせいで兼用が埋まっていれば、衛星は取り合いになる (ケース1)", () => {
+  test("先に終わった地上波のせいで兼用が埋まっていれば、衛星は取り合いになる (ケース 1)", () => {
     const t16 = occ({
       programId: 1,
       channel: "T16",
@@ -916,7 +916,7 @@ describe("チューナーの取り合い (プレビュー、兼用のチュー�
     expect(got.get(1)).toBeUndefined();
   });
 
-  test("どの瞬間も足りていても、途中で替えずに入れないなら取り合い (ケース2)", () => {
+  test("どの瞬間も足りていても、途中で替えずに入れないなら取り合い (ケース 2)", () => {
     const got = contentions(
       [
         occ({ programId: 1, channel: "T16", start_at: at(21), end_at: at(22) }),

@@ -1,7 +1,7 @@
 import { constants, setPriority } from "node:os";
 
 /**
- * ReadableStream を1チャンクずつ読む。
+ * ReadableStream を 1 チャンクずつ読む。
  *
  * Bun の ReadableStream は実際には for-await できるが、TypeScript の DOM 型定義には
  * Symbol.asyncIterator が無く型エラーになる。reader を明示的に回すことで型を通しつつ、
@@ -43,14 +43,14 @@ export async function* lines(
   for await (const chunk of chunks(stream)) {
     buffer += decoder.decode(chunk, { stream: true });
     const parts = buffer.split("\n");
-    // 最後の1つは途中かもしれないので持ち越す
+    // 最後の 1 つは途中かもしれないので持ち越す
     buffer = parts.pop() ?? "";
     for (const part of parts) yield part.trim();
   }
   if (buffer.trim() !== "") yield buffer.trim();
 }
 
-/** 優先度を下げられなかったことは1度だけ知らせる (コンテナで権限が無いなど) */
+/** 優先度を下げられなかったことは 1 度だけ知らせる (コンテナで権限が無いなど) */
 let lowerFailed = false;
 
 /**
@@ -86,7 +86,7 @@ export function lowerPriority(
 /** `onStderrLine` のとき返す標準エラーの行数 */
 const STDERR_TAIL = 20;
 
-export interface RunResult {
+interface RunResult {
   /** 終了コード。起こせなかったときは 127、時間切れや中止で殺したときは殺された後のコード */
   code: number;
   /** 標準出力の中身 (`stdout: true` のときだけ。無ければ空) */
@@ -96,12 +96,11 @@ export interface RunResult {
 }
 
 /**
- * 外の道具を1回動かして、終わるまで待つ。
+ * 外の道具を 1 回動かして、終わるまで待つ。
  *
- * ffmpeg / ffprobe を呼ぶところで同じ処理をあちこちで書いていた —
- * 起こす・出力を読み切る・中止 (AbortSignal) や時間切れで殺す・待つ。
- * ここに寄せて、**読み切る前に `exited` を待たない** (パイプが詰まって固まる) など
- * の決まりごとを1箇所で守る。
+ * ffmpeg / ffprobe を呼ぶところで、起こす・出力を読み切る・中止 (AbortSignal) や時間切れで殺す・待つ、
+ * という同じ処理をあちこちで書いていた。ここに寄せて、**読み切る前に `exited` を待たない**
+ * (パイプが詰まって固まる) などの決まりごとを 1 か所で守る。
  *
  * - `signal` … 押されたら殺す (エンコードの中止など)
  * - `timeoutMs` … これを過ぎたら殺す (壊れたファイルで居座らせない)
@@ -115,12 +114,12 @@ export async function run(
     stdout?: boolean;
     stderr?: boolean;
     /**
-     * 標準出力を溜めずに、来たそばから渡す。録画1本ぶんの未圧縮のフレームのように
+     * 標準出力を溜めずに、来たそばから渡す。録画 1 本ぶんの未圧縮のフレームのように
      * 溜めると収まらないもの向け (`stdout` より優先。そのとき `stdout` は空で返る)
      */
     onStdout?: (chunk: Uint8Array) => void;
     /**
-     * 標準エラーを溜めずに1行ずつ渡す。コマごとに行が出るもの (コマ数の実測の `signalstats`・`-progress`) 向け。
+     * 標準エラーを溜めずに 1 行ずつ渡す。コマごとに行が出るもの (コマ数の実測の `signalstats`・`-progress`) 向け。
      * `stderr` より優先し、返る `stderr` は末尾の数行だけ (落ちた理由を読むため)
      */
     onStderrLine?: (line: string) => void;
@@ -129,10 +128,10 @@ export async function run(
   } = {},
 ): Promise<RunResult> {
   /*
-   * **もう押されている合図は、起こす前に見る。** `abort` の聞き耳は押された
-   * *瞬間*にしか鳴らないので、押された後に起こした道具には届かず、最後まで
-   * 走り切っていた — 中止を押したあとに CM検出が無音検出へ落ち、字幕まで
-   * 画像にしてから畳んでいたのはこれ。殺されたときと同じ顔 (143 = SIGTERM) で返す
+   * **もう押されている合図は、起こす前に見る。** `abort` のリスナーは押された
+   * *瞬間*にしか呼ばれないので、押された後に起こした道具には届かず、最後まで
+   * 走り切っていた。中止を押したあとに CM 検出が無音検出へ落ち、字幕まで
+   * 画像にしてから畳んでいたのはこれ。殺されたときと同じコード (143 = SIGTERM) で返す
    */
   if (options.signal?.aborted === true) {
     return { code: 143, stdout: new Uint8Array(), stderr: "中止されました" };
@@ -201,7 +200,7 @@ export async function run(
         : options.stdout === true
           ? /*
              * **`.bytes()` は使わない。** Bun 1.3.14 は 1MB を境に返すものが
-             * 変わる — それ未満は Uint8Array、それ以上は **ArrayBuffer**
+             * 変わる。それ未満は Uint8Array、それ以上は **ArrayBuffer**
              * (`.length` が `undefined` になる)。型は Uint8Array のままなので
              * 型検査では気付けず、`String(out.length)` が "undefined" になって
              * `Content-Length: undefined` を送り、**本文が丸ごと落ちていた**
@@ -233,7 +232,7 @@ export async function run(
  *
  * `-loglevel error` で起こすこと。出るのは失敗の理由だけで、それをログへ回す
  *
- * @param what ログの頭 (`[audio] 音声だけの取り出し …`)
+ * @param what ログの先頭 (`[audio] 音声だけの取り出し …`)
  */
 export function ffmpegBody(
   argv: string[],

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * CM検出の流れ (`cm.openCm` → 読む → `decide`) を、偽 ffmpeg (`tests/fake/ffmpeg.sh`) で通す。
+ * CM 検出の流れ (`cm.openCm` → 読む → `decide`) を、偽 ffmpeg (`tests/fake/ffmpeg.sh`) で通す。
  * 偽 ffmpeg は 300 秒と 360 秒に 1 秒の無音を返し、尺 (`Duration:`) は 600 秒。ffprobe は無い。
  * ふだんはエンコードと一緒に読むが、ここでは同じ出口を `cm-scan.scan` で読む
  */
@@ -35,7 +35,7 @@ async function detect(at: { skip?: number; video?: boolean } = {}) {
   });
 }
 
-describe("CM検出の流れ", () => {
+describe("CM 検出の流れ", () => {
   test("ロゴが使えなければ、同じ材料から尺だけで決め直し、理由を残す", async () => {
     const found = await detect();
     expect(found.cm).toEqual([{ start: 300, end: 360 }]);

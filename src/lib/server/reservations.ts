@@ -44,14 +44,14 @@ export async function reserve(programId: number): Promise<Reservation> {
   // 終わった番組を予約しても録れない。予約表に並べても取り消す手間が増えるだけ
   if (program.end_at <= at) throw new Error("この番組は放送が終わっています");
   /*
-   * **コピー禁止の番組は録らない** (`format.COPY_NEVER_REASON`)。手で押したものも断る —
+   * **コピー禁止の番組は録らない** (`format.COPY_NEVER_REASON`)。手で押したものも断る。
    * 予約を立てても「録画しない」になるだけで、押した人には録れたように見えてしまう
    */
   if (program.copy_never) throw new Error(COPY_NEVER_REASON);
   // 手動で入れたものはルール由来 (既定 1) より上。**予約どうしだけの物差し**
   const priority = 2;
-  // 録画のしかたは全体で1つ。「エンコードするか否か」だけ予約時に固定する。
-  // エンコード方法の細目 (元のTSを残すか・CMの扱い・コーデック) はエンコードするときに settings を見る
+  // 録画のしかたは全体で 1 つ。「エンコードするか否か」だけ予約時に固定する。
+  // エンコード方法の細目 (元の TS を残すか・CM の扱い・コーデック) はエンコードするときに settings を見る
   const encode = settings().encode;
 
   orm()
@@ -123,7 +123,7 @@ export async function restore(reservationId: number): Promise<void> {
 
   orm()
     .update(reservations)
-    // 録っている途中で取り消したものも、戻せば続きを録る (`rerecord`)
+    // 録っている途中で取り消したものも、戻せば残りを録る (`rerecord` と同じ。次の録画は別の行・別のファイル)
     .set({
       state: "scheduled",
       started_at: null,
@@ -183,7 +183,7 @@ type RecordAiring =
  *
  * 番組表からいま流れている番組を引いて、手動予約と同じ処理 ({@link reserve}) に通す。
  * 既に始まっている番組の予約は次のスケジューラ周期 (数秒) でそのまま録りはじめる。
- * 既に予約済み・録画中なら upsert されるだけで、二重には録らない (予約は program_id で1本)。
+ * 既に予約済み・録画中なら upsert されるだけで、二重には録らない (予約は program_id で 1 本)。
  *
  * **画面とアプリで同じものを使う。** 番組の引き方や断り方が入口ごとにずれると、
  * 片方でだけ録れない番組が出る
@@ -235,7 +235,7 @@ export async function recordAiring(
  * **番組ごとの予約の状態** (番組表のマスと同じ物差し `reservationState`)。
  * 取り消したものと、予約の無い番組は入らない。
  *
- * 録画の状態は録画の行から引く — 予約側は録り始めた時刻しか持たないので、
+ * 録画の状態は録画の行から引く。予約側は録り始めた時刻しか持たないので、
  * `reservations.state` だけでは録画中と録り終えたものの見分けがつかない
  */
 export function reservationStates(

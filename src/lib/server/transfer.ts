@@ -29,7 +29,7 @@ import { readTar, type TarSource, writeTar } from "./tar";
  * **denpa を別の機械へ移す** (設定の「連携」の「denpa を別の機械へ移す」。docs/migrate.md「別の機械へ移す」)。
  *
  * 書き出すのは DB の写しとロゴの置き場 (`logos/`。局ロゴと CM 検出のために覚えたロゴ) だけ。
- * **録画のファイルは入れない** — 録画はユーザーがフォルダごと写す (denpa は録画をファイルとして持ち出す機能を持たない)。
+ * **録画のファイルは入れない。** 録画はユーザーがフォルダごと写す (denpa は録画をファイルとして持ち出す機能を持たない)。
  *
  * 取り込めるのは、まだ使っていない denpa だけ。送られたファイルを検証し、写しに drizzle の migrate を当て、
  * 録画のファイルが置き場にあるかを数えてから、次の起動の最初で入れ替える (`swapAtBoot`)。
@@ -79,7 +79,7 @@ interface Counts {
   logos: number;
 }
 
-/** 送ったファイルの名乗り。同じファイルなら続きから送る */
+/** 送り始めに伝えるファイルの情報。同じファイルなら続きから送る */
 interface UploadMeta {
   name: string;
   size: number;
@@ -92,13 +92,13 @@ interface FileCheck {
   present: number;
   /** エンコードしたものが無い (取り込むと起動直後の照合が削除済みにする) */
   missing: number;
-  /** 元のTSだけの録画 (エンコード待ち・失敗・エンコードしない設定) で、TS が無いもの */
+  /** 元の TS だけの録画 (エンコード待ち・失敗・エンコードしない設定) で、TS が無いもの */
   rawMissing: number;
   /** 置き場の外の絶対パスで持っていて、そこに無いもの (Windows で書かれた古い行など) */
   outside: number;
-  /** 待っているエンコードのうち、元のTSが無いもの */
+  /** 待っているエンコードのうち、元の TS が無いもの */
   jobsMissing: number;
-  /** 無いものの頭から (名前と DB にある場所) */
+  /** 無いものの先頭から (名前と DB にある場所) */
   list: { name: string; path: string }[];
 }
 
@@ -430,7 +430,7 @@ function clearImport(): void {
 
 /**
  * 送り始める。**同じファイル (名前・大きさ・更新時刻) を送りかけていれば、続きの位置を返す**
- * (画面を開き直しても続きから送れる)。違うファイルなら前のものを消して頭から
+ * (画面を開き直しても続きから送れる)。違うファイルなら前のものを消して先頭から
  */
 export function beginUpload(meta: UploadMeta): {
   offset: number;
@@ -509,7 +509,7 @@ export function appendUpload(
   if (chunk.length === 0 || chunk.length > CHUNK_LIMIT)
     throw new TransferError(400, "送る大きさが読めません");
   if (have + chunk.length > meta.size)
-    throw new TransferError(400, "名乗った大きさより多く送られました");
+    throw new TransferError(400, "送り始めに伝えた大きさより多く送られました");
   appendFileSync(uploadPart(), chunk);
   return { offset: have + chunk.length };
 }
@@ -562,7 +562,7 @@ function triggersAndViews(db: Database): string[] {
  * 1. tar を開く。**普通のファイルとフォルダだけ、名前は決めたものだけ** (`readTar` と下の名前の一覧)
  * 2. 写しのほうが新しいバージョンの DB なら断る (drizzle の migrate は自分より新しいものを黙って
  *    素通しし、列の確かめも余分な列では止まらないので、ここで見ないと壊れたまま動く)
- * 3. 起動と同じ `bootstrap` (migrate と列の確かめ) を写しに当てる。古い形を読む層は持たない
+ * 3. 起動と同じ `bootstrap` (migrate と列の確かめ) を写しに当てる。古い形式を読む層は持たない
  * 4. 整合性・外部キー、トリガーとビューが空の DB に migrate を当てたものと同じか
  *    (手で足したトリガーやビューは、入れ替えたあとの書き込みのたびに動いてしまう)
  */
@@ -581,7 +581,7 @@ async function prepare(): Promise<void> {
         if (entry.type === "dir") {
           if (!LOGO_DIRS.some((re) => re.test(entry.name)))
             throw new Error(
-              `思っていないフォルダ (${JSON.stringify(entry.name)}) が入っています`,
+              `受け付けないフォルダ (${JSON.stringify(entry.name)}) が入っています`,
             );
           return null;
         }
@@ -591,7 +591,7 @@ async function prepare(): Promise<void> {
           !LOGO_NAMES.some((re) => re.test(entry.name))
         )
           throw new Error(
-            `思っていない名前 (${JSON.stringify(entry.name)}) が入っています`,
+            `受け付けない名前 (${JSON.stringify(entry.name)}) が入っています`,
           );
         const path = join(staging(), entry.name);
         mkdirSync(dirname(path), { recursive: true });
@@ -893,14 +893,14 @@ export function restartSoon(): void {
  * **起動の最初 (DB とロゴに触る前) に入れ替える。** `ready/` があれば、今の DB (`-wal`・`-shm` も) と
  * `logos/` を `*.before-import-<時刻>` に退け、`ready/` のものを置く。
  *
- * 途中で落ちても、もう一度起動すれば同じ結果になる。退けた先が既にあれば退け直さず、
+ * 途中で止まっても、もう一度起動すれば同じ結果になる。退けた先が既にあれば退け直さず、
  * DB を最後に置く (`ready/denpa.db` が残っている間は、まだ終わっていない)
  */
 export function swapAtBoot(): boolean {
   const dir = ready();
   const db = join(dir, DB_ENTRY);
   if (!existsSync(db)) {
-    // 置き終えて消す前に落ちた跡
+    // 置き終えて消す前に止まった跡
     if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
     return false;
   }
@@ -925,7 +925,7 @@ export function swapAtBoot(): boolean {
   return true;
 }
 
-/** 送りかけのまま 1 日たったものと、落ちて残った書き出しの写しを消す (`runtime.ts` の片付けの周期) */
+/** 送りかけのまま 1 日たったものと、止まって残った書き出しの写しを消す (`runtime.ts` の片付けの周期) */
 export function pruneTransfer(): void {
   if (!existsSync(root())) return;
   if (!exporting) {

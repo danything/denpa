@@ -8,16 +8,16 @@ import { eq } from "drizzle-orm";
 /**
  * エンコードキューの毒ジョブ対策。
  *
- * プロセスごと落とすジョブは running→queued へ戻り続け、同時実行1・id順だと
- * 毎回先頭に来てキューを塞ぐ。取り出した回数 (attempts) が上限を超えたら、走らせずに
- * failed へ倒して後ろを進める、を確かめる。
+ * プロセスごと落とすジョブは running→queued へ戻り続け、同時実行 1・id 順だと
+ * 毎回先頭に来てキューを塞ぐ。取り出した回数 (attempts) が上限を超えたら、動かさずに
+ * failed にして後ろを進めることを確かめる。
  *
- * DBの置き場は一時ファイルへ。環境変数ではなく設定そのものを書き換える
- * (config は読み込み時に1度だけ環境変数を見るため。files.test.ts と同じ理由)。
+ * DB の置き場は一時ファイルへ。環境変数ではなく設定そのものを書き換える
+ * (config は読み込み時に 1 度だけ環境変数を読むため。files.test.ts と同じ理由)。
  *
- * 録画には元のTSを持たせない。上限未満のジョブは取り出されて runJob へ進むが、元にできる
- * ファイルが無いので ffmpeg を起こす前に自分で failed になる。テストで本物の
- * エンコードを起こさないための細工でもある
+ * 録画には元の TS を持たせない。上限未満のジョブは取り出されて runJob へ進むが、元にできる
+ * ファイルが無いので ffmpeg を起動する前に failed になる。テストで本物の
+ * エンコードを起動しないためでもある
  */
 const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-encpump-")), "denpa.db");
@@ -62,13 +62,13 @@ function job(jobId: number): { state: string; attempts: number } {
     .get()!;
 }
 
-test("上限を超えたジョブは取り出さずに failed へ倒す", () => {
+test("上限を超えたジョブは取り出さずに failed にする", () => {
   reset();
   const jobId = seedJob(config.encodeMaxAttempts); // ちょうど上限 (>=)
   pump();
   const after = job(jobId);
   expect(after.state).toBe("failed");
-  // 取り出していないので attempts は増えない (増えていれば走らせてしまっている)
+  // 取り出していないので attempts は増えない (増えていれば動かしている)
   expect(after.attempts).toBe(config.encodeMaxAttempts);
 });
 
@@ -76,16 +76,16 @@ test("上限未満のジョブは普通に取り出す (attempts が増える)",
   reset();
   const jobId = seedJob(config.encodeMaxAttempts - 1);
   pump();
-  // 取り出しで attempts+1。上限の分岐で早々に切り捨てていないことの裏返し
+  // 取り出すと attempts+1。上限の分岐で切り捨てていないことを確かめる
   expect(job(jobId).attempts).toBe(config.encodeMaxAttempts);
 });
 
 /*
  * **中止は畳み終わってから返す。**
  *
- * 中止を伝えるだけで返していた頃は、押した直後の読み直しが ffmpeg の死ぬ前に届くので、
+ * 中止を伝えるだけで返していた頃は、押した直後の読み直しが ffmpeg の終了より前に届くので、
  * 同じ「エンコード中 60.9%」がそのまま出た。行が変わるのは畳み終わりの通知
- * (SSE) が来たときで、その繋ぎが切れている端末ではリロードするまで変わらない
+ * (SSE) が来たときで、その接続が切れている端末ではリロードするまで変わらない
  */
 test("待機中のジョブの中止は、その場で canceled になる", async () => {
   reset();
@@ -96,14 +96,14 @@ test("待機中のジョブの中止は、その場で canceled になる", asyn
   expect(isCanceling(jobId)).toBe(false);
 });
 
-test("走り出したジョブの中止は、畳み終わってから返る", async () => {
+test("動き出したジョブの中止は、畳み終わってから返る", async () => {
   reset();
   const jobId = seedJob(0);
-  pump(); // 取り出して走り出す (この録画には元のTSが無いので、すぐ畳まれる)
+  pump(); // 取り出して動き出す (この録画には元の TS が無いので、すぐ畳まれる)
   const at = Date.now();
   await cancel(jobId);
-  // 返ってきた時点で走り終わっている = 押した直後の読み直しが真実を読める
+  // 返ってきた時点で終わっているので、押した直後の読み直しが今の状態を読める
   expect(job(jobId).state).not.toBe("running");
-  // 上限 (CANCEL_WAIT_MS) で諦めたのではなく、畳み終わりを受け取って返っている
+  // 上限 (CANCEL_WAIT_MS) まで待ったのではなく、畳み終わりを受け取って返っている
   expect(Date.now() - at).toBeLessThan(1_000);
 });

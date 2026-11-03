@@ -1,16 +1,16 @@
 /**
  * WebSocket に繋ぐための使い捨てのチケット。
  *
- * **ブラウザは WebSocket の握手に `Authorization` を付けてくれない。** OIDC で
+ * **ブラウザは WebSocket のハンドシェイクに `Authorization` を付けない。** OIDC で
  * 画面に入れていても、そこから張る WebSocket は素通しで届いてしまう。
  * チューナーを使う API をそのまま開けておくわけにはいかない。
  *
- * そこで、**認証を通った画面だけが取れるチケット**を1枚配り、それを URL に付けて
+ * そこで、**認証を通った画面だけが取れるチケット**を 1 枚配り、それを URL に付けて
  * 繋いでもらう。チケットの発行 (`/api/live/ticket`) は普通の HTTP なので、
  * OIDC も信頼するネットワークも**そのまま効く**。
  *
- * **1回使ったら消す。** URL は履歴にもログにも残るので、残しておくと見た人が
- * 繋げてしまう。寿命も短くしてある (取ってすぐ繋ぐだけの用なので、これで足りる)。
+ * **1 回使ったら消す。** URL は履歴にもログにも残るので、残しておくと見た人が
+ * 繋げてしまう。
  */
 
 /** チケットの寿命。取ってすぐ繋ぐだけなので短くてよい */
@@ -25,7 +25,7 @@ function sweep(at: number): void {
   }
 }
 
-/** 1枚配る */
+/** 1 枚配る */
 export function issue(at: number = Date.now()): string {
   sweep(at);
   const token = crypto.randomUUID();
@@ -33,7 +33,7 @@ export function issue(at: number = Date.now()): string {
   return token;
 }
 
-/** 使う。**使えるのは1回だけ** */
+/** 使う。**使えるのは 1 回だけ** */
 export function redeem(token: string | null, at: number = Date.now()): boolean {
   if (token === null) return false;
   sweep(at);

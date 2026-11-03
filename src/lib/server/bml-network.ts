@@ -37,7 +37,7 @@ import { normalize } from "./address";
 import { config } from "./config";
 import { settings } from "./settings";
 
-/** 追いかける上限。放送局は https へ寄せるのに1回挟むことがある */
+/** 追いかける上限。放送局は https へ寄せるのに 1 回挟むことがある */
 const HOPS = 3;
 /** 受け取る上限 */
 const LIMIT = 4 * 1024 * 1024;
@@ -85,7 +85,7 @@ export function refusalMessage(failure: unknown, fallback: string): string {
  *   502 と見分けが付かない。画面側はこれを見て成否を決める
  * - **返したものを denpa の権限で動かさない。** 中身も形式も相手の言うままなので、`text/html` や SVG が
  *   来ることがある。`sandbox` の CSP と `nosniff` を付け、直に開かれても denpa のオリジンの文書には
- *   ならないようにする (`hc-relay.ts` と同じ考え)。形式は変えない — 画面側は fetch で読み、`content-type`
+ *   ならないようにする (`hc-relay.ts` と同じ考え)。形式は変えない。画面側は fetch で読み、`content-type`
  *   を見て文字コードや BML の文書かどうかを決める。CSP は fetch で読む分には効かない
  */
 export function relayed(got: Fetched): Response {
@@ -124,9 +124,9 @@ export function requireBmlNetwork(): void {
  * **名前は自前の DNS で引く** (`BML_DNS`、既定は公開 DNS)。
  *
  * 家庭の DNS フィルタ (AdGuard 等) は局の双方向ドメインをブラックホール
- * (0.0.0.0 / ::) に落とすことがある — 実測で `view.fujitv.co.jp` と
+ * (0.0.0.0 / ::) に落とすことがある。実測で `view.fujitv.co.jp` と
  * `recv-entry.tbs.co.jp` がそうなり、下の SSRF 防御が「内側のアドレス」として
- * 正しく断った結果、TBS の TVer リンクが NAP エラーになっていた。
+ * 正しく断った結果、TBS の TVerリンクが NAP エラーになっていた。
  * 上流が複数あると答えがフラつくので、放送アプリの通信はここで固定する。
  *
  * **繋ぐのも引いたアドレスへ直に繋ぐ** (`doRequest` の host に IP を渡す)。
@@ -143,8 +143,8 @@ if (BML_DNS.length > 0) resolver.setServers(BML_DNS);
  * そのアドレスへ繋いでよいか。**内側を向いていたら断る。**
  *
  * 綴りは `normalize` (address.ts) でそろえてから数で見ます。省かない書き方も、
- * `::ffff:` で IPv4 を被せただけのもの (16進の綴りも) も、同じ数になる。
- * IPv6 は**公開のユニキャスト (2000::/3) だけを通す** — 断る範囲を並べるやり方では、
+ * `::ffff:` で IPv4 を被せただけのもの (16 進の綴りも) も、同じ数になる。
+ * IPv6 は**公開のユニキャスト (2000::/3) だけを通す。** 断る範囲を並べるやり方では、
  * 並べ忘れた範囲 (サイトローカルや IPv4 互換) が素通りしていた
  */
 export function isPublicAddress(raw: string): boolean {
@@ -189,15 +189,15 @@ function isPublicV4(address: string): boolean {
 
 /**
  * 取得してよいアドレスか。**綴りではなく、引いた先で見る。**
- * 通ったアドレスを1つ返す (繋ぐのもそのアドレスへ直に繋ぐ)。
+ * 通ったアドレスを 1 つ返す (繋ぐのもそのアドレスへ直に繋ぐ)。
  *
  * 名前で弾こうとすると `localhost` の別名や、内側を指す公開の名前
  * (いわゆる DNS リバインディング) が抜けます
  */
 async function resolvable(host: string): Promise<string> {
   /*
-   * IPv6 リテラルの [] を自分で剥がす。**`new URL().hostname` は剥がさない** —
-   * `[::1]` のままだと綴りの判定に1つも掛からず、内側のアドレスなのに
+   * IPv6 リテラルの [] を自分で剥がす。**`new URL().hostname` は剥がさない。**
+   * `[::1]` のままだと綴りの判定に 1 つも掛からず、内側のアドレスなのに
    * 公開扱いで素通りしていた
    */
   const bare =
@@ -231,7 +231,7 @@ async function resolvable(host: string): Promise<string> {
 
 /**
  * その URL を取得してよいか。行けるなら整えた URL と、確かめたアドレスを返す。
- * 繋ぐのはそのアドレスへ直に — 引き直すと、確かめたのと違う先に化かされうる
+ * 繋ぐのもそのアドレスへ直に繋ぐ。引き直すと、確かめたのと違う先へ繋がりうる
  */
 export async function allowed(
   raw: string,
@@ -248,8 +248,8 @@ export async function allowed(
    * 最初は https だけにしていた。**放送がそう作られていない。** NHK は
    * `http://beacon.nhk.jp/` へ送ってくるし、通信系コンテンツはおおむね
    * 素の http で組まれている (受信機がそうしているから)。https だけに
-   * すると、双方向を入れても「接続されていません」のまま — 実機で
-   * そうなった。
+   * すると、双方向を入れても「接続されていません」のままになる (実機で
+   * そうなった)。
    *
    * 覗かれる経路を開けることは承知の上。ただし**これは放送のアプリの
    * 通信**で、denpa の資格情報も利用者の秘密も乗らない (cookie も認証も
@@ -267,7 +267,7 @@ export async function allowed(
 }
 
 /**
- * 1回ぶんの HTTP。**確かめたアドレスへ直に繋ぐ。**
+ * 1 回ぶんの HTTP。**確かめたアドレスへ直に繋ぐ。**
  *
  * fetch は名前引きを差し替えられないので node:http(s) で繋ぐ。Host と SNI には
  * 元の名前を入れる (IP へ繋いでも相手には正しい名前で名乗る)。
@@ -275,7 +275,7 @@ export async function allowed(
  * **証明書は検証しない。** 放送局の通信系サーバは受信機の専用スタック前提で、
  * 証明書の鎖を最後まで送ってこないことがある (実測: フジの
  * `tvid-sha1.tver-tech.co.jp` が `unable to get local issuer certificate` で
- * 転び、502 → データ放送が `affiliationId == null` で描けなかった)。実機の
+ * 失敗し、502 → データ放送が `affiliationId == null` で描けなかった)。実機の
  * テレビは厳密な PKI 検証をしないので、ここも同じにする。資格情報は何も
  * 乗せないし、素の http すら通しているので、検証を外して増える危険は無い
  */
@@ -362,7 +362,7 @@ function doRequest(
 }
 
 /**
- * 取ってくる。**追いかけるぶんも1つずつ確かめる。**
+ * 取ってくる。**追いかけるぶんも 1 つずつ確かめる。**
  *
  * 自動の redirect に任せると、飛ばされた先が内側でも黙って繋ぎます。
  * 手で追いかけて、行き先ごとに `allowed` を通します
@@ -378,7 +378,7 @@ export function fetchForBml(raw: string): Promise<Fetched> {
  * NHK のデータ放送は `isIPConnected` に 1 と答えても信じず、ここへ一度
  * 送ってみて、返らなければ「インターネットに接続されていません」と案内
  * します (実機で確かめた。`confirmIPNetwork` は呼びに来もしない)。
- * 実装しないという最初の決めでは、双方向を入れても入っていないのと同じ
+ * 最初は実装しないと決めていて、それでは双方向を入れても入っていないのと同じ
  * でした。
  *
  * **中身は組み立てません。** エンジン (`src/lib/bml/`) が `Denbun=<EUC-JP を
@@ -386,7 +386,7 @@ export function fetchForBml(raw: string): Promise<Fetched> {
  * `application/x-www-form-urlencoded` として素通しするだけです。
  * 返りもデコードせずにそのまま返す (EUC-JP として読むのはエンジン)。
  *
- * 飛ばされたときの手の変わりかたは web と同じ規則にします —
+ * リダイレクトされたときのメソッドの変わり方は web と同じ規則にします。
  * 301/302/303 は GET へ、307/308 は POST のまま。**行き先は毎回確かめ直す**
  */
 export function postForBml(
@@ -401,7 +401,7 @@ export function postForBml(
 let running = 0;
 
 /**
- * 同時の数を数えながら走らせる。**あふれたら待たせずに断る** — 待ち行列を持つと、
+ * 同時の数を数えながら走らせる。**あふれたら待たせずに断る。** 待ち行列を持つと、
  * 呼び続けられたときにそこへ溜まるだけになる
  */
 export async function limited<T>(task: () => Promise<T>): Promise<T> {
@@ -417,7 +417,7 @@ export async function limited<T>(task: () => Promise<T>): Promise<T> {
   }
 }
 
-/** 飛ばされるのを1つずつ確かめながら追いかける (`fetchForBml` / `postForBml` の本体) */
+/** 飛ばされるのを 1 つずつ確かめながら追いかける (`fetchForBml` / `postForBml` の本体) */
 function follow(
   raw: string,
   first: "GET" | "POST",
@@ -468,7 +468,7 @@ async function hops(
  * 要る) ので、**443 番へ繋がるか**で代えます。放送局のサーバは https で
  * 待っているので、目的 (相手まで届くか) には十分です。
  *
- * 繋ぎ先は `allowed` と同じ枠で見ます — 内側を確かめる道具にしない
+ * 繋ぎ先は `allowed` と同じ枠で見ます。内側を確かめる道具にはしません
  */
 export async function confirmReachable(
   destination: string,
@@ -486,7 +486,7 @@ export async function confirmReachable(
 
   return limited(async () => {
     const started = Date.now();
-    // 確かめたアドレスへ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS に化かされうる)
+    // 確かめたアドレスへ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS が別のアドレスを返しうる)
     const address = await resolvable(host);
     return await new Promise((resolve) => {
       const socket = connect({

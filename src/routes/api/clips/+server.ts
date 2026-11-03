@@ -32,16 +32,16 @@ function number(url: URL, name: string): number | null {
 }
 
 /**
- * 1枚を受けて置く。本文は2つの形のどちらか:
+ * 1 枚を受けて置く。本文は次の 2 つの形式のどちらか。
  *
  * - **multipart/form-data** … `frame` (映像。PNG・JPEG・WebP) と、出していた重ね `captions` (字幕)・`comments` (実況のコメント)。
  *   重ねは映像と同じ縦横の透明な PNG で、送ったものはあとから出し入れできる (`PATCH /api/clips/<id>`)
  * - **画像そのもの** (PNG・JPEG・WebP) … 重ねは無し (出し入れできない)
  *
- * どこで撮ったかは URL で:
+ * どこで撮ったかは URL で渡す。
  *
- * - `place=watch|chase` … `recording` (録画ID)・`at` (位置の秒。観ているものの物差し)・`source` (`ts` / `encoded` / `hevc` / `alt`)
- * - `place=live` … `service` (局の内部ID)・`aired` (映していたコマの放送時刻。unix ms。無ければ受け取った時刻)
+ * - `place=watch|chase` … `recording` (録画 ID)・`at` (位置の秒。観ているものの物差し)・`source` (`ts` / `encoded` / `hevc` / `alt`)
+ * - `place=live` … `service` (局の内部 ID)・`aired` (映していたコマの放送時刻。unix ms。無ければ受け取った時刻)
  * - `captions` … 出していた字幕の文字 (任意)
  *
  * 番組の情報はサーバが引く (`server/clips.ts`)。返事は 201 と `Clip`。本文が大きすぎれば 413、画像でなければ 415
@@ -66,7 +66,7 @@ export async function POST({ url, request }) {
       const service = number(url, "service");
       if (service === null) error(400, "局が不正です");
       const aired = number(url, "aired");
-      // 端末の時計は信じすぎない。1日より離れていれば受け取った時刻にする
+      // 端末の時計は信じすぎない。1 日より離れていれば受け取った時刻にする
       const at =
         aired !== null && Math.abs(aired - Date.now()) < 24 * 60 * 60_000
           ? aired

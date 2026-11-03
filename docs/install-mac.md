@@ -1,7 +1,7 @@
 # Mac に入れる
 
-**Apple Silicon の Mac なら、Linux と同じ1行で denpa ごと立ち上がってブラウザが開きます**
-(入口の `install.sh` は1つで、OS を見て振り分ける)。Mac 用は v1.23.0 からで、
+**Apple Silicon の Mac なら、Linux と同じ 1 行で denpa ごと立ち上がってブラウザが開きます**
+(入口の `install.sh` は 1 つで、OS を見て振り分ける)。Mac 用は v1.23.0 からで、
 それより前のバージョンは入れられません (install.sh がそう言って止まる)。
 
 ```sh
@@ -32,7 +32,7 @@ compose.prod.yml から tuner-agent を外したもの)。
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `~/denpa/` (`DENPA_HOME`)                    | Linux と同じ置き場。`compose.yml` (上げ直すたびに上書き)・`compose.override.yml` (手を入れるならここ。無いときだけ雛形を作る)・`config/` (エージェントの `tuners.json` / `channels.json`)・`.env` (組むときの合言葉。無いときだけ作る) |
 | `~/Library/Application Support/denpa-agent/` | エージェント・px4-userland・siano-userland (プログラムだけ)                                                                                                                                                                            |
-| `~/Movies/denpa/recorded`                    | 元のTS。エージェントとコンテナの両方に見せる (掛かったまま録れたものを後から復号するとき、denpa は相対パスで要求し、エージェントが直に読み書きする)                                                                                    |
+| `~/Movies/denpa/recorded`                    | 元の TS。エージェントとコンテナの両方に見せる (掛かったまま録れたものを後から復号するとき、denpa は相対パスで要求し、エージェントが直に読み書きする)                                                                                   |
 | `~/Movies/denpa/library`                     | 出来上がった録画 (Finder から見える)                                                                                                                                                                                                   |
 | Docker のボリューム `denpa_denpa-data`       | DB。SQLite の錠は Mac から見せたフォルダ越しだと当てにならないので、名前付きボリュームに                                                                                                                                               |
 | `~/Library/Logs/denpa-agent.log`             | エージェントのログ                                                                                                                                                                                                                     |
@@ -56,8 +56,8 @@ LaunchAgent の環境変数は、
 `SIANO_USERLAND_DIR` `SIANO_FIRMWARE` `RAW_DIR`)。`PX4_RUNTIME_DIR` を
 `~/Library/Caches/denpa-agent` と短くしているのは、px4d の制御ソケットのパスが macOS では
 104 バイトまでだからです。IT930x のファームウェアは install.sh が PLEX のドライバから
-手元で切り出します (ハッシュ3つで確かめる。コンテナではエージェントが初めて使うときに取ってきます)。
-denpa も Docker で動かすときは、もう1つ `AGENT_HOST=127.0.0.1` を書き、エージェントを Mac のループバックでだけ
+手元で切り出します (ハッシュ 3 つで確かめる。コンテナではエージェントが初めて使うときに取ってきます)。
+denpa も Docker で動かすときは、もう 1 つ `AGENT_HOST=127.0.0.1` を書き、エージェントを Mac のループバックでだけ
 待ち受けさせます (ほかの機械から繋ぐ相手はいないため)。コンテナの denpa は `host.docker.internal` 越しにそこへ繋ぎます。
 `--no-docker` では書きません (別の機械の denpa から繋ぐため)。
 

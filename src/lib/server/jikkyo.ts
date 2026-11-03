@@ -1,8 +1,8 @@
 /**
- * **実況のコメント (サーバの受け持ち)。** コメントそのものはサーバを通らない — 端末が NX-Jikkyo と
- * 過去ログ API に直接繋ぐ (`#lib/jikkyo/endpoints.ts`)。サーバが渡すのは次の 2 つだけ:
+ * **実況のコメント (サーバの受け持ち)。** コメントそのものはサーバを通らず、端末が NX-Jikkyo と
+ * 過去ログ API に直接つなぐ (`#lib/jikkyo/endpoints.ts`)。サーバが渡すのは次の 2 つだけです。
  *
- * - 録画の実況のチャンネルと、頭と終わりの放送時刻 (`recordingJikkyo`)。観る画面がコメントを取って再生位置に合わせるのに使う
+ * - 録画の実況のチャンネルと、先頭と終わりの放送時刻 (`recordingJikkyo`)。観る画面がコメントを取得して再生位置に合わせるのに使う
  * - 局の勢い (`RankingRelay`)。NX-Jikkyo の REST は CORS を許していないのでブラウザから読めず、
  *   ここで中継する。**保持しない** (30 秒だけメモリに持つ。DB にもファイルにも書かない)
  *
@@ -20,8 +20,8 @@ import { services } from "./schema";
 import { settings } from "./settings";
 
 /**
- * 録画の実況。チャンネルと、元の TS の頭 (再生位置 0 の手前) の放送時刻、録画の終わりの放送時刻 (unix ms)。
- * 観る画面は `[head, end)` のコメントを過去ログ API から 1 回で取る
+ * 録画の実況。チャンネルと、元の TS の先頭 (再生位置 0 の手前) の放送時刻、録画の終わりの放送時刻 (unix ms)。
+ * 観る画面は `[head, end)` のコメントを過去ログ API から 1 回で取得する
  */
 interface RecordingJikkyo {
   channel: string;
@@ -30,7 +30,7 @@ interface RecordingJikkyo {
 }
 
 /**
- * 録画の実況 (頭は `recording.tsHeadOf`。測れていない録画は予定の時刻で代わりにするので、数秒ずれることがある)。
+ * 録画の実況 (先頭は `recording.tsHeadOf`。測れていない録画は予定の時刻で代えるので、数秒ずれることがある)。
  * 世帯の設定がオフ・実況の無い局なら null
  */
 export function recordingJikkyo(recording: Recording): RecordingJikkyo | null {
@@ -61,9 +61,9 @@ type Forces = ReadonlyMap<string, number>;
 export const RANKING_TTL = 30_000;
 
 /**
- * `GET /api/v1/channels` の返事から、放送中のスレッドの勢いを抜く。
+ * `GET /api/v1/channels` の応答から、放送中のスレッドの勢いを取り出す。
  * 返すのは勢いだけで、`viewers` (NX-Jikkyo に繋いでいる数で、ニコニコの視聴者数ではない)・番組名・スレッドの一覧は捨てる。
- * 形式がずれていたら、読めたチャンネルだけ使う (`warn` に 1 回言う)。1 つも読めなければ失敗にする
+ * 形式がずれていたら、読めたチャンネルだけ使う (`warn` を 1 回呼ぶ)。1 つも読めなければ失敗にする
  */
 export function parseForces(
   body: unknown,

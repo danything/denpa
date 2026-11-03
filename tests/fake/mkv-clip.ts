@@ -3,7 +3,7 @@
  * 単体試験 (`src/lib/ts/mkv-media.test.ts`) と E2E (`41-watch-compat-local`) が使う。
  *
  * 偽 ffmpeg がエンコードする録画は中身が無い (0 が並んでいるだけ) ので、互換モードで描くところまで見るには
- * 本物の映像と音の入った mkv が要る。ffmpeg の Matroska と同じ並びにする — SeekHead (Cues の在りか)・
+ * 本物の映像と音の入った mkv が要る。ffmpeg の Matroska と同じ並びにする。並びは SeekHead (Cues の在りか)・
  * Info・Tracks (CodecPrivate)・Cluster (1 秒ごと、キーフレームで区切る)・Cues。字幕トラックは入れない。
  *
  * 大きさは全部 8 バイトで書く (先に大きさを決めずに組めて、位置の計算が楽)。Bun にも Node にも依らない

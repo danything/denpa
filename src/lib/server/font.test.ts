@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { FONT_IMMUTABLE, fontCacheControl, fontCss } from "./font.js";
 
 describe("fontCacheControl", () => {
-  test("バージョンが入っている字と合えば1年持たせる", () => {
+  test("バージョンが入っている字と合えば 1 年持たせる", () => {
     expect(fontCacheControl("v2.1", "v2.1")).toBe(FONT_IMMUTABLE);
     expect(FONT_IMMUTABLE).toBe("public, max-age=31536000, immutable");
   });

@@ -1,10 +1,10 @@
 /**
- * EPGStation の HTTP API を読む (引き継ぎ用。`migrate.ts`)。v2 と v3 はエンドポイントの並びも形も
- * 取り込みに関わるところは同じなので、読み方は1つだけ。違うのは v3 のルールの `BS4K` だけで、
+ * EPGStation の HTTP API を読む (引き継ぎ用。`migrate.ts`)。v2 と v3 はエンドポイントの並びも形式も
+ * 取り込みに関わるところは同じなので、読み方は 1 つだけ。違うのは v3 のルールの `BS4K` だけで、
  * それは写す側 (`migrate.ts`) が見る。
  *
- * - **形が違っても止めない** (`shape.tolerate`)。1回だけ警告して来たものを使う。`id` など
- *   無いと扱えない項目が欠けた1件だけを飛ばす ({@link validItems})
+ * - **形式が違っても止めない** (`shape.tolerate`)。1 回だけ警告して来たものを使う。`id` など
+ *   無いと扱えない項目が欠けた 1 件だけを飛ばす ({@link validItems})
  * - 一覧は `limit` を明示してページ送りで全部取る ({@link EpgstationClient.list})
  * - ファイルは Range で続きから取り、長さを確かめる ({@link downloadVideo})
  *
@@ -31,13 +31,13 @@ export const timing = {
   header: 10_000,
   /** ファイルのデータが来ない間をどこまで待つか */
   idle: 60_000,
-  /** 取り直す間隔の最初。2倍ずつ伸ばす */
+  /** 取り直す間隔の最初。2 倍ずつ伸ばす */
   backoff: 2_000,
   /** 取り直す回数 */
   retries: 3,
 };
 
-/** 一覧を1回に取る数。省くと本物は 24 件しか返さない */
+/** 一覧を 1 回に取る数。省くと本物は 24 件しか返さない */
 const PAGE = 100;
 
 interface EpgstationSource {
@@ -168,14 +168,14 @@ const RECORDED = object({
 });
 
 /**
- * 型は形どおりだが、**形が違えば来たものがそのまま入っている** (`tolerate`)。写す側は
+ * 型は形式どおりだが、**形式が違えば来たものがそのまま入っている** (`tolerate`)。写す側は
  * 値の型を確かめてから使う (`migrate.ts` の `flag` など)
  */
 export type EpgstationRule = ReturnType<typeof RULE>;
 export type EpgstationReserve = ReturnType<typeof RESERVE>;
 export type EpgstationRecorded = ReturnType<typeof RECORDED>;
 
-/** 形のずれた値を見分ける。写す側 (`migrate.ts`) も使う */
+/** 形式のずれた値を見分ける。写す側 (`migrate.ts`) も使う */
 export const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -183,7 +183,7 @@ export const isId = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value);
 
 /**
- * 形を1回だけ確かめ (違えば警告して続ける)、無いと扱えない項目 (`essentials`) が欠けた1件だけ飛ばす。
+ * 形式を 1 回だけ確かめ (違えば警告して続ける)、無いと扱えない項目 (`essentials`) が欠けた 1 件だけ飛ばす。
  * 飛ばしたものは `skip` に言う
  */
 export function validItems<T>(
@@ -226,9 +226,9 @@ class HttpError extends Error {
 export class EpgstationClient {
   constructor(
     readonly source: EpgstationSource,
-    /** 形が違ったときの警告の出し先 */
+    /** 形式が違ったときの警告の出し先 */
     private readonly warn: (message: string) => void,
-    /** 欠けた1件を飛ばしたときの出し先 */
+    /** 欠けた 1 件を飛ばしたときの出し先 */
     private readonly skip: (message: string) => void,
   ) {}
 
@@ -239,7 +239,7 @@ export class EpgstationClient {
     return `${this.source.base}/api${path}${query === "" ? "" : `?${query}`}`;
   }
 
-  /** JSON を1つ取る。本文まで含めて {@link timing.header} の3倍で諦める */
+  /** JSON を 1 つ取る。本文まで含めて {@link timing.header} の 3 倍で諦める */
   async json(
     path: string,
     params: Record<string, string | number> = {},
@@ -440,7 +440,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * EPGStation のファイル (`/api/videos/<id>`) を `temporary` へ取る。**書きかけがあれば続きから。**
  *
  * - 書きかけの長さ `n` で `Range: bytes=n-` を送る。`206` で始まりが `n`、全体が `size` なら足す。
- *   `200` (プロキシが Range を落とした) なら頭から書き直す。全体が `size` と違えば書きかけを消して投げる
+ *   `200` (プロキシが Range を落とした) なら先頭から書き直す。全体が `size` と違えば書きかけを消して投げる
  *   (一覧の大きさが古いので、次の実行で取り直す)
  * - `n == size` なら取得しない
  * - 止まったら (ヘッダまで {@link timing.header}、データが {@link timing.idle} 来ない)・切れたら・5xx なら、
@@ -448,7 +448,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * - 終わったら長さを確かめる: 最後の長さ == `size` == 応答の全体の長さ。違えば書きかけを消して投げる
  * - `signal` で止めたら書きかけを残して投げる (次の実行で続きから)
  *
- * `onBytes` には書いたぶん (続きからなら、すでにあったぶんも最初に1回) を渡す
+ * `onBytes` には書いたぶん (続きからなら、すでにあったぶんも最初に 1 回) を渡す
  */
 export async function downloadVideo(
   client: EpgstationClient,
@@ -494,7 +494,7 @@ export async function downloadVideo(
         return "missing";
       }
       if (res.status === 416) {
-        // 書きかけのほうが長い (向こうのファイルが変わった)。頭から
+        // 書きかけのほうが長い (向こうのファイルが変わった)。先頭から
         await res.body?.cancel();
         await restart();
         throw new Retriable("EPGStation が範囲外 (416) を返しました");
@@ -515,7 +515,7 @@ export async function downloadVideo(
       if (res.status === 206) {
         const range = contentRange(res.headers.get("content-range"));
         if (range === null || range.start !== have || range.total !== size) {
-          // 続きにならない。頭から取り直す (Range を付けないので次は 200)
+          // 続きにならない。先頭から取り直す (Range を付けないので次は 200)
           await res.body?.cancel();
           await restart();
           throw new Retriable("続きの範囲が返りませんでした");
@@ -523,11 +523,11 @@ export async function downloadVideo(
         announced = range.total;
         append = true;
       } else {
-        // Range を落とされた (か、頭からリクエストした)。書きかけは捨てて書き直す
+        // Range を落とされた (か、先頭からリクエストした)。書きかけは捨てて書き直す
         const length = res.headers.get("content-length");
         announced = length === null ? null : Number(length);
         if (announced !== null && announced !== size) {
-          // 全部取ってから確かめるまでもない。数百GBを無駄に取らない
+          // 全部取ってから確かめるまでもない。数百 GB を無駄に取らない
           await res.body?.cancel();
           await restart();
           throw new LengthMismatch(

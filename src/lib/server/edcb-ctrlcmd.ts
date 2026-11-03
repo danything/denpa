@@ -1,6 +1,6 @@
 /**
  * EDCB の EpgTimerSrv に TCP (CtrlCmd。EpgTimerNW と同じもの) で繋いで、ルール・予約・録画済みの一覧を読む
- * (引き継ぎ用。写すのは `migrate-edcb.ts`)。決まりは EDCB の `CtrlCmdDef.h`・`CtrlCmdUtil.cpp`・`StructDef.h` に合わせてある:
+ * (引き継ぎ用。写すのは `migrate-edcb.ts`)。決まりは EDCB の `CtrlCmdDef.h`・`CtrlCmdUtil.cpp`・`StructDef.h` に合わせてある。
  *
  * - **1 接続 1 コマンド。** 送るのは `DWORD コマンド` + `DWORD 長さ` + 本文、返るのは `DWORD 結果` + `DWORD 長さ` + 本文
  *   (どれもリトルエンディアン)。サーバは返したら切る
@@ -202,7 +202,7 @@ export class Reader {
   }
 
   /**
-   * `DWORD 全体の長さ` + `DWORD 件数` の配列。`least` は1件の最小のバイト数で、
+   * `DWORD 全体の長さ` + `DWORD 件数` の配列。`least` は 1 件の最小のバイト数で、
    * 件数がそれで割った数を超えたら壊れているとして止める (大きな配列を先に取らない)
    */
   array<T>(read: (reader: Reader) => T, least: number): T[] {
@@ -223,10 +223,10 @@ export class Reader {
   }
 }
 
-/** 1件の最小のバイト数 ({@link Reader.array}) */
+/** 1 件の最小のバイト数 ({@link Reader.array}) */
 const LEAST = { struct: 4, word: 2, longlong: 8 } as const;
 
-/** 時間帯と曜日の1件 (`EPGDB_SEARCH_DATE_INFO`)。曜日は 0 = 日曜 */
+/** 時間帯と曜日の 1 件 (`EPGDB_SEARCH_DATE_INFO`)。曜日は 0 = 日曜 */
 export interface EdcbDate {
   startDay: number;
   startHour: number;
@@ -284,7 +284,7 @@ export interface EdcbReserve {
   comment: string;
 }
 
-/** 録画済みの1件 (`REC_FILE_INFO`。使う欄だけ) */
+/** 録画済みの 1 件 (`REC_FILE_INFO`。使う欄だけ) */
 export interface EdcbRecInfo {
   title: string;
   startAt: number | null;
@@ -311,7 +311,7 @@ function readSearchKey(reader: Reader, ver: number) {
     const notKey = r.string();
     const regExp = r.bool();
     const titleOnly = r.bool();
-    // `EPGDB_CONTENT_DATA` (大分類・中分類・ユーザー1・ユーザー2)
+    // `EPGDB_CONTENT_DATA` (大分類・中分類・ユーザー 1・ユーザー 2)
     const contents = r.array(
       (item) =>
         item.struct(

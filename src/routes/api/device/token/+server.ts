@@ -3,7 +3,7 @@ import { json } from "@sveltejs/kit";
 import { poll } from "#lib/server/device-auth.js";
 
 /**
- * **許されたか聞きに来る** (device-auth.ts)。許されていればアクセストークンを1度だけ返す。
+ * **許されたか聞きに来る** (device-auth.ts)。許されていればアクセストークンを 1 度だけ返す。
  * 応答の形式は RFC 8628 に揃えてある (`authorization_pending` なら `interval` 秒おいてまた聞く)
  */
 export async function POST({ request }) {

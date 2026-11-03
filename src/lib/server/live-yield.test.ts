@@ -4,7 +4,7 @@ import type { YieldedRecording } from "#lib/live.js";
 
 import { recordingOn, tunerOf, yieldedTo } from "./live-yield";
 
-/** 一覧の1本。読むところ (`index` `channel` `users`) だけ */
+/** 一覧の 1 本。読むところ (`index` `channel` `users`) だけ */
 const tuner = (index: number, channel: string | null, ...uses: string[]) => ({
   index,
   channel: channel === null ? null : { type: "GR" as const, channel },
@@ -29,7 +29,7 @@ describe("ライブが譲った録画を名指しする", () => {
       tuner(1, "T21", "rec 3", "live GR/T21"),
     ];
     expect(tunerOf(tuners, "GR", "T21", "live GR/T21")).toBe(1);
-    // 同じチャンネルでも利用者が違えば別 (番組表集めだけのチューナーは自分のものではない)
+    // 同じチャンネルでも利用者が違えば別 (番組表の取得だけのチューナーは自分のものではない)
     expect(tunerOf(tuners, "GR", "T16", "live GR/T16")).toBeNull();
   });
 

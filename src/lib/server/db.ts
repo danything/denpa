@@ -12,15 +12,15 @@ import * as schema from "./schema";
 /**
  * SQLite への接続。
  *
- * 最初に使われるまで開かない。import しただけでディレクトリを掘ってDBを作ると、
- * 引数の組み立てなど「DBに触らないはずの関数」を単体テストするだけで書き込み権限が
- * 要るようになってしまう(実際、CIで /app を掘ろうとして落ちた)。
+ * 最初に使われるまで開かない。import しただけでディレクトリを掘って DB を作ると、
+ * 引数の組み立てなど「DB に触らないはずの関数」を単体テストするだけで書き込み権限が
+ * 要るようになってしまう (実際、CI で /app を掘ろうとして落ちた)。
  */
 let instance: Database | null = null;
 /**
- * 開いた置き場。**置き場が変われば開き直す** — 試験はファイルごとに `config.dbPath` を
- * 一時ファイルへ差し替える (`bun test` は全部を1つのプロセスで走らせる)。最初に開いた
- * 1本を使い回していた頃は、前のファイルが残した行が次のファイルの試験に混ざっていた
+ * 開いた置き場。**置き場が変われば開き直す。** テストは `config.dbPath` を一時ファイルへ差し替える。
+ * `--isolate` の前は全部のファイルが 1 つのグローバルを共有していて、最初に開いた 1 本を
+ * 使い回していた頃は、前のファイルが残した行が次のファイルのテストに混ざっていた
  */
 let openedPath = "";
 
@@ -30,7 +30,7 @@ function database(): Database {
   mkdirSync(dirname(config.dbPath), { recursive: true });
   const db = new Database(config.dbPath, { create: true });
 
-  // WAL でないと、録画中の書き込みとUIの読み取りが SQLITE_BUSY で衝突する
+  // WAL でないと、録画中の書き込みと UI の読み取りが SQLITE_BUSY で衝突する
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA busy_timeout = 5000");
   db.exec("PRAGMA synchronous = NORMAL");
@@ -53,7 +53,7 @@ export function closeDatabase(): void {
 }
 
 /**
- * マイグレーションの置き場 (drizzle-kit の出力)。**cwd から読む** — 開発サーバも
+ * マイグレーションの置き場 (drizzle-kit の出力)。**cwd から読む。** 開発サーバも
  * `bun test` もリポジトリ直下で動き、コンテナは `/app` に COPY してある (Dockerfile)。
  * vite に束ねさせない (`?raw` は bun test の直接実行で読めない)
  */
@@ -64,7 +64,7 @@ export const MIGRATIONS = "drizzle";
  *
  * 当てたぶんは `__drizzle_migrations` に残り、次からは新しいものだけが当たる。
  * 最初のマイグレーション (baseline) は `IF NOT EXISTS` にしてあるので、
- * マイグレーションを持つ前 (1.7.x まで) の DB にもそのまま当たる — あの頃は起動のたびに
+ * マイグレーションを持つ前 (1.7.x まで) の DB にもそのまま当たる。あの頃は起動のたびに
  * `CREATE TABLE IF NOT EXISTS` と足りない列の追加で同じ構成に整えていた
  */
 export function bootstrap(db: Database): void {
@@ -108,8 +108,8 @@ let typedFor: Database | null = null;
 /**
  * 同じ接続を drizzle で包んだもの。**型の付いた読み書きはこちらから。**
  *
- * `database()` と接続は1つ (WAL や busy_timeout の設定もそのまま効く)。
- * bun:sqlite なので同期のまま — `.get()` / `.all()` / `.run()` を付けて呼ぶ。
+ * `database()` と接続は 1 つ (WAL や busy_timeout の設定もそのまま効く)。
+ * bun:sqlite なので同期のまま。`.get()` / `.all()` / `.run()` を付けて呼ぶ。
  * 組み立てで書けないもの (相関サブクエリ・CASE) は `sql<型>\`…\`` で列を名指しして
  * 挟む。素の SQL の文字列に型を付けて返す関数は置かない (キャストになるので)
  */
@@ -126,10 +126,10 @@ export function orm() {
  * 変えた行数が要るときの `.run()`。
  *
  * bun の `.run()` は行数を返しているのに、drizzle の型の上では void になる。
- * 1行なら `.returning()` で足りるが、まとめて消す/直すところで全行を返させるのは
+ * 1 行なら `.returning()` で足りるが、まとめて消す/直すところで全行を返させるのは
  * 無駄なので、組み立てた SQL を素の接続で流して行数を取る。
  *
- * 接続は `orm()` と同じ1本なので、drizzle のトランザクションの中から呼んでも
+ * 接続は `orm()` と同じ 1 本なので、drizzle のトランザクションの中から呼んでも
  * その中で流れる (epg.ts の syncServices → clearBelongings がそれ)
  */
 export function affected(query: {

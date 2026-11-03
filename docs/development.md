@@ -33,7 +33,7 @@ docker compose run --rm unit bun run check  # 型 (svelte-check)
 
 ## README の画像
 
-`docs/images/` の画像は **偽の放送で撮ります** — 局も番組もロゴも映像も字幕も作り物
+`docs/images/` の画像は **偽の放送で撮ります。** 局も番組もロゴも映像も字幕も作り物です
 (`tests/fake/docs.ts`)。本物の放送・ロゴ・本番の画面は画像に出しません。
 E2E と同じ一式 (denpa + 偽エージェント) を立て、ルール・予約・録画を入れてから撮り、静止画は WebP、動く画像は AVIF にして置きます。
 
@@ -45,7 +45,7 @@ docker compose run --rm docs bun scripts/capture-docs.ts watch live   # 名前�
 手元で回せなければ Actions の **Screenshots** (`.github/workflows/screenshots.yml`) を手で走らせると、
 撮った画像が artifact に上がります。
 
-撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています — 画面の BIZ UDPゴシック
+撮るイメージ (Dockerfile の `docs` 段) には、本番と同じ字が入っています。画面の BIZ UDPゴシック
 (OFL で配られているもの) と、放送の字の Denpa Font (denpa-font のリリースの woff2)。撮る条件 (1600×900・暗いテーマ・
 ja-JP・Asia/Tokyo。動く画像も同じ広さで撮り、縮めずに 30fps で組む) は `scripts/capture-docs.ts` の冒頭に
 あります。見た目を変えたら撮り直してください (古い画像は README を見て入れた人を迷わせます)。
@@ -66,6 +66,10 @@ PR を出して自分でマージします。急ぐときは Actions から手�
 視聴済み削除までを通します (`tests/fake/`)。偽エージェントの BS は 1 番組 5 秒 (地上波は 30 分) で、
 録画完了まで待っても 30 秒です。
 
+単体テスト (`bun run test:unit`) は `bun test --isolate` で、**ファイルごとに新しいグローバルで動かします。**
+前のファイルで始めた処理や差し替えた `config` が、次のファイルに届きません。
+そのぶん、DB や録画の置き場に触るテストは、それぞれのファイルで `config` を一時ディレクトリに向けます。
+
 画面まわりの入口は [app.md](app.md#テスト)、置いてあるものの一覧は
 [app.md](app.md#構成) にあります。
 
@@ -80,7 +84,7 @@ PR を出して自分でマージします。急ぐときは Actions から手�
   動かす。開発サーバを 4 つ立てるより軽く、本番と同じ出力を試せる
 - API へ直接投げるときは `Origin` を付ける。SvelteKit は Origin の無いフォーム形式の POST を
   別サイトからの送信として断る (3 からは Content-Type の無い POST/PUT/PATCH/DELETE も)。
-  `tests/stack.ts` が付けている。`x-forwarded-proto` は付けない — 前段の無い平文の接続には
+  `tests/stack.ts` が付けている。`x-forwarded-proto` は付けない。前段の無い平文の接続には
   server.js が `http` を入れるので、本番の `http://<IP>:3000` と同じ経路を試せる
 
 **1 台ではこれ以上縮みません。** 中身の合計は約 3 分で大半は偽の放送を待つ時間、
@@ -88,7 +92,7 @@ PR を出して自分でマージします。急ぐときは Actions から手�
 
 CI では 6 つに割って別のランナーに出し、3 ワーカー×6 台 = 18 ワーカーぶん並べます。
 組の中身は `tests/e2e/shards.json` で、実測の所要時間 (CI の結果に出る 1 本ずつの秒数) で人が割っています。
-組ごとにテストの秒数の和がそろうように割り、長いファイルは組の頭のほうに来るように組みます
+組ごとにテストの秒数の和がそろうように割り、長いファイルは組の先頭のほうに来るように組みます
 (組の中ではファイル名の順にワーカーへ配られるので、遅れて始まらずに済む)。組の時間の下限は、その組でいちばん長いファイル 1 本です。
 
 - 映像を長くデコードし続けるスペック (20-live・22-watch・互換モードのものなど。一覧は shards.json の注記) は 1 つの組に寄せすぎません。混むとどれも遅くなります
@@ -104,7 +108,7 @@ CI では 6 つに割って別のランナーに出し、3 ワーカー×6 台 =
 - 組を増やしたら、test.yml の `shard` の並びと検算の組の名前、main の ruleset の必須チェックにも `e2e (n)` を足します
 
 ワーカー数は**手元では CPU の数そのまま (下限 2・上限 6)、CI (`CI=1`。`docker compose run e2e` も
-そう) では 3 で固定**です (4 つ並べるとチューナー待ちで落ちる。実測は `playwright.config.ts` の頭)。
+そう) では 3 で固定**です (4 つ並べるとチューナー待ちで落ちる。実測は `playwright.config.ts` の冒頭)。
 混み具合でごく稀にブラウザ側が落ちるので、1 回だけやり直します (`retries: 1`)。
 
 ## DB の列を足す
@@ -114,7 +118,7 @@ CI では 6 つに割って別のランナーに出し、3 ワーカー×6 台 =
 書くのはオブジェクトだけ。
 
 1. `schema.ts` の列を変える (足す・消す・型を変える)
-2. `bun run db:generate` — 前回の snapshot との差分が `drizzle/` に SQL で出る。
+2. `bun run db:generate` で、前回の snapshot との差分が `drizzle/` に SQL で出る。
    一緒にコミットする (CI が出し直して、増えていれば落とす)
 3. 起動時に当たる (`db.ts` の `bootstrap`)。手で流すものは無い
 
@@ -134,7 +138,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 入れてよいのは別)、`noPropertyAccessFromIndexSignature` (index signature のものは `[]` で読む)、
 `noUncheckedIndexedAccess` (添字で読んだものは undefined かもしれない) を入れてある。
 
-`noUncheckedIndexedAccess` の書き分け:
+`noUncheckedIndexedAccess` は次のように書き分ける。
 
 - **バイト列の読み** (`data[i]`、`packages/arib/src/` の PSI/EIT/字幕と `src/lib/ts/` の TS・mkv のパーサ) は、長さを確かめた
   上で `data[i]!`。1 バイトごとに undefined を見てもパーサのコードが二倍の長さになるだけ。
@@ -142,7 +146,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 - **配列の先頭・regex の group・`split()` の結果** は undefined を見る (`?? ''`、
   `const [a = NaN] = ...`、`if (x === undefined) return`)。`[0]!` にしてよいのは、直前で
   空でないことを確かめている (`tests/e2e/helpers.ts` の `atLeastOne` のような) 場合だけ
-- **試験** は `!` でよい。落ちれば試験が落ちる
+- **テスト** は `!` でよい。外れればテストが落ちる
 
 外から来る JSON (チューナーエージェントの答え、OIDC の相手、取り込み元の DB) は
 `res.json() as X` と書かず、`src/lib/shape.ts` の読み取り関数で形式を確かめてから型にする
@@ -168,7 +172,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 2. **画面を変えたなら、docs の画像を撮り直す** ([上](#readme-の画像))。Actions の **Screenshots** を main で走らせ、
    artifact の `shots` を `docs/images/` に写して PR にします
 3. **`packages/arib/` が変わっていれば、その `version` を上げる** ([下](#danythingarib-を出す))。リリースといっしょに npm へ出ます
-4. main のイメージのビルドが通ったのを確かめて、リリースを作る:
+4. main のイメージのビルドが通ったのを確かめて、次のコマンドでリリースを作る。
    `gh release create vX.Y.Z --target main --generate-notes --title vX.Y.Z`。
    イメージは組み直さず、そのコミットのものにバージョンを貼り足します ([下](#イメージ))
 

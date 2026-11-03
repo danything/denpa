@@ -37,11 +37,11 @@ const { loadRecordedBml, saveRecordedBml, withProgramInfo } =
  * 書いた時刻がエンコードしたものの再生位置に合っているかを確かめる。
  */
 
-/** モジュール1つぶんの multipart (ファイル1枚の形式) */
+/** モジュール 1 つぶんの multipart (ファイル 1 枚の形式) */
 const multipart = (body: string) =>
   multipartModule([["/startup.bml", "text/X-arib-bml", body]]);
 
-/** DII と DDB を並べて、1つのモジュールを配りきる。バージョンごとに回 (transaction) を変える */
+/** DII と DDB を並べて、1 つのモジュールを配りきる。バージョンごとに回 (transaction) を変える */
 function carousel(body: string, version: number): Uint8Array[] {
   const module = multipart(body);
   const spec = {
@@ -73,9 +73,9 @@ const T = Date.UTC(2026, 7, 12, 0, 0, 30);
 const PCR = 500;
 
 /**
- * **合成の録画。番組の始まり (`T`) の 10秒前から録っている** (前のマージン)。
- * 時計 (PCR・TDT) は実時間どおりに進み、データ放送は番組の始まりで ver1、1分後に ver2 に変わる。
- * 元の TS の物差しでは ver1 が 10秒、ver2 が 70秒
+ * **合成の録画。番組の始まり (`T`) の 10 秒前から録っている** (前のマージン)。
+ * 時計 (PCR・TDT) は実時間どおりに進み、データ放送は番組の始まりで ver1、1 分後に ver2 に変わる。
+ * 元の TS の物差しでは ver1 が 10 秒、ver2 が 70 秒
  */
 function recorded(): Uint8Array {
   const at = (seconds: number) => [
@@ -174,7 +174,7 @@ describe("saveRecordedBml / loadRecordedBml", () => {
 
   /*
    * **時刻の基準は録画の頭で、番組の始まりではない。** 番組の始まり (`start_at`) を基準にしていた頃は、
-   * 前のマージン (10秒) のぶん切り替わりが映像より早く出ていた
+   * 前のマージン (10 秒) のぶん切り替わりが映像より早く出ていた
    */
   test("切っていない録画は、録画の頭から数えて、頭から捨てたぶんを引いた位置で切り替わる", async () => {
     const ts = join(dir, "plain-cut.ts");
@@ -182,7 +182,7 @@ describe("saveRecordedBml / loadRecordedBml", () => {
     writeFileSync(ts, recorded());
 
     await saveRecordedBml(ts, sidecar, recording(T), { kept: null, skip: 1 });
-    // 元の TS の 10秒・70秒 → エンコードしたものの 9秒・69秒
+    // 元の TS の 10 秒・70 秒 → エンコードしたものの 9 秒・69 秒
     expect(switchesAt(sidecar)).toEqual([9_000, 69_000]);
     expect(shownAt(sidecar, 8_999)).toBeNull();
     expect(shownAt(sidecar, 9_000)).toContain("ver1");
@@ -195,13 +195,13 @@ describe("saveRecordedBml / loadRecordedBml", () => {
     const sidecar = join(dir, "kept.bml.jsonl");
     writeFileSync(ts, recorded());
 
-    // 元の TS の 1〜30秒 と 50〜200秒 を残した (30〜50秒の CM を切った)
+    // 元の TS の 1〜30 秒 と 50〜200 秒 を残した (30〜50 秒の CM を切った)
     const kept = [
       { start: 1, end: 30 },
       { start: 50, end: 200 },
     ];
     await saveRecordedBml(ts, sidecar, recording(T), { kept, skip: 1 });
-    // ver1 は 10 − 1 = 9秒、ver2 は 29 + (70 − 50) = 49秒
+    // ver1 は 10 − 1 = 9 秒、ver2 は 29 + (70 − 50) = 49 秒
     expect(switchesAt(sidecar)).toEqual([9_000, 49_000]);
     expect(shownAt(sidecar, 48_999)).toContain("ver1");
     expect(shownAt(sidecar, 49_000)).toContain("ver2");
@@ -212,7 +212,7 @@ describe("saveRecordedBml / loadRecordedBml", () => {
     const fixed = withProgramInfo(old, recording(T));
     expect(fixed[0]!.message.type).toBe("programInfo");
     expect(fixed).toHaveLength(2);
-    // 空 (データ放送を持たない録画) には足さない — 「出せない」のままにする
+    // 空 (データ放送を持たない録画) には足さない。「出せない」のままにする
     expect(withProgramInfo([], recording(T))).toEqual([]);
   });
 
@@ -275,7 +275,7 @@ describe("saveRecordedBml と録画の頭の放送時刻", () => {
       kept: null,
       skip: 0,
     });
-    // 最初の TDT は録画の頭 (番組の始まりの 10秒前) と同じ PCR に来ている
+    // 最初の TDT は録画の頭 (番組の始まりの 10 秒前) と同じ PCR に来ている
     expect(tsHeadOf()).toBe(T - 10_000);
   });
 

@@ -2,7 +2,7 @@
  * 番組名からシリーズ名とサブタイトルを切り出す。
  *
  * 保存先では「シリーズ名のフォルダ + 日付ベースの録画」として並べたいので、
- * 毎回変わる部分(話数・サブタイトル)を番組名から落として安定したシリーズ名を作るのが目的。
+ * 毎回変わる部分 (話数・サブタイトル) を番組名から落として安定したシリーズ名を作るのが目的。
  * 放送局ごとに表記が揺れるため完璧は狙わず、実害の出やすいパターンだけ潰す。
  */
 import { FOLD, foldForSearch, toHalfWidth } from "../fold";
@@ -20,19 +20,19 @@ const DECORATION_MARK = new RegExp(
   "gu",
 );
 
-// 局が頭に付ける枠の名前。`<アニメギルド>てつりょー!` (全角の ＜＞ は半角に寄せてから見る)
+// 局が先頭に付ける枠の名前。`<アニメギルド>てつりょー!` (全角の ＜＞ は半角に寄せてから見る)
 const FRAME = /^<[^<>]{1,20}>\s*/;
 
 /*
- * 作品名の頭に付く枠の名前。`アニメA・貸した魔力は…` (BS朝日) `ドラマ・天狗の台所`
+ * 作品名の先頭に付く枠の名前。`アニメA・貸した魔力は…` (BS朝日) `ドラマ・天狗の台所`
  * `アニメ　どうも、好きな人に…` (BS日テレ。区切りが空白)。
- * 「・」で始まる頭はほかにも多い (`新・BS日本のうた` `続・深夜食堂` `ザ・ミステリー`) ので決め打ち
+ * 「・」で区切る先頭はほかにも多い (`新・BS日本のうた` `続・深夜食堂` `ザ・ミステリー`) ので決め打ち
  */
 const SLOT = /^(?:アニメ|ドラマ)[A-Za-zＡ-Ｚａ-ｚ]?(?:[・･]|\s+)/;
 
 /**
- * シリーズ名から枠の名前を外す。**同じ作品を局をまたいで同じと見るため** —
- * 地上波は `どうも、…` で BS は `アニメ　どうも、…` のように、同じ回でも頭が違う。
+ * シリーズ名から枠の名前を外す。**同じ作品を局をまたいで同じと見るため。**
+ * 地上波は `どうも、…` で BS は `アニメ　どうも、…` のように、同じ回でも先頭が違う。
  * 外すと何も残らないなら元のまま
  */
 export function withoutSlot(series: string): string {
@@ -42,10 +42,10 @@ export function withoutSlot(series: string): string {
 // 「サブタイトル」形式。番組名の末尾に出てきたものだけをサブタイトル扱いにする
 const BRACKET_SUBTITLE = /[「『](.+?)[」』]\s*$/;
 
-// 頭の「作品名」。後ろは編の名前 (`「東京リベンジャーズ」三天戦争編`)
+// 先頭の「作品名」。後ろは編の名前 (`「東京リベンジャーズ」三天戦争編`)
 const LEADING_TITLE = /^[「『]([^「『」』]+)[」』]\s*(.*)$/;
 
-// 第2期 / 第3シーズン (括弧ごと `【第2期】` も)。話数ではなく編として持つ。話数の前かタイトルの終わりにあるものだけ —
+// 第2期 / 第3シーズン (括弧ごと `【第2期】` も)。話数ではなく編として持つ。話数の前かタイトルの終わりにあるものだけ。
 // 「将棋)第34期 銀河戦」のように後ろに名前が続くものは、どこまでが編か分からない
 const SEASON =
   /\s*(?:[【[(]\s*)?第\s*(?:\d{1,4}|[一二三四五六七八九十]{1,3})\s*(?:期|シーズン|クール|章|部)(?:\s*[】\])])?(?=\s*(?:#|第\s*\d|$))/;
@@ -79,7 +79,7 @@ const FORBIDDEN = '/\\:*?"<>|';
 /** 標準の大きさの空白 (U+3000) */
 const WIDE_SPACE = String.fromCharCode(0x3000);
 
-/** 外した跡の空白は1つに。全角の空白だけが並んでいたなら全角のまま */
+/** 外した跡の空白は 1 つに。全角の空白だけが並んでいたなら全角のまま */
 function squeezeSpaces(text: string): string {
   return text.replace(/\s+/g, (run) =>
     [...run].every((c) => c === WIDE_SPACE) ? WIDE_SPACE : " ",
@@ -90,7 +90,7 @@ function squeezeSpaces(text: string): string {
  * 元の文字列と、半角に寄せた写し (`toHalfWidth`)。**探すのは写しで、切り出すのは元から。**
  *
  * 番組名は放送のとおり全角混じり (「Ｖｅｎｕｅ１０１ ＃３」) で持つ。この下の規則は半角で
- * 書いてあるので写しに当て、当たった位置で元を切る。`toHalfWidth` は1文字を1文字に写すので
+ * 書いてあるので写しに当て、当たった位置で元を切る。`toHalfWidth` は 1 文字を 1 文字に写すので
  * 位置はそのまま使える。空白の位置も同じ (全角の空白は半角の空白に写り、どちらも `\s`)
  */
 class Twin {
@@ -117,7 +117,7 @@ class Twin {
     return this.key.match(pattern);
   }
 
-  /** 当たった所を消す。g 付きなら全部、無ければ最初の1つ */
+  /** 当たった所を消す。g 付きなら全部、無ければ最初の 1 つ */
   remove(pattern: RegExp): Twin {
     const hits = pattern.global
       ? [...this.key.matchAll(pattern)]
@@ -156,14 +156,14 @@ const SEASON_ANYWHERE = new RegExp(
   "gi",
 );
 
-// 期の表記を外した跡に残る頭と後ろの区切り記号 (`Season 2 - 作品名` の ` - `、`作品名・Season 2` の `・`)
+// 期の表記を外した跡に残る前後の区切り記号 (`Season 2 - 作品名` の ` - `、`作品名・Season 2` の `・`)
 const LEADING_SEPARATOR = /^[\s\-~〜:：|｜▼▽・･]+/u;
 const LEFTOVER_SEPARATOR = /[\s\-~〜:：|｜▼▽・･]+$/u;
 
 /**
- * シリーズ名から期・シーズンの表記を外す。**ルールのキーワードを次の期にも当てるため** —
+ * シリーズ名から期・シーズンの表記を外す。**ルールのキーワードを次の期にも当てるため。**
  * `作品名 Season 2` をそのまま語にすると、次の `作品名 Season 3` に当たらない。
- * 外した跡の空白は1つに、前後の区切り記号は落とす。外すものが無い・外すと何も残らないなら元のまま
+ * 外した跡の空白は 1 つに、前後の区切り記号は落とす。外すものが無い・外すと何も残らないなら元のまま
  */
 export function withoutSeason(series: string): string {
   const removed = new Twin(series).remove(SEASON_ANYWHERE).raw;
@@ -181,7 +181,7 @@ export function searchable(input: string): string {
 
 /**
  * 人に見せる用の番組名。[字][デ] のような装飾記号だけ落とし、話数も
- * サブタイトルも ARIB の囲み文字 (🈚🈑) も残す。全角も放送のまま。エンコードの入れ物の title にも埋め込む
+ * サブタイトルも ARIB の囲み文字 (🈚🈑) も残す。全角も放送のまま。エンコードしたコンテナの title にも埋め込む
  */
 export function displayTitle(rawName: string): string {
   const cleaned = squeezeSpaces(
@@ -215,14 +215,14 @@ export function parseTitle(rawName: string): ParsedTitle {
   let subtitle = "";
   let series = name.remove(FRAME);
 
-  // 頭の鍵括弧は副題ではなく作品名 (`「名探偵コナン」` `「東京リベンジャーズ」三天戦争編`)。副題はその後ろから探す
+  // 先頭の鍵括弧は副題ではなく作品名 (`「名探偵コナン」` `「東京リベンジャーズ」三天戦争編`)。副題はその後ろから探す
   const head = series.match(LEADING_TITLE)?.[1]?.length;
   const from = head === undefined ? 0 : head + 2;
   const rest = series.slice(from);
   const bracket = rest.match(BRACKET_SUBTITLE);
   if (bracket !== null) {
     const at = bracket.index ?? 0;
-    // 中身は括弧1字の後ろから
+    // 中身は括弧 1 字の後ろから
     subtitle = rest
       .slice(at + 1, at + 1 + (bracket[1] ?? "").length)
       .trim().raw;
@@ -246,7 +246,7 @@ export function parseTitle(rawName: string): ParsedTitle {
   if (ep !== null) {
     episode = Number(ep[1]);
     const at = ep.index ?? 0;
-    // 話数以降(「番組名 #12 サブタイトル」の後半)はサブタイトル扱いにして series からは落とす
+    // 話数以降 (「番組名 #12 サブタイトル」の後半) はサブタイトル扱いにして series からは落とす
     const tail = series.slice(at + ep[0].length).trim();
     if (subtitle === "" && tail.key !== "" && !LABELS_ONLY.test(tail.key)) {
       const body = tail.remove(TRAILING_LABELS).trim();
@@ -289,7 +289,7 @@ export function hasSeason(arc: string): boolean {
 }
 
 /**
- * ファイル名・ディレクトリ名に使える形式に落とす。**全角の英数は半角に寄せる** —
+ * ファイル名・ディレクトリ名に使える形式に落とす。**全角の英数は半角に寄せる。**
  * 番組名を放送のまま持つようになる前に録ったものと、同じ名前に並べるため。
  * ext4 で壊れるのは `/` と NUL だけだが、SMB 経由で覗くことを考えて Windows の禁止文字も落とす。
  */
@@ -302,7 +302,7 @@ export function sanitizeFileName(input: string): string {
     .trim()
     // 末尾のドット・スペースは Windows が扱えない
     .replace(/[\s.]+$/, "");
-  // ext4 のファイル名上限は255バイト。日本語(UTF-8で3バイト)でも収まる長さに切る
+  // ext4 のファイル名上限は 255 バイト。日本語 (UTF-8 で 3 バイト) でも収まる長さに切る
   // 文字 (コードポイント) で数える。`slice` だと絵文字などのサロゲートペアを割り、片割れが名前に残る
   const limited = Array.from(cleaned).slice(0, 60).join("").trim();
   return limited === "" ? "untitled" : limited;

@@ -11,13 +11,13 @@ import {
 } from "./cm-scan";
 
 /**
- * CM 検出の材料を1回のデコードで取るところ (`cm-scan.ts`)。ffmpeg は動かさず、
+ * CM 検出の材料を 1 回のデコードで取るところ (`cm-scan.ts`)。ffmpeg は動かさず、
  * 渡す引数と、書き出しの読み方だけを見る
  */
 const files = { cuts: "/tmp/x.cuts", silences: "/tmp/x.silences" };
 
 describe("書き出しを読む", () => {
-  test("切れ目はコマごとの時刻と点 (metadata の1コマ2行)", () => {
+  test("切れ目はコマごとの時刻と点 (metadata の 1 コマ 2 行)", () => {
     const text = [
       "frame:0    pts:58316   pts_time:0.647956",
       "lavfi.scd.score=0.000",

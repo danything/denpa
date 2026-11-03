@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 /**
  * **CM 検出だけやり直す** ジョブ (`encoder.runCmJob`)。偽 ffmpeg (`tests/fake/ffmpeg.sh`) で通す。
  * 偽 ffmpeg は 300 秒と 360 秒に 1 秒の無音を返す (尺 600 秒)。ffprobe は無い。
- * 元のTSは持たせず、エンコードしたもの (mkv) から読ませる
+ * 元の TS は持たせず、エンコードしたもの (mkv) から読ませる
  */
 const root = mkdtempSync(join(tmpdir(), "denpa-cmredo-"));
 const { config } = await import("./config");
@@ -84,7 +84,7 @@ test("CM を切ってエンコードしたものは受けない", async () => {
   expect(job.error).toBe(CM_CUT_ALREADY);
 });
 
-test("同じ録画に2つは積まない (エンコードするジョブがあればそれを返す)", () => {
+test("同じ録画に 2 つは積まない (エンコードするジョブがあればそれを返す)", () => {
   seed(null);
   const encode = enqueue(1);
   expect(enqueue(1, "cm")).toBe(encode);
@@ -130,7 +130,7 @@ test("材料の控えがあれば読み直さずに決める (控えの物差し
   orm().delete(cmMaterials).run();
 });
 
-test("コマを1つも読めなかったものは控えない (次も読み直す)", async () => {
+test("コマを 1 つも読めなかったものは控えない (次も読み直す)", async () => {
   seed(null);
   const { loadMaterial } = await import("./cm-material-store");
   const jobId = enqueue(1, "cm");

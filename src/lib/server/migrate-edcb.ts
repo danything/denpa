@@ -8,7 +8,7 @@
  * EDCB が重複の確認に使う履歴 (`RecInfo2.txt`) を返すコマンドも無いので、録画済みの一覧から消した回は移らない。
  *
  * 何度実行しても二重にはならない。ルールと履歴は `source` (`edcb:<ID>`・`edcb:recinfo:<キー>` など) で見分ける。
- * 値は設定フォルダのファイルを読んでいたころと同じなので、そのころ取り込んだものも飛ぶ
+ * 値は設定フォルダのファイルを読んでいたころと同じなので、そのころ取り込んだものも飛ばす
  */
 import { parseSearchFields } from "#lib/search.js";
 
@@ -41,7 +41,7 @@ import {
 import { programKey, serviceKey } from "./tuner";
 
 /**
- * EDCB のジャンル1件を denpa の書き方 (`"7"` / `"7-0"`) に。写せないものは null。
+ * EDCB のジャンル 1 件を denpa の書き方 (`"7"` / `"7-0"`) に。写せないものは null。
  *
  * 値は `(大分類 << 24) | (中分類 << 16) | …` を符号付きで書いたもので、大分類が 0x80 以上だと負になる。
  * `>>> 0` で符号なしに戻してから分ける。中分類 0xFF は「その大分類の全部」。
@@ -70,18 +70,18 @@ const DAY_MINUTES = 24 * 60;
 /**
  * EDCB の時間帯と曜日 (`EPGDB_SEARCH_DATE_INFO` の並び) を denpa の時間帯と曜日 (`rule-time.ts`) に。
  *
- * EDCB は番組の始まる時刻が、週の頭からの分で `開始 ≤ 始まる時刻 ≤ 終了` なら当たる (**両端を含む**)。
- * どれか1件に入れば当たる。denpa は `time_from` 以上 `time_to` 未満なので:
+ * EDCB は番組の始まる時刻が、週の先頭からの分で `開始 ≤ 始まる時刻 ≤ 終了` なら当たる (**両端を含む**)。
+ * どれか 1 件に入れば当たる。denpa は `time_from` 以上 `time_to` 未満なので、次のように写す。
  *
- * - **同じ曜日の中** (月 20:00〜月 21:30) → `time_to` を1分後ろにする (20:00〜21:31)。23:59 までなら 0:00 になり、
+ * - **同じ曜日の中** (月 20:00〜月 21:30) → `time_to` を 1 分後ろにする (20:00〜21:31)。23:59 までなら 0:00 になり、
  *   denpa では「その時刻から日の終わりまで」と同じ。0:00〜23:59 は丸一日なので時刻では絞らない
  * - **次の日にまたぐ** (月 23:00〜火 01:00) → 23:00〜01:01。denpa は日をまたぐ時間帯も**始まる日の暦の曜日**で
  *   見るので、そのままだと火曜の 0〜1 時が外れる。**次の日の曜日も足す** (月・火)。当たる番組は増える
- *   (月曜の 0〜1 時と火曜の 23 時台) ので、記録に残す。曜日が7日そろえば EDCB と同じになる
- * - 2日以上にわたるもの (日 0:00〜土 23:59 のような「期間で指定」) → 0:00 に始まり 23:59 に終わるなら、
+ *   (月曜の 0〜1 時と火曜の 23 時台) ので、記録に残す。曜日が 7 日そろえば EDCB と同じになる
+ * - 2 日以上にわたるもの (日 0:00〜土 23:59 のような「期間で指定」) → 0:00 に始まり 23:59 に終わるなら、
  *   その曜日を全部の日として写す。途中から始まる・途中で終わるものは写せない
  *
- * denpa のルールは時間帯を1つしか持てないので、時刻の同じものは曜日をまとめ、時刻の違うものが残れば写せない。
+ * denpa のルールは時間帯を 1 つしか持てないので、時刻の同じものは曜日をまとめ、時刻の違うものが残れば写せない。
  * 範囲を外れた値は丸める (EDCB も丸めて使う)
  */
 export function parseDateList(dates: readonly EdcbDate[]): DateListResult {
@@ -120,7 +120,7 @@ export function parseDateList(dates: readonly EdcbDate[]): DateListResult {
   return { slot, widened: crossing && starts.size < 7 };
 }
 
-/** andKey の頭の印を外す。印は `^!{999}` (無効)・`C!{999}` (大小を区別)・`D!{1MMMMNNNN}` (番組の長さ) の順に付く */
+/** andKey の先頭の印を外す。印は `^!{999}` (無効)・`C!{999}` (大小を区別)・`D!{1MMMMNNNN}` (番組の長さ) の順に付く */
 export function splitAndKey(andKey: string): {
   disabled: boolean;
   caseSensitive: boolean;
@@ -137,7 +137,7 @@ export function splitAndKey(andKey: string): {
   return { disabled, caseSensitive, duration, keyword: rest };
 }
 
-/** notKey の頭のメモ (`:note:` から最初の空白まで) を外す。メモは検索に使わない */
+/** notKey の先頭のメモ (`:note:` から最初の空白まで) を外す。メモは検索に使わない */
 export function stripNote(notKey: string): string {
   if (!notKey.startsWith(":note:")) return notKey;
   const at = notKey.search(/[ 　]/);
@@ -174,7 +174,7 @@ type ConvertedRule =
   { values: EdcbRuleValues; notes: string[] } | { skip: string };
 
 /**
- * EDCB のルール1件を denpa のルールに。写せないものは `skip` に理由を、写したが意味が少し変わる
+ * EDCB のルール 1 件を denpa のルールに。写せないものは `skip` に理由を、写したが意味が少し変わる
  * ものは `notes` に書く (どちらも記録に出す)。局は `serviceOf` で引く (ONID と SID。TSID は denpa に無い)。
  *
  * **局が空のルールは飛ばす。** EDCB は局の並びにある局の番組だけを探すので、局が空なら何にも当たらない。
@@ -268,7 +268,7 @@ export function convertRule(
   };
 }
 
-/** 局の内部ID。denpa の局に無ければ undefined */
+/** 局の内部 ID。denpa の局に無ければ undefined */
 function serviceOf(networkId: number, serviceId: number): number | undefined {
   return serviceById(serviceKey(networkId, serviceId))?.id;
 }
@@ -280,8 +280,8 @@ function ruleLabel(rule: EdcbRule): string {
 }
 
 /**
- * 同じキーのものを1つにまとめる (先に出たほうを残す)。同じ `source` を2回数えると、下見では2件、
- * 取り込みでは1件 (2件目は入らない) になって件数が食い違う
+ * 同じキーのものを 1 つにまとめる (先に出たほうを残す)。同じ `source` を 2 回数えると、下見では 2 件、
+ * 取り込みでは 1 件 (2 件目は入らない) になって件数が食い違う
  */
 function firstBy<T>(list: readonly T[], keyOf: (item: T) => string): T[] {
   const seen = new Map<string, T>();
@@ -450,13 +450,13 @@ function runEdcb(lists: EdcbLists, options: MigrateOptions): Promise<void> {
   });
 }
 
-/** 一覧を読んでいる間。二重に押されても1つしか走らせない */
+/** 一覧を読んでいる間。二重に押されても 1 つしか走らせない */
 let starting = false;
 
 /**
  * 設定画面から呼ぶ入口。**先に 3 つの一覧を読み、繋がらなければその場で理由を返す**
  * (裏で走らせてから失敗にしない)。読めたら走り出したことだけ返す。
- * どちらかの引き継ぎが走っている間は断る (進み具合を1つしか持たないため)
+ * どちらかの引き継ぎが走っている間は断る (進み具合を 1 つしか持たないため)
  */
 export async function startEdcb(
   input: string,

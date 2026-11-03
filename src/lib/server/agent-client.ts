@@ -31,7 +31,7 @@ import { connect } from "node:tls";
 import { config } from "./config";
 
 /** `TUNER_AGENT_URL` を、送る先 (`origin`) と合言葉に分けたもの */
-export interface AgentTarget {
+interface AgentTarget {
   /** `https://host:port` (末尾の `/` と `#` から後ろは除く) */
   origin: string;
   /** `#pair=` の値。無ければ null */
@@ -78,14 +78,14 @@ export function fingerprint(der: Uint8Array): string {
   return createHash("sha256").update(der).digest("hex");
 }
 
-export function pemToDer(pem: string): Uint8Array {
+function pemToDer(pem: string): Uint8Array {
   const body = pem
     .replace(/-----(BEGIN|END) CERTIFICATE-----/g, "")
     .replace(/\s+/g, "");
   return new Uint8Array(Buffer.from(body, "base64"));
 }
 
-export function derToPem(der: Uint8Array): string {
+function derToPem(der: Uint8Array): string {
   const b64 = Buffer.from(der).toString("base64");
   const lines = b64.match(/.{1,64}/g) ?? [];
   return `-----BEGIN CERTIFICATE-----\n${lines.join("\n")}\n-----END CERTIFICATE-----\n`;
@@ -133,7 +133,7 @@ function generalizedTime(at: Date): Uint8Array {
 }
 
 /** 自己署名の証明書 (PEM)。有効期間は前日から 100 年 (相手は証明書そのものを覚えるので、期限で切らない) */
-export function selfSignedCertificate(key: KeyObject, name: string): string {
+function selfSignedCertificate(key: KeyObject, name: string): string {
   const spki = new Uint8Array(
     createPublicKey(key).export({ type: "spki", format: "der" }),
   );
@@ -193,7 +193,7 @@ function writeSecret(path: string, text: string): void {
 let own: { dir: string; identity: Identity } | null = null;
 
 /** こちらの鍵と証明書。無ければ作って残す。置き場ごとに 1 度だけ読む */
-export function ownIdentity(): Identity {
+function ownIdentity(): Identity {
   const dir = tlsDir();
   if (own?.dir !== dir) own = { dir, identity: loadIdentity(dir) };
   return own.identity;

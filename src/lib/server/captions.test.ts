@@ -45,7 +45,7 @@ describe("字幕の取り出し方", () => {
   });
 
   /*
-   * **時刻を運べるコンテナで受ける。** 別の出力 (`showinfo`) に喋らせて来た順に組にすると数が合わずにずれる
+   * **時刻を運べるコンテナで受ける。** 別の出力 (`showinfo`) に書かせて来た順に組にすると数が合わずにずれる
    */
   test("時刻はコマと一緒に運ばせる", () => {
     const args = captionOutput("0:p:1024", 0);
@@ -58,14 +58,14 @@ describe("字幕の取り出し方", () => {
     expect(captionOutput("0:p:1024", 0)).toContain("pipe:3");
   });
 
-  /** 溜められるとそのぶん遅れる。塊の上限を最小にして1枚ずつ書かせる */
+  /** 溜められるとそのぶん遅れる。塊の上限を最小にして 1 枚ずつ書かせる */
   test("溜めさせない", () => {
     const args = captionOutput("0:p:1024", 0);
     expect(args[args.indexOf("-cluster_time_limit") + 1]).toBe("1");
     expect(args[args.indexOf("-flush_packets") + 1]).toBe("1");
   });
 
-  /** 局を名指しする。1本の物理チャンネルに複数の局が入っている (映像と同じ)。言語が複数ある放送では2本目も選べる */
+  /** 局を名指しする。1 つのチャンネルに複数の局が入っている (映像と同じ)。言語が複数ある放送では 2 本目も選べる */
   test("選んだ局の何本目かを採る", () => {
     expect(captionOutput("0:p:1032", 1).join(" ")).toContain(
       "-map 0:p:1032:s:1",
@@ -100,12 +100,12 @@ describe("放送そのままの経路の字幕", () => {
 /**
  * **字幕を持たない放送は普通にある** (ショッピングやサブチャンネル)。
  *
- * そこに字幕を要求すると ffmpeg は組み立ての時点で降りる — **映像も出ない**。
- * そうと分かったら字幕なしで再エンコードするので、その言い分を見分けられること
+ * そこに字幕を要求すると ffmpeg は組み立ての時点で終了する。**映像も出ない**。
+ * そうと分かったら字幕なしで起動し直すので、そのときの出力を見分けられること
  */
 describe("字幕が無いと分かる", () => {
   /** 実機で出させたものそのまま */
-  test("ffmpeg の言い分から見分ける", () => {
+  test("ffmpeg の出力から見分ける", () => {
     expect(
       NO_SUBTITLE.test(
         "[out#0/matroska @ 0x1] Stream map '' matches no streams.",
@@ -186,8 +186,8 @@ async function readAll(
 }
 
 /**
- * **字幕があるかは ffmpeg を起こす前に PMT で分かる** (`peekCaptions`)。無い放送に字幕の出口を頼むと
- * ffmpeg は入口を探り終えてから降り、起こし直すぶん映像が遅れる
+ * **字幕があるかは ffmpeg を起動する前に PMT で分かる** (`peekCaptions`)。無い放送に字幕の出口を要求すると
+ * ffmpeg は入口を探り終えてから終了し、起動し直すぶん映像が遅れる
  */
 describe("PMT で字幕の本数を見る", () => {
   test("字幕の部品タグを持つ ES を数える", () => {
@@ -195,7 +195,7 @@ describe("PMT で字幕の本数を見る", () => {
       programMap(SERVICE, VIDEO_PID, [[0x02, VIDEO_PID], ...streams]);
     expect(captionStreams(pmt([]))).toBe(0);
     expect(captionStreams(pmt([[0x06, 0x130, captionDescriptors()]]))).toBe(1);
-    // 言語が複数ある放送は ES が2本
+    // 言語が複数ある放送は ES が 2 本
     expect(
       captionStreams(
         pmt([
@@ -221,7 +221,7 @@ describe("PMT で字幕の本数を見る", () => {
     expect(captionStreams(pmt)).toBe(0);
   });
 
-  test("TS を少しずつ食わせて、その局の PMT を読めたら本数を返す", () => {
+  test("TS を少しずつ渡して、その局の PMT を読めたら本数を返す", () => {
     const ts = head([[0x06, 0x130, captionDescriptors()]]);
     const counter = new CaptionCount(SERVICE);
     // パケットの切れ目と関係なく割って届く
@@ -257,7 +257,7 @@ describe("PMT で字幕の本数を見る", () => {
     const source = (async function* () {
       yield video;
       await then;
-      // 待ちきったあとに届く1つ目。返すストリームから出てこないといけない
+      // 待ちきったあとに届く 1 つ目。返すストリームから出てこないといけない
       yield video;
     })();
     const peeked = await peekCaptions(source, SERVICE, 50);
@@ -273,7 +273,7 @@ describe("PMT で字幕の本数を見る", () => {
     expect(await readAll(peeked.stream)).toEqual(parts);
   });
 
-  test("転んだら、返すストリームを読んだ側に届く", async () => {
+  test("読み取りの失敗は、返すストリームを読んだ側に届く", async () => {
     const source = (async function* (): AsyncGenerator<Uint8Array> {
       yield packetize(VIDEO_PID, new Uint8Array(10));
       throw new Error("切れた");
@@ -292,7 +292,7 @@ describe("PMT で字幕の本数を見る", () => {
 });
 
 /**
- * **放送が字幕を持っているかは、1枚も来ていなくても分かる。**
+ * **放送が字幕を持っているかは、1 枚も来ていなくても分かる。**
  *
  * ffmpeg が入口で読んだストリーム一覧に出ている。届いてから画面に切り替えを
  * 出していた頃は、間隔の空く番組を開くとボタンが出なかった (実機の
@@ -325,7 +325,7 @@ describe("TrackList", () => {
     expect(list.tracks).toHaveLength(1);
   });
 
-  /** **言語が複数ある放送はたまにある。** そのときは2本以上になる */
+  /** **言語が複数ある放送はたまにある。** そのときは 2 本以上になる */
   test("言語が複数あれば、その数だけ出す", () => {
     const list = new TrackList(1024);
     for (const line of [
@@ -407,7 +407,7 @@ describe("アプリ向けの字幕 API", () => {
   const json = (value: unknown) =>
     new TextEncoder().encode(JSON.stringify(value));
 
-  /** WebSocket の1フレームの頭に、後ろの長さを足しただけ (受け側の読み方を1つにする) */
+  /** WebSocket の 1 フレームの先頭に、後ろの長さを足しただけ (受け側の読み方を 1 つにする) */
   test("フレームは [4:長さ][1:種別][8:時刻][中身]", () => {
     const out = appFrame(
       CHANNEL.captionText,
@@ -502,7 +502,7 @@ describe("アプリ向けの字幕 API", () => {
   });
 
   // 録画の字幕は、受け側が読まなくなったら録画を読むのも止める (`recordingCaptions`)
-  test("読まれずに溜まったら待ってほしいと言う", () => {
+  test("読まれずに溜まったら backedUp が true を返す", () => {
     let out: CaptionOut | null = null;
     const stream = captionFeed((given) => {
       out = given;
@@ -536,7 +536,7 @@ describe("アプリ向けの字幕 API", () => {
  * そのまま (`S_ARIBSUB`) 入っている。ずっと前にエンコードした録画は画像 (PGS) のことがあり、それは読まない (null。字幕なし)
  */
 describe("pagesFromMkv", () => {
-  test("S_ARIBSUB をデコードして、時刻 (秒) と1枚ずつに", () => {
+  test("S_ARIBSUB をデコードして、時刻 (秒) と 1 枚ずつに", () => {
     const pages = pagesFromMkv(
       mkv([
         [0, management()],
@@ -580,7 +580,7 @@ describe("textFrame", () => {
    *
    * 添えずに「届いた時点の再生位置」に置いていた頃は、エンコードする手間のぶん字幕の
    * ほうが先に届くぶんだけ早く出ていた。その量を測って足し引きしようとして
-   * 3回外している (docs/stream.md#時刻同期) — 別々の ffmpeg では測れなかった
+   * 3 回外している (docs/stream.md#時刻同期)。別々の ffmpeg では測れなかった
    */
   test("時刻は丸めて添える", () => {
     const page = {
@@ -595,7 +595,7 @@ describe("textFrame", () => {
 });
 
 /**
- * **字幕1本に言語が複数ある放送。** 全部の言語をデコードして、言語の番号を付けて出す。どれを誰に出すかは
+ * **字幕 1 本に言語が複数ある放送。** 全部の言語をデコードして、言語の番号を付けて出す。どれを誰に出すかは
  * 使う側が決める (ライブは視聴者ごと、録画は `others`)
  */
 describe("字幕の言語", () => {
@@ -621,7 +621,7 @@ describe("字幕の言語", () => {
     expect(text.languagesChanged).toBe(false);
   });
 
-  test("言語が1つなら今までどおり第1言語だけ", () => {
+  test("言語が 1 つなら今までどおり第 1 言語だけ", () => {
     const text = new CaptionText();
     text.feed(frame(0, management()));
     expect(text.languages.map((l) => l.index)).toEqual([1]);
@@ -630,7 +630,7 @@ describe("字幕の言語", () => {
     ).toEqual([1]);
   });
 
-  test("録画は第1言語を pages に、第2言語から後ろを others に", () => {
+  test("録画は第 1 言語を pages に、第 2 言語から後ろを others に", () => {
     const pages = pagesFromMkv(
       mkv([
         [0, management({ languages: ["jpn", "eng"] })],
@@ -649,7 +649,7 @@ describe("字幕の言語", () => {
     ).toEqual([[2, "英語", "えいご"]]);
   });
 
-  test("言語が1つの録画には others を付けない (今までと同じ形)", () => {
+  test("言語が 1 つの録画には others を付けない (今までと同じ形)", () => {
     const pages = pagesFromMkv(
       mkv([
         [0, management()],
@@ -660,7 +660,7 @@ describe("字幕の言語", () => {
   });
 });
 
-/** 第 `language` 言語の本文1つ */
+/** 第 `language` 言語の本文 1 つ */
 function text_(language: number, body: string): Uint8Array {
   return text(encodeAribText(body), language);
 }
