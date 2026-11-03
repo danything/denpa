@@ -76,6 +76,7 @@ import {
   followFile,
   resumeFrom,
   resumePlan,
+  tsFileHead,
 } from "./chase";
 import { config } from "./config";
 import { DataBroadcast, type ResponseMessage } from "./databroadcast";
@@ -558,9 +559,11 @@ export function whyNotTuned(why: string, until: number | null): string {
 
 interface Viewer {
   /** 送り先。WebSocket の視聴者は Connection、HTTP の視聴者は映像か字幕だけを流すエンドポイント (`sessionStream`・`liveCaptions`) */
-  connection: Pick<Connection, "send">;
+  connection: Pick<Connection, "send"> & Partial<Pick<Connection, "congested">>;
   /** init を渡したか。渡す前に中身を送っても MSE は捨てる */
   ready: boolean;
+  /** 送るのを止めてと言われているか (`{ type: 'hold' }`。追っかけを元の TS で受けているときだけ効く) */
+  held?: boolean;
   /** データ放送を出しているか。**求めた人にだけ配る** */
   wantsData: boolean;
   /**
@@ -1053,7 +1056,9 @@ class Session {
    * (捨てるとその人には以降ずっと映像が出ない)。
    *
    * **そのままの TS も捨ててよい。** 欠けた PES は受け側のデコーダが次の I フレームで立ち直る。
-   * 1局 15Mbit/s を積み続けると、詰まった客1人でサーバの手元が数秒で数十 MB 太る
+   * 1局 15Mbit/s を積み続けると、詰まった客1人でサーバの手元が数秒で数十 MB 太る。
+   * **ただし追っかけの TS は捨てない。** 欠けたら観ていない先が飛ぶ。詰まったら録画のファイルを読むほうを止める
+   * (`openChase` の `held`)
    */
   private hand(viewer: Viewer, kind: number, data: Uint8Array): void {
     if (kind === CHANNEL.videoInit) viewer.ready = true;
@@ -1062,7 +1067,8 @@ class Session {
       kind,
       0n,
       data,
-      kind === CHANNEL.videoMedia || kind === CHANNEL.rawTs,
+      kind === CHANNEL.videoMedia ||
+        (kind === CHANNEL.rawTs && this.source === undefined),
     );
   }
 
@@ -1880,11 +1886,15 @@ class Session {
    * **字幕の ffmpeg が転んでも映像は止めない。** エンコードの経路と違って、映像はそもそも
    * ffmpeg を通っていない。字幕を持たない放送で降りたら、覚えておいて (`captionless`)
    * 次からは起こさない
+   *
+   * **追っかけも同じ** (`source`。録画中のファイルを読む)。違うのは終わり方だけで、読み切ったら `ended` を伝えて閉じる
+   * (エンコードの経路と同じ)。番組が替わっても作り直さないので `restart` は無い
    */
   private async runRaw(label: string): Promise<void> {
     let captioner: RawCaptions | null = null;
+    const chase = this.source !== undefined;
     try {
-      const tuned = await this.tune();
+      const tuned = this.source?.() ?? (await this.tune());
       if (!remembered(captionless, this.serviceId)) captioner = this.captions();
       const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
       const streams = new StreamsWatch();
@@ -1912,7 +1922,7 @@ class Session {
             captioner = this.captions();
           }
           if (out.length === 0) continue;
-          // **詰まったら捨てる** (`hand` の説明)。遅れて全部届くより、飛んで今が映るほうがいい
+          // ライブは詰まったら捨てる。追っかけは捨てずに読むほうを止める (`hand` の説明)
           for (const viewer of this.viewers)
             this.hand(viewer, CHANNEL.rawTs, out);
           this.tellClock();
@@ -1920,7 +1930,12 @@ class Session {
         }
       } catch (error) {
         // 届く前に切れたのは選局の失敗 (下の catch)。届いたあとなら外された
-        if (!this.fed) throw error;
+        if (!this.fed || chase) throw error;
+      }
+      // 追っかけは録れているところまで読み切った。終わりであってエラーではない
+      if (chase) {
+        if (!this.stopped) this.tell({ type: "ended" });
+        return;
       }
       // 届いたあとで途切れた = チューナーから外された。エンコードの経路と同じくリクエストし直させる (`lose`)
       if (this.fed && !this.stopped) return await this.lose(label);
@@ -1929,7 +1944,9 @@ class Session {
       this.died(
         label,
         String(error),
-        whyNotTuned(String(error), resting(this.serviceId)),
+        chase
+          ? "録画を読めませんでした"
+          : whyNotTuned(String(error), resting(this.serviceId)),
       );
     } finally {
       captioner?.stop();
@@ -2163,6 +2180,8 @@ export function chaseStream(
         codec,
         caption: 0,
         language: undefined,
+        // 元の TS は上で直に流す (このストリームでは字幕を運ばない)
+        raw: false,
       },
       viewer,
       hold,
@@ -2560,6 +2579,7 @@ export function warm(
 type Asked =
   | { type: "data"; on: boolean }
   | { type: "language"; language: number }
+  | { type: "hold"; on: boolean }
   | {
       type: "tune";
       channelType: string;
@@ -2585,6 +2605,8 @@ type ChaseAsked = {
   codec: LiveCodec;
   caption: number;
   language: number | undefined;
+  /** 元の TS で欲しいと言われたか (`codec` は効かない) */
+  raw: boolean;
 };
 
 /**
@@ -2612,6 +2634,8 @@ function parseCommand(message: Record<string, unknown>): Asked | null {
       return { type: "data", on: message["on"] === true };
     case "language":
       return language === undefined ? null : { type: "language", language };
+    case "hold":
+      return { type: "hold", on: message["on"] === true };
     case "chase": {
       const at = Number(message["at"]);
       return {
@@ -2623,6 +2647,7 @@ function parseCommand(message: Record<string, unknown>): Asked | null {
         codec: codec === "hevc" ? "h264" : codec,
         caption,
         language,
+        raw: message["raw"] === true,
       };
     }
     case "tune": {
@@ -2685,6 +2710,11 @@ export function attend(connection: Connection): void {
       else current.setLanguage(viewer, asked.language);
       return;
     }
+    // 追っかけの元の TS を送るのを止める・続ける。読む側 (`openChase` の `held`) が見る
+    if (asked.type === "hold") {
+      viewer.held = asked.on;
+      return;
+    }
     if (asked.language !== undefined) viewer.language = asked.language;
     /*
      * **追っかけ再生** (issue #16)。シークも同じ指示の送り直しで、
@@ -2693,6 +2723,8 @@ export function attend(connection: Connection): void {
     if (asked.type === "chase") {
       leave();
       viewer.ready = false;
+      // 止めてと言われていたのは前の位置のぶん。新しい位置は送り始める (画面も止めた印を戻している)
+      viewer.held = false;
       current = openChase(asked, viewer);
       return;
     }
@@ -2811,6 +2843,10 @@ function rememberResume(recordingId: number, resume: ChaseResume): void {
  *
  * **その場の変換の枠を 1 つ使う** (`transcode.ts`)。埋まっていれば断る。畳んだら返す。
  * HTTP のエンドポイント (`chaseStream`) は先に取って `held` で渡す (断るのを 503 にするため)
+ *
+ * **元の TS で送るとき (`raw`) は枠を使わない。** ffmpeg は字幕を写すものだけ (`Session.runRaw`。ライブの MPEG-2 と同じ)。
+ * 倍速の送り込みはそのままで、捨てずに読むほうを止める。止めるのは画面に止めてと言われたとき (`Viewer.held`) と、
+ * 送り先が詰まっているとき (`Connection.congested`)。画面が再生位置を出せるよう、録画の先頭の PTS を `timeline` に載せる
  */
 function openChase(
   asked: ChaseAsked,
@@ -2829,15 +2865,21 @@ function openChase(
     return refuse(text);
   };
 
-  const { recordingId, at, audio: wanted, codec, caption } = asked;
+  const { recordingId, at, audio: wanted, codec, caption, raw } = asked;
   const source = Number.isInteger(recordingId)
     ? chaseSource(recordingId)
     : undefined;
   if (source === undefined) return refuseHeld("録画が見つかりません");
   const { rec, path, size } = source;
   if (size === 0) return refuseHeld("まだ何も録画されていません");
-  const release = held ?? holdTranscode();
+  const release = raw ? (held ?? (() => undefined)) : (held ?? holdTranscode());
   if (release === null) return refuse(BUSY);
+  const stopReading = raw
+    ? () =>
+        viewer.held === true ||
+        viewer.connection.congested === true ||
+        hold?.() === true
+    : hold;
 
   const finished = rec.finished_at !== null;
   // 番組が替わって作り直したところの近くなら、そのバイトから (`chase.ts` の `resumePlan`)
@@ -2857,11 +2899,11 @@ function openChase(
     channel: String(rec.id),
     codecs: codecsFor(codec),
     codec,
-    // 追っかけは変換せずに送る方式 (raw) にしない。録画の TS を倍速で送り込む作りで、受け側の貯め方が別物
-    raw: false,
+    raw,
     audio: audio.id,
     audios: tracks,
   });
+  const origin = raw ? tsFileHead(path) : null;
   tell({
     type: "timeline",
     at: plan.at,
@@ -2872,6 +2914,7 @@ function openChase(
       (rec.end_at + config.endMargin - rec.created_at) / 1000,
     ),
     finished,
+    ...(origin === null ? {} : { origin }),
   });
 
   let session: Session;
@@ -2884,14 +2927,14 @@ function openChase(
       audio,
       codec,
       caption,
-      false,
+      raw,
       () =>
         followFile(
           path,
           plan.offset,
           plan.paceBytesPerSec,
           () => recordingDone(rec.id),
-          hold,
+          stopReading,
         ),
       (consumed) => rememberResume(rec.id, resumeFrom(plan, consumed)),
     );

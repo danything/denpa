@@ -14,10 +14,12 @@
  * シークのたびに ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。
  */
 
-import { statSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { open } from "node:fs/promises";
 
 import { PACKET } from "@danything/arib/psi";
+
+import { tsHead } from "#lib/ts/seek.js";
 
 /** 1回に読む量。小さすぎると read の回数だけ損する */
 const READ_SIZE = 256 * 1024;
@@ -212,4 +214,38 @@ export function fileSize(path: string): number | null {
   } catch {
     return null;
   }
+}
+
+/** 先頭の PTS を探すのに読む量。映像と音声の最初の PES が必ず入る長さ (`playback.ts` の `PROBE_BYTES` と同じ) */
+const HEAD_BYTES = 4 * 1024 * 1024;
+
+/** 読んだ先頭の控え。録画中も先頭は変わらないので、読めたものはパスごとに覚える (追っかけはシークのたびに聞く) */
+const heads = new Map<string, number>();
+/** 覚えておく数。録画中の録画は同時にいくつもない */
+const HEADS_MOST = 32;
+
+/**
+ * **元の TS の先頭の PTS** (90kHz。`ts/seek.ts` の `tsHead`)。追っかけを元の TS で送るとき、画面が再生位置を
+ * 出す物差しの 0 (`live.ts` の `openChase`)。録り始めたばかりで先頭の PES が揃わない・読めなければ null (覚えない)
+ */
+export function tsFileHead(path: string): number | null {
+  const held = heads.get(path);
+  if (held !== undefined) return held;
+  let head: number | null = null;
+  try {
+    const fd = openSync(path, "r");
+    try {
+      const buffer = new Uint8Array(HEAD_BYTES);
+      const length = readSync(fd, buffer, 0, HEAD_BYTES, 0);
+      head = tsHead(buffer.subarray(0, length));
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+  if (head === null) return null;
+  if (heads.size >= HEADS_MOST) heads.delete(heads.keys().next().value!);
+  heads.set(path, head);
+  return head;
 }

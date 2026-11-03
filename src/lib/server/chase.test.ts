@@ -10,6 +10,7 @@ import {
   programMap,
   stream,
 } from "@danything/arib/synth";
+import { packetizePes, pes } from "@danything/arib/synth-av";
 
 import {
   chasePlan,
@@ -17,6 +18,7 @@ import {
   followFile,
   resumeFrom,
   resumePlan,
+  tsFileHead,
 } from "./chase";
 import { chunks } from "./stream";
 
@@ -230,5 +232,61 @@ describe("作り直したところから読み直す (resumePlan)", () => {
     const near = chasePlan(ts.length, 80, resume.at);
     expect(resumePlan(near, resume, resume.until + 1)).toEqual(near);
     expect(resumePlan(near, undefined)).toEqual(near);
+  });
+});
+
+/**
+ * 追っかけを元の TS で送るときの物差しの 0 (`live.ts` の `openChase` が `timeline.origin` に載せる)。
+ * 画面は届いた PTS からこれを引いて再生位置を出す
+ */
+describe("元の TS の先頭の PTS (tsFileHead)", () => {
+  let dir: string | null = null;
+  afterEach(() => {
+    if (dir !== null) rmSync(dir, { recursive: true, force: true });
+    dir = null;
+  });
+
+  /** 映像と音声の PES を1つずつ。映像の PTS は音声より後 */
+  function head(start: number): Uint8Array {
+    const video = packetizePes(
+      0x100,
+      pes(0xe0, start + 3003, new Uint8Array(300)),
+      0,
+    ).packets;
+    const audio = packetizePes(
+      0x110,
+      pes(0xc0, start, new Uint8Array(7)),
+      0,
+    ).packets;
+    const out = new Uint8Array(video.length + audio.length);
+    out.set(video);
+    out.set(audio, video.length);
+    return out;
+  }
+
+  test("映像と音声の最初の PTS の早いほう (観る画面の物差しと同じ `tsHead`)", () => {
+    dir = mkdtempSync(join(tmpdir(), "chase-"));
+    const path = join(dir, "rec.ts");
+    writeFileSync(path, head(900_000));
+    expect(tsFileHead(path)).toBe(900_000);
+  });
+
+  test("読めたものは覚える (録画中も先頭は変わらない)", () => {
+    dir = mkdtempSync(join(tmpdir(), "chase-"));
+    const path = join(dir, "rec.ts");
+    writeFileSync(path, head(1_800_000));
+    expect(tsFileHead(path)).toBe(1_800_000);
+    writeFileSync(path, head(2_700_000));
+    expect(tsFileHead(path)).toBe(1_800_000);
+  });
+
+  test("まだ先頭が揃っていなければ null で、覚えずに次に読み直す", () => {
+    dir = mkdtempSync(join(tmpdir(), "chase-"));
+    const path = join(dir, "rec.ts");
+    expect(tsFileHead(path)).toBeNull();
+    writeFileSync(path, new Uint8Array(0));
+    expect(tsFileHead(path)).toBeNull();
+    writeFileSync(path, head(450_000));
+    expect(tsFileHead(path)).toBe(450_000);
   });
 });

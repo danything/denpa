@@ -145,6 +145,11 @@ export type Notice =
       totalSec: number;
       /** 録り終わっているか。true なら右端はもう伸びない */
       finished: boolean;
+      /**
+       * 元の TS で送るとき (`ChaseCommand.raw`)、**録画の先頭の PTS** (90kHz。`ts/seek.ts` の `tsHead`)。画面は届いた
+       * PTS からこれを引いて再生位置を出す (`sinceHead`)。バイト比例の当たり (`at`) より正しい。読めなければ省く
+       */
+      origin?: number;
     }
   | {
       /**
@@ -267,13 +272,20 @@ export type Command =
    * 字幕の言語を選ぶ (第何言語か。1〜8)。**再エンコードしない** — 字幕のストリーム1本に全部の言語が入っていて、
    * サーバは全部デコードしている (`server/captions.ts` の `CaptionText`)。出す言語を視聴者ごとに替えるだけ
    */
-  | { type: "language"; language: number };
+  | { type: "language"; language: number }
+  /**
+   * 追っかけを元の TS で受けているとき (`ChaseCommand.raw`)、**送るのを止める・続ける**。サーバは倍速で
+   * 送り込む (`server/chase.ts`) が、元の TS は捨てると観ていない先が欠ける。捨てる代わりに、画面が手元の量と
+   * 止めているかを見て止めさせる。止めている間、サーバは録画のファイルを読まずに待つ
+   */
+  | { type: "hold"; on: boolean };
 
 /**
  * 追っかけ再生 — **録画中の録画を頭から観る** (issue #16)。
  *
  * チューナーは使わない。録画が書き足している元のTSをサーバが追い読みして、
  * ライブと同じ形式 (fMP4 → この WebSocket) で再エンコードする (`server/chase.ts`)。
+ * `raw` なら再エンコードせず、元の TS をそのまま送る (ライブの MPEG-2 と同じ `CHANNEL.rawTs`)。
  *
  * **シークもこれを送り直す。** 元のTSに時間の索引は無いので、飛ぶときは
  * ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。バッファに残っている
@@ -292,6 +304,8 @@ type ChaseCommand = {
   caption?: number;
   /** 字幕の第何言語を出すか (1〜8)。省くと第1言語 */
   language?: number;
+  /** **エンコードせずに元の TS で欲しい** (`TuneCommand.raw` と同じ。`codec` は効かない) */
+  raw?: boolean;
 };
 
 type TuneCommand = {
