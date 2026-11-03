@@ -352,7 +352,7 @@
     --c-hover: var(--dp-on-video-hover);
     --c-face: var(--dp-video-menu);
     --c-field: rgb(255 255 255 / 0.12);
-    --c-shadow: 0 2px 6px rgb(0 0 0 / 0.35), 0 18px 40px rgb(0 0 0 / 0.45);
+    --c-shadow: var(--dp-video-shadow);
     display: flex;
     flex-direction: column;
     gap: var(--dp-space-1);

@@ -141,7 +141,7 @@
      */
   .pop {
     --volume-empty: var(--dp-video-menu);
-    --volume-shadow: 0 2px 6px rgb(0 0 0 / 0.35), 0 18px 40px rgb(0 0 0 / 0.45);
+    --volume-shadow: var(--dp-video-shadow);
     position: absolute;
     left: 50%;
     bottom: 100%;
