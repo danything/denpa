@@ -34,7 +34,7 @@ import {
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
 import { forget, read, write } from "#lib/keep.js";
-import { nextHold, rawChasePosition } from "#lib/live-chase.js";
+import { holdStep, rawChasePosition } from "#lib/live-chase.js";
 import {
   autoCodec,
   formatLabel,
@@ -1206,10 +1206,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     send({ type: "language", language: index });
   }
 
-  /** 繋がっていれば指示を送る */
-  function send(command: Command): void {
-    if (socket !== null && socket.readyState === WebSocket.OPEN)
-      socket.send(JSON.stringify(command));
+  /** 指示を送る。**送れたか**を返す (繋がっていない・繋ぎ直している間は送らずに false) */
+  function send(command: Command): boolean {
+    if (socket === null || socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify(command));
+    return true;
   }
 
   /** 字幕を出す・消す。端末ごとに覚える (`caption-pref.ts`) */
@@ -2440,7 +2441,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * 追っかけを元の TS で受けているときの再生位置 (`base` からの秒)。PTS は放送の時刻のままなので、録画の先頭の PTS
-   * (`origin`) を引いて通しの位置を出す (観る画面の MPEG-2 と同じ `sinceHead`)。バイト比例で当たりを付けた `base`
+   * (`origin`) を引いて通しの位置を出す (観る画面の MPEG-2 と同じ `sinceHead`)。バイト数から割り出した `base`
    * より正しい。`origin` が無ければ、鳴らし始めた位置を `base` とみなす
    */
   function rawChaseAt(at: number, base: number): number {
@@ -2450,14 +2451,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 追っかけを元の TS で受けているとき、**サーバに送るのを止めさせる・続けさせる** (`{ type: 'hold' }`)。サーバは倍速で
-   * 送り込み、元の TS は捨てられない (捨てると観ていない先が欠ける) ので、手元が溜まったら止めさせる。止めている間も止めさせる
+   * 追っかけを元の TS で受けているとき、**サーバに送るのを止めさせる・続けさせる** (`{ type: 'hold' }`。`live-chase.ts` の `holdStep`)。
+   * サーバは倍速で送り込み、元の TS は捨てられない (捨てると観ていない先が欠ける) ので、受信バッファが溜まったら止めさせる。
+   * 一時停止している間も止めさせる。**送れたときだけ覚える。** 繋ぎ直している間に送れなかったぶんは、繋がってから送り直す
    */
   function holdFeed(lead: number): void {
-    const next = nextHold(feedHeld, lead, paused);
-    if (next === feedHeld) return;
-    feedHeld = next;
-    send({ type: "hold", on: next });
+    feedHeld = holdStep(feedHeld, lead, paused, (on) =>
+      send({ type: "hold", on }),
+    );
   }
 
   return {
