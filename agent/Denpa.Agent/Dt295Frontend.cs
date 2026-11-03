@@ -23,6 +23,7 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
 
     /// <summary>衛星を選んでいる (地上波へ戻すときに先に衛星をスリープさせる。8.7)</summary>
     public bool SatelliteActive { get; private set; }
+    private bool _terrestrialReady;
 
     // ---------------------------------------------------------------------
     // 周波数 (7.1・8.1)
@@ -230,7 +231,8 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
         TerrestrialDivider(hz);
         RequireAuthenticated();
         if (SatelliteActive) SleepSatellite();
-        InitTerrestrial();
+        if (!_terrestrialReady) InitTerrestrial();
+        _terrestrialReady = true;
         Rf(0x0B, 1);
         Rf(0x12, 1);
         Sleep(20);
@@ -387,6 +389,7 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
         InitSatellite();
         SleepTerrestrial();
         SatelliteActive = true;
+        _terrestrialReady = false;
         // 1〜4
         Sat(0x1E, (byte)((SatRead(0x1E) & 0xCF) | 0x20));
         RfWake();

@@ -531,7 +531,7 @@ public sealed class Dt295Device
         UploadTrc(trc);
         ClearSettings();
         fields.Apply(_bridge);
-        Dt295Routes.Write(_bridge, plan, main);
+        Dt295Routes.Write(_bridge, plan, main, cleared: true);
         var pause = PauseState();
         if (pause != fields.Pause) throw new Dt295Exception($"一時停止の状態番号が読み戻しで {pause} です (フィールド表からは {fields.Pause})");
         StartAcquisition();
