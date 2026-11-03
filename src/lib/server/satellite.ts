@@ -10,7 +10,9 @@
  * - **入口は規格の周波数の中継器。** 中継器の周波数は再編でも変わらない。CATV で一部の中継器しか通らない家のために、
  *   候補を 3 つ持つ (`ENTRANCES`)
  * - **CS はネットワークが 2 つ** (6 と 7)。NIT[other] にもう片方の TS と周波数は載るがサービスの一覧が無く、
- *   SDT[other] も自分のネットワークの分だけ (本番で確かめた)。なので、もう片方のネットワークの中継器も 1 つ開く
+ *   SDT[other] も自分のネットワークの分だけ (本番で確かめた)。なので、もう片方のネットワークの中継器も 1 つ開く。
+ *   NIT[other] は NIT[actual] と別に流れてくるので、そろうまで待つ (待たずに打ち切ると、もう片方のネットワークが丸ごと落ちる)。
+ *   読めなかったネットワークは今のチャンネルを残し、欠けた一覧で置き換えない
  *
  * NIT は「放送されているもの」で「その家で受信できるもの」ではない。受信できない中継器が混ざりうる。
  */
@@ -203,6 +205,9 @@ export interface TableRead {
 /**
  * 流れてくる TS から NIT と SDT を読む。**自分のネットワークの NIT がそろい、そこに載っているテレビの局の
  * 名前が SDT でそろったら打ち切る。** そろわなくても `timeout` で打ち切る (名前は欠けたまま返す)
+ *
+ * `other` を渡すと、それに当てはまる NIT[other] がそろうまでも待つ。CS はこれでもう片方のネットワークの
+ * 中継器を知る。NIT[actual] と NIT[other] は別々に流れてくるので、actual と局名だけで打ち切ると other を読み落とす
  */
 export async function readTables(
   stream: ReadableStream<Uint8Array>,
@@ -210,6 +215,7 @@ export async function readTables(
   abort?: AbortSignal,
   /** 同じストリームから番組表も取得する (スキャンのついで) */
   epg?: EpgReader,
+  other?: (network: Network) => boolean,
 ): Promise<TableRead> {
   const nit = new NitReader();
   const sdt = new SdtReader();
@@ -234,7 +240,7 @@ export async function readTables(
       // 両方に渡す (`||` でつなぐと、NIT が変わった回に SDT を読み落とす)
       const network = nit.feed(value);
       const names = sdt.feed(value);
-      if ((network || names) && settled(nit, sdt)) return;
+      if ((network || names) && settled(nit, sdt, other)) return;
     }
   })().catch((reason: unknown) => {
     error = String(reason).trim().split("\n").at(-1)?.trim() ?? "";
@@ -247,10 +253,19 @@ export async function readTables(
   return { nit, sdt, signal, error };
 }
 
-/** 自分のネットワークの NIT がそろい、テレビの局の名前が全部そろったか */
-function settled(nit: NitReader, sdt: SdtReader): boolean {
+/** 自分のネットワークの NIT がそろい、テレビの局の名前が全部そろったか (`other` があれば、その NIT[other] も) */
+function settled(
+  nit: NitReader,
+  sdt: SdtReader,
+  other?: (network: Network) => boolean,
+): boolean {
   const network = nit.actual;
   if (network === null) return false;
+  if (
+    other !== undefined &&
+    !nit.networks().some((candidate) => candidate.other && other(candidate))
+  )
+    return false;
   const named = new Set<string>();
   for (const table of sdt.tables()) {
     for (const service of table.services) {
@@ -286,13 +301,35 @@ export interface Lineup {
   log: string[];
   /** 読めたネットワーク。1 つも無ければ一覧は作れていない */
   networks: number[];
+  /**
+   * あるはずなのに読めなかったネットワーク (CS)。前の控えにそのネットワークのチャンネルがあれば、
+   * `channels` にそのまま残してある。呼ぶ側は間をあけて読み直す
+   */
+  missing: number[];
+}
+
+/** そのネットワークの、その種別の中継器を 1 つ (入口に使う)。載っていなければ null */
+function firstTransponder(
+  type: SatelliteType,
+  network: Network,
+): number | null {
+  for (const ts of network.transportStreams) {
+    if (ts.delivery?.kind !== "satellite") continue;
+    const transponder = transponderOf(type, ts.delivery.frequency);
+    if (transponder !== null) return transponder;
+  }
+  return null;
 }
 
 /**
  * **その種別の一覧を、入口から NIT を読んで作る。**
  *
  * `open` は中継器を開く (チューナーの空き待ちは呼ぶ側)。BS は入口を 1 つ読めば足りる。CS は、読んだ NIT[other] に
- * 載っているまだ読んでいないネットワークの中継器を、ネットワークごとに 1 つ開く。
+ * 載っているまだ読んでいないネットワークの中継器を、ネットワークごとに 1 つ開く。NIT[other] を読めなかったときは、
+ * 残りの入口も開く (CS-2 と CS-4 はネットワークが違う)。
+ *
+ * **CS は、ネットワークが欠けた一覧を返さない。** 読めなかったネットワークは `missing` に入れ、`previous` (今の控え)
+ * にあったそのネットワークのチャンネルを残す。NIT[other] を読めて、そこに載っていないネットワークは無くなったものとして残さない。
  * 1 つもネットワークが読めなければ、`networks` が空の結果を返す (呼ぶ側は控えを書き換えない)
  */
 export async function readLineup(
@@ -302,6 +339,10 @@ export async function readLineup(
     timeout: number;
     abort?: AbortSignal;
     known?: ReadonlyMap<string, string>;
+    /** 今の控えのチャンネル。CS で読めなかったネットワークのぶんを残す */
+    previous?: readonly AgentChannel[];
+    /** 控えのほかに、あるはずのネットワーク (CS。NIT[other] を読めなかったときに `missing` を決める) */
+    expected?: readonly number[];
     /** 読んだ番組表を渡す先 (スキャンのついで) */
     onEvents?: (epg: EpgReader) => void;
     /** 中継器を 1 つ読むたびに、読んだ NIT と SDT を渡す先 (再編に付いていく。`lineup-follow.ts`) */
@@ -316,11 +357,24 @@ export async function readLineup(
     type
   ].map((channel) => ({ channel, network: null }));
   const tried = new Set<string>();
+  /** NIT[other] に載っていた、その種別の中継器を持つネットワーク (CS) */
+  const listed = new Set<number>();
+  const several = type === "CS";
+  /** NIT[other] を読めたか (CS)。読めていなければ、まだ読んでいないネットワークがあるかもしれない */
+  const sawOther = () => listed.size > 0;
+  /** CS で、まだ読みたいネットワークがあるか */
+  const wanting = () =>
+    several &&
+    (!sawOther() || [...listed].some((network) => !networks.has(network)));
+  const otherOfType = several
+    ? (network: Network) => firstTransponder(type, network) !== null
+    : undefined;
 
   while (queue.length > 0 && options.abort?.aborted !== true) {
     const job = queue.shift()!;
-    // 入口は 1 つ読めたら残りは要らない。ネットワークを指した中継器は、そのネットワークがまだのときだけ
-    if (job.network === null && networks.size > 0) continue;
+    // 入口は 1 つ読めたら残りは要らない (CS は、まだ読みたいネットワークがあれば開く)。
+    // ネットワークを指した中継器は、そのネットワークがまだのときだけ
+    if (job.network === null && networks.size > 0 && !wanting()) continue;
     if (job.network !== null && networks.has(job.network)) continue;
     if (tried.has(job.channel)) continue;
     tried.add(job.channel);
@@ -333,7 +387,13 @@ export async function readLineup(
       continue;
     }
     const epg = new EpgReader();
-    const read = await readTables(stream, options.timeout, options.abort, epg);
+    const read = await readTables(
+      stream,
+      options.timeout,
+      options.abort,
+      epg,
+      otherOfType,
+    );
     const network = read.nit.actual;
     if (network === null) {
       log.push(
@@ -353,16 +413,13 @@ export async function readLineup(
       `${job.channel}: ネットワーク ${network.networkId} の ${network.transportStreams.length} TS を読みました`,
     );
 
-    if (type !== "CS") continue;
+    if (!several) continue;
     for (const other of read.nit.networks()) {
-      if (!other.other || networks.has(other.networkId)) continue;
-      const ts = other.transportStreams.find(
-        (candidate) =>
-          candidate.delivery?.kind === "satellite" &&
-          transponderOf(type, candidate.delivery.frequency) !== null,
-      );
-      if (ts === undefined || ts.delivery?.kind !== "satellite") continue;
-      const transponder = transponderOf(type, ts.delivery.frequency)!;
+      if (!other.other) continue;
+      const transponder = firstTransponder(type, other);
+      if (transponder === null) continue;
+      listed.add(other.networkId);
+      if (networks.has(other.networkId)) continue;
       queue.push({
         channel: channelName(type, transponder),
         network: other.networkId,
@@ -380,5 +437,42 @@ export async function readLineup(
     log.push(
       `${type} の中継器として読めない TS を入れませんでした (TSID ${skipped.join(", ")})`,
     );
-  return { channels, log, networks: [...networks.keys()] };
+
+  const previous = (options.previous ?? []).filter(
+    (channel) => channel.type === type,
+  );
+  const expected = sawOther()
+    ? listed
+    : new Set([
+        ...(options.expected ?? []),
+        ...previous.map((channel) => channel.networkId),
+      ]);
+  const missing = several
+    ? [...expected]
+        .filter((network) => !networks.has(network))
+        .sort((a, b) => a - b)
+    : [];
+  // 1 つも読めなければ一覧は作れていない (控えを書き換えない)。残すのは読めたネットワークがあるときだけ
+  if (networks.size > 0) {
+    for (const network of missing) {
+      const kept = previous.filter((channel) => channel.networkId === network);
+      channels.push(...kept);
+      log.push(
+        `${type}: ネットワーク ${network} を読めませんでした${
+          kept.length === 0
+            ? ""
+            : `。今のチャンネル (${kept.length} TS) を残します`
+        }`,
+      );
+    }
+    channels.sort((a, b) =>
+      a.channel.localeCompare(b.channel, "en", { numeric: true }),
+    );
+  }
+  return {
+    channels,
+    log,
+    networks: [...networks.keys()],
+    missing,
+  };
 }

@@ -327,7 +327,8 @@ class Scanner {
       });
       return;
     }
-    const known = knownNames(await getChannels().catch(() => []));
+    const current = await getChannels().catch(() => []);
+    const known = knownNames(current);
     const lineup = await readLineup(
       type,
       (channel) => this.openWaiting(type, channel),
@@ -335,6 +336,8 @@ class Scanner {
         timeout: TUNE_TIMEOUT,
         abort: this.aborter.signal,
         known,
+        // CS で読めなかったネットワークは今のチャンネルを残す (欠けた一覧で置き換えない)
+        previous: current,
         onEvents: (epg) => this.events.push(...epg.all()),
       },
     );
