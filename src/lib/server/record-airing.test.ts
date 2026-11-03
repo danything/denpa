@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import { eq } from "drizzle-orm";
 
+import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+
 /**
  * **いま流れている番組を録る** (`recordAiring`) と、番組ごとの予約の状態 (`reservationStates`)。
  *
@@ -17,6 +19,7 @@ import { eq } from "drizzle-orm";
 const tuners = [{ types: ["GR"] }];
 const agent = Bun.serve({
   port: 0,
+  tls: fakeAgentTls(),
   fetch: () =>
     Response.json({
       tuners: tuners.map((tuner, index) => ({
@@ -40,7 +43,8 @@ config.dbPath = join(
   mkdtempSync(join(tmpdir(), "denpa-record-airing-")),
   "denpa.db",
 );
-config.agentUrl = `http://127.0.0.1:${agent.port}`;
+config.agentUrl = fakeAgentUrl(agent.port!);
+trustFakeAgent();
 
 const { orm } = await import("./db");
 const { programs, recordings, reservations, services } =

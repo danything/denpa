@@ -1,6 +1,6 @@
 {{- if .Values.agent.networkPolicy.enabled }}
 # エージェントへは denpa の Pod からだけ繋がせる (values.yaml の agent.networkPolicy)。
-# エージェントは認証を持たず、/denpa/stream は復号済みの TS を返す (docs/agent.md「エージェントは認証を持たない」)
+# エージェントは組んだ denpa にしか答えないが、届く相手も絞る (docs/agent.md)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

@@ -14,7 +14,7 @@ namespace Denpa.Agent;
 /// <para>
 /// **普通の API (<c>AGENT_PORT</c>) とは別のポートで受ける** (<see cref="CardLanPolicy.Port"/>)。
 /// 鍵を配るために普通の API まで開かずに済むように (普通の API も /denpa/stream が復号済みの TS を返すので、
-/// 世帯の外へは出さない。docs/agent.md「エージェントは認証を持たない」)。このポートで答えるのは
+/// 組んだ denpa しか通さない。docs/agent.md「denpa とは TLS で組む」)。**このポートは平文の HTTP のまま**で、答えるのは
 /// <c>/denpa/card/init</c> と <c>/denpa/card/ecm</c> だけで、どちらも相手のアドレスと
 /// (決めてあれば) 往復時間を確かめてから答える。接続には TTL を付ける (<see cref="CardLan"/>)。
 /// </para>

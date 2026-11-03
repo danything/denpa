@@ -1,0 +1,12 @@
+# denpa と組むときの合言葉 (values.yaml の pairToken。docs/agent.md)。エージェントには AGENT_PAIR_TOKEN で渡し、
+# denpa の TUNER_AGENT_URL には #pair= で書く (読み方は NOTES.txt)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tuner-agent-pair
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "denpa-agent.labels" . | nindent 4 }}
+type: Opaque
+data:
+  token: {{ include "denpa-agent.pairToken" . | b64enc | quote }}

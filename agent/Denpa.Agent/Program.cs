@@ -1,9 +1,11 @@
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Authentication;
 using System.Text;
 using System.Text.Json.Nodes;
 using Denpa.Agent;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 
 /*
  * チューナーエージェント。**機材に触るのはここだけ。**
@@ -40,6 +42,37 @@ if (args is ["--version"])
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
 if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
+
+var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out var configured)
+    ? configured
+    : 25252;
+var config = Config.FromEnvironment();
+
+/*
+ * denpa と組むときの URL を出して終わる。サーバは立てない (鍵と合言葉が無ければここで作る。AgentTls.cs)。
+ * 組んだ相手がいて起動のログに出なくなってからも、これで見られる
+ */
+if (args is ["--pair"])
+{
+    // 標準出力には URL だけを出す (スクリプトで読めるように)。鍵を作ったなどの知らせは標準エラーへ
+    var stdout = Console.Out;
+    Console.SetOut(Console.Error);
+    stdout.WriteLine(AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN")).PairUrl(port));
+    return 0;
+}
+/*
+ * 動いているエージェントの /denpa/tuners を自分の証明書で読んで出す (インストーラが様子を見る。AgentTls.Status)。
+ * 待ち受けを AGENT_HOST で絞っていればそのアドレスへ、そうでなければループバックへ繋ぐ
+ */
+if (args is ["--status"])
+{
+    var target = Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } bound
+        && IPAddress.TryParse(bound, out var address)
+        && !address.Equals(IPAddress.Any) && !address.Equals(IPAddress.IPv6Any)
+        ? bound
+        : "127.0.0.1";
+    return await AgentTls.Status(config.TlsDir, target, port);
+}
 /*
  * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ刺さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
@@ -49,17 +82,16 @@ if (args.Length > 0)
     Console.Error.WriteLine($"知らない引数です: {string.Join(" ", args)}");
     Console.Error.WriteLine("usage: denpa-agent                     (引数なしでサーバとして立ち上がる)");
     Console.Error.WriteLine("       denpa-agent --version");
+    Console.Error.WriteLine("       denpa-agent --pair                (denpa と組むときの URL を出す)");
+    Console.Error.WriteLine("       denpa-agent --status              (動いているエージェントの /denpa/tuners を出す)");
     Console.Error.WriteLine($"       {Probe.TuneUsage}");
     Console.Error.WriteLine($"       {Probe.DecodeUsage}");
     Console.Error.WriteLine($"       {Probe.CardUsage}");
     return 2;
 }
 
-var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out var configured)
-    ? configured
-    : 25252;
 /*
- * 待ち受けるアドレス (AGENT_HOST)。既定は全部のインターフェース。**エージェントは認証を持たない**ので、
+ * 待ち受けるアドレス (AGENT_HOST)。既定は全部のインターフェース。組んだ denpa しか通さない (AgentTls.cs) が、
  * 同じ機械の denpa からしか繋がない構成ではループバック (127.0.0.1) に絞る (Mac の install.sh)。
  * 鍵を配るポート (CARD_SHARE_PORT) はこれに従わない (LAN の別の拠点に配るので。CardShareServer.cs)
  */
@@ -79,7 +111,8 @@ var recorded = Path.GetFullPath(
     Environment.GetEnvironmentVariable("RAW_DIR")
     ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") ?? "/media", "raw"));
 
-var config = Config.FromEnvironment();
+// 自分の鍵と証明書、合言葉、組んだ denpa (tuners.json の隣の tls/。AgentTls.cs)
+var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN"));
 // CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。Zd1j.cs)
 Zd1jBoard.Locks = new Zd1jLocks(config.Zd1jLocksFile);
 var events = new Events();
@@ -131,10 +164,21 @@ void PrepareDaemons()
 var builder = WebApplication.CreateSlimBuilder(args);
 // 鍵を配るポートだけは待ち受けを自分で作る (IPv4 と IPv6 を分けて TTL を付ける。CardShareServer.cs)
 if (sharing is { } server) builder.WebHost.UseSockets(sockets => sockets.CreateBoundListenSocket = server.Bind);
+/*
+ * **普通のポートは HTTPS だけ。クライアント証明書を必須にする** (出さない相手は TLS の段で落ちる。ブラウザはここで止まる)。
+ * TLS の段ではどの証明書も受け、見分けるのは下の門 (AgentTls.Decide)。鍵を配るポートは平文のまま (CardShareServer.cs)
+ */
+var https = new HttpsConnectionAdapterOptions
+{
+    ServerCertificate = tls.Certificate,
+    ClientCertificateMode = ClientCertificateMode.RequireCertificate,
+    ClientCertificateValidation = (_, _, _) => true,
+    SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+};
 builder.WebHost.ConfigureKestrel(options =>
 {
-    if (host is null) options.ListenAnyIP(port);
-    else options.Listen(host, port);
+    if (host is null) options.ListenAnyIP(port, listen => listen.UseHttps(https));
+    else options.Listen(host, port, listen => listen.UseHttps(https));
     sharing?.Listen(options);
     // 選局は何時間も開きっぱなしになる。既定のまま切られると録画が落ちる
     options.Limits.KeepAliveTimeout = TimeSpan.FromDays(365);
@@ -164,40 +208,26 @@ var app = builder.Build();
 if (sharing is not null) app.Use(sharing.Serve);
 
 /*
- * **知らない名前で呼ばれたら答えない** (403。AgentHosts.cs)。アドレスで届く範囲を絞っても、
- * 悪いサイトが自分の名前を 127.0.0.1 に向け直せば、そのサイトを開いたブラウザから読み出しの GET が届く
- */
-var hosts = AgentHosts.FromEnvironment();
-app.Use(async (HttpContext http, RequestDelegate next) =>
-{
-    var named = http.Request.Headers.Host.ToString();
-    if (hosts.Allows(named))
-    {
-        await next(http);
-        return;
-    }
-    var shown = named.Length > 0 ? named : "(名前なし)";
-    if (hosts.FirstRefusal(shown))
-    {
-        Log.Write($"知らない名前「{shown}」で呼ばれたので断りました (403)。この名前で繋ぐなら AGENT_ALLOWED_HOSTS に足してください (docs/agent.md)");
-    }
-    await Respond.Error(http, $"「{shown}」という名前では答えません。この名前で繋ぐなら AGENT_ALLOWED_HOSTS に足してください", 403);
-});
-
-/*
- * **本文を読む API (PUT / POST) は application/json しか受けない** (415)。ブラウザは text/plain などの
- * POST を下調べ (preflight) なしに送るので、受けていると、開いた外のサイトから LAN の中の
- * エージェントへ書き込めてしまう。JSON と名乗れば下調べが入り、エージェントは CORS に答えないので止まる
+ * **門。組んだ denpa しか通さない** (AgentTls.cs)。相手の証明書の指紋が clients にあれば通し、
+ * 無ければ組む API (POST /denpa/pair) だけ受ける
  */
 app.Use(async (HttpContext http, RequestDelegate next) =>
 {
-    var method = http.Request.Method;
-    if ((HttpMethods.IsPost(method) || HttpMethods.IsPut(method)) && !Json.IsJsonContentType(http.Request.ContentType))
+    var peer = http.Connection.ClientCertificate is { } client ? AgentTls.FingerprintOf(client) : null;
+    switch (tls.Decide(peer, http.Request.Method, http.Request.Path.Value ?? ""))
     {
-        await Respond.Error(http, "本文は application/json で送ります", 415);
-        return;
+        case AgentTls.Gate.Pass:
+            await next(http);
+            return;
+        case AgentTls.Gate.Pair:
+            var result = tls.Pair(peer, await Respond.Read(http));
+            if (result.Proof is { } proof) await Respond.Write(http, new JsonObject { ["proof"] = proof });
+            else await Respond.Error(http, result.Error!, result.Status);
+            return;
+        default:
+            await Respond.Error(http, AgentTls.NotPaired, 403);
+            return;
     }
-    await next(http);
 });
 
 // --- 選局。**エージェントの表看板** ---------------------------------------
@@ -484,7 +514,13 @@ app.Lifetime.ApplicationStopped.Register(() =>
     UserlandDaemon.StopAll();
 });
 
-Log.Write($"listening on {(host is null ? $"*:{port}" : new IPEndPoint(host, port).ToString())} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
+Log.Write($"listening on https://{(host is null ? $"*:{port}" : new IPEndPoint(host, port).ToString())} (tuners: {config.TunersFile} / channels: {config.ChannelsFile})");
+Log.Write($"証明書 {tls.Fingerprint[..16]}… / 組んだ denpa {tls.Clients.Count} 台 ({tls.Dir})");
+/*
+ * **組む URL は、組んだ相手がまだいないときだけ出す。** 標準出力にだけ書き、/denpa/logs には残さない
+ * (あちらは組んだ denpa が読み、不具合報告に入る。合言葉を載せない)
+ */
+if (tls.Clients.Count == 0) Console.WriteLine($"[agent] denpa と組むときの URL: {tls.PairUrl(port)}");
 if (sharing is not null)
 {
     var limit = cardLan.MaxRoundTrip is { } max ? $"{max.TotalMilliseconds}ms まで" : "見ない";

@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 import { count, eq, sql } from "drizzle-orm";
 
+import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+
 /**
  * 局だけの取り込み。
  *
@@ -40,6 +42,7 @@ let offered = [
 
 const server = Bun.serve({
   port: 0,
+  tls: fakeAgentTls(),
   fetch(request) {
     const path = new URL(request.url).pathname;
     asked.push(path);
@@ -47,7 +50,8 @@ const server = Bun.serve({
     return new Response("not found", { status: 404 });
   },
 });
-config.agentUrl = `http://127.0.0.1:${server.port}`;
+config.agentUrl = fakeAgentUrl(server.port!);
+trustFakeAgent();
 
 const { orm } = await import("./db");
 const { programs, recordings, reservations, services } =

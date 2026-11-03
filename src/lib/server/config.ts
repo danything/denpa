@@ -47,12 +47,10 @@ export const config = {
    *
    * 選局もスクランブルの復号もチャンネルスキャンも、全部ここが窓口。
    * B-CASカードのリーダーを使うのも向こう側。
-   * 別PCのチューナーを足すときは、そのPCのエージェントを指す
+   * 別PCのチューナーを足すときは、そのPCのエージェントを指す。
+   * `https://<名前>:<ポート>#pair=<合言葉>` の形 (agent-client.ts)
    */
-  agentUrl: str("TUNER_AGENT_URL", "http://tuner-agent:25252").replace(
-    /\/+$/,
-    "",
-  ),
+  agentUrl: str("TUNER_AGENT_URL", "https://tuner-agent:25252"),
 
   /**
    * チューナーの取り合いでの優先度。**大きいほうが勝つ。**

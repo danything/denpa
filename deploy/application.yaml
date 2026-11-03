@@ -148,3 +148,11 @@ spec:
         # dataSourceRef(VolSync の populator)は作るときにしか書けない。今ある PVC には当てない
         - /spec/dataSourceRef
         - /spec/dataSource
+    # **エージェントと組む合言葉は最初に作ったものを残す。** chart はクラスタの Secret を lookup で読み直して
+    # 変えない作りだが、ArgoCD はクラスタを見ずに描くので、描くたびに新しい値になる。そのまま当てると
+    # ずっと差分が出たうえ、Secret が変わるたびに Reloader が denpa を入れ替える (charts/denpa/values.yaml の agent の説明)
+    - group: ""
+      kind: Secret
+      name: tuner-agent-pair
+      jsonPointers:
+        - /data

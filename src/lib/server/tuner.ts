@@ -22,6 +22,7 @@ import {
   tolerate,
 } from "../shape";
 import type { ChannelType } from "../types";
+import { agentFetch } from "./agent-client";
 import { config } from "./config";
 import type { Busy } from "./conflict";
 
@@ -104,7 +105,7 @@ export function programKey(
 }
 
 async function get<T>(path: string, shape: Shape<T>): Promise<T> {
-  const res = await fetch(`${config.agentUrl}${path}`, {
+  const res = await agentFetch(path, {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(10_000),
   });
@@ -118,7 +119,7 @@ async function get<T>(path: string, shape: Shape<T>): Promise<T> {
 
 /** 書き換えを預ける。控えを書くのを待つので、読むより長く待つ */
 function put(path: string, body: unknown): Promise<Response> {
-  return fetch(`${config.agentUrl}${path}`, {
+  return agentFetch(path, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -297,7 +298,7 @@ export async function openChannelStream(
     use,
   });
   for (const leaving of after) query.append("after", leaving);
-  const res = await fetch(`${config.agentUrl}/denpa/stream?${query}`, {
+  const res = await agentFetch(`/denpa/stream?${query}`, {
     signal,
   });
   if (!res.ok || res.body === null) {
