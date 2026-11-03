@@ -6,7 +6,7 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 
 チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#px4-userland-の作り)。
 
-「Amazon で見る」は Amazon のアソシエイトのリンク (広告) です。ここから買っても値段は変わらず、紹介料が denpa の開発を続ける費用になります。どこで買っても動作は同じです。
+「Amazon で見る」は広告のリンクです ([tuners.md](tuners.md))。
 
 [px4-userland](https://github.com/Khronos31/px4-userland) を**エージェントのイメージに同梱**しています
 (`agent/Dockerfile`)。libusb だけで USB を扱うユーザー空間のドライバで、`/dev/bus/usb` が見えれば動き、
@@ -30,8 +30,8 @@ Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=
   古い `q3u4:<14桁>:<受信機>` は「知らないデバイス」として断るので、書いてあれば
   `px4:` に書き直してください (番号と受信機はそのまま)
 - **番号が重なる筐体 (`serial_unique=false`) は、USB ポートで見分けます。** PX-M1UR と PX-S1UR は
-  どれも USB の serial が `000000000000001` で、0.1.9 からは同時に挿すと別々の ready な
-  筐体として並びます (0.1.8 までは 1 つの `duplicate`)。番号のままだと同じ
+  どれも USB の serial が `000000000000001` で、同時に挿すと別々の ready な
+  筐体として並びます。番号のままだと同じ
   `px4:000000000000001:0` が 2 つでき、`px4d --device` も番号だけでは 1 台に決められず断ります。
   そこで名前を番号と USB ポートにし (`px4:000000000000001_1-2.3:0`)、`px4d` を
   `--device <番号> --usb-path <USBポート> --instance <名前>` で起こし、`px4ctl` やソケットも
@@ -43,7 +43,7 @@ Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=
 - **15V は 2 段階で許可します。** `px4d` には `--allow-lnb-power` を渡し、実際に要求するのは
   設定に `lnb: 15v` と書いたチューナーだけ (TUNE の `lnb_voltage` = 15)。`11v` は
   px4-userland に無い (0V か 15V) ので要求しません
-- **15V を出せない受信機では 0V で選局します** (`Px4Tuner.Lnb`)。px4-userland 0.1.8 から、
+- **15V を出せない受信機では 0V で選局します** (`Px4Tuner.Lnb`)。
   1 受信機の機種 (PX-M1UR / DTV02-1T1S-U / DTV02A-1T1S-U) は 15V の要求を
   `--allow-lnb-power` があっても UNSUPPORTED で断ります (給電の経路が無い)。そのまま要求すると
   衛星の選局が全部落ちるので、`lnb: 15v` と書いてあっても 0V で合わせ、記録に 1 度と、
