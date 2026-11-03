@@ -3,9 +3,9 @@
  * worker の中で動く。
  *
  * `createImageBitmap` の縮小 (`resizeWidth`) に任せると、1920 から 32 へ一度に縮めるので、どこまで
- * 平均されるかがブラウザと経路しだいになる — GPU の上で mipmap を作らずに縮めると、32x18 の1画素が
+ * 平均されるかがブラウザと経路しだいになる。GPU の上で mipmap を作らずに縮めると、32x18 の 1 画素が
  * 元の数画素だけを使い、放送の雑音や字幕の縁で写すたびに色が変わる (止まった場面でもちらつく)。
- * そこで **半分ずつ縮める**: 2D の canvas に縦横ちょうど半分で描くと、1画素は元の 2x2 のちょうど平均になる
+ * そこで **半分ずつ縮める**: 2D の canvas に縦横ちょうど半分で描くと、1 画素は元の 2x2 のちょうど平均になる
  * (どのブラウザでも、GPU でも)。128 画素幅まで縮めてから、最後は自分で面積で平均する (`boxAverage`)
  */
 import type { GrabSize } from "./messages";
@@ -28,7 +28,7 @@ export function halvingSteps(
 }
 
 /**
- * RGBA を、面積の割合で平均して `outWidth`x`outHeight` に縮める。**元の画素は全部、重なった割合だけ数える** —
+ * RGBA を、面積の割合で平均して `outWidth`x`outHeight` に縮める。**元の画素は全部、重なった割合だけ数える**。
  * 点で間引かないので、細かい雑音は平均されて消える
  */
 export function boxAverage(
@@ -69,8 +69,8 @@ export function boxAverage(
 const HALVING_LIMIT = 128;
 
 /**
- * `source` (`width`x`height`) を `size` に縮める。**描いたのと同じ回のうちに呼ぶこと** — WebGL の面は
- * 回をまたぐと消えている (`worker.ts` の `toPip` と同じ)。最初の1回の `drawImage` までは同期で進む
+ * `source` (`width`x`height`) を `size` に縮める。**描いたのと同じ回のうちに呼ぶこと**。WebGL の面は
+ * 回をまたぐと消えている (`worker.ts` の `toPip` と同じ)。最初の 1 回の `drawImage` までは同期で進む
  */
 export async function downscale(
   source: CanvasImageSource,
@@ -86,7 +86,7 @@ export async function downscale(
     const context = canvas.getContext("2d");
     if (context === null) return null;
     context.imageSmoothingEnabled = true;
-    // ちょうど半分なら、線形で読む1画素が元の 2x2 の真ん中に来て、4画素のちょうど平均になる
+    // ちょうど半分なら、線形で読む 1 画素が元の 2x2 の真ん中に来て、4 画素のちょうど平均になる
     // (奇数の大きさを丸めた回だけは少しずれるが、最後に面積で平均するので残らない)
     context.imageSmoothingQuality = "low";
     context.drawImage(current, 0, 0, sw, sh);

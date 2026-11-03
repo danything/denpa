@@ -107,9 +107,9 @@ public sealed class TunerPool(
     /// 機材の定義を入れ替える。**画面から書き換えたとき。**
     ///
     /// <para>
-    /// 走っている選局は**そのまま続ける**。名前が変わった・消えたチューナーのものだけ、
-    /// 失敗として畳む — 使っているデバイスが別物になったのに流し続けると、
-    /// 何が録れているのか分からなくなる。
+    /// 走っている選局は**そのまま続ける**。名前かデバイスが変わった・消えた・無効にしたチューナーのものだけ、
+    /// 失敗として畳み、開いているデバイスも手放す。使っているデバイスが別物になったのに流し続けると、
+    /// 何が録れているのか分からなくなる。無効にしたのに使い続けると、ほかのソフトから使えない。
     /// </para>
     /// </summary>
     public void Replace(IReadOnlyList<TunerSpec> next)
@@ -118,15 +118,28 @@ public sealed class TunerPool(
         {
             var before = _specs;
             _specs = next;
+            // 同じチューナーのまま使い続けてよいか。名前とデバイスが同じで、無効になっていない
+            bool Kept(int index)
+            {
+                var was = index < before.Count ? before[index] : null;
+                var now = index < next.Count ? next[index] : null;
+                return was is not null && now is not null && was.Name == now.Name && was.Device == now.Device && !now.Disabled;
+            }
             foreach (var (index, lease) in _leases.ToList())
             {
-                var was = index < before.Count ? before[index].Name : null;
-                var now = index < next.Count ? next[index].Name : null;
-                if (was == now && now is not null) continue;
-                Release(lease, "チューナーの設定が変わりました");
+                if (Kept(index)) continue;
+                var disabled = index < next.Count && next[index].Disabled;
+                Release(lease, disabled ? "チューナーを無効にしました" : "チューナーの設定が変わりました");
                 // 別の機材になったかもしれない。取り直す
                 Drop(index);
             }
+            /*
+             * **選局していなくても、開いたままのデバイスは手放す。** PIX-DT295 のように最初の選局で開いたまま持つ機材は、
+             * 無効にしても USB を握ったままで、ほかのソフトから使えなかった
+             */
+            List<int> idle;
+            lock (_deviceGate) idle = [.. _held.Keys.Where(index => !Kept(index))];
+            foreach (var index in idle) Drop(index);
         }
         onChange();
     }

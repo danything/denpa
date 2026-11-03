@@ -49,7 +49,7 @@ export interface PlayAudio {
  * `from` とストリームの時刻は、どれもこれで数える。
  *
  * - `encoded` … エンコード済みのファイルの時刻
- * - `ts` … 元の TS の頭を 0 とした時刻 (エンコード済みが無い録画)
+ * - `ts` … 元の TS の先頭を 0 とした時刻 (エンコード済みが無い録画)
  */
 export type PlayAxis = "encoded" | "ts";
 
@@ -62,7 +62,7 @@ export interface PlaybackInfo {
   offers: PlayOffer[];
   /**
    * 物差しの時刻を元の TS の時刻に戻すための情報 (`ts/watch.ts` の `Ruler`。`toTsTime`)。**`axis` が `encoded` のときだけ。**
-   * 元の TS の時刻に録画の頭の放送時刻 (`GET /api/recordings/<id>` の `jikkyo.head`) を足すと、その場面の放送時刻になる
+   * 元の TS の時刻に録画の先頭の放送時刻 (`GET /api/recordings/<id>` の `jikkyo.head`) を足すと、その場面の放送時刻になる
    * (アプリが実況のコメントを場面に合わせる。docs/api.md)
    */
   ruler?: Ruler;
@@ -70,7 +70,7 @@ export interface PlaybackInfo {
 
 /**
  * MPEG-2 をそのまま流すときの応答ヘッダ。**物差しの 0 にあたる PTS** (90kHz、0〜2^33-1)。
- * 元の TS の頭の PTS に、エンコードしたときに捨てた頭 (`encode_skip`) を足したもの。
+ * 元の TS の先頭の PTS に、エンコードしたときに先頭で捨てた長さ (`encode_skip`) を足したもの。
  * 画面の時刻 = (PTS − これ) を一周の中で取って 90000 で割ったもの (`ts/seek.ts` の `sinceHead`)
  */
 export const ORIGIN_HEADER = "X-Denpa-Origin";
@@ -100,7 +100,7 @@ export type StreamState = "flowing" | "retrying" | "failed" | "busy";
 /** 続けてリクエストし直す上限 */
 export const STREAM_RETRIES = 8;
 
-/** `retries` 回リクエストし直したあと、次にリクエストするまで待つ時間 (ms)。倍々に伸ばして 10秒で頭打ち (デプロイの入れ替えは数十秒かかる) */
+/** `retries` 回リクエストし直したあと、次にリクエストするまで待つ時間 (ms)。倍々に伸ばして 10 秒で頭打ち (デプロイの入れ替えは数十秒かかる) */
 export function retryWait(retries: number): number {
   return Math.min(10_000, 1000 * 2 ** retries);
 }
@@ -145,7 +145,7 @@ function playsRaw(info: PlaybackInfo, can: MediaAbility): boolean {
 const RAW: Picked = { way: "raw", codec: "mpeg2" };
 
 /**
- * そのままのファイルを読めるか。Matroska と WebM の両方で聞く — Chrome は `video/x-matroska` に答えるが、
+ * そのままのファイルを読めるか。Matroska と WebM の両方で聞く。Chrome は `video/x-matroska` に答えるが、
  * Safari は WebM としてしか答えない (AV1 の Matroska はそれで読める)。中身が分からないものは false
  */
 function playsFile(offer: PlayOffer, can: MediaAbility): boolean {
@@ -200,9 +200,9 @@ function byEncodedOrder(offers: PlayOffer[]): PlayOffer[] {
  * 観られなければ、または `auto` なら端末に合わせる。
  *
  * **録画しか無い (エンコード済みが無い) ときは、ライブ・追っかけと同じ「その場でエンコード」の順** (`autoOrder`。家の中なら
- * MPEG-2 → H.264 → AV1、外なら AV1 → H.264。H.265 には変換しないので並びから外れる)。エンコード済みがあるときは:
+ * MPEG-2 → H.264 → AV1、外なら AV1 → H.264。H.265 には変換しないので並びから外れる)。エンコード済みがあるときは次の順。
  *
- * 1. **そのまま読めるファイル** (AV1 → H.265 → H.264。小さいほうが先 — 同じ画質なら回線もディスクも食わない)
+ * 1. **そのまま読めるファイル** (AV1 → H.265 → H.264。小さいほうが先。同じ画質なら回線もディスクも使わない)
  * 2. MSE が受け取れる**詰め替え** (エンコード済みと同じコーデック。サーバは軽い。並びは 1 と同じ)
  * 3. MSE が受け取れる**変換** (H.264 → AV1 の順。サーバはその場でエンコードする。H.265 には変換しない)
  * 4. 中身が分からないファイル (ffprobe が読めなかった) をそのまま渡す。読めなければ観る画面が観られる先を案内する
@@ -263,8 +263,8 @@ export function pickOffer(
 
 /**
  * **音声を選ぶために、その場で流すほうへ移るときの行き先。** ファイルをそのまま読んでいて、ブラウザが
- * 入れ物の音声を出さない (`video.audioTracks` が無い。Chrome・Firefox の既定) ときに使う —
- * そのままでは2本目の音声 (副音声・解説) を選べない。流すほうはサーバが選んだ1本を流す (`/stream?audio=`)。
+ * 入れ物の音声を出さない (`video.audioTracks` が無い。Chrome・Firefox の既定) ときに使う。
+ * そのままでは 2 本目の音声 (副音声・解説) を選べない。流すほうはサーバが選んだ 1 本を流す (`/stream?audio=`)。
  *
  * 同じコーデックの詰め替え (サーバは軽い) を先に、無ければ `pickOffer` と同じ順の変換。MSE が
  * 受け取れるものが無ければ null (= 移れないので、音声の切り替えは出さない)
@@ -311,7 +311,7 @@ export function codecChoices(
  */
 
 /**
- * 互換モードで描く形式。**H.265 は描かない** — 描く側 (`ts/fmp4.ts`・`raw/support.ts`) は H.264・AV1・MPEG-2 しか
+ * 互換モードで描く形式。**H.265 は描かない。** 描く側 (`ts/fmp4.ts`・`raw/support.ts`) は H.264・AV1・MPEG-2 しか
  * 読まない。H.265 だけの録画も、AV1 か H.264 に変換して流せば描ける
  */
 export type CanvasCodec = Exclude<PlayCodec, "hevc">;
@@ -336,7 +336,7 @@ export function canvasChoices(
 }
 
 /**
- * **互換モードでどれで観るか。** 選んだものが描ければそれ。`auto` か、選んだものが描けなければ:
+ * **互換モードでどれで観るか。** 選んだものが描ければそれ。`auto` か、選んだものが描けなければ次の順。
  *
  * 1. エンコード済みと同じ形式の fMP4 (詰め替え。サーバは軽い)
  * 2. 変換する fMP4 (H.264 → AV1)
@@ -391,8 +391,8 @@ export function aheadOf(ranges: Ranges, t: number): number {
 }
 
 /**
- * 区間どうしの小さな隙間は無いものと見る (秒)。映像と音声の頭が数十ms ずれるぶん
- * (音声の頭は AAC の前置きぶん早い) と、ブラウザが跨いで再生する程度の隙間
+ * 区間どうしの小さな隙間は無いものと見る (秒)。映像と音声の先頭が数十 ms ずれるぶん
+ * (音声の先頭は AAC の前置きぶん早い) と、ブラウザが跨いで再生する程度の隙間
  */
 const GAP = 0.5;
 
@@ -401,7 +401,7 @@ const GAP = 0.5;
  *
  * - いま溜まっている区間の中なら、そのまま
  * - 読んでいる最中 (`from` からリクエストしたストリームが伸びている) で、その伸びる先の少し先
- *   (`slack` 秒) までなら待つ。10秒送りのたびにリクエストし直すと、毎回キーフレームまで戻って
+ *   (`slack` 秒) までなら待つ。10 秒送りのたびにリクエストし直すと、毎回キーフレームまで戻って
  *   詰め直すぶん遅い
  *
  * @param from 読んでいるストリームのリクエストした位置。読んでいなければ null

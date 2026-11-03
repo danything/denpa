@@ -28,7 +28,7 @@ describe("行の大きさ", () => {
 });
 
 describe("Lanes", () => {
-  test("上の行から使い、前のコメントの尻尾が入りきるまで同じ行に入れない", () => {
+  test("上の行から使い、前のコメントの末尾が入りきるまで同じ行に入れない", () => {
     const lanes = new Lanes(2);
     // 幅 1000px の枠で、幅 200px のコメント。速さは 1000px / 4 秒
     const first = lanes.flow(0, 200, 1000, 20);
@@ -37,7 +37,7 @@ describe("Lanes", () => {
       duration: ((1000 + 200) / 1000) * SPAN_MS,
     });
     expect(lanes.flow(100, 200, 1000, 20)?.lane).toBe(1);
-    // 尻尾 (200px + 間 20px) が入りきるのは 880ms 後
+    // 末尾 (200px + 間 20px) が入りきるのは 880ms 後
     expect(lanes.flow(800, 200, 1000, 20)).toBeNull();
     expect(lanes.flow(880, 200, 1000, 20)?.lane).toBe(0);
   });
@@ -64,10 +64,10 @@ describe("Lanes", () => {
     expect(lead(0, 300)).toBe(0);
   });
 
-  test("行が空くのは、前の尻尾が枠の右の端を過ぎてから次の頭がそこへ着くとき (外から入っても重ならない)", () => {
+  test("行が空くのは、前の末尾が枠の右の端を過ぎてから次の先頭がそこへ着くとき (外から入っても重ならない)", () => {
     const lanes = new Lanes(1);
     const outside = { right: 300, left: 300 };
-    // 頭が枠に着くのは 1200ms、尻尾 (200px + 間 20px) が枠の右の端を過ぎるのは 1200 + 880ms
+    // 先頭が枠に着くのは 1200ms、末尾 (200px + 間 20px) が枠の右の端を過ぎるのは 1200 + 880ms
     lanes.flow(0, 200, 1000, 20, outside);
     expect(lanes.flow(879, 200, 1000, 20, outside)).toBeNull();
     expect(lanes.flow(880, 200, 1000, 20, outside)?.lane).toBe(0);
@@ -75,9 +75,9 @@ describe("Lanes", () => {
 
   test("外が縮んだ (光を消した) 直後は、枠の外にまだいる前のものを待つ", () => {
     const lanes = new Lanes(1);
-    // 外 300px から入ったもの。尻尾が枠の右の端を過ぎるのは 2080ms
+    // 外 300px から入ったもの。末尾が枠の右の端を過ぎるのは 2080ms
     lanes.flow(0, 200, 1000, 20, { right: 300, left: 0 });
-    // 外が無くなると、次の頭は流し始めた時刻に枠に着く。それまで待つ
+    // 外が無くなると、次の先頭は流し始めた時刻に枠に着く。それまで待つ
     expect(lanes.flow(2000, 200, 1000, 20)).toBeNull();
     expect(lanes.flow(2080, 200, 1000, 20)?.lane).toBe(0);
   });

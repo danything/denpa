@@ -11,7 +11,7 @@
  *   `currentTime` で引いているので、そのまま合う
  * - 溜めるのは先 `AHEAD` 秒まで、後ろは `BEHIND` 秒まで。iPhone は溜められる量が小さい
  * - `ManagedMediaSource` (iPhone) は**送り込む頃合いをブラウザが言う**。言われていない間は読まない
- * - 切れたら観ていた位置からリクエストし直す (1秒→2秒→…10秒で頭打ち、続けて8回で諦める)。
+ * - 切れたら観ていた位置からリクエストし直す (1 秒→2 秒→…10 秒で頭打ち、続けて 8 回で諦める)。
  *   観る画面の繋ぎ直し (`recover`) と同じ数
  * - **サーバが混んでいて断られたら (503) リクエストし直さない** (`busy`)。その場の変換の枠が埋まっている
  *   (`server/transcode.ts`)。待っても空くとは限らないので、画面がほかの形式を勧める
@@ -33,7 +33,7 @@ import {
 const AHEAD = 60;
 /** 後ろに残す長さ (秒)。これより前は捨てる */
 const BEHIND = 30;
-/** 読んでいるストリームの尻からこれだけ先までは、リクエストし直さずに届くのを待つ (秒。`covers`) */
+/** 読んでいるストリームの末尾からこれだけ先までは、リクエストし直さずに届くのを待つ (秒。`covers`) */
 const SLACK = 15;
 interface RemuxOptions {
   /** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
@@ -51,7 +51,7 @@ interface RemuxOptions {
 }
 
 export interface RemuxPlayer {
-  /** 音声を選び直す。**いまの位置からリクエストし直す** (選んだ1本だけを流しているため) */
+  /** 音声を選び直す。**いまの位置からリクエストし直す** (選んだ 1 本だけを流しているため) */
   setAudio(id: string): void;
   /** 畳む。読んでいるストリームを切る (サーバの ffmpeg も止まる) */
   destroy(): void;
@@ -101,7 +101,7 @@ export function remuxPlayer(
   }
 
   /**
-   * 1つリクエストして、終わるまで待つ。読めない中身なら投げる。
+   * 1 つリクエストして、終わるまで待つ。読めない中身なら例外を投げる。
    *
    * `mine` を渡したら、手が空くのを待つ間にリクエストし直されていれば (`load`) 何もしない。
    * 古いストリームの残りを、新しいストリームの捨てた後へ足さないため
@@ -195,7 +195,7 @@ export function remuxPlayer(
     try {
       await idle();
       if (mine !== run || buffer === null) return;
-      // 前のストリームの読みかけを落とす。尻まで読み終えて閉じていれば、足せば開き直る
+      // 前のストリームの読みかけを落とす。末尾まで読み終えて閉じていれば、足せば開き直る
       if (media.readyState === "open") buffer.abort();
       if (buffered().length > 0)
         await update(
@@ -242,7 +242,7 @@ export function remuxPlayer(
       }
       if (mine !== run) return;
       loadingFrom = null;
-      // 尻まで届いた。終わりを言わないと、最後で止まったまま `ended` が来ない
+      // 末尾まで届いた。終わりを言わないと、最後で止まったまま `ended` が来ない
       await idle();
       if (mine === run && media.readyState === "open") media.endOfStream();
     } catch (error) {
@@ -315,7 +315,7 @@ export function remuxPlayer(
       buffer.mode = "segments";
       /*
        * **始める位置を先に言っておく。** まだ何も無いうちに代入した位置は、尺が分かった
-       * ところで効く。言わないと 0 にいると見なされ、詰まり (`waiting`) で頭からリクエストし直す
+       * ところで効く。言わないと 0 にいると見なされ、詰まり (`waiting`) で先頭からリクエストし直す
        */
       const start = Math.min(
         Math.max(0, options.start),

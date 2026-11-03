@@ -534,6 +534,26 @@ public class Dt295Tests
     }
 
     [Test]
+    public async Task 復調器の表は続いているレジスターを1回の_I2C_にまとめる()
+    {
+        var usb = new FakeDt295Usb { State = Dt295Device.Authenticated };
+        List<string> writes = [];
+        usb.I2cDevice = (address, write, read) =>
+        {
+            if (write.Length > 0) writes.Add($"{address:X2}:{Convert.ToHexString(write)}");
+            return new byte[read];
+        };
+        var material = FakeDt295Material.Create();
+        var tuner = new Dt295Frontend(new Dt295Bridge(usb, usb.Time), material);
+        tuner.TuneTerrestrial(27);
+        // 偽の表はレジスターが 0x40 から続くので、先頭の番号のあとに全部の値が並ぶ 1 回になる
+        var table = material.TerrestrialDemod;
+        var expected = "20:40" + Convert.ToHexString([.. table.Select(row => row.Value)]);
+        await Assert.That(writes).Contains(expected);
+        await Assert.That(writes.Count(line => line.StartsWith("20:4", StringComparison.Ordinal) && line.Length == 7)).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task 地上波の2回目の選局は初期化を省く()
     {
         var usb = new FakeDt295Usb { State = Dt295Device.Authenticated };
@@ -562,7 +582,8 @@ public class Dt295Tests
         var count = 0;
         usb.I2cDevice = (address, write, read) =>
         {
-            if (write.Length > 0) count++;
+            // 値を書く転送だけを数える (読むときに番号だけ送る 1 バイトは数えない。ロックの確認で増える)
+            if (write.Length > 1) count++;
             return new byte[read];
         };
         var tuner = new Dt295Frontend(new Dt295Bridge(usb, usb.Time), FakeDt295Material.Create());

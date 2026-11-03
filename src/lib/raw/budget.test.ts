@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { DecodeBudget, QUEUE_STUCK, STRIKES, WINDOW } from "./budget";
 
-/** 1秒ぶん、決まった重さでデコードしたことにする */
+/** 1 秒ぶん、決まった重さでデコードしたことにする */
 function second(
   budget: DecodeBudget,
   at: number,
@@ -22,7 +22,7 @@ describe("DecodeBudget", () => {
     expect(budget.p95).toBe(10);
   });
 
-  test("重いのが3秒続いたら諦める。**1回の重さでは戻さない**", () => {
+  test("重いのが 3 秒続いたら諦める。**1 回の重さでは戻さない**", () => {
     const budget = new DecodeBudget();
     budget.tick(0, 33.4, 0);
     const results = [1, 2, 3].map((s) => second(budget, s * WINDOW, 30));
@@ -63,13 +63,13 @@ describe("DecodeBudget", () => {
       for (let i = 0; i < 10; i++) budget.record(20);
       return budget.tick(s * WINDOW, 33.4, 0, 0, dropped);
     };
-    // 1秒 (30 コマ) に 6 枚捨てる (20%)
+    // 1 秒 (30 コマ) に 6 枚捨てる (20%)
     expect([window(1, 6), window(2, 12), window(3, 18)]).toEqual([
       false,
       false,
       true,
     ]);
-    // 捨てるのが少なければ (1秒に 2 枚) 数えない
+    // 捨てるのが少なければ (1 秒に 2 枚) 数えない
     const calm = new DecodeBudget();
     calm.tick(0, 33.4, 0, 0, 0);
     for (const s of [1, 2, 3, 4]) {
@@ -120,7 +120,7 @@ describe("DecodeBudget", () => {
 });
 
 describe("DecodeBudget (WebCodecs の経路)", () => {
-  /** 1秒ぶん。`queued` は刻みごとの詰まり */
+  /** 1 秒ぶん。`queued` は刻みごとの詰まり */
   function webSecond(
     budget: DecodeBudget,
     at: number,
@@ -139,7 +139,7 @@ describe("DecodeBudget (WebCodecs の経路)", () => {
     return result;
   }
 
-  test("1コマの時間が長くても (GPU 経由の溜め) 詰まっていなければ諦めない", () => {
+  test("1 コマの時間が長くても (GPU 経由の溜め) 詰まっていなければ諦めない", () => {
     const budget = new DecodeBudget(false);
     budget.tick(0, 16.7, 0, 0);
     for (let s = 1; s <= 10; s++)
@@ -147,7 +147,7 @@ describe("DecodeBudget (WebCodecs の経路)", () => {
     expect(budget.p95).toBe(60);
   });
 
-  test("窓の間ずっと捌けきらないのが3秒続いたら諦める", () => {
+  test("窓の間ずっと捌けきらないのが 3 秒続いたら諦める", () => {
     const budget = new DecodeBudget(false);
     budget.tick(0, 16.7, 0, QUEUE_STUCK);
     const results = [1, 2, 3].map((s) =>

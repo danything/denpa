@@ -271,12 +271,12 @@ describe("溜まり方 (aheadOf / covers)", () => {
     expect(aheadOf(ranges, 50)).toBe(0);
   });
 
-  test("区間の頭のわずかな手前 (音声と映像の頭のずれ) は中と見る", () => {
+  test("区間の先頭のわずかな手前 (音声と映像の先頭のずれ) は中と見る", () => {
     expect(aheadOf(ranges, 99.8)).toBeCloseTo(60.2);
   });
 
   test("読んでいるストリームの少し先までは待つ。外れたらリクエストし直す", () => {
-    // 100秒からリクエストして 160秒まで来ている。10秒送りの 170秒は待てば届く
+    // 100 秒からリクエストして 160 秒まで来ている。10 秒送りの 170 秒は待てば届く
     expect(covers(ranges, 170, 100, 15)).toBe(true);
     expect(covers(ranges, 200, 100, 15)).toBe(false);
     // 戻った先は届かない
@@ -340,7 +340,7 @@ describe("互換モード (canvasChoices / pickCanvas)", () => {
 describe("H.265 もある録画 (AV1 → H.265 → H.264)", () => {
   const MKV = (codecs: string) => `video/x-matroska; codecs="${codecs}"`;
   const HEVC_MP4 = 'video/mp4; codecs="hvc1.1.6.L123.90,mp4a.40.2"';
-  /** 3つともエンコードした録画。サーバの並びに意味は無いので、わざと H.264 を先に置く */
+  /** 3 つともエンコードした録画。サーバの並びに意味は無いので、わざと H.264 を先に置く */
   const three: PlaybackInfo = {
     ...h264Only,
     offers: [

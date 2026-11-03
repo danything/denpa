@@ -3,21 +3,21 @@
  *
  * デコードするのは [bml.ts](../../../packages/arib/src/bml.ts) で、
  * ここはその出力を受けて「いま出すのに要るもの」だけを持つ。**入力も
- * 出力も持たない** — 繋ぐのは [server/databroadcast.ts](../server/databroadcast.ts)。
+ * 出力も持たない。** 繋ぐのは [server/databroadcast.ts](../server/databroadcast.ts)。
  *
  * ## なぜ覚えるのか
  *
  * カルーセルは回り続けるので、途中から見た人もそのうち揃う。**`pmt` だけは
- * 1回しか来ない**ので、それを逃すと「何番のコンポーネントを出すか」が分からず、
- * 揃ったモジュールを渡しても始まらない。字幕で最後の1枚を配り直しているのと
+ * 1 回しか来ない**ので、それを逃すと「何番のコンポーネントを出すか」が分からず、
+ * 揃ったモジュールを渡しても始まらない。字幕で最後の 1 枚を配り直しているのと
  * 同じ理由 (`server/live.ts` の `showing`)。
  *
- * 覚えるのは4つだけ:
+ * 覚えるのは次の 4 つだけ。
  *
- * - `pmt` … 最後の1つ。差し替わったら上書き
- * - `programInfo` … 同じく最後の1つ
- * - `moduleListUpdated` … コンポーネントごとに最後の1つ (DII)
- * - `moduleDownloaded` … コンポーネントとモジュールの組ごとに最後の1つ。
+ * - `pmt` … 最後の 1 つ。差し替わったら上書き
+ * - `programInfo` … 同じく最後の 1 つ
+ * - `moduleListUpdated` … コンポーネントごとに最後の 1 つ (DII)
+ * - `moduleDownloaded` … コンポーネントとモジュールの組ごとに最後の 1 つ。
  *   **バージョンが上がると中身が変わる**ので、来るたびに置き換える
  *
  * ## DII (`moduleListUpdated`) を覚える理由
@@ -28,8 +28,8 @@
  * (`src/lib/bml/engine.ts` の `checkModule`)。
  *
  * ライブは回り続けるので数秒待てば次の DII が来ますが、**録画の巻き戻しでは
- * 来ません** — 変化ログを積み直す作りなので、覚えていないものは二度と流れない。
- * テレビ朝日の入口の文書がまさにこれで、番組連動データ (`/50`) の DII を
+ * 来ません。** 変化ログを積み直す作りなので、覚えていないものは二度と流れない。
+ * テレビ朝日の入口の文書がこれに当たり、番組連動データ (`/50`) の DII を
  * 待ったまま止まり、**データ放送が何も出ませんでした** (実機の録画で再現)。
  *
  * `currentTime` は覚えない。**次がすぐ来る**もので、古いものを配ると
@@ -38,7 +38,7 @@
  *
  * ## 配る価値のあるものだけ通す
  *
- * `take` は「配る価値があるか」を返す。**サイドチャネルは映像と同じ1本**なので、
+ * `take` は「配る価値があるか」を返す。**サイドチャネルは映像と同じ 1 本**なので、
  * 中身の変わらないものを流し続けると、受け側がそれを捌くだけで手一杯になる。
  *
  * **`pmt` と `programInfo` は変わったときだけ。** 放送は同じ表を何度も送るので、
@@ -54,13 +54,13 @@ import type { ResponseMessage } from "@danything/arib/bml-protocol";
 /**
  * 覚えておくモジュールの上限。**溜め込みすぎない歯止め。**
  *
- * 実機のテレビ朝日で、40秒ぶんの中に揃ったのは 16個・約1.4MB だった。
+ * 実機のテレビ朝日で、40 秒ぶんの中に揃ったのは 16 個・約 1.4MB だった。
  * データ放送の作りによってはもっと多いので上限を置く。溢れたら**古いほうから
- * 落とす** — 新しいほうが、いま出ている画面に近い
+ * 落とします。** 新しいほうが、いま出ている画面に近い
  */
 export const KEEP_MODULES = 256;
 
-/** コンポーネントとモジュールの組で1つ */
+/** コンポーネントとモジュールの組で 1 つ */
 function moduleKey(message: { componentId: number; moduleId: number }): string {
   return `${message.componentId}/${message.moduleId}`;
 }
@@ -68,12 +68,12 @@ function moduleKey(message: { componentId: number; moduleId: number }): string {
 export class Carousel {
   private pmt: ResponseMessage | null = null;
   private programInfo: ResponseMessage | null = null;
-  /** DII。**コンポーネントごとに最後の1つ** (上の説明) */
+  /** DII。**コンポーネントごとに最後の 1 つ** (上の説明) */
   private readonly lists = new Map<number, ResponseMessage>();
   private readonly modules = new Map<string, ResponseMessage>();
 
   /**
-   * 1つ受ける。**覚えるかどうかと、配る価値があるかをここで決める**
+   * 1 つ受ける。**覚えるかどうかと、配る価値があるかをここで決める**
    *
    * @returns 配る価値があるか (上の説明)
    */
@@ -96,7 +96,7 @@ export class Carousel {
     const key = moduleKey(message);
     /*
      * **入れ直す前に消す。** Map は入れた順に並ぶので、上書きしただけでは
-     * 古い位置に居座る。溢れたときに落とすのは「いちばん古く**来た**もの」で
+     * 古い位置に残る。溢れたときに落とすのは「いちばん古く**来た**もの」で
      * ありたいので、来るたびに末尾へ動かす
      */
     this.modules.delete(key);
@@ -109,7 +109,7 @@ export class Carousel {
   /**
    * 繋いできた人に渡すぶん。
    *
-   * **出す順は pmt → programInfo → DII → モジュール** — 何番のコンポーネントを
+   * **出す順は pmt → programInfo → DII → モジュール。** 何番のコンポーネントを
    * 出すかが決まってからでないと、モジュールを渡しても置き場所が無い。DII は
    * モジュールより先に置く (「在る」と言う前に中身だけ来ても、受け側は
    * 在ることを知らないまま)

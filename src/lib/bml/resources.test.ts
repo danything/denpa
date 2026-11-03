@@ -330,7 +330,7 @@ describe("PNG・DRCS・深い入れ子 (レビューで足したもの)", () => 
     const idat = png.subarray(idatAt + 8, idatAt + 8 + view.getUint32(idatAt));
     const raw = inflateSync(idat);
     expect(raw.length).toBe(40 * (1 + 40 * 2));
-    // 2 行目 (y=1) の x=1 の透明度: 行の頭 81 + フィルタ 1 + 灰と透明度 2 × 1 + 灰 1
+    // 2 行目 (y=1) の x=1 の透明度: 行の先頭 81 + フィルタ 1 + 灰と透明度 2 × 1 + 灰 1
     expect(raw[81 + 1 + 2 + 1]).toBe(alpha[41]);
   });
 

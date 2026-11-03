@@ -78,7 +78,7 @@ describe("入れ物の始まり (tsHead)", () => {
     expect(tsHead(bytes.subarray(0, 1024 * 1024))).toBe(900_000);
   });
 
-  test("一周の直前から始まっても、またいだ先を頭にしない", () => {
+  test("一周の直前から始まっても、またいだ先を先頭にしない", () => {
     const start = WRAP - 0.2 * CLOCK;
     const bytes = recording(start, 3, 0.5);
     expect(tsHead(bytes)).toBe(start);
@@ -89,7 +89,7 @@ describe("入れ物の始まり (tsHead)", () => {
   });
 });
 
-describe("頭から数えた秒 (sinceHead)", () => {
+describe("先頭から数えた秒 (sinceHead)", () => {
   test("一周をまたいでも増え続ける", () => {
     const head = WRAP - 10 * CLOCK;
     expect(sinceHead(head + 5 * CLOCK, head)).toBe(5);
@@ -97,7 +97,7 @@ describe("頭から数えた秒 (sinceHead)", () => {
     expect(sinceHead(20 * CLOCK, head)).toBe(30);
   });
 
-  test("頭の少し前 (並べ替え・音声との頭のずれ) は負", () => {
+  test("先頭の少し前 (並べ替え・音声との先頭のずれ) は負", () => {
     expect(sinceHead(900_000 - 9_000, 900_000)).toBeCloseTo(-0.1, 6);
     expect(sinceHead(WRAP - 9_000, 0)).toBeCloseTo(-0.1, 6);
   });
@@ -116,13 +116,13 @@ describe("時刻から位置を引く (seekTs)", () => {
       const at = sinceHead(mark!.pts, head);
       expect(at).toBeLessThanOrEqual(target);
       expect(target - at).toBeLessThan(FRAME_TICKS / CLOCK + 1e-9);
-      // 返した位置はその PES の頭のパケット
+      // 返した位置はその PES の先頭のパケット
       expect(bytes[mark!.at]).toBe(SYNC);
       expect(bytes[mark!.at + 1]! & 0x40).toBe(0x40);
     }
   });
 
-  test("頭より前なら頭の映像、尻より後ろなら最後の映像", async () => {
+  test("先頭より前なら先頭の映像、尻より後ろなら最後の映像", async () => {
     const first = await seekTs(read, bytes.length, head, 0);
     expect(sinceHead(first!.pts, head)).toBeCloseTo(0.5, 3);
     const last = await seekTs(read, bytes.length, head, 10_000);

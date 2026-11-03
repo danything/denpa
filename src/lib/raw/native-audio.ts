@@ -43,7 +43,7 @@ export class NativeAudio {
   private readonly outlet: Outlet;
   private readonly muteGain: GainNode;
   private readonly timer: ReturnType<typeof setInterval>;
-  /** `<video>`・window に付けた受け口。畳むときにまとめて外す */
+  /** `<video>`・window に付けたリスナー。畳むときにまとめて外す */
   private readonly listening = new AbortController();
   private frames: Frame[] = [];
   private nodes = new Set<AudioBufferSourceNode>();
@@ -211,7 +211,7 @@ export class NativeAudio {
       return;
     const rate = video.playbackRate;
     const follow = (last: Clock) => last.position + (now - last.at) * last.rate;
-    // 映像と音の対応は1つに保つ。21ms の AAC の1コマごとに video.currentTime を読み直すと、
+    // 映像と音の対応は 1 つに保つ。21ms の AAC の 1 コマごとに video.currentTime を読み直すと、
     // 時刻の揺れがそのまま音の隙間・重なりになる。大きくずれたときだけ組み直す
     if (
       this.last !== null &&

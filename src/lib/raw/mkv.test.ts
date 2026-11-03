@@ -9,7 +9,7 @@ import { type Fmp4Video, jumped } from "./fmp4";
 import { MkvInput } from "./mkv";
 
 /**
- * **尻まで読んだら、待たせているコマを出しきる** (`finish`)。dts を起こすために数コマ待たせるので、
+ * **末尾まで読んだら、待たせているコマを出しきる** (`finish`)。dts を起こすために数コマ待たせるので、
  * 出しきらないと最後の数コマがデコードされないまま終わる。
  * 流すのは作り置きの fMP4 から組んだ Matroska (`tests/fake/mkv-clip.ts`。映像はトラック 1)
  */
@@ -37,7 +37,7 @@ function receiver() {
 }
 
 describe("MkvInput", () => {
-  test("読んでいる間は数コマ待たせ、尻まで読んだら残りを出しきる", () => {
+  test("読んでいる間は数コマ待たせ、末尾まで読んだら残りを出しきる", () => {
     const { video, input } = receiver();
     input.feed(av1);
     expect(videoAt.length).toBeGreaterThan(10);
@@ -51,23 +51,23 @@ describe("MkvInput", () => {
       if (i > 0) expect(sample.dts).toBeGreaterThanOrEqual(video[i - 1]!.dts);
     }
 
-    // 2度言われても同じものは出さない
+    // 2 度言われても同じものは出さない
     input.finish();
     expect(video.length).toBe(videoAt.length);
   });
 
   /*
-   * **B フレームのある H.264 (x264 の既定) で、dts が1コマずつ進む。** 29.97 コマ・160x90・3秒を
-   * x264 の medium (録画を H.264 でエンコードするときと同じ。`server/encoder.ts`) で焼いた Matroska
+   * **B フレームのある H.264 (x264 の既定) で、dts が 1 コマずつ進む。** 29.97 コマ・160x90・3 秒を
+   * x264 の medium (録画を H.264 でエンコードするときと同じ。`server/encoder.ts`) でエンコードした Matroska
    * (`tests/fake/x264-bframes.mkv`)。作り方:
    *
    *     ffmpeg -f lavfi -i testsrc2=size=160x90:rate=30000/1001 -t 3 \
    *       -c:v libx264 -preset medium -crf 30 -pix_fmt yuv420p -an -f matroska x264-bframes.mkv
    *
-   * 先の数枚の最小をそのまま dts にしていた頃は、dts が止まったり跳んだりして受け取る側が「時刻が飛んだ」と
+   * 先の数枚の最小をそのまま dts にしていた頃は、dts が止まったり飛んだりして受け取る側が「時刻が飛んだ」と
    * 見なし (`jumped`)、90 コマ中 86 コマをキーフレームまで捨てていた (iPhone で真っ黒のまま音だけ進んだ)
    */
-  test("B フレームがあっても dts は1コマずつ進み、受け取る側に捨てられない", () => {
+  test("B フレームがあっても dts は 1 コマずつ進み、受け取る側に捨てられない", () => {
     const mkv = new Uint8Array(
       readFileSync(
         new URL("../../../tests/fake/x264-bframes.mkv", import.meta.url),
