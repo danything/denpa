@@ -1967,6 +1967,21 @@ test.describe("ライブ視聴", () => {
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(gear).toBeFocused();
+
+    // 選択肢の並びで選んで閉じても、引っ込む間は中身を上の並びに替えない (替えると背の違う枠が一瞬見える)。
+    // 上の並びへ戻すのは次に開くとき
+    await page.keyboard.press("Enter");
+    await codec.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(h264).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeHidden();
+    await expect(page.getByTestId("live-settings-back")).toHaveCount(1);
+    await expect(gear).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    await expect(page.getByTestId("live-settings-back")).toHaveCount(0);
+    await expect(codec).toBeVisible();
   });
 
   /*
