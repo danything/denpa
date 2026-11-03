@@ -1,7 +1,7 @@
 /**
  * 本番の入口。**adapter-bun の `Bun.serve` に WebSocket を足すためだけにある。**
  *
- * ライブ視聴は映像・音声・字幕・データ放送を1本の接続に多重化する作りなので
+ * ライブ視聴は映像・音声・字幕・データ放送を 1 本の接続に多重化する作りなので
  * ([docs/stream.md](docs/stream.md#websocket-プロトコル))、`Request` → `Response` しか扱えない
  * SvelteKit の仕組みでは足りない。
  *
@@ -13,14 +13,14 @@
  * SvelteKit の手続き (handler) も静的ファイルの表 (routes) も `build/server/adapter-index.js`
  * に畳み込まれていて、外から import できる形では出てこない。
  *
- * そこで **`Bun.serve` を1回だけ包んでから `build/index.js` を読む。** adapter が渡す
+ * そこで **`Bun.serve` を 1 回だけ包んでから `build/index.js` を読む。** adapter が渡す
  * 設定 (PORT・HOST・BODY_SIZE_LIMIT などの環境変数を読んだもの) はそのまま使い、
  * `websocket` を足して、`fetch` の前に WebSocket の握手と接続元の決定を挟む。
  * Bun のバージョンの確認も環境変数の読み方も adapter のものがそのまま効く。
- * 頼っているのは「adapter の入口が `Bun.serve` を1回呼ぶ」ことだけ — 呼ばれなければ起動を止める。
+ * 頼っているのは「adapter の入口が `Bun.serve` を 1 回呼ぶ」ことだけで、呼ばれなければ起動を止める。
  *
  * 以前は adapter-node を内側に置いて HTTP を中継していた (bun の `node:http` は WebSocket の
- * 握手ができないため)。その1ホップと `Accept-Encoding` の食い違いはもう無い。
+ * 握手ができないため)。その 1 ホップと `Accept-Encoding` の食い違いはもう無い。
  *
  * **止まれの合図 (SIGTERM) は adapter のものを使わない。** adapter は受けたその場で listen を
  * 閉じるので、録画が終わるまで居座る間に画面が開けなくなる。アプリ (`runtime.ts` の
@@ -29,7 +29,7 @@
  * `hold-signals.ts` が取っておき、アプリが受け直す (PID 1 では、受け手のいない合図は捨てられる)。
  *
  * **`Host` はそのまま扱う。** SvelteKit の CSRF 判定は自分の origin と `Origin` を比べる。
- * denpa は名前をいくつも持てるので自分の origin を1つに固定できない (SvelteKit の `paths.origin`。
+ * denpa は名前をいくつも持てるので自分の origin を 1 つに固定できない (SvelteKit の `paths.origin`。
  * 組むときに決まる) ので、`Host` と `x-forwarded-proto` から毎回組み立てさせる
  * (名前は charts/denpa/values.yaml の httpRoute.hostnames。無ければ ingress.hosts)。
  * そのため名前を偽ると (DNS リバインディング) CSRF の判定は通ってしまう。信頼するネットワークから
@@ -55,10 +55,10 @@ const TAKE_OVER = "__denpaTakeOverSignals";
 /*
  * **スキームは常に `x-forwarded-proto` から読む** (選べるオプションにしない)。
  * adapter は読めないと https と決め打つので、http で受ける構成 (前段の無い直結など)
- * で CSRF 判定が食い違って POST が全部 403 になる (前段が無ければ下で入れる)。偽装されても得るものが無い —
+ * で CSRF 判定が食い違って POST が全部 403 になる (前段が無ければ下で入れる)。偽装されても得るものが無い。
  * ブラウザ経由の CSRF ではこのヘッダを付けられないし、直に付けて来る相手が
  * 変えられるのは自分に返る origin の見た目だけ。`TRUSTED_PROXIES` の前段からだけ読む
- * ようにはしない — 守れるものが無いのに、前段を設定し忘れた構成の POST を全部止める。
+ * ようにはしない。守れるものが無いのに、前段を設定し忘れた構成の POST を全部止めることになる。
  *
  * **接続元のアドレスはこの入口が決める** (TRUSTED_NETWORKS の判定材料。`src/lib/server/address.ts`)。
  * ここで決めたアドレスを `x-denpa-remote` に**上書きで**入れ (外から同名で付けて来ても消える)、
@@ -69,9 +69,9 @@ const TAKE_OVER = "__denpaTakeOverSignals";
  * - そうでなければ相手そのもの。`X-Forwarded-For` は誰でも付けられるので読まない
  *
  * 以前は `ADDRESS_HEADER=x-forwarded-for` を渡すと adapter-node が誰から来たヘッダでも
- * 信じていた — :3000 へ直に届く経路があると、ヘッダを付けるだけで信頼ネットワークを
+ * 信じていた。:3000 へ直に届く経路があると、ヘッダを付けるだけで信頼ネットワークを
  * 名乗れた。**`ADDRESS_HEADER` はもう読まない** (互換の経路は残さない。docs/auth.md の
- * 「前段の後ろに置くとき」)。設定してあれば起動時に1行だけ知らせる
+ * 「前段の後ろに置くとき」)。設定してあれば起動時に 1 行だけ知らせる
  */
 process.env.PROTOCOL_HEADER = "x-forwarded-proto";
 const REMOTE_HEADER = "x-denpa-remote";
@@ -95,7 +95,7 @@ const upgrading = (request) =>
   request.headers.get("upgrade")?.toLowerCase() === "websocket" &&
   request.headers.get("connection")?.toLowerCase().includes("upgrade") === true;
 
-/** アプリが置いたもの。**毎回引き直す** — 読み込みが遅れることがある */
+/** アプリが置いたもの。**毎回引き直す。** 読み込みが遅れることがある */
 const live = () => globalThis[LIVE];
 
 const websocket = {
@@ -112,7 +112,7 @@ const websocket = {
   // 映像はサーバ→客の一方向なので、この値は「客からの pong が途切れて
   // よい上限」。ブラウザは ping に自動で pong を返すため、**生きている客は
   // 映像が流れているだけで切れない**。返さなくなった客だけを畳む。
-  // serve 直下は 0 のまま — 録画のファイルや SSE は別勘定。
+  // serve 直下は 0 のままで、録画のファイルや SSE はこの値に掛からない。
   idleTimeout: 120,
   sendPings: true,
   open(ws) {
@@ -200,9 +200,9 @@ if (!served)
  * 画面が開けなくなる (上の説明)。
  *
  * **adapter の作りが変わっても気付けるようにする。** ここは adapter の中の作りに頼っているので、
- * 外れたら黙って居座りが壊れる。引き取る関数が無い・引き取ったあとも合図に2人以上ついている、は
- * 起動を止める (E2E も本番と同じくこの入口で起こすので、CI で落ちる)。数が想定 (アプリの2件 +
- * adapter の2件) と違うだけなら知らせる。adapter があとから登録する作りに変わったときのために、
+ * 外れたら黙って居座りが壊れる。引き取る関数が無い・引き取ったあとも合図に 2 人以上ついている、は
+ * 起動を止める (E2E も本番と同じくこの入口で起こすので、CI で落ちる)。数が想定 (アプリの 2 件 +
+ * adapter の 2 件) と違うだけなら知らせる。adapter があとから登録する作りに変わったときのために、
  * 少し置いてもう一度見て、ついていたら引き取り直して知らせる
  */
 const SIGNALS = ["SIGTERM", "SIGINT"];

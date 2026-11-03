@@ -3,20 +3,20 @@ import { config } from "./config";
 import { chunks } from "./stream";
 
 /**
- * エージェントが起きたことを教えてくれるエンドポイント (`GET /denpa/events`, SSE)。
+ * エージェントが起きたことを知らせるエンドポイント (`GET /denpa/events`。SSE)。
  *
- * これが使えると、チューナーの様子も局の入れ替わりも「覗きに行く」必要がない。
+ * これがあれば、チューナーの様子も局の入れ替わりも定期的に問い合わせなくてよい。
  * 定期実行は**通知が途切れたときの保険**として残してある
- * (つなぎ直しは下でやっているが、黙って止まる可能性は消せない)。
+ * (下で繋ぎ直すが、黙って止まる可能性は消せない)。
  *
- * 流れてくるもの:
+ * 流れてくるイベント
  *
  * | イベント | denpa の使い道 |
  * | --- | --- |
- * | `tuners` | 設定の「チューナー」を更新し、開いた選局をロゴ集めが共有する |
+ * | `tuners` | 設定の「チューナー」を更新し、開いた選局をロゴの取得が共有する |
  * | `channels` | スキャンで局が入れ替わった。取り込み直す |
  *
- * スキャンの進み具合は流れてこない — 走らせているのは denpa 自身 (`scan.ts`)。
+ * スキャンの進み具合は流れてこない (走らせているのは denpa 自身。`scan.ts`)。
  */
 
 interface AgentEvent {
@@ -28,7 +28,7 @@ interface AgentEvent {
 const RETRY_MIN = 1000;
 const RETRY_MAX = 60_000;
 
-/** SSE の1ブロックを解釈する。`event:` と `data:` だけ見れば足りる */
+/** SSE の 1 ブロックを解釈する。`event:` と `data:` だけ見れば足りる */
 export function parseBlock(block: string): AgentEvent | null {
   let name = "";
   let data = "";
@@ -73,7 +73,7 @@ export async function* blocks(
  *
  * `onReachable` は**繋がる/繋がらないが切り替わったときだけ**呼ぶ。一瞬の切れで
  * 鳴らさないよう、繋がらない状態が `agentDownGrace` 続いて初めて `false`。起動時に
- * すんなり繋がったときは何も呼ばない (「復帰」ではないため) — `false` を出した
+ * すんなり繋がったときは何も呼ばない (「復帰」ではないため)。`false` を出した
  * あとに繋がったときだけ `true`。エージェントが黙って落ちても、録画が失敗するまで
  * 気付けなかったのを埋める (webhook は `runtime.ts` が繋ぐ)
  */
@@ -99,8 +99,8 @@ export function listen(
         if (!res.ok || res.body === null)
           throw new Error(`/denpa/events -> ${res.status}`);
 
-        // 繋がった時点で待ち時間を戻す。長く繋がっていたのに1度切れただけで
-        // 1分待つ、ということにならないように
+        // 繋がった時点で待ち時間を戻す。長く繋がっていたのに 1 度切れただけで
+        // 1 分待つ、ということにならないように
         retry = RETRY_MIN;
         downSince = null;
         // 落ちていると知らせたあとに繋がったときだけ「復帰」を鳴らす

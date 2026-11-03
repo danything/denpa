@@ -24,7 +24,7 @@
     if (form?.scan)
       list.push({ key: "tuner-notice", kind: "info", text: form.scan });
     /*
-     * 済んだこと (覚えたロゴを消した)。**`message` に載せない** — あれは fail の言葉として
+     * 済んだこと (覚えたロゴを消した)。**`message` に載せない**。あれは fail の言葉として
      * 赤で出す欄 (`errorNotice`) なので、載せていた頃は済んだことまで失敗の赤で出ていた
      */
     if (form?.done)

@@ -36,9 +36,9 @@ import { run } from "./stream";
  * 覚え方と当て方は [logo-detect.ts](../ts/logo-detect.ts)。ここはコマを抜いて渡すところと、
  * 覚えたものの置き場です。
  *
- * 1. **覚える** — キーフレームだけ散らして抜き (`-skip_frame nokey`。全部をデコードしないので速い)、
+ * 1. 覚えるときは、キーフレームだけ散らして抜き (`-skip_frame nokey`。全部をデコードしないので速い)、
  *    上下 1/5 の範囲で線の向きを足し合わせて在り処を割り出す。局のぶんを覚えていれば飛ばす
- * 2. **当てる** — ロゴの枠を CM 検出の1回のデコード (`cm-scan.ts`) で全部のコマから切り出してもらい、
+ * 2. 当てるときは、ロゴの枠を CM 検出の 1 回のデコード (`cm-scan.ts`) で全部のコマから切り出してもらい、
  *    点を付けて区間にする。ついでに散らしたコマを足して、覚えたものを育てる
  *
  * 覚えたものは局ごとの入れ物に、コマの大きさごとに置く (`logo-data.logoRepo`・`modelFile`)。
@@ -46,15 +46,15 @@ import { run } from "./stream";
  */
 
 /**
- * 覚えたものの置き場 (局ごとの入れ物の中)。**コマの大きさごとに分ける** — 同じ局で SD と HD の録画が
- * 交互に来ると、1つの名前では毎回入れ替わって育たない
+ * 覚えたものの置き場 (局ごとの入れ物の中)。**コマの大きさごとに分ける。** 同じ局で SD と HD の録画が
+ * 交互に来ると、1 つの名前では毎回入れ替わって育たない
  */
 export const modelFile = (width: number, height: number) =>
   `own-logo-${width}x${height}.bin`;
 
 /** 覚えるときに見るキーフレームの数 */
 const LEARN_FRAMES = 600;
-/** 当てるついでに覚えたものへ足すコマの間隔 (コマ数)。30分で 600 コマほど */
+/** 当てるついでに覚えたものへ足すコマの間隔 (コマ数)。30 分で 600 コマほど */
 const GROW_EVERY = 90;
 
 export function load(
@@ -96,7 +96,7 @@ export function save(repo: string, model: LogoModel): void {
   }
 }
 
-/** 2つの枠が重なるか */
+/** 2 つの枠が重なるか */
 function overlaps(a: Rect, b: Rect): boolean {
   return (
     a.x < b.x + b.width &&
@@ -118,7 +118,7 @@ interface Video {
  *
  * 途中で大きさの変わる録画 (SD の CM が挟まる) で、決め打ちの枠がはみ出すと ffmpeg ごと落ちる。
  * 先にコマ全体を元の大きさへ scale すると、大きさが同じでも毎コマ変換が走って
- * 切り出しの CPU が倍になった (実測 30分で 112 → 211 秒)。比で切ってから小さい枠だけ
+ * 切り出しの CPU が倍になった (実測 30 分で 112 → 211 秒)。比で切ってから小さい枠だけ
  * 戻せば、同じ大きさのときの scale は何もしない
  */
 function cropTo(rect: Rect, video: Video): string {
@@ -129,7 +129,7 @@ function cropTo(rect: Rect, video: Video): string {
   );
 }
 
-/** 止める合図と、ffmpeg 1回ぶんの時間切れ (ms) */
+/** 止める合図と、ffmpeg 1 回ぶんの時間切れ (ms) */
 interface Limits {
   signal?: AbortSignal | undefined;
   timeoutMs: number;
@@ -142,7 +142,7 @@ async function learn(
   limits: Limits,
 ): Promise<LogoModel | string> {
   const { width, height, duration } = video;
-  // 隅は上下の 1/5 (logo-area の REGION_H)。並べた2つの境目が縦の真ん中で揃うよう偶数に
+  // 隅は上下の 1/5 (logo-area の REGION_H)。並べた 2 つの境目が縦の真ん中で揃うよう偶数に
   const band = Math.round(height / 5) & ~1;
   const top = emptyOrientation(width, band);
   const bottom = emptyOrientation(width, band);
@@ -269,7 +269,7 @@ interface LogoResult {
 /**
  * ロゴの判定を始める。覚えていれば読み、無ければこの録画から覚える。
  * `scan()` を CM 検出のデコードに渡し、読み終えたら `finish` を呼ぶ。デコードをやり直すとき (エンコードの
- * 再エンコード) は `scan()` をもう一度呼ぶ — 点は読むたびに一から数える
+ * 再エンコード) は `scan()` をもう一度呼ぶ。点は読むたびに一から数える
  */
 export async function openLogo(
   input: string,
@@ -280,7 +280,7 @@ export async function openLogo(
   | {
       scan(): ScanLogo;
       /**
-       * 区間を出し、覚えたものを書く。**覚えていたもので1コマも当たらなければ覚え直す** (局がロゴを
+       * 区間を出し、覚えたものを書く。**覚えていたもので 1 コマも当たらなければ覚え直す** (局がロゴを
        * 替えたとき)。覚え直したら枠だけもう一度切り出す (`rescan`。無音と切れ目は取り直さない)
        */
       finish(

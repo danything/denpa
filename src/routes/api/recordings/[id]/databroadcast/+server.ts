@@ -7,9 +7,9 @@ import { recordingOr404 } from "#lib/server/recording.js";
 /**
  * 録画のデータ放送 (再生位置つきの変化ログ)。**d ボタンで開いたときに読む。**
  *
- * エンコードするときに元TSから取り出してサイドカーへ置いてある (`server/recorded-bml.ts`)。
- * ここは録画IDから場所を引いて、そのまま JSON で配るだけ。持っていない録画
- * (データ放送の無い局・古い録画) は空を返す — 画面はそれで「出せない」を出す。
+ * エンコードするときに元の TS から取り出してサイドカーへ置いてある (`server/recorded-bml.ts`)。
+ * ここは録画 ID から場所を引いて、そのまま JSON で配るだけ。持っていない録画
+ * (データ放送の無い局・古い録画) は空を返す。画面はそれを見て「出せない」と出す。
  */
 export function GET({ params }) {
   const recording = recordingOr404(params.id);

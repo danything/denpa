@@ -5,8 +5,8 @@ import { config } from "./config";
  * ホーム画面に置いたときの見た目 (PWA のマニフェスト)。
  *
  * **名前を来た名前ごとに変えられるようにしてある。** 同じ denpa を外向き
- * (`dp.doany.io`) と LAN 用 (`dp.l.doany.io`) の2つの名前で出していて、
- * 両方をホーム画面に置くと**アイコンも名前も同じものが2つ並ぶ**。
+ * (`dp.doany.io`) と LAN 用 (`dp.l.doany.io`) の 2 つの名前で出していて、
+ * 両方をホーム画面に置くと**アイコンも名前も同じものが 2 つ並ぶ**。
  * どちらを押せば家の中から繋がるほうなのか分からない。
  *
  * ブラウザは入れた時点のマニフェストを覚えるので、**入れ直すまで名前は
@@ -30,7 +30,7 @@ export function appName(hostname: string): string {
   );
 }
 
-/** `PWA_NAMES` を読む。ホスト名は小文字にする。`=` の無いものは書き間違いとして飛ばす (表示名にも、知っている名前にもしない) */
+/** `PWA_NAMES` を読む。ホスト名は小文字にする。`=` の無いものは書き間違いとして飛ばす (表示名にも、登録した名前にもしない) */
 export function pwaNames(): { host: string; name: string }[] {
   return networks(config.pwaNames).flatMap((raw) => {
     const at = raw.indexOf("=");
@@ -54,7 +54,7 @@ export function pwaNames(): { host: string; name: string }[] {
  */
 const BACKGROUND = { dark: "#0b0c0f", light: "#ffffff" } as const;
 
-export type ManifestTheme = keyof typeof BACKGROUND;
+type ManifestTheme = keyof typeof BACKGROUND;
 
 export function manifest(
   hostname: string,
@@ -68,11 +68,11 @@ export function manifest(
     lang: "ja",
     /*
      * **`id` も名前ごとに分ける。** 既定は `start_url` なので、
-     * どちらの名前で入れても同じ `/` になる。同じ端末に2つ置いたときに
+     * どちらの名前で入れても同じ `/` になる。同じ端末に 2 つ置いたときに
      * 片方がもう片方の入れ直しとして扱われないよう、明示しておく
      */
     // URL は manifest の置き場からの相対。前段の接頭辞の下でも、その中を指す (server/paths.ts)。
-    // 根で動かしていれば前と同じ `/?host=…` に解決されるので、入れてある PWA は別物にならない
+    // ルートで動かしていれば前と同じ `/?host=…` に解決されるので、入れてある PWA は別物にならない
     id: `./?host=${hostname.toLowerCase()}`,
     start_url: "./",
     scope: "./",

@@ -3,7 +3,7 @@
  * 読み直すやり方では、サーバ側で起きた変化 (待機中のジョブが動き出した等) を伝えられない。
  *
  * WebSocket ではなく SSE を使う。伝えたいのはサーバ→ブラウザの一方向だけで、
- * SSE なら普通のHTTPなので逆プロキシも SvelteKit もそのまま通る
+ * SSE なら普通の HTTP なので逆プロキシも SvelteKit もそのまま通る
  * (WebSocket は入口の `server.js` でしか受けられない。`ws.ts`)。
  */
 
@@ -15,26 +15,26 @@ export type DenpaEvent =
   | "migrate"
   | "scan"
   | "services"
-  /** 番組表が増えた・書き換わった。書くたびに飛ぶ (集めている間は読めたぶんを30秒ごとに書く。`epg-collect.collectChannel`) */
+  /** 番組表が増えた・書き換わった。書くたびに飛ぶ (集めている間は読めたぶんを 30 秒ごとに書く。`epg-collect.collectChannel`) */
   | "programs"
-  /** 局ロゴを取得している最中の進み具合。1チャンネルに数分かかる */
+  /** 局ロゴを取得している最中の進み具合。1 チャンネルに数分かかる */
   | "logos"
   | "tuners"
   /**
-   * エンコードの進み具合。**中身 (`EncodeProgress`) も運ぶ** — 数秒おきに
+   * エンコードの進み具合。**中身 (`EncodeProgress`) も運ぶ。** 数秒おきに
    * 飛ぶので、そのたびにページ全体を読み直させない。画面は該当行の
    * 数字だけを書き換える (`encode-live.svelte.ts`)
    */
   | "encode"
   /**
    * **ライブがチューナーを録画に譲った** (`server/live.ts` の `lose`)。中身は `Yielded`。
-   * HTTP でライブを観ているもの (テレビのアプリ) 向け — ストリームの中では伝えられないので、ここで知る。
+   * HTTP でライブを観ているもの (テレビのアプリ) 向け。ストリームの中では伝えられないので、こちらで伝える。
    * 画面 (WebSocket) は同じものを `lost` の通知で受け取るので、これは読まない
    */
   | "yielded"
   /**
-   * **録画のチャプターが書き換わった** (CM検出のやり直し。`encoder.runCmJob`)。中身は `ChaptersChanged`。
-   * 開いている観る画面がチャプターを取り直す — 開いたときに読んだきりなので、CM飛ばしとシークバーが古いままになる
+   * **録画のチャプターが書き換わった** (CM 検出のやり直し。`encoder.runCmJob`)。中身は `ChaptersChanged`。
+   * 開いている観る画面がチャプターを取り直す。開いたときに読んだきりなので、CM 飛ばしとシークバーが古いままになる
    */
   | "chapters"
   /** 切り抜きが増えた・消えた・字幕やコメントを切り替えた (`server/clips.ts`)。開いている切り抜きの画面が読み直す */
@@ -69,7 +69,7 @@ export function emit(event: DenpaEvent, payload?: unknown): void {
     try {
       listener(event, payload);
     } catch {
-      // 1つの購読者の失敗で他に波及させない
+      // 1 つの購読者の失敗で他に波及させない
     }
   }
 }

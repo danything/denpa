@@ -150,7 +150,7 @@ interface Tokens {
 
 /**
  * トークンの応答 (RFC 6749 5.1) を読む。hub は手を加えずに渡すので、読むものだけ読む。
- * `access_token` が無ければ投げる。期限が無い・数でないときは短めに見て、`warn` に言う
+ * `access_token` が無ければ投げる。期限が無い・数でないときは短めに見て、`warn` を呼ぶ
  */
 export function readTokens(
   body: unknown,
@@ -298,7 +298,7 @@ function unseal(data: Buffer, column: string): string {
 // ---- 状態・更新・外す ----
 
 /** 設定の画面に出す状態 */
-export type LinkState =
+type LinkState =
   | { state: "none" }
   | { state: "linked"; userId: string; linkedAt: number }
   | { state: "lost"; lostAt: number };

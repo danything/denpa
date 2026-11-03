@@ -31,7 +31,7 @@ import type { Actions } from "./$types";
  * 同じ位置で探せるようにするため。
  *
  * 取り残しの局は出さない (`currentServices` と `airing`)。出すと、選んでも
- * 映らない行が並ぶ — 終わったチャンネルの枠が SDT に残っていることがある。
+ * 映らない行が並ぶ。終わったチャンネルの枠が SDT に残っていることがある。
  */
 export interface LiveChannel {
   /** `service.id`。一覧の目印 */

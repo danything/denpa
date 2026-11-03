@@ -289,7 +289,7 @@
     if (stage === null) return;
     const lifting = controls.shown;
     /*
-     * 位置は `offsetTop` で測る (ずらす前の位置)。データ放送の小窓の中 (`data-bml-window`) では動かさない —
+     * 位置は `offsetTop` で測る (ずらす前の位置)。データ放送の小窓の中 (`data-bml-window`) では動かさない。
      * 操作バーと重ならず、ずらすと小窓の端で切れる
      */
     const offsetIn = (el: HTMLElement): number | null => {
@@ -379,7 +379,7 @@
   {/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!--
-    映像の周りは黒 (letterbox の帯にテーマ色を出さない)。低くしすぎない (224px) — 上下と右に重ねる操作バーどうしが重なる
+    映像の周りは黒 (letterbox の帯にテーマ色を出さない)。低くしすぎない (224px)。上下と右に重ねる操作バーどうしが重なる
 -->
   <div
     bind:this={element}
@@ -424,7 +424,7 @@
     display: contents;
   }
   /*
-   * 枠の外を流れるコメントの所 (`outside`)。二段組 (下) のほかでは出さない — 縦に積むときは枠が窓の幅いっぱいで外が無く、
+   * 枠の外を流れるコメントの所 (`outside`)。二段組 (下) のほかでは出さない。縦に積むときは枠が窓の幅いっぱいで外が無く、
    * 置き場が箱を持たないので、置くと窓の別の所に出る
    */
   .outside {
@@ -433,7 +433,7 @@
   /*
      * 二段組では、枠を映像の形にして使える広さに収める (上の `aspect`)。幅は列の幅 (`100cqw`) と
      * 「高さ × 縦横比」(`100cqh`) の小さいほう。上に寄せて横は真ん中 (E2E の `expectSideFrame`)。
-     * 測る箱は `.room` — `<main>` の列にすると `position: absolute` の基準になり、`AmbientGlow` の位置がずれる
+     * 測る箱は `.room`。`<main>` の列にすると `position: absolute` の基準になり、`AmbientGlow` の位置がずれる
      */
   /* 横にしたスマホ (下) は 1000px を超えても二段組にしないので、ここから外す (`PlayerLayout` の `PHONE_LANDSCAPE`) */
   @media (min-width: 1000px) and (not ((orientation: landscape) and (max-height: 500px) and (pointer: coarse))) {

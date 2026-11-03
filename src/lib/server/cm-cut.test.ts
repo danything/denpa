@@ -64,7 +64,7 @@ describe("切る所を決める", () => {
     expect(plan?.errors.map((e) => Math.round(e * 1000))).toEqual([0, 0]);
   });
 
-  test("1コマずれたキーフレームでも同じ境目とみなす", () => {
+  test("1 コマずれたキーフレームでも同じ境目とみなす", () => {
     const plan = planCut(
       [{ start: 190.2, end: 1800 }],
       [key(0), key(190.2 + frame)],

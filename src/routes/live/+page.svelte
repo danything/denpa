@@ -142,7 +142,7 @@
   let dataButton = $state<(() => boolean) | null>(null);
 
   /**
-   * サーバが決めた局で開く (`+page.server.ts` の `start`)。こちらでも同じ判断をしない — サーバは既に
+   * サーバが決めた局で開く (`+page.server.ts` の `start`)。こちらでも同じ判断をしない。サーバは既に
    * その局をエンコードし始めている (`server/live.ts` の `warm`)
    */
   onMount(() => {
@@ -251,7 +251,7 @@
   /**
    * データ放送が「この局へ」と言ってきた (epgTune)。手で選んだのと同じ経路 (`select`) で切り替える。
    * original_network_id と service_id で探す (局の一覧は transport_stream_id を持っていない)。
-   * 一覧に無い局なら false — 文書には失敗が返り、文書が自分で案内する
+   * 一覧に無い局なら false。文書には失敗が返り、文書が自分で案内する
    */
   function tuneFromData(service: Service): boolean {
     const found = channels.find(
@@ -283,7 +283,7 @@
     if (scrolled || row === undefined || list === null) return;
     scrolled = true;
     /*
-     * `scrollIntoView` は使わない — 動かせるものは何でも動かすので、縦に積む幅では窓ごと動いて、
+     * `scrollIntoView` は使わない。動かせるものは何でも動かすので、縦に積む幅では窓ごと動いて、
      * 読み込み直したときに映像が画面から出ていた。動かすのは一覧の中身だけ (中で動けない幅では何もしない)
      */
     const room = list.scrollHeight - list.clientHeight;
@@ -1000,7 +1000,7 @@
     {/snippet}
     {#if detail.current}
       <!--
-            番組の中身は、この列を入れ替えて出す (モーダルにしない — 映像に被さると観ながら読めない)
+            番組の中身は、この列を入れ替えて出す (モーダルにしない。映像に被さると観ながら読めない)
         -->
       <FactsAside
         testid="live-detail"
@@ -1022,7 +1022,7 @@
       <!-- 幅と高さ・サイドバーの形は FactsAside と同じ (PlayerLayout が持つ。一覧は中身が違うので列だけ揃える) -->
       <aside class="live-side">
         <!--
-                データ放送を開いている間だけ、リモコンを一覧の上に出す (入れ替えない — 押しながら局も変えたい)。
+                データ放送を開いている間だけ、リモコンを一覧の上に出す (入れ替えない。押しながら局も変えたい)。
                 常に受信していても、開くまでは出さない
             -->
         {#if dataPress !== null}
@@ -1120,7 +1120,7 @@
                 <span class="channel-text">
                   <!--
                                     テレビの番号を局名の頭に添える (地上波はリモコン番号、BS/CS は3桁)。
-                                    番号の無い局も幅は取る — 局名の頭がそろう
+                                    番号の無い局も幅は取る。局名の頭がそろう
                                 -->
                   <span class="channel-name broadcast">
                     {#if tuned}<span

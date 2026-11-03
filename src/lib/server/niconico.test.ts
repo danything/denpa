@@ -155,7 +155,7 @@ describe("戻ってきた結果を保存する", () => {
     ).toEqual({ ok: false, message: FINISH_ERRORS.unreadable });
   });
 
-  test("更新に使うトークンか ユーザー ID が無ければ連携しない", async () => {
+  test("更新に使うトークンかユーザー ID が無ければ連携しない", async () => {
     const noRefresh = await link({
       access_token: "a",
       expires_in: 3600,
@@ -279,7 +279,7 @@ describe("外す", () => {
 });
 
 describe("応答を読む", () => {
-  test("期限が無ければ短めに見て、1 回言う", () => {
+  test("期限が無ければ短めに見て、1 回警告する", () => {
     const warned: string[] = [];
     const tokens = readTokens({ access_token: "a" }, (m) => warned.push(m));
     expect(tokens.expiresIn).toBe(1800);

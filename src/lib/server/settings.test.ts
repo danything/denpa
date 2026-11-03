@@ -13,8 +13,8 @@ const { normalizePostalCode, parseCodecs, saveSettings, settings, store } =
   await import("./settings");
 
 /*
- * **コーデックは複数選べる。** 両方選ぶと1本の録画を AV1 と H.264 でエンコードする
- * (`server/encoder.ts`)。カンマ区切りで持ち、1つだけの古い値も読める。
+ * **コーデックは複数選べる。** 両方選ぶと 1 本の録画を AV1 と H.264 でエンコードする
+ * (`server/encoder.ts`)。カンマ区切りで持ち、1 つだけの古い値も読める。
  */
 describe("コーデックの選択", () => {
   test("両方選べる。AV1 を先頭に寄せる", () => {
@@ -23,7 +23,7 @@ describe("コーデックの選択", () => {
     expect(parseCodecs("h264,av1")).toEqual(["av1", "h264"]);
   });
 
-  test("1つだけの古い値もそのまま読める", () => {
+  test("1 つだけの古い値もそのまま読める", () => {
     expect(parseCodecs("av1")).toEqual(["av1"]);
     expect(parseCodecs("h264")).toEqual(["h264"]);
   });
@@ -39,14 +39,14 @@ describe("コーデックの選択", () => {
 });
 
 /*
- * **郵便番号は、7桁揃っていなければ入れないほうがよい。**
+ * **郵便番号は、7 桁揃っていなければ入れないほうがよい。**
  *
  * 放送のアプリはこれを読んで天気や地域のニュースの場所を決める
  * (`nvram://receiverinfo/zipcode`)。途中まで入った番号を渡すと
  * 「入っているが違う場所」として扱われるので、**空のほうがまだ分かる**。
  */
 describe("郵便番号", () => {
-  test("数字7桁はそのまま", () => {
+  test("数字 7 桁はそのまま", () => {
     expect(normalizePostalCode("1000001")).toBe("1000001");
   });
 
@@ -56,11 +56,11 @@ describe("郵便番号", () => {
     expect(normalizePostalCode(" 100 - 0001 ")).toBe("1000001");
   });
 
-  test("7桁でなければ空にする", () => {
+  test("7 桁でなければ空にする", () => {
     expect(normalizePostalCode("100")).toBe("");
     expect(normalizePostalCode("10000012")).toBe("");
     expect(normalizePostalCode("")).toBe("");
-    // 数字が1つも無いものも同じ
+    // 数字が 1 つも無いものも同じ
     expect(normalizePostalCode("とうきょう")).toBe("");
   });
 });

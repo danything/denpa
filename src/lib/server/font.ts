@@ -1,8 +1,8 @@
 /**
- * Denpa Font をどう配るか (`/api/font/` の woff2 の 2 つと、それを名乗らせる CSS)。
+ * Denpa Font をどう配るか (`/api/font/` の woff2 の 2 つと、それを宣言する CSS)。
  *
  * 画面はバージョン付きの URL (`?v=v2.1`。`#lib/font.ts`。woff2 は CSS が付ける) で取りに来る。**入っている字とバージョンが
- * 合うときだけ1年持たせる** (`immutable`)。字が変わるのはリリースを上げたときだけで、
+ * 合うときだけ 1 年持たせる** (`immutable`)。字が変わるのはリリースを上げたときだけで、
  * そのとき URL も変わる。
  *
  * 合わない (バージョンなし・古い画面・バージョンを書いた印が無い) ときは**毎回確かめさせる**
@@ -35,12 +35,12 @@ const RANGES =
   /^U\+[0-9A-F]{1,6}(-[0-9A-F]{1,6})?(,U\+[0-9A-F]{1,6}(-[0-9A-F]{1,6})?)*$/i;
 
 /**
- * Denpa Font を名乗らせる CSS (`/api/font/denpa-font.css`)。**2 つの woff2 を同じファミリ名で名乗らせる**:
- * 基本の字 (`denpa-font.woff2`) と、JIS X 0213 で足された漢字 (`denpa-font-jisx0213.woff2`)。後のほうには
+ * Denpa Font の `@font-face` を宣言する CSS (`/api/font/denpa-font.css`)。**2 つの woff2 を同じファミリ名で宣言する。**
+ * 基本の字 (`denpa-font.woff2`) と、JIS X 0213 で足された漢字 (`denpa-font-jisx0213.woff2`) で、後のほうには
  * `unicode-range` を付けるので、ブラウザはその字が画面に出たときだけ取得する (多くの画面は基本の字だけで済む)。
  *
- * URL は CSS からの相対 (接頭辞の下でも同じ)。`version` は入っているバージョンで、woff2 を1年持たせる鍵。
- * 範囲 (`ranges`) が無い・読めないときは基本のファイルだけを名乗らせる
+ * URL は CSS からの相対 (接頭辞の下でも同じ)。`version` は入っているバージョンで、woff2 を 1 年持たせる鍵。
+ * 範囲 (`ranges`) が無い・読めないときは基本のファイルだけを宣言する
  */
 export function fontCss(version: string, ranges: string | null): string {
   const v = version === "" ? "" : `?v=${encodeURIComponent(version)}`;

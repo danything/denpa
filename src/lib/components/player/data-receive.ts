@@ -11,7 +11,7 @@
 /** 覚える鍵。`1` / `0`。頭の `player-` は、バックグラウンド再生 (`player-background`) と同じく画面をまたいで効くもの */
 export const DATA_RECEIVE_KEY = "player-data-always";
 
-/** 覚えていた値。**既定はオフ** — オンにしたことのある端末だけオンで始まる */
+/** 覚えていた値。**既定はオフ**。オンにしたことのある端末だけオンで始まる */
 export function storedDataReceive(saved: string | null): boolean {
   return saved === "1";
 }

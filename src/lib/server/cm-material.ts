@@ -4,7 +4,7 @@ import type { Range } from "../ts/cm-decide";
 import type { Span } from "../ts/logo-detect";
 
 /**
- * **CM 検出の材料の控え** (`cm_materials`)。1回のデコードで取った無音・場面の切れ目・ロゴの点を、数だけ縮めて DB に置く。
+ * **CM 検出の材料の控え** (`cm_materials`)。1 回のデコードで取った無音・場面の切れ目・ロゴの点を、数だけ縮めて DB に置く。
  *
  * - CM 検出だけやり直すとき (`encoder.runCmJob`) に、バージョンが合えば読み直さずにここから決める
  * - 決め方 (`cm-decide.ts`) を変えたときに、本番の録画で前と比べる材料にする
@@ -44,7 +44,7 @@ export interface CmMaterial {
 /** 頭の JSON。並びの長さはここから決まる */
 type Header = Omit<CmMaterial, "silences" | "times" | "cuts" | "logo"> & {
   version: number;
-  /** 1コマ目の時刻 (µs) とコマの数 */
+  /** 1 コマ目の時刻 (µs) とコマの数 */
   first: number;
   frames: number;
   /** 持っている切れ目の数 */

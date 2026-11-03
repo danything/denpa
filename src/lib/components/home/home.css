@@ -27,7 +27,7 @@
   overflow-wrap: anywhere;
 }
 /*
- * 行の入口 (`RowTitle`)。**見た目は番組名の字のまま** — リンクの色も下線も、
+ * 行の入口 (`RowTitle`)。**見た目は番組名の字のまま**。リンクの色も下線も、
  * Pico のボタンの地・枠・余白も付けない。押せる範囲は `::after` で行
  * (`.row` は `position: relative`) いっぱいに広げる
  */

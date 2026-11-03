@@ -16,14 +16,14 @@ describe("sidecarPaths", () => {
 });
 
 describe("buildThumbnailArgs", () => {
-  test("位置ぴったりではなく thumbnail フィルタで代表のコマを選ぶ (CM明けの黒コマを選ばない)", () => {
+  test("位置ぴったりではなく thumbnail フィルタで代表のコマを選ぶ (CM 明けの黒コマを選ばない)", () => {
     const args = buildThumbnailArgs(
       "/library/番組/a.mkv",
       "/library/番組/a-poster.jpg",
       { at: 130 },
     );
     const i = args.indexOf("-vf");
-    // 片方のフィールド → 正方形の画素に縮小 → 選ぶ (候補を全部持つフィルタなので、1080pのままだとGB単位で食う)
+    // 片方のフィールド → 正方形の画素に縮小 → 選ぶ (候補を全部持つフィルタなので、1080p のままだと GB 単位で使う)
     expect(args[i + 1]).toMatch(
       /^field=top,setsar=[^,]+,scale=\d+:[^,]+,setsar=1,thumbnail=\d+$/,
     );
@@ -32,7 +32,7 @@ describe("buildThumbnailArgs", () => {
     expect(args.at(-1)).toBe("/library/番組/a-poster.jpg");
   });
 
-  test("負の位置は0に丸める", () => {
+  test("負の位置は 0 に丸める", () => {
     expect(buildThumbnailArgs("/a.mkv", "/a-poster.jpg", { at: -5 })).toContain(
       "0",
     );
@@ -53,36 +53,36 @@ describe("buildThumbnailArgs", () => {
   });
 });
 
-describe("thumbnailPlace (元のTSの時刻で決める)", () => {
+describe("thumbnailPlace (元の TS の時刻で決める)", () => {
   const position = config.thumbnailPosition;
 
-  test("CM 無し: 頭を捨てた所から数える", () => {
+  test("CM 無し: 先頭を捨てた所から数える", () => {
     expect(
       thumbnailPlace(1800, { skip: 0.93, kept: null, content: null }),
     ).toEqual({
       at: 0.93 + position,
     });
-    // 短い番組は尺の1/3
+    // 短い番組は尺の 1/3
     expect(
       thumbnailPlace(60, { skip: 0.5, kept: null, content: null }),
     ).toEqual({ at: 20.5 });
-    // 元のTSを渡さない (エンコードしない録画) なら動画の頭から
+    // 元の TS を渡さない (エンコードしない録画) なら動画の先頭から
     expect(thumbnailPlace(1800)).toEqual({ at: position });
   });
 
   test("CM を切った: 残した区間をつないで数え、その区間の終わりまで読む", () => {
-    // エンコードしたものの頭は 30 秒 (前の CM と捨てた頭は入らない)
+    // エンコードしたものの先頭は 30 秒 (前の CM と捨てた先頭は入らない)
     const kept = [
       { start: 30, end: 30 + position / 2 },
       { start: 400, end: 1700 },
     ];
     const place = thumbnailPlace(1800, { skip: 0.93, kept, content: null });
-    // 1つ目の区間で position/2 秒使い、残りを2つ目の頭から
+    // 1 つ目の区間で position/2 秒使い、残りを 2 つ目の先頭から
     expect(place.at).toBeCloseTo(400 + position / 2);
     expect(place.limit).toBeCloseTo(1700 - (400 + position / 2));
   });
 
-  test("CM を切った: 1つ目の区間で届くならそこから", () => {
+  test("CM を切った: 1 つ目の区間で届くならそこから", () => {
     const place = thumbnailPlace(1800, {
       skip: 0,
       kept: [{ start: 12, end: 900 }],
@@ -103,7 +103,7 @@ describe("thumbnailPlace (元のTSの時刻で決める)", () => {
     expect(place).toEqual({ at: 60, limit: 10 });
   });
 
-  test("CM を残した: 本編の最初の区間の頭から測り、区間の終わりまで読む", () => {
+  test("CM を残した: 本編の最初の区間の先頭から測り、区間の終わりまで読む", () => {
     expect(
       thumbnailPlace(1800, {
         skip: 0.93,

@@ -64,7 +64,7 @@ export function haystack(
 }
 
 /**
- * 判定が番組から読む列。**全列は要らない** — 下見 (`rule-preview.ts`) は
+ * 判定が番組から読む列。**全列は要らない。** 下見 (`rule-preview.ts`) は
  * 読む列を絞って引くので、ここを `Program` にしていると渡せない
  */
 type Matchable = Pick<
@@ -86,10 +86,10 @@ function parseGenreDetail(program: Matchable): Genre[] {
 /**
  * 判定に使う形式にほどいたルール。
  *
- * ほどく作業 (JSON の読み出し、キーワードの分割、全角の直し) を**ルール1つにつき
- * 1回**にするために分けてある。以前は判定のたびにやっていて、実機では
- * 有効なルール 318 × これから放送される番組 25,608 = **810万回**それをやっていた。
- * ルールを1つ足すだけで十数秒待たされていたのはこれが理由。
+ * ほどく作業 (JSON の読み出し、キーワードの分割、全角の直し) を**ルール 1 つにつき
+ * 1 回**にするために分けてある。以前は判定のたびにやっていて、実機では
+ * 有効なルール 318 × これから放送される番組 25,608 = **810 万回**それをやっていた。
+ * ルールを 1 つ足すだけで十数秒待たされていたのはこれが理由。
  */
 interface CompiledRule {
   rule: Rule;
@@ -112,7 +112,7 @@ export function compile(rule: Rule): CompiledRule {
     types: nonEmpty(rule.service_types),
     genres: nonEmpty(rule.genres),
     time: hasTime(rule) ? { from: rule.time_from, to: rule.time_to } : null,
-    // 7日とも選んだものは毎日と同じ
+    // 7 日とも選んだものは毎日と同じ
     weekdays:
       rule.weekdays !== null && rule.weekdays.length < 7
         ? nonEmpty(rule.weekdays)
@@ -120,7 +120,7 @@ export function compile(rule: Rule): CompiledRule {
     fields: parseSearchFields(rule.search_fields),
     // キーワードは空白区切りの AND。「アニメ 再放送」で両方含むものだけ当たる
     keywords: searchable(rule.keyword).split(/\s+/).filter(Boolean),
-    // 除外キーワードは OR。1つでも当たれば落とす
+    // 除外キーワードは OR。1 つでも当たれば落とす
     ignores: searchable(rule.ignore_keyword).split(/\s+/).filter(Boolean),
   };
 }
@@ -129,15 +129,15 @@ export function compile(rule: Rule): CompiledRule {
  * SQL の `GLOB` で候補を減らすための形式。**減らすだけで、当てるのは `matchesCompiled`。**
  *
  * 下見 (`rule-preview.ts`) はこれから放送される番組を全部引いて JS で絞っていた。
- * 実データ相当 (33,000 件) で全列を読むだけで 330〜400ms、条件が1語でも同じだけ
+ * 実データ相当 (33,000 件) で全列を読むだけで 330〜400ms、条件が 1 語でも同じだけ
  * かかる。番組名に `GLOB '*語*'` を掛ければ当たった行だけ読める。
  *
- * **必ず含むはずの語だけ使う。** キーワードは空白区切りの AND なので、1語でも
- * 含まない番組は当たらない — SQL で落としても結果は変わらない。ただし
+ * **必ず含むはずの語だけ使う。** キーワードは空白区切りの AND なので、1 語でも
+ * 含まない番組は当たらない。SQL で落としても結果は変わらない。ただし
  *
  * - `extended` (詳細説明) は JSON のまま入っているので、検索範囲がそこまで及ぶときは
  *   SQL では当てない (null を返す)
- * - 番組名と概要は放送のとおり全角混じりで、語は半角に寄せてある。英数・記号は1字ごとに
+ * - 番組名と概要は放送のとおり全角混じりで、語は半角に寄せてある。英数・記号は 1 字ごとに
  *   全角と大文字も並べた組 (`[ｖＶvV]`) にして当てる (`fold.globTerms`)。組を作れない
  *   大文字小文字を持つ非 ASCII の字 (キリル文字など) を含む語は使わない
  * - 外字は規格の字 (𠮷 🈟) のまま入っていて、語のほうは昔の書き方 (吉 [新]) に
@@ -180,7 +180,7 @@ export type Miss =
  * 局やジャンルで落ちる番組にはそもそも作らせない。
  * 同じ番組に何本ものルールを当てるときは、呼ぶ側が作ったものを使い回せる。
  *
- * **当てるのはここ1つ。** 予約を立てる (`applyRules`)・下見 (`rule-preview.ts`)・検索の
+ * **当てるのはここ 1 つ。** 予約を立てる (`applyRules`)・下見 (`rule-preview.ts`)・検索の
  * 「これからの放送」(`search.ts`) はどれもここを通る (`matchesCompiled` はその真偽)
  */
 export function missOf(
@@ -195,8 +195,8 @@ export function missOf(
   const { services, types, genres, time, weekdays, keywords, ignores } =
     compiled;
 
-  // 局の条件は「種別」と「個別の局」のOR。
-  // 「地上波全部 + BS11だけ」のような指定ができるようにするため
+  // 局の条件は「種別」と「個別の局」の OR。
+  // 「地上波全部 + BS11 だけ」のような指定ができるようにするため
   if (services !== null || types !== null) {
     const byService = services?.includes(program.service_id) ?? false;
     const byType =
@@ -204,7 +204,7 @@ export function missOf(
     if (!byService && !byType) return "service";
   }
 
-  // ジャンルは "7"(大分類だけ)と "7-0"(中分類まで)の2通りで持つ。
+  // ジャンルは "7" (大分類だけ) と "7-0" (中分類まで) の 2 通りで持つ。
   // 昔のルールは数値の配列だが、読み出し時に文字列へ揃えてある (schema.ts の strings)
   if (genres !== null) {
     const detail = parseGenreDetail(program);
@@ -250,7 +250,7 @@ export function matchesCompiled(
 }
 
 /**
- * ルールに番組が当てはまるか。1件だけ見るとき用 (いまはテストだけが使う。画面と予約は `matchesCompiled`)。
+ * ルールに番組が当てはまるか。1 件だけ見るとき用 (いまはテストだけが使う。画面と予約は `matchesCompiled`)。
  *
  * 有料放送を対象にするかは全体設定なので、呼ぶ側が渡す
  * (ここで設定を読むと純粋関数でなくなり、テストから条件を作れない)。
@@ -271,8 +271,8 @@ export function matches(
 }
 
 /**
- * 番組1つぶんの検索用テキストを、対象範囲ごとに1度だけ作って使い回す。
- * ほとんどのルールは同じ範囲 (番組名だけ) を見るので、実際にはほぼ1回で済む。
+ * 番組 1 つぶんの検索用テキストを、対象範囲ごとに 1 度だけ作って使い回す。
+ * ほとんどのルールは同じ範囲 (番組名だけ) を見るので、実際にはほぼ 1 回で済む。
  */
 function textCache(program: Program): (fields: SearchField[]) => string {
   const cache = new Map<string, string>();
@@ -299,7 +299,7 @@ interface RuleSource {
 }
 
 /**
- * シリーズ名。**録画でもいまの番組名から切り出す** — 録画の `series` は録ったときの
+ * シリーズ名。**録画でもいまの番組名から切り出す。** 録画の `series` は録ったときの
  * 切り出し方のままで、`「東京リベンジャーズ」三天戦争編` のように鍵括弧ごと残っているものがある
  */
 function seriesOf(source: Pick<RuleSource, "name">): string {
@@ -329,8 +329,8 @@ export function prefillFrom(source: RuleSource): RulePrefill | null {
 /**
  * **このシリーズを既に録っているルール。** 有効なものを先に返す。
  *
- * 当てるのは録れた回のタイトルではなく**シリーズ名だけ**。`[新]` で当たった第1話は
- * 「[新]」のルールにも当たるが、そのルールは第2話を録らない。
+ * 当てるのは録れた回のタイトルではなく**シリーズ名だけ**。`[新]` で当たった第 1 話は
+ * 「[新]」のルールにも当たるが、そのルールは第 2 話を録らない。
  * 次の回のタイトルに何が付くかは分からないので、いちばん素の名前で確かめる
  */
 export function coveringRule(
@@ -366,7 +366,7 @@ interface Declined {
 
 /**
  * 取り消した回と開始が 10 分以内なら同じ放送。延長や繰り下げで開始が少し動いても
- * 追いかけられ、同じ日の再放送 (1時間後など) は別の回として扱える
+ * 追いかけられ、同じ日の再放送 (1 時間後など) は別の回として扱える
  */
 const DECLINE_WINDOW = 10 * 60 * 1000;
 
@@ -375,7 +375,7 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  *
  * 取り消しの記録は `reservations.program_id` (局 + event_id) に付いていて、ルールは
  * `INSERT OR IGNORE` がそれに当たることで「二度と立てない」を成り立たせていた。
- * ところが id が同じでなくなるケースが2つあり、どちらも実機で**取り消したはずの回が
+ * ところが id が同じでなくなるケースが 2 つあり、どちらも実機で**取り消したはずの回が
  * 録れた**として出た。
  *
  * - **枝番違い。** 同じ放送が 23608 と 23609 の両方に載るとき、束ねが一時的に
@@ -392,7 +392,7 @@ const DECLINE_WINDOW = 10 * 60 * 1000;
  * **システムの取り消しは含めない。** 選局できなくなった局の予約はシステムが
  * 取り消す (`epg.clearBelongings`、`canceled_by = 'system'`) が、それは「局が戻ったなら
  * 録る」でよい。列を足す前の行 (NULL) は人が押したものとして扱う。
- * 手動予約を人が取り消したぶんは含める — 今までも id が同じ限りルールを止めていたので、
+ * 手動予約を人が取り消したぶんは含める。今までも id が同じ限りルールを止めていたので、
  * その振る舞いを id が変わっても続けるだけ。
  */
 export function canceledBroadcasts(at: number): Declined {
@@ -441,7 +441,7 @@ const TAKEN_WINDOW = 30 * 24 * 60 * 60 * 1000;
  * これが無いと、いちばん早い放送を録り終えた途端 (番組表の「これから」から
  * 抜けた途端)、次の再放送が「いちばん早い放送」に繰り上がって録れてしまう。
  *
- * **失敗した録画は数えない** — 再放送は録り直す好機。消したものは数える
+ * **失敗した録画は数えない。** 再放送は録り直す好機。消したものは数える
  * (観て消したものをまた録っても困る)
  */
 function recordedEpisodes(at: number): Taken {
@@ -512,7 +512,7 @@ function historyEpisodes(): Taken {
 
 /**
  * **当たった放送と同じシリーズの録画** (「前の回は録らない」の相手。`episode.earlierAirings`)。
- * **期間で切らない** — 1期を数か月前に録り終え、2期の頃に別の局で1期が流れる、を外したい。
+ * **期間で切らない。** 1 期を数か月前に録り終え、2 期の頃に別の局で 1 期が流れる、を外したい。
  * 全部の録画を読むと録画の数だけ重くなるので、当たった放送のシリーズ名 (`recordings.series`。
  * 録るときに `parseTitle` で入れたもの) で引く (索引 `recordings_series`)。全角・半角のどちらで
  * 入っていても当たるよう両方で引き、同じシリーズかは `earlierAirings` が回の読み方で決める。
@@ -549,7 +549,7 @@ function seriesEpisodes(list: readonly Described[]): Taken {
 /**
  * **予約してある回** (「前の回は録らない」の相手。`episode.earlierAirings`)。録り始めたものは録画の行
  * ({@link seriesEpisodes}) にいるので入れない。録らない予約 (チューナー不足の `conflict`、コピー禁止の `skipped`) と
- * 取り消しも入れない — 録らない6話のせいで、別の局の5話まで外さない
+ * 取り消しも入れない。録らない 6 話のせいで、別の局の 5 話まで外さない
  */
 function reservedEpisodes(at: number): Known {
   const rows = orm()
@@ -590,7 +590,7 @@ type Candidate = Omit<Airing, "type"> & {
 };
 
 /**
- * **同じ回の読み方で決める「録らない」** — ルールの「同じ回は最初の放送だけ」(`dedupe`。
+ * **同じ回の読み方で決める「録らない」。** ルールの「同じ回は最初の放送だけ」(`dedupe`。
  * `episode.firstAirings`) と「前の回は録らない」(`skip_earlier`。`episode.earlierAirings`)。
  * それぞれ、そのスイッチを入れたルールが当たった放送を渡す。録らない番組 → 理由。
  * 予約を立てるとき (`applyRules`) と下見 (`rule-preview.ts`) で同じものを使う
@@ -610,7 +610,7 @@ function episodeSkips<T extends Candidate>(
     list.map((program) => ({ ...program, type: program.service_type }));
   /*
    * **コピー禁止の放送も弾かれているのと同じ。** 録らないので、同じ回の次の放送 (禁止でない局) を録る
-   * (`format.COPY_NEVER_REASON`)。前の回の相手にもしない (録らない6話のせいで、別の局の5話まで外さない)
+   * (`format.COPY_NEVER_REASON`)。前の回の相手にもしない (録らない 6 話のせいで、別の局の 5 話まで外さない)
    */
   const blocked = blockedPrograms();
   for (const program of [...lists.dedupe, ...lists.earlier])
@@ -710,11 +710,11 @@ interface RuleSync {
  *   読めていないだけのことがある (実機で 23,000 件のうち 11,000 件がそうだった)
  * - **もうすぐ始まるもの** (`config.ruleRetractGrace`)。番組表は放送直前まで
  *   書き換わるので、そこで条件を外れても手遅れになるより録っておく。
- *   ただし**ルールごと消された/止められたぶんは、直前でも引っ込める** —
+ *   ただし**ルールごと消された/止められたぶんは、直前でも引っ込める。**
  *   そちらは人が押した結果なので迷う理由がない
  *
  * @param options.rule そのルールだけを当てる。**足すことしかしない。**
- *   ルールを足した直後用 — 新しいルールは他の予約を外すことができないので、
+ *   ルールを足した直後用。新しいルールは他の予約を外せないので、
  *   全ルール × 全番組 (実機で 318 × 25,608) を回し直さずに済む
  */
 export function applyRules(options: { rule?: number } = {}): RuleSync {
@@ -728,9 +728,9 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   if (rules.length === 0 && adding) return result;
 
   const at = now();
-  // 録画のしかたは全体で1つ。ルールごとに持たせるとどこで決まったか分からなくなる
+  // 録画のしかたは全体で 1 つ。ルールごとに持たせるとどこで決まったか分からなくなる
   const recording = settings();
-  // 種別(GR/BS/CS)でも絞り込めるよう、番組に局の種別と物理チャンネルを添えて取る
+  // 種別 (GR/BS/CS) でも絞り込めるよう、番組に局の種別と物理チャンネルを添えて取る
   const programs = orm()
     .select({
       ...getTableColumns(programTable),
@@ -751,7 +751,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   const declined = canceledBroadcasts(at);
 
   /**
-   * 番組 → 受け持つルール。同じ番組に何本当たっても予約は1つで、**先勝ち**。
+   * 番組 → 受け持つルール。同じ番組に何本当たっても予約は 1 つで、**先勝ち**。
    * `matched` は当たったルールすべて (当たった順)。下の「同じ回は最初の放送だけ」「前の回は録らない」で
    * 外れたとき、そのスイッチを入れていないルールが受け持つ
    */
@@ -764,12 +764,12 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     }
   >();
   /**
-   * **同じ放送は1本だけ。** 同じ物理チャンネルの中で、同じ時刻に同じ番組名が
+   * **同じ放送は 1 本だけ。** 同じ物理チャンネルの中で、同じ時刻に同じ番組名が
    * 流れていたら同じ放送とみなし、いちばん小さい局だけを残す。
    *
    * 局は分割放送のために枝番を持っていて (TOKYO MX なら 23608 / 23609、
    * どちらも名前は「TOKYO MX1」)、**分割していない間は同じ番組が両方に載る**。
-   * 素通しにしていた実機では、同じ回が2本録れたうえに、2つのエンコードが
+   * 素通しにしていた実機では、同じ回が 2 本録れたうえに、2 つのエンコードが
    * 同じ名前のファイルへ同時に書いて中身が壊れた。
    *
    * 中身が違うとき (MX1 と MX2 で別番組) はタイトルが違うので、両方残る。
@@ -820,7 +820,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
    * **同じ回は最初の放送だけ** (ルールの `dedupe`) と **前の回は録らない** (`skip_earlier`)。
    * 同じ回は、局を替えた再放送・同時放送のうちいちばん早いものだけ残す (`episode.firstAirings`)。
    * 前の回は、先の回を録った・予約したあとに流れる前の話数を外す (`episode.earlierAirings`)。
-   * 比べるのはそのスイッチのルールが当たった放送すべて — 持ち主が別のルールでも、録るならそれが
+   * 比べるのはそのスイッチのルールが当たった放送すべて。持ち主が別のルールでも、録るならそれが
    * 「最初の放送」になる。外したものは、外したスイッチを入れていないルールも当たっていればそちらが
    * 受け持ち、無ければ予約を立てず、立っていれば下で引っ込む (番組表が動いたときと同じ扱い・同じ猶予)
    */
@@ -910,9 +910,9 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
          * 予約は `INSERT OR IGNORE` で立てるので、**もう立っている
          * ぶんは作った日の優先度のまま**だった。ルールの優先度を
          * 上げても効くのは次に立つ予約からで、いま競合している
-         * 予約はいくら上げても負けたまま — 実機で、優先度2に
-         * 上げた「片田舎のおっさん」が優先度1の裏番組に負け続けて
-         * いた (予約側は3件とも1のまま)。
+         * 予約はいくら上げても負けたまま。実機で、優先度 2 に
+         * 上げた「片田舎のおっさん」が優先度 1 の裏番組に負け続けて
+         * いた (予約側は 3 件とも 1 のまま)。
          *
          * 優先度はルールが持つものなので、こちらを本物として扱う
          */

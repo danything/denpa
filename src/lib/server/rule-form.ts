@@ -18,9 +18,9 @@ import {
 /**
  * **ルールの書く欄の読み取り** (検索の画面の「ルールとして保存」)。
  *
- * 画面から来る経路が2つある — 初期値 (`?from=` から出直した `?q=`、前のルールの画面から送られた `?keyword=` など) は
+ * 画面から来る経路が 2 つある。初期値 (`?from=` から出直した `?q=`、前のルールの画面から送られた `?keyword=` など) は
  * URL のクエリで、下見 (`?/preview`) と保存はフォームの POST で来る。どちらも `get` / `getAll` を持つ。
- * **下見も保存もここを通る** — 別々に読んでいた頃は、画面に出ている結果と保存されるものがズレた
+ * **下見も保存もここを通る。** 別々に読んでいた頃は、画面に出ている結果と保存されるものがズレた
  */
 export interface Fields {
   get(key: string): unknown;
@@ -38,7 +38,7 @@ interface Conditions {
   /** 時間帯 (0:00 からの分)。両方そろっているときだけ入り、無ければどちらも null (`rule-time.ts`) */
   timeFrom: number | null;
   timeTo: number | null;
-  /** 曜日 (0 が日曜)。7日とも選んだものは毎日と同じなので null */
+  /** 曜日 (0 が日曜)。7 日とも選んだものは毎日と同じなので null */
   weekdays: number[] | null;
   /** 同じ回は最初の放送だけ録る (`rules.dedupe`)。送られてこなければ null (`switchOf`) */
   dedupe: boolean | null;
@@ -124,7 +124,7 @@ export function conditionsOf(fields: Fields): Conditions {
  * 区別できない)。
  *
  * **送られてこなければ null。** 新しく作るとき (下見・追加) は既定 (同じ回は入れる、前の回は切る) にする。
- * **更新では今の値のまま** — 書く欄は必ず送るが、それ以外の経路から来た更新で、
+ * **更新では今の値のまま。** 書く欄は必ず送るが、それ以外の経路から来た更新で、
  * 入れていないルールが黙って変わらないように
  */
 function switchOf(fields: Fields, key: string): boolean | null {
@@ -151,7 +151,7 @@ export function rulePriority(fields: Fields): number {
 
 /**
  * 新しく作るルールのスイッチ。送られてこなければ、同じ回は入れて、前の回は切る
- * (1話から数え直すシリーズを飛ばさないため)。下見 (`draftRule`) と追加 (`rule-actions.createRule`) で同じ
+ * (1 話から数え直すシリーズを飛ばさないため)。下見 (`draftRule`) と追加 (`rule-actions.createRule`) で同じ
  */
 export function newSwitches(conditions: Conditions) {
   return {
@@ -241,7 +241,7 @@ export const EMPTY_RULE =
   "キーワード・局・ジャンルのいずれかを指定してください";
 
 /**
- * create と update で同じもの。**エンコード方式は書かない** — エンコードもCMも全体設定で、
+ * create と update で同じもの。**エンコード方式は書かない。** エンコードも CM も全体設定で、
  * エンコードするときに読む
  */
 export function ruleValues(conditions: Conditions, form: Fields) {
@@ -273,8 +273,8 @@ interface Origin {
  * `?program=` は検索の画面では番組の詳細を開くキーなので、別の名前にしてある。
  *
  * 下書き (`rules.prefillFrom`) と、このシリーズを既に録っているルール
- * (`rules.coveringRule`) を一緒に引く。ルールがあれば作らせずにそちらを案内する —
- * 同じ番組のルールが2つあっても予約は1本だが、どちらを直せばいいか分からなくなる
+ * (`rules.coveringRule`) を一緒に引く。ルールがあれば作らせずにそちらを案内する。
+ * 同じ番組のルールが 2 つあっても予約は 1 本だが、どちらを直せばいいか分からなくなる
  */
 export function originOf(from: string | null): Origin | null {
   const match = (from ?? "").match(/^(recording|program):(-?\d+)$/);
@@ -316,7 +316,7 @@ function recordingSource(id: number) {
 }
 
 /**
- * 番組から読む分。**番組表の行が無ければ予約の行から** — 番組表は終わった番組を
+ * 番組から読む分。**番組表の行が無ければ予約の行から。** 番組表は終わった番組を
  * 消していくが、予約の一覧には済んだものも残る。予約の行はジャンルを持たないので、
  * ジャンルで絞ったルールは「このシリーズを既に録っているルール」(`rules.coveringRule`) に挙がらない
  */

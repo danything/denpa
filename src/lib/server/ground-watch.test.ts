@@ -48,7 +48,7 @@ beforeEach(() => {
   compareGround(MX, sdtOf([[23608, 0x01]]));
 });
 
-describe("地上波の知らせ", () => {
+describe("地上波のお知らせ", () => {
   test("局の顔ぶれがスキャンの結果と違えば知らせ、同じに戻れば消す", () => {
     expect(groundNotice()).toBeNull();
     // MX2 (23610) が増えた。データ放送の違いは数えない
@@ -108,7 +108,7 @@ describe("地上波の知らせ", () => {
 });
 
 describe("チャンネルのお知らせの順", () => {
-  test("BS・CS の書き換えを地上波の知らせより先に出す", async () => {
+  test("BS・CS の書き換えを地上波のお知らせより先に出す", async () => {
     const { channelAlert } = await import("./channel-alert");
     const { channelChanges } = await import("./schema");
     compareGround(

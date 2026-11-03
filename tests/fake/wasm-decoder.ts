@@ -7,13 +7,13 @@ import type { AudioDecoder } from "../../src/lib/raw/wasm-audio";
  * 面の中身 (面 i は i + 0.5) を書く
  */
 export interface FakeDecoder extends AudioDecoder {
-  /** 1コマごとに返す標本数。途中で差し替えられる */
+  /** 1 コマごとに返す標本数。途中で差し替えられる */
   samples: (bytes: Uint8Array) => number;
   /** 開いた順 (`aac` / `opus`) */
   opened: string[];
   /** 返した置き場 */
   frees: number[];
-  /** 最後に渡されたバイト (開くときの OpusHead・デコードした1コマ) */
+  /** 最後に渡されたバイト (開くときの OpusHead・デコードした 1 コマ) */
   last: Uint8Array;
 }
 

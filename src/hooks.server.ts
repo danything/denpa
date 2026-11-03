@@ -19,7 +19,7 @@ import { relative } from "#lib/server/paths.js";
 import { start } from "#lib/server/runtime.js";
 import { COOKIE, find } from "#lib/server/session.js";
 
-// SvelteKit のサーバ起動時に一度だけ走る。EPG取得・スケジューラ・エンコーダを立ち上げる
+// SvelteKit のサーバ起動時に一度だけ走る。番組表の取得・スケジューラ・エンコーダなどを立ち上げる
 start();
 
 /**
@@ -37,7 +37,7 @@ export async function handle({ event, resolve }) {
    * **アクセストークン** (`Authorization: Bearer denpa_…`、device-auth.ts)。ペアリングで渡したもの。
    * 生きていればログインした人と同じに通す (どこから来ても。家の外の OIDC 越しでも使えるように)。
    *
-   * **出されたアクセストークンが駄目なら、ほかの認証方法へ回さずに 401。** 信頼するネットワークの中でも同じ —
+   * **出されたアクセストークンが駄目なら、ほかの認証方法へ回さずに 401。** 信頼するネットワークの中でも同じ。
    * 取り消されたアクセストークンで黙って通すと、アプリは取り消されたことに気付けず、外へ出た途端に
    * 使えなくなる。401 ならアプリは「ペアリングし直し」と分かる。
    * `denpa_` で始まらない Bearer (前段の SSO などが付けるもの) は見ずに、いつもの認証へ回す
@@ -79,7 +79,7 @@ export async function handle({ event, resolve }) {
        *
        * ここで見るのは Cookie の控えだけ。OIDC の発行元とのやり取りは `/login` と
        * `/login/callback` に閉じてあり、普段のリクエストで外へ出ることはない。
-       * 録画のファイル (`/api/recordings/<id>/file`) もここで通す — ブラウザで観る
+       * 録画のファイル (`/api/recordings/<id>/file`) もここで通す。ブラウザで観る
        * `<video>` も端末に保存も、同じ Cookie を付けてリクエストする
        */
       const session = find(event.cookies.get(COOKIE));
@@ -135,7 +135,7 @@ function finish(response: Response): Response {
    *
    * SvelteKit は SSR した HTML に中身の指紋 (`etag`) だけを付け、
    * 「どれくらい持っていていいか」は何も言わない。言われなかった端末は
-   * **自分で決める** — ホーム画面から入れたアプリ (PWA) を開き直したときに、
+   * **自分で決める。** ホーム画面から入れたアプリ (PWA) を開き直したときに、
    * 溜めてあった HTML をそのまま出すことがあり、**録画一覧が前に閉じた
    * ときのまま**になる。
    *

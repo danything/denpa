@@ -43,15 +43,15 @@ const SIDECAR_ORPHAN = new RegExp(
 /**
  * 録画ファイルの実体まわり。
  *
- * 削除は denpa の画面から行う。外から(ファイルマネージャや別のマシンから)
- * 消されることもあるので、DBと実体を突き合わせて消えたものを一覧から落とす仕組みも持つ。
+ * 削除は denpa の画面からする。外から (ファイルマネージャや別のマシンから)
+ * 消されることもあるので、DB と実体を突き合わせて消えたものを一覧から落とす仕組みも持つ。
  */
 
 export function deleteRecordingFiles(
   recording: Recording,
   reason: string,
 ): void {
-  // いくつものコーデックでエンコードしていれば最大3本ある。どれもサイドカーごと消す
+  // いくつものコーデックでエンコードしていれば最大 3 本ある。どれもサイドカーごと消す
   for (const path of encodedPaths(recording)) {
     removeIfExists(path);
     // サイドカー (ポスター・データ放送) も一緒に。取り残すと片付かないゴミになる
@@ -106,9 +106,9 @@ export function usedByOther(path: string, recordingId: number): boolean {
 }
 
 /**
- * 保存先の実体とDBを突き合わせる。**両方向を見る。**
+ * 保存先の実体と DB を突き合わせる。**両方向を見る。**
  *
- * - **行はあるが実体が無い。** ファイルマネージャなど外から録画を消すと、DBには
+ * - **行はあるが実体が無い。** ファイルマネージャなど外から録画を消すと、DB には
  *   実体の無い行だけが残る。削除済みに倒して一覧から外す
  * - **実体はあるが行が無い。** 動画のサイドカー (作業ファイル・サムネイル・データ放送) は
  *   動画と同じ名前で隣に置くので、動画が消えたあとに取り残されることがある
@@ -150,7 +150,7 @@ export function reconcile(): {
       if (column === "hevc_path") hevc = null;
       else alt = null;
       console.log(
-        `[files] もう一方が消えていたので控えを外しました: ${recording.name}`,
+        `[files] 控えが保存先から消えていたので外しました: ${recording.name}`,
       );
     }
     if (existsSync(recording.library_path!)) continue;
@@ -188,7 +188,7 @@ export function reconcile(): {
 /** 動画そのものの拡張子。これの隣に置くものが「サイドカー」 */
 const VIDEO_EXTENSIONS = ["m2ts", "ts", "mkv", "mp4"];
 const VIDEO = new RegExp(`\\.(?:${VIDEO_EXTENSIONS.join("|")})$`, "i");
-/** 作業ファイル。動画の名前をまるごと頭に持つ (`….m2ts.chapters.txt`) */
+/** 作業ファイル。動画の名前をまるごと先頭に持つ (`….m2ts.chapters.txt`) */
 const TRAILING = new RegExp(
   `^(.+\\.(?:${VIDEO_EXTENSIONS.join("|")}))\\.[^/]+$`,
   "i",
@@ -225,7 +225,7 @@ function settling(path: string, at: number): boolean {
  * - `<動画>.…` … 作業ファイル (`.chapters.txt` など)
  * - `<動画から拡張子を取ったもの>-poster.jpg` / `.bml.jsonl` … サムネイルと録画のデータ放送
  *
- * 元のTSを残さない設定だと、TS が消えたあともサイドカーだけが残り、録るたびに積もる。
+ * 元の TS を残さない設定だと、TS が消えたあともサイドカーだけが残り、録るたびに積もる。
  */
 function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
   const known = new Set(
@@ -252,7 +252,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     const videos = new Set(files.filter((path) => VIDEO.test(path)));
     for (const path of videos) {
       // 動画は消さない。手で置いたものかもしれないので、数えるだけ。
-      // エンコードの途中で作る復号したTS (`<入力>.decoded.m2ts`) を数に入れないよう、書きたては飛ばす
+      // エンコードの途中で作る復号した TS (`<入力>.decoded.m2ts`) を数に入れないよう、書きたては飛ばす
       if (!known.has(path) && !settling(path, at)) strays++;
     }
     for (const path of files) {
@@ -268,15 +268,15 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
   /*
    * **すでに空のフォルダも畳む。**
    *
-   * 上の掃除は「ファイルを消した道すがら」しか畳まない。ファイルの無い
-   * フォルダは `walk` (ファイルだけを返す) の目に入らず、**一生残る**。
+   * 上の掃除は、ファイルを消したフォルダしか畳まない。ファイルの無い
+   * フォルダは `walk` のファイルの一覧に出ないので、**ずっと残る**。
    *
    * 深いものから試す。親は子が消えてはじめて空になる。**空でなければ
-   * `rmdir` が断ってくれる**ので、中身の確認はしない。作りたては飛ばす —
-   * エンコードがこれからファイルを置くところかもしれない。
+   * `rmdir` が失敗する**ので、中身の確認はしない。作りたては飛ばす
+   * (エンコードがこれからファイルを置くところかもしれない)。
    *
    * **古さは消す前にまとめて見る。** 子を `rmdir` すると親の mtime が
-   * いま になるので、消しながら見ると**自分の掃除で親が作りたてに化けて**
+   * いまになるので、消しながら見ると**自分の掃除で親が作りたてに見えて**
    * シリーズのフォルダだけ残る
    */
   const dirs = walk(config.encodedDir)
@@ -298,7 +298,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
   return { swept, strays, pruned };
 }
 
-/** サイドカーで、かつ元の動画が1つも無いか */
+/** サイドカーで、かつ元の動画が 1 つも無いか */
 function orphan(path: string, videos: Set<string>): boolean {
   const trailing = TRAILING.exec(path);
   if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
@@ -337,7 +337,7 @@ function walk(
  *
  * 残すのは「録れたか」を後から確かめるためだけなので、期限を切って畳む。
  * 対象は**終わった予約**と**消した録画の行**だけ。ファイルが残っているものには
- * 触らない(消すかどうかはユーザーが決めること)。
+ * 触らない (消すかどうかは人が決める)。
  */
 export function pruneHistory(): {
   reservations: number;
@@ -404,7 +404,7 @@ export function pruneHistory(): {
   /*
    * 終わったエンコードの記録も期限を切る (録画の行が残っていても)。
    *
-   * **いちばん新しい1件だけは残す。** 一覧はそれを見て
+   * **いちばん新しい 1 件だけは残す。** 一覧はそれを見て
    * 「いま失敗しているか」を決めているため、消してしまうと状態が読めなくなる。
    */
   const jobs = affected(

@@ -25,7 +25,7 @@ describe("素通しにするエンドポイント", () => {
 
   /*
    * **死活確認。** Kubernetes の livenessProbe が呼ぶ。守ると Pod が
-   * 再起動を繰り返す — 掛ける範囲を選べるのをやめたときに実際に踏んだ
+   * 再起動を繰り返す。掛ける範囲を選べるのをやめたときに実際に起きた
    */
   test("死活確認", () => {
     expect(isOpenPath("/api/health")).toBe(true);
@@ -50,7 +50,7 @@ describe("素通しにするエンドポイント", () => {
 });
 
 /**
- * **ログイン方法が1つも無ければ、全部断る** (fail-closed)。OIDC はこのテストでは
+ * **ログイン方法が 1 つも無ければ、全部断る** (fail-closed)。OIDC はこのテストでは
  * 設定していないので、TRUSTED_NETWORKS の有無がそのまま答えになる。
  */
 describe("ログイン方法が設定してあるか", () => {
@@ -154,7 +154,7 @@ describe("知っている名前か", () => {
     expect(knownHost("lan.evil.example")).toBe(false);
   });
 
-  test("ALLOWED_HOSTS の名前は通す。頭にドットでその下も", () => {
+  test("ALLOWED_HOSTS の名前は通す。先頭にドットを付けるとその下も", () => {
     config.allowedHosts = "tv.example.com, .tail1234.ts.net";
     expect(knownHost("tv.example.com")).toBe(true);
     expect(knownHost("TV.example.com:443")).toBe(true);

@@ -3,7 +3,7 @@
  *
  * エージェントの `FAKE_TUNE` にこれを渡すと、本物のエージェントを実チューナー無しで
  * 動かせる (エージェントが `<種別> <チャンネル>` を足して起こす)。エージェントから見れば「起こすと TS を標準出力に流し続ける子プロセス」
- * でしかないので、**取り合いも殺し方もスキャンも本物のまま**試せる。
+ * でしかないので、**取り合いも止め方もスキャンも本物のまま**試せる。
  *
  *     bun tests/fake/tune.ts GR T16
  *
@@ -25,7 +25,7 @@ if (type === undefined || channel === undefined) {
 
 const services = on(type, channel);
 if (services.length === 0) {
-  // 電波を受けられなかったときの落ち方 (非0で終わる)。スキャンはここを見て次へ行く
+  // 電波を受けられなかったときの落ち方 (非 0 で終わる)。スキャンはここを見て次へ行く
   process.stderr.write(`Cannot tune to ${channel}: no signal\n`);
   process.exit(1);
 }
@@ -54,7 +54,7 @@ const stop = broadcast(services, knobs, (data) => {
     out.write(data);
     out.flush();
   } catch {
-    // 読む側がいなくなった (エージェントに殺された)。静かに畳む
+    // 読む側がいなくなった (エージェントに止められた)。静かに畳む
     closed = true;
     stop();
   }

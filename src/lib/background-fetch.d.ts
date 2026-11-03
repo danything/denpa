@@ -1,7 +1,7 @@
 /**
  * Background Fetch API の型。TS の lib.dom にまだ入っていないので自前で持つ
  * (Chrome/Edge のみ。https://wicg.github.io/background-fetch/)。
- * 使うところだけ書いてある — 仕様の写経はしない。
+ * 使うところだけ書いてある。仕様の写経はしない。
  */
 
 interface BackgroundFetchRecord {

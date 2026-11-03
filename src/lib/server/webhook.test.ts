@@ -225,7 +225,7 @@ describe("Discord", () => {
     expect(discord("https://discord.com/api/webhooks/1/x?thread_id=2")).toBe(
       true,
     );
-    // Slack 互換のエンドポイントは text を読むので、ほかの通知先と同じ形で送る
+    // Slack 互換のエンドポイントは text を読むので、ほかの通知先と同じ形式で送る
     expect(discord("https://discord.com/api/webhooks/1/x/slack")).toBe(false);
     expect(discord("https://hooks.slack.com/services/T0/B0/x")).toBe(false);
     expect(discord("https://discord.com.example.net/api/webhooks/1/x")).toBe(
@@ -234,7 +234,7 @@ describe("Discord", () => {
     expect(discord("not-a-url")).toBe(false);
   });
 
-  test("Discord 以外には今までどおりの形で送る", async () => {
+  test("Discord 以外には今までどおりの形式で送る", async () => {
     let received: Record<string, unknown> = {};
     const other = Bun.serve({
       port: 0,

@@ -18,8 +18,8 @@ import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
 /**
  * 衛星のロゴを、**チューナーを取り合いながら**揃える (`logo.ride` / `logo.sweep`)。
  *
- * 実機の報告: 衛星のチューナーが2台の環境で、地上波のロゴは揃ったのに BS/CS は何日経っても進まなかった。
- * カルーセルは十数分に一度しか流れてこないのに、共有は3分で切り上げ、番組表集めやライブに
+ * 実機の報告: 衛星のチューナーが 2 台の環境で、地上波のロゴは揃ったのに BS/CS は何日経っても進まなかった。
+ * カルーセルは十数分に一度しか流れてこないのに、共有は 3 分で切り上げ、番組表の取得やライブに
  * 取り上げられるたびに一から読み直していた。
  *
  * チューナーの API は手元に立てた偽物で、`tuners` は場面ごとに差し替え、選局は中継ごとに用意した TS を
@@ -60,7 +60,7 @@ function blocks(moduleId: number, module: Uint8Array): Uint8Array[] {
     );
   return list;
 }
-/** ブロックを3回に分ける。どの回もそれだけでは揃わない */
+/** ブロックを 3 回に分ける。どの回もそれだけでは揃わない */
 const thirds = (list: Uint8Array[]) => {
   const size = Math.ceil(list.length / 3);
   return [0, 1, 2].map((i) => list.slice(i * size, (i + 1) * size));
@@ -88,7 +88,7 @@ const dii = packetize(
     },
   ]),
 );
-/** 当たりの中継の n 回目。DII が流れるのは最初だけで、2回目からはブロックだけ */
+/** 当たりの中継の n 回目。DII が流れるのは最初だけで、2 回目からはブロックだけ */
 const part = (n: number) =>
   stream(...psi, ...(n === 0 ? [dii] : []), ...bsParts[n]!, ...csParts[n]!);
 /** ロゴを積んでいない中継。PAT にエンジニアリングサービスがいない */
@@ -203,7 +203,7 @@ describe("衛星のロゴをチューナーを取り合いながら揃える", (
     expect(stats().satellite).toEqual({ missing: 4, carrier: "BS15_0" });
   });
 
-  test("番組表集めの選局を共有して、続きを読む", async () => {
+  test("番組表の取得が開いた選局を共有して、続きを読む", async () => {
     tuners = [
       {
         channel: { type: "BS", channel: "BS15_0" },
@@ -223,7 +223,7 @@ describe("衛星のロゴをチューナーを取り合いながら揃える", (
     expect(opened).toHaveLength(3);
   });
 
-  test("空いたら当たりの中継だけを開いて待ち、DII の来ない3回目で読み切る", async () => {
+  test("空いたら当たりの中継だけを開いて待ち、DII の来ない 3 回目で読み切る", async () => {
     tuners = [idle(), idle()];
     streams.set("BS15_0", part(2));
     await sweep();

@@ -67,9 +67,9 @@ export function forgetGrants(): void {
 }
 
 /**
- * トークンの配信元の `path` を取って返す (`routes/api/bml/hc/[token]/[...path]`)。取り方は `fetchForBml` (差し替えは試験のため)。
+ * トークンの配信元の `path` を取得して返す (`routes/api/bml/hc/[token]/[...path]`)。取得は `fetchForBml` (差し替えはテストのため)。
  *
- * **返したものを denpa の権限で動かさない。** どれにも `sandbox` の CSP と `nosniff` を付ける — この URL を直に開かれても、
+ * **返したものを denpa の権限で動かさない。** どれにも `sandbox` の CSP と `nosniff` を付けるので、この URL を直に開かれても
  * denpa のオリジンの文書にはならない (script・画像・CSS として読まれる分には CSP は効かない)
  */
 export async function relayAsset(

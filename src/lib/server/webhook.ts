@@ -8,8 +8,8 @@ import { webhooks } from "./schema";
 /**
  * 録画の節目を外部に知らせる。
  *
- * 録画は失敗しても画面を開くまで気づけないので、外に飛ばせるようにしておく。
- * 送信は投げっぱなしにする。通知が届かないことより、通知の相手が遅いせいで
+ * 録画は失敗しても画面を開くまで気づけないので、外に送れるようにしておく。
+ * 送信は待たない。通知が届かないことより、通知の相手が遅いせいで
  * 録画やエンコードが止まるほうが困るため。
  */
 
@@ -17,7 +17,7 @@ type Webhook = typeof webhooks.$inferSelect;
 
 export interface Payload {
   event: WebhookEvent;
-  /** 人が読む1行。Discord や Slack にそのまま出せる形式にしておく */
+  /** 人が読む 1 行。Discord や Slack にそのまま出せる形式にしておく */
   text: string;
   recording?: {
     id: number;
@@ -40,7 +40,7 @@ function subscribed(webhook: Webhook, event: WebhookEvent): boolean {
  *
  * **宛先のアドレスは縛らない。** 自宅の Home Assistant のような LAN の中の通知先が
  * ふつうにあり、通知先を決めるのは denpa の画面を使える人だけだから。代わりに、
- * 通知先を足がかりに別の所を覗かせない:
+ * 通知先を足がかりに別の所を覗かせない。
  *
  * - **リダイレクトは追わない。** 外の通知先が内側の URL へ飛ばしても、そこへは送らない
  * - **相手の本文は残さない・返さない。** 結果は HTTP のステータスコードだけ (テスト送信で内側の
@@ -101,7 +101,7 @@ export function failure(error: unknown): string {
  *
  * Discord は本文を `content` で受け取り、`content` や `embeds` が無いと 400 で断る
  * (Slack 向けの `text` は読まない)。末尾が `/slack` の Slack 互換のエンドポイントは `text` を読むので、
- * ほかの通知先と同じ形で送る
+ * ほかの通知先と同じ形式で送る
  */
 export function discord(raw: string): boolean {
   try {
@@ -155,7 +155,7 @@ export function hostOf(url: string): string {
   }
 }
 
-/** 投げっぱなしにする。呼び出し側は待たない */
+/** 送るだけで、呼び出し側は結果を待たない */
 export function notify(payload: Payload): void {
   const enabled = orm()
     .select()

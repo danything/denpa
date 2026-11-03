@@ -24,10 +24,10 @@ export interface LibraryNameInput {
  * **シリーズのフォルダ名。** エンコードしたものはこの名前のフォルダに並ぶ (下の `libraryRelPath`)。
  *
  * 録画一覧の「まとめて表示」も同じ名前でまとめる。画面だけ別の見分け方をすると、
- * ディスクでは1つのフォルダなのに一覧では2つに割れる (またはその逆) ことが起きる。
+ * ディスクでは 1 つのフォルダなのに一覧では 2 つに割れる (またはその逆) ことが起きる。
  * シリーズ名を持たない行 (録り逃し・古い取り込み) は番組名から切り出す
- * (録るときと同じ `parseTitle`)。**ここだけはディスクと違う** — エンコードするときは空のまま
- * `untitled/` に入るが、一覧で無関係な番組が1つにまとまっても探しにくいだけなので
+ * (録るときと同じ `parseTitle`)。**ここだけはディスクと違う。** エンコードするときは空のまま
+ * `untitled/` に入るが、一覧で無関係な番組が 1 つにまとまっても探しにくいだけなので
  */
 export function seriesFolder(series: string, name: string): string {
   return sanitizeFileName(series === "" ? parseTitle(name).series : series);
@@ -47,7 +47,7 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
   const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const time = `${pad(d.getHours())}${pad(d.getMinutes())}`;
 
-  // 同一シリーズが同じ分に2本並ぶことはまず無い (万一衝突したら libraryPath が録画IDで分ける)
+  // 同一シリーズが同じ分に 2 本並ぶことはまず無い (万一衝突したら libraryPath が録画 ID で分ける)
   const subtitle =
     rec.subtitle === "" ? "" : ` ${sanitizeFileName(rec.subtitle)}`;
   const base = `${series} - ${date} - ${time}${subtitle}`;
@@ -56,7 +56,7 @@ function libraryRelPath(rec: LibraryNameInput, ext: string): string {
 }
 
 /**
- * 絶対パスで返すもの。**別の録画のファイルと衝突したら**録画IDを足して避ける。
+ * 絶対パスで返すもの。**別の録画のファイルと衝突したら**録画 ID を足して避ける。
  *
  * **自分がいま置いてあるファイルは衝突ではない** (数えると、再エンコードするたびに素の名前と
  * `[録画ID]` 付きが入れ替わる)。
@@ -78,9 +78,9 @@ export function libraryPath(rec: LibraryNameInput, ext: string): string {
 /**
  * コーデックごとの置き場所。
  *
- * どれも Matroska (`.mkv`) — mp4 は放送の字幕 (ARIB 字幕。Matroska なら `S_ARIBSUB`) を持てない
+ * どれも Matroska (`.mkv`)。mp4 は放送の字幕 (ARIB 字幕。Matroska なら `S_ARIBSUB`) を持てない
  * ため、全部 mkv で揃える。**H.265・H.264 のほうは名前に印を付ける** (`[H265]`・`[H264]`)。
- * 同じフォルダに最大3本並ぶので、名前が違わないと衝突する。
+ * 同じフォルダに最大 3 本並ぶので、名前が違わないと衝突する。
  */
 export function encodedPath(rec: LibraryNameInput, codec: HwCodec): string {
   return libraryPath(rec, CODEC_SUFFIX[codec]);
@@ -88,7 +88,7 @@ export function encodedPath(rec: LibraryNameInput, codec: HwCodec): string {
 
 /**
  * **エンコードしたもの全部** (無いものは除く)。並びは主 (`library_path`) → H.265 → H.264 で、
- * 小さい順 (`HW_CODECS`) と同じ。削除・照合・大きさ・移すときに、列を1つずつ書き並べずにこれで回す
+ * 小さい順 (`HW_CODECS`) と同じ。削除・照合・大きさ・移すときに、列を 1 つずつ書き並べずにこれで回す
  */
 export function encodedPaths(rec: {
   library_path: string | null;
@@ -110,8 +110,8 @@ const CODEC_SUFFIX: Record<HwCodec, string> = {
 /**
  * この録画が取りうる保存先の候補すべて。
  *
- * コーデック (素 = AV1 / `[H265]` / `[H264]`) と、衝突回避の `[録画ID]` の有無で6通り。
- * 再エンコードする前に、DBの `library_path`/`hevc_path`/`alt_path` が指していない**はぐれファイル**まで
+ * コーデック (素 = AV1 / `[H265]` / `[H264]`) と、衝突回避の `[録画ID]` の有無で 6 通り。
+ * 再エンコードする前に、DB の `library_path`/`hevc_path`/`alt_path` が指していない**はぐれファイル**まで
  * 含めて片付けるために使う (残っていると `libraryPath` がそれを「衝突」と読む)。
  */
 export function libraryFamily(rec: LibraryNameInput): string[] {
@@ -122,7 +122,7 @@ export function libraryFamily(rec: LibraryNameInput): string[] {
   return exts.map((ext) => join(config.encodedDir, libraryRelPath(rec, ext)));
 }
 
-/** 元のTSの置き場。保存先と違い人が見るものではないので平置きでよい */
+/** 元の TS の置き場。保存先と違い人が見るものではないので平置きでよい */
 export function recordedPath(rec: LibraryNameInput, ext = ".m2ts"): string {
   const d = new Date(rec.start_at);
   const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;

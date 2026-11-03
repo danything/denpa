@@ -13,7 +13,7 @@
  * ## 上限は GPU の有無で決め、設定で変えられる
  *
  * 既定は **GPU が無ければ 2、あれば 4** (設定の `transcodeLimit` が null のとき)。GPU の API から
- * 「同時に何本エンコードできるか」を聞く手は無い — denpa が使う VA-API のドライバはセッション数の
+ * 「同時に何本エンコードできるか」を聞く方法は無い。denpa が使う VA-API のドライバはセッション数の
  * 上限を言わず、NVENC の消費者向けの上限 (いまは 12) もドライバには聞けない。機材ごとに違うので設定で変えられる。
  * GPU があるかはライブと同じ印で見る (`liveHwAllow` と `hwenc.liveHw`。印を外していれば無いのと同じ)
  */
@@ -28,7 +28,7 @@ let used = 0;
 
 /**
  * GPU でエンコードできるか (H.264 か AV1 のどちらかに、ライブの印が付いた使える方式がある)。
- * 数えるその場の変換と追っかけは、ライブと同じ印 (`liveHwAllow`) で GPU に載る。`devices` は試験で差し替えるときだけ渡す
+ * 数えるその場の変換と追っかけは、ライブと同じ印 (`liveHwAllow`) で GPU に載る。`devices` はテストで差し替えるときだけ渡す
  */
 export function gpuReady(devices: HwDevice[] = hwEncode().devices): boolean {
   const allow = settings().liveHwAllow;

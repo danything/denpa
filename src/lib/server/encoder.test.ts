@@ -33,13 +33,13 @@ describe("録画エンコードの引数", () => {
   test("既定は AV1 8bit で、コマ数は増やさない", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
     expect(args).toContain("libsvtav1");
-    // send_field だとコマ数が倍になり、時間もサイズも約2倍になる
+    // send_field だとコマ数が倍になり、時間もサイズも約 2 倍になる
     expect(argValue(args, "-vf")).toBe("bwdif=mode=send_frame,format=yuv420p");
     expect(args.at(-1)).toBe("/out.mkv");
   });
 
   // 上流の既定 preset はバージョンで変わる (encoder.videoArgs の実測)。書いてあることを守る。
-  // **10 に戻さない** — M10 以上はシーンの変わり目でブロックノイズが出る
+  // **10 に戻さない**。M10 以上はシーンの変わり目でブロックノイズが出る
   // (docs/encode.md「preset は 8・crf 37 (値は書いておく)」)
   test("AV1 の preset と crf は書いてある", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
@@ -57,7 +57,7 @@ describe("録画エンコードの引数", () => {
     expect(argValue(args, "-crf")).toBe("23");
   });
 
-  test("なめらかにすると1フィールドごとに1コマ出す", () => {
+  test("なめらかにすると 1 フィールドごとに 1 コマ出す", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
       smoothMotion: true,
     });
@@ -77,7 +77,7 @@ describe("録画エンコードの引数", () => {
  * **エンコードしたものの音声と字幕に名前を入れる** (`arib.audioTitles`)。
  *
  * 入れていなかった頃は、プレイヤーの切り替えに「Audio 1」「Audio 2」しか
- * 出なかった — 二カ国語や解説放送でどちらがどちらか分からない。
+ * 出なかった。二か国語や解説放送でどちらがどちらか分からない。
  */
 describe("トラックの名前", () => {
   const title = (args: string[], key: string) => argValue(args, key);
@@ -108,7 +108,7 @@ describe("トラックの名前", () => {
     expect(title(args, "-metadata:s:a:1")).toBe("title=副音声");
   });
 
-  /** 頭に中身の無い音声 (次の番組の副音声) は使わない。分からなければ全部使う */
+  /** 冒頭に中身の無い音声 (次の番組の副音声) は使わない。分からなければ全部使う */
   test("使う音声を名指しされたらそれだけを map する", () => {
     const all = buildArgs("/in.m2ts", "/out.mkv", 1, null);
     expect(all).toContain("0:a");
@@ -147,7 +147,7 @@ describe("トラックの名前", () => {
   });
 });
 
-describe("エンコードの引数 (入れ物・コーデック・字幕・頭捨て)", () => {
+describe("エンコードの引数 (入れ物・コーデック・字幕・先頭を捨てる長さ)", () => {
   test("入れ物は拡張子ではなく引数で決める", () => {
     // 書いている間は .mkv.encoding という名前なので、拡張子からは決まらない
     const args = buildArgs("/in.m2ts", "/out.mkv.encoding", 1, null);
@@ -252,12 +252,12 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
     }
   });
 
-  test("字幕は1本だけ。入力も1回しか開かない", () => {
+  test("字幕は 1 本だけ。入力も 1 回しか開かない", () => {
     for (const codec of ["av1", "h264"] as const) {
       const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, codec);
       /*
-       * ASS (外字が「〓」になる) と dvdsub (1枚4色) を作るために同じ入力を
-       * 2回開いていた頃の名残を残さない
+       * ASS (外字が「〓」になる) と dvdsub (1 枚 4 色) を作るために同じ入力を
+       * 2 回開いていた頃の名残を残さない
        */
       expect(args.filter((a) => a === "/in.m2ts")).toHaveLength(1);
       expect(args).not.toContain("ass");
@@ -275,13 +275,13 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
     expect(args).toContain("language=und");
   });
 
-  test("再試行時は頭を捨てる", () => {
+  test("再試行時は先頭を捨てる", () => {
     expect(argValue(buildArgs("/in.m2ts", "/out.mkv", 1, 0.2), "-ss")).toBe(
       "0.2",
     );
   });
 
-  test("CMを切っても字幕は落とさない", () => {
+  test("CM を切っても字幕は落とさない", () => {
     // 字幕も CM ごと写して、エンコードしたものと一緒に切る (cm-cut.ts)
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
       keyframes: "scene",
@@ -306,16 +306,16 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
     });
     expect(args).toContain("0:p:1024:s:0?");
     expect(argValue(args, "-c:s")).toBe("copy");
-    // 局が分からなければ入力の頭の字幕
+    // 局が分からなければ入力の先頭の字幕
     expect(buildArgs("/in.m2ts", "/out.mkv", 1, null)).toContain("0:s:0?");
   });
 
   /**
-   * TS は音声のほうが先に始まっていることが多い。実機では映像の1コマ目が
+   * TS は音声のほうが先に始まっていることが多い。実機では映像の 1 コマ目が
    * 0.930 秒あとで、エンコードしたものも音声だけの区間から始まっていた。
-   * 1コマ目を 0 秒として数えるプレイヤーでは、そのぶん字幕が早く出る。
+   * 1 コマ目を 0 秒として数えるプレイヤーでは、そのぶん字幕が早く出る。
    *
-   * **ずらすのではなく捨てる。** `-output_ts_offset` では直らなかった —
+   * **ずらすのではなく捨てる。** `-output_ts_offset` では直らなかった。
    * Matroska は負の時刻を持てないので、下がった音声を muxer が押し戻し、
    * 全トラックまとめて元の位置に戻る (実測: 0.363 渡して動いたのは 0.022 だけ)。
    * 捨てれば映像も音声も 0.000 から始まる (実測で確認)
@@ -348,7 +348,7 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
     expect(argValue(args, "-ss")).toBeUndefined();
   });
 
-  test("再試行の頭捨てと足し算になる", () => {
+  test("再試行で捨てる長さと足し算になる", () => {
     // 再試行 (PAT/PMT が固まる前) と音声だけの区間は別の理由。両方捨てる
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, 0.2, "av1", {
       videoStart: 0.93,
@@ -357,9 +357,9 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・頭�
   });
 
   /**
-   * 地上波HDは 1440x1080 の横長画素で送られてくる。
+   * 地上波の HD は 1440x1080 の横長画素で送られてくる。
    * 添え書きを見ないプレイヤー (実機の Android) では 4:3 に潰れるので、正方形に直して出す。
-   * **大きさは測って渡す** — `iw*sar` と式で書くと、SAR が読めない素材で
+   * **大きさは測って渡す**。`iw*sar` と式で書くと、SAR が読めない素材で
    * 幅が 0 になって落ちる
    */
   test("横長の画素は正方形に直した大きさへ引き伸ばす", () => {
@@ -384,7 +384,7 @@ describe("inputSkip", () => {
    * **エンコードするほう (`-ss`) と進み具合の分母で同じ値を使う。** 片方だけ変わると、
    * 捨てた量と分母から引いた量がずれて、進み具合が最後まで届かなくなる
    */
-  test("頭出しと頭捨ての足し算", () => {
+  test("再試行で捨てる長さと、音声だけの区間の足し算", () => {
     expect(inputSkip(0.5, 1.5)).toBe(2);
   });
 
@@ -392,27 +392,27 @@ describe("inputSkip", () => {
     expect(inputSkip(null, undefined)).toBe(0);
   });
 
-  test("1コマにも満たない頭捨ては数えない (headSkip と同じ判断)", () => {
+  test("1 コマにも満たない音声だけの区間は数えない (headSkip と同じ判断)", () => {
     expect(inputSkip(null, 0.01)).toBe(0);
     expect(inputSkip(0.5, 0.01)).toBe(0.5);
   });
 });
 
 describe("expectedFrames", () => {
-  // 1080i の放送 = 毎秒 29.97 コマ。60コマで出すならインタレ解除が倍にする
+  // 1080i の放送 = 毎秒 29.97 コマ。60 コマで出すならインタレ解除が倍にする
   const hd = { duration: 100, fps: 30000 / 1001 };
 
-  test("60コマで出すなら入力のコマ数の2倍", () => {
+  test("60 コマで出すなら入力のコマ数の 2 倍", () => {
     expect(expectedFrames(hd, 0, true)).toBeCloseTo(5994, 0);
   });
 
-  test("30コマで出すなら入力のコマ数そのまま", () => {
+  test("30 コマで出すなら入力のコマ数そのまま", () => {
     expect(expectedFrames(hd, 0, false)).toBeCloseTo(2997, 0);
   });
 
   /*
    * **出力の毎秒コマ数を決め打ちにしない。** 720p で送っている局は入力が
-   * 59.94 で、60コマ決め打ちだと分母が半分になり 50% で頭打ちになる
+   * 59.94 で、60 コマ決め打ちだと分母が半分になり 50% で頭打ちになる
    */
   test("入力が 59.94 の素材でも当たる (出力を決め打ちにしない)", () => {
     expect(
@@ -420,7 +420,7 @@ describe("expectedFrames", () => {
     ).toBeCloseTo(11988, 0);
   });
 
-  test("頭から捨てるぶんはエンコードしないので引く", () => {
+  test("先頭から捨てるぶんはエンコードしないので引く", () => {
     expect(expectedFrames(hd, 10, false)).toBeCloseTo(2697, 0);
   });
 
@@ -428,7 +428,7 @@ describe("expectedFrames", () => {
     expect(expectedFrames(undefined, 0, true)).toBeNaN();
     expect(expectedFrames({ duration: NaN, fps: 30 }, 0, true)).toBeNaN();
     expect(expectedFrames({ duration: 100, fps: NaN }, 0, true)).toBeNaN();
-    // 捨てるぶんが尺より長い (測り違え)。0コマや負のコマ数は出さない
+    // 捨てるぶんが尺より長い (測り違え)。0 コマや負のコマ数は出さない
     expect(expectedFrames(hd, 200, true)).toBeNaN();
   });
 });
@@ -436,7 +436,7 @@ describe("expectedFrames", () => {
 describe("encodeProgress", () => {
   /*
    * out_time_us はわざとほぼ最後を指す値にしてある。実機の TOKYO MX 録画で、
-   * 入力を 65% しか読んでいないのに時刻だけ 99.1% に飛んで「あと1秒」のまま
+   * 入力を 65% しか読んでいないのに時刻だけ 99.1% に飛んで「あと 1 秒」のまま
    * 数分止まって見えた。割合はエンコードできたコマ数だけを信じ、時刻には釣られないこと
    */
   const at = (frame: number) => ({
@@ -458,9 +458,9 @@ describe("encodeProgress", () => {
   });
 
   /*
-   * **実機で踏んだ例** (2026-09、7.4GB の映画)。デマクサだけ先に走って入力を
+   * **実機で起きた例** (2026-09、7.4GB の映画)。デマクサだけ先に進んで入力を
    * 読み切り、エンコードするほうは半分。読み位置で出していた頃は 99% に貼り付いて
-   * 「あと50分」の間ずっと止まって見えた
+   * 「あと 50 分」の間ずっと止まって見えた
    */
   test("入力を読み切っていても、エンコードできた量で答える", () => {
     const p = encodeProgress(1000, 1000)(0, 1000, at(500), 0);
@@ -484,29 +484,29 @@ describe("encodeProgress", () => {
     expect(report(1000, 0, at(700), 0.8).percent).toBe(0.8);
   });
 
-  test("progress=end で必ず100%にする", () => {
+  test("progress=end で必ず 100% にする", () => {
     expect(
       encodeProgress(NaN, NaN)(0, NaN, { progress: "end" }, 0.9).percent,
     ).toBe(1);
   });
 
-  test("エンコードし切っても、終わるまでは99%で止める", () => {
-    // 最後のコマをエンコードしたあとも吐き出しと mux の締めが残っている。100.0% で
-    // 止まって見えるより、99% のまま「まだ終わっていない」と言うほうが正直
+  test("エンコードし切っても、終わるまでは 99% で止める", () => {
+    // 最後のコマをエンコードしたあとも溜めたフレームの出力と mux の後処理が残っている。100.0% で
+    // 止まって見えるより、99% のまま「まだ終わっていない」と出すほうが実際に近い
     expect(encodeProgress(1000, 1000)(0, 0, at(1000), 0).percent).toBe(0.99);
   });
 
   test("残り時間は直近にエンコードできたぶんから出す。速さが読めないうちは null", () => {
     const report = encodeProgress(10_000, NaN);
     expect(report(0, NaN, at(1000), 0).etaMs).toBeNull(); // 窓がまだ短い
-    // 5秒で1000コマエンコードできた → 残り8000コマは40秒
+    // 5 秒で 1000 コマエンコードできた → 残り 8000 コマは 40 秒
     expect(report(5000, NaN, at(2000), 0.1).etaMs).toBe(40_000);
   });
 
-  test("エンコードするほうが止まったら残り時間を出さない (「あと1秒」で張り付かせない)", () => {
+  test("エンコードするほうが止まったら残り時間を出さない (「あと 1 秒」で張り付かせない)", () => {
     const report = encodeProgress(10_000, NaN);
     report(0, NaN, at(2000), 0);
-    report(31_000, NaN, at(2000), 0.2); // 窓から最初の1点が落ちる
+    report(31_000, NaN, at(2000), 0.2); // 窓から最初の 1 点が落ちる
     expect(report(36_000, NaN, at(2000), 0.2).etaMs).toBeNull();
   });
 
@@ -586,7 +586,7 @@ describe("CM を探しながらエンコードする", () => {
 });
 
 describe("CM を切るときのキーフレーム", () => {
-  test("1本目は場面の切れ目ごと。CM 検出と同じコマで測って印を付ける", () => {
+  test("境目が決まる前は場面の切れ目ごと。CM 検出と同じコマで測って印を付ける", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
       keyframes: "scene",
       displaySize: { width: 1920, height: 1080 },
@@ -663,9 +663,9 @@ describe("CM を切るときのキーフレーム", () => {
 
 /*
  * 片方だけ「短いから捨てない」と判断すると、そのぶん字幕がずれる。
- * 判断そのものを1箇所に置いてある
+ * 判断そのものを 1 か所に置いてある
  */
-describe("頭から捨てる長さ", () => {
+describe("先頭から捨てる長さ", () => {
   test("そのまま返す", () => {
     expect(headSkip(0.93)).toBe(0.93);
   });
@@ -679,7 +679,7 @@ describe("頭から捨てる長さ", () => {
 });
 
 describe("encodeOrder", () => {
-  test("H.265 を選んでいれば1本目 (CM を探し、切れるかを決める)", () => {
+  test("H.265 を選んでいれば 1 本目 (CM を探し、切れるかを決める)", () => {
     expect(encodeOrder(["av1", "hevc", "h264"], true)).toEqual([
       "hevc",
       "av1",
@@ -704,12 +704,12 @@ describe("combineProgress", () => {
     log,
   });
 
-  test("1本だけならそのまま", () => {
+  test("1 本だけならそのまま", () => {
     const one = part(0.4, 1000);
     expect(combineProgress(new Map([["av1", one]]), 1)).toEqual(one);
   });
 
-  test("同時に走るコーデックの平均。残り時間はいちばん遅いもの", () => {
+  test("同時に動くコーデックの平均。残り時間はいちばん遅いもの", () => {
     const got = combineProgress(
       new Map([
         ["av1", part(0.2, 80_000)],

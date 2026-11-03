@@ -11,7 +11,7 @@ import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
  * 局だけの取り込み。
  *
  * どの局があるかを知っているのは**エージェント** (チャンネルスキャンの結果) で、
- * 番組表を集めるのは denpa 自身。集めるほうは1チャンネルに数分かかるので、
+ * 番組表を集めるのは denpa 自身。集めるほうは 1 チャンネルに数分かかるので、
  * 局だけ先に取り込めることを確かめる。
  *
  * 環境変数ではなく設定そのものを書き換えている (files.test.ts と同じ理由)。
@@ -80,7 +80,7 @@ describe("syncServicesOnly", () => {
       .from(services)
       .all();
     // 局名は放送のとおり (全角の英数は全角のまま)。比べるときに寄せる
-    // 内部IDは networkId * 100000 + serviceId。録画が参照しているので変えられない
+    // 内部 ID は networkId * 100000 + serviceId。録画が参照しているので変えられない
     expect(rows).toEqual([
       { id: 3239123608, name: "ＴＯＫＹＯ　ＭＸ", type: "GR" },
     ]);
@@ -247,7 +247,7 @@ describe("消えた局の片付け", () => {
     expect(orm().select({ n: count() }).from(services).get()).toEqual({ n: 2 });
   });
 
-  test("1局も返ってこなかった回では何もしない", async () => {
+  test("1 局も返ってこなかった回では何もしない", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ")];
     syncServicesOnly(await getChannels());
     seed(3239123608);
@@ -272,12 +272,12 @@ describe("消えた局の片付け", () => {
   });
 
   /*
-   * **実機で踏んだところ。** エージェントからは空だけでなく*欠けた*一覧も返る。
-   * そちらは「1局も返ってこなかった」の網に掛からないので、まだ現役の局
+   * **実機で起きたこと。** エージェントからは空だけでなく*欠けた*一覧も返る。
+   * そちらは「1 局も返ってこなかった」の条件に掛からないので、まだ現役の局
    * (NHK総合1・TOKYO MX1・テレ東…) の予約が 44 件まとめて取り消されていた。
-   * 一覧は1分ごとに取り直しているので、1回ぐらい欠けても待てばいい
+   * 一覧は 1 分ごとに取り直しているので、1 回ぐらい欠けても待てばいい
    */
-  test("1回見かけなかっただけでは片付けない", async () => {
+  test("1 回見かけなかっただけでは片付けない", async () => {
     offered = [channel(23608, "ＴＯＫＹＯ　ＭＸ"), channel(23609, "別の局")];
     syncServicesOnly(await getChannels());
     seed(3239123608);
@@ -302,7 +302,7 @@ describe("消えた局の片付け", () => {
 /**
  * 番組の取り込み。
  *
- * 番組表は「基本」(タイトル) と「詳細」(番組内容) の2つの表に分かれて放送されていて、
+ * 番組表は「基本」(タイトル) と「詳細」(番組内容) の 2 つの表に分かれて放送されていて、
  * 読むほうも分けて届く ([packages/arib/src/eit.ts](../../../packages/arib/src/eit.ts) の EpgReader.merge)。
  * 片方しか読めなかった回に、もう片方を消させない。
  */
@@ -597,7 +597,7 @@ describe("savePrograms", () => {
     orm().delete(programs).run();
 
     const base = Date.now();
-    // 野球 10:15〜11:05 と、その後の2本
+    // 野球 10:15〜11:05 と、その後の 2 本
     savePrograms([
       event({ eventId: 1, name: "野球", startAt: base, duration: 50 * 60_000 }),
       event({
@@ -614,7 +614,7 @@ describe("savePrograms", () => {
       }),
     ]);
 
-    // 野球が 11:54 まで延長 (EIT[p/f])。潰された2本は局の送り直しまで書き換わらない
+    // 野球が 11:54 まで延長 (EIT[p/f])。潰された 2 本は局の送り直しまで書き換わらない
     savePrograms([
       event({ eventId: 1, name: "野球", startAt: base, duration: 99 * 60_000 }),
     ]);
@@ -772,7 +772,7 @@ describe("savePrograms", () => {
 /**
  * 枠はあるが放送していない局を、番組表から外す。
  *
- * - 終わったチャンネル (BS103 は 2024年3月で放送終了。SDT に枠だけ残る)
+ * - 終わったチャンネル (BS103 は 2024 年 3 月で放送終了。SDT に枠だけ残る)
  * - 本チャンネルと同じ番組を流しているサブチャンネル (NHK総合2 は、マルチ編成でない間ずっと名前が無い)
  */
 describe("番組表に出す局", () => {
@@ -790,20 +790,20 @@ describe("番組表に出す局", () => {
     end_at: end,
   });
 
-  test("名前の付いた番組が1つも無い局は出さない", () => {
+  test("名前の付いた番組が 1 つも無い局は出さない", () => {
     const services = [service(1), service(2), service(3)];
     const programs = [
       program(1, "ニュース"),
       // 本チャンネルと同じ番組を流しているサブチャンネル。名前の無い番組だけが並ぶ
       program(2, ""),
       program(2, ""),
-      // 3 は終わったチャンネル。番組が1つも来ない
+      // 3 は終わったチャンネル。番組が 1 つも来ない
     ];
 
     expect(airing(services, programs).map((s) => s.id)).toEqual([1]);
   });
 
-  test("1つでも名前が付いていれば出す", () => {
+  test("1 つでも名前が付いていれば出す", () => {
     // マルチ編成の日だけサブチャンネルにも名前が付く
     const services = [service(1), service(2)];
     const programs = [program(2, ""), program(2, "大相撲")];
@@ -870,7 +870,7 @@ describe("番組表に出す局", () => {
     expect(airing(services, programs).map((s) => s.id)).toEqual([1, 2]);
   });
 
-  test("1局も残らないときは全部出す", () => {
+  test("1 局も残らないときは全部出す", () => {
     // 入れたばかりで番組表が空のとき。列ごと消えると先へ進めない
     const services = [service(1), service(2)];
 
@@ -881,8 +881,8 @@ describe("番組表に出す局", () => {
 /**
  * 局の並び。**テレビと同じ順にする。**
  *
- * リモコン番号を持つのは地上波だけで、BS と CS はサービスID がそのまま
- * テレビの3桁番号にあたる。物理チャンネル順に並べていた頃は実機と食い違っていた。
+ * リモコン番号を持つのは地上波だけで、BS と CS はサービス ID がそのまま
+ * テレビの 3 桁番号にあたる。物理チャンネル順に並べていた頃は実機と食い違っていた。
  */
 describe("SERVICE_ORDER", () => {
   function put(
@@ -917,7 +917,7 @@ describe("SERVICE_ORDER", () => {
       .all()
       .map((row) => row.name);
 
-  test("BS は物理チャンネルではなく3桁番号の順に並ぶ", () => {
+  test("BS は物理チャンネルではなく 3 桁番号の順に並ぶ", () => {
     orm().delete(services).run();
     // 実機の並び。BS-TBS (161) は BS朝日 (151) より前の中継に入っている
     put(400161, 161, "BS", "BS01_1", null, "BS-TBS");
@@ -937,7 +937,7 @@ describe("SERVICE_ORDER", () => {
     ]);
   });
 
-  test("地上波はリモコン番号順。同じ番号ならサービスID順", () => {
+  test("地上波はリモコン番号順。同じ番号ならサービス ID 順", () => {
     orm().delete(services).run();
     put(3273601025, 1025, "GR", "T27", 1, "NHK総合2");
     put(3273601024, 1024, "GR", "T27", 1, "NHK総合1");

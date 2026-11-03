@@ -1,10 +1,10 @@
 /**
  * チューナーエージェントを呼ぶところ。
  *
- * **相手が返すのは素のTSだけ**で、局も番組も時刻も、意味を持つものは何も
+ * **相手が返すのは素の TS だけ**で、局も番組も時刻も、意味を持つものは何も
  * 返ってこない。読むのは denpa の仕事 ([agent.md](../../../docs/agent.md))。
  *
- * **使い方は1つだけ。** 物理チャンネルを丸ごと開く。局を選り分けるのは
+ * **使い方は 1 つだけ。** 物理チャンネルを丸ごと開く。局を選り分けるのは
  * `packages/arib/src/service-filter.ts`、番組の切れ目を見るのは `packages/arib/src/eit.ts`。
  */
 
@@ -88,7 +88,7 @@ export interface TunerConfig {
 }
 
 /**
- * 局の内部ID。`networkId * 100000 + serviceId`。
+ * 局の内部 ID。`networkId * 100000 + serviceId`。
  *
  * 録画も予約も `services.id` を参照しているので、ここを変えると
  * 過去の録画が辿れなくなる (docs/data.md)。
@@ -97,7 +97,7 @@ export function serviceKey(networkId: number, serviceId: number): number {
   return networkId * 100000 + serviceId;
 }
 
-/** 番組のID。局の内部ID + event_id */
+/** 番組の ID。局の内部 ID + event_id */
 export function programKey(
   networkId: number,
   serviceId: number,
@@ -137,8 +137,8 @@ export function getChannels(): Promise<AgentChannel[]> {
  * チャンネルスキャンの結果を預ける。
  *
  * **見つけたのは denpa** (総当たりの選局はエージェントに任せるが、NIT と SDT を
- * 読むのはこちら)。それでも控えを持つのはエージェントのほうにする —
- * アンテナに何が映るかは機材ごとの話で、エージェントを増やせば顔ぶれも変わる。
+ * 読むのはこちら)。それでも控えはエージェントが持つ。
+ * アンテナに何が映るかは機材ごとに違い、エージェントを増やせば顔ぶれも変わるため。
  *
  * `scanned` には**探した種別**を渡す。地上波だけ探したときに全部を置き換えると
  * BS と CS が設定から消える。
@@ -159,7 +159,7 @@ export async function putChannels(
   );
 }
 
-/** 一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を1度に */
+/** 一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を 1 度に */
 export function tunerList(): Promise<Infer<typeof TUNERS>> {
   return get("/denpa/tuners", TUNERS);
 }
@@ -195,8 +195,8 @@ export async function putTuners(tuners: TunerConfig[]): Promise<void> {
 /**
  * 何のために開いたかを伝える印。設定の「チューナー」にそのまま出る。
  *
- * **ASCII だけ**にしてある。番組名は入れず録画IDだけ渡して、読める言葉に直すのは
- * 画面側でやる (routes/settings/reception/tuners.server.ts)。
+ * **ASCII だけ**にしてある。番組名は入れず録画 ID だけ渡して、読める言葉に直すのは
+ * 画面側 (routes/settings/reception/tuners.server.ts)。
  *
  * **頭の語はエージェントも読む。** `epg` `logo` `scan` は掛かっていない SI しか読まないので、それだけの選局は
  * カードに聞かずに流す (docs/agent.md「選局コマンドは画面から渡させない」)。復号の要る使い方を足すなら別の語にする
@@ -214,7 +214,7 @@ export function recordingUse(id: number): StreamUse {
 }
 
 /**
- * 録画の利用者 (`recordingUse`) なら、その録画ID。**どの録画がどのチューナーにいるか**を
+ * 録画の利用者 (`recordingUse`) なら、その録画 ID。**どの録画がどのチューナーにいるか**を
  * エージェントの一覧から読む (`recordingHolds`) のと、設定の「チューナー」に録画の名前を出すのに使う
  */
 export function recordingOf(use: string): number | null {
@@ -230,7 +230,7 @@ export function recordingOf(use: string): number | null {
  * (`recordingUse`) から読む。利用者のいるチューナーは今まさに録っているチューナーなので、いる場所を取り違えることは無い。
  * ただし録り始めたのに、まだ使えていない (空き待ちで掛け直している) 録画は数えられない。
  *
- * 録画以外の利用者 (ライブ・番組表集めなど) は入れない。録画には譲る約束なので
+ * 録画以外の利用者 (ライブ・番組表の取得など) は入れない。録画には譲る約束なので
  * (docs/agent.md「選ぶ順の約束」)、予約の割り振りには効かない。
  * 終わる時刻の分からない録画 (DB に無い) も入れない
  */
@@ -276,7 +276,7 @@ export class TunerBusyError extends Error {}
 export class TuneError extends Error {}
 
 /**
- * 物理チャンネルを丸ごと開く。**使い方はこれ1つ。**
+ * 物理チャンネルを丸ごと開く。**使い方はこれ 1 つ。**
  *
  * 同じチャンネルを誰かが既に開いていれば、エージェントが選局を共有させる
  * (チューナーは増えない)。空きが無ければ 409 が返るので、呼んだ側は待って掛け直す。
@@ -322,13 +322,13 @@ const BUSY_WAIT = 700;
 /**
  * 開く。**空きが無ければ少し待って掛け直す。**
  *
- * ライブは**チャンネルを変える一瞬だけ、前のチャンネルと合わせて2台要る**。
+ * ライブは**チャンネルを変える一瞬だけ、前のチャンネルと合わせて 2 台要る**。
  * 前のを離してから次を要求しているが、離れたことがエージェントに届くのは非同期なので、
- * 重なる瞬間が残る。地上波は2台しかないため、録画か番組表集めが1台使っていると
+ * 重なる瞬間が残る。地上波は 2 台しかないため、録画か番組表の取得が 1 台使っていると
  * そこで断られていた (実機で `[live] GR:T15: チューナーに空きがありません`)。
  *
  * **待っているのは前のチャンネルが離れるまで**なので、長くは掛からない。
- * 掛け直すのは空き待ちのときだけ — 選局そのものが駄目なら何度やっても同じ。
+ * 掛け直すのは空き待ちのときだけ。選局そのものが駄目なら何度試しても同じ。
  *
  * 録画には使わない。録画は自前で掛け直す (`recorder.openWithRetry`。空き待ちに
  * 限らず、終了時刻まで取り直す)。
@@ -351,7 +351,7 @@ export function openWhenFree(
 /**
  * 空き待ちのときだけ掛け直す。**掛け方そのものは渡してもらう。**
  *
- * 分けてあるのは試すため — 本物のエージェントを立てなくても、待ち直しの
+ * 分けてあるのはテストのため。本物のエージェントを立てなくても、掛け直すかの
  * 判断だけを確かめられる (`tuner.test.ts`)
  */
 export async function retryWhileBusy<T>(

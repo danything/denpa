@@ -322,7 +322,7 @@ describe("取り込む", () => {
     expect(transfer.swapAtBoot()).toBe(false);
   });
 
-  test("入れ替えの途中で落ちても、次の起動で続きから入れ替わる", async () => {
+  test("入れ替えの途中で止まっても、次の起動で続きから入れ替わる", async () => {
     const fresh = machine(`fresh-${counter}`);
     mkdirSync(join(fresh.encoded, "シリーズ"), { recursive: true });
     writeFileSync(join(fresh.encoded, "シリーズ", "第1話.mkv"), "video");
@@ -333,7 +333,7 @@ describe("取り込む", () => {
     await transfer.check();
     transfer.apply(false);
 
-    // ロゴを退けて新しいロゴを置いたところで落ちた (DB はまだ前のまま)
+    // ロゴを退けて新しいロゴを置いたところで止まった (DB はまだ前のまま)
     const at = readFileSync(
       join(fresh.data, "transfer", "ready", "stamp"),
       "utf8",
@@ -387,7 +387,7 @@ describe("取り込む", () => {
     }
     // 開き直して同じファイルを選ぶと、続きの位置から
     expect(transfer.beginUpload(meta).offset).toBe(100);
-    // 違うファイルなら頭から
+    // 違うファイルなら先頭から
     expect(transfer.beginUpload({ ...meta, lastModified: 6 }).offset).toBe(0);
     transfer.cancel();
   });
@@ -434,8 +434,8 @@ describe("取り込む", () => {
         "読めません",
       ],
       [exported.subarray(0, Math.floor(exported.length / 2)), "読めません"],
-      [await pack({ "../evil": "x" }), "思っていない名前"],
-      [await pack({ "logos/../../x.png": "x" }), "思っていない名前"],
+      [await pack({ "../evil": "x" }), "受け付けない名前"],
+      [await pack({ "logos/../../x.png": "x" }), "受け付けない名前"],
       [await pack({ "denpa-export.json": "{}" }), "DB が入っていません"],
       [
         await pack({ "denpa.db": "SQLite? いいえ" }),

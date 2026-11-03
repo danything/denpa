@@ -72,7 +72,7 @@ describe("コード", () => {
 });
 
 describe("ペアリングの流れ", () => {
-  test("許されるまでは待てと言い、許されたらアクセストークンを1度だけ渡す", () => {
+  test("許されるまでは待てと言い、許されたらアクセストークンを 1 度だけ渡す", () => {
     const at = 3_000_000;
     const { deviceCode, userCode } = pair("居間", at);
     expect(poll(deviceCode, at)).toEqual({ error: "authorization_pending" });
@@ -85,7 +85,7 @@ describe("ペアリングの流れ", () => {
     const token = (got as { token: string }).token;
     expect(token.startsWith(TOKEN_PREFIX)).toBe(true);
 
-    // 2度目は渡さない (使い終えたコード)
+    // 2 度目は渡さない (使い終えたコード)
     expect(poll(deviceCode, at + 2 * POLL_INTERVAL_MS)).toEqual({
       error: "invalid_grant",
     });
@@ -100,7 +100,7 @@ describe("ペアリングの流れ", () => {
     expect(row?.created_by).toBe("trusted-network");
   });
 
-  test("許すのは何度呼んでも同じ (読み直しでアクセストークンが2つにならない)", () => {
+  test("許すのは何度呼んでも同じ (読み直しでアクセストークンが 2 つにならない)", () => {
     const at = 4_000_000;
     const { deviceCode, userCode } = pair("二度押し", at);
     approve(userCode, "trusted-network", at);
@@ -123,13 +123,13 @@ describe("ペアリングの流れ", () => {
     const { deviceCode } = pair("せっかち", at);
     expect(poll(deviceCode, at)).toEqual({ error: "authorization_pending" });
     expect(poll(deviceCode, at + 1000)).toEqual({ error: "slow_down" });
-    // タイマーのずれ (4.9秒) は許す
+    // タイマーのずれ (4.9 秒) は許す
     expect(poll(deviceCode, at + 1000 + POLL_INTERVAL_MS - 100)).toEqual({
       error: "authorization_pending",
     });
   });
 
-  test("10分で切れる。切れたコードは許せず、端末には expired_token", () => {
+  test("10 分で切れる。切れたコードは許せず、端末には expired_token", () => {
     const at = 6_000_000;
     const { deviceCode, userCode } = pair("遅刻", at);
     const later = at + CODE_TTL_MS;
@@ -144,10 +144,10 @@ describe("ペアリングの流れ", () => {
   });
 
   /*
-   * **呼び続ける1台がいても、ほかの人はペアリングできる。** 前は全体の上限を全員で
-   * 分け合っていて、埋められると10分のあいだ誰もコードを貰えなかった
+   * **呼び続ける 1 台がいても、ほかの人はペアリングできる。** 前は全体の上限を全員で
+   * 分け合っていて、埋められると 10 分のあいだ誰もコードを貰えなかった
    */
-  test("1つの接続元が呼び続けても、持てるのは上限まで (古いものから切れる)", () => {
+  test("1 つの接続元が呼び続けても、持てるのは上限まで (古いものから切れる)", () => {
     const at = 8_000_000_000;
     const flood = Array.from({ length: 10 }, (_, i) =>
       issueCode(`連打${i}`, "203.0.113.7", at + i),
@@ -175,7 +175,7 @@ describe("ペアリングの流れ", () => {
     expect(viewCode(mine!.userCode, at + 40)?.state).toBe("pending");
   });
 
-  test("IPv6 は /64 で1つの接続元として数える", () => {
+  test("IPv6 は /64 で 1 つの接続元として数える", () => {
     expect(sourceKey("2001:db8:1:2::a")).toBe(sourceKey("2001:db8:1:2::b"));
     expect(sourceKey("2001:db8:1:2::a")).not.toBe(sourceKey("2001:db8:1:3::a"));
     expect(sourceKey("::ffff:192.0.2.1")).toBe("192.0.2.1");
@@ -242,7 +242,7 @@ describe("アクセストークン", () => {
     expect(verifyToken(`${TOKEN_PREFIX}forged`, at)).toBeNull();
   });
 
-  test("最後に使った時刻は1分に1度だけ書く", () => {
+  test("最後に使った時刻は 1 分に 1 度だけ書く", () => {
     const at = 10_000_000_000;
     const token = mint("書斎", at);
     const id = verifyToken(token, at)!.id;

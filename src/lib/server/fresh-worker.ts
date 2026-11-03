@@ -42,7 +42,7 @@ function wrapHandler(handler: Handler): Handler {
   };
 }
 
-/** 静的な `Response` は、呼ばれるたびに複製して付ける (本体は1回しか読めない) */
+/** 静的な `Response` は、呼ばれるたびに複製して付ける (本体は 1 回しか読めない) */
 function wrapResponse(response: Response): Handler {
   return () => noCache(response.clone());
 }

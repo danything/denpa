@@ -19,8 +19,8 @@ const {
 } = await import("./jikkyo");
 
 /*
- * 実況のサーバの受け持ち。コメントは通さず、録画の頭と終わりの時刻と局の勢いだけを渡す。
- * NX-Jikkyo には繋がない (読む関数を差し替える)。返事は自分で作った偽物
+ * 実況のサーバの受け持ち。コメントは通さず、録画の先頭と終わりの時刻と局の勢いだけを渡す。
+ * NX-Jikkyo にはつながない (読む関数を差し替える)。応答は自分で作った偽物
  */
 
 /** NX-Jikkyo の `GET /api/v1/channels` の形 (要るところだけ) */
@@ -34,7 +34,7 @@ const channel = (id: string, force: number | null, status = "ACTIVE") => ({
 });
 
 describe("parseForces", () => {
-  test("放送中のスレッドの勢いだけを抜く", () => {
+  test("放送中のスレッドの勢いだけを取り出す", () => {
     const forces = parseForces([
       channel("jk1", 3),
       channel("jk6", 36),
@@ -46,7 +46,7 @@ describe("parseForces", () => {
     ]);
   });
 
-  test("形のずれたチャンネルは飛ばして、1 回だけ言う", () => {
+  test("形式のずれたチャンネルは飛ばして、1 回だけ警告する", () => {
     const warned: string[] = [];
     const forces = parseForces(
       [channel("jk1", 3), { id: 5 }, channel("jk6", null)],
@@ -204,7 +204,7 @@ describe("recordingJikkyo", () => {
     expect(recordingJikkyo(recording({ ts_head: T - 9_000 }))).toBeNull();
   });
 
-  test("測った頭を使う。無ければ予定の時刻で代わりに合わせる", () => {
+  test("測った先頭を使う。無ければ予定の時刻で合わせる", () => {
     saveSettings({ jikkyo: true });
     expect(recordingJikkyo(recording({ ts_head: T - 9_000 }))).toEqual({
       channel: "jk6",
@@ -216,7 +216,7 @@ describe("recordingJikkyo", () => {
       head: T - config.startMargin,
       end: T + 30 * 60_000 + config.endMargin,
     });
-    // 取り合いで頭を譲った録画は、使えた区間の頭
+    // 取り合いで先頭を譲った録画は、使えた区間の先頭
     expect(
       recordingJikkyo(
         recording({ record_from: T + 60_000, record_to: T + 20 * 60_000 }),

@@ -27,7 +27,7 @@ import * as schema from "./schema";
 describe("ルールのジャンルの条件を外す (0013_clear-rule-genres)", () => {
   /**
    * 0013 を当てる前の DB。0012 までのマイグレーションだけを写した置き場から当てる。次の `bootstrap` がそこから先を当てる
-   * (当てた記録を消すだけだと、0013 より後に作ったテーブルを作り直そうとして落ちる)
+   * (当てた記録を消すだけだと、0013 より後に作ったテーブルを作り直そうとして失敗する)
    */
   function before0013() {
     const dir = mkdtempSync(join(tmpdir(), "denpa-0012-"));

@@ -28,11 +28,11 @@ import {
  * - 後ろのページは**転がらないようにし、周りを黒に** (`html[data-stage-fullscreen]`、`app.css`)。
  *   横持ちの切り欠きの帯は Safari がページの地の色で塗るので、それも黒になる
  * - 出口は**同じボタン・Esc・戻る**。本物の全画面なら OS が持っている「戻る」を、
- *   こちらでは**履歴を1段積んで** (`page.state.fullscreen`) 作る — 戻るで広げたのを
+ *   こちらでは**履歴を1段積んで** (`page.state.fullscreen`) 作る。戻るで広げたのを
  *   畳み、もう一度戻るで前の画面へ。ボタン・Esc で出たときは積んだ段を戻して消す
  * - 別の画面へ移るときは畳む (`beforeNavigate`)。録画から次の録画へ行くときは
  *   部品が作り直されないので、黙っていると広げたまま残る
- * - 向きは固定しない — iPhone の Safari は `screen.orientation.lock` を持たない。
+ * - 向きは固定しない。iPhone の Safari は `screen.orientation.lock` を持たない。
  *   横に持てば横いっぱいになる
  *
  * ## テーブルトップ
@@ -86,7 +86,7 @@ export function stageFullscreen(
 
   /*
    * 広げている間: 後ろを止めて黒く、Esc で出る。**枠の中のメニューが開いていれば
-   * そちらに譲る** — メニュー (`Menu.svelte`) は document で Esc を受けて `preventDefault` するので、
+   * そちらに譲る**。メニュー (`Menu.svelte`) は document で Esc を受けて `preventDefault` するので、
    * window まで上がってきたときには印が付いている
    */
   $effect(() => {
@@ -107,7 +107,7 @@ export function stageFullscreen(
 
   /*
    * **戻るで畳む。** 積んだ段 (`fullscreen: true`) から降りたら広げたのをやめる。
-   * 見るのは「立っていた印が消えた」ときだけ — 積む前 (`goto` が済むまで) は
+   * 見るのは「立っていた印が消えた」ときだけ。積む前 (`goto` が済むまで) は
    * 印がまだ無いので、それを「降りた」と取り違えない。
    *
    * **こちらが戻した段** (ボタン・Esc で出た) は、もう出ているので畳まない。
@@ -138,7 +138,7 @@ export function stageFullscreen(
 
   /*
    * 積めなくても広げたまま (開いた直後でルーターがまだ動いていないなど)。ボタン・Esc で出られる。
-   * **積み終わる前に出られたら、積んだ段をそこで戻す** — 出た時点では段がまだ無く
+   * **積み終わる前に出られたら、積んだ段をそこで戻す**。出た時点では段がまだ無く
    * `exit` は戻さないので、放っておくと何も広げていない段が1つ残る
    */
   function push(): void {

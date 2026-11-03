@@ -16,7 +16,7 @@ import { channelEntry, channelsFor, readServices } from "./scan";
  * `tests/e2e/16-scan.spec.ts` で、本物の総当たりが偽の放送に当たっている。
  */
 
-/** NIT と SDT だけの TS。チューナーが吐くものの代わり */
+/** NIT と SDT だけの TS。チューナーが出すものの代わり */
 function stream(
   services: [number, number, string?][],
   half = false,
@@ -100,7 +100,7 @@ describe("チャンネル定義の組み立て", () => {
   });
 });
 
-describe("1チャンネルの読み取り", () => {
+describe("1 チャンネルの読み取り", () => {
   test("局を探しているあいだに流れてきた番組表も取得する", async () => {
     const epg = new EpgReader();
     const eit = eitSection({
@@ -176,7 +176,7 @@ describe("1チャンネルの読み取り", () => {
   });
 
   test("揃った時点で打ち切る", async () => {
-    // ある局で毎回30秒待っていたら総当たりが終わらない。**閉じないリーダー**で試す
+    // ある局で毎回 30 秒待っていたら総当たりが終わらない。**閉じないリーダー**で試す
     const started = Bun.nanoseconds();
     const { error } = await readServices(
       fromBytes(stream([[1024, 0x01]]), true),
@@ -186,8 +186,8 @@ describe("1チャンネルの読み取り", () => {
     expect((Bun.nanoseconds() - started) / 1e9).toBeLessThan(10);
   });
 
-  test("読み終えたら、走査の打ち切りの見張りを外す", async () => {
-    // 合図は走査全体で1つ。局ごとに足したまま残すと、総当たりで100を超えて積もる
+  test("読み終えたら、走査の打ち切りのリスナーを外す", async () => {
+    // 合図は走査全体で 1 つ。局ごとに足したまま残すと、総当たりで 100 を超えて積もる
     const { signal } = new AbortController();
     const listening = new Set<unknown>();
     const add = signal.addEventListener.bind(signal);

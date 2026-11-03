@@ -2,7 +2,7 @@
  * **作り置きの fMP4 (`live-h264.mp4` / `live-av1.mp4`) を、時刻をずらして並べ直す。** 偽 ffmpeg (`fmp4-loop.ts`・
  * `fmp4-out.ts`) と E2E (`40-watch-compat`) が使う。作り方は `fmp4-loop.ts` の頭に。
  *
- * 2秒ぶんの媒体 (moof + mdat) の時刻 (tfdt) に足して、好きな位置から好きな長さだけ並べる。
+ * 2 秒ぶんの媒体 (moof + mdat) の時刻 (tfdt) に足して、好きな位置から好きな長さだけ並べる。
  * 頭 (ftyp + moov) はそのまま。Bun にも Node にも依らない (E2E は Playwright の中で読む)
  */
 
@@ -24,9 +24,9 @@ export interface Fmp4Clip {
   /** ftyp + moov */
   head: Uint8Array;
   fragments: Fmp4Fragment[];
-  /** トラックごとの時刻の刻み (1秒あたり) */
+  /** トラックごとの時刻の刻み (1 秒あたり) */
   timescales: Map<number, number>;
-  /** 1周の長さ (秒)。トラックのうち長いほう */
+  /** 1 周の長さ (秒)。トラックのうち長いほう */
   period: number;
 }
 
@@ -79,7 +79,7 @@ export function readClip(file: Uint8Array): Fmp4Clip {
     top.find((b) => b.type === "moof")?.start ?? file.length,
   );
   const fragments: Fmp4Fragment[] = [];
-  /** トラックごとの1周の長さ (そのトラックの刻み)。最後のコマの終わり */
+  /** トラックごとの 1 周の長さ (そのトラックの刻み)。最後のコマの終わり */
   const loop = new Map<number, number>();
   for (let i = 0; i < top.length; i++) {
     const moof = top[i]!;
@@ -105,7 +105,7 @@ export function readClip(file: Uint8Array): Fmp4Clip {
       stamps.push({ track, at, wide });
       const scale = timescales.get(track) ?? 90000;
       seconds = Math.min(seconds, base / scale);
-      // 1周の長さ: このかたまりのコマの長さを足した終わり (trun に長さが無ければ tfhd の既定)
+      // 1 周の長さ: このかたまりのコマの長さを足した終わり (trun に長さが無ければ tfhd の既定)
       if (trun !== undefined) {
         const flags = v.getUint32(trun.start + 8) & 0xffffff;
         const count = v.getUint32(trun.start + 12);
@@ -139,8 +139,8 @@ export function readClip(file: Uint8Array): Fmp4Clip {
 }
 
 /**
- * 媒体1つを、時刻を `shift` 秒ずらして写す。**ずらす量はトラックで揃える** (それぞれの刻みで数える)。
- * 揃えないと音と映像が1周ごとにずれていく
+ * 媒体 1 つを、時刻を `shift` 秒ずらして写す。**ずらす量はトラックで揃える** (それぞれの刻みで数える)。
+ * 揃えないと音と映像が 1 周ごとにずれていく
  */
 export function shiftFragment(
   clip: Fmp4Clip,
@@ -159,7 +159,7 @@ export function shiftFragment(
 
 /**
  * **`from` 秒から `length` 秒ぶん** を繰り返して並べた fMP4 (頭つき)。録画をその場で流す API
- * (`/api/recordings/<id>/stream`) の代わり — 時刻はページの物差しのまま (`from` から始まる)
+ * (`/api/recordings/<id>/stream`) の代わり。時刻はページの物差しのまま (`from` から始まる)
  */
 export function clipFrom(
   clip: Fmp4Clip,

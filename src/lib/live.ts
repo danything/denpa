@@ -5,7 +5,7 @@
  *
  *     [1 byte: 種別][8 bytes: 時刻 (90kHz, BE)][中身...]
  *
- * 時刻は**エンコードした mp4 の物差し** — 受け側の `video.currentTime` と直に
+ * 時刻は**エンコードした mp4 の物差し**。受け側の `video.currentTime` と直に
  * 突き合わせられる。映像と字幕を**同じ ffmpeg** でエンコードしているので、入口で
  * 0 に寄せる幅が両方に同じだけ効く (`server/captions.ts` に実測)。変換せずに送る経路 (`rawTs`) と
  * その字幕は放送の PTS のまま
@@ -55,7 +55,7 @@ export function codecsFor(codec: LiveCodec): string {
 }
 
 /**
- * 選べる字幕1つぶん。**取り決めなので、ここに置く** — 組み立てるのは
+ * 選べる字幕1つぶん。**取り決めなので、ここに置く**。組み立てるのは
  * サーバ (`server/captions.ts` の `TrackList`) だが、画面も同じ形式で読む
  */
 export interface CaptionTrack {
@@ -121,7 +121,7 @@ export type Notice =
       /** いま出しているもの (`CaptionTrack.index`) */
       track: number;
       /**
-       * いまの字幕のストリームに載っている言語 (字幕管理データから)。**届くまでは省く** — 知らない受け側は
+       * いまの字幕のストリームに載っている言語 (字幕管理データから)。**届くまでは省く**。知らない受け側は
        * 読み飛ばせばよく、そのときは第1言語だけが届く
        */
       languages?: CaptionLanguage[];
@@ -154,7 +154,7 @@ export type Notice =
   | {
       /**
        * 追っかけ再生が**録れているところまで読み切った**。エラーではない。
-       * 画面は MediaSource を閉じる (`MediaSource.endOfStream`) — 閉じないと、
+       * 画面は MediaSource を閉じる (`MediaSource.endOfStream`)。閉じないと、
        * バッファの端で「読み込み中」のまま止まって見える
        */
       type: "ended";
@@ -194,7 +194,7 @@ export type Notice =
        * **チューナーから外された** (読んでいたストリームが、こちらが畳む前に途切れた)。セッションはここで畳む。
        *
        * いちばん多いのは録画にチューナーを取り上げられたとき (ライブは録画にだけ譲る。docs/agent.md「選ぶ順の約束」)。
-       * 画面は同じ局をリクエストし直す — 使ってよいチューナーが空いていればそこに入り、見ているものは変わらない。
+       * 画面は同じ局をリクエストし直す。使ってよいチューナーが空いていればそこに入り、見ているものは変わらない。
        * **リクエストし直しても入れなかったときだけ** `recording` の追っかけに切り替える (`live-player.svelte.ts`)。
        * チューナーを取り上げた録画が分からない (録画ではなかった・エージェントに訊けなかった) なら null
        */
@@ -269,7 +269,7 @@ export type Command =
    */
   | { type: "data"; on: boolean }
   /**
-   * 字幕の言語を選ぶ (第何言語か。1〜8)。**再エンコードしない** — 字幕のストリーム1本に全部の言語が入っていて、
+   * 字幕の言語を選ぶ (第何言語か。1〜8)。**再エンコードしない**。字幕のストリーム1本に全部の言語が入っていて、
    * サーバは全部デコードしている (`server/captions.ts` の `CaptionText`)。出す言語を視聴者ごとに替えるだけ
    */
   | { type: "language"; language: number }
@@ -282,7 +282,7 @@ export type Command =
   | { type: "hold"; on: boolean };
 
 /**
- * 追っかけ再生 — **録画中の録画を頭から観る** (issue #16)。
+ * 追っかけ再生。**録画中の録画を頭から観る** (issue #16)。
  *
  * チューナーは使わない。録画が書き足している元のTSをサーバが追い読みして、
  * ライブと同じ形式 (fMP4 → この WebSocket) で再エンコードする (`server/chase.ts`)。
@@ -315,7 +315,7 @@ type TuneCommand = {
   channel: string;
   serviceId: number;
   /**
-   * どの音声を出すか (`AudioTrack.id`)。省くと先頭 = 主音声。選ぶのはサーバ — 複数の音声を入れた fMP4 は
+   * どの音声を出すか (`AudioTrack.id`)。省くと先頭 = 主音声。選ぶのはサーバ。複数の音声を入れた fMP4 は
    * ブラウザによって切り替えられない (`audioTracks` の実装がまちまち)
    */
   audio?: string;

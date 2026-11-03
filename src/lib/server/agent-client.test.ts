@@ -1,6 +1,13 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { X509Certificate } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 
 import {
@@ -136,7 +143,6 @@ describe("agentFetch", () => {
 
   test("覚えた証明書と違う相手なら、組み直してから呼ぶ", async () => {
     const other = createIdentity("denpa-agent");
-    const { writeFileSync, mkdirSync } = await import("node:fs");
     mkdirSync(`${dir}/tls`, { recursive: true });
     writeFileSync(`${dir}/tls/agent.crt`, other.cert);
     const server = serveFakeAgent(() => Response.json({ ok: true }));

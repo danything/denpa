@@ -3,21 +3,21 @@
  *
  * 番組表はいま放送のとおり持つ (「Ｖｅｎｕｅ１０１」。`packages/arib/src/aribtext.ts`) が、それより前は
  * 取り込むときに半角へ寄せていた (「Venue101」)。録画は録り始めたときの番組表を写すので、
- * 寄せた字のまま残っている。**元のTSが残っていれば、そこに流れていた EIT を読み直せば元の字が分かる。**
- * 元のTSしか元は無い — 番組表の行は放送が終われば取り込み直されず (24時間で消える)、録画の横に置く
- * データ放送の控えも、寄せたあとの DB から書いたもの。元のTSが消えた録画は寄せたまま残す。
+ * 寄せた字のまま残っている。**元の TS が残っていれば、そこに流れていた EIT を読み直せば元の字が分かる。**
+ * 元の字が残っているのは元の TS だけ。番組表の行は放送が終われば取り込み直されず (24 時間で消える)、録画の横に置く
+ * データ放送の控えも、寄せたあとの DB から書いたもの。元の TS が消えた録画は寄せたまま残す。
  *
  * - **字は変えず、幅だけ戻す。** 読み直した字を半角に寄せて今の値と同じときだけ書く (外字の書き方の
- *   違い「[新]」と「🈟」も揃えて比べ、放送の字にする)。録ったあとに番組表が書き換わっていた
- *   (副題が入った等) なら、その欄は触らない
+ *   違い「[新]」と「🈟」もそろえて比べ、放送の字にする)。録ったあとに番組表が書き換わっていた
+ *   (副題が入ったなど) なら、その欄は変えない
  * - 作品名・副題は戻した番組名から同じ所を切り出す (`widthOf`)。切り出し方を変える前に録ったものも、
  *   字は今の値のまま
- * - **保存先の名前 (`library_path`) と元のTSの置き場は動かさない。** どちらも半角に寄せた名前で、
+ * - **保存先の名前 (`library_path`) と元の TS の置き場は動かさない。** どちらも半角に寄せた名前で、
  *   名前を作る `sanitizeFileName` も半角に寄せるので、戻したあとも食い違わない
  * - 局名は局のほうを直すときに一緒に直る (`epg.widenServices`)
- * - **見た録画は覚えておく** (`settings` の `widthRestoredThrough` = 録画ID)。戻せなかったものも
- *   二度は読まない。番組表が取り込み直されるまでの間 (チャンネルごとに最大6時間) に録り始めたものも
- *   寄せた字を写すので、起動時だけでなく定期的に回して取りこぼさない。もう全角が入っている録画は読まずに済ませる
+ * - **見た録画は覚えておく** (`settings` の `widthRestoredThrough` = 録画 ID)。戻せなかったものも
+ *   二度は読まない。番組表が取り込み直されるまでの間 (チャンネルごとに最大 6 時間) に録り始めたものも
+ *   寄せた字を写すので、起動時だけでなく定期的に動かして取りこぼさない。もう全角が入っている録画は読まずに済ませる
  */
 import { open } from "node:fs/promises";
 
@@ -30,12 +30,12 @@ import { emit } from "./events";
 import { recordings, services } from "./schema";
 import { store, stored } from "./settings";
 
-/** 済んだ録画ID を覚えておくキー */
+/** 済んだ録画 ID を覚えておくキー */
 const MARK = "widthRestoredThrough";
 
 /**
- * 元のTSの頭から読む上限。EIT の現在/次 (p/f) は数秒おきに流れるので、頭の数十秒で足りる。
- * BS の 1秒はおよそ 3MB
+ * 元の TS の先頭から読む上限。EIT の現在/次 (p/f) は数秒おきに流れるので、先頭の数十秒で足りる。
+ * BS の 1 秒はおよそ 3MB
  */
 const READ_LIMIT = 96 * 1024 * 1024;
 const CHUNK = 1024 * 1024;
@@ -56,7 +56,7 @@ export type BroadcastText = Pick<
 >;
 
 /**
- * 比べる形式。幅と、外字の書き方だけを揃える — 外字を文字列に開いていた頃 (「[新]」) に録ったものは、
+ * 比べる形式。幅と、外字の書き方だけをそろえる。外字を文字列に開いていた頃 (「[新]」) に録ったものは、
  * 放送を読み直すと規格の字 (「🈟」) で返ってくる (`fold.ts`)
  */
 function same(text: string): string {
@@ -69,7 +69,7 @@ function sameButWidth(stored: string, original: string): string | null {
 }
 
 /**
- * `stored` を `original` から同じ所を切り出して戻す。`toHalfWidth` は1文字を1文字に写すので、
+ * `stored` を `original` から同じ所を切り出して戻す。`toHalfWidth` は 1 文字を 1 文字に写すので、
  * 寄せた写しで見つけた位置で元を切れる。見つからなければ null
  */
 export function widthOf(stored: string, original: string): string | null {
@@ -101,7 +101,7 @@ function extendedWidth(
 
 /**
  * 戻す欄だけを返す。変わるものが無ければ null。
- * 作品名・副題は戻した番組名から切り出すので、番組名が戻せないときは触らない
+ * 作品名・副題は戻した番組名から切り出すので、番組名が戻せないときは変えない
  */
 export function restoredText(
   stored: StoredText,
@@ -132,7 +132,7 @@ export function restoredText(
 }
 
 /**
- * もう放送のとおりの幅で入っているか (タイトルか概要に全角の英数・記号・空白が1字でもある)。
+ * もう放送のとおりの幅で入っているか (タイトルか概要に全角の英数・記号・空白が 1 字でもある)。
  * 寄せていたのはタイトルと概要だけなので、詳細は見ない (漢字の集合の全角はもとから残っている)
  */
 function alreadyWide(stored: StoredText): boolean {
@@ -142,9 +142,9 @@ function alreadyWide(stored: StoredText): boolean {
 }
 
 /**
- * 元のTSに流れていた EIT から、その番組のタイトル・概要・詳細を読む。読めなければ null。
+ * 元の TS に流れていた EIT から、その番組のタイトル・概要・詳細を読む。読めなければ null。
  *
- * 録画は番組の少し前から回すので、頭では「次」として来ていることが多い。どちらでも event_id で見つける
+ * 録画は番組の少し前から始めるので、先頭では「次」として来ていることが多い。どちらでも event_id で見つける
  */
 export async function readBroadcastText(
   path: string,
@@ -190,24 +190,24 @@ export async function readBroadcastText(
   };
 }
 
-/** 1回ぶんの結果。ログに出す */
+/** 1 回ぶんの結果。ログに出す */
 export interface RestoreResult {
   /** 見た録画 */
   seen: number;
-  /** 元のTSから戻した */
+  /** 元の TS から戻した */
   restored: number;
   /** もう放送のとおりだった (取り込み直された番組表から録ったもの) */
   already: number;
-  /** 元のTSが無い・EIT が読めない・字が違っていた */
+  /** 元の TS が無い・EIT が読めない・字が違っていた */
   missed: number;
 }
 
-/** 走っているか。元のTSを読むので数分かかることがあり、次の周期と重ねない */
+/** 動いているか。元の TS を読むので数分かかることがあり、次の周期と重ねない */
 let running = false;
 
 /**
- * まだ見ていない録画 (ID が覚えた所より後ろ) を見て回る。**録画中のものの手前で止める** —
- * 元のTSが書き終わってから次の回で見る。前の回が走っていれば何もしない
+ * まだ見ていない録画 (ID が覚えた所より後ろ) を順に見る。**録画中のものの手前で止める**。
+ * 元の TS が書き終わってから次の回で見る。前の回が動いていれば何もしない
  */
 export async function restoreWidths(): Promise<RestoreResult> {
   if (running) return { seen: 0, restored: 0, already: 0, missed: 0 };
@@ -252,7 +252,7 @@ async function walk(): Promise<RestoreResult> {
   return result;
 }
 
-/** 1件戻す。戻せたら true */
+/** 1 件戻す。戻せたら true */
 async function restoreOne(
   row: StoredText & {
     id: number;
@@ -261,7 +261,7 @@ async function restoreOne(
     ts_path: string | null;
   },
 ): Promise<boolean> {
-  // 取り込んだ録画 (負の番組ID) は放送から録っていない
+  // 取り込んだ録画 (負の番組 ID) は放送から録っていない
   if (row.ts_path === null || row.program_id === null || row.program_id < 0)
     return false;
   const service = orm()
@@ -269,7 +269,7 @@ async function restoreOne(
     .from(services)
     .where(eq(services.id, row.service_id))
     .get();
-  // 局の行が無くても、局の内部ID の下5桁が ARIB のサービスID (`tuner.serviceKey`)
+  // 局の行が無くても、局の内部 ID の下 5 桁が ARIB のサービスID (`tuner.serviceKey`)
   const serviceId = service?.service_id ?? row.service_id % 100000;
   const read = await readBroadcastText(
     row.ts_path,

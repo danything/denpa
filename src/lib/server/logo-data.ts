@@ -23,7 +23,7 @@ import { currentServices } from "./epg";
 import { services } from "./schema";
 
 /**
- * CM検出のために覚えた局ロゴ (`own-logo-<幅>x<高さ>.bin`。`logo-own.ts`) の置き場と、その中身。
+ * CM 検出のために覚えた局ロゴ (`own-logo-<幅>x<高さ>.bin`。`logo-own.ts`) の置き場と、その中身。
  *
  * **これは放送波から取得する局ロゴ (PNG) とは別物。** あちら (`server/logo.ts`) は番組表に
  * 出すための画像で、こちらは「画面のどこにロゴが出ているか」を録画から覚えたもの。
@@ -36,10 +36,10 @@ export function logoRepo(serviceId: number): string {
   return join(config.cmLogoDir, String(serviceId));
 }
 
-/** 覚えたもののファイル名 (`logo-own.modelFile`)。コマの大きさごとに1つ */
+/** 覚えたもののファイル名 (`logo-own.modelFile`)。コマの大きさごとに 1 つ */
 const MODEL = /^own-logo-\d+x\d+\.bin$/;
 
-/** その局の覚えたもの。読めなければ空 (置き場がまだ無い = 1本もエンコードしていない) */
+/** その局の覚えたもの。読めなければ空 (置き場がまだ無い = 1 本もエンコードしていない) */
 function models(serviceId: number): string[] {
   try {
     return readdirSync(logoRepo(serviceId)).filter((name) => MODEL.test(name));
@@ -56,7 +56,7 @@ export function forgetLogoData(serviceId: number): void {
 }
 
 interface LearnedLogo {
-  /** 覚えている枠。**記録されているコマの座標** (地上波のHDなら 1440×1080 の中) */
+  /** 覚えている枠。**記録されているコマの座標** (地上波の HD なら 1440×1080 の中) */
   x: number;
   y: number;
   width: number;
@@ -132,7 +132,7 @@ export function readLearnedLogo(serviceId: number): LearnedLogo | null {
   };
 }
 
-/** 8bit グレースケールの PNG。出すのは1枚だけなので、素直に組む */
+/** 8bit グレースケールの PNG。出すのは 1 枚だけなので、素直に組む */
 function encodeGray(
   gray: Uint8Array,
   width: number,
@@ -161,13 +161,13 @@ function encodeGray(
   return joinBytes(parts);
 }
 
-/** その局のロゴを覚えているか。**中身が1つでもあれば覚えている** */
+/** その局のロゴを覚えているか。**中身が 1 つでもあれば覚えている** */
 export function learned(serviceId: number): boolean {
   return models(serviceId).length > 0;
 }
 
 /**
- * 同じ映像を映している局を1つにまとめる。**局名で束ねる。**
+ * 同じ映像を映している局を 1 つにまとめる。**局名で束ねる。**
  *
  * 放送局はサブチャンネルの枠を常時流していて、マルチ編成をしていない間は
  * 本チャンネルと同じ映像が出ている。SDT の局名も同じなので、実機では
@@ -177,13 +177,13 @@ export function learned(serviceId: number): boolean {
  * テレビ朝日  1064 / 1065 / 1066     BS-TBS       161 / 162 / 163
  * ```
  *
- * のように並んでいた。**同じ映像なのでロゴは1つ覚えれば足りる。** 束ねずに
- * 並べていた頃は、画面に「TOKYO MX1」が2つ並んでいた。
+ * のように並んでいた。**同じ映像なのでロゴは 1 つ覚えれば足りる。** 束ねずに
+ * 並べていた頃は、画面に「TOKYO MX1」が 2 つ並んでいた。
  *
  * 代表は**もう覚えている局を優先**する。無ければ先頭 (呼ぶ側の並び順)。
  *
  * ネットワークもそろえて見る。局名だけで束ねると、たまたま同名の別系列を
- * 1つにしてしまう。幅は寄せて比べる (局名の幅は SDT を読んだ局から放送のとおりに直るので、
+ * 1 つにしてしまう。幅は寄せて比べる (局名の幅は SDT を読んだ局から放送のとおりに直るので、
  * 直る前と後の局が並ぶことがある。`epg.widenServices`)
  */
 export function stations<
@@ -222,7 +222,7 @@ export function siblings(serviceId: number): number[] {
 /**
  * 覚えたロゴを、同じ映像を映している局にも配る (`copyModel`)。
  *
- * 束ねて1局ぶんしか画面に出さないので (`stations`)、そのままだとサブチャンネルの枠で
+ * 束ねて 1 局ぶんしか画面に出さないので (`stations`)、そのままだとサブチャンネルの枠で
  * 録れた番組が一から覚え直すことになる。中身は同じなので写せば足りる。
  */
 export function share(serviceId: number, file: string, replace: boolean): void {
@@ -235,11 +235,11 @@ export function share(serviceId: number, file: string, replace: boolean): void {
 }
 
 /**
- * 覚えたもの1つ (`file`) を、他の局の入れ物へ写す。
+ * 覚えたもの 1 つ (`file`) を、他の局の入れ物へ写す。
  *
  * **向こうが同じ大きさのものを持っていれば、ふだんは写さない** (自分で育てたほうが確か)。
- * 覚え直した (`replace`。局がロゴを替えた) ときだけは上書きする — 同じ映像なので向こうの型も
- * 古く、残すと向こうは古い型で当てて外すか、覚え直しに1本ぶん余計にかかる。
+ * 覚え直した (`replace`。局がロゴを替えた) ときだけは上書きする。同じ映像なので向こうの型も
+ * 古く、残すと向こうは古い型で当てて外すか、覚え直しに 1 本ぶん余計にかかる。
  * 書きかけを読まれないよう、隣に写してから差し替える (`logo-own.save` と同じ)
  */
 export function copyModel(

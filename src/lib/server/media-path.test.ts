@@ -124,7 +124,7 @@ describe("古い DB の絶対パスを相対に直す (0002_relative-media-paths
     "utf8",
   );
 
-  test("元のTS はファイル名、エンコードしたものはシリーズとファイル (古い Season フォルダは3段)", () => {
+  test("元の TS はファイル名、エンコードしたものはシリーズとファイル (古い Season フォルダは 3 段)", () => {
     const { db } = fresh();
     const insert = db.prepare(
       `INSERT INTO recordings (id, service_id, name, start_at, end_at, created_at, updated_at, ts_path, library_path, alt_path)

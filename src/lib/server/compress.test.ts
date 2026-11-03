@@ -84,10 +84,10 @@ describe("縮めて返す", () => {
 
   /**
    * **流して返す応答は、届いた塊ごとに出す。** SvelteKit は load の promise を後から流す。
-   * 縮める側が溜めると、先に出せたはずの頭まで最後まで届かない
+   * 縮める側が溜めると、先に出せたはずの先頭の行まで最後まで届かない
    */
   for (const encoding of ["br", "gzip"] as const) {
-    test(`流して返す応答は、続きを待たずに頭が届く (${encoding})`, async () => {
+    test(`流して返す応答は、続きを待たずに先頭の行が届く (${encoding})`, async () => {
       let finish = (): void => {};
       const later = new Promise<void>((resolve) => {
         finish = resolve;
@@ -121,7 +121,7 @@ describe("縮めて返す", () => {
         ).toString();
       };
 
-      // 続きはまだ流れていないのに、頭は伸ばせるところまで届いている
+      // 続きはまだ流れていないのに、先頭の行は伸ばせるところまで届いている
       const got: Uint8Array[] = [];
       while (inflate(Buffer.concat(got)) !== head) {
         const { done, value } = await reader.read();

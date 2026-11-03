@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { eitSection, packetize, stream } from "@danything/arib/synth";
 
 /**
- * 半角に寄せて取り込んでいた頃の録画を、元のTSの EIT から放送のとおりの幅に戻す。
+ * 半角に寄せて取り込んでいた頃の録画を、元の TS の EIT から放送のとおりの幅に戻す。
  * 環境変数ではなく設定そのものを書き換えている (files.test.ts と同じ理由)
  */
 const { config } = await import("./config");
@@ -41,7 +41,7 @@ const STORED = {
   extended: { 出演者: "司会：テスト太郎" },
 };
 
-/** EIT p/f (現在と次) を流す TS。録画の頭は前の番組が「現在」で、録る番組は「次」 */
+/** EIT p/f (現在と次) を流す TS。録画の先頭では前の番組が「現在」で、録る番組は「次」 */
 function tsFile(name: string): string {
   const pf = (
     sectionNumber: number,
@@ -85,7 +85,7 @@ describe("幅だけ戻す (restoredText)", () => {
     });
   });
 
-  test("外字を文字列に開いていた頃の録画 ([新]) も、放送の字 (🈟) と揃えて戻す", () => {
+  test("外字を文字列に開いていた頃の録画 ([新]) も、放送の字 (🈟) とそろえて戻す", () => {
     const stored = {
       ...STORED,
       name: "[新]彼方から #1「目覚め」",
@@ -99,7 +99,7 @@ describe("幅だけ戻す (restoredText)", () => {
     });
   });
 
-  test("字が違う欄は触らない (録ったあとに番組表が書き換わった)", () => {
+  test("字が違う欄は変えない (録ったあとに番組表が書き換わった)", () => {
     const changed = {
       ...AIRED,
       name: "［新］Ｖｅｎｕｅ１０１　＃３「別のゲスト」",
@@ -136,7 +136,7 @@ describe("幅だけ戻す (restoredText)", () => {
   });
 });
 
-describe("元のTSの EIT を読む (readBroadcastText)", () => {
+describe("元の TS の EIT を読む (readBroadcastText)", () => {
   test("「次」として流れていた番組も event_id で見つける", async () => {
     expect(await readBroadcastText(tsFile("pf.ts"), 1024, 77, true)).toEqual({
       name: AIRED.name,
@@ -155,7 +155,7 @@ describe("元のTSの EIT を読む (readBroadcastText)", () => {
   });
 });
 
-describe("録画を見て回る (restoreWidths)", () => {
+describe("録画を順に見る (restoreWidths)", () => {
   const at = Date.now();
   const row = (
     id: number,
@@ -181,7 +181,7 @@ describe("録画を見て回る (restoreWidths)", () => {
     updated_at: at,
   });
 
-  test("元のTSから戻す。保存先の名前は動かさない。見た録画は二度と読まない", async () => {
+  test("元の TS から戻す。保存先の名前は動かさない。見た録画は二度と読まない", async () => {
     orm()
       .insert(services)
       .values({
@@ -200,7 +200,7 @@ describe("録画を見て回る (restoreWidths)", () => {
       .insert(recordings)
       .values([
         row(1, tsFile("rec1.ts")),
-        // 元のTSが消えたもの
+        // 元の TS が消えたもの
         row(2, null),
         // 取り込み直された番組表から録ったもの (もう全角)
         row(3, join(dir, "missing.ts"), {
@@ -238,7 +238,7 @@ describe("録画を見て回る (restoreWidths)", () => {
       { key: "widthRestoredThrough", value: "3" },
     ]);
 
-    // 2回目は何も見ない
+    // 2 回目は何も見ない
     expect(await restoreWidths()).toEqual({
       seen: 0,
       restored: 0,

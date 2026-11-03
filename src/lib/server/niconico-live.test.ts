@@ -198,7 +198,7 @@ describe("繋ぐ", () => {
     expect(h.asked).toHaveLength(2);
   });
 
-  test("wss: でない接続先には繋がない (試験の偽物のループバックだけは ws: も通す)", async () => {
+  test("wss: でない接続先には繋がない (テストの偽物のループバックだけは ws: も通す)", async () => {
     const h = harness({ watch: () => ({ url: "ws://evil.example/" }) });
     h.live.touch("jk1");
     await h.flush();

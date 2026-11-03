@@ -2,10 +2,10 @@
  * 偽チューナーエージェント。denpa の E2E で、実チューナー無しに全体を動かす。
  *
  * **電波の組み立ては `broadcast.ts` に置いてある。** 同じものを本物の
- * エージェントにも食わせているため (`tune.ts`)。こちらが受け持つのは
+ * エージェントにも渡しているため (`tune.ts`)。こちらが受け持つのは
  * 「denpa から見た API」だけで、取り合いもスキャンも本物らしく見えるだけの作り物。
  *
- * エージェント自身のふるまい (取り合い・殺し方・スキャンの総当たり) は
+ * エージェント自身のふるまい (取り合い・止め方・スキャンの総当たり) は
  * ここでは試せない。それは `agent/conformance.test.ts` が本物に当てている。
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -22,12 +22,12 @@ import {
 import type { FakeService } from "./services";
 
 /**
- * ポートは2つ。denpa が繋ぐのは TLS のほう (本物と同じく HTTPS で、合言葉で組む。`FAKE_AGENT_TLS_PORT`、既定は +1)。
- * 平文のほう (`FAKE_AGENT_PORT`) はテストが `/__control/...` を叩き、API を覗くため
+ * ポートは 2 つ。denpa が繋ぐのは TLS のほう (本物と同じく HTTPS で、合言葉で組む。`FAKE_AGENT_TLS_PORT`、既定は +1)。
+ * 平文のほう (`FAKE_AGENT_PORT`) はテストが `/__control/...` を呼び、API の中身を確かめるため
  */
 const PORT = Number(process.env["FAKE_AGENT_PORT"] ?? 25252);
 const TLS_PORT = Number(process.env["FAKE_AGENT_TLS_PORT"] ?? PORT + 1);
-/** denpa の元のTSの置き場。本物では同じものをエージェント側にも見せてある */
+/** denpa の元の TS の置き場。本物では同じものをエージェント側にも見せてある */
 const RECORDED = resolve(process.env["RAW_DIR"] ?? "/media/raw");
 
 /** テストから切り替えるつまみ。本物では `tune.ts` がファイル越しに読む */
@@ -109,10 +109,10 @@ function agentAbout() {
 }
 
 /**
- * 偽のスクランブル解除。本物の復号はせず、4バイト目の
+ * 偽のスクランブルの復号。本物の復号はせず、4 バイト目の
  * transport_scrambling_control を落とすだけ。
  *
- * 本物と同じく、渡されるのは元のTSの置き場からの相対パス。
+ * 本物と同じく、渡されるのは元の TS の置き場からの相対パス。
  */
 function unscramble(
   input: string,
@@ -290,10 +290,10 @@ function vacate(index: number): void {
  * - 引き継ぐ利用者 (`after`) しかいないチューナー。その利用者は正常に終わらせる
  * - 同じチャンネルを優先度の低い利用者しか読んでいないチューナー。選局し直さずに共有する (`join`)
  *
- * **空きが無ければ、自分より優先度の低い利用者しかいないチューナーを取り上げて使う** (約束の2)。ライブが録画に
+ * **空きが無ければ、自分より優先度の低い利用者しかいないチューナーを取り上げて使う** (約束の 2)。ライブが録画に
  * チューナーを取り上げられる場面 (`34-live-yield.spec.ts`) を作るため。本物は空きがあっても順の前のチューナーを取り上げるが、
- * ここでは**空きが無いときだけ**にしてある — 偽エージェントは spec をまたいで共有で、空きがあるのに
- * 取り上げると、裏で回っている番組表集めやロゴ集めの見え方まで変わる
+ * ここでは**空きが無いときだけ**にしてある。偽エージェントは spec をまたいで共有で、空きがあるのに
+ * 取り上げると、裏で回っている番組表の取得やロゴの取得の見え方まで変わる
  */
 function pick(
   type: string,
@@ -339,7 +339,7 @@ function pick(
 
 /*
  * 起きたことを知らせるエンドポイント (SSE)。本物では `/denpa/events`。
- * denpa はこれを聞いてチューナー画面を更新し、スキャンの進み具合を出す
+ * denpa はこれを読んでチューナーの画面を更新し、局が入れ替わったら取り込み直す (`agent-events.ts`)
  */
 const listeners = new Set<ReadableStreamDefaultController<Uint8Array>>();
 
@@ -391,7 +391,7 @@ function openStream(url: URL, signal: AbortSignal): Response {
     return json({ error: "type と channel が必要です" }, 400);
   const services = on(type, channel);
 
-  // 優先度が自分と同じか高い利用者が同じチャンネルを読んでいれば選局を共有 (約束の3)。無ければ選ぶ
+  // 優先度が自分と同じか高い利用者が同じチャンネルを読んでいれば選局を共有 (約束の 3)。無ければ選ぶ
   let index = [...leases.entries()].find(
     ([, lease]) =>
       lease.type === type &&
@@ -404,7 +404,7 @@ function openStream(url: URL, signal: AbortSignal): Response {
       return json({ error: `${type} のチューナーに空きがありません` }, 409);
     index = picked.index;
     /*
-     * **放送の無いチャンネルは、チューナーを取ってから選局に落ちる** (本物と同じ順)。1バイトも送る前なので、
+     * **放送の無いチャンネルは、チューナーを取ってから選局に落ちる** (本物と同じ順)。1 バイトも送る前なので、
      * 理由を付けて 500 で返す (docs/agent.md「選局は、利用者が切るまで終わらない」)。
      * 空けたチューナー (取り上げた・引き継いだ相手) は戻らない。選局が無いまま空きになる
      */
@@ -488,7 +488,7 @@ const options: Bun.ServeOptions = {
      * **繋ぎを壊す。Pod を入れ替えたのと同じ形。**
      *
      * 接続ごと落として、その場で立て直す。読んでいる側には
-     * `The socket connection was closed unexpectedly` が飛ぶ — 本物で
+     * `The socket connection was closed unexpectedly` が飛ぶ。本物で
      * エージェントの Pod が入れ替わったときと同じ壊れ方。
      *
      * **ストリームを `controller.error()` で壊すのでは足りない。** それだと
@@ -583,7 +583,7 @@ const options: Bun.ServeOptions = {
           ) {
             return json({ error: "channels と scanned が必要です" }, 400);
           }
-          // 1件も無いまま上書きすると、今まで録れていた局まで消える
+          // 1 件も無いまま上書きすると、今まで録れていた局まで消える
           if (body.channels.length === 0)
             return json({ error: "チャンネルが 1 件もありません" }, 400);
           const scanned = body.scanned as string[];
@@ -598,8 +598,8 @@ const options: Bun.ServeOptions = {
 
     if (url.pathname === "/denpa/card") {
       /*
-       * 本物と同じ形 (agent/Denpa.Agent/Card.cs)。**予備のリーダーも1つ置く** —
-       * 使うのは1枚だけで、チューナーが並ぶのは使用中の行だけ、を画面で確かめる
+       * 本物と同じ形 (agent/Denpa.Agent/Card.cs)。**予備のリーダーも 1 つ置く。**
+       * 使うのは 1 枚だけで、チューナーが並ぶのは使用中の行だけ、を画面で確かめる
        */
       return json(
         knobs.scrambled

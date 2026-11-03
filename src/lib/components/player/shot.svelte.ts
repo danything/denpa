@@ -39,7 +39,7 @@ export function snapshotter(controls: PlayerControls) {
   let saved = $state(false);
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
   /**
-   * 撮っている最中か。**続けて押しても1枚ずつ** — 共有シートが開いている間に
+   * 撮っている最中か。**続けて押しても1枚ずつ**。共有シートが開いている間に
    * もう一度押すと、2枚目の共有が「もう開いている」で断られて落ちてくる
    */
   let busy = false;
@@ -94,7 +94,7 @@ export function snapshotter(controls: PlayerControls) {
     },
     /**
      * いまの1コマを、出している字幕・実況のコメントごと切り抜いて送る。コメントは画面から読む (`readComments`)。
-     * @param frame 写すフレームを取ってくる関数。**撮れると決まってから呼ぶ** (`busy` の後) — canvas で
+     * @param frame 写すフレームを取ってくる関数。**撮れると決まってから呼ぶ** (`busy` の後)。canvas で
      *   描いているときは worker から1枚もらう (`raw/engine.ts` の `grab`) ので、先に呼ぶと
      *   弾いた押しのぶんのフレーム (1080 で 8MB) が誰にも閉じられずに残る
      * @param caption 出している字幕の canvas。出していなければ null

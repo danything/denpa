@@ -60,7 +60,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 | `~/denpa/` (`DENPA_HOME`)      | `denpa.env` (コンテナの環境変数。手で足すならここ。無いときだけ雛形を作る)・`config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・エージェントのログ `denpa-agent.log` |
 | `%LOCALAPPDATA%\denpa-agent\`  | エージェント・px4-userland (`px4d.exe`・`px4ctl.exe`・切り出したファームウェア・ライセンスの文書)・siano-userland・起こす `denpa-agent.cmd` と `denpa-start.ps1`                    |
 | `C:\denpa-run`                 | px4d のソケットの置き場 (下)                                                                                                                                                        |
-| `~/Videos/denpa/recorded`      | 元の TS 。エージェントとコンテナ (`/media/raw`) の両方に見せる                                                                                                                      |
+| `~/Videos/denpa/recorded`      | 元の TS。エージェントとコンテナ (`/media/raw`) の両方に見せる                                                                                                                       |
 | `~/Videos/denpa/library`       | 出来上がった録画 (コンテナの `/media/encoded`。エクスプローラーから見える)                                                                                                          |
 | wslc のボリューム `denpa-data` | DB                                                                                                                                                                                  |
 
@@ -74,7 +74,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   入れるのは 0.2.1) は、ドライバを WinUSB にすれば動きます。Linux・Mac と同じく px4d の制御ソケットで
   受信機を使い、内蔵カードリーダーも読みます (IPC は Windows でも AF_UNIX)。配布 zip のうち使うのは
   `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
-  置きません。エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらを引いてしまいます。
+  置きません。エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらが読み込まれてしまいます。
   ファームウェアは Mac と同じく PLEX 公式ドライバから切り出します ([tuner-px4.md](tuner-px4.md#ファームウェア))
 - **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 用 (`siano-ts.exe` と libusb) も、
   ドライバを WinUSB にすれば動きます

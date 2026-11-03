@@ -3,7 +3,7 @@ import { error } from "@sveltejs/kit";
 import { readLearnedLogo } from "#lib/server/logo-data.js";
 
 /**
- * その局について CM検出のために**覚えたロゴ**を画像にして返す。
+ * その局について CM 検出のために**覚えたロゴ**を画像にして返す。
  *
  * 番組表に出すロゴ (`/api/services/<id>/logo`) とは別物。あちらは放送波から
  * 取得した局のマークで、こちらは「画面のどこにロゴが出ているか」を録画から
