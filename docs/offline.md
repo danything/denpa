@@ -56,7 +56,7 @@ adapter-bun は名前に指紋の無い静的ファイルに `Cache-Control` を
 
 ## データモデル (IndexedDB)
 
-DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/offline-db.ts) の型が正):
+DB 名 `denpa-offline`、ストア4つ (実体は [offline-db.ts](../src/lib/offline-db.ts) の型が正):
 
 - `videos` (key: 録画ID) … 保存した録画1本。`video: Blob` と付属のデータ
   (`captionText`: `captions.json` の JSON・`poster: Blob`・`chapters`/`databroadcast`: JSON) を1行にまとめ、
@@ -65,6 +65,11 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 - `outbox` (key: 録画ID) … オンライン復帰で処理する予約 (`{op: 'delete', name, queuedAt}`)。
 - `resume` (key: 録画ID) … オフライン中に進んだ視聴位置。復帰時にまとめて
   `POST /api/recordings/<id>/resume` で送る。
+- `parts` (key: `[録画ID, 番号]`) … ページで受け取った動画の塊 (16MiB ずつ。下記の 5)。
+  その録画の `videos` の行は `video` の代わりに塊の数 (`parts`) と形式 (`videoType`) を持つ。
+  **読むときは `videos.get` / `all` が塊を1本の `video` につないで出す**ので、観る画面・`/offline`・SW は
+  塊を知らなくてよい (つないでも中身は写さない。置き場の Blob はファイルを指しているだけ)。
+  塊が欠けていたら `video` 無しとして扱い、消すときは塊も消す。DB のバージョンは 2 (1 で保存したものはそのまま読める)。
 
 `state` は `'downloading' | 'ready' | 'failed'` の3つ。**失敗は消さずに残す。**
 通知 (トースト) は一瞬なので、控えごと消すと無かったことに見える。残った行がそのまま
@@ -76,7 +81,7 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
 
 ### ダウンロード — Background Fetch API を使う
 
-1. **HEAD で下見してから預ける** (`probeDownloads`)。Background Fetch は
+1. **HEAD で下見してから預ける** (`probeDownloads`。一度に訊く)。Background Fetch は
    404 が1つでも混ざると全体が失敗になる (`failureReason: bad-status`) ので、付属のデータは
    在るものだけに絞る。`downloadTotal` を超えても打ち切られるので、HEAD の実測合計 (+2%) を渡す。
    どちらも実機の Edge で踏んだ。
@@ -92,7 +97,19 @@ DB 名 `denpa-offline`、ストア3つ (実体は [offline-db.ts](../src/lib/off
    開き直したときは、「保存中」なのにブラウザ側にダウンロードが無ければ失敗に倒す (`watchRunning`)。
 5. 対応していないブラウザ (Safari / Firefox) はページ主導の fetch にフォールバック
    (タブを開いたまま。進捗は一覧の行の3段目に出す)。機能検出は
-   `'backgroundFetch' in swReg`。仕分けは SW の受け取りと共有 (`storeResponse`)。
+   `'backgroundFetch' in swReg`。付属のデータの仕分けは SW の受け取りと共有 (`storeResponse`)。
+   - **始めたら返る** (`saveOffline` は受け取り終わりを待たない)。押したらすぐ「保存中」にし、
+     下見は動画だけ (付属のデータは受け取るときに無ければ飛ばす。下見はサーバで録画を読みます。
+     字幕は ffmpeg、チャプターは ffprobe で読むので、1つずつ訊いていた頃は始まるまで数秒待たせていた)。
+     付属のデータは動画と同時に取得する。途中の失敗は `state='failed'` で残し、塊は捨てる
+   - 取り消し・削除は受け取りも止める。開き直したときに「保存中」なのに受け取っていない行は失敗に倒す
+     (ページを閉じた・読み込み直した時点で止まっている。`watchRunning`)
+   - **動画は 16MiB の塊ごとに `parts` へ書きながら受け取る** (`stream-parts.ts`)。全部をメモリに
+     溜めてから1つの Blob にしていた頃は、900MB の録画で iPhone の Safari のタブがだんだん重くなり、
+     最後は落とされて読み込み直しになっていた。書いている間も次の塊を受け取る (書き込みは1つずつ)
+   - **割合の分母は、返事に `Content-Length` が無ければ下見 (HEAD) の大きさ。** Cloudflare など
+     間に入るものが外して送ることがあり、そのときは割合が出ず流れるだけの表示になっていた。
+     割合は 1% 変わったときだけ書き換える (届くたびに一覧を描き直さない)
 
 ### どれを保存するか — 端末がデコードできるコーデック
 
