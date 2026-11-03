@@ -71,6 +71,7 @@ import {
 } from "./captions";
 import {
   chasePlan,
+  chaseReadHeld,
   type ChaseResume,
   fileSize,
   followFile,
@@ -1932,14 +1933,18 @@ class Session {
         // 届く前に切れたのは選局の失敗 (下の catch)。届いたあとなら外された
         if (!this.fed || chase) throw error;
       }
-      // 追っかけは録れているところまで読み切った。終わりであってエラーではない
-      if (chase) {
-        if (!this.stopped) this.tell({ type: "ended" });
-        return;
+      switch (rawEnding({ chase, fed: this.fed, stopped: this.stopped })) {
+        case "ended":
+          this.tell({ type: "ended" });
+          return;
+        case "lost":
+          return await this.lose(label);
+        case "died":
+          this.died(label, "放送が途切れました", "映像を出せませんでした");
+          return;
+        case "quiet":
+          return;
       }
-      // 届いたあとで途切れた = チューナーから外された。エンコードの経路と同じくリクエストし直させる (`lose`)
-      if (this.fed && !this.stopped) return await this.lose(label);
-      this.died(label, "放送が途切れました", "映像を出せませんでした");
     } catch (error) {
       this.died(
         label,
@@ -2616,7 +2621,7 @@ type ChaseAsked = {
  *
  * 選局と追っかけで読むのをここ1箇所にしてある (両方に足すものが片方だけにならないように)
  */
-function parseCommand(message: Record<string, unknown>): Asked | null {
+export function parseCommand(message: Record<string, unknown>): Asked | null {
   const audio =
     typeof message["audio"] === "string" ? message["audio"] : undefined;
   const asked = message["codec"];
@@ -2876,9 +2881,11 @@ function openChase(
   if (release === null) return refuse(BUSY);
   const stopReading = raw
     ? () =>
-        viewer.held === true ||
-        viewer.connection.congested === true ||
-        hold?.() === true
+        chaseReadHeld({
+          asked: viewer.held === true,
+          congested: viewer.connection.congested === true,
+          outside: hold?.() === true,
+        })
     : hold;
 
   const finished = rec.finished_at !== null;
@@ -2903,8 +2910,7 @@ function openChase(
     audio: audio.id,
     audios: tracks,
   });
-  const origin = raw ? tsFileHead(path) : null;
-  tell({
+  const timeline: Extract<Notice, { type: "timeline" }> = {
     type: "timeline",
     at: plan.at,
     recordedSec: plan.recordedSec,
@@ -2914,8 +2920,8 @@ function openChase(
       (rec.end_at + config.endMargin - rec.created_at) / 1000,
     ),
     finished,
-    ...(origin === null ? {} : { origin }),
-  });
+  };
+  if (!raw) tell(timeline);
 
   let session: Session;
   try {
@@ -2944,8 +2950,20 @@ function openChase(
     throw failure;
   }
   session.whenStopped(release);
-  void session.run();
   session.add(viewer);
+  if (!raw) {
+    void session.run();
+    return session;
+  }
+  /*
+   * **元の TS は、録画の先頭の PTS を読んでから流し始める** (`timeline` の `origin`。読むのは非同期で、読めたものは覚える)。
+   * 先に流すと、画面は物差しの 0 を知らないまま再生位置を出すことになる。読み終える前に選び直された (畳まれた) ら流さない
+   */
+  void tsFileHead(path).then((origin) => {
+    if (!session.alive) return;
+    tell(origin === null ? timeline : { ...timeline, origin });
+    void session.run();
+  });
   return session;
 }
 
@@ -3055,4 +3073,22 @@ function serviceOf(serviceId: number) {
     .from(services)
     .where(eq(services.id, serviceId))
     .get();
+}
+
+/**
+ * **元の TS を配る経路 (`Session.runRaw`) が、入力が尽きたあとにすること。**
+ *
+ * - `ended` … 追っかけが録れているところまで読み切った。終わりであってエラーではない (エンコードの経路と同じく `ended` を伝える)
+ * - `lost` … ライブで、届いたあとに途切れた (チューナーから外された)。リクエストし直させる (`lose`)
+ * - `died` … ライブで、何も届かないまま途切れた。理由を伝える
+ * - `quiet` … もう畳んでいる (選び直された・抜けた)。何も伝えない
+ */
+export function rawEnding(o: {
+  chase: boolean;
+  fed: boolean;
+  stopped: boolean;
+}): "ended" | "lost" | "died" | "quiet" {
+  if (o.stopped) return "quiet";
+  if (o.chase) return "ended";
+  return o.fed ? "lost" : "died";
 }
