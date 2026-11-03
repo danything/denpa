@@ -883,8 +883,7 @@
               codec={liveCodecs({
                 icon: CODEC,
                 choice: player.choice,
-                format: player.raw ? "raw" : player.codec,
-                raw: true,
+                format: player.format,
                 hevc: data.hevc,
                 hidden: data.hidden.length > 0,
                 unavailable: player.unavailable,

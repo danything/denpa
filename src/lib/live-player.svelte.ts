@@ -15,7 +15,7 @@ import {
   type CaptionLanguage,
   type CaptionPage,
 } from "@danything/arib/caption-text";
-import { CLOCK } from "@danything/arib/pes";
+import { CLOCK, WRAP } from "@danything/arib/pes";
 import { untrack } from "svelte";
 
 import type { AudioTrack } from "#lib/arib.js";
@@ -86,6 +86,7 @@ import {
   type Steering,
 } from "#lib/ts/pacing.js";
 import { retryWait } from "#lib/ts/playback.js";
+import { sinceHead } from "#lib/ts/seek.js";
 import { MAX_LEVEL } from "#lib/volume.js";
 
 type LiveState = "idle" | "connecting" | "playing" | "error";
@@ -159,6 +160,13 @@ const SLIP_MOST = 0.1;
  * 読み直し (ffmpeg の立ち上がりとキーフレーム待ち) は 1 秒ほどなので、尽きる前に間に合う
  */
 const REFILL = 5;
+/**
+ * 追っかけを元の TS で受けているとき、手元がこれ (秒) を超えたらサーバに送るのを止めさせる (`holdFeed`)。
+ * worker が圧縮のまま持てる 30 秒 (`raw/worker.ts` の `FOLLOW_PENDING_MOST`) より手前で止め、`full` まで行かせない
+ */
+const HOLD_ABOVE = 20;
+/** 止めさせたあと、手元がこれ (秒) を切ったら送り直させる。倍速で届くので、尽きるまでに十分間に合う */
+const RESUME_BELOW = 10;
 /** 飛び直す間隔の下限 (ms)。**デコードが追いつかない状態は飛んでも直らない** */
 const UNSLIP_EVERY = 3_000;
 /*
@@ -387,6 +395,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   } | null>(null);
   /** 追っかけが録れているところまで読み切ったか */
   let chaseEnded = $state(false);
+  /**
+   * 追っかけを元の TS で受けるときの物差しの 0 (録画の先頭の PTS。`timeline` の `origin`)。届いていなければ null で、
+   * そのときは鳴らし始めた PTS を `base` の位置とみなす (`rawHead`。`rawChaseAt`)
+   */
+  let origin: number | null = null;
+  /** `origin` が無いとき、リクエストし直してから最初に鳴った位置 (秒。PTS のまま) */
+  let rawHead: number | null = null;
+  /** サーバに送るのを止めさせているか (`{ type: 'hold' }`。追っかけを元の TS で受けているときだけ。`holdFeed`) */
+  let feedHeld = false;
   /** 読み切ったら、流し残しが尽きたところで MediaSource を閉じる (`finishStream`) */
   let ending = false;
 
@@ -1464,11 +1481,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   function setAudio(id: string): void {
     if (element === null || id === audio) return;
-    // MPEG-2 では再エンコードしない。TS には全部の音声が入っている (`RawEngine.selectAudio`)
-    if (raw && engine !== null && tuned !== null) {
+    // MPEG-2 では再エンコードしない。TS には全部の音声が入っている (`RawEngine.selectAudio`。ライブも追っかけも)
+    if (raw && engine !== null) {
       audio = id;
-      tuned = { ...tuned, audio: id };
-      remember(tuned, choice);
+      if (tuned !== null) {
+        tuned = { ...tuned, audio: id };
+        remember(tuned, choice);
+      }
       pickAudio();
       return;
     }
@@ -1503,17 +1522,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // MPEG-2 をデコードできるかをまだ確かめていなければ、決まる形式が分からない。リクエストし直して確かめる
     const unknown = rawProblem === undefined && needsRawCheck();
     if (!unknown && decideFormat() === before && state !== "error") return;
-    if (chase !== null) {
-      reopenChase();
-      return;
-    }
-    if (tuned === null) return;
-    void tune(element, tuned, true);
+    requestAgain();
   }
 
   /** 選んでいるものから決まる形式が、MPEG-2 になりうるか (デコードできるかを確かめる要るか) */
   function needsRawCheck(): boolean {
-    if (chase !== null) return false;
     return choice === "raw" || (choice === "auto" && options.indoor === true);
   }
 
@@ -1526,18 +1539,18 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * **選んでいるものから、リクエストする形式を決める。** 自動なら `autoCodec`。選んだものは使えればそのまま、
    * 使えなければ外と同じ順 (AV1 → H.265 → H.264、互換モードは AV1 → H.264 → MPEG-2) で代わりを探す。何も使えなければ null。
    * 使えるかは、MPEG-2 はデコードできて諦めていないか、AV1・H.265・H.264 は受け取れて (互換モードなら描けて) 諦めていないか。
-   * H.265 はそのうえで、ライブのエンコーダが GPU のときだけ (`options.hevc`)。互換モードと追っかけでは使わない
+   * H.265 はそのうえで、ライブのエンコーダが GPU のときだけ (`options.hevc`)。互換モードと追っかけでは使わない。
+   * ライブと追っかけで決め方は同じ (使えない形式を外すだけ)
    */
   function decideFormat(): LiveFormat | null {
-    const forChase = chase !== null;
     const can = {
-      rawOk: !forChase && rawProblem === null && !rawGaveUp,
+      rawOk: rawProblem === null && !rawGaveUp,
       av1: compat
         ? !compatGaveUp && compatSupport?.av1 === true
         : !av1GaveUp && mseCan("av1"),
       hevc:
         !compat &&
-        !forChase &&
+        chase === null &&
         options.hevc === true &&
         !hevcGaveUp &&
         mseCan("hevc"),
@@ -1545,7 +1558,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         ? !compatGaveUp && compatSupport?.h264 === true
         : mseCan("h264"),
       compat,
-      chase: forChase,
     };
     if (choice === "auto")
       return autoCodec({ ...can, indoor: options.indoor === true });
@@ -1771,6 +1783,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         codec,
         caption: captionTrack,
         language: captionLanguage,
+        raw: wantsRaw(),
       };
     }
     if (tuned !== null)
@@ -1851,6 +1864,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     state = "connecting";
     message = "";
     quiet = Date.now() + GRACE;
+    // サーバは新しい指示で送るのを止めた印を戻す (`server/live.ts` の `attend`)。物差しの 0 も届き直す
+    feedHeld = false;
+    origin = null;
+    rawHead = null;
 
     if (open) {
       const command = wantedCommand();
@@ -2005,6 +2022,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
            * 合わせ直す** — リクエストした位置は録れている範囲に収められることがある
            */
           if (chase !== null) chase = { ...chase, base: notice.at };
+          // 元の TS で受けるとき、届いた PTS から位置を出す物差しの 0 (`rawChaseAt`)
+          origin = notice.origin ?? null;
           chaseTimeline = {
             recordedSec: notice.recordedSec,
             totalSec: notice.totalSec,
@@ -2012,10 +2031,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             since: Date.now(),
           };
         } else if (notice.type === "ended") {
-          // 録れているところまで読み切った。流し残しが尽きたら MediaSource を閉じる
+          // 録れているところまで読み切った。流し残しが尽きたら MediaSource を閉じる (canvas なら鳴らしきって止める)
           chaseEnded = true;
           ending = true;
           finishStream();
+          engine?.finish();
         } else if (notice.type === "tuned") {
           // 選べる音声はここで初めて分かる (いま流れている番組次第)
           audios = notice.audios;
@@ -2276,6 +2296,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             full: () => {
               starved = true;
             },
+            // 追っかけを録れているところまで鳴らしきった (`ended` の通知で `finish` したあと)。止めておく
+            ended: () => {
+              if (paused || engine === null) return;
+              paused = true;
+              engine.pause();
+            },
           },
           playback,
           input,
@@ -2342,15 +2368,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     stopRaw();
     if (input === "fmp4") {
       compatGaveUp = true;
-      if (
-        chase === null &&
-        rawProblem === null &&
-        !rawGaveUp &&
-        element !== null &&
-        tuned !== null
-      ) {
+      if (rawProblem === null && !rawGaveUp) {
         warning = `${reason}。MPEG-2 に切り替えました`;
-        void tune(element, { ...tuned, raw: true }, true);
+        requestAgain();
         return;
       }
       fail(reason);
@@ -2362,7 +2382,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     }
     warning = reason;
-    if (element !== null && tuned !== null) void tune(element, tuned, true);
+    requestAgain();
+  }
+
+  /**
+   * 形式を決め直してリクエストし直す (諦めた形式は `decideFormat` が外す)。ライブは同じ局を、追っかけは
+   * 再生していた位置から
+   */
+  function requestAgain(): void {
+    if (element === null) return;
+    if (chase !== null) reopenChase();
+    else if (tuned !== null) void tune(element, tuned, true);
   }
 
   /**
@@ -2391,8 +2421,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       paint(at);
       sweep(at);
       // 再生位置 (再エンコードの頭からの秒)。追っかけは base を足して通しで出す (`chasePosition`)
-      if (tenth(at) !== position) position = tenth(at);
+      const local = tenth(
+        raw && chase !== null ? rawChaseAt(at, chase.base) : at,
+      );
+      if (local !== position) position = local;
     }
+    if (raw && chase !== null) holdFeed(engine.lead);
     /*
      * **互換モードの追っかけで抱えきれなくなっていたら、手元が尽きる前に再生している位置からリクエストし直す**
      * (`RawEvents.full`)。サーバは倍速で送り込むので観ている先が伸び続け、worker は上限で
@@ -2405,6 +2439,34 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     settle();
   }
 
+  /**
+   * 追っかけを元の TS で受けているときの再生位置 (`base` からの秒)。PTS は放送の時刻のままなので、録画の先頭の PTS
+   * (`origin`) を引いて通しの位置を出す (観る画面の MPEG-2 と同じ `sinceHead`)。バイト比例で当たりを付けた `base`
+   * より正しい。`origin` が無ければ、鳴らし始めた位置を `base` とみなす
+   */
+  function rawChaseAt(at: number, base: number): number {
+    if (origin !== null)
+      return sinceHead(Math.round(at * CLOCK) % WRAP, origin) - base;
+    rawHead ??= at;
+    return at - rawHead;
+  }
+
+  /**
+   * 追っかけを元の TS で受けているとき、**サーバに送るのを止めさせる・続けさせる** (`{ type: 'hold' }`)。サーバは倍速で
+   * 送り込み、元の TS は捨てられない (捨てると観ていない先が欠ける) ので、手元が溜まったら止めさせる。止めている間も止めさせる
+   */
+  function holdFeed(lead: number): void {
+    const next =
+      paused || lead > HOLD_ABOVE
+        ? true
+        : lead < RESUME_BELOW
+          ? false
+          : feedHeld;
+    if (next === feedHeld) return;
+    feedHeld = next;
+    send({ type: "hold", on: next });
+  }
+
   return {
     get state() {
       return state;
@@ -2412,6 +2474,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /** MPEG-2 で見ているか (エンコードしていない)。コーデックのメニューが MPEG-2 を指すか */
     get raw() {
       return raw;
+    },
+    /** いま観ている形式 (コーデックのメニューの「自動 (…)」に添える)。MPEG-2 なら `raw` */
+    get format(): LiveFormat {
+      return raw ? "raw" : codec;
     },
     /**
      * canvas で描いているか (放送のままの MPEG-2 か、互換モードのエンコードしたものか)。**操作列の出し分けに使う** —

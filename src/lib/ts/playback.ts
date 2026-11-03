@@ -6,6 +6,7 @@
  * 端末が何かを知らない。決め方は `server/playback.ts`
  */
 
+import { autoOrder } from "../live-choice";
 import type { Ruler } from "./watch";
 
 /** 出せる映像の形式。H.265 はエンコード済みがあるときだけ (ファイルそのままと詰め替え。その場の変換では作らない) */
@@ -164,9 +165,10 @@ function asPicked(offer: PlayOffer): Picked | null {
 
 /**
  * エンコード済みを選ぶ順。**AV1 → H.265 → H.264** (小さくなる順。主を選ぶ順 `#lib/hw.ts` の `HW_CODECS` と同じ)。
- * 観る画面・端末に保存・テレビのアプリで同じ順にする
+ * 「自動」の順はライブ・追っかけと同じ関数から出す (`#lib/live-choice.ts` の `autoOrder`)。観る画面・端末に保存・
+ * テレビのアプリで同じ順にする
  */
-export const ENCODED_ORDER = ["av1", "hevc", "h264"] as const;
+export const ENCODED_ORDER = autoOrder("encoded");
 
 /** `ENCODED_ORDER` の順に並べ替える (同じコーデックの中では元の並びのまま) */
 function byEncodedOrder(offers: PlayOffer[]): PlayOffer[] {

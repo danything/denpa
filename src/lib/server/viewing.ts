@@ -86,7 +86,6 @@ export function warmFormat(choice: LiveChoice, indoor: boolean): LiveFormat {
       hevc: true,
       h264: true,
       compat: false,
-      chase: false,
     }) ?? "h264"
   );
 }
