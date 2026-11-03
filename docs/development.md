@@ -95,8 +95,8 @@ CI では 6 つに割って別のランナーに出し、3 ワーカー×6 台 =
 - 名前が後ろの長いスペック (51-live-gaps・57-jikkyo など) は、前に並ぶスペックが少ない組に置きます。
   前のスペックがワーカーを埋めていると遅れて始まり、組がそのぶん長くなります
 - 50-live-pacing は 6 組に 1 本だけで置きます。同じ組でほかのワーカーが動くと届く間隔が乱れ、貯める量がその間隔を覆う高さ
-  (`pacing.ts` の `cover`) へ上がって、「下限のまま」を見るテストが落ちます (軽いスペックと組ませても 5 回に 2 回、0.27〜0.29 秒)。
-  デコードが重なると、途中から入ったときにコマも落とします。1 本だけなら届く間隔は乱れず、貯める量は 0.2 秒のままでした
+  (`pacing.ts` の `cover`) へ上がって、「下限のまま」を見るテストが落ちるためです (軽いスペックと組ませても 5 回に 2 回落ちた)。
+  デコードが重なると、途中から入ったときにコマも落とします
 - 1 本で 1 分を超えるスペックは、組の時間の下限を押し上げるので分けます (57-jikkyo-recorded・26-hwenc-hevc はそうして分けたもの)。
   分けられない 51-live-gaps (実時間で 2 分) が、いまの組の時間の下限です
 - どの組にも入れていない新しいスペックは **5 組で流れます** (CI に注記が出る)。あとで所要時間を見て割り直してください
@@ -223,9 +223,7 @@ Debian のパッケージを入れてから要るファイルだけを写して�
 
 denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しません (denpa-aio の入口・Helm の prepull も bun で動かす)。実行ファイルを直に呼ぶことはできます
 (`kubectl exec deploy/denpa -- ffmpeg -hide_banner -hwaccels`、`kubectl exec deploy/tuner-agent -- denpa-agent --tune …`)。
-コンテナの中を見たいときは、`kubectl debug -it <Pod> --image=busybox --target=denpa`
-(エージェントは `--target=tuner-agent`。Docker なら `docker run --rm -it --pid=container:<名前> --network=container:<名前> busybox` で、
-中のファイルは `/proc/1/root/` の下) のようにシェルのあるコンテナを横に付けます。
+コンテナの中を見たいときは、シェルのあるコンテナを横に付けます (手順は [install.md](install.md#うまくいかないとき)。エージェントは `--target=tuner-agent`)。
 
 ### 外から持ってくるものはバージョンで固定する
 
