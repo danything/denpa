@@ -208,6 +208,13 @@
    */
   /** 互換モードか。開いたときに決める (⚙ で切り替えたら読み直す。`StageTail`) */
   let compat = $state(false);
+  /**
+   * 互換モードでないとき、元の TS (MPEG-2) をこの端末でデコードできて、まだ諦めていないか (`MediaAbility.mpeg2`)。
+   * できれば互換モードと同じく canvas に描く (`pickOffer` の `raw`)。諦めたかは `rawGaveUp`
+   */
+  let rawCapable = $state(false);
+  /** MPEG-2 を描いている途中で諦めたか。**選び直すまで MPEG-2 にしない** (`canvasFallBack`) */
+  let rawGaveUp = $state(false);
   /** この端末で描ける形式 (`raw/support.ts`)。調べるまで null */
   let canvasAbility = $state.raw<CanvasAbility | null>(null);
   /** いま canvas に描いている形式。描いていなければ null (`<video>` で観ている・まだ始めていない) */
@@ -367,13 +374,27 @@
   /**
    * 描くのを諦めた。理由は断り書きに残す。ライブと同じ順 (`live-player.svelte.ts` の `fallBack`):
    * H.264 / AV1 を諦めたら MPEG-2 へ、MPEG-2 を諦めたら描ける H.264 / AV1 へ。端末に保存した録画なら
-   * サーバから流すものへ。どれも無理なら理由を出して止まる (`<video>` には戻らない)
+   * サーバから流すものへ。どれも無理なら理由を出して止まる (`<video>` には戻らない)。
+   *
+   * 互換モードでないのに描いているのは MPEG-2 を選んだときだけ (`pickOffer` の `raw`)。諦めたらこの画面を開いている間は
+   * MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で `<video>` に戻す
    */
   function canvasFallBack(reason: string): void {
     const failed = canvasCodec;
     const position = mediaTime();
     const wasLocal = localMkv !== null;
     stopCanvas();
+    if (!compat) {
+      rawGaveUp = true;
+      const fresh =
+        info === null ? null : pickOffer(info, ability(), "auto", data.indoor);
+      warning =
+        fresh === null
+          ? reason
+          : `${reason}。${codecLabel(fresh.codec)} に切り替えました`;
+      replay(fresh, position);
+      return;
+    }
     let next: CanvasCodec | null = null;
     if (wasLocal) {
       localMkv = null;
@@ -493,6 +514,7 @@
     return {
       play: (type) => document.createElement("video").canPlayType(type) !== "",
       mse: (type) => pickMediaSource()?.Source.isTypeSupported(type) ?? false,
+      mpeg2: rawCapable && !rawGaveUp,
     };
   }
 
@@ -522,15 +544,16 @@
         localChecked = true;
         return;
       }
+      // 元の TS をそのまま流せるなら、この端末でデコードできるかを先に確かめる (MPEG-2 を並べる・選ぶ元)
+      if (got?.offers.some((offer) => offer.way === "raw") === true)
+        rawCapable = (await rawUnsupported()) === null;
       /*
        * 聞けなかった (オフライン) ときは、今までどおりエンコード済みをそのまま渡す。
        * 端末に保存したものがあればそちら (下)
        */
-      // MPEG-2 は互換モードでだけ選べる。互換モードでなければ自動と同じ
-      const wanted = choice === "mpeg2" ? "auto" : choice;
       picked =
         got !== null
-          ? pickOffer(got, ability(), wanted)
+          ? pickOffer(got, ability(), choice, data.indoor)
           : rec.library_path?.endsWith(".mkv") === true ||
               localCopy?.video !== undefined
             ? { way: "file", codec: "av1", source: "encoded" }
@@ -539,10 +562,12 @@
       if (
         localCopy?.video !== undefined &&
         picked?.way === "file" &&
-        wanted === "auto"
+        choice === "auto"
       ) {
         localSrc = URL.createObjectURL(localCopy.video);
       }
+      // 元の TS は互換モードと同じく canvas に描く (`startCanvas`)
+      if (picked?.way === "raw") canvasCodec = "mpeg2";
       if (ready && picked === null) broken = true;
       localChecked = true;
     })();
@@ -649,14 +674,20 @@
       chooseCanvas(next);
       return;
     }
-    const fresh = pickOffer(info, ability(), next === "mpeg2" ? "auto" : next);
+    // 選んだものは諦めていても試す (互換モードの `chooseCanvas` と同じ)
+    if (next === "mpeg2") rawGaveUp = false;
+    const fresh = pickOffer(info, ability(), next, data.indoor);
     if (JSON.stringify(fresh) === JSON.stringify(picked) && !busy) return;
+    warning = null;
     replay(fresh);
   }
 
-  /** `<video>` で観るものを `fresh` に替えて、いまの位置から観直す */
-  function replay(fresh: Picked | null): void {
-    const position = video?.currentTime ?? 0;
+  /**
+   * 観るものを `fresh` に替えて、いまの位置 (`position`。省けばいま再生している位置) から観直す。
+   * 元の TS (`raw`) は canvas に描き、それ以外は `<video>` で観る。描いていた canvas は畳む
+   */
+  function replay(fresh: Picked | null, position = mediaTime()): void {
+    if (canvas !== null || canvasCodec !== null) stopCanvas();
     remux?.destroy();
     remux = null;
     // 端末のコピーは自動のときだけ (主のエンコード済み)
@@ -670,6 +701,14 @@
     retryAt = position;
     switchAt = position;
     picked = fresh;
+    if (fresh?.way !== "raw") return;
+    // `<video>` で観ていたものは止める (src を外しただけでは読み込んだぶんを鳴らし続ける)
+    if (video !== null) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    }
+    canvasCodec = "mpeg2";
   }
 
   /**
@@ -721,7 +760,7 @@
               }))
           : codecChoices(info, ability(), data.hidden).map((codec) => ({
               key: codec,
-              label: CODEC_LABEL[codec],
+              label: codecLabel(codec),
             }));
       return items.length < 2 ? [] : [{ key: "auto", label: "自動" }, ...items];
     },
@@ -2190,8 +2229,8 @@
               {/snippet}
             </InfoBlock>
 
-            <!-- 早送りは追っかけと同じ。互換モードは等速だけ -->
-            {#if !compat}
+            <!-- 早送りは追っかけと同じ。canvas に描くとき (互換モード・MPEG-2) は等速だけ -->
+            {#if !compat && !drawing}
               <Extras>
                 <SpeedMenu
                   testid="watch-speed"
@@ -2211,7 +2250,7 @@
               {volume}
               fold={[
                 muteRow(SOUND_OFF, muted, toggleMute),
-                ...(compat
+                ...(compat || drawing
                   ? []
                   : [
                       speedRow({
