@@ -232,6 +232,9 @@ public sealed class Dt295Bridge : IDt295Board
 
     public ushort Events() => Read16(EventRegister);
 
+    /// <summary>直近の <see cref="WaitEvent"/> が待ちを終えたときに読んだ 0x90074 の値。立ったビットは消すまで残るので、あとで同じビットを調べ直さずに使える</summary>
+    public ushort LastEvents { get; private set; }
+
     /// <summary>そのビットだけを立てた値を書いて消す (3.4)</summary>
     public void Clear(ushort bits) => Write16(EventRegister, bits);
 
@@ -247,7 +250,12 @@ public sealed class Dt295Bridge : IDt295Board
         Span<byte> buffer = stackalloc byte[64];
         while (true)
         {
-            if ((Events() & bits) != 0) return true;
+            var events = Events();
+            if ((events & bits) != 0)
+            {
+                LastEvents = events;
+                return true;
+            }
             var left = deadline - _time.NowMs;
             if (left <= 0) return false;
             _usb.InterruptRead(InterruptEndpoint, buffer, (int)Math.Min(InterruptSliceMs, left));
@@ -295,15 +303,16 @@ public sealed class Dt295Bridge : IDt295Board
     /// コマンドを 1 つ送って完了を待つ (3.8)。**失敗しても送り直さない。** 完了コードの上位バイトが cmd と同じで、
     /// 下位バイトが 0x80 でも 0x81 でもなければ成功。<paramref name="beforeClear"/> は完了ビットを消す前に呼ぶ
     /// (セキュアコマンドの応答をここで読む。手順 5)
+    /// <paramref name="events"/> は呼び出し側がたったいま読んだ 0x90074 の値で、渡せば手順 1 の読み直しを省く
     /// </summary>
-    public ushort Command(Dt295Channel channel, byte command, byte sub, ushort value, Action? beforeClear = null)
+    public ushort Command(Dt295Channel channel, byte command, byte sub, ushort value, Action? beforeClear = null, ushort? events = null)
     {
         var (request, done, codeAt) = channel == Dt295Channel.Main
             ? (MainRequest, EventMainDone, MainCode)
             : (SubRequest, EventSubDone, SubCode);
         var what = $"cmd {command} sub 0x{sub:X2} val 0x{value:X4}";
         // 1. 完了ビットがすでに立っていたら送らない
-        if ((Events() & done) != 0) throw new Dt295Exception($"{what}: 前のコマンドの完了ビット (0x{done:X4}) が残っています");
+        if (((events ?? Events()) & done) != 0) throw new Dt295Exception($"{what}: 前のコマンドの完了ビット (0x{done:X4}) が残っています");
         // 2. 送る
         SendControl(request, 0, 0, CommandBytes(command, sub, value), what);
         // 3. 完了を待つ
@@ -333,20 +342,25 @@ public sealed class Dt295Bridge : IDt295Board
     public void I2c(byte address, ReadOnlySpan<byte> write, Span<byte> read)
     {
         if (write.Length > 64 || read.Length > 64 || (write.IsEmpty && read.IsEmpty)) throw new ArgumentException("I2C は送り・受けとも 0〜64 バイトで、どちらかは 1 バイト以上です");
-        if ((Events() & EventI2c) != 0) throw new Dt295Exception("前の I2C の結果 (0x90074 のビット 8) が残っています");
+        var before = Events();
+        if ((before & EventI2c) != 0) throw new Dt295Exception("前の I2C の結果 (0x90074 のビット 8) が残っています");
+        var known = (ushort?)before;
+        LastEvents = 0;
         if (!write.IsEmpty)
         {
             Span<byte> padded = stackalloc byte[64];
             padded.Clear();
             write.CopyTo(padded);
             Write(I2cBuffer, padded);
-            Command(Dt295Channel.Sub, 9, read.IsEmpty ? (byte)0 : (byte)2, I2cValue(address, write.Length));
+            Command(Dt295Channel.Sub, 9, read.IsEmpty ? (byte)0 : (byte)2, I2cValue(address, write.Length), events: known);
+            known = null;
         }
         if (!read.IsEmpty)
         {
-            Command(Dt295Channel.Sub, 9, write.IsEmpty ? (byte)1 : (byte)3, I2cValue(address, read.Length));
+            Command(Dt295Channel.Sub, 9, write.IsEmpty ? (byte)1 : (byte)3, I2cValue(address, read.Length), events: known);
         }
-        if (!WaitEvent(EventI2c, I2cTimeoutMs)) throw new Dt295Exception($"I2C 0x{address:X2}: {I2cTimeoutMs} ms 待っても結果が来ません");
+        // コマンドの完了を待ったときにすでに結果のビットが立っていれば、読み直さない
+        if ((LastEvents & EventI2c) == 0 && !WaitEvent(EventI2c, I2cTimeoutMs)) throw new Dt295Exception($"I2C 0x{address:X2}: {I2cTimeoutMs} ms 待っても結果が来ません");
         Span<byte> result = stackalloc byte[66];
         Read(I2cResult, result);
         Clear(EventI2c);
