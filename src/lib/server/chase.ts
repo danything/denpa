@@ -14,7 +14,7 @@
  * シークのたびに ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。
  */
 
-import { closeSync, openSync, readSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { open } from "node:fs/promises";
 
 import { PACKET } from "@danything/arib/psi";
@@ -223,29 +223,59 @@ const HEAD_BYTES = 4 * 1024 * 1024;
 const heads = new Map<string, number>();
 /** 覚えておく数。録画中の録画は同時にいくつもない */
 const HEADS_MOST = 32;
+/** 読めなかったパスと、次に読み直してよい時刻 (ms)。録り始めの数秒は先頭が揃わないので、シークのたびに 4MB 読み直さない */
+const unreadable = new Map<string, number>();
+/** 読めなかったあと、読み直すまで控える長さ (ms) */
+const HEAD_RETRY = 5_000;
 
 /**
  * **元の TS の先頭の PTS** (90kHz。`ts/seek.ts` の `tsHead`)。追っかけを元の TS で送るとき、画面が再生位置を
- * 出す物差しの 0 (`live.ts` の `openChase`)。録り始めたばかりで先頭の PES が揃わない・読めなければ null (覚えない)
+ * 出す物差しの 0 (`live.ts` の `openChase`)。読めたものは覚える。録り始めたばかりで先頭の PES が揃わない・読めなければ
+ * null で、`HEAD_RETRY` の間は読み直さずに null を返す
  */
-export function tsFileHead(path: string): number | null {
+export async function tsFileHead(
+  path: string,
+  now = Date.now(),
+): Promise<number | null> {
   const held = heads.get(path);
   if (held !== undefined) return held;
+  if ((unreadable.get(path) ?? 0) > now) return null;
   let head: number | null = null;
   try {
-    const fd = openSync(path, "r");
+    const handle = await open(path, "r");
     try {
       const buffer = new Uint8Array(HEAD_BYTES);
-      const length = readSync(fd, buffer, 0, HEAD_BYTES, 0);
-      head = tsHead(buffer.subarray(0, length));
+      const { bytesRead } = await handle.read(buffer, 0, HEAD_BYTES, 0);
+      head = tsHead(buffer.subarray(0, bytesRead));
     } finally {
-      closeSync(fd);
+      await handle.close();
     }
   } catch {
+    head = null;
+  }
+  if (head === null) {
+    if (unreadable.size >= HEADS_MOST)
+      unreadable.delete(unreadable.keys().next().value!);
+    unreadable.set(path, now + HEAD_RETRY);
     return null;
   }
-  if (head === null) return null;
+  unreadable.delete(path);
   if (heads.size >= HEADS_MOST) heads.delete(heads.keys().next().value!);
   heads.set(path, head);
   return head;
+}
+
+/**
+ * **追っかけを元の TS で送るとき、録画のファイルを読むのを止めるか** (`followFile` の `hold`。`live.ts` の `openChase`)。
+ * 元の TS は捨てると観ていない先が欠けるので、捨てる代わりに読むほうを止める。どれか1つでも当たれば止める
+ */
+export function chaseReadHeld(o: {
+  /** 画面が止めてほしいと送ってきた (`{ type: 'hold', on: true }`) */
+  asked: boolean;
+  /** 送り先の溜まりが捨て始める量を超えている (`ws.ts` の `Connection.congested`。回線が倍速に追いつかない) */
+  congested: boolean;
+  /** 呼ぶ側のほかの理由 (HTTP の追っかけで読まれていない、など) */
+  outside: boolean;
+}): boolean {
+  return o.asked || o.congested || o.outside;
 }
