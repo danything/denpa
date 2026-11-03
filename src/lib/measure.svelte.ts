@@ -32,7 +32,7 @@ export const measure = {
   /**
    * 読み込み時とページ移動のたびに読み直す。
    *
-   * `?measure` は**覚えない** — 1回だけ見たいときの手で、付けた URL を
+   * `?measure` は**覚えない**。1回だけ見たいときの手で、付けた URL を
    * 誰かに渡したときに相手の端末に居座らせない
    */
   start(url: ReadonlyURL): void {

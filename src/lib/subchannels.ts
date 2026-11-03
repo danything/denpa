@@ -91,7 +91,7 @@ export function mainOf(services: Station[]): Map<number, number> {
  * - **名前が無い** → 同じ番組。マルチ編成をしていない間の NHK総合2 や Eテレ2・3 は
  *   名前の無い枠が並ぶ
  * - **重なる時間の本チャンネルの番組と同じ名前** → 同じ番組。サブの EIT に本チャンネルと
- *   同じ番組を載せてくる局もある (時刻は揃っているとは限らないので、名前で見る。幅は寄せて比べる —
+ *   同じ番組を載せてくる局もある (時刻は揃っているとは限らないので、名前で見る。幅は寄せて比べる。
  *   名前は放送のとおりの幅で持っていて、英数を全角で送るか半角で送るかは EIT ごとに違いうる)
  * - それ以外 → 分割放送
  *
@@ -287,12 +287,12 @@ export function cellsOf<S extends Station, P extends Airing>(
 }
 
 /**
- * 端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`) — 描く前に
+ * 端末ごとに覚える cookie。**読むのはサーバ** (`+page.server.ts`)。描く前に
  * どちらの形か分かっていれば、覚えを読むまで列が出たり消えたりしない
  */
 export const SUBCHANNELS_COOKIE = "denpa_guide_subchannels";
 
-/** 覚えていた値。**既定は出す** — 隠すのは「サブch」をオフにした ("0") ときだけ */
+/** 覚えていた値。**既定は出す**。隠すのは「サブch」をオフにした ("0") ときだけ */
 export function storedSubchannels(saved: string | undefined): boolean {
   return saved !== "0";
 }

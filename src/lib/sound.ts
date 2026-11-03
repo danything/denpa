@@ -16,7 +16,7 @@ import {
 /**
  * **「再生する音」だと Safari に言う** (Audio Session API。Safari にしか無い)。
  *
- * Web Audio で鳴らす音を、言わずにおくと iOS は効果音と同じに扱い、**Safari を裏へ回すと止める** —
+ * Web Audio で鳴らす音を、言わずにおくと iOS は効果音と同じに扱い、**Safari を裏へ回すと止める**。
  * 小窓で観ていても音だけ消えた (iPhone 15 Pro Max、iOS 27.2)。消音スイッチで黙らないのも `<video>` と
  * 同じになる。畳むときは既定 (`auto`) に戻す。
  *
@@ -44,7 +44,7 @@ interface Through {
 }
 
 /**
- * 音量を掛け、リミッタを通して鳴らす。**鳴らす先は2つ** — ページから直に (`context.destination`) か、
+ * 音量を掛け、リミッタを通して鳴らす。**鳴らす先は2つ**。ページから直に (`context.destination`) か、
  * ストリームにして `<audio>` から (`route`)。
  *
  * 音を消すのは使う側 (canvas はその前の GainNode、`<video>` は `muted`)。ここは触らない
@@ -56,7 +56,7 @@ export class Outlet {
   private readonly tail: GainNode;
   /** `<audio>` を通したいか (`want`)。通しているかは `through` */
   private wanted = false;
-  /** 止めているか (`hold`)。`<audio>` も止めておく — 外から見て「止まっている」と分かるように */
+  /** 止めているか (`hold`)。`<audio>` も止めておく。外から見て「止まっている」と分かるように */
   private held = false;
   /** `<audio>` の出口。一度作ったら畳むまで使い回す */
   private out: Through | null = null;
@@ -121,10 +121,10 @@ export class Outlet {
    *
    * Web Audio の音を、ブラウザによっては効果音と同じに扱い、**裏へ回すと止める**
    * (テスラの車載ブラウザ。Chromium 系)。`<audio>` が鳴らしていれば「メディアの再生」で、
-   * `<video>` と同じ扱いになる — ロック画面・車の操作にも「再生中」と出て、そこで押された止める・再開は
+   * `<video>` と同じ扱いになる。ロック画面・車の操作にも「再生中」と出て、そこで押された止める・再開は
    * `remote` で伝える。
    *
-   * - **Safari は通さない** — Audio Session を `playback` にすれば裏でも止まらない
+   * - **Safari は通さない**。Audio Session を `playback` にすれば裏でも止まらない
    *   (`playbackSession`。iPhone で確かめてある)。iOS で MediaStream を鳴らすと、出口が
    *   通話の扱いに寄ることがあった
    * - ストリームを作れない端末は直に鳴らすまま
@@ -159,7 +159,7 @@ export class Outlet {
     if (this.held || !out.audio.paused) return;
     const { audio } = out;
     void audio.play().catch(() => {
-      // 断られた。**黙らせない** — 直に鳴らして、押されたらまた試す
+      // 断られた。**黙らせない**。直に鳴らして、押されたらまた試す
       if (this.out?.audio === audio && audio.paused) this.direct();
     });
   }

@@ -1,12 +1,12 @@
 /**
  * オフライン視聴の画面側 ([docs/offline.md](../../docs/offline.md))。
  *
- * 実体は IndexedDB (`offline-db.ts`)。ここはその**反応する影** — どの録画が
+ * 実体は IndexedDB (`offline-db.ts`)。ここはその**反応する影**。どの録画が
  * 端末に入っているかを一覧と視聴画面に映し、落とす・消す・サーバへ伝える
  * (outbox) の入口になる。
  *
  * ダウンロードは **Background Fetch** (ブラウザに預ける。タブを閉じても続く)。
- * 対応していないブラウザ (Safari/Firefox) はページ主導の fetch に落ちる —
+ * 対応していないブラウザ (Safari/Firefox) はページ主導の fetch に落ちる。
  * タブを開いたままにしてもらう。
  */
 
@@ -41,7 +41,7 @@ interface OfflineEntry {
 let entries = $state<Record<number, OfflineEntry>>({});
 /** サーバからも消すと決めたもの (outbox)。一覧の下に、次にオンラインに戻ったときサーバからも削除する件数を出す */
 let pendingDelete = $state<Record<number, boolean>>({});
-/** 保存に失敗した録画。画面が読んだら消す (`clearFailed`) — 黙って消えると分からない */
+/** 保存に失敗した録画。画面が読んだら消す (`clearFailed`)。黙って消えると分からない */
 let failed = $state<number | null>(null);
 /** 控えが変わるたびに増える。`/offline` の一覧はこれを見て読み直す */
 let revision = $state(0);
@@ -104,14 +104,14 @@ const inPage = new Map<number, AbortController>();
  * ブラウザに預けたダウンロードの進み具合を映す。**イベントとポーリングの両建て。**
  *
  * `progress` イベントだけに任せると、**登録時に受け取ったオブジェクトへの通知は
- * 途中で途切れることがある** — 遅い回線でブラウザがダウンロードを止めて
+ * 途中で途切れることがある**。遅い回線でブラウザがダウンロードを止めて
  * 再開すると、その後のイベントが届かず、割合が張り付いたままになっていた
  * (開き直すと取り直すので直る)。かといって訊きに行くだけでは、その間隔でしか
  * 数字が動かない。
  *
  * そこで **2秒おきに get() で新しく取り直し、取り直したものに毎回 `progress` も
- * 付ける** — イベントが生きている間はコマ落ちなく動き、黙り込んだ個体は
- * 次の取り直しが引き取る。終わったかどうかはここでは決めない — 成否は
+ * 付ける**。イベントが生きている間はコマ落ちなく動き、黙り込んだ個体は
+ * 次の取り直しが引き取る。終わったかどうかはここでは決めない。成否は
  * SW の受け取りが伝えてくる
  */
 function watchProgress(
@@ -230,7 +230,7 @@ async function canDecode(type: string): Promise<boolean> {
 
 /**
  * **AV1 は Level 4.1 (`09`) で問う。** `canDecode` は 1080p60 と言っているので、それが収まる Level で
- * なければならない — AV1 の Level 4.0 (`08`) は 30fps まで。Safari は codecs の Level と
+ * なければならない。AV1 の Level 4.0 (`08`) は 30fps まで。Safari は codecs の Level と
  * 大きさ・コマ数・ビットレートを突き合わせ (WebKit の `validateAV1PerLevelConstraints`)、
  * 収まらなければ「デコードできない」と答える。4.0 で問うていた頃は、AV1 をデコードできる iPhone
  * (15 Pro Max) でも AV1 を保存しなかった。Chrome は突き合わせない
@@ -391,7 +391,7 @@ async function startSave(
   await ensureRoom(total ?? rec.ts_size);
 
   /*
-   * 試みの印。やり直しのたびに変える — Background Fetch は**同じ登録IDが
+   * 試みの印。やり直しのたびに変える。Background Fetch は**同じ登録IDが
    * 生きている間は再登録できない**ので、前回の残骸があっても必ず登録できる。
    * 残骸の中止の通知が遅れて届いても、印が違えばこの控えは消されない (SW の drop)
    */

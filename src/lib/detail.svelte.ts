@@ -43,7 +43,7 @@ function filled(seed: DetailSeed): ProgramDetail {
 
 /**
  * 録画の行から出す番組の中身。**観る画面と追っかけの右の列で同じもの。**
- * 開いた時点で `programDetail().open` の種にもそのまま渡す — 別に組み直していた頃は
+ * 開いた時点で `programDetail().open` の種にもそのまま渡す。別に組み直していた頃は
  * ジャンル・音声を落としていて、番組表から消えた録画でラベルが出なかった
  */
 export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {

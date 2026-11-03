@@ -33,7 +33,7 @@ export { default as OPEN_OUT } from "~icons/lucide/external-link";
 export { default as CODEC } from "~icons/lucide/film";
 /** 再生の速さ (`SpeedMenu`)。等速のときだけ出し、速めている間は数字だけにする */
 export { default as SPEED } from "~icons/lucide/gauge";
-/** バックグラウンド再生。ヘッドホン — 裏で続けるのはたいてい聴くため */
+/** バックグラウンド再生。ヘッドホン。裏で続けるのはたいてい聴くため */
 export { default as BACKGROUND } from "~icons/lucide/headphones";
 /** 中身を読む。丸に i */
 export { default as INFO } from "~icons/lucide/info";
@@ -76,7 +76,7 @@ export const OVERLAY_BTN = "ov-btn";
 export const OVERLAY_ROUND = "ov-round";
 
 /**
- * 聞き返しの2回目の見た目 (削除)。大きさは変えず色とアイコンだけ変える — 「確定」の文字にすると幅が変わって
+ * 聞き返しの2回目の見た目 (削除)。大きさは変えず色とアイコンだけ変える。「確定」の文字にすると幅が変わって
  * 隣のボタンが動き、同じ場所を押し直せなかった
  */
 export const OVERLAY_DANGER = "ov-danger";

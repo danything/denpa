@@ -11,11 +11,11 @@ export const VOLUME_KEY = "player-volume";
  * **100% のときに足す大きさ (dB)。**
  *
  * 放送は ARIB TR-B32 で -24 LKFS にそろえてあり、動画サイト (-14 LUFS 前後) より 10 dB ほど小さく
- * 聞こえる。差を全部は埋めない — 埋めると大きな音の山がリミッタ (`LIMITER`) に当たり続けて、潰れた音に
+ * 聞こえる。差を全部は埋めない。埋めると大きな音の山がリミッタ (`LIMITER`) に当たり続けて、潰れた音に
  * なる。+6 dB なら差の半分より多くを埋めつつ、リミッタに当たるのは大きな山だけで済む
  */
 export const BOOST_DB = 6;
-/** つまみの上限 (%)。**既定もここ** — 開いたときは +6 dB で鳴らし、つまみは下げる向きにだけ動く */
+/** つまみの上限 (%)。**既定もここ**。開いたときは +6 dB で鳴らし、つまみは下げる向きにだけ動く */
 export const MAX_LEVEL = 100;
 /** つまみと ↑↓ の刻み (%) */
 export const LEVEL_STEP = 5;
@@ -45,7 +45,7 @@ export function stepLevel(level: number, direction: number): number {
  * 0% は無音、100% は +6 dB (`BOOST_DB`)。50% は 100% より 12 dB 小さい (放送より 6 dB 小さい)。
  *
  * 人が感じる大きさは振幅のおよそ 0.6 乗に比例する (Stevens のべき法則)。2乗に比例させると感じる大きさは
- * つまみの値の 1.2 乗になり、**つまみの位置と聞こえる大きさがほぼ比例する** — 半分まで下げれば、
+ * つまみの値の 1.2 乗になり、**つまみの位置と聞こえる大きさがほぼ比例する**。半分まで下げれば、
  * ほぼ半分の大きさに聞こえる。
  *
  * - 振幅に比例させると感じる大きさは 0.6 乗で、上半分を動かしても 6 dB しか変わらず、変わるのは下の端ばかりになる
@@ -80,7 +80,7 @@ export const LIMITER = {
 const MAKEUP_EXPONENT = 0.6;
 
 /**
- * **リミッタの後ろで掛ける大きさ。** リミッタが足す makeup gain をちょうど打ち消す — 当たらない音の
+ * **リミッタの後ろで掛ける大きさ。** リミッタが足す makeup gain をちょうど打ち消す。当たらない音の
  * 大きさは、つまみの値どおり (`volumeGain`) のまま通す。
  *
  * `knee` 0 では、0 dBFS を入れると `threshold + (0 - threshold) / ratio` dB で出てくる
@@ -96,7 +96,7 @@ export function limiterTrim(limiter: {
 /**
  * **`<audio>` を通すか** (`sound.ts` の `Outlet`)。バックグラウンド再生・小窓で、裏でも止まらないように。
  *
- * - Safari (Audio Session が言える) は通さない — `playback` と言えば裏でも止まらない
+ * - Safari (Audio Session が言える) は通さない。`playback` と言えば裏でも止まらない
  * - ストリームを作れない端末は直に鳴らすまま
  */
 export function throughAudio(now: {
@@ -114,7 +114,7 @@ export function throughAudio(now: {
  * **`<video>` の音を Web Audio に通すか** (`volume.svelte.ts`)。
  *
  * 一度通した要素の音は、もう Web Audio からしか出ない。**AudioContext が鳴らせる (`running`) まで
- * 通さない** — 自動再生の許しが無いまま通すと、`<video>` は鳴っているのに何も聞こえない
+ * 通さない**。自動再生の許しが無いまま通すと、`<video>` は鳴っているのに何も聞こえない
  */
 export function tapVideo(now: {
   /** `<video>` で観ているか (canvas に描いていない) */

@@ -242,7 +242,7 @@ export interface Audio {
 /**
  * 「主音声ステレオ (日本語)」「ステレオ (日本語)」「デュアルモノ (日本語/英語)」
  *
- * 放送が名乗っていれば (`text_char`) その名前に差し替え、言語を添える — 符号だけでは主音声と解説が
+ * 放送が名乗っていれば (`text_char`) その名前に差し替え、言語を添える。符号だけでは主音声と解説が
  * どちらも「ステレオ (日本語)」になっていた
  */
 export function audioLabel(audio: Audio): string {
@@ -264,7 +264,7 @@ export const DUAL_MONO = 2;
  * どちらの音を出すか。
  *
  * `both` は入っているものをそのまま出す。デュアルモノで `both` を選ぶと
- * 左右から別の言語が同時に鳴る — テレビの「主+副」と同じ状態
+ * 左右から別の言語が同時に鳴る。テレビの「主+副」と同じ状態
  */
 export type AudioSide = "main" | "sub" | "both";
 
@@ -366,7 +366,7 @@ export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
  *
  * `audios` は放送から読み取ったものをそのまま持っているだけなので、無い・壊れている
  * (壊れた行は列の読み取り関数が空にする。`schema.ts`) ことはありうる。そのときは
- * `audio_type` に落とし、それも無ければ何も無いことにする — どの道 `audioTracks` が
+ * `audio_type` に落とし、それも無ければ何も無いことにする。どの道 `audioTracks` が
  * 「そのまま出す」1つを返す
  */
 export function parseAudios(

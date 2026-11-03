@@ -78,7 +78,7 @@ export interface OfflineVideo {
   attempt?: string;
   /**
    * `downloading` は Background Fetch がまだ運んでいる最中。
-   * `failed` は**消さずに残す** — 失敗した瞬間の通知 (トースト) は一瞬で、
+   * `failed` は**消さずに残す**。失敗した瞬間の通知 (トースト) は一瞬で、
    * 控えごと消すと「無かったことになった」ように見える。行に残して、やり直す
    * 入口にする
    */
@@ -126,7 +126,7 @@ interface ResumeItem {
  * Background Fetch の登録ID。`rec-<録画ID>-<どちらを落とすか>-<試みの印>`。
  *
  * **試みの印を含める。** 同じIDが生きている間は再登録できない
- * (`There already is a registration for the given id`) — 前回の失敗の残骸が
+ * (`There already is a registration for the given id`)。前回の失敗の残骸が
  * ブラウザに残っていると、やり直しがそのまま断られていた。試みごとに
  * 変えれば必ず登録でき、残骸は登録前に中止する (offline.svelte.ts)
  */

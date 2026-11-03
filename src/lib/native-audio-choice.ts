@@ -3,7 +3,7 @@
  *
  * WebKit は MSE / ManagedMediaSource で流している `<video>` の音を Web Audio に通すと無音しか渡さない
  * ([WebKit #266922](https://bugs.webkit.org/show_bug.cgi?id=266922)) ので、音量のつまみ (`volume.svelte.ts`) が効かない。
- * **設定には出さず UA で決める** — 起きるかはブラウザで決まり、使う人が選ぶことではない。
+ * **設定には出さず UA で決める**。起きるかはブラウザで決まり、使う人が選ぶことではない。
  * Chromium (テスラ・Android も) は UA に `Chrome/` などの印がある。Firefox は `AppleWebKit/` を名乗らない
  */
 export function isWebKit(ua: string): boolean {

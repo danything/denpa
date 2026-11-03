@@ -29,7 +29,7 @@ export const load: PageServerLoad = ({ params, url }) => {
   if (rec === undefined) error(404, "録画が見つかりません");
   if (rec.deleted_at !== null) error(410, "この録画は削除されています");
   /*
-   * **追っかけは録っている最中だけ。** 録り終えたら観る画面へ — エンコード済みがあればそれを、まだなら
+   * **追っかけは録っている最中だけ。** 録り終えたら観る画面へ。エンコード済みがあればそれを、まだなら
    * 元の TS をサーバがその場で変換して流す (`server/playback.ts`)。CM飛ばし・チャプターもそちらで揃う
    */
   if (rec.library_path !== null || rec.finished_at !== null)

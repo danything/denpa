@@ -42,7 +42,7 @@
     /** 溝を区切る切れ目の位置 (`value` と同じ単位) */
     marks?: number[];
     /**
-     * 読み上げで言う位置 (`aria-valuetext`)。**色だけに頼らない** — 「12:34、CM」のように
+     * 読み上げで言う位置 (`aria-valuetext`)。**色だけに頼らない**。「12:34、CM」のように
      * いまの区間の名前を添える
      */
     valuetext?: string | undefined;
@@ -234,7 +234,7 @@
      * 見た目の高さは 1.5rem (24px)。指の端末では押せる所を上へ広げて 48px ほどにする
      * (`::before`。下は操作列のボタンなので広げすぎない)。溝は真ん中に 4px、触っている間は 6px。
      * 色は舞台がいつも黒いので、ダーク・ライトで変えない。
-     * `touch-action: none` — 横に動かしている間にページが動かないように
+     * `touch-action: none`。横に動かしている間にページが動かないように
      */
   .seek {
     --seek-track: color-mix(in srgb, var(--dp-on-video) 22%, transparent);

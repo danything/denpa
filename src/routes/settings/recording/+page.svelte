@@ -19,7 +19,7 @@
   let { data, form } = $props();
 
   /**
-   * 押した結果。**その場で保存した結果はここに出さない** — 変えた欄の近く (節の見出しの横。`SaveNote`) に出す
+   * 押した結果。**その場で保存した結果はここに出さない**。変えた欄の近く (節の見出しの横。`SaveNote`) に出す
    */
   const notices = $derived.by(() => {
     const list = errorNotice(form, "settings-error");
@@ -35,7 +35,7 @@
   /**
    * 録画設定のフォームは bind せず `checked` / `selected` で初期値だけ渡す。
    * 別のフォームを保存して data が読み直されても、値が同じなら Svelte は DOM に
-   * 書かない — 手元で変えたまま保存していない入力はそのまま残る
+   * 書かない。手元で変えたまま保存していない入力はそのまま残る
    */
   const recording = $derived(data.recording);
 
@@ -92,7 +92,7 @@
                     選ぶ欄はチェックと関係なく出しておく。
                     **H.265 は GPU でだけエンコードする**ので、行ごと GPU を確かめてから出し、エンコーダに
                     「ソフトウェア」を置かない (録画で外すならチェックを外す)。ライブの列は「ソフトウェア」の代わりに「使わない」を置く。
-                    選ぶとライブで H.265 を出さない (`live.liveHevc`)。行を出したときだけ `codecsShown` を送る —
+                    選ぶとライブで H.265 を出さない (`live.liveHevc`)。行を出したときだけ `codecsShown` を送る。
                     確かめている最中や GPU が無いときに保存しても、H.265 のチェックは前のまま (saveEncoding)
                 -->
         {#snippet codecRow(

@@ -137,7 +137,7 @@ interface Parts {
 
 /**
  * **色の入れ替え。** 新しい色を裏の1枚に描いてから表と裏を入れ替える。動きは CSS の `opacity` の transition
- * (表の印 `data-front`)。2 枚は重ねずに足す (`mix-blend-mode: plus-lighter`) — 途中も「前 × (1 − t) + 次 × t」になる。
+ * (表の印 `data-front`)。2 枚は重ねずに足す (`mix-blend-mode: plus-lighter`)。途中も「前 × (1 − t) + 次 × t」になる。
  *
  * 描いた1枚は画面に出さない canvas (`layers`) に持ち、画面の canvas へはそこから写す (同じ1枚を何枚もの帯に出せる)
  */

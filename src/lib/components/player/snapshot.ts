@@ -32,7 +32,7 @@ export async function grabbedFrame(
 
 /**
  * ファイル名に使えない字。Windows が断る `\ / : * ? " < > |` と制御文字。
- * 番組名には「／」(全角) や「:」がよく入る — 全角は通るので残し、半角だけ替える
+ * 番組名には「／」(全角) や「:」がよく入る。全角は通るので残し、半角だけ替える
  */
 const FORBIDDEN = /[\\/:*?"<>|\p{Cc}]/gu;
 /** 名前の上限 (字)。**長い番組名で 255 バイトを超えない**ように (日本語は1字3バイト) */
@@ -78,7 +78,7 @@ function prefersShare(file: File): boolean {
   }
 }
 
-/** 落とす。**URL はすぐには捨てない** — Safari と Firefox は押した直後に捨てると落とし損ねる */
+/** 落とす。**URL はすぐには捨てない**。Safari と Firefox は押した直後に捨てると落とし損ねる */
 function download(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
