@@ -6,8 +6,8 @@ import { MkvSplitter } from "./mkv";
  * 本物の ffmpeg が流したもので確かめる。**手で組んだものでは足りない。**
  *
  * ここに入れてあるのは、実機の ffmpeg に
- * `-f matroska pipe:1` で吐かせた 4 コマ (16x16 の PNG、25コマ/秒)。
- * **パイプへ流させた**ものなので、Segment の大きさが「不明」で書かれている —
+ * `-f matroska pipe:1` で出力させた 4 コマ (16x16 の PNG、25 コマ/秒)。
+ * **パイプへ流させた**ものなので、Segment の大きさが「不明」で書かれている。
  * ファイルに書かせたものとは形式が違い、本番で来るのはこちら。
  *
  * ffprobe が読んだ時刻は 0 / 0.04 / 0.08 / 0.12 秒
@@ -76,7 +76,7 @@ describe("MkvSplitter", () => {
   test("途中で切れたら、そこまでを出して続きを待つ", () => {
     const raw = bytes();
     const splitter = new MkvSplitter();
-    // 2コマ目の途中まで
+    // 2 コマ目の途中まで
     const half = splitter.feed(raw.subarray(0, 800));
     expect(half.map((f) => f.at)).toEqual([0]);
     // 残りを渡せば揃う

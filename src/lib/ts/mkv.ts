@@ -1,17 +1,17 @@
 /**
  * Matroska から、コマとその時刻だけを取り出す。**字幕 (`S_ARIBSUB`) を運ぶコンテナとして使う。**
  *
- * ライブ視聴では ffmpeg 1本で映像と字幕の両方を出す ([stream.md](../../../docs/stream.md#字幕))。
+ * ライブ視聴では ffmpeg 1 本で映像と字幕の両方を出す ([stream.md](../../../docs/stream.md#字幕))。
  * 映像は fMP4、字幕は**このコンテナ**で受ける。コンテナが要るのは、**時刻を字幕と一緒に
- * 運ばせるため** — 時刻を別の経路 (`showinfo`) で出させると、行とコマの数が合わずにずれて戻らない。
+ * 運ばせるため。** 時刻を別の経路 (`showinfo`) で出させると、行とコマの数が合わずにずれて戻らない。
  *
  * Matroska を選んだのは、**必要なところだけなら小さいから**。NUT はコマの
  * 見出しを組み立てるのに表を復元する必要があり、mp4 は ARIB の字幕を入れられない。
- * ここが読むのは5つだけ:
+ * ここが読むのは 次の 5 つだけ。
  *
  *     Segment > Info > TimestampScale       時刻の刻み (既定 1ms)
- *     Segment > Cluster > Timestamp         その塊の頭の時刻
- *     Segment > Cluster > SimpleBlock       コマ本体 (頭からの差 + 中身)
+ *     Segment > Cluster > Timestamp         その塊の先頭の時刻
+ *     Segment > Cluster > SimpleBlock       コマ本体 (先頭からの差 + 中身)
  *     Segment > Cluster > BlockGroup > Block  同上 (書き手によってはこちら)
  *     Segment > Tracks > TrackEntry > CodecID  中身の種類 (録画の字幕が S_ARIBSUB かを見る)
  *
@@ -45,13 +45,13 @@ export const BLOCK = 0xa1;
 /** トラックの中身の種類 (`S_ARIBSUB` など)。入っているものを確かめるのに使う */
 export const CODEC_ID = 0x86;
 
-/** 大きさが「不明」の印 (全部 1)。頭だけ書いて流し始めるときに出てくる */
+/** 大きさが「不明」の印 (全部 1)。ヘッダだけ書いて流し始めるときに出てくる */
 export const UNKNOWN = -1;
 
 /** 時刻の刻みの既定 (ナノ秒)。1ms */
 export const DEFAULT_SCALE = 1_000_000;
 
-/** 取り出した1コマ */
+/** 取り出した 1 コマ */
 export interface MkvFrame {
   /** そのコマの時刻 (ミリ秒)。**映像の mp4 と同じ物差し** (stream.md#時刻同期) */
   at: number;
@@ -69,7 +69,7 @@ interface EbmlHead {
 /**
  * EBML の可変長整数。
  *
- * 先頭バイトの**最初に立っているビットの位置**が長さ (1〜8バイト)。
+ * 先頭バイトの**最初に立っているビットの位置**が長さ (1〜8 バイト)。
  * ID はその印も含めた並びをそのまま値とし (慣例)、大きさは印を落とした値を採る。
  *
  * @returns 読めなければ null (まだ足りない)
@@ -88,7 +88,7 @@ function vint(
 
   const mask = length >= 8 ? 0 : 0xff >> length;
   let value = keepMarker ? first : first & mask;
-  // 印を落とした桁が全部 1 なら「大きさは不明」。頭だけ書いて流すときに出てくる
+  // 印を落とした桁が全部 1 なら「大きさは不明」。ヘッダだけ書いて流すときに出てくる
   let allOnes = (first & mask) === mask;
   for (let i = 1; i < length; i++) {
     value = value * 256 + buffer[at + i]!;
@@ -115,11 +115,11 @@ export function ebmlHead(buffer: Uint8Array, at: number): EbmlHead | null {
 }
 
 /**
- * コマ1つ。`[トラック番号(可変長)][頭からの差(2バイト、符号あり)][旗][中身…]`
+ * コマ 1 つ。`[トラック番号(可変長)][先頭からの差(2バイト、符号あり)][旗][中身…]`
  *
- * **束ね (lacing) は来ない。** 1つの塊に複数のコマを詰める書き方だが、
- * ffmpeg は映像・音声では使わない。万一来たら、その塊は捨てる — 変に読むより
- * 1枚落とすほうが安い (字幕は次が来る)
+ * **束ね (lacing) は来ない。** 1 つの塊に複数のコマを詰める書き方だが、
+ * ffmpeg は映像・音声では使わない。万一来たら、その塊は捨てる。変に読むより
+ * 1 枚落とすほうが安い (字幕は次が来る)
  */
 export function readBlock(
   body: Uint8Array,
@@ -137,7 +137,7 @@ export function readBlock(
 }
 
 /**
- * 繋がったバイト列から、コマを1つずつ取り出す。
+ * 繋がったバイト列から、コマを 1 つずつ取り出す。
  *
  * **足りないところで止めて、続きを待つ。** 流れてくるものなので、要素の
  * 途中で切れているのが普通
@@ -146,7 +146,7 @@ export class MkvSplitter {
   private buffer = new Uint8Array(0);
   /** 時刻の刻み (ナノ秒)。Info に書いてあれば差し替える */
   private scale = DEFAULT_SCALE;
-  /** いまいる塊の頭の時刻 (刻みの単位) */
+  /** いまいる塊の先頭の時刻 (刻みの単位) */
   private base = 0;
   /** 見出しに書いてあったトラックの種類 (書いてある順) */
   readonly codecs: string[] = [];
@@ -158,7 +158,7 @@ export class MkvSplitter {
     for (;;) {
       const head = ebmlHead(this.buffer, at);
       if (head === null) break;
-      // 中に入るものは、見出しだけ食べて先へ進む
+      // 中に入るものは、見出しだけ読んで先へ進む
       if (DESCEND.has(head.id) || head.size === UNKNOWN) {
         at = head.body;
         continue;

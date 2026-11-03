@@ -3,7 +3,7 @@
  *
  * 字幕を運ぶための最小の読み (`mkv.ts` の `MkvSplitter`) とは別に置く (EBML の読み方は `mkv.ts` のものを使う)。こちらはトラックごとの形式
  * (CodecPrivate: avcC / av1C / AudioSpecificConfig / OpusHead) と、コマのトラック番号・キーフレームの印、
- * 飛ぶ位置の表 (Cues) まで読む。読むのは denpa のエンコードが書く形式 (ffmpeg の Matroska) に要るものだけ:
+ * 飛ぶ位置の表 (Cues) まで読む。読むのは denpa のエンコードが書く形式 (ffmpeg の Matroska) に要るものだけ。
  *
  *     Segment > SeekHead > Seek (SeekID・SeekPosition)   Cues の在りか
  *     Segment > Info > TimestampScale・Duration
@@ -12,8 +12,8 @@
  *     Segment > Cluster > Timestamp・SimpleBlock・BlockGroup (Block・ReferenceBlock)
  *     Segment > Cues > CuePoint > CueTime・CueTrackPositions (CueTrack・CueClusterPosition)
  *
- * **飛ぶときは、頭 (最初の Cluster の手前まで) に飛び先の Cluster からを繋いで読ませる** (`mkv-source.ts`)。
- * 読む側は位置を確かめないので、繋いだものを1本のストリームとして読める。
+ * **飛ぶときは、先頭 (最初の Cluster の手前まで) に飛び先の Cluster からを繋いで読ませる** (`mkv-source.ts`)。
+ * 読む側は位置を確かめないので、繋いだものを 1 本のストリームとして読める。
  *
  * DOM も worker も触らない (`mkv-media.test.ts`)
  */
@@ -96,7 +96,7 @@ export interface MkvTrack {
   codec: string | null;
   /** CodecPrivate (avcC / av1C / AudioSpecificConfig / OpusHead) */
   config: Uint8Array<ArrayBuffer>;
-  /** 1コマの長さ (ナノ秒)。書いていなければ null */
+  /** 1 コマの長さ (ナノ秒)。書いていなければ null */
   defaultDuration: number | null;
   name: string;
   language: string;
@@ -170,7 +170,7 @@ function readTracks(body: Uint8Array): MkvTrack[] {
 }
 
 /**
- * OpusHead (Matroska の CodecPrivate) を dOps (MP4 の形式) に書き換える。`ts/fmp4.ts` の `opusHead` の逆 —
+ * OpusHead (Matroska の CodecPrivate) を dOps (MP4 の形式) に書き換える。`ts/fmp4.ts` の `opusHead` の逆。
  * デコードする側 (`raw/fmp4.ts`) は dOps を受け取って OpusHead に直すので、形式を揃えて渡す
  */
 export function opusDops(opus: Uint8Array): Uint8Array<ArrayBuffer> | null {
@@ -181,7 +181,7 @@ export function opusDops(opus: Uint8Array): Uint8Array<ArrayBuffer> | null {
   const out = new Uint8Array(11 + table.length);
   const o = new DataView(out.buffer);
   out[1] = opus[9]!; // 出すチャンネル数
-  o.setUint16(2, v.getUint16(10, true)); // 頭で捨てる標本数
+  o.setUint16(2, v.getUint16(10, true)); // 先頭で捨てる標本数
   o.setUint32(4, v.getUint32(12, true)); // 元の標本化周波数
   o.setInt16(8, v.getInt16(16, true)); // 音量の補正
   out[10] = family;
@@ -208,7 +208,7 @@ export function asFmp4Track(track: MkvTrack, scale: number): Fmp4Track | null {
   };
 }
 
-/** 取り出した1コマ。時刻は TimestampScale の刻み */
+/** 取り出した 1 コマ。時刻は TimestampScale の刻み */
 export interface MkvBlock {
   track: number;
   at: number;
@@ -284,7 +284,7 @@ export class MkvDemuxer {
       blocks.push({ ...group.block, key: !group.referenced });
   }
 
-  /** コマ1つ (`mkv.ts` の `readBlock`)。キーフレームの印は SimpleBlock の旗。Block のときは `closeGroup` が決める */
+  /** コマ 1 つ (`mkv.ts` の `readBlock`)。キーフレームの印は SimpleBlock の旗。Block のときは `closeGroup` が決める */
   private block(body: Uint8Array): MkvBlock | null {
     const block = readBlock(body);
     if (block === null) return null;
@@ -293,28 +293,28 @@ export class MkvDemuxer {
   }
 }
 
-/** 飛ぶ位置の表の1つ (時刻は秒、位置は Segment の中身の頭から) */
+/** 飛ぶ位置の表の 1 つ (時刻は秒、位置は Segment の中身の先頭から) */
 export interface MkvCue {
   time: number;
   position: number;
 }
 
-/** ファイルの頭から読んだもの (`readMkvHead`) */
+/** ファイルの先頭から読んだもの (`readMkvHead`) */
 interface MkvHead {
-  /** Segment の中身の頭 (ファイルの頭から)。Cues・SeekHead の位置はここから数える */
+  /** Segment の中身の先頭 (ファイルの先頭から)。Cues・SeekHead の位置はここから数える */
   segment: number;
-  /** 最初の Cluster の位置 (ファイルの頭から)。ここまでが「頭」 */
+  /** 最初の Cluster の位置 (ファイルの先頭から)。ここまでが「先頭」 */
   firstCluster: number;
   scale: number;
   /** 尺 (秒)。書いていなければ null */
   duration: number | null;
   tracks: MkvTrack[];
-  /** Cues の位置 (ファイルの頭から)。SeekHead にも無ければ null */
+  /** Cues の位置 (ファイルの先頭から)。SeekHead にも無ければ null */
   cues: number | null;
 }
 
 /**
- * ファイルの頭 (最初の Cluster まで) を読む。**最初の Cluster が `bytes` の中に無ければ null**
+ * ファイルの先頭 (最初の Cluster まで) を読む。**最初の Cluster が `bytes` の中に無ければ null**
  * (もっと長く読んで渡し直す)
  */
 export function readMkvHead(bytes: Uint8Array): MkvHead | null {
@@ -368,7 +368,7 @@ export function readMkvHead(bytes: Uint8Array): MkvHead | null {
   }
 }
 
-/** 要素の大きさ (頭も含めて)。頭が読めなければ null */
+/** 要素の大きさ (ヘッダも含めて)。ヘッダが読めなければ null */
 export function elementSize(bytes: Uint8Array): number | null {
   const h = ebmlHead(bytes, 0);
   return h === null || h.size === UNKNOWN ? null : h.body + h.size;
@@ -403,7 +403,7 @@ export function readCues(
   return out.sort((a, b) => a.time - b.time);
 }
 
-/** `seconds` から観るときに読み始める Cluster。表に無ければ null (頭から) */
+/** `seconds` から観るときに読み始める Cluster。表に無ければ null (先頭から) */
 export function cueBefore(
   cues: readonly MkvCue[],
   seconds: number,

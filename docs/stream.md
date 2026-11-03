@@ -720,7 +720,7 @@ WebSocket に流し、ブラウザが WebAssembly の MPEG-2 デコーダでデ�
 
 FFmpeg の **mpeg2video のデコーダとフレームの区切りを探す parser、AAC のデコーダだけ**を emscripten で組んだもの
 (`wasm/decoder.c`。互換モードの音のために Opus のデコーダと、それが当てにする swresample も入っている)。AAC の parser は組まない。
-ADTS の区切りと時刻は JS (`packages/arib/src/pes.ts` の `AdtsSplitter`) が付け、デコーダは ADTS ヘッダーを自分で読む。音も映像と同じ worker でデコードする
+ADTS の区切りと時刻は JS (`packages/arib/src/pes.ts` の `AdtsSplitter`) が付け、デコーダは ADTS ヘッダを自分で読む。音も映像と同じ worker でデコードする
 (1 秒ぶんで数 ms)。**Dockerfile の `mpeg2wasm` 段で毎回組み**、git には入れません (生成物を抱えると FFmpeg を上げるたびに差し替えが要り、
 組んだ手順と中身が食い違っても気づけない)。FFmpeg はサーバの ffmpeg と同じバージョンに揃え、emsdk はバージョンで固定しています。置き場はアプリの外
 (`/opt/denpa/mpeg2`、`MPEG2_DIR`) で、`/api/live/mpeg2/<名前>` から配ります。開発と E2E の compose はソースを `/app` に被せるので、
@@ -1072,7 +1072,7 @@ WebKit の MSE / ManagedMediaSource は、`<video>` の音を Web Audio に通�
 
 ```
 サーバ (変えない) → WebSocket (0x00 init / 0x01 媒体。fMP4) → worker ┬→ moof/trun → WebCodecs (VideoDecoder) → 2D
-                                                                     └→ AAC は ADTS ヘッダーを付けて / Opus は OpusHead で → WASM → 画面 → Web Audio (時計)
+                                                                     └→ AAC は ADTS ヘッダを付けて / Opus は OpusHead で → WASM → 画面 → Web Audio (時計)
 ```
 
 - **サーバは変えません。** 届くものはエンコードする経路と同じ fMP4 で、画面が MSE ではなく放送のまま描くエンジン
@@ -1087,7 +1087,7 @@ WebKit の MSE / ManagedMediaSource は、`<video>` の音を Web Audio に通�
 - **描く大きさは pasp (画素の縦横比) を掛けた幅** (1440x1080 の SAR 4:3 なら 1920 幅。`Fmp4Track.displayWidth`)。
   VideoFrame の見せる大きさは使いません。Safari は画素の数のまま返し (H.264 の SAR も `displayAspectWidth` も見ない)、
   AV1 は映像の中に縦横比を持たないので、4:3 に縮んで出ます。pasp が無ければフレームに合わせる
-- **音は MPEG-2 と同じ WASM。** AAC は esds の AudioSpecificConfig から ADTS ヘッダーを組んで付ける (`adtsHeader`)。
+- **音は MPEG-2 と同じ WASM。** AAC は esds の AudioSpecificConfig から ADTS ヘッダを組んで付ける (`adtsHeader`)。
   Opus は dOps を OpusHead に書き換えて Opus のデコーダ (`opus_open`) へ渡す。H.264 の WASM のデコーダと dav1d の WASM は作りません
 - **時計は放送のままのときと同じ** (鳴っている音。`playout.ts`)。時刻は MP4 の物差し (0 から数え、一周しない) で、
   字幕・時計の通知も同じ物差しで届く

@@ -32,18 +32,18 @@ import {
 
 const { bmlPid: BML_PID, downloadId: DOWNLOAD_ID } = BML_TS;
 
-/** TS を一気に食べさせて、並んだ変化を返す */
+/** TS を一度に渡して、並んだ変化を返す */
 function captureDataBroadcast(chunks: Uint8Array[]): TimedMessage[] {
   const capture = new DataBroadcastCapture();
   for (const chunk of chunks) capture.feed(chunk);
   return capture.result();
 }
 
-/** モジュール1つぶんの multipart (ファイル1枚の形式) */
+/** モジュール 1 つぶんの multipart (ファイル 1 枚の形式) */
 const multipart = (body: string) =>
   multipartModule([["/startup.bml", "text/X-arib-bml", body]]);
 
-/** DII と DDB を並べて、1つのモジュールを配りきる。バージョンごとに回 (transaction) を変える */
+/** DII と DDB を並べて、1 つのモジュールを配りきる。バージョンごとに回 (transaction) を変える */
 function carousel(module: Uint8Array, version: number): Uint8Array[] {
   const spec = {
     moduleId: 1,
@@ -91,7 +91,7 @@ describe("captureDataBroadcast", () => {
     expect(done?.at).toBeNull();
   });
 
-  test("同じバージョンは配り直さない = ログにも1つだけ", () => {
+  test("同じバージョンは配り直さない = ログにも 1 つだけ", () => {
     const module = multipart("<bml/>");
     const timeline = captureDataBroadcast([
       stream(...head, tdt(T1), ...carousel(module, 1), ...carousel(module, 1)),
@@ -145,8 +145,8 @@ describe("replayAt", () => {
 describe("DataBroadcastCapture.head", () => {
   const { videoPid } = BML_TS;
 
-  test("最初の TDT から、ファイルの頭からそこまでに PCR が進んだぶんを引く", () => {
-    // 頭の PCR は 1000秒。12秒進んだところで初めて TDT (T1) が来る → 頭は T1 の 12秒前
+  test("最初の TDT から、ファイルの先頭からそこまでに PCR が進んだぶんを引く", () => {
+    // 先頭の PCR は 1000 秒。12 秒進んだところで初めて TDT (T1) が来る → 先頭は T1 の 12 秒前
     const capture = new DataBroadcastCapture();
     capture.feed(
       stream(
@@ -162,7 +162,7 @@ describe("DataBroadcastCapture.head", () => {
     expect(capture.head).toBe(T1 - 12_000);
   });
 
-  test("頭と最初の TDT の間で PCR が一周しても、進んだぶんで数える", () => {
+  test("先頭と最初の TDT の間で PCR が一周しても、進んだぶんで数える", () => {
     const wrap = 2 ** 33 / 90_000;
     const capture = new DataBroadcastCapture();
     capture.feed(
@@ -186,19 +186,19 @@ describe("DataBroadcastCapture.head", () => {
 describe("playbackMsAt", () => {
   const plain = { kept: null, skip: 0 };
 
-  test("切っていない録画は、頭からの経過そのまま", () => {
+  test("切っていない録画は、先頭からの経過そのまま", () => {
     expect(playbackMsAt(60_000, 0, plain)).toBe(60_000);
   });
 
-  test("頭より前は 0 に寄せる", () => {
+  test("先頭より前は 0 に寄せる", () => {
     expect(playbackMsAt(-5_000, 0, plain)).toBe(0);
   });
 
-  test("エンコードで頭から捨てたぶんを引く (`encode_skip`)", () => {
+  test("エンコードで先頭から捨てたぶんを引く (`encode_skip`)", () => {
     expect(playbackMsAt(60_000, 0, { kept: null, skip: 1.5 })).toBe(58_500);
   });
 
-  // 0〜60秒 と 120〜180秒 を残す (60〜120秒の CM を切った録画)
+  // 0〜60 秒と 120〜180 秒を残す (60〜120 秒の CM を切った録画)
   const kept = {
     kept: [
       { start: 0, end: 60 },
@@ -208,20 +208,20 @@ describe("playbackMsAt", () => {
   };
 
   test("CM を切った録画は、残した尺だけ積む", () => {
-    // ts 150秒 = 2つ目の残り区間の途中。残ったのは 60 + (150-120) = 90秒
+    // ts 150 秒 = 2 つ目の残り区間の途中。残ったのは 60 + (150-120) = 90 秒
     expect(playbackMsAt(150_000, 0, kept)).toBe(90_000);
-    // 両区間とも通り過ぎた ts 200秒 = 60 + 60 = 120秒
+    // 両区間とも通り過ぎた ts 200 秒 = 60 + 60 = 120 秒
     expect(playbackMsAt(200_000, 0, kept)).toBe(120_000);
   });
 
-  test("CM の穴に落ちた時刻は、その後の本編の頭に寄る", () => {
-    // ts 90秒 = 切った 60〜120秒の中。残した尺では 60秒 (= 2つ目の残り区間の頭)
+  test("CM の穴に落ちた時刻は、その後の本編の先頭に寄る", () => {
+    // ts 90 秒 = 切った 60〜120 秒の中。残した尺では 60 秒 (= 2 つ目の残り区間の先頭)
     expect(playbackMsAt(90_000, 0, kept)).toBe(60_000);
   });
 });
 
 describe("toPlaybackTimeline", () => {
-  test("頭の準備 (at=null) は 0、あとは再生位置に写る", () => {
+  test("先頭の準備 (at=null) は 0、あとは再生位置に写る", () => {
     const placed = toPlaybackTimeline(
       [
         {
@@ -256,7 +256,7 @@ describe("feedFor", () => {
     { at: 60_000, message: mod(2) },
   ];
 
-  test("頭から進む = そこまでの変化を順に流す", () => {
+  test("先頭から進む = そこまでの変化を順に流す", () => {
     expect(feedFor(tl, -1, 5_000)).toEqual({
       reset: false,
       messages: [tl[0]!.message],
@@ -277,7 +277,7 @@ describe("feedFor", () => {
   test("戻ったら作り直して積み直す", () => {
     const feed = feedFor(tl, 70_000, 5_000);
     expect(feed.reset).toBe(true);
-    // 5秒の時点ではバージョン 1 (10秒) はまだ来ていない。pmt だけ
+    // 5 秒の時点ではバージョン 1 (10 秒) はまだ来ていない。pmt だけ
     expect(feed.messages.some((m) => m.type === "moduleDownloaded")).toBe(
       false,
     );

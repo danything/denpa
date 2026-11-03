@@ -6,7 +6,7 @@ import { KeyGate } from "./key-gate";
 
 /**
  * 本物の ffmpeg が書いた 2 秒 (`tests/fake/fmp4-loop.ts` に作り方)。0.05 秒ずつの塊で、
- * キーフレームは頭と 1.021 秒 (16 個目の塊の2コマ目)
+ * キーフレームは先頭と 1.021 秒 (16 個目の塊の 2 コマ目)
  */
 const file = new Uint8Array(
   readFileSync(new URL("../../../tests/fake/live-h264.mp4", import.meta.url)),
@@ -16,7 +16,7 @@ const head = segments.find((s) => s.kind === "init")!.data;
 const fragments = segments.filter((s) => s.kind === "media").map((s) => s.data);
 const tracks = readInit(head);
 const video = tracks.find((t) => t.kind === "video")!.id;
-/** 映像のキーフレームを含む塊のうち、頭の次のもの */
+/** 映像のキーフレームを含む塊のうち、先頭の次のもの */
 const KEY = fragments.findIndex(
   (f, i) =>
     i > 0 && readFragment(f, tracks).some((s) => s.track === video && s.key),
@@ -33,7 +33,7 @@ describe("途中から入ったストリーム", () => {
     expect(gate.at).toBeCloseTo(1.021, 2);
   });
 
-  test("頭から入ればそのまま渡す", () => {
+  test("先頭から入ればそのまま渡す", () => {
     const gate = new KeyGate();
     gate.init(head);
     expect(gate.pass(fragments[0]!)).toBe(true);
