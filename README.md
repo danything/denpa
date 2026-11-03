@@ -196,3 +196,6 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 **AGPL-3.0-or-later** ([LICENSE](LICENSE))。ネットワーク越しに使わせる形で配るなら、その中身も同じ条件で
 渡せるようにしてほしい、という理由で選んでいます。借りているもの (ffmpeg・Denpa Font ほか) は
 元のライセンスのままで、一覧は [docs/licenses.md](docs/licenses.md)。
+
+チューナーエージェント (`agent/`) だけは **MPL-2.0** ([agent/LICENSE](agent/LICENSE))。ほかのソフトに組み込んだり一緒に配ったりできる一方で、
+エージェントのファイルを直したら、そのファイルは同じ条件で公開してください。
