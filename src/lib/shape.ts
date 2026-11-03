@@ -154,12 +154,19 @@ export function object<F extends Fields>(fields: F): Shape<ObjectOf<F>> {
  * 止めてよいのは、違う形式のまま進むと危ないところ (ID トークン) だけ。相手が
  * 別のバージョンで動いているだけなら止めずに通す (`tolerate`)
  */
+/**
+ * 「〇〇の」の形にする。名前が英数字で終わるとき (`/api/rules` など) だけ、日本語との間に空白を入れる
+ */
+function of(what: string): string {
+  return /[!-~]$/.test(what) ? `${what} の` : `${what}の`;
+}
+
 export function read<T>(shape: Shape<T>, value: unknown, what: string): T {
   try {
     return shape(value, "");
   } catch (error) {
     if (error instanceof ShapeError)
-      throw new ShapeError(`${what}の形式が違います: ${error.message}`);
+      throw new ShapeError(`${of(what)}形式が違います: ${error.message}`);
     throw error;
   }
 }
@@ -192,7 +199,7 @@ export function tolerate<T>(
     if (!warned.has(what)) {
       warned.add(what);
       warn(
-        `[shape] ${what}の形式が違います (相手のバージョンがずれている?)。そのまま使います: ${error.message}`,
+        `[shape] ${of(what)}形式が違います (相手のバージョンがずれている?)。そのまま使います: ${error.message}`,
       );
     }
     return value as T;

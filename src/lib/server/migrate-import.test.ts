@@ -387,7 +387,7 @@ describe("形式の違う応答", () => {
     expect(s.rules).toEqual({ imported: 3, skipped: 3 });
     expect(s.log).toContain("ルール(予定): 形違いテスト");
     expect(
-      s.log.some((line) => line.includes("/api/rulesの形式が違います")),
+      s.log.some((line) => line.includes("/api/rules の形式が違います")),
     ).toBe(true);
     expect(
       s.log.some((line) =>
