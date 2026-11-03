@@ -41,7 +41,7 @@ describe("freshWorker", () => {
 
   test("静的な Response に付き、何度呼んでも本体を読める", async () => {
     const routes = freshWorker({ [PATH]: new Response("x") });
-    const wrapped = routes[PATH] as () => Response;
+    const wrapped = routes[PATH] as unknown as () => Response;
     for (let i = 0; i < 2; i++) {
       const response = wrapped();
       expect(response.headers.get("cache-control")).toBe("no-cache");
