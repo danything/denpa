@@ -40,6 +40,7 @@ import {
   type LiveChoice,
   type LiveFormat,
 } from "#lib/live-choice.js";
+import { pinnedTuner } from "#lib/live-tuner.svelte.js";
 import {
   type CaptionTrack,
   CHANNEL,
@@ -1773,14 +1774,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         language: captionLanguage,
       };
     }
-    if (tuned !== null)
+    if (tuned !== null) {
+      const tuner = pinnedTuner();
       return {
         type: "tune",
         ...tuned,
         caption: captionTrack,
         language: captionLanguage,
         raw: wantsRaw(),
+        ...(tuner === null ? {} : { tuner }),
       };
+    }
     return null;
   }
 

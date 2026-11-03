@@ -142,8 +142,14 @@ public sealed class TunerPool(
     /// **<paramref name="after"/> の利用者は、もう離れたものとして選ぶ** (引き継ぎ。docs/agent.md「選ぶ順の約束」の 4)。
     /// 選んだチューナーにその利用者がいれば、正常に終わらせてから同じチューナーで選局し直す。
     /// </para>
+    ///
+    /// <para>
+    /// **<paramref name="pin"/> があれば、その目印 (<see cref="PinKey"/>。デバイス、無ければ名前) のチューナーだけで選局する** (デバッグ用の名指し。
+    /// docs/agent.md「デバッグ用の名指し」)。受けられない種別・無効・優先度の高い利用者がいるときは、ほかへ振り替えずに断る。
+    /// 同じチャンネルをほかのチューナーが読んでいても共有せず、指定のチューナーで選局する
+    /// </para>
     /// </summary>
-    public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null)
+    public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null, string? pin = null)
     {
         int index;
         TunerSpec spec;
@@ -160,16 +166,20 @@ public sealed class TunerPool(
              * (わけは docs/agent.md「選ぶ順の約束」)
              */
             after ??= new HashSet<string>();
-            foreach (var open in _leases.Values)
+            if (pin is null)
             {
-                if (open.Type != type || open.Channel != channel) continue;
-                bool strong;
-                lock (open.Sinks) strong = open.Sinks.Any(sink => !after.Contains(sink.Use) && sink.Priority >= priority);
-                if (strong) return Join(open, priority, use);
+                foreach (var open in _leases.Values)
+                {
+                    if (open.Type != type || open.Channel != channel) continue;
+                    bool strong;
+                    lock (open.Sinks) strong = open.Sinks.Any(sink => !after.Contains(sink.Use) && sink.Priority >= priority);
+                    if (strong) return Join(open, priority, use);
+                }
             }
 
-            index = Pick(type, channel, priority, after)
-                ?? throw new TunerBusyException($"{type} のチューナーに空きがありません");
+            index = pin is null
+                ? Pick(type, channel, priority, after) ?? throw new TunerBusyException($"{type} のチューナーに空きがありません")
+                : PickPinned(pin, type, priority, after);
 
             if (_leases.TryGetValue(index, out var victim))
             {
@@ -525,6 +535,38 @@ public sealed class TunerPool(
         return group.MinBy(index => Strongest(index) ?? int.MinValue);
     }
 
+    /// <summary>名指しで選べなかったときの理由 (<see cref="Open"/> の <c>pin</c>)</summary>
+    public sealed class TunerPinException(string message) : Exception(message);
+
+    /// <summary>名指しの目印。デバイスがあればデバイス、無ければ名前</summary>
+    public static string PinKey(TunerSpec spec) => spec.Device ?? spec.Name;
+
+    /// <summary>
+    /// <paramref name="pin"/> のデバイスのチューナーを返す。**ほかのチューナーへは振り替えない。**
+    /// 見つからない・無効・その種別を受けられないときは <see cref="TunerPinException"/>、
+    /// 同じか優先度の高い利用者がいるときは <see cref="TunerBusyException"/>
+    /// </summary>
+    private int PickPinned(string pin, string type, int priority, IReadOnlySet<string> after)
+    {
+        var index = -1;
+        for (var i = 0; i < Tuners.Count && index < 0; i++)
+            if (PinKey(Tuners[i]) == pin) index = i;
+        if (index < 0) throw new TunerPinException($"{pin} のチューナーがありません");
+        var spec = Tuners[index];
+        if (spec.Disabled) throw new TunerPinException($"{spec.Name} ({pin}) は無効です");
+        if (!spec.Types.Contains(type)) throw new TunerPinException($"{spec.Name} ({pin}) は {type} を受けられません");
+        if (_leases.TryGetValue(index, out var lease))
+        {
+            lock (lease.Sinks)
+            {
+                var staying = lease.Sinks.Where(sink => !after.Contains(sink.Use)).ToList();
+                if (staying.Count > 0 && staying.Max(sink => sink.Priority) >= priority)
+                    throw new TunerBusyException($"{spec.Name} ({pin}) は同じか優先度の高い利用者が使っています");
+            }
+        }
+        return index;
+    }
+
     /// <summary>チューナー画面に出るもの (<see cref="JsonNode"/> で組むわけは <see cref="Json"/>)</summary>
     public JsonArray Status()
     {
@@ -554,6 +596,8 @@ public sealed class TunerPool(
                     ["disabled"] = spec.Disabled,
                     // 画面がそのまま編集できるように、定義もいっしょに返す
                     ["device"] = spec.Device,
+                    // 名指しで選ぶときの目印 (stream の tuner。デバッグ用)
+                    ["pin"] = PinKey(spec),
                     ["lnb"] = spec.Lnb,
                     ["channel"] = lease is null
                         ? null

@@ -6,6 +6,7 @@
   import { arming } from "#lib/arming.svelte.js";
   import Lead from "#lib/components/Lead.svelte";
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
+  import { liveTuner } from "#lib/live-tuner.svelte.js";
   import { measure } from "#lib/measure.svelte.js";
   import {
     theme,
@@ -17,6 +18,9 @@
   import Diagnostics from "./Diagnostics.svelte";
 
   let { data, form } = $props();
+
+  // この端末で覚えている名指しを読む (サーバには置かない)
+  $effect(() => liveTuner.load());
 
   const notices = $derived.by(() => {
     const list = errorNotice(form, "settings-error");
@@ -114,6 +118,44 @@
             <strong>はみ出している要素</strong>。はみ出しが 0
             でなければページごと動きます。 単位の 4
             つが同じ数なら、食い違いが原因ではありません。
+          </p>
+        {/snippet}
+      </Lead>
+    </section>
+    <!--
+            **ライブで使うチューナーを名指しする** (開発者向け。`#lib/live-tuner.svelte.ts`)。
+            ふだんはエージェントが選ぶ (docs/agent.md「選ぶ順の約束」)。サーバには送らず、端末に覚える (localStorage)
+        -->
+    <section class="section">
+      <div class="section-head">
+        <h2>ライブのチューナー (開発者向け)</h2>
+      </div>
+      <select
+        class="narrow"
+        aria-label="ライブのチューナー"
+        onchange={(event) =>
+          liveTuner.set(
+            event.currentTarget.value === "" ? null : event.currentTarget.value,
+          )}
+        data-testid="live-tuner-select"
+      >
+        <option value="" selected={liveTuner.pin === null}>自動</option>
+        {#each data.tuners as tuner (tuner.pin)}
+          <option value={tuner.pin} selected={liveTuner.pin === tuner.pin}
+            >{tuner.name} ({tuner.types.join("・")})</option
+          >
+        {/each}
+      </select>
+      <Lead>
+        ふだんは「自動」にします。選ぶと、ライブの選局にそのチューナーだけを使います。
+        使えないときは、ほかのチューナーに替えずに理由を出します
+        {#snippet more()}
+          <p>
+            <strong>この端末だけ</strong
+            >の設定で、サーバにも他の端末にも伝わりません。録画と番組表の取得は、これまでどおりエージェントが選びます。
+          </p>
+          <p>
+            放送の種別を受けられないチューナーを選んだ局は、選局できません。同じ局をほかの人が「自動」で見ているときも、共有せずにこのチューナーで選局し直します。
           </p>
         {/snippet}
       </Lead>
