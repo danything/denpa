@@ -15,7 +15,7 @@ import {
   type CaptionLanguage,
   type CaptionPage,
 } from "@danything/arib/caption-text";
-import { CLOCK, WRAP } from "@danything/arib/pes";
+import { CLOCK } from "@danything/arib/pes";
 import { untrack } from "svelte";
 
 import type { AudioTrack } from "#lib/arib.js";
@@ -34,6 +34,7 @@ import {
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
 import { forget, read, write } from "#lib/keep.js";
+import { nextHold, rawChasePosition } from "#lib/live-chase.js";
 import {
   autoCodec,
   formatLabel,
@@ -86,7 +87,6 @@ import {
   type Steering,
 } from "#lib/ts/pacing.js";
 import { retryWait } from "#lib/ts/playback.js";
-import { sinceHead } from "#lib/ts/seek.js";
 import { MAX_LEVEL } from "#lib/volume.js";
 
 type LiveState = "idle" | "connecting" | "playing" | "error";
@@ -160,13 +160,6 @@ const SLIP_MOST = 0.1;
  * 読み直し (ffmpeg の立ち上がりとキーフレーム待ち) は 1 秒ほどなので、尽きる前に間に合う
  */
 const REFILL = 5;
-/**
- * 追っかけを元の TS で受けているとき、手元がこれ (秒) を超えたらサーバに送るのを止めさせる (`holdFeed`)。
- * worker が圧縮のまま持てる 30 秒 (`raw/worker.ts` の `FOLLOW_PENDING_MOST`) より手前で止め、`full` まで行かせない
- */
-const HOLD_ABOVE = 20;
-/** 止めさせたあと、手元がこれ (秒) を切ったら送り直させる。倍速で届くので、尽きるまでに十分間に合う */
-const RESUME_BELOW = 10;
 /** 飛び直す間隔の下限 (ms)。**デコードが追いつかない状態は飛んでも直らない** */
 const UNSLIP_EVERY = 3_000;
 /*
@@ -395,6 +388,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   } | null>(null);
   /** 追っかけが録れているところまで読み切ったか */
   let chaseEnded = $state(false);
+  /** 追っかけを録れているところまで鳴らしきったか (canvas で描くとき。`RawEvents.ended`)。押しても再開しない (`toggle`) */
+  let drained = false;
   /**
    * 追っかけを元の TS で受けるときの物差しの 0 (録画の先頭の PTS。`timeline` の `origin`)。届いていなければ null で、
    * そのときは鳴らし始めた PTS を `base` の位置とみなす (`rawHead`。`rawChaseAt`)
@@ -1126,6 +1121,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 互換モードの追っかけは止めた所から (`RawEngine` の `chase`)
      */
     if (canvas && engine !== null) {
+      // 追っかけを録れているところまで鳴らしきったあとは、もう鳴らすものが無い。戻す (シーク) とリクエストし直す
+      if (paused && drained && chase !== null) return;
       paused = !paused;
       if (paused) engine.pause();
       else {
@@ -1715,6 +1712,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     tuned = null;
     chase = { recordingId, base: Math.max(0, at) };
     chaseEnded = false;
+    drained = false;
     await begin(video, keepList);
   }
 
@@ -2298,6 +2296,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
             },
             // 追っかけを録れているところまで鳴らしきった (`ended` の通知で `finish` したあと)。止めておく
             ended: () => {
+              drained = true;
               if (paused || engine === null) return;
               paused = true;
               engine.pause();
@@ -2445,8 +2444,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * より正しい。`origin` が無ければ、鳴らし始めた位置を `base` とみなす
    */
   function rawChaseAt(at: number, base: number): number {
-    if (origin !== null)
-      return sinceHead(Math.round(at * CLOCK) % WRAP, origin) - base;
+    if (origin !== null) return rawChasePosition(at, base, origin);
     rawHead ??= at;
     return at - rawHead;
   }
@@ -2456,12 +2454,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 送り込み、元の TS は捨てられない (捨てると観ていない先が欠ける) ので、手元が溜まったら止めさせる。止めている間も止めさせる
    */
   function holdFeed(lead: number): void {
-    const next =
-      paused || lead > HOLD_ABOVE
-        ? true
-        : lead < RESUME_BELOW
-          ? false
-          : feedHeld;
+    const next = nextHold(feedHeld, lead, paused);
     if (next === feedHeld) return;
     feedHeld = next;
     send({ type: "hold", on: next });
