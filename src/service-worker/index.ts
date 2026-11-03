@@ -53,10 +53,10 @@ const OFFLINE_PAGE = resolve("offline");
 const OFFLINE_DATA = `${OFFLINE_PAGE}/__data.json`;
 /**
  * 音 (と MPEG-2) をデコードする WebAssembly (`routes/api/live/mpeg2`。`raw/worker.ts` が読む)。
- * **入口で保存した録画を canvas に描くとき要る** — iPhone の Safari は保存した Matroska を `<video>` で
- * 読めないので、入口は観る画面の互換モードと同じエンジンで描く (`offline/+page.svelte`)。
- * `/api/` は素通しなので、控えていなかった頃は電波が無いと「音声を再生できません」で止まっていた。
- * 中身はイメージごとに変わる (URL は同じ) ので、入口と同じく install のたびに取り直し、サーバ優先で出す
+ * /offline で保存した録画を canvas に描くときに要る。iPhone の Safari は保存した Matroska を `<video>` で
+ * 読めないので、/offline は観る画面の互換モードと同じエンジンで描く (`offline/+page.svelte`)。
+ * `/api/` は素通しなので、キャッシュしていなかった頃は電波が無いと「音声を再生できません」で止まっていた。
+ * 中身はイメージごとに変わる (URL は同じ) ので、/offline と同じく install のたびに取り直し、サーバ優先で返す
  */
 const DECODER = ["decoder.mjs", "decoder.wasm"].map(
   (file) => `${resolve("")}api/live/mpeg2/${file}`,
@@ -88,7 +88,7 @@ worker.addEventListener("install", (event) => {
       // 入口は無くても殻は使える。デプロイした直後などで取れなくても諦める
       await cache.add(OFFLINE_PAGE).catch(() => {});
       await cache.add(OFFLINE_DATA).catch(() => {});
-      // 組んでいない denpa もある (無ければ 404)。入口で描けないだけなので諦める
+      // 組んでいない denpa もある (無ければ 404)。/offline で描けないだけなので諦める
       await Promise.all(DECODER.map((url) => cache.add(url).catch(() => {})));
     }),
   );
@@ -115,7 +115,7 @@ worker.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
-  // デコーダはサーバ優先、繋がらなければ控え (`DECODER`)
+  // デコーダはサーバ優先、繋がらなければキャッシュ (`DECODER`)
   if (DECODER.includes(url.pathname)) {
     event.respondWith(
       fromNetwork(request).catch(

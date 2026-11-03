@@ -22,8 +22,8 @@
    *
    * **`<video>` で読めなければ canvas に描く** (観る画面の互換モードと同じエンジン。`canvas-player.ts`・
    * `mkv-source.ts`)。保存したものは Matroska で、iPhone の Safari の `<video>` は Matroska を読めない
-   * (再生ボタンに斜線が出るだけだった)。読めるかは前もって聞いても当てにならない (Chrome は Matroska を
-   * 再生できるのに `canPlayType` は読めないと答える) ので、`<video>` に渡して断られたら移る
+   * (再生ボタンに斜線が出るだけだった)。`canPlayType` の答えは当てにならない (Chrome は Matroska を
+   * 再生できるのに読めないと答える) ので、`<video>` に渡して `error` イベントが起きたら移る
    */
 
   let list = $state<OfflineVideo[]>([]);
@@ -39,7 +39,7 @@
   /** 何本目に観はじめたものか。読み込みを待つ間に閉じた・別のものを観はじめたら、遅れて来た結果を捨てる */
   let session = 0;
 
-  /** canvas に描いているとき (`<video>` に断られた)。描きはじめるまでは `drawn` が null */
+  /** canvas に描いているとき (`<video>` が `error` を返した)。描きはじめるまでは `drawn` が null */
   let canvasMode = $state(false);
   let drawn = $state<CanvasPlayer | null>(null);
   let stage = $state<HTMLElement | null>(null);
@@ -103,7 +103,7 @@
     if (video !== null) video.currentTime = startAt;
   }
 
-  /** `<video>` に断られた (読めない入れ物・形式)。canvas に描く */
+  /** `<video>` が `error` を返した (読めない入れ物・形式)。canvas に描く */
   async function fallBack(): Promise<void> {
     const item = playing;
     if (item?.video === undefined || canvasMode) return;
@@ -180,7 +180,7 @@
     if (drawn === null) return;
     drawnAt = drawn.currentTime;
     drawnPaused = drawn.paused;
-    // 自動再生で断られて音を出せていない。消音にしておき、押して出してもらう (観る画面と同じ)
+    // 自動再生がブロックされて音を出せていない。消音にしておき、押して出してもらう (観る画面と同じ)
     if (!drawnMuted && drawn.blocked && !drawn.paused) {
       drawnMuted = true;
       drawn.mute(true);

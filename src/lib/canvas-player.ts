@@ -30,6 +30,7 @@ import { CLOCK, WRAP } from "@danything/arib/pes";
 import type { AudioSide } from "#lib/arib.js";
 import { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
+import { mayRead } from "#lib/read-ahead.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import {
   busyAnswer,
@@ -70,7 +71,7 @@ interface CanvasOptions {
   /** 尺 (秒)。**ここまで飛んだらリクエストせずに終わりにする** (`<video>` が尻へ飛ぶと `ended` になるのと同じ) */
   duration: number;
   /**
-   * 読み込み元の平均の速さ (バイト/秒)。**読むのが速すぎる元 (端末に保存した録画の Blob) だけ渡す** —
+   * 読み込み元の平均の速さ (バイト/秒)。読むのが速すぎる元 (端末に保存した録画の Blob) だけ渡す。
    * 渡すと、観ている位置より `AHEAD` 秒ぶん (の 1.5 倍) 先までしか読まない (`room`)
    */
   bytesPerSecond?: number;
@@ -243,21 +244,24 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
    * 先へ読んでよいか。**手元の尺が `AHEAD` を超えたら待つ** (デコードし始める前はバイト数で)。
    *
    * **端末に保存した録画はバイト数でも抑える** (`bytesPerSecond`)。手元の尺は worker がデコードして返してから
-   * 伸びるので、ネットワークより速く読める Blob はその前に尻まで読めてしまう — 900MB を一度に worker へ
-   * 流し込み、返ってくる音の知らせで画面が詰まって描き直せず (音はブツ切れ)、抱えきれない映像で `full` に
-   * なっては同じ所から読み直していた (iPhone で真っ黒のまま音だけ進んだ)
+   * 伸びるので、ネットワークより速く読める Blob はその前に尻まで読めてしまう。900MB を一度に worker へ
+   * 渡すと、返ってくる音の知らせで画面の処理が詰まって描き直せず (音は途切れる)、映像が溜まりすぎて `full`
+   * になり、同じ所から読み直していた (iPhone で真っ黒のまま音だけ進んだ)
    */
   async function room(mine: number): Promise<void> {
     const rate = options.bytesPerSecond;
     for (;;) {
       if (mine !== run) return;
-      const lead = engine.lead;
-      const played = Math.max(0, position() - loadedFrom);
-      const tooFar =
-        rate !== undefined &&
-        fed > Math.max(RATE_FLOOR, (played + AHEAD[input]) * rate * 1.5);
-      if (lead < AHEAD[input] && (lead > 0 || fed < EARLY_BYTES) && !tooFar)
-        return;
+      const ok = mayRead({
+        lead: engine.lead,
+        ahead: AHEAD[input],
+        fed,
+        early: EARLY_BYTES,
+        played: Math.max(0, position() - loadedFrom),
+        bytesPerSecond: rate,
+        floor: RATE_FLOOR,
+      });
+      if (ok) return;
       await new Promise((resolve) => setTimeout(resolve, WAIT));
     }
   }
