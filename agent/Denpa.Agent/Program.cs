@@ -174,17 +174,22 @@ void PrepareDaemons()
 
 /*
  * **挿した機材を、そのまま使えるようにする** (DeviceWatch が抜き差しを受け取ったら呼ぶ)。
- * 定義を書いてあれば、無い機材を有効なチューナーとして末尾に書き足す。抜いた機材は定義から消さない
- * (挿し直したときに名前や無効の設定が戻るように)。定義を書いていなければ、見つけたもので置き換える。
+ * 定義を書いてあれば、前に探したときに無かった (いま挿された) 機材を、有効なチューナーとして末尾に書き足す
+ * (Config.Additions)。抜いた機材は定義から消さない (挿し直したときに名前や「使う」の設定が戻るように)。
+ * 定義を書いていなければ、見つけたもので置き換える。
  * 画面からの書き換え (PUT /denpa/tuners) と同じロックで、書き足しと書き換えが混ざらないようにする
  */
 var tunersGate = new Lock();
+// 前に探したときに挿さっていた機材。起きたときに挿さっていたものは、挿されたとは数えない
+HashSet<string?> seen = [];
 void Rescan()
 {
     lock (tunersGate)
     {
         var found = DeviceProbe.Detect();
         var written = config.LoadTuners();
+        var added = Config.Additions(written, found, seen);
+        seen = [.. found.Select(tuner => tuner.Device)];
         if (written.Count == 0)
         {
             if (found.Select(tuner => tuner.Device).SequenceEqual(pool.Tuners.Select(tuner => tuner.Device))) return;
@@ -193,17 +198,6 @@ void Rescan()
         }
         else
         {
-            var known = written.Select(tuner => tuner.Device).ToHashSet();
-            var names = written.Select(tuner => tuner.Name).ToHashSet();
-            var added = new List<TunerSpec>();
-            foreach (var tuner in found.Where(tuner => !known.Contains(tuner.Device)))
-            {
-                // 名前は定義の中で重ならないようにする (チューナーを名前で見分ける。TunerPool.Replace)
-                var name = tuner.Name;
-                for (var n = 2; names.Contains(name); n++) name = $"{tuner.Name} ({n})";
-                names.Add(name);
-                added.Add(tuner with { Name = name });
-            }
             if (added.Count == 0) return;
             foreach (var tuner in added) Log.Write($"挿した機材を定義に足しました: {tuner.Name} [{string.Join(", ", tuner.Types)}] {tuner.Device}");
             config.SaveTuners([.. written, .. added]);
@@ -560,8 +554,19 @@ _ = Task.Run(() =>
     if (warmCard) Keys.Local.Warm();
 });
 
-// 機材の抜き差しを受け取ったら、定義に足す (Rescan。DeviceWatch.cs)。偽の選局で動かす適合テストでは受け取らない
-using var watch = tune.FakeTune is null ? new DeviceWatch(Rescan) : null;
+/*
+ * 機材の抜き差しを受け取ったら、定義に足す (Rescan。DeviceWatch.cs)。偽の選局で動かす適合テストでは受け取らない。
+ * 先にいま挿さっている機材を控えてから受け取り始める (起きたときに挿さっていたものを、挿されたと数えない)
+ */
+DeviceWatch? watch = null;
+if (tune.FakeTune is null)
+{
+    _ = Task.Run(() =>
+    {
+        lock (tunersGate) seen = [.. DeviceProbe.Detect().Select(tuner => tuner.Device)];
+        watch = new DeviceWatch(Rescan);
+    });
+}
 
 /*
  * **選局を離すのは `ApplicationStopping` で。** これが来るのは `Drain` が録画を待ち終えてからなので、録画は切らない
@@ -600,6 +605,8 @@ if (sharing is not null)
 if (cardUrl is { Length: > 0 }) Log.Write($"鍵を {cardUrl} から受け取ります (TTL {cardLan.Hops})");
 Log.Write($"チューナー {pool.Tuners.Count} 台 / チャンネル {config.LoadChannels().Count} 件");
 await app.RunAsync();
+// 抜き差しを受け取るもの (タイマーと inotify) を、止まるまで手放さない
+watch?.Dispose();
 return 0;
 
 /// <summary>HTTP に JSON を書く / 読む。中身の作りは <see cref="Json"/></summary>

@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 /// <item>Linux: <c>/dev/bus/usb</c> の下にファイルができる・消えるのを inotify で受け取る (<see cref="FileSystemWatcher"/>)。
 /// カーネルの uevent はコンテナのネットワーク名前空間には届かないので、コンテナでも届くファイルの変化を使う</item>
 /// <item>Windows: 挿さっている USB 機材のパス (<see cref="WinUsbDevice.Fingerprint"/>) を 2 秒ごとに見比べる</item>
-/// <item>macOS: 10 秒ごとに呼ぶ (探す側が変化の有無を見る)</item>
+/// <item>macOS: 10 秒ごとに呼ぶ (探した結果を前回と比べ、増えた機材だけを足す。Config.Additions)</item>
 /// </list>
 /// </summary>
 internal sealed class DeviceWatch : IDisposable
@@ -63,8 +63,12 @@ internal sealed class DeviceWatch : IDisposable
 
     private void Fire()
     {
-        // 探すのは数百 ms かかる。前の回が終わっていなければ重ねない
-        if (!_gate.TryEnter()) return;
+        // 探すのは数百 ms かかる。前の回が終わっていなければ重ねず、少し待って探し直す (その間の抜き差しを取りこぼさない)
+        if (!_gate.TryEnter())
+        {
+            Soon();
+            return;
+        }
         try
         {
             _changed();
