@@ -45,6 +45,7 @@ import {
   unreadable,
 } from "./src/lib/server/address.ts";
 import { compress } from "./src/lib/server/compress.ts";
+import { freshWorker } from "./src/lib/server/fresh-worker.ts";
 
 /** `src/lib/server/ws.ts` が置く名前 */
 const LIVE = "__denpaLive";
@@ -175,7 +176,13 @@ let served = false;
 Bun.serve = (options) => {
   Bun.serve = serve;
   served = true;
-  return serve({ ...options, fetch: front(options.fetch), websocket });
+  return serve({
+    ...options,
+    // サービスワーカーは毎回聞き直させる (`src/lib/server/fresh-worker.ts`)
+    routes: freshWorker(options.routes),
+    fetch: front(options.fetch),
+    websocket,
+  });
 };
 try {
   await import("./build/index.js");

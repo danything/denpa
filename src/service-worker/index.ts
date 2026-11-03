@@ -21,6 +21,7 @@ import {
   storeResponse,
   videos,
 } from "#lib/offline-db.js";
+import { reach } from "#lib/reach.js";
 
 /*
  * **頭 (前段の接頭辞込み。server/paths.ts) は SvelteKit が自分の置き場から求める。**
@@ -43,6 +44,32 @@ const SHELL = [
  * install のたびに取り直す
  */
 const OFFLINE_PAGE = resolve("offline");
+/**
+ * /offline の画面が始まるときに読むデータ (共通の枠の `+layout.server.ts`。ログイン情報など)。
+ * /offline は SSR を切った殻なので、開くたびにこれをサーバへ取得する。
+ * キャッシュしていなかった頃は、電波が無いとここでエラーになり、真っ白な画面になっていた。
+ * /offline と一緒にキャッシュし、繋がらないときだけ返す
+ */
+const OFFLINE_DATA = `${OFFLINE_PAGE}/__data.json`;
+
+/**
+ * 画面と /offline のデータをサーバへ取得する。繋がらないと分かっていれば待たず、
+ * 返事が無ければ見切る (`#lib/reach.ts`)。
+ *
+ * iPhone の Safari は機内モードで、取得したものが失敗せずに返事待ちのまま止まることがあり、
+ * /offline へ移れずにいつまでも読み込み中になっていた。見切るのは、端末が繋がっていないと言うとき
+ * (すぐ)、または応答のヘッダが 10 秒届かないときだけ。後者で見切ったあとの 5 秒は取得しない
+ * (開いた画面、/offline、/offline のデータと続けて取得するので、毎回 10 秒待たせないため)。
+ * サーバが遅いだけのときにほかの画面まで開けなくならないよう、短くしてある。
+ * 応答が届いたとき、または繋がり直したとき (`online` イベント) は、見切った記憶をすぐ捨てる
+ */
+const fromNetwork = reach({
+  fetch: (request, signal) => fetch(request, { signal }),
+  online: () => worker.navigator.onLine,
+  wait: 10_000,
+  giveUpFor: 5_000,
+});
+worker.addEventListener("online", () => fromNetwork.reset());
 
 worker.addEventListener("install", (event) => {
   event.waitUntil(
@@ -50,6 +77,7 @@ worker.addEventListener("install", (event) => {
       await cache.addAll(SHELL);
       // 入口は無くても殻は使える。デプロイした直後などで取れなくても諦める
       await cache.add(OFFLINE_PAGE).catch(() => {});
+      await cache.add(OFFLINE_DATA).catch(() => {});
     }),
   );
   void worker.skipWaiting();
@@ -88,10 +116,29 @@ worker.addEventListener("fetch", (event) => {
    */
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => {
-        const fallback = await caches.match(OFFLINE_PAGE);
-        return fallback ?? Response.error();
+      fromNetwork(request).catch(async () => {
+        const page = await caches.match(OFFLINE_PAGE);
+        if (page === undefined) return Response.error();
+        /*
+         * /offline へ移す (その場で /offline の HTML を返さない)。殻は開いた URL の画面として
+         * 始まるので、`/` のまま返すと一覧の画面を組もうとしてデータを取得し、エラーになっていた
+         */
+        if (url.pathname !== OFFLINE_PAGE)
+          return Response.redirect(new URL(OFFLINE_PAGE, location.origin));
+        return page;
       }),
+    );
+    return;
+  }
+
+  // /offline のデータはサーバ優先 (ログイン情報が変わる)。繋がらなければキャッシュ
+  if (url.pathname === OFFLINE_DATA) {
+    event.respondWith(
+      fromNetwork(request).catch(
+        async () =>
+          (await caches.match(OFFLINE_DATA, { ignoreSearch: true })) ??
+          Response.error(),
+      ),
     );
     return;
   }
