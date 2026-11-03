@@ -39,7 +39,7 @@ export const BOTTOM_SLACK = 8;
  */
 export function nowTop(
   box: { scrollHeight: number; clientHeight: number },
-  /** `W` までの行の下の端 (巻く中身の頭から px)。この先が無ければ null */
+  /** `W` までの行の下の端 (スクロールする中身の先頭から px)。この先が無ければ null */
   past: number | null,
 ): number {
   const most = Math.max(0, box.scrollHeight - box.clientHeight);

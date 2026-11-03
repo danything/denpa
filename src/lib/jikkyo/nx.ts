@@ -27,7 +27,7 @@ const MAX_BACKOFF = 60_000;
 const BACKFILL_LIMIT = 1000;
 
 /**
- * `room` が言うコメントの WS の URL から、NX-Jikkyo の中のパスだけを取る。**NX-Jikkyo の外を指していたら null** —
+ * `room` が言うコメントの WS の URL から、NX-Jikkyo の中のパスだけを取る。**NX-Jikkyo の外を指していたら null。**
  * 返事の言うまま別のホストへ繋がない (CSP でも止まるが、こちらでも確かめる)。URL はこの定数のオリジンに付け直して使う
  */
 export function commentPath(uri: string): string | null {
@@ -179,7 +179,7 @@ export class NxJikkyo {
 
   /**
    * `before` より前のコメントを 1 回だけ遡って取る (録画中の追っかけで、過去ログにまだ入っていない 10 分以内のところ)。
-   * 2 度目からは何もしない — NX-Jikkyo の DB の読み出しは重いので、何度も遡らない
+   * 2 度目からは何もしない。NX-Jikkyo の DB の読み出しは重いので、何度も遡らない
    */
   backfill(before: number): void {
     if (this.backfilled || this.backfillBefore !== null) return;

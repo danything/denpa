@@ -3,7 +3,7 @@
  * **エンコードしたもの (fMP4) を canvas に描く**、worker の中の半分 (`messages.ts` の `fmp4`)。
  *
  *     fMP4 ─→ 箱を読む (ts/fmp4.ts) ┬→ 映像: WebCodecs の VideoDecoder → 2D で描く
- *                                   └→ 音声: AAC は ADTS の頭を付けて / Opus はそのまま → WASM (worker.ts)
+ *                                   └→ 音声: AAC は ADTS のヘッダを付けて / Opus はそのまま → WASM (worker.ts)
  *
  * **<video> の再生が止まる端末のための経路。** テスラの車載ブラウザは停車中でも <video> を
  * 止めるが、canvas に描くものは止めない。放送のままの MPEG-2 (worker.ts) と同じ考えで、時計は画面が
@@ -12,14 +12,14 @@
  * MPEG-2 の経路との違い:
  *
  * - **デコードするのはブラウザ** (VideoDecoder)。たいてい GPU 経由で、デコードしたフレームは VideoFrame
- *   (GPU の上のフレーム) として出てくる。**描いたらすぐ閉じる** — 閉じずに持つと、デコーダの
+ *   (GPU の上のフレーム) として出てくる。**描いたらすぐ閉じる**。閉じずに持つと、デコーダの
  *   フレームの置き場が尽きて止まる (`DECODED_MOST` 枚より先にはデコードさせない)
  * - 描くのは 2D (`drawImage`)。インタレ解除はサーバが済ませている
  * - 時刻は MP4 の物差し (0 から数える。一周しない)。字幕・時計の通知も同じ物差しで来る
  * - 間に合っているかは VideoDecoder の詰まりと遅れで見る (`budget.ts` の `timed: false`)
  *
  * サーバは受け取りの詰まった接続には映像の塊を捨てて送る (`server/live.ts` の `hand`) ので、**コマの時刻が
- * 飛んだら次のキーフレームまで捨てる** — 参照するコマが欠けたまま渡すと、デコーダは崩れたフレームを
+ * 飛んだら次のキーフレームまで捨てる**。参照するコマが欠けたまま渡すと、デコーダは崩れたフレームを
  * 出すか転ぶ。転んだら (`error`) 開き直してキーフレームから入り直し、続けて転ぶなら諦める。
  */
 
@@ -42,7 +42,7 @@ import type { GrabSize } from "./messages";
 const AHEAD = 0.3 * CLOCK;
 /**
  * デコードできたフレームと、渡したまま出てきていないフレームを合わせてこれだけまで (VideoFrame は GPU の置き場を使う)。
- * **少なすぎても多すぎても止まる** — 実測 (`tests/bench`。docs/stream.md#デコードしたフレームを持つ数) では、GPU で
+ * **少なすぎても多すぎても止まる**。実測 (`tests/bench`。docs/stream.md#デコードしたフレームを持つ数) では、GPU で
  * デコードする H.264 (B フレームあり) は 4 以下だとデコーダが次を出せずに毎秒 30〜40 コマまで落ち、12 にすると
  * GPU の置き場が尽きてデコーダが止まった (「再生が追いつきません」)。数えていない手前の分を含めると、
  * 実際に抱えるのはこれより 2 枚ほど多い
@@ -52,17 +52,17 @@ const DECODED_MOST = 8;
 const PENDING_MOST = 8 * CLOCK;
 /** これだけ遅れたら、デコードしながら追いつくのをやめてキーフレームまで飛ぶ (90kHz) */
 const BEHIND_MOST = 0.5 * CLOCK;
-/** 1コマの長さの目安 (90kHz)。59.94 コマ。実際の間隔が分かればそれを使う */
+/** 1 コマの長さの目安 (90kHz)。59.94 コマ。実際の間隔が分かればそれを使う */
 const FRAME = 1501;
 /**
- * 追っかけ・録画 (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう** —
+ * 追っかけ・録画 (`follow`) で圧縮のまま持っておく上限。**時間 (90kHz) とバイト数の小さいほう**。
  * サーバは倍速で送り込んでくるので、観ている先が伸び続ける。超えたら受け取るのをやめて
  * `full` を返し、画面が手元の尽きる前に再生している位置からリクエストし直す (エンコードする経路の MSE の `BUDGET` と同じ量)
  */
 const FOLLOW_AHEAD_MOST = 120 * CLOCK;
 /** MPEG-2 の worker の録画 (`worker.ts`) も同じ量で切る */
 export const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
-/** デコーダが転んでも開き直す回数。**これより続けて転んだら諦める** (1コマでも描ければ数え直す) */
+/** デコーダが転んでも開き直す回数。**これより続けて転んだら諦める** (1 コマでも描ければ数え直す) */
 const ERRORS_MOST = 3;
 
 /**
@@ -77,7 +77,7 @@ export function audioCodec(
   return config === null ? null : { codec: "opus", config };
 }
 
-/** 音の1コマをデコーダへ渡す形にする。AAC は ADTS の頭を付ける (デコーダは ADTS として読む)。付けられなければ null */
+/** 音の 1 コマをデコーダへ渡す形にする。AAC は ADTS のヘッダを付ける (デコーダは ADTS として読む)。付けられなければ null */
 export function audioFrame(
   track: Fmp4Track,
   data: Uint8Array,
@@ -87,20 +87,20 @@ export function audioFrame(
   return head === null ? null : concatBytes([head, data]);
 }
 
-/** 音の1フレームを画面へ渡す関数 (WASM でデコードするのは worker.ts) */
+/** 音の 1 フレームを画面へ渡す関数 (WASM でデコードするのは worker.ts) */
 interface AudioSink {
   /** 開き直す。`opus` のときは OpusHead を渡す。**開けなければ false** */
   open(codec: "aac" | "opus", config: Uint8Array | null): boolean;
-  /** 1コマデコードして画面へ。時刻は 90kHz */
+  /** 1 コマデコードして画面へ。時刻は 90kHz */
   push(data: Uint8Array, pts: number): void;
 }
 
 export interface Fmp4Host {
   audio: AudioSink;
-  /** 1コマ描いた (小窓へ写す・数える)。`first` は選局し直してから最初の1枚 */
+  /** 1 コマ描いた (小窓へ写す・数える)。`first` は選局し直してから最初の 1 枚 */
   drew(first: boolean): void;
   fail(reason: string): void;
-  /** 1コマをデコードするのに掛かった時間 (ms。渡してから出てくるまで) */
+  /** 1 コマをデコードするのに掛かった時間 (ms。渡してから出てくるまで) */
   record(ms: number): void;
   /** 抱えきれなくなって、届いたものを捨て始めた (`follow` のときだけ) */
   full(): void;
@@ -115,7 +115,7 @@ interface Pending {
 }
 
 /**
- * 映像のコマの dts が、前のコマ (`expected` = 前の dts + 長さ) から飛んだか (90kHz)。1コマぶんまでは揺れとして許す。
+ * 映像のコマの dts が、前のコマ (`expected` = 前の dts + 長さ) から飛んだか (90kHz)。1 コマぶんまでは揺れとして許す。
  * 飛んでいたら受け取る側はキーフレームまで捨てる (`Fmp4Video.queue`)
  */
 export function jumped(
@@ -154,8 +154,8 @@ export class Fmp4Video {
   private pendingBytes = 0;
   private shownSinceReset = false;
   /**
-   * 飛び先 (µs。`reset` の `from`)。**これより前に出てきたフレームは描かずに閉じる** — 録画のサーバは
-   * 飛び先の手前のキーフレームから流してくる。最初の1枚を描いたら外す
+   * 飛び先 (µs。`reset` の `from`)。**これより前に出てきたフレームは描かずに閉じる**。録画のサーバは
+   * 飛び先の手前のキーフレームから流してくる。最初の 1 枚を描いたら外す
    */
   private floor: number | null = null;
   private lastPts: number | null = null;
@@ -188,9 +188,9 @@ export class Fmp4Video {
     return this.frames.length;
   }
 
-  /** 箱を1つぶん (init か媒体)。サーバは箱の切れ目で送ってくる */
+  /** 箱を 1 つぶん (init か媒体)。サーバは箱の切れ目で送ってくる */
   feed(bytes: Uint8Array): void {
-    // init (ftyp + moov)。**来るたびに開き直す** — 選局し直し・音声やコーデックの選び直しで中身が変わる
+    // init (ftyp + moov)。**来るたびに開き直す**。選局し直し・音声やコーデックの選び直しで中身が変わる
     if (bytes.length >= 8 && hasBox(bytes, "moov")) {
       this.configure(readInit(bytes));
       return;
@@ -200,7 +200,7 @@ export class Fmp4Video {
   }
 
   /**
-   * 読めたコマを渡す (時刻はそのトラックの刻み)。**fMP4 でなくても同じ入口** — 端末に保存した録画の
+   * 読めたコマを渡す (時刻はそのトラックの刻み)。**fMP4 でなくても同じ入口**。端末に保存した録画の
    * Matroska も、読んだコマをここへ渡す (`mkv.ts`)
    */
   push(samples: readonly Fmp4Sample[]): void {
@@ -283,7 +283,7 @@ export class Fmp4Video {
     this.decoder = null;
     this.open();
     /*
-     * **待たせている圧縮の頭も、次のキーフレームまで捨てる。** 開き直したデコーダに差分のコマから
+     * **待たせている圧縮の先頭も、次のキーフレームまで捨てる。** 開き直したデコーダに差分のコマから
      * 渡すと、また転ぶ (`ERRORS_MOST` を使い切って諦めてしまう)。キーフレームが無ければこれから来るぶんを待つ
      */
     const key = this.pending.findIndex((item) => item.key);
@@ -316,7 +316,7 @@ export class Fmp4Video {
   }
 
   /**
-   * `target` より手前でいちばん新しいキーフレームまで飛ぶ。**デコーダも開き直す** —
+   * `target` より手前でいちばん新しいキーフレームまで飛ぶ。**デコーダも開き直す**。
    * 飛ばしたコマを参照するフレームを出させないため
    */
   private skipTo(target: number): void {
@@ -329,7 +329,7 @@ export class Fmp4Video {
     this.keep(this.pending.slice(found));
     this.decoder?.reset();
     this.open();
-    // 開き直しでキーフレームを待つ印が立つが、頭はキーフレームなのでそのまま渡せる
+    // 開き直しでキーフレームを待つ印が立つが、先頭はキーフレームなのでそのまま渡せる
     this.needKey = false;
   }
 
@@ -342,7 +342,7 @@ export class Fmp4Video {
     );
   }
 
-  /** 圧縮の待ちの頭を1つ取り出す */
+  /** 圧縮の待ちの先頭を 1 つ取り出す */
   private take(): Pending {
     const item = this.pending.shift() as Pending;
     this.pendingBytes -= item.data.length;
@@ -403,7 +403,7 @@ export class Fmp4Video {
     if (decoder === null || decoder.state !== "configured") return;
 
     /*
-     * **新しい局の1枚目は、デコードできたらすぐ出して待つ** (worker.ts の MPEG-2 と同じ理由)。
+     * **新しい局の 1 枚目は、デコードできたらすぐ出して待つ** (worker.ts の MPEG-2 と同じ理由)。
      * 録画で飛んだあと (`floor`) は、飛び先より前をデコードして捨てながら進むので、詰められるだけ渡す
      */
     if (!this.shownSinceReset) {
@@ -456,7 +456,7 @@ export class Fmp4Video {
   }
 
   /**
-   * 1コマ描いて閉じる。**大きさは pasp を掛けた幅** (`Fmp4Track.displayWidth`)。無ければフレームに合わせる。
+   * 1 コマ描いて閉じる。**大きさは pasp を掛けた幅** (`Fmp4Track.displayWidth`)。無ければフレームに合わせる。
    *
    * **フレームの見せる大きさ (`displayWidth`) は当てにしない。** Safari の VideoDecoder は画素の数を
    * そのまま返し、H.264 の SAR も、VideoDecoderConfig の `displayAspectWidth` も見ない (WebKit の
@@ -527,7 +527,7 @@ export class Fmp4Video {
   }
 }
 
-/** 頭に並んだ箱の中に `type` があるか (中まで読まない) */
+/** 先頭に並んだ箱の中に `type` があるか (中まで読まない) */
 function hasBox(bytes: Uint8Array, type: string): boolean {
   for (let at = 0; at + 8 <= bytes.length;) {
     if (ascii(bytes, at + 4, 4) === type) return true;

@@ -5,16 +5,16 @@
  * **音を鳴らすことと、時計** (`playout.ts`)。時計はいま鳴っている音の PTS で、
  * それを worker へ流して映像を合わせさせる。
  *
- * `live-player.svelte.ts` からは、MSE の代わりにこれを使う — `<video>` の代わりに
- * canvas を1枚、映像の入れ物の中に差し込む。字幕・データ放送・操作列はエンコードする経路と同じもの
+ * `live-player.svelte.ts` からは、MSE の代わりにこれを使う。`<video>` の代わりに
+ * canvas を 1 枚、映像の入れ物の中に差し込む。字幕・データ放送・操作列はエンコードする経路と同じもの
  * がそのまま重なる。
  *
  * **エンコードしたもの (fMP4) も同じ入口で受ける** (互換モード。`input` が `fmp4`)。<video> の再生が止まる
  * 端末 (テスラの車載ブラウザ) で、ライブ・追っかけの H.264 / AV1 を canvas に描く。違うのは worker の中だけ
  * (`fmp4.ts`) で、音・時計・小窓・切り抜きはここのまま。
  *
- * **録画の観る画面も同じ仕組みで描く** (`canvas-player.ts`。互換モード)。`/stream` を fetch で読んで `feed` し、
- * 飛ぶたびに `reset(from)`、尻まで読んだら `finish`
+ * **録画の観る画面も同じ仕組みで描く** (`canvas-player.ts`。互換モードと MPEG-2)。`/stream` を fetch で読んで `feed` し、
+ * 飛ぶたびに `reset(from)`、末尾まで読んだら `finish`
  */
 
 import { resolve } from "$app/paths";
@@ -30,18 +30,18 @@ import { type Chunk, Playout, type Scheduled } from "./playout";
 const TICK = 20;
 /** 映像は出ているのに音が来ないまま、これだけたったら諦める (ms) */
 const NO_AUDIO = 5_000;
-/** 切り抜きの返事を待つ上限 (ms)。1080 の1枚を読み出して渡すのは数十 ms */
+/** 切り抜きの返事を待つ上限 (ms)。1080 の 1 枚を読み出して渡すのは数十 ms */
 const GRAB_WAIT = 2_000;
 /** デコーダの置き場 (`routes/api/live/mpeg2`) */
 const DECODER = "/api/live/mpeg2";
 /**
  * **`<audio>` を通したとき、出口から耳までの遅れの見込み (秒)** (`Outlet.route`)。
  *
- * ストリーム (MediaStream) へ出した音は、Web Audio が組んだその場でストリームに乗る — ページから直に
+ * ストリーム (MediaStream) へ出した音は、Web Audio が組んだその場でストリームに乗る。ページから直に
  * 鳴らすときの出口の遅れ (`baseLatency + outputLatency`。`latencyHint: 'playback'` で
  * 大きめ) を通らず、代わりに `<audio>` の側の出口を通る。その遅れはページから読めないので
- * 見込みで置く。**少なめに置く** — 外れても「音が映像より遅れる」側に倒れる (人は音が先に
- * 来るほうに気づきやすい)。実測は docs/stream.md#時計とリップシンク--時計は鳴っている音
+ * 見込みで置く。**少なめに置く**。外れても「音が映像より遅れる」側に倒れる (人は音が先に
+ * 来るほうに気づきやすい)。実測は docs/stream.md#時計は鳴っている音-リップシンク
  */
 const STREAM_OUT = 0.03;
 
@@ -58,7 +58,7 @@ interface RawEvents {
   /** **使えなくなった。** 次の方式に移るか止まるかは画面が決める (理由は画面に出す) */
   gaveUp(reason: string): void;
   /**
-   * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ** —
+   * 外から止められた・再開された (`paused`)。**`<audio>` を通している間だけ**。
    * ロック画面・車のハンドルの再生ボタン・ブラウザの再生中の通知は `<audio>` を直に
    * 止めるので、画面の「止めているか」をそれに合わせる (`Outlet.route`)
    */
@@ -93,9 +93,9 @@ export class RawEngine {
   /** デコードできた音のコマ数 (選局からの通しではなく、このエンジンを作ってからの通し) */
   private heard = 0;
   private gone = false;
-  /** worker がデコーダを読み終えたか (`ready`)。それまでは尻まで読んでも終わりにしない (`finish`) */
+  /** worker がデコーダを読み終えたか (`ready`)。それまでは末尾まで読んでも終わりにしない (`finish`) */
   private ready = false;
-  /** デコーダを読み終える前に尻まで読んだ。読み終えたら `Playout` に伝える */
+  /** デコーダを読み終える前に末尾まで読んだ。読み終えたら `Playout` に伝える */
   private finishing = false;
   /** デュアルモノのどちらを両耳へ配るか (`AudioTrack.side`) */
   private side: AudioSide = "both";
@@ -117,7 +117,7 @@ export class RawEngine {
   private grabbed = 0;
   /** 描かれずに捨てたコマ (worker が数える) */
   dropped = 0;
-  /** 1コマをデコードする時間の 95 パーセンタイル (ms) */
+  /** 1 コマをデコードする時間の 95 パーセンタイル (ms) */
   decodeMs = 0;
   /** 間に合わないので B フレームを飛ばしているか (`worker.ts` の `thin`) */
   thinned = false;
@@ -127,8 +127,8 @@ export class RawEngine {
    * @param before この前に差し込む (字幕の canvas より下に来るように)
    * @param target どれだけ貯めるか (秒)。あとから変えるときは `target`
    * @param background 「再生する音」だと言うか (`playbackSession`・`Outlet.route`)。あとから変えるときは `background`
-   * @param input 何を受け取るか (`messages.ts` の `RawInput`)。元の TS か、エンコードしたもの (fMP4。互換モード)
-   * @param chase 追っかけ・録画 (互換モード)。放送の今を追わない — 溜まっても飛ばず、止めて再開は止めた所から
+   * @param input 何を受け取るか (`messages.ts` の `RawInput`)。元の TS、エンコードしたもの (fMP4。互換モード)、端末に保存した録画 (Matroska)
+   * @param chase 追っかけ・録画。放送の今を追わない。溜まっても飛ばず、止めて再開は止めた所から
    *   (`playout.ts` と worker の `follow`)。録画 (`canvas-player.ts`) は飛ぶ先 (`reset` の `from`) と終わり
    *   (`finish`) も使う
    */
@@ -244,7 +244,7 @@ export class RawEngine {
     this.outlet.want(on);
   }
 
-  /** 音量 (%。`#lib/volume.ts`)。**消音 (`mute`) とは別** — 消しても音量はそのまま */
+  /** 音量 (%。`#lib/volume.ts`)。**消音 (`mute`) とは別**。消しても音量はそのまま */
   set volume(level: number) {
     this.outlet.level = level;
   }
@@ -254,7 +254,7 @@ export class RawEngine {
     return this.context.state !== "running";
   }
 
-  /** 届いた TS を渡す。**写さずに worker へ移す** (1局 15Mbit/s ぶんを毎秒写さない) */
+  /** 届いた TS を渡す。**写さずに worker へ移す** (1 局 15Mbit/s ぶんを毎秒写さない) */
   feed(buffer: ArrayBuffer, offset: number): void {
     this.send({ type: "data", buffer, offset }, [buffer]);
   }
@@ -279,11 +279,11 @@ export class RawEngine {
   }
 
   /**
-   * もう届かない (録画の尻まで読んだ)。残りを鳴らしきったら `ended`。
+   * もう届かない (録画の末尾まで読んだ)。残りを鳴らしきったら `ended`。
    *
-   * **デコーダを読み終えるまでは `Playout` に伝えない。** 伝えると「尻まで読んだのに鳴らすものが無い」が
-   * `LAST_WAIT` (2秒) 続いた時点で終わりになる。残りが短い (短い録画・尻の近くへ飛んだ) と、読み込みの間に
-   * 尻まで読み切ってしまい、遅い回線でデコーダが 2 秒より遅れると、1コマも出さずに「観終わった」になっていた
+   * **デコーダを読み終えるまでは `Playout` に伝えない。** 伝えると「末尾まで読んだのに鳴らすものが無い」が
+   * `LAST_WAIT` (2 秒) 続いた時点で終わりになる。残りが短い (短い録画・末尾の近くへ飛んだ) と、読み込みの間に
+   * 末尾まで読み切ってしまい、遅い回線でデコーダが 2 秒より遅れると、1 コマも出さずに「観終わった」になっていた
    */
   finish(): void {
     if (this.ready) this.playout.finish();
@@ -292,7 +292,7 @@ export class RawEngine {
   }
 
   /**
-   * 音声を選ぶ。**再エンコードにならない** — 元の TS には全部の音声が入っているので、
+   * 音声を選ぶ。**再エンコードにならない**。元の TS には全部の音声が入っているので、
    * どれをデコードするか (worker) と、デュアルモノのどちら側を両耳へ配るか (ここ) を変えるだけ
    */
   selectAudio(stream: number, side: AudioSide): void {
@@ -317,12 +317,12 @@ export class RawEngine {
     if (!this.gone) this.outlet.hold(false);
   }
 
-  /** 音を消す。**消すのは音量の前の GainNode** — `<audio>` を通していてもいなくても同じ所で効く */
+  /** 音を消す。**消すのは音量の前の GainNode**。`<audio>` を通していてもいなくても同じ所で効く */
   mute(): void {
     this.gain.gain.value = 0;
   }
 
-  /** 音を出す。**押されて呼ばれる** — 自動再生で断られていても、ここなら鳴らせる (`<audio>` も) */
+  /** 音を出す。**押されて呼ばれる**。自動再生で断られていても、ここなら鳴らせる (`<audio>` も) */
   unmute(): void {
     this.gain.gain.value = 1;
     void this.context.resume().catch(() => undefined);
@@ -350,7 +350,7 @@ export class RawEngine {
   }
 
   /**
-   * いま出しているコマを1枚 (切り抜き)。**映像は worker の canvas にある**ので、
+   * いま出しているコマを 1 枚 (切り抜き)。**映像は worker の canvas にある**ので、
    * リクエストして返してもらう。返事が来ない (worker が詰まっている) ときは諦めて null。
    * `size` を付けると worker の中で縮めたものが返る (アンビエントモード)
    */
@@ -570,7 +570,7 @@ export class RawEngine {
 
   /**
    * 時計を替える。**鳴っている位置はそのまま。** 自動再生の許しが出たら音へ、音が止められたら
-   * (出口が外れた・OS に止められた) 壁時計へ — 止まった音の時計に映像まで付いて止まらないように
+   * (出口が外れた・OS に止められた) 壁時計へ。止まった音の時計に映像まで付いて止まらないように
    */
   private follow(): void {
     const wall = this.context.state !== "running";
@@ -592,7 +592,7 @@ export class RawEngine {
     /*
      * **デュアルモノは片側を両耳へ** (エンコードする経路の `pan` と同じ)。
      *
-     * 5.1ch の番組は**頭の2本 (前の左右) だけ**鳴らす。面の並びは FFmpeg の決まりで
+     * 5.1ch の番組は**最初の 2 本 (前の左右) だけ**鳴らす。面の並びは FFmpeg の決まりで
      * 分かっている (worker の WASM がデコードする) が、中央と後ろを混ぜる下げ方はまだ持っていない
      */
     const left = chunk.planes[0]!;

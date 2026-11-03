@@ -3,7 +3,7 @@
  *
  * ライブで出している「遅延」は、これまで**手元の貯まりの差**
  * (`buffered.end - currentTime`) でした。あれは「あと何秒ぶん持っているか」で
- * あって、放送との差ではありません — チューナーの選局から ffmpeg のエンコードの完了、
+ * あって、放送との差ではありません。チューナーの選局から ffmpeg のエンコードの完了、
  * 回線まで、**上流でかかった時間はどれも入っていない**。
  *
  * 放送は PCR という時計を運んでいて、映像の PTS も同じ時計で打たれています。
@@ -17,17 +17,17 @@
  * 引く量は ffmpeg 自身が入口で言ってくる (`Input #0 ... start: 72575.147089`)。
  * 出口でも同じだけしか寄っていないことは実測で確かめてある (docs/stream.md)。
  *
- * **PCR は 26.5 時間で一周します** (33ビット)。またいだら結びつけ直すだけに
- * してあります — 巻き戻ったように見えたぶんを足し込む作りにすると、
+ * **PCR は 26.5 時間で一周します** (33 ビット)。またいだら結びつけ直すだけに
+ * してあります。巻き戻ったように見えたぶんを足し込む作りにすると、
  * 選局直後の飛びまで取り込んで**時刻が何時間もずれる**ほうが怖い。
  *
  * ## 放送の時刻 (TDT/TOT) は使わない
  *
  * 以前は TDT と組にしていましたが、**TDT は局ごとに固定でずれています**。
- * 受け取った時刻 (NTP で合わせたサーバの時計) と突き合わせると、11局で
- * -0.72〜+0.90秒 (テレ東 -0.41、tvk +0.90、フジ -0.72)。秒未満の端数も局ごとに
+ * 受け取った時刻 (NTP で合わせたサーバの時計) と突き合わせると、11 局で
+ * -0.72〜+0.90 秒 (テレ東 -0.41、tvk +0.90、フジ -0.72)。秒未満の端数も局ごとに
  * 同じところで入ってくるので、何本待っても寄りません。その差がそのまま
- * 「放送から」に出て、Eテレでは手元の貯まりより小さい値になっていました。
+ * 「放送から」に出て、E テレでは手元の貯まりより小さい値になっていました。
  *
  * 比べる相手 (`now`) もサーバの時計なので、**時計の絶対値はどこにも要りません**。
  *
@@ -35,8 +35,8 @@
  *
  * 受け取るのは塊ごとで、ffmpeg が詰まれば読むのも遅れます。遅れた組を採ると
  * そのぶん「放送から」が小さく出るので、**`受け取った時刻 − PCR` がいちばん
- * 小さい組**を採ります。ただし PCR とサーバの時計は別の水晶なので少しずつずれる —
- * 永久には持たず、**30秒ごとに選び直します** (直前の区切りのぶんも残して比べる)
+ * 小さい組**を採ります。ただし PCR とサーバの時計は別の水晶なので少しずつずれます。
+ * 組は永久には持たず、**30 秒ごとに選び直します** (直前の区切りのぶんも残して比べる)
  */
 
 import { u16 } from "@danything/arib/bytes";
@@ -48,9 +48,9 @@ import {
   TABLE_PMT,
 } from "@danything/arib/psi";
 
-/** 33ビットで一周する長さ (秒)。26.5 時間ほど */
+/** 33 ビットで一周する長さ (秒)。26.5 時間ほど */
 const WRAP = PTS_WRAP / CLOCK;
-/** 組を選び直す区切り (ms)。水晶どうしのずれは 30秒で 1ms にも届かない */
+/** 組を選び直す区切り (ms)。水晶どうしのずれは 30 秒で 1ms にも届かない */
 const WINDOW = 30_000;
 
 /** 受け取った時刻と、そのとき着いた PCR */
@@ -62,9 +62,9 @@ export interface Anchor {
 }
 
 /**
- * 1パケットから PCR を読む。無ければ NaN。
+ * 1 パケットから PCR を読む。無ければ NaN。
  *
- * PCR は適応フィールドの先頭に入っている。**基準部だけ使う** — 拡張部は
+ * PCR は適応フィールドの先頭に入っている。**基準部だけ使う。** 拡張部は
  * 27MHz ぶんの端数で、秒に直すと 1/27,000,000 なので要らない
  */
 export function readPcr(packet: Uint8Array): number {
@@ -91,20 +91,20 @@ function lag(anchor: Anchor): number {
 }
 
 /**
- * 1局に絞った TS から、PCR と受け取った時刻の組を集め続ける。
+ * 1 局に絞った TS から、PCR と受け取った時刻の組を集め続ける。
  *
- * **絞ったあとを食わせる** (`ServiceFilter` の出口)。あちらは PAT・PMT と
+ * **絞ったあとを渡す** (`ServiceFilter` の出口)。あちらは PAT・PMT と
  * その局の ES を残すので、PCR を運ぶ ES も通っている
  */
 export class BroadcastClock {
   private readonly packets = new PacketStream();
-  /** 絞ったあとなので番組は1つだけ。最初のものを見る */
+  /** 絞ったあとなので番組は 1 つだけ。最初のものを見る */
   private readonly pmt = new PmtTracker();
   private pcrPid: number | null = null;
   private pcr = Number.NaN;
   /** いまの区切りで採っている組 */
   private current: Anchor | null = null;
-  /** 1つ前の区切りで採った組。**区切りの直後に遅れた組しか無くても困らないように** */
+  /** 1 つ前の区切りで採った組。**区切りの直後に遅れた組しか無くても困らないように** */
   private previous: Anchor | null = null;
   private windowFrom = Number.NaN;
 
@@ -123,7 +123,7 @@ export class BroadcastClock {
 
   /**
    * @param receivedAt その塊を受け取った時刻 (unix ms, サーバの時計)。
-   *   塊の中の PCR はどれもこの時刻で組にする — 早く着いた PCR ほど遅れて
+   *   塊の中の PCR はどれもこの時刻で組にする。早く着いた PCR ほど遅れて
    *   見えるだけで、塊の最後の PCR がいちばん小さく出て選ばれる
    */
   feed(chunk: Uint8Array, receivedAt = Date.now()): void {
@@ -131,7 +131,7 @@ export class BroadcastClock {
       this.feedPacket(packet, receivedAt);
   }
 
-  /** 切り分け済みのパケットを1つ (`BmlDecoder.feedPacket` と同じ事情) */
+  /** 切り分け済みのパケットを 1 つ (`BmlDecoder.feedPacket` と同じ事情) */
   feedPacket(packet: Uint8Array, receivedAt: number): void {
     const pid = packetPid(packet);
     if (this.pcrPid === null || pid === this.pcrPid) {
@@ -177,7 +177,7 @@ export class BroadcastClock {
  *
  * **これが 0 に寄せたぶん**。`-copyts` を付けていないので、出てくる時刻は
  * 入口の時刻からこれを引いたものになる。映像が音声より遅れて始まっても
- * 映像だけ 0 に詰められることはない (頭は同じフレームで埋まる。docs/stream.md)
+ * 映像だけ 0 に詰められることはない (先頭は同じフレームで埋まる。docs/stream.md)
  */
 export function parseStart(line: string): number {
   const match = /\bstart:\s*(-?\d+(?:\.\d+)?)/.exec(line);

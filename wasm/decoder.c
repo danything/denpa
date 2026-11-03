@@ -7,15 +7,15 @@
  *
  * 音 (AAC) も同じ FFmpeg の `aac` でデコードする (`aac_open` / `audio_push`)。WebCodecs の AudioDecoder は
  * https でしか出てこず、iPhone の Safari には iOS 26 まで無いので、
- * それに頼ると LAN の http と古い iPhone で元のTSをそのまま再生する経路が使えない。画面の canvas で描く経路 (fMP4) の
+ * それに頼ると LAN の http と古い iPhone で元の TS をそのまま再生する経路が使えない。画面の canvas で描く経路 (fMP4) の
  * Opus も同じ API でデコードする (`opus_open`)。
  *
- * - `dec_push` … PES の中身 (ES) を渡す。**区切りは FFmpeg の parser に任せる** —
+ * - `dec_push` … PES の中身 (ES) を渡す。**区切りは FFmpeg の parser に任せる**。
  *   放送はふつう 1 PES = 1 枚だが、決まりではない。PTS も一緒に渡し、
  *   parser が「どのフレームのものか」を付け替える
  * - デコードできたフレームは**こちらで持っておく** (`queue`)。AVFrame は受け取るたびに使い回されるので、
  *   JS が見せる時刻まで待たせるには参照を移して取っておくしかない
- * - `dec_peek` / `dec_pop` … いちばん古い1枚を覗く・捨てる。表示順で並んでいる
+ * - `dec_peek` / `dec_pop` … いちばん古い 1 枚を覗く・捨てる。表示順で並んでいる
  *   (B フレームの並べ替えはデコーダが済ませている)
  *
  * スレッドは使わない。スレッドを使うビルドは COOP/COEP (crossOriginIsolated) が要り、効く端末が限られる
@@ -40,11 +40,11 @@ static int head, count;
 /** 直近の dec_push に掛かった時間 (ms)。**デコードするのが間に合っているかの物差し** */
 static double last_ms;
 /**
- * B フレーム (参照されないコマ) をデコードしないか (`dec_skip`)。**間に合わないときだけ** JS が立てる —
+ * B フレーム (参照されないコマ) をデコードしないか (`dec_skip`)。**間に合わないときだけ** JS が立てる。
  * 動きは 1 秒 10〜15 コマに落ちるが、紙芝居になって飛び越し走査のフィールドの順番が崩れるよりは見やすい
  */
 static int skip_nonref;
-/** JS へ渡す1枚ぶんの控え (dec_peek) */
+/** JS へ渡す 1 枚ぶんの控え (dec_peek) */
 static int info[12];
 static double info_pts;
 
@@ -55,7 +55,7 @@ static void clear_queue(void) {
 }
 
 /**
- * 開く。**2回目以降は開き直し** — 局を変えたときに呼ぶ。参照フレームも待たせているフレームも
+ * 開く。**2 回目以降は開き直し**。局を変えたときに呼ぶ。参照フレームも待たせているフレームも
  * parser の持ち越しも捨てる (`avcodec_flush_buffers` だけだと parser に前の局の切れ端が残る)
  */
 EMSCRIPTEN_KEEPALIVE int dec_open(void) {
@@ -100,8 +100,8 @@ static void receive(void) {
 /**
  * ES を渡す。`pts` は 90kHz (無ければ負)。**返すのは待っている枚数。**
  *
- * 1 PES ぶんを丸ごと渡す想定。parser はフレームの終わりを次のフレームの頭で知るので、
- * 最後の1枚は次の PES が来たときに出てくる (1 コマ遅れる。貯めの中に収まる)
+ * 1 PES ぶんを丸ごと渡す想定。parser はフレームの終わりを次のフレームの先頭で知るので、
+ * 最後の 1 枚は次の PES が来たときに出てくる (1 コマ遅れる。貯めの中に収まる)
  */
 EMSCRIPTEN_KEEPALIVE int dec_push(const uint8_t *data, int len, double pts) {
     double started = emscripten_get_now();
@@ -110,7 +110,7 @@ EMSCRIPTEN_KEEPALIVE int dec_push(const uint8_t *data, int len, double pts) {
         uint8_t *out = NULL;
         int size = 0;
         int used = av_parser_parse2(parser, ctx, &out, &size, data, len, stamp, stamp, 0);
-        // 同じ PTS を2枚目に付けない。parser は渡された時刻を最初のフレームに付ける
+        // 同じ PTS を 2 枚目に付けない。parser は渡された時刻を最初のフレームに付ける
         stamp = AV_NOPTS_VALUE;
         data += used;
         len -= used;
@@ -137,7 +137,7 @@ EMSCRIPTEN_KEEPALIVE int dec_count(void) { return count; }
 EMSCRIPTEN_KEEPALIVE double dec_last_ms(void) { return last_ms; }
 
 /**
- * いちばん古い1枚を覗く。**無ければ NULL。**
+ * いちばん古い 1 枚を覗く。**無ければ NULL。**
  *
  *     [0] 幅 [1] 高さ [2..4] 各面の行の幅 (linesize) [5..7] 各面のアドレス
  *     [8] フラグ (1: インタレ, 2: 上が先) [9,10] 画素の縦横比 [11] 色空間 (AVColorSpace)
@@ -165,7 +165,7 @@ EMSCRIPTEN_KEEPALIVE int *dec_peek(void) {
 EMSCRIPTEN_KEEPALIVE double dec_peek_pts(void) { return info_pts; }
 
 /**
- * i 枚目 (0 がいちばん古い) の時刻。**見せる番が過ぎたフレームを、覗かずに飛ばすため** —
+ * i 枚目 (0 がいちばん古い) の時刻。**見せる番が過ぎたフレームを、覗かずに飛ばすため**。
  * 次のフレームがもう番を迎えているなら、手前のフレームは画像にする (テクスチャに上げる) だけ無駄
  */
 EMSCRIPTEN_KEEPALIVE double dec_pts_at(int i) {
@@ -175,7 +175,7 @@ EMSCRIPTEN_KEEPALIVE double dec_pts_at(int i) {
     return pts == AV_NOPTS_VALUE ? -1 : (double)pts;
 }
 
-/** いちばん古い1枚を捨てる。**見せ終わったか、見せずに飛ばすとき** */
+/** いちばん古い 1 枚を捨てる。**見せ終わったか、見せずに飛ばすとき** */
 EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
     if (count == 0) return;
     av_frame_free(&queue[head]);
@@ -184,26 +184,26 @@ EMSCRIPTEN_KEEPALIVE void dec_pop(void) {
 }
 
 /* ---------------------------------------------------------------------------
- * 音 (AAC と Opus)。**1コマずつ渡して、その場で1コマ受け取る** — 区切りと時刻は JS が
+ * 音 (AAC と Opus)。**1 コマずつ渡して、その場で 1 コマ受け取る**。区切りと時刻は JS が
  * 付けているので parser は組まない。
  *
  * - AAC (`aac_open`) … 放送の ADTS をそのまま渡す (packages/arib/src/pes.ts の AdtsSplitter が切る)。
- *   ADTS の頭はデコーダが自分で読む (extradata 無しで開くと ADTS として読む決まり)。
- *   画面の canvas で描く経路の fMP4 の AAC は、JS が頭を組んで付けてから渡す
+ *   ADTS のヘッダはデコーダが自分で読む (extradata 無しで開くと ADTS として読む決まり)。
+ *   画面の canvas で描く経路の fMP4 の AAC は、JS がヘッダを組んで付けてから渡す
  *   (ts/fmp4.ts の `adtsHeader`)
  * - Opus (`opus_open`) … AV1 と組んで送られてくる fMP4 の Opus。設定 (OpusHead) を
  *   extradata として渡して開く (ts/fmp4.ts の `opusHead` が dOps から書き換える)
  *
- * どちらも同じ1つのデコーダの置き場 (`audio`) に開き直し、`audio_push` でデコードする
+ * どちらも同じ 1 つのデコーダの置き場 (`audio`) に開き直し、`audio_push` でデコードする
  * ------------------------------------------------------------------------- */
 
-/** 返せる面の数。AAC は 7.1 (8本) まで */
+/** 返せる面の数。AAC は 7.1 (8 本) まで */
 #define AUDIO_PLANES 8
 
 static AVCodecContext *audio;
 static AVPacket *audio_pkt;
 static AVFrame *audio_frame;
-/** JS へ渡す1コマぶんの控え (audio_push) */
+/** JS へ渡す 1 コマぶんの控え (audio_push) */
 static int audio_info[3 + AUDIO_PLANES];
 
 static int audio_open(enum AVCodecID id, const uint8_t *extra, int len) {
@@ -225,7 +225,7 @@ static int audio_open(enum AVCodecID id, const uint8_t *extra, int len) {
     return audio_pkt != NULL && audio_frame != NULL ? 0 : -4;
 }
 
-/** AAC を開く。**2回目以降は開き直し** — 局を変えた・標本化周波数や本数が変わったときに呼ぶ */
+/** AAC を開く。**2 回目以降は開き直し**。局を変えた・標本化周波数や本数が変わったときに呼ぶ */
 EMSCRIPTEN_KEEPALIVE int aac_open(void) { return audio_open(AV_CODEC_ID_AAC, NULL, 0); }
 
 /** Opus を開く。`extra` は OpusHead (19 バイト〜)。開き直しも同じ */
@@ -234,7 +234,7 @@ EMSCRIPTEN_KEEPALIVE int opus_open(const uint8_t *extra, int len) {
 }
 
 /**
- * 1コマデコードする。**返すのはデコードできた標本数** (0 は出てこなかった、負は壊れたコマ)。
+ * 1 コマデコードする。**返すのはデコードできた標本数** (0 は出てこなかった、負は壊れたコマ)。
  * デコードできたものは `audio_peek` で読む:
  *
  *     [0] 本数 [1] 標本化周波数 [2] 標本数 [3..] 各面のアドレス (float -1〜1、標本数ぶん)

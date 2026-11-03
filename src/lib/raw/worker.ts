@@ -5,7 +5,7 @@
  *     TS ─→ PES (packages/arib/src/pes.ts) ┬→ 映像: WASM の MPEG-2 デコーダ (wasm/decoder.c) → WebGL2 (render.ts)
  *                                          └→ 音声: ADTS → 同じ WASM の AAC デコーダ → 画面へ (鳴らすのは画面)
  *
- * 音をデコードするのも同じ worker。AAC は1秒ぶんで数 ms (stream.md#放送そのままmpeg-2を送る) と、映像をデコードする手間の
+ * 音をデコードするのも同じ worker。AAC は 1 秒ぶんで数 ms (stream.md#放送そのままmpeg-2を送る) と、映像をデコードする手間の
  * 数 % ほどなので、worker を分けて受け渡しを増やすほどではない。
  *
  * **時計は画面が持つ** (鳴っている音。`playout.ts`)。ここは届いた時計に合わせて、番が
@@ -13,16 +13,16 @@
  *
  * **エンコードしたもの (fMP4) を canvas に描く経路もここで受ける** (`messages.ts` の `RawInput`)。
  * <video> の再生が止まる端末 (テスラの車載ブラウザ) のための経路で、映像は WebCodecs、音は
- * 同じ WASM (AAC・Opus) でデコードする。中身は `fmp4.ts`。時計・小窓・切り抜き・見張りはこことで共有する
+ * 同じ WASM (AAC・Opus) でデコードする。中身は `fmp4.ts`。時計・小窓・切り抜き・間に合っているかの判定はこことで共有する
  *
  * ## 貯めるのはデコードする前
  *
- * 貯め (0.2秒〜) のぶんをデコードしたフレームで持つと、1080 のフレームは1枚 3MB あるので 1秒で 90MB になる。
- * **圧縮のまま持っておき、番の少し前 (`AHEAD`) にデコードする。** デコードするのは実測で1コマ 3〜5ms (重いもので 10ms 近く)
+ * 貯め (0.2 秒〜) のぶんをデコードしたフレームで持つと、1080 のフレームは 1 枚 3MB あるので 1 秒で 90MB になる。
+ * **圧縮のまま持っておき、番の少し前 (`AHEAD`) にデコードする。** デコードするのは実測で 1 コマ 3〜5ms (重いもので 10ms 近く)
  * なので、0.3 秒前に始めれば間に合う。デコードできたフレームはデコーダの中で順番待ちさせる
  * (`dec_peek` / `dec_pop`)。
  *
- * ## 頭は I フレームから
+ * ## 先頭は I フレームから
  *
  * MPEG-2 は I フレームからしかデコードし始められない。選局の直後や飛ばしたあとは、I が来る
  * まで捨てる (放送の GOP は 0.5 秒)。前のフレームを参照するコマを先に渡すと、デコーダは灰色の
@@ -62,8 +62,8 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
 /** 番のこれだけ前からデコードする (90kHz)。デコードするのは重いコマでも 10ms 近く */
 const AHEAD = 0.3 * CLOCK;
 /**
- * デコードできたフレームを待たせる上限。**これ以上は先にデコードしない** (1枚 3MB)。
- * 実測 (`tests/bench`。docs/stream.md#デコードしたフレームを持つ数) では、1回に 1 枚ずつデコードするので
+ * デコードできたフレームを待たせる上限。**これ以上は先にデコードしない** (1 枚 3MB)。
+ * 実測 (`tests/bench`。docs/stream.md#デコードしたフレームを持つ数) では、1 回に 1 枚ずつデコードするので
  * 待たせるのは多くて 3〜5 枚で、8 にも届かない。2 だと追いつかずに毎秒 30 フィールド前後まで落ちた。
  * WASM のメモリは最初の 64MB のまま増えないので、上げても下げても使う量は変わらない。
  * fMP4 の `DECODED_MOST` (fmp4.ts) と同じ数だが、数えているもの (あちらは GPU の VideoFrame) も決め手も違う
@@ -73,7 +73,7 @@ const DECODED_MOST = 8;
 const PENDING_MOST = 8 * CLOCK;
 /** これだけ遅れたら、デコードしながら追いつくのをやめて I フレームまで飛ぶ (90kHz) */
 const BEHIND_MOST = 0.5 * CLOCK;
-/** 1コマの長さの目安 (90kHz)。29.97 コマ。実際の間隔が分かればそれを使う */
+/** 1 コマの長さの目安 (90kHz)。29.97 コマ。実際の間隔が分かればそれを使う */
 const FRAME = 3003;
 /** 音のデコードが続けて失敗したら諦める回数 */
 const AUDIO_ERRORS_MOST = 20;
@@ -83,10 +83,10 @@ const AUDIO_ERRORS_MOST = 20;
  * やめて `full` を返す (fMP4 の `FOLLOW_AHEAD_MOST` と同じ考え)。バイト数は fMP4 と同じ `FOLLOW_BYTES_MOST`
  */
 const FOLLOW_PENDING_MOST = 30 * CLOCK;
-/** 飛び先より手前をデコードして捨てるとき、1回の刻みでデコードする上限 (1枚は重いもので 10ms 近く) */
+/** 飛び先より手前をデコードして捨てるとき、1 回の刻みでデコードする上限 (1 枚は重いもので 10ms 近く) */
 const UNDER_PER_TICK = 4;
 
-/** デコーダ (`wasm/decoder.c`)。音とメモリの口は `wasm-audio.ts` */
+/** デコーダ (`wasm/decoder.c`)。音とメモリの関数は `wasm-audio.ts` */
 interface Decoder extends AudioDecoder {
   _dec_open(): number;
   _dec_push(data: number, length: number, pts: number): number;
@@ -150,7 +150,7 @@ let overflowed = false;
 let pendingBytes = 0;
 /**
  * 飛び先 (`reset` の `from`)。**これより前のコマはデコードするだけで描かない。** 届いたものの近くに伸ばすまでは
- * 一周の中の値 (`floorRaw`) で持つ。最初の1枚を描いたら外す
+ * 一周の中の値 (`floorRaw`) で持つ。最初の 1 枚を描いたら外す
  */
 let floorRaw: number | null = null;
 let floor: number | null = null;
@@ -169,15 +169,15 @@ let fmp4: Fmp4Video | null = null;
 /** 端末に保存した録画 (Matroska) を読む係。`mkv` のときだけ (`mkv.ts`)。読んだコマは `fmp4` へ渡す */
 let mkv: MkvInput | null = null;
 /**
- * デコーダ (WASM) を読み終える前に届いたもの (fMP4・Matroska・録画の TS)。**読み終えたら順に渡す** —
- * fMP4 の頭 (init) は選局の直後に1回しか来ないので、落とすと以降を1つも読めない。ライブの TS は溜めない (`init`)。読み終えたら null
+ * デコーダ (WASM) を読み終える前に届いたもの (fMP4・Matroska・録画の TS)。**読み終えたら順に渡す**。
+ * fMP4 の先頭 (init) は選局の直後に 1 回しか来ないので、落とすと以降を 1 つも読めない。ライブの TS は溜めない (`init`)。読み終えたら null
  */
 let early: Uint8Array[] | null = [];
 /** `early` に溜めたバイト数 (録画は `FOLLOW_BYTES_MOST` まで) */
 let earlyBytes = 0;
-/** `early` を溜めている間に尻まで届いた (`end`)。溜めたぶんを渡しきってから出しきる */
+/** `early` を溜めている間に末尾まで届いた (`end`)。溜めたぶんを渡しきってから出しきる */
 let earlyEnd = false;
-/** `early` に溜める上限 (箱の数)。1秒に 20 個ほど来るので、読み込みが 10 秒掛かっても足りる */
+/** `early` に溜める上限 (箱の数)。1 秒に 20 個ほど来るので、読み込みが 10 秒掛かっても足りる */
 const EARLY_MOST = 200;
 let dropped = 0;
 let shown = 0;
@@ -281,7 +281,7 @@ function onVideo(pes: Pes): void {
   }
 }
 
-/** 待たせている圧縮の頭を1つ取り出す */
+/** 待たせている圧縮の先頭を 1 つ取り出す */
 function shift(): Pending {
   const item = pending.shift() as Pending;
   pendingBytes -= item.data.length;
@@ -305,7 +305,7 @@ function dropUnder(): void {
 }
 
 /**
- * `target` より手前でいちばん新しい I フレームまで飛ぶ。**デコーダも開き直す** —
+ * `target` より手前でいちばん新しい I フレームまで飛ぶ。**デコーダも開き直す**。
  * 飛ばしたコマを参照するフレームを出させないため
  */
 function skipTo(target: number): void {
@@ -328,7 +328,7 @@ function onAudio(pes: Pes): void {
   )) {
     /*
      * 形式が変わったら (局・番組の切り替わりで 5.1ch ⇔ ステレオ、標本化周波数) 開き直す。
-     * デコーダは ADTS の頭を読んで自分で合わせもするが、前の形式の持ち越し (重ね合わせの
+     * デコーダは ADTS のヘッダを読んで自分で合わせもするが、前の形式の持ち越し (重ね合わせの
      * 半コマ) を新しい形式に混ぜないため
      */
     const config = `${frame.sampleRate}/${frame.channels}`;
@@ -344,7 +344,7 @@ function onAudio(pes: Pes): void {
 }
 
 /**
- * ADTS の1コマをデコードして画面へ渡す。**壊れたコマは飛ばす** (放送の取りこぼし)。
+ * ADTS の 1 コマをデコードして画面へ渡す。**壊れたコマは飛ばす** (放送の取りこぼし)。
  * 続けて転ぶなら諦める
  */
 function decodeAudio(audio: WasmAudio, data: Uint8Array, pts: number): void {
@@ -418,7 +418,7 @@ function take(): void {
   const pts = decoder._dec_peek_pts();
   if (lastFramePts !== null) {
     const gap = pts - lastFramePts;
-    // 1コマの長さを実際の間隔から知る (59.94p の局・3:2 のフィルム)
+    // 1 コマの長さを実際の間隔から知る (59.94p の局・3:2 のフィルム)
     if (gap > 0 && gap < 3 * FRAME) frameTicks = gap;
   }
   lastFramePts = pts;
@@ -444,7 +444,7 @@ function draw(field: number): void {
 }
 
 /**
- * 描いたばかりの1コマを小窓へ書き込む。**描いたのと同じ回のうちに写す** — 描いたものは
+ * 描いたばかりの 1 コマを小窓へ書き込む。**描いたのと同じ回のうちに写す**。描いたものは
  * 残さない作り (`preserveDrawingBuffer` 無し) なので、回をまたぐと消えている。
  *
  * canvas の画面への更新 (`captureStream`) から取っていた頃は、Ubuntu (GNOME) で Chrome の
@@ -482,7 +482,7 @@ function toPip(): void {
 function tick(): void {
   if (decoder === null || failed) return;
   schedule();
-  // 互換モード (WebCodecs) は見えていなくても止めない — デコードするのはたいてい GPU で、端末の CPU を取り合わない
+  // 互換モード (WebCodecs) は見えていなくても止めない。デコードするのはたいてい GPU で、端末の CPU を取り合わない
   if (fmp4 !== null) {
     tickFmp4(fmp4);
     return;
@@ -500,13 +500,13 @@ function tick(): void {
   }
 
   /*
-   * **新しい局の1枚目は、デコードできたらすぐ出して待つ** — 前の局の映像のまま新しい局の音を
+   * **新しい局の 1 枚目は、デコードできたらすぐ出して待つ**。前の局の映像のまま新しい局の音を
    * 聞かせると、見えているものと聞こえるものが食い違う。音の時計が動き出していても
    * 待たない: 放送の映像は音より先に届く (VBV の遅れ) ので、番を待つと 1 枚目が
-   * 0.5〜2 秒遅れていた (本番の実測)。番が来るまではこの1枚のまま止めておく。
+   * 0.5〜2 秒遅れていた (本番の実測)。番が来るまではこの 1 枚のまま止めておく。
    *
    * **録画で飛んだあとは、飛び先より前をデコードして捨てる** (`floor`)。それまでは前のフレームのまま
-   * (CM を飛ばしたなら本編の映像のまま)。1回にデコードするのは `UNDER_PER_TICK` 枚まで
+   * (CM を飛ばしたなら本編の映像のまま)。1 回にデコードするのは `UNDER_PER_TICK` 枚まで
    */
   if (!shownSinceReset) {
     const limit =
@@ -531,13 +531,13 @@ function tick(): void {
   if (head !== undefined && head.dts < at - BEHIND_MOST) skipTo(at);
 
   /*
-   * **先に出す。描いた回はデコードしない** — 描いたものはその回の終わりに画面へ渡るので、続けて
-   * デコードする (1枚は重いもので 10ms 近く) と回が延び、次の画面の切り替わりに間に合わないことがある。
+   * **先に出す。描いた回はデコードしない**。描いたものはその回の終わりに画面へ渡るので、続けて
+   * デコードする (1 枚は重いもので 10ms 近く) と回が延び、次の画面の切り替わりに間に合わないことがある。
    * 番のコマがまだデコードできていなければ、デコードしてから出す
    */
   if (!present(decoder, at)) {
     /*
-     * **1回にデコードするのは1枚まで** (遅れているときだけ3枚まで)。1枚は重いもので 10ms 近くかかるので、
+     * **1 回にデコードするのは 1 枚まで** (遅れているときだけ 3 枚まで)。1 枚は重いもので 10ms 近くかかるので、
      * まとめてデコードするとその間コマを出せず、番を過ぎて捨てるコマが増える。
      * 先にデコードしたものがあるうちは、画面の切り替わりの直後にだけ始める (`Vsync.settled`)
      */
@@ -614,7 +614,7 @@ function resetThin(grace = 0): void {
 
 /**
  * 映像が時計から大きく遅れたところから追いつく (裏から戻った・止めていたのを再開した)。追いつくまで
- * (`BACK_GRACE`) は、捨てたコマも遅れも数えない — B を飛ばしはじめる (`thin`) のにも、エンコードしたものに
+ * (`BACK_GRACE`) は、捨てたコマも遅れも数えない。B を飛ばしはじめる (`thin`) のにも、エンコードしたものに
  * 戻る (`budget.ts`) のにも
  */
 function catchUp(): void {
@@ -663,7 +663,7 @@ function present(decoder: Decoder, at: number): boolean {
   return shown !== before;
 }
 
-/** エンコードしたもの (fMP4) の刻み。描くのは `fmp4.ts` で、ここは遅れを見張って数を出すだけ */
+/** エンコードしたもの (fMP4) の刻み。描くのは `fmp4.ts` で、ここは遅れを確かめて数を出すだけ */
 function tickFmp4(video: Fmp4Video): void {
   const at = now();
   video.tick(at);
@@ -676,7 +676,7 @@ function tickFmp4(video: Fmp4Video): void {
   watch(late, video.frameTicks, video.queued, "再生が追いつきません");
 }
 
-/** 間に合っているかを見張り (`budget.ts`)、1秒ごとに数を出す */
+/** 間に合っているかを確かめ (`budget.ts`)、1 秒ごとに数を出す */
 function watch(
   late: number,
   frame: number,
@@ -690,7 +690,7 @@ function watch(
   report();
 }
 
-/** 1秒ごとに数を出す (見えていない間も。音のコマ数は画面がこの通知で書き出す) */
+/** 1 秒ごとに数を出す (見えていない間も。音のコマ数は画面がこの通知で書き出す) */
 function report(): void {
   const wall = performance.now();
   if (wall - statsAt < 1000) return;
@@ -708,8 +708,8 @@ function schedule(): void {
   };
   /*
    * **rAF ではなく細かい時計で刻む。** worker の rAF は描いたものが画面に出る速さに
-   * 引っ張られ、実機の録画 (1080i) をヘッドレスで流すと毎秒 6 回しか来なかった — 1回に
-   * 何枚もデコードすることになり、コマを出す番を逃し続ける。4ms ごとに1枚ずつデコードして、番が来た
+   * 引っ張られ、実機の録画 (1080i) をヘッドレスで流すと毎秒 6 回しか来なかった。1 回に
+   * 何枚もデコードすることになり、コマを出す番を逃し続ける。4ms ごとに 1 枚ずつデコードして、番が来た
    * コマを出す (描いたものはその回の終わりに画面へ渡る)
    */
   setTimeout(next, 4);
@@ -749,12 +749,12 @@ function reset(from: number | null): void {
 }
 
 /**
- * いま出しているコマを1枚返す (切り抜き。`messages.ts` の `grab`)。
- * **最後に描いたフィールドのまま** 描き直す — 1080i で別のフィールドを描くと、
+ * いま出しているコマを 1 枚返す (切り抜き。`messages.ts` の `grab`)。
+ * **最後に描いたフィールドのまま** 描き直す。1080i で別のフィールドを描くと、
  * 画面に見えていたものと半コマずれる。
  *
  * `size` があれば縮めたものを返す (アンビエントモード)。MPEG-2 は描き直した直後の面を
- * 半分ずつ縮めて写す (`downscale.ts`) — 呼んだ時点の面を写すので、描いたのと同じ回のうちなら読める
+ * 半分ずつ縮めて写す (`downscale.ts`)。呼んだ時点の面を写すので、描いたのと同じ回のうちなら読める
  * (`toPip` と同じ)。全部を `readPixels` で読み出す切り抜きの経路は通らない
  */
 async function grab(id: number, size: GrabSize | undefined): Promise<void> {
@@ -781,8 +781,8 @@ async function grab(id: number, size: GrabSize | undefined): Promise<void> {
 }
 
 /**
- * エンコードしたもの (fMP4) の音を受け取る側 (`fmp4.ts` の `AudioSink`)。デコードするのは MPEG-2 の経路と同じ WASM —
- * AAC は ADTS の頭を付けて (`fmp4.ts` が付ける)、Opus は OpusHead を渡して開く
+ * エンコードしたもの (fMP4) の音を受け取る側 (`fmp4.ts` の `AudioSink`)。デコードするのは MPEG-2 の経路と同じ WASM。
+ * AAC は ADTS のヘッダを付けて (`fmp4.ts` が付ける)、Opus は OpusHead を渡して開く
  */
 function openAudio(codec: "aac" | "opus", config: Uint8Array | null): boolean {
   if (audio === null) return false;
@@ -932,19 +932,19 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
         reset(message.from ?? null);
       } finally {
         // ここより前に出した音は前の局のもの。画面はこの返事まで捨てる (`engine.ts` の `resetting`)。
-        // 転んでも返す — 返さないと、画面はこのあとの音をずっと捨て続ける
+        // 転んでも返す。返さないと、画面はこのあとの音をずっと捨て続ける
         post({ type: "reset" });
       }
       break;
     case "end":
-      // 尻まで読んだ。デコーダを読み終えるまでは溜めたぶんの後ろで (`early`)
+      // 末尾まで読んだ。デコーダを読み終えるまでは溜めたぶんの後ろで (`early`)
       if (early !== null) earlyEnd = true;
       else mkv?.finish();
       break;
     case "audio":
-      // エンコードしたものには選んだ音声1本しか入っていない (選び直すとサーバが再エンコードする)
+      // エンコードしたものには選んだ音声 1 本しか入っていない (選び直すとサーバが再エンコードする)
       if (mode === "mkv") {
-        // 保存した録画はトラックを選び直す (次の頭から効く。画面がリクエストし直す)
+        // 保存した録画はトラックを選び直す (次のリクエストし直しから効く。画面がリクエストし直す)
         mkv?.selectAudio(message.index);
         break;
       }
@@ -961,7 +961,7 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
     case "pip":
       void pip?.abort().catch(() => undefined);
       pip = message.writable.getWriter();
-      // 1枚目は書く (受け手がコマの大きさを知るまで小窓に出せない)。そのあとは画面が決める
+      // 1 枚目は書く (受け手がコマの大きさを知るまで小窓に出せない)。そのあとは画面が決める
       pipFlowing = true;
       break;
     case "pipFlow":

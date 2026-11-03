@@ -2,7 +2,7 @@
  * 文書 ([document.ts](document.ts)) をページに描く。
  *
  * - 作るのは絶対配置の div / span / br と、画像の img だけ。**innerHTML も属性の写しも
- *   使わない** — 字は textContent、見た目は確かめた値 (px の数・CLUT の色・列挙) から組んだ
+ *   使わない。** 字は textContent、見た目は確かめた値 (px の数・CLUT の色・列挙) から組んだ
  *   style だけ。放送の on* や任意の属性がページに出ることは無い
  * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、そこより前に描くものの
  *   背景には穴を開ける (映像は下にあって、穴から見える。web-bml の clipVideoPlane と同じ考え)

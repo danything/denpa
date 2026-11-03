@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /**
  * ライブの fMP4 から音だけ読み、WASM でデコードして PCM を画面へ返す (`native-audio.ts`)。
- * デコードは canvas に描く worker と同じ口 (`wasm-audio.ts`)。デコーダを読み終えるまでに届いたものは溜めておき、
+ * デコードは canvas に描く worker と同じ関数 (`wasm-audio.ts`)。デコーダを読み終えるまでに届いたものは溜めておき、
  * 読み終えたら順に流す
  */
 import { type Fmp4Track, readFragment, readInit } from "../ts/fmp4";

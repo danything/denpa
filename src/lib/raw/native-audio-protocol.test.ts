@@ -9,7 +9,7 @@ describe("別に鳴らす音は映像の時計に合わせる", () => {
     expect(p.when).toBeCloseTo(50.17, 8);
     expect(p.offset).toBe(0);
   });
-  test("間に合わなかった頭は切り、過ぎたコマは捨てる", () => {
+  test("間に合わなかった先頭は切り、過ぎたコマは捨てる", () => {
     const p = audioPlan(10, 0.04, 10.01, 1, 20, 0)!;
     expect(p.when).toBeCloseTo(20.005, 8);
     expect(p.offset).toBeCloseTo(0.015, 8);

@@ -15,7 +15,7 @@ export type AudioOutput =
   | { type: "ack"; bytes: number }
   | { type: "error"; message: string };
 
-/** PCM の1コマを映像の時計の上に置く。間に合わなかった頭は鳴らし直さず切る。全部過ぎていれば null */
+/** PCM の 1 コマを映像の時計の上に置く。間に合わなかった先頭は鳴らし直さず切る。全部過ぎていれば null */
 export function audioPlan(
   pts: number,
   duration: number,

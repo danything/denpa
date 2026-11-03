@@ -1,10 +1,10 @@
 /**
- * **WASM のデコーダ (`wasm/decoder.c`) の音の口。** canvas に描く worker (`worker.ts`) と、ライブの音だけを
- * 鳴らす worker (`native-audio-worker.ts`) で同じものを使う。どちらも AAC は ADTS の頭を付けて、
+ * **WASM のデコーダ (`wasm/decoder.c`) の音の関数。** canvas に描く worker (`worker.ts`) と、ライブの音だけを
+ * 鳴らす worker (`native-audio-worker.ts`) で同じものを使う。どちらも AAC は ADTS のヘッダを付けて、
  * Opus は OpusHead を渡して開く (`fmp4.ts` の `audioCodec`・`audioFrame`)
  */
 
-/** デコーダのうち、音とメモリの口 */
+/** デコーダのうち、音とメモリの関数 */
 export interface AudioDecoder {
   _aac_open(): number;
   _opus_open(extra: number, length: number): number;
@@ -16,7 +16,7 @@ export interface AudioDecoder {
   HEAP32: Int32Array;
 }
 
-/** デコードできた1コマ。面は写して持ち出したもの (デコーダの面は次のコマで上書きされる) */
+/** デコードできた 1 コマ。面は写して持ち出したもの (デコーダの面は次のコマで上書きされる) */
 interface Pcm {
   sampleRate: number;
   samples: number;
@@ -31,7 +31,7 @@ export interface Slot {
 
 /**
  * WASM のメモリに `size` バイトの置き場を用意する。**足りるうちは使い回す。** 取れなければ
- * `pointer` が 0 で大きさも 0 (次にまた取りに行く。0 番地へ書かせない)
+ * `pointer` が 0 で大きさも 0 (次にまた確保する。アドレス 0 へ書かせない)
  */
 export function ensure(decoder: AudioDecoder, slot: Slot, size: number): Slot {
   if (size <= slot.size) return slot;
@@ -62,7 +62,7 @@ export class WasmAudio {
     return at !== 0 && this.decoder._opus_open(at, config!.length) === 0;
   }
 
-  /** 1コマデコードする。**出てこなければ null、壊れたコマ (と置き場を取れない・形式がおかしい) は `"broken"`** */
+  /** 1 コマデコードする。**出てこなければ null、壊れたコマ (と置き場を取れない・形式がおかしい) は `"broken"`** */
   decode(data: Uint8Array): Pcm | null | "broken" {
     const d = this.decoder;
     const at = this.put(data);
@@ -70,7 +70,7 @@ export class WasmAudio {
     const samples = d._audio_push(at, data.length);
     if (samples < 0) return "broken";
     if (samples === 0) return null;
-    // デコードしたあとに読む — メモリが伸びると HEAPU8 の下の ArrayBuffer が替わる
+    // デコードしたあとに読む。メモリが伸びると HEAPU8 の下の ArrayBuffer が替わる
     const info = d._audio_peek() >> 2;
     const channels = d.HEAP32[info]!;
     const sampleRate = d.HEAP32[info + 1]!;

@@ -119,7 +119,7 @@ describe("CSS", () => {
     ]);
   });
 
-  test("行の頭の div:focus・p:focus は規則として読む (BS日テレの書き方)", () => {
+  test("行頭の div:focus・p:focus は規則として読む (BS日テレの書き方)", () => {
     const rules = parseStylesheet(
       "p { color-index: 1 }\ndiv:focus { color-index: 2 }\np:focus{color-index:3}\n",
     );
