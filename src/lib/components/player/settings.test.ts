@@ -89,7 +89,6 @@ describe("⚙ のコーデックの行 (ライブ・追っかけ)", () => {
       icon,
       choice: "auto",
       format: "raw",
-      raw: true,
       unavailable: [],
       onselect: (next) => picked.push(next),
       ...over,
@@ -125,9 +124,14 @@ describe("⚙ のコーデックの行 (ライブ・追っかけ)", () => {
     expect(picked).toEqual(["raw", "auto", "h264"]);
   });
 
-  test("追っかけには MPEG-2 が無い", () => {
-    const { made } = codecs({ raw: false, format: "av1" });
-    expect(made.options.map((o) => o.key)).toEqual(["auto", "av1", "h264"]);
+  test("ライブでも追っかけでも MPEG-2 を並べる", () => {
+    const { made } = codecs({ format: "av1" });
+    expect(made.options.map((o) => o.key)).toEqual([
+      "auto",
+      "av1",
+      "h264",
+      "mpeg2",
+    ]);
   });
 
   test("H.264 と H.265 を出さない設定では並べない。自動でそれになっていれば値には出す", () => {

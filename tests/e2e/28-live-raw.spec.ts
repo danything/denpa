@@ -660,8 +660,8 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     await expect(page.getByTestId("live-warning")).toContainText(
       "MPEG-2 を再生できません",
     );
-    // 選んでいた MPEG-2 は自動に戻す (開くたびに断り書きを出さない)。家の中でも MPEG-2 は使えないので AV1
-    await expect(page.getByTestId("live-codec")).toContainText("自動 (AV1)");
+    // 選んでいた MPEG-2 は自動に戻す (開くたびに断り書きを出さない)。家の中の順 (MPEG-2 → H.264 → AV1) で MPEG-2 の次の H.264
+    await expect(page.getByTestId("live-codec")).toContainText("自動 (H.264)");
     await expect(page.getByTestId("live-raw")).toHaveCount(0);
   });
 

@@ -1,12 +1,12 @@
 import { error, redirect } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 
-import { HIDDEN_CODECS } from "#lib/live-choice.js";
 import { orm } from "#lib/server/db.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { relative } from "#lib/server/paths.js";
 import { recordings } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
+import { viewingOptions } from "#lib/server/viewing.js";
 
 import type { PageServerLoad } from "./$types";
 
@@ -14,8 +14,8 @@ import type { PageServerLoad } from "./$types";
  * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
  * **録画中の録画**を、いま録れているところまで観る画面。
  *
- * 元のTSはブラウザで読めないので (MPEG-2)、観るのはライブと同じプレイヤー —
- * サーバが再エンコードして WebSocket で運ぶ (`server/live.ts` の `openChase`)。
+ * 観るのはライブと同じプレイヤーで、サーバが再エンコードするか元の TS のまま (MPEG-2) WebSocket で運ぶ
+ * (`server/live.ts` の `openChase`)。どちらにするかの決め方もライブと同じ (`#lib/live-choice.ts`)。
  */
 export const load: PageServerLoad = ({ params, url }) => {
   const id = Number(params.id);
@@ -35,6 +35,7 @@ export const load: PageServerLoad = ({ params, url }) => {
   if (rec.library_path !== null || rec.finished_at !== null)
     redirect(302, relative(url, `/watch/${rec.id}`));
   if (rec.ts_path === null) error(404, "まだ何も録画されていません");
+  const viewing = viewingOptions(url);
 
   return {
     rec: {
@@ -60,7 +61,9 @@ export const load: PageServerLoad = ({ params, url }) => {
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
     jikkyoNg: settings().jikkyoNg,
     /** コーデックのメニューから外すもの (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) */
-    hidden: settings().hideH264Hevc ? [...HIDDEN_CODECS] : [],
+    hidden: viewing.hidden,
+    /** 開いた名前が家の中か (`#lib/host.ts` の `indoorHost`)。「自動」の形式をライブと同じ決め方で画面が決める */
+    indoor: viewing.indoor,
     /** 実況のチャンネルと頭・終わりの放送時刻。古いところは過去ログ API、新しいところは NX-Jikkyo から取る */
     jikkyo: recordingJikkyo(rec),
   };

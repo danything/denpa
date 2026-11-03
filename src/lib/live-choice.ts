@@ -1,13 +1,14 @@
 /**
- * **ライブと追っかけで、どの形式で観るか** (コーデックのメニュー)。画面 (`live-player.svelte.ts`) とサーバ
- * (`server/live-start.ts` の先回り) が同じ決め方をするので、ここに置く (docs/stream.md「どの形式で流すか」)。
+ * **どの形式で観るか** (コーデックのメニュー)。「自動」の順はライブ・追っかけ・録画の観る画面で同じ関数 (`autoOrder`) から出す。
+ * 画面 (`live-player.svelte.ts`・`ts/playback.ts`) とサーバ (`server/viewing.ts` の先回り) が同じ決め方をするので、
+ * ここに置く (docs/stream.md「どの形式で流すか」)。
  */
 
 import { LIVE_CODECS, type LiveCodec } from "./live";
 
 /**
  * メニューで選んだもの。`auto` は端末と開いた場所 (家の中か) に合わせる (`autoCodec`)。
- * `raw` は MPEG-2 (放送のまま。ライブだけ)。**端末ごとに覚える** (`LAST_COOKIE` の `choice`)
+ * `raw` は MPEG-2 (放送のまま)。ライブは**端末ごとに覚える** (`LAST_COOKIE` の `choice`)
  */
 export type LiveChoice = "auto" | LiveCodec | "raw";
 
@@ -37,23 +38,45 @@ export function readChoice(value: unknown, hidden: boolean): LiveChoice {
   return "auto";
 }
 
+/** エンコード済みのコーデック (録画の観る画面で選ぶもの) */
+export type EncodedCodec = "av1" | "hevc" | "h264";
+
 /**
- * **「自動」の形式。** 使えるもの (`rawOk`・`av1`・`hevc`・`h264`) のうち、次の順で先頭のもの。どれも使えなければ null。
+ * **「自動」の順。ライブ・追っかけ・録画の観る画面で、この1つで決める。** 画面ごとの例外は作らず、その画面で出せない形式
+ * (追っかけの H.265 など) は呼ぶ側が並びから外すだけにする。
  *
- * | 場面 | 順 |
- * | --- | --- |
- * | 家の中 (`indoor`) | MPEG-2 → AV1 → H.265 → H.264 |
- * | 外 | AV1 → H.265 → H.264 |
- * | 互換モード (`compat`。canvas に描く) | AV1 → H.264 → MPEG-2 |
- * | 追っかけ (`chase`。MPEG-2 は無い) | AV1 → H.264 (家の中でも、互換モードでも) |
+ * | 場面 | 家の中 (`indoor`) | 外 | 互換モード (`compat`。canvas に描く) |
+ * | --- | --- | --- | --- |
+ * | その場でエンコード (ライブ・追っかけ) | MPEG-2 → H.264 → AV1 → H.265 | AV1 → H.265 → H.264 | AV1 → H.264 → MPEG-2 |
+ * | エンコード済み (`encoded`。録画の観る画面) | AV1 → H.265 → H.264 | AV1 → H.265 → H.264 | (`ts/playback.ts` の `pickCanvas`) |
  *
- * 家の中で MPEG-2 を先にするのは、サーバがエンコードせずに済み、画質も放送のままだから。外では太すぎる
- * (放送のままは 1局で 15Mbit/s ほど)。互換モードで MPEG-2 を後ろにするのは、エンコードしたものより canvas に描くのが重いから。
- * H.265 は同じ画質で H.264 より小さいので先にする。互換モードと追っかけでは出さない。
+ * - 家の中は**開くまでの速さ**を採る。MPEG-2 はエンコードせずに済み、画質も放送のまま。次はエンコードの立ち上がりが速い H.264
+ * - 外は**回線**を採る。放送のままは 1局で 15Mbit/s ほどあり太すぎる。同じ画質で小さい順 (AV1 → H.265 → H.264)
+ * - 互換モードで MPEG-2 を後ろにするのは、エンコードしたものより canvas に描くのが重いから
+ * - エンコード済みは小さい順。もうエンコードしてあるので、開く速さはコーデックで変わらない
+ */
+export function autoOrder(scene: "encoded"): readonly EncodedCodec[];
+export function autoOrder(scene: {
+  indoor: boolean;
+  compat: boolean;
+}): readonly LiveFormat[];
+export function autoOrder(
+  scene: "encoded" | { indoor: boolean; compat: boolean },
+): readonly LiveFormat[] {
+  if (scene === "encoded") return ["av1", "hevc", "h264"];
+  if (scene.compat) return ["av1", "h264", "raw"];
+  return scene.indoor
+    ? ["raw", "h264", "av1", "hevc"]
+    : ["av1", "hevc", "h264"];
+}
+
+/**
+ * **ライブと追っかけの「自動」の形式。** `autoOrder` の順で、使えるもの (`rawOk`・`av1`・`hevc`・`h264`) の先頭。どれも
+ * 使えなければ null。
  *
  * `rawOk` は「この端末で MPEG-2 をデコードできて、まだ諦めていない」、`av1`・`hevc`・`h264` は「受け取れて (互換モードなら
  * 描けて)、まだ諦めていない」。`hevc` はそのうえでライブのエンコーダが GPU のとき (`server/viewing.ts` の
- * `ViewingOptions.hevc`)。どれが諦められたかは呼ぶ側が持つ
+ * `ViewingOptions.hevc`)。追っかけと互換モードでは呼ぶ側が false にする。どれが諦められたかは呼ぶ側が持つ
  */
 export function autoCodec(o: {
   indoor: boolean;
@@ -62,16 +85,9 @@ export function autoCodec(o: {
   hevc: boolean;
   h264: boolean;
   compat: boolean;
-  chase: boolean;
 }): LiveFormat | null {
-  const order: LiveFormat[] = o.chase
-    ? ["av1", "h264"]
-    : o.compat
-      ? ["av1", "h264", "raw"]
-      : o.indoor
-        ? ["raw", "av1", "hevc", "h264"]
-        : ["av1", "hevc", "h264"];
   return (
-    order.find((format) => (format === "raw" ? o.rawOk : o[format])) ?? null
+    autoOrder(o).find((format) => (format === "raw" ? o.rawOk : o[format])) ??
+    null
   );
 }

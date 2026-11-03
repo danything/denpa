@@ -85,7 +85,11 @@
 
   /** 運転中の注意 (互換モード。`drive-gate.svelte.ts`)。押すまで再生を始めない */
   const drive = driveGate();
-  const player = livePlayer({ confirm: drive.confirm });
+  // 開いた名前が家の中か (サーバが決める)。「自動」の形式をライブと同じ決め方で決める
+  const player = livePlayer({
+    confirm: drive.confirm,
+    indoor: untrack(() => data.indoor),
+  });
   /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
   let video = $state<HTMLVideoElement | null>(null);
   let still = $state<HTMLCanvasElement | null>(null);
@@ -467,7 +471,7 @@
             {/snippet}
           </InfoBlock>
 
-          <!-- 速さはいつでも選べる (録れている範囲の中を進むだけ)。互換モードは等速だけ -->
+          <!-- 速さはいつでも選べる (録れている範囲の中を進むだけ)。canvas に描くとき (互換モード・MPEG-2) は等速だけ -->
           {#if !player.canvas}
             <Extras>
               <SpeedMenu
@@ -504,7 +508,7 @@
             codec={liveCodecs({
               icon: CODEC,
               choice: player.choice,
-              format: player.codec,
+              format: player.format,
               hidden: data.hidden.length > 0,
               unavailable: player.unavailable,
               onselect: (next) => player.setChoice(next),
