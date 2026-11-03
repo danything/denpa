@@ -1549,3 +1549,41 @@ describe("チューナーの名指し", () => {
     b.close();
   });
 });
+
+describe("定義の書き換えと選局", () => {
+  const FOUR = [
+    { name: "gr0", types: ["GR"] },
+    { name: "bs0", types: ["BS", "CS"] },
+    { name: "bs1", types: ["BS", "CS"] },
+    { name: "off0", types: ["GR"], disabled: true },
+  ];
+
+  test("名前を変えずに無効にしたチューナーの選局は畳み、利用者を残さない", async () => {
+    expect(
+      (await request("PUT", "/denpa/tuners", { tuners: FOUR })).status,
+    ).toBe(200);
+    const stream = await open("type=GR&channel=T22&use=epg%20T22&priority=3");
+    await stream.reader?.read();
+    expect((await tuners())[0].users.map((u) => u.use)).toEqual(["epg T22"]);
+
+    const off = FOUR.map((t) =>
+      t.name === "gr0" ? { ...t, disabled: true } : t,
+    );
+    expect(
+      (await request("PUT", "/denpa/tuners", { tuners: off })).status,
+    ).toBe(200);
+    // 畳まれたので読めなくなる。読めなくなること自体が合図
+    const ended = await Promise.race([
+      drain(stream.reader as ReadableStreamDefaultReader),
+      sleep(5000).then(() => null),
+    ]);
+    expect(ended).not.toBeNull();
+    const status = await tuners();
+    expect(status[0].users).toEqual([]);
+    expect(status[0].channel).toBeNull();
+
+    expect(
+      (await request("PUT", "/denpa/tuners", { tuners: FOUR })).status,
+    ).toBe(200);
+  });
+});
