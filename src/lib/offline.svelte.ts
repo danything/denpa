@@ -560,6 +560,8 @@ async function receiveInPage(
     await videos.put(held);
   } catch {
     if (signal.aborted && failure === null) return;
+    // 受け取りの終わりを待つあいだに消された・やり直しが始まった録画には、失敗の行を書き戻さない
+    if (inPage.get(held.id) !== control) return;
     // 失敗は消さずに残す (やり直しの入口)。塊は捨てて場所を空ける
     held.state = "failed";
     delete held.parts;
