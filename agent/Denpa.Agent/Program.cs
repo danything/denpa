@@ -172,6 +172,49 @@ void PrepareDaemons()
     UserlandDaemon.Prepare(AsicenUserland.IdsIn(pool.Tuners).ToList(), AsicenDaemon.For);
 }
 
+/*
+ * **挿した機材を、そのまま使えるようにする** (DeviceWatch が抜き差しを受け取ったら呼ぶ)。
+ * 定義を書いてあれば、無い機材を有効なチューナーとして末尾に書き足す。抜いた機材は定義から消さない
+ * (挿し直したときに名前や無効の設定が戻るように)。定義を書いていなければ、見つけたもので置き換える。
+ * 画面からの書き換え (PUT /denpa/tuners) と同じロックで、書き足しと書き換えが混ざらないようにする
+ */
+var tunersGate = new Lock();
+void Rescan()
+{
+    lock (tunersGate)
+    {
+        var found = DeviceProbe.Detect();
+        var written = config.LoadTuners();
+        if (written.Count == 0)
+        {
+            if (found.Select(tuner => tuner.Device).SequenceEqual(pool.Tuners.Select(tuner => tuner.Device))) return;
+            Log.Write($"挿さっている機材が変わりました ({found.Count} 台)");
+            pool.Replace(found);
+        }
+        else
+        {
+            var known = written.Select(tuner => tuner.Device).ToHashSet();
+            var names = written.Select(tuner => tuner.Name).ToHashSet();
+            var added = new List<TunerSpec>();
+            foreach (var tuner in found.Where(tuner => !known.Contains(tuner.Device)))
+            {
+                // 名前は定義の中で重ならないようにする (チューナーを名前で見分ける。TunerPool.Replace)
+                var name = tuner.Name;
+                for (var n = 2; names.Contains(name); n++) name = $"{tuner.Name} ({n})";
+                names.Add(name);
+                added.Add(tuner with { Name = name });
+            }
+            if (added.Count == 0) return;
+            foreach (var tuner in added) Log.Write($"挿した機材を定義に足しました: {tuner.Name} [{string.Join(", ", tuner.Types)}] {tuner.Device}");
+            config.SaveTuners([.. written, .. added]);
+            var (resolved, auto) = config.ResolveTuners();
+            pool.Detected = auto;
+            pool.Replace(resolved);
+        }
+    }
+    PrepareDaemons();
+}
+
 var builder = WebApplication.CreateSlimBuilder(args);
 // 鍵を配るポートだけは待ち受けを自分で作る (IPv4 と IPv6 を分けて TTL を付ける。CardShareServer.cs)
 if (sharing is { } server) builder.WebHost.UseSockets(sockets => sockets.CreateBoundListenSocket = server.Bind);
@@ -399,26 +442,6 @@ JsonObject TunerList() => new() { ["tuners"] = pool.Status(), ["detected"] = poo
 app.MapGet("/denpa/tuners", (HttpContext http) => Respond.Write(http, TunerList()));
 
 /*
- * 挿さっているのに、書いてある定義に無い機材。**定義を書いてあると、新しく挿した機材は使わない**
- * (書いた順や設定を勝手に変えない) ので、画面に出して足せるようにする。
- * 探すのは画面が開いたときだけ (機材を探すのは数百 ms かかり、asicen はファームウェアも流し込む)。
- * 定義を書いていない (自動で見つけた) ときは、見つけたものを全部使っているので空
- */
-app.MapGet("/denpa/tuners/unlisted", (HttpContext http) =>
-{
-    var list = new JsonArray();
-    if (!pool.Detected)
-    {
-        var known = pool.Tuners.Select(tuner => tuner.Device).ToHashSet();
-        foreach (var found in Unlisted.Detect().Where(found => !known.Contains(found.Device)))
-        {
-            list.Add((JsonNode)new JsonObject { ["name"] = found.Name, ["types"] = Json.Strings(found.Types), ["device"] = found.Device });
-        }
-    }
-    return Respond.Write(http, list);
-});
-
-/*
  * 機材の定義を書き換える。**画面から。**
  *
  * 受け取るのはデバイスと種別と LNB だけで、選局コマンドは受け取らない (TunerSpec)。
@@ -450,10 +473,13 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
         return;
     }
 
-    config.SaveTuners([.. next.OfType<TunerSpec>()]);
-    var (resolved, auto) = config.ResolveTuners();
-    pool.Detected = auto;
-    pool.Replace(resolved);
+    lock (tunersGate)
+    {
+        config.SaveTuners([.. next.OfType<TunerSpec>()]);
+        var (resolved, auto) = config.ResolveTuners();
+        pool.Detected = auto;
+        pool.Replace(resolved);
+    }
     // 新しく書かれた筐体があれば px4d / asicend を起こす。数秒かかるので返事は待たせない
     _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, TunerList());
@@ -533,6 +559,9 @@ _ = Task.Run(() =>
     PrepareDaemons();
     if (warmCard) Keys.Local.Warm();
 });
+
+// 機材の抜き差しを受け取ったら、定義に足す (Rescan。DeviceWatch.cs)。偽の選局で動かす適合テストでは受け取らない
+using var watch = tune.FakeTune is null ? new DeviceWatch(Rescan) : null;
 
 /*
  * **選局を離すのは `ApplicationStopping` で。** これが来るのは `Drain` が録画を待ち終えてからなので、録画は切らない

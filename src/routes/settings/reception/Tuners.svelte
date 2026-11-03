@@ -57,19 +57,10 @@
   let opened = $state<number | null>(null);
   /** 「追加」で出す欄。足せたら (台数が増えたら) 閉じる。断られたら打った字を残したまま */
   let adding = $state(false);
-  /** 一覧に無い機材の「追加」で、足す欄に先に入れておく値。手で開いたときは空 */
-  let prefill = $state<{
-    name: string;
-    device: string;
-    types: readonly string[];
-  } | null>(null);
   let lastCount = 0;
   $effect(() => {
     const count = shownTuners.value?.list.length ?? 0;
-    if (count > lastCount) {
-      adding = false;
-      prefill = null;
-    }
+    if (count > lastCount) adding = false;
     if (count < lastCount) opened = null;
     lastCount = count;
   });
@@ -354,54 +345,23 @@
             <input type="hidden" name="use.add" value="on" />
             <label class="field">
               <span>名前</span>
-              <input
-                class="w-name"
-                name="name.add"
-                value={prefill?.name ?? ""}
-              />
+              <input class="w-name" name="name.add" />
             </label>
             <label class="field grow">
               <span>デバイス</span>
               <input
                 class="mono"
                 name="device.add"
-                value={prefill?.device ?? ""}
                 placeholder="/dev/dvb/adapter0/frontend0"
               />
             </label>
             <div class="field">
               <span>受信できる種別</span>
-              {@render typeChips("add", prefill?.types ?? [])}
+              {@render typeChips("add", [])}
             </div>
             {@render lnbField("lnb.add", "")}
           </div>
         {/if}
-        <!--
-            **挿さっているのに一覧に無い機材を出す。** 一覧を書いてあると、エージェントは新しく挿した機材を使わない
-            (書いた順や設定を勝手に変えない)。「追加」で、足す欄に名前・デバイス・種別を入れて開く
-        -->
-        {#await data.unlisted then unlisted}
-          {#if unlisted.length > 0 && !adding}
-            <div class="stack small" data-testid="tuner-unlisted">
-              <p>挿さっているのに、一覧に無い機材があります</p>
-              {#each unlisted as found (found.device)}
-                <div class="cluster">
-                  <span>{found.name} ({found.types.join("・")})</span>
-                  <span class="mono muted">{found.device}</span>
-                  <button
-                    type="button"
-                    class="small secondary outline"
-                    onclick={() => {
-                      prefill = found;
-                      adding = true;
-                    }}
-                    data-testid="tuner-unlisted-add">追加</button
-                  >
-                </div>
-              {/each}
-            </div>
-          {/if}
-        {/await}
         <div class="cluster actions">
           {#if adding}
             <button
@@ -414,10 +374,7 @@
             <button
               type="button"
               class="small ghost"
-              onclick={() => {
-                adding = false;
-                prefill = null;
-              }}>取消</button
+              onclick={() => (adding = false)}>取消</button
             >
           {:else}
             <button

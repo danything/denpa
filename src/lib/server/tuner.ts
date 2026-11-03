@@ -168,34 +168,6 @@ export async function getTuners(): Promise<AgentTuner[]> {
   return (await tunerList()).tuners;
 }
 
-const UNLISTED = array(
-  object({ name: string, types: array(CHANNEL_TYPE), device: string }),
-);
-export type UnlistedTuner = Infer<typeof UNLISTED>[number];
-
-/**
- * 挿さっているのに、書いてある定義に無い機材 (エージェントの `/denpa/tuners/unlisted`)。
- * 定義を書いてあると新しく挿した機材は使われないので、設定の「チューナー」に出して足せるようにする。
- * 古いエージェントには無いので、404 は空として読む
- */
-export async function getUnlistedTuners(): Promise<UnlistedTuner[]> {
-  const res = await agentFetch("/denpa/tuners/unlisted", {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (res.status === 404) return [];
-  if (!res.ok) {
-    throw new Error(
-      `エージェント /denpa/tuners/unlisted -> ${res.status} ${await res.text()}`,
-    );
-  }
-  return tolerate(
-    UNLISTED,
-    await res.json(),
-    "エージェントの /denpa/tuners/unlisted",
-  );
-}
-
 /**
  * 機材の定義を書き換える。
  *
