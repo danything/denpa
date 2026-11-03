@@ -18,9 +18,9 @@ import {
  * **空きが無いだけなら、掛け直せば通る。**
  *
  * ライブはチャンネルを変える一瞬だけ、前のチャンネルと合わせてチューナーが
- * 2台要る — 前のを離してから次を要求しているが、離れたことがエージェントに届くのは
- * 非同期なので重なる瞬間が残る。地上波は2台しかないので、録画か番組表集めが
- * 1台使っていると、そこで断られていた (実機で
+ * 2 台要る。前のを離してから次を要求しているが、離れたことがエージェントに届くのは
+ * 非同期なので重なる瞬間が残る。地上波は 2 台しかないので、録画か番組表の取得が
+ * 1 台使っていると、そこで断られていた (実機で
  * `[live] GR:T15: チューナーに空きがありません`)。
  *
  * 字幕側で一度断られると、**そのチャンネルの字幕がそれきり出ない**という
@@ -151,7 +151,7 @@ describe("recordingHolds", () => {
             { use: "epg T21", priority: 3 },
           ],
         }),
-        // ライブや番組表集めだけのチューナーは入れない (録画に譲る約束)
+        // ライブや番組表の取得だけのチューナーは入れない (録画に譲る約束)
         tuner({
           name: "gr0",
           rank: 0,
@@ -186,7 +186,7 @@ describe("recordingHolds", () => {
 
 /**
  * **引き継ぎ (`after`) は、選局の API にそのまま並べて渡す。** エージェントは何度でも書ける
- * `after` を読み、その利用者をもう離れたものとして選ぶ (docs/agent.md「選ぶ順の約束」の4)
+ * `after` を読み、その利用者をもう離れたものとして選ぶ (docs/agent.md「選ぶ順の約束」の 4)
  */
 describe("openChannelStream の引き継ぎ", () => {
   test("止めた録画の利用者を after に並べる", async () => {
@@ -201,6 +201,7 @@ describe("openChannelStream の引き継ぎ", () => {
     });
     const { config } = await import("./config");
     const before = config.agentUrl;
+    const beforeData = config.dataDir;
     config.agentUrl = fakeAgentUrl(agent.port!);
     // 組んだエージェントの証明書を置く所。既定の /data は CI では書けない
     config.dataDir = mkdtempSync(join(tmpdir(), "denpa-tuner-"));
@@ -218,6 +219,7 @@ describe("openChannelStream の引き継ぎ", () => {
       aborter.abort();
     } finally {
       config.agentUrl = before;
+      config.dataDir = beforeData;
       agent.stop(true);
     }
     expect(asked[0]?.getAll("after")).toEqual(["rec 7", "rec 8"]);

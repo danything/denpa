@@ -20,7 +20,7 @@
  * - 200 以外 (部分取得の 206 や、中身の無い 204・304)、HEAD
  *
  * **何も import しない** (`node:zlib` だけ)。`server.js` は SvelteKit のビルドの外にある素の JS で、
- * このファイルを直に読む — 本番のイメージにもこの1枚を置いてある (Dockerfile。`address.ts` と同じ)
+ * このファイルを直に読む。本番のイメージにもこのファイルを置いてある (Dockerfile。`address.ts` と同じ)
  */
 import { constants, createBrotliCompress, createGzip } from "node:zlib";
 
@@ -31,7 +31,7 @@ import { constants, createBrotliCompress, createGzip } from "node:zlib";
 const COMPRESSIBLE =
   /^(?:text\/(?:html|css|javascript|plain|xml|csv|sveltekit-data)|application\/(?:json|javascript|xml|manifest\+json|ld\+json)|image\/svg\+xml)\s*(?:;|$)/i;
 
-/** これより小さいと分かっている応答は縮めない (縮めても数百バイトしか減らず、頭の分だけ損) */
+/** これより小さいと分かっている応答は縮めない (縮めても数百バイトしか減らず、ヘッダの分だけ損) */
 export const MIN_SIZE = 1024;
 
 type Encoding = "br" | "gzip";

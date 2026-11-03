@@ -1,12 +1,12 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-
 /**
  * テストと開発用の偽のエージェントに要る TLS と「組む」受け答え (`tests/fake/agent.ts` と単体テストで使う)。
  *
- * 本物 (agent/Denpa.Agent/AgentTls.cs) との違いは1つ: **相手の証明書を見ない。** Bun.serve からは
+ * 本物 (agent/Denpa.Agent/AgentTls.cs) との違いは 1 つで、**相手の証明書を見ない。** Bun.serve からは
  * クライアント証明書を読めないので、denpa が名乗った指紋 (`client`) をそのまま信じて証しを返す。
  * denpa 側の確かめ (証しを確かめて証明書を覚える) は本物と同じに通る。
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+
 import { createIdentity, pairProof } from "./agent-client";
 import type { Identity } from "./agent-client";
 import { config } from "./config";
@@ -16,7 +16,7 @@ export const FAKE_AGENT_PAIR = "fake-agent-pair";
 
 let identity: Identity | null = null;
 
-/** 偽のエージェントの鍵と証明書。プロセスの中では1つ (組み直しを起こさないため) */
+/** 偽のエージェントの鍵と証明書。プロセスの中では 1 つ (組み直しを起こさないため) */
 export function fakeAgentIdentity(): Identity {
   identity ??= createIdentity("denpa-agent");
   return identity;

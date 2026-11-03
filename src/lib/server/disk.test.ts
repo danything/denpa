@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * ディスク残量の見張り。**境目をまたいだ一度だけ鳴らす**のが要点なので、そこを見る。
+ * ディスク残量の定期チェック。**境目をまたいだ一度だけ鳴らす**のが要点なので、そこを見る。
  *
  * webhook は差し替える (本物は DB とネットワークを触る)。閾値を実際の空きより
  * 上下させて「下回る/戻る」を作り、鳴った回数を数える
@@ -15,7 +15,7 @@ mock.module("./webhook", () => ({
 }));
 
 const { config } = await import("./config");
-// 元のTSの置き場とエンコード済みの置き場を同じ実在ディレクトリへ。重複は畳まれて1つになる
+// 元の TS の置き場とエンコード済みの置き場を同じ実在ディレクトリへ。重複は畳まれて 1 つになる
 const dir = mkdtempSync(join(tmpdir(), "denpa-disk-"));
 config.rawDir = dir;
 config.encodedDir = dir;
@@ -31,7 +31,7 @@ const HUGE = Number.MAX_SAFE_INTEGER;
 test("下回ったら鳴らし、戻るまで鳴らし直さない", () => {
   posted.length = 0;
 
-  // 下回る → 1回鳴る
+  // 下回る → 1 回鳴る
   config.diskLowThreshold = HUGE;
   checkDisk();
   expect(posted.filter((p) => p.event === "disk.low")).toHaveLength(1);
@@ -52,7 +52,7 @@ test("下回ったら鳴らし、戻るまで鳴らし直さない", () => {
   expect(posted.filter((p) => p.event === "disk.low")).toHaveLength(2);
 });
 
-test("0 のときは見張らない", () => {
+test("0 のときは確かめない", () => {
   posted.length = 0;
   config.diskLowThreshold = 0;
   checkDisk();
@@ -60,8 +60,8 @@ test("0 のときは見張らない", () => {
 });
 
 /**
- * 録画の見出しに出す空きと残り時間 (`capacity`)。時間は**最近の録画が1時間あたりに
- * 置いていった量**で割る。残した元のTSも足す
+ * 録画の見出しに出す空きと残り時間 (`capacity`)。時間は**最近の録画が 1 時間あたりに
+ * 置いていった量**で割る。残した元の TS も足す
  */
 describe("空きと残り時間", () => {
   const HOUR = 3_600_000;
@@ -95,9 +95,9 @@ describe("空きと残り時間", () => {
     expect(room?.hours).toBeNull();
   });
 
-  test("1時間あたりの量で空きを割る。残した元のTSも数え、消したものと短いものは数えない", () => {
+  test("1 時間あたりの量で空きを割る。残した元の TS も数え、消したものと短いものは数えない", () => {
     orm().delete(recordings).run();
-    // 1本は元のTSも残している (エンコードしたものと元のTS 3KB で、足して 1GB)
+    // 1 本は元の TS も残している (エンコードしたものと元の TS 3KB で、足して 1GB)
     const raw = join(dir, "kept.ts");
     writeFileSync(raw, Buffer.alloc(3 * 1024));
     orm()
@@ -111,7 +111,7 @@ describe("空きと残り時間", () => {
       ])
       .run();
     const room = capacity()!;
-    // 3時間で 3GB (元のTSのぶんは ts_size から引いてあるので、足して 3GB ちょうど)
+    // 3 時間で 3GB (元の TS のぶんは ts_size から引いてあるので、足して 3GB ちょうど)
     expect(room.hours).toBeCloseTo(room.free / GB, 5);
   });
 });

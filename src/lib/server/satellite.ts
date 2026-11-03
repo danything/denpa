@@ -36,7 +36,7 @@ export type SatelliteType = "BS" | "CS";
  * BS-15 は NHK BS の中継器で、2018 年からの再編でも動いていない。CS-2 はネットワーク 6、CS-4 はネットワーク 7
  * (本番で確かめた)。どれも規格の周波数で、再編で変わるのは中身だけ
  */
-export const ENTRANCES: Record<SatelliteType, readonly string[]> = {
+const ENTRANCES: Record<SatelliteType, readonly string[]> = {
   BS: ["BS15", "BS01", "BS03"],
   CS: ["CS02", "CS04", "CS08"],
 };
@@ -172,7 +172,7 @@ const nameKey = (onid: number, tsid: number, sid: number) =>
   `${onid}:${tsid}:${sid}`;
 
 /** 前の控えの局名を引く鍵 (`lineupFrom` の `known`) */
-export const serviceKeyOf = (networkId: number, serviceId: number) =>
+const serviceKeyOf = (networkId: number, serviceId: number) =>
   `${networkId}:${serviceId}`;
 
 /** 前の控えから、局名の表を作る (`lineupFrom` の `known`) */
@@ -193,7 +193,7 @@ export function knownNames(
 }
 
 /** 1 つの中継器を読んだ結果 */
-export interface TableRead {
+interface TableRead {
   nit: NitReader;
   sdt: SdtReader;
   /** TS が 1 バイトでも来たか。アンテナの問題と読み取りの問題を分ける手掛かり */

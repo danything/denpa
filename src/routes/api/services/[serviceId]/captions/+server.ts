@@ -11,10 +11,10 @@ import { liveCaptions } from "#lib/server/live.js";
  * - `?codec=` は映像に渡したものと同じ。省けば `raw` (変換しない TS。時刻は放送の PTS)。`h264` / `av1` は変換したライブ
  *   (時刻は fMP4 の時刻)。ほかの値は 400
  * - `?audio=` も、変換したライブなら映像に渡したものと同じものを渡す (同じ音声のセッションを共有するため)。`raw` では効かない
- * - `?language=<1〜8>` で字幕の第何言語かを選ぶ (省けば第1言語)
+ * - `?language=<1〜8>` で字幕の第何言語かを選ぶ (省けば第 1 言語)
  *
  * いま流しているセッションを脇から共有するだけ (`live.ts` の `liveCaptions`)。
- * 共有する相手が無ければ 404 — 映像を開いてからリクエストする
+ * 共有する相手が無ければ 404。映像を開いてからリクエストする
  */
 export function GET({ params, url }) {
   const serviceId = Number(params.serviceId);

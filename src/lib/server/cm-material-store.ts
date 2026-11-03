@@ -43,7 +43,7 @@ export function loadMaterial(recordingId: number): CmMaterial | null {
 }
 
 /**
- * 局の録画の控えを捨てる。**覚えたロゴを捨てたとき** — 控えのロゴの区間は捨てた型で当てたものなので、
+ * 局の録画の控えを捨てる。**覚えたロゴを捨てたときに呼ぶ。** 控えのロゴの区間は捨てた型で当てたものなので、
  * やり直すときは読み直して新しく覚えたロゴで当てる
  */
 export function forgetMaterials(serviceIds: number[]): void {

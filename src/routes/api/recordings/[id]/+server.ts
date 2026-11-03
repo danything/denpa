@@ -7,7 +7,7 @@ import { encodedFile } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 
 /**
- * 録画の状態を返す。**追っかけ再生の画面が「エンコードが終わったか」を聞く API** —
+ * 録画の状態を返す。**追っかけ再生の画面が「エンコードが終わったか」を聞く API。**
  * 開いたまま録り終えても追っかけで観続けられるが、エンコードが終われば普通の観る画面
  * (シークも字幕も揃う) に移りたい。
  * 画面は `recordings` の通知 (SSE) を受けるたびにここを読む。
@@ -16,7 +16,7 @@ import { recordingOr404 } from "#lib/server/recording.js";
  * 元の TS なので、置き終えても false のまま。
  * `durationMs` は一覧 (`GET api/recordings`) と同じもの。テレビのアプリの追っかけは、ストリームが終わったときに
  * これで「録り終えて最後まで観たか」を確かめる (一覧を丸ごと取り直さずに済む)。
- * `jikkyo` は実況のチャンネルと、元の TS の頭と録画の終わりの放送時刻 (`{ channel, head, end }`。`server/jikkyo.ts`)。
+ * `jikkyo` は実況のチャンネルと、元の TS の先頭と録画の終わりの放送時刻 (`{ channel, head, end }`。`server/jikkyo.ts`)。
  * 世帯の設定がオフ・実況の無い局は null。コメントは端末が過去ログ API から直接取得する
  */
 export function GET({ params }) {
@@ -33,7 +33,7 @@ export function GET({ params }) {
 /**
  * 録画を消す。**オフライン視聴の後片付けの API** ([docs/offline.md](../../../../../docs/offline.md))。
  *
- * 画面の削除はフォーム (2回クリックの確認つき) で、これは端末側が
+ * 画面の削除はフォーム (2 回クリックの確認つき) で、これは端末側が
  * 「オフラインで消しておいたものを、オンラインに戻ったときにサーバからも消す」
  * ために呼ぶ (`offline.svelte.ts` の flush)。
  *

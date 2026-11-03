@@ -30,7 +30,7 @@ import {
 /**
  * EPGStation からの引き継ぎを、偽の EPGStation (`tests/fake/epgstation.ts`) に向けて通しで回す。
  *
- * - 写し方 (ルール・予約・録画・履歴)、v2 と v3、ページ送り、形の違う応答
+ * - 写し方 (ルール・予約・録画・履歴)、v2 と v3、ページ送り、形式の違う応答
  * - ファイル: 続きから取る・最初から取り直す・長さが違う・止まる・中断・空きが足りない
  * - 途中で止まっても「ファイルの無い行」を残さない。DB が途中で失敗するところは SQLite のトリガで
  *   RAISE させて作る (本物の取り込みをそのまま動かすため、試験用の差し替えの仕組みは持たない)
@@ -61,7 +61,7 @@ afterAll(() => fake.stop());
 const apply = { apply: true };
 const preview = { apply: false };
 
-/** 偽 EPGStation に向けて1回走らせ、終わるまで待つ */
+/** 偽 EPGStation に向けて 1 回走らせ、終わるまで待つ */
 async function run(
   options = apply,
   signal?: AbortSignal,
@@ -103,10 +103,10 @@ function placed(): string[] {
 const temporaries = () =>
   placed().filter((name) => name.endsWith(".migrating"));
 
-/** 録画 2 (元のTS) の書きかけ。元のTSの置き場の直下 */
+/** 録画 2 (元の TS) の書きかけ。元の TS の置き場の直下 */
 const rawTemporary = () => join(config.rawDir, ".epgstation-2.m2ts.migrating");
 
-/** 次の INSERT / UPDATE を失敗させる。プロセスが途中で死んだのと同じく、そこで止まる */
+/** 次の INSERT / UPDATE を失敗させる。プロセスが途中で止まったのと同じく、そこで止まる */
 function failOn(event: "INSERT" | "UPDATE"): void {
   orm().run(
     sql.raw(
@@ -150,7 +150,7 @@ const SIZE_1 = VIDEO_FILES[11].size;
 const SIZE_2 = VIDEO_FILES[21].size;
 
 describe("取り込み (v3)", () => {
-  test("ルール・予約・履歴・録画を入れ、録画はエンコード済みを保存先へ、元のTSを作業領域へ", async () => {
+  test("ルール・予約・履歴・録画を入れ、録画はエンコード済みを保存先へ、元の TS を作業領域へ", async () => {
     await run();
     const s = status();
     expect(s.state).toBe("done");
@@ -190,7 +190,7 @@ describe("取り込み (v3)", () => {
     expect(second.service_name).toBe("どこかのテレビ");
     expect(second.service_id).toBe(0);
 
-    // 選んだファイルだけ取る (エンコード済みがあるものは元のTSを取得しない)
+    // 選んだファイルだけ取る (エンコード済みがあるものは元の TS を取得しない)
     expect(fake.videoRequests.map((item) => item.id).sort()).toEqual([
       11, 21, 51,
     ]);
@@ -298,7 +298,7 @@ describe("取り込み (v3)", () => {
   test("offset を無視する相手でも、同じページを積み続けない", async () => {
     fake.setMode({ extraRules: 150, ignoreOffset: true });
     await run(preview);
-    // 頭のページ (100 件) だけ。2ページ目は全部受けたものなので止める
+    // 最初のページ (100 件) だけ。2 ページ目は全部受けたものなので止める
     expect(status().rules.imported + status().rules.skipped).toBe(100);
     expect(
       fake.listRequests.filter((path) => path.startsWith("/api/rules")),
@@ -377,13 +377,13 @@ describe("Basic 認証", () => {
   });
 });
 
-describe("形の違う応答", () => {
-  test("警告して続け、id の無い1件だけ飛ばす", async () => {
+describe("形式の違う応答", () => {
+  test("警告して続け、id の無い 1 件だけ飛ばす", async () => {
     fake.setMode({ drift: true });
     await run(preview);
     const s = status();
     expect(s.state).toBe("done");
-    // 4 件 + 形違い 2 件 (id の無い1件は数えない)。真偽が 0/1 の形違いは入り、searchOption の無いものは条件が空
+    // 4 件 + 形式違い 2 件 (id の無い 1 件は数えない)。真偽が 0/1 の形式違いは入り、searchOption の無いものは条件が空
     expect(s.rules).toEqual({ imported: 3, skipped: 3 });
     expect(s.log).toContain("ルール(予定): 形違いテスト");
     expect(
@@ -431,7 +431,7 @@ describe("ファイルの取り方", () => {
     expect(fake.videoRequests.some((item) => item.id === 21)).toBe(false);
   });
 
-  test("Range を無視されたら、頭から書き直す", async () => {
+  test("Range を無視されたら、先頭から書き直す", async () => {
     fake.setMode({ ignoreRange: true });
     mkdirSync(config.rawDir, { recursive: true });
     writeFileSync(rawTemporary(), videoContent(21, SIZE_2).subarray(0, 1000));
@@ -476,7 +476,7 @@ describe("ファイルの取り方", () => {
     const controller = new AbortController();
     try {
       const running = run(apply, controller.signal);
-      // 1回目は切れ、取り直しの2回目で黙っている間に止める
+      // 1 回目は切れ、取り直しの 2 回目でデータが来ない間に止める
       while (fake.videoRequests.length < 2) await Bun.sleep(10);
       controller.abort(new Error("中断しました"));
       await running;

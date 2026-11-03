@@ -1,6 +1,6 @@
 /**
  * 録画・番組表・ライブの上に出す、チャンネルのお知らせの 1 行 (`ChannelNotice.svelte`)。
- * BS・CS のチャンネルを書き換えた (`lineup-follow.ts`) ほうを先に、地上波の知らせ (`ground-watch.ts`) をあとに出す
+ * BS・CS のチャンネルを書き換えた (`lineup-follow.ts`) ほうを先に、地上波のお知らせ (`ground-watch.ts`) をあとに出す
  */
 import type { ChannelNotice } from "#lib/channel-notice.js";
 

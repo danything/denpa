@@ -216,7 +216,7 @@ describe("BS と CS で共通のチューナー 2 台で「ロゴをいますぐ
     for (const s of STATIONS)
       rmSync(join(root, "logos", `${serviceKey(s.network, s.sid)}.png`));
     opened.length = 0;
-    // 1 台は番組表集めが使っている。空きは 1 台なので 1 つずつ回る
+    // 1 台は番組表の取得が使っている。空きは 1 台なので 1 つずつ回る
     tuners = [
       { channel: null, users: [] },
       {

@@ -10,26 +10,26 @@ import { run } from "./stream";
 import { TS_PROBE } from "./ts-probe";
 
 /**
- * CM検出。
+ * CM 検出。
  *
- * **1本の ffmpeg で1回だけデコードして材料を取り** (`cm-scan.ts`。無音・場面の切れ目・局ロゴの枠)、
+ * **1 本の ffmpeg で 1 回だけデコードして材料を取り** (`cm-scan.ts`。無音・場面の切れ目・局ロゴの枠)、
  * 境目は TS で決める (`ts/cm-decide.ts`)。
  *
  * - **ロゴの消えている所を CM にする**。境目は近くの「無音 + 切れ目」に寄せる
  * - ロゴが使えない (覚えられない・当たらない・結果がおかしい) ときは、同じ材料から
- *   **CM の尺 (15秒の倍数) だけで**決め直す。もう一度デコードはしない
+ *   **CM の尺 (15 秒の倍数) だけで**決め直す。もう一度デコードはしない
  *
- * 誤爆したときの被害が大きい(本編が消える)ので、既定は実カットではなく
- * チャプター付与にしてある (`config.cmCutDefault`)。設定の CMの扱いを `cut` にしたときだけ実際に切る。
+ * 誤検出したときの被害が大きい (本編が消える) ので、既定は実カットではなく
+ * チャプター付与にしてある (`config.cmCutDefault`)。設定の CM の扱いを `cut` にしたときだけ実際に切る。
  */
 
 export type { Range };
 
 /**
- * これ以上がCM判定になったら、その結果は信じない。
+ * これ以上が CM 判定になったら、その結果は信じない。
  *
- * **ロゴでも尺だけでも同じ値を使う。** どちらも「番組が丸ごとCM」は
- * 検出が効いていない兆候で、本編を削るよりCMが残るほうが被害が小さい。
+ * **ロゴでも尺だけでも同じ値を使う。** どちらも「番組が丸ごと CM」は
+ * 検出が効いていない兆候で、本編を削るより CM が残るほうが被害が小さい。
  */
 const MAX_CM_RATIO = 0.5;
 
@@ -37,7 +37,7 @@ export function isCmMode(value: unknown): value is CmMode {
   return value === "off" || value === "chapter" || value === "cut";
 }
 
-/** CM判定が占める割合 (%) */
+/** CM 判定が占める割合 (%) */
 export function cmRatio(cm: Range[], duration: number): number {
   if (!Number.isFinite(duration) || duration <= 0) return 0;
   const total = cm.reduce((sum, range) => sum + (range.end - range.start), 0);
@@ -45,9 +45,9 @@ export function cmRatio(cm: Range[], duration: number): number {
 }
 
 /**
- * CM判定が多すぎないか。
+ * CM 判定が多すぎないか。
  *
- * ロゴを覚えたてのときなど、「頭の2秒だけ本編」のような結果になることがある。
+ * ロゴを覚えたてのときなど、「頭の 2 秒だけ本編」のような結果になることがある。
  */
 export function tooMuchCm(cm: Range[], duration: number): boolean {
   return cmRatio(cm, duration) > MAX_CM_RATIO * 100;
@@ -57,7 +57,7 @@ export function tooMuchCm(cm: Range[], duration: number): boolean {
 const MIN_RANGE = 0.5;
 
 /**
- * 区間の裏返し。CMを渡して残す区間をもらう (チャプター・実カット)。
+ * 区間の裏返し。CM を渡して残す区間をもらう (チャプター・実カット)。
  *
  * 渡された区間は並べ替えてから使う。
  *
@@ -81,8 +81,8 @@ export function invertRanges(ranges: Range[], duration: number): Range[] {
  *
  * エンコードは頭 (映像が出るまでの音声だけの区間、実機で 0.5〜0.9 秒) を
  * `-ss` で捨てて 0 秒から始める (`encoder.headSkip`)。検出した時刻をそのまま
- * チャプターに書くと**全チャプターがそのぶん遅れて入り**、CMの自動スキップは
- * 毎回そのぶんCMを見せてから飛んで、着地も本編に食い込んでいた
+ * チャプターに書くと**全チャプターがそのぶん遅れて入り**、CM の自動スキップは
+ * 毎回そのぶん CM を見せてから飛んで、着地も本編に食い込んでいた
  * (字幕はエンコードする ffmpeg が映像と一緒に詰める)。
  *
  * 詰めた結果 {@link MIN_RANGE} も残らない区間は落とす。
@@ -110,8 +110,8 @@ export function chapterList(
 }
 
 /**
- * ffmetadata 形式のチャプター定義。本編とCMを交互のチャプターにして、
- * プレイヤーのチャプター送りでCMを飛ばせるようにする(ファイルは切らない)。
+ * ffmetadata 形式のチャプター定義。本編と CM を交互のチャプターにして、
+ * プレイヤーのチャプター送りで CM を飛ばせるようにする (ファイルは切らない)。
  */
 export function chapterMetadata(cm: Range[], duration: number): string {
   const lines = [";FFMETADATA1"];
@@ -130,7 +130,7 @@ export function chapterMetadata(cm: Range[], duration: number): string {
 /**
  * ffprobe の `key=value` 出力を読む。**位置では読まない。**
  *
- * - 1本のTSに局がいくつも入っていると (TOKYO MX)、`-select_streams v:0` でも
+ * - 1 本の TS に局がいくつも入っていると (TOKYO MX)、`-select_streams v:0` でも
  *   **同じ行が番組の数だけ並ぶ**
  * - `-show_entries` に**書いた順では返らない** (`avg_frame_rate,width,height` が幅,高さ,fps の順で来る)
  *
@@ -154,7 +154,7 @@ export function parseFrameRate(value: string | undefined): number {
   return Number.isFinite(fps) && fps > 0 ? fps : NaN;
 }
 
-/** ffprobe を1回動かして、標準出力を返す */
+/** ffprobe を 1 回動かして、標準出力を返す */
 async function probe(input: string, args: string[]): Promise<string> {
   const result = await run([config.ffprobe, "-v", "error", ...args, input], {
     stdout: true,
@@ -166,7 +166,7 @@ async function probe(input: string, args: string[]): Promise<string> {
  * 尺とフレームレートを先に取る (ffmpeg の stderr の `Duration:` は TS によっては出ない)。
  *
  * **頭出し (`probeLeadIn`) はここに含めない。** あちらは実際にデコードしてみる
- * ぶんだけ高くつくのに、要るのはエンコードする前の1回だけ
+ * ぶんだけ高くつくのに、要るのはエンコードする前の 1 回だけ
  */
 export async function probeVideo(input: string): Promise<{
   duration: number;
@@ -224,7 +224,7 @@ export async function probeVideo(input: string): Promise<{
     /** 映像の最初の**パケット**の時刻 (PTS)。デコードできるコマを探せなかったときの代用 */
     packetStart: Number(stream.get("start_time")),
     /**
-     * 画素の横長さ。1440x1080 の地上波HDは 4:3 で、これを掛けると 1920 になる。
+     * 画素の横長さ。1440x1080 の地上波 HD は 4:3 で、これを掛けると 1920 になる。
      * 読めなければ 1 (正方形) とみなす
      */
     sar: parseRatio(stream.get("sample_aspect_ratio")),
@@ -234,7 +234,7 @@ export async function probeVideo(input: string): Promise<{
 /**
  * ffprobe の JSON から、**中身のある音声**が音声の何本目かを読み取る (`0:a:<n>` の n)。
  *
- * 中身があるかは `channels` で見る。探り (`TS_PROBE`) の間に1パケットも来なかった
+ * 中身があるかは `channels` で見る。探り (`TS_PROBE`) の間に 1 パケットも来なかった
  * 音声はデコードできておらず、0 のまま出てくる
  */
 export function liveAudioIndexes(json: string): number[] {
@@ -248,13 +248,13 @@ export function liveAudioIndexes(json: string): number[] {
  * エンコードするときに使う音声 (音声の何本目か)。**頭に中身の無い音声は使わない。**
  *
  * 録画の尻には次の番組の頭が少し入る。次の番組が副音声つきだと、その音声の PID が
- * 最後の十数秒だけ現れ、`-map 0:a` はそれも1本の音声として取り込んでしまう
+ * 最後の十数秒だけ現れ、`-map 0:a` はそれも 1 本の音声として取り込んでしまう
  * (出来上がりに**末尾にしか中身の無い音声トラック**が入る)。
  *
  * **探りの長さはエンコードするほうと揃える** (`TS_PROBE`)。何本目かで名指しするので、
  * 見えている音声の並びが食い違うと別の音声を指してしまう。
  *
- * 分からなければ空を返す — 呼ぶ側は今までどおり全部使う
+ * 分からなければ空を返し、呼ぶ側は全部使う
  */
 export async function probeLiveAudio(input: string): Promise<number[]> {
   try {
@@ -278,15 +278,15 @@ export async function probeLiveAudio(input: string): Promise<number[]> {
  * **映像が出るまでの、音声だけの区間 (秒)。エンコードするときに頭から捨てる長さ。**
  *
  * TS は音声のほうが先に始まっているのがふつうで、実機では 0.930 秒あった。
- * 残したままエンコードすると出来上がりも音声だけの区間から始まり、**1コマ目を 0 秒として
+ * 残したままエンコードすると出来上がりも音声だけの区間から始まり、**1 コマ目を 0 秒として
  * 数えるプレイヤー**ではそのぶん字幕が早く出る。ずらす (`-output_ts_offset`) のでは
  * 直らないので捨てる (`encoder.buildArgs` の `-ss`)。
  *
- * **測るのは「実際にデコードできた1コマ目」。** stream の `start_time` は最初の
+ * **測るのは「実際にデコードできた 1 コマ目」。** stream の `start_time` は最初の
  * **パケット**の時刻で、そこから何コマかは参照先が録れておらず捨てられる。
- * 実機ではその差が 0.567 秒 (17コマ = 半GOP) あった。
+ * 実機ではその差が 0.567 秒 (17 コマ = 半 GOP) あった。
  *
- *     start_time 6115.872 / 実際に出た1コマ目 6116.439 (I)
+ *     start_time 6115.872 / 実際に出た 1 コマ目 6116.439 (I)
  *
  * `probeVideo` とは別にしてある (理由はあちら)。`formatStart` はあちらで取ったものを渡す
  */
@@ -322,7 +322,7 @@ export async function probeLeadIn(
  *
  * TS の時刻は**放送の時刻そのもの** (PTS) で、頭からの秒数ではない。実機では
  * 62170 のような値が入る。引き算を忘れるとその値がそのまま頭捨ての長さになり、
- * **17時間ぶん読み飛ばして中身の無いものができあがる**。
+ * **17 時間ぶん読み飛ばして中身の無いものができあがる**。
  *
  * ずれが数秒を超えたら 0 にする。読み違えているほうが疑わしく、
  * 大きく捨てると壊れ方が派手になる
@@ -333,8 +333,8 @@ const MAX_LEAD_IN = 5;
  * `ffprobe -show_frames` の出力から、**最初にデコードできたコマの時刻**を読む。
  *
  * 頭のほうは参照先が録れていないコマが混ざるので、ffprobe も ffmpeg も
- * 最初の I フレームまで捨てる。ここで返るのは捨て終わったあとの1コマ目。
- * 1件も無ければ NaN (呼ぶ側がパケットの時刻で代用する)
+ * 最初の I フレームまで捨てる。ここで返るのは捨て終わったあとの 1 コマ目。
+ * 1 件も無ければ NaN (呼ぶ側がパケットの時刻で代用する)
  */
 export function firstFrameTime(output: string): number {
   for (const line of output.split("\n")) {
@@ -373,7 +373,7 @@ export interface CmDetection {
 
 interface CmOptions {
   signal?: AbortSignal;
-  /** 局のID。覚えたロゴの置き場を局ごとに分けるのに使う */
+  /** 局の ID。覚えたロゴの置き場を局ごとに分けるのに使う */
   serviceId: number;
   /** 番組の尺 (秒。番組表)。録画の頭と尻に入った前後の番組を見分けるのに使う */
   programLength?: number;
@@ -404,8 +404,8 @@ export function shiftDetection(
 /** 読み方 (`openCm`) と、読んだ材料からの決め方 */
 export interface CmReading {
   /**
-   * 1回のデコードで何を読むか。エンコードの ffmpeg に `cm-scan.scanReader` の出口を足す。
-   * **デコードするたびに呼ぶ** — ロゴの点は読むたびに一から数える (再エンコードで途中までを持ち越さない)
+   * 1 回のデコードで何を読むか。エンコードの ffmpeg に `cm-scan.scanReader` の出口を足す。
+   * **デコードするたびに呼ぶ。** ロゴの点は読むたびに一から数える (再エンコードで途中までを持ち越さない)
    */
   want(): ScanWant;
   /** 入れ物の尺 (秒。ffprobe)。測れなければ NaN */
@@ -414,7 +414,7 @@ export interface CmReading {
    * 読み終えた材料から CM を決める。
    *
    * 材料の時刻は**頭を `skip` 秒捨てた ffmpeg の時刻** (エンコードの `-ss` と同じだけ。`before` はその引数)。
-   * 返す区間も同じ物差し — つまり**エンコードしたものの時刻**。ロゴを覚え直したときは、枠だけ同じ捨て方で読み直す。
+   * 返す区間も同じ物差しで、**エンコードしたものの時刻**になる。ロゴを覚え直したときは、枠だけ同じ捨て方で読み直す。
    * `video` が偽なら映像は読めていない (音だけ読み直した) ので、尺だけで決める
    */
   decide(
@@ -424,8 +424,8 @@ export interface CmReading {
 }
 
 /**
- * CM検出の支度。尺と映像の大きさを測り、ロゴを開く (覚えていなければこの録画から覚える。
- * キーフレームだけ読むので速い)。**覚えられなくても続ける** — 無音と切れ目だけで決め直せる
+ * CM 検出の支度。尺と映像の大きさを測り、ロゴを開く (覚えていなければこの録画から覚える。
+ * キーフレームだけ読むので速い)。**覚えられなくても続ける。** 無音と切れ目だけで決め直せる
  */
 export async function openCm(
   input: string,
@@ -579,13 +579,13 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
       logoScores: material.logo.scores,
     });
     if (cm.length === 0) why = "ロゴの消えている所がありませんでした";
-    // 番組の半分以上がCMになったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
+    // 番組の半分以上が CM になったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
     else if (tooMuchCm(cm, duration))
       why = `番組の ${cmRatio(cm, duration)}% が CM と判定されたため、この結果は使いません`;
     else return { cm, duration, note: LOGO_OK };
   }
 
-  // ロゴを使わずに、CM の尺 (15秒の倍数) だけで決める
+  // ロゴを使わずに、CM の尺 (15 秒の倍数) だけで決める
   const cm = decideCm(input);
   // 落ちた理由まで書く。**この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)
   return {

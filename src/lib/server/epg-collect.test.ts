@@ -5,8 +5,8 @@ import type { AgentChannel } from "./tuner";
 /**
  * どのチャンネルを集めに行くか。
  *
- * **ここが実機で暴走した。** 番組表が7日先まで埋まっているのに、30分ごとの
- * 周回で毎回ほぼ全チャンネルが選ばれ、1本ぶんの上限まで開きっぱなしに
+ * **ここが実機で止まらなくなった。** 番組表が 7 日先まで埋まっているのに、30 分ごとの
+ * 周回で毎回ほぼ全チャンネルが選ばれ、1 本ぶんの上限まで開きっぱなしに
  * なっていた ([config.ts](config.ts) の epgChannelTimeout)。
  */
 const { config } = await import("./config");
@@ -64,7 +64,7 @@ describe("どこまで埋まっているか", () => {
     expect(reachOf(reach, channel("T16", [23608, 23611]))).toBe(WEEK);
   });
 
-  test("1局も知らないチャンネルはまっさら扱い", () => {
+  test("1 局も知らないチャンネルはまっさら扱い", () => {
     expect(reachOf(new Map(), channel("T16", [23608]))).toBe(0);
   });
 });
@@ -73,7 +73,7 @@ describe("pickChannels", () => {
   const NOW = Date.UTC(2026, 7, 4, 3, 0, 0);
   /** 番組表が薄い (まっさら) チャンネル */
   const thin = () => 0;
-  /** 7日先まで埋まっているチャンネル */
+  /** 7 日先まで埋まっているチャンネル */
   const full = () => NOW + 7 * 24 * 3600_000;
 
   test("薄いチャンネルから先に行く", () => {
@@ -100,7 +100,7 @@ describe("pickChannels", () => {
   });
 
   /*
-   * **実機に受信できない CS が 24 局残っていた。** 開いても EIT が1件も来ない
+   * **実機に受信できない CS が 24 局残っていた。** 開いても EIT が 1 件も来ない
    * ので永久に薄いままで、「薄いから行く」だけで選んでいた頃は周回のたびに
    * 選ばれ、上限まで開きっぱなしになっていた
    */
@@ -136,9 +136,9 @@ describe("pickChannels", () => {
 /*
  * **最後に集めた時刻は局から引く。**
  *
- * `services.channel` に入るのは「最後に取り込んだときの枠の名前」1つだけなので、
- * 同じ TS を指す枠が2つあると片方が必ず「一度も集めていない」ことになる。
- * 実機の BS がまさにそれで、9枠が永久にまっさらに見えて周回のたびに開かれていた。
+ * `services.channel` に入るのは「最後に取り込んだときの枠の名前」1 つだけなので、
+ * 同じ TS を指す枠が 2 つあると片方が必ず「一度も集めていない」ことになる。
+ * 実機の BS がまさにそれで、9 枠が永久にまっさらに見えて周回のたびに開かれていた。
  */
 describe("最後に集めた時刻", () => {
   const AT = Date.UTC(2026, 7, 4, 3, 0, 0);
@@ -158,12 +158,12 @@ describe("最後に集めた時刻", () => {
     expect(lastOf(perService, channel("BS01_3", [101]))).toBe(AT);
   });
 
-  test("1件も入っていなければ「まっさら」", () => {
+  test("1 件も入っていなければ「まっさら」", () => {
     expect(lastOf(new Map(), channel("BS01_0", [101]))).toBe(0);
   });
 });
 
-describe("初回は BS をネットワークごとに1中継で埋める", () => {
+describe("初回は BS をネットワークごとに 1 中継で埋める", () => {
   const BS = 4;
   const sat = (name: string, networkId: number, services: number[]) =>
     ({
@@ -179,7 +179,7 @@ describe("初回は BS をネットワークごとに1中継で埋める", () =>
     sat("CS04", 7, [55]),
   ];
 
-  test("番組が1件も無いネットワークから、1つずつ選ぶ (地上波と CS は対象外)", () => {
+  test("番組が 1 件も無いネットワークから、1 つずつ選ぶ (地上波と CS は対象外)", () => {
     expect(firstSweeps(channels, new Map()).map((c) => c.channel)).toEqual([
       "BS01_0",
     ]);
@@ -190,14 +190,14 @@ describe("初回は BS をネットワークごとに1中継で埋める", () =>
     expect(firstSweeps(channels, new Map(), last)[0]?.channel).toBe("BS03_0");
   });
 
-  test("1局でも埋まっているネットワークは選ばない (受信できない局が残っていても)", () => {
+  test("1 局でも埋まっているネットワークは選ばない (受信できない局が残っていても)", () => {
     const reach = new Map([[serviceKey(BS, 151), Date.now()]]);
     expect(firstSweeps(channels, reach)).toEqual([]);
   });
 
   /*
    * CS は詳細を流していないので、中継ごとに開かずいつも全局読み。
-   * 選ばれた中継が1つでもあるネットワークを、受信を確かめていない順の1中継にまとめる
+   * 選ばれた中継が 1 つでもあるネットワークを、受信を確かめていない順の 1 中継にまとめる
    */
   const cs = [
     sat("CS02", 6, [296]),
@@ -206,7 +206,7 @@ describe("初回は BS をネットワークごとに1中継で埋める", () =>
     sat("CS08", 7, [800]),
   ];
 
-  test("CS はネットワークごとに1中継へまとめる", () => {
+  test("CS はネットワークごとに 1 中継へまとめる", () => {
     const checked = (c: AgentChannel) =>
       c.channel === "CS02" ? Date.now() : 0;
     expect(
@@ -241,7 +241,7 @@ describe("初回は BS をネットワークごとに1中継で埋める", () =>
     expect(opened).toEqual(["CS02", "CS08", "CS10", "CS02"]);
   });
 
-  test("全局読みが受信できなければ、同じ周回で次の中継に替える (ネットワークごとに1回)", () => {
+  test("全局読みが受信できなければ、同じ周回で次の中継に替える (ネットワークごとに 1 回)", () => {
     const order = (network: number) => sweepOrder(cs, network, () => 0);
     const replaced = new Set<number>();
     const job = { channel: cs[0]!, whole: [296, 227] };

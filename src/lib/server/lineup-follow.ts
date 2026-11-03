@@ -2,17 +2,17 @@
  * **BS と CS の再編に付いていく。** 市販のテレビと同じく、放送の NIT が変わったら受信できるチャンネルを書き換える
  * (スキャンし直さなくてよい)。
  *
- * - **NIT は番組表集めのついでに読む** (`epg-collect.ts`)。衛星はどの中継器にもネットワークの全部の TS が載っているので、
+ * - **NIT は番組表の取得のついでに読む** (`epg-collect.ts`)。衛星はどの中継器にもネットワークの全部の TS が載っているので、
  *   どれを開いても分かる。version が前に確かめたものと同じなら何もしない
  * - **書き換えるのは、同じ version の変わった一覧を 5 分以上あけて 2 回読んでから。** 放送に古い情報が混ざることがある
  *   (2026-08、NHK のアップリンクから古いチャンネル情報が送られ、一部の市販機で 6 局が選局できなくなった)。
  *   1 回読んだだけでは書き換えない
  * - 書き換えるのはそのネットワークのチャンネルだけ (CS はネットワークが 2 つある)
  * - 予約とルールは局の ID (ネットワーク ID とサービス ID) で持っているので、チャンネルの名前が変わっても外れない。
- *   書き換えたあとの新しいチャンネルは「確認中」で、受信できるかは番組表集めが確かめる (`reception.ts`)
+ *   書き換えたあとの新しいチャンネルは「確認中」で、受信できるかは番組表の取得が確かめる (`reception.ts`)
  * - 書き換えたら、お知らせの 1 行 (録画・番組表・ライブの上) と通知 (`channels.changed`) で知らせる
  * - **録画が衛星のチャンネルを選局できなかったら、すぐに読み直す** (`refreshLineup`)。再編の切り替えの直後に録画が
- *   始まると、番組表集めが次に中継器を開くまで待てない
+ *   始まると、番組表の取得が次に中継器を開くまで待てない
  */
 import { NitReader, SdtReader } from "@danything/arib/psi";
 import { and, desc, gte, isNull, lt } from "drizzle-orm";
@@ -59,14 +59,14 @@ const sighted = new Map<string, { version: number; at: number }>();
  */
 const CONFIRM_AFTER = 5 * 60_000;
 
-/** 種別ごとに 1 つずつ比べる。番組表集めの中継器と録画の読み直しが同時に来ても、二重に書き換えない */
+/** 種別ごとに 1 つずつ比べる。番組表の取得の中継器と録画の読み直しが同時に来ても、二重に書き換えない */
 const queues = new Map<SatelliteType, Promise<unknown>>();
 
 /** 最後に録画の失敗で読み直した時刻 (種別ごと) */
 const refreshedAt = new Map<SatelliteType, number>();
 
 /** 2 つの一覧の違い。局の ID で比べる */
-export interface LineupDiff {
+interface LineupDiff {
   /** 新しく入った局 */
   added: number;
   /** 無くなった局 */
@@ -133,7 +133,7 @@ export function changeText(type: SatelliteType, diff: LineupDiff): string {
 }
 
 /**
- * 番組表集めで読んだ NIT と SDT を、今の一覧と比べる。**変わっていて、同じものを間をあけて 2 回読んだら書き換える。**
+ * 番組表の取得で読んだ NIT と SDT を、今の一覧と比べる。**変わっていて、同じものを間をあけて 2 回読んだら書き換える。**
  * 書き換えたら true。同じ種別は 1 つずつ比べる
  */
 export function followLineup(
@@ -268,11 +268,11 @@ export function seenLineupChanges(at = now()): void {
     .run();
 }
 
-/** 番組表集めが中継器を読むついでに、放送の一覧を読む長さ (BS の SDT[other] は 10 秒ほどでそろう) */
+/** 番組表の取得が中継器を読むついでに、放送の一覧を読む長さ (BS の SDT[other] は 10 秒ほどでそろう) */
 const WATCH_FOR = 20_000;
 
 /**
- * **番組表集めのついでに放送の一覧を読む** (`epg-collect.ts`)。開いてから `WATCH_FOR` の間だけ NIT と SDT を読み、
+ * **番組表の取得のついでに放送の一覧を読む** (`epg-collect.ts`)。開いてから `WATCH_FOR` の間だけ NIT と SDT を読み、
  * 閉じたら `followLineup` で今の一覧と比べる
  */
 export class LineupWatch {
@@ -288,7 +288,7 @@ export class LineupWatch {
     this.sdt.feed(chunk);
   }
 
-  /** 読んだ一覧を今の一覧と比べる。失敗しても番組表集めは止めない */
+  /** 読んだ一覧を今の一覧と比べる。失敗しても番組表の取得は止めない */
   follow(): void {
     if (this.nit.actual === null) return;
     void followLineup(this.type, this.nit, this.sdt).catch((error: unknown) => {

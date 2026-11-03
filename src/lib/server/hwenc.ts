@@ -26,22 +26,22 @@ import { run } from "./stream";
  *
  * `ffmpeg -encoders` に載っているかでは「動くか」は分からないので、`HW_DEVICES`
  * (既定 `/dev/dri/renderD*`) に当たるデバイスを全部探し、**デバイスごとに** VA-API で
- * 3つのコーデックを `nullsrc` で実際に1コマエンコードして確かめる。結果は
+ * 3 つのコーデックを `nullsrc` で実際に 1 コマエンコードして確かめる。結果は
  * 設定の「エンコード」に出て、使えるものは自動で使う (コーデックごとのエンコーダ。`settings().hwAllow` (録画)・`liveHwAllow` (ライブ) と
- * 突き合わせるのは `hwChain`)。**Intel も VA-API だけで、QSV は使わない** — QSV は VA-API の上に
+ * 突き合わせるのは `hwChain`)。**Intel も VA-API だけで、QSV は使わない。** QSV は VA-API の上に
  * かぶさる層で速さは同じ。QSV にしか無い先読みなどは使っておらず、Tiger Lake より前の世代では
  * QSV のランタイムが動かない (docs/encode.md「QSV を使わない理由」)。
  *
- * **Rockchip (RK3588 / RK3588S) は別のデバイス** (`/dev/mpp_service`。`config.rkmppDevice`)。在れば
- * そのデバイスで h264_rkmpp / hevc_rkmpp を同じく1コマ試す (RK3588 は AV1 をエンコードできないので H.264 と H.265 だけ)。
+ * **Rockchip (RK3588 / RK3588S) は別のデバイス** (`/dev/mpp_service`。`config.rkmppDevice`)。あれば
+ * そのデバイスで h264_rkmpp / hevc_rkmpp を同じく 1 コマ試す (RK3588 は AV1 をエンコードできないので H.264 と H.265 だけ)。
  * 画質の決め方は `hwBitrate`。
  *
- * **NVIDIA の GPU も別のデバイス** (`/dev/nvidia0`・`/dev/nvidia1` …。`config.nvidiaDir`)。在れば
- * 1枚ごとに h264_nvenc / hevc_nvenc / av1_nvenc を同じく1コマ試す (AV1 は RTX 40 以降だけで、通るかは試しのエンコードで決まる)。
+ * **NVIDIA の GPU も別のデバイス** (`/dev/nvidia0`・`/dev/nvidia1` …。`config.nvidiaDir`)。あれば
+ * 1 枚ごとに h264_nvenc / hevc_nvenc / av1_nvenc を同じく 1 コマ試す (AV1 は RTX 40 以降だけで、通るかは試しのエンコードで決まる)。
  * ffmpeg は GPU を番号 (`-gpu N`) で受けるので、番号はデバイスファイルの並びから決める (`findNvidia`)。
  * 消費者向けの GPU は同時に開けるエンコードの数に上限がある (`nvencBusy`)。
  *
- * **H.265 (`hevc`) は GPU でだけエンコードする。** 試しのエンコードは AV1・H.264 と同じく方式ごとに1コマ行う。
+ * **H.265 (`hevc`) は GPU でだけエンコードする。** 試しのエンコードは AV1・H.264 と同じく方式ごとに 1 コマ試す。
  * ソフトウェアのエンコーダは無いので、ライブはライブのエンコーダが GPU のときだけ H.265 を出す (`live.liveHevc`)。
  * 追っかけ・その場の変換は H.265 を出さない。
  *
@@ -50,7 +50,7 @@ import { run } from "./stream";
  * 全体の話は docs/encode.md「GPU でエンコードする」
  */
 
-/** 1つのデバイス (GPU) で何がエンコードできるか */
+/** 1 つのデバイス (GPU) で何がエンコードできるか */
 export interface HwDevice {
   /** `/dev/dri/renderD128` や `/dev/mpp_service` のようなデバイス */
   path: string;
@@ -85,7 +85,7 @@ export interface HwEncode {
   message: string;
 }
 
-/** エンコードする1回ぶんの方式。どのデバイスを、どちらの方式で */
+/** エンコードする 1 回ぶんの方式。どのデバイスを、どちらの方式で */
 export interface HwWay {
   device: string;
   kind: HwKind;
@@ -107,8 +107,8 @@ export function hwEncode(): HwEncode {
  * **このコーデックを GPU でエンコードするときに試す方式、順に。** 使える (試しのエンコードが通った)
  * かつ設定で外していない (`allow`) もの。空ならソフトウェアだけ。
  *
- * **デバイスは `turn` で回す。** グラボが2枚あって両方が同じコーデックをエンコードできるなら、
- * 1本エンコードするごとに先頭を入れ替えて、2本並べてエンコードするとき片方に寄らないようにする。
+ * **デバイスは `turn` で回す。** GPU が 2 枚あって両方が同じコーデックをエンコードできるなら、
+ * 1 本エンコードするごとに先頭を入れ替えて、2 本並べてエンコードするとき片方に寄らないようにする。
  * 同じデバイスの中では VA-API → MPP → NVENC (`HW_KINDS` の順)
  */
 export function hwChain(
@@ -148,7 +148,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  *
  * - `device` … 入力より前に置く。GPU のデバイスを開ける
  * - `filter` … 映像フィルタの最後に足す。CPU で作ったフレームを渡すので nv12 に
- *   揃える。VA-API は自分では上げてくれないので `hwupload` まで
+ *   そろえる。VA-API は GPU へ転送しないので `hwupload` まで付ける
  * - `encoder` … `-c:v` に続くもの
  *
  * **VA-API の画質は、H.264・H.265 は CQP (`-qp`)、AV1 は ICQ (`-global_quality`)。** どちらも
@@ -156,7 +156,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * 「この画質で」の指定 (1〜51)。**値はコーデックごとに、ソフトウェアのエンコードと同じ画質になる所**
  * (`VAAPI_QP`・`AV1_ICQ`)。Arc A310 (iHD) で放送の 1440x1080 を 60 秒ずつ 2 か所エンコードし、
  * XPSNR が svt-av1 preset 9・crf 35 (前の設定) と x264 crf 23 の高いほうに 2 か所とも −0.26 dB 以内で
- * 揃う値を選んだ (H.265 はソフトウェアのエンコーダが無いので同じ目標に合わせる)。どれも下の `VAAPI_SLOW` を足して測った値:
+ * そろう値を選んだ (H.265 はソフトウェアのエンコーダが無いので同じ目標に合わせる)。どれも下の `VAAPI_SLOW` を足して測った値。
  *
  * - H.264 は **qp 24** (目標との差 −0.10・−0.18 dB)。同じ XPSNR で ICQ より 5〜7% 小さい
  * - H.265 は **qp 24** (−0.20・−0.19 dB)。同じ XPSNR で ICQ より 9〜17% 小さく、ICQ は 25〜26 で画質が頭打ちになった
@@ -166,15 +166,15 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * docs/encode.md「GPU でエンコードする (VA-API)」
  *
  * **`-global_quality` は `:v` を付けて映像にだけ効かせる。** 付けないとどのストリームにも効き、音のエンコーダが
- * 画質での指定として受け取る — libopus は「画質での指定はできない」で開けずに転び、aac は VBR に切り替わる
+ * 画質での指定として受け取る。libopus は「画質での指定はできない」で開けずに失敗し、aac は VBR に切り替わる
  * (GPU を挿してエンコードし始めたら、AV1 + Opus の録画とライブが通らなかった)
  *
  * ## 録画は遅くても小さく (`VAAPI_SLOW`)
  *
- * 録画は急がないので、同じ画質で小さくなる指定を足す。**ライブには足さない** (`liveHwArgs`):
+ * 録画は急がないので、同じ画質で小さくなる指定を足す。**ライブには足さない** (`liveHwArgs`)。
  *
  * - `-compression_level:v 1` … ドライバの品質と速さの段 (iHD は 1〜7 で、渡さないときは 4 と同じ出力)。
- *   1 は 3 つとも同じ XPSNR で 3〜5% 小さい。**これも `:v` を付ける** — 付けないと音のエンコーダにも効き、
+ *   1 は 3 つとも同じ XPSNR で 3〜5% 小さい。**これも `:v` を付ける。** 付けないと音のエンコーダにも効き、
  *   libopus はこれを計算の手間 (complexity) として読み、10 から 1 に落とす
  * - `-bf 3 -b_depth 2 -b_qfactor` (H.264・H.265 だけ) … B フレームを 3 枚にして、真ん中の B を
  *   残りの B の参照にするピラミッドにし、B の qp を P の 1.3 倍 (H.265 は 1.4 倍。どちらも +1.25) にする。同じ qp では XPSNR が
@@ -192,12 +192,12 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * レート制御を決めるときにも行うので、それが通るドライバなら通る。
  *
  * **CM を切るときのキーフレーム (`encoder.ts` の `keyframeArgs`) もピラミッドのまま IDR になる。** FFmpeg は
- * 印の付いたコマ (`pict_type = I`) を IDR にすると決め、その1つ前のコマを P にして B の並びをそこで閉じる
+ * 印の付いたコマ (`pict_type = I`) を IDR にすると決め、その 1 つ前のコマを P にして B の並びをそこで閉じる
  * (hw_base_encode.c)。ピラミッドは閉じた並びの中を分けるだけなので、IDR の位置は変わらない
  *
  * ## ICQ を持たないドライバの AV1 は CQP で指定する
  *
- * **i965 (Gemini Lake などの古い Intel)・Mesa (AMD) は ICQ を持たない** — ICQ で試すと落ちて
+ * **i965 (Gemini Lake などの古い Intel)・Mesa (AMD) は ICQ を持たない。** ICQ で試すと落ちて
  * 「エンコードできない」に見えていた (issue #417)。AV1 は ICQ が落ちたら CQP でも試し (`probeOnce`)、
  * 通ればそちらでエンコードする (`HwWay.cqp`)。H.264・H.265 は初めから CQP なので落ちない。
  * **av1_vaapi は `-qp` を受けず、`-global_quality` で量子化の値 (0〜255) を受ける。** `-qp` は黙って無視され、
@@ -218,13 +218,13 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * vbr / cbr / avbr だけ。**AVBR** (動きの少ない場面では量を下げる VBR) で、出す映像の大きさと
  * コマ数ごとに決めたビットレートを渡す (`hwBitrate`)。デバイスは開かない (MPP が自分で
  * `/dev/mpp_service` を開く)。CPU で作ったフレームを nv12 で渡す。`-g 250` は x264 の既定の
- * キーフレームの間隔 (keyint 250) に合わせたもの — 渡さないと libavcodec の既定の 12 コマになる
+ * キーフレームの間隔 (keyint 250) に合わせたもの。渡さないと libavcodec の既定の 12 コマになる
  *
  * ## NVENC もビットレートで指定する
  *
  * NVENC は `-global_quality` (ICQ) を受けない (FFmpeg の nvenc.c が断る)。Rockchip MPP と同じ表のビットレートを
  * **VBR** で渡す (`nvencRate`)。GPU は番号 (`-gpu`) で選び、デバイスは開かない。CPU で作ったフレームを nv12 で
- * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は7段 (p1〜p7) の真ん中
+ * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は 7 段 (p1〜p7) の真ん中
  */
 export function hwArgs(
   way: HwWay,
@@ -276,8 +276,8 @@ const VAAPI_QP: Record<Exclude<HwCodec, "av1">, number> = {
 };
 
 /**
- * ライブの qp。H.265 も H.264 と同じ値 (H.265 では測っていない)。**25 のまま** — 25 は B フレームを
- * 2 枚作る FFmpeg の既定で、目標の XPSNR に揃っていた値 (前の録画の値)。ライブは B フレームを作らず
+ * ライブの qp。H.265 も H.264 と同じ値 (H.265 では測っていない)。**25 のまま**。25 は B フレームを
+ * 2 枚作る FFmpeg の既定で、目標の XPSNR にそろっていた値 (前の録画の値)。ライブは B フレームを作らず
  * (`liveHwArgs`)、どのコマも P の qp で出るので、それより画質が落ちることはない
  */
 const LIVE_QP: Record<Exclude<HwCodec, "av1">, number> = {
@@ -348,12 +348,12 @@ function vaapiQuality(
 interface Picture {
   /** 出す映像の高さ (画素を正方形に直したあと) */
   height: number;
-  /** 60コマで出す (`encoder.measureSmoothMotion`)。false なら 30コマ */
+  /** 60 コマで出す (`encoder.measureSmoothMotion`)。false なら 30 コマ */
   smooth: boolean;
 }
 
 /**
- * 大きさが分からないとき。**放送でいちばん重い 1080 の 60コマ** — 小さい映像に多めに渡しても
+ * 大きさが分からないとき。**放送でいちばん重い 1080 の 60 コマ**。小さい映像に多めに渡しても
  * AVBR が静かな場面で量を下げるだけで、足りないよりよい。ライブとその場の変換もこれ
  * (映像が来る前に引数を決めるので大きさを知らない)
  */
@@ -361,15 +361,15 @@ const LARGEST: Picture = { height: 1080, smooth: true };
 
 /**
  * **Rockchip MPP と NVENC に渡すビットレート (bit/s)。** H.264 は、今の CPU の H.264 (libx264 medium crf 23) と
- * 同じくらいの画質になる値を、放送を使わずに測って決めた (docs/encode.md「画質はビットレートで決める」):
+ * 同じくらいの画質になる値を、放送を使わずに測って決めた (docs/encode.md「画質はビットレートで決める」)。
  *
  * Blender の公開映像 (Big Buck Bunny・Tears of Steel、CC BY 3.0) 4 か所を放送に似せた MPEG-2 にして、
  * denpa と同じフィルタを通し、libx264 medium crf 23 の VMAF を測る。ハードウェアの代わりに
  * libx264 veryfast・B フレームなし・ビットレート指定で同じ VMAF に届くビットレートを内挿し、
  * 4 か所のいちばん大きい値に 2 割足して 500 kbit/s 単位で切り上げた。測ったいちばん大きい値は
- * 1080 の 30コマ 7.3 Mbit/s・60コマ 8.6、720 の 60コマ 5.0、480 の 60コマ 2.3。720 と 480 の 30コマは
- * 測っておらず、1080 の 30コマと 60コマの比 (0.85) で出した。
- * **実機の h264_rkmpp・h264_nvenc では測っていない** — 代わりより効率が悪ければ、2 割で足りないことがある。
+ * 1080 の 30 コマ 7.3 Mbit/s・60 コマ 8.6、720 の 60 コマ 5.0、480 の 60 コマ 2.3。720 と 480 の 30 コマは
+ * 測っておらず、1080 の 30 コマと 60 コマの比 (0.85) で出した。
+ * **実機の h264_rkmpp・h264_nvenc では測っていない。** 代わりより効率が悪ければ、2 割で足りないことがある。
  * NVENC の H.264 は B フレームを作れるぶん、代わりより効率は良いはず (それも測っていない)。
  *
  * AV1 (av1_nvenc) は `AV1_KBPS`、H.265 (hevc_nvenc・hevc_rkmpp) は `HEVC_KBPS`
@@ -403,7 +403,7 @@ const AV1_KBPS = H264_KBPS;
 /**
  * **H.265 の高さごとの kbit/s。いまは H.264 と同じ値で、H.265 では何も測っていない** (CPU でも GPU でも)。
  *
- * 下げない理由は AV1 (`AV1_KBPS`) と同じ — 同じ画質で H.265 が H.264 よりどれだけ小さいかを、放送に似せた素材で
+ * 下げない理由は AV1 (`AV1_KBPS`) と同じ。同じ画質で H.265 が H.264 よりどれだけ小さいかを、放送に似せた素材で
  * 測ったものが手元に無い。忙しい実写では AV1 ですら H.264 と互角だった (docs/encode.md「H.264 は crf 23」) ので、
  * いちばん重い素材で決める表を測らずに下げると足りなくなりうる。**NVENC の VBR は平均を、Rockchip MPP の AVBR は
  * 上限をこの値に寄せるので、ファイルは H.264 とほぼ同じ大きさになり、H.265 で浮くぶんは画質に回る** (小さくしたいなら、
@@ -412,9 +412,9 @@ const AV1_KBPS = H264_KBPS;
 const HEVC_KBPS = H264_KBPS;
 
 /**
- * h264_rkmpp / hevc_rkmpp のレート制御の引数。**上限と下限も渡す** — MPP の VBR / AVBR が実際に目指すのは
+ * h264_rkmpp / hevc_rkmpp のレート制御の引数。**上限と下限も渡す。** MPP の VBR / AVBR が実際に目指すのは
  * 上限 (`rc:bps_max`) で、渡さないと MPP の既定 (2 Mbit/s の ±25%) のまま残る。
- * 上限は目標の 17/16、下限は 1/16 (MPP の試験用のコード `mpi_enc_utils.c` が VBR / AVBR に置く値)。
+ * 上限は目標の 17/16、下限は 1/16 (MPP のテスト用のコード `mpi_enc_utils.c` が VBR / AVBR に置く値)。
  * AVBR は動きの無い場面で上限に対する下限の割合まで量を下げる
  */
 function rkmppRate(codec: HwCodec, picture: Picture): string[] {
@@ -433,7 +433,7 @@ function rkmppRate(codec: HwCodec, picture: Picture): string[] {
 
 /**
  * NVENC のレート制御の引数。**VBR で、平均を表の値に寄せる** (MPP の VBR と違い、NVENC は平均を目指す)。
- * 上限は目標の 2 倍 — 動きの多い場面に量を寄せられる幅として置いたもので、測っていない。
+ * 上限は目標の 2 倍。動きの多い場面に量を寄せられる幅として置いたもので、測っていない。
  * バッファは上限と同じ (FFmpeg の nvenc.c が何も渡さないときに置く値は平均の 2 倍で、それと同じ)
  */
 function nvencRate(codec: HwCodec, picture: Picture): string[] {
@@ -450,22 +450,22 @@ function nvencRate(codec: HwCodec, picture: Picture): string[] {
   ];
 }
 
-/** NVENC で使う GPU (`HwWay.gpu`)。番号が無ければ 0 (1枚目) */
+/** NVENC で使う GPU (`HwWay.gpu`)。番号が無ければ 0 (1 枚目) */
 function nvencGpu(way: HwWay): string[] {
   return ["-gpu", String(way.gpu ?? 0)];
 }
 
 /**
- * **NVENC が同時に開けるエンコードの数を超えて降りたか** (ffmpeg の標準エラーの全文か1行)。
+ * **NVENC が同時に開けるエンコードの数を超えて降りたか** (ffmpeg の標準エラーの全文か 1 行)。
  *
  * 消費者向けの GeForce は、システム全体で同時に開けるエンコードの数に上限がある (いまの NVIDIA の
  * 一覧では 12)。超えるとドライバはエンコードを開くところ (`nvEncOpenEncodeSessionEx`) で断り、FFmpeg の
  * nvenc.c は `OpenEncodeSessionEx failed: <理由> (<番号>): …` と出す。理由はドライバで違い、新しいものは
  * `out of memory` (NV_ENC_ERR_OUT_OF_MEMORY)、古いものは `incompatible client key`
- * (NV_ENC_ERR_INCOMPATIBLE_CLIENT_KEY) と言う。本当に GPU のメモリが尽きたときも前者になるが、
+ * (NV_ENC_ERR_INCOMPATIBLE_CLIENT_KEY) を返す。本当に GPU のメモリが尽きたときも前者になるが、
  * どちらも「空けば通る」ので同じに扱ってよい。
  *
- * **これで降りたものは GPU が壊れているのではない** — その1本だけソフトウェアでエンコードし、
+ * **これで降りたものは GPU の故障ではない。** その 1 本だけソフトウェアでエンコードし、
  * 方式を覚えて外すことはしない (`live.ts` の `blameLiveHw`)。録画は今までどおり次の方式へ倒れるだけ
  * (`encoder.ts` は落ちた方式を覚えない)。**実機の上限で確かめてはいない** (手元に NVIDIA の GPU が無い)
  */
@@ -487,8 +487,8 @@ export interface LiveHw {
  *
  * 録画と同じ `hwChain` で、印はライブの印 (`liveHwAllow`。呼ぶ側の `live.pickLiveHw` が渡す) を使う。そのうえで
  * **デコードから GPU で通せる方式 (`HwDevice.full`) があれば先に採る。** エンコードするところだけ GPU に
- * 移しても、CPU に残るデコード・bwdif・nv12 への変換で非力な機材は3本目が間に合わない
- * (issue #417 の実測: Celeron J4125 で3本同時、エンコードするだけ GPU 0.76x / 全部 GPU 1.2x)
+ * 移しても、CPU に残るデコード・bwdif・nv12 への変換で非力な機材は 3 本目が間に合わない
+ * (issue #417 の実測: Celeron J4125 で 3 本同時、エンコードするだけ GPU 0.76x / 全部 GPU 1.2x)
  */
 export function liveHw(
   codec: HwCodec,
@@ -508,9 +508,9 @@ export function liveHw(
 }
 
 /**
- * **ライブで GPU にエンコードさせる引数。** 録画の `hwArgs` との違いは遅れを作らないこと:
+ * **ライブで GPU にエンコードさせる引数。** 録画の `hwArgs` との違いは遅れを作らないこと。
  *
- * - `-bf 0` … B フレームを作らない。作ると必ず1枚以上待つ (x264 の `zerolatency` と同じ狙い)
+ * - `-bf 0` … B フレームを作らない。作ると必ず 1 枚以上待つ (x264 の `zerolatency` と同じ狙い)
  * - `-async_depth 1` … GPU に先積みしない。既定 (2) のぶんだけ映像が遅れて出る
  * - 録画の遅くても小さくする指定 (`VAAPI_SLOW`。`-compression_level 1` と B フレームのピラミッド) は足さない。
  *   B フレームを作らないので qp は録画の 24 ではなく前のままの 25 (`LIVE_QP`)。AV1 は録画と同じ (`AV1_ICQ`・`AV1_CQP`)。
@@ -518,24 +518,24 @@ export function liveHw(
  *
  * `-g` はライブの側 (`live.ts` の `videoArgs`) が足す。
  *
- * **Rockchip MPP は録画と同じ AVBR を、いちばん重い映像の値で** (`LARGEST`。ライブは常に60コマで、
+ * **Rockchip MPP は録画と同じ AVBR を、いちばん重い映像の値で** (`LARGEST`。ライブは常に 60 コマで、
  * 大きさは映像が来る前に決まらない)。`-async_depth` は持たない (渡すと使われない引数として
  * ffmpeg が降りる)。MPP の H.264 は B フレームを作らないので `-bf` も要らない。
  *
- * **NVENC も同じ表の、いちばん重い映像の値を VBR で。** 遅れを作らない引数は NVENC の言い方で渡す —
+ * **NVENC も同じ表の、いちばん重い映像の値を VBR で。** 遅れを作らない引数は NVENC の引数で渡す。
  * `-async_depth` は持たず (渡すと降りる)、代わりに `-delay 0` (出来たコマを溜めずにすぐ出す。既定は
  * 作業用の面の数 − 1 コマぶん溜める)。`-tune ll` (低遅延向けの調整)、`-zerolatency 1` (並べ替えの待ちを作らない)、
- * `-bf 0`。preset は `p2` (7段の速いほうから2つ目)。**どれも実機では見ていない**。
+ * `-bf 0`。preset は `p2` (7 段の速いほうから 2 つ目)。**どれも実機では見ていない**。
  * デコードとインタレ解除を GPU に寄せる (`full`) のは VA-API だけで、NVENC は実機で確かめてから
  *
- * ## `full` — デコードとインタレ解除も GPU (VA-API だけ)
+ * ## `full`: デコードとインタレ解除も GPU (VA-API だけ)
  *
  * `-hwaccel vaapi -hwaccel_output_format vaapi` で放送の MPEG-2 を GPU でデコードし、フレームを GPU に
- * 置いたまま `deinterlace_vaapi=rate=field` (フィールドごとに1コマ。bwdif の既定と同じ
- * 59.94p) に通して、そのままエンコードする。**CPU のフィルタは1つも挟めない** — 挟むなら
- * `hwdownload` が要り、降ろしたぶんだけ遅くなる。ライブの映像の鎖はインタレ解除だけ
+ * 置いたまま `deinterlace_vaapi=rate=field` (フィールドごとに 1 コマ。bwdif の既定と同じ
+ * 59.94p) に通して、そのままエンコードする。**CPU のフィルタは 1 つも挟めない。** 挟むなら
+ * `hwdownload` が要り、降ろしたぶんだけ遅くなる。ライブの映像のフィルタはインタレ解除だけ
  * なので挟むものは無い (`-fpsmax` はコマを間引くだけでフィルタではなく、字幕と音声は
- * 別のストリーム)。インタレ解除の映像は bwdif と変わる — **まだ見比べていない**。
+ * 別のストリーム)。インタレ解除の映像は bwdif と変わる (**まだ見比べていない**)。
  *
  * `filter` は「デコードのあとに通すもの全部」。`full` でなければインタレ解除は含まないので、
  * 呼ぶ側が CPU の bwdif を前に足す
@@ -601,7 +601,7 @@ export function liveHwArgs(
 }
 
 /**
- * 1本だけ試しにエンコードする。**時間で切る** — ドライバが固まって返ってこないとき
+ * 1 本だけ試しにエンコードする。**時間で切る。** ドライバが固まって返ってこないとき
  * (実機で見たことはないが) に起動が止まらないように
  */
 async function tryEncode(args: string[]): Promise<boolean> {
@@ -614,7 +614,7 @@ async function tryEncode(args: string[]): Promise<boolean> {
   return result.code === 0;
 }
 
-/** 試しのエンコードの素材。小さく短く — 何が使えるかを見るだけで、速さは測らない */
+/** 試しのエンコードの素材。小さく短くする (何が使えるかを見るだけで、速さは測らない) */
 const SOURCE = ["-f", "lavfi", "-i", "nullsrc=s=256x256:r=30:d=0.2"];
 
 /** PCI の作り手の番号 → 名前。sysfs から読めたときだけ添える */
@@ -624,7 +624,7 @@ const VENDOR: Record<string, string> = {
   "0x10de": "NVIDIA",
 };
 
-/** デバイスの名前。`renderD128 (Intel)` — 作り手は `/sys/class/drm/<デバイス>/device/vendor` から */
+/** デバイスの名前。`renderD128 (Intel)`。作り手は `/sys/class/drm/<デバイス>/device/vendor` から */
 function labelOf(path: string): string {
   const name = basename(path);
   try {
@@ -640,8 +640,8 @@ function labelOf(path: string): string {
 
 /**
  * `HW_DEVICES` に当たるデバイス。名前順 (renderD128, renderD129, …)。
- * 印は最後の段の `*` だけ (デバイスの名前は決まっている)。**readdir で探す** —
- * デバイスは普通のファイルでもフォルダでもないので、glob の道具に頼らない
+ * 印は最後の段の `*` だけ (デバイスの名前は決まっている)。**readdir で探す。**
+ * デバイスは普通のファイルでもフォルダでもないので、glob の関数は使わない
  */
 export function findDevices(pattern = config.hwDevices): string[] {
   const dir = dirname(pattern);
@@ -664,10 +664,10 @@ export function findDevices(pattern = config.hwDevices): string[] {
  * **NVIDIA の GPU のデバイスファイル** (`nvidia0`・`nvidia1` …。`nvidiactl` や `nvidia-uvm` は GPU ではないので外す)。
  * 番号の小さい順に並べ、**並びの位置をそのまま ffmpeg に渡す GPU の番号にする** (`HwDevice.gpu`)。
  *
- * ファイル名の数字は渡さない — コンテナに一部の GPU だけ渡すと (`nvidia1` だけ、など)、CUDA はコンテナから
- * 見える GPU だけを 0 から数え直す。並びが CUDA の数え方と揃うのは、イメージが `CUDA_DEVICE_ORDER=PCI_BUS_ID`
+ * ファイル名の数字は渡さない。コンテナに一部の GPU だけ渡すと (`nvidia1` だけ、など)、CUDA はコンテナから
+ * 見える GPU だけを 0 から数え直す。並びが CUDA の数え方とそろうのは、イメージが `CUDA_DEVICE_ORDER=PCI_BUS_ID`
  * (Dockerfile) で CUDA を PCI のバスの順にしていて、ドライバがデバイスファイルの番号もバスの順に振るため
- * (ふつうはそうなるが、2枚挿しの実機では確かめていない)
+ * (ふつうはそうなるが、2 枚挿しの実機では確かめていない)
  */
 export function findNvidia(dir = config.nvidiaDir): string[] {
   let entries: string[];
@@ -687,12 +687,12 @@ function escapeRegExp(text: string): string {
 }
 
 /**
- * 探し直す。同時に2回押されても ffmpeg は1組しか走らせない
+ * 探し直す。同時に 2 回押されても ffmpeg は 1 組しか動かさない
  */
 export function probe(): Promise<HwEncode> {
   if (running !== null) return running;
-  // 終わったら手を離す。**中で null にしない** — 待たずに終わる場合 (デバイスが無い) では
-  // 代入より先に走り終えてしまい、済んだ promise を握ったままになる
+  // 終わったら null に戻す。**probeOnce の中で null にしない**。待たずに終わる場合 (デバイスが無い) では
+  // 代入より先に終わってしまい、済んだ promise を持ったままになる
   running = probeOnce().finally(() => {
     running = null;
   });
@@ -701,7 +701,7 @@ export function probe(): Promise<HwEncode> {
 
 /**
  * **一度は確かめ終わった見立て。** まだなら (起動した直後) 確かめ終わるのを待つ。確かめ終わっていれば探し直さない。
- * 録画のエンコードはこれを待ってからコーデックと方式を決める (`encoder.ts`) — 待たずに決めていた頃は、
+ * 録画のエンコードはこれを待ってからコーデックと方式を決める (`encoder.ts`)。待たずに決めていた頃は、
  * 起動した直後に溜まっていたジョブが確かめの終わる前に始まり、GPU が無いものとして H.265 を黙って飛ばし、
  * H.264 を CPU でエンコードしていた (起動は確かめを待たずに進む。`runtime.ts`)
  */
@@ -745,7 +745,7 @@ async function probeOnce(): Promise<HwEncode> {
     devices.push(device);
   }
   /*
-   * **NVIDIA の GPU は1枚ずつ、NVENC だけ試す。** renderD* の行とは別にする — NVIDIA のドライバが
+   * **NVIDIA の GPU は 1 枚ずつ、NVENC だけ試す。** renderD* の行とは別にする。NVIDIA のドライバが
    * renderD* も作っていても、イメージに NVIDIA の VA-API ドライバは無く、そちらの行は使えないと出るだけ。
    * AV1 は RTX 40 以降だけで、それより前の GPU は AV1 の試しのエンコードが落ちて H.264・H.265 だけになる
    */
@@ -761,9 +761,9 @@ async function probeOnce(): Promise<HwEncode> {
     devices.push(device);
   }
   /*
-   * **Rockchip MPP は `/dev/mpp_service` が在るときだけ、H.264 と H.265 だけ試す** (RK3588 は AV1 をエンコードできない)。
-   * renderD* の行とは別の1行にする — 同じエンコーダが GPU の行にも並ばないように。
-   * 在っても MPP が開けなければ (BSP でないカーネル・権限) 試しのエンコードが落ちて、使わないだけ
+   * **Rockchip MPP は `/dev/mpp_service` があるときだけ、H.264 と H.265 だけ試す** (RK3588 は AV1 をエンコードできない)。
+   * renderD* の行とは別の 1 行にする (同じエンコーダが GPU の行にも並ばないように)。
+   * あっても MPP が開けなければ (BSP でないカーネル・権限) 試しのエンコードが落ちて、使わないだけ
    */
   if (existsSync(config.rkmppDevice)) {
     const path = config.rkmppDevice;
@@ -781,7 +781,7 @@ async function probeOnce(): Promise<HwEncode> {
   return next;
 }
 
-/** 録画と同じ引数で1コマエンコードしてみる */
+/** 録画と同じ引数で 1 コマエンコードしてみる */
 function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
   const hw = hwArgs(way, codec);
   return tryEncode([

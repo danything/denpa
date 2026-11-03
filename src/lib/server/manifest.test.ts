@@ -4,7 +4,7 @@ import { config } from "./config";
 import { appName, manifest } from "./manifest";
 
 /**
- * **同じ denpa を2つの名前で出している。** 両方をホーム画面に置くと、
+ * **同じ denpa を 2 つの名前で出している。** 両方をホーム画面に置くと、
  * 名前もアイコンも同じものが並んで見分けが付かない。
  */
 describe("ホーム画面に置いたときの名前", () => {

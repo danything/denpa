@@ -1,12 +1,12 @@
 /**
  * 偽の放送。**実チューナー無しで「電波」を作る。**
  *
- * ここが持つのは組み立てだけで、誰に配るかは知らない。使う先が2つあるため。
+ * ここが持つのは組み立てだけで、誰に配るかは知らない。使う先が 2 つあるため。
  *
- * - `tests/fake/tune.ts` … 選局コマンドの代わり。**本物のエージェント**に食わせる
+ * - `tests/fake/tune.ts` … 選局コマンドの代わり。**本物のエージェント**に渡す
  * - `tests/fake/agent.ts` … 偽エージェント。denpa の E2E で使う
  *
- * 番組も局名もJSONでは配らない。EIT と SDT を組み立てて電波に乗せる
+ * 番組も局名も JSON では配らない。EIT と SDT を組み立てて電波に乗せる
  * (`packages/arib/src/synth.ts`)。こうしておかないと、denpa 側の解析が通っているか
  * どうかをテストで確かめられない。
  */
@@ -75,7 +75,7 @@ const LOGO_PNG_LARGE = Uint8Array.from(
   (c) => c.charCodeAt(0),
 );
 
-/** 番組表を埋める長さ。1日より少し長く (30時間) とる。局ごとの尺に応じて増やす */
+/** 番組表を埋める長さ。1 日より少し長く (30 時間) とる。局ごとの尺に応じて増やす */
 const DAY = 30 * 60 * 60 * 1000;
 
 const TITLES = [
@@ -141,10 +141,10 @@ const programsWith = (service: FakeService, knobs: Knobs): SynthEvent[] =>
     ? programsFor(service).map((event) => ({ ...event, copyControl: 0b11 }))
     : programsFor(service);
 
-/** 1枠の本数。E2E では短くして「数秒後に始まる番組」を作る */
+/** 1 枠の本数。E2E では短くして「数秒後に始まる番組」を作る */
 const SLOTS = Number(process.env["FAKE_SLOTS"] ?? 60);
 
-/** 局のロゴ。スクリーンショットを撮るときは局ごとに作った作り物、テストは上の2枚 */
+/** 局のロゴ。スクリーンショットを撮るときは局ごとに作った作り物、テストは上の 2 枚 */
 const logoOf = (service: FakeService, large: boolean): Uint8Array =>
   DOCS
     ? docsLogo(service, large ? 64 : 48, large ? 36 : 24)
@@ -155,7 +155,7 @@ const logoOf = (service: FakeService, large: boolean): Uint8Array =>
 function programsFor(service: FakeService): SynthEvent[] {
   const slotMs = service.slotMs;
   /*
-   * 番組表(4時〜翌4時)が埋まるだけの本数を出す。短い尺の局は本数で稼ぐと多すぎるので上限を切る。
+   * 番組表(4 時〜翌 4 時)が埋まるだけの本数を出す。短い尺の局は本数で稼ぐと多すぎるので上限を切る。
    *
    * 番組を出さない局もある (`noPrograms`)。**その局の番組表がまだ集まっていない状態**は
    * 本物でも普通に起きる。ロゴの中継まわりを見るためだけに置いてある局にまで
@@ -170,8 +170,8 @@ function programsFor(service: FakeService): SynthEvent[] {
   // 作れる本数で覆える幅。尺が短い局は本数の上限で頭打ちになる
   const span = Math.min(DAY, count * slotMs);
   /*
-   * 少し過去から始める。全部を過去にすると予約できる番組が1つも無くなる。
-   * スクリーンショットを撮るときは前後 30 時間ずつ — いつ撮っても、その日の番組表 (4時〜翌4時) が頭から埋まる
+   * 少し過去から始める。全部を過去にすると予約できる番組が 1 つも無くなる。
+   * スクリーンショットを撮るときは前後 30 時間ずつ。いつ撮っても、その日の番組表 (4 時〜翌 4 時) が頭から埋まる
    */
   const base =
     Math.floor((Date.now() - (DOCS ? DAY : span / 3)) / slotMs) * slotMs;
@@ -180,7 +180,7 @@ function programsFor(service: FakeService): SynthEvent[] {
     const startAt = base + i * slotMs;
     const slot = startAt / slotMs;
     programs.push({
-      // 枠番号から決めるので取得のたびにIDが変わらない
+      // 枠番号から決めるので取得のたびに ID が変わらない
       eventId: slot % 65536,
       startAt,
       duration: slotMs,
@@ -194,12 +194,12 @@ function programsFor(service: FakeService): SynthEvent[] {
         番組内容: `${service.name} の詳細`,
       },
       /*
-       * **同じ分類を2つ入れておく。** 本物の放送がそうなっている —
+       * **同じ分類を 2 つ入れておく。** 本物の放送がそうなっている。
        * 実機の NHK の高校野球中継が `[スポーツ, 拡張, 拡張]` で、0xE (拡張) は
        * 分類ではなく局が自分で決めた符号を載せる枠なので、同じものが並ぶ。
        *
-       * 1つずつしか入れていなかった頃は、**同じラベルが2つ並ぶと画面が落ちる**のに
-       * 気付けなかった (詳細が開かなくなる。実機で1番組だけ開かなかった)
+       * 1 つずつしか入れていなかった頃は、**同じラベルが 2 つ並ぶと画面が落ちる**のに
+       * 気付けなかった (詳細が開かなくなる。実機で 1 番組だけ開かなかった)
        */
       genres: [
         [7, 0],
@@ -207,11 +207,11 @@ function programsFor(service: FakeService): SynthEvent[] {
         [14, 0],
       ],
       /*
-       * **音声を2本にしておく。** 本物にもよくある構成で (解説放送・二重音声)、
+       * **音声を 2 本にしておく。** 本物にもよくある構成で (解説放送・二重音声)、
        * どちらも `component_type=3` の日本語なので、**符号だけでは
-       * 「ステレオ (日本語)」が2つ並ぶ**。見分けが付くのは放送が付けた
-       * 名前だけ — 実機の日テレ「金曜ロードショー[解]」がまさにこれで、
-       * 番組表の詳細に同じラベルが2つ出ていた
+       * 「ステレオ (日本語)」が 2 つ並ぶ**。見分けが付くのは放送が付けた
+       * 名前だけ。実機の日テレ「金曜ロードショー[解]」がまさにこれで、
+       * 番組表の詳細に同じラベルが 2 つ出ていた
        */
       audios: [
         { type: 3, text: "主音声ステレオ" },
@@ -298,8 +298,8 @@ export function channels() {
 /**
  * 番組表をセクションに割る。
  *
- * 1セクションは 4093 バイトまでなので、10 番組ずつに切る。
- * **セグメント (8セクション) の切れ目まで面倒を見る** — denpa は
+ * 1 セクションは 4093 バイトまでなので、10 番組ずつに切る。
+ * **セグメント (8 セクション) の切れ目まで面倒を見る。** denpa は
  * `segment_last_section_number` を見て「もう来ない番号」を判断するので、
  * ここが嘘だと永久に揃わない。`tableId` は自局が 0x50、ほかの TS の局 (EIT[schedule other]) が 0x60
  */
@@ -342,7 +342,7 @@ function present(events: SynthEvent[]): SynthEvent | undefined {
  * 中身のパケットを並べる。
  *
  * 本物である必要はないが、ヘッダだけは本物らしくしておく。
- * 全部を 0x47 で埋めると 4バイト目の上位2ビットが立ち、denpa の
+ * 全部を 0x47 で埋めると 4 バイト目の上位 2 ビットが立ち、denpa の
  * スクランブル判定が「掛かっている」と誤って読む。
  */
 function payload(pid: number, count: number, scrambled: boolean): Uint8Array {
@@ -352,7 +352,7 @@ function payload(pid: number, count: number, scrambled: boolean): Uint8Array {
     buffer[at] = 0x47;
     buffer[at + 1] = (pid >> 8) & 0x1f;
     buffer[at + 2] = pid & 0xff;
-    // 上位2ビットが transport_scrambling_control、下位が adaptation/continuity
+    // 上位 2 ビットが transport_scrambling_control、下位が adaptation/continuity
     buffer[at + 3] = scrambled ? 0x90 : 0x10;
     buffer.fill(0xff, at + 4, at + 188);
   }
@@ -386,8 +386,8 @@ const ENGINEERING = { service: 929, pmt: 0x1f0, es: 0x1f1 };
 
 function carouselPackets(services: FakeService[]): Uint8Array {
   /*
-   * **BS (ネットワーク4) は `LOGO-05`、CS は `CS_LOGO-05` に分け、DII も別々に流す。** 本物の BS15:16625 も
-   * 2つのモジュールで流れてくる。1つにまとめていると、片方だけ揃った時点で読み切ったと決める
+   * **BS (ネットワーク 4) は `LOGO-05`、CS は `CS_LOGO-05` に分け、DII も別々に流す。** 本物の BS15:16625 も
+   * 2 つのモジュールで流れてくる。1 つにまとめていると、片方だけ揃った時点で読み切ったと決める
    * 誤り (`DsmccLogoCollector.carouselRead`) がテストで見えない
    */
   // 載せる局が無くても両方流す (本物も CS の局を受けていない家に CS_LOGO-05 を流している)
@@ -411,7 +411,7 @@ function carouselModule(
   downloadId: number,
 ): Uint8Array {
   /*
-   * テストは1枚を全局で使い回す。スクリーンショットを撮るときは局ごとに別の画像 (番組表に並ぶので見分けが付くように)
+   * テストは 1 枚を全局で使い回す。スクリーンショットを撮るときは局ごとに別の画像 (番組表に並ぶので見分けが付くように)
    */
   const module = logoModule(
     0x05,
@@ -453,9 +453,9 @@ function logoPackets(service: FakeService): Uint8Array {
   const logoId = service.serviceId % 512;
 
   /*
-   * **小さいもの (0x00) を先に、大きいもの (0x05) をあとに流す。** 本物の局も6種類を
-   * 順に流していて、どれが先に来るかは運。最初に来た1つで閉じていた頃は、実機の
-   * 地上波26局が小さいロゴのまま並んでいた
+   * **小さいもの (0x00) を先に、大きいもの (0x05) をあとに流す。** 本物の局も 6 種類を
+   * 順に流していて、どれが先に来るかは運。最初に来た 1 つで閉じていた頃は、実機の
+   * 地上波 26 局が小さいロゴのまま並んでいた
    */
   const cdt = (logoType: number, data: Uint8Array) =>
     withCrc([
@@ -506,18 +506,18 @@ function logoPackets(service: FakeService): Uint8Array {
 }
 
 /**
- * 物理チャンネル1つぶんの表 (PAT / PMT / SDT / NIT)。選局したら真っ先に流れてくる。
+ * 物理チャンネル 1 つぶんの表 (PAT / PMT / SDT / NIT)。選局したら真っ先に流れてくる。
  *
  * **NIT も出す。** チャンネルスキャンは NIT と SDT が**両方**揃って初めて
  * 「受信できた」とみなす (`packages/arib/src/psi.ts` の `ServiceReader`)。偽エージェントは
  * スキャンの結果を作り物で返していたので要らなかったが、本物のエージェントに
- * 食わせるならこれが無いとどのチャンネルも見つからない。
+ * 渡すならこれが無いとどのチャンネルも見つからない。
  */
 function tables(services: FakeService[], knobs: Knobs): Uint8Array {
   /*
    * ロゴを積んでいる中継にはエンジニアリングサービス (929) がある。
-   * **PAT に載せるかどうかがそのまま「当たり外れ」になる** — denpa は
-   * ここを見て、外れの中継を1秒ほどで見切る
+   * **PAT に載せるかどうかがそのまま「当たり外れ」になる。** denpa は
+   * ここを見て、外れの中継を 1 秒ほどで見切る
    */
   const carousel = services.some((service) => service.carousel === true);
   const programs: [number, number][] = services.map((s, i) => [
@@ -633,7 +633,7 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
 }
 
 /**
- * 番組表 (EIT[schedule])。開いたら1回で全部流す。
+ * 番組表 (EIT[schedule])。開いたら 1 回で全部流す。
  *
  * **衛星は、同じネットワークのほかの TS の局のぶんも流す** (EIT[schedule other])。本物の BS・CS は
  * どの中継にもネットワーク全局ぶんの番組表 (基本) が流れていて、denpa の全局読み
@@ -728,7 +728,7 @@ function motionColor(
  *
  * エンコードする経路の E2E では ffmpeg も偽物なので中身は何でもよかったが、ライブを変換せずに送る経路は
  * **ブラウザが自分でデコードして映像を出す** (docs/stream.md#放送そのままmpeg-2を送る)。そこを試すにはデコードできるものが要る。
- * コマは 30 枚を使い回す (1秒で一巡りする縞)。
+ * コマは 30 枚を使い回す (1 秒で一巡りする縞)。
  *
  * **PTS は PCR より 0.4 秒先にする。** 本物の放送もそう作ってある (受信機は PTS まで
  * 待って映す。stream.md#貯まりより小さく出ることはある)
@@ -798,8 +798,8 @@ function avPackets(index: number, state: AvState): Uint8Array {
 /**
  * 選局した状態を作る。**物理チャンネル丸ごと**しか無い。
  *
- * 局を選り分けるのも番組表を読むのも denpa の仕事なので、1本の TS に
- * その中継の局を全部乗せる。`knobs` は都度読む — 別プロセスから
+ * 局を選り分けるのも番組表を読むのも denpa の仕事なので、1 本の TS に
+ * その中継の局を全部入れる。`knobs` は都度読む。別プロセスから
  * ファイル越しに変えられることがあるため。
  */
 export function broadcast(
@@ -842,8 +842,8 @@ export function broadcast(
       send(nowOnAir(services, now));
     }
     /*
-     * 映像と音声。局ごとに別のPIDで流す (選り分けを試すため)。**スクランブルが掛かって
-     * いる状態は、復号できない中身のまま流す** — 掛かっていれば本物も復号できない
+     * 映像と音声。局ごとに別の PID で流す (選り分けを試すため)。**スクランブルが掛かって
+     * いる状態は、復号できない中身のまま流す。** 掛かっていれば本物も復号できない
      */
     for (let index = 0; index < services.length; index++) {
       send(

@@ -1,6 +1,6 @@
 # 立てる
 
-README の手順の細かいところ。用意するもの、入れ方 (1行・Compose・1コンテナ・Helm・Talos Linux)、誰を通すか、前段 (リバースプロキシ) の後ろに置くとき。
+README の手順の細かいところ。用意するもの、入れ方 (1 行・Compose・1 コンテナ・Helm・Talos Linux)、誰を通すか、前段 (リバースプロキシ) の後ろに置くとき。
 Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [install-windows.md](install-windows.md) に。使う前に [使ってよい範囲](../README.md#使ってよい範囲) を読んでください。
 
 ## 用意するもの
@@ -65,8 +65,8 @@ docker compose up -d
 
 ### 1つのコンテナで (`denpa-aio`)
 
-本体とエージェントを1つにまとめたイメージです。チューナーを挿した機械で全部動かすとき
-(NAS や、ほかの仕組みに載せるとき) 向け。中身は2つのイメージと同じです。
+本体とエージェントを 1 つにまとめたイメージです。チューナーを挿した機械で全部動かすとき
+(NAS や、ほかの仕組みに載せるとき) 向け。中身は 2 つのイメージと同じです。
 
 ```sh
 docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
@@ -79,7 +79,7 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
 ```
 
 - エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、録画は `/media` の下
-  (元のTS は `raw`、エンコードしたものは `encoded`)。前のバージョンから上げるときは [config.md](config.md#置き場を変えた-前のバージョンから上げるとき)
+  (元の TS は `raw`、エンコードしたものは `encoded`)。前のバージョンから上げるときは [config.md](config.md#置き場を変えた-前のバージョンから上げるとき)
 - 本体とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、入口が `/config/tls/pair-token` に無いときだけ作って両方に渡します
 - `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可と、pipe を広げる
   `SYS_RESOURCE` だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
@@ -145,7 +145,7 @@ install.sh / install.ps1 が確かめるのは、同じリリースに置いた 
 
 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (`192.168.0.0/16,10.0.0.0/8`) で、ここからはログインなしで通ります。
 通るのは IP の直書きや `.local` などの名前で開いたときで、自分のドメインなどの名前で開くなら `ALLOWED_HOSTS` に書きます ([auth.md](auth.md#ログインなしで開ける名前-allowed_hosts))。
-画面をログインで守るなら OIDC の3つを渡します (リダイレクト URI は `https://<denpa>/login/callback`)。
+画面をログインで守るなら OIDC の 3 つを渡します (リダイレクト URI は `https://<denpa>/login/callback`)。
 
 ```yaml
 # ~/denpa/compose.override.yml
@@ -168,7 +168,7 @@ Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `den
 **持っているドメインの名前を LAN の中のアドレスに向ければ、公開しないまま本物の証明書が
 使えます** (DNS-01 なら外から繋がる必要が無い。`.arpa` のような内側だけの名前は ACME で
 取れない)。ホーム画面に置けるのも全画面にできるのも https のページだけなので、PWA にも要ります。
-外向きと LAN 用の2つの名前で出すなら、ホーム画面の名前を分けられます ([watch.md](watch.md#ホーム画面に置く))。
+外向きと LAN 用の 2 つの名前で出すなら、ホーム画面の名前を分けられます ([watch.md](watch.md#ホーム画面に置く))。
 その名前で信頼するネットワークからログインなしで開くなら、名前を `ALLOWED_HOSTS` (か `PWA_NAMES`) に書きます
 ([auth.md](auth.md#ログインなしで開ける名前-allowed_hosts))。
 

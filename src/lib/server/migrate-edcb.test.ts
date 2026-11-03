@@ -34,7 +34,7 @@ type EdcbReserve = import("./edcb-ctrlcmd").EdcbReserve;
 type EdcbRecInfo = import("./edcb-ctrlcmd").EdcbRecInfo;
 
 const fake = await startFakeEdcb();
-/** 偽サーバのルールの局 (TOKYO MX) の内部ID */
+/** 偽サーバのルールの局 (TOKYO MX) の内部 ID */
 const MX_ID = MX.networkId * 100000 + MX.serviceId;
 
 const preview = { apply: false };
@@ -85,7 +85,7 @@ const known = (networkId: number, serviceId: number) =>
   [GR, BS].find((s) => s.networkId === networkId && s.serviceId === serviceId)
     ?.id;
 
-/** 時間帯と曜日の1件 (曜・時・分 〜 曜・時・分) */
+/** 時間帯と曜日の 1 件 (曜・時・分 〜 曜・時・分) */
 function span(
   startDay: number,
   startHour: number,
@@ -161,7 +161,7 @@ beforeEach(() => {
     .run();
 });
 
-/** 引き継ぎを1回走らせて、記録と件数を返す (進み具合は `track` が作り直す) */
+/** 引き継ぎを 1 回走らせて、記録と件数を返す (進み具合は `track` が作り直す) */
 async function within(body: () => void | Promise<void>) {
   await track("edcb", preview, async () => {
     await body();
@@ -207,7 +207,7 @@ describe("ジャンル", () => {
 });
 
 describe("時間帯と曜日", () => {
-  test("終わりを含むので、1分後ろにする", () => {
+  test("終わりを含むので、1 分後ろにする", () => {
     // 月曜 20:00〜21:30
     expect(parseDateList([span(1, 20, 0, 1, 21, 30)])).toEqual({
       slot: { time_from: 20 * 60, time_to: 21 * 60 + 31, weekdays: [1] },
@@ -244,7 +244,7 @@ describe("時間帯と曜日", () => {
       slot: { time_from: 23 * 60, time_to: 61, weekdays: [1, 2, 3] },
       widened: true,
     });
-    // 7日そろえば EDCB と同じ
+    // 7 日そろえば EDCB と同じ
     const all = [0, 1, 2, 3, 4, 5, 6].map((day) =>
       span(day, 23, 0, (day + 1) % 7, 1, 0),
     );
@@ -254,7 +254,7 @@ describe("時間帯と曜日", () => {
     });
   });
 
-  test("時刻の違う時間帯が2つ、2日以上にわたる途中からの時間帯は写せない", () => {
+  test("時刻の違う時間帯が 2 つ、2 日以上にわたる途中からの時間帯は写せない", () => {
     expect(
       parseDateList([span(1, 19, 0, 1, 20, 0), span(2, 21, 0, 2, 22, 0)]),
     ).toEqual({ skip: "時刻の違う時間帯が 2 つ以上あるので取り込めません" });
@@ -370,7 +370,7 @@ describe("ルールに写す", () => {
     });
   });
 
-  test("見つからない局は外し、1つも残らなければ飛ばす", () => {
+  test("見つからない局は外し、1 つも残らなければ飛ばす", () => {
     expect(
       convertRule(rule({ andKey: "テスト", services: [GR, UNKNOWN] }), known),
     ).toMatchObject({
@@ -547,7 +547,7 @@ describe("取り込み", () => {
     expect(orm().select().from(recordedHistory).all()).toHaveLength(2);
   });
 
-  test("同じ局・同じ開始の行が2つあっても、下見と取り込みで件数がそろう", async () => {
+  test("同じ局・同じ開始の行が 2 つあっても、下見と取り込みで件数がそろう", async () => {
     const start = Date.UTC(2026, 8, 1, 12, 0, 0);
     const list = [
       recInfoRow({ title: "テスト番組 #1", startAt: start }),
@@ -651,7 +651,7 @@ describe("EpgTimerSrv から通しで", () => {
     expect(orm().select().from(recordedHistory).all()).toHaveLength(1);
   });
 
-  test("ver が違えば記録に1回だけ残して続ける", async () => {
+  test("ver が違えば記録に 1 回だけ残して続ける", async () => {
     fake.setMode({ ver: 4 });
     await startEdcb(fake.target, preview);
     const result = await settled();

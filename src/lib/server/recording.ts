@@ -9,7 +9,7 @@ import type { Payload } from "./webhook";
 
 /**
  * 通知 (webhook) に載せる録画の要点。録画とエンコードの節目で同じ形式。
- * webhook.ts に置かないのは、試験がそちらを差し替える (`disk.test.ts`) ため
+ * webhook.ts に置かないのは、テストがそちらを差し替える (`disk.test.ts`) ため
  */
 export function recordingSummary(
   recording: Recording,
@@ -33,10 +33,10 @@ export function recordingFromForm(form: FormData): Recording | undefined {
 /**
  * `/api/recordings/<id>` 系の前置き。id を確かめて行を引く。
  * 数字でなければ 400、無ければ 404 をここで投げるので、呼ぶ側は
- * 在る前提で書ける (同じ4行をルートごとに書いていた)。
+ * ある前提で書ける。
  *
- * @param deleted 消した行も引くか。**既定は引かない** — 観る API が
- *   消したものを返さないように。削除 API だけは「もう消えている」を
+ * @param deleted 消した行も引くか。**既定は引かない** (観る API が
+ *   消したものを返さないように)。削除 API だけは「もう消えている」を
  *   見分けたいので true で呼ぶ
  */
 export function recordingOr404(idLike: string, deleted = false): Recording {
@@ -56,8 +56,8 @@ export function recordingOr404(idLike: string, deleted = false): Recording {
 }
 
 /**
- * 録画の頭の放送時刻 (`ts_head`) を書く。**空のときだけ** — 録っている間に測れていれば、
- * エンコードのときに測り直した値で上書きしない (どちらも同じ TS の頭を測るので同じ値になる)
+ * 録画の先頭の放送時刻 (`ts_head`) を書く。**空のときだけ**書く。録っている間に測れていれば、
+ * エンコードのときに測り直した値で上書きしない (どちらも同じ TS の先頭を測るので同じ値になる)
  */
 export function fillTsHead(recordingId: number, head: number): void {
   orm()
@@ -68,7 +68,7 @@ export function fillTsHead(recordingId: number, head: number): void {
 }
 
 /**
- * **元の TS の頭 (再生位置 0 の手前) の放送時刻** (unix ms)。測った値 (`ts_head`) があればそれ、
+ * **元の TS の先頭 (再生位置 0 の手前) の放送時刻** (unix ms)。測った値 (`ts_head`) があればそれ、
  * 測れていない録画 (TDT を読めない・取り込んだ録画) は予定の時刻 (`record_from ?? start_at − START_MARGIN`) で
  * 代わりにする。数秒ずれることがある。実況のコメント (`jikkyo.ts`) と切り抜きの位置 (`clips.ts`) が使う
  */

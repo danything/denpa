@@ -12,8 +12,8 @@
  *       -c:v libsvtav1 -preset 12 -g 30 -pix_fmt yuv420p -c:a libopus -b:a 64k -ac 2 \
  *       -f mp4 -movflags +empty_moov+default_base_moof -frag_duration 50000 live-av1.mp4
  *
- * 形式はライブの ffmpeg と同じ (`server/live.ts` の `+empty_moov+default_base_moof`)。2秒ぶんを
- * 頭 (ftyp + moov) を1回だけ出してから、媒体 (moof + mdat) を**時刻 (tfdt) を1周ぶんずつ
+ * 形式はライブの ffmpeg と同じ (`server/live.ts` の `+empty_moov+default_base_moof`)。2 秒ぶんを
+ * 頭 (ftyp + moov) を 1 回だけ出してから、媒体 (moof + mdat) を**時刻 (tfdt) を 1 周ぶんずつ
  * 足して**繰り返す。速さは実時間 (本物のライブと同じく、先へは溜めない)。
  *
  *     bun tests/fake/fmp4-loop.ts <fMP4>

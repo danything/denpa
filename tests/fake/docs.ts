@@ -51,8 +51,8 @@ function sat(
     name,
     type,
     /*
-     * 衛星は種別ごとに1つの中継にまとめる。番組表は中継を1つ読めば全局ぶん揃う作り
-     * (本物も他局の番組表が乗っている)。CS も置く — 無いと denpa が標準の表 (本物の局名) から入れる
+     * 衛星は種別ごとに 1 つの中継にまとめる。番組表は中継を 1 つ読めば全局ぶん揃う作り
+     * (本物も他局の番組表が入っている)。CS も置く。無いと denpa が CS の局を放送の一覧から入れようとして選局する (`satellite-lineup.ts`)
      */
     channel: type === "BS" ? "BS01:16400" : "CS02:24608",
     slotMs: 60 * 60_000,
@@ -213,7 +213,7 @@ const SHOWS: Show[] = [
   },
 ];
 
-/** 番組表に積む1本ぶん。枠番号から決まるので、取り直しても同じものが出る */
+/** 番組表に積む 1 本ぶん。枠番号から決まるので、取り直しても同じものが出る */
 export function docsProgram(service: FakeService, slot: number) {
   const show = SHOWS[(slot * 7 + service.serviceId) % SHOWS.length]!;
   const episode =
@@ -245,7 +245,7 @@ export function docsProgram(service: FakeService, slot: number) {
 /** ARIB の決め打ちの色の表 (STD-B24) の番号。0 黒 1 赤 2 緑 3 黄 4 青 5 マゼンタ 6 シアン 7 白 8 透明 */
 const LOGO_COLORS = [1, 4, 2, 5, 6, 3, 1, 4, 2, 5, 6, 3];
 
-/** 角を落とした色の四角に、白い丸と電波の弧を2本。どの局も同じ形で、色だけ違う */
+/** 角を落とした色の四角に、白い丸と電波の弧を 2 本。どの局も同じ形で、色だけ違う */
 export function docsLogo(
   service: FakeService,
   width: number,
@@ -299,8 +299,8 @@ export function docsLogo(
 }
 
 /*
- * ライブの映像。偽の放送の映像はマクロブロック (16x16) ごとに1色の MPEG-2 (`synth-av.ts`) なので、
- * 16x9 個の升で色帯 (75% のカラーバー) を描く。下の2段の灰色の階段だけ流して、動いているのが分かるようにする
+ * ライブの映像。偽の放送の映像はマクロブロック (16x16) ごとに 1 色の MPEG-2 (`synth-av.ts`) なので、
+ * 16x9 個の升で色帯 (75% のカラーバー) を描く。下の 2 段の灰色の階段だけ流して、動いているのが分かるようにする
  */
 const BARS: [number, number, number][] = [
   [180, 128, 128], // 白
@@ -335,7 +335,7 @@ const csi = (params: string, final: number) => [
   0x20,
   final,
 ];
-/** 960x540・表示区画 620x480 を (170,30) に・36ドット・字間4・行間24 (放送でよく見る頭) */
+/** 960x540・表示区画 620x480 を (170,30) に・36 ドット・字間 4・行間 24 (放送でよく見る頭) */
 const CAPTION_HEAD = [
   ...csi("7", 0x53),
   ...csi("620;480", 0x56),
@@ -344,7 +344,7 @@ const CAPTION_HEAD = [
   ...csi("4", 0x58),
   ...csi("24", 0x59),
 ];
-/** 1行に入る字の数 (区画 620 ÷ 字の枠 40) */
+/** 1 行に入る字の数 (区画 620 ÷ 字の枠 40) */
 const CAPTION_COLUMNS = 15;
 /** 字幕の色。白 / 黄 (話している人の名前) */
 const WHITE = 0x87;
@@ -378,7 +378,7 @@ export function docsCaptions(): Uint8Array {
     const lines = LINES[i % LINES.length]!;
     const body: number[] = [0x0c, ...CAPTION_HEAD];
     lines.forEach(([color, line], index) => {
-      // 下から2行目まで (いちばん下は観る画面の操作バーと重なる)
+      // 下から 2 行目まで (いちばん下は観る画面の操作バーと重なる)
       const row = 7 - lines.length + index;
       const col = Math.max(
         0,

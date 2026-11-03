@@ -59,7 +59,7 @@ const withoutGone = (stored: readonly StoredService[]) =>
 let running: Promise<ChannelType[]> | null = null;
 
 /** 局の表 (`services`) の 1 行のうち、作り直すかを決めるのに使うところ */
-export interface StoredService {
+interface StoredService {
   type: string;
   network_id: number;
   channel: string;

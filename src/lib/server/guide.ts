@@ -28,7 +28,7 @@ import {
 
 export const HOUR = 60 * 60 * 1000;
 /**
- * 日本の番組表の慣習に合わせ、1日は 4:00 から翌 4:00 まで。
+ * 日本の番組表の慣習に合わせ、1 日は 4:00 から翌 4:00 まで。
  * 深夜番組が翌日側に送られると探しにくいため。
  */
 const DAY_START_HOUR = 4;
@@ -53,11 +53,11 @@ export function requestedDay(raw: string | null): number {
 /**
  * 表に出す局と、分割放送のあるサブチャンネル。
  *
- * **放送していない局は出さない** (終わったチャンネル)。放送局ごとに決める —
- * どれか1つが放送していれば揃って残し、サブの列を立てるかは画面が決める
+ * **放送していない局は出さない** (終わったチャンネル)。放送局ごとに決める。
+ * どれか 1 つが放送していれば揃って残し、サブの列を立てるかは画面が決める
  * (分割放送のある日だけ。`#lib/subchannels.ts`)。
  *
- * 決めるには番組の名前と時刻が要るが、引くのはその4列だけ (予約・録画を結ばない)。
+ * 決めるには番組の名前と時刻が要るが、引くのはその 4 列だけ (予約・録画を結ばない)。
  * 番組そのもの (`programsOf`) より軽いので、外枠と一緒に返せる
  */
 export function stationsOf(
@@ -149,9 +149,9 @@ export function programsOf(
   );
 }
 
-/** 日付の並びに出す日数 (今日を含む)。番組表はおよそ1週間先まで届く */
+/** 日付の並びに出す日数 (今日を含む)。番組表はおよそ 1 週間先まで届く */
 const STRIP_DAYS = 8;
-/** 番組表が1週間より先まで届いていても、並べるのはここまで */
+/** 番組表が 1 週間より先まで届いていても、並べるのはここまで */
 const STRIP_MAX_DAYS = 15;
 /** 前の日を並べるのはここまで。番組表は終わってから `programRetention` (24 時間) で消えるので、並ぶのはふつう前の日まで。上限は念のため */
 const STRIP_PAST_DAYS = 7;
@@ -163,7 +163,7 @@ function shiftDay(start: number, n: number): number {
   return d.getTime();
 }
 
-/** その放送日 (4:00〜翌4:00) に始まる番組があるか。始まりの時刻の索引 (`programs_time`) で範囲を引くだけ */
+/** その放送日 (4:00〜翌 4:00) に始まる番組があるか。始まりの時刻の索引 (`programs_time`) で範囲を引くだけ */
 function hasPrograms(type: ChannelType, start: number): boolean {
   const row = orm()
     .select({ id: programTable.id })
@@ -183,16 +183,16 @@ function hasPrograms(type: ChannelType, start: number): boolean {
 
 /**
  * 日付の並び。**番組の無い日も並べて、押せなくする** (並びの幅が日によって変わらない)。
- * 届いている最後の日が1週間より先なら、そこまで伸ばす。
+ * 届いている最後の日が 1 週間より先なら、そこまで伸ばす。
  * **前の日も、番組が残っている日だけ今日の左に並べる** (遡るのは番組の無い日に当たるまで。`STRIP_PAST_DAYS` 日まで)。
- * 「←」1つで前の日へ送るより、どこまで戻れるかが見える
+ * 「←」1 つで前の日へ送るより、どこまで戻れるかが見える
  */
 export function daysOf(type: ChannelType, today: number) {
   const days = Array.from({ length: STRIP_DAYS }, (_, i) => {
     const start = shiftDay(today, i);
     return { start, has: hasPrograms(type, start) };
   });
-  // 1週間より先にも届いていれば、届いている日まで伸ばす
+  // 1 週間より先にも届いていれば、届いている日まで伸ばす
   while (days.length < STRIP_MAX_DAYS) {
     const start = shiftDay(today, days.length);
     if (!hasPrograms(type, start)) break;

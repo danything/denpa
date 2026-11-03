@@ -1,17 +1,17 @@
 /**
  * WebSocket のエンドポイント。**入口 (`server.js`) の `Bun.serve` に間借りする。**
  *
- * ライブ視聴は映像・音声・字幕・データ放送を1本の接続に多重化する作りなので
+ * ライブ視聴は映像・音声・字幕・データ放送を 1 本の接続に多重化する作りなので
  * ([stream.md](../../../docs/stream.md#websocket-プロトコル))、`Request` → `Response` では足りない。
  *
- * 枠の組み立て (RFC6455) も ping/pong も詰まり具合の面倒も **bun が見る**。
- * こちらが書くのは、多重化の頭を付けることと、誰に配るかだけ。
+ * フレームの組み立て (RFC6455) も ping/pong も送信の詰まりも **bun が受け持つ**。
+ * こちらが書くのは、多重化のヘッダを付けることと、誰に配るかだけ。
  *
  * ## なぜ入口が別にあるのか
  *
  * 公式の adapter-bun は `Bun.serve` に `websocket` を渡す手段を持たない (`server.js` の冒頭)。
- * そこで `server.js` が adapter の `Bun.serve` に `websocket` を足し、握手だけ SvelteKit の手前で受ける。
- * 入口はアプリの束の外にあるので直に import できない。`globalThis` 越しに渡す。
+ * そこで `server.js` が adapter の `Bun.serve` に `websocket` を足し、ハンドシェイクだけ SvelteKit の手前で受ける。
+ * 入口はアプリのバンドルの外にあるので直に import できない。`globalThis` 越しに渡す。
  */
 
 import type { ServerWebSocket, WebSocketHandler } from "bun";
@@ -22,13 +22,13 @@ const LIVE = "__denpaLive";
 /** 溜まってよい量。超えたら捨ててよいもの (`droppable`) を捨てる。何を捨ててよいかは live.ts の `hand` */
 const BACKLOG_LIMIT = 4 * 1024 * 1024;
 
-/** 接続1本ぶんの持ち物。`server.upgrade()` に渡して `ws.data` になる */
+/** 接続 1 本ぶんの持ち物。`server.upgrade()` に渡して `ws.data` になる */
 interface SocketData {
   url: URL;
   connection: Connection | null;
 }
 
-/** 開いている1本。**送るのは binary、受けるのは小さな指示だけ** */
+/** 開いている 1 本。**送るのは binary、受けるのは小さな指示だけ** */
 export class Connection {
   /** ブラウザからの指示。JSON でデコードできなかったものは渡さない */
   onmessage: ((message: Record<string, unknown>) => void) | null = null;
@@ -37,12 +37,12 @@ export class Connection {
   constructor(private readonly ws: ServerWebSocket<SocketData>) {}
 
   /**
-   * 1つ送る。**多重化の頭を自分で付ける** (stream.md#websocket-プロトコル)。
+   * 1 つ送る。**多重化のヘッダを自分で付ける** (stream.md#websocket-プロトコル)。
    *
    *     [1 byte: 種別][8 bytes: PTS (90kHz, BE)][中身...]
    *
    * 時刻は受け側の物差し (エンコードの経路は mp4 の 0 起点、放送そのままの経路は放送の PTS)。運ぶのは
-   * 字幕だけで、映像・データ放送・制御は 0 を渡す — 字幕を映像と同じ物差しに乗せるため。
+   * 字幕だけで、映像・データ放送・制御は 0 を渡す。字幕を映像と同じ物差しに乗せるため。
    *
    * @param droppable 詰まっているときに捨ててよいか。映像の中身 (fMP4 / そのままの TS) だけ true
    */
@@ -89,10 +89,10 @@ export class Connection {
 
 interface Route {
   /**
-   * 握手してよいか。**握手より前に呼ばれる。**
+   * ハンドシェイクしてよいか。**ハンドシェイクより前に呼ばれる。**
    *
    * ここで断れば普通の HTTP として返せるので、理由を伝えられる。
-   * 握手したあとに切ると、ブラウザには「繋がらない」としか映らない。
+   * ハンドシェイクしたあとに切ると、ブラウザには「繋がらない」としか映らない。
    */
   accept(url: URL): boolean;
   open(connection: Connection): void;
@@ -108,14 +108,14 @@ export function serve(pathname: string, route: Route): void {
 /**
  * 入口へ渡すもの。**遅延で引く。**
  *
- * `Bun.serve` は起動時にこれを1度だけ受け取るが、アプリが読み込まれるのは
+ * `Bun.serve` は起動時にこれを 1 度だけ受け取るが、アプリが読み込まれるのは
  * そのあとになりうる。**入口側は毎回 `globalThis` を引き直す**ので、
- * ここに置くのは1回で足りる。
+ * ここに置くのは 1 回で足りる。
  */
 interface LiveEntry {
   /** そもそも受け持つパスか。**断り方を変えるために `accept` と分けてある** */
   handles(url: URL): boolean;
-  /** 握手してよいか。ここでチケットを使い切る */
+  /** ハンドシェイクしてよいか。ここでチケットを使い切る */
   accept(url: URL): boolean;
   websocket: WebSocketHandler<SocketData>;
 }

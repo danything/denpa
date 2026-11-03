@@ -16,11 +16,7 @@ import { eq, sql } from "drizzle-orm";
 /**
  * 古い履歴の片付け。
  *
- * 本物の pruneHistory を動かす。DBの置き場は一時ファイルへ向ける。
- *
- * 環境変数ではなく設定そのものを書き換えている。環境変数は config の
- * 読み込み時に1度だけ見られるので、同じプロセスで走る別のテストが先に
- * config を読んでいると効かない (bun test はファイルをまたいでモジュールを使い回す)。
+ * 本物の pruneHistory を動かす。DB の置き場は一時ファイルへ向ける (設定そのものを書き換える)。
  */
 const { config } = await import("./config");
 config.dbPath = join(mkdtempSync(join(tmpdir(), "denpa-files-")), "denpa.db");
@@ -42,7 +38,7 @@ function seed(): void {
 
   /*
    * 「終わった予約」は取り消し・録り逃しか、録り始めたもの (started_at が入る)。
-   * 予約の行に 'done' や 'failed' は入らない — 顛末は録画の行が持っている
+   * 予約の行に 'done' や 'failed' は入らない。顛末は録画の行が持っている
    */
   const reservation = (
     id: number,
@@ -134,7 +130,7 @@ const ids = (
     .map((row) => row.id);
 
 describe("古い履歴の片付け", () => {
-  test("2週間より古い「終わったもの」だけ消える", () => {
+  test("2 週間より古い「終わったもの」だけ消える", () => {
     seed();
     expect(pruneHistory()).toEqual({ reservations: 2, recordings: 1, jobs: 1 });
     // 残るのは「これから」と最近のもの
@@ -186,17 +182,17 @@ describe("古い履歴の片付け", () => {
  * 実体との照合。**両方向を見る。**
  *
  * 行はあるが実体が無いものは削除済みに倒す。逆に、動画が消えたあとに残った
- * サイドカー (作業ファイル・サムネイル・データ放送) は片付ける。**動画そのものには触らない** —
+ * サイドカー (作業ファイル・サムネイル・データ放送) は片付ける。**動画そのものには触らない。**
  * 手で置いたものかもしれないので、数えるだけ。
  */
 describe("実体との照合", () => {
-  /** 元のTSの置き場にあるファイルの一覧 */
+  /** 元の TS の置き場にあるファイルの一覧 */
   function files(): string[] {
     return readdirSync(config.rawDir).sort();
   }
 
   /**
-   * ファイルを置く。**既定では「書き終えて時間が経ったもの」にする** —
+   * ファイルを置く。**既定では「書き終えて時間が経ったもの」にする。**
    * 照合は書きたてに触らないので、置いたままだと何も片付かない
    */
   function put(root: string, name: string, settled = true): string {
@@ -220,7 +216,7 @@ describe("実体との照合", () => {
   }
 
   /*
-   * 作業ファイルは `<入力>.…` に置く。元のTSを残さない設定だと TS が消えたあとも
+   * 作業ファイルは `<入力>.…` に置く。元の TS を残さない設定だと TS が消えたあとも
    * サイドカーだけが残り、録るたびに積もる
    */
   test("元の動画が消えた作業ファイルを片付ける", () => {
@@ -253,9 +249,9 @@ describe("実体との照合", () => {
   });
 
   /*
-   * **ファイルの無いフォルダは、掃除の目に入らない。** サイドカーの掃除は
-   * ファイルを消した道すがらでしか畳まないので、既に空のフォルダは
-   * 一生残っていた (実機の保存先に7組)。フォルダを辿るプレイヤーには
+   * **ファイルの無いフォルダは、サイドカーの掃除では畳まれない。** サイドカーの掃除は
+   * ファイルを消したフォルダしか畳まないので、すでに空のフォルダは
+   * ずっと残っていた (実機の保存先に 7 組)。フォルダを辿るプレイヤーには
    * 中身の無いシリーズとして並び続ける
    */
   test("すでに空のフォルダも畳む", () => {
@@ -298,7 +294,7 @@ describe("実体との照合", () => {
     expect(existsSync(join(config.encodedDir, "生きている番組"))).toBe(true);
   });
 
-  test("DBに無い動画は数えるだけ。手で置いたものかもしれない", () => {
+  test("DB に無い動画は数えるだけ。手で置いたものかもしれない", () => {
     fresh();
     put(config.encodedDir, "手で置いた/手で置いた - 1.mkv");
 
@@ -313,9 +309,9 @@ describe("実体との照合", () => {
   /*
    * **エンコードしている途中のものに触らない。**
    *
-   * エンコードは出来上がるまで `<最終の名前>.encoding` に書いていて、その `.mkv` は
+   * エンコードは出来上がるまで `<最終の名前>.<jobId>.<codec>.encoding` に書いていて、その `.mkv` は
    * まだどこにも無い。名前だけで見ると「元の動画の無いサイドカー」そのものなので、
-   * 実機では5分ごとの照合がこれを消し、ffmpeg が書き終えて置き換えるところで
+   * 実機では 5 分ごとの照合がこれを消し、ffmpeg が書き終えて置き換えるところで
    * `ENOENT ... rename` になっていた
    */
   test("エンコードしている途中の .encoding は消さない", () => {
@@ -334,16 +330,16 @@ describe("実体との照合", () => {
     expect(existsSync(left)).toBe(false);
   });
 
-  test("復号したばかりのTSは「実体だけ」に数えない", () => {
+  test("復号したばかりの TS は「実体だけ」に数えない", () => {
     fresh();
     put(config.rawDir, "番組.m2ts");
     put(config.rawDir, "番組.m2ts.decoded.m2ts", false);
 
-    // 元のTSのほうはDBに無いので1件。書きたての .decoded.m2ts は数えない
+    // 元の TS のほうは DB に無いので 1 件。書きたての .decoded.m2ts は数えない
     expect(reconcile().strays).toBe(1);
   });
 
-  /** AV1 と H.264 の2つでエンコードした録画を1件入れる。返り値は {av1, h264} の実パス */
+  /** AV1 と H.264 の 2 つでエンコードした録画を 1 件入れる。返り値は {av1, h264} の実パス */
   function twoCodec(): { av1: string; h264: string } {
     const av1 = put(config.encodedDir, "二本立て/二本立て - 1.mkv");
     const h264 = put(config.encodedDir, "二本立て/二本立て - 1 [H264].mkv");
@@ -366,7 +362,7 @@ describe("実体との照合", () => {
   }
 
   /*
-   * **AV1 と H.264 でエンコードした録画の H.264 は「DBに無い動画」ではない。** known 集合に
+   * **AV1 と H.264 でエンコードした録画の H.264 は「DB に無い動画」ではない。** known 集合に
    * `alt_path` も入れておかないと、もう一方が野良動画として数えられてしまう
    */
   test("もう一方のコーデックは stray に数えない", () => {
@@ -413,7 +409,7 @@ describe("実体との照合", () => {
     expect(row.alt).toBeNull();
   });
 
-  /** 3つのコーデックでエンコードした録画。返り値は実パス */
+  /** 3 つのコーデックでエンコードした録画。返り値は実パス */
   function threeCodec(): { av1: string; hevc: string; h264: string } {
     const av1 = put(config.encodedDir, "三本立て/三本立て - 1.mkv");
     const hevc = put(config.encodedDir, "三本立て/三本立て - 1 [H265].mkv");
@@ -447,7 +443,7 @@ describe("実体との照合", () => {
       .where(eq(recordings.id, 10))
       .get()!;
 
-  test("3本あるとき、H.265 も stray に数えず、主が消えたら H.265 を繰り上げる", () => {
+  test("3 本あるとき、H.265 も stray に数えず、主が消えたら H.265 を繰り上げる", () => {
     fresh();
     const { av1, hevc, h264 } = threeCodec();
     expect(reconcile().strays).toBe(0);

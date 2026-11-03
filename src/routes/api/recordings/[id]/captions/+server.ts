@@ -4,10 +4,10 @@ import { error } from "@sveltejs/kit";
 import { recordingCaptions } from "#lib/server/live.js";
 
 /**
- * **録画の字幕をアプリへ流す** (docs/api.md)。元のTS (`chase?codec=raw` と `file?source=ts`) を
+ * **録画の字幕をアプリへ流す** (docs/api.md)。元の TS (`chase?codec=raw` と `file?source=ts`) を
  * 観ているアプリが、字幕を放送の PTS のまま受け取って映像に重ねる。`?from=<秒>` は映像を
  * リクエストした位置と同じもの (シークしたらリクエストし直す)。`?language=<1〜8>` で字幕の第何言語かを選ぶ
- * (省けば第1言語)。読み方は `live.ts` の `recordingCaptions`
+ * (省けば第 1 言語)。読み方は `live.ts` の `recordingCaptions`
  */
 export function GET({ params, url }) {
   const id = Number(params.id);

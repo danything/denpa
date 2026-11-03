@@ -25,12 +25,12 @@ import { chunks } from "./stream";
 
 /**
  * 追っかけ再生の追い読み ([issue #16](https://github.com/danything/denpa/issues/16))。
- * 元のTSに時間の索引は無いので、シークはバイト比例の当たりでよい —
- * ここで守るのは「188に揃う」「際に寄りすぎない」「録り終わるまで読み続ける」。
+ * 元の TS に時間の索引は無いので、シークはバイト比例の当たりでよい。
+ * ここで守るのは「188 に揃う」「端に寄りすぎない」「録り終わるまで読み続ける」。
  */
 describe("どこから読み始めるか (chasePlan)", () => {
-  test("バイト比例で、TSパケットの頭に揃える", () => {
-    // 600秒で 600 * 188 * 100 バイト → 1秒 = 188*100 バイト
+  test("バイト比例で、TS パケットの先頭に揃える", () => {
+    // 600 秒で 600 * 188 * 100 バイト → 1 秒 = 188*100 バイト
     const plan = chasePlan(600 * 188 * 100, 600, 300);
     expect(plan.at).toBe(300);
     expect(plan.offset).toBe(300 * 188 * 100);
@@ -42,13 +42,13 @@ describe("どこから読み始めるか (chasePlan)", () => {
     expect(plan.at).toBe(595);
   });
 
-  test("負の位置は頭に丸める", () => {
+  test("負の位置は先頭に丸める", () => {
     expect(chasePlan(1_000_000, 60, -5).at).toBe(0);
     expect(chasePlan(1_000_000, 60, -5).offset).toBe(0);
   });
 
   test("送り込みは実測レートより速い (追い付けるように)", () => {
-    const size = 600 * 2_000_000; // 2MB/s の10分
+    const size = 600 * 2_000_000; // 2MB/s の 10 分
     const plan = chasePlan(size, 600, 0);
     expect(plan.paceBytesPerSec).toBeGreaterThan(size / 600);
   });
@@ -80,7 +80,7 @@ describe("伸びるファイルの追い読み (followFile)", () => {
     const path = join(dir, "rec.ts");
     writeFileSync(path, "abcdef");
 
-    // 尻に着いたら1回だけ書き足し、次に訊かれたとき「終わった」と答える
+    // 末尾に着いたら 1 回だけ書き足し、次に訊かれたとき「終わった」と答える
     let asked = 0;
     const stream = followFile(path, 0, 1e9, () => {
       asked++;
@@ -126,9 +126,9 @@ describe("伸びるファイルの追い読み (followFile)", () => {
 
   /*
    * アプリ向けの字幕 API は、リクエストされた位置より手前から読み始めて観ている位置を追い越す
-   * (`live.ts` の `recordingCaptions`)。頭のぶんは倍速の縛りを掛けない
+   * (`live.ts` の `recordingCaptions`)。先頭のぶんは倍速の縛りを掛けない
    */
-  test("頭の burst ぶんは送り込みの上限を掛けずに読む", async () => {
+  test("先頭の burst ぶんは送り込みの上限を掛けずに読む", async () => {
     dir = mkdtempSync(join(tmpdir(), "chase-"));
     const path = join(dir, "rec.ts");
     writeFileSync(path, new Uint8Array(600 * 1024));
@@ -141,7 +141,7 @@ describe("伸びるファイルの追い読み (followFile)", () => {
     expect(Date.now() - started).toBeLessThan(2_000);
   });
 
-  test("無いファイルは転ぶ (エラーとして伝わる)", async () => {
+  test("無いファイルはエラーとして伝わる", async () => {
     dir = mkdtempSync(join(tmpdir(), "chase-"));
     const stream = followFile(join(dir, "missing.ts"), 0, 1e9, () => true);
     expect(readAll(stream)).rejects.toThrow();
@@ -181,13 +181,13 @@ describe("作り直したところから読み直す (resumePlan)", () => {
         [0x0f, 0x111],
       ]),
     );
-  /** 前の番組 40 組・新しい番組 40 組の PAT/PMT が並んだ元のTS */
+  /** 前の番組 40 組・新しい番組 40 組の PAT/PMT が並んだ元の TS */
   const ts = stream(
     ...Array.from({ length: 40 }, () => [pat(), before()]).flat(),
     ...Array.from({ length: 40 }, () => [pat(), after()]).flat(),
   );
 
-  /** `from` から塊ごとに読んで、並びが変わったら頭から読んだ量を返す (`Session.pump` と同じ見方) */
+  /** `from` から塊ごとに読んで、並びが変わったら `from` から読んだ量を返す (`Session.pump` と同じ見方) */
   function readUntilChange(
     from: number,
     size: number,
@@ -247,7 +247,7 @@ describe("元の TS の先頭の PTS (tsFileHead)", () => {
     dir = null;
   });
 
-  /** 映像と音声の PES を1つずつ。映像の PTS は音声より後 */
+  /** 映像と音声の PES を 1 つずつ。映像の PTS は音声より後 */
   function head(start: number): Uint8Array {
     const video = packetizePes(
       0x100,

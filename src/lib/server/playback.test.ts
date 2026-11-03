@@ -24,7 +24,7 @@ import { sinceHead } from "#lib/ts/seek.js";
 
 /**
  * **録画の観方を決めて流す** (`server/playback.ts`)。ffprobe は偽物 (ファイル名で中身を答える)、
- * 元の TS は合成したもの。DB は一時ファイルへ (ほかの試験と同じプロセスで走るので、変えた設定は戻す)
+ * 元の TS は合成したもの。DB は一時ファイルへ (変えた設定は終わったら戻す)
  */
 const dir = mkdtempSync(join(tmpdir(), "denpa-playback-"));
 const { config } = await import("./config");
@@ -194,7 +194,7 @@ describe("何を出せるか (playbackPlan)", () => {
     expect(plan?.skip).toBe(0.5);
   });
 
-  test("CM を切った録画・捨てた頭を覚えていない録画では MPEG-2 を出さない", async () => {
+  test("CM を切った録画・捨てた先頭を覚えていない録画では MPEG-2 を出さない", async () => {
     const cut = await playbackPlan(
       seed({
         library_path: h264,
@@ -212,7 +212,7 @@ describe("何を出せるか (playbackPlan)", () => {
     );
   });
 
-  // アプリは再生位置を元の TS の時刻に戻し、録画の頭の放送時刻に足して実況のコメントを合わせる (docs/api.md)
+  // アプリは再生位置を元の TS の時刻に戻し、録画の先頭の放送時刻に足して実況のコメントを合わせる (docs/api.md)
   test("エンコードした物差しには、元の TS の時刻に戻す直し方 (ruler) を付ける。元の TS の物差しには付けない", async () => {
     const cut = await playbackPlan(
       seed({
@@ -234,7 +234,7 @@ describe("何を出せるか (playbackPlan)", () => {
     expect(tsOnly?.info.ruler).toBeUndefined();
   });
 
-  test("元の TS だけ: TS から変換と MPEG-2。物差しは TS の頭、尺は尻の映像まで", async () => {
+  test("元の TS だけ: TS から変換と MPEG-2。物差しは TS の先頭、尺は最後の映像まで", async () => {
     const plan = await playbackPlan(seed({ ts_path: ts }));
     expect(plan?.info.axis).toBe("ts");
     expect(plan?.info.offers).toEqual([
@@ -299,7 +299,7 @@ describe("何を出せるか (playbackPlan)", () => {
 });
 
 describe("エンコード済みが無い録画のチャプター (tsChapters)", () => {
-  test("検出した CM の区間 (元の TS の頭からの秒) から、本編と CM を交互に並べる", async () => {
+  test("検出した CM の区間 (元の TS の先頭からの秒) から、本編と CM を交互に並べる", async () => {
     saveSettings({ cmCut: "chapter" });
     const rec = seed({ ts_path: ts, cm_ranges: [{ start: 10, end: 25 }] });
     const chapters = await tsChapters(rec);
@@ -395,7 +395,7 @@ describe("流す (streamResponse)", () => {
     expect(origin).toBe(TS_START + 0.5 * CLOCK);
     const head = new Uint8Array(await res.arrayBuffer()).subarray(0, 32);
     expect(head[0]).toBe(SYNC);
-    // 頭のパケットは映像の PES の頭。物差しで 20 秒の 1 秒手前 (`LEAD`) あたり
+    // 先頭のパケットは映像の PES の先頭。物差しで 20 秒の 1 秒手前 (`LEAD`) あたり
     const pts =
       ((head[13]! >> 1) & 0x07) * 2 ** 30 +
       (head[14]! << 22) +
@@ -461,7 +461,7 @@ describe("ffmpeg の出口を本文にする (transcodeBody)", () => {
           blame: (failed) => blamed.push(failed),
         },
       ],
-      "[試験]",
+      "[テスト]",
       () => done++,
     );
     expect(await new Response(body).text()).toBe("ok");
@@ -472,13 +472,13 @@ describe("ffmpeg の出口を本文にする (transcodeBody)", () => {
   test("標準入力へ流し込む", async () => {
     const body = transcodeBody(
       [{ argv: ["cat"], input: () => new Blob(["流し込んだもの"]).stream() }],
-      "[試験]",
+      "[テスト]",
       () => undefined,
     );
     expect(await new Response(body).text()).toBe("流し込んだもの");
   });
 
-  /** 畳まれるまで待つ (上限を超えてから見張りが気づくまでの間がある) */
+  /** 畳まれるまで待つ (上限を超えてから定期チェックが畳むまでの間がある) */
   const until = async (ok: () => boolean) => {
     for (let i = 0; i < 500 && !ok(); i++) await Bun.sleep(10);
   };
@@ -492,7 +492,7 @@ describe("ffmpeg の出口を本文にする (transcodeBody)", () => {
     let done = 0;
     const body = transcodeBody(
       [{ argv: ["sh", "-c", "sleep 0.3; printf ok"] }],
-      "[試験]",
+      "[テスト]",
       () => done++,
       {
         limit: 2000,
@@ -507,7 +507,7 @@ describe("ffmpeg の出口を本文にする (transcodeBody)", () => {
     let done = 0;
     const body = transcodeBody(
       [{ argv: ["sh", "-c", "exec sleep 30"] }],
-      "[試験]",
+      "[テスト]",
       () => done++,
       {
         limit: 200,
@@ -523,7 +523,7 @@ describe("ffmpeg の出口を本文にする (transcodeBody)", () => {
     // 上限は `sh` の起動より十分長く (最初の読みが「何も出さない」で切られないように)
     const body = transcodeBody(
       [{ argv: ["sh", "-c", "yes"] }],
-      "[試験]",
+      "[テスト]",
       () => done++,
       {
         limit: 1000,
@@ -546,7 +546,7 @@ describe("ffprobe の読み (mediaInfo)", () => {
   const probe = (streams: unknown[], duration = "1800.5") =>
     JSON.stringify({ streams, format: { duration } });
 
-  test("H.264 High / Level 4.0 と Opus 2本", () => {
+  test("H.264 High / Level 4.0 と Opus 2 本", () => {
     const json = probe([
       { codec_type: "video", codec_name: "h264", profile: "High", level: 40 },
       { codec_type: "audio", codec_name: "opus", tags: { title: "主音声" } },
@@ -635,7 +635,7 @@ describe("続きの位置の物差し", () => {
     ).toBeNull();
   });
 
-  test("名指しされたらそれ。alt も同じ切り方 (2本目は1本目と同じ区間で切る)", () => {
+  test("名指しされたらそれ。alt も同じ切り方 (2 本目は 1 本目と同じ区間で切る)", () => {
     expect(rulerOf(encoded, "ts")).toBeNull();
     expect(rulerOf(encoded, "encoded")).toEqual({ kept, skip: 3 });
     expect(rulerOf(encoded, "alt")).toEqual({ kept, skip: 3 });
@@ -643,7 +643,7 @@ describe("続きの位置の物差し", () => {
 });
 
 /**
- * 一覧の「残り」(`watchProgress`)。**位置と尺を同じ物差しで比べる** — 位置は元の TS の物差しで覚えていて、
+ * 一覧の「残り」(`watchProgress`)。**位置と尺を同じ物差しで比べる。** 位置は元の TS の物差しで覚えていて、
  * 尺はエンコードし終えると出来上がりの長さになるので、そのまま引くと CM を切ったものでは食い違う
  */
 describe("一覧の残り", () => {
@@ -669,7 +669,7 @@ describe("一覧の残り", () => {
     });
   });
 
-  test("切っていないものは、捨てた頭のぶんだけずらす", () => {
+  test("切っていないものは、捨てた先頭のぶんだけずらす", () => {
     const plain = {
       library_path: "/library/a.mkv",
       cm_kept: null,
@@ -706,9 +706,9 @@ describe("一覧の残り", () => {
     });
   });
 
-  test("続きが無い・直すと頭になるものは出さない", () => {
+  test("続きが無い・直すと先頭になるものは出さない", () => {
     expect(watchProgress({ ...cut, resume_ms: null })).toBeNull();
-    // 元の TS の頭 5 秒は、残した区間 (10 秒から) の前
+    // 元の TS の先頭 5 秒は、残した区間 (10 秒から) の前
     expect(watchProgress({ ...cut, resume_ms: 5_000 })).toBeNull();
   });
 });

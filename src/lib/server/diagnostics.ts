@@ -22,7 +22,7 @@ interface AgentLogs {
   error: string | null;
 }
 
-/** 来たものを疑って読む。形が違う行は捨てる (`tolerate` と同じく止めない) */
+/** 来たものを疑って読む。形式が違う行は捨てる (`shape.tolerate` と同じく止めない) */
 function readAgentLogs(raw: unknown): LogLine[] {
   const lines =
     typeof raw === "object" && raw !== null && "lines" in raw
@@ -80,7 +80,7 @@ interface AgentAboutResult {
   error: string | null;
 }
 
-/** 来たものを疑って読む。項目ごとに、形が違えば null にして続ける */
+/** 来たものを疑って読む。項目ごとに、形式が違えば null にして続ける */
 function readAgentAbout(raw: unknown): AgentAbout {
   const body =
     typeof raw === "object" && raw !== null
@@ -134,7 +134,7 @@ export async function agentAbout(known: Known): Promise<AgentAboutResult> {
 }
 
 /**
- * **サーバの設定と DB にある、形では見分けられない値。** 画面に送る前にログから消す
+ * **サーバの設定と DB にある、形式では見分けられない値。** 画面に送る前にログから消す
  * (OIDC のクライアントシークレット・登録してある Webhook の URL は、画面にも出さない)。
  * ホスト名は画面にはそのまま出し、Issue に貼るときに伏せる (`redact`)。
  * エージェントに繋がらないときの一言 (`agentLogs` の `error`) だけは、ここでホスト名ごと伏せて返す
@@ -148,7 +148,7 @@ export function knownValues(requestHost: string): {
     for (const row of orm().select({ url: webhooks.url }).from(webhooks).all())
       secrets.push(row.url);
   } catch {
-    // DB が読めなくても、形で伏せるぶんは効く
+    // DB が読めなくても、形式で伏せるぶんは効く
   }
   const hosts = [requestHost];
   const agentHost = agentHostname();

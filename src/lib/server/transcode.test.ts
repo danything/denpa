@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 /**
  * **その場で変換する本数の枠** (`transcode.ts`)。DB は一時ファイルへ。
- * GPU の見立て (`hwenc`) はほかの試験が同じプロセスで差し替えていることがあるので、既定の本数は
+ * GPU の見立て (`hwenc`) は動かす機械で変わるので、既定の本数は
  * `transcodeAuto` の答えで比べる
  */
 const dir = mkdtempSync(join(tmpdir(), "denpa-transcode-"));

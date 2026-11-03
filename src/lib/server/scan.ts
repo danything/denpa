@@ -10,7 +10,7 @@
  * 地上波は Mirakurun の走査に合わせてある。
  *
  * - 地上波は 13〜62ch を総当たり (CATV を選ぶと C13〜C63 も)
- * - 1チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす
+ * - 1 チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす
  * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入り、
  *   映像の無いものは取り込みで落とす: `epg.DIGITAL_TV`)
  *
@@ -39,10 +39,10 @@ import {
 } from "./tuner";
 
 /**
- * 1チャンネルあたりの待ち時間。
+ * 1 チャンネルあたりの待ち時間。
  *
  * 電波が無ければ選局がすぐ落ちるので、実際にここまで待つのは受信できた局だけ。
- * NIT は 10 秒に1回しか流れてこないうえ、選局が落ち着くまでにも数秒かかるので、
+ * NIT は 10 秒に 1 回しか流れてこないうえ、選局が落ち着くまでにも数秒かかるので、
  * Mirakurun の 20 秒では取りこぼすことがある
  */
 const TUNE_TIMEOUT = 30_000;
@@ -92,7 +92,7 @@ export function channelsFor(type: "GR" | "CATV"): string[] {
 interface ScanResult {
   services: FoundService[] | null;
   error: string | null;
-  /** TS が1バイトでも来たか。アンテナの問題と読み取りの問題を分ける手掛かり */
+  /** TS が 1 バイトでも来たか。アンテナの問題と読み取りの問題を分ける手掛かり */
   signal: boolean;
 }
 
@@ -117,7 +117,7 @@ export async function readServices(
   let bytes = 0;
   let message = "";
 
-  // 打ち切りの合図は走査全体で1つ。局ごとに足したリスナーは、読み終えたら外す (100局を超えると積もる)
+  // 打ち切りの合図は走査全体で 1 つ。局ごとに足したリスナーは、読み終えたら外す (100 局を超えると積もる)
   let stop = (): void => {};
   const deadline = new Promise<void>((resolve) => {
     stop = resolve;
@@ -163,7 +163,7 @@ export async function readServices(
   );
 }
 
-/** スキャンで分かったことを1件にまとめる */
+/** スキャンで分かったことを 1 件にまとめる */
 export function channelEntry(
   type: ScannableType,
   channel: string,
@@ -242,7 +242,7 @@ interface Progress {
   skipped?: number;
 }
 
-/** 総当たりの1件。どの種別のどの物理チャンネルか */
+/** 総当たりの 1 件。どの種別のどの物理チャンネルか */
 interface Job {
   type: ScannableType;
   channel: string;
@@ -253,9 +253,9 @@ class Scanner {
   /** 中断の合図。押されたら選局を切り、残りのチャンネルには行かない */
   private readonly aborter = new AbortController();
   private readonly found = new Map<string, AgentChannel>();
-  /** 電波が来た(TSが1バイトでも出た)チャンネル数。種別ごと */
+  /** 電波が来た(TS が 1 バイトでも出た)チャンネル数。種別ごと */
   private readonly tuned = new Map<ScannableType, number>();
-  /** 電波は来たのに局情報が揃わなかったチャンネル。1周したあとで回し直す */
+  /** 電波は来たのに局情報が揃わなかったチャンネル。1 周したあとで回し直す */
   private retry: Job[] = [];
   /** 放送の一覧を読めた衛星の種別。読めなかった種別は控えを書き換えない (`runScan`) */
   readonly lineups = new Set<SatelliteType>();
@@ -403,7 +403,7 @@ class Scanner {
       for (const channel of channels) queue.push({ type, channel });
     }
 
-    /** そのチューナーで引けるものが1つでもあるチューナーだけ動かす */
+    /** そのチューナーで引けるものが 1 つでもあるチューナーだけ動かす */
     const wanted = new Set(queue.map((job) => job.type));
     const workers = tuners.filter((tuner) =>
       tuner.types.some((type) => wanted.has(type as ScannableType)),
@@ -415,8 +415,8 @@ class Scanner {
       /*
        * 電波は来たのに揃わなかったチャンネルは、もう一度だけ回す。
        *
-       * NIT は 10 秒に1回しか流れてこないので、選局が落ち着くのが遅れると
-       * 待ち時間の中に1回も入らないことがある。**受信できたチャンネルだけ**を
+       * NIT は 10 秒に 1 回しか流れてこないので、選局が落ち着くのが遅れると
+       * 待ち時間の中に 1 回も入らないことがある。**受信できたチャンネルだけ**を
        * 対象にするので、総当たりの時間はほとんど増えない
        */
       const retry = this.retry;
@@ -430,7 +430,7 @@ class Scanner {
     }
 
     /*
-     * 種別ごとに1行でまとめる。
+     * 種別ごとに 1 行でまとめる。
      *
      * 「電波は来たのに局情報が揃わなかった」のか「そもそも何も来なかった」のかで
      * 疑うところがまるで違う (前者は受信環境、後者は配線やデバイス指定)。
@@ -447,19 +447,19 @@ class Scanner {
     }
   }
 
-  /** そのチューナーで引ける先頭の1件を取り出す。引けないものは飛ばして次を見る */
+  /** そのチューナーで引ける先頭の 1 件を取り出す。引けないものは飛ばして次を見る */
   private take(queue: Job[], types: ChannelType[]): Job | undefined {
     const at = queue.findIndex((job) => types.includes(job.type));
     return at === -1 ? undefined : queue.splice(at, 1)[0];
   }
 
   /**
-   * チューナー1台ぶんの担当。列が尽きるまで引き続ける。
+   * チューナー 1 台ぶんの担当。列が尽きるまで引き続ける。
    *
    * `types` はそのチューナーが受けられる種別。地上波のチューナーは地上波の分だけ、衛星のチューナーは
    * 衛星の分だけを引くので、片方が先に終わってももう片方は止まらない。
    *
-   * first が false のときは数え直さない (同じチャンネルを2回数えないため)
+   * first が false のときは数え直さない (同じチャンネルを 2 回数えないため)
    */
   private async work(
     types: ChannelType[],
@@ -473,7 +473,7 @@ class Scanner {
       const { type, channel } = job;
 
       /*
-       * 1チャンネルごとに切る手段を持つ。読み終えたらここで接続を落とし、
+       * 1 チャンネルごとに切る手段を持つ。読み終えたらここで接続を落とし、
        * エージェントにチューナーを返す
        */
       const closer = new AbortController();
@@ -567,7 +567,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
       return;
     }
 
-    // 1件も見つからないまま上書きすると、今まで録れていた局まで消える
+    // 1 件も見つからないまま上書きすると、今まで録れていた局まで消える
     if (found.length === 0) {
       throw new Error(
         "チャンネルが 1 件も見つかりませんでした。チューナーとアンテナを確認してください",
@@ -596,7 +596,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
      */
     await sync().catch(() => undefined);
     // 局が入ったので、スキャン中に取得した番組表を書ける
-    // ついでの保存なので、失敗しても局の通知と番組表集めは止めない
+    // ついでの保存なので、失敗しても局の通知と番組表の取得は止めない
     if (scanner.events.length > 0) {
       try {
         const saved = savePrograms(scanner.events);

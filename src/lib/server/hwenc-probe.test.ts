@@ -7,17 +7,17 @@ import type { HwDevice } from "./hwenc";
 
 /**
  * **試しのエンコードの落とし方** (`hwenc.probe`)。手元にも CI にも GPU は無いので、ffmpeg を
- * 起こす `run` だけ差し替えて、ドライバの返事を作って見る。
+ * 起動する `run` だけ差し替えて、ドライバの返事を作って見る。
  *
- * 作る返事は issue #417 の機材 (Gemini Lake・i965) に寄せたもの:
+ * 作る返事は issue #417 の機材 (Gemini Lake・i965) に寄せたもの。
  * VA-API は ICQ を持たず、MPEG-2 は GPU でデコードできる。AV1 はエンコードできない。
  * H.264・H.265 はいつも CQP で指定するので通る (デコードから GPU は、ライブが使わない H.265 では試さない)。
  * AV1 も CQP で通るドライバ (Mesa) は下の `mesa`
  */
 const real = await import("./stream");
 /*
- * **差し替えはこのファイルの中だけで効かせる。** bun は1つのプロセスで全部のテストを回し、
- * `mock.module` は他のファイルにも残る。終わったら本物の `run` に戻す (下の `afterAll`)
+ * **差し替えはこのファイルの中だけで効かせる。** `--isolate` を付けずに動かすと `mock.module` は
+ * 他のファイルにも残るので、終わったら本物の `run` に戻す (下の `afterAll`)
  */
 const realRun = real.run;
 const calls: string[][] = [];
@@ -66,7 +66,7 @@ function i965(argv: string[]): number {
 
 /*
  * **録画のエンコードは確かめ終わるのを待つ** (`hwReady`)。起動した直後のジョブが、確かめる前の「GPU 無し」で
- * H.265 を飛ばしていた。まだなら確かめて待ち、確かめ終わっていれば ffmpeg を起こさない
+ * H.265 を飛ばしていた。まだなら確かめて待ち、確かめ終わっていれば ffmpeg を起動しない
  */
 test("hwReady: まだ確かめていなければ確かめ終わるのを待ち、済んでいれば探し直さない", async () => {
   answer = i965;
@@ -205,7 +205,7 @@ test("試し素材を作れなければ、デコードから GPU は試さない
   expect(calls.some((argv) => argv.includes("-hwaccel"))).toBe(false);
 });
 
-test("/dev/mpp_service が在れば、別の行で H.264 と H.265 だけ MPP で試す", async () => {
+test("/dev/mpp_service があれば、別の行で H.264 と H.265 だけ MPP で試す", async () => {
   writeFileSync(mppService, "");
   try {
     answer = () => 0;
@@ -245,12 +245,12 @@ test("/dev/mpp_service が在れば、別の行で H.264 と H.265 だけ MPP �
   }
 });
 
-test("NVIDIA の GPU は1枚ずつ別の行で NVENC を試し、GPU の番号で選ぶ", async () => {
-  // 2枚挿し。nvidiactl は GPU ではないので行にしない
+test("NVIDIA の GPU は 1 枚ずつ別の行で NVENC を試し、GPU の番号で選ぶ", async () => {
+  // 2 枚挿し。nvidiactl は GPU ではないので行にしない
   for (const name of ["nvidia0", "nvidia1", "nvidiactl"])
     writeFileSync(join(nvidiaDir, name), "");
   try {
-    // 1枚目 (-gpu 0) は RTX 40 より前で AV1 をエンコードできない
+    // 1 枚目 (-gpu 0) は RTX 40 より前で AV1 をエンコードできない
     answer = (argv) => {
       const line = argv.join(" ");
       if (line.includes("av1_nvenc -gpu 0")) return 1;

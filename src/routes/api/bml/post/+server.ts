@@ -1,5 +1,5 @@
 /**
- * データ放送の双方向 — **送るほう**の中継エンドポイント (`browser.transmitTextDataOverIP`)
+ * データ放送の双方向で、**送るほう**の中継エンドポイント (`browser.transmitTextDataOverIP`)
  * ([docs/stream.md](../../../../../docs/stream.md#双方向通信系コンテンツプロキシ))。
  *
  * **応募や投票のためだけのエンドポイントではありません。** 放送のアプリは「繋がって

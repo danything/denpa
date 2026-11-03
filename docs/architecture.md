@@ -57,7 +57,7 @@ Kubernetes の `terminationGracePeriodSeconds` と docker compose の
 
 ### 待っている間も、始まる録画は始めます
 
-始めないでいた頃は、デプロイの最中に始まった番組の頭が **9 分 42 秒ぶん欠けて**いました
+始めないでいた頃は、デプロイの最中に始まった番組の冒頭が **9 分 42 秒ぶん欠けて**いました
 (`server/scheduler.ts` に実測)。始めればそのぶん待ちが伸びますが、`SHUTDOWN_WAIT` が歯止めになります。
 
 ### エージェントも録画が終わるまで待ちます
@@ -75,7 +75,7 @@ TS を流しているのはエージェントなので、そちらが先に消�
 
 **録画が無ければすぐ止まります。** 通知 (`/denpa/events`) やライブの選局が開いたままだと、Kestrel は
 受け口だけ閉じて 30 秒待ってから止まっていました。そのぶん入れ替えの隙間が伸び、実機ではその間に始まった
-録画の頭が約 35 秒欠けました。いまは止まるときにエージェントのほうから閉じます。
+録画の冒頭が約 35 秒欠けました。いまは止まるときにエージェントのほうから閉じます。
 
 ### それでも切れたときは取り直します
 
@@ -160,19 +160,19 @@ NVIDIA の NVENC は amd64 に、Rockchip の MPP は arm64 にだけ入れて�
 [charts/denpa-agent](../charts/denpa-agent))。このリポジトリ自身の本番は ArgoCD が
 [deploy/application.yaml](../deploy/application.yaml) の Application から同じ chart を当てていて、
 値はそこの `helm.valuesObject` にあります (chart の使い方の実例として読めます。なぜそう置くかは
-ファイルの頭のコメント)。クラスタの初期構築や共通アドオンは別のリポジトリです。chart を当てる前に以下が要ります。
+ファイルの冒頭のコメント)。クラスタの初期構築や共通アドオンは別のリポジトリです。chart を当てる前に以下が要ります。
 
-- **StorageClass** — `persistence.storageClassName` (空ならクラスタの既定)。PVC を消させない設定は
+- StorageClass は `persistence.storageClassName` (空ならクラスタの既定)。PVC を消させない設定は
   `persistence.protectFromPruning` (values.yaml に理由つき)
-- **Gateway API の Gateway か Ingress** — chart の `httpRoute.parentRefs` / `ingress` が指す先。証明書は
+- Gateway API の Gateway か Ingress。chart の `httpRoute.parentRefs` / `ingress` が指す先です。証明書は
   Gateway 側のリスナーが持ちます
-- **DNS** — denpa の名前が Gateway のアドレスを指すこと
-- **チューナードライバ** — エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
+- DNS で、denpa の名前が Gateway のアドレスを指すこと
+- チューナードライバ。エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
   hostPath でマウントするので、DVB の機材はノード側にドライバが読み込まれていること。
   PX-Q3U4 など px4-userland の対応機種と、smsusb を blacklist した PX-S1UD はノードに
   何も要らない (イメージ同梱のユーザー空間ドライバが `/dev/bus/usb` を使う。
   [tuner-px4.md](tuner-px4.md))
-- **GHCR** — `ghcr.io/danything/denpa-agent` と `.../denpa` を pull できること
+- GHCR から `ghcr.io/danything/denpa-agent` と `.../denpa` を pull できること
 
 ## 画面で動いてよいもの (CSP)
 
@@ -214,8 +214,8 @@ Hybridcast (別のタブで開く)・更新のお知らせのリンクは移動�
 ### nonce にする (hash ではなく)
 
 **設定の画面 (録画・受信) は、load から Promise を返して後から流しています**
-(SvelteKit のストリーミング)。流れてくる `<script>` は頭 (ヘッダ) を送ったあとに組まれるので、
-hash を頭に載せられず、hash の方式だと止まります。`app.html` の頭のスクリプト (色当てと、スマホの形の印 `data-phone`) も
+(SvelteKit のストリーミング)。流れてくる `<script>` はヘッダを送ったあとに組まれるので、
+hash を先頭に載せられず、hash の方式だと止まります。`app.html` の先頭のスクリプト (色当てと、スマホの形の印 `data-phone`) も
 `nonce="%sveltekit.nonce%"` で通しています。
 
 nonce は毎回変わるので、**画面の HTML は 304 になりません** (中身の指紋が毎回変わる)。

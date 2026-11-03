@@ -19,7 +19,7 @@ import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
  * **当たりの中継を「外れ」と控えてしまっても、「ロゴをいますぐ集める」で当たり直せる** (`logo.sweepNow`)。
  *
  * Linux DVB の dvr には前の選局の残りが溜まったままで (エージェントは直した。`DvbTuner.Tune`)、
- * 当たりの中継 (BS15_0) の頭で前の中継の PAT を読み、1週間「外れ」と控えることがあった。どの中継も
+ * 当たりの中継 (BS15_0) の頭で前の中継の PAT を読み、1 週間「外れ」と控えることがあった。どの中継も
  * 外れと控えられていると、定期の取得は何も開かず、押しても「ロゴはすべて取得済みです」と言われるだけだった
  */
 const ESS = 929;
@@ -51,7 +51,7 @@ function blocks(moduleId: number, module: Uint8Array): Uint8Array[] {
   return list;
 }
 
-/** 当たりの中継。1回でカルーセルを読み切れる */
+/** 当たりの中継。1 回でカルーセルを読み切れる */
 const CARRIER = stream(
   packetize(0x0000, patSection([[ESS, PMT_PID]])),
   packetize(PMT_PID, pmtSection(ESS, ES_PID, 0x79)),

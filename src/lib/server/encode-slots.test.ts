@@ -14,7 +14,7 @@ function pool(limit: number) {
   return { slots, calls };
 }
 
-test("ジョブは持ち枠を1つ取り、上限まで始められる", () => {
+test("ジョブは持ち枠を 1 つ取り、上限まで始められる", () => {
   const { slots } = pool(2);
   expect(slots.open(1)).toBe(true);
   expect(slots.open(2)).toBe(true);
@@ -23,7 +23,7 @@ test("ジョブは持ち枠を1つ取り、上限まで始められる", () => {
   expect(slots.inUse()).toBe(2);
 });
 
-test("1本目のコーデックは持ち枠で、2本目は空いた枠でエンコードする", async () => {
+test("1 本目のコーデックは持ち枠で、2 本目は空いた枠でエンコードする", async () => {
   const { slots } = pool(3);
   slots.open(1);
   const first = await slots.acquire(1, signal());
@@ -34,7 +34,7 @@ test("1本目のコーデックは持ち枠で、2本目は空いた枠でエン
   expect(slots.inUse()).toBe(2);
 });
 
-test("上限がコーデックの数より小さければ、残りは枠が空いてから走る", async () => {
+test("上限がコーデックの数より小さければ、残りは枠が空いてから動く", async () => {
   const { slots } = pool(2);
   slots.open(1);
   const av1 = (await slots.acquire(1, signal()))!;
@@ -43,7 +43,7 @@ test("上限がコーデックの数より小さければ、残りは枠が空�
   const waiting = slots.acquire(1, signal()).then((r) => (hevc = r));
   await Promise.resolve();
   expect(hevc).toBeNull();
-  // 待っている人がいる間は、新しいジョブを始めない (走り出したジョブを先に終わらせる)
+  // 待ちがある間は、新しいジョブを始めない (動き出したジョブを先に終わらせる)
   expect(slots.free()).toBe(false);
   h264();
   await waiting;
@@ -55,7 +55,7 @@ test("上限がコーデックの数より小さければ、残りは枠が空�
   expect(slots.inUse()).toBe(1);
 });
 
-test("上限 1 なら1本ずつ。1本目が終わると持ち枠が2本目に渡る", async () => {
+test("上限 1 なら 1 本ずつ。1 本目が終わると持ち枠が 2 本目に渡る", async () => {
   const { slots } = pool(1);
   slots.open(1);
   const first = (await slots.acquire(1, signal()))!;
@@ -117,7 +117,7 @@ test("ジョブが終われば持ち枠を返し、そのジョブの待ちは�
   expect(calls.free).toBe(1);
 });
 
-test("返すのは何度呼んでも1回だけ", async () => {
+test("返すのは何度呼んでも 1 回だけ", async () => {
   const { slots } = pool(3);
   slots.open(1);
   await slots.acquire(1, signal());

@@ -1,6 +1,6 @@
 # Windows に入れる
 
-**x64 の Windows なら、PowerShell の1行で denpa ごと立ち上がってブラウザが開きます**
+**x64 の Windows なら、PowerShell の 1 行で denpa ごと立ち上がってブラウザが開きます**
 (`install.ps1`)。Windows 用は v1.23.1 からで、
 それより前のバージョンは入れられません (install.ps1 がそう言って止まる)。
 
@@ -39,7 +39,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 - **この PC のブラウザから入ると、送信元は `169.254.x.x` に見えます** (wslc がポートを中継するため)。
   LAN のほかの機器は本当の IP のまま届きます。なので `TRUSTED_NETWORKS` の既定に `169.254.0.0/16` を足してあります
 - **DB は wslc のボリューム (`denpa-data`) に置きます。** Windows のフォルダ越し (virtiofs) だと SQLite のロックが当てにならないため
-- **wslc に compose はありません。** Windows で動かすコンテナは本体の1つだけなので、`wslc run` で足ります
+- **wslc に compose はありません。** Windows で動かすコンテナは本体の 1 つだけなので、`wslc run` で足ります
 - 録画中に上げ直すと、`wslc stop` が録画の終わりを待ってから入れ替えます (`--stop-timeout 21900`)
 
 **前のバージョン (Docker Desktop の compose) から上げるとき**は、install.ps1 が `docker compose down` で止め
@@ -60,7 +60,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 | `~/denpa/` (`DENPA_HOME`)      | `denpa.env` (コンテナの環境変数。手で足すならここ。無いときだけ雛形を作る)・`config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・エージェントのログ `denpa-agent.log` |
 | `%LOCALAPPDATA%\denpa-agent\`  | エージェント・px4-userland (`px4d.exe`・`px4ctl.exe`・切り出したファームウェア・ライセンスの文書)・siano-userland・起こす `denpa-agent.cmd` と `denpa-start.ps1`                    |
 | `C:\denpa-run`                 | px4d のソケットの置き場 (下)                                                                                                                                                        |
-| `~/Videos/denpa/recorded`      | 元のTS。エージェントとコンテナ (`/media/raw`) の両方に見せる                                                                                                                        |
+| `~/Videos/denpa/recorded`      | 元の TS。エージェントとコンテナ (`/media/raw`) の両方に見せる                                                                                                                       |
 | `~/Videos/denpa/library`       | 出来上がった録画 (コンテナの `/media/encoded`。エクスプローラーから見える)                                                                                                          |
 | wslc のボリューム `denpa-data` | DB                                                                                                                                                                                  |
 
@@ -74,21 +74,21 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   入れるのは 0.2.1) は、ドライバを WinUSB にすれば動きます。Linux・Mac と同じく px4d の制御ソケットで
   受信機を使い、内蔵カードリーダーも読みます (IPC は Windows でも AF_UNIX)。配布 zip のうち使うのは
   `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
-  置きません — エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらを引いてしまう。
+  置きません。エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらが読み込まれてしまう。
   ファームウェアは Mac と同じく PLEX 公式ドライバから切り出します ([tuner-px4.md](tuner-px4.md#ファームウェア))
 - **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 用 (`siano-ts.exe` と libusb) も、
   ドライバを WinUSB にすれば動きます
 - **Sony CECH-ZD1 J** (PS3 の torne。地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません。
   内蔵の差し込み口の B-CAS も読みます)。機材にドライバが無いので、Zadig で `054c:04b2` に WinUSB を当てます。
   当てていないか、ほかのソフトが使っていると「ほかのソフトが使っているか、WinUSB になっていません」と返します。
-  device の名前 (`zd1j:2-3.2` など) は、挿したポートから Linux と同じ形に作ります (1台だけなら挿し替えても付いていく。[tuners.md](tuners.md#sony-cech-zd1-j))。
+  device の名前 (`zd1j:2-3.2` など) は、挿したポートから Linux と同じ形に作ります (1 台だけなら挿し替えても付いていく。[tuners.md](tuners.md#sony-cech-zd1-j))。
   Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#sony-cech-zd1-j))
 - WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
-  **PX-Q3U4 / PX-W3U4 は USB の機材が2つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
+  **PX-Q3U4 / PX-W3U4 は USB の機材が 2 つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
   機材は、WinUSB にするとそちらからは見えなくなります (戻すときはデバイス マネージャーでドライバを戻す)。
   installer はドライバを入れ替えません (ほかのソフトで使っていた機材を黙って奪わない)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
-  (Windows の libusb は WinUSB の機材しか開けず、開けるのも1つのプロセスだけ)
+  (Windows の libusb は WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
 - px4・Siano・CECH-ZD1 J の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
@@ -104,7 +104,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   書ける人がいないフォルダしか使わないので、install.ps1 がその ACL で作ります。ユーザーのフォルダの下にしないのは、
   ソケットのパスが UTF-8 で 108 バイトまでで日本語のユーザー名だとすぐ溢れ、非 ASCII のパスだと px4d の ready の行が
   途切れるため ([px4-userland #52](https://github.com/Khronos31/px4-userland/issues/52))。エージェントは px4d を起こす前に
-  持ち主・ACL・長さを確かめ、合わなければ理由を言います。**1台の PC でエージェントを動かせるのは1人のユーザーだけ**です
+  持ち主・ACL・長さを確かめ、合わなければ理由を言います。**1 台の PC でエージェントを動かせるのは 1 人のユーザーだけ**です
 - **px4d が使っている筐体は、一覧で開けない機材 (`open_failed`) に見えます。** エージェントは起こしたときの筐体を
   覚えていて、動いている間は顔ぶれに残します。同じ番号の筐体を `--usb-path` で分けて起こすのは、
   px4-userland も Windows では確かめていません

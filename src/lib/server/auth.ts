@@ -6,7 +6,7 @@ import { pwaNames } from "./manifest";
 import { enabled as oidcEnabled } from "./oidc";
 
 /**
- * 誰を通すか。**どこでも通る方法が3つと、エンドポイントを限った方法が2つ。**
+ * 誰を通すか。**どこでも通る方法が 3 つと、エンドポイントを限った方法が 2 つ。**
  *
  * | 方法 | 何者か |
  * | --- | --- |
@@ -16,9 +16,9 @@ import { enabled as oidcEnabled } from "./oidc";
  * | 使い捨てのチケット | ライブ視聴の WebSocket だけ (`tickets.ts`) |
  * | Hybridcast の中継のトークン | Hybridcast のアプリの読み込みだけ (`hc-relay.ts`。下の `OPEN_PATHS`) |
  *
- * **どれも設定していなければ、全部断る** (`configured`)。以前はベーシック認証を
- * 起動時に自動で掛けていたが、廃止した — 残っていたのは「画面に出して
- * 覚えさせるパスワード」だけだった。全部開けたいなら `TRUSTED_NETWORKS=0.0.0.0/0`
+ * **どれも設定していなければ、全部断る** (`configured`)。以前は起動時にベーシック認証を
+ * 自動で掛けていたが、残っていたのは「画面に出して覚えさせるパスワード」だけだったので
+ * 廃止した。全部開けたいなら `TRUSTED_NETWORKS=0.0.0.0/0`
  * (公開の注意は docs/auth.md)。
  */
 
@@ -28,7 +28,7 @@ import { enabled as oidcEnabled } from "./oidc";
  * - **ログインの入口。** 守ると入れなくなる (ログイン画面へ行くのにログインが要る)
  * - **`/logout`。** ここも素通し (ログアウトするのにログインを要求しない)
  * - **`/api/health`。** Kubernetes の `livenessProbe` が呼ぶ。守ると**Pod が
- *   再起動を繰り返す** (掛ける範囲を選べるのをやめたときに実際に踏んだ —
+ *   再起動を繰り返す** (掛ける範囲を選べるのをやめたときに実際に起き、
  *   E2E のスタックが起動待ちで固まった)。出しているのは
  *   「生きているか・動いているバージョンと新しいバージョン・局が何件か・録画が何本か」だけ
  * - **`/manifest.webmanifest`。** ブラウザは**資格情報を付けずに**取得する
@@ -55,7 +55,7 @@ export function isOpenPath(pathname: string): boolean {
 }
 
 /**
- * ログイン方法が1つでも設定してあるか。**無ければ全部断る** (fail-closed)。
+ * ログイン方法が 1 つでも設定してあるか。**無ければ全部断る** (fail-closed)。
  *
  * 分からない状態で開けておくより、閉まっていることが起動ログとエラーページから
  * はっきり分かるほうがいい。以前の「起動時にパスワードを自動生成して掛ける」は、
@@ -65,7 +65,7 @@ export function configured(): boolean {
   return oidcEnabled() || networks(config.trustedNetworks).length > 0;
 }
 
-/** ログイン方法が無いまま上がったとき (と、TRUSTED_NETWORKS の書き損じ) の案内。起動ログに1度だけ出す */
+/** ログイン方法が無いまま上がったとき (と、TRUSTED_NETWORKS の書き損じ) の案内。起動ログに 1 度だけ出す */
 export function warnIfClosed(): void {
   // 書き損じは当たらないだけなので、気づけるように知らせる
   for (const entry of unreadable(networks(config.trustedNetworks))) {
@@ -146,7 +146,7 @@ const LOCAL_SUFFIXES = [
  * denpa の IP に向け直すと、そのサイトを開いた LAN の人のブラウザは、denpa を「そのサイトと
  * 同じオリジン」として読み書きできる (接続元は LAN の人なので `TRUSTED_NETWORKS` に当たり、
  * CSRF の判定も `Host` から組んだ origin と `Origin` が同じ名前なので通る)。
- * そこで、攻める側が自分の名前として用意できないものだけを通す:
+ * そこで、攻める側が自分の名前として用意できないものだけを通す。
  *
  * - IP の直書き (IPv4・IPv6)、`localhost`、ドットの無い名前
  * - 家の中だけの名前 (`LOCAL_SUFFIXES`)
@@ -189,7 +189,7 @@ function ownNames(): string[] {
     .filter((raw) => raw !== "" && raw !== ".");
 }
 
-/** 知らせた名前。同じ名前で何度来ても1度だけ出す (ログを埋めないよう、覚えるのは上限まで) */
+/** 知らせた名前。同じ名前で何度来ても 1 度だけ出す (ログを埋めないよう、覚えるのは上限まで) */
 const reported = new Set<string>();
 const MAX_REPORTED = 64;
 
@@ -201,7 +201,7 @@ const MAX_REPORTED = 64;
  * `Host` はブラウザのスクリプトから変えられないが、`X-Forwarded-Host` のようなヘッダは
  * 同じオリジンからなら付けられるので、どちらか片方だけでは足りない。
  *
- * 信頼するネットワークの中から知らない名前で来たときに呼ぶ。ログに理由を1度だけ出す
+ * 信頼するネットワークの中から知らない名前で来たときに呼ぶ。ログに理由を 1 度だけ出す
  */
 export function foreignHost(headers: Headers, address: string): string | null {
   const names = [headers.get("host")];
@@ -231,7 +231,7 @@ export function foreignHost(headers: Headers, address: string): string | null {
  * 接続を Docker のゲートウェイから繋ぎ直すときも同じ。
  *
  * 自分のインターフェースのネットワークと `TRUSTED_NETWORKS` が重なっていて、`TRUSTED_PROXIES` が
- * 空のときに当たる。ループバックとリンクローカル (`169.254.0.0/16`・`fe80::/10`) は見ない —
+ * 空のときに当たる。ループバックとリンクローカル (`169.254.0.0/16`・`fe80::/10`) は見ない。
  * ループバックは外から来ない。リンクローカルは IPv6 ならどのインターフェースにもあり、
  * wslc はこの PC からの接続を `169.254.x.x` に見せる (install.ps1 が信頼している)
  */
@@ -274,7 +274,7 @@ export function warnIfProxyHidden(): void {
  *
  * アドレスは入口の server.js が決めて `x-denpa-remote` に入れ、adapter-bun はそれを読む
  * (`ADDRESS_HEADER` は server.js が固定する。前段をどこまで信じるかは `TRUSTED_PROXIES`)。
- * adapter-bun はそのヘッダが無いと**例外を投げる** — server.js が相手のアドレスを
+ * adapter-bun はそのヘッダが無いと**例外を投げる**。server.js が相手のアドレスを
  * 読めなかったときがそれで、そのまま呼ぶと 500 になる。
  *
  * **読めなかったときは素通しにしない** (空文字はどの CIDR にも当たらない)。

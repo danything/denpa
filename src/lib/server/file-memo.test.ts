@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileMemo } from "./file-memo";
 
 /**
- * **録画の字幕を作り直さない** (`captions.json`)。抜くには ffmpeg が動画を丸ごと読み、
+ * **録画の字幕を作り直さない** (`captions.json`)。取り出すには ffmpeg が動画を丸ごと読み、
  * 観はじめの読み込みとディスクを取り合っていた
  */
 describe("fileMemo", () => {

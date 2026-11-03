@@ -1,12 +1,12 @@
 /**
  * 偽の Entra ID。
  *
- * denpa の OIDC を通しで試すためだけのもの。OIDC のエンドポイントは4つしか使っていないので
+ * denpa の OIDC を通しで試すためだけのもの。OIDC のエンドポイントは 4 つしか使っていないので
  * (discovery / authorize / token / jwks)、そのぶんだけ本物のように振る舞う。
  * 鍵は起動のたびに作る。
  *
  * **人は出てこない。** `authorize` に来たらその場でコードを発行して戻す。
- * 「誰が入るか」は `FAKE_IDP_GROUPS` で決める — 通す人と断る人の両方を試すため。
+ * 「誰が入るか」は `FAKE_IDP_GROUPS` で決める。通す人と断る人の両方を試すため。
  */
 const PORT = Number(process.env["FAKE_IDP_PORT"] ?? 9876);
 const ISSUER = process.env["FAKE_IDP_ISSUER"] ?? `http://127.0.0.1:${PORT}`;
@@ -42,7 +42,7 @@ let groups = (process.env["FAKE_IDP_GROUPS"] ?? "admins")
 /** `groups` そのものを載せない。アプリ登録の設定漏れを再現する */
 let omitGroups = false;
 /**
- * アプリロール。**既定では載せません** — グループから移す途中なので、
+ * アプリロール。**既定では載せません。** グループから移す途中なので、
  * 「roles だけ来る」形もテストから作れるようにしてあります
  */
 let roles = (process.env["FAKE_IDP_ROLES"] ?? "").split(",").filter(Boolean);

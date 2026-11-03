@@ -8,23 +8,23 @@ import { config } from "./config";
 import { run } from "./stream";
 
 /**
- * **CM 検出の材料を、1回だけデコードして取る。**
+ * **CM 検出の材料を、1 回だけデコードして取る。**
  *
- * 取るのは3つ。どれもコマの時刻 (ffmpeg の時刻) にそろえて返す。
+ * 取るのは 3 つ。どれもコマの時刻 (ffmpeg の時刻) にそろえて返す。
  *
- * - **場面の切れ目** — `scdet` の点をコマごとに。`metadata` で一時ファイルへ (1コマ2行)
- * - **局ロゴの枠** — 枠だけ切り出した白黒のコマを標準出力へ。点を付けるのは呼ぶ側 (`logo-own.ts`)
- * - **無音** — 主音声に `silencedetect`。`ametadata` で一時ファイルへ
+ * - 場面の切れ目は、`scdet` の点をコマごとに `metadata` で一時ファイルへ書く (1 コマ 2 行)
+ * - 局ロゴの枠は、枠だけ切り出した白黒のコマを標準出力へ出す。点を付けるのは呼ぶ側 (`logo-own.ts`)
+ * - 無音は、主音声の `silencedetect` を `ametadata` で一時ファイルへ書く
  *
- * ふだんは**エンコードと同じ ffmpeg で一緒に行う** (`scanReader` の `outputs` をエンコードする出口のあとに足す。
+ * ふだんは**エンコードと同じ ffmpeg で一緒に読む** (`scanReader` の `outputs` をエンコードする出口のあとに足す。
  * `encoder.ts`)。ここの `scan` が自分で ffmpeg を起こすのは、ロゴを覚え直して枠だけ読み直すとき、
  * CM 検出だけやり直すとき、エンコードのあとに音だけ読み直すとき。
  *
- * **材料は標準エラーに出させない。** ffmpeg はログを書けなければ黙って捨てるので、エンコードと一緒に行うと
- * 行が落ちる (実測 30分で 54712 行のうち 1 行)。ファイルへ書かせれば落ちない。標準エラーから読むのは入れ物の尺 (`Duration:`) だけ。
+ * **材料は標準エラーに出させない。** ffmpeg はログを書けなければ黙って捨てるので、エンコードと一緒に読むと
+ * 行が落ちる (実測 30 分で 54712 行のうち 1 行)。ファイルへ書かせれば落ちない。標準エラーから読むのは入れ物の尺 (`Duration:`) だけ。
  */
 
-/** 無音とみなす音の大きさ。16ビットで ±50 */
+/** 無音とみなす音の大きさ。16 ビットで ±50 */
 const SILENCE_NOISE = 50 / 32768;
 /** 検出する無音の最短 (秒)。短いものは判定 (`cm-decide`) で捨てる */
 const SILENCE_MIN = 0.15;
@@ -32,9 +32,9 @@ const SILENCE_MIN = 0.15;
 export interface ScanLogo {
   /** 枠を切り出すフィルタ (`crop=…`)。白黒にするのはこちらで足す */
   filter: string;
-  /** 1コマのバイト数 (枠の幅 × 高さ) */
+  /** 1 コマのバイト数 (枠の幅 × 高さ) */
   size: number;
-  /** 1コマ届くたびに呼ぶ。`index` は `times` と同じ並び */
+  /** 1 コマ届くたびに呼ぶ。`index` は `times` と同じ並び */
   onFrame: (frame: Uint8Array, index: number) => void;
 }
 
@@ -73,7 +73,7 @@ export interface Scan {
 
 const DURATION = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/;
 
-/** 標準エラーの1行から入れ物の尺 (`Duration:`) を秒で。それ以外は null */
+/** 標準エラーの 1 行から入れ物の尺 (`Duration:`) を秒で。それ以外は null */
 export function scanLine(line: string): { duration: number } | null {
   const length = DURATION.exec(line);
   if (length === null) return null;
@@ -86,7 +86,7 @@ export function scanLine(line: string): { duration: number } | null {
 const FRAME_TIME = /pts_time:\s*(-?[\d.]+)/;
 
 /**
- * `metadata=mode=print` の書き出しから、コマごとの時刻と `scdet` の点を読み取る。1コマ2行:
+ * `metadata=mode=print` の書き出しから、コマごとの時刻と `scdet` の点を読み取る。1 コマ 2 行:
  *
  *     frame:0    pts:58316   pts_time:0.647956
  *     lavfi.scd.score=0.000
@@ -134,8 +134,8 @@ export function parseSilences(text: string, end: number): Range[] {
 }
 
 /**
- * 材料を取る出口 (ffmpeg の引数の、入力より後ろ)。映像と音で2つに分ける。`files` は書き出し先。
- * **エンコードの出口のあとに足しても同じに動く** — `-map` は出口ごとなので、映像の出口は
+ * 材料を取る出口 (ffmpeg の引数の、入力より後ろ)。映像と音で 2 つに分ける。`files` は書き出し先。
+ * **エンコードの出口のあとに足しても同じに動く。** `-map` は出口ごとなので、映像の出口は
  * ffmpeg の自動の選び方 (いちばん大きい映像) のまま
  */
 export function scanOutputs(
@@ -145,8 +145,8 @@ export function scanOutputs(
   const args: string[] = [];
   if (want.video) {
     /*
-     * 映像は ffmpeg に選ばせる (いちばん大きいもの)。1本の TS に局がいくつも入っていても (TOKYO MX)、
-     * 中身のある映像を選ぶ。**コマは間引かない・増やさない** — `times` とロゴの枠を順番で突き合わせる。
+     * 映像は ffmpeg に選ばせる (いちばん大きいもの)。1 本の TS に局がいくつも入っていても (TOKYO MX)、
+     * 中身のある映像を選ぶ。**コマは間引かない・増やさない。** `times` とロゴの枠を順番で突き合わせる。
      * `scdet` は点を全部のコマに付ける。閾値を上げておくのはログを出させないため (キーフレームを置く
      * `scdet@key` と名前で分ける)
      */
@@ -183,13 +183,13 @@ export function scanOutputs(
   return args;
 }
 
-/** ffmpeg の出力を読んで材料にする。エンコードと一緒に行うときも、自分で読むときも同じもの */
+/** ffmpeg の出力を読んで材料にする。エンコードと一緒に読むときも、自分で読むときも同じもの */
 export interface ScanReader {
   /** ffmpeg に足す出口 (`scanOutputs`) */
   outputs: string[];
   /** 標準出力 (ロゴの枠) の塊。ロゴを読まないときは無い */
   onStdout: ((chunk: Uint8Array) => void) | undefined;
-  /** 標準エラーの1行。材料だったら true (落ちた理由として残さなくてよい) */
+  /** 標準エラーの 1 行。材料だったら true (落ちた理由として残さなくてよい) */
   line(line: string): boolean;
   /**
    * 読み終えたら。書き出しを読んで片付ける。`duration` (ffprobe で測った尺。読んだものの物差しで) は
@@ -199,7 +199,7 @@ export interface ScanReader {
 }
 
 /**
- * 書き出しの置き場。読み取りごとに一時フォルダを1つ作る (名前は他と重ならない)。
+ * 書き出しの置き場。読み取りごとに一時フォルダを 1 つ作る (名前は他と重ならない)。
  * **パスはフィルタの引数に入る**ので、`:` `,` などを含まない一時フォルダの下に固定の名前で置く
  */
 function scratch(): { dir: string; cuts: string; silences: string } {
@@ -275,7 +275,7 @@ function scanArgs(
 
 const PROGRESS = /^out_time_us=(\d+)$/;
 
-/** 録画を1回だけデコードして、CM 検出の材料を取る (エンコードと一緒に行わないとき) */
+/** 録画を 1 回だけデコードして、CM 検出の材料を取る (エンコードと一緒に読まないとき) */
 export async function scan(
   input: string,
   options: ScanOptions & { onTime?: (seconds: number) => void },

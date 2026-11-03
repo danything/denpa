@@ -4,8 +4,8 @@
  * **入口の `server.js` とアプリ (`auth.ts`) の両方が使う。** server.js は SvelteKit の
  * ビルドの外にある素の JS なので、ここは**何も import しない** (`$lib` も config も
  * 引かない)。bun は `.ts` をそのまま読めるので、server.js はこのファイルを直に
- * import する — 本番のイメージにもこの1枚だけ置いてある (Dockerfile)。
- * 同じ判定を2か所に書くと、片方だけ直して食い違うほうが危ない。
+ * import する。本番のイメージにもこの 1 枚だけ置いてある (Dockerfile)。
+ * 同じ判定を 2 か所に書くと、片方だけ直して食い違うほうが危ない。
  */
 
 /**
@@ -13,7 +13,7 @@
  *
  * - IPv4 はそのまま (`10.0.0.1`)
  * - IPv6 は小文字の省略なしの数として扱い、`::ffff:10.0.0.1` (IPv4 を写した IPv6) は
- *   IPv4 に戻す — Bun は IPv4 の相手をこの形式で渡すことがある
+ *   IPv4 に戻す。Bun は IPv4 の相手をこの形式で渡すことがある
  */
 export function normalize(address: string): string | null {
   const parsed = parse(address);
@@ -36,7 +36,7 @@ export function inNetwork(address: string, entry: string): boolean {
 }
 
 /**
- * 2つのネットワークに重なりがあるか (片方がもう片方を含む)。書き方は `inNetwork` と同じで、
+ * 2 つのネットワークに重なりがあるか (片方がもう片方を含む)。書き方は `inNetwork` と同じで、
  * `172.18.0.3/16` のように中のアドレスで書いてもよい (OS が返すインターフェースの形)。
  * IPv4 と IPv6 は互いに重ならない。読めなければ重ならない
  */
@@ -92,7 +92,7 @@ export function inAny(address: string, entries: readonly string[]): boolean {
  *   前段でないアドレスを接続元とする。右端ほど近い前段が書いたもので、左ほど
  *   詐称しやすい。全部が前段なら左端 (いちばん遠いところ)
  * - 前段なのに `X-Forwarded-For` が無い・読めない項目に当たったら、そこで止めて
- *   それまでに分かったアドレス (無ければ相手) を使う — 読めないものの先は信じない
+ *   それまでに分かったアドレス (無ければ相手) を使う。読めないものの先は信じない
  *
  * 返すアドレスは `normalize` した形式。相手が読めなければ空文字 (どの CIDR にも当たらない)
  */
@@ -142,7 +142,7 @@ function parseV4(raw: string): bigint | null {
 function parseV6(raw: string): bigint | null {
   if (!raw.includes(":")) return null;
   let text = raw.toLowerCase();
-  // 末尾が IPv4 の書き方 (::ffff:10.0.0.1) なら 16bit 2つに直す
+  // 末尾が IPv4 の書き方 (::ffff:10.0.0.1) なら 16bit 2 つに直す
   const tail = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(text);
   if (tail) {
     const v4 = parseV4(tail[2]!);
