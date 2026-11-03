@@ -16,6 +16,8 @@ import {
   LIVE_STREAM_BACKLOG,
   liveHwFailed,
   openingLine,
+  parseCommand,
+  rawEnding,
   sessionStream,
   whyNotTuned,
 } from "./live";
@@ -706,5 +708,51 @@ describe("開くまでの内訳", () => {
     ).toBe(
       "[live] GR:T27: 開くまで 選局 - / 最初のバイト - / ffmpeg 3ms / init 250ms / 最初の fMP4 260ms (av1)",
     );
+  });
+});
+
+/** 画面から来た指示の読み方 (`parseCommand`)。追っかけを元の TS で受ける `raw` と、送るのを止める `hold` */
+describe("画面からの指示 (parseCommand)", () => {
+  test("追っかけの raw は true のときだけ。省けばエンコードしたもの", () => {
+    expect(
+      parseCommand({ type: "chase", recordingId: 3, at: 10, raw: true }),
+    ).toMatchObject({ type: "chase", recordingId: 3, at: 10, raw: true });
+    expect(parseCommand({ type: "chase", recordingId: 3 })).toMatchObject({
+      raw: false,
+      codec: "h264",
+    });
+    expect(
+      parseCommand({ type: "chase", recordingId: 3, raw: "yes" }),
+    ).toMatchObject({ raw: false });
+  });
+
+  test("hold は on が true のときだけ止める", () => {
+    expect(parseCommand({ type: "hold", on: true })).toEqual({
+      type: "hold",
+      on: true,
+    });
+    expect(parseCommand({ type: "hold" })).toEqual({ type: "hold", on: false });
+  });
+});
+
+/** 元の TS を配る経路が、入力が尽きたあとにすること (`rawEnding`) */
+describe("元の TS が尽きたあと (rawEnding)", () => {
+  test("追っかけは読み切ったので ended", () => {
+    expect(rawEnding({ chase: true, fed: true, stopped: false })).toBe("ended");
+    expect(rawEnding({ chase: true, fed: false, stopped: false })).toBe(
+      "ended",
+    );
+  });
+
+  test("ライブは届いたあとなら外された (lost)、届く前なら died", () => {
+    expect(rawEnding({ chase: false, fed: true, stopped: false })).toBe("lost");
+    expect(rawEnding({ chase: false, fed: false, stopped: false })).toBe(
+      "died",
+    );
+  });
+
+  test("畳んだあとは何も伝えない", () => {
+    expect(rawEnding({ chase: true, fed: true, stopped: true })).toBe("quiet");
+    expect(rawEnding({ chase: false, fed: true, stopped: true })).toBe("quiet");
   });
 });

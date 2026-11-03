@@ -10,13 +10,16 @@ import {
   programMap,
   stream,
 } from "@danything/arib/synth";
+import { packetizePes, pes } from "@danything/arib/synth-av";
 
 import {
   chasePlan,
+  chaseReadHeld,
   fileSize,
   followFile,
   resumeFrom,
   resumePlan,
+  tsFileHead,
 } from "./chase";
 import { chunks } from "./stream";
 
@@ -230,5 +233,109 @@ describe("作り直したところから読み直す (resumePlan)", () => {
     const near = chasePlan(ts.length, 80, resume.at);
     expect(resumePlan(near, resume, resume.until + 1)).toEqual(near);
     expect(resumePlan(near, undefined)).toEqual(near);
+  });
+});
+
+/**
+ * 追っかけを元の TS で送るときの物差しの 0 (`live.ts` の `openChase` が `timeline.origin` に載せる)。
+ * 画面は届いた PTS からこれを引いて再生位置を出す
+ */
+describe("元の TS の先頭の PTS (tsFileHead)", () => {
+  let dir: string | null = null;
+  afterEach(() => {
+    if (dir !== null) rmSync(dir, { recursive: true, force: true });
+    dir = null;
+  });
+
+  /** 映像と音声の PES を1つずつ。映像の PTS は音声より後 */
+  function head(start: number): Uint8Array {
+    const video = packetizePes(
+      0x100,
+      pes(0xe0, start + 3003, new Uint8Array(300)),
+      0,
+    ).packets;
+    const audio = packetizePes(
+      0x110,
+      pes(0xc0, start, new Uint8Array(7)),
+      0,
+    ).packets;
+    const out = new Uint8Array(video.length + audio.length);
+    out.set(video);
+    out.set(audio, video.length);
+    return out;
+  }
+
+  test("映像と音声の最初の PTS の早いほう (観る画面の物差しと同じ `tsHead`)", async () => {
+    dir = mkdtempSync(join(tmpdir(), "chase-"));
+    const path = join(dir, "rec.ts");
+    writeFileSync(path, head(900_000));
+    expect(await tsFileHead(path)).toBe(900_000);
+  });
+
+  test("読めたものは覚える (録画中も先頭は変わらない)", async () => {
+    dir = mkdtempSync(join(tmpdir(), "chase-"));
+    const path = join(dir, "rec.ts");
+    writeFileSync(path, head(1_800_000));
+    expect(await tsFileHead(path)).toBe(1_800_000);
+    writeFileSync(path, head(2_700_000));
+    expect(await tsFileHead(path)).toBe(1_800_000);
+  });
+
+  test("まだ先頭が揃っていなければ null。しばらくは読み直さず、過ぎたら読み直す", async () => {
+    dir = mkdtempSync(join(tmpdir(), "chase-"));
+    const path = join(dir, "rec.ts");
+    const at = 1_000_000;
+    expect(await tsFileHead(path, at)).toBeNull();
+    writeFileSync(path, head(450_000));
+    // 控えている間は読まない (シークのたびに 4MB 読み直さない)
+    expect(await tsFileHead(path, at + 1_000)).toBeNull();
+    expect(await tsFileHead(path, at + 5_001)).toBe(450_000);
+  });
+});
+
+/**
+ * 追っかけを元の TS で送るとき、録画のファイルを読むのを止めるか (`live.ts` の `openChase` が `followFile` の `hold` に渡す)。
+ * 元の TS は捨てると観ていない先が欠けるので、捨てる代わりに読むほうを止める
+ */
+describe("元の TS の追っかけで読むのを止めるか (chaseReadHeld)", () => {
+  const none = { asked: false, congested: false, outside: false };
+
+  test("画面が止めてと送ってきた・送り先が詰まっている・ほかの理由、のどれかで止める", () => {
+    expect(chaseReadHeld(none)).toBe(false);
+    expect(chaseReadHeld({ ...none, asked: true })).toBe(true);
+    expect(chaseReadHeld({ ...none, congested: true })).toBe(true);
+    expect(chaseReadHeld({ ...none, outside: true })).toBe(true);
+  });
+
+  test("止めている間は読まず、画面が続けてと送ったら続きを読む (`followFile` に渡したとき)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "chase-"));
+    try {
+      const path = join(dir, "rec.ts");
+      writeFileSync(path, "abcdef");
+      const viewer = { held: true };
+      let asked = 0;
+      const stream = followFile(
+        path,
+        0,
+        1e9,
+        () => true,
+        () => {
+          // 3 回訊かれるまで止めてもらい、そのあと画面が `{ type: 'hold', on: false }` を送ったことにする
+          if (++asked > 3) viewer.held = false;
+          return chaseReadHeld({
+            asked: viewer.held,
+            congested: false,
+            outside: false,
+          });
+        },
+      );
+      const parts: string[] = [];
+      for await (const chunk of chunks(stream))
+        parts.push(new TextDecoder().decode(chunk));
+      expect(parts.join("")).toBe("abcdef");
+      expect(asked).toBeGreaterThan(3);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

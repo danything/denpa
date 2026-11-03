@@ -60,6 +60,14 @@ export class Connection {
     this.ws.sendBinary(out);
   }
 
+  /**
+   * 溜まりが捨て始める量 (`BACKLOG_LIMIT`) を超えているか。捨てられないもの (追っかけの元の TS) は、
+   * これを見て読むほうを止める (live.ts の `openChase`)
+   */
+  get congested(): boolean {
+    return this.ws.getBufferedAmount() > BACKLOG_LIMIT;
+  }
+
   /** bun から渡されたものをデコードする。**JSON 以外は黙って捨てる** */
   receive(message: string | Buffer): void {
     if (typeof message !== "string") return;
