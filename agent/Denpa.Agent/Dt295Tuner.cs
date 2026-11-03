@@ -212,6 +212,7 @@ public sealed class Dt295Board : IDisposable
             {
                 if (Session.Boot(Vendor.Idle) == Dt295Boot.Recovered) Log.Write($"[{Dt295.Model} {Port}] エラーの状態から戻しました");
                 Session.Authenticate(Dt295Material.From(Vendor));
+                Frontend.Forget();
                 Card = Session.InitCard();
             }
             catch

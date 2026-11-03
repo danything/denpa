@@ -23,7 +23,11 @@ public sealed class Dt295Frontend(IDt295Board board, Dt295Material material)
 
     /// <summary>衛星を選んでいる (地上波へ戻すときに先に衛星をスリープさせる。8.7)</summary>
     public bool SatelliteActive { get; private set; }
+    /// <summary>地上波のチューナーを初期化済み。認証し直したとき (<see cref="Forget"/>) と衛星を選んだときに false に戻る</summary>
     private bool _terrestrialReady;
+
+    /// <summary>認証し直したあと、次の地上波の選局で初期化をやり直す</summary>
+    public void Forget() => _terrestrialReady = false;
 
     // ---------------------------------------------------------------------
     // 周波数 (7.1・8.1)

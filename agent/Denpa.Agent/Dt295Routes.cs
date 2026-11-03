@@ -113,7 +113,8 @@ public static class Dt295Routes
 
     /// <summary>
     /// 計画をレジスターに書く (9.3 の手順 3・4 と 9.5)。全 64 スロットを書き、計画に無いスロットは無効・PID 0・ECM 0 にする
-    /// (参照実装は全部クリアしてから計画を書く。最後に残る値は同じ)
+    /// (参照実装は全部クリアしてから計画を書く。最後に残る値は同じ)。<paramref name="cleared"/> が true なら、領域を 0 で埋めた直後なので計画のスロットだけを書く
+    /// (フィールド表が書くレジスター 0x1002〜0x101B は PID スロットの 0x101E 以降と重ならない)
     /// </summary>
     public static void Write(Dt295Bridge bridge, IReadOnlyList<Dt295Route> routes, Dt295Program? main, bool cleared = false)
     {
