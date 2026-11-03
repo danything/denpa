@@ -10,8 +10,15 @@ import type { AgentChannel } from "./tuner";
  * なっていた ([config.ts](config.ts) の epgChannelTimeout)。
  */
 const { config } = await import("./config");
-const { firstSweeps, lastOf, networkSweeps, pickChannels, reachOf } =
-  await import("./epg-collect");
+const {
+  firstSweeps,
+  lastOf,
+  networkSweeps,
+  pickChannels,
+  reachOf,
+  replacement,
+  sweepOrder,
+} = await import("./epg-collect");
 const { serviceKey } = await import("./tuner");
 
 const NETWORK = 32391;
@@ -190,21 +197,85 @@ describe("初回は BS をネットワークごとに1中継で埋める", () =>
 
   /*
    * CS は詳細を流していないので、中継ごとに開かずいつも全局読み。
-   * 選ばれた中継が1つでもあるネットワークを、行っていない順の1中継にまとめる
+   * 選ばれた中継が1つでもあるネットワークを、受信を確かめていない順の1中継にまとめる
    */
+  const cs = [
+    sat("CS02", 6, [296]),
+    sat("CS06", 6, [227]),
+    sat("CS04", 7, [55]),
+    sat("CS08", 7, [800]),
+  ];
+
   test("CS はネットワークごとに1中継へまとめる", () => {
-    const cs = [
-      sat("CS02", 6, [296]),
-      sat("CS06", 6, [227]),
-      sat("CS04", 7, [55]),
-      sat("CS08", 7, [800]),
-    ];
-    const last = (c: AgentChannel) => (c.channel === "CS02" ? Date.now() : 0);
+    const checked = (c: AgentChannel) =>
+      c.channel === "CS02" ? Date.now() : 0;
     expect(
-      networkSweeps([cs[0]!, channels[1]!], cs, last).map((c) => c.channel),
+      networkSweeps([cs[0]!, channels[1]!], cs, checked).map((c) => c.channel),
     ).toEqual(["CS06"]);
     expect(
-      networkSweeps([cs[0]!, cs[3]!], cs, last).map((c) => c.channel),
+      networkSweeps([cs[0]!, cs[3]!], cs, checked).map((c) => c.channel),
     ).toEqual(["CS06", "CS04"]);
+  });
+
+  /*
+   * 番組の行の時刻は全局読みでネットワークの全中継が同じになる。確かめた時刻で選ぶので、
+   * 周回のたびに次の中継へ移り、どの中継も受信を確かめられる (「確認中」のまま残らない)
+   */
+  test("周回のたびに、まだ確かめていない中継へ順に移る", () => {
+    const network6 = [
+      sat("CS02", 6, [296]),
+      sat("CS08", 6, [800]),
+      sat("CS10", 6, [227]),
+    ];
+    const checked = new Map<string, number>();
+    const opened: string[] = [];
+    for (let round = 1; round <= 4; round++) {
+      const [pick] = networkSweeps(
+        network6,
+        network6,
+        (c) => checked.get(c.channel) ?? 0,
+      );
+      opened.push(pick!.channel);
+      checked.set(pick!.channel, round);
+    }
+    expect(opened).toEqual(["CS02", "CS08", "CS10", "CS02"]);
+  });
+
+  test("全局読みが受信できなければ、同じ周回で次の中継に替える (ネットワークごとに1回)", () => {
+    const order = (network: number) => sweepOrder(cs, network, () => 0);
+    const replaced = new Set<number>();
+    const job = { channel: cs[0]!, whole: [296, 227] };
+
+    expect(replacement(job, true, replaced, order)).toEqual({
+      channel: cs[1]!,
+      whole: [296, 227],
+    });
+    // 替えた先も受信できなかった。アンテナの不調かもしれないので、残りを全部は開かない
+    expect(
+      replacement({ ...job, channel: cs[1]! }, true, replaced, order),
+    ).toBeUndefined();
+    // ほかのネットワークは別に数える
+    expect(
+      replacement({ channel: cs[2]!, whole: [55] }, true, replaced, order)
+        ?.channel,
+    ).toBe(cs[3]);
+  });
+
+  test("受信できた・全局読みでない・BS のときは替えない", () => {
+    const order = (network: number) => sweepOrder(cs, network, () => 0);
+    expect(
+      replacement({ channel: cs[0]!, whole: [296] }, false, new Set(), order),
+    ).toBeUndefined();
+    expect(
+      replacement({ channel: cs[0]!, whole: null }, true, new Set(), order),
+    ).toBeUndefined();
+    expect(
+      replacement(
+        { channel: channels[1]!, whole: [101] },
+        true,
+        new Set(),
+        order,
+      ),
+    ).toBeUndefined();
   });
 });

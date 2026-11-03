@@ -118,6 +118,23 @@ export function unreceivableChannels(): Set<string> {
 }
 
 /**
+ * チャンネル (`種別:名前`) ごとの、最後に確かめた時刻 (受信できた・できなかったの新しいほう)。
+ * 一度も確かめていないチャンネルは入らない。CS の全局読みで開く中継を順に回すのに使う (`epg-collect.networkSweeps`)
+ */
+export function checkedAt(): Map<string, number> {
+  return new Map(
+    orm()
+      .select()
+      .from(channelReception)
+      .all()
+      .map((row) => [
+        keyOf(row.type, row.channel),
+        Math.max(row.ok_at ?? 0, row.failed_at ?? 0),
+      ]),
+  );
+}
+
+/**
  * チャンネルごとの受信の様子 (設定の「受信」に出す)。
  * 一度も確かめていない衛星のチャンネルは「確認中」。地上波はスキャンで受信できたものだけが入るので「確認中」にしない
  */

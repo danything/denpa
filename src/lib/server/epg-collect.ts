@@ -28,7 +28,7 @@ import {
 import { emit } from "./events";
 import { alertGround, forgetGround, GroundWatch } from "./ground-watch";
 import { LineupWatch } from "./lineup-follow";
-import { recordFailed, recordReceived } from "./reception";
+import { checkedAt, recordFailed, recordReceived } from "./reception";
 import { resolveConflicts } from "./scheduler";
 import { programs, services } from "./schema";
 import { chunks } from "./stream";
@@ -244,7 +244,7 @@ async function collectChannel(
   channel: AgentChannel,
   /** 全局読みのとき、来るはずの局 (service_id)。普段 (自分の中継だけ) は null */
   whole: number[] | null = null,
-): Promise<{ programs: number; complete: boolean }> {
+): Promise<{ programs: number; complete: boolean; failed: boolean }> {
   const reader = new EpgReader(Date.now, {
     other: whole !== null,
     settle: config.epgSweepSettle,
@@ -369,9 +369,10 @@ async function collectChannel(
    */
   lineup?.follow();
   ground?.compare();
+  const failed = !received && (refused || (opened && timedOut));
   if (received) {
     recordReceived(channel.type, channel.channel);
-  } else if (refused || (opened && timedOut)) {
+  } else if (failed) {
     collected.set(key(channel), Date.now());
     if (recordFailed(channel.type, channel.channel)) {
       console.warn(
@@ -413,6 +414,7 @@ async function collectChannel(
   return {
     programs: Math.min(saved, reader.all().length),
     complete: opened && reader.complete,
+    failed,
   };
 }
 
@@ -511,22 +513,54 @@ export function firstSweeps(
 
 /**
  * 詳細の無い種別 (`WHOLE_ONLY`) の、この周回で読むべきものを**ネットワークごとに1中継**へまとめる。
- * そのネットワークの中継が1つでも選ばれていれば、いちばん長く行っていない中継で全局を読む
+ * そのネットワークの中継が1つでも選ばれていれば、`sweepOrder` の先頭の中継で全局を読む
  */
 export function networkSweeps(
   targets: AgentChannel[],
   channels: AgentChannel[],
-  lastOf: (channel: AgentChannel) => number,
+  checkedOf: (channel: AgentChannel) => number,
 ): AgentChannel[] {
   const wanted = new Set(
     targets.filter((c) => WHOLE_ONLY.has(c.type)).map((c) => c.networkId),
   );
   return [...wanted].map(
-    (network) =>
-      channels
-        .filter((c) => WHOLE_ONLY.has(c.type) && c.networkId === network)
-        .sort((a, b) => lastOf(a) - lastOf(b))[0]!,
+    (network) => sweepOrder(channels, network, checkedOf)[0]!,
   );
+}
+
+/**
+ * 全局読みで開く中継の順。**受信できるかをいちばん長く確かめていない中継から** (一度も確かめていないものが先)。
+ *
+ * 番組の行の時刻では選べない。1中継の全局読みでネットワークの全局の番組が新しくなるので、
+ * どの中継も同じ時刻になり、いつも先頭の中継 (CS02・CS04) ばかり開いていた。受信できたかは
+ * 開いた中継にしか残らないので、ほかの中継がずっと「確認中」のままだった (`reception.ts`)
+ */
+export function sweepOrder(
+  channels: AgentChannel[],
+  network: number,
+  checkedOf: (channel: AgentChannel) => number,
+): AgentChannel[] {
+  return channels
+    .filter((c) => WHOLE_ONLY.has(c.type) && c.networkId === network)
+    .sort((a, b) => checkedOf(a) - checkedOf(b));
+}
+
+/**
+ * 詳細の無い種別の全局読みが受信できなかったときに、代わりに読む中継 (`order` の次の中継)。
+ * ネットワークごとに1回まで (`replaced` に足す)。替えないときは undefined
+ */
+export function replacement(
+  job: { channel: AgentChannel; whole: number[] | null },
+  failed: boolean,
+  replaced: Set<number>,
+  order: (network: number) => AgentChannel[],
+): { channel: AgentChannel; whole: number[] } | undefined {
+  const { channel, whole } = job;
+  if (whole === null || !failed || !WHOLE_ONLY.has(channel.type)) return;
+  if (replaced.has(channel.networkId)) return;
+  replaced.add(channel.networkId);
+  const next = order(channel.networkId).find((c) => c !== channel);
+  return next === undefined ? undefined : { channel: next, whole };
 }
 
 async function run(): Promise<number> {
@@ -572,7 +606,9 @@ async function run(): Promise<number> {
   const first = firstSweeps(channels, reach, lastOf).filter(
     (channel) => at - lastOf(channel) >= config.epgChannelRetry,
   );
-  const sweeps = [...first, ...networkSweeps(targets, channels, lastOf)];
+  const checked = checkedAt();
+  const checkedOf = (channel: AgentChannel) => checked.get(key(channel)) ?? 0;
+  const sweeps = [...first, ...networkSweeps(targets, channels, checkedOf)];
   // 全局ぶんを読んだ中継は、自分の中継の詳細もそこで取れている。続きでは回らない
   const rest = targets.filter(
     (channel) => !sweeps.includes(channel) && !WHOLE_ONLY.has(channel.type),
@@ -621,6 +657,8 @@ async function run(): Promise<number> {
      * 集められないまま落ちる。1つの列を全チューナーで引けば数は合う
      */
     let sweepsLeft = first.length;
+    /** 全局読みが受信できず、この周回でほかの中継に替えたネットワーク */
+    const replaced = new Set<number>();
     // 全局ぶんを読む中継を列の先頭に置く。衛星のチューナーが最初に取る
     const queue: { channel: AgentChannel; whole: number[] | null }[] = [
       ...sweeps.map((channel) => ({ channel, whole: expect(channel) })),
@@ -648,6 +686,20 @@ async function run(): Promise<number> {
           !WHOLE_ONLY.has(job.channel.type)
         ) {
           queue.push({ channel: job.channel, whole: null });
+          update({ pending: state.pending + 1, total: state.total + 1 });
+        }
+        /*
+         * 詳細の無い種別の全局読みが受信できなかったら、**この周回のうちに次の中継で読み直す。**
+         * 受信できない中継の番が来ても、そのネットワークの番組表を止めない
+         * (失敗した中継も「行った」と覚えるので、そのままだと次に集め直すときまで延びる)。
+         * 替えるのはネットワークごとに1回まで。どれも受信できないとき (アンテナの不調) に、
+         * 中継を全部開いて回らない
+         */
+        const next = replacement(job, result.failed, replaced, (network) =>
+          sweepOrder(channels, network, checkedOf),
+        );
+        if (next !== undefined) {
+          queue.push(next);
           update({ pending: state.pending + 1, total: state.total + 1 });
         }
         if (first.includes(job.channel) && --sweepsLeft === 0)

@@ -16,6 +16,7 @@ config.dbPath = join(
 const { orm } = await import("./db");
 const { channelReception } = await import("./schema");
 const {
+  checkedAt,
   pruneReception,
   receptionOf,
   recordFailed,
@@ -202,5 +203,19 @@ describe("受信できないチャンネルの局の番組表", () => {
     expect(savePrograms([event(191)])).toBe(0);
     recordReceived("BS", "BS03:16432", T0 + 4 * HOUR);
     expect(savePrograms([event(191)])).toBe(1);
+  });
+});
+
+describe("最後に確かめた時刻", () => {
+  test("受信できた・できなかったの新しいほう。確かめていないチャンネルは入らない", () => {
+    recordReceived("CS", "CS02:24608", T0);
+    recordFailed("CS", "CS02:24608", T0 + HOUR);
+    recordFailed("CS", "CS08:24704", T0);
+    recordReceived("CS", "CS08:24704", T0 + 2 * HOUR);
+
+    const checked = checkedAt();
+    expect(checked.get("CS:CS02:24608")).toBe(T0 + HOUR);
+    expect(checked.get("CS:CS08:24704")).toBe(T0 + 2 * HOUR);
+    expect(checked.has("CS:CS10:24736")).toBe(false);
   });
 });
