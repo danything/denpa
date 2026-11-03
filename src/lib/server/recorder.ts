@@ -477,6 +477,8 @@ async function pump(
     eventId !== null && (fileSize(path) ?? 0) === 0
       ? new PfEvent(service.service_id, eventId)
       : null;
+  // p/f を読まないものは、同じ回を確かめ直せないので録ると決まっている。開始はすぐ知らせる
+  if (pf === null) announceOnce();
   /**
    * 書き直した情報で、同じ回をもう録ってあると分かったときの理由 (`rules.duplicateAtStart`)。
    * 見るのは「同じ回は最初の放送だけ」のルールの予約 (`checks`) だけ
