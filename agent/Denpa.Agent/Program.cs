@@ -410,7 +410,7 @@ app.MapGet("/denpa/tuners/unlisted", (HttpContext http) =>
     if (!pool.Detected)
     {
         var known = pool.Tuners.Select(tuner => tuner.Device).ToHashSet();
-        foreach (var found in DeviceProbe.Detect().Where(found => !known.Contains(found.Device)))
+        foreach (var found in Unlisted.Detect().Where(found => !known.Contains(found.Device)))
         {
             list.Add((JsonNode)new JsonObject { ["name"] = found.Name, ["types"] = Json.Strings(found.Types), ["device"] = found.Device });
         }

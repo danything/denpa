@@ -1588,3 +1588,15 @@ describe("定義の書き換えと選局", () => {
     }
   });
 });
+
+describe("一覧に無い機材", () => {
+  test("定義を書いてあれば、挿さっていて定義に無い機材を配列で返す", async () => {
+    const res = await get("/denpa/tuners/unlisted");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { device: string }[];
+    expect(Array.isArray(body)).toBe(true);
+    // 定義にあるデバイスは入らない
+    const defined = new Set((await tuners()).map((t) => t.device));
+    expect(body.filter((found) => defined.has(found.device))).toEqual([]);
+  });
+});
