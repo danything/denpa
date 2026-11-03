@@ -490,71 +490,15 @@ public class Dt295TunerTests
     }
 
     [Test]
-    public async Task 置き場の_IV_は確かめが合うときだけ使い_割り出したものを写す()
+    public async Task TS_の_IV_は固定の_16_バイトで_仕様書の_SHA256_と合う()
     {
-        var folder = Directory.CreateTempSubdirectory("dt295receive");
-        try
-        {
-            var good = RandomNumberGenerator.GetBytes(16);
-            var store = new Dt295ReceiveStore(folder.FullName, iv => iv.AsSpan().SequenceEqual(good));
-            // 置き場に無ければ、標準の設定だけで IV は null (受けながら割り出す)
-            var none = store.Ensure();
-            await Assert.That(none.TsIv).IsNull();
-            await Assert.That(none.Fields).IsEqualTo(Dt295FieldTable.Default);
-            // 合わない IV は使わない
-            File.WriteAllBytes(Path.Combine(folder.FullName, Dt295Receive.IvFile), new byte[16]);
-            await Assert.That(store.Ensure().TsIv).IsNull();
-            // 割り出したものを写せば、次から使う
-            store.Save(good);
-            await Assert.That(store.Ensure().TsIv).IsEquivalentTo(good);
-        }
-        finally
-        {
-            folder.Delete(recursive: true);
-        }
-    }
-
-    /// <summary>IV を 0 で復号した出力に見える TS: 最初の 16 バイトが「本当の中身 XOR IV」になったパケット</summary>
-    private static byte[] LearnerPacket(int pid, byte[] plain, byte[] iv, int counter)
-    {
-        var packet = new byte[188];
-        packet[0] = 0x47;
-        packet[1] = (byte)(0x40 | (pid >> 8));
-        packet[2] = (byte)pid;
-        packet[3] = (byte)(0x10 | (counter & 0xF));
-        for (var i = 0; i < 16; i++) packet[4 + i] = (byte)(plain[i] ^ iv[i]);
-        return packet;
-    }
-
-    [Test]
-    public async Task IV_は_PAT_と映像の_PES_の頭の形から割り出す()
-    {
-        var iv = RandomNumberGenerator.GetBytes(16);
-        // PAT: ポインター 0、table_id 0、0xB0 + 長さ、番組表 ID・版、section 0/0、NIT (番組番号 0 → PID 0x0010)、次の番組
-        byte[] pat = [0x00, 0x00, 0xB0, 0x1D, 0x7F, 0xE0, 0xCD, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE1];
-        var packets = new List<byte[]>();
-        for (var i = 0; i < 20; i++)
-        {
-            packets.Add(LearnerPacket(0x0000, pat, iv, i));
-            // 映像の PES: 00 00 01 E0、長さ 0、フラグ 0x87、PTS だけ (0x80)、header_data_length 5、PTS 5 バイト (変わる)、ES の頭 00 00
-            byte[] pes = [0x00, 0x00, 0x01, 0xE0, 0x00, 0x00, 0x87, 0x80, 0x05, 0x21, (byte)i, 0x03, (byte)(i * 7), 0x41, 0x00, 0x00];
-            packets.Add(LearnerPacket(0x0100, pes, iv, i));
-        }
-        bool IsIv(byte[] candidate) => candidate.AsSpan().SequenceEqual(iv);
-
-        // 足りないうちは割り出さない
-        var learner = new Dt295IvLearner();
-        await Assert.That(learner.TryDerive(IsIv)).IsNull();
-        foreach (var packet in packets) learner.Push(packet);
-        await Assert.That(learner.TryDerive(IsIv)).IsEquivalentTo(iv);
-        // 確かめが合うものが無ければ null
-        await Assert.That(learner.TryDerive(_ => false)).IsNull();
-
-        // 188 バイトにそろっていない渡し方でも同じ
-        var split = new Dt295IvLearner();
-        var all = packets.SelectMany(packet => packet).ToArray();
-        for (var at = 0; at < all.Length; at += 500) split.Push(all.AsSpan(at, Math.Min(500, all.Length - at)));
-        await Assert.That(split.TryDerive(IsIv)).IsEquivalentTo(iv);
+        // 実機の TS から割り出した値 (地上波 27ch と BS1 で同じ)。受信するチャンネルでは変わらない
+        var iv = Dt295Receive.TsIv;
+        await Assert.That(iv.Length).IsEqualTo(16);
+        await Assert.That(Convert.ToHexStringLower(SHA256.HashData(iv))).IsEqualTo(Dt295Receive.TsIvSha256);
+        var data = Dt295Receive.Ensure();
+        await Assert.That(data.TsIv).IsEquivalentTo(iv);
+        await Assert.That(data.Fields).IsEqualTo(Dt295FieldTable.Default);
     }
 
     // ---------------------------------------------------------------------

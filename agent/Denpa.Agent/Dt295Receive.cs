@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace Denpa.Agent;
 
 /*
@@ -8,8 +6,7 @@ namespace Denpa.Agent;
  * - 受信設定 (12.5): 受信設定の領域に当てる (アドレス、シフト、幅、値) の並び。実機 (PIX-DT295、地上波と BS1) で
  *   「これだけで TS が受けられる」最小の組を、外して確かめて決めた (<see cref="Dt295FieldTable.Default"/>)。
  *   メーカーのデータの写しではなく、機材の挙動から決めた設定の値なので、コードに持つ。
- * - TS の IV (12.7): 機材が TS にかけ直した AES の IV。16 バイト。コードには持たず、初めて受けるときに TS から割り出して
- *   (<see cref="Dt295IvLearner"/>)、SHA-256 で確かめてから、置き場に写して次からはそれを使う。
+ * - TS の IV (12.7): 機材が TS にかけ直した AES の IV。16 バイト。実機の TS から割り出した値をコードに持つ (<see cref="Dt295Receive.TsIv"/>)。
  */
 
 /// <summary>受信設定の 1 行 (12.5)。部分書き換え (3.2) で当てる</summary>
@@ -75,58 +72,24 @@ public sealed class Dt295FieldTable
     }
 }
 
-/// <summary>受信に要るもの。<paramref name="TsIv"/> は、まだ割り出していなければ null</summary>
-public sealed record Dt295ReceiveData(Dt295FieldTable Fields, byte[]? TsIv);
+/// <summary>受信に要るもの (受信設定と TS の IV)</summary>
+public sealed record Dt295ReceiveData(Dt295FieldTable Fields, byte[] TsIv);
 
-/// <summary>受信に要るものを、置き場 (tuners.json の隣) から揃える</summary>
+/// <summary>受信に要るもの</summary>
 public static class Dt295Receive
 {
-    public const string IvFile = "dt295-ts-iv.bin";
-
-    /// <summary>TS の IV の確かめ (12.7)</summary>
+    /// <summary>TS の IV の確かめ (12.7)。仕様書の値 (IV の SHA-256)</summary>
     internal const string TsIvSha256 = "69a206b3bbcd395b81b201f762355fb224c4e9e16439090663b8dfc1f5b03301";
 
-    /// <summary>IV が正しいか</summary>
-    internal static bool IsTsIv(ReadOnlySpan<byte> data) =>
-        data.Length == 16 && Convert.ToHexStringLower(SHA256.HashData(data)) == TsIvSha256;
+    /// <summary>
+    /// TS の IV (12.7)。機材が TS のペイロードをパケットごとに AES-CBC で暗号化するときの、いつも同じ 16 バイト。
+    /// 実機 (PIX-DT295) の TS から割り出した: IV を 0 にして復号すると、各パケットの最初の 16 バイトだけが「本当の中身 XOR IV」になって出るので、
+    /// PAT (00 00 B0…、番組番号 0 の NIT は PID 0x0010) と映像の PES の頭 (00 00 01 E0…) の決まった形から引ける。
+    /// 地上波 27ch と BS1 のどちらからも同じ値になり、SHA-256 が仕様書の値 (<see cref="TsIvSha256"/>) と一致した
+    /// (受信するチャンネルや環境では変わらない。テストで確かめる)
+    /// </summary>
+    public static readonly byte[] TsIv = Convert.FromHexString("EC8F4B6AD92A36892BDFB618FC255EFC");
 
-    private static readonly Lazy<Dt295ReceiveStore> Default = new(() => new Dt295ReceiveStore(Dt295Firmware.Folder));
-
-    /// <summary>揃えて返す。IV が置き場にまだ無ければ <see cref="Dt295ReceiveData.TsIv"/> は null (受けながら割り出す)</summary>
-    public static Dt295ReceiveData Ensure() => Default.Value.Ensure();
-
-    /// <summary>割り出した IV を置き場に写す。書けなくても受信はできる (次も割り出す)</summary>
-    public static void Save(byte[] iv) => Default.Value.Save(iv);
-}
-
-/// <summary>置き場 1 つ。TS の IV は、置き場の写しがあって、確かめが合うときだけ使う</summary>
-internal sealed class Dt295ReceiveStore(string folder, Func<byte[], bool>? isIv = null)
-{
-    private readonly Func<byte[], bool> _isIv = isIv ?? (iv => Dt295Receive.IsTsIv(iv));
-
-    public Dt295ReceiveData Ensure()
-    {
-        var path = Path.Combine(folder, Dt295Receive.IvFile);
-        byte[]? iv = null;
-        if (File.Exists(path))
-        {
-            var cached = File.ReadAllBytes(path);
-            if (_isIv(cached)) iv = cached;
-        }
-        return new Dt295ReceiveData(Dt295FieldTable.Default, iv);
-    }
-
-    public void Save(byte[] iv)
-    {
-        var path = Path.Combine(folder, Dt295Receive.IvFile);
-        try
-        {
-            Directory.CreateDirectory(folder);
-            File.WriteAllBytes(path, iv);
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            Log.Write($"{path} に写せません ({error.Message})。次も割り出します");
-        }
-    }
+    /// <summary>受信に要るもの</summary>
+    public static Dt295ReceiveData Ensure() => new(Dt295FieldTable.Default, TsIv);
 }
