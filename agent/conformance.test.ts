@@ -28,6 +28,8 @@ import {
   expect,
   test,
 } from "bun:test";
+import { execFileSync } from "node:child_process";
+import { createHash, createHmac } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -37,8 +39,6 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { createHash, createHmac } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 

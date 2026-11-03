@@ -512,7 +512,7 @@ jobs:
           # Re-import through PKCS#12 so SChannel can use the key
           $client = [Security.Cryptography.X509Certificates.X509Certificate2]::new($made.Export('Pfx'))
           $fp = { param($raw) [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($raw)).ToLowerInvariant() }
-          $agentCert = [Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPemFile("$smoke\tls\agent.crt")
+          $agentCert = [Security.Cryptography.X509Certificates.X509Certificate2]::new("$smoke\tls\agent.crt")
           $a = & $fp $agentCert.RawData
           $d = & $fp $client.RawData
           $hmac = [Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes('smoke-token'))

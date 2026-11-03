@@ -243,7 +243,11 @@ function peerCertificate(
         host: url.hostname.replace(/^\[|\]$/g, ""),
         port: Number(url.port || 443),
         servername: /^[\d.]+$|:/.test(url.hostname) ? undefined : url.hostname,
-        rejectUnauthorized: false,
+        /*
+         * ここでは確かめない (まだ知らない相手の証明書を取りに行くので)。取った証明書は、このあと
+         * 合言葉の証し (pairProof) で相手が合言葉を知っていると確かめてからしか覚えない
+         */
+        rejectUnauthorized: false, // lgtm[js/disabling-certificate-validation]
         cert: identity.cert,
         key: identity.key,
       },
