@@ -377,8 +377,14 @@ function isTrustError(error: unknown): boolean {
   );
 }
 
-/** エージェントの 403 のうち、組んでいないと断られたものか */
-const NOT_PAIRED = "まだ組んでいません";
+/** エージェントの 403 のうち、組んでいないと断られたものか (本文の `paired: false`。文言は見ない) */
+async function notPaired(res: Response): Promise<boolean> {
+  const body = (await res
+    .clone()
+    .json()
+    .catch(() => null)) as { paired?: unknown } | null;
+  return body?.paired === false;
+}
 
 /**
  * エージェントを呼ぶ。`path` は `/denpa/...`。返すのはふつうの `fetch` の応答。
@@ -406,8 +412,7 @@ export async function agentFetch(
   try {
     const res = await attempt();
     if (res.status !== 403 || target.pair === null) return res;
-    const text = await res.clone().text();
-    if (!text.includes(NOT_PAIRED)) return res;
+    if (!(await notPaired(res))) return res;
   } catch (error) {
     if (!(error instanceof NeedsPairing)) throw error;
   }

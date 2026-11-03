@@ -144,6 +144,44 @@ describe("agentFetch", () => {
     }
   });
 
+  test("エージェントに組んでいないと断られたら (paired: false)、組み直してから呼ぶ", async () => {
+    let forgotten = true;
+    const server = serveFakeAgent(() => {
+      if (forgotten) {
+        // エージェントの clients から消されたとき。1 度目は断られる
+        forgotten = false;
+        return Response.json(
+          { error: "この denpa とはまだ組んでいません", paired: false },
+          { status: 403 },
+        );
+      }
+      return Response.json({ ok: true });
+    });
+    try {
+      config.agentUrl = fakeAgentUrl(server.port!);
+      const res = await agentFetch("/denpa/tuners");
+      expect(await res.json()).toEqual({ ok: true });
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("ほかの 403 は組み直さずにそのまま返す", async () => {
+    let calls = 0;
+    const server = serveFakeAgent(() => {
+      calls += 1;
+      return Response.json({ error: "置き場の外です" }, { status: 403 });
+    });
+    try {
+      config.agentUrl = fakeAgentUrl(server.port!);
+      const res = await agentFetch("/denpa/decode");
+      expect(res.status).toBe(403);
+      expect(calls).toBe(1);
+    } finally {
+      server.stop(true);
+    }
+  });
+
   test("組んでいないのに合言葉も無ければ、付け方を言う", async () => {
     rmSync(`${dir}/tls/agent.crt`, { force: true });
     config.agentUrl = "https://127.0.0.1:9";

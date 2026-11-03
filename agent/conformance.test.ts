@@ -467,7 +467,10 @@ describe("denpa と組む", () => {
         stranger,
       );
       expect({ path, status: res.status }).toEqual({ path, status: 403 });
-      expect(await error(res)).toContain("#pair=");
+      const body = (await res.json()) as { error: string; paired: boolean };
+      // denpa は paired: false を見て組み直す (src/lib/server/agent-client.ts)
+      expect(body.paired).toBe(false);
+      expect(body.error).toContain("#pair=");
     }
     expect(readFileSync(join(paths().tls, "clients"), "utf8")).not.toContain(
       stranger.fingerprint,

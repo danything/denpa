@@ -233,7 +233,8 @@ app.Use(async (HttpContext http, RequestDelegate next) =>
             else await Respond.Error(http, result.Error!, result.Status);
             return;
         default:
-            await Respond.Error(http, AgentTls.NotPaired, 403);
+            // paired: false は denpa が「組み直せば通る」と見分ける印 (文言は変わりうるので見ない。agent-client.ts)
+            await Respond.Write(http, new JsonObject { ["error"] = AgentTls.NotPaired, ["paired"] = false }, 403);
             return;
     }
 });
