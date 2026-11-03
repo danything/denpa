@@ -254,7 +254,7 @@ test.describe("操作したときの反応", () => {
 
   /*
    * **番組の詳細を閉じるのは左下の「閉じる」** (主のボタンは右)。Esc でも閉じる。
-   * 狭い画面では下から出る一枚 (下端に付き、ボタンは全幅で、閉じるがいちばん下)
+   * 狭い画面では下から出る一枚 (下端に付き、ボタンは全幅にせず、閉じると主が下の段の両端)
    */
   test("番組の詳細は左下の「閉じる」と Esc で閉じ、狭い画面では下から出る", async ({
     page,
@@ -280,14 +280,20 @@ test.describe("操作したときの反応", () => {
     const box = (await detail.locator("> div").first().boundingBox())!;
     expect(Math.round(box.y + box.height)).toBe(view.height);
     expect(Math.round(box.width)).toBe(view.width);
-    // 狭い画面では閉じるがいちばん下
-    const closeY = (await detail.getByTestId("detail-close").boundingBox())!.y;
-    for (const other of await detail
-      .locator(
-        '.modal-actions :is(button, a.button):not([data-testid="detail-close"])',
-      )
-      .all())
-      expect(closeY).toBeGreaterThan((await other.boundingBox())!.y);
+    // 狭い画面でもボタンは全幅にせず、閉じるは下の段の左端。主 (並びの最後) は下の段の右端
+    const closeBox = (await detail.getByTestId("detail-close").boundingBox())!;
+    const rest = await detail
+      .locator(".modal-actions :is(button, a.button)")
+      .all();
+    const main = (await rest.at(-1)!.boundingBox())!;
+    expect(closeBox.width).toBeLessThan(view.width / 2);
+    expect(Math.round(closeBox.y)).toBe(Math.round(main.y));
+    expect(main.x).toBeGreaterThan(closeBox.x);
+    for (const other of rest) {
+      const b = (await other.boundingBox())!;
+      expect(closeBox.x).toBeLessThan(b.x);
+      expect(b.y).toBeLessThanOrEqual(closeBox.y + 1);
+    }
     await detail.getByTestId("detail-close").click();
     await expect(detail).toBeHidden();
   });

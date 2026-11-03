@@ -14,7 +14,8 @@
    *
    * **閉じるは左下の「閉じる」** (幕を押しても Esc でも閉じる)。主のボタン (再生・予約) は右下に
    * 1つだけ置き、ほかは控えにする。左右に分ければ主が埋もれない
-   * (狭い画面では下から出る一枚になり、主がいちばん上・閉じるがいちばん下の全幅のボタン)。
+   * (狭い画面では下から出る一枚になる。ボタンは全幅にせず、入りきらない控えは上の段へ折り返す。
+   * 全幅で縦に積んでいた頃は、ボタンが一枚を埋めて中身が読めなかった)。
    *
    * **中身は `ProgramFacts` が持っている**。観る画面・ライブ・追っかけは
    * 枠なしで同じものを右 (FactsAside) に置くため。
@@ -98,7 +99,11 @@
       <ProgramFacts {program} {notes} {cmNote} {fps} {status} />
     </div>
 
-    <div class="detail-actions modal-actions" bind:offsetHeight={actionsHeight}>
+    <!--
+          閉じると、開いた画面が渡す並び (`.modal-actions`) を分けて置く。狭い画面で並びが上の段へ折り返しても、
+          閉じるは下の段の左端に残る
+      -->
+    <div class="detail-actions" bind:offsetHeight={actionsHeight}>
       <button
         type="button"
         class="secondary detail-close"
@@ -106,7 +111,9 @@
         data-testid="detail-close">閉じる</button
       >
       {#if actions}
-        {@render actions()}
+        <div class="modal-actions detail-rest">
+          {@render actions()}
+        </div>
       {/if}
     </div>
   </div>
@@ -195,25 +202,36 @@
     }
   }
   /*
-     * 並べ方は `.modal-actions`。箱の下端に重ね、地は塗らない。ボタンの無い所は押しても中身に届く
-     * (字を選ぶ・巻き取る)。閉じるは左端、ほかは右に寄せる
+     * 箱の下端に重ね、地は塗らない。ボタンの無い所は押しても中身に届く (字を選ぶ・巻き取る)。
+     * 閉じるは左端、ほかは右に寄せる (並べ方は `app.css` の `.modal-actions`)。
+     * 並びが折り返したら、閉じるは下の段にそろえる
      */
   .detail-actions {
     position: absolute;
     inset-inline: var(--dp-space-5);
     bottom: var(--dp-space-5);
-    margin: 0;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--dp-space-2);
     pointer-events: none;
   }
-  .detail-actions > :global(*) {
+  .detail-close {
+    flex: none;
+    margin: 0;
     pointer-events: auto;
   }
-  .detail-close {
-    margin-inline-end: auto;
+  .detail-rest {
+    flex: 1 1 0%;
+    min-width: 0;
+    margin: 0;
+  }
+  .detail-rest > :global(*) {
+    pointer-events: auto;
   }
   /* 送れなかった理由 (開いた画面が並びに置く `.notice`) は 1 行まるごと使う */
-  .detail-actions > :global(.notice) {
+  .detail-rest > :global(.notice) {
     flex-basis: 100%;
+    margin: 0;
   }
   /* 狭い画面では下から出る一枚 (箱の形は `app.css` の `.modal-box`) */
   @media (max-width: 639.98px) {
