@@ -63,6 +63,7 @@
         <Compile Include="../Denpa.Agent/Dt295Frontend.cs" />
         <Compile Include="../Denpa.Agent/Dt295Tuner.cs" />
         <Compile Include="../Denpa.Agent/Dt295Receive.cs" />
+        <Compile Include="../Denpa.Agent/Dt295Iv.cs" />
     </ItemGroup>
 
     <ItemGroup>

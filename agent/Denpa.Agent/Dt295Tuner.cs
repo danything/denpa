@@ -435,6 +435,45 @@ internal sealed class Dt295Stream
     /// 受信を始める: 読みを出してから、準備 (9.2〜9.6) と受信開始 (9.7)。選局は済ませておく。
     /// 途中で失敗したら止める手順 (9.9) を通して投げる
     /// </summary>
+    /// <summary>TS の IV を割り出せなかった</summary>
+    public const string IvNotLearned = "TS の IV を割り出せませんでした (PAT と映像が受けられていません)";
+
+    /// <summary>
+    /// 初めて受けるときに、TS の IV を割り出す (12.7)。IV を 0 にして短く受け、最初の 16 バイトが決まった形のパケットから引く
+    /// (<see cref="Dt295IvLearner"/>)。選局は済ませておく。受け終わると機材は止めてあるので、呼ぶ側はもう一度選局して受け直す。
+    /// 割り出せなければ <see cref="Dt295Exception"/>
+    /// </summary>
+    public static byte[] LearnIv(Dt295Board board, string name, TimeSpan most, Func<byte[], bool>? accept = null)
+    {
+        accept ??= iv => Dt295Receive.IsTsIv(iv);
+        var zero = new Dt295ReceiveData(Dt295FieldTable.Default, new byte[Dt295IvLearner.Block]);
+        var stream = Start(board, zero, new Dt295RouteTracker(needCat: false), name, () => { }, Silence);
+        try
+        {
+            var learner = new Dt295IvLearner();
+            var buffer = new byte[PacketSize * 512];
+            var clock = Stopwatch.StartNew();
+            while (clock.Elapsed < most)
+            {
+                var task = stream.Output.ReadAsync(buffer).AsTask();
+                if (!task.Wait(most - clock.Elapsed)) break;
+                var got = task.Result;
+                if (got == 0) break;
+                learner.Push(buffer.AsSpan(0, got));
+                // 試すのは少し溜まってから (1 回は数万通りの確かめ)
+                if (learner.PacketsSinceTry >= 4000 && learner.TryDerive(accept) is { } iv) return iv;
+            }
+            if (learner.TryDerive(accept) is { } last) return last;
+            throw new Dt295Exception(IvNotLearned);
+        }
+        finally
+        {
+            stream.Stop();
+        }
+    }
+
+    private const int PacketSize = 188;
+
     public static Dt295Stream Start(Dt295Board board, Dt295ReceiveData data, Dt295RouteTracker routes, string name, Action stalled, TimeSpan silence, TimeSpan? settle = null)
     {
         var input = board.Usb.OpenInStream(Endpoint, TransferSize, Depth);
@@ -632,6 +671,9 @@ internal sealed class Dt295Stream
 /// </summary>
 public sealed class Dt295Tuner : ITuneDevice
 {
+    /// <summary>初めて受けるときに、TS の IV を割り出すのに待つ上限</summary>
+    private static readonly TimeSpan IvLearnLimit = TimeSpan.FromSeconds(10);
+
     /// <summary>
     /// 選局から最初の TS を待つ上限と、流している間にデータが途切れてよい上限 (10.1 の「10 秒データが来なければ異常」)。
     /// 地上波はこれがロックの判定の代わり (7.5)
@@ -682,7 +724,7 @@ public sealed class Dt295Tuner : ITuneDevice
             Dt295Board board;
             try
             {
-                // 受信に要るもの (フィールド表など) が無ければ、機材に触らずに断る
+                // 置き場の読み込みに失敗したら、機材に触らずに断る
                 data = _receive();
                 if (_board is { Fault: not null } broken)
                 {
@@ -700,21 +742,30 @@ public sealed class Dt295Tuner : ITuneDevice
             }
 
             var routes = new Dt295RouteTracker(needCat: !tuning.Satellite);
+            void TuneNow() => board.Locked(() =>
+            {
+                board.CheckCard();
+                if (tuning.Satellite)
+                {
+                    int? tsid = streamId == ChannelTable.NoStreamId ? null : (int)streamId;
+                    board.Frontend.TuneSatellite(tuning.Frequency * 1000L, Math.Max(0, tuning.Slot), tsid);
+                }
+                else
+                {
+                    board.Frontend.TuneTerrestrialHz(tuning.Frequency);
+                }
+            });
             try
             {
-                board.Locked(() =>
+                TuneNow();
+                if (data.TsIv is null)
                 {
-                    board.CheckCard();
-                    if (tuning.Satellite)
-                    {
-                        int? tsid = streamId == ChannelTable.NoStreamId ? null : (int)streamId;
-                        board.Frontend.TuneSatellite(tuning.Frequency * 1000L, Math.Max(0, tuning.Slot), tsid);
-                    }
-                    else
-                    {
-                        board.Frontend.TuneTerrestrialHz(tuning.Frequency);
-                    }
-                });
+                    // 初めて受けるとき: TS の IV を割り出して置き場に写し、止めたので選局し直す
+                    var learned = Dt295Stream.LearnIv(board, _name, IvLearnLimit);
+                    Dt295Receive.Save(learned);
+                    data = data with { TsIv = learned };
+                    TuneNow();
+                }
                 _stream = Dt295Stream.Start(board, data, routes, _name, () => Task.Run(Stall), _silence, _settle);
             }
             catch (Dt295Exception error) when (error.Message == Dt295Frontend.NoLock)

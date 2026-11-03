@@ -17,7 +17,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 置き場に公式パッケージの zip (<see cref="Dt295FirmwareStore.PackageFile"/>) が置いてあれば、取ってこずにそれを使う。
-/// **TRC のフィールド表 (12.5) と TS の IV (12.7) は zip から取れない**ので Dt295Receive.cs で別に揃える。
+/// TRC の受信設定 (12.5) と TS の IV (12.7) は zip を使わず、Dt295Receive.cs で揃える。
 /// </para>
 /// </summary>
 public static class Dt295Firmware

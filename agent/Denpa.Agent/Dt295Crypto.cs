@@ -122,7 +122,7 @@ public enum Dt295PacketResult
 
 /// <summary>
 /// 機器が TS にかけ直した AES を外す (10.3)。**TS の IV はここで持たず、呼ぶ側が渡す。**
-/// IV は公式パッケージからの取り出し方が分かっていない (12.7・14 章の 2) ので、denpa はまだ持っていない。
+/// IV は呼ぶ側が渡す (初めて受けるときに TS から割り出して置き場に写す。Dt295Iv.cs)。
 /// </summary>
 public interface IDt295PacketDecryptor
 {

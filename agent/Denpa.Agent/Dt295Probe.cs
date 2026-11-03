@@ -162,6 +162,15 @@ public static class Dt295Probe
             step($"受信はしません: {error.Message}");
             return;
         }
+        if (data.TsIv is null)
+        {
+            step("TS の IV を割り出します (初めて受けるとき。10 秒まで)");
+            var learned = Dt295Stream.LearnIv(board, $"{Dt295.Model} {board.Port}", TimeSpan.FromSeconds(10));
+            Dt295Receive.Save(learned);
+            data = data with { TsIv = learned };
+            step("TS の IV を割り出して置き場に写しました。選局し直します");
+            board.Locked(() => Tune(options, board.Frontend, step));
+        }
         var routes = new Dt295RouteTracker(needCat: options.Kind == 'T');
         var stream = Dt295Stream.Start(board, data, routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence);
         step("受信を始めました (9.2〜9.7)");

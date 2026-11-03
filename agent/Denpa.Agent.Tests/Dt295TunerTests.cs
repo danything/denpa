@@ -460,23 +460,15 @@ public class Dt295TunerTests
     // ---------------------------------------------------------------------
 
     [Test]
-    public async Task フィールド表を_JSON_から読み_形を確かめる()
+    public async Task 受信設定は組むときに形を確かめる()
     {
-        var table = Dt295FieldTable.Parse("""
-            {"fields": [
-              {"name": "A", "address": "0x1002", "shift": 8, "width": 2, "value": 1},
-              {"address": 4100, "shift": 0, "width": 16, "value": "0xBEEF"}
-            ]}
-            """);
+        var table = new Dt295FieldTable([new(0x1002, 8, 2, 1), new(0x1004, 0, 16, 0xBEEF)]);
         await Assert.That(table.Rows.Count).IsEqualTo(2);
         await Assert.That(table.Rows[1]).IsEqualTo(new Dt295Field(0x1004, 0, 16, 0xBEEF));
         await Assert.That(table.Pause).IsEqualTo((ushort)3);
-        await Assert.That(table.Sha256()).IsNotEqualTo(Dt295FieldTable.ReferenceSha256);
         await Assert.That(new Dt295FieldTable([new(0x1010, 0, 1, 1)]).Pause).IsEqualTo((ushort)4);
 
-        Assert.Throws<InvalidDataException>(() => Dt295FieldTable.Parse("""{"fields": []}"""));
-        Assert.Throws<InvalidDataException>(() => Dt295FieldTable.Parse("""{"rows": []}"""));
-        Assert.Throws<InvalidDataException>(() => Dt295FieldTable.Parse("not json"));
+        Assert.Throws<InvalidDataException>(() => new Dt295FieldTable([]));
         // アドレスは 0x1000〜0x1AFE の偶数
         Assert.Throws<InvalidDataException>(() => new Dt295FieldTable([new(0x1001, 0, 1, 1)]));
         Assert.Throws<InvalidDataException>(() => new Dt295FieldTable([new(0x1B00, 0, 1, 1)]));
@@ -487,34 +479,82 @@ public class Dt295TunerTests
     }
 
     [Test]
-    public async Task フィールド表が無ければ_受信には要ると断り_IV_が見つからなければそう言う()
+    public async Task 標準の受信設定は_実機で決めた_5_個のレジスター()
+    {
+        var table = Dt295FieldTable.Default;
+        await Assert.That(table.Rows.Select(row => (row.Address, row.Value)).ToArray()).IsEquivalentTo(
+            new (ushort, int)[] { (0x1002, 0x8004), (0x1004, 0x0100), (0x100A, 0x0020), (0x100E, 0xA000), (0x101A, 0xA300) });
+        // 値は 16 ビットそのもの。0x1002 のビット 8〜9 は 0 なので、一時停止は状態 4
+        await Assert.That(table.Rows.All(row => row is { Shift: 0, Width: 16 })).IsTrue();
+        await Assert.That(table.Pause).IsEqualTo((ushort)4);
+    }
+
+    [Test]
+    public async Task 置き場の_IV_は確かめが合うときだけ使い_割り出したものを写す()
     {
         var folder = Directory.CreateTempSubdirectory("dt295receive");
         try
         {
-            var store = new Dt295ReceiveStore(folder.FullName, [Path.Combine(folder.FullName, Dt295Receive.AppFolder)], TimeProvider.System);
-            var none = Assert.Throws<IOException>(() => store.Ensure());
-            await Assert.That(none.Message).Contains("受信にはフィールド表が要ります (まだ未対応)");
-            await Assert.That(none.Message).Contains(Dt295Receive.FieldsFile);
-
-            File.WriteAllText(Path.Combine(folder.FullName, Dt295Receive.FieldsFile), """{"fields": [{"address": "0x1002", "shift": 8, "width": 2, "value": 0}]}""");
-            // StationTV X の写しに IV は入っていない (でたらめのファイル)
-            var app = Directory.CreateDirectory(Path.Combine(folder.FullName, Dt295Receive.AppFolder));
-            File.WriteAllBytes(Path.Combine(app.FullName, "app.dll"), RandomNumberGenerator.GetBytes(4096));
-            var noIv = Assert.Throws<IOException>(() => store.Ensure());
-            await Assert.That(noIv.Message).Contains("StationTV X");
-            // 置き場の IV が合わなければ使わない
+            var good = RandomNumberGenerator.GetBytes(16);
+            var store = new Dt295ReceiveStore(folder.FullName, iv => iv.AsSpan().SequenceEqual(good));
+            // 置き場に無ければ、標準の設定だけで IV は null (受けながら割り出す)
+            var none = store.Ensure();
+            await Assert.That(none.TsIv).IsNull();
+            await Assert.That(none.Fields).IsEqualTo(Dt295FieldTable.Default);
+            // 合わない IV は使わない
             File.WriteAllBytes(Path.Combine(folder.FullName, Dt295Receive.IvFile), new byte[16]);
-            Assert.Throws<IOException>(() => store.Ensure());
-
-            File.WriteAllText(Path.Combine(folder.FullName, Dt295Receive.FieldsFile), """{"fields": [{"address": "0x1003"}]}""");
-            var broken = Assert.Throws<IOException>(() => store.Ensure());
-            await Assert.That(broken.Message).Contains(Dt295Receive.FieldsFile);
+            await Assert.That(store.Ensure().TsIv).IsNull();
+            // 割り出したものを写せば、次から使う
+            store.Save(good);
+            await Assert.That(store.Ensure().TsIv).IsEquivalentTo(good);
         }
         finally
         {
             folder.Delete(recursive: true);
         }
+    }
+
+    /// <summary>IV を 0 で復号した出力に見える TS: 最初の 16 バイトが「本当の中身 XOR IV」になったパケット</summary>
+    private static byte[] LearnerPacket(int pid, byte[] plain, byte[] iv, int counter)
+    {
+        var packet = new byte[188];
+        packet[0] = 0x47;
+        packet[1] = (byte)(0x40 | (pid >> 8));
+        packet[2] = (byte)pid;
+        packet[3] = (byte)(0x10 | (counter & 0xF));
+        for (var i = 0; i < 16; i++) packet[4 + i] = (byte)(plain[i] ^ iv[i]);
+        return packet;
+    }
+
+    [Test]
+    public async Task IV_は_PAT_と映像の_PES_の頭の形から割り出す()
+    {
+        var iv = RandomNumberGenerator.GetBytes(16);
+        // PAT: ポインター 0、table_id 0、0xB0 + 長さ、番組表 ID・版、section 0/0、NIT (番組番号 0 → PID 0x0010)、次の番組
+        byte[] pat = [0x00, 0x00, 0xB0, 0x1D, 0x7F, 0xE0, 0xCD, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE1];
+        var packets = new List<byte[]>();
+        for (var i = 0; i < 20; i++)
+        {
+            packets.Add(LearnerPacket(0x0000, pat, iv, i));
+            // 映像の PES: 00 00 01 E0、長さ 0、フラグ 0x87、PTS だけ (0x80)、header_data_length 5、PTS 5 バイト (変わる)、ES の頭 00 00
+            byte[] pes = [0x00, 0x00, 0x01, 0xE0, 0x00, 0x00, 0x87, 0x80, 0x05, 0x21, (byte)i, 0x03, (byte)(i * 7), 0x41, 0x00, 0x00];
+            packets.Add(LearnerPacket(0x0100, pes, iv, i));
+        }
+        bool IsIv(byte[] candidate) => candidate.AsSpan().SequenceEqual(iv);
+
+        // 足りないうちは割り出さない
+        var learner = new Dt295IvLearner();
+        await Assert.That(learner.TryDerive(IsIv)).IsNull();
+        foreach (var packet in packets) learner.Push(packet);
+        await Assert.That(learner.TryDerive(IsIv)).IsEquivalentTo(iv);
+        // 確かめが合うものが無ければ null
+        await Assert.That(learner.TryDerive(_ => false)).IsNull();
+
+        // 188 バイトにそろっていない渡し方でも同じ
+        var split = new Dt295IvLearner();
+        var all = packets.SelectMany(packet => packet).ToArray();
+        for (var at = 0; at < all.Length; at += 500) split.Push(all.AsSpan(at, Math.Min(500, all.Length - at)));
+        await Assert.That(split.TryDerive(IsIv)).IsEquivalentTo(iv);
     }
 
     // ---------------------------------------------------------------------
@@ -546,21 +586,21 @@ public class Dt295TunerTests
     }
 
     [Test]
-    public async Task フィールド表が無ければ機材に触らず理由を画面に出す()
+    public async Task 置き場を読めなければ機材に触らず理由を画面に出す()
     {
         var opened = false;
         using var tuner = new Dt295Tuner($"{Dt295.Model} 3-5", "dt295:3-5",
-            () => throw new IOException(Dt295Receive.NoFields("/data")),
+            () => throw new IOException("置き場を読めません"),
             () =>
             {
                 opened = true;
                 throw new InvalidOperationException("開かないはず");
             });
         var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId));
-        await Assert.That(error.Message).Contains("受信にはフィールド表が要ります (まだ未対応)");
+        await Assert.That(error.Message).Contains("置き場を読めません");
         await Assert.That(opened).IsFalse();
         await Assert.That(tuner.Tuned).IsFalse();
-        await Assert.That(Px4Userland.Notice("dt295:3-5")).Contains("フィールド表");
+        await Assert.That(Px4Userland.Notice("dt295:3-5")).Contains("置き場を読めません");
         tuner.Dispose();
         await Assert.That(Px4Userland.Notice("dt295:3-5")).IsNull();
     }
