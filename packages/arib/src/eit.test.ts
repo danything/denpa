@@ -144,6 +144,38 @@ describe("EIT の解析", () => {
     );
   });
 
+  /**
+   * BS日テレの「番組内容」は、同じ見出しの項目が 2 つ続けて来る。1 つ目は英数字に切り替えたまま
+   * (LS1 のあと「!?」) 終わり、2 つ目は最初の状態 (漢字) から読む前提で送られている。
+   * バイトのまま繋いでいた頃は、2 つ目の「凶乱令嬢」が「６＇ＭｐＮａ＞ｎ」と出ていた
+   */
+  test("見出しのある項目は、同じ見出しでも最初の状態から読む", () => {
+    /** 見出し「番組内容」 */
+    const heading = [0x48, 0x56, 0x41, 0x48, 0x46, 0x62, 0x4d, 0x46];
+    /** 「大」のあと LS1 で英数字に切り替え、「!?」で終わる */
+    const first = [0x42, 0x67, 0x0e, 0x21, 0x3f];
+    /** 「凶乱令嬢」(漢字の 2 バイトずつ) */
+    const second = [0x36, 0x27, 0x4d, 0x70, 0x4e, 0x61, 0x3e, 0x6e];
+    const body = (numbering: number, text: number[]) => {
+      const items = [heading.length, ...heading, text.length, ...text];
+      return [numbering, 0x6a, 0x70, 0x6e, items.length, ...items, 0x00];
+    };
+    const one = body(0x01, first);
+    const two = body(0x11, second);
+
+    const parsed = parseEit(
+      section([
+        event({
+          rawDescriptors: [0x4e, one.length, ...one, 0x4e, two.length, ...two],
+        }),
+      ]),
+    );
+
+    const text = parsed?.events[0]?.extended["番組内容"] ?? "";
+    expect(text.startsWith("大")).toBe(true);
+    expect(text.endsWith("凶乱令嬢")).toBe(true);
+  });
+
   test("詳細情報は見出しごとに繋ぎ直す", () => {
     const parsed = parseEit(
       section([

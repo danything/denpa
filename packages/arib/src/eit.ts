@@ -270,10 +270,19 @@ const lang = (data: Uint8Array, at: number) => ascii(data, at, 3).toLowerCase();
  *   続きの側には書き直されない。前の状態のまま読む前提で送られてくる
  *
  * ので、部分だけを単独でデコードすると、そこから先が崩れます。
+ *
+ * **ただし見出しのある項目は、同じ見出しでも別の項目として最初の状態から読む。** 見出しが同じ
+ * 項目が 2 つ続けて来る局があり (BS日テレの「番組内容」)、2 つ目は最初の状態 (漢字) から読む前提で
+ * 送られている。1 つ目が英数字に切り替えたまま (`0e 21 3f` = LS1 のあと「!?」) 終わっていると、
+ * バイトのまま繋いだ頃は 2 つ目の漢字が英数字で出ていた (実機の「いずれ「６＇ＭｐＮａ＞ｎ」と８Ｆばれる」。
+ * 正しくは「いずれ「凶乱令嬢」と呼ばれる」)。項目ごとにデコードして、文字で繋ぐ
  */
 function readDescriptors(event: EitEvent, body: Uint8Array): void {
-  /** 見出しごとの生バイト。**全部揃ってからデコードする** (Map なので見出しの出てきた順に並ぶ) */
-  const pending = new Map<string, Uint8Array[]>();
+  /**
+   * 見出しごとの項目。項目は生バイトの部分の並びで、**項目の部分が全部揃ってからデコードする**
+   * (Map なので見出しの出てきた順に並ぶ)
+   */
+  const pending = new Map<string, Uint8Array[][]>();
   let lastHeading = "";
 
   for (const [tag, data] of descriptors(body)) {
@@ -301,13 +310,16 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
           const text = data.subarray(at + 1, at + 1 + textLength);
           at += 1 + textLength;
 
-          // 見出しが空なら前の項目の続き。改行を挟まずそのまま繋ぐ
-          const key = heading === "" ? lastHeading : heading;
-          if (key === "") continue;
-          const parts = pending.get(key);
-          if (parts === undefined) pending.set(key, [text]);
-          else parts.push(text);
-          lastHeading = key;
+          // 見出しが空なら前の項目の続き (バイトのまま繋ぐ)。見出しがあれば、同じ見出しでも新しい項目
+          if (heading === "") {
+            if (lastHeading === "") continue;
+            pending.get(lastHeading)!.at(-1)!.push(text);
+            continue;
+          }
+          const items = pending.get(heading);
+          if (items === undefined) pending.set(heading, [[text]]);
+          else items.push([text]);
+          lastHeading = heading;
         }
         break;
       }
@@ -390,9 +402,11 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
     }
   }
 
-  // 全部揃ってからデコードする (分割点が二バイト文字や文字集合の途中に来るため)
-  for (const [heading, parts] of pending)
-    event.extended[heading] = decodeAribText(joinBytes(parts));
+  // 項目ごとに、部分が全部揃ってからデコードする (分割点が二バイト文字や文字集合の途中に来るため)
+  for (const [heading, items] of pending)
+    event.extended[heading] = items
+      .map((parts) => decodeAribText(joinBytes(parts)))
+      .join("");
 }
 
 /**
