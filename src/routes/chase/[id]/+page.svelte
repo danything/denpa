@@ -460,7 +460,8 @@
             {#snippet status()}
               <span class="clock num"
                 >{clockLabel(pos)} / {clockLabel(recorded)}</span
-              ><!-- 赤いのは点だけ (`.rec-dot`)。字まで赤くすると黒い操作バーの上で沈む -->{#if line !== null && !line.finished}・<span
+              ><!-- 赤いのは点だけ (`.rec-dot`)。字まで赤くすると黒い操作バーの上で沈む。
+                録画中は「・」で区切らない (区切りの「・」と赤い点が並んで詰まって見える)。点の前を空けて区切りにする -->{#if line !== null && !line.finished}<span
                   class="rec"><span class="rec-dot"></span>録画中</span
                 >{:else if line !== null}・録画済み{/if}
             {/snippet}
@@ -613,7 +614,8 @@
   .rec {
     display: inline-flex;
     align-items: baseline;
-    gap: 0.25rem;
+    gap: 0.375rem;
+    margin-inline-start: 0.625rem;
   }
   /* 録画中の点 (`app.css` の `.rec-dot`。ゆっくり脈打つ) を字の真ん中に */
   .rec .rec-dot {
