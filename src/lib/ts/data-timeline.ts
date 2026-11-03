@@ -1,15 +1,15 @@
 /**
  * 録画のデータ放送。**実時刻つきで並べた変化から、その時点の画面を積み直す。**
  *
- * ライブは「常に今」なので [carousel.ts](carousel.ts) が「各モジュールの最後の1つ」
- * だけ持てば足りる。録画は**巻き戻し・番組またぎ**があるので、それでは足りない —
- * 30分の番組の途中で天気が差し替わったなら、10分の位置では古いほう、20分の位置では
+ * ライブは「常に今」なので [carousel.ts](carousel.ts) が「各モジュールの最後の 1 つ」
+ * だけ持てば足りる。録画は**巻き戻し・番組またぎ**があるので、それでは足りない。
+ * 30 分の番組の途中で天気が差し替わったなら、10 分の位置では古いほう、20 分の位置では
  * 新しいほうを出したい。
  *
  * そこで、エンコードのついでに元の TS をもう一度 [bml.ts](../../../packages/arib/src/bml.ts) に通し、**配る価値の
  * あった変化だけ**を放送の実時刻 (TDT/TOT) つきで並べておく
  * ([data-capture.ts](data-capture.ts) の `DataBroadcastCapture`。**TS をデコードする側は
- * サーバ専用**なので別ファイル — ここは観る画面 (ブラウザ) も読み込む)。
+ * サーバ専用**なので別ファイル。ここは観る画面 (ブラウザ) も読み込む)。
  * 再生時は、再生位置に当たる実時刻までの変化を新しい `Carousel` に流し込めば、
  * **その時点の画面**が復元できる (`replayAt`)。シークもこれで作り直すだけ。
  *
@@ -30,7 +30,7 @@ import { fromTsTime, type Ruler } from "./watch";
 
 export interface TimedMessage {
   /**
-   * 放送の実時刻 (TDT/TOT 由来, unix ms)。**頭で時計を見る前のものは null。**
+   * 放送の実時刻 (TDT/TOT 由来, unix ms)。**先頭で時計を見る前のものは null。**
    *
    * TDT は数秒おきにしか来ないので、間のメッセージは「最後に見た時刻」を負う。
    * データ放送は秒単位で変わるものなので、この粒度で足りる
@@ -43,14 +43,14 @@ export interface TimedMessage {
  * 放送の実時刻 (unix ms) を、エンコードしたものの**再生位置** (ms) に写す。
  *
  * タイムラインは放送の実時刻 (TDT) で並ぶが、再生時に突き合わせたいのは
- * 動画の再生位置。2段で直す:
+ * 動画の再生位置。2 段で直す。
  *
- * 1. **元の TS の物差しへ。** `headUnixMs` は「元の TS の頭の放送実時刻」
- *    (`DataBroadcastCapture.head`)。番組の始まり (`start_at`) ではない — 録画は
- *    前のマージンのぶん早く始まるので、そちらを基準にすると番組連動がマージン (既定 10秒) ぶん早く出る
+ * 1. **元の TS の物差しへ。** `headUnixMs` は「元の TS の先頭の放送実時刻」
+ *    (`DataBroadcastCapture.head`)。番組の始まり (`start_at`) ではない。録画は
+ *    前のマージンのぶん早く始まるので、そちらを基準にすると番組連動がマージン (既定 10 秒) ぶん早く出る
  * 2. **エンコードしたものの物差しへ** (`ruler`。観る画面の `Ruler` と同じもの)。
- *    頭から捨てた長さ (`encode_skip`) を引き、CM を切ったものは残した区間 (`cm_kept`) だけを積む。
- *    CM の穴に落ちた時刻は、その後の本編の頭に寄せる (`fromTsTime`)
+ *    先頭から捨てた長さ (`encode_skip`) を引き、CM を切ったものは残した区間 (`cm_kept`) だけを積む。
+ *    CM の穴に落ちた時刻は、その後の本編の先頭に寄せる (`fromTsTime`)
  */
 export function playbackMsAt(
   atUnixMs: number,
@@ -62,7 +62,7 @@ export function playbackMsAt(
 
 /** 再生位置 (ms) を負ったメッセージ。サイドカーに書くのはこの形式 */
 export interface PlacedMessage {
-  /** 動画の再生位置 (ms)。頭の準備 (`at === null`) は 0 に寄せる */
+  /** 動画の再生位置 (ms)。先頭の準備 (`at === null`) は 0 に寄せる */
   at: number;
   message: ResponseMessage;
 }
@@ -100,14 +100,14 @@ interface Feed {
  * 配られた変化を足せばよい (入れ物は積み上がっている)。**戻ると入れ物には「まだ配られて
  * いないはずの先の画面」が残っている**ので、作り直して `toMs` まで積み直す。
  *
- * `fromMs` に負の値 (まだ一度も流していない) を渡せば、頭から `toMs` まで積む。
+ * `fromMs` に負の値 (まだ一度も流していない) を渡せば、先頭から `toMs` まで積む。
  */
 export function feedFor(
   timeline: readonly PlacedMessage[],
   fromMs: number,
   toMs: number,
 ): Feed {
-  // 戻った (シークで巻き戻し)。先に出した画面を捨てて、頭から積み直す
+  // 戻った (シークで巻き戻し)。先に出した画面を捨てて、先頭から積み直す
   if (toMs < fromMs) return { reset: true, messages: replayAt(timeline, toMs) };
   // 進んだ。その間に配られた変化だけ足す (入れ物はそのまま)
   const messages: ResponseMessage[] = [];
@@ -122,7 +122,7 @@ export function feedFor(
  * 実時刻 `at` の時点の画面。**そこまでの変化を積んで復元する。**
  *
  * 出す順は `Carousel` に委ねる (pmt → programInfo → DII → モジュール)。シークで戻った
- * ときも、頭から積み直すだけで正しい状態になる — 変化ログなので、積む順は届いた順。
+ * ときも、先頭から積み直すだけで正しい状態になる。変化ログなので、積む順は届いた順。
  *
  * `at` の物差しは渡すタイムラインに合わせる。本番 (観る画面と `feedFor`) は再生位置 (ms) つきの
  * `PlacedMessage[]`、テストは放送の実時刻 (unix ms) つきの `TimedMessage[]` も渡す。
@@ -136,7 +136,7 @@ export function replayAt(
 ): ResponseMessage[] {
   const carousel = new Carousel();
   for (const item of timeline) {
-    // 時計を見る前のもの (at === null) は頭の準備なので常に含める。
+    // 時計を見る前のもの (at === null) は先頭の準備なので常に含める。
     // 実時刻が付いていて、それが越えていたら、そこから先はまだ配られていない
     if (item.at !== null && item.at > at) break;
     carousel.take(item.message);

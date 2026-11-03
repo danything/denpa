@@ -126,7 +126,7 @@ const RESERVED = new Set([
 
 class Parser {
   private at = 0;
-  /** for の頭の中では `in` を二項演算として読まない */
+  /** for の括弧の中では `in` を二項演算として読まない */
   private noIn = false;
 
   constructor(private readonly tokens: Token[]) {}
@@ -203,7 +203,7 @@ class Parser {
     return expr;
   }
 
-  /** 括弧の中は `in` を二項演算として読む (for の頭の中でも) */
+  /** 括弧の中は `in` を二項演算として読む (for の括弧の中でも) */
   private inside<T>(read: () => T): T {
     const noIn = this.noIn;
     this.noIn = false;

@@ -798,7 +798,7 @@ describe("開く前の入口", () => {
   });
 
   test("閉じたら入口から出直す。指定が無い入口は、閉じたら止めたまま", async () => {
-    // 入口を読むたびに Ureg に1字足す (Ureg は局が替わらなければ残る)
+    // 入口を読むたびに Ureg に 1 字足す (Ureg は局が替わらなければ残る)
     const counted = startup(
       "",
       'function start() { browser.Ureg[3] = browser.Ureg[3] + "s"; }',
@@ -833,7 +833,7 @@ describe("epgTune", () => {
         browser.Ureg[1] = "after:" + r;
     }`;
 
-  test("別の局は呼び手に任せ、受けられたら文書を閉じる (後のスクリプトは動かない)", async () => {
+  test("別の局は呼ぶ側に任せ、受けられたら文書を閉じる (後のスクリプトは動かない)", async () => {
     const asked: Service[] = [];
     const { bml } = open({
       onTune: (service) => {
@@ -871,7 +871,7 @@ describe("epgTune", () => {
     expect(bml.path).toBeNull();
   });
 
-  test("呼び手が断る・呼び手がいない (録画) なら NaN を返して続ける", async () => {
+  test("呼ぶ側が断る・呼ぶ側がいない (録画) なら NaN を返して続ける", async () => {
     for (const onTune of [() => false, undefined]) {
       const { bml, logs } = open(onTune === undefined ? {} : { onTune });
       // BinaryTable の行から引いた値と同じ、ただの文字列
@@ -889,7 +889,7 @@ describe("epgTune", () => {
     }
   });
 
-  test("今の局 (arib://-1.-1.-1) は呼び手に任せず入口から出直す", async () => {
+  test("今の局 (arib://-1.-1.-1) は呼ぶ側に任せず入口から出直す", async () => {
     const asked: Service[] = [];
     const { bml } = open({ onTune: (service) => asked.push(service) > 0 });
     const restart = `var target = "arib://-1.-1.-1";

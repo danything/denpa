@@ -71,7 +71,7 @@ export function caughtUp(lag: number | null, paused: boolean): boolean {
   return !paused && lag !== null && lag <= CAUGHT_UP;
 }
 
-/** 書き込みの `vpos` (スレッドの頭 `vposBaseTime` からの 1/100 秒) */
+/** 書き込みの `vpos` (スレッドの始まり `vposBaseTime` からの 1/100 秒) */
 export function vpos(now: number, base: number): number {
   return Math.round((now - base) / 10);
 }

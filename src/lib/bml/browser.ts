@@ -1,7 +1,7 @@
 /**
  * `browser.*` (STD-B24 第二編 付属2 7 章の拡張関数)。実際の放送が呼ぶもの (9 局 16 本で 53 種) を
- * 全部持ち、**動かせないものは規格どおり「失敗」を返す** (NaN・null・0)。呼んだら転ぶ、には
- * しない — 放送のアプリはその返事を見て「この機能はありません」と案内する。
+ * 全部持ち、**動かせないものは規格どおり「失敗」を返す** (NaN・null・0)。呼ばれても例外は投げない。
+ * 放送のアプリはその返事を見て「この機能はありません」と案内する。
  *
  * 動かさないもの: 外のアプリ・予約・電話回線 (PPP)。選局 (epgTune) と Hybridcast の起動
  * (startAITControlledApp) は denpa の画面に任せる (エンジンは「この局へ」「アプリを」と知らせるだけ)。
@@ -9,9 +9,9 @@
  *
  * 通信の文書 (http・https から取った文書) からは、NVRAM の局の領域を読み書きさせない。使えるのは
  * 通信の文書向けの `nvram://local_web/` と、受信機の設定 (`nvram://receiverinfo/`) を読むことだけ
- * (denpa の決め。放送の文書が覚えたもの — 同意・地域など — を、外から来た文書に渡さない。
+ * (denpa の決め。放送の文書が覚えたもの (同意・地域など) を、外から来た文書に渡さない。
  * `local_web` は名前のとおり通信の文書と分け合う領域)。
- * 同じ理由で、通信の文書からは XML の AIT を渡して Hybridcast のアプリを開かせない — 開いたアプリは
+ * 同じ理由で、通信の文書からは XML の AIT を渡して Hybridcast のアプリを開かせない。開いたアプリは
  * 局の NVRAM を読み書きできるので、外から来た文書が選んだアプリにそれを渡すことになる。
  * 電波の AIT にあるアプリ (行き先を局が決めたもの) は、通信の文書からも開ける。
  */
@@ -100,7 +100,7 @@ export interface BrowserHost {
    */
   startApp?(hint: number[]): boolean;
   /**
-   * XML の AIT を取得できるか (双方向がオン)。**電波に AIT が無くても開ける局がある** — NHK は AIT を電波に載せず、
+   * XML の AIT を取得できるか (双方向がオン)。**電波に AIT が無くても開ける局がある。** NHK は AIT を電波に載せず、
    * 文書が XML の AIT の URL を渡してくる (`AITTransportMethod` の XML・HTTP を訊く)
    */
   canFetchAit?(): boolean;
@@ -156,7 +156,7 @@ const AIT_QUERIES = new Set([
 
 /**
  * getBrowserSupport (TR-B14 第二分冊 5.12.6)。`app` は電波の AIT にあるアプリを開けるか、`xml` は XML の AIT を
- * 取得できるか (双方向がオン)。AIT の問い合わせは開けるときだけ 1 — 1 と答えて開かないと、放送のアプリは起動を待ったまま返らない。
+ * 取得できるか (双方向がオン)。AIT の問い合わせは開けるときだけ 1。1 と答えて開かないと、放送のアプリは起動を待ったまま返らない。
  * 運び方 (`AITTransportMethod`) は XML なら `xml`、それ以外 (電波の表) は `app` で答える
  */
 function browserSupport(
@@ -207,7 +207,7 @@ function browserSupport(
 }
 
 /**
- * startAITControlledApp の引数から XML の AIT の URL を取り出す。**http(s) の絶対 URL だけ** — 数 (organisation_id など) と
+ * startAITControlledApp の引数から XML の AIT の URL を取り出す。**http(s) の絶対 URL だけ。** 数 (organisation_id など) と
  * 相対の名前は手がかりにしない (相対は何に対してかが決まっていない)
  */
 function aitUri(args: Value[]): string | null {

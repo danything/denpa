@@ -26,16 +26,16 @@ describe("currentCue", () => {
 
   /*
    * **字幕は次が来るまで出しっぱなし。** だから「いま出すもの」は
-   * 追い越していない中の**最後の1つ**で、ちょうど1枚ずつ送り出すのではない
+   * 追い越していない中の**最後の 1 つ**で、ちょうど 1 枚ずつ送り出すのではない
    */
-  test("過ぎたものの中でいちばん新しい1つを出す", () => {
+  test("過ぎたものの中でいちばん新しい 1 つを出す", () => {
     expect(currentCue(cues, 10)?.at).toBe(10);
     expect(currentCue(cues, 19.9)?.at).toBe(10);
     expect(currentCue(cues, 20)?.at).toBe(20);
     expect(currentCue(cues, 999)?.at).toBe(30);
   });
 
-  /** 飛んだ直後もこれで追いつく。間の枚を1つずつ出す必要が無い */
+  /** 飛んだ直後もこれで追いつく。間の枚を 1 つずつ出す必要が無い */
   test("飛んでも間を通らずに追いつく", () => {
     expect(currentCue(cues, 30)?.at).toBe(30);
   });
@@ -47,11 +47,11 @@ describe("currentCue", () => {
 
 /**
  * **止めて見ている間も受け取り続ける。** 放っておくと際限なく増えるので刈るが、
- * いま出している1枚を捨ててはいけない (出しっぱなしのものなので、捨てると
+ * いま出している 1 枚を捨ててはいけない (出しっぱなしのものなので、捨てると
  * 次の字幕まで何も出なくなる)。
  */
 describe("trimCues", () => {
-  test("いま出している1枚は残す", () => {
+  test("いま出している 1 枚は残す", () => {
     const cues = [cue(10), cue(20), cue(30)];
     const kept = trimCues(cues, 25);
     expect(kept.map((c) => c.at)).toEqual([20, 30]);
@@ -108,7 +108,7 @@ describe("showing", () => {
     expect(showing(held, 12)).toBeNull();
   });
 
-  test("長さが無ければ次の1枚まで出しっぱなし", () => {
+  test("長さが無ければ次の 1 枚まで出しっぱなし", () => {
     const held = { at: 10, page: page(null) };
     expect(showing(held, 9999)).toBe(held.page);
     expect(showing(null, 10)).toBeNull();

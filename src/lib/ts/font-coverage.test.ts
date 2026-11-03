@@ -1,7 +1,7 @@
 /**
  * **字の表の字が、取ってくるフォント (Denpa Font) に全部入っているか。**
  *
- * 字幕と番組表 (`b24-tables.ts`。JIS X 0213 の1面・2面も)・番組表などの外字 (`aribtext-gaiji.ts`)・DRCS の置き換え先・データ放送
+ * 字幕と番組表 (`b24-tables.ts`。JIS X 0213 の 1 面・2 面も)・番組表などの外字 (`aribtext-gaiji.ts`)・DRCS の置き換え先・データ放送
  * (`src/lib/bml/euc.ts`。1〜84 区は `TextDecoder('euc-jp')`、85 区から先は `ADDITIONAL`) の字を、Dockerfile が留めているバージョンのリリースの woff2 の 2 つ (基本の字と JIS X 0213 で足された漢字) の cmap と突き合わせる。
  * 表に字を足したのにフォントに無いと、その字だけ端末の字で出て見た目が揃わない。
  *
@@ -57,7 +57,7 @@ function base128(b: Uint8Array, at: number): [number, number] {
 }
 
 /**
- * WOFF2 の cmap の字。**表を展開して cmap だけ読む** — 表は brotli で 1 つに圧縮してあり、
+ * WOFF2 の cmap の字。**表を展開して cmap だけ読む。** 表は brotli で 1 つに圧縮してあり、
  * 目録の順に並んでいる (glyf・loca・hmtx は変換して詰めてあるので長さが違うが、cmap は元のまま)
  */
 function woff2Codepoints(woff2: Uint8Array): Set<number> {
@@ -141,8 +141,8 @@ function tableCodepoints(): Map<number, string> {
     add(value, `b24-tables ${name}`);
   /*
    * 1〜84 区は `TextDecoder('euc-jp')` が返す字 (データ放送の `src/lib/bml/euc.ts` と同じ読み方。
-   * 字幕と番組表も EUC-JP で読み、差分 `KANJI_DIFF` と2つのコードポイントの字を足す)。
-   * 13 区 (WHATWG の EUC-JP では NEC 特殊文字。JIS X 0213 の1面もほぼ同じ字) も入れる
+   * 字幕と番組表も EUC-JP で読み、差分 `KANJI_DIFF` と 2 つのコードポイントの字を足す)。
+   * 13 区 (WHATWG の EUC-JP では NEC 特殊文字。JIS X 0213 の 1 面もほぼ同じ字) も入れる
    */
   const decoder = new TextDecoder("euc-jp");
   for (let cell = 0; cell < 84 * 94; cell++) {

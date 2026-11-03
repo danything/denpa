@@ -11,7 +11,7 @@ import {
   readInit,
 } from "./fmp4";
 
-/** 箱を1つ組み立てる。中身は大きさが分かればよいので詰め物 */
+/** 箱を 1 つ組み立てる。中身は大きさが分かればよいので詰め物 */
 function box(type: string, fill = 0, size = 4): Uint8Array {
   const out = new Uint8Array(8 + size);
   new DataView(out.buffer).setUint32(0, out.length);
@@ -33,9 +33,9 @@ function join(...parts: Uint8Array[]): Uint8Array {
 describe("fMP4 を割る", () => {
   /*
    * MSE は init セグメント (`ftyp` + `moov`) を先に渡さないと、そのあとの
-   * 中身を1バイトも受け取らない。ffmpeg は1本のストリームで出してくる
+   * 中身を 1 バイトも受け取らない。ffmpeg は 1 本のストリームで出してくる
    */
-  test("頭の ftyp + moov が init になる", () => {
+  test("先頭の ftyp + moov が init になる", () => {
     const splitter = new Fmp4Splitter();
     const out = splitter.feed(
       join(box("ftyp"), box("moov"), box("moof"), box("mdat")),
@@ -45,7 +45,7 @@ describe("fMP4 を割る", () => {
     expect(out[1]!.data).toEqual(join(box("moof"), box("mdat")));
   });
 
-  test("moof + mdat の組が1枚ずつ出る", () => {
+  test("moof + mdat の組が 1 枚ずつ出る", () => {
     const splitter = new Fmp4Splitter();
     splitter.feed(join(box("ftyp"), box("moov")));
     const out = splitter.feed(
@@ -58,9 +58,9 @@ describe("fMP4 を割る", () => {
 
   /*
    * **パイプは箱の切れ目で届かない。** 半端なところで切って MSE に渡すと
-   * その場で投げる。1バイトずつ食わせても同じ答えになること
+   * その場で例外を出す。1 バイトずつ渡しても同じ答えになること
    */
-  test("どこで切って食わせても同じ", () => {
+  test("どこで切って渡しても同じ", () => {
     const whole = join(
       box("ftyp"),
       box("moov"),
@@ -76,10 +76,10 @@ describe("fMP4 を割る", () => {
   });
 
   /*
-   * **数で区切らない。** 「2つ溜まったら出す」にしていると `moof` + `sidx` を
-   * 1枚として出してしまい、中身の無いものを MSE に渡すことになる
+   * **数で区切らない。** 「2 つ溜まったら出す」にしていると `moof` + `sidx` を
+   * 1 枚として出してしまい、中身の無いものを MSE に渡すことになる
    */
-  test("moof と mdat の間に別の箱が挟まっても、1枚として出す", () => {
+  test("moof と mdat の間に別の箱が挟まっても、1 枚として出す", () => {
     const splitter = new Fmp4Splitter();
     const out = splitter.feed(
       join(box("ftyp"), box("moov"), box("moof"), box("sidx"), box("mdat")),
@@ -89,8 +89,8 @@ describe("fMP4 を割る", () => {
   });
 
   /*
-   * **init は `moof` が見えた時点で出す。** そこで頭が終わったと分かるので、
-   * `mdat` まで待つ理由が無い。繋いできた人を1枚ぶん待たせないで済む
+   * **init は `moof` が見えた時点で出す。** そこで先頭が終わったと分かるので、
+   * `mdat` まで待つ理由が無い。繋いできた人を 1 枚ぶん待たせないで済む
    */
   test("init は moof が見えた時点で出す。媒体は mdat まで待つ", () => {
     const splitter = new Fmp4Splitter();
@@ -204,11 +204,11 @@ function trex(
   );
 }
 
-/** H.264 High 4.1 (avcC の頭4バイト。中身の SPS/PPS は読まないので省く) */
+/** H.264 High 4.1 (avcC の先頭 4 バイト。中身の SPS/PPS は読まないので省く) */
 const AVCC = Uint8Array.of(1, 0x64, 0x00, 0x29, 0xff, 0xe0);
 /** AAC LC 48kHz 2ch */
 const ASC = Uint8Array.of(0x11, 0x90);
-/** dOps: バージョン 0 / 2ch / 頭で捨てる 312 / 48000 / 補正 0 / 並べ方 0 */
+/** dOps: バージョン 0 / 2ch / 先頭で捨てる 312 / 48000 / 補正 0 / 並べ方 0 */
 const DOPS = be([0, 1], [2, 1], [312, 2], [48000, 4], [0, 2], [0, 1]);
 
 function init(): Uint8Array {
@@ -259,13 +259,13 @@ describe("fMP4 の中身を読む", () => {
     expect(tracks[1]!.config).toEqual(DOPS);
   });
 
-  test("moof の tfdt と trun から1コマずつの時刻と中身を読む", () => {
+  test("moof の tfdt と trun から 1 コマずつの時刻と中身を読む", () => {
     const tracks = readInit(init());
     const video = [Uint8Array.of(1, 1, 1), Uint8Array.of(2, 2)];
     const audio = [Uint8Array.of(9, 9, 9, 9)];
     /*
-     * 映像の trun: data_offset + first_sample_flags + 1コマごとの大きさと合成時刻のずれ (バージョン 1、符号あり)。
-     * 長さは trex の既定 (1500)、2コマ目の印も trex の既定 (sync でない)
+     * 映像の trun: data_offset + first_sample_flags + 1 コマごとの大きさと合成時刻のずれ (バージョン 1、符号あり)。
+     * 長さは trex の既定 (1500)、2 コマ目の印も trex の既定 (sync でない)
      */
     const vtrun = (offset: number) =>
       boxOf(
@@ -281,7 +281,7 @@ describe("fMP4 の中身を読む", () => {
           [-1500, 4],
         ),
       );
-    // 音声の trun: data_offset + 1コマごとの長さと大きさ。tfhd に既定の印 (sync)
+    // 音声の trun: data_offset + 1 コマごとの長さと大きさ。tfhd に既定の印 (sync)
     const atrun = (offset: number) =>
       boxOf("trun", be([0x000301, 4], [1, 4], [offset, 4], [1024, 4], [4, 4]));
     const moof = (voff: number, aoff: number) =>
@@ -301,7 +301,7 @@ describe("fMP4 の中身を読む", () => {
           atrun(aoff),
         ),
       );
-    // 在りかは moof の頭から数える。moof の大きさが決まってから組み直す
+    // 在りかは moof の先頭から数える。moof の大きさが決まってから組み直す
     const size = moof(0, 0).length;
     const mdat = boxOf("mdat", ...video, ...audio);
     const fragment = join(moof(size + 8, size + 8 + 5), mdat);
@@ -322,7 +322,7 @@ describe("fMP4 の中身を読む", () => {
     ]);
   });
 
-  test("壊れた媒体は、読めたところまで返して投げない", () => {
+  test("壊れた媒体は、読めたところまで返して例外を出さない", () => {
     const tracks = readInit(init());
     // 中身の在りかが mdat の外を指している
     const broken = join(
@@ -342,18 +342,18 @@ describe("fMP4 の中身を読む", () => {
   });
 });
 
-describe("ADTS の頭を組む", () => {
+describe("ADTS のヘッダを組む", () => {
   /*
-   * 放送の ADTS と同じものになること。48kHz・2ch・LC で中身 371 バイトの1コマは、
-   * 頭込みで 378 バイト (ffmpeg が `-f adts` で書いたものと同じ7バイト)
+   * 放送の ADTS と同じものになること。48kHz・2ch・LC で中身 371 バイトの 1 コマは、
+   * ヘッダ込みで 378 バイト (ffmpeg が `-f adts` で書いたものと同じ 7 バイト)
    */
-  test("AudioSpecificConfig から 7 バイトの頭を起こす", () => {
+  test("AudioSpecificConfig から 7 バイトのヘッダを起こす", () => {
     expect([...(adtsHeader(ASC, 371) ?? [])]).toEqual([
       0xff, 0xf1, 0x4c, 0x80, 0x2f, 0x5f, 0xfc,
     ]);
   });
 
-  test("付けた頭は pes.ts の AdtsSplitter がそのまま読める", () => {
+  test("付けたヘッダは pes.ts の AdtsSplitter がそのまま読める", () => {
     const payload = new Uint8Array(100).fill(7);
     const frame = join(adtsHeader(ASC, payload.length)!, payload);
     const [read] = new AdtsSplitter().feed(frame, 0);
@@ -372,7 +372,7 @@ describe("ADTS の頭を組む", () => {
 });
 
 describe("dOps を OpusHead にする", () => {
-  test("数の並べ方を入れ替え、頭に OpusHead を付ける", () => {
+  test("数の並べ方を入れ替え、先頭に OpusHead を付ける", () => {
     const head = opusHead(DOPS)!;
     expect(new TextDecoder().decode(head.subarray(0, 8))).toBe("OpusHead");
     const view = new DataView(head.buffer);
@@ -422,7 +422,7 @@ describe("ffmpeg が書いた fMP4 を読む", () => {
         expect(opusHead(tracks[1]!.config)?.length).toBe(19);
       else expect(adtsHeader(tracks[1]!.config, 100)).not.toBeNull();
 
-      // 媒体を全部読む: 2秒ぶんのコマが時刻の順に並び、頭はキーフレーム
+      // 媒体を全部読む: 2 秒ぶんのコマが時刻の順に並び、先頭はキーフレーム
       const samples = new Fmp4Splitter()
         .feed(file)
         .filter((s) => s.kind === "media")

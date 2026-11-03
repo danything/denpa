@@ -2,21 +2,21 @@
  * 届いた字幕を、映像に合わせて出す順に並べる。**DOM を触らない。**
  *
  * 時刻は**受け側の再生位置 (mp4 の秒)** で持つ。サーバが添えてくるものが
- * 既にその物差しになっている — 映像と字幕を**同じ ffmpeg** でエンコードしていて、
+ * 既にその物差しになっている。映像と字幕を**同じ ffmpeg** でエンコードしていて、
  * 入口で 0 に寄せる幅が両方に同じだけ効くため (`server/captions.ts` に実測)。
  * **届いた時刻からずれを測って足し引きはしない** (測れない。docs/stream.md#時刻同期)。
  */
 
 import type { CaptionPage } from "@danything/arib/caption-text";
 
-/** 出す時刻と、その1枚 (文字の配置)。`page` が null か `runs` が空なら「消す」 */
+/** 出す時刻と、その 1 枚 (文字の配置)。`page` が null か `runs` が空なら「消す」 */
 export interface Cue {
   /** 受け側の再生位置 (秒)。ここを追い越したら出す */
   at: number;
   page: CaptionPage | null;
 }
 
-/** 出しておく長さ (`CaptionPage.duration`) を過ぎていれば消す。**次の1枚を待たずに消える字幕がある** */
+/** 出しておく長さ (`CaptionPage.duration`) を過ぎていれば消す。**次の 1 枚を待たずに消える字幕がある** */
 export function showing(cue: Cue | null, at: number): CaptionPage | null {
   const page = cue?.page ?? null;
   if (page === null || cue === null) return null;
@@ -29,17 +29,17 @@ export function showing(cue: Cue | null, at: number): CaptionPage | null {
  * 溜めておく上限。**止めて見ている人のぶん。**
  *
  * 押して止めている間も受け取り続けるので、放っておくと際限なく増える。
- * 遅れて見られる長さ (`live-player` の `KEEP` = 5分) を、字幕の出る間隔
- * (実機で毎分18回) で数えたぶんより多めに採る
+ * 遅れて見られる長さ (`live-player` の `KEEP` = 5 分) を、字幕の出る間隔
+ * (実機で毎分 18 回) で数えたぶんより多めに採る
  */
 export const KEEP_CUES = 200;
 
 /**
- * 再生位置に合うものを選ぶ。**過ぎたものの中でいちばん新しい1つ。**
+ * 再生位置に合うものを選ぶ。**過ぎたものの中でいちばん新しい 1 つ。**
  *
  * 字幕は次が来るまで出しっぱなしなので、「いま出すもの」は
- * **時刻が再生位置を追い越していない中の、最後の1つ**になる。
- * 飛んだ直後もこれで正しく追いつく (間の枚を1つずつ出す必要が無い)。
+ * **時刻が再生位置を追い越していない中の、最後の 1 つ**になる。
+ * 飛んだ直後もこれで正しく追いつく (間の枚を 1 つずつ出す必要が無い)。
  *
  * @returns 出すもの。何も出さないなら null
  */
@@ -53,7 +53,7 @@ export function currentCue(cues: Cue[], at: number): Cue | null {
 }
 
 /**
- * 出し終わったものを捨てる。**いま出している1つは残す。**
+ * 出し終わったものを捨てる。**いま出している 1 つは残す。**
  *
  * 残さないと、次が来るまでの間に出すものが無くなる (字幕は出しっぱなし)。
  * 上限を超えたぶんは、古いほうから落とす。
@@ -61,7 +61,7 @@ export function currentCue(cues: Cue[], at: number): Cue | null {
  * @param at いまの再生位置 (秒)
  */
 export function trimCues(cues: Cue[], at: number): Cue[] {
-  // 過ぎたものの中でいちばん新しい1つより前は、もう使わない
+  // 過ぎたものの中でいちばん新しい 1 つより前は、もう使わない
   let keepFrom = 0;
   for (let i = 0; i < cues.length; i++) {
     if (cues[i]!.at > at) break;

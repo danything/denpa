@@ -13,7 +13,7 @@
  *   VideoDecoder でデコードして 2D で描き、音 (AAC・Opus) は WASM でデコードする (`fmp4.ts`)。
  *   **<video> の再生が止まる端末** (テスラの車載ブラウザ) のための経路
  * - `mkv` … 端末に保存した録画 (エンコード済みの Matroska)。互換モードの観る画面で、読んだコマを `fmp4` と
- *   同じ経路でデコードして描く (`mkv.ts`)。音は選んだ1本 (`audio` の何本目か)
+ *   同じ経路でデコードして描く (`mkv.ts`)。音は選んだ 1 本 (`audio` の何本目か)
  */
 export type RawInput = "ts-mpeg2" | "fmp4" | "mkv";
 
@@ -25,7 +25,7 @@ export interface GrabSize {
 
 /**
  * `createImageBitmap` に渡す縮め方。**`VideoFrame` の無いブラウザで、画面の側で `<video>` を縮めるときだけ使う**
- * (worker の中は `downscale.ts`)。`high` で縮める — 低いほど 1920 から 32 へ点で間引き、写すたびに色が揺れる
+ * (worker の中は `downscale.ts`)。`high` で縮める。低いほど 1920 から 32 へ点で間引き、写すたびに色が揺れる
  */
 export function shrink(size: GrabSize): ImageBitmapOptions {
   return {
@@ -51,13 +51,13 @@ export type ToWorker =
       follow: boolean;
     }
   /**
-   * 届いたもの (TS、fMP4 の init・媒体1つ、Matroska)。**頭の9バイト (多重化の頭) を飛ばした位置から**。
+   * 届いたもの (TS、fMP4 の init・媒体 1 つ、Matroska)。**先頭の 9 バイト (多重化のヘッダ) を飛ばした位置から**。
    * fMP4 は箱の切れ目で届く (サーバが割ってから送る。`ts/fmp4.ts` の `Fmp4Splitter`)
    */
   | { type: "data"; buffer: ArrayBuffer; offset: number }
   /**
    * いま鳴っている PTS (90kHz。伸ばしたもの) と、それが鳴った時刻 (`performance.timeOrigin +
-   * performance.now()` の ms)。**null は「止まっている」** — 映像もそこで止める
+   * performance.now()` の ms)。**null は「止まっている」**。映像もそこで止める
    */
   | { type: "clock"; pts: number | null; at: number }
   /**
@@ -67,16 +67,16 @@ export type ToWorker =
   | { type: "vsync"; at: number }
   /**
    * 選局し直した・録画で飛んだ。**前の局のものは全部捨てる。** `from` (90kHz。届くものの PTS の物差しで、
-   * 元の TS なら一周の中) があれば、それより前のコマはデコードするだけで描かない — サーバは飛び先の少し手前
+   * 元の TS なら一周の中) があれば、それより前のコマはデコードするだけで描かない。サーバは飛び先の少し手前
    * (キーフレーム・1 秒前) から流すので、手前の映像 (CM を飛ばしたなら CM の映像) を出さないため
    */
   | { type: "reset"; from?: number | null }
-  /** もう届かない (録画の尻まで読んだ。`engine.ts` の `finish`)。Matroska は待たせているコマを出しきる (`mkv.ts`) */
+  /** もう届かない (録画の末尾まで読んだ。`engine.ts` の `finish`)。Matroska は待たせているコマを出しきる (`mkv.ts`) */
   | { type: "end" }
   /** 何本目の音声をデコードするか (`AudioTrack.stream`) */
   | { type: "audio"; index: number }
   /**
-   * いま出しているコマを1枚ください (切り抜き)。**映像は worker の canvas にあって、
+   * いま出しているコマを 1 枚ください (切り抜き)。**映像は worker の canvas にあって、
    * 画面の側からは画素を読めない** (`transferControlToOffscreen` で渡したので)。
    * `id` は返事 (`frame`) と組にするため。
    *
@@ -86,13 +86,13 @@ export type ToWorker =
   | { type: "grab"; id: number; size?: GrabSize }
   /**
    * 小窓 (PiP) へ出す映像の書き込み先 (`MediaStreamTrackGenerator` の `writable`)。
-   * **描いた1コマをその場で書き込む** — canvas の画面への更新を待たない (`engine.ts` の `pipStream`)
+   * **描いた 1 コマをその場で書き込む**。canvas の画面への更新を待たない (`engine.ts` の `pipStream`)
    */
   | { type: "pip"; writable: WritableStream<VideoFrame> }
-  /** 小窓へ書き込むか。出していない間は書かない (1コマごとに写すぶん重い) */
+  /** 小窓へ書き込むか。出していない間は書かない (1 コマごとに写すぶん重い) */
   | { type: "pipFlow"; on: boolean }
   /**
-   * 画面が見えているか (`visibilitychange`)。**見えていない間は映像をデコードしない** — 同じ端末で 2 本見ていると、
+   * 画面が見えているか (`visibilitychange`)。**見えていない間は映像をデコードしない**。同じ端末で 2 本見ていると、
    * 裏に回したほうも 1 コマ 10ms 前後デコードし続けて、見ているほうが間に合わなくなっていた。音は流し続ける
    */
   | { type: "visible"; on: boolean }
@@ -107,7 +107,7 @@ export type FromWorker =
   /** 使えなくなった (デコーダが無い・音がデコードできない・間に合わない。`budget.ts`)。**次の方式に移るか止まるかは画面が決める** */
   | { type: "fail"; reason: string }
   /**
-   * デコードできた音1コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)
+   * デコードできた音 1 コマ。面ごとの float (-1〜1)。**時刻は伸ばした PTS** (`pes.unwrap`)
    */
   | {
       type: "audio";
@@ -124,11 +124,11 @@ export type FromWorker =
    */
   | { type: "size"; width: number; height: number }
   /**
-   * デコーダ (WASM) を読み終え、それまで溜めていたものを渡しきった。**これより前は「尻まで読んだのに
+   * デコーダ (WASM) を読み終え、それまで溜めていたものを渡しきった。**これより前は「末尾まで読んだのに
    * 音が来ない」を終わりと見なさない** (`RawEngine.finish`)
    */
   | { type: "ready" }
-  /** 数字 (1秒ごと)。画面に出すもの */
+  /** 数字 (1 秒ごと)。画面に出すもの */
   | {
       type: "stats";
       dropped: number;
@@ -144,7 +144,7 @@ export type FromWorker =
    */
   | { type: "full" }
   /**
-   * `reset` を済ませた。**これより前に出した音・`shown`・`full` は前の局 (録画なら飛ぶ前) のもの** — 画面はこれが届くまで捨てる
+   * `reset` を済ませた。**これより前に出した音・`shown`・`full` は前の局 (録画なら飛ぶ前) のもの**。画面はこれが届くまで捨てる
    * (`engine.ts` の `resetting`)。worker は届いた順にデコードするので、`reset` を受け取る前のぶんがまだ画面へ向かっていることがある
    */
   | { type: "reset" };

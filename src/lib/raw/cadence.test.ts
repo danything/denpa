@@ -25,7 +25,7 @@ describe("Vsync", () => {
     expect(vsync.next(last + 20)).toBeCloseTo(last + 2000 / 60, 6);
   });
 
-  test("落とした回 (2回ぶん空いた) は間隔を崩さない", () => {
+  test("落とした回 (2 回ぶん空いた) は間隔を崩さない", () => {
     const vsync = new Vsync();
     for (const at of [0, 16.667, 33.333, 66.667, 83.333, 133.333])
       vsync.feed(at);
@@ -45,10 +45,10 @@ describe("SmoothClock", () => {
     const clock = new SmoothClock();
     clock.set(90_000, 1000);
     expect(clock.at(1010)).toBe(90_900);
-    // 2ms ぶん (180) 先を言ってきた。1割だけ寄せる
+    // 2ms ぶん (180) 先を言ってきた。1 割だけ寄せる
     clock.set(90_000 + 1800 + 180, 1020);
     expect(clock.at(1020)).toBeCloseTo(90_000 + 1800 + 18, 6);
-    // 1秒飛んだ (シークした・貯め直した)
+    // 1 秒飛んだ (シークした・貯め直した)
     clock.set(500_000, 1040);
     expect(clock.at(1040)).toBe(500_000);
     clock.set(null, 1060);
@@ -78,8 +78,8 @@ describe("fieldAt", () => {
 });
 
 /**
- * 59.94i (1秒に 59.94 フィールド) を 60Hz の画面で 20 秒出したときの、画面の切り替わりごとに
- * 出たフィールドの並び。刻みは 4ms ごとで、デコード (1コマに1回、8〜20ms) の回は延びる。時計の組は
+ * 59.94i (1 秒に 59.94 フィールド) を 60Hz の画面で 20 秒出したときの、画面の切り替わりごとに
+ * 出たフィールドの並び。刻みは 4ms ごとで、デコード (1 コマに 1 回、8〜20ms) の回は延びる。時計の組は
  * 20ms ごとに ±3ms 揺れて届く。
  *
  * - `aligned` … 次の画面の切り替わりの時点の PTS (`VsyncClock`) で選び、描いた回はデコードせず、
@@ -124,7 +124,7 @@ function simulate(
       smooth.set(truth(at), stamp);
       nextClock += 20;
     } else {
-      // デコードは1コマ (2フィールド) に1回、8〜20ms。先に 8 コマまでデコードしておける
+      // デコードは 1 コマ (2 フィールド) に 1 回、8〜20ms。先に 8 コマまでデコードしておける
       const due = Math.floor((at * 90) / 3003);
       const wanted = decoded < due + 8;
       const urgent = decoded <= due + 1;
@@ -245,7 +245,7 @@ describe("Vsync (覚えた間隔がずれたとき)", () => {
     near(vsync, 1000 / 60);
   });
 
-  test("60Hz で、ときどき落とす (2〜3回ぶん空く) 回があっても 16.67ms を覚える", () => {
+  test("60Hz で、ときどき落とす (2〜3 回ぶん空く) 回があっても 16.67ms を覚える", () => {
     const rand = random(2);
     const vsync = new Vsync();
     play(vsync, 0, 1000 / 60, 600, rand, 0.15);

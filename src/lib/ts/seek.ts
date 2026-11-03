@@ -1,20 +1,20 @@
 /**
  * **録画の TS の中で、時刻からバイトの位置を引く** (`/api/recordings/<id>/stream` で元の TS を流す経路)。
  *
- * TS には索引が無い。位置を当てるには中を読むしかないが、頭から読むと 1 時間の BS で 7GB になる。
- * そこで**決まった位置の PES の PTS を見て二分探索する** (1 回に読むのは数百KB、30 回ほどで当たる)。
+ * TS には索引が無い。位置を当てるには中を読むしかないが、先頭から読むと 1 時間の BS で 7GB になる。
+ * そこで**決まった位置の PES の PTS を見て二分探索する** (1 回に読むのは数百 KB、30 回ほどで当たる)。
  * 追っかけの当て方 (`server/chase.ts` の `chasePlan`。バイト比例) より正確で、録り終えた録画なら尻まで使える。
  *
  * ## 時刻の物差し
  *
- * **頭 (`head`) は入れ物の始まり** — ffmpeg (ffprobe) が `start_time` と呼ぶもの。映像と音声の
- * 最初の PTS のうち早いほうで、CM の区間 (`recordings.cm_ranges`) もエンコードしたときに捨てた頭
+ * **先頭 (`head`) は入れ物の始まり。** ffmpeg (ffprobe) が `start_time` と呼ぶもの。映像と音声の
+ * 最初の PTS のうち早いほうで、CM の区間 (`recordings.cm_ranges`) もエンコードしたときに先頭で捨てた長さ
  * (`encode_skip`) もこれから数えている (`server/cm.ts` の `probeVideo` の `formatStart`)。
  * 同じものを ffprobe 無しで出す (`tsHead`)。
  *
- * PTS は 33 ビットで 26.5 時間ごとに 0 へ戻る。**頭から数えた差を一周の中で取る** (`sinceHead`) — 録画は
- * 26.5 時間より短いので、一周をまたいでも差は増え続ける。頭より少し前 (B フレームの並べ替え、
- * 音声と映像の頭のずれ) は負の小さな数にする
+ * PTS は 33 ビットで 26.5 時間ごとに 0 へ戻る。**先頭から数えた差を一周の中で取る** (`sinceHead`)。録画は
+ * 26.5 時間より短いので、一周をまたいでも差は増え続ける。先頭より少し前 (B フレームの並べ替え、
+ * 音声と映像の先頭のずれ) は負の小さな数にする
  *
  * DOM もファイルも触らない (読む関数は受け取る) ので、合成した TS で確かめられる (`seek.test.ts`)
  */
@@ -23,26 +23,26 @@ import { u16 } from "@danything/arib/bytes";
 import { CLOCK, readStamp, WRAP } from "@danything/arib/pes";
 import { findSync, PACKET, SYNC } from "@danything/arib/psi";
 
-/** PES の頭の印 (stream_id)。映像 0xE0〜0xEF、音声 0xC0〜0xDF、字幕などは private_stream_1 (0xBD) */
+/** PES の先頭の印 (stream_id)。映像 0xE0〜0xEF、音声 0xC0〜0xDF、字幕などは private_stream_1 (0xBD) */
 const isVideo = (id: number) => id >= 0xe0 && id <= 0xef;
 const isAudio = (id: number) => id >= 0xc0 && id <= 0xdf;
 const PRIVATE_1 = 0xbd;
 
-/** 頭より前とみなす幅 (秒)。これより手前に見えるものは、一周したのではなく頭の少し前 */
+/** 先頭より前とみなす幅 (秒)。これより手前に見えるものは、一周したのではなく先頭の少し前 */
 const BEFORE_HEAD = 600;
 
-/** 見つけた PES の頭 */
+/** 見つけた PES の先頭 */
 interface PesMark {
   /** stream_id */
   id: number;
   /** 90kHz。一周の中 */
   pts: number;
-  /** その PES が始まる TS パケットの位置 (渡したバイト列の頭から) */
+  /** その PES が始まる TS パケットの位置 (渡したバイト列の先頭から) */
   at: number;
 }
 
 /**
- * PTS の付いた PES の頭を順に出す。**誤りの印・スクランブルの残るパケットは読まない**。
+ * PTS の付いた PES の先頭を順に出す。**誤りの印・スクランブルの残るパケットは読まない**。
  * 切れ目が見つからなければ何も出さない
  */
 export function* pesMarks(bytes: Uint8Array): Generator<PesMark> {
@@ -58,14 +58,14 @@ export function* pesMarks(bytes: Uint8Array): Generator<PesMark> {
     }
     const b1 = bytes[at + 1]!;
     const b3 = bytes[at + 3]!;
-    // 頭 (payload_unit_start) だけ。誤り・スクランブルは読まない
+    // 先頭 (payload_unit_start) だけ。誤り・スクランブルは読まない
     if (!(b1 & 0x40) || b1 & 0x80 || b3 & 0xc0) continue;
     const control = (b3 >> 4) & 0x03;
     if (!(control & 0x01)) continue;
     const offset = at + 4 + (control & 0x02 ? 1 + bytes[at + 4]! : 0);
-    // 頭の 9 バイト + PTS の 5 バイトがパケットの中に収まっていること
+    // 先頭の 9 バイト + PTS の 5 バイトがパケットの中に収まっていること
     if (offset + 14 > at + PACKET) continue;
-    // PES の頭 (00 00 01) で、PTS が付いているもの
+    // PES の先頭 (00 00 01) で、PTS が付いているもの
     if (u16(bytes, offset) !== 0 || bytes[offset + 2] !== 1) continue;
     if (!(bytes[offset + 7]! & 0x80)) continue;
     yield { id: bytes[offset + 3]!, pts: readStamp(bytes, offset + 9), at };
@@ -82,9 +82,9 @@ function delta(a: number, b: number): number {
 }
 
 /**
- * **入れ物の始まり (90kHz)。** 録画の頭のバイト列から。読めなければ null。
+ * **入れ物の始まり (90kHz)。** 録画の先頭のバイト列から。読めなければ null。
  *
- * ffmpeg の `start_time` と同じ決め方にする (libavformat の `update_stream_timings`):
+ * ffmpeg の `start_time` と同じ決め方にする (libavformat の `update_stream_timings`)。
  * 映像と音声の最初の PTS のうち早いほう。字幕などの PTS は、それより 1 秒以内に早いときだけ使う
  * (`start_time - start_time_text < AV_TIME_BASE`)。映像は B フレームのぶん後の PES に
  * 早い PTS があるので、見えた中でいちばん早いものを採る
@@ -106,7 +106,7 @@ export function tsHead(bytes: Uint8Array): number | null {
   return inWrap(ref + first);
 }
 
-/** 頭から数えた秒。一周をまたいでも増え続ける (録画は一周より短い)。頭の少し前は負 */
+/** 先頭から数えた秒。一周をまたいでも増え続ける (録画は一周より短い)。先頭の少し前は負 */
 export function sinceHead(pts: number, head: number): number {
   const d = inWrap(pts - head);
   return (d > WRAP - BEFORE_HEAD * CLOCK ? d - WRAP : d) / CLOCK;
@@ -126,11 +126,11 @@ export type ReadAt = (offset: number, length: number) => Promise<Uint8Array>;
 const WINDOW = 256 * 1024;
 /** 映像の PES を探して読み進める上限。これだけ読んで無ければ、その位置には無いことにする */
 const SEARCH = 4 * 1024 * 1024;
-/** これより狭くなったら二分探索をやめる。数十ms ぶん */
+/** これより狭くなったら二分探索をやめる。数十 ms ぶん */
 const NARROW = PACKET * 256;
 
 /**
- * `offset` から先で最初の映像の PES。`at` はファイルの頭からの位置。無ければ null
+ * `offset` から先で最初の映像の PES。`at` はファイルの先頭からの位置。無ければ null
  */
 async function videoAt(read: ReadAt, offset: number): Promise<PesMark | null> {
   for (let from = offset; from < offset + SEARCH; from += WINDOW - PACKET * 3) {
@@ -144,10 +144,10 @@ async function videoAt(read: ReadAt, offset: number): Promise<PesMark | null> {
 }
 
 /**
- * **頭から `target` 秒のところを読みはじめる位置。** その時刻より前で、いちばん近い映像の PES の頭。
+ * **先頭から `target` 秒のところを読みはじめる位置。** その時刻より前で、いちばん近い映像の PES の先頭。
  *
  * 決まった位置を読み、そこから先で最初に来る映像の PES の PTS で比べる二分探索。時刻は映像の
- * PES でしか見ない (音声は映像より 0.数秒ずれて多重化されている)。頭より前を指定されたら頭から。
+ * PES でしか見ない (音声は映像より 0.数秒ずれて多重化されている)。先頭より前を指定されたら先頭から。
  * 映像の PES が 1 つも無ければ null
  *
  * @param size ファイルの大きさ (バイト)
