@@ -3,13 +3,13 @@
  *
  * サーバの `/stream` の代わりに、Blob を切り出して流す:
  *
- * - 開くときに頭 (最初の Cluster まで: Info・Tracks) と、飛ぶ位置の表 (Cues。SeekHead が在りかを言う) を読む
- * - `from` 秒から観るときは、表で `from` より手前のいちばん近い Cluster を引き、**頭 + その Cluster から尻まで**
- *   を1本のストリームにする。読む側 (`raw/mkv.ts`) は位置を確かめないので、繋いだまま読める。手前のコマは
+ * - 開くときに先頭 (最初の Cluster まで: Info・Tracks) と、飛ぶ位置の表 (Cues。SeekHead が在りかを言う) を読む
+ * - `from` 秒から観るときは、表で `from` より手前のいちばん近い Cluster を引き、**先頭 + その Cluster から末尾まで**
+ *   を 1 本のストリームにする。読む側 (`raw/mkv.ts`) は位置を確かめないので、繋いだまま読める。手前のコマは
  *   描かない (`floor`。サーバから流すときと同じ)
- * - 表が無ければ頭から流す (飛んだ先まではデコードして捨てるので遅いが、観られる)
+ * - 表が無ければ先頭から流す (飛んだ先まではデコードして捨てるので遅いが、観られる)
  *
- * 読むのは頭と表の数 MB だけ。中身は流しながら読む (`Blob.stream`。端末のメモリへ丸ごとは載せない)
+ * 読むのは先頭と表の数 MB だけ。中身は流しながら読む (`Blob.stream`。端末のメモリへ丸ごとは載せない)
  */
 
 import {
@@ -21,7 +21,7 @@ import {
   readMkvHead,
 } from "#lib/ts/mkv-media.js";
 
-/** 頭を読む量 (バイト)。足りなければ倍にして読み直す (Tags・Chapters が大きい録画) */
+/** 先頭を読む量 (バイト)。足りなければ倍にして読み直す (Tags・Chapters が大きい録画) */
 const HEAD_FIRST = 1024 * 1024;
 const HEAD_MOST = 32 * 1024 * 1024;
 
@@ -63,7 +63,7 @@ export async function openMkv(blob: Blob): Promise<MkvSource | null> {
 
   let cues: MkvCue[] = [];
   if (head.cues !== null && video !== null) {
-    // 頭 (大きさ) を読んでから、要素ごと読む
+    // ヘッダ (大きさ) を読んでから、要素ごと読む
     const lead = await bytes(blob, head.cues, head.cues + 16);
     const length = elementSize(lead);
     if (length !== null)

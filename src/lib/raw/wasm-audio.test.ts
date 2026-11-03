@@ -51,7 +51,7 @@ describe("WasmAudio", () => {
     ).toBe("broken");
   });
 
-  test("メモリを取れなければ書かずに broken・開けない (0 番地へ書かない)", () => {
+  test("メモリを取れなければ書かずに broken・開けない (アドレス 0 へ書かない)", () => {
     const d = fakeDecoder();
     d._malloc = () => 0;
     const audio = new WasmAudio(d);
@@ -59,7 +59,7 @@ describe("WasmAudio", () => {
     expect(audio.decode(new Uint8Array([7]))).toBe("broken");
     expect(audio.open("opus", new Uint8Array([1]))).toBe(false);
     expect(d.HEAPU8[0]).toBe(42);
-    // 置き場の大きさは 0 のまま (次にまた取りに行く)
+    // 置き場の大きさは 0 のまま (次にまた確保する)
     expect(ensure(d, { pointer: 0, size: 0 }, 8)).toEqual({
       pointer: 0,
       size: 0,

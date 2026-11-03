@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 
 import { DRY, LAST_WAIT, LEAD, Playout, SLACK, SLACK_FOR } from "./playout";
 
-/** AAC の1コマ (1024 標本 @48kHz) = 1920 (90kHz) = 21.3ms */
+/** AAC の 1 コマ (1024 標本 @48kHz) = 1920 (90kHz) = 21.3ms */
 const D = 1920;
 const chunk = (n: number) => ({ pts: 90_000 + n * D, duration: D, n });
 
 describe("Playout", () => {
   test("貯まるまで鳴らさない。貯まったら放送の今から target 手前で始める", () => {
     const playout = new Playout<ReturnType<typeof chunk>>(0.2);
-    // 0.2秒 = 9.4コマ。9コマでは足りない
+    // 0.2 秒 = 9.4 コマ。9 コマでは足りない
     for (let n = 0; n < 9; n++) expect(playout.push(chunk(n), 0)).toBeNull();
     expect(playout.tick(0).kind).toBe("none");
     expect(playout.position(0)).toBeNull();
@@ -19,12 +19,12 @@ describe("Playout", () => {
     expect(started.kind).toBe("start");
     if (started.kind !== "start") return;
     const newest = 90_000 + 20 * D;
-    // 鳴らし始めは新しい端の 0.2秒手前。そこより古いコマは予約しない
+    // 鳴らし始めは新しい端の 0.2 秒手前。そこより古いコマは予約しない
     expect(playout.position(10 + LEAD)).toBeCloseTo(newest - 0.2 * 90_000, 5);
     expect(
       started.schedule.every((s) => s.chunk.pts + D > newest - 0.2 * 90_000),
     ).toBe(true);
-    // 途中から鳴らすコマは頭を飛ばす
+    // 途中から鳴らすコマは先頭を飛ばす
     expect(started.schedule[0]!.offset).toBeGreaterThan(0);
   });
 
@@ -101,7 +101,7 @@ describe("Playout (追っかけ: 放送の今を追わない)", () => {
     for (let n = 0; n < 100; n++) playout.push(chunk(n), 0);
     const started = playout.tick(0);
     if (started.kind !== "start") throw new Error("始まらない");
-    // 追っかけは頭 (いちばん古いもの) から鳴らす
+    // 追っかけは先頭 (いちばん古いもの) から鳴らす
     expect(playout.position(LEAD)).toBeCloseTo(90_000, 5);
     const here = playout.position(0.5) as number;
     playout.hold(0.5);
@@ -147,7 +147,7 @@ describe("Playout (録画: 飛ぶ先と終わり)", () => {
   test("終わりまで届いたら、貯めが足りなくても残りを鳴らし、鳴らしきったら end", () => {
     const playout = new Playout<ReturnType<typeof chunk>>(1);
     playout.follow = true;
-    // 尻の 3 コマ (0.06 秒) だけ。target (1 秒) には届かない
+    // 最後の 3 コマ (0.06 秒) だけ。target (1 秒) には届かない
     for (let n = 0; n < 3; n++) playout.push(chunk(n), 0);
     expect(playout.tick(0).kind).toBe("none");
     playout.finish();
@@ -169,7 +169,7 @@ describe("Playout (録画: 飛ぶ先と終わり)", () => {
 });
 
 describe("Playout (録画: 何も来ないまま終わった)", () => {
-  test("飛んだ先が尻の先で何も届かなければ、少し待ってから end", () => {
+  test("飛んだ先が末尾の先で何も届かなければ、少し待ってから end", () => {
     const playout = new Playout<ReturnType<typeof chunk>>(1);
     playout.follow = true;
     playout.reset(chunk(0).pts);

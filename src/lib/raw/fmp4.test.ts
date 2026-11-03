@@ -12,7 +12,7 @@ import { audioCodec, audioFrame, type Fmp4Host, Fmp4Video } from "./fmp4";
 
 /**
  * **追っかけで抱えきれなくなったとき** (`follow`)。圧縮のまま持つのが上限を超えたら、受け取るのを
- * やめて `full` を1回だけ返し、以降は捨てる。リクエストし直し (`reset` → 新しい init) で元に戻る。
+ * やめて `full` を 1 回だけ返し、以降は捨てる。リクエストし直し (`reset` → 新しい init) で元に戻る。
  *
  * 映像はデコードさせない (刻まないので VideoDecoder に渡らない)。VideoDecoder と 2D のコンテキストは形だけの偽物。
  * 流すのは E2E と同じ作り置き (本物の ffmpeg が書いた AV1 + Opus。`tests/fake/fmp4-loop.ts`)
@@ -73,16 +73,16 @@ function watcher(follow: boolean) {
   return { video: new Fmp4Video(canvas, host, follow), seen };
 }
 
-/** 2秒ぶんを繰り返し流す (作り置きの時刻のまま。キーフレームから入り直すので、圧縮の待ちは積み増していく) */
+/** 2 秒ぶんを繰り返し流す (作り置きの時刻のまま。キーフレームから入り直すので、圧縮の待ちは積み増していく) */
 function feedRounds(video: Fmp4Video, rounds: number): void {
   for (let i = 0; i < rounds; i++) for (const data of media) video.feed(data);
 }
 
 describe("Fmp4Video (追っかけで抱えきれないとき)", () => {
-  test("上限を超えたら full を1回だけ返し、以降は音も映像も捨てる。リクエストし直せば戻る", () => {
+  test("上限を超えたら full を 1 回だけ返し、以降は音も映像も捨てる。リクエストし直せば戻る", () => {
     const { video, seen } = watcher(true);
     video.feed(init);
-    // 作り置きは 2秒で 140KB ほど。120MB を超えるまで流す
+    // 作り置きは 2 秒で 140KB ほど。120MB を超えるまで流す
     for (let round = 0; round < 2_000 && seen.full === 0; round++)
       feedRounds(video, 1);
     expect(seen.full).toBe(1);
@@ -181,7 +181,7 @@ describe("Fmp4Video (描く大きさ)", () => {
 });
 
 /**
- * **音の開き方と1コマの形** (`audioCodec`・`audioFrame`)。canvas に描く worker とライブの音だけの worker が
+ * **音の開き方と 1 コマの形** (`audioCodec`・`audioFrame`)。canvas に描く worker とライブの音だけの worker が
  * 同じものを使う。作り置きの H.264 は AAC、AV1 は Opus (本物の ffmpeg が書いたもの)
  */
 describe("audioCodec・audioFrame", () => {
@@ -197,7 +197,7 @@ describe("audioCodec・audioFrame", () => {
     return { track, sample };
   };
 
-  test("AAC は設定なしで開き、1コマに ADTS の頭 (7バイト。長さは頭を含む) を付ける", () => {
+  test("AAC は設定なしで開き、1 コマに ADTS のヘッダ (7 バイト。長さはヘッダを含む) を付ける", () => {
     const { track, sample } = audioOf("live-h264.mp4");
     expect(audioCodec(track)).toEqual({ codec: "aac", config: null });
     const frame = audioFrame(track, sample.data)!;
@@ -209,7 +209,7 @@ describe("audioCodec・audioFrame", () => {
     expect(frame.subarray(7)).toEqual(sample.data);
   });
 
-  test("Opus は OpusHead を添えて開き、1コマはそのまま渡す", () => {
+  test("Opus は OpusHead を添えて開き、1 コマはそのまま渡す", () => {
     const { track, sample } = audioOf("live-av1.mp4");
     const open = audioCodec(track)!;
     expect(open.codec).toBe("opus");
