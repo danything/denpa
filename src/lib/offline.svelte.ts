@@ -13,6 +13,7 @@
 import { browser } from "$app/env";
 import { resolve } from "$app/paths";
 
+import { afterPrevious } from "./after-previous";
 import {
   clearParts,
   downloadRequests,
@@ -411,7 +412,7 @@ async function startSave(
 
   if (byPage) {
     // 対応していないブラウザ。タブを開いたまま、ページで落とす (終わりは待たない)
-    void downloadInPage(held, requests, videoSize);
+    downloadInPage(held, requests, videoSize);
     return "page";
   }
 
@@ -427,6 +428,9 @@ async function startSave(
       ...(total === null ? {} : { downloadTotal: Math.round(total * 1.02) }),
     },
   );
+  // 前にページで受け取った塊が残っていたら捨てる (この行はもう塊を持たない)。
+  // 預けるのに失敗したときは前の行に戻すので、預けられたあとで捨てる
+  await clearParts(rec.id).catch(() => {});
   watchProgress(running);
   return "background";
 }
@@ -460,15 +464,39 @@ function stopInPage(id: number): void {
  * **付属のデータは動画と同時に取得する。** 字幕はサーバが録画から抜き出すので数秒かかる。
  * 動画の後に取得していた頃は、100% になってからしばらく「保存中」のままだった
  */
-async function downloadInPage(
+function downloadInPage(
   held: OfflineVideo,
   requests: string[],
   videoSize: number | null,
-): Promise<void> {
+): void {
   stopInPage(held.id);
+  // 前の試みが終わるのを待ってから始める。abort しても書きかけの `putPart` は終わるまで
+  // 続くので、待たずに `clearParts` すると、そのあとに古い塊が書かれて余分な番号が残る
   const control = new AbortController();
   inPage.set(held.id, control);
+  void afterPrevious(
+    finishing,
+    held.id,
+    () => receiveInPage(held, requests, videoSize, control),
+    (error) => console.warn("端末への保存が止まりました", error),
+  );
+}
+
+/** ページで受け取っている最中、または後始末の最中の試み (番号ごと。終わるまで次を始めない) */
+const finishing = new Map<number, Promise<void>>();
+
+async function receiveInPage(
+  held: OfflineVideo,
+  requests: string[],
+  videoSize: number | null,
+  control: AbortController,
+): Promise<void> {
   const { signal } = control;
+  // 待っている間に取り消された・やり直された。何も始めない
+  if (signal.aborted) {
+    if (inPage.get(held.id) === control) inPage.delete(held.id);
+    return;
+  }
   /** どれかが失敗したか (取り消しとは区別する。どちらも `signal` は abort される) */
   let failure = null as { error: unknown } | null;
   /** 1つ受け取る。動画は塊ごとに書き、付属のデータは仕分ける */
@@ -541,7 +569,10 @@ async function downloadInPage(
   } finally {
     if (inPage.get(held.id) === control) inPage.delete(held.id);
   }
-  await refresh();
+  // 一覧の読み直しに失敗しても、行は保存できている。画面は次の読み直しで追いつく
+  await refresh().catch((error: unknown) =>
+    console.warn("一覧を読み直せませんでした", error),
+  );
 }
 
 /** 端末から消して、**次にオンラインへ戻ったときサーバからも消す** (outbox) */
