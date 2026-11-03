@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { eq } from "drizzle-orm";
 
@@ -43,6 +43,8 @@ config.dbPath = join(
   mkdtempSync(join(tmpdir(), "denpa-record-airing-")),
   "denpa.db",
 );
+// 置き場 (組んだエージェントの証明書など) も同じ一時ディレクトリに。既定の /data は CI では書けない
+config.dataDir = dirname(config.dbPath);
 config.agentUrl = fakeAgentUrl(agent.port!);
 trustFakeAgent();
 

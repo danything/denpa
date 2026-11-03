@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
 import {
@@ -199,6 +202,8 @@ describe("openChannelStream の引き継ぎ", () => {
     const { config } = await import("./config");
     const before = config.agentUrl;
     config.agentUrl = fakeAgentUrl(agent.port!);
+    // 組んだエージェントの証明書を置く所。既定の /data は CI では書けない
+    config.dataDir = mkdtempSync(join(tmpdir(), "denpa-tuner-"));
     trustFakeAgent();
     try {
       const aborter = new AbortController();
