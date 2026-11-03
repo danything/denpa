@@ -63,6 +63,12 @@ spec:
           # OIDC。中身は SopsSecret (deploy/secrets.sops.yaml) が作る Secret
           oidcSecretName: denpa-oidc
 
+        agent:
+          # エージェントと組む合言葉。SopsSecret (deploy/pair.sops.yaml) が作る Secret を使う。
+          # chart に作らせないのは、この ArgoCD が Secret を同期しない (resource.exclusions) ため。
+          # 2026-11-03 にこれで chart の Secret が作られず、denpa とエージェントが起動できなかった
+          pairSecret: denpa-agent-pair
+
         persistence:
           storageClassName: local-path
           # **「git で消したものは消える」を優先する** という判断
@@ -148,11 +154,3 @@ spec:
         # dataSourceRef(VolSync の populator)は作るときにしか書けない。今ある PVC には当てない
         - /spec/dataSourceRef
         - /spec/dataSource
-    # **エージェントと組む合言葉は最初に作ったものを残す。** chart はクラスタの Secret を lookup で読み直して
-    # 変えない作りだが、ArgoCD はクラスタを見ずに描くので、描くたびに新しい値になる。そのまま当てると
-    # ずっと差分が出たうえ、Secret が変わるたびに Reloader が denpa を入れ替える (charts/denpa/values.yaml の agent の説明)
-    - group: ""
-      kind: Secret
-      name: tuner-agent-pair
-      jsonPointers:
-        - /data

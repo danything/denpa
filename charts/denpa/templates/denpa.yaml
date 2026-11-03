@@ -53,7 +53,7 @@ spec:
             # (Kubernetes が展開するのは、同じコンテナで先に書いた変数だけなので、この順のまま)
             - name: AGENT_PAIR_TOKEN
               valueFrom:
-                secretKeyRef: { name: tuner-agent-pair, key: token }
+                secretKeyRef: { name: {{ include "denpa.pairSecretName" . }}, key: token }
             - name: TUNER_AGENT_URL
               value: "https://tuner-agent:25252#pair=$(AGENT_PAIR_TOKEN)"
             # 置き場所は既定値がそのままこの構成になっている (src/lib/server/config.ts)。

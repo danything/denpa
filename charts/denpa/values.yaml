@@ -89,14 +89,15 @@ denpa:
   tolerations: []
   affinity: {}
 
-# エージェントは組んだ denpa (クライアント証明書) にしか答えない。組むときの合言葉は chart が Secret
-# `tuner-agent-pair` に作り、両方の Pod へ渡す (templates/pair.yaml。docs/agent.md)。値は書かなくてよい。
-# **1度作った合言葉はクラスタの Secret から読み直して変えない** (lookup)。ただし ArgoCD はクラスタを見ずに描くので、
-# 描くたびに新しい値になり、ずっと差分が出る (Reloader を入れていれば denpa も入れ替わり続ける)。
-# ArgoCD では Application に次を書き、最初に作った値を残す (このリポジトリの deploy/application.yaml):
-#   syncOptions: [RespectIgnoreDifferences=true]
-#   ignoreDifferences: [{group: "", kind: Secret, name: tuner-agent-pair, jsonPointers: [/data]}]
+# エージェントは組んだ denpa (クライアント証明書) にしか答えない。組むときの合言葉は Secret の `token` に置き、
+# 両方の Pod へ渡す (docs/agent.md)。
 agent:
+  # **合言葉を置く Secret の名前。** 空なら chart が `tuner-agent-pair` に作り、上げ直しても変えない (templates/pair.yaml・lookup)。
+  # 名前を書いたら chart は作らず、その Secret (キーは `token`。32 字以上の乱数) を使う。
+  # GitOps で使うときはこちら: ArgoCD はクラスタを見ずに描くので、chart に作らせると描くたびに値が変わる。
+  # 秘密を SOPS などで別に持ち、ArgoCD が Secret を同期しない設定 (resource.exclusions) なら、chart の Secret はそもそも作られない
+  # (このリポジトリの deploy/application.yaml と deploy/pair.sops.yaml)
+  pairSecret: ""
   # チューナーとカードリーダーに触るために特権が要る
   privileged: true
   # ホストのデバイス。/dev/bus (USB) と /dev/dvb (DVB 型のチューナー)

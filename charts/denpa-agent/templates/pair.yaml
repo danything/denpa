@@ -1,5 +1,6 @@
-# denpa と組むときの合言葉 (values.yaml の pairToken。docs/agent.md)。エージェントには AGENT_PAIR_TOKEN で渡し、
+# denpa と組むときの合言葉 (values.yaml の pairSecret が空のときだけ作る。docs/agent.md)。エージェントには AGENT_PAIR_TOKEN で渡し、
 # denpa の TUNER_AGENT_URL には #pair= で書く (読み方は NOTES.txt)
+{{- if not .Values.pairSecret }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -10,3 +11,4 @@ metadata:
 type: Opaque
 data:
   token: {{ include "denpa-agent.pairToken" . | b64enc | quote }}
+{{- end }}
