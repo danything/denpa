@@ -135,6 +135,11 @@ DB 名 `denpa-offline`、ストア4つ (実体は [offline-db.ts](../src/lib/off
   互換モードでは保存した Matroska をそのまま canvas に描く (`mkv-source.ts`。[stream.md](stream.md#録画の観る画面も-canvas-に描く))。
 - **オフラインの `/offline`** は素の `<video controls>` で、動画だけを流す
   (字幕・チャプター・データ放送は保存してあっても使わない)。位置は5秒ごとに `resume` ストアへ。
+  **`<video>` が `error` を返したら canvas に描く** (観る画面の互換モードと同じエンジン。`canvas-player.ts`・`mkv-source.ts`)。
+  保存したものは Matroska で、iPhone の Safari の `<video>` は Matroska を読めない (再生ボタンに斜線が出るだけだった)。
+  読めるかを `canPlayType` で前もって調べても当てにならない (Chrome は再生できるのに読めないと答える) ので、渡して
+  `error` イベントが起きたら移る。canvas のときは再生・一時停止・位置のつまみ・時刻を自前で出す。音のデコーダ
+  (`/api/live/mpeg2/decoder.{mjs,wasm}`) は SW が install 時にキャッシュし、繋がらないときはキャッシュから返す (`/api/` で唯一キャッシュするもの)
 - 使い終わったら `URL.revokeObjectURL` する。
 
 ### 削除とサーバ同期

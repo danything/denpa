@@ -30,6 +30,7 @@ import { CLOCK, WRAP } from "@danything/arib/pes";
 import type { AudioSide } from "#lib/arib.js";
 import { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
+import { mayRead } from "#lib/read-ahead.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import {
   busyAnswer,
@@ -47,6 +48,8 @@ const TARGET = 1;
 const AHEAD: Record<RawInput, number> = { fmp4: 30, mkv: 30, "ts-mpeg2": 10 };
 /** デコードし始める前に渡しておく上限 (バイト)。デコーダを読み終えるまでは、手元の尺で測れない */
 const EARLY_BYTES = 8 * 1024 * 1024;
+/** `bytesPerSecond` で抑えるときも、ここまでは読む (バイト。頭と最初のキーフレームが入る量) */
+const RATE_FLOOR = 2 * 1024 * 1024;
 /** 読むのを待つときの間 (ms) */
 const WAIT = 100;
 /** 時計を画面へ配る間 (ms)。字幕の貼り直し・CM の跨ぎ・データ放送はこれで回る */
@@ -67,6 +70,11 @@ interface CanvasOptions {
   request(from: number, audio: string, signal: AbortSignal): Promise<Response>;
   /** 尺 (秒)。**ここまで飛んだらリクエストせずに終わりにする** (`<video>` が尻へ飛ぶと `ended` になるのと同じ) */
   duration: number;
+  /**
+   * 読み込み元の平均の速さ (バイト/秒)。読むのが速すぎる元 (端末に保存した録画の Blob) だけ渡す。
+   * 渡すと、観ている位置より `AHEAD` 秒ぶん (の 1.5 倍) 先までしか読まない (`room`)
+   */
+  bytesPerSecond?: number;
   /** 観はじめる位置 (秒) */
   start: number;
   audio: string;
@@ -166,6 +174,8 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
   let closed = false;
   /** リクエストし直してから渡したバイト数 (デコードし始める前の区切り。`EARLY_BYTES`) */
   let fed = 0;
+  /** リクエストし直した位置 (秒)。そこから観た長さぶんだけ先へ読む (`bytesPerSecond`) */
+  let loadedFrom = options.start;
   /** 貯めを使い切って止まっているか (読み込み中の輪) */
   let starving = false;
 
@@ -230,12 +240,28 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     return time;
   }
 
-  /** 先へ読んでよいか。**手元の尺が `AHEAD` を超えたら待つ** (デコードし始める前はバイト数で) */
+  /**
+   * 先へ読んでよいか。**手元の尺が `AHEAD` を超えたら待つ** (デコードし始める前はバイト数で)。
+   *
+   * **端末に保存した録画はバイト数でも抑える** (`bytesPerSecond`)。手元の尺は worker がデコードして返してから
+   * 伸びるので、ネットワークより速く読める Blob はその前に尻まで読めてしまう。900MB を一度に worker へ
+   * 渡すと、返ってくる音の知らせで画面の処理が詰まって描き直せず (音は途切れる)、映像が溜まりすぎて `full`
+   * になり、同じ所から読み直していた (iPhone で真っ黒のまま音だけ進んだ)
+   */
   async function room(mine: number): Promise<void> {
+    const rate = options.bytesPerSecond;
     for (;;) {
       if (mine !== run) return;
-      const lead = engine.lead;
-      if (lead < AHEAD[input] && (lead > 0 || fed < EARLY_BYTES)) return;
+      const ok = mayRead({
+        lead: engine.lead,
+        ahead: AHEAD[input],
+        fed,
+        early: EARLY_BYTES,
+        played: Math.max(0, position() - loadedFrom),
+        bytesPerSecond: rate,
+        floor: RATE_FLOOR,
+      });
+      if (ok) return;
       await new Promise((resolve) => setTimeout(resolve, WAIT));
     }
   }
@@ -249,6 +275,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     // 飛んだ。前の音はすぐ止める (映像は次が描けるまで前のまま)
     engine.reset();
     time = from;
+    loadedFrom = from;
     fed = 0;
     /*
      * **尻 (の手前 `END_EDGE`) へ飛んだらリクエストせずに終わり** — 最後が CM の録画で CM を飛ばした・シークバーを
