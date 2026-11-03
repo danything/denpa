@@ -165,6 +165,13 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         return found;
     }
 
+    /// <summary>
+    /// 挿さっている USB 機材のパスを並べたもの。**抜き差しが起きたかを見比べるためだけ** (DeviceWatch.cs)。
+    /// 機材は開かない
+    /// </summary>
+    public static string Fingerprint() =>
+        string.Join("\n", Interfaces(UsbDeviceInterface).Select(found => found.Path).Order(StringComparer.OrdinalIgnoreCase));
+
     /// <summary>インターフェースのパスと、その機材の最初の場所の文字列</summary>
     private static List<(string Path, string? Location)> Interfaces(Guid guid)
     {

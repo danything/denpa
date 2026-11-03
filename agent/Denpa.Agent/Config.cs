@@ -192,6 +192,26 @@ public sealed class Config(string tunersFile, string channelsFile)
     }
 
     /// <summary>
+    /// 挿した機材のうち、定義に足すもの。**前に探したときに無かった (いま挿された) 機材だけ**を足す。
+    /// 挿したままの機材を定義から消したら、挿し直すまで戻さない (消したのに勝手に戻ると、消せない)。
+    /// 名前は定義の中で重ならないようにする (チューナーを名前で見分ける。TunerPool.Replace)
+    /// </summary>
+    public static List<TunerSpec> Additions(IReadOnlyList<TunerSpec> written, IReadOnlyList<TunerSpec> found, IReadOnlySet<string?> seen)
+    {
+        var known = written.Select(tuner => tuner.Device).ToHashSet();
+        var names = written.Select(tuner => tuner.Name).ToHashSet();
+        var added = new List<TunerSpec>();
+        foreach (var tuner in found.Where(tuner => !seen.Contains(tuner.Device) && !known.Contains(tuner.Device)))
+        {
+            var name = tuner.Name;
+            for (var n = 2; names.Contains(name); n++) name = $"{tuner.Name} ({n})";
+            names.Add(name);
+            added.Add(tuner with { Name = name });
+        }
+        return added;
+    }
+
+    /// <summary>
     /// 機材を決める。**書いてあればそれ、無ければ自分で見つける。**
     ///
     /// <para>

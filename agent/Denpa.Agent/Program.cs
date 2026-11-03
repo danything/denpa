@@ -172,6 +172,43 @@ void PrepareDaemons()
     UserlandDaemon.Prepare(AsicenUserland.IdsIn(pool.Tuners).ToList(), AsicenDaemon.For);
 }
 
+/*
+ * **挿した機材を、そのまま使えるようにする** (DeviceWatch が抜き差しを受け取ったら呼ぶ)。
+ * 定義を書いてあれば、前に探したときに無かった (いま挿された) 機材を、有効なチューナーとして末尾に書き足す
+ * (Config.Additions)。抜いた機材は定義から消さない (挿し直したときに名前や「使う」の設定が戻るように)。
+ * 定義を書いていなければ、見つけたもので置き換える。
+ * 画面からの書き換え (PUT /denpa/tuners) と同じロックで、書き足しと書き換えが混ざらないようにする
+ */
+var tunersGate = new Lock();
+// 前に探したときに挿さっていた機材。起きたときに挿さっていたものは、挿されたとは数えない
+HashSet<string?> seen = [];
+void Rescan()
+{
+    lock (tunersGate)
+    {
+        var found = DeviceProbe.Detect();
+        var written = config.LoadTuners();
+        var added = Config.Additions(written, found, seen);
+        seen = [.. found.Select(tuner => tuner.Device)];
+        if (written.Count == 0)
+        {
+            if (found.Select(tuner => tuner.Device).SequenceEqual(pool.Tuners.Select(tuner => tuner.Device))) return;
+            Log.Write($"挿さっている機材が変わりました ({found.Count} 台)");
+            pool.Replace(found);
+        }
+        else
+        {
+            if (added.Count == 0) return;
+            foreach (var tuner in added) Log.Write($"挿した機材を定義に足しました: {tuner.Name} [{string.Join(", ", tuner.Types)}] {tuner.Device}");
+            config.SaveTuners([.. written, .. added]);
+            var (resolved, auto) = config.ResolveTuners();
+            pool.Detected = auto;
+            pool.Replace(resolved);
+        }
+    }
+    PrepareDaemons();
+}
+
 var builder = WebApplication.CreateSlimBuilder(args);
 // 鍵を配るポートだけは待ち受けを自分で作る (IPv4 と IPv6 を分けて TTL を付ける。CardShareServer.cs)
 if (sharing is { } server) builder.WebHost.UseSockets(sockets => sockets.CreateBoundListenSocket = server.Bind);
@@ -430,10 +467,13 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
         return;
     }
 
-    config.SaveTuners([.. next.OfType<TunerSpec>()]);
-    var (resolved, auto) = config.ResolveTuners();
-    pool.Detected = auto;
-    pool.Replace(resolved);
+    lock (tunersGate)
+    {
+        config.SaveTuners([.. next.OfType<TunerSpec>()]);
+        var (resolved, auto) = config.ResolveTuners();
+        pool.Detected = auto;
+        pool.Replace(resolved);
+    }
     // 新しく書かれた筐体があれば px4d / asicend を起こす。数秒かかるので返事は待たせない
     _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, TunerList());
@@ -515,6 +555,20 @@ _ = Task.Run(() =>
 });
 
 /*
+ * 機材の抜き差しを受け取ったら、定義に足す (Rescan。DeviceWatch.cs)。偽の選局で動かす適合テストでは受け取らない。
+ * 先にいま挿さっている機材を控えてから受け取り始める (起きたときに挿さっていたものを、挿されたと数えない)
+ */
+DeviceWatch? watch = null;
+if (tune.FakeTune is null)
+{
+    _ = Task.Run(() =>
+    {
+        lock (tunersGate) seen = [.. DeviceProbe.Detect().Select(tuner => tuner.Device)];
+        watch = new DeviceWatch(Rescan);
+    });
+}
+
+/*
  * **選局を離すのは `ApplicationStopping` で。** これが来るのは `Drain` が録画を待ち終えてからなので、録画は切らない
  * (止まれの合図のその場で来ていた頃は、録画中のチューナーまで離していた。上の 30 分番組はこれ)。
  * ここで離さないと、番組表やライブの選局が残っている間 Kestrel が 30 秒待ち、そのぶん入れ替えの隙間が伸びる。
@@ -551,6 +605,8 @@ if (sharing is not null)
 if (cardUrl is { Length: > 0 }) Log.Write($"鍵を {cardUrl} から受け取ります (TTL {cardLan.Hops})");
 Log.Write($"チューナー {pool.Tuners.Count} 台 / チャンネル {config.LoadChannels().Count} 件");
 await app.RunAsync();
+// 抜き差しを受け取るもの (タイマーと inotify) を、止まるまで手放さない
+watch?.Dispose();
 return 0;
 
 /// <summary>HTTP に JSON を書く / 読む。中身の作りは <see cref="Json"/></summary>

@@ -311,6 +311,10 @@ public class DeviceStreamPipedTests
         var (read, left) = await reading.WaitAsync(TimeSpan.FromSeconds(5), cancel);
 
         await Assert.That(read).IsEqualTo(0);
-        await Assert.That(left).IsLessThan(TimeSpan.FromMilliseconds(100));
+        /*
+         * 200ms ごとに起きるだけなら、止めてから戻るまで 180ms ほど掛かる。それより短ければ止めたことで起きている。
+         * 100ms にしていた頃は、混んだ Windows のランナーで 131ms になって落ちた (起きてから戻るまでのスレッドの待ち)
+         */
+        await Assert.That(left).IsLessThan(TimeSpan.FromMilliseconds(160));
     }
 }
