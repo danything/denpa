@@ -649,63 +649,6 @@ describe("チューナー", () => {
     stream.close();
   });
 
-  /** デバッグ用の名指し。指定のチューナーだけを使い、ほかへ振り替えない */
-  test("tuner を指定すると、順位が後ろでもそのチューナーで選局する", async () => {
-    const status = await tuners();
-    expect(status.map((t) => t.pin)).toEqual(["gr0", "bs0", "bs1", "off0"]);
-    const stream = await open(
-      "type=BS&channel=BS11:18000&use=pin%201&priority=5&tuner=bs1",
-    );
-    expect(stream.status).toBe(200);
-    await stream.reader?.read();
-
-    const after = await tuners();
-    expect(after[1].users).toEqual([]);
-    expect(after[2].users.map((u) => u.use)).toEqual(["pin 1"]);
-    stream.close();
-  });
-
-  test("tuner を指定しても、同じチャンネルをほかのチューナーが読んでいれば共有せず、指定のチューナーで選局する", async () => {
-    const a = await open(
-      "type=BS&channel=BS11:18000&use=pin%202&priority=5&tuner=bs0",
-    );
-    await a.reader?.read();
-    const b = await open(
-      "type=BS&channel=BS11:18000&use=pin%203&priority=5&tuner=bs1",
-    );
-    expect(b.status).toBe(200);
-    await b.reader?.read();
-
-    const status = await tuners();
-    expect(status[1].users.map((u) => u.use)).toEqual(["pin 2"]);
-    expect(status[2].users.map((u) => u.use)).toEqual(["pin 3"]);
-    a.close();
-    b.close();
-  });
-
-  test("tuner が無い・無効・その種別を受けられないときは 400 で理由を返す", async () => {
-    for (const tuner of ["none", "off0", "gr0"]) {
-      const res = await open(
-        `type=BS&channel=BS11:18000&use=pin%204&priority=5&tuner=${tuner}`,
-      );
-      expect(res.status).toBe(400);
-    }
-  });
-
-  test("指定のチューナーを同じか優先度の高い相手が使っていれば、空きがあっても 409 で断る", async () => {
-    const holder = await open(
-      "type=BS&channel=BS11:18000&use=rec%209&priority=10&tuner=bs1",
-    );
-    await holder.reader?.read();
-    const res = await open(
-      "type=BS&channel=BS03:16432&use=pin%205&priority=5&tuner=bs1",
-    );
-    expect(res.status).toBe(409);
-    // 空いている bs0 には振り替えない
-    expect((await tuners())[1].users).toEqual([]);
-    holder.close();
-  });
-
   /** 同じ物理チャンネルなら選局は 1 本で足りる */
   test("同じチャンネルなら選局を共有する。チューナーは増えない", async () => {
     const a = await open("type=GR&channel=T21&use=rec%201&priority=10");
@@ -1513,4 +1456,79 @@ describe("止まれと言われたとき", () => {
       await stop();
     }
   }, 60_000);
+});
+
+/**
+ * デバッグ用の名指し。**ファイルの最後に置く** — 名指しで使ったチューナーに選局が余韻で残るので、
+ * 前提が崩れる (空いているチューナーが使われていない、など) テストが後ろにあると巻き込む。
+ */
+describe("チューナーの名指し", () => {
+  // 前の描画で定義を書き換えていても、顔ぶれ (gr0 / bs0 / bs1 / off0) をそろえてから始める
+  beforeAll(async () => {
+    const put = await request("PUT", "/denpa/tuners", {
+      tuners: [
+        { name: "gr0", types: ["GR"] },
+        { name: "bs0", types: ["BS", "CS"] },
+        { name: "bs1", types: ["BS", "CS"] },
+        { name: "off0", types: ["GR"], disabled: true },
+      ],
+    });
+    expect(put.status).toBe(200);
+  });
+
+  test("tuner を指定すると、順位が後ろでもそのチューナーで選局する", async () => {
+    const status = await tuners();
+    expect(status.map((t) => t.pin)).toEqual(["gr0", "bs0", "bs1", "off0"]);
+    const stream = await open(
+      "type=BS&channel=BS11:18000&use=pin%201&priority=5&tuner=bs1",
+    );
+    expect(stream.status).toBe(200);
+    await stream.reader?.read();
+
+    const after = await tuners();
+    expect(after[1].users).toEqual([]);
+    expect(after[2].users.map((u) => u.use)).toEqual(["pin 1"]);
+    stream.close();
+  });
+
+  test("tuner を指定しても、同じチャンネルをほかのチューナーが読んでいれば共有せず、指定のチューナーで選局する", async () => {
+    const a = await open(
+      "type=BS&channel=BS11:18000&use=pin%202&priority=5&tuner=bs0",
+    );
+    await a.reader?.read();
+    const b = await open(
+      "type=BS&channel=BS11:18000&use=pin%203&priority=5&tuner=bs1",
+    );
+    expect(b.status).toBe(200);
+    await b.reader?.read();
+
+    const status = await tuners();
+    expect(status[1].users.map((u) => u.use)).toEqual(["pin 2"]);
+    expect(status[2].users.map((u) => u.use)).toEqual(["pin 3"]);
+    a.close();
+    b.close();
+  });
+
+  test("tuner が無い・無効・その種別を受けられないときは 400 で理由を返す", async () => {
+    for (const tuner of ["none", "off0", "gr0"]) {
+      const res = await open(
+        `type=BS&channel=BS11:18000&use=pin%204&priority=5&tuner=${tuner}`,
+      );
+      expect(res.status).toBe(400);
+    }
+  });
+
+  test("指定のチューナーを同じか優先度の高い相手が使っていれば、空きがあっても 409 で断る", async () => {
+    const holder = await open(
+      "type=BS&channel=BS11:18000&use=rec%209&priority=10&tuner=bs1",
+    );
+    await holder.reader?.read();
+    const res = await open(
+      "type=BS&channel=BS03:16432&use=pin%205&priority=5&tuner=bs1",
+    );
+    expect(res.status).toBe(409);
+    // 空いている bs0 には振り替えない
+    expect((await tuners())[1].users).toEqual([]);
+    holder.close();
+  });
 });
