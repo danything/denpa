@@ -181,8 +181,11 @@ jobs:
           if ($found) { throw "PSScriptAnalyzer: $($found.Count) findings" }
 
       # Mac で denpa 本体を起こす compose。Mac のランナーには Docker が無いので、書き方だけここで見る
+      # 合言葉は install.sh が ~/denpa/.env に作る。ここでは仮の値を渡し、無いときに止まることも見る
       - name: Mac compose file is valid
-        run: docker compose -f compose.mac.yml config -q
+        run: |
+          AGENT_PAIR_TOKEN=x docker compose -f compose.mac.yml config -q
+          if docker compose -f compose.mac.yml config -q 2>/dev/null; then exit 1; fi
 
       - name: install.sh end to end
         env:
@@ -191,7 +194,13 @@ jobs:
           set -euo pipefail
           bash install.sh --no-open
           curl -fsS http://localhost:3000/api/health; echo
-          curl -fsS http://127.0.0.1:25252/denpa/tuners; echo
+          # 組むときの合言葉 (~/denpa/.env) が、エージェントには AGENT_PAIR_TOKEN、denpa には TUNER_AGENT_URL の #pair= で届いている。
+          # 組めるかまでは見ない (イメージはコミットではなく latest なので、エージェントと denpa の作りがこのコミットと揃わない)
+          token=$(sed -n 's/^AGENT_PAIR_TOKEN=//p' ~/denpa/.env)
+          test "${#token}" = 43
+          env_of() { docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(cd ~/denpa && docker compose ps -q "$1")"; }
+          env_of tuner-agent | grep -qxF "AGENT_PAIR_TOKEN=$token"
+          env_of denpa | grep -qxF "TUNER_AGENT_URL=https://tuner-agent:25252#pair=$token"
           # ランナーの 80 / 443 は空いているので genkan が入り、http://denpa.localhost で開ける
           curl -fsS --resolve denpa.localhost:80:127.0.0.1 http://denpa.localhost/api/health; echo
           # 画面はログインなしで開ける: genkan 越しは、install.sh が書いた TRUSTED_PROXIES と genkan のゲートウェイで。
@@ -203,6 +212,8 @@ jobs:
           cp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
           bash install.sh --no-open
           cmp ~/denpa/compose.override.yml "$RUNNER_TEMP/override"
+          # 合言葉は上げ直しても変えない
+          test "$(sed -n 's/^AGENT_PAIR_TOKEN=//p' ~/denpa/.env)" = "$token"
           # 自分で書いた compose.yml は退けずに上書きする
           test ! -e ~/denpa/compose.yml.bak
           bash install.sh --uninstall
@@ -307,18 +318,36 @@ jobs:
         run: |
           set -euo pipefail
           ./out/denpa-agent --card || true
-          # 同じ Mac の Docker の denpa と組むときと同じく、ループバックでだけ待ち受ける (install.sh)
-          AGENT_PORT=25300 AGENT_HOST=127.0.0.1 ./out/denpa-agent > agent.log 2>&1 &
+          # 同じ Mac の Docker の denpa と組むときと同じく、ループバックでだけ待ち受ける (install.sh)。
+          # 置き場は ~/denpa/config と分ける (あとの install.sh が「まだ誰とも組んでいない」から始められるように)
+          smoke="$RUNNER_TEMP/smoke"
+          mkdir -p "$smoke"
+          export AGENT_PORT=25300 AGENT_HOST=127.0.0.1 TUNERS_FILE="$smoke/tuners.json" CHANNELS_FILE="$smoke/channels.json"
+          AGENT_PAIR_TOKEN=smoke-token ./out/denpa-agent > agent.log 2>&1 &
           pid=$!
-          for _ in $(seq 30); do curl -fsS http://127.0.0.1:25300/denpa/tuners > tuners.json 2>/dev/null && break; sleep 1; done
+          # 自分の証明書で聞く (組まなくてよい)。macOS の TLS (Security.framework) で HTTPS を受けられることもここで見る
+          for _ in $(seq 30); do ./out/denpa-agent --status > tuners.json 2>/dev/null && break; sleep 1; done
           echo "tuners: $(cat tuners.json)"
-          curl -fsS http://127.0.0.1:25300/denpa/card | tee card.json; echo
           jq -e '.tuners | type == "array"' tuners.json
+          # denpa と同じように組む: 拡張の無い自己署名の証明書を作り、合言葉から proof を作って POST /denpa/pair
+          printf '[req]\ndistinguished_name = dn\n[dn]\n' > "$smoke/client.cnf"
+          openssl ecparam -name prime256v1 -genkey -noout -out "$smoke/client.key"
+          openssl req -config "$smoke/client.cnf" -new -x509 -key "$smoke/client.key" -out "$smoke/client.crt" -days 2 -subj /CN=denpa
+          fp() { openssl x509 -in "$1" -outform der | shasum -a 256 | cut -d' ' -f1; }
+          agent=$(fp "$smoke/tls/agent.crt")
+          client=$(fp "$smoke/client.crt")
+          proof=$(printf 'denpa-pair/client\n%s\n%s' "$agent" "$client" | openssl dgst -sha256 -hmac smoke-token -binary | base64 | tr '+/' '-_' | tr -d '=')
+          # 名前は見ない (denpa は agent.crt そのものを ca にする)。ここでは curl の名前の確かめを外すだけ
+          call() { curl -fsS -k --cert "$smoke/client.crt" --key "$smoke/client.key" "$@"; }
+          # 組む前は 403、クライアント証明書を出さなければ TLS の段で落ちる
+          test "$(curl -s -k -o /dev/null -w '%{http_code}' --cert "$smoke/client.crt" --key "$smoke/client.key" https://127.0.0.1:25300/denpa/card)" = 403
+          if curl -fsS -k --max-time 5 https://127.0.0.1:25300/denpa/card; then exit 1; fi
+          call -H 'Content-Type: application/json' -d "{\"client\":\"$client\",\"proof\":\"$proof\"}" https://127.0.0.1:25300/denpa/pair; echo
+          grep -qxF "$client" "$smoke/tls/clients"
+          call https://127.0.0.1:25300/denpa/card | tee card.json; echo
           jq -e '.ok == false and (.readers | type == "array")' card.json
-          # 本文を読む API は JSON と名乗ったものしか受けない (docs/agent.md「エージェントは認証を持たない」)
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: text/plain' -d '{}' http://127.0.0.1:25300/denpa/decode)" = 415
           # 自分のこと (About.cs)。macOS では CCID ドライバも (`defaults` をここで実際に起こす)
-          curl -fsS http://127.0.0.1:25300/denpa/about | tee about.json; echo
+          call https://127.0.0.1:25300/denpa/about | tee about.json; echo
           jq -e '.version == "dev" and .os == "macos" and .arch == "arm64" and (.ccidDriver == "apple" or .ccidDriver == "ifd-ccid")' about.json
           # SIGTERM で畳めること (録画していなければすぐ終わる)
           kill -TERM "$pid"
@@ -335,7 +364,20 @@ jobs:
           set -euo pipefail
           tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent
           DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" bash install.sh --no-docker
-          curl -fsS http://127.0.0.1:25252/denpa/card; echo
+          # install.sh は denpa-agent --status で応答を確かめている (API は組んだ denpa にしか答えない)。
+          # 合言葉 (~/denpa/.env) がエージェント自身の置き場 (config/tls/pair-token) に同じ値で書かれ、エージェントがそれを読んで
+          # 組むための URL をログに出していること (まだ誰とも組んでいないので出す。docs/agent.md)
+          token=$(sed -n 's/^AGENT_PAIR_TOKEN=//p' "$HOME/denpa/.env")
+          test "${#token}" = 43
+          test "$(cat "$HOME/denpa/config/tls/pair-token")" = "$token"
+          if grep -q AGENT_PAIR_TOKEN "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"; then exit 1; fi
+          for _ in $(seq 15); do grep -qF "#pair=$token" "$HOME/Library/Logs/denpa-agent.log" && break; sleep 1; done
+          grep -qF "#pair=$token" "$HOME/Library/Logs/denpa-agent.log"
+          # 平文の HTTP には答えない
+          if curl -fsS --max-time 5 http://127.0.0.1:25252/denpa/card; then exit 1; fi
+          # 上げ直しても合言葉は変えない
+          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" bash install.sh --no-docker
+          test "$(sed -n 's/^AGENT_PAIR_TOKEN=//p' "$HOME/denpa/.env")" = "$token"
           ls -l "$HOME/Library/Application Support/denpa-agent/px4-userland" "$HOME/Library/Application Support/denpa-agent/siano-userland"
           # libusb は中に抱えている (Homebrew のものに繋がない)。ランナーには Homebrew の libusb が
           # 入りうるので、動いたことでは確かめられない。繋ぎ先を直に見る
@@ -439,24 +481,57 @@ jobs:
 
       # **このジョブの PowerShell の段には日本語を書かない** (5.1 が ANSI で読んで、引用符が崩れうる)
       # 何も設定せずに起こす。チューナーは自動検出で空、カードはリーダーが無いので ok:false が返るはず。
-      # **落ちずに答える**ことを見る。WinSCard (winscard.dll) をここで実際に引く
+      # **落ちずに答える**ことを見る。WinSCard (winscard.dll) をここで実際に引く。
+      # HTTPS (SChannel) で受けて、denpa と同じように組めることもここで見る (docs/agent.md「denpa とは TLS で組む」)。
+      # 組む手順は .NET の暗号を直に使うので pwsh (PowerShell 7) で流す
       - name: Smoke test (published binary)
-        shell: powershell
+        shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           & .\out\denpa-agent.exe --card
+          # Keep the files away from ~\denpa\config, so the install test below starts unpaired
+          $smoke = "$env:RUNNER_TEMP\smoke"
+          New-Item -ItemType Directory -Force $smoke | Out-Null
           $env:AGENT_PORT = '25300'
+          $env:TUNERS_FILE = "$smoke\tuners.json"
+          $env:CHANNELS_FILE = "$smoke\channels.json"
+          $env:AGENT_PAIR_TOKEN = 'smoke-token'
           $agent = Start-Process .\out\denpa-agent.exe -PassThru -RedirectStandardOutput agent.log -RedirectStandardError agent.err
+          # --status calls the running agent with its own certificate (no pairing needed)
           $tuners = $null
           for ($i = 0; $i -lt 30 -and -not $tuners; $i++) {
-            try { $tuners = Invoke-RestMethod http://127.0.0.1:25300/denpa/tuners } catch { Start-Sleep 1 }
+            $out = & .\out\denpa-agent.exe --status 2>$null
+            if ($LASTEXITCODE -eq 0) { $tuners = $out | ConvertFrom-Json } else { Start-Sleep 1 }
           }
-          $card = Invoke-RestMethod http://127.0.0.1:25300/denpa/card
+          if ($null -eq $tuners.tuners) { throw 'no tuners from --status' }
+
+          # Pair like denpa: a self-signed P-256 certificate without extensions, proof = HMAC(token, ...)
+          $ecdsa = [Security.Cryptography.ECDsa]::Create([Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+          $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=denpa', $ecdsa, 'SHA256')
+          $made = $request.CreateSelfSigned((Get-Date).AddDays(-1), (Get-Date).AddDays(2))
+          # Re-import through PKCS#12 so SChannel can use the key
+          $client = [Security.Cryptography.X509Certificates.X509Certificate2]::new($made.Export('Pfx'))
+          $fp = { param($raw) [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($raw)).ToLowerInvariant() }
+          $agentCert = [Security.Cryptography.X509Certificates.X509Certificate2]::new("$smoke\tls\agent.crt")
+          $a = & $fp $agentCert.RawData
+          $d = & $fp $client.RawData
+          $hmac = [Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes('smoke-token'))
+          $proof = [Convert]::ToBase64String($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes("denpa-pair/client`n$a`n$d"))).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+          $base = 'https://127.0.0.1:25300'
+          # Not paired yet: 403. Without a client certificate: the TLS handshake fails
+          $status = try { Invoke-WebRequest "$base/denpa/card" -Certificate $client -SkipCertificateCheck | ForEach-Object StatusCode } catch { [int]$_.Exception.Response.StatusCode }
+          if ($status -ne 403) { throw "unpaired client got $status" }
+          $plain = try { Invoke-WebRequest "$base/denpa/card" -SkipCertificateCheck -TimeoutSec 5 | ForEach-Object StatusCode } catch { 0 }
+          if ($plain -eq 200) { throw 'answered without a client certificate' }
+          $paired = Invoke-RestMethod "$base/denpa/pair" -Method Post -ContentType 'application/json' -Body (@{ client = $d; proof = $proof } | ConvertTo-Json) -Certificate $client -SkipCertificateCheck
+          "pair: $($paired | ConvertTo-Json -Compress)"
+          if (-not ((Get-Content "$smoke\tls\clients") -contains $d)) { throw 'client not in tls\clients' }
+
+          $card = Invoke-RestMethod "$base/denpa/card" -Certificate $client -SkipCertificateCheck
           "tuners: $($tuners | ConvertTo-Json -Compress -Depth 5)"
           "card: $($card | ConvertTo-Json -Compress -Depth 5)"
-          if ($null -eq $tuners.tuners) { throw 'no tuners in /denpa/tuners' }
           if ($card.ok -ne $false -or $null -eq $card.readers) { throw 'unexpected /denpa/card' }
-          $about = Invoke-RestMethod http://127.0.0.1:25300/denpa/about
+          $about = Invoke-RestMethod "$base/denpa/about" -Certificate $client -SkipCertificateCheck
           "about: $($about | ConvertTo-Json -Compress)"
           if ($about.version -ne 'dev' -or $about.os -ne 'windows' -or $about.arch -ne 'x64' -or $null -ne $about.ccidDriver) { throw 'unexpected /denpa/about' }
           Stop-Process -Id $agent.Id
@@ -479,7 +554,15 @@ jobs:
           & $script -AgentOnly -NoOpen
           $prefix = "$env:LOCALAPPDATA\denpa-agent"
           Get-ScheduledTask -TaskName denpa-agent | Format-List TaskName, State
-          Invoke-RestMethod -TimeoutSec 10 http://127.0.0.1:25252/denpa/card | ConvertTo-Json -Compress
+          # install.ps1 checks the agent with denpa-agent --status (the API answers only paired denpa).
+          # The pair token is in the agent's own place (config\tls\pair-token), not in the .cmd, and the agent
+          # logs the URL to pair with (nobody is paired yet)
+          $token = (Get-Content "$env:USERPROFILE\denpa\config\tls\pair-token" -Raw).Trim()
+          if (Select-String -LiteralPath "$prefix\denpa-agent.cmd" -SimpleMatch 'AGENT_PAIR_TOKEN' -Quiet) { throw 'pair token should not be in the .cmd' }
+          if ($token.Length -ne 43) { throw 'pair-token is not 43 characters' }
+          $log = "$env:USERPROFILE\denpa\denpa-agent.log"
+          for ($i = 0; $i -lt 15 -and -not (Select-String -LiteralPath $log -SimpleMatch "#pair=$token" -Quiet); $i++) { Start-Sleep 1 }
+          if (-not (Select-String -LiteralPath $log -SimpleMatch "#pair=$token" -Quiet)) { throw 'agent does not log the pairing URL with the token' }
           & "$prefix\siano-userland\siano-ts.exe" --list
           "siano-ts --list: exit $LASTEXITCODE"
           Get-Content "$prefix\denpa-agent.cmd"
@@ -510,9 +593,9 @@ jobs:
           if ($acl.Owner -ne [Security.Principal.WindowsIdentity]::GetCurrent().Name) { throw "C:\denpa-run owner is $($acl.Owner)" }
           if (-not $acl.AreAccessRulesProtected -or @($acl.Access).Count -ne 3) { throw 'C:\denpa-run DACL is not the expected one' }
 
+          # install.ps1 waits until denpa-agent --status answers again, and keeps the pair token
           & $script -AgentOnly -NoOpen
-          $tuners = Invoke-RestMethod -TimeoutSec 10 http://127.0.0.1:25252/denpa/tuners
-          if ($null -eq $tuners.tuners) { throw 'agent does not answer after the upgrade' }
+          if ((Get-Content "$env:USERPROFILE\denpa\config\tls\pair-token" -Raw).Trim() -ne $token) { throw 'pair-token changed on upgrade' }
 
           & $script -Uninstall
           if (Get-ScheduledTask -TaskName denpa-agent -ErrorAction SilentlyContinue) { throw 'task left' }

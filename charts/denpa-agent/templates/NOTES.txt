@@ -1,0 +1,17 @@
+tuner-agent を {{ .Release.Namespace }} に入れました。答えるのは合言葉で組んだ denpa だけです (docs/agent.md)。
+
+1. 合言葉を読む (人に見せない):
+
+   kubectl -n {{ .Release.Namespace }} get secret tuner-agent-pair -o jsonpath='{.data.token}' | base64 -d
+
+2. denpa の TUNER_AGENT_URL に次を書く (<合言葉> は 1. で読んだもの):
+{{ if eq .Values.service.type "ClusterIP" }}
+   https://tuner-agent.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}#pair=<合言葉>
+{{- else if eq .Values.service.type "NodePort" }}
+   https://<ノードの IP>:<NodePort>#pair=<合言葉>
+   (NodePort は kubectl -n {{ .Release.Namespace }} get svc tuner-agent で分かります)
+{{- else }}
+   https://<Service tuner-agent に届くアドレス>:{{ .Values.service.port }}#pair=<合言葉>
+{{- end }}
+
+   名前はどう書いても構いません (denpa は組んだときの証明書そのもので確かめるので、IP でも通ります)。

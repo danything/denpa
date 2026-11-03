@@ -55,16 +55,17 @@ service:
   port: 25252
   type: ClusterIP
   # 別のクラスタ/機械の denpa から届かせるなら NodePort か LoadBalancer にする。
-  # **エージェントは認証を持たない** (/denpa/stream は復号済みの TS を返す)。開くのは世帯の中の
-  # LAN までにして、インターネットや世帯の外へは出さない (docs/agent.md「エージェントは認証を持たない」)。
-  # 下の networkPolicy で繋げる相手も絞れる
+  # 答えるのは合言葉 (下の pairToken) で組んだ denpa だけ (docs/agent.md)。
+  # 下の networkPolicy で届く相手も絞れる
   nodePort: null
 
-# **エージェントが答えてよい名前** (AGENT_ALLOWED_HOSTS。カンマ区切り、頭にドットでその下の名前全部)。
-# 知らない名前で呼ばれると 403 で断る (DNS リバインディングを防ぐ。docs/agent.md「エージェントは認証を持たない」)。
-# IP の直書き・tuner-agent・tuner-agent.<名前空間>.svc(.cluster.local)・.local などは書かなくても通るので、
-# denpa の TUNER_AGENT_URL をそれ以外の名前 (持っているドメインの名前など) で書くときだけ足す
-allowedHosts: ""
+# **denpa と組むときの合言葉** (docs/agent.md)。denpa の TUNER_AGENT_URL に
+# https://<ここに届く名前>:25252#pair=<合言葉> と書く (読み方は helm install のあとに出る NOTES)。
+# 空なら chart が作って Secret `tuner-agent-pair` に置き、上げ直しても変えない (lookup)。
+# ArgoCD はクラスタを見ずに描くので、空のままだと描くたびに新しい値になってずっと差分が出る。
+# ArgoCD ではここに書くか、Application の ignoreDifferences でその Secret の /data を外す
+# (RespectIgnoreDifferences=true も。charts/denpa/values.yaml の agent の説明)
+pairToken: ""
 
 # **エージェントに繋げる相手を絞る** NetworkPolicy を出す。CNI が NetworkPolicy に対応していないと、
 # 出しても効かない。オンにしたら from に denpa のいる所を書く (NetworkPolicyPeer の並び。

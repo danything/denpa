@@ -17,7 +17,8 @@
 #
 # 置き場:
 #   ~/denpa (DENPA_HOME)                  denpa.env (コンテナの環境変数。無いときだけ雛形を作り、あれば触らない)・
-#                                         config/・denpa-agent.log
+#                                         config/ (tls\pair-token は denpa とエージェントが組むときの合言葉。無いときだけ作る)・
+#                                         denpa-agent.log
 #   %LOCALAPPDATA%\denpa-agent\           エージェント・px4-userland (px4d.exe・px4ctl.exe・切り出したファームウェア)・
 #                                         siano-userland・起こす .cmd と denpa-start.ps1
 #   C:\denpa-run                          px4d のソケットの置き場 (本人・SYSTEM・Administrators だけが書ける。px4d がそう決めている)
@@ -94,10 +95,50 @@ function Write-Text([string]$Path, [string]$Text, [Text.Encoding]$Encoding = (Ne
     [IO.File]::WriteAllText($Path, $Text, $Encoding)
 }
 
-# 録画中か (エージェントに聞く。答えなければ録画していないことにする)
-function Test-Recording {
+# denpa とエージェントが組むときの合言葉 (32 バイトの乱数を base64url で。docs/agent.md)。
+# **エージェント自身の置き場** (tuners.json の隣の tls\pair-token) に**1度だけ**作り、上げ直しても変えない。
+# エージェントには環境変数で渡さず、そこから読ませる (手で denpa-agent --pair を流しても同じ URL が出るように)。
+# denpa には TUNER_AGENT_URL の #pair= で同じものを渡す。エージェントが先に作っていればそれを使う
+function Get-PairToken {
+    $path = "$DenpaDir\config\tls\pair-token"
+    if (Test-Path -LiteralPath $path) {
+        $text = Get-Content -LiteralPath $path -Raw
+        if ($text -and $text.Trim()) { return $text.Trim() }
+    }
+    $bytes = New-Object byte[] 32
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+    $token = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
+    Write-Text $path $token
+    return $token
+}
+
+# エージェントのいまの様子 (/denpa/tuners の JSON)。API は組んだ denpa (クライアント証明書) にしか答えないので、
+# denpa-agent --status に聞かせる (エージェント自身の証明書で呼ぶ)。置き場とポートは .cmd と同じものを渡す。
+# 答えなければ $null
+function Get-AgentStatus([string]$Exe) {
+    Use-Continue
+    if (-not (Test-Path -LiteralPath $Exe)) { return $null }
+    $saved = @($env:AGENT_PORT, $env:TUNERS_FILE)
+    $env:AGENT_PORT = [string]$Port
+    $env:TUNERS_FILE = "$DenpaDir\config\tuners.json"
     try {
-        $status = Invoke-RestMethod -TimeoutSec 5 "http://127.0.0.1:$Port/denpa/tuners"
+        $out = & $Exe --status 2>$null | Out-String
+        if ($LASTEXITCODE -ne 0 -or -not $out.Trim()) { return $null }
+        return $out.Trim()
+    } finally {
+        $env:AGENT_PORT = $saved[0]
+        $env:TUNERS_FILE = $saved[1]
+    }
+}
+
+# 録画中か ($Exe の --status で聞く。答えなければ録画していないことにする)
+function Test-Recording([string]$Exe) {
+    $out = Get-AgentStatus $Exe
+    if (-not $out) { return $false }
+    try {
+        $status = ConvertFrom-Json $out
         return [bool]($status.tuners | ForEach-Object { $_.users } | Where-Object { $_.use -match '^rec( |$)' })
     } catch {
         return $false
@@ -109,12 +150,13 @@ function Test-Recording {
 # 起こした conhost・.cmd・エージェント・siano-ts・px4d を、コマンドラインに置き場が入っているもので見つけて落とす
 # (タスクを止めても、.cmd の下で起きたものまでは止まらない)。**px4d は先に落とさない** — エージェントが
 # 終われば px4d は標準入力が閉じたのを見て、後片付け (LNB を 0V に戻す・ソケットを消す) をして自分で終わる。
-# 10 秒待っても残っていれば落とす
-function Stop-Agent {
+# 10 秒待っても残っていれば落とす。
+# 録画中かを聞く denpa-agent は $Exe (上げ直すときは取ってきた新しいほう。古いものは --status を知らない)
+function Stop-Agent([string]$Exe) {
     if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) { return }
-    if (Test-Recording) {
+    if (Test-Recording $Exe) {
         Say '録画中です。終わるまでここで待ちます (Windows では録画の途中で止めると、その録画は切れます)'
-        while (Test-Recording) { Start-Sleep -Seconds 10 }
+        while (Test-Recording $Exe) { Start-Sleep -Seconds 10 }
     }
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     for ($i = 0; $i -lt 30; $i++) {
@@ -195,11 +237,12 @@ function Move-FromDocker {
 
 # 起こすスクリプト。**起こすたびに作り直すかを決める**: コンテナから Windows のエージェントへは
 # Hyper-V の Default Switch の IP で届くが (host.docker.internal は無い)、その IP は再起動で変わりうる。
-# 宛先かバージョンか denpa.env が変わっていればコンテナを作り直す (環境変数は作るときに埋め込まれる。
-# DB はボリューム、録画は Windows のフォルダなので消えない)。
+# 宛先 (合言葉も込みの TUNER_AGENT_URL) かバージョンか denpa.env が変わっていればコンテナを作り直す
+# (環境変数は作るときに埋め込まれる。DB はボリューム、録画は Windows のフォルダなので消えない)。
+# エージェントの名前は見ない (denpa は組んだときの証明書そのもので確かめる) ので、IP で書いてよい。
 # wslc には restart の指定が無いので、ログオン時のタスクがこれを流す。
 # **ポートは 0.0.0.0 に出す** (既定は 127.0.0.1 だけで、LAN のほかの機器から開けない)
-function Write-StartScript([string]$Image) {
+function Write-StartScript([string]$Image, [string]$Token) {
     $start = Join-Path $Prefix 'denpa-start.ps1'
     $body = @'
 # Written by install.ps1 (denpa). Re-run the installer instead of editing this file.
@@ -210,7 +253,7 @@ $raw = '__RAW__'
 $encoded = '__ENCODED__'
 $ip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'vEthernet (Default Switch)' -ErrorAction SilentlyContinue).IPAddress | Select-Object -First 1
 if (-not $ip) { $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -like 'vEthernet*' | Select-Object -First 1).IPAddress }
-$agent = "http://${ip}:__PORT__"
+$agent = "https://${ip}:__PORT__#pair=__TOKEN__"
 # Env vars are baked in at creation, so a changed denpa.env also means recreating
 $envHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $envFile).Hash
 $info = & wslc inspect __NAME__ 2>$null | Out-String
@@ -230,14 +273,14 @@ exit $LASTEXITCODE
 '@
     $body = $body.Replace('__IMAGE__', $Image).Replace('__ENVFILE__', (Join-Path $DenpaDir 'denpa.env')).
         Replace('__RAW__', "$Media\recorded").Replace('__ENCODED__', "$Media\library").
-        Replace('__PORT__', [string]$Port).Replace('__NAME__', $Container).Replace('__VOLUME__', $Volume)
+        Replace('__PORT__', [string]$Port).Replace('__TOKEN__', $Token).Replace('__NAME__', $Container).Replace('__VOLUME__', $Volume)
     # 5.1 は BOM の無い .ps1 を ANSI で読む。パスに日本語が入りうるので BOM を付ける
     Write-Text $start $body (New-Object Text.UTF8Encoding $true)
     return $start
 }
 
 # denpa 本体を wslc で起こす。エージェントと同じバージョンのイメージ (x.y.z のときだけ。コミットなら latest)
-function Start-Denpa([string]$Ref, [switch]$NoOpen) {
+function Start-Denpa([string]$Ref, [string]$Token, [switch]$NoOpen) {
     $version = $Ref -replace '^v', ''
     $tag = if ($version -match '^\d+\.\d+\.\d+$') { $version } else { 'latest' }
     $image = "ghcr.io/$Repo`:$tag"
@@ -262,7 +305,7 @@ function Start-Denpa([string]$Ref, [switch]$NoOpen) {
     & wslc pull $image
     if ($LASTEXITCODE -ne 0) { throw "イメージを取れません: $image" }
     & wslc volume create $Volume *> $null
-    $start = Write-StartScript $image
+    $start = Write-StartScript $image $Token
 
     # ログオンしたら起こす (エージェントと同じく、自分のアカウントのタスク。窓は出さない)
     $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
@@ -478,7 +521,7 @@ function Install-Agent([string]$Ref) {
         Get-ChildItem -Recurse -File "$work\new" | Unblock-File
 
         # --- 入れ替える。**揃ってから止める** (取ってこられなかったら、動いているものに触らない) ---
-        Stop-Agent
+        Stop-Agent "$work\new\bin\denpa-agent.exe"
         foreach ($dir in $Prefix, "$DenpaDir\config", "$Media\recorded", "$Media\library") {
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
         }
@@ -494,7 +537,8 @@ function Install-Agent([string]$Ref) {
     Set-Px4Runtime
     Show-Px4
 
-    # 起こす .cmd。環境変数はコンテナで既定にしている置き場を Windows の置き場に向け直すものだけ (Mac の plist と同じ)。
+    # 起こす .cmd。環境変数はコンテナで既定にしている置き場を Windows の置き場に向け直すものだけ (Mac の plist と同じ。
+    # 合言葉は環境変数で渡さず、エージェントが tls\pair-token から読む。Get-PairToken)。
     # **落ちたら5秒置いて起こし直す** (タスク スケジューラの「失敗したら再起動」は、終了コードでは効かない)。
     # ログはここで足していく。**パスに日本語が入りうる**ので、1行目で cmd の文字コードを UTF-8 にしてから読ませる
     # (そのままだとコンソールの文字コードで読み、それはユーザーの設定次第で決め打てない)
@@ -529,8 +573,8 @@ function Install-Agent([string]$Ref) {
 
     Say 'エージェントを起動しました。応答を待ちます'
     for ($i = 0; $i -lt 15; $i++) {
-        $tuners = & curl.exe -fs --max-time 5 "http://127.0.0.1:$Port/denpa/tuners"
-        if ($LASTEXITCODE -eq 0) {
+        $tuners = Get-AgentStatus "$Prefix\bin\denpa-agent.exe"
+        if ($tuners) {
             Write-Host $tuners
             return
         }
@@ -552,7 +596,7 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
             & wslc rm $Container *> $null
             $ErrorActionPreference = 'Stop'
         }
-        Stop-Agent
+        Stop-Agent "$Prefix\bin\denpa-agent.exe"
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $Prefix) { Remove-Item -Recurse -Force -LiteralPath $Prefix }
         if (Test-Path -LiteralPath $Px4Runtime) {
@@ -569,19 +613,22 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
     if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw '対応しているのは x64 の Windows だけです (px4-userland / siano-userland に ARM 用がありません)' }
 
     $ref = if ($env:DENPA_AGENT_ZIP) { '' } else { Get-Version }
+    # エージェントを起こす前に置いておく (無ければエージェントが自分で作り、そちらと食い違わないように)
+    $token = Get-PairToken
     Install-Agent $ref
     Show-Tuner
     if ($AgentOnly) {
-        Say "エージェントだけ入れました。denpa の TUNER_AGENT_URL に http://$($env:COMPUTERNAME):$Port を書いてください"
+        Say 'エージェントだけ入れました。denpa の TUNER_AGENT_URL に次を書いてください (#pair= の後ろは合言葉。人に見せない):'
+        Say "  https://$($env:COMPUTERNAME):$Port#pair=$token"
         Say "(LAN から繋ぐなら、Windows ファイアウォールでポート $Port への受信を許してください)"
         return
     }
     if (-not (Test-Wslc)) {
-        Say "エージェントは入っています (http://127.0.0.1:$Port)"
+        Say "エージェントは入っています (https://127.0.0.1:$Port)"
         return
     }
     # --- denpa 本体 (wslc)。エージェントと同じバージョンに。手元の zip を入れたときは latest ---
-    Start-Denpa $(if ($ref) { $ref } else { 'main' }) -NoOpen:$NoOpen
+    Start-Denpa $(if ($ref) { $ref } else { 'main' }) $token -NoOpen:$NoOpen
 }
 
 Invoke-Main -NoOpen:$NoOpen -Uninstall:$Uninstall -AgentOnly:$AgentOnly

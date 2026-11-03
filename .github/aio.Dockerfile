@@ -37,6 +37,7 @@ COPY --from=agent /opt/px4-userland /opt/px4-userland
 COPY --from=agent /opt/siano-userland /opt/siano-userland
 COPY --from=agent /opt/asicen-userland /opt/asicen-userland
 COPY .github/aio-entrypoint.ts /usr/local/lib/denpa-aio.ts
-# エージェントは同じコンテナの中。元のTSの置き場は既定が両方 `/media/raw` なので書かない
-ENV TUNER_AGENT_URL=http://127.0.0.1:25252
+# エージェントは同じコンテナの中。元のTSの置き場は既定が両方 `/media/raw` なので書かない。
+# 組むときの合言葉 (#pair=) は入口 (aio-entrypoint.ts) が `/config` に作って両方へ渡す
+ENV TUNER_AGENT_URL=https://127.0.0.1:25252
 CMD ["bun", "/usr/local/lib/denpa-aio.ts"]

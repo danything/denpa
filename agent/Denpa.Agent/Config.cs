@@ -103,6 +103,9 @@ public sealed class Config(string tunersFile, string channelsFile)
     /// </summary>
     public string Px4FirmwareFile => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(TunersFile))!, Px4Firmware.FileName);
 
+    /// <summary>自分の鍵と証明書・合言葉・組んだ denpa の置き場 (tuners.json の隣の tls/。<see cref="AgentTls"/>)</summary>
+    public string TlsDir => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(TunersFile))!, "tls");
+
     public static Config FromEnvironment() => new(
         Environment.GetEnvironmentVariable("TUNERS_FILE") ?? Path.Combine(DefaultDir(), "tuners.json"),
         Environment.GetEnvironmentVariable("CHANNELS_FILE") ?? Path.Combine(DefaultDir(), "channels.json"));

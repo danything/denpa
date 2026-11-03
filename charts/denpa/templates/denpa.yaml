@@ -48,9 +48,16 @@ spec:
           env:
             - name: TZ
               value: {{ .Values.denpa.timezone | quote }}
-            # エージェントの場所も置き場所も、既定値がそのままこの構成になっている
-            # (src/lib/server/config.ts)。同じ値を書き写すと、片方だけ直したときに
-            # どちらが効いているのか分からなくなる。
+            # エージェントの場所は既定 (https://tuner-agent:25252) と同じで、組むときの合言葉 (pair.yaml) を
+            # #pair= で足す。AGENT_PAIR_TOKEN は denpa 自身は読まず、下の $(…) で URL に埋めるためだけ
+            # (Kubernetes が展開するのは、同じコンテナで先に書いた変数だけなので、この順のまま)
+            - name: AGENT_PAIR_TOKEN
+              valueFrom:
+                secretKeyRef: { name: tuner-agent-pair, key: token }
+            - name: TUNER_AGENT_URL
+              value: "https://tuner-agent:25252#pair=$(AGENT_PAIR_TOKEN)"
+            # 置き場所は既定値がそのままこの構成になっている (src/lib/server/config.ts)。
+            # 同じ値を書き写すと、片方だけ直したときにどちらが効いているのか分からなくなる。
             # PROTOCOL_HEADER (x-forwarded-proto) は server.js が常に設定する
             - name: ENCODE_CONCURRENCY
               value: {{ .Values.denpa.encodeConcurrency | quote }}

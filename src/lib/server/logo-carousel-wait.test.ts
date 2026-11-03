@@ -14,6 +14,8 @@ import {
   stream,
 } from "@danything/arib/synth";
 
+import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+
 /**
  * 衛星のロゴを流す中継で、**カルーセルが来るまで待つ** (`logo.awaitCarousel`・「いますぐ」)。
  *
@@ -110,6 +112,7 @@ const opened: { channel: string; priority: number }[] = [];
 
 const agent = Bun.serve({
   port: 0,
+  tls: fakeAgentTls(),
   fetch: (request) => {
     const url = new URL(request.url);
     if (url.pathname === "/denpa/stream") {
@@ -151,7 +154,8 @@ const { config } = await import("./config");
 const root = mkdtempSync(join(tmpdir(), "denpa-logo-carousel-wait-"));
 config.dbPath = join(root, "denpa.db");
 config.dataDir = root;
-config.agentUrl = `http://127.0.0.1:${agent.port}`;
+config.agentUrl = fakeAgentUrl(agent.port!);
+trustFakeAgent();
 // 同じプロセスで走るほかのテストファイルへ持ち越さない
 const wait = config.logoCarouselWait;
 afterAll(() => {

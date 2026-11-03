@@ -22,11 +22,16 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 2. **denpa 本体** — エージェントと同じバージョンのイメージを `wslc pull` し、ログオン時に起こすタスク (`denpa`) を
    載せて、すぐ起こします。起こすのは `denpa-start.ps1` (install.ps1 が書く)
 
+2 つが組むときの合言葉 ([agent.md](agent.md)) はエージェント自身の置き場 (`~/denpa/config/tls/pair-token`) に無いときだけ作り、エージェントはそこから読み
+(手で `denpa-agent --pair` を流しても同じ URL が出る)、denpa には `TUNER_AGENT_URL` の `#pair=` で渡します。上げ直しても変えません。
+`-AgentOnly` では、別の機械の denpa の `TUNER_AGENT_URL` に書く `https://<この PC の名前>:25252#pair=<合言葉>` を最後に出します
+
 `denpa-start.ps1` は**起こすたびに、コンテナを作り直すか決めます。** 実機 (wslc 3.0.1) で確かめた wslc の癖に合わせています。
 
 - **コンテナから Windows のエージェントへは、Hyper-V の Default Switch の IP で届きます。**
   `host.docker.internal` のような名前はありません。その IP は Windows を起こし直すと変わりうるので、
-  起こすたびに調べ、`TUNER_AGENT_URL` かバージョンか `denpa.env` (ハッシュをコンテナのラベルに持つ) が変わっていれば
+  起こすたびに調べ、`TUNER_AGENT_URL` (`https://<その IP>:25252#pair=<合言葉>`。denpa は組んだときの証明書そのもので
+  確かめるので、IP で書いても通る) かバージョンか `denpa.env` (ハッシュをコンテナのラベルに持つ) が変わっていれば
   作り直します (環境変数は作るときに埋め込まれる。DB はボリューム、録画は Windows のフォルダなので消えない)。
   変わっていなければ `wslc start` だけ。`denpa.env` を直したら、install.ps1 を流し直すかログオンし直せば効く
 - **自動で起こし直す指定 (`--restart`) がありません。** ログオン時のタスクが代わりに起こします
@@ -50,14 +55,14 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 - genkan (`http://denpa.localhost`) には繋ぎません (genkan は Docker のネットワークにいて、wslc のコンテナからは入れない)
 - エージェントの zip は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
 
-| 置き場                         | 中身                                                                                                                                                             |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `~/denpa/` (`DENPA_HOME`)      | `denpa.env` (コンテナの環境変数。手で足すならここ。無いときだけ雛形を作る)・`config/`・エージェントのログ `denpa-agent.log`                                      |
-| `%LOCALAPPDATA%\denpa-agent\`  | エージェント・px4-userland (`px4d.exe`・`px4ctl.exe`・切り出したファームウェア・ライセンスの文書)・siano-userland・起こす `denpa-agent.cmd` と `denpa-start.ps1` |
-| `C:\denpa-run`                 | px4d のソケットの置き場 (下)                                                                                                                                     |
-| `~/Videos/denpa/recorded`      | 元のTS。エージェントとコンテナ (`/media/raw`) の両方に見せる                                                                                                     |
-| `~/Videos/denpa/library`       | 出来上がった録画 (コンテナの `/media/encoded`。エクスプローラーから見える)                                                                                       |
-| wslc のボリューム `denpa-data` | DB                                                                                                                                                               |
+| 置き場                         | 中身                                                                                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `~/denpa/` (`DENPA_HOME`)      | `denpa.env` (コンテナの環境変数。手で足すならここ。無いときだけ雛形を作る)・`config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・エージェントのログ `denpa-agent.log` |
+| `%LOCALAPPDATA%\denpa-agent\`  | エージェント・px4-userland (`px4d.exe`・`px4ctl.exe`・切り出したファームウェア・ライセンスの文書)・siano-userland・起こす `denpa-agent.cmd` と `denpa-start.ps1`                    |
+| `C:\denpa-run`                 | px4d のソケットの置き場 (下)                                                                                                                                                        |
+| `~/Videos/denpa/recorded`      | 元のTS。エージェントとコンテナ (`/media/raw`) の両方に見せる                                                                                                                        |
+| `~/Videos/denpa/library`       | 出来上がった録画 (コンテナの `/media/encoded`。エクスプローラーから見える)                                                                                                          |
+| wslc のボリューム `denpa-data` | DB                                                                                                                                                                                  |
 
 **別の機械 (Linux の Docker Compose や Kubernetes) へ移すとき**は、DB を wslc のボリュームから取り出す必要はありません。
 設定の「連携」の「denpa を別の機械へ移す」で書き出すと、ブラウザのダウンロードとして落ちてきます。
@@ -113,7 +118,8 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 - **PT2/PT3 などの DVB の機材** — Windows に DVB はありません
 - **PX-W3U3 (asicen-userland)** — Windows 用がありません
 - **止めるときに録画を待てません。** Windows には「止まれ」を伝える手 (SIGTERM) が無く、
-  止めればその場で落ちます。上げ直し・外すときは install.ps1 が録画の終わりを待ってから止めますが、
+  止めればその場で落ちます。上げ直し・外すときは install.ps1 が録画の終わりを待ってから止めますが
+  (録画中かは `denpa-agent --status` に聞く。エージェントの API は組んだ denpa にしか答えないので、エージェント自身の証明書で呼ぶもの)、
   ログオフ・再起動・シャットダウンでは待たずに切れます (録画中に Windows を落とさないこと)。
   siano-ts も同じく、止めるときに `quit` を読めなければ Kill になります (USB は OS が閉じる)
 
@@ -126,7 +132,7 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 - エージェントは全部のインターフェースで待ち受けます。WSL のコンテナの denpa は vEthernet のアドレスで繋いでくるうえ、
   そのアドレスは起動のたびに変わりうるので、ループバックには絞れません。LAN から届かないようにするのは Windows ファイアウォールの役目です
   (25252 の受信を許さないままにする)。LAN のほかの機械からエージェントに繋ぐとき (`-AgentOnly`) は、ファイアウォールでポート 25252 を
-  許します。許す相手は世帯の中の機械だけにします ([エージェントは認証を持たない](agent.md#エージェントは認証を持たない))
+  許します。答えるのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
 - **Windows の実機でチューナーとカードを繋いで確かめたことはまだありません。** CI (`agent-windows`・`agent-windows-install`) で
   ビルドして起こし、偽の px4d を相手に IPC と TS の受け渡しを流し、入れ方 (`-AgentOnly`) を最後まで流すところまでです。
   denpa 本体を wslc で起こすところは手元の Windows 11 (wslc 3.0.1) で確かめました (Docker Desktop からの移行は未確認)。

@@ -21,6 +21,16 @@ wait_for() {
     return 1
 }
 
+# コンテナのログにその文が出るまで待つ。出なければ 1
+wait_log() {
+    local container=$1 text=$2 tries=$3
+    for _ in $(seq "$tries"); do
+        if docker logs "$container" 2>&1 | grep -qF "$text"; then return 0; fi
+        sleep 1
+    done
+    return 1
+}
+
 case "$name" in
 denpa)
     # 放送と同じ形 (MPEG-2 のインターレース + AAC の TS) を作り、denpa が使う経路
@@ -162,11 +172,12 @@ denpa)
     exit 1
     ;;
 denpa-agent)
-    # 起こして API が答えるか (機材は無いので、チューナーは自動検出で空)
-    docker run -d --name agent-smoke -p 25252:25252 "$image" > /dev/null
+    # 起こして HTTPS で待ち受けるか (機材は無いので、チューナーは自動検出で空)。API は組んだ denpa
+    # (クライアント証明書) にしか答えないので、鍵と合言葉を作って組むための URL をログに出すところまでを見る
+    docker run -d --name agent-smoke "$image" > /dev/null
     trap 'docker logs agent-smoke; docker rm -f agent-smoke > /dev/null' EXIT
-    wait_for localhost:25252/denpa/tuners 30 && exit 0
-    echo "エージェントが答えません" >&2
+    wait_log agent-smoke "#pair=" 30 && exit 0
+    echo "エージェントが組むための URL を出しません" >&2
     exit 1
     ;;
 denpa-aio)
@@ -186,10 +197,11 @@ denpa-aio)
             if (r.exitCode !== 0 || out.includes("not found")) { console.error(`使えません: ${name}\n${out}`); process.exit(1); }
         }
     '
-    docker run -d --name aio-smoke -p 3000:3000 -p 25252:25252 "$image" > /dev/null
+    docker run -d --name aio-smoke -p 3000:3000 "$image" > /dev/null
     trap 'docker logs aio-smoke; docker rm -f aio-smoke > /dev/null' EXIT
-    wait_for localhost:25252/denpa/tuners 30 || { echo "エージェントが答えません" >&2; exit 1; }
     health=$(wait_for localhost:3000/api/health 60) || { echo "denpa が答えません" >&2; exit 1; }
+    # 入口が作った合言葉で、denpa がエージェントと組めたか (エージェントのログ。docs/agent.md)
+    wait_log aio-smoke "と組みました" 60 || { echo "denpa がエージェントと組めません" >&2; exit 1; }
     echo "$health"
     if [ -n "$want_version" ] && ! grep -qF "\"version\":\"$want_version\"" <<< "$health"; then
         echo "バージョンが $want_version になっていません" >&2
