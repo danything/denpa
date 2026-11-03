@@ -100,17 +100,67 @@ describe("どれで観るか (pickOffer)", () => {
     });
   });
 
-  test("元の TS だけの録画は変換。H.264 を先に", () => {
+  test("元の TS だけの録画は、ライブ・追っかけと同じ「その場でエンコード」の順。外なら AV1 → H.264", () => {
     expect(pickOffer(tsOnly, chrome)).toEqual({
+      way: "stream",
+      codec: "av1",
+      type: AV1_MP4,
+    });
+    // MPEG-2 をデコードできても、外では選ばない
+    expect(pickOffer(tsOnly, { ...chrome, mpeg2: true })).toEqual({
+      way: "stream",
+      codec: "av1",
+      type: AV1_MP4,
+    });
+    // AV1 を受け取れない端末は H.264
+    expect(pickOffer(tsOnly, browser([], [H264_LIVE]))).toEqual({
       way: "stream",
       codec: "h264",
       type: H264_LIVE,
     });
-    // H.264 を持たない Chromium は AV1
-    expect(pickOffer(tsOnly, browser([], [AV1_MP4]))).toEqual({
+  });
+
+  test("元の TS だけの録画は、家の中なら MPEG-2 → H.264 → AV1", () => {
+    expect(pickOffer(tsOnly, { ...chrome, mpeg2: true }, "auto", true)).toEqual(
+      { way: "raw", codec: "mpeg2" },
+    );
+    expect(pickOffer(tsOnly, chrome, "auto", true)).toEqual({
+      way: "stream",
+      codec: "h264",
+      type: H264_LIVE,
+    });
+    expect(pickOffer(tsOnly, browser([], [AV1_MP4]), "auto", true)).toEqual({
       way: "stream",
       codec: "av1",
       type: AV1_MP4,
+    });
+  });
+
+  test("エンコード済みがある録画の自動は、家の中でも MPEG-2 を選ばない。選べば元の TS で観る", () => {
+    const kept: PlaybackInfo = {
+      ...av1Only,
+      offers: [...av1Only.offers, { codec: "mpeg2", way: "raw" }],
+    };
+    const can = { ...chrome, mpeg2: true };
+    expect(pickOffer(kept, can, "auto", true)).toEqual({
+      way: "file",
+      codec: "av1",
+      source: "encoded",
+    });
+    expect(pickOffer(kept, can, "mpeg2")).toEqual({
+      way: "raw",
+      codec: "mpeg2",
+    });
+    // デコードできない端末で MPEG-2 を選んでいたら自動と同じ。元の TS が無い録画も同じ
+    expect(pickOffer(kept, chrome, "mpeg2")).toEqual({
+      way: "file",
+      codec: "av1",
+      source: "encoded",
+    });
+    expect(pickOffer(av1Only, can, "mpeg2")).toEqual({
+      way: "file",
+      codec: "av1",
+      source: "encoded",
     });
   });
 
@@ -191,6 +241,19 @@ describe("コーデックのメニュー (codecChoices)", () => {
     expect(codecChoices(av1Only, chrome)).toEqual(["h264", "av1"]);
     expect(codecChoices(av1Only, iphone)).toEqual(["h264", "av1"]);
     expect(codecChoices(tsOnly, browser([], [AV1_MP4]))).toEqual(["av1"]);
+  });
+
+  test("MPEG-2 は元の TS が残っていて、この端末でデコードできるときだけ末尾に", () => {
+    expect(codecChoices(tsOnly, { ...chrome, mpeg2: true })).toEqual([
+      "h264",
+      "av1",
+      "mpeg2",
+    ]);
+    expect(codecChoices(tsOnly, chrome)).toEqual(["h264", "av1"]);
+    expect(codecChoices(av1Only, { ...chrome, mpeg2: true })).toEqual([
+      "h264",
+      "av1",
+    ]);
   });
 
   test("世帯の設定で外したもの (H.264・H.265) は並べない", () => {

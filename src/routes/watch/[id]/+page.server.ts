@@ -14,6 +14,7 @@ import { encodedFile, rulerOf } from "#lib/server/playback.js";
 import { recordingFromForm } from "#lib/server/recording.js";
 import { lastEncodeError, recordings } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
+import { viewingOptions } from "#lib/server/viewing.js";
 import { tsPathOf } from "#lib/source.js";
 import { fromTsTime } from "#lib/ts/watch.js";
 import type { Recording } from "#lib/types.js";
@@ -94,6 +95,8 @@ export function load({ params, url }) {
     clips: countClips({ recording: id }),
     /** コーデックのメニューから外すもの (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) */
     hidden: hideH264Hevc ? [...HIDDEN_CODECS] : [],
+    /** 開いた名前が家の中か (`#lib/host.ts` の `indoorHost`)。録画しか無いときの「自動」の順に効く (`ts/playback.ts` の `pickOffer`) */
+    indoor: viewingOptions(url).indoor,
   };
 }
 

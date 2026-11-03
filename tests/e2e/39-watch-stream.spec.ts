@@ -68,19 +68,46 @@ test.describe("観る画面でその場で流す", () => {
     await row.click();
     await expect(page).toHaveURL(new RegExp(`/watch/${id}$`));
 
-    // 頭から、端末が受け取れる形式で (Playwright の Chromium は H.264 を持たないので AV1 のことがある)
+    /*
+     * **録画しか無いときの自動は、ライブ・追っかけと同じ「その場でエンコード」の順** (`autoOrder`)。E2E は 127.0.0.1 で
+     * 開くので家の中で、元の TS をそのまま流してこの端末でデコードし、互換モードと同じく canvas に描く
+     */
     await expect.poll(() => asked.length).toBeGreaterThan(0);
-    expect(asked[0]?.searchParams.get("codec")).toMatch(/^(h264|av1)$/);
+    expect(asked[0]?.searchParams.get("codec")).toBe("mpeg2");
     expect(asked[0]?.searchParams.get("from")).toBe("0.000");
-    // ファイルそのままは渡さない (元の TS はブラウザで読めない)
+    const canvas = page.locator(
+      '[data-testid="live-raw"][data-input="ts-mpeg2"]',
+    );
+    await expect(canvas).toBeVisible({ timeout: 30_000 });
+    await expect
+      .poll(
+        async () => Number((await canvas.getAttribute("data-shown")) ?? 0),
+        {
+          timeout: 30_000,
+        },
+      )
+      .toBeGreaterThan(10);
+    // ファイルそのままは渡さない (元の TS は `<video>` で読めない)
     await expect(page.getByTestId("watch-video")).not.toHaveAttribute(
       "src",
       /file/,
     );
+    await wakeControls(page, "watch-stage");
+    // 速さは等速だけ (canvas に描くときは互換モードと同じく切り替えを出さない)
+    await expect(page.getByTestId("watch-speed")).toHaveCount(0);
 
     // 字幕は元の TS から (偽 ffmpeg は作り置きの字幕を返す)。データ放送は出さない
     await expect(page.getByTestId("watch-captions")).toHaveCount(1);
     await expect(page.getByTestId("watch-data")).toHaveCount(0);
+
+    // ほかのコーデックを選ぶと、サーバに変換させて `<video>` で観る
+    await pickCodec(page, "watch", "av1");
+    await expect
+      .poll(() => asked.at(-1)?.searchParams.get("codec"))
+      .toBe("av1");
+    await expect(page.getByTestId("live-raw")).toHaveCount(0);
+    await wakeControls(page, "watch-stage");
+    await expect(page.getByTestId("watch-speed")).toBeVisible();
   });
 
   /**

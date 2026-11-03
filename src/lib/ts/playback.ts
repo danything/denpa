@@ -121,12 +121,28 @@ export interface MediaAbility {
   play(type: string): boolean;
   /** MSE が受け取れるか (`isTypeSupported`)。MediaSource が無ければ false */
   mse(type: string): boolean;
+  /** 元の TS (MPEG-2) をこの端末でデコードできるか (`raw/support.ts` の `rawUnsupported`)。省けばできない */
+  mpeg2?: boolean;
 }
 
-/** どれで観るか */
+/**
+ * どれで観るか。`raw` は元の TS をそのまま流してこの端末でデコードする (`canvas-player.ts` の `ts-mpeg2`。
+ * 互換モードと同じく canvas に描く)
+ */
 export type Picked =
   | { way: "file"; codec: PlayCodec; source: EncodedSource }
-  | { way: "stream"; codec: "h264" | "hevc" | "av1"; type: string };
+  | { way: "stream"; codec: "h264" | "hevc" | "av1"; type: string }
+  | { way: "raw"; codec: "mpeg2" };
+
+/** 元の TS をそのまま流せて、この端末でデコードできるか */
+function playsRaw(info: PlaybackInfo, can: MediaAbility): boolean {
+  return (
+    can.mpeg2 === true &&
+    info.offers.some((offer) => offer.way === "raw" && offer.codec === "mpeg2")
+  );
+}
+
+const RAW: Picked = { way: "raw", codec: "mpeg2" };
 
 /**
  * そのままのファイルを読めるか。Matroska と WebM の両方で聞く — Chrome は `video/x-matroska` に答えるが、
@@ -180,26 +196,35 @@ function byEncodedOrder(offers: PlayOffer[]): PlayOffer[] {
 }
 
 /**
- * **どれで観るか。** 人が選んだコーデックがあれば、それを観られる方法 (ファイルそのまま → その場で流す)。
- * 観られなければ、または `auto` なら端末に合わせる:
+ * **どれで観るか。** 人が選んだコーデックがあれば、それを観られる方法 (ファイルそのまま → その場で流す。MPEG-2 は元の TS)。
+ * 観られなければ、または `auto` なら端末に合わせる。
+ *
+ * **録画しか無い (エンコード済みが無い) ときは、ライブ・追っかけと同じ「その場でエンコード」の順** (`autoOrder`。家の中なら
+ * MPEG-2 → H.264 → AV1、外なら AV1 → H.264。H.265 には変換しないので並びから外れる)。エンコード済みがあるときは:
  *
  * 1. **そのまま読めるファイル** (AV1 → H.265 → H.264。小さいほうが先 — 同じ画質なら回線もディスクも食わない)
  * 2. MSE が受け取れる**詰め替え** (エンコード済みと同じコーデック。サーバは軽い。並びは 1 と同じ)
  * 3. MSE が受け取れる**変換** (H.264 → AV1 の順。サーバはその場でエンコードする。H.265 には変換しない)
  * 4. 中身が分からないファイル (ffprobe が読めなかった) をそのまま渡す。読めなければ観る画面が観られる先を案内する
  *
- * MPEG-2 (`raw`) はここでは選ばない (そのまま再生する方式は画面の設定で別に決める)。何も無ければ null
+ * エンコード済みがあるときの自動は MPEG-2 を選ばない (元の TS が残っていれば、選べば観られる)。何も無ければ null
+ *
+ * @param indoor 開いた名前が家の中か (`#lib/host.ts` の `indoorHost`)。録画しか無いときの順に効く
  */
 export function pickOffer(
   info: PlaybackInfo,
   can: MediaAbility,
-  choice: CodecChoice = "auto",
+  choice: CodecChoice | "mpeg2" = "auto",
+  indoor = false,
 ): Picked | null {
   const files = byEncodedOrder(
     info.offers.filter((offer) => offer.way === "file"),
   );
   const streams = info.offers.filter((offer) => offer.way === "stream");
-  if (choice !== "auto") {
+  const raw = playsRaw(info, can);
+  if (choice === "mpeg2") {
+    if (raw) return RAW;
+  } else if (choice !== "auto") {
     const file = files.find(
       (offer) => offer.codec === choice && playsFile(offer, can),
     );
@@ -208,6 +233,19 @@ export function pickOffer(
     );
     const chosen = file ?? stream;
     if (chosen !== undefined) return asPicked(chosen);
+  }
+  if (files.length === 0) {
+    for (const format of autoOrder({ indoor, compat: false })) {
+      if (format === "raw") {
+        if (raw) return RAW;
+        continue;
+      }
+      const stream = streams.find(
+        (offer) => offer.codec === format && playsStream(offer, can),
+      );
+      if (stream !== undefined) return asPicked(stream);
+    }
+    return null;
   }
   const order = [
     ...files.filter((offer) => playsFile(offer, can)),
@@ -242,16 +280,17 @@ export function streamForAudio(
 }
 
 /**
- * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → H.265 → AV1)。
- * H.265 はエンコード済みがある録画にだけある (その場の変換では作らない)。`hidden` (世帯の設定。
- * `#lib/live-choice.ts` の `HIDDEN_CODECS`) は並べない。外すのはメニューだけで、自動 (`pickOffer`) は今までどおり選ぶ
+ * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → H.265 → AV1 → MPEG-2)。
+ * H.265 はエンコード済みがある録画にだけある (その場の変換では作らない)。MPEG-2 は元の TS が残っていて、この端末で
+ * デコードできるときだけ。`hidden` (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) は並べない。外すのはメニューだけで、
+ * 自動 (`pickOffer`) は今までどおり選ぶ
  */
 export function codecChoices(
   info: PlaybackInfo,
   can: MediaAbility,
   hidden: readonly PlayCodec[] = [],
-): ("h264" | "hevc" | "av1")[] {
-  return (["h264", "hevc", "av1"] as const).filter(
+): PlayCodec[] {
+  const encoded = (["h264", "hevc", "av1"] as const).filter(
     (codec) =>
       !hidden.includes(codec) &&
       info.offers.some(
@@ -260,6 +299,7 @@ export function codecChoices(
           (playsFile(offer, can) || playsStream(offer, can)),
       ),
   );
+  return playsRaw(info, can) ? [...encoded, "mpeg2"] : encoded;
 }
 
 /*
