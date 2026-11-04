@@ -116,7 +116,7 @@ public static class Dt295Routes
     /// (参照実装は全部クリアしてから計画を書く。最後に残る値は同じ)。<paramref name="cleared"/> が true なら、領域を 0 で埋めた直後なので計画のスロットだけを書く
     /// (フィールド表が書くレジスター 0x1002〜0x101B は PID スロットの 0x101E 以降と重ならない)
     /// </summary>
-    public static void Write(Dt295Bridge bridge, IReadOnlyList<Dt295Route> routes, Dt295Program? main, bool cleared = false)
+    public static void Write(Dt295Bridge bridge, IReadOnlyList<Dt295Route> routes, Dt295Program? main, bool cleared = false, int program = 0)
     {
         var bySlot = routes.ToDictionary(route => route.Slot);
         for (var slot = 0; slot < Slots; slot++)
@@ -133,8 +133,9 @@ public static class Dt295Routes
             bridge.Modify16(register, 15, 1, found ? 1 : 0);
             if (EcmField(slot) is { } field) bridge.Modify16(field.Address, field.Shift, 7, found ? route.EcmSlot : 0);
         }
-        // 9.5 番組情報。主番組がまだ決まっていなければ 0
-        bridge.Write16(0x1018, (ushort)(main?.Number ?? 0));
+        // 9.5 番組情報。主番組がまだ決まっていなければ、指定された番組番号 (無ければ 0)。
+        // 0x1018 は機材が流す番組の番組番号で、0 なら PAT の最初の番組 (実機で確かめた。衛星は PMT の ES が空に書き換わり主番組が決まらないので、指定がここに効く)
+        bridge.Write16(0x1018, (ushort)(main?.Number ?? program));
         bridge.Modify16(0x101C, 8, 8, main?.VideoType ?? 0);
         bridge.Modify16(0x101C, 0, 8, main?.AudioType ?? 0);
     }

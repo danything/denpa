@@ -34,7 +34,11 @@ public static class ChannelTable
     /// 復調器に渡す TSID。BS で名前に TSID があるときだけ入る。無ければ <see cref="NoStreamId"/> (選り分けない) で、
     /// その中継器の先頭の TS が来る (NIT を読む入口の <c>BS15</c> はこれ)
     /// </param>
-    public sealed record Tuning(string Type, int Delivery, uint Frequency, uint StreamId)
+    /// <param name="ServiceId">
+    /// 受ける番組の番組番号 (service_id)。名前に <c>/152</c> のように付いているときだけ入る。無ければ null。
+    /// 機材が番組を選ぶもの (PIX-DT295 の衛星) だけが使い、ほかの機材は選り分けずに TS をまるごと流す
+    /// </param>
+    public sealed record Tuning(string Type, int Delivery, uint Frequency, uint StreamId, int? ServiceId = null)
     {
         public bool Satellite => Delivery == SysIsdbs;
     }
@@ -72,32 +76,44 @@ public static class ChannelTable
 
         if (name.StartsWith("BS", StringComparison.Ordinal))
         {
-            if (!Satellite(name[2..], out var channel, out var tsid)) return null;
+            if (!Satellite(name[2..], out var channel, out var tsid, out var service)) return null;
             if (channel is < 1 or > 23 || channel % 2 == 0) return null;
             if (channel is 7 or 17) return null;  // ISDB-S3 (4K/8K)。この復調では受からない
 
             var index = channel / 2;  // BS01 -> 0 … BS23 -> 11
-            return new Tuning("BS", SysIsdbs, (uint)(1049480 + 38360 * index), tsid);
+            return new Tuning("BS", SysIsdbs, (uint)(1049480 + 38360 * index), tsid, service);
         }
 
         if (name.StartsWith("CS", StringComparison.Ordinal))
         {
-            if (!Satellite(name[2..], out var channel, out _)) return null;
+            if (!Satellite(name[2..], out var channel, out _, out var service)) return null;
             if (channel is < 2 or > 24 || channel % 2 != 0) return null;
 
             // CS は 1 つの中継器に 1 本しか入っていない。TSID は名前で TS を見分けるためだけにあり、選り分けない
-            return new Tuning("CS", SysIsdbs, (uint)(1613000 + 40000 * (channel / 2 - 1)), NoStreamId);
+            return new Tuning("CS", SysIsdbs, (uint)(1613000 + 40000 * (channel / 2 - 1)), NoStreamId, service);
         }
 
         return null;
     }
 
     /// <summary>
-    /// 衛星の名前の、種別の後ろ (<c>15:16625</c> か <c>15</c>)。TSID は 1〜65535。付いていなければ <see cref="NoStreamId"/>
+    /// 衛星の名前の、種別の後ろ (<c>15:16625</c> か <c>15</c>。番組番号を付けるなら <c>15:16625/152</c>)。
+    /// TSID は 1〜65535。付いていなければ <see cref="NoStreamId"/>。番組番号は 1〜65535 で、付いていなければ null
     /// </summary>
-    private static bool Satellite(string body, out int channel, out uint tsid)
+    private static bool Satellite(string body, out int channel, out uint tsid, out int? service)
     {
         tsid = NoStreamId;
+        service = null;
+        channel = 0;
+        var slash = body.IndexOf('/');
+        if (slash >= 0)
+        {
+            var text = body[(slash + 1)..];
+            if (text.Length is 0 or > 5 || !text.All(char.IsAsciiDigit)
+                || !int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number is < 1 or > 65535) return false;
+            service = number;
+            body = body[..slash];
+        }
         var colon = body.IndexOf(':');
         if (colon < 0) return Number(body, out channel);
         if (!Number(body[..colon], out channel)) return false;
