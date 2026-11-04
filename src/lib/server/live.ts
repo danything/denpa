@@ -838,20 +838,62 @@ export const LIGHT_NOTE: Record<LightStep, string> = {
 
 /**
  * **次に何を軽くするか。** 順に 60 コマ → 30 コマ (段 0 だけ。段 1〜3 はもう 30 コマ)、ソフトウェア → GPU (同じコーデックを
- * GPU でエンコードできるときだけ。`gpuReady` は `pickLiveHw` が経路を返すか)。どれも済んでいれば null (断り書きだけ)。
- * 30 コマを先にするのは、コーデックとエンコーダを替えずに済み、GPU が降りる心配が無いため
+ * GPU でエンコードできるときだけ)。どれも済んでいれば null (断り書きだけ)。
+ * 30 コマを先にするのは、コーデックとエンコーダを替えずに済み、GPU が降りる心配が無いため。
+ * `gpuReady` は `pickLiveHw` が経路を返すか。GPU に移せるときだけ呼ぶ (`pickLiveHw` は GPU の振り分けの順を進める)
  */
 export function nextLight(o: {
   codec: StreamCodec;
   rung: Rung;
   light: Light;
   software: boolean;
-  gpuReady: boolean;
+  gpuReady: () => boolean;
 }): LightStep | null {
   if (o.codec === "audio") return null;
   if (o.rung === 0 && !o.light.half) return "half";
-  if (o.software && !o.light.gpu && o.gpuReady) return "gpu";
+  if (o.software && !o.light.gpu && o.gpuReady()) return "gpu";
   return null;
+}
+
+/** 軽くしたときに観ている人へ送るもの。断り書きを先に、そのあと全員にリクエストし直させる (`restart`) */
+export function lightNotices(step: LightStep): Notice[] {
+  return [{ type: "notice", message: LIGHT_NOTE[step] }, { type: "restart" }];
+}
+
+/**
+ * **エンコードの遅れを数えて、軽くするかを決める** (`Session.lighten`)。時刻と速さは引数で受け取る (単体で確かめられる)。
+ * 速さが `LIGHT_SLOW` を切ったまま `LIGHT_LAG` 続いたら、1 回だけ答えを返す。
+ *
+ * - `{ step, light }` … 軽くする。`light` は受け継がせるもの (`keepLight`)
+ * - `"heavy"` … 遅れているが、これより軽くできない (書き残すだけ)
+ * - null … まだ何もしない
+ */
+export class EncodeLag {
+  private slowSince: number | null = null;
+  private decided = false;
+
+  /** ffmpeg を起こし直した。前の ffmpeg の遅れは数えない */
+  reset(): void {
+    this.slowSince = null;
+  }
+
+  tick(
+    now: number,
+    speed: number | null,
+    state: Parameters<typeof nextLight>[0],
+  ): { step: LightStep; light: Light } | "heavy" | null {
+    if (this.decided) return null;
+    if (speed === null || speed >= LIGHT_SLOW) {
+      this.slowSince = null;
+      return null;
+    }
+    this.slowSince ??= now;
+    if (now - this.slowSince < LIGHT_LAG) return null;
+    this.decided = true;
+    const step = nextLight(state);
+    if (step === null) return "heavy";
+    return { step, light: { ...state.light, [step]: true } };
+  }
 }
 
 /**
@@ -1201,10 +1243,8 @@ class Session {
   private light: Light = { half: false, gpu: false };
   /** いまの ffmpeg がソフトウェアでエンコードしているか (`lighten` で GPU に移せるかを見る) */
   private software = false;
-  /** エンコードの速さが `LIGHT_SLOW` を切った時刻 */
-  private slowSince: number | null = null;
-  /** 遅れを見て、軽くできなかった。同じことを何度も書き残さない */
-  private heavy = false;
+  /** エンコードの遅れを数える (`lighten`) */
+  private readonly lag = new EncodeLag();
 
   /** 出した映像の長さ (`pace` の `speed`)。ffmpeg ごとに init から読み直す (`drain`) */
   private readonly length = new VideoLength();
@@ -1467,7 +1507,7 @@ class Session {
         this.busy = false;
         this.software = hw === null;
         // 遅れは ffmpeg ごとに数え直す (前の ffmpeg の遅れと、起こし直した直後の速さを合わせない)
-        this.slowSince = null;
+        this.lag.reset();
         const proc = Bun.spawn(
           [
             config.ffmpeg,
@@ -1876,39 +1916,28 @@ class Session {
    *   画面がコーデックを選び直す
    */
   private lighten(now: number): void {
-    if (this.source !== undefined || this.heavy || this.stopped) return;
+    if (this.source !== undefined || this.stopped) return;
     const speed = this.speed;
-    if (speed === null || speed >= LIGHT_SLOW) {
-      this.slowSince = null;
-      return;
-    }
-    this.slowSince ??= now;
-    if (now - this.slowSince < LIGHT_LAG) return;
-    const step = nextLight({
-      codec: this.codec,
+    const codec = this.codec;
+    const verdict = this.lag.tick(now, speed, {
+      codec,
       rung: this.rung,
       light: this.light,
       software: this.software,
-      // GPU を調べるのは移せるときだけ (`pickLiveHw` は GPU の振り分けの順を進める)
-      gpuReady:
-        this.software &&
-        !this.light.gpu &&
-        this.codec !== "audio" &&
-        pickLiveHw(this.codec) !== null,
+      gpuReady: () => codec !== "audio" && pickLiveHw(codec) !== null,
     });
-    if (step === null) {
-      this.heavy = true;
+    if (verdict === null) return;
+    if (verdict === "heavy") {
       console.warn(
         `[live] ${this.id}: エンコードが実時間に追いつきません (${speed} 倍)。これより軽い組み合わせはありません`,
       );
       return;
     }
-    keepLight(this.id, { ...this.light, [step]: true });
+    keepLight(this.id, verdict.light);
     console.warn(
-      `[live] ${this.id}: エンコードが実時間に追いつかない (${speed} 倍) ので、${step === "half" ? "30 コマ" : "GPU"} で作り直します`,
+      `[live] ${this.id}: エンコードが実時間に追いつかない (${speed} 倍) ので、${verdict.step === "half" ? "30 コマ" : "GPU"} で作り直します`,
     );
-    this.tell({ type: "notice", message: LIGHT_NOTE[step] });
-    this.tell({ type: "restart" });
+    for (const notice of lightNotices(verdict.step)) this.tell(notice);
     this.stop();
   }
 
