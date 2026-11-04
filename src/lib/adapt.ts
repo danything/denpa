@@ -1,4 +1,5 @@
 import {
+  ENCODE_SLOW,
   LOWEST_RUNG,
   type Pace,
   type Rung,
@@ -49,7 +50,7 @@ import {
  *
  * ## 下げないとき
  *
- * - サーバのエンコードが実時間に追いつかない (`Pace.speed` が 0 より大きく 1 未満。0 は測れていないと読む) 間は、詰まっても回線のせいにしない。
+ * - サーバのエンコードが実時間に追いつかない (`Pace.speed` が 0 より大きく `ENCODE_SLOW` (0.95) 未満。0 は測れていないと読む) 間は、詰まっても回線のせいにしない。
  *   3 秒続いたら段は下げずに `encode` を返す (画面は断り書きを出すだけ。ライブはサーバが自分で軽い組み合わせに作り直す。
  *   `server/live.ts` の `Session.lighten`)
  * - 形式を手で選んでいる間は段を動かさず、足りないときに `pinned` だけを返す
@@ -193,7 +194,7 @@ export const PROBE_START = 6_000;
  * 速さは 5 秒の窓で測るので、窓 2 つぶん続いたのを見る。先は 60 秒溜まるので、10 秒待っても詰まる前に下げられる
  */
 export const THIN = 10_000;
-/** エンコードの速さが 1 未満のままこれだけ続いたら `encode` を返す (ms)。`budget.ts` と同じく 1 回の遅れでは動かない */
+/** エンコードの速さが `ENCODE_SLOW` 未満のままこれだけ続いたら `encode` を返す (ms)。`budget.ts` と同じく 1 回の遅れでは動かない */
 export const ENCODE_LAG = 3_000;
 /**
  * 段 0 のビットレートが分からないときに使う値 (kbit/s)。ふだんのエンコード (1080p60) のハードウェアの固定ビットレート
@@ -272,7 +273,7 @@ export class RungAdapter {
   private lowSince: number | null = null;
   /** 段 3 での刻みごとの長さ (ms) と、足りなかったか。直近 `AUDIO_WINDOW` ぶん */
   private lowTicks: { at: number; ms: number; short: boolean }[] = [];
-  /** エンコードの速さが 1 を切った時刻 */
+  /** エンコードの速さが `ENCODE_SLOW` を切った時刻 */
   private slowSince: number | null = null;
   /** 観る画面で、測った速さがいまの段に足りなくなった時刻 */
   private thinSince: number | null = null;
@@ -307,7 +308,8 @@ export class RungAdapter {
      * `encode` を返し続けて段がいつまでも動かず、断り書きも出し直され続けた。本当に遅れていれば 0 より大きい値が届く
      */
     const speed = s.pace?.speed ?? null;
-    if (speed !== null && speed > 0 && speed < 1) this.slowSince ??= now;
+    if (speed !== null && speed > 0 && speed < ENCODE_SLOW)
+      this.slowSince ??= now;
     else this.slowSince = null;
     if (this.slowSince !== null) {
       // 溜まりが減るのも詰まるのもエンコードが遅いせい。回線のぶんとして数えない

@@ -50,11 +50,13 @@ import {
   probeBytes,
   probeRate,
   replacesWarning,
+  retryAfterMs,
   rungFields,
   servedStep,
   stepFields,
   STUCK_LEAST,
   Throughput,
+  videoFrozen,
 } from "#lib/live-adapt.js";
 import { holdStep, rawChasePosition } from "#lib/live-chase.js";
 import {
@@ -179,6 +181,11 @@ const RESUME_STUCK = 3_000;
  * 実機で無事なときの遅れは最大 0.058 秒だったので、飛んでばかりにはならない (0.15 では分かるのに直らなかった)
  */
 const SLIP_MOST = 0.1;
+/**
+ * canvas で、描いたコマ数がこれだけ増えなければ映像だけ止まっていると見る (ms。`stuckNow`)。RawEngine は描いたコマ数を
+ * 1 秒ごとにしか知らせないので、`<video>` の `STUCK_LEAST` (0.5 秒) より長くとる
+ */
+const CANVAS_FROZEN = 1_500;
 /**
  * 互換モードの追っかけで、抱えきれずに受け取るのをやめたあと、手元がこれを切ったらリクエストし直す (秒)。
  * 読み直し (ffmpeg の立ち上がりとキーフレーム待ち) は 1 秒ほどなので、尽きる前に間に合う
@@ -380,6 +387,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let freshSocket = false;
   /** 試しのデータを取っている最中か (`probeLink`) */
   let probing = false;
+  /** この時刻 (ms) までは試しのデータを取らない (サーバに回数の制限で断られたとき。`probeLink`) */
+  let probeAfter = 0;
   /** 上げた段をリクエストした時刻と、上げる前の段。映り始めるまで (`adapt` の `PROBE_START`) */
   let upAsk: { from: Step; at: number } | null = null;
   /** `<video>` が先を持たなくなった時刻 (`stuckNow`) */
@@ -935,22 +944,41 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 詰まっているか (`AdaptSample.waiting`)。canvas は詰まった次の刻みだけ (`stuck`)。`<video>` は `waiting` から `playing` までに
+   * 詰まっているか (`AdaptSample.waiting`)。canvas は詰まった次の刻み (`stuck`) と、描いたコマが `CANVAS_FROZEN` 増えないとき。`<video>` は `waiting` から `playing` までに
    * 加えて、先を持たない状態が `STUCK_LEAST` 続いたとき。`waiting` は自分で飛んだあと 3 秒数えない (`quiet`) ので、
    * 止まっては飛ぶのを繰り返すと、それだけでは詰まりが見えない
    */
   function stuckNow(now: number): boolean {
-    if (canvas || element === null) return stuck;
+    if (canvas) {
+      /*
+       * canvas (MPEG-2・互換モード) は、描いたコマ数 (RawEngine の `frameAt`。1 秒ごとに届く) が `CANVAS_FROZEN` 増えなければ、
+       * 音は鳴っているのに映像だけ止まっていると見る。`<video>` の `requestVideoFrameCallback` の代わり
+       */
+      const at = engine?.frameAt ?? 0;
+      const frozen = videoFrozen({
+        now: Date.now(),
+        frameAt: at,
+        least: CANVAS_FROZEN,
+        playing: engine?.playing === true,
+        audioOnly: served === "audio",
+        hidden: document.hidden,
+      });
+      return stuck || frozen;
+    }
+    if (element === null) return stuck;
     /*
      * **映像だけが止まって音が続く**のも詰まりに数える。キーフレームの大きな塊が細い回線で遅れて届くと、音の時計は進むのに
      * 映るコマが来ない (`readyState` は落ちず `waiting` も来ない)。映ったコマ (`requestVideoFrameCallback`) が
      * `STUCK_LEAST` 来なければそう見る。測れないブラウザ (`lastFrameAt` が 0)・音声だけ・画面が裏のときは見ない
      */
-    const frozen =
-      lastFrameAt > 0 &&
-      served !== "audio" &&
-      !document.hidden &&
-      performance.now() - lastFrameAt >= STUCK_LEAST;
+    const frozen = videoFrozen({
+      now: performance.now(),
+      frameAt: lastFrameAt,
+      least: STUCK_LEAST,
+      playing: true,
+      audioOnly: served === "audio",
+      hidden: document.hidden,
+    });
     const starving =
       (element.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || frozen) &&
       !element.seeking;
@@ -974,7 +1002,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 再生中の段の受け取りの速さと足して `capacity` にする。`PROBE_GIVE_UP` でやめる (細い回線で取り続けると映像が細る)
    */
   async function probeLink(need: number, stream: number): Promise<void> {
-    if (probing) return;
+    if (probing || Date.now() < probeAfter) return;
     probing = true;
     const bytes = probeBytes(need, stream);
     const control = new AbortController();
@@ -989,6 +1017,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         cache: "no-store",
         signal: control.signal,
       });
+      if (res.status === 429) {
+        // 間を置かずに取ろうとした (同じ利用者のほかの画面が測った直後など)。言われた時間までは測らず、測ったことにもしない
+        probeAfter = Date.now() + retryAfterMs(res.headers.get("Retry-After"));
+        return;
+      }
       const reader = res.ok ? res.body?.getReader() : undefined;
       while (reader !== undefined) {
         const { done, value } = await reader.read();

@@ -219,3 +219,35 @@ export function probeSize(asked: string | null): number {
   if (asked === null || !Number.isFinite(n)) return PROBE_LEAST;
   return Math.round(Math.min(PROBE_MOST, Math.max(PROBE_LEAST, n)));
 }
+
+/**
+ * 試しのデータを断られたとき (429) に、次に測ってよいまでの長さ (ms)。`Retry-After` (秒) が無い・読めなければ `fallback`。
+ * 無いときを 0 と読むと、次の刻みでまた取りにいって断られ続ける
+ */
+export function retryAfterMs(header: string | null, fallback = 10_000): number {
+  if (header === null || header.trim() === "") return fallback;
+  const seconds = Number(header);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : fallback;
+}
+
+/**
+ * **音は進むのに映像だけ止まっているか** (`live-player.svelte.ts` の `stuckNow`)。最後にコマが映った時刻 (`frameAt`。
+ * 測れない・まだ映っていなければ 0) から `least` たったら止まっていると見る。鳴らしていない・音声だけ・画面が裏
+ * (コマを描かない) のときは見ない。`<video>` は `requestVideoFrameCallback` の時刻、canvas は描いたコマ数が増えた時刻を渡す
+ */
+export function videoFrozen(o: {
+  now: number;
+  frameAt: number;
+  least: number;
+  playing: boolean;
+  audioOnly: boolean;
+  hidden: boolean;
+}): boolean {
+  return (
+    o.frameAt > 0 &&
+    o.playing &&
+    !o.audioOnly &&
+    !o.hidden &&
+    o.now - o.frameAt >= o.least
+  );
+}

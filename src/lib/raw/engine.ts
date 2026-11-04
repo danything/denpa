@@ -90,6 +90,13 @@ export class RawEngine {
   /** 選局し直してから音が来たか。来ないまま映像だけ出ているなら諦める (`NO_AUDIO`) */
   private heardAt = 0;
   private shownAt = 0;
+  /** 最後に届いた描いたコマ数 (`stats`) */
+  private shownCount = 0;
+  /**
+   * 描いたコマ数が最後に増えた時刻 (ms。`stats` は 1 秒ごと)。まだ描いていなければ 0。選局し直したら 0 に戻す。
+   * 画面が「音は進むのに映像だけ止まっている」を詰まりに数えるのに使う (`live-player.svelte.ts` の `stuckNow`)
+   */
+  frameAt = 0;
   /** デコードできた音のコマ数 (選局からの通しではなく、このエンジンを作ってからの通し) */
   private heard = 0;
   private gone = false;
@@ -273,6 +280,8 @@ export class RawEngine {
     this.near = null;
     this.heardAt = 0;
     this.shownAt = 0;
+    this.shownCount = 0;
+    this.frameAt = 0;
     this.finishing = false;
     if (!this.gone) this.resetting++;
     this.send({ type: "reset", from });
@@ -478,6 +487,9 @@ export class RawEngine {
         this.canvas.dataset["aspect"] = `${message.width} / ${message.height}`;
         break;
       case "stats":
+        // 描いたコマ数が進んだ時刻 (`frameAt`)。音は進むのにコマが増えなければ、映像だけ止まっている
+        if (message.shown > this.shownCount) this.frameAt = Date.now();
+        this.shownCount = message.shown;
         this.dropped = message.dropped;
         this.decodeMs = message.p95;
         this.thinned = message.thinned;
