@@ -250,6 +250,7 @@ type StreamCodec = LiveCodec | "audio";
  *   そうと分かったらこちらで再エンコードする (`Session.run`)
  * @param hw GPU でエンコードするならその経路 (`hwenc.liveHw`)。null ならソフトウェア (`videoArgs`)
  * @param rung 回線に合わせて下げた段 (`#lib/rungs.ts`)。0 なら下げない
+ * @param half エンコードが遅れたので 30 コマにするか (`videoArgs` の `half`。`Session` の `lighten`)
  */
 export function encodeArgs(
   program: number,
@@ -258,8 +259,10 @@ export function encodeArgs(
   caption: number | null = 0,
   hw: LiveHw | null = null,
   rung: Rung = 0,
+  half = false,
 ): string[] {
-  const picture = codec === "audio" ? null : videoArgs(codec, hw, true, rung);
+  const picture =
+    codec === "audio" ? null : videoArgs(codec, hw, true, rung, null, half);
   const from = programSpec(program);
   return [
     "-hide_banner",
@@ -400,7 +403,14 @@ export function panArgs(audio: AudioTrack): string[] {
  * `rung` が 1〜3 なら、段の表 (`#lib/rungs.ts`) の高さ・30 コマ以下・ビットレートの上限で変換する (`rungVideo`)。
  * 0 なら上のとおりで、今までと同じ引数になる
  *
+ * ## エンコードが遅れたときの 30 コマ (`half`)
+ *
+ * サーバのエンコードが実時間に追いつかないとき、段 0 の放送を 60 コマではなく 30 コマにする (`Session` の `lighten`)。
+ * インタレ解除を 1 コマずつの出し方 (`bwdif=mode=send_frame`・`deinterlace_vaapi=rate=frame`) にするだけで、
+ * エンコードするコマが半分になる。キーフレームは 1 秒ごとのまま (`-g 30`)。段 1〜3 はもともと 30 コマなので効かない
+ *
  * @param fps 元のコマ数 (エンコード済みを ffprobe で読んだもの)。分からなければ null。段を下げるときだけ使う
+ * @param half 段 0 の放送を 30 コマにするか (上の説明)
  * @returns `input` は `-i` より前、`filter` は `-vf` (無ければ空)、`encoder` は `-c:v` から
  */
 export function videoArgs(
@@ -409,23 +419,32 @@ export function videoArgs(
   interlaced = true,
   rung: Rung = 0,
   fps: number | null = null,
+  half = false,
 ): { input: string[]; filter: string; encoder: string[] } {
   if (rung !== 0) return rungVideo(codec, hw, interlaced, rung, fps);
+  const smooth = !(half && interlaced);
+  // キーフレームは 1 秒ごと。合流の待ちはキーフレームの間隔で決まる
+  const gop = smooth ? "60" : "30";
   if (hw !== null) {
-    const gpu = liveHwArgs(interlaced ? hw : { ...hw, full: false }, codec);
+    const gpu = liveHwArgs(
+      interlaced ? hw : { ...hw, full: false },
+      codec,
+      null,
+      !smooth,
+    );
     return {
       input: gpu.input,
       // 復号から GPU なら CPU のインタレ解除は挟まない (挟むとフレームを降ろすことになる)
       filter: (hw.full && interlaced
         ? gpu.filter
-        : [...(interlaced ? [deinterlace(true)] : []), ...gpu.filter]
+        : [...(interlaced ? [deinterlace(smooth)] : []), ...gpu.filter]
       ).join(","),
-      // -g はソフトウェアと揃える。合流の待ちはキーフレームの間隔で決まる
+      // -g はソフトウェアと揃える
       encoder: [
         "-c:v",
         ...gpu.encoder,
         "-g",
-        "60",
+        gop,
         ...(codec === "hevc" ? ["-tag:v", "hvc1"] : []),
       ],
     };
@@ -433,13 +452,13 @@ export function videoArgs(
   if (codec === "hevc") throw new Error("H.265 は GPU でだけエンコードします");
   return {
     input: [],
-    filter: interlaced ? deinterlace(true) : "",
-    encoder: softwareArgs(codec),
+    filter: interlaced ? deinterlace(smooth) : "",
+    encoder: softwareArgs(codec, gop),
   };
 }
 
 /** ソフトウェアでエンコードするときの `-c:v` から (上の説明) */
-function softwareArgs(codec: Exclude<LiveCodec, "hevc">): string[] {
+function softwareArgs(codec: Exclude<LiveCodec, "hevc">, gop = "60"): string[] {
   if (codec === "av1") {
     // -g は H.264 と揃える。合流の待ちはキーフレームの間隔で決まる
     return [
@@ -448,7 +467,7 @@ function softwareArgs(codec: Exclude<LiveCodec, "hevc">): string[] {
       "-preset",
       "12",
       "-g",
-      "60",
+      gop,
       "-svtav1-params",
       "lookahead=0",
     ];
@@ -499,7 +518,7 @@ function softwareArgs(codec: Exclude<LiveCodec, "hevc">): string[] {
     "-tune",
     "zerolatency",
     "-g",
-    "60",
+    gop,
   ];
 }
 
@@ -773,6 +792,108 @@ const FORGET = 15 * 60_000;
 function remembered<K>(memo: Map<K, number>, key: K): boolean {
   const at = memo.get(key);
   return at !== undefined && Date.now() - at < FORGET;
+}
+
+/**
+ * **エンコードが遅れたので軽くしたもの** (`Session` の `lighten`)。
+ *
+ * - `half` … 段 0 の放送を 30 コマにした (`videoArgs` の `half`)
+ * - `gpu` … ソフトウェアから GPU に移した (GPU を 1 回試した。また降りてソフトウェアに戻っても、もう試さない)
+ */
+export interface Light {
+  half: boolean;
+  gpu: boolean;
+}
+export type LightStep = keyof Light;
+
+/**
+ * エンコードの速さ (`Session.speed`) がこれを切ったら遅れている。1 ちょうどにしないのは、塊の届き方で 1 の前後に揺れるため
+ * (5 秒の窓で 0.05 秒ぶんの塊 1 つが 1%)
+ */
+export const LIGHT_SLOW = 0.95;
+/** 遅れがこれだけ続いたら軽くする (ms)。画面の断り書き (`adapt.ts` の `ENCODE_LAG`) より長く、1 回の重さでは動かない */
+export const LIGHT_LAG = 5_000;
+/** 軽くしたものを、作り直した次のセッションへ受け継ぐ期限 (ms)。画面がリクエストし直すまでの間 */
+const LIGHT_CARRY = 30_000;
+/** セッションの目印 (`key`) → 軽くしたもの。次のセッションが作られたら消す */
+const lightened = new Map<string, { light: Light; at: number }>();
+
+/** 作り直す前のセッションが、軽くしたものを次のセッションへ預ける */
+export function keepLight(id: string, light: Light, now = Date.now()): void {
+  lightened.set(id, { light, at: now });
+}
+
+/** 新しいセッションが、預けられた軽くしたものを受け取る (1 回だけ)。無い・期限 (`LIGHT_CARRY`) を過ぎたなら null */
+export function takeLight(id: string, now = Date.now()): Light | null {
+  const held = lightened.get(id);
+  lightened.delete(id);
+  return held !== undefined && now - held.at < LIGHT_CARRY ? held.light : null;
+}
+
+/** 軽くしたときに、観ている人に出す断り書き (`notice`) */
+export const LIGHT_NOTE: Record<LightStep, string> = {
+  half: "サーバのエンコードが追いつかないため、30 コマに切り替えました",
+  gpu: "サーバのエンコードが追いつかないため、GPU のエンコードに切り替えました",
+};
+
+/**
+ * **次に何を軽くするか。** 順に 60 コマ → 30 コマ (段 0 だけ。段 1〜3 はもう 30 コマ)、ソフトウェア → GPU (同じコーデックを
+ * GPU でエンコードできるときだけ)。どれも済んでいれば null (断り書きだけ)。
+ * 30 コマを先にするのは、コーデックとエンコーダを替えずに済み、GPU が降りる心配が無いため。
+ * `gpuReady` は `pickLiveHw` が経路を返すか。GPU に移せるときだけ呼ぶ (`pickLiveHw` は GPU の振り分けの順を進める)
+ */
+export function nextLight(o: {
+  codec: StreamCodec;
+  rung: Rung;
+  light: Light;
+  software: boolean;
+  gpuReady: () => boolean;
+}): LightStep | null {
+  if (o.codec === "audio") return null;
+  if (o.rung === 0 && !o.light.half) return "half";
+  if (o.software && !o.light.gpu && o.gpuReady()) return "gpu";
+  return null;
+}
+
+/** 軽くしたときに観ている人へ送るもの。断り書きを先に、そのあと全員にリクエストし直させる (`restart`) */
+export function lightNotices(step: LightStep): Notice[] {
+  return [{ type: "notice", message: LIGHT_NOTE[step] }, { type: "restart" }];
+}
+
+/**
+ * **エンコードの遅れを数えて、軽くするかを決める** (`Session.lighten`)。時刻と速さは引数で受け取る (単体で確かめられる)。
+ * 速さが `LIGHT_SLOW` を切ったまま `LIGHT_LAG` 続いたら、1 回だけ答えを返す。
+ *
+ * - `{ step, light }` … 軽くする。`light` は受け継がせるもの (`keepLight`)
+ * - `"heavy"` … 遅れているが、これより軽くできない (書き残すだけ)
+ * - null … まだ何もしない
+ */
+export class EncodeLag {
+  private slowSince: number | null = null;
+  private decided = false;
+
+  /** ffmpeg を起こし直した。前の ffmpeg の遅れは数えない */
+  reset(): void {
+    this.slowSince = null;
+  }
+
+  tick(
+    now: number,
+    speed: number | null,
+    state: Parameters<typeof nextLight>[0],
+  ): { step: LightStep; light: Light } | "heavy" | null {
+    if (this.decided) return null;
+    if (speed === null || speed >= LIGHT_SLOW) {
+      this.slowSince = null;
+      return null;
+    }
+    this.slowSince ??= now;
+    if (now - this.slowSince < LIGHT_LAG) return null;
+    this.decided = true;
+    const step = nextLight(state);
+    if (step === null) return "heavy";
+    return { step, light: { ...state.light, [step]: true } };
+  }
 }
 
 /**
@@ -1114,7 +1235,16 @@ class Session {
       pin,
       rung,
     );
+    // エンコードが遅れて作り直した前のセッションから、軽くしたものを受け継ぐ (`lighten`)
+    this.light = takeLight(this.id) ?? this.light;
   }
+
+  /** エンコードが遅れたので軽くしたもの (`lighten`)。作ったときに前のセッションから受け継ぐ */
+  private light: Light = { half: false, gpu: false };
+  /** いまの ffmpeg がソフトウェアでエンコードしているか (`lighten` で GPU に移せるかを見る) */
+  private software = false;
+  /** エンコードの遅れを数える (`lighten`) */
+  private readonly lag = new EncodeLag();
 
   /** 出した映像の長さ (`pace` の `speed`)。ffmpeg ごとに init から読み直す (`drain`) */
   private readonly length = new VideoLength();
@@ -1375,6 +1505,9 @@ class Session {
         }
         this.produced = false;
         this.busy = false;
+        this.software = hw === null;
+        // 遅れは ffmpeg ごとに数え直す (前の ffmpeg の遅れと、起こし直した直後の速さを合わせない)
+        this.lag.reset();
         const proc = Bun.spawn(
           [
             config.ffmpeg,
@@ -1385,6 +1518,7 @@ class Session {
               wanted,
               hw,
               this.rung,
+              this.light.half,
             ),
           ],
           // 字幕は 4 本目のパイプ (pipe:3) へ出させる。**stdio の配列でしか増やせない**
@@ -1402,7 +1536,7 @@ class Session {
         if (this.opening.media === undefined) {
           this.opening.spawned = this.since();
           delete this.opening.init;
-          this.way = `${this.codec}${hw === null ? "" : `・GPU ${hw.way.kind}`}`;
+          this.way = `${this.codec}${hw === null ? "" : `・GPU ${hw.way.kind}`}${this.light.half ? "・30 コマ" : ""}`;
         }
 
         /*
@@ -1770,6 +1904,44 @@ class Session {
   }
 
   /**
+   * **エンコードが実時間に追いつかなければ、軽い組み合わせで作り直す** (docs/stream.md「エンコードが遅れたとき」)。
+   * 映像の塊を出すたびに呼ぶ。速さ (`speed`) が `LIGHT_SLOW` を切ったまま `LIGHT_LAG` 続いたら、`nextLight` の順で 1 つ軽くする。
+   *
+   * - **決めるのはサーバ。** 速さはこのセッションのエンコードの値で、観ている人の端末の都合ではない。画面は指示を送らない
+   * - **観ている人全員に効く。** 同じセッションを共有している人は、同じ遅れを受けている。軽くしたものは受け継がせ
+   *   (`lightened`)、`restart` で全員にリクエストし直させる (番組が替わったときと同じ。途切れるのはエンコードし始めのぶん)。
+   *   作り直した新しいセッションは、閉じるまで軽いまま (戻さない)
+   * - **ライブだけ。** 追っかけは録画の書き込みを待つ間も速さが 1 を割るので、エンコードの遅れと読み分けられない
+   * - コーデックを替える軽くし方 (ソフトウェアの AV1 → GPU の H.264 など) はしない。セッションの目印 (`key`) が変わるので、
+   *   画面がコーデックを選び直す
+   */
+  private lighten(now: number): void {
+    if (this.source !== undefined || this.stopped) return;
+    const speed = this.speed;
+    const codec = this.codec;
+    const verdict = this.lag.tick(now, speed, {
+      codec,
+      rung: this.rung,
+      light: this.light,
+      software: this.software,
+      gpuReady: () => codec !== "audio" && pickLiveHw(codec) !== null,
+    });
+    if (verdict === null) return;
+    if (verdict === "heavy") {
+      console.warn(
+        `[live] ${this.id}: エンコードが実時間に追いつきません (${speed} 倍)。これより軽い組み合わせはありません`,
+      );
+      return;
+    }
+    keepLight(this.id, verdict.light);
+    console.warn(
+      `[live] ${this.id}: エンコードが実時間に追いつかない (${speed} 倍) ので、${verdict.step === "half" ? "30 コマ" : "GPU"} で作り直します`,
+    );
+    for (const notice of lightNotices(verdict.step)) this.tell(notice);
+    this.stop();
+  }
+
+  /**
    * ffmpeg が出した fMP4 を割って配る。**割る道具は ffmpeg ごとに作り**、起こし直したとき
    * (`run`)、前の ffmpeg の書きかけを次へ持ち越さない
    */
@@ -1805,6 +1977,7 @@ class Session {
             this.media += this.length.media(segment.data);
             const now = Date.now();
             this.meter.record(now, this.media, now);
+            this.lighten(now);
           }
           for (const viewer of this.viewers)
             this.hand(viewer, CHANNEL.videoMedia, segment.data);

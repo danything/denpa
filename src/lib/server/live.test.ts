@@ -14,9 +14,15 @@ import {
   blameLiveHw,
   CHASE_STREAM_HOLD,
   encodeArgs,
+  EncodeLag,
+  keepLight,
   key,
+  type Light,
+  LIGHT_LAG,
+  lightNotices,
   LIVE_STREAM_BACKLOG,
   liveHwFailed,
+  nextLight,
   openingLine,
   parseCommand,
   parsePlayable,
@@ -26,6 +32,7 @@ import {
   rungSlot,
   sessionStream,
   softwareEncodes,
+  takeLight,
   videoArgs,
   whyNotTuned,
 } from "./live";
@@ -762,6 +769,162 @@ describe("元の TS が尽きたあと (rawEnding)", () => {
   test("畳んだあとは何も伝えない", () => {
     expect(rawEnding({ chase: true, fed: true, stopped: true })).toBe("quiet");
     expect(rawEnding({ chase: false, fed: true, stopped: true })).toBe("quiet");
+  });
+});
+
+/**
+ * **エンコードが遅れたときに軽くする** (`Session` の `lighten`)。60 コマ → 30 コマ、ソフトウェア → GPU の順で、
+ * コーデックは替えない。軽くしたものは作り直した次のセッションが受け継ぐ
+ */
+describe("エンコードが遅れたときの軽い組み合わせ", () => {
+  const fresh: Light = { half: false, gpu: false };
+  const base = {
+    codec: "h264" as const,
+    rung: 0 as const,
+    light: fresh,
+    software: true,
+    gpuReady: () => true,
+  };
+
+  test("段 0 はまず 30 コマ、次に GPU、どちらも済めば何もしない", () => {
+    expect(nextLight(base)).toBe("half");
+    expect(nextLight({ ...base, light: { half: true, gpu: false } })).toBe(
+      "gpu",
+    );
+    expect(nextLight({ ...base, light: { half: true, gpu: true } })).toBeNull();
+  });
+
+  test("段 1〜3 はもう 30 コマなので GPU だけ。GPU で動いている・GPU が使えないなら何もしない", () => {
+    expect(nextLight({ ...base, rung: 2 })).toBe("gpu");
+    expect(nextLight({ ...base, rung: 2, software: false })).toBeNull();
+    expect(nextLight({ ...base, rung: 2, gpuReady: () => false })).toBeNull();
+    expect(nextLight({ ...base, codec: "audio" })).toBeNull();
+  });
+
+  test("GPU を調べるのは GPU に移せるときだけ (振り分けの順を進めない)", () => {
+    let asked = 0;
+    const gpuReady = () => {
+      asked++;
+      return true;
+    };
+    nextLight({ ...base, gpuReady });
+    nextLight({ ...base, rung: 1, software: false, gpuReady });
+    nextLight({
+      ...base,
+      rung: 1,
+      light: { half: false, gpu: true },
+      gpuReady,
+    });
+    expect(asked).toBe(0);
+    nextLight({ ...base, rung: 1, gpuReady });
+    expect(asked).toBe(1);
+  });
+
+  test("速さが 0.95 を切ったまま 5 秒続いたら 1 回だけ軽くする。戻れば数え直す", () => {
+    const lag = new EncodeLag();
+    expect(lag.tick(0, null, base)).toBeNull();
+    expect(lag.tick(1_000, 0.9, base)).toBeNull();
+    // 0.95 以上に戻った。数え直す
+    expect(lag.tick(3_000, 0.97, base)).toBeNull();
+    expect(lag.tick(4_000, 0.9, base)).toBeNull();
+    expect(lag.tick(8_999, 0.9, base)).toBeNull();
+    expect(lag.tick(4_000 + LIGHT_LAG, 0.9, base)).toEqual({
+      step: "half",
+      light: { half: true, gpu: false },
+    });
+    // 答えは 1 回だけ (セッションはここで畳む)
+    expect(lag.tick(20_000, 0.5, base)).toBeNull();
+  });
+
+  test("起こし直した ffmpeg は遅れを数え直す", () => {
+    const lag = new EncodeLag();
+    lag.tick(0, 0.9, base);
+    lag.reset();
+    expect(lag.tick(LIGHT_LAG, 0.9, base)).toBeNull();
+    expect(lag.tick(2 * LIGHT_LAG, 0.9, base)).not.toBeNull();
+  });
+
+  test("これより軽くできなければ heavy を 1 回だけ返す", () => {
+    const lag = new EncodeLag();
+    const done = { ...base, light: { half: true, gpu: true } };
+    lag.tick(0, 0.5, done);
+    expect(lag.tick(LIGHT_LAG, 0.5, done)).toBe("heavy");
+    expect(lag.tick(2 * LIGHT_LAG, 0.5, done)).toBeNull();
+  });
+
+  /*
+   * **遅れてから作り直すまでの流れ** (`Session.lighten` が順に呼ぶもの)。遅れを数え (`EncodeLag`)、軽くしたものを預け
+   * (`keepLight`)、断り書きと `restart` を送る (`lightNotices`)。画面がリクエストし直して作られた次のセッションは
+   * 預けたものを受け取り (`takeLight`)、軽い組み合わせで ffmpeg を起こす (`encodeArgs` の `half`)。もう一度遅れたら次は GPU
+   */
+  test("遅れたら 30 コマで作り直し、次のセッションが受け継ぐ。また遅れたら GPU", () => {
+    const id = "GR:T27:1024:0:both:h264:0";
+    const first = new EncodeLag();
+    for (let at = 0; at < LIGHT_LAG; at += 500)
+      expect(first.tick(at, 0.8, base)).toBeNull();
+    const verdict = first.tick(LIGHT_LAG, 0.8, base);
+    if (verdict === null || verdict === "heavy")
+      throw new Error("軽くしていない");
+    keepLight(id, verdict.light, LIGHT_LAG);
+    expect(lightNotices(verdict.step)).toEqual([
+      {
+        type: "notice",
+        message:
+          "サーバのエンコードが追いつかないため、30 コマに切り替えました",
+      },
+      { type: "restart" },
+    ]);
+
+    // 画面がリクエストし直して、同じ目印の新しいセッションができる
+    const light = takeLight(id, LIGHT_LAG + 1_000) ?? fresh;
+    expect(light).toEqual({ half: true, gpu: false });
+    const args = encodeArgs(1024, stereo, "h264", 0, null, 0, light.half);
+    expect(args).toContain("bwdif=mode=send_frame");
+    expect(args.join(" ")).toContain("-g 30");
+
+    // 新しいセッションでもまだ遅い。次は GPU
+    const second = new EncodeLag();
+    const now = { ...base, light };
+    second.tick(0, 0.8, now);
+    const again = second.tick(LIGHT_LAG, 0.8, now);
+    expect(again).toEqual({ step: "gpu", light: { half: true, gpu: true } });
+    expect(lightNotices("gpu")[0]).toEqual({
+      type: "notice",
+      message:
+        "サーバのエンコードが追いつかないため、GPU のエンコードに切り替えました",
+    });
+  });
+
+  test("30 コマは放送のインタレ解除を 1 コマずつにして、キーフレームは 1 秒ごと", () => {
+    const soft = videoArgs("h264", null, true, 0, null, true);
+    expect(soft.filter).toBe("bwdif=mode=send_frame");
+    expect(soft.encoder.join(" ")).toContain("-g 30");
+    expect(encodeArgs(1024, stereo, "h264", 0, null, 0, true)).toContain(
+      "bwdif=mode=send_frame",
+    );
+    const vaapi: LiveHw = {
+      way: { device: "/dev/dri/renderD128", kind: "vaapi" },
+      full: true,
+    };
+    expect(videoArgs("h264", vaapi, true, 0, null, true).filter).toBe(
+      "deinterlace_vaapi=rate=frame",
+    );
+    expect(videoArgs("h264", vaapi, true, 0).filter).toBe(
+      "deinterlace_vaapi=rate=field",
+    );
+    // 指定しなければ今までどおり 60 コマ
+    expect(videoArgs("h264", null, true, 0).encoder.join(" ")).toContain(
+      "-g 60",
+    );
+  });
+
+  test("軽くしたものは次のセッションが 1 回だけ受け取り、期限を過ぎたら受け取らない", () => {
+    keepLight("GR:T27:1", { half: true, gpu: false }, 1_000);
+    expect(takeLight("GR:T27:1", 2_000)).toEqual({ half: true, gpu: false });
+    expect(takeLight("GR:T27:1", 2_000)).toBeNull();
+    keepLight("GR:T27:1", { half: true, gpu: false }, 1_000);
+    expect(takeLight("GR:T27:1", 60_000)).toBeNull();
+    expect(takeLight("GR:T16:1", 2_000)).toBeNull();
   });
 });
 
