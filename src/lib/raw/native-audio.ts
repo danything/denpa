@@ -1,5 +1,5 @@
 /**
- * ライブの映像は <video> のまま、音声だけ既存の WASM デコーダーと Web Audio で再生する。
+ * ライブの映像は <video> のまま、音声だけ WASM のデコーダ (canvas に描く worker と同じ。`wasm-audio.ts`) と Web Audio で再生する。
  * WebKit の MSE → MediaElementAudioSource が音声を渡さない問題を避ける (WebKit だけ。`native-audio-choice.ts`)。
  * 同期は映像の時計に合わせ、AudioContext 上では連続する音声の間隔を保つ。
  *
@@ -18,7 +18,7 @@ import {
 
 const TICK_MS = 20;
 /**
- * 復号した PCM を持つ上限。**止めていても増え続けない**ための天井で、`HISTORY_SECONDS` とは別の歯止め。
+ * デコードした PCM を持つ上限。**止めていても増え続けない**ための天井で、`HISTORY_SECONDS` とは別の歯止め。
  * float の 48kHz 2ch なら約 43 秒ぶん (このときは `HISTORY_SECONDS` が先に効く)、5.1ch なら約 14 秒ぶん
  */
 const PCM_LIMIT = 16 * 1024 * 1024;
@@ -88,8 +88,7 @@ export class NativeAudio {
     }
     this.worker.onmessage = (event: MessageEvent<AudioOutput>) =>
       this.receive(event.data);
-    this.worker.onerror = () =>
-      this.fail("音声デコーダーでエラーが発生しました");
+    this.worker.onerror = () => this.fail("音声のデコーダが止まりました");
     this.send({ type: "load", base: decoder });
     const signal = this.listening.signal;
     const bind = (event: string, fn: () => void) =>

@@ -275,7 +275,7 @@ export class Fmp4Video {
     try {
       this.decoder.configure(config);
     } catch {
-      this.host.fail("この形式を再生できません");
+      this.host.fail("再生できない形式です");
     }
   }
 

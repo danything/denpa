@@ -27,7 +27,7 @@ interface Pcm {
 }
 
 /** WASM のメモリの置き場 */
-export interface Slot {
+interface Slot {
   pointer: number;
   size: number;
 }

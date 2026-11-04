@@ -152,7 +152,10 @@ function readTrack(body: Uint8Array): MkvTrack {
   return track;
 }
 
-/** CodecID と CodecPrivate から WebCodecs の書き方を起こす (`ts/fmp4.ts` の `readEntry` と同じ決まり) */
+/**
+ * CodecID と CodecPrivate から WebCodecs の書き方を起こす (`ts/fmp4.ts` の `readEntry` と同じ決まり)。
+ * H.265 は互換モードで描かないので読まない (`ts/playback.ts` の `CanvasCodec`)
+ */
 function codecOf(track: MkvTrack): string | null {
   const c = track.config;
   if (track.codecId === "V_MPEG4/ISO/AVC" && c.length >= 4) return avcCodec(c);

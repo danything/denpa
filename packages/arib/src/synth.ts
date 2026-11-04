@@ -499,7 +499,7 @@ export function pcrPacket(
   return packet;
 }
 
-/** 放送の実時刻 (TDT) を 1 パケットに。BML の `getCurrentDateTime` が見る */
+/** 放送の実時刻 (TDT) を 1 パケットに。データ放送の時刻 (`BmlDecoder` の `currentTime`) はこれから作る */
 export function tdtPacket(unixMs: number): Uint8Array {
   return packetize(
     0x0014,

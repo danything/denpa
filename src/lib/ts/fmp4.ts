@@ -90,10 +90,11 @@ export class Fmp4Splitter {
 
 /*
  * ---------------------------------------------------------------------------
- * 中身を読む (画面の canvas で描く経路。`raw/fmp4.ts`)。
+ * 中身を読む (画面の canvas で描く経路の `raw/fmp4.ts`、キーフレームを待つ `key-gate.ts`、
+ * サーバが送り出した映像の長さを数える `server/pace.ts`)。
  *
- * MSE に渡すときは割るだけで済んだが、**自分でデコードするときは中身が要る。** moov から
- * 何の映像・音声か (avcC / av1C / esds / dOps) を、moof から 1 コマずつの時刻と在りかを
+ * MSE に渡すときは割るだけで済んだが、**自分でデコードするときやコマを数えるときは中身が要る。** moov から
+ * 何の映像・音声か (avcC / hvcC / av1C / esds / dOps) を、moof から 1 コマずつの時刻と在りかを
  * (tfdt / trun) 読む。読むのは denpa の ffmpeg が出す形式 (`server/live.ts` の
  * `+empty_moov+default_base_moof`) に要るものだけ。
  *
@@ -262,88 +263,94 @@ function paspWidth(pasp: Uint8Array | null, width: number): number | null {
   return displayWidth >= 1 && displayWidth <= 0xffff ? displayWidth : null;
 }
 
+/** sample entry から読む、映像・音声に共通のもの */
+type EntryBase = Pick<Fmp4Track, "id" | "timescale" | "defaults">;
+
+/** 映像の sample entry の種類ごとの、設定の箱 (`min` はその箱に要る長さ) と codec の起こし方 */
+interface VideoEntry {
+  box: string;
+  min: number;
+  codec: (type: string, config: Uint8Array) => string;
+}
+
+/**
+ * 読む映像の sample entry。H.265 は段を下げた変換で GPU (hevc_rkmpp など) が出す。読めないと映像の長さが
+ * 数えられず、サーバの速さ (`server/pace.ts`) が 0 のままになる (#2152)
+ */
+const VIDEO_ENTRIES = new Map<string, VideoEntry>([
+  ["avc1", { box: "avcC", min: 4, codec: (_, config) => avcCodec(config) }],
+  ["hvc1", { box: "hvcC", min: 13, codec: hevcCodec }],
+  ["hev1", { box: "hvcC", min: 13, codec: hevcCodec }],
+  ["av01", { box: "av1C", min: 4, codec: (_, config) => av1Codec(config) }],
+]);
+
 function readEntry(
   entry: Box,
   id: number,
   timescale: number,
   defaults: Fmp4Track["defaults"],
 ): Fmp4Track | null {
+  const base = { id, timescale, defaults };
+  const video = VIDEO_ENTRIES.get(entry.type);
+  if (video !== undefined) return readVideoEntry(entry, video, base);
+  if (entry.type === "mp4a" || entry.type === "Opus")
+    return readAudioEntry(entry, base);
+  return null;
+}
+
+function readVideoEntry(
+  entry: Box,
+  video: VideoEntry,
+  base: EntryBase,
+): Fmp4Track | null {
   const body = entry.body;
+  // VisualSampleEntry: 中身の先頭から 78 バイトが決まった並び (幅は 24、高さは 26)
+  if (body.length < 78) return null;
   const v = view(body);
-  const base = {
-    id,
-    timescale,
-    defaults,
-    width: 0,
-    height: 0,
+  const inner = body.subarray(78);
+  const config = child(inner, video.box);
+  if (config === null || config.length < video.min) return null;
+  const width = v.getUint16(24);
+  const displayWidth = paspWidth(child(inner, "pasp"), width);
+  return {
+    ...base,
+    kind: "video",
+    codec: video.codec(entry.type, config),
+    config: config.slice(),
+    width,
+    height: v.getUint16(26),
+    ...(displayWidth === null ? {} : { displayWidth }),
     channels: 0,
     sampleRate: 0,
   };
-  if (
-    entry.type === "avc1" ||
-    entry.type === "av01" ||
-    entry.type === "hvc1" ||
-    entry.type === "hev1"
-  ) {
-    // VisualSampleEntry: 中身の先頭から 78 バイトが決まった並び (幅は 24、高さは 26)
-    if (body.length < 78) return null;
-    const inner = body.subarray(78);
-    const width = v.getUint16(24);
-    const displayWidth = paspWidth(child(inner, "pasp"), width);
-    const size = {
-      width,
-      height: v.getUint16(26),
-      ...(displayWidth === null ? {} : { displayWidth }),
-    };
-    // H.265 は段を下げた変換で GPU (hevc_rkmpp など) が出す。読めないと映像の長さが数えられず、
-    // サーバの速さ (`server/pace.ts`) が 0 のままになる (#2152)
-    const hevc = entry.type === "hvc1" || entry.type === "hev1";
-    const avc = entry.type === "avc1";
-    const config = child(inner, avc ? "avcC" : hevc ? "hvcC" : "av1C");
-    if (config === null || config.length < (hevc ? 13 : 4)) return null;
-    return {
-      ...base,
-      ...size,
-      kind: "video",
-      codec: avc
-        ? avcCodec(config)
-        : hevc
-          ? hevcCodec(entry.type, config)
-          : av1Codec(config),
-      config: config.slice(),
-    };
-  }
-  if (entry.type === "mp4a" || entry.type === "Opus") {
-    // AudioSampleEntry: チャンネル数は 16、標本化周波数は 24 (16.16 の上半分)、中身の箱は 28 から
-    if (body.length < 28) return null;
-    const sound = {
-      channels: v.getUint16(16),
-      sampleRate: v.getUint32(24) >>> 16,
-    };
-    const inner = body.subarray(28);
-    if (entry.type === "Opus") {
-      const dOps = child(inner, "dOps");
-      if (dOps === null) return null;
-      return {
-        ...base,
-        ...sound,
-        kind: "audio",
-        codec: "opus",
-        config: dOps.slice(),
-      };
-    }
-    const esds = child(inner, "esds");
-    const asc = esds === null ? null : audioSpecificConfig(esds);
-    if (asc === null || asc.length < 2) return null;
-    return {
-      ...base,
-      ...sound,
-      kind: "audio",
-      codec: aacCodec(asc),
-      config: asc,
-    };
-  }
-  return null;
+}
+
+function readAudioEntry(entry: Box, base: EntryBase): Fmp4Track | null {
+  const body = entry.body;
+  // AudioSampleEntry: チャンネル数は 16、標本化周波数は 24 (16.16 の上半分)、中身の箱は 28 から
+  if (body.length < 28) return null;
+  const v = view(body);
+  const inner = body.subarray(28);
+  const config =
+    entry.type === "Opus" ? child(inner, "dOps")?.slice() : aacConfig(inner);
+  if (config === undefined) return null;
+  return {
+    ...base,
+    kind: "audio",
+    codec: entry.type === "Opus" ? "opus" : aacCodec(config),
+    config,
+    width: 0,
+    height: 0,
+    channels: v.getUint16(16),
+    sampleRate: v.getUint32(24) >>> 16,
+  };
+}
+
+/** mp4a の中身の箱から AudioSpecificConfig を読む。無い・短すぎるなら undefined */
+function aacConfig(inner: Uint8Array): Uint8Array<ArrayBuffer> | undefined {
+  const esds = child(inner, "esds");
+  const asc = esds === null ? null : audioSpecificConfig(esds);
+  return asc === null || asc.length < 2 ? undefined : asc;
 }
 
 /** avcC から `avc1.PPCCLL` を起こす。profile・互換の印・level (avcC の 1〜3 バイト目) */
@@ -356,7 +363,7 @@ export function avcCodec(avcC: Uint8Array): string {
  * hvcC の 1 バイト目が profile_space (2 ビット)・tier (1 ビット)・profile_idc (5 ビット)、2〜5 バイト目が
  * 互換の印 (32 ビット。ビットを逆順にして 16 進で書く)、6〜11 バイト目が制約の印 (末尾の 0 は省く)、12 バイト目が level
  */
-export function hevcCodec(type: string, hvcC: Uint8Array): string {
+function hevcCodec(type: string, hvcC: Uint8Array): string {
   const space = ["", "A", "B", "C"][hvcC[1]! >> 6]!;
   const tier = (hvcC[1]! >> 5) & 1 ? "H" : "L";
   const profile = hvcC[1]! & 0x1f;
