@@ -352,6 +352,7 @@ export function panArgs(audio: AudioTrack): string[] {
 function broadcastFilters(smooth: boolean): string[] {
   return smooth ? [deinterlace(true)] : [deinterlace(false), "fps=30000/1001"];
 }
+
 /**
  * 映像のエンコード方式。**見ている人が選べる** (`LiveCodec`)。
  *

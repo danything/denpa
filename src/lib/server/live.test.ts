@@ -569,7 +569,7 @@ describe("GPU でエンコードする", () => {
     expect(before(args, "-hwaccel")).toBe(true);
     expect(before(args, "-hwaccel_output_format")).toBe(true);
     expect(args[args.indexOf("-vf") + 1]).toBe("deinterlace_vaapi=rate=field");
-    expect(args.join(" ")).not.toContain("bwdif=deint=interlaced");
+    expect(args.join(" ")).not.toContain("bwdif");
     expect(args.join(" ")).not.toContain("hwupload");
   });
 
