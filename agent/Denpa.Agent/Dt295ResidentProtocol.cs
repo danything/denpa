@@ -55,7 +55,7 @@ public static class Dt295ResidentProtocol
     /// <summary>CAPABILITIES が返す名前 (MB86H_FIRMWARE_IDENTITY)</summary>
     public const string Identity = "mAgicVISION_1";
 
-    /// <summary>DT295 の受信部の印 (native_profiles の rf_mask。地上波と衛星の 2 つ)</summary>
+    /// <summary>DT295 の受信部のビット (native_profiles の rf_mask。地上波と衛星の 2 つ)</summary>
     public const byte RfMask = 3;
 
     /// <summary>受信部の数。0 が地上波、1 が衛星 (MB86H_CHANNEL_COUNT)</summary>
@@ -76,7 +76,7 @@ public static class Dt295ResidentProtocol
     public const uint PageSource = 1;
     public const uint PageState = 2;
 
-    // 受信部の説明の印 (MB86H_DEVICE_QUERY_*)
+    // 受信部の説明のフラグ (MB86H_DEVICE_QUERY_*)
     public const byte SourcePresent = 1;
     public const byte SourceStream = 2;
     public const byte SourceAutoTsid = 4;
@@ -85,7 +85,7 @@ public static class Dt295ResidentProtocol
     public const uint FormatMux = 1;
     public const uint FormatRaw = 2;
 
-    // 状態の印 (MB86H_DEVICE_STATE_*)
+    // 状態のフラグ (MB86H_DEVICE_STATE_*)
     public const uint StateStarted = 1;
     public const uint StateInitialized = 2;
     public const uint StateShuttingDown = 4;
@@ -103,7 +103,7 @@ public static class Dt295ResidentProtocol
     public const uint PhaseComplete = 6;
     public const uint PhaseFailed = 8;
 
-    /// <summary>窓のバージョン (MB86H_STREAM_WINDOW_VERSION)。USB では使わない (window_records が 0)</summary>
+    /// <summary>ウィンドウのバージョン (MB86H_STREAM_WINDOW_VERSION)。USB では使わない (window_records が 0)</summary>
     public const uint StreamWindowVersion = 1;
 
     /// <summary>要求を組む (protocol.c の mb86H_debug_packet_pack)。<paramref name="data"/> は 40 バイトか空</summary>

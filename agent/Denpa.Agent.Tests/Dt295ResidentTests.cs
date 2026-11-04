@@ -7,7 +7,7 @@ namespace Denpa.Agent.Tests;
 
 /*
  * 常駐方式の PIX-DT295 (Dt295Resident*.cs)。機材なしで確かめられる所: 同梱のファームウェアと SBC2 の読み取り、要求の形、
- * 導入・引き継ぎ・選局・停止・手放す手順 (常駐イメージの偽物を相手に)、TS の取り出し、窓の切り替え、ポートの電源の入れ直し。
+ * 導入・引き継ぎ・選局・停止・手放す手順 (常駐イメージの偽物を相手に)、TS の取り出し、ウィンドウの切り替え、ポートの電源の入れ直し。
  * SBC2 と常駐イメージはテストの中で作る偽物で、同梱のファームウェアは読めることと SHA-256 だけを確かめる。
  */
 public class Dt295ResidentTests
@@ -144,7 +144,7 @@ public class Dt295ResidentTests
     // ---------------------------------------------------------------------
 
     [Test]
-    public async Task 冷えた機材に入れて初期化する()
+    public async Task 起動直後の機材に入れて初期化する()
     {
         var bundle = FakeBundle.Create();
         var image = Dt295ResidentImage.Parse(bundle.Bytes);
@@ -161,7 +161,7 @@ public class Dt295ResidentTests
     }
 
     [Test]
-    public async Task 冷えていなければ入れない()
+    public async Task 起動直後でなければ入れない()
     {
         var bundle = FakeBundle.Create();
         var image = Dt295ResidentImage.Parse(bundle.Bytes);
@@ -283,11 +283,11 @@ public class Dt295ResidentTests
     }
 
     // ---------------------------------------------------------------------
-    // 窓・ポート
+    // ウィンドウ・ポート
     // ---------------------------------------------------------------------
 
     [Test]
-    public async Task 窓を通した読みはバンクを切り替えてから戻す()
+    public async Task ウィンドウを通した読みはバンクを切り替えてから戻す()
     {
         var usb = new FakeDt295Usb();
         foreach (var window in new[] { Dt295ResidentLink.ReadWindow, Dt295ResidentLink.WriteWindow })
@@ -304,7 +304,7 @@ public class Dt295ResidentTests
     }
 
     [Test]
-    public async Task 窓がふだんの値でなければ触らない()
+    public async Task ウィンドウがふだんの値でなければ触らない()
     {
         var usb = new FakeDt295Usb();
         var link = new Dt295ResidentLink(usb);
@@ -332,8 +332,17 @@ public class Dt295ResidentTests
             Directory.CreateDirectory(Path.Combine(sysfs, "1-0:1.0", "usb1-port2"));
             Directory.CreateDirectory(Path.Combine(sysfs, "1-2"));
             Directory.CreateSymbolicLink(Path.Combine(sysfs, "1-2", "port"), Path.Combine("..", "1-0:1.0", "usb1-port2"));
-            File.WriteAllText(Path.Combine(sysfs, "1-2", "devnum"), "9\n");
-            UsbSysfs.PowerCycle(sysfs, "1-2", TimeSpan.FromSeconds(1));
+            var devnum = Path.Combine(sysfs, "1-2", "devnum");
+            File.WriteAllText(devnum, "9\n");
+            // 電源を入れ直す間に、新しい番号でつながる (前の番号のままでは戻らない)
+            var reconnect = Task.Run(async () =>
+            {
+                await Task.Delay(800);
+                File.WriteAllText(devnum, "10\n");
+            });
+            UsbSysfs.PowerCycle(sysfs, "1-2", TimeSpan.FromSeconds(3));
+            await reconnect;
+            await Assert.That(File.ReadAllText(devnum)).IsEqualTo("10\n");
             await Assert.That(File.ReadAllText(Path.Combine(sysfs, "1-0:1.0", "usb1-port2", "disable"))).IsEqualTo("0");
             await Assert.That(() => UsbSysfs.PowerCycle(sysfs, "3-4", TimeSpan.FromSeconds(1))).Throws<IOException>();
         }

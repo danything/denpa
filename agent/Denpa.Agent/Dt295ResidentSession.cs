@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 /// <summary>常駐方式の PIX-DT295 との制御の経路。<see cref="Dt295ResidentLink"/> と、テストの偽物が実装する</summary>
 public interface IDt295ResidentTransport
 {
-    /// <summary>機材のメモリーを読む。0x1000000 以上は窓を通す</summary>
+    /// <summary>機材のメモリーを読む。0x1000000 以上はウィンドウを通す</summary>
     void Read(uint address, Span<byte> data);
 
     /// <summary>機材のメモリーに書く。アドレスと長さは 4 の倍数</summary>
@@ -369,7 +369,7 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
 
     /// <summary>
     /// SHUTDOWN を 1 回送り、持ち主が全部手放すまで SERVICE を送る (session.c の session_shutdown)。
-    /// <paramref name="detach"/> なら、同じイメージをもう一度初期化してよいと常駐イメージが言っていれば、冷えた状態を求められても通す
+    /// <paramref name="detach"/> なら、同じイメージをもう一度初期化してよいと常駐イメージが言っていれば、起動直後の状態を求められても通す
     /// (DT295 は常駐イメージを機材に残したまま閉じる)
     /// </summary>
     public void Shutdown(bool detach)
@@ -445,7 +445,7 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
     }
 
     /// <summary>
-    /// 常駐イメージを書く (mb86H_resident_image_program)。書き終えた印を 0 にしてから全体を書き、印以外を照合し、最後に印を書いて読み戻す
+    /// 常駐イメージを書く (mb86H_resident_image_program)。コミットの値を 0 にしてから全体を書き、コミットの値以外を照合し、最後にコミットの値を書いて読み戻す
     /// </summary>
     public void Program(ReadOnlySpan<byte> image)
     {
@@ -471,10 +471,10 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
         WriteBlock(commit, image.Slice((int)commit, 4));
         Span<byte> got = stackalloc byte[4];
         ReadBlock(commit, got);
-        if (!got.SequenceEqual(image.Slice((int)commit, 4))) throw new Dt295ResidentException("常駐イメージの書き終えた印が読み戻せません");
+        if (!got.SequenceEqual(image.Slice((int)commit, 4))) throw new Dt295ResidentException("常駐イメージのコミットの値が読み戻せません");
     }
 
-    /// <summary>常駐イメージを全部読んで照合する (mb86H_resident_image_verify)。<paramref name="skipCommit"/> なら書き終えた印は比べない</summary>
+    /// <summary>常駐イメージを全部読んで照合する (mb86H_resident_image_verify)。<paramref name="skipCommit"/> ならコミットの値は比べない</summary>
     public void Verify(ReadOnlySpan<byte> image, bool skipCommit)
     {
         var commit = (int)(Dt295ResidentImage.Commit - Dt295ResidentImage.Base);

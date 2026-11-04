@@ -21,7 +21,7 @@ public sealed class Dt295ResidentImage
     public const uint End = 0x803C0000;
     public const int Bytes = (int)(End - Base);
 
-    /// <summary>ビルドの印 8 バイト (MB86H_RESIDENT_BUILD_ID)</summary>
+    /// <summary>ビルド ID 8 バイト (MB86H_RESIDENT_BUILD_ID)</summary>
     public const uint BuildId = End - 8;
 
     /// <summary>書き換えない範囲の終わりと、その範囲の合計を 0 にする値の場所</summary>
@@ -32,7 +32,7 @@ public sealed class Dt295ResidentImage
     /// <summary>イメージの説明 (magic・ABI・大きさ・場所…) の場所</summary>
     public const uint Meta = 0x803BEFE0;
 
-    /// <summary>書き終えた印の場所。書き込みの最初に 0 にし、最後に書く</summary>
+    /// <summary>コミットの値の場所。書き込みの最初に 0 にし、最後に書く</summary>
     public const uint Commit = 0x803AFFFC;
 
     public const uint HeaderMagic = 0x585A3352;
@@ -85,7 +85,7 @@ public sealed class Dt295ResidentImage
     /// <summary>常駐イメージ 256 KiB</summary>
     public ReadOnlySpan<byte> Resident => _bundle.AsSpan(_resident, Bytes);
 
-    /// <summary>常駐イメージのビルドの印</summary>
+    /// <summary>常駐イメージのビルド ID</summary>
     public ReadOnlySpan<byte> Build => Resident.Slice((int)(BuildId - Base), 8);
 
     /// <summary>同梱のファームウェアの名前 (実行ファイルに埋め込む。firmware/README.md)</summary>
@@ -190,8 +190,8 @@ public sealed class Dt295ResidentImage
         var referenceCount = (int)Word(b, profile + 16);
         var patchStart = (int)Word(b, profile + 20);
         var patchTotal = (int)Word(b, profile + 24);
-        Records(b, references, referenceCount, 0, 0, relocation: false, size);
-        Records(b, patchStart, patchTotal, Body, BodyBytes, relocation: false, size);
+        Records(b, references, referenceCount, 0, 0, size);
+        Records(b, patchStart, patchTotal, Body, BodyBytes, size);
         // DT295 の書き換えは hook の 8 バイトだけで、そこを全部覆う (bootstrap.c の validate_patch_windows)
         for (var index = 0; index < patchTotal; index++)
         {
@@ -242,7 +242,7 @@ public sealed class Dt295ResidentImage
     }
 
     /// <summary>
-    /// 常駐イメージの説明・書き終えた印・書き換えない範囲の合計を確かめる (resident_image.c の mb86H_resident_image_validate)
+    /// 常駐イメージの説明・コミットの値・書き換えない範囲の合計を確かめる (resident_image.c の mb86H_resident_image_validate)
     /// </summary>
     public static void Validate(ReadOnlySpan<byte> image)
     {
@@ -384,24 +384,24 @@ public sealed class Dt295ResidentImage
     }
 
     /// <summary>記録の並び (bootstrap.c の validate_records)。長さが 0 でなく、末尾の予約が 0 で、禁じた範囲や互いと重ならない</summary>
-    private static void Records(ReadOnlySpan<byte> b, int records, int count, uint forbidden, uint forbiddenSize, bool relocation, long size)
+    private static void Records(ReadOnlySpan<byte> b, int records, int count, uint forbidden, uint forbiddenSize, long size)
     {
-        var width = relocation ? RelocationBytes : ReferenceBytes;
+        const int width = ReferenceBytes;
         if ((records & 3) != 0 || count > size / width || !InBounds(size, records, (long)count * width)) throw Bad("記録の並び");
         for (var index = 0; index < count; index++)
         {
             var record = records + index * width;
             long address = Word(b, record);
-            long bytes = relocation ? 4 : Word(b, record + 4);
+            long bytes = Word(b, record + 4);
             if (bytes == 0 || Word(b, record + width - 4) != 0) throw Bad("記録の値");
             if (address + bytes > uint.MaxValue) throw Bad("記録の範囲");
             if (forbiddenSize != 0 && address < forbidden + forbiddenSize && forbidden < address + bytes) throw Bad("記録が body に重なる");
-            if (!relocation && !InBounds(size, Word(b, record + 8), bytes)) throw Bad("記録のデータの範囲");
+            if (!InBounds(size, Word(b, record + 8), bytes)) throw Bad("記録のデータの範囲");
             for (var other = 0; other < index; other++)
             {
                 var prior = records + other * width;
                 long priorAddress = Word(b, prior);
-                long priorBytes = relocation ? 4 : Word(b, prior + 4);
+                long priorBytes = Word(b, prior + 4);
                 if (address < priorAddress + priorBytes && priorAddress < address + bytes) throw Bad("記録の重なり");
             }
         }

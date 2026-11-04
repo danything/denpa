@@ -12,7 +12,7 @@ namespace Denpa.Agent;
 /// </code>
 ///
 /// <para>
-/// 常駐イメージが残っていれば引き継ぎ、無ければ冷えた機材に入れる。どちらでもない (元のファームウェアで動いた) 機材は、
+/// 常駐イメージが残っていれば引き継ぎ、無ければ起動直後の機材に入れる。どちらでもない (元のファームウェアで動いた) 機材は、
 /// <c>--replug</c> でポートの電源を入れ直してから入れる (Linux だけ)。終わるときは常駐イメージを機材に残したまま手放す。
 /// 段ごとの記録 (時間つき) は標準エラーに、統計は標準出力に出す。<c>--output</c> を付けたときだけ TS をファイルに書く。
 /// 終了コードは、うまくいけば 0、どこかで止まれば 1
@@ -119,14 +119,18 @@ public static class Dt295ResidentProbe
             var started = false;
             try
             {
-                var outcome = Dt295ResidentLoader.Start(link, session, image, Step);
+                // 入れるか引き継いだあとは、初期化で止まっても手放す (Dt295ResidentLoader.Start と同じ手順を分けて書く)
+                var adopted = Dt295ResidentLoader.Adopt(link, session, image, Step);
+                if (!adopted) Dt295ResidentLoader.Install(link, session, image, Step);
                 started = true;
                 var overview = session.QueryOverview();
-                Step($"常駐イメージを{(outcome == Dt295ResidentLoader.Outcome.Adopted ? "引き継ぎ" : "入れ")}、初期化しました "
+                session.Initialize();
+                Step($"常駐イメージを{(adopted ? "引き継ぎ" : "入れ")}、初期化しました "
                     + $"(受信部 {overview.RfMask}、TS {overview.StreamMask}、制御転送 {link.Controls} 回)");
                 Receive(options, session, usb, stats, Step);
             }
-            catch (Exception error) when (error is IOException or TimeoutException or InvalidOperationException or InvalidDataException)
+            catch (Exception error) when (error is IOException or TimeoutException or InvalidOperationException or InvalidDataException
+                or UnauthorizedAccessException or ArgumentException)
             {
                 Step($"止めました: {error.Message}");
                 failed = true;
@@ -161,9 +165,9 @@ public static class Dt295ResidentProbe
         var request = Request(options.Tuning, options.Tuning.StreamId);
         var described = session.QuerySource(request.Source);
         step($"受信部 {request.Source}: 周波数 {described.FrequencyMin}〜{described.FrequencyMax}、記録 {described.RecordSize} バイト、"
-            + $"形式 {(described.StreamFormat == Dt295ResidentProtocol.FormatMux ? "MUX" : "そのまま")}、印 0x{described.Flags:X}");
+            + $"形式 {(described.StreamFormat == Dt295ResidentProtocol.FormatMux ? "MUX" : "そのまま")}、フラグ 0x{described.Flags:X}");
         if ((described.Flags & Dt295ResidentProtocol.SourceStream) == 0) throw new InvalidOperationException($"受信部 {request.Source} は TS を出せません");
-        if (described.WindowRecords != 0) throw new InvalidOperationException("受信部が窓での受け渡しを求めていて、USB では使えません");
+        if (described.WindowRecords != 0) throw new InvalidOperationException("受信部がウィンドウでの受け渡しを求めていて、USB では使えません");
 
         var ts = new Dt295ResidentTs(described.StreamFormat, request.Source, (int)described.RecordSize);
         using var output = options.Output is { } path ? File.Create(path) : null;
@@ -187,39 +191,47 @@ public static class Dt295ResidentProbe
                 try
                 {
                     got = input.Read(buffer, 100);
+                    if (got == 0) continue;
+                    if (firstMs < 0) firstMs = reading.ElapsedMilliseconds;
+                    if (!ts.Push(buffer.AsSpan(0, got), Sink))
+                    {
+                        problem = ts.Broken;
+                        return;
+                    }
                 }
-                catch (IOException error)
+                catch (Exception error) when (error is IOException or ObjectDisposedException)
                 {
-                    problem = error.Message;
-                    return;
-                }
-                if (got == 0) continue;
-                if (firstMs < 0) firstMs = reading.ElapsedMilliseconds;
-                if (!ts.Push(buffer.AsSpan(0, got), Sink))
-                {
-                    problem = ts.Broken;
+                    // 止める前に読みを閉じたときもここに来る。読みのスレッドの例外でプロセスを落とさない
+                    problem ??= error.Message;
                     return;
                 }
             }
         }) { IsBackground = true, Name = "dt295-resident-probe" };
         reader.Start();
 
-        var tuneClock = Stopwatch.StartNew();
-        session.Tune(request, streaming: true);
-        step($"{options.Channel} を選びました (選局 {tuneClock.ElapsedMilliseconds} ms、世代 {session.Generation}、最初の TS {(firstMs < 0 ? "まだ" : $"{firstMs} ms")})");
-
         var services = 0L;
-        while (reading.Elapsed < options.Seconds && problem is null)
+        var locked = false;
+        try
         {
-            session.Service();
-            services++;
-            Thread.Sleep(1);
+            var tuneClock = Stopwatch.StartNew();
+            session.Tune(request, streaming: true);
+            step($"{options.Channel} を選びました (選局 {tuneClock.ElapsedMilliseconds} ms、世代 {session.Generation}、最初の TS {(firstMs < 0 ? "まだ" : $"{firstMs} ms")})");
+            while (reading.Elapsed < options.Seconds && problem is null)
+            {
+                session.Service();
+                services++;
+                Thread.Sleep(1);
+            }
+            locked = session.Locked(request.Source);
+            session.Stop(request.Source);
+            session.WaitStopped();
         }
-        var locked = session.Locked(request.Source);
-        session.Stop(request.Source);
-        session.WaitStopped();
-        Volatile.Write(ref stop, true);
-        reader.Join(TimeSpan.FromSeconds(2));
+        finally
+        {
+            // 読みとファイルを閉じる前に、読みのスレッドを止め切る
+            Volatile.Write(ref stop, true);
+            if (!reader.Join(TimeSpan.FromSeconds(2))) problem ??= "TS を読むスレッドが 2 秒のうちに止まりませんでした";
+        }
         step($"受信を止めました (SERVICE {services} 回、受かっている {(locked ? "はい" : "いいえ")}、同期の探し直し {ts.Desyncs} 回・捨てた {ts.Discarded} バイト"
             + $"{(problem is null ? "" : $"、{problem}")})");
         if (problem is not null) throw new IOException(problem);

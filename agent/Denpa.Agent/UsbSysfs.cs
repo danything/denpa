@@ -52,11 +52,13 @@ public static class UsbSysfs
     {
         // 電源を切ると機材のディレクトリごと消えるので、先にハブの側のポート (<c>3-0:1.0/usb3-port5</c>) をたどっておく
         string disable;
+        string? before;
         try
         {
             var link = new DirectoryInfo(Path.Combine(sysfs, port, "port"));
             var hub = link.LinkTarget is { } target ? Path.GetFullPath(Path.Combine(sysfs, port, target)) : link.FullName;
             disable = Path.Combine(hub, "disable");
+            before = Read(Path.Combine(sysfs, port), "devnum");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
@@ -75,8 +77,8 @@ public static class UsbSysfs
         var deadline = DateTime.UtcNow + wait;
         while (DateTime.UtcNow < deadline)
         {
-            // つながり直すと、新しい番号の devnum が出る
-            if (Read(Path.Combine(sysfs, port), "devnum") is { Length: > 0 }) return;
+            // つながり直すと、前と違う番号の devnum が出る (前の機材が消える前の番号では戻らない)
+            if (Read(Path.Combine(sysfs, port), "devnum") is { Length: > 0 } now && now != before) return;
             Thread.Sleep(100);
         }
         throw new IOException($"USB のポート {port} の電源を入れ直したあと、機材が {wait.TotalSeconds:0} 秒のうちにつながりませんでした");

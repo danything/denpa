@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// resident 方式の PIX-DT295 との制御転送。vendor request 0xBC で 24 ビットのアドレスを読み書きし、0x1000000 以上
-/// (resident の RAM と補助の RAM) は窓レジスターでバンクを切り替えて 0x80000 から見る。resident への要求 64 バイトもここで送る。
+/// (resident の RAM と補助の RAM) はウィンドウのレジスターでバンクを切り替えて 0x80000 から見る。resident への要求 64 バイトもここで送る。
 /// 1 つのスレッドから使う (TS の読みは別のスレッドでよい。制御転送とは別の端点)
 /// </summary>
 public sealed class Dt295ResidentLink : IDt295ResidentTransport
@@ -33,16 +33,16 @@ public sealed class Dt295ResidentLink : IDt295ResidentTransport
     /// <summary>24 ビットで直に届く範囲の終わり</summary>
     public const uint DirectEnd = 0x1000000;
 
-    /// <summary>読むときのバンクの窓レジスター (constants.h 196 行の MB86H_DT295_BOOT0_READ_WINDOW)</summary>
+    /// <summary>読むときのバンクのウィンドウのレジスター (constants.h 196 行の MB86H_DT295_BOOT0_READ_WINDOW)</summary>
     public const uint ReadWindow = 0x000E9EBC;
 
-    /// <summary>書くときのバンクの窓レジスター (constants.h 197 行)</summary>
+    /// <summary>書くときのバンクのウィンドウのレジスター (constants.h 197 行)</summary>
     public const uint WriteWindow = 0x000EA3D8;
 
     /// <summary>要求と応答を置く場所 (constants.h 195 行の MB86H_DT295_BOOT0_STAGING_ADDRESS)</summary>
     public const uint Staging = 0x000C4620;
 
-    /// <summary>補助の RAM (constants.h 198・199 行)。窓で見てよい範囲の 1 つ</summary>
+    /// <summary>補助の RAM (constants.h 198・199 行)。ウィンドウで見てよい範囲の 1 つ</summary>
     public const uint AuxAddress = 0x017A0000;
 
     public const uint AuxBytes = 0x4000;
@@ -52,16 +52,13 @@ public sealed class Dt295ResidentLink : IDt295ResidentTransport
 
     public const uint BankBytes = 0x20000;
 
-    /// <summary>状態のレジスター (16 ビット)。0 が冷えた状態</summary>
-    public const uint StateRegister = 0x82008;
-
-    /// <summary>窓レジスターのふだんの値 (window.c 177 行)。使い終わったらこれに戻す</summary>
+    /// <summary>ウィンドウのレジスターのふだんの値 (window.c 177 行)。使い終わったらこれに戻す</summary>
     private static readonly byte[] NativeWindow = [0x00, 0xF0, 0x00, 0x00];
 
     private readonly IUsbDevice _usb;
     private readonly Action<string>? _trace;
 
-    /// <param name="trace">あれば、窓を通した書き込みと要求の制御転送を 1 行ずつ渡す</param>
+    /// <param name="trace">あれば、ウィンドウを通した書き込みと要求の制御転送を 1 行ずつ渡す</param>
     public Dt295ResidentLink(IUsbDevice usb, Action<string>? trace = null)
     {
         _usb = usb;
@@ -103,18 +100,6 @@ public sealed class Dt295ResidentLink : IDt295ResidentTransport
         }
     }
 
-    /// <summary>16 ビット BE のレジスターを読む (window.c 78〜87 行)</summary>
-    public ushort Read16(uint address)
-    {
-        if ((address & 1) != 0) throw new ArgumentOutOfRangeException(nameof(address), $"16 ビットの読みは偶数のアドレスです (0x{address:X})");
-        Span<byte> two = stackalloc byte[2];
-        Read24(address, two);
-        return BinaryPrimitives.ReadUInt16BigEndian(two);
-    }
-
-    /// <summary>状態 (0x82008)。0 なら resident を入れられる</summary>
-    public ushort State() => Read16(StateRegister);
-
     /// <summary>
     /// 24 ビットの範囲を書く (window.c 125〜159 行の torne_native の書く側)。アドレスも長さも 4 の倍数。
     /// <paramref name="block"/> なら 64 バイトずつ、そうでなければ 4 バイトずつ
@@ -139,13 +124,13 @@ public sealed class Dt295ResidentLink : IDt295ResidentTransport
     }
 
     // ---------------------------------------------------------------------
-    // 窓 (window.c 172〜226 行の usb_native_window)
+    // ウィンドウ (window.c 172〜226 行の usb_native_window)
     // ---------------------------------------------------------------------
 
-    /// <summary>読む。0x1000000 より下は直に、上は窓を通して (window.c 172〜226 行)</summary>
+    /// <summary>読む。0x1000000 より下は直に、上はウィンドウを通して (window.c 172〜226 行)</summary>
     public void Read(uint address, Span<byte> data) => Window(address, data, writing: false);
 
-    /// <summary>書く。0x1000000 より下は直に、上は窓を通して。アドレスと長さは 4 の倍数</summary>
+    /// <summary>書く。0x1000000 より下は直に、上はウィンドウを通して。アドレスと長さは 4 の倍数</summary>
     public void Write(uint address, ReadOnlySpan<byte> data)
     {
         var copy = data.ToArray();
@@ -154,7 +139,7 @@ public sealed class Dt295ResidentLink : IDt295ResidentTransport
     }
 
     private static bool Windowed(uint address, int length) =>
-        // resident の RAM か補助の RAM (window.c 186〜194 行。DT295 は ring_bytes が 0 なので TS の環は無い)
+        // resident の RAM か補助の RAM (window.c 186〜194 行。DT295 は ring_bytes が 0 なので TS のリングバッファは無い)
         (address >= Dt295ResidentImage.Base && address < Dt295ResidentImage.End && (ulong)length <= Dt295ResidentImage.End - address)
         || (address >= AuxAddress && address < AuxAddress + AuxBytes && (ulong)length <= AuxAddress + AuxBytes - address);
 
@@ -168,7 +153,7 @@ public sealed class Dt295ResidentLink : IDt295ResidentTransport
         }
         if (data.IsEmpty || !Windowed(address, data.Length) || (writing && ((address & 3) != 0 || (data.Length & 3) != 0)))
         {
-            throw new ArgumentOutOfRangeException(nameof(address), $"0x{address:X8} から {data.Length} バイトは窓で見られる範囲の外です");
+            throw new ArgumentOutOfRangeException(nameof(address), $"0x{address:X8} から {data.Length} バイトはウィンドウで見られる範囲の外です");
         }
         var window = writing ? WriteWindow : ReadWindow;
         Span<byte> check = stackalloc byte[4];
@@ -179,17 +164,17 @@ public sealed class Dt295ResidentLink : IDt295ResidentTransport
             var bank = current & ~(BankBytes - 1);
             var alias = AliasBase + (current & (BankBytes - 1));
             var chunk = (int)Math.Min((uint)(data.Length - cursor), BankBytes - (current & (BankBytes - 1)));
-            // DT295 は dispatch_out なので、切り替える前に窓がふだんの値かを確かめる (window.c 206〜210 行)
+            // DT295 は dispatch_out なので、切り替える前にウィンドウがふだんの値かを確かめる (window.c 206〜210 行)
             Read24(window, check);
-            if (!check.SequenceEqual(NativeWindow)) throw new Dt295ResidentException($"窓レジスター 0x{window:X} がふだんの値ではありません ({Convert.ToHexString(check)})");
+            if (!check.SequenceEqual(NativeWindow)) throw new Dt295ResidentException($"ウィンドウのレジスター 0x{window:X} がふだんの値ではありません ({Convert.ToHexString(check)})");
             BinaryPrimitives.WriteUInt32BigEndian(mapped, bank);
             Exception? failure = null;
             try
             {
                 Write24(window, mapped, block: false);
                 Read24(window, check);
-                if (!check.SequenceEqual(mapped)) throw new Dt295ResidentException($"窓レジスター 0x{window:X} にバンク 0x{bank:X8} が入りません ({Convert.ToHexString(check)})");
-                // 書き込みが 64 バイトずつになるのは、窓の先の書き込みだけ (window.c 215・216 行)
+                if (!check.SequenceEqual(mapped)) throw new Dt295ResidentException($"ウィンドウのレジスター 0x{window:X} にバンク 0x{bank:X8} が入りません ({Convert.ToHexString(check)})");
+                // 書き込みが 64 バイトずつになるのは、ウィンドウの先の書き込みだけ (window.c 215・216 行)
                 if (writing) Write24(alias, data.Slice(cursor, chunk), BlockWrites);
                 else Read24(alias, data.Slice(cursor, chunk));
             }
@@ -197,10 +182,10 @@ public sealed class Dt295ResidentLink : IDt295ResidentTransport
             {
                 failure = error;
             }
-            // 失敗しても窓は戻す。失敗した操作は繰り返さない (window.c 217〜222 行)。戻せなかったことを先に投げる
+            // 失敗してもウィンドウは戻す。失敗した操作は繰り返さない (window.c 217〜222 行)。戻せなかったことを先に投げる
             Write24(window, NativeWindow, block: false);
             Read24(window, check);
-            if (!check.SequenceEqual(NativeWindow)) throw new Dt295ResidentException($"窓レジスター 0x{window:X} をふだんの値に戻せません ({Convert.ToHexString(check)})");
+            if (!check.SequenceEqual(NativeWindow)) throw new Dt295ResidentException($"ウィンドウのレジスター 0x{window:X} をふだんの値に戻せません ({Convert.ToHexString(check)})");
             if (failure is not null) throw failure;
             cursor += chunk;
         }
