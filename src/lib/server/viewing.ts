@@ -72,7 +72,7 @@ export function parseFormats(value: string | null): LiveFormat[] | null {
   return known.length === 0 ? null : [...new Set(known)];
 }
 
-/** ライブと追っかけのどちらか。**追っかけは H.265 を出さない** (その場の変換では H.265 を作らない) */
+/** ライブと追っかけのどちらか。**追っかけは段 0 では H.265 を出さない** (段を下げるときは `rungCodec` が選ぶ。WebSocket の `chase` と同じ) */
 type AutoScene = "live" | "chase";
 
 /**
