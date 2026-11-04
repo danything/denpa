@@ -85,6 +85,7 @@ import {
   parsePlayable,
   pickLiveHw,
   rungCodec,
+  softwareEncodes,
   videoArgs,
 } from "./live";
 import { openPace, StreamPace } from "./pace";
@@ -1059,7 +1060,12 @@ function mp4Headers(
   };
 }
 
-/** 音声だけ (`?codec=audio`。`audioOnlyArgs`)。枠は使わない (音声だけは軽い。`transcode.ts`) */
+/**
+ * 音声だけ (`?codec=audio`。`audioOnlyArgs`)。**その場で変換する本数の枠は使わない。** 枠は映像のデコードとエンコードで
+ * CPU (GPU) を食い潰さないためのもので、音声だけなら映像はデコードもエンコードもしない (`-vn`)。AAC 96k のエンコードは
+ * 映像のエンコードと比べてずっと軽い (本数ごとの重さは測っていない)。録画ファイルの `?audio=only` とライブの `?audio=only` も
+ * 数えていないので、同じ扱いにする。上限の設定は足さない
+ */
 async function audioResponse(
   plan: PlaybackPlan,
   source: EncodedFile | undefined,
@@ -1118,7 +1124,7 @@ async function audioResponse(
  * GPU でエンコードできるなら GPU、駄目ならソフトウェア。GPU が 1 バイトも出せずに降りたら覚える。
  * NVENC の同時に開ける数を超えただけなら覚えない (`live.blameLiveHw`)。
  *
- * **段を下げた AV1・H.265 はソフトウェアに降りない** (`live.rungVideo`)。GPU が降りたらそこで止め、降りた方式を覚える (`gaveUp`)。
+ * **段を下げた AV1・H.265 はソフトウェアに降りない** (`live.softwareEncodes`)。GPU が降りたらそこで止め、降りた方式を覚える (`gaveUp`)。
  * 画面が同じ段をリクエストし直すと、覚えている間は次のコーデックになる (`live.rungCodec`)
  */
 function withFallback(
@@ -1132,7 +1138,7 @@ function withFallback(
   const blame = (failed: string) => {
     blameLiveHw(codec, hw, nvencBusy(failed));
   };
-  if (rung !== 0 && codec !== "h264") return [{ ...build(hw), gaveUp: blame }];
+  if (!softwareEncodes(codec, rung)) return [{ ...build(hw), gaveUp: blame }];
   return [build(hw), { ...build(null), blame }];
 }
 

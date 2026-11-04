@@ -54,6 +54,11 @@ export function transcodesInUse(): number {
   return used;
 }
 
+/** いま空いている本数。上限を下げた直後は負になりうる */
+export function transcodeRoom(): number {
+  return transcodeLimit() - used;
+}
+
 /**
  * 1 本ぶん枠を取る。**取れたら返す関数を返す** (何度呼んでも 1 回だけ返す)。埋まっていれば null
  */
