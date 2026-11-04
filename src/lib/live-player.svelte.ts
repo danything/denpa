@@ -364,8 +364,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let awaiting = false;
   /** 詰まっているか。`<video>` は `waiting` から `playing` まで、canvas は詰まった次の刻みまで (`adapt`) */
   let stuck = false;
-  /** サーバが混んでいて段を下げられなかった (`tuned` の段がリクエストより高い)。この時刻までは下げ直さない */
-  let busyUntil = 0;
   /** 段を下げた変換で GPU が降りたコーデック (AV1・H.265 はソフトウェアに降りない)。段を下げるときの `playable` から外す */
   const rungOff = new Set<LiveCodec>();
   /** `encode`・`pinned` の断り書きと、最後に出した時刻。その状態が `ADAPT_HOLD` のあいだ来なければ消す */
@@ -899,8 +897,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     const { step } = decision;
     // 追っかけには音声だけが無い。段 3 のまま流す
     if (step === "audio" && chase !== null) return;
-    // サーバが混んでいて下げられなかったばかり。しばらく下げ直さない
-    if (stepOrder(step) > stepOrder(served) && now < busyUntil) return;
     standing = null;
     asked = step;
     warning = text;
@@ -2240,8 +2236,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           awaiting = false;
           const step = servedStep(notice);
           if (stepOrder(step) < stepOrder(asked)) {
-            // サーバが混んでいて下げられなかった (理由は続く `notice`)。しばらく下げ直さない
-            busyUntil = Date.now() + ADAPT_HOLD;
+            // サーバが混んでいて下げられなかった (理由は続く `notice`)。段の切り替えとして数えられないので、20 秒は同じ段を返させない
+            adapter.refused(Date.now());
             asked = step;
           }
           served = step;
