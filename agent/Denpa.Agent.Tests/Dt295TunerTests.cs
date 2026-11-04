@@ -916,8 +916,14 @@ public class Dt295TunerTests
         await Assert.That(tuner.Stream!.Reprepared).IsGreaterThanOrEqualTo(1);
         await Assert.That(tuner.Stream!.Ended).IsFalse();
         await Assert.That(usb.State).IsEqualTo((ushort)2);
-        usb.Ts.Enqueue(both[188..]);
-        await Assert.That(ReadAll(tuner.Output, 188)).IsEquivalentTo(both[188..]);
+        // PMT と CAT が届いたら、PSI がそろってから 1 回だけ準備し直す。断られた追加は、この受信では試さない (追加のコマンドは 1 回だけ)
+        byte[] rest = [.. both[188..], .. Dt295Ts.Cat()];
+        usb.Ts.Enqueue(rest);
+        await Assert.That(ReadAll(tuner.Output, rest.Length)).IsEquivalentTo(rest);
+        for (var i = 0; i < 200 && tuner.Stream!.Reprepared < 2; i++) await Task.Delay(10);
+        await Assert.That(tuner.Stream!.Reprepared).IsEqualTo(2);
+        await Assert.That(usb.MainCommands().Count(command => command == "05010000")).IsEqualTo(1);
+        await Assert.That(usb.Get16(0x101E)).IsEqualTo((ushort)0x8111);
         tuner.Dispose();
         await Assert.That(usb.State).IsEqualTo(Dt295Device.Idle);
     }

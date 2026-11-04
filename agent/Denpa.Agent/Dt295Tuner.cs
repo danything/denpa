@@ -433,6 +433,9 @@ internal sealed class Dt295Stream
     private Dt295Program? _writtenMain;
     private bool _settled;
 
+    /// <summary>機材が受信中のルートの追加を断った。この受信では追加を試さず、PSI がそろってから準備し直しで足す</summary>
+    private bool _additionsRefused;
+
     /// <summary>最後にログへ出した、ルートの計画を作り直せなかった理由 (同じものを繰り返し出さない)</summary>
     private string? _problem;
     private volatile bool _stopping;
@@ -582,7 +585,7 @@ internal sealed class Dt295Stream
             _settled |= _routes.Settled || late;
             return;
         }
-        var additions = plan.Except(_written)
+        var additions = _additionsRefused ? [] : plan.Except(_written)
             .Where(route => route.EcmSlot == 0 && route.Slot > Dt295Routes.PatSlot
                 && !_written.Any(written => written.Slot == route.Slot || written.Pid == route.Pid))
             .ToList();
@@ -605,7 +608,9 @@ internal sealed class Dt295Stream
         catch (Dt295Exception error) when (error.Completion == RouteChangeRefused)
         {
             // 機材が受信中の追加を断った (完了コード 0x0580。2 回目以降の追加でよく起きる)。同じコマンドは送り直さず (13 章)、
-            // 受信を止めて全部のルートで準備し直す (9.10)。ここで例外にすると、機材の受信が止まらないまま取り残される
+            // 受信を止めて全部のルートで準備し直す (9.10)。ここで例外にすると、機材の受信が止まらないまま取り残される。
+            // この受信では、追加をもう試さない (断られるたびに準備し直すと、何度も止めることになる)
+            _additionsRefused = true;
             Reprepare(plan, main);
             Log.Write($"[{_name}] 機材が受信中のルートの追加を断ったため、準備し直しました ({plan.Length} スロット{(main is null ? "" : $"、主番組 {main.Number}")})");
             return;
@@ -623,9 +628,22 @@ internal sealed class Dt295Stream
         _board.Locked(() =>
         {
             _board.Session.StopReception(Pause, Drain);
+            FlushStale();
             Prepare(plan, main);
         });
         Reprepared++;
+    }
+
+    /// <summary>
+    /// 止めたあとに EP 0x81 に残っている古いデータを読み捨てる (最大 300 ms)。残したまま準備し直すと、次の受信の最初の読みが
+    /// 古いデータの途中から始まり、パケットの先頭を取り違えて「不正なパケット」で止まることがある
+    /// </summary>
+    private void FlushStale()
+    {
+        var waited = Stopwatch.StartNew();
+        while (waited.ElapsedMilliseconds < 300 && _in.Read(_scratch, DrainMs) > 0)
+        {
+        }
     }
 
     private ushort Pause => _data.Fields.Pause;
