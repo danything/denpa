@@ -1466,6 +1466,8 @@ class Session {
         this.produced = false;
         this.busy = false;
         this.software = hw === null;
+        // 遅れは ffmpeg ごとに数え直す (前の ffmpeg の遅れと、起こし直した直後の速さを合わせない)
+        this.slowSince = null;
         const proc = Bun.spawn(
           [
             config.ffmpeg,
@@ -1887,7 +1889,12 @@ class Session {
       rung: this.rung,
       light: this.light,
       software: this.software,
-      gpuReady: this.codec !== "audio" && pickLiveHw(this.codec) !== null,
+      // GPU を調べるのは移せるときだけ (`pickLiveHw` は GPU の振り分けの順を進める)
+      gpuReady:
+        this.software &&
+        !this.light.gpu &&
+        this.codec !== "audio" &&
+        pickLiveHw(this.codec) !== null,
     });
     if (step === null) {
       this.heavy = true;
