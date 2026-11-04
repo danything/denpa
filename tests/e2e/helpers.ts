@@ -595,7 +595,7 @@ export async function cancelAllReservations(page: Page): Promise<void> {
 }
 
 /**
- * 操作列を出し直す。**触らないでいると 2.5 秒で引っ込む**ので
+ * 操作バーを出し直す。**触らないでいると 2.5 秒で引っ込む**ので
  * ([controls.svelte.ts](../../src/lib/components/player/controls.svelte.ts))、
  * 引っ込んでいる間の操作バーは押せません (`pointer-events-none`)。
  *
@@ -630,7 +630,7 @@ export async function pretendGpu(page: Page): Promise<void> {
 
 /**
  * 再生の設定 (⚙ `SettingsMenu`) を開く。開いていればそのまま。`prefix` は `live` / `chase` / `watch`。
- * 操作列が引っ込んでいると押せないので、待ちを挟んだ先では先に `wakeControls` を呼ぶ
+ * 操作バーが引っ込んでいると押せないので、待ちを挟んだ先では先に `wakeControls` を呼ぶ
  */
 export async function openSettings(page: Page, prefix: string): Promise<void> {
   const menu = page.getByTestId(`${prefix}-settings-menu`);
@@ -769,7 +769,7 @@ export async function leaveFullscreen(page: Page): Promise<void> {
 }
 
 /**
- * **字幕は操作列の下に潜らない** (`PlayerStage` の持ち上げ)。字幕の canvas に「下の方に
+ * **字幕は操作バーの下に潜らない** (`PlayerStage` の持ち上げ)。字幕の canvas に「下の方に
  * 字が載っている」(`data-ink`。描く係が書くもの) と書き込み、字の下端が操作バーの上端より
  * 上へ来るのを待つ。偽の放送には字幕が乗っていないので、載っている範囲だけを作る
  */
@@ -1231,7 +1231,7 @@ export async function feedCaption(
     [0x40, JSON.stringify(captions)],
     [0x22, JSON.stringify(FAKE_CAPTION)],
   ]);
-  // 押すのは要素に直に (操作列が引っ込んでいても、データ放送の面が上に被っていても届く)
+  // 押すのは要素に直に (操作バーが引っ込んでいても、データ放送の面が上に被っていても届く)
   const button = page.getByTestId(`${prefix}-caption`);
   await expect(button).toHaveAttribute("aria-pressed", "true");
   await button.evaluate((el) => (el as HTMLElement).click());

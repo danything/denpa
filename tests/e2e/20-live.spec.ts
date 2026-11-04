@@ -830,7 +830,7 @@ test.describe("ライブ視聴", () => {
      * **エンジンが立ち上がったらリモコンを出す。右の列、一覧の上。**
      *
      * 映像の上に重ねない — 放送の作った画面は枠を下まで塗り潰すので、
-     * 重ねると押すものが放送の映像に埋もれる (操作列で踏んだのと同じ)
+     * 重ねると押すものが放送の映像に埋もれる (操作バーで踏んだのと同じ)
      */
     await expect(page.getByTestId("live-remote")).toBeVisible();
     await expect(page.getByTestId("live-channels")).toBeVisible();
@@ -906,15 +906,15 @@ test.describe("ライブ視聴", () => {
       .toBe(true);
 
     /*
-     * **操作列より下に敷いているか。**
+     * **操作バーより下に敷いているか。**
      *
      * データ放送の面は枠いっぱいで、放送の作った画面は下まで塗り潰す。
-     * 上に載せていた頃は出した瞬間に操作列が隠れ、**そこにある d ボタンごと
+     * 上に載せていた頃は出した瞬間に操作バーが隠れ、**そこにある d ボタンごと
      * 見えなくなって、出したら消せなくなった**。面は
      * `pointer-events-none` なので押せてはいる — 押す場所が見えないだけで、
      * 触って確かめる形では捕まらない
      */
-    // 操作列の段はボタンの並び (`[data-bar-items]`) が持つ (外の箱は持たない。`ControlBar`)
+    // 操作バーの段はボタンの並び (`[data-bar-items]`) が持つ (外の箱は持たない。`ControlBar`)
     const layers = await page.evaluate(() => {
       const z = (selector: string) =>
         Number(
@@ -925,7 +925,7 @@ test.describe("ライブ視聴", () => {
         controls: z('[data-testid="live-controls"] > [data-bar-items]'),
       };
     });
-    expect(layers.data, "データ放送が操作列を覆っている").toBeLessThan(
+    expect(layers.data, "データ放送が操作バーを覆っている").toBeLessThan(
       layers.controls,
     );
 
@@ -1204,10 +1204,10 @@ test.describe("ライブ視聴", () => {
   /*
    * **出せない形式でも、エンコード方式を選び直すボタンは残す。**
    *
-   * 失敗している間は操作列を隠していた頃は、「再生できる形式がありません」
+   * 失敗している間は操作バーを隠していた頃は、「再生できる形式がありません」
    * と出たきり、別の形式 (や放送のままの MPEG-2) へ逃げる手立てが無かった
    */
-  test("出せない形式でも、操作列からエンコード方式を選び直せる", async ({
+  test("出せない形式でも、操作バーからエンコード方式を選び直せる", async ({
     page,
   }) => {
     await page.addInitScript(() => {
@@ -1302,7 +1302,7 @@ test.describe("ライブ視聴", () => {
    * 描くので、0.05 秒ごとに中身が届くたびに右へ左へ動く。放送に終わりは無いので、
    * 位置ではなく張り付いているかどうかを出す
    */
-  test("自前の操作列を出し、備え付けは使わない", async ({ page }) => {
+  test("自前の操作バーを出し、備え付けは使わない", async ({ page }) => {
     await goto(page, "/live");
     await expect(page.getByTestId("live-video")).not.toHaveAttribute(
       "controls",
@@ -1357,7 +1357,7 @@ test.describe("ライブ視聴", () => {
    * 引っ込んでいるほうがいい。**止めていても消えます** — 一時停止するのは
    * 映像の中の文字をじっくり見るためで、そこに操作バーが残っていては止めた意味が無い
    */
-  test("操作列は触らないでいると消え、動かすと戻る", async ({ page }) => {
+  test("操作バーは触らないでいると消え、動かすと戻る", async ({ page }) => {
     await goto(page, "/live");
     const controls = page.getByTestId("live-controls");
     await expect(controls).toHaveAttribute("data-shown", "true");
@@ -1387,7 +1387,7 @@ test.describe("ライブ視聴", () => {
    *
    * 指を離すとブラウザはポインタを取り下げるので、`pointerleave` が**触った
    * 直後に必ず飛ぶ**。マウスと同じに「出ていったら消す」で扱っていたので、
-   * タッチの端末では**触った瞬間に操作列が消えて**いた — 操作バーに触れる間が無い。
+   * タッチの端末では**触った瞬間に操作バーが消えて**いた — 操作バーに触れる間が無い。
    *
    * 押すまで留めていた時期もあるが、**消したいときに毎回映像を押すことになった**。
    * 出し方は指とマウスで違ってよいが、消え方は同じでいい
@@ -1633,7 +1633,7 @@ test.describe("ライブ視聴", () => {
 
     await enter();
     expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
-    // 字幕の面は映像と同じ枠、映像は枠いっぱい。操作列は画面の中
+    // 字幕の面は映像と同じ枠、映像は枠いっぱい。操作バーは画面の中
     await sameBox(
       page.getByTestId("live-captions"),
       page.getByTestId("live-video"),
@@ -2011,7 +2011,7 @@ test.describe("ライブ視聴", () => {
    *
    * 偽の放送に字幕は乗っていないので、ここで見られるのは敷き方まで。
    * **映像と寸分同じ枠に、当たり判定を抜いて敷く** — ずれると字幕が飛び、
-   * 抜けていないと下の操作列が押せなくなる。
+   * 抜けていないと下の操作バーが押せなくなる。
    */
   test("字幕を重ねる場所は、映像と同じ枠で、押す邪魔をしない", async ({
     page,
@@ -2604,7 +2604,7 @@ test.describe("スマホの縦でライブ", () => {
 
 /**
  * **観ている間に番組が替わったら、出ている番組も替わる。** 開いた時点の番組のまま残っていた
- * (次の番組が始まっても操作列の番組名・時間帯と一覧の番組名が前のまま)。
+ * (次の番組が始まっても操作バーの番組名・時間帯と一覧の番組名が前のまま)。
  *
  * - 予定どおりの切り替わり … いちばん早く終わる番組の終わりで読み直す
  * - 延長・繰り下げ … サーバが観ている局の EIT[p/f] を読んで番組表に写し、知らせてくる
@@ -2617,7 +2617,9 @@ test.describe("ライブで番組が替わる", () => {
     await request.post(`${stack.agentUrl}/__control/extend?ms=0`);
   });
 
-  test("次の番組が始まると、操作列と一覧の番組名が替わる", async ({ page }) => {
+  test("次の番組が始まると、操作バーと一覧の番組名が替わる", async ({
+    page,
+  }) => {
     await goto(page, `/live?service=${BS11.id}`);
     const title = page.getByTestId("live-title");
     await expect(title).toBeVisible();

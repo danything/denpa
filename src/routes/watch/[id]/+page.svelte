@@ -1461,7 +1461,7 @@
   let retryAt = 0;
   let chapters = $state<Chapter[]>([]);
 
-  /** 操作列の出し入れ ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts)) */
+  /** 操作バーの出し入れ ([controls.svelte.ts](../../../lib/components/player/controls.svelte.ts)) */
   const controls = playerControls();
 
   /** 画面を落とさせない。観るためだけに開く画面なので、開いている間はずっと */
@@ -2412,7 +2412,7 @@
           <!--
                     字幕は `<track>` ではなく canvas に放送の置き場所のまま描く (左右の位置・背景の箱・外字が落ちるため)。
                     映像と同じ箱に入れて、データ放送の小窓へ一緒に縮ませる (ライブの `MediaStack` と同じ)。
-                    位置と大きさは `place` が書く。段は実況 (8) より上、操作列のボタン (10) より下 (`ControlBar`)
+                    位置と大きさは `place` が書く。段は実況 (8) より上、操作バーのボタン (10) より下 (`ControlBar`)
                 -->
           <canvas
             bind:this={overlay}

@@ -45,7 +45,7 @@
   } = $props();
 
   let open = $state(false);
-  /** 開いている間は操作列を残し、メニューは舞台の枠の中に収める (`stageMenu`) */
+  /** 開いている間は操作バーを残し、メニューは舞台の枠の中に収める (`stageMenu`) */
   const stage = stageMenu(() => open);
 </script>
 

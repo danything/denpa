@@ -251,7 +251,7 @@
     keepResume(data.rec.id, pos, total, "ts", leaving);
   }
 
-  /** 操作列の出し入れ。ライブ・観る画面と同じ */
+  /** 操作バーの出し入れ。ライブ・観る画面と同じ */
   const controls = playerControls();
   /** 止めている間も掛けたまま (ライブ・観る画面と同じ。あちらに理由) */
   const awake = screenAwake();

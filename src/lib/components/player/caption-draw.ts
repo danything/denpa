@@ -258,7 +258,7 @@ function drawRun(
 
 /**
  * 字の載っている縦の範囲 `[上, 下]` (面の高さに対する割合 0〜1)。背景の区画まで含める。
- * 操作列と重なるかを舞台が見るのに使う (`PlayerStage` の持ち上げ)。字が無ければ `[0, 0]`
+ * 操作バーと重なるかを舞台が見るのに使う (`PlayerStage` の持ち上げ)。字が無ければ `[0, 0]`
  */
 export function inkSpan(page: CaptionPage): [number, number] {
   const height = page.plane[1];
@@ -387,7 +387,7 @@ export class CaptionPainter {
     }
     ctx.clearRect(0, 0, width, height);
     canvas.dataset["drawn"] = "";
-    // 字の載っている縦の範囲 (canvas の高さに対する割合)。操作列と重なるときに舞台が字幕を持ち上げる (`PlayerStage`)
+    // 字の載っている縦の範囲 (canvas の高さに対する割合)。操作バーと重なるときに舞台が字幕を持ち上げる (`PlayerStage`)
     const [top, bottom] = inkSpan(page);
     const tall = cssHeight || 1;
     canvas.dataset["ink"] =

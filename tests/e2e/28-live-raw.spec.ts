@@ -26,7 +26,7 @@ import {
  * 時間とともに変わることを見る。GPU の無いヘッドレス (SwiftShader) でも同じに動く。
  */
 
-/** 画質の切り替えで MPEG-2 を選ぶ。操作列は触らないと引っ込む (`ControlBar`) ので動かして出す */
+/** 画質の切り替えで MPEG-2 を選ぶ。操作バーは触らないと引っ込む (`ControlBar`) ので動かして出す */
 async function chooseRaw(page: Page): Promise<void> {
   await wakeControls(page, "live-frame");
   await pickCodec(page, "live", "mpeg2");
@@ -86,7 +86,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     // 再生中になり、止める・再開するも繋がっている (再開は放送の今から)
     await expect(page.getByTestId("live-status")).toHaveCount(0);
     const play = page.getByTestId("live-play");
-    // 操作列は触らないと引っ込む (`ControlBar`)。動かして出してから押す
+    // 操作バーは触らないと引っ込む (`ControlBar`)。動かして出してから押す
     await wakeControls(page, "live-frame");
     await play.click();
     await expect(play).toHaveAttribute("aria-label", "再生");
