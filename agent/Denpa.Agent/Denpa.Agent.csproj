@@ -35,6 +35,12 @@
             実行ファイルに埋め込み、1 個のまま配れるようにする。px4d に渡すときに書き出す (Px4Firmware.cs)
         -->
         <EmbeddedResource Include="firmware/it930x-firmware.bin" LogicalName="it930x-firmware.bin" />
+        <!--
+            PIX-DT295 の常駐方式で機材に入れる mAgicVISION のファームウェア (作者が再配布を認めている。firmware/README.md)。
+            その移植元のコードの MIT の表示も埋め込み、実行ファイルといっしょに配る (Dt295ResidentImage.cs)
+        -->
+        <EmbeddedResource Include="firmware/magicvision-firmware.bin" LogicalName="magicvision-firmware.bin" />
+        <EmbeddedResource Include="licenses/mAgicVISION.txt" LogicalName="mAgicVISION-LICENSE.txt" />
     </ItemGroup>
 
 </Project>

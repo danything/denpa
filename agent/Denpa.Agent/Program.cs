@@ -75,6 +75,7 @@ if (args is ["--status"])
 }
 // PIX-DT295 を確かめる。起動・認証・カード・選局と、受信に要るものがあれば受信の統計だけを出す (Dt295Probe.cs)
 if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295Probe.Run(args);
+if (args.ElementAtOrDefault(0) == "--dt295-resident-probe") return Dt295ResidentProbe.Run(args);
 /*
  * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる

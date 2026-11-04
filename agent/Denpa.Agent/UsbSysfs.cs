@@ -43,6 +43,45 @@ public static class UsbSysfs
         return null;
     }
 
+    /// <summary>
+    /// ポートの電源を切って入れ直し、機材を挿し直したのと同じ状態にする (ハブのポートの <c>port/disable</c> に 1 を書いてから 0 を書く)。
+    /// 機材がもう一度つながるまで待つ。<c>authorized</c> を書き換えるだけでは機材の中は戻らない (PIX-DT295 で確かめた)。
+    /// sysfs に書けなければ <see cref="IOException"/>
+    /// </summary>
+    public static void PowerCycle(string sysfs, string port, TimeSpan wait)
+    {
+        // 電源を切ると機材のディレクトリごと消えるので、先にハブの側のポート (<c>3-0:1.0/usb3-port5</c>) をたどっておく
+        string disable;
+        try
+        {
+            var link = new DirectoryInfo(Path.Combine(sysfs, port, "port"));
+            var hub = link.LinkTarget is { } target ? Path.GetFullPath(Path.Combine(sysfs, port, target)) : link.FullName;
+            disable = Path.Combine(hub, "disable");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException($"USB のポート {port} のハブの側が見当たりません ({error.Message})。機材を挿し直してください", error);
+        }
+        try
+        {
+            File.WriteAllText(disable, "1");
+            Thread.Sleep(500);
+            File.WriteAllText(disable, "0");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException($"USB のポート {port} の電源を入れ直せません ({error.Message})。機材を挿し直してください", error);
+        }
+        var deadline = DateTime.UtcNow + wait;
+        while (DateTime.UtcNow < deadline)
+        {
+            // つながり直すと、新しい番号の devnum が出る
+            if (Read(Path.Combine(sysfs, port), "devnum") is { Length: > 0 }) return;
+            Thread.Sleep(100);
+        }
+        throw new IOException($"USB のポート {port} の電源を入れ直したあと、機材が {wait.TotalSeconds:0} 秒のうちにつながりませんでした");
+    }
+
     /// <summary>属性を 1 つ読む (前後の空白を落とす)。無い・読めなければ null</summary>
     public static string? Read(string dir, string name)
     {
