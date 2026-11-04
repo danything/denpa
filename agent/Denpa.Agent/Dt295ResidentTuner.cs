@@ -639,7 +639,7 @@ public sealed class Dt295ResidentCard : ICardLink
     }) + $" (操作 {op}、理由 {rc})");
 
     /// <summary>「まだ」の間、SERVICE を送って待つ (card.c の settle)。待つ間は <see cref="Dt295ResidentBoard.Locked{T}"/> を手放す</summary>
-    private void Settle(int rc)
+    private void Settle(uint op, int rc)
     {
         var start = _now();
         while (rc == 1)
@@ -650,7 +650,14 @@ public sealed class Dt295ResidentCard : ICardLink
                 throw new IOException(_failed.Message, _failed);
             }
             _delay(10);
-            rc = Command(OpService, new byte[DataSize], out _);
+            try
+            {
+                rc = Command(OpService, new byte[DataSize], out _);
+            }
+            catch (IOException error)
+            {
+                throw new IOException($"{error.Message}。操作 {op} を待つ間です", error);
+            }
         }
     }
 
@@ -661,7 +668,7 @@ public sealed class Dt295ResidentCard : ICardLink
         _powered = response[38] != 0;
         if (response[39] != 0) return true;
         _active = false;
-        if (_powered) Settle(Command(OpPowerOff, new byte[DataSize], out _));
+        if (_powered) Settle(OpPowerOff, Command(OpPowerOff, new byte[DataSize], out _));
         _powered = false;
         return false;
     }
@@ -692,18 +699,29 @@ public sealed class Dt295ResidentCard : ICardLink
         return [.. bytes];
     }
 
+    /// <summary>
+    /// 電源を入れて ATR を返す (card.c の mb86H_card_power_on)。この接続でもう電源を入れていれば、カードには触らずに前の ATR を返す
+    /// (B-CAS を読む処理がリセットし直すたびに、カードを起こし直さない)
+    /// </summary>
     public byte[] Reset()
     {
         if (!Present()) throw new CardAbsentException($"{Name} にカードが挿さっていません");
+        if (_active && _atr is not null && _powered) return _atr;
         _active = false;
+        _atr = null;
         // 電源が入っていればリセット、入っていなければ電源を入れる (card.c の activate。電源が入ったまま電源を入れると、使用中で断られる)
-        Settle(Command(_powered ? OpReset : OpPowerOn, new byte[DataSize], out _));
+        var op = _powered ? OpReset : OpPowerOn;
+        Settle(op, Command(op, new byte[DataSize], out _));
         _powered = true;
         var atr = ReadBytes(OpAtrRead, MaxAtr);
         if (atr.Length < 2 || atr[0] is not (0x3B or 0x3F)) throw new IOException($"{Name} のカードの ATR が読めません ({Convert.ToHexString(atr)})");
         _active = true;
+        _atr = atr;
         return atr;
     }
+
+    /// <summary>この接続で電源を入れたときの ATR</summary>
+    private byte[]? _atr;
 
     public byte[] Transmit(ReadOnlySpan<byte> apdu)
     {
@@ -727,7 +745,7 @@ public sealed class Dt295ResidentCard : ICardLink
                 Command(OpTxData, data, out _);
                 at += n;
             }
-            Settle(Command(OpTransmit, new byte[DataSize], out _));
+            Settle(OpTransmit, Command(OpTransmit, new byte[DataSize], out _));
             return ReadBytes(OpRxRead, MaxRx);
         }
         catch (IOException error) when (error is not CardAbsentException)
