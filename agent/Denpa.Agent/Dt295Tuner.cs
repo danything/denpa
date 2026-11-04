@@ -397,6 +397,9 @@ internal sealed class Dt295Stream
     private readonly Action _stalled;
     private readonly TimeSpan _silence;
     private readonly TimeSpan _settle;
+
+    /// <summary>機材に流させる番組の番組番号 (0 なら指定なし)。主番組が決まらないとき (衛星) だけ 0x1018 に書く</summary>
+    private readonly int _program;
     private readonly Thread _pump;
     private readonly ManualResetEventSlim _first = new();
     private readonly byte[] _scratch = new byte[TransferSize * Depth];
@@ -418,8 +421,9 @@ internal sealed class Dt295Stream
     /// <summary>準備し直した回数 (9.10)</summary>
     public int Reprepared { get; private set; }
 
-    private Dt295Stream(IUsbInStream input, Dt295Board board, Dt295ReceiveData data, Dt295RouteTracker routes, string name, Action stalled, TimeSpan silence, TimeSpan settle)
+    private Dt295Stream(IUsbInStream input, Dt295Board board, Dt295ReceiveData data, Dt295RouteTracker routes, string name, Action stalled, TimeSpan silence, TimeSpan settle, int program)
     {
+        _program = program;
         _in = input;
         _board = board;
         _data = data;
@@ -436,10 +440,10 @@ internal sealed class Dt295Stream
     /// 受信を始める: 読みを出してから、準備 (9.2〜9.6) と受信開始 (9.7)。選局は済ませておく。
     /// 途中で失敗したら止める手順 (9.9) を通して投げる
     /// </summary>
-    public static Dt295Stream Start(Dt295Board board, Dt295ReceiveData data, Dt295RouteTracker routes, string name, Action stalled, TimeSpan silence, TimeSpan? settle = null)
+    public static Dt295Stream Start(Dt295Board board, Dt295ReceiveData data, Dt295RouteTracker routes, string name, Action stalled, TimeSpan silence, TimeSpan? settle = null, int program = 0)
     {
         var input = board.Usb.OpenInStream(Endpoint, TransferSize, Depth);
-        var stream = new Dt295Stream(input, board, data, routes, name, stalled, silence, settle ?? Settle);
+        var stream = new Dt295Stream(input, board, data, routes, name, stalled, silence, settle ?? Settle, program);
         try
         {
             board.Locked(() =>
@@ -463,7 +467,7 @@ internal sealed class Dt295Stream
     private void Prepare(Dt295Route[] plan, Dt295Program? main)
     {
         var session = _board.Session;
-        var key = session.PrepareReception(_board.Vendor.Trc, _data.Fields, plan, main);
+        var key = session.PrepareReception(_board.Vendor.Trc, _data.Fields, plan, main, _program);
         _filter = new Dt295TsFilter(new Dt295PacketDecryptor(), key, _data.TsIv);
         session.StartReception();
         _written = plan;
@@ -715,7 +719,7 @@ public sealed class Dt295Tuner : ITuneDevice
                         board.Frontend.TuneTerrestrialHz(tuning.Frequency);
                     }
                 });
-                _stream = Dt295Stream.Start(board, data, routes, _name, () => Task.Run(Stall), _silence, _settle);
+                _stream = Dt295Stream.Start(board, data, routes, _name, () => Task.Run(Stall), _silence, _settle, tuning.Satellite ? tuning.ServiceId ?? 0 : 0);
             }
             catch (Dt295Exception error) when (error.Message == Dt295Frontend.NoLock)
             {

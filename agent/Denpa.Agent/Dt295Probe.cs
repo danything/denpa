@@ -21,9 +21,9 @@ namespace Denpa.Agent;
 public static class Dt295Probe
 {
     public const string Usage =
-        "denpa-agent --dt295-probe [--port <USB のポート>] (--terrestrial <13-62> | --bs <1-23> | --cs <2-24> | --no-tune) [--slot <0-7>] [--seconds N] [--trace]";
+        "denpa-agent --dt295-probe [--port <USB のポート>] (--terrestrial <13-62> | --bs <1-23> | --cs <2-24> | --no-tune) [--slot <0-7>] [--program <1-65535>] [--seconds N] [--trace]";
 
-    private sealed record Options(string? Port, char Kind, int Channel, int Slot, TimeSpan Seconds, bool Trace);
+    private sealed record Options(string? Port, char Kind, int Channel, int Slot, int Program, TimeSpan Seconds, bool Trace);
 
     private static Options? Parse(string[] args)
     {
@@ -45,8 +45,9 @@ public static class Dt295Probe
         if (args.Contains("--no-tune")) kinds.Add(('N', 0));
         if (kinds.Count != 1) return null;
         var slot = args.Contains("--slot") ? Number(Value("--slot")) : 0;
+        var program = args.Contains("--program") ? Number(Value("--program")) : 0;
         var seconds = args.Contains("--seconds") ? Number(Value("--seconds")) : 5;
-        if (slot is not (>= 0 and <= 7) || seconds is not > 0) return null;
+        if (slot is not (>= 0 and <= 7) || program is not (>= 0 and <= 65535) || seconds is not > 0) return null;
         var (k, c) = kinds[0];
         try
         {
@@ -63,7 +64,7 @@ public static class Dt295Probe
         {
             return null;
         }
-        return new Options(Value("--port"), k, c, slot.Value, TimeSpan.FromSeconds(seconds.Value), args.Contains("--trace"));
+        return new Options(Value("--port"), k, c, slot.Value, program.Value, TimeSpan.FromSeconds(seconds.Value), args.Contains("--trace"));
     }
 
     public static int Run(string[] args)
@@ -152,7 +153,7 @@ public static class Dt295Probe
     private static void Receive(Options options, Dt295Board board, Dt295TsStats stats, Action<string> step)
     {
         var routes = new Dt295RouteTracker(needCat: options.Kind == 'T');
-        var stream = Dt295Stream.Start(board, Dt295Receive.Ensure(), routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence);
+        var stream = Dt295Stream.Start(board, Dt295Receive.Ensure(), routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence, program: options.Kind == 'T' ? 0 : options.Program);
         step("受信を始めました (9.2〜9.7)");
         try
         {
