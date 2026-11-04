@@ -132,7 +132,7 @@ public class AsicenTests
 
     private static readonly AsicenUserland.Enclosure Ready = new(
         "1-2", "PX-W3U3", new("0b06:0005", 1, 29, "1-2.1", false), new("1738:5211", 1, 30, "1-2.2", true),
-        AsicenUserland.Receivers(4));
+        AsicenUserland.Receivers());
 
     [Test]
     public async Task asicend_には_1_と_2_のアドレスとポートを渡す()
@@ -186,7 +186,7 @@ public class AsicenTunerTests
     private static readonly ChannelTable.Tuning Bs15 = ChannelTable.Parse("BS15:16625")!;
 
     private static Px4Tuner Open(Px4TunerTests.FakePx4d asicend, int receiver, string? lnb) => new(
-        "1-2", receiver, lnb, asicend.Runtime.FullName, () => AsicenUserland.Receivers(4),
+        "1-2", receiver, lnb, asicend.Runtime.FullName, () => AsicenUserland.Receivers(),
         Px4Wire.Asicen, AsicenUserland.Device("1-2", receiver), $"asicen-1-2 #{receiver}");
 
     [Test]

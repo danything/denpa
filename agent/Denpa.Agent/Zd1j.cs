@@ -28,19 +28,12 @@ public static class Zd1j
     public const int Product = 0x04B2;
     public const string Model = "Sony CECH-ZD1 J";
 
-    private const string DevUsb = "/dev/bus/usb";
-
     public static string Device(string port) => $"{Scheme}{port}";
 
     public static bool Is(string? device) => device?.StartsWith(Scheme, StringComparison.Ordinal) == true;
 
     /// <summary><c>zd1j:4-12.1</c> からポートを取る。形式が違えば null</summary>
-    public static string? Parse(string device)
-    {
-        if (!Is(device)) return null;
-        var port = device[Scheme.Length..];
-        return UsbSysfs.IsPort(port) ? port : null;
-    }
+    public static string? Parse(string device) => UsbSysfs.PortOf(device, Scheme);
 
     /// <summary>
     /// 挿さっている CECH-ZD1 J のポート。**開かない** (開くと他から使えなくなり、ブリッジの起動もしてしまう)。
@@ -99,7 +92,7 @@ public static class Zd1j
     /// <summary>開く (Linux は usbfs、Windows は WinUSB、macOS は IOKit)</summary>
     internal static IUsbDevice OpenUsb(string port) =>
         OperatingSystem.IsLinux()
-            ? UsbFsDevice.Open(UsbSysfs.Devices, DevUsb, port, Vendor, Product)
+            ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, Vendor, Product)
             : UsbDevices.Open(port, Vendor, Product);
 
     /// <summary>付いていったことを記録したもの (設定のポート → 使ったポート)。同じ組は 1 回だけ記録する</summary>
@@ -668,9 +661,9 @@ internal sealed class Zd1jStream
         return !flushing.Result.IsCompleted;
     }
 
-    private void End(string? reason)
+    private void End(string reason)
     {
-        if (_stopped || reason is null) return;
+        if (_stopped) return;
         _reason = reason;
         Log.Write($"[{_name}] {reason}");
     }
@@ -833,7 +826,7 @@ public sealed class Zd1jCard : ICardLink
     }
 
     /// <summary>
-    /// T=1 のブロックを 1 つ送って 1 つ受ける。受けは「受けた数が 0 でなくなる」だけを合図に頭 3 バイトを読み、
+    /// T=1 のブロックを 1 つ送って 1 つ受ける。受けは「受けた数が 0 でなくなる」だけを合図に先頭の 3 バイトを読み、
     /// 長さぶんと LRC を読む。時間切れは null (T1Protocol が送り直す)
     /// </summary>
     private byte[]? Exchange(byte[] block, byte wtx)

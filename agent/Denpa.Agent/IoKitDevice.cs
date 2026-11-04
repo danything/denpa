@@ -161,6 +161,12 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
 
     private static void* Slot(void* self, int index) => (*(void***)self)[index];
 
+    /// <summary>IUnknown の Release (表の <see cref="Release"/>)</summary>
+    private static void ReleaseObject(void* self) => ((delegate* unmanaged[Cdecl]<void*, uint>)Slot(self, Release))(self);
+
+    /// <summary>IOUSBDeviceInterface182 の USBDeviceClose (表の <see cref="DeviceClose"/>)</summary>
+    private static void CloseDevice(void* device) => ((delegate* unmanaged[Cdecl]<void*, int>)Slot(device, DeviceClose))(device);
+
     // USB.h の転送の種類
     private const byte TransferInterrupt = 3;
 
@@ -246,7 +252,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         void* result = null;
         var query = (delegate* unmanaged[Cdecl]<void*, UuidBytes, void**, int>)Slot(plugin, 1);
         var hr = query(plugin, CFUUIDGetUUIDBytes(interfaceId), &result);
-        ((delegate* unmanaged[Cdecl]<void*, uint>)Slot(plugin, Release))(plugin);
+        ReleaseObject(plugin);
         return hr == 0 ? result : null;
     }
 
@@ -275,7 +281,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         var open = ((delegate* unmanaged[Cdecl]<void*, int>)Slot(device, DeviceOpen))(device);
         if (open != Success)
         {
-            ((delegate* unmanaged[Cdecl]<void*, uint>)Slot(device, Release))(device);
+            ReleaseObject(device);
             throw new IOException(open == ExclusiveAccess
                 ? $"{name} はほかのソフト (かドライバ) が使っています"
                 : $"{name} を開けません (IOReturn 0x{open:X8})");
@@ -303,7 +309,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
             var opened = ((delegate* unmanaged[Cdecl]<void*, int>)Slot(@interface, InterfaceOpen))(@interface);
             if (opened != Success)
             {
-                ((delegate* unmanaged[Cdecl]<void*, uint>)Slot(@interface, Release))(@interface);
+                ReleaseObject(@interface);
                 result._interface = null;
                 throw new IOException(opened == ExclusiveAccess
                     ? $"{name} はほかのソフト (かドライバ) が使っています"
@@ -318,8 +324,8 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
             if (result is not null) result.Dispose();
             else
             {
-                ((delegate* unmanaged[Cdecl]<void*, int>)Slot(device, DeviceClose))(device);
-                ((delegate* unmanaged[Cdecl]<void*, uint>)Slot(device, Release))(device);
+                CloseDevice(device);
+                ReleaseObject(device);
             }
             throw;
         }
@@ -489,15 +495,15 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
                 }
                 else
                 {
-                    ((delegate* unmanaged[Cdecl]<void*, uint>)Slot(_interface, Release))(_interface);
+                    ReleaseObject(_interface);
                 }
                 _interface = null;
             }
             _pumps.Clear();
             if (_device is not null)
             {
-                ((delegate* unmanaged[Cdecl]<void*, int>)Slot(_device, DeviceClose))(_device);
-                ((delegate* unmanaged[Cdecl]<void*, uint>)Slot(_device, Release))(_device);
+                CloseDevice(_device);
+                ReleaseObject(_device);
                 _device = null;
             }
         }

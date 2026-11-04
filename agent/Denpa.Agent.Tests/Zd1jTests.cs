@@ -344,7 +344,7 @@ public class Zd1jTests
             await Assert.That(tuner.Timings.FirstTsMs).IsGreaterThanOrEqualTo(0);
 
             tuner.Dispose();
-            // 流し終わり (仕様書 9.5): コア 0 を止め、受け口と書き手を止め、出力をハイインピーダンスに
+            // 流し終わり (仕様書 9.5): コア 0 を止め、受信側と書き手を止め、出力をハイインピーダンスに
             await Assert.That(usb.Log).Contains("S stop");
             await Assert.That(usb.Log).Contains("W 00D02010=04000000");
             await Assert.That(usb.Dib.Demod[1286]).IsEqualTo((ushort)0);

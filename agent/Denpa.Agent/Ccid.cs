@@ -420,13 +420,11 @@ public sealed class CcidLink : ICardLink
 /// <summary>USB の CCID リーダーを探す</summary>
 public static class Ccid
 {
-    private const string DevUsb = "/dev/bus/usb";
-
     /// <summary>
     /// 挿さっている CCID のインターフェース (bInterfaceClass 0x0b) を並べる。**開かない。**
     /// sysfs だけを読むので、別のプロセスが使っていても並ぶ (開くときに断られる)
     /// </summary>
-    public static IReadOnlyList<CardLinkCandidate> Find() => Find(UsbSysfs.Devices, DevUsb);
+    public static IReadOnlyList<CardLinkCandidate> Find() => Find(UsbSysfs.Devices, UsbSysfs.DevUsb);
 
     internal static List<CardLinkCandidate> Find(string sysfs, string devUsb)
     {

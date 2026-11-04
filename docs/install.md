@@ -194,7 +194,7 @@ kubectl debug -it deploy/denpa --image=busybox --target=denpa -n denpa
 - **`Host` をそのまま渡し、WebSocket を通します。** `Host` が書き換わると設定の保存などの POST が
   `403 Cross-site POST form submissions are forbidden` で断られ、WebSocket が通らないとライブが
   「繋がりませんでした」になります。Caddy・Traefik・Envoy (Gateway API) は何もしなくても満たします。
-  Nginx Proxy Manager は「Websockets Support」を入れます。nginx は自分で書きます:
+  Nginx Proxy Manager は「Websockets Support」を入れます。nginx は次のように書きます。
 
   ```nginx
   location / {
