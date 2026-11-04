@@ -261,18 +261,16 @@ export function poll(
 
   const token = `${TOKEN_PREFIX}${randomToken(32)}`;
   orm().transaction((tx) => {
-    const created = tx
-      .insert(apiTokens)
+    tx.insert(apiTokens)
       .values({
         name: row.name,
         token_hash: sha256(token),
         created_at: at,
         created_by: row.approved_by,
       })
-      .returning({ id: apiTokens.id })
-      .get();
+      .run();
     tx.update(deviceCodes)
-      .set({ consumed_at: at, approved_token_id: created.id })
+      .set({ consumed_at: at })
       .where(eq(deviceCodes.id, row.id))
       .run();
   });
