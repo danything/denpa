@@ -305,11 +305,24 @@ public sealed class Dt295SectionReader
 }
 
 /// <summary>
+/// <see cref="Dt295RouteTracker"/> の写し。同じチャンネルを選び直したとき、最初の準備から全部のルートを書くために取っておく。
+/// 届く PSI と見比べて、違えば捨てる (<see cref="Dt295RouteTracker.Seed"/>)
+/// </summary>
+public sealed record Dt295RouteSnapshot(
+    IReadOnlyList<Dt295PatEntry> Pat,
+    IReadOnlyDictionary<int, Dt295Pmt> Pmts,
+    IReadOnlyList<int>? Emms,
+    IReadOnlyList<int> Pids,
+    IReadOnlyDictionary<int, int> EcmOf,
+    Dt295Program? Main);
+
+/// <summary>
 /// 届いた PSI からルートの計画を組み立てる (11.2・11.3)。始めは PAT (暗黙) と固定の SI PID。PAT が読めたら NIT とすべての PMT を足し、
 /// PMT が読めたら PCR・CA 記述子の PID・ES を足す。主番組は PAT の順で最初の、映像と音声を持つ番組で、**一度決めたら替えない** (11.3)。
 /// CAT が読めたら EMM (CA 記述子の PID) を足す。
 /// 読むのは AES を外したあとの、暗号化されていない (transport_scrambling_control = 00) パケットだけで、PAT・CAT・PAT に載った PMT の PID のものだけを使う。
-/// 版数の追従 (11.4) と、録画中の PMT の変化の扱い (11.3 の後半) はまだ持たない (最初の PAT・CAT と、PMT ごとに最初の 1 つだけを使う)
+/// 版数の追従 (11.4) と、録画中の PMT の変化の扱い (11.3 の後半) はまだ持たない (最初の PAT・CAT と、PMT ごとに最初の 1 つだけを使う)。
+/// <see cref="Seed"/> で前回の写しを渡したときだけは、最初に届く PAT・CAT・PMT を写しと見比べ、違えば写しを捨てて届いたものに替える
 /// </summary>
 /// <param name="needCat">そろったとみるのに CAT を待つか (地上波は待ち、衛星は待たない。11.2・8.6)</param>
 /// <param name="satellite">衛星か。専用のスロットの使い方が変わる (<see cref="Dt295Routes.Plan"/>)</param>
@@ -317,11 +330,17 @@ public sealed class Dt295SectionReader
 public sealed class Dt295RouteTracker(bool needCat = true, int? service = null, bool satellite = false)
 {
     private readonly Dt295SectionReader _sections = new();
-    private readonly List<int> _pids = [.. Dt295Routes.FixedSi];
+    private List<int> _pids = [.. Dt295Routes.FixedSi];
     private readonly Dictionary<int, int> _ecmOf = [];
     private readonly Dictionary<int, Dt295Pmt> _pmts = [];
     private List<Dt295PatEntry>? _pat;
     private bool _cat;
+    private List<int> _emms = [];
+
+    /// <summary>写しを渡されて、まだ届いたものと見比べていないもの</summary>
+    private bool _patUnchecked;
+    private bool _catUnchecked;
+    private readonly HashSet<int> _pmtsUnchecked = [];
 
     /// <summary>PAT・(地上波は) CAT・PAT に載ったすべての番組の PMT がそろった (11.2 の手順 3)</summary>
     public bool Settled =>
@@ -341,6 +360,35 @@ public sealed class Dt295RouteTracker(bool needCat = true, int? service = null, 
     /// <summary>計画を作り直せなかった理由 (複数の ECM・スロットの不足。11.5)。前の計画のまま続ける</summary>
     public string? Problem { get; private set; }
 
+    /// <summary>
+    /// いまの状態の写し。PAT と、PAT に載ったすべての PMT (地上波は CAT も) がそろっているときだけ返す (そろっていなければ null)
+    /// </summary>
+    public Dt295RouteSnapshot? Snapshot() => Settled
+        ? new Dt295RouteSnapshot([.. _pat!], new Dictionary<int, Dt295Pmt>(_pmts), needCat ? [.. _emms] : null, [.. _pids], new Dictionary<int, int>(_ecmOf), Main)
+        : null;
+
+    /// <summary>
+    /// 前回の写しから始める。計画は最初から全部のルートを持つ。届く PAT・CAT・PMT は、最初の 1 つずつを写しと見比べ、
+    /// 同じなら何もせず、違えば写しのその部分を捨てて届いたものに替える
+    /// </summary>
+    public void Seed(Dt295RouteSnapshot snapshot)
+    {
+        _pat = [.. snapshot.Pat];
+        _pmts.Clear();
+        foreach (var (pid, pmt) in snapshot.Pmts) _pmts[pid] = pmt;
+        _cat = snapshot.Emms is not null;
+        _emms = snapshot.Emms is null ? [] : [.. snapshot.Emms];
+        _pids = [.. snapshot.Pids];
+        _ecmOf.Clear();
+        foreach (var (guarded, ecm) in snapshot.EcmOf) _ecmOf[guarded] = ecm;
+        Main = snapshot.Main;
+        _patUnchecked = true;
+        _catUnchecked = _cat;
+        _pmtsUnchecked.Clear();
+        foreach (var pid in _pmts.Keys) _pmtsUnchecked.Add(pid);
+        Replan();
+    }
+
     /// <summary>パケット 1 つを渡す。計画が変わったら true</summary>
     public bool Push(ReadOnlySpan<byte> packet)
     {
@@ -350,23 +398,52 @@ public sealed class Dt295RouteTracker(bool needCat = true, int? service = null, 
         if (pid != 0 && pid != 1 && !(_pat is not null && _pat.Any(entry => entry.Pid == pid))) return false;
         foreach (var section in _sections.Push(packet))
         {
-            if (pid == 0 && _pat is null && Dt295SectionReader.Pat(section) is { } pat)
+            if (pid == 0 && (_pat is null || _patUnchecked) && Dt295SectionReader.Pat(section) is { } pat)
             {
                 // 番組番号の指定があれば、NIT (番組番号 0) とその番組だけを追う
-                _pat = service is null ? pat : pat.Where(entry => entry.Number == 0 || entry.Number == service).ToList();
+                var read = service is null ? pat : pat.Where(entry => entry.Number == 0 || entry.Number == service).ToList();
+                if (_pat is not null && _patUnchecked)
+                {
+                    _patUnchecked = false;
+                    if (read.SequenceEqual(_pat)) continue;
+                    // 写しと違う。PMT 以降は読み直す
+                    Discard();
+                }
+                _pat = read;
                 // NIT (番組番号 0) とすべての PMT (11.2 の手順 2)
                 foreach (var entry in _pat) _pids.Add(entry.Pid);
                 changed = true;
             }
-            else if (pid == 1 && !_cat && Dt295SectionReader.Cat(section) is { } emms)
+            else if (pid == 1 && (!_cat || _catUnchecked) && Dt295SectionReader.Cat(section) is { } emms)
             {
+                if (_cat && _catUnchecked)
+                {
+                    _catUnchecked = false;
+                    if (emms.SequenceEqual(_emms)) continue;
+                    _emms = [.. emms];
+                    _pids.AddRange(emms.Where(emm => !_pids.Contains(emm)));
+                    changed = true;
+                    continue;
+                }
                 _cat = true;
+                _emms = [.. emms];
                 _pids.AddRange(emms);
                 changed = true;
             }
-            else if (_pat is not null && !_pmts.ContainsKey(pid) && _pat.Any(entry => entry.Number != 0 && entry.Pid == pid)
+            else if (_pat is not null && (!_pmts.ContainsKey(pid) || _pmtsUnchecked.Contains(pid))
+                && _pat.Any(entry => entry.Number != 0 && entry.Pid == pid)
                 && Dt295SectionReader.Pmt(section) is { } pmt)
             {
+                if (_pmtsUnchecked.Remove(pid))
+                {
+                    if (SamePmt(_pmts[pid], pmt)) continue;
+                    // 写しと違う。この PMT に替えて、PID と ECM の対応と主番組を組み直す
+                    _pmts[pid] = pmt;
+                    Rebuild();
+                    Main = ChooseMain();
+                    changed = true;
+                    continue;
+                }
                 _pmts[pid] = pmt;
                 _pids.AddRange(pmt.CaPids);
                 _pids.Add(pmt.PcrPid);
@@ -378,6 +455,38 @@ public sealed class Dt295RouteTracker(bool needCat = true, int? service = null, 
         }
         return changed && Replan();
     }
+
+    /// <summary>写しの PAT が届いた PAT と違った。PMT と主番組は捨てて、届いた PAT から組み立て直す</summary>
+    private void Discard()
+    {
+        _pmts.Clear();
+        _pmtsUnchecked.Clear();
+        _ecmOf.Clear();
+        Main = null;
+        _pids = [.. Dt295Routes.FixedSi];
+        if (_cat) _pids.AddRange(_emms);
+    }
+
+    /// <summary>PAT・CAT・PMT から、計画に入れる PID と ECM の対応を組み直す (PAT の順)</summary>
+    private void Rebuild()
+    {
+        _pids = [.. Dt295Routes.FixedSi];
+        _ecmOf.Clear();
+        if (_cat) _pids.AddRange(_emms);
+        foreach (var entry in _pat!) _pids.Add(entry.Pid);
+        foreach (var entry in _pat.Where(entry => entry.Number != 0))
+        {
+            if (!_pmts.TryGetValue(entry.Pid, out var pmt)) continue;
+            _pids.AddRange(pmt.CaPids);
+            _pids.Add(pmt.PcrPid);
+            _pids.AddRange(pmt.Streams.Select(stream => stream.Pid));
+            foreach (var (guarded, ecm) in pmt.EcmOf) _ecmOf.TryAdd(guarded, ecm);
+        }
+    }
+
+    private static bool SamePmt(Dt295Pmt a, Dt295Pmt b) =>
+        a.Number == b.Number && a.PcrPid == b.PcrPid && a.Streams.SequenceEqual(b.Streams) && a.CaPids.SequenceEqual(b.CaPids)
+        && a.EcmOf.Count == b.EcmOf.Count && a.EcmOf.All(pair => b.EcmOf.TryGetValue(pair.Key, out var ecm) && ecm == pair.Value);
 
     /// <summary>PAT の順に見る。PMT がまだ来ていない番組に当たったら、まだ決めない</summary>
     private Dt295Program? ChooseMain()

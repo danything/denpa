@@ -731,6 +731,93 @@ public class Dt295TunerTests
     }
 
     [Test]
+    public async Task 前回の写しから始めると_最初から全部のルートを持ち_同じ_PSI_では計画を変えない()
+    {
+        byte[] ca = [0x09, 0x04, 0x00, 0x05, 0xE9, 0x01];
+        var both = Dt295Ts.PatPmt(ca);
+        var live = new Dt295RouteTracker();
+        await Assert.That(live.Snapshot()).IsNull();
+        live.Push(both.AsSpan(0, 188));
+        await Assert.That(live.Snapshot()).IsNull();  // PMT と CAT がまだ
+        live.Push(both.AsSpan(188));
+        live.Push(Dt295Ts.Cat());
+        var snapshot = live.Snapshot()!;
+        await Assert.That(snapshot).IsNotNull();
+
+        var seeded = new Dt295RouteTracker();
+        seeded.Seed(snapshot);
+        await Assert.That(seeded.Settled).IsTrue();
+        await Assert.That(seeded.Main!.VideoPid).IsEqualTo(0x111);
+        await Assert.That(seeded.Plan).IsEquivalentTo(live.Plan);
+
+        // 同じ PSI が届いても、計画は変わらない (準備し直さない)
+        await Assert.That(seeded.Push(both.AsSpan(0, 188))).IsFalse();
+        await Assert.That(seeded.Push(both.AsSpan(188))).IsFalse();
+        await Assert.That(seeded.Push(Dt295Ts.Cat())).IsFalse();
+        await Assert.That(seeded.Plan).IsEquivalentTo(live.Plan);
+        await Assert.That(seeded.Main!.VideoPid).IsEqualTo(0x111);
+    }
+
+    [Test]
+    public async Task 写しと違う_PMT_や_PAT_が届いたら_写しを捨てて届いたもので計画を作り直す()
+    {
+        byte[] ca = [0x09, 0x04, 0x00, 0x05, 0xE9, 0x01];
+        var both = Dt295Ts.PatPmt(ca);
+        var live = new Dt295RouteTracker();
+        live.Push(both.AsSpan(0, 188));
+        live.Push(both.AsSpan(188));
+        live.Push(Dt295Ts.Cat());
+        var snapshot = live.Snapshot()!;
+
+        // PMT の映像の PID が替わった (0x111 → 0x211)
+        var changedPmt = Dt295Ts.Packet(0x1F0, Dt295Ts.Section(0x02, 0x400,
+            [0xE2, 0x11, 0xF0, (byte)ca.Length, .. ca, 0x02, 0xE2, 0x11, 0xF0, 0x00, 0x0F, 0xE1, 0x12, 0xF0, 0x00]));
+        var pmtChanged = new Dt295RouteTracker();
+        pmtChanged.Seed(snapshot);
+        await Assert.That(pmtChanged.Push(both.AsSpan(0, 188))).IsFalse();
+        await Assert.That(pmtChanged.Push(changedPmt)).IsTrue();
+        await Assert.That(pmtChanged.Main!.VideoPid).IsEqualTo(0x211);
+        await Assert.That(pmtChanged.Plan.Any(route => route.Pid == 0x211)).IsTrue();
+        await Assert.That(pmtChanged.Plan.Any(route => route.Pid == 0x111)).IsFalse();
+
+        // PAT が替わった (番組 0x400 の PMT が 0x1F0 → 0x2F0)。PMT 以降は読み直す
+        var changedPat = Dt295Ts.Packet(0, Dt295Ts.Section(0x00, 0x7FE0, [0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE2, 0xF0]));
+        var patChanged = new Dt295RouteTracker();
+        patChanged.Seed(snapshot);
+        await Assert.That(patChanged.Push(changedPat)).IsTrue();
+        await Assert.That(patChanged.Settled).IsFalse();
+        await Assert.That(patChanged.Main).IsNull();
+        await Assert.That(patChanged.Plan.Any(route => route.Pid == 0x2F0)).IsTrue();
+        await Assert.That(patChanged.Plan.Any(route => route.Pid == 0x111)).IsFalse();
+    }
+
+    [Test]
+    public async Task 同じチャンネルを選び直すと_最初の準備からルートを書き_準備し直さない()
+    {
+        var usb = FakeDt295Usb.Receiving(FakeDt295Material.Create());
+        byte[] psi = [.. Dt295Ts.PatPmt([0x09, 0x04, 0x00, 0x05, 0xE9, 0x01]), .. Dt295Ts.Cat()];
+        usb.Ts.Enqueue(psi);
+        var tuner = Tuner(usb, "3-5");
+        var t27 = ChannelTable.Parse("T27")!;
+        tuner.Tune(t27, ChannelTable.NoStreamId);
+        await Assert.That(ReadAll(tuner.Output, psi.Length)).IsEquivalentTo(psi);
+        for (var i = 0; i < 200 && tuner.Stream!.Reprepared == 0; i++) await Task.Delay(10);
+        await Assert.That(tuner.Stream!.Reprepared).IsEqualTo(1);
+
+        // 2 回目: 同じ PSI が届いても準備し直さない。TRC の準備 (04000000) は選局ごとの 1 回だけ増える
+        var before = usb.MainCommands().Count(command => command == "04000000");
+        usb.Ts.Enqueue(psi);
+        tuner.Tune(t27, ChannelTable.NoStreamId);
+        await Assert.That(usb.Get16(0x101E)).IsEqualTo((ushort)0x8111);
+        await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)0x0400);
+        await Assert.That(ReadAll(tuner.Output, psi.Length)).IsEquivalentTo(psi);
+        await Task.Delay(300);
+        await Assert.That(tuner.Stream!.Reprepared).IsEqualTo(0);
+        await Assert.That(usb.MainCommands().Count(command => command == "04000000")).IsEqualTo(before + 1);
+        tuner.Dispose();
+    }
+
+    [Test]
     public async Task 受信中は空きスロットへの_ECM_でない_PID_だけを_9_8_で足す()
     {
         var usb = FakeDt295Usb.Receiving(FakeDt295Material.Create());

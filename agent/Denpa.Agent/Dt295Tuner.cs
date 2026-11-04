@@ -429,6 +429,9 @@ internal sealed class Dt295Stream
 
     public bool Ended => _ended;
 
+    /// <summary>この受信のルートの計画。止めるときに写しを取る</summary>
+    internal Dt295RouteTracker Routes => _routes;
+
     /// <summary>流し終わった理由 (無ければ null)</summary>
     public string? Reason => _reason;
 
@@ -463,7 +466,7 @@ internal sealed class Dt295Stream
             board.Locked(() =>
             {
                 board.Receiving = true;
-                stream.Prepare(routes.Plan, null);
+                stream.Prepare(routes.Plan, routes.Main);
             });
         }
         catch
@@ -679,6 +682,15 @@ public sealed class Dt295Tuner : ITuneDevice
     private Dt295Board? _board;
     private Dt295Stream? _stream;
 
+    /// <summary>
+    /// チャンネルごとの、前回の PAT・PMT・CAT の写し (エージェントが動いている間だけ持つ)。同じチャンネルを選び直すと、最初の準備から
+    /// 全部のルートを書き、PMT が届くのを待たずに映像と音声が流れる。届く PSI と見比べて、違えば写しを捨てる
+    /// </summary>
+    private readonly Dictionary<string, Dt295RouteSnapshot> _routeCache = [];
+
+    /// <summary>いまの受信の写しのキー (周波数・TSID・番組番号)</summary>
+    private string? _streamKey;
+
     public Dt295Tuner(string port) : this($"{Dt295.Model} {port}", Dt295.Device(port), Dt295Receive.Ensure, () => Dt295Board.Acquire(port))
     {
     }
@@ -733,6 +745,9 @@ public sealed class Dt295Tuner : ITuneDevice
             if (tuning.Satellite) data = data with { Fields = data.Fields.WithAutoPidMode(false) };
             // ServiceId は 1〜65535 か null (ChannelTable が 0 を断る)。null なら全番組を追う
             var routes = new Dt295RouteTracker(needCat: !tuning.Satellite, service: tuning.Satellite ? tuning.ServiceId : null, satellite: tuning.Satellite);
+            var key = $"{(tuning.Satellite ? "S" : "T")}{tuning.Frequency}:{tuning.StreamId}:{(tuning.Satellite ? tuning.ServiceId : null)}";
+            if (_routeCache.TryGetValue(key, out var cached)) routes.Seed(cached);
+            _streamKey = key;
             try
             {
                 board.Locked(() =>
@@ -786,6 +801,8 @@ public sealed class Dt295Tuner : ITuneDevice
     {
         var stream = _stream;
         _stream = null;
+        // 止める前に、PAT と全部の PMT がそろっていれば写しを取る。次に同じチャンネルを選ぶとき、最初の準備に使う
+        if (stream is not null && _streamKey is { } key && stream.Routes.Snapshot() is { } snapshot) _routeCache[key] = snapshot;
         stream?.Stop();
     }
 
