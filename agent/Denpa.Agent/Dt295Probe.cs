@@ -47,7 +47,7 @@ public static class Dt295Probe
         var slot = args.Contains("--slot") ? Number(Value("--slot")) : 0;
         var program = args.Contains("--program") ? Number(Value("--program")) : 0;
         var seconds = args.Contains("--seconds") ? Number(Value("--seconds")) : 5;
-        if (slot is not (>= 0 and <= 7) || program is not (>= 0 and <= 65535) || seconds is not > 0) return null;
+        if (slot is not (>= 0 and <= 7) || program is not (>= 0 and <= 65535) || (args.Contains("--program") && (program < 1 || kinds[0].Kind is not ('B' or 'C'))) || seconds is not > 0) return null;
         var (k, c) = kinds[0];
         try
         {
@@ -153,7 +153,7 @@ public static class Dt295Probe
     private static void Receive(Options options, Dt295Board board, Dt295TsStats stats, Action<string> step)
     {
         var routes = new Dt295RouteTracker(needCat: options.Kind == 'T');
-        var stream = Dt295Stream.Start(board, Dt295Receive.Ensure(), routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence, program: options.Kind == 'T' ? 0 : options.Program);
+        var stream = Dt295Stream.Start(board, Dt295Receive.Ensure(), routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence, program: options.Program);
         step("受信を始めました (9.2〜9.7)");
         try
         {
