@@ -4,11 +4,13 @@ import {
   type AdaptDecision,
   type AdaptSample,
   AUDIO_AFTER,
+  BASE_GUESS_KBPS,
   ENCODE_LAG,
   GRACE,
   HOLD,
   PROBE,
   RungAdapter,
+  THIN,
   UP_WAIT_LIVE,
   UP_WAIT_MOST,
   UP_WAIT_WATCH,
@@ -170,6 +172,72 @@ describe("下げる", () => {
   });
 });
 
+describe("観る画面で速さが足りないとき", () => {
+  test("測った速さの 7 割がいまの段に足りない状態が 10 秒続いたら、溜まりがあっても下げる", () => {
+    const a = new RungAdapter();
+    // 16 Mbit/s の MPEG-2 に 20 Mbit/s × 0.7 = 14 Mbit/s では足りない
+    expect(
+      first(a, 0, 60_000, {
+        current: 0,
+        baseKbps: 16_000,
+        throughput: 20_000_000,
+        ahead: 50,
+      }),
+    ).toEqual({ at: GRACE + THIN, decision: { step: 1, reason: "slow" } });
+
+    // 段 2 (1.596 Mbit/s) に 2 Mbit/s × 0.7 = 1.4 Mbit/s では足りない
+    const b = new RungAdapter();
+    expect(
+      first(b, 0, 60_000, { current: 2, throughput: 2_000_000, ahead: 50 })
+        ?.decision,
+    ).toEqual({ step: 3, reason: "slow" });
+  });
+
+  test("段 0 のビットレートが分からなければ BASE_GUESS_KBPS と比べる", () => {
+    const a = new RungAdapter();
+    // 12 Mbit/s × 0.7 = 8.4 Mbit/s は 10.5 Mbit/s に足りない
+    expect(
+      first(a, 0, 60_000, { current: 0, throughput: 12_000_000, ahead: 50 })
+        ?.at,
+    ).toBe(GRACE + THIN);
+    expect(BASE_GUESS_KBPS).toBe(10_500);
+  });
+
+  test("足りていれば下げず、途中で足りれば数え直す", () => {
+    const a = new RungAdapter();
+    expect(
+      first(a, 0, 60_000, {
+        current: 0,
+        baseKbps: 16_000,
+        throughput: 25_000_000,
+        ahead: 50,
+      }),
+    ).toBeNull();
+    const b = new RungAdapter();
+    expect(
+      first(b, 0, 60_000, (now) => ({
+        current: 0,
+        baseKbps: 16_000,
+        throughput: now % 8_000 === 0 ? 25_000_000 : 20_000_000,
+        ahead: 50,
+      })),
+    ).toBeNull();
+  });
+
+  test("ライブでは速さを下げる引き金に使わない", () => {
+    const a = new RungAdapter();
+    expect(
+      first(a, 0, 60_000, {
+        route: "live",
+        current: 0,
+        baseKbps: 16_000,
+        throughput: 2_000_000,
+        ahead: 1,
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("GRACE", () => {
   test("選局の直後 3 秒は詰まっても下げない", () => {
     const a = new RungAdapter();
@@ -206,19 +274,19 @@ describe("行き来しない", () => {
     });
   });
 
-  test("速さが次の段の 1.5 倍に届かなければ上げない", () => {
+  test("速さが次の段の 2 倍に届かなければ上げない", () => {
     const a = new RungAdapter();
-    // 段 1 は 3.096 Mbit/s。1.5 倍は 4.644 Mbit/s
+    // 段 1 は 3.096 Mbit/s。2 倍は 6.192 Mbit/s
     expect(
-      first(a, 0, 120_000, { current: 2, throughput: 4_500_000 }),
+      first(a, 0, 120_000, { current: 2, throughput: 6_000_000 }),
     ).toBeNull();
   });
 });
 
 describe("上げる", () => {
-  test("観る画面は、次の段の 1.5 倍以上の速さが 20 秒続いたら 1 段上げる", () => {
+  test("観る画面は、次の段の 2 倍以上の速さが 20 秒続いたら 1 段上げる", () => {
     const a = new RungAdapter();
-    expect(first(a, 0, 120_000, { current: 2, throughput: 5_000_000 })).toEqual(
+    expect(first(a, 0, 120_000, { current: 2, throughput: 6_500_000 })).toEqual(
       {
         at: GRACE + UP_WAIT_WATCH,
         decision: { step: 1, reason: "restored" },
@@ -226,14 +294,14 @@ describe("上げる", () => {
     );
   });
 
-  test("段 0 へは、ファイルのビットレートの 1.5 倍以上が続いたときだけ戻す", () => {
+  test("段 0 へは、ファイルのビットレートの 2 倍以上が続いたときだけ戻す", () => {
     const a = new RungAdapter();
-    // 16 Mbit/s の MPEG-2。1.5 倍は 24 Mbit/s
+    // 16 Mbit/s の MPEG-2。2 倍は 32 Mbit/s
     expect(
       first(a, 0, 120_000, {
         current: 1,
         baseKbps: 16_000,
-        throughput: 20_000_000,
+        throughput: 30_000_000,
       }),
     ).toBeNull();
     const b = new RungAdapter();
@@ -241,7 +309,7 @@ describe("上げる", () => {
       first(b, 0, 120_000, {
         current: 1,
         baseKbps: 16_000,
-        throughput: 25_000_000,
+        throughput: 33_000_000,
       })?.decision,
     ).toEqual({ step: 0, reason: "restored" });
   });
@@ -405,11 +473,11 @@ describe("音声だけ", () => {
     ).toBeNull();
   });
 
-  test("音声だけから、段 3 の 1.5 倍の速さが続けば段 3 に戻す", () => {
+  test("音声だけから、段 3 の 2 倍の速さが続けば段 3 に戻す", () => {
     const a = new RungAdapter();
-    // 段 3 は 0.696 Mbit/s。1.5 倍は 1.044 Mbit/s
+    // 段 3 は 0.696 Mbit/s。2 倍は 1.392 Mbit/s
     expect(
-      first(a, 0, 120_000, { current: "audio", throughput: 1_100_000 })
+      first(a, 0, 120_000, { current: "audio", throughput: 1_400_000 })
         ?.decision,
     ).toEqual({ step: 3, reason: "restored" });
   });

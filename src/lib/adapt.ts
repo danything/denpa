@@ -20,13 +20,14 @@ import {
  * - 詰まった (`waiting`)
  * - 先の溜まりが 2 秒を切って、減り続けている
  * - サーバの `backlog` が 3 秒続けて伸びた、または映像の塊を捨てた
+ * - 観る画面で、測った速さ × 0.7 がいまの段に足りない状態が 10 秒続いた (先を 60 秒溜めるので、溜まりを使い切る前に下げる)
  *
  * 下げ先は「測った速さ × 0.7 − 音声」に収まるいちばん高い段。速さを測れていなければ 2 段下げる。
  * 段 3 でも 10 秒続けて足りなければ音声だけにする (車で聞くこともあるので、自動の最後の手)。
  *
  * ## 上げる
  *
- * - 観る画面 (速さを測れる): 次の段の 1.5 倍以上の速さが 20 秒続いたら 1 段上げる
+ * - 観る画面 (速さを測れる): 次の段の 2 倍以上の速さが 20 秒続いたら 1 段上げる
  * - ライブ・MPEG-2 (実時間でしか送られないので余裕を測れない): 足りない兆しが 30 秒無ければ 1 段上げてみる
  *
  * 上げて 1 分以内に足りなくなったら、上げる前の段に戻し、次に上げるまでの待ちを倍にする (上限 5 分)。
@@ -35,7 +36,7 @@ import {
  * ## 段 0 がファイルの直再生・MPEG-2 のとき
  *
  * 段 0 から下げるのは「変換に移る」こと。段 0 へ上げ直すのは、速さが段 0 のビットレート (`baseKbps`) の
- * 1.5 倍以上で続いたとき。どちらの経路に移すかは画面が決める。
+ * 2 倍以上で続いたとき。どちらの経路に移すかは画面が決める。
  *
  * ## 下げないとき
  *
@@ -116,8 +117,11 @@ export const FALL_LEAST = 0.5;
 export const BACKLOG_GROW = 3_000;
 /** 測った速さのうち、映像と音声に使ってよい割合。残りは揺れとほかの通信のぶん */
 export const HEADROOM = 0.7;
-/** 上げるのは、次の段の何倍の速さが続いたときか。下げる割合 (0.7) との間を空けて、行き来しないようにする */
-export const UP_MARGIN = 1.5;
+/**
+ * 上げるのは、次の段の何倍の速さが続いたときか。観る画面は速さ × 0.7 がいまの段に足りないと下げる (いまの段の 1/0.7 ≈ 1.43 倍未満)。
+ * 2 倍ならその間が 4 割ほど空き、上げた直後に速さが揺れても上げる前の段へ戻さない
+ */
+export const UP_MARGIN = 2;
 /** 観る画面で上げるまでの待ち (ms) */
 export const UP_WAIT_WATCH = 20_000;
 /** ライブで上げてみるまでの待ち (ms)。余裕を測れないので、観る画面より長く待つ */
@@ -128,6 +132,11 @@ export const UP_WAIT_MOST = 300_000;
 export const PROBE = 60_000;
 /** 段 3 でもこれだけ続けて足りなければ音声だけにする (ms) */
 export const AUDIO_AFTER = 10_000;
+/**
+ * 観る画面で、測った速さ × `HEADROOM` がいまの段に足りない状態がこれだけ続いたら下げる (ms)。
+ * 速さは 5 秒の窓で測るので、窓 2 つぶん続いたのを見る。先は 60 秒溜まるので、10 秒待っても詰まる前に下げられる
+ */
+export const THIN = 10_000;
 /** エンコードの速さが 1 未満のままこれだけ続いたら `encode` を返す (ms)。`budget.ts` と同じく 1 回の遅れでは動かない */
 export const ENCODE_LAG = 3_000;
 /**
@@ -179,6 +188,8 @@ export class RungAdapter {
   private shortSince: number | null = null;
   /** エンコードの速さが 1 を切った時刻 */
   private slowSince: number | null = null;
+  /** 観る画面で、測った速さがいまの段に足りなくなった時刻 */
+  private thinSince: number | null = null;
 
   /**
    * 刻むたびに呼ぶ。**段を動かすか、断り書きが要るときだけ返す。** null なら段はそのままで、断り書きも要らない。
@@ -321,7 +332,18 @@ export class RungAdapter {
         this.grow !== null && this.grow.lastAt - this.grow.from >= BACKLOG_GROW;
       dropped = pace !== this.lastPace && pace.dropped > 0;
     }
-    return s.waiting || falling || growing || dropped;
+    // 先が埋まっている間の速さは高めに出やすい。外れても下げ遅れるほうなので、そのまま比べる
+    if (
+      s.route === "watch" &&
+      s.throughput !== null &&
+      s.current !== "audio" &&
+      s.throughput * HEADROOM < stepBps(s.current, s.baseKbps)
+    )
+      this.thinSince ??= now;
+    else this.thinSince = null;
+    const thin = this.thinSince !== null && now - this.thinSince >= THIN;
+
+    return s.waiting || falling || growing || dropped || thin;
   }
 
   /** 下げ先。速さが分かれば収まるいちばん高い段、分からなければ 2 段下 (段 0 からは段 1) */
@@ -347,6 +369,7 @@ export class RungAdapter {
   private clearStreaks(): void {
     this.fall = null;
     this.grow = null;
+    this.thinSince = null;
     this.upSince = null;
     this.shortSince = null;
   }
