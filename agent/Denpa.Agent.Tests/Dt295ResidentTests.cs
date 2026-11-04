@@ -81,7 +81,7 @@ public class Dt295ResidentTests
         var resident = new FakeResident();
         var session = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
         var tuning = ChannelTable.Parse("T27")!;
-        session.Tune(Dt295ResidentProbe.Request(tuning, tuning.StreamId), streaming: true);
+        session.Tune(Dt295ResidentTuner.Request(tuning, tuning.StreamId), streaming: true);
         var tune = resident.Commands.Single(item => item.Command == CommandTune);
         // 557142857 Hz → 557143 kHz、A・B・C 全部、TS を出す、TSID は指さない
         await Assert.That(tune.Channel).IsEqualTo(0u);
@@ -96,7 +96,7 @@ public class Dt295ResidentTests
         var resident = new FakeResident();
         var session = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
         var tuning = ChannelTable.Parse("BS15:16625")!;
-        session.Tune(Dt295ResidentProbe.Request(tuning, tuning.StreamId), streaming: true);
+        session.Tune(Dt295ResidentTuner.Request(tuning, tuning.StreamId), streaming: true);
         var tune = resident.Commands.Single(item => item.Command == CommandTune);
         await Assert.That(tune.Channel).IsEqualTo(1u);
         await Assert.That(BinaryPrimitives.ReadUInt32BigEndian(tune.Data)).IsEqualTo(1318000u + SatelliteLocalKhz);
@@ -110,7 +110,7 @@ public class Dt295ResidentTests
         var resident = new FakeResident { NeverReady = true };
         var session = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
         var tuning = ChannelTable.Parse("T27")!;
-        await Assert.That(() => session.Tune(Dt295ResidentProbe.Request(tuning, tuning.StreamId), streaming: true)).Throws<TimeoutException>();
+        await Assert.That(() => session.Tune(Dt295ResidentTuner.Request(tuning, tuning.StreamId), streaming: true)).Throws<TimeoutException>();
         // 受理された選局は 1 回止めてある
         await Assert.That(resident.Commands.Count(item => item.Command == CommandStop)).IsEqualTo(1);
         await Assert.That(session.RequestValid).IsFalse();
@@ -123,7 +123,7 @@ public class Dt295ResidentTests
         var resident = new FakeResident();
         var session = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
         var tuning = ChannelTable.Parse("T27")!;
-        session.Tune(Dt295ResidentProbe.Request(tuning, tuning.StreamId), streaming: true);
+        session.Tune(Dt295ResidentTuner.Request(tuning, tuning.StreamId), streaming: true);
         session.Stop(0);
         await Assert.That(session.StopPending).IsTrue();
         session.WaitStopped();
@@ -181,7 +181,7 @@ public class Dt295ResidentTests
         var first = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
         Dt295ResidentLoader.Start(resident, first, image);
         var tuning = ChannelTable.Parse("T27")!;
-        first.Tune(Dt295ResidentProbe.Request(tuning, tuning.StreamId), streaming: true);
+        first.Tune(Dt295ResidentTuner.Request(tuning, tuning.StreamId), streaming: true);
         // 選局したまま持ち主がいなくなった (エージェントが落ちた)
         resident.BlockWrites = false;
         var second = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
@@ -289,10 +289,10 @@ public class Dt295ResidentTests
     [Test]
     public async Task ウィンドウを通した読みはバンクを切り替えてから戻す()
     {
-        var usb = new FakeDt295Usb();
+        var usb = new FakeResidentUsb(new FakeResident());
         foreach (var window in new[] { Dt295ResidentLink.ReadWindow, Dt295ResidentLink.WriteWindow })
         {
-            usb.Memory[window + 1] = 0xF0;
+            usb.Resident.Poke(window, [0x00, 0xF0, 0x00, 0x00]);
         }
         var link = new Dt295ResidentLink(usb);
         link.Read(0x803A0010, new byte[8]);
@@ -306,7 +306,7 @@ public class Dt295ResidentTests
     [Test]
     public async Task ウィンドウがふだんの値でなければ触らない()
     {
-        var usb = new FakeDt295Usb();
+        var usb = new FakeResidentUsb(new FakeResident());
         var link = new Dt295ResidentLink(usb);
         await Assert.That(() => link.Read(0x80380000, new byte[4])).Throws<Dt295ResidentException>();
         await Assert.That(usb.Log).IsEmpty();
@@ -315,7 +315,7 @@ public class Dt295ResidentTests
     [Test]
     public async Task 要求は制御_OUT_で渡して受け渡し場所から読む()
     {
-        var usb = new FakeDt295Usb();
+        var usb = new FakeResidentUsb(new FakeResident());
         var link = new Dt295ResidentLink(usb);
         var request = Pack(1, Dt295ResidentProtocol.Ping, 0, 0, 0, new byte[DataSize]);
         link.Exchange(request, new byte[PacketSize]);
@@ -473,6 +473,21 @@ internal sealed class FakeResident : IDt295ResidentTransport
     public bool Capturing { get; private set; }
     public bool NeverReady { get; set; }
     public bool WrongSequence { get; set; }
+
+    /// <summary>TS を出し始めたときに呼ぶ (TS を積むため)</summary>
+    public Action? OnTune { get; set; }
+
+    public bool CardInserted { get; set; }
+
+    /// <summary>カードに渡した APDU の切れの数</summary>
+    public int CardTxChunks { get; private set; }
+
+    public static readonly byte[] Atr = [0x3B, 0xF0, 0x12, 0x00, 0xFF, 0x91, 0x81, 0xB1, 0x7C, 0x45, 0x1F, 0x03, 0x99];
+
+    private uint _cardGeneration;
+    private bool _cardPowered;
+    private List<byte> _tx = [];
+    private byte[] _rx = [];
     public List<(uint Command, uint Channel, byte[] Data)> Commands { get; } = [];
 
     private uint _generation;
@@ -493,6 +508,54 @@ internal sealed class FakeResident : IDt295ResidentTransport
     }
 
     public void Write(uint address, ReadOnlySpan<byte> data) => Poke(address, data);
+
+    /// <summary>CARD コマンド (card.c の形)。APDU はそのまま返して 90 00 を付ける</summary>
+    private void Card(uint op, byte[] data, Span<byte> response)
+    {
+        response[24] = Dt295ResidentCard.Version;
+        Put(response, 16, _cardGeneration);
+        static void Read(byte[] data, Span<byte> response, byte[] bytes)
+        {
+            var at = (data[2] << 8) | data[3];
+            var n = Math.Min(Dt295ResidentCard.Chunk, bytes.Length - at);
+            response[25] = (byte)n;
+            response[26] = (byte)(bytes.Length >> 8);
+            response[27] = (byte)bytes.Length;
+            bytes.AsSpan(at, n).CopyTo(response[32..]);
+        }
+        switch (op)
+        {
+            case Dt295ResidentCard.OpStatus:
+                Put(response, 12, _cardPowered ? 3u : 0u);
+                response[38] = _cardPowered ? (byte)1 : (byte)0;
+                response[39] = CardInserted ? (byte)1 : (byte)0;
+                return;
+            case Dt295ResidentCard.OpPowerOn:
+            case Dt295ResidentCard.OpReset:
+                _cardPowered = true;
+                Put(response, 16, ++_cardGeneration);
+                return;
+            case Dt295ResidentCard.OpPowerOff:
+                _cardPowered = false;
+                return;
+            case Dt295ResidentCard.OpTxBegin:
+                _tx = [];
+                return;
+            case Dt295ResidentCard.OpTxData:
+                _tx.AddRange(data.AsSpan(8, data[1]));
+                CardTxChunks++;
+                return;
+            case Dt295ResidentCard.OpTransmit:
+                _rx = [.. _tx, 0x90, 0x00];
+                return;
+            case Dt295ResidentCard.OpRxRead:
+                Read(data, response, _rx);
+                return;
+            case Dt295ResidentCard.OpAtrRead:
+                Read(data, response, Atr);
+                return;
+        }
+    }
 
     public void Exchange(ReadOnlySpan<byte> request, Span<byte> response)
     {
@@ -540,6 +603,7 @@ internal sealed class FakeResident : IDt295ResidentTransport
                 _ready = !NeverReady;
                 Capturing = !NeverReady && data[7] == 1;
                 Put(response, 16, _generation);
+                if (Capturing) OnTune?.Invoke();
                 return;
             case CommandStop:
                 _generation++;
@@ -558,6 +622,9 @@ internal sealed class FakeResident : IDt295ResidentTransport
             case CommandService:
             case CommandStatus:
                 return;
+            case CommandCard:
+                Card(argument, data, response);
+                return;
             case CommandDeviceQuery:
                 Put(response, 12, CommandDeviceQuery);
                 Put(response, 16, argument);
@@ -567,7 +634,7 @@ internal sealed class FakeResident : IDt295ResidentTransport
                 var words = argument switch
                 {
                     PageOverview => new uint[] { 3, 3, AbiVersion, 0 },
-                    PageSource => new uint[] { 1, 2, 1, 188, FormatMux, 0, 7 },
+                    PageSource => data[1] == 0 ? new uint[] { 473142857, 707143000, 1, 188, FormatRaw, 0, 7 } : new uint[] { 950000, 2150000, 1, 188, FormatRaw, 0, 0 },
                     _ => new uint[]
                     {
                         _generation, 0, 0, _phase,

@@ -148,7 +148,7 @@ COPY --from=fetch /opt/ /opt/
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
 #
 # px4-userland の機材に流し込む IT930x のファームウェアも、px4d に渡すときに
-# エージェントが同梱のものをここに書き出す (/config/it930x-firmware.bin。Px4Firmware.cs)。PIX-DT295 のデータ (Dt295Firmware.cs) と、
+# エージェントが同梱のものをここに書き出す (/config/it930x-firmware.bin。Px4Firmware.cs)。
 # denpa と組むための鍵・証明書・合言葉 (/config/tls。AgentTls.cs) も同じ所に置く。
 COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
 

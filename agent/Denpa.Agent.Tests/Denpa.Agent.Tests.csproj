@@ -55,14 +55,6 @@
         <Compile Include="../Denpa.Agent/Dib8096.cs" />
         <Compile Include="../Denpa.Agent/Zd1j.cs" />
         <Compile Include="../Denpa.Agent/Dt295.cs" />
-        <Compile Include="../Denpa.Agent/Dt295Bridge.cs" />
-        <Compile Include="../Denpa.Agent/Dt295Crypto.cs" />
-        <Compile Include="../Denpa.Agent/Dt295Firmware.cs" />
-        <Compile Include="../Denpa.Agent/Dt295Probe.cs" />
-        <Compile Include="../Denpa.Agent/Dt295Routes.cs" />
-        <Compile Include="../Denpa.Agent/Dt295Frontend.cs" />
-        <Compile Include="../Denpa.Agent/Dt295Tuner.cs" />
-        <Compile Include="../Denpa.Agent/Dt295Receive.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentImage.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentLink.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentLoader.cs" />
@@ -70,6 +62,7 @@
         <Compile Include="../Denpa.Agent/Dt295ResidentProtocol.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentSession.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentTs.cs" />
+        <Compile Include="../Denpa.Agent/Dt295ResidentTuner.cs" />
         <!-- 本体と同じ名前で埋め込む (Px4Firmware.Bundled が読む) -->
         <EmbeddedResource Include="../Denpa.Agent/firmware/it930x-firmware.bin" LogicalName="it930x-firmware.bin" />
         <EmbeddedResource Include="../Denpa.Agent/firmware/magicvision-firmware.bin" LogicalName="magicvision-firmware.bin" />

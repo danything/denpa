@@ -7,8 +7,8 @@ namespace Denpa.Agent;
 /// 常駐方式 (mAgicVISION のファームウェア) で PIX-DT295 を確かめる入口。**サーバを立てず、機材を 1 回だけ動かして統計を出す。**
 ///
 /// <code>
-/// denpa-agent --dt295-resident-probe --channel T27 --seconds 5
-/// denpa-agent --dt295-resident-probe --channel BS15 --port 1-2 --replug --output /tmp/bs15.ts
+/// denpa-agent --dt295-probe --channel T27 --seconds 5
+/// denpa-agent --dt295-probe --channel BS15 --port 1-2 --replug --output /tmp/bs15.ts
 /// </code>
 ///
 /// <para>
@@ -21,7 +21,7 @@ namespace Denpa.Agent;
 public static class Dt295ResidentProbe
 {
     public const string Usage =
-        "denpa-agent --dt295-resident-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--output <TS のファイル>] [--replug] [--trace]";
+        "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--output <TS のファイル>] [--replug] [--trace]";
 
     private sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Seconds, string? Output, bool Replug, bool Trace);
 
@@ -38,13 +38,6 @@ public static class Dt295ResidentProbe
         if (seconds <= 0) return null;
         return new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), Value("--output"), args.Contains("--replug"), args.Contains("--trace"));
     }
-
-    /// <summary>denpa のチャンネルから、常駐イメージへの選局の中身を作る</summary>
-    public static Dt295ResidentRequest Request(ChannelTable.Tuning tuning, uint streamId) =>
-        tuning.Satellite
-            ? new Dt295ResidentRequest(Dt295ResidentProtocol.SourceSatellite, tuning.Frequency, streamId == ChannelTable.NoStreamId ? null : (int)streamId, 0)
-            // 地上波は 3 つの階層を全部受ける
-            : new Dt295ResidentRequest(Dt295ResidentProtocol.SourceTerrestrial, tuning.Frequency, null, 7);
 
     public static int Run(string[] args)
     {
@@ -158,7 +151,7 @@ public static class Dt295ResidentProbe
     /// </summary>
     private static void Receive(Options options, Dt295ResidentSession session, IUsbDevice usb, Dt295TsStats stats, Action<string> step)
     {
-        var request = Request(options.Tuning, options.Tuning.StreamId);
+        var request = Dt295ResidentTuner.Request(options.Tuning, options.Tuning.StreamId);
         var described = session.QuerySource(request.Source);
         step($"受信部 {request.Source}: 周波数 {described.FrequencyMin}〜{described.FrequencyMax}、記録 {described.RecordSize} バイト、"
             + $"形式 {(described.StreamFormat == Dt295ResidentProtocol.FormatMux ? "MUX" : "そのまま")}、フラグ 0x{described.Flags:X}");
@@ -231,5 +224,44 @@ public static class Dt295ResidentProbe
         step($"受信を止めました (SERVICE {services} 回、受かっている {(locked ? "はい" : "いいえ")}、同期の探し直し {ts.Desyncs} 回・捨てた {ts.Discarded} バイト"
             + $"{(problem is null ? "" : $"、{problem}")})");
         if (problem is not null) throw new IOException(problem);
+    }
+}
+
+/// <summary>
+/// TS の統計。188 バイトのパケットを 1 つずつ渡す。同期バイトの割合・transport_scrambling_control ごとの数・
+/// transport_error_indicator が 1 の数・PID の種類を数える。中身は持たない
+/// </summary>
+public sealed class Dt295TsStats
+{
+    public long Bytes { get; private set; }
+    public long Packets { get; private set; }
+    public long Synced { get; private set; }
+    public long Errors { get; private set; }
+    public long[] Scrambling { get; } = new long[4];
+    public SortedDictionary<int, long> Pids { get; } = [];
+
+    public void Push(ReadOnlySpan<byte> packet)
+    {
+        Bytes += packet.Length;
+        Packets++;
+        if (packet[0] != 0x47) return;
+        Synced++;
+        // 誤りのあるパケットは PID も崩れているので、PID の種類には数えない
+        if ((packet[1] & 0x80) != 0)
+        {
+            Errors++;
+            return;
+        }
+        Scrambling[packet[3] >> 6]++;
+        var pid = ((packet[1] & 0x1F) << 8) | packet[2];
+        Pids[pid] = Pids.GetValueOrDefault(pid) + 1;
+    }
+
+    public void Print(TextWriter output)
+    {
+        output.WriteLine($"bytes: {Bytes}");
+        output.WriteLine($"packets: {Packets}  sync 0x47: {Synced} ({(Packets == 0 ? 0 : 100.0 * Synced / Packets):F2}%)  transport_error_indicator: {Errors}");
+        output.WriteLine($"transport_scrambling_control: 00={Scrambling[0]} 01={Scrambling[1]} 10={Scrambling[2]} 11={Scrambling[3]}");
+        output.WriteLine($"PID: {Pids.Count} 種類  PAT: {(Pids.ContainsKey(0) ? "来た" : "来ない")}");
     }
 }

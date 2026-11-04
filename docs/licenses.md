@@ -82,11 +82,7 @@ PX4 host facade と Core host adapters (どちらも GPL-2.0-only) をリンク�
 (Core engine library は MIT。上流の README)。それより前のリリースの配布物は、本体の GPL-2.0-or-later だけです。
 入っているリリースの条件は、同梱の `DEPENDENCY-NOTICE.txt` に書いてあります。
 
-IT930x のファームウェアはエージェントの実行ファイルに埋め込んであります ([下](#チューナーエージェントに同梱するファームウェア))。
-
-**PIX-DT295 に要るメーカーのデータ (`dt295-idle.bin`・`dt295-trc.bin`・`dt295-driver.bin`) は入っていません。** 再配布の許諾を
-誰も持っていないからです。エージェントが初めて使うときに、使う人の機械で PIXELA の公式パッケージ (StationTV X の更新パッケージ) を取ってきて取り出し、
-`tuners.json` の隣に置きます (`Dt295Firmware.cs`。[tuners.md](tuners.md#pixela-pix-dt295-試験的))。
+IT930x と mAgicVISION (PIX-DT295 用) のファームウェアは、エージェントの実行ファイルに埋め込んであります ([下](#チューナーエージェントに同梱するファームウェア))。
 
 ### チューナーエージェントに同梱するファームウェア
 

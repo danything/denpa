@@ -1,803 +1,365 @@
-using System.Buffers.Binary;
-using System.Security.Cryptography;
+using System.Collections.Concurrent;
+using System.Text;
 using Denpa.Agent;
+using static Denpa.Agent.Dt295ResidentProtocol;
 
 namespace Denpa.Agent.Tests;
 
 /*
- * PIX-DT295 (Dt295*.cs)。機材なしで確かめられる所: アドレスの形、コマンド・I2C・セキュアコマンドの形、周波数の式、
- * ルートの計画、AES-CMAC (RFC 4493 の例)、端数付き CBC 復号、認証の流れ。
- * 鍵・表・IV はどれも偽物 (でたらめな値)。メーカーのデータも放送のデータも使わない。
+ * PIX-DT295 をチューナーとカードとして持つところ (Dt295.cs の名前と検出、Dt295ResidentTuner.cs)。
+ * USB は偽物 (FakeResidentUsb。常駐イメージの偽物 FakeResident を制御転送の形で包む)、SBC2 と TS は合成のもの。
  */
 public class Dt295Tests
 {
-    private static byte[] Hex(string text) => Convert.FromHexString(text);
-
     // ---------------------------------------------------------------------
-    // レジスター (3.1・3.2)
+    // 名前と検出
     // ---------------------------------------------------------------------
 
     [Test]
-    public async Task アドレスは_wValue_の上位バイトと_wIndex()
+    public async Task 設定の_device_は_dt295_とポート()
     {
-        await Assert.That(Dt295Bridge.Setup(0x82008)).IsEqualTo(((ushort)0x0800, (ushort)0x2008));
-        await Assert.That(Dt295Bridge.Setup(0x1000)).IsEqualTo(((ushort)0x0000, (ushort)0x1000));
-        await Assert.That(Dt295Bridge.Setup(0xFFFFFF)).IsEqualTo(((ushort)0xFF00, (ushort)0xFFFF));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Dt295Bridge.Setup(0x1000000));
+        await Assert.That(Dt295.Device("4-12.1")).IsEqualTo("dt295:4-12.1");
+        await Assert.That(Dt295.Parse("dt295:4-12.1")).IsEqualTo("4-12.1");
+        await Assert.That(Dt295.Parse("dt295:abc")).IsNull();
+        await Assert.That(Dt295.Parse("zd1j:4-12.1")).IsNull();
+        await Assert.That(Dt295.Is("dt295:1-2")).IsTrue();
+        await Assert.That(Dt295.Is(null)).IsFalse();
+    }
+
+    private static void Usb(DirectoryInfo dir, string name, string vendor, string product)
+    {
+        var at = Directory.CreateDirectory(Path.Combine(dir.FullName, name)).FullName;
+        File.WriteAllText(Path.Combine(at, "idVendor"), vendor + "\n");
+        File.WriteAllText(Path.Combine(at, "idProduct"), product + "\n");
     }
 
     [Test]
-    public async Task 長い読み書きは64バイトずつ()
+    public async Task sysfs_から_06b8_103b_だけを並べる()
     {
-        var usb = new FakeDt295Usb();
-        var bridge = new Dt295Bridge(usb, usb.Time);
-        bridge.Write(0x83000, new byte[130]);
-        await Assert.That(usb.Log).IsEquivalentTo(new[]
+        // sysfs は Linux だけ (インターフェースの名前の「:」は Windows のファイル名に使えない)
+        if (OperatingSystem.IsWindows()) return;
+        var dir = Directory.CreateTempSubdirectory("dt295sysfs");
+        try
         {
-            $"40 BC 0800 3000 {new string('0', 128)}",
-            $"40 BC 0800 3040 {new string('0', 128)}",
-            "40 BC 0800 3080 0000",
+            Usb(dir, "1-2", "06b8", "103b");
+            Usb(dir, "1-3", "054c", "04b2");
+            Usb(dir, "1-2:1.0", "06b8", "103b");
+            Usb(dir, "2-1.4", "06b8", "103b");
+            await Assert.That(Dt295.Ports(dir.FullName, null)).IsEquivalentTo(new[] { "1-2", "2-1.4" });
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    [Arguments(0x06B8, 0x103B, "PIXELA PIX-DT295", true)]
+    [Arguments(0x06B8, 0x103C, "PIXELA PIX-DT295 W", false)]
+    [Arguments(0x06B8, 0x1038, "PIXELA PIX-DT420", false)]
+    [Arguments(0x06B8, 0x1039, "PIXELA PIX-DT410", false)]
+    [Arguments(0x04C5, 0x202F, "PIX-DTxxx (SPI モード)", false)]
+    public async Task 公式_INF_の_ID_を見分けて_DT295_だけを使う(int vendor, int product, string name, bool supported)
+    {
+        var model = Dt295.Find(vendor, product);
+        await Assert.That(model).IsNotNull();
+        await Assert.That(model!.Name).IsEqualTo(name);
+        await Assert.That(model.Supported).IsEqualTo(supported);
+    }
+
+    [Test]
+    public async Task 未確認の機材は_USB_に触らずに断る()
+    {
+        var opened = 0;
+        IUsbDevice Open(Dt295Model model)
+        {
+            opened++;
+            return new FakeResidentUsb(new FakeResident());
+        }
+        foreach (var model in Dt295.Family.Where(model => !model.Supported))
+        {
+            var error = Assert.Throws<IOException>(() => Dt295.OpenUsb("3-1", _ => model, Open));
+            await Assert.That(error.Message).Contains(model.Name);
+            await Assert.That(error.Message).Contains("未確認");
+        }
+        Assert.Throws<IOException>(() => Dt295.OpenUsb("3-1", _ => null, Open));
+        await Assert.That(opened).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task sysfs_から同じドライバーの機材を見分けて並べる()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var dir = Directory.CreateTempSubdirectory("dt295family");
+        try
+        {
+            Usb(dir, "1-1", "06b8", "103b");
+            Usb(dir, "1-2", "06b8", "103c");
+            Usb(dir, "1-3", "06b8", "1038");
+            Usb(dir, "1-6", "06b8", "103a");
+            await Assert.That(Dt295.Identify(dir.FullName, "1-3")?.Name).IsEqualTo("PIXELA PIX-DT420");
+            await Assert.That(Dt295.Identify(dir.FullName, "1-6")).IsNull();
+            List<string> warnings = [];
+            await Assert.That(Dt295.Ports(dir.FullName, warnings.Add)).IsEquivalentTo(new[] { "1-1" });
+            await Assert.That(warnings.Count).IsEqualTo(2);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task dt295_の_device_は開かずに常駐方式のチューナーにする()
+    {
+        using var tuner = TunerPool.OpenDevice("dt295:1-2", null);
+        await Assert.That(tuner).IsTypeOf<Dt295ResidentTuner>();
+        await Assert.That(tuner.Tuned).IsFalse();
+        Assert.Throws<IOException>(() => TunerPool.OpenDevice("dt295:bad", null));
+    }
+
+    // ---------------------------------------------------------------------
+    // ボード
+    // ---------------------------------------------------------------------
+
+    private static int _ports;
+
+    /// <summary>テストごとに別のポート (ボードの置き場はプロセスで 1 つ)</summary>
+    private static string NewPort() => $"9-{Interlocked.Increment(ref _ports)}";
+
+    private static (FakeResident Resident, FakeResidentUsb Usb, Dt295ResidentImage Image) Device()
+    {
+        var bundle = FakeBundle.Create();
+        var resident = new FakeResident(bundle);
+        return (resident, new FakeResidentUsb(resident), Dt295ResidentImage.Parse(bundle.Bytes));
+    }
+
+    private static Dt295ResidentBoard Acquire(string port, FakeResidentUsb usb, Dt295ResidentImage image, Action? powerCycle = null) =>
+        Dt295ResidentBoard.Acquire(port, () => usb, powerCycle, image, () => usb.Resident.Now, ms => usb.Resident.Now += ms);
+
+    [Test]
+    public async Task 公式のファームウェアで動いた機材は電源を入れ直してから入れる()
+    {
+        var (resident, usb, image) = Device();
+        resident.Poke(Dt295ResidentLoader.StateRegister, [0x00, 0x11]);
+        var cycles = 0;
+        var port = NewPort();
+        var board = Acquire(port, usb, image, () =>
+        {
+            cycles++;
+            resident.Poke(Dt295ResidentLoader.StateRegister, [0, 0]);
         });
-        await Assert.That(bridge.Writes).IsEqualTo(3);
-        Assert.Throws<ArgumentOutOfRangeException>(() => bridge.Write(0xFFFFF0, new byte[17]));
-    }
-
-    [Test]
-    public async Task 部分書き換えは範囲だけ置き換える()
-    {
-        await Assert.That(Dt295Bridge.Field(0xFFFF, 12, 3, 1)).IsEqualTo((ushort)0x9FFF);
-        await Assert.That(Dt295Bridge.Field(0x0000, 15, 1, 1)).IsEqualTo((ushort)0x8000);
-        await Assert.That(Dt295Bridge.Field(0xABCD, 0, 13, 0x111)).IsEqualTo((ushort)0xA111);
-        Assert.Throws<ArgumentOutOfRangeException>(() => Dt295Bridge.Field(0, 14, 3, 0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Dt295Bridge.Field(0, 0, 2, 4));
-
-        var usb = new FakeDt295Usb();
-        usb.Set16(0x80076, 0x1234);
-        new Dt295Bridge(usb, usb.Time).Modify16(0x80076, 4, 4, 0xF);
-        await Assert.That(usb.Get16(0x80076)).IsEqualTo((ushort)0x12F4);
-    }
-
-    // ---------------------------------------------------------------------
-    // コマンド (3.8)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task コマンドは4バイトで完了ビットを消す()
-    {
-        var usb = new FakeDt295Usb();
-        var bridge = new Dt295Bridge(usb, usb.Time);
-        var code = bridge.Command(Dt295Channel.Main, 4, 0x20, 0);
-        await Assert.That(code).IsEqualTo((ushort)0x0400);
-        await Assert.That(usb.Log[0]).IsEqualTo("40 B8 0000 0000 04200000");
-        // 完了ビットを書いて消した
-        await Assert.That(usb.Log[1]).IsEqualTo("40 BC 0900 0074 0008");
-        await Assert.That(usb.Events).IsEqualTo((ushort)0);
-
-        bridge.Command(Dt295Channel.Sub, 0x0A, 1, 1);
-        await Assert.That(usb.Log[2]).IsEqualTo("40 B9 0000 0000 0A010001");
-        await Assert.That(Dt295Bridge.CommandBytes(5, 0, 2)).IsEquivalentTo(new byte[] { 5, 0, 0, 2 });
-    }
-
-    [Test]
-    public async Task 完了ビットが残っていれば送らず_失敗の完了コードは投げる()
-    {
-        var usb = new FakeDt295Usb { Events = Dt295Bridge.EventMainDone };
-        var bridge = new Dt295Bridge(usb, usb.Time);
-        Assert.Throws<Dt295Exception>(() => bridge.Command(Dt295Channel.Main, 1, 0, 0));
-        await Assert.That(usb.Log).IsEmpty();
-
-        usb.Events = 0;
-        usb.CodeLow = 0x81;
-        Assert.Throws<Dt295Exception>(() => bridge.Command(Dt295Channel.Main, 1, 0, 0));
-        await Assert.That(Dt295Bridge.Succeeded(4, 0x0400)).IsTrue();
-        await Assert.That(Dt295Bridge.Succeeded(4, 0x0480)).IsFalse();
-        await Assert.That(Dt295Bridge.Succeeded(4, 0x0500)).IsFalse();
-    }
-
-    [Test]
-    public async Task 状態は通知のビットを消して読み直す()
-    {
-        var usb = new FakeDt295Usb { State = 0x0011, Events = Dt295Bridge.EventState };
-        var bridge = new Dt295Bridge(usb, usb.Time);
-        await Assert.That(bridge.State()).IsEqualTo((ushort)0x0011);
-        await Assert.That(usb.Log).IsEquivalentTo(new[] { "40 BC 0900 0074 0004" });
-        usb.State = 0xFFFF;
-        Assert.Throws<Dt295Exception>(() => bridge.State());
-    }
-
-    // ---------------------------------------------------------------------
-    // I2C (3.10)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task I2C_は送り_受けの_sub_と長さを_val_に()
-    {
-        var usb = new FakeDt295Usb();
-        List<string> seen = [];
-        usb.I2cDevice = (address, write, read) =>
+        try
         {
-            seen.Add($"{address:X2} {Convert.ToHexString(write)} {read}");
-            return read == 0 ? [] : [0x5A];
-        };
-        var bridge = new Dt295Bridge(usb, usb.Time);
-
-        // 送って受ける: sub 2 → sub 3
-        var one = new byte[1];
-        bridge.I2c(0x20, [0x0E], one);
-        await Assert.That(one[0]).IsEqualTo((byte)0x5A);
-        var commands = usb.Log.Where(line => line.StartsWith("40 B9", StringComparison.Ordinal)).ToList();
-        await Assert.That(commands).IsEquivalentTo(new[] { "40 B9 0000 0000 09022001", "40 B9 0000 0000 09032001" });
-        // 送るものは 64 バイトに 0 で埋めて 0x800C0 へ
-        await Assert.That(usb.Log[0]).IsEqualTo($"40 BC 0800 00C0 0E{new string('0', 126)}");
-        // 結果のビットを消した
-        await Assert.That(usb.Log[^1]).IsEqualTo("40 BC 0900 0074 0100");
-
-        // 送るだけ: sub 0。受けるだけ: sub 1
-        usb.Log.Clear();
-        bridge.I2c(0x22, [0xFE, 0xC0, 0x09, 0x58], []);
-        bridge.I2c(0x22, [], one);
-        commands = [.. usb.Log.Where(line => line.StartsWith("40 B9", StringComparison.Ordinal))];
-        await Assert.That(commands).IsEquivalentTo(new[] { "40 B9 0000 0000 09002204", "40 B9 0000 0000 09012201" });
-        await Assert.That(seen).IsEquivalentTo(new[] { "20 0E 1", "22 FEC00958 0", "22  1" });
-        await Assert.That(Dt295Bridge.I2cValue(0x20, 64)).IsEqualTo((ushort)0x2040);
-    }
-
-    [Test]
-    public async Task I2C_は_0x90074_の読み直しを省く()
-    {
-        var usb = new FakeDt295Usb();
-        usb.I2cDevice = (_, _, read) => new byte[read];
-        var bridge = new Dt295Bridge(usb, usb.Time);
-        bridge.I2c(0x22, [0xFE, 0xC0, 0x09, 0x58], []);
-        // 前の結果の確認 1 回、完了の待ち 1 回、完了コード 1 回、結果 (66 バイトは 2 回に分かれる) 2 回
-        await Assert.That(usb.ControlReads).IsEqualTo(5);
-    }
-
-    // ---------------------------------------------------------------------
-    // セキュアコマンド (3.11)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task セキュアコマンドの要求の形()
-    {
-        var request = Dt295Bridge.SecureRequest(0x01020000, [1, 2, 3, 4, 5, 6, 7, 8]);
-        await Assert.That(request.Length).IsEqualTo(512);
-        await Assert.That(Convert.ToHexString(request.AsSpan(0, 24))).IsEqualTo("010200000000000000000002FFFFFFFF0102030405060708");
-        await Assert.That(request.Skip(24).All(value => value == 0)).IsTrue();
-        await Assert.That(Dt295Bridge.EncryptsRequest(0x07010600)).IsTrue();
-        await Assert.That(Dt295Bridge.DecryptsResponse(0x07010600)).IsTrue();
-        await Assert.That(Dt295Bridge.EncryptsRequest(0x02010200)).IsFalse();
-        await Assert.That(Dt295Bridge.DecryptsResponse(0x02010200)).IsTrue();
-        await Assert.That(Dt295Bridge.EncryptsRequest(0x02020400)).IsTrue();
-        await Assert.That(Dt295Bridge.DecryptsResponse(0x02020400)).IsFalse();
-        Assert.Throws<ArgumentException>(() => Dt295Bridge.SecureRequest(1, new byte[3]));
-        Assert.Throws<ArgumentException>(() => Dt295Bridge.SecureRequest(1, new byte[500]));
-    }
-
-    [Test]
-    public async Task セキュアコマンドの応答の判定()
-    {
-        static byte[] Response(uint id, uint status, uint words)
-        {
-            var response = new byte[512];
-            BinaryPrimitives.WriteUInt32BigEndian(response, id);
-            BinaryPrimitives.WriteUInt32BigEndian(response.AsSpan(4), status);
-            BinaryPrimitives.WriteUInt32BigEndian(response.AsSpan(8), words);
-            response[16] = 0xAB;
-            return response;
+            await Assert.That(cycles).IsEqualTo(1);
+            await Assert.That(resident.Initialized).IsTrue();
+            await Assert.That(resident.Peek(Dt295ResidentImage.Hook, 8)).IsEquivalentTo(FakeBundle.Patch);
+            // 2 回目はそのまま同じボード
+            await Assert.That(Acquire(port, usb, image)).IsSameReferenceAs(board);
+            board.Release();
         }
-        var payload = Dt295Bridge.SecureResponse(0x01010000, Response(0x01010000, 0, 9), null, null);
-        await Assert.That(payload.Length).IsEqualTo(36);
-        await Assert.That(payload[0]).IsEqualTo((byte)0xAB);
-        Assert.Throws<Dt295Exception>(() => Dt295Bridge.SecureResponse(0x01010000, Response(0x01020000, 0, 0), null, null));
-        var rejected = Assert.Throws<Dt295Exception>(() => Dt295Bridge.SecureResponse(0x01010000, Response(0x01010000, 0x00020019, 0), null, null));
-        await Assert.That(rejected.Message).Contains("0x00020019");
-        Assert.Throws<Dt295Exception>(() => Dt295Bridge.SecureResponse(0x01010000, Response(0x01010000, 0, 125), null, null));
-    }
-
-    // ---------------------------------------------------------------------
-    // 暗号 (5.1)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task AES_CMAC_は_RFC_4493_の例と同じ()
-    {
-        var key = Hex("2b7e151628aed2a6abf7158809cf4f3c");
-        var message = Hex("6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710");
-        await Assert.That(Convert.ToHexStringLower(Dt295Crypto.Cmac(key, []))).IsEqualTo("bb1d6929e95937287fa37d129b756746");
-        await Assert.That(Convert.ToHexStringLower(Dt295Crypto.Cmac(key, message.AsSpan(0, 16)))).IsEqualTo("070a16b46b4d4144f79bdd9dd04a287c");
-        await Assert.That(Convert.ToHexStringLower(Dt295Crypto.Cmac(key, message.AsSpan(0, 40)))).IsEqualTo("dfa66747de9ae63030ca32611497c827");
-        await Assert.That(Convert.ToHexStringLower(Dt295Crypto.Cmac(key, message))).IsEqualTo("51f0bebf7e3b9d92fc49741779363cfe");
-    }
-
-    private static readonly byte[] SomeKey = [.. Enumerable.Range(0, 16).Select(i => (byte)(i * 17 + 1))];
-    private static readonly byte[] SomeIv = [.. Enumerable.Range(0, 16).Select(i => (byte)(0xF0 - i * 3))];
-
-    /// <summary>端数付き CBC の暗号化 (テスト側で別に組む): 全ブロックは CBC、端数は直前の暗号ブロック (無ければ IV) の AES と XOR</summary>
-    private static byte[] EncryptWithResidual(byte[] plain)
-    {
-        var data = plain.ToArray();
-        var whole = data.Length / 16 * 16;
-        using var aes = Aes.Create();
-        aes.Key = SomeKey;
-        if (whole > 0) aes.EncryptCbc(data.AsSpan(0, whole), SomeIv, data.AsSpan(0, whole), PaddingMode.None);
-        var previous = whole == 0 ? SomeIv : data[(whole - 16)..whole];
-        var stream = aes.EncryptEcb(previous, PaddingMode.None);
-        for (var i = whole; i < data.Length; i++) data[i] ^= stream[i - whole];
-        return data;
-    }
-
-    [Test]
-    public async Task 端数付き_CBC_復号は端数を直前の暗号ブロックの暗号化と_XOR()
-    {
-        foreach (var length in new[] { 184, 176, 16, 7, 0 })
+        finally
         {
-            var plain = Enumerable.Range(0, length).Select(i => (byte)(i * 5 + 9)).ToArray();
-            var data = EncryptWithResidual(plain);
-            Dt295Crypto.CbcDecryptWithResidual(SomeKey, SomeIv, data);
-            await Assert.That(data).IsEquivalentTo(plain);
+            board.Release();
+            Dt295ResidentBoard.CloseIfIdle(port);
         }
+        // 閉じるときは常駐イメージを残して手放す
+        await Assert.That(resident.Initialized).IsFalse();
+        await Assert.That(usb.Disposed).IsTrue();
     }
 
     [Test]
-    public async Task TS_のパケットは_01_だけ復号して_00_に戻す()
+    public async Task 電源を入れ直せなければ断る()
     {
-        var decryptor = new Dt295PacketDecryptor();
-        var plain = new byte[188];
-        plain[0] = 0x47;
-        plain[1] = 0x01;
-        plain[2] = 0x11;
-        plain[3] = 0x10;
-        for (var i = 4; i < 188; i++) plain[i] = (byte)i;
-        var packet = plain.ToArray();
-        EncryptWithResidual(plain[4..]).CopyTo(packet, 4);
-        packet[3] |= 0x40;
-        await Assert.That(decryptor.Decrypt(packet, SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Decrypted);
-        await Assert.That(packet).IsEquivalentTo(plain);
+        var (resident, usb, image) = Device();
+        resident.Poke(Dt295ResidentLoader.StateRegister, [0x00, 0x11]);
+        await Assert.That(() => Acquire(NewPort(), usb, image)).Throws<Dt295ResidentColdException>();
+        await Assert.That(usb.Disposed).IsTrue();
+    }
 
-        // adaptation field のあとから
-        var adapted = plain.ToArray();
-        adapted[3] = 0x30;
-        adapted[4] = 10;
-        var encrypted = adapted.ToArray();
-        EncryptWithResidual(adapted[15..]).CopyTo(encrypted, 15);
-        encrypted[3] |= 0x40;
-        await Assert.That(decryptor.Decrypt(encrypted, SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Decrypted);
-        await Assert.That(encrypted).IsEquivalentTo(adapted);
+    // ---------------------------------------------------------------------
+    // チューナー
+    // ---------------------------------------------------------------------
 
-        // そのまま・不正
-        var clear = plain.ToArray();
-        await Assert.That(decryptor.Decrypt(clear, SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Clear);
-        await Assert.That(clear).IsEquivalentTo(plain);
-        byte[] Changed(Action<byte[]> change)
+    private static byte[] Packets(int count, int pid)
+    {
+        var bytes = new byte[188 * count];
+        for (var i = 0; i < count; i++)
         {
-            var copy = plain.ToArray();
-            change(copy);
-            return copy;
+            bytes[i * 188] = 0x47;
+            bytes[i * 188 + 1] = (byte)(pid >> 8);
+            bytes[i * 188 + 2] = (byte)pid;
+            bytes[i * 188 + 3] = (byte)(0x90 | (i & 15));
         }
-        await Assert.That(decryptor.Decrypt(Changed(p => p[0] = 0x48), SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Invalid);
-        await Assert.That(decryptor.Decrypt(Changed(p => p[1] |= 0x80), SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Invalid);
-        await Assert.That(decryptor.Decrypt(Changed(p => p[3] = 0x00), SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Invalid);
-        await Assert.That(decryptor.Decrypt(Changed(p => p[3] = 0x90), SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Invalid);
-        await Assert.That(decryptor.Decrypt(Changed(p => p[3] = 0xD0), SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Invalid);
-        await Assert.That(decryptor.Decrypt(Changed(p => { p[3] = 0x60; p[4] = 183; }), SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Invalid);
-        await Assert.That(decryptor.Decrypt(Changed(p => { p[3] = 0x20; p[4] = 100; }), SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Invalid);
-        await Assert.That(decryptor.Decrypt(Changed(p => { p[3] = 0x70; p[4] = 183; }), SomeKey, SomeIv)).IsEqualTo(Dt295PacketResult.Invalid);
-    }
-
-    // ---------------------------------------------------------------------
-    // 認証 (5.3〜5.6)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task 認証の部品()
-    {
-        await Assert.That(Convert.ToHexString(Dt295Auth.InitialPayload()))
-            .IsEqualTo("E0070000060000000E00000078050000010000000300000002000000" + "0C000000");
-        await Assert.That(Dt295Auth.InitialPayload()[6]).IsEqualTo((byte)0);
-        var s = Enumerable.Range(0, 16).Select(i => (byte)i).ToArray();
-        await Assert.That(Convert.ToHexString(Dt295Auth.Reorder(s))).IsEqualTo("0C0D0E0F08090A0B0001020304050607");
-        await Assert.That(Dt295Auth.Next(1)).IsEqualTo(2u);
-        await Assert.That(Dt295Auth.Next(0xFFFFFFFF)).IsEqualTo(1u);
+        return bytes;
     }
 
     [Test]
-    public async Task 認証からセッション更新とセッションの終わりまで()
+    public async Task 選局すると読みを出してから_TUNE_し_TS_を渡す()
     {
-        var material = FakeDt295Material.Create();
-        var usb = new FakeDt295Usb { State = Dt295Device.Idle };
-        var first = Enumerable.Range(0, 36).Select(i => (byte)(i * 11 + 4)).ToArray();
-        byte[] nonce = [0xDE, 0xAD, 0xBE, 0xEF];
-
-        // テスト側で 5.3・5.4 を別に計算しておく
-        var initial = Dt295Auth.InitialPayload();
-        var select = new byte[32];
-        material.AuthPrefix.CopyTo(select);
-        select[30] = first[32];
-        select[31] = initial[6];
-        var n = Dt295Crypto.Cmac(material.Key1, select)[15] & 0x0F;
-        var row = material.Rows.AsSpan(32 * n, 32).ToArray();
-        var answer = Dt295Crypto.Cmac(material.Key2, [.. first[..32], .. row]).Concat(nonce).ToArray();
-        var s = Dt295Crypto.Cmac(material.Key3, [.. answer, .. row, .. material.SessionSuffix]);
-        byte[] sessionKey = [.. s[12..16], .. s[8..12], .. s[..8]];
-        var challenge = Enumerable.Range(0, 32).Select(i => (byte)(0x80 + i)).ToArray();
-
-        List<string> secure = [];
-        usb.SecureDevice = request =>
+        var (resident, usb, image) = Device();
+        resident.OnTune = () => usb.Ts.Enqueue(Packets(10, 0x111));
+        var port = NewPort();
+        using (var tuner = new Dt295ResidentTuner("DT295", () => Acquire(port, usb, image), () => Dt295ResidentBoard.CloseIfIdle(port)))
         {
-            var id = BinaryPrimitives.ReadUInt32BigEndian(request);
-            var plain = request.ToArray();
-            if ((id & 0x400) != 0)
+            tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+            await Assert.That(tuner.Tuned).IsTrue();
+            // 読みを出したのは TUNE より前
+            await Assert.That(usb.StreamOpenedBeforeTune).IsTrue();
+            var buffer = new byte[188 * 10];
+            var got = 0;
+            while (got < buffer.Length) got += await tuner.Output.ReadAsync(buffer.AsMemory(got));
+            await Assert.That(buffer[0]).IsEqualTo((byte)0x47);
+            await Assert.That(buffer[188 * 9 + 2]).IsEqualTo((byte)0x11);
+
+            // 選局し直すと、前の受信を止めてから
+            tuner.Tune(ChannelTable.Parse("BS15")!, ChannelTable.NoStreamId);
+            int stops;
+            uint channel;
+            // SERVICE を送るスレッドも書き足すので、偽物の鍵の中で数える
+            lock (resident)
             {
-                using var aes = Aes.Create();
-                aes.Key = sessionKey;
-                aes.DecryptCbc(plain.AsSpan(12, 496), material.SessionIv, plain.AsSpan(12, 496), PaddingMode.None);
+                stops = resident.Commands.Count(item => item.Command == CommandStop);
+                channel = resident.Commands.Last(item => item.Command == CommandTune).Channel;
             }
-            var words = BinaryPrimitives.ReadUInt32BigEndian(plain.AsSpan(8));
-            var payload = plain.AsSpan(16, (int)words * 4).ToArray();
-            secure.Add($"{id:X8} {Convert.ToHexString(payload)}");
-            var response = new byte[512];
-            BinaryPrimitives.WriteUInt32BigEndian(response, id);
-            byte[] reply = id switch
-            {
-                Dt295Device.AuthFirst => first,
-                Dt295Device.RefreshQuery => challenge,
-                _ => [],
-            };
-            BinaryPrimitives.WriteUInt32BigEndian(response.AsSpan(8), (uint)(reply.Length / 4));
-            reply.CopyTo(response, 16);
-            if ((id & 0x200) != 0)
-            {
-                using var aes = Aes.Create();
-                aes.Key = sessionKey;
-                aes.EncryptCbc(response.AsSpan(12, 496), material.SessionIv, response.AsSpan(12, 496), PaddingMode.None);
-            }
-            return response;
-        };
-
-        var device = new Dt295Device(new Dt295Bridge(usb, usb.Time), _ => nonce);
-        device.Authenticate(material);
-        await Assert.That(usb.State).IsEqualTo(Dt295Device.Authenticated);
-        await Assert.That(secure[0]).IsEqualTo($"01010000 {Convert.ToHexString(initial)}");
-        await Assert.That(secure[1]).IsEqualTo($"01020000 {Convert.ToHexString(answer)}");
-        // アイドル設定 (5.5) のあと cmd 1
-        await Assert.That(usb.Log.Count(line => line == "40 B8 0000 0000 01000000")).IsEqualTo(1);
-
-        // 30 秒までは更新しない
-        await Assert.That(device.RefreshIfDue()).IsFalse();
-        usb.Time.NowMs += Dt295Device.RefreshMs;
-        await Assert.That(device.RefreshIfDue()).IsTrue();
-        var mac = Dt295Crypto.Cmac(material.Key4, [.. challenge, .. material.RefreshSuffix, 0, 0, 0, 1]);
-        await Assert.That(secure[2]).IsEqualTo("02010200 ");
-        await Assert.That(secure[3]).IsEqualTo($"02020400 {Convert.ToHexString(mac)}DEADBEEF");
-        // 2 回目は計数 2
-        usb.Time.NowMs += Dt295Device.RefreshMs;
-        device.RefreshIfDue();
-        var mac2 = Dt295Crypto.Cmac(material.Key4, [.. challenge, .. material.RefreshSuffix, 0, 0, 0, 2]);
-        await Assert.That(secure[5]).IsEqualTo($"02020400 {Convert.ToHexString(mac2)}DEADBEEF");
-
-        // 終わり: cmd 4 sub 0 val 1 → idle イメージ → cmd 4 sub 1 val 0 → 0x10 (偽物は cmd 4 sub 1 で 0x10 になる)
-        usb.Log.Clear();
-        device.Close(new byte[65536 + 10]);
-        await Assert.That(usb.Log.Where(line => line.StartsWith("40 B8", StringComparison.Ordinal) || line.StartsWith("BULK", StringComparison.Ordinal)))
-            .IsEquivalentTo(new[] { "40 B8 0000 0000 04000001", "BULK 02 65536", "BULK 02 10", "40 B8 0000 0000 04010000" });
-        await Assert.That(usb.State).IsEqualTo(Dt295Device.Idle);
-        await Assert.That(device.HasSession).IsFalse();
-    }
-
-    // ---------------------------------------------------------------------
-    // カード (6)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task カードは通知を読み捨てて上位4ビットを状態にする()
-    {
-        var usb = new FakeDt295Usb { State = Dt295Device.Authenticated, Events = Dt295Bridge.EventCard };
-        usb.Set16(0x822AC, 0x3000);
-        var device = new Dt295Device(new Dt295Bridge(usb, usb.Time));
-        await Assert.That(device.CardState()).IsEqualTo(Dt295CardState.Ready);
-        await Assert.That(device.CardNotices).IsEqualTo(1);
-        usb.Events = Dt295Bridge.EventCardError;
-        Assert.Throws<Dt295Exception>(() => device.CardState());
-    }
-
-    [Test]
-    public async Task カードの活性化は送り直さず3を待つ()
-    {
-        var usb = new FakeDt295Usb { State = Dt295Device.Authenticated };
-        usb.Set16(0x822AC, 0x1000);
-        // cmd 0x0A sub 1 で活性化中 (2) になり、50 ms たつと 3 になるふり
-        long activatedAt = -1;
-        usb.OnCommand = (command, sub, _) =>
-        {
-            if (command == 0x0A && sub == 1)
-            {
-                usb.Set16(0x822AC, 0x2000);
-                activatedAt = usb.Time.NowMs;
-            }
-        };
-        usb.Time.OnSleep = () =>
-        {
-            if (activatedAt >= 0 && usb.Time.NowMs - activatedAt >= 50) usb.Set16(0x822AC, 0x3000);
-        };
-        var device = new Dt295Device(new Dt295Bridge(usb, usb.Time));
-        await Assert.That(device.ActivateCard()).IsEqualTo(Dt295CardState.Ready);
-        await Assert.That(usb.Time.Sleeps.Count).IsEqualTo(5);
-        await Assert.That(usb.Log.Count(line => line.StartsWith("40 B9", StringComparison.Ordinal))).IsEqualTo(1);
-
-        // 通知を受けたあとの 0 は「カードが無い」
-        var empty = new FakeDt295Usb { State = Dt295Device.Authenticated, Events = Dt295Bridge.EventCard };
-        var none = new Dt295Device(new Dt295Bridge(empty, empty.Time));
-        Assert.Throws<Dt295Exception>(() => none.ActivateCard());
-        await Assert.That(empty.Log.Any(line => line.StartsWith("40 B9", StringComparison.Ordinal))).IsFalse();
-    }
-
-    // ---------------------------------------------------------------------
-    // 起動 (4)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task 状態で起動を分ける()
-    {
-        var running = new FakeDt295Usb { State = Dt295Device.Idle };
-        await Assert.That(new Dt295Device(new Dt295Bridge(running, running.Time)).Boot([1, 2, 3])).IsEqualTo(Dt295Boot.Running);
-        await Assert.That(running.Log).IsEmpty();
-
-        var busy = new FakeDt295Usb { State = Dt295Device.Authenticated };
-        Assert.Throws<Dt295Exception>(() => new Dt295Device(new Dt295Bridge(busy, busy.Time)).Boot([1]));
-        await Assert.That(busy.Log).IsEmpty();
-        // 0xFFFF は cmd 3 で戻してみる (5.8)。戻らなければ投げる
-        var broken = new FakeDt295Usb { State = 0xFFFF };
-        Assert.Throws<Dt295Exception>(() => new Dt295Device(new Dt295Bridge(broken, broken.Time)).Boot([1]));
-        await Assert.That(broken.Log.Count(line => line.StartsWith("40 B8", StringComparison.Ordinal))).IsEqualTo(1);
-        await Assert.That(broken.Bulk).IsEmpty();
-
-        // コールド: 合図が来なければイメージを送らない
-        var cold = new FakeDt295Usb();
-        Assert.Throws<Dt295Exception>(() => new Dt295Device(new Dt295Bridge(cold, cold.Time)).Boot(new byte[10]));
-        await Assert.That(cold.Bulk).IsEmpty();
-        // 手順 1〜4 の書き込み: 0x90194 → 0x90198 → 0x90078 を 14 回 → 0x901B4 を 12 回
-        var writes = cold.Log.Select(line => line.Split(' ')[2] + line.Split(' ')[3]).ToList();
-        await Assert.That(writes[0]).IsEqualTo("09000194");
-        await Assert.That(writes[1]).IsEqualTo("09000198");
-        await Assert.That(writes.Count(address => address == "09000078")).IsEqualTo(14);
-        await Assert.That(writes.Count(address => address == "090001B4")).IsEqualTo(12);
-        await Assert.That(cold.Get16(0x90194)).IsEqualTo((ushort)0x1000);
-        await Assert.That(cold.Get16(0x90198)).IsEqualTo((ushort)0x0040);
-    }
-
-    // ---------------------------------------------------------------------
-    // 周波数 (7.1・8.1・8.4)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task 地上波の周波数と分周値()
-    {
-        await Assert.That(Dt295Frontend.TerrestrialHz(13)).IsEqualTo(473_142_857L);
-        await Assert.That(Dt295Frontend.TerrestrialHz(27)).IsEqualTo(557_142_857L);
-        await Assert.That(Dt295Frontend.TerrestrialHz(62)).IsEqualTo(767_142_857L);
-        await Assert.That(Dt295Frontend.TerrestrialDivider(557_142_857)).IsEqualTo(35657);
-        await Assert.That(Dt295Frontend.TerrestrialDivider(473_142_857)).IsEqualTo(30281);
-        Assert.Throws<ArgumentOutOfRangeException>(() => Dt295Frontend.TerrestrialHz(12));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Dt295Frontend.TerrestrialHz(63));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Dt295Frontend.TerrestrialDivider(770_000_001));
-    }
-
-    [Test]
-    public async Task 衛星の_IF_と書く値()
-    {
-        await Assert.That(Dt295Frontend.BsIfHz(1)).IsEqualTo(1_049_480_000L);
-        await Assert.That(Dt295Frontend.BsIfHz(23)).IsEqualTo(1_471_440_000L);
-        await Assert.That(Dt295Frontend.CsIfHz(2)).IsEqualTo(1_613_000_000L);
-        await Assert.That(Dt295Frontend.CsIfHz(24)).IsEqualTo(2_053_000_000L);
-        Assert.Throws<ArgumentOutOfRangeException>(() => Dt295Frontend.BsIfHz(2));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Dt295Frontend.CsIfHz(3));
-
-        var bs1 = Dt295Frontend.SatelliteIfSettings(1_049_480_000);
-        await Assert.That(bs1.Khz).IsEqualTo(1_049_000);
-        await Assert.That(Convert.ToHexString(bs1.Bytes)).IsEqualTo("1064000080");
-        await Assert.That(bs1.Band).IsEqualTo((byte)0x58);
-
-        var cs2 = Dt295Frontend.SatelliteIfSettings(1_613_000_000);
-        await Assert.That(cs2.Khz).IsEqualTo(1_613_000);
-        await Assert.That(Convert.ToHexString(cs2.Bytes)).IsEqualTo("0C9A000000");
-        await Assert.That(cs2.Band).IsEqualTo((byte)0x44);
-
-        // 四捨五入 (1,100,500 kHz は 1,101 MHz になり、高い側)
-        var edge = Dt295Frontend.SatelliteIfSettings(1_100_500_000);
-        await Assert.That(edge.Khz).IsEqualTo(1_101_000);
-        await Assert.That(edge.Bytes[4]).IsEqualTo((byte)0);
-        await Assert.That(Dt295Frontend.SatelliteIfSettings(2_150_000_000).Band).IsEqualTo((byte)0x00);
-    }
-
-    [Test]
-    public async Task 地上波の選局は分周値を_RF_の_0x10_と_0x11_へ()
-    {
-        var usb = new FakeDt295Usb { State = Dt295Device.Authenticated };
-        List<string> writes = [];
-        usb.I2cDevice = (address, write, read) =>
-        {
-            if (write.Length > 0) writes.Add($"{address:X2}:{Convert.ToHexString(write)}");
-            return new byte[read];
-        };
-        var tuner = new Dt295Frontend(new Dt295Bridge(usb, usb.Time), FakeDt295Material.Create());
-        tuner.TuneTerrestrial(27);
-        // 初期化の 473 MHz (N = 30281 = 0x7649) と、選んだ 557 MHz (N = 35657 = 0x8B49)
-        await Assert.That(writes).Contains("20:FEC01049");
-        await Assert.That(writes).Contains("20:FEC01176");
-        await Assert.That(writes).Contains("20:FEC0118B");
-        // RF の 0xFF は値を送らない
-        await Assert.That(writes).Contains("20:FEC0FF");
-        // 最後は復調器 [0x1F] ← 0x8A
-        await Assert.That(writes[^1]).IsEqualTo("20:1F8A");
-        await Assert.That(usb.Time.Sleeps.Sum()).IsEqualTo(20 + 5 + 100 + 20 + 20 + 20 + 100);
-    }
-
-    [Test]
-    public async Task 復調器の表は続いているレジスターを1回の_I2C_にまとめる()
-    {
-        var usb = new FakeDt295Usb { State = Dt295Device.Authenticated };
-        List<string> writes = [];
-        usb.I2cDevice = (address, write, read) =>
-        {
-            if (write.Length > 0) writes.Add($"{address:X2}:{Convert.ToHexString(write)}");
-            return new byte[read];
-        };
-        var material = FakeDt295Material.Create();
-        var tuner = new Dt295Frontend(new Dt295Bridge(usb, usb.Time), material);
-        tuner.TuneTerrestrial(27);
-        // 偽の表はレジスターが 0x40 から続くので、先頭の番号のあとに全部の値が並ぶ 1 回になる
-        var table = material.TerrestrialDemod;
-        var expected = "20:40" + Convert.ToHexString([.. table.Select(row => row.Value)]);
-        await Assert.That(writes).Contains(expected);
-        await Assert.That(writes.Count(line => line.StartsWith("20:4", StringComparison.Ordinal) && line.Length == 7)).IsEqualTo(0);
-    }
-
-    [Test]
-    public async Task 地上波の2回目の選局は初期化を省く()
-    {
-        var usb = new FakeDt295Usb { State = Dt295Device.Authenticated };
-        List<string> writes = [];
-        usb.I2cDevice = (address, write, read) =>
-        {
-            if (write.Length > 0) writes.Add($"{address:X2}:{Convert.ToHexString(write)}");
-            return new byte[read];
-        };
-        var tuner = new Dt295Frontend(new Dt295Bridge(usb, usb.Time), FakeDt295Material.Create());
-        tuner.TuneTerrestrial(27);
-        var first = writes.Count;
-        usb.Time.Sleeps.Clear();
-        writes.Clear();
-        tuner.TuneTerrestrial(20);
-        await Assert.That(writes.Count).IsLessThan(first / 2);
-        // 初期化の 473 MHz は書かず、選んだ 515 MHz だけを書く
-        await Assert.That(writes).DoesNotContain("20:FEC01176");
-        await Assert.That(usb.Time.Sleeps.Sum()).IsEqualTo(20 + 20 + 100);
-    }
-
-    [Test]
-    public async Task 衛星の2回目の選局は初期化を省く()
-    {
-        var usb = new FakeDt295Usb { State = Dt295Device.Authenticated };
-        var count = 0;
-        usb.I2cDevice = (address, write, read) =>
-        {
-            // 値を書く転送だけを数える (読むときに番号だけ送る 1 バイトは数えない。ロックの確認で増える)
-            if (write.Length > 1) count++;
-            return new byte[read];
-        };
-        var tuner = new Dt295Frontend(new Dt295Bridge(usb, usb.Time), FakeDt295Material.Create());
-        // ロックの状態を返さない偽の機材なので、選局の最後でロックしないと断られる
-        Assert.Throws<Dt295Exception>(() => tuner.TuneSatellite(1_049_480_000, 0, 16400));
-        var first = count;
-        count = 0;
-        Assert.Throws<Dt295Exception>(() => tuner.TuneSatellite(1_087_840_000, 0, 16432));
-        await Assert.That(count).IsLessThan(first * 2 / 3);
-        // 認証し直したあとは初期化からやり直す
-        tuner.Forget();
-        count = 0;
-        Assert.Throws<Dt295Exception>(() => tuner.TuneSatellite(1_049_480_000, 0, 16400));
-        await Assert.That(count).IsEqualTo(first);
-    }
-
-    // ---------------------------------------------------------------------
-    // ルート (9.4・11)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task スロットのレジスターの場所()
-    {
-        await Assert.That(Dt295Routes.PidRegister(0)).IsEqualTo(0x101Eu);
-        await Assert.That(Dt295Routes.PidRegister(3)).IsEqualTo(0x1024u);
-        await Assert.That(Dt295Routes.PidRegister(4)).IsNull();
-        await Assert.That(Dt295Routes.PidRegister(5)).IsEqualTo(0x1028u);
-        await Assert.That(Dt295Routes.PidRegister(39)).IsEqualTo(0x106Cu);
-        await Assert.That(Dt295Routes.PidRegister(40)).IsEqualTo(0x106Eu);
-        await Assert.That(Dt295Routes.PidRegister(41)).IsEqualTo(0x1070u);
-        await Assert.That(Dt295Routes.PidRegister(63)).IsEqualTo(0x109Cu);
-
-        await Assert.That(Dt295Routes.EcmField(0)).IsEqualTo(((uint)0x10A2, 8));
-        await Assert.That(Dt295Routes.EcmField(1)).IsEqualTo(((uint)0x10A2, 0));
-        await Assert.That(Dt295Routes.EcmField(2)).IsNull();
-        await Assert.That(Dt295Routes.EcmField(3)).IsNull();
-        await Assert.That(Dt295Routes.EcmField(4)).IsNull();
-        await Assert.That(Dt295Routes.EcmField(5)).IsEqualTo(((uint)0x10A6, 0));
-        await Assert.That(Dt295Routes.EcmField(6)).IsEqualTo(((uint)0x10A8, 8));
-        await Assert.That(Dt295Routes.EcmField(7)).IsEqualTo(((uint)0x10A8, 0));
-        await Assert.That(Dt295Routes.EcmField(8)).IsEqualTo(((uint)0x10AA, 8));
-        await Assert.That(Dt295Routes.EcmField(63)).IsEqualTo(((uint)0x10E0, 0));
-    }
-
-    [Test]
-    public async Task 計画は_ECM_を上から_主番組を0から3_残りを5から()
-    {
-        var main = new Dt295Program(0x0400, PmtPid: 0x1F0, PcrPid: 0x111, VideoPid: 0x111, VideoType: 0x02, AudioPid: 0x112, AudioType: 0x0F);
-        int[] pids = [.. Dt295Routes.FixedSi, 0x1F0, 0x111, 0x112, 0x130, 0x0000, 0x1FFF, 0x0010];
-        var ecm = new Dictionary<int, int> { [0x111] = 0x901, [0x112] = 0x901, [0x130] = 0x901 };
-        var plan = Dt295Routes.Plan(main, pids, ecm);
-        var bySlot = plan.ToDictionary(route => route.Slot);
-
-        await Assert.That(bySlot[63]).IsEqualTo(new Dt295Route(63, 0x901, 63));
-        await Assert.That(bySlot[0]).IsEqualTo(new Dt295Route(0, 0x111, 63));
-        await Assert.That(bySlot[1]).IsEqualTo(new Dt295Route(1, 0x112, 63));
-        await Assert.That(bySlot[2]).IsEqualTo(new Dt295Route(2, 0x1F0, 0));
-        // PCR は映像と同じ PID なので専用枠に入れない
-        await Assert.That(bySlot.ContainsKey(3)).IsFalse();
-        await Assert.That(bySlot.ContainsKey(4)).IsFalse();
-        // 固定の SI が 5 から、そのあと ES
-        await Assert.That(bySlot[5].Pid).IsEqualTo(0x0001);
-        await Assert.That(bySlot[15].Pid).IsEqualTo(0x0029);
-        await Assert.That(bySlot[16]).IsEqualTo(new Dt295Route(16, 0x130, 63));
-        // 同じ PID・0・0x1FFF は登録しない
-        await Assert.That(plan.Length).IsEqualTo(4 + 11 + 1);
-        await Assert.That(plan.Select(route => route.Pid).Distinct().Count()).IsEqualTo(plan.Length);
-    }
-
-    [Test]
-    public async Task 複数の_ECM_とスロットの不足は断る()
-    {
-        Assert.Throws<InvalidOperationException>(() => Dt295Routes.Plan(null, [0x100, 0x101], new Dictionary<int, int> { [0x100] = 0x901, [0x101] = 0x902 }));
-        Assert.Throws<InvalidOperationException>(() => Dt295Routes.Plan(null, Enumerable.Range(0x100, 64)));
-        await Assert.That(Dt295Routes.Plan(null, Enumerable.Range(0x100, 59)).Length).IsEqualTo(59);
-    }
-
-    [Test]
-    public async Task 衛星は映像と_PCR_だけを専用のスロットに入れ_音声と_PMT_は一般のスロットに入れる()
-    {
-        // 専用のスロットに音声と PMT を入れると、機材が音声を流さず PMT の ES の一覧を映像だけに書き換える (実機の BS1)
-        var main = new Dt295Program(0x0400, 0x1F0, 0x113, 0x111, 0x02, 0x112, 0x0F);
-        var terrestrial = Dt295Routes.Plan(main, [0x0010]).ToDictionary(route => route.Pid);
-        await Assert.That(terrestrial[0x111].Slot).IsEqualTo(0);
-        await Assert.That(terrestrial[0x112].Slot).IsEqualTo(1);
-        await Assert.That(terrestrial[0x1F0].Slot).IsEqualTo(2);
-        await Assert.That(terrestrial[0x113].Slot).IsEqualTo(3);
-
-        var satellite = Dt295Routes.Plan(main, [0x0010, 0x112, 0x1F0], satellite: true).ToDictionary(route => route.Pid);
-        await Assert.That(satellite[0x111].Slot).IsEqualTo(0);
-        await Assert.That(satellite[0x113].Slot).IsEqualTo(3);
-        await Assert.That(satellite[0x112].Slot).IsGreaterThanOrEqualTo(5);
-        await Assert.That(satellite[0x1F0].Slot).IsGreaterThanOrEqualTo(5);
-        await Assert.That(satellite.Values.Any(route => route.Slot is 1 or 2)).IsFalse();
-    }
-
-    [Test]
-    public async Task ルートをレジスターに書く()
-    {
-        var usb = new FakeDt295Usb();
-        var bridge = new Dt295Bridge(usb, usb.Time);
-        var main = new Dt295Program(0x0400, 0x1F0, 0x111, 0x111, 0x02, 0x112, 0x0F);
-        var plan = Dt295Routes.Plan(main, [0x0010], new Dictionary<int, int> { [0x111] = 0x901 });
-        usb.Set16(0x1028 + 2, 0x8123);
-        Dt295Routes.Write(bridge, plan, main);
-        await Assert.That(usb.Get16(0x101E)).IsEqualTo((ushort)0x8111);
-        await Assert.That(usb.Get16(0x1020)).IsEqualTo((ushort)0x8112);
-        await Assert.That(usb.Get16(0x1022)).IsEqualTo((ushort)0x81F0);
-        await Assert.That(usb.Get16(0x1024)).IsEqualTo((ushort)0x0000);
-        await Assert.That(usb.Get16(0x1028)).IsEqualTo((ushort)0x8010);
-        // 計画に無いスロットは無効・PID 0
-        await Assert.That(usb.Get16(0x102A)).IsEqualTo((ushort)0x0000);
-        await Assert.That(usb.Get16(0x109C)).IsEqualTo((ushort)0x8901);
-        // ECM 参照: スロット 0 → 63、スロット 63 は自分
-        await Assert.That(usb.Get16(0x10A2) >> 8).IsEqualTo(63);
-        await Assert.That(usb.Get16(0x10E0) & 0x7F).IsEqualTo(63);
-        await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)0x0400);
-        await Assert.That(usb.Get16(0x101C)).IsEqualTo((ushort)0x020F);
-    }
-
-    [Test]
-    public async Task 主番組が無いときは指定の番組番号を書き_主番組があればそちらを書く()
-    {
-        var usb = new FakeDt295Usb();
-        var bridge = new Dt295Bridge(usb, usb.Time);
-        // 衛星は PMT の ES が空に書き換わり、主番組が決まらない。指定した番組番号が 0x1018 に入る
-        Dt295Routes.Write(bridge, Dt295Routes.Plan(null, [0x0010]), null, cleared: true, program: 152);
-        await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)152);
-        await Assert.That(usb.Get16(0x101C)).IsEqualTo((ushort)0x0000);
-
-        // 主番組があれば、PSI から読んだ番号を使う (指定は使わない)
-        var main = new Dt295Program(0x0400, 0x1F0, 0x111, 0x111, 0x02, 0x112, 0x0F);
-        Dt295Routes.Write(bridge, Dt295Routes.Plan(main, [0x0010]), main, cleared: true, program: 152);
-        await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)0x0400);
-    }
-
-    [Test]
-    public async Task 領域を埋めた直後のルート書き込みは計画のスロットだけを書く()
-    {
-        var usb = new FakeDt295Usb();
-        var bridge = new Dt295Bridge(usb, usb.Time);
-        var main = new Dt295Program(0x0400, 0x1F0, 0x111, 0x111, 0x02, 0x112, 0x0F);
-        var plan = Dt295Routes.Plan(main, [0x0010], new Dictionary<int, int> { [0x111] = 0x901 });
-        // 計画に無いスロットの値が残っていても、cleared では触らない
-        usb.Set16(0x102A, 0x8777);
-        Dt295Routes.Write(bridge, plan, main, cleared: true);
-        await Assert.That(usb.Get16(0x1028)).IsEqualTo((ushort)0x8010);
-        await Assert.That(usb.Get16(0x102A)).IsEqualTo((ushort)0x8777);
-        await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)0x0400);
-    }
-
-    // ---------------------------------------------------------------------
-    // PSI と TS の統計 (10.2)
-    // ---------------------------------------------------------------------
-
-    [Test]
-    public async Task PAT_と_PMT_を読んで主番組を選ぶ()
-    {
-        var reader = new Dt295SectionReader();
-        var pat = Dt295Ts.Packet(0, Dt295Ts.Section(0x00, 0x7FE0, [0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE1, 0xF0]));
-        var sections = reader.Push(pat);
-        await Assert.That(sections.Count).IsEqualTo(1);
-        var entries = Dt295SectionReader.Pat(sections[0])!;
-        await Assert.That(entries).IsEquivalentTo(new[] { new Dt295PatEntry(0, 0x10), new Dt295PatEntry(0x400, 0x1F0) });
-
-        byte[] ca = [0x09, 0x04, 0x00, 0x05, 0xE9, 0x01];
-        byte[] pmtBody =
-        [
-            0xE1, 0x11, 0xF0, (byte)ca.Length, .. ca,
-            0x02, 0xE1, 0x11, 0xF0, 0x00,
-            0x0F, 0xE1, 0x12, 0xF0, 0x00,
-            0x06, 0xE1, 0x30, 0xF0, 0x00,
-        ];
-        var pmtSections = reader.Push(Dt295Ts.Packet(0x1F0, Dt295Ts.Section(0x02, 0x400, pmtBody)));
-        var pmt = Dt295SectionReader.Pmt(pmtSections[0])!;
-        await Assert.That(pmt.PcrPid).IsEqualTo(0x111);
-        await Assert.That(pmt.CaPids).IsEquivalentTo(new[] { 0x901 });
-        await Assert.That(pmt.EcmOf[0x111]).IsEqualTo(0x901);
-        await Assert.That(pmt.EcmOf[0x130]).IsEqualTo(0x901);
-        var main = Dt295SectionReader.MainProgram(0x1F0, pmt)!;
-        await Assert.That(main).IsEqualTo(new Dt295Program(0x400, 0x1F0, 0x111, 0x111, 0x02, 0x112, 0x0F));
-
-        // 暗号化されたパケットと CRC の合わないセクションは読まない
-        var scrambled = pat.ToArray();
-        scrambled[3] |= 0x40;
-        await Assert.That(reader.Push(scrambled)).IsEmpty();
-        var broken = pat.ToArray();
-        broken[10] ^= 1;
-        await Assert.That(reader.Push(broken)).IsEmpty();
-    }
-
-    [Test]
-    public async Task 統計は188バイトずつ切って端数を次につなぐ()
-    {
-        var stats = new Dt295TsStats();
-        var data = new byte[188 * 3];
-        for (var i = 0; i < 3; i++)
-        {
-            data[i * 188] = 0x47;
-            data[i * 188 + 1] = 0x01;
-            data[i * 188 + 2] = (byte)i;
-            data[i * 188 + 3] = (byte)(i << 6 | 0x10);
+            await Assert.That(stops).IsGreaterThanOrEqualTo(1);
+            await Assert.That(channel).IsEqualTo(1u);
         }
-        data[188 * 2] = 0x00;
-        await Assert.That(stats.Push(data.AsSpan(0, 100)).Count).IsEqualTo(0);
-        await Assert.That(stats.Push(data.AsSpan(100, 300)).Count).IsEqualTo(2);
-        await Assert.That(stats.Push(data.AsSpan(400)).Count).IsEqualTo(0);
-        await Assert.That(stats.Bytes).IsEqualTo(188L * 3);
-        await Assert.That(stats.Packets).IsEqualTo(3L);
-        await Assert.That(stats.Synced).IsEqualTo(2L);
-        await Assert.That(stats.Scrambling).IsEquivalentTo(new long[] { 1, 1, 0, 0 });
-        await Assert.That(stats.Pids.Keys).IsEquivalentTo(new[] { 0x100, 0x101 });
-        var output = new StringWriter();
-        stats.Print(output);
-        await Assert.That(output.ToString()).Contains("00=1 01=1 10=0 11=0");
+        await Assert.That(usb.Disposed).IsTrue();
     }
+
+    [Test]
+    public async Task TS_が来なければ止めて断る()
+    {
+        var (_, usb, image) = Device();
+        var port = NewPort();
+        using var tuner = new Dt295ResidentTuner("DT295", () => Acquire(port, usb, image), () => Dt295ResidentBoard.CloseIfIdle(port), TimeSpan.FromMilliseconds(200));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId));
+        await Assert.That(error.Message).Contains("TS が来ません");
+        await Assert.That(tuner.Tuned).IsFalse();
+    }
+
+    [Test]
+    public async Task 受からなければ同期しなかったと伝える()
+    {
+        var (resident, usb, image) = Device();
+        resident.NeverReady = true;
+        var port = NewPort();
+        using var tuner = new Dt295ResidentTuner("DT295", () => Acquire(port, usb, image), () => Dt295ResidentBoard.CloseIfIdle(port));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId));
+        await Assert.That(error.Message).IsEqualTo(ITuneDevice.SyncFailed);
+    }
+
+    // ---------------------------------------------------------------------
+    // カード
+    // ---------------------------------------------------------------------
+
+    [Test]
+    public async Task カードは_ATR_を読み_APDU_を_32_バイトずつ渡す()
+    {
+        var (resident, usb, image) = Device();
+        resident.CardInserted = true;
+        var port = NewPort();
+        using (var card = new Dt295ResidentCard("DT295 Card Reader", () => Acquire(port, usb, image), () => resident.Now, ms => resident.Now += ms))
+        {
+            await Assert.That(card.Reset()).IsEquivalentTo(FakeResident.Atr);
+            var apdu = Enumerable.Range(0, 70).Select(i => (byte)i).ToArray();
+            var answer = card.Transmit(apdu);
+            // 偽物はそのまま返して 90 00 を付ける
+            await Assert.That(answer).IsEquivalentTo(apdu.Concat(new byte[] { 0x90, 0x00 }).ToArray());
+            await Assert.That(resident.CardTxChunks).IsEqualTo(3);
+        }
+        Dt295ResidentBoard.CloseIfIdle(port);
+        await Assert.That(usb.Disposed).IsTrue();
+    }
+
+    [Test]
+    public async Task カードが無ければ_CardAbsentException()
+    {
+        var (_, usb, image) = Device();
+        var port = NewPort();
+        using var card = new Dt295ResidentCard("DT295 Card Reader", () => Acquire(port, usb, image));
+        await Assert.That(() => card.Reset()).Throws<CardAbsentException>();
+        card.Dispose();
+        Dt295ResidentBoard.CloseIfIdle(port);
+    }
+}
+
+/// <summary>
+/// <see cref="FakeResident"/> を USB の制御転送の形で包んだもの。0xBC の読み書きはメモリー、wValue 0x0C7D・wIndex 0x4620 の OUT は要求で、
+/// 応答を受け渡し場所 (0xC4620) に置く。TS は <see cref="Ts"/> に積んだものを EP 0x81 から返す
+/// </summary>
+internal sealed class FakeResidentUsb(FakeResident resident) : IUsbDevice
+{
+    private byte[] _response = new byte[PacketSize];
+
+    public FakeResident Resident => resident;
+    public ConcurrentQueue<byte[]> Ts { get; } = new();
+    public List<string> Log { get; } = [];
+    public bool Disposed { get; private set; }
+    public bool StreamOpenedBeforeTune { get; private set; }
+    private bool _streamOpen;
+
+    public string Name => "fake dt295";
+
+    private static uint Address(ushort value, ushort index) => ((uint)(value >> 8) << 16) | index;
+
+    public int ControlIn(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)
+    {
+        var address = Address(value, index);
+        if (address == Dt295ResidentLink.Staging)
+        {
+            _response.AsSpan(0, data.Length).CopyTo(data);
+            return data.Length;
+        }
+        lock (resident) resident.Read(address, data);
+        return data.Length;
+    }
+
+    public void ControlOut(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs)
+    {
+        lock (Log) Log.Add($"{requestType:X2} {request:X2} {value:X4} {index:X4} {Convert.ToHexString(data)}");
+        if (value == 0x0C7D && index == 0x4620)
+        {
+            var response = new byte[PacketSize];
+            lock (resident)
+            {
+                if (Word(data, 8) == ResidentDispatch && Word(data, 12) == CommandTune && !StreamOpenedBeforeTune) StreamOpenedBeforeTune = _streamOpen;
+                resident.Exchange(data, response);
+            }
+            _response = response;
+            return;
+        }
+        lock (resident) resident.Write(Address(value, index), data);
+    }
+
+    public void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs) => throw new NotSupportedException();
+
+    public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs) => 0;
+
+    public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
+    {
+        _streamOpen = true;
+        return new InStream(this);
+    }
+
+    private sealed class InStream(FakeResidentUsb usb) : IUsbInStream
+    {
+        public int Read(Span<byte> buffer, int timeoutMs)
+        {
+            if (usb.Ts.TryDequeue(out var chunk))
+            {
+                chunk.CopyTo(buffer);
+                return chunk.Length;
+            }
+            Thread.Sleep(Math.Min(timeoutMs, 5));
+            return 0;
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    public void Dispose() => Disposed = true;
 }
