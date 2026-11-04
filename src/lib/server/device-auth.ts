@@ -339,7 +339,6 @@ export function liveTokens() {
       name: apiTokens.name,
       created_at: apiTokens.created_at,
       last_used_at: apiTokens.last_used_at,
-      created_by: apiTokens.created_by,
     })
     .from(apiTokens)
     .where(isNull(apiTokens.revoked_at))

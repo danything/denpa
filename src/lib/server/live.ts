@@ -41,7 +41,7 @@ import {
   parseAudios,
   pickTrack,
 } from "#lib/arib.js";
-import { LIGHT_NOTE as LIGHT_NOTES } from "#lib/live-adapt.js";
+import { LIGHT_NOTE } from "#lib/live-adapt.js";
 import { autoOrder } from "#lib/live-choice.js";
 import {
   type CaptionTrack,
@@ -180,7 +180,7 @@ type StreamCodec = LiveCodec | "audio";
  *
  * **インタレ解除には録画と同じフィルタを使う** (`encoder.deinterlace`)。放送は 1080i
  * なので、デコードせずにブラウザへ渡すと動きのある場面が櫛状になる。録画と違って
- * コマ数はいつも倍にする (下の `-vf` の説明)。
+ * コマ数は 60 から始める (下の `-vf` の説明)。
  *
  * ## 字幕も同じ ffmpeg から受ける。**出口を 2 つ持つ**
  *
@@ -282,9 +282,10 @@ export function encodeArgs(
     ...(picture !== null
       ? [
           /*
-           * インタレ解除 (上の説明)。**ライブは常に 60 コマ。** 録画は本編映像から実測して
-           * 30 に落とすことがあるが (`encoder.measureSmoothMotion`)、ライブは映像が来る前に
-           * 決めないといけない。60 に倒しておけば動きは絶対に落ちない (アニメで無駄が出るだけ)
+           * インタレ解除 (上の説明)。**ライブは 60 コマから始める。** エンコードが遅れたとき (`half`) と
+           * 段 1〜3 は 30 コマ (`videoArgs`)。録画は本編映像から実測して 30 に落とすことがあるが
+           * (`encoder.measureSmoothMotion`)、ライブは映像が来る前に決めないといけない。60 に倒しておけば
+           * 動きは落ちない (アニメで無駄が出るだけ)
            */
           "-vf",
           picture.filter,
@@ -349,7 +350,7 @@ export function panArgs(audio: AudioTrack): string[] {
  * ## H.264
  *
  * `-tune zerolatency` で B フレームを作らない (作ると必ず遅れる)。
- * **どの端末でも出る**ので既定。
+ * **どの端末でも出る**ので、知らない指示の受け皿 (`parseCommand`)。
  *
  * ## AV1
  *
@@ -502,8 +503,8 @@ function softwareArgs(codec: Exclude<LiveCodec, "hevc">, gop = "60"): string[] {
    *
    * **ライブは宅内で見るもの**という前提で決めている。宅内なら帯域は余って
    * いて、削って得るものが無い一方、**削るのは動きの多い場面の映像**で、
-   * いちばん要るところが荒れる。宅外や細い経路のためには **AV1 を選ぶ方法が
-   * ある** (`LIVE_CODECS`)。あちらは削るのではなく、同じ映像を小さく詰める。
+   * いちばん要るところが荒れる。宅外や細い経路では、**段を下げる** (`rungVideo`。
+   * 上限つきの crf) か **AV1 にする** (`LIVE_CODECS`。削るのではなく、同じ映像を小さく詰める)。
    *
    * **一度入れて、外して、戻して、また外した。** 「一瞬止まって遅延が増えて
    * いく」を流量の話だと見立てて入れたが、原因は受け側の貯め方だった
@@ -629,7 +630,7 @@ export function parsePlayable(value: unknown, codec: LiveCodec): LiveCodec[] {
   const listed = Array.isArray(value)
     ? value
     : typeof value === "string" && value !== ""
-      ? value.split(",")
+      ? value.split(",").map((item) => item.trim())
       : null;
   const known = (listed ?? [codec, "h264"]).filter(
     (item): item is LiveCodec =>
@@ -691,7 +692,7 @@ export function softwareEncodes(codec: LiveCodec, rung: Rung): boolean {
  * **256k は放送に合わせた値。** 元の放送が AAC 256kbps なので、録画側は
  * そこへ揃えてある。ライブだけ 192k で低かったのを、こちらへ寄せる。
  *
- * H.264 は AAC のまま。**どの端末でも出る**ほうを既定にしている以上、
+ * H.264 は AAC のまま。**どの端末でも出る**ための方式なので、
  * 音声まで新しいものに替える理由が無い。
  *
  * どちらも 2ch に落とす。デュアルモノの配り直し (`-af pan=…`) はこの手前で
@@ -736,13 +737,13 @@ function resting(serviceId: number): number | null {
 /**
  * 使えなかったことを、**画面に出す言葉にする。**
  *
- * エージェントの言い分 (「電波が来ていないか、その周波数に放送がありません」) は
+ * エージェントが返した理由 (「電波が来ていないか、その周波数に放送がありません」) は
  * 言い切りとしては正しいが、**アンテナや配線を疑う文面**になる。放送そのものが
  * 止まっているだけのときは、そうと言えるほうがいい。denpa は番組表を持っていて、
  * エージェントは持っていないので、言い換えられるのはこちらだけ。
  *
  * **言い換えるのは「同期しなかった」ときだけ。** チューナーが塞がっていたときや
- * ffmpeg が降りたときに「放送休止です」と出すと、今度はこちらが嘘をつく
+ * ffmpeg が降りたときに「放送休止です」と出すと、今度は誤った理由を出すことになる
  *
  * @param why エージェントから返ってきた理由
  * @param until 放送休止が明ける時刻 (ms)。休止でなければ null
@@ -806,10 +807,8 @@ export interface Light {
   half: boolean;
   gpu: boolean;
 }
-export type LightStep = keyof Light;
+type LightStep = keyof Light;
 
-/** エンコードの速さ (`Session.speed`) がこれを切ったら遅れている。画面と同じ値 (`#lib/rungs.ts` の `ENCODE_SLOW`) */
-export const LIGHT_SLOW = ENCODE_SLOW;
 /** 遅れがこれだけ続いたら軽くする (ms)。画面の断り書き (`adapt.ts` の `ENCODE_LAG`) より長く、1 回の重さでは動かない */
 export const LIGHT_LAG = 5_000;
 /** 軽くしたものを、作り直した次のセッションへ受け継ぐ期限 (ms)。画面がリクエストし直すまでの間 */
@@ -828,9 +827,6 @@ export function takeLight(id: string, now = Date.now()): Light | null {
   lightened.delete(id);
   return held !== undefined && now - held.at < LIGHT_CARRY ? held.light : null;
 }
-
-/** 軽くしたときに、観ている人に出す断り書き (`notice`)。画面も同じ文で見分ける (`#lib/live-adapt.ts`) */
-export const LIGHT_NOTE: Record<LightStep, string> = LIGHT_NOTES;
 
 /**
  * **次に何を軽くするか。** 順に 60 コマ → 30 コマ (段 0 だけ。段 1〜3 はもう 30 コマ)、ソフトウェア → GPU (同じコーデックを
@@ -871,7 +867,8 @@ export function encodeSpeed(
 
 /**
  * **エンコードの遅れを数えて、軽くするかを決める** (`Session.lighten`)。時刻と速さは引数で受け取る (単体で確かめられる)。
- * 速さが `LIGHT_SLOW` を切ったまま `LIGHT_LAG` 続いたら、1 回だけ答えを返す。
+ * 速さが `ENCODE_SLOW` (`#lib/rungs.ts`。画面と同じ値) を切ったまま `LIGHT_LAG` 続いたら、1 回だけ答えを返す。
+ * 0 は画面 (`adapt.ts`) と同じく測れていない値とみなす (映像のトラックを読めない init では 0 になる)
  *
  * - `{ step, light }` … 軽くする。`light` は受け継がせるもの (`keepLight`)
  * - `"heavy"` … 遅れているが、これより軽くできない (書き残すだけ)
@@ -892,7 +889,7 @@ export class EncodeLag {
     state: Parameters<typeof nextLight>[0],
   ): { step: LightStep; light: Light } | "heavy" | null {
     if (this.decided) return null;
-    if (speed === null || speed >= LIGHT_SLOW) {
+    if (speed === null || speed <= 0 || speed >= ENCODE_SLOW) {
       this.slowSince = null;
       return null;
     }
@@ -1257,13 +1254,14 @@ class Session {
 
   /** 出した映像の長さ (`pace` の `speed`)。ffmpeg ごとに init から読み直す (`drain`) */
   private readonly length = new VideoLength();
-  private readonly meter = new SpeedMeter();
+  /** 速さを測る点。ffmpeg ごとに作り直す (`run`。起こし直すまでの空きを遅れに数えない) */
+  private meter = new SpeedMeter();
   /** 出した映像の長さの合計 (秒) */
   private media = 0;
 
   /**
    * **エンコードの速さ** (出した映像の時刻の進み ÷ 実時間。`#lib/rungs.ts` の `Pace`)。ライブは実時間で届くので、
-   * 追いついていれば 1 前後で、1 を下回り続けたらエンコードが遅れている。追っかけは倍速で読むので 2 前後まで出る。
+   * 追いついていれば 1 前後で、`ENCODE_SLOW` (0.95) を下回り続けたらエンコードが遅れている。追っかけは倍速で読むので 2 前後まで出る。
    * 放送そのまま (エンコードしない)・音声だけ・測れるまでは null (`encodeSpeed`)
    */
   get speed(): number | null {
@@ -1517,8 +1515,9 @@ class Session {
         this.produced = false;
         this.busy = false;
         this.software = hw === null;
-        // 遅れは ffmpeg ごとに数え直す (前の ffmpeg の遅れと、起こし直した直後の速さを合わせない)
+        // 遅れと速さは ffmpeg ごとに数え直す (前の ffmpeg の遅れと、起こし直した直後の速さを合わせない)
         this.lag.reset();
+        this.meter = new SpeedMeter();
         const proc = Bun.spawn(
           [
             config.ffmpeg,
@@ -1578,7 +1577,7 @@ class Session {
         if (this.cut && this.fed) return await this.lose(label);
         /*
          * **降りた理由を読み終えてから決める。** `proc.exited` は最後の
-         * 言い分より先に来るので、待たずに見ると「字幕が無い」を取り
+         * 行より先に来るので、待たずに見ると「字幕が無い」を取り
          * こぼして、**再エンコードに来られない**。標準エラーは相手が終了すれば
          * 必ず閉じるので、ここで待つのは安全 (流し込みのほうは閉じても
          * 例外にならないことがあるので待てない)
@@ -1903,7 +1902,7 @@ class Session {
    * GPU のせいだったと決める。**ソフトウェアに替えて映像が出たときだけ**。選局直後で
    * 映像がまだ来ていない・入力が途切れた、のように GPU と関係なく降りたのなら、
    * ソフトウェアでも出ずに「映像を出せませんでした」になる。そのとき GPU を 15 分
-   * 外したり「GPU でエンコードできなかった」と言ったりすると嘘になる。
+   * 外したり「GPU でエンコードできなかった」と出したりすると、誤った理由になる。
    * 同時に開ける数を超えただけなら覚えず (`blameLiveHw`)、断り書きもそう言う
    */
   private blameGpu(): void {
@@ -1916,7 +1915,7 @@ class Session {
 
   /**
    * **エンコードが実時間に追いつかなければ、軽い組み合わせで作り直す** (docs/stream.md「エンコードが遅れたとき」)。
-   * 映像の塊を出すたびに呼ぶ。速さ (`speed`) が `LIGHT_SLOW` を切ったまま `LIGHT_LAG` 続いたら、`nextLight` の順で 1 つ軽くする。
+   * 映像の塊を出すたびに呼ぶ。速さ (`speed`) が `ENCODE_SLOW` を切ったまま `LIGHT_LAG` 続いたら、`nextLight` の順で 1 つ軽くする。
    *
    * - **決めるのはサーバ。** 速さはこのセッションのエンコードの値で、観ている人の端末の都合ではない。画面は指示を送らない
    * - **観ている人全員に効く。** 同じセッションを共有している人は、同じ遅れを受けている。軽くしたものは受け継がせ
@@ -1964,8 +1963,10 @@ class Session {
       for (const segment of splitter.feed(chunk)) {
         if (segment.kind === "init") {
           this.init = segment.data;
-          if (this.proc === proc) this.length.init(segment.data);
-          if (this.proc === proc) this.opening.init ??= this.since();
+          if (this.proc === proc) {
+            this.length.init(segment.data);
+            this.opening.init ??= this.since();
+          }
           for (const viewer of this.viewers)
             this.hand(viewer, CHANNEL.videoInit, segment.data);
         } else {
@@ -2185,7 +2186,7 @@ class Session {
   }
 
   /**
-   * ffmpeg の言い分から、**選べる字幕と失敗**を読み取る。
+   * ffmpeg の標準エラーから、**選べる字幕と失敗**を読み取る。
    *
    * エンコードできない理由 (音声が無い・解像度が変わった) はここにしか出ない。
    * 捨てていると「映像が出ない」としか分からなくなる。
@@ -3338,8 +3339,12 @@ export function attend(connection: Connection): void {
       const plan = rungPlan({
         shared: shared(),
         room: transcodeRoom(),
+        // 音声だけ (`codec: "audio"`) は段を下げても枠を使わないので、抜けても空かない
         leaving:
-          current !== null && current.rung !== 0 && current.alone(viewer),
+          current !== null &&
+          current.codec !== "audio" &&
+          current.rung !== 0 &&
+          current.alone(viewer),
       });
       if (plan === "leave") leave();
       release = plan === "stay" ? null : rungSlot(rung, shared());
@@ -3347,8 +3352,9 @@ export function attend(connection: Connection): void {
         refused = true;
         release = () => undefined;
         const kept = current;
-        if (kept !== null && sameAs()) {
-          codec = kept.codec === "audio" ? plain : kept.codec;
+        // 音声だけからは段 0 へ戻す。その段の映像を枠なしでエンコードし始めないため
+        if (kept !== null && kept.codec !== "audio" && sameAs()) {
+          codec = kept.codec;
           rung = kept.rung;
         } else {
           codec = plain;

@@ -22,7 +22,7 @@ import { rules as ruleTable, services } from "./schema";
 const CANDIDATES = 5;
 
 /** 選局できなくなった局を指すルールの 1 件 */
-export interface Orphan {
+interface Orphan {
   ruleId: number;
   ruleName: string;
   /** いまの局の一覧に無い局 (`services.id`) */

@@ -16,7 +16,6 @@ import {
   nullable,
   number,
   object,
-  optional,
   type Shape,
   string,
   tolerate,
@@ -75,7 +74,7 @@ export type AgentTuner = Infer<typeof AGENT_TUNER>;
 
 const TUNERS = object({
   tuners: array(AGENT_TUNER),
-  detected: optional(boolean),
+  detected: boolean,
 });
 
 /** 画面から書き換えられる部分だけ */

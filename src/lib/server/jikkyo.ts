@@ -4,7 +4,7 @@
  *
  * - 録画の実況のチャンネルと、先頭と終わりの放送時刻 (`recordingJikkyo`)。観る画面がコメントを取得して再生位置に合わせるのに使う
  * - 局の勢い (`RankingRelay`)。NX-Jikkyo の REST は CORS を許していないのでブラウザから読めず、
- *   ここで中継する。**保持しない** (30 秒だけメモリに持つ。DB にもファイルにも書かない)
+ *   ここで中継する。**保存しない** (30 秒だけメモリに持つ。DB にもファイルにも書かない)
  *
  * どちらも世帯の設定 (連携の「実況」) がオフなら何も渡さない
  */
@@ -13,7 +13,7 @@ import { eq } from "drizzle-orm";
 import { jikkyoChannel, type JikkyoStation } from "../jikkyo/channels";
 import { NX_JIKKYO_CHANNELS } from "../jikkyo/endpoints";
 import type { Recording } from "../types";
-import { config } from "./config";
+import { config, userAgent } from "./config";
 import { orm } from "./db";
 import { tsHeadOf } from "./recording";
 import { services } from "./schema";
@@ -106,12 +106,12 @@ export function parseForces(
   return forces;
 }
 
-/** NX-Jikkyo から全チャンネルの今の状態を読む。Cookie は受けても使わない (サーバの fetch は覚えない) */
+/** NX-Jikkyo から全チャンネルの今の状態を読む。Cookie は受けても使わない (サーバの fetch は Cookie を保存しない) */
 async function readChannels(): Promise<unknown> {
   const res = await fetch(NX_JIKKYO_CHANNELS, {
     headers: {
       Accept: "application/json",
-      "User-Agent": `denpa/${config.version} (+https://github.com/danything/denpa)`,
+      "User-Agent": userAgent(),
     },
     signal: AbortSignal.timeout(10_000),
   });

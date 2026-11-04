@@ -21,7 +21,7 @@ import { run } from "./stream";
 const KEY_SCENE = 8;
 
 /**
- * エンコードする鎖の頭に足すフィルタ。印 (`lavfi.scd.time`) の付いたコマを `-force_key_frames scd_metadata` が
+ * エンコードするフィルタの並びの先頭に足すフィルタ。印 (`lavfi.scd.time`) の付いたコマを `-force_key_frames scd_metadata` が
  * キーフレームにする。同じ ffmpeg に並ぶ CM 検出の `scdet@cm` と名前で分ける
  */
 export const KEY_SCDET = `scdet@key=threshold=${KEY_SCENE}`;
@@ -83,11 +83,11 @@ export async function listKeyframes(
 
 /** 残す 1 切れ (エンコードしたものの時刻) */
 interface Piece {
-  /** 頭のキーフレームの pts */
+  /** 先頭のキーフレームの pts */
   start: number;
-  /** 尻 (次の CM の頭のキーフレームの pts)。null は終わりまで */
+  /** 末尾 (次の CM の先頭のキーフレームの pts)。null は終わりまで */
   end: number | null;
-  /** 尻のキーフレームの dts。**ここで読むのをやめる** (concat の `outpoint` は dts で見る) */
+  /** 末尾のキーフレームの dts。**ここで読むのをやめる** (concat の `outpoint` は dts で見る) */
   outpoint: number | null;
 }
 
@@ -98,7 +98,7 @@ interface CutPlan {
 }
 
 interface CutLimits {
-  /** エンコードしたものの時刻 − 境目の物差しの時刻 (秒)。muxer が頭を数ミリ秒ずらす */
+  /** エンコードしたものの時刻 − 境目の物差しの時刻 (秒)。muxer が先頭を数ミリ秒ずらす */
   offset: number;
   /** 同じ境目とみなすずれ (秒)。1 コマ半 */
   tolerance: number;
@@ -113,8 +113,8 @@ interface CutLimits {
  * (呼ぶ側が境目を指して再エンコードする)。
  *
  * - 境目から `tolerance` 以内のキーフレームがあれば、そこ (切れ目に置いたもの)
- * - 無ければ CM 側へ `margin` まで寄せる。頭は前へ、尻は後ろへ (本編を削らない)
- * - 録画の頭と尻は切らない (最初のキーフレームから・終わりまで)
+ * - 無ければ CM 側へ `margin` まで寄せる。先頭は前へ、末尾は後ろへ (本編を削らない)
+ * - 録画の先頭と末尾は切らない (最初のキーフレームから・終わりまで)
  */
 export function planCut(
   keep: Range[],
@@ -248,7 +248,7 @@ export function chapterArgs(
   ];
 }
 
-/** 境目の時刻 (キーフレームを置く所)。残す区間の頭と尻。録画の頭と尻は除く */
+/** 境目の時刻 (キーフレームを置く所)。残す区間の先頭と末尾。録画の先頭と末尾は除く */
 export function cutPoints(keep: Range[], duration: number): number[] {
   const out: number[] = [];
   for (const range of keep) {

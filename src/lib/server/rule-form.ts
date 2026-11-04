@@ -132,6 +132,9 @@ function switchOf(fields: Fields, key: string): boolean | null {
   return sent.length === 0 ? null : sent.includes("1");
 }
 
+/** 優先度の上限。画面の選択肢 (0〜9) と同じ。フォームを手で組んで大きな値を送られても 9 に丸める */
+const PRIORITY_MOST = 9;
+
 /**
  * 予約どうしを比べる数。**0 も受ける。**
  *
@@ -146,7 +149,9 @@ export function rulePriority(fields: Fields): number {
   const raw = fields.get("priority");
   if (raw === null || raw === undefined || raw === "") return 1;
   const value = Number(raw);
-  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 1;
+  return Number.isFinite(value) && value >= 0
+    ? Math.min(PRIORITY_MOST, Math.floor(value))
+    : 1;
 }
 
 /**

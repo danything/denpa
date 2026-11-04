@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { takeOverSignals } from "./runtime";
 
 /**
- * 止まれの合図を誰が受けるか。
+ * 停止のシグナルを誰が受けるか。
  *
  * adapter は SIGTERM を受けたその場で listen を閉じる。録画が終わるまで
  * 居座る denpa では、そのせいで「Pod は生きているのに画面だけ落ちる」状態が
@@ -24,7 +24,7 @@ afterEach(() => {
   }
 });
 
-describe("止まれの合図の受け取り", () => {
+describe("停止のシグナルの受け取り", () => {
   test("先に入っていた後始末を外して、こちらだけが受ける", () => {
     let others = 0;
     const other = () => {

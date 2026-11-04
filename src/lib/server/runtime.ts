@@ -121,11 +121,11 @@ export function start(): void {
    * **ライブ視聴のエンドポイントを開ける。** ここは `DENPA_AUTOSTART=0` でも開ける。
    * 押されたときだけ動くもので、勝手にチューナーを使いはしない。
    *
-   * 認証は使い捨てのチケットで見る。ブラウザは WebSocket の握手に `Authorization` を
+   * 認証は使い捨てのチケットで見る。ブラウザは WebSocket のハンドシェイクに `Authorization` を
    * 付けてくれないので、画面が先に `/api/live/ticket` から取ってくる (`tickets.ts`)
    */
   serve(SOCKET_PATH, {
-    // **握手より前に見る。** ここで断れば普通の HTTP で理由を返せる
+    // **ハンドシェイクより前に見る。** ここで断れば普通の HTTP で理由を返せる
     accept: (url) => redeem(url.searchParams.get("ticket")),
     open: (connection) => attend(connection),
   });
@@ -142,7 +142,7 @@ export function start(): void {
 
   /*
    * **新しいバージョンが出ていないか、GitHub を見に行く** (update.ts)。起動時に 1 回と
-   * 1 時間おき。チューナーには行かないので `DENPA_AUTOSTART=0` でも回す
+   * `UPDATE_CHECK_INTERVAL` (既定 1 時間) おき。チューナーには行かないので `DENPA_AUTOSTART=0` でも回す
    */
   nowAndEvery(config.updateCheckInterval, "update", checkForUpdate);
 
@@ -364,13 +364,13 @@ function installShutdownHooks(): void {
   (globalThis as Record<string, unknown>)[TAKE_OVER] = (): number => {
     const taken = take();
     if (taken > 0)
-      console.log(`[boot] 止まれの合図を引き取りました (${taken} 件)`);
+      console.log(`[boot] 停止のシグナルを引き取りました (${taken} 件)`);
     return taken;
   };
 }
 
 /**
- * 止まれの合図を**こちらで受け取る**。先に入っていた後始末は外す。
+ * 停止のシグナルを**こちらで受け取る**。先に入っていた後始末は外す。
  *
  * 外す相手は adapter (adapter-bun。前は adapter-node) で、SIGTERM を受けた**その場で listen を閉じる**。
  * 両方残すと、録画が終わるまで居座っている間、プロセスは生きているのにポートだけ

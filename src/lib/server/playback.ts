@@ -208,7 +208,7 @@ export function mediaInfo(source: EncodedSource, json: string): MediaFile {
   };
 }
 
-/** ffprobe の待ち時間の上限。壊れたファイルで居座らせない */
+/** ffprobe の待ち時間の上限。壊れたファイルで待ち続けない */
 export const PROBE_TIMEOUT = 15_000;
 
 /** 読んだ中身の控え。開くたびに聞くので、同じファイル (パスと更新時刻) なら読み直さない */
@@ -1231,7 +1231,7 @@ async function rawResponse(
     headers: {
       "Content-Type": "video/mp2t",
       "Cache-Control": "no-store",
-      // `live`・`chase` の放送のままと同じ値 (`codec=mpeg2` で頼まれても `raw`)
+      // `live`・`chase` の放送のままと同じ値 (`codec=mpeg2` でリクエストされても `raw`)
       [CODEC_HEADER]: "raw",
       [ORIGIN_HEADER]: String(origin),
     },
@@ -1329,7 +1329,6 @@ export async function tsChapters(
  */
 export async function captionArgs(recording: Recording): Promise<{
   argv: string[];
-  ts: boolean;
   /** 抜くファイル (エンコード済み)。元の TS から抜くときは null */
   path: string | null;
 } | null> {
@@ -1338,7 +1337,6 @@ export async function captionArgs(recording: Recording): Promise<{
   if (encoded !== null) {
     return {
       argv: ["-v", "error", "-i", encoded, "-map", "0:s:0", ...out],
-      ts: false,
       path: encoded,
     };
   }
@@ -1358,7 +1356,6 @@ export async function captionArgs(recording: Recording): Promise<{
       (-presented(ts.head)).toFixed(6),
       ...out,
     ],
-    ts: true,
     path: null,
   };
 }

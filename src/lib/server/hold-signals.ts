@@ -1,5 +1,5 @@
 /**
- * **起動の途中に来た止まれの合図 (SIGTERM・SIGINT) を取っておく。** 入口 (`server.js`) が
+ * **起動の途中に来た停止のシグナル (SIGTERM・SIGINT) を取っておく。** 入口 (`server.js`) が
  * いちばん先に読む。アプリ (`runtime.ts` の `installShutdownHooks`) が合図を引き取るときに、
  * 取っておいたものがあれば受け直す。
  *

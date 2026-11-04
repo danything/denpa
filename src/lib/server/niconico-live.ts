@@ -17,8 +17,8 @@
  */
 import type { PostStyle } from "../jikkyo/command";
 import { POST_GAP, type PostResult, REPLY_WAIT, vpos } from "../jikkyo/post";
-import { config } from "./config";
-import { accessToken, linkState, renew } from "./niconico";
+import { config, userAgent } from "./config";
+import { accessToken, HUB_TIMEOUT, linkState, renew } from "./niconico";
 
 /** 欄が呼ばなくなってから閉じるまで (ms)。欄は 30 秒おきに呼ぶ */
 export const IDLE = 2 * 60_000;
@@ -28,8 +28,6 @@ export const MAX_SESSIONS = 2;
 export const CONNECT_WAIT = 10_000;
 /** 繋げなかったあと、次に試すまで (ms)。欄が呼ぶたびに hub を呼ばない */
 export const RETRY_AFTER = 30_000;
-/** hub を待つ上限 (ms)。hub はニコニコを 15 秒で打ち切る */
-const HUB_TIMEOUT = 20_000;
 
 /** 欄に返す接続の状態 */
 export type LiveState =
@@ -58,9 +56,6 @@ export interface LiveDeps {
   clearTimeout: (id: unknown) => void;
 }
 
-const USER_AGENT = () =>
-  `denpa/${config.version} (+https://github.com/danything/denpa)`;
-
 async function hubWatch(
   token: string,
   channel: string,
@@ -72,7 +67,7 @@ async function hubWatch(
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
-      "User-Agent": USER_AGENT(),
+      "User-Agent": userAgent(),
     },
     body: new URLSearchParams({ channel, user }),
     signal: AbortSignal.timeout(HUB_TIMEOUT),
@@ -109,7 +104,7 @@ const server: LiveDeps = {
   // Bun の WebSocket はヘッダーを付けられる。ニコニコはツールの名前が分かる User-Agent を求めている
   open: (url) =>
     new WebSocket(url, {
-      headers: { "User-Agent": USER_AGENT() },
+      headers: { "User-Agent": userAgent() },
     } as unknown as string[]),
   token: accessToken,
   renew,

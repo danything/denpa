@@ -41,7 +41,7 @@ const READ_LIMIT = 96 * 1024 * 1024;
 const CHUNK = 1024 * 1024;
 
 /** 録画が持っている、幅を戻す欄 */
-export interface StoredText {
+interface StoredText {
   name: string;
   series: string;
   subtitle: string;
@@ -50,10 +50,7 @@ export interface StoredText {
 }
 
 /** 放送 (か番組表) から読み直したもの */
-export type BroadcastText = Pick<
-  StoredText,
-  "name" | "description" | "extended"
->;
+type BroadcastText = Pick<StoredText, "name" | "description" | "extended">;
 
 /**
  * 比べる形式。幅と、外字の書き方だけをそろえる。外字を文字列に開いていた頃 (「[新]」) に録ったものは、
@@ -191,7 +188,7 @@ export async function readBroadcastText(
 }
 
 /** 1 回ぶんの結果。ログに出す */
-export interface RestoreResult {
+interface RestoreResult {
   /** 見た録画 */
   seen: number;
   /** 元の TS から戻した */

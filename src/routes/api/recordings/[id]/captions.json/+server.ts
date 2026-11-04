@@ -27,7 +27,7 @@ import { run } from "#lib/server/stream.js";
 const TIMEOUT = 30_000;
 const TIMEOUT_TS = 300_000;
 
-/** 溜める量の上限。字幕の筋だけなら 1 時間で数百 KB。壊れたファイルで膨らんでもここで止める */
+/** 溜める量の上限。字幕のストリームだけなら 1 時間で数百 KB。壊れたファイルで膨らんでもここで止める */
 const LIMIT = 32 * 1024 * 1024;
 
 /** 作ったもの。JSON か、字幕が無い理由。1 本で数百 KB なので、最近観た十数本ぶん */
@@ -55,7 +55,7 @@ async function build(argv: string[], ts: boolean): Promise<Made> {
       size += chunk.length;
     },
   });
-  // 字幕を持たない番組のほうが多い (ffmpeg は「その筋は無い」で、動画を読む前に降りる)
+  // 字幕を持たない番組のほうが多い (ffmpeg は「そのストリームは無い」で、動画を読む前に降りる)
   if (code !== 0) error(404, MISSING);
   // 上限で切れた。壊れたファイルの途中までを覚えて返し続けない
   if (over) error(404, MISSING);
@@ -71,18 +71,20 @@ export async function GET({ params }) {
   const recording = recordingOr404(params.id);
   const args = await captionArgs(recording);
   if (args === null) error(404, MISSING);
+  const { argv, path } = args;
+  const ts = path === null;
 
   const result =
-    args.path === null
-      ? await build(args.argv, args.ts)
-      : await made.get(args.path, () => build(args.argv, args.ts));
+    path === null
+      ? await build(argv, ts)
+      : await made.get(path, () => build(argv, ts));
   if ("missing" in result) error(404, result.missing);
 
   return new Response(result.json, {
     headers: {
       "Content-Type": "application/json",
       // 同じファイルなら中身は変わらない。再エンコードすればパスごと変わる。元の TS はエンコードが終わると物差しが変わる
-      "Cache-Control": args.ts ? "no-store" : "private, max-age=3600",
+      "Cache-Control": ts ? "no-store" : "private, max-age=3600",
     },
   });
 }

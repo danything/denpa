@@ -20,7 +20,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { RETURN_PATH } from "../niconico";
-import { config } from "./config";
+import { config, userAgent } from "./config";
 import { now, orm } from "./db";
 import { randomToken } from "./oidc";
 import { niconicoLink } from "./schema";
@@ -34,7 +34,7 @@ const REFRESH_BEFORE = 5 * 60_000;
 /** 応答に期限が無かったときのアクセストークンの長さ (秒)。短めに見て早く更新する */
 const DEFAULT_EXPIRES_IN = 30 * 60;
 /** hub を待つ上限 (ms)。hub はニコニコを 15 秒で打ち切る */
-const HUB_TIMEOUT = 20_000;
+export const HUB_TIMEOUT = 20_000;
 /** hub が結果の暗号化に使う HKDF の info (denpa-hub との約束) */
 const INFO = new TextEncoder().encode("denpa-hub niconico token v1");
 
@@ -335,9 +335,6 @@ function warn(message: string): void {
   console.warn(`[niconico] ${message}`);
 }
 
-const USER_AGENT = () =>
-  `denpa/${config.version} (+https://github.com/danything/denpa)`;
-
 /** 走っている更新。同時に何か所から呼ばれても 1 本だけ */
 let refreshing: Promise<string | null> | null = null;
 
@@ -390,7 +387,7 @@ async function refresh(): Promise<string | null> {
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
-      "User-Agent": USER_AGENT(),
+      "User-Agent": userAgent(),
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",

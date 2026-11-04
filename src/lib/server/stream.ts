@@ -74,7 +74,7 @@ export function lowerPriority(
   try {
     set(pid, constants.priority.PRIORITY_LOW);
   } catch (error) {
-    // もう終わっていた (ESRCH) なら下げる相手がいないだけ。権限不足の知らせを取っておく
+    // もう終わっていた (ESRCH) なら下げる相手がいないだけ。権限不足の通知を取っておく
     if ((error as { code?: unknown }).code === "ESRCH" || lowerFailed) return;
     lowerFailed = true;
     console.warn(
@@ -103,7 +103,7 @@ interface RunResult {
  * (パイプが詰まって固まる) などの決まりごとを 1 か所で守る。
  *
  * - `signal` … 押されたら殺す (エンコードの中止など)
- * - `timeoutMs` … これを過ぎたら殺す (壊れたファイルで居座らせない)
+ * - `timeoutMs` … これを過ぎたら殺す (壊れたファイルで待ち続けない)
  * - 起こせなかった (道具が入っていない) ときは投げずに `code: 127` で返す
  */
 export async function run(

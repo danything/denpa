@@ -549,7 +549,7 @@ async function liveRaw(page: Page): Promise<void> {
     .click();
 }
 
-/** 一覧のうち、いま画面に全部見えている最初の録画の行 (下から積む枠なので、頭の行は切れている) */
+/** 一覧のうち、いま画面に全部見えている最初の録画の行 (下から積む枠なので、先頭の行は切れている) */
 async function visibleRow(page: Page) {
   const rows = page.getByTestId("recording-row");
   for (let i = 0; i < (await rows.count()); i++) {
@@ -1041,7 +1041,7 @@ try {
         await page.waitForTimeout(1500);
         /*
          * 開くのは**今の線のそばの、見えているマス**。並び順 (`nth`) で選ぶと
-         * 日の頭 (4:00) の終わった番組に当たり、押す前に Playwright がそこまで
+         * 日の始まり (4:00) の終わった番組に当たり、押す前に Playwright がそこまで
          * スクロールしてしまう (#866 までの画像)。これから始まる番組を選び、
          * 見えている中に無ければ放送中のものを開く
          */

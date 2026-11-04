@@ -837,6 +837,13 @@ describe("エンコードが遅れたときの軽い組み合わせ", () => {
     expect(lag.tick(20_000, 0.5, base)).toBeNull();
   });
 
+  test("速さ 0 は測れていない値として数えない (画面の adapt.ts と同じ)", () => {
+    const lag = new EncodeLag();
+    expect(lag.tick(0, 0, base)).toBeNull();
+    expect(lag.tick(LIGHT_LAG, 0, base)).toBeNull();
+    expect(lag.tick(2 * LIGHT_LAG, 0, base)).toBeNull();
+  });
+
   test("起こし直した ffmpeg は遅れを数え直す", () => {
     const lag = new EncodeLag();
     lag.tick(0, 0.9, base);
@@ -1072,6 +1079,8 @@ describe("段を下げるときのコーデック", () => {
     expect(parsePlayable("", "h264")).toEqual(["h264"]);
     expect(parsePlayable("hevc,x,h264,hevc", "av1")).toEqual(["hevc", "h264"]);
     expect(parsePlayable(["av1", 3], "h264")).toEqual(["av1"]);
+    // `?playable=av1, hevc` の空白は読み飛ばす (`viewing.parseFormats` と同じ)
+    expect(parsePlayable("av1, hevc", "h264")).toEqual(["av1", "hevc"]);
   });
 });
 

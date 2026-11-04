@@ -4,7 +4,7 @@
  * - こちらの証明書は自分で作る (`<dataDir>/tls/denpa.key` / `denpa.crt`。自己署名)
  * - エージェントの証明書は、組んだときに覚える (`<dataDir>/tls/agent.crt`)。その証明書そのものを
  *   `ca` にして繋ぐので、`TUNER_AGENT_URL` をどんな名前・IP で書いても通る (名前は見ない)
- * - 組むのは合言葉 (`TUNER_AGENT_URL` の `#pair=…`) を知っている者どうしだけ。覚えた証明書で
+ * - 組むのは合言葉 (`TUNER_AGENT_URL` の `#pair=…`) が同じものどうしだけ。覚えた証明書で
  *   繋がらない・エージェントに断られたときは、合言葉があれば組み直してもう 1 度だけ試す
  *
  * 合言葉はログにも不具合報告にも出さない (`agentSecrets`)。
@@ -264,8 +264,8 @@ function peerCertificate(
         port: Number(url.port || 443),
         servername: /^[\d.]+$|:/.test(url.hostname) ? undefined : url.hostname,
         /*
-         * ここでは確かめない (まだ知らない相手の証明書を取りに行くので)。取った証明書は、このあと
-         * 合言葉の証し (pairProof) で相手が合言葉を知っていると確かめてからしか覚えない
+         * ここでは確かめない (まだ覚えていない相手の証明書を取得するので)。取った証明書は、このあと
+         * 合言葉の証し (pairProof) で相手が同じ合言葉を持つと確かめてからしか覚えない
          */
         rejectUnauthorized: false, // lgtm[js/disabling-certificate-validation]
         cert: identity.cert,
@@ -349,21 +349,17 @@ function pair(target: AgentTarget): Promise<void> {
       body?.proof !== pairProof(token, "agent", agent, identity.fingerprint)
     ) {
       throw new Error(
-        "エージェントと組めません: 相手が合言葉を知りません (別の相手に繋がっているかもしれません)",
+        "エージェントと組めません: 相手の合言葉が違います (別の相手に繋がっているかもしれません)",
       );
     }
     rememberAgent(peerPem);
     console.log(`[agent] エージェント (${agent.slice(0, 16)}) と組みました`);
   })();
   pairing = { origin: target.origin, done };
-  done.then(
-    () => {
-      if (pairing?.done === done) pairing = null;
-    },
-    () => {
-      if (pairing?.done === done) pairing = null;
-    },
-  );
+  const clear = () => {
+    if (pairing?.done === done) pairing = null;
+  };
+  done.then(clear, clear);
   return done;
 }
 

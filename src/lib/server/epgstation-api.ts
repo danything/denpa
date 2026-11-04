@@ -184,7 +184,7 @@ export const isId = (value: unknown): value is number =>
 
 /**
  * 形式を 1 回だけ確かめ (違えば警告して続ける)、無いと扱えない項目 (`essentials`) が欠けた 1 件だけ飛ばす。
- * 飛ばしたものは `skip` に言う
+ * 飛ばしたものは `skip` に渡す
  */
 export function validItems<T>(
   shape: (value: unknown, path: string) => T,

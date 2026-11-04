@@ -51,7 +51,7 @@ export interface ScanWant {
 interface ScanOptions extends ScanWant {
   signal?: AbortSignal | undefined;
   timeoutMs: number;
-  /** 入力の前に置く引数。エンコードと同じだけ頭を捨てる (`-ss`) ときに */
+  /** 入力の前に置く引数。エンコードと同じだけ先頭を捨てる (`-ss`) ときに */
   before?: string[];
 }
 
@@ -169,7 +169,7 @@ export function scanOutputs(
     );
   }
   if (want.audio) {
-    // 主音声だけ。録画の尻にだけ現れる副音声を選ばないように (cm.probeLiveAudio)
+    // 主音声だけ。録画の末尾にだけ現れる副音声を選ばないように (cm.probeLiveAudio)
     args.push(
       "-map",
       "0:a:0",
