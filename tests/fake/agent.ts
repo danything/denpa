@@ -41,7 +41,7 @@ let busyTuners = false;
 /**
  * エージェントのログ (`GET /denpa/logs`)。本物と同じ形 (`{"lines":[{"at","text"}]}`。新しいほうから 2000 行まで、古い順)。
  * 中身は伏せる処理を確かめるための作り物で、カードの番号・IP アドレス・ホスト名と、伏せない番組名を混ぜてある。
- * `off` は前のバージョンのエージェント (404)、`many` は URL の上限を確かめる長いログ。
+ * `off` は答えを返せないエージェント (500)、`many` は URL の上限を確かめる長いログ。
  *
  * **伏せるものを含む行は、読まれた時点で出たばかりのエラーにしておく。** Issue の URL に入るログは
  * 警告とエラーを先に、それぞれ新しいほうから選ぶ (`#lib/issue-report.ts`)。同じワーカーで先に流れたテストが
@@ -85,7 +85,7 @@ function agentLogLines(): { at: number; text: string }[] {
 /**
  * エージェント自身のこと (`GET /denpa/about`)。本物と同じ形 (agent/Denpa.Agent/About.cs)。
  * バージョンは本物のイメージと同じく `DENPA_VERSION` から (tests/stack.ts が denpa と同じものを渡す)。
- * `off` は前のバージョンのエージェント (404)、`mac` は macOS のエージェントで、バージョンが denpa と違う
+ * `off` は答えを返せないエージェント (500)、`mac` は macOS のエージェントで、バージョンが denpa と違う
  */
 let aboutMode: "normal" | "off" | "mac" = "normal";
 
@@ -238,8 +238,13 @@ const OPENS_KEEP = 200;
 
 function tunerStatus() {
   return TUNERS.map((plain) => {
-    // 選ぶ順は定義の順 (下の `pick` は前から空きを取る)。無効なチューナーは使わないので null
-    const tuner = { ...plain, rank: plain.disabled ? null : plain.index };
+    // 選ぶ順は定義の順 (下の `pick` は前から空きを取る)。無効なチューナーは使わないので null。
+    // 名指しの目印はデバイス、無ければ名前 (本物の `TunerPool.PinKey`)
+    const tuner = {
+      ...plain,
+      rank: plain.disabled ? null : plain.index,
+      pin: plain.device ?? plain.name,
+    };
     /*
      * 塞がっているのは**衛星のチューナー**にしてある。地上波を塞ぐと、
      * 同時に走っている局ロゴのテストが「地上波の空きが無い」で
@@ -633,12 +638,11 @@ const options: Bun.ServeOptions = {
       );
     }
     if (url.pathname === "/denpa/logs" && request.method === "GET") {
-      if (logsMode === "off") return new Response("not found", { status: 404 });
+      if (logsMode === "off") return new Response("failed", { status: 500 });
       return json({ lines: agentLogLines() });
     }
     if (url.pathname === "/denpa/about" && request.method === "GET") {
-      if (aboutMode === "off")
-        return new Response("not found", { status: 404 });
+      if (aboutMode === "off") return new Response("failed", { status: 500 });
       return json(agentAbout());
     }
     if (url.pathname === "/denpa/decode" && request.method === "POST") {

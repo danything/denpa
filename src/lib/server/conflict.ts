@@ -101,21 +101,15 @@ interface TunerGroup {
 export type Capacity = readonly TunerGroup[];
 
 /**
- * エージェントの一覧から作る。**`rank` の無いチューナーが 1 つでもあれば台数不明** (空) にする。
- * 選ぶ順の分からないエージェント (古いバージョン) を相手に、外れるかもしれない割り振りで
- * 予約を競合にしない。エージェントに繋がらないときと同じ扱い
+ * エージェントの一覧から作る。**`rank` の無いチューナー (無効にしたもの) は数えない。**
+ * エージェントもそれを選ばない
  */
 export function capacityOf(
-  tuners: readonly {
-    types: readonly string[];
-    disabled?: boolean;
-    rank?: number | null;
-  }[],
+  tuners: readonly { types: readonly string[]; rank: number | null }[],
 ): Capacity {
-  const enabled = tuners.filter((t) => !t.disabled);
   const groups = new Map<number, TunerGroup>();
-  for (const tuner of enabled) {
-    if (typeof tuner.rank !== "number") return [];
+  for (const tuner of tuners) {
+    if (tuner.rank === null) continue;
     const group = groups.get(tuner.rank);
     if (group === undefined)
       groups.set(tuner.rank, {
