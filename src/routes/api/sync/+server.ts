@@ -17,6 +17,11 @@ import { programs } from "#lib/server/schema.js";
  * 揃っている局は集め直さないので、増えた数だけを返すと「0 件しか無い」に見える。
  */
 export async function POST() {
+  /*
+   * 取得 (`collectOnce`) が先。取得は始めに局を取り込み直す (`syncServices`) ので、局の入れ替わりもここで入る。
+   * `sync` をあとに呼ぶのは、取得した番組まで入れた局の数・予約の結果を返すため (取得で番組が増えなくても当て直す)。
+   * エージェントの `channels` 通知 (runtime.ts) は逆の順で、取得を待たずに局の一覧を先に変える
+   */
   await collectOnce();
   const result = await sync();
   return json({

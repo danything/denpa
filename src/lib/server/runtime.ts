@@ -268,7 +268,11 @@ function listenToAgent(): void {
           void guard("logo", ride);
           break;
         case "channels":
-          // スキャンで局が入れ替わった。取り込み直して番組表も集め直す
+          /*
+           * スキャンで局が入れ替わった。取り込み直して番組表も取得し直す。
+           * 局の取り込み (`sync`) が先。取得は全チャンネルで数分かかるので、局の一覧と予約はそれを待たずに変える
+           * (取得も始めに局を取り込むので、`POST /api/sync` は逆の順で同じ結果になる)
+           */
           void guard("epg", async () => {
             await sync();
             await collectOnce();

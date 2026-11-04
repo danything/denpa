@@ -14,6 +14,7 @@ import {
   blameLiveHw,
   CHASE_STREAM_HOLD,
   encodeArgs,
+  httpLiveForm,
   key,
   LIVE_STREAM_BACKLOG,
   liveHwFailed,
@@ -892,6 +893,36 @@ describe("段を下げるときのコーデック", () => {
     expect(parsePlayable("", "h264")).toEqual(["h264"]);
     expect(parsePlayable("hevc,x,h264,hevc", "av1")).toEqual(["hevc", "h264"]);
     expect(parsePlayable(["av1", 3], "h264")).toEqual(["av1"]);
+  });
+});
+
+/**
+ * **HTTP のライブで流すコーデックと段** (`httpLiveForm`)。`?audio=only` の段は、画面の WebSocket の `codec: "audio"` と
+ * 同じく段のまま (音声を 96k に下げる)
+ */
+describe("HTTP のライブのコーデックと段", () => {
+  const hw: LiveHw = { way: { device: "d", kind: "rkmpp" }, full: false };
+  const form = (query: string) =>
+    httpLiveForm(new URLSearchParams(query), (codec) =>
+      codec === "hevc" ? hw : null,
+    );
+
+  test("音声だけは段を保ち、音声のビットレートだけが下がる", () => {
+    expect(form("audio=only&rung=2")).toEqual({ codec: "audio", rung: 2 });
+    expect(form("audio=only")).toEqual({ codec: "audio", rung: 0 });
+    expect(audioArgs("audio", 2).join(" ")).toContain("-b:a 96k");
+  });
+
+  test("放送そのままは段を見ない", () => {
+    expect(form("codec=raw&rung=3")).toEqual({ codec: "raw", rung: 0 });
+  });
+
+  test("映像の段を下げるならコーデックは再生できるものから選ぶ。段 0 はリクエストしたまま", () => {
+    expect(form("rung=1&playable=hevc,h264")).toEqual({
+      codec: "hevc",
+      rung: 1,
+    });
+    expect(form("codec=av1")).toEqual({ codec: "av1", rung: 0 });
   });
 });
 
