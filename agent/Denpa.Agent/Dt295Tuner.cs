@@ -463,7 +463,7 @@ internal sealed class Dt295Stream
     /// 8,192 が 1.8〜2.0 秒、4,096 が 1.7〜1.9 秒だった。CPU 時間 (20 秒) は 3.8 秒、4.2 秒、4.7 秒、5.2 秒、6.3 秒と増える。
     /// 8,192 バイトは、短縮がほぼ頭打ちになる手前で CPU が少ない。待機中に溜められる量 (512 KiB) は変えない
     /// USB 2.0 の bulk の最大パケットは 512 バイトで、読みの大きさはその倍数でなければならない (WinUSB の RAW_IO が断る)。
-    /// Windows と Mac で 64 本の読みが動くかは、実機で確かめていない (Linux だけ)
+    /// Mac で 64 本の読みが動くかは、実機で確かめていない (Windows と Linux は確かめた)
     /// </summary>
     private const int TransferSize = 8192;
 
