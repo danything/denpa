@@ -28,6 +28,7 @@ import {
   nextCarouselAttempt,
   OFF_PERIOD_RETRY,
 } from "./logo-period";
+import { recordLogoAttempt } from "./logo-record";
 import { services } from "./schema";
 import { chunks } from "./stream";
 import {
@@ -977,13 +978,8 @@ async function drain(
       const limit =
         target.type === "GR" ? SWEEP_TIMEOUT : config.logoCarouselWait;
       const startedAt = Date.now();
-      const { outcome, carrier, received, openedMs, counts } = await collect(
-        target,
-        limit,
-        signal,
-        left,
-        carouselPriority(target),
-      );
+      const { found, outcome, carrier, received, openedMs, counts } =
+        await collect(target, limit, signal, left, carouselPriority(target));
       // 記録の「7 時間あけて開き直します」と合わせる。「いますぐ」で開けた回も、定期チェックの間合いはここから数える
       if (carrier) markTried(outcome, startedAt);
       const note = carrier
@@ -994,6 +990,17 @@ async function drain(
         ? waitedMessage(target.channel, outcome, received, openedMs, counts)
         : null;
       if (line !== null) console.log(`[logo] ${line}`);
+      if (carrier)
+        recordLogoAttempt({
+          startedAt,
+          channel: target.channel,
+          origin: "now",
+          openedMs,
+          outcome,
+          received,
+          found,
+          counts,
+        });
       left = [logoUse(target)];
       update({
         channels: state.channels.filter(
@@ -1182,6 +1189,17 @@ async function awaitCarousel(): Promise<number> {
           )
         : null;
       if (line !== null) console.log(`[logo] ${line}`);
+      if (result.carrier)
+        recordLogoAttempt({
+          startedAt,
+          channel: target.channel,
+          origin: "wait",
+          openedMs: result.openedMs,
+          outcome: result.outcome,
+          received: result.received,
+          found: result.found,
+          counts: result.counts,
+        });
       // 外れなら次の中継へ。それ以外 (読み切った・譲った・来なかった) はここまで
       if (result.outcome !== "miss") return found;
     } finally {

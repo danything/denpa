@@ -1,11 +1,13 @@
 import { fail } from "@sveltejs/kit";
 
+import { logoRecordList } from "#lib/server/logo-record.js";
 import {
   COOKIE,
   countOthers,
   destroyOthers,
   find,
 } from "#lib/server/session.js";
+import { saveSettings, settings } from "#lib/server/settings.js";
 import { getTuners } from "#lib/server/tuner.js";
 
 import * as diagnostics from "./diagnostics.server";
@@ -42,11 +44,20 @@ export async function load({ cookies, url }) {
     liveTuners: await liveTuners(),
     /** この端末の控えのほかに生きているログインの数。控えで入っていなければ null */
     others: session === null ? null : countOthers(session.id),
+    /** ロゴの取得を記録するか (開発者向け。`logo-record.ts`) と、新しいものからの記録 */
+    recordLogo: settings().recordLogo,
+    logoRecords: logoRecordList(50),
     ...diagnostics.load(url),
   };
 }
 
 export const actions = {
+  /** **ロゴの取得を記録するか** (開発者向け。`logo-record.ts`)。世帯の設定で、オンの間だけ当たりの中継で待つたびに記録する */
+  recordLogo: async ({ request }) => {
+    const form = await request.formData();
+    saveSettings({ recordLogo: form.get("recordLogo") === "on" });
+    return { success: true };
+  },
   /**
    * **この端末のほかのログインを全部終わらせる。** なくした端末・手放した端末を止めるため。
    * 送るのは POST だけ (フォームの送信。SvelteKit が Origin を見て、よそのサイトからの送信を断る)
