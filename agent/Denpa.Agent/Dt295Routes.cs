@@ -318,7 +318,7 @@ public sealed record Dt295RouteSnapshot(
 
 /// <summary>
 /// 届いた PSI からルートの計画を組み立てる (11.2・11.3)。始めは PAT (暗黙) と固定の SI PID。PAT が読めたら NIT とすべての PMT を足し、
-/// PMT が読めたら PCR・CA 記述子の PID・ES を足す。主番組は PAT の順で最初の、映像と音声を持つ番組で、**一度決めたら替えない** (11.3。ただし <see cref="Seed"/> の写しと違う PMT が届いたときは、選び直す)。
+/// PMT が読めたら PCR・CA 記述子の PID・ES を足す。主番組は PAT の順で最初の、映像と音声を持つ番組で、**一度決めたら替えない** (11.3)。ただし、<see cref="Seed"/> の写しと違う PMT が届いたときは選び直す。
 /// CAT が読めたら EMM (CA 記述子の PID) を足す。
 /// 読むのは AES を外したあとの、暗号化されていない (transport_scrambling_control = 00) パケットだけで、PAT・CAT・PAT に載った PMT の PID のものだけを使う。
 /// 版数の追従 (11.4) と、録画中の PMT の変化の扱い (11.3 の後半) はまだ持たない (最初の PAT・CAT と、PMT ごとに最初の 1 つだけを使う)。
@@ -342,9 +342,13 @@ public sealed class Dt295RouteTracker(bool needCat = true, int? service = null, 
     private bool _catUnchecked;
     private readonly HashSet<int> _pmtsUnchecked = [];
 
-    /// <summary>PAT・(地上波は) CAT・PAT に載ったすべての番組の PMT がそろった (11.2 の手順 3)</summary>
+    /// <summary>
+    /// PAT・(地上波は) CAT・PAT に載ったすべての番組の PMT がそろった (11.2 の手順 3)。<see cref="Seed"/> の写しから始めたときは、
+    /// それらが全部、届いたものと見比べ済みであること (違う PSI が続けて届く間は、準備し直さずに待つ)
+    /// </summary>
     public bool Settled =>
-        _pat is not null && (_cat || !needCat) && _pat.Where(entry => entry.Number != 0).All(entry => _pmts.ContainsKey(entry.Pid));
+        _pat is not null && (_cat || !needCat) && !_patUnchecked && !_catUnchecked && _pmtsUnchecked.Count == 0
+        && _pat.Where(entry => entry.Number != 0).All(entry => _pmts.ContainsKey(entry.Pid));
 
     public Dt295Route[] Plan { get; private set; } = Dt295Routes.Plan(null, Dt295Routes.FixedSi);
 
@@ -361,9 +365,9 @@ public sealed class Dt295RouteTracker(bool needCat = true, int? service = null, 
     public string? Problem { get; private set; }
 
     /// <summary>
-    /// いまの状態の写し。PAT と、PAT に載ったすべての PMT (地上波は CAT も) がそろっているときだけ返す (そろっていなければ null)
+    /// いまの状態の写し。<see cref="Settled"/> で、計画を作れているときだけ返す (写しから始めたときは、届いたものと見比べ済みのときだけ)。そうでなければ null
     /// </summary>
-    public Dt295RouteSnapshot? Snapshot() => Settled
+    public Dt295RouteSnapshot? Snapshot() => Settled && Problem is null
         ? new Dt295RouteSnapshot([.. _pat!], new Dictionary<int, Dt295Pmt>(_pmts), needCat ? [.. _emms] : null, [.. _pids], new Dictionary<int, int>(_ecmOf), Main)
         : null;
 
@@ -386,7 +390,20 @@ public sealed class Dt295RouteTracker(bool needCat = true, int? service = null, 
         _catUnchecked = _cat;
         _pmtsUnchecked.Clear();
         foreach (var pid in _pmts.Keys) _pmtsUnchecked.Add(pid);
-        Replan();
+        if (Replan() || Problem is null) return;
+        // 写しの計画を作れない (複数の ECM・スロット不足)。写しは使わず、何も無い状態から始める
+        _pat = null;
+        _pmts.Clear();
+        _cat = false;
+        _emms = [];
+        _pids = [.. Dt295Routes.FixedSi];
+        _ecmOf.Clear();
+        Main = null;
+        _patUnchecked = false;
+        _catUnchecked = false;
+        _pmtsUnchecked.Clear();
+        Plan = Dt295Routes.Plan(null, Dt295Routes.FixedSi, null, satellite);
+        Problem = null;
     }
 
     /// <summary>パケット 1 つを渡す。計画が変わったら true</summary>
@@ -420,8 +437,9 @@ public sealed class Dt295RouteTracker(bool needCat = true, int? service = null, 
                 {
                     _catUnchecked = false;
                     if (emms.SequenceEqual(_emms)) continue;
+                    // 写しと違う。古い EMM の PID を計画から外すため、PID を組み直す
                     _emms = [.. emms];
-                    _pids.AddRange(emms.Where(emm => !_pids.Contains(emm)));
+                    Rebuild();
                     changed = true;
                     continue;
                 }

@@ -748,7 +748,7 @@ public sealed class Dt295Tuner : ITuneDevice
             if (tuning.Satellite) data = data with { Fields = data.Fields.WithAutoPidMode(false) };
             // ServiceId は 1〜65535 か null (ChannelTable が 0 を断る)。null なら全番組を追う
             var routes = new Dt295RouteTracker(needCat: !tuning.Satellite, service: tuning.Satellite ? tuning.ServiceId : null, satellite: tuning.Satellite);
-            var key = $"{(tuning.Satellite ? "S" : "T")}{tuning.Frequency}:{tuning.StreamId}:{(tuning.Satellite ? tuning.ServiceId : null)}";
+            var key = $"{(tuning.Satellite ? "S" : "T")}{tuning.Frequency}:{streamId}:{(tuning.Satellite ? tuning.ServiceId : null)}";
             if (_routeCache.TryGetValue(key, out var cached)) routes.Seed(cached);
             _streamKey = key;
             try
@@ -808,17 +808,8 @@ public sealed class Dt295Tuner : ITuneDevice
         _streamKey = null;
         stream?.Stop();
         // 読み出しのスレッドが終わってから (ルートの計画は読み出しのスレッドが書き換える)、PAT と全部の PMT がそろっていれば写しを取る。
-        // 次に同じチャンネルを選ぶとき、最初の準備に使う。取れなくても、止める手順は終わっているので、写しなしで続ける
-        if (stream is { PumpStopped: true } && key is not null)
-        {
-            try
-            {
-                if (stream.Routes.Snapshot() is { } snapshot) _routeCache[key] = snapshot;
-            }
-            catch (InvalidOperationException)
-            {
-            }
-        }
+        // 次に同じチャンネルを選ぶとき、最初の準備に使う。見比べていない写しや、計画を作れなかった状態は取らない (前の写しを残す)
+        if (stream is { PumpStopped: true } && key is not null && stream.Routes.Snapshot() is { } snapshot) _routeCache[key] = snapshot;
     }
 
     /// <summary>捨てる (定義が変わった・止める)。セッションを終えて閉じる</summary>

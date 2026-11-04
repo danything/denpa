@@ -746,7 +746,9 @@ public class Dt295TunerTests
 
         var seeded = new Dt295RouteTracker();
         seeded.Seed(snapshot);
-        await Assert.That(seeded.Settled).IsTrue();
+        // 見比べるまでは、そろったとみない
+        await Assert.That(seeded.Settled).IsFalse();
+        await Assert.That(seeded.Snapshot()).IsNull();
         await Assert.That(seeded.Main!.VideoPid).IsEqualTo(0x111);
         await Assert.That(seeded.Plan).IsEquivalentTo(live.Plan);
 
@@ -754,6 +756,9 @@ public class Dt295TunerTests
         await Assert.That(seeded.Push(both.AsSpan(0, 188))).IsFalse();
         await Assert.That(seeded.Push(both.AsSpan(188))).IsFalse();
         await Assert.That(seeded.Push(Dt295Ts.Cat())).IsFalse();
+        // 全部見比べたら、そろったとみて、写しも取れる
+        await Assert.That(seeded.Settled).IsTrue();
+        await Assert.That(seeded.Snapshot()).IsNotNull();
         await Assert.That(seeded.Plan).IsEquivalentTo(live.Plan);
         await Assert.That(seeded.Main!.VideoPid).IsEqualTo(0x111);
     }
@@ -792,6 +797,82 @@ public class Dt295TunerTests
     }
 
     [Test]
+    public async Task 写しから始めたとき_すべてを見比べるまでは_そろったとみない()
+    {
+        // 番組 0x400 (PMT 0x1F0) と 0x401 (PMT 0x2F0)
+        var pat = Dt295Ts.Packet(0, Dt295Ts.Section(0x00, 0x7FE0, [0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE1, 0xF0, 0x04, 0x01, 0xE2, 0xF0]));
+        var first = Dt295Ts.Packet(0x1F0, Dt295Ts.Section(0x02, 0x400, [0xE1, 0x11, 0xF0, 0x00, 0x02, 0xE1, 0x11, 0xF0, 0x00, 0x0F, 0xE1, 0x12, 0xF0, 0x00]));
+        var second = Dt295Ts.Packet(0x2F0, Dt295Ts.Section(0x02, 0x401, [0xE2, 0x11, 0xF0, 0x00, 0x02, 0xE2, 0x11, 0xF0, 0x00, 0x0F, 0xE2, 0x12, 0xF0, 0x00]));
+        var live = new Dt295RouteTracker(needCat: false);
+        live.Push(pat);
+        live.Push(first);
+        live.Push(second);
+        var snapshot = live.Snapshot()!;
+
+        // どちらの PMT も映像の PID が替わった。1 つ目が届いた時点では、2 つ目が未確認なので、まだそろったとみない
+        var changedFirst = Dt295Ts.Packet(0x1F0, Dt295Ts.Section(0x02, 0x400, [0xE3, 0x11, 0xF0, 0x00, 0x02, 0xE3, 0x11, 0xF0, 0x00, 0x0F, 0xE1, 0x12, 0xF0, 0x00]));
+        var changedSecond = Dt295Ts.Packet(0x2F0, Dt295Ts.Section(0x02, 0x401, [0xE4, 0x11, 0xF0, 0x00, 0x02, 0xE4, 0x11, 0xF0, 0x00, 0x0F, 0xE2, 0x12, 0xF0, 0x00]));
+        var seeded = new Dt295RouteTracker(needCat: false);
+        seeded.Seed(snapshot);
+        await Assert.That(seeded.Push(pat)).IsFalse();
+        await Assert.That(seeded.Settled).IsFalse();
+        await Assert.That(seeded.Push(changedFirst)).IsTrue();
+        await Assert.That(seeded.Settled).IsFalse();
+        await Assert.That(seeded.Snapshot()).IsNull();
+        await Assert.That(seeded.Push(changedSecond)).IsTrue();
+        await Assert.That(seeded.Settled).IsTrue();
+        await Assert.That(seeded.Main!.VideoPid).IsEqualTo(0x311);
+        await Assert.That(seeded.Plan.Any(route => route.Pid == 0x411)).IsTrue();
+        await Assert.That(seeded.Plan.Any(route => route.Pid is 0x111 or 0x211)).IsFalse();
+    }
+
+    [Test]
+    public async Task 写しと違う_CAT_が届いたら_古い_EMM_を計画から外す()
+    {
+        byte[] ca = [0x09, 0x04, 0x00, 0x05, 0xE9, 0x01];
+        var both = Dt295Ts.PatPmt(ca);
+        var live = new Dt295RouteTracker();
+        live.Push(both.AsSpan(0, 188));
+        live.Push(both.AsSpan(188));
+        live.Push(Dt295Ts.Cat());  // EMM 0x030
+        var snapshot = live.Snapshot()!;
+        await Assert.That(live.Plan.Any(route => route.Pid == 0x030)).IsTrue();
+
+        // EMM が 0x030 から 0x031 に替わった CAT
+        var changedCat = Dt295Ts.Packet(1, Dt295Ts.Section(0x01, 0xFFFF, [0x09, 0x04, 0x00, 0x05, 0xE0, 0x31]));
+        var seeded = new Dt295RouteTracker();
+        seeded.Seed(snapshot);
+        await Assert.That(seeded.Push(changedCat)).IsTrue();
+        await Assert.That(seeded.Plan.Any(route => route.Pid == 0x031)).IsTrue();
+        await Assert.That(seeded.Plan.Any(route => route.Pid == 0x030)).IsFalse();
+    }
+
+    [Test]
+    public async Task 写しの計画を作れないときは_写しを使わず_何も無い状態から始める()
+    {
+        // 映像と音声が別の ECM (0x901・0x902) を使う PMT の写し。複数の ECM は扱えない (11.5)
+        var pmt = new Dt295Pmt(0x400, 0x111, [(0x02, 0x111), (0x0F, 0x112)], [], new Dictionary<int, int> { [0x111] = 0x901, [0x112] = 0x902 });
+        var snapshot = new Dt295RouteSnapshot(
+            [new Dt295PatEntry(0, 0x10), new Dt295PatEntry(0x400, 0x1F0)],
+            new Dictionary<int, Dt295Pmt> { [0x1F0] = pmt },
+            null,
+            [.. Dt295Routes.FixedSi, 0x1F0, 0x111, 0x112],
+            new Dictionary<int, int> { [0x111] = 0x901, [0x112] = 0x902 },
+            null);
+        var tracker = new Dt295RouteTracker(needCat: false);
+        tracker.Seed(snapshot);
+        await Assert.That(tracker.Main).IsNull();
+        await Assert.That(tracker.PatSeen).IsFalse();
+        await Assert.That(tracker.Settled).IsFalse();
+        await Assert.That(tracker.Snapshot()).IsNull();
+        await Assert.That(tracker.Plan.Length).IsEqualTo(Dt295Routes.FixedSi.Length);
+        // 届いた PSI から、いつもどおり組み立てる
+        var pat = Dt295Ts.Packet(0, Dt295Ts.Section(0x00, 0x7FE0, [0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE1, 0xF0]));
+        await Assert.That(tracker.Push(pat)).IsTrue();
+        await Assert.That(tracker.PatSeen).IsTrue();
+    }
+
+    [Test]
     public async Task 同じチャンネルを選び直すと_最初の準備からルートを書き_準備し直さない()
     {
         var usb = FakeDt295Usb.Receiving(FakeDt295Material.Create());
@@ -804,14 +885,13 @@ public class Dt295TunerTests
         for (var i = 0; i < 200 && tuner.Stream!.Reprepared == 0; i++) await Task.Delay(10);
         await Assert.That(tuner.Stream!.Reprepared).IsEqualTo(1);
 
-        // 2 回目: 同じ PSI が届いても準備し直さない。TRC の準備 (04000000) は選局ごとの 1 回だけ増える
+        // 2 回目: 同じ PSI が届いても準備し直さない (PSI を渡し終えた時点で、読み出しのスレッドは計画の確認まで済ませている)。TRC の準備 (04000000) は選局ごとの 1 回だけ増える
         var before = usb.MainCommands().Count(command => command == "04000000");
         usb.Ts.Enqueue(psi);
         tuner.Tune(t27, ChannelTable.NoStreamId);
         await Assert.That(usb.Get16(0x101E)).IsEqualTo((ushort)0x8111);
         await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)0x0400);
         await Assert.That(ReadAll(tuner.Output, psi.Length)).IsEquivalentTo(psi);
-        await Task.Delay(300);
         await Assert.That(tuner.Stream!.Reprepared).IsEqualTo(0);
         await Assert.That(usb.MainCommands().Count(command => command == "04000000")).IsEqualTo(before + 1);
         tuner.Dispose();
