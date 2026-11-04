@@ -228,7 +228,7 @@
     <div class="main-inner">
       {#if group !== null}
         <!-- 狭い画面だけ。一覧へ戻る (ブラウザの戻ると同じ行き先) と、節へ飛ぶ行 -->
-        <div class="jump small" data-testid="settings-jump">
+        <div class="jump small dock" data-testid="settings-jump">
           <a
             class="back"
             href={resolve("settings")}
@@ -407,7 +407,7 @@
   }
   /* いまの節は、ほかの選んでいるものと同じく塗らずに主の色の太字と、字の幅いっぱいの下線 (`app.css` の `.chip` と同じ) */
   .jump a.selected {
-    text-decoration: underline 2px var(--pico-primary);
+    text-decoration: underline var(--dp-mark) var(--pico-primary);
     text-underline-offset: 0.3em;
     color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
@@ -431,39 +431,29 @@
     height: 1.125rem;
   }
   /*
-     * **スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では下のタブのすぐ上に浮かべる** (押すものは下に。ホームの操作の1行と同じ半透明のカプセル)。
-     * 読んでいる間は下のタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。中身の最後が隠れないよう、そのぶん下を空ける
+     * **スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では下のタブのすぐ上に浮かべる** (押すものは下に。
+     * ホームの操作の1行と同じ `app.css` の `.dock`)。中身の最後が隠れないよう、そのぶん下を空ける
      */
   :global(:where(html[data-phone])) .page {
-    /* 下のタブとの隙間と、節へ飛ぶ行の高さ。節の操作の1行はこの上に積む (`--jump-room`。節へ飛ぶ行の無い 768px からは 0) */
-    --jump-gap: 0.375rem;
+    /* 節へ飛ぶ行の高さ。節の操作の1行はこの上に積む (`--jump-room`。節へ飛ぶ行の無い 768px からは 0) */
     --jump-h: calc(var(--dp-btn-h-sm) + 0.5rem);
-    --jump-room: calc(var(--jump-h) + var(--jump-gap));
+    --jump-room: calc(var(--jump-h) + var(--dp-dock-gap));
   }
   :global(:where(html[data-phone])) .jump {
     position: fixed;
-    inset: auto 0.75rem calc(var(--dp-tabbar, 0px) + var(--jump-gap));
+    inset-inline: var(--dp-dock-inset);
     box-sizing: border-box;
     height: var(--jump-h);
     margin: 0;
     padding: 0.25rem 0.5rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
-    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
-  }
-  :global(:where(html[data-phone]))
-    :global([data-retract])
-    .jump:not(:has(:focus-visible)) {
-    transform: translateY(calc(var(--dp-tabbar, 0px) + var(--jump-gap) + 100%));
   }
   :global(:where(html[data-phone])) .main-inner {
     padding-bottom: 3.5rem;
   }
   /*
    * **節の操作の1行 (`.section-bar`) は、見えている節のものだけを節へ飛ぶ行のすぐ上に浮かべる** (押すものは下に。
-   * ルールの細い1行と同じ半透明のカプセル)。ほかの節のものは隠す。はみ出す分は横に巻く (節へ飛ぶ行と同じ)。
-   * 浮いた面なので、中の主のボタンは浮かせず太字だけ (`app.css` の「浮いたものの中」)。読んでいる間は節へ飛ぶ行と一緒に引っ込む
+   * 形は `app.css` の `.dock`。節へ飛ぶ行のぶん `--dock-gap` を足して上げる)。ほかの節のものは隠す。はみ出す分は横に巻く (節へ飛ぶ行と同じ)。
+   * 読んでいる間は節へ飛ぶ行と一緒に引っ込む
    */
   :global(:where(html[data-phone]))
     .main-inner
@@ -473,12 +463,9 @@
   :global(:where(html[data-phone]))
     .main-inner
     :global([data-current] .section-bar) {
-    --dp-btn-solid: transparent;
-    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
-    --dp-btn-lift: none;
+    --dock-gap: calc(var(--dp-dock-gap) + var(--jump-room));
     position: fixed;
-    inset: auto 0.75rem
-      calc(var(--dp-tabbar, 0px) + var(--jump-gap) + var(--jump-room));
+    inset-inline: var(--dp-dock-inset);
     z-index: 30;
     display: flex;
     flex-wrap: nowrap;
@@ -489,23 +476,11 @@
     overflow-x: auto;
     scrollbar-width: none;
     white-space: nowrap;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
-    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   :global(:where(html[data-phone]))
     .main-inner
     :global([data-current] .section-bar > *) {
     flex-shrink: 0;
-  }
-  :global(:where(html[data-phone]))
-    :global([data-retract])
-    .main-inner
-    :global([data-current] .section-bar:not(:has(:focus-visible))) {
-    transform: translateY(
-      calc(var(--dp-tabbar, 0px) + var(--jump-gap) + var(--jump-room) + 100%)
-    );
   }
   /* 操作の1行が出ている間は、そのぶんも下を空ける (中身の最後が隠れないように) */
   :global(:where(html[data-phone]))

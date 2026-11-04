@@ -72,7 +72,7 @@
                 1件を URL・送る通知・直近の結果・ボタン の順に縦に積む。幅がいくらでも横には出ない
                 (URL だけは `text-overflow: ellipsis` で止める)
             -->
-      <div class="rows">
+      <div class="item-list">
         {#each data.webhooks as webhook (webhook.id)}
           <div class="webhook item" data-testid="webhook-row">
             <div class="url-line">
@@ -134,12 +134,7 @@
 </div>
 
 <style>
-  /* 1 件が 3〜4 行あるので件の面 (`app.css` の `.item`) に乗せ、件の間は余白 (docs/design.md の「何行かある一覧」) */
-  .rows {
-    display: flex;
-    flex-direction: column;
-    gap: var(--dp-list-gap);
-  }
+  /* 1 件が 3〜4 行あるので件の面 (`app.css` の `.item`) に乗せ、並べ方は `.item-list` (docs/design.md の「何行かある一覧」) */
   .events {
     display: flex;
     flex-wrap: wrap;

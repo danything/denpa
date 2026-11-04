@@ -26,12 +26,12 @@
   );
 </script>
 
-<div class="t-toolbar" data-testid="timeline-toolbar">
+<div class="t-toolbar dock" data-testid="timeline-toolbar">
   <div class="t-chips" role="group" aria-label="絞り込み">
     {#each FILTERS as f (f.id)}
       <button
         type="button"
-        class="t-chip"
+        class="t-chip pick-line"
         aria-pressed={filter === f.id}
         onclick={() => setFilter(f.id)}
         data-testid="filter-chip"
@@ -46,7 +46,7 @@
       <!-- 見てほしいこと。押すとそれで絞り、もう一度押すと「すべて」に戻る -->
       <button
         type="button"
-        class="t-chip warn"
+        class="t-chip pick-line warn"
         aria-pressed={filter === f.id}
         onclick={() => setFilter(filter === f.id ? "all" : f.id)}
         data-testid="filter-chip"

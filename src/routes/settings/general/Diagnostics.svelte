@@ -350,7 +350,7 @@
         {/snippet}
       </Lead>
 
-      <div class="filters section-bar" data-testid="logs-filters">
+      <div class="filters section-bar dock" data-testid="logs-filters">
         {#if phone.current}{@render logActions()}{/if}
         <div class="chips">
           <label class="chip">
