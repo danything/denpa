@@ -125,10 +125,10 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
 
     private static async Task Ecm(HttpContext http)
     {
-        var ecm = await ReadUpTo(http.Request.Body, MaxEcm);
+        var ecm = await CardWire.ReadUpTo(http.Request.Body, CardWire.MaxEcm);
         if (ecm is null)
         {
-            await Respond.Error(http, $"ECM が長すぎます ({MaxEcm} バイトまで)", 400);
+            await Respond.Error(http, $"ECM が長すぎます ({CardWire.MaxEcm} バイトまで)", 400);
             return;
         }
         if (ecm.Length == 0)
@@ -137,26 +137,6 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
             return;
         }
         await Reply(http, () => CardWire.Pack(Keys.Local.Ecm(ecm)));
-    }
-
-    /// <summary>受け取る ECM の上限 (バイト)</summary>
-    internal const int MaxEcm = 4096;
-
-    /// <summary>
-    /// 本文を <paramref name="limit"/> バイトまで読む。超えたら、その時点で読むのをやめて null。
-    /// 先に全部読むと、LAN の相手が上限の何倍もの本文を溜めさせられる
-    /// </summary>
-    internal static async Task<byte[]?> ReadUpTo(Stream body, int limit)
-    {
-        var buffer = new byte[limit + 1];
-        var length = 0;
-        while (length < buffer.Length)
-        {
-            var got = await body.ReadAsync(buffer.AsMemory(length));
-            if (got == 0) return buffer[..length];
-            length += got;
-        }
-        return null;
     }
 
     /// <summary>カードに聞いて (別のスレッドで) バイト列で返す。カードが駄目なら 503</summary>

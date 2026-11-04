@@ -200,13 +200,13 @@ public class CardLanTests
     [Test]
     public async Task ECM_の本文は上限まで読み_超えたらそこでやめる()
     {
-        await Assert.That((await CardShareServer.ReadUpTo(new MemoryStream(new byte[4096]), 4096))!.Length).IsEqualTo(4096);
-        await Assert.That((await CardShareServer.ReadUpTo(new MemoryStream(), 4096))!.Length).IsEqualTo(0);
+        await Assert.That((await CardWire.ReadUpTo(new MemoryStream(new byte[4096]), 4096))!.Length).IsEqualTo(4096);
+        await Assert.That((await CardWire.ReadUpTo(new MemoryStream(), 4096))!.Length).IsEqualTo(0);
 
         var large = new MemoryStream(new byte[100_000]);
-        await Assert.That(await CardShareServer.ReadUpTo(large, 4096)).IsNull();
+        await Assert.That(await CardWire.ReadUpTo(large, 4096)).IsNull();
         // 上限を 1 バイト超えたところで読むのをやめている
-        await Assert.That(large.Position).IsLessThanOrEqualTo(4097);
+        await Assert.That(large.Position).IsLessThanOrEqualTo(4097L);
     }
 
     /// <summary>待ち受けて、繋いで、受け取った側と繋いだ側のソケットを返す</summary>

@@ -223,6 +223,26 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
 /// </summary>
 public static class CardWire
 {
+    /// <summary>配る側が受け取る ECM の上限 (バイト。CardShareServer.cs)</summary>
+    internal const int MaxEcm = 4096;
+
+    /// <summary>
+    /// 本文を <paramref name="limit"/> バイトまで読む。超えたら、その時点で読むのをやめて null。
+    /// 先に全部読むと、LAN の相手が上限の何倍もの本文を溜めさせられる
+    /// </summary>
+    internal static async Task<byte[]?> ReadUpTo(Stream body, int limit)
+    {
+        var buffer = new byte[limit + 1];
+        var length = 0;
+        while (length < buffer.Length)
+        {
+            var got = await body.ReadAsync(buffer.AsMemory(length));
+            if (got == 0) return buffer[..length];
+            length += got;
+        }
+        return null;
+    }
+
     /// <summary>32 バイトの system_key + 8 バイトの init_cbc + ca_system_id (BE32) + カード番号 (BE64 の並び)</summary>
     public static byte[] Pack(CardInit init)
     {
