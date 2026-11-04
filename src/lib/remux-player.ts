@@ -16,7 +16,7 @@
  * - **サーバが混んでいて断られたら (503) リクエストし直さない** (`busy`)。その場の変換の枠が埋まっている
  *   (`server/transcode.ts`)。待っても空くとは限らないので、画面がほかの形式を勧める
  * - **受け取りの速さを測る** (`ts/meter.ts`)。読んでいる間だけ数える。先が埋まったままだと測れないので、
- *   `PROBE_EVERY` 測れていなければ、先を `PROBE_MORE` 秒だけ多く溜めて測る
+ *   `PROBE_EVERY` 測れていなければ、測れるまで先を最大 `PROBE_MORE` 秒多く溜める
  */
 
 import { parseRung, type Rung } from "#lib/rungs.js";
@@ -46,8 +46,13 @@ const BEHIND = 30;
 const SLACK = 15;
 /** 受け取りの速さをこれだけ測れていなければ、先を多めに溜めて測る (ms)。`adapt.ts` の上げるまでの待ち (20 秒) と同じ */
 const PROBE_EVERY = 20_000;
-/** 測るときに多めに溜める長さ (秒) */
-const PROBE_MORE = 10;
+/**
+ * 測るときに多めに溜める長さの上限 (秒)。測れたら (`meter.measuredAt` が新しくなったら) そこで止める。
+ * 読むのを止めている間も、ブラウザは回線から受け取って手元に溜めている (数 MB)。多めに溜める量がそれより少ないと、
+ * 読み出しは全部手元から待たずに返り、回線から届くのを待つ読み出しが来ないので測れない。以前は 10 秒で、
+ * 360p (0.7 Mbit/s) では 1 MB に満たず、絞りを外しても速さが 2 Mbit/s のまま 140 秒変わらず、段が上がらなかった
+ */
+const PROBE_MORE = 60;
 
 /** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
 export type StreamUrl = (from: number, audio: string) => string;

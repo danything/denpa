@@ -19,9 +19,11 @@ import { CLOCK } from "@danything/arib/pes";
 import { untrack } from "svelte";
 
 import {
+  ADAPT_NOTE,
   type AdaptDecision,
   adaptNote,
   HOLD as ADAPT_HOLD,
+  PROBE_START,
   RungAdapter,
   type Step,
   stepOrder,
@@ -43,10 +45,15 @@ import {
 import { eachFrame } from "#lib/components/player/frames.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
+  LagMeter,
+  PROBE_GIVE_UP,
+  probeBytes,
+  probeRate,
   replacesWarning,
   rungFields,
   servedStep,
   stepFields,
+  STUCK_LEAST,
   Throughput,
 } from "#lib/live-adapt.js";
 import { holdStep, rawChasePosition } from "#lib/live-chase.js";
@@ -354,13 +361,29 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * サーバには canvas に描けるコーデックだけを渡す (`playable`。H.265 は描かない)。デコードが間に合うかは `raw/budget.ts` が見て、
    * 回線とは混ぜない
    */
-  /** いま流れている段 (`tuned` の答え)。メニューの「自動 (H.264 540p)」に出す */
+  /** いま再生中の段 (`tuned` の答え)。メニューの「自動 (H.264 540p)」に出す */
   let served = $state<Step>(0);
   /** リクエストする段。局を変えても、追っかけのシークでも持ち越す */
   let asked: Step = 0;
   const adapter = new RungAdapter();
   /** 受け取りの速さ (`AdaptSample.throughput`)。リクエストし直すたびに測り直す */
   const throughput = new Throughput();
+  /** 放送に対する遅れの伸び (`AdaptSample.lag`)。リクエストし直すたびに測り直す */
+  const lagMeter = new LagMeter();
+  /** 測った回線の速さ (`AdaptSample.capacity`。`probeLink`)。まだ測っていなければ null */
+  let capacity: { bps: number; at: number } | null = null;
+  /** 最後にコマが映った時刻 (`performance.now`。`stuckNow`)。測れない・選局し直したあとまだ映っていなければ 0 */
+  let lastFrameAt = 0;
+  /** 段を動かした断り書きを引っ込める時計 (`act`) */
+  let noteTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 次の選局で繋ぎ直すか (足りなくて下げるとき。`tune`) */
+  let freshSocket = false;
+  /** 試しのデータを取っている最中か (`probeLink`) */
+  let probing = false;
+  /** 上げた段をリクエストした時刻と、上げる前の段。映り始めるまで (`adapt` の `PROBE_START`) */
+  let upAsk: { from: Step; at: number } | null = null;
+  /** `<video>` が先を持たなくなった時刻 (`stuckNow`) */
+  let starvedSince: number | null = null;
   /** 最後に届いた `pace` (`AdaptSample.pace`)。届くたびに新しいオブジェクトにする */
   let lastPace: Pace | null = null;
   /** リクエストしてから `tuned` が来るまで。この間は段を決めない (前の段のストリームを新しい段として測ってしまう) */
@@ -741,6 +764,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (following !== video) return false;
       // 映した 1 枚の時刻と再生位置の差 (`slip`)。`requestVideoFrameCallback` を持つブラウザでだけ測れる
       if (frame !== undefined) {
+        lastFrameAt = performance.now();
         const late = video.currentTime - frame.mediaTime;
         slip = Math.max(late, 0);
         if (slip > slipMost) slipMost = slip;
@@ -851,10 +875,33 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * **段を上げ下げするかを決める** (`ADAPT_EVERY` ごと)。測った値を `RungAdapter` に渡し、返ってきたら動かす (`act`)。
-   * 決めないのは、止めている間・リクエストしてから `tuned` が来るまで・まだ再生していない間
+   * 決めないのは、止めている間・リクエストしてから `tuned` が来るまで・まだ再生していない間。
+   * ただし上げた段が映り始めるまでの待ちは数える (`PROBE_START`)
    */
   function adapt(): void {
-    if (left || paused || awaiting || !running || state !== "playing") return;
+    if (left || paused) {
+      // 止めている間の先の無さを、再開したときの詰まりに数えない (`stuckNow`)
+      starvedSince = null;
+      return;
+    }
+    const now = Date.now();
+    const starting = awaiting || !running || state !== "playing";
+    /*
+     * **上げた段がいつまでも映り始めなければ戻す** (`PROBE_START`)。足りない段では最初のキーフレームが届かず、
+     * `tuned` も溜まった前の段の映像の後ろに並ぶ。刻みは映っている間しか回らないので、ここで数える
+     */
+    if (choice !== "auto") upAsk = null;
+    if (upAsk !== null && starting) {
+      if (now - upAsk.at >= PROBE_START) {
+        const from = upAsk.from;
+        upAsk = null;
+        adapter.abandon(now);
+        act({ step: from, reason: "slow" }, now);
+      }
+      return;
+    }
+    if (starting) return;
+    upAsk = null;
     /*
      * 互換モードで H.264 を描けない (諦めて MPEG-2 に移った・VideoDecoder が H.264 を持たない)。段を下げた先は、
      * GPU でエンコードできるものが無ければソフトウェアの H.264 になる (`server/live.ts` の `rungCodec`) ので描けない
@@ -862,22 +909,113 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (compat && !playable().includes("h264")) return;
     const ahead = aheadNow();
     if (ahead === null) return;
-    const now = Date.now();
+    // 放送に対する遅れ (`LagMeter`)。追っかけは録画を実時間より速く読むので測らない
+    const edge = edgeNow();
+    if (edge !== null && chase === null) lagMeter.push(now, edge);
+    const rate = throughput.rate(now);
     const decision = adapter.tick({
       now,
       route: "live",
       current: served,
       manual: choice !== "auto",
-      throughput: throughput.rate(now),
+      throughput: rate,
       ahead,
-      waiting: stuck,
+      waiting: stuckNow(now),
       pace: lastPace,
       // ライブの段 0 から上げ下げを決めるのに、段 0 のビットレートは使わない (`adapt.ts` の `stepBps` は観る画面だけ)
       baseKbps: null,
+      lag: chase === null ? lagMeter.growth(now) : null,
+      capacity,
     });
     // canvas の詰まりには終わりの合図が無い。1 回の刻みで数える
     if (canvas) stuck = false;
     act(decision, now);
+    const want = adapter.wantProbe();
+    if (want !== null) void probeLink(want, rate ?? 0);
+  }
+
+  /**
+   * 詰まっているか (`AdaptSample.waiting`)。canvas は詰まった次の刻みだけ (`stuck`)。`<video>` は `waiting` から `playing` までに
+   * 加えて、先を持たない状態が `STUCK_LEAST` 続いたとき。`waiting` は自分で飛んだあと 3 秒数えない (`quiet`) ので、
+   * 止まっては飛ぶのを繰り返すと、それだけでは詰まりが見えない
+   */
+  function stuckNow(now: number): boolean {
+    if (canvas || element === null) return stuck;
+    /*
+     * **映像だけが止まって音が続く**のも詰まりに数える。キーフレームの大きな塊が細い回線で遅れて届くと、音の時計は進むのに
+     * 映るコマが来ない (`readyState` は落ちず `waiting` も来ない)。映ったコマ (`requestVideoFrameCallback`) が
+     * `STUCK_LEAST` 来なければそう見る。測れないブラウザ (`lastFrameAt` が 0)・音声だけ・画面が裏のときは見ない
+     */
+    const frozen =
+      lastFrameAt > 0 &&
+      served !== "audio" &&
+      !document.hidden &&
+      performance.now() - lastFrameAt >= STUCK_LEAST;
+    const starving =
+      (element.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || frozen) &&
+      !element.seeking;
+    if (!starving) starvedSince = null;
+    else starvedSince ??= now;
+    return (
+      stuck || (starvedSince !== null && now - starvedSince >= STUCK_LEAST)
+    );
+  }
+
+  /** 届いた映像の端 (メディアの時刻、秒。`LagMeter`)。canvas は届いた音の端。まだ無ければ null */
+  function edgeNow(): number | null {
+    if (canvas) return engine?.edge ?? null;
+    if (buffer === null || buffer.buffered.length === 0) return null;
+    return buffer.buffered.end(buffer.buffered.length - 1);
+  }
+
+  /**
+   * **上げる前に回線の速さを測る** (`RungAdapter.wantProbe`)。ライブのストリームは実時間でしか届かないので、受け取りの速さを見ても
+   * 余裕は分からない。試しのデータ (`GET /api/playback/probe`) を、要る速さの残りで `PROBE_SPAN` かかる量だけ取り、
+   * 再生中の段の受け取りの速さと足して `capacity` にする。`PROBE_GIVE_UP` でやめる (細い回線で取り続けると映像が細る)
+   */
+  async function probeLink(need: number, stream: number): Promise<void> {
+    if (probing) return;
+    probing = true;
+    const bytes = probeBytes(need, stream);
+    const control = new AbortController();
+    const giveUp = setTimeout(() => control.abort(), PROBE_GIVE_UP);
+    const startAt = performance.now();
+    let firstAt: number | null = null;
+    let firstBytes = 0;
+    let got = 0;
+    let lastAt = startAt;
+    try {
+      const res = await fetch(resolve(`api/playback/probe?bytes=${bytes}`), {
+        cache: "no-store",
+        signal: control.signal,
+      });
+      const reader = res.ok ? res.body?.getReader() : undefined;
+      while (reader !== undefined) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        lastAt = performance.now();
+        got += value.byteLength;
+        if (firstAt === null) {
+          firstAt = lastAt;
+          firstBytes = value.byteLength;
+        }
+      }
+    } catch {
+      // やめた (`PROBE_GIVE_UP`)・繋がらなかった。そこまでに届いた量で測る
+      lastAt = performance.now();
+    } finally {
+      clearTimeout(giveUp);
+      probing = false;
+    }
+    if (left) return;
+    const rate = probeRate({
+      startAt,
+      firstAt,
+      firstBytes,
+      lastAt,
+      bytes: got,
+    });
+    capacity = { bps: stream + (rate ?? 0), at: Date.now() };
   }
 
   /**
@@ -919,8 +1057,18 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      */
     if (step === "audio" && (chase !== null || compat)) return;
     standing = null;
+    // 上げたなら、映り始めるまでを数える (`adapt` の `PROBE_START`)
+    upAsk = decision.reason === "restored" ? { from: served, at: now } : null;
+    // 足りなくて下げるなら、溜まった前の段の映像の後ろに並ばないように繋ぎ直す (`tune`)
+    freshSocket = decision.reason === "slow" && chase === null;
     asked = step;
     warning = text;
+    // 段を動かした断り書きは、観る画面と同じく少しで引っ込める (`ADAPT_NOTE`)。ほかの断り書きで替わっていれば消さない
+    if (noteTimer !== null) clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => {
+      noteTimer = null;
+      if (warning === text) warning = "";
+    }, ADAPT_NOTE);
     requestAgain();
   }
 
@@ -2038,12 +2186,27 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     awaiting = true;
     lastPace = null;
     throughput.reset(Date.now());
+    lagMeter.reset();
+    starvedSince = null;
+    lastFrameAt = 0;
     adapter.reset(Date.now());
     adaptTimer ??= setInterval(adapt, ADAPT_EVERY);
     // 字幕は映した 1 枚ごとに貼り直す (`follow`)。2 度目からは何もしない
     follow(video);
     // 次のフレームが出るまで前のフレームを貼る。**閉じる前に写す** (閉じると何も映らなくなる)
     freeze();
+    /*
+     * **回線が足りなくて下げるときは、繋ぎ直す** (`freshSocket`)。前の段の映像は回線の途中 (サーバ・中継・カーネル・
+     * リバースプロキシ) に溜まっていて、同じ接続で送る指示の答え (`tuned`) も下げた段の映像もその後ろに並ぶ。手元で
+     * 0.25 Mbit/s に絞ったときは、音声だけにすると決めてから `tuned` が届くまで 32 秒かかった。閉じれば溜まったぶんは捨てられる
+     */
+    if (freshSocket && socket !== null) {
+      const old = socket;
+      socket = null;
+      old.onmessage = null;
+      old.close();
+    }
+    freshSocket = false;
     // 繋がっていれば繋ぎ直さない (1 本に何度でも指示を送れる。`server/live.ts` の `attend`)
     const open = socket !== null && socket.readyState === WebSocket.OPEN;
     if (open) forget(keepList);
@@ -2868,7 +3031,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get codec() {
       return codec;
     },
-    /** いま流れている段 (`#lib/adapt.ts` の `Step`。回線に合わせて下げた画質)。0 は下げていない */
+    /** いま再生中の段 (`#lib/adapt.ts` の `Step`。回線に合わせて下げた画質)。0 は下げていない */
     get step() {
       return served;
     },

@@ -335,6 +335,12 @@ export class RawEngine {
     return at === null ? null : at.pts / CLOCK;
   }
 
+  /** 届いた音の端 (PTS の秒、伸ばしたもの)。放送に対する遅れを測るのに使う (`live-adapt.ts` の `LagMeter`)。まだ無ければ null */
+  get edge(): number | null {
+    const newest = this.playout.newest;
+    return newest === null ? null : newest / CLOCK;
+  }
+
   /** 手元にあと何秒ぶん持っているか (エンコードする経路の `buffered.end - currentTime`) */
   get lead(): number {
     return this.playout.lead(this.now());

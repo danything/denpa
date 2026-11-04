@@ -21,17 +21,25 @@ import {
  * - 詰まった (`waiting`)
  * - 先の溜まりが 2 秒を切って、減り続けている
  * - サーバの `backlog` が 3 秒続けて伸びた、または映像の塊を捨てた
+ * - ライブで、放送に対する遅れ (`lag`) が 4 秒で 0.6 秒以上伸びた。届く速さが流している段の 85% ほどを切ると伸びる。
+ *   サーバの `backlog` は、溜まりが中継・カーネル・リバースプロキシに隠れると 0 のままなので、画面が測れるこれも使う
  * - 観る画面で、測った速さ × 0.7 がいまの段に足りない状態が 10 秒続いた (先を 60 秒溜めるので、溜まりを使い切る前に下げる)
  *
  * 下げ先は「測った速さ × 0.7 − 音声」に収まるいちばん高い段。速さを測れていなければ 2 段下げる。
- * 段 3 でも 10 秒続けて足りなければ音声だけにする (車で聞くこともあるので、自動の最後の手)。
+ * 段 3 で、直近 15 秒のうち 3 割以上が足りない状態なら音声だけにする (車で聞くこともあるので、自動の最後の手)。
+ * 「途切れずに 10 秒」では数えない。細い回線では止まっては少し動くを繰り返し、動いている刻みで数え直しになるため。
+ * 段 3 に移って 10 秒たつまでは決めない。
  *
  * ## 上げる
  *
  * - 観る画面 (速さを測れる): 次の段の 2 倍以上の速さが 20 秒続いたら 1 段上げる
- * - ライブ・MPEG-2 (実時間でしか送られないので余裕を測れない): 足りない兆しが 30 秒無ければ 1 段上げてみる
+ * - ライブ・MPEG-2: 足りない兆しが 30 秒無く、そのあと画面が測った回線の速さ (`capacity`) が次の段の 1.2 倍以上なら
+ *   1 段上げる。回線の速さは、再生中の段の受け取りの速さと、別に取った試しのデータの速さを足したもの。
+ *   ライブは実時間でしか送られないので、受け取りの速さを見ても余裕は分からない。時間がたっただけでは上げない (溜まりが外に隠れると、足りない段へ上げて長く止まる)。
+ *   測りたいときは `wantProbe` が次の段を返す。測って足りなければ上げずに待ち直す (待ちは倍にしない)
  *
  * 上げて 1 分以内に足りなくなったら、上げる前の段に戻し、次に上げるまでの待ちを倍にする (上限 5 分)。
+ * 上げた段が `PROBE_START` たっても映り始めなければ、同じく戻す (`abandon`)。
  * どの切り替えのあとも 20 秒は動かさない (上げてみて足りなかったときだけは、すぐ戻す)。上限は段 0。
  *
  * ## 段 0 がファイルの直再生・MPEG-2 のとき
@@ -41,7 +49,7 @@ import {
  *
  * ## 下げないとき
  *
- * - サーバのエンコードが実時間に追いつかない (`Pace.speed` が 1 未満) 間は、詰まっても回線のせいにしない。
+ * - サーバのエンコードが実時間に追いつかない (`Pace.speed` が 0 より大きく 1 未満。0 は測れていないと読む) 間は、詰まっても回線のせいにしない。
  *   3 秒続いたら段は下げずに `encode` を返す (画面は断り書きを出すだけ。ライブはサーバが自分で軽い組み合わせに作り直す。
  *   `server/live.ts` の `Session.lighten`)
  * - 形式を手で選んでいる間は段を動かさず、足りないときに `pinned` だけを返す
@@ -100,7 +108,23 @@ export interface AdaptSample {
   pace: Pace | null;
   /** 段 0 の映像と音声を合わせたビットレート (kbit/s)。ファイルや MPEG-2 の実際の値。分からなければ null */
   baseKbps: number | null;
+  /**
+   * ライブで、放送に対する遅れがここ `LAG_SPAN` で伸びた長さ (秒。`live-adapt.ts` の `LagMeter`)。測れなければ null・省略。
+   * 届いた映像の端の時刻と実時間の差なので、溜まりが回線のどこに隠れていても、届く速さが足りなければ伸びる
+   */
+  lag?: number | null;
+  /**
+   * ライブで、画面が測った回線の速さ (bit/s) と測った時刻 (ms)。再生中の段の受け取りの速さに、別に取った試しのデータ
+   * (`GET /api/playback/probe`) の速さを足したもの。無ければ null・省略。ライブで上げてよいかを決めるのにだけ使う
+   */
+  capacity?: { bps: number; at: number } | null;
 }
+
+/**
+ * 段を動かしたときの断り書き (「回線が細いため、540p に下げました」など) を出しておく長さ (ms)。ライブ・追っかけ・観る画面で同じ。
+ * `encode`・`pinned` は、その状態が続く間は刻むたびに出し直す
+ */
+export const ADAPT_NOTE = 6_000;
 
 /** 選局・シーク・切り替えの直後はこれだけ数えない (ms)。立ち上がりで溜まりが空なのを「足りない」と読まない */
 export const GRACE = 3_000;
@@ -132,8 +156,38 @@ export const UP_WAIT_LIVE = 30_000;
 export const UP_WAIT_MOST = 300_000;
 /** 上げてからこれだけの間に足りなくなったら、上げたのが早かったと見る (ms) */
 export const PROBE = 60_000;
-/** 段 3 でもこれだけ続けて足りなければ音声だけにする (ms) */
+/** 段 3 に移ってからこれだけたつまでは、音声だけにしない (ms) */
 export const AUDIO_AFTER = 10_000;
+/**
+ * 段 3 で足りない割合を数える窓 (ms)。この中で `AUDIO_SHARE` 以上の時間が足りない状態なら音声だけにする。
+ * 細い回線では 1〜2 秒止まって 1 秒ほど動くのを繰り返す (手元で 0.25 Mbit/s に絞って 360p を流したとき)。
+ * 途切れずに続くのを待つと、動いている刻みで数え直しになり、いつまでも音声だけにならなかった
+ */
+export const AUDIO_WINDOW = 15_000;
+/** `AUDIO_WINDOW` のうち、これ以上の割合が足りない状態なら音声だけにする。15 秒のうち 4.5 秒止まるのは観ていられない */
+export const AUDIO_SHARE = 0.3;
+/** 1 回の刻みとして数える長さの上限 (ms)。画面が裏に回って刻みが空いたとき、空いた間をまとめて数えない */
+const TICK_MOST = 2_000;
+/**
+ * 放送に対する遅れの伸びを見る長さ (ms。`live-adapt.ts` の `LagMeter` が測る)。`LAG_GROW` と合わせて、届く速さが
+ * 流している段の 85% ほどを切ると足りないと見る (4 秒で 0.6 秒)。キーフレームの塊が遅れて届くぶんの揺れより大きくとる
+ */
+export const LAG_SPAN = 4_000;
+/** `LAG_SPAN` の間に遅れがこれだけ伸びたら足りない (秒) */
+export const LAG_GROW = 0.6;
+/**
+ * ライブで上げるのは、測った回線の速さが次の段の何倍のときか。測るのは短い間なので、揺れのぶん多めに見る。
+ * 観る画面の `UP_MARGIN` (2 倍) より小さいのは、こちらは再生中の段のぶんも足した回線全体の値で、余りではないため
+ */
+export const LIVE_UP_MARGIN = 1.2;
+/** 測った回線の速さを使ってよい間 (ms)。これより古ければ測り直す */
+export const CAPACITY_FRESH = 15_000;
+/**
+ * 上げた段が、リクエストしてからこれだけたっても映り始めなければ戻す (ms。`abandon`)。上げた先は変換の立ち上がり
+ * (1 秒ほど) とキーフレームを待つので、ふつうは 2〜3 秒で映る。足りない段だと最初のキーフレームが届かず、手元では
+ * 22 秒映らなかった
+ */
+export const PROBE_START = 6_000;
 /**
  * 観る画面で、測った速さ × `HEADROOM` がいまの段に足りない状態がこれだけ続いたら下げる (ms)。
  * 速さは 5 秒の窓で測るので、窓 2 つぶん続いたのを見る。先は 60 秒溜まるので、10 秒待っても詰まる前に下げられる
@@ -214,12 +268,18 @@ export class RungAdapter {
   private grow: { from: number; lastAt: number } | null = null;
   /** 上げてよい状態が始まった時刻 */
   private upSince: number | null = null;
-  /** 段 3 で足りない状態が始まった時刻 */
-  private shortSince: number | null = null;
+  /** 段 3 に着いた時刻。段 3 でなければ null */
+  private lowSince: number | null = null;
+  /** 段 3 での刻みごとの長さ (ms) と、足りなかったか。直近 `AUDIO_WINDOW` ぶん */
+  private lowTicks: { at: number; ms: number; short: boolean }[] = [];
   /** エンコードの速さが 1 を切った時刻 */
   private slowSince: number | null = null;
   /** 観る画面で、測った速さがいまの段に足りなくなった時刻 */
   private thinSince: number | null = null;
+  /** ライブで、足りていたときに測った段ごとの受け取りの速さ (bit/s)。段 0 へ上げてよいかを見るのに使う */
+  private readonly rates = new Map<Step, number>();
+  /** ライブで、上げる前に測りたい回線の速さ (bit/s。`wantProbe`)。要らなければ null */
+  private wanted: number | null = null;
 
   /**
    * 刻むたびに呼ぶ。**段を動かすか、断り書きが要るときだけ返す。** null なら段はそのままで、断り書きも要らない。
@@ -235,18 +295,25 @@ export class RungAdapter {
       this.probe = null;
       this.fails = 0;
     }
+    this.wanted = null;
     if (now < this.quietUntil) {
       this.remember(s);
       return null;
     }
 
+    /*
+     * 0 は「測れていない」と読む (エンコードの遅れには数えない)。サーバは出した映像の長さで測るので、映像として読めない
+     * トラック (#2152 の hvc1) や映像の無いストリームでは、エンコードが進んでいても 0 になる。0 を遅れと読むと、
+     * `encode` を返し続けて段がいつまでも動かず、断り書きも出し直され続けた。本当に遅れていれば 0 より大きい値が届く
+     */
     const speed = s.pace?.speed ?? null;
-    if (speed !== null && speed < 1) this.slowSince ??= now;
+    if (speed !== null && speed > 0 && speed < 1) this.slowSince ??= now;
     else this.slowSince = null;
     if (this.slowSince !== null) {
       // 溜まりが減るのも詰まるのもエンコードが遅いせい。回線のぶんとして数えない
       // この間にサーバが捨てた塊 (`dropped`) も数えない (回線のせいではない)
       this.clearStreaks();
+      this.clearLow();
       this.remember(s);
       return now - this.slowSince >= ENCODE_LAG
         ? { step: s.current, reason: "encode" }
@@ -254,15 +321,22 @@ export class RungAdapter {
     }
 
     const short = this.short(s);
+    // この刻みが受け持つ長さ。前の刻みが無い (選局・シークの直後) なら 0
+    const tickMs = Number.isNaN(this.prevAt)
+      ? 0
+      : Math.min(TICK_MOST, Math.max(0, now - this.prevAt));
     this.remember(s);
 
     if (s.manual) {
       this.upSince = null;
-      this.shortSince = null;
+      this.clearLow();
       // 手で選んだ段は上げてみたものではない。手動を外した直後に前の段へ戻さない
       this.probe = null;
       return short ? { step: s.current, reason: "pinned" } : null;
     }
+
+    if (s.current === LOWEST_RUNG) this.markLow(now, tickMs, short);
+    else this.clearLow();
 
     if (short) {
       this.upSince = null;
@@ -272,16 +346,13 @@ export class RungAdapter {
         this.probe = null;
         return { step: from, reason: "slow" };
       }
-      if (s.current === LOWEST_RUNG) this.shortSince ??= now;
-      else this.shortSince = null;
       if (now < this.holdUntil || s.current === "audio") return null;
       if (s.current === LOWEST_RUNG)
-        return now - this.shortSince! >= AUDIO_AFTER
-          ? { step: "audio", reason: "slow" }
-          : null;
+        return this.lowShare(now) ? { step: "audio", reason: "slow" } : null;
       return { step: this.lower(s), reason: "slow" };
     }
-    this.shortSince = null;
+    if (s.route === "live" && s.throughput !== null && s.current !== "audio")
+      this.rates.set(s.current, s.throughput);
 
     const up = upper(s.current);
     if (up === null) return null;
@@ -296,13 +367,63 @@ export class RungAdapter {
     this.upSince ??= now;
     if (now < this.holdUntil || now - this.upSince < this.upWait(s.route))
       return null;
+    if (s.route === "live") return this.liveUp(s, up, this.upSince);
     return { step: up, reason: "restored" };
+  }
+
+  /**
+   * ライブで上げてよいか。足りない兆しが無いだけでは上げず、測った回線の速さ (`capacity`) が次の段の `LIVE_UP_MARGIN` 倍に
+   * 届いたときだけ上げる。上げてよい状態が始まってから測ったものが無ければ、測ってもらう (`wantProbe`)。
+   * 測って足りなければ、上げずに待ち直す。待ちは倍にしない。倍にしていた頃は、細い間に測るたびに待ちが伸び、
+   * 回線が戻ってからも 90 秒以上 360p のままだった (上げてみて足りなかったときと違い、止まってはいない)
+   */
+  private liveUp(
+    s: AdaptSample,
+    up: Step,
+    since: number,
+  ): AdaptDecision | null {
+    const need = LIVE_UP_MARGIN * this.liveBps(up, s.baseKbps);
+    const cap = s.capacity ?? null;
+    if (cap === null || cap.at < since || s.now - cap.at > CAPACITY_FRESH) {
+      this.wanted = need;
+      return null;
+    }
+    if (cap.bps >= need) return { step: up, reason: "restored" };
+    this.upSince = null;
+    return null;
+  }
+
+  /** ライブの段の映像と音声を合わせたビットレート (bit/s)。段 0 は足りていたときに測った値 (無ければ `stepBps`) */
+  private liveBps(step: Step, baseKbps: number | null): number {
+    if (step === 0) return this.rates.get(0) ?? stepBps(0, baseKbps);
+    return stepBps(step, baseKbps);
+  }
+
+  /**
+   * ライブで、上げる前に測りたい回線の速さ (bit/s)。再生中の段のぶんも含めた回線全体の値。要らなければ null。
+   * 刻みの直後に読む (次の刻みで消える)。画面は試しのデータを取り、再生中の段の受け取りの速さと足して `capacity` で渡す
+   */
+  wantProbe(): number | null {
+    return this.wanted;
+  }
+
+  /**
+   * 上げた段が `PROBE_START` たっても映り始めなかった (画面がリクエストし直した段の `tuned` か最初のコマを待っている)。
+   * 刻みは映っている間しか呼ばれないので、画面が待ちを数えて呼ぶ。上げてみて足りなかったときと同じく待ちを倍にする。
+   * 画面は上げる前の段をリクエストし直す
+   */
+  abandon(now: number): void {
+    this.fails++;
+    this.probe = null;
+    this.upSince = null;
+    this.holdUntil = now + HOLD;
   }
 
   /** 選局し直したとき・シークしたとき。段・待ちの倍数・上げてみている間は持ち越し、測った値だけ捨てる */
   reset(now: number): void {
     this.quietUntil = now + GRACE;
     this.clearStreaks();
+    this.prevAt = Number.NaN;
     this.prevAhead = null;
     this.prevBacklog = null;
     this.slowSince = null;
@@ -327,9 +448,39 @@ export class RungAdapter {
   /** 画面が段を切り替えた */
   private switched(now: number, from: Step, to: Step): void {
     this.reset(now);
+    this.clearLow();
     this.holdUntil = now + HOLD;
     this.probe =
       stepOrder(to) < stepOrder(from) ? { from, until: now + PROBE } : null;
+  }
+
+  /** 段 3 の刻みを 1 つ数える。`AUDIO_WINDOW` より古いものは捨てる */
+  private markLow(now: number, ms: number, short: boolean): void {
+    this.lowSince ??= now;
+    this.lowTicks.push({ at: now, ms, short });
+    while (
+      this.lowTicks.length > 0 &&
+      this.lowTicks[0]!.at <= now - AUDIO_WINDOW
+    )
+      this.lowTicks.shift();
+  }
+
+  /** 段 3 に `AUDIO_AFTER` 以上いて、直近 `AUDIO_WINDOW` のうち `AUDIO_SHARE` 以上が足りなかったか */
+  private lowShare(now: number): boolean {
+    if (this.lowSince === null || now - this.lowSince < AUDIO_AFTER)
+      return false;
+    let all = 0;
+    let short = 0;
+    for (const t of this.lowTicks) {
+      all += t.ms;
+      if (t.short) short += t.ms;
+    }
+    return all > 0 && short >= AUDIO_SHARE * all;
+  }
+
+  private clearLow(): void {
+    this.lowSince = null;
+    this.lowTicks = [];
   }
 
   /** 足りない兆しがあるか。続いているかを見るために、刻むたびに呼ぶ */
@@ -373,8 +524,10 @@ export class RungAdapter {
       this.thinSince ??= now;
     else this.thinSince = null;
     const thin = this.thinSince !== null && now - this.thinSince >= THIN;
+    // 放送に対する遅れが伸びている。溜まりが外に隠れていても、届く速さが足りなければこれが伸びる
+    const lagging = s.route === "live" && (s.lag ?? 0) >= LAG_GROW;
 
-    return s.waiting || falling || growing || dropped || thin;
+    return s.waiting || falling || growing || dropped || thin || lagging;
   }
 
   /** 下げ先。速さが分かれば収まるいちばん高い段、分からなければ 2 段下 (段 0 からは段 1) */
@@ -402,6 +555,5 @@ export class RungAdapter {
     this.grow = null;
     this.thinSince = null;
     this.upSince = null;
-    this.shortSince = null;
   }
 }

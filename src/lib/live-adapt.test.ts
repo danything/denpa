@@ -3,7 +3,13 @@ import { describe, expect, test } from "bun:test";
 import { stepOrder } from "./adapt";
 import type { Notice } from "./live";
 import {
+  LagMeter,
   LIGHT_NOTE,
+  PROBE_LEAST,
+  PROBE_MOST,
+  probeBytes,
+  probeRate,
+  probeSize,
   RATE_LEAST,
   RATE_WINDOW,
   replacesWarning,
@@ -61,7 +67,7 @@ describe("段の指示の組み立て", () => {
 });
 
 /** **`tuned` から読む段** (`servedStep`) */
-describe("流れている段", () => {
+describe("再生中の段", () => {
   test("段を下げた変換はその段、音声だけは audio、放送のままは 0", () => {
     expect(servedStep(tuned({ rung: 2 }))).toBe(2);
     expect(servedStep(tuned({ codec: "audio", rung: 3 }))).toBe("audio");
@@ -129,5 +135,107 @@ describe("断り書きの上書き", () => {
     expect(replacesWarning("encode", LIGHT_NOTE.gpu, null)).toBe(true);
     // 手で選んでいて回線が足りないのは別の理由。軽くした文は残す
     expect(replacesWarning("pinned", LIGHT_NOTE.half, null)).toBe(false);
+  });
+});
+
+/** **放送に対する遅れの伸び** (`LagMeter`)。実時間と、届いた映像の端の差がどれだけ伸びたか */
+describe("放送に対する遅れ", () => {
+  /** `rate` 倍の速さで届く映像の端を、0.5 秒ごとに `seconds` 秒ぶん渡す */
+  function feed(meter: LagMeter, seconds: number, rate: number): number {
+    let now = 0;
+    for (; now <= seconds * 1000; now += 500)
+      meter.push(now, (now / 1000) * rate);
+    return now - 500;
+  }
+
+  test("届く速さが足りていれば伸びない", () => {
+    const meter = new LagMeter();
+    const now = feed(meter, 10, 1);
+    expect(meter.growth(now)).toBeCloseTo(0);
+  });
+
+  test("足りなければ、足りないぶん伸びる (2/3 しか届かなければ 4 秒で 1.3 秒ほど)", () => {
+    const meter = new LagMeter();
+    const now = feed(meter, 10, 2 / 3);
+    expect(meter.growth(now)!).toBeGreaterThan(1);
+  });
+
+  test("4 秒ぶん測れるまでは null", () => {
+    const meter = new LagMeter();
+    const now = feed(meter, 3, 1);
+    expect(meter.growth(now)).toBeNull();
+  });
+
+  test("キーフレームの塊が遅れて届く揺れは、両端のいちばん小さい遅れどうしで比べるので数えない", () => {
+    const meter = new LagMeter();
+    let now = 0;
+    for (; now <= 10_000; now += 250) {
+      // 1 秒に 1 回、0.4 秒遅れて届く
+      const late = now % 1_000 === 500 ? 0.4 : 0;
+      meter.push(now, now / 1000 - late);
+    }
+    expect(Math.abs(meter.growth(now - 250)!)).toBeLessThan(0.1);
+  });
+
+  test("端が大きく戻ったら (別のストリーム)、前の値と比べない", () => {
+    const meter = new LagMeter();
+    feed(meter, 10, 1);
+    meter.push(11_000, 0.5);
+    expect(meter.growth(11_000)).toBeNull();
+  });
+});
+
+/** **上げる前に取る試しのデータ** (`probeBytes`・`probeRate`) */
+describe("試しのデータ", () => {
+  test("再生中の段のぶんを引いた残りを、1 秒ぶん取る。下限と上限に丸める", () => {
+    // 6 Mbit/s 要って、いま 2 Mbit/s の段を再生中。残り 4 Mbit/s の 1 秒 = 500,000 バイト
+    expect(probeBytes(6_000_000, 2_000_000)).toBe(500_000);
+    expect(probeBytes(1_000_000, 2_000_000)).toBe(PROBE_LEAST);
+    expect(probeBytes(1e9, 0)).toBe(PROBE_MOST);
+  });
+
+  test("最初の塊から最後の塊までで割る (最初の塊までは往復の待ち)", () => {
+    expect(
+      probeRate({
+        startAt: 0,
+        firstAt: 100,
+        firstBytes: 10_000,
+        lastAt: 1_100,
+        bytes: 260_000,
+      }),
+    ).toBe(2_000_000);
+  });
+
+  test("塊が 1 つしか来なければ、取り始めてからで割る。何も来なければ null", () => {
+    expect(
+      probeRate({
+        startAt: 0,
+        firstAt: 50,
+        firstBytes: 65_536,
+        lastAt: 50,
+        bytes: 65_536,
+      }),
+    ).toBeCloseTo((65_536 * 8 * 1000) / 50);
+    expect(
+      probeRate({
+        startAt: 0,
+        firstAt: null,
+        firstBytes: 0,
+        lastAt: 2_000,
+        bytes: 0,
+      }),
+    ).toBeNull();
+  });
+});
+
+/** **試しのデータの量の丸め** (`probeSize`。`GET /api/playback/probe?bytes=`) */
+describe("試しのデータの量", () => {
+  test("下限と上限に丸め、読めない値・無い値は下限にする", () => {
+    expect(probeSize("500000")).toBe(500_000);
+    expect(probeSize("10")).toBe(PROBE_LEAST);
+    expect(probeSize("-5")).toBe(PROBE_LEAST);
+    expect(probeSize("1e12")).toBe(PROBE_MOST);
+    expect(probeSize("abc")).toBe(PROBE_LEAST);
+    expect(probeSize(null)).toBe(PROBE_LEAST);
   });
 });

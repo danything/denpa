@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { Meter, METER_QUEUED } from "./meter";
+import { Meter, METER_DRAIN_MOST, METER_QUEUED } from "./meter";
 
 /** `at` ms から `every` ms ごとに `bytes` バイトずつ、`count` 個届いたことにする。どれも回線から届くのを待って返った */
 function feed(
@@ -57,5 +57,20 @@ describe("受け取りの速さ (Meter)", () => {
     now = feed(meter, now + 101, 60, 100, 12_500);
     expect(meter.bps()).toBe(1_000_000);
     expect(meter.measuredAt).toBe(now);
+  });
+  test("止めたあと、読み出しが待たずに返り続けても (足すのに時間がかかる速い回線)、METER_DRAIN_MOST を過ぎたら数え始める", () => {
+    const meter = new Meter();
+    let now = feed(meter, 0, 20, 100, 25_000);
+    meter.pause();
+    now += 10_000;
+    // 足すのに 20ms かかり、その間に次の塊が届いている。読み出しは毎回 1ms で返る (15 Mbit/s ほど)
+    for (let i = 0; i < 400; i++) {
+      meter.add(37_500, now, now + 1);
+      now += 20;
+    }
+    expect(meter.measuredAt).not.toBeNull();
+    expect(meter.measuredAt! > now - 1_000).toBe(true);
+    expect(meter.bps()!).toBeCloseTo(15_000_000, -5);
+    expect(METER_DRAIN_MOST).toBeLessThan(400 * 20);
   });
 });
