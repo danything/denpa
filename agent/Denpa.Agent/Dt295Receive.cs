@@ -82,6 +82,13 @@ public sealed class Dt295FieldTable
         Rows = rows;
     }
 
+    /// <summary>
+    /// <see cref="AutoPidMode"/> を指定の値にした受信設定 (すでにその値ならそのまま)。ビットを書き換える行を最後に足す。
+    /// 衛星は 0 にして、PMT の ES の一覧を空に書き換えさせず、PSI から決めたルートで PID を取る
+    /// </summary>
+    public Dt295FieldTable WithAutoPidMode(bool on) =>
+        AutoPidMode == on ? this : new Dt295FieldTable([.. Rows, new Dt295Field(AutoPidRegister, AutoPidShift, 1, on ? 1 : 0)]);
+
     /// <summary>領域を 0 で埋めたあとに、先頭から順に当てる (9.3 の手順 2)</summary>
     public void Apply(Dt295Bridge bridge)
     {

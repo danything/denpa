@@ -74,10 +74,10 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     }
 
     /// <summary>
-    /// 受け取ったものを渡す。確かめたパケットを <paramref name="output"/> に書き、暗号化されていないものは
-    /// <paramref name="clear"/> にも渡す (PSI を読むため)。書いたパケットの数を返す
+    /// 受け取ったものを渡す。確かめたパケットを <paramref name="output"/> に書き、書いたものは (AES を外したあとの)
+    /// <paramref name="plain"/> にも渡す (PSI を読むため。手動で PID を決めるときは、機材が PSI にも AES をかける)。書いたパケットの数を返す
     /// </summary>
-    public int Feed(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? clear = null)
+    public int Feed(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain = null)
     {
         var written = 0;
         if (!_synced && _carried == 0)
@@ -93,11 +93,11 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
             data = data[take..];
             if (_carried < PacketSize) return 0;
             _carried = 0;
-            written += One(_carry, output, clear);
+            written += One(_carry, output, plain);
         }
         while (data.Length >= PacketSize)
         {
-            written += One(data[..PacketSize], output, clear);
+            written += One(data[..PacketSize], output, plain);
             data = data[PacketSize..];
         }
         data.CopyTo(_carry);
@@ -105,7 +105,7 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
         return written;
     }
 
-    private int One(ReadOnlySpan<byte> input, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? clear)
+    private int One(ReadOnlySpan<byte> input, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
     {
         var (kind, _) = Dt295PacketDecryptor.Classify(input);
         if (kind == Dt295PacketResult.Invalid) throw new Dt295Exception(Invalid);
@@ -115,7 +115,7 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
         if (kind == Dt295PacketResult.Decrypted) decryptor.Decrypt(packet, key!, iv!);
         output.Advance(PacketSize);
         Packets++;
-        if (kind == Dt295PacketResult.Clear) clear?.Invoke(packet);
+        plain?.Invoke(packet);
         return 1;
     }
 }
@@ -702,7 +702,10 @@ public sealed class Dt295Tuner : ITuneDevice
                 throw new IOException(error.Message, error);
             }
 
-            var routes = new Dt295RouteTracker(needCat: !tuning.Satellite);
+            // 衛星は、機材に PID を選ばせない (自動だと PMT の ES の一覧が空に書き換わる)。PSI から決めたルートで、指定された番組だけを取る
+            if (tuning.Satellite) data = data with { Fields = data.Fields.WithAutoPidMode(false) };
+            // ServiceId は 1〜65535 か null (ChannelTable が 0 を断る)。null なら全番組を追う
+            var routes = new Dt295RouteTracker(needCat: !tuning.Satellite, service: tuning.Satellite ? tuning.ServiceId : null, satellite: tuning.Satellite);
             try
             {
                 board.Locked(() =>
