@@ -349,7 +349,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    *
    * 決めるのは `adapt.ts` の `RungAdapter` で、ここは測った値を渡し、決まった段でリクエストし直すだけ (`adapt`)。
    * 段を動かすのは**メニューで「自動」を選んでいるときだけ**。段 0 は自動で決まった形式 (家の中なら MPEG-2) で、
-   * 段 1〜3 はサーバが選んだコーデックの変換、`audio` は音声だけ。互換モード (canvas に描くエンコードしたもの) では動かさない
+   * 段 1〜3 はサーバが選んだコーデックの変換、`audio` は音声だけ。互換モード (canvas に描くエンコードしたもの) でも同じに動かし、
+   * サーバには canvas に描けるコーデックだけを渡す (`playable`。H.265 は描かない)。デコードが間に合うかは `raw/budget.ts` が見て、
+   * 回線とは混ぜない
    */
   /** いま流れている段 (`tuned` の答え)。メニューの「自動 (H.264 540p)」に出す */
   let served = $state<Step>(0);
@@ -848,11 +850,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * **段を上げ下げするかを決める** (`ADAPT_EVERY` ごと)。測った値を `RungAdapter` に渡し、返ってきたら動かす (`act`)。
-   * 決めないのは、互換モード・止めている間・リクエストしてから `tuned` が来るまで・まだ再生していない間
+   * 決めないのは、止めている間・リクエストしてから `tuned` が来るまで・まだ再生していない間
    */
   function adapt(): void {
-    if (left || compat || paused || awaiting || !running || state !== "playing")
-      return;
+    if (left || paused || awaiting || !running || state !== "playing") return;
+    /*
+     * 互換モードで H.264 を描けない (諦めて MPEG-2 に移った・VideoDecoder が H.264 を持たない)。段を下げた先は、
+     * GPU でエンコードできるものが無ければソフトウェアの H.264 になる (`server/live.ts` の `rungCodec`) ので描けない
+     */
+    if (compat && !playable().includes("h264")) return;
     const ahead = aheadNow();
     if (ahead === null) return;
     const now = Date.now();
@@ -905,22 +911,28 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     }
     const { step } = decision;
-    // 追っかけには音声だけが無い。段 3 のまま流す
-    if (step === "audio" && chase !== null) return;
+    /*
+     * 追っかけには音声だけが無い。段 3 のまま流す。互換モードも同じ (映像の無い fMP4 を canvas に流す経路を
+     * 確かめていない)
+     */
+    if (step === "audio" && (chase !== null || compat)) return;
     standing = null;
     asked = step;
     warning = text;
     requestAgain();
   }
 
-  /** 段を下げるとき、端末が再生できるコーデック (`TuneCommand.playable`)。受け取れないもの・諦めたものは外す */
+  /**
+   * 段を下げるとき、端末が再生できるコーデック (`TuneCommand.playable`)。受け取れないもの・諦めたものは外す。
+   * 互換モードは canvas に描けるもの (`canvasCan`。H.265 は描かない)
+   */
   function playable(): LiveCodec[] {
     return LIVE_CODECS.map((c) => c.id).filter(
       (id) =>
         !rungOff.has(id) &&
         !(id === "av1" && av1GaveUp) &&
         !(id === "hevc" && hevcGaveUp) &&
-        mseCan(id),
+        (compat ? !compatGaveUp && canvasCan(id) : mseCan(id)),
     );
   }
 

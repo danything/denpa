@@ -122,6 +122,7 @@
   import { loadOffline } from "#lib/offline.svelte.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import {
+    heardOf,
     rangesOf,
     type RemuxPlayer,
     remuxPlayer,
@@ -219,8 +220,9 @@
   /*
    * ---- 回線に合わせた画質の段 (`watch-adapt.ts`。docs/stream.md「回線に合わせて画質を下げる」) ----
    *
-   * 「自動」のときだけ段を動かす。ファイルの直再生 (段 0) から下げるときは 1 回だけプレイヤーを作り直して変換へ移し、
-   * そのあとは同じ MSE のまま替える (`remux-player.ts` の `switchTo`)。音声だけとの行き来は作り直す
+   * 「自動」のときだけ段を動かす。ファイルの直再生・MPEG-2 (段 0) から下げるときは 1 回だけプレイヤーを作り直して変換へ移し、
+   * そのあとは同じ MSE のまま替える (`remux-player.ts` の `switchTo`)。音声だけとの行き来は作り直す。
+   * 互換モード (canvas に描く) は継ぎ目なく替える経路が無いので、段を替えるたびに canvas のプレイヤーを作り直す (`canvasStep`)
    */
   /** いまの段。0 は下げていない (ファイルの直再生・詰め替え・ふだんの変換) */
   let step = $state<Step>(0);
@@ -228,8 +230,15 @@
   let stepCodec = $state<string | null>(null);
   /** 送り出しの具合を読む id (`X-Denpa-Pace`)。流していなければ null */
   let paceId: string | null = null;
-  /** 段 0 がファイルの直再生だったとき、そのファイル。写すだけのストリームが無いときに戻す先 */
+  /** 段 0 がファイルの直再生か MPEG-2 (canvas に描く) だったとき、その観かた。写すだけのストリームが無いときに戻す先 */
   let fileZero: Picked | null = null;
+  /**
+   * 互換モードで段を替えて作り直したとき、替える前の段。応答が来たら忘れる (`heard`)。その前に混んでいて断られたら、
+   * この段で作り直す (`canvasBusy`)
+   */
+  let stepFrom: Step | null = null;
+  /** canvas のプレイヤーが貯めを使い切って止まっているか (`waiting`)。段を決めるのに渡す */
+  let canvasStuck = false;
   /** 段 0 のビットレート (kbit/s)。ファイルの大きさと尺から。分からなければ null */
   let baseKbps: number | null = null;
   /** 段を切り替えている最中か (応答を待っている間は刻まない) */
@@ -357,11 +366,22 @@
       made = canvasPlayer({
         host: mediaBox as HTMLElement,
         before: jikkyoSlot ?? overlay,
-        input: local !== null ? "mkv" : codec === "mpeg2" ? "ts-mpeg2" : "fmp4",
+        input:
+          local !== null
+            ? "mkv"
+            : codec === "mpeg2" && step === 0
+              ? "ts-mpeg2"
+              : "fmp4",
         request: (at, audio, signal) =>
           local !== null
             ? Promise.resolve(local.request(at))
-            : fetch(streamUrl(codec, at, audio), { signal }),
+            : fetch(canvasUrl(codec, at, audio), { signal }),
+        heard: (response) => {
+          const heard = heardOf(response);
+          stepCodec = heard.codec;
+          paceId = heard.pace;
+          stepFrom = null;
+        },
         duration,
         // 端末に保存した録画の Blob は読むのが速すぎる。観ている位置の少し先までしか読まない (`canvas-player.ts` の `room`)
         ...(local !== null && localCopy?.video !== undefined && duration > 0
@@ -372,6 +392,11 @@
         background: background.on || pip.active,
         paused: false,
         state: (state) => {
+          // 段を替えようとして作り直したが、混んでいて断られた。替える前の段で作り直して続ける
+          if (state === "busy" && stepFrom !== null) {
+            canvasBusy();
+            return;
+          }
           resuming = state === "retrying";
           busy = state === "busy";
           if (state !== "failed") return;
@@ -381,7 +406,11 @@
         },
         gaveUp: canvasFallBack,
         remote: (stop) => (stop ? pauseMedia() : playMedia()),
-        waiting: (on) => (on ? stall() : flowing()),
+        waiting: (on) => {
+          canvasStuck = on;
+          if (on) stall();
+          else flowing();
+        },
         ended: () => {
           playing = false;
           finished();
@@ -411,10 +440,67 @@
     settle();
   }
 
+  /**
+   * canvas のプレイヤーのリクエスト先。段 0 は選んだ形式そのまま。段を下げるなら変換で、コーデックはサーバが
+   * 描ける形式 (`canvasPlayable`) から選ぶ (MPEG-2 からは H.264 の変換としてリクエストする。`rungQuery`)
+   */
+  function canvasUrl(codec: CanvasCodec, at: number, audio: string): string {
+    // 互換モードは音声だけにしない (`decideStep`)
+    if (step === 0 || step === "audio") return streamUrl(codec, at, audio);
+    return (
+      streamUrl(codec === "mpeg2" ? "h264" : codec, at, audio) +
+      rungQuery(step, canvasPlayable())
+    );
+  }
+
+  /** 互換モードで描けるコーデック (`?playable=`)。描いている途中で諦めたものは外す。H.265 は描かない (`raw/support.ts`) */
+  function canvasPlayable(): LiveCodec[] {
+    const can = canvasAbility;
+    if (can === null) return [];
+    return (["av1", "h264"] as const).filter(
+      (codec) => can[codec] && !canvasGaveUp.includes(codec),
+    );
+  }
+
+  /**
+   * **互換モードで段を替える。** canvas のプレイヤーには継ぎ目なく替える経路が無いので、いまの位置から作り直す
+   * (新しいプレイヤーが描き始めるまで、映像と音は止まる)。替えたら true
+   */
+  function canvasStep(next: Step): boolean {
+    const codec = canvasCodec;
+    if (codec === null || localMkv !== null) return false;
+    const position = mediaTime();
+    const from = step;
+    stopCanvas();
+    stepFrom = from;
+    step = next;
+    stepCodec = null;
+    paceId = null;
+    switchAt = position;
+    canvasCodec = codec;
+    startCanvas(codec);
+    return true;
+  }
+
+  /** 互換モードで段を替えようとして、混んでいて断られた。替える前の段で作り直し、しばらく段を動かさない */
+  function canvasBusy(): void {
+    const back = stepFrom;
+    if (back === null) return;
+    const down = stepOrder(step) > stepOrder(back);
+    adaptQuietUntil = Date.now() + HOLD;
+    canvasStep(back);
+    // 前の段に戻すのは段の切り替えではない。この作り直しが断られたら、ふだんどおり「混んでいる」と出す
+    stepFrom = null;
+    noteAdapt(busyNote(down));
+  }
+
   /** canvas のプレイヤーを畳む (切り替える・諦める) */
   function stopCanvas(): void {
     canvas?.destroy();
     canvas = null;
+    canvasStuck = false;
+    // 作り直しの途中で畳んだ (失敗した・諦めた・選び直した)。替える前の段は忘れる (残すと段を動かさなくなる)
+    stepFrom = null;
     drawing = false;
     drawingLocal = false;
     canvasCodec = null;
@@ -435,6 +521,10 @@
     const position = mediaTime();
     const wasLocal = localMkv !== null;
     stopCanvas();
+    // 描けなくなったのは端末のデコードの都合 (`raw/budget.ts`)。回線の段とは混ぜず、段 0 から決め直す
+    step = 0;
+    stepCodec = null;
+    stepFrom = null;
     if (!compat) {
       rawGaveUp = true;
       const fresh =
@@ -773,7 +863,7 @@
     replay(fresh);
   }
 
-  /** 段を下げた変換をやめて、ファイルの直再生に戻す (作り直す) */
+  /** 段を下げた変換をやめて、ファイルの直再生か MPEG-2 に戻す (作り直す) */
   function backToFile(note: string | null): void {
     const back = fileZero;
     if (back === null) return;
@@ -783,6 +873,8 @@
     paceId = null;
     adaptQuietUntil = Date.now() + HOLD;
     swap(back);
+    // MPEG-2 は canvas のプレイヤーが止めずに始める。`<video>` を続けるための印は残さない
+    if (back.way === "raw") keepPlaying = false;
     if (note !== null) noteAdapt(note);
   }
 
@@ -809,6 +901,11 @@
       return;
     }
     if (decision.step === from) return;
+    /*
+     * 互換モードは音声だけにせず、段 3 のまま流す (追っかけと同じ)。映像の無い fMP4 を canvas のプレイヤーで
+     * 鳴らす経路を確かめていない
+     */
+    if (decision.step === "audio" && compat) return;
     void moveStep(decision.step).then((moved) => {
       if (moved) noteAdapt(adaptNote(decision, from));
     });
@@ -816,8 +913,21 @@
 
   /** 段を `next` に替える。替えたら true */
   async function moveStep(next: Step): Promise<boolean> {
+    // 互換モードは canvas のプレイヤーを作り直す
+    if (compat) return canvasStep(next);
     const plan = picked;
     if (info === null || plan === null) return false;
+    // MPEG-2 (canvas に描いている) から下げる。ファイルの直再生と同じく、1 回だけ `<video>` の変換に作り直す
+    if (plan.way === "raw") {
+      if (next === 0) return false;
+      const fresh = streamForAudio(info, ability(), "h264");
+      if (fresh === null) return false;
+      fileZero = plan;
+      step = next;
+      keepPlaying = canvas !== null && !canvas.paused;
+      swap(fresh);
+      return true;
+    }
     // ファイルの直再生から下げる。1 回だけプレイヤーを作り直して変換へ (同じコーデックの詰め替えを先に)
     if (plan.way === "file") {
       if (next === 0) return false;
@@ -861,9 +971,10 @@
 
   /**
    * いまの様子 (`watch-adapt.ts` の `sample`)。段を動かさない間は null。
-   * 互換モード・MPEG-2 (canvas に描く)・端末に保存したもの・止めている間・断られて止まっている間
+   * 端末に保存したもの・止めている間・断られて止まっている間。canvas に描いているときは `canvasSample`
    */
   function adaptSample() {
+    if (compat || canvas !== null) return canvasSample();
     const target = video;
     const plan = picked;
     if (
@@ -871,8 +982,6 @@
       info === null ||
       plan === null ||
       (plan.way !== "file" && plan.way !== "stream") ||
-      compat ||
-      canvas !== null ||
       localSrc !== null ||
       localMkv !== null ||
       switching ||
@@ -895,6 +1004,36 @@
       paceId: plan.way === "stream" ? paceId : null,
       // 段 0 が変換 (エンコード済みが無い録画) なら分からない
       baseKbps: fileZero !== null || plan.way === "file" ? baseKbps : null,
+    };
+  }
+
+  /**
+   * canvas に描いているときの様子 (互換モードと MPEG-2)。端末に保存したもの・作り直している最中・止めている間・
+   * 鳴らし始める前・断られて止まっている間は null。下げた先の H.264 を受け取れなければ (互換モードは描けなければ) 動かさない
+   */
+  function canvasSample() {
+    const player = canvas;
+    if (
+      player === null ||
+      info === null ||
+      localMkv !== null ||
+      stepFrom !== null ||
+      busy ||
+      player.paused ||
+      (!player.flowing && !canvasStuck) ||
+      Date.now() < adaptQuietUntil ||
+      // 段を下げた先は、GPU でエンコードできるものが無ければソフトウェアの H.264 (`server/live.ts` の `rungCodec`)
+      !(compat ? canvasPlayable() : playable()).includes("h264")
+    )
+      return null;
+    return {
+      current: step,
+      manual: choice !== "auto",
+      throughput: player.throughput(),
+      ahead: player.lead,
+      waiting: canvasStuck,
+      paceId,
+      baseKbps: null,
     };
   }
 
@@ -984,7 +1123,8 @@
       next,
       next === "auto" ? canvasGaveUp : [],
     );
-    if (fresh === canvasCodec && !busy && canvasProblem === null) return;
+    if (fresh === canvasCodec && !busy && canvasProblem === null && step === 0)
+      return;
     const position = mediaTime();
     stopCanvas();
     busy = false;
@@ -995,6 +1135,10 @@
       return;
     }
     canvasGaveUp = canvasGaveUp.filter((codec) => codec !== fresh);
+    // 選び直したら段 0 から (`chooseCodec` と同じ)
+    step = 0;
+    stepCodec = null;
+    stepFrom = null;
     switchAt = position;
     canvasCodec = fresh;
   }

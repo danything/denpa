@@ -4,7 +4,9 @@ import type { Page } from "@playwright/test";
 
 import { MX } from "../fake/services";
 import {
+  captureSockets,
   expect,
+  feedNotice,
   goto,
   openSettings,
   pickCodec,
@@ -194,6 +196,64 @@ test.describe("互換モード", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
+    });
+
+    /*
+     * **互換モードでも、回線が細ければ「自動」は段を下げる** (`live-player.svelte.ts` の `adapt`)。下げた先のコーデックは
+     * サーバが選ぶので、canvas に描けるものだけを `playable` に並べる (H.265 は描かない)。GPU が無ければ下げた先は
+     * ソフトウェアの H.264 なので、H.264 を描ける端末のふりをする (Playwright の Chromium は描けないことがある。
+     * 段を下げた後に描くところは見ない)
+     */
+    test("回線が細いと、互換モードでも描ける形式だけを渡して段を下げる", async ({
+      page,
+    }) => {
+      await captureSockets(page);
+      await page.addInitScript(() => {
+        const real = VideoDecoder.isConfigSupported.bind(VideoDecoder);
+        VideoDecoder.isConfigSupported = (config) =>
+          config.codec.startsWith("avc1")
+            ? Promise.resolve({ supported: true, config })
+            : real(config);
+        // 送った指示を控える
+        const sent = window as unknown as { __sent: string[] };
+        sent.__sent = [];
+        const send = WebSocket.prototype.send;
+        WebSocket.prototype.send = function (data) {
+          if (typeof data === "string") sent.__sent.push(data);
+          send.call(this, data);
+        };
+      });
+      // 自動で開く (ほかのスペックは H.264 を選んだ端末として開く)
+      await page.context().clearCookies();
+      await goto(page, "/live");
+      await page.getByTestId("drive-notice-accept").click();
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      await expect(
+        page.locator('[data-testid="live-raw"][data-input="fmp4"]'),
+      ).toBeVisible({ timeout: 30_000 });
+
+      // 選局の直後 (`adapt.ts` の `GRACE`) は数えないので、下がるまで送り続ける
+      await expect(async () => {
+        await feedNotice(page, [
+          { type: "pace", backlog: 0, dropped: 3, speed: null },
+        ]);
+        await expect(page.getByTestId("live-warning")).toContainText(
+          "回線が細いため",
+          { timeout: 1_000 },
+        );
+      }).toPass({ timeout: 20_000 });
+      const lowered = (
+        await page.evaluate(
+          () => (window as unknown as { __sent: string[] }).__sent,
+        )
+      )
+        .map((text) => JSON.parse(text) as Record<string, unknown>)
+        .filter((command) => command["type"] === "tune")
+        .at(-1);
+      expect(lowered?.["rung"]).toBeGreaterThanOrEqual(1);
+      expect(lowered?.["raw"]).toBe(false);
+      expect(lowered?.["playable"]).toContain("h264");
+      expect(lowered?.["playable"]).not.toContain("hevc");
     });
 
     test("⚙ で明示して切れば、テスラでも <video> で観る", async ({ page }) => {

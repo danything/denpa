@@ -22,6 +22,8 @@
  *   送るのを待つ)。デコードし始める前 (デコーダの読み込み中) はバイト数で区切る (`EARLY_BYTES`)
  * - **終わり** … 末尾まで読んだら `finish`。残りを鳴らしきったら `ended`
  * - **切れたら** 観ていた位置からリクエストし直す (`remux-player.ts` と同じ数)。混んでいて断られたらリクエストし直さない
+ * - **受け取りの速さを測る** (`ts/meter.ts`。`remux-player.ts` と同じく読んでいる間だけ)。観る画面が回線に合わせて段を
+ *   上げ下げするのに使う (`#lib/watch-adapt.ts`)。継ぎ目なく替える経路は無いので、段を替えるときは観る画面がプレイヤーを作り直す
  *
  * 速さは等速だけ (音を自前で鳴らしている)。DOM はエンジン (`RawEngine`) が触る canvas と `<audio>` だけ
  */
@@ -33,6 +35,7 @@ import { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { mayRead } from "#lib/read-ahead.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
+import { Meter } from "#lib/ts/meter.js";
 import {
   busyAnswer,
   ORIGIN_HEADER,
@@ -95,6 +98,8 @@ interface CanvasOptions {
   ended(): void;
   /** 刻み (`TICK`)。いまの位置で字幕などを合わせる */
   tick(): void;
+  /** 応答を受けるたびに呼ぶ (中身のコーデック・段・送り出しの具合を読む id のヘッダ。`remux-player.ts` の `heardOf`) */
+  heard?(response: Response): void;
 }
 
 export interface CanvasPlayer {
@@ -123,6 +128,10 @@ export interface CanvasPlayer {
   grab(size?: GrabSize): Promise<ImageBitmap | null>;
   pipStream(): MediaStream | null;
   pipFlow(on: boolean): void;
+  /** 受け取りの速さ (bit/s。`ts/meter.ts`)。まだ測れていなければ null */
+  throughput(): number | null;
+  /** 手元に溜まっている長さ (秒。音の尺) */
+  readonly lead: number;
   destroy(): void;
 }
 
@@ -179,6 +188,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
   let loadedFrom = options.start;
   /** 貯めを使い切って止まっているか (読み込み中の輪) */
   let starving = false;
+  const meter = new Meter();
 
   const engine = new RawEngine(
     options.host,
@@ -263,6 +273,8 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         floor: RATE_FLOOR,
       });
       if (ok) return;
+      // 待つ間は速さを数えない (`remux-player.ts` の `sleep` と同じ)
+      meter.pause();
       await new Promise((resolve) => setTimeout(resolve, WAIT));
     }
   }
@@ -278,6 +290,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     time = from;
     loadedFrom = from;
     fed = 0;
+    meter.pause();
     /*
      * **末尾 (の手前 `END_EDGE`) へ飛んだらリクエストせずに終わり**。最後が CM の録画で CM を飛ばした・シークバーを
      * 右端まで動かした。サーバは末尾の先からは流せない (`<video>` も末尾へ飛ぶと `ended` になる)
@@ -299,6 +312,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
       }
       if (!response.ok || response.body === null)
         throw new Error(`HTTP ${response.status}`);
+      options.heard?.(response);
       let start = Math.round(from * CLOCK);
       if (input === "ts-mpeg2") {
         const header = response.headers.get(ORIGIN_HEADER);
@@ -318,9 +332,11 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
           void reader.cancel().catch(() => undefined);
           return;
         }
+        const asked = performance.now();
         const { done, value } = await reader.read();
         if (mine !== run) return;
         if (done) break;
+        meter.add(value.byteLength, asked, performance.now());
         fed += value.length;
         if (splitter === null) engine.feed(own(value), 0);
         else
@@ -437,6 +453,10 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     grab: (size) => engine.grab(size),
     pipStream: () => engine.pipStream(),
     pipFlow: (on) => engine.pipFlow(on),
+    throughput: () => meter.bps(),
+    get lead() {
+      return engine.lead;
+    },
     destroy(): void {
       if (closed) return;
       closed = true;

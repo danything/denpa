@@ -800,9 +800,25 @@ describe("段を下げた映像の引数", () => {
     );
   });
 
-  test("エンコード済みは fps で 30 コマにそろえて縮める", () => {
+  test("エンコード済みは、元が 30 コマを超えるか分からなければ fps で 30 コマにそろえて縮める", () => {
     expect(videoArgs("h264", null, false, 1).filter).toBe(
       "fps=30000/1001,scale=-2:720",
+    );
+    expect(videoArgs("h264", null, false, 1, 60000 / 1001).filter).toBe(
+      "fps=30000/1001,scale=-2:720",
+    );
+  });
+
+  test("エンコード済みで元が 30 コマ以下なら、コマを足さずにそのままのコマ数。キーフレームは 1 秒ごと", () => {
+    const film = videoArgs("h264", null, false, 1, 24000 / 1001);
+    expect(film.filter).toBe("scale=-2:720");
+    expect(film.encoder.join(" ")).toContain("-g 24");
+    const thirty = videoArgs("h264", rkmpp, false, 2, 30000 / 1001);
+    expect(thirty.filter).toBe("scale=-2:540,format=nv12");
+    expect(thirty.encoder.join(" ")).toContain("-g 30");
+    // 放送 (インタレ) はコマ数を渡しても bwdif で 30 コマ
+    expect(videoArgs("h264", null, true, 1, 24000 / 1001).filter).toBe(
+      "bwdif=mode=send_frame,scale=-2:720",
     );
   });
 

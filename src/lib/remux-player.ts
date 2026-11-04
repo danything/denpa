@@ -112,7 +112,8 @@ export function rangesOf(buffered: TimeRanges): Ranges {
   return out;
 }
 
-function heardOf(response: Response): StreamHeard {
+/** 応答のヘッダを読む。canvas のプレイヤーで観ているときも使う (`canvas-player.ts` の `heard`) */
+export function heardOf(response: Response): StreamHeard {
   return {
     codec: response.headers.get(CODEC_HEADER),
     rung: parseRung(response.headers.get(RUNG_HEADER)),
