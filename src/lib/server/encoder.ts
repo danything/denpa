@@ -102,9 +102,15 @@ import { notify } from "./webhook";
  * **24p 系 (アニメ・フィルム) と 30p は倍にしない** (`smooth` が false。見分け方は `fps.ts`)。
  * 24p 系はプルダウンして 60 フィールドに入れているだけ、30p は上下が同じ時刻のコマなので、
  * フィールドごとにコマを作っても同じ画像が並ぶだけになる。滑らかさは少しも増えず、時間とサイズだけ倍になる。
+ *
+ * **インタレのコマだけを解除する** (`deint=interlaced`)。既定 (`all`) はプログレッシブのコマにも同じことをするので、
+ * 720p (59.94p) の局を通すとコマ数が倍の 119.88p になっていた (本番の ffmpeg で 3 秒 180 コマが 360 コマ)。
+ * 1080i はどのコマもインタレの印が付いているので、今までどおり解除する
  */
 export function deinterlace(smooth: boolean): string {
-  return smooth ? "bwdif" : "bwdif=mode=send_frame";
+  return smooth
+    ? "bwdif=deint=interlaced"
+    : "bwdif=mode=send_frame:deint=interlaced";
 }
 
 /** 1 窓ぶん測る。ffmpeg が失敗したら「測れない」 */

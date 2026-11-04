@@ -345,6 +345,14 @@ export function panArgs(audio: AudioTrack): string[] {
 }
 
 /**
+ * 放送 (インタレ) のインタレ解除。**30 コマにするとき (`smooth` が false) は、そのあとで 29.97p にそろえる。**
+ * `bwdif` の 1 コマずつの出し方はプログレッシブのコマをそのまま通すので、720p (59.94p) の局は 60 コマのままになる。
+ * 1080i はもう 29.97p なので、そろえても何も変わらない
+ */
+function broadcastFilters(smooth: boolean): string[] {
+  return smooth ? [deinterlace(true)] : [deinterlace(false), "fps=30000/1001"];
+}
+/**
  * 映像のエンコード方式。**見ている人が選べる** (`LiveCodec`)。
  *
  * ## H.264
@@ -440,7 +448,7 @@ export function videoArgs(
       // 復号から GPU なら CPU のインタレ解除は挟まない (挟むとフレームを降ろすことになる)
       filter: (hw.full && interlaced
         ? gpu.filter
-        : [...(interlaced ? [deinterlace(smooth)] : []), ...gpu.filter]
+        : [...(interlaced ? broadcastFilters(smooth) : []), ...gpu.filter]
       ).join(","),
       // -g はソフトウェアと揃える
       encoder: [
@@ -455,7 +463,7 @@ export function videoArgs(
   if (codec === "hevc") throw new Error("H.265 は GPU でだけエンコードします");
   return {
     input: [],
-    filter: interlaced ? deinterlace(smooth) : "",
+    filter: interlaced ? broadcastFilters(smooth).join(",") : "",
     encoder: softwareArgs(codec, gop),
   };
 }
@@ -557,7 +565,7 @@ function rungVideo(
   const gop = ["-g", String(keep ? Math.max(1, Math.round(fps)) : spec.fps)];
   const cpu = [
     ...(interlaced
-      ? [deinterlace(false)]
+      ? broadcastFilters(false)
       : keep
         ? []
         : [`fps=${spec.fps * 1000}/1001`]),

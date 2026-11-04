@@ -388,7 +388,9 @@ describe("ffmpeg の引数", () => {
     expect(file).toContain("-c:a aac -b:a 96k");
     const track = { id: "0:main", stream: 0, side: "both" as const, label: "" };
     const fromTs = tsTranscodeArgs(1024, track, "h264", null, 0, 1).join(" ");
-    expect(fromTs).toContain("-vf bwdif=mode=send_frame,scale=-2:720");
+    expect(fromTs).toContain(
+      "-vf bwdif=mode=send_frame:deint=interlaced,fps=30000/1001,scale=-2:720",
+    );
     expect(fromTs).toContain("-fps_mode passthrough");
   });
 

@@ -192,14 +192,14 @@ Helm は既定で `/dev/dri` を hostPath で渡してあります (`denpa.gpu.h
 
 エンコード済みの録画は、元が 30 コマを超えるとき (60 コマ) だけ `fps` で 29.97 コマに間引きます。元が 30 コマ以下 (24 コマ・29.97 コマ) なら
 コマを足さずにそのままのコマ数で縮め、キーフレームも 1 秒ごと (24 コマなら `-g 24`) にします。元のコマ数はファイルを ffprobe で読んだ
-平均のコマ数 (`avg_frame_rate`) で、読めなければ 29.97 コマにそろえます。放送 (インタレ) は今までどおり `bwdif` で 29.97 コマにします。
+平均のコマ数 (`avg_frame_rate`) で、読めなければ 29.97 コマにそろえます。放送 (インタレ) は今までどおり `bwdif` で 29.97 コマにします。`bwdif` はインタレのコマだけを解除するので (`deint=interlaced`)、720p (59.94p) の局はそのあと `fps` で 29.97 コマにそろえます。
 
-| エンコーダ   | レート制御                                                           | 縮める所                                                                           |
-| ------------ | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| x264         | `veryfast`・`-crf 23 -maxrate <上限> -bufsize <上限>` (上限つき crf) | CPU (`bwdif=mode=send_frame` か `fps`、`scale=-2:<高さ>`)                          |
-| Rockchip MPP | 今の AVBR (`hwenc.rkmppRate`) に段の上限を渡す                       | CPU                                                                                |
-| NVENC        | 今の VBR (`hwenc.nvencRate`) に段の上限を渡す                        | CPU                                                                                |
-| VA-API       | CQP をやめて VBR (`-b:v` と `-maxrate:v` に上限)                     | デコードから GPU なら GPU (`deinterlace_vaapi=rate=frame,scale_vaapi`)、ほかは CPU |
+| エンコーダ   | レート制御                                                           | 縮める所                                                                                  |
+| ------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| x264         | `veryfast`・`-crf 23 -maxrate <上限> -bufsize <上限>` (上限つき crf) | CPU (`bwdif=mode=send_frame:deint=interlaced,fps=30000/1001` か `fps`、`scale=-2:<高さ>`) |
+| Rockchip MPP | 今の AVBR (`hwenc.rkmppRate`) に段の上限を渡す                       | CPU                                                                                       |
+| NVENC        | 今の VBR (`hwenc.nvencRate`) に段の上限を渡す                        | CPU                                                                                       |
+| VA-API       | CQP をやめて VBR (`-b:v` と `-maxrate:v` に上限)                     | デコードから GPU なら GPU (`deinterlace_vaapi=rate=frame,scale_vaapi`)、ほかは CPU        |
 
 - x264 は `ultrafast` にしません。CABAC とデブロックを切るので、低いビットレートでは粗さが目立ちます。静かな場面は crf のぶんだけ小さく、動きの多い場面は上限で抑えます
 - 段 1〜3 の音声は 96k です (256k は 2.4 Mbit/s の回線の 1 割を使う)

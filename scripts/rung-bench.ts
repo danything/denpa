@@ -43,7 +43,9 @@ export function benchVideo(
   const spec = RUNG_SPECS[rung];
   const bps = spec.videoKbps * 1000;
   const cpu = [
-    interlaced ? "bwdif=mode=send_frame" : `fps=${spec.fps * 1000}/1001`,
+    interlaced
+      ? `bwdif=mode=send_frame:deint=interlaced,fps=${spec.fps * 1000}/1001`
+      : `fps=${spec.fps * 1000}/1001`,
     `scale=-2:${spec.height}`,
   ];
   const gop = ["-g", String(spec.fps)];

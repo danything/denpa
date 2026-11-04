@@ -132,7 +132,7 @@ describe("ライブのエンコード方法", () => {
    */
   test("インタレを 60 コマでデコードする", () => {
     const live = encodeArgs(1024, stereo);
-    expect(live[live.indexOf("-vf") + 1]).toBe("bwdif");
+    expect(live[live.indexOf("-vf") + 1]).toBe("bwdif=deint=interlaced");
   });
 
   /*
@@ -555,7 +555,9 @@ describe("GPU でエンコードする", () => {
   test("エンコードするところだけ GPU。インタレ解除は CPU の bwdif のまま、上げてから渡す", () => {
     const args = encodeOnly();
     expect(before(args, "-init_hw_device")).toBe(true);
-    expect(args[args.indexOf("-vf") + 1]).toBe("bwdif,format=nv12,hwupload");
+    expect(args[args.indexOf("-vf") + 1]).toBe(
+      "bwdif=deint=interlaced,format=nv12,hwupload",
+    );
     expect(args.join(" ")).toContain("-c:v h264_vaapi");
     expect(args.join(" ")).toContain("-bf 0 -async_depth 1 -g 60");
     expect(args).not.toContain("libx264");
@@ -567,7 +569,7 @@ describe("GPU でエンコードする", () => {
     expect(before(args, "-hwaccel")).toBe(true);
     expect(before(args, "-hwaccel_output_format")).toBe(true);
     expect(args[args.indexOf("-vf") + 1]).toBe("deinterlace_vaapi=rate=field");
-    expect(args.join(" ")).not.toContain("bwdif");
+    expect(args.join(" ")).not.toContain("bwdif=deint=interlaced");
     expect(args.join(" ")).not.toContain("hwupload");
   });
 
@@ -621,7 +623,9 @@ describe("GPU でエンコードする", () => {
       full: false,
     });
     expect(args).not.toContain("-init_hw_device");
-    expect(args[args.indexOf("-vf") + 1]).toBe("bwdif,format=nv12");
+    expect(args[args.indexOf("-vf") + 1]).toBe(
+      "bwdif=deint=interlaced,format=nv12",
+    );
     expect(args.join(" ")).toContain("-c:v h264_nvenc -gpu 0");
     expect(args.join(" ")).toContain("-zerolatency 1 -delay 0 -g 60");
     expect(args).not.toContain("-async_depth");
@@ -887,7 +891,9 @@ describe("エンコードが遅れたときの軽い組み合わせ", () => {
     const light = takeLight(id, LIGHT_LAG + 1_000) ?? fresh;
     expect(light).toEqual({ half: true, gpu: false });
     const args = encodeArgs(1024, stereo, "h264", 0, null, 0, light.half);
-    expect(args).toContain("bwdif=mode=send_frame");
+    expect(args).toContain(
+      "bwdif=mode=send_frame:deint=interlaced,fps=30000/1001",
+    );
     expect(args.join(" ")).toContain("-g 30");
 
     // 新しいセッションでもまだ遅い。次は GPU
@@ -905,10 +911,12 @@ describe("エンコードが遅れたときの軽い組み合わせ", () => {
 
   test("30 コマは放送のインタレ解除を 1 コマずつにして、キーフレームは 1 秒ごと", () => {
     const soft = videoArgs("h264", null, true, 0, null, true);
-    expect(soft.filter).toBe("bwdif=mode=send_frame");
+    expect(soft.filter).toBe(
+      "bwdif=mode=send_frame:deint=interlaced,fps=30000/1001",
+    );
     expect(soft.encoder.join(" ")).toContain("-g 30");
     expect(encodeArgs(1024, stereo, "h264", 0, null, 0, true)).toContain(
-      "bwdif=mode=send_frame",
+      "bwdif=mode=send_frame:deint=interlaced,fps=30000/1001",
     );
     const vaapi: LiveHw = {
       way: { device: "/dev/dri/renderD128", kind: "vaapi" },
@@ -965,7 +973,9 @@ describe("段を下げた映像の引数", () => {
 
   test("x264 は veryfast の上限つき crf。放送は bwdif で 30 コマにして縮め、キーフレームは 1 秒ごと", () => {
     const args = videoArgs("h264", null, true, 2);
-    expect(args.filter).toBe("bwdif=mode=send_frame,scale=-2:540");
+    expect(args.filter).toBe(
+      "bwdif=mode=send_frame:deint=interlaced,fps=30000/1001,scale=-2:540",
+    );
     expect(args.encoder.join(" ")).toBe(
       "-c:v libx264 -preset veryfast -tune zerolatency -crf 23 -maxrate:v 1500000 -bufsize:v 1500000 -g 30",
     );
@@ -989,13 +999,15 @@ describe("段を下げた映像の引数", () => {
     expect(thirty.encoder.join(" ")).toContain("-g 30");
     // 放送 (インタレ) はコマ数を渡しても bwdif で 30 コマ
     expect(videoArgs("h264", null, true, 1, 24000 / 1001).filter).toBe(
-      "bwdif=mode=send_frame,scale=-2:720",
+      "bwdif=mode=send_frame:deint=interlaced,fps=30000/1001,scale=-2:720",
     );
   });
 
   test("Rockchip MPP は段の上限を AVBR に渡し、縮めるのは CPU", () => {
     const args = videoArgs("hevc", rkmpp, true, 1);
-    expect(args.filter).toBe("bwdif=mode=send_frame,scale=-2:720,format=nv12");
+    expect(args.filter).toBe(
+      "bwdif=mode=send_frame:deint=interlaced,fps=30000/1001,scale=-2:720,format=nv12",
+    );
     expect(args.encoder.join(" ")).toBe(
       "-c:v hevc_rkmpp -rc avbr -b:v 3000000 -maxrate 3187500 -minrate 187500 -g 30 -tag:v hvc1",
     );
@@ -1018,7 +1030,7 @@ describe("段を下げた映像の引数", () => {
     expect(full.encoder).not.toContain("CQP");
     const upload = videoArgs("h264", vaapi(false), true, 1);
     expect(upload.filter).toBe(
-      "bwdif=mode=send_frame,scale=-2:720,format=nv12,hwupload",
+      "bwdif=mode=send_frame:deint=interlaced,fps=30000/1001,scale=-2:720,format=nv12,hwupload",
     );
     // エンコード済みは GPU でデコードしない (`full` を外す)
     expect(videoArgs("h264", vaapi(true), false, 1).filter).toBe(
