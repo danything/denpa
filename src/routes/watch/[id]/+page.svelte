@@ -442,11 +442,11 @@
 
   /**
    * canvas のプレイヤーのリクエスト先。段 0 は選んだ形式そのまま。段を下げるなら変換で、コーデックはサーバが
-   * 描ける形式 (`canvasPlayable`) から選ぶ (MPEG-2 からは H.264 の変換として頼む。`rungQuery`)。音声だけは `codec=audio`
+   * 描ける形式 (`canvasPlayable`) から選ぶ (MPEG-2 からは H.264 の変換としてリクエストする。`rungQuery`)
    */
   function canvasUrl(codec: CanvasCodec, at: number, audio: string): string {
-    if (step === "audio") return streamUrl("audio", at, audio);
-    if (step === 0) return streamUrl(codec, at, audio);
+    // 互換モードは音声だけにしない (`decideStep`)
+    if (step === 0 || step === "audio") return streamUrl(codec, at, audio);
     return (
       streamUrl(codec === "mpeg2" ? "h264" : codec, at, audio) +
       rungQuery(step, canvasPlayable())
@@ -470,11 +470,12 @@
     const codec = canvasCodec;
     if (codec === null || localMkv !== null) return false;
     const position = mediaTime();
-    stepFrom = step;
+    const from = step;
+    stopCanvas();
+    stepFrom = from;
     step = next;
     stepCodec = null;
     paceId = null;
-    stopCanvas();
     switchAt = position;
     canvasCodec = codec;
     startCanvas(codec);
@@ -498,6 +499,8 @@
     canvas?.destroy();
     canvas = null;
     canvasStuck = false;
+    // 作り直しの途中で畳んだ (失敗した・諦めた・選び直した)。替える前の段は忘れる (残すと段を動かさなくなる)
+    stepFrom = null;
     drawing = false;
     drawingLocal = false;
     canvasCodec = null;
@@ -898,6 +901,11 @@
       return;
     }
     if (decision.step === from) return;
+    /*
+     * 互換モードは音声だけにせず、段 3 のまま流す (追っかけと同じ)。映像の無い fMP4 を canvas のプレイヤーで
+     * 鳴らす経路を確かめていない
+     */
+    if (decision.step === "audio" && compat) return;
     void moveStep(decision.step).then((moved) => {
       if (moved) noteAdapt(adaptNote(decision, from));
     });

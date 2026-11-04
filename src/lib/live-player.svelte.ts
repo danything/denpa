@@ -911,8 +911,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return;
     }
     const { step } = decision;
-    // 追っかけには音声だけが無い。段 3 のまま流す
-    if (step === "audio" && chase !== null) return;
+    /*
+     * 追っかけには音声だけが無い。段 3 のまま流す。互換モードも同じ (映像の無い fMP4 を canvas に流す経路を
+     * 確かめていない)
+     */
+    if (step === "audio" && (chase !== null || compat)) return;
     standing = null;
     asked = step;
     warning = text;
