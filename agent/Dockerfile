@@ -127,9 +127,10 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 # ---------------------------------------------------------------------------
 # **土台は distroless (Debian 13 = trixie。組む段の sdk:10.0 と同じバージョンなので glibc も合う)。**
 # 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
-# エージェントが要るのはこれで全部: 実行ファイルが直に繋ぐのは libc と libm だけ、
-# CARD_URL を https で指したときと、IT930x のファームウェア・PIX-DT295 の公式パッケージを取ってくるときは .NET の HttpClient が libssl を読み、
-# 証明書は ca-certificates で確かめる。
+# エージェントが要るのはこれで全部。実行ファイルが直に繋ぐのは libc と libm だけで、libssl は .NET が読む。
+# エージェントのポート (AGENT_PORT) は denpa と証明書で確かめ合う HTTPS なので、libssl を常に使う (AgentTls.cs)。
+# CARD_URL を https で指したときと、IT930x のファームウェア・PIX-DT295 の公式パッケージを取ってくるときも .NET の HttpClient が libssl を読み、
+# 相手の証明書は ca-certificates で確かめる。
 # 子プロセスは px4d / px4ctl / siano-ts / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起こす。
 # シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
 # 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。

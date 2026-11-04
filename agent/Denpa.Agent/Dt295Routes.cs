@@ -103,7 +103,7 @@ public static class Dt295Routes
             if (slots[slot] < 0) continue;
             var pid = slots[slot];
             var ecmSlot = 0;
-            if (at.TryGetValue(pid, out _) && ecms.Contains(pid)) ecmSlot = slot;
+            if (ecms.Contains(pid)) ecmSlot = slot;
             else if (ecmOf.TryGetValue(pid, out var ecm) && at.TryGetValue(ecm, out var registered)) ecmSlot = registered;
             if (ecmSlot != 0 && EcmField(slot) is null) throw new InvalidOperationException($"スロット {slot} には ECM 参照を書けません (PID 0x{pid:X4})");
             routes.Add(new Dt295Route(slot, pid, ecmSlot));

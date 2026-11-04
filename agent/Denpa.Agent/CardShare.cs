@@ -184,7 +184,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         return status switch
         {
             403 => $"鍵を配る拠点に断られました: {reason ?? "理由は返っていません"}",
-            // 前のバージョンの CARD_URL (普通の API のポート) のまま。鍵を配る API は専用のポートに移った
+            // CARD_URL が鍵を配る API の無い所を指している。普通の API のポート (TLS だけ) なら、ここへは来ずに繋がらない
             404 => $"{url} では鍵を配っていません (404)。CARD_URL には配る側の CARD_SHARE_PORT のポートを書きます",
             _ => $"鍵を配る拠点から{what}を受け取れません ({status}{(reason is null ? "" : $": {reason}")})",
         };

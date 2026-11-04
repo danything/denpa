@@ -65,7 +65,7 @@ public static class Dt295Firmware
     internal static readonly TimeSpan Backoff = TimeSpan.FromMinutes(10);
 
     /// <summary>置き場 (tuners.json の隣)</summary>
-    public static string Folder => Path.GetDirectoryName(Path.GetFullPath(Config.FromEnvironment().TunersFile))!;
+    public static string Folder => Config.FromEnvironment().Dir;
 
     private static readonly Lazy<Dt295FirmwareStore> Default = new(() =>
         new Dt295FirmwareStore(Folder, Pixela, Download, TimeProvider.System));
@@ -290,7 +290,7 @@ internal sealed class Dt295FirmwareStore(string folder, Dt295FirmwareSource sour
                 using var zip = File.OpenRead(temporary);
                 return source.Extract(zip);
             }
-            catch (Exception error) when (error is HttpRequestException or TaskCanceledException or OperationCanceledException or InvalidDataException or IOException)
+            catch (Exception error) when (error is HttpRequestException or OperationCanceledException or InvalidDataException or IOException)
             {
                 var why = error is OperationCanceledException ? "時間切れ" : error.Message;
                 reasons.Add($"{new Uri(url).Host}: {why}");
