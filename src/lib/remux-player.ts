@@ -4,7 +4,7 @@
  *
  * 観る画面はそれまでどおり `<video>` の `currentTime`・`duration`・`playbackRate` を触るだけで
  * 済むようにする。ここが受け持つのは、飛んだ先が溜まっていなければ**そこからリクエストし直す**ことと、
- * 先へ溜めすぎないことだけ。
+ * 先へ溜めすぎないこと、回線に合わせて段を替えるときに**継ぎ目なく切り替える**こと (`switchTo`)。
  *
  * - **尺は先に言う** (`duration`)。バーは最初から全長で出て、続きの位置へも飛べる
  * - **ストリームの時刻はページの物差しのまま** (`PlayAxis`)。字幕・チャプター・データ放送は
@@ -15,18 +15,28 @@
  *   観る画面の繋ぎ直し (`recover`) と同じ数
  * - **サーバが混んでいて断られたら (503) リクエストし直さない** (`busy`)。その場の変換の枠が埋まっている
  *   (`server/transcode.ts`)。待っても空くとは限らないので、画面がほかの形式を勧める
+ * - **受け取りの速さを測る** (`ts/meter.ts`)。読んでいる間だけ数える。先が埋まったままだと測れないので、
+ *   `PROBE_EVERY` 測れていなければ、先を `PROBE_MORE` 秒だけ多く溜めて測る
  */
 
+import type { Rung } from "#lib/rungs.js";
+import { parseRung } from "#lib/rungs.js";
 import type { PickedMediaSource } from "#lib/ts/media-source.js";
+import { Meter } from "#lib/ts/meter.js";
 import {
   aheadOf,
   busyAnswer,
+  CODEC_HEADER,
   covers,
+  PACE_HEADER,
   type Ranges,
   retryable,
   retryWait,
+  RUNG_HEADER,
   STREAM_RETRIES,
   type StreamState,
+  switchPoint,
+  typeOfCodec,
 } from "#lib/ts/playback.js";
 
 /** 先へ溜める上限 (秒) */
@@ -35,11 +45,36 @@ const AHEAD = 60;
 const BEHIND = 30;
 /** 読んでいるストリームの末尾からこれだけ先までは、リクエストし直さずに届くのを待つ (秒。`covers`) */
 const SLACK = 15;
+/** 受け取りの速さをこれだけ測れていなければ、先を多めに溜めて測る (ms)。`adapt.ts` の上げるまでの待ち (20 秒) と同じ */
+const PROBE_EVERY = 20_000;
+/** 測るときに多めに溜める長さ (秒) */
+const PROBE_MORE = 10;
+
+/** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
+export type StreamUrl = (from: number, audio: string) => string;
+
+/** 応答のヘッダに書いてあったもの (`ts/playback.ts` の `CODEC_HEADER`・`RUNG_HEADER`・`PACE_HEADER`) */
+export interface StreamHeard {
+  /** 中身のコーデック (`h264` / `hevc` / `av1` / `audio`)。無ければ null */
+  codec: string | null;
+  rung: Rung;
+  /** 送り出しの具合を読む id (`GET /api/playback/pace?id=`)。無ければ null */
+  pace: string | null;
+}
+
+/**
+ * 段の切り替えの結果。
+ *
+ * - `switched`: 新しいストリームに切り替えた
+ * - `busy`: サーバが混んでいて断られた。前のストリームのまま続けている
+ * - `failed`: 繋がらなかった・待つ間に飛ばれた。前のストリームのまま続けている
+ */
+export type SwitchResult = "switched" | "busy" | "failed";
+
 interface RemuxOptions {
-  /** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
-  url(from: number, audio: string): string;
-  /** MSE に渡す型 (`ts/playback.ts` の `streamType`) */
-  codecs: string;
+  url: StreamUrl;
+  /** MSE に渡す型 (`ts/playback.ts` の `streamType`)。null なら応答の `CODEC_HEADER` から決める (段を下げた変換) */
+  codecs: string | null;
   /** 尺 (秒) */
   duration: number;
   /** 観はじめる位置 (秒。続きから) */
@@ -48,20 +83,42 @@ interface RemuxOptions {
   audio: string;
   /** 繋ぎ直している・諦めた・戻った・混んでいて断られた */
   state(state: StreamState): void;
+  /** 応答を受けるたびに呼ぶ */
+  heard?(stream: StreamHeard): void;
 }
 
 export interface RemuxPlayer {
   /** 音声を選び直す。**いまの位置からリクエストし直す** (選んだ 1 本だけを流しているため) */
   setAudio(id: string): void;
+  /**
+   * **段を替える。** 溜まっているものは、いまの位置を含む区間の末尾 (`switchPoint`) まで残して再生を続け、そこから先を
+   * `url` でリクエストする。応答が来てから前のストリームを止めるので、断られたら前のまま続く。
+   * コーデックが違えば `changeType` で替える (`codecs` が null なら応答の `CODEC_HEADER` から)。そのあとのシーク・
+   * 繋ぎ直しも `url` でリクエストする。
+   *
+   * **映像の有無は替えられない** (MSE は SourceBuffer の中のトラックの数を変えられない)。音声だけとの行き来は作り直す
+   */
+  switchTo(codecs: string | null, url: StreamUrl): Promise<SwitchResult>;
+  /** 受け取りの速さ (bit/s。`ts/meter.ts`)。まだ測れていなければ null */
+  throughput(): number | null;
   /** 畳む。読んでいるストリームを切る (サーバの ffmpeg も止まる) */
   destroy(): void;
 }
 
-function ranges(buffered: TimeRanges): Ranges {
+/** `TimeRanges` を配列にする (`ts/playback.ts` の `aheadOf` などに渡す) */
+export function rangesOf(buffered: TimeRanges): Ranges {
   const out: [number, number][] = [];
   for (let i = 0; i < buffered.length; i++)
     out.push([buffered.start(i), buffered.end(i)]);
   return out;
+}
+
+function heardOf(response: Response): StreamHeard {
+  return {
+    codec: response.headers.get(CODEC_HEADER),
+    rung: parseRung(response.headers.get(RUNG_HEADER)),
+    pace: response.headers.get(PACE_HEADER),
+  };
 }
 
 export function remuxPlayer(
@@ -71,17 +128,26 @@ export function remuxPlayer(
 ): RemuxPlayer {
   const media = new picked.Source();
   let buffer: SourceBuffer | null = null;
+  /** いまの SourceBuffer の型 */
+  let bufferType: string | null = null;
+  let url = options.url;
+  let wanted = options.codecs;
   /** リクエストし直すたびに増やす。古いストリームの続きを捨てる目印 */
   let run = 0;
   let controller: AbortController | null = null;
+  /** 応答を待っている段の切り替え。飛んだら取りやめる */
+  let pendingSwitch: AbortController | null = null;
   /** 読んでいるストリームのリクエストした位置。読んでいなければ null */
   let loadingFrom: number | null = null;
   let audio = options.audio;
   let retries = 0;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
+  /** MediaSource が開いたか (`sourceopen`)。開く前の位置の変更は、開いてから始める位置に入る */
+  let opened = false;
   /** 溜めすぎて待っている読み込みを起こす */
   let wake: (() => void) | null = null;
+  const meter = new Meter();
 
   const nudge = (): void => {
     const resolve = wake;
@@ -89,7 +155,7 @@ export function remuxPlayer(
     resolve?.();
   };
   const buffered = (): Ranges =>
-    buffer === null ? [] : ranges(buffer.buffered);
+    buffer === null ? [] : rangesOf(buffer.buffered);
 
   /** SourceBuffer の手が空くまで待つ */
   function idle(): Promise<void> {
@@ -144,14 +210,20 @@ export function remuxPlayer(
     return true;
   }
 
-  /** 先へ溜めすぎていない・ブラウザが送り込んでよいと言っている、まで待つ */
+  /** 先へ溜めすぎていない・ブラウザが送り込んでよいと言っている、まで待つ。待つ間は速さを数えない */
   async function room(mine: number): Promise<void> {
     for (;;) {
       if (mine !== run) return;
       const streaming =
         !picked.managed ||
         (media as MediaSource & { streaming?: boolean }).streaming !== false;
-      if (streaming && aheadOf(buffered(), video.currentTime) < AHEAD) return;
+      // しばらく測れていなければ、多めに溜めて測る (先が埋まったままだと、回線が戻っても上げられない)
+      const stale =
+        meter.measuredAt === null ||
+        performance.now() - meter.measuredAt > PROBE_EVERY;
+      const limit = AHEAD + (stale ? PROBE_MORE : 0);
+      if (streaming && aheadOf(buffered(), video.currentTime) < limit) return;
+      meter.pause();
       await new Promise<void>((resolve) => {
         wake = resolve;
       });
@@ -174,6 +246,7 @@ export function remuxPlayer(
         ))
           throw error;
         if (!(await trim(mine))) {
+          meter.pause();
           await new Promise<void>((resolve) => {
             wake = resolve;
           });
@@ -182,28 +255,116 @@ export function remuxPlayer(
     }
   }
 
-  /** `from` 秒からリクエストし直す。溜まっていたものは捨てる */
-  async function load(from: number): Promise<void> {
+  /** 新しいストリームを読み始める。前のストリームを止めて、`from` から読んでいることにする */
+  function begin(from: number, abort: AbortController): number {
     const mine = ++run;
     controller?.abort();
+    controller = abort;
     nudge();
     if (retryTimer !== null) clearTimeout(retryTimer);
     retryTimer = null;
-    const abort = new AbortController();
-    controller = abort;
     loadingFrom = from;
-    try {
-      await idle();
-      if (mine !== run || buffer === null) return;
-      // 前のストリームの読みかけを落とす。末尾まで読み終えて閉じていれば、足せば開き直る
-      if (media.readyState === "open") buffer.abort();
-      if (buffered().length > 0)
-        await update(
-          (target) => target.remove(0, Number.POSITIVE_INFINITY),
-          mine,
-        );
+    meter.pause();
+    return mine;
+  }
+
+  /** 前のストリームの読みかけを落とし、`from` 秒から先を捨てる (0 なら全部) */
+  async function cut(from: number, mine: number): Promise<void> {
+    await idle();
+    if (mine !== run || buffer === null) return;
+    // 末尾まで読み終えて閉じていれば、足せば開き直る
+    if (media.readyState === "open") buffer.abort();
+    if (buffered().some(([, end]) => end > from))
+      await update(
+        (target) => target.remove(from, Number.POSITIVE_INFINITY),
+        mine,
+      );
+  }
+
+  /**
+   * 応答の中身の型に SourceBuffer を合わせる。まだ無ければ作り、型が違えば `changeType` で替える。
+   * 型が分からなければ例外を投げる
+   */
+  async function prepare(response: Response, mine: number): Promise<void> {
+    const heard = heardOf(response);
+    options.heard?.(heard);
+    const type = wanted ?? typeOfCodec(heard.codec);
+    if (type === null)
+      throw new Error(`中身の型が分かりません: ${heard.codec}`);
+    if (buffer === null) {
+      buffer = media.addSourceBuffer(type);
+      // ストリームの時刻をそのまま使う (ページの物差し。`server/playback.ts`)
+      buffer.mode = "segments";
+      bufferType = type;
+      return;
+    }
+    if (type === bufferType) return;
+    // 古いブラウザには無い。何度リクエストし直しても同じなので、読めない中身として扱う (`retryable` で外れる)
+    if (typeof buffer.changeType !== "function")
+      throw new Error(`型を替えられません: ${type}`);
+    await idle();
+    if (mine !== run) return;
+    buffer.changeType(type);
+    bufferType = type;
+  }
+
+  /** 応答を末尾まで読んで足す。読めない中身なら例外を投げる */
+  async function pump(response: Response, mine: number): Promise<void> {
+    if (response.body === null) throw new Error("HTTP 本文がありません");
+    const reader = response.body.getReader();
+    for (;;) {
+      await room(mine);
+      if (mine !== run) {
+        void reader.cancel().catch(() => undefined);
+        return;
+      }
+      const asked = performance.now();
+      const { done, value } = await reader.read();
       if (mine !== run) return;
-      const response = await fetch(options.url(from, audio), {
+      if (done) break;
+      meter.add(value.byteLength, asked, performance.now());
+      await append(value, mine);
+      if (retries > 0) {
+        retries = 0;
+        options.state("flowing");
+      }
+      // 後ろを捨てるのは足したついでに。捨てる長さが溜まってから (毎回は削らない)
+      if (
+        video.currentTime - (buffered()[0]?.[0] ?? video.currentTime) >
+        BEHIND * 2
+      )
+        await trim(mine);
+    }
+    if (mine !== run) return;
+    loadingFrom = null;
+    // 末尾まで届いた。終わりを言わないと、最後で止まったまま `ended` が来ない
+    await idle();
+    if (mine === run && media.readyState === "open") media.endOfStream();
+  }
+
+  /** 読んでいる途中で切れた・読めなかった */
+  function broke(error: unknown, mine: number): void {
+    if (mine !== run || closed) return;
+    loadingFrom = null;
+    // 切れた (繋がらない・途中で落ちた・サーバの 5xx) ならリクエストし直す。読めない中身
+    // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面が観られる先の案内を出す
+    if (video.error !== null || !retryable(error)) {
+      console.warn("[remux] 流せませんでした", error);
+      options.state("failed");
+      return;
+    }
+    retry();
+  }
+
+  /** `from` 秒からリクエストし直す。溜まっていたものは捨てる */
+  async function load(from: number): Promise<void> {
+    pendingSwitch?.abort();
+    const abort = new AbortController();
+    const mine = begin(from, abort);
+    try {
+      await cut(0, mine);
+      if (mine !== run) return;
+      const response = await fetch(url(from, audio), {
         signal: abort.signal,
       });
       /*
@@ -218,45 +379,58 @@ export function remuxPlayer(
       }
       if (!response.ok || response.body === null)
         throw new Error(`HTTP ${response.status}`);
-      const reader = response.body.getReader();
-      for (;;) {
-        await room(mine);
-        if (mine !== run) {
-          void reader.cancel().catch(() => undefined);
-          return;
-        }
-        const { done, value } = await reader.read();
-        if (mine !== run) return;
-        if (done) break;
-        await append(value, mine);
-        if (retries > 0) {
-          retries = 0;
-          options.state("flowing");
-        }
-        // 後ろを捨てるのは足したついでに。捨てる長さが溜まってから (毎回は削らない)
-        if (
-          video.currentTime - (buffered()[0]?.[0] ?? video.currentTime) >
-          BEHIND * 2
-        )
-          await trim(mine);
-      }
+      await prepare(response, mine);
       if (mine !== run) return;
-      loadingFrom = null;
-      // 末尾まで届いた。終わりを言わないと、最後で止まったまま `ended` が来ない
-      await idle();
-      if (mine === run && media.readyState === "open") media.endOfStream();
+      await pump(response, mine);
     } catch (error) {
-      if (mine !== run || closed) return;
-      loadingFrom = null;
-      // 切れた (繋がらない・途中で落ちた・サーバの 5xx) ならリクエストし直す。読めない中身
-      // (SourceBuffer が断った) と 4xx は何度やっても同じ。画面が観られる先の案内を出す
-      if (video.error !== null || !retryable(error)) {
-        console.warn("[remux] 流せませんでした", error);
-        options.state("failed");
-        return;
-      }
-      retry();
+      broke(error, mine);
     }
+  }
+
+  async function switchTo(
+    codecs: string | null,
+    next: StreamUrl,
+  ): Promise<SwitchResult> {
+    if (closed || buffer === null) return "failed";
+    pendingSwitch?.abort();
+    const asking = new AbortController();
+    pendingSwitch = asking;
+    const before = run;
+    const at = switchPoint(buffered(), video.currentTime);
+    let response: Response;
+    try {
+      response = await fetch(next(at, audio), { signal: asking.signal });
+    } catch {
+      return "failed";
+    } finally {
+      if (pendingSwitch === asking) pendingSwitch = null;
+    }
+    // 待っている間に飛んだ・畳んだ。飛んだ先は前の段のまま読んでいる
+    if (before !== run || closed || asking.signal.aborted) {
+      asking.abort();
+      return "failed";
+    }
+    if (response.status === 503 && (await busyAnswer(response))) return "busy";
+    if (!response.ok || response.body === null) {
+      asking.abort();
+      return "failed";
+    }
+    // 切り替える。前のストリームを止めて、`at` から先を新しいストリームで埋める
+    const mine = begin(at, asking);
+    url = next;
+    wanted = codecs;
+    void (async () => {
+      try {
+        await cut(at, mine);
+        if (mine !== run) return;
+        await prepare(response, mine);
+        if (mine !== run) return;
+        await pump(response, mine);
+      } catch (error) {
+        broke(error, mine);
+      }
+    })();
+    return "switched";
   }
 
   /** 切れた。倍々に待って、観ていた位置からリクエストし直す */
@@ -277,7 +451,7 @@ export function remuxPlayer(
   /** 飛んだ先が溜まっておらず、待っても届かないなら、そこからリクエストし直す */
   const onSeeking = (): void => {
     nudge();
-    if (buffer === null || retryTimer !== null) return;
+    if (!opened || retryTimer !== null) return;
     if (!covers(buffered(), video.currentTime, loadingFrom, SLACK))
       void load(video.currentTime);
   };
@@ -310,9 +484,13 @@ export function remuxPlayer(
       URL.revokeObjectURL(objectUrl);
       if (closed) return;
       media.duration = options.duration;
-      buffer = media.addSourceBuffer(options.codecs);
-      // ストリームの時刻をそのまま使う (ページの物差し。`server/playback.ts`)
-      buffer.mode = "segments";
+      opened = true;
+      // 型が分かっていれば先に作る。分からなければ (段を下げた変換) 応答を受けてから (`prepare`)
+      if (wanted !== null) {
+        buffer = media.addSourceBuffer(wanted);
+        buffer.mode = "segments";
+        bufferType = wanted;
+      }
       /*
        * **始める位置を先に言っておく。** まだ何も無いうちに代入した位置は、尺が分かった
        * ところで効く。言わないと 0 にいると見なされ、詰まり (`waiting`) で先頭からリクエストし直す
@@ -333,10 +511,13 @@ export function remuxPlayer(
       audio = id;
       void load(video.currentTime);
     },
+    switchTo,
+    throughput: () => meter.bps(),
     destroy(): void {
       closed = true;
       run++;
       controller?.abort();
+      pendingSwitch?.abort();
       nudge();
       if (retryTimer !== null) clearTimeout(retryTimer);
       video.removeEventListener("seeking", onSeeking);

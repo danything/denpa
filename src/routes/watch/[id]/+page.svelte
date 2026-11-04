@@ -12,6 +12,7 @@
   import { MediaQuery } from "svelte/reactivity";
 
   import { submitting } from "#lib/actions.js";
+  import { type AdaptDecision, HOLD, type Step } from "#lib/adapt.js";
   import { arming } from "#lib/arming.svelte.js";
   import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
   import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
@@ -109,12 +110,19 @@
   import { JIKKYO_LIST_KEY, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { read as stored, write as remind } from "#lib/keep.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
+  import { codecsFor, type LiveCodec } from "#lib/live.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline } from "#lib/offline.svelte.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
-  import { type RemuxPlayer, remuxPlayer } from "#lib/remux-player.js";
+  import {
+    rangesOf,
+    type RemuxPlayer,
+    remuxPlayer,
+    type StreamUrl,
+  } from "#lib/remux-player.js";
   import { keepResume } from "#lib/resume.js";
+  import type { Pace } from "#lib/rungs.js";
   import {
     type Cue,
     currentCue,
@@ -128,6 +136,8 @@
   import { pickMediaSource } from "#lib/ts/media-source.js";
   import { stepSpeed } from "#lib/ts/pacing.js";
   import {
+    aheadOf,
+    AUDIO_TYPE,
     type CanvasAbility,
     canvasChoices,
     type CanvasCodec,
@@ -160,6 +170,14 @@
     skipTarget,
     toTsTime,
   } from "#lib/ts/watch.js";
+  import {
+    ADAPT_TICK,
+    adaptNote,
+    autoLabel,
+    busyNote,
+    rungQuery,
+    watchAdapt,
+  } from "#lib/watch-adapt.js";
 
   let { data, form } = $props();
   const rec = $derived(data.recording);
@@ -192,6 +210,34 @@
   let remux: RemuxPlayer | null = null;
   /** 選び直したときに続ける位置 (秒)。プレイヤーの開始位置に使う */
   let switchAt: number | null = null;
+
+  /*
+   * ---- 回線に合わせた画質の段 (`watch-adapt.ts`。docs/stream.md「回線に合わせて画質を下げる」) ----
+   *
+   * 「自動」のときだけ段を動かす。ファイルの直再生 (段 0) から下げるときは 1 回だけプレイヤーを作り直して変換へ移し、
+   * そのあとは同じ MSE のまま替える (`remux-player.ts` の `switchTo`)。音声だけとの行き来は作り直す
+   */
+  /** いまの段。0 は下げていない (ファイルの直再生・詰め替え・ふだんの変換) */
+  let step = $state<Step>(0);
+  /** 段を下げた変換でサーバが選んだコーデック (`X-Denpa-Codec`)。メニューの「自動」の行に添える */
+  let stepCodec = $state<string | null>(null);
+  /** 送り出しの具合を読む id (`X-Denpa-Pace`)。流していなければ null */
+  let paceId: string | null = null;
+  /** 段 0 がファイルの直再生だったとき、そのファイル。写すだけのストリームが無いときに戻す先 */
+  let fileZero: Picked | null = null;
+  /** 段 0 のビットレート (kbit/s)。ファイルの大きさと尺から。分からなければ null */
+  let baseKbps: number | null = null;
+  /** 段を切り替えている最中か (応答を待っている間は刻まない) */
+  let switching = false;
+  /** これより前 (ms) は段を動かさない。混んでいて断られたあと、続けてリクエストしない */
+  let adaptQuietUntil = 0;
+  /** 段の断り書き。しばらくで引っ込める */
+  let adaptText = $state<string | null>(null);
+  let adaptTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 断り書きを出しておく長さ (ms)。`encode`・`pinned` は続く間は刻むたびに出し直す */
+  const ADAPT_NOTE = 6_000;
+  /** 段を替えるために作り直したとき、作り直す前に再生していたか。尺が分かったら続ける (`resume`) */
+  let keepPlaying = false;
   /**
    * 「この場面から観る」(切り抜きの画面から `?at=`) で始める位置 (秒)。続きの位置より先に使い、1度使ったら忘れる。
    * 続きからではないので「続きから」とは言わない
@@ -597,7 +643,11 @@
   );
 
   /** その場で流すもの (`/stream`) のリクエスト先。`at` 秒から、`audio` (`streamAudio`) の音声で */
-  function streamUrl(codec: PlayCodec, at: number, audio: string): string {
+  function streamUrl(
+    codec: PlayCodec | "audio",
+    at: number,
+    audio: string,
+  ): string {
     return resolve(
       `api/recordings/${rec.id}/stream?codec=${codec}&from=${at.toFixed(3)}&audio=${encodeURIComponent(audio)}`,
     );
@@ -647,18 +697,223 @@
     if (source === null) return;
     const total = info.duration;
     const from = startFrom(total);
+    const at = untrack(() => step);
     remux = remuxPlayer(video, source, {
-      url: (at, audio) => streamUrl(plan.codec, at, audio),
-      codecs: plan.type,
+      url: stepUrl(at, plan),
+      codecs: stepType(at, plan),
       duration: total,
       start: from ?? 0,
       audio: streamAudio(audioIndex),
       state: (state) => {
+        // 段を下げようとして作り直したが、混んでいて断られた。ファイルの直再生に戻して続ける
+        if (state === "busy" && step !== 0 && fileZero !== null) {
+          backToFile(busyNote(true));
+          return;
+        }
         resuming = state === "retrying";
         busy = state === "busy";
         if (state === "failed") broken = true;
       },
+      heard: (stream) => {
+        stepCodec = stream.codec;
+        paceId = stream.pace;
+      },
     });
+  });
+
+  /** 端末が MSE で受け取れるコーデック (`?playable=`。段を下げたときはこの中からサーバが選ぶ) */
+  function playable(): LiveCodec[] {
+    const source = pickMediaSource();
+    if (source === null) return [];
+    return (["av1", "hevc", "h264"] as const).filter((codec) =>
+      source.Source.isTypeSupported(codecsFor(codec)),
+    );
+  }
+
+  /** その段のリクエスト先。段 0 は選んだもの (`plan`) そのまま */
+  function stepUrl(
+    at: Step,
+    plan: Extract<Picked, { way: "stream" }>,
+  ): StreamUrl {
+    if (at === "audio") return (from, audio) => streamUrl("audio", from, audio);
+    const query = rungQuery(at, playable());
+    return (from, audio) => streamUrl(plan.codec, from, audio) + query;
+  }
+
+  /** その段の MSE の型。段を下げた変換はサーバがコーデックを選ぶので、応答を受けてから決める (null) */
+  function stepType(
+    at: Step,
+    plan: Extract<Picked, { way: "stream" }>,
+  ): string | null {
+    if (at === "audio") return AUDIO_TYPE;
+    return at === 0 ? plan.type : null;
+  }
+
+  /** 段の断り書きを出す。しばらくで引っ込める */
+  function noteAdapt(text: string): void {
+    adaptText = text;
+    if (adaptTimer !== null) clearTimeout(adaptTimer);
+    adaptTimer = setTimeout(() => {
+      adaptTimer = null;
+      adaptText = null;
+    }, ADAPT_NOTE);
+  }
+
+  /** 段の並び。数が大きいほど軽い */
+  function weight(at: Step): number {
+    return at === "audio" ? 4 : at;
+  }
+
+  /**
+   * 段を替えるためにプレイヤーを作り直す。いまの位置から観直し、再生していたなら続ける。
+   * 作り直したばかりで再生を待っている間 (`keepPlaying` が残っている) も続ける
+   */
+  function swap(fresh: Picked): void {
+    keepPlaying = keepPlaying || (video !== null && !video.paused);
+    replay(fresh);
+  }
+
+  /** 段を下げた変換をやめて、ファイルの直再生に戻す (作り直す) */
+  function backToFile(note: string | null): void {
+    const back = fileZero;
+    if (back === null) return;
+    fileZero = null;
+    step = 0;
+    stepCodec = null;
+    paceId = null;
+    adaptQuietUntil = Date.now() + HOLD;
+    swap(back);
+    if (note !== null) noteAdapt(note);
+  }
+
+  /** ファイルの大きさから段 0 のビットレートを読む (`HEAD`)。読めなければ null のまま */
+  async function readBaseKbps(source: string, duration: number): Promise<void> {
+    try {
+      const res = await fetch(
+        resolve(`api/recordings/${rec.id}/file?source=${source}`),
+        { method: "HEAD" },
+      );
+      const bytes = Number(res.headers.get("Content-Length"));
+      if (res.ok && bytes > 0 && duration > 0)
+        baseKbps = (bytes * 8) / duration / 1000;
+    } catch {
+      // 分からなければ `adapt.ts` の目安を使う
+    }
+  }
+
+  /** `adapt.ts` が決めたことを受ける。段を動かせたら断り書きを出す */
+  function decideStep(decision: AdaptDecision): void {
+    const from = step;
+    if (decision.reason === "encode" || decision.reason === "pinned") {
+      noteAdapt(adaptNote(decision, from));
+      return;
+    }
+    if (decision.step === from) return;
+    void moveStep(decision.step).then((moved) => {
+      if (moved) noteAdapt(adaptNote(decision, from));
+    });
+  }
+
+  /** 段を `next` に替える。替えたら true */
+  async function moveStep(next: Step): Promise<boolean> {
+    const plan = picked;
+    if (info === null || plan === null) return false;
+    // ファイルの直再生から下げる。1 回だけプレイヤーを作り直して変換へ (同じコーデックの詰め替えを先に)
+    if (plan.way === "file") {
+      if (next === 0) return false;
+      const fresh = streamForAudio(info, ability(), plan.codec);
+      if (fresh === null) return false;
+      fileZero = plan;
+      if (baseKbps === null && plan.source !== undefined)
+        void readBaseKbps(plan.source, info.duration);
+      step = next;
+      swap(fresh);
+      return true;
+    }
+    if (plan.way !== "stream") return false;
+    // 段 0 へ戻す。写すだけのストリームが無ければ (ファイルを変換していた) ファイルに戻す
+    if (next === 0 && fileZero !== null && transcodes(info, plan)) {
+      backToFile(null);
+      return true;
+    }
+    // 音声だけとの行き来は作り直す (MSE は SourceBuffer の中のトラックの数を替えられない)
+    if (next === "audio" || step === "audio" || remux === null) {
+      step = next;
+      // 同じ中身でも新しいオブジェクトにする (同じものを入れ直しても、プレイヤーを作り直す `$effect` が動かない)
+      swap({ ...plan });
+      return true;
+    }
+    switching = true;
+    const result = await remux.switchTo(
+      stepType(next, plan),
+      stepUrl(next, plan),
+    );
+    switching = false;
+    if (result === "switched") {
+      step = next;
+      return true;
+    }
+    adaptQuietUntil = Date.now() + HOLD;
+    if (result === "busy") noteAdapt(busyNote(weight(next) > weight(step)));
+    return false;
+  }
+
+  /**
+   * いまの様子 (`watch-adapt.ts` の `sample`)。段を動かさない間は null。
+   * 互換モード・MPEG-2 (canvas に描く)・端末に保存したもの・止めている間・断られて止まっている間
+   */
+  function adaptSample() {
+    const target = video;
+    const plan = picked;
+    if (
+      target === null ||
+      info === null ||
+      plan === null ||
+      (plan.way !== "file" && plan.way !== "stream") ||
+      compat ||
+      canvas !== null ||
+      localSrc !== null ||
+      localMkv !== null ||
+      switching ||
+      broken ||
+      busy ||
+      target.paused ||
+      target.ended ||
+      Date.now() < adaptQuietUntil ||
+      playable().length === 0
+    )
+      return null;
+    return {
+      current: step,
+      manual: choice !== "auto",
+      throughput: remux?.throughput() ?? null,
+      ahead: aheadOf(rangesOf(target.buffered), target.currentTime),
+      waiting:
+        target.readyState < HTMLMediaElement.HAVE_FUTURE_DATA &&
+        !target.seeking,
+      paceId: plan.way === "stream" ? paceId : null,
+      // 段 0 が変換 (エンコード済みが無い録画) なら分からない
+      baseKbps: fileZero !== null || plan.way === "file" ? baseKbps : null,
+    };
+  }
+
+  const adapt = watchAdapt({
+    sample: adaptSample,
+    readPace: async (id) => {
+      const res = await fetch(
+        resolve(`api/playback/pace?id=${encodeURIComponent(id)}`),
+      );
+      return res.ok ? ((await res.json()) as Pace) : null;
+    },
+    decide: decideStep,
+  });
+
+  onMount(() => {
+    const timer = setInterval(() => adapt.tick(), ADAPT_TICK);
+    return () => {
+      clearInterval(timer);
+      if (adaptTimer !== null) clearTimeout(adaptTimer);
+    };
   });
 
   /**
@@ -677,8 +932,13 @@
     // 選んだものは諦めていても試す (互換モードの `chooseCanvas` と同じ)
     if (next === "mpeg2") rawGaveUp = false;
     const fresh = pickOffer(info, ability(), next, data.indoor);
-    if (JSON.stringify(fresh) === JSON.stringify(picked) && !busy) return;
+    if (JSON.stringify(fresh) === JSON.stringify(picked) && !busy && step === 0)
+      return;
     warning = null;
+    // 選び直したら段 0 から (下げた段は「自動」が回線を見て決め直す)
+    step = 0;
+    stepCodec = null;
+    fileZero = null;
     replay(fresh);
   }
 
@@ -762,7 +1022,9 @@
               key: codec,
               label: codecLabel(codec),
             }));
-      return items.length < 2 ? [] : [{ key: "auto", label: "自動" }, ...items];
+      // 「自動」で段を下げている間は、いまの形式と高さを添える (「自動 (H.264 540p)」)
+      const auto = choice === "auto" ? autoLabel(step, stepCodec) : "自動";
+      return items.length < 2 ? [] : [{ key: "auto", label: auto }, ...items];
     },
   );
 
@@ -1287,6 +1549,11 @@
       retryAt = 0;
       void video.play().catch(() => undefined);
       return;
+    }
+    // 回線に合わせて段を替えるために作り直した (`moveStep`)。再生していたなら続ける
+    if (keepPlaying && video !== null) {
+      keepPlaying = false;
+      void video.play().catch(() => undefined);
     }
     if (resumed || video === null) return;
     resumed = true;
@@ -1965,7 +2232,11 @@
             onended={finished}
             onwaiting={stall}
             onstalled={stall}
-            onseeking={stall}
+            onseeking={() => {
+              stall();
+              // シーク・CM スキップのあとは測り直す。段は持ち越す
+              adapt.reset();
+            }}
             onplaying={flowing}
             oncanplay={flowing}
             ontimeupdate={() => {
@@ -2332,6 +2603,10 @@
         {#if warning !== null}
           <!-- 互換モードの断り書き (切り替えた理由)。ライブと同じ出し方 -->
           <StageNote>{warning}</StageNote>
+        {/if}
+        {#if adaptText !== null}
+          <!-- 回線に合わせて段を替えた理由 (`watch-adapt.ts`) -->
+          <StageNote testid="watch-adapt">{adaptText}</StageNote>
         {/if}
         {#if volume.noted}
           <StageNote testid="watch-volume-note">音量 {volume.level}%</StageNote>

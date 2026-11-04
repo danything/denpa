@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   aheadOf,
+  AUDIO_TYPE,
   canvasChoices,
   canvasTranscodes,
   codecChoices,
@@ -11,7 +12,9 @@ import {
   pickOffer,
   type PlaybackInfo,
   streamForAudio,
+  switchPoint,
   transcodes,
+  typeOfCodec,
 } from "./playback";
 
 /** 答えを表で持つブラウザ。載っていない形式は読めない */
@@ -288,6 +291,28 @@ describe("溜まり方 (aheadOf / covers)", () => {
   test("リクエストした直後でまだ何も無くても、リクエストした位置なら待つ", () => {
     expect(covers([], 300, 300, 15)).toBe(true);
     expect(covers([], 400, 300, 15)).toBe(false);
+  });
+});
+
+describe("段の切り替え (switchPoint / typeOfCodec)", () => {
+  test("新しい段は、いまの位置を含む区間の末尾から始める。いまの位置が溜まっていなければ、いまの位置から", () => {
+    const ranges = [
+      [100, 160],
+      [300, 320],
+    ] as const;
+    expect(switchPoint(ranges, 120)).toBe(160);
+    // 区間の先頭のわずかな手前も中と見る (`aheadOf` と同じ)
+    expect(switchPoint(ranges, 99.8)).toBe(160);
+    expect(switchPoint(ranges, 200)).toBe(200);
+    expect(switchPoint([], 50)).toBe(50);
+  });
+
+  test("応答の X-Denpa-Codec から MSE の型を決める。読めない値は null", () => {
+    expect(typeOfCodec("h264")).toBe(H264_LIVE);
+    expect(typeOfCodec("av1")).toBe(AV1_MP4);
+    expect(typeOfCodec("audio")).toBe(AUDIO_TYPE);
+    expect(typeOfCodec("mpeg2")).toBeNull();
+    expect(typeOfCodec(null)).toBeNull();
   });
 });
 

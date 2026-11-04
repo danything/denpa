@@ -6,6 +6,7 @@
  * 端末が何かを知らない。決め方は `server/playback.ts`
  */
 
+import { codecsFor } from "../live";
 import { autoOrder } from "../live-choice";
 import type { Ruler } from "./watch";
 
@@ -89,6 +90,19 @@ export const RUNG_HEADER = "X-Denpa-Rung";
  * 閉じたあとは 404
  */
 export const PACE_HEADER = "X-Denpa-Pace";
+
+/** 音声だけの fMP4 (`?codec=audio`) を MSE に渡す型。サーバは AAC にする (`server/playback.ts` の `audioOnlyArgs`) */
+export const AUDIO_TYPE = 'audio/mp4; codecs="mp4a.40.2"';
+
+/**
+ * `CODEC_HEADER` の値から、MSE に渡す型を決める。段を下げた変換 (`?rung=`) はサーバがコーデックを選ぶので、
+ * 画面は応答を受けてから型を決める。読めない値なら null
+ */
+export function typeOfCodec(codec: string | null): string | null {
+  if (codec === "h264" || codec === "hevc" || codec === "av1")
+    return codecsFor(codec);
+  return codec === "audio" ? AUDIO_TYPE : null;
+}
 
 /** 混んでいて断ったときの言い分 (503) */
 export const BUSY = "サーバが混んでいます";
@@ -435,4 +449,17 @@ export function covers(
     if (start <= from + GAP && stop >= from) end = Math.max(end, stop);
   }
   return t <= end + slack;
+}
+
+/**
+ * **段を切り替えるときに、新しいストリームを始める位置** (`remux-player.ts` の `switchTo`)。いまの位置を含む区間の末尾で、
+ * それより前に溜まっているものはそのまま再生する。いまの位置が溜まっていなければ、いまの位置。
+ *
+ * 区間の途中で切ると、残したコマが参照するコマ (後ろの P フレーム) まで消えることがある。末尾なら、残すものは揃っている
+ */
+export function switchPoint(ranges: Ranges, t: number): number {
+  for (const [start, end] of ranges) {
+    if (start <= t + GAP && t < end) return end;
+  }
+  return t;
 }
