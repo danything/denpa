@@ -1,5 +1,5 @@
 /**
- * **回線に合わせて下げる画質の段。** サーバ (変換の引数・ライブの共有の鍵) と画面 (`adapt.ts` の上げ下げ・メニューの表示) が
+ * **回線に合わせて下げる画質の段。** サーバ (変換の引数・ライブを共有する単位) と画面 (`adapt.ts` の上げ下げ・メニューの表示) が
  * 同じ表を使う (docs/stream.md「回線に合わせて画質を下げる」)。
  *
  * 段は解像度で組む。ビットレートは「その解像度で画質が保てる上限」で、回線に合わせて削らずに次の段へ下りる。
@@ -35,7 +35,7 @@ export const RUNG_SPECS: Readonly<Record<Exclude<Rung, 0>, RungSpec>> = {
 export const RUNG_AUDIO_KBPS = 96;
 
 /** 下げた段のうち、いちばん低いもの */
-export const LOWEST_RUNG: Rung = 3;
+export const LOWEST_RUNG = 3 satisfies Rung;
 
 /** クエリや指示の値を段として読む。読めない値は 0 (下げない) */
 export function parseRung(value: unknown): Rung {
@@ -49,7 +49,7 @@ export function rungLabel(rung: Rung): string | null {
 }
 
 /**
- * **サーバが知っている送り出しの具合** (WebSocket の `pace`。2 秒ごとか変わったときに送る)。
+ * **サーバが測った送り出しの状態** (WebSocket の `pace`。2 秒ごとか変わったときに送る)。
  * 回線が細いのか、サーバのエンコードが遅いのかを画面が読み分けるために使う
  */
 export interface Pace {
