@@ -176,7 +176,7 @@ export async function startRecording(
   emit("recordings");
   /*
    * **「同じ回は最初の放送だけ」のルールの予約は、録り始めに同じ回かを見直す** (`pump`)。
-   * やめたものに「録画を開始しました」を送らないよう、知らせは見直したあと
+   * やめたものに「録画を開始しました」を送らないよう、通知は見直したあと
    */
   const checks = ruleDedupes(reservation);
   if (!checks) announce(recording);
@@ -193,21 +193,20 @@ function announce(recording: Recording): void {
   });
 }
 
-/** 「同じ回は最初の放送だけ」を入れたルールの予約か。手動の予約は見ない */
+/** 「同じ回は最初の放送だけ」を入れた、有効なルールの予約か (`duplicateAtStart` と同じ条件)。手動の予約は見ない */
 function ruleDedupes(reservation: Reservation): boolean {
   if (reservation.manual || reservation.rule_id === null) return false;
-  return (
-    orm()
-      .select({ dedupe: rules.dedupe })
-      .from(rules)
-      .where(eq(rules.id, reservation.rule_id))
-      .get()?.dedupe === true
-  );
+  const rule = orm()
+    .select({ dedupe: rules.dedupe, enabled: rules.enabled })
+    .from(rules)
+    .where(eq(rules.id, reservation.rule_id))
+    .get();
+  return rule?.dedupe === true && rule.enabled;
 }
 
 /**
  * 読み出しをバックグラウンドで動かす。止める手段 (`active`) はここで立てる。
- * `checks` は録り始めに同じ回かを見直すか (`startRecording`)。見直すものは、開始の知らせも `pump` が送る
+ * `checks` は録り始めに同じ回かを見直すか (`startRecording`)。見直すものは、開始の通知も `pump` が送る
  */
 function launch(
   recording: Recording,
@@ -403,11 +402,11 @@ async function pump(
   recording: Recording,
   controller: AbortController,
   after: readonly StreamUse[],
-  checks = false,
+  checks: boolean,
 ): Promise<void> {
   const path = recording.ts_path!;
   mkdirSync(dirname(path), { recursive: true });
-  /** 開始の知らせ。見直すもの (`checks`) は、録ると決まったとき (か終わるとき) に 1 回だけ送る */
+  /** 開始の通知。見直すもの (`checks`) は、録ると決まったとき (か終わるとき) に 1 回だけ送る */
   let announced = !checks;
   const announceOnce = () => {
     if (announced) return;

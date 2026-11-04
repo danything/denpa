@@ -160,6 +160,16 @@ export function askedFormat(
   };
 }
 
+/**
+ * **HTTP のライブの音声だけ** (`?audio=only`)。音声だけでなければ null (`askedFormat` で読む)。
+ * 段 (`?rung=`) はそのまま返す。画面の WebSocket の `codec: "audio"` と同じく、音声のビットレートだけを下げる (`live.audioArgs`)
+ */
+export function liveAudioOnly(url: URL): { codec: "audio"; rung: Rung } | null {
+  const query = url.searchParams;
+  if (query.get("audio") !== "only") return null;
+  return { codec: "audio", rung: parseRung(query.get("rung")) };
+}
+
 /** 前回の局と選択の控え (`LAST_COOKIE`)。前の形式 (`codec`・`raw`) は読まない */
 interface Kept {
   channelType?: string;

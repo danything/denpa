@@ -17,9 +17,11 @@ afterAll(() => {
 });
 
 const { saveSettings } = await import("./settings");
+const { audioArgs } = await import("./live");
 const {
   askedFormat,
   autoFormat,
+  liveAudioOnly,
   liveStart,
   parseFormats,
   readKept,
@@ -280,5 +282,20 @@ describe("形式をサーバに選ばせる (codec=auto)", () => {
       rung: 0,
     });
     expect(askedFormat(at(""), "chase")).toEqual({ codec: "h264", rung: 0 });
+  });
+
+  test("HTTP のライブの音声だけは段を保つ (liveAudioOnly)。WebSocket の codec: audio と同じく音声だけを 96k に下げる", () => {
+    const at = (query: string) => new URL(`http://192.168.1.20/x?${query}`);
+    expect(liveAudioOnly(at("audio=only&rung=2&codec=av1"))).toEqual({
+      codec: "audio",
+      rung: 2,
+    });
+    expect(liveAudioOnly(at("audio=only"))).toEqual({
+      codec: "audio",
+      rung: 0,
+    });
+    expect(liveAudioOnly(at("audio=0:sub&rung=2"))).toBeNull();
+    expect(audioArgs("audio", 2).join(" ")).toContain("-b:a 96k");
+    expect(audioArgs("audio", 0).join(" ")).toContain("-b:a 256k");
   });
 });

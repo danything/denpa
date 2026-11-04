@@ -54,7 +54,10 @@ export function recordingJikkyo(recording: Recording): RecordingJikkyo | null {
   };
 }
 
-/** NX-Jikkyo から読んだ勢い (チャンネル → 直近 60 秒のコメント数) */
+/**
+ * NX-Jikkyo から読んだ勢い (チャンネル → 直近 60 秒のコメント数)。NX-Jikkyo は公式のニコニコ実況から取り込んだコメントも
+ * 同じ数に足している (NX-Jikkyo の `server/app/app.py` の `StreamNicoliveComments`) ので、両方の合計になる
+ */
 type Forces = ReadonlyMap<string, number>;
 
 /** 中継を読んで持っておく長さ。勢いは 60 秒の窓なので、細かく読んでも変わらない (NX-Jikkyo 自身も 10 秒ごとに作り直している) */

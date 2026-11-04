@@ -89,7 +89,8 @@ WebSocket では TCP の詰まりを避けられないと書いている ([WebSo
 UDP をまるごと塞ぐ回線は 3〜5% ([RFC 9308](https://www.rfc-editor.org/rfc/rfc9308.html)。2016 年の測定) で、携帯の回線と会社の網に分けた新しい数は見つからなかった。
 tailscale の DERP は TCP で、直結できないときは QUIC も TCP の中を通る。結局 WebSocket の経路を残すことになり、運び方が 2 通りに増えるだけになる。
 
-**効きそうなのは、外の細い回線で画質を段階で落とすとき。** 解像度を 720p・540p・360p のように測った帯域で切り替える仕組みを入れる場合、
+**効きそうなのは、外の細い回線で画質を段階で落とすとき。** 解像度を 720p・540p・360p のように測った帯域で切り替えるには
+(いまは画面が段を決めてリクエストし直す形で入っている。[stream.md](stream.md#回線に合わせて画質を下げる))、
 解像度ごとにトラックを分けて受け側が選び直す形がよく合う (個人のドラフト [draft-ugur-moq-fast-switching](https://datatracker.ietf.org/doc/draft-ugur-moq-fast-switching/) など)。
 ただ今の WebSocket でも、サーバがキーフレームで切り替え、詰まった客には映像を捨てられる。MoQ でしか作れないものではない。
 放送のままの TS を載せるドラフトもある ([draft-lcurley-moq-mpegts](https://datatracker.ietf.org/doc/draft-lcurley-moq-mpegts/)・[draft-gregoire-moq-msfts](https://datatracker.ietf.org/doc/draft-gregoire-moq-msfts/))

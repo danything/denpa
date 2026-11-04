@@ -389,7 +389,7 @@ export function pruneHistory(): {
     .run();
   /*
    * CM 検出の材料の控えも。スキーマの `onDelete: cascade` は外部キーを有効にしていない (`PRAGMA foreign_keys`) ので効かない。
-   * 行を消すところはここだけなので、ここで消す
+   * 行を消すのはここと、録り始めてすぐやめた録画 (`recorder.skipDuplicate`。エンコードする前なので控えは無い) だけなので、ここで消す
    */
   orm()
     .delete(cmMaterials)

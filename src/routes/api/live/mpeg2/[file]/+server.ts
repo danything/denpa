@@ -19,6 +19,7 @@ import { brotliCompress, constants, gzip } from "node:zlib";
 
 import { error } from "@sveltejs/kit";
 
+import { encodingFor } from "#lib/server/compress.js";
 import { config } from "#lib/server/config.js";
 import { etagMatches, fileEtag } from "#lib/server/serve.js";
 
@@ -93,12 +94,7 @@ export const GET: RequestHandler = ({ params, request }) => {
   };
   if (etagMatches(request, tag))
     return new Response(null, { status: 304, headers });
-  const accept = request.headers.get("accept-encoding") ?? "";
-  const encoding = /\bbr\b/.test(accept)
-    ? "br"
-    : /\bgzip\b/.test(accept)
-      ? "gzip"
-      : null;
+  const encoding = encodingFor(request.headers.get("accept-encoding"));
   const ready = encoding === null ? null : pack(path, tag);
   if (encoding === null || ready === null)
     return new Response(Bun.file(path).stream(), { headers });
