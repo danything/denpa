@@ -239,6 +239,15 @@ describe("形式をサーバに選ばせる (codec=auto)", () => {
     expect(autoFormat({ ...base, formats: ["raw", "av1"], pick: noGpu })).toBe(
       null,
     );
+    // 追っかけは段を下げても H.265 を出さない
+    expect(
+      autoFormat({
+        ...base,
+        scene: "chase",
+        formats: ["hevc", "h264"],
+        pick: gpu,
+      }),
+    ).toBe("h264");
   });
 
   test("HTTP の live・chase の codec と段 (askedFormat)", () => {

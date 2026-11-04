@@ -90,8 +90,10 @@ export function autoFormat(o: {
   pick?: Parameters<typeof rungCodec>[2];
 }): LiveFormat | null {
   if (o.rung !== 0) {
+    // 追っかけは段を下げても H.265 を出さない (段 0 と同じ決まり)
     const codecs = o.formats.filter(
-      (format): format is LiveCodec => format !== "raw",
+      (format): format is LiveCodec =>
+        format !== "raw" && (o.scene === "live" || format !== "hevc"),
     );
     // `rungCodec` は何も合わなければ H.264 を返す。端末が H.264 を再生できないと言っていれば選ばない
     const codec = rungCodec(codecs, true, o.pick);
