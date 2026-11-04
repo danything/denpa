@@ -5,7 +5,7 @@
  *
  * - **既定はサブも出す。** テレ東2・3、Eテレ2・3、BS朝日2・3 などの列。ただし
  *   その日に分割放送のあるサブだけで、ずっと本チャンネルと同じ番組のサブは列ごと立てない
- * - **同じものを流している間は1つのマスにまとめる。** 本チャンネルの番組を
+ * - **同じものを流している間は 1 つのマスにまとめる。** 本チャンネルの番組を
  *   サブの列まで横に伸ばし、分割放送をしている間だけサブに自分のマスを立てる
  * - 「サブ ch」をオフにすると本チャンネルだけになる (端末ごとに覚える)
  *
@@ -25,7 +25,7 @@ function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
 export interface Station {
   id: number;
   service_id: number;
-  /** 物理チャンネル (`T27`、`BS01:16400`)。選局に使う名前で、1つの TS を指す */
+  /** 物理チャンネル (`T27`、`BS01:16400`)。選局に使う名前で、1 つの TS を指す */
   channel: string;
   type: string;
 }
@@ -45,19 +45,19 @@ export interface Airing {
  * **地上波と BS は、同じ TS (`channel`) に入っている局を束ねる。** 同じ番組を流すこと
  * (同じ映像を複数のサービスで流す「イベント共有」) は同じ TS の中でしかできない決まり
  * (ARIB TR-B14 第四編 17.2「TS 内」、TR-B15 第一部 第四編 17.2「同じ事業者かつ同じ TS 内」)。
- * 本チャンネルはサービスID のいちばん若い局 (NHK総合1 1024 / 総合2 1025、
+ * 本チャンネルはサービス ID のいちばん若い局 (NHK総合1 1024 / 総合2 1025、
  * テレ東 1072〜1074、BS朝日 151〜153)。
  *
- * - **地上波**は1放送局が1つの TS (TR-B14 第四編 5.3: transport_stream_id は
- *   network_id と同じ値)。チャンネルで束ねても、ネットワークID で束ねていた頃と同じ
- * - **BS** はネットワークID が全局で同じ (4) なので、チャンネル (= TS) で見る。
- *   BS朝日1・2・3 は3つとも `BS01:16400`。WOWOW のプライム・ライブ・シネマ (191〜193) は
+ * - **地上波**は 1 放送局が 1 つの TS (TR-B14 第四編 5.3: transport_stream_id は
+ *   network_id と同じ値)。チャンネルで束ねても、ネットワーク ID で束ねていた頃と同じ
+ * - **BS** はネットワーク ID が全局で同じ (4) なので、チャンネル (= TS) で見る。
+ *   BS朝日1・2・3 は 3 つとも `BS01:16400`。WOWOW のプライム・ライブ・シネマ (191〜193) は
  *   同じ会社でも TS が別々 (`BS03:16432` / `BS05:17488` / `BS05:17489`) で、それぞれが本チャンネル。
- *   サービスID の番号の範囲や事業者 (broadcaster_id) で束ねると、ここを取り違える
- * - **CS と SKY は束ねない。** 1つの TS に別々の会社の局が入っていて、同じ TS でも
+ *   サービス ID の番号の範囲や事業者 (broadcaster_id) で束ねると、ここを取り違える
+ * - **CS と SKY は束ねない。** 1 つの TS に別々の会社の局が入っていて、同じ TS でも
  *   同じ番組を流す仲間とは限らない
  *
- * チャンネルの名前は TS ごとに1つ (衛星は名前に TSID が入っている。`satellite.ts`)
+ * チャンネルの名前は TS ごとに 1 つ (衛星は名前に TSID が入っている。`satellite.ts`)
  */
 export function mainOf(services: Station[]): Map<number, number> {
   const tsOf = (service: Station) =>
@@ -96,7 +96,7 @@ export function mainOf(services: Station[]): Map<number, number> {
  * - それ以外 → 分割放送
  *
  * サブに番組が無い時間も同じ番組とみなす (サブの番組表がまだ集まっていないときも、これで済む)。
- * 番組が1つも来ないサブ (NHK BS の 103。局名も「-」) は、ずっと同じ番組として本チャンネルにまとまる。
+ * 番組が 1 つも来ないサブ (NHK BS の 103。局名も「-」) は、ずっと同じ番組として本チャンネルにまとまる。
  * 逆に**本チャンネルに番組が無い**時間のサブの番組は、見比べる相手が無いので分割放送として扱う
  * (本チャンネルの番組表がまだ集まっていないと、その間だけサブが独立して見える)。
  *
@@ -135,7 +135,7 @@ export function splitOf<P extends Omit<Airing, "id">>(
  * **出すサブは、その日に分割放送のあるものだけ。** ずっと本チャンネルと同じ番組のサブは列を立てても
  * 本チャンネルのマスが伸びてくるだけなので、立てずに済ませる (テレビの番組表も同じ)。
  *
- * 渡す順でも普通は隣り合う (リモコン番号 → サービスID) が、別の地域の同じ番号の局を
+ * 渡す順でも普通は隣り合う (リモコン番号 → サービス ID) が、別の地域の同じ番号の局を
  * 一緒に受けていると間に挟まる。横に伸ばすマスは隣り合っていないと描けないので寄せ直す
  *
  * @param split 分割放送 (`splitOf`)。サブを出さないときは null
@@ -159,7 +159,7 @@ export function columnsOf<S extends Station>(
   return columns;
 }
 
-/** 表の1マス。同じ番組が2つ以上のマスになることがある (分割放送の前後で幅が変わるとき) */
+/** 表の 1 マス。同じ番組が 2 つ以上のマスになることがある (分割放送の前後で幅が変わるとき) */
 export interface Cell<P extends Airing> {
   /** 描くときの鍵。番組の id だけでは重なる */
   key: string;
@@ -238,7 +238,7 @@ export function cellsOf<S extends Station, P extends Airing>(
     });
 
     for (const program of own) {
-      // 長さの無い枠は切りようが無い。本チャンネルの列に1行だけ出す
+      // 長さの無い枠は切りようが無い。本チャンネルの列に 1 行だけ出す
       if (program.end_at <= program.start_at) {
         add(program, column, 1, program.start_at, program.end_at);
         continue;
@@ -268,7 +268,7 @@ export function cellsOf<S extends Station, P extends Airing>(
         lists.forEach((list, i) => {
           if (list.some((p) => p.start_at < end && p.end_at > start)) return;
           const last = next[next.length - 1]!;
-          // 1つ左の列も出しているなら、そのマスを伸ばす
+          // 1 つ左の列も出しているなら、そのマスを伸ばす
           if (last[0] + last[1] === column + 1 + i) last[1]++;
           else next.push([column + 1 + i, 1]);
         });

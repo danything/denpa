@@ -8,10 +8,10 @@
  * 押した位置と値は溝の端から端までまっすぐ対応する (つまみの往復ぶんを引かなくてよい)
  */
 
-/** 溝の1部分。`from`・`to` は比 (0〜1)、`cm` は CM の部分か */
+/** 溝の 1 部分。`from`・`to` は比 (0〜1)、`cm` は CM の部分か */
 export type TrackPart = { from: number; to: number; cm: boolean };
 
-/** 比を 4 桁で丸める (1時間で 0.4 秒。溝の 1px より細かい) */
+/** 比を 4 桁で丸める (1 時間で 0.4 秒。溝の 1px より細かい) */
 function round(ratio: number): number {
   return Math.round(ratio * 10000) / 10000;
 }
@@ -20,7 +20,7 @@ function round(ratio: number): number {
  * CM の区間と切れ目から、溝の部分の並びを作る。
  *
  * 区間は重ならず、並んでいること (`cmSpans` の出すもの)。幅の無いバー (尺がまだ分からない・
- * 戻れる範囲が無い) は区切らず1本にする。バーの外の区間・切れ目は捨てる
+ * 戻れる範囲が無い) は区切らず 1 本にする。バーの外の区間・切れ目は捨てる
  */
 export function trackParts(
   spans: { start: number; end: number }[],

@@ -55,7 +55,7 @@ export const offline = {
   get pendingDelete(): Record<number, boolean> {
     return pendingDelete;
   },
-  /** 保存に失敗した録画のID。画面はこれを見て通知を出す */
+  /** 保存に失敗した録画の ID。画面はこれを見て通知を出す */
   get failed(): number | null {
     return failed;
   },
@@ -88,7 +88,7 @@ async function refresh(): Promise<void> {
   revision += 1;
 }
 
-/** 進み具合を1件ぶん書き換える。無い行には書かない (先に消されたもの) */
+/** 進み具合を 1 件ぶん書き換える。無い行には書かない (先に消されたもの) */
 function setProgress(id: number, progress: number | null): void {
   const held = entries[id];
   if (held === undefined) return;
@@ -109,7 +109,7 @@ const inPage = new Map<number, AbortController>();
  * (開き直すと取り直すので直る)。かといって訊きに行くだけでは、その間隔でしか
  * 数字が動かない。
  *
- * そこで **2秒おきに get() で新しく取り直し、取り直したものに毎回 `progress` も
+ * そこで **2 秒おきに get() で新しく取り直し、取り直したものに毎回 `progress` も
  * 付ける**。イベントが生きている間はコマ落ちなく動き、黙り込んだ個体は
  * 次の取り直しが引き取る。終わったかどうかはここでは決めない。成否は
  * SW の受け取りが伝えてくる
@@ -189,7 +189,7 @@ async function watchRunning(): Promise<void> {
 }
 
 /**
- * 起動時に1回。控えを読み、オンラインに戻る合図で outbox を流す。
+ * 起動時に 1 回。控えを読み、オンラインに戻る合図で outbox を流す。
  * SW からの「保存できた/失敗した」も受けて一覧を映し直す
  */
 export function startOffline(): void {
@@ -291,7 +291,7 @@ interface SaveTarget {
  *
  * どちらも Background Fetch の仕様が理由 (実機の Edge で踏んだ):
  *
- * - **404 が1つでも混ざると全体が失敗になる** (`failureReason: bad-status`)。
+ * - **404 が 1 つでも混ざると全体が失敗になる** (`failureReason: bad-status`)。
  *   付属のデータ (字幕・データ放送・ポスター) は無い録画もあるので、そのまま
  *   渡すと**動画は落ち終わっているのに**全部が捨てられる。進みは 97% あたりで
  *   止まり、控えごと消えて「無かったことになった」ように見えていた
@@ -302,7 +302,7 @@ async function probeDownloads(
   requests: string[],
 ): Promise<{ urls: string[]; total: number | null; videoSize: number | null }> {
   // 一度に訊く。付属のデータの下見はサーバで録画を読む (字幕は ffmpeg、チャプターは ffprobe) ので、
-  // 1つずつ訊いていた頃は押してから始まるまでに数秒待たせていた
+  // 1 つずつ訊いていた頃は押してから始まるまでに数秒待たせていた
   const probed = await Promise.all(
     requests.map(async (url) => {
       const video = url.includes("/file?");
@@ -351,7 +351,7 @@ async function probeDownloads(
 export async function saveOffline(
   rec: SaveTarget,
 ): Promise<"background" | "page"> {
-  // 押したらすぐ「保存中」にする。下見の間 (数百ms〜) も、押せたのか分からない間を作らない
+  // 押したらすぐ「保存中」にする。下見の間 (数百 ms〜) も、押せたのか分からない間を作らない
   entries = { ...entries, [rec.id]: { state: "downloading", progress: null } };
   // 前に保存した行 (保存済み・失敗)。やり直しが始められなかったら、この行に戻す
   const before = await videos.get(rec.id).catch(() => undefined);
@@ -391,7 +391,7 @@ async function startSave(
   await ensureRoom(total ?? rec.ts_size);
 
   /*
-   * 試みの印。やり直しのたびに変える。Background Fetch は**同じ登録IDが
+   * 試みの印。やり直しのたびに変える。Background Fetch は**同じ登録 ID が
    * 生きている間は再登録できない**ので、前回の残骸があっても必ず登録できる。
    * 残骸の中止の通知が遅れて届いても、印が違えばこの控えは消されない (SW の drop)
    */
@@ -438,7 +438,7 @@ async function startSave(
 /**
  * 動画を塊ごとに置き場へ書きながら受け取る ([stream-parts.ts](./stream-parts.ts))。
  * **全部をメモリに抱えない。** 900MB を抱えていた頃は、iPhone の Safari のタブが重くなって
- * 落とされていた。1塊は 16MiB (書き込み待ちで抱えるのはこれだけ)
+ * 落とされていた。1 塊は 16MiB (書き込み待ちで抱えるのはこれだけ)
  */
 const PART_BYTES = 16 * 1024 * 1024;
 
@@ -499,7 +499,7 @@ async function receiveInPage(
   }
   /** どれかが失敗したか (取り消しとは区別する。どちらも `signal` は abort される) */
   let failure = null as { error: unknown } | null;
-  /** 1つ受け取る。動画は塊ごとに書き、付属のデータは仕分ける */
+  /** 1 つ受け取る。動画は塊ごとに書き、付属のデータは仕分ける */
   const receive = async (url: string): Promise<void> => {
     const video = url.includes("/file?");
     const response = await fetch(url, { signal }).catch((error) => {
@@ -533,7 +533,7 @@ async function receiveInPage(
     // 前の試みの塊が残っていたら捨てる (同じ番号に上書きすると、短くなったとき後ろが残る)
     await clearParts(held.id);
     /*
-     * **1つ失敗したら残りも止め、全部が終わるのを待つ。** 付属のデータが先に失敗しても、
+     * **1 つ失敗したら残りも止め、全部が終わるのを待つ。** 付属のデータが先に失敗しても、
      * 動画の受け取りは続いて塊を書く。止めずに塊を捨てると、捨てたあとに書かれて残る
      */
     await Promise.all(

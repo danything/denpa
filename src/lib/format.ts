@@ -4,7 +4,7 @@ export const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 /**
  * チャンネル種別の見出し。**どれを出すか (並び) は画面ごとに決める**。
- * ここは名前だけ。5画面が同じ表をコピーしていたのを1つに (SKY を選べるのは
+ * ここは名前だけ。5 画面が同じ表をコピーしていたのを 1 つに (SKY を選べるのは
  * ルールの条件だけだが、余分に持っていても他画面の表示には出ない)
  */
 export const SERVICE_TYPE_LABEL: Record<string, string> = {
@@ -23,7 +23,7 @@ export function time(ms: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** 日付だけ。時刻と2行に分けて出すとき用 */
+/** 日付だけ。時刻と 2 行に分けて出すとき用 */
 export function date(ms: number): string {
   const d = new Date(ms);
   return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS[d.getDay()]})`;
@@ -45,7 +45,7 @@ export function durationMs(ms: number): string {
   const min = Math.round(ms / 60000);
   if (min < 60) return `${min} 分`;
   const rest = min % 60;
-  // 「24時間0分」のような書き方は読みにくいので、端数が無いときは時間だけ出す
+  // 「24 時間 0 分」のような書き方は読みにくいので、端数が無いときは時間だけ出す
   return rest === 0
     ? `${Math.floor(min / 60)} 時間`
     : `${Math.floor(min / 60)} 時間 ${rest} 分`;
@@ -63,11 +63,11 @@ export interface NowStatus {
 
 /**
  * **「いま」の線に添える一言。** 次の録画 (いまより後に始まる予約のうちいちばん早いもの) までを
- * 「次の録画まで 3時間59分」と言う。無ければ null (何も添えない)。録画中かどうかは言わない。
- * 録画中の行は線の上にあり、あと何分かは行の3段目が言う (`recordingLeft`)。
+ * 「次の録画まで 3 時間 59 分」と言う。無ければ null (何も添えない)。録画中かどうかは言わない。
+ * 録画中の行は線の上にあり、あと何分かは行の 3 段目が言う (`recordingLeft`)。
  *
- * 分は切り上げる。線の時刻は分を切り捨てて出すので、22:00 の録画は 18:01 の間ずっと「3時間59分」になり、
- * 時刻と食い違わない。1日より先は日数で
+ * 分は切り上げる。線の時刻は分を切り捨てて出すので、22:00 の録画は 18:01 の間ずっと「3 時間 59 分」になり、
+ * 時刻と食い違わない。1 日より先は日数で
  */
 export function nowStatus(
   now: number,
@@ -81,19 +81,19 @@ export function nowStatus(
 }
 
 /**
- * **録画中の行の、あと何分か。** 「あと21分」(分は `nowStatus` と同じく切り上げ)。行の3段目に「録画中・あと21分」と出す (`RowActivity`)。
+ * **録画中の行の、あと何分か。** 「あと 21 分」(分は `nowStatus` と同じく切り上げ)。行の 3 段目に「録画中・あと 21 分」と出す (`RowActivity`)。
  * 終わりの時刻を過ぎても止まりきるまでは録画中のまま。そのときはあと何分かは言えないので null (「録画中」だけ)
  */
 export function recordingLeft(now: number, endAt: number): string | null {
   return endAt <= now ? null : `あと ${untilWords(endAt - now)}`;
 }
 
-/** 切り上げた分。過ぎていても 1 分 (「0分」とは言わない) */
+/** 切り上げた分。過ぎていても 1 分 (「0 分」とは言わない) */
 function minutesUntil(ms: number): number {
   return Math.max(1, Math.ceil(ms / 60_000));
 }
 
-/** 「3時間59分」「12分」「3日」 */
+/** 「3 時間 59 分」「12 分」「3 日」 */
 function untilWords(ms: number): string {
   const min = minutesUntil(ms);
   return min < 24 * 60
@@ -101,7 +101,7 @@ function untilWords(ms: number): string {
     : `${Math.floor(min / (24 * 60))} 日`;
 }
 
-/** 狭い幅の形。「3:59」「12分」「3日」 */
+/** 狭い幅の形。「3:59」「12 分」「3 日」 */
 function untilShort(ms: number): string {
   const min = minutesUntil(ms);
   if (min < 60) return `${min} 分`;
@@ -140,9 +140,9 @@ export function clipNote(
 /**
  * 再生位置の表示。**`12:34` / `1:02:03`。**
  *
- * `durationMs` は「27分」のように読み物の書き方をするもので、動かしている間の
- * 表示には向かない (秒が見えないと、10秒送ったことが分からない)。
- * **1時間を超えたときだけ時間を出す**。短いものに `0:12:34` と出ると、
+ * `durationMs` は「27 分」のように読み物の書き方をするもので、動かしている間の
+ * 表示には向かない (秒が見えないと、10 秒送ったことが分からない)。
+ * **1 時間を超えたときだけ時間を出す**。短いものに `0:12:34` と出ると、
  * 位を数えないと読めない
  */
 export function clock(seconds: number): string {
@@ -158,7 +158,7 @@ export function clock(seconds: number): string {
  * 録画の長さ。実際に録れた長さがあればそちらを出す。
  *
  * 番組表の尺 (end_at - start_at) は予定でしかなく、途中で止めたときや
- * CMを切ったときは出来上がりと合わない。取れていない古い行は予定で代用する。
+ * CM を切ったときは出来上がりと合わない。取れていない古い行は予定で代用する。
  */
 export function recordedDuration(recording: {
   duration_ms: number | null;
@@ -179,8 +179,8 @@ export function size(bytes: number): string {
 }
 
 /**
- * 進み具合のバー (`JobProgress`) に出す大きさの単位と換算。数百GBをバイトで並べても読めないので、
- * 合計が 1GB 以上なら GB (小数1桁)、それより小さければ MB (引き継ぎ・別の機械へ移す)
+ * 進み具合のバー (`JobProgress`) に出す大きさの単位と換算。数百 GB をバイトで並べても読めないので、
+ * 合計が 1GB 以上なら GB (小数 1 桁)、それより小さければ MB (引き継ぎ・別の機械へ移す)
  */
 export function byteScale(total: number): {
   unit: "GB" | "MB";
@@ -195,7 +195,7 @@ export function byteScale(total: number): {
 }
 
 /**
- * 録画の見出しに添える空きと残り時間 (`disk.capacity`)。「空き 1.2TB」と「約900時間」。
+ * 録画の見出しに添える空きと残り時間 (`disk.capacity`)。「空き 1.2TB」と「約 900 時間」。
  * 分けて返すのは、列が狭いと時間のほうだけ落とすため。目安が無ければ `hours` は null。
  *
  * **細かく出さない。** 見出しの脇に小さく置くので短く、また値が少し動くたびに
@@ -223,10 +223,10 @@ export function capacityLabel(
 }
 
 /**
- * 進み具合。**小数第1位まで出す。**
+ * 進み具合。**小数第 1 位まで出す。**
  *
- * 整数だけだと、1時間かかるエンコードでは同じ数字が30秒以上動かない。
- * 動いていないのか止まったのか画面から判らなかったので、1桁足してある
+ * 整数だけだと、1 時間かかるエンコードでは同じ数字が 30 秒以上動かない。
+ * 動いていないのか止まったのか画面から判らなかったので、1 桁足してある
  */
 export function percent(value: number): string {
   const clamped = Math.min(Math.max(value, 0), 1);
@@ -236,7 +236,7 @@ export function percent(value: number): string {
 /**
  * 残り時間の見込み。**秒まで出す。**
  *
- * 分どまりだと終わりぎわの数分が「あと1分」で固まってしまい、
+ * 分どまりだと終わりぎわの数分が「あと 1 分」で固まってしまい、
  * 見終わるまで待てばいいのか席を立っていいのか判らなかった。
  * 秒の桁は多少ふらつくが、動いていることそのものが情報になる
  */
@@ -252,7 +252,7 @@ export function eta(ms: number | null): string {
 }
 
 /**
- * エンコードの「45.0%・あと3分04秒」。一覧の行も状態の欄もこれを使う。SSE で届いた進み (`encode-live`) があれば
+ * エンコードの「45.0%・あと 3 分 04 秒」。一覧の行も状態の欄もこれを使う。SSE で届いた進み (`encode-live`) があれば
  * **残り時間もそちらだけ**。届いた `etaMs` の null は見積もれないということ (docs/api.md) なので、DB の古い値に戻さず出さない
  */
 export function encodeDetail(
@@ -290,7 +290,7 @@ function encodeLabel(
  *
  * 録画の状態 (`state`) は録画そのものの話しかしない。エンコードは別の仕事なので、
  * 動いていればその段階を、落ちていれば落ちたことを、こちらで足す。
- * エンコードの失敗を録画の状態に書き込んでいた頃は、元のTSが無事なのに
+ * エンコードの失敗を録画の状態に書き込んでいた頃は、元の TS が無事なのに
  * 「失敗」と出て再生できなくなっていた
  */
 export function rowState(rec: {
@@ -407,18 +407,18 @@ export function duplicateReason(serviceName: string): string {
 }
 
 /**
- * ロゴでの判定が使えなかったときに、CM検出の覚え書き (`recordings.cm_note`) へ
+ * ロゴでの判定が使えなかったときに、CM 検出の覚え書き (`recordings.cm_note`) へ
  * 入れる目印。無音検出に落ちた理由はこの後ろに続く。
  */
 export const LOGO_UNUSABLE = "ロゴは使えず";
 
 /**
- * その録画を「ロゴでCMを判定できなかった」(無音だけで判定) と扱うか。
+ * その録画を「ロゴで CM を判定できなかった」(無音だけで判定) と扱うか。
  * 一覧に出し、観はじめに CM 飛ばしを入れない (`watch.skipCmAtStart`)。
  *
  * **覚え書きから読む。別の列では持たない。** 印を立てていた頃は、後から条件を
- * 広げても既に録ってある分には効かなかった (「結果の100%がCM判定だったので捨てた」
- * ときも出すようにしたのに、実機の2本は印が 0 のままで画面に出なかった)。
+ * 広げても既に録ってある分には効かなかった (「結果の 100%が CM 判定だったので捨てた」
+ * ときも出すようにしたのに、実機の 2 本は印が 0 のままで画面に出なかった)。
  *
  * 落ちた理由がロゴとは限らない (無音側の道具が落ちることもある) が、そのときも
  * 出しておく。理由は覚え書きに書いてあるし、精度が落ちていることに変わりはない。
@@ -431,8 +431,8 @@ export function logoUnusable(cmNote: string | null): boolean {
  * カードリーダーの名前を「名前」と「挿さっている場所」に分ける。
  *
  * エージェントは `Gemplus USB SmartCard Reader (usb 4-11)` のように場所を括弧で
- * 後ろに付けて返す。**場所は2行目に小さく出す**。1行に詰めていた頃は列が狭く、
- * 文字の途中で1文字ずつ折り返して名前が読めなかった。括弧の無い名前 (px4 の内蔵
+ * 後ろに付けて返す。**場所は 2 行目に小さく出す**。1 行に詰めていた頃は列が狭く、
+ * 文字の途中で 1 文字ずつ折り返して名前が読めなかった。括弧の無い名前 (px4 の内蔵
  * リーダーなど) はそのまま
  */
 export function splitReaderName(name: string): {
@@ -467,12 +467,12 @@ export function cmNoteWorthShowing(cmNote: string | null): boolean {
 }
 
 /*
- * 番組の説明に入っているURLを取り出す。
+ * 番組の説明に入っている URL を取り出す。
  *
  * 番組表の説明欄には公式サイトや配信の告知が素のまま書いてある。読めるだけで
  * 押せないと、結局手で選んで貼り直すことになる。
  *
- * 閉じ括弧や句点はURLの一部にしない。「…example.com/)」のような書き方が多く、
+ * 閉じ括弧や句点は URL の一部にしない。「…example.com/)」のような書き方が多く、
  * そのまま含めると開けないリンクになる。日本語の記号は URL に現れないので切る
  */
 const URL_PATTERN = /https?:\/\/[^\s"'<>）」』】〉、。，]+/g;
@@ -501,7 +501,7 @@ export function linkify(text: string): TextPart[] {
 }
 
 /**
- * **テレビに出ている番号。** 地上波はリモコン番号、BS/CS はサービスID がそのまま3桁番号
+ * **テレビに出ている番号。** 地上波はリモコン番号、BS/CS はサービス ID がそのまま 3 桁番号
  * (BS朝日1=151)。局名だけだと、テレビで覚えている番号から探せない。
  * 地上波でリモコン番号が分からなければ null (出さない)
  */

@@ -49,7 +49,7 @@ export function reflectionLayout(
 const MIRROR_ROWS = 5;
 
 /**
- * **反射を作る。** 写した1枚 (`frame`、32x18 の RGBA。明るさはもう抑えてあるもの) から、`at` の大きさの RGBA を返す。
+ * **反射を作る。** 写した 1 枚 (`frame`、32x18 の RGBA。明るさはもう抑えてあるもの) から、`at` の大きさの RGBA を返す。
  *
  * - 色は下の縁の行を上下に返したもの。折り目の直下は映像のいちばん下の行、手前へ行くほど上の行
  *   (`MIRROR_ROWS` まで)。光沢のある机に映るのと同じ向き
@@ -75,7 +75,7 @@ export function reflectionPixels(
     const r0 = Math.ceil(row);
     const r1 = Math.max(0, r0 - 1);
     const fr = r0 - row;
-    // ならす幅 (写した1マス単位)。折り目で 1、手前で 7
+    // ならす幅 (写した 1 マス単位)。折り目で 1、手前で 7
     const spread = 1 + Math.min(1, t) * 6;
     // 映像の横の外へにじむ幅 (canvas の画素)
     const side = at.w * (0.04 + 0.16 * Math.min(1, t));

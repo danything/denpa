@@ -29,7 +29,7 @@ interface CalendarItem {
   at: number;
 }
 
-/** 月は `年 * 12 + 月 (0 始まり)` の1つの数で持つ (前後の月は ±1) */
+/** 月は `年 * 12 + 月 (0 始まり)` の 1 つの数で持つ (前後の月は ±1) */
 export function monthOf(at: number): number {
   const d = new Date(at);
   return d.getFullYear() * 12 + d.getMonth();
@@ -110,7 +110,7 @@ export function stepMonth(
   return months.find((month) => month > current) ?? null;
 }
 
-/** 矢印の鍵で動かした先の日 (←→ は1日、↑↓ は1週)。ほかの鍵なら null */
+/** 矢印の鍵で動かした先の日 (←→ は 1 日、↑↓ は 1 週)。ほかの鍵なら null */
 export function moveDay(day: number, key: string): number | null {
   const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[key];
   if (step === undefined) return null;
@@ -119,7 +119,7 @@ export function moveDay(day: number, key: string): number | null {
   return d.getTime();
 }
 
-/** 読み上げの名前 (「10月19日 (今日)、予約 3件」)。行が無ければ「なし」 */
+/** 読み上げの名前 (「10 月 19 日 (今日)、予約 3 件」)。行が無ければ「なし」 */
 export function dayAriaLabel(
   day: number,
   mark: DayMark | undefined,

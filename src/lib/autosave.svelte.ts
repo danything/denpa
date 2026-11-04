@@ -8,7 +8,7 @@ import { submitting } from "#lib/actions.js";
  * 中のどれかが変わったら (`change`) 節ごと送る。文字を入れる欄は、欄を離れたときか
  * Enter で `change` が来るので、打っている途中では送らない。
  *
- * - 送っている間にまた変わったら、返事を待ってからもう1度送る (後から来た古い返事で
+ * - 送っている間にまた変わったら、返事を待ってからもう 1 度送る (後から来た古い返事で
  *   新しい値を上書きしない)。「保存しました」は**最後の返事のあとだけ**出す
  * - 断られたら、最後に保存できた値に**戻して**理由を出す。画面とサーバの値を食い違わせない
  * - 送るだけの欄ではないもの (その場の操作のボタンなど) は `data-no-autosave` で外す
@@ -92,7 +92,7 @@ export function autosave(node: HTMLFormElement, status: SaveState) {
   const enhanced = submitting(node, () => async (options) => {
     inFlight = false;
     if (pending) {
-      // 返事を待つ間に変わった。今の値でもう1度送る (この返事では画面を書き換えない)
+      // 返事を待つ間に変わった。今の値でもう 1 度送る (この返事では画面を書き換えない)
       pending = false;
       send();
       return;

@@ -77,8 +77,8 @@ describe("本チャンネルとサブチャンネル", () => {
   });
 
   test("地上波はチャンネルで束ねても、ネットワークID で束ねたのと同じ", () => {
-    // 関東の各局 [サービスID, ネットワークID, チャンネル]。地上波は1局1TS で、
-    // TS の番号はネットワークID と同じ (ARIB TR-B14 第四編 5.3)
+    // 関東の各局 [サービス ID, ネットワーク ID, チャンネル]。地上波は 1 局 1TS で、
+    // TS の番号はネットワーク ID と同じ (ARIB TR-B14 第四編 5.3)
     const kanto: [number, number, string][] = [
       [1024, 32736, "T27"],
       [1025, 32736, "T27"],
@@ -98,7 +98,7 @@ describe("本チャンネルとサブチャンネル", () => {
     const main = mainOf(
       kanto.map(([sid, , channel], i) => station(i, sid, channel)),
     );
-    // ネットワークID ごとに、サービスID のいちばん若い局
+    // ネットワーク ID ごとに、サービス ID のいちばん若い局
     const byNetwork = kanto.map(([, nid]) => {
       const first = Math.min(
         ...kanto.filter(([, n]) => n === nid).map(([s]) => s),
@@ -108,11 +108,11 @@ describe("本チャンネルとサブチャンネル", () => {
     expect(kanto.map((_, i) => main.get(i))).toEqual(byNetwork);
   });
 
-  // 実機の BS [サービスID, チャンネル]
+  // 実機の BS [サービス ID, チャンネル]
   const BS: [number, string][] = [
     [101, "BS15_0"],
     [102, "BS15_0"],
-    // 2024年3月で終わった枠。局名も「-」で、番組は1つも来ない
+    // 2024 年 3 月で終わった枠。局名も「-」で、番組は 1 つも来ない
     [103, "BS15_0"],
     [141, "BS13_3"],
     [142, "BS13_3"],

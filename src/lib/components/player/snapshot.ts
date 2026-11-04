@@ -4,21 +4,21 @@ import { CLIP_BYTES_MOST } from "#lib/clips.js";
 import type { Notice } from "#lib/components/Toasts.svelte";
 import { pad } from "#lib/format.js";
 
-/** 写す1コマ。`<video>` か、canvas で描いているときに worker から貰ったフレーム (`raw/engine.ts` の `grab`) */
+/** 写す 1 コマ。`<video>` か、canvas で描いているときに worker から貰ったフレーム (`raw/engine.ts` の `grab`) */
 export interface Frame {
   image: CanvasImageSource;
   width: number;
   height: number;
 }
 
-/** いま映している `<video>` の1コマ。まだフレームが来ていなければ null */
+/** いま映している `<video>` の 1 コマ。まだフレームが来ていなければ null */
 export function videoFrame(video: HTMLVideoElement | null): Frame | null {
   if (video === null || video.videoWidth === 0) return null;
   return { image: video, width: video.videoWidth, height: video.videoHeight };
 }
 
 /**
- * **canvas で描いているとき (MPEG-2・互換モード) は worker に1枚貰う。** 映像は worker の canvas にあって、
+ * **canvas で描いているとき (MPEG-2・互換モード) は worker に 1 枚貰う。** 映像は worker の canvas にあって、
  * `<video>` は空のまま (`raw/engine.ts`)
  */
 export async function grabbedFrame(
@@ -35,7 +35,7 @@ export async function grabbedFrame(
  * 番組名には「／」(全角) や「:」がよく入る。全角は通るので残し、半角だけ替える
  */
 const FORBIDDEN = /[\\/:*?"<>|\p{Cc}]/gu;
-/** 名前の上限 (字)。**長い番組名で 255 バイトを超えない**ように (日本語は1字3バイト) */
+/** 名前の上限 (字)。**長い番組名で 255 バイトを超えない**ように (日本語は 1 字 3 バイト) */
 const NAME_MOST = 60;
 
 /**
@@ -101,7 +101,7 @@ function blankCanvas(
 }
 
 /**
- * いまの1コマを1枚の canvas に写し、`layers` (映像と同じ縦横の重ね) を下から順に重ねる。
+ * いまの 1 コマを 1 枚の canvas に写し、`layers` (映像と同じ縦横の重ね) を下から順に重ねる。
  * 重ねを渡さなければ映像だけ。まだフレームが来ていなければ null
  */
 export function composeFrame(
@@ -118,7 +118,7 @@ export function composeFrame(
   return canvas;
 }
 
-/** 透けていない画素が1つでもあるか (何も描かれていない重ねは送らない) */
+/** 透けていない画素が 1 つでもあるか (何も描かれていない重ねは送らない) */
 function inked(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -153,7 +153,7 @@ export interface Box {
   height: number;
 }
 
-/** 画面に出ている実況のコメント1件 */
+/** 画面に出ている実況のコメント 1 件 */
 export interface ShownComment {
   text: string;
   /** いま見えている箱 (CSS px。`getBoundingClientRect`。流れている途中の位置) */
@@ -163,7 +163,7 @@ export interface ShownComment {
   color: string;
 }
 
-/** 重ねに描くコメント1件。位置は映像の枠の左上からの CSS px */
+/** 重ねに描くコメント 1 件。位置は映像の枠の左上からの CSS px */
 export interface CommentSpot {
   text: string;
   font: string;
@@ -201,7 +201,7 @@ export function commentSpots(
 
 /** 実況の字の透明度。`JikkyoLayer` の `.comment` と同じ */
 const COMMENT_OPACITY = 0.5;
-/** 黒い縁の幅 (CSS px)。`JikkyoLayer` の `text-shadow` と同じく斜め4方向にずらして描く */
+/** 黒い縁の幅 (CSS px)。`JikkyoLayer` の `text-shadow` と同じく斜め 4 方向にずらして描く */
 const OUTLINE = 1;
 
 /** 押した瞬間のコメントの枠 (CSS px) と、そこに掛かっているコメント */
@@ -213,7 +213,7 @@ export interface CommentScene {
 /**
  * **いま流れているコメントを読む** (押した瞬間に。コメントは動き続けるので、フレームを待つ前に)。
  * 位置は DOM から読む (`getBoundingClientRect`。CSS の `translateX` で動いている途中の所)。
- * コメントの層はプレイヤーに1つ (`JikkyoLayer`) なので、画面から探す。流していない・枠に1件も無ければ null
+ * コメントの層はプレイヤーに 1 つ (`JikkyoLayer`) なので、画面から探す。流していない・枠に 1 件も無ければ null
  */
 export function readComments(): CommentScene | null {
   const frame = document.querySelector<HTMLElement>(
@@ -251,7 +251,7 @@ export function commentLayer(
   if (scene === null) return null;
   const { area, spots } = scene;
 
-  // いったん濃いまま描いて、まとめて透かす (1件ずつ透かすと、縁と字が重なった所だけ濃くなる)
+  // いったん濃いまま描いて、まとめて透かす (1 件ずつ透かすと、縁と字が重なった所だけ濃くなる)
   const solid = blankCanvas(width, height);
   const layer = blankCanvas(width, height);
   if (solid === null || layer === null) return null;
@@ -352,9 +352,9 @@ async function uploadBlob(
   return null;
 }
 
-/** multipart の区切りと部分の頭のぶん (バイト)。3つの部分で数百バイトなので、多めに */
+/** multipart の区切りと部分の頭のぶん (バイト)。3 つの部分で数百バイトなので、多めに */
 const FORM_SLACK = 4 * 1024;
-/** 重ねを除いて映像に残したい大きさ。これより狭ければ重ねを諦めて1枚にする (画質を下げても入らない) */
+/** 重ねを除いて映像に残したい大きさ。これより狭ければ重ねを諦めて 1 枚にする (画質を下げても入らない) */
 const FRAME_LEAST = 64 * 1024;
 
 /** 送る重ね (映像と同じ縦横)。出していなかったものは null */
@@ -365,7 +365,7 @@ export interface ClipLayerCanvases {
 
 /**
  * 映像に使える大きさ (バイト)。本文の上限から区切りのぶんと重ね (PNG) を引いたもの。
- * 重ねが無い・狭すぎて映像が入らないなら null (重ねたものを1枚で送る)
+ * 重ねが無い・狭すぎて映像が入らないなら null (重ねたものを 1 枚で送る)
  */
 export function frameRoom(layerBytes: number[]): number | null {
   if (layerBytes.length === 0) return null;
@@ -378,7 +378,7 @@ export function frameRoom(layerBytes: number[]): number | null {
  * **`POST /api/clips` の本文。** 映像 (`frame`) と、出していた重ね (`captions`・`comments`。透明な PNG) を
  * 分けて送る (あとから出し入れできる)。合わせて本文の上限に収まるよう、重ねの残りで映像の画質を下げる。
  *
- * 重ねが大きすぎて映像が入らないときは、**重ねたもの (`composite`) を映像として1枚だけ送る** (出し入れはできないが、
+ * 重ねが大きすぎて映像が入らないときは、**重ねたもの (`composite`) を映像として 1 枚だけ送る** (出し入れはできないが、
  * 撮ったものは残る)。それも収まらなければ null
  */
 export async function clipForm(

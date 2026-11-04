@@ -39,7 +39,7 @@
    * - 色は小さな canvas で作って CSS で引き伸ばす。`filter: blur` は使わない (GPU の無い端末で重かった)
    * - 写す繰り返しと前の色からの入れ替えは、テーブルトップの反射 (`FoldReflection`) と同じ部品 (`glow-loop.svelte.ts`)。
    *   入れ替えは CSS の `opacity` の transition (下の style)
-   * - 色は枠に重ならない4本の帯 (`.band`) にだけ描く (`strips`)。枠の後ろに敷くと映像のコマごとに合成し直す
+   * - 色は枠に重ならない 4 本の帯 (`.band`) にだけ描く (`strips`)。枠の後ろに敷くと映像のコマごとに合成し直す
    * - ブラウザの枠の色 (`theme-color`) もページの上の端の色にする (`washTop`)
    * - 写さないときは `ambient.ts` の `plan`。映像の上には何も重ねない
    */
@@ -61,7 +61,7 @@
   } = $props();
 
   const BANDS = [0, 1, 2, 3];
-  /** 帯ごとの2枚 (表と裏) */
+  /** 帯ごとの 2 枚 (表と裏) */
   const SIDES = [0, 1];
   let box = $state<HTMLDivElement | null>(null);
   const bands = $state<(HTMLDivElement | null)[]>([null, null, null, null]);
@@ -82,7 +82,7 @@
 
   /** いまの置き場。枠の大きさが変わると変わる */
   let layout: GlowLayout | null = null;
-  /** 帯の canvas の入れ替え。描く1枚は範囲全体で、どの帯にも同じに描き、帯がその一部を切り出す */
+  /** 帯の canvas の入れ替え。描く 1 枚は範囲全体で、どの帯にも同じに描き、帯がその一部を切り出す */
   const fade = new Crossfade({
     box: () => box,
     canvases: (side) => canvases.filter((_, k) => k % 2 === side),
@@ -116,7 +116,7 @@
 
   /** ページの上の端に見える色 (`washTop`)。ブラウザの枠の色にする (下の `toolbar`) */
   let top = $state<Rgb | null>(null);
-  /** 色が枠の外に見えているか。消した・まだ1枚も写していない・全画面 (枠の外が見えない) なら false */
+  /** 色が枠の外に見えているか。消した・まだ 1 枚も写していない・全画面 (枠の外が見えない) なら false */
   const painted = $derived(now !== "off" && loop.lit && !fullscreen);
   $effect(() => {
     shown = painted;
@@ -131,7 +131,7 @@
   });
   $effect(() => () => setAmbientThemeColor(null));
 
-  /** いまの色を最後の1枚から作り直し、動かさずに表へ出す (置き場・テーマが変わったとき) */
+  /** いまの色を最後の 1 枚から作り直し、動かさずに表へ出す (置き場・テーマが変わったとき) */
   function repaint(): void {
     const at = layout;
     const last = colors;
@@ -140,7 +140,7 @@
     );
   }
 
-  /** 写した1枚を次の色にして、裏に描いてから表と裏を入れ替える (動きは CSS。動かさない設定ではすぐ) */
+  /** 写した 1 枚を次の色にして、裏に描いてから表と裏を入れ替える (動きは CSS。動かさない設定ではすぐ) */
   function show(pixels: Uint8ClampedArray): void {
     // 縁の色を延ばし (`edgeExtend`)、時間でならす (`follow`。場面が変わったらすぐ)
     const now = performance.now();
@@ -204,7 +204,7 @@
     fade.repaint(null);
   });
 
-  /** テーマが変わったら、最後の1枚から塗り直す (色の濃くし方が違う) */
+  /** テーマが変わったら、最後の 1 枚から塗り直す (色の濃くし方が違う) */
   $effect(() => {
     void dark;
     untrack(() => {
@@ -296,7 +296,7 @@
           }
         }
       });
-      // 置き場が変わったら、最後の1枚から描き直す (入れ替えの途中なら、そこで済ませる)
+      // 置き場が変わったら、最後の 1 枚から描き直す (入れ替えの途中なら、そこで済ませる)
       if (moved) repaint();
     };
     measure();
@@ -354,7 +354,7 @@
   .band {
     position: absolute;
     overflow: hidden;
-    /* 2枚の足し合わせ (下の `plus-lighter`) を帯の中で済ませ、ページの地には足さない */
+    /* 2 枚の足し合わせ (下の `plus-lighter`) を帯の中で済ませ、ページの地には足さない */
     isolation: isolate;
   }
   /*
@@ -367,8 +367,8 @@
     opacity: 0.6;
   }
   /*
-   * **色の入れ替え。** 表 (`data-front`) へ回った1枚が透明から出て、裏へ回った1枚が同じ長さ・同じ曲線で消える。
-   * 2枚は重ねずに足す (`plus-lighter`)。重ねると光の薄い所で透明度が足りなくなり、1秒に5回の入れ替えのたびに
+   * **色の入れ替え。** 表 (`data-front`) へ回った 1 枚が透明から出て、裏へ回った 1 枚が同じ長さ・同じ曲線で消える。
+   * 2 枚は重ねずに足す (`plus-lighter`)。重ねると光の薄い所で透明度が足りなくなり、1 秒に 5 回の入れ替えのたびに
    * 明滅して見えた。足せば途中も「前の色 × (1 − t) + 次の色 × t」になる。
    * 写す間隔 (`EVERY`。200ms) のうちに終わる長さにする。動かさない設定ではトークンが 0 になり、すぐ入れ替わる
    */

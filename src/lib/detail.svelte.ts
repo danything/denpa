@@ -12,7 +12,7 @@ export interface DetailSeed {
   description?: string;
   /**
    * 録画の行は**番組表から写したもの**も持っている (`recordings` の
-   * genre_detail / audios / extended)。番組表の行は24時間で消えるので、
+   * genre_detail / audios / extended)。番組表の行は 24 時間で消えるので、
    * そのあとに出せるのはこの写しだけ。持っている行は渡す
    */
   genre_detail?: Program["genre_detail"];
@@ -84,7 +84,7 @@ export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {
  *
  * 予約・録画の一覧とルールのプレビューで同じものが要る。**開く手順を写していると
  * 片方だけ直したときに見え方がずれる** (実際、先に出す・あとで差し替えるという
- * 段取りそのものが2箇所にあった)。
+ * 段取りそのものが 2 箇所にあった)。
  */
 export function programDetail() {
   let current = $state<ProgramDetail | null>(null);
@@ -108,7 +108,7 @@ export function programDetail() {
        * **既定を先に置いて、行の分で上書きする。** 逆順に書いていた頃は、
        * 行が持っているジャンル・音声・詳細を既定の null で潰していた。
        * 番組表から引けるうちは引き直しで戻るので気付かず、**番組表から
-       * 消えた録画 (24時間過ぎ) だけジャンルのラベルが出なかった** (実機)
+       * 消えた録画 (24 時間過ぎ) だけジャンルのラベルが出なかった** (実機)
        */
       current = filled(seed);
       if (programId === null) return;

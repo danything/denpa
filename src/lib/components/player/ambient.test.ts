@@ -153,7 +153,7 @@ describe("光の canvas", () => {
     const stage = { left: 100, top: 100, right: 740, bottom: 460 };
     const area = { left: 0, top: 60, right: 900, bottom: 600 };
     const layout = glowLayout(area, stage, 64);
-    // 640px の枠が 96 画素 (1画素 6.67px)
+    // 640px の枠が 96 画素 (1 画素 6.67px)
     expect(layout.width).toBe(135);
     expect(layout.height).toBe(81);
     expect(layout.x).toBeCloseTo(15);
@@ -538,7 +538,7 @@ describe("映像の中の動き", () => {
 });
 
 describe("washTop (ページの上の端の色 = ブラウザの枠の色)", () => {
-  /** 幅 `width` の1行。色と透明度は全部同じ */
+  /** 幅 `width` の 1 行。色と透明度は全部同じ */
   const row = (width: number, [r, g, b]: [number, number, number], a: number) =>
     Uint8ClampedArray.from(
       { length: width * 4 },

@@ -8,7 +8,7 @@ import {
 } from "./prefecture";
 
 /*
- * **都道府県の番号は ARIB の県域 (STD-B10 付録G 表G-2)。** JIS の都道府県コードではないので、
+ * **都道府県の番号は ARIB の県域 (STD-B10 付録 G 表 G-2)。** JIS の都道府県コードではないので、
  * 東京都は 13 ではなく 14。放送はこの値を `nvram://receiverinfo/prefecture` で読む。
  */
 describe("都道府県", () => {

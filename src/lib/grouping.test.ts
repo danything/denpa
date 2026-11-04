@@ -90,7 +90,7 @@ describe("描く行に開く", () => {
     ]);
     expect(lines[0]).toMatchObject({ kind: "head", open: true });
     expect(lines[1]).toMatchObject({ kind: "row", nested: true });
-    // 1本だけの番組は中の行ではない
+    // 1 本だけの番組は中の行ではない
     expect(lines[4]).toMatchObject({ kind: "row", nested: false });
   });
 });

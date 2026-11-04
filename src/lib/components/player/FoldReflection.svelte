@@ -170,7 +170,7 @@
     bottom: 0;
     left: 0;
     pointer-events: none;
-    /* 2枚の足し合わせ (下の `plus-lighter`) を箱の中で済ませる */
+    /* 2 枚の足し合わせ (下の `plus-lighter`) を箱の中で済ませる */
     isolation: isolate;
   }
   .reflection[data-off] {

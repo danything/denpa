@@ -14,7 +14,7 @@
   // 引き継ぎの進み具合はサーバから流れてくる
   liveUpdates(["migrate"]);
 
-  /** 押した結果は画面で1か所に出す。引き継ぎの進み具合そのものは、その節の中に出したまま */
+  /** 押した結果は画面で 1 か所に出す。引き継ぎの進み具合そのものは、その節の中に出したまま */
   const notices = $derived.by(() => {
     const list = errorNotice(form, "settings-error");
     if (form?.webhookAdded)

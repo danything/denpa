@@ -1,7 +1,7 @@
 import { SKIP } from "#lib/ts/watch.js";
 
 /**
- * 再生画面のキー操作。**3画面 (ライブ・追っかけ・観る画面) で同じ割り当てにする** (観ているものは同じなので、
+ * 再生画面のキー操作。**3 画面 (ライブ・追っかけ・観る画面) で同じ割り当てにする** (観ているものは同じなので、
  * 画面やエンコードの前後で押し方を変えない)。その画面でできないことは、押しても何も起きない (速さはライブの
  * 追っかけ中だけ、など。決めるのは画面のほう)。
  *
@@ -15,7 +15,7 @@ import { SKIP } from "#lib/ts/watch.js";
 export interface PlayerKeys {
   /** 空白 / k */
   togglePlay: () => void;
-  /** ← → (10秒。`ts/watch.ts` の端2回タップと同じ幅) */
+  /** ← → (10 秒。`ts/watch.ts` の端 2 回タップと同じ幅) */
   seekBy: (seconds: number) => void;
   /** c。持っていない画面は省く */
   toggleCaptions?: () => void;

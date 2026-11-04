@@ -54,7 +54,7 @@ export interface SuggestResponse {
 }
 
 interface Suggestion {
-  /** 画面の中で1つだけの鍵。候補の id (`aria-activedescendant`) にも使う */
+  /** 画面の中で 1 つだけの鍵。候補の id (`aria-activedescendant`) にも使う */
   key: string;
   label: string;
   /** 名前の下の小さな字 (局・時刻・状態) */

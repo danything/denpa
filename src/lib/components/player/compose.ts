@@ -2,7 +2,7 @@
  * 小窓 (PiP) へ**字幕ごと**出す映像ストリームを作る (`pip.svelte.ts`)。
  *
  * 字幕は `<video>` の上に重ねた canvas に描いている (`caption-draw.ts`) ので、`<video>` を
- * そのまま小窓にすると字幕は付いていかない。流れてくるコマ1枚ずつに、いま画面に
+ * そのまま小窓にすると字幕は付いていかない。流れてくるコマ 1 枚ずつに、いま画面に
  * 出している字幕の canvas をそのまま重ねて、別のストリームに書き込む。
  *
  * - **時刻は画面の字幕と同じ**。重ねるのは画面の canvas そのものなので、出し消し
@@ -116,7 +116,7 @@ export function compose(
         context.drawImage(caption, 0, 0, width, height);
         composed = new VideoFrame(canvas, { timestamp: frame.timestamp });
       } catch {
-        // 重ねられなかった1枚は字幕無しで出す。捨てると小窓の映像が飛ぶ
+        // 重ねられなかった 1 枚は字幕無しで出す。捨てると小窓の映像が飛ぶ
         controller.enqueue(frame);
         return;
       }

@@ -2,7 +2,7 @@
   import type { IconShape } from "./icons";
 
   /**
-   * アイコン1つ。**中身は `icons.ts` の部品 (Lucide) をそのまま渡す。**
+   * アイコン 1 つ。**中身は `icons.ts` の部品 (Lucide) をそのまま渡す。**
    * 読み上げはボタンの `aria-label` に任せるので、アイコンそのものは隠す
    */
   let { icon: Shape, size = "size-6" }: { icon: IconShape; size?: string } =

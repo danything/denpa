@@ -53,7 +53,7 @@
   /** 観られなかった理由 */
   let problem = $state<string | null>(null);
   /**
-   * 消すのは2回押し。挙動はほかの画面と共通 ([arming.svelte.ts](../../lib/arming.svelte.ts))。
+   * 消すのは 2 回押し。挙動はほかの画面と共通 ([arming.svelte.ts](../../lib/arming.svelte.ts))。
    * サーバからも消えることが分かる言葉で聞き返す
    */
   const deleting = arming('[data-testid="offline-delete"]');
@@ -218,7 +218,7 @@
       deleting.arm(item.id);
       return;
     }
-    // フォーム送信ではないので、消したら自分で2回押しを戻す
+    // フォーム送信ではないので、消したら自分で 2 回押しを戻す
     deleting.fire();
     if (playing?.id === item.id) stop();
     await removeEverywhere(item);

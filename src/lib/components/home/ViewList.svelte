@@ -3,7 +3,7 @@
 
   /**
    * 表示の切り替え (まとめて表示・新しい順で表示・完了した予約も表示・削除済みも表示・ファイルと照合)。
-   * オン・オフの印 (`aria-checked`) 付き。操作の1行の「⋯」(`TimelineBar`) とサイドバーの「表示」(`HomeAside`) の中身
+   * オン・オフの印 (`aria-checked`) 付き。操作の 1 行の「⋯」(`TimelineBar`) とサイドバーの「表示」(`HomeAside`) の中身
    */
   import { submitting } from "#lib/actions.js";
   import Icon from "#lib/components/player/Icon.svelte";

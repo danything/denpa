@@ -196,7 +196,7 @@
 
   /**
    * 行を押したら番組詳細を出す。中身の出し方は `detail` が持っている。
-   * ここで決めるのは、その行に添える注記 (失敗の理由・CMの判定) だけ。
+   * ここで決めるのは、その行に添える注記 (失敗の理由・CM の判定) だけ。
    */
   function openDetail(
     programId: number | null,
@@ -218,7 +218,7 @@
     detailResId = res.id;
   }
 
-  /** 削除は2回押させる。挙動はほかの画面と共通 ([arming.svelte.ts](../lib/arming.svelte.ts)) */
+  /** 削除は 2 回押させる。挙動はほかの画面と共通 ([arming.svelte.ts](../lib/arming.svelte.ts)) */
   const deleting = arming(
     '[data-testid="delete-button"], [data-testid="delete-confirm"], [data-testid="row-menu-delete"], [data-testid="row-menu-delete-confirm"]',
   );
@@ -233,7 +233,7 @@
     if (rec.deleted_at !== null || rec.state === "failed") return null;
     if (rec.library_path !== null) return resolve(`watch/${rec.id}`);
     /*
-     * **エンコードが終わる前でも観られる。** 録り終えて CM検出やエンコードを待っている間 (失敗したときも) は
+     * **エンコードが終わる前でも観られる。** 録り終えて CM 検出やエンコードを待っている間 (失敗したときも) は
      * 観る画面がサーバに元の TS をその場で変換させて流す (`server/playback.ts`)。録っている最中だけ
      * 追っかけ再生の画面 (`/chase`。伸びている TS を追い読みする)
      */
@@ -275,7 +275,7 @@
    * 録画の詳細。
    *
    * 失敗の理由は**ここでしか出さない** (一覧の行の高さを揃えるため)。
-   * 理由は3種類あって、それぞれ別物なので見出しを付けて分けて渡す
+   * 理由は 3 種類あって、それぞれ別物なので見出しを付けて分けて渡す
    */
   function openRecording(rec: Rec): void {
     const notes: { title: string; text: string }[] = [];
@@ -305,9 +305,9 @@
   }
 
   /*
-   * ---- 1本の時間軸 (`#lib/timeline.ts`) ----
+   * ---- 1 本の時間軸 (`#lib/timeline.ts`) ----
    *
-   * 予約・録画・録り逃しを1つの一覧に並べる。上が録れたものと録画中、「いま」の線、
+   * 予約・録画・録り逃しを 1 つの一覧に並べる。上が録れたものと録画中、「いま」の線、
    * 下がこれからの予約 (下へ行くほど時間が進む)。行の形 (`Item`) は部品と分け合う (`#lib/components/home/context.ts`)
    */
 
@@ -526,7 +526,7 @@
   }
 
   /**
-   * まだ描いていない**録れたものの本数** (「残り N 件」)。閉じた見出し1つに何本も入っているので、
+   * まだ描いていない**録れたものの本数** (「残り N 件」)。閉じた見出し 1 つに何本も入っているので、
    * 描く行の数では数えない
    */
   const pastRest = $derived.by(() => {
@@ -562,7 +562,7 @@
     }
     return next;
   });
-  /** 「いま」の線に添える一言。次の録画まで (絞り込みに関係なく。録画中のあと何分かは行の3段目) */
+  /** 「いま」の線に添える一言。次の録画まで (絞り込みに関係なく。録画中のあと何分かは行の 3 段目) */
   const lineStatus = $derived(nowStatus(clock, nextRes));
   function dayLabel(at: number): string {
     return dayName(at, clock) ?? fullDate(at);
@@ -575,7 +575,7 @@
    * まだ描いていない所にあれば、そこまで描いてから送る。
    * **新しい順のときは探さず、「いま」の線を上のほうに映す** (線のすぐ下に新しい録画が並ぶ。古い未視聴へ送ると、
    * 新しいものがすべて上に残り、読む向きと逆になる)。
-   * 並べ替えや絞り込みのたびには動かさない (開いたときの1回だけ)
+   * 並べ替えや絞り込みのたびには動かさない (開いたときの 1 回だけ)
    */
   let listBox: HTMLElement | undefined = $state();
   let placed = false;
@@ -665,7 +665,7 @@
   const dayMarks = $derived(markDays(shownItems, today));
   let pinned = $state<number | null>(null);
   let pinFrame = 0;
-  /** 頭の日を読み直す。送っている間は1コマに1回だけ */
+  /** 頭の日を読み直す。送っている間は 1 コマに 1 回だけ */
   function trackPinned(): void {
     if (pinFrame !== 0) return;
     pinFrame = requestAnimationFrame(() => {
@@ -682,7 +682,7 @@
   /**
    * その日の見出しを頭に送る。**まだ描いていない古い日なら、そこまで描いてから** (`showPastUpTo` と同じ数え方)。
    * 上へ足すときは、足す間は読んでいる所を動かさず (`holdPlace`)、描き終えてから送る。足したぶん飛んでから送り直す、
-   * という2段の動きを見せない。新しい順のときは見出しの下にも 1 回に足すぶんを描く (見出しを頭まで送れるように)
+   * という 2 段の動きを見せない。新しい順のときは見出しの下にも 1 回に足すぶんを描く (見出しを頭まで送れるように)
    */
   async function pickDay(day: number): Promise<void> {
     if (listBox === undefined) return;
@@ -799,7 +799,7 @@
       data-testid="timeline"
     >
       <!--
-                **300件で頭打ちなのを黙らない。** 溜まると古いものが黙って消え、「消えた」ように見える。
+                **300 件で頭打ちなのを黙らない。** 溜まると古いものが黙って消え、「消えた」ように見える。
                 上限に当たっていたら、いちばん古い録画の隣 (一覧の端。新しい順のときは末尾) に検索へ誘う一行を出す (`+page.server.ts` の `.limit(300)`)。
                 描き切っていなければ、代わりに残りの件数を出し、近づいたら古いほうを足す (`sentinel`・`revealOlder`)。残りが無くなれば消える
             -->
@@ -919,7 +919,7 @@
 {/snippet}
 
 <!--
-    その1本に対する操作。**一覧の行ではなくここに置く** (行に並べていた頃は狭い画面で枠から流れ出した)。
+    その 1 本に対する操作。**一覧の行ではなくここに置く** (行に並べていた頃は狭い画面で枠から流れ出した)。
     行に残すのは入口 (詳細) と削除だけ
 -->
 {#snippet recordingActions()}
@@ -928,7 +928,7 @@
     {#if hasFile(rec)}
       <!--
                 **並べるのはよく押すものだけ**。端末に保存・ルールを作る。
-                条件が揃うと10個のボタンが同じ見た目で並び、狭い画面では文字の
+                条件が揃うと 10 個のボタンが同じ見た目で並び、狭い画面では文字の
                 途中で折り返していた。めったに押さないもの (視聴済みの付け外し・
                 再エンコード) は「その他…」に畳む。
             -->
@@ -992,7 +992,7 @@
     {#if hasFile(rec)}
       <!--
                 **めったに押さないものの置き場。** 上に開く (フッターは画面の下端にある)。中身は上から
-                視聴済みの付け外し、直すもの (再エンコード・CM検出) の順。
+                視聴済みの付け外し、直すもの (再エンコード・CM 検出) の順。
                 閉じている間も中身は DOM に置く (どの項目が出るかを e2e が開かずに数えている)
             -->
       <Menu side="top" align="end" class="more-menu" testid="detail-more-menu">
@@ -1072,7 +1072,7 @@
 
 <style>
   /*
-     * 一覧・行・操作の1行の見た目は部品と分け合うので `#lib/components/home/home.css` (`.board` の下だけに効く)。
+     * 一覧・行・操作の 1 行の見た目は部品と分け合うので `#lib/components/home/home.css` (`.board` の下だけに効く)。
      * ここに残すのは、一覧の外 (番組の詳細) に出るものだけ。送るだけの項目を包むフォーム (`.menu-form`) は `app.css`
      */
   /* 「その他…」の中身 (枠は `Menu` の中なので :global)。項目は左寄せで縦に積む (`app.css` の `.menu`) */
@@ -1080,7 +1080,7 @@
     width: 16rem;
     max-width: calc(100vw - 2rem);
   }
-  /* 押せない項目のすぐ下に出す理由 (CM検出をやり直せないわけ)。項目と同じ字下げで、次の項目とは余白で分ける */
+  /* 押せない項目のすぐ下に出す理由 (CM 検出をやり直せないわけ)。項目と同じ字下げで、次の項目とは余白で分ける */
   .menu-note {
     padding: 0.25rem 0.75rem 0.5rem;
     white-space: nowrap;

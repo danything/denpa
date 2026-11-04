@@ -117,7 +117,7 @@
       Math.min(...ends) - Date.now() + PROGRAM_END_GRACE,
       PROGRAM_END_FLOOR,
     );
-    // setTimeout は 2^31-1 ms (約24日) を超えると即座に鳴る
+    // setTimeout は 2^31-1 ms (約 24 日) を超えると即座に鳴る
     const timer = setTimeout(reload, Math.min(wait, 2 ** 31 - 1));
     return () => clearTimeout(timer);
   });
@@ -154,7 +154,7 @@
     return () => player.stop();
   });
 
-  /** いま映している局。局で引く (物理チャンネルで引くと、1本に複数の局が入っていると先頭が塗られた) */
+  /** いま映している局。局で引く (物理チャンネルで引くと、1 本に複数の局が入っていると先頭が塗られた) */
   const current = $derived(
     channels.find((c) => c.id === player.tuned?.serviceId),
   );
@@ -272,7 +272,7 @@
     stageEl.scrollIntoView({ block: "start" });
   }
 
-  /** 一覧の各行。開いたときに、いま映している局まで送る (局が100を超えると画面の外のほうが普通) */
+  /** 一覧の各行。開いたときに、いま映している局まで送る (局が 100 を超えると画面の外のほうが普通) */
   const rows: Record<number, HTMLElement | undefined> = $state({});
   /** 一覧そのもの。送るのはこの中だけ (下の説明) */
   let list = $state<HTMLElement | null>(null);
@@ -360,7 +360,7 @@
   }
 
   const controls = playerControls();
-  /** 全画面にする枠と、その出入り (3画面共通) */
+  /** 全画面にする枠と、その出入り (3 画面共通) */
   let stageEl = $state<HTMLElement | null>(null);
   const fullscreen = stageFullscreen(() => stageEl);
 
@@ -434,7 +434,7 @@
     },
   });
 
-  /** アンビエントモード。canvas に描いているときは worker から縮めた1枚をもらう */
+  /** アンビエントモード。canvas に描いているときは worker から縮めた 1 枚をもらう */
   const ambient = ambientMode({
     playing: () => !player.paused,
     canvas: () => (player.canvas ? player : null),
@@ -471,10 +471,10 @@
     player.volume = volume.level;
   });
 
-  /** 真ん中あたりを素早く2回で再生/一時停止 (`center-tap.ts`)。1回目は操作列の出し入れ */
+  /** 真ん中あたりを素早く 2 回で再生/一時停止 (`center-tap.ts`)。1 回目は操作列の出し入れ */
   const stageTap = centerTap(() => player.toggle(), controls.toggle);
 
-  /** いまの1コマを字幕・コメントごと切り抜いてサーバに保存する (3画面共通。`shot.svelte.ts`) */
+  /** いまの 1 コマを字幕・コメントごと切り抜いてサーバに保存する (3 画面共通。`shot.svelte.ts`) */
   const shooter = snapshotter(controls);
   const notices = $derived<Notice[]>([
     ...shooter.notices,
@@ -642,7 +642,7 @@
                 pressD(player.showData, dataButton, (on) => player.setData(on))}
             />
           {/if}
-          <!-- MPEG-2 でも切り抜ける (worker の canvas から1枚もらう。`snapshot.grabbedFrame`) -->
+          <!-- MPEG-2 でも切り抜ける (worker の canvas から 1 枚もらう。`snapshot.grabbedFrame`) -->
           <ControlButton
             icon={shooter.saved ? CHECK : CAMERA}
             label="この場面を切り抜く"
@@ -715,7 +715,7 @@
               />
 
               <!--
-                        字幕を持っている番組でだけ出す。1枚も届いていなくても出す (`server/captions.ts` の
+                        字幕を持っている番組でだけ出す。1 枚も届いていなくても出す (`server/captions.ts` の
                         `TrackList`。届いてから出すと間隔の空く番組で出なかった)
                     -->
               {#if player.hasCaptions}
@@ -900,7 +900,7 @@
       {#if player.silenced && player.state === "playing"}
         <!--
                     押されるまで音は出せない (前回の局で勝手に始めるので、ブラウザが音ありの再生を断る)。
-                    並びの外に1つだけ浮かぶので、地は映像の上の通知と同じに自分で敷く
+                    並びの外に 1 つだけ浮かぶので、地は映像の上の通知と同じに自分で敷く
                 -->
         <button
           type="button"
@@ -922,7 +922,7 @@
           testid="live-status"
         >
           {#snippet actions()}
-            <!-- 録画に譲っている間は出さない (通知の「ライブに戻る」と2つ並ぶと迷う) -->
+            <!-- 録画に譲っている間は出さない (通知の「ライブに戻る」と 2 つ並ぶと迷う) -->
             {#if player.yielded === null}
               <button
                 type="button"
@@ -1120,7 +1120,7 @@
                             -->
                 <span class="channel-text">
                   <!--
-                                    テレビの番号を局名の頭に添える (地上波はリモコン番号、BS/CS は3桁)。
+                                    テレビの番号を局名の頭に添える (地上波はリモコン番号、BS/CS は 3 桁)。
                                     番号の無い局も幅は取る。局名の頭がそろう
                                 -->
                   <span class="channel-name broadcast">
@@ -1180,7 +1180,7 @@
   }}
 />
 
-<!-- 運転中の注意 (互換モードで初めて再生する前に1回)。押すまで再生を始めない -->
+<!-- 運転中の注意 (互換モードで初めて再生する前に 1 回)。押すまで再生を始めない -->
 <DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>

@@ -32,7 +32,7 @@
   import type { Volume } from "./volume.svelte.js";
 
   /**
-   * 操作バーの右端 (3画面で同じ)。再生の設定 (⚙ `SettingsMenu`。並びと中身は docs/player.md)・小窓 (出せる端末だけ)・
+   * 操作バーの右端 (3 画面で同じ)。再生の設定 (⚙ `SettingsMenu`。並びと中身は docs/player.md)・小窓 (出せる端末だけ)・
    * 全画面。畳むとき (`stage.fold`。狭い枠か、一段に収まらないとき) は毎回は使わないものを ⚙ の頭に入れる (`fold`。小窓もここで足す)。
    * 互換モードは切り替えたらページを読み直す。`<video>` か canvas かはプレイヤーを組むときに決まる
    */
@@ -54,9 +54,9 @@
     fold?: SettingRow[];
     /** コーデック (`settings.ts` の `liveCodecs` / `recordingCodecs`)。選べないときは省く */
     codec?: SettingChoice | undefined;
-    /** 音声 (`settings.ts` の `audioTracks`)。選べるものが2つ以上あるときだけ */
+    /** 音声 (`settings.ts` の `audioTracks`)。選べるものが 2 つ以上あるときだけ */
     audio?: SettingChoice | undefined;
-    /** CMスキップ (観る画面で、CM の入った録画だけ) */
+    /** CM スキップ (観る画面で、CM の入った録画だけ) */
     cm?: { on: boolean; toggle: () => void } | undefined;
     /**
      * データ放送 (観る画面で、取り出してある録画だけ)。**映像の上の列には置かない**。右端の列は
@@ -64,14 +64,14 @@
      */
     data?: { on: boolean; toggle: () => void } | undefined;
     /**
-     * データ放送を常に受信するか (ライブと観る画面で同じ1つ。端末ごと。`data-receive.ts`)。開くのは d (ライブは右端の列、
+     * データ放送を常に受信するか (ライブと観る画面で同じ 1 つ。端末ごと。`data-receive.ts`)。開くのは d (ライブは右端の列、
      * 観る画面はこのメニュー) で、これは開いていなくても受信しておくかの切り替え。観る画面はデータ放送のある録画だけ
      */
     receive?: { on: boolean; toggle: () => void } | undefined;
     /** 字幕 (`settings.ts` の `subtitles`)。字幕を持っているときだけ */
     subtitle?: SettingChoice | undefined;
     /**
-     * 実況のコメント (3画面で同じ。端末ごと。`#lib/jikkyo/switch.svelte.ts`)。世帯の設定 (連携の「実況」) がオンのときだけ渡す。
+     * 実況のコメント (3 画面で同じ。端末ごと。`#lib/jikkyo/switch.svelte.ts`)。世帯の設定 (連携の「実況」) がオンのときだけ渡す。
      * 実況の無い局・録画は `missing` で押せなくし、読めないときは `down` で「(いまは読めません)」を添える (押せるまま)
      */
     jikkyo?:
@@ -118,7 +118,7 @@
   );
 
   /**
-   * ⚙ に音量のつまみを置くか。**つまみは画面に1つだけ**。マウスの端末では音のボタンに乗せると浮かぶので
+   * ⚙ に音量のつまみを置くか。**つまみは画面に 1 つだけ**。マウスの端末では音のボタンに乗せると浮かぶので
    * (`SoundButton`) ⚙ には置かない。置くのは指の端末 (浮かばない) と、畳んで音のボタンごと ⚙ に入ったときだけ
    */
   const pointer = new MediaQuery(POINTER);
@@ -238,7 +238,7 @@
   {choices}
   volume={showVolume ? volume : undefined}
 />
-<!-- 出すときだけ置く。ライブは再生の前に出す注意を自分でも持っているので、いつも置くと2つになる -->
+<!-- 出すときだけ置く。ライブは再生の前に出す注意を自分でも持っているので、いつも置くと 2 つになる -->
 {#if confirming}
   <DriveNotice
     open

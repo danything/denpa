@@ -62,7 +62,7 @@ describe("側ごとの並び", () => {
       "rec-2",
     ]);
     expect(keys(now)).toEqual(["res-now", "now"]);
-    // 今日の予約には見出しを立てない (今日の見出しは線の上の1つだけ)
+    // 今日の予約には見出しを立てない (今日の見出しは線の上の 1 つだけ)
     expect(keys(future)).toEqual(["res-1", "res-2"]);
   });
 
@@ -357,7 +357,7 @@ describe("まとめて表示", () => {
       isOpen: () => false,
     });
     const heads = future.filter((line) => line.kind === "head");
-    // アニメの次の回 (2時間後) はドラマの次の回 (10時間後) より早いので、線の側 (上) に来る
+    // アニメの次の回 (2 時間後) はドラマの次の回 (10 時間後) より早いので、線の側 (上) に来る
     expect(heads.map((line) => line.key)).toEqual([
       "future-group-アニメ",
       "future-group-ドラマ",

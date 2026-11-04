@@ -2,11 +2,11 @@
   import { resolve } from "$app/paths";
 
   /**
-   * 局名・尺・サイズ。1行にまとめて、空のものは出さない。
+   * 局名・尺・サイズ。1 行にまとめて、空のものは出さない。
    * 局ロゴは**まだ取得できていない局では何も出さない** (ServiceLogo)。
    * 局名は放送から来た字なので放送の字 (`.broadcast`)。残りはこちらで書いた字。
    *
-   * **何でこの1本が立ったのか** (`rule`)。要らないものが混ざっていたときに直す先 (どのルールか) が分かるよう、
+   * **何でこの 1 本が立ったのか** (`rule`)。要らないものが混ざっていたときに直す先 (どのルールか) が分かるよう、
    * ルール名をそのままルールの編集への入口にする。手動予約は、録れたもの (後から見返すもの) にだけ書く
    */
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
@@ -23,7 +23,7 @@
     row: { service_id: number; has_logo: boolean | null };
     rule:
       { rule_id: number | null; rule_name: string | null } | "manual" | null;
-    /** 残りの幅を埋める番組の説明の頭 (1行で「…」まで。狭い画面では出さない) */
+    /** 残りの幅を埋める番組の説明の頭 (1 行で「…」まで。狭い画面では出さない) */
     excerpt?: string;
   } = $props();
   const rest = $derived(parts.filter(Boolean).join("・"));
