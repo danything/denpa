@@ -5,7 +5,7 @@
  * 窓は読んでいた時間で 5 秒ぶん。読むのを止めている間は窓が進まないので、最後に測った値をそのまま返す。
  *
  * 読むのを止めていた間にも、ブラウザは回線から受け取って手元に溜めている。読み始めてすぐの塊は待たずに返るので、
- * 回線の速さとして数えない (`draining`)。待って返った塊が来てから数え始める
+ * 回線の速さとして数えない (`draining`)。待って返った塊が来てから数え始める (待たずに返り続けても、`METER_DRAIN_MOST` を過ぎたら数え始める)
  */
 
 /** 窓の長さ (ms。読んでいた時間) */
@@ -17,6 +17,14 @@ const METER_LEAST = 1_000;
  * 塊 1 つぶん (数十 KB) を受け取る時間がかかる
  */
 export const METER_QUEUED = 4;
+/**
+ * 止めたあと、溜まっていたものを読む (数えない) のはこれまで (ms。最初に読んでから)。これを過ぎたら、待たずに返った塊も数える。
+ * 速い回線では、足すのを待っている間 (`appendBuffer`) に次の塊が届いて手元に溜まるので、読み出しは毎回待たずに返る。
+ * 待って返った塊だけを合図にしていた頃は、そのまま測り直せず、絞りを外しても段が上がらなかった (手元で 15 Mbit/s 届いて
+ * いるのに、最後に測った 2 Mbit/s のまま)。手元に溜まるのはブラウザの受け取りの入れ物のぶん (数 MB まで) で、
+ * 速い回線なら 1 秒もかからずに読み切る
+ */
+export const METER_DRAIN_MOST = 1_000;
 
 export class Meter {
   /** 塊ごとのバイト数と、それを受け取るのにかかった時間 (ms)。古い順 */
@@ -27,6 +35,8 @@ export class Meter {
   private last: number | null = null;
   /** 手元に溜まっていたものを読んでいる最中か */
   private draining = true;
+  /** 溜まっていたものを読み始めた時刻 (`METER_DRAIN_MOST`)。まだ読んでいなければ null */
+  private drainFrom: number | null = null;
   /** 最後に測った時刻 (ms)。まだなら null */
   measuredAt: number | null = null;
 
@@ -37,6 +47,7 @@ export class Meter {
   pause(): void {
     this.last = null;
     this.draining = true;
+    this.drainFrom = null;
   }
 
   /**
@@ -44,8 +55,10 @@ export class Meter {
    */
   add(bytes: number, asked: number, now: number): void {
     if (this.draining) {
-      if (now - asked < METER_QUEUED) return;
-      // 待って返った。ここから先は回線から届いたもの。この塊は待ち始めが分からないので、時刻だけ控える
+      this.drainFrom ??= asked;
+      if (now - asked < METER_QUEUED && now - this.drainFrom < METER_DRAIN_MOST)
+        return;
+      // 待って返った (か、`METER_DRAIN_MOST` を過ぎた)。ここから先は回線から届いたもの。この塊は待ち始めが分からないので、時刻だけ控える
       this.draining = false;
       this.last = now;
       return;

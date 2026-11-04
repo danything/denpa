@@ -13,6 +13,7 @@
 
   import { submitting } from "#lib/actions.js";
   import {
+    ADAPT_NOTE,
     type AdaptDecision,
     adaptNote,
     HOLD,
@@ -248,8 +249,6 @@
   /** 段の断り書き。しばらくで引っ込める */
   let adaptText = $state<string | null>(null);
   let adaptTimer: ReturnType<typeof setTimeout> | null = null;
-  /** 断り書きを出しておく長さ (ms)。`encode`・`pinned` は続く間は刻むたびに出し直す */
-  const ADAPT_NOTE = 6_000;
   /** 段を替えるために作り直したとき、作り直す前に再生していたか。尺が分かったら続ける (`resume`) */
   let keepPlaying = false;
   /**

@@ -7,7 +7,7 @@
  * 音声だけ (`"audio"`) は `codec: "audio"` で、音声は段 3 と同じ 96k にする (`rung: 3`)
  */
 
-import type { Step } from "./adapt";
+import { LAG_SPAN, type Step } from "./adapt";
 import { type LiveCodec, type Notice } from "./live";
 import { LOWEST_RUNG, type Rung } from "./rungs";
 
@@ -112,4 +112,103 @@ export function replacesWarning(
     reason === "encode" &&
     (Object.values(LIGHT_NOTE) as string[]).includes(warning)
   );
+}
+
+/** 1 回渡すあいだにこれより遅れが伸びたら、端が戻ったと見る (秒)。刻みは 0.5 秒なので、届かなくても 0.5 秒しか伸びない */
+const LAG_JUMP = 5;
+/** 遅れを比べる両端の幅 (ms)。端どうしの、それぞれの中のいちばん小さい遅れを比べる (届き方の揺れを除く) */
+const LAG_EDGE = 1_000;
+
+/**
+ * **放送に対する遅れの伸びを測る** (`AdaptSample.lag`)。刻むたびに、届いた映像の端の時刻 (メディアの時刻、秒) を渡す。
+ * 遅れは「実時間 − 届いた端」で、届く速さが流している段に足りていれば一定、足りなければ足りないぶん伸びていく。
+ * 溜まりがサーバ・中継・カーネル・リバースプロキシのどこにあっても、画面に届くのが遅れれば伸びるので、
+ * サーバの `backlog` が 0 のままでも細い回線を見分けられる (手元で 2 Mbit/s に絞って 3 Mbit/s の段を流したとき、
+ * `backlog` は 0 のままだった)。
+ *
+ * 両端 (`LAG_EDGE`) のいちばん小さい遅れどうしを比べる。キーフレームの大きな塊は遅れて届くので、1 回ずつだと揺れる。
+ * ストリームが替わったら (選局・段の切り替え・作り直し) 物差しが変わるので `reset` する
+ */
+export class LagMeter {
+  #samples: { at: number; lag: number }[] = [];
+
+  reset(): void {
+    this.#samples = [];
+  }
+
+  /** `now` (ms) の時点で届いている映像の端 (秒)。測れなければ渡さない */
+  push(now: number, edge: number): void {
+    const lag = now / 1000 - edge;
+    const last = this.#samples.at(-1);
+    // 端が戻った (シークで捨てた・別のストリーム)。1 回の刻みで `LAG_JUMP` も伸びることは無いので、前の値とは比べない
+    if (last !== undefined && lag - last.lag > LAG_JUMP) this.#samples = [];
+    this.#samples.push({ at: now, lag });
+    const from = now - LAG_SPAN - LAG_EDGE;
+    while (this.#samples.length > 0 && this.#samples[0]!.at < from)
+      this.#samples.shift();
+  }
+
+  /** ここ `LAG_SPAN` で伸びた遅れ (秒)。縮んでいれば負。まだ `LAG_SPAN` ぶん測れていなければ null */
+  growth(now: number): number | null {
+    const first = this.#samples[0];
+    if (first === undefined || now - first.at < LAG_SPAN) return null;
+    let old = Infinity;
+    let recent = Infinity;
+    for (const s of this.#samples) {
+      if (s.at < first.at + LAG_EDGE) old = Math.min(old, s.lag);
+      if (s.at > now - LAG_EDGE) recent = Math.min(recent, s.lag);
+    }
+    return Number.isFinite(old) && Number.isFinite(recent)
+      ? recent - old
+      : null;
+  }
+}
+
+/**
+ * 詰まりとして数えるまでの長さ (ms)。`<video>` が先を持たない状態 (`readyState` が `HAVE_FUTURE_DATA` 未満) が
+ * これだけ続いたら詰まっていると見る。画面が自分で 1 コマ飛んだとき (`unslip`) の短い空きは数えない。
+ * `waiting` の知らせは、飛んだあと 3 秒数えない (`quiet`) ので、細い回線で止まっては飛ぶのを繰り返すと詰まりが見えなくなっていた
+ */
+export const STUCK_LEAST = 500;
+
+/** 試しのデータの量を決める長さ (ms)。測りたい速さで、これだけかかる量を取る */
+export const PROBE_SPAN = 1_000;
+/** 試しのデータの量の下限と上限 (バイト)。小さすぎると TCP の立ち上がりで遅く見える。上限はサーバの `PROBE_MOST` と同じ */
+export const PROBE_LEAST = 64 * 1024;
+export const PROBE_MOST = 4 * 1024 * 1024;
+/**
+ * 試しのデータを取るのをやめる長さ (ms)。測りたい速さが出ていればこの半分で取り終わる。細い回線で取り続けると、
+ * そのぶん流れている映像が細る
+ */
+export const PROBE_GIVE_UP = 2 * PROBE_SPAN;
+
+/**
+ * 上げる前に取る試しのデータの量 (バイト)。`need` は回線全体に要る速さ (`RungAdapter.wantProbe`)、`stream` はいま流れている
+ * 段の受け取りの速さ (bit/s)。流れている段のぶんは試しのデータで測らず、残りだけを `PROBE_SPAN` ぶん取る
+ */
+export function probeBytes(need: number, stream: number): number {
+  const rest = Math.max(0, need - stream);
+  return Math.round(
+    Math.min(PROBE_MOST, Math.max(PROBE_LEAST, (rest * PROBE_SPAN) / 8000)),
+  );
+}
+
+/**
+ * 試しのデータの速さ (bit/s)。時刻は ms。最初の塊が届いてから最後の塊までで割る (最初の塊までは往復の待ちで、回線の
+ * 速さではない)。塊が 1 つしか来なかったとき (速い回線で小さく取ったとき) は、取り始めてからで割る (往復のぶん遅く出る)。
+ * `PROBE_GIVE_UP` でやめたときは、`lastAt` にやめた時刻を渡し、そこまでに届いた量で割る (足りないと分かれば十分)。
+ * 測れなければ null
+ */
+export function probeRate(o: {
+  startAt: number;
+  firstAt: number | null;
+  firstBytes: number;
+  lastAt: number;
+  bytes: number;
+}): number | null {
+  if (o.firstAt !== null && o.lastAt > o.firstAt && o.bytes > o.firstBytes)
+    return ((o.bytes - o.firstBytes) * 8 * 1000) / (o.lastAt - o.firstAt);
+  if (o.bytes > 0 && o.lastAt > o.startAt)
+    return (o.bytes * 8 * 1000) / (o.lastAt - o.startAt);
+  return null;
 }

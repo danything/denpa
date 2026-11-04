@@ -5,11 +5,16 @@ import {
   adaptNote,
   type AdaptSample,
   AUDIO_AFTER,
+  AUDIO_SHARE,
+  AUDIO_WINDOW,
   BASE_GUESS_KBPS,
   ENCODE_LAG,
   GRACE,
   HOLD,
+  LAG_GROW,
+  LIVE_UP_MARGIN,
   PROBE,
+  PROBE_START,
   RungAdapter,
   stepLabel,
   THIN,
@@ -46,6 +51,12 @@ function first(
   }
   return null;
 }
+
+/**
+ * ライブで、いつ見ても測ったばかりの十分な回線の速さ (`capacity`)。`at` を Infinity にすると、上げてよい状態が始まったあとに
+ * 測ったもので、古くもない (`liveUp`)
+ */
+const ROOMY = { bps: 1e9, at: Number.POSITIVE_INFINITY };
 
 /** 2 秒ごとに新しい `pace` を作る (サーバが送る間隔) */
 function paces(make: (n: number) => Pace): (now: number) => Pace {
@@ -316,7 +327,7 @@ describe("上げる", () => {
     ).toEqual({ step: 0, reason: "restored" });
   });
 
-  test("ライブは、溜まりが無い状態が 30 秒続いたら 1 段上げてみる", () => {
+  test("ライブは、溜まりが無い状態が 30 秒続き、測った回線の速さが次の段の 1.2 倍あれば 1 段上げる", () => {
     const a = new RungAdapter();
     const clear = paces(() => ({ backlog: 0, dropped: 0, speed: null }));
     expect(
@@ -325,11 +336,64 @@ describe("上げる", () => {
         current: 2,
         ahead: 1,
         pace: clear(now),
+        capacity: ROOMY,
       })),
     ).toEqual({
       at: GRACE + UP_WAIT_LIVE,
       decision: { step: 1, reason: "restored" },
     });
+  });
+
+  test("ライブは時間がたっただけでは上げず、上げてよい状態が始まってから測った回線の速さを求める", () => {
+    const a = new RungAdapter();
+    const live = { route: "live" as const, current: 2 as const, ahead: 1 };
+    // 測っていなければ上げない。待ちが明けたら、次の段 (3.096 Mbit/s) の 1.2 倍を測ってほしいと返す
+    expect(first(a, 0, GRACE + UP_WAIT_LIVE - 1_000, live)).toBeNull();
+    expect(a.wantProbe()).toBeNull();
+    expect(
+      first(a, GRACE + UP_WAIT_LIVE, GRACE + UP_WAIT_LIVE, live),
+    ).toBeNull();
+    expect(a.wantProbe()).toBeCloseTo(LIVE_UP_MARGIN * 3_096_000);
+    // 上げてよい状態が始まる前に測ったものは使わない
+    const stale = { bps: 1e9, at: GRACE - 1_000 };
+    expect(
+      first(a, GRACE + UP_WAIT_LIVE + 1_000, GRACE + UP_WAIT_LIVE + 1_000, {
+        ...live,
+        capacity: stale,
+      }),
+    ).toBeNull();
+    // 測ったばかりで足りていれば上げる
+    const at = GRACE + UP_WAIT_LIVE + 2_000;
+    expect(
+      first(a, at, at, { ...live, capacity: { bps: 4_000_000, at } })?.decision,
+    ).toEqual({ step: 1, reason: "restored" });
+  });
+
+  test("ライブで測った回線の速さが足りなければ上げず、上げてみて足りなかったときと同じに待ちを倍にする", () => {
+    const a = new RungAdapter();
+    const live = { route: "live" as const, current: 2 as const, ahead: 1 };
+    const at = GRACE + UP_WAIT_LIVE;
+    first(a, 0, at - 1_000, live);
+    // 2 Mbit/s しか出ない回線。次の段 (3.096 Mbit/s) の 1.2 倍に届かない
+    expect(
+      first(a, at, at + 50_000, { ...live, capacity: { bps: 2_000_000, at } }),
+    ).toBeNull();
+    expect(a.upWait("live")).toBe(UP_WAIT_LIVE * 2);
+  });
+
+  test("ライブで段 0 へ戻すときは、段 0 で足りていたときに受け取っていた速さと比べる", () => {
+    const a = new RungAdapter();
+    // 段 0 で 15 Mbit/s 受け取っていた
+    first(a, 0, 10_000, {
+      route: "live",
+      current: 0,
+      ahead: 1,
+      throughput: 15_000_000,
+    });
+    const live = { route: "live" as const, current: 1 as const, ahead: 1 };
+    // 段を替えたあとの GRACE と HOLD、上げるまでの待ちを過ぎるまで刻む
+    first(a, 11_000, 11_000 + HOLD + UP_WAIT_LIVE, live);
+    expect(a.wantProbe()).toBeCloseTo(LIVE_UP_MARGIN * 15_000_000);
   });
 
   test("ライブで送れずに溜まっている間は上げない", () => {
@@ -356,7 +420,7 @@ describe("上げる", () => {
 describe("待ちの倍増", () => {
   test("上げて足りなければすぐ戻し、次に上げるまでの待ちを倍にする (上限 5 分)", () => {
     const a = new RungAdapter();
-    const live = { route: "live" as const, ahead: 1 };
+    const live = { route: "live" as const, ahead: 1, capacity: ROOMY };
     let now = 0;
     let current: 1 | 2 = 2;
     const waits: number[] = [];
@@ -386,7 +450,7 @@ describe("待ちの倍増", () => {
 
   test("上げて 1 分足りていれば、待ちを元に戻す", () => {
     const a = new RungAdapter();
-    const live = { route: "live" as const, ahead: 1 };
+    const live = { route: "live" as const, ahead: 1, capacity: ROOMY };
     const up = first(a, 0, 120_000, { ...live, current: 2 })!;
     first(a, up.at + 1_000, up.at + 1_000, { ...live, current: 1 });
     first(a, up.at + 5_000, up.at + 5_000, {
@@ -464,15 +528,57 @@ describe("音声だけ", () => {
     });
   });
 
-  test("途中で足りれば数え直す", () => {
+  test("止まっては少し動くを繰り返しても、直近 15 秒の 3 割以上が足りなければ音声だけにする", () => {
     const a = new RungAdapter();
+    // 手元で 0.25 Mbit/s に絞って 360p を流したときの形。2 秒止まって 1 秒動く
+    const got = first(a, 0, 60_000, (now) => ({
+      route: "live",
+      current: 3,
+      waiting: now % 3_000 !== 0,
+    }));
+    expect(got?.decision).toEqual({ step: "audio", reason: "slow" });
+    expect(got!.at).toBeGreaterThanOrEqual(GRACE + AUDIO_AFTER);
+    expect(got!.at).toBeLessThan(GRACE + AUDIO_WINDOW);
+  });
+
+  test("足りない時間が 3 割に届かなければ、段 3 のまま", () => {
+    const a = new RungAdapter();
+    // 5 秒に 1 回、1 秒詰まる (2 割)
     expect(
-      first(a, 0, 60_000, (now) => ({
+      first(a, 0, 120_000, (now) => ({
         route: "live",
         current: 3,
-        waiting: now % 8_000 !== 0,
+        waiting: now % 5_000 === 0,
       })),
     ).toBeNull();
+    expect(AUDIO_SHARE).toBeGreaterThan(0.2);
+  });
+
+  test("段 3 に下げた直後は、切り替えのあとの 20 秒 (HOLD) を待ってから音声だけにする", () => {
+    const a = new RungAdapter();
+    first(a, 0, 10_000, { route: "live", current: 2 });
+    expect(
+      first(a, 11_000, 60_000, { route: "live", current: 3, waiting: true }),
+    ).toEqual({
+      at: 11_000 + HOLD,
+      decision: { step: "audio", reason: "slow" },
+    });
+  });
+
+  test("シークしても (reset)、段 3 で足りなかった時間は持ち越す", () => {
+    const a = new RungAdapter();
+    first(a, 0, GRACE + 8_000, { route: "live", current: 3, waiting: true });
+    a.reset(GRACE + 8_500);
+    const got = first(a, GRACE + 9_000, 60_000, {
+      route: "live",
+      current: 3,
+      waiting: true,
+    });
+    // reset のあとの GRACE は数えない。段 3 に着いてから 10 秒たっているので、数える最初の刻みで決める
+    expect(got).toEqual({
+      at: GRACE + 8_500 + GRACE + 500,
+      decision: { step: "audio", reason: "slow" },
+    });
   });
 
   test("音声だけから、段 3 の 2 倍の速さが続けば段 3 に戻す", () => {
@@ -485,8 +591,85 @@ describe("音声だけ", () => {
   });
 });
 
+/**
+ * **放送に対する遅れの伸び** (`lag`)。溜まりが中継・カーネル・リバースプロキシに隠れると、サーバの `backlog` は 0 のまま。
+ * 手元で 2 Mbit/s に絞り 3 Mbit/s の段を流したとき、`backlog` は 0 のままで、2 Mbit/s のまま段 0 まで上がっていった
+ */
+describe("放送に対する遅れの伸び", () => {
+  test("ライブで遅れが 4 秒に 0.6 秒以上伸びたら、backlog が 0 でも下げる", () => {
+    const a = new RungAdapter();
+    const clear: Pace = { backlog: 0, dropped: 0, speed: null };
+    expect(
+      first(a, 0, 10_000, {
+        route: "live",
+        current: 1,
+        ahead: 1,
+        pace: clear,
+        lag: LAG_GROW - 0.1,
+      }),
+    ).toBeNull();
+    expect(
+      first(a, 11_000, 11_000, {
+        route: "live",
+        current: 1,
+        ahead: 1,
+        pace: clear,
+        lag: LAG_GROW,
+        throughput: 2_000_000,
+      })?.decision,
+    ).toEqual({ step: 3, reason: "slow" });
+  });
+
+  test("観る画面では使わない (先を溜めて読むので、遅れという物差しが無い)", () => {
+    const a = new RungAdapter();
+    expect(
+      first(a, 0, 30_000, { current: 1, throughput: 5_000_000, lag: 5 }),
+    ).toBeNull();
+  });
+
+  test("上げてみた段で遅れが伸びたら、HOLD の間でもすぐ戻す", () => {
+    const a = new RungAdapter();
+    const live = { route: "live" as const, ahead: 1, capacity: ROOMY };
+    const up = first(a, 0, 120_000, { ...live, current: 2 })!;
+    expect(up.decision).toEqual({ step: 1, reason: "restored" });
+    first(a, up.at + 1_000, up.at + 1_000, { ...live, current: 1 });
+    // GRACE (3 秒) のあとの最初の刻みで戻す
+    expect(
+      first(a, up.at + 2_000, up.at + 20_000, {
+        ...live,
+        current: 1,
+        lag: 2,
+      }),
+    ).toEqual({
+      at: up.at + 1_000 + GRACE,
+      decision: { step: 2, reason: "slow" },
+    });
+    expect(a.upWait("live")).toBe(UP_WAIT_LIVE * 2);
+  });
+
+  test("上げた段が映り始めないとき (abandon) は、上げてみて足りなかったときと同じに待ちを倍にし、20 秒は動かさない", () => {
+    const a = new RungAdapter();
+    const live = { route: "live" as const, ahead: 1, capacity: ROOMY };
+    const up = first(a, 0, 120_000, { ...live, current: 2 })!;
+    a.abandon(up.at + PROBE_START);
+    expect(a.upWait("live")).toBe(UP_WAIT_LIVE * 2);
+    expect(
+      first(
+        a,
+        up.at + PROBE_START + 1_000,
+        up.at + PROBE_START + HOLD - 1_000,
+        {
+          ...live,
+          current: 2,
+          waiting: true,
+        },
+      ),
+    ).toBeNull();
+  });
+});
+
 describe("上げてみている間", () => {
-  const live = { route: "live" as const, ahead: 1 };
+  const live = { route: "live" as const, ahead: 1, capacity: ROOMY };
   // 段 0 へ上げないように、送れずに溜まっている量を変えずに置く
   const queued: Pace = { backlog: 1, dropped: 0, speed: null };
 
