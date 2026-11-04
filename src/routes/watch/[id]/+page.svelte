@@ -464,7 +464,7 @@
 
   /**
    * **互換モードで段を替える。** canvas のプレイヤーには継ぎ目なく替える経路が無いので、いまの位置から作り直す
-   * (描けるまでは前の映像のまま。音は作り直す間だけ止まる)。替えたら true
+   * (新しいプレイヤーが描き始めるまで、映像と音は止まる)。替えたら true
    */
   function canvasStep(next: Step): boolean {
     const codec = canvasCodec;
