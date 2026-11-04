@@ -1,191 +1,106 @@
-using System.IO.Compression;
 using System.Security.Cryptography;
 
 namespace Denpa.Agent;
 
 /// <summary>
-/// IT930x のファームウェア。**イメージには入れず、使う人の機械で取ってくる。**
+/// IT930x のファームウェア。**エージェントに同梱している** (firmware/it930x-firmware.bin を実行ファイルに埋め込む)。
 ///
 /// <para>
 /// 本体には入っておらず、挿すたびにホストから RAM へ流し込むもの。px4-userland は受理するバージョンを SHA-256 で
 /// 1 つに固定していて (SPEC 4.5)、違うものを渡すと <c>FIRMWARE_REJECTED</c> で起動しない。
-/// **再配布の許諾は誰も持っていない**ので、公開しているイメージには入れない。px4d を初めて起こすときに
-/// PLEX 公式の Windows ドライバ (PX-W3U4 BDA Ver.1.0 64bit) を取ってきて <c>PXW3U4.sys</c> から切り出し、
-/// 設定の置き場 (tuners.json の隣) に置いて次からはそれを使う (docs/tuner-px4.md「ファームウェア」)。
+/// 中身は ITE Tech. の IT930x の Linux ドライバに入っているデータをそのまま書き出したもので、ITE Tech. から
+/// 無改変での再配布の許諾を得ている (firmware/README.md、docs/licenses.md)。
 /// </para>
 ///
 /// <para>
-/// **もう置いてあればそれを使う。** Mac と Windows は install.sh / install.ps1 が入れるときに同じものを切り出して
-/// px4-userland の横に置き、<c>PX4_FIRMWARE</c> で指している。
+/// px4d にはファイルのパスで渡すので、埋め込んだものを設定の置き場 (tuners.json の隣) に書き出して渡す。
+/// <c>PX4_FIRMWARE</c> が指定されていれば、そちらを使う。どちらも SHA-256 を確かめ、違えば px4d を起こさない
 /// </para>
 /// </summary>
 public static class Px4Firmware
 {
     public const string FileName = "it930x-firmware.bin";
 
-    /// <summary>
-    /// 取ってくる先と確かめ方。**install.sh / install.ps1 も同じ値を持っている** (変えるときは 3 つとも)。
-    /// PLEX のサイトが落ちていることがある (2026-10-30 はサーバーの「無効な URL」のページと別の証明書を返した) ので、
-    /// 取れなければ Internet Archive の写し (同じハッシュ) から取る
-    /// </summary>
-    internal static readonly Px4FirmwareSource Plex = new(
-        Urls:
-        [
-            "https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip",
-            "https://web.archive.org/web/20260927060746id_/http://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip",
-        ],
-        ZipSha256: "bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200",
-        Entry: "pxw3u4_BDA_ver1x64/PXW3U4.sys",
-        SysSha256: "8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722",
-        Offset: 0x287d0,
-        Length: 2169,
-        FirmwareSha256: "5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484");
+    /// <summary>受理するファームウェアの SHA-256 (ITE の Linux ドライバの V1_3_0_0。px4-userland が固定しているものと同じ)</summary>
+    internal const string Sha256 = "5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484";
 
-    /// <summary>
-    /// 取れなかったあと、次に試すまで待つ時間。**選局のたびには取得しない** (番組表の取得や録画の予約は
-    /// 数分おきに選局する。PLEX のサイトや Internet Archive が落ちるのは何時間という単位)
-    /// </summary>
-    internal static readonly TimeSpan Backoff = TimeSpan.FromMinutes(10);
+    /// <summary>埋め込んだリソースの名前 (Denpa.Agent.csproj の LogicalName)</summary>
+    internal const string ResourceName = FileName;
 
     private static readonly Lazy<Px4FirmwareStore> Default = new(() => new Px4FirmwareStore(
-        Existing(), Config.FromEnvironment().Px4FirmwareFile, Plex, Download, TimeProvider.System));
+        Environment.GetEnvironmentVariable("PX4_FIRMWARE"), Bundled, Config.FromEnvironment().Px4FirmwareFile));
 
-    /// <summary>
-    /// 先に見る置き場。<c>PX4_FIRMWARE</c> (install.sh / install.ps1 が書く) と、px4-userland の横
-    /// (前のバージョンのイメージはここに入れていた)
-    /// </summary>
-    private static IReadOnlyList<string> Existing() =>
-        [
-            .. Environment.GetEnvironmentVariable("PX4_FIRMWARE") is { Length: > 0 } configured ? new[] { configured } : [],
-            Path.Combine(Px4Userland.Dir, "firmware", FileName),
-        ];
-
-    /// <summary>ファームウェアのパス。無ければ取ってくる。取れなければ理由を添えて投げる (<see cref="Px4FirmwareStore.Ensure"/>)</summary>
+    /// <summary>ファームウェアのパス。使えなければ理由を添えて投げる (<see cref="Px4FirmwareStore.Ensure"/>)</summary>
     public static string Ensure() => Default.Value.Ensure();
 
-    /// <summary>取れなかった理由 (取れているか、まだ試していなければ null)。チューナー画面の <c>error</c> に出す</summary>
+    /// <summary>使えなかった理由 (使えているか、まだ試していなければ null)。チューナー画面の <c>error</c> に出す</summary>
     public static string? Problem => Default.IsValueCreated ? Default.Value.Problem : null;
 
-    private static byte[] Download(string url)
+    /// <summary>実行ファイルに埋め込んだファームウェア</summary>
+    internal static byte[] Bundled()
     {
-        using var http = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(60),
-            // 本物は数 MB。違うものが返ってきたときにメモリを使い切らない
-            MaxResponseContentBufferSize = 64 << 20,
-        };
-        return http.GetByteArrayAsync(url).GetAwaiter().GetResult();
-    }
-}
-
-/// <summary>ファームウェアの出どころ。配布 zip・<c>.sys</c>・切り出したものの 3 つをハッシュで確かめる</summary>
-internal sealed record Px4FirmwareSource(
-    IReadOnlyList<string> Urls,
-    string ZipSha256,
-    string Entry,
-    string SysSha256,
-    int Offset,
-    int Length,
-    string FirmwareSha256)
-{
-    /// <summary>配布 zip からファームウェアを切り出す。どこかが合わなければ <see cref="InvalidDataException"/></summary>
-    public byte[] Extract(byte[] zip)
-    {
-        Check(zip, ZipSha256, "配布 zip");
-        using var archive = new ZipArchive(new MemoryStream(zip, writable: false), ZipArchiveMode.Read);
-        var entry = archive.GetEntry(Entry) ?? throw new InvalidDataException($"配布 zip に {Entry} がありません");
-        using var sys = new MemoryStream();
-        using (var stream = entry.Open()) stream.CopyTo(sys);
-        Check(sys.GetBuffer().AsSpan(0, (int)sys.Length), SysSha256, Path.GetFileName(Entry));
-        if (sys.Length < Offset + Length) throw new InvalidDataException($"{Path.GetFileName(Entry)} が短すぎます ({sys.Length} バイト)");
-        var firmware = sys.GetBuffer().AsSpan(Offset, Length).ToArray();
-        Check(firmware, FirmwareSha256, "切り出したファームウェア");
-        return firmware;
-    }
-
-    private static void Check(ReadOnlySpan<byte> data, string expected, string what)
-    {
-        var actual = Convert.ToHexStringLower(SHA256.HashData(data));
-        if (actual != expected) throw new InvalidDataException($"{what}: SHA-256 が違います ({actual})");
+        using var stream = typeof(Px4Firmware).Assembly.GetManifestResourceStream(ResourceName)
+            ?? throw new IOException($"同梱の {FileName} が実行ファイルに入っていません");
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
     }
 }
 
 /// <summary>
-/// ファームウェアの置き場 1 つ。**置いてあるものが勝ち**、無ければ取ってきて <c>target</c> に置く。
-/// 取れなければ <see cref="Px4Firmware.Backoff"/> のあいだ取得し直さず、同じ理由で断る
+/// ファームウェアの置き場。<c>configured</c> (<c>PX4_FIRMWARE</c>) が指定されていればそれ、無ければ同梱のものを
+/// <c>target</c> に書き出して使う。**どちらも SHA-256 を確かめる** (違うものを px4d に渡すと FIRMWARE_REJECTED になる)
 /// </summary>
-/// <param name="existing">先に見る置き場。どれかにあればそれを使い、取得しない</param>
-/// <param name="target">取ってきたものを置く場所</param>
-/// <param name="download">URL の中身を返す。テストは偽の zip を返す</param>
-internal sealed class Px4FirmwareStore(
-    IReadOnlyList<string> existing, string target, Px4FirmwareSource source, Func<string, byte[]> download, TimeProvider clock)
+/// <param name="configured">指定された置き場 (<c>PX4_FIRMWARE</c>)。空なら同梱のものを使う</param>
+/// <param name="bundled">同梱のファームウェアを返す。テストは偽のものを返す</param>
+/// <param name="target">同梱のものを書き出す場所</param>
+/// <param name="sha256">受理する SHA-256</param>
+internal sealed class Px4FirmwareStore(string? configured, Func<byte[]> bundled, string target, string sha256 = Px4Firmware.Sha256)
 {
     private readonly Lock _gate = new();
-    private DateTimeOffset _retryAt = DateTimeOffset.MinValue;
 
     public string? Problem { get; private set; }
 
-    /// <summary>
-    /// ファームウェアのパス。無ければ取ってくる (筐体が 2 台でも取得は 1 度。もう 1 台は待つ)。
-    /// 取れなければ、または待つ時間のうちなら、理由を添えて <see cref="IOException"/>
-    /// </summary>
+    /// <summary>ファームウェアのパス。使えなければ理由を添えて <see cref="IOException"/></summary>
     public string Ensure()
     {
-        foreach (var path in existing)
-        {
-            if (!File.Exists(path)) continue;
-            // 取れなかったあとで手で置かれた
-            Problem = null;
-            return path;
-        }
         lock (_gate)
         {
-            if (File.Exists(target))
-            {
-                Problem = null;
-                return target;
-            }
-            if (Problem is { } problem && clock.GetUtcNow() < _retryAt) throw new IOException(problem);
             try
             {
-                Log.Write($"IT930x のファームウェアを PLEX のドライバから切り出します (置き場: {target})");
-                var firmware = Fetch();
-                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(target))!);
-                // 書きかけを読ませない (px4d に途中までのものを渡すと FIRMWARE_REJECTED になる)
-                var working = $"{target}.writing";
-                File.WriteAllBytes(working, firmware);
-                File.Move(working, target, overwrite: true);
+                var path = string.IsNullOrEmpty(configured) ? WriteBundled() : CheckConfigured(configured);
                 Problem = null;
-                Log.Write("IT930x のファームウェアを切り出しました");
-                return target;
+                return path;
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
             {
-                _retryAt = clock.GetUtcNow() + Px4Firmware.Backoff;
-                Problem = $"IT930x のファームウェアを用意できません ({error.Message})。"
-                    + $"初めて使うときはインターネットに繋がっている必要があります。{Px4Firmware.Backoff.TotalMinutes:F0} 分おきに試し直します";
+                Problem = $"IT930x のファームウェアを用意できません ({error.Message})";
                 throw new IOException(Problem, error);
             }
         }
     }
 
-    /// <summary>URL を順に試す。どれも駄目なら、それぞれの理由を並べて投げる</summary>
-    private byte[] Fetch()
+    private string CheckConfigured(string path)
     {
-        List<string> reasons = [];
-        foreach (var url in source.Urls)
-        {
-            try
-            {
-                return source.Extract(download(url));
-            }
-            catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidDataException or IOException)
-            {
-                // TaskCanceledException は HttpClient の時間切れ
-                var why = error is TaskCanceledException ? "時間切れ" : error.Message;
-                reasons.Add($"{new Uri(url).Host}: {why}");
-            }
-        }
-        throw new IOException(string.Join(" / ", reasons));
+        if (!File.Exists(path)) throw new FileNotFoundException($"PX4_FIRMWARE の {path} がありません", path);
+        if (!Matches(File.ReadAllBytes(path))) throw new InvalidDataException($"PX4_FIRMWARE の {path} の SHA-256 が違います");
+        return path;
     }
+
+    /// <summary>同梱のものを <c>target</c> に書き出す。もう同じものがあれば書かない</summary>
+    private string WriteBundled()
+    {
+        if (File.Exists(target) && Matches(File.ReadAllBytes(target))) return target;
+        var firmware = bundled();
+        if (!Matches(firmware)) throw new InvalidDataException($"同梱の {Px4Firmware.FileName} の SHA-256 が違います");
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(target))!);
+        // 書きかけを読ませない (px4d に途中までのものを渡すと FIRMWARE_REJECTED になる)
+        var working = $"{target}.writing";
+        File.WriteAllBytes(working, firmware);
+        File.Move(working, target, overwrite: true);
+        Log.Write($"同梱の IT930x のファームウェアを書き出しました ({target})");
+        return target;
+    }
+
+    private bool Matches(ReadOnlySpan<byte> data) => Convert.ToHexStringLower(SHA256.HashData(data)) == sha256;
 }

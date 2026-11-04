@@ -19,7 +19,7 @@
 #   ~/denpa (DENPA_HOME)                  denpa.env (コンテナの環境変数。無いときだけ雛形を作り、あれば触らない)・
 #                                         config/ (tls\pair-token は denpa とエージェントが組むときの合言葉。無いときだけ作る)・
 #                                         denpa-agent.log
-#   %LOCALAPPDATA%\denpa-agent\           エージェント・px4-userland (px4d.exe・px4ctl.exe・切り出したファームウェア)・
+#   %LOCALAPPDATA%\denpa-agent\           エージェント・px4-userland (px4d.exe・px4ctl.exe・ライセンスの文書)・
 #                                         siano-userland・起こす .cmd と denpa-start.ps1
 #   C:\denpa-run                          px4d のソケットの置き場 (本人・SYSTEM・Administrators だけが書ける。px4d がそう決めている)
 #   ~/Videos/denpa/{recorded,library}     元の TS (エージェントとコンテナの両方が見る) と出来上がった録画
@@ -42,10 +42,7 @@ $IsdbtRioSha256 = '054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff
 # 起動の不具合が直ったのが 0.2.1)
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 $Px4UserlandVersion = '0.2.1'
-# IT930x のファームウェアは PLEX 公式ドライバから切り出す。取ってくる先と 3 つのハッシュは agent/Denpa.Agent/Px4Firmware.cs・install.sh と同じ
-$PlexDriverSha256 = 'bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200'
-$Pxw3u4SysSha256 = '8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722'
-$It930xFirmwareSha256 = '5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484'
+# IT930x のファームウェアはエージェントに同梱している (agent/Denpa.Agent/Px4Firmware.cs)。ここでは置かない
 # 配布 zip から取り出すもの。**使うのは px4d.exe と px4ctl.exe だけ** (受信機もカードも px4d の制御ソケットで直に話す)。
 # px4-ts.exe と WinSCard.dll (B25 のアプリの横に置く代わりの DLL) は置かない。残りはライセンスの文書
 $Px4Keep = @('px4d.exe', 'px4ctl.exe', 'LICENSE', 'DEPENDENCY-NOTICE.txt', 'THIRD_PARTY_NOTICES.md', 'libusb/*', 'toolchain/*')
@@ -69,7 +66,7 @@ $WslHelp = 'WSL を新しくしてください (PowerShell で wsl --update。WS
 function Say([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 
 # 取ってくる。PowerShell 5.1 の Invoke-WebRequest は遅い (進み具合の表示) ので、Windows 10 から入っている curl.exe で
-# **時間の上限を付ける。** 繋がったまま止まる相手 (落ちかけの PLEX のサイトや Internet Archive) だと、付けなければいつまでも待つ。
+# **時間の上限を付ける。** 繋がったまま止まる相手 (落ちかけのサイト) だと、付けなければいつまでも待つ。
 # 時間切れも --retry が試し直す
 function Get-Url([string]$From, [string]$To) {
     & curl.exe -fsSL --retry 3 --connect-timeout 20 --max-time 300 -o $To $From
@@ -361,7 +358,7 @@ function Open-Zip([string]$Path) {
 }
 
 # px4-userland (PX-Q3U4 など) を $To に置く。**要るものだけ取り出す** ($Px4Keep)。
-# ファームウェアは Mac と同じく PLEX 公式ドライバから切り出す (再配布の許諾は誰も持っていない。docs/tuner-px4.md)
+# IT930x のファームウェアはエージェントに同梱しているので、ここでは置かない (docs/tuner-px4.md)
 function Get-Px4Userland([string]$Work, [string]$To) {
     Say "px4-userland $Px4UserlandVersion"
     $base = "https://github.com/Khronos31/px4-userland/releases/download/v$Px4UserlandVersion"
@@ -388,32 +385,6 @@ function Get-Px4Userland([string]$Work, [string]$To) {
     foreach ($exe in 'px4d.exe', 'px4ctl.exe') {
         if (-not (Test-Path -LiteralPath "$To\$exe")) { throw "$name に $exe が入っていません" }
     }
-
-    Say 'IT930x のファームウェアを PLEX のドライバから切り出します'
-    # PLEX のサイトが落ちていることがある (2026-10-30 はサーバーの「無効な URL」のページと別の証明書を返した)。
-    # 中身はハッシュで確かめるので、取れなければ Internet Archive の写し (同じハッシュ) から取る
-    try {
-        Get-Url 'https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip' "$Work\plex.zip"
-    } catch {
-        Get-Url 'https://web.archive.org/web/20260927060746id_/http://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip' "$Work\plex.zip"
-    }
-    Assert-Hash "$Work\plex.zip" $PlexDriverSha256
-    $zip = Open-Zip "$Work\plex.zip"
-    try {
-        $entry = $zip.GetEntry('pxw3u4_BDA_ver1x64/PXW3U4.sys')
-        if (-not $entry) { throw 'PLEX のドライバに PXW3U4.sys が見当たりません' }
-        [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, "$Work\PXW3U4.sys", $true)
-    } finally {
-        $zip.Dispose()
-    }
-    Assert-Hash "$Work\PXW3U4.sys" $Pxw3u4SysSha256
-    $sys = [IO.File]::ReadAllBytes("$Work\PXW3U4.sys")
-    $firmware = New-Object byte[] 2169
-    [Array]::Copy($sys, 0x287d0, $firmware, 0, 2169)
-    New-Item -ItemType Directory -Force -Path "$To\firmware" | Out-Null
-    [IO.File]::WriteAllBytes("$To\firmware\it930x-firmware.bin", $firmware)
-    Assert-Hash "$To\firmware\it930x-firmware.bin" $It930xFirmwareSha256
-    Remove-Item -Force -LiteralPath "$Work\plex.zip", "$Work\PXW3U4.sys"
 }
 
 # px4d のソケットの置き場を作って整える。**持ち主は本人、書けるのは本人・SYSTEM・Administrators だけ**
@@ -546,7 +517,7 @@ function Install-Agent([string]$Ref) {
     $vars = [ordered]@{
         AGENT_PORT = $Port; TUNERS_FILE = "$DenpaDir\config\tuners.json"; CHANNELS_FILE = "$DenpaDir\config\channels.json"
         SIANO_USERLAND_DIR = "$Prefix\siano-userland"; SIANO_FIRMWARE = "$Prefix\siano-userland\firmware\isdbt_rio.inp"
-        PX4_USERLAND_DIR = "$Prefix\px4-userland"; PX4_FIRMWARE = "$Prefix\px4-userland\firmware\it930x-firmware.bin"
+        PX4_USERLAND_DIR = "$Prefix\px4-userland"
         PX4_RUNTIME_DIR = $Px4Runtime
         RAW_DIR = "$Media\recorded"
     }

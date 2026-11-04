@@ -29,4 +29,12 @@
         <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     </PropertyGroup>
 
+    <ItemGroup>
+        <!--
+            IT930x のファームウェア (ITE Tech. の許諾を得て無改変で同梱する。firmware/README.md)。
+            実行ファイルに埋め込み、1 個のまま配れるようにする。px4d に渡すときに書き出す (Px4Firmware.cs)
+        -->
+        <EmbeddedResource Include="firmware/it930x-firmware.bin" LogicalName="it930x-firmware.bin" />
+    </ItemGroup>
+
 </Project>
