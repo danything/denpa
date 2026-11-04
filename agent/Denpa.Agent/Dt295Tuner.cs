@@ -290,6 +290,20 @@ public sealed class Dt295Board : IDisposable
         return true;
     });
 
+    /// <summary>
+    /// <see cref="Fault"/> が立っていても通す <see cref="Locked(Action)"/>。受信を止める手順だけに使う。
+    /// 手順の途中で失敗した印 (Fault) が立っているからといって止めずにおくと、機材が受信中のまま取り残され、
+    /// 次に開くときに「ほかのプロセスが使っているかもしれません」と断られ続ける
+    /// </summary>
+    public void LockedToStop(Action action)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_closed, this);
+            action();
+        }
+    }
+
     /// <summary>更新のスレッド。約 1 秒おきに期限を確かめる</summary>
     private void Refresh()
     {
@@ -575,23 +589,43 @@ internal sealed class Dt295Stream
         var rest = _written.Except(plan).Any() || plan.Except(_written).Except(additions).Any() || main != _writtenMain;
         if (rest && (_routes.Settled || late))
         {
-            _board.Locked(() =>
-            {
-                _board.Session.StopReception(Pause, Drain);
-                Prepare(plan, main);
-            });
+            Reprepare(plan, main);
             _settled = true;
-            Reprepared++;
             Log.Write($"[{_name}] 準備し直しました ({plan.Length} スロット{(main is null ? "" : $"、主番組 {main.Number}")}{(late ? "。PSI が待ちの上限までにそろいませんでした" : "")})");
             return;
         }
         if (additions.Count == 0) return;
-        _board.Locked(() =>
+        try
         {
-            foreach (var route in additions) _board.Session.ChangeRoute(route);
-        });
+            _board.Locked(() =>
+            {
+                foreach (var route in additions) _board.Session.ChangeRoute(route);
+            });
+        }
+        catch (Dt295Exception error) when (error.Completion == RouteChangeRefused)
+        {
+            // 機材が受信中の追加を断った (完了コード 0x0580。2 回目以降の追加でよく起きる)。同じコマンドは送り直さず (13 章)、
+            // 受信を止めて全部のルートで準備し直す (9.10)。ここで例外にすると、機材の受信が止まらないまま取り残される
+            Reprepare(plan, main);
+            Log.Write($"[{_name}] 機材が受信中のルートの追加を断ったため、準備し直しました ({plan.Length} スロット{(main is null ? "" : $"、主番組 {main.Number}")})");
+            return;
+        }
         _written = rest ? [.. _written, .. additions] : plan;
         Log.Write($"[{_name}] 受信中にルートを足しました ({additions.Count} 本)");
+    }
+
+    /// <summary>受信中にルートを足すコマンド (cmd 5 sub 1) を機材が断ったときの完了コード</summary>
+    private const ushort RouteChangeRefused = 0x0580;
+
+    /// <summary>受信を止めて、計画の全部のルートで準備し直す (9.10)</summary>
+    private void Reprepare(Dt295Route[] plan, Dt295Program? main)
+    {
+        _board.Locked(() =>
+        {
+            _board.Session.StopReception(Pause, Drain);
+            Prepare(plan, main);
+        });
+        Reprepared++;
     }
 
     private ushort Pause => _data.Fields.Pause;
@@ -636,7 +670,7 @@ internal sealed class Dt295Stream
     {
         try
         {
-            _board.Locked(() => _board.Session.StopReception(Pause, Drain));
+            _board.LockedToStop(() => _board.Session.StopReception(Pause, Drain));
         }
         catch (Exception error) when (error is Dt295Exception or InvalidOperationException)
         {
@@ -719,6 +753,8 @@ public sealed class Dt295Tuner : ITuneDevice
     }
 
     internal Dt295Stream? Stream => _stream;
+
+    internal Dt295Board? Board => _board;
 
     public void Tune(ChannelTable.Tuning tuning, uint streamId)
     {

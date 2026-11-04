@@ -898,6 +898,48 @@ public class Dt295TunerTests
     }
 
     [Test]
+    public async Task 機材が受信中のルートの追加を断ったら_準備し直して受信を続ける()
+    {
+        var usb = FakeDt295Usb.Receiving(FakeDt295Material.Create());
+        // 2 回目以降の追加を断る機材。PAT だけが届くと、PMT の PID を足そうとして断られる
+        usb.RefuseRouteChangesAfter = 0;
+        var both = Dt295Ts.PatPmt([0x09, 0x04, 0x00, 0x05, 0xE9, 0x01]);
+        var pat = both[..188];
+        usb.Ts.Enqueue(pat);
+        var tuner = Tuner(usb, "3-4");
+        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+        await Assert.That(ReadAll(tuner.Output, pat.Length)).IsEquivalentTo(pat);
+        for (var i = 0; i < 200 && tuner.Stream!.Reprepared == 0; i++) await Task.Delay(10);
+
+        // 断られても Fault にせず、準備し直して受信を続ける (受信が止まらない)
+        await Assert.That(tuner.Board!.Fault).IsNull();
+        await Assert.That(tuner.Stream!.Reprepared).IsGreaterThanOrEqualTo(1);
+        await Assert.That(tuner.Stream!.Ended).IsFalse();
+        await Assert.That(usb.State).IsEqualTo((ushort)2);
+        usb.Ts.Enqueue(both[188..]);
+        await Assert.That(ReadAll(tuner.Output, 188)).IsEquivalentTo(both[188..]);
+        tuner.Dispose();
+        await Assert.That(usb.State).IsEqualTo(Dt295Device.Idle);
+    }
+
+    [Test]
+    public async Task Fault_が立っていても_受信を止めてから閉じる()
+    {
+        var usb = FakeDt295Usb.Receiving(FakeDt295Material.Create());
+        byte[] psi = [.. Dt295Ts.PatPmt([0x09, 0x04, 0x00, 0x05, 0xE9, 0x01]), .. Dt295Ts.Cat()];
+        usb.Ts.Enqueue(psi);
+        var tuner = Tuner(usb, "3-3");
+        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+        await Assert.That(ReadAll(tuner.Output, psi.Length)).IsEquivalentTo(psi);
+        await Assert.That(usb.State).IsEqualTo((ushort)2);
+
+        // 手順の途中の失敗で印が付いても、機材を受信中のまま取り残さない
+        tuner.Board!.MarkFault("テストの失敗");
+        tuner.Dispose();
+        await Assert.That(usb.State).IsEqualTo(Dt295Device.Idle);
+    }
+
+    [Test]
     public async Task 受信中は空きスロットへの_ECM_でない_PID_だけを_9_8_で足す()
     {
         var usb = FakeDt295Usb.Receiving(FakeDt295Material.Create());

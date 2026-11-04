@@ -40,6 +40,11 @@ internal sealed class FakeDt295Usb : IUsbDevice
     /// <summary>完了コードの下位バイト (0x80 にすると失敗)</summary>
     public byte CodeLow { get; set; }
 
+    /// <summary>受信中のルートの追加 (cmd 5 sub 1) を、この回数を超えたら完了コード 0x0580 で断る (既定は断らない)</summary>
+    public int RefuseRouteChangesAfter { get; set; } = int.MaxValue;
+
+    private int _routeChanges;
+
     /// <summary>コマンドのあとの状態 (cmd, sub, val → 状態。null なら変えない)。既定はアイドル設定 (cmd 1) で 0x11、idle の書き戻しの完了 (cmd 4 sub 1) で 0x10</summary>
     public Func<byte, byte, ushort, ushort?> NextState { get; set; } = (command, sub, _) => command switch
     {
@@ -104,7 +109,8 @@ internal sealed class FakeDt295Usb : IUsbDevice
         }
         var (command, sub, val) = (data[0], data[1], (ushort)((data[2] << 8) | data[3]));
         var main = request == 0xB8;
-        Set16(main ? Dt295Bridge.MainCode : Dt295Bridge.SubCode, (ushort)((command << 8) | CodeLow));
+        var low = command == 5 && sub == 1 && ++_routeChanges > RefuseRouteChangesAfter ? (byte)0x80 : CodeLow;
+        Set16(main ? Dt295Bridge.MainCode : Dt295Bridge.SubCode, (ushort)((command << 8) | low));
         if (command == 8 && SecureDevice is not null)
         {
             var mailbox = new byte[512];
