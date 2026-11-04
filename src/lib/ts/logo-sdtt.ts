@@ -20,15 +20,16 @@ const TABLE_SDTT = 0xc3;
 const DESC_DOWNLOAD_CONTENT = 0xc9;
 
 /**
- * 全受信機共通データの maker_id / model_id。0xFE が本番、0xFD が送る前の試験 (TR-B15 5.1.2.2・7.1.8)。
+ * 全受信機共通データの maker_id / model_id。maker_id は 0xFF、model_id は 0xFE が本番、0xFD が送る前の試験
+ * (TR-B15 5.1.2.2・7.1.8)。
  * 試験のものはロゴの印にしない
  */
 const COMMON_MAKER_ID = 0xff;
 const COMMON_MODEL_ID = 0xfe;
 
-/** 中身1つ。ロゴの判断に使うものだけ */
-export interface SdttContent {
-  /** 共通データのバージョン。共通データ全体で1つの番号 (TR-B15 5.1.6.2) */
+/** 中身 1 つ。ロゴの判断に使うものだけ */
+interface SdttContent {
+  /** 共通データのバージョン。共通データ全体で 1 つの番号 (TR-B15 5.1.6.2) */
   newVersion: number;
   /** 予定の数。共通データは 0 (TR-B15 5.1.2.2) */
   schedules: number;
@@ -57,12 +58,12 @@ export function parseSdtt(section: Uint8Array): Sdtt | null {
     const body = at + 8;
     const bodyEnd = Math.min(body + contentLength, end);
     const componentTags: number[] = [];
-    // 予定 (8バイトずつ) のあとに記述子が並ぶ。記述子の長さの欄は無い
+    // 予定 (8 バイトずつ) のあとに記述子が並ぶ。記述子の長さの欄は無い
     for (let p = Math.min(body + scheduleLength, bodyEnd); p + 2 <= bodyEnd;) {
       const tag = section[p]!;
       const length = section[p + 1]!;
       if (p + 2 + length > bodyEnd) break;
-      // component_tag は記述子の中身の 17 バイト目 (フラグ1・大きさ4・download_id 4・DII待ち4・leak_rate 3 のあと)
+      // component_tag は記述子の中身の 17 バイト目 (フラグ 1・大きさ 4・download_id 4・DII 待ち 4・leak_rate 3 のあと)
       if (tag === DESC_DOWNLOAD_CONTENT && length >= 17)
         componentTags.push(section[p + 2 + 16]!);
       p += 2 + length;

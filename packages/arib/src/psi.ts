@@ -1,11 +1,11 @@
 /**
  * TS の土台 (パケットの切り出し・セクションの組み立て・PAT/PMT) と、局の一覧。
  * 局の一覧はチャンネルスキャンで「この物理チャンネルに何が入っているか」を知るために使い、
- * 読むのは NIT と SDT の2つ。
+ * 読むのは NIT と SDT の 2 つ。
  *
- * - NIT (PID 0x0010) … ネットワークID と、地上波ならリモコン番号。衛星はネットワークの全部の TS
+ * - NIT (PID 0x0010) … ネットワーク ID と、地上波ならリモコン番号。衛星はネットワークの全部の TS
  *   (TSID・周波数・サービスの一覧) が載っている (`NitReader`)
- * - SDT (PID 0x0011) … その TS に入っているサービスのIDと種別。衛星はほかの TS のぶん
+ * - SDT (PID 0x0011) … その TS に入っているサービスの ID と種別。衛星はほかの TS のぶん
  *   (SDT[other]) も流れている (`SdtReader`)
  *
  * 局名も SDT から読む。ARIB の文字符号は独自だが、番組表を自分で集めるなら
@@ -63,7 +63,7 @@ const CRC32_TABLE = (() => {
   return table;
 })();
 
-/** MPEG-2 の CRC32。セクション末尾の4バイトを含めて回すと 0 になる */
+/** MPEG-2 の CRC32。セクション末尾の 4 バイトを含めて回すと 0 になる */
 function crc32(data: Uint8Array): number {
   let crc = 0xffffffff;
   for (const byte of data) {
@@ -76,9 +76,9 @@ function crc32(data: Uint8Array): number {
 /**
  * セクション本体に CRC32 を付けて仕上げる。`section_length` も実長に直す。
  *
- * **書く側が2つある。** PAT を書き直して流す `service-filter.ts` と、
+ * **書く側が 2 つある。** PAT を書き直して流す `service-filter.ts` と、
  * 偽の放送を組み立てる `synth.ts`。長さの直し方を間違えると読む側が黙って
- * 捨てるだけなので、1箇所に置く。
+ * 捨てるだけなので、1 箇所に置く。
  */
 export function withCrc(body: number[]): Uint8Array {
   const section = Uint8Array.from(body);
@@ -119,15 +119,15 @@ const NONE: readonly Uint8Array[] = Object.freeze([]);
  *
  * セクションは TS パケットをまたいで運ばれ、パケットの切れ目とは無関係な
  * 位置で終わる。payload_unit_start_indicator と pointer_field を見て
- * 頭を合わせ、section_length ぶん溜まったら1本として吐く。
+ * 頭を合わせ、section_length ぶん溜まったら 1 本として返す。
  */
 export class SectionAssembler {
   private buffer = new Uint8Array(0);
 
   /**
-   * @param pid 読むPID
+   * @param pid 読む PID
    * @param crc CRC の見方。
-   *   `always` … 末尾4バイトを CRC32 とみなして必ず確かめる (PSI はこちら)
+   *   `always` … 末尾 4 バイトを CRC32 とみなして必ず確かめる (PSI はこちら)
    *   `syntax` … `section_syntax_indicator` が立っているときだけ確かめる。
    *     DSM-CC は立っていないと末尾が CRC ではなく Checksum なので、
    *     いつも確かめると**全部捨ててしまう**
@@ -138,10 +138,10 @@ export class SectionAssembler {
   ) {}
 
   /**
-   * パケットを1つ食わせる。組み上がったセクションを返す。
+   * パケットを 1 つ渡す。組み上がったセクションを返す。
    *
    * 返りは**読むだけ**にすること。何も組み上がらないとき (ほとんどのパケット) は
-   * 使い回しの空配列を返す — 関係ないパケットのたびに配列を作っていた
+   * 使い回しの空配列を返す (関係ないパケットのたびに配列を作っていた)
    */
   feed(packet: Uint8Array): readonly Uint8Array[] {
     // トランスポートエラーが立っているものは信用しない
@@ -205,7 +205,7 @@ export class SectionAssembler {
 
 /**
  * 同期が取れているとみなすのに必要な連続パケット数。
- * 1つだけでは中身のたまたまの 0x47 を頭と誤認する
+ * 1 つだけでは中身のたまたまの 0x47 を頭と誤認する
  */
 const CONFIRM = 3;
 
@@ -231,7 +231,7 @@ export function findSync(
  * 任意の長さで届くバイト列を 188 バイトのパケットに切り分ける。
  *
  * 頭が必ずパケットの先頭とは限らず、電波が弱いと途中で数バイト落ちる。
- * ずれたままだと**以降ずっと1パケットも読めなくなる**ので、頭が 0x47 でなければ
+ * ずれたままだと**以降ずっと 1 パケットも読めなくなる**ので、頭が 0x47 でなければ
  * 取り直す。普段は先頭が 0x47 なので、探しに行くのはずれたときだけ。
  *
  * **出すパケットは渡された塊の上の窓** (写しではない。写すと録画の処理の 1/3 を食う)。
@@ -246,7 +246,7 @@ export class PacketStream {
     /*
      * 前の残り (`rest`) と塊を繋いだ並びの上を歩く。位置 `at` はその並びでの位置。
      * 繋ぐのは**残りに頭があるパケットを読むのに要るぶんだけ** (頭を探すのに
-     * 3パケットぶん先まで見る)
+     * 3 パケットぶん先まで見る)
      */
     const split = this.rest.length;
     const total = split + chunk.length;
@@ -310,8 +310,8 @@ export class PacketStream {
 }
 
 /**
- * PAT から1つの局の PMT を追う。`serviceId` を渡さなければ PAT の最初の局
- * (1局に絞った TS を食わせるところ)。PAT で PMT の PID が替われば組み立て直す
+ * PAT から 1 つの局の PMT を追う。`serviceId` を渡さなければ PAT の最初の局
+ * (1 局に絞った TS を渡すところ)。PAT で PMT の PID が替われば組み立て直す
  */
 export class PmtTracker {
   private readonly pat = new SectionAssembler(PID_PAT);
@@ -321,7 +321,7 @@ export class PmtTracker {
 
   constructor(private readonly serviceId?: number) {}
 
-  /** パケットを1つ (`pid` はその PID)。組み上がった PMT のセクションを返す */
+  /** パケットを 1 つ (`pid` はその PID)。組み上がった PMT のセクションを返す */
   feed(packet: Uint8Array, pid: number): readonly Uint8Array[] {
     if (pid === PID_PAT) {
       for (const section of this.pat.feed(packet)) {
@@ -360,8 +360,8 @@ export const DESC_DIGITAL_COPY_CONTROL = 0xc1;
 /**
  * デジタルコピー制御記述子の中身 (タグと長さを除いたもの) から、**コピー禁止か**を読む。
  *
- * 先頭2ビットの digital_recording_control_data が 11 なら禁止
- * (00 コピー可、01 事業者定義、10 1世代のみ)。禁止の番組は録らない
+ * 先頭 2 ビットの digital_recording_control_data が 11 なら禁止
+ * (00 コピー可、01 事業者定義、10 1 世代のみ)。禁止の番組は録らない
  * ([data.md](https://github.com/danything/denpa/blob/main/docs/data.md)「コピー禁止の番組は録らない」)
  */
 export function isCopyNever(data: Uint8Array): boolean {
@@ -400,7 +400,7 @@ export function* pmtStreams(
   }
 }
 
-/** PAT から `サービスID → PMT の PID`。サービス0 は NIT なので飛ばす */
+/** PAT から `サービスID → PMT の PID`。サービス 0 は NIT なので飛ばす */
 export function parsePat(section: Uint8Array): Map<number, number> {
   const programs = new Map<number, number>();
   if (section[0] !== TABLE_PAT) return programs;
@@ -416,8 +416,8 @@ export function parsePat(section: Uint8Array): Map<number, number> {
 /**
  * SDT のサービスの並びを (service_id, 記述子の並び) に切り分ける。
  *
- * **読む側が2つある。** 局名 (`parseSdt`) とロゴの対応 (denpa の `ts/logo.ts`) で、
- * 欲しい記述子が違うだけで歩き方は同じ。並びの読み方をここ1箇所に置く。
+ * **読む側が 2 つある。** 局名 (`parseSdt`) とロゴの対応 (denpa の `ts/logo.ts`) で、
+ * 欲しい記述子が違うだけで歩き方は同じ。並びの読み方をここ 1 箇所に置く。
  */
 export function* sdtServices(
   section: Uint8Array,
@@ -646,7 +646,7 @@ export function parseNitSection(section: Uint8Array): NitSection | null {
 }
 
 /**
- * NIT からネットワークIDとリモコン番号、他の TS の顔ぶれを読む。**セクション 1 つぶん。**
+ * NIT からネットワーク ID とリモコン番号、他の TS の顔ぶれを読む。**セクション 1 つぶん。**
  * スキャンで「どのネットワークか」を知るにはこれで足りる。ネットワークの全部の TS が要るなら `NitReader`
  */
 export function parseNit(section: Uint8Array): NetworkInfo | null {
@@ -876,7 +876,7 @@ export interface FoundService extends Service {
 }
 
 /**
- * 流れてくる TS を食べて、NIT と SDT が揃うまで待つ。
+ * 流れてくる TS を読んで、NIT と SDT が揃うまで待つ。
  *
  * Mirakurun のスキャンと同じで、**両方**揃って初めてそのチャンネルを
  * 「受信できた」とみなす。SDT だけ取れても、どのネットワークのものか
@@ -894,7 +894,7 @@ export class ServiceReader {
     return this.network !== null && this.transport !== null;
   }
 
-  /** 任意の長さのバイト列を食わせる。揃ったら true */
+  /** 任意の長さのバイト列を渡す。揃ったら true */
   feed(chunk: Uint8Array): boolean {
     for (const packet of this.packets.feed(chunk)) {
       if (this.network === null) {

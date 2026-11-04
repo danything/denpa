@@ -11,10 +11,11 @@ import {
   type AdaptSample,
   RungAdapter,
   type Step,
+  stepLabel,
 } from "./adapt";
 import { CODEC_LABEL } from "./hw";
 import type { LiveCodec } from "./live";
-import { type Pace, type Rung, rungLabel } from "./rungs";
+import type { Pace, Rung } from "./rungs";
 
 /** `adapt.ts` を呼ぶ間隔 (ms)。`adapt.ts` の数 (2〜3 秒続いたら) を読み分けられる細かさ */
 export const ADAPT_TICK = 1_000;
@@ -27,31 +28,14 @@ export function rungQuery(rung: Rung, playable: readonly LiveCodec[]): string {
   return `&rung=${rung}&playable=${playable.join(",")}`;
 }
 
-/** コーデックのメニューの「自動」の行 (「自動 (H.264 540p)」)。段 0 は「自動」だけ */
+/** コーデックのメニューの「自動」の行の値 (「自動 (H.264 540p)」)。段 0 は「自動」だけ */
 export function autoLabel(step: Step, codec: string | null): string {
-  if (step === "audio") return "自動 (音声だけ)";
-  const size = rungLabel(step);
-  if (size === null) return "自動";
+  if (step === 0) return "自動";
   const name =
     codec === "h264" || codec === "hevc" || codec === "av1"
-      ? `${CODEC_LABEL[codec]} `
+      ? CODEC_LABEL[codec]
       : "";
-  return `自動 (${name}${size})`;
-}
-
-/** 断り書き。`from` は切り替える前の段 */
-export function adaptNote(decision: AdaptDecision, from: Step): string {
-  const { step, reason } = decision;
-  if (reason === "encode")
-    return "サーバのエンコードが追いつかないため、再生が止まります";
-  if (reason === "pinned")
-    return "回線が細いため、再生が止まります。コーデックを「自動」にすると、画質を下げて再生を続けます";
-  if (step === "audio") return "回線が細いため、音声だけにしました";
-  const size = rungLabel(step);
-  if (reason === "slow") return `回線が細いため、${size ?? ""} に下げました`;
-  if (size === null) return "回線が戻ったため、元の画質に戻しました";
-  if (from === "audio") return `回線が戻ったため、${size} の映像に戻しました`;
-  return `回線が戻ったため、${size} に上げました`;
+  return `自動 (${stepLabel(step, name)})`;
 }
 
 /** 段を切り替えようとして、サーバが混んでいて断られたとき。`down` は下げようとしたか */

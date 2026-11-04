@@ -23,7 +23,7 @@ export interface BudgetLimits {
   ratio: number;
 }
 
-export const DEFAULT_BUDGET: BudgetLimits = {
+const DEFAULT_BUDGET: BudgetLimits = {
   slice: 5,
   window: 10_000,
   ratio: 0.4,

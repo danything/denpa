@@ -1,9 +1,9 @@
 /**
- * ARIB STD-B24 の8単位符号を読む。番組名・概要・局名はこの形式で流れてくる。
+ * ARIB STD-B24 の 8 単位符号を読む。番組名・概要・局名はこの形式で流れてくる。
  *
  * ## 仕組み
  *
- * 符号表を4つ (G0〜G3) 持ち、**どの表を今使うか**を切り替えながら読む。
+ * 符号表を 4 つ (G0〜G3) 持ち、**どの表を今使うか**を切り替えながら読む。
  * 0x21〜0x7E は GL に、0xA1〜0xFE は GR に割り当てられた表で引く。
  * SI の初期状態は G0=漢字 / G1=英数 / G2=ひらがな / G3=カタカナ、GL=G0・GR=G2。
  *
@@ -11,19 +11,19 @@
  *
  * 英数集合 (と空白) は**いまの文字の大きさ**で描く。SI の初期状態は標準 (NSZ) で、
  * テレビはこれを全角で描く。半角にしたい局は中型 (MSZ) を挟んでくる (ARIB TR-B14)。
- * 番組名の「Ｖｅｎｕｅ１０１」は英数集合を標準のまま送ったもの。**放送のとおりに出す** —
+ * 番組名の「Ｖｅｎｕｅ１０１」は英数集合を標準のまま送ったもの。**放送のとおりに出す。**
  * 探すときや比べるときに半角へ寄せるのは使う側 (denpa なら `fold.toHalfWidth` / `title.searchable`)。
  * 全角は `toHalfWidth` でそのまま戻る字 (U+FF01〜U+FF5E) にする (0x5C は ＼、0x7E は ～)
  *
- * ## 漢字は EUC-JP に押し付ける
+ * ## 漢字は EUC-JP として読む
  *
- * 2バイトの漢字集合は JIS X 0208 の並びで、区点は (第1-0x20, 第2-0x20)。
+ * 2 バイトの漢字集合は JIS X 0208 の並びで、区点は (第 1-0x20, 第 2-0x20)。
  * **各バイトの最上位を立てれば EUC-JP になる**ので、ほとんどの字は
- * `TextDecoder('euc-jp')` に渡せる。自前の表を引くのは:
+ * `TextDecoder('euc-jp')` に渡せる。自前の表を引くのは次の字だけ。
  *
- * - 85区から先の外字 ([aribtext-gaiji.ts](aribtext-gaiji.ts))
- * - EUC-JP に無い JIS X 0213 の1面の字 (字幕と同じ表。▷ や ⓐ、か゚ のような2つのコードポイントの字も)
- * - JIS互換漢字1面 (終端 0x39) の 85〜94区と、2面 (0x3A) 全部 (`PLANE1_HIGH`・`PLANE2`)
+ * - 85 区から先の外字 ([aribtext-gaiji.ts](aribtext-gaiji.ts))
+ * - EUC-JP に無い JIS X 0213 の 1 面の字 (字幕と同じ表。▷ や ⓐ、か゚ のような 2 つのコードポイントの字も)
+ * - JIS 互換漢字 1 面 (終端 0x39) の 85〜94 区と、2 面 (0x3A) 全部 (`PLANE1_HIGH`・`PLANE2`)
  */
 
 import { GAIJI } from "./aribtext-gaiji.js";
@@ -63,9 +63,9 @@ const MOSAIC: Charset = { bytes: 1, kind: "blank" };
  * 終端バイト → 符号表。ESC の指示で使う。
  *
  * モザイク (0x32〜0x35) は図形なので読めるものが無い。**捨てずに空へ倒す**のは、
- * 1バイト表として字数を数え続けないと以降がずれるため。
+ * 1 バイト表として字数を数え続けないと以降がずれるため。
  *
- * **オブジェクトではなく Map。** 数値のキーは書式が10進に直されてしまい、
+ * **オブジェクトではなく Map。** 数値のキーは書式が 10 進に直されてしまい、
  * 規格に載っている終端バイトと突き合わせられなくなる (この下も同じ)。
  */
 const CHARSETS = new Map<number, Charset>([
@@ -86,16 +86,16 @@ const CHARSETS = new Map<number, Charset>([
   [0x35, MOSAIC],
 ]);
 
-/** 外字にも JIS にも無い文字を出すときの印。消すとタイトルから1文字黙って落ちる */
+/** 外字にも JIS にも無い文字を出すときの印。消すとタイトルから 1 文字黙って落ちる */
 const UNKNOWN = "□";
 
 /**
- * 1バイトの集合は字幕と同じ表 ([b24-tables.ts](b24-tables.ts)) を引く。**番組表で違えるところ**:
+ * 1 バイトの集合は字幕と同じ表 ([b24-tables.ts](b24-tables.ts)) を引く。**字幕と違えるところは次のとおり。**
  *
  * - ひらがなの 0x74〜0x76 は規格で空き。字幕は全角の空白で埋めるが、番組表では何も出さない
  * - JIS X 0201 カタカナはいつも半角 (字幕は大きさで全角と半角を描き分ける)
  * - 英数は大きさに従って全角か ASCII (字幕の半角の表は 0x5C が ¥、0x7E が ‾。番組表は検索で打つ字に合わせる)
- * - 漢字は EUC-JP のまま読む (字幕は 1区33点の 〜・34点の ‖・61点の − などを差し替える。`KANJI_DIFF`)。
+ * - 漢字は EUC-JP のまま読む (字幕は 1 区 33 点の 〜・34 点の ‖・61 点の − などを差し替える。`KANJI_DIFF`)。
  *   EUC-JP に無い点だけ字幕と同じ JIS X 0213 の字を引く
  */
 const HIRA = [...HIRAGANA_TABLE];
@@ -104,7 +104,7 @@ const ANK = [...JISX0201_HALF];
 
 const eucjp = new TextDecoder("euc-jp");
 
-/** EUC-JP に無い JIS X 0213 の1面の字 (区×94+点 → 字)。字幕と同じ表 */
+/** EUC-JP に無い JIS X 0213 の 1 面の字 (区×94+点 → 字)。字幕と同じ表 */
 const x0213 = new Map<number, string>(KANJI_SEQUENCES);
 for (const [start, chars] of KANJI_DIFF) {
   let i = start;
@@ -114,19 +114,19 @@ for (const [start, chars] of KANJI_DIFF) {
   }
 }
 const PLANE1_HIGH_CHARS = [...PLANE1_HIGH];
-/** 2面の区 (1〜94) → 94 字 */
+/** 2 面の区 (1〜94) → 94 字 */
 const PLANE2_ROWS = new Map(PLANE2.map(([ku, row]) => [ku, [...row]]));
 
 /**
- * 2バイト文字の変換結果を覚えておく。
+ * 2 バイト文字の変換結果を覚えておく。
  *
- * 番組表は同じ字が何万回も出てくるので、1文字ごとに `TextDecoder` を
+ * 番組表は同じ字が何万回も出てくるので、1 文字ごとに `TextDecoder` を
  * 呼び直すと配列の確保だけで効いてくる。
  */
 const cache = new Map<number, string>();
 
 function twoByte(code: number, kind: Charset["kind"]): string {
-  // 2面と、1面の 85区から先は同じ区点でも別の字。覚えるときも漢字集合と混ぜない
+  // 2 面と、1 面の 85 区から先は同じ区点でも別の字。覚えるときも漢字集合と混ぜない
   const high = code >> 8;
   const low = code & 0xff;
   const key =
@@ -146,7 +146,7 @@ function twoByte(code: number, kind: Charset["kind"]): string {
   } else if (kind === "plane2") {
     decoded = PLANE2_ROWS.get(ku)?.[low - 0x21] ?? "";
   } else if (ku >= 85) {
-    // 85区から先は自前の表だけで引く。EUC-JP に渡すと 89〜92区が IBM 拡張の漢字になる
+    // 85 区から先は自前の表だけで引く。EUC-JP に渡すと 89〜92 区が IBM 拡張の漢字になる
     decoded =
       kind === "plane1"
         ? (PLANE1_HIGH_CHARS[cell - 84 * 94] ?? "")
@@ -177,7 +177,7 @@ const SZX_TINY = 0x60;
 /** 標準の大きさの空白 (U+3000) */
 const WIDE_SPACE = String.fromCharCode(0x3000);
 
-/** C1 も同じ。COL/CDC は最初の引数が 0x20 のときだけもう1つ増える */
+/** C1 も同じ。COL/CDC は最初の引数が 0x20 のときだけもう 1 つ増える */
 const C1_PARAMS = new Map<number, number>([
   [0x8b, 1], // SZX
   [0x90, 1], // COL
@@ -191,16 +191,16 @@ const C1_PARAMS = new Map<number, number>([
 ]);
 
 /**
- * 8単位符号を読んで文字列にする。
+ * 8 単位符号を読んで文字列にする。
  *
- * 壊れた並びで例外を投げない。放送波は落ちるもので、1つの記述子が読めなくても
+ * 壊れた並びで例外を投げない。放送波は落ちるもので、1 つの記述子が読めなくても
  * 番組表全体を落とすほうが害が大きい。**読めたところまで返す。**
  */
 export function decodeAribText(data: Uint8Array): string {
   const g: Charset[] = [KANJI, ALNUM, HIRAGANA, KATAKANA];
   let gl = 0;
   let gr = 2;
-  /** 単発シフト (SS2/SS3)。1文字だけ別の表を使ったら元に戻す */
+  /** 単発シフト (SS2/SS3)。1 文字だけ別の表を使ったら元に戻す */
   let single: number | null = null;
   /** 英数と空白を半角で描く大きさか (MSZ/SSZ)。SI の初期状態は標準 (NSZ) で全角 */
   let half = false;
@@ -275,7 +275,7 @@ export function decodeAribText(data: Uint8Array): string {
       else if (byte === NSZ) half = false;
       else if (byte === SZX) half = data[at] === SZX_TINY;
       let params = C1_PARAMS.get(byte) ?? 0;
-      // COL と CDC は「色を直に指定する」形式のときだけ引数が1つ増える
+      // COL と CDC は「色を直に指定する」形式のときだけ引数が 1 つ増える
       if ((byte === 0x90 || byte === 0x92) && data[at] === 0x20) params = 2;
       at += params;
       continue;
@@ -334,7 +334,7 @@ const LOCKING = new Map<number, [number | null, number | null]>([
 
 /**
  * ESC のあとを読む。**指示 (どの表を G0〜G3 に載せるか) と
- * 呼び出し (どの G を GL/GR に出すか) の2種類がある。**
+ * 呼び出し (どの G を GL/GR に出すか) の 2 種類がある。**
  *
  * @returns 次に読むべき位置
  */
@@ -353,12 +353,12 @@ function afterEscape(
     return at + 1;
   }
 
-  // 2バイト集合の指示。ESC 0x24 F は G0 への指示の略記
+  // 2 バイト集合の指示。ESC 0x24 F は G0 への指示の略記
   if (byte === 0x24) {
     const next = data[at + 1];
     if (next === undefined) return at + 2;
     if (next >= 0x28 && next <= 0x2b) {
-      // ESC 0x24 0x2x 0x20 F は2バイトDRCS。読めないので空へ倒す
+      // ESC 0x24 0x2x 0x20 F は 2 バイト DRCS。読めないので空へ倒す
       if (data[at + 2] === 0x20) {
         designate(next - 0x28, { bytes: 2, kind: "blank" });
         return at + 4;
@@ -370,11 +370,11 @@ function afterEscape(
     return at + 2;
   }
 
-  // 1バイト集合の指示
+  // 1 バイト集合の指示
   if (byte >= 0x28 && byte <= 0x2b) {
     const target = byte - 0x28;
     if (data[at + 1] === 0x20) {
-      // 1バイトDRCS
+      // 1 バイト DRCS
       designate(target, MOSAIC);
       return at + 3;
     }
@@ -382,6 +382,6 @@ function afterEscape(
     return at + 2;
   }
 
-  // 知らない指示。1バイトだけ飛ばして読み進める (止めるより取り返しがつく)
+  // 知らない指示。1 バイトだけ飛ばして読み進める (止めるより取り返しがつく)
   return at + 1;
 }

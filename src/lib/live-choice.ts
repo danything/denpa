@@ -13,7 +13,7 @@ import { LIVE_CODECS, type LiveCodec } from "./live";
  */
 export type LiveChoice = "auto" | LiveCodec | "raw";
 
-/** 実際にリクエストする形式。エンコードするもの (AV1・H.264) か、放送のまま (`raw`) */
+/** 実際にリクエストする形式。エンコードするもの (AV1・H.265・H.264) か、放送のまま (`raw`) */
 export type LiveFormat = LiveCodec | "raw";
 
 /**

@@ -23,13 +23,14 @@
  * 出すか転ぶ。転んだら (`error`) 開き直してキーフレームから入り直し、続けて転ぶなら諦める。
  */
 
-import { ascii, concatBytes, u32 } from "@danything/arib/bytes";
+import { concatBytes } from "@danything/arib/bytes";
 import { CLOCK } from "@danything/arib/pes";
 
 import {
   adtsHeader,
   type Fmp4Sample,
   type Fmp4Track,
+  hasBox,
   opusHead,
   readFragment,
   readInit,
@@ -131,6 +132,11 @@ function ticks(value: number, timescale: number): number {
   return Math.round((value * CLOCK) / timescale);
 }
 
+/** 90kHz を µs (WebCodecs の時刻) に直す */
+function micros(value: number): number {
+  return Math.round((value * 1_000_000) / CLOCK);
+}
+
 export class Fmp4Video {
   private readonly context: OffscreenCanvasRenderingContext2D;
   private tracks: Fmp4Track[] = [];
@@ -191,7 +197,7 @@ export class Fmp4Video {
   /** 箱を 1 つぶん (init か媒体)。サーバは箱の切れ目で送ってくる */
   feed(bytes: Uint8Array): void {
     // init (ftyp + moov)。**来るたびに開き直す**。選局し直し・音声やコーデックの選び直しで中身が変わる
-    if (bytes.length >= 8 && hasBox(bytes, "moov")) {
+    if (hasBox(bytes, "moov")) {
       this.configure(readInit(bytes));
       return;
     }
@@ -363,14 +369,14 @@ export class Fmp4Video {
   private decode(item: Pending): void {
     const decoder = this.decoder;
     if (decoder === null || decoder.state !== "configured") return;
-    const timestamp = Math.round((item.pts * 1_000_000) / CLOCK);
+    const timestamp = micros(item.pts);
     this.started.set(timestamp, performance.now());
     try {
       decoder.decode(
         new EncodedVideoChunk({
           type: item.key ? "key" : "delta",
           timestamp,
-          duration: Math.round((item.duration * 1_000_000) / CLOCK),
+          duration: micros(item.duration),
           // 届いた ArrayBuffer の一部 (共有のメモリではない)
           data: item.data as Uint8Array<ArrayBuffer>,
         }),
@@ -444,7 +450,7 @@ export class Fmp4Video {
       this.decode(this.take());
     }
 
-    const now = Math.round((at * 1_000_000) / CLOCK);
+    const now = micros(at);
     // 次のフレームがもう表示時刻を迎えているなら、手前のフレームは描かずに捨てる
     while (this.frames.length >= 2 && this.frames[1]!.timestamp <= now) {
       this.frames.shift()?.close();
@@ -473,7 +479,7 @@ export class Fmp4Video {
       this.canvas.height = height;
     }
     this.context.drawImage(frame, 0, 0, width, height);
-    const pts = Math.round((frame.timestamp * CLOCK) / 1_000_000);
+    const pts = ticks(frame.timestamp, 1_000_000);
     frame.close();
     if (this.lastPts !== null) {
       const gap = pts - this.lastPts;
@@ -502,7 +508,7 @@ export class Fmp4Video {
    * `from` (90kHz) を渡すと、それより前のフレームは描かない (`floor`)
    */
   reset(from: number | null = null): void {
-    this.floor = from === null ? null : Math.round((from * 1_000_000) / CLOCK);
+    this.floor = from === null ? null : micros(from);
     this.keep([]);
     this.overflowed = false;
     this.dropFrames();
@@ -525,15 +531,4 @@ export class Fmp4Video {
     for (const frame of this.frames) frame.close();
     this.frames = [];
   }
-}
-
-/** 先頭に並んだ箱の中に `type` があるか (中まで読まない) */
-function hasBox(bytes: Uint8Array, type: string): boolean {
-  for (let at = 0; at + 8 <= bytes.length;) {
-    if (ascii(bytes, at + 4, 4) === type) return true;
-    const size = u32(bytes, at);
-    if (size < 8) return false;
-    at += size;
-  }
-  return false;
 }

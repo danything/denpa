@@ -1,10 +1,10 @@
 /**
  * 放送波から局ロゴを取得する。
  *
- * エージェントは TS を1バイトも読まないので、**番組表に出す局ロゴは denpa が
- * 自分で取得する**。番組表集めなどが開いた選局を共有して、ついでに読む (`server/logo.ts`)。
+ * エージェントは TS を 1 バイトも読まないので、**番組表に出す局ロゴは denpa が
+ * 自分で取得する**。番組表の取得などで開いた選局を共有して、ついでに読む (`server/logo.ts`)。
  *
- * 地上波は2つの表に分かれて流れてくる。
+ * 地上波は 2 つの表に分かれて流れてくる。
  *
  * - CDT (PID 0x0029) … ロゴの実体。PNG がそのまま入っている
  * - SDT (PID 0x0011) … どのサービスがどのロゴを使うか (logo_transmission_descriptor)
@@ -12,7 +12,7 @@
  * 片方だけでは紐付かないので、両方見て初めて「この局のロゴ」になる。
  *
  * **衛星 (BS/CS) は CDT を使わない。** データカルーセル (DSM-CC) で送るので、
- * そちらは別仕立て (`logo-dsmcc.ts`)。両方まとめてここで面倒を見る。
+ * そちらは別仕立て (`logo-dsmcc.ts`)。どちらのロゴも `LogoCollector` が集める。
  */
 
 import { u16 } from "@danything/arib/bytes";
@@ -40,14 +40,14 @@ const DATA_TYPE_LOGO = 0x01;
 const DESC_LOGO_TRANSMISSION = 0xcf;
 
 /**
- * 使うロゴの大きさ。0x05 が一番大きい(64×36)。
- * 小さいものは並べたときに粗いので、大きいものが来たら差し替える。
+ * 使うロゴの大きさ。0x05 は HD の大 (64×36)。
+ * 小さいものは並べたときに粗いので、これが来たら差し替える。
  */
 export const PREFERRED_LOGO_TYPE = 0x05;
 
 /**
- * ロゴの大きさは**規格で6種類に決まっている** (ARIB STD-B21。logo_type → 幅×高さ)。
- * 局は6種類とも流していて、どれが先に来るかは運。0x00〜0x04 は SD 用・HD の小で、
+ * ロゴの大きさは**規格で 6 種類に決まっている** (ARIB STD-B21。logo_type → 幅×高さ)。
+ * 局は 6 種類とも流していて、どれが先に来るかは運。0x00〜0x04 は SD 用・HD の小で、
  * SD 用は画素が正方でない前提の画像なので、そのまま並べると縦横比まで局ごとに違って見える
  */
 const LOGO_SIZES: readonly (readonly [number, number])[] = [
@@ -60,7 +60,7 @@ const LOGO_SIZES: readonly (readonly [number, number])[] = [
 ];
 
 /**
- * 置いてある PNG がどの logo_type か。寸法から引く (6種類とも寸法が違う)。
+ * 置いてある PNG がどの logo_type か。寸法から引く (6 種類とも寸法が違う)。
  * PNG でない・規格に無い寸法なら null
  */
 export function logoTypeOfPng(png: Uint8Array): number | null {
@@ -74,7 +74,8 @@ export function logoTypeOfPng(png: Uint8Array): number | null {
 }
 
 /**
- * いま持っているものを、来たもので置き換えてよいか。**小さいものへは戻さない。**
+ * いま持っているものを、来たもので置き換えてよいか。**logo_type の番号が大きいほうへだけ進め、
+ * 0x05 からは動かさない** (番号の順に進めば、いずれ 0x05 に揃う)。
  * 同じ種類は置き換える (画像が新しくなっているかもしれない)。
  * 持っているものの種類が分からなければ (null) 置き換える
  */
@@ -155,7 +156,7 @@ interface CollectedLogo {
    * その局のネットワーク。
    *
    * 衛星はロゴ自身が「どのネットワークのどの局か」を持っているので、開いた
-   * チャンネルのものとは限らない (1つの中継に他ネットワークの局が入る)。
+   * チャンネルのものとは限らない (1 つの中継に他ネットワークの局が入る)。
    * 地上波は CDT にその情報が無いので、開いたチャンネルのものを使う。
    */
   networkId: number;
@@ -183,7 +184,7 @@ export class LogoCollector {
 
   /**
    * @param networkId 開いている物理チャンネルのネットワーク。地上波の CDT には
-   *   ネットワークが入っていないので、外から教えてもらう
+   *   ネットワークが入っていないので、呼ぶ側が渡す
    * @param carousel 衛星のカルーセルの読みかけ (`CarouselProgress`)。渡せば、前に開いたときの続きから
    *   読む。渡さなければ一から
    */
@@ -202,7 +203,7 @@ export class LogoCollector {
     return this.dsmcc.hasLogoService;
   }
 
-  /** 衛星のロゴのカルーセルを1回ぶん読み切ったか (`DsmccLogoCollector.carouselRead`) */
+  /** 衛星のロゴのカルーセルを 1 回ぶん読み切ったか (`DsmccLogoCollector.carouselRead`) */
   get satelliteCarouselRead(): boolean {
     return this.dsmcc.carouselRead;
   }
@@ -229,7 +230,7 @@ export class LogoCollector {
 
   private remember(logo: LogoData): void {
     const known = this.logos.get(logo.logoId);
-    // 大きいものを優先する。同じ大きさならバージョンが違えば入れ替える
+    // 種類は `replacesLogo` のとおりに進める。同じ種類ならバージョンが違えば入れ替える
     if (
       known === undefined ||
       (known.logoType === logo.logoType
@@ -254,7 +255,7 @@ export class LogoCollector {
     }));
 
     /*
-     * 衛星ぶん。**ネットワークごとにまとめ直す。** 1つのロゴが他ネットワークの
+     * 衛星ぶん。**ネットワークごとにまとめ直す。** 1 つのロゴが他ネットワークの
      * 局にも紐付いていることがあるので、開いた中継のネットワークで一括りには
      * できない
      */

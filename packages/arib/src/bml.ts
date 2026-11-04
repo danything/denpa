@@ -1,5 +1,5 @@
 /**
- * データ放送 (ARIB STD-B24 の BML) をデコードする。**1局に絞った TS を食わせると、
+ * データ放送 (ARIB STD-B24 の BML) をデコードする。**1 局に絞った TS を渡すと、
  * 組み立て終わったファイルが出てくる。**
  *
  *     TS → PAT → PMT → データ符号化方式記述子 (0xFD) の付いた ES
@@ -9,7 +9,7 @@
  *
  * **運び方は衛星のロゴと同じ DSM-CC** で、denpa はそれを既に持っている
  * ([dsmcc.ts](dsmcc.ts) / [logo-dsmcc.ts](https://github.com/danything/denpa/blob/main/src/lib/ts/logo-dsmcc.ts))。
- * [web-bml](https://github.com/otya128/web-bml) の `decode_ts.ts` は使わない — 要るのは
+ * [web-bml](https://github.com/otya128/web-bml) の `decode_ts.ts` は使わない。要るのは
  * その一部だけで、残り (EIT/SDT/NIT・字幕の PES) は自前で読んでおり
  * ([eit.ts](eit.ts) / [psi.ts](psi.ts) / [b24caption.ts](b24caption.ts))、`@chinachu/aribts` も抱えずに済む。
  *
@@ -51,11 +51,11 @@ import {
 } from "./psi.js";
 
 const DESC_STREAM_IDENTIFIER = 0x52;
-/** データ符号化方式記述子 (STD-B10 第2部 6.2.20) */
+/** データ符号化方式記述子 (STD-B10 第 2 部 6.2.20) */
 const DESC_DATA_COMPONENT = 0xfd;
 
 /**
- * BML が載っている符号化方式 (STD-B10 第2部 付録J 表J-1)。
+ * BML が載っている符号化方式 (STD-B10 第 2 部 付録 J 表 J-1)。
  * 0x0C/0x0D が地上波、0x07 が BS、0x0B が CS
  */
 const BXML_COMPONENT_IDS = new Set([0x07, 0x0b, 0x0c, 0x0d]);
@@ -66,15 +66,15 @@ const COMPRESSION_ZLIB = 0;
 /**
  * データ符号化方式記述子の後半を読む。
  *
- * 地上波は TR-B14 第二分冊 2.1.4 表2-3、BS/CS は TR-B15 第一分冊 5.1.5 表5-4。
+ * 地上波は TR-B14 第二分冊 2.1.4 表 2-3、BS/CS は TR-B15 第一分冊 5.1.5 表 5-4。
  *
- * **`data_component_id` は16ビット** (aribts は8ビットで読んでいる)。
+ * **`data_component_id` は 16 ビット** (aribts は 8 ビットで読んでいる)。
  */
 export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
   let at = 0;
   // 00 のみ運用 (データカルーセル伝送方式およびイベントメッセージ伝送方式)
   const transmissionFormat = (data[at]! >> 6) & 0b11;
-  // component_tag=0x40 のとき必ず1。startup.xml が最初に起動される
+  // component_tag=0x40 のとき必ず 1。startup.xml が最初に起動される
   const entryPointFlag = ((data[at]! >> 5) & 1) === 1;
   const info: AdditionalAribBXMLInfo = { transmissionFormat, entryPointFlag };
 
@@ -82,17 +82,17 @@ export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
     const autoStartFlag = ((data[at]! >> 4) & 1) === 1;
     /*
      * 画面の大きさ。運用されるのは 0011 (960x540)、0100 (640x480 16:9)、
-     * 0101 (640x480 4:3) の3つ
+     * 0101 (640x480 4:3) の 3 つ
      */
     const documentResolution = data[at]! & 0x0f;
     at++;
     const useXML = ((data[at]! >> 7) & 1) === 1;
     const defaultVersionFlag = ((data[at]! >> 6) & 1) === 1;
-    // BS/CS では 0 のとき単独視聴不可。地上波は常に1
+    // BS/CS では 0 のとき単独視聴不可。地上波は常に 1
     const independentFlag = ((data[at]! >> 5) & 1) === 1;
     const styleForTVFlag = ((data[at]! >> 4) & 1) === 1;
     at++;
-    // 既定は BS の 1.0。地上波は3、CS は2が入ってくる
+    // 既定は BS の 1.0。地上波は 3、CS は 2 が入ってくる
     info.entryPointInfo = {
       autoStartFlag,
       documentResolution,
@@ -138,7 +138,7 @@ export function parseBxmlInfo(data: Uint8Array): AdditionalAribBXMLInfo {
 }
 
 /**
- * PMT から ES を並べる。**部品タグ (component_tag) を持たない ES は数に入れない** —
+ * PMT から ES を並べる。**部品タグ (component_tag) を持たない ES は数に入れない。**
  * データ放送は「何番の部品か」でしか物を指せないので、番号の無いものは指しようがない。
  */
 function parsePmt(section: Uint8Array): ComponentPMT[] {
@@ -168,7 +168,7 @@ function parsePmt(section: Uint8Array): ComponentPMT[] {
   return components;
 }
 
-/** `at` の下位1ビットと続く4バイトで 33 ビット (STC・NPT) */
+/** `at` の下位 1 ビットと続く 4 バイトで 33 ビット (STC・NPT) */
 const u33 = (data: Uint8Array, at: number) =>
   (data[at]! & 1) * 0x100000000 + u32(data, at + 1);
 
@@ -213,7 +213,7 @@ function parseEsEvents(section: Uint8Array): ESEvent[] {
 }
 
 /**
- * 組み立て中のモジュール1つ。
+ * 組み立て中のモジュール 1 つ。
  *
  * **DII の言い分を持ち歩く。** 縮んでいるか・中身が何かは DII にしか書いておらず、
  * ブロックを運ぶ DDB は何も知らない。揃ったときに読み方が分からないと困る
@@ -237,13 +237,13 @@ interface Building {
 const GIVE_UP_ROUNDS = 4;
 
 /**
- * 1つの `BmlDecoder` で同時に組み立てるモジュールの大きさの合計の上限 (64MiB)。
- * 1つずつは `MAX_MODULE_SIZE` に収まっても、たくさん並べた DII や ES でメモリを使い切らせられる。
+ * 1 つの `BmlDecoder` で同時に組み立てるモジュールの大きさの合計の上限 (64MiB)。
+ * 1 つずつは `MAX_MODULE_SIZE` に収まっても、たくさん並べた DII や ES でメモリを使い切らせられる。
  * 実際のカルーセルは全部で数 MB に収まる
  */
 const MAX_CAROUSEL_SIZE = 64 * 1024 * 1024;
 
-/** カルーセルが流れている ES 1本ぶんの覚え書き */
+/** カルーセルが流れている ES 1 本ぶんの覚え書き */
 interface Component {
   componentId: number;
   sections: SectionAssembler;
@@ -268,14 +268,14 @@ function doneMark(component: Component, version: number): string {
 }
 
 /**
- * 1局に絞った TS を食わせると、データ放送の通知が出てくる。
+ * 1 局に絞った TS を渡すと、データ放送の通知が出てくる。
  *
- * **1つの選局に1つ。** 局を変えたら作り直す — カルーセルは局ごとに別物で、
+ * **1 つの選局に 1 つ。** 局を変えたら作り直す。カルーセルは局ごとに別物で、
  * 組み立て中のものを持ち越すと混ざる。
  */
 export class BmlDecoder {
   private readonly packets = new PacketStream();
-  /** **1局に絞ったあとを食わせる前提。** 入っているサービスは1つなので、最初の局の PMT を追う */
+  /** **1 局に絞ったあとを渡す前提。** 入っているサービスは 1 つなので、最初の局の PMT を追う */
   private readonly pmt = new PmtTracker();
   // TDT は CRC を持たない。DSM-CC と同じ理由で 'syntax' で受ける
   private readonly time = new SectionAssembler(PID_TIME, "syntax");
@@ -286,24 +286,24 @@ export class BmlDecoder {
 
   constructor(private readonly send: (message: ResponseMessage) => void) {}
 
-  /** 1局に絞った TS を食わせる */
+  /** 1 局に絞った TS を渡す */
   feed(chunk: Uint8Array): void {
     for (const packet of this.packets.feed(chunk)) this.feedPacket(packet);
   }
 
   /**
-   * 切り分け済みのパケットを1つ。ライブは同じ TS を時計や Hybridcast とも
-   * 分け合うので、切り分けは1回で済ませて配る (denpa の `server/live.ts` の `tap`)。
+   * 切り分け済みのパケットを 1 つ。ライブは同じ TS を時計や Hybridcast とも
+   * 分け合うので、切り分けは 1 回で済ませて配る (denpa の `server/live.ts` の `tap`)。
    *
    * **PID で行き先を引く。** 組み立て役を全部に回していた頃は、データ放送と
    * 関係ない映像のパケットのたびにカルーセルの数だけ呼んでいた。
    *
    * `packet` は呼び手の塊の上の窓 (`psi.ts` の `PacketStream`)。**返ったあとまで
-   * 持つなら写すこと** — 塊の入れ物は使い回される
+   * 持つなら写すこと。** 塊の入れ物は使い回される
    */
   feedPacket(packet: Uint8Array): void {
     const pid = packetPid(packet);
-    // 同じ PID を2役が名乗ることもあるので、else でつながない
+    // 同じ PID を 2 役が名乗ることもあるので、else でつながない
     for (const section of this.pmt.feed(packet, pid)) this.onPmt(section);
     if (pid === PID_TIME)
       for (const section of this.time.feed(packet)) this.onTime(section);
@@ -319,7 +319,7 @@ export class BmlDecoder {
     if (components.length === 0) return;
 
     /*
-     * 放送は同じ表を何度も送る。**変わったときだけ配る** — 受け側は
+     * 放送は同じ表を何度も送る。**変わったときだけ配る。** 受け側は
      * PMT が来るたびに画面を組み直すので、そのまま通すと出っ放しになる
      */
     const shape = JSON.stringify(components);
@@ -527,7 +527,7 @@ export class BmlDecoder {
 /**
  * 揃ったモジュールをファイルに分ける。
  *
- * **多くは `multipart/mixed`** で、1つのモジュールに BML と画像がまとめて
+ * **多くは `multipart/mixed`** で、1 つのモジュールに BML と画像がまとめて
  * 入っている。Type 記述子が無いときも中身は multipart なので、同じ扱いにする。
  */
 export function moduleFiles(

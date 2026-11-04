@@ -1,21 +1,21 @@
 /**
  * 放送の字幕 (ARIB STD-B24 の字幕文) をデコードして、**字の置き場所まで決める** ([caption-text.ts](caption-text.ts))。
  *
- * libaribcaption の「デコードする (decoder)」側を写したもの — 置き場所・大きさ・色・外字の置き換えまでは
+ * libaribcaption の「デコードする (decoder)」側を写したもの。置き場所・大きさ・色・外字の置き換えまでは
  * 同じ計算で、描く (renderer) 手前で止める。描くのは受け側 (ブラウザ・アプリ)。
  *
- * 写したのは日本の放送で要るところだけ: 8単位符号 (JIS)・Profile A (フルセグ)。言語は1つを選んで読む
- * (既定は第1言語。`new B24CaptionDecoder(2)` で第2言語)。
+ * 写したのは日本の放送で要るところだけ: 8 単位符号 (JIS)・Profile A (フルセグ)。言語は 1 つを選んで読む
+ * (既定は第 1 言語。`new B24CaptionDecoder(2)` で第 2 言語)。
  * ブラジルの Latin・UTF-8・ワンセグ (Profile C) は持たない。
  *
  * ## libaribcaption と違えたところ
  *
  * - **字幕管理データの「送り直し」の見分け。** あちらは群 (A/B) を `(id & 0xF0) >> 8` で
- *   取っていて常に 0 になり、最初の1回しか読まない。ここは群を正しく見る
+ *   取っていて常に 0 になり、最初の 1 回しか読まない。ここは群を正しく見る
  *   (番組が変わって群が替わったときに書式を読み直す)
  * - **点滅 (FLC) を読み取る。** あちらは読み捨てている
- * - **JIS X 0213 を最後まで読む。** JIS互換漢字2面 (0x3A) を2面の表で、1面 (0x39) の 85〜94区を
- *   第3水準の漢字で引く。か゚ のような2つのコードポイントの字も出す (あちらは空き)
+ * - **JIS X 0213 を最後まで読む。** JIS 互換漢字 2 面 (0x3A) を 2 面の表で、1 面 (0x39) の 85〜94 区を
+ *   第 3 水準の漢字で引く。か゚ のような 2 つのコードポイントの字も出す (あちらは空き)
  * - **表で空いている点 (U+FFFD) はゲタ (〓) にする。** 「�」は Denpa Font に無く、端末の字の
  *   「?」の印で出る。定義されていない外字と同じ扱い
  *
@@ -82,9 +82,9 @@ const MOSAIC: Entry = { set: "mosaic", bytes: 1 };
 /**
  * 終端バイト → 集合 (G の指示)。プロポーショナルは同じ表で引く (libaribcaption と同じ)。
  *
- * JIS X 0213 の1面 (0x39) は 1〜84区を漢字集合 (0x42) と同じ表で引き (漢字集合でも JIS X 0213 にだけある字を出す)、
- * 85〜94区は JIS X 0213 の漢字 (`PLANE1_HIGH`)。漢字集合と追加記号 (0x3B) の 85区から先は追加記号。
- * 2面 (0x3A) は別の表 (`PLANE2`)。libaribcaption は 1面・2面とも漢字集合の表で引いていた
+ * JIS X 0213 の 1 面 (0x39) は 1〜84 区を漢字集合 (0x42) と同じ表で引き (漢字集合でも JIS X 0213 にだけある字を出す)、
+ * 85〜94 区は JIS X 0213 の漢字 (`PLANE1_HIGH`)。漢字集合と追加記号 (0x3B) の 85 区から先は追加記号。
+ * 2 面 (0x3A) は別の表 (`PLANE2`)。libaribcaption は 1 面・2 面とも漢字集合の表で引いていた
  */
 const G_SETS = new Map<number, Entry>([
   [0x42, KANJI],
@@ -104,7 +104,7 @@ const G_SETS = new Map<number, Entry>([
   [0x3b, { set: "additional", bytes: 2 }],
 ]);
 
-/** 終端バイト → DRCS の面 (0x40 は2バイトの面 0)。0x70 はマクロ */
+/** 終端バイト → DRCS の面 (0x40 は 2 バイトの面 0)。0x70 はマクロ */
 function drcsSet(final: number): Entry | undefined {
   if (final === 0x70) return MACRO;
   if (final < 0x40 || final > 0x4f) return undefined;
@@ -172,10 +172,10 @@ const T = {
   kanjiHalf: points(KANJI_SYMBOLS_HALF),
   additional: points(ADDITIONAL),
   plane1High: points(PLANE1_HIGH),
-  /** 2面の区 (0 から) → 94 字 */
+  /** 2 面の区 (0 から) → 94 字 */
   plane2: new Map(PLANE2.map(([ku, row]) => [ku - 1, points(row)])),
 };
-/** 1区画に2つのコードポイントを描く字 (区×94+点 → 字)。JIS X 0213 の か゚ など */
+/** 1 区画に 2 つのコードポイントを描く字 (区×94+点 → 字)。JIS X 0213 の か゚ など */
 const sequences = new Map(KANJI_SEQUENCES);
 
 /** 色。CLUT の組 (0〜7) と番号 (0〜15) */
@@ -211,7 +211,7 @@ interface Drcs {
 
 /**
  * 送る画像 (なめらかにした濃淡。drcs-smooth.ts) を元の画像の MD5 ごとに覚えておく。放送は字幕文のたびに
- * 同じ外字を定義し直してくるので、定義ごとではなくここで1回だけ作る
+ * 同じ外字を定義し直してくるので、定義ごとではなくここで 1 回だけ作る
  */
 const smoothed = new Map<string, CaptionDrcs>();
 const SMOOTHED_MAX = 256;
@@ -237,10 +237,10 @@ function sendable(drcs: Drcs): CaptionDrcs {
   return sent;
 }
 
-/** デコードした1字。libaribcaption の CaptionChar と同じもの */
+/** デコードした 1 字。libaribcaption の CaptionChar と同じもの */
 interface Char {
   code: number;
-  /** 1区画に2つのコードポイントを描く字 (JIS X 0213 の か゚ など)。`code` はその1つめ */
+  /** 1 区画に 2 つのコードポイントを描く字 (JIS X 0213 の か゚ など)。`code` はその 1 つめ */
   joined: string | null;
   /** 置き換えられなかった外字 */
   drcs: number | null;
@@ -263,7 +263,7 @@ interface Char {
   ruby: boolean;
 }
 
-/** デコードした1枚。CS と TIME のあった印つき */
+/** デコードした 1 枚。CS と TIME のあった印つき */
 interface Caption {
   chars: Char[];
   clear: boolean;
@@ -273,11 +273,11 @@ interface Caption {
 }
 
 /**
- * 字幕のストリーム1本ぶんのデコーダ。**状態を持つ** (書式・位置・色・外字は字幕文を跨いで続く) ので、
- * ストリームごとに1つ作って、届いた順に食わせる。
+ * 字幕のストリーム 1 本ぶんのデコーダ。**状態を持つ** (書式・位置・色・外字は字幕文を跨いで続く) ので、
+ * ストリームごとに 1 つ作って、届いた順に渡す。
  *
- * **読むのは1つの言語だけ** (`language`。1〜8)。言語ごとに書式も位置も別に続くので、2つの言語を出し分けるなら
- * 言語ごとに1つ作って、同じコマを両方に食わせる (denpa の `server/captions.ts` の `CaptionText`)
+ * **読むのは 1 つの言語だけ** (`language`。1〜8)。言語ごとに書式も位置も別に続くので、2 つの言語を出し分けるなら
+ * 言語ごとに 1 つ作って、同じコマを両方に渡す (denpa の `server/captions.ts` の `CaptionText`)
  */
 export class B24CaptionDecoder {
   /** 字幕管理データに書いてある言語。まだ届いていなければ空 */
@@ -330,9 +330,9 @@ export class B24CaptionDecoder {
   }
 
   /**
-   * 字幕の PES の中身を1つ食わせる。
+   * 字幕の PES の中身を 1 つ渡す。
    *
-   * @returns 出す1枚。出すものが無ければ (字幕管理データ・送り直し・待ちだけの字幕文) null
+   * @returns 出す 1 枚。出すものが無ければ (字幕管理データ・送り直し・待ちだけの字幕文) null
    */
   decode(data: Uint8Array): CaptionPage | null {
     const begin = groupAt(data);
@@ -650,7 +650,7 @@ export class B24CaptionDecoder {
       if (set !== undefined) this.gx[byte - 0x28] = set;
       return 2;
     }
-    // 知らない ESC は、ESC 1バイトだけ読んだことにする (libaribcaption と同じ)
+    // 知らない ESC は、ESC 1 バイトだけ読んだことにする (libaribcaption と同じ)
     return 0;
   }
 
@@ -977,13 +977,13 @@ export class B24CaptionDecoder {
 }
 
 /**
- * デコードした1枚を、送る形式にする。**同じ見た目で続いている字を1つの並びに束ねる。**
+ * デコードした 1 枚を、送る形式にする。**同じ見た目で続いている字を 1 つの並びに束ねる。**
  *
  * libaribcaption の描き手 (region_renderer) が字ごとに計算している置き場所を、ここで
  * 面の単位のまま済ませておく。区画は `floor((字の幅 + 字間) × 倍率)`、字の枠は区画の中で
  * 字間の半分だけ右下へずらしたところ。
  *
- * @returns 出すものが無い (待ちだけの字幕文) なら null。CS だけなら「消す」1枚
+ * @returns 出すものが無い (待ちだけの字幕文) なら null。CS だけなら「消す」1 枚
  */
 function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
   if (caption.chars.length === 0 && !caption.clear) return null;
@@ -1028,7 +1028,7 @@ function toPage(caption: Caption, plane: [number, number]): CaptionPage | null {
     if (char.flash) run.flash = true;
     if (char.ruby) run.ruby = true;
 
-    // 見た目が同じで、すぐ右に続いていれば束ねる。外字の画像と、2つのコードポイントの字は1字ずつ
+    // 見た目が同じで、すぐ右に続いていれば束ねる。外字の画像と、2 つのコードポイントの字は 1 字ずつ
     const { x: _x, y: _y, text: _t, ...looks } = run;
     const key = JSON.stringify(looks);
     if (

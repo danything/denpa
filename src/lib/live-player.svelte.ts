@@ -20,9 +20,11 @@ import { untrack } from "svelte";
 
 import {
   type AdaptDecision,
+  adaptNote,
   HOLD as ADAPT_HOLD,
   RungAdapter,
   type Step,
+  stepOrder,
 } from "#lib/adapt.js";
 import type { AudioTrack } from "#lib/arib.js";
 import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
@@ -41,11 +43,9 @@ import {
 import { eachFrame } from "#lib/components/player/frames.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
-  adaptMessage,
   rungFields,
   servedStep,
   stepFields,
-  stepOrder,
   Throughput,
 } from "#lib/live-adapt.js";
 import { holdStep, rawChasePosition } from "#lib/live-chase.js";
@@ -477,7 +477,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * ---- 変換せずに送る経路 ([stream.md](../../docs/stream.md#放送そのままmpeg-2を送る)) ----
    *
    * **MSE の代わりに `raw/engine.ts` を使う。** それ以外 (接続・通知・字幕・データ放送・
-   * 貯め方の決め方) はエンコードする経路と同じものを通す。違うのは描く先と時計だけ:
+   * 貯め方の決め方) はエンコードする経路と同じものを通す。違うのは描く先と時計だけ。
    *
    * | | エンコードする経路 | 変換しない経路 |
    * | --- | --- | --- |
@@ -837,12 +837,22 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
+   * 再生位置を動かした (飛んだ・シーク・ライブへ)。これで上がる `waiting` を数えず (`quiet`)、
+   * 飛んで減った溜まりを回線が足りないせいに数えない (`RungAdapter.reset`)
+   */
+  function jumped(): void {
+    const now = Date.now();
+    quiet = now + GRACE;
+    adapter.reset(now);
+  }
+
+  /**
    * **段を上げ下げするかを決める** (`ADAPT_EVERY` ごと)。測った値を `RungAdapter` に渡し、返ってきたら動かす (`act`)。
    * 決めないのは、互換モード・止めている間・リクエストしてから `tuned` が来るまで・まだ再生していない間
    */
   function adapt(): void {
-    if (left || compat || paused || awaiting || !running) return;
-    if (state !== "playing") return;
+    if (left || compat || paused || awaiting || !running || state !== "playing")
+      return;
     const ahead = aheadNow();
     if (ahead === null) return;
     const now = Date.now();
@@ -888,7 +898,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       }
       return;
     }
-    const text = adaptMessage(decision);
+    const text = adaptNote(decision, served);
     if (decision.reason === "encode" || decision.reason === "pinned") {
       if (warning === "" || warning === standing?.text) warning = text;
       standing = { text, at: now };
@@ -1051,7 +1061,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
     /*
      * **始める位置は最初のキーフレーム** (`keyGate`)。渡すのはキーフレームを含む塊からなので、
-     * 持っている頭はその塊の頭。キーフレームより1〜2コマ手前のことがある。そこから始めると、
+     * 持っている先頭はその塊の先頭。キーフレームより1〜2コマ手前のことがある。そこから始めると、
      * Safari はその手前のコマをデコードしては捨てる (コマ落ちに数える)。
      *
      * **飛んだあとは比べない。** Chromium は入れた時刻をマイクロ秒に丸めて返すので、キーフレームの
@@ -1091,10 +1101,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
     if (next.seek !== null) {
       video.currentTime = next.seek;
-      quiet = Date.now() + GRACE;
       lows.clear();
-      // 飛んで減った溜まりを、回線が足りないせいに数えない
-      adapter.reset(Date.now());
+      jumped();
     }
     if (next.rate !== null) steerTo(video, next.rate);
     // 読み直すと 1 に戻るので、入れた値ではなく今の値を出す
@@ -1320,8 +1328,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     chasing = false;
     speed = 1;
     element.playbackRate = 1;
-    quiet = Date.now() + GRACE;
-    adapter.reset(Date.now());
+    jumped();
     if (paused) toggle();
   }
 
@@ -1405,8 +1412,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     element.currentTime = at;
     // 端の近くへ戻しただけならライブのまま。少しの操作で追っかけにしない
     if (end - at > target + 1.5) chasing = true;
-    quiet = Date.now() + GRACE;
-    adapter.reset(Date.now());
+    jumped();
   }
 
   /**
@@ -1429,8 +1435,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       const end = buffer.buffered.end(buffer.buffered.length - 1);
       if (local >= start && local <= end) {
         element.currentTime = Math.min(end, Math.max(start, local));
-        quiet = Date.now() + GRACE;
-        adapter.reset(Date.now());
+        jumped();
         return;
       }
     }
@@ -1977,7 +1982,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 互換モードの支度 (`begin` の頭)。**入っていなければ何もしない。**
+   * 互換モードの支度 (`begin` の最初)。**入っていなければ何もしない。**
    *
    * 運転中の注意をまだ見せていなければ見せて、押されるまで待つ。描ける形式と MPEG-2 をデコードできるかを調べる
    * (どの形式にするかは `pickFormat`。**`<video>` には戻らない**。どれも描けなければ理由を出してリクエストしない)
@@ -2064,7 +2069,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     // このエンドポイントは SvelteKit のルートではない (server.js が受ける) ので、型の付いた `resolve` に
-    // パスごとは渡せない。頭 (`resolve('')` = 接頭辞 + `/`) だけ借りる
+    // パスごとは渡せない。接頭辞 (`resolve('')` = 接頭辞 + `/`) だけを使う
     const ws = new WebSocket(
       `${scheme}://${location.host}${resolve("")}${SOCKET_PATH.slice(1)}?ticket=${ticket}`,
     );
@@ -2105,7 +2110,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       const kind = new DataView(data).getUint8(0);
       const body = new Uint8Array(data, 9);
 
-      // 元の TS。写さずに worker へ移す (`RawEngine.feed`。頭の9バイトは多重化の頭)
+      // 元の TS。写さずに worker へ移す (`RawEngine.feed`。先頭の 9 バイトは種別と時刻)
       if (kind === CHANNEL.rawTs) {
         arrived();
         // 届く間隔は数えない (`arrive`)。元の TS はチューナーから読めたぶんずつ来るので、塊の間合いが決まっていない
@@ -2468,8 +2473,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   function startCompat(video: HTMLVideoElement, baked: LiveCodec): void {
     if (!canvasCan(baked)) {
-      const label = LIVE_CODECS.find((c) => c.id === baked)?.label ?? baked;
-      fallBack(`${label} を再生できません`, "fmp4");
+      fallBack(`${formatLabel(baked)} を再生できません`, "fmp4");
       return;
     }
     openEngine(video, "fmp4");
@@ -2634,7 +2638,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (truly !== fromAir) fromAir = truly;
       paint(at);
       sweep(at);
-      // 再生位置 (再エンコードの頭からの秒)。追っかけは base を足して通しで出す (`chasePosition`)
+      // 再生位置 (再エンコードの先頭からの秒)。追っかけは base を足して通しで出す (`chasePosition`)
       const local = tenth(
         raw && chase !== null ? rawChaseAt(at, chase.base) : at,
       );

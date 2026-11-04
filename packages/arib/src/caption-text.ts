@@ -18,12 +18,12 @@ export const STROKE_WIDTH = 1.5;
 /** 点滅 (FLC) の間 (ms)。出ている時間と消えている時間 */
 export const FLASH_MS = 500;
 
-/** 字幕1枚。**前の1枚を丸ごと置き換える** (`runs` が空なら消す) */
+/** 字幕 1 枚。**前の 1 枚を丸ごと置き換える** (`runs` が空なら消す) */
 export interface CaptionPage {
   v: typeof CAPTION_TEXT_VERSION;
   /** 字幕の面の大きさ [幅, 高さ] */
   plane: [number, number];
-  /** 出しておく長さ (ms)。null なら次の1枚まで */
+  /** 出しておく長さ (ms)。null なら次の 1 枚まで */
   duration: number | null;
   /** 字の並び。描く順 */
   runs: CaptionRun[];
@@ -32,14 +32,14 @@ export interface CaptionPage {
 }
 
 /**
- * 同じ見た目で横に並ぶ字。`text` の1字 (コードポイント) ごとに、幅 `w` の区画を
- * `x` から右へ1つずつ使う。
+ * 同じ見た目で横に並ぶ字。`text` の 1 字 (コードポイント) ごとに、幅 `w` の区画を
+ * `x` から右へ 1 つずつ使う。
  */
 export interface CaptionRun {
-  /** 1字目の区画の左上 */
+  /** 1 字目の区画の左上 */
   x: number;
   y: number;
-  /** 区画1つの幅・高さ。背景 (`bg`) はこの広さを塗る */
+  /** 区画 1 つの幅・高さ。背景 (`bg`) はこの広さを塗る */
   w: number;
   h: number;
   /** 区画の左上から、字の枠の左上まで */
@@ -54,8 +54,8 @@ export interface CaptionRun {
   scaleX: number;
   text: string;
   /**
-   * `text` 全体で1つの区画 (JIS X 0213 の か゚・æ̀・˩˥ のように、2つのコードポイントで1字のもの)。
-   * この run は1字だけで、`text` をまとめて描く (フォントが1字に組む)
+   * `text` 全体で 1 つの区画 (JIS X 0213 の か゚・æ̀・˩˥ のように、2 つのコードポイントで 1 字のもの)。
+   * この run は 1 字だけで、`text` をまとめて描く (フォントが 1 字に組む)
    */
   joined?: true;
   /** 置き換えられなかった外字。`text` は「〓」で、この画像を字の枠いっぱいに描く */
@@ -77,7 +77,7 @@ export interface CaptionRun {
   ruby?: true;
 }
 
-/** 外字の画像。`data` は base64 で、左上から1画素 `bits` ビットずつ (上の桁から) 詰めたもの */
+/** 外字の画像。`data` は base64 で、左上から 1 画素 `bits` ビットずつ (上の桁から) 詰めたもの */
 export interface CaptionDrcs {
   w: number;
   h: number;
@@ -106,34 +106,34 @@ export function isSpace(code: number): boolean {
   );
 }
 
-/** 録画1本ぶんの字幕 (`GET /api/recordings/<id>/captions.json`)。`at` は動画の頭からの秒 */
+/** 録画 1 本ぶんの字幕 (`GET /api/recordings/<id>/captions.json`)。`at` は動画の頭からの秒 */
 export interface CaptionPages {
   v: typeof CAPTION_TEXT_VERSION;
-  /** 第1言語 */
+  /** 第 1 言語 */
   pages: { at: number; page: CaptionPage }[];
-  /** 第1言語の名前。字幕管理データが読めなければ省く */
+  /** 第 1 言語の名前。字幕管理データが読めなければ省く */
   language?: CaptionLanguage;
-  /** 第2言語から後ろ。**載っているときだけ** (たいていの番組は第1言語だけ) */
+  /** 第 2 言語から後ろ。**載っているときだけ** (たいていの番組は第 1 言語だけ) */
   others?: CaptionLanguagePages[];
 }
 
 /**
- * 字幕の言語1つ。**ARIB の字幕は1本の中に最大8言語を持てる** (データグループの番号 1〜8。
- * 何番がどの言語かは字幕管理データに ISO 639 の3文字で書いてある)。日本の放送はほぼ日本語だけで、
+ * 字幕の言語 1 つ。**ARIB の字幕は 1 本の中に最大 8 言語を持てる** (データグループの番号 1〜8。
+ * 何番がどの言語かは字幕管理データに ISO 639 の 3 文字で書いてある)。日本の放送はほぼ日本語だけで、
  * 英語の字幕が付く番組がたまにある
  */
 export interface CaptionLanguage {
   /** 第何言語か (1〜8。データグループの番号) */
   index: number;
-  /** ISO 639-2 の3文字 (`jpn` / `eng`)。読めなければ空 */
+  /** ISO 639-2 の 3 文字 (`jpn` / `eng`)。読めなければ空 */
   code: string;
   /** 読める名前 (日本語・英語)。知らない符号はそのまま */
   label: string;
 }
 
 /**
- * 録画の字幕のうち、第2言語から後ろ (`CaptionPages.others`)。**第1言語は今までどおり `pages`** —
- * バージョン (`v`) を上げずに足したので、知らない受け側は第1言語だけを描く
+ * 録画の字幕のうち、第 2 言語から後ろ (`CaptionPages.others`)。**第 1 言語は今までどおり `pages`。**
+ * バージョン (`v`) を上げずに足したので、知らない受け側は第 1 言語だけを描く
  */
 export interface CaptionLanguagePages extends CaptionLanguage {
   pages: { at: number; page: CaptionPage }[];
@@ -148,7 +148,7 @@ export function captionLanguage(index: number, code: string): CaptionLanguage {
   };
 }
 
-/** `?language=` を読む (1〜8)。省いた・読めないときは第1言語 */
+/** `?language=` を読む (1〜8)。省いた・読めないときは第 1 言語 */
 export function parseCaptionLanguage(value: string | null): number {
   const number = Number(value);
   return Number.isInteger(number) && number >= 1 && number <= 8 ? number : 1;

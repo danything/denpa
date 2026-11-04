@@ -22,7 +22,7 @@ function crc16(data: number[]): number {
 
 const u24 = (n: number) => [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
 
-/** データユニット。0x20 本文・0x30 1バイト DRCS・0x31 2バイト DRCS */
+/** データユニット。0x20 本文・0x30 1 バイト DRCS・0x31 2 バイト DRCS */
 export function unit(parameter: number, data: number[]): number[] {
   return [0x1f, parameter, ...u24(data.length), ...data];
 }
@@ -44,8 +44,8 @@ function dataGroup(id: number, group: number, body: number[]): Uint8Array {
 }
 
 /**
- * 字幕管理データ。言語は `languages` (ISO 639 の3文字。既定は日本語1つ)・書式は `format` (SWF+1。既定 8 = 960x540 横書き)。
- * 言語の順に第1言語・第2言語…になる (言語タグ 0, 1, …)
+ * 字幕管理データ。言語は `languages` (ISO 639 の 3 文字。既定は日本語 1 つ)・書式は `format` (SWF+1。既定 8 = 960x540 横書き)。
+ * 言語の順に第 1 言語・第 2 言語…になる (言語タグ 0, 1, …)
  */
 export function management(
   options: {
@@ -82,13 +82,13 @@ export function statement(units: number[], language = 1): Uint8Array {
   return dataGroup(language, 0, [0x3f, ...u24(units.length), ...units]);
 }
 
-/** 本文1つだけの字幕文 (`language` は第何言語か) */
+/** 本文 1 つだけの字幕文 (`language` は第何言語か) */
 export function text(body: number[], language = 1): Uint8Array {
   return statement(unit(0x20, body), language);
 }
 
 /**
- * 1バイト DRCS (DRCS-1 の面) の定義。`rows` は '#' を点にした図 (白黒)
+ * 1 バイト DRCS (DRCS-1 の面) の定義。`rows` は '#' を点にした図 (白黒)
  *
  * @param code 符号 (0x21〜0x7E)。呼び出すときは `ESC ( 0x20 0x41` で G0 に載せて、この符号を書く
  */
@@ -117,14 +117,14 @@ export function drcsUnit(code: number, rows: string[]): number[] {
   ]);
 }
 
-/** EBML の要素1つ。大きさは8バイトで書く (読む側はどの長さでも読める) */
+/** EBML の要素 1 つ。大きさは 8 バイトで書く (読む側はどの長さでも読める) */
 function element(id: number[], body: number[]): number[] {
   const size = body.length;
   return [...id, 0x01, 0, 0, 0, (size >>> 24) & 0xff, ...u24(size), ...body];
 }
 
 /**
- * ffmpeg が `-c:s copy -f matroska` で書くのと同じ骨組みの Matroska (トラック1本・コマごとに塊1つ)。
+ * ffmpeg が `-c:s copy -f matroska` で書くのと同じ骨組みの Matroska (トラック 1 本・コマごとに塊 1 つ)。
  * 中身は字幕の PES の中身 (`text(...)` など) をそのまま入れる
  *
  * @param frames [時刻 (ミリ秒。65535 まで), 中身] の並び

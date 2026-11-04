@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import type { AdaptDecision } from "./adapt";
 import type { Pace } from "./rungs";
 import {
-  adaptNote,
   autoLabel,
   busyNote,
   rungQuery,
@@ -21,28 +20,7 @@ describe("画面に出すもの", () => {
     expect(autoLabel("audio", "audio")).toBe("自動 (音声だけ)");
   });
 
-  test("断り書きは、理由と替えた先を書く", () => {
-    expect(adaptNote({ step: 2, reason: "slow" }, 0)).toBe(
-      "回線が細いため、540p に下げました",
-    );
-    expect(adaptNote({ step: "audio", reason: "slow" }, 3)).toBe(
-      "回線が細いため、音声だけにしました",
-    );
-    expect(adaptNote({ step: 1, reason: "restored" }, 2)).toBe(
-      "回線が戻ったため、720p に上げました",
-    );
-    expect(adaptNote({ step: 3, reason: "restored" }, "audio")).toBe(
-      "回線が戻ったため、360p の映像に戻しました",
-    );
-    expect(adaptNote({ step: 0, reason: "restored" }, 1)).toBe(
-      "回線が戻ったため、元の画質に戻しました",
-    );
-    expect(adaptNote({ step: 1, reason: "encode" }, 1)).toBe(
-      "サーバのエンコードが追いつかないため、再生が止まります",
-    );
-    expect(adaptNote({ step: 0, reason: "pinned" }, 0)).toContain(
-      "コーデックを「自動」にすると",
-    );
+  test("サーバが混んでいて替えられなかったときは、下げようとしたか上げようとしたかを書く", () => {
     expect(busyNote(true)).toBe(
       "サーバが混んでいるため、画質を下げられませんでした",
     );

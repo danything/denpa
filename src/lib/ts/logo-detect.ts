@@ -59,7 +59,7 @@ export function emptyOrientation(width: number, height: number): Orientation {
 }
 
 /**
- * 1コマぶん足す。`src[offset + y * stride + x]` が `o` の (x, y)。
+ * 1 コマぶん足す。`src[offset + y * stride + x]` が `o` の (x, y)。
  * 外周 1 画素は Sobel が掛けられないので足さない
  */
 export function addFrame(
@@ -272,7 +272,7 @@ function agree(t: Template, data: Uint8Array, dx: number, dy: number): number {
 /**
  * そのコマにロゴが出ているか (おおむね 0〜1)。`data` は `t.crop` を切り出したグレースケール。
  *
- * **型の位置で揃う割合から、斜めにずらした4箇所で揃う割合を引く。** 後ろが細かい柄
+ * **型の位置で揃う割合から、斜めにずらした 4 箇所で揃う割合を引く。** 後ろが細かい柄
  * (文字・格子) だと、ロゴが無くてもたまたま揃う画素が出る。同じ柄はずらしても揃うが、
  * ロゴはずらすと外れるので、差がロゴのぶんになる
  */
@@ -323,7 +323,7 @@ export interface Span {
  */
 const ON = 0.25;
 export const OFF = 0.12;
-/** 1コマごとの点を、前後これだけのコマの中央値でならす (奇数)。白いフラッシュ1枚で切れないように */
+/** 1 コマごとの点を、前後これだけのコマの中央値でならす (奇数)。白いフラッシュ 1 枚で切れないように */
 const SMOOTH = 9;
 /**
  * 「消えた」と言うには、前後この秒数のどこにもロゴが見えないこと。
@@ -413,7 +413,7 @@ interface Readings {
  * コマでも点の 9 割が 0.16 未満)。細かい柄 (金網・木の葉) の上でも埋もれる。
  * そこを「消えた」と読むと、本編が明るい場面・柄の場面のたびに切れる。
  *
- * 決め方は2回。どちらも局ごとに決め打ちせず、その録画の映像から決まる。
+ * 決め方は 2 回。どちらも局ごとに決め打ちせず、その録画の映像から決まる。
  *
  * 1. 明るさの段ごとに点の上位 5% を見て、ON に届かない段は判断しない (番組の大半にロゴが
  *    出ているので、見える段なら上位 5% は ON を超える)。数えるのは前後 2 秒にロゴがはっきり
@@ -604,7 +604,7 @@ export function decodeModel(bytes: Uint8Array): LogoModel | null {
   const size = width * height;
   if (size === 0 || bytes.length < HEADER + size * 8) return null;
   /*
-   * Float32Array は4バイト境界から始まる必要があるので写す。**`slice` では写らないことがある** —
+   * Float32Array は 4 バイト境界から始まる必要があるので写す。**`slice` では写らないことがある。**
    * `readFileSync` の Buffer は `slice` が写しではなく窓を返し、`.buffer` が共有の大きな塊になる
    */
   const body = new Uint8Array(size * 8);
@@ -624,7 +624,7 @@ export function decodeModel(bytes: Uint8Array): LogoModel | null {
 }
 
 /**
- * 流れてくるバイト列を、1コマずつに区切って渡す。チャンクの境目はコマの境目と揃わない
+ * 流れてくるバイト列を、1 コマずつに区切って渡す。チャンクの境目はコマの境目と揃わない
  */
 export function framer(
   size: number,

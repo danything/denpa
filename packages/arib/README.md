@@ -1,17 +1,17 @@
 # @danything/arib
 
 日本のデジタル放送 (ISDB-T / ISDB-S、ARIB 規格) の MPEG-TS を TypeScript で読むライブラリです。
-録画サーバー [denpa](https://github.com/danything/denpa) の中で使っているものを切り出しました。
+録画サーバ [denpa](https://github.com/danything/denpa) の中で使っているものを切り出しました。
 
-- **PSI** — パケットの切り出し、セクションの組み立て、PAT / PMT / SDT / NIT (`psi`)。衛星はネットワークの全部の TS の NIT と、ほかの TS の SDT もそろえて読む
-- **PES** — 映像・音声の PES と ADTS (`pes`)
-- **番組表** — EIT[p/f] と EIT[schedule]。ジャンル・音声・拡張形式イベント・シリーズ記述子まで (`eit`)
-- **ARIB の文字** — STD-B24 の8単位符号 (JIS X 0213 の1面・2面まで) と ARIB 外字 (`aribtext`、`aribtext-gaiji`)
-- **字幕** — STD-B24 の字幕文を、字の置き場所まで決めた JSON にする (`b24caption`、形式は `caption-text`)
-- **データ放送** — DSM-CC のカルーセルからモジュールとファイルを組み立てる (`dsmcc`、`multipart`、`bml`、形式は `bml-protocol`)
-- **Hybridcast の AIT** (`ait`)、**1つの局だけを抜き出す** (`service-filter`)
-- **試験用の TS を組み立てる** — PSI・EIT・字幕・カルーセル・映像と音声 (`synth`、`synth-caption`、`synth-av`)
-- 下で使う道具 — バイト列 (`bytes`)、言語の名前 (`language`)、文字の表 (`b24-tables`)、字幕の外字の画像をなめらかにする (`drcs-smooth`)
+- PSI (`psi`): パケットの切り出し、セクションの組み立て、PAT / PMT / SDT / NIT。衛星はネットワークの全部の TS の NIT と、ほかの TS の SDT もそろえて読む
+- 映像・音声の PES と ADTS を取り出す (`pes`)
+- 番組表の EIT[p/f] と EIT[schedule] を、ジャンル・音声・拡張形式イベント・シリーズ記述子まで読む。放送の時刻 (TDT / TOT) もここ (`eit`)
+- ARIB STD-B24 の 8 単位符号 (JIS X 0213 の 1 面・2 面まで) と ARIB 外字を文字列にする (`aribtext`、`aribtext-gaiji`)
+- 字幕は STD-B24 の字幕文を、字の置き場所まで決めた JSON にする (`b24caption`、形式は `caption-text`)
+- データ放送は DSM-CC のカルーセルからモジュールとファイルを組み立てる (`dsmcc`、`multipart`、`bml`、形式は `bml-protocol`)
+- Hybridcast の AIT を読む (`ait`)。1 つの局だけを抜き出す (`service-filter`)
+- 試験用の TS (PSI・EIT・字幕・カルーセル・映像と音声) を組み立てる (`synth`、`synth-caption`、`synth-av`)
+- ほかのモジュールが使う道具として、バイト列 (`bytes`)、言語の名前 (`language`)、文字の表 (`b24-tables`)、字幕の外字の画像をなめらかにする処理 (`drcs-smooth`)
 
 依存するパッケージはありません。
 
@@ -35,7 +35,7 @@ const epg = new EpgReader();
 for await (const chunk of stream) {
   // 長さはそろっていなくてよい
   if (epg.feed(chunk)) {
-    // 返るのは開始時刻の決まった番組だけ
+    // 返るのは開始時刻と尺の決まった番組だけ
     for (const event of epg.takeChanged()) {
       console.log(event.serviceId, new Date(event.startAt!), event.name);
     }
@@ -53,7 +53,7 @@ decodeAribText(bytes); // "🈟ニュース"
 import { B24CaptionDecoder } from "@danything/arib/b24caption";
 
 const captions = new B24CaptionDecoder();
-// 字幕の PES の中身 (データ識別 0x80 から) を1つずつ渡す
+// 字幕の PES の中身 (データ識別 0x80 から) を 1 つずつ渡す
 const page = captions.decode(pesPayload);
 if (page !== null) draw(page); // 形式は caption-text.ts の CaptionPage
 ```

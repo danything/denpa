@@ -367,7 +367,7 @@ export function autoPick(
  * 入れ物の音声を出さない (`video.audioTracks` が無い。Chrome・Firefox の既定) ときに使う。
  * そのままでは 2 本目の音声 (副音声・解説) を選べない。流すほうはサーバが選んだ 1 本を流す (`/stream?audio=`)。
  *
- * 同じコーデックの詰め替え (サーバは軽い) を先に、無ければ `pickOffer` と同じ順の変換。MSE が
+ * 同じコーデックの詰め替え (サーバは軽い) を先に、無ければサーバが並べた順で先頭の変換。MSE が
  * 受け取れるものが無ければ null (= 移れないので、音声の切り替えは出さない)
  */
 export function streamForAudio(
@@ -483,12 +483,18 @@ export function transcodes(info: PlaybackInfo, picked: Picked): boolean {
 /** `TimeRanges` を配列にしたもの (`[始まり, 終わり]` 秒) */
 export type Ranges = readonly (readonly [number, number])[];
 
+/** `t` を含む区間の終わり (秒)。含む区間が無ければ null */
+function endAround(ranges: Ranges, t: number): number | null {
+  for (const [start, end] of ranges) {
+    if (start <= t + GAP && t < end) return end;
+  }
+  return null;
+}
+
 /** `t` を含む区間の、`t` から先に溜まっている長さ (秒)。含む区間が無ければ 0 */
 export function aheadOf(ranges: Ranges, t: number): number {
-  for (const [start, end] of ranges) {
-    if (start <= t + GAP && t < end) return end - t;
-  }
-  return 0;
+  const end = endAround(ranges, t);
+  return end === null ? 0 : end - t;
 }
 
 /**
@@ -530,8 +536,5 @@ export function covers(
  * 区間の途中で切ると、残したコマが参照するコマ (後ろの P フレーム) まで消えることがある。末尾なら、残すものは揃っている
  */
 export function switchPoint(ranges: Ranges, t: number): number {
-  for (const [start, end] of ranges) {
-    if (start <= t + GAP && t < end) return end;
-  }
-  return t;
+  return endAround(ranges, t) ?? t;
 }
