@@ -181,7 +181,14 @@
       <div class="section-head">
         <h2>ロゴの取得を記録する (開発者向け)</h2>
       </div>
-      <form method="POST" action="?/recordLogo" use:enhance>
+      <!-- 送ったあとにフォームを戻すと、再描画までスイッチが一瞬もとに戻って見える -->
+      <form
+        method="POST"
+        action="?/recordLogo"
+        use:enhance={() =>
+          ({ update }) =>
+            update({ reset: false })}
+      >
         <label class="check">
           <input
             type="checkbox"
