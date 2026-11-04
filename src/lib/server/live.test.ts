@@ -965,4 +965,14 @@ describe("段の指示 (parseCommand)", () => {
       }),
     ).toMatchObject({ codec: "h264", rung: 1, playable: ["hevc"] });
   });
+
+  test("音声だけ (codec: audio) は選局でだけ受け、追っかけでは H.264 にする", () => {
+    expect(parseCommand({ ...tune, codec: "audio", rung: 3 })).toMatchObject({
+      codec: "audio",
+      rung: 3,
+    });
+    expect(
+      parseCommand({ type: "chase", recordingId: 3, codec: "audio" }),
+    ).toMatchObject({ codec: "h264" });
+  });
 });

@@ -1,7 +1,9 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 
 import {
+  captureSockets,
   expect,
+  feedNotice,
   goto,
   openSettings,
   syncEpg,
@@ -77,6 +79,33 @@ test.describe("ライブの自動", () => {
     await expect(page.getByTestId("live-codec")).toContainText("自動 (H.264)");
     await expect(page.getByTestId("live-raw")).toHaveCount(0);
     await expect(page.getByTestId("live-warning")).toHaveCount(0);
+  });
+
+  test("サーバが塊を捨てたと知らせてきたら、家の中の MPEG-2 から段を下げた変換に移り、メニューに高さを出す", async ({
+    page,
+  }) => {
+    await captureSockets(page);
+    await openLive(page);
+    await expect(page.getByTestId("live-raw")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId("live-codec")).toContainText("自動 (MPEG-2)");
+    // 選局の直後 (`adapt.ts` の `GRACE`) は数えないので、下がるまで送り続ける。届くたびに新しい通知として数える
+    await expect(async () => {
+      await feedNotice(page, [
+        { type: "pace", backlog: 0, dropped: 3, speed: null },
+      ]);
+      await expect(page.getByTestId("live-warning")).toContainText(
+        "回線が細いため",
+        { timeout: 1_000 },
+      );
+    }).toPass({ timeout: 20_000 });
+    // サーバが選んだコーデック (GPU が無いのでソフトウェアの H.264) と段の高さ
+    await expect(page.getByTestId("live-codec")).toContainText(
+      /自動 \(H\.264 \d+p\)/,
+      { timeout: 30_000 },
+    );
+    await expect(page.getByTestId("live-raw")).toHaveCount(0);
   });
 
   test("H.264 も受け取れない端末では AV1 で観る", async ({ page }) => {

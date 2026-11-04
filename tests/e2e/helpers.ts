@@ -1135,6 +1135,20 @@ export async function feedData(
   );
 }
 
+/**
+ * **制御の通知を流す** (`CHANNEL.control` = 0x40。`pace` など。`#lib/live.ts` の `Notice`)。
+ * `captureSockets` してから開いた画面で呼ぶ
+ */
+export async function feedNotice(
+  page: Page,
+  notices: Record<string, unknown>[],
+): Promise<void> {
+  await feedFrames(
+    page,
+    notices.map((notice) => [0x40, JSON.stringify(notice)]),
+  );
+}
+
 /** 最後に開いた WebSocket に、チャンネル番号 + 多重化の頭 8 バイト (時刻 0) + JSON の通知を流す */
 async function feedFrames(
   page: Page,

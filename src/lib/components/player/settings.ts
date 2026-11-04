@@ -1,5 +1,7 @@
 import type { CaptionLanguage } from "@danything/arib/caption-text";
 
+import type { Step } from "#lib/adapt.js";
+import { stepFormatLabel } from "#lib/live-adapt.js";
 import {
   formatLabel,
   type LiveChoice,
@@ -67,6 +69,7 @@ const AUTO = "auto";
 /**
  * ライブと追っかけのコーデック。並びは **自動 → AV1 → H.265 → H.264 → MPEG-2** (`#lib/live-choice.ts`)。押すと再エンコードに
  * なるので映像が一瞬止まるが、前の映像を貼ったまま差し替わる。自動の行の値には、いま決まっている形式を添える (「自動 (MPEG-2)」)。
+ * 回線に合わせて段を下げていれば高さも添える (「自動 (H.264 540p)」「自動 (音声だけ)」)。
  *
  * 末尾に **MPEG-2** が並ぶ (ライブも追っかけも)。エンコードせずに放送そのままを
  * この端末でデコードする経路 (docs/stream.md#放送そのままmpeg-2を送る)。
@@ -80,6 +83,8 @@ export function liveCodecs(opts: {
   choice: LiveChoice;
   /** いま決まっている形式 (自動の行の値に添える) */
   format: LiveFormat;
+  /** 回線に合わせて下げた段 (`live-player.svelte.ts` の `step`)。自動の行の値に高さを添える (「自動 (H.264 540p)」)。省くと 0 */
+  step?: Step;
   /** H.265 を並べるか (ライブで、ライブのエンコーダが GPU のときだけ。追っかけは出さない) */
   hevc?: boolean;
   hidden?: boolean;
@@ -97,7 +102,7 @@ export function liveCodecs(opts: {
     icon: opts.icon,
     value:
       opts.choice === "auto"
-        ? `自動 (${formatLabel(opts.format)})`
+        ? `自動 (${stepFormatLabel(opts.format, opts.step ?? 0)})`
         : formatLabel(opts.choice),
     options: [
       { key: AUTO, label: "自動", active: opts.choice === "auto" },

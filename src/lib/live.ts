@@ -45,11 +45,13 @@ export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
  *   (`server/live.ts` の `videoArgs`。ffmpeg の既定の `hev1` は Safari が受け取らない)
  * - `Opus` … MP4 での Opus の名前 (中の箱の名前と同じく大文字の O)。Safari は小文字の `opus` を断る
  *   (Chromium は両方受け取る)。入れ物が WebM なら小文字が正しいので、エンコード済みのファイルは `opus` のまま
+ * - `audio` … 音声だけ (AAC)。回線に合わせて下げる最後の手 (`TuneCommand.codec`)
  *
  * **音声も組で決まる** (`server/live.ts` の `audioArgs`)。AV1 は Opus、H.264・H.265 は AAC
  * (H.265 を受け取りたいのは AV1 をデコードできない端末で、MP4 の Opus を受け取れるとは限らない)
  */
-export function codecsFor(codec: LiveCodec): string {
+export function codecsFor(codec: LiveCodec | "audio"): string {
+  if (codec === "audio") return 'audio/mp4; codecs="mp4a.40.2"';
   if (codec === "av1") return 'video/mp4; codecs="av01.0.08M.08,Opus"';
   if (codec === "hevc") return 'video/mp4; codecs="hvc1.1.6.L123.B0,mp4a.40.2"';
   return 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
@@ -106,8 +108,11 @@ export type Notice =
       channel: string;
       /** MSE に渡す codecs 文字列。エンコード方式から決まる */
       codecs: string;
-      /** いまエンコードしているコーデック。コーデックのメニューがどれを指すか */
-      codec: LiveCodec;
+      /**
+       * いまエンコードしているコーデック。コーデックのメニューがどれを指すか。`audio` は音声だけ
+       * (`TuneCommand.codec`。回線に合わせて下げる最後の手)
+       */
+      codec: LiveCodec | "audio";
       /** **エンコードせずに元の TS を送るか** (`CHANNEL.rawTs`) */
       raw: boolean;
       /**
@@ -336,8 +341,11 @@ type TuneCommand = {
    * ブラウザによって切り替えられない (`audioTracks` の実装がまちまち)
    */
   audio?: string;
-  /** どのコーデックでエンコードするか。省くと `h264`。音声と同じで、選び直すと再エンコードになる */
-  codec?: LiveCodec;
+  /**
+   * どのコーデックでエンコードするか。省くと `h264`。音声と同じで、選び直すと再エンコードになる。
+   * `audio` は映像を止めて音声だけにする (回線に合わせて下げる最後の手。`#lib/adapt.ts`)。`rung` を 1〜3 にすると音声は 96k
+   */
+  codec?: LiveCodec | "audio";
   /** どの字幕を出すか (`CaptionTrack.index`)。省くと1本目。字幕は映像と同じ ffmpeg なので、選び直すと再エンコード */
   caption?: number;
   /**
