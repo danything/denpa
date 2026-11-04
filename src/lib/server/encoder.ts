@@ -2217,7 +2217,7 @@ async function runCmJob(jobId: number): Promise<void> {
         jobId,
         `${ts === null ? "エンコード済みの動画から" : "元の TS から"}無音・場面の切れ目・ロゴを読み取っています`,
       );
-      const report = progressReporter(jobId, reading.duration);
+      const report = progressReporter(jobId, recording.id, reading.duration);
       const found = await scan(input, {
         ...reading.want(),
         signal,
@@ -2304,6 +2304,7 @@ export const CM_CUT_ALREADY =
  */
 function progressReporter(
   jobId: number,
+  recordingId: number,
   duration: number,
 ): (seconds: number) => void {
   let lastWrite = 0;
@@ -2312,12 +2313,20 @@ function progressReporter(
     const at = Date.now();
     if (at - lastWrite < PROGRESS_INTERVAL) return;
     lastWrite = at;
-    orm()
+    const percent = Math.min(0.99, Math.max(0, seconds / duration));
+    const row = orm()
       .update(encodeJobs)
-      .set({ percent: Math.min(0.99, Math.max(0, seconds / duration)) })
+      .set({ percent })
       .where(eq(encodeJobs.id, jobId))
-      .run();
-    emit("recordings");
+      .returning({ log: encodeJobs.log })
+      .get();
+    // エンコードと同じく中身ごと流す (`encode` イベント)。一覧を丸ごと読み直させない
+    emit("encode", {
+      recordingId,
+      percent,
+      etaMs: null,
+      log: row?.log ?? "",
+    } satisfies EncodeProgress);
   };
 }
 
