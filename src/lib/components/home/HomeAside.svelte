@@ -48,7 +48,7 @@
 </script>
 
 <aside
-  class="t-side side-panel"
+  class="t-side side-panel side-column"
   aria-label="絞り込みと表示"
   data-testid="sidebar"
 >

@@ -688,29 +688,39 @@
     inset: 0 0 auto 0;
     z-index: 60;
     height: 3px;
+    overflow: hidden;
     background: var(--pico-primary-background);
   }
+  /* 光の筋は幅 40% の層を transform で横に流す (背景の位置は動かさない。docs/design.md 7 章) */
   @media (prefers-reduced-motion: no-preference) {
     :global(:root:not([data-lite])) .nav-progress {
-      background:
-        linear-gradient(
-            90deg,
-            transparent 0%,
-            var(--pico-primary-background) 40%,
-            var(--pico-primary-background) 60%,
-            transparent 100%
-          )
-          0 0 / 40% 100% no-repeat,
-        color-mix(in srgb, var(--pico-primary-background) 30%, transparent);
+      background: color-mix(
+        in srgb,
+        var(--pico-primary-background) 30%,
+        transparent
+      );
+    }
+    :global(:root:not([data-lite])) .nav-progress::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 40%;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--pico-primary-background) 40%,
+        var(--pico-primary-background) 60%,
+        transparent 100%
+      );
       animation: nav-progress var(--dp-shine) ease-in-out infinite;
     }
   }
   @keyframes nav-progress {
     from {
-      background-position: -40% 0;
+      transform: translateX(-100%);
     }
     to {
-      background-position: 140% 0;
+      transform: translateX(250%);
     }
   }
   /* 浮いたヘッダーの面と影 (広い形の `.navbar`。巻いた量で進む) */

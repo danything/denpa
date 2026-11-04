@@ -814,10 +814,6 @@
     gap: var(--dp-space-3);
     margin: 0;
   }
-  .field-label {
-    font-size: var(--dp-text-sm);
-    color: var(--dp-muted);
-  }
   .field input {
     margin: 0;
   }

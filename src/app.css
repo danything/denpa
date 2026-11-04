@@ -674,18 +674,15 @@ thead th {
 /*
  * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表の取得)。値が変わったら
  * なめらかに伸ばす (`--dp-duration`)。**動いているあいだ** (`.running`。付けるのは
- * 呼ぶ側。`JobProgress` など) は、伸びたところの上に光の筋を流す (流すのはファイルの最後)。
+ * 呼ぶ側。`JobProgress` など) は、伸びたところを明るさで脈打たせる (動かすのはファイルの最後)。
  * 長さの分からないもの (値の無いバー) は Pico のまま (左右に流れる)
  */
 progress[value]::-webkit-progress-value {
   transition: inline-size var(--dp-duration) var(--dp-ease);
 }
 @keyframes progress-shine {
-  from {
-    background-position: -100% 0;
-  }
-  to {
-    background-position: 200% 0;
+  50% {
+    opacity: 0.7;
   }
 }
 /* 走っている取り込み・スキャン・ロゴや番組表の取得の状態と記録 */
@@ -1307,7 +1304,8 @@ input[type="checkbox"]:not([role="switch"]) {
     [aria-pressed="true"],
     [aria-current]:not([aria-current="false"]),
     .selected
-  )::after {
+  )::after,
+.chip:has(input:checked)::after {
   content: "";
   position: absolute;
   inset-inline: var(--pick-inset, 0.75rem);
@@ -2408,12 +2406,38 @@ dialog[open] > article {
 .chip:hover {
   background-color: var(--dp-hover-soft);
 }
-/* 選んでいるものは塗らず、主の色の太字と字の幅いっぱいの下線 (ほかの選んでいるものと同じ) */
+/* 選んでいるものは塗らず、主の色の太字と字の幅いっぱいの下線。下線は `.pick-line` と同じ疑似要素 1 本 */
 .chip:has(input:checked) {
-  text-decoration: underline var(--dp-mark) var(--pico-primary);
-  text-underline-offset: 0.3em;
+  --pick-inset: 0.55rem;
+  --pick-bottom: 0.05rem;
   color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
+}
+
+/*
+ * **一覧と右の列** (`.with-side` と、右の列に付ける `.side-column`)。録画の一覧 (ホーム) と切り抜きで同じ。
+ * スマホの形は一覧だけ (右の列は出さない)、広い形は一覧と 20rem の右の列 (1600px からは 22rem)
+ */
+.with-side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.with-side > .side-column {
+  display: none;
+}
+:where(html:not([data-phone])) .with-side {
+  grid-template-columns: minmax(0, 1fr) 20rem;
+}
+:where(html:not([data-phone])) .with-side > .side-column {
+  display: flex;
+  padding-top: 0.25rem;
+}
+@media (min-width: 1600px) {
+  :where(html:not([data-phone])) .with-side {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+  }
 }
 
 /*
@@ -2667,15 +2691,12 @@ dialog[open] > article {
   :root:not([data-lite]) .flash {
     animation: flash var(--flash-for, 2.5s) linear both;
   }
+  /* 伸びたところを明るさで脈打たせる (透明度だけ。背景の位置は動かさない。docs/design.md 7 章) */
+  /* 片方の擬似要素を知らない画面が規則ごと捨てないよう、2 つに分ける */
   :root:not([data-lite]) progress.running[value]::-webkit-progress-value {
-    background-image: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgb(255 255 255 / 0.35) 50%,
-      transparent 100%
-    );
-    background-repeat: no-repeat;
-    background-size: 40% 100%;
+    animation: progress-shine var(--dp-shine) ease-in-out infinite;
+  }
+  :root:not([data-lite]) progress.running[value]::-moz-progress-bar {
     animation: progress-shine var(--dp-shine) ease-in-out infinite;
   }
   :root:not([data-lite]) .skeleton::after {

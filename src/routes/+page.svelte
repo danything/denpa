@@ -791,7 +791,7 @@
 
   <TimelineBar {...controls} />
 
-  <div class="t-main">
+  <div class="t-main with-side">
     <section
       class="t-list"
       bind:this={listBox}

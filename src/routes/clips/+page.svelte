@@ -534,7 +534,7 @@
   <Toasts {notices} ondismiss={() => (notice = null)} />
   <h1 class="visually-hidden">切り抜き</h1>
 
-  <div class="c-main">
+  <div class="c-main with-side">
     <section class="c-list" aria-label="切り抜き">
       {#if data.recording !== null}
         <!-- 録画から来たとき。どの録画で絞っているかと、外すボタン -->
@@ -665,7 +665,7 @@
 
     <!-- 広い形だけ。並びは録画のサイドバーと同じ部品 (`app.css` の `.side-panel`) -->
     <aside
-      class="c-side side-panel"
+      class="c-side side-panel side-column"
       aria-label="絞り込み"
       data-testid="clip-side"
     >
@@ -915,25 +915,9 @@
       padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
     }
   }
-  .c-main {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    flex: 1;
-    min-height: 0;
-  }
   .c-list {
     min-width: 0;
     padding-bottom: 1rem;
-  }
-  .c-side {
-    display: none;
-  }
-  :global(html:not([data-phone])) .c-main {
-    grid-template-columns: minmax(0, 1fr) 20rem;
-  }
-  :global(html:not([data-phone])) .c-side {
-    display: flex;
-    padding-top: 0.25rem;
   }
   .c-usage {
     margin: 0.25rem 0 0.25rem 0.75rem;
@@ -983,8 +967,9 @@
     color: var(--pico-color);
     text-align: start;
   }
-  .c-card:hover .c-thumb {
-    filter: brightness(1.08);
+  /* 乗せたときはほかの件と同じく淡い地 (`--dp-hover-soft`)。画像の明るさは変えない */
+  .c-card:hover {
+    background: var(--dp-hover-soft);
   }
   .c-thumb {
     width: 100%;
@@ -994,7 +979,6 @@
     border-radius: var(--dp-radius);
     background: var(--dp-video);
     object-fit: cover;
-    transition: filter var(--dp-duration);
   }
   .c-name {
     font-size: var(--dp-text-sm);
@@ -1009,7 +993,7 @@
   /*
    * 選ぶ丸 (画像の左上)。押せる所は 40px、見える丸は 28px。ふだんは隠し、マウスで乗せた・キーボードで触った・
    * 選ぶ形の間だけ出す (指の端末は乗せる操作が無いので長押しで入る)。
-   * 選んだものは主の色の円にレ点、選んでいないものは淡い円 (塗るのは印だけ)
+   * 選んだものは主の色の輪とレ点、選んでいないものは白い輪 (どちらも塗らない)
    */
   .c-check {
     position: absolute;
@@ -1052,17 +1036,17 @@
     color: transparent;
     box-shadow: inset 0 0 0 2px var(--dp-on-video);
     transition:
-      background-color var(--dp-duration) var(--dp-ease),
+      box-shadow var(--dp-duration) var(--dp-ease),
       color var(--dp-duration) var(--dp-ease);
   }
   /* 乗せたら、押せば選べることをレ点で先に見せる */
   .c-check:hover .c-check-mark {
     color: var(--dp-on-video);
   }
+  /* 選んだものも塗らない。輪とレ点を主の色にする (画像の上でも読めるよう、地の暗い円はそのまま) */
   .c-check[aria-pressed="true"] .c-check-mark {
-    background: var(--pico-primary);
-    color: var(--pico-primary-inverse);
-    box-shadow: none;
+    color: var(--pico-primary);
+    box-shadow: inset 0 0 0 2px var(--pico-primary);
   }
   .c-card[aria-pressed="true"] .c-name {
     color: var(--dp-primary-text);

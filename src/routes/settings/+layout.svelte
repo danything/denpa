@@ -241,6 +241,7 @@
           {#each group.sections as section (section.slug)}
             <a
               href="{resolve(`settings/${group.slug}`)}#{section.slug}"
+              class="pick-line"
               class:selected={active === section.slug}
               onclick={() => jump(section.slug)}
               data-testid="settings-jump-{section.slug}"
@@ -401,16 +402,14 @@
   .jump a {
     flex-shrink: 0;
     padding: 0.3rem 0.65rem;
+    --pick-inset: 0.65rem;
+    --pick-bottom: 0.15rem;
     border-radius: var(--dp-radius-full);
-    color: inherit;
     text-decoration: none;
   }
-  /* いまの節は、ほかの選んでいるものと同じく塗らずに主の色の太字と、字の幅いっぱいの下線 (`app.css` の `.chip` と同じ) */
-  .jump a.selected {
-    text-decoration: underline var(--dp-mark) var(--pico-primary);
-    text-underline-offset: 0.3em;
-    color: var(--dp-primary-text);
-    font-weight: var(--dp-weight-bold);
+  /* いまの節は、ほかの選んでいるものと同じく塗らずに主の色の太字と、字の幅いっぱいの下線 (`app.css` の `.pick-line`) */
+  .jump a:not(.selected) {
+    color: inherit;
   }
   /* 戻るは字だけのアイコンのボタン */
   .jump .back {
