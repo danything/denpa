@@ -47,6 +47,7 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
         _carried = 0;
         _headLen = 0;
         _synced = false;
+        _window = ResyncWindow;
     }
 
     /// <summary>最初の読みで、先頭に混じった古い切れ端を飛ばす範囲 (パケット数)。見分けに使う並びの長さでもある</summary>
@@ -97,15 +98,30 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
             data = data[take..];
             var found = Find(_head.AsSpan(0, _headLen), out var at);
             if (!found && _headLen < _head.Length) return 0;
+            // 揃った並びが見つからなかった。もう探し直さず、崩れたら不正として止める (探し直し続けない)
+            if (!found) _window = 0;
             _synced = true;
-            var buffered = _head.AsSpan(at, _headLen - at);
-            written += Carry(buffered, output, plain);
+            byte[] buffered = [.. _head.AsSpan(at, _headLen - at)];
             _headLen = 0;
+            // 溜めたぶんと、溜めきれなかった続きを、この順に渡す
+            byte[] rest = [.. buffered, .. data];
+            return written + Carry(rest, output, plain);
         }
         return written + Carry(data, output, plain);
     }
 
-    /// <summary>先頭が決まったあとの渡し方。端数は次の呼びにつなぐ</summary>
+    /// <summary>
+    /// 受信を始めてから、並びが崩れたら先頭を探し直してよい量 (バイト)。準備し直したあとの最初の 3〜4 KiB には、機材に残っていた
+    /// 前の受信の切れ端が入る (実機の PIX-DT295、地上波 27ch。先頭に 28〜116 バイトのごみ、17〜22 パケットの古い並び、31〜119 バイトの
+    /// ごみが続き、オフセット 3072 か 4096 から新しい並びになる)。古い並びで先頭を決めると、その境目で崩れて止まっていた。
+    /// これを過ぎてからの崩れは、仕様どおり不正なパケットとして止める (10.3)
+    /// </summary>
+    private const int ResyncWindow = 64 * 1024;
+
+    /// <summary>探し直してよい残りの量 (バイト)</summary>
+    private int _window = ResyncWindow;
+
+    /// <summary>先頭が決まったあとの渡し方。端数は次の呼びにつなぐ。始めのうちに並びが崩れたら、崩れた所から先頭を探し直す</summary>
     private int Carry(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
     {
         var written = 0;
@@ -117,17 +133,38 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
             data = data[take..];
             if (_carried < PacketSize) return 0;
             _carried = 0;
-            written += One(_carry, output, plain);
+            if (_carry[0] != 0x47 && _window > 0) return written + Resync([.. _carry, .. data], output, plain);
+            written += Pass(_carry, output, plain);
         }
         while (data.Length >= PacketSize)
         {
-            written += One(data[..PacketSize], output, plain);
+            if (data[0] != 0x47 && _window > 0) return written + Resync(data, output, plain);
+            written += Pass(data[..PacketSize], output, plain);
             data = data[PacketSize..];
         }
         data.CopyTo(_carry);
         _carried = data.Length;
         return written;
     }
+
+    /// <summary>並びが崩れた所から、先頭を探し直す (<see cref="ResyncWindow"/> の間だけ)</summary>
+    private int Resync(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
+    {
+        _synced = false;
+        _headLen = 0;
+        _carried = 0;
+        Resyncs++;
+        return Feed(data, output, plain);
+    }
+
+    private int Pass(ReadOnlySpan<byte> input, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
+    {
+        if (_window > 0) _window -= PacketSize;
+        return One(input, output, plain);
+    }
+
+    /// <summary>始めのうちに並びが崩れて、先頭を探し直した回数</summary>
+    public int Resyncs { get; private set; }
 
     private int One(ReadOnlySpan<byte> input, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
     {

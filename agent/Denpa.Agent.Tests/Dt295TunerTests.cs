@@ -218,10 +218,11 @@ public class Dt295TunerTests
         byte[] data = [.. new byte[56].Select(_ => (byte)0x5A), .. packets];
         await Assert.That(filter.Feed(data, output)).IsEqualTo(3);
         await Assert.That(output.WrittenSpan.ToArray()).IsEquivalentTo(packets);
-        // そろったあとは探し直さない (途中で狂ったら止める)
+        // 始めのうち (64 KiB まで) に崩れたら、止めずに探し直す (準備し直した直後の古い切れ端。止めるのは、それを過ぎてから)
         var bad = Dt295Ts.Payload(0x103);
         bad[0] = 0x00;
-        Assert.Throws<Dt295Exception>(() => filter.Feed(bad, output));
+        await Assert.That(filter.Feed(bad, output)).IsEqualTo(0);
+        await Assert.That(filter.Resyncs).IsEqualTo(1);
     }
 
     [Test]
@@ -255,6 +256,37 @@ public class Dt295TunerTests
         await Assert.That(filter.Feed(stale, output)).IsEqualTo(0);
         await Assert.That(filter.Feed(real, output)).IsEqualTo(4);
         await Assert.That(output.WrittenSpan.ToArray()).IsEquivalentTo(real);
+    }
+
+    [Test]
+    public async Task 準備し直した直後の古い切れ端の並びが崩れても_新しい並びから続ける()
+    {
+        // 実機 (地上波 27ch) で準備し直した直後の形: ごみ 40 バイト・古い並び 41 パケット・ごみ 35 バイトのあとに、新しい並びが始まる。
+        // 古い並びが、先頭を探すときに溜める量 (33 パケット) より長いと、古い並びで先頭が決まり、その境目で崩れる
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor());
+        var output = new ArrayBufferWriter<byte>();
+        byte[] Junk(int length) => [.. Enumerable.Range(0, length).Select(i => (byte)(i * 7 + 1))];
+        byte[] stale = [.. Enumerable.Range(0, 41).SelectMany(i => Dt295Ts.Payload(0x200 + i % 4))];
+        byte[] fresh = [.. Enumerable.Range(0, 5).SelectMany(i => Dt295Ts.Payload(0x100 + i))];
+        byte[] data = [.. Junk(40), .. stale, .. Junk(35), .. fresh];
+        await Assert.That(filter.Feed(data, output)).IsEqualTo(46);
+        await Assert.That(filter.Resyncs).IsEqualTo(1);
+        await Assert.That(output.WrittenSpan[^fresh.Length..].ToArray()).IsEquivalentTo(fresh);
+    }
+
+    [Test]
+    public async Task 始めのうちを過ぎてからの崩れは_不正なパケットとして止める()
+    {
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor());
+        var output = new ArrayBufferWriter<byte>();
+        // 64 KiB を超えるまで正しい並びを流したあとの崩れは、探し直さない
+        byte[] good = [.. Enumerable.Range(0, 400).SelectMany(i => Dt295Ts.Payload(0x100 + i % 8))];
+        await Assert.That(filter.Feed(good, output)).IsEqualTo(400);
+        var bad = Dt295Ts.Payload(0x100);
+        bad[0] = 0x00;
+        var error = Assert.Throws<Dt295Exception>(() => filter.Feed(bad, output));
+        await Assert.That(error.Message).IsEqualTo(Dt295TsFilter.Invalid);
+        await Assert.That(filter.Resyncs).IsEqualTo(0);
     }
 
     [Test]
