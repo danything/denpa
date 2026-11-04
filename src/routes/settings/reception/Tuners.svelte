@@ -572,8 +572,7 @@
     border-end-end-radius: 0;
   }
   /* 使わないチューナーは名前と状態を控えた字にする (印の「無効」と合わせて、色だけに頼らない。透かすと 4.5:1 を割る) */
-  .tuners .main.off :is(.name-cell, .state-cell),
-  .tuners .main.off :is(.name-cell, .state-cell) :global(*) {
+  .tuners .main.off :is(.name-cell, .state-cell) {
     color: var(--dp-muted);
   }
   .name-cell {

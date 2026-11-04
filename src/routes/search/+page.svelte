@@ -843,8 +843,7 @@
     transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
   }
   /* 書く欄の条件では録らない行。消さずに出すが、控えた字にして録るものより沈める (透かすと 4.5:1 を割る) */
-  .hit.dim,
-  .hit.dim :global(*) {
+  .hit.dim {
     color: var(--dp-muted);
   }
   .summary {
