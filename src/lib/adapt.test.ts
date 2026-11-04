@@ -369,7 +369,7 @@ describe("上げる", () => {
     ).toEqual({ step: 1, reason: "restored" });
   });
 
-  test("ライブで測った回線の速さが足りなければ上げず、上げてみて足りなかったときと同じに待ちを倍にする", () => {
+  test("ライブで測った回線の速さが足りなければ上げず、30 秒待ち直してまた測る (待ちは倍にしない)", () => {
     const a = new RungAdapter();
     const live = { route: "live" as const, current: 2 as const, ahead: 1 };
     const at = GRACE + UP_WAIT_LIVE;
@@ -378,7 +378,10 @@ describe("上げる", () => {
     expect(
       first(a, at, at + 50_000, { ...live, capacity: { bps: 2_000_000, at } }),
     ).toBeNull();
-    expect(a.upWait("live")).toBe(UP_WAIT_LIVE * 2);
+    expect(a.upWait("live")).toBe(UP_WAIT_LIVE);
+    // 足りないと分かった次の刻みから待ち直し、30 秒で明けたらまた測ってほしいと返す
+    first(a, at + 51_000, at + 51_000, live);
+    expect(a.wantProbe()).not.toBeNull();
   });
 
   test("ライブで段 0 へ戻すときは、段 0 で足りていたときに受け取っていた速さと比べる", () => {
