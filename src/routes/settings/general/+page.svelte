@@ -226,7 +226,7 @@
         </ol>
         <a
           class="button small secondary"
-          href={resolve("/api/logo-records")}
+          href={resolve("api/logo-records")}
           download
           data-testid="logo-records-csv">CSV をダウンロード</a
         >
