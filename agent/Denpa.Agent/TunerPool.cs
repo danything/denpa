@@ -14,10 +14,7 @@ namespace Denpa.Agent;
 /// (<c>tests/fake/tune.ts</c>)。環境変数 <c>FAKE_TUNE</c> からだけ入る。
 /// 設定ファイルにも画面にも、コマンドを書く場所は無い。
 /// </param>
-public sealed record TuneOptions(string? FakeTune = null)
-{
-    public static TuneOptions None => new();
-}
+public sealed record TuneOptions(string? FakeTune = null);
 
 /// <summary>
 /// チューナーの取り合い。**エージェントの本体はここ。**
@@ -38,9 +35,9 @@ public sealed record TuneOptions(string? FakeTune = null)
 /// </para>
 /// </summary>
 public sealed class TunerPool(
-    IReadOnlyList<TunerSpec> specs, Action onChange, TuneOptions? tune = null)
+    IReadOnlyList<TunerSpec> specs, Action onChange, TuneOptions tune)
 {
-    private readonly TuneOptions _tune = tune ?? TuneOptions.None;
+    private readonly TuneOptions _tune = tune;
 
     /// <summary>誰も読まなくなってから選局を畳むまでの間</summary>
     public static readonly TimeSpan Linger = TimeSpan.FromSeconds(5);
@@ -279,14 +276,20 @@ public sealed class TunerPool(
              * 「使用中」で開けなくなる (総当たりのスキャンが 1 本目以降ぜんぶ
              * 落ちたのはこれ)。次の選局で取り直す
              */
+            var reason = $"{spec.Name}: {error.Message}";
             lock (_gate)
             {
                 Forget(lease);
-                lock (lease.Sinks) lease.Sinks.Clear();
+                lock (lease.Sinks)
+                {
+                    // 選局している間に共有に入った利用者にも失敗を伝える (黙って外すと読み出しが終わらない)
+                    foreach (var joined in lease.Sinks) joined.Fail(reason);
+                    lease.Sinks.Clear();
+                }
             }
-            sink.Fail($"{spec.Name}: {error.Message}");
+            sink.Fail(reason);
             onChange();
-            throw new IOException($"{spec.Name}: {error.Message}");
+            throw new IOException(reason);
         }
         return sink;
     }

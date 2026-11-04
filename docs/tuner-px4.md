@@ -70,7 +70,6 @@ Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=
 
 **実機には当てていません** (手元の機材は PT3)。確かめたのは、機材に触らない部分
 (`px4d --list-json` / `px4ctl list` の読み方・device 文字列・TUNE の中身・受信機と内蔵カードの IPC)
-と、配布物の CLI が期待どおりの引数を受けることです。テストは `Px4Tests.cs` /
-`Px4TunerTests.cs` / `Px4CardTests.cs` で (受信機とカードは px4d のふりをしたソケット相手)、出力の形式は px4-userland の SPEC 4.6 と自身のテストの期待値に
+と、配布物の CLI が期待どおりの引数を受けることです。テストは `Px4*Tests.cs` で (受信機とカードは px4d のふりをしたソケット相手)、出力の形式は px4-userland の SPEC 4.6 と自身のテストの期待値に
 合わせてあります。実機で当てるのは
 `denpa-agent --tune px4:<筐体の番号>:2 T27` (`Probe.cs`)。

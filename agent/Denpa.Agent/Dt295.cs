@@ -56,19 +56,12 @@ public static class Dt295
     /// <summary>設定の <c>device</c> の接頭辞 (<c>dt295:4-12.1</c>。シリアルは使わずポートで指す。<see cref="Zd1j"/> と同じ形)</summary>
     public const string Scheme = "dt295:";
 
-    private const string DevUsb = "/dev/bus/usb";
-
     public static string Device(string port) => $"{Scheme}{port}";
 
     public static bool Is(string? device) => device?.StartsWith(Scheme, StringComparison.Ordinal) == true;
 
     /// <summary><c>dt295:4-12.1</c> からポートを取る。形式が違えば null</summary>
-    public static string? Parse(string device)
-    {
-        if (!Is(device)) return null;
-        var port = device[Scheme.Length..];
-        return UsbSysfs.IsPort(port) ? port : null;
-    }
+    public static string? Parse(string device) => UsbSysfs.PortOf(device, Scheme);
 
     /// <summary>
     /// 設定に書いたのと同じ形式で。**開かない** (開くと idle イメージの書き込みと認証まで進んでしまう)。
@@ -152,7 +145,7 @@ public static class Dt295
     /// </summary>
     public static IUsbDevice OpenUsb(string port) =>
         OpenUsb(port, Identify, model => OperatingSystem.IsLinux()
-            ? UsbFsDevice.Open(UsbSysfs.Devices, DevUsb, port, model.Vendor, model.Product)
+            ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, model.Vendor, model.Product)
             : UsbDevices.Open(port, model.Vendor, model.Product));
 
     /// <summary>機材を見分けてから開く (見分け方と開き方を渡せるのはテストのため)</summary>
@@ -610,7 +603,8 @@ public sealed class Dt295Device
     /// <summary>9.8 受信中のルート変更の 6 バイト: <c>(スロット &lt;&lt; 8) | ECM参照スロット</c>、<c>(有効 &lt;&lt; 15) | PID</c>、<c>PID</c> (BE16)</summary>
     public static byte[] RouteChangeBytes(int slot, int ecmSlot, int pid, bool valid)
     {
-        if (slot is < 0 or >= Dt295Routes.Slots || slot == Dt295Routes.PatSlot) throw new ArgumentOutOfRangeException(nameof(slot), "スロット 4 (PAT) は指定できません (9.8)");
+        if (slot is < 0 or >= Dt295Routes.Slots) throw new ArgumentOutOfRangeException(nameof(slot), $"スロットは 0〜{Dt295Routes.Slots - 1} です ({slot})");
+        if (slot == Dt295Routes.PatSlot) throw new ArgumentOutOfRangeException(nameof(slot), "スロット 4 (PAT) は指定できません (9.8)");
         var words = new[] { (ushort)((slot << 8) | ecmSlot), (ushort)((valid ? 0x8000 : 0) | pid), (ushort)pid };
         var bytes = new byte[6];
         for (var i = 0; i < 3; i++) BinaryPrimitives.WriteUInt16BigEndian(bytes.AsSpan(i * 2), words[i]);

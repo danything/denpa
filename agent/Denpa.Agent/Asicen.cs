@@ -139,7 +139,7 @@ public static class AsicenUserland
                 warn($"ASICEN の機材 (USB {where}) はファームウェア待ちのままなので使いません");
                 continue;
             }
-            found.Add(new Enclosure(group.Key, "PX-W3U3", primary, sibling, Receivers(4)));
+            found.Add(new Enclosure(group.Key, "PX-W3U3", primary, sibling, Receivers()));
         }
         return found;
     }
@@ -149,8 +149,8 @@ public static class AsicenUserland
     /// asicend を起こしたあとは <c>asicenctl list</c> の答えで置き換える (<see cref="AsicenDaemon"/>)。
     /// LNB の給電はできない (上流が断る) ので、15V と書いてあっても 0V で選局する (<see cref="Px4Tuner.Lnb"/>)
     /// </summary>
-    public static List<Px4Receiver> Receivers(int count) =>
-        [.. Enumerable.Range(0, Math.Max(count, 0)).Select(index => new Px4Receiver(index, index % 2 == 1, index % 2 == 0, false))];
+    public static List<Px4Receiver> Receivers() =>
+        [.. Enumerable.Range(0, 4).Select(index => new Px4Receiver(index, index % 2 == 1, index % 2 == 0, false))];
 
     /// <summary>挿さっている筐体 (ファームウェア待ちのものには先に流し込む)。配布物が無ければ空</summary>
     public static List<Enclosure> Enclosures(Action<string>? warn = null)
@@ -244,7 +244,7 @@ public static class AsicenUserland
             var daemon = AsicenDaemon.For(id);
             daemon.Ensure();
             // 聞けなかったときも上流の決まりの並びで見る。null だと 15V をそのまま指定して断られる
-            return daemon.Receivers ?? Receivers(4);
+            return daemon.Receivers ?? Receivers();
         },
         Px4Wire.Asicen, Device(id, receiver), $"asicen-{id} #{receiver}");
 

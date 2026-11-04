@@ -67,7 +67,7 @@ alpha.1 にもドライバは入っていますが、復調とチューナーの
 | 入れるディスク         | 流すと番号で聞かれる。聞かずに入れるなら `--disk /dev/nvme0n1` (端末の無いところから流すときは要る。無いと一覧を出して止まる)                                      |
 | ログインなしで通す範囲 | `--trusted` (既定は `192.168.0.0/16,10.0.0.0/8`。compose と同じ)。会社や VPN の網が 10.0.0.0/8 に重なるなら自分の LAN だけに絞る。あとから変えるなら `values.yaml` |
 
-install.sh がやること (もう一度流すと、済んだところは飛ばします):
+install.sh は次の順に進めます (もう一度流すと、済んだところは飛ばします)。
 
 1. `talos/schematic.yaml` を Image Factory に送り、インストールのイメージ (`factory.talos.dev/metal-installer/<ID>:v1.15.0-alpha.2`) を決める
 2. `talosctl gen secrets` でクラスタの秘密を作る (初回だけ)
