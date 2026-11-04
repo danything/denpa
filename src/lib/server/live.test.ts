@@ -22,8 +22,10 @@ import {
   parsePlayable,
   rawEnding,
   rungCodec,
+  rungPlan,
   rungSlot,
   sessionStream,
+  softwareEncodes,
   videoArgs,
   whyNotTuned,
 } from "./live";
@@ -920,6 +922,32 @@ describe("段を下げたライブの枠", () => {
     expect(rungSlot(3, false, hold)).toBeNull();
     release?.();
     expect(rungSlot(3, false, hold)).not.toBeNull();
+  });
+
+  /*
+   * **抜けるかは枠を取る前に決める** (`rungPlan`)。抜けたあとで取れないと、映像が切れたうえに今の段にも戻れない
+   * (段 0 で開き直していた)
+   */
+  test("空いていれば取る。共有するなら空きを見ない", () => {
+    expect(rungPlan({ shared: false, room: 1, leaving: false })).toBe("hold");
+    expect(rungPlan({ shared: true, room: 0, leaving: false })).toBe("hold");
+  });
+
+  test("埋まっていても、自分だけの段のセッションから移るなら抜けてから取る", () => {
+    expect(rungPlan({ shared: false, room: 0, leaving: true })).toBe("leave");
+  });
+
+  test("抜けても空かないなら抜けずに今の段のまま (上限を下げた直後は空きが負)", () => {
+    expect(rungPlan({ shared: false, room: -1, leaving: true })).toBe("stay");
+    expect(rungPlan({ shared: false, room: 0, leaving: false })).toBe("stay");
+  });
+
+  test("ソフトウェアでエンコードしてよいのは H.264 と段 0 の AV1 だけ", () => {
+    expect(softwareEncodes("h264", 0)).toBe(true);
+    expect(softwareEncodes("h264", 2)).toBe(true);
+    expect(softwareEncodes("av1", 0)).toBe(true);
+    expect(softwareEncodes("av1", 1)).toBe(false);
+    expect(softwareEncodes("hevc", 0)).toBe(false);
   });
 
   test("共有の目印に段が入る。段 0 は段を足す前と同じ", () => {

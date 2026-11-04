@@ -55,7 +55,6 @@ import {
   type Rung,
   RUNG_AUDIO_KBPS,
   RUNG_SPECS,
-  type RungSpec,
 } from "#lib/rungs.js";
 import { BroadcastClock, parseStart } from "#lib/ts/clock.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
@@ -106,7 +105,7 @@ import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
 import { programs, recordings, services } from "./schema";
 import { settings } from "./settings";
 import { chunks, endInput, lines } from "./stream";
-import { holdTranscode } from "./transcode";
+import { holdTranscode, transcodeRoom } from "./transcode";
 import { getTuners, openWhenFree, type StreamUse } from "./tuner";
 import type { Connection } from "./ws";
 
@@ -409,7 +408,7 @@ export function videoArgs(
   interlaced = true,
   rung: Rung = 0,
 ): { input: string[]; filter: string; encoder: string[] } {
-  if (rung !== 0) return rungVideo(codec, hw, interlaced, RUNG_SPECS[rung]);
+  if (rung !== 0) return rungVideo(codec, hw, interlaced, rung);
   if (hw !== null) {
     const gpu = liveHwArgs(interlaced ? hw : { ...hw, full: false }, codec);
     return {
@@ -521,8 +520,9 @@ function rungVideo(
   codec: LiveCodec,
   hw: LiveHw | null,
   interlaced: boolean,
-  spec: RungSpec,
+  rung: Exclude<Rung, 0>,
 ): { input: string[]; filter: string; encoder: string[] } {
+  const spec = RUNG_SPECS[rung];
   const bps = spec.videoKbps * 1000;
   const gop = ["-g", String(spec.fps)];
   const cpu = [
@@ -546,7 +546,7 @@ function rungVideo(
       ],
     };
   }
-  if (codec !== "h264")
+  if (!softwareEncodes(codec, rung))
     throw new Error("段を下げた変換のソフトウェアは H.264 だけです");
   return {
     input: [],
@@ -617,6 +617,35 @@ export function rungSlot(
 ): (() => void) | null {
   if (rung === 0 || shared) return () => undefined;
   return hold();
+}
+
+/**
+ * **段を下げた新しいエンコードの枠をどう取るか** (`attend`)。枠を取る前に決める。いったん抜けてから取れなかった、
+ * を起こさないため (抜けると映像が切れ、今の段にも戻れない)。
+ *
+ * - `hold` … 同じ段を共有するか、枠が空いている。そのまま取る
+ * - `leave` … 空いていないが、観ているのが自分だけの段を下げたセッションから移る (`leaving`)。抜ければ 1 つ空くので、抜けてから取る
+ * - `stay` … 空かない。段を下げずに今のまま
+ *
+ * @param room いま空いている本数 (`transcode.transcodeRoom`。上限を下げた直後は負になりうる)
+ */
+export function rungPlan(o: {
+  shared: boolean;
+  room: number;
+  leaving: boolean;
+}): "hold" | "leave" | "stay" {
+  if (o.shared || o.room > 0) return "hold";
+  if (o.leaving && o.room + 1 > 0) return "leave";
+  return "stay";
+}
+
+/**
+ * **このコーデックをソフトウェアでエンコードしてよいか。** H.264 はいつも、AV1 は段 0 だけ (SVT-AV1 は段を下げても重い)、
+ * H.265 はいつも駄目 (ソフトウェアのエンコーダを組んでいない)。駄目なものは GPU が降りてもソフトウェアに降りず、
+ * そこで止めて降りた方式を覚える (`Session.run`・`server/playback.ts` の `withFallback`)
+ */
+export function softwareEncodes(codec: LiveCodec, rung: Rung): boolean {
+  return codec === "h264" || (codec === "av1" && rung === 0);
 }
 
 /**
@@ -1274,18 +1303,15 @@ class Session {
           : this.track;
       // GPU でエンコードするか (`pickLiveHw`)。降りたらソフトウェアで再エンコードする (下)
       let hw = this.codec === "audio" ? null : pickLiveHw(this.codec);
-      // H.265 はソフトウェアに降りられない。画面は諦めて次の形式をリクエストし直す (`live-player.svelte.ts`)
-      if (this.codec === "hevc" && hw === null) {
-        this.died(label, "H.265 を GPU でエンコードできない", HEVC_GAVE_UP);
-        return;
-      }
-      // 段を下げた AV1 も GPU でだけ (`rungVideo`)。選んだあとで GPU が使えなくなっていた
-      if (this.rung !== 0 && this.codec === "av1" && hw === null) {
-        this.died(
-          label,
-          "段を下げた AV1 を GPU でエンコードできない",
-          AV1_GAVE_UP,
-        );
+      /*
+       * H.265 と段を下げた AV1 はソフトウェアに降りられない (`softwareEncodes`)。画面は諦めて次の形式をリクエストし直す
+       * (`live-player.svelte.ts`)。段を下げたときは、同じ段をリクエストし直すと次のコーデックになる (`rungCodec`)
+       */
+      const gpuOnly =
+        this.codec !== "audio" && !softwareEncodes(this.codec, this.rung);
+      const gaveUp = this.codec === "hevc" ? HEVC_GAVE_UP : AV1_GAVE_UP;
+      if (gpuOnly && hw === null) {
+        this.died(label, `${this.codec} を GPU でエンコードできない`, gaveUp);
         return;
       }
       /*
@@ -1426,28 +1452,16 @@ class Session {
           !(wanted !== null && this.noSubtitle)
         ) {
           /*
-           * H.265 はソフトウェアに降りられない。覚えて (同時に開ける数を超えただけなら覚えない) 降りる。
-           * 画面は次の形式をリクエストし直し、覚えている間は H.265 の指示を H.264 にする (`liveHevc`)
+           * H.265 と段を下げた AV1 はソフトウェアに降りられない (`softwareEncodes`)。覚えて (同時に開ける数を超えただけなら
+           * 覚えない) 降りる。画面は次の形式をリクエストし直し、覚えている間は H.265 の指示を H.264 にする (`liveHevc`)。
+           * 段を下げたときは、同じ段をリクエストし直すと次のコーデックになる (`rungCodec`)
            */
-          if (this.codec === "hevc") {
+          if (gpuOnly) {
             blameLiveHw(this.codec, hw, this.busy);
             this.died(
               label,
-              `GPU (${hw.way.device} の ${hw.way.kind}) で H.265 をエンコードできなかった`,
-              HEVC_GAVE_UP,
-            );
-            return;
-          }
-          /*
-           * 段を下げた AV1 もソフトウェアに降りない (SVT-AV1 は段を下げても重い。`rungVideo`)。覚えて降りる。
-           * 画面が同じ段をリクエストし直すと、覚えている間は次のコーデックになる (`rungCodec`)
-           */
-          if (this.rung !== 0 && this.codec === "av1") {
-            blameLiveHw(this.codec, hw, this.busy);
-            this.died(
-              label,
-              `GPU (${hw.way.device} の ${hw.way.kind}) で段を下げた AV1 をエンコードできなかった`,
-              AV1_GAVE_UP,
+              `GPU (${hw.way.device} の ${hw.way.kind}) で ${this.codec} (段 ${this.rung}) をエンコードできなかった`,
+              gaveUp,
             );
             return;
           }
@@ -3101,8 +3115,9 @@ export function attend(connection: Connection): void {
 
     /*
      * **段を下げた新しいエンコードには、その場で変換する本数の枠を 1 つ使う** (`rungSlot`)。同じ段をもう誰かが観ていれば
-     * 共有するので使わない。観ているのが自分だけの段を下げたセッションから移るなら、抜ければ枠が 1 つ空くので、抜けてから取り直す。
-     * **埋まっていれば段を下げない。** いま同じ局を観ていればその段のまま、そうでなければ段 0 で開き、理由を断り書きで言う
+     * 共有するので使わない。観ているのが自分だけの段を下げたセッションから移るなら、抜ければ枠が 1 つ空くので、抜けてから取る。
+     * 抜けるかは枠を取る前に決める (`rungPlan`)。抜けたあとで取れないと、映像が切れたうえに今の段にも戻れない。
+     * **空かなければ段を下げない。** いま同じ局を観ていればその段のまま、そうでなければ段 0 で開き、理由を断り書きで言う
      */
     let release: (() => void) | null = () => undefined;
     let refused = false;
@@ -3119,11 +3134,14 @@ export function attend(connection: Connection): void {
           tuner,
           rung,
         ) !== undefined;
-      release = rungSlot(rung, shared());
-      if (release === null && current?.rung !== 0 && current?.alone(viewer)) {
-        leave();
-        release = rungSlot(rung, shared());
-      }
+      const plan = rungPlan({
+        shared: shared(),
+        room: transcodeRoom(),
+        leaving:
+          current !== null && current.rung !== 0 && current.alone(viewer),
+      });
+      if (plan === "leave") leave();
+      release = plan === "stay" ? null : rungSlot(rung, shared());
       if (release === null) {
         refused = true;
         release = () => undefined;

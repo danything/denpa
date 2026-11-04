@@ -352,7 +352,8 @@
   詰め替えは `from` の手前のキーフレームから、変換は元の TS なら `from` の 1 秒手前の映像から始まります
 - `mpeg2` … 元の TS を `from` の 1 秒手前の映像から流します (`video/mp2t`)。**`X-Denpa-Origin` に物差しの 0 にあたる PTS** (90kHz) を返します。
   物差しの時刻 = (PTS − `X-Denpa-Origin`) を 33 ビットの一周の中で取って 90000 で割ったもの。`audio` は効きません (全部の音声が入る)
-- `audio` (`codec=audio`) … 音声だけの fragmented MP4 (`audio/mp4`。AAC 96k)。時刻は映像のときと同じ物差しです
+- `audio` (`codec=audio`) … 音声だけの fragmented MP4 (`audio/mp4`。AAC 96k)。時刻は映像のときと同じ物差しです。
+  映像をデコードもエンコードもしないので、その場で変換する本数の枠は使いません (ファイルとライブの `audio=only` と同じ)
 - fragmented MP4 には `X-Denpa-Codec`・`X-Denpa-Rung`・`X-Denpa-Pace` (送り出しの具合を読む id。[上記](#送り出しの具合-get-apiplaybackpaceidid)) を付けます
 - 変換 (エンコード済みと違うコーデック・段を下げたもの) は**その場で変換する本数の枠**を使います。埋まっていれば 503 (`{"message":"サーバが混んでいます"}`)。
   詰め替えと `mpeg2` と音声だけは数えません
