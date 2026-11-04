@@ -263,6 +263,8 @@ public class Dt295Tests
         using (var card = new Dt295ResidentCard("DT295 Card Reader", () => Acquire(port, usb, image), () => resident.Now, ms => resident.Now += ms))
         {
             await Assert.That(card.Reset()).IsEquivalentTo(FakeResident.Atr);
+            // 電源が入ったままもう一度リセットしても通る (B-CAS を読む処理がリセットし直す)
+            await Assert.That(card.Reset()).IsEquivalentTo(FakeResident.Atr);
             var apdu = Enumerable.Range(0, 70).Select(i => (byte)i).ToArray();
             var answer = card.Transmit(apdu);
             // 偽物はそのまま返して 90 00 を付ける

@@ -530,6 +530,10 @@ internal sealed class FakeResident : IDt295ResidentTransport
                 response[38] = _cardPowered ? (byte)1 : (byte)0;
                 response[39] = CardInserted ? (byte)1 : (byte)0;
                 return;
+            case Dt295ResidentCard.OpPowerOn when _cardPowered:
+                // 電源が入ったまま電源を入れると、使用中で断る (実機の常駐イメージと同じ)
+                Put(response, 20, unchecked((uint)-2600));
+                return;
             case Dt295ResidentCard.OpPowerOn:
             case Dt295ResidentCard.OpReset:
                 _cardPowered = true;

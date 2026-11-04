@@ -576,6 +576,9 @@ public sealed class Dt295ResidentCard : ICardLink
     private Dt295ResidentBoard? _board;
     private uint _generation;
     private bool _active;
+
+    /// <summary>最後の STATUS で、カードの電源が入っていた</summary>
+    private bool _powered;
     private Exception? _failed;
 
     public string Name { get; }
@@ -655,9 +658,11 @@ public sealed class Dt295ResidentCard : ICardLink
     private bool Present()
     {
         Command(OpStatus, new byte[DataSize], out var response);
+        _powered = response[38] != 0;
         if (response[39] != 0) return true;
         _active = false;
-        if (response[38] != 0) Settle(Command(OpPowerOff, new byte[DataSize], out _));
+        if (_powered) Settle(Command(OpPowerOff, new byte[DataSize], out _));
+        _powered = false;
         return false;
     }
 
@@ -691,8 +696,9 @@ public sealed class Dt295ResidentCard : ICardLink
     {
         if (!Present()) throw new CardAbsentException($"{Name} にカードが挿さっていません");
         _active = false;
-        // 電源が入っていればリセット、入っていなければ電源を入れる (card.c の activate)
-        Settle(Command(OpPowerOn, new byte[DataSize], out _));
+        // 電源が入っていればリセット、入っていなければ電源を入れる (card.c の activate。電源が入ったまま電源を入れると、使用中で断られる)
+        Settle(Command(_powered ? OpReset : OpPowerOn, new byte[DataSize], out _));
+        _powered = true;
         var atr = ReadBytes(OpAtrRead, MaxAtr);
         if (atr.Length < 2 || atr[0] is not (0x3B or 0x3F)) throw new IOException($"{Name} のカードの ATR が読めません ({Convert.ToHexString(atr)})");
         _active = true;
