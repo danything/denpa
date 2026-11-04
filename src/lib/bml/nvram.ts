@@ -55,7 +55,7 @@ function areaOf(prefix: string): (typeof AREAS)[string] | undefined {
   return Object.hasOwn(AREAS, prefix) ? AREAS[prefix] : undefined;
 }
 
-/** 局の領域を分ける頭 (置き場の名前の真ん中) */
+/** 置き場の名前の真ん中に入れる、領域を分ける部分 */
 function scopeOf(kind: Scope, who: Who): string {
   // BS・CS (original_network_id 4・6・7) は局どうしで同じ番号なので、局の領域もサービスで分ける
   const network = who.originalNetworkId;

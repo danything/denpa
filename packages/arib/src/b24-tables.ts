@@ -10,7 +10,7 @@
  * **表の名前と `export const` の形は変えない。** danything/denpa-font の道具がこのファイルを
  * 名前で読んでフォントに入れる字を決める (`ADDITIONAL_ROWS`・`PLANE1_HIGH_ROWS` も。`aribtext-gaiji.ts`・`fold.ts` も同じ)。
  *
- * - 漢字は EUC-JP で読んだものと違うところだけ持つ (`KANJI_DIFF`。番組表は EUC-JP のまま読む —
+ * - 漢字は EUC-JP で読んだものと違うところだけ持つ (`KANJI_DIFF`。番組表は EUC-JP のまま読むので、
  *   1区33点の 〜 / ～ などは字幕と番組表で違えてある。aribtext.ts の説明)。1〜84区は JIS X 0213:2004 の1面と
  *   同じ字 (全角の形を選んだ点と、1区17点の ￣ など libaribcaption のとおりの数点を除く)
  * - JIS X 0213 の表 (2つのコードポイントの字・1面の 85〜94区・2面) は [scripts/jisx0213.ts](../scripts/jisx0213.ts) が
@@ -20,7 +20,7 @@
  * ## 外字 (DRCS) の置き換えを足す
  *
  * 放送は字幕の外字を小さな画像で送ってくる。画像の MD5 (`b24caption.ts` が中身の画素から取る) が
- * `DRCS_REPLACE` にあれば、その字に置き換えて描く (無ければ画像のまま)。足すときは:
+ * `DRCS_REPLACE` にあれば、その字に置き換えて描く (無ければ画像のまま)。足すときは次の手順。
  *
  * 1. 字幕の JSON (`/api/recordings/<id>/captions.json` の `drcs`) の `md5` を読み取る。`data` の画像は送るために
  *    なめらかにしたもの (drcs-smooth.ts) なので、`data` から MD5 を取っても表と合わない

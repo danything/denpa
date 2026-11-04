@@ -4,6 +4,9 @@
  * Opus は OpusHead を渡して開く (`fmp4.ts` の `audioCodec`・`audioFrame`)
  */
 
+/** 壊れたコマ (`"broken"`) がこれより多く続いたら諦める。1 つずつなら飛ばす (放送の取りこぼし) */
+export const BROKEN_MOST = 20;
+
 /** デコーダのうち、音とメモリの関数 */
 export interface AudioDecoder {
   _aac_open(): number;

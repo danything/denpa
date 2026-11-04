@@ -5,7 +5,7 @@
  * 空いているだけ並列に回せる**し、録画で開いているチャンネルのぶんはただで
  * 手に入る ([agent.md](https://github.com/danything/denpa/blob/main/docs/agent.md))。
  *
- * 扱うのは2種類。
+ * 扱うのは 2 種類。
  *
  * - **EIT[p/f]** (table_id 0x4E) … いま流れている番組と次の番組。**放送に追従する。**
  *   野球で延びた終了時刻はここに出る
@@ -32,9 +32,9 @@ const SCHEDULE_ACTUAL_MIN = 0x50;
 const SCHEDULE_ACTUAL_EXTENDED = 0x58;
 const SCHEDULE_ACTUAL_MAX = 0x5f;
 
-/** セグメント1つが受け持つ時間。0:00 から3時間ずつ、1日8つ */
+/** セグメント 1 つが受け持つ時間。0:00 から 3 時間ずつ、1 日 8 つ */
 const SEGMENT_SPAN = 3 * 3600_000;
-/** 1つの table_id が持つセグメントの数 (= 4日ぶん) */
+/** 1 つの table_id が持つセグメントの数 (= 4 日ぶん) */
 const SEGMENTS_PER_TABLE = 32;
 
 const DESC_SHORT_EVENT = 0x4d;
@@ -57,7 +57,7 @@ function isEitActual(tableId: number): boolean {
  * 並びは自局のもの (0x50〜0x5F) と同じで、`OTHER_SHIFT` だけずれている。
  *
  * BS・CS はどの中継にもネットワーク全局ぶんが流れているが、**詳細はほぼ付かない**
- * (実測で BS 45 局のうち2局ぶん。denpa の docs/data.md)。いま/次 (0x4F) は読まない
+ * (実測で BS 45 局のうち 2 局ぶん。denpa の docs/data.md)。いま/次 (0x4F) は読まない
  */
 const SCHEDULE_OTHER_MIN = 0x60;
 const SCHEDULE_OTHER_MAX = 0x6f;
@@ -70,9 +70,9 @@ interface EventAudio {
   /**
    * 放送が自分で付けた名前。**「主音声ステレオ」「解説ステレオ」。**
    *
-   * 同じ構成の音声が2本ある番組 (解説放送・二重音声) は、種別も言語も同じに
+   * 同じ構成の音声が 2 本ある番組 (解説放送・二重音声) は、種別も言語も同じに
    * なるので**符号からは区別が付かない**。実機の日テレでは、どちらも
-   * `component_type=3 lang=jpn` で「ステレオ (日本語)」が2つ並んでいた。
+   * `component_type=3 lang=jpn` で「ステレオ (日本語)」が 2 つ並んでいた。
    * 見分けが付くものはここにしか無い
    */
   text?: string;
@@ -81,7 +81,7 @@ interface EventAudio {
 }
 
 /**
- * シリーズ (series_descriptor。ARIB STD-B10 第2部)。**載せる局と載せない局がある。**
+ * シリーズ (series_descriptor。ARIB STD-B10 第 2 部)。**載せる局と載せない局がある。**
  *
  * `seriesId` で決まるのは**その局の中だけ**。番号は局ごとに振るので、別の局の同じ番号は
  * 別のシリーズ。比べるときは局 (original_network_id + service_id) と組にする
@@ -95,7 +95,7 @@ export interface EitSeries {
    */
   repeatLabel: number;
   /**
-   * 編成の型 (program_pattern)。0=不定期 1=帯 (毎日・平日のみなど) 2=週1回 3=月1回
+   * 編成の型 (program_pattern)。0=不定期 1=帯 (毎日・平日のみなど) 2=週 1 回 3=月 1 回
    * 4=同じ日に何話か 5=長い番組を分けたもの。6・7 はここでは意味を読まない
    */
   programPattern: number;
@@ -118,7 +118,7 @@ export interface EitEvent {
   transportStreamId: number;
   originalNetworkId: number;
   eventId: number;
-  /** 開始時刻 (epoch ms)。未定 (全ビット1) なら null */
+  /** 開始時刻 (epoch ms)。未定 (全ビット 1) なら null */
   startAt: number | null;
   /** 尺 (ms)。未定なら null。番組表に入れられるのは決まっているものだけ */
   duration: number | null;
@@ -158,7 +158,7 @@ export interface EitSection {
   version: number;
   sectionNumber: number;
   lastSectionNumber: number;
-  /** このセグメント (8セクション単位) で実際に使われている最後のセクション */
+  /** このセグメント (8 セクション単位) で実際に使われている最後のセクション */
   segmentLastSectionNumber: number;
   /** この局で使われている最後の table_id。番組表がどこまで先を持っているか */
   lastTableId: number;
@@ -180,7 +180,7 @@ const TABLE_TOT = 0x73;
 /**
  * TDT / TOT のセクションから**放送の実時刻**を読む。別のテーブルなら null。
  *
- * 頭3バイトのあとに MJD + BCD が5バイト。**TOT も同じ並び**で、後ろに
+ * 頭 3 バイトのあとに MJD + BCD が 5 バイト。**TOT も同じ並び**で、後ろに
  * 時差の記述子が付くだけなので同じに読める。
  *
  * データ放送 (`bml.ts` の `onTime`) が読み、BML の時計にします
@@ -191,9 +191,9 @@ export function parseTimeTable(section: Uint8Array): number | null {
 }
 
 /**
- * MJD + BCD の5バイトを epoch ms に直す。
+ * MJD + BCD の 5 バイトを epoch ms に直す。
  *
- * 全ビットが1なら「未定」。開始時刻が未定の番組は番組表に置けないので null で返す。
+ * 全ビットが 1 なら「未定」。開始時刻が未定の番組は番組表に置けないので null で返す。
  */
 export function parseMjdTime(data: Uint8Array, at: number): number | null {
   if ([0, 1, 2, 3, 4].every((i) => data[at + i] === 0xff)) return null;
@@ -207,7 +207,7 @@ export function parseMjdTime(data: Uint8Array, at: number): number | null {
   return seconds * 1000;
 }
 
-/** BCD 3バイトの尺 (時分秒) を ms に。全ビット1なら「終了未定」 */
+/** BCD 3 バイトの尺 (時分秒) を ms に。全ビット 1 なら「終了未定」 */
 export function parseBcdDuration(data: Uint8Array, at: number): number | null {
   if (data[at] === 0xff && data[at + 1] === 0xff && data[at + 2] === 0xff)
     return null;
@@ -242,7 +242,7 @@ const VIDEO_CODEC: Record<number, string> = {
   9: "h.265",
 };
 
-/** audio_component_descriptor の sampling_rate。3ビットの符号 */
+/** audio_component_descriptor の sampling_rate。3 ビットの符号 */
 const SAMPLING_RATE: Record<number, number> = {
   1: 16000,
   2: 22050,
@@ -266,7 +266,7 @@ const lang = (data: Uint8Array, at: number) => ascii(data, at, 3).toLowerCase();
  * 正しくは「音楽制作:ONE MUSIC」)。分割点は
  *
  * - **二バイト文字の途中**に来ることがある (片割れだけでは字にならない)
- * - **文字集合の状態を持ち越す** — G0〜G3 の指示も GL/GR の呼び出しも、
+ * - **文字集合の状態を持ち越す。** G0〜G3 の指示も GL/GR の呼び出しも、
  *   続きの側には書き直されない。前の状態のまま読む前提で送られてくる
  *
  * ので、部分だけを単独でデコードすると、そこから先が崩れます。
@@ -279,7 +279,7 @@ const lang = (data: Uint8Array, at: number) => ascii(data, at, 3).toLowerCase();
  */
 function readDescriptors(event: EitEvent, body: Uint8Array): void {
   /**
-   * 見出しごとの項目。項目は生バイトの部分の並びで、**項目の部分が全部揃ってからデコードする**
+   * 見出しごとの項目。項目はバイト列の部分の並びで、**項目の部分が全部揃ってからデコードする**
    * (Map なので見出しの出てきた順に並ぶ)
    */
   const pending = new Map<string, Uint8Array[][]>();
@@ -339,7 +339,7 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
         break;
       }
       /*
-       * audio_component_descriptor (ARIB STD-B10 第2部)。
+       * audio_component_descriptor (ARIB STD-B10 第 2 部)。
        *
        *     [0] reserved(4) stream_content(4)
        *     [1] component_type          … ステレオ・デュアルモノ…
@@ -375,7 +375,7 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
         break;
       }
       /*
-       * series_descriptor (ARIB STD-B10 第2部)。
+       * series_descriptor (ARIB STD-B10 第 2 部)。
        *
        *     [0..1] series_id
        *     [2]    repeat_label(4) program_pattern(3) expire_date_valid_flag(1)
@@ -410,7 +410,7 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
 }
 
 /**
- * EIT のセクションを1本読む。自局のもの以外は null。
+ * EIT のセクションを 1 本読む。自局のもの以外は null。
  *
  * 壊れたセクションは `SectionAssembler` が CRC で落としているので、ここに来るのは
  * 中身が揃っているものだけ。それでも長さの辻褄が合わないことはあるので、
@@ -489,13 +489,13 @@ export function parseEit(
  * 早く揃った局でも待たされ、遅い局は取りこぼす。EIT は自分がどこまであるかを
  * セクションの中で言っているので、それを数えれば足りる。
  *
- * セクションは**8本ずつのセグメント**に分かれていて、セグメントの中で実際に
+ * セクションは**8 本ずつのセグメント**に分かれていて、セグメントの中で実際に
  * 使われている最後の番号が `segment_last_section_number`。使われていない番号は
  * 永久に来ないので、そこまで揃えばそのセグメントは終わり。
  *
- * **過ぎた時間帯のセグメントは流れてこない** (`stale`)。空でも先頭の1本は必ず
+ * **過ぎた時間帯のセグメントは流れてこない** (`stale`)。空でも先頭の 1 本は必ず
  * 来るものとして待っていた頃は、**どのチャンネルも例外なく上限まで
- * 開きっぱなし**になっていた (実機14チャンネル、揃って離せたのは0本)。
+ * 開きっぱなし**になっていた (実機 14 チャンネル、揃って離せたのは 0 本)。
  */
 export class ScheduleProgress {
   /** `table_id` → 受け取ったセクション番号 */
@@ -508,11 +508,11 @@ export class ScheduleProgress {
   /**
    * `table_id` → バージョン。変わったらその表だけ数え直す。
    *
-   * **バージョンは `table_id` ごとに別々に振られる。** 番組表の1つの表 (sub_table) は
+   * **バージョンは `table_id` ごとに別々に振られる。** 番組表の 1 つの表 (sub_table) は
    * `table_id` + 局 + TS で決まり、`version_number` はその単位で動く。
-   * 局に1つだけ持っていた頃は、**基本 (0x50〜) と詳細 (0x58〜) を行き来する
+   * 局に 1 つだけ持っていた頃は、**基本 (0x50〜) と詳細 (0x58〜) を行き来する
    * たびにバージョンが違って数えたものを全部捨てて**いた。揃ったと分かることが
-   * 二度と無いので、どのチャンネルも上限の10分 (denpa の `epgChannelTimeout`) まで開きっぱなしになる。
+   * 二度と無いので、どのチャンネルも上限の 10 分 (denpa の `epgChannelTimeout`) まで開きっぱなしになる。
    */
   private readonly version = new Map<number, number>();
 
@@ -523,7 +523,7 @@ export class ScheduleProgress {
   constructor(private readonly now: () => number = Date.now) {}
 
   add(section: EitSection): void {
-    // p/f は番組表の完成度とは関係ない (いつでも2番組しか無い)
+    // p/f は番組表の完成度とは関係ない (いつでも 2 番組しか無い)
     if (section.tableId < SCHEDULE_ACTUAL_MIN) return;
     if (section.version !== this.version.get(section.tableId)) {
       for (const key of [...this.segmentLast.keys()]) {
@@ -548,13 +548,13 @@ export class ScheduleProgress {
   /**
    * 使われている table_id を全部揃えられたか。
    *
-   * **番号が飛ぶ。** 1つの `table_id` が受け持つのは4日ぶんで、基本は
-   * `0x50` から、詳細は `0x58` から始まる。日本の放送は8日ぶんなので、
+   * **番号が飛ぶ。** 1 つの `table_id` が受け持つのは 4 日ぶんで、基本は
+   * `0x50` から、詳細は `0x58` から始まる。日本の放送は 8 日ぶんなので、
    * 実際に流れてくるのは `0x50` `0x51` と `0x58` `0x59` あたりだけで、
    * **`0x52`〜`0x57` は永久に来ません**。
    *
    * `0x50` から `last_table_id` まで全部を待っていた頃は、詳細を積んでいる局が
-   * **一度も「揃った」にならず**、どのチャンネルも上限の10分 (denpa の `epgChannelTimeout`) まで開きっぱなしに
+   * **一度も「揃った」にならず**、どのチャンネルも上限の 10 分 (denpa の `epgChannelTimeout`) まで開きっぱなしに
    * なっていました (実機で、詳細の無い BS11 だけが早く閉じていた)。
    *
    * 見かけた表と、`last_table_id` が指す表だけを見ます。
@@ -591,9 +591,9 @@ export class ScheduleProgress {
   /**
    * そのセグメントの時間帯がもう過ぎているか。**過ぎたものは待たない。**
    *
-   * セグメントは 0:00 から3時間ずつの枠で、`table_id` と節番号から
-   * それがいつの枠なのかが決まる — 基本は `0x50` が当日 0:00 から4日ぶん、
-   * `0x51` がその次の4日ぶん。詳細 (`0x58`〜) も同じ並びをもう一度たどる。
+   * セグメントは 0:00 から 3 時間ずつの枠で、`table_id` と節番号から
+   * それがいつの枠なのかが決まる。基本は `0x50` が当日 0:00 から 4 日ぶん、
+   * `0x51` がその次の 4 日ぶん。詳細 (`0x58`〜) も同じ並びをもう一度たどる。
    * 終わった枠は放送に乗らない (クラスの説明)。そのぶんの番組は、そこが未来だった数日前に取り込んである。
    */
   private stale(tableId: number, start: number): boolean {
@@ -613,7 +613,7 @@ export class ScheduleProgress {
    * 何が足りないか。**上限まで開いても揃わなかったときに出す。**
    *
    * 揃ったかどうかしか分からなかった頃は、上限まで開きっぱなしになっている局を
-   * 見つけても**その先を追えなかった** — 電波が弱くて欠けているのか、
+   * 見つけても**その先を追えなかった。** 電波が弱くて欠けているのか、
    * こちらが来ない表を待っているのかで、直し方がまるで違う。
    */
   report(): string {
@@ -642,7 +642,7 @@ export class ScheduleProgress {
 const hex = (value: number) => `0x${value.toString(16)}`;
 
 /**
- * 流れてくる TS を食べて番組を溜める。
+ * 流れてくる TS を読んで番組を溜める。
  *
  * 局ごとに `ScheduleProgress` を持ち、**その物理チャンネルに入っている局が
  * 全部揃ったら**読むのをやめられる。同じ番組が何度も来る (カルーセルなので) ので、
@@ -667,7 +667,7 @@ export class EpgReader {
   /**
    * @param now いまの時刻。局ごとの `ScheduleProgress` にそのまま渡す
    * @param options.other ほかの TS の局の番組表も読む。ネットワーク全局ぶんを
-   *   1つの中継から先に入れるときに使う (denpa の `epg-collect.ts` の初回)
+   *   1 つの中継から先に入れるときに使う (denpa の `epg-collect.ts` の初回)
    * @param options.settle `other` のとき、新しい局が出てこなくなってから閉じるまで (ms)
    * @param options.expect `other` のとき、来るはずの局 (service_id)。全部見えて揃えば
    *   `settle` を待たずに閉じる。受信できない局が混ざっていれば `settle` で閉じる
@@ -681,7 +681,7 @@ export class EpgReader {
     } = {},
   ) {}
 
-  /** 任意の長さのバイト列を食わせる。番組が1つでも増えたら true */
+  /** 任意の長さのバイト列を渡す。番組が 1 つでも増えたら true */
   feed(chunk: Uint8Array): boolean {
     let added = false;
     for (const packet of this.packets.feed(chunk)) {
@@ -716,7 +716,7 @@ export class EpgReader {
   /**
    * 溜めてあるものと混ぜる。**別の表で来るものを消し合わせない。**
    *
-   * 番組表は2つの表に分かれて流れてくる。同じ event_id が両方に載っていて、
+   * 番組表は 2 つの表に分かれて流れてくる。同じ event_id が両方に載っていて、
    * **それぞれ自分のぶんの記述子しか持っていない**。
    *
    * - **基本** (table_id 0x50〜0x57) … タイトルと短い説明 (short_event_descriptor)
@@ -724,7 +724,7 @@ export class EpgReader {
    *
    * あとから来たもので丸ごと置き換えていた頃は、**詳細のほうが後に届いた番組の
    * タイトルが空になっていた**。実機では番組 23,000 件のうち 11,000 件が名無しで、
-   * うち 2,700 件は「タイトルは無いのに番組内容だけある」状態 — 詳細に上書きされた
+   * うち 2,700 件は「タイトルは無いのに番組内容だけある」状態で、詳細に上書きされた
    * 跡そのもの。番組表には「(番組情報なし)」の列が並んでいた。
    *
    * **中身のあるほうを残す。** 書き換え (「[新]」が付く、誤字が直る) は
@@ -761,7 +761,7 @@ export class EpgReader {
    * p/f で「いま流れている」と言えるか。
    *
    * **`running_status` を当てにしきれない。** 4 (放送中) を入れてくる局も
-   * あれば、**0 (未定義) しか入れてこない局もある** — 実機の NHK は 74 節
+   * あれば、**0 (未定義) しか入れてこない局もある。** 実機の NHK は 74 節
    * ぜんぶ 0 だった。4 だけを見ていると、そういう局では延長追従が丸ごと
    * 効かなくなる (denpa の docs/data.md)。
    *
@@ -798,7 +798,7 @@ export class EpgReader {
     );
   }
 
-  /** 番組表を1つでも見かけた局 */
+  /** 番組表を 1 つでも見かけた局 */
   services(): number[] {
     return [...this.progress.keys()];
   }
@@ -806,7 +806,7 @@ export class EpgReader {
   /**
    * 見かけた局が**全部**揃ったか。
    *
-   * 「1局でも揃えば閉じる」にはしない。1つの物理チャンネルには複数の局が
+   * 「1 局でも揃えば閉じる」にはしない。1 つの物理チャンネルには複数の局が
    * 入っていて (地上波なら MX1 と MX2)、先に揃ったほうで閉じると残りが
    * 永久に埋まらない。
    */
@@ -815,7 +815,7 @@ export class EpgReader {
     /*
      * ほかの TS の局まで読むときは、**来るはずの局が全部見えるか、しばらく新しい局が
      * 出てこないことも待つ。** 局ごとに流れてくる順はばらばらで、見かけた局が
-     * 揃っただけではまだ1度も来ていない局を置いていく。来るはずの局を知っていれば
+     * 揃っただけではまだ 1 度も来ていない局を置いていく。来るはずの局を知っていれば
      * すぐ閉じられる (WebTS.app・Mirakurun と同じ)
      */
     if (
@@ -831,7 +831,7 @@ export class EpgReader {
     return true;
   }
 
-  /** 来るはずの局を教わっていて、それが全部見えたか */
+  /** 来るはずの局 (`expect`) が渡されていて、それが全部見えたか */
   private sawExpected(): boolean {
     const expect = this.options.expect ?? [];
     return (
@@ -843,7 +843,7 @@ export class EpgReader {
   /**
    * 揃っていない局と、その理由。**上限まで開いてしまったときに出す。**
    *
-   * 1局でも揃わなければチャンネルごと上限まで開き続けるので、
+   * 1 局でも揃わなければチャンネルごと上限まで開き続けるので、
    * 「どの局のせいか」が分からないと直しようがない。
    */
   shortfall(): string[] {
@@ -856,7 +856,7 @@ export class EpgReader {
 }
 
 /**
- * **1局の「いま」と「次」(EIT[p/f]) を追う。** ライブで番組の切り替わりを知るのに使う。
+ * **1 局の「いま」と「次」(EIT[p/f]) を追う。** ライブで番組の切り替わりを知るのに使う。
  *
  * 番組表 (schedule) は数日先までの予定で、**延長や繰り下げには追いつかない**
  * (局が送り直してくるのは後になってから)。p/f は放送そのものに追従していて、
@@ -865,7 +865,7 @@ export class EpgReader {
  * section 0 が「いま」、section 1 が「次」と決まっている (`EpgReader.onAir` と同じ)。
  *
  * **中身で比べる。** 書き換われば version が上がるはずだが、上げずに中身だけ替える
- * 送り手を当てにしないよう、番組の番号・時刻・尺・タイトルで比べる。p/f は1局ぶん数百バイトが
+ * 送り手を当てにしないよう、番組の番号・時刻・尺・タイトルで比べる。p/f は 1 局ぶん数百バイトが
  * 数秒おきに来るだけなので、毎回読んでも軽い
  */
 export class PresentFollowing {
@@ -889,7 +889,7 @@ export class PresentFollowing {
   }
 
   /**
-   * 188 バイトのパケットを1つ。**いまか次のどちらかが変わったら true**。
+   * 188 バイトのパケットを 1 つ。**いまか次のどちらかが変わったら true**。
    * 最初に読めたときも true (知らなかったものが分かった)
    */
   feedPacket(packet: Uint8Array): boolean {
@@ -912,7 +912,7 @@ export class PresentFollowing {
   }
 }
 
-/** 変わったかどうかを見る中身。**番号・時刻・尺・タイトルだけ** — 番組表に写して画面に出るもの */
+/** 変わったかどうかを見る中身。**番号・時刻・尺・タイトルだけ** (番組表に写して画面に出るもの) */
 function markOf(event: EitEvent): string {
   return `${event.eventId}:${event.startAt}:${event.duration}:${event.name}`;
 }

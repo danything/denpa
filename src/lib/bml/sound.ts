@@ -42,7 +42,7 @@ export class Sound {
     return this.context;
   }
 
-  /** 内蔵音を鳴らす。知らない番号なら false */
+  /** 内蔵音を鳴らす。無い番号なら false */
   rom(id: number): boolean {
     const tune = TUNES[id];
     const context = tune === undefined ? null : this.audio();

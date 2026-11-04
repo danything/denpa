@@ -11,12 +11,14 @@ import {
   type AudioOutput,
   MAX_PENDING_BYTES,
 } from "./native-audio-protocol";
-import { type AudioDecoder, loadDecoder, WasmAudio } from "./wasm-audio";
+import {
+  type AudioDecoder,
+  BROKEN_MOST,
+  loadDecoder,
+  WasmAudio,
+} from "./wasm-audio";
 
 type Segment = Extract<AudioInput, { type: "segment" }>;
-
-/** 続けて壊れたコマがこれより多ければ諦める (`worker.ts` の `AUDIO_ERRORS_MOST` と同じ) */
-const BROKEN_MOST = 20;
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 let decoder: WasmAudio | null = null;

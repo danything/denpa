@@ -7,7 +7,7 @@
  *
  * Matroska を選んだのは、**必要なところだけなら小さいから**。NUT はコマの
  * 見出しを組み立てるのに表を復元する必要があり、mp4 は ARIB の字幕を入れられない。
- * ここが読むのは 次の 5 つだけ。
+ * ここが読むのは次の 5 つだけ。
  *
  *     Segment > Info > TimestampScale       時刻の刻み (既定 1ms)
  *     Segment > Cluster > Timestamp         その塊の先頭の時刻

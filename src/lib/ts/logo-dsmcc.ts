@@ -2,11 +2,11 @@
  * 衛星 (BS/CS) の局ロゴを取得する。
  *
  * **地上波とは伝送方式が違う。** 地上波は CDT (PID 0x0029) にロゴをそのまま
- * 載せてくるが、衛星は載せない。実機で確かめると、BS を26中継・CS を12中継
- * 開いても CDT は1つも来なかった (地上波は12中継で 29/29 揃う)。
+ * 載せてくるが、衛星は載せない。実機で確かめると、BS を 26 中継・CS を 12 中継
+ * 開いても CDT は 1 つも来なかった (地上波は 12 中継で 29/29 揃う)。
  *
  * 衛星は**データカルーセル (DSM-CC)** で送る (ARIB STD-B21 / TR-B15)。
- * Mirakurun も同じ切り分けで、ネットワーク4 は DSM-CC を読みに行く
+ * Mirakurun も同じ切り分けで、ネットワーク 4 は DSM-CC を読みに行く
  * (`TSFilter.ts` の `_enableParseDSMCC`)。
  *
  * 手順が長い。
@@ -65,7 +65,7 @@ const LOGO_MODULE_NAMES = new Set(["LOGO-05", "CS_LOGO-05"]);
 const MAX_LOGO_MODULE_SIZE = 2 * 1024 * 1024;
 
 /**
- * 同時に組み立てるロゴのモジュールの数。ふつうは `LOGO-05` と `CS_LOGO-05` の2つ
+ * 同時に組み立てるロゴのモジュールの数。ふつうは `LOGO-05` と `CS_LOGO-05` の 2 つ
  * (`downloadKey` の説明)
  */
 const MAX_LOGO_DOWNLOADS = 4;
@@ -166,9 +166,9 @@ export function parseLogoModule(data: Uint8Array): ModuleLogo[] {
 /**
  * 組み立て中のモジュールの見分け。
  *
- * **downloadId だけでは足りない。** 1つのカルーセルに `LOGO-05` と
+ * **downloadId だけでは足りない。** 1 つのカルーセルに `LOGO-05` と
  * `CS_LOGO-05` が両方流れてくることがあり (実機の BS15:16625 がそう)、
- * downloadId で1つだけ持っていた頃は先に来たほうしか組み立てられず、
+ * downloadId で 1 つだけ持っていた頃は先に来たほうしか組み立てられず、
  * CS のロゴが永久に揃わなかった。
  */
 function downloadKey(downloadId: number, moduleId: number): string {
@@ -178,7 +178,7 @@ function downloadKey(downloadId: number, moduleId: number): string {
 /**
  * 揃ったロゴの見分け。
  *
- * `logo_id` は9ビットで、**BS と CS で番号が別々に振られている**。
+ * `logo_id` は 9 ビットで、**BS と CS で番号が別々に振られている**。
  * logo_id だけを鍵にしていると、同じ番号の BS と CS のロゴが上書きし合う。
  */
 function logoKey(logo: ModuleLogo): string {
@@ -188,9 +188,9 @@ function logoKey(logo: ModuleLogo): string {
 /**
  * カルーセルの読みかけ。**開き直しても捨てない。**
  *
- * 衛星のロゴは十数分に一度まとめて流れてくるだけで (`server/config.ts` の `logoCarouselWait`)、
- * 開いている間にその一度が来るとは限らない。番組表集めやライブに譲って閉じるたびに
- * 一から読み直していた頃は、衛星のチューナーが2台の環境では途中で取り上げられてばかりで、
+ * 衛星のロゴはダウンロードの期間の間だけ、20 分以内の間隔でまとめて流れてくる (docs/logo.md)。
+ * 開いている間にその一度が来るとは限らない。番組表の取得やライブに譲って閉じるたびに
+ * 一から読み直していた頃は、衛星のチューナーが 2 台の環境では途中で取り上げられてばかりで、
  * BS も CS も何日経っても揃わなかった。DII で知ったモジュールと受け取ったブロックを
  * ここに残し、次に開いたときに続きを読む。
  *
@@ -203,7 +203,7 @@ export class CarouselProgress {
   private readonly logos = new Map<string, ModuleLogo>();
   /**
    * DII が知らせたロゴのモジュール (`downloadKey` → 名前) と、そのうち一度でも揃ったもの。
-   * 両方の名前が知らされて全部揃えば、カルーセルを1回ぶん読み切った (`carouselRead`)。
+   * 両方の名前が知らされて全部揃えば、カルーセルを 1 回ぶん読み切った (`carouselRead`)。
    * 組み立て中と同じく数を限り、あふれたら両方とも捨てて数え直す
    */
   private readonly announced = new Map<string, string>();
@@ -213,8 +213,8 @@ export class CarouselProgress {
   /**
    * **読み進んだ数。** 初めて知らされたロゴのモジュール (DII) と、初めて受け取ったブロック (DDB) だけを数える。
    * 開いている間に増えなければ、その間カルーセルは一度も流れてこなかった (`server/logo.ts` の `carouselWatch`)。
-   * 同じ DII や受け取り済みのブロックは数えない — 無音の間も DII だけ流し続ける中継があると、毎回「届いた」ことになって
-   * ずっとダウンロードの期間中に見え、番組表集めより上の優先度で20分ずつ塞ぎ続けてしまう
+   * 同じ DII や受け取り済みのブロックは数えない。カルーセルを流していない間も DII だけ流し続ける中継があると、
+   * 毎回「届いた」ことになってずっとダウンロードの期間中に見え、番組表の取得より上の優先度で 20 分ずつチューナーを塞ぎ続ける
    */
   get received(): number {
     return this.sections;
@@ -226,13 +226,14 @@ export class CarouselProgress {
       if (dii === null) return;
       // 合致するモジュールは全部取得する (`downloadKey` の説明)
       for (const module of dii.modules) {
-        if (module.name === null || !LOGO_MODULE_NAMES.has(module.name))
+        if (
+          module.name === null ||
+          !LOGO_MODULE_NAMES.has(module.name) ||
+          module.moduleSize > MAX_LOGO_MODULE_SIZE
+        )
           continue;
         const key = downloadKey(dii.downloadId, module.moduleId);
-        if (
-          module.moduleSize <= MAX_LOGO_MODULE_SIZE &&
-          !this.announced.has(key)
-        ) {
+        if (!this.announced.has(key)) {
           if (this.announced.size >= MAX_LOGO_DOWNLOADS) {
             this.announced.clear();
             this.completed.clear();
@@ -247,7 +248,6 @@ export class CarouselProgress {
           building.moduleVersion === module.moduleVersion
         )
           continue;
-        if (module.moduleSize > MAX_LOGO_MODULE_SIZE) continue;
         // 数に上限を置き、超えたら一番古いものを捨てる (downloadId を変えて送られても溜まらない)
         this.downloads.delete(key);
         if (this.downloads.size >= MAX_LOGO_DOWNLOADS) {
@@ -294,7 +294,7 @@ export class CarouselProgress {
   }
 
   /**
-   * **カルーセルを1回ぶん読み切ったか。** DII が `LOGO-05` と `CS_LOGO-05` の両方を知らせ、知らせた
+   * **カルーセルを 1 回ぶん読み切ったか。** DII が `LOGO-05` と `CS_LOGO-05` の両方を知らせ、知らせた
    * モジュールが全部一度は揃った。BS と CS が別々の DII で来ることもありうるので、片方の名前しか
    * 知らされていないうちは読み切ったことにしない。ここまで来て持っていない局は、カルーセルに載っていない。
    *
@@ -354,7 +354,7 @@ export class DsmccLogoCollector {
     return this.tally;
   }
 
-  /** パケットを1つ食わせる */
+  /** パケットを 1 つ渡す */
   feed(packet: Uint8Array): void {
     this.tally.packets++;
     if (packet[1]! & 0x80) this.tally.errors++;
@@ -400,7 +400,7 @@ export class DsmccLogoCollector {
     return this.progress.collected();
   }
 
-  /** カルーセルを1回ぶん読み切ったか (`CarouselProgress.carouselRead`) */
+  /** カルーセルを 1 回ぶん読み切ったか (`CarouselProgress.carouselRead`) */
   get carouselRead(): boolean {
     return this.progress.carouselRead;
   }
@@ -411,10 +411,10 @@ export class DsmccLogoCollector {
    * `null` … まだ PAT を読んでいない (判断できない)
    * `false` … 載っていないので、いくら開いても来ない
    *
-   * **衛星のロゴは1つの中継にしかない。** 実機の BS はネットワーク4に26の中継が
+   * **衛星のロゴは 1 つの中継にしかない。** 実機の BS はネットワーク 4 に 26 の中継が
    * あるが、エンジニアリングサービス (929) がいるのは `BS15:16625` だけだった
    * (NHK BS と同じ中継)。他を開いても永久に来ないので、PAT を見た時点で切り上げる。
-   * PAT は1秒に何度も流れてくるので、外れの中継はすぐ諦められる。
+   * PAT は 1 秒に何度も流れてくるので、外れの中継はすぐ諦められる。
    */
   get hasLogoService(): boolean | null {
     return this.sawPat ? this.ess : null;

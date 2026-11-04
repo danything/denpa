@@ -1,15 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
+import { stepOrder } from "./adapt";
 import type { Notice } from "./live";
 import {
-  adaptMessage,
   RATE_LEAST,
   RATE_WINDOW,
   rungFields,
   servedStep,
   stepFields,
-  stepFormatLabel,
-  stepOrder,
   Throughput,
 } from "./live-adapt";
 
@@ -71,46 +69,6 @@ describe("流れている段", () => {
   test("音声だけがいちばん軽い", () => {
     expect(stepOrder("audio")).toBeGreaterThan(stepOrder(3));
     expect(stepOrder(1)).toBeGreaterThan(stepOrder(0));
-  });
-});
-
-/** **メニューの「自動」の行の値** (`stepFormatLabel`) */
-describe("自動の行の値", () => {
-  test("段 0 は形式だけ、下げたら高さを添える、音声だけはそう出す", () => {
-    expect(stepFormatLabel("raw", 0)).toBe("MPEG-2");
-    expect(stepFormatLabel("h264", 2)).toBe("H.264 540p");
-    expect(stepFormatLabel("hevc", 1)).toBe("H.265 720p");
-    expect(stepFormatLabel("h264", "audio")).toBe("音声だけ");
-  });
-});
-
-/** **断り書き** (`adaptMessage`) */
-describe("断り書き", () => {
-  test("下げたときは理由と下げた先", () => {
-    expect(adaptMessage({ step: 2, reason: "slow" })).toBe(
-      "回線が細いため、540p に下げました",
-    );
-    expect(adaptMessage({ step: "audio", reason: "slow" })).toBe(
-      "回線が細いため、音声だけにしました",
-    );
-  });
-
-  test("上げたときは上げた先。段 0 は元の画質", () => {
-    expect(adaptMessage({ step: 1, reason: "restored" })).toBe(
-      "回線が戻ったため、720p に上げました",
-    );
-    expect(adaptMessage({ step: 0, reason: "restored" })).toBe(
-      "回線が戻ったため、元の画質に戻しました",
-    );
-  });
-
-  test("エンコードの遅れと手で選んでいるときは、段を動かさない理由とすること", () => {
-    expect(adaptMessage({ step: 0, reason: "encode" })).toContain(
-      "画質を下げずに",
-    );
-    expect(adaptMessage({ step: 0, reason: "pinned" })).toContain(
-      "コーデックを「自動」にすると",
-    );
   });
 });
 

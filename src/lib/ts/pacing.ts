@@ -229,7 +229,7 @@ export function pacing({
  * 速さの寄せ方。**ブラウザによっては、速さを変えること自体が乱れになる。**
  *
  * Safari (Apple の WebKit) は再生中に `playbackRate` を変えるたびに、音と映像が 90ms ほどつまずく
- * ([WebKit bug 163433](https://bugs.webkit.org/show_bug.cgi?id=163433)、2016年から直っていない)。
+ * ([WebKit bug 163433](https://bugs.webkit.org/show_bug.cgi?id=163433)、2016 年から直っていない)。
  * 実機の iPad では、貯まりが狙いを割って遅くした瞬間にコマが落ち、映像の遅れの補正が続いていた (#1210)。
  * dash.js も Safari では 0.25 より小さく速さを変えない。hls.js は遅くせず、1 秒より多く貯まっているときだけ速める
  */

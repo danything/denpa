@@ -1,8 +1,8 @@
 /**
  * データカルーセル (DSM-CC) をデコードする。**放送が同じものを何度も回してくる**中から、
- * ブロックを集めて1つのモジュールに組み立て直すところまで。
+ * ブロックを集めて 1 つのモジュールに組み立て直すところまで。
  *
- * 使う側が2つある。**中身の読み方だけが違って、運び方は同じ**なので、ここに寄せる。
+ * 使う側が 2 つある。**中身の読み方だけが違って、運び方は同じ**なので、ここに寄せる。
  *
  * - [logo-dsmcc.ts](https://github.com/danything/denpa/blob/main/src/lib/ts/logo-dsmcc.ts) … 衛星の局ロゴ (ARIB STD-B21)
  * - [bml.ts](bml.ts) … データ放送 (ARIB STD-B24 / TR-B14・TR-B15)
@@ -14,8 +14,8 @@
  * 3. 全ブロック揃うとモジュールになる
  *
  * セクションを取り出すのは [psi.ts](psi.ts) の `SectionAssembler`。**`'syntax'` を
- * 渡すこと** — DSM-CC は `section_syntax_indicator` が立たないことがあり、そのときは
- * 末尾4バイトが CRC ではなく Checksum なので、いつも確かめると全部捨ててしまう。
+ * 渡すこと。** DSM-CC は `section_syntax_indicator` が立たないことがあり、そのときは
+ * 末尾 4 バイトが CRC ではなく Checksum なので、いつも確かめると全部捨ててしまう。
  */
 
 import { u16, u32 } from "./bytes.js";
@@ -35,8 +35,8 @@ const MODULE_DESC_COMPRESSION = 0xc2;
 const DEFAULT_BLOCK_SIZE = 4066;
 
 /**
- * 同じカルーセルの中の「回」。**downloadId の上位4ビットに入っている**
- * (下位28ビットは常に1で運用される)。
+ * 同じカルーセルの中の「回」。**downloadId の上位 4 ビットに入っている**
+ * (下位 28 ビットは常に 1 で運用される)。
  *
  * 番組が変わるとここが変わるので、**前の番組のモジュールを捨てる合図**になる。
  */
@@ -129,7 +129,7 @@ export function parseDii(section: Uint8Array): Dii | null {
       else if (tag === MODULE_DESC_TYPE)
         contentType = new TextDecoder("ascii").decode(descriptor);
       else if (tag === MODULE_DESC_COMPRESSION && descriptor.length >= 5) {
-        // 先頭1バイトは符号付き。運用されるのは 0 (zlib) だけ
+        // 先頭 1 バイトは符号付き。運用されるのは 0 (zlib) だけ
         compression = {
           type: (descriptor[0]! << 24) >> 24,
           originalSize: u32(descriptor, 1),
@@ -164,7 +164,7 @@ export function parseDii(section: Uint8Array): Dii | null {
   return { downloadId, transactionId, blockSize, modules, returnToEntry };
 }
 
-/** DDB (Download Data Block)。モジュールを割ったブロックが1つ入っている */
+/** DDB (Download Data Block)。モジュールを割ったブロックが 1 つ入っている */
 export function parseDdb(section: Uint8Array): Ddb | null {
   if (section[0] !== TABLE_DDB) return null;
   const message = messageOf(section);
@@ -195,7 +195,7 @@ export function parseDdb(section: Uint8Array): Ddb | null {
 /**
  * 組み立てるモジュールの大きさの上限 (16MiB)。**これより大きいと言う DII は信じない。**
  *
- * `moduleSize` は32ビットで、そのまま信じると DII 1つで 4GB を確保させられる。
+ * `moduleSize` は 32 ビットで、そのまま信じると DII 1 つで 4GB を確保させられる。
  * 実際のデータ放送のモジュールは数 KB〜数百 KB、衛星のロゴも全局ぶんで数百 KB なので、
  * 十分に余裕を見た値。zlib で伸ばしたあとの大きさにも同じ上限を使う ([bml.ts](bml.ts) の `inflate`)
  */
@@ -213,7 +213,7 @@ export const MAX_MODULE_SIZE = 16 * 1024 * 1024;
  */
 export class ModuleBuilder {
   private buffer = new Uint8Array(0);
-  /** 受け取ったブロック番号 (1ブロック1ビット)。最初のブロックが来てから確保する */
+  /** 受け取ったブロック番号 (1 ブロック 1 ビット)。最初のブロックが来てから確保する */
   private received: Uint8Array | null = null;
   private count = 0;
   private readonly total: number;
@@ -236,7 +236,7 @@ export class ModuleBuilder {
     return this.buffer;
   }
 
-  /** 受け取ったブロックの数 (同じブロックを2度受けても1つ) */
+  /** 受け取ったブロックの数 (同じブロックを 2 度受けても 1 つ) */
   get blocks(): number {
     return this.count;
   }
@@ -246,7 +246,7 @@ export class ModuleBuilder {
     return this.count >= this.total;
   }
 
-  /** ブロックを1つ置く。**揃ったら true** */
+  /** ブロックを 1 つ置く。**揃ったら true** */
   add(blockNumber: number, block: Uint8Array): boolean {
     if (this.moduleSize > MAX_MODULE_SIZE) return false;
     // blockSize を超えるブロックは受けない。重なったブロックで受け取る量が膨らむ

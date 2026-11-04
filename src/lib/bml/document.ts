@@ -3,7 +3,7 @@
  * ([dom.ts](dom.ts)) と描く側 ([render.ts](render.ts)) が同じものを見る。
  *
  * **放送が使う 18 の要素だけを持つ** (bml・head・title・meta・script・style・link・body・
- * div・p・span・a・br・object・bevent・beitem・input・img)。知らない要素は中身ごと無視する。
+ * div・p・span・a・br・object・bevent・beitem・input・img)。ほかの要素は中身ごと無視する。
  * 属性は持つが、ページの DOM には写さない (on* はここで読むだけ)。
  */
 
@@ -250,7 +250,7 @@ export class BmlDocument {
 }
 
 /**
- * 尻の空白 (` \t\n\r`) を `by` に替える。無ければそのまま。`/[ \t\n\r]+$/` は空白の後ろに字が続くと
+ * 末尾の空白 (` \t\n\r`) を `by` に替える。無ければそのまま。`/[ \t\n\r]+$/` は空白の後ろに字が続くと
  * 2 乗かかるので、後ろから数える
  */
 function replaceTail(text: string, by: string): string {
@@ -278,7 +278,7 @@ function collapse(text: string, parent: XmlElement, index: number): string {
       .replace(/^[ \t\n\r]+/, "")
       .replace(between, "$1");
   } else {
-    // 頭と尻の空白、2 バイト文字どうしのあいだの空白は消す
+    // 先頭と末尾の空白、2 バイト文字どうしのあいだの空白は消す
     out = replaceTail(out.replace(/^[ \t\n\r]+/, ""), "").replace(
       between,
       "$1",

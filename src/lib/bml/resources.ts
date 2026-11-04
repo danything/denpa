@@ -20,12 +20,14 @@ import type {
 
 import type { ImageSource } from "./render";
 
+/**
+ * モジュールの中のファイル 1 つ。モジュールの `files` は小文字にそろえた名前で引く
+ * (multipart でないモジュールは '')
+ */
 export interface CarouselFile {
-  /** 小文字にそろえた名前 (multipart でないモジュールは '') */
-  name: string;
   type: MediaType;
   data: Uint8Array;
-  /** 作った blob: の URL (種類ごと)。モジュールを捨てるときに返す (アニメーションはコマごとの URL も) */
+  /** 作った blob: の URL (種類ごと)。モジュールを捨てるときに解放する (アニメーションはコマごとの URL も) */
   urls: Map<string, ImageSource>;
 }
 
@@ -132,6 +134,10 @@ export function refToPath(ref: Ref): string {
   return out;
 }
 
+/** 問い合わせ (`?…`)・断片 (`#…`) から後ろを落とした名前 */
+export const withoutQuery = (name: string): string =>
+  name.replace(/[?#][\s\S]*$/, "");
+
 export class Resources {
   pmt = new Map<number, ComponentPMT>();
   pmtSeen = false;
@@ -232,7 +238,6 @@ export class Resources {
             message.files.map((file) => [
               file.contentLocation?.toLowerCase() ?? "",
               {
-                name: file.contentLocation?.toLowerCase() ?? "",
                 type: file.contentType,
                 data: fromBase64(file.dataBase64),
                 urls: new Map(),
@@ -284,7 +289,7 @@ export class Resources {
     }
     // 問い合わせ (`?tsid=…`)・断片 (`#…`) はファイルを引くのに使わない。resourceName に `?`・`#` は
     // 入らない (STD-B24 第二編 9.2.1.2)。文書からは getActiveDocument で読める (engine.ts の load)
-    let path = raw.replace(/[?#][\s\S]*$/, "");
+    let path = withoutQuery(raw);
     const dc =
       /^arib-dc:\/\/(-1|[0-9a-f]+)\.(-1|[0-9a-f]+)\.(-1|[0-9a-f]+)(?:;[0-9a-f]+)?(?:\.[0-9a-f]+)?(\/.*)?$/i.exec(
         path,
@@ -427,7 +432,6 @@ export class Resources {
         (got): CarouselFile | null => {
           if (got === null || this.remoteGet === null) return null;
           const file: CarouselFile = {
-            name: url,
             type: mediaType(got.contentType),
             data: got.body,
             urls: new Map(),
@@ -610,7 +614,7 @@ export class Resources {
     });
   }
 
-  /** モジュールを捨てる。今のもの・押さえたものとしてまだ持っていなければ、作った URL を返す */
+  /** モジュールを捨てる。今のもの・押さえたものとしてまだ持っていなければ、作った URL を解放する */
   private release(module: Module): void {
     const k = key(module.component, module.id);
     if (this.cache.get(k) === module || this.locks.get(k)?.module === module)
@@ -638,7 +642,7 @@ export class Resources {
   }
 }
 
-/** ファイルから作った blob: の URL を返す */
+/** ファイルから作った blob: の URL を解放する */
 function revoke(file: CarouselFile): void {
   for (const made of file.urls.values()) {
     URL.revokeObjectURL(made.url);
