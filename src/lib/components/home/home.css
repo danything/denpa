@@ -315,12 +315,6 @@
     overflow-anchor: none;
   }
 }
-.board .t-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  flex: 1;
-  min-height: 0;
-}
 .board .t-list {
   position: relative;
   min-width: 0;
@@ -472,7 +466,6 @@
 }
 .board .t-excerpt {
   color: var(--dp-muted);
-  opacity: 0.85;
 }
 .board .t-thumb {
   position: relative;
@@ -674,24 +667,9 @@
  * ここは幅と、出すかどうかだけ。この形では操作の 1 行は出さず、一覧はいちばん上から始まる。
  * テーブルトップは 1000px 以上でもスマホの形なので、幅ではなく `<html data-phone>` で分ける (下のタブの上に操作の 1 行を出す)
  */
-.board .t-side {
-  display: none;
-}
-:where(html:not([data-phone])) .board .t-main {
-  grid-template-columns: minmax(0, 1fr) 20rem;
-}
 /* 右の列の頭 (カレンダーの見出し) は、貼り付いた日付のカプセルの字と高さをそろえる */
-:where(html:not([data-phone])) .board .t-side {
-  display: flex;
-  padding-top: 0.25rem;
-}
 :where(html:not([data-phone])) .board .t-toolbar {
   display: none;
-}
-@media (min-width: 1600px) {
-  :where(html:not([data-phone])) .board .t-main {
-    grid-template-columns: minmax(0, 1fr) 22rem;
-  }
 }
 .board .a-state dt,
 .board .a-state dd {

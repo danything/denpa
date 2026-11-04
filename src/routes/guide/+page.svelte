@@ -936,7 +936,7 @@
   </div>
 
   {#if services.length === 0}
-    <div class="panel empty" data-testid="empty-grid">
+    <div class="panel empty-state" data-testid="empty-grid">
       {#if data.typeEmpty}
         <!-- 局がまだ無い。上の案内と同じ文とボタンを、表の場所の真ん中に (上の案内はこのとき出さない) -->
         <ChannelNotice
@@ -956,11 +956,14 @@
             組めなかった。**骨組みのまま放っておかない**。読み込み中と区別が
             付かず、いつまでも待たせることになる。本当の理由はサーバのログに出る
         -->
-    <div class="panel empty">
-      <p class="muted">番組表を読み込めませんでした ({sheet.failed})</p>
-      <button type="button" class="small secondary outline" onclick={reload}
-        >読み直す</button
-      >
+    <div class="panel empty-state">
+      <p><strong>番組表を読み込めませんでした</strong></p>
+      <p class="small muted">{sheet.failed}</p>
+      <div class="actions">
+        <button type="button" class="small secondary outline" onclick={reload}
+          >読み直す</button
+        >
+      </div>
     </div>
   {:else}
     <!--
@@ -1519,10 +1522,9 @@
     border-radius: 50%;
     background: var(--tint);
   }
-  .empty {
+  /* 空の状態の並びは共通の `.empty-state` (app.css)。表の場所なので本文と同じ余白だけ足す */
+  .empty-state {
     margin: var(--dp-gutter);
-    padding: 1.5rem;
-    text-align: center;
   }
 
   /* 表は枠で囲まない。操作の 1 行の下から画面の端まで (上のコメント)。地はページの地のまま (マスだけが面) */

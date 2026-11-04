@@ -571,9 +571,9 @@
     border-end-start-radius: 0;
     border-end-end-radius: 0;
   }
-  /* 使わないチューナーは名前と状態を沈める (印の「無効」と合わせて、色だけに頼らない) */
+  /* 使わないチューナーは名前と状態を控えた字にする (印の「無効」と合わせて、色だけに頼らない。透かすと 4.5:1 を割る) */
   .tuners .main.off :is(.name-cell, .state-cell) {
-    opacity: 0.55;
+    color: var(--dp-muted);
   }
   .name-cell {
     max-width: 16rem;
@@ -809,9 +809,6 @@
     flex-direction: column;
     gap: 0.5rem;
     margin-top: 0.5rem;
-  }
-  .reader h3 {
-    font-size: var(--dp-text-base);
   }
   /* リーダーの表もチューナーの表と同じく、線で区切らない行 */
   .reader td {

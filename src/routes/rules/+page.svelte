@@ -511,9 +511,9 @@
   .sep {
     margin-inline: 0.25rem;
   }
-  /* 無効のルールは中身を沈める (印の「無効」と合わせて、色だけに頼らない) */
+  /* 無効のルールは中身を控えた字にする (印の「無効」と合わせて、色だけに頼らない)。透かすと 4.5:1 を割る */
   .row.off .row-body {
-    opacity: 0.55;
+    color: var(--dp-muted);
   }
   .switch {
     display: flex;

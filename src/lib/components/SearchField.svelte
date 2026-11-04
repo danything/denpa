@@ -358,6 +358,12 @@
     outline: none;
     text-align: start;
   }
+  /* 指で押す端末は 16px。それより小さいと iPhone の Safari が押したときに画面を拡大する */
+  @media (pointer: coarse) {
+    .search-field input {
+      font-size: var(--dp-text-base);
+    }
+  }
   .key {
     padding: 0 0.375rem;
     border: 1px solid var(--dp-line);
