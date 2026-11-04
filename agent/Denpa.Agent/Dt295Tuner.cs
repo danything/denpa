@@ -429,6 +429,9 @@ internal sealed class Dt295Stream
 
     public bool Ended => _ended;
 
+    /// <summary>止めたとき、読み出しのスレッドが 3 秒以内に終わったか (終わっていなければ、ルートの計画をまだ書き換えているかもしれない)</summary>
+    internal bool PumpStopped { get; private set; }
+
     /// <summary>この受信のルートの計画。止めるときに写しを取る</summary>
     internal Dt295RouteTracker Routes => _routes;
 
@@ -651,7 +654,7 @@ internal sealed class Dt295Stream
         _stopping = true;
         var stopped = Stopwatch.StartNew();
         Output.Stop();
-        _pump.Join(TimeSpan.FromSeconds(3));
+        PumpStopped = _pump.Join(TimeSpan.FromSeconds(3));
         StopReception();
         _board.Receiving = false;
         _in.Dispose();
@@ -806,7 +809,7 @@ public sealed class Dt295Tuner : ITuneDevice
         stream?.Stop();
         // 読み出しのスレッドが終わってから (ルートの計画は読み出しのスレッドが書き換える)、PAT と全部の PMT がそろっていれば写しを取る。
         // 次に同じチャンネルを選ぶとき、最初の準備に使う。取れなくても、止める手順は終わっているので、写しなしで続ける
-        if (stream is not null && key is not null)
+        if (stream is { PumpStopped: true } && key is not null)
         {
             try
             {
