@@ -14,9 +14,12 @@ import {
   blameLiveHw,
   CHASE_STREAM_HOLD,
   encodeArgs,
+  keepLight,
   key,
+  type Light,
   LIVE_STREAM_BACKLOG,
   liveHwFailed,
+  nextLight,
   openingLine,
   parseCommand,
   parsePlayable,
@@ -26,6 +29,7 @@ import {
   rungSlot,
   sessionStream,
   softwareEncodes,
+  takeLight,
   videoArgs,
   whyNotTuned,
 } from "./live";
@@ -762,6 +766,68 @@ describe("元の TS が尽きたあと (rawEnding)", () => {
   test("畳んだあとは何も伝えない", () => {
     expect(rawEnding({ chase: true, fed: true, stopped: true })).toBe("quiet");
     expect(rawEnding({ chase: false, fed: true, stopped: true })).toBe("quiet");
+  });
+});
+
+/**
+ * **エンコードが遅れたときに軽くする** (`Session` の `lighten`)。60 コマ → 30 コマ、ソフトウェア → GPU の順で、
+ * コーデックは替えない。軽くしたものは作り直した次のセッションが受け継ぐ
+ */
+describe("エンコードが遅れたときの軽い組み合わせ", () => {
+  const fresh: Light = { half: false, gpu: false };
+  const base = {
+    codec: "h264" as const,
+    rung: 0 as const,
+    light: fresh,
+    software: true,
+    gpuReady: true,
+  };
+
+  test("段 0 はまず 30 コマ、次に GPU、どちらも済めば何もしない", () => {
+    expect(nextLight(base)).toBe("half");
+    expect(nextLight({ ...base, light: { half: true, gpu: false } })).toBe(
+      "gpu",
+    );
+    expect(nextLight({ ...base, light: { half: true, gpu: true } })).toBeNull();
+  });
+
+  test("段 1〜3 はもう 30 コマなので GPU だけ。GPU で動いている・GPU が使えないなら何もしない", () => {
+    expect(nextLight({ ...base, rung: 2 })).toBe("gpu");
+    expect(nextLight({ ...base, rung: 2, software: false })).toBeNull();
+    expect(nextLight({ ...base, rung: 2, gpuReady: false })).toBeNull();
+    expect(nextLight({ ...base, codec: "audio" })).toBeNull();
+  });
+
+  test("30 コマは放送のインタレ解除を 1 コマずつにして、キーフレームは 1 秒ごと", () => {
+    const soft = videoArgs("h264", null, true, 0, null, true);
+    expect(soft.filter).toBe("bwdif=mode=send_frame");
+    expect(soft.encoder.join(" ")).toContain("-g 30");
+    expect(encodeArgs(1024, stereo, "h264", 0, null, 0, true)).toContain(
+      "bwdif=mode=send_frame",
+    );
+    const vaapi: LiveHw = {
+      way: { device: "/dev/dri/renderD128", kind: "vaapi" },
+      full: true,
+    };
+    expect(videoArgs("h264", vaapi, true, 0, null, true).filter).toBe(
+      "deinterlace_vaapi=rate=frame",
+    );
+    expect(videoArgs("h264", vaapi, true, 0).filter).toBe(
+      "deinterlace_vaapi=rate=field",
+    );
+    // 指定しなければ今までどおり 60 コマ
+    expect(videoArgs("h264", null, true, 0).encoder.join(" ")).toContain(
+      "-g 60",
+    );
+  });
+
+  test("軽くしたものは次のセッションが 1 回だけ受け取り、期限を過ぎたら受け取らない", () => {
+    keepLight("GR:T27:1", { half: true, gpu: false }, 1_000);
+    expect(takeLight("GR:T27:1", 2_000)).toEqual({ half: true, gpu: false });
+    expect(takeLight("GR:T27:1", 2_000)).toBeNull();
+    keepLight("GR:T27:1", { half: true, gpu: false }, 1_000);
+    expect(takeLight("GR:T27:1", 60_000)).toBeNull();
+    expect(takeLight("GR:T16:1", 2_000)).toBeNull();
   });
 });
 

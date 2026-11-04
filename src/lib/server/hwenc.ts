@@ -551,11 +551,14 @@ export function liveHw(
  * - VA-API は CQP をやめて **VBR で上限を決める** (`-b:v` と `-maxrate:v` に同じ値)。CQP は量を場面に任せるので、回線に収まる保証が無い
  * - `full` なら GPU の上でインタレ解除して 30 コマにし (`rate=frame`)、そのまま `scale_vaapi` で縮める。フレームを CPU に降ろさない。
  *   `full` でなければ、縮めるのは呼ぶ側の CPU の `scale` (`live.ts` の `rungVideo`)
+ *
+ * `half` はエンコードが遅れたときの 30 コマ (`live.ts` の `videoArgs`)。`full` なら GPU のインタレ解除を `rate=frame` にする
  */
 export function liveHwArgs(
   hw: LiveHw,
   codec: HwCodec,
   cap: RungCap | null = null,
+  half = false,
 ): { input: string[]; filter: string[]; encoder: string[] } {
   const { way } = hw;
   const base = hwArgs(way, codec);
@@ -613,7 +616,7 @@ export function liveHwArgs(
     ],
     filter:
       cap === null
-        ? ["deinterlace_vaapi=rate=field"]
+        ? [`deinterlace_vaapi=rate=${half ? "frame" : "field"}`]
         : ["deinterlace_vaapi=rate=frame", `scale_vaapi=w=-2:h=${cap.height}`],
     encoder,
   };
