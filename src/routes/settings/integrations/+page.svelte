@@ -49,9 +49,9 @@
 <Toasts {notices} source={form} />
 
 <!-- 節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先 -->
-<div class="part" id="notifications" data-part><Notifications {data} /></div>
-<div class="part" id="tv" data-part><Tv {data} /></div>
-<div class="part" id="jikkyo" data-part><Jikkyo {data} /></div>
-<div class="part" id="migrate" data-part><Migrate {data} /></div>
-<div class="part" id="migrate-edcb" data-part><MigrateEdcb {data} /></div>
-<div class="part" id="transfer" data-part><Transfer {data} /></div>
+<div id="notifications" data-part><Notifications {data} /></div>
+<div id="tv" data-part><Tv {data} /></div>
+<div id="jikkyo" data-part><Jikkyo {data} /></div>
+<div id="migrate" data-part><Migrate {data} /></div>
+<div id="migrate-edcb" data-part><MigrateEdcb {data} /></div>
+<div id="transfer" data-part><Transfer {data} /></div>

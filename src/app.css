@@ -114,7 +114,7 @@
   --dp-bar-pad: 0.375rem;
   /*
    * 字の大きさ。本文は 16px のまま (番組表のマスなど rem で組んだ寸法が変わらない)。使い分けは docs/design.md の「作り方」。
-   * `-2xs` (11px) は幅か高さの決まった所だけ (下のタブの名前・番組表の時の列の「いま」・カレンダーの曜日・バーの先の「いま」)
+   * `-2xs` (11px) は幅か高さの決まった所だけ (下のタブの名前・番組表の時の列の「いま」・カレンダーの曜日・バーの先の「いま」・番組表のマスの「コピー禁止」)
    */
   --dp-text-2xs: 0.6875rem;
   --dp-text-xs: 0.75rem;
@@ -158,8 +158,8 @@
   /*
      * 色は**主の色ひとつ**と、状態の色 4 つだけ。主の色は Blades (Pico) の既定の azure を
      * そのまま使う (上書きしない。アイコンの水色とも揃う)。
-     * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・通知 cyan)。
-     * 「通知」は azure と並ぶと見分けが付かないので、緑寄りの cyan にしてある
+     * 状態の色も Pico の色見本の段から選ぶ (録画中 red・成功 jade・注意 amber・案内 cyan)。
+     * 「案内」は azure と並ぶと見分けが付かないので、緑寄りの cyan にしてある
      *
      * **状態の色は状態にだけ使い、ふつうの状態には付けない。**
      * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
@@ -619,21 +619,16 @@ section {
   margin-bottom: 0;
 }
 /*
- * 文字の大きさは html の 16px を据え置いたまま、小さい側を一段上げてある。
- * 1280px の画面で本文・表・注記が 0.75〜0.9rem だと詰まって見えた。
+ * 見出しの大きさ。画面の見出し (`h1`) と小見出し (`h2`・`h3`) の 2 段だけ。表は本文と同じ 16px
+ * (1280px の画面で表・注記が 0.75〜0.9rem だと詰まって見えた)。
  * **番組表のマスは各画面の <style> で大きさを決めている** ので、ここを変えても動かない
  */
 h1 {
   font-size: var(--dp-text-xl);
 }
-h2 {
-  font-size: 1.25rem;
-}
+h2,
 h3 {
   font-size: var(--dp-text-lg);
-}
-table {
-  font-size: 0.95rem;
 }
 th,
 td {
@@ -677,7 +672,7 @@ thead th {
   min-width: 0;
 }
 /*
- * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表集め)。値が変わったら
+ * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表の取得)。値が変わったら
  * なめらかに伸ばす (`--dp-duration`)。**動いているあいだ** (`.running`。付けるのは
  * 呼ぶ側。`JobProgress` など) は、伸びたところの上に光の筋を流す (流すのはファイルの最後)。
  * 長さの分からないもの (値の無いバー) は Pico のまま (左右に流れる)
@@ -1214,6 +1209,63 @@ input[type="checkbox"]:not([role="switch"]) {
 .item-list > li {
   margin: 0;
   list-style: none;
+}
+/*
+ * **日付の見出し** (`.day-head`。録画の一覧と切り抜き)。ふだんは平ら。貼り付いて行がその裏を流れるときだけ、
+ * ヘッダーと同じ半透明の面と影の小さなカプセルで浮かせる (docs/design.md の「浮かせ方」)。地の色で塗ると、半透明のヘッダーの下で塗った所だけが浮いて見えた。
+ * 中は `.day-head-chip` に日の名前 (`.day-head-name`) と日付 (`.day-head-date`)。
+ * 貼り付く位置は、いちばん上の見出しの置かれた位置 (main の頭の空き) と同じにし、巻き始めても動かない (上端ではカプセルにならない)
+ */
+.day-head {
+  --day-head-gap: 0.5rem;
+  position: sticky;
+  top: var(--day-head-gap);
+  z-index: 3;
+  width: fit-content;
+  margin: 0.5rem 0 0.25rem;
+  color: var(--dp-muted);
+  font-size: var(--dp-text-xs);
+  font-weight: var(--dp-weight-bold);
+  container-type: scroll-state;
+}
+.day-head-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--dp-radius-full);
+  background: var(--dp-float);
+  box-shadow: var(--dp-shadow-pop);
+  transition:
+    background-color var(--dp-duration) var(--dp-ease),
+    box-shadow var(--dp-duration) var(--dp-ease);
+}
+/* 貼り付いたかは `scroll-state(stuck: top)` で見る。知らないブラウザは、いつもカプセル */
+@supports (container-type: scroll-state) {
+  .day-head-chip {
+    background: transparent;
+    box-shadow: none;
+  }
+  @container scroll-state(stuck: top) {
+    .day-head-chip {
+      background: var(--dp-float);
+      box-shadow: var(--dp-shadow-pop);
+    }
+  }
+}
+.day-head-name {
+  color: var(--pico-color);
+}
+.day-head-date {
+  font-weight: var(--dp-weight);
+}
+/* 広い形 (`#lib/phone-form.ts`) では浮いたヘッダーの下に、操作の 1 行どうしと同じ隙間 (`--dp-bar-gap`) 離して貼り付ける。スマホの形は上の安全域 (ノッチ) の少し下 */
+:where(html:not([data-phone])) .day-head {
+  --day-head-gap: var(--dp-bar-gap);
+  top: calc(var(--dp-header-bottom) + var(--day-head-gap));
+}
+:where(html[data-phone]) .day-head {
+  top: calc(env(safe-area-inset-top, 0px) + var(--day-head-gap));
 }
 /*
  * **入っている切り替え (`aria-pressed="true"`) は、オンの印の主の色の短い下線と字** (番組表の「サブ ch」)。
@@ -2113,7 +2165,6 @@ dialog {
 }
 .modal-close ~ h2 {
   margin: 0 2.5rem 0 0;
-  font-size: var(--dp-text-lg);
 }
 .modal-actions {
   display: flex;
@@ -2231,9 +2282,6 @@ dialog[open] > article {
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--dp-space-2) var(--dp-space-3);
-}
-.section-head h2 {
-  font-size: var(--dp-text-lg);
 }
 .sections .fields {
   display: flex;

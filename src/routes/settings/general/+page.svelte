@@ -63,7 +63,7 @@
     **ほかの場所で切り替えられるものはここに並べない** (互換モードは再生画面の ⚙)。
     同じ設定が 2 か所にあると、どちらが効いているのか迷う
 -->
-<div class="part" id="browser" data-part>
+<div id="browser" data-part>
   <div class="sections readable">
     <!--
             **テーマはここだけで選ぶ** (`#lib/theme.svelte.ts`)。前はヘッダーのボタンと下のタブの「その他」にあったが、
@@ -175,7 +175,7 @@
   </div>
 </div>
 
-<div class="part" id="login" data-part>
+<div id="login" data-part>
   <div class="sections readable">
     <!--
             **ログアウトはヘッダーではなくここ。** ヘッダーと下のタブの「その他」に置いていた頃は、

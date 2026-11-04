@@ -790,7 +790,9 @@
         type="button"
         class="small secondary outline"
         disabled={nowSlots === null || grid === null}
-        title={nowSlots === null ? "今日を見ているときだけ" : "いまの時刻へ"}
+        title={nowSlots === null
+          ? "今日を見ているときだけ使えます"
+          : "いまの時刻へ"}
         onclick={jumpNow}
         data-testid="guide-jump-now">今</button
       >
@@ -2005,7 +2007,7 @@
     color: color-mix(in srgb, currentColor 80%, transparent);
   }
   .copy-never {
-    font-size: 0.625rem;
+    font-size: var(--dp-text-2xs);
     font-weight: var(--dp-weight);
     color: color-mix(in srgb, currentColor 70%, transparent);
     white-space: nowrap;

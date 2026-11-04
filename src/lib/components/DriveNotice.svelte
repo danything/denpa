@@ -74,7 +74,6 @@
   }
   h2 {
     margin-bottom: var(--dp-space-3);
-    font-size: var(--dp-text-lg);
   }
   p {
     margin: 0;

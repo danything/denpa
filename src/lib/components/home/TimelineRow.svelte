@@ -330,7 +330,7 @@
       />
     </div>
     <div class="row-actions">
-      <!-- 2 回押しの鍵は負の値にして、録画の ID と混ざらないようにする (deleting は録画と共用) -->
+      <!-- 2 回押しのキーは負の値にして、録画の ID と混ざらないようにする (deleting は録画と共用) -->
       <ArmedDelete
         deleting={ctx.deleting}
         armKey={-res.id}
@@ -522,7 +522,7 @@
       {/if}
       {#if rec.deleted_at === null}
         {#if rec.job_id !== null}
-          <!-- 動いている間は中断だけ。裏で ffmpeg が元の TS を読んでいるので、消させると道連れになる。
+          <!-- 動いている間は中断だけ。裏で ffmpeg が元の TS を読んでいるので、削除すると、その ffmpeg も失敗する。
                         狭い画面はアイコンだけ (3 段目のエンコードの進みに幅を回す。字は読み上げに残す) -->
           {#if rec.job_canceling}
             <button

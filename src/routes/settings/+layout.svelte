@@ -292,8 +292,8 @@
   .group-link {
     border-radius: var(--dp-radius);
     transition:
-      background-color var(--dp-duration),
-      color var(--dp-duration);
+      background-color var(--dp-duration) var(--dp-ease),
+      color var(--dp-duration) var(--dp-ease);
   }
   .group-link:hover {
     color: inherit;

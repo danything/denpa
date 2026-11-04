@@ -128,7 +128,7 @@
       return;
     }
     if (!support[source.codec]) {
-      problem = `この端末では再生できません (${source.codec === "av1" ? "AV1" : "H.264"} を描けません)`;
+      problem = `この端末では再生できません (${source.codec === "av1" ? "AV1" : "H.264"} をデコードできません)`;
       return;
     }
     await tick();
@@ -356,7 +356,7 @@
             <span class="tag error keep">保存に失敗</span>
           {:else}
             <button type="button" class="small keep" onclick={() => play(item)}>
-              観る
+              再生
             </button>
           {/if}
           {#if item.state === "failed"}
@@ -402,7 +402,6 @@
   }
   h1 {
     margin-bottom: 0.25rem;
-    font-size: 1.25rem;
   }
   .lead {
     margin-bottom: 1rem;
@@ -475,7 +474,7 @@
     object-fit: cover;
   }
   .thumb.blank {
-    background: var(--dp-line);
+    background: var(--dp-line-strong);
   }
   .info {
     min-width: 0;

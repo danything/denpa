@@ -543,7 +543,7 @@
     border: 0;
     background: transparent;
     vertical-align: middle;
-    transition: background-color var(--dp-duration);
+    transition: background-color var(--dp-duration) var(--dp-ease);
   }
   /* 「⋯」の中。閉じていても欄は送るので、消さずに隠す */
   .detail:not(.open) {

@@ -565,7 +565,7 @@
             href={resolve(`watch/${data.rec.id}`)}
             data-testid="chase-to-watch"
           >
-            エンコードが終わりました。続きは観る画面で
+            エンコードが終わりました。続きは観る画面で観られます
           </a>
         </span>
       {:else}
@@ -638,6 +638,6 @@
     text-underline-offset: 2px;
   }
   .to-watch:hover {
-    background: var(--dp-video-veil-strong);
+    background: var(--dp-on-video-hover);
   }
 </style>

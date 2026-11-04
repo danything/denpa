@@ -570,11 +570,11 @@
       {/if}
 
       {#each days as group (group.day)}
-        <h2 class="c-day" data-testid="clip-day">
-          <span class="c-day-chip">
-            <span class="c-day-name">{dayLabel(group.day)}</span>
-            {#if dayName(group.day, now) !== null}<span class="c-day-date num"
-                >{fullDate(group.day)}</span
+        <h2 class="day-head" data-testid="clip-day">
+          <span class="day-head-chip">
+            <span class="day-head-name">{dayLabel(group.day)}</span>
+            {#if dayName(group.day, now) !== null}<span
+                class="day-head-date num">{fullDate(group.day)}</span
               >{/if}
           </span>
         </h2>
@@ -904,7 +904,6 @@
    * スマホの形は絞り込みの 1 行を下のタブのすぐ上に浮かせる (docs/design.md の「浮かせ方」)
    */
   .clips {
-    --c-day-gap: 0.5rem;
     display: flex;
     flex-direction: column;
   }
@@ -940,59 +939,12 @@
     margin: 0.25rem 0 0.25rem 0.75rem;
   }
 
-  /* 日付の見出し。ふだんは平ら、貼り付いて行がその裏を流れるときだけ浮く (録画の一覧と同じ) */
-  .c-day {
-    position: sticky;
-    top: var(--c-day-gap);
-    z-index: 3;
-    width: fit-content;
-    margin: 0.5rem 0 0.375rem;
-    color: var(--dp-muted);
-    font-size: var(--dp-text-xs);
-    font-weight: var(--dp-weight-bold);
-    container-type: scroll-state;
+  /* 日付の見出しは録画の一覧と同じ (`app.css` の `.day-head`)。下のグリッドとは少し離す */
+  .c-list > .day-head {
+    margin-bottom: 0.375rem;
   }
-  .c-list > .c-day:first-of-type {
+  .c-list > .day-head:first-of-type {
     margin-top: 0;
-  }
-  .c-day-chip {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
-    transition:
-      background-color var(--dp-duration-enter) var(--dp-ease),
-      box-shadow var(--dp-duration-enter) var(--dp-ease);
-  }
-  @supports (container-type: scroll-state) {
-    .c-day-chip {
-      background: transparent;
-      box-shadow: none;
-    }
-    @container scroll-state(stuck: top) {
-      .c-day-chip {
-        background: var(--dp-float);
-        box-shadow: var(--dp-shadow-pop);
-      }
-    }
-  }
-  .c-day-name {
-    color: var(--pico-color);
-  }
-  .c-day-date {
-    font-weight: var(--dp-weight);
-  }
-  :global(html:not([data-phone])) .clips {
-    --c-day-gap: var(--dp-bar-gap);
-  }
-  :global(html:not([data-phone])) .c-day {
-    top: calc(var(--dp-header-bottom) + var(--c-day-gap));
-  }
-  :global(html[data-phone]) .c-day {
-    top: calc(env(safe-area-inset-top, 0px) + var(--c-day-gap));
   }
 
   /*

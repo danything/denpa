@@ -71,7 +71,7 @@
     結果は変えた節の見出しの横に出る。値の渡し方は上の `recording`。
     どの節もすべての録画に効く。ルールや予約ごとには変えられない
 -->
-<div class="part" id="encoding" data-part>
+<div id="encoding" data-part>
   <div class="sections readable">
     <section class="section">
       <div class="section-head">
@@ -232,7 +232,7 @@
                     エンコーダは録画とライブで別々に選べます。追っかけと、録画を別の形式で観るときの変換もライブのエンコーダを使います
                     (チェックを外したコーデックも)。MPEG-2 のデコードまで GPU
                     でできるデバイスでは、ライブはデコードとインターレース解除も
-                    GPU で行います。
+                    GPU で処理します。
                   </p>
                   <p>
                     GPU が 2 枚あれば「録画はこちら、ライブはあちら」「AV1
@@ -354,7 +354,7 @@
     視聴 (世帯の設定)。ライブの「自動」が家の中とみる名前 (`#lib/host.ts` の `indoorHost`) と、コーデックのメニューから
     H.264 と H.265 を外すか (`#lib/live-choice.ts` の `HIDDEN_CODECS`)。名前の欄は離れたときに保存する (打っている途中では送らない)
 -->
-<div class="part" id="viewing" data-part>
+<div id="viewing" data-part>
   <div class="sections readable">
     <section class="section">
       <div class="section-head">
@@ -413,7 +413,7 @@
   </div>
 </div>
 
-<div class="part" id="cm" data-part>
+<div id="cm" data-part>
   <div class="sections readable">
     <section class="section">
       <div class="section-head">
@@ -449,7 +449,7 @@
   </div>
 </div>
 
-<div class="part" id="reserve" data-part>
+<div id="reserve" data-part>
   <div class="sections readable">
     <section class="section">
       <div class="section-head">

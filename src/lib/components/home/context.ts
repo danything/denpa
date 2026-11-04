@@ -16,7 +16,7 @@ export type Res = PageData["reservations"][number];
 export type Rec = PageData["recordings"][number];
 export type Missed = PageData["missed"][number];
 
-/** 時間軸に並べる 1 行 (`#lib/timeline.ts`)。鍵は種類ごとに接頭辞を付ける (録画と予約で ID の空間が別のため) */
+/** 時間軸に並べる 1 行 (`#lib/timeline.ts`)。キーは種類ごとに接頭辞を付ける (録画と予約で ID の空間が別のため) */
 export type Item = TimelineItem &
   (
     | { kind: "res"; res: Res }
@@ -55,9 +55,9 @@ interface HomeContext {
   readonly clock: number;
   /** 「いま」の線に添える一言 (次の録画まで)。次の予約が無ければ null */
   readonly nowStatus: NowStatus | null;
-  /** バーの先に「いま」の時刻を出す、いちばん上の録画中の行の鍵 (無ければ null で、「いま」の線を見せる。`TimelineHeading`) */
+  /** バーの先に「いま」の時刻を出す、いちばん上の録画中の行のキー (無ければ null で、「いま」の線を見せる。`TimelineHeading`) */
   readonly firstLiveKey: string | null;
-  /** 削除の 2 回押し (録画と録り逃しで共用。録り逃しの鍵は負の値) */
+  /** 削除の 2 回押し (録画と録り逃しで共用。録り逃しのキーは負の値) */
   readonly deleting: Arming;
   /** 取り消せる予約か */
   cancelable(res: { state: string; end_at: number }): boolean;

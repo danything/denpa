@@ -946,10 +946,10 @@
         {@const yielded = player.yielded}
         <span class="stage-note yielded" data-testid="live-yielded">
           <span>
-            録画が始まったため、局を切り替えました: <span class="broadcast"
+            録画が始まったため、局を切り替えました。<span class="broadcast"
               >{yielded.recording.title}</span
             >
-            (録画中を再生しています)
+            (録画中) を再生しています
           </span>
           <button
             type="button"
@@ -1280,7 +1280,7 @@
     font-size: inherit;
     /* 地は行の決まりと同じ。並べ直した行は前の場所から滑る (上の `slide`) */
     transition:
-      background-color var(--dp-duration),
+      background-color var(--dp-duration) var(--dp-ease),
       translate var(--dp-duration-move) var(--dp-ease-spring);
   }
   /* 並べ直した直後の 1 回だけ、前の場所にずらして置く (印を外すと滑る。印は `slide` が付けるので、Svelte からは見えない) */
@@ -1366,7 +1366,7 @@
   @media (hover: hover) and (pointer: fine) {
     .channel-detail {
       opacity: 0;
-      transition: opacity var(--dp-duration);
+      transition: opacity var(--dp-duration) var(--dp-ease);
     }
     .channel-item:is(:hover, :focus-within) .channel-detail {
       opacity: 1;
