@@ -240,8 +240,8 @@
     window.visualViewport?.addEventListener("resize", take);
 
     /*
-     * **見張るのは土台の中だけ。** この表示も body の中にいるので、body ごと
-     * 見張ると**自分が書き換わったことで測り直しに来る**。コマに束ねても
+     * **測るのは土台の中だけ。** この表示も body の中にあるので、body ごと
+     * 測ると**自分が書き換わったことで測り直しに来る**。コマに束ねても
      * 毎コマ回り続けることになる
      */
     const root = document.querySelector("[data-root]");

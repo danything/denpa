@@ -56,7 +56,7 @@
    * `?/preview` に送り、結果の一覧の行ごとに「録る / 録らない (理由) / 予約済み」を返してもらう
    * (`rule-preview.ts`。予約を立てるときと同じ判定)。返事は `preview` で画面に渡す。
    *
-   * **サーバに重ねて投げない。** 送るのは打つのが止まってから `PREVIEW_DELAY` 後。返事を待つ間に
+   * **サーバに重ねて送らない。** 送るのは打つのが止まってから `PREVIEW_DELAY` 後。返事を待つ間に
    * 変わったぶんは、返ってから最後の条件で1回だけ送る。条件が前と同じなら送らない。空なら数えない
    */
   let {
@@ -764,7 +764,7 @@
     position: fixed;
     inset: auto 0 0;
     z-index: 60;
-    max-height: 80dvh;
+    max-height: 80svh;
     overflow-y: auto;
     border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
     box-shadow: var(--dp-shadow-pop);

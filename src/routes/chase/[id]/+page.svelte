@@ -383,7 +383,7 @@
         {/snippet}
       </MediaStack>
 
-      <!-- 右端の縦の列。**観る画面と同じ並び** (上から閉じる・切り抜き) -->
+      <!-- 右端の縦の列。**観る画面と同じ並び** (上から閉じる・切り抜き・コメントの一覧) -->
       <ControlBar side shown={controls.shown}>
         <CloseLink />
         <ControlButton
@@ -540,7 +540,7 @@
           {#snippet actions()}
             <button
               type="button"
-              class="small"
+              class="small secondary"
               onclick={() =>
                 video !== null &&
                 void player.openChase(video, data.rec.id, pos)}

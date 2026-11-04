@@ -191,7 +191,7 @@
     background: transparent;
     box-shadow: none;
     color: var(--dp-fg);
-    transition: background-color var(--dp-duration);
+    transition: background-color var(--dp-duration) var(--dp-ease);
   }
   .cal-step:hover:not(:disabled) {
     background: var(--dp-hover-soft);
@@ -241,7 +241,7 @@
     color: var(--dp-fg);
     font-size: 0.8125rem;
     font-weight: var(--dp-weight);
-    transition: background-color var(--dp-duration);
+    transition: background-color var(--dp-duration) var(--dp-ease);
   }
   .cal-day[aria-disabled="true"] {
     color: var(--dp-muted);

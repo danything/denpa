@@ -1086,7 +1086,7 @@
     }
     .tabbar .tab,
     .tab-more :global(.tab) {
-      font-size: 0.75rem;
+      font-size: var(--dp-text-xs);
     }
   }
   /* ライブの全画面のあいだは隠す (映像だけにする) */

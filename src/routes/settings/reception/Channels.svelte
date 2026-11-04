@@ -149,7 +149,7 @@
               testid="logo-sweep"
             >
               {data.logoSweep.running
-                ? "ロゴを集めています…"
+                ? "集めています…"
                 : "ロゴをいますぐ集める"}
             </ActionButton>
           {/if}

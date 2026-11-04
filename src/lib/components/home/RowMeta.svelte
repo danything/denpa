@@ -55,5 +55,5 @@
       </span>
     </span>
   {/if}
-  {#if excerpt}<span class="t-excerpt broadcast"> — {excerpt}</span>{/if}
+  {#if excerpt}<span class="t-excerpt broadcast">・{excerpt}</span>{/if}
 </div>

@@ -92,7 +92,7 @@ test.describe("互換モード", () => {
     // ライブは再生の前に出す注意も持っている (閉じたまま)。開いているほうを見る
     const notice = page.locator('[data-testid="drive-notice"][open]');
     await expect(notice).toBeVisible();
-    await expect(notice).toContainText("走行中は画面を見ないでください");
+    await expect(notice).toContainText("運転中は画面を見ないでください");
     // フォーカスは箱に置き (取消に枠が付かない)、Tab でボタンへ進む
     await expect(notice.locator(".modal-box")).toBeFocused();
     await page.keyboard.press("Tab");

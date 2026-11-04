@@ -166,7 +166,7 @@
   display: inline-flex;
   align-self: center;
   /* 開いた・閉じたで向きを変える。スイッチと同じく「場所が動く」の時間 (docs/design.md) */
-  transition: transform var(--dp-duration-move);
+  transition: transform var(--dp-duration-move) var(--dp-ease-spring);
 }
 .board .group-chevron.open {
   transform: rotate(90deg);
@@ -455,8 +455,8 @@
   background: var(--dp-float);
   box-shadow: var(--dp-shadow-pop);
   transition:
-    background-color var(--dp-duration-enter) var(--dp-ease),
-    box-shadow var(--dp-duration-enter) var(--dp-ease);
+    background-color var(--dp-duration) var(--dp-ease),
+    box-shadow var(--dp-duration) var(--dp-ease);
 }
 /* 貼り付いたかは `scroll-state(stuck: top)` で見る。知らないブラウザは、いつもカプセル */
 @supports (container-type: scroll-state) {
@@ -606,7 +606,7 @@
   color: #fff;
   opacity: 0;
   background: rgb(0 0 0 / 0.45);
-  transition: opacity var(--dp-duration);
+  transition: opacity var(--dp-duration) var(--dp-ease);
 }
 .board .t-play .poster-icon {
   width: 1.5rem;

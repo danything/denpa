@@ -215,7 +215,7 @@ test.describe("ライブが録画にチューナーを取り上げられたと�
        */
       await page.getByTestId("live-back").click();
       await expect(page.getByTestId("live-refused")).toContainText(
-        "録画が終わるまでライブは見られません (",
+        "録画が終わるまでライブは観られません (",
         {
           timeout: 30_000,
         },

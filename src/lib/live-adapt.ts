@@ -70,7 +70,7 @@ export function adaptMessage(decision: AdaptDecision): string {
   if (reason === "encode")
     return "サーバのエンコードが追いついていないため、画質を下げずに流しています";
   if (reason === "pinned")
-    return "回線が足りていません。コーデックを「自動」にすると、回線に合わせて画質を下げます";
+    return "回線が細いため、再生が止まります。コーデックを「自動」にすると、画質を下げて再生を続けます";
   // 下げる先は段 1 から下、上げる先は段 3 から上 (`adapt.ts`)。段 0 へ下げることと、音声だけへ上げることは無い
   const height = step === "audio" ? null : rungLabel(step);
   if (reason === "slow")

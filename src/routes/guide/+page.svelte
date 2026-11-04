@@ -115,6 +115,12 @@
   );
 
   const services = $derived(data.services);
+  /** 文に入れる種別。英字 (BS・CS・SKY) のあとには半角の空白を入れる (docs/writing.md) */
+  const typeWord = $derived(
+    /^[A-Z]/.test(SERVICE_TYPE_LABEL[data.type] ?? "")
+      ? `${SERVICE_TYPE_LABEL[data.type]} `
+      : SERVICE_TYPE_LABEL[data.type],
+  );
   const programs = $derived<GridProgram[]>(sheet?.programs ?? []);
 
   /**
@@ -614,9 +620,9 @@
   /*
    * 前日・翌日を先に取り寄せておく。`data-sveltekit-preload-data="hover"` は指を乗せてからなので、狙って押すと間に合わない。
    *
-   * **マスを描き終わってから** (`drawing` が下りてから) 取得する。表が届いた時点で投げていた頃は、BS で 1 件 1 MB 超の
+   * **マスを描き終わってから** (`drawing` が下りてから) 取得する。表が届いた時点で取得していた頃は、BS で 1 件 1 MB 超の
    * 応答の解読が描画と取り合っていた。描き終わった直後もレイアウトが走っているので、少し置いて (`PREFETCH_DELAY`)
-   * 空いたとき (`requestIdleCallback`。Safari には無いので置くだけ) に投げる。
+   * 空いたとき (`requestIdleCallback`。Safari には無いので置くだけ) に取得する。
    * 同じ日・同じ放送波の読み直しでは取り直さない (`prefetchedFor`)
    */
   const PREFETCH_DELAY = 1000;
@@ -907,7 +913,7 @@
           onclick={() => (highlight = null)}
           data-testid="genre-all"
         >
-          <span class="swatch all" aria-hidden="true"></span>すべて
+          <span class="swatch" aria-hidden="true"></span>すべて
         </button>
         {#each GENRES as genre (genre.id)}
           <button
@@ -934,14 +940,12 @@
         <ChannelNotice
           kind="all"
           variant="center"
-          text={`${SERVICE_TYPE_LABEL[data.type]}のチャンネルがありません。チャンネルスキャンをしてください`}
+          text={`${typeWord}のチャンネルがありません。チャンネルスキャンをしてください`}
         />
       {:else}
         <!-- 局はあるが、いま流している番組が無い (番組表を集めている途中など) -->
         <p class="muted">
-          {SERVICE_TYPE_LABEL[
-            data.type
-          ]}の番組表はまだありません。集まるまでお待ちください
+          {typeWord}の番組表はまだありません。集まるまでお待ちください
         </p>
       {/if}
     </div>
@@ -1243,7 +1247,7 @@
       {/if}
 
       <!--
-                **並びは控えから主へ。** 主 (クラスの無いボタン) はいちばん右 (狭い画面ではいちばん上)。
+                **並びは控えから主へ。** 主 (クラスの無いボタン) はいちばん右 (狭い画面では下の段の右端)。
                 閉じるは左下 (`ProgramDetail`)
             -->
 
@@ -1362,7 +1366,7 @@
     white-space: nowrap;
   }
   a.day-chip:hover {
-    background: var(--dp-btn-tonal-hover);
+    background: var(--dp-hover-soft);
     color: var(--pico-secondary-hover);
   }
   .day-chip.selected {
@@ -1691,7 +1695,7 @@
     overflow: hidden;
     white-space: nowrap;
     padding: 0.5rem;
-    font-size: 0.875rem;
+    font-size: var(--dp-text-sm);
     /* 行の高さ (= 時刻の数字が止まる位置 headHeight) は 36px */
     line-height: 1.25rem;
     font-weight: var(--dp-weight);
@@ -1709,7 +1713,7 @@
     z-index: 10;
     clip-path: inset(0 -1.5rem 0 0);
     padding-inline: 0.25rem;
-    font-size: 0.75rem;
+    font-size: var(--dp-text-xs);
     /* 数字の行の高さは 1rem に揃える。高いと、前の時間の数字が枠の下に残って次の時間の数字と並んで見える */
     line-height: 1rem;
   }
@@ -1821,10 +1825,7 @@
     background-size: 100% calc(var(--past) * 100%);
     transition:
       background-color var(--dp-duration) var(--dp-ease),
-      border-color var(--dp-duration) var(--dp-ease),
       color var(--dp-duration) var(--dp-ease),
-      box-shadow var(--dp-duration) var(--dp-ease),
-      scale var(--dp-duration-move) var(--dp-ease-spring),
       background-size var(--dp-duration-move) var(--dp-ease);
   }
   /*
@@ -1969,9 +1970,8 @@
     -webkit-line-clamp: var(--lines);
     line-clamp: var(--lines);
     overflow: hidden;
-    font-size: 0.75rem;
+    font-size: var(--dp-text-xs);
     line-height: 1.25;
-    font-weight: var(--dp-weight);
   }
   /* 説明 (または予約の状態) は番組名の次の行から */
   .state,
