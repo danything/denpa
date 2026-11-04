@@ -232,4 +232,19 @@ describe("変換したライブの字幕と時計 (liveCaptions の codec)", () 
     await new Response(encoded!).arrayBuffer();
     expect(liveCaptions(SERVICE, 1, "h264")).toBeNull();
   });
+
+  // 段を下げた映像は段ごとに別のセッションなので、字幕も同じ段を渡したときだけ共有する
+  test("段を下げた映像には、同じ段を渡したときだけ繋ぐ", async () => {
+    const media = liveStream(
+      SERVICE,
+      "h264",
+      undefined,
+      2,
+    ) as ReadableStream<Uint8Array>;
+    const lowered = liveCaptions(SERVICE, 1, "h264", undefined, 2);
+    expect(lowered).not.toBeNull();
+    expect(liveCaptions(SERVICE, 1, "h264")).toBeNull();
+    await media.cancel();
+    await new Response(lowered!).arrayBuffer();
+  });
 });

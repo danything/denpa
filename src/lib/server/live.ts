@@ -2508,8 +2508,9 @@ export function chaseStream(
  * 観ているアプリに、字幕 (文字の配置 0x22) と時計 (`clock` の通知) を、**その映像と同じ物差しの時刻のまま**流す。
  *
  * - `raw` (既定) … そのままの TS。時刻は放送の PTS (ブラウザで放送そのままを送る経路と同じ。stream.md#放送のままのときの字幕)
- * - `h264` / `av1` … 変換したライブ。時刻は ffmpeg が付けた fMP4 の時刻 (ブラウザが MSE に積むものと同じ)。
+ * - `h264` / `av1` / `hevc` … 変換したライブ。時刻は ffmpeg が付けた fMP4 の時刻 (ブラウザが MSE に積むものと同じ)。
  *   `audio` は映像に渡したものと同じものを渡す (同じ局・同じ形式・同じ音声のセッションだけを共有するので、違えば別の映像になる。`key`)
+ *   `rung` も映像に渡したものと同じ段を渡す (段ごとに別のセッション。`raw` では効かない)
  *
  * **いま流しているセッションを脇から共有する**だけで、チューナーもエンコードも増やさない (ブラウザで同じものを観ていればそれも共有する)。
  * 共有する相手が無ければ null なので、映像 (`live`) を先に開いてからリクエストすること。映像が終われば閉じる (`Viewer.side`)
@@ -2519,6 +2520,7 @@ export function liveCaptions(
   language = 1,
   form: LiveCodec | "raw" = "raw",
   audio?: string,
+  rung: Rung = 0,
 ): ReadableStream<Uint8Array> | null {
   const row = serviceOf(serviceId);
   if (row === undefined) return null;
@@ -2531,6 +2533,8 @@ export function liveCaptions(
       nowPlaying(serviceId, form === "raw" ? undefined : audio).audio,
       form,
       0,
+      null,
+      form === "raw" ? 0 : rung,
     ),
   );
   if (session === undefined || !session.alive) return null;
