@@ -341,6 +341,20 @@ public class Dt295TunerTests
         // PAT より前の映像のパケットや、PAT に載っていない PID は無視する
         await Assert.That(tracker.Push(Dt295Ts.Payload(0x111))).IsFalse();
         await Assert.That(tracker.PatSeen).IsFalse();
+
+        // PAT が読めたあとも、PAT に載っていない PID の PMT 形式のセクションは読まない
+        var pat = Dt295Ts.Packet(0, Dt295Ts.Section(0x00, 0x7FE0, [0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE1, 0xF0]));
+        await Assert.That(tracker.Push(pat)).IsTrue();
+        var plan = tracker.Plan;
+        var stray = Dt295Ts.Packet(0x2F0, Dt295Ts.Section(0x02, 0x401, [0xE2, 0x11, 0xF0, 0x00, 0x02, 0xE2, 0x11, 0xF0, 0x00, 0x0F, 0xE2, 0x12, 0xF0, 0x00]));
+        await Assert.That(tracker.Push(stray)).IsFalse();
+        await Assert.That(tracker.Plan).IsEquivalentTo(plan);
+        await Assert.That(tracker.Main).IsNull();
+
+        // PAT に載った PMT は今までどおり読む
+        var listed = Dt295Ts.Packet(0x1F0, Dt295Ts.Section(0x02, 0x400, [0xE1, 0x11, 0xF0, 0x00, 0x02, 0xE1, 0x11, 0xF0, 0x00, 0x0F, 0xE1, 0x12, 0xF0, 0x00]));
+        await Assert.That(tracker.Push(listed)).IsTrue();
+        await Assert.That(tracker.Main!.Number).IsEqualTo(0x400);
     }
 
     [Test]
