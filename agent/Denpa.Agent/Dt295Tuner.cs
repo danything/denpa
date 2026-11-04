@@ -801,9 +801,21 @@ public sealed class Dt295Tuner : ITuneDevice
     {
         var stream = _stream;
         _stream = null;
-        // 止める前に、PAT と全部の PMT がそろっていれば写しを取る。次に同じチャンネルを選ぶとき、最初の準備に使う
-        if (stream is not null && _streamKey is { } key && stream.Routes.Snapshot() is { } snapshot) _routeCache[key] = snapshot;
+        var key = _streamKey;
+        _streamKey = null;
         stream?.Stop();
+        // 読み出しのスレッドが終わってから (ルートの計画は読み出しのスレッドが書き換える)、PAT と全部の PMT がそろっていれば写しを取る。
+        // 次に同じチャンネルを選ぶとき、最初の準備に使う。取れなくても、止める手順は終わっているので、写しなしで続ける
+        if (stream is not null && key is not null)
+        {
+            try
+            {
+                if (stream.Routes.Snapshot() is { } snapshot) _routeCache[key] = snapshot;
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
     }
 
     /// <summary>捨てる (定義が変わった・止める)。セッションを終えて閉じる</summary>

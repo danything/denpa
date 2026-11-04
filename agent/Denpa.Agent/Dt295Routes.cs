@@ -318,7 +318,7 @@ public sealed record Dt295RouteSnapshot(
 
 /// <summary>
 /// 届いた PSI からルートの計画を組み立てる (11.2・11.3)。始めは PAT (暗黙) と固定の SI PID。PAT が読めたら NIT とすべての PMT を足し、
-/// PMT が読めたら PCR・CA 記述子の PID・ES を足す。主番組は PAT の順で最初の、映像と音声を持つ番組で、**一度決めたら替えない** (11.3)。
+/// PMT が読めたら PCR・CA 記述子の PID・ES を足す。主番組は PAT の順で最初の、映像と音声を持つ番組で、**一度決めたら替えない** (11.3。ただし <see cref="Seed"/> の写しと違う PMT が届いたときは、選び直す)。
 /// CAT が読めたら EMM (CA 記述子の PID) を足す。
 /// 読むのは AES を外したあとの、暗号化されていない (transport_scrambling_control = 00) パケットだけで、PAT・CAT・PAT に載った PMT の PID のものだけを使う。
 /// 版数の追従 (11.4) と、録画中の PMT の変化の扱い (11.3 の後半) はまだ持たない (最初の PAT・CAT と、PMT ごとに最初の 1 つだけを使う)。
