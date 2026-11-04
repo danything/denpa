@@ -259,8 +259,8 @@ public static class Px4Userland
     /// <c>{"enclosures":[{serial, model, usb, status, serial_unique, devices, candidates, receivers}],
     /// "ungrouped_usb_devices":[…]}</c> の 1 行。<c>schema_version</c> は無く、消費側は知らない鍵を
     /// 無視する決まり。**形式が違っても止まらない。** 無い鍵・型の違う値は既定で埋めて読み進め、
-    /// バージョンのずれを疑う旨を 1 度だけ <paramref name="warn"/> で残す。止めるのは筐体の番号と受信機の番号
-    /// (それが無いと <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> が作れない) が読めないときだけで、それも
+    /// バージョンのずれを疑う旨を 1 度だけ <paramref name="warn"/> で残す。止めるのは筐体の番号と受信機の番号・方式
+    /// (番号が無いと <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> が作れず、方式が無いと受けられる種別が決まらない) が読めないときだけで、それも
     /// その筐体・受信機だけを飛ばす。
     /// </para>
     ///
@@ -792,7 +792,7 @@ public abstract class UserlandDaemon(string name, string id)
                     Write(line);
                 }
             });
-            _ = Task.Run(() => process.StandardOutput.ReadToEndAsync());
+            _ = process.StandardOutput.ReadToEndAsync();
 
             var deadline = DateTime.UtcNow + ReadyTimeout;
             while (DateTime.UtcNow < deadline)

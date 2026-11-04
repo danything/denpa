@@ -245,7 +245,7 @@ public class Dib8096Tests
     [Test]
     public async Task 待ちの丸め上げ()
     {
-        // 既定は参考の実装と同じ: 0.1ms 単位の t を floor(10 × (t + 99) / 100) ms。t = 0 でも 9ms
+        // 参考の実装と同じく、0.1ms 単位の t を floor(10 × (t + 99) / 100) ms。t = 0 でも 9ms
         var (dib, _, _, time) = Make();
         dib.Initialize();
         time.Sleeps.Clear();

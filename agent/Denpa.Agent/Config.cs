@@ -147,7 +147,7 @@ public sealed class Config(string tunersFile, string channelsFile)
 
     internal static void WriteAtomic(string path, JsonNode body)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         // 書きかけを読ませない。GET /denpa/channels や選局 (TSID を引く) は、書いている最中にもこのファイルを読みに来る
         var working = $"{path}.writing";
         File.WriteAllText(working, body.ToJsonString(Json.Pretty));

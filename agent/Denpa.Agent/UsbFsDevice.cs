@@ -161,43 +161,47 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
 
     public int ControlIn(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)
     {
-        CheckLength(data.Length);
         fixed (byte* start = data)
         {
-            var transfer = new ControlTransfer
-            {
-                RequestType = requestType, Request = request, Value = value, Index = index,
-                Length = (ushort)data.Length, TimeoutMs = (uint)timeoutMs, Data = start,
-            };
-            var got = Sys.Ioctl(Fd, Control, (nint)(&transfer));
-            if (got < 0) throw Failure("制御転送 (IN)");
-            return got;
+            return ControlTransferOnce(requestType, request, value, index, start, data.Length, timeoutMs, "制御転送 (IN)");
         }
     }
 
     public void ControlOut(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs)
     {
-        CheckLength(data.Length);
         fixed (byte* start = data)
         {
-            var transfer = new ControlTransfer
-            {
-                RequestType = requestType, Request = request, Value = value, Index = index,
-                Length = (ushort)data.Length, TimeoutMs = (uint)timeoutMs, Data = start,
-            };
-            var sent = Sys.Ioctl(Fd, Control, (nint)(&transfer));
-            if (sent < 0) throw Failure("制御転送 (OUT)");
+            var sent = ControlTransferOnce(requestType, request, value, index, start, data.Length, timeoutMs, "制御転送 (OUT)");
             if (sent != data.Length) throw new IOException($"{Name}: 制御転送で送りきれません ({sent}/{data.Length} バイト)");
         }
     }
 
-    /// <summary>制御転送の長さは wLength (16 ビット) に収まるだけ</summary>
-    private static void CheckLength(int length)
+    /// <summary>制御転送を 1 回。長さは wLength (16 ビット) に収まるだけ</summary>
+    private int ControlTransferOnce(byte requestType, byte request, ushort value, ushort index, byte* data, int length, int timeoutMs, string what)
     {
         if (length > ushort.MaxValue) throw new ArgumentOutOfRangeException(nameof(length), $"制御転送は {ushort.MaxValue} バイトまでです ({length} バイト)");
+        var transfer = new ControlTransfer
+        {
+            RequestType = requestType, Request = request, Value = value, Index = index,
+            Length = (ushort)length, TimeoutMs = (uint)timeoutMs, Data = data,
+        };
+        var done = Sys.Ioctl(Fd, Control, (nint)(&transfer));
+        if (done < 0) throw Failure(what);
+        return done;
     }
 
-    public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs) => Transfer(endpoint, buffer, timeoutMs);
+    /// <summary>IN を 1 回。時間切れは 0</summary>
+    public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs)
+    {
+        fixed (byte* start = buffer)
+        {
+            var transfer = new UsbFsPipe.BulkTransfer { Endpoint = endpoint, Length = (uint)buffer.Length, TimeoutMs = (uint)timeoutMs, Data = start };
+            var got = Sys.Ioctl(Fd, UsbFsPipe.Bulk, (nint)(&transfer));
+            if (got >= 0) return got;
+            if (Marshal.GetLastPInvokeError() == Etimedout) return 0;
+            throw Failure($"EP 0x{endpoint:X2} から読めません");
+        }
+    }
 
     public void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs)
     {

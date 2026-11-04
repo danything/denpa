@@ -2275,7 +2275,6 @@ public sealed class Dib8096
     {
         Internal,
         Both,
-        External,
     }
 
     /// <summary>7.5.7 ダイバーシティの入力。バージョン 0x8002 は D[903] のビット 3 を 30ms 落とす (選局ごとに 3 回)</summary>
@@ -2292,12 +2291,7 @@ public sealed class Dib8096
             D(272, 0);
             D(273, sw);
         }
-        var (r270, r271) = mode switch
-        {
-            DiversityMode.Internal => (1, 0),
-            DiversityMode.Both => (6, 6),
-            _ => (0, 1),
-        };
+        var (r270, r271) = mode == DiversityMode.Internal ? (1, 0) : (6, 6);
         D(270, r270);
         D(271, r271);
         if (Version == 0x8002)

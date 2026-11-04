@@ -45,12 +45,7 @@ public static class SianoUserland
     public static bool Is(string? device) => device?.StartsWith(Scheme, StringComparison.Ordinal) == true;
 
     /// <summary><c>siano:1-2.3</c> からポートを取る。形式が違えば null</summary>
-    public static string? Parse(string device)
-    {
-        if (!Is(device)) return null;
-        var port = device[Scheme.Length..];
-        return UsbSysfs.IsPort(port) ? port : null;
-    }
+    public static string? Parse(string device) => UsbSysfs.PortOf(device, Scheme);
 
     /// <summary>画面に出す名前</summary>
     public static string Name(string model, string port) => $"{model} {port}";

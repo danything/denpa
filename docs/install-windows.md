@@ -24,7 +24,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 2 つが組むときの合言葉 ([agent.md](agent.md)) はエージェント自身の置き場 (`~/denpa/config/tls/pair-token`) に無いときだけ作り、エージェントはそこから読み
 (手で `denpa-agent --pair` を流しても同じ URL が出る)、denpa には `TUNER_AGENT_URL` の `#pair=` で渡します。上げ直しても変えません。
-`-AgentOnly` では、別の機械の denpa の `TUNER_AGENT_URL` に書く `https://<この PC の名前>:25252#pair=<合言葉>` を最後に出します
+`-AgentOnly` では、別の機械の denpa の `TUNER_AGENT_URL` に書く `https://<この PC の名前>:25252#pair=<合言葉>` を最後に出します。
 
 `denpa-start.ps1` は**起こすたびに、コンテナを作り直すか決めます。** 実機 (wslc 3.0.1) で確かめた wslc の癖に合わせています。
 

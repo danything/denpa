@@ -172,13 +172,13 @@ BinaryTable の検索の比べ方・既定のスタイルなど一部は、web-b
 
 ## 使っていないもの (書いておく価値のあるもの)
 
-- **web-bml (otya128, MIT)** — 2026-10 までデータ放送を描いていた借りもの。自前のエンジン
+- **web-bml (otya128, MIT)**。2026-10 までデータ放送を描いていた借りもの。自前のエンジン
   (`src/lib/bml/`) に置き換えて外した (es2・crc-32・css・fast-xml-parser・arib-mmt-tlv-ts・fflate も一緒に抜けた)。
   通知の型だけは録画との互換のために写して残している (上の「リポジトリに写してあるもの」)
-- **@chinachu/aribts / aribb24.js / mpegts.js / hls.js / shaka-player** — 検討したうえで
+- **@chinachu/aribts / aribb24.js / mpegts.js / hls.js / shaka-player**。検討したうえで
   自前実装にしたもの ([stream.md](stream.md))
-- **@iconify/svelte / lucide-svelte** — アイコンは組むときに埋め込む unplugin-icons にした
+- **@iconify/svelte / lucide-svelte**。アイコンは組むときに埋め込む unplugin-icons にした
   ([player.md](player.md#アイコンは-lucide-を組むときに埋め込みます))。`@iconify/svelte` は既定で
   Iconify の API からアイコンデータを取得し、LAN だけ・オフラインで開けない
-- **OIDC のライブラリ** — 入れていません ([auth.md](auth.md))
-- **recisdb** — 選局は自前で ioctl を呼びます。値の出どころとして上に書いてあります
+- **OIDC のライブラリ**。入れていません ([auth.md](auth.md))
+- **recisdb**。選局は自前で ioctl を呼びます。値の出どころとして上に書いてあります
