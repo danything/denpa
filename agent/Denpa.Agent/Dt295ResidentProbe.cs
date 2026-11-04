@@ -119,13 +119,9 @@ public static class Dt295ResidentProbe
             var started = false;
             try
             {
-                // 入れるか引き継いだあとは、初期化で止まっても手放す (Dt295ResidentLoader.Start と同じ手順を分けて書く)
-                var adopted = Dt295ResidentLoader.Adopt(link, session, image, Step);
-                if (!adopted) Dt295ResidentLoader.Install(link, session, image, Step);
-                started = true;
-                var overview = session.QueryOverview();
-                session.Initialize();
-                Step($"常駐イメージを{(adopted ? "引き継ぎ" : "入れ")}、初期化しました "
+                // 入れるか引き継いだあとは、初期化で止まっても手放す
+                var (outcome, overview) = Dt295ResidentLoader.Start(link, session, image, Step, () => started = true);
+                Step($"常駐イメージを{(outcome == Dt295ResidentLoader.Outcome.Adopted ? "引き継ぎ" : "入れ")}、初期化しました "
                     + $"(受信部 {overview.RfMask}、TS {overview.StreamMask}、制御転送 {link.Controls} 回)");
                 Receive(options, session, usb, stats, Step);
             }

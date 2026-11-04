@@ -116,7 +116,7 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
         if (Word(response, 12) != CommandDeviceQuery || Word(response, 16) != page || response[24] != QueryVersion || response[25] != page
             || response[26] != source)
         {
-            throw new Dt295ResidentException($"状態の問い合わせ (ページ {page}) の応答の形が違います");
+            throw new Dt295ResidentException($"状態の問い合わせ (ページ {page}) に返った応答の形が違います");
         }
         var rc = Error(response);
         if (Result(response) == Fatal && rc < 0) throw new Dt295ResidentException($"状態の問い合わせ (ページ {page}) が失敗しました (理由 {rc})", rc);
@@ -127,10 +127,10 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
     public Dt295ResidentOverview QueryOverview()
     {
         var response = Query(PageOverview, 0);
-        if (response[27] != 0) throw new Dt295ResidentException("常駐イメージの様子の応答の形が違います");
+        if (response[27] != 0) throw new Dt295ResidentException("常駐イメージの様子を問い合わせた応答の形が違います");
         for (var word = 4; word < 9; word++)
         {
-            if (QueryWord(response, word) != 0) throw new Dt295ResidentException("常駐イメージの様子の応答の形が違います");
+            if (QueryWord(response, word) != 0) throw new Dt295ResidentException("常駐イメージの様子を問い合わせた応答の形が違います");
         }
         var overview = new Dt295ResidentOverview(QueryWord(response, 0), QueryWord(response, 1), QueryWord(response, 2), QueryWord(response, 3));
         if ((overview.RfMask & ~((1u << SourceCount) - 1)) != 0 || (overview.StreamMask & ~overview.RfMask) != 0 || overview.ResidentAbi != AbiVersion
@@ -159,7 +159,7 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
     public Dt295ResidentState QueryState(int source)
     {
         var response = Query(PageState, source);
-        if (response[27] != 0) throw new Dt295ResidentException($"受信部 {source} の状態の応答の形が違います");
+        if (response[27] != 0) throw new Dt295ResidentException($"受信部 {source} の状態を問い合わせた応答の形が違います");
         var state = new Dt295ResidentState(QueryWord(response, 0), (int)QueryWord(response, 1), (int)QueryWord(response, 2), QueryWord(response, 3),
             QueryWord(response, 4), QueryWord(response, 5), QueryWord(response, 6), QueryWord(response, 7), QueryWord(response, 8));
         if ((state.Flags & ~StateMask) != 0 || (state.CaptureMask & ~((1u << SourceCount) - 1)) != 0 || state.Phase > PhaseFailed || state.Tsid > 0xFFFF)
@@ -369,7 +369,7 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
 
     /// <summary>
     /// SHUTDOWN を 1 回送り、持ち主が全部手放すまで SERVICE を送る (session.c の session_shutdown)。
-    /// <paramref name="detach"/> なら、同じイメージをもう一度初期化してよいと常駐イメージが言っていれば、起動直後の状態を求められても通す
+    /// <paramref name="detach"/> なら、状態に <see cref="StateReinitializable"/> が立っていれば <see cref="StateColdRequired"/> が立っていても通す
     /// (DT295 は常駐イメージを機材に残したまま閉じる)
     /// </summary>
     public void Shutdown(bool detach)

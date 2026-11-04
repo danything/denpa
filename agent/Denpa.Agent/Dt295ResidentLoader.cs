@@ -28,14 +28,17 @@ public static class Dt295ResidentLoader
     /// <summary>
     /// 常駐イメージを使える状態にする (mb86H_loader_start)。前のエージェントが残した同じイメージがあれば引き継ぎ (RECOVER)、
     /// 無ければ起動直後の機材に入れる。そのあと様子を問い合わせて INITIALIZE する。
-    /// 起動直後の状態でも同じイメージでもなければ <see cref="Dt295ResidentColdException"/> を投げる (USB のつなぎ直しが要る)
+    /// 起動直後の状態でも同じイメージでもなければ <see cref="Dt295ResidentColdException"/> を投げる (USB のつなぎ直しが要る)。
+    /// <paramref name="placed"/> は、イメージを入れるか引き継いだあと、初期化の前に呼ぶ (このあとに失敗しても、呼ぶ側は手放す)
     /// </summary>
-    public static Outcome Start(IDt295ResidentTransport transport, Dt295ResidentSession session, Dt295ResidentImage image, Action<string>? log = null)
+    public static (Outcome Outcome, Dt295ResidentOverview Overview) Start(IDt295ResidentTransport transport, Dt295ResidentSession session,
+        Dt295ResidentImage image, Action<string>? log = null, Action? placed = null)
     {
         var outcome = Adopt(transport, session, image, log) ? Outcome.Adopted : Install(transport, session, image, log);
-        session.QueryOverview();
+        placed?.Invoke();
+        var overview = session.QueryOverview();
         session.Initialize();
-        return outcome;
+        return (outcome, overview);
     }
 
     /// <summary>
@@ -61,7 +64,7 @@ public static class Dt295ResidentLoader
         Resident(session, image);
         var reply = session.Command(CommandCapabilities, 0, new byte[DataSize]);
         if (Result(reply) != Ok || Word(reply, 16) != AbiVersion || !Identified(reply) || !reply.AsSpan(40, 8).SequenceEqual(image.Build)
-            || reply[39] != RfMask)
+            || reply[DataOffset + 15] != RfMask)
         {
             throw new Dt295ResidentColdException("残っている常駐イメージが、同梱のものと違います");
         }

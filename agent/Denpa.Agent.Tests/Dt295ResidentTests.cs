@@ -150,7 +150,7 @@ public class Dt295ResidentTests
         var image = Dt295ResidentImage.Parse(bundle.Bytes);
         var resident = new FakeResident(bundle);
         var session = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
-        var outcome = Dt295ResidentLoader.Start(resident, session, image);
+        var (outcome, _) = Dt295ResidentLoader.Start(resident, session, image);
         await Assert.That(outcome).IsEqualTo(Dt295ResidentLoader.Outcome.Installed);
         // body と hook が導入したあとの値になり、常駐イメージが全部書かれている
         await Assert.That(resident.Peek(Dt295ResidentImage.Hook, 8)).IsEquivalentTo(FakeBundle.Patch);
@@ -185,7 +185,7 @@ public class Dt295ResidentTests
         // 選局したまま持ち主がいなくなった (エージェントが落ちた)
         resident.BlockWrites = false;
         var second = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
-        var outcome = Dt295ResidentLoader.Start(resident, second, image);
+        var (outcome, _) = Dt295ResidentLoader.Start(resident, second, image);
         await Assert.That(outcome).IsEqualTo(Dt295ResidentLoader.Outcome.Adopted);
         await Assert.That(resident.Commands.Count(item => item.Command == CommandRecover)).IsGreaterThanOrEqualTo(1);
         await Assert.That(resident.Capturing).IsFalse();

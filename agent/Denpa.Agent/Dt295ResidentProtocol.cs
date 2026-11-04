@@ -135,7 +135,7 @@ public static class Dt295ResidentProtocol
     /// <summary>応答の 20 バイト目の符号付きの値 (失敗の理由)</summary>
     public static int Error(ReadOnlySpan<byte> response) => (int)Word(response, 20);
 
-    /// <summary>問い合わせの応答のデータの <paramref name="word"/> 番目 (device_query.h の mb86H_query_word。データの 4 バイト目から)</summary>
+    /// <summary>問い合わせた応答にあるデータの <paramref name="word"/> 番目 (device_query.h の mb86H_query_word。データの 4 バイト目から)</summary>
     public static uint QueryWord(ReadOnlySpan<byte> response, int word) => Word(response, DataOffset + 4 + word * 4);
 }
 
