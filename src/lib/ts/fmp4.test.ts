@@ -259,6 +259,39 @@ describe("fMP4 の中身を読む", () => {
     expect(tracks[1]!.config).toEqual(DOPS);
   });
 
+  // 段を下げた変換で GPU が出す H.265 も映像として読む。読めないとサーバの速さが 0 のままになる (#2152)
+  test("H.265 (hvc1・hev1) は hvcC から codec を起こす", () => {
+    // hvcC: バージョン / Main・tier L / 互換の印 0x60000000 / 制約の印 B0 00.. / level 93 (3.1)
+    const hvcC = Uint8Array.of(
+      0x01,
+      0x01,
+      0x60,
+      0x00,
+      0x00,
+      0x00,
+      0xb0,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x5d,
+      0xf0,
+    );
+    for (const type of ["hvc1", "hev1"] as const) {
+      const tracks = readInit(
+        boxOf(
+          "moov",
+          trak(1, 90000, visual(type, 1280, 720, boxOf("hvcC", hvcC))),
+        ),
+      );
+      expect(tracks.map((t) => [t.kind, t.codec])).toEqual([
+        ["video", `${type}.1.6.L93.B0`],
+      ]);
+      expect(tracks[0]!.config).toEqual(hvcC);
+    }
+  });
+
   test("moof の tfdt と trun から 1 コマずつの時刻と中身を読む", () => {
     const tracks = readInit(init());
     const video = [Uint8Array.of(1, 1, 1), Uint8Array.of(2, 2)];
