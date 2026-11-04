@@ -109,7 +109,7 @@ export function alertGround(): void {
 }
 
 /**
- * **番組表の取得のついでに、地上波の SDT を読む** (`epg-collect.ts`)。開いてから `WATCH_FOR` の間だけ読み、
+ * **番組表の取得のついでに、地上波の SDT を読む** (`epg-collect.ts`)。最初の塊が届いてから `WATCH_FOR` の間だけ読み、
  * 閉じたら `compareGround` でスキャンの結果と比べる
  */
 export class GroundWatch {

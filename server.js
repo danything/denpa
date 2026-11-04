@@ -15,14 +15,14 @@
  *
  * そこで **`Bun.serve` を 1 回だけ包んでから `build/index.js` を読む。** adapter が渡す
  * 設定 (PORT・HOST・BODY_SIZE_LIMIT などの環境変数を読んだもの) はそのまま使い、
- * `websocket` を足して、`fetch` の前に WebSocket の握手と接続元の決定を挟む。
+ * `websocket` を足して、`fetch` の前に WebSocket のハンドシェイクと接続元の決定を挟む。
  * Bun のバージョンの確認も環境変数の読み方も adapter のものがそのまま効く。
  * 頼っているのは「adapter の入口が `Bun.serve` を 1 回呼ぶ」ことだけで、呼ばれなければ起動を止める。
  *
  * 以前は adapter-node を内側に置いて HTTP を中継していた (bun の `node:http` は WebSocket の
- * 握手ができないため)。その 1 ホップと `Accept-Encoding` の食い違いはもう無い。
+ * ハンドシェイクができないため)。その 1 ホップと `Accept-Encoding` の食い違いはもう無い。
  *
- * **止まれの合図 (SIGTERM) は adapter のものを使わない。** adapter は受けたその場で listen を
+ * **停止のシグナル (SIGTERM) は adapter のものを使わない。** adapter は受けたその場で listen を
  * 閉じるので、録画が終わるまで居座る間に画面が開けなくなる。アプリ (`runtime.ts` の
  * `takeOverSignals`) が引き取る。adapter が合図を登録するのは `build/index.js` のいちばん最後なので、
  * 読み終えたあとでもう一度アプリに引き取らせる (下の `takeOver`)。アプリが引き取るまでに来た合図は
@@ -36,7 +36,7 @@
  * ログインなしで通すのを、知っている名前のときだけにしてある (`auth.knownHost`)。
  */
 
-// いちばん先に読む。起動の途中に来た止まれの合図を捨てずに取っておく (中の説明)
+// いちばん先に読む。起動の途中に来た停止のシグナルを捨てずに取っておく (中の説明)
 import "./src/lib/server/hold-signals.ts";
 
 import {
@@ -132,8 +132,8 @@ const front = (handler) => (request, server) => {
 
   if (upgrading(request) && live()?.handles(url) === true) {
     /*
-     * **断るのは握手の前。** ここなら普通の HTTP として理由を返せる。
-     * 握手したあとに切ると、ブラウザには「繋がらない」としか映らない
+     * **断るのはハンドシェイクの前。** ここなら普通の HTTP として理由を返せる。
+     * ハンドシェイクしたあとに切ると、ブラウザには「繋がらない」としか映らない
      */
     if (!live().accept(url))
       return new Response("ticket required", { status: 403 });
@@ -195,7 +195,7 @@ if (!served)
   );
 
 /*
- * **止まれの合図をアプリにもう一度引き取らせる。** adapter は読み込みのいちばん最後で
+ * **停止のシグナルをアプリにもう一度引き取らせる。** adapter は読み込みのいちばん最後で
  * 自分の後始末を登録する。それが残ると SIGTERM で listen が閉じ、録画が終わるまで居座る間に
  * 画面が開けなくなる (上の説明)。
  *
@@ -209,7 +209,7 @@ const SIGNALS = ["SIGTERM", "SIGINT"];
 const takeOver = globalThis[TAKE_OVER];
 if (typeof takeOver !== "function") {
   throw new Error(
-    "アプリが止まれの合図を引き取る関数を置いていません (src/lib/server/runtime.ts)",
+    "アプリが停止のシグナルを引き取る関数を置いていません (src/lib/server/runtime.ts)",
   );
 }
 const taken = takeOver();
@@ -217,12 +217,12 @@ const extra = () =>
   SIGNALS.filter((signal) => process.listenerCount(signal) !== 1);
 if (extra().length > 0) {
   throw new Error(
-    `止まれの合図を引き取れません (${extra().join("・")})。adapter-bun の作りが変わっていないか確かめてください`,
+    `停止のシグナルを引き取れません (${extra().join("・")})。adapter-bun の作りが変わっていないか確かめてください`,
   );
 }
 if (taken !== 4) {
   console.warn(
-    `[boot] 止まれの合図の数が想定 (4 件) と違います (${taken} 件)。adapter-bun の作りが変わっていないか確かめてください`,
+    `[boot] 停止のシグナルの数が想定 (4 件) と違います (${taken} 件)。adapter-bun の作りが変わっていないか確かめてください`,
   );
 }
 setTimeout(() => {
@@ -230,6 +230,6 @@ setTimeout(() => {
   if (late.length === 0) return;
   takeOver();
   console.warn(
-    `[boot] 起動のあとで止まれの合図に後始末が足されていました (${late.join("・")})。引き取り直しました。adapter-bun の作りが変わっていないか確かめてください`,
+    `[boot] 起動のあとで停止のシグナルに後始末が足されていました (${late.join("・")})。引き取り直しました。adapter-bun の作りが変わっていないか確かめてください`,
   );
 }, 1000).unref();

@@ -38,10 +38,10 @@ import {
 } from "./tuner";
 
 /**
- * 局ロゴを集める。
+ * 局ロゴを取得する。
  *
  * 放送波の CDT (地上波) とデータカルーセル (衛星) に流れてくるものを取得する。
- * 集め方は Mirakurun と同じで、開いているストリームを共有する。
+ * 取得のしかたは Mirakurun と同じで、開いているストリームを共有する。
  *
  * ロゴは滅多に変わらないうえ、放送波に流れてくるのは地上波で数分に一度、衛星はダウンロードの期間中だけ十数分に一度なので、
  * 番組表の取得や録画の選局を共有して取得する (`ride`)。自分でチューナーを開くのは
@@ -61,7 +61,7 @@ const SWEEP_TIMEOUT = 6 * 60_000;
  * 選局を共有するときの上限。向こうの都合でいつ閉じてもおかしくないので短くする
  * (衛星の当たりの中継だけは `config.logoCarouselWait` まで延ばす。`collect`)。
  * こちらはチューナーを増やさない (同じチャンネルなら**エージェントが選局を共有させる**)。
- * **実際に集めているのはほぼこちら** (`sweep`)
+ * **実際に取得しているのはほぼこちら** (`sweep`)
  */
 const RIDE_TIMEOUT = 3 * 60_000;
 /**
@@ -172,7 +172,7 @@ function save(next: RelayNotes): void {
     mkdirSync(logoDir(), { recursive: true });
     writeWhole(relayPath(), JSON.stringify(next));
   } catch {
-    // 控えられなくても集めることはできる。次の機会に
+    // 控えられなくても取得はできる。次の機会に
   }
 }
 
@@ -1021,7 +1021,7 @@ function carouselMessage(
   const minutes = config.logoCarouselWait / 60_000;
   switch (outcome) {
     case "yielded":
-      return `${channel} は優先度の高い選局にチューナーを譲りました。読んだところまでは覚えているので、次に開いたときに続きから読みます`;
+      return `${channel} はほかの選局にチューナーを譲りました。読んだところまでは覚えているので、次に開いたときに続きから読みます`;
     case "ranOut":
       return received
         ? `${channel} を ${minutes} 分開いて途中まで読みました。次に開いたときに続きから読みます`

@@ -4,8 +4,8 @@
  *
  * - **1 接続 1 コマンド。** 送るのは `DWORD コマンド` + `DWORD 長さ` + 本文、返るのは `DWORD 結果` + `DWORD 長さ` + 本文
  *   (どれもリトルエンディアン)。サーバは返したら切る
- * - 「2」の付くコマンドは本文の頭に `WORD ver` を送り、応答の頭にも `WORD ver` が付く。サーバはリクエストした ver で書く
- * - 構造体は頭に `DWORD 全体の長さ` (長さの欄を含む)、配列は `DWORD 全体の長さ` + `DWORD 件数`。**長さで飛ばせるので、
+ * - 「2」の付くコマンドは本文の先頭に `WORD ver` を送り、応答の先頭にも `WORD ver` が付く。サーバはリクエストした ver で書く
+ * - 構造体は先頭に `DWORD 全体の長さ` (長さの欄を含む)、配列は `DWORD 全体の長さ` + `DWORD 件数`。**長さで飛ばせるので、
  *   後ろに知らない欄が増えても読める** ({@link Reader})
  * - 文字列は `DWORD 長さ` + UTF-16LE + NUL、時刻は `SYSTEMTIME` (WORD ×8) で日本時間の壁時計
  * - 認証は無い。EpgTimerSrv のアクセス制御 (`TCPAccessControlList`) から外れた IP は、受けてすぐ何も返さずに切られる
@@ -60,7 +60,7 @@ const DEFAULT_PORT = 4510;
 
 /**
  * 入力欄の `host:port` を読む。ポートを省けば 4510、IPv6 は `[::1]:4510`。
- * `tcp://` のような頭は付けない。読めなければ理由を投げる
+ * `tcp://` のようなスキームは付けない。読めなければ理由を投げる
  */
 export function parseTarget(input: string): EdcbTarget {
   const text = input.trim();
@@ -88,7 +88,7 @@ const JST = 9 * 60 * 60 * 1000;
 const utf16 = new TextDecoder("utf-16le");
 
 /**
- * 応答を頭から読む。構造体と配列の中では、その終わりを越えて読まない
+ * 応答を先頭から読む。構造体と配列の中では、その終わりを越えて読まない
  * ({@link struct}・{@link array})。読み終えたら終わりまで飛ばすので、後ろに知らない欄があっても次が読める
  */
 export class Reader {
@@ -188,7 +188,7 @@ export class Reader {
     return Date.UTC(year, month - 1, day, hour, minute, second) - JST;
   }
 
-  /** 頭に長さを持つ構造体。読み終えたら長さの終わりまで飛ばす */
+  /** 先頭に長さを持つ構造体。読み終えたら長さの終わりまで飛ばす */
   struct<T>(read: (reader: Reader) => T): T {
     const end = this.bounded(4, "構造体");
     const outer = this.end;
@@ -246,7 +246,7 @@ interface EdcbService {
 /** ルール (`EPG_AUTO_ADD_DATA`。使う欄だけ) */
 export interface EdcbRule {
   id: number;
-  /** 頭に印 (`^!{999}` 無効・`C!{999}` 大小を区別・`D!{…}` 番組の長さ) が付く。サーバが付けて送る */
+  /** 先頭に印 (`^!{999}` 無効・`C!{999}` 大小を区別・`D!{…}` 番組の長さ) が付く。サーバが付けて送る */
   andKey: string;
   notKey: string;
   regExp: boolean;
@@ -299,7 +299,7 @@ export interface EdcbRecInfo {
   epgStartAt: number | null;
 }
 
-/** 録画の設定 (`REC_SETTING_DATA`) は録画モード (頭の BYTE) だけ読んで、あとは長さで飛ばす */
+/** 録画の設定 (`REC_SETTING_DATA`) は録画モード (先頭の BYTE) だけ読んで、あとは長さで飛ばす */
 function readRecMode(reader: Reader): number {
   return reader.struct((r) => r.u8());
 }
@@ -470,7 +470,7 @@ function send(
     let settled = false;
     const chunks: Buffer[] = [];
     let received = 0;
-    /** 本文の長さ。頭の 8 バイトが来るまでは null */
+    /** 本文の長さ。先頭の 8 バイトが来るまでは null */
     let size: number | null = null;
 
     const finish = (error: Error | null, reply?: Reply) => {

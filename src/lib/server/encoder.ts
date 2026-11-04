@@ -494,9 +494,7 @@ export function buildArgs(
    *
    * 字幕は同じ入力から写すので、映像と同じだけ詰まる。
    */
-  const skip = inputSkip(seek, options.videoStart);
-  if (skip > 0) args.push("-ss", String(skip));
-  args.push(...TS_PROBE);
+  args.push(...inputArgs(inputSkip(seek, options.videoStart)));
   args.push("-i", input);
   /*
    * チャプター (CM の位置) はここでは入れない。境目はエンコードし終えてから決まるので、どのコーデックも

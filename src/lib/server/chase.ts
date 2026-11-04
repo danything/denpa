@@ -147,7 +147,8 @@ export function chasePlan(
  *
  * @param done もう書き足されないか (録画が終わったか)。EOF のたびに訊く
  * @param hold ほかの理由で止めておくか (HTTP の追っかけで、エンコードした先が読まれていないとき。
- *   `live.ts` の `chaseStream`)。省けば止めない
+ *   WebSocket の元の TS の追っかけで、止めてと言われたとき・詰まったとき。`live.ts` の `chaseStream`・`openChase`)。
+ *   省けば止めない
  * @param burst 倍速の縛りを掛けずに読む先頭のぶん (バイト)。アプリ向けの字幕 API が、リクエストされた位置より
  *   手前から読み始めて観ている位置を追い越すのに使う (`live.ts` の `recordingCaptions`)。省けば 0
  */

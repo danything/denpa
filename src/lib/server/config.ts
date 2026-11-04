@@ -349,6 +349,13 @@ export const config = {
    */
   pwaNames: str("PWA_NAMES", ""),
 
-  /** 0 にすると番組表の取得・スケジューラ・エンコーダなどのバックグラウンド処理を起動しない (単体テスト用。新しいバージョンの確認だけは回す) */
+  /**
+   * 0 にすると番組表の取得・スケジューラ・エンコーダなどのバックグラウンド処理を起動しない (単体テスト用)。
+   * チューナーを使わないもの (GPU の確認・ライブのエンドポイント・異常終了した録画の回収・新しいバージョンの確認) は回す
+   */
   autostart: bool("DENPA_AUTOSTART", true),
 };
+
+/** 外のサービス (ニコニコ・NX-Jikkyo・hub) に名乗る User-Agent */
+export const userAgent = (): string =>
+  `denpa/${config.version} (+https://github.com/danything/denpa)`;

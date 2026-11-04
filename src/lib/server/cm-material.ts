@@ -20,9 +20,9 @@ const CUT_KEEP = 3;
 /** ロゴの点の目盛り。0〜2.55 を 1 バイトで */
 const SCORE_SCALE = 100;
 
-/** 材料。時刻は決めたときの物差し (`offset` を足すと入れ物の頭からの秒) */
+/** 材料。時刻は決めたときの物差し (`offset` を足すと入れ物の先頭からの秒) */
 export interface CmMaterial {
-  /** 材料の時刻に足すと入れ物の頭からの秒になる (エンコードしたときに頭から捨てた長さなど) */
+  /** 材料の時刻に足すと入れ物の先頭からの秒になる (エンコードしたときに先頭から捨てた長さなど) */
   offset: number;
   /** 尺 (秒) */
   duration: number;
@@ -41,7 +41,7 @@ export interface CmMaterial {
   why: string;
 }
 
-/** 頭の JSON。並びの長さはここから決まる */
+/** 先頭の JSON。並びの長さはここから決まる */
 type Header = Omit<CmMaterial, "silences" | "times" | "cuts" | "logo"> & {
   version: number;
   /** 1 コマ目の時刻 (µs) とコマの数 */
@@ -100,7 +100,7 @@ export function encodeMaterial(material: CmMaterial): Uint8Array {
 /** 戻す。壊れている・バージョンが違うものは null */
 export function decodeMaterial(bytes: Uint8Array): CmMaterial | null {
   try {
-    // 写して頭から並べる (Buffer は大きな置き場の一部を指していることがある)
+    // 写して先頭から並べる (Buffer は大きな置き場の一部を指していることがある)
     const raw = new Uint8Array(Bun.zstdDecompressSync(bytes));
     const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
     const length = view.getUint32(0, true);

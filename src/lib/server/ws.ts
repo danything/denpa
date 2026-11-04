@@ -52,7 +52,7 @@ export class Connection {
    * 時刻は受け側の物差し (エンコードの経路は mp4 の 0 起点、放送そのままの経路は放送の PTS)。運ぶのは
    * 字幕だけで、映像・データ放送・制御は 0 を渡す。字幕を映像と同じ物差しに乗せるため。
    *
-   * @param droppable 詰まっているときに捨ててよいか。映像の中身 (fMP4 / そのままの TS) だけ true
+   * @param droppable 詰まっているときに捨ててよいか。fMP4 とライブの元の TS だけ true (追っかけの元の TS は捨てずに読むのを止める)
    */
   send(
     kind: number,

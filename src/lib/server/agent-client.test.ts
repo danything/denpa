@@ -123,7 +123,7 @@ describe("agentFetch", () => {
     }
   });
 
-  test("合言葉を知らない相手 (証しを返せない) は覚えない", async () => {
+  test("合言葉の違う相手 (証しを返せない) は覚えない", async () => {
     const liar = Bun.serve({
       port: 0,
       hostname: "127.0.0.1",
@@ -133,7 +133,7 @@ describe("agentFetch", () => {
     try {
       config.agentUrl = `https://127.0.0.1:${liar.port}#pair=${FAKE_AGENT_PAIR}`;
       await expect(agentFetch("/denpa/tuners")).rejects.toThrow(
-        "合言葉を知りません",
+        "合言葉が違います",
       );
       expect(existsSync(`${dir}/tls/agent.crt`)).toBe(false);
     } finally {

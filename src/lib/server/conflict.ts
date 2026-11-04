@@ -168,7 +168,7 @@ class Tuners {
     this.free = capacity.map((group) => group.count);
   }
 
-  /** 録画中のものを入れる。`rank` の知らないチューナー (無効にしたものなど) は数えない */
+  /** 録画中のものを入れる。capacity に無い `rank` のチューナー (無効にしたものなど) は数えない */
   place(busy: Busy): string | null {
     const group = this.capacity.findIndex((g) => g.rank === busy.rank);
     if (group < 0) return null;

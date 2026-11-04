@@ -755,7 +755,7 @@ export const sessions = sqliteTable(
  *
  * **アクセストークンそのものは持たない。** 持つのは SHA-256 だけで、トークンは渡すときに 1 度だけ返す。
  * DB が漏れても、ここから入れるトークンは作れない。消さずに `revoked_at` で止める
- * (いつ・誰が許したかを設定画面に残すため)
+ * (いつ・誰が許したかを行に残す。設定画面に並ぶのは取り消していないものだけ)
  */
 export const apiTokens = sqliteTable("api_tokens", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -791,7 +791,7 @@ export const deviceCodes = sqliteTable(
     created_at: integer("created_at").notNull(),
     expires_at: integer("expires_at").notNull(),
     last_polled_at: integer("last_polled_at"),
-    /** 許された時刻と、許した人。**アクセストークンはまだ作らない** (渡すときに作る。生のトークンを DB に置かないため) */
+    /** 許された時刻と、許した人。**アクセストークンはまだ作らない** (渡すときに作る。平文のトークンを DB に置かないため) */
     approved_at: integer("approved_at"),
     approved_by: text("approved_by"),
     /** 渡したアクセストークン */

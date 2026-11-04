@@ -149,11 +149,13 @@ describe("書く欄を読む", () => {
     expect(conditionsOf(form({ keyword: "a" })).skipEarlier).toBeNull();
   });
 
-  test("優先度は空なら 1、0 はそのまま", () => {
+  test("優先度は空なら 1、0 はそのまま、9 より大きければ 9", () => {
     expect(rulePriority(form({ priority: "" }))).toBe(1);
     expect(rulePriority(form({ priority: "0" }))).toBe(0);
     expect(rulePriority(form({ priority: "3" }))).toBe(3);
     expect(rulePriority(form({ priority: "-1" }))).toBe(1);
+    // 画面の選択肢は 0〜9。それより大きい値は 9 に丸める
+    expect(rulePriority(form({ priority: "100" }))).toBe(9);
   });
 
   test("時間帯は HH:MM を分に、曜日は 0〜6 を並べ直す", () => {

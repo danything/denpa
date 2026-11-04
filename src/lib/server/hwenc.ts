@@ -521,8 +521,8 @@ export function liveHw(
  *
  * `-g` はライブの側 (`live.ts` の `videoArgs`) が足す。
  *
- * **Rockchip MPP は録画と同じ AVBR を、いちばん重い映像の値で** (`LARGEST`。ライブは常に 60 コマで、
- * 大きさは映像が来る前に決まらない)。`-async_depth` は持たない (渡すと使われない引数として
+ * **Rockchip MPP は録画と同じ AVBR を、いちばん重い映像の値で** (`LARGEST`。ライブはコマ数と
+ * 大きさが映像の来る前に決まらない)。`-async_depth` は持たない (渡すと使われない引数として
  * ffmpeg が降りる)。MPP の H.264 は B フレームを作らないので `-bf` も要らない。
  *
  * **NVENC も同じ表の、いちばん重い映像の値を VBR で。** 遅れを作らない引数は NVENC の引数で渡す。
@@ -623,7 +623,7 @@ export function liveHwArgs(
 }
 
 /** 段を下げた変換で GPU に渡すもの (`liveHwArgs`)。映像の高さと、ビットレートの上限 (bit/s) */
-export interface RungCap {
+interface RungCap {
   height: number;
   bps: number;
 }

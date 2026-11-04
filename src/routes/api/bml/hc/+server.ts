@@ -1,6 +1,6 @@
 /**
  * Hybridcast のアプリを中継するトークンを出す ([hc-relay.ts](../../../../lib/server/hc-relay.ts))。
- * **ここはログインした人だけ** (いつもの守り)。http も https も出す
+ * **ここはログインした人だけ** (`hooks.server.ts` の認証を通る。`OPEN_PATHS` に入れていない)。http も https も出す
  */
 
 import { error, json } from "@sveltejs/kit";
