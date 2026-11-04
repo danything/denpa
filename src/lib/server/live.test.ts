@@ -8,7 +8,9 @@ import {
 } from "#lib/arib.js";
 import { CHANNEL, codecsFor } from "#lib/live.js";
 
+import type { LiveHw } from "./hwenc";
 import {
+  audioArgs,
   blameLiveHw,
   CHASE_STREAM_HOLD,
   encodeArgs,
@@ -17,8 +19,14 @@ import {
   liveHwFailed,
   openingLine,
   parseCommand,
+  parsePlayable,
   rawEnding,
+  rungCodec,
+  rungPlan,
+  rungSlot,
   sessionStream,
+  softwareEncodes,
+  videoArgs,
   whyNotTuned,
 } from "./live";
 
@@ -754,5 +762,235 @@ describe("元の TS が尽きたあと (rawEnding)", () => {
   test("畳んだあとは何も伝えない", () => {
     expect(rawEnding({ chase: true, fed: true, stopped: true })).toBe("quiet");
     expect(rawEnding({ chase: false, fed: true, stopped: true })).toBe("quiet");
+  });
+});
+
+/**
+ * **回線に合わせて下げた段** (`videoArgs` の `rung`。段の表は `#lib/rungs.ts`)。段 0 は今までと同じ引数で、
+ * 段 1〜3 は 30 コマ・段の高さ・ビットレートの上限
+ */
+describe("段を下げた映像の引数", () => {
+  const rkmpp: LiveHw = {
+    way: { device: "/dev/mpp_service", kind: "rkmpp" },
+    full: false,
+  };
+  const vaapi = (full: boolean): LiveHw => ({
+    way: { device: "/dev/dri/renderD128", kind: "vaapi" },
+    full,
+  });
+  const nvenc: LiveHw = {
+    way: { device: "/dev/nvidia0", kind: "nvenc", gpu: 0 },
+    full: false,
+  };
+
+  test("段 0 は段を渡さないときと同じ", () => {
+    for (const hw of [null, rkmpp, vaapi(true), nvenc])
+      for (const interlaced of [true, false])
+        expect(videoArgs("h264", hw, interlaced, 0)).toEqual(
+          videoArgs("h264", hw, interlaced),
+        );
+    expect(encodeArgs(1024, stereo, "h264", 0, null, 0)).toEqual(plain());
+  });
+
+  test("x264 は veryfast の上限つき crf。放送は bwdif で 30 コマにして縮め、キーフレームは 1 秒ごと", () => {
+    const args = videoArgs("h264", null, true, 2);
+    expect(args.filter).toBe("bwdif=mode=send_frame,scale=-2:540");
+    expect(args.encoder.join(" ")).toBe(
+      "-c:v libx264 -preset veryfast -tune zerolatency -crf 23 -maxrate:v 1500000 -bufsize:v 1500000 -g 30",
+    );
+  });
+
+  test("エンコード済みは fps で 30 コマにそろえて縮める", () => {
+    expect(videoArgs("h264", null, false, 1).filter).toBe(
+      "fps=30000/1001,scale=-2:720",
+    );
+  });
+
+  test("Rockchip MPP は段の上限を AVBR に渡し、縮めるのは CPU", () => {
+    const args = videoArgs("hevc", rkmpp, true, 1);
+    expect(args.filter).toBe("bwdif=mode=send_frame,scale=-2:720,format=nv12");
+    expect(args.encoder.join(" ")).toBe(
+      "-c:v hevc_rkmpp -rc avbr -b:v 3000000 -maxrate 3187500 -minrate 187500 -g 30 -tag:v hvc1",
+    );
+  });
+
+  test("NVENC は段の上限を VBR の平均に渡す", () => {
+    expect(videoArgs("h264", nvenc, true, 3).encoder.join(" ")).toContain(
+      "-rc vbr -b:v 600000 -maxrate 1200000 -bufsize 1200000",
+    );
+  });
+
+  test("VA-API は CQP をやめて VBR。デコードから GPU なら GPU の上で縮める", () => {
+    const full = videoArgs("h264", vaapi(true), true, 1);
+    expect(full.filter).toBe(
+      "deinterlace_vaapi=rate=frame,scale_vaapi=w=-2:h=720",
+    );
+    expect(full.encoder.join(" ")).toContain(
+      "-rc_mode VBR -b:v 3000000 -maxrate:v 3000000",
+    );
+    expect(full.encoder).not.toContain("CQP");
+    const upload = videoArgs("h264", vaapi(false), true, 1);
+    expect(upload.filter).toBe(
+      "bwdif=mode=send_frame,scale=-2:720,format=nv12,hwupload",
+    );
+    // エンコード済みは GPU でデコードしない (`full` を外す)
+    expect(videoArgs("h264", vaapi(true), false, 1).filter).toBe(
+      "fps=30000/1001,scale=-2:720,format=nv12,hwupload",
+    );
+  });
+
+  test("ソフトウェアで段を下げるのは H.264 だけ (SVT-AV1・x265 は使わない)", () => {
+    expect(() => videoArgs("av1", null, true, 1)).toThrow();
+    expect(() => videoArgs("hevc", null, true, 1)).toThrow();
+  });
+
+  test("段 1〜3 の音声は 96k", () => {
+    expect(audioArgs("h264", 1)).toEqual([
+      "-c:a",
+      "aac",
+      "-b:a",
+      "96k",
+      "-ac",
+      "2",
+    ]);
+    expect(audioArgs("av1", 3)).toContain("libopus");
+    expect(audioArgs("h264")).toContain("256k");
+    expect(encodeArgs(1024, stereo, "h264", 0, null, 2).join(" ")).toContain(
+      "-c:a aac -b:a 96k",
+    );
+  });
+});
+
+/**
+ * **段を下げるときのコーデック** (`rungCodec`)。AV1 → H.265 → H.264 のうち、端末が再生できて GPU でエンコードできる最初のもの。
+ * 無ければソフトウェアの H.264
+ */
+describe("段を下げるときのコーデック", () => {
+  const hw: LiveHw = { way: { device: "d", kind: "rkmpp" }, full: false };
+  /** GPU でエンコードできるコーデックだけ経路を返す */
+  const gpu =
+    (...codecs: string[]) =>
+    (codec: string) =>
+      codecs.includes(codec) ? hw : null;
+
+  test("RK3588 (H.265 と H.264 だけ) は、H.265 を再生できれば H.265、できなければ H.264", () => {
+    const rk = gpu("hevc", "h264");
+    expect(rungCodec(["av1", "hevc", "h264"], true, rk)).toBe("hevc");
+    expect(rungCodec(["av1", "h264"], true, rk)).toBe("h264");
+  });
+
+  test("AV1 を GPU でエンコードできて再生できれば AV1", () => {
+    expect(rungCodec(["av1", "h264"], true, gpu("av1", "h264"))).toBe("av1");
+  });
+
+  test("GPU が無ければソフトウェアの H.264 (再生できると言われていなくても)", () => {
+    expect(rungCodec(["av1", "hevc"], true, gpu())).toBe("h264");
+  });
+
+  test("再生できるコーデックの読み方。省けばリクエストされたものと H.264、知らない値は捨てる", () => {
+    expect(parsePlayable(undefined, "av1")).toEqual(["av1", "h264"]);
+    expect(parsePlayable("", "h264")).toEqual(["h264"]);
+    expect(parsePlayable("hevc,x,h264,hevc", "av1")).toEqual(["hevc", "h264"]);
+    expect(parsePlayable(["av1", 3], "h264")).toEqual(["av1"]);
+  });
+});
+
+/** **段を下げたライブの枠** (`rungSlot`)。段 0 と共有は使わず、新しく段を下げてエンコードするときだけ 1 つ使う */
+describe("段を下げたライブの枠", () => {
+  test("段 0 と、同じ段のセッションに入るときは枠を取らない", () => {
+    let asked = 0;
+    const hold = () => {
+      asked++;
+      return () => undefined;
+    };
+    expect(rungSlot(0, false, hold)).not.toBeNull();
+    expect(rungSlot(2, true, hold)).not.toBeNull();
+    expect(asked).toBe(0);
+  });
+
+  test("新しく段を下げるときは 1 つ取り、埋まっていれば null", () => {
+    let held = 0;
+    const hold = () => {
+      if (held >= 1) return null;
+      held++;
+      return () => {
+        held--;
+      };
+    };
+    const release = rungSlot(1, false, hold);
+    expect(release).not.toBeNull();
+    expect(rungSlot(3, false, hold)).toBeNull();
+    release?.();
+    expect(rungSlot(3, false, hold)).not.toBeNull();
+  });
+
+  /*
+   * **抜けるかは枠を取る前に決める** (`rungPlan`)。抜けたあとで取れないと、映像が切れたうえに今の段にも戻れない
+   * (段 0 で開き直していた)
+   */
+  test("空いていれば取る。共有するなら空きを見ない", () => {
+    expect(rungPlan({ shared: false, room: 1, leaving: false })).toBe("hold");
+    expect(rungPlan({ shared: true, room: 0, leaving: false })).toBe("hold");
+  });
+
+  test("埋まっていても、自分だけの段のセッションから移るなら抜けてから取る", () => {
+    expect(rungPlan({ shared: false, room: 0, leaving: true })).toBe("leave");
+  });
+
+  test("抜けても空かないなら抜けずに今の段のまま (上限を下げた直後は空きが負)", () => {
+    expect(rungPlan({ shared: false, room: -1, leaving: true })).toBe("stay");
+    expect(rungPlan({ shared: false, room: 0, leaving: false })).toBe("stay");
+  });
+
+  test("ソフトウェアでエンコードしてよいのは H.264 と段 0 の AV1 だけ", () => {
+    expect(softwareEncodes("h264", 0)).toBe(true);
+    expect(softwareEncodes("h264", 2)).toBe(true);
+    expect(softwareEncodes("av1", 0)).toBe(true);
+    expect(softwareEncodes("av1", 1)).toBe(false);
+    expect(softwareEncodes("hevc", 0)).toBe(false);
+  });
+
+  test("共有の目印に段が入る。段 0 は段を足す前と同じ", () => {
+    expect(key("GR", "27", 1, stereo, "h264", 0, null, 0)).toBe(
+      key("GR", "27", 1, stereo, "h264", 0),
+    );
+    expect(key("GR", "27", 1, stereo, "h264", 0, null, 0)).not.toBe(
+      key("GR", "27", 1, stereo, "h264", 0, null, 1),
+    );
+    expect(key("GR", "27", 1, stereo, "h264", 0, null, 1)).not.toBe(
+      key("GR", "27", 1, stereo, "h264", 0, null, 2),
+    );
+  });
+});
+
+/** **段と再生できるコーデックの指示** (`parseCommand`)。読めない段は 0 (下げない) */
+describe("段の指示 (parseCommand)", () => {
+  const tune = { type: "tune", channelType: "GR", channel: "27", serviceId: 1 };
+
+  test("tune の段と再生できるコーデックを読む", () => {
+    expect(
+      parseCommand({ ...tune, rung: 2, playable: ["hevc", "h264"] }),
+    ).toMatchObject({ rung: 2, playable: ["hevc", "h264"] });
+    expect(parseCommand({ ...tune, codec: "av1" })).toMatchObject({
+      rung: 0,
+      playable: ["av1", "h264"],
+    });
+    expect(parseCommand({ ...tune, rung: 5 })).toMatchObject({ rung: 0 });
+    expect(parseCommand({ ...tune, rung: "1" })).toMatchObject({ rung: 1 });
+  });
+
+  test("追っかけも同じ。段 0 の H.265 は H.264 にする", () => {
+    expect(
+      parseCommand({ type: "chase", recordingId: 3, rung: 3 }),
+    ).toMatchObject({ rung: 3, playable: ["h264"] });
+    expect(
+      parseCommand({
+        type: "chase",
+        recordingId: 3,
+        codec: "hevc",
+        rung: 1,
+        playable: ["hevc"],
+      }),
+    ).toMatchObject({ codec: "h264", rung: 1, playable: ["hevc"] });
   });
 });

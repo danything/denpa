@@ -19,7 +19,12 @@ import {
 } from "@danything/arib/synth-av";
 import { eq } from "drizzle-orm";
 
-import { ORIGIN_HEADER } from "#lib/ts/playback.js";
+import {
+  CODEC_HEADER,
+  ORIGIN_HEADER,
+  PACE_HEADER,
+  RUNG_HEADER,
+} from "#lib/ts/playback.js";
 import { sinceHead } from "#lib/ts/seek.js";
 
 /**
@@ -63,7 +68,9 @@ const { orm } = await import("./db");
 const { recordings } = await import("./schema");
 const { saveSettings } = await import("./settings");
 const { holdTranscode, transcodesInUse } = await import("./transcode");
+const { readPace } = await import("./pace");
 const {
+  audioOnlyArgs,
   copyArgs,
   fileTranscodeArgs,
   mediaInfo,
@@ -372,6 +379,37 @@ describe("ffmpeg の引数", () => {
     expect(args[args.indexOf("-output_ts_offset") + 1]).toBe("-12345.500000");
   });
 
+  test("段を下げた変換: 30 コマにして縮め、音声は 96k。時刻の運び方は同じ", () => {
+    const file = fileTranscodeArgs("/m/a.mkv", 30, 0, "h264", null, 2).join(
+      " ",
+    );
+    expect(file).toContain("-ss 30.000 -copyts -i /m/a.mkv");
+    expect(file).toContain("-vf fps=30000/1001,scale=-2:540");
+    expect(file).toContain("-c:a aac -b:a 96k");
+    const track = { id: "0:main", stream: 0, side: "both" as const, label: "" };
+    const fromTs = tsTranscodeArgs(1024, track, "h264", null, 0, 1).join(" ");
+    expect(fromTs).toContain("-vf bwdif=mode=send_frame,scale=-2:720");
+    expect(fromTs).toContain("-fps_mode passthrough");
+  });
+
+  test("音声だけ: 映像を出さず、AAC 96k の fMP4 を同じ物差しで", () => {
+    const file = audioOnlyArgs({ path: "/m/a.mkv", from: 12, audio: 1 });
+    const joined = file.join(" ");
+    expect(joined).toContain("-ss 12.000 -copyts -i /m/a.mkv -map 0:a:1? -vn");
+    expect(joined).toContain("-c:a aac -b:a 96k");
+    expect(file).not.toContain("-c:v");
+    expect(file.at(-1)).toBe("pipe:1");
+    const track = { id: "0:sub", stream: 0, side: "sub" as const, label: "" };
+    const fromTs = audioOnlyArgs({
+      program: 1024,
+      audio: track,
+      offset: -5,
+    }).join(" ");
+    expect(fromTs).toContain("-f mpegts -i pipe:0 -map 0:p:1024:a:0?");
+    expect(fromTs).toContain("-af pan=stereo|c0=c1|c1=c1");
+    expect(fromTs).toContain("-output_ts_offset -5.000000");
+  });
+
   test("一周の手前 60 秒に入った PTS は、ffmpeg が負にする", () => {
     expect(presented(90_000 * 100)).toBe(100);
     expect(presented(WRAP - 120 * CLOCK)).toBe((WRAP - 120 * CLOCK) / CLOCK);
@@ -438,6 +476,76 @@ describe("流す (streamResponse)", () => {
     await copy.body?.cancel();
     held?.();
     expect(transcodesInUse()).toBe(0);
+    saveSettings({ transcodeLimit: null });
+  });
+
+  test("段を下げるなら同じコーデックでも変換し、選んだコーデック・段・具合の id をヘッダで返す", async () => {
+    // 何も出さずに待つ ffmpeg (閉じるまで枠を持ったままにする)
+    const slow = join(dir, "slow-ffmpeg");
+    writeFileSync(slow, "#!/bin/sh\nexec sleep 5\n");
+    chmodSync(slow, 0o755);
+    config.ffmpeg = slow;
+    const res = await streamResponse(
+      seed({ library_path: h264 }),
+      new URLSearchParams({ codec: "h264", rung: "1", playable: "av1,h264" }),
+    );
+    // GPU が無いのでソフトウェアの H.264
+    expect(res.headers.get(CODEC_HEADER)).toBe("h264");
+    expect(res.headers.get(RUNG_HEADER)).toBe("1");
+    const pace = res.headers.get(PACE_HEADER)!;
+    expect(readPace(pace)).toEqual({ backlog: 0, dropped: 0, speed: null });
+    // 変換なので枠を使う
+    expect(transcodesInUse()).toBe(1);
+    await res.body?.cancel();
+    expect(transcodesInUse()).toBe(0);
+    expect(readPace(pace)).toBeNull();
+  });
+
+  test("段を下げるなら H.265 のエンコード済みからも変換できる。下げないなら写すだけ", async () => {
+    config.ffmpeg = "true";
+    const rec = seed({ hevc_path: hevc });
+    const lowered = await streamResponse(
+      rec,
+      new URLSearchParams({ codec: "hevc", rung: "2", playable: "hevc,h264" }),
+    );
+    // H.265 を GPU でエンコードできないので H.264
+    expect(lowered.headers.get(CODEC_HEADER)).toBe("h264");
+    expect(lowered.headers.get(RUNG_HEADER)).toBe("2");
+    await lowered.body?.cancel();
+    const copy = await streamResponse(
+      rec,
+      new URLSearchParams({ codec: "hevc" }),
+    );
+    expect(copy.headers.get(CODEC_HEADER)).toBe("hevc");
+    expect(copy.headers.get(RUNG_HEADER)).toBe("0");
+    await copy.body?.cancel();
+  });
+
+  test("段を下げる変換も、枠が埋まっていれば 503", async () => {
+    saveSettings({ transcodeLimit: 1 });
+    const held = holdTranscode();
+    await expect(
+      streamResponse(
+        seed({ library_path: h264 }),
+        new URLSearchParams({ codec: "h264", rung: "3" }),
+      ),
+    ).rejects.toMatchObject({ status: 503 });
+    held?.();
+    saveSettings({ transcodeLimit: null });
+  });
+
+  test("音声だけは枠を使わない", async () => {
+    config.ffmpeg = "true";
+    saveSettings({ transcodeLimit: 1 });
+    const held = holdTranscode();
+    const res = await streamResponse(
+      seed({ ts_path: ts }),
+      new URLSearchParams({ codec: "audio" }),
+    );
+    expect(res.headers.get("Content-Type")).toBe("audio/mp4");
+    expect(res.headers.get(CODEC_HEADER)).toBe("audio");
+    await res.body?.cancel();
+    held?.();
     saveSettings({ transcodeLimit: null });
   });
 });

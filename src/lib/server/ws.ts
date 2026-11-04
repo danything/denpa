@@ -34,7 +34,15 @@ export class Connection {
   onmessage: ((message: Record<string, unknown>) => void) | null = null;
   onclose: (() => void) | null = null;
 
+  /** 開いてから、溜まりすぎて捨てた塊 (`droppable`) の数。画面への `pace` の通知に載せる (`live.ts` の `attend`) */
+  dropped = 0;
+
   constructor(private readonly ws: ServerWebSocket<SocketData>) {}
+
+  /** 送れずに溜まっている量 (バイト) */
+  get backlog(): number {
+    return this.ws.getBufferedAmount();
+  }
 
   /**
    * 1 つ送る。**多重化のヘッダを自分で付ける** (stream.md#websocket-プロトコル)。
@@ -52,7 +60,10 @@ export class Connection {
     payload: Uint8Array,
     droppable = false,
   ): void {
-    if (droppable && this.ws.getBufferedAmount() > BACKLOG_LIMIT) return;
+    if (droppable && this.ws.getBufferedAmount() > BACKLOG_LIMIT) {
+      this.dropped++;
+      return;
+    }
     const out = new Uint8Array(9 + payload.length);
     out[0] = kind;
     new DataView(out.buffer).setBigUint64(1, pts);

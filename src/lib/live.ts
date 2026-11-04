@@ -14,6 +14,7 @@
 import type { CaptionLanguage } from "@danything/arib/caption-text";
 
 import type { AudioTrack } from "./arib";
+import type { Pace, Rung } from "./rungs";
 
 /**
  * エンコード方式 ([stream.md](../../docs/stream.md#エンコード))。`av1` は量を採るが、SVT-AV1 が溜め込むぶん放送の今から
@@ -109,6 +110,11 @@ export type Notice =
       codec: LiveCodec;
       /** **エンコードせずに元の TS を送るか** (`CHANNEL.rawTs`) */
       raw: boolean;
+      /**
+       * いまの段 (`#lib/rungs.ts`。回線に合わせて下げた画質)。0 は下げていない。リクエストした段より高ければ、
+       * サーバが混んでいて下げられなかった (理由は続く `notice`)。段を下げたときの `codec` はサーバが `playable` から選んだもの
+       */
+      rung: Rung;
       /** いまエンコードしている音声 (`AudioTrack.id`) */
       audio: string;
       /** 選べる音声。1つしか無ければ画面は切り替えを出さない */
@@ -183,12 +189,19 @@ export type Notice =
   | {
       /**
        * **失敗ではないが、リクエストどおりにできなかった**ことの一行。映像は出ている。
-       * いまは「GPU でエンコードできなかったのでソフトウェアでエンコードしている」だけ (`server/live.ts` の
-       * `GPU_GAVE_UP`)。画面は断り書き (`warning`) に出す
+       * 「GPU でエンコードできなかったのでソフトウェアでエンコードしている」(`server/live.ts` の `GPU_GAVE_UP`) や、
+       * 「サーバが混んでいて画質を下げられなかった」(`RUNG_BUSY`) など。画面は断り書き (`warning`) に出す
        */
       type: "notice";
       message: string;
     }
+  | ({
+      /**
+       * **送り出しの具合** (`#lib/rungs.ts` の `Pace`。`server/pace.ts`)。2 秒ごとか、塊を捨てた・溜まりが動いたときに来る。
+       * 回線が細いのか、サーバのエンコードが遅いのかを読み分けて段を決める (`adapt.ts`)
+       */
+      type: "pace";
+    } & Pace)
   | {
       /**
        * **チューナーから外された** (読んでいたストリームが、こちらが畳む前に途切れた)。セッションはここで畳む。
@@ -307,6 +320,10 @@ type ChaseCommand = {
   language?: number;
   /** **エンコードせずに元の TS で欲しい** (`TuneCommand.raw` と同じ。`codec` は効かない) */
   raw?: boolean;
+  /** 回線に合わせて下げた段 (`TuneCommand.rung` と同じ)。追っかけはもともと枠を使うので、枠が埋まって下げられないことは無い */
+  rung?: Rung;
+  /** 端末が再生できるコーデック (`TuneCommand.playable` と同じ) */
+  playable?: LiveCodec[];
 };
 
 type TuneCommand = {
@@ -339,6 +356,17 @@ type TuneCommand = {
    * 省くとエージェントが選ぶ。使えなければ、ほかへ振り替えずに理由を返す
    */
   tuner?: string;
+  /**
+   * **回線に合わせて下げた段** (`#lib/rungs.ts`。0〜3。省くと 0 で、今までと同じ)。1〜3 なら段の高さ・30 コマ・ビットレートの上限で
+   * 変換する。コーデックは `codec` ではなく、サーバが `playable` から選んで `tuned` で知らせる。`raw` では効かない。
+   * 同じ段を誰も観ていなければその場で変換する本数の枠を使い、埋まっていれば下げない (`tuned` の `rung` と `notice`)
+   */
+  rung?: Rung;
+  /**
+   * 端末が再生できるコーデック。段を下げるとき、サーバはこの中から AV1 → H.265 → H.264 の順に GPU でエンコードできる最初のものを選び、
+   * 無ければソフトウェアの H.264 にする。省くと `codec` と H.264
+   */
+  playable?: LiveCodec[];
 };
 
 /** WebSocket の宛先 */

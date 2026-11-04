@@ -41,6 +41,7 @@ import {
   parseAudios,
   pickTrack,
 } from "#lib/arib.js";
+import { autoOrder } from "#lib/live-choice.js";
 import {
   type CaptionTrack,
   CHANNEL,
@@ -49,6 +50,12 @@ import {
   type LiveCodec,
   type Notice,
 } from "#lib/live.js";
+import {
+  parseRung,
+  type Rung,
+  RUNG_AUDIO_KBPS,
+  RUNG_SPECS,
+} from "#lib/rungs.js";
 import { BroadcastClock, parseStart } from "#lib/ts/clock.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import { MkvSplitter } from "#lib/ts/mkv.js";
@@ -94,10 +101,11 @@ import {
   nvencBusy,
 } from "./hwenc";
 import { tunerOf, yieldedTo } from "./live-yield";
+import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
 import { programs, recordings, services } from "./schema";
 import { settings } from "./settings";
 import { chunks, endInput, lines } from "./stream";
-import { holdTranscode } from "./transcode";
+import { holdTranscode, transcodeRoom } from "./transcode";
 import { getTuners, openWhenFree, type StreamUse } from "./tuner";
 import type { Connection } from "./ws";
 
@@ -241,6 +249,7 @@ type StreamCodec = LiveCodec | "audio";
  *   字幕を持たない放送で字幕を求めると ffmpeg は組み立ての時点で降りるので、
  *   そうと分かったらこちらで再エンコードする (`Session.run`)
  * @param hw GPU でエンコードするならその経路 (`hwenc.liveHw`)。null ならソフトウェア (`videoArgs`)
+ * @param rung 回線に合わせて下げた段 (`#lib/rungs.ts`)。0 なら下げない
  */
 export function encodeArgs(
   program: number,
@@ -248,8 +257,9 @@ export function encodeArgs(
   codec: StreamCodec = "h264",
   caption: number | null = 0,
   hw: LiveHw | null = null,
+  rung: Rung = 0,
 ): string[] {
-  const picture = codec === "audio" ? null : videoArgs(codec, hw);
+  const picture = codec === "audio" ? null : videoArgs(codec, hw, true, rung);
   const from = programSpec(program);
   return [
     "-hide_banner",
@@ -303,7 +313,7 @@ export function encodeArgs(
     "-map",
     `${from}:a:${audio.stream}`,
     ...panArgs(audio),
-    ...audioArgs(codec),
+    ...audioArgs(codec, rung),
     "-f",
     "mp4",
     "-movflags",
@@ -385,13 +395,20 @@ export function panArgs(audio: AudioTrack): string[] {
  * (インタレ解除が済んでいる) なら `interlaced` を false にする。インタレ解除を挟まず、
  * GPU も復号からは載せない (`full` は放送の MPEG-2 を GPU でデコードする経路)
  *
+ * ## 回線に合わせて下げた段
+ *
+ * `rung` が 1〜3 なら、段の表 (`#lib/rungs.ts`) の高さ・30 コマ・ビットレートの上限で変換する (`rungVideo`)。
+ * 0 なら上のとおりで、今までと同じ引数になる
+ *
  * @returns `input` は `-i` より前、`filter` は `-vf` (無ければ空)、`encoder` は `-c:v` から
  */
 export function videoArgs(
   codec: LiveCodec,
   hw: LiveHw | null,
   interlaced = true,
+  rung: Rung = 0,
 ): { input: string[]; filter: string; encoder: string[] } {
+  if (rung !== 0) return rungVideo(codec, hw, interlaced, rung);
   if (hw !== null) {
     const gpu = liveHwArgs(interlaced ? hw : { ...hw, full: false }, codec);
     return {
@@ -485,6 +502,153 @@ function softwareArgs(codec: Exclude<LiveCodec, "hevc">): string[] {
 }
 
 /**
+ * **回線に合わせて下げた段の映像** (`videoArgs` の `rung`。段の表は `#lib/rungs.ts`)。
+ *
+ * - **30 コマにして縮める。** 放送 (インタレ) は `bwdif` を 1 コマずつの出し方 (`encoder.deinterlace(false)`) にして 29.97p にする。
+ *   60 コマにするのに比べてエンコードが半分で、1 コマに使えるビットが倍になる。エンコード済み (インタレではない) は `fps` で 29.97 にそろえる
+ *   (60 コマでエンコードした録画を 30 コマに間引く。24 コマの録画は同じコマを足して 29.97 になる)。高さは段の値、幅は縦横比を保って偶数にする (`scale=-2:H`)
+ * - **キーフレームは 1 秒ごと** (`-g` に段のコマ数)。今の段 0 と同じ間隔で、共有しているライブに入る人の待ちも同じ
+ * - **x264 は上限つきの crf** (`-crf 23 -maxrate T -bufsize T`。T は段のビットレート)。静かな場面は crf のぶんだけ小さく、
+ *   動きの多い場面は回線に収まるように上限で抑える。preset は `veryfast`。`ultrafast` は CABAC とデブロックを切るので、
+ *   低いビットレートでは粗さが目立つ。`-tune zerolatency` は段 0 と同じ (B フレームを作らない)
+ * - **GPU** は段の上限を渡す (`hwenc.liveHwArgs` の `cap`)。デコードから GPU に載せる VA-API は GPU の上で縮め (`scale_vaapi`)、
+ *   それ以外は CPU で縮めてから渡す
+ * - **ソフトウェアでエンコードするのは H.264 だけ。** SVT-AV1 は段を下げても重く、H.265 はソフトウェアのエンコーダを組んでいない。
+ *   コーデックの選び方は `rungCodec`
+ */
+function rungVideo(
+  codec: LiveCodec,
+  hw: LiveHw | null,
+  interlaced: boolean,
+  rung: Exclude<Rung, 0>,
+): { input: string[]; filter: string; encoder: string[] } {
+  const spec = RUNG_SPECS[rung];
+  const bps = spec.videoKbps * 1000;
+  const gop = ["-g", String(spec.fps)];
+  const cpu = [
+    interlaced ? deinterlace(false) : `fps=${spec.fps * 1000}/1001`,
+    `scale=-2:${spec.height}`,
+  ];
+  if (hw !== null) {
+    const full = hw.full && interlaced;
+    const gpu = liveHwArgs({ ...hw, full }, codec, {
+      height: spec.height,
+      bps,
+    });
+    return {
+      input: gpu.input,
+      filter: (full ? gpu.filter : [...cpu, ...gpu.filter]).join(","),
+      encoder: [
+        "-c:v",
+        ...gpu.encoder,
+        ...gop,
+        ...(codec === "hevc" ? ["-tag:v", "hvc1"] : []),
+      ],
+    };
+  }
+  if (!softwareEncodes(codec, rung))
+    throw new Error("段を下げた変換のソフトウェアは H.264 だけです");
+  return {
+    input: [],
+    filter: cpu.join(","),
+    encoder: [
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-tune",
+      "zerolatency",
+      "-crf",
+      "23",
+      "-maxrate:v",
+      String(bps),
+      "-bufsize:v",
+      String(bps),
+      ...gop,
+    ],
+  };
+}
+
+/**
+ * **段を下げた変換のコーデック。** `autoOrder` (エンコード済みの順。AV1 → H.265 → H.264) のうち、端末が再生できて (`playable`)
+ * GPU でエンコードできる最初のもの。無ければソフトウェアの H.264 (`rungVideo`)。
+ *
+ * 回線が細いときの話なので、同じ画質で小さい順に採る。RK3588 なら AV1 はエンコードできないので飛ばし、端末が H.265 を
+ * 再生できれば hevc_rkmpp、できなければ h264_rkmpp になる。`pick` はテストで差し替えるときだけ渡す
+ */
+export function rungCodec(
+  playable: readonly LiveCodec[],
+  interlaced: boolean,
+  pick: (codec: LiveCodec, interlaced: boolean) => LiveHw | null = pickLiveHw,
+): LiveCodec {
+  for (const codec of autoOrder("encoded")) {
+    if (playable.includes(codec) && pick(codec, interlaced) !== null)
+      return codec;
+  }
+  return "h264";
+}
+
+/**
+ * 端末が再生できるコーデック (`tune`・`chase` の `playable`、HTTP の `?playable=`)。配列でも `,` 区切りでもよい。
+ * 知らない値は捨てる。**省かれたら、リクエストされたコーデックと H.264** (H.264 はどの端末でも再生できる)
+ */
+export function parsePlayable(value: unknown, codec: LiveCodec): LiveCodec[] {
+  const listed = Array.isArray(value)
+    ? value
+    : typeof value === "string" && value !== ""
+      ? value.split(",")
+      : null;
+  const known = (listed ?? [codec, "h264"]).filter(
+    (item): item is LiveCodec =>
+      item === "h264" || item === "hevc" || item === "av1",
+  );
+  return [...new Set(known)];
+}
+
+/**
+ * **段を下げたライブのセッションに要る枠** (`transcode.ts`)。段 0 と、もう動いている同じ段のセッションに入るとき (`shared`) は
+ * 使わない (何もしない関数を返す)。段 1〜3 を新しくエンコードするときは 1 本ぶん取り、埋まっていれば null。
+ * 段 0 のライブは今までどおり数えない。`hold` はテストで差し替えるときだけ渡す
+ */
+export function rungSlot(
+  rung: Rung,
+  shared: boolean,
+  hold: () => (() => void) | null = holdTranscode,
+): (() => void) | null {
+  if (rung === 0 || shared) return () => undefined;
+  return hold();
+}
+
+/**
+ * **段を下げた新しいエンコードの枠をどう取るか** (`attend`)。枠を取る前に決める。いったん抜けてから取れなかった、
+ * を起こさないため (抜けると映像が切れ、今の段にも戻れない)。
+ *
+ * - `hold` … 同じ段を共有するか、枠が空いている。そのまま取る
+ * - `leave` … 空いていないが、観ているのが自分だけの段を下げたセッションから移る (`leaving`)。抜ければ 1 つ空くので、抜けてから取る
+ * - `stay` … 空かない。段を下げずに今のまま
+ *
+ * @param room いま空いている本数 (`transcode.transcodeRoom`。上限を下げた直後は負になりうる)
+ */
+export function rungPlan(o: {
+  shared: boolean;
+  room: number;
+  leaving: boolean;
+}): "hold" | "leave" | "stay" {
+  if (o.shared || o.room > 0) return "hold";
+  if (o.leaving && o.room + 1 > 0) return "leave";
+  return "stay";
+}
+
+/**
+ * **このコーデックをソフトウェアでエンコードしてよいか。** H.264 はいつも、AV1 は段 0 だけ (SVT-AV1 は段を下げても重い)、
+ * H.265 はいつも駄目 (ソフトウェアのエンコーダを組んでいない)。駄目なものは GPU が降りてもソフトウェアに降りず、
+ * そこで止めて降りた方式を覚える (`Session.run`・`server/playback.ts` の `withFallback`)
+ */
+export function softwareEncodes(codec: LiveCodec, rung: Rung): boolean {
+  return codec === "h264" || (codec === "av1" && rung === 0);
+}
+
+/**
  * 音声のエンコード方式。**AV1 と組むときは Opus。**
  *
  * 設計 (stream.md#前提) が狙っていた組み合わせで、**録画と同じ扱い**でもある
@@ -499,11 +663,14 @@ function softwareArgs(codec: Exclude<LiveCodec, "hevc">): string[] {
  *
  * どちらも 2ch に落とす。デュアルモノの配り直し (`-af pan=…`) はこの手前で
  * 効いているので、ここへ来るのは既に「出したい音」1 本ぶん
+ *
+ * **回線に合わせて下げた段 (`rung` が 1〜3) は 96k** (`#lib/rungs.ts` の `RUNG_AUDIO_KBPS`)。256k は 2.4 Mbit/s の回線の 1 割を使う
  */
-export function audioArgs(codec: StreamCodec): string[] {
+export function audioArgs(codec: StreamCodec, rung: Rung = 0): string[] {
+  const rate = rung === 0 ? "256k" : `${RUNG_AUDIO_KBPS}k`;
   return codec === "av1"
-    ? ["-c:a", "libopus", "-b:a", "256k", "-ac", "2"]
-    : ["-c:a", "aac", "-b:a", "256k", "-ac", "2"];
+    ? ["-c:a", "libopus", "-b:a", rate, "-ac", "2"]
+    : ["-c:a", "aac", "-b:a", rate, "-ac", "2"];
 }
 
 /**
@@ -619,6 +786,13 @@ const GPU_BUSY =
  * (`live-player.svelte.ts`。文面は見ず、H.265 をリクエストしていて降りたことで決める)
  */
 const HEVC_GAVE_UP = "H.265 を GPU でエンコードできませんでした";
+/** 段を下げた AV1 を GPU でエンコードできずに降りたときの文面 (`Session.run`) */
+const AV1_GAVE_UP = "AV1 を GPU でエンコードできませんでした";
+/**
+ * 段を下げようとしたが、その場で変換する本数の枠 (`transcode.ts`) が埋まっていて下げられなかったときの断り書き (`attend`)。
+ * 段は下げずに今のまま観られる
+ */
+const RUNG_BUSY = "サーバが混んでいるため、画質を下げられませんでした";
 /** H.265 をリクエストされたが出せないので H.264 にしたときの断り書き (`attend`) */
 const HEVC_TO_H264 =
   "H.265 を GPU でエンコードできないため、H.264 に切り替えました";
@@ -914,6 +1088,8 @@ class Session {
      * 無ければエージェントが選ぶ
      */
     readonly pin: string | null = null,
+    /** 回線に合わせて下げた段 (`#lib/rungs.ts`)。0 なら下げない。放送そのまま (`raw`) は 0 */
+    readonly rung: Rung = 0,
   ) {
     this.list = new TrackList(program);
     this.id = key(
@@ -924,7 +1100,23 @@ class Session {
       raw ? "raw" : codec,
       track,
       pin,
+      rung,
     );
+  }
+
+  /** 出した映像の長さ (`pace` の `speed`)。ffmpeg ごとに init から読み直す (`drain`) */
+  private readonly length = new VideoLength();
+  private readonly meter = new SpeedMeter();
+  /** 出した映像の長さの合計 (秒) */
+  private media = 0;
+
+  /**
+   * **エンコードの速さ** (出した映像の時刻の進み ÷ 実時間。`#lib/rungs.ts` の `Pace`)。ライブは実時間で届くので、
+   * 追いついていれば 1 前後で、1 を下回り続けたらエンコードが遅れている。追っかけは倍速で読むので 2 前後まで出る。
+   * 放送そのまま (エンコードしない) と、測れるまでは null
+   */
+  get speed(): number | null {
+    return this.raw ? null : this.meter.speed(Date.now());
   }
 
   /** 一覧 (`sessions`) での目印。**作ったときに決めて、畳むときも同じものを消す** */
@@ -934,6 +1126,13 @@ class Session {
     // 脇から字幕だけ受け取っている人は数えない (`Viewer.side`)
     for (const viewer of this.viewers) if (viewer.side !== true) return false;
     return true;
+  }
+
+  /** 映像を観ているのがこの人だけか (`empty` と同じく字幕だけの人は数えない)。抜ければ畳まれる */
+  alone(viewer: Viewer): boolean {
+    for (const other of this.viewers)
+      if (other !== viewer && other.side !== true) return false;
+    return this.viewers.has(viewer);
   }
 
   /**
@@ -1104,9 +1303,15 @@ class Session {
           : this.track;
       // GPU でエンコードするか (`pickLiveHw`)。降りたらソフトウェアで再エンコードする (下)
       let hw = this.codec === "audio" ? null : pickLiveHw(this.codec);
-      // H.265 はソフトウェアに降りられない。画面は諦めて次の形式をリクエストし直す (`live-player.svelte.ts`)
-      if (this.codec === "hevc" && hw === null) {
-        this.died(label, "H.265 を GPU でエンコードできない", HEVC_GAVE_UP);
+      /*
+       * H.265 と段を下げた AV1 はソフトウェアに降りられない (`softwareEncodes`)。画面は諦めて次の形式をリクエストし直す
+       * (`live-player.svelte.ts`)。段を下げたときは、同じ段をリクエストし直すと次のコーデックになる (`rungCodec`)
+       */
+      const gpuOnly =
+        this.codec !== "audio" && !softwareEncodes(this.codec, this.rung);
+      const gaveUp = this.codec === "hevc" ? HEVC_GAVE_UP : AV1_GAVE_UP;
+      if (gpuOnly && hw === null) {
+        this.died(label, `${this.codec} を GPU でエンコードできない`, gaveUp);
         return;
       }
       /*
@@ -1161,7 +1366,14 @@ class Session {
         const proc = Bun.spawn(
           [
             config.ffmpeg,
-            ...encodeArgs(this.program, this.audio, this.codec, wanted, hw),
+            ...encodeArgs(
+              this.program,
+              this.audio,
+              this.codec,
+              wanted,
+              hw,
+              this.rung,
+            ),
           ],
           // 字幕は 4 本目のパイプ (pipe:3) へ出させる。**stdio の配列でしか増やせない**
           {
@@ -1240,15 +1452,16 @@ class Session {
           !(wanted !== null && this.noSubtitle)
         ) {
           /*
-           * H.265 はソフトウェアに降りられない。覚えて (同時に開ける数を超えただけなら覚えない) 降りる。
-           * 画面は次の形式をリクエストし直し、覚えている間は H.265 の指示を H.264 にする (`liveHevc`)
+           * H.265 と段を下げた AV1 はソフトウェアに降りられない (`softwareEncodes`)。覚えて (同時に開ける数を超えただけなら
+           * 覚えない) 降りる。画面は次の形式をリクエストし直し、覚えている間は H.265 の指示を H.264 にする (`liveHevc`)。
+           * 段を下げたときは、同じ段をリクエストし直すと次のコーデックになる (`rungCodec`)
            */
-          if (this.codec === "hevc") {
+          if (gpuOnly) {
             blameLiveHw(this.codec, hw, this.busy);
             this.died(
               label,
-              `GPU (${hw.way.device} の ${hw.way.kind}) で H.265 をエンコードできなかった`,
-              HEVC_GAVE_UP,
+              `GPU (${hw.way.device} の ${hw.way.kind}) で ${this.codec} (段 ${this.rung}) をエンコードできなかった`,
+              gaveUp,
             );
             return;
           }
@@ -1556,6 +1769,7 @@ class Session {
       for (const segment of splitter.feed(chunk)) {
         if (segment.kind === "init") {
           this.init = segment.data;
+          if (this.proc === proc) this.length.init(segment.data);
           if (this.proc === proc) this.opening.init ??= this.since();
           for (const viewer of this.viewers)
             this.hand(viewer, CHANNEL.videoInit, segment.data);
@@ -1574,6 +1788,11 @@ class Session {
                 ),
               );
             }
+          }
+          if (this.proc === proc) {
+            this.media += this.length.media(segment.data);
+            const now = Date.now();
+            this.meter.record(now, this.media, now);
           }
           for (const viewer of this.viewers)
             this.hand(viewer, CHANNEL.videoMedia, segment.data);
@@ -2040,7 +2259,10 @@ class RawCaptions {
  * 出すかが違えば別のものになる (`encodeArgs`)。言語が複数ある放送でしか
  * 動かないところなので、そのために起こし直すのは年に数回のこと。
  *
- * 名指しのチューナー (`pin`) も入る (下の引数の説明)
+ * 名指しのチューナー (`pin`) も入る (下の引数の説明)。
+ *
+ * **回線に合わせて下げた段 (`rung`) も入る。** 段は固定の表 (`#lib/rungs.ts`) なので、同じ段の人どうしは共有できる。
+ * 段 0 の目印は段を足す前と同じ
  */
 export const key = (
   type: string,
@@ -2052,8 +2274,9 @@ export const key = (
   // **放送そのままでは音声で分けない**。全部の音声を送って画面が選ぶ (`TuneCommand.raw`)
   // **チューナーを名指ししているものは別のセッションにする**。名指しでない人と混ぜると、指定のチューナーで選局されない
   pin: string | null = null,
+  rung: Rung = 0,
 ) =>
-  `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}`;
+  `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}${rung === 0 ? "" : `~${rung}`}`;
 const sessions = new Map<string, Session>();
 
 /** エンコードし始めて一覧に載せる。畳むのは見ている人がいなくなったとき。ここでは待たない */
@@ -2066,6 +2289,7 @@ function begin(
   track: number,
   raw: boolean,
   pin: string | null = null,
+  rung: Rung = 0,
 ): Session {
   const session = new Session(
     channelType,
@@ -2079,13 +2303,45 @@ function begin(
     undefined,
     undefined,
     pin,
+    rung,
   );
   sessions.set(session.id, session);
   void session.run();
   return session;
 }
 
-/** 見に行く。既に同じものをエンコードしていれば、そのセッションを共有する */
+/** いま同じもの (段まで同じ) をエンコードしているセッション。段を下げるときに枠が要るかを決める (`rungSlot`) */
+function sharedSession(
+  channelType: string,
+  channel: string,
+  serviceId: number,
+  now: NowPlaying,
+  codec: StreamCodec,
+  track: number,
+  raw: boolean,
+  pin: string | null,
+  rung: Rung,
+): Session | undefined {
+  return sessions.get(
+    key(
+      channelType,
+      channel,
+      serviceId,
+      now.audio,
+      raw ? "raw" : codec,
+      track,
+      pin,
+      rung,
+    ),
+  );
+}
+
+/**
+ * 見に行く。既に同じものをエンコードしていれば、そのセッションを共有する。
+ *
+ * `release` は段を下げたもの (`rung` が 1〜3) のために呼ぶ側が取った枠 (`rungSlot`)。新しくエンコードし始めたら
+ * 畳んだときに返し、共有したならその場で返す
+ */
 function watch(
   channelType: string,
   channel: string,
@@ -2096,19 +2352,25 @@ function watch(
   raw: boolean,
   viewer: Viewer,
   pin: string | null = null,
+  rung: Rung = 0,
+  release: () => void = () => undefined,
 ): Session {
+  const shared = sharedSession(
+    channelType,
+    channel,
+    serviceId,
+    now,
+    codec,
+    track,
+    raw,
+    pin,
+    rung,
+  );
   const session =
-    sessions.get(
-      key(
-        channelType,
-        channel,
-        serviceId,
-        now.audio,
-        raw ? "raw" : codec,
-        track,
-        pin,
-      ),
-    ) ?? begin(channelType, channel, serviceId, now, codec, track, raw, pin);
+    shared ??
+    begin(channelType, channel, serviceId, now, codec, track, raw, pin, rung);
+  if (shared === undefined) session.whenStopped(release);
+  else release();
   session.add(viewer);
   return session;
 }
@@ -2138,28 +2400,51 @@ export const CHASE_STREAM_HOLD = 4 * 1024 * 1024;
  * 放送そのままでは効かない (全部の音声を送り、アプリが選ぶ)。
  *
  * 画面の視聴者と同じ取り合いに加わる。同じ局・同じエンコード方式・**同じ音声**を誰かが見ていれば
- * 共有し (`key`)、最後の 1 人が抜けたら畳む。局が無ければ null
+ * 共有し (`key`)、最後の 1 人が抜けたら畳む。局が無ければ null。
+ *
+ * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`。コーデックは呼ぶ側が `rungCodec` で決めて `codec` に渡す)。
+ * 放送そのままと音声だけでは効かない。同じ段を誰も観ていなければ枠を使い (`rungSlot`)、埋まっていれば `'busy'`
  */
 export function liveStream(
   serviceId: number,
   codec: StreamCodec | "raw",
   audio?: string,
-): ReadableStream<Uint8Array> | null {
+  rung: Rung = 0,
+): ReadableStream<Uint8Array> | null | "busy" {
   const row = serviceOf(serviceId);
   if (row === undefined) return null;
-  return sessionStream((viewer) => {
-    const raw = codec === "raw";
-    return watch(
+  const raw = codec === "raw";
+  const form = raw ? "h264" : codec;
+  const level = raw || codec === "audio" ? 0 : rung;
+  const now = nowPlaying(serviceId, audio);
+  const shared = sharedSession(
+    row.type,
+    row.channel,
+    serviceId,
+    now,
+    form,
+    0,
+    raw,
+    null,
+    level,
+  );
+  const release = rungSlot(level, shared !== undefined);
+  if (release === null) return "busy";
+  return sessionStream((viewer) =>
+    watch(
       row.type,
       row.channel,
       serviceId,
-      nowPlaying(serviceId, audio),
-      raw ? "h264" : codec,
+      now,
+      form,
       0,
       raw,
       viewer,
-    );
-  });
+      null,
+      level,
+      release,
+    ),
+  );
 }
 
 /**
@@ -2173,13 +2458,17 @@ export function liveStream(
  * シークは `at` を変えてリクエストし直す (画面の追っかけと同じく、位置ごとに立て直す)。
  * `audio` はエンコードする音声 (`AudioTrack.id`)。無いもの・省けば主音声で、放送そのままでは効かない。
  * 録画が無い・まだ何も録れていなければ null。再エンコードでその場の変換の枠 (`transcode.ts`) が
- * 埋まっていれば `'busy'`
+ * 埋まっていれば `'busy'`。
+ *
+ * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`。コーデックは呼ぶ側が `rungCodec` で決めて `codec` に渡す)。
+ * 追っかけはもともと枠を使うので、段を下げても使う枠は 1 つのまま。`raw` では効かない
  */
 export function chaseStream(
   recordingId: number,
   codec: LiveCodec | "raw",
   at: number,
   audio?: string,
+  rung: Rung = 0,
 ): ReadableStream<Uint8Array> | null | "busy" {
   const source = chaseSource(recordingId);
   if (source === undefined || source.size === 0) return null;
@@ -2204,6 +2493,8 @@ export function chaseStream(
         language: undefined,
         // 元の TS は上で直に流す (このストリームでは字幕を運ばない)
         raw: false,
+        rung,
+        playable: [codec],
       },
       viewer,
       hold,
@@ -2617,6 +2908,10 @@ type Asked =
       raw: boolean;
       /** デバッグ用に名指しされたチューナー (エージェントの `tuner`)。無ければ名指ししない */
       tuner: string | null;
+      /** 回線に合わせて下げた段 (`#lib/rungs.ts`)。読めなければ 0 */
+      rung: Rung;
+      /** 端末が再生できるコーデック (`parsePlayable`)。段を下げるときのコーデックを選ぶ (`rungCodec`) */
+      playable: LiveCodec[];
     }
   | ChaseAsked;
 
@@ -2631,6 +2926,10 @@ type ChaseAsked = {
   language: number | undefined;
   /** 元の TS で欲しいと言われたか (`codec` は効かない) */
   raw: boolean;
+  /** 回線に合わせて下げた段 (`#lib/rungs.ts`)。読めなければ 0。`raw` では効かない */
+  rung: Rung;
+  /** 端末が再生できるコーデック (`parsePlayable`)。段を下げるときのコーデックを選ぶ (`rungCodec`) */
+  playable: LiveCodec[];
 };
 
 /**
@@ -2653,6 +2952,8 @@ export function parseCommand(message: Record<string, unknown>): Asked | null {
   const number = Number(message["language"]);
   const language =
     Number.isInteger(number) && number >= 1 && number <= 8 ? number : undefined;
+  // 段 (`#lib/rungs.ts`)。知らない値は 0 (下げない)
+  const rung = parseRung(message["rung"]);
   switch (message["type"]) {
     case "data":
       return { type: "data", on: message["on"] === true };
@@ -2662,16 +2963,19 @@ export function parseCommand(message: Record<string, unknown>): Asked | null {
       return { type: "hold", on: message["on"] === true };
     case "chase": {
       const at = Number(message["at"]);
+      // 追っかけは段 0 では H.265 を出さない (`#lib/live.ts` の `LiveCodec`)。段を下げるときは `playable` から選ぶ
+      const chased = codec === "hevc" ? "h264" : codec;
       return {
         type: "chase",
         recordingId: Number(message["recordingId"]),
         at: Number.isFinite(at) ? Math.max(0, at) : 0,
         audio,
-        // 追っかけは H.265 を出さない (`#lib/live.ts` の `LiveCodec`)
-        codec: codec === "hevc" ? "h264" : codec,
+        codec: chased,
         caption,
         language,
         raw: message["raw"] === true,
+        rung,
+        playable: parsePlayable(message["playable"], chased),
       };
     }
     case "tune": {
@@ -2693,6 +2997,8 @@ export function parseCommand(message: Record<string, unknown>): Asked | null {
           typeof message["tuner"] === "string" && message["tuner"] !== ""
             ? message["tuner"]
             : null,
+        rung,
+        playable: parsePlayable(message["playable"], codec),
       };
     }
     default:
@@ -2753,7 +3059,16 @@ export function attend(connection: Connection): void {
       viewer.ready = false;
       // 止めてと言われていたのは前の位置のぶん。新しい位置は送り始める (画面も止めた印を戻している)
       viewer.held = false;
-      current = openChase(asked, viewer);
+      // 段を下げるなら、コーデックはサーバが選ぶ (`rungCodec`。答えの `tuned` で知らせる)
+      const lowered = asked.rung !== 0 && !asked.raw;
+      current = openChase(
+        {
+          ...asked,
+          codec: lowered ? rungCodec(asked.playable, true) : asked.codec,
+          rung: lowered ? asked.rung : 0,
+        },
+        viewer,
+      );
       return;
     }
     const { channelType, channel, serviceId, audio, caption, raw, tuner } =
@@ -2763,7 +3078,10 @@ export function attend(connection: Connection): void {
      * コーデックで受け取るので、そのまま観られる。替えたことは断り書きで言う
      */
     const downgraded = asked.codec === "hevc" && !raw && !liveHevc();
-    const codec = downgraded ? "h264" : asked.codec;
+    const plain = downgraded ? "h264" : asked.codec;
+    // 段を下げるなら、コーデックはサーバが選ぶ (`rungCodec`)。放送そのままでは下げない
+    let rung: Rung = raw ? 0 : asked.rung;
+    let codec = rung === 0 ? plain : rungCodec(asked.playable, true);
 
     const now = nowPlaying(serviceId, audio);
 
@@ -2772,17 +3090,66 @@ export function attend(connection: Connection): void {
      *
      * ただし**畳まれていないことを確かめる**。ffmpeg が降りたセッションを
      * 指したままだと「もう見ている」と見なされ、選び直しても「やり直す」を
-     * 押しても新しく起こさない。画面は待ち続けるだけになる
+     * 押しても新しく起こさない。画面は待ち続けるだけになる。
+     * `form` を省くと、段とコーデックは見ずに局・音声・字幕だけを比べる (下の枠の話)
      */
-    const same =
+    const sameAs = (form?: { codec: LiveCodec; rung: Rung }): boolean =>
       current?.alive === true &&
       current.channelType === channelType &&
       current.channel === channel &&
       current.serviceId === serviceId &&
       current.raw === raw &&
       current.pin === tuner &&
-      (raw || (current.audio.id === now.audio.id && current.codec === codec)) &&
+      (raw ||
+        (current.audio.id === now.audio.id &&
+          (form === undefined ||
+            (current.codec === form.codec && current.rung === form.rung)))) &&
       current.track === caption;
+    let same = sameAs({ codec, rung });
+
+    /*
+     * **段を下げた新しいエンコードには、その場で変換する本数の枠を 1 つ使う** (`rungSlot`)。同じ段をもう誰かが観ていれば
+     * 共有するので使わない。観ているのが自分だけの段を下げたセッションから移るなら、抜ければ枠が 1 つ空くので、抜けてから取る。
+     * 抜けるかは枠を取る前に決める (`rungPlan`)。抜けたあとで取れないと、映像が切れたうえに今の段にも戻れない。
+     * **空かなければ段を下げない。** いま同じ局を観ていればその段のまま、そうでなければ段 0 で開き、理由を断り書きで言う
+     */
+    let release: (() => void) | null = () => undefined;
+    let refused = false;
+    if (rung !== 0 && !same) {
+      const shared = () =>
+        sharedSession(
+          channelType,
+          channel,
+          serviceId,
+          now,
+          codec,
+          caption,
+          raw,
+          tuner,
+          rung,
+        ) !== undefined;
+      const plan = rungPlan({
+        shared: shared(),
+        room: transcodeRoom(),
+        leaving:
+          current !== null && current.rung !== 0 && current.alone(viewer),
+      });
+      if (plan === "leave") leave();
+      release = plan === "stay" ? null : rungSlot(rung, shared());
+      if (release === null) {
+        refused = true;
+        release = () => undefined;
+        const kept = current;
+        if (kept !== null && sameAs()) {
+          codec = kept.codec === "audio" ? plain : kept.codec;
+          rung = kept.rung;
+        } else {
+          codec = plain;
+          rung = 0;
+        }
+        same = sameAs({ codec, rung });
+      }
+    }
 
     /*
      * **知らせるのも印を戻すのも、共有する前に済ませる。**
@@ -2802,15 +3169,22 @@ export function attend(connection: Connection): void {
       codecs: codecsFor(codec),
       codec,
       raw,
+      rung,
       audio: now.audio.id,
       audios: now.audios,
     };
     connection.send(CHANNEL.control, 0n, json(notice));
-    if (downgraded)
+    if (downgraded && rung === 0 && codec === "h264")
       connection.send(
         CHANNEL.control,
         0n,
         json({ type: "notice", message: HEVC_TO_H264 } satisfies Notice),
+      );
+    if (refused)
+      connection.send(
+        CHANNEL.control,
+        0n,
+        json({ type: "notice", message: RUNG_BUSY } satisfies Notice),
       );
 
     /*
@@ -2826,6 +3200,7 @@ export function attend(connection: Connection): void {
      * その場で渡すので、映像は 0.2 秒ほどで戻る
      */
     if (same && current !== null) {
+      release();
       current.add(viewer);
       return;
     }
@@ -2841,10 +3216,35 @@ export function attend(connection: Connection): void {
       raw,
       viewer,
       tuner,
+      rung,
+      release,
     );
   };
 
+  /*
+   * **送り出しの具合を知らせる** (`pace`。`server/pace.ts`)。溜まりと捨てた塊は接続ごと、エンコードの速さはいま観ているセッションのもの。
+   * 何も観ていない間は送らない
+   */
+  const meter = new PaceMeter();
+  const pacing = setInterval(() => {
+    if (current === null) return;
+    const pace = meter.next(
+      Date.now(),
+      connection.backlog,
+      connection.dropped,
+      current.speed,
+    );
+    if (pace !== null)
+      connection.send(
+        CHANNEL.control,
+        0n,
+        json({ type: "pace", ...pace } satisfies Notice),
+      );
+  }, PACE_CHECK);
+  pacing.unref?.();
+
   connection.onclose = () => {
+    clearInterval(pacing);
     leave();
   };
 }
@@ -2897,6 +3297,8 @@ function openChase(
   };
 
   const { recordingId, at, audio: wanted, codec, caption, raw } = asked;
+  // 段を下げた追っかけも使う枠は 1 つ (下げないときと同じ)。コーデックは呼ぶ側が選んである (`rungCodec`)
+  const rung = raw ? 0 : asked.rung;
   const source = Number.isInteger(recordingId)
     ? chaseSource(recordingId)
     : undefined;
@@ -2933,6 +3335,7 @@ function openChase(
     codecs: codecsFor(codec),
     codec,
     raw,
+    rung,
     audio: audio.id,
     audios: tracks,
   });
@@ -2969,6 +3372,8 @@ function openChase(
           stopReading,
         ),
       (consumed) => rememberResume(rec.id, resumeFrom(plan, consumed)),
+      null,
+      rung,
     );
   } catch (failure) {
     // 起こせなかった。取った枠は返す
