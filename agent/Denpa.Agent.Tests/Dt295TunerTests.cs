@@ -297,6 +297,59 @@ public class Dt295TunerTests
         await Assert.That(tracker.Push(both.AsSpan(188))).IsFalse();
     }
 
+    [Test]
+    public async Task 番組番号を指定すると_NIT_とその番組の_PMT_だけを追い_主番組もその番組になる()
+    {
+        // 番組 0x400 (PMT 0x1F0) と 0x401 (PMT 0x2F0) が載った PAT
+        var pat = Dt295Ts.Packet(0, Dt295Ts.Section(0x00, 0x7FE0, [0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE1, 0xF0, 0x04, 0x01, 0xE2, 0xF0]));
+        var first = Dt295Ts.Packet(0x1F0, Dt295Ts.Section(0x02, 0x400, [0xE1, 0x11, 0xF0, 0x00, 0x02, 0xE1, 0x11, 0xF0, 0x00, 0x0F, 0xE1, 0x12, 0xF0, 0x00]));
+        var second = Dt295Ts.Packet(0x2F0, Dt295Ts.Section(0x02, 0x401, [0xE2, 0x11, 0xF0, 0x00, 0x02, 0xE2, 0x11, 0xF0, 0x00, 0x0F, 0xE2, 0x12, 0xF0, 0x00]));
+
+        var tracker = new Dt295RouteTracker(needCat: false, service: 0x401);
+        await Assert.That(tracker.Push(pat)).IsTrue();
+        await Assert.That(tracker.Plan.Any(route => route.Pid == 0x2F0)).IsTrue();
+        await Assert.That(tracker.Plan.Any(route => route.Pid == 0x1F0)).IsFalse();
+        await Assert.That(tracker.Settled).IsFalse();
+        // 指定していない番組の PMT は読まない
+        await Assert.That(tracker.Push(first)).IsFalse();
+        await Assert.That(tracker.Main).IsNull();
+        await Assert.That(tracker.Push(second)).IsTrue();
+        await Assert.That(tracker.Main!.Number).IsEqualTo(0x401);
+        await Assert.That(tracker.Main!.VideoPid).IsEqualTo(0x211);
+        await Assert.That(tracker.Settled).IsTrue();
+        await Assert.That(tracker.Plan.Any(route => route.Pid is 0x111 or 0x112)).IsFalse();
+
+        // 指定が無ければ全番組を追い、主番組は PAT の順で最初の番組
+        var all = new Dt295RouteTracker(needCat: false);
+        all.Push(pat);
+        all.Push(first);
+        all.Push(second);
+        await Assert.That(all.Main!.Number).IsEqualTo(0x400);
+        await Assert.That(all.Plan.Any(route => route.Pid == 0x211)).IsTrue();
+        await Assert.That(all.Settled).IsTrue();
+    }
+
+    [Test]
+    public async Task ルートの計画は_PAT_CAT_PMT_以外のパケットを読まない()
+    {
+        var tracker = new Dt295RouteTracker(needCat: false);
+        // PAT より前の映像のパケットや、PAT に載っていない PID は無視する
+        await Assert.That(tracker.Push(Dt295Ts.Payload(0x111))).IsFalse();
+        await Assert.That(tracker.PatSeen).IsFalse();
+    }
+
+    [Test]
+    public async Task AES_を外したパケットも_PSI_を読む側に渡す()
+    {
+        // 手動で PID を決めるときは、機材が PSI にも AES をかける。外したあとのパケットを渡す
+        var plain = Dt295Ts.Payload(0x111);
+        var received = new List<byte[]>();
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor(), FakeDt295Usb.TsKey, Iv);
+        filter.Feed(Dt295Ts.Encrypted(plain, FakeDt295Usb.TsKey, Iv), new ArrayBufferWriter<byte>(), packet => received.Add(packet.ToArray()));
+        await Assert.That(received.Count).IsEqualTo(1);
+        await Assert.That(received[0]).IsEquivalentTo(plain);
+    }
+
     // ---------------------------------------------------------------------
     // ボード (開く・更新・閉じる)
     // ---------------------------------------------------------------------
@@ -489,6 +542,15 @@ public class Dt295TunerTests
         await Assert.That(table.Pause).IsEqualTo((ushort)4);
         // 0x101A のビット 15 が 1 なので、PID は機材が選ぶ (実機の BS1 では、これを 0 にすると SI しか流れない)
         await Assert.That(table.AutoPidMode).IsTrue();
+        // 手動 (機材に PID を選ばせない) にするときは、最後に 0x101A のビット 15 を 0 にする行を足す
+        var manual = table.WithAutoPidMode(false);
+        await Assert.That(manual.AutoPidMode).IsFalse();
+        await Assert.That(manual.Rows.Count).IsEqualTo(table.Rows.Count + 1);
+        await Assert.That(manual.Rows[^1]).IsEqualTo(new Dt295Field(0x101A, 15, 1, 0));
+        await Assert.That(manual.Pause).IsEqualTo(table.Pause);
+        await Assert.That(manual.WithAutoPidMode(true).AutoPidMode).IsTrue();
+        // 同じ値ならそのまま
+        await Assert.That(table.WithAutoPidMode(true)).IsSameReferenceAs(table);
     }
 
     [Test]

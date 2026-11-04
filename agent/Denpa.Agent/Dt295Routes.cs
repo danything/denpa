@@ -307,11 +307,12 @@ public sealed class Dt295SectionReader
 /// 届いた PSI からルートの計画を組み立てる (11.2・11.3)。始めは PAT (暗黙) と固定の SI PID。PAT が読めたら NIT とすべての PMT を足し、
 /// PMT が読めたら PCR・CA 記述子の PID・ES を足す。主番組は PAT の順で最初の、映像と音声を持つ番組で、**一度決めたら替えない** (11.3)。
 /// CAT が読めたら EMM (CA 記述子の PID) を足す。
-/// 読むのは暗号化されていない (transport_scrambling_control = 00) パケットだけ。
+/// 読むのは AES を外したあとの、暗号化されていない (transport_scrambling_control = 00) パケットだけで、PAT・CAT・PAT に載った PMT の PID のものだけを使う。
 /// 版数の追従 (11.4) と、録画中の PMT の変化の扱い (11.3 の後半) はまだ持たない (最初の PAT・CAT と、PMT ごとに最初の 1 つだけを使う)
 /// </summary>
 /// <param name="needCat">そろったとみるのに CAT を待つか (地上波は待ち、衛星は待たない。11.2・8.6)</param>
-public sealed class Dt295RouteTracker(bool needCat = true)
+/// <param name="service">受ける番組の番組番号。指定すると PAT のうち NIT とこの番組だけを追い、主番組もこの番組にする。null なら全番組を追う</param>
+public sealed class Dt295RouteTracker(bool needCat = true, int? service = null)
 {
     private readonly Dt295SectionReader _sections = new();
     private readonly List<int> _pids = [.. Dt295Routes.FixedSi];
@@ -343,13 +344,16 @@ public sealed class Dt295RouteTracker(bool needCat = true)
     {
         var changed = false;
         var pid = packet.Length == 188 ? ((packet[1] & 0x1F) << 8) | packet[2] : -1;
+        // 使うのは PAT・CAT・PAT に載った PMT だけ。映像などのパケットはセクションに組まない
+        if (pid != 0 && pid != 1 && !(_pat is not null && _pat.Any(entry => entry.Pid == pid))) return false;
         foreach (var section in _sections.Push(packet))
         {
             if (pid == 0 && _pat is null && Dt295SectionReader.Pat(section) is { } pat)
             {
-                _pat = pat;
+                // 番組番号の指定があれば、NIT (番組番号 0) とその番組だけを追う
+                _pat = service is null ? pat : pat.Where(entry => entry.Number == 0 || entry.Number == service).ToList();
                 // NIT (番組番号 0) とすべての PMT (11.2 の手順 2)
-                foreach (var entry in pat) _pids.Add(entry.Pid);
+                foreach (var entry in _pat) _pids.Add(entry.Pid);
                 changed = true;
             }
             else if (pid == 1 && !_cat && Dt295SectionReader.Cat(section) is { } emms)

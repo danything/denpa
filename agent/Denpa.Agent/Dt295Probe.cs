@@ -152,8 +152,11 @@ public static class Dt295Probe
     /// <summary>チューナーと同じ手順で、決めた秒数だけ受けて数える (9 章)</summary>
     private static void Receive(Options options, Dt295Board board, Dt295TsStats stats, Action<string> step)
     {
-        var routes = new Dt295RouteTracker(needCat: options.Kind == 'T');
-        var stream = Dt295Stream.Start(board, Dt295Receive.Ensure(), routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence, program: options.Program);
+        var satellite = options.Kind != 'T';
+        var routes = new Dt295RouteTracker(needCat: !satellite, service: satellite && options.Program > 0 ? options.Program : null);
+        var data = Dt295Receive.Ensure();
+        if (satellite) data = data with { Fields = data.Fields.WithAutoPidMode(false) };
+        var stream = Dt295Stream.Start(board, data, routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence, program: options.Program);
         step("受信を始めました (9.2〜9.7)");
         try
         {
