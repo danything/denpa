@@ -444,13 +444,12 @@ export function splitReaderName(name: string): {
   return { name: found[1] ?? name, where: found[2] ?? null };
 }
 
-/** カードリーダーの状態の呼び名。`unknown` は前のバージョンのエージェント (名前しか返さない) */
+/** カードリーダーの状態の呼び名 */
 export const READER_STATE_LABEL: Record<CardReaderState, string> = {
   active: "使用中",
   standby: "予備",
   empty: "カードなし",
   error: "エラー",
-  unknown: "—",
 };
 
 /** ロゴまで見て判定できたときの覚え書き (`cm.openCm`) */

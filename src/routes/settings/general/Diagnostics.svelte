@@ -79,7 +79,7 @@
     version === "dev" ? "開発ビルド (dev)" : version;
   const versionText = $derived(showVersion(data.environment.version));
 
-  /** エージェントのバージョン。前のバージョンのエージェントは返さないので、そのときは理由を出す */
+  /** エージェントのバージョン。取れなければ理由を出す */
   const agentVersionText = $derived(
     about.value === undefined
       ? null

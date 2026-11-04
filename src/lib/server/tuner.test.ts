@@ -122,6 +122,7 @@ describe("recordingHolds", () => {
     disabled: false,
     rank: 1,
     device: null,
+    pin: "mlt0",
     lnb: null,
     channel: { type: "GR", channel: "T21" },
     users: [],

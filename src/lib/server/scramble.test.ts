@@ -100,26 +100,6 @@ describe("カードリーダーの状態", () => {
     expect(card.readers[3]?.error).toBe("使えません");
   });
 
-  test("前のバージョンのエージェント (名前だけの並び) でも落ちずに名前を出す", () => {
-    const warn = console.warn;
-    console.warn = () => {};
-    try {
-      const card = readCardStatus({
-        ok: true,
-        readers: ["Gemplus (usb 4-11)"],
-        message: "カードが読めています (Gemplus (usb 4-11)、0000001234567890)",
-      });
-      expect(card.ok).toBe(true);
-      expect(card.source).toBe("local");
-      expect(card.message).toContain("0000001234567890");
-      expect(card.readers).toEqual([
-        { name: "Gemplus (usb 4-11)", state: "unknown", ids: [], tuners: [] },
-      ]);
-    } finally {
-      console.warn = warn;
-    }
-  });
-
   test("鍵を配る相手から貰っているときは相手と番号を持つ", () => {
     const card = readCardStatus({
       ok: true,
