@@ -407,6 +407,9 @@ internal sealed class Dt295Stream
     private Dt295Route[] _written = [];
     private Dt295Program? _writtenMain;
     private bool _settled;
+
+    /// <summary>最後にログへ出した、ルートの計画を作り直せなかった理由 (同じものを繰り返し出さない)</summary>
+    private string? _problem;
     private volatile bool _stopping;
     private volatile bool _ended;
     private volatile string? _reason;
@@ -500,6 +503,7 @@ internal sealed class Dt295Stream
                 }
                 quiet.Restart();
                 if (_filter.Feed(raw.AsSpan(0, got), writer, packet => changed |= _routes.Push(packet)) == 0) continue;
+                ReportProblem();
                 if (changed || (!_settled && since.Elapsed >= _settle))
                 {
                     changed = false;
@@ -520,6 +524,18 @@ internal sealed class Dt295Stream
             _first.Set();
             writer.Complete();
         }
+    }
+
+    /// <summary>
+    /// ルートの計画を作り直せない理由 (複数の ECM・スロット不足。11.5) が変わったら、ログに出す。
+    /// 計画は前のままになり、新しい PID が流れないので、ログに出さないと原因が分からない
+    /// </summary>
+    private void ReportProblem()
+    {
+        var problem = _routes.Problem;
+        if (problem == _problem) return;
+        _problem = problem;
+        if (problem is not null) Log.Write($"[{_name}] ルートの計画を作り直せません ({problem})。前の計画のまま受信します");
     }
 
     /// <summary>

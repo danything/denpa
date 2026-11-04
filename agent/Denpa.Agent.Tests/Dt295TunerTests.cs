@@ -298,6 +298,54 @@ public class Dt295TunerTests
     }
 
     [Test]
+    public async Task 異なる_ECM_が_2_本要る番組は計画を作り直さず_理由を残す()
+    {
+        // 映像と音声が別の ECM (0x901・0x902) を使う PMT。複数の ECM は扱えない (11.5)
+        var pat = Dt295Ts.Packet(0, Dt295Ts.Section(0x00, 0x7FE0, [0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE1, 0xF0]));
+        var pmt = Dt295Ts.Packet(0x1F0, Dt295Ts.Section(0x02, 0x400,
+        [
+            0xE1, 0x11, 0xF0, 0x00,
+            0x02, 0xE1, 0x11, 0xF0, 0x06, 0x09, 0x04, 0x00, 0x05, 0xE9, 0x01,
+            0x0F, 0xE1, 0x12, 0xF0, 0x06, 0x09, 0x04, 0x00, 0x05, 0xE9, 0x02,
+        ]));
+        var tracker = new Dt295RouteTracker(needCat: false);
+        await Assert.That(tracker.Push(pat)).IsTrue();
+        var plan = tracker.Plan;
+        await Assert.That(tracker.Problem).IsNull();
+        await Assert.That(tracker.Push(pmt)).IsFalse();
+        await Assert.That(tracker.Problem).Contains("ECM");
+        await Assert.That(tracker.Plan).IsEquivalentTo(plan);
+    }
+
+    [Test]
+    public async Task 計画を作り直せない理由はログに出す()
+    {
+        var usb = FakeDt295Usb.Receiving(FakeDt295Material.Create());
+        byte[] ecm1 = [0x09, 0x04, 0x00, 0x05, 0xE9, 0x01];
+        var pat = Dt295Ts.Packet(0, Dt295Ts.Section(0x00, 0x7FE0, [0x00, 0x00, 0xE0, 0x10, 0x04, 0x00, 0xE1, 0xF0]));
+        var pmt = Dt295Ts.Packet(0x1F0, Dt295Ts.Section(0x02, 0x400,
+        [
+            0xE1, 0x11, 0xF0, 0x00,
+            0x02, 0xE1, 0x11, 0xF0, 0x06, .. ecm1,
+            0x0F, 0xE1, 0x12, 0xF0, 0x06, 0x09, 0x04, 0x00, 0x05, 0xE9, 0x02,
+        ]));
+        byte[] first = [.. pat, .. pmt, .. Dt295Ts.Cat()];
+        usb.Ts.Enqueue(first);
+        var tuner = Tuner(usb, "3-9");
+        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+        await Assert.That(ReadAll(tuner.Output, first.Length)).IsEquivalentTo(first);
+        const string Expected = "ルートの計画を作り直せません";
+        var logged = false;
+        for (var i = 0; i < 200 && !logged; i++)
+        {
+            logged = Log.Recent.Snapshot().Any(line => line.Text.Contains(Expected, StringComparison.Ordinal) && line.Text.Contains("3-9", StringComparison.Ordinal));
+            if (!logged) await Task.Delay(10);
+        }
+        await Assert.That(logged).IsTrue();
+        tuner.Dispose();
+    }
+
+    [Test]
     public async Task 番組番号を指定すると_NIT_とその番組の_PMT_だけを追い_主番組もその番組になる()
     {
         // 番組 0x400 (PMT 0x1F0) と 0x401 (PMT 0x2F0) が載った PAT
