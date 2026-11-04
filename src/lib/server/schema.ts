@@ -828,3 +828,40 @@ export const niconicoLink = sqliteTable("niconico_link", {
   /** 更新できなくなった時刻 */
   lost_at: integer("lost_at"),
 });
+
+/**
+ * **ロゴを取りに行った記録** (`logo-record.ts`)。設定の「その他」の「ロゴの取得を記録する」(`recordLogo`) がオンの間だけ、
+ * 当たりの中継で待つたびに 1 行足す。衛星のロゴはダウンロードの期間にしか流れず、期間がいつ来るかは分からないので、
+ * その来方 (間隔・長さ) を実測で知るためのもの (docs/logo.md「ロゴの取得を記録する」)。
+ * 新しい順で `LOGO_RECORD_KEEP` 行・`LOGO_RECORD_DAYS` 日ぶんまで残し、古いものから消す
+ */
+export const logoRecords = sqliteTable(
+  "logo_records",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** 開き始めた時刻 (unix ms) */
+    started_at: integer("started_at").notNull(),
+    /** 開いた中継 (`BS15:16625` など) */
+    channel: text("channel").notNull(),
+    /** 取りに行った経緯。`wait` = 空いたときに自分で開いた、`now` = 「ロゴをいますぐ集める」 */
+    origin: text("origin").$type<"wait" | "now">().notNull(),
+    /** 開いていた長さ (ms) */
+    opened_ms: integer("opened_ms").notNull(),
+    /** どう終わったか (`logo.ts` の `Outcome`) */
+    outcome: text("outcome").notNull(),
+    /** この回にカルーセルから 1 つでも受け取ったか */
+    received: flag("received").notNull(),
+    /** この回に取れた局の数 */
+    found: integer("found").notNull(),
+    /** 読んだ数 (`CarouselCounts`)。開けなかった回は 0 */
+    packets: integer("packets").notNull(),
+    errors: integer("errors").notNull(),
+    pmt: flag("pmt").notNull(),
+    es_pids: integer("es_pids").notNull(),
+    es_packets: integer("es_packets").notNull(),
+    dii: integer("dii").notNull(),
+    ddb: integer("ddb").notNull(),
+    sdtt: integer("sdtt").notNull(),
+  },
+  (t) => [index("logo_records_started").on(t.started_at)],
+);

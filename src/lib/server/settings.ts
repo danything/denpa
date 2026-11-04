@@ -115,6 +115,11 @@ interface Settings {
    * 自動で H.265 か H.264 を流す (`#lib/live-choice.ts` の `HIDDEN_CODECS`)
    */
   hideH264Hevc: boolean;
+  /**
+   * **ロゴを取りに行った結果を DB に残すか。既定はオフ。** デバッグ用。衛星のロゴが流れてくる期間を測るときだけオンにする
+   * (`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)
+   */
+  recordLogo: boolean;
 }
 
 /** 本数の上限に選べる幅 */
@@ -217,6 +222,7 @@ export function settings(): Settings {
     jikkyoNg: readNg(stored("jikkyoNg")),
     indoorHosts: readIndoorHosts(stored("indoorHosts")),
     hideH264Hevc: flag("hideH264Hevc", false),
+    recordLogo: flag("recordLogo", false),
   };
 }
 
