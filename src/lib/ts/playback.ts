@@ -2,12 +2,12 @@
  * **録画の観方の取り決め** (`GET /api/recordings/<id>/playback` と `/stream`)。画面にもサーバにも依らない。
  *
  * 分担: **サーバは「何を出せるか・どの形式で出すか・時刻の物差し」を決める。画面は「どれを使うか」を
- * 決める** (端末で再生できるか、人が選んだコーデック、MPEG-2 をそのまま再生する設定)。サーバは
- * 端末が何かを知らない。決め方は `server/playback.ts`
+ * 決める** (端末で再生できるか、人が選んだコーデック、MPEG-2 をそのまま再生する設定)。決め方は `server/playback.ts`。
+ * テレビのアプリは再生できる形式 (`?playable=`) を送り、サーバが同じ `pickOffer` で選んで `auto` で返す (`autoPick`)
  */
 
-import { codecsFor } from "../live";
-import { autoOrder } from "../live-choice";
+import { codecsFor, type LiveCodec } from "../live";
+import { autoOrder, type LiveFormat } from "../live-choice";
 import type { Ruler } from "./watch";
 
 /** 出せる映像の形式。H.265 はエンコード済みがあるときだけ (ファイルそのままと詰め替え。その場の変換では作らない) */
@@ -67,7 +67,18 @@ export interface PlaybackInfo {
    * (アプリが実況のコメントを場面に合わせる。docs/api.md)
    */
   ruler?: Ruler;
+  /** サーバが選んだ観方 (`autoPick`)。**`?playable=` を付けて聞いたときだけ**ある。選べなければ null */
+  auto?: AutoPick | null;
 }
+
+/**
+ * **サーバが選んだ観方** (`GET /api/recordings/<id>/playback?playable=` の `auto`。テレビのアプリ向け)。
+ * `file` は `file?source=`、`stream` は `stream?codec=`、`raw` は `stream?codec=mpeg2` で開く
+ */
+export type AutoPick =
+  | { way: "file"; codec: PlayCodec; source: EncodedSource }
+  | { way: "stream"; codec: LiveCodec }
+  | { way: "raw"; codec: "mpeg2" };
 
 /**
  * MPEG-2 をそのまま流すときの応答ヘッダ。**物差しの 0 にあたる PTS** (90kHz、0〜2^33-1)。
@@ -77,8 +88,9 @@ export interface PlaybackInfo {
 export const ORIGIN_HEADER = "X-Denpa-Origin";
 
 /**
- * fMP4 で流すときの応答ヘッダ (`stream`・`chase`・`live`)。**中身のコーデック** (`h264` / `hevc` / `av1`、音声だけなら `audio`)。
- * 段を下げたとき (`?rung=`) はサーバが `?playable=` から選ぶので、画面はこれで MSE に渡す codecs を決める (`#lib/live.ts` の `codecsFor`)
+ * 流すときの応答ヘッダ (`stream`・`chase`・`live`)。**中身の形式** (`h264` / `hevc` / `av1`、音声だけなら `audio`、
+ * 放送のままの TS なら `raw`。`stream?codec=mpeg2` も `raw`)。段を下げたとき (`?rung=`) と `codec=auto` はサーバが `?playable=` から
+ * 選ぶので、画面はこれで MSE に渡す codecs を決める (`#lib/live.ts` の `codecsFor`)
  */
 export const CODEC_HEADER = "X-Denpa-Codec";
 
@@ -103,6 +115,9 @@ export function typeOfCodec(codec: string | null): string | null {
     return codecsFor(codec);
   return codec === "audio" ? AUDIO_TYPE : null;
 }
+
+/** `codec=auto` で、端末が再生できる形式 (`?playable=`) から選べるものが無かったときの言い分 (406) */
+export const NO_FORMAT = "再生できる形式がありません";
 
 /** 混んでいて断ったときの言い分 (503) */
 export const BUSY = "サーバが混んでいます";
@@ -215,6 +230,18 @@ function asPicked(offer: PlayOffer): Picked | null {
  */
 export const ENCODED_ORDER = autoOrder("encoded");
 
+/** その場でエンコードする順 (`autoOrder`。家の中か外か) に並べ替える。並びに無いもの (H.265 の詰め替え) は後ろ */
+function byOnTheFlyOrder(offers: PlayOffer[], indoor: boolean): PlayOffer[] {
+  const order: readonly PlayCodec[] = autoOrder({ indoor, compat: false }).map(
+    (format) => (format === "raw" ? "mpeg2" : format),
+  );
+  const rank = (codec: PlayCodec) => {
+    const at = order.indexOf(codec);
+    return at === -1 ? order.length : at;
+  };
+  return [...offers].sort((a, b) => rank(a.codec) - rank(b.codec));
+}
+
 /** `ENCODED_ORDER` の順に並べ替える (同じコーデックの中では元の並びのまま) */
 function byEncodedOrder(offers: PlayOffer[]): PlayOffer[] {
   const rank = (codec: PlayCodec) => {
@@ -233,7 +260,8 @@ function byEncodedOrder(offers: PlayOffer[]): PlayOffer[] {
  *
  * 1. **そのまま読めるファイル** (AV1 → H.265 → H.264。小さいほうが先。同じ画質なら回線もディスクも使わない)
  * 2. MSE が受け取れる**詰め替え** (エンコード済みと同じコーデック。サーバは軽い。並びは 1 と同じ)
- * 3. MSE が受け取れる**変換** (H.264 → AV1 の順。サーバはその場でエンコードする。H.265 には変換しない)
+ * 3. MSE が受け取れる**変換** (ライブ・追っかけと同じ「その場でエンコード」の順。家の中なら H.264 → AV1、外なら AV1 → H.264。
+ *    サーバはその場でエンコードする。H.265 には変換しない)
  * 4. 中身が分からないファイル (ffprobe が読めなかった) をそのまま渡す。読めなければ観る画面が観られる先を案内する
  *
  * エンコード済みがあるときの自動は MPEG-2 を選ばない (元の TS が残っていれば、選べば観られる)。何も無ければ null
@@ -283,11 +311,55 @@ export function pickOffer(
         (offer) => playsStream(offer, can) && hasFile(info, offer.codec),
       ),
     ),
-    ...streams.filter((offer) => playsStream(offer, can)),
+    ...byOnTheFlyOrder(
+      streams.filter((offer) => playsStream(offer, can)),
+      indoor,
+    ),
     ...files,
   ];
   const first = order[0];
   return first === undefined ? null : asPicked(first);
+}
+
+/** codecs の文字列 (`av01.0.08M.08,opus`) の映像のコーデック。読めなければ null */
+function videoCodecOf(type: string): LiveCodec | null {
+  const head = /codecs="([^".,]*)/.exec(type)?.[1]?.toLowerCase();
+  if (head === "av01") return "av1";
+  if (head === "hvc1" || head === "hev1") return "hevc";
+  if (head === "avc1" || head === "avc3") return "h264";
+  return null;
+}
+
+/**
+ * **端末が再生できる形式 (`?playable=`) を、`pickOffer` に渡す問い合わせにする。** ファイルそのままも fMP4 も、
+ * 映像のコーデックが並びにあれば再生できるとみなす (テレビのアプリは Matroska も fMP4 も同じデコーダで読む)。
+ * `raw` は元の TS (MPEG-2)
+ */
+export function playableAbility(formats: readonly LiveFormat[]): MediaAbility {
+  const has = (type: string) => {
+    const codec = videoCodecOf(type);
+    return codec !== null && formats.includes(codec);
+  };
+  return { play: has, mse: has, mpeg2: formats.includes("raw") };
+}
+
+/**
+ * **サーバが選ぶ観方** (`playback?playable=` の `auto`)。ブラウザの「自動」と同じ `pickOffer` で選ぶ。
+ * `pickOffer` の最後の手 (中身が分からないファイルをそのまま渡す) は、コーデックが並びにあるときだけ使う。
+ * 端末が再生できないと言ったものは返さない。選べなければ null
+ */
+export function autoPick(
+  info: PlaybackInfo,
+  formats: readonly LiveFormat[],
+  indoor: boolean,
+): AutoPick | null {
+  const picked = pickOffer(info, playableAbility(formats), "auto", indoor);
+  if (picked === null) return null;
+  if (picked.way === "raw") return picked;
+  if (picked.codec === "mpeg2" || !formats.includes(picked.codec)) return null;
+  return picked.way === "file"
+    ? { way: "file", codec: picked.codec, source: picked.source }
+    : { way: "stream", codec: picked.codec };
 }
 
 /**
