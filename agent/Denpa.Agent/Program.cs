@@ -110,9 +110,10 @@ if (Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } hostText
  * `/media/raw`)。掛かったまま録れた TS を後から復号する (/denpa/decode) ときに読むので、denpa と
  * 同じ実体を同じ名前で見せる。ここの外のファイルは求められても触らない
  */
-var recorded = Path.GetFullPath(
+// 末尾の `/` は落とす (置き場の中かを `<置き場>/` で始まるかで見るので、`/media/raw/` だとどれも外になる)
+var recorded = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
     Environment.GetEnvironmentVariable("RAW_DIR")
-    ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") ?? "/media", "raw"));
+    ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") ?? "/media", "raw")));
 
 // 自分の鍵と証明書、合言葉、組んだ denpa (tuners.json の隣の tls/。AgentTls.cs)
 var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN"));
@@ -182,6 +183,16 @@ void PrepareDaemons()
 var tunersGate = new Lock();
 // 前に探したときに挿さっていた機材。起きたときに挿さっていたものは、挿されたとは数えない
 HashSet<string?> seen = [];
+
+// 定義を書き、読み直したものに入れ替える。tunersGate の中で呼ぶ
+void ApplyTuners(List<TunerSpec> next)
+{
+    config.SaveTuners(next);
+    var (resolved, auto) = config.ResolveTuners();
+    pool.Detected = auto;
+    pool.Replace(resolved);
+}
+
 void Rescan()
 {
     lock (tunersGate)
@@ -200,10 +211,7 @@ void Rescan()
         {
             if (added.Count == 0) return;
             foreach (var tuner in added) Log.Write($"挿した機材を定義に足しました: {tuner.Name} [{string.Join(", ", tuner.Types)}] {tuner.Device}");
-            config.SaveTuners([.. written, .. added]);
-            var (resolved, auto) = config.ResolveTuners();
-            pool.Detected = auto;
-            pool.Replace(resolved);
+            ApplyTuners([.. written, .. added]);
         }
     }
     PrepareDaemons();
@@ -469,10 +477,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
 
     lock (tunersGate)
     {
-        config.SaveTuners([.. next.OfType<TunerSpec>()]);
-        var (resolved, auto) = config.ResolveTuners();
-        pool.Detected = auto;
-        pool.Replace(resolved);
+        ApplyTuners([.. next.OfType<TunerSpec>()]);
     }
     // 新しく書かれた筐体があれば px4d / asicend を起こす。数秒かかるので返事は待たせない
     _ = Task.Run(PrepareDaemons);

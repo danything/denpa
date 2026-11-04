@@ -19,7 +19,13 @@ public static class Shell
             using var child = Process.Start(start)!;
             var stdout = child.StandardOutput.ReadToEndAsync();
             var stderr = child.StandardError.ReadToEndAsync();
-            if (!child.WaitForExit(timeout)) child.Kill(entireProcessTree: true);
+            if (!child.WaitForExit(timeout))
+            {
+                // Kill は終わるのを待たない。待たずに ExitCode を読むと例外になり、時間切れの理由が残らない
+                child.Kill(entireProcessTree: true);
+                child.WaitForExit();
+                return (-1, $"{Path.GetFileName(file)} が {timeout.TotalSeconds:0} 秒で終わらないので止めました");
+            }
             return (child.ExitCode, $"{stdout.GetAwaiter().GetResult()}{stderr.GetAwaiter().GetResult()}".Trim());
         }
         catch (Exception error)

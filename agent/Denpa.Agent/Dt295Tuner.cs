@@ -16,7 +16,7 @@ namespace Denpa.Agent;
  */
 
 /// <summary>
-/// 届いたバイト列を 188 バイトずつ切り (端数は次の先頭へ。同期バイトは探し直さない。10.2)、パケットごとに確かめて (10.3) 渡す。
+/// 届いたバイト列を 188 バイトずつ切り (端数は次の先頭へ。同期バイトは受信を始めて <see cref="ResyncWindow"/> の間だけ探し直す。10.2)、パケットごとに確かめて (10.3) 渡す。
 /// **不正なパケットが 1 つでも来たら投げる** (参照実装と同じく受信を止める)。AES のかかったパケット (01) は、鍵と IV があれば外し、
 /// 無ければ投げる
 /// </summary>
@@ -56,7 +56,7 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     /// <summary>
     /// 最初の読みの、パケットの先頭の位置。188 バイトおきに 0x47 が並ぶ最初の位置 (そろわなければ 0)。
     /// 前の受信が途中で終わると、機材の中に残ったデータが次の受信の最初に混じる (パケットの途中の切れ端や、古いパケット)。
-    /// 受信の途中では探し直さない (10.2)
+    /// 受信を始めて <see cref="ResyncWindow"/> を過ぎたら探し直さない (10.2)
     /// </summary>
     internal static bool Find(ReadOnlySpan<byte> data, out int at)
     {
@@ -87,7 +87,6 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     /// </summary>
     public int Feed(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain = null)
     {
-        var written = 0;
         if (!_synced)
         {
             // 先頭の位置が確かめられるまで溜める。最初の読みが短い切れ端だけのとき (古いデータの途中)、それで先頭を決めると
@@ -105,9 +104,9 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
             _headLen = 0;
             // 溜めたぶんと、溜めきれなかった続きを、この順に渡す
             byte[] rest = [.. buffered, .. data];
-            return written + Carry(rest, output, plain);
+            return Carry(rest, output, plain);
         }
-        return written + Carry(data, output, plain);
+        return Carry(data, output, plain);
     }
 
     /// <summary>
@@ -392,7 +391,19 @@ public sealed class Dt295Board : IDisposable
                 Px4Userland.SetNotice(_device, this, Fault);
                 return false;
             }
-            if (!Receiving) CheckCard();
+            if (Receiving) return true;
+            try
+            {
+                CheckCard();
+            }
+            catch (IOException error)
+            {
+                // 抜かれた・制御転送が失敗した。更新のスレッドから投げるとプロセスごと落ちるので、更新の失敗と同じに扱う
+                Fault = $"{Dt295.Model} を読めません ({error.Message})。次の選局で開き直します";
+                Log.Write($"[{Dt295.Model} {Port}] {Fault}");
+                Px4Userland.SetNotice(_device, this, Fault);
+                return false;
+            }
             return true;
         }
     }
