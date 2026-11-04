@@ -686,6 +686,22 @@ public class Dt295Tests
     }
 
     [Test]
+    public async Task 主番組が無いときは指定の番組番号を書き_主番組があればそちらを書く()
+    {
+        var usb = new FakeDt295Usb();
+        var bridge = new Dt295Bridge(usb, usb.Time);
+        // 衛星は PMT の ES が空に書き換わり、主番組が決まらない。指定した番組番号が 0x1018 に入る
+        Dt295Routes.Write(bridge, Dt295Routes.Plan(null, [0x0010]), null, cleared: true, program: 152);
+        await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)152);
+        await Assert.That(usb.Get16(0x101C)).IsEqualTo((ushort)0x0000);
+
+        // 主番組があれば、PSI から読んだ番号を使う (指定は使わない)
+        var main = new Dt295Program(0x0400, 0x1F0, 0x111, 0x111, 0x02, 0x112, 0x0F);
+        Dt295Routes.Write(bridge, Dt295Routes.Plan(main, [0x0010]), main, cleared: true, program: 152);
+        await Assert.That(usb.Get16(0x1018)).IsEqualTo((ushort)0x0400);
+    }
+
+    [Test]
     public async Task 領域を埋めた直後のルート書き込みは計画のスロットだけを書く()
     {
         var usb = new FakeDt295Usb();
