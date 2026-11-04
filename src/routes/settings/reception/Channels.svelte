@@ -126,7 +126,7 @@
     <div class="section-head spread">
       <h2>受信できるチャンネル</h2>
       {#if coverage.length > 0}
-        <div class="cluster section-bar" data-testid="channel-actions">
+        <div class="cluster section-bar dock" data-testid="channel-actions">
           {@render scanControl()}
           <!-- 入れたばかりのとき用 (`channels.server.ts` の `collectNow`) -->
           <ActionButton
@@ -350,7 +350,7 @@
 
     {#if coverage.length === 0}
       <!-- まだ1つも無い。表の場所の真ん中に、スキャンの欄と1行の案内 -->
-      <div class="empty glow">
+      <div class="empty-state glow">
         <p class="small muted">
           チャンネルがまだありません。種別を選んでスキャンしてください
         </p>
@@ -508,17 +508,6 @@
     font-size: var(--dp-text-sm);
   }
   .scan-control button {
-    margin: 0;
-  }
-  .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--dp-space-3);
-    padding: var(--dp-space-6) var(--dp-space-4);
-    text-align: center;
-  }
-  .empty p {
     margin: 0;
   }
   /*

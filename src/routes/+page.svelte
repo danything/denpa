@@ -838,12 +838,12 @@
       {#if shownItems.length === 0}
         {#if items.length === 0}
           <!-- 空のときは次に何をすればよいかまで言う -->
-          <div class="empty glow">
-            <p class="empty-title">予約も録画もありません</p>
-            <p class="empty-hint">
+          <div class="empty-state glow">
+            <p class="bold">予約も録画もありません</p>
+            <p class="small muted">
               番組表から予約するか、ルールを作ると自動で入ります
             </p>
-            <div class="empty-actions">
+            <div class="actions">
               <a class="button small" href={resolve("guide")}>番組表を開く</a>
               <a class="button secondary outline small" href={resolve("search")}
                 >ルールを作る</a
@@ -851,8 +851,8 @@
             </div>
           </div>
         {:else}
-          <div class="empty">
-            <p class="empty-title">当てはまるものはありません</p>
+          <div class="empty-state">
+            <p class="bold">当てはまるものはありません</p>
           </div>
         {/if}
       {/if}

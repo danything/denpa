@@ -819,8 +819,8 @@
     position: absolute;
     inset-inline: 0.65rem;
     bottom: 0.2rem;
-    height: 2px;
-    border-radius: 1px;
+    height: var(--dp-mark);
+    border-radius: var(--dp-mark);
     background: var(--pico-primary);
     pointer-events: none;
   }
@@ -842,8 +842,8 @@
       left: calc(anchor(left) + 0.65rem);
       right: calc(anchor(right) + 0.65rem);
       bottom: calc(anchor(bottom) + 0.2rem);
-      height: 2px;
-      border-radius: 1px;
+      height: var(--dp-mark);
+      border-radius: var(--dp-mark);
       background: var(--pico-primary);
       pointer-events: none;
       transition:
@@ -924,7 +924,7 @@
     background: transparent;
     box-shadow: none;
     color: inherit;
-    font-size: 0.6875rem;
+    font-size: var(--dp-text-2xs);
     line-height: 1.2;
     text-decoration: none;
     white-space: nowrap;
@@ -961,8 +961,8 @@
     position: absolute;
     inset-inline: 0;
     top: calc(100% + 0.125rem);
-    height: 2px;
-    border-radius: 1px;
+    height: var(--dp-mark);
+    border-radius: var(--dp-mark);
     background: var(--pico-primary);
     pointer-events: none;
   }
@@ -989,8 +989,8 @@
       left: anchor(left);
       right: anchor(right);
       top: calc(anchor(bottom) + 0.125rem);
-      height: 2px;
-      border-radius: 1px;
+      height: var(--dp-mark);
+      border-radius: var(--dp-mark);
       background: var(--pico-primary);
       pointer-events: none;
       transition:

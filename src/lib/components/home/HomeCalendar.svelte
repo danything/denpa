@@ -216,7 +216,7 @@
   .cal-grid th {
     height: 1.5rem;
     color: var(--dp-muted);
-    font-size: 0.6875rem;
+    font-size: var(--dp-text-2xs);
     font-weight: var(--dp-weight);
   }
   /*
@@ -239,7 +239,7 @@
     background: transparent;
     box-shadow: none;
     color: var(--dp-fg);
-    font-size: 0.8125rem;
+    font-size: var(--dp-text-sm);
     font-weight: var(--dp-weight);
     transition: background-color var(--dp-duration) var(--dp-ease);
   }
@@ -271,8 +271,8 @@
     bottom: 0.25rem;
     left: 50%;
     width: 1rem;
-    height: 2px;
-    border-radius: 1px;
+    height: var(--dp-mark);
+    border-radius: var(--dp-mark);
     background: var(--pico-primary);
     transform: translateX(-50%);
   }

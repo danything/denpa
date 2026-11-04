@@ -13,7 +13,7 @@ import { webhooks } from "./schema";
  *
  * エージェントのログは `GET /denpa/logs` (`{"lines":[{"at":<epoch ms>,"text":"…"}]}`。新しいほうから 2000 行まで、古い順)。
  * エージェント自身のことは `GET /denpa/about` (`{"version","os","arch","runtime","ccidDriver"}`。agent/Denpa.Agent/About.cs)。
- * どちらも前のバージョンのエージェントには無いので、取れなければ理由を返して画面は止めない
+ * 取れなければ理由を返して画面は止めない
  */
 
 interface AgentLogs {
@@ -50,13 +50,6 @@ export async function agentLogs(known: Known): Promise<AgentLogs> {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
-    if (res.status === 404) {
-      return {
-        lines: [],
-        error:
-          "このエージェントはログを返しません (前のバージョンです)。エージェントを新しくすると読めます",
-      };
-    }
     if (!res.ok)
       return {
         lines: [],
@@ -112,13 +105,6 @@ export async function agentAbout(known: Known): Promise<AgentAboutResult> {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
-    if (res.status === 404) {
-      return {
-        about: null,
-        error:
-          "このエージェントはバージョンと OS を返しません (前のバージョンです)。エージェントを新しくすると出ます",
-      };
-    }
     if (!res.ok)
       return {
         about: null,

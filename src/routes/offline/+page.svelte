@@ -320,14 +320,14 @@
   {#if loading}
     <p class="muted">読み込んでいます…</p>
   {:else if list.length === 0}
-    <div class="empty glow">
-      <p>まだ何も保存していません。</p>
+    <div class="empty-state glow">
+      <p class="bold">まだ何も保存していません</p>
       <p class="small muted">
         録画の詳細の「端末に保存」を押すと、オフラインでも観られるようになります。
       </p>
     </div>
   {:else}
-    <ul class="list">
+    <ul class="item-list">
       {#each list as item (item.id)}
         <li class="row item">
           {#if posterUrl(item) !== null}
@@ -460,35 +460,13 @@
   .name {
     font-weight: var(--dp-weight);
   }
-  /* 空のときも枠で囲まず、見出しの下に左揃えで (断られた画面と同じ置き方) */
-  .empty {
-    padding-block: var(--dp-space-4);
-  }
-  .empty p:first-child {
-    margin-bottom: 0.25rem;
-  }
-  /* 1 件ずつ件の面 (`app.css` の `.item`) に乗せ、件の間は余白 (docs/design.md の「何行かある一覧」。ホームの行と同じ) */
-  .list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--dp-list-gap);
-    margin: 0;
-    padding: 0;
-  }
+  /* 1 件ずつ件の面 (`app.css` の `.item`) に乗せ、並べ方は `.item-list` (docs/design.md の「何行かある一覧」。ホームの行と同じ) */
   .row {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    min-height: 4rem;
-    /* Pico は `li` に下の余白と四角の印を付ける */
-    margin: 0;
+    min-height: var(--dp-item-h);
     padding: 0.5rem 0.75rem;
-    list-style: none;
-  }
-  @media (pointer: coarse) {
-    .row {
-      min-height: 4.5rem;
-    }
   }
   .thumb {
     width: 5rem;

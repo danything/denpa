@@ -21,8 +21,7 @@ async function liveTuners() {
       .map((tuner) => ({
         name: tuner.name,
         types: tuner.types,
-        // 古いエージェントは `pin` を返さない。エージェントの目印と同じく、デバイス、無ければ名前
-        pin: tuner.pin ?? tuner.device ?? tuner.name,
+        pin: tuner.pin,
       }));
   } catch {
     return [];

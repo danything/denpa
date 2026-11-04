@@ -108,9 +108,8 @@ const CARD_STATUS = object({
   readers: array(CARD_READER),
 });
 
-/** 画面での呼び分け。`unknown` は前のバージョンのエージェント (名前しか返さない) */
-export type CardReaderState =
-  "active" | "standby" | "empty" | "error" | "unknown";
+/** 画面での呼び分け */
+export type CardReaderState = "active" | "standby" | "empty" | "error";
 
 type CardReader = {
   name: string;
@@ -147,8 +146,7 @@ function stateOf(row: Loose<Infer<typeof CARD_READER>>): CardReaderState {
 
 /**
  * 画面に渡す形式に揃える。**形式が違っても止めない** (`tolerate`) ので、ここは来たものを
- * 疑って読む。前のバージョンのエージェントは `readers` がリーダーの名前の並びで、
- * 名前と番号は `message` に書いてある。行は名前だけ出し、状態は「—」にする
+ * 疑って読む
  */
 function normalize(raw: unknown): CardStatus {
   const body: Loose<Infer<typeof CARD_STATUS>> =
@@ -156,8 +154,6 @@ function normalize(raw: unknown): CardStatus {
   const readers = (
     Array.isArray(body.readers) ? (body.readers as unknown[]) : []
   ).map((entry): CardReader => {
-    if (typeof entry === "string")
-      return { name: entry, state: "unknown", ids: [], tuners: [] };
     const row: Loose<Infer<typeof CARD_READER>> =
       typeof entry === "object" && entry !== null ? entry : {};
     return {

@@ -79,7 +79,7 @@
     version === "dev" ? "開発ビルド (dev)" : version;
   const versionText = $derived(showVersion(data.environment.version));
 
-  /** エージェントのバージョン。前のバージョンのエージェントは返さないので、そのときは理由を出す */
+  /** エージェントのバージョン。取れなければ理由を出す */
   const agentVersionText = $derived(
     about.value === undefined
       ? null
@@ -350,7 +350,7 @@
         {/snippet}
       </Lead>
 
-      <div class="filters section-bar" data-testid="logs-filters">
+      <div class="filters section-bar dock" data-testid="logs-filters">
         {#if phone.current}{@render logActions()}{/if}
         <div class="chips">
           <label class="chip">

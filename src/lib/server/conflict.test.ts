@@ -783,17 +783,13 @@ describe("兼用のチューナーがあるとき (#668)", () => {
     }
   });
 
-  test("順位の分からないエージェントなら、台数不明として何も競合にしない", () => {
-    expect(
-      capacityOf([{ types: ["GR"], rank: 0 }, { types: ["GR", "BS", "CS"] }]),
-    ).toEqual([]);
-    // 無効にしたチューナーは順位が無くてよい
+  test("順位の無いチューナー (無効にしたもの) は数えない", () => {
     expect(
       capacityOf([
         { types: ["GR"], rank: 0 },
-        { types: ["GR"], disabled: true, rank: null },
+        { types: ["GR"], rank: null },
       ]),
-    ).toHaveLength(1);
+    ).toEqual([{ rank: 0, types: new Set(["GR"]), count: 1 }]);
   });
 });
 

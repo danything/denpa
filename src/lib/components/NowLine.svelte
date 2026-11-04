@@ -101,7 +101,7 @@
   .inline .now-time {
     flex-shrink: 0;
     padding-right: 0;
-    font-size: var(--now-time-size, 0.875rem);
+    font-size: var(--now-time-size, var(--dp-text-sm));
   }
   /* 一言は時刻のすぐ後ろに控えた字で (補足なので、時刻ほど目立たせない) */
   .now-status {
@@ -109,7 +109,7 @@
     min-width: 0;
     overflow: hidden;
     color: var(--dp-muted);
-    font-size: 0.8125rem;
+    font-size: var(--dp-text-sm);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -151,7 +151,7 @@
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
     transform: translateY(-50%);
-    font-size: 0.6875rem;
+    font-size: var(--dp-text-2xs);
     line-height: 1rem;
   }
   /* 時の列の幅に収めるため、点は付けない */

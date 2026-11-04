@@ -61,8 +61,8 @@ const AGENT_TUNER = object({
   rank: nullable(number),
   /** 選局に使うデバイス。エージェントはこれを直に開く */
   device: nullable(string),
-  /** ストリームのリクエストで名指しするときの目印 (`tuner`。デバッグ用)。古いエージェントには無い */
-  pin: optional(string),
+  /** ストリームのリクエストで名指しするときの目印 (`tuner`。デバッグ用) */
+  pin: string,
   /** 衛星の給電。要る構成だけ */
   lnb: nullable(string),
   /** いま使っているチャンネル。空いていれば null */
@@ -282,8 +282,7 @@ export class TuneError extends Error {}
  * (チューナーは増えない)。空きが無ければ 409 が返るので、呼んだ側は待って掛け直す。
  *
  * `after` の利用者は、もう離れたものとしてエージェントに選ばせる (引き継ぎ。録画を止めて
- * 同じ定期チェックで次を始めるとき。docs/agent.md「選ぶ順の約束」)。知らない古いエージェントは
- * 読み飛ばして、ふつうに選ぶ
+ * 同じ定期チェックで次を始めるとき。docs/agent.md「選ぶ順の約束」)
  */
 export async function openChannelStream(
   type: string,

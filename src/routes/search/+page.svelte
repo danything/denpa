@@ -276,7 +276,7 @@
               data-testid="recent-clear">履歴を消す</button
             >
           </div>
-          <ul class="hits" data-testid="recent-searches">
+          <ul class="item-list" data-testid="recent-searches">
             {#each recent as word (word)}
               <li class="hit item">
                 <a
@@ -316,7 +316,7 @@
         {#if data.programs.total === 0}
           <p class="none small muted">番組表に一致する番組はありません</p>
         {:else}
-          <ul class="hits">
+          <ul class="item-list">
             {#each shown("programs", data.programs.rows) as program (program.id)}
               {@const verdict = verdictOf(program.id)}
               <li
@@ -405,7 +405,7 @@
         {#if data.recordings.total === 0}
           <p class="none small muted">一致する録画はありません</p>
         {:else}
-          <ul class="hits">
+          <ul class="item-list">
             {#each shown("recordings", data.recordings.rows) as rec (rec.id)}
               {@const link = watchLink(rec)}
               <li
@@ -506,7 +506,7 @@
         {#if data.reservations.total === 0}
           <p class="none small muted">一致する予約はありません</p>
         {:else}
-          <ul class="hits">
+          <ul class="item-list">
             {#each shown("reservations", data.reservations.rows) as res (res.id)}
               <li
                 class="hit item"
@@ -573,7 +573,7 @@
         {#if data.rules.total === 0}
           <p class="none small muted">一致するルールはありません</p>
         {:else}
-          <ul class="hits">
+          <ul class="item-list">
             {#each shown("rules", data.rules.rows) as rule (rule.id)}
               <li class="hit item" data-testid="search-rule">
                 <a class="hit-main" href={resolve(`search?rule=${rule.id}`)}>
@@ -639,7 +639,7 @@
     {:else if preview.programs.length === 0}
       <p class="none small muted">いまの番組表では 1 件も一致しません</p>
     {:else}
-      <ul class="hits">
+      <ul class="item-list">
         {#each preview.programs as row (row.id)}
           <li
             class="hit item"
@@ -902,30 +902,16 @@
     font-weight: var(--dp-weight);
     font-variant-numeric: tabular-nums;
   }
-  .hits {
-    display: flex;
-    flex-direction: column;
-    gap: var(--dp-list-gap);
-    margin: 0;
-    padding: 0;
-  }
-  /* 件は件の面 (`app.css` の `.item`) に乗せる */
+  /* 件は件の面 (`app.css` の `.item`) に乗せ、並べ方は `.item-list` */
   .hit {
     display: flex;
     align-items: center;
     gap: var(--dp-space-2);
-    margin: 0;
     padding-inline-end: var(--dp-space-2);
-    list-style: none;
   }
-  /* 2段の件は 64px、指で押す端末では 72px (docs/design.md の「何行かある一覧」。ホームの行と同じ)。1段の最近の検索は除く */
+  /* 2段の件は `--dp-item-h` (docs/design.md の「何行かある一覧」。ホームの行と同じ)。1段の最近の検索は除く */
   .hit:has(.hit-meta) {
-    min-height: 4rem;
-  }
-  @media (pointer: coarse) {
-    .hit:has(.hit-meta) {
-      min-height: 4.5rem;
-    }
+    min-height: var(--dp-item-h);
   }
   .hit-main {
     display: flex;
