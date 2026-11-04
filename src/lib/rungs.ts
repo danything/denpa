@@ -13,8 +13,6 @@
 /** 段の番号。0 は下げない */
 export type Rung = 0 | 1 | 2 | 3;
 
-export const RUNGS = [0, 1, 2, 3] as const satisfies readonly Rung[];
-
 /** 下げた段 (変換するもの) の中身 */
 export interface RungSpec {
   /** 映像の高さ。幅は縦横比を保って偶数にそろえる */

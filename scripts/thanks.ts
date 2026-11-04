@@ -17,8 +17,8 @@ const EXCLUDE = new Set(["5ym"]);
 export const START = "<!-- thanks:start -->";
 export const END = "<!-- thanks:end -->";
 
-export type Kind = "pr" | "issue" | "discussion";
-export interface Item {
+type Kind = "pr" | "issue" | "discussion";
+interface Item {
   kind: Kind;
   number: number;
   login: string;

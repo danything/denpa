@@ -7,7 +7,7 @@ import { sync } from "#lib/server/epg.js";
 import { programs } from "#lib/server/schema.js";
 
 /**
- * 番組表を今すぐ集め直す。定期実行 (EPG_COLLECT_INTERVAL) を待たずに反映したいとき用。
+ * 番組表を今すぐ取得し直す。定期実行 (EPG_COLLECT_INTERVAL) を待たずに反映したいとき用。
  * E2E でも「番組表が入った状態」を待たずに作るためにここを呼ぶ。
  *
  * **局の取り込みと番組表の取得の両方をやる。** 集めるところから denpa の仕事なので、

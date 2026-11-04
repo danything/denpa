@@ -30,11 +30,14 @@ const DIR = "/usr/share/denpa-font";
 /** 入っているバージョン (`v2.1` など。Dockerfile が `DENPA_FONT_VERSION` を書く) */
 const VERSION = `${DIR}/VERSION`;
 
-/** 中身と指紋。字はイメージに組み込んであり、動いている間は変わらないので 1 度だけ読む */
-const loaded = new Map<string, { body: string | Buffer; tag: string } | null>();
+/**
+ * 指紋と、作った CSS (woff2 は null。中身は置き場から流すので持たない)。字はイメージに組み込んであり、
+ * 動いている間は変わらないので 1 度だけ読む
+ */
+const loaded = new Map<string, { css: string | null; tag: string } | null>();
 let installed: string | null = null;
 
-function read(file: string): { body: string | Buffer; tag: string } | null {
+function read(file: string): { css: string | null; tag: string } | null {
   const known = loaded.get(file);
   if (known !== undefined) return known;
   let body: string | Buffer | null = null;
@@ -54,7 +57,7 @@ function read(file: string): { body: string | Buffer; tag: string } | null {
     body === null
       ? null
       : {
-          body,
+          css: typeof body === "string" ? body : null,
           tag: `"${createHash("sha256").update(body).digest("base64url")}"`,
         };
   loaded.set(file, found);
@@ -79,10 +82,6 @@ export const GET: RequestHandler = ({ params, request, url }) => {
   if (etagMatches(request, found.tag))
     return new Response(null, { status: 304, headers });
   // CSS は作ったもの、woff2 は置き場のファイルをそのまま流す
-  return new Response(
-    typeof found.body === "string"
-      ? found.body
-      : Bun.file(`${DIR}/${params.file}`).stream(),
-    { headers },
-  );
+  const body = found.css ?? Bun.file(`${DIR}/${params.file}`).stream();
+  return new Response(body, { headers });
 };

@@ -42,7 +42,7 @@ interface Settings {
   /**
    * **ライブ・追っかけ・録画のその場の変換で、GPU でエンコードしてよいコーデック。** 持ち方は `hwAllow` と同じ。
    * 録画と分けてあるのは、録画とライブで使う GPU を分けられるようにするため (`server/live.ts` の `pickLiveHw`)。
-   * ライブが出すのは AV1 と H.264 だけなので、H.265 の印は何にも効かない
+   * H.265 は GPU でだけエンコードするので、どの GPU でも H.265 を外すと、ライブで H.265 を出さない (`live.liveHevc`)
    */
   liveHwAllow: HwAllow;
   /** CM の扱い。off / chapter / cut */

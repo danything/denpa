@@ -60,7 +60,7 @@ export class Connection {
     payload: Uint8Array,
     droppable = false,
   ): void {
-    if (droppable && this.ws.getBufferedAmount() > BACKLOG_LIMIT) {
+    if (droppable && this.congested) {
       this.dropped++;
       return;
     }
@@ -76,7 +76,7 @@ export class Connection {
    * これを見て読むほうを止める (live.ts の `openChase`)
    */
   get congested(): boolean {
-    return this.ws.getBufferedAmount() > BACKLOG_LIMIT;
+    return this.backlog > BACKLOG_LIMIT;
   }
 
   /** bun から渡されたものをデコードする。**JSON 以外は黙って捨てる** */
