@@ -190,7 +190,7 @@
     {/if}
 
     {#if data.rules.length === 0}
-      <div class="empty glow" data-testid="rule-empty">
+      <div class="empty-state glow" data-testid="rule-empty">
         <p class="bold">ルールはまだありません</p>
         <p class="small muted">
           <a href={resolve("search")}>検索</a
@@ -198,7 +198,7 @@
         </p>
       </div>
     {:else}
-      <ul class="rows" data-testid="rule-table">
+      <ul class="item-list" data-testid="rule-table">
         {#each paged.rows as rule (rule.id)}
           <!--
                         **2段の件。** 1段目に名前、右にスイッチと削除。2段目に条件・次の放送・予約と録画の数・最後に録れた日。
@@ -361,12 +361,12 @@
         スマホの形の細い1行。絞り込みは横に送れる1列のチップ、並びは選ぶ欄、右に「作る」。
         画面の下 (タブの上) に貼り付ける
     -->
-  <div class="rules-bar" data-testid="rule-bar">
+  <div class="rules-bar dock" data-testid="rule-bar">
     <div class="bar-chips" role="group" aria-label="絞り込み">
       {#each FILTERS as f (f.key)}
         <button
           type="button"
-          class="chip-button"
+          class="chip-button pick-line"
           aria-pressed={filter === f.key}
           onclick={() => (filter = f.key)}
           data-testid="rule-bar-filter-{f.key}"
@@ -479,30 +479,14 @@
   }
 
   /*
-     * **行は2段の件** (ホームの行と同じく件の面 (`app.css` の `.item`) に乗せ、件の間は余白)
+     * **行は2段の件** (ホームの行と同じく件の面 (`app.css` の `.item`) に乗せ、並べ方は `.item-list`)
      */
-  .rows {
-    display: flex;
-    flex-direction: column;
-    gap: var(--dp-list-gap);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
   .row {
     display: flex;
     align-items: center;
     gap: 0.25rem 0.75rem;
-    min-height: 4rem;
-    margin: 0;
+    min-height: var(--dp-item-h);
     padding: 0.5rem 0.75rem;
-    list-style: none;
-  }
-  /* 指で押す端末では 72px (docs/design.md の「何行かある一覧」。ホームの行と同じ) */
-  @media (pointer: coarse) {
-    .row {
-      min-height: 4.5rem;
-    }
   }
   .row-body {
     display: flex;
@@ -544,20 +528,8 @@
     text-align: center;
     list-style: none;
   }
-  .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--dp-space-2);
-    padding: 3rem 1rem;
-    text-align: center;
-  }
-  .empty p,
   .narrow-summary {
-    margin: 0;
-  }
-  .narrow-summary {
-    margin-bottom: var(--dp-space-2);
+    margin: 0 0 var(--dp-space-2);
   }
 
   /* ---- スマホの形の細い1行 (`#lib/phone-form.ts`。`<html data-phone>`) ---- */
@@ -587,24 +559,6 @@
   .chip-button .num {
     color: var(--dp-muted);
   }
-  /*
-     * 選んでいるものはホームのチップ・`app.css` の `.chip` と同じ (囲まず、主の色の太字と字の幅いっぱいの下線)。
-     * 線は疑似要素で 1 本引く (`text-decoration` だと名前と数に別々の線が付く)
-     */
-  .chip-button[aria-pressed="true"] {
-    position: relative;
-    color: var(--dp-primary-text);
-    font-weight: var(--dp-weight-bold);
-  }
-  .chip-button[aria-pressed="true"]::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0.75rem;
-    bottom: 0.2rem;
-    height: 2px;
-    border-radius: 1px;
-    background: var(--pico-primary);
-  }
   .rules-bar select {
     flex: none;
     width: auto;
@@ -620,8 +574,7 @@
     margin: 0;
   }
   /*
-     * **スマホの形ではこの1行を画面の下、タブのすぐ上に浮かせる** (押すものは指の届く下に)。下のタブと同じ操作の層なので、
-     * 同じ半透明のカプセル (`--dp-float`) にして、読んでいる間はタブと一緒に引っ込む (`+layout.svelte` の `data-retract`)。
+     * **スマホの形ではこの1行を画面の下、タブのすぐ上に浮かせる** (押すものは指の届く下に。形は `app.css` の `.dock`)。
      * 一覧の最後の行が隠れないよう、この1行の高さぶん下を空ける
      */
   :global(:where(html[data-phone])) .rules-bar {
@@ -629,23 +582,10 @@
     align-items: center;
     gap: var(--dp-space-2);
     position: fixed;
-    --dp-btn-solid: transparent;
-    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
-    --dp-btn-lift: none;
-    inset-inline: 0.75rem;
-    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
+    inset-inline: var(--dp-dock-inset);
     z-index: 30;
     padding: var(--dp-space-1) var(--dp-space-1) var(--dp-space-1)
       var(--dp-space-3);
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
-    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
-  }
-  :global(:where(html[data-phone]))
-    :global([data-retract])
-    .rules-bar:not(:has(:focus-visible)) {
-    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
   }
   :global(:where(html[data-phone])) .rules-list {
     padding-bottom: 4rem;

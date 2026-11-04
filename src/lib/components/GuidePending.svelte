@@ -59,7 +59,7 @@
 
 <div class="guide-frame" data-testid="guide-pending">
   <!-- `toolbar` は e2e の目印 (49-guide-skeleton) -->
-  <div class="toolbar guide-bar">
+  <div class="toolbar guide-bar dock">
     <div role="group" class="segmented">
       {#each CHANNEL_TYPES as each (each)}
         <a

@@ -597,7 +597,7 @@
   /** 目立たせているジャンル。ほかのマスを淡くする。端末をまたいで覚えるほどのものではない */
   let highlight = $state<number | null>(null);
 
-  /** 狭い画面ではサブch をジャンルのメニューに入れる (下の style の 768px 未満と同じ線) */
+  /** 狭い画面ではサブ ch をジャンルのメニューに入れる (下の style の 768px 未満と同じ線) */
   const narrowQuery = new MediaQuery("max-width: 767.98px");
   const narrow = $derived(narrowQuery.current);
   /** スマホの形 (`#lib/phone-form.ts`) では操作の1行が下にあるので、メニューは上へ開く */
@@ -662,7 +662,7 @@
 -->
 <div class="guide-frame">
   <!--
-        **どこを見るかは表の外の細い1行にまとめる** (種別・日付・時刻・サブch・ジャンル)。縦は表に回す。
+        **どこを見るかは表の外の細い1行にまとめる** (種別・日付・時刻・サブ ch・ジャンル)。縦は表に回す。
 
         表の中 (左上の角・局名の行) には入れない。角は時刻の列の幅 (1.75rem) しか無く、
         入れるならメニューに畳むことになり、種別や日を変えるたびに1回多く押す。
@@ -673,7 +673,7 @@
         DOM の順 (種別 → 日付 → 時刻 → …) は読み上げの順なので変えない。
         入りきらない幅では、時刻のボタンを「⋯」に、さらに狭いと日付のメニューに移す
     -->
-  <div class="toolbar guide-bar" data-testid="guide-toolbar">
+  <div class="toolbar guide-bar dock" data-testid="guide-toolbar">
     <div role="group" class="segmented" data-testid="type-tabs">
       {#each CHANNEL_TYPES as type (type)}
         <a
@@ -705,7 +705,7 @@
           {@const selected = day.start === data.start}
           {#if day.has || selected}
             <a
-              class="day-chip {day.weekday}"
+              class="day-chip pick-line {day.weekday}"
               class:selected
               class:present={day.today}
               class:past={day.past}
@@ -849,7 +849,7 @@
           <span class="icon-only" aria-hidden="true"
             ><Icon icon={Layers} size="size-4" /></span
           >
-          <span class="word">サブch</span>
+          <span class="word">サブ ch</span>
         </button>
       {/if}
 
@@ -888,7 +888,7 @@
           </button>
         {/snippet}
         {#if narrow && canSplit}
-          <!-- 狭い画面ではサブch もここに入れる (ボタン2つぶんの幅が1行に入らない) -->
+          <!-- 狭い画面ではサブ ch もここに入れる (ボタン2つぶんの幅が1行に入らない) -->
           <button
             type="button"
             class="menu-item"
@@ -1348,9 +1348,10 @@
   }
   /*
      * 日付の1つ。ふだんは字だけ (押せることは字の濃さと、指を乗せたときの地で)。
-     * **選んでいる日は主の色の下線と字・太字** (ほかの選んでいるものと同じ。塗らない)。土日は土日の字の色のまま
+     * **選んでいる日は主の色の下線と字・太字** (`app.css` の `.pick-line`。塗らない)。土日は土日の字の色のまま
      */
   .day-chip {
+    --pick-inset: 0.55rem;
     position: relative;
     display: inline-flex;
     flex: none;
@@ -1368,20 +1369,6 @@
   a.day-chip:hover {
     background: var(--dp-hover-soft);
     color: var(--pico-secondary-hover);
-  }
-  .day-chip.selected {
-    color: var(--dp-primary-text);
-    font-weight: var(--dp-weight-bold);
-  }
-  .day-chip.selected::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0.55rem;
-    bottom: 0.2rem;
-    height: 2px;
-    border-radius: 1px;
-    background: var(--pico-primary);
-    pointer-events: none;
   }
   /*
      * **今日は日付の前に小さく「今日」** (主の色の字・太字)。選んでいる日の下線とは別の印なので、
@@ -1439,7 +1426,7 @@
   .more {
     flex: none;
   }
-  /* 右端に寄せる (サブch・ジャンル) */
+  /* 右端に寄せる (サブ ch・ジャンル) */
   .end {
     display: flex;
     flex: none;
@@ -1450,10 +1437,14 @@
   .icon-only {
     display: none;
   }
+  /* 「サブ ch」の空白で折り返さない */
+  .word {
+    white-space: nowrap;
+  }
   .genre-button {
     gap: 0.4rem;
   }
-  /* 時刻のボタンが入る幅。サブch が出ていても 1180px で1行に収まる (実測は PR に) */
+  /* 時刻のボタンが入る幅。サブ ch が出ていても 1180px で1行に収まる (実測は PR に) */
   @media (min-width: 1180px) {
     .jumps {
       display: flex;
@@ -1464,7 +1455,7 @@
   }
   /*
      * **768px より狭い画面では中を詰める。** 中身は ← 日付 → (日付を押すと1週間ぶんと時刻) と、
-     * 印だけのボタン1つ (ジャンル。サブch があればそれも中に)。日付の並びと時刻のボタンは出さない (日付のメニューに入っている)。
+     * 印だけのボタン1つ (ジャンル。サブ ch があればそれも中に)。日付の並びと時刻のボタンは出さない (日付のメニューに入っている)。
      * それでも入りきらない幅 (360px で今日以外を見ているとき) は横に流す
      */
   @media (max-width: 767.98px) {
@@ -1477,7 +1468,7 @@
     .date-label {
       padding-inline: 0.4rem;
     }
-    /* サブch はジャンルのメニューに入れる (2つ並べると、今日以外を見ているときに 390px で入りきらない) */
+    /* サブ ch はジャンルのメニューに入れる (2つ並べると、今日以外を見ているときに 390px で入りきらない) */
     .strip,
     .more,
     .word,

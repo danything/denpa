@@ -7,7 +7,7 @@
  *   その日に分割放送のあるサブだけで、ずっと本チャンネルと同じ番組のサブは列ごと立てない
  * - **同じものを流している間は1つのマスにまとめる。** 本チャンネルの番組を
  *   サブの列まで横に伸ばし、分割放送をしている間だけサブに自分のマスを立てる
- * - 「サブch」をオフにすると本チャンネルだけになる (端末ごとに覚える)
+ * - 「サブ ch」をオフにすると本チャンネルだけになる (端末ごとに覚える)
  *
  * 録画のルールには関わらない (サブチャンネルも局として扱い続ける)。ライブの一覧は
  * いま本チャンネルと同じ番組を流しているサブを外す (`epg.airing`)。決め方はここ (`splitOf`) と同じ
@@ -292,7 +292,7 @@ export function cellsOf<S extends Station, P extends Airing>(
  */
 export const SUBCHANNELS_COOKIE = "denpa_guide_subchannels";
 
-/** 覚えていた値。**既定は出す**。隠すのは「サブch」をオフにした ("0") ときだけ */
+/** 覚えていた値。**既定は出す**。隠すのは「サブ ch」をオフにした ("0") ときだけ */
 export function storedSubchannels(saved: string | undefined): boolean {
   return saved !== "0";
 }

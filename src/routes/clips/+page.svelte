@@ -648,14 +648,14 @@
 
       {#if clips.length === 0}
         {#if filtered}
-          <div class="c-empty">
-            <p class="c-empty-title">当てはまるものはありません</p>
+          <div class="empty-state">
+            <p class="bold">当てはまるものはありません</p>
           </div>
         {:else}
           <!-- まだ何も無いときは、どうすれば並ぶかまで言う -->
-          <div class="c-empty glow" data-testid="clip-empty">
-            <p class="c-empty-title">切り抜きはまだありません</p>
-            <p class="c-empty-hint">
+          <div class="empty-state glow" data-testid="clip-empty">
+            <p class="bold">切り抜きはまだありません</p>
+            <p class="small muted">
               観ている画面のカメラのボタンを押すと、その場面がここに並びます
             </p>
           </div>
@@ -698,7 +698,7 @@
 
   <!-- スマホの形の絞り込み (下のタブのすぐ上)。選ぶ形の間は選んだぶんの操作の1行に替わる -->
   <div
-    class="c-bar"
+    class="c-bar dock"
     data-selecting={selecting ? "" : undefined}
     data-testid="clip-bar"
   >
@@ -948,7 +948,7 @@
     width: fit-content;
     margin: 0.5rem 0 0.375rem;
     color: var(--dp-muted);
-    font-size: 0.75rem;
+    font-size: var(--dp-text-xs);
     font-weight: var(--dp-weight-bold);
     container-type: scroll-state;
   }
@@ -1150,39 +1150,20 @@
   .c-picked {
     white-space: nowrap;
   }
-  .c-empty {
-    padding: 3rem 1rem;
-    text-align: center;
-  }
-  .c-empty-title {
-    margin: 0;
-    font-weight: var(--dp-weight-bold);
-  }
-  .c-empty-hint {
-    margin: 0.5rem 0 0;
-    color: var(--dp-muted);
-    font-size: var(--dp-text-sm);
-  }
-
-  /* スマホの形の絞り込みの1行。ほかの画面の操作の1行と同じく、下のタブのすぐ上にカプセルで浮かせる */
+  /* スマホの形の絞り込みの1行。ほかの画面の操作の1行と同じく、下のタブのすぐ上にカプセルで浮かせる (`app.css` の `.dock`) */
   .c-bar {
     display: none;
   }
   :global(html[data-phone]) .c-bar {
     position: sticky;
     order: 2;
-    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
     z-index: 5;
     display: flex;
     align-items: center;
     gap: 0.25rem;
     height: 2.75rem;
-    margin-inline: calc(0.75rem - var(--dp-gutter, 1rem));
+    margin-inline: calc(var(--dp-dock-inset) - var(--dp-gutter, 1rem));
     padding-inline: 0.5rem;
-    border-radius: var(--dp-radius-full);
-    background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
-    transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   :global(html[data-phone]) .c-bar > :global(button) {
     width: auto;
@@ -1196,11 +1177,8 @@
   }
   @media (min-width: 768px) {
     :global(html[data-phone]) .c-bar {
-      margin-inline: 0.75rem;
+      margin-inline: var(--dp-dock-inset);
     }
-  }
-  :global(html[data-phone] [data-retract]) .c-bar:not(:has(:focus-visible)) {
-    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
   }
   :global(html[data-phone]) .c-main {
     order: 1;

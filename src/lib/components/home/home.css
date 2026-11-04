@@ -70,7 +70,7 @@
  */
 .board .row-meta {
   margin-top: 0.25rem;
-  font-size: 0.875rem;
+  font-size: var(--dp-text-sm);
   color: var(--dp-muted);
   overflow-wrap: anywhere;
 }
@@ -101,34 +101,6 @@
 }
 .board .row-empty {
   padding: 0.75rem;
-}
-/*
- * **一覧が空のとき。** 隅に一言だけでは壊れているのか空なのか読めないので、
- * 真ん中に寄せて上下に余白を取り、次にすること (番組表・ルール) へのリンクを添える
- */
-.board .empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 2.5rem 1rem;
-  text-align: center;
-}
-.board .empty-title {
-  font-weight: var(--dp-weight-bold);
-  overflow-wrap: anywhere;
-}
-.board .empty-hint {
-  font-size: 0.875rem;
-  color: var(--dp-muted);
-}
-.board .empty-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
 }
 /* まだ観ていない録画の点 (`unwatched`。形は `app.css` の `.fresh-dot`)。名前の前に置く */
 .board .fresh-dot {
@@ -283,7 +255,7 @@
   left: clamp(1.5rem, calc(100% * var(--done)), calc(100% - 1.5rem));
   transform: translateX(-50%);
   color: var(--dp-rec-text);
-  font-size: 0.6875rem;
+  font-size: var(--dp-text-2xs);
   font-weight: var(--dp-weight-bold);
   line-height: 1;
   white-space: nowrap;
@@ -393,7 +365,7 @@
   height: 2.125rem;
   margin: 0;
   padding: 0 0.75rem;
-  font-size: 0.8125rem;
+  font-size: var(--dp-text-sm);
   white-space: nowrap;
 }
 .board .t-chip .num {
@@ -402,25 +374,9 @@
 .board .t-toolbar .t-chips > .t-chip:hover {
   --pico-background-color: var(--dp-btn-tonal-hover);
 }
-/*
- * 選んでいるチップは塗らず囲まず、主の色の太字と字の幅いっぱいの下線 (`app.css` の `.chip` と同じ)。
- * 線は疑似要素で 1 本引く。`text-decoration` だと名前と数 (`.num`) に別々の線が付き、2 本に切れて見えた
- */
-.board .t-toolbar .t-chips > .t-chip[aria-pressed="true"] {
-  --pico-color: var(--dp-primary-text);
-  /* 入っている切り替えの短い下線 (app.css) は引かない。印は下の `::after` だけ */
-  background-image: none;
-  position: relative;
-  font-weight: var(--dp-weight-bold);
-}
-.board .t-toolbar .t-chips > .t-chip[aria-pressed="true"]::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0.75rem;
-  bottom: 0.3rem;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--pico-primary);
+/* 選んでいるチップは塗らず囲まず、主の色の太字と字の幅いっぱいの下線 (`app.css` の `.pick-line`)。線はチップの高さに合わせて少し上に */
+.board .t-toolbar .t-chips > .t-chip {
+  --pick-bottom: 0.3rem;
 }
 @media (min-width: 768px) {
   .board .t-list {
@@ -442,7 +398,7 @@
   width: fit-content;
   margin: 0.5rem 0 0.25rem;
   color: var(--dp-muted);
-  font-size: 0.75rem;
+  font-size: var(--dp-text-xs);
   font-weight: var(--dp-weight-bold);
   container-type: scroll-state;
 }
@@ -490,30 +446,19 @@
 /*
  * **スマホの形 (下のタブがある形) では、操作の1行を下のタブのすぐ上に貼り付ける。** 押すものは下に置く (指の届く所)。
  * 並びの上では一覧の後ろに回し (`order`)、下端に貼り付ける (`sticky` + `bottom`)。メニューは上に開く (`TimelineBar`)。
- * この1行も操作の層なので、下のタブの上に同じ半透明のカプセルで浮かせる (縁の線は引かない)。
+ * この1行も操作の層なので、下のタブの上に同じ半透明のカプセルで浮かせ、読んでいる間は引っ込める (`app.css` の `.dock`)。
  * 日付の見出しは上の安全域 (ノッチ) の少し下に浮かべる。スマホの形は `#lib/phone-form.ts` (`<html data-phone>`)
  */
 :where(html[data-phone]) .board .t-toolbar {
   order: 2;
-  bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
-  margin-inline: calc(0.75rem - var(--dp-gutter, 1rem));
+  margin-inline: calc(var(--dp-dock-inset) - var(--dp-gutter, 1rem));
   padding-inline: 0.5rem;
-  border-radius: var(--dp-radius-full);
-  background: var(--dp-float);
-  box-shadow: var(--dp-shadow-pop);
-  transition: transform var(--dp-duration-move) var(--dp-ease-spring);
 }
 /* 768px からは一覧が main の余白の外まで広がっているので、窓の端から下のタブと同じだけ離す */
 @media (min-width: 768px) {
   :where(html[data-phone]) .board .t-toolbar {
-    margin-inline: 0.75rem;
+    margin-inline: var(--dp-dock-inset);
   }
-}
-:where(html[data-phone])
-  [data-retract]
-  .board
-  .t-toolbar:not(:has(:focus-visible)) {
-  transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
 }
 :where(html[data-phone]) .board .t-main {
   order: 1;
@@ -559,7 +504,7 @@
   display: flex;
   align-items: center;
   gap: 0.25rem 0.875rem;
-  min-height: 4rem;
+  min-height: var(--dp-item-h);
   margin: 0;
   padding: 0.5rem 0.75rem;
 }
@@ -572,7 +517,6 @@
 }
 .board .t-row .row-meta {
   margin: 0;
-  font-size: 0.8125rem;
 }
 .board .title-line .row-name {
   flex: 0 1 auto;
@@ -581,7 +525,7 @@
 .board .t-time {
   flex-shrink: 0;
   color: var(--dp-muted);
-  font-size: 0.875rem;
+  font-size: var(--dp-text-sm);
   white-space: nowrap;
 }
 .board .t-excerpt {
@@ -658,10 +602,10 @@
     display: none;
   }
   .board .t-time {
-    font-size: 0.8125rem;
+    font-size: var(--dp-text-xs);
   }
   .board .t-rows .t-now {
-    --now-time-size: 0.8125rem;
+    --now-time-size: var(--dp-text-xs);
   }
   /*
      * 状態の段は2行まで折り返す。押すものに幅を取られて、1行で切ると「エンコー…」のように
@@ -768,10 +712,6 @@
  * 間を空ける。チップと「⋯」の中の項目も指の大きさに。マウスの画面 (`pointer: fine`) の詰め具合は変えない
  */
 @media (pointer: coarse) {
-  .board .t-row,
-  .board .group-head {
-    min-height: 4.5rem;
-  }
   .board .t-row .row-actions {
     --dp-btn-h: 2.75rem;
     --dp-btn-h-sm: 2.75rem;
@@ -832,9 +772,10 @@
   align-items: center;
   gap: 0.5rem;
 }
-/* スマホの形の、手を止めてほしいもののチップ。注意の色の字 (塗らない) */
+/* スマホの形の、手を止めてほしいもののチップ。注意の色の字 (塗らない。選んでいても注意の色のまま) */
 .board .t-toolbar .t-chips > .t-chip.warn {
   --pico-color: var(--dp-warn-text);
+  color: var(--dp-warn-text);
 }
 .board .t-chip.warn .num {
   color: inherit;
