@@ -153,7 +153,7 @@ public static class Dt295Probe
     private static void Receive(Options options, Dt295Board board, Dt295TsStats stats, Action<string> step)
     {
         var satellite = options.Kind != 'T';
-        var routes = new Dt295RouteTracker(needCat: !satellite, service: satellite && options.Program > 0 ? options.Program : null);
+        var routes = new Dt295RouteTracker(needCat: !satellite, service: satellite && options.Program > 0 ? options.Program : null, satellite: satellite);
         var data = Dt295Receive.Ensure();
         if (satellite) data = data with { Fields = data.Fields.WithAutoPidMode(false) };
         var stream = Dt295Stream.Start(board, data, routes, $"{Dt295.Model} {board.Port}", () => { }, Dt295Stream.Silence, program: options.Program);

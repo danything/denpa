@@ -305,7 +305,7 @@ public class Dt295TunerTests
         var first = Dt295Ts.Packet(0x1F0, Dt295Ts.Section(0x02, 0x400, [0xE1, 0x11, 0xF0, 0x00, 0x02, 0xE1, 0x11, 0xF0, 0x00, 0x0F, 0xE1, 0x12, 0xF0, 0x00]));
         var second = Dt295Ts.Packet(0x2F0, Dt295Ts.Section(0x02, 0x401, [0xE2, 0x11, 0xF0, 0x00, 0x02, 0xE2, 0x11, 0xF0, 0x00, 0x0F, 0xE2, 0x12, 0xF0, 0x00]));
 
-        var tracker = new Dt295RouteTracker(needCat: false, service: 0x401);
+        var tracker = new Dt295RouteTracker(needCat: false, service: 0x401, satellite: true);
         await Assert.That(tracker.Push(pat)).IsTrue();
         await Assert.That(tracker.Plan.Any(route => route.Pid == 0x2F0)).IsTrue();
         await Assert.That(tracker.Plan.Any(route => route.Pid == 0x1F0)).IsFalse();
@@ -318,6 +318,11 @@ public class Dt295TunerTests
         await Assert.That(tracker.Main!.VideoPid).IsEqualTo(0x211);
         await Assert.That(tracker.Settled).IsTrue();
         await Assert.That(tracker.Plan.Any(route => route.Pid is 0x111 or 0x112)).IsFalse();
+        // 衛星は音声と PMT を一般のスロット (5 以上) に入れる
+        var slots = tracker.Plan.ToDictionary(route => route.Pid);
+        await Assert.That(slots[0x211].Slot).IsEqualTo(0);
+        await Assert.That(slots[0x212].Slot).IsGreaterThanOrEqualTo(5);
+        await Assert.That(slots[0x2F0].Slot).IsGreaterThanOrEqualTo(5);
 
         // 指定が無ければ全番組を追い、主番組は PAT の順で最初の番組
         var all = new Dt295RouteTracker(needCat: false);

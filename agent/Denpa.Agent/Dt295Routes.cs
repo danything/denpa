@@ -58,7 +58,7 @@ public static class Dt295Routes
     /// それ以外はスロット 5 から上へ。同じ PID は 2 つ登録しない。PID 0 と 0x1FFF は登録しない。
     /// <paramref name="ecmOf"/> は「保護された PID → その ECM の PID」。異なる ECM が 2 つ以上なら断る (11.5)
     /// </summary>
-    public static Dt295Route[] Plan(Dt295Program? main, IEnumerable<int> pids, IReadOnlyDictionary<int, int>? ecmOf = null)
+    public static Dt295Route[] Plan(Dt295Program? main, IEnumerable<int> pids, IReadOnlyDictionary<int, int>? ecmOf = null, bool satellite = false)
     {
         ecmOf ??= new Dictionary<int, int>();
         var slots = new int[Slots];
@@ -79,7 +79,8 @@ public static class Dt295Routes
         }
         if (main is not null)
         {
-            int[] dedicated = [main.VideoPid, main.AudioPid, main.PmtPid, main.PcrPid];
+            // 衛星は映像と PCR だけを専用にする。音声と PMT を専用のスロット (1・2) に入れると、機材が音声を流さず、PMT の ES の一覧を映像だけに書き換える (実機の BS1)
+            int[] dedicated = satellite ? [main.VideoPid, 0, 0, main.PcrPid] : [main.VideoPid, main.AudioPid, main.PmtPid, main.PcrPid];
             for (var slot = 0; slot < dedicated.Length; slot++)
             {
                 var pid = dedicated[slot];
@@ -311,8 +312,9 @@ public sealed class Dt295SectionReader
 /// 版数の追従 (11.4) と、録画中の PMT の変化の扱い (11.3 の後半) はまだ持たない (最初の PAT・CAT と、PMT ごとに最初の 1 つだけを使う)
 /// </summary>
 /// <param name="needCat">そろったとみるのに CAT を待つか (地上波は待ち、衛星は待たない。11.2・8.6)</param>
+/// <param name="satellite">衛星か。専用のスロットの使い方が変わる (<see cref="Dt295Routes.Plan"/>)</param>
 /// <param name="service">受ける番組の番組番号。指定すると PAT のうち NIT とこの番組だけを追い、主番組もこの番組にする。null なら全番組を追う</param>
-public sealed class Dt295RouteTracker(bool needCat = true, int? service = null)
+public sealed class Dt295RouteTracker(bool needCat = true, int? service = null, bool satellite = false)
 {
     private readonly Dt295SectionReader _sections = new();
     private readonly List<int> _pids = [.. Dt295Routes.FixedSi];
@@ -393,7 +395,7 @@ public sealed class Dt295RouteTracker(bool needCat = true, int? service = null)
         Dt295Route[] plan;
         try
         {
-            plan = Dt295Routes.Plan(Main, _pids, _ecmOf);
+            plan = Dt295Routes.Plan(Main, _pids, _ecmOf, satellite);
         }
         catch (InvalidOperationException error)
         {

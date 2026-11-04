@@ -704,7 +704,7 @@ public sealed class Dt295Tuner : ITuneDevice
 
             // 衛星は、機材に PID を選ばせない (自動だと PMT の ES の一覧が空に書き換わる)。PSI から決めたルートで、指定された番組だけを取る
             if (tuning.Satellite) data = data with { Fields = data.Fields.WithAutoPidMode(false) };
-            var routes = new Dt295RouteTracker(needCat: !tuning.Satellite, service: tuning.Satellite ? tuning.ServiceId : null);
+            var routes = new Dt295RouteTracker(needCat: !tuning.Satellite, service: tuning.Satellite ? tuning.ServiceId : null, satellite: tuning.Satellite);
             try
             {
                 board.Locked(() =>
