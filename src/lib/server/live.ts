@@ -859,6 +859,19 @@ export function lightNotices(step: LightStep): Notice[] {
 }
 
 /**
+ * セッションのエンコードの速さ (`Pace.speed`)。放送そのまま (エンコードしない) と音声だけは null。
+ * 速さは出した映像の長さで測る (`pace.ts` の `VideoLength`) ので、映像の無い音声だけでは 0 になり、画面が
+ * 「サーバのエンコードが追いつかないため、再生が止まります」を出していた (手元で 0.25 Mbit/s に絞って音声だけにしたとき)
+ */
+export function encodeSpeed(
+  raw: boolean,
+  codec: StreamCodec,
+  measure: () => number | null,
+): number | null {
+  return raw || codec === "audio" ? null : measure();
+}
+
+/**
  * **エンコードの遅れを数えて、軽くするかを決める** (`Session.lighten`)。時刻と速さは引数で受け取る (単体で確かめられる)。
  * 速さが `LIGHT_SLOW` を切ったまま `LIGHT_LAG` 続いたら、1 回だけ答えを返す。
  *
@@ -1253,10 +1266,12 @@ class Session {
   /**
    * **エンコードの速さ** (出した映像の時刻の進み ÷ 実時間。`#lib/rungs.ts` の `Pace`)。ライブは実時間で届くので、
    * 追いついていれば 1 前後で、1 を下回り続けたらエンコードが遅れている。追っかけは倍速で読むので 2 前後まで出る。
-   * 放送そのまま (エンコードしない) と、測れるまでは null
+   * 放送そのまま (エンコードしない)・音声だけ・測れるまでは null (`encodeSpeed`)
    */
   get speed(): number | null {
-    return this.raw ? null : this.meter.speed(Date.now());
+    return encodeSpeed(this.raw, this.codec, () =>
+      this.meter.speed(Date.now()),
+    );
   }
 
   /** 一覧 (`sessions`) での目印。**作ったときに決めて、畳むときも同じものを消す** */

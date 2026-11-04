@@ -15,6 +15,7 @@ import {
   CHASE_STREAM_HOLD,
   encodeArgs,
   EncodeLag,
+  encodeSpeed,
   keepLight,
   key,
   type Light,
@@ -1181,5 +1182,17 @@ describe("段の指示 (parseCommand)", () => {
     expect(
       parseCommand({ type: "chase", recordingId: 3, codec: "audio" }),
     ).toMatchObject({ codec: "h264" });
+  });
+});
+
+/** **セッションのエンコードの速さ** (`encodeSpeed`)。測るのは映像の長さなので、映像の無いものは null */
+describe("エンコードの速さ", () => {
+  test("エンコードしているなら測った値を返す", () => {
+    expect(encodeSpeed(false, "h264", () => 0.8)).toBe(0.8);
+  });
+
+  test("放送そのままと音声だけは null (音声だけで 0 と返すと、画面がエンコードの遅れと読む)", () => {
+    expect(encodeSpeed(true, "h264", () => 0)).toBeNull();
+    expect(encodeSpeed(false, "audio", () => 0)).toBeNull();
   });
 });

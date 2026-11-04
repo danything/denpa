@@ -49,7 +49,7 @@ import {
  *
  * ## 下げないとき
  *
- * - サーバのエンコードが実時間に追いつかない (`Pace.speed` が 1 未満) 間は、詰まっても回線のせいにしない。
+ * - サーバのエンコードが実時間に追いつかない (`Pace.speed` が 0 より大きく 1 未満。0 は測れていないと読む) 間は、詰まっても回線のせいにしない。
  *   3 秒続いたら段は下げずに `encode` を返す (画面は断り書きを出すだけ。ライブはサーバが自分で軽い組み合わせに作り直す。
  *   `server/live.ts` の `Session.lighten`)
  * - 形式を手で選んでいる間は段を動かさず、足りないときに `pinned` だけを返す
@@ -301,8 +301,13 @@ export class RungAdapter {
       return null;
     }
 
+    /*
+     * 0 は「測れていない」と読む (エンコードの遅れには数えない)。サーバは出した映像の長さで測るので、映像として読めない
+     * トラック (#2152 の hvc1) や映像の無いストリームでは、エンコードが進んでいても 0 になる。0 を遅れと読むと、
+     * `encode` を返し続けて段がいつまでも動かず、断り書きも出し直され続けた。本当に遅れていれば 0 より大きい値が届く
+     */
     const speed = s.pace?.speed ?? null;
-    if (speed !== null && speed < 1) this.slowSince ??= now;
+    if (speed !== null && speed > 0 && speed < 1) this.slowSince ??= now;
     else this.slowSince = null;
     if (this.slowSince !== null) {
       // 溜まりが減るのも詰まるのもエンコードが遅いせい。回線のぶんとして数えない

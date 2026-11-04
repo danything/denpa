@@ -493,6 +493,20 @@ describe("エンコードの遅れ", () => {
       decision: { step: 0, reason: "encode" },
     });
   });
+
+  test("速さ 0 は測れていないと読み、encode を返さずに回線のぶんとして下げる (#2152)", () => {
+    const a = new RungAdapter();
+    const zero = paces(() => ({ backlog: 0, dropped: 0, speed: 0 }));
+    expect(
+      first(a, 0, 30_000, (now) => ({
+        route: "live",
+        current: 1,
+        waiting: true,
+        ahead: 0,
+        pace: zero(now),
+      })),
+    ).toEqual({ at: GRACE, decision: { step: 3, reason: "slow" } });
+  });
 });
 
 describe("手で選んでいるとき", () => {
