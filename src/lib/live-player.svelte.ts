@@ -931,7 +931,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       ahead,
       waiting: stuckNow(now),
       pace: lastPace,
-      // ライブの段 0 から上げ下げを決めるのに、段 0 のビットレートは使わない (`adapt.ts` の `stepBps` は観る画面だけ)
+      // ライブは段 0 のビットレートを渡さない。段 0 へ上げるときは、段 0 で足りていたときに測った速さと比べる (`RungAdapter.liveBps`)
       baseKbps: null,
       lag: chase === null ? lagMeter.growth(now) : null,
       capacity,
@@ -956,7 +956,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
        */
       const at = engine?.frameAt ?? 0;
       const frozen = videoFrozen({
-        now: Date.now(),
+        now,
         frameAt: at,
         least: CANVAS_FROZEN,
         playing: engine?.playing === true,
@@ -1771,7 +1771,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     reset();
     stopRaw();
     thaw();
-    // 字幕を描く係も畳む (canvas の大きさの見張りを外す)
+    // 字幕を描く係も畳む (canvas の大きさを読む `ResizeObserver` を外す)
     painter?.close();
     painter = null;
   }
@@ -2450,7 +2450,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           audio = notice.audio;
           awaiting = false;
           const step = servedStep(notice);
-          // 追っかけで音声だけを頼んでいたときは、実際には段 3 をリクエストしている (`wantedCommand`)
+          // 追っかけで音声だけを選んでいたときは、実際には段 3 をリクエストしている (`wantedCommand`)
           const requested =
             chase !== null && asked === "audio" ? LOWEST_RUNG : asked;
           if (stepOrder(step) < stepOrder(requested)) {

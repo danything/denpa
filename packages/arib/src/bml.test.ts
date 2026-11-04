@@ -385,7 +385,7 @@ describe("BmlDecoder", () => {
     ).toEqual([1, 2]);
   });
 
-  /** TDT。BML の `getCurrentDateTime` はこれを見る */
+  /** TDT。データ放送の時刻 (`currentTime`) はこれから作る */
   test("放送の時刻を配る", () => {
     const at = Date.UTC(2026, 7, 9, 12, 0, 0);
     const out = decode(...head, tdtPacket(at));

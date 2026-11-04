@@ -12,7 +12,8 @@
  * - `fmp4` … エンコードしたもの (ライブ・追っかけは `CHANNEL.videoInit` / `videoMedia`、観る画面は `/stream`)。映像は WebCodecs の
  *   VideoDecoder でデコードして 2D で描き、音 (AAC・Opus) は WASM でデコードする (`fmp4.ts`)。
  *   **<video> の再生が止まる端末** (テスラの車載ブラウザ) のための経路
- * - `mkv` … 端末に保存した録画 (エンコード済みの Matroska)。互換モードの観る画面で、読んだコマを `fmp4` と
+ * - `mkv` … 端末に保存した録画 (エンコード済みの Matroska)。互換モードの観る画面と、オフラインの画面で `<video>` が
+ *   読めなかったとき (`routes/offline`) に、読んだコマを `fmp4` と
  *   同じ経路でデコードして描く (`mkv.ts`)。音は選んだ 1 本 (`audio` の何本目か)
  */
 export type RawInput = "ts-mpeg2" | "fmp4" | "mkv";

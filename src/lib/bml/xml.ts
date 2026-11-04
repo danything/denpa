@@ -9,6 +9,8 @@
  * 名前は小文字にそろえる。`bml:` などの前置きは落とす (C プロファイルの名残)。
  */
 
+import { replaceBlocks } from "./css";
+
 interface XmlText {
   kind: "text";
   text: string;
@@ -62,21 +64,6 @@ export function decodeEntities(text: string): string {
       return ENTITIES[body] ?? whole;
     },
   );
-}
-
-/** 注釈 (`<!-- -->`) を落とす。閉じないものは残す */
-function dropComments(text: string): string {
-  let out = "";
-  let at = 0;
-  for (;;) {
-    const start = text.indexOf("<!--", at);
-    if (start === -1) break;
-    const end = text.indexOf("-->", start + 4);
-    if (end === -1) break;
-    out += text.slice(at, start);
-    at = end + 3;
-  }
-  return out + text.slice(at);
 }
 
 function localName(name: string): string {
@@ -222,7 +209,7 @@ export function parseXml(source: string): XmlElement | null {
         // CDATA が幾つあってもつなぐ。外の注釈 (<!-- -->) は捨て、外の字は実体参照を開く
         // 正規表現の `[\s\S]*?` は閉じない `<![CDATA[`・`<!--` が並ぶと 2 乗かかるので、位置で探す
         const outside = (part: string): string =>
-          decodeEntities(dropComments(part));
+          decodeEntities(replaceBlocks(part, "<!--", "-->", ""));
         let text = "";
         let from = 0;
         for (;;) {

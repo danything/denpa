@@ -52,7 +52,11 @@ export interface CanvasSupport {
 
 /**
  * 問い合わせる形式。サーバがエンコードする形式と同じ (`#lib/live.ts` の `codecsFor`)。
- * 実際にデコードするときは moov から読んだ形式で開く (`ts/fmp4.ts` の `readInit`)。エンコード方式が同じなので同じになる
+ * 実際にデコードするときは moov から読んだ形式で開く (`ts/fmp4.ts` の `readInit`)。エンコード方式が同じなので同じになる。
+ *
+ * **H.265 は問い合わせない。** 互換モードは H.265 を選ばず、サーバにも描けるものとして渡さない。ライブ・追っかけは
+ * `live-player.svelte.ts` の `canvasCan` (段を下げたときの `playable` も同じ)、録画の観る画面は `ts/playback.ts` の
+ * `CanvasCodec` と `canvasPlayable`、端末に保存した録画は `mkv-source.ts` (H.264 と AV1 しか読まない) で外している
  */
 const PROBE = { h264: "avc1.640029", av1: "av01.0.08M.08" } as const;
 

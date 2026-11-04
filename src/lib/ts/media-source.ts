@@ -22,7 +22,7 @@ export interface PickedMediaSource {
   managed: boolean;
 }
 
-/** MediaSource のありか。**試しで差し替えられるように**受け取る (既定は `globalThis`) */
+/** MediaSource のありか。**テストで差し替えられるように**受け取る (既定は `globalThis`) */
 interface MediaSourceScope {
   MediaSource?: MediaSourceClass;
   ManagedMediaSource?: MediaSourceClass;

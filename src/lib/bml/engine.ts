@@ -10,7 +10,7 @@
  * - 映像は動かさない。映像の object の場所を `onVideoRect` で知らせ、置くのは呼ぶ側
  * - 文書は自前の XML パーサ → 中身の木 → Shadow DOM の中の絶対配置の div ([render.ts](render.ts))
  * - スクリプトは自前の VM ([vm.ts](vm.ts))。イベントは 1 つずつ順に動かす
- * - **ページを握るのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
+ * - **ページを占めるのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
  *   スクリプト・描き直し・約束の続きは全部その下で動かし、休みなく回り続ける文書は止める
  *
  * 時計は `clock` (録画は再生位置から放送の時刻を出す)。無ければ TOT + 経過時間。
@@ -130,7 +130,7 @@ export interface BmlOptions {
    */
   opened?: () => boolean;
   log?: (message: string) => void;
-  /** ページを握る長さの決まり (既定は [budget.ts](budget.ts) の DEFAULT_BUDGET。テストで縮める) */
+  /** ページを占める長さの決まり (既定は [budget.ts](budget.ts) の DEFAULT_BUDGET。テストで縮める) */
   budget?: Partial<BudgetLimits>;
 }
 
@@ -335,7 +335,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   /** 文書を読み込んでいる間。外から来るイベントは捨てる (onload より前に受け手を動かさない) */
   private preparing = false;
   private readonly budget: Budget;
-  /** 暴れたので止めた。このエンジンではもう文書を出さない */
+  /** 文書が休みなく動き続けたので止めた (epgTune で選局を任せたときも)。このエンジンではもう文書を出さない */
   private halted = false;
   /** 続きを次のタスクに回してある (pump・描き直し) */
   private deferred = false;
@@ -1076,7 +1076,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.currentEvent = this.dom?.event({}) ?? null;
     this.screenLocked = false;
     this.draw();
-    // 続けて動かす。呼び出しを積み重ねないよう、一度手を放してから
+    // 続けて動かす。呼び出しを積み重ねないよう、マイクロタスクに回してから
     queueMicrotask(() => this.pump());
   }
 

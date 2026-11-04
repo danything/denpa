@@ -52,7 +52,7 @@ export const RATE_LEAST = 2_000;
 /**
  * **受け取った量から、受け取りの速さ (bit/s) を出す** (`AdaptSample.throughput`)。直近 `RATE_WINDOW` の窓で数える。
  * ライブは実時間でしか送られないので、足りているときはストリームのビットレート、足りないときは回線の上限に近い値になる。
- * `adapt.ts` は下げ先を決めるのにだけ使う
+ * `adapt.ts` は下げ先を決めるのと、段 0 で足りていたときの速さを覚えるのにだけ使う
  */
 export class Throughput {
   #samples: { at: number; bytes: number }[] = [];
@@ -167,12 +167,12 @@ export class LagMeter {
 /**
  * 詰まりとして数えるまでの長さ (ms)。`<video>` が先を持たない状態 (`readyState` が `HAVE_FUTURE_DATA` 未満) が
  * これだけ続いたら詰まっていると見る。画面が自分で 1 コマ飛んだとき (`unslip`) の短い空きは数えない。
- * `waiting` の知らせは、飛んだあと 3 秒数えない (`quiet`) ので、細い回線で止まっては飛ぶのを繰り返すと詰まりが見えなくなっていた
+ * `waiting` の通知は、飛んだあと 3 秒数えない (`quiet`) ので、細い回線で止まっては飛ぶのを繰り返すと詰まりが見えなくなっていた
  */
 export const STUCK_LEAST = 500;
 
 /** 試しのデータの量を決める長さ (ms)。測りたい速さで、これだけかかる量を取る */
-export const PROBE_SPAN = 1_000;
+const PROBE_SPAN = 1_000;
 /** 試しのデータの量の下限と上限 (バイト)。小さすぎると TCP の立ち上がりで遅く見える。サーバもこの値を使う (`GET /api/playback/probe`) */
 export const PROBE_LEAST = 64 * 1024;
 export const PROBE_MOST = 4 * 1024 * 1024;
@@ -222,7 +222,7 @@ export function probeSize(asked: string | null): number {
 
 /**
  * 試しのデータを断られたとき (429) に、次に測ってよいまでの長さ (ms)。`Retry-After` (秒) が無い・読めなければ `fallback`。
- * 無いときを 0 と読むと、次の刻みでまた取りにいって断られ続ける
+ * 無いときを 0 と読むと、次の刻みでまた取得しようとして断られ続ける
  */
 export function retryAfterMs(header: string | null, fallback = 10_000): number {
   if (header === null || header.trim() === "") return fallback;

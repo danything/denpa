@@ -33,7 +33,7 @@ export function parseDrcs(data: Uint8Array): [number, Glyph][] {
       const head = data[at++]!;
       const fontId = head >> 4;
       const mode = head & 0x0f;
-      // ジオメトリックは運用されない。読めないので残りを諦める
+      // ジオメトリックは運用されない。読み方を持たないので、そこから後ろは読まない
       if (mode > 1) return out;
       const levels = (data[at++] ?? 0) + 2;
       const width = data[at++] ?? 0;
