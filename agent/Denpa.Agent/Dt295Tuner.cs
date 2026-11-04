@@ -370,10 +370,21 @@ internal sealed class Dt295Stream
 {
     private const byte Endpoint = 0x81;
 
-    /// <summary>1 本の読みの大きさと本数 (10.1 の参照実装の値: 65,536 バイトを 8 本)</summary>
-    private const int TransferSize = 65536;
+    /// <summary>
+    /// 1 本の読みの大きさと本数。参照実装 (10.1) は 65,536 バイトを 8 本だが、受信を始めた直後は PSI だけが約 180 kbps で流れ、
+    /// 65,536 バイトが埋まるまで 3 秒ほどかかり、映像が出るまでが長くなる (pix-userland の issue 77 も同じ)。
+    /// 実機 (BS1、番組 152、各 4 回) で映像の最初のパケットまでを測ると、65,536 バイトが 5.3〜5.9 秒、32,768 が 2.9〜3.7 秒、16,384 が 2.3〜2.9 秒、
+    /// 8,192 が 1.8〜2.0 秒、4,096 が 1.7〜1.9 秒だった。CPU 時間 (20 秒) は 3.8 秒、4.2 秒、4.7 秒、5.2 秒、6.3 秒と増える。
+    /// 8,192 バイトは、短縮がほぼ頭打ちになる手前で CPU が少ない。待機中に溜められる量 (512 KiB) は変えない
+    /// USB 2.0 の bulk の最大パケットは 512 バイトで、読みの大きさはその倍数でなければならない (WinUSB の RAW_IO が断る)。
+    /// Windows と Mac で 64 本の読みが動くかは、実機で確かめていない (Linux だけ)
+    /// </summary>
+    private const int TransferSize = 8192;
 
-    private const int Depth = 8;
+    private const int Depth = 64;
+
+    /// <summary>1 回の <c>Read</c> で受け取る上限。読みが小さくなっても、1 回の呼び出しでまとめて受け取る</summary>
+    private const int ReadChunk = 65536;
 
     private const int ReadTimeoutMs = 100;
 
@@ -418,6 +429,12 @@ internal sealed class Dt295Stream
 
     public bool Ended => _ended;
 
+    /// <summary>止めたとき、読み出しのスレッドが 3 秒以内に終わったか (終わっていなければ、ルートの計画をまだ書き換えているかもしれない)</summary>
+    internal bool PumpStopped { get; private set; }
+
+    /// <summary>この受信のルートの計画。止めるときに写しを取る</summary>
+    internal Dt295RouteTracker Routes => _routes;
+
     /// <summary>流し終わった理由 (無ければ null)</summary>
     public string? Reason => _reason;
 
@@ -452,7 +469,7 @@ internal sealed class Dt295Stream
             board.Locked(() =>
             {
                 board.Receiving = true;
-                stream.Prepare(routes.Plan, null);
+                stream.Prepare(routes.Plan, routes.Main);
             });
         }
         catch
@@ -482,7 +499,7 @@ internal sealed class Dt295Stream
 
     private void Pump()
     {
-        var raw = new byte[TransferSize * 2];
+        var raw = new byte[ReadChunk];
         var writer = _pipe.Writer;
         var quiet = Stopwatch.StartNew();
         var since = Stopwatch.StartNew();
@@ -637,7 +654,7 @@ internal sealed class Dt295Stream
         _stopping = true;
         var stopped = Stopwatch.StartNew();
         Output.Stop();
-        _pump.Join(TimeSpan.FromSeconds(3));
+        PumpStopped = _pump.Join(TimeSpan.FromSeconds(3));
         StopReception();
         _board.Receiving = false;
         _in.Dispose();
@@ -667,6 +684,15 @@ public sealed class Dt295Tuner : ITuneDevice
     private readonly Lock _gate = new();
     private Dt295Board? _board;
     private Dt295Stream? _stream;
+
+    /// <summary>
+    /// チャンネルごとの、前回の PAT・PMT・CAT の写し (エージェントが動いている間だけ持つ)。同じチャンネルを選び直すと、最初の準備から
+    /// 全部のルートを書き、PMT が届くのを待たずに映像と音声が流れる。届く PSI と見比べて、違えば写しを捨てる
+    /// </summary>
+    private readonly Dictionary<string, Dt295RouteSnapshot> _routeCache = [];
+
+    /// <summary>いまの受信の写しのキー (周波数・TSID・番組番号)</summary>
+    private string? _streamKey;
 
     public Dt295Tuner(string port) : this($"{Dt295.Model} {port}", Dt295.Device(port), Dt295Receive.Ensure, () => Dt295Board.Acquire(port))
     {
@@ -722,6 +748,9 @@ public sealed class Dt295Tuner : ITuneDevice
             if (tuning.Satellite) data = data with { Fields = data.Fields.WithAutoPidMode(false) };
             // ServiceId は 1〜65535 か null (ChannelTable が 0 を断る)。null なら全番組を追う
             var routes = new Dt295RouteTracker(needCat: !tuning.Satellite, service: tuning.Satellite ? tuning.ServiceId : null, satellite: tuning.Satellite);
+            var key = $"{(tuning.Satellite ? "S" : "T")}{tuning.Frequency}:{streamId}:{(tuning.Satellite ? tuning.ServiceId : null)}";
+            if (_routeCache.TryGetValue(key, out var cached)) routes.Seed(cached);
+            _streamKey = key;
             try
             {
                 board.Locked(() =>
@@ -775,7 +804,12 @@ public sealed class Dt295Tuner : ITuneDevice
     {
         var stream = _stream;
         _stream = null;
+        var key = _streamKey;
+        _streamKey = null;
         stream?.Stop();
+        // 読み出しのスレッドが終わってから (ルートの計画は読み出しのスレッドが書き換える)、PAT と全部の PMT がそろっていれば写しを取る。
+        // 次に同じチャンネルを選ぶとき、最初の準備に使う。見比べていない写しや、計画を作れなかった状態は取らない (前の写しを残す)
+        if (stream is { PumpStopped: true } && key is not null && stream.Routes.Snapshot() is { } snapshot) _routeCache[key] = snapshot;
     }
 
     /// <summary>捨てる (定義が変わった・止める)。セッションを終えて閉じる</summary>

@@ -109,10 +109,10 @@ export interface Fmp4Track {
   kind: "video" | "audio";
   /** 時刻の刻み (1 秒あたり) */
   timescale: number;
-  /** WebCodecs の書き方の codec (`avc1.640029` / `av01.0.08M.08` / `mp4a.40.2` / `opus`) */
+  /** WebCodecs の書き方の codec (`avc1.640029` / `hvc1.1.6.L93.B0` / `av01.0.08M.08` / `mp4a.40.2` / `opus`) */
   codec: string;
   /**
-   * デコーダに渡すもの。映像は avcC / av1C の中身 (VideoDecoder の `description`)、
+   * デコーダに渡すもの。映像は avcC / hvcC / av1C の中身 (VideoDecoder の `description`)、
    * AAC は AudioSpecificConfig、Opus は dOps の中身
    */
   config: Uint8Array<ArrayBuffer>;
@@ -279,7 +279,12 @@ function readEntry(
     channels: 0,
     sampleRate: 0,
   };
-  if (entry.type === "avc1" || entry.type === "av01") {
+  if (
+    entry.type === "avc1" ||
+    entry.type === "av01" ||
+    entry.type === "hvc1" ||
+    entry.type === "hev1"
+  ) {
     // VisualSampleEntry: 中身の先頭から 78 バイトが決まった並び (幅は 24、高さは 26)
     if (body.length < 78) return null;
     const inner = body.subarray(78);
@@ -290,14 +295,21 @@ function readEntry(
       height: v.getUint16(26),
       ...(displayWidth === null ? {} : { displayWidth }),
     };
+    // H.265 は段を下げた変換で GPU (hevc_rkmpp など) が出す。読めないと映像の長さが数えられず、
+    // サーバの速さ (`server/pace.ts`) が 0 のままになる (#2152)
+    const hevc = entry.type === "hvc1" || entry.type === "hev1";
     const avc = entry.type === "avc1";
-    const config = child(inner, avc ? "avcC" : "av1C");
-    if (config === null || config.length < 4) return null;
+    const config = child(inner, avc ? "avcC" : hevc ? "hvcC" : "av1C");
+    if (config === null || config.length < (hevc ? 13 : 4)) return null;
     return {
       ...base,
       ...size,
       kind: "video",
-      codec: avc ? avcCodec(config) : av1Codec(config),
+      codec: avc
+        ? avcCodec(config)
+        : hevc
+          ? hevcCodec(entry.type, config)
+          : av1Codec(config),
       config: config.slice(),
     };
   }
@@ -337,6 +349,27 @@ function readEntry(
 /** avcC から `avc1.PPCCLL` を起こす。profile・互換の印・level (avcC の 1〜3 バイト目) */
 export function avcCodec(avcC: Uint8Array): string {
   return `avc1.${hex(avcC[1]!)}${hex(avcC[2]!)}${hex(avcC[3]!)}`;
+}
+
+/**
+ * hvcC から `hvc1.1.6.L93.B0` のような codec を起こす (ISO/IEC 14496-15 の付録 E)。
+ * hvcC の 1 バイト目が profile_space (2 ビット)・tier (1 ビット)・profile_idc (5 ビット)、2〜5 バイト目が
+ * 互換の印 (32 ビット。ビットを逆順にして 16 進で書く)、6〜11 バイト目が制約の印 (末尾の 0 は省く)、12 バイト目が level
+ */
+export function hevcCodec(type: string, hvcC: Uint8Array): string {
+  const space = ["", "A", "B", "C"][hvcC[1]! >> 6]!;
+  const tier = (hvcC[1]! >> 5) & 1 ? "H" : "L";
+  const profile = hvcC[1]! & 0x1f;
+  let flags = 0;
+  for (let i = 0; i < 4; i++) flags = (flags << 8) | hvcC[2 + i]!;
+  let reversed = 0;
+  for (let i = 0; i < 32; i++) reversed = (reversed << 1) | ((flags >>> i) & 1);
+  const constraints = [...hvcC.subarray(6, 12)];
+  while (constraints.length > 0 && constraints.at(-1) === 0) constraints.pop();
+  const tail = constraints
+    .map((b) => `.${b.toString(16).toUpperCase()}`)
+    .join("");
+  return `${type}.${space}${profile}.${(reversed >>> 0).toString(16).toUpperCase()}.${tier}${hvcC[12]!}${tail}`;
 }
 
 /** AudioSpecificConfig から `mp4a.40.N` を起こす (N は先頭の 5 ビットのオブジェクトの種類) */
