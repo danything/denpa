@@ -13,10 +13,12 @@ import {
   RATE_LEAST,
   RATE_WINDOW,
   replacesWarning,
+  retryAfterMs,
   rungFields,
   servedStep,
   stepFields,
   Throughput,
+  videoFrozen,
 } from "./live-adapt";
 
 type Tuned = Extract<Notice, { type: "tuned" }>;
@@ -237,5 +239,41 @@ describe("試しのデータの量", () => {
     expect(probeSize("1e12")).toBe(PROBE_MOST);
     expect(probeSize("abc")).toBe(PROBE_LEAST);
     expect(probeSize(null)).toBe(PROBE_LEAST);
+  });
+});
+
+/** **断られたあと次に測ってよいまで** (`retryAfterMs`) */
+describe("Retry-After", () => {
+  test("秒をミリ秒にする。無い・空・読めない値は既定の 10 秒", () => {
+    expect(retryAfterMs("7")).toBe(7_000);
+    expect(retryAfterMs(null)).toBe(10_000);
+    expect(retryAfterMs("")).toBe(10_000);
+    expect(retryAfterMs("soon")).toBe(10_000);
+    expect(retryAfterMs("-1")).toBe(10_000);
+  });
+});
+
+/** **音は進むのに映像だけ止まっているか** (`videoFrozen`) */
+describe("映像だけの詰まり", () => {
+  const base = {
+    now: 10_000,
+    frameAt: 8_000,
+    least: 1_500,
+    playing: true,
+    audioOnly: false,
+    hidden: false,
+  };
+
+  test("最後にコマが映ってから least たてば止まっている。届かなければ止まっていない", () => {
+    expect(videoFrozen(base)).toBe(true);
+    expect(videoFrozen({ ...base, frameAt: 8_600 })).toBe(false);
+    expect(videoFrozen({ ...base, frameAt: 8_500 })).toBe(true);
+  });
+
+  test("まだ映っていない・鳴らしていない・音声だけ・画面が裏のときは見ない", () => {
+    expect(videoFrozen({ ...base, frameAt: 0 })).toBe(false);
+    expect(videoFrozen({ ...base, playing: false })).toBe(false);
+    expect(videoFrozen({ ...base, audioOnly: true })).toBe(false);
+    expect(videoFrozen({ ...base, hidden: true })).toBe(false);
   });
 });

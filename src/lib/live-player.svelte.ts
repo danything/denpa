@@ -50,11 +50,13 @@ import {
   probeBytes,
   probeRate,
   replacesWarning,
+  retryAfterMs,
   rungFields,
   servedStep,
   stepFields,
   STUCK_LEAST,
   Throughput,
+  videoFrozen,
 } from "#lib/live-adapt.js";
 import { holdStep, rawChasePosition } from "#lib/live-chase.js";
 import {
@@ -953,12 +955,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
        * 音は鳴っているのに映像だけ止まっていると見る。`<video>` の `requestVideoFrameCallback` の代わり
        */
       const at = engine?.frameAt ?? 0;
-      const frozen =
-        at > 0 &&
-        engine?.playing === true &&
-        served !== "audio" &&
-        !document.hidden &&
-        Date.now() - at >= CANVAS_FROZEN;
+      const frozen = videoFrozen({
+        now: Date.now(),
+        frameAt: at,
+        least: CANVAS_FROZEN,
+        playing: engine?.playing === true,
+        audioOnly: served === "audio",
+        hidden: document.hidden,
+      });
       return stuck || frozen;
     }
     if (element === null) return stuck;
@@ -967,11 +971,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 映るコマが来ない (`readyState` は落ちず `waiting` も来ない)。映ったコマ (`requestVideoFrameCallback`) が
      * `STUCK_LEAST` 来なければそう見る。測れないブラウザ (`lastFrameAt` が 0)・音声だけ・画面が裏のときは見ない
      */
-    const frozen =
-      lastFrameAt > 0 &&
-      served !== "audio" &&
-      !document.hidden &&
-      performance.now() - lastFrameAt >= STUCK_LEAST;
+    const frozen = videoFrozen({
+      now: performance.now(),
+      frameAt: lastFrameAt,
+      least: STUCK_LEAST,
+      playing: true,
+      audioOnly: served === "audio",
+      hidden: document.hidden,
+    });
     const starving =
       (element.readyState < HTMLMediaElement.HAVE_FUTURE_DATA || frozen) &&
       !element.seeking;
@@ -1012,8 +1019,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       });
       if (res.status === 429) {
         // 間を置かずに取ろうとした (同じ利用者のほかの画面が測った直後など)。言われた時間までは測らず、測ったことにもしない
-        const after = Number(res.headers.get("Retry-After"));
-        probeAfter = Date.now() + (Number.isFinite(after) ? after : 10) * 1000;
+        probeAfter = Date.now() + retryAfterMs(res.headers.get("Retry-After"));
         return;
       }
       const reader = res.ok ? res.body?.getReader() : undefined;

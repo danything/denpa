@@ -1,4 +1,5 @@
 import { PROBE_MOST, probeSize } from "#lib/live-adapt.js";
+import { clientAddress } from "#lib/server/auth.js";
 import { ProbeGate } from "#lib/server/probe-gate.js";
 
 /** 回数の制限 (`ProbeGate`)。利用者ごとに間を置く */
@@ -25,9 +26,11 @@ function filled(): Uint8Array {
  * 届く速さを測る (`live-player.svelte.ts` の `probeLink`)。ライブのストリームは実時間でしか届かないので、それだけでは回線の余裕が
  * 分からないため。量は `PROBE_LEAST`〜`PROBE_MOST` に丸める。キャッシュさせない
  */
-export function GET({ url, locals, getClientAddress }) {
-  // ログインしていれば利用者、していなければ (信頼するネットワークから) 送り元ごとに数える
-  const key = locals.user?.subject ?? `addr:${getClientAddress()}`;
+export function GET(event) {
+  const { url, locals } = event;
+  // ログインしていれば利用者、していなければ (信頼するネットワークから) 送り元ごとに数える。送り元が読めなければ
+  // (`clientAddress` が空)、読めないもの全部を 1 人として数える (通すと、送り元を隠すだけで制限を抜けられる)
+  const key = locals.user?.subject ?? `addr:${clientAddress(event)}`;
   const wait = gate.allow(key, Date.now());
   if (wait > 0)
     return new Response("試しのデータは同じ利用者で 10 秒に 1 回までです", {
