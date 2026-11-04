@@ -6,6 +6,7 @@
   import { arming } from "#lib/arming.svelte.js";
   import Lead from "#lib/components/Lead.svelte";
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
+  import { dateTime } from "#lib/format.js";
   import { liveTuner } from "#lib/live-tuner.svelte.js";
   import { measure } from "#lib/measure.svelte.js";
   import {
@@ -204,22 +205,20 @@
             新しいものから 2,000 件・60 日ぶんまで残します。CSV
             はロゴが揃わないことを報告するときに添えてください。
           </p>
+          <p>
+            1
+            行は、開き始めた時刻・中継・開いていた長さ・終わり方・ロゴのデータとして届いたパケットの数・ダウンロードを知らせる表
+            (SDTT) が届いた回数・取れた局の数です。
+          </p>
         {/snippet}
       </Lead>
       {#if data.logoRecords.length > 0}
         <ol class="logo-records small" data-testid="logo-records">
           {#each data.logoRecords as record (record.id)}
             <li data-testid="logo-record-row">
-              <span
-                >{new Date(record.started_at).toLocaleString("ja-JP", {
-                  month: "numeric",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}</span
-              >
-              {record.channel}・{Math.round(record.opened_ms / 60_000)} 分・{record.outcome}・ロゴの
-              ES {record.es_packets} パケット・SDTT {record.sdtt}・{record.found}
+              <span>{dateTime(record.started_at)}</span>
+              {record.channel}・{Math.round(record.opened_ms / 60_000)} 分・{record.outcome}・ロゴのデータ
+              {record.es_packets} パケット・ダウンロードの知らせ {record.sdtt} 回・{record.found}
               局
             </li>
           {/each}

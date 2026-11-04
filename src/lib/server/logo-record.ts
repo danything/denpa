@@ -39,6 +39,15 @@ export function recordLogoAttempt(
   now = Date.now(),
 ): void {
   if (!settings().recordLogo) return;
+  // デバッグ用の記録なので、書けなくても (ディスクが満杯・DB のロックなど) ロゴの取得は止めない
+  try {
+    write(attempt, now);
+  } catch (error) {
+    console.warn(`[logo] ロゴの取得の記録を書けませんでした: ${String(error)}`);
+  }
+}
+
+function write(attempt: LogoAttempt, now: number): void {
   const c = attempt.counts;
   const db = orm();
   db.insert(logoRecords)
