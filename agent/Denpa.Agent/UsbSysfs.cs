@@ -67,18 +67,35 @@ public static class UsbSysfs
         try
         {
             File.WriteAllText(disable, "1");
-            Thread.Sleep(500);
-            File.WriteAllText(disable, "0");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            throw new IOException($"USB のポート {port} の電源を入れ直せません ({error.Message})。機材を挿し直してください", error);
+            throw new IOException($"USB のポート {port} の電源を切れません ({error.Message})。機材を挿し直してください", error);
+        }
+        try
+        {
+            Thread.Sleep(500);
+        }
+        finally
+        {
+            // 切ったあとは、途中で何が起きても入れ直しを試す (切れたままにしない)
+            try
+            {
+                File.WriteAllText(disable, "0");
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                throw new IOException($"USB のポート {port} の電源を入れ直せず、切れたままです ({error.Message})。機材を挿し直してください", error);
+            }
         }
         var deadline = DateTime.UtcNow + wait;
+        var gone = before is null;
         while (DateTime.UtcNow < deadline)
         {
-            // つながり直すと、前と違う番号の devnum が出る (前の機材が消える前の番号では戻らない)
-            if (Read(Path.Combine(sysfs, port), "devnum") is { Length: > 0 } now && now != before) return;
+            // 前の機材が消えたのを見たか、前と違う番号の devnum が出たら、つながり直した (同じ番号が振り直されることもある)
+            var now = Read(Path.Combine(sysfs, port), "devnum");
+            if (now is null) gone = true;
+            else if (now.Length > 0 && (gone || now != before)) return;
             Thread.Sleep(100);
         }
         throw new IOException($"USB のポート {port} の電源を入れ直したあと、機材が {wait.TotalSeconds:0} 秒のうちにつながりませんでした");

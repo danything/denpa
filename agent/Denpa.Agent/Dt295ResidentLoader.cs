@@ -43,7 +43,7 @@ public static class Dt295ResidentLoader
 
     /// <summary>
     /// 残っている常駐イメージを引き継ぐ (recovery.c の mb86H_loader_adopt)。hook が元の boot0 のままなら何もせず false。
-    /// 導入したあとの値と、body・常駐イメージの書き換えない範囲・説明・ビルド IDが全部同じなら、RECOVER で前の持ち主の仕事を
+    /// 導入したあとの値と、body・常駐イメージの書き換えない範囲・説明・ビルド ID が全部同じなら、RECOVER で前の持ち主の仕事を
     /// 片付けて true。どちらでもなければ <see cref="Dt295ResidentColdException"/>
     /// </summary>
     public static bool Adopt(IDt295ResidentTransport transport, Dt295ResidentSession session, Dt295ResidentImage image, Action<string>? log = null)
@@ -167,7 +167,7 @@ public static class Dt295ResidentLoader
     }
 
     /// <summary>
-    /// 残っている常駐イメージの、書き換えない範囲・説明・ビルド IDを全部比べる (recovery.c の validate_resident)。
+    /// 残っている常駐イメージの、書き換えない範囲・説明・ビルド ID を全部比べる (recovery.c の validate_resident)。
     /// 動いている間に変わる範囲は比べない
     /// </summary>
     private static void Resident(Dt295ResidentSession session, Dt295ResidentImage image)
