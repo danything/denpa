@@ -613,7 +613,10 @@ function rungVideo(
 export function rungCodec(
   playable: readonly LiveCodec[],
   interlaced: boolean,
-  pick: (codec: LiveCodec, interlaced: boolean) => LiveHw | null = pickLiveHw,
+  pick: (
+    codec: LiveCodec,
+    interlaced: boolean,
+  ) => LiveHw | null = liveHwAvailable,
 ): LiveCodec {
   for (const codec of autoOrder("encoded")) {
     if (playable.includes(codec) && pick(codec, interlaced) !== null)
@@ -951,10 +954,7 @@ export function pickLiveHw(
   interlaced = true,
   devices: HwDevice[] = hwEncode().devices,
 ): LiveHw | null {
-  const found = liveHw(codec, settings().liveHwAllow, liveTurn++, devices);
-  if (found === null) return null;
-  const hw = interlaced ? found : { ...found, full: false };
-  return liveHwFailed(codec, hw) ? null : hw;
+  return findLiveHw(codec, interlaced, liveTurn++, devices);
 }
 
 /**
@@ -963,8 +963,32 @@ export function pickLiveHw(
  * 受けるところ (`attend`。出せなければ H.264 にする) が使う。順番 (`liveTurn`) は進めない
  */
 export function liveHevc(devices: HwDevice[] = hwEncode().devices): boolean {
-  const found = liveHw("hevc", settings().liveHwAllow, 0, devices);
-  return found !== null && !liveHwFailed("hevc", found);
+  return liveHwAvailable("hevc", true, devices) !== null;
+}
+
+/**
+ * **GPU でエンコードできるかだけを見る** (段を下げるときのコーデック選び。`rungCodec`)。`pickLiveHw` と同じ決め方だが、
+ * 順番 (`liveTurn`) は進めない。選ぶたびに進めると、実際に起こすエンコードの GPU の振り分けがずれる
+ */
+export function liveHwAvailable(
+  codec: LiveCodec,
+  interlaced = true,
+  devices: HwDevice[] = hwEncode().devices,
+): LiveHw | null {
+  return findLiveHw(codec, interlaced, 0, devices);
+}
+
+/** `pickLiveHw` と `liveHwAvailable` の中身。`turn` は同じ種類の GPU が複数あるときの振り分けの順 */
+function findLiveHw(
+  codec: LiveCodec,
+  interlaced: boolean,
+  turn: number,
+  devices: HwDevice[],
+): LiveHw | null {
+  const found = liveHw(codec, settings().liveHwAllow, turn, devices);
+  if (found === null) return null;
+  const hw = interlaced ? found : { ...found, full: false };
+  return liveHwFailed(codec, hw) ? null : hw;
 }
 
 /** しばらくソフトウェアにしている (`blameLiveHw` で覚えた) 経路か */
