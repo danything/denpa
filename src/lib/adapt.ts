@@ -238,7 +238,7 @@ export class RungAdapter {
       this.upSince = null;
       if (this.probe !== null) {
         this.fails++;
-        const from = this.probe!.from;
+        const from = this.probe.from;
         this.probe = null;
         return { step: from, reason: "slow" };
       }

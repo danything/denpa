@@ -525,13 +525,13 @@ public sealed class Dt295Device
     /// 受信の準備 (9.2〜9.6。2 回目からは 9.10): TS 鍵 → TRC イメージ → 領域のクリア → フィールド表 → ルートと番組情報 → 取得開始 (状態 1)。
     /// 前提は状態 0x11 で選局済み。TRC は毎回書く (書かずに始めると 0x0480 で失敗する。9.10)。TS 鍵を返す
     /// </summary>
-    public byte[] PrepareReception(ReadOnlySpan<byte> trc, Dt295FieldTable fields, IReadOnlyList<Dt295Route> plan, Dt295Program? main)
+    public byte[] PrepareReception(ReadOnlySpan<byte> trc, Dt295FieldTable fields, IReadOnlyList<Dt295Route> plan, Dt295Program? main, int program = 0)
     {
         var key = TsKey();
         UploadTrc(trc);
         ClearSettings();
         fields.Apply(_bridge);
-        Dt295Routes.Write(_bridge, plan, main, cleared: true);
+        Dt295Routes.Write(_bridge, plan, main, cleared: true, program);
         var pause = PauseState();
         if (pause != fields.Pause) throw new Dt295Exception($"一時停止の状態番号が読み戻しで {pause} です (フィールド表からは {fields.Pause})");
         StartAcquisition();
