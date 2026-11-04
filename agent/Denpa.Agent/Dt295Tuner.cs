@@ -370,10 +370,21 @@ internal sealed class Dt295Stream
 {
     private const byte Endpoint = 0x81;
 
-    /// <summary>1 本の読みの大きさと本数 (10.1 の参照実装の値: 65,536 バイトを 8 本)</summary>
-    private const int TransferSize = 65536;
+    /// <summary>
+    /// 1 本の読みの大きさと本数。参照実装 (10.1) は 65,536 バイトを 8 本だが、受信を始めた直後は PSI だけが約 180 kbps で流れ、
+    /// 65,536 バイトが埋まるまで 3 秒ほどかかり、映像が出るまでが長くなる (pix-userland の issue 77 も同じ)。
+    /// 実機 (BS1、番組 152、各 4 回) で映像の最初のパケットまでを測ると、65,536 バイトが 5.3〜5.9 秒、32,768 が 2.9〜3.7 秒、16,384 が 2.3〜2.9 秒、
+    /// 8,192 が 1.8〜2.0 秒、4,096 が 1.7〜1.9 秒だった。CPU 時間 (20 秒) は 3.8 秒、4.2 秒、4.7 秒、5.2 秒、6.3 秒と増える。
+    /// 8,192 バイトは、短縮がほぼ頭打ちになる手前で CPU が少ない。待機中に溜められる量 (512 KiB) は変えない
+    /// USB 2.0 の bulk の最大パケットは 512 バイトで、読みの大きさはその倍数でなければならない (WinUSB の RAW_IO が断る)。
+    /// Windows と Mac で 64 本の読みが動くかは、実機で確かめていない (Linux だけ)
+    /// </summary>
+    private const int TransferSize = 8192;
 
-    private const int Depth = 8;
+    private const int Depth = 64;
+
+    /// <summary>1 回の <c>Read</c> で受け取る上限。読みが小さくなっても、1 回の呼び出しでまとめて受け取る</summary>
+    private const int ReadChunk = 65536;
 
     private const int ReadTimeoutMs = 100;
 
@@ -482,7 +493,7 @@ internal sealed class Dt295Stream
 
     private void Pump()
     {
-        var raw = new byte[TransferSize * 2];
+        var raw = new byte[ReadChunk];
         var writer = _pipe.Writer;
         var quiet = Stopwatch.StartNew();
         var since = Stopwatch.StartNew();
