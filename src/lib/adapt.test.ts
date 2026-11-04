@@ -22,7 +22,7 @@ import {
   UP_WAIT_MOST,
   UP_WAIT_WATCH,
 } from "./adapt";
-import type { Pace } from "./rungs";
+import { ENCODE_SLOW, type Pace } from "./rungs";
 
 const calm: Omit<AdaptSample, "now"> = {
   route: "watch",
@@ -495,6 +495,21 @@ describe("エンコードの遅れ", () => {
       at: GRACE + ENCODE_LAG,
       decision: { step: 0, reason: "encode" },
     });
+  });
+
+  test("速さ 0.99 のような 1 の前後の揺れは遅れと読まない (サーバと同じ ENCODE_SLOW で切る)", () => {
+    const a = new RungAdapter();
+    const jitter = paces(() => ({ backlog: 0, dropped: 0, speed: 0.99 }));
+    expect(
+      first(a, 0, 30_000, (now) => ({
+        route: "live",
+        current: 1,
+        waiting: true,
+        ahead: 0,
+        pace: jitter(now),
+      })),
+    ).toEqual({ at: GRACE, decision: { step: 3, reason: "slow" } });
+    expect(ENCODE_SLOW).toBeLessThan(0.99);
   });
 
   test("速さ 0 は測れていないと読み、encode を返さずに回線のぶんとして下げる (#2152)", () => {

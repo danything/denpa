@@ -52,6 +52,7 @@ import {
   type Notice,
 } from "#lib/live.js";
 import {
+  ENCODE_SLOW,
   parseRung,
   type Rung,
   RUNG_AUDIO_KBPS,
@@ -807,11 +808,8 @@ export interface Light {
 }
 export type LightStep = keyof Light;
 
-/**
- * エンコードの速さ (`Session.speed`) がこれを切ったら遅れている。1 ちょうどにしないのは、塊の届き方で 1 の前後に揺れるため
- * (5 秒の窓で 0.05 秒ぶんの塊 1 つが 1%)
- */
-export const LIGHT_SLOW = 0.95;
+/** エンコードの速さ (`Session.speed`) がこれを切ったら遅れている。画面と同じ値 (`#lib/rungs.ts` の `ENCODE_SLOW`) */
+export const LIGHT_SLOW = ENCODE_SLOW;
 /** 遅れがこれだけ続いたら軽くする (ms)。画面の断り書き (`adapt.ts` の `ENCODE_LAG`) より長く、1 回の重さでは動かない */
 export const LIGHT_LAG = 5_000;
 /** 軽くしたものを、作り直した次のセッションへ受け継ぐ期限 (ms)。画面がリクエストし直すまでの間 */
