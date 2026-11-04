@@ -35,7 +35,7 @@ public static class Probe
     // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
     public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N]";
     public const string DecodeUsage = "denpa-agent --decode-file <in.ts> <out.ts>";
-    public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート>]";
+    public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート>]";
 
     /// <summary>1 チャンネルあたり読む時間</summary>
     private static readonly TimeSpan Read = TimeSpan.FromSeconds(3);
@@ -105,12 +105,13 @@ public static class Probe
     {
         if (args.ElementAtOrDefault(1) is { } device)
         {
+            if (Dt295.Parse(device) is { } dt295) return OneCard(Dt295.Card(dt295), Dt295ResidentBoard.CloseAll);
             if (Zd1j.Parse(device) is not { } port)
             {
                 Console.Error.WriteLine($"usage: {CardUsage}");
                 return 2;
             }
-            return Zd1jCard(port);
+            return OneCard(Zd1j.Card(port), Zd1jBoard.CloseAll);
         }
         Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
         foreach (var found in Px4Card.Find().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
@@ -284,18 +285,17 @@ public static class Probe
     }
 
     /// <summary>
-    /// <c>--card zd1j:&lt;ポート&gt;</c>: **そのボードの内蔵の差し込み口だけ**を開いて、ATR とかかった時間、カードの番号を出す。
+    /// <c>--card zd1j:&lt;ポート&gt;</c> (<c>dt295:</c> も): **その機材の差し込み口だけ**を開いて、ATR とかかった時間、カードの番号を出す。
     /// ほかのリーダー (本番が使っている USB のリーダーなど) には触らない
     /// </summary>
-    private static int Zd1jCard(string port)
+    private static int OneCard(CardLinkCandidate found, Action close)
     {
-        var found = Zd1j.Card(port);
         var started = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             using var link = found.Open();
             var atr = link.Reset();
-            Console.WriteLine($"{found.Name}: ATR {Convert.ToHexString(atr)} ({started.ElapsedMilliseconds} ms。冷えた状態から開いて IFSD を決めるまで)");
+            Console.WriteLine($"{found.Name}: ATR {Convert.ToHexString(atr)} ({started.ElapsedMilliseconds} ms。開いてカードの電源を入れるまで)");
             var init = BCas.Read(link);
             Console.WriteLine($"{found.Name}: カード {string.Join(" / ", init.Ids.Select(id => id.ToString("D16")))}  CA_system_id 0x{init.CaSystemId:X4} ({started.ElapsedMilliseconds} ms)");
             return 0;
@@ -307,7 +307,7 @@ public static class Probe
         }
         finally
         {
-            Zd1jBoard.CloseAll();
+            close();
         }
     }
 

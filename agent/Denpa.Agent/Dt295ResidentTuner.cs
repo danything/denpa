@@ -609,7 +609,7 @@ public sealed class Dt295ResidentCard : ICardLink
             throw;
         }
         var rc = Error(response);
-        if (Result(response) != Ok && rc < 0) return Fail(rc);
+        if (Result(response) != Ok && rc < 0) return Fail(op, rc);
         if (response[24] != Version || rc > 1 || Result(response) != Ok)
         {
             _failed = new Dt295ResidentException($"{Name} の応答の形が違います (結果 {Result(response)}、理由 {rc})");
@@ -621,19 +621,19 @@ public sealed class Dt295ResidentCard : ICardLink
             _failed = new Dt295ResidentException($"{Name} の応答の世代が違います");
             throw _failed;
         }
-        return rc < 0 ? Fail(rc) : rc;
+        return rc < 0 ? Fail(op, rc) : rc;
     }
 
     /// <summary>常駐イメージのカードの失敗 (card.c の result)。理由ごとに文言を決めて投げる</summary>
-    private int Fail(int rc) => throw new IOException(rc switch
+    private int Fail(uint op, int rc) => throw new IOException((rc switch
     {
         -2600 => $"{Name} のカードは使用中です",
         -2601 => $"{Name} のカードでは使えない操作です",
         -2602 => $"{Name} のカードとのやり取りに失敗しました",
         -2603 => $"{Name} のカードが時間内に答えませんでした",
         -2604 => $"{Name} のカードの応答が長すぎます",
-        _ => $"{Name} のカードの操作が失敗しました (理由 {rc})",
-    });
+        _ => $"{Name} のカードの操作が失敗しました",
+    }) + $" (操作 {op}、理由 {rc})");
 
     /// <summary>「まだ」の間、SERVICE を送って待つ (card.c の settle)。待つ間は <see cref="Dt295ResidentBoard.Locked{T}"/> を手放す</summary>
     private void Settle(int rc)
