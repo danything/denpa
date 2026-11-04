@@ -75,6 +75,21 @@ export interface PlaybackInfo {
  */
 export const ORIGIN_HEADER = "X-Denpa-Origin";
 
+/**
+ * fMP4 で流すときの応答ヘッダ (`stream`・`chase`・`live`)。**中身のコーデック** (`h264` / `hevc` / `av1`、音声だけなら `audio`)。
+ * 段を下げたとき (`?rung=`) はサーバが `?playable=` から選ぶので、画面はこれで MSE に渡す codecs を決める (`#lib/live.ts` の `codecsFor`)
+ */
+export const CODEC_HEADER = "X-Denpa-Codec";
+
+/** fMP4 で流すときの応答ヘッダ。**いまの段** (`#lib/rungs.ts`。0〜3)。0 なら下げていない */
+export const RUNG_HEADER = "X-Denpa-Rung";
+
+/**
+ * `stream` の応答ヘッダ。**送り出しの具合を読む id** (`GET /api/playback/pace?id=`。中身は `#lib/rungs.ts` の `Pace`)。
+ * 閉じたあとは 404
+ */
+export const PACE_HEADER = "X-Denpa-Pace";
+
 /** 混んでいて断ったときの言い分 (503) */
 export const BUSY = "サーバが混んでいます";
 

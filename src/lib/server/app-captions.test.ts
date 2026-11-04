@@ -204,7 +204,8 @@ describe("ライブの字幕 (liveCaptions)", () => {
 
   // 脇の字幕 API は畳む判断に数えない。字幕のためだけにチューナーを使い続けない
   test("字幕 API が抜けても映像は続き、映像が抜けたら字幕 API も閉じる", async () => {
-    const media = liveStream(SERVICE, "raw")!;
+    // 段 0 は枠を使わないので "busy" にはならない
+    const media = liveStream(SERVICE, "raw") as ReadableStream<Uint8Array>;
     const first = liveCaptions(SERVICE);
     expect(first).not.toBeNull();
     await first!.cancel();
@@ -221,7 +222,7 @@ describe("ライブの字幕 (liveCaptions)", () => {
 describe("変換したライブの字幕と時計 (liveCaptions の codec)", () => {
   // 時刻は映像と同じ fMP4 の時刻なので、同じ形式のセッションだけを共有する (別の形式の時刻を渡さない)
   test("同じ形式で流しているセッションだけを共有する。省けば放送そのまま", async () => {
-    const media = liveStream(SERVICE, "h264")!;
+    const media = liveStream(SERVICE, "h264") as ReadableStream<Uint8Array>;
     const encoded = liveCaptions(SERVICE, 1, "h264");
     expect(encoded).not.toBeNull();
     expect(liveCaptions(SERVICE)).toBeNull();

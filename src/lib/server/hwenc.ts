@@ -43,7 +43,7 @@ import { run } from "./stream";
  *
  * **H.265 (`hevc`) は GPU でだけエンコードする。** 試しのエンコードは AV1・H.264 と同じく方式ごとに 1 コマ試す。
  * ソフトウェアのエンコーダは無いので、ライブはライブのエンコーダが GPU のときだけ H.265 を出す (`live.liveHevc`)。
- * 追っかけ・その場の変換は H.265 を出さない。
+ * 追っかけ・その場の変換は H.265 を出さない (回線に合わせて段を下げるときは、GPU があれば出す。`live.rungCodec`)。
  *
  * **ライブ・追っかけ・その場の変換は、録画と別の設定で GPU に載る** (`liveHw`。設定 `liveHwAllow`)。
  * 録画とライブで使う GPU を分けられ、エンコーダをソフトウェアにすれば CPU に戻る。
@@ -235,7 +235,12 @@ export function hwArgs(
     return {
       device: [],
       filter: ["format=nv12"],
-      encoder: [`${codec}_rkmpp`, ...rkmppRate(codec, picture), "-g", "250"],
+      encoder: [
+        `${codec}_rkmpp`,
+        ...rkmppRate(hwBitrate(codec, picture)),
+        "-g",
+        "250",
+      ],
     };
   }
   if (way.kind === "nvenc") {
@@ -247,7 +252,7 @@ export function hwArgs(
         ...nvencGpu(way),
         "-preset",
         "p4",
-        ...nvencRate(codec, picture),
+        ...nvencRate(hwBitrate(codec, picture)),
         "-g",
         "250",
       ],
@@ -417,8 +422,7 @@ const HEVC_KBPS = H264_KBPS;
  * 上限は目標の 17/16、下限は 1/16 (MPP のテスト用のコード `mpi_enc_utils.c` が VBR / AVBR に置く値)。
  * AVBR は動きの無い場面で上限に対する下限の割合まで量を下げる
  */
-function rkmppRate(codec: HwCodec, picture: Picture): string[] {
-  const bps = hwBitrate(codec, picture);
+function rkmppRate(bps: number): string[] {
   return [
     "-rc",
     "avbr",
@@ -436,8 +440,7 @@ function rkmppRate(codec: HwCodec, picture: Picture): string[] {
  * 上限は目標の 2 倍。動きの多い場面に量を寄せられる幅として置いたもので、測っていない。
  * バッファは上限と同じ (FFmpeg の nvenc.c が何も渡さないときに置く値は平均の 2 倍で、それと同じ)
  */
-function nvencRate(codec: HwCodec, picture: Picture): string[] {
-  const bps = hwBitrate(codec, picture);
+function nvencRate(bps: number): string[] {
   return [
     "-rc",
     "vbr",
@@ -539,18 +542,29 @@ export function liveHw(
  *
  * `filter` は「デコードのあとに通すもの全部」。`full` でなければインタレ解除は含まないので、
  * 呼ぶ側が CPU の bwdif を前に足す
+ *
+ * ## 段を下げた変換 (`cap`)
+ *
+ * 回線に合わせて下げた段 (`#lib/rungs.ts`) では、`cap` に段の高さとビットレートの上限を渡す。
+ *
+ * - Rockchip MPP・NVENC は、表の値 (`hwBitrate`) の代わりに段の上限を同じレート制御 (`rkmppRate`・`nvencRate`) に渡す
+ * - VA-API は CQP をやめて **VBR で上限を決める** (`-b:v` と `-maxrate:v` に同じ値)。CQP は量を場面に任せるので、回線に収まる保証が無い
+ * - `full` なら GPU の上でインタレ解除して 30 コマにし (`rate=frame`)、そのまま `scale_vaapi` で縮める。フレームを CPU に降ろさない。
+ *   `full` でなければ、縮めるのは呼ぶ側の CPU の `scale` (`live.ts` の `rungVideo`)
  */
 export function liveHwArgs(
   hw: LiveHw,
   codec: HwCodec,
+  cap: RungCap | null = null,
 ): { input: string[]; filter: string[]; encoder: string[] } {
   const { way } = hw;
   const base = hwArgs(way, codec);
+  const bps = cap?.bps ?? hwBitrate(codec, LARGEST);
   if (way.kind === "rkmpp") {
     return {
       input: base.device,
       filter: base.filter,
-      encoder: [`${codec}_rkmpp`, ...rkmppRate(codec, LARGEST)],
+      encoder: [`${codec}_rkmpp`, ...rkmppRate(bps)],
     };
   }
   if (way.kind === "nvenc") {
@@ -564,7 +578,7 @@ export function liveHwArgs(
         "p2",
         "-tune",
         "ll",
-        ...nvencRate(codec, LARGEST),
+        ...nvencRate(bps),
         "-bf",
         "0",
         "-zerolatency",
@@ -577,7 +591,9 @@ export function liveHwArgs(
   // 録画の遅くても小さくする指定 (`VAAPI_SLOW`) は足さない
   const encoder = [
     `${codec}_vaapi`,
-    ...vaapiQuality(way, codec, LIVE_QP),
+    ...(cap === null
+      ? vaapiQuality(way, codec, LIVE_QP)
+      : ["-rc_mode", "VBR", "-b:v", String(bps), "-maxrate:v", String(bps)]),
     "-bf",
     "0",
     "-async_depth",
@@ -595,9 +611,18 @@ export function liveHwArgs(
       "-hwaccel_device",
       "va",
     ],
-    filter: ["deinterlace_vaapi=rate=field"],
+    filter:
+      cap === null
+        ? ["deinterlace_vaapi=rate=field"]
+        : ["deinterlace_vaapi=rate=frame", `scale_vaapi=w=-2:h=${cap.height}`],
     encoder,
   };
+}
+
+/** 段を下げた変換で GPU に渡すもの (`liveHwArgs`)。映像の高さと、ビットレートの上限 (bit/s) */
+export interface RungCap {
+  height: number;
+  bps: number;
 }
 
 /**
