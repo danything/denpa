@@ -41,6 +41,7 @@ import {
   parseAudios,
   pickTrack,
 } from "#lib/arib.js";
+import { LIGHT_NOTE as LIGHT_NOTES } from "#lib/live-adapt.js";
 import { autoOrder } from "#lib/live-choice.js";
 import {
   type CaptionTrack,
@@ -830,11 +831,8 @@ export function takeLight(id: string, now = Date.now()): Light | null {
   return held !== undefined && now - held.at < LIGHT_CARRY ? held.light : null;
 }
 
-/** 軽くしたときに、観ている人に出す断り書き (`notice`) */
-export const LIGHT_NOTE: Record<LightStep, string> = {
-  half: "サーバのエンコードが追いつかないため、30 コマに切り替えました",
-  gpu: "サーバのエンコードが追いつかないため、GPU のエンコードに切り替えました",
-};
+/** 軽くしたときに、観ている人に出す断り書き (`notice`)。画面も同じ文で見分ける (`#lib/live-adapt.ts`) */
+export const LIGHT_NOTE: Record<LightStep, string> = LIGHT_NOTES;
 
 /**
  * **次に何を軽くするか。** 順に 60 コマ → 30 コマ (段 0 だけ。段 1〜3 はもう 30 コマ)、ソフトウェア → GPU (同じコーデックを

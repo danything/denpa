@@ -3,8 +3,10 @@ import { describe, expect, test } from "bun:test";
 import { stepOrder } from "./adapt";
 import type { Notice } from "./live";
 import {
+  LIGHT_NOTE,
   RATE_LEAST,
   RATE_WINDOW,
+  replacesWarning,
   rungFields,
   servedStep,
   stepFields,
@@ -103,5 +105,29 @@ describe("受け取りの速さ", () => {
     meter.push(3_000, 125_000);
     meter.reset(4_000);
     expect(meter.rate(5_000)).toBeNull();
+  });
+});
+
+/** **`encode`・`pinned` の断り書きを、いまの断り書きの代わりに出すか** (`replacesWarning`) */
+describe("断り書きの上書き", () => {
+  const encode = "サーバのエンコードが追いつかないため、再生が止まります";
+
+  test("何も出ていないときと、前に出した同じ文が残っているときは出す", () => {
+    expect(replacesWarning("encode", "", null)).toBe(true);
+    expect(replacesWarning("pinned", "", null)).toBe(true);
+    expect(replacesWarning("encode", encode, encode)).toBe(true);
+  });
+
+  test("ほかの理由の断り書き (GPU から降りた・混んでいた) は上書きしない", () => {
+    const busy = "サーバが混んでいるため、画質を下げられませんでした";
+    expect(replacesWarning("encode", busy, null)).toBe(false);
+    expect(replacesWarning("pinned", busy, null)).toBe(false);
+  });
+
+  test("サーバが軽くしたあとも遅れているなら、軽くしたという文をエンコードの遅れの文で替える", () => {
+    expect(replacesWarning("encode", LIGHT_NOTE.half, null)).toBe(true);
+    expect(replacesWarning("encode", LIGHT_NOTE.gpu, null)).toBe(true);
+    // 手で選んでいて回線が足りないのは別の理由。軽くした文は残す
+    expect(replacesWarning("pinned", LIGHT_NOTE.half, null)).toBe(false);
   });
 });

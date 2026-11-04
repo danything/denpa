@@ -43,6 +43,7 @@ import {
 import { eachFrame } from "#lib/components/player/frames.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
+  replacesWarning,
   rungFields,
   servedStep,
   stepFields,
@@ -894,7 +895,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * 決まったことをする。段を動かすなら断り書きを出してリクエストし直す (前のコマを貼ったまま。`requestAgain`)。
-   * `encode`・`pinned` は断り書きだけで、ほかの理由の断り書きは上書きしない
+   * `encode`・`pinned` は断り書きだけで、ほかの理由の断り書きは上書きしない (サーバが軽くしたときの文は `encode` で替える。`replacesWarning`)
    */
   function act(decision: AdaptDecision | null, now: number): void {
     if (decision === null) {
@@ -906,7 +907,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
     const text = adaptNote(decision, served);
     if (decision.reason === "encode" || decision.reason === "pinned") {
-      if (warning === "" || warning === standing?.text) warning = text;
+      if (replacesWarning(decision.reason, warning, standing?.text ?? null))
+        warning = text;
       standing = { text, at: now };
       return;
     }

@@ -87,3 +87,29 @@ export class Throughput {
     if (i > 0) this.#samples = this.#samples.slice(i);
   }
 }
+
+/**
+ * **サーバが軽い組み合わせでエンコードし直したときの断り書き** (`server/live.ts` の `Session.lighten` が `notice` で送る)。
+ * 画面は `encode` の文に替えてよいかを見分けるのに使う (`replacesWarning`)
+ */
+export const LIGHT_NOTE = {
+  half: "サーバのエンコードが追いつかないため、30 コマに切り替えました",
+  gpu: "サーバのエンコードが追いつかないため、GPU のエンコードに切り替えました",
+} as const;
+
+/**
+ * **`encode`・`pinned` の断り書きを、いま出ている断り書き (`warning`) の代わりに出すか。** ほかの理由の断り書きは上書きしない。
+ * 出すのは、何も出ていないときと、前に出したこの種類の文 (`standing`) が残っているとき。
+ * `encode` は、サーバが軽くしたときの文 (`LIGHT_NOTE`) も替える。軽くしたあとも遅れているなら、その文はもう当たっていないため
+ */
+export function replacesWarning(
+  reason: "encode" | "pinned",
+  warning: string,
+  standing: string | null,
+): boolean {
+  if (warning === "" || warning === standing) return true;
+  return (
+    reason === "encode" &&
+    (Object.values(LIGHT_NOTE) as string[]).includes(warning)
+  );
+}
