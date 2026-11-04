@@ -352,7 +352,7 @@ test.describe("CM検出のロゴ", () => {
       "に覚えました",
     );
     const large = zoom.getByRole("img", {
-      name: `${BS11.name} の CM 検出のロゴ`,
+      name: `${BS11.name} の CM ロゴ`,
     });
     await expect(large).toHaveCSS("image-rendering", "pixelated");
     await expect

@@ -73,8 +73,8 @@
     vertical-align: middle;
     cursor: pointer;
     transition:
-      background-color var(--dp-duration),
-      color var(--dp-duration);
+      background-color var(--dp-duration) var(--dp-ease),
+      color var(--dp-duration) var(--dp-ease);
   }
   /* 指で押す端末では、見た目は変えずに押せる範囲だけ 40px に広げる */
   @media (pointer: coarse) {

@@ -17,7 +17,7 @@
   const RESTART_WAIT = 90_000;
 
   const status = $derived(data.transfer);
-  /** 取り込んで起き直したところ (`waitForRestart` が付けて開き直す) */
+  /** 取り込んで再起動したところ (`waitForRestart` が付けて開き直す) */
   const imported = $derived(
     page.url.searchParams.get("transfer") === "imported",
   );
@@ -34,7 +34,7 @@
   let error = $state<string | null>(null);
   /** 置き場に無い録画があるときの「承知で取り込む」の 1 回目を押したか */
   let armed = $state(false);
-  /** 再起動を待ちきれなかった (自動で起き直さない環境) */
+  /** 再起動を待ちきれなかった (自動で再起動しない環境) */
   let restartLate = $state(false);
 
   const endpoint = (name: string) =>
@@ -148,7 +148,7 @@
   }
 
   /**
-   * 起き直すのを待って開き直す。先に落ちるのを待ち (止まる前の返事を「起きた」と取り違えない)、
+   * 再起動を待って開き直す。先に落ちるのを待ち (止まる前の返事を「起きた」と取り違えない)、
    * それから返事が来るまで待つ。来なければ「再起動してください」
    */
   async function waitForRestart(): Promise<void> {
@@ -169,7 +169,7 @@
       await new Promise((r) => setTimeout(r, 1000));
       const up = await alive();
       if (!up) wentDown = true;
-      // 起き直しが速くて落ちたところを見逃しても、10 秒たてば開き直す
+      // 再起動が速くて落ちたところを見逃しても、10 秒たてば開き直す
       else if (wentDown || Date.now() > until - RESTART_WAIT + 10_000) {
         const url = new URL(location.href);
         url.searchParams.delete("transfer_error");

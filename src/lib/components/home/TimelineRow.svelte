@@ -192,7 +192,7 @@
         tone: "warning",
         label: "ロゴで CM を判定できませんでした",
         detail:
-          "無音だけで判定。覚えたロゴは設定の「受信できるチャンネル」の「CM ロゴ」で確かめられます",
+          "無音だけで判定しました。覚えたロゴは設定の「受信できるチャンネル」の「CM ロゴ」で確かめられます",
       });
     }
     return statusLines(activities, problems);

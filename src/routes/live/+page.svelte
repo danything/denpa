@@ -789,8 +789,8 @@
                     class="relearn"
                     onclick={() => player.relearn()}
                     data-testid="live-relearn">測り直す</button
-                  >{" "}{/if}{#if player.stalls > 0}・<span
-                    data-testid="live-stalls">途切れ {player.stalls} 回</span
+                  >{/if}{#if player.stalls > 0}・<span data-testid="live-stalls"
+                    >途切れ {player.stalls} 回</span
                   >{/if}{#if player.stalls > 0 || player.floor > FLOOR}・<span
                     data-testid="live-floor"
                     data-target={player.target}
@@ -961,7 +961,7 @@
         </span>
         {#if yielded.refused}
           <StageNote testid="live-refused"
-            >録画が終わるまでライブは見られません ({time(
+            >録画が終わるまでライブは観られません ({time(
               yielded.recording.endAt,
             )})</StageNote
           >

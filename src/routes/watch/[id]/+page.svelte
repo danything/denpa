@@ -298,7 +298,7 @@
    */
   async function prepareCompat(got: PlaybackInfo | null): Promise<void> {
     if (got === null && localCopy?.video === undefined) {
-      canvasProblem = "サーバに繋がらないため再生できません";
+      canvasProblem = "サーバに繋がらないため、再生できません";
       return;
     }
     if (!driveNoticeSeen()) await drive.confirm();
@@ -1201,7 +1201,7 @@
   let captionText = $state.raw<CaptionPages | null>(null);
   /**
    * 載っている言語。第1言語は `pages`、第2言語から後ろは `others`。
-   * 名前が分からない第1言語 (古いサーバ・端末に保存した古いコピー) は「字幕1」
+   * 名前が分からない第1言語 (古いサーバ・端末に保存した古いコピー) は「字幕 1」
    */
   const captionLanguages = $derived<CaptionLanguage[]>(
     captionText === null
@@ -1448,7 +1448,7 @@
 
   /**
    * 開いたら、そのまま観はじめる。一覧の行を押した勢い (user activation) がまだ効いているので
-   * `play()` も全画面も通る。読み込み直したときだけ通らないので、どちらも転んでも無視する
+   * `play()` も全画面も通る。読み込み直したときだけ通らないので、どちらも失敗しても無視する
    */
   onMount(() => {
     setSpeed(storedSpeed(), false);
@@ -1556,7 +1556,7 @@
     }
     if (resumed || video === null) return;
     resumed = true;
-    // この場面から観るときも `settle` を通す (通らないと蓋が待ちくたびれるまで残る)
+    // この場面から観るときも `settle` を通す (通らないと蓋が待つ上限の時間まで残る)
     if (sceneAt !== null) {
       video.currentTime = sceneAt;
       sceneAt = null;
@@ -1820,7 +1820,7 @@
     hopGiveUp = setTimeout(open, HOP_GIVE_UP);
   }
 
-  /** 蓋を外す。飛んだ先が映ったとき (`follow`) と、待ちくたびれたとき */
+  /** 蓋を外す。飛んだ先が映ったとき (`follow`) と、待つ上限の時間を過ぎたとき */
   function open(): void {
     hopping = false;
     waiting = false;
@@ -1889,7 +1889,7 @@
   const CAPTION_WAIT = 3_000;
 
   /**
-   * **字幕は映像が出てから取る** (最初のコマ・読めなかった・互換モードで流れ出した・待ちくたびれた、の早いほう)。
+   * **字幕は映像が出てから取る** (最初のコマ・読めなかった・互換モードで流れ出した・待つ上限の時間を過ぎた、の早いほう)。
    * サーバは字幕を抜くのに動画を丸ごと読む (`captions.json`。初回は1時間の録画で1秒ほど)。
    * 開いた時点で取っていた頃は、観はじめの読み込み (続きの位置・CM の先へ飛んだ先) とディスクを
    * 取り合い、最初のコマが字幕の応答を待つように遅れていた (実機で canplay から 0.8 秒)
@@ -2359,7 +2359,7 @@
         {/if}
 
         <!--
-                    右端の縦の列は観る流れの外の操作 (上から閉じる・切り抜き・削除。理由は `ControlBar`)。
+                    右端の縦の列は観る流れの外の操作 (上から閉じる・切り抜き・コメントの一覧・削除。理由は `ControlBar`)。
                     削除はいちばん下 (当たっても聞き返しがある)。データ放送 (d) は ⚙ の中
                 -->
         <ControlBar side shown={controls.shown} testid="watch-side">
@@ -2490,11 +2490,11 @@
                 <!-- 残りは倍速のぶんを割った実際に掛かる時間 (`remaining`)。狭い枠では `.long` を省く -->
                 <span class="clock" data-testid="watch-clock">
                   {clock(scrub ?? at)} / {clock(length)}<span class="long"
-                    >{" · 残り "}{clock(remaining)}</span
+                    >{"・残り "}{clock(remaining)}</span
                   >
                 </span>
                 {#if current !== null}
-                  <span class="long">{" · "}<span>{current.title}</span></span>
+                  <span class="long">{"・"}<span>{current.title}</span></span>
                 {/if}
               {/snippet}
             </InfoBlock>

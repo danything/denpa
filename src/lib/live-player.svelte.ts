@@ -463,7 +463,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let fallback: YieldedRecording | null = null;
   /**
    * 録画に譲って追っかけを観ている。`back` は戻る先のライブ、`refused` は「ライブに戻る」を
-   * 試して入れなかったか (画面は「録画が終わるまでライブは見られません」を出す)
+   * 試して入れなかったか (画面は「録画が終わるまでライブは観られません」を出す)
    */
   let yielded = $state<{
     recording: YieldedRecording;

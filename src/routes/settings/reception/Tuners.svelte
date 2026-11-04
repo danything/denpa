@@ -428,7 +428,7 @@
                 <span class="mono">({card.ids.join(" / ")})</span>
               {/if}
               {#if card.tuners.length > 0}
-                — {card.tuners.join("、")}
+                (使っているチューナー: {card.tuners.join("、")})
               {/if}
             </span>
           {/if}

@@ -128,7 +128,7 @@
     /*
      * 飛んだ節の頭が止まる所から下を数える。浮いたヘッダー (`html` の `scroll-padding-top` が px で持つ。スマホは 0) と、
      * 節の巻き取りの余白 (スマホの形は上の安全域のぶんも入っている。下の style)。
-     * ここより上に残る前の節の終わりは数えない (スマホで節へ飛んだあと、前の節に印が戻っていた)。rootMargin は px か % だけ (rem は投げる)
+     * ここより上に残る前の節の終わりは数えない (スマホで節へ飛んだあと、前の節に印が戻っていた)。rootMargin は px か % だけ (rem を渡すと例外になる)
      */
     const px = (value: string) => Number.parseFloat(value) || 0;
     const cover =
@@ -288,9 +288,6 @@
   .groups > li {
     margin: 0;
     list-style: none;
-  }
-  .side a {
-    text-decoration: none;
   }
   .group-link {
     border-radius: var(--dp-radius);

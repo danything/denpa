@@ -142,7 +142,7 @@
         <img
           {src}
           alt={shown.kind === "cm"
-            ? `${shown.name} の CM 検出のロゴ`
+            ? `${shown.name} の CM ロゴ`
             : `${shown.name} の局ロゴ`}
           onload={loaded}
           class:ready={scale > 0}
@@ -164,7 +164,7 @@
             <button
               type="submit"
               class="secondary"
-              aria-label={`${shown.name} の CM 検出のロゴを覚え直す`}
+              aria-label={`${shown.name} の CM ロゴを覚え直す`}
               data-testid="logo-zoom-forget"
             >
               覚え直す

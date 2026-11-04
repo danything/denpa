@@ -49,7 +49,7 @@
   aria-labelledby="drive-notice-title"
 >
   <article class="modal-box" bind:this={box} tabindex="-1">
-    <h2 id="drive-notice-title">走行中は画面を見ないでください</h2>
+    <h2 id="drive-notice-title">運転中は画面を見ないでください</h2>
     <p>運転中に画面を注視することは法律で禁じられています。</p>
     <footer class="modal-actions">
       {#if oncancel}

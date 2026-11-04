@@ -156,7 +156,7 @@
      * **状態の色は状態にだけ使い、ふつうの状態には付けない。**
      * 以前は予約済み(青)・視聴可能(緑)・取消(赤枠)が行ごとに並んでいて、
      * 一覧を開くと色の列が3本立ち、どこを見ればよいのか分からなくなっていた。
-     * ふつうの状態は地の色に混ぜた淡いバッジにして、目は録画中の赤だけに行くようにする
+     * ふつうの状態は出さず (読み上げだけ)、目は録画中の赤だけに行くようにする
      */
   --dp-rec: #d93526; /* red-500 */
   --dp-ok: #00895a; /* jade-500 */
@@ -654,7 +654,7 @@ thead th {
 }
 /*
  * **進み具合のバー** (エンコード・スキャン・ロゴの取得・番組表集め)。値が変わったら
- * なめらかに伸ばす (Pico の 0.15 秒より少し長く)。**動いているあいだ** (`.running`。付けるのは
+ * なめらかに伸ばす (`--dp-duration`)。**動いているあいだ** (`.running`。付けるのは
  * 呼ぶ側。`JobProgress` など) は、伸びたところの上に光の筋を流す (流すのはファイルの最後)。
  * 長さの分からないもの (値の無いバー) は Pico のまま (左右に流れる)
  */
@@ -1530,8 +1530,7 @@ a.button {
 /*
  * **幅を動かさない。** Pico の `aria-busy` は回るものを `::before` で*文字の前に
  * 足す*ので、押した瞬間にボタンが横に伸びる。行に並んだボタンはそれで**隣ごと
- * ずれて**、次に押す場所が変わってしまう (削除の聞き返しが2文字で揃えてあるのと
- * 同じ話。`arming.svelte.ts`)。
+ * ずれて**、次に押す場所が変わってしまう。
  *
  * 中身は**消さずに隠す**。場所を取ったままなので、ボタンの大きさは送信の前後で
  * 1px も変わらない。回るものはその上に重ねる
@@ -2213,7 +2212,7 @@ dialog[open] > article {
   margin: 0;
   padding: 0.15rem 0.55rem;
   border-radius: var(--dp-radius-full);
-  transition: background-color var(--dp-duration);
+  transition: background-color var(--dp-duration) var(--dp-ease);
   font-size: var(--dp-text-xs);
   line-height: 1.6;
   white-space: nowrap;
@@ -2341,7 +2340,7 @@ dialog[open] > article {
   font-weight: var(--dp-weight);
   text-align: left;
   text-decoration: none;
-  transition: background-color var(--dp-duration);
+  transition: background-color var(--dp-duration) var(--dp-ease);
   position: relative;
 }
 .side-item:hover {
