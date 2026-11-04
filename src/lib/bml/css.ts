@@ -89,7 +89,7 @@ function stripComments(text: string): string {
  * `open` から次の `close` までを `by` に置き換える (閉じないものは残す)。正規表現の `[\s\S]*?` は
  * 閉じない `open` が並ぶと 2 乗かかるので、位置で探す
  */
-function replaceBlocks(
+export function replaceBlocks(
   text: string,
   open: string,
   close: string,

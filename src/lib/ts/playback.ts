@@ -159,7 +159,7 @@ export function retryable(error: unknown): boolean {
 /** 画面が選べるコーデック。`auto` は端末に合わせて決める (`pickOffer`) */
 export type CodecChoice = "auto" | "h264" | "hevc" | "av1";
 
-/** ブラウザに問い合わせる関数。**試しで差し替えられるように**受け取る */
+/** ブラウザに問い合わせる関数。**テストで差し替えられるように**受け取る */
 export interface MediaAbility {
   /** `<video>` にそのまま渡して読めるか (`canPlayType` が空でない) */
   play(type: string): boolean;
@@ -412,8 +412,9 @@ export function codecChoices(
  */
 
 /**
- * 互換モードで描く形式。**H.265 は描かない。** 描く側 (`ts/fmp4.ts`・`raw/support.ts`) は H.264・AV1・MPEG-2 しか
- * 読まない。H.265 だけの録画も、AV1 か H.264 に変換して流せば描ける
+ * 互換モードで描く形式。**H.265 は描かない。** 描く側 (`raw/support.ts`) は H.264・AV1・MPEG-2 しか
+ * 問い合わせない (`ts/fmp4.ts` は H.265 も読むが、サーバが送り出した映像の長さを数えるため)。
+ * H.265 だけの録画も、AV1 か H.264 に変換して流せば描ける
  */
 export type CanvasCodec = Exclude<PlayCodec, "hevc">;
 

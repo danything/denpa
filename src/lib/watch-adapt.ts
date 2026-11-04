@@ -20,7 +20,7 @@ import type { Pace, Rung } from "./rungs";
 /** `adapt.ts` を呼ぶ間隔 (ms)。`adapt.ts` の数 (2〜3 秒続いたら) を読み分けられる細かさ */
 export const ADAPT_TICK = 1_000;
 /** 送り出しの具合を読み直す間 (ms)。WebSocket の `pace` と同じ 2 秒ごと */
-export const PACE_EVERY = 2_000;
+const PACE_EVERY = 2_000;
 
 /** 段を下げた変換をリクエストするときに足すクエリ (`&rung=2&playable=av1,h264`)。段 0 は空 */
 export function rungQuery(rung: Rung, playable: readonly LiveCodec[]): string {

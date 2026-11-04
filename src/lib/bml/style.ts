@@ -77,7 +77,7 @@ const INHERITED = new Set([
 ]);
 
 /**
- * 既定のスタイル (web-bml の default_css.ts から、放送が頼るものだけ)。
+ * 既定のスタイル (web-bml の default_css.ts に合わせ、放送が頼るものだけ)。
  * 文字の色は規格では受信機しだい。テレビの画面に合わせて白 (7) にする
  */
 const DEFAULTS: Record<string, [string, string][]> = {

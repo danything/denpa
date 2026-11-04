@@ -82,7 +82,7 @@ export class HostObject extends JSObject {
   }
 }
 
-/** 字の数値の属性 (無ければ既定) */
+/** 数を書く属性 (読めなければ既定) */
 function numberAttr(
   element: BmlElement,
   name: string,

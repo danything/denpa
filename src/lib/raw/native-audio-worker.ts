@@ -40,26 +40,32 @@ function fail(message: string): void {
   post({ type: "error", message });
 }
 
+/** 画面の断り書きに出す理由 (`Error: ` を付けない) */
+function reason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** init なら開き直す。それ以外は音のコマをデコードして返す */
 function segment(d: WasmAudio, message: Segment): void {
   if (message.init) {
     epoch = message.epoch;
     broken = 0;
     track = readInit(message.bytes).find((t) => t.kind === "audio");
-    if (track === undefined) throw new Error("audio track missing");
+    if (track === undefined) throw new Error("音声のトラックがありません");
     const open = audioCodec(track);
     if (open === null || !d.open(open.codec, open.config))
-      throw new Error(`${track.codec} could not open`);
+      throw new Error(`音声 (${track.codec}) を開けません`);
     return;
   }
   if (message.epoch !== epoch || track === undefined) return;
   for (const sample of readFragment(message.bytes, [track])) {
     const frame = audioFrame(track, sample.data);
-    if (frame === null) throw new Error("unsupported AAC configuration");
+    if (frame === null) throw new Error("対応していない AAC の形式です");
     const pcm = d.decode(frame);
     // 壊れたコマは飛ばす (放送の取りこぼし)。続けて転ぶなら諦める (canvas に描く worker と同じ)
     if (pcm === "broken") {
-      if (++broken > BROKEN_MOST) throw new Error("audio decode failed");
+      if (++broken > BROKEN_MOST)
+        throw new Error("音声をデコードできませんでした");
       continue;
     }
     if (pcm === null) continue;
@@ -90,7 +96,7 @@ async function load(base: string): Promise<void> {
     heldBytes = 0;
     for (const message of waiting) handle(d, message);
   } catch (error) {
-    fail(String(error));
+    fail(reason(error));
   }
 }
 
@@ -106,10 +112,10 @@ scope.onmessage = (event: MessageEvent<AudioInput>) => {
     else {
       heldBytes += message.bytes.byteLength;
       if (heldBytes > MAX_PENDING_BYTES)
-        throw new Error("decoder startup queue exceeded limit");
+        throw new Error("デコーダを読み込む間に届いた音声が多すぎます");
       held.push(message);
     }
   } catch (error) {
-    fail(String(error));
+    fail(reason(error));
   }
 };
