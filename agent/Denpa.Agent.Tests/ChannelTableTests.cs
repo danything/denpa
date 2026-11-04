@@ -90,6 +90,35 @@ public class ChannelTableTests
     }
 
     [Test]
+    public async Task 衛星の名前の後ろに番組番号を付けられる()
+    {
+        // 機材が番組を選ぶもの (PIX-DT295 の衛星) に、受ける番組を伝える。TSID と同じ中継器の同じ周波数
+        var plain = ChannelTable.Parse("BS01:16400")!;
+        var service = ChannelTable.Parse("BS01:16400/152")!;
+        await Assert.That(plain.ServiceId).IsNull();
+        await Assert.That(service.ServiceId).IsEqualTo(152);
+        await Assert.That(service.StreamId).IsEqualTo(16400u);
+        await Assert.That(service.Frequency).IsEqualTo(plain.Frequency);
+        // TSID が無くても付けられる (先頭の TS の番組)
+        await Assert.That(ChannelTable.Parse("BS15/101")!.ServiceId).IsEqualTo(101);
+        await Assert.That(ChannelTable.Parse("BS15/101")!.StreamId).IsEqualTo(ChannelTable.NoStreamId);
+        await Assert.That(ChannelTable.Parse("CS04:28736/161")!.ServiceId).IsEqualTo(161);
+    }
+
+    [Test]
+    [Arguments("BS15:16625/")]
+    [Arguments("BS15:16625/0")]       // 番組番号は 1〜65535
+    [Arguments("BS15:16625/65536")]
+    [Arguments("BS15:16625/1x")]
+    [Arguments("BS15:16625/1/2")]
+    [Arguments("T27/152")]            // 地上波は番組を指さない
+    [Arguments("C13/152")]
+    public async Task 番組番号の読めない名前は受け取らない(string name)
+    {
+        await Assert.That(ChannelTable.Parse(name)).IsNull();
+    }
+
+    [Test]
     public async Task ゼロ詰めは同じものとして読む()
     {
         await Assert.That(ChannelTable.Parse("BS01:16400")).IsEqualTo(ChannelTable.Parse("BS1:16400"));
