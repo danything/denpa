@@ -60,13 +60,13 @@ export function load() {
 
 export const actions = {
   /**
-   * エンコード。番組ごとに変えたくなることが実際にはほとんど無いので全体で1つ。
-   * コーデックごとのエンコーダ (GPU)・その場で変換する本数・元のTS・コマ数も同じ節で受ける。
+   * エンコード。番組ごとに変えたくなることが実際にはほとんど無いので全体で 1 つ。
+   * コーデックごとのエンコーダ (GPU)・その場で変換する本数・元の TS・コマ数も同じ節で受ける。
    * **節ごとにフォームが分かれている** (CM・自動予約は別の action)。ここで受けない値には触らない
    */
   saveEncoding: async ({ request }) => {
     const form = await request.formData();
-    // **コーデックは複数選べる** (`av1` / `hevc` / `h264`)。1つも選ばなければ「エンコードしない」。カンマ区切りで持つ
+    // **コーデックは複数選べる** (`av1` / `hevc` / `h264`)。1 つも選ばなければ「エンコードしない」。カンマ区切りで持つ
     const picked = form.getAll("codecs").map(String);
     /*
      * H.265 の行は、H.265 をエンコードできる GPU を確かめ終えてからしか出ない (`codecsShown`)。
@@ -131,7 +131,7 @@ export const actions = {
     return { success: true, saved: true };
   },
 
-  /** CMの扱い (チャプターを打つ・切り取る・何もしない) */
+  /** CM の扱い (チャプターを打つ・切り取る・何もしない) */
   saveCm: async ({ request }) => {
     const cmCut = String((await request.formData()).get("cmCut") ?? "");
     if (!isCmMode(cmCut)) {

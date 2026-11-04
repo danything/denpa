@@ -18,7 +18,7 @@ export function load() {
 
 export const actions = {
   /**
-   * EPGStation からの引き継ぎ。先に繋がるかだけ確かめ、数百GBを取ってくるところは裏で進める。
+   * EPGStation からの引き継ぎ。先に繋がるかだけ確かめ、数百 GB を取ってくるところは裏で進める。
    * 進み具合は SSE で降ってくる。
    */
   migrate: async ({ request }) => {

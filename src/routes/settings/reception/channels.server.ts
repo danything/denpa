@@ -20,7 +20,7 @@ import {
 import { programs, services } from "#lib/server/schema.js";
 import type { ChannelType } from "#lib/types.js";
 
-/** 物理チャンネル1本と、そこに入っている局 */
+/** 物理チャンネル 1 本と、そこに入っている局 */
 interface Coverage {
   type: ChannelType;
   channel: string;
@@ -30,11 +30,11 @@ interface Coverage {
 }
 
 /**
- * 取れているチャンネルと、局ごとの番組表の集まり具合。**denpa 自身のDBから。**
+ * 取れているチャンネルと、局ごとの番組表の集まり具合。**denpa 自身の DB から。**
  *
  * エージェントにも同じ顔ぶれの控えがある (スキャンの結果を預けてあるので) が、
  * **聞きに行かない。** 向こうが持っているのは選局に要る周波数と TSID のためで、
- * 局名も番組表も denpa のもの。両方を並べていた頃は、取り込みが1分おきだった
+ * 局名も番組表も denpa のもの。両方を並べていた頃は、取り込みが 1 分おきだった
  * 名残で「denpa への取り込み待ち」を出していたが、いまはスキャンが終わった
  * その場で取り込む (scan.ts) ので、待ちようがない。
  *
@@ -106,7 +106,7 @@ export function load() {
     // スキャンの進み具合。回しているのは denpa 自身 (scan.ts)
     scan: scanState(),
     channels: coverage(),
-    /** 番組表を集めている最中の様子。1チャンネルに数分かかる */
+    /** 番組表を集めている最中の様子。1 チャンネルに数分かかる */
     collect: collectState(),
     /** チャンネルを書き換えたお知らせが出ているか。出ていれば、画面を開いたところで消す (`seenLineup`) */
     lineupChanged: lineupNotice() !== null,
@@ -135,7 +135,7 @@ export const actions = {
     const form = await request.formData();
     const types = form
       .getAll("types")
-      // 画面の選ぶ欄は1つ。「すべて」は `GR,BS,CS`、CATV は `CATV` で来る
+      // 画面の選ぶ欄は 1 つ。「すべて」は `GR,BS,CS`、CATV は `CATV` で来る
       .flatMap((value) => String(value).split(","))
       .filter((t): t is ScanKind => SCAN_KINDS.includes(t as ScanKind));
     if (types.length === 0)

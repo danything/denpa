@@ -126,7 +126,7 @@ export function requireBmlNetwork(): void {
  * 家庭の DNS フィルタ (AdGuard 等) は局の双方向ドメインをブラックホール
  * (0.0.0.0 / ::) に落とすことがある。実測で `view.fujitv.co.jp` と
  * `recv-entry.tbs.co.jp` がそうなり、下の SSRF 防御が「内側のアドレス」として
- * 正しく断った結果、TBS の TVerリンクが NAP エラーになっていた。
+ * 正しく断った結果、TBS の TVer リンクが NAP エラーになっていた。
  * 上流が複数あると答えがフラつくので、放送アプリの通信はここで固定する。
  *
  * **繋ぐのも引いたアドレスへ直に繋ぐ** (`doRequest` の host に IP を渡す)。

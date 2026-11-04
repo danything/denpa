@@ -171,7 +171,7 @@ const mx6 = (over: Partial<Aired> = {}): void =>
     ...over,
   });
 
-/** BS日テレの同じ回。番組表ではタイトルにも概要にも話数が無く、p/f の概要に「第6話　副題」 */
+/** BS日テレの同じ回。番組表ではタイトルにも概要にも話数が無く、p/f の概要に「第 6 話　副題」 */
 const bs = (description: string, over: Partial<Aired> = {}): void =>
   aired({
     id: 2,

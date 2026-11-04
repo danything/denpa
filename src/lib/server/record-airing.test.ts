@@ -14,7 +14,7 @@ import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
  * `GET /api/services` の `now.reserved` / `now.recording` も `reservationStates` を読む。
  *
  * チューナーの API は手元に立てた偽物 (`tuners` を返すだけ)。予約のあとの数え直し
- * (`resolveConflicts`) がこれを読む。地上波1台にしておけば「予約はできたが録らない」(競合) も作れる
+ * (`resolveConflicts`) がこれを読む。地上波 1 台にしておけば「予約はできたが録らない」(競合) も作れる
  */
 const tuners = [{ types: ["GR"] }];
 const agent = Bun.serve({
@@ -182,7 +182,7 @@ describe("いま流れている番組を録る", () => {
 
   test("チューナーが足りなければ競合として返す (予約は残る)", async () => {
     reset();
-    // 地上波1台を、先に始まった別の物理チャンネルの予約が使っている
+    // 地上波 1 台を、先に始まった別の物理チャンネルの予約が使っている
     orm()
       .insert(reservations)
       .values({
@@ -405,7 +405,7 @@ describe("コピー禁止の番組", () => {
 
   test("ルールが立てた予約は「録画しない」にして理由を残す。チューナーは取り合わない", async () => {
     reset();
-    // 地上波1台。コピー禁止の番組と同じ時間に、別の物理チャンネルの予約がある
+    // 地上波 1 台。コピー禁止の番組と同じ時間に、別の物理チャンネルの予約がある
     program(2, NOW + 10 * MINUTE, NOW + 40 * MINUTE, "コピー禁止の番組", true);
     ruleReservation(2, SERVICE, NOW + 10 * MINUTE, NOW + 40 * MINUTE);
     ruleReservation(99, OTHER, NOW + 10 * MINUTE, NOW + 40 * MINUTE);

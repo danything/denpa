@@ -15,7 +15,7 @@ import { eq } from "drizzle-orm";
  * **録り始めに EIT[p/f] を読み、同じ回をもう録ってあればやめる** (`recorder.ts` の `pump`)。
  *
  * チューナーは差し替えて、p/f だけを流す TS を返す (PAT・PMT が無いので保存はしない)。
- * 実機の BS日テレのように、番組表では話数が無く p/f の概要にだけ「第6話　副題」がある番組で見る
+ * 実機の BS日テレのように、番組表では話数が無く p/f の概要にだけ「第 6 話　副題」がある番組で見る
  */
 const notified: { event: string }[] = [];
 mock.module("./webhook", () => ({
