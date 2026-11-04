@@ -794,10 +794,6 @@ export const deviceCodes = sqliteTable(
     /** 許された時刻と、許した人。**アクセストークンはまだ作らない** (渡すときに作る。平文のトークンを DB に置かないため) */
     approved_at: integer("approved_at"),
     approved_by: text("approved_by"),
-    /** 渡したアクセストークン */
-    approved_token_id: integer("approved_token_id").references(
-      (): AnySQLiteColumn => apiTokens.id,
-    ),
     consumed_at: integer("consumed_at"),
   },
   // 切れたものを片付けるときに引く
