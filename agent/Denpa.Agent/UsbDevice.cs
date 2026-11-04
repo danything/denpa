@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace Denpa.Agent;
 
 /*
- * エージェントが USB を直に持つ機材 (いまは CECH-ZD1 J) のための小さな抽象。OS ごとの実装は
+ * エージェントが USB を直に持つ機材 (いまは CECH-ZD1 J と PIX-DT295) のための小さな抽象。OS ごとの実装は
  * UsbFsDevice (Linux の usbfs)・WinUsbDevice (Windows の WinUSB)・IoKitDevice (macOS の IOKit)。どれも P/Invoke だけで、
  * 外のライブラリ (libusb など) は使わない。iso の転送は持たない (要る機材が無い)。
  */

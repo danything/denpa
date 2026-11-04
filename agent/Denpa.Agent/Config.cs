@@ -95,16 +95,19 @@ public sealed class Config(string tunersFile, string channelsFile)
     public string ChannelsFile { get; } = channelsFile;
 
     /// <summary>CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。消してよい。Zd1j.cs の <see cref="Zd1jLocks"/>)</summary>
-    public string Zd1jLocksFile => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(TunersFile))!, "zd1j-locks.json");
+    public string Zd1jLocksFile => Path.Combine(Dir, "zd1j-locks.json");
 
     /// <summary>
     /// px4-userland の機材に流し込む IT930x のファームウェアを、取ってきて置く場所 (tuners.json の隣。
     /// イメージには入れない。<see cref="Px4Firmware"/>)
     /// </summary>
-    public string Px4FirmwareFile => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(TunersFile))!, Px4Firmware.FileName);
+    public string Px4FirmwareFile => Path.Combine(Dir, Px4Firmware.FileName);
 
     /// <summary>自分の鍵と証明書・合言葉・組んだ denpa の置き場 (tuners.json の隣の tls/。<see cref="AgentTls"/>)</summary>
-    public string TlsDir => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(TunersFile))!, "tls");
+    public string TlsDir => Path.Combine(Dir, "tls");
+
+    /// <summary>tuners.json のあるディレクトリ。機材のデータ・覚えた値・鍵はここに置く</summary>
+    public string Dir => Path.GetDirectoryName(Path.GetFullPath(TunersFile))!;
 
     public static Config FromEnvironment() => new(
         Environment.GetEnvironmentVariable("TUNERS_FILE") ?? Path.Combine(DefaultDir(), "tuners.json"),

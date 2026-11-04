@@ -16,7 +16,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland / siano-userland /
- *   asicen-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs / Asicen.cs)。CECH-ZD1 J は USB を直に持つ (Zd1j.cs)
+ *   asicen-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs / Asicen.cs)。CECH-ZD1 J と PIX-DT295 は USB を直に持つ (Zd1j.cs / Dt295.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
  * 復号に要る PAT・PMT・ECM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -500,6 +500,13 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
         return;
     }
 
+    // 文字列でない値は、読むところ (ここと Config.SaveChannels) で投げて 500 になるので先に断る
+    if (!scanned.All(node => Respond.IsText(node))
+        || !found.All(entry => entry is null || (entry is JsonObject item && Respond.IsText(item["type"]) && Respond.IsText(item["channel"]))))
+    {
+        await Respond.Error(http, "scanned と、channels の type・channel は文字列で書きます", 400);
+        return;
+    }
     var types = scanned.Select(node => node?.GetValue<string>() ?? "").ToHashSet();
     var merged = config.SaveChannels(found, types);
     Log.Write($"チャンネルを保存しました: {found.Count} 件 ({string.Join(", ", types)})");
@@ -524,6 +531,11 @@ app.MapGet("/denpa/card", async (HttpContext http) =>
 app.MapPost("/denpa/decode", async (HttpContext http) =>
 {
     var body = await Respond.Read(http);
+    if (!Respond.IsText(body?["input"]) || !Respond.IsText(body?["output"]))
+    {
+        await Respond.Error(http, "input と output は文字列で書きます", 400);
+        return;
+    }
     var result = Scramble.Decode(recorded, body?["input"]?.GetValue<string>(), body?["output"]?.GetValue<string>());
     await Respond.Write(http, result, result["ok"]!.GetValue<bool>() ? 200 : 500);
 });
@@ -621,6 +633,9 @@ internal static class Respond
 
     public static Task Error(HttpContext http, string message, int status) =>
         Write(http, new JsonObject { ["error"] = message }, status);
+
+    /// <summary>無いか文字列か (<c>GetValue&lt;string&gt;</c> で読んでも投げない)</summary>
+    public static bool IsText(JsonNode? node) => node is null || (node is JsonValue value && value.TryGetValue<string>(out _));
 
     public static async Task<JsonNode?> Read(HttpContext http)
     {

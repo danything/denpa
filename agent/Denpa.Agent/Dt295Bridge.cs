@@ -31,7 +31,7 @@ public sealed class Dt295SystemTime : IDt295Time
 /// <summary>ASSP とのやり取りが仕様どおりに進まなかった (機器の状態は不明として扱う。13 章の再送しない方針)</summary>
 public sealed class Dt295Exception(string message) : IOException(message);
 
-/// <summary>チューナーの操作 (Dt295Frontend.cs) が使う分だけ。テストは偽物を渡す</summary>
+/// <summary>チューナーの操作 (Dt295Frontend.cs) が使う分だけ</summary>
 public interface IDt295Board
 {
     IDt295Time Time { get; }
@@ -114,7 +114,6 @@ public sealed class Dt295Bridge : IDt295Board
     private readonly IUsbDevice _usb;
     private readonly IDt295Time _time;
     private readonly Action<string>? _trace;
-    private readonly byte[] _chunk = new byte[MaxChunk];
 
     /// <summary>機材へ書いた回数 (control OUT と bulk OUT)</summary>
     public long Writes { get; private set; }
@@ -131,8 +130,6 @@ public sealed class Dt295Bridge : IDt295Board
     }
 
     public IDt295Time Time => _time;
-
-    public IUsbDevice Usb => _usb;
 
     // ---------------------------------------------------------------------
     // 書き込みの通り道 (全部ここ)
