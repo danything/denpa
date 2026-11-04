@@ -23,7 +23,7 @@ test.describe("PWA", () => {
     );
     const manifest = await res.json();
     expect(manifest.name).toBe("denpa");
-    // ホーム画面から開いたときにブラウザのUIを出さない
+    // ホーム画面から開いたときにブラウザの UI を出さない
     expect(manifest.display).toBe("standalone");
     // 丸く切り抜かれる端末があるので、そのためのアイコンも要る
     expect(
@@ -185,7 +185,7 @@ test.describe("PWA", () => {
       await badge.evaluate((el) => getComputedStyle(el).pointerEvents),
     ).toBe("none");
 
-    // **URL には居座らせない。** 1回だけ見たいときの手なので、外せば消える
+    // **URL には居座らせない。** 1 回だけ見たいときの手なので、外せば消える
     await goto(page, "/guide");
     await expect(page.getByTestId("measure")).toHaveCount(0);
   });
@@ -224,7 +224,7 @@ test.describe("PWA", () => {
     });
     expect(registered).toBeTruthy();
 
-    // 録画の配信は数十GB、通知は繋ぎっぱなしのSSE。載せると壊れる
+    // 録画の配信は数十 GB、通知は繋ぎっぱなしの SSE。載せると壊れる
     const cached = await page.evaluate(async () => {
       const keys = await caches.keys();
       const entries = await Promise.all(
@@ -291,7 +291,7 @@ test.describe("PWA", () => {
 
     /*
      * **狭い幅では、主な画面へのタブが画面の下に並ぶ。** 指が届くのは画面の下のほうで、
-     * 上のハンバーガーに畳んでいた頃は、画面を移るたびに2回押していた。
+     * 上のハンバーガーに畳んでいた頃は、画面を移るたびに 2 回押していた。
      * ルールは「その他」の中 (チューナーは設定の節に移した)
      */
     await page.setViewportSize({ width: 390, height: 780 });
@@ -550,7 +550,7 @@ test.describe("PWA", () => {
       await shown();
       expect(await size()).toEqual(opened);
 
-      // 時刻へ送るボタン (狭い画面は日付のメニューの中) で動いたぶんでは隠さない (押した1行ごと消さない)
+      // 時刻へ送るボタン (狭い画面は日付のメニューの中) で動いたぶんでは隠さない (押した 1 行ごと消さない)
       await page.getByTestId("guide-date").click();
       await page.getByRole("menuitem", { name: /^夜/ }).click();
       await page.waitForTimeout(400);

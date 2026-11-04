@@ -46,7 +46,7 @@ function placeDataBroadcast(libraryPath: string, script?: string): void {
 }
 
 /**
- * 小窓を持つ既定の BML を置いた録画は**1本を使い回す** (どのテストも同じサイドカーを読むだけ)。
+ * 小窓を持つ既定の BML を置いた録画は**1 本を使い回す** (どのテストも同じサイドカーを読むだけ)。
  * 文書を差し替えるテストだけが自分のぶんを録る
  */
 let shared: { id: string } | null = null;
@@ -113,7 +113,7 @@ test.describe("録画のデータ放送", () => {
     request,
   }) => {
     test.setTimeout(180_000);
-    // 文書を差し替えるので、使い回しの1本は汚さない
+    // 文書を差し替えるので、使い回しの 1 本は汚さない
     const { id, libraryPath } = await recordOne(page, request);
     placeDataBroadcast(
       libraryPath,
@@ -154,7 +154,7 @@ test.describe("録画のデータ放送", () => {
 });
 
 /**
- * **データ放送を常に受信する端末** (再生の設定。ライブと同じ1つ。`data-receive.ts`)。ライブは 36-bml。
+ * **データ放送を常に受信する端末** (再生の設定。ライブと同じ 1 つ。`data-receive.ts`)。ライブは 36-bml。
  *
  * 録画でも、開く前から変化ログを流して入口の文書を裏で動かし、文書が自分で出したものは映像に重ねる。
  * リモコン・キー・d は開いてから。文書からの選局は、開くまでは黙って断る (知らせるのは開いているときだけ)

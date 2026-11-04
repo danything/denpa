@@ -8,7 +8,7 @@ import {
 } from "./helpers";
 
 /**
- * **サイト全体の検索** (`/search?q=`)。番組表・録画・予約・ルールを1つの言葉で探す。
+ * **サイト全体の検索** (`/search?q=`)。番組表・録画・予約・ルールを 1 つの言葉で探す。
  * 入口は広い画面ならヘッダーの欄 (`/` か Ctrl+K)、狭い画面なら下のタブの「検索」
  */
 test.describe("検索", () => {
@@ -65,7 +65,7 @@ test.describe("検索", () => {
     for (const row of await programs.all()) {
       await expect(row).toContainText("テストアニメ");
     }
-    // 先頭の5件だけ。残りは「もっと見る」で
+    // 先頭の 5 件だけ。残りは「もっと見る」で
     expect(await programs.count()).toBeLessThanOrEqual(5);
     const more = page.getByTestId("search-more-programs");
     if (await more.isVisible()) {

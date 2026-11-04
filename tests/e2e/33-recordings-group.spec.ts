@@ -5,12 +5,12 @@ import type { Page } from "@playwright/test";
 import { deleteRule, expect, goto, homeTools, syncEpg, test } from "./helpers";
 
 /**
- * ホームの1本の一覧の「まとめて表示」(issue #480) と、開いたときの位置。
+ * ホームの 1 本の一覧の「まとめて表示」(issue #480) と、開いたときの位置。
  *
  * **録画と予約は DB に直に入れる。** 番組ごとに何本も要るので、本当に録ると偽の放送の
- * 番組の巡り (5秒ずつ・タイトルは数本の使い回し) を何周も待つことになる。並べ方を
+ * 番組の巡り (5 秒ずつ・タイトルは数本の使い回し) を何周も待つことになる。並べ方を
  * 見たいだけなので、録り終えた行 (`finished_at` だけある = 「録画済み」) と、先の予約を足す。
- * Playwright は CI では node で動くので、`bun:sqlite` は bun を1回起こして使う
+ * Playwright は CI では node で動くので、`bun:sqlite` は bun を 1 回起こして使う
  *
  * 録画の放送日は 2099 年にして、同じワーカーの他のスペックが残した録画より必ず新しく
  * (= 「いま」の線のすぐ下に) 来るようにする。予約は 2100 年 (いちばん先 = 一覧の頭)
@@ -28,7 +28,7 @@ interface Seed {
 }
 
 const SEEDS: Seed[] = [
-  // 3本の番組。いちばん新しい回がいちばん新しい → 先頭の見出し
+  // 3 本の番組。いちばん新しい回がいちばん新しい → 先頭の見出し
   {
     name: "グループ試験アニメ #1",
     series: "グループ試験アニメ",
@@ -44,16 +44,16 @@ const SEEDS: Seed[] = [
     series: "グループ試験アニメ",
     at: BASE + 3 * DAY,
   },
-  // 1本だけの番組。まとめずに、日付の位置 (アニメとニュースの間) にふつうの行で出る
+  // 1 本だけの番組。まとめずに、日付の位置 (アニメとニュースの間) にふつうの行で出る
   {
     name: "グループ試験ドラマ",
     series: "グループ試験ドラマ",
     at: BASE + 2.5 * DAY,
   },
-  // 2本の番組。シリーズ名を持たない行は番組名から切り出してまとめる
+  // 2 本の番組。シリーズ名を持たない行は番組名から切り出してまとめる
   { name: "グループ試験ニュース 第1回", series: "", at: BASE + 0.5 * DAY },
   { name: "グループ試験ニュース 第2回", series: "", at: BASE + 1.5 * DAY },
-  // 一覧をスクロールさせるための1本ものの番組 (上の番組より古い)
+  // 一覧をスクロールさせるための 1 本ものの番組 (上の番組より古い)
   ...Array.from({ length: 14 }, (_, i) => ({
     name: `グループ試験単発${i + 1}`,
     series: `グループ試験単発${i + 1}`,
@@ -61,7 +61,7 @@ const SEEDS: Seed[] = [
   })),
 ];
 
-/** これからの予約。録画と同じ番組 (アニメ) の続きの回と、1本だけの予約 */
+/** これからの予約。録画と同じ番組 (アニメ) の続きの回と、1 本だけの予約 */
 const RESERVATIONS: Seed[] = [
   { name: "グループ試験アニメ #4", series: "", at: FUTURE + 1 * DAY },
   { name: "グループ試験アニメ #5", series: "", at: FUTURE + 2 * DAY },
@@ -216,7 +216,7 @@ test.describe("ホームの一覧のまとめて表示", () => {
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await expect(page.getByTestId("view-toggle")).toHaveAttribute("data-on");
 
-    // 閉じた見出しと1本ものが、いちばん新しい回の日付で並ぶ (線のすぐ上がいちばん新しい)
+    // 閉じた見出しと 1 本ものが、いちばん新しい回の日付で並ぶ (線のすぐ上がいちばん新しい)
     expect((await listed(page)).slice(-4)).toEqual([
       "グループ試験単発1",
       "group:グループ試験ニュース",
@@ -230,7 +230,7 @@ test.describe("ホームの一覧のまとめて表示", () => {
     await expect(anime).toHaveAttribute("aria-expanded", "false");
     await expect(anime.getByTestId("recording-group-count")).toHaveText("3 本");
 
-    // 押すと見出しのすぐ下に、第1話から順に開く
+    // 押すと見出しのすぐ下に、第 1 話から順に開く
     await anime.click();
     await expect(anime).toHaveAttribute("aria-expanded", "true");
     expect((await listed(page)).slice(-5)).toEqual([
@@ -258,7 +258,7 @@ test.describe("ホームの一覧のまとめて表示", () => {
 
   /**
    * **予約もまとめる。** 同じ番組でも、録画は「いま」の線の上、予約は線の下と側ごとに別の見出しを立てる
-   * (1つにすると、見出しの位置が時間の並びから外れ、開くと中身が線をまたぐ)。予約の番組は次の回の位置
+   * (1 つにすると、見出しの位置が時間の並びから外れ、開くと中身が線をまたぐ)。予約の番組は次の回の位置
    */
   test("予約もまとめ、同じ番組でも線の上と下で別の見出しになる", async ({
     page,

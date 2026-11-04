@@ -76,7 +76,7 @@ async function contrastOf(link: Locator): Promise<Seen> {
   });
 }
 
-/** 画面に見えている字のリンク・字で見せるボタンに1つずつ指を乗せ、乗せる前と後のコントラストを確かめる */
+/** 画面に見えている字のリンク・字で見せるボタンに 1 つずつ指を乗せ、乗せる前と後のコントラストを確かめる */
 async function hoverAll(
   page: Page,
   scope: Locator,

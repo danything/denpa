@@ -11,7 +11,7 @@ import { expect, goto, syncEpg, test } from "./helpers";
  * 追っかけに切り替える。どの録画に取り上げられたかはサーバが読む (覚えておいたチューナーにいる `rec <録画ID>`。
  * `server/live-yield.ts`)。
  *
- * 場面は偽エージェントで作る — 地上波のチューナーを1台だけにして、ライブを観ている間に別の
+ * 場面は偽エージェントで作る — 地上波のチューナーを 1 台だけにして、ライブを観ている間に別の
  * チャンネルを録る。偽エージェントは空きが無ければ弱い利用者からチューナーを取り上げる (`tests/fake/agent.ts` の `pick`)。
  * 映像は出ない (偽 ffmpeg) ので、見るのは通知と、エージェントの利用者の顔ぶれ
  */
@@ -26,7 +26,7 @@ const tunerDefs = (count: number) =>
     disabled: false,
   }));
 
-/** 偽エージェントのチューナーを入れ替える。3台 = 地上波は1台だけ、4台 = 既定 */
+/** 偽エージェントのチューナーを入れ替える。3 台 = 地上波は 1 台だけ、4 台 = 既定 */
 async function setTuners(stack: Stack, count: number): Promise<void> {
   const res = await fetch(`${stack.agentUrl}/denpa/tuners`, {
     method: "PUT",
@@ -54,7 +54,7 @@ interface Listed {
   programId: number;
 }
 
-/** 地上波の局を2つ、物理チャンネルの違うもの (MX と、ほかの中継の局) */
+/** 地上波の局を 2 つ、物理チャンネルの違うもの (MX と、ほかの中継の局) */
 async function twoChannels(
   request: APIRequestContext,
 ): Promise<[Listed, Listed]> {
@@ -84,7 +84,7 @@ async function recordNow(
   expect(res.ok()).toBe(true);
 }
 
-/** 録っている番組を止める。地上波の偽番組は30分あるので、止めないと次のテストまでチューナーを塞ぐ */
+/** 録っている番組を止める。地上波の偽番組は 30 分あるので、止めないと次のテストまでチューナーを塞ぐ */
 async function stopRecording(
   request: APIRequestContext,
   service: Listed,
@@ -104,7 +104,7 @@ test.describe("ライブが録画にチューナーを取り上げられたと�
   });
 
   /*
-   * **同じチャンネルの録画は選局を共有するので、取り上げられない。** チューナーは増えないので、地上波が1台でも
+   * **同じチャンネルの録画は選局を共有するので、取り上げられない。** チューナーは増えないので、地上波が 1 台でも
    * ライブはそのまま。切り替えの通知も出ない
    */
   test("同じチャンネルの録画なら、ライブはそのまま", async ({

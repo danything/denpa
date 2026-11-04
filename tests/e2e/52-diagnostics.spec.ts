@@ -63,7 +63,7 @@ test.describe("設定のバージョンと環境・ログ", () => {
     );
   });
 
-  /** スマホでは、ログの押すものと絞り込みを1行にまとめ、節へ飛ぶ行のすぐ上に浮かべる (docs/design.md の「浮かせ方」) */
+  /** スマホでは、ログの押すものと絞り込みを 1 行にまとめ、節へ飛ぶ行のすぐ上に浮かべる (docs/design.md の「浮かせ方」) */
   test("スマホではログの操作と絞り込みが下の1行に出る", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await goto(page, "/settings/general#logs");
@@ -247,7 +247,7 @@ test.describe("設定のバージョンと環境・ログ", () => {
     await expect(page.getByTestId("agent-logs-error")).toContainText(
       "エージェントからログを取得できません (500)",
     );
-    // バージョンと OS を取れなくても、理由を1行出す
+    // バージョンと OS を取れなくても、理由を 1 行出す
     await expect(page.getByTestId("diag-agent-version")).toContainText(
       "エージェントからバージョンを取得できません (500)",
     );

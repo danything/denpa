@@ -25,7 +25,7 @@ import {
  *
  * **追っかけは録っている最中だけ。** 録り終えたら、エンコードを待っている間も観る画面 (`/watch`) で
  * 観る (サーバが元の TS をその場で変換して流す。22-watch・39-watch-stream)。ここでは地上波の
- * いまの番組 (偽番組は30分) を録りはじめて、録っている最中に追っかけを開き、止めてエンコードが終わったら
+ * いまの番組 (偽番組は 30 分) を録りはじめて、録っている最中に追っかけを開き、止めてエンコードが終わったら
  * 観る画面へ案内されるところまでを見る
  */
 
@@ -79,7 +79,7 @@ test.describe("追っかけ再生の入口", () => {
       await expect(page.getByTestId("chase-encoded")).toHaveCount(0);
       await checkChase(page, browser, id);
     } finally {
-      // 地上波の偽番組は30分あるので、止めないと次のテストまでチューナーを塞ぐ
+      // 地上波の偽番組は 30 分あるので、止めないと次のテストまでチューナーを塞ぐ
       await request.post("/guide?/cancel", {
         form: { programId: String(programId) },
       });
@@ -108,7 +108,7 @@ async function checkChase(
 
   /*
    * **字幕は、見えている大きさ × 画面の画素で描く** (`CaptionPainter`。ライブと同じ係)。
-   * 偽の放送に字幕は乗っていないので1枚流す。PC (DPR 1・2) とスマホの縦で
+   * 偽の放送に字幕は乗っていないので 1 枚流す。PC (DPR 1・2) とスマホの縦で
    */
   await holdCaptions(page, "chase-captions");
   await feedCaption(page, "chase");
@@ -145,7 +145,7 @@ async function checkChase(
   }
 
   /*
-   * **スマホの縦 (360px・320px) でも、操作バーのボタンは1行** (観る画面・ライブと同じ)。
+   * **スマホの縦 (360px・320px) でも、操作バーのボタンは 1 行** (観る画面・ライブと同じ)。
    * 残すのは再生・最新・読みもの・⚙・全画面だけで、畳んだ音は ⚙ の頭の行から押せる
    */
   for (const width of [360, 320]) {
@@ -187,7 +187,7 @@ async function checkChase(
       path: test.info().outputPath(`chase-${width}-more.png`),
     });
 
-    // 閉じても1行のまま
+    // 閉じても 1 行のまま
     await tab.keyboard.press("Escape");
     await expect(tab.getByTestId("chase-settings-menu")).toBeHidden();
     expect(
@@ -214,7 +214,7 @@ async function checkChase(
    * 画面内クリックでも切り替わる。**押したときの処理が繋がっているかだけを見る** —
    * 偽 ffmpeg では映像が出ないので状態の幕 (`chase-status`) が映像を覆ったままで、
    * 本物のマウスの当たり判定はここでは通らない。押された位置の読み分け
-   * (端2回で 10秒 など) は `ts/watch.ts` の試験が見ている
+   * (端 2 回で 10 秒 など) は `ts/watch.ts` の試験が見ている
    */
   await page
     .getByTestId("chase-video")

@@ -300,7 +300,7 @@ test.describe("互換モードの追っかけ", () => {
     writeFileSync(stack.liveFmp4File, "");
   });
   test.afterEach(async ({ request, stack }) => {
-    // 地上波の偽番組は30分あるので、止めないと次のテストまでチューナーを塞ぐ
+    // 地上波の偽番組は 30 分あるので、止めないと次のテストまでチューナーを塞ぐ
     if (programId !== null) {
       await request.post("/guide?/cancel", {
         form: { programId: String(programId) },
@@ -319,7 +319,7 @@ test.describe("互換モードの追っかけ", () => {
     test.setTimeout(180_000);
     /*
      * **録っている最中に観る。** 追っかけは録っている最中だけで、録り終えた録画は観る画面へ送られる
-     * (25-chase と同じく、地上波のいまの番組 (偽番組は30分) を録る)。エンコードは失敗させておく
+     * (25-chase と同じく、地上波のいまの番組 (偽番組は 30 分) を録る)。エンコードは失敗させておく
      * (止めたあとエンコードできると元の TS が無くなり、リクエストし直しが断られる)
      */
     writeFileSync(stack.failFile, "1");
@@ -398,14 +398,14 @@ test.describe("互換モードの追っかけ", () => {
     );
     await page.keyboard.press("ArrowLeft");
     /*
-     * **戻った先 (10秒前) の近くに来たのを見てから数える。** 新しいストリームが届くまでは、手元に残った前の
+     * **戻った先 (10 秒前) の近くに来たのを見てから数える。** 新しいストリームが届くまでは、手元に残った前の
      * ストリームを描き続け、再生位置もそれで進む (RawEngine を開き直すのは届いてから)。混んでいて届くのが
      * 遅れると、そのぶんのコマを新しいストリームのものと取り違え、前のストリームの位置を「後」として読んでいた
      */
     await expect
       .poll(where, { timeout: 15_000 })
       .toBeLessThan(Math.max(0, before - 10) + 3);
-    // リクエストした所へ戻り、そこから進む。3秒後も、前の再生位置より手前にある (前のストリームの秒を足していない)
+    // リクエストした所へ戻り、そこから進む。3 秒後も、前の再生位置より手前にある (前のストリームの秒を足していない)
     await expect
       .poll(shown, { timeout: 15_000 })
       .toBeGreaterThan((await shown()) + 30);

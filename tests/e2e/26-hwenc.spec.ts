@@ -19,7 +19,7 @@ import {
 
 /**
  * GPU でエンコードする (server/hwenc.ts)。GPU の偽物の作り方は `hwenc.ts`。
- * H.265 は `26-hwenc-hevc` (録画を2本エンコードして1分ほどかかるので、CI の別の組で流す)
+ * H.265 は `26-hwenc-hevc` (録画を 2 本エンコードして 1 分ほどかかるので、CI の別の組で流す)
  */
 
 test.describe("GPU でエンコードする", () => {
@@ -39,7 +39,7 @@ test.describe("GPU でエンコードする", () => {
     await expect(page.getByTestId("hw-device")).toHaveCount(0);
     await expect(page.getByTestId("hw-av1")).toHaveCount(0);
 
-    // 2枚挿した → 確かめ直すと、デバイスが2つ。どちらも両方のコーデックを使えるので「順番に使う」
+    // 2 枚挿した → 確かめ直すと、デバイスが 2 つ。どちらも両方のコーデックを使えるので「順番に使う」
     for (const gpu of GPUS) writeFileSync(`${stack.hwDir}/${gpu}`, "1");
     await page.getByTestId("hw-probe").click();
     await expect(page.getByTestId("hw-status")).toContainText(
@@ -96,7 +96,7 @@ test.describe("GPU でエンコードする", () => {
     );
     await waitWatchable(page, row);
     let recordingId = await row.getAttribute("data-recording-id");
-    // AV1 は 128、H.264 は 129 の VA-API。2つは同時にエンコードするので、引数を書く順は決まらない
+    // AV1 は 128、H.264 は 129 の VA-API。2 つは同時にエンコードするので、引数を書く順は決まらない
     expect(
       encodeRuns(stack.encodeArgsFile, recordingId).map(wayOf).sort(),
     ).toEqual(["renderD128:av1_vaapi", "renderD129:h264_vaapi"]);
@@ -104,7 +104,7 @@ test.describe("GPU でエンコードする", () => {
     /*
      * **GPU が途中で駄目になっても録画は失敗にならない。** 129 を抜いてから
      * (確かめ直さずに) H.264 をエンコードさせると、129 の方式が初期化で落ちて、
-     * ソフトウェアで再エンコードされる。試す順は 方式ごとに 2回 (頭を捨てる分) → 次。
+     * ソフトウェアで再エンコードされる。試す順は 方式ごとに 2 回 (頭を捨てる分) → 次。
      * 128 は H.264 を外してあるので、そちらへは行かない
      */
     rmSync(`${stack.hwDir}/renderD129`, { force: true });
@@ -171,7 +171,7 @@ test.describe("GPU でエンコードする", () => {
   }) => {
     test.setTimeout(180_000);
     clearGpus(stack.hwDir);
-    // 2枚目だけをコンテナに渡したときの形。番号は並びの位置なので -gpu 0 になる
+    // 2 枚目だけをコンテナに渡したときの形。番号は並びの位置なので -gpu 0 になる
     const nvidia = `${stack.hwDir}/nvidia1`;
     writeFileSync(nvidia, "1");
     writeFileSync(`${stack.hwDir}/nvidiactl`, "1");

@@ -16,7 +16,7 @@ import {
  * **追っかけも放送のまま (MPEG-2) で観る** ([docs/stream.md](../../docs/stream.md#追っかけも放送のままで送る))。
  *
  * E2E は 127.0.0.1 で開くので家の中で、「自動」なら追っかけも MPEG-2 になる (`#lib/live-choice.ts` の `autoOrder`)。
- * 録っている最中に観る (25-chase と同じく、地上波のいまの番組 (偽番組は30分) を録る)。偽の録画は本当にデコードできる
+ * 録っている最中に観る (25-chase と同じく、地上波のいまの番組 (偽番組は 30 分) を録る)。偽の録画は本当にデコードできる
  * MPEG-2 と AAC なので (`packages/arib/src/synth-av.ts`)、canvas の描いたコマ数が進むところまで見る。
  * エンコードは失敗させておく (止めたあとエンコードできると元の TS が無くなり、リクエストし直しが断られる)
  */
@@ -52,7 +52,7 @@ test.describe("追っかけを MPEG-2 のまま観る", () => {
     await syncEpg(request);
   });
   test.afterEach(async ({ request, stack }) => {
-    // 地上波の偽番組は30分あるので、止めないと次のテストまでチューナーを塞ぐ
+    // 地上波の偽番組は 30 分あるので、止めないと次のテストまでチューナーを塞ぐ
     if (programId !== null) {
       await request.post("/guide?/cancel", {
         form: { programId: String(programId) },

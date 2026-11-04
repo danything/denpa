@@ -124,7 +124,7 @@ test.describe("検索からルールを作る", () => {
       page.getByTestId("rule-preview").getByTestId("preview-row").first(),
     ).toBeVisible();
 
-    // 行は1本ずつ扱える: 押すと番組の詳細、予約の立っている行はその場で取消。取り消すと「取り消し済み」に変わる
+    // 行は 1 本ずつ扱える: 押すと番組の詳細、予約の立っている行はその場で取消。取り消すと「取り消し済み」に変わる
     const reserved = page
       .getByTestId("rule-preview")
       .getByTestId("preview-row")
@@ -156,7 +156,7 @@ test.describe("検索からルールを作る", () => {
     await page.getByTestId("rule-toggle").click();
     await expect(page.getByTestId("rule-toggle")).toHaveText("無効化");
 
-    // 削除は2回押し。消したら `?rule=` を外して出直す
+    // 削除は 2 回押し。消したら `?rule=` を外して出直す
     await page.getByTestId("rule-delete").click();
     await page.getByTestId("rule-delete-confirm").click();
     await page.waitForURL((url) => !url.searchParams.has("rule"));
@@ -193,7 +193,7 @@ test.describe("検索からルールを作る", () => {
     await expect(page.getByTestId("slot-summary")).toContainText("いつでも");
 
     /*
-     * 「録る」の行を1つ選び、その始まりの1分だけを外す時間帯にする (日をまたぐ書き方)。
+     * 「録る」の行を 1 つ選び、その始まりの 1 分だけを外す時間帯にする (日をまたぐ書き方)。
      * 選ぶのは先の放送 (`searchRowStart`)。近い放送は前のテストが取り消して「取り消し済み」か、
      * 確かめている間に始まって「放送中」に変わるので、先まで並べてから選ぶ
      */
@@ -232,7 +232,7 @@ test.describe("検索からルールを作る", () => {
       `${clock(start + 1)}〜${clock(start)}`,
     );
 
-    // 始まりから1分だけにすると、また「録る」
+    // 始まりから 1 分だけにすると、また「録る」
     await page.getByTestId("rule-time-from").fill(clock(start));
     await page.getByTestId("rule-time-to").fill(clock(start + 1));
     await expect(same).toHaveAttribute("data-verdict", "record");
@@ -256,7 +256,7 @@ test.describe("検索からルールを作る", () => {
   });
 
   /**
-   * **前の回は録らない** (`rules.skip_earlier`)。1話から数え直すシリーズを飛ばさないよう、新しいルールでも
+   * **前の回は録らない** (`rules.skip_earlier`)。1 話から数え直すシリーズを飛ばさないよう、新しいルールでも
    * 切って始まる。入れて保存すれば、直すときも一覧でも入ったまま。判定そのものは rules-apply.test.ts が見る
    */
   test("「前の回は録らない」は切って始まり、入れて保存すると直すときも入っている", async ({

@@ -6,14 +6,14 @@ import { type BrowserContext, test as base } from "@playwright/test";
 import { fakeAgentUrl } from "../src/lib/server/fake-agent";
 
 /**
- * ワーカーごとに1式ずつ、denpa と偽チューナーエージェント / 偽通知先を立てる。
+ * ワーカーごとに 1 式ずつ、denpa と偽チューナーエージェント / 偽通知先を立てる。
  *
- * 以前は1つのアプリと1つのDBを全テストで共有していたので、直列に流すしかなかった。
- * 予約も録画もルールも同じ表に入るため、2つのテストが同時に動くと件数が合わない。
+ * 以前は 1 つのアプリと 1 つの DB を全テストで共有していたので、直列に流すしかなかった。
+ * 予約も録画もルールも同じ表に入るため、2 つのテストが同時に動くと件数が合わない。
  *
- * ワーカーごとに**ポートも置き場もDBも別**にすれば、その制約が消えて素直に並べられる。
+ * ワーカーごとに**ポートも置き場も DB も別**にすれば、その制約が消えて素直に並べられる。
  * ファイル単位では今までどおり順番に流れる (`fullyParallel: false`) ので、
- * 1つのファイルの中でテストが前のテストの結果を当てにしている書き方はそのまま通る。
+ * 1 つのファイルの中でテストが前のテストの結果を当てにしている書き方はそのまま通る。
  */
 
 /** 作業領域。global-setup で毎回まっさらにする */
@@ -21,7 +21,7 @@ export const TEST_ROOT = "/tmp/denpa-e2e";
 
 /*
  * ワーカー番号ごとにずらす幅。
- * 10 ずつ空けておけば、あとでポートを1つ2つ増やしても衝突しない
+ * 10 ずつ空けておけば、あとでポートを 1 つ 2 つ増やしても衝突しない
  */
 const STRIDE = 10;
 const APP_PORT = 4173;
@@ -31,7 +31,7 @@ const WEBHOOK_PORT = 8096;
 /** 立ち上がりを待つ上限。ここを短くすると混んでいるマシンで落ちる */
 const BOOT_TIMEOUT = 120_000;
 const BOOT_POLL = 200;
-/** 立ち上がりを訊く1回ぶんの上限。返事の来ない接続に捕まったまま BOOT_TIMEOUT を使い切らないように */
+/** 立ち上がりを訊く 1 回ぶんの上限。返事の来ない接続に捕まったまま BOOT_TIMEOUT を使い切らないように */
 const BOOT_ASK = 5_000;
 
 export interface Stack {
@@ -58,7 +58,7 @@ export interface Stack {
   /** エンコーダの名前 (`libx264` など) を書いて置くと、偽 ffmpeg はそのエンコーダを使うエンコードだけ失敗する */
   failEncoderFile: string;
   /**
-   * これを置くと偽 ffmpeg のエンコードが長引く (20秒ほど)。
+   * これを置くと偽 ffmpeg のエンコードが長引く (20 秒ほど)。
    * **走っている最中に押す**ものを試すのに使う (エンコード中止)
    */
   slowFile: string;
@@ -74,7 +74,7 @@ export interface Stack {
    * 偽の放送の PMT は既定で字幕を載せない (`/__control/captions` で載せる)
    */
   liveNoCaptionsFile: string;
-  /** ライブ視聴で偽 ffmpeg に渡された TS の頭。1局に絞れているかを見る */
+  /** ライブ視聴で偽 ffmpeg に渡された TS の頭。1 局に絞れているかを見る */
   liveTsFile: string;
   /**
    * これを置くとライブの AV1 の偽 ffmpeg が、本物の AV1 + Opus の fMP4 を流す (`tests/fake/fmp4-loop.ts`)。
@@ -89,9 +89,9 @@ export interface Stack {
    * `mpp_service` を置けば Rockchip MPP (`RKMPP_DEVICE`)、`nvidia0` を置けば NVIDIA の GPU (`NVIDIA_DIR`) として同じく見える
    */
   hwDir: string;
-  /** エンコードするときに偽 ffmpeg へ渡された引数 (1回ずつ `---` で区切って足される) */
+  /** エンコードするときに偽 ffmpeg へ渡された引数 (1 回ずつ `---` で区切って足される) */
   encodeArgsFile: string;
-  /** 偽 ffmpeg がエンコードしていた間 (`start`/`end`・ミリ秒・入力・出力をタブで区切った行が1行ずつ足される。`helpers.encodeSpans`) */
+  /** 偽 ffmpeg がエンコードしていた間 (`start`/`end`・ミリ秒・入力・出力をタブで区切った行が 1 行ずつ足される。`helpers.encodeSpans`) */
   encodeSpansFile: string;
 }
 
@@ -134,7 +134,7 @@ async function waitFor(
   /*
    * **最後に何が返ったかを持っておく。** 待ち受けているのに応答しないとき、断られたのか
    * (ECONNREFUSED)、返事が来ないのか (時間切れ)、ok でない状態が返ったのかで、原因が違う。
-   * 1回ずつ上限を切る — 返事の来ない接続を1つ待ち続けると、BOOT_TIMEOUT を丸ごと使ってしまう
+   * 1 回ずつ上限を切る — 返事の来ない接続を 1 つ待ち続けると、BOOT_TIMEOUT を丸ごと使ってしまう
    */
   let last = "まだ一度も訊いていません";
   while (Date.now() < until) {
@@ -168,7 +168,7 @@ async function stop(started: Started): Promise<void> {
   if (started.proc.exitCode === null) started.proc.kill("SIGKILL");
 }
 
-/** 1式立てる。テストはワーカーごとに下の `stack` から、スクリーンショットを撮るときは scripts/capture-docs.ts から */
+/** 1 式立てる。テストはワーカーごとに下の `stack` から、スクリーンショットを撮るときは scripts/capture-docs.ts から */
 export async function boot(
   index: number,
 ): Promise<{ stack: Stack; shutdown: () => Promise<void> }> {
@@ -262,7 +262,7 @@ export async function boot(
       RAW_DIR: stack.rawDir,
       ENCODED_DIR: stack.encodedDir,
       FFMPEG: "./tests/fake/ffmpeg.sh",
-      // 選局もスクランブル解除もスキャンも、窓口はここ1つ
+      // 選局もスクランブル解除もスキャンも、窓口はここ 1 つ
       TUNER_AGENT_URL: stack.tunerAgentUrl,
       /*
        * ディスクの残す量 (既定 20GB) を 0 にする。CI の作業機は空きが 10GB を切ることがあり、
@@ -293,11 +293,11 @@ export async function boot(
       // ニコニコとの連携は偽の denpa-hub が中継する
       DENPA_HUB: stack.hubUrl,
       UPDATE_CHECK_INTERVAL: "1000",
-      // 定期処理は止め、テストからボタン/APIで明示的に走らせる(タイミング依存を避ける)
+      // 定期処理は止め、テストからボタン/API で明示的に走らせる(タイミング依存を避ける)
       RECONCILE_INTERVAL: "86400000",
       EPG_COLLECT_INTERVAL: "86400000",
       CHANNEL_SYNC_INTERVAL: "86400000",
-      // 1チャンネル読むのに待つ上限。偽エージェントは開いた直後に全部流す
+      // 1 チャンネル読むのに待つ上限。偽エージェントは開いた直後に全部流す
       EPG_CHANNEL_TIMEOUT: "10000",
       // 偽の放送にはほかの中継の番組表が無い。初回の全局読みで待たない
       EPG_SWEEP_SETTLE: "500",
@@ -564,7 +564,7 @@ export async function keepH264(
 }
 
 /**
- * `stack` はワーカーに1つ。`auto` にしてあるので、明示的に受け取らないテストでも
+ * `stack` はワーカーに 1 つ。`auto` にしてあるので、明示的に受け取らないテストでも
  * 立ち上がった状態で始まる (`baseURL` がこれに乗っているため)。
  */
 export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({

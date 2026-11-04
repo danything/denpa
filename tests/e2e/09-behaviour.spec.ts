@@ -38,10 +38,10 @@ test.describe("操作したときの反応", () => {
     /*
      * EPG の符号はそのままでは読めないので、言葉に直して出す。
      *
-     * **同じ分類が2つ来ても1つにまとめる。** 偽の放送は本物と同じく
+     * **同じ分類が 2 つ来ても 1 つにまとめる。** 偽の放送は本物と同じく
      * `[アニメ, 拡張, 拡張]` を積んである (0xE は分類ではなく局が自分で決めた
      * 符号を載せる枠なので、同じものが並ぶ)。ラベルの字を一覧の目印にしていた頃は、
-     * **同じラベルが2つあると Svelte が落ちて詳細が開かなかった**
+     * **同じラベルが 2 つあると Svelte が落ちて詳細が開かなかった**
      * (実機の高校野球中継。押しても何も起きない出方をする)
      */
     await expect(detail.getByTestId("detail-genre")).toHaveCount(2);
@@ -51,10 +51,10 @@ test.describe("操作したときの反応", () => {
     await expect(detail.getByTestId("detail-genre").nth(1)).toHaveText("拡張");
     await expect(detail.getByTestId("detail-video")).toHaveText("1080i MPEG-2");
     /*
-     * **音声が2本あるなら、見分けが付くように出す。**
+     * **音声が 2 本あるなら、見分けが付くように出す。**
      *
-     * 解説放送や二重音声は、種別も言語も同じ音声が2本並ぶ。符号だけを見て
-     * いた頃は**「ステレオ (日本語)」が2つ**出ていて、どちらが何なのか
+     * 解説放送や二重音声は、種別も言語も同じ音声が 2 本並ぶ。符号だけを見て
+     * いた頃は**「ステレオ (日本語)」が 2 つ**出ていて、どちらが何なのか
      * 分からなかった (実機の日テレ「金曜ロードショー[解]」)。放送のほうは
      * `audio_component_descriptor` の `text_char` に名前を書いている
      */
@@ -142,8 +142,8 @@ test.describe("操作したときの反応", () => {
   test("番組表の時刻は縦横どちらへスクロールしても左に残る", async ({
     page,
   }) => {
-    // 24時間ぶんを1画面には出せないので、どこを見ていても時刻が分かる必要がある。
-    // 横は列ごと、縦は数字を1時間の枠の中で下ろして追従させている
+    // 24 時間ぶんを 1 画面には出せないので、どこを見ていても時刻が分かる必要がある。
+    // 横は列ごと、縦は数字を 1 時間の枠の中で下ろして追従させている
     await page.setViewportSize({ width: 900, height: 700 });
     await goto(page, "/guide?type=GR");
 
@@ -151,12 +151,12 @@ test.describe("操作したときの反応", () => {
     /*
      * **`style` の字面では探さない。** 表は後から流れてきて画面側で組むので
      * (`guide/+page.server.ts`)、`grid-column` と `grid-row` はブラウザが
-     * `grid-area` にまとめ直す。SSR の頃の字面を当てにすると1つも見つからない
+     * `grid-area` にまとめ直す。SSR の頃の字面を当てにすると 1 つも見つからない
      */
     const hours = grid.locator("div.hour > span.hour-label");
     /*
      * 見えている表の上端は左上の角 (局名の行の頭)。広い画面では箱がヘッダーの裏まで伸びていて、
-     * 箱の上端はヘッダーと操作の1行に隠れている (docs/design.md の「浮かせ方」)
+     * 箱の上端はヘッダーと操作の 1 行に隠れている (docs/design.md の「浮かせ方」)
      */
     const frame = (await grid.locator(".corner").boundingBox())!;
 
@@ -166,7 +166,7 @@ test.describe("操作したときの反応", () => {
         // 横に流しても時刻の列は左に残る
         el.scrollLeft = 300;
       }, top);
-      // 画面の上端付近に、いま見ているところの時刻がちょうど1つ出ていること
+      // 画面の上端付近に、いま見ているところの時刻がちょうど 1 つ出ていること
       const shown: string[] = [];
       for (let i = 0; i < (await hours.count()); i++) {
         const box = await hours.nth(i).boundingBox();
@@ -188,7 +188,7 @@ test.describe("操作したときの反応", () => {
      * 時刻の列が横に付いてこられるのは、外側の枠の中にいる間だけ。
      * 枠を画面の幅のままにして中身をはみ出させていた頃は、
      * 「画面の幅 − 時刻の列」ぶんスクロールしたところで置いていかれていた
-     * (390px の端末で302pxから先)。枠を列の合計まで広げておけば端まで残る
+     * (390px の端末で 302px から先)。枠を列の合計まで広げておけば端まで残る
      */
     await page.setViewportSize({ width: 320, height: 700 });
     await goto(page, "/guide?type=GR");
@@ -301,11 +301,11 @@ test.describe("操作したときの反応", () => {
   test("スマホの幅でも番組表の操作は1行で、表の上・下のタブのすぐ上に浮く", async ({
     page,
   }) => {
-    // 操作を2段に積んだり表の下を空けたりすると、1画面に入る時間が減る。親指が届くよう下に置く
+    // 操作を 2 段に積んだり表の下を空けたりすると、1 画面に入る時間が減る。親指が届くよう下に置く
     await page.setViewportSize({ width: 390, height: 844 });
     await goto(page, "/guide?type=GR");
 
-    // 今日を見ているときは「今日」を出さない (押しても同じ表)。そのぶん1行に収まる
+    // 今日を見ているときは「今日」を出さない (押しても同じ表)。そのぶん 1 行に収まる
     await expect(page.getByTestId("guide-today")).toHaveCount(0);
     const types = (await page.getByTestId("type-tabs").boundingBox())!;
     for (const id of ["next-day", "guide-date", "guide-genres"]) {
@@ -316,7 +316,7 @@ test.describe("操作したときの反応", () => {
       ).toBeLessThan(4);
     }
 
-    // ページごとは動かず、表だけが動く。表は画面の下の端まで伸び、操作の1行はその上に浮く。ほかの画面の操作の1行と同じく、
+    // ページごとは動かず、表だけが動く。表は画面の下の端まで伸び、操作の 1 行はその上に浮く。ほかの画面の操作の 1 行と同じく、
     // 下のタブのすぐ上に浮いた面で、下のタブとの間を 0.375rem (6px) 空ける (読んでいる間は一緒に引っ込む。E2E 18)
     const fit = await page.evaluate(() => {
       const rect = (id: string) =>
@@ -344,7 +344,7 @@ test.describe("操作したときの反応", () => {
       390,
     );
 
-    // 日付を押すと、1週間ぶんと時刻のメニューが上へ開く
+    // 日付を押すと、1 週間ぶんと時刻のメニューが上へ開く
     await page.getByTestId("guide-date").click();
     const menu = page.getByTestId("guide-date-menu");
     await expect(menu).toBeVisible();
@@ -364,7 +364,7 @@ test.describe("操作したときの反応", () => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await goto(page, "/guide?type=GR");
     const days = page.getByTestId("guide-day");
-    // 今日から1週間ぶん (番組の無い日も押せないまま並ぶ)。前の日は番組が残っていれば今日の左に
+    // 今日から 1 週間ぶん (番組の無い日も押せないまま並ぶ)。前の日は番組が残っていれば今日の左に
     expect(await days.count()).toBeGreaterThanOrEqual(8);
     const today = page.locator('[data-testid="guide-day"].present');
     await expect(today).toHaveText(/^今日\d+\(.\)$/);
@@ -378,12 +378,12 @@ test.describe("操作したときの反応", () => {
     await expect(page.getByTestId("next-day")).toBeHidden();
     await expect(page.getByTestId("guide-date")).toBeHidden();
 
-    // 1366px で全部が1行に収まる (時刻のボタンも「⋯」に畳まない)
+    // 1366px で全部が 1 行に収まる (時刻のボタンも「⋯」に畳まない)
     await expect(page.getByTestId("guide-jump-19")).toBeVisible();
     await expect(page.getByTestId("guide-more")).toBeHidden();
     const toolbar = page.getByTestId("guide-toolbar");
     const bar = (await toolbar.boundingBox())!;
-    // 上の余白 (画面の頭の余白 `--dp-page-top`。浮いたヘッダーのぶん) を除いて、1行なら 70px ほど。2行に折れると 110px を超える
+    // 上の余白 (画面の頭の余白 `--dp-page-top`。浮いたヘッダーのぶん) を除いて、1 行なら 70px ほど。2 行に折れると 110px を超える
     const top = await toolbar.evaluate((el) =>
       Number.parseFloat(getComputedStyle(el).paddingTop),
     );
@@ -417,7 +417,7 @@ test.describe("操作したときの反応", () => {
       Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
     );
     const room = await grid.evaluate((el) => el.scrollHeight - el.clientHeight);
-    // 表の頭は 4:00、5分で 0.75rem
+    // 表の頭は 4:00、5 分で 0.75rem
     const at = (hour: number) => Math.min(room, (hour - 4) * 12 * 0.75 * rem);
     await page.getByTestId("guide-jump-6").click();
     await expect
@@ -427,7 +427,7 @@ test.describe("操作したときの反応", () => {
     await expect
       .poll(() => grid.evaluate((el) => el.scrollTop))
       .toBeCloseTo(at(19), 0);
-    // 操作の1行は動かない (畳まない)
+    // 操作の 1 行は動かない (畳まない)
     const top = (await page.getByTestId("guide-toolbar").boundingBox())!.y;
     await page.getByTestId("guide-jump-now").click();
     const line = page.getByTestId("now-line");
@@ -446,7 +446,7 @@ test.describe("操作したときの反応", () => {
   }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     const grid = page.getByTestId("guide-grid");
-    // 表の頭は 4:00、5分で 0.75rem
+    // 表の頭は 4:00、5 分で 0.75rem
     const at = (hour: number) =>
       grid.evaluate(
         (el, hour) =>
@@ -476,7 +476,7 @@ test.describe("操作したときの反応", () => {
     await expect
       .poll(() => grid.evaluate((el) => el.scrollTop))
       .toBeCloseTo(at6, 0);
-    // 6時から 19時へ。巻いた位置をコマごとに集め、途中を通ったこと・同じ位置に着くことを見る
+    // 6 時から 19 時へ。巻いた位置をコマごとに集め、途中を通ったこと・同じ位置に着くことを見る
     const path = await grid.evaluate(
       (el, end) =>
         new Promise<number[]>((resolve) => {
@@ -562,7 +562,7 @@ test.describe("操作したときの反応", () => {
     await expect(menu).toBeVisible();
     await expect(menu.getByRole("menuitemradio")).toHaveCount(13);
 
-    // 表にあるジャンルを1つ選ぶ。見本の点の色はマスの時刻の前の点の色と同じ
+    // 表にあるジャンルを 1 つ選ぶ。見本の点の色はマスの時刻の前の点の色と同じ
     const genre = await page
       .locator('[data-testid="program-button"][data-genre]')
       .first()
@@ -631,7 +631,7 @@ test.describe("操作したときの反応", () => {
 
   test("ルールを消すと、そのルールが作った予約も消える", async ({ page }) => {
     // ルールを作ると、条件に合う番組の予約がその場で立つ
-    // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+    // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を 1 度にまとめない
     await page.setViewportSize({ width: 1440, height: 900 });
     await makeRule(page, "テストアニメ", { dedupe: false });
 

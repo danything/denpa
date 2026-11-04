@@ -199,7 +199,7 @@ function updates(page: Page): () => Promise<number> {
     );
 }
 
-/** 表の1枚に色が描いてあるか */
+/** 表の 1 枚に色が描いてあるか */
 function painted(page: Page) {
   return page
     .getByTestId("live-frame-reflection")

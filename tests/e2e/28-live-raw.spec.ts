@@ -32,7 +32,7 @@ async function chooseRaw(page: Page): Promise<void> {
   await pickCodec(page, "live", "mpeg2");
 }
 
-/** 偽 ffmpeg に渡された引数を、1回ぶんずつに切る (`tests/fake/ffmpeg.sh`) */
+/** 偽 ffmpeg に渡された引数を、1 回ぶんずつに切る (`tests/fake/ffmpeg.sh`) */
 function ffmpegRuns(file: string): string[][] {
   if (!existsSync(file)) return [];
   return readFileSync(file, "utf8")
@@ -61,7 +61,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     // 切り替えに選んだものが出る
     await expect(page.getByTestId("live-codec")).toContainText("MPEG-2");
 
-    // **コマが進む。** 1秒に 60 枚 (フィールドごと) 描くので、数秒で数十は進む
+    // **コマが進む。** 1 秒に 60 枚 (フィールドごと) 描くので、数秒で数十は進む
     const shown = async () =>
       Number((await canvas.getAttribute("data-shown")) ?? 0);
     await expect.poll(shown, { timeout: 30_000 }).toBeGreaterThan(10);
@@ -76,7 +76,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
       )
       .toBeGreaterThan(0);
 
-    // **映像が動いている。** 縞が流れるので、時間をおいて撮った2枚は違う
+    // **映像が動いている。** 縞が流れるので、時間をおいて撮った 2 枚は違う
     const one = await canvas.screenshot();
     await expect(async () => {
       const two = await canvas.screenshot();
@@ -97,7 +97,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     await expect.poll(shown, { timeout: 15_000 }).toBeGreaterThan(resumed + 10);
 
     /*
-     * **エンコードする ffmpeg は起こさない。** 起きるのは字幕だけを描く1本で、放送の時刻のまま
+     * **エンコードする ffmpeg は起こさない。** 起きるのは字幕だけを描く 1 本で、放送の時刻のまま
      * 出させる (`-copyts`。`server/captions.ts` の `rawCaptionArgs`)。
      *
      * MPEG-2 を選ぶまではエンコードしている。見るのは**MPEG-2 のままでリクエストしたあと**にエンコードし始めていないこと
@@ -139,7 +139,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
    * 選局したては映像と音声が先に届く。捨てていた頃は、PMT を読んでから音を貯め始めていた — 鳴り出すのは
    * 貯める量 (0.2 秒) が貯まってから。取っておけば、PMT と一緒に貯まったぶんが届いてすぐ鳴り出す
    * (手元で、新しい局の PAT が届いてから鳴り出すまで 直す前 197ms → 直したあと 16〜20ms)。
-   * 偽の電波は表を1秒おきに流すので (`Knobs.tablesLate`)、その間に届いたものを取っておけているかを見る
+   * 偽の電波は表を 1 秒おきに流すので (`Knobs.tablesLate`)、その間に届いたものを取っておけているかを見る
    */
   test("局を変えて PMT が遅れても、届いていた音からすぐ鳴り出す", async ({
     page,
@@ -252,7 +252,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
 
   /*
    * **MPEG-2 のまま見ている間も切り抜ける。** 映像は worker の canvas にあって `<video>` は空なので、
-   * worker に1枚貰う (`raw/engine.ts` の `grab`)。描いたものは残さない作り
+   * worker に 1 枚貰う (`raw/engine.ts` の `grab`)。描いたものは残さない作り
    * (`preserveDrawingBuffer` 無し) なので、**描き直さずに読むと真っ黒**になる — 黒くないことまで見る
    */
   test("MPEG-2 のまま見ている間も切り抜きは映像ごとサーバに届く", async ({
@@ -272,7 +272,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
       .toBeGreaterThan(10);
 
     await wakeControls(page, "live-frame");
-    // 送った1枚を見る。偽 ffmpeg は受けたものをそのまま置くので、置いた画像が送った WebP
+    // 送った 1 枚を見る。偽 ffmpeg は受けたものをそのまま置くので、置いた画像が送った WebP
     const clip = await takeClip(page, "live-shot");
     const image = (
       await (await request.get(`/api/clips/${clip.id}/image`)).body()
@@ -300,9 +300,9 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
    * **MPEG-2 のままでも小窓 (PiP) に映像が出る。** 映像は worker の canvas にあって `<video>` は空なので、
    * canvas からストリームを取って見えない `<video>` (`pip-raw`) に映し、それを小窓にする。
    *
-   * その `<video>` は MPEG-2 のままに切り替えた時点で1枚目まで受け取っておく。押されてから待つと、
+   * その `<video>` は MPEG-2 のままに切り替えた時点で 1 枚目まで受け取っておく。押されてから待つと、
    * iPhone の Safari は「押された直後」と見なさなくなって断った (`NotAllowedError`)。
-   * 押す前に1枚目が届いていること、押したら小窓に入ってコマが流れること、
+   * 押す前に 1 枚目が届いていること、押したら小窓に入ってコマが流れること、
    * 小窓で止めると操作バーも止まることを見る
    */
   test("MPEG-2 のままでも小窓に映像が出て、小窓で止めると操作バーも止まる", async ({
@@ -320,7 +320,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
       )
       .toBeGreaterThan(10);
 
-    // 押す前に1枚目が届いている (`HAVE_METADATA` 以上)
+    // 押す前に 1 枚目が届いている (`HAVE_METADATA` 以上)
     const proxy = page.getByTestId("pip-raw");
     await expect
       .poll(() => proxy.evaluate((v) => (v as HTMLVideoElement).readyState), {
@@ -524,7 +524,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     const heard = await count("audio");
     const shown = await count("shown");
     await page.waitForTimeout(5_000);
-    // 音は1秒に 47 コマ (48kHz・1024 サンプル)。5秒で半分より多くは進む
+    // 音は 1 秒に 47 コマ (48kHz・1024 サンプル)。5 秒で半分より多くは進む
     expect((await count("audio")) - heard).toBeGreaterThan(100);
     // 映像は裏ではデコードしない (同じ端末で見ているほかのタブに CPU を回す。`raw/worker.ts` の `hidden`)
     expect((await count("shown")) - shown).toBeLessThan(5);

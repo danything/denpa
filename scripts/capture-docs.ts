@@ -29,7 +29,7 @@
  * 4. 撮って、`scripts/docs-images.ts` (ffmpeg) で静止画は WebP、アニメーションは AVIF にして docs/images に置く
  *
  * **撮る条件はここに書いてある** (散らばると撮り直しのたびに画像の大きさが揃わない):
- * 1600×900 (20インチの画面と同じ 16:9)・暗いテーマ・ja-JP・Asia/Tokyo。
+ * 1600×900 (20 インチの画面と同じ 16:9)・暗いテーマ・ja-JP・Asia/Tokyo。
  * アニメーションも同じ広さで動かし、縮めずに 30fps で組む (組み立ての側)。
  *
  * 字は本番と同じものを使う (イメージの `docs` 段): 画面は BIZ UDPゴシック、放送の字は
@@ -136,7 +136,7 @@ function textFile(name: string, text: string): string {
   return path;
 }
 
-/** 番組ごとの色 (グラデーションの2色)。ジャンルで決める */
+/** 番組ごとの色 (グラデーションの 2 色)。ジャンルで決める */
 const PALETTE: Record<number, [string, string]> = {
   0: ["0x16324f", "0x2f6690"],
   1: ["0x1b4332", "0x52b788"],
@@ -176,9 +176,9 @@ function poster(
 }
 
 /**
- * 観る画面で流す作り物の映像 (30分・10コマ/秒・無音)。色が流れるだけで、左上に「サンプル映像」。
+ * 観る画面で流す作り物の映像 (30 分・10 コマ/秒・無音)。色が流れるだけで、左上に「サンプル映像」。
  * 録画はどれもこれを使い回す (番組の中身は字幕で出る。`docsCaptions`)。
- * 5分から1分だけ「ＣＭ」のラベルが出て、そこが CM のチャプターになる (本物のエンコードが終わったときと同じ入れ方。`cm.chapterMetadata`)
+ * 5 分から 1 分だけ「ＣＭ」のラベルが出て、そこが CM のチャプターになる (本物のエンコードが終わったときと同じ入れ方。`cm.chapterMetadata`)
  */
 const CLIP_SECONDS = 30 * 60;
 const CM = { start: 300, end: 360 };
@@ -278,7 +278,7 @@ async function seed(): Promise<void> {
   // 番組表。偽エージェントから集め終わるまで待つ (`/api/sync`)
   await post("/api/sync", null);
   await sweepLogos();
-  // 1回目で取りこぼした局 (チューナーの取り合いで待ちきれなかったもの) を集め直す
+  // 1 回目で取りこぼした局 (チューナーの取り合いで待ちきれなかったもの) を集め直す
   await post("/api/sync", null);
 
   // GPU (偽物。置いたファイルを偽 ffmpeg が「ある」と答える)
@@ -317,7 +317,7 @@ async function seed(): Promise<void> {
 
   /*
    * 録画。終わった番組から、番組名が重ならないように新しい順に選ぶ。同じ時刻の番組は
-   * 2本まで (並んだ録画の時刻がばらけるように)。中身は1本の作り物を全部で使い回す
+   * 2 本まで (並んだ録画の時刻がばらけるように)。中身は 1 本の作り物を全部で使い回す
    */
   const seen = new Set<string>();
   const slots = new Map<number, number>();
@@ -375,7 +375,7 @@ async function seed(): Promise<void> {
       p.end_at,
       p.audio_type,
       library,
-      // 大きさは本物の30分ものくらい (AV1 で 0.6〜1.1 GB)。置いたファイルは小さい作り物
+      // 大きさは本物の 30 分ものくらい (AV1 で 0.6〜1.1 GB)。置いたファイルは小さい作り物
       Math.round((0.6 + ((i * 37) % 50) / 100) * 1024 ** 3),
       p.end_at + 5_000,
       JSON.stringify([CM]),
@@ -385,7 +385,7 @@ async function seed(): Promise<void> {
       30,
       null,
       0,
-      // 2本目は途中まで観たもの、4本目から先は観終えたもの (一覧の印が揃わないように)
+      // 2 本目は途中まで観たもの、4 本目から先は観終えたもの (一覧の印が揃わないように)
       i === 1 ? 11 * 60_000 : null,
       i >= 3 ? p.end_at + 60 * 60_000 : null,
       p.end_at + 5_000,
@@ -409,7 +409,7 @@ async function seed(): Promise<void> {
   db.close();
 }
 
-/** 撮るための窓。スマホ (`mobile`) は2倍の細かさで、指で触る端末として開く */
+/** 撮るための窓。スマホ (`mobile`) は 2 倍の細かさで、指で触る端末として開く */
 async function open(
   browser: Browser,
   width: number,
@@ -521,7 +521,7 @@ async function watching(page: Page): Promise<void> {
     );
     return v !== null && v.readyState >= 2;
   });
-  // 2行の台詞が出ているところ (docsCaptions は 1 秒から 4 秒ごと)
+  // 2 行の台詞が出ているところ (docsCaptions は 1 秒から 4 秒ごと)
   await video.evaluate((v: HTMLVideoElement) => {
     v.currentTime = 9.5;
     void v.play();
@@ -948,7 +948,7 @@ try {
   }
   if (only.includes("motion")) await motionShots(browser);
 
-  // 静止画 (1600×900。20インチの画面と同じ 16:9)
+  // 静止画 (1600×900。20 インチの画面と同じ 16:9)
   {
     const page = await open(browser, 1600, 900);
     if (want("dashboard")) {

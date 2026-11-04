@@ -10,7 +10,7 @@ import { expect, goto, pickCodec, wakeControls } from "./helpers";
  * 偽 ffmpeg に本物の AV1 の fMP4 を流させ (`stack.liveFmp4File`)、目印に書いた JSON で届き方を荒らす
  * (`tests/fake/fmp4-loop.ts`)。MSE に入れて実際に再生し、`<video>` の貯まりと途切れ (`waiting`) を数える。
  *
- * 実時間で流すので1本が1〜2分かかる。**1つのスペックに並べない** — CI の組 (`shards.json`) を1つだけ長くする
+ * 実時間で流すので 1 本が 1〜2 分かかる。**1 つのスペックに並べない** — CI の組 (`shards.json`) を 1 つだけ長くする
  */
 
 /** 貯まり (`buffered.end - currentTime`) と貯めようとしている量を、再生が落ち着いてから記録し始める */

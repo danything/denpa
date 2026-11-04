@@ -275,7 +275,7 @@ globalThis.__benchInstall = (options) => {
   };
 
   /**
-   * **ふだんの Chrome で1回ぶん。** ページの中で観る画面 (`/watch/<id>`) へ移り、出はじめたら `warm` ms 待って
+   * **ふだんの Chrome で 1 回ぶん。** ページの中で観る画面 (`/watch/<id>`) へ移り、出はじめたら `warm` ms 待って
    * `ms` ms 数え、`proxy.ts` へ送る (`out/chrome.jsonl`。数えるのは report.ts)
    */
   bench.run = async ({ id, load, run, warm = 3000, ms = 15000 }) => {

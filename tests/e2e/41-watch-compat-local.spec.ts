@@ -22,7 +22,7 @@ import {
  *
  * 偽 ffmpeg がエンコードする録画は中身が無いので、作り置きの fMP4 (AV1 + Opus) から組んだ Matroska を端末に
  * 保存したことにする (`tests/fake/mkv-clip.ts`。IndexedDB に直に置く。置き方は `offline-db.ts` と同じ)。
- * サーバへはリクエストしない (`/stream` を1度も読まない) ことも見る
+ * サーバへはリクエストしない (`/stream` を 1 度も読まない) ことも見る
  */
 
 /** 操作バーの「m:ss / m:ss」の左 (いまの位置。秒) */

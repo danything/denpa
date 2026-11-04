@@ -11,7 +11,7 @@ import {
 } from "./helpers";
 
 /**
- * **ルールの一覧と管理** (`/rules`)。並べて見比べ、スイッチで止める・戻す、2回押しで消す。
+ * **ルールの一覧と管理** (`/rules`)。並べて見比べ、スイッチで止める・戻す、2 回押しで消す。
  * 作る・直すのは検索の画面の「ルールとして保存」(行を押すと `/search?rule=<ID>`。47-search-rule)
  */
 test.describe("ルールの一覧", () => {
@@ -33,7 +33,7 @@ test.describe("ルールの一覧", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を1度にまとめない
+    // 偽の放送は同じタイトルを何度も流す。見たいのは予約が立つことなので、同じ回を 1 度にまとめない
     await makeRule(page, "テストアニメ", {
       dedupe: false,
       fields: { serviceIds: String(BS11.id) },
@@ -47,7 +47,7 @@ test.describe("ルールの一覧", () => {
     await expect(rows).toHaveCount(2);
     const anime = rows.filter({ hasText: "テストアニメ" });
     const none = rows.filter({ hasText: "どこにも無い番組" });
-    // 条件は1行で。局の名前・同じ回・除外
+    // 条件は 1 行で。局の名前・同じ回・除外
     await expect(anime).toContainText(`番組名、${BS11.name}`);
     await expect(none).toContainText("全局、同じ回は 1 度、除外: 再放送");
     // 次の放送と予約の数。当たらないルールは「予定なし」
@@ -93,7 +93,7 @@ test.describe("ルールの一覧", () => {
     await page.waitForURL(/\/search\?rule=\d+$/);
     await expect(page.getByTestId("rule-mode")).toContainText("テストアニメ");
 
-    // 削除は2回押し
+    // 削除は 2 回押し
     await goto(page, "/rules");
     await deleteRule(none);
     await expect(rows).toHaveCount(1);
@@ -104,7 +104,7 @@ test.describe("ルールの一覧", () => {
   });
 
   /**
-   * **狭い画面では2段の行。** 1段目に名前とスイッチ・削除、2段目に次の放送と予約・録画の数。横にはみ出さない
+   * **狭い画面では 2 段の行。** 1 段目に名前とスイッチ・削除、2 段目に次の放送と予約・録画の数。横にはみ出さない
    */
   test("狭い画面では2段の行にする", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });

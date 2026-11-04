@@ -13,7 +13,7 @@ import { clearGpus, encodeRuns, forgetGpusAfterAll, wayOf } from "./hwenc";
 
 /**
  * GPU で H.265 をエンコードする (server/hwenc.ts)。GPU の偽物の作り方は `hwenc.ts`。
- * ほかの GPU のことは `26-hwenc` (1本で CI の組の時間を押し上げていたので分けた)
+ * ほかの GPU のことは `26-hwenc` (1 本で CI の組の時間を押し上げていたので分けた)
  */
 
 test.describe("GPU で H.265 をエンコードする", () => {
@@ -24,7 +24,7 @@ test.describe("GPU で H.265 をエンコードする", () => {
     request,
     stack,
   }) => {
-    // 録画を2本録ってエンコードする。CI で 1.2〜1.3分 (2026-11)。その倍あまりを見る
+    // 録画を 2 本録ってエンコードする。CI で 1.2〜1.3 分 (2026-11)。その倍あまりを見る
     test.setTimeout(180_000);
     clearGpus(stack.hwDir);
     await goto(page, "/settings/recording");
@@ -46,7 +46,7 @@ test.describe("GPU で H.265 をエンコードする", () => {
       page.getByTestId("hw-hevc").locator('option[value="software"]'),
     ).toHaveCount(0);
 
-    // 3つ選ぶと、H.265 を1本目に GPU で。主は AV1、H.265 と H.264 はもう一方
+    // 3 つ選ぶと、H.265 を 1 本目に GPU で。主は AV1、H.265 と H.264 はもう一方
     await syncEpg(request);
     rmSync(stack.encodeArgsFile, { force: true });
     await setRecording(request, { codecs: ["av1", "hevc", "h264"] });
@@ -59,8 +59,8 @@ test.describe("GPU で H.265 をエンコードする", () => {
     const runs = encodeRuns(stack.encodeArgsFile, recordingId);
     expect(runs).toHaveLength(3);
     /*
-     * 1本目は CM 検出の材料を一緒に取るもの (書き出しを `denpa-scan-…` に置く)。**引数を書いた順では見ない** —
-     * 3本は同時に立ち上がるので、どれが先に書くかは決まらない (CI で AV1 が先に来て落ちていた)
+     * 1 本目は CM 検出の材料を一緒に取るもの (書き出しを `denpa-scan-…` に置く)。**引数を書いた順では見ない** —
+     * 3 本は同時に立ち上がるので、どれが先に書くかは決まらない (CI で AV1 が先に来て落ちていた)
      */
     const lead = runs.filter((run) =>
       run.some((a) => a.includes("denpa-scan-")),

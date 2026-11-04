@@ -59,9 +59,9 @@ test.describe("エンコードの失敗", () => {
     );
 
     /*
-     * **観られる。** エンコードできていなくても元のTSは無事で、追っかけ再生の画面 (/chase) が
+     * **観られる。** エンコードできていなくても元の TS は無事で、追っかけ再生の画面 (/chase) が
      * サーバで再エンコードして運ぶ (25-chase)。行には再生の印が出て、押すと追っかけへ。
-     * 以前は「エンコードできていない = 観られない」で印を消していたが、元のTSがある限り観られる
+     * 以前は「エンコードできていない = 観られない」で印を消していたが、元の TS がある限り観られる
      */
     await expect(failed.getByTestId("play-hint")).toBeVisible();
 
@@ -69,7 +69,7 @@ test.describe("エンコードの失敗", () => {
     // (観られる行は押すと再生に行くので、詳細は別のボタン)
     await failed.getByTestId("detail-button").click();
     const detail = page.getByTestId("program-detail");
-    // 理由は1つだけ。録画そのものは失敗していないので、出るのはジョブ側の理由だけ
+    // 理由は 1 つだけ。録画そのものは失敗していないので、出るのはジョブ側の理由だけ
     const note = detail.getByTestId("detail-error");
     await expect(note).toHaveCount(1);
     await expect(note).toContainText("エンコードに失敗しました");
@@ -79,7 +79,7 @@ test.describe("エンコードの失敗", () => {
     await page.getByTestId("detail-close").click();
     await expect(detail).toHaveCount(0);
 
-    // 削除は2回押させる。1回目は聞き返すだけで、まだ消えない
+    // 削除は 2 回押させる。1 回目は聞き返すだけで、まだ消えない
     await failed.getByTestId("delete-button").click();
     await expect(failed.getByTestId("delete-confirm")).toBeVisible();
     await expect(failed).toHaveCount(1);
@@ -107,9 +107,9 @@ test.describe("エンコードの失敗", () => {
 });
 
 /**
- * コーデックをいくつも選んだときは、コーデックごとに ffmpeg を1本ずつ同時に走らせる。
- * **1本が落ちても、ほかは止めずに置く** (観られるものを捨てない)。ジョブは失敗にして理由を残し、
- * 元のTSは消さない (再エンコードすれば全部作り直せる)
+ * コーデックをいくつも選んだときは、コーデックごとに ffmpeg を 1 本ずつ同時に走らせる。
+ * **1 本が落ちても、ほかは止めずに置く** (観られるものを捨てない)。ジョブは失敗にして理由を残し、
+ * 元の TS は消さない (再エンコードすれば全部作り直せる)
  */
 test.describe("コーデックの片方だけ失敗する", () => {
   test.afterAll(async ({ request, stack }) => {

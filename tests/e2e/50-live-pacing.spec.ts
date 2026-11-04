@@ -8,7 +8,7 @@ import { result, watch } from "./live-pacing";
 
 /**
  * **ライブの貯め方** (`src/lib/ts/pacing.ts`。docs/stream.md#たまに長く空く経路で止まり続ける)。見方は `live-pacing.ts`。
- * たまに長く空く経路は `51-live-gaps` (実時間で2分かかるので、CI の別の組で流す)。数字は test-results に残す
+ * たまに長く空く経路は `51-live-gaps` (実時間で 2 分かかるので、CI の別の組で流す)。数字は test-results に残す
  */
 
 test.describe("ライブの貯め方", () => {
@@ -21,7 +21,7 @@ test.describe("ライブの貯め方", () => {
   });
 
   /*
-   * **低い遅延が先。** 宅内のように滑らかに届くなら、貯める量は下限 (0.2秒) のまま動かさない。
+   * **低い遅延が先。** 宅内のように滑らかに届くなら、貯める量は下限 (0.2 秒) のまま動かさない。
    * 遅延 (貯まり) も直す前と同じ (手元で中央値 0.185 秒。直す前も 0.185 秒)。
    *
    * **遅延の上限は、詰め始める貯まり** (`pacing.ts` の `steer`。下限 0.2 秒の `SMOOTH.catchUpRatio` 倍 = 0.3 秒)。
@@ -80,11 +80,11 @@ test.describe("ライブの貯め方", () => {
 });
 
 interface Joined {
-  /** 押してから、新しい MediaSource の1枚目が映るまで (ms) */
+  /** 押してから、新しい MediaSource の 1 枚目が映るまで (ms) */
   firstFrame: number;
   /** 捨てられたコマ (Safari は飛ぶたびに 0 に戻すので、差を足し上げる) */
   dropped: number;
-  /** 鳴り始めた位置と、映った1枚目の時刻の差 (秒)。手前から鳴らすと、映像はキーフレームで止まったまま音だけ進む */
+  /** 鳴り始めた位置と、映った 1 枚目の時刻の差 (秒)。手前から鳴らすと、映像はキーフレームで止まったまま音だけ進む */
   ahead: number;
 }
 
@@ -193,7 +193,7 @@ test.describe("途中から入る", () => {
         },
       )
       .toBeGreaterThan(0.3);
-    // キーフレームは 1 秒おき (`tests/fake/live-h264.mp4`)。入る位置をずらして2回
+    // キーフレームは 1 秒おき (`tests/fake/live-h264.mp4`)。入る位置をずらして 2 回
     const joined: Joined[] = [];
     for (const wait of [300, 700]) {
       await page.waitForTimeout(wait);
@@ -209,7 +209,7 @@ test.describe("途中から入る", () => {
   });
 });
 
-/** 局を押して、新しい局の再生が始まって (`playing`) から、1枚目の次のコマが映るまで (ms) */
+/** 局を押して、新しい局の再生が始まって (`playing`) から、1 枚目の次のコマが映るまで (ms) */
 async function switchTo(page: Page, index: number): Promise<number> {
   await page.getByTestId("live-video").evaluate((v) => {
     const video = v as HTMLVideoElement & {
@@ -261,8 +261,8 @@ async function switchTo(page: Page, index: number): Promise<number> {
  *
  * 選局したての ffmpeg は、最初の塊が音声だけのことがあり、立ち上がりで読み込んだぶんをまとめて出すので貯まりも
  * 狙いより多い (画面はすぐ速めにかかる)。キーフレームを待つ係がその塊を捨てていた頃は、音声が映像より後から始まり、
- * Chromium は再生の時計が止まって1枚目のまま動かなかった (本番で 0.3〜0.6 秒。手元ではこの組の 24 回のうち 4 回、0.53〜7.9 秒)。
- * 直したあとは、作り置きの1枚目の尺 (0.155 秒) のぶんを足した 0.23〜0.25 秒に揃う
+ * Chromium は再生の時計が止まって 1 枚目のまま動かなかった (本番で 0.3〜0.6 秒。手元ではこの組の 24 回のうち 4 回、0.53〜7.9 秒)。
+ * 直したあとは、作り置きの 1 枚目の尺 (0.155 秒) のぶんを足した 0.23〜0.25 秒に揃う
  */
 test.describe("選局の直後", () => {
   test.beforeEach(async ({ request }) => {

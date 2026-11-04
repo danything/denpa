@@ -10,7 +10,7 @@ import {
   waitWatchable,
 } from "./helpers";
 
-/** 残っているTSのうち、スクランブルが掛かったままのもの */
+/** 残っている TS のうち、スクランブルが掛かったままのもの */
 function scrambledFiles(dir: string): string[] {
   return readdirSync(dir)
     .filter((name) => name.endsWith(".ts"))
@@ -25,7 +25,7 @@ function scrambledFiles(dir: string): string[] {
 }
 
 /**
- * カードが読めていない状態で録れてしまったTSの扱い。
+ * カードが読めていない状態で録れてしまった TS の扱い。
  *
  * 電波は二度と戻ってこないので、スクランブルされたままでも録画は止めない。
  * 代わりにエンコードの前に見て、掛かったままならエージェントにリクエストして復号する
@@ -53,7 +53,7 @@ test.describe("スクランブルされたまま録れたとき", () => {
     // 録画自体は失敗しない。解除まで済んで視聴可能になる
     await waitWatchable(page, page.locator(row));
 
-    // 失敗の理由は詳細にしか出ない。何も起きていないので1つも無いこと
+    // 失敗の理由は詳細にしか出ない。何も起きていないので 1 つも無いこと
     await page.locator(row).getByTestId("detail-button").click();
     await expect(page.getByTestId("program-detail")).toBeVisible();
     await expect(page.getByTestId("detail-error")).toHaveCount(0);
@@ -76,11 +76,11 @@ test.describe("スクランブルされたまま録れたとき", () => {
 
       await waitWatchable(page, page.locator(row));
 
-      // 掛かったままのTSを取っておいても、あとから復号できる保証は無いので置き換える
+      // 掛かったままの TS を取っておいても、あとから復号できる保証は無いので置き換える
       expect(scrambledFiles(stack.rawDir)).toEqual([]);
 
       /*
-       * 元のTSを残しているなら、その大きさも行に出す。
+       * 元の TS を残しているなら、その大きさも行に出す。
        * エンコード済みのぶんしか出していなかった頃は、消していいのか・
        * どれだけ空くのかが画面から分からなかった
        */

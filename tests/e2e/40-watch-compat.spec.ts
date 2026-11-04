@@ -157,7 +157,7 @@ test.describe("互換モードの観る画面", () => {
         readFileSync(new URL("../fake/live-av1.mp4", import.meta.url)),
       ),
     );
-    // 30分の録画のふり。AV1 でエンコードしてある (互換モードは同じ形の詰め替えを選ぶ)
+    // 30 分の録画のふり。AV1 でエンコードしてある (互換モードは同じ形の詰め替えを選ぶ)
     await page.route(`**/api/recordings/${id}/playback`, (route) =>
       route.fulfill({
         json: {
@@ -384,7 +384,7 @@ test.describe("互換モードの観る画面", () => {
   /*
    * **デコーダの読み込みが遅くても描ける** (遅い回線)。偽の録画は数秒しかなく、読み込みの間に尻まで
    * 読み切る。「尻まで読んだのに音が来ない」を 2 秒で終わりと見なしていた頃は、デコーダが 2 秒より
-   * 遅れると1コマも出さずに「観終わった」になっていた (`RawEngine.finish`)
+   * 遅れると 1 コマも出さずに「観終わった」になっていた (`RawEngine.finish`)
    */
   test("デコーダの読み込みが遅くても、短い録画を描く", async ({
     page,
