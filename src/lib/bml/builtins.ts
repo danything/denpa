@@ -1,6 +1,6 @@
 /**
  * 組み込みのオブジェクト (Object・Array・String・Number・Boolean・Date・parseInt・isNaN)。
- * STD-B24 第二編 付属2 の ECMAScript で使えるもの。
+ * STD-B24 第二編 付属 2 の ECMAScript で使えるもの。
  *
  * - 文字の符号は EUC-JP (`charCodeAt` / `fromCharCode`。[euc.ts](euc.ts))
  * - Date は**日本の時刻**で年月日を返す (端末の時間帯に引きずられない)。引数無しの

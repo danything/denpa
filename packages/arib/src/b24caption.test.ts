@@ -23,7 +23,7 @@ const csi = (params: string, final: number) => [
 /** APS (行, 桁) */
 const aps = (row: number, col: number) => [0x1c, 0x40 | row, 0x40 | col];
 
-/** 放送でよく見る頭。960x540・表示区画 620x480 を (170,30) に・36ドット・字間4・行間24 */
+/** 放送でよく見る頭。960x540・表示区画 620x480 を (170,30) に・36 ドット・字間 4・行間 24 */
 const HEAD = [
   ...csi("7", 0x53), // SWF
   ...csi("620;480", 0x56), // SDF
@@ -50,7 +50,7 @@ describe("B24CaptionDecoder", () => {
       duration: null,
       runs: [
         {
-          // 区画 40x60。APS(3行, 2桁) → x = 170 + 2×40、下端 = 30 + 4×60
+          // 区画 40x60。APS(3 行, 2 桁) → x = 170 + 2×40、下端 = 30 + 4×60
           x: 250,
           y: 210,
           w: 40,
@@ -87,7 +87,7 @@ describe("B24CaptionDecoder", () => {
         0x50 | 0x04, // 背景を青
         ...encodeAribText("赤"),
         0x87, // WHF
-        ...csi("1;7", 0x63), // ORN 縁取り 組0の7 (白)
+        ...csi("1;7", 0x63), // ORN 縁取り 組 0 の 7 (白)
         0x97,
         0x4f, // HLC 四方
         0x9a, // STL
@@ -164,7 +164,7 @@ describe("B24CaptionDecoder", () => {
       text([
         ...HEAD,
         ...aps(0, 0),
-        // 漢字の表の 87区1点 (追加記号の空き)、8区63点 (JIS X 0213 にも無い点)
+        // 漢字の表の 87 区 1 点 (追加記号の空き)、8 区 63 点 (JIS X 0213 にも無い点)
         ...[0x77, 0x21, 0x28, 0x5f],
         ...encodeAribText("字"),
       ]),
@@ -177,11 +177,11 @@ describe("B24CaptionDecoder", () => {
       text([
         ...HEAD,
         ...aps(0, 0),
-        // 漢字集合の 3区1点 (JIS X 0213 にだけある字) と 85区1点 (追加漢字)
+        // 漢字集合の 3 区 1 点 (JIS X 0213 にだけある字) と 85 区 1 点 (追加漢字)
         ...[0x23, 0x21, 0x75, 0x21],
-        // JIS互換漢字1面の 85区1点 (第3水準の漢字)
+        // JIS 互換漢字 1 面の 85 区 1 点 (第 3 水準の漢字)
         ...[0x1b, 0x24, 0x39, 0x75, 0x21],
-        // JIS互換漢字2面の 1区1点と 94区94点 (空き)
+        // JIS 互換漢字 2 面の 1 区 1 点と 94 区 94 点 (空き)
         ...[0x1b, 0x24, 0x3a, 0x21, 0x21, 0x7e, 0x7e],
       ]),
     );
@@ -194,7 +194,7 @@ describe("B24CaptionDecoder", () => {
         ...HEAD,
         ...aps(0, 0),
         ...encodeAribText("字"),
-        // 4区87点 (か + 半濁点)・11区70点 (声調の組)
+        // 4 区 87 点 (か + 半濁点)・11 区 70 点 (声調の組)
         ...[0x24, 0x77, 0x2b, 0x66],
         ...encodeAribText("字"),
       ]),
@@ -206,7 +206,7 @@ describe("B24CaptionDecoder", () => {
       ["˥˩", true],
       ["字", undefined],
     ]);
-    // 区画は1つずつ右へ
+    // 区画は 1 つずつ右へ
     expect(runs.map((r) => r.x - runs[0]!.x)).toEqual(
       [0, 1, 2, 3].map((i) => i * runs[0]!.w),
     );
@@ -263,7 +263,7 @@ describe("B24CaptionDecoder", () => {
   });
 
   test("追加記号 (90区〜) は Unicode の字にする", () => {
-    // 90区 48点 は「[字]」の囲み文字 (U+1F228 ではなく libaribcaption の表のとおり)
+    // 90 区 48 点 は「[字]」の囲み文字 (U+1F228 ではなく libaribcaption の表のとおり)
     const page = decoder().decode(
       text([...HEAD, ...aps(0, 0), 0x1b, 0x24, 0x3b, 0x7a, 0x50]),
     );
@@ -310,8 +310,8 @@ describe("B24CaptionDecoder", () => {
 });
 
 /**
- * **字幕1本に言語が複数ある放送** (データグループの番号 1〜8。何番がどの言語かは字幕管理データの ISO 639)。
- * デコーダは1つの言語だけを読み、載っている言語を `languages` に出す
+ * **字幕 1 本に言語が複数ある放送** (データグループの番号 1〜8。何番がどの言語かは字幕管理データの ISO 639)。
+ * デコーダは 1 つの言語だけを読み、載っている言語を `languages` に出す
  */
 describe("字幕の言語", () => {
   const both = management({ languages: ["jpn", "eng"] });
@@ -358,7 +358,7 @@ describe("字幕の言語", () => {
 
   test("書式は選んだ言語のものを使う", () => {
     const decoder = new B24CaptionDecoder(2);
-    // 第1言語は 960x540 (SWF 7)、第2言語は 720x480 (SWF 9)。書式は言語ごとに書いてある
+    // 第 1 言語は 960x540 (SWF 7)、第 2 言語は 720x480 (SWF 9)。書式は言語ごとに書いてある
     decoder.decode(management({ languages: ["jpn", "eng"], formats: [8, 10] }));
     expect(decoder.decode(text(encodeAribText("A"), 2))?.plane).toEqual([
       720, 480,

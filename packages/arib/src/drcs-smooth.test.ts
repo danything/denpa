@@ -10,7 +10,7 @@ import {
   smoothDrcs,
 } from "./drcs-smooth.js";
 
-/** `size`x`size` の白黒の画像を、放送の詰め方 (1画素1ビット) で作る。`scale` 倍に水増しして送る放送を真似る */
+/** `size`x`size` の白黒の画像を、放送の詰め方 (1 画素 1 ビット) で作る。`scale` 倍に水増しして送る放送を真似る */
 function pack(
   size: number,
   on: (x: number, y: number) => boolean,
@@ -161,7 +161,7 @@ describe("boxDown", () => {
 
 describe("smoothDrcs", () => {
   test("2 倍で送られた 18x18 の斜めの線は、階段が細かくなり縁に中間の濃さが付く", () => {
-    // (2,2)〜(15,15)。送る画像では 8〜63 の行に載る。両端の丸まったところ (元の1点ぶん) は見ない
+    // (2,2)〜(15,15)。送る画像では 8〜63 の行に載る。両端の丸まったところ (元の 1 点ぶん) は見ない
     const line = sent(18, (x, y) => x === y && x >= 2 && x < 16, 2);
     expect([line.width, line.height]).toEqual([72, 72]);
     let partial = false;

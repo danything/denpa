@@ -15,7 +15,7 @@ const MX2 = 23609;
 const PMT1 = 0x1f0;
 const PMT2 = 0x1f1;
 
-/** 適当な中身のパケットを1つ作る。PID だけ合っていればいい */
+/** 適当な中身のパケットを 1 つ作る。PID だけ合っていればいい */
 function payload(pid: number, counter = 0): Uint8Array {
   const out = new Uint8Array(PACKET).fill(0x00);
   out[0] = 0x47;
@@ -123,13 +123,13 @@ describe("局の選り分け", () => {
   });
 
   /**
-   * **ここが目的。** 丸ごと通すと ffmpeg には2つのプログラムが見えて、
-   * 1つ目のつもりで読んだ値が2つ目のものだったりする
+   * **ここが目的。** 丸ごと通すと ffmpeg には 2 つのプログラムが見えて、
+   * 1 つ目のつもりで読んだ値が 2 つ目のものだったりする
    */
   test("PAT はその局1つだけに書き直す", () => {
     const filter = new ServiceFilter(MX1);
     const out = filter.filter(Uint8Array.from([...pat(), ...pmt1()]));
-    // PAT は1パケットに収まる。先頭に出てくるはず
+    // PAT は 1 パケットに収まる。先頭に出てくるはず
     expect(pids(out)[0]).toBe(0x0000);
 
     const section = out.subarray(5, 5 + 20);
@@ -145,7 +145,7 @@ describe("局の選り分け", () => {
 
   /**
    * **絞るのに要るわけではない。** データ放送が受信機に訊いてくるので覚える —
-   * テレ朝の TVerリンクはこれを TVer のサーバへ送り、無いと `DT-RE` で止まる
+   * テレ朝の TVer リンクはこれを TVer のサーバへ送り、無いと `DT-RE` で止まる
    * ([server/live.ts](https://github.com/danything/denpa/blob/main/src/lib/server/live.ts) の `programInfo`)
    */
   test("中継の番号 (TSID) を PAT から覚える", () => {

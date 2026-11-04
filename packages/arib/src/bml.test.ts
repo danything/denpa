@@ -25,7 +25,7 @@ import {
  * データ放送 (ARIB STD-B24 の BML)。
  *
  * PAT → PMT のデータ符号化方式記述子 (0xFD) → DII でモジュールの素性 →
- * DDB でブロック、と辿らないと1つのファイルにならない。運び方は衛星のロゴと
+ * DDB でブロック、と辿らないと 1 つのファイルにならない。運び方は衛星のロゴと
  * 同じ DSM-CC で、[dsmcc.ts](dsmcc.ts) を分け合っている。
  */
 
@@ -36,7 +36,7 @@ const {
   componentTag: COMPONENT_TAG,
 } = BML_TS;
 
-/** DII と DDB を並べて、1つのモジュールを配りきる */
+/** DII と DDB を並べて、1 つのモジュールを配りきる */
 function carousel(
   module: Uint8Array,
   options: Partial<DiiModuleSpec> = {},
@@ -121,7 +121,7 @@ describe("moduleFiles", () => {
     expect(files[1]!.contentType.type).toBe("image");
   });
 
-  /** 中身が1つのモジュールは包まれていない。置き場所は BML 側が知っている */
+  /** 中身が 1 つのモジュールは包まれていない。置き場所は BML 側が知っている */
   test("multipart でなければ丸ごと1ファイル", () => {
     const files = moduleFiles(new TextEncoder().encode("PNG"), "image/png");
     expect(files).toHaveLength(1);
@@ -240,7 +240,7 @@ describe("BmlDecoder", () => {
       ["/big.bml", "text/X-arib-bml", "x".repeat(9000)],
     ]);
     const parts = carousel(module);
-    // DII と、最後の1ブロックを除いた全部
+    // DII と、最後の 1 ブロックを除いた全部
     const half = decode(...head, ...parts.slice(0, -1));
     expect(half.some((message) => message.type === "moduleDownloaded")).toBe(
       false,
@@ -327,7 +327,7 @@ describe("BmlDecoder", () => {
       ...Array.from({ length: 6 }, () => round).flat(),
     );
     expect(lists(out)).toEqual([[1, 2], [1]]);
-    // 来たほうは1回だけ配る
+    // 来たほうは 1 回だけ配る
     expect(
       out.filter((message) => message.type === "moduleDownloaded"),
     ).toHaveLength(1);
@@ -420,8 +420,8 @@ describe("BmlDecoder", () => {
   });
 
   /**
-   * **放送の中身は外から作れる。** moduleSize は32ビットで、言われるままに確保すると
-   * DII 1つで 4GB になる。大きすぎるモジュールは組み立てず、来ないものとして一覧から外す
+   * **放送の中身は外から作れる。** moduleSize は 32 ビットで、言われるままに確保すると
+   * DII 1 つで 4GB になる。大きすぎるモジュールは組み立てず、来ないものとして一覧から外す
    */
   test("大きすぎると言うモジュールは組み立てず、一覧から外す", () => {
     const here = multipart([["/startup.bml", "text/X-arib-bml", "<bml/>"]]);
@@ -458,7 +458,7 @@ describe("BmlDecoder", () => {
   });
 
   test("同時に組み立てるモジュールは合計の大きさを限る", () => {
-    // 1つずつは上限に収まるが、5つ並べると合計の上限 (64MiB) を超える
+    // 1 つずつは上限に収まるが、5 つ並べると合計の上限 (64MiB) を超える
     const modules = Array.from({ length: 5 }, (_, i) => ({
       moduleId: i + 1,
       moduleSize: MAX_MODULE_SIZE,

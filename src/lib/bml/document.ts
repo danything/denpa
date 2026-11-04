@@ -259,7 +259,7 @@ function replaceTail(text: string, by: string): string {
   return end === text.length ? text : text.slice(0, end) + by;
 }
 
-/** 文字のあいだの空白をどう扱うか (STD-B24 第二分冊 付属2 5.3.2) */
+/** 文字のあいだの空白をどう扱うか (STD-B24 第二分冊 付属 2 5.3.2) */
 function collapse(text: string, parent: XmlElement, index: number): string {
   const name = (node: XmlNode | undefined): string =>
     node?.kind === "element" ? node.name : "";

@@ -157,7 +157,7 @@ export interface Bml {
   destroy(): void;
 }
 
-/** AribKeyCode (STD-B24 第二分冊 付属2 表5-9) */
+/** AribKeyCode (STD-B24 第二分冊 付属 2 表 5-9) */
 const KEY = {
   up: 1,
   down: 2,
@@ -175,7 +175,7 @@ const KEY = {
   data2: 26,
 } as const;
 
-/** キーの組 (TR-B14 第二分冊 5.3.1 表5-5)。used-key-list で受けるかを決める */
+/** キーの組 (TR-B14 第二分冊 5.3.1 表 5-5)。used-key-list で受けるかを決める */
 function keyGroup(code: number): string | null {
   if (code >= KEY.up && code <= KEY.right) return "basic";
   if (code === KEY.enter || code === KEY.back) return "basic";
@@ -184,7 +184,7 @@ function keyGroup(code: number): string | null {
   return null;
 }
 
-/** accesskey の字 (付属2 5.4.2.3) */
+/** accesskey の字 (付属 2 5.4.2.3) */
 const ACCESS_KEYS: Record<number, string> = {
   [KEY.back]: "X",
   [KEY.blue]: "B",
@@ -502,7 +502,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         });
       }
     }
-    // 受け手が文書を替えなければ、入口から出直す (TR-B14 第二分冊 表5-11)
+    // 受け手が文書を替えなければ、入口から出直す (TR-B14 第二分冊 表 5-11)
     this.enqueue({
       kind: "native",
       token: this.token,
@@ -565,7 +565,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     void this.startup();
   }
 
-  /** ModuleUpdated の beitem に、DII と PMT の変わり目を知らせる (付属2 表5-11 の status) */
+  /** ModuleUpdated の beitem に、DII と PMT の変わり目を知らせる (付属 2 表 5-11 の status) */
   private moduleUpdated(): void {
     for (const beitem of this.beitems("ModuleUpdated"))
       this.checkModule(beitem, false);
@@ -860,7 +860,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const previous =
       this.current === null ? null : this.resources.resolve(this.current, null);
     const next = this.resources.resolve(path, null);
-    // 別の部品の文書へ移ったら lockModuleOnMemory で押さえたものを外す (TR-B14 第二分冊 表5-11)
+    // 別の部品の文書へ移ったら lockModuleOnMemory で押さえたものを外す (TR-B14 第二分冊 表 5-11)
     if (
       previous !== null &&
       next !== null &&
@@ -904,7 +904,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     this.screenLocked = false;
     this.renderer.draw(true);
 
-    // フォーカスは onload より前に当たるが、onfocus は onload の後 (付属1 5.1.3)
+    // フォーカスは onload より前に当たるが、onfocus は onload の後 (付属 1 5.1.3)
     const first = this.navIndex(0);
     if (first?.style().visible) {
       this.focusedElement = first;
@@ -1200,7 +1200,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   stream(element: BmlElement, status: string): void {
     const type = (element.attr("type") ?? "").toLowerCase();
     if (type !== "audio/x-arib-aiff") {
-      // MNG は止めるとコマの位置が 0 に戻る (付属2 4.8.5.3 表4-27)
+      // MNG は止めるとコマの位置が 0 に戻る (付属 2 4.8.5.3 表 4-27)
       if (type === "image/x-arib-mng" && status.toLowerCase() === "stop")
         element.setAttr("streamposition", "0");
       element.setAttr("streamstatus", status);
@@ -1532,7 +1532,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const ref = this.moduleRef(module);
     if (ref === null) return Number.NaN;
     // Ex で押さえられるのは 0x40・0x50・0x60 の部品だけ。地上波 (TR-B14 第二分冊 5.12.6.9・2.3.6.1) も
-    // BS (TR-B15 第一分冊 10.3.3 表10-3「lockModuleOnMemoryEx() (tag values 0x40, 0x50, and 0x60)」) も
+    // BS (TR-B15 第一分冊 10.3.3 表 10-3「lockModuleOnMemoryEx() (tag values 0x40, 0x50, and 0x60)」) も
     // 同じ。受信機はこの 3 つと見ている部品の 4 つまでしか並べて取らない。0x61 などにあるモジュールは、
     // その部品の文書から lockModuleOnMemory で押さえる
     if (kind === "lockEx" && ![0x40, 0x50, 0x60].includes(ref.component)) {
@@ -1658,7 +1658,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   finished(element: BmlElement, position: number): void {
-    // 回し終えたら pause にして、出しているコマを streamposition に (付属2 4.8.5.3)
+    // 回し終えたら pause にして、出しているコマを streamposition に (付属 2 4.8.5.3)
     element.setAttr("streamposition", String(position));
     element.setAttr("streamstatus", "pause");
     this.drawSoon();
@@ -1810,7 +1810,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private afterKeyDown(code: number): void {
     const focused = this.focusedElement;
     if (focused === null) return;
-    // 十字キーで nav-* の先へ。見えない要素は飛ばす (付属2 5.4.13.3)
+    // 十字キーで nav-* の先へ。見えない要素は飛ばす (付属 2 5.4.13.3)
     const nav = (element: BmlElement) => {
       const s = element.style();
       return {

@@ -44,7 +44,7 @@ export interface RenderHost {
   drcs(unit: number, fontSize: number, family: string): string | null;
   /**
    * アニメーション (MNG) を決めた回数だけ動かし終えた。streamstatus を pause にし、出しているコマを
-   * streamposition にするのはエンジン (付属2 4.8.5.3「回し終えたら pause」)
+   * streamposition にするのはエンジン (付属 2 4.8.5.3「回し終えたら pause」)
    */
   finished(element: BmlElement, position: number): void;
 }
@@ -402,7 +402,7 @@ export class Renderer {
   }
 
   /**
-   * MNG を出す (付属2 4.8.5.3)。streamstatus が stop なら出さない、pause なら streamposition の
+   * MNG を出す (付属 2 4.8.5.3)。streamstatus が stop なら出さない、pause なら streamposition の
    * コマ、play ならそこから動かす (くり返しは TERM の回数 × streamlooping)。回し終えたら
    * 最後のコマのまま pause にする (エンジンが属性を書く)
    */
@@ -506,7 +506,7 @@ export class Renderer {
     img.style.cssText = "position:absolute;left:0;top:0;display:block;";
     img.src = source.url;
     const size = (width: number, height: number): void => {
-      // JPEG は 960x540 の画面で半分の大きさ (付属2 表5-3。960x540 で 960x540 の画像だけそのまま)
+      // JPEG は 960x540 の画面で半分の大きさ (付属 2 表 5-3。960x540 で 960x540 の画像だけそのまま)
       let w = width;
       let h = height;
       if (type === "image/jpeg" && this.host.resolution().width === 960) {

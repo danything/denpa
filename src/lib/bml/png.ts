@@ -1,7 +1,7 @@
 /**
  * PNG を組み直す。**ブラウザの画像 API にそのまま渡すため。**
  *
- * - 放送の PNG はパレット (PLTE) を持たず、色は文書の CLUT で決まる (STD-B24 付属3)。
+ * - 放送の PNG はパレット (PLTE) を持たず、色は文書の CLUT で決まる (STD-B24 付属 3)。
  *   CLUT から PLTE と tRNS を作って差し込む
  * - DRCS (外字) の画像を、字の色で塗るための mask にする。圧縮しない zlib (stored) で
  *   PNG を組むので、canvas も圧縮の API も要らない

@@ -1,6 +1,6 @@
 /**
  * データ放送の字 (EUC-JP)。**スクリプトは字を EUC-JP の符号として扱う**
- * (STD-B24 第二編 付属2 5.4.3.4)。`"あ".charCodeAt(0)` は 0xA4A2、
+ * (STD-B24 第二編 付属 2 5.4.3.4)。`"あ".charCodeAt(0)` は 0xA4A2、
  * `String.fromCharCode(0xA4A2)` は「あ」、大小の比べ方も EUC-JP の符号の順。
  * 実際の放送もこれに頼っている (TBS・テレ東が `fromCharCode(0xA1A1〜)`、MX が
  * `charCodeAt` を EUC の範囲と比べる)。
@@ -27,7 +27,7 @@ export const PUA_ADDITIONAL = 0xe000;
 const PUA_EMPTY = 0xe400;
 /** 85〜94 区で 940 点 */
 const ADDITIONAL_POINTS = 10 * 94;
-/** DRCS (外字) が入る 87・88 区 (STD-B24 付属1 表13-1。BML では追加記号ではない) */
+/** DRCS (外字) が入る 87・88 区 (STD-B24 付属 1 表 13-1。BML では追加記号ではない) */
 const DRCS_FIRST = PUA_ADDITIONAL + 2 * 94;
 const DRCS_LAST = PUA_ADDITIONAL + 4 * 94 - 1;
 

@@ -58,7 +58,7 @@ function inLogo(x: number, y: number): boolean {
 }
 
 /**
- * 1コマ。中身はなだらかな波 (本物の映像は隣どうしが似ている) に細かい揺らぎを足したもの。
+ * 1 コマ。中身はなだらかな波 (本物の映像は隣どうしが似ている) に細かい揺らぎを足したもの。
  * `base` を渡すと、中身をその明るさに寄せる (明るい場面)
  */
 function frame(rand: () => number, logo: boolean, base?: number): Uint8Array {

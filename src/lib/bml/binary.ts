@@ -1,5 +1,5 @@
 /**
- * 2 進の表 (STD-B24 付属2 5.5 BinaryTable) と、NVRAM に書く並びの読み書き。
+ * 2 進の表 (STD-B24 付属 2 5.5 BinaryTable) と、NVRAM に書く並びの読み書き。
  *
  * 書式は `型:長さ単位` を `,` で並べたもの (`U:8b,S:16B,Z:1V`)。型は B (真偽)・U (符号なし)・
  * I (符号つき)・S (文字列)・Z (郵便番号の範囲)・P (詰め物)、単位は B (バイト)・b (ビット)・
@@ -197,7 +197,7 @@ export function writeFields(
   return out;
 }
 
-/** 郵便番号の範囲を読む (STD-B24 付属2 5.5.2.3) */
+/** 郵便番号の範囲を読む (STD-B24 付属 2 5.5.2.3) */
 function decodeZip(data: Uint8Array): ZipRanges {
   // [長さ, 除く並びの長さ, 除く並び…, 含む並び…] (web-bml の zip_code.ts と同じ読み方)
   const length = data[0] ?? 0;
@@ -325,7 +325,7 @@ export class Table {
       }
       const [row, end] = readFields(data, fields, decode, position);
       this.rows.push(row);
-      // 行は必ずバイトの境目で終わる (付属2 5.5.2.4)
+      // 行は必ずバイトの境目で終わる (付属 2 5.5.2.4)
       const next =
         lengthBytes > 0 ? position + length * 8 : Math.ceil(end / 8) * 8;
       if (next <= position) break;
@@ -378,7 +378,7 @@ export class Table {
   }
 }
 
-/** 検索の比べ方 (付属2 5.5.3.6) */
+/** 検索の比べ方 (付属 2 5.5.3.6) */
 function test(
   cell: Cell | undefined,
   field: Field | undefined,
@@ -446,7 +446,7 @@ function test(
   return false;
 }
 
-/** 演算子が列の型に合うか (付属2 5.5.3.6) */
+/** 演算子が列の型に合うか (付属 2 5.5.3.6) */
 function operatorFits(type: FieldType, operator: number): boolean {
   if (type === "U" || type === "I") return operator >= 0 && operator <= 11;
   if (type === "S") return operator >= 32 && operator <= 37;

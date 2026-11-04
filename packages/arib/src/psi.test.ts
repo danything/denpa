@@ -144,8 +144,8 @@ describe("サービスの読み取り", () => {
 });
 
 /**
- * 電波が弱いと途中でバイトが落ちる。1バイトずれただけで以降ずっと
- * 1パケットも読めなくなると、受信できているのに「局がいない」ことになる。
+ * 電波が弱いと途中でバイトが落ちる。1 バイトずれただけで以降ずっと
+ * 1 パケットも読めなくなると、受信できているのに「局がいない」ことになる。
  */
 describe("同期の取り直し", () => {
   /** 実際のチューナーと同じで、同じ表が何度も流れてくる状況にする */
@@ -157,7 +157,7 @@ describe("同期の取り直し", () => {
 
   test("頭がずれていても読める", () => {
     const body = repeated();
-    // わざと 0x47 で埋める。頭が1つ合っただけでは切れ目とは言えない
+    // わざと 0x47 で埋める。頭が 1 つ合っただけでは切れ目とは言えない
     const data = new Uint8Array(37 + body.length);
     data.fill(0x47, 0, 37);
     data.set(body, 37);
@@ -253,7 +253,7 @@ function damaged(next: () => number, packets: number): Uint8Array {
   return Uint8Array.from(out);
 }
 
-/** 好きな大きさに切る。1バイトや 188 の倍数、残りより短いものも混ぜる */
+/** 好きな大きさに切る。1 バイトや 188 の倍数、残りより短いものも混ぜる */
 function cut(next: () => number, data: Uint8Array): Uint8Array[] {
   const sizes = [1, 2, 187, 188, 189, 375, 564, 565, 1000, 24064];
   const out: Uint8Array[] = [];
@@ -287,7 +287,7 @@ describe("パケットの切り分け (塊を写さない)", () => {
   });
 
   test("入れ物を使い回されても、出したパケットは届いた中身のまま", () => {
-    // recorded-bml.ts と同じ使い方: 1つの入れ物に読み込み直しながら食わせる
+    // recorded-bml.ts と同じ使い方: 1 つの入れ物に読み込み直しながら食わせる
     const next = random(7);
     const data = damaged(next, 400);
     const before = new CopyingPacketStream();

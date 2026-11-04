@@ -7,7 +7,7 @@ import type { Rect } from "./render";
 /**
  * 文字図形の面 (body の resolution と display-aspect-ratio。STD-B24 第二編 5.4.13.1)。
  * `aspect` は面を映す縦横比で、960x540 はいつも 16:9、720x480 は 16:9 か 4:3
- * (第二編 表6-3・付属1 の document_resolution)
+ * (第二編 表 6-3・付属 1 の document_resolution)
  */
 export interface Plane {
   width: number;

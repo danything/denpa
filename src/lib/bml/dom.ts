@@ -1,5 +1,5 @@
 /**
- * スクリプトから見える文書 (BML の DOM。STD-B24 第二編 付属2 の DOM のうち放送が使うもの)。
+ * スクリプトから見える文書 (BML の DOM。STD-B24 第二編 付属 2 の DOM のうち放送が使うもの)。
  *
  * `document`・要素・文字 (`firstChild.data`)・`normalStyle`/`focusStyle`/`activeStyle`・
  * `currentEvent`。どれも中身 ([document.ts](document.ts)) を書き換えるだけで、描くのは
@@ -435,7 +435,7 @@ export class Dom {
   }
 }
 
-/** 止まった状態から始まる object (付属2 4.8.5.2 注2) */
+/** 止まった状態から始まる object (付属 2 4.8.5.2 注 2) */
 function isStoppable(element: BmlElement): boolean {
   const type = (element.attr("type") ?? "").toLowerCase();
   return [
