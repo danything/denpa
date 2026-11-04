@@ -20,6 +20,7 @@ import {
  * - 詰まった (`waiting`)
  * - 先の溜まりが 2 秒を切って、減り続けている
  * - サーバの `backlog` が 3 秒続けて伸びた、または映像の塊を捨てた
+ * - 観る画面で、測った速さ × 0.7 がいまの段に足りない状態が 10 秒続いた (先を 60 秒溜めるので、溜まりを使い切る前に下げる)
  *
  * 下げ先は「測った速さ × 0.7 − 音声」に収まるいちばん高い段。速さを測れていなければ 2 段下げる。
  * 段 3 でも 10 秒続けて足りなければ音声だけにする (車で聞くこともあるので、自動の最後の手)。
@@ -128,6 +129,11 @@ export const UP_WAIT_MOST = 300_000;
 export const PROBE = 60_000;
 /** 段 3 でもこれだけ続けて足りなければ音声だけにする (ms) */
 export const AUDIO_AFTER = 10_000;
+/**
+ * 観る画面で、測った速さ × `HEADROOM` がいまの段に足りない状態がこれだけ続いたら下げる (ms)。
+ * 速さは 5 秒の窓で測るので、窓 2 つぶん続いたのを見る。先は 60 秒溜まるので、10 秒待っても詰まる前に下げられる
+ */
+export const THIN = 10_000;
 /** エンコードの速さが 1 未満のままこれだけ続いたら `encode` を返す (ms)。`budget.ts` と同じく 1 回の遅れでは動かない */
 export const ENCODE_LAG = 3_000;
 /**
@@ -179,6 +185,8 @@ export class RungAdapter {
   private shortSince: number | null = null;
   /** エンコードの速さが 1 を切った時刻 */
   private slowSince: number | null = null;
+  /** 観る画面で、測った速さがいまの段に足りなくなった時刻 */
+  private thinSince: number | null = null;
 
   /**
    * 刻むたびに呼ぶ。**段を動かすか、断り書きが要るときだけ返す。** null なら段はそのままで、断り書きも要らない。
@@ -321,7 +329,18 @@ export class RungAdapter {
         this.grow !== null && this.grow.lastAt - this.grow.from >= BACKLOG_GROW;
       dropped = pace !== this.lastPace && pace.dropped > 0;
     }
-    return s.waiting || falling || growing || dropped;
+    // 先が埋まっている間の速さは高めに出やすい。外れても下げ遅れるほうなので、そのまま比べる
+    if (
+      s.route === "watch" &&
+      s.throughput !== null &&
+      s.current !== "audio" &&
+      s.throughput * HEADROOM < stepBps(s.current, s.baseKbps)
+    )
+      this.thinSince ??= now;
+    else this.thinSince = null;
+    const thin = this.thinSince !== null && now - this.thinSince >= THIN;
+
+    return s.waiting || falling || growing || dropped || thin;
   }
 
   /** 下げ先。速さが分かれば収まるいちばん高い段、分からなければ 2 段下 (段 0 からは段 1) */
@@ -347,6 +366,7 @@ export class RungAdapter {
   private clearStreaks(): void {
     this.fall = null;
     this.grow = null;
+    this.thinSince = null;
     this.upSince = null;
     this.shortSince = null;
   }
