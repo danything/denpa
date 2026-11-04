@@ -414,3 +414,78 @@ describe("音声だけ", () => {
     ).toEqual({ step: 3, reason: "restored" });
   });
 });
+
+describe("上げてみている間", () => {
+  const live = { route: "live" as const, ahead: 1 };
+  // 段 0 へ上げないように、送れずに溜まっている量を変えずに置く
+  const queued: Pace = { backlog: 1, dropped: 0, speed: null };
+
+  test("手で選んだら上げてみていたことを捨て、手動を外した直後に前の段へ戻さない", () => {
+    const a = new RungAdapter();
+    const up = first(a, 0, 120_000, { ...live, current: 2 })!;
+    first(a, up.at + 1_000, up.at + 1_000, { ...live, current: 1 });
+    expect(
+      first(a, up.at + 5_000, up.at + 8_000, {
+        ...live,
+        current: 1,
+        manual: true,
+      }),
+    ).toBeNull();
+    // 手動を外して詰まっても、HOLD の間は動かさない (上げてみて足りなかったとは見ない)
+    expect(
+      first(a, up.at + 9_000, up.at + 9_000, {
+        ...live,
+        current: 1,
+        waiting: true,
+      }),
+    ).toBeNull();
+    expect(a.upWait("live")).toBe(UP_WAIT_LIVE);
+  });
+
+  test("期限の刻みでちょうど足りなくても、待ちの倍数はその刻みで戻す", () => {
+    const a = new RungAdapter();
+    // 1 回失敗して待ちを倍にしておく
+    const up = first(a, 0, 120_000, { ...live, current: 2 })!;
+    first(a, up.at + 1_000, up.at + 1_000, { ...live, current: 1 });
+    first(a, up.at + 5_000, up.at + 5_000, {
+      ...live,
+      current: 1,
+      waiting: true,
+    });
+    first(a, up.at + 6_000, up.at + 6_000, { ...live, current: 2 });
+    const again = first(a, up.at + 7_000, up.at + 600_000, {
+      ...live,
+      current: 2,
+    })!;
+    const switchedAt = again.at + 1_000;
+    first(a, switchedAt, switchedAt + PROBE - 1_000, {
+      ...live,
+      current: 1,
+      pace: queued,
+    });
+    const hit = first(a, switchedAt + PROBE, switchedAt + PROBE, {
+      ...live,
+      current: 1,
+      waiting: true,
+    });
+    // 上げる前の段 (2) に戻すのではなく、ふつうに下げる
+    expect(hit?.decision).toEqual({ step: 3, reason: "slow" });
+    expect(a.upWait("live")).toBe(UP_WAIT_LIVE);
+  });
+});
+
+describe("サーバが切り替えなかったとき", () => {
+  test("refused のあと 20 秒は同じ段をリクエストし直さない", () => {
+    const a = new RungAdapter();
+    const short = { waiting: true, throughput: 5_000_000 };
+    expect(first(a, 0, 10_000, short)).toEqual({
+      at: GRACE,
+      decision: { step: 1, reason: "slow" },
+    });
+    a.refused(GRACE);
+    expect(first(a, GRACE + 1_000, 60_000, short)).toEqual({
+      at: GRACE + HOLD,
+      decision: { step: 1, reason: "slow" },
+    });
+  });
+});

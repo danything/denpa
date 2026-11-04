@@ -189,6 +189,11 @@ export class RungAdapter {
     if (this.last === null) this.reset(now);
     else if (s.current !== this.last) this.switched(now, this.last, s.current);
     this.last = s.current;
+    if (this.probe !== null && now >= this.probe.until) {
+      // 上げたあと 1 分足りていた。ほかの分岐より先に見て、待ちの倍数をその刻みで戻す
+      this.probe = null;
+      this.fails = 0;
+    }
     if (now < this.quietUntil) {
       this.remember(s);
       return null;
@@ -199,6 +204,7 @@ export class RungAdapter {
     else this.slowSince = null;
     if (this.slowSince !== null) {
       // 溜まりが減るのも詰まるのもエンコードが遅いせい。回線のぶんとして数えない
+      // この間にサーバが捨てた塊 (`dropped`) も数えない。サーバ側で軽い組み合わせに替えるので、段は下げない
       this.clearStreaks();
       this.remember(s);
       return now - this.slowSince >= ENCODE_LAG
@@ -212,19 +218,14 @@ export class RungAdapter {
     if (s.manual) {
       this.upSince = null;
       this.shortSince = null;
-      return short ? { step: s.current, reason: "pinned" } : null;
-    }
-
-    const probing = this.probe !== null && now < this.probe.until;
-    if (this.probe !== null && !probing) {
-      // 上げたあと 1 分足りていた
+      // 手で選んだ段は上げてみたものではない。手動を外した直後に前の段へ戻さない
       this.probe = null;
-      this.fails = 0;
+      return short ? { step: s.current, reason: "pinned" } : null;
     }
 
     if (short) {
       this.upSince = null;
-      if (probing) {
+      if (this.probe !== null) {
         this.fails++;
         const from = this.probe!.from;
         this.probe = null;
@@ -264,6 +265,16 @@ export class RungAdapter {
     this.prevAhead = null;
     this.prevBacklog = null;
     this.slowSince = null;
+  }
+
+  /**
+   * 画面がリクエストした段にサーバが切り替えなかったとき (変換の枠が埋まっていた) に呼ぶ。`current` が変わらないので
+   * 切り替えとして数えられない。そのまま次の刻みでリクエストし直さないように、切り替えのあとと同じく 20 秒動かさない。
+   * 測った値は持ち越すので、20 秒たっても足りなければもう一度同じ段を返す
+   */
+  refused(now: number): void {
+    this.holdUntil = now + HOLD;
+    this.upSince = null;
   }
 
   /** 上げるまでの待ち (ms) */
