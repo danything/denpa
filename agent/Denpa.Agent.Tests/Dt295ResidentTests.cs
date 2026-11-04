@@ -325,6 +325,8 @@ public class Dt295ResidentTests
     [Test]
     public async Task ポートの電源を切って入れ直す()
     {
+        // sysfs は Linux だけ (ハブのポートの名前 1-0:1.0 は Windows のファイル名に使えない)
+        if (!OperatingSystem.IsLinux()) return;
         var sysfs = Directory.CreateTempSubdirectory("dt295-sysfs").FullName;
         try
         {
