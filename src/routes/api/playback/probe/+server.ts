@@ -1,4 +1,4 @@
-import { PROBE_LEAST, PROBE_MOST } from "#lib/live-adapt.js";
+import { PROBE_MOST, probeSize } from "#lib/live-adapt.js";
 
 /**
  * 乱数で埋めたもの。**途中で圧縮されないように** (リバースプロキシが圧縮すると、回線の速さより速く見える)。
@@ -18,17 +18,11 @@ function filled(): Uint8Array {
 
 /**
  * **回線の速さを測る試しのデータ** (docs/stream.md「ライブと追っかけの画面」)。ライブの画面が段を上げる前に、`?bytes=` だけ取って
- * 届く速さを測る (`live-player.svelte.ts` の `probeLink`)。ライブの流れは実時間でしか届かないので、それだけでは回線の余裕が
+ * 届く速さを測る (`live-player.svelte.ts` の `probeLink`)。ライブのストリームは実時間でしか届かないので、それだけでは回線の余裕が
  * 分からないため。量は `PROBE_LEAST`〜`PROBE_MOST` に丸める。キャッシュさせない
  */
 export function GET({ url }) {
-  const asked = Number(url.searchParams.get("bytes"));
-  const bytes = Math.round(
-    Math.min(
-      PROBE_MOST,
-      Math.max(PROBE_LEAST, Number.isFinite(asked) ? asked : PROBE_LEAST),
-    ),
-  );
+  const bytes = probeSize(url.searchParams.get("bytes"));
   return new Response(filled().slice(0, bytes), {
     headers: {
       "Content-Type": "application/octet-stream",

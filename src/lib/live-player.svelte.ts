@@ -361,7 +361,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * サーバには canvas に描けるコーデックだけを渡す (`playable`。H.265 は描かない)。デコードが間に合うかは `raw/budget.ts` が見て、
    * 回線とは混ぜない
    */
-  /** いま流れている段 (`tuned` の答え)。メニューの「自動 (H.264 540p)」に出す */
+  /** いま再生中の段 (`tuned` の答え)。メニューの「自動 (H.264 540p)」に出す */
   let served = $state<Step>(0);
   /** リクエストする段。局を変えても、追っかけのシークでも持ち越す */
   let asked: Step = 0;
@@ -969,9 +969,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * **上げる前に回線の速さを測る** (`RungAdapter.wantProbe`)。ライブの流れは実時間でしか届かないので、受け取りの速さを見ても
+   * **上げる前に回線の速さを測る** (`RungAdapter.wantProbe`)。ライブのストリームは実時間でしか届かないので、受け取りの速さを見ても
    * 余裕は分からない。試しのデータ (`GET /api/playback/probe`) を、要る速さの残りで `PROBE_SPAN` かかる量だけ取り、
-   * 流れている段の受け取りの速さと足して `capacity` にする。`PROBE_GIVE_UP` でやめる (細い回線で取り続けると映像が細る)
+   * 再生中の段の受け取りの速さと足して `capacity` にする。`PROBE_GIVE_UP` でやめる (細い回線で取り続けると映像が細る)
    */
   async function probeLink(need: number, stream: number): Promise<void> {
     if (probing) return;
@@ -3031,7 +3031,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get codec() {
       return codec;
     },
-    /** いま流れている段 (`#lib/adapt.ts` の `Step`。回線に合わせて下げた画質)。0 は下げていない */
+    /** いま再生中の段 (`#lib/adapt.ts` の `Step`。回線に合わせて下げた画質)。0 は下げていない */
     get step() {
       return served;
     },

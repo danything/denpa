@@ -38,7 +38,7 @@ export function stepFields(step: Step, playable: LiveCodec[]): StepFields {
   return rungFields(step, playable);
 }
 
-/** `tuned` から、いま流れている段を読む。音声だけなら `"audio"`、放送のままは 0 */
+/** `tuned` から、いま再生中の段を読む。音声だけなら `"audio"`、放送のままは 0 */
 export function servedStep(notice: Extract<Notice, { type: "tuned" }>): Step {
   if (notice.codec === "audio") return "audio";
   return notice.raw ? 0 : notice.rung;
@@ -173,18 +173,18 @@ export const STUCK_LEAST = 500;
 
 /** 試しのデータの量を決める長さ (ms)。測りたい速さで、これだけかかる量を取る */
 export const PROBE_SPAN = 1_000;
-/** 試しのデータの量の下限と上限 (バイト)。小さすぎると TCP の立ち上がりで遅く見える。上限はサーバの `PROBE_MOST` と同じ */
+/** 試しのデータの量の下限と上限 (バイト)。小さすぎると TCP の立ち上がりで遅く見える。サーバもこの値を使う (`GET /api/playback/probe`) */
 export const PROBE_LEAST = 64 * 1024;
 export const PROBE_MOST = 4 * 1024 * 1024;
 /**
  * 試しのデータを取るのをやめる長さ (ms)。測りたい速さが出ていればこの半分で取り終わる。細い回線で取り続けると、
- * そのぶん流れている映像が細る
+ * そのぶん再生中の映像が細る
  */
 export const PROBE_GIVE_UP = 2 * PROBE_SPAN;
 
 /**
- * 上げる前に取る試しのデータの量 (バイト)。`need` は回線全体に要る速さ (`RungAdapter.wantProbe`)、`stream` はいま流れている
- * 段の受け取りの速さ (bit/s)。流れている段のぶんは試しのデータで測らず、残りだけを `PROBE_SPAN` ぶん取る
+ * 上げる前に取る試しのデータの量 (バイト)。`need` は回線全体に要る速さ (`RungAdapter.wantProbe`)、`stream` はいま再生中の
+ * 段の受け取りの速さ (bit/s)。再生中の段のぶんは試しのデータで測らず、残りだけを `PROBE_SPAN` ぶん取る
  */
 export function probeBytes(need: number, stream: number): number {
   const rest = Math.max(0, need - stream);
@@ -211,4 +211,11 @@ export function probeRate(o: {
   if (o.bytes > 0 && o.lastAt > o.startAt)
     return (o.bytes * 8 * 1000) / (o.lastAt - o.startAt);
   return null;
+}
+
+/** 試しのデータの量 (`GET /api/playback/probe?bytes=`) を `PROBE_LEAST`〜`PROBE_MOST` に丸める。読めない値は `PROBE_LEAST` */
+export function probeSize(asked: string | null): number {
+  const n = Number(asked);
+  if (asked === null || !Number.isFinite(n)) return PROBE_LEAST;
+  return Math.round(Math.min(PROBE_MOST, Math.max(PROBE_LEAST, n)));
 }

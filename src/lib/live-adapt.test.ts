@@ -9,6 +9,7 @@ import {
   PROBE_MOST,
   probeBytes,
   probeRate,
+  probeSize,
   RATE_LEAST,
   RATE_WINDOW,
   replacesWarning,
@@ -66,7 +67,7 @@ describe("段の指示の組み立て", () => {
 });
 
 /** **`tuned` から読む段** (`servedStep`) */
-describe("流れている段", () => {
+describe("再生中の段", () => {
   test("段を下げた変換はその段、音声だけは audio、放送のままは 0", () => {
     expect(servedStep(tuned({ rung: 2 }))).toBe(2);
     expect(servedStep(tuned({ codec: "audio", rung: 3 }))).toBe("audio");
@@ -186,8 +187,8 @@ describe("放送に対する遅れ", () => {
 
 /** **上げる前に取る試しのデータ** (`probeBytes`・`probeRate`) */
 describe("試しのデータ", () => {
-  test("流れている段のぶんを引いた残りを、1 秒ぶん取る。下限と上限に丸める", () => {
-    // 6 Mbit/s 要って、いま 2 Mbit/s 流れている。残り 4 Mbit/s の 1 秒 = 500,000 バイト
+  test("再生中の段のぶんを引いた残りを、1 秒ぶん取る。下限と上限に丸める", () => {
+    // 6 Mbit/s 要って、いま 2 Mbit/s の段を再生中。残り 4 Mbit/s の 1 秒 = 500,000 バイト
     expect(probeBytes(6_000_000, 2_000_000)).toBe(500_000);
     expect(probeBytes(1_000_000, 2_000_000)).toBe(PROBE_LEAST);
     expect(probeBytes(1e9, 0)).toBe(PROBE_MOST);
@@ -224,5 +225,17 @@ describe("試しのデータ", () => {
         bytes: 0,
       }),
     ).toBeNull();
+  });
+});
+
+/** **試しのデータの量の丸め** (`probeSize`。`GET /api/playback/probe?bytes=`) */
+describe("試しのデータの量", () => {
+  test("下限と上限に丸め、読めない値・無い値は下限にする", () => {
+    expect(probeSize("500000")).toBe(500_000);
+    expect(probeSize("10")).toBe(PROBE_LEAST);
+    expect(probeSize("-5")).toBe(PROBE_LEAST);
+    expect(probeSize("1e12")).toBe(PROBE_MOST);
+    expect(probeSize("abc")).toBe(PROBE_LEAST);
+    expect(probeSize(null)).toBe(PROBE_LEAST);
   });
 });
