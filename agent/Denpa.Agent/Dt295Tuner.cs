@@ -33,6 +33,11 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
 
     private bool _synced;
 
+    /// <summary>先頭の位置を決めるまで溜めたもの</summary>
+    private readonly byte[] _head = new byte[(AlignSpan + 1) * PacketSize];
+
+    private int _headLen;
+
     /// <summary>渡したパケットの数</summary>
     public long Packets { get; private set; }
 
@@ -40,7 +45,9 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     public void Reset()
     {
         _carried = 0;
+        _headLen = 0;
         _synced = false;
+        _window = ResyncWindow;
     }
 
     /// <summary>最初の読みで、先頭に混じった古い切れ端を飛ばす範囲 (パケット数)。見分けに使う並びの長さでもある</summary>
@@ -51,9 +58,9 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     /// 前の受信が途中で終わると、機材の中に残ったデータが次の受信の最初に混じる (パケットの途中の切れ端や、古いパケット)。
     /// 受信の途中では探し直さない (10.2)
     /// </summary>
-    internal static int Align(ReadOnlySpan<byte> data)
+    internal static bool Find(ReadOnlySpan<byte> data, out int at)
     {
-        for (var at = 0; at < AlignSpan * PacketSize && at < data.Length; at++)
+        for (at = 0; at < AlignSpan * PacketSize && at < data.Length; at++)
         {
             if (data[at] != 0x47) continue;
             var confirmed = 0;
@@ -67,10 +74,11 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
                 }
                 confirmed++;
             }
-            // 後ろに確かめるものが無いときは、先頭から始まっているときだけ認める
-            if (aligned && (confirmed > 0 || at == 0)) return at;
+            // 後ろに確かめるものが無いときは、先頭から 1 パケット分が揃っているときだけ認める
+            if (aligned && (confirmed > 0 || (at == 0 && data.Length >= PacketSize))) return true;
         }
-        return 0;
+        at = 0;
+        return false;
     }
 
     /// <summary>
@@ -80,11 +88,43 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     public int Feed(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain = null)
     {
         var written = 0;
-        if (!_synced && _carried == 0)
+        if (!_synced)
         {
-            data = data[Align(data)..];
+            // 先頭の位置が確かめられるまで溜める。最初の読みが短い切れ端だけのとき (古いデータの途中)、それで先頭を決めると
+            // 以後ずっとずれて「不正なパケット」で止まる。揃った並びが見つからないまま上限まで溜まったら、先頭から始まるものとして流す
+            var take = Math.Min(_head.Length - _headLen, data.Length);
+            data[..take].CopyTo(_head.AsSpan(_headLen));
+            _headLen += take;
+            data = data[take..];
+            var found = Find(_head.AsSpan(0, _headLen), out var at);
+            if (!found && _headLen < _head.Length) return 0;
+            // 揃った並びが見つからなかった。もう探し直さず、崩れたら不正として止める (探し直し続けない)
+            if (!found) _window = 0;
             _synced = true;
+            byte[] buffered = [.. _head.AsSpan(at, _headLen - at)];
+            _headLen = 0;
+            // 溜めたぶんと、溜めきれなかった続きを、この順に渡す
+            byte[] rest = [.. buffered, .. data];
+            return written + Carry(rest, output, plain);
         }
+        return written + Carry(data, output, plain);
+    }
+
+    /// <summary>
+    /// 受信を始めてから、並びが崩れたら先頭を探し直してよい量 (バイト)。準備し直したあとの最初の 3〜4 KiB には、機材に残っていた
+    /// 前の受信の切れ端が入る (実機の PIX-DT295、地上波 27ch。先頭に 28〜116 バイトのごみ、17〜22 パケットの古い並び、31〜119 バイトの
+    /// ごみが続き、オフセット 3072 か 4096 から新しい並びになる)。古い並びで先頭を決めると、その境目で崩れて止まっていた。
+    /// これを過ぎてからの崩れは、仕様どおり不正なパケットとして止める (10.3)
+    /// </summary>
+    private const int ResyncWindow = 64 * 1024;
+
+    /// <summary>探し直してよい残りの量 (バイト)</summary>
+    private int _window = ResyncWindow;
+
+    /// <summary>先頭が決まったあとの渡し方。端数は次の呼びにつなぐ。始めのうちに並びが崩れたら、崩れた所から先頭を探し直す</summary>
+    private int Carry(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
+    {
+        var written = 0;
         if (_carried > 0)
         {
             var take = Math.Min(PacketSize - _carried, data.Length);
@@ -93,17 +133,38 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
             data = data[take..];
             if (_carried < PacketSize) return 0;
             _carried = 0;
-            written += One(_carry, output, plain);
+            if (_carry[0] != 0x47 && _window > 0) return written + Resync([.. _carry, .. data], output, plain);
+            written += Pass(_carry, output, plain);
         }
         while (data.Length >= PacketSize)
         {
-            written += One(data[..PacketSize], output, plain);
+            if (data[0] != 0x47 && _window > 0) return written + Resync(data, output, plain);
+            written += Pass(data[..PacketSize], output, plain);
             data = data[PacketSize..];
         }
         data.CopyTo(_carry);
         _carried = data.Length;
         return written;
     }
+
+    /// <summary>並びが崩れた所から、先頭を探し直す (<see cref="ResyncWindow"/> の間だけ)</summary>
+    private int Resync(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
+    {
+        _synced = false;
+        _headLen = 0;
+        _carried = 0;
+        Resyncs++;
+        return Feed(data, output, plain);
+    }
+
+    private int Pass(ReadOnlySpan<byte> input, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
+    {
+        if (_window > 0) _window -= PacketSize;
+        return One(input, output, plain);
+    }
+
+    /// <summary>始めのうちに並びが崩れて、先頭を探し直した回数</summary>
+    public int Resyncs { get; private set; }
 
     private int One(ReadOnlySpan<byte> input, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
     {
@@ -290,6 +351,20 @@ public sealed class Dt295Board : IDisposable
         return true;
     });
 
+    /// <summary>
+    /// <see cref="Fault"/> が立っていても通す <see cref="Locked(Action)"/>。受信を止める手順だけに使う。
+    /// 手順の途中で失敗した印 (Fault) が立っているからといって止めずにおくと、機材が受信中のまま取り残され、
+    /// 次に開くときに「ほかのプロセスが使っているかもしれません」と断られ続ける
+    /// </summary>
+    public void LockedToStop(Action action)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_closed, this);
+            action();
+        }
+    }
+
     /// <summary>更新のスレッド。約 1 秒おきに期限を確かめる</summary>
     private void Refresh()
     {
@@ -418,6 +493,9 @@ internal sealed class Dt295Stream
     private Dt295Route[] _written = [];
     private Dt295Program? _writtenMain;
     private bool _settled;
+
+    /// <summary>機材が受信中のルートの追加を断った。この受信では追加を試さず、PSI がそろってから準備し直しで足す</summary>
+    private bool _additionsRefused;
 
     /// <summary>最後にログへ出した、ルートの計画を作り直せなかった理由 (同じものを繰り返し出さない)</summary>
     private string? _problem;
@@ -568,30 +646,65 @@ internal sealed class Dt295Stream
             _settled |= _routes.Settled || late;
             return;
         }
-        var additions = plan.Except(_written)
+        var additions = _additionsRefused ? [] : plan.Except(_written)
             .Where(route => route.EcmSlot == 0 && route.Slot > Dt295Routes.PatSlot
                 && !_written.Any(written => written.Slot == route.Slot || written.Pid == route.Pid))
             .ToList();
         var rest = _written.Except(plan).Any() || plan.Except(_written).Except(additions).Any() || main != _writtenMain;
         if (rest && (_routes.Settled || late))
         {
-            _board.Locked(() =>
-            {
-                _board.Session.StopReception(Pause, Drain);
-                Prepare(plan, main);
-            });
+            Reprepare(plan, main);
             _settled = true;
-            Reprepared++;
             Log.Write($"[{_name}] 準備し直しました ({plan.Length} スロット{(main is null ? "" : $"、主番組 {main.Number}")}{(late ? "。PSI が待ちの上限までにそろいませんでした" : "")})");
             return;
         }
         if (additions.Count == 0) return;
-        _board.Locked(() =>
+        try
         {
-            foreach (var route in additions) _board.Session.ChangeRoute(route);
-        });
+            _board.Locked(() =>
+            {
+                foreach (var route in additions) _board.Session.ChangeRoute(route);
+            });
+        }
+        catch (Dt295Exception error) when (error.Completion == RouteChangeRefused)
+        {
+            // 機材が受信中の追加を断った (完了コード 0x0580。2 回目以降の追加でよく起きる)。同じコマンドは送り直さず (13 章)、
+            // 受信を止めて全部のルートで準備し直す (9.10)。ここで例外にすると、機材の受信が止まらないまま取り残される。
+            // この受信では、追加をもう試さない (断られるたびに準備し直すと、何度も止めることになる)
+            _additionsRefused = true;
+            Reprepare(plan, main);
+            Log.Write($"[{_name}] 機材が受信中のルートの追加を断ったため、準備し直しました ({plan.Length} スロット{(main is null ? "" : $"、主番組 {main.Number}")})");
+            return;
+        }
         _written = rest ? [.. _written, .. additions] : plan;
         Log.Write($"[{_name}] 受信中にルートを足しました ({additions.Count} 本)");
+    }
+
+    /// <summary>受信中にルートを足すコマンド (cmd 5 sub 1) を機材が断ったときの完了コード</summary>
+    private const ushort RouteChangeRefused = 0x0580;
+
+    /// <summary>受信を止めて、計画の全部のルートで準備し直す (9.10)</summary>
+    private void Reprepare(Dt295Route[] plan, Dt295Program? main)
+    {
+        _board.Locked(() =>
+        {
+            _board.Session.StopReception(Pause, Drain);
+            FlushStale();
+            Prepare(plan, main);
+        });
+        Reprepared++;
+    }
+
+    /// <summary>
+    /// 止めたあとに EP 0x81 に残っている古いデータを読み捨てる (最大 300 ms)。残したまま準備し直すと、次の受信の最初の読みが
+    /// 古いデータの途中から始まり、パケットの先頭を取り違えて「不正なパケット」で止まることがある
+    /// </summary>
+    private void FlushStale()
+    {
+        var waited = Stopwatch.StartNew();
+        while (waited.ElapsedMilliseconds < 300 && _in.Read(_scratch, DrainMs) > 0)
+        {
+        }
     }
 
     private ushort Pause => _data.Fields.Pause;
@@ -636,7 +749,7 @@ internal sealed class Dt295Stream
     {
         try
         {
-            _board.Locked(() => _board.Session.StopReception(Pause, Drain));
+            _board.LockedToStop(() => _board.Session.StopReception(Pause, Drain));
         }
         catch (Exception error) when (error is Dt295Exception or InvalidOperationException)
         {
@@ -719,6 +832,8 @@ public sealed class Dt295Tuner : ITuneDevice
     }
 
     internal Dt295Stream? Stream => _stream;
+
+    internal Dt295Board? Board => _board;
 
     public void Tune(ChannelTable.Tuning tuning, uint streamId)
     {

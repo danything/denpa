@@ -29,7 +29,11 @@ public sealed class Dt295SystemTime : IDt295Time
 }
 
 /// <summary>ASSP とのやり取りが仕様どおりに進まなかった (機器の状態は不明として扱う。13 章の再送しない方針)</summary>
-public sealed class Dt295Exception(string message) : IOException(message);
+public sealed class Dt295Exception(string message, ushort? completion = null) : IOException(message)
+{
+    /// <summary>機材が返した完了コード (コマンドの失敗のとき。そうでなければ null)</summary>
+    public ushort? Completion { get; } = completion;
+}
 
 /// <summary>チューナーの操作 (Dt295Frontend.cs) が使う分だけ</summary>
 public interface IDt295Board
@@ -321,7 +325,7 @@ public sealed class Dt295Bridge : IDt295Board
         // 6. 完了ビットを消す
         Clear(done);
         // 7. 判定
-        if (!Succeeded(command, code)) throw new Dt295Exception($"{what}: 完了コード 0x{code:X4}");
+        if (!Succeeded(command, code)) throw new Dt295Exception($"{what}: 完了コード 0x{code:X4}", code);
         return code;
     }
 

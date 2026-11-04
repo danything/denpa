@@ -218,10 +218,11 @@ public class Dt295TunerTests
         byte[] data = [.. new byte[56].Select(_ => (byte)0x5A), .. packets];
         await Assert.That(filter.Feed(data, output)).IsEqualTo(3);
         await Assert.That(output.WrittenSpan.ToArray()).IsEquivalentTo(packets);
-        // そろったあとは探し直さない (途中で狂ったら止める)
+        // 始めのうち (64 KiB まで) に崩れたら、止めずに探し直す (準備し直した直後の古い切れ端。止めるのは、それを過ぎてから)
         var bad = Dt295Ts.Payload(0x103);
         bad[0] = 0x00;
-        Assert.Throws<Dt295Exception>(() => filter.Feed(bad, output));
+        await Assert.That(filter.Feed(bad, output)).IsEqualTo(0);
+        await Assert.That(filter.Resyncs).IsEqualTo(1);
     }
 
     [Test]
@@ -244,6 +245,51 @@ public class Dt295TunerTests
     }
 
     [Test]
+    public async Task 最初の読みが短い切れ端だけなら_先頭が確かめられるまで溜めて待つ()
+    {
+        // 前の受信の切れ端 (パケットの途中の 100 バイト) だけが最初の読みで届き、そのあとに本物の並びが続く。
+        // 切れ端だけで先頭を決めると、以後ずっとずれて不正なパケットになる
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor());
+        var output = new ArrayBufferWriter<byte>();
+        var stale = Enumerable.Range(0, 100).Select(i => (byte)(i + 1)).ToArray();
+        byte[] real = [.. Dt295Ts.Payload(0x100), .. Dt295Ts.Payload(0x101), .. Dt295Ts.Payload(0x102), .. Dt295Ts.Payload(0x103)];
+        await Assert.That(filter.Feed(stale, output)).IsEqualTo(0);
+        await Assert.That(filter.Feed(real, output)).IsEqualTo(4);
+        await Assert.That(output.WrittenSpan.ToArray()).IsEquivalentTo(real);
+    }
+
+    [Test]
+    public async Task 準備し直した直後の古い切れ端の並びが崩れても_新しい並びから続ける()
+    {
+        // 実機 (地上波 27ch) で準備し直した直後の形: ごみ 40 バイト・古い並び 41 パケット・ごみ 35 バイトのあとに、新しい並びが始まる。
+        // 古い並びが、先頭を探すときに溜める量 (33 パケット) より長いと、古い並びで先頭が決まり、その境目で崩れる
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor());
+        var output = new ArrayBufferWriter<byte>();
+        byte[] Junk(int length) => [.. Enumerable.Range(0, length).Select(i => (byte)(i * 7 + 1))];
+        byte[] stale = [.. Enumerable.Range(0, 41).SelectMany(i => Dt295Ts.Payload(0x200 + i % 4))];
+        byte[] fresh = [.. Enumerable.Range(0, 5).SelectMany(i => Dt295Ts.Payload(0x100 + i))];
+        byte[] data = [.. Junk(40), .. stale, .. Junk(35), .. fresh];
+        await Assert.That(filter.Feed(data, output)).IsEqualTo(46);
+        await Assert.That(filter.Resyncs).IsEqualTo(1);
+        await Assert.That(output.WrittenSpan[^fresh.Length..].ToArray()).IsEquivalentTo(fresh);
+    }
+
+    [Test]
+    public async Task 始めのうちを過ぎてからの崩れは_不正なパケットとして止める()
+    {
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor());
+        var output = new ArrayBufferWriter<byte>();
+        // 64 KiB を超えるまで正しい並びを流したあとの崩れは、探し直さない
+        byte[] good = [.. Enumerable.Range(0, 400).SelectMany(i => Dt295Ts.Payload(0x100 + i % 8))];
+        await Assert.That(filter.Feed(good, output)).IsEqualTo(400);
+        var bad = Dt295Ts.Payload(0x100);
+        bad[0] = 0x00;
+        var error = Assert.Throws<Dt295Exception>(() => filter.Feed(bad, output));
+        await Assert.That(error.Message).IsEqualTo(Dt295TsFilter.Invalid);
+        await Assert.That(filter.Resyncs).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task Reset_のあとは先頭を探し直す()
     {
         var output = new ArrayBufferWriter<byte>();
@@ -261,7 +307,9 @@ public class Dt295TunerTests
     {
         var bad = Dt295Ts.Payload(0x100);
         bad[0] = 0x00;
-        var error = Assert.Throws<Dt295Exception>(() => new Dt295TsFilter(new Dt295PacketDecryptor()).Feed(bad, new ArrayBufferWriter<byte>()));
+        // 同期バイトの無い並びは、先頭を探せるだけ溜まったところで不正として止める (数パケットでは、古い切れ端かもしれないので待つ)
+        var garbage = new byte[188 * 40];
+        var error = Assert.Throws<Dt295Exception>(() => new Dt295TsFilter(new Dt295PacketDecryptor()).Feed(garbage, new ArrayBufferWriter<byte>()));
         await Assert.That(error.Message).IsEqualTo(Dt295TsFilter.Invalid);
         var tei = Dt295Ts.Payload(0x100, scrambling: 1);
         tei[1] |= 0x80;
@@ -895,6 +943,54 @@ public class Dt295TunerTests
         await Assert.That(tuner.Stream!.Reprepared).IsEqualTo(0);
         await Assert.That(usb.MainCommands().Count(command => command == "04000000")).IsEqualTo(before + 1);
         tuner.Dispose();
+    }
+
+    [Test]
+    public async Task 機材が受信中のルートの追加を断ったら_準備し直して受信を続ける()
+    {
+        var usb = FakeDt295Usb.Receiving(FakeDt295Material.Create());
+        // 2 回目以降の追加を断る機材。PAT だけが届くと、PMT の PID を足そうとして断られる
+        usb.RefuseRouteChangesAfter = 0;
+        var both = Dt295Ts.PatPmt([0x09, 0x04, 0x00, 0x05, 0xE9, 0x01]);
+        var pat = both[..188];
+        usb.Ts.Enqueue(pat);
+        var tuner = Tuner(usb, "3-4");
+        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+        await Assert.That(ReadAll(tuner.Output, pat.Length)).IsEquivalentTo(pat);
+        for (var i = 0; i < 200 && tuner.Stream!.Reprepared == 0; i++) await Task.Delay(10);
+
+        // 断られても Fault にせず、準備し直して受信を続ける (受信が止まらない)
+        await Assert.That(tuner.Board!.Fault).IsNull();
+        await Assert.That(tuner.Stream!.Reprepared).IsGreaterThanOrEqualTo(1);
+        await Assert.That(tuner.Stream!.Ended).IsFalse();
+        await Assert.That(usb.State).IsEqualTo((ushort)2);
+        // PMT と CAT が届いたら、PSI がそろってから 1 回だけ準備し直す。断られた追加は、この受信では試さない (追加のコマンドは 1 回だけ)
+        byte[] rest = [.. both[188..], .. Dt295Ts.Cat()];
+        usb.Ts.Enqueue(rest);
+        await Assert.That(ReadAll(tuner.Output, rest.Length)).IsEquivalentTo(rest);
+        for (var i = 0; i < 200 && tuner.Stream!.Reprepared < 2; i++) await Task.Delay(10);
+        await Assert.That(tuner.Stream!.Reprepared).IsEqualTo(2);
+        await Assert.That(usb.MainCommands().Count(command => command == "05010000")).IsEqualTo(1);
+        await Assert.That(usb.Get16(0x101E)).IsEqualTo((ushort)0x8111);
+        tuner.Dispose();
+        await Assert.That(usb.State).IsEqualTo(Dt295Device.Idle);
+    }
+
+    [Test]
+    public async Task Fault_が立っていても_受信を止めてから閉じる()
+    {
+        var usb = FakeDt295Usb.Receiving(FakeDt295Material.Create());
+        byte[] psi = [.. Dt295Ts.PatPmt([0x09, 0x04, 0x00, 0x05, 0xE9, 0x01]), .. Dt295Ts.Cat()];
+        usb.Ts.Enqueue(psi);
+        var tuner = Tuner(usb, "3-3");
+        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+        await Assert.That(ReadAll(tuner.Output, psi.Length)).IsEquivalentTo(psi);
+        await Assert.That(usb.State).IsEqualTo((ushort)2);
+
+        // 手順の途中の失敗で印が付いても、機材を受信中のまま取り残さない
+        tuner.Board!.MarkFault("テストの失敗");
+        tuner.Dispose();
+        await Assert.That(usb.State).IsEqualTo(Dt295Device.Idle);
     }
 
     [Test]
