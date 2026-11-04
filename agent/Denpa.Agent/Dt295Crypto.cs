@@ -71,13 +71,6 @@ public static class Dt295Crypto
         if ((from[0] & 0x80) != 0) to[Block - 1] ^= 0x87;
     }
 
-    /// <summary>AES-128 で 1 ブロックを暗号化する</summary>
-    public static void EncryptBlock(ReadOnlySpan<byte> key, ReadOnlySpan<byte> input, Span<byte> output)
-    {
-        using var aes = Create(key);
-        aes.EncryptEcb(input[..Block], output[..Block], PaddingMode.None);
-    }
-
     /// <summary>AES-128-CBC で暗号化する (埋めない。長さは 16 の倍数)</summary>
     public static void CbcEncrypt(ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv, Span<byte> data)
     {

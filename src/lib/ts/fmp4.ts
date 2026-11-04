@@ -22,8 +22,10 @@ import { ADTS_RATES } from "@danything/arib/pes";
 /** 箱のヘッダ。大きさと種別で 8 バイト */
 const HEADER = 8;
 
-type Segment =
-  { kind: "init"; data: Uint8Array } | { kind: "media"; data: Uint8Array };
+interface Segment {
+  kind: "init" | "media";
+  data: Uint8Array;
+}
 
 /**
  * バイト列を渡すと、組み上がったセグメントを返す。
@@ -163,6 +165,20 @@ function boxes(data: Uint8Array): Box[] {
   return out;
 }
 
+/**
+ * 先頭に並んだ箱の中に `type` があるか (中までは読まない)。canvas に描く経路が、届いたものが init かを見分けるのに使う
+ * (`raw/fmp4.ts`)。**箱が尻で切れていても、見出しが読めれば数える**
+ */
+export function hasBox(data: Uint8Array, type: string): boolean {
+  for (let at = 0; at + HEADER <= data.length;) {
+    if (ascii(data, at + 4, 4) === type) return true;
+    const size = u32(data, at);
+    if (size < HEADER) return false;
+    at += size;
+  }
+  return false;
+}
+
 function child(body: Uint8Array, type: string): Uint8Array | null {
   return boxes(body).find((b) => b.type === type)?.body ?? null;
 }
@@ -274,25 +290,15 @@ function readEntry(
       height: v.getUint16(26),
       ...(displayWidth === null ? {} : { displayWidth }),
     };
-    if (entry.type === "avc1") {
-      const avcC = child(inner, "avcC");
-      if (avcC === null || avcC.length < 4) return null;
-      return {
-        ...base,
-        ...size,
-        kind: "video",
-        codec: avcCodec(avcC),
-        config: avcC.slice(),
-      };
-    }
-    const av1C = child(inner, "av1C");
-    if (av1C === null || av1C.length < 4) return null;
+    const avc = entry.type === "avc1";
+    const config = child(inner, avc ? "avcC" : "av1C");
+    if (config === null || config.length < 4) return null;
     return {
       ...base,
       ...size,
       kind: "video",
-      codec: av1Codec(av1C),
-      config: av1C.slice(),
+      codec: avc ? avcCodec(config) : av1Codec(config),
+      config: config.slice(),
     };
   }
   if (entry.type === "mp4a" || entry.type === "Opus") {
@@ -522,7 +528,7 @@ export function adtsHeader(
     ((channels & 0x03) << 6) | (length >> 11),
     (length >> 3) & 0xff,
     ((length & 0x07) << 5) | 0x1f,
-    0xfc, // 溜まり具合は「可変」(0x7ff)、1つの ADTS に 1 コマ
+    0xfc, // 溜まり具合は「可変」(0x7ff)、1 つの ADTS に 1 コマ
   );
 }
 

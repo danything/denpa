@@ -1,16 +1,16 @@
 /**
- * 物理チャンネル丸ごとの TS から、1つの局のぶんだけを抜き出す。
+ * 物理チャンネル丸ごとの TS から、1 つの局のぶんだけを抜き出す。
  *
  * エージェントは**中身を読まずに素の TS を流す**ので
  * ([agent.md](https://github.com/danything/denpa/blob/main/docs/agent.md))、選り分けるのは denpa の仕事。
  *
- * **これをやらないと1つの録画に複数の番組が入る。** 実機の TOKYO MX は
- * 1本の TS に MX1 と MX2 を載せていて、丸ごと保存すると ffprobe が2つの
+ * **これをやらないと 1 つの録画に複数の番組が入る。** 実機の TOKYO MX は
+ * 1 本の TS に MX1 と MX2 を載せていて、丸ごと保存すると ffprobe が 2 つの
  * プログラムを返す (これで CM 検出の fps を読み違えたことがある)。
  *
- * 残すもの:
+ * 残すものは次のとおり。
  *
- * - **PAT** … その局1つだけに**書き直して**出す。丸ごと通すと ffmpeg には
+ * - **PAT** … その局 1 つだけに**書き直して**出す。丸ごと通すと ffmpeg には
  *   相変わらず複数のプログラムが見える
  * - **PMT と、そこに載っている ES** … 映像・音声・字幕。ECM も (掛かったまま
  *   録れたものを後から復号するのに要る)
@@ -44,7 +44,7 @@ const PID_NULL = 0x1fff;
 /**
  * 局に関係なく残す PID。**どれも数十バイト/秒**で、落として得るものが無い。
  *
- * CDT (ロゴ) はここに入れない。録画に要らないうえ、衛星では数百KBのカルーセルが
+ * CDT (ロゴ) はここに入れない。録画に要らないうえ、衛星では数百 KB のカルーセルが
  * 流れてくる。ロゴを取得するのは録画の外でやる (denpa の logo.ts)
  */
 const KEEP = new Set([
@@ -65,7 +65,7 @@ const DESC_CA = 0x09;
  */
 const HOLD_MOST = 8192;
 
-/** 1つの局に絞った PAT を組み立てる */
+/** 1 つの局に絞った PAT を組み立てる */
 function buildPat(
   transportStreamId: number,
   version: number,
@@ -94,7 +94,7 @@ function buildPat(
   return withCrc(body);
 }
 
-/** セクション1本を TS パケット1つに詰める。PAT は小さいので必ず収まる */
+/** セクション 1 本を TS パケット 1 つに詰める。PAT は小さいので必ず収まる */
 function packet(pid: number, section: Uint8Array, counter: number): Uint8Array {
   const out = new Uint8Array(PACKET).fill(0xff);
   out[0] = SYNC;
@@ -113,7 +113,7 @@ function packet(pid: number, section: Uint8Array, counter: number): Uint8Array {
 const MEDIA_STREAMS = new Set([0x02, 0x1b, 0x24, 0x03, 0x04, 0x0f, 0x11, 0x06]);
 
 /**
- * 局1つぶんに絞る。
+ * 局 1 つぶんに絞る。
  *
  * PAT と PMT を読むまでは**何も出さない**。どの PID がその局のものか決まらないためで、
  * どちらも 100ms ごとに流れてくるので待つのは一瞬。**待つ間に届いたものは取っておき**、PMT を読んだら
@@ -138,18 +138,18 @@ export class ServiceFilter {
 
   constructor(private readonly serviceId: number) {}
 
-  /** その局の PMT を読めたか。読めるまで映像は1バイトも出ない (届いたものは取っておく) */
+  /** その局の PMT を読めたか。読めるまで映像は 1 バイトも出ない (届いたものは取っておく) */
   get ready(): boolean {
     return this.own.size > 0;
   }
 
   /**
    * **いま流れているものがコピー禁止か** (最後に読んだ PMT のデジタルコピー制御記述子)。
-   * 番組全体 (1つめのループ) と ES ごと (2つめのループ) のどちらかが禁止なら禁止。
+   * 番組全体 (1 つめのループ) と ES ごと (2 つめのループ) のどちらかが禁止なら禁止。
    * PMT を読むまでは false。
    *
    * 録画はこれを見て、禁止のあいだは保存しない (denpa の `recorder.ts`)。番組表が古い・無いときの備え。
-   * 絞り方には効かせない — ライブは保存しないので、禁止の番組もそのまま観られる
+   * 絞り方には効かせない。ライブは保存しないので、禁止の番組もそのまま観られる
    */
   get copyNever(): boolean {
     return this.copyNeverNow;
@@ -160,7 +160,7 @@ export class ServiceFilter {
    *
    * これが変わったら ffmpeg を作り直す (`StreamsWatch`)。ffmpeg は起きたときの並びのまま
    * 音声・字幕を選んでいるので、番組が替わって音声の本数や字幕の PID が変わると追従しない。
-   * データ放送などのセクション (0x0D など) は入れない — 番組ごとに増減しても ffmpeg には関係ない
+   * データ放送などのセクション (0x0D など) は入れない。番組ごとに増減しても ffmpeg には関係ない
    */
   get streams(): string | null {
     return this.streamsNow;
@@ -170,7 +170,7 @@ export class ServiceFilter {
    * **中継の番号 (transport_stream_id)。** PAT を読むまでは null。
    *
    * 絞るのに要るわけではありません。**データ放送が受信機に訊いてくる**ので
-   * 覚えておきます — テレ朝の TVerリンクは `browser.getProgramID(4)` で
+   * 覚えておきます。テレ朝の TVerリンクは `browser.getProgramID(4)` で
    * これを取り、TVer のサーバへそのまま送る。`null` のまま渡すと文字の
    * "null" が飛んで、あちらが断り、画面には `DT-RE` とだけ出ます
    * ([server/live.ts](https://github.com/danything/denpa/blob/main/src/lib/server/live.ts) の `programInfo`)
@@ -180,7 +180,7 @@ export class ServiceFilter {
   }
 
   /**
-   * 任意の長さのバイト列を食わせて、残すぶんを返す。
+   * 任意の長さのバイト列を渡すと、残すぶんを返す。
    *
    * 落とした PID の連続性カウンタは飛ぶが、**残す PID は元のまま**なので
    * 読む側から見て抜けは無い。自分で作るのは PAT だけで、そこは自前で数える。
@@ -214,7 +214,7 @@ export class ServiceFilter {
   /** PMT を読む前のパケットを取っておく。**写す** (パケットは届いた塊の上の窓。`PacketStream`) */
   private hold(ts: Uint8Array): void {
     this.held.push(ts.slice());
-    // 溢れたら古い半分を捨てる (1つずつ捨てると、来ないあいだずっと詰め直すことになる)
+    // 溢れたら古い半分を捨てる (1 つずつ捨てると、来ないあいだずっと詰め直すことになる)
     if (this.held.length > HOLD_MOST)
       this.held = this.held.slice(this.held.length - HOLD_MOST / 2);
   }
@@ -273,10 +273,10 @@ export class ServiceFilter {
 
 /**
  * **映像・音声・字幕の並びが変わったか** (`ServiceFilter.streams`) を見る。最初に読んだ並びを覚え、変わったら
- * 1回だけ true を返して新しい並びを覚え直す。
+ * 1 回だけ true を返して新しい並びを覚え直す。
  *
  * 並びを決め打ちで起こした ffmpeg (`-map`) は、番組が替わって音声の本数や字幕の PID が変わっても追従しない。
- * 変わったら起こし直す — ライブと追っかけのエンコード (denpa の `server/live.ts` の `Session.pump`)、MPEG-2 をそのまま
+ * 変わったら起こし直す。使うのはライブと追っかけのエンコード (denpa の `server/live.ts` の `Session.pump`)、MPEG-2 をそのまま
  * 流す経路の字幕 (`Session.runRaw`・`recordingCaptions`)
  */
 export class StreamsWatch {

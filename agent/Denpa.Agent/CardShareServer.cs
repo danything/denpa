@@ -125,19 +125,17 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
 
     private static async Task Ecm(HttpContext http)
     {
-        using var body = new MemoryStream();
-        await http.Request.Body.CopyToAsync(body);
-        if (body.Length == 0)
+        var ecm = await CardWire.ReadUpTo(http.Request.Body, CardWire.MaxEcm);
+        if (ecm is null)
+        {
+            await Respond.Error(http, $"ECM が長すぎます ({CardWire.MaxEcm} バイトまで)", 400);
+            return;
+        }
+        if (ecm.Length == 0)
         {
             await Respond.Error(http, "ECM が入っていません", 400);
             return;
         }
-        if (body.Length > 4096)
-        {
-            await Respond.Error(http, $"ECM が長すぎます ({body.Length} バイト。4096 バイトまで)", 400);
-            return;
-        }
-        var ecm = body.ToArray();
         await Reply(http, () => CardWire.Pack(Keys.Local.Ecm(ecm)));
     }
 

@@ -664,7 +664,10 @@ public sealed class TunerPool(
         lock (_gate)
         {
             foreach (var lease in _leases.Values.ToList()) Release(lease, "停止します");
-            foreach (var index in _held.Keys.ToList()) Drop(index);
+            // _held は選局 (Acquire) が _gate の外で足すので、写すのは _deviceGate の中で (Replace と同じ)
+            List<int> held;
+            lock (_deviceGate) held = [.. _held.Keys];
+            foreach (var index in held) Drop(index);
         }
     }
 }

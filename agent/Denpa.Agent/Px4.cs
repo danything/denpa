@@ -623,7 +623,7 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bo
             if (!fields.TryGetValue("receiver", out var index) || !fields.TryGetValue("system", out var system)) continue;
             if (!int.TryParse(index, out var number))
             {
-                warn($"px4ctl list の受信機番号が読めません: {line.Trim()}");
+                warn($"受信機の一覧の受信機番号が読めません: {line.Trim()}");
                 continue;
             }
             if (From(number, system, null, warn) is { } receiver) found.Add(receiver);

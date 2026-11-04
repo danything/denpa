@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   aheadOf,
   AUDIO_TYPE,
+  autoPick,
   canvasChoices,
   canvasTranscodes,
   codecChoices,
@@ -10,6 +11,7 @@ import {
   type MediaAbility,
   pickCanvas,
   pickOffer,
+  playableAbility,
   type PlaybackInfo,
   streamForAudio,
   switchPoint,
@@ -441,5 +443,88 @@ describe("H.265 もある録画 (AV1 → H.265 → H.264)", () => {
       "av1",
     ]);
     expect(pickCanvas(three, all, "hevc")).toBe("h264");
+  });
+});
+
+describe("エンコード済みがあるときの変換の順 (pickOffer)", () => {
+  /** Matroska を読めず、MSE は H.264 と AV1 を受け取る端末。H.265 の録画は変換するしかない */
+  const hevcOnly: PlaybackInfo = {
+    ...h264Only,
+    offers: [
+      {
+        codec: "hevc",
+        way: "file",
+        source: "encoded",
+        codecs: "hvc1.1.6.L123.90,opus",
+      },
+      { codec: "hevc", way: "stream", codecs: "hvc1.1.6.L123.90,mp4a.40.2" },
+      { codec: "h264", way: "stream", codecs: "avc1.640029,mp4a.40.2" },
+      { codec: "av1", way: "stream", codecs: "av01.0.08M.08,Opus" },
+    ],
+  };
+  const mseOnly = browser([], [H264_LIVE, AV1_MP4]);
+
+  test("ライブと同じ「その場でエンコード」の順。家の中なら H.264 → AV1、外なら AV1 → H.264", () => {
+    expect(pickOffer(hevcOnly, mseOnly, "auto", true)?.codec).toBe("h264");
+    expect(pickOffer(hevcOnly, mseOnly, "auto", false)?.codec).toBe("av1");
+  });
+});
+
+describe("サーバが選ぶ観方 (autoPick。playback?playable=)", () => {
+  const withTs: PlaybackInfo = {
+    ...av1Only,
+    offers: [...av1Only.offers, { codec: "mpeg2", way: "raw" }],
+  };
+
+  test("再生できる形式の codecs だけを読めるとみなす。raw は元の TS", () => {
+    const can = playableAbility(["av1", "raw"]);
+    expect(can.play('video/x-matroska; codecs="av01.0.08M.08,opus"')).toBe(
+      true,
+    );
+    expect(can.mse(H264_LIVE)).toBe(false);
+    expect(can.mpeg2).toBe(true);
+    expect(playableAbility(["hevc"]).mse('video/mp4; codecs="hev1.1"')).toBe(
+      true,
+    );
+  });
+
+  test("エンコード済みのファイルを、再生できればそのまま。家の中でも MPEG-2 は選ばない", () => {
+    expect(autoPick(withTs, ["raw", "av1", "h264"], true)).toEqual({
+      way: "file",
+      codec: "av1",
+      source: "encoded",
+    });
+  });
+
+  test("ファイルのコーデックを再生できなければ変換", () => {
+    expect(autoPick(av1Only, ["h264"], false)).toEqual({
+      way: "stream",
+      codec: "h264",
+    });
+  });
+
+  test("元の TS だけなら、家の中は MPEG-2 から。外は AV1 → H.264", () => {
+    expect(autoPick(tsOnly, ["raw", "h264", "av1"], true)).toEqual({
+      way: "raw",
+      codec: "mpeg2",
+    });
+    expect(autoPick(tsOnly, ["raw", "h264", "av1"], false)).toEqual({
+      way: "stream",
+      codec: "av1",
+    });
+    expect(autoPick(tsOnly, ["raw"], false)).toBeNull();
+  });
+
+  test("中身が分からないファイルは、コーデックが並びにあるときだけ渡す", () => {
+    const unknown: PlaybackInfo = {
+      ...h264Only,
+      offers: [{ codec: "av1", way: "file", source: "encoded" }],
+    };
+    expect(autoPick(unknown, ["av1"], false)).toEqual({
+      way: "file",
+      codec: "av1",
+      source: "encoded",
+    });
+    expect(autoPick(unknown, ["h264"], false)).toBeNull();
   });
 });

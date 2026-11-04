@@ -21,7 +21,7 @@ export interface SectionPart {
   lastSectionNumber?: number;
 }
 
-/** セクションの頭8バイト (長さは `withCrc` が埋める) */
+/** セクションの頭 8 バイト (長さは `withCrc` が埋める) */
 function head(
   tableId: number,
   extension: number,
@@ -52,8 +52,8 @@ export function putPcr(packet: Uint8Array, pcr: number): void {
 /**
  * Unicode → JIS X 0208 の区点。**読む側の裏返し。**
  *
- * 表を抱え込まずに、EUC-JP のデコーダを1回だけ総当たりして作る
- * (84区 × 94点 = 7896 文字)。テストと偽放送局からしか呼ばないので、
+ * 表を抱え込まずに、EUC-JP のデコーダを 1 回だけ総当たりして作る
+ * (84 区 × 94 点 = 7896 文字)。テストと偽放送局からしか呼ばないので、
  * 最初に使うときまで作らない。
  */
 let jis: Map<string, number> | null = null;
@@ -73,7 +73,7 @@ function jisTable(): Map<string, number> {
 }
 
 /**
- * 文字列を ARIB STD-B24 の8単位符号にする。
+ * 文字列を ARIB STD-B24 の 8 単位符号にする。
  *
  * 初期状態 (G0=漢字) から始めて、ASCII のところだけ英数集合へ切り替える。
  * 本物の放送はもっと凝った切り替え方をするが、**読む側が同じ経路を通れば足りる**。
@@ -95,14 +95,14 @@ export function encodeAribText(text: string, half = false): number[] {
     if (alnum) out.push(0x1b, 0x24, 0x42, ...(half ? [0x8a] : []));
     alnum = false;
     const kuten = jisTable().get(char);
-    // 表に無い字は下駄で埋める (2区14点)。長さが変わらないので位置がずれない
+    // 表に無い字は下駄で埋める (2 区 14 点)。長さが変わらないので位置がずれない
     out.push(...be(kuten ?? 0x222e));
   }
   return out;
 }
 
 /**
- * 番組名・局名 (SI) に書く形式。**ASCII は中型 (MSZ) で挟んで半角で読ませる** — 標準の大きさの
+ * 番組名・局名 (SI) に書く形式。**ASCII は中型 (MSZ) で挟んで半角で読ませる。** 標準の大きさの
  * 英数はテレビが全角で描く (読む側 `aribtext.ts` も全角にする)。全角の英数 (「Ｖｅｎｕｅ」) は
  * 漢字の集合の字として書くので、読めば書いたとおりの文字列に戻る
  */
@@ -113,7 +113,7 @@ function encodeSiText(text: string): number[] {
 /** 言語の符号 "jpn" (ISO 639-2) */
 const JPN = [0x6a, 0x70, 0x6e];
 
-/** 長さ1バイトを頭に付けた文字列。SI の記述子はどこもこの形式 */
+/** 長さ 1 バイトを頭に付けた文字列。SI の記述子はどこもこの形式 */
 const sized = (text: string) => {
   const body = encodeSiText(text);
   return [body.length, ...body];
@@ -145,11 +145,11 @@ export function sdtSection(
   return withCrc(body);
 }
 
-/** 2桁の10進を BCD の1バイトに */
+/** 2 桁の 10 進を BCD の 1 バイトに */
 const bcd = (value: number) =>
   ((Math.floor(value / 10) << 4) | (value % 10)) & 0xff;
 
-/** epoch ms → MJD + BCD の5バイト。放送の時刻は日本時間で書く */
+/** epoch ms → MJD + BCD の 5 バイト。放送の時刻は日本時間で書く */
 function mjdTime(at: number): number[] {
   const jst = Math.floor(at / 1000) + 9 * 3600;
   const mjd = Math.floor(jst / 86400) + 40587;
@@ -162,7 +162,7 @@ function mjdTime(at: number): number[] {
   ];
 }
 
-/** ms → BCD 3バイトの尺 */
+/** ms → BCD 3 バイトの尺 */
 function bcdDuration(ms: number): number[] {
   const total = Math.floor(ms / 1000);
   return [
@@ -196,8 +196,8 @@ export interface SynthEvent {
   /** 4 = 放送中。EIT[p/f] で「いま」を表すのに使う */
   runningStatus?: number;
   /**
-   * デジタルコピー制御記述子の digital_recording_control_data (2ビット)。
-   * 3 がコピー禁止、2 が1世代のみ。省くと記述子を載せない ({@link copyControlDescriptor})
+   * デジタルコピー制御記述子の digital_recording_control_data (2 ビット)。
+   * 3 がコピー禁止、2 が 1 世代のみ。省くと記述子を載せない ({@link copyControlDescriptor})
    */
   copyControl?: number;
   /** シリーズ。省くと記述子を載せない ({@link seriesDescriptor}) */
@@ -215,11 +215,11 @@ export interface SynthSeries {
 }
 
 /**
- * シリーズ記述子 (0xD5。ARIB STD-B10 第2部)。
+ * シリーズ記述子 (0xD5。ARIB STD-B10 第 2 部)。
  *
  * series_id(16) / repeat_label(4) program_pattern(3) expire_date_valid_flag(1) /
  * expire_date(16) / episode_number(12) last_episode_number(12) / series_name_char。
- * 有効期限は載せない (flag 0、日付は全ビット1)
+ * 有効期限は載せない (flag 0、日付は全ビット 1)
  */
 function seriesDescriptor(series: SynthSeries): number[] {
   const episode = series.episode ?? 0;
@@ -239,13 +239,13 @@ function seriesDescriptor(series: SynthSeries): number[] {
 
 /**
  * デジタルコピー制御記述子 (0xC1)。EIT の番組と PMT に載る。
- * 中身は1バイトだけ: 記録制御 (2) 最大ビットレートの有無 (1) 部品ごとの制御の有無 (1) 出力の制御 (4)
+ * 中身は 1 バイトだけ: 記録制御 (2) 最大ビットレートの有無 (1) 部品ごとの制御の有無 (1) 出力の制御 (4)
  */
 export function copyControlDescriptor(control: number): number[] {
   return [0xc1, 0x01, ((control & 0b11) << 6) | 0b0100];
 }
 
-/** 音声1本ぶん。**放送が付けた名前まで持てる** (解説放送の見分けに要る) */
+/** 音声 1 本ぶん。**放送が付けた名前まで持てる** (解説放送の見分けに要る) */
 interface SynthAudio {
   /** audio_component_descriptor の component_type (3 = ステレオ) */
   type: number;
@@ -310,7 +310,7 @@ function eventDescriptors(event: SynthEvent): number[] {
      * simulcast_group_tag / フラグ / 言語 / **放送が付けた名前**。
      *
      * フラグは 多言語(1) 主音声(1) 品質(2) 標本化周波数(3) reserved(1)。
-     * 名前は、種別も言語も同じ音声が2本あるとき**唯一の見分け**になる
+     * 名前は、種別も言語も同じ音声が 2 本あるとき**唯一の見分け**になる
      */
     const lang = [...(audio.lang ?? "jpn")].map((c) => c.charCodeAt(0));
     const text = encodeSiText(audio.text ?? "");
@@ -476,12 +476,12 @@ export function packetize(
   return Uint8Array.from(packets);
 }
 
-/** 部品を1本のバイト列に繋ぐ。組んだパケットを流し込むときの糊 */
+/** 部品を 1 本のバイト列に繋ぐ。組んだパケットを流し込むときの糊 */
 export function stream(...parts: Uint8Array[]): Uint8Array {
   return joinBytes(parts);
 }
 
-/** PCR を1つ運ぶだけのパケット */
+/** PCR を 1 つ運ぶだけのパケット */
 export function pcrPacket(
   pid: number,
   seconds: number,
@@ -499,7 +499,7 @@ export function pcrPacket(
   return packet;
 }
 
-/** 放送の実時刻 (TDT) を1パケットに。BML の `getCurrentDateTime` が見る */
+/** 放送の実時刻 (TDT) を 1 パケットに。BML の `getCurrentDateTime` が見る */
 export function tdtPacket(unixMs: number): Uint8Array {
   return packetize(
     0x0014,
@@ -507,7 +507,7 @@ export function tdtPacket(unixMs: number): Uint8Array {
   );
 }
 
-/** PAT。サービスID → PMT の PID */
+/** PAT。サービス ID → PMT の PID */
 export function patSection(
   programs: [number, number][],
   transportStreamId = 1,
@@ -520,7 +520,7 @@ export function patSection(
 }
 
 /**
- * PMT。ロゴのカルーセルが乗る ES を1つだけ持たせる。
+ * PMT。ロゴのカルーセルが乗る ES を 1 つだけ持たせる。
  * 目印は stream_identifier_descriptor (0x52) の component_tag
  */
 export function pmtSection(
@@ -554,7 +554,7 @@ export function pmtSection(
 export function programMap(
   serviceId: number,
   pcrPid: number,
-  /** `[種別, PID]`。**3つ目は記述子**の並び (字幕の部品タグなど) */
+  /** `[種別, PID]`。**3 つ目は記述子**の並び (字幕の部品タグなど) */
   streams: ([number, number] | [number, number, number[]])[],
   ecmPid?: number,
   /** 番組ぜんたいに掛かる記述子 (program_info) に足すもの。コピー制御 ({@link copyControlDescriptor}) など */
@@ -597,7 +597,7 @@ export function bxmlDescriptor(
   const { dataComponentId = 0x0c, entryPoint = true } = options;
   const body = [
     ...be(dataComponentId),
-    // 伝送方式00 / 入口 / 自動起動 / 解像度0011 (960x540)
+    // 伝送方式 00 / 入口 / 自動起動 / 解像度 0011 (960x540)
     ...(entryPoint ? [0x33, 0x70] : [0x00, 0xff]),
     0xf8, // dataEventId 0xF / event_section_flag
     0xa0, // 即時取得あり / 蓄積不可 / 起動優先
@@ -609,7 +609,7 @@ export function bxmlDescriptor(
  * 字幕の ES (stream_type 0x06) に付ける記述子。**字幕の目印。**
  *
  * 部品タグ (stream_identifier_descriptor。ふつうの字幕は 0x30〜0x37) と、データ符号化方式記述子の
- * data_component_id 0x0008 (字幕)。続く1バイトの DMF・時刻制御モードは denpa も ffmpeg も見ない
+ * data_component_id 0x0008 (字幕)。続く 1 バイトの DMF・時刻制御モードは denpa も ffmpeg も見ない
  */
 export function captionDescriptors(componentTag = 0x30): number[] {
   return [0x52, 0x01, componentTag, 0xfd, 0x03, 0x00, 0x08, 0x3d];
@@ -636,7 +636,7 @@ export interface DiiModuleSpec {
  * DII。「このモジュールは何バイトで、名前は何か」を伝える。
  *
  * **複数のモジュールを載せられる。** 本物の BS はここに `LOGO-05` と
- * `CS_LOGO-05` を並べて流していて (実機の `BS15:16625` で確認)、1つしか
+ * `CS_LOGO-05` を並べて流していて (実機の `BS15:16625` で確認)、1 つしか
  * 載せられない作りでは CS を取りこぼす経路を試せない。
  */
 export function diiSection(
@@ -693,7 +693,7 @@ export function diiSection(
   ]);
 }
 
-/** DDB。モジュールを割ったブロックを1つ運ぶ */
+/** DDB。モジュールを割ったブロックを 1 つ運ぶ */
 export function ddbSection(
   downloadId: number,
   moduleId: number,
@@ -735,7 +735,7 @@ export function logoModule(
 
 /*
  * --- データ放送のテストで使う定番の割り振り ---
- * denpa の bml / data-timeline / recorded-bml の3つのテストが、同じ表と同じ組み立てを
+ * denpa の bml / data-timeline / recorded-bml の 3 つのテストが、同じ表と同じ組み立てを
  * それぞれに書いていた。番号そのものに意味は無く、揃っていることに意味がある。
  */
 export const BML_TS = {
@@ -747,7 +747,7 @@ export const BML_TS = {
   componentTag: 0x40,
 } as const;
 
-/** BML の ES が1本だけ載った PMT (`BML_TS` の割り振り) */
+/** BML の ES が 1 本だけ載った PMT (`BML_TS` の割り振り) */
 export function bmlPmt(): Uint8Array {
   return programMap(BML_TS.service, BML_TS.videoPid, [
     [0x02, BML_TS.videoPid, [0x52, 0x01, 0x00]],
@@ -768,7 +768,7 @@ export function bmlHead(): Uint8Array[] {
 }
 
 /**
- * モジュール1つぶんの中身。**放送は multipart/mixed で複数のファイルを詰める。**
+ * モジュール 1 つぶんの中身。**放送は multipart/mixed で複数のファイルを詰める。**
  * 本物と同じく、頭に Content-Type、境界で区切って各ファイルに Content-Location
  */
 export function multipartModule(

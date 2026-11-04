@@ -1207,6 +1207,8 @@ async function rawResponse(
     headers: {
       "Content-Type": "video/mp2t",
       "Cache-Control": "no-store",
+      // `live`・`chase` の放送のままと同じ値 (`codec=mpeg2` で頼まれても `raw`)
+      [CODEC_HEADER]: "raw",
       [ORIGIN_HEADER]: String(origin),
     },
   });

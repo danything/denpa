@@ -198,11 +198,8 @@ function browserSupport(
       return (a === "XML" ? xml : app) ? 1 : 0;
     case "AITTransferMethod":
       return app ? 1 : 0;
-    case "IRDID":
-    case "ResidentApp":
-    case "ExtraBrowserFunction":
-      return 0;
   }
+  // ほか (IRDID・ResidentApp・ExtraBrowserFunction など) は無いと答える
   return 0;
 }
 

@@ -61,6 +61,7 @@ import {
   STARTUP_COMPONENT,
   STARTUP_MODULE,
   unknownScheme,
+  withoutQuery,
 } from "./resources";
 import { Sound } from "./sound";
 import {
@@ -99,7 +100,7 @@ export interface BmlOptions {
   receiver?: Partial<ReceiverInfo>;
   /** 映像の object の場所 (画面の座標)。映像が無い・隠れていれば null */
   onVideoRect?: (rect: Rect | null, plane: Plane) => void;
-  /** 文書が「出ている」と言っているか (body の invisible の逆) */
+  /** 文書が見える状態か (body の invisible の逆) */
   onVisible?: (visible: boolean) => void;
   /** 待っているモジュールがあるか (データ取得中) */
   onReceiving?: (receiving: boolean) => void;
@@ -138,7 +139,7 @@ export interface Bml {
   key(code: number, down: boolean): void;
   /** 今の文書がその種類の beitem を subscribe しているか */
   listens(type: string): boolean;
-  /** 押したままのキーを忘れる (窓のフォーカスが外れて keyup が来ないとき) */
+  /** 押したままのキーを放したことにする (窓のフォーカスが外れて keyup が来ないとき) */
   releaseKeys(): void;
   /** いまの局と番組 (放送の programInfo)。Hybridcast のアプリに渡す */
   program(): ProgramInfoMessage | null;
@@ -197,7 +198,7 @@ const ACCESS_KEYS: Record<number, string> = {
 /*
  * 長く流し続けても増え続けない歯止め。ライブはモジュールのバージョンの更新・イベントメッセージ・TOT が
  * 止まらずに来る (NHK は 10 分で DII の更新 48 回・イベントメッセージ 4234 件)。文書が
- * 後始末を忘れても、エンジンが持つものは一定に収める
+ * 後始末をしなくても、エンジンが持つものは一定に収める
  */
 /** 待っているイベントの上限 (溢れた受け手は捨てる) */
 export const MAX_QUEUE = 512;
@@ -374,7 +375,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   feed(message: ResponseMessage): void {
     if (this.destroyed) return;
     // 届いたものを捌くのもエンジンの仕事に数える (ライブは止まらずに流れ込み続ける。
-    // モジュールをデコードする・受け手を探すのを数えないと、10 秒のうち 4 割の見張りから漏れる)
+    // モジュールをデコードする・受け手を探すのを数えないと、「10 秒のうち 4 割を超えて動いたら止める」
+    // 決まり (budget.ts) の勘定から漏れる)
     this.work(() => {
       for (const event of this.resources.feed(message)) this.react(event);
     });
@@ -762,7 +764,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     }
     // 入口の文書が読めない文書へ移ろうとしたなら、入口のまま止める (出直すと同じ遷移を
     // 繰り返して回り続ける)。そうでなければ入口から出直す
-    if (this.current?.replace(/[?#][\s\S]*$/, "") === `${ENTRY}/startup.bml`)
+    if (
+      this.current !== null &&
+      withoutQuery(this.current) === `${ENTRY}/startup.bml`
+    )
       return;
     setTimeout(() => {
       if (token === this.token && !this.destroyed) this.restart();
@@ -1343,7 +1348,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   /**
    * 同じことは 1 回だけ知らせる。覚えておく数には上限を置く (名前はスクリプトが組むので、
-   * 長く流すと際限なく増えうる。溢れたら忘れて、また 1 回ずつ知らせる)
+   * 長く流すと際限なく増えうる。溢れたら消して、また 1 回ずつ知らせる)
    */
   private report(key: string, message: string): void {
     if (this.reported.has(key)) return;
@@ -1689,7 +1694,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
     const mng = type === "image/x-arib-mng";
     // PNG・MNG の色は文書の CLUT で決まるので、文書ごとに作る
     // 問い合わせ (`?tsid=…`) は文書の名前の一部だが、CLUT は同じなので作り直さない
-    const page = this.current?.replace(/[?#][\s\S]*$/, "");
+    const page = this.current === null ? undefined : withoutQuery(this.current);
     const variant = png ? `png:${page}` : mng ? `mng:${page}` : "raw";
     const made = file.urls.get(variant);
     if (made !== undefined) return made;

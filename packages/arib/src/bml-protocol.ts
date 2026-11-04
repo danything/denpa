@@ -1,8 +1,8 @@
 /**
  * データ放送の通知の形式。**デコードする側 ([bml.ts](bml.ts)) と描く側の取り決め。**
  *
- * もとは web-bml の `server/ws_api.ts` の型を借りていた。形式はそのまま写してある —
- * 録画の隣に置いた `.bml.jsonl` はこの形式の JSON を1行ずつ持っているので、
+ * もとは web-bml の `server/ws_api.ts` の型を借りていた。形式はそのまま写してある。
+ * 録画の隣に置いた `.bml.jsonl` はこの形式の JSON を 1 行ずつ持っているので、
  * **形式を変えると前に録ったものが読めなくなる**。足すのはよいが、名前や意味は変えない。
  * web-bml は MIT で、著作権表示と許諾の文は [LICENSE](../LICENSE) に置いてある。
  *
@@ -11,7 +11,7 @@
  * TS 解析のために持っていた PCR・PES・BIT・映像の URL は作らないので持たない。
  */
 
-/** PMT の ES 1本。**部品タグ (`componentId`) を持つものだけ**並ぶ (bml.ts の `parsePmt`) */
+/** PMT の ES 1 本。**部品タグ (`componentId`) を持つものだけ**並ぶ (bml.ts の `parsePmt`) */
 export interface ComponentPMT {
   pid: number;
   componentId: number;
@@ -67,7 +67,7 @@ export interface MediaTypeParameter {
   value: string;
 }
 
-/** モジュールの中のファイル1つ。中身は base64 (JSON で運ぶため) */
+/** モジュールの中のファイル 1 つ。中身は base64 (JSON で運ぶため) */
 export interface ModuleFile {
   contentLocation: string | null;
   contentType: MediaType;

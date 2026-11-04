@@ -17,8 +17,17 @@ afterAll(() => {
 });
 
 const { saveSettings } = await import("./settings");
-const { liveStart, readKept, viewingOptions, warmFormat } =
-  await import("./viewing");
+const { audioArgs } = await import("./live");
+const {
+  askedFormat,
+  autoFormat,
+  liveAudioOnly,
+  liveStart,
+  parseFormats,
+  readKept,
+  viewingOptions,
+  warmFormat,
+} = await import("./viewing");
 
 describe("観るときの決まり (画面の load と GET /api/playback/options)", () => {
   test("設定が無ければ、外の名前は外・家の中のアドレスは家の中。外すコーデックは無い", () => {
@@ -159,5 +168,134 @@ describe("開いたときに先回りする形式と局", () => {
       codec: "av1",
     });
     expect(liveStart([], NaN, { choice: "auto" }, true)).toBeNull();
+  });
+});
+
+describe("形式をサーバに選ばせる (codec=auto)", () => {
+  /** GPU が無い (段を下げるならソフトウェアの H.264) */
+  const noGpu = () => null;
+  /** どれも GPU でエンコードできる */
+  const gpu = () => ({ kind: "test" }) as never;
+
+  test("playable を省けば H.264 だけ。知らない値は捨て、何も残らなければ null", () => {
+    expect(parseFormats(null)).toEqual(["h264"]);
+    expect(parseFormats("raw,av1,vp9,av1")).toEqual(["raw", "av1"]);
+    expect(parseFormats("")).toBeNull();
+    expect(parseFormats("vp9,mpeg2")).toBeNull();
+  });
+
+  test("家の中は MPEG-2 → H.264 → AV1 → H.265、外は AV1 → H.265 → H.264", () => {
+    const all = ["raw", "av1", "hevc", "h264"] as const;
+    const base = { scene: "live" as const, rung: 0 as const, hevc: true };
+    expect(autoFormat({ ...base, formats: all, indoor: true })).toBe("raw");
+    expect(autoFormat({ ...base, formats: all, indoor: false })).toBe("av1");
+    expect(
+      autoFormat({ ...base, formats: ["hevc", "h264"], indoor: false }),
+    ).toBe("hevc");
+    expect(autoFormat({ ...base, formats: ["raw", "av1"], indoor: true })).toBe(
+      "raw",
+    );
+    // 外の並びに放送のままは無い
+    expect(autoFormat({ ...base, formats: ["raw"], indoor: false })).toBeNull();
+  });
+
+  test("H.265 はライブで GPU のときだけ。追っかけでは出さない", () => {
+    const formats = ["hevc", "h264"] as const;
+    expect(
+      autoFormat({
+        scene: "live",
+        formats,
+        indoor: false,
+        rung: 0,
+        hevc: false,
+      }),
+    ).toBe("h264");
+    expect(
+      autoFormat({
+        scene: "chase",
+        formats,
+        indoor: false,
+        rung: 0,
+        hevc: true,
+      }),
+    ).toBe("h264");
+    expect(
+      autoFormat({
+        scene: "chase",
+        formats: ["hevc"],
+        indoor: false,
+        rung: 0,
+        hevc: true,
+      }),
+    ).toBeNull();
+  });
+
+  test("段を下げるなら rungCodec。放送のままは外し、H.264 を再生できない端末には選ばない", () => {
+    const base = { scene: "live" as const, indoor: true, rung: 2 as const };
+    expect(
+      autoFormat({ ...base, formats: ["raw", "av1", "h264"], pick: gpu }),
+    ).toBe("av1");
+    expect(autoFormat({ ...base, formats: ["raw", "h264"], pick: noGpu })).toBe(
+      "h264",
+    );
+    expect(autoFormat({ ...base, formats: ["raw", "av1"], pick: noGpu })).toBe(
+      null,
+    );
+  });
+
+  test("HTTP の live・chase の codec と段 (askedFormat)", () => {
+    const at = (query: string) => new URL(`http://192.168.1.20/x?${query}`);
+    const outside = (query: string) =>
+      new URL(`https://dp.example.com/x?${query}`);
+    expect(askedFormat(at("codec=auto&playable=raw,h264"), "live")).toEqual({
+      codec: "raw",
+      rung: 0,
+    });
+    expect(
+      askedFormat(outside("codec=auto&playable=raw,h264,av1"), "chase"),
+    ).toEqual({ codec: "av1", rung: 0 });
+    expect(askedFormat(at("codec=auto"), "live")).toEqual({
+      codec: "h264",
+      rung: 0,
+    });
+    expect(askedFormat(at("codec=auto&playable="), "live")).toBeNull();
+    expect(
+      askedFormat(at("codec=auto&playable=raw,h264&rung=1"), "live", {
+        pick: noGpu,
+      }),
+    ).toEqual({ codec: "h264", rung: 1 });
+    // 明示の codec は今までどおり。ライブの H.265 は出せなければ H.264
+    expect(askedFormat(at("codec=raw&rung=2"), "live")).toEqual({
+      codec: "raw",
+      rung: 0,
+    });
+    expect(askedFormat(at("codec=hevc"), "live", { hevc: true })).toEqual({
+      codec: "hevc",
+      rung: 0,
+    });
+    expect(askedFormat(at("codec=hevc"), "live", { hevc: false })).toEqual({
+      codec: "h264",
+      rung: 0,
+    });
+    expect(askedFormat(at("codec=hevc"), "chase", { hevc: true })).toEqual({
+      codec: "h264",
+      rung: 0,
+    });
+    expect(askedFormat(at(""), "chase")).toEqual({ codec: "h264", rung: 0 });
+  });
+
+  test("HTTP のライブの音声だけは段を保つ (liveAudioOnly)。WebSocket の codec: audio と同じく音声だけを 96k に下げる", () => {
+    const at = (query: string) => new URL(`http://192.168.1.20/x?${query}`);
+    expect(liveAudioOnly(at("audio=only&rung=2&codec=av1"))).toEqual({
+      codec: "audio",
+      rung: 2,
+    });
+    expect(liveAudioOnly(at("audio=only"))).toEqual({
+      codec: "audio",
+      rung: 0,
+    });
+    expect(liveAudioOnly(at("audio=0:sub&rung=2"))).toBeNull();
+    expect(audioArgs("audio", 2).join(" ")).toContain("-b:a 96k");
+    expect(audioArgs("audio", 0).join(" ")).toContain("-b:a 256k");
   });
 });

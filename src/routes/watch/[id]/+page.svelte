@@ -12,7 +12,13 @@
   import { MediaQuery } from "svelte/reactivity";
 
   import { submitting } from "#lib/actions.js";
-  import { type AdaptDecision, HOLD, type Step } from "#lib/adapt.js";
+  import {
+    type AdaptDecision,
+    adaptNote,
+    HOLD,
+    type Step,
+    stepOrder,
+  } from "#lib/adapt.js";
   import { arming } from "#lib/arming.svelte.js";
   import { type CanvasPlayer, canvasPlayer } from "#lib/canvas-player.js";
   import { canvasVideo, driveNoticeSeen } from "#lib/canvas-video.js";
@@ -172,7 +178,6 @@
   } from "#lib/ts/watch.js";
   import {
     ADAPT_TICK,
-    adaptNote,
     autoLabel,
     busyNote,
     rungQuery,
@@ -759,11 +764,6 @@
     }, ADAPT_NOTE);
   }
 
-  /** 段の並び。数が大きいほど軽い */
-  function weight(at: Step): number {
-    return at === "audio" ? 4 : at;
-  }
-
   /**
    * 段を替えるためにプレイヤーを作り直す。いまの位置から観直し、再生していたなら続ける。
    * 作り直したばかりで再生を待っている間 (`keepPlaying` が残っている) も続ける
@@ -854,7 +854,8 @@
       return true;
     }
     adaptQuietUntil = Date.now() + HOLD;
-    if (result === "busy") noteAdapt(busyNote(weight(next) > weight(step)));
+    if (result === "busy")
+      noteAdapt(busyNote(stepOrder(next) > stepOrder(step)));
     return false;
   }
 
@@ -1022,9 +1023,7 @@
               key: codec,
               label: codecLabel(codec),
             }));
-      // 「自動」で段を下げている間は、いまの形式と高さを添える (「自動 (H.264 540p)」)
-      const auto = choice === "auto" ? autoLabel(step, stepCodec) : "自動";
-      return items.length < 2 ? [] : [{ key: "auto", label: auto }, ...items];
+      return items.length < 2 ? [] : [{ key: "auto", label: "自動" }, ...items];
     },
   );
 
@@ -2573,6 +2572,9 @@
                     selected: codecMenu.some((item) => item.key === choice)
                       ? choice
                       : "auto",
+                    // 「自動」で段を下げている間は、いまの形式と高さを添える (「自動 (H.264 540p)」)
+                    auto:
+                      choice === "auto" ? autoLabel(step, stepCodec) : "自動",
                     onpick: (key) => chooseCodec(key as CodecChoice | "mpeg2"),
                   })
                 : undefined}

@@ -1,7 +1,7 @@
 /**
- * CM の境目を決める (純粋な計算)。材料は `server/cm-scan.ts` が1回のデコードで取ったもの。
+ * CM の境目を決める (純粋な計算)。材料は `server/cm-scan.ts` が 1 回のデコードで取ったもの。
  *
- * 秒はどれも ffmpeg の時刻 (入れ物の頭を 0)。
+ * 秒はどれも材料を読んだ ffmpeg の時刻 (`-ss` で捨てたあとの先頭が 0。コンテナの先頭からの秒に直すのは呼ぶ側の `server/cm.ts`)。
  */
 
 import { OFF as LOGO_OFF } from "./logo-detect";
@@ -29,11 +29,11 @@ export interface CmInput {
   programStart?: number;
 }
 
-/** 境目の候補。無音1つにつき、その中の切れ目 (無ければ真ん中) */
+/** 境目の候補。無音 1 つにつき、その中の切れ目 (無ければ真ん中) */
 interface Boundary {
   /** 無音 */
   silence: Range;
-  /** 切れ目 (新しい場面の1コマ目の秒)。強い順 */
+  /** 切れ目 (新しい場面の 1 コマ目の秒)。強い順 */
   cuts: number[];
   /** 切れ目が無かった (無音の真ん中を置いた) */
   still: boolean;
@@ -54,7 +54,7 @@ const REACH = 0.2;
 const CUT_MIN = 8;
 /** 弱い切れ目の下限。明るい映像どうしの切り替わりはこのくらい */
 const CUT_WEAK = 3;
-/** 「15秒の倍数」とみなす誤差 (秒) */
+/** 「15 秒の倍数」とみなす誤差 (秒) */
 const CM_TOLERANCE = 0.6;
 
 /** 最初に `at` 以上になる位置 */
@@ -101,7 +101,7 @@ export function boundaries(input: CmInput, shortest = SILENCE_MIN): Boundary[] {
   return out;
 }
 
-/** 境目の位置 (無音ごとにいちばん強い切れ目)。時刻の順で、近すぎるものは1つに */
+/** 境目の位置 (無音ごとにいちばん強い切れ目)。時刻の順で、近すぎるものは 1 つに */
 function points(candidates: Boundary[]): number[] {
   const out: number[] = [];
   for (const at of candidates.map((b) => b.cuts[0]!).sort((a, b) => a - b)) {
@@ -325,7 +325,7 @@ const EDGE_NEAR = 0.1;
 const EDGE_FAR = 2;
 const EDGE_FLAT_FALL = 5;
 const EDGE_FLAT_RISE = 8;
-/** ロゴの出入りが1つも無いときの減点の上限 */
+/** ロゴの出入りが 1 つも無いときの減点の上限 */
 const EDGE_CAP = 30;
 /**
  * **録画の頭の CM (尺を問わない) は、番組表どおりの頭 (`programStart`) からこの秒までに終える。** その先のロゴの無い所は、
@@ -340,7 +340,7 @@ const EDGE_CAP = 30;
 const HEAD_GRACE = 3;
 
 /**
- * 無音1つから採る切れ目の数 (強いほうから)。動いている場面の無音には弱い切れ目がいくつも並ぶので、比べる数を抑える
+ * 無音 1 つから採る切れ目の数 (強いほうから)。動いている場面の無音には弱い切れ目がいくつも並ぶので、比べる数を抑える
  */
 const PER_SILENCE = 4;
 
@@ -357,8 +357,8 @@ interface Candidate {
 }
 
 /**
- * 境目の候補。**無音の中の切れ目を強いものも弱いものも** (継ぎ目の無音に切れ目が2つあると、強いほうが継ぎ目とは限らない)。
- * 無音1つにつき強いほうから `PER_SILENCE` 個まで。切れ目が無ければ無音の真ん中。ほかに、
+ * 境目の候補。**無音の中の切れ目を強いものも弱いものも** (継ぎ目の無音に切れ目が 2 つあると、強いほうが継ぎ目とは限らない)。
+ * 無音 1 つにつき強いほうから `PER_SILENCE` 個まで。切れ目が無ければ無音の真ん中。ほかに、
  *
  * - 録画の頭と尻
  * - 無音の候補からちょうど 5・10 秒の、無音の外の強い切れ目 (`bare`)。CM に挟まれた短い所の頭の告知の終わりにだけ使う
@@ -416,7 +416,7 @@ function candidates(
   if (last !== undefined && last.end < duration - EDGE)
     out.push({ at: last.end, cut: 0, silence: 0, kind: "logo" });
   out.sort((a, b) => a.at - b.at);
-  // 同じ時刻は1つに (無音が重なっていた・ロゴの出入りが切れ目と同じ)。強いほうを残す
+  // 同じ時刻は 1 つに (無音が重なっていた・ロゴの出入りが切れ目と同じ)。強いほうを残す
   const merged: Candidate[] = [{ at: 0, cut: 0, silence: 0, kind: "end" }];
   const rank = { end: 3, mark: 2, bare: 1, logo: 0 };
   for (const c of out) {
@@ -634,7 +634,7 @@ function edgeCost(distance: number, flat: number): number {
 
 /**
  * ロゴの出ていない所を CM にする。**分け方を全部比べて、点数の合計がいちばん高いものを選ぶ** (動的計画法)。
- * 点数は上の定数 (docs/cm.md の「境目の決め方」)。隣り合う CM の区間は1つにまとめて返す
+ * 点数は上の定数 (docs/cm.md の「境目の決め方」)。隣り合う CM の区間は 1 つにまとめて返す
  */
 function byLogo(input: CmInput, logo: Range[]): Range[] {
   const silences = boundaries(input);
@@ -886,7 +886,7 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
 /** ロゴを使わないとき、CM ブロックとして採る最短 (秒)。単発の 15 秒は本編のコーナーと紛らわしい */
 const BLOCK_MIN = 30;
 
-/** CMの尺は15秒の倍数 (15〜180秒) */
+/** CM の尺は 15 秒の倍数 (15〜180 秒) */
 export function isCmLength(seconds: number): boolean {
   if (seconds < 15 - CM_TOLERANCE || seconds > 180 + CM_TOLERANCE) return false;
   const units = Math.round(seconds / 15);
@@ -894,8 +894,8 @@ export function isCmLength(seconds: number): boolean {
 }
 
 /**
- * ロゴを使わずに決める。境目と境目の間が CM の尺 (15秒の倍数) になっているところが続けば CM。
- * 本編の「間」に当たることがあるので、30秒以上続いたものだけ
+ * ロゴを使わずに決める。境目と境目の間が CM の尺 (15 秒の倍数) になっているところが続けば CM。
+ * 本編の「間」に当たることがあるので、30 秒以上続いたものだけ
  */
 function byLength(input: CmInput, candidates: Boundary[]): Range[] {
   const edges = [0, ...points(candidates), input.duration];

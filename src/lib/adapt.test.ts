@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   type AdaptDecision,
+  adaptNote,
   type AdaptSample,
   AUDIO_AFTER,
   BASE_GUESS_KBPS,
@@ -10,6 +11,7 @@ import {
   HOLD,
   PROBE,
   RungAdapter,
+  stepLabel,
   THIN,
   UP_WAIT_LIVE,
   UP_WAIT_MOST,
@@ -555,5 +557,44 @@ describe("サーバが切り替えなかったとき", () => {
       at: GRACE + HOLD,
       decision: { step: 1, reason: "slow" },
     });
+  });
+});
+
+/** **画面に出す文** (`stepLabel`・`adaptNote`)。ライブも観る画面も同じ文 */
+describe("画面に出す文", () => {
+  test("自動の行の値は、段 0 は形式だけ、下げたら高さを添える、音声だけはそう出す", () => {
+    expect(stepLabel(0, "MPEG-2")).toBe("MPEG-2");
+    expect(stepLabel(2, "H.264")).toBe("H.264 540p");
+    expect(stepLabel(1, "H.265")).toBe("H.265 720p");
+    // 応答を受ける前はコーデックが分からない
+    expect(stepLabel(3, "")).toBe("360p");
+    expect(stepLabel("audio", "H.264")).toBe("音声だけ");
+  });
+
+  test("段を動かしたときは、理由と替えた先を書く", () => {
+    expect(adaptNote({ step: 2, reason: "slow" }, 0)).toBe(
+      "回線が細いため、540p に下げました",
+    );
+    expect(adaptNote({ step: "audio", reason: "slow" }, 3)).toBe(
+      "回線が細いため、音声だけにしました",
+    );
+    expect(adaptNote({ step: 1, reason: "restored" }, 2)).toBe(
+      "回線が戻ったため、720p に上げました",
+    );
+    expect(adaptNote({ step: 3, reason: "restored" }, "audio")).toBe(
+      "回線が戻ったため、360p の映像に戻しました",
+    );
+    expect(adaptNote({ step: 0, reason: "restored" }, 1)).toBe(
+      "回線が戻ったため、元の画質に戻しました",
+    );
+  });
+
+  test("エンコードの遅れと手で選んでいるときは、段を動かさない理由とすること", () => {
+    expect(adaptNote({ step: 1, reason: "encode" }, 1)).toBe(
+      "サーバのエンコードが追いつかないため、再生が止まります",
+    );
+    expect(adaptNote({ step: 0, reason: "pinned" }, 0)).toBe(
+      "回線が細いため、再生が止まります。コーデックを「自動」にすると、画質を下げて再生を続けます",
+    );
   });
 });

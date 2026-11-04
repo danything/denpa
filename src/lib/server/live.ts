@@ -606,32 +606,6 @@ export function parsePlayable(value: unknown, codec: LiveCodec): LiveCodec[] {
 }
 
 /**
- * **HTTP のライブ (`GET /api/services/<id>/live`) で流すコーデックと段。** `?audio=only` なら音声だけ、
- * `?codec=av1`・`raw` ならそれ、ほかは H.264。段 (`?rung=`) は放送そのままでは 0。
- * 音声だけは段のまま返す (画面の WebSocket の `codec: "audio"` と同じく、音声のビットレートだけを下げる)。
- * 映像の段を下げるなら、コーデックは `?playable=` から `rungCodec` で選ぶ。`pick` はテストで差し替えるときだけ渡す
- */
-export function httpLiveForm(
-  query: URLSearchParams,
-  pick: (codec: LiveCodec, interlaced: boolean) => LiveHw | null = pickLiveHw,
-): { codec: StreamCodec | "raw"; rung: Rung } {
-  const asked = query.get("codec");
-  const plain =
-    query.get("audio") === "only"
-      ? "audio"
-      : asked === "av1" || asked === "raw"
-        ? asked
-        : "h264";
-  const rung = plain === "raw" ? 0 : parseRung(query.get("rung"));
-  if (rung === 0 || plain === "raw" || plain === "audio")
-    return { codec: plain, rung };
-  return {
-    codec: rungCodec(parsePlayable(query.get("playable"), plain), true, pick),
-    rung,
-  };
-}
-
-/**
  * **段を下げたライブのセッションに要る枠** (`transcode.ts`)。段 0 と、もう動いている同じ段のセッションに入るとき (`shared`) は
  * 使わない (何もしない関数を返す)。段 1〜3 を新しくエンコードするときは 1 本ぶん取り、埋まっていれば null。
  * 段 0 のライブは今までどおり数えない。`hold` はテストで差し替えるときだけ渡す
@@ -2428,7 +2402,7 @@ export const CHASE_STREAM_HOLD = 4 * 1024 * 1024;
  * 画面の視聴者と同じ取り合いに加わる。同じ局・同じエンコード方式・**同じ音声**を誰かが見ていれば
  * 共有し (`key`)、最後の 1 人が抜けたら畳む。局が無ければ null。
  *
- * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`。コーデックは呼ぶ側が `httpLiveForm` で決めて `codec` に渡す)。
+ * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`。コーデックは呼ぶ側が `viewing.askedFormat`・`liveAudioOnly` で決めて `codec` に渡す)。
  * 放送そのままでは効かない。音声だけは画面の WebSocket と同じく音声のビットレートだけを下げ (`audioArgs`)、枠は使わない。
  * 映像を段を下げてエンコードするなら、同じ段を誰も観ていなければ枠を使い (`rungSlot`)、埋まっていれば `'busy'`
  */

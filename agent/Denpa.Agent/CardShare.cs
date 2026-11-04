@@ -184,7 +184,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         return status switch
         {
             403 => $"鍵を配る拠点に断られました: {reason ?? "理由は返っていません"}",
-            // 前のバージョンの CARD_URL (普通の API のポート) のまま。鍵を配る API は専用のポートに移った
+            // CARD_URL が鍵を配る API の無い所を指している。普通の API のポート (TLS だけ) なら、ここへは来ずに繋がらない
             404 => $"{url} では鍵を配っていません (404)。CARD_URL には配る側の CARD_SHARE_PORT のポートを書きます",
             _ => $"鍵を配る拠点から{what}を受け取れません ({status}{(reason is null ? "" : $": {reason}")})",
         };
@@ -223,6 +223,26 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
 /// </summary>
 public static class CardWire
 {
+    /// <summary>配る側が受け取る ECM の上限 (バイト。CardShareServer.cs)</summary>
+    internal const int MaxEcm = 4096;
+
+    /// <summary>
+    /// 本文を <paramref name="limit"/> バイトまで読む。超えたら、その時点で読むのをやめて null。
+    /// 先に全部読むと、LAN の相手が上限の何倍もの本文を溜めさせられる
+    /// </summary>
+    internal static async Task<byte[]?> ReadUpTo(Stream body, int limit)
+    {
+        var buffer = new byte[limit + 1];
+        var length = 0;
+        while (length < buffer.Length)
+        {
+            var got = await body.ReadAsync(buffer.AsMemory(length));
+            if (got == 0) return buffer[..length];
+            length += got;
+        }
+        return null;
+    }
+
     /// <summary>32 バイトの system_key + 8 バイトの init_cbc + ca_system_id (BE32) + カード番号 (BE64 の並び)</summary>
     public static byte[] Pack(CardInit init)
     {

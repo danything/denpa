@@ -4,7 +4,7 @@
  * 使うのは、`<video>` の再生が止まる端末 (テスラの車載ブラウザ) の互換モード (`canvas-video.ts`) と、
  * 元の TS (MPEG-2) を選んだとき。サーバへのリクエストの仕方は `<video>` で
  * その場で流すとき (`remux-player.ts`) と同じ `/api/recordings/<id>/stream` で、届いたものを MSE ではなく
- * ライブ・追っかけと同じエンジン (`raw/engine.ts`) へ流す:
+ * ライブ・追っかけと同じエンジン (`raw/engine.ts`) へ流す。
  *
  * - `fmp4` … H.264 / AV1 の fMP4。時刻はページの物差しのまま (`PlayAxis`)。箱の切れ目で割ってから渡す
  *   (`ts/fmp4.ts` の `Fmp4Splitter`。worker は箱ごとに受け取る)
@@ -14,7 +14,7 @@
  *   (`mkv-source.ts`)。時刻はエンコード済みの物差しのまま
  *
  * 決め方は追っかけと同じ `follow` (`raw/playout.ts`)。止めたら位置を保ち、そこから再開し、今へは飛ばない。
- * 録画のために足したのは:
+ * 録画のために足したものは次のとおり。
  *
  * - **飛ぶ** … 持っているものを捨てて、飛び先からリクエストし直す (`seek`)。サーバは飛び先の少し手前 (キーフレーム・
  *   1 秒前) から流すので、手前は鳴らさず描かない (`RawEngine.reset` の `from`)。描けるまでは前の映像のまま
@@ -309,7 +309,6 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         origin = head;
         start = (((origin + start) % WRAP) + WRAP) % WRAP;
       }
-      if (mine !== run) return;
       engine.reset(start);
       const splitter = input === "fmp4" ? new Fmp4Splitter() : null;
       reader = response.body.getReader();

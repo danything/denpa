@@ -307,8 +307,6 @@ public sealed class Dt295Device
         _random = random ?? RandomNumberGenerator.GetBytes;
     }
 
-    public Dt295Bridge Bridge => _bridge;
-
     /// <summary>セッション鍵を持っている (認証の手順 9 まで進んだ)</summary>
     public bool HasSession => _sessionKey is not null;
 

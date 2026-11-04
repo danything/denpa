@@ -4,6 +4,7 @@ import {
   type Rung,
   RUNG_AUDIO_KBPS,
   RUNG_SPECS,
+  rungLabel,
 } from "./rungs";
 
 /**
@@ -41,7 +42,7 @@ import {
  * ## 下げないとき
  *
  * - サーバのエンコードが実時間に追いつかない (`Pace.speed` が 1 未満) 間は、詰まっても回線のせいにしない。
- *   3 秒続いたら段は下げずに `encode` を返す (サーバ側で軽い組み合わせに替える)
+ *   3 秒続いたら段は下げずに `encode` を返す (画面は断り書きを出すだけ。サーバに軽い組み合わせへ替えさせる指示はまだ無い)
  * - 形式を手で選んでいる間は段を動かさず、足りないときに `pinned` だけを返す
  */
 
@@ -146,8 +147,36 @@ export const ENCODE_LAG = 3_000;
 export const BASE_GUESS_KBPS = 10_500;
 
 /** 段の並び。数が大きいほど軽い */
-function order(step: Step): number {
+export function stepOrder(step: Step): number {
   return step === "audio" ? LOWEST_RUNG + 1 : step;
+}
+
+/**
+ * コーデックのメニューの「自動」の行に添える値 (「H.264 540p」「音声だけ」)。段 0 は形式だけ (「MPEG-2」)。
+ * `format` は形式の名前 (分からなければ "" で、高さだけになる)。ライブも観る画面もこれを使う
+ */
+export function stepLabel(step: Step, format: string): string {
+  if (step === "audio") return "音声だけ";
+  return [format, rungLabel(step) ?? ""].filter((s) => s !== "").join(" ");
+}
+
+/**
+ * **断り書きに出す文** (docs/writing.md)。段を動かしたときは動かした先、`encode` と `pinned` は段を動かさない理由と、
+ * 何をすればどうなるか。`from` は切り替える前の段。ライブも観る画面もこれを使う
+ */
+export function adaptNote(decision: AdaptDecision, from: Step): string {
+  const { step, reason } = decision;
+  if (reason === "encode")
+    return "サーバのエンコードが追いつかないため、再生が止まります";
+  if (reason === "pinned")
+    return "回線が細いため、再生が止まります。コーデックを「自動」にすると、画質を下げて再生を続けます";
+  // 下げる先は段 1 から下、上げる先は段 3 から上。段 0 へ下げることと、音声だけへ上げることは無い
+  if (step === "audio") return "回線が細いため、音声だけにしました";
+  const height = rungLabel(step);
+  if (reason === "slow") return `回線が細いため、${height ?? ""} に下げました`;
+  if (height === null) return "回線が戻ったため、元の画質に戻しました";
+  if (from === "audio") return `回線が戻ったため、${height} の映像に戻しました`;
+  return `回線が戻ったため、${height} に上げました`;
 }
 
 /** 段の映像と音声を合わせたビットレート (bit/s) */
@@ -215,7 +244,7 @@ export class RungAdapter {
     else this.slowSince = null;
     if (this.slowSince !== null) {
       // 溜まりが減るのも詰まるのもエンコードが遅いせい。回線のぶんとして数えない
-      // この間にサーバが捨てた塊 (`dropped`) も数えない。サーバ側で軽い組み合わせに替えるので、段は下げない
+      // この間にサーバが捨てた塊 (`dropped`) も数えない (回線のせいではない)
       this.clearStreaks();
       this.remember(s);
       return now - this.slowSince >= ENCODE_LAG
@@ -298,7 +327,8 @@ export class RungAdapter {
   private switched(now: number, from: Step, to: Step): void {
     this.reset(now);
     this.holdUntil = now + HOLD;
-    this.probe = order(to) < order(from) ? { from, until: now + PROBE } : null;
+    this.probe =
+      stepOrder(to) < stepOrder(from) ? { from, until: now + PROBE } : null;
   }
 
   /** 足りない兆しがあるか。続いているかを見るために、刻むたびに呼ぶ */

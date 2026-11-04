@@ -13,12 +13,17 @@
  * 渡さなければ、どちらも始める位置がキーフレームになります (`at`)。待つ長さは変わりません。
  * 映せる 1 枚目はどのみちキーフレームです
  */
-import { type Fmp4Track, readFragment, readInit } from "./fmp4";
+import {
+  type Fmp4Sample,
+  type Fmp4Track,
+  readFragment,
+  readInit,
+} from "./fmp4";
 
 /**
  * キーフレームを待つ上限 (秒。映像の尺で数える)。**待ちきりにはしない。**
  *
- * キーフレームの間隔は約 1 秒 (`-g 60` で 60 コマごと。ライブはインタレ解除で 59.94 コマ/秒にする。`server/live.ts`)。印 (`sample_is_non_sync_sample`) が
+ * キーフレームの間隔は約 1 秒 (`-g` にコマの数。段 0 はインタレ解除で 59.94 コマ/秒にして 60、段を下げると 29.97 コマ/秒で 30。`server/live.ts`)。印 (`sample_is_non_sync_sample`) が
  * 読めないストリームだったときに、映像が出ないまま止まるよりは、前のとおり全部渡すほうがいい
  */
 const KEY_WAIT = 4;
@@ -50,7 +55,7 @@ export class KeyGate {
   pass(bytes: Uint8Array): boolean {
     const video = this.#video;
     if (!this.#waiting || video === undefined) return true;
-    let samples: ReturnType<typeof readFragment>;
+    let samples: Fmp4Sample[];
     try {
       samples = readFragment(bytes, this.#tracks);
     } catch {
