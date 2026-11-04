@@ -100,7 +100,7 @@
   let typed = false;
 
   /**
-   * **書く欄を初期値から組み直す鍵。** 直すルール (`?rule=`) や元の番組 (`?from=`) が変わったときだけ。
+   * **書く欄を初期値から組み直すキー。** 直すルール (`?rule=`) や元の番組 (`?from=`) が変わったときだけ。
    * 予約・取消・保存のあとの読み直しでは組み直さない (打ちかけの欄が戻る)
    */
   const seedKey = $derived(
@@ -798,7 +798,6 @@
   }
   .draft-head h2 {
     margin: 0;
-    font-size: var(--dp-text-lg);
   }
   .eyebrow {
     margin: 0 0 0.125rem;

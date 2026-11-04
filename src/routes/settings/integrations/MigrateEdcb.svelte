@@ -23,8 +23,9 @@
       {#snippet more()}
         <p>
           EpgTimerSrv に TCP で繋いで読みます (EpgTimerNW と同じ方法)。先に
-          EpgTimer の設定で「ネットワーク接続を許可する」を入れ、アクセス制御に
-          denpa の IP
+          EpgTimer
+          の設定で「ネットワーク接続を許可する」をオンにし、アクセス制御に denpa
+          の IP
           を足してください。録画のファイルと、録画済みの一覧から消した回は取り込みません。
         </p>
         <p>

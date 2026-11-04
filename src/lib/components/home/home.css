@@ -300,8 +300,6 @@
  * 広い画面 (768px 以上) では左右と下を main の余白の外まで広げ、右のサイドバーを窓の右端と下端に付ける
  */
 .board {
-  /* 日付の見出しが貼り付く所の上の離れ (下の `.t-day`) */
-  --t-day-gap: 0.5rem;
   display: flex;
   flex-direction: column;
 }
@@ -386,68 +384,15 @@
     gap: 0.75rem;
   }
 }
-/*
- * **日付の見出しは、貼り付いたときだけ操作の層の小さなカプセル。** 巻くと行がその裏を流れるので、ヘッダーと同じ半透明の面と影で浮かせる
- * (docs/design.md の「浮かせ方」)。地の色で塗ると、半透明のヘッダーの下で塗った所だけが浮いて見えた
- */
-.board .t-day {
-  /* 貼り付く位置。いちばん上の見出しの置かれた位置 (main の頭の空き) と同じにし、巻き始めても動かない (上端ではカプセルにならない) */
-  position: sticky;
-  top: var(--t-day-gap);
-  z-index: 3;
-  width: fit-content;
-  margin: 0.5rem 0 0.25rem;
-  color: var(--dp-muted);
-  font-size: var(--dp-text-xs);
-  font-weight: var(--dp-weight-bold);
-  container-type: scroll-state;
-}
-.board .t-day-chip {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--dp-radius-full);
-  background: var(--dp-float);
-  box-shadow: var(--dp-shadow-pop);
-  transition:
-    background-color var(--dp-duration) var(--dp-ease),
-    box-shadow var(--dp-duration) var(--dp-ease);
-}
-/* 貼り付いたかは `scroll-state(stuck: top)` で見る。知らないブラウザは、いつもカプセル */
-@supports (container-type: scroll-state) {
-  .board .t-day-chip {
-    background: transparent;
-    box-shadow: none;
-  }
-  @container scroll-state(stuck: top) {
-    .board .t-day-chip {
-      background: var(--dp-float);
-      box-shadow: var(--dp-shadow-pop);
-    }
-  }
-}
+/* 日付の見出しは `app.css` の `.day-head`。いちばん上の見出しは一覧の頭に付ける */
 .board .t-rows > .t-block:first-child > .t-day {
   margin-top: 0;
-}
-.board .t-day-name {
-  color: var(--pico-color);
-}
-.board .t-day-date {
-  font-weight: var(--dp-weight);
-}
-/* 広い形 (`#lib/phone-form.ts`) では、日付の見出しを浮いたヘッダーの下に、操作の 1 行どうしと同じ隙間 (`--dp-bar-gap`) 離して貼り付ける */
-:where(html:not([data-phone])) .board {
-  --t-day-gap: var(--dp-bar-gap);
-}
-:where(html:not([data-phone])) .board .t-day {
-  top: calc(var(--dp-header-bottom) + var(--t-day-gap));
 }
 /*
  * **スマホの形 (下のタブがある形) では、操作の 1 行を下のタブのすぐ上に貼り付ける。** 押すものは下に置く (指の届く所)。
  * 並びの上では一覧の後ろに回し (`order`)、下端に貼り付ける (`sticky` + `bottom`)。メニューは上に開く (`TimelineBar`)。
  * この 1 行も操作の層なので、下のタブの上に同じ半透明のカプセルで浮かせ、読んでいる間は引っ込める (`app.css` の `.dock`)。
- * 日付の見出しは上の安全域 (ノッチ) の少し下に浮かべる。スマホの形は `#lib/phone-form.ts` (`<html data-phone>`)
+ * スマホの形は `#lib/phone-form.ts` (`<html data-phone>`)
  */
 :where(html[data-phone]) .board .t-toolbar {
   order: 2;
@@ -470,9 +415,6 @@
       var(--dp-tabbar, 0px)
   );
   margin-bottom: calc(-1 * var(--dp-gutter, 1rem));
-}
-:where(html[data-phone]) .board .t-day {
-  top: calc(env(safe-area-inset-top, 0px) + var(--t-day-gap));
 }
 
 /*

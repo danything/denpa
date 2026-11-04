@@ -54,7 +54,7 @@ describe("押したときに何をするか", () => {
     expect(action).toEqual({ kind: "play" });
   });
 
-  test("指は 1 回で操作列の出し入れ", () => {
+  test("指は 1 回で操作バーの出し入れ", () => {
     const { action } = tap(null, 1000, "center", true);
     expect(action).toEqual({ kind: "controls" });
   });
@@ -100,7 +100,7 @@ describe("押したときに何をするか", () => {
     expect(action).toEqual({ kind: "play" });
   });
 
-  /** スマホの VLC と同じ癖。1 回目は操作列の出し入れで、2 回目で再生に触る */
+  /** スマホの VLC と同じ癖。1 回目は操作バーの出し入れで、2 回目で再生に触る */
   test("指は真ん中を素早く 2 回で再生・一時停止", () => {
     const first = tap(null, 1000, "center", true);
     expect(first.action).toEqual({ kind: "controls" });
@@ -108,7 +108,7 @@ describe("押したときに何をするか", () => {
     expect(action).toEqual({ kind: "play" });
   });
 
-  test("真ん中でも間合いを過ぎたら操作列の出し入れのまま", () => {
+  test("真ん中でも間合いを過ぎたら操作バーの出し入れのまま", () => {
     const first = tap(null, 1000, "center", true);
     const { action } = tap(first.next, 1000 + DOUBLE_TAP, "center", true);
     expect(action).toEqual({ kind: "controls" });

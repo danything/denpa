@@ -36,7 +36,7 @@
     describe = (day) =>
       dayAriaLabel(day, marks.get(day) as DayMark | undefined, today),
   }: {
-    /** 日ごとの行の数 (鍵はその日の 0 時)。切り抜きの画面は日ごとの枚数 (`describe` で読み上げを替える) */
+    /** 日ごとの行の数 (キーはその日の 0 時)。切り抜きの画面は日ごとの枚数 (`describe` で読み上げを替える) */
     marks: Map<number, DayMark | number>;
     /** 今日の 0 時 */
     today: number;

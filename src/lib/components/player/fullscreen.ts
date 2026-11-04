@@ -6,7 +6,7 @@
  * - `pseudo` … どちらも無い (iPhone の Safari)。**枠を画面いっぱいに広げて
  *   代わりにする** (`fullscreen.svelte.ts`)。iPhone は要素の全画面を持たず、
  *   あるのは `<video>` だけの `webkitEnterFullscreen`。あれは映像だけを OS の
- *   再生画面に渡すので、字幕・データ放送・操作列が置いていかれる。だから使わない
+ *   再生画面に渡すので、字幕・データ放送・操作バーが置いていかれる。だから使わない
  *
  * API があっても `fullscreenEnabled` が偽なら使えない (iframe の許可が無いなど) ので、
  * そのときも次へ回す

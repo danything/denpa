@@ -524,7 +524,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** いま MPEG-2 で見ているか。**サーバが `tuned` でそう答えたときだけ** */
   let raw = $state(false);
   /**
-   * canvas で描いているか (放送のままの MPEG-2 か、互換モードのエンコードしたものか)。**操作列の出し分けに使う**。
+   * canvas で描いているか (放送のままの MPEG-2 か、互換モードのエンコードしたものか)。**操作バーの出し分けに使う**。
    * どちらも遡れない (止めて再開は放送の今から)
    */
   let canvas = $state(false);
@@ -2902,7 +2902,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       return raw ? "raw" : codec;
     },
     /**
-     * canvas で描いているか (放送のままの MPEG-2 か、互換モードのエンコードしたものか)。**操作列の出し分けに使う**。
+     * canvas で描いているか (放送のままの MPEG-2 か、互換モードのエンコードしたものか)。**操作バーの出し分けに使う**。
      * どちらも遡れない。切り抜き・小窓も canvas から取る
      */
     get canvas() {

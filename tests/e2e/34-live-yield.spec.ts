@@ -183,7 +183,7 @@ test.describe("ライブが録画にチューナーを取り上げられたと�
           timeout: 30_000,
         },
       );
-      await expect(note).toContainText("(録画中を再生しています)");
+      await expect(note).toContainText("(録画中) を再生しています");
       // チューナーは録画のもの。ライブはリクエストし直したが入れなかった
       const users = await grUsers(stack);
       expect(users.some((use) => use.startsWith("rec "))).toBe(true);

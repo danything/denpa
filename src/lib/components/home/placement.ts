@@ -26,7 +26,7 @@ function bottomCover(): number {
 
 /**
  * 開いたときの位置に送る。線を見えている所の 7 割ほどの高さに置き (上に新しい録画、下に次の予約が入る)、
- * `target` (映したい録画の行の鍵) があって線のままでは見えなければ、その行が上の端 (貼り付いた日付の見出しの下)
+ * `target` (映したい録画の行のキー) があって線のままでは見えなければ、その行が上の端 (貼り付いた日付の見出しの下)
  * に来るまで戻す。閉じた番組の中にあれば、その見出し (`data-group-rows`)。
  *
  * **新しい順で表示 (`reversed`) のときは、線を上から 3 割ほどの高さに置く。** 上に近い予約、下に新しい録画が入る。
@@ -155,7 +155,7 @@ interface Anchor {
   offset: number;
 }
 
-/** 見えている所の上のほうで、頭から見えている最初の行の鍵と位置 (貼り付いた日付の見出しの下) */
+/** 見えている所の上のほうで、頭から見えている最初の行のキーと位置 (貼り付いた日付の見出しの下) */
 export function topRow(list: HTMLElement): Anchor | null {
   const top = topEdge(list);
   for (const row of list.querySelectorAll<HTMLElement>("[data-key]")) {

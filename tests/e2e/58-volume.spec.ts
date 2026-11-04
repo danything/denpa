@@ -245,7 +245,7 @@ async function waitHooked(
     .toBe(true);
 }
 
-/** 舞台の testid。操作列を出すときに動かす所 */
+/** 舞台の testid。操作バーを出すときに動かす所 */
 const STAGE = { live: "live-frame", chase: "chase", watch: "watch-stage" };
 
 /**

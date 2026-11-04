@@ -202,7 +202,7 @@ test.describe("設定のバージョンと環境・ログ", () => {
       .getAttribute("href"))!;
     expect(longer.length).toBeLessThanOrEqual(8000);
     await expect(dialog.getByTestId("issue-length")).toContainText(
-      "ログの頭の",
+      "ログの先頭の",
     );
   });
 

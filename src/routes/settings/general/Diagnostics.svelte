@@ -207,7 +207,7 @@
 </script>
 
 <!-- 節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先 -->
-<div class="part" id="version" data-part>
+<div id="version" data-part>
   <div class="sections readable">
     <!--
         **動いているバージョンと、バグを報告するときに聞かれるもの。** denpa とエージェントのバージョン・OS・
@@ -249,7 +249,7 @@
         <div class="field">
           <span class="field-label">エージェントのバージョン</span>
           <span class="small" data-testid="diag-agent-version">
-            {agentVersionText ?? "エージェントに聞いています…"}
+            {agentVersionText ?? "エージェントから取得しています…"}
             {#if versionMismatch}
               <span class="mismatch" data-testid="diag-version-mismatch">
                 ⚠ denpa ({data.environment.version})
@@ -283,13 +283,13 @@
         <div class="field">
           <span class="field-label">チューナー</span>
           <span class="small" data-testid="diag-tuners">
-            {tunerText ?? "エージェントに聞いています…"}
+            {tunerText ?? "エージェントから取得しています…"}
           </span>
         </div>
         <div class="field">
           <span class="field-label">カードリーダー</span>
           <span class="small" data-testid="diag-card">
-            {cardText ?? "エージェントに聞いています…"}
+            {cardText ?? "エージェントから取得しています…"}
           </span>
         </div>
         <div class="field">
@@ -325,7 +325,7 @@
   </button>
 {/snippet}
 
-<div class="part" id="logs" data-part>
+<div id="logs" data-part>
   <div class="sections">
     <section class="section" data-testid="diagnostics-logs">
       <div class="section-head">
@@ -344,8 +344,9 @@
             GitHub で開きます。denpa からは何も送りません。
           </p>
           <p>
-            エージェントのログには重さが無いので、「警告とエラーだけ」は字
-            (失敗・エラー・できません など) から見分けています。
+            エージェントのログにはレベル (警告・エラー)
+            が無いので、「警告とエラーだけ」は字 (失敗・エラー・できません など)
+            から見分けています。
           </p>
         {/snippet}
       </Lead>

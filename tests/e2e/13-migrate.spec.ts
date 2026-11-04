@@ -52,7 +52,7 @@ test.describe("EPGStation からの引き継ぎ", () => {
     await expect(log).toContainText(
       "BS4K は denpa に無いので種別から外しました",
     );
-    // 取ってくる大きさと置き場の空き
+    // 取得する大きさと置き場の空き
     await expect(log).toContainText("取り込む 3 件");
     await expect(log).toContainText("空き");
     await expect(page.getByTestId("epgstation-url")).toHaveValue(

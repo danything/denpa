@@ -305,7 +305,7 @@
     background: var(--dp-video-veil-strong);
     color: var(--dp-on-video);
     font-family: var(--dp-font-mono);
-    font-size: 10px;
+    font-size: var(--dp-text-xs);
     line-height: 1.25;
   }
   .wrap {

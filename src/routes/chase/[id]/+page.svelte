@@ -251,7 +251,7 @@
     keepResume(data.rec.id, pos, total, "ts", leaving);
   }
 
-  /** 操作列の出し入れ。ライブ・観る画面と同じ */
+  /** 操作バーの出し入れ。ライブ・観る画面と同じ */
   const controls = playerControls();
   /** 止めている間も掛けたまま (ライブ・観る画面と同じ。あちらに理由) */
   const awake = screenAwake();
@@ -565,7 +565,7 @@
             href={resolve(`watch/${data.rec.id}`)}
             data-testid="chase-to-watch"
           >
-            エンコードが終わりました。続きは観る画面で
+            エンコードが終わりました。続きは観る画面で再生できます
           </a>
         </span>
       {:else}
@@ -638,6 +638,6 @@
     text-underline-offset: 2px;
   }
   .to-watch:hover {
-    background: var(--dp-video-veil-strong);
+    background: var(--dp-on-video-hover);
   }
 </style>

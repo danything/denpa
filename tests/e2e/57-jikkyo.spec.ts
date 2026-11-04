@@ -1256,11 +1256,11 @@ test.describe("「実況」タブ", () => {
 });
 
 /*
- * **流れるコメントは操作列の影より上、ボタンより下** (`ControlBar`)。影とボタンが 1 つの段だった頃は、右端の列の所で
+ * **流れるコメントは操作バーの影より上、ボタンより下** (`ControlBar`)。影とボタンが 1 つの段だった頃は、右端の列の所で
  * コメントが影に潜り、暗く欠けて見えた。重なりの順は当たり判定の順と同じなので、確かめる間だけコメントと影に
  * 当たり判定を持たせ、`elementFromPoint` で上にあるものを読む
  */
-test.describe("実況のコメントと操作列の重なり", () => {
+test.describe("実況のコメントと操作バーの重なり", () => {
   test.use({ reducedMotion: "no-preference" });
 
   test("コメントは右端の列と下の操作バーの影より上を通り、ボタンはその上で押せる", async ({
@@ -1358,7 +1358,7 @@ test.describe("実況のコメントと操作列の重なり", () => {
           if (button.contains(hit)) return "ボタン";
           if (hit.closest('[data-testid="jikkyo-comment"]')) return "コメント";
           if (hit.closest(":has(> [data-bar-items]), [data-bar-items]"))
-            return "操作列";
+            return "操作バー";
           return hit.getAttribute("data-testid") ?? hit.tagName;
         };
         const real = at(b.left + b.width / 2, y);

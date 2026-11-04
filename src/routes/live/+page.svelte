@@ -103,7 +103,7 @@
   const channels = $derived(data.channels as LiveChannel[]);
 
   /*
-   * 番組が替わったら読み直す (操作列と一覧の番組名を前のまま残さない)。観ている局はサーバが放送の
+   * 番組が替わったら読み直す (操作バーと一覧の番組名を前のまま残さない)。観ている局はサーバが放送の
    * EIT[p/f] を読んで知らせてくる (`programs`)。観ていない局は番組表の予定で、いちばん早く終わる番組の
    * 少し後に読み直す。読み直しても観ているものは変わらない
    */
@@ -399,7 +399,7 @@
     if (canList) {
       if (jikkyoList.on) jikkyoList.toggle();
     } else writing = false;
-    // 一覧の下で打っている間は操作列が引っ込んでいることがある。出し直してから移す (消えている間は押せない)
+    // 一覧の下で打っている間は操作バーが引っ込んでいることがある。出し直してから移す (消えている間は押せない)
     controls.stir();
     void tick().then(() =>
       document
@@ -471,7 +471,7 @@
     player.volume = volume.level;
   });
 
-  /** 真ん中あたりを素早く 2 回で再生/一時停止 (`center-tap.ts`)。1 回目は操作列の出し入れ */
+  /** 真ん中あたりを素早く 2 回で再生/一時停止 (`center-tap.ts`)。1 回目は操作バーの出し入れ */
   const stageTap = centerTap(() => player.toggle(), controls.toggle);
 
   /** いまの 1 コマを字幕・コメントごと切り抜いてサーバに保存する (3 画面共通。`shot.svelte.ts`) */
@@ -946,10 +946,10 @@
         {@const yielded = player.yielded}
         <span class="stage-note yielded" data-testid="live-yielded">
           <span>
-            録画が始まったため、局を切り替えました: <span class="broadcast"
+            録画が始まったため、局を切り替えました。<span class="broadcast"
               >{yielded.recording.title}</span
             >
-            (録画中を再生しています)
+            (録画中) を再生しています
           </span>
           <button
             type="button"
@@ -1241,7 +1241,7 @@
   .back-live:hover:not(:disabled) {
     background: var(--dp-on-video-hover);
   }
-  /* 押すものなので操作列のボタンと同じ段 (実況のコメントより上。`ControlBar`) */
+  /* 押すものなので操作バーのボタンと同じ段 (実況のコメントより上。`ControlBar`) */
   .unmute {
     --pico-background-color: var(--dp-video-veil);
     position: absolute;
@@ -1280,7 +1280,7 @@
     font-size: inherit;
     /* 地は行の決まりと同じ。並べ直した行は前の場所から滑る (上の `slide`) */
     transition:
-      background-color var(--dp-duration),
+      background-color var(--dp-duration) var(--dp-ease),
       translate var(--dp-duration-move) var(--dp-ease-spring);
   }
   /* 並べ直した直後の 1 回だけ、前の場所にずらして置く (印を外すと滑る。印は `slide` が付けるので、Svelte からは見えない) */
@@ -1366,7 +1366,7 @@
   @media (hover: hover) and (pointer: fine) {
     .channel-detail {
       opacity: 0;
-      transition: opacity var(--dp-duration);
+      transition: opacity var(--dp-duration) var(--dp-ease);
     }
     .channel-item:is(:hover, :focus-within) .channel-detail {
       opacity: 1;

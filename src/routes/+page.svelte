@@ -2,7 +2,7 @@
   import { SvelteSet } from "svelte/reactivity";
 
   /**
-   * 「まとめて表示」で開いている番組 (まとめる鍵)。**その場かぎり覚える**。
+   * 「まとめて表示」で開いている番組 (まとめるキー)。**その場かぎり覚える**。
    * モジュールに置くので、観る画面へ行って戻っても開いたまま。読み込み直すと閉じる
    */
   const openedGroups = new SvelteSet<string>();
@@ -424,7 +424,7 @@
    */
   // svelte-ignore state_referenced_locally
   let grouped = $state(data.grouped);
-  /** 開いた番組の鍵。側ごとに分けて覚える (`future:アニメ`) */
+  /** 開いた番組のキー。側ごとに分けて覚える (`future:アニメ`) */
   const openKey = (zone: "future" | "past", group: string) =>
     `${zone}:${group}`;
   function isOpen(zone: "future" | "past", group: string): boolean {
