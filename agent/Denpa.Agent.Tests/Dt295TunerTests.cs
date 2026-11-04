@@ -487,6 +487,22 @@ public class Dt295TunerTests
         // 値は 16 ビットそのもの。0x1002 のビット 8〜9 は 0 なので、一時停止は状態 4
         await Assert.That(table.Rows.All(row => row is { Shift: 0, Width: 16 })).IsTrue();
         await Assert.That(table.Pause).IsEqualTo((ushort)4);
+        // 0x101A のビット 15 が 1 なので、PID は機材が選ぶ (実機の BS1 では、これを 0 にすると SI しか流れない)
+        await Assert.That(table.AutoPidMode).IsTrue();
+    }
+
+    [Test]
+    public async Task PID_を機材が選ぶかは_0x101A_のビット_15_で決まる()
+    {
+        // 482 行の受信設定 (pix-userland のバンドル) のように、このビットが 0 なら手動のルート指定
+        await Assert.That(new Dt295FieldTable([new(0x1002, 0, 16, 0x8004), new(0x101A, 15, 1, 0)]).AutoPidMode).IsFalse();
+        await Assert.That(new Dt295FieldTable([new(0x1002, 0, 16, 0x8004), new(0x101A, 0, 16, 0x0300)]).AutoPidMode).IsFalse();
+        // 行の順に当てるので、あとの行で 1 にすれば自動
+        await Assert.That(new Dt295FieldTable([new(0x101A, 0, 16, 0x0300), new(0x101A, 15, 1, 1)]).AutoPidMode).IsTrue();
+        // 別のレジスターのビットは見ない
+        await Assert.That(new Dt295FieldTable([new(0x1002, 15, 1, 1)]).AutoPidMode).IsFalse();
+        await Assert.That(Dt295FieldTable.AutoPidRegister).IsEqualTo((ushort)0x101A);
+        await Assert.That(Dt295FieldTable.AutoPidShift).IsEqualTo(15);
     }
 
     [Test]
