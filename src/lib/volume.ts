@@ -32,7 +32,7 @@ export function clampLevel(level: number): number {
   return Math.min(MAX_LEVEL, Math.max(0, Math.round(level)));
 }
 
-/** ↑↓ で1刻み動かす。刻みの途中にいたら、次の刻みの目に乗せる */
+/** ↑↓ で 1 刻み動かす。刻みの途中にいたら、次の刻みの目に乗せる */
 export function stepLevel(level: number, direction: number): number {
   const at = level / LEVEL_STEP;
   const next = direction > 0 ? Math.floor(at) + 1 : Math.ceil(at) - 1;
@@ -40,11 +40,11 @@ export function stepLevel(level: number, direction: number): number {
 }
 
 /**
- * **つまみの値 (%) → 掛ける大きさ (振幅の倍率)。振幅をつまみの値の2乗に比例させる。**
+ * **つまみの値 (%) → 掛ける大きさ (振幅の倍率)。振幅をつまみの値の 2 乗に比例させる。**
  *
  * 0% は無音、100% は +6 dB (`BOOST_DB`)。50% は 100% より 12 dB 小さい (放送より 6 dB 小さい)。
  *
- * 人が感じる大きさは振幅のおよそ 0.6 乗に比例する (Stevens のべき法則)。2乗に比例させると感じる大きさは
+ * 人が感じる大きさは振幅のおよそ 0.6 乗に比例する (Stevens のべき法則)。2 乗に比例させると感じる大きさは
  * つまみの値の 1.2 乗になり、**つまみの位置と聞こえる大きさがほぼ比例する**。半分まで下げれば、
  * ほぼ半分の大きさに聞こえる。
  *

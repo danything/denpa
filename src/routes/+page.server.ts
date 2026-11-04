@@ -74,10 +74,10 @@ interface RecordingRow extends Recording {
    */
   job_canceling: boolean;
   /**
-   * 元のTSの大きさ。エンコード済みと**両方ある**ときだけ入る。
+   * 元の TS の大きさ。エンコード済みと**両方ある**ときだけ入る。
    *
    * `ts_size` はいま配っているファイルの大きさで、エンコードが終わると
-   * mkv のものに書き換わる。元のTSを残す設定だと「消していいのか、どれだけ
+   * mkv のものに書き換わる。元の TS を残す設定だと「消していいのか、どれだけ
    * 空くのか」が画面から分からなかった
    */
   raw_size: number | null;
@@ -90,7 +90,7 @@ interface RecordingRow extends Recording {
   hevc_size: number | null;
   alt_size: number | null;
   /**
-   * どこから来た1本か。**予約の行から引く** (録画には写さない)。
+   * どこから来た 1 本か。**予約の行から引く** (録画には写さない)。
    *
    * 写していないので、ルールの条件を変えても「何で録れたか」は変わらない。
    * ルールごと消えたときだけ `rule_id` が NULL になり (rules の delete が外す)、
@@ -122,7 +122,7 @@ function seriesGroup(
 ): { group_key: string; group_name: string } {
   const key = seriesFolder(series, name);
   const shown = (series === "" ? parseTitle(name).series : series).trim();
-  // 名前が空白だけのときはフォルダ名 (`untitled`) を出す。見出しが「N本」だけになるため
+  // 名前が空白だけのときはフォルダ名 (`untitled`) を出す。見出しが「N 本」だけになるため
   return { group_key: key, group_name: shown === "" ? key : shown };
 }
 
@@ -158,9 +158,9 @@ interface ReservationRow extends Omit<Reservation, "state"> {
   rule_name: string | null;
   /** 局ロゴを取得できているか。局名の隣に出す */
   has_logo: boolean | null;
-  /** 録画中の録画のID。追っかけ再生 (`/chase/<id>`) への入口 (issue #16) */
+  /** 録画中の録画の ID。追っかけ再生 (`/chase/<id>`) への入口 (issue #16) */
   recording_id: number | null;
-  /** 録画の行が1本でもあるか (消したものも含む)。終わった予約を録画の行にまとめる (`mergeRecorded`) */
+  /** 録画の行が 1 本でもあるか (消したものも含む)。終わった予約を録画の行にまとめる (`mergeRecorded`) */
   recorded: boolean;
   /** 「まとめて表示」でまとめるキーと見出し。録画の行と同じ決め方 (`seriesGroup`) */
   group_key: string;
@@ -168,10 +168,10 @@ interface ReservationRow extends Omit<Reservation, "state"> {
 }
 
 /**
- * 予約と録画を1画面に並べる。
+ * 予約と録画を 1 画面に並べる。
  *
  * 「これから何が録れるか」と「録れたものが今どうなっているか」は続きものなので、
- * 行き来せずに見えるほうがいい。1本の時間軸に並べる (ふだんは上が録れたもの、下が予約で、新しい順で表示では上下を返す。並べるのは画面の `#lib/timeline.ts`)。
+ * 行き来せずに見えるほうがいい。1 本の時間軸に並べる (ふだんは上が録れたもの、下が予約で、新しい順で表示では上下を返す。並べるのは画面の `#lib/timeline.ts`)。
  *
  * **番組名で探すのはここではない** (全体の検索 `/search?q=`)。ホームは絞り込みのボタンだけで絞る
  */
@@ -209,7 +209,7 @@ export function load({ url, cookies }) {
       recording_id: sql<
         number | null
       >`CASE WHEN ${rec.state} = 'recording' THEN ${rec.id} END`,
-      // 録画の行が1本でもあるか (消したものも)。終わった予約を録画の行にまとめるのに使う (`timeline.ts` の `mergeRecorded`)
+      // 録画の行が 1 本でもあるか (消したものも)。終わった予約を録画の行にまとめるのに使う (`timeline.ts` の `mergeRecorded`)
       recorded:
         sql<number>`EXISTS (SELECT 1 FROM recordings WHERE reservation_id = ${r.id})`.mapWith(
           Boolean,
@@ -248,7 +248,7 @@ export function load({ url, cookies }) {
       job_eta_ms: j.eta_ms,
       job_log: j.log,
       has_logo: services.has_logo,
-      // 何で録れた1本か。予約とルールから引く (録画には持たせない)
+      // 何で録れた 1 本か。予約とルールから引く (録画には持たせない)
       rule_id: res.rule_id,
       from_manual: res.manual,
       rule_name: ruleTable.name,
@@ -260,7 +260,7 @@ export function load({ url, cookies }) {
     .leftJoin(j, eq(j.id, activeEncodeJobId(recordingTable.id)))
     .where(
       and(
-        // 録画中のものは予約の行として出ている。ここにも出すと同じ番組が2箇所に並ぶ
+        // 録画中のものは予約の行として出ている。ここにも出すと同じ番組が 2 箇所に並ぶ
         ne(recordingTable.state, "recording"),
         /*
          * 「削除済みも表示」は消したものを**足す**。消したものだけに切り替えていた頃は、
@@ -299,7 +299,7 @@ export function load({ url, cookies }) {
    * (放送が終わっても `skipped` のまま。`scheduler.tick`)
    *
    * 溜まり続けはしない。終わった予約は履歴の片付けで消える
-   * (`server/files.ts`。既定で14日)
+   * (`server/files.ts`。既定で 14 日)
    */
   const missed: MissedRow[] = orm()
     .select({
@@ -369,7 +369,7 @@ export const actions = {
     const recording = recordingFromForm(await request.formData());
     if (recording === undefined)
       return fail(400, { message: "録画が見つかりません" });
-    // 元になるのは元のTS。エンコード済みを元に録り直しても画質は戻らない
+    // 元になるのは元の TS。エンコード済みを元に録り直しても画質は戻らない
     if (encodeSource(recording) === null) {
       return fail(400, {
         message: "元の TS が残っていないため再エンコードできません",
@@ -391,8 +391,8 @@ export const actions = {
   },
 
   /**
-   * 「CM検出をやり直す」(詳細の「その他…」)。再エンコードせず、CM を探し直してエンコードしたもののチャプターを
-   * 書き直す (`encoder.runCmJob`)。エンコードするジョブと同じ待ち行列に並び、同じ録画に2つは積まない
+   * 「CM 検出をやり直す」(詳細の「その他…」)。再エンコードせず、CM を探し直してエンコードしたもののチャプターを
+   * 書き直す (`encoder.runCmJob`)。エンコードするジョブと同じ待ち行列に並び、同じ録画に 2 つは積まない
    */
   redetectCm: async ({ request }) => {
     const recording = recordingFromForm(await request.formData());
@@ -402,7 +402,7 @@ export const actions = {
     if (redo.state === "hidden")
       return fail(400, { message: "CM 検出に使えるファイルがありません" });
     if (redo.state === "disabled") return fail(400, { message: redo.reason });
-    // 切ったものからは戻せない。元のTSはあるので、再エンコードを促す
+    // 切ったものからは戻せない。元の TS はあるので、再エンコードを促す
     if (redo.state === "prompt") return fail(400, { message: CM_CUT_ALREADY });
     enqueue(recording.id, "cm");
     pump();
@@ -455,7 +455,7 @@ export const actions = {
   /**
    * 録り逃しを一覧から消す。**消すのは予約の行そのもの**。録画の行が無い
    * (始まらないまま終わった) ので、失敗した録画の削除とは消す先が違う。
-   * 放って置いても履歴の片付け (14日) で消えるが、見るたびに並んだままなのは
+   * 放って置いても履歴の片付け (14 日) で消えるが、見るたびに並んだままなのは
    * 失敗した録画と同じで、確かめ終わったら畳みたい
    */
   deleteMissed: async ({ request }) => {

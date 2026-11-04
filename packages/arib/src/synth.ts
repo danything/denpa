@@ -676,7 +676,7 @@ export function diiSection(
     0x00, // ackPeriod
     ...be32(0), // tCDownloadWindow
     ...be32(0), // tCDownloadScenario
-    ...be(0), // compatibilityDescriptor: 長さ0
+    ...be(0), // compatibilityDescriptor: 長さ 0
     ...be(list.length), // numberOfModules
     ...entries,
     ...be(0), // privateDataLength

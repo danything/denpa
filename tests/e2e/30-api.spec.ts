@@ -29,7 +29,7 @@ test.describe("外から使う API", () => {
       reserved: expect.any(Boolean),
       recording: expect.any(Boolean),
     });
-    // 選べる音声。番組表が何も言っていなくても「そのまま出す」1つは入る
+    // 選べる音声。番組表が何も言っていなくても「そのまま出す」1 つは入る
     expect(now.audios.length).toBeGreaterThan(0);
     expect(now.audios[0]).toMatchObject({
       id: expect.any(String),
@@ -60,7 +60,7 @@ test.describe("外から使う API", () => {
   });
 
   /*
-   * 録れる側 (予約が入る・2度押しても1本) は record-airing.test.ts が押さえる。ここで録らせると、
+   * 録れる側 (予約が入る・2 度押しても 1 本) は record-airing.test.ts が押さえる。ここで録らせると、
    * 同じ組の試験がチューナーを取り合う
    */
   test("いまの番組を録る API は、番組表に無ければ 404 と理由を返す", async ({

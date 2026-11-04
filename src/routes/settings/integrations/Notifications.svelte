@@ -11,7 +11,7 @@
 
   let { data }: { data: PageData } = $props();
 
-  /** 通知先の削除は2回押させる (録画・ルールと同じ。[arming.svelte.ts](../../../lib/arming.svelte.ts)) */
+  /** 通知先の削除は 2 回押させる (録画・ルールと同じ。[arming.svelte.ts](../../../lib/arming.svelte.ts)) */
   const deleting = arming('[data-testid^="webhook-delete"]');
 </script>
 
@@ -69,7 +69,7 @@
 
     {#if data.webhooks.length > 0}
       <!--
-                1件を URL・送る通知・直近の結果・ボタン の順に縦に積む。幅がいくらでも横には出ない
+                1 件を URL・送る通知・直近の結果・ボタン の順に縦に積む。幅がいくらでも横には出ない
                 (URL だけは `text-overflow: ellipsis` で止める)
             -->
       <div class="item-list">

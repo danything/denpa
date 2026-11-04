@@ -70,8 +70,8 @@ const MOSAIC: Charset = { bytes: 1, kind: "blank" };
  */
 const CHARSETS = new Map<number, Charset>([
   [0x42, KANJI],
-  [0x39, { bytes: 2, kind: "plane1" }], // JIS互換漢字1面
-  [0x3a, { bytes: 2, kind: "plane2" }], // JIS互換漢字2面
+  [0x39, { bytes: 2, kind: "plane1" }], // JIS 互換漢字 1 面
+  [0x3a, { bytes: 2, kind: "plane2" }], // JIS 互換漢字 2 面
   [0x3b, KANJI], // 追加記号 (漢字集合と同じ表を引く)
   [0x4a, ALNUM],
   [0x30, HIRAGANA],
@@ -220,7 +220,7 @@ export function decodeAribText(data: Uint8Array): string {
     if (byte <= 0x20 || byte === 0x7f || byte === 0xa0 || byte === 0xff) {
       at++;
       switch (byte) {
-        case 0x0d: // APR。改行。直後の LF は同じ1回として畳む
+        case 0x0d: // APR。改行。直後の LF は同じ 1 回として畳む
           out += "\n";
           if (data[at] === 0x0a) at++;
           break;

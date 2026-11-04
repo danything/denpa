@@ -21,7 +21,7 @@ test.describe("入る方法を何も設定していないとき", () => {
   test("全部断り、死活確認とマニフェストだけ通す", async ({ stack }) => {
     const closed = await bootClosed(test.info().workerIndex, stack.root);
     try {
-      // 画面もファイルのエンドポイントも断る。理由は本文に書いてある (謎の403にしない)
+      // 画面もファイルのエンドポイントも断る。理由は本文に書いてある (謎の 403 にしない)
       const screen = await fetch(`${closed.appUrl}/`);
       expect(screen.status).toBe(403);
       expect(await screen.text()).toContain("TRUSTED_NETWORKS");
@@ -98,7 +98,7 @@ test.describe("接続元のアドレス", () => {
       TRUSTED_PROXIES: "127.0.0.1,10.42.0.0/16",
     });
     try {
-      // 2段目の前段 (10.42.0.7) を飛ばして、その左が接続元
+      // 2 段目の前段 (10.42.0.7) を飛ばして、その左が接続元
       const inside = await fetch(`${closed.appUrl}/`, {
         headers: { "x-forwarded-for": "10.10.5.9, 10.42.0.7" },
       });

@@ -6,7 +6,7 @@ import { BACKGROUND_KEY, step, storedBackground } from "./background";
 import { nativeBackgroundRecovery } from "./native-background";
 
 /**
- * バックグラウンド再生。**3画面 (ライブ・追っかけ・観る画面) で同じもの。既定はオフ。**
+ * バックグラウンド再生。**3 画面 (ライブ・追っかけ・観る画面) で同じもの。既定はオフ。**
  *
  * ## オフ (既定)
  *
@@ -26,7 +26,7 @@ import { nativeBackgroundRecovery } from "./native-background";
  * 止めない。canvas で描くときの音は「再生する音」として鳴らし (Safari は Audio Session を `playback`、ほかは
  * `<audio>` を通す。Web Audio のままだと裏で止めるブラウザがある)、OS が勝手に小窓にするのも許す。
  *
- * **端末ごとに覚える** (`keep.ts`。速さ・CMスキップと同じ)。手元のスマホでは裏で
+ * **端末ごとに覚える** (`keep.ts`。速さ・CM スキップと同じ)。手元のスマホでは裏で
  * 聴きたいが、居間のテレビでは要らない、のように端末で変わる
  */
 interface Options {

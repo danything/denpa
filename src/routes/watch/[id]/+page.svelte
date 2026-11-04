@@ -253,7 +253,7 @@
   /** 段を替えるために作り直したとき、作り直す前に再生していたか。尺が分かったら続ける (`resume`) */
   let keepPlaying = false;
   /**
-   * 「この場面から観る」(切り抜きの画面から `?at=`) で始める位置 (秒)。続きの位置より先に使い、1度使ったら忘れる。
+   * 「この場面から観る」(切り抜きの画面から `?at=`) で始める位置 (秒)。続きの位置より先に使い、1 度使ったら忘れる。
    * 続きからではないので「続きから」とは言わない
    */
   // svelte-ignore state_referenced_locally
@@ -567,7 +567,7 @@
     canvasCodec = next;
   }
 
-  /** canvas のプレイヤーの刻み。`<video>` の `timeupdate` と映した1枚ごとの追いかけ (`follow`) の代わり */
+  /** canvas のプレイヤーの刻み。`<video>` の `timeupdate` と映した 1 枚ごとの追いかけ (`follow`) の代わり */
   function canvasTick(): void {
     if (canvas === null) return;
     const now = canvas.currentTime;
@@ -628,8 +628,8 @@
     if (canvas !== null) {
       canvas.pause();
       /*
-       * **止めた位置を時計にすぐ出す。** 刻み (`canvasTick`) を待つと、押した直後は1つ前の刻みの位置が
-       * 出ていて、次の刻みで1秒進んだように見えた。0.05 秒より小さな差は刻みでは直さないので、
+       * **止めた位置を時計にすぐ出す。** 刻み (`canvasTick`) を待つと、押した直後は 1 つ前の刻みの位置が
+       * 出ていて、次の刻みで 1 秒進んだように見えた。0.05 秒より小さな差は刻みでは直さないので、
        * 止めている間ずっとずれたままのこともあった (`<video>` は止めたときに `timeupdate` が来る)
        */
       at = canvas.currentTime;
@@ -750,7 +750,7 @@
 
   /**
    * プレイヤーを作るときに始める位置 (秒)。コーデックを切り替えた所か、この場面から観る位置か、続きの位置。頭からなら null。
-   * **切り替えた所は1度読んだら忘れる**
+   * **切り替えた所は 1 度読んだら忘れる**
    */
   function startFrom(duration: number): number | null {
     const from =
@@ -1196,7 +1196,7 @@
   let video = $state<HTMLVideoElement | null>(null);
   /** 映像とその上の操作をまとめた箱。全画面にするのはこちら */
   let stage = $state<HTMLElement | null>(null);
-  /** 全画面の出入り (3画面共通。[fullscreen.svelte.ts](../../../lib/components/player/fullscreen.svelte.ts)) */
+  /** 全画面の出入り (3 画面共通。[fullscreen.svelte.ts](../../../lib/components/player/fullscreen.svelte.ts)) */
   const fullscreen = stageFullscreen(() => stage);
 
   /*
@@ -1208,7 +1208,7 @@
   /** d ボタンで出しているか */
   let showData = $state(false);
   /**
-   * データ放送を常に受信するか (再生の設定の行。ライブと同じ1つを端末ごとに覚える。`data-receive.ts`)。
+   * データ放送を常に受信するか (再生の設定の行。ライブと同じ 1 つを端末ごとに覚える。`data-receive.ts`)。
    * 開く前から変化ログを取得して流し、入口の文書を裏で動かす (`DataBroadcast` の `receive`)
    */
   let receiveData = $state(false);
@@ -1240,7 +1240,7 @@
     else dataChannel = null;
   }
 
-  /** 常に受信するかを切り替える。ライブと同じ1つを端末ごとに覚える (`data-receive.ts`) */
+  /** 常に受信するかを切り替える。ライブと同じ 1 つを端末ごとに覚える (`data-receive.ts`) */
   function toggleReceiveData(): void {
     receiveData = !receiveData;
     remind(DATA_RECEIVE_KEY, receiveData ? "1" : "0");
@@ -1262,7 +1262,7 @@
    */
   async function startData(): Promise<void> {
     if (dataChannel !== null) return;
-    // 取得は1回だけ。開いた直後 (常に受信) と押したのが重なっても二重に取らない
+    // 取得は 1 回だけ。開いた直後 (常に受信) と押したのが重なっても二重に取らない
     dataLoading ??= loadTimeline();
     await dataLoading;
     // 取得している間に、閉じて常に受信もやめていたら作らない
@@ -1332,7 +1332,7 @@
    * 選べる音声トラック (主音声・副音声など)。ブラウザが Matroska の音声を `video.audioTracks` に出せれば
    * それを切り替える (サーバはエンコードし直さない)。出せない端末 (Chrome・Firefox の既定) では `playback` の
    * 名前で並べ、選んだらその場で流すほうへ移る (`moveForAudio`)。押しても効かない操作を並べないため、
-   * 2本以上あるときだけ出す
+   * 2 本以上あるときだけ出す
    */
   let audios = $state<string[]>([]);
   let audioIndex = $state(0);
@@ -1344,8 +1344,8 @@
    */
   let captionText = $state.raw<CaptionPages | null>(null);
   /**
-   * 載っている言語。第1言語は `pages`、第2言語から後ろは `others`。
-   * 名前が分からない第1言語 (古いサーバ・端末に保存した古いコピー) は「字幕 1」
+   * 載っている言語。第 1 言語は `pages`、第 2 言語から後ろは `others`。
+   * 名前が分からない第 1 言語 (古いサーバ・端末に保存した古いコピー) は「字幕 1」
    */
   const captionLanguages = $derived<CaptionLanguage[]>(
     captionText === null
@@ -1517,7 +1517,7 @@
     resume: playMedia,
   });
 
-  /** アンビエントモード。canvas に描いているときはプレイヤーから縮めた1枚をもらう */
+  /** アンビエントモード。canvas に描いているときはプレイヤーから縮めた 1 枚をもらう */
   const ambient = ambientMode({
     playing: () => playing,
     canvas: () => canvas,
@@ -1544,7 +1544,7 @@
 
   /**
    * CM を自動で飛ばすか (CM を残してエンコードした録画のため)。端末ごとに覚える。
-   * 観はじめに入れるかどうかは `skipCmAtStart` (ロゴでの判定に失敗した1本は切って始める)
+   * 観はじめに入れるかどうかは `skipCmAtStart` (ロゴでの判定に失敗した 1 本は切って始める)
    */
   const SKIP_CM_KEY = "watch-skip-cm";
   let skipCm = $state(false);
@@ -1571,8 +1571,8 @@
   let settled = 0;
   /**
    * 蓋を外すまでに待つコマ数。`requestVideoFrameCallback` はコンポジタへ渡したところで呼ばれ、
-   * Windows の Chrome / Edge は映像を DOM と別の面に出すので、1コマで外すと画面だけ CM のまま残る
-   * (実機)。4コマ (0.13秒) なら飛んだ間合いに紛れる。`mediaTime` の無いブラウザは `currentTime` で数える
+   * Windows の Chrome / Edge は映像を DOM と別の面に出すので、1 コマで外すと画面だけ CM のまま残る
+   * (実機)。4 コマ (0.13 秒) なら飛んだ間合いに紛れる。`mediaTime` の無いブラウザは `currentTime` で数える
    */
   const SETTLED = 4;
   /** 蓋の外し忘れ止め。飛んだ先が来ないまま止まっても、いつかは外す */
@@ -1585,7 +1585,7 @@
   /** 続きから出したか。画面にも言う */
   let continued = $state(false);
 
-  /** 押し間違い防止に2回押させる (どの画面とも同じ。`arming.svelte.ts`) */
+  /** 押し間違い防止に 2 回押させる (どの画面とも同じ。`arming.svelte.ts`) */
   const deleting = arming('[data-testid^="watch-delete"]');
 
   const detail = programDetail();
@@ -1621,7 +1621,7 @@
     if (window.matchMedia("(pointer: coarse)").matches) fullscreen.enter();
     const onResize = () => place();
     window.addEventListener("resize", onResize);
-    // 閉じ際にも書き送る (15秒おきだと最後の十数秒が落ちる)。`unload` はスマホで来ないことがある
+    // 閉じ際にも書き送る (15 秒おきだと最後の十数秒が落ちる)。`unload` はスマホで来ないことがある
     const onLeave = () => remember(true);
     window.addEventListener("pagehide", onLeave);
     const ticker = setInterval(() => {
@@ -1670,7 +1670,7 @@
   }
 
   /**
-   * **末尾まで来たことを、その場で覚える** (`onended`)。控えは15秒おきで流れている間だけなので、
+   * **末尾まで来たことを、その場で覚える** (`onended`)。控えは 15 秒おきで流れている間だけなので、
    * 末尾の CM を自動で飛ぶと終端の控えが書かれず、一覧で観かけのまま残っていた (`ts/watch.ts` の `resumePoint`)。
    * `remember` を直に渡すと `leaving` にイベントが入って真になるので包む
    */
@@ -1679,7 +1679,7 @@
   }
 
   /**
-   * 観ていたところから出す。尺が分かってから (`loadedmetadata`)、1回だけ
+   * 観ていたところから出す。尺が分かってから (`loadedmetadata`)、1 回だけ
    * (もう一度来ると観ている最中に引き戻される)
    */
   let resumed = false;
@@ -1754,7 +1754,7 @@
       );
       return;
     }
-    // その場で流しているものは選んだ1本だけなので、`audioTracks` には1本しか出ない (`remux-player.ts`)
+    // その場で流しているものは選んだ 1 本だけなので、`audioTracks` には 1 本しか出ない (`remux-player.ts`)
     if (picked?.way === "stream" || canvas !== null) {
       audios = offeredAudios();
       return;
@@ -1821,14 +1821,14 @@
    */
   async function loadChapters(): Promise<void> {
     try {
-      // 端末に保存したものがあればそちら (オフラインでもCM飛ばしが効く)。探し終えるのを待ってから
+      // 端末に保存したものがあればそちら (オフラインでも CM 飛ばしが効く)。探し終えるのを待ってから
       const copy = await localLookup;
       const held = copy?.chapters as { chapters?: typeof chapters } | undefined;
       if (held?.chapters !== undefined) {
         chapters = held.chapters;
         return;
       }
-      // 前に読んだものを持っていても、変わっていないか確かめさせる (CM検出のやり直しは同じファイルを書き直す)
+      // 前に読んだものを持っていても、変わっていないか確かめさせる (CM 検出のやり直しは同じファイルを書き直す)
       const res = await fetch(resolve(`api/recordings/${rec.id}/chapters`), {
         cache: "no-cache",
       });
@@ -1840,7 +1840,7 @@
   }
 
   /**
-   * CM検出をやり直したら、チャプターだけ取り直す (`chapters` の通知)。位置も再生も触らない
+   * CM 検出をやり直したら、チャプターだけ取り直す (`chapters` の通知)。位置も再生も触らない
    * (いまいる所が CM になれば次のコマで `hopCm` が飛ぶ)。端末に保存したものは落としたときのまま
    */
   liveUpdates([], {
@@ -1889,7 +1889,7 @@
     controls.stir();
   }
 
-  /** CM飛ばしのオン/オフ。いま CM の中にいればその場で飛ぶ (「CMが始まったから押した」がいちばん多い) */
+  /** CM 飛ばしのオン/オフ。いま CM の中にいればその場で飛ぶ (「CM が始まったから押した」がいちばん多い) */
   function toggleSkipCm(): void {
     skipCm = !skipCm;
     remind(SKIP_CM_KEY, skipCm ? "1" : "0");
@@ -1898,8 +1898,8 @@
   }
 
   /**
-   * CM を跨ぐ手前で飛ぶための先読み (秒。30コマ/秒で3コマ)。入ってから飛ぶと必ず CM のコマが見え、
-   * コンポジタに渡し済みのコマもあるので1コマぶんでは間に合わない。本編の末尾 0.1 秒が静止画になるが、
+   * CM を跨ぐ手前で飛ぶための先読み (秒。30 コマ/秒で 3 コマ)。入ってから飛ぶと必ず CM のコマが見え、
+   * コンポジタに渡し済みのコマもあるので 1 コマぶんでは間に合わない。本編の末尾 0.1 秒が静止画になるが、
    * 境目は場面の切れ目なので分からない
    */
   const CM_LEAD = 0.1;
@@ -1929,7 +1929,7 @@
 
   /**
    * いま映っているコマを写して蓋をする (飛ぶ前に呼ぶ)。写すのは本編にいるときだけ。CM の中
-   * (チャプターがまだ無いときも) で写すと蓋が CM の1コマになる。写せないときは黒で塗って枠ごと覆う。
+   * (チャプターがまだ無いときも) で写すと蓋が CM の 1 コマになる。写せないときは黒で塗って枠ごと覆う。
    * CM の字幕も一緒に消す
    */
   function shut(): void {
@@ -1976,9 +1976,9 @@
   }
 
   /**
-   * 観はじめの1回。チャプターが揃い、始める位置 (続きか頭か。`resume`) も決まってから、始まりが CM なら飛ぶ。
+   * 観はじめの 1 回。チャプターが揃い、始める位置 (続きか頭か。`resume`) も決まってから、始まりが CM なら飛ぶ。
    * 取得している間は黒い蓋をしておく (本編前の CM が一瞬流れていた)。位置を待たないと頭の CM を
-   * 飛んでから続きへ移り、リロードのたびに「CMを飛ばしました」が出ていた。両方から呼び、遅いほうで決める
+   * 飛んでから続きへ移り、リロードのたびに「CM を飛ばしました」が出ていた。両方から呼び、遅いほうで決める
    */
   let chaptersReady = false;
   function settle(): void {
@@ -2023,7 +2023,7 @@
     paint();
   }
 
-  /** 字幕を取得したか。取得は1回だけ */
+  /** 字幕を取得したか。取得は 1 回だけ */
   let captionsAsked = false;
   /** 取得しようとして繋がらなかったか。字幕を入れ直したときだけ取り直す */
   let captionsFailed = false;
@@ -2034,7 +2034,7 @@
 
   /**
    * **字幕は映像が出てから取る** (最初のコマ・読めなかった・互換モードで流れ出した・待つ上限の時間を過ぎた、の早いほう)。
-   * サーバは字幕を抜くのに動画を丸ごと読む (`captions.json`。初回は1時間の録画で1秒ほど)。
+   * サーバは字幕を抜くのに動画を丸ごと読む (`captions.json`。初回は 1 時間の録画で 1 秒ほど)。
    * 開いた時点で取っていた頃は、観はじめの読み込み (続きの位置・CM の先へ飛んだ先) とディスクを
    * 取り合い、最初のコマが字幕の応答を待つように遅れていた (実機で canplay から 0.8 秒)
    */
@@ -2049,7 +2049,7 @@
   }
 
   /**
-   * 字幕を取ってくる (`askCaptions` から1回)。端末に保存したものがあればそちら。字幕を持たない番組は 404 (ボタンを出さないだけ)
+   * 字幕を取ってくる (`askCaptions` から 1 回)。端末に保存したものがあればそちら。字幕を持たない番組は 404 (ボタンを出さないだけ)
    */
   async function loadCaptions(): Promise<void> {
     if (captionText !== null) return;
@@ -2064,7 +2064,7 @@
             );
       if (text?.v === CAPTION_TEXT_VERSION) {
         captionText = text;
-        // 覚えている言語が載っていればそれ、無ければ第1言語
+        // 覚えている言語が載っていればそれ、無ければ第 1 言語
         captionLanguage = pickLanguage(
           captionLanguages,
           stored(CAPTION_LANGUAGE_KEY),
@@ -2104,7 +2104,7 @@
   }
 
   /**
-   * 字幕の貼り直しと CM の跨ぎを、映した1枚ごとに追わせる ([frames.ts](../../../lib/components/player/frames.ts)。
+   * 字幕の貼り直しと CM の跨ぎを、映した 1 枚ごとに追わせる ([frames.ts](../../../lib/components/player/frames.ts)。
    * ライブと同じ作り)。`timeupdate` (250ms ごと) 任せだった頃は字幕が遅れ、CM も数コマ見えていた
    */
   function follow(target: HTMLVideoElement): void {
@@ -2115,7 +2115,7 @@
       if (following !== target) return false;
       /*
        * 映したコマの時刻 (`mediaTime`) で外す。`currentTime` は代入した時点で飛んだ先を返すのに、
-       * 画面にはまだ手前のコマが出ていて、CM の尻が1コマ見えていた
+       * 画面にはまだ手前のコマが出ていて、CM の尻が 1 コマ見えていた
        */
       if (waiting) {
         const there =
@@ -2182,7 +2182,7 @@
   });
 
   /**
-   * いまの位置に合う1枚を重ねる (描き方はライブと同じ `caption-draw.ts`)。変わったときだけ描く。
+   * いまの位置に合う 1 枚を重ねる (描き方はライブと同じ `caption-draw.ts`)。変わったときだけ描く。
    * 蓋の下では描かない (CM の字幕を仕込むことになる)
    */
   function paint(): void {
@@ -2267,7 +2267,7 @@
   const cmOnBar = $derived(cmSpans(chapters));
   const marksOnBar = $derived(plainMarks(chapters));
 
-  /** あと何分で終わるか。倍速のぶんは割る (2倍で「残り30分」と出ても掛かるのは15分) */
+  /** あと何分で終わるか。倍速のぶんは割る (2 倍で「残り 30 分」と出ても掛かるのは 15 分) */
   const remaining = $derived(
     Math.max(0, (length - at) / (drawing ? 1 : speed || 1)),
   );
@@ -2301,8 +2301,8 @@
   ]);
 
   /**
-   * いまの1コマを字幕・コメントごと切り抜いてサーバに保存する (3画面共通。[shot.svelte.ts](../../../lib/components/player/shot.svelte.ts))。
-   * canvas に描いているときはプレイヤーから1枚もらう (`<video>` は空)
+   * いまの 1 コマを字幕・コメントごと切り抜いてサーバに保存する (3 画面共通。[shot.svelte.ts](../../../lib/components/player/shot.svelte.ts))。
+   * canvas に描いているときはプレイヤーから 1 枚もらう (`<video>` は空)
    */
   function snapshot(): void {
     const drawn = captions && shownPage !== null;
@@ -2362,7 +2362,7 @@
             onplay={() => {
               playing = true;
               if (video !== null) follow(video);
-              // 出たので、繋ぎ直しは済み。次に切れたらまた1秒から待つ
+              // 出たので、繋ぎ直しは済み。次に切れたらまた 1 秒から待つ
               retries = 0;
               resuming = false;
               controls.stir();
@@ -2524,7 +2524,7 @@
               onclick={jikkyoList.toggle}
             />
           {/if}
-          <!-- 観終わったその場で消せるように。2回目も同じ大きさの丸 (`icons.ts` の `OVERLAY_DANGER`) -->
+          <!-- 観終わったその場で消せるように。2 回目も同じ大きさの丸 (`icons.ts` の `OVERLAY_DANGER`) -->
           <form method="POST" action="?/delete" use:submitting>
             <input type="hidden" name="id" value={rec.id} />
             {#if deleting.armed !== null}
@@ -2546,7 +2546,7 @@
           </form>
         </ControlBar>
 
-        <!-- 下端の操作バー。並びは3画面で同じ (`ControlBar`・`ControlRow`) -->
+        <!-- 下端の操作バー。並びは 3 画面で同じ (`ControlBar`・`ControlRow`) -->
         <ControlBar shown={controls.shown} testid="watch-controls">
           <!--
                         シークバーの CM は琥珀で塗る (denpa-tv と同じ)。送りを何回押すかが分かる。
@@ -2570,7 +2570,7 @@
 
           <ControlRow testid="watch-buttons">
             <!--
-                            10秒送り・戻しは置いていない。PC は矢印キー、指は左右の端を素早く2回
+                            10 秒送り・戻しは置いていない。PC は矢印キー、指は左右の端を素早く 2 回
                             (`ts/watch.ts` の `tap`) でできる
                         -->
             <ControlButton
@@ -2657,7 +2657,7 @@
 
             <!--
                             ⚙ の行は使えるときだけ出す: CM スキップは CM の入った録画、コーデックは観られる方式が
-                            2つ以上 (`codecMenu`)、音声は2本以上 (`syncAudio`)
+                            2 つ以上 (`codecMenu`)、音声は 2 本以上 (`syncAudio`)
                         -->
             <StageTail
               prefix="watch"
@@ -2816,7 +2816,7 @@
   }}
 />
 
-<!-- 運転中の注意 (互換モードで初めて再生する前に1回。ライブ・追っかけと同じ)。押すまで再生を始めない -->
+<!-- 運転中の注意 (互換モードで初めて再生する前に 1 回。ライブ・追っかけと同じ)。押すまで再生を始めない -->
 <DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>

@@ -168,7 +168,7 @@ export function mpeg2Frame(
 
   // picture_header (6.2.3)
   bits.startCode(0x00);
-  bits.put(0, 10); // temporal_reference (GOP ごとに1枚なので 0)
+  bits.put(0, 10); // temporal_reference (GOP ごとに 1 枚なので 0)
   bits.put(1, 3); // picture_coding_type = I
   bits.put(0xffff, 16); // vbv_delay
   bits.put(0, 1); // extra_bit_picture
@@ -199,7 +199,7 @@ export function mpeg2Frame(
     for (let col = 0; col < mbWidth; col++) {
       bits.put(1, 1); // macroblock_address_increment = 1
       bits.put(1, 1); // macroblock_type = intra
-      bits.put(1, 1); // dct_type = 1 (フィールド DCT: 輝度の上2ブロックが上のフィールド、下2つが下)
+      bits.put(1, 1); // dct_type = 1 (フィールド DCT: 輝度の上 2 ブロックが上のフィールド、下 2 つが下)
       const [top, cb, cr] = color(col, row, n, 0);
       const [bottom] = color(col, row, n, 1);
       for (let i = 0; i < 4; i++) {

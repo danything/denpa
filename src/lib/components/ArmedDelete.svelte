@@ -7,9 +7,9 @@
   import Icon from "#lib/components/player/Icon.svelte";
 
   /**
-   * 消すボタン。**1回目で聞き返し、2回目で送る** (`arming`。録画・予約・ルール・通知先で同じ)。
+   * 消すボタン。**1 回目で聞き返し、2 回目で送る** (`arming`。録画・予約・ルール・通知先で同じ)。
    *
-   * 2回押しのキー (`armKey`) は同じ `deleting` を分け合う中で被らない値にする
+   * 2 回押しのキー (`armKey`) は同じ `deleting` を分け合う中で被らない値にする
    * (録画の一覧は録画と録り逃しの予約で共用するので、予約は負の値)
    */
   let {
@@ -38,7 +38,7 @@
     icon?: boolean;
   } = $props();
 
-  /** 送り終えたら2回押しを戻す。断られて行が残ったとき、「削除を確定」を出したままにしない */
+  /** 送り終えたら 2 回押しを戻す。断られて行が残ったとき、「削除を確定」を出したままにしない */
   const sent: SubmitFunction = (input) => {
     const after = submit?.(input);
     return async (options) => {

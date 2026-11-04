@@ -72,7 +72,7 @@ export function hwUsable<D extends HwUsable>(
   );
 }
 
-/** デバイスの使える方式のうち、このコーデックで1つでも許されているか */
+/** デバイスの使える方式のうち、このコーデックで 1 つでも許されているか */
 function onFor(allow: HwAllow, device: HwUsable, codec: HwCodec): boolean {
   return HW_KINDS.some(
     (kind) =>
@@ -82,8 +82,8 @@ function onFor(allow: HwAllow, device: HwUsable, codec: HwCodec): boolean {
 }
 
 /**
- * **設定 (`hwAllow`・`liveHwAllow`) を、コーデックごとの「エンコーダ」1つに読み替える。**
- * 使えるデバイスのうち許されているのが 0 ならソフトウェア、1つならそのデバイス、2つ以上なら順番に使う
+ * **設定 (`hwAllow`・`liveHwAllow`) を、コーデックごとの「エンコーダ」1 つに読み替える。**
+ * 使えるデバイスのうち許されているのが 0 ならソフトウェア、1 つならそのデバイス、2 つ以上なら順番に使う
  */
 export function hwChoice(
   allow: HwAllow,

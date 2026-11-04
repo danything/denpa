@@ -9,7 +9,7 @@ const bytes = (...values: number[]) => Uint8Array.from(values);
 
 describe("ARIB 8単位符号", () => {
   test("初期状態の GL は漢字。区点をそのまま2バイトで読む", () => {
-    // 日 = 38区72点 → 0x46,0x7C / 本 = 43区60点 → 0x4B,0x5C
+    // 日 = 38 区 72 点 → 0x46,0x7C / 本 = 43 区 60 点 → 0x4B,0x5C
     expect(decodeAribText(bytes(0x46, 0x7c, 0x4b, 0x5c))).toBe("日本");
   });
 
@@ -69,17 +69,17 @@ describe("ARIB 8単位符号", () => {
 
   /** 市販のテレビと同じく、寄せずにそのまま出す。探すときの寄せは `fold.ts` */
   test("規格の字のまま出す。似た字に寄せない", () => {
-    // 85区2点・15点 (つちよし)・39点 (互換漢字の恵)
+    // 85 区 2 点・15 点 (つちよし)・39 点 (互換漢字の恵)
     expect(decodeAribText(bytes(0x75, 0x22, 0x75, 0x2f))).toBe("𠅘𠮷");
     expect(decodeAribText(bytes(0x75, 0x47))).toBe(
       String.fromCodePoint(0xfa6b),
     );
-    // 93区16点 (野球)・67点 (雪だるま)・70・71点・76・77点
+    // 93 区 16 点 (野球)・67 点 (雪だるま)・70・71 点・76・77 点
     expect(decodeAribText(bytes(0x7d, 0x30, 0x7d, 0x63))).toBe("⚾⛄");
     expect(
       decodeAribText(bytes(0x7d, 0x66, 0x7d, 0x67, 0x7d, 0x6c, 0x7d, 0x6d)),
     ).toBe("⛉⛊⛋⨀");
-    // 93区48点 (2分の1)・94区33点 (括弧の A)
+    // 93 区 48 点 (2 分の 1)・94 区 33 点 (括弧の A)
     expect(decodeAribText(bytes(0x7d, 0x50, 0x7e, 0x41))).toBe("½🄐");
   });
 
@@ -124,7 +124,7 @@ describe("ARIB 8単位符号", () => {
   });
 
   test("色や大きさの指定は読み飛ばす。引数の数を間違えると以降が全部ずれる", () => {
-    // 0x80 (黒) は引数なし / 0x91 (点滅 FLC) は1つ / 0x9d (時刻) は2つ
+    // 0x80 (黒) は引数なし / 0x91 (点滅 FLC) は 1 つ / 0x9d (時刻) は 2 つ
     const data = bytes(
       0x80,
       0x46,
@@ -196,7 +196,7 @@ describe("ARIB 8単位符号", () => {
   });
 
   /**
-   * 電波は落ちる。1つの記述子が読めなくても、読めたところまでは番組表に出したい。
+   * 電波は落ちる。1 つの記述子が読めなくても、読めたところまでは番組表に出したい。
    * ここで例外を投げると、その局の番組が丸ごと消える
    */
   test("途中で切れていても、読めたところまで返す", () => {
@@ -206,37 +206,37 @@ describe("ARIB 8単位符号", () => {
   });
 
   test("90・91区の記号は規格の字にする。EUC-JP の IBM 拡張漢字に化けない", () => {
-    // 90区1点 (事故)・91区17点 (温泉)・91区43点 (電話)
+    // 90 区 1 点 (事故)・91 区 17 点 (温泉)・91 区 43 点 (電話)
     expect(decodeAribText(bytes(0x7a, 0x21, 0x7b, 0x31, 0x7b, 0x4b))).toBe(
       "⛌♨☎",
     );
-    // 89区は規格で空き。EUC-JP なら「纊」になるところ
+    // 89 区は規格で空き。EUC-JP なら「纊」になるところ
     expect(decodeAribText(bytes(0x79, 0x21))).toBe("□");
   });
 
   test("規格ののちのバージョンで足された外字も読む", () => {
-    // 85区47点・86区1点 (漢字)、93区26点 (亀甲括弧の S)、93区39点 (リットル)
+    // 85 区 47 点・86 区 1 点 (漢字)、93 区 26 点 (亀甲括弧の S)、93 区 39 点 (リットル)
     expect(
       decodeAribText(bytes(0x75, 0x4f, 0x76, 0x21, 0x7d, 0x3a, 0x7d, 0x47)),
     ).toBe("鿄鿅🄪ℓ");
   });
 
   test("EUC-JP に無い点は JIS X 0213 の1面の字", () => {
-    // 3区1点・9区1点・13区31点 (13区のほかの点は EUC-JP の字のまま)
+    // 3 区 1 点・9 区 1 点・13 区 31 点 (13 区のほかの点は EUC-JP の字のまま)
     expect(decodeAribText(bytes(0x23, 0x21, 0x29, 0x21, 0x2d, 0x3f))).toBe(
       "▷€Ⅺ",
     );
     expect(decodeAribText(bytes(0x2d, 0x21))).toBe("①");
-    // 漢字集合のままでも、JIS互換漢字1面を指示しても同じ
+    // 漢字集合のままでも、JIS 互換漢字 1 面を指示しても同じ
     expect(decodeAribText(bytes(0x1b, 0x24, 0x39, 0x23, 0x21))).toBe("▷");
-    // 1区33点は EUC-JP の字のまま (字幕は 〜 に差し替える)
+    // 1 区 33 点は EUC-JP の字のまま (字幕は 〜 に差し替える)
     expect(decodeAribText(bytes(0x21, 0x41))).toBe(
       new TextDecoder("euc-jp").decode(bytes(0xa1, 0xc1)),
     );
   });
 
   test("2つのコードポイントで表す字は並べて出す", () => {
-    // 4区87点 (か + 半濁点)・11区69点 (声調の組)
+    // 4 区 87 点 (か + 半濁点)・11 区 69 点 (声調の組)
     expect(decodeAribText(bytes(0x24, 0x77, 0x2b, 0x65))).toBe("か゚˩˥");
   });
 
@@ -249,15 +249,15 @@ describe("ARIB 8単位符号", () => {
   });
 
   test("JIS互換漢字2面は2面の表を引く。1面と混ぜない", () => {
-    // 2面の1区1点・3区1点。1面なら「　」と「▷」
+    // 2 面の 1 区 1 点・3 区 1 点。1 面なら「　」と「▷」
     expect(
       decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x21, 0x21, 0x23, 0x21)),
     ).toBe("𠂉儈");
-    // 2面の 94区94点は空き、2区は字の無い区
+    // 2 面の 94 区 94 点は空き、2 区は字の無い区
     expect(
       decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x7e, 0x7e, 0x22, 0x21)),
     ).toBe("□□");
-    // G1 に2面を載せて、G0 の漢字集合と交互に引いても混ざらない
+    // G1 に 2 面を載せて、G0 の漢字集合と交互に引いても混ざらない
     expect(
       decodeAribText(
         bytes(0x1b, 0x24, 0x29, 0x3a, 0x0e, 0x21, 0x21, 0x0f, 0x21, 0x21),
@@ -266,7 +266,7 @@ describe("ARIB 8単位符号", () => {
   });
 
   test("JIS にも外字にも無い区点は印を残す。黙って消さない", () => {
-    // 94区94点。外字表の末尾 (㉛) の1つ先で、JIS にも当たらない
+    // 94 区 94 点。外字表の末尾 (㉛) の 1 つ先で、JIS にも当たらない
     expect(decodeAribText(bytes(0x7e, 0x7e))).toBe("□");
   });
 });

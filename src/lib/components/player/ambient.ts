@@ -20,13 +20,13 @@ export function storedAmbient(saved: string | null): boolean {
 export const GLANCE = { width: 32, height: 18 } as const;
 
 /**
- * 写す間隔 (ms)。**1秒に5回。** 1秒に1回写して時間でならし、1.2 秒かけて入れ替えていた頃 (#1000) は、
+ * 写す間隔 (ms)。**1 秒に 5 回。** 1 秒に 1 回写して時間でならし、1.2 秒かけて入れ替えていた頃 (#1000) は、
  * 場面が変わっても色がなかなか付いてこなかった
  */
 export const EVERY = 200;
 
 /**
- * **写した2枚の違い。** 色 (RGB) の差の平均 (0〜255)。透明度は見ない
+ * **写した 2 枚の違い。** 色 (RGB) の差の平均 (0〜255)。透明度は見ない
  */
 export function frameDelta(a: ArrayLike<number>, b: ArrayLike<number>): number {
   let sum = 0;
@@ -42,16 +42,16 @@ export function frameDelta(a: ArrayLike<number>, b: ArrayLike<number>): number {
 /**
  * **これより小さい違いは入れ替えない** (`frameDelta`、0〜255)。止まった場面でも、放送の雑音や字幕の縁で
  * 写すたびに少しずつ違い、それを 1 秒に 5 回入れ替えるとちらついて見えた。比べる相手は最後に入れ替えた
- * 1枚なので、ゆっくり変わる色もいずれは追いつく
+ * 1 枚なので、ゆっくり変わる色もいずれは追いつく
  */
 export const STILL = 2;
 
 /**
  * **縁の色を外へ延ばす元** (`edgeExtend`)。映像が枠の外へ続いているように見せる (Ambilight と同じ考え)。
  *
- * - **辺に沿っては細かく**。上下の辺は 32 点、左右の辺は 18 点 (写した 32x18 の1マスごと)。映像の色が辺に
+ * - **辺に沿っては細かく**。上下の辺は 32 点、左右の辺は 18 点 (写した 32x18 の 1 マスごと)。映像の色が辺に
  *   沿って変われば、光の色もそのとおりに変わる。少しだけならす (`taps`。左右 2 マスまで)
- * - **辺から内へは厚く平均する**。枠の外側 15% (`depth`) の帯の平均。外周の1マスだけから取っていた頃は、
+ * - **辺から内へは厚く平均する**。枠の外側 15% (`depth`) の帯の平均。外周の 1 マスだけから取っていた頃は、
  *   そこを小さなものが横切るたびに色が変わってちらついた
  *
  * 4x3 の格子に平均していた頃 (#1064) より、辺の色の細かさが残る。真ん中の動きは光に入らない
@@ -60,7 +60,7 @@ const EDGE = { depth: 0.15, taps: [1, 2, 3, 2, 1] } as const;
 
 /**
  * 写した 32x18 (`GLANCE`) から、**縁を延ばした 32x18** を作る。各マスは、近い辺の帯の平均 (`EDGE`) を、
- * 辺までの近さで混ぜたもの (近いほど重い。角では2辺が半分ずつ)。光 (`glowPixels`) はこれの、いちばん近い
+ * 辺までの近さで混ぜたもの (近いほど重い。角では 2 辺が半分ずつ)。光 (`glowPixels`) はこれの、いちばん近い
  * 縁の所の色を外へ延ばす
  */
 export function edgeExtend(
@@ -118,7 +118,7 @@ export function edgeExtend(
   const out = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      // 辺までの距離 (マス)。近さの4乗で重みを付ける
+      // 辺までの距離 (マス)。近さの 4 乗で重みを付ける
       const near = [y + 0.5, height - y - 0.5, x + 0.5, width - x - 0.5].map(
         (d) => 1 / d ** 4,
       );
@@ -165,7 +165,7 @@ export function follow(
 }
 
 /**
- * **ただし、どこか1画素でもこれ以上変わったら入れ替える** (0〜255)。字幕が出たなど一部だけが大きく変わると、
+ * **ただし、どこか 1 画素でもこれ以上変わったら入れ替える** (0〜255)。字幕が出たなど一部だけが大きく変わると、
  * 平均では `STILL` に届かないことがある
  */
 const STILL_PEAK = 24;
@@ -188,11 +188,11 @@ export interface Situation {
   fullscreen: boolean;
   /** ページが裏に回っているか */
   hidden: boolean;
-  /** 1枚写したら止めるか (動きを減らす設定・ソフトウェアで描いている端末 `data-lite`。`GlowLoop` の `still`) */
+  /** 1 枚写したら止めるか (動きを減らす設定・ソフトウェアで描いている端末 `data-lite`。`GlowLoop` の `still`) */
   still: boolean;
   /** 再生しているか */
   playing: boolean;
-  /** もう1枚写して光を出しているか */
+  /** もう 1 枚写して光を出しているか */
   lit: boolean;
 }
 
@@ -200,10 +200,10 @@ export interface Situation {
  * いま何をするか。
  *
  * - `off` … 光を消す (オフにした・光が見えない置き方)
- * - `hold` … 写さない。出している光はそのまま (止めている・裏に回った・全画面・`still` で1枚写したあと)
+ * - `hold` … 写さない。出している光はそのまま (止めている・裏に回った・全画面・`still` で 1 枚写したあと)
  * - `watch` … 間隔ごとに写す
  *
- * **止めている間・`still` では、まだ光が無ければ1枚だけ写す** (`lit` が立つと `hold` になる)。
+ * **止めている間・`still` では、まだ光が無ければ 1 枚だけ写す** (`lit` が立つと `hold` になる)。
  * 止めた映像から開いた録画にも光は出る
  */
 export function plan(now: Situation): "off" | "hold" | "watch" {
@@ -233,7 +233,7 @@ export function reach(width: number, wide: boolean): number {
 
 /**
  * 縁からの距離 `t` (0 = 枠の縁、1 = `reach`) での色の濃さ。**縁で 1、届く幅で 0。** 両端で傾きが 0 なので、
- * 枠の縁にも光の外側にも筋が出ない。濃いのは縁の近くで、半分で 0.35、4分の3で 0.06
+ * 枠の縁にも光の外側にも筋が出ない。濃いのは縁の近くで、半分で 0.35、4 分の 3 で 0.06
  */
 export function falloff(t: number): number {
   if (t <= 0) return 1;
@@ -274,11 +274,11 @@ export function region(stage: Rect, bounds: Rect, spread: number): Rect {
 }
 
 /**
- * 範囲を、**枠に重ならない4本の帯** (上・下・左・右) に分ける。幅か高さが無い帯は返さない。
+ * 範囲を、**枠に重ならない 4 本の帯** (上・下・左・右) に分ける。幅か高さが無い帯は返さない。
  *
- * 光を枠の後ろに1枚で敷くと、映像が1コマ進むたびに枠の下の光まで合成し直すことになる
- * (GPU の無いヘッドレスの Chromium では、1枚で敷くと光が止まっていても CPU が 1 秒あたり 0.6 秒ほど増えた)。
- * 帯なら映像のコマで描き直される所に光が無い。帯はどれも同じ1枚の光を切り出すので、継ぎ目は出ない
+ * 光を枠の後ろに 1 枚で敷くと、映像が 1 コマ進むたびに枠の下の光まで合成し直すことになる
+ * (GPU の無いヘッドレスの Chromium では、1 枚で敷くと光が止まっていても CPU が 1 秒あたり 0.6 秒ほど増えた)。
+ * 帯なら映像のコマで描き直される所に光が無い。帯はどれも同じ 1 枚の光を切り出すので、継ぎ目は出ない
  */
 export function strips(area: Rect, stage: Rect): Rect[] {
   const top = Math.min(Math.max(stage.top, area.top), area.bottom);
@@ -337,7 +337,7 @@ export function glowLayout(
 }
 
 /**
- * **光を作る。** 写した1枚 (`frame`、`width`x`height` の RGBA) から、`at` の大きさの RGBA を返す。
+ * **光を作る。** 写した 1 枚 (`frame`、`width`x`height` の RGBA) から、`at` の大きさの RGBA を返す。
  *
  * - 色は**いちばん近い枠の縁の色**。枠の外の点を枠の中へ寄せた位置の色を取る。上の光は上の縁、
  *   左の光は左の縁の色になり、角は角の色になる
@@ -352,7 +352,7 @@ export function glowPixels(
 ): Uint8ClampedArray<ArrayBuffer> {
   const out = new Uint8ClampedArray(at.width * at.height * 4);
   /*
-   * 枠の奥は描かない (枠に隠れる)。ぼかしが届く深さ (3回ぶん) より奥だけを飛ばすので、縁の色は変わらない。
+   * 枠の奥は描かない (枠に隠れる)。ぼかしが届く深さ (3 回ぶん) より奥だけを飛ばすので、縁の色は変わらない。
    * 描くのは枠の周りの輪だけになり、手間は枠の面積に比例しない
    */
   const deep = 3 * at.radius + 2;
@@ -399,15 +399,15 @@ export function glowPixels(
 }
 
 /**
- * 箱ぼかしを3回かけてガウスぼかし (強さ `sigma`) に近づけるときの半径。
- * 幅 `2r+1` の箱1回の分散は `((2r+1)^2 - 1) / 12` で、3回で3倍
+ * 箱ぼかしを 3 回かけてガウスぼかし (強さ `sigma`) に近づけるときの半径。
+ * 幅 `2r+1` の箱 1 回の分散は `((2r+1)^2 - 1) / 12` で、3 回で 3 倍
  */
 export function boxRadius(sigma: number): number {
   return Math.max(1, Math.round((Math.sqrt(4 * sigma * sigma + 1) - 1) / 2));
 }
 
 /**
- * RGBA (`ImageData` の並び。乗算していない) を箱ぼかしで3回ぼかす。**外は透明として扱う。**
+ * RGBA (`ImageData` の並び。乗算していない) を箱ぼかしで 3 回ぼかす。**外は透明として扱う。**
  *
  * 色は透明度を掛けてからぼかし、最後に割り戻す。掛けずにぼかすと、透明の外 (黒) が色に混ざって
  * 縁が黒ずむ
@@ -451,7 +451,7 @@ export function blurPixels(
 }
 
 /**
- * 1方向の箱ぼかし。`length` 個並んだ列 (`step` 飛び) を `lines` 本 (`stride` 飛び)。
+ * 1 方向の箱ぼかし。`length` 個並んだ列 (`step` 飛び) を `lines` 本 (`stride` 飛び)。
  * 窓の外は 0 として足し、いつも `2r+1` で割る (外は透明)
  */
 function boxLine(
@@ -486,7 +486,7 @@ const TONE = {
 } as const;
 
 /**
- * **色を濃くする** (`washTone` が1色ずつ掛ける。`ImageData` の並び。乗算していない)。
+ * **色を濃くする** (`washTone` が 1 色ずつ掛ける。`ImageData` の並び。乗算していない)。
  * 明るさ (BT.709 の輝度) から各色を `saturate` 倍に離し、明るさを `gain` 倍にする。
  * ぼかすと色が混ざって鈍るので、先に濃くしておく
  */
@@ -556,7 +556,7 @@ export function washTone(
 }
 
 /**
- * 写した1枚 (RGBA) の色を、地に敷く色に直す (`washTone`)。**明るいテーマでは色の薄い所ほど透明にする**。
+ * 写した 1 枚 (RGBA) の色を、地に敷く色に直す (`washTone`)。**明るいテーマでは色の薄い所ほど透明にする**。
  * 灰色・黒・白のまま白い地に敷くと、灰色の汚れに見える。色の付いた所だけが乗る
  * (帯は `mix-blend-mode: multiply` で地に掛ける。`AmbientGlow.svelte`)
  */
@@ -588,7 +588,7 @@ export const LIGHT_OPACITY = 0.6;
  *
  * 光の canvas (`glowPixels` が出したもの、幅 `width`) のいちばん上の行を透明度で重みを付けて平均し、地
  * (`background`) にページと同じ描き方で重ねる。暗いテーマはそのまま重ね、明るいテーマは `multiply` を
- * `LIGHT_OPACITY` の濃さで掛ける。枠の色は1色なので、横は平均する。
+ * `LIGHT_OPACITY` の濃さで掛ける。枠の色は 1 色なので、横は平均する。
  * 縦に積むときは上の端が映像の上の縁になるので、その縁の色を延ばした色になる
  */
 export function washTop(
@@ -622,7 +622,7 @@ export function washTop(
  */
 export const TOOLBAR_STEP = 3;
 
-/** 2色の違い (各色の差のいちばん大きいもの) */
+/** 2 色の違い (各色の差のいちばん大きいもの) */
 export function colorStep(a: Rgb, b: Rgb): number {
   return Math.max(
     Math.abs(a[0] - b[0]),

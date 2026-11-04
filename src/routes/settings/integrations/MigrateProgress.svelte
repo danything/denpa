@@ -6,7 +6,7 @@
 
   /**
    * 引き継ぎの進み具合と記録。EPGStation と EDCB の節が同じものを出す
-   * (進み具合はサーバに1つだけ。`from` の合う節にだけ出す)。
+   * (進み具合はサーバに 1 つだけ。`from` の合う節にだけ出す)。
    * EDCB は録画を持ってこないので、録画の件数と取ってきた大きさは出さない (`recordings`)
    */
   let { migrate, recordings }: { migrate: MigrateStatus; recordings: boolean } =

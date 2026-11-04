@@ -15,7 +15,7 @@ export { expect, keepH264, test };
 
 /**
  * ページを開いてハイドレーション完了まで待つ。
- * SSR済みのDOMにいきなり入力すると、その後のハイドレーションで値が初期値に戻り、
+ * SSR 済みの DOM にいきなり入力すると、その後のハイドレーションで値が初期値に戻り、
  * 空のまま絞り込みが実行されてしまう。フォームを触るテストは必ずこれを使う。
  */
 export async function goto(page: Page, url: string): Promise<void> {
@@ -107,7 +107,7 @@ interface Cell {
 /**
  * 番組表に出ているうち、これから始まるものを放送順に返す。
  *
- * グリッドは日本の慣習どおり4時から24時間ぶんを出すので、先頭は「もう終わった番組」。
+ * グリッドは日本の慣習どおり 4 時から 24 時間ぶんを出すので、先頭は「もう終わった番組」。
  * 位置で選ぶと過去の番組を予約してしまい、いつまでも録画が始まらない。
  */
 async function allCells(page: Page): Promise<Cell[]> {
@@ -175,7 +175,7 @@ async function turnDay(
   await guideDrawn(page);
 }
 
-/** 番組表に出ているうち、もう終わったもの。放送日の頭(4時台)では前日に送って探す */
+/** 番組表に出ているうち、もう終わったもの。放送日の頭(4 時台)では前日に送って探す */
 export async function past(page: Page): Promise<Cell[]> {
   const stale = (cells: Cell[]) =>
     cells.filter((c) => c.startAt < Date.now() - 60 * 60 * 1000);
@@ -188,7 +188,7 @@ export async function past(page: Page): Promise<Cell[]> {
   return found;
 }
 
-/** 1つは要る。型でも「先頭がある」と言う (`const [target] = await upcoming(page)` がそのまま使える) */
+/** 1 つは要る。型でも「先頭がある」と言う (`const [target] = await upcoming(page)` がそのまま使える) */
 function atLeastOne(cells: Cell[], what: string): [Cell, ...Cell[]] {
   const [head, ...rest] = cells;
   if (head === undefined) throw new Error(`${what}が1つも無い`);
@@ -196,7 +196,7 @@ function atLeastOne(cells: Cell[], what: string): [Cell, ...Cell[]] {
 }
 
 /**
- * 番組表に出ているうち、**いま流れているもの。** 局ごとに1つ。
+ * 番組表に出ているうち、**いま流れているもの。** 局ごとに 1 つ。
  *
  * 偽の放送は隙間なく並べてある (`tests/fake/broadcast.ts`) ので、始まったものの
  * うちいちばん新しいものがそれにあたる。終わりの時刻はマスに出ていない
@@ -216,8 +216,8 @@ export async function airing(page: Page): Promise<[Cell, ...Cell[]]> {
 export async function upcoming(page: Page): Promise<[Cell, ...Cell[]]> {
   let soon = await cellsOn(page);
   if (soon.length === 0) {
-    // 放送日の終わり際(深夜3時台など)は、この日にこれから始まる番組が
-    // 1つも残っていない。翌日に送って探す
+    // 放送日の終わり際(深夜 3 時台など)は、この日にこれから始まる番組が
+    // 1 つも残っていない。翌日に送って探す
     await turnDay(page, "next-day");
     soon = await cellsOn(page);
   }
@@ -227,9 +227,9 @@ export async function upcoming(page: Page): Promise<[Cell, ...Cell[]]> {
 /**
  * いま開いている番組表の日を、`start` を名指しした URL で返す。
  *
- * **番組表を開き直すときはこれを使う。** `upcoming` は放送日の終わり際 (3時台) に翌日へ
+ * **番組表を開き直すときはこれを使う。** `upcoming` は放送日の終わり際 (3 時台) に翌日へ
  * 送って選ぶので、`/guide?type=GR` で開き直すと今日の表に戻り、選んだ番組が無い
- * (3:30〜4:00 に CI で落ちていた)。4時を跨いで「今日」が変わっても同じ日が開く
+ * (3:30〜4:00 に CI で落ちていた)。4 時を跨いで「今日」が変わっても同じ日が開く
  */
 export async function shownDay(page: Page): Promise<string> {
   const href = await page
@@ -242,7 +242,7 @@ export async function shownDay(page: Page): Promise<string> {
 /**
  * ブラウザの時計を、今日の番組表の頭 (日本時間の 4:00) から `hours` 時間あとに止める。
  *
- * 番組表は開くと「いま」を表の4分の1あたりへ送るので、表のどこが映るかは時刻で変わる。
+ * 番組表は開くと「いま」を表の 4 分の 1 あたりへ送るので、表のどこが映るかは時刻で変わる。
  * 夜遅くは表の最後に近く、下へ送れる量が足りない (390×844 では 0:30 から表の最後に着いている)。
  * 位置で結果が変わるテストは、これで時刻を決めてから開く。止めるのはブラウザの時計だけで、番組はサーバの今のまま
  */
@@ -257,7 +257,7 @@ export async function stopGuideClock(page: Page, hours: number): Promise<void> {
   await page.clock.setFixedTime(head + hours * HOUR);
 }
 
-/** 番組表のマスをIDで探す。番組が終わると並びがずれるので位置では追わない */
+/** 番組表のマスを ID で探す。番組が終わると並びがずれるので位置では追わない */
 export function cellOf(page: Page, programId: string) {
   return page.locator(
     `[data-testid="grid-program"][data-program-id="${programId}"]`,
@@ -267,7 +267,7 @@ export function cellOf(page: Page, programId: string) {
 /**
  * 指定した局の「少し先の番組」を予約する。
  *
- * BSの偽番組は5秒しかなく、番組表のグリッドではマスが潰れて押せない。
+ * BS の偽番組は 5 秒しかなく、番組表のグリッドではマスが潰れて押せない。
  * ここで見たいのは録画そのものなので、予約は画面ではなくアクションに直接投げる。
  */
 export async function reserveSoon(
@@ -287,7 +287,7 @@ export async function reserveSoon(
 }
 
 /**
- * 1回開いて、行の状態が変わるのを待つ。**開き直さない** — 画面はサーバからの
+ * 1 回開いて、行の状態が変わるのを待つ。**開き直さない** — 画面はサーバからの
  * 通知 (liveUpdates) で自分で書き換わるので、待っている間は裏の録画とエンコードに
  * CPU を回せる。`waitWatchable` はこれの「視聴可能」専用で、あちらは開き直す
  * (行が通知で書き換わらない場面 = 予約が録画の行に化けるところ を跨ぐため)
@@ -311,10 +311,10 @@ export async function waitRowState(
 /**
  * 一覧を読み直しながら、その録画が「視聴可能」になるまで待つ。
  *
- * **短い間隔で見に行く。** 中の `toHaveText` に既定の待ち (30秒) を使わせると、
- * 「録画中」のうちは30秒粘ってから読み直すので、5秒で終わる録画に気づくのが
- * 最悪90秒後になっていた (録画を待つテストが軒並み1〜2分掛かっていた正体)。
- * 1秒待って読み直すほうが、待ち時間が録画の実尺に近づく
+ * **短い間隔で見に行く。** 中の `toHaveText` に既定の待ち (30 秒) を使わせると、
+ * 「録画中」のうちは 30 秒粘ってから読み直すので、5 秒で終わる録画に気づくのが
+ * 最悪 90 秒後になっていた (録画を待つテストが軒並み 1〜2 分掛かっていた正体)。
+ * 1 秒待って読み直すほうが、待ち時間が録画の実尺に近づく
  */
 export async function waitWatchable(
   page: Page,
@@ -331,10 +331,10 @@ export async function waitWatchable(
 }
 
 /**
- * 1本録って、視聴可能になるまで待つ。
+ * 1 本録って、視聴可能になるまで待つ。
  *
  * 「外から消されたとき」のような、実体のある録画が要る試験のためのもの。
- * 以前は録画の通しテスト(03)が残した1本を借りていたが、ワーカーごとに別のアプリが
+ * 以前は録画の通しテスト(03)が残した 1 本を借りていたが、ワーカーごとに別のアプリが
  * 立つようになったので、自分のぶんは自分で用意する
  */
 export async function recordOne(
@@ -342,7 +342,7 @@ export async function recordOne(
   request: APIRequestContext,
 ): Promise<{ id: string; libraryPath: string }> {
   await syncEpg(request);
-  // BS の偽番組は5秒。すぐ録り終わる
+  // BS の偽番組は 5 秒。すぐ録り終わる
   const programId = await reserveSoon(page, request, "BS");
   const row = page.locator(
     `[data-testid="recording-row"][data-program-id="${programId}"]`,
@@ -355,7 +355,7 @@ export async function recordOne(
 }
 
 /**
- * 録画のしかたを変える。全体で1つの設定なので、番組ごとの指定は無い。
+ * 録画のしかたを変える。全体で 1 つの設定なので、番組ごとの指定は無い。
  * 設定画面のフォームと同じものを投げる (チェックを外した状態はキーごと消える)。
  * エンコードしないときは codec に 'none' を渡す (専用のチェックは無い)
  */
@@ -387,7 +387,7 @@ export async function setRecording(
     encoding.append("transcodeLimit", patch.transcodeLimit);
   const reserve = new URLSearchParams();
   if (patch.freeOnly === true) reserve.append("freeOnly", "on");
-  // 画面では節ごとにフォームが分かれている (エンコード・CM・自動予約)。同じ3つを投げる
+  // 画面では節ごとにフォームが分かれている (エンコード・CM・自動予約)。同じ 3 つを投げる
   await saveRecordingPart(request, "saveEncoding", encoding);
   await saveRecordingPart(
     request,
@@ -397,7 +397,7 @@ export async function setRecording(
   await saveRecordingPart(request, "saveReserve", reserve);
 }
 
-/** 偽 ffmpeg がエンコードしていた1回 (`stack.encodeSpansFile`)。`end` が null なら終わらなかった (止められた) */
+/** 偽 ffmpeg がエンコードしていた 1 回 (`stack.encodeSpansFile`)。`end` が null なら終わらなかった (止められた) */
 export interface EncodeSpan {
   output: string;
   start: number;
@@ -405,7 +405,7 @@ export interface EncodeSpan {
 }
 
 /**
- * 偽 ffmpeg がその録画の元のTSをエンコードしていた間。作業ファイル (`….<コーデック>.encoding`) へ書いたものだけ
+ * 偽 ffmpeg がその録画の元の TS をエンコードしていた間。作業ファイル (`….<コーデック>.encoding`) へ書いたものだけ
  * (サムネイルなどは除く)。始まった順
  */
 export function encodeSpans(file: string, recordingId: string): EncodeSpan[] {
@@ -427,7 +427,7 @@ export function encodeSpans(file: string, recordingId: string): EncodeSpan[] {
   return spans;
 }
 
-/** 偽 ffmpeg に渡された引数 (`stack.encodeArgsFile`)。1回ぶんずつ */
+/** 偽 ffmpeg に渡された引数 (`stack.encodeArgsFile`)。1 回ぶんずつ */
 export function encodeRuns(file: string): string[][] {
   if (!existsSync(file)) return [];
   return readFileSync(file, "utf8")
@@ -441,14 +441,14 @@ async function saveRecordingPart(
   body: URLSearchParams,
 ): Promise<void> {
   /*
-   * **1回だけ投げ直す。**
+   * **1 回だけ投げ直す。**
    *
-   * CI で 1回、**中身の空の 400** が返って落ちました (保存の action は
+   * CI で 1 回、**中身の空の 400** が返って落ちました (保存の action は
    * 不正な値でしか 400 を出さず、そのときは理由の入ったページを返すので、
    * 出どころはこちらのフォームではない)。手元では同じ条件で走らせても出ず、
-   * 4つ並べて走らせている CI でだけ出ています。
+   * 4 つ並べて走らせている CI でだけ出ています。
    *
-   * ここは**確かめたいことではなく前準備**なので、1回投げ直す。それでも
+   * ここは**確かめたいことではなく前準備**なので、1 回投げ直す。それでも
    * 駄目なら落とす — 本当に壊れているならどのみち後の assert が落ちる
    */
   for (let 回 = 0; ; 回++) {
@@ -463,14 +463,14 @@ async function saveRecordingPart(
   }
 }
 
-/** ルールを1件消す。一覧 (`/rules`) の行の削除を2回押す */
+/** ルールを 1 件消す。一覧 (`/rules`) の行の削除を 2 回押す */
 export async function deleteRule(row: Locator): Promise<void> {
   await row.getByTestId("rule-delete").click();
   await row.getByTestId("rule-delete-confirm").click();
 }
 
 /**
- * **ルールを1件作る** (検索の画面の「ルールとして保存」)。書く欄の値は URL に載せて始める
+ * **ルールを 1 件作る** (検索の画面の「ルールとして保存」)。書く欄の値は URL に載せて始める
  * (`/search?keyword=…`。`dedupe: false` で「同じ回は最初の放送だけ」を外す)。狭い画面なら下から出してから押す。
  * 作ったら保存したルールへのリンクが出るまで待つ。画面は検索のまま
  */
@@ -508,7 +508,7 @@ export async function clearRules(page: Page): Promise<void> {
   /*
    * **消えるのを待ってから次を押す。** 数えた直後に前の削除が反映されて
    * 行が消える (か、送信中で `disabled` になる) と、`first().click()` が
-   * 押せる要素をテストのタイムアウトいっぱい (2分) 待っていた
+   * 押せる要素をテストのタイムアウトいっぱい (2 分) 待っていた
    */
   const rows = page.getByTestId("rule-row");
   for (let i = 0; i < 20; i++) {
@@ -568,7 +568,7 @@ export async function clearWebhooks(page: Page): Promise<void> {
   for (let i = 0; i < 10; i++) {
     const count = await rows.count();
     if (count === 0) break;
-    // 削除は2回押し (`ArmedDelete`)。1回目で「確定」に変わるだけなので、確定まで押す
+    // 削除は 2 回押し (`ArmedDelete`)。1 回目で「確定」に変わるだけなので、確定まで押す
     await rows.first().click();
     await page.getByTestId("webhook-delete-confirm").click();
     await expect(page.getByTestId("webhook-row")).toHaveCount(count - 1);
@@ -603,7 +603,7 @@ export async function cancelAllReservations(page: Page): Promise<void> {
  * **待ちを挟んだ先で押すものは、ここで起こしてから押すこと。**
  *
  * 同じ場所への `pointermove` は捨てられるので (止まっているカーソルの下で
- * 中身が動いただけでもブラウザは投げてくる)、**2回、違う場所へ動かします**
+ * 中身が動いただけでもブラウザは投げてくる)、**2 回、違う場所へ動かします**
  */
 export async function wakeControls(page: Page, stage: string): Promise<void> {
   const box = await page.getByTestId(stage).boundingBox();
@@ -666,7 +666,7 @@ export async function flipSetting(
 }
 
 /**
- * 舞台の上の押すもの (`.ov-btn`) が**丸ごと見えているか**を見る。どれか2つが重なって
+ * 舞台の上の押すもの (`.ov-btn`) が**丸ごと見えているか**を見る。どれか 2 つが重なって
  * いないか (箱が交わらないか)、枠からはみ出していないか。見えていないもの (畳んだもの・
  * 幅 0) は数えない。返すのは困りごとの一覧 (空なら良し)
  */
@@ -712,8 +712,8 @@ export async function overlayTroubles(
 }
 
 /**
- * **操作バーのボタンが1行に並んでいるか** (`ControlRow`。狭い幅で見る)。見えているボタン (`.ov-btn`) の
- * 上端がそろい、行の高さが1段ぶん (いちばん高いボタンと同じ)、行からはみ出したものが無く、
+ * **操作バーのボタンが 1 行に並んでいるか** (`ControlRow`。狭い幅で見る)。見えているボタン (`.ov-btn`) の
+ * 上端がそろい、行の高さが 1 段ぶん (いちばん高いボタンと同じ)、行からはみ出したものが無く、
  * どれも 40px 以上あること。畳んだもの (幅 0) は数えない。返すのは困りごとの一覧 (空なら良し)
  */
 export async function oneRowTroubles(
@@ -802,7 +802,7 @@ export async function captionsClearOfBar(
 }
 
 /**
- * **偽のデータ放送。** 1枚だけの BML で、映像を右下の小窓 (`DATA_WINDOW`。960x540 の面の上の
+ * **偽のデータ放送。** 1 枚だけの BML で、映像を右下の小窓 (`DATA_WINDOW`。960x540 の面の上の
  * 位置) に映し、まわりを青で塗る。実際の局の画面と同じく、小窓の外は面に塞がれる。
  *
  * 作りものの放送にはデータ放送が載っていないので、出したときの見え方 (字幕が映像と一緒に
@@ -995,7 +995,7 @@ export async function captionsSeenInDataWindow(page: Page): Promise<void> {
 
   /*
    * **画像で見る。** 字幕を塗りつぶして撮り、塗った色の画素の割合を数える。字幕を描く係が
-   * 描き直すと塗りが消えるので、塗るのと撮るのを1組にして待つ
+   * 描き直すと塗りが消えるので、塗るのと撮るのを 1 組にして待つ
    */
   const share = async (clip: Box): Promise<number> => {
     await page.evaluate(() => {
@@ -1186,7 +1186,7 @@ export function dataElement(page: Page, selector: string) {
 }
 
 /**
- * 試しの字幕1枚 (文字の配置。`caption-text.ts` の `CaptionPage`)。面の下の方に白地に黒の字が1行。
+ * 試しの字幕 1 枚 (文字の配置。`caption-text.ts` の `CaptionPage`)。面の下の方に白地に黒の字が 1 行。
  * 偽の放送にも偽の録画にも字幕は乗っていないので、これを渡して描かせる
  */
 export const FAKE_CAPTION = {
@@ -1211,11 +1211,11 @@ export const FAKE_CAPTION = {
 };
 
 /**
- * **字幕を1枚流して描かせる** (ライブ・追っかけ。`prefix` は `live` か `chase`)。
+ * **字幕を 1 枚流して描かせる** (ライブ・追っかけ。`prefix` は `live` か `chase`)。
  *
- * 字幕が1本あると通知 (`CHANNEL.control` = 0x40 の `captions`)、`FAKE_CAPTION` を字幕のチャンネル
+ * 字幕が 1 本あると通知 (`CHANNEL.control` = 0x40 の `captions`)、`FAKE_CAPTION` を字幕のチャンネル
  * (`CHANNEL.captionText` = 0x22、時刻 0) で渡す。偽の放送は映像が出ず再生位置が進まないので、
- * 描くきっかけ (`paint`) は字幕のボタンを2回押して作る (消して出す)。
+ * 描くきっかけ (`paint`) は字幕のボタンを 2 回押して作る (消して出す)。
  * `captureSockets` してから開いた画面で呼ぶ
  */
 export async function feedCaption(
@@ -1265,7 +1265,7 @@ export const CAPTION_SCREENS = [
 ] as const;
 
 /**
- * **観る画面に字幕を1枚渡す。** 偽の録画は中身が無く再生位置は 0 のまま動かないので、
+ * **観る画面に字幕を 1 枚渡す。** 偽の録画は中身が無く再生位置は 0 のまま動かないので、
  * `captions.json` を `FAKE_CAPTION` を 0 秒に置いたものに差し替える。開く前に呼ぶ
  */
 export async function routeCaptions(page: Page): Promise<void> {
@@ -1276,7 +1276,7 @@ export async function routeCaptions(page: Page): Promise<void> {
 
 /**
  * ホームの**表示の切り替え** (まとめて表示・完了した予約も表示・削除済みも表示・ファイルと照合) の入れ物を返す。
- * 広い画面 (1000px 以上) はサイドバーの「表示」、狭い画面は下のタブのすぐ上の1行の「⋯」から出るメニュー
+ * 広い画面 (1000px 以上) はサイドバーの「表示」、狭い画面は下のタブのすぐ上の 1 行の「⋯」から出るメニュー
  */
 export async function homeTools(page: Page): Promise<Locator> {
   const side = page.getByTestId("sidebar");
@@ -1288,8 +1288,8 @@ export async function homeTools(page: Page): Promise<Locator> {
 }
 
 /**
- * ホームの絞り込み (すべて・予約・録画中・未視聴、見てほしいことの競合・失敗・録り逃し・CMの判定) を押す。
- * 広い画面はサイドバーの行、狭い画面は下のタブのすぐ上の1行のチップ
+ * ホームの絞り込み (すべて・予約・録画中・未視聴、見てほしいことの競合・失敗・録り逃し・CM の判定) を押す。
+ * 広い画面はサイドバーの行、狭い画面は下のタブのすぐ上の 1 行のチップ
  */
 export async function homeFilter(page: Page, id: string): Promise<void> {
   const side = page.getByTestId("sidebar");
@@ -1303,7 +1303,7 @@ export async function homeFilter(page: Page, id: string): Promise<void> {
 
 /**
  * **目に見える映像の上端と、右の列の最初のもの (の外枠) の上端がそろっている** (1px まで)。
- * 観る・ライブ・追っかけで同じ1つの値 (`PlayerLayout` の `--dp-side-top`) から決まるので、片方だけ動くとここで分かる。
+ * 観る・ライブ・追っかけで同じ 1 つの値 (`PlayerLayout` の `--dp-side-top`) から決まるので、片方だけ動くとここで分かる。
  *
  * 映像は枠 (舞台) ではなく、**絵の出ている所** を測る — `media` の要素 (video か、ライブの MPEG-2 の canvas) の
  * 中で、絵の縦横比 (`videoWidth`/`width`) を `object-fit: contain` で収めた矩形。絵の大きさがまだ分からなければ
@@ -1379,7 +1379,7 @@ export async function fakeFrame(page: Page, testid: string): Promise<void> {
   });
 }
 
-/** 切り抜き1枚 (`POST /api/clips` の返事。`#lib/clips.ts` の `Clip`) */
+/** 切り抜き 1 枚 (`POST /api/clips` の返事。`#lib/clips.ts` の `Clip`) */
 interface ClipJson {
   id: number;
   place: "live" | "chase" | "watch";

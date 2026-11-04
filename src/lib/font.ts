@@ -5,7 +5,7 @@
  * `.broadcast`) と字幕は、2 つを `unicode-range` で名乗らせる CSS (`denpaFontCssUrl`) を読み、
  * 後のほうはその字が出たときだけ落ちてくる。データ放送は基本の字だけで足りる (`denpaFontUrl`)。
  *
- * **バージョンを付けて、1年持たせる。** バージョンは Dockerfile の `DENPA_FONT_VERSION`
+ * **バージョンを付けて、1 年持たせる。** バージョンは Dockerfile の `DENPA_FONT_VERSION`
  * (組むときに `vite.config.ts` が読んで埋める)。字が変わるのはリリースを上げたときだけで、
  * そのとき URL も変わるので、古い字が残らない。バージョンの合わない問い合わせは配る側が
  * 毎回確かめさせる (`api/font/[file]/+server.ts`)

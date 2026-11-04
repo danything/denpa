@@ -79,7 +79,7 @@
 
   /**
    * **言葉なしで開いたら欄に入る** (下のタブの「検索」から来たとき)。結果を見に来たときは入らない。
-   * 狭い画面でキーボードが出て結果を隠す。欄は画面の外 (`SearchField`。広い形はヘッダー、スマホの形は上の1行)
+   * 狭い画面でキーボードが出て結果を隠す。欄は画面の外 (`SearchField`。広い形はヘッダー、スマホの形は上の 1 行)
    * にあるので、見えているほうに入る
    */
   onMount(() => {
@@ -176,7 +176,7 @@
     if (focus !== null) show({ ...focus, program_id: focus.id }, focus);
   });
 
-  /** 削除は2回押させる (ホームと同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
+  /** 削除は 2 回押させる (ホームと同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
   const deleting = arming(
     '[data-testid="search-delete"], [data-testid="search-delete-confirm"]',
   );
@@ -216,7 +216,7 @@
   function verdictOf(id: number) {
     return preview?.verdicts[id] ?? null;
   }
-  /** ルールの削除の2回押し (書く欄の「削除」) */
+  /** ルールの削除の 2 回押し (書く欄の「削除」) */
   const ruleDeleting = arming('[data-testid^="rule-delete"]');
 
   const notices = $derived.by(() => {
@@ -257,7 +257,7 @@
 -->
 <div class="search-layout" class:drafting>
   <div class="search-page">
-    <!-- 検索の欄はこの画面には置かない。ヘッダー (スマホの形では上の1行) の欄がそのまま言葉を持っている -->
+    <!-- 検索の欄はこの画面には置かない。ヘッダー (スマホの形では上の 1 行) の欄がそのまま言葉を持っている -->
     {#if q === ""}
       {#if drafting}
         <!--
@@ -674,7 +674,7 @@
                 {/if}
               </span>
             </button>
-            <!-- 1件ずつ: 立っている予約は取り消し、録る行はその1本だけ予約できる (ホーム・結果の行と同じ action) -->
+            <!-- 1 件ずつ: 立っている予約は取り消し、録る行はその 1 本だけ予約できる (ホーム・結果の行と同じ action) -->
             <div class="row-actions">
               {#if row.reservation_id !== null && row.reservation_state !== "skipped"}
                 <ActionButton
@@ -708,7 +708,7 @@
   </section>
 {/snippet}
 
-<!-- 行の2段目の頭 (局のロゴと名前) と、状態のバッジ -->
+<!-- 行の 2 段目の頭 (局のロゴと名前) と、状態のバッジ -->
 {#snippet service(row: {
   service_id: number;
   has_logo: boolean | null;
@@ -850,7 +850,7 @@
     margin: 0;
   }
   /*
-     * **節は見出しだけ** (カードで囲まず、線も引かない)。行は名前と小さな説明の2段で、
+     * **節は見出しだけ** (カードで囲まず、線も引かない)。行は名前と小さな説明の 2 段で、
      * ホームの行と同じく 1 件ずつ件の面に乗せ、件の間は `--dp-list-gap`。指を乗せると面が一段変わる (押せる範囲は行の中身いっぱい)
      */
   .hits-section {
@@ -909,7 +909,7 @@
     gap: var(--dp-space-2);
     padding-inline-end: var(--dp-space-2);
   }
-  /* 2段の件は `--dp-item-h` (docs/design.md の「何行かある一覧」。ホームの行と同じ)。1段の最近の検索は除く */
+  /* 2 段の件は `--dp-item-h` (docs/design.md の「何行かある一覧」。ホームの行と同じ)。1 段の最近の検索は除く */
   .hit:has(.hit-meta) {
     min-height: var(--dp-item-h);
   }

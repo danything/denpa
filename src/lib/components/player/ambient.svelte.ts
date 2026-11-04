@@ -5,7 +5,7 @@ import { AMBIENT_KEY, storedAmbient } from "./ambient";
 import type { GlanceReply, GlanceRequest } from "./glance-worker";
 
 /**
- * アンビエントモード。**映像の色を、枠の周りにぼかして広げる。3画面 (ライブ・追っかけ・観る画面) で同じもの。既定はオン。**
+ * アンビエントモード。**映像の色を、枠の周りにぼかして広げる。3 画面 (ライブ・追っかけ・観る画面) で同じもの。既定はオン。**
  *
  * 光を描くのは `AmbientGlow.svelte` (舞台 `PlayerStage` が枠の周りに置く。テーブルトップの間は代わりに
  * 反射の `FoldReflection.svelte`)。ここが持つのは
@@ -14,14 +14,14 @@ import type { GlanceReply, GlanceRequest } from "./glance-worker";
  * - `<video>` で観ているとき … コマ (`VideoFrame`) を worker に渡して縮めてもらう (`glance-worker.ts`)。
  *   `VideoFrame` の無いブラウザは画面の側で `createImageBitmap` で縮める
  * - canvas に描いているとき (放送のままの MPEG-2・互換モード) … 映像は worker の canvas にあって
- *   画面の側からは読めないので、その worker に縮めたものを1枚もらう (`RawEngine.grab` の `size`)
+ *   画面の側からは読めないので、その worker に縮めたものを 1 枚もらう (`RawEngine.grab` の `size`)
  *
  * どちらも同じオリジンから流しているので、写しても汚れ (CORS) は付かない
  */
 interface Options {
   /** 再生しているか。止めている間は写さない (光は残す) */
   playing: () => boolean;
-  /** canvas に描いているときのプレイヤー (縮めた1枚をくれる)。`<video>` で観ているときは null */
+  /** canvas に描いているときのプレイヤー (縮めた 1 枚をくれる)。`<video>` で観ているときは null */
   canvas: () => { grab(size: GrabSize): Promise<ImageBitmap | null> } | null;
   video: () => HTMLVideoElement | null;
 }

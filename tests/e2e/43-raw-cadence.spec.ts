@@ -18,9 +18,9 @@ import {
  * 偽の放送の映像は上下のフィールドで別の時刻の映像にしてある (`packages/arib/src/synth-av.ts`)。worker の WebGL の
  * 呼び出しを横から数え (どのコマを上げたか・どちらのフィールドを描いたか・いつ描いたか)、画面の
  * requestAnimationFrame の時刻と突き合わせて、**画面の切り替わりごとにどのフィールドが出ていたか**を並べる。
- * 同じフィールドが続けば重なり、2つ以上進めば飛び。数字は test-results に残す。
+ * 同じフィールドが続けば重なり、2 つ以上進めば飛び。数字は test-results に残す。
  *
- * 59.94 と 60 の差のぶん (約 17 秒に1回) の重なりは避けられない。ヘッドレスの画面の切り替わりは
+ * 59.94 と 60 の差のぶん (約 17 秒に 1 回) の重なりは避けられない。ヘッドレスの画面の切り替わりは
  * 実機と違う (GPU も無い) ので、ここで見るのは「大きく崩れていないか」まで
  */
 
@@ -58,7 +58,7 @@ async function instrument(worker: Worker): Promise<void> {
         if (location !== null && names.get(location) === "field") field = value;
         return uniform1i.call(this, location, value);
       };
-      // 1コマで3面 (Y・Cb・Cr) 上げる
+      // 1 コマで 3 面 (Y・Cb・Cr) 上げる
       for (const name of ["texImage2D", "texSubImage2D"] as const) {
         const original = proto[name] as (...args: unknown[]) => void;
         (proto as unknown as Record<string, unknown>)[name] = function (
@@ -126,9 +126,9 @@ const STEADY = 2;
  *
  * **確かめられる切り替わりだけ数える。** CI はほかのスペック (エンコードなど) と並んで混み、worker にも
  * 回ってこない (4ms ごとの刻みが 20〜70ms 空く)。描く機会が無かった回は同じフィールドが続き、次の回で
- * 2つ進む。前の作りでは rAF が来なかった回のぶん進むのを正しいとして割り戻していたが、混むほど外れて落ちていた。
- * いまは、**その回までの `STEADY` 回の rAF が1回ぶんの間隔で来ていて、その回と前の回の手前1回ぶんの間に
- * worker の刻みがまるごと収まっていた**切り替わりだけを数え、そこで1つずつ進んでいるかを見る。
+ * 2 つ進む。前の作りでは rAF が来なかった回のぶん進むのを正しいとして割り戻していたが、混むほど外れて落ちていた。
+ * いまは、**その回までの `STEADY` 回の rAF が 1 回ぶんの間隔で来ていて、その回と前の回の手前 1 回ぶんの間に
+ * worker の刻みがまるごと収まっていた**切り替わりだけを数え、そこで 1 つずつ進んでいるかを見る。
  * 間合いの選び方が崩れたとき (刻みの時刻で番を見ていた頃) は、混んでいない手元 (Xvfb の上で headed) でも
  * 重なりと飛びが出ていたので、この絞り方で見落とさない。**ヘッドレスでは、刻みの時刻で番を見るよう戻しても
  * 0・0 のまま** (映像が小さくデコードがほぼ 0ms で、刻みの揺れが 4ms しかない)。ここで捕まえられるのは大きな崩れまで
@@ -152,7 +152,7 @@ function cadence(draws: Draw[], ticks: Tick[], vsyncs: number[]): Cadence {
     .map((vsync, i) => vsync - vsyncs[i]!)
     .sort((a, b) => a - b);
   /*
-   * 半分より多く来ないこともあるので、中央値ではなく短い側 (下から 1 割) を1回ぶんとする。
+   * 半分より多く来ないこともあるので、中央値ではなく短い側 (下から 1 割) を 1 回ぶんとする。
    * それでも 2 回ぶんを拾うほど来ないときのために、テストの画面 (60Hz) の 1.1 倍で頭を押さえる
    */
   const period = Math.min(
@@ -160,7 +160,7 @@ function cadence(draws: Draw[], ticks: Tick[], vsyncs: number[]): Cadence {
     (1000 / 60) * 1.1,
   );
   const onTime = (j: number) => vsyncs[j]! - vsyncs[j - 1]! <= period * 1.5;
-  // 切り替わり j の手前1回ぶんの間に、worker の刻みがまるごと収まっていたか (描く機会があったか)
+  // 切り替わり j の手前 1 回ぶんの間に、worker の刻みがまるごと収まっていたか (描く機会があったか)
   const ran = (j: number) => {
     const from = Math.max(vsyncs[j - 1]!, vsyncs[j]! - period);
     return ticks.some(([start, end]) => start > from && end < vsyncs[j]!);
@@ -249,7 +249,7 @@ async function measure(
         .catch(() => ({ draws: [] as Draw[], ticks: [] as Tick[] })),
     ),
   );
-  // 描いているのは映像の worker 1つだけ (前に開いた画面の worker は、もう答えない)
+  // 描いているのは映像の worker 1 つだけ (前に開いた画面の worker は、もう答えない)
   const drawer = lists.reduce(
     (best, list) => (list.draws.length > best.draws.length ? list : best),
     { draws: [] as Draw[], ticks: [] as Tick[] },
@@ -273,8 +273,8 @@ async function shots(page: Page, info: TestInfo, name: string): Promise<void> {
  * **測った 2.5 秒を当てにしてよいか。** 画面の rAF の 1 割より多くが来なかったら当てにしない。
  *
  * worker は画面の rAF から切り替わりの間隔を覚える (`Vsync`) が、rAF が半分ほど来ない間が続くと、
- * 覚えた間隔が 25〜30ms にずれる (33ms 空けば1回ぶん、50ms 空けば2回ぶんと割るので)。
- * 戻るまでは rAF が続けて来た回でも1つ先・1つ手前のフィールドを選ぶ。CI で落ちていたのはこれで、
+ * 覚えた間隔が 25〜30ms にずれる (33ms 空けば 1 回ぶん、50ms 空けば 2 回ぶんと割るので)。
+ * 戻るまでは rAF が続けて来た回でも 1 つ先・1 つ手前のフィールドを選ぶ。CI で落ちていたのはこれで、
  * 来なかった回が 150 回のうち 46〜68 回あった。**混んだ端末で間合いが崩れるのは本当** だが、ここで
  * 確かめたいのは混んでいないときの選び方なので、混んだ 2.5 秒では判断せず、開き直して測り直す。
  * 確かめられた切り替わり (`cadence`) も 100 回は要る (混んでいない手元で 140〜150 回)
@@ -316,7 +316,7 @@ test.describe("元の TS を出す間合い", () => {
       void instrument(worker);
     });
 
-    // 混んでいて当てにならなければ (`usable`)、開き直して頭から測り直す。偽の番組は 5 秒なので、1回に測るのは 2.5 秒
+    // 混んでいて当てにならなければ (`usable`)、開き直して頭から測り直す。偽の番組は 5 秒なので、1 回に測るのは 2.5 秒
     const results: Cadence[] = [];
     while (results.length < TRIES && !results.some(usable)) {
       await goto(page, `/watch/${id}`);
@@ -356,7 +356,7 @@ test.describe("元の TS を出す間合い", () => {
     );
     /*
      * 飛びと重なりは、ほぼ無い。手元 (Xvfb の上で headed) で 150 回の切り替わりのうち、直す前は
-     * 重なり 9・飛び 8 (1 割ほど)、直した後は 0・0。59.94 と 60 の差のぶんの重なり (約 17 秒に1回) と
+     * 重なり 9・飛び 8 (1 割ほど)、直した後は 0・0。59.94 と 60 の差のぶんの重なり (約 17 秒に 1 回) と
      * 揺れに 2 回、加えて確かめた回の 20 分の 1 まで許す (直す前の 1 割は超える)
      */
     expect(result!.repeats + result!.skips).toBeLessThanOrEqual(

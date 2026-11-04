@@ -8,10 +8,10 @@ namespace Denpa.Agent;
 /// PIX-DT295 に要るメーカーのデータ。**ソースにもイメージにも入れず、使う人の機械で PIXELA の公式パッケージから取り出す。**
 ///
 /// <para>
-/// 要るのは3つ (仕様書 12.1): ASSP に毎回書き込む idle イメージ、受信の前に書き込む TRC イメージ、公式の Windows ドライバー
+/// 要るのは 3 つ (仕様書 12.1): ASSP に毎回書き込む idle イメージ、受信の前に書き込む TRC イメージ、公式の Windows ドライバー
 /// <c>pxmb86m0x_usb.sys</c> から位置で切り出す定数 (認証の鍵の片割れ・表、チューナーの初期化表。5.2)。
 /// どれも StationTV X の更新パッケージ (PIX-DT295 StationTV X 1.20.3000.2) の zip に入っている (12.2・12.3)。
-/// 取り方は <see cref="Px4Firmware"/> と同じ: 取ってくる → zip の SHA-256 → 3つのエントリーを取り出して SHA-256 →
+/// 取り方は <see cref="Px4Firmware"/> と同じ: 取ってくる → zip の SHA-256 → 3 つのエントリーを取り出して SHA-256 →
 /// ドライバーから位置で切り出して範囲ごとに SHA-256。取れたものは設定の置き場 (tuners.json の隣) に置いて次からはそれを使う。
 /// </para>
 ///
@@ -70,7 +70,7 @@ public static class Dt295Firmware
     private static readonly Lazy<Dt295FirmwareStore> Default = new(() =>
         new Dt295FirmwareStore(Folder, Pixela, Download, TimeProvider.System));
 
-    /// <summary>3つを揃えて返す。無ければ取ってくる。取れなければ理由を添えて投げる</summary>
+    /// <summary>3 つを揃えて返す。無ければ取ってくる。取れなければ理由を添えて投げる</summary>
     public static Dt295Vendor Ensure() => Default.Value.Ensure();
 
     /// <summary>

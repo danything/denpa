@@ -39,7 +39,7 @@ test.describe("録画とエンコード", () => {
       .fill(`${stack.webhookUrl}/__control/webhook`);
     await page.getByTestId("webhook-add").click();
 
-    // BSは他のテストが触らないので、チューナー競合の心配なく録れる
+    // BS は他のテストが触らないので、チューナー競合の心配なく録れる
     const programId = await reserveSoon(page, request, "BS");
 
     const recordingRow = `[data-testid="recording-row"][data-program-id="${programId}"]`;
@@ -63,7 +63,7 @@ test.describe("録画とエンコード", () => {
     expect(videoPath).toContain(".mkv");
 
     /*
-     * CM検出が走り、既定のチャプター付与として記録されていること。
+     * CM 検出が走り、既定のチャプター付与として記録されていること。
      *
      * **切った位置は画面に出さない** — チャプターとして動画に入っているので、
      * 再生すれば分かる。ここでは行の属性から確かめる。
@@ -78,7 +78,7 @@ test.describe("録画とエンコード", () => {
     // 途中で止めたときは実物と合わない
     const recorded = Number(await recording.getAttribute("data-duration-ms"));
     expect(recorded).toBeGreaterThan(0);
-    // 番組表の尺(BSの偽番組は10秒)から大きく外れていないこと
+    // 番組表の尺(BS の偽番組は 10 秒)から大きく外れていないこと
     expect(recorded).toBeLessThan(5 * 60_000);
 
     // サムネイル (denpa の画面が出す画像) が隣に置かれていること。
@@ -92,7 +92,7 @@ test.describe("録画とエンコード", () => {
     await expect(recording.getByTestId("play-hint")).toBeVisible();
 
     /*
-     * 何で録れた1本かを出していること。**録画の側では手動とも書く** —
+     * 何で録れた 1 本かを出していること。**録画の側では手動とも書く** —
      * 予約は「ルールでないなら黙る」が、録れたものは後から見返すので、
      * 「ルールではない」ことにも意味がある (どのルールを直せばいいのか、を
      * 探し始める前に打ち切れる)
@@ -237,7 +237,7 @@ test.describe("CMの実カット", () => {
     ).toEqual([]);
 
     /*
-     * **1本目は場面の切れ目ごとにキーフレームを置いてエンコードし、境目にキーフレームが無ければ境目を指して
+     * **1 本目は場面の切れ目ごとにキーフレームを置いてエンコードし、境目にキーフレームが無ければ境目を指して
      * ソフトウェアで再エンコードする** (cm-cut.ts)。偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、
      * 再エンコードまで進み、それでも切れずにチャプターに落ちる。境目 (300 秒・360 秒) を 1ms 手前で指していること
      */
@@ -266,7 +266,7 @@ test.describe("コーデックを両方エンコードする", () => {
   });
 
   /*
-   * **両方選ぶと1本の録画が2ファイルになる。** 古いテレビは AV1 をデコードできない
+   * **両方選ぶと 1 本の録画が 2 ファイルになる。** 古いテレビは AV1 をデコードできない
    * ので H.264 も置いておくと、同じ録画をどちらの端末でも観られる。主は AV1
    * (`library_path`)、もう一方は H.264 (`alt_path`)。どちらも同じフォルダに
    * 並ぶので、H.264 のほうは名前に印を付けて分ける ([H264])。
@@ -286,7 +286,7 @@ test.describe("コーデックを両方エンコードする", () => {
     );
     await waitWatchable(page, row);
 
-    // 主は AV1 (素の .mkv)、もう一方は H.264 ([H264] 付き)。実体も2本ある
+    // 主は AV1 (素の .mkv)、もう一方は H.264 ([H264] 付き)。実体も 2 本ある
     const av1 = (await row.getAttribute("data-library-path")) ?? "";
     const alt = (await row.getAttribute("data-alt-path")) ?? "";
     expect(av1).toMatch(/\.mkv$/);
@@ -324,8 +324,8 @@ test.describe("コーデックを両方エンコードする", () => {
     );
 
     /*
-     * **2本を同時にエンコードする** (コーデックごとに ffmpeg を1本ずつ。`encode-slots.ts`)。
-     * 2本のエンコードしていた間が重なっていること
+     * **2 本を同時にエンコードする** (コーデックごとに ffmpeg を 1 本ずつ。`encode-slots.ts`)。
+     * 2 本のエンコードしていた間が重なっていること
      */
     const spans = encodeSpans(stack.encodeSpansFile, String(id));
     expect(
@@ -339,7 +339,7 @@ test.describe("コーデックを両方エンコードする", () => {
 
     /*
      * **CM のチャプターは、どちらにもエンコードしたあとに書き足す** (既定の「チャプター」。`-c copy`)。
-     * 境目は1本目をエンコードし終えてから決まるので、エンコードするときには入れない
+     * 境目は 1 本目をエンコードし終えてから決まるので、エンコードするときには入れない
      */
     expect(await row.getAttribute("data-cm-ranges")).toContain("300");
     expect(chapterRewrites(stack.encodeArgsFile, [av1, alt])).toEqual([
@@ -368,9 +368,9 @@ test.describe("コーデックを両方エンコードする", () => {
 
     /*
      * 境目はまだ分からないので、どちらも場面の切れ目ごとにキーフレームを置いて同時にエンコードする。
-     * 偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、1本目 (AV1) は境目を指して再エンコードまで進み、
-     * それでも切れずに CM を残す。**1本目を切れなかったので H.264 は再エンコードせず、切らずにチャプターを入れる**
-     * (2本で長さを揃える)
+     * 偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、1 本目 (AV1) は境目を指して再エンコードまで進み、
+     * それでも切れずに CM を残す。**1 本目を切れなかったので H.264 は再エンコードせず、切らずにチャプターを入れる**
+     * (2 本で長さを揃える)
      */
     const mine = new RegExp(`-${id}\\.m2ts$`);
     const runs = encodeRuns(stack.encodeArgsFile)
@@ -465,8 +465,8 @@ test.describe("エンコードしない", () => {
     });
 
     /*
-     * 再エンコードのボタンは出ない。**エンコードしない設定では元のTSがそのまま保存先へ移る**ので、
-     * 元にできるTSがもう無い (「元のTSも残す」はエンコードしたときの話)。
+     * 再エンコードのボタンは出ない。**エンコードしない設定では元の TS がそのまま保存先へ移る**ので、
+     * 元にできる TS がもう無い (「元の TS も残す」はエンコードしたときの話)。
      * エンコードしたくなったらコーデックを選んで録り直すことになる
      */
     await page.locator(row).getByTestId("detail-button").click();
@@ -489,7 +489,7 @@ test.describe("CM検出のやり直し", () => {
   /*
    * **CM 検出だけやり直す** (詳細の「その他…」)。再エンコードせずに CM を探し直して、エンコードしたもののチャプターを
    * 書き直す (`encoder.runCmJob`)。CM を探さずにエンコードした録画で押せば、探した結果が入る。
-   * 元のTSはエンコードし終えると消える設定 (既定) なので、エンコードしたものから読む
+   * 元の TS はエンコードし終えると消える設定 (既定) なので、エンコードしたものから読む
    */
   test("CM検出だけやり直せる (再エンコードしない)", async ({
     page,

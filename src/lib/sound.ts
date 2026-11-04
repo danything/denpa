@@ -1,8 +1,8 @@
 /**
- * **Web Audio で鳴らす音の出口** (3画面共通)。canvas に描く経路 (`raw/engine.ts`) と、`<video>` の音を通す
+ * **Web Audio で鳴らす音の出口** (3 画面共通)。canvas に描く経路 (`raw/engine.ts`) と、`<video>` の音を通す
  * 経路 (`components/player/volume.svelte.ts`) が同じものを使う。
  *
- * 出口までは「音量 → リミッタ → 出口」の1本の経路 (`Outlet`)。決め方は `volume.ts`
+ * 出口までは「音量 → リミッタ → 出口」の 1 本の経路 (`Outlet`)。決め方は `volume.ts`
  */
 
 import {
@@ -44,7 +44,7 @@ interface Through {
 }
 
 /**
- * 音量を掛け、リミッタを通して鳴らす。**鳴らす先は2つ**。ページから直に (`context.destination`) か、
+ * 音量を掛け、リミッタを通して鳴らす。**鳴らす先は 2 つ**。ページから直に (`context.destination`) か、
  * ストリームにして `<audio>` から (`route`)。
  *
  * 音を消すのは使う側 (canvas はその前の GainNode、`<video>` は `muted`)。ここは触らない

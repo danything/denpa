@@ -45,7 +45,7 @@ import { media, SECONDS } from "./media";
  *     BENCH_VALUES=3,4,6,8,12 BENCH_PATHS=mpeg2,av1,h264 BENCH_LOADS=idle,busy BENCH_RUNS=3 \
  *       docker compose --profile docs run --rm docs bunx playwright test -c tests/bench
  *
- * 1回ずつの結果は `tests/bench/out/decoded-most.jsonl`、まとめは `decoded-most.md`
+ * 1 回ずつの結果は `tests/bench/out/decoded-most.jsonl`、まとめは `decoded-most.md`
  */
 
 const OUT = "tests/bench/out";

@@ -12,9 +12,9 @@ import { expect, test as base } from "./helpers";
  * Playwright の APIRequestContext は資格情報を勝手に足してしまうので使えません。
  */
 /*
- * **OIDC の一式はワーカーごとに1回だけ立てる** (普段の `stack` と同じ寿命)。
- * テストごとに立てていた頃は 14本 × 5秒強の起動待ちで、このファイルだけで
- * 1分以上掛かっていた。どのテストも Cookie は自分の jar に閉じているので、
+ * **OIDC の一式はワーカーごとに 1 回だけ立てる** (普段の `stack` と同じ寿命)。
+ * テストごとに立てていた頃は 14 本 × 5 秒強の起動待ちで、このファイルだけで
+ * 1 分以上掛かっていた。どのテストも Cookie は自分の jar に閉じているので、
  * 共有して困らない。偽 IdP の振る舞いを変えるテスト (グループ) だけが終わりに戻す
  */
 const test = base.extend<Record<never, never>, { oidc: OidcStack }>({

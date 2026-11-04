@@ -502,7 +502,7 @@ test.describe("音量", () => {
 
 /**
  * **音のボタンに乗せると縦のつまみが浮かぶ** (`SoundButton`)。マウスで指せる端末だけ。
- * 指の端末 (車のタブレットなど) と、畳んで音のボタンごと ⚙ に入ったときは ⚙ のつまみを使う (つまみは画面に1つだけ)
+ * 指の端末 (車のタブレットなど) と、畳んで音のボタンごと ⚙ に入ったときは ⚙ のつまみを使う (つまみは画面に 1 つだけ)
  */
 test.describe("音のボタンの縦のつまみ", () => {
   test("乗せると真上に出て、縦に動かす・ホイールで変わり、⚙ には置かない。外れたら閉じ、キーボードでも開く", async ({
@@ -564,7 +564,7 @@ test.describe("音のボタンの縦のつまみ", () => {
     await expect(pop).toBeVisible();
     await expect(pop).toBeHidden();
 
-    // つまみは画面に1つだけ。マウスの端末の広い枠では ⚙ に音量のつまみを置かない
+    // つまみは画面に 1 つだけ。マウスの端末の広い枠では ⚙ に音量のつまみを置かない
     await openSettings(page, "live");
     await expect(page.getByTestId("live-settings-menu")).toBeVisible();
     await expect(page.getByTestId("live-volume")).toHaveCount(0);
@@ -698,7 +698,7 @@ test.describe("⚙ の開け閉めと遅れて届く toggle", () => {
     page,
   }) => {
     await page.addInitScript(() => {
-      // 止めている popover と、止めた間のもとの状態 (oldState)。届けるときは1回にまとめる (ブラウザと同じ)
+      // 止めている popover と、止めた間のもとの状態 (oldState)。届けるときは 1 回にまとめる (ブラウザと同じ)
       const held = new Map<HTMLElement, string>();
       (globalThis as { __release?: () => void }).__release = () => {
         for (const [target, oldState] of held) {

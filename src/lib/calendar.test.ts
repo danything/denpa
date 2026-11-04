@@ -14,14 +14,14 @@ import {
 import { dayStart } from "./timeline";
 
 const H = 3_600_000;
-/** 2026年10月19日 (月) 14:30 */
+/** 2026 年 10 月 19 日 (月) 14:30 */
 const NOW = new Date(2026, 9, 19, 14, 30).getTime();
 const today = dayStart(NOW);
 const day = (m: number, d: number) => new Date(2026, m - 1, d).getTime();
 
 describe("月の升目", () => {
   test("週は日曜からで、月の外は空ける", () => {
-    // 2026年10月1日は木曜
+    // 2026 年 10 月 1 日は木曜
     const weeks = monthGrid(monthOf(NOW));
     expect(weeks[0]).toEqual([
       null,
@@ -34,7 +34,7 @@ describe("月の升目", () => {
     ]);
     expect(weeks.flat().filter((cell) => cell !== null)).toHaveLength(31);
     expect(weeks.every((week) => week.length === 7)).toBe(true);
-    // 31日は土曜なので、最後の週はちょうど埋まる
+    // 31 日は土曜なので、最後の週はちょうど埋まる
     expect(weeks.at(-1)?.at(-1)).toBe(day(10, 31));
   });
 

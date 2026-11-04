@@ -13,7 +13,7 @@ import { packetize, patSection, programMap } from "./synth.js";
 
 /**
  * 変換せずに送る経路の受け側。**ffmpeg がやっていた「TS を PES に戻す」を自前でやる**ので、
- * 組み立てた放送 (`synth-av.ts`) を食わせて、映像の1枚・音声の1コマが時刻ごと
+ * 組み立てた放送 (`synth-av.ts`) を食わせて、映像の 1 枚・音声の 1 コマが時刻ごと
  * そのまま戻ってくるかを見る。
  */
 
@@ -53,7 +53,7 @@ describe("PesDemuxer", () => {
     const { pes: found, changed } = demuxer.feed(Uint8Array.from(parts));
     expect(changed).toBe(true);
     expect(demuxer.streams).toEqual({ video: VIDEO, audio: AUDIO });
-    // 3枚目は次の頭が来るまで終わりが分からない
+    // 3 枚目は次の頭が来るまで終わりが分からない
     expect(found.map((p) => p.pts)).toEqual([90_000, 90_000 + FRAME_TICKS]);
     expect(found[0]!.data).toEqual(frames[0]!);
     expect(found[1]!.kind).toBe("video");
@@ -61,7 +61,7 @@ describe("PesDemuxer", () => {
 
   test("64KB を超える1枚も欠けずに戻り、返した中身は次の PES を組み立てても変わらない", () => {
     const demuxer = new PesDemuxer();
-    // 中身は読まないので、決まった並びのバイトで足りる。1枚目は入れ物を何度か広げる大きさ
+    // 中身は読まないので、決まった並びのバイトで足りる。1 枚目は入れ物を何度か広げる大きさ
     const big = Uint8Array.from({ length: 200_000 }, (_, i) => (i * 7) & 0xff);
     const small = Uint8Array.from({ length: 1000 }, (_, i) => i & 0xff);
     let counter = 0;

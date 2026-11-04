@@ -55,7 +55,7 @@ function movedTo(params: URLSearchParams): string | null {
 }
 
 /**
- * **ルールの一覧と管理** (`/rules`)。並べて見比べ、スイッチで止める・戻す、2回押しで消す。
+ * **ルールの一覧と管理** (`/rules`)。並べて見比べ、スイッチで止める・戻す、2 回押しで消す。
  * 作る・直すのは検索の画面 (行を押すと `/search?rule=<ID>`)
  */
 export function load({ url }) {
@@ -100,7 +100,7 @@ export const actions = {
     return { success: true, remapped: true };
   },
 
-  /** ルールを消す (行の削除。2回押し) */
+  /** ルールを消す (行の削除。2 回押し) */
   delete: async ({ request }) => {
     const id = idOf(await request.formData());
     if (id === null) return fail(400, { message: "ルール ID が不正です" });

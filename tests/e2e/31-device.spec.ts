@@ -56,7 +56,7 @@ test.describe("テレビのペアリング", () => {
       "E2E のテレビ とペアリングしました",
     );
 
-    // 間隔を守って聞き直すと、アクセストークンを1度だけ受け取れる
+    // 間隔を守って聞き直すと、アクセストークンを 1 度だけ受け取れる
     await new Promise((resolve) => setTimeout(resolve, 5_000));
     const got = await request.post("/api/device/token", {
       data: { deviceCode: code.deviceCode },

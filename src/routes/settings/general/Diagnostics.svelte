@@ -25,13 +25,13 @@
 
   /**
    * 設定の「その他」の「バージョンと環境」(`#version`) と「ログ」(`#logs`) の節。前の「診断」の画面。
-   * 環境の中身は Issue の報告にも入れるので、2つの節を1つの部品に置く
+   * 環境の中身は Issue の報告にも入れるので、2 つの節を 1 つの部品に置く
    */
   let { data }: { data: PageData } = $props();
 
   /**
-   * スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、ログの押すもの (読み直す・Issue にする) を絞り込みと同じ1行に入れる。
-   * その1行は下のタブの上に浮く (`settings/+layout.svelte` の `.section-bar`)
+   * スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、ログの押すもの (読み直す・Issue にする) を絞り込みと同じ 1 行に入れる。
+   * その 1 行は下のタブの上に浮く (`settings/+layout.svelte` の `.section-bar`)
    */
   const phone = new MediaQuery(PHONE_FORM);
 
@@ -303,7 +303,7 @@
   </div>
 </div>
 
-<!-- ログの押すもの。広い画面では見出しの行の右、スマホの形では絞り込みの1行の頭 (上の `phone`) -->
+<!-- ログの押すもの。広い画面では見出しの行の右、スマホの形では絞り込みの 1 行の頭 (上の `phone`) -->
 {#snippet logActions()}
   <button
     type="button"
@@ -485,7 +485,7 @@
     max-width: 20rem;
     margin: 0;
   }
-  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では横に巻く1行の中なので、検索の欄は決まった幅 */
+  /* スマホの形 (`#lib/phone-form.ts`。`<html data-phone>`) では横に巻く 1 行の中なので、検索の欄は決まった幅 */
   :global(:where(html[data-phone])) .search {
     flex: 0 0 10rem;
   }

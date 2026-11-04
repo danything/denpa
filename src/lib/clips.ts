@@ -13,10 +13,10 @@ export type ClipPlace = "live" | "chase" | "watch";
  */
 export const CLIP_BYTES_MOST = 512 * 1024;
 
-/** 1ページの件数 (`GET /api/clips`) */
+/** 1 ページの件数 (`GET /api/clips`) */
 export const CLIP_PAGE = 60;
 
-/** 切り抜き1枚 (`GET /api/clips` の1行・`POST /api/clips` の返事) */
+/** 切り抜き 1 枚 (`GET /api/clips` の 1 行・`POST /api/clips` の返事) */
 export interface Clip {
   id: number;
   /** 撮った時刻 (unix ms) */
@@ -24,7 +24,7 @@ export interface Clip {
   place: ClipPlace;
   /** 撮った録画。録画が無い (ライブで録っていなかった)・消した録画なら null */
   recordingId: number | null;
-  /** 局の内部ID */
+  /** 局の内部 ID */
   serviceId: number;
   serviceName: string;
   programName: string;

@@ -221,7 +221,7 @@ export function redact(text: string, known: Known = {}): string {
     .replace(CARD, MASK.card)
     .replace(LONG_DIGITS, MASK.card)
     .replace(IPV6, (found) =>
-      // `::` だけ、16進の1字だけの並び (`a::b`) は C++ の名前などのことが多いので、数字を含むときだけ
+      // `::` だけ、16 進の 1 字だけの並び (`a::b`) は C++ の名前などのことが多いので、数字を含むときだけ
       /\d/.test(found) ? MASK.ip : found,
     )
     .replace(IPV4, MASK.ip)

@@ -117,7 +117,7 @@ describe("DsmccLogoCollector", () => {
     const module = logoModule(0x05, [
       { logoId: 0x0011, services: [[4, 211]], data: PNG },
     ]);
-    // わざと小さく割る。1つの DDB に収まると組み立てを試したことにならない
+    // わざと小さく割る。1 つの DDB に収まると組み立てを試したことにならない
     for (const packet of packets(carousel(module, 16))) collector.feed(packet);
 
     const logos = collector.collected();
@@ -164,11 +164,11 @@ describe("DsmccLogoCollector", () => {
   /**
    * **CS のロゴは BS の中継から流れてくる。**
    *
-   * 実機の `BS15_0` を15分読み続けると、エンジニアリングサービスに
+   * 実機の `BS15_0` を 15 分読み続けると、エンジニアリングサービスに
    * `LOGO-00`〜`LOGO-05` と `CS_LOGO-00`〜`CS_LOGO-05` が並んで来ていた
-   * (CS の12中継にはエンジニアリングサービスが1つもいない)。
+   * (CS の 12 中継にはエンジニアリングサービスが 1 つもいない)。
    *
-   * DII のモジュールを1つ見つけた時点で打ち切っていた頃は、先に並んでいる
+   * DII のモジュールを 1 つ見つけた時点で打ち切っていた頃は、先に並んでいる
    * BS のぶんしか組み立てず、CS が永久に揃わなかった。
    */
   test("1つのカルーセルに並んだ BS と CS のモジュールを両方組み立てる", () => {
@@ -368,7 +368,7 @@ describe("DsmccLogoCollector", () => {
 /**
  * **開き直しても読みかけを捨てない** (`CarouselProgress`)。
  *
- * 衛星のカルーセルは十数分に一度まとめて来るだけで、チューナーが2台の衛星では番組表集めやライブに
+ * 衛星のカルーセルは十数分に一度まとめて来るだけで、チューナーが 2 台の衛星では番組表集めやライブに
  * 途中で取り上げられる。開くたびに一から読んでいた頃は、DII を見たあとで切れるとそれまでの
  * ブロックが消え、次に開いても DII が来るまで何も組み立てられず、何日経っても揃わなかった
  */
@@ -475,7 +475,7 @@ describe("読みかけ (CarouselProgress)", () => {
     const mid = Math.ceil(list.length / 2);
     return first ? list.slice(0, mid) : list.slice(mid);
   };
-  /** 1回目: DII と前半のブロックで切れる。2回目: DII の無いまま後半のブロック */
+  /** 1 回目: DII と前半のブロックで切れる。2 回目: DII の無いまま後半のブロック */
   const first = stream(
     head(true),
     ...half(bsBlocks, true),
@@ -503,7 +503,7 @@ describe("読みかけ (CarouselProgress)", () => {
         .flatMap((logo) => logo.services.map((s) => s.serviceId))
         .sort(),
     ).toEqual([211, 212, 330]);
-    // 2回に分けて読んでも、知らされたモジュールが全部揃えば読み切ったことになる
+    // 2 回に分けて読んでも、知らされたモジュールが全部揃えば読み切ったことになる
     expect(after.carouselRead).toBe(true);
   });
 
@@ -527,7 +527,7 @@ describe("読みかけ (CarouselProgress)", () => {
 
 describe("LogoCollector (衛星)", () => {
   test("ネットワークごとにまとめて返す", () => {
-    // 1つのロゴが他ネットワークの局にも紐付いていることがある
+    // 1 つのロゴが他ネットワークの局にも紐付いていることがある
     const module = logoModule(0x05, [
       {
         logoId: 3,

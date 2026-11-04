@@ -1,5 +1,5 @@
 /**
- * DRCS (外字)。`browser.loadDRCS("x.drc")` で読む字の画像 (STD-B24 付属3 4.6)。
+ * DRCS (外字)。`browser.loadDRCS("x.drc")` で読む字の画像 (STD-B24 付属 3 4.6)。
  *
  * 運用は 4 階調・非圧縮・全角の正方形 (16/20/24/30/36) だけ。1 字を CSS の mask にして、
  * **色は字の色** (currentColor) で塗る。TTF は作らない。中間の 2 階調は透明度で近づける

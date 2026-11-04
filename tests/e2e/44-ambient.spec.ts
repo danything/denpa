@@ -50,7 +50,7 @@ function updates(page: Page): () => Promise<number> {
 }
 
 /**
- * 出ている帯の1つにある2枚の canvas (表と裏)。入れ替えの動きは CSS の `opacity` の transition で、
+ * 出ている帯の 1 つにある 2 枚の canvas (表と裏)。入れ替えの動きは CSS の `opacity` の transition で、
  * JS が動かすのは表の印 (`data-front`) だけ
  */
 function faces(page: Page) {
@@ -99,7 +99,7 @@ test.describe("アンビエントモード", () => {
       const glow = page.getByTestId("live-frame-ambient");
       await expect(glow).toBeVisible();
       await expect(glow).toHaveAttribute("data-plan", "watch");
-      // 1秒に5回まで。数秒で何回も進む
+      // 1 秒に 5 回まで。数秒で何回も進む
       await expect.poll(updates(page), { timeout: 15_000 }).toBeGreaterThan(5);
       const before = await updates(page)();
       await expect
@@ -147,7 +147,7 @@ test.describe("アンビエントモード", () => {
         expect(overlaps, JSON.stringify({ box, stage })).toBe(false);
       }
 
-      // 入れ替えの途中も、2枚の透明度を足すといつも 1 (前の色から次の色へ、抜けも跳ねも無くつながる)
+      // 入れ替えの途中も、2 枚の透明度を足すといつも 1 (前の色から次の色へ、抜けも跳ねも無くつながる)
       for (let i = 0; i < 10; i++) {
         const sum = (await faces(page)).reduce(
           (total, face) => total + Number(face.opacity),
@@ -164,7 +164,7 @@ test.describe("アンビエントモード", () => {
       await page.waitForTimeout(1500);
       expect(await updates(page)()).toBe(paused);
       await expect(glow).toBeVisible();
-      // 入れ替えは CSS の transition (120ms) で、2枚は足して重ねる。止まったら表の1枚だけが出ていて、色が描いてある
+      // 入れ替えは CSS の transition (120ms) で、2 枚は足して重ねる。止まったら表の 1 枚だけが出ていて、色が描いてある
       const settled = await faces(page);
       expect(settled.map((face) => face.transition)).toEqual([
         "opacity 0.12s",
@@ -244,7 +244,7 @@ test.describe("アンビエントモード", () => {
     await expect(glow).toHaveAttribute("data-updates", "1");
     await page.waitForTimeout(1500);
     await expect(glow).toHaveAttribute("data-updates", "1");
-    // 入れ替えの長さは 0 (トークンが 0 になる)。写した1枚がその場で表に出ている
+    // 入れ替えの長さは 0 (トークンが 0 になる)。写した 1 枚がその場で表に出ている
     const shown = await faces(page);
     expect(shown.map((face) => face.transition)).toEqual([
       "opacity 0s",

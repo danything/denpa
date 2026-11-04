@@ -9,7 +9,7 @@ import { TEST_ROOT } from "../stack";
  * **起動の途中に来た SIGTERM を捨てない** (`src/lib/server/hold-signals.ts`)。
  *
  * コンテナの中の denpa は PID 1 で、受け手のいない合図はカーネルが捨てる。アプリが引き取る前に
- * Pod の入れ替えが始まると SIGTERM が消え、6時間 (`terminationGracePeriodSeconds`) 降りなかった。
+ * Pod の入れ替えが始まると SIGTERM が消え、6 時間 (`terminationGracePeriodSeconds`) 降りなかった。
  * ここでは PID 1 にならないので、取っておかなければ既定どおり合図で殺される。
  * **アプリが受けて自分で降りた (終了コード 0・受けた記録あり) ことを見る。**
  *

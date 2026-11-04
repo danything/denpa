@@ -6,7 +6,7 @@ import type { MediaSourceClass } from "./ts/media-source";
 import { AUDIO_TYPE } from "./ts/playback";
 
 /*
- * MSE を真似た最小の入れ物。中身の代わりに「この塊は何秒から何秒か」を Float64 2つで運ぶ。
+ * MSE を真似た最小の入れ物。中身の代わりに「この塊は何秒から何秒か」を Float64 2 つで運ぶ。
  * 足す・捨てるは次の刻みで終わる (本物と同じく、その間は `updating`)
  */
 type Range = [number, number];
@@ -101,7 +101,7 @@ class FakeVideo extends EventTarget {
   }
 }
 
-/** リクエストされた位置から、2秒ずつの塊を `count` 個流す。`gate` がデコードできるまで2つ目から先を止められる */
+/** リクエストされた位置から、2 秒ずつの塊を `count` 個流す。`gate` がデコードできるまで 2 つ目から先を止められる */
 let requests: string[] = [];
 let gate: Promise<void> = Promise.resolve();
 const realFetch = globalThis.fetch;
@@ -202,7 +202,7 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     });
     const { video, media } = start(100);
     await settle();
-    // 1つ目の塊だけ届いて、残りは止まっている
+    // 1 つ目の塊だけ届いて、残りは止まっている
     expect(media().buffer?.ranges).toEqual([[100, 102]]);
     video.currentTime = 300;
     open();

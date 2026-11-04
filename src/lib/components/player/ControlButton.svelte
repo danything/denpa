@@ -10,7 +10,7 @@
   } from "./icons";
 
   /**
-   * 映像の上に置くボタン (3画面で同じ)。押されている間の色と `aria-pressed` はここ1箇所。
+   * 映像の上に置くボタン (3 画面で同じ)。押されている間の色と `aria-pressed` はここ 1 箇所。
    * `aria-pressed` は切り替えのボタン (`on` を渡したとき) にだけ付ける。押すと役目が変わるもの (再生/一時停止・音) は
    * 名前のほうで言う。名前は `title` にも出す (PC でマウスを重ねたときに読める)。文字を添えると丸くなくなる
    */
@@ -34,7 +34,7 @@
      * **渡したときだけ `aria-pressed` を付ける**。押すだけのボタン (閉じる・切り抜き) には渡さない
      */
     on?: boolean | undefined;
-    /** 押すと戻せないもの。**聞き返しの2回目**に立てる (`icons.ts` の `OVERLAY_DANGER`) */
+    /** 押すと戻せないもの。**聞き返しの 2 回目**に立てる (`icons.ts` の `OVERLAY_DANGER`) */
     danger?: boolean;
     /** 中の `<form>` を送るボタンにする (削除など) */
     submit?: boolean;
@@ -69,7 +69,7 @@
 
 <style>
   /*
-     * 映像の上に置くボタンの見た目はここ1箇所 (`icons.ts` の OVERLAY*。`:global` なので `<a>` や EdgeButton にも届く)。
+     * 映像の上に置くボタンの見た目はここ 1 箇所 (`icons.ts` の OVERLAY*。`:global` なので `<a>` や EdgeButton にも届く)。
      * Pico の色の変数を差し替える。ボタンは塗らず (docs/design.md)、アイコンと字に小さな影を付ける。
      * 指を乗せた・キーボードで触っているボタンだけ、ごく薄い地で示す
      */
@@ -121,7 +121,7 @@
   :global(.ov-btn:is(:hover, :focus-visible)) {
     --pico-background-color: var(--dp-on-video-hover);
   }
-  /* オンは空色のアイコンと下の短い線、戻せないものの2回目と「今」に張り付いた「ライブ」「最新」は赤 (塗らない) */
+  /* オンは空色のアイコンと下の短い線、戻せないものの 2 回目と「今」に張り付いた「ライブ」「最新」は赤 (塗らない) */
   :global(.ov-btn.ov-on) {
     --pico-color: var(--dp-on-video-on);
     /* 入っている切り替えの共通の短い下線 (app.css の `aria-pressed`) は引かない。線は下の `::after` 1 本 */

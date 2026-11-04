@@ -174,7 +174,7 @@ public class B25Tests
         return crc;
     }
 
-    /// <summary>1本の番組、映像と音声に番組全体の ECM が掛かっている、よくある形式の頭</summary>
+    /// <summary>1 本の番組、映像と音声に番組全体の ECM が掛かっている、よくある形式の頭</summary>
     private static Ts Channel() => new Ts()
         .Pat((0x0400, PmtPid))
         .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []), (AudioPid, []));
@@ -241,11 +241,11 @@ public class B25Tests
         await Assert.That(Convert.ToHexString(cards.Asked[0])).IsEqualTo(Convert.ToHexString(EcmBody(3)));
     }
 
-    /// <summary>セクションはパケットを跨ぐし、1つのパケットに2つ入ることもある (pointer_field の手前は前のセクションの尻尾)</summary>
+    /// <summary>セクションはパケットを跨ぐし、1 つのパケットに 2 つ入ることもある (pointer_field の手前は前のセクションの尻尾)</summary>
     [Test]
     public async Task パケットを跨ぐセクションも_1つのパケットに並ぶセクションも読む()
     {
-        // 1つ目の ECM (243 バイト) は2つのパケットを跨ぎ、2つ目のパケットにはその尻尾と2つ目の ECM が並ぶ
+        // 1 つ目の ECM (243 バイト) は 2 つのパケットを跨ぎ、2 つ目のパケットにはその尻尾と 2 つ目の ECM が並ぶ
         byte[] body = [4, .. Enumerable.Range(0, 230).Select(i => (byte)i)];
         var first = Psi(0x82, 0, body);
         byte[] sections = [.. first, .. Psi(0x82, 0, EcmBody(5)), .. Enumerable.Repeat((byte)0xFF, 2 * 183)];
@@ -316,7 +316,7 @@ public class B25Tests
     {
         var head = Channel().Ecm(EcmPid, 1).Videos(10, 1);
         var tail = new Ts().Videos(10, 1);
-        // 0x47 を混ぜたゴミ。1つだけの 0x47 に釣られないこと
+        // 0x47 を混ぜたゴミ。1 つだけの 0x47 に釣られないこと
         byte[] garbage = [0x00, 0x47, 0x12, 0x47, 0x47, 0x99, .. Enumerable.Repeat((byte)0x33, 300)];
         byte[] wire = [.. garbage.AsSpan(0, 50), .. head.Wire, .. garbage, .. tail.Wire];
 
@@ -426,7 +426,7 @@ public class B25Tests
     public async Task 溜めている間にECMが変わっても溜めた頭は最初の鍵で復号する()
     {
         const int other = 0x0902;
-        // 2本目の ECM が来ないうちに、1本目が変わる
+        // 2 本目の ECM が来ないうちに、1 本目が変わる
         var ts = new Ts()
             .Pat((0x0400, PmtPid))
             .Pmt(PmtPid, 0x0400, [], (VideoPid, Ca(EcmPid)), (AudioPid, Ca(other)))
@@ -440,7 +440,7 @@ public class B25Tests
         await Assert.That(descrambler.Decoded).IsEqualTo(9);
     }
 
-    /// <summary>ECM が2本なら、**どちらも答えを貰うまで溜める** (片方の ES の頭が掛かったまま出ない)</summary>
+    /// <summary>ECM が 2 本なら、**どちらも答えを貰うまで溜める** (片方の ES の頭が掛かったまま出ない)</summary>
     [Test]
     public async Task ECMが2本なら両方の答えを待ってから流す()
     {
@@ -620,8 +620,8 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **ECM が1本しか見えていなくても、PAT の PMT がみな来るまではそれで表に無い ES を復号しない。**
-    /// 2本目の番組の PMT がまだなだけで、その ES は別の ECM の鍵で掛かっている
+    /// **ECM が 1 本しか見えていなくても、PAT の PMT がみな来るまではそれで表に無い ES を復号しない。**
+    /// 2 本目の番組の PMT がまだなだけで、その ES は別の ECM の鍵で掛かっている
     /// </summary>
     [Test]
     public async Task PMTが揃うまでは1本だけのECMで他の番組を復号しない()
@@ -743,7 +743,7 @@ public class B25Tests
 
     /// <summary>
     /// **地上波の並びで、カードが断る ECM が流れていても、聞かずに鍵の揃った時点で流し始める。** PAT・PMT・ECM が
-    /// 0.1 秒 (地上波の 1,120 パケットほど) おきに来て、番組は3つ (PMT が来ない臨時の番組と、掛かっていない
+    /// 0.1 秒 (地上波の 1,120 パケットほど) おきに来て、番組は 3 つ (PMT が来ない臨時の番組と、掛かっていない
     /// ワンセグを含む)。番組の PMT は B-CAS と別の方式の CA 記述子も持ち、その方式の ECM はカードが断る。
     ///
     /// <para>
@@ -884,7 +884,7 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **溜めていた間の内訳を1行に出せる** (選局して最初に送り出したときの記録。docs/stream.md「本番の記録で割る」)。
+    /// **溜めていた間の内訳を 1 行に出せる** (選局して最初に送り出したときの記録。docs/stream.md「本番の記録で割る」)。
     /// そろった順と、鍵の相手に聞いた回数・覚えた答え・未契約・ロックの待ち
     /// </summary>
     [Test]

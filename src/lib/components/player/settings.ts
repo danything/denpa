@@ -12,10 +12,10 @@ import { SPEEDS } from "#lib/ts/pacing.js";
 import type { IconShape } from "./icons";
 
 /**
- * 再生の設定 (⚙ `SettingsMenu`) に並べるもの。**3画面 (ライブ・追っかけ・観る画面) で同じ形。**
+ * 再生の設定 (⚙ `SettingsMenu`) に並べるもの。**3 画面 (ライブ・追っかけ・観る画面) で同じ形。**
  *
  * - 選ぶもの (`SettingChoice`) … 行にいまの値を出し、押すと選択肢の並びに入る (字幕・音声・コーデック)
- * - 切り替え (`SettingToggle`) … 行を押すとその場でオン/オフ (CMスキップ・データ放送・データ放送を常に受信・実況・
+ * - 切り替え (`SettingToggle`) … 行を押すとその場でオン/オフ (CM スキップ・データ放送・データ放送を常に受信・実況・
  *   アンビエントモード・バックグラウンド再生・互換モード。並べるのは `StageTail`)
  *
  * 何を覚えるか (端末ごと) は各画面と `ambient.svelte.ts`・`background.svelte.ts` が持つ。ここは並べ方だけ
@@ -48,7 +48,7 @@ export interface SettingToggle {
   toggle: () => void;
   /**
    * 押したらメニューを閉じる (既定は閉じない)。押したあとに窓を出すもの (互換モードの運転中の注意)。開いたままだと、
-   * 窓のボタンを押した1回目がメニューの外を押したことになって、閉じるだけで終わる
+   * 窓のボタンを押した 1 回目がメニューの外を押したことになって、閉じるだけで終わる
    */
   closes?: boolean;
   /** 名前の後ろに添える注記 (「この局にはありません」など。括弧は付けて出す) */
@@ -157,8 +157,8 @@ export function recordingCodecs(opts: {
 }
 
 /**
- * 音声 (主音声・副音声・解説など)。二カ国語も多重音声も、見ている人には「音声を選ぶ」1つの操作。
- * 選べるものが2つ以上あるときだけ渡す。何が「選べるもの」かは画面ごとに違う
+ * 音声 (主音声・副音声・解説など)。二カ国語も多重音声も、見ている人には「音声を選ぶ」1 つの操作。
+ * 選べるものが 2 つ以上あるときだけ渡す。何が「選べるもの」かは画面ごとに違う
  * (ライブは再エンコードで切り替え、録画はコンテナの中から選ぶ)
  */
 export function audioTracks<T extends string | number>(opts: {
@@ -177,8 +177,8 @@ export function audioTracks<T extends string | number>(opts: {
 }
 
 /**
- * 字幕 (`subtitle`)。**オフと、選べる字幕を1つの並びに。** 字幕のストリームが複数ある放送 (`tracks`。たまにある) は
- * ストリームごとに、1本の中に言語が複数ある放送 (`languages`) は言語ごとに並べる。言語が分かるのは
+ * 字幕 (`subtitle`)。**オフと、選べる字幕を 1 つの並びに。** 字幕のストリームが複数ある放送 (`tracks`。たまにある) は
+ * ストリームごとに、1 本の中に言語が複数ある放送 (`languages`) は言語ごとに並べる。言語が分かるのは
  * いまデコードしているストリームだけ (ほかのストリームは切り替えるまで分からない) なので、そこだけ言語に開く。
  *
  * 選んだら字幕を出す (`onoff(true)`)。ストリームを替えるのは再エンコード (`ontrack`)、言語を替えるのは
@@ -187,7 +187,7 @@ export function audioTracks<T extends string | number>(opts: {
 export function subtitles(opts: {
   icon: IconShape;
   on: boolean;
-  /** 字幕のストリーム (ライブ・追っかけ)。観る画面は1本なので省く */
+  /** 字幕のストリーム (ライブ・追っかけ)。観る画面は 1 本なので省く */
   tracks?: { index: number; label: string }[];
   track?: number;
   languages: CaptionLanguage[];
@@ -221,7 +221,7 @@ export function subtitles(opts: {
     for (const l of languages)
       one(`${current}:${l.index}`, l.label, opts.language === l.index);
   } else {
-    // 選ぶものが無い (言語が1つだけ・まだ分からない)。出すか消すかだけ
+    // 選ぶものが無い (言語が 1 つだけ・まだ分からない)。出すか消すかだけ
     const only = opts.languages[0];
     one(
       `${current}:0`,
@@ -289,7 +289,7 @@ function speeds(opts: {
   };
 }
 
-/** 畳んだときの消音の行 (3画面同じ。操作バーの音のボタン) */
+/** 畳んだときの消音の行 (3 画面同じ。操作バーの音のボタン) */
 export function muteRow(
   icon: IconShape,
   on: boolean,

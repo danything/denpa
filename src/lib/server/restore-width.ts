@@ -269,7 +269,7 @@ async function restoreOne(
     .from(services)
     .where(eq(services.id, row.service_id))
     .get();
-  // 局の行が無くても、局の内部 ID の下 5 桁が ARIB のサービスID (`tuner.serviceKey`)
+  // 局の行が無くても、局の内部 ID の下 5 桁が ARIB のサービス ID (`tuner.serviceKey`)
   const serviceId = service?.service_id ?? row.service_id % 100000;
   const read = await readBroadcastText(
     row.ts_path,

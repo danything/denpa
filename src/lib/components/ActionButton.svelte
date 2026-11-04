@@ -4,7 +4,7 @@
   import { submitting } from "#lib/actions.js";
 
   /**
-   * 押すとアクションを1つ送るだけのボタン (`<form method="POST">` + 隠し欄 + 送るボタン)。
+   * 押すとアクションを 1 つ送るだけのボタン (`<form method="POST">` + 隠し欄 + 送るボタン)。
    * 送っている間の見た目と二度押し止めは `submitting` が持つ
    */
   let {

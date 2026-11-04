@@ -68,7 +68,7 @@ test.describe("CSP", () => {
         "connect-src 'self' wss://nx-jikkyo.tsukumijima.net https://jikkyo.tsukumijima.net;",
       );
       await page.locator('[data-hydrated="true"]').waitFor();
-      // app.html の色当て (インラインの1つ) も nonce で通っている
+      // app.html の色当て (インラインの 1 つ) も nonce で通っている
       expect(
         await page.evaluate(() =>
           document.documentElement.getAttribute("data-theme"),

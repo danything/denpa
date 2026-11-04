@@ -3,10 +3,10 @@
   import TriangleAlert from "~icons/lucide/triangle-alert";
 
   /**
-   * 行の3段目: いま動いていること・止まっている問題を1段で (`#lib/row-status.ts`)。
+   * 行の 3 段目: いま動いていること・止まっている問題を 1 段で (`#lib/row-status.ts`)。
    * 頭に点か印、ラベル、「・」の後ろに中身。
    *
-   * 狭いときは中身から「…」で縮め (狭い画面は2行まで)、全部は `title` と詳細で読める。
+   * 狭いときは中身から「…」で縮め (狭い画面は 2 行まで)、全部は `title` と詳細で読める。
    * 印は飾り (読み上げはラベルと中身で足りる)
    */
   import Icon from "#lib/components/player/Icon.svelte";

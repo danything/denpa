@@ -4,14 +4,14 @@
  *
  * まとめる単位は**番組 (シリーズ)**。鍵はサーバが付ける (`+page.server.ts` の
  * `seriesGroup`)。エンコードしたものを置くシリーズのフォルダと同じ名前なので、
- * ディスクで1つのフォルダに並ぶものが一覧でも1つにまとまる。
+ * ディスクで 1 つのフォルダに並ぶものが一覧でも 1 つにまとまる。
  *
- * 並びは2段:
+ * 並びは 2 段:
  *
  * - **番組どうしは時刻の遅い順** (ホームの時間軸はふだん逆にして早い順に並べ、新しい順で表示のときはこのまま使う)。番組の位置は `anchor` の回で決める
- * - **番組の中は放送順** (第1話が上)。開いた番組を上から読めば話が進む。新しい順で表示のときも放送順のまま
+ * - **番組の中は放送順** (第 1 話が上)。開いた番組を上から読めば話が進む。新しい順で表示のときも放送順のまま
  *
- * **1本しか無い番組はまとめない。** 見出しを押してやっと1行出るのでは手間が増える
+ * **1 本しか無い番組はまとめない。** 見出しを押してやっと 1 行出るのでは手間が増える
  * だけなので、ふつうの行としてその日付の位置に混ぜる。
  */
 
@@ -27,7 +27,7 @@ export interface Groupable {
   groupName: string;
 }
 
-/** 2本以上ある番組 */
+/** 2 本以上ある番組 */
 export interface SeriesGroup<T extends Groupable> {
   /** 見出しの鍵。行の鍵 (`rec-` / `missed-`) と混ざらないよう接頭辞を付ける */
   key: string;
@@ -43,7 +43,7 @@ export interface SeriesGroup<T extends Groupable> {
 export type GroupEntry<T extends Groupable> =
   { kind: "single"; item: T } | { kind: "group"; group: SeriesGroup<T> };
 
-/** 画面に描く1行。見出しか、行そのもの (`nested` は番組の中の行) */
+/** 画面に描く 1 行。見出しか、行そのもの (`nested` は番組の中の行) */
 type GroupLine<T extends Groupable> =
   | { kind: "head"; key: string; group: SeriesGroup<T>; open: boolean }
   | { kind: "row"; key: string; item: T; nested: boolean };

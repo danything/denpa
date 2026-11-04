@@ -419,7 +419,7 @@ describe("置く・探す・消す", () => {
       .set({ service_name: "局その1" })
       .where(eq(clips.id, c))
       .run();
-    // 局の名前を取る副問い合わせが外の行の局を見ていなかった頃は、どの局もいちばん新しい 1 枚 (局その1) の名前になっていた
+    // 局の名前を取る副問い合わせが外の行の局を見ていなかった頃は、どの局もいちばん新しい 1 枚 (局その 1) の名前になっていた
     expect(clipFacets().services).toEqual([
       { id: SERVICE, name: "局その1", count: 2 },
       { id: SERVICE + 1, name: "局その2", count: 1 },

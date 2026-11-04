@@ -5,7 +5,7 @@ import * as transfer from "./transfer.server";
 import * as tv from "./tv.server";
 
 /**
- * 連携。通知 (Webhook)・テレビのアプリ・実況 (ニコニコのアカウントとの連携も)・EPGStation と EDCB からの引き継ぎ・denpa を別の機械へ移すの節を1つの画面に積む。
+ * 連携。通知 (Webhook)・テレビのアプリ・実況 (ニコニコのアカウントとの連携も)・EPGStation と EDCB からの引き継ぎ・denpa を別の機械へ移すの節を 1 つの画面に積む。
  * 読み込みと保存 (actions) は節ごとのファイルが持ち、ここでまとめる。
  * 返す値の名前と action の名前は節どうしで重ならない
  */

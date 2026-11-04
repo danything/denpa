@@ -86,7 +86,7 @@
     return () => clearInterval(timer);
   });
 
-  /** ルールの削除は2回押させる (録画・通知先と同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
+  /** ルールの削除は 2 回押させる (録画・通知先と同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
   const deleting = arming('[data-testid^="rule-delete"]');
   /**
    * 行のスイッチを送るとき。**送っている間は押せなくする** (連打で何度も切り替わらない)。
@@ -131,9 +131,9 @@
 <Toasts {notices} source={form} />
 
 <!--
-    **ホームと同じ作り。** 左に1本の一覧 (2段の件を件の面に乗せて並べる)、広い形では右にサイドバー
+    **ホームと同じ作り。** 左に 1 本の一覧 (2 段の件を件の面に乗せて並べる)、広い形では右にサイドバー
     (絞り込み・並び・集計。ドキュメントの目次と同じ行)。スマホの形 (下のタブがある形。`#lib/phone-form.ts`) では、
-    絞り込みと並びを細い1行にまとめ、画面の下、タブのすぐ上に置く (押すものは指の届く下に)
+    絞り込みと並びを細い 1 行にまとめ、画面の下、タブのすぐ上に置く (押すものは指の届く下に)
 -->
 <div class="rules-board">
   <div class="rules-list" data-testid="rule-list">
@@ -201,7 +201,7 @@
       <ul class="item-list" data-testid="rule-table">
         {#each paged.rows as rule (rule.id)}
           <!--
-                        **2段の件。** 1段目に名前、右にスイッチと削除。2段目に条件・次の放送・予約と録画の数・最後に録れた日。
+                        **2 段の件。** 1 段目に名前、右にスイッチと削除。2 段目に条件・次の放送・予約と録画の数・最後に録れた日。
                         件を押すと検索の画面でそのルールを直す。スイッチと削除はリンクの外 (隣) なので、押してもルールは開かない
                     -->
           <li
@@ -358,7 +358,7 @@
   </aside>
 
   <!--
-        スマホの形の細い1行。絞り込みは横に送れる1列のチップ、並びは選ぶ欄、右に「作る」。
+        スマホの形の細い 1 行。絞り込みは横に送れる 1 列のチップ、並びは選ぶ欄、右に「作る」。
         画面の下 (タブの上) に貼り付ける
     -->
   <div class="rules-bar dock" data-testid="rule-bar">
@@ -479,7 +479,7 @@
   }
 
   /*
-     * **行は2段の件** (ホームの行と同じく件の面 (`app.css` の `.item`) に乗せ、並べ方は `.item-list`)
+     * **行は 2 段の件** (ホームの行と同じく件の面 (`app.css` の `.item`) に乗せ、並べ方は `.item-list`)
      */
   .row {
     display: flex;
@@ -532,7 +532,7 @@
     margin: 0 0 var(--dp-space-2);
   }
 
-  /* ---- スマホの形の細い1行 (`#lib/phone-form.ts`。`<html data-phone>`) ---- */
+  /* ---- スマホの形の細い 1 行 (`#lib/phone-form.ts`。`<html data-phone>`) ---- */
   .bar-chips {
     display: flex;
     flex: 1 1 0%;
@@ -574,8 +574,8 @@
     margin: 0;
   }
   /*
-     * **スマホの形ではこの1行を画面の下、タブのすぐ上に浮かせる** (押すものは指の届く下に。形は `app.css` の `.dock`)。
-     * 一覧の最後の行が隠れないよう、この1行の高さぶん下を空ける
+     * **スマホの形ではこの 1 行を画面の下、タブのすぐ上に浮かせる** (押すものは指の届く下に。形は `app.css` の `.dock`)。
+     * 一覧の最後の行が隠れないよう、この 1 行の高さぶん下を空ける
      */
   :global(:where(html[data-phone])) .rules-bar {
     display: flex;
@@ -590,7 +590,7 @@
   :global(:where(html[data-phone])) .rules-list {
     padding-bottom: 4rem;
   }
-  /* 狭い幅の2段目は次の放送と予約・録画の数だけ (条件と最後に録れた日は押した先で見る。幅で決める) */
+  /* 狭い幅の 2 段目は次の放送と予約・録画の数だけ (条件と最後に録れた日は押した先で見る。幅で決める) */
   @media (max-width: 639.98px) {
     .wide-part {
       display: none;

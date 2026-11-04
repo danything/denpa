@@ -44,8 +44,8 @@
   });
 
   /**
-   * **2回押させる** (削除と同じ `arming`)。押し間違えると、家族の端末まで入り直しになる。
-   * 押す場所は1つなので、`arm` に渡す値は 0 で足りる
+   * **2 回押させる** (削除と同じ `arming`)。押し間違えると、家族の端末まで入り直しになる。
+   * 押す場所は 1 つなので、`arm` に渡す値は 0 で足りる
    */
   const confirming = arming('[data-testid^="logout-others"]');
   const sent: SubmitFunction = () => async (options) => {
@@ -61,7 +61,7 @@
 <!--
     節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先。
     **ほかの場所で切り替えられるものはここに並べない** (互換モードは再生画面の ⚙)。
-    同じ設定が2か所にあると、どちらが効いているのか迷う
+    同じ設定が 2 か所にあると、どちらが効いているのか迷う
 -->
 <div class="part" id="browser" data-part>
   <div class="sections readable">

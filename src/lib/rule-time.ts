@@ -72,7 +72,7 @@ export function inTime(from: number, to: number, minutes: number): boolean {
     : minutes >= from || minutes < to;
 }
 
-/** 曜日を短く。続く3日以上は「月〜金」にまとめる (月曜から数える) */
+/** 曜日を短く。続く 3 日以上は「月〜金」にまとめる (月曜から数える) */
 function weekdaysText(weekdays: number[]): string {
   const days = WEEK_ORDER.filter((day) => weekdays.includes(day));
   const runs: number[][] = [];

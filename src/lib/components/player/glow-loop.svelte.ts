@@ -4,7 +4,7 @@ import type { Ambient } from "./ambient.svelte.js";
 /**
  * 映像の色を写して敷く部品 (`AmbientGlow`・`FoldReflection`) で同じ所。どこに・どんな形で描くかは部品が持つ。
  *
- * - `GlowLoop` … 写す繰り返し。`EVERY` ごとに 32x18 (`GLANCE`) を1枚写して画素を渡す。写すか・止めるかは `ambient.ts` の `plan`
+ * - `GlowLoop` … 写す繰り返し。`EVERY` ごとに 32x18 (`GLANCE`) を 1 枚写して画素を渡す。写すか・止めるかは `ambient.ts` の `plan`
  * - `Crossfade` … 前の色からの入れ替え。canvas 2 枚 (表と裏) の透明度の transition で、JS は表の印を付け替えるだけ
  */
 
@@ -19,16 +19,16 @@ interface Where {
 /**
  * **写す繰り返し。** 部品の初めに作る (中で `$effect` を使う)。
  *
- * 動きを減らす設定と、ソフトウェアで描いている端末 (`<html data-lite>`) では、1枚写したら止める (`still`)。
+ * 動きを減らす設定と、ソフトウェアで描いている端末 (`<html data-lite>`) では、1 枚写したら止める (`still`)。
  * 1 秒に 5 回描き直すのは docs/design.md 7 章の「時間で動き続けるもの」で、重さの決まりに従う
  */
 export class GlowLoop {
   #where: () => Where;
   /** 画面を離れている (裏のタブ) */
   hidden = $state(false);
-  /** 1枚写したら止めるか (動きを減らす設定・`data-lite`) */
+  /** 1 枚写したら止めるか (動きを減らす設定・`data-lite`) */
   still = $state(false);
-  /** もう1枚写して色を出しているか */
+  /** もう 1 枚写して色を出しているか */
   lit = $state(false);
   /** 写した回数。E2E が「動いている・止まっている」を見る */
   updates = $state(0);
@@ -49,7 +49,7 @@ export class GlowLoop {
 
   #edge: HTMLCanvasElement | null = null;
 
-  /** `show` は写した1枚の画素 (32x18 の RGBA) を受ける */
+  /** `show` は写した 1 枚の画素 (32x18 の RGBA) を受ける */
   constructor(where: () => Where, show: (pixels: Uint8ClampedArray) => void) {
     this.#where = where;
 
@@ -111,7 +111,7 @@ export class GlowLoop {
     });
   }
 
-  /** 写した1枚の画素 (32x18 の RGBA) */
+  /** 写した 1 枚の画素 (32x18 の RGBA) */
   #pixels(bitmap: ImageBitmap): Uint8ClampedArray | null {
     if (this.#edge === null) {
       this.#edge = document.createElement("canvas");
@@ -129,23 +129,23 @@ export class GlowLoop {
 interface Parts {
   /** 外の箱。その場で入れ替えるあいだ `data-instant` を付ける (CSS が transition を外す) */
   box: () => HTMLElement | null;
-  /** 画面に出す canvas のうち、`side` (0 か 1) の側のもの。どれにも同じ1枚を描く */
+  /** 画面に出す canvas のうち、`side` (0 か 1) の側のもの。どれにも同じ 1 枚を描く */
   canvases: (side: number) => (HTMLCanvasElement | null | undefined)[];
-  /** 描く1枚の大きさ (画素)。まだ決まっていなければ null */
+  /** 描く 1 枚の大きさ (画素)。まだ決まっていなければ null */
   size: () => { width: number; height: number } | null;
 }
 
 /**
- * **色の入れ替え。** 新しい色を裏の1枚に描いてから表と裏を入れ替える。動きは CSS の `opacity` の transition
+ * **色の入れ替え。** 新しい色を裏の 1 枚に描いてから表と裏を入れ替える。動きは CSS の `opacity` の transition
  * (表の印 `data-front`)。2 枚は重ねずに足す (`mix-blend-mode: plus-lighter`)。途中も「前 × (1 − t) + 次 × t」になる。
  *
- * 描いた1枚は画面に出さない canvas (`layers`) に持ち、画面の canvas へはそこから写す (同じ1枚を何枚もの帯に出せる)
+ * 描いた 1 枚は画面に出さない canvas (`layers`) に持ち、画面の canvas へはそこから写す (同じ 1 枚を何枚もの帯に出せる)
  */
 export class Crossfade {
   #parts: Parts;
   /** いま表の側 (0 か 1) */
   #front = 0;
-  /** 表と裏それぞれに描いた1枚 */
+  /** 表と裏それぞれに描いた 1 枚 */
   #layers: (HTMLCanvasElement | null)[] = [null, null];
   /** 入れ替えの途中で次の色が来たとき、見えている色を作る下書き (`settle`) */
   #spare: HTMLCanvasElement | null = null;
@@ -162,7 +162,7 @@ export class Crossfade {
     return canvas;
   }
 
-  /** 画面の canvas の `side` の側に、その側の1枚を描く。1枚も無ければ空にする */
+  /** 画面の canvas の `side` の側に、その側の 1 枚を描く。1 枚も無ければ空にする */
   #paint(side: number): void {
     const layer = this.#layers[side];
     for (const canvas of this.#parts.canvases(side)) {
@@ -193,7 +193,7 @@ export class Crossfade {
    * 見えている色は「表 × 表の透明度 + 裏 × (1 − 表の透明度)」。それを裏に描いて、その場で表にする
    */
   #settle(): void {
-    // 隠した帯の中では transition が進まないので、出ている1枚で見る
+    // 隠した帯の中では transition が進まないので、出ている 1 枚で見る
     const shown = this.#parts
       .canvases(this.#front)
       .find((canvas) => canvas && canvas.parentElement?.hidden === false);

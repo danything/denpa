@@ -1,6 +1,6 @@
 /**
  * ホーム (`routes/+page.svelte`) の部品が分け合うもの。行と見出し (日付・番組・「いま」) は、
- * 描いた時刻・番組の開け閉め・詳細の開き方・削除の2回押しをホームと共有するので、props で何段も渡さずに
+ * 描いた時刻・番組の開け閉め・詳細の開き方・削除の 2 回押しをホームと共有するので、props で何段も渡さずに
  * コンテキストで配る (`setHome` はホームだけが呼ぶ)
  */
 
@@ -16,7 +16,7 @@ export type Res = PageData["reservations"][number];
 export type Rec = PageData["recordings"][number];
 export type Missed = PageData["missed"][number];
 
-/** 時間軸に並べる1行 (`#lib/timeline.ts`)。鍵は種類ごとに接頭辞を付ける (録画と予約でIDの空間が別のため) */
+/** 時間軸に並べる 1 行 (`#lib/timeline.ts`)。鍵は種類ごとに接頭辞を付ける (録画と予約で ID の空間が別のため) */
 export type Item = TimelineItem &
   (
     | { kind: "res"; res: Res }
@@ -38,7 +38,7 @@ export interface ViewControls {
   showDeleted: boolean;
 }
 
-/** 絞り込み・状態・表示の切り替え。操作の1行 (`TimelineBar`) とサイドバー (`HomeAside`) が同じものを受ける */
+/** 絞り込み・状態・表示の切り替え。操作の 1 行 (`TimelineBar`) とサイドバー (`HomeAside`) が同じものを受ける */
 export interface HomeControls extends ViewControls {
   filter: Filter;
   /** 絞り込みを替える (見ていた行をその場に残す。`routes/+page.svelte`) */
@@ -57,7 +57,7 @@ interface HomeContext {
   readonly nowStatus: NowStatus | null;
   /** バーの先に「いま」の時刻を出す、いちばん上の録画中の行の鍵 (無ければ null で、「いま」の線を見せる。`TimelineHeading`) */
   readonly firstLiveKey: string | null;
-  /** 削除の2回押し (録画と録り逃しで共用。録り逃しの鍵は負の値) */
+  /** 削除の 2 回押し (録画と録り逃しで共用。録り逃しの鍵は負の値) */
   readonly deleting: Arming;
   /** 取り消せる予約か */
   cancelable(res: { state: string; end_at: number }): boolean;

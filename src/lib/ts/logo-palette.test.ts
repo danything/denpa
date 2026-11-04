@@ -54,7 +54,7 @@ function lengthAt(data: Uint8Array, at: number): number {
 describe("ロゴの色の表", () => {
   test("IHDR の直後に PLTE と tRNS を入れる", () => {
     const out = withPalette(png(3));
-    // 129色ぶん。RGB が 3バイト、透明度が 1バイト
+    // 129 色ぶん。RGB が 3 バイト、透明度が 1 バイト
     expect(lengthAt(out, 33)).toBe(129 * 3);
     expect(chunkTypeAt(out, 33)).toBe("PLTE");
     expect(lengthAt(out, 33 + 12 + 129 * 3)).toBe(129);

@@ -127,7 +127,7 @@ worker.addEventListener("fetch", (event) => {
     return;
   }
   /*
-   * ほかの API は素通しする。録画の配信は数十GB、通知は繋ぎっぱなしの SSE で、
+   * ほかの API は素通しする。録画の配信は数十 GB、通知は繋ぎっぱなしの SSE で、
    * どちらもキャッシュに載せると壊れる
    */
   if (url.pathname.startsWith(`${resolve("")}api/`)) return;
@@ -216,13 +216,13 @@ worker.addEventListener("backgroundfetchsuccess", (event) => {
       if (held === null) return;
 
       for (const record of await event.registration.matchAll()) {
-        // 1つ読めなくても他は仕舞う。動画さえあれば観られる (下の確認)
+        // 1 つ読めなくても他は仕舞う。動画さえあれば観られる (下の確認)
         try {
           const response = await record.responseReady.catch(() => null);
           if (response === null || !response.ok) continue;
           await storeResponse(held, record.request.url, response);
         } catch {
-          // その1つを諦める
+          // その 1 つを諦める
         }
       }
 

@@ -18,7 +18,7 @@ const H = 720;
 /** 上下の帯の高さ。`server/logo-own.ts` と同じく縦の 1/5 */
 const BAND = Math.round(H / 5) & ~1;
 
-/** 番組のコマ1枚 (8bit グレースケール) */
+/** 番組のコマ 1 枚 (8bit グレースケール) */
 interface Frame {
   data: Uint8Array;
 }
@@ -78,7 +78,7 @@ function make(
       amp: 30 + rand() * 30,
     }));
     for (let y = 0; y < H; y++) {
-      // 見るのは上下の帯だけ (`find`)。間は描かない — 全面を描いていた頃は1件 8 秒かかり、CI で時間切れになっていた
+      // 見るのは上下の帯だけ (`find`)。間は描かない — 全面を描いていた頃は 1 件 8 秒かかり、CI で時間切れになっていた
       if (y >= BAND && y < H - BAND) continue;
       for (let x = 0; x < W; x++) {
         let value = 128 + (rand() - 0.5) * 16;
@@ -113,7 +113,7 @@ function paint(
   }
 }
 
-/** 作った画像に、動かない白い四角をもう1つ重ねる (窓枠やテロップのつもり)。`striped` を外すと塗りつぶし (帯の線) */
+/** 作った画像に、動かない白い四角をもう 1 つ重ねる (窓枠やテロップのつもり)。`striped` を外すと塗りつぶし (帯の線) */
 function overlay(
   frames: Frame[],
   rect: Rect,

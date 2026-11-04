@@ -5,7 +5,7 @@
  * 「アニメ／特撮 > 国内アニメ」「ステレオ (日本語)」と出すための対応表と、選べる音声の組み立て (`audioTracks`・`pickTrack`)。
  *
  * ブラウザ側でも使うのでサーバの機能には触れない。
- * 出典は ARIB STD-B10 第2部 (content_nibble / component_type)。
+ * 出典は ARIB STD-B10 第 2 部 (content_nibble / component_type)。
  */
 
 import type { Genre } from "@danything/arib/eit";
@@ -256,7 +256,7 @@ export function audioLabel(audio: Audio): string {
 
 /**
  * 番組表の `audio_type` が言う「二カ国語」。**左右に別の言語が乗っている**
- * (ARIB STD-B32)。録画もライブも、見分け方はここ1つ
+ * (ARIB STD-B32)。録画もライブも、見分け方はここ 1 つ
  */
 export const DUAL_MONO = 2;
 
@@ -268,7 +268,7 @@ export const DUAL_MONO = 2;
  */
 export type AudioSide = "main" | "sub" | "both";
 
-/** 選べる音声1つぶん */
+/** 選べる音声 1 つぶん */
 export interface AudioTrack {
   /** 選ぶときの ID。`"0:main"` の形式。**画面とサーバの間で渡す** */
   id: string;
@@ -284,21 +284,21 @@ export interface AudioTrack {
 /**
  * 番組表の音声情報から、**選べるものを並べる。**
  *
- * 日本の放送で「多重音声」と呼ばれるものは2通りあり、見た目は同じでも中身が違う。
+ * 日本の放送で「多重音声」と呼ばれるものは 2 通りあり、見た目は同じでも中身が違う。
  *
- * - **デュアルモノ** … 音声は1本で、左に主音声・右に副音声が入っている
+ * - **デュアルモノ** … 音声は 1 本で、左に主音声・右に副音声が入っている
  *   (二カ国語、解説放送)。分けるには左右のどちらかを両耳へ配り直す
- * - **複数の音声** … 音声そのものが2本以上入っている。分けるにはどちらを
+ * - **複数の音声** … 音声そのものが 2 本以上入っている。分けるにはどちらを
  *   取り出すかを選ぶ
  *
- * どちらも「音声を選ぶ」1つの操作に見せたいので、**両方を平らに並べて**
- * 1つの一覧にする。デュアルモノは1本から3つ (主・副・主+副) 出てくる。
+ * どちらも「音声を選ぶ」1 つの操作に見せたいので、**両方を平らに並べて**
+ * 1 つの一覧にする。デュアルモノは 1 本から 3 つ (主・副・主+副) 出てくる。
  *
- * **番組表が何も言っていなければ1つだけ返す。** 音声が無いことはないので、
- * 何も出せないより「そのまま出す」1つを置くほうが確か
+ * **番組表が何も言っていなければ 1 つだけ返す。** 音声が無いことはないので、
+ * 何も出せないより「そのまま出す」1 つを置くほうが確か
  */
 export function audioTracks(audios: Audio[]): AudioTrack[] {
-  // 音声が2本以上あるときだけ「音声 1/音声 2」を添える。1本のときは邪魔なだけ
+  // 音声が 2 本以上あるときだけ「音声 1/音声 2」を添える。1 本のときは邪魔なだけ
   const many = audios.length > 1;
   const tracks: AudioTrack[] = [];
 
@@ -346,7 +346,7 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
 
 /**
  * エンコードしたものに入れる音声の名前 (番組表と同じ言い方。入れないとプレイヤーに「Audio 1」としか出ない)。
- * 数と並びはエンコードしたものに合わせる: デュアルモノは左右に割った2本 (`encoder.ts` の `channelsplit`)、
+ * 数と並びはエンコードしたものに合わせる: デュアルモノは左右に割った 2 本 (`encoder.ts` の `channelsplit`)、
  * それ以外は放送の順。多すぎても ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす
  */
 export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
@@ -367,7 +367,7 @@ export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
  * `audios` は放送から読み取ったものをそのまま持っているだけなので、無い・壊れている
  * (壊れた行は列の読み取り関数が空にする。`schema.ts`) ことはありうる。そのときは
  * `audio_type` に落とし、それも無ければ何も無いことにする。どの道 `audioTracks` が
- * 「そのまま出す」1つを返す
+ * 「そのまま出す」1 つを返す
  */
 export function parseAudios(
   row: { audio_type: number | null; audios: Audio[] | null } | undefined,
@@ -383,14 +383,14 @@ export function parseAudios(
  * 番組が変われば音声の構成も変わる (二カ国語の映画が終わればステレオに戻る)。
  * 前の番組の ID が残っていても、無いものは選べない。
  *
- * **どれが主音声かは放送が言っている** (`main_component_flag`)。並び順の1本目が
+ * **どれが主音声かは放送が言っている** (`main_component_flag`)。並び順の 1 本目が
  * 主音声とは限らないので、言っているならそちらに従う。何も言っていなければ先頭
  */
 export function pickTrack(
   tracks: AudioTrack[],
   wanted: string | undefined,
 ): AudioTrack {
-  // `audioTracks` は1本も無くても「音声」を1つ返すので、先頭は必ずある
+  // `audioTracks` は 1 本も無くても「音声」を 1 つ返すので、先頭は必ずある
   return (
     tracks.find((track) => track.id === wanted) ??
     tracks.find((track) => track.main) ??

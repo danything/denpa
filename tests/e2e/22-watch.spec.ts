@@ -30,16 +30,16 @@ import {
  *
  * **映像が出るところまでは見ません。** 偽 ffmpeg が置くのは中身の無いファイルで、
  * ブラウザは当然読めない。ここで確かめるのは**画面の作り**のほう —
- * 一覧から1回で来られるか、右に番組の中身が出るか、観たその場で消せるか。
- * 押したときの読み方 (どこでも一時停止・左右2回で10秒・チャプター送り) は
+ * 一覧から 1 回で来られるか、右に番組の中身が出るか、観たその場で消せるか。
+ * 押したときの読み方 (どこでも一時停止・左右 2 回で 10 秒・チャプター送り) は
  * `src/lib/ts/watch.test.ts` が持っている。
  */
 
 /**
- * 読み取りだけのテストは**1本の録画を使い回す**。全テストが `recordOne`
- * (予約→録画→エンコードの完了待ちで各15秒前後) を自前でやっていた頃は、この
- * ファイルだけで3分近く掛かり、e2e の一番遅いシャードそのものだった。
- * 録画を消すテストだけが自分のぶんを録る (使い回しの1本を壊さない)。
+ * 読み取りだけのテストは**1 本の録画を使い回す**。全テストが `recordOne`
+ * (予約→録画→エンコードの完了待ちで各 15 秒前後) を自前でやっていた頃は、この
+ * ファイルだけで 3 分近く掛かり、e2e の一番遅いシャードそのものだった。
+ * 録画を消すテストだけが自分のぶんを録る (使い回しの 1 本を壊さない)。
  * データ放送のサイドカーを置くテストは 23-watch-data に分けた (組の時間を割るため)
  */
 let shared: { id: string } | null = null;
@@ -51,7 +51,7 @@ async function watchable(
   return shared.id;
 }
 
-/** 合成の1枚 (端末の canvas で作った PNG) を API で切り抜きに置く。`page` は何か開いていること */
+/** 合成の 1 枚 (端末の canvas で作った PNG) を API で切り抜きに置く。`page` は何か開いていること */
 async function putClip(
   page: Page,
   request: APIRequestContext,
@@ -99,9 +99,9 @@ test.describe("録画を観る", () => {
     await expect(page).toHaveURL(new RegExp(`/watch/${id}$`));
 
     /*
-     * **観るのはエンコードしたものだけ。** 元のTSは MPEG-2 で、ブラウザにデコーダが
+     * **観るのはエンコードしたものだけ。** 元の TS は MPEG-2 で、ブラウザにデコーダが
      * 無い (docs/stream.md#放送そのままmpeg-2を送る)。名指ししていないと、エンコードしている最中は
-     * 元のTSが返ってきて何も映らない
+     * 元の TS が返ってきて何も映らない
      */
     const video = page.getByTestId("watch-video");
     await expect(video).toHaveAttribute(
@@ -116,9 +116,9 @@ test.describe("録画を観る", () => {
 
   /*
    * **番組表から消えても、ジャンルと音声のラベルは出る。** 録画の行は録り始めに
-   * 番組表から写している (recorder)。番組表の行は24時間で消えるので、そのあとは
+   * 番組表から写している (recorder)。番組表の行は 24 時間で消えるので、そのあとは
    * この写しだけが頼り — なのに詳細の種を組み直すところで null に潰していて、
-   * **1日過ぎた録画だけラベルが消えていた** (実機、2026-09-11)。
+   * **1 日過ぎた録画だけラベルが消えていた** (実機、2026-09-11)。
    *
    * 番組表から引き直すエンドポイントを 404 にして「消えたあと」を作る
    */
@@ -144,7 +144,7 @@ test.describe("録画を観る", () => {
 
   /**
    * **観終わったその場で消せる。** 末尾はたいてい CM なので、流したまま消せる
-   * のが狙い。押し間違い防止に2回押させるのは一覧と同じ
+   * のが狙い。押し間違い防止に 2 回押させるのは一覧と同じ
    */
   test("観ながら消せる。1回目は聞き返すだけ", async ({ page, request }) => {
     test.setTimeout(180_000);
@@ -191,7 +191,7 @@ test.describe("録画を観る", () => {
   });
 
   /**
-   * **シークバーの CM は琥珀で分ける** (denpa-tv と同じ色)。続いている CM は1本にまとめ、
+   * **シークバーの CM は琥珀で分ける** (denpa-tv と同じ色)。続いている CM は 1 本にまとめ、
    * CM の端で溝を区切る (`seek-track.ts`。区切りの計算は単体試験が持つ)。観たぶんは CM の中では濃い琥珀。
    *
    * 偽の録画にはチャプターも尺も無いので、チャプターは API ごと差し替え、尺と位置は映像の要素に
@@ -219,7 +219,7 @@ test.describe("録画を観る", () => {
     await goto(page, `/watch/${id}`);
 
     const seek = page.getByTestId("watch-seek");
-    // 続いている CM (400–415・415–430) は1本の区間
+    // 続いている CM (400–415・415–430) は 1 本の区間
     await expect(seek).toHaveAttribute("data-cm", "0-10 400-430");
     // 頭は CM。色だけに頼らず、読み上げる位置にチャプターの名前を添える
     await expect(seek).toHaveAttribute("aria-valuetext", "0:00、CM");
@@ -234,7 +234,7 @@ test.describe("録画を観る", () => {
       video.dispatchEvent(new Event("timeupdate"));
     });
     const parts = seek.locator("xpath=..").locator("[data-part]");
-    // 溝は CM の端で区切った4つ (頭の CM・本編・続いた CM・本編)
+    // 溝は CM の端で区切った 4 つ (頭の CM・本編・続いた CM・本編)
     await expect
       .poll(() =>
         parts.evaluateAll((els) =>
@@ -242,7 +242,7 @@ test.describe("録画を観る", () => {
         ),
       )
       .toEqual(["cm", "main", "cm", "main"]);
-    // 2本目は 400 秒 (40%) から 430 秒 (43%) まで
+    // 2 本目は 400 秒 (40%) から 430 秒 (43%) まで
     const second = parts.nth(2);
     expect(
       await second.evaluate((el) => [el.style.left, el.style.width]),
@@ -269,9 +269,9 @@ test.describe("録画を観る", () => {
   });
 
   /**
-   * **CM検出をやり直したら、開いている観る画面もチャプターを取り直す** (`chapters` の通知)。
+   * **CM 検出をやり直したら、開いている観る画面もチャプターを取り直す** (`chapters` の通知)。
    * 位置は動かさない。本物のやり直しは 03 が見ているので、ここではチャプターと通知を差し替える。
-   * 通知の繋ぎは、やり直すまで返さずに待たせておき、やり直したら通知を1つだけ流す
+   * 通知の繋ぎは、やり直すまで返さずに待たせておき、やり直したら通知を 1 つだけ流す
    */
   test("CM検出をやり直すと、開いている画面のシークバーにも CM が出る", async ({
     page,
@@ -328,8 +328,8 @@ test.describe("録画を観る", () => {
 
   /**
    * **つまんで動かす間、つまみは指にそのまま付いてくる** (`SeekBar`)。タブレットで、動かすたびに
-   * 飛んでいた頃はつまみが指から遅れていた。飛ぶのは下見を1度に1つまで (飛び終わってから次) と、
-   * 離したときの1回。動かしている間に届く位置ではつまみを戻さず、CM も飛ばさない。
+   * 飛んでいた頃はつまみが指から遅れていた。飛ぶのは下見を 1 度に 1 つまで (飛び終わってから次) と、
+   * 離したときの 1 回。動かしている間に届く位置ではつまみを戻さず、CM も飛ばさない。
    * 離した先が CM なら、いつもどおり飛ばす。
    *
    * 偽の録画は読めないので、位置は映像の要素に持たせ、代入された回数を数える。
@@ -414,7 +414,7 @@ test.describe("録画を観る", () => {
         () => (window as unknown as { seeked: number }).seeked,
       ),
     ).toBe(0);
-    // 21回動かしても、下見は飛び終わりを待つ (着かなければ 1 秒) ので、押したときの1つと多くて1つ
+    // 21 回動かしても、下見は飛び終わりを待つ (着かなければ 1 秒) ので、押したときの 1 つと多くて 1 つ
     expect((await seeks()).length).toBeLessThanOrEqual(2);
 
     // 下見が着いたことにしても (`timeupdate` で元の位置が届いても)、つまみは戻らず、CM も飛ばさない
@@ -432,7 +432,7 @@ test.describe("録画を観る", () => {
     expect(await left()).toBeCloseTo(41, 0);
     expect((await seeks()).length).toBe(during);
 
-    // 離すと、その位置へちゃんと1回飛ぶ。つまみはそこに居る
+    // 離すと、その位置へちゃんと 1 回飛ぶ。つまみはそこに居る
     await page.mouse.up();
     await expect
       .poll(async () => (await seeks()).slice(during)[0])
@@ -486,7 +486,7 @@ test.describe("録画を観る", () => {
   });
 
   /*
-   * **字幕の言語を再生の設定 (⚙) で選ぶ。** 字幕1本に英語も載っている録画 (`captions.json` の `others`)。
+   * **字幕の言語を再生の設定 (⚙) で選ぶ。** 字幕 1 本に英語も載っている録画 (`captions.json` の `others`)。
    * 選んだ言語と出し入れは端末に覚え、開き直しても続く (`caption-pref.ts`)
    */
   test("字幕の言語を ⚙ で選び、出し入れと一緒に覚える", async ({
@@ -557,7 +557,7 @@ test.describe("録画を観る", () => {
   });
 
   /*
-   * **字幕を待たずに観はじめる。** サーバは字幕を作るのに動画を丸ごと読む (初回は1時間の録画で1秒ほど)。
+   * **字幕を待たずに観はじめる。** サーバは字幕を作るのに動画を丸ごと読む (初回は 1 時間の録画で 1 秒ほど)。
    * 開いた時点で取っていた頃は観はじめの読み込みと取り合い、最初のコマが字幕の応答のすぐ後まで出なかった。
    * 字幕は映像が出てから取る (`askCaptions`)。ここでは本物の映像 (`tests/fake/live-av1.mp4`) を渡し、
    * 字幕の応答を止めたままでも映像が出ることを見る
@@ -634,7 +634,7 @@ test.describe("録画を観る", () => {
     const button = page.getByTestId("watch-captions");
     await expect(button).toHaveAttribute("aria-pressed", "true");
 
-    // コピー (Ctrl / Cmd) は素通し。字幕は出たまま。**1回ずつ見る** (2回で元に戻ると見逃す)
+    // コピー (Ctrl / Cmd) は素通し。字幕は出たまま。**1 回ずつ見る** (2 回で元に戻ると見逃す)
     await page.keyboard.press("Control+c");
     await expect(button).toHaveAttribute("aria-pressed", "true");
     await page.keyboard.press("Meta+c");
@@ -724,8 +724,8 @@ test.describe("録画を観る", () => {
   });
 
   /**
-   * **切り抜きの画面** (`/clips`)。撮った1枚が番組名つきで並び、言葉で絞れ、開いて「この場面から観る」で
-   * 録画のその位置へ行ける。2回押しで消すと画像も 404。入口は広い形のヘッダー・観る画面の右の列・検索の結果
+   * **切り抜きの画面** (`/clips`)。撮った 1 枚が番組名つきで並び、言葉で絞れ、開いて「この場面から観る」で
+   * 録画のその位置へ行ける。2 回押しで消すと画像も 404。入口は広い形のヘッダー・観る画面の右の列・検索の結果
    */
   test("切り抜きの画面で探して開き、この場面から観られ、2回押しで消せる", async ({
     page,
@@ -789,7 +789,7 @@ test.describe("録画を観る", () => {
     await expect(page).toHaveURL(new RegExp(String.raw`/watch/${id}\?at=`));
     await expect(page.getByTestId("watch-video")).toBeVisible();
 
-    // 2回押しで消える。画像も 404
+    // 2 回押しで消える。画像も 404
     await goto(page, "/clips");
     await card.click();
     await viewer.getByTestId("clip-delete").click();
@@ -802,8 +802,8 @@ test.describe("録画を観る", () => {
   });
 
   /**
-   * **字幕はあとから出し入れできる。** 字幕を出して撮ると、映像と字幕を分けて送り (multipart)、字幕が重なった1枚で並ぶ。
-   * 開いた1枚は元の画像を重ねて見せ、「字幕」で外す・戻すと**サーバの返事を待たずに**字幕の1枚を隠す・出す。
+   * **字幕はあとから出し入れできる。** 字幕を出して撮ると、映像と字幕を分けて送り (multipart)、字幕が重なった 1 枚で並ぶ。
+   * 開いた 1 枚は元の画像を重ねて見せ、「字幕」で外す・戻すと**サーバの返事を待たずに**字幕の 1 枚を隠す・出す。
    * 残すのは `PATCH /api/clips/<id>` (一覧の画像を元から重ね直す) で、読み直しても続く。
    * 撮ったときに無かったもの (コメント) の切り替えは出さない
    */
@@ -960,7 +960,7 @@ test.describe("録画を観る", () => {
   });
 
   /**
-   * **開いた1枚はクリップボードに PNG でコピーできる。** サーバの AVIF を端末で PNG にし直して置く
+   * **開いた 1 枚はクリップボードに PNG でコピーできる。** サーバの AVIF を端末で PNG にし直して置く
    * (クリップボードに置けるのは PNG だけ)。うまくいったらトーストは出さない (ボタンが一瞬チェックになるだけ)
    */
   test("切り抜きの開いた1枚をクリップボードに PNG でコピーできる", async ({
@@ -1011,9 +1011,9 @@ test.describe("録画を観る", () => {
   });
 
   /**
-   * **スマホの幅では、絞り込みを下のタブのすぐ上に浮かせ**、開いた1枚の右端の列は 48px の丸
+   * **スマホの幅では、絞り込みを下のタブのすぐ上に浮かせ**、開いた 1 枚の右端の列は 48px の丸
    * (車のタブレットでも指が届く大きさ。観る画面の右の列と同じ)。
-   * 指の端末には乗せる操作が無いので、長押しで選ぶ形に入り、下の1行が選んだぶんの操作に替わる
+   * 指の端末には乗せる操作が無いので、長押しで選ぶ形に入り、下の 1 行が選んだぶんの操作に替わる
    */
   test("スマホの幅の切り抜きの画面: 絞り込みは下のタブの上、開いた1枚の列は 48px、長押しで選ぶ", async ({
     browser,
@@ -1107,8 +1107,8 @@ test.describe("録画を観る", () => {
   });
 
   /**
-   * **選び方は写真のサービスと同じ。** マウスで乗せると1枚の左上に丸が出て、押すと選ぶ形に入る。
-   * 選ぶ形の間は1枚を押すと選ぶ・外す (開かない)、Shift でまとめて選び、2回押しでまとめて消す。
+   * **選び方は写真のサービスと同じ。** マウスで乗せると 1 枚の左上に丸が出て、押すと選ぶ形に入る。
+   * 選ぶ形の間は 1 枚を押すと選ぶ・外す (開かない)、Shift でまとめて選び、2 回押しでまとめて消す。
    * Esc で抜けると、押せばまた開く
    */
   test("切り抜きは乗せて出る丸で選び、Shift でまとめて選び、まとめて消せる。Esc で抜ける", async ({
@@ -1142,7 +1142,7 @@ test.describe("録画を観る", () => {
       await expect(checkOf(first)).toHaveAttribute("aria-label", /^選ぶ: /);
       await expect(checkOf(first)).toHaveAttribute("aria-pressed", "false");
 
-      // 丸を押すと選ぶ形に入り、ほかの1枚にも丸が出る
+      // 丸を押すと選ぶ形に入り、ほかの 1 枚にも丸が出る
       await checkOf(first).click();
       await expect(picked).toHaveText("1 枚を選択中");
       await expect(checkOf(first)).toHaveAttribute("aria-pressed", "true");
@@ -1150,7 +1150,7 @@ test.describe("録画を観る", () => {
       await page.mouse.move(0, 0);
       await expect(checkOf(third)).toHaveCSS("opacity", "1");
 
-      // Shift で3枚目までまとめて選ぶ。選ぶ形の間は押しても開かない
+      // Shift で 3 枚目までまとめて選ぶ。選ぶ形の間は押しても開かない
       await cardOf(third).click({ modifiers: ["Shift"] });
       await expect(picked).toHaveText("3 枚を選択中");
       await expect(page.getByTestId("clip-viewer")).toBeHidden();
@@ -1171,7 +1171,7 @@ test.describe("録画を観る", () => {
       await viewer.getByTestId("clip-close").click();
       await expect(viewer).toBeHidden();
 
-      // 丸はキーボードでも押せる (1枚の次に Tab で触ると見える)
+      // 丸はキーボードでも押せる (1 枚の次に Tab で触ると見える)
       await cardOf(first).focus();
       await page.keyboard.press("Tab");
       await expect(checkOf(first)).toBeFocused();
@@ -1181,7 +1181,7 @@ test.describe("録画を観る", () => {
       await cardOf(third).click();
       await expect(picked).toHaveText("2 枚を選択中");
 
-      // 削除は2回押し。1回目は聞き返すだけ
+      // 削除は 2 回押し。1 回目は聞き返すだけ
       await page.getByTestId("clip-delete-many").first().click();
       await expect(cardOf(first)).toBeVisible();
       await page.getByTestId("clip-delete-many-confirm").first().click();
@@ -1387,7 +1387,7 @@ test.describe("録画を観る", () => {
    * 観ながら使う操作 (再生・音・字幕) とは押す頻度も並べる理由も違う。
    * **削除も映像の上** — タブレットは全画面で観るので、全画面から出ずに消せるように。データ放送 (d) は ⚙ の中。
    *
-   * 1つの操作バーに混ぜていた頃は押すものが12個並び、**番組の名前が入る幅が
+   * 1 つの操作バーに混ぜていた頃は押すものが 12 個並び、**番組の名前が入る幅が
    * 残らなかった** — 実機のタブレットで名前が折り返し、操作バーが二段になっていた。
    * **列は縦に積む** — 車に付けたタブレットでは右の縁がいちばん指が届く (横一行・40px にして戻した)
    */
@@ -1430,7 +1430,7 @@ test.describe("録画を観る", () => {
     const side = page.getByTestId("watch-side");
     for (const testid of ["watch-close", "watch-shot", "watch-delete"]) {
       expect(await side.getByTestId(testid).count()).toBe(1);
-      // 下の操作バーには無い。同じことをするボタンを2つ置かない
+      // 下の操作バーには無い。同じことをするボタンを 2 つ置かない
       expect(
         await page.getByTestId("watch-controls").getByTestId(testid).count(),
       ).toBe(0);
@@ -1754,7 +1754,7 @@ test.describe("スマホの縦で観る", () => {
   });
 
   /*
-   * **いちばん狭いスマホ (360px・320px) でも、操作バーのボタンは1行。** 折り返していた頃は、
+   * **いちばん狭いスマホ (360px・320px) でも、操作バーのボタンは 1 行。** 折り返していた頃は、
    * 時刻が押すものの上に一行を取って操作バーが二段になっていた。残すのは再生・チャプター送り・
    * 時刻・⚙・全画面だけで、時刻は短い形 (残りを省く)。畳んだもの (音など) は ⚙ の頭の行から押せる
    */
@@ -1805,7 +1805,7 @@ test.describe("スマホの縦で観る", () => {
         path: test.info().outputPath(`watch-${width}-more.png`),
       });
 
-      // 閉じても1行のまま
+      // 閉じても 1 行のまま
       await page.keyboard.press("Escape");
       await expect(page.getByTestId("watch-settings-menu")).toBeHidden();
       expect(
@@ -1862,7 +1862,7 @@ test.describe("スマホの横で観る", () => {
     // シークバーは映像の下の方 (真ん中に来ると、映像を押したつもりで位置が飛ぶ)
     const seek = (await bar.getByRole("slider").boundingBox())!;
     expect(seek.y).toBeGreaterThan(390 * 0.6);
-    // どのボタンも重ならず、映像の枠の中に丸ごと見える (右上の3つも)
+    // どのボタンも重ならず、映像の枠の中に丸ごと見える (右上の 3 つも)
     expect(await overlayTroubles(page, "watch-stage")).toEqual([]);
     // 操作バーは映像に重ねるので、下の方の字幕は操作バーの上まで持ち上がる
     await captionsClearOfBar(page, "watch-captions-canvas", "watch-controls");
@@ -1904,7 +1904,7 @@ test.describe("指で観る", () => {
     await goto(page, `/watch/${id}`);
 
     /*
-     * 指は映像を1回押して操作列を出す (マウスのように動かしただけでは出ない)。
+     * 指は映像を 1 回押して操作列を出す (マウスのように動かしただけでは出ない)。
      * 開いた直後は出ていて、そこで押すと引っ込む (出し入れなので)。消えるまで待ってから押す
      */
     const bar = page.getByTestId("watch-controls");
@@ -2071,7 +2071,7 @@ function roundBox(
  * 拡大した画像のように滲んでいた。当時は BML の面 (960x540) を原寸で組んで枠いっぱいに
  * `transform: scale` で伸ばすのに、字幕は CSS の大きさ (面の上の 480x270) の画素で描いていた。
  * いまは面ごと伸ばさないが、CSS の大きさは整数に丸めてあるので、見えている大きさで描くのは変わらない。
- * 偽の録画は中身が無いので、字幕は `captions.json` を差し替えて 0 秒に1枚置く
+ * 偽の録画は中身が無いので、字幕は `captions.json` を差し替えて 0 秒に 1 枚置く
  */
 test.describe("字幕をくっきり描く", () => {
   test("PC (DPR 1・2) とスマホで、字幕の画素が見えている大きさ × DPR と合う", async ({

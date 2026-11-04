@@ -21,7 +21,7 @@
   import { SPEED } from "./icons";
 
   /**
-   * 速さの切り替え。**3画面で同じ見た目。**
+   * 速さの切り替え。**3 画面で同じ見た目。**
    * `label` だけ画面の言葉 (ライブは「追っかけの速さ」、他は「再生の速さ」)。
    *
    * **ボタンは、等速ならメーターのアイコンだけの丸、速めている間は数字だけ (「1.25」)。**
@@ -51,7 +51,7 @@
 
 <!--
     中身 (`children`) は速めているときだけ渡す。ControlButton は中身が無いときだけ丸くする。
-    ボタンは1つのまま、アイコンと数字を差し替える (`{#if}` で ControlButton ごと出し分けない)
+    ボタンは 1 つのまま、アイコンと数字を差し替える (`{#if}` で ControlButton ごと出し分けない)
 -->
 {#snippet number()}
   <span style="font-variant-numeric: tabular-nums">{speed}</span>

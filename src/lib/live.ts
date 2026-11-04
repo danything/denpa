@@ -1,7 +1,7 @@
 /**
  * ライブ視聴で、サーバとブラウザが取り決めていること。**両側から読む。**
  *
- * 1本の WebSocket で全部を一緒に送る ([stream.md](../../docs/stream.md#websocket-プロトコル))。
+ * 1 本の WebSocket で全部を一緒に送る ([stream.md](../../docs/stream.md#websocket-プロトコル))。
  *
  *     [1 byte: 種別][8 bytes: 時刻 (90kHz, BE)][中身...]
  *
@@ -18,7 +18,7 @@ import type { Pace, Rung } from "./rungs";
 
 /**
  * エンコード方式 ([stream.md](../../docs/stream.md#エンコード))。`av1` は量を採るが、SVT-AV1 が溜め込むぶん放送の今から
- * 1秒ほど離れる (`server/live.ts` の `videoArgs`)。`h264` は速さを採り、どの端末でも出る。
+ * 1 秒ほど離れる (`server/live.ts` の `videoArgs`)。`h264` は速さを採り、どの端末でも出る。
  * `hevc` (H.265) は**ライブのエンコーダが GPU のときだけ**出す (ソフトウェアのエンコーダを組んでいない。`#lib/hw.ts` の
  * `SOFTWARE_CODECS`)。出せるかはサーバが決めて画面に渡す (`server/viewing.ts` の `ViewingOptions.hevc`)。追っかけでは出さない。
  * **画面の既定は「自動」** (`#lib/live-choice.ts` の `autoCodec`)。指示で省かれたときの既定は `h264` のまま (テレビのアプリ)。
@@ -58,7 +58,7 @@ export function codecsFor(codec: LiveCodec | "audio"): string {
 }
 
 /**
- * 選べる字幕1つぶん。**取り決めなので、ここに置く**。組み立てるのは
+ * 選べる字幕 1 つぶん。**取り決めなので、ここに置く**。組み立てるのは
  * サーバ (`server/captions.ts` の `TrackList`) だが、画面も同じ形式で読む
  */
 export interface CaptionTrack {
@@ -84,7 +84,7 @@ export const CHANNEL = {
   // 0x10・0x11 (音声) は使わない (映像と同じコンテナに入れている)
   /**
    * **字幕の文字の配置** (JSON。`caption-text.ts` の `CaptionPage`)。サーバが置き場所まで決め、
-   * 受け側が描く。前の1枚を丸ごと置き換える (`runs` が空なら消す)。
+   * 受け側が描く。前の 1 枚を丸ごと置き換える (`runs` が空なら消す)。
    * 0x20 (字幕の画像) と 0x21 (字幕を消す) は以前の取り決めで、もう使わない (番号は空けておく)
    */
   captionText: 0x22,
@@ -122,18 +122,18 @@ export type Notice =
       rung: Rung;
       /** いまエンコードしている音声 (`AudioTrack.id`) */
       audio: string;
-      /** 選べる音声。1つしか無ければ画面は切り替えを出さない */
+      /** 選べる音声。1 つしか無ければ画面は切り替えを出さない */
       audios: AudioTrack[];
     }
   | {
-      /** 選べる字幕。ffmpeg が入口で読んだストリーム一覧から分かるので、1枚も届いていなくても来る (`captions.ts` の `TrackList`) */
+      /** 選べる字幕。ffmpeg が入口で読んだストリーム一覧から分かるので、1 枚も届いていなくても来る (`captions.ts` の `TrackList`) */
       type: "captions";
       tracks: CaptionTrack[];
       /** いま出しているもの (`CaptionTrack.index`) */
       track: number;
       /**
        * いまの字幕のストリームに載っている言語 (字幕管理データから)。**届くまでは省く**。知らない受け側は
-       * 読み飛ばせばよく、そのときは第1言語だけが届く
+       * 読み飛ばせばよく、そのときは第 1 言語だけが届く
        */
       languages?: CaptionLanguage[];
       /** この視聴者に出している言語 (`CaptionLanguage.index`) */
@@ -237,7 +237,7 @@ export type Notice =
  * 取り上げられたあとでそのチューナーの利用者にいる録画 (`rec <録画ID>`) を名指しする。エージェントは予約を知らない
  */
 export interface YieldedRecording {
-  /** 録画ID。追っかけ (`chase` / `GET /api/recordings/<id>/chase`) に渡す */
+  /** 録画 ID。追っかけ (`chase` / `GET /api/recordings/<id>/chase`) に渡す */
   id: number;
   /** 番組名 (記号を落としたもの。録画の一覧の `title` と同じ) */
   title: string;
@@ -249,7 +249,7 @@ export interface YieldedRecording {
 /**
  * 譲った録画の追っかけを**録れているところの少し手前から**観るときにリクエストする位置 (秒)。
  * サーバは録れている範囲に収める (`server/chase.ts` の `chasePlan`)。ライブの代わりに観るので、先頭からではなく今に近いところ。
- * どの録画よりも長い値 (1週間) にしてある
+ * どの録画よりも長い値 (1 週間) にしてある
  */
 export const CHASE_EDGE = 7 * 24 * 60 * 60;
 
@@ -269,7 +269,7 @@ export interface HybridcastLink {
  * ブラウザ→サーバの指示。
  *
  * **局まで渡す。** 物理チャンネルだけでは、いま流れている番組が引けない
- * (1つの物理チャンネルに複数の局が入っている)。番組が引けないと、インタレ解除で
+ * (1 つの物理チャンネルに複数の局が入っている)。番組が引けないと、インタレ解除で
  * コマ数を倍にするかどうかを決められない (国内アニメだけ倍にしない)。
  *
  * **音声もここで指定する。** 選び直しは再エンコードになる (下の説明) ので、
@@ -287,7 +287,7 @@ export type Command =
    */
   | { type: "data"; on: boolean }
   /**
-   * 字幕の言語を選ぶ (第何言語か。1〜8)。**再エンコードしない**。字幕のストリーム1本に全部の言語が入っていて、
+   * 字幕の言語を選ぶ (第何言語か。1〜8)。**再エンコードしない**。字幕のストリーム 1 本に全部の言語が入っていて、
    * サーバは全部デコードしている (`server/captions.ts` の `CaptionText`)。出す言語を視聴者ごとに替えるだけ
    */
   | { type: "language"; language: number }
@@ -302,11 +302,11 @@ export type Command =
 /**
  * 追っかけ再生。**録画中の録画を先頭から観る** (issue #16)。
  *
- * チューナーは使わない。録画が書き足している元のTSをサーバが追い読みして、
+ * チューナーは使わない。録画が書き足している元の TS をサーバが追い読みして、
  * ライブと同じ形式 (fMP4 → この WebSocket) で再エンコードする (`server/chase.ts`)。
  * `raw` なら再エンコードせず、元の TS をそのまま送る (ライブの MPEG-2 と同じ `CHANNEL.rawTs`)。
  *
- * **シークもこれを送り直す。** 元のTSに時間の索引は無いので、飛ぶときは
+ * **シークもこれを送り直す。** 元の TS に時間の索引は無いので、飛ぶときは
  * ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。バッファに残っている
  * 範囲内なら画面は送らずに `video.currentTime` だけ動かす
  */
@@ -319,9 +319,9 @@ type ChaseCommand = {
   audio?: string;
   /** どのコーデックでエンコードするか。省くと `h264` */
   codec?: LiveCodec;
-  /** 何本目の字幕か。省くと1本目 */
+  /** 何本目の字幕か。省くと 1 本目 */
   caption?: number;
-  /** 字幕の第何言語を出すか (1〜8)。省くと第1言語 */
+  /** 字幕の第何言語を出すか (1〜8)。省くと第 1 言語 */
   language?: number;
   /** **エンコードせずに元の TS で欲しい** (`TuneCommand.raw` と同じ。`codec` は効かない) */
   raw?: boolean;
@@ -346,10 +346,10 @@ type TuneCommand = {
    * `audio` は映像を止めて音声だけにする (回線に合わせて下げる最後の手。`#lib/adapt.ts`)。`rung` を 1〜3 にすると音声は 96k
    */
   codec?: LiveCodec | "audio";
-  /** どの字幕を出すか (`CaptionTrack.index`)。省くと1本目。字幕は映像と同じ ffmpeg なので、選び直すと再エンコード */
+  /** どの字幕を出すか (`CaptionTrack.index`)。省くと 1 本目。字幕は映像と同じ ffmpeg なので、選び直すと再エンコード */
   caption?: number;
   /**
-   * 字幕の第何言語を出すか (1〜8)。省くと第1言語。**選び直しは `{ type: 'language' }` で** (再エンコードしない)
+   * 字幕の第何言語を出すか (1〜8)。省くと第 1 言語。**選び直しは `{ type: 'language' }` で** (再エンコードしない)
    */
   language?: number;
   /**
@@ -384,7 +384,7 @@ export const SOCKET_PATH = "/api/live/socket";
 export interface Tuned {
   channelType: string;
   channel: string;
-  /** 局の内部ID (`services.id`)。いま流れている番組からコマ数を決めるのに要る */
+  /** 局の内部 ID (`services.id`)。いま流れている番組からコマ数を決めるのに要る */
   serviceId: number;
   /** どの音声を出すか (`AudioTrack.id`)。省くと主音声 */
   audio?: string;
@@ -397,7 +397,7 @@ export interface Tuned {
 /**
  * 前回見ていた局を覚えておく cookie (`/live` にだけ付ける。中身は局・音声と、コーデックのメニューで選んだもの (`choice`。
  * `#lib/live-choice.ts`) の JSON。前の形式の `codec`・`raw` は読まない)。サーバが読んで、繋いでくる前に
- * エンコードし始める (`server/live.ts` の `warm`)。どの局を開くかはサーバ側1箇所で決める (`server/viewing.ts` の `liveStart`)。
+ * エンコードし始める (`server/live.ts` の `warm`)。どの局を開くかはサーバ側 1 箇所で決める (`server/viewing.ts` の `liveStart`)。
  * localStorage と二重に持つと、先にエンコードしたものが使われず別の局が開いていた
  */
 export const LAST_COOKIE = "denpa_live_last";

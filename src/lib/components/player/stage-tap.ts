@@ -5,11 +5,11 @@ import { type Tap, tap, zoneOf } from "#lib/ts/watch.js";
  * 録画と同じなので、エンコードする前だけ押し方が違うと迷う。読み方は `ts/watch.ts` の `tap` が決め、
  * ここは効かせるだけ。
  *
- * - マウス … 1回で再生/一時停止、左右の端を素早く2回で 10秒
- * - 指 … 1回で操作列の出し入れ、真ん中を素早く2回で再生/一時停止、端2回で 10秒
+ * - マウス … 1 回で再生/一時停止、左右の端を素早く 2 回で 10 秒
+ * - 指 … 1 回で操作列の出し入れ、真ん中を素早く 2 回で再生/一時停止、端 2 回で 10 秒
  *
  * 指かどうかは押すたびに見る (`(pointer: coarse)` は「いま使っているポインタが粗いか」なので、
- * タッチのノートPCでも当たる)
+ * タッチのノート PC でも当たる)
  */
 export function stageTap(on: {
   toggle: () => void;
@@ -31,7 +31,7 @@ export function stageTap(on: {
     // 出し入れの判断は `controls` が持つ (押す前に出ていたかで決める)
     else if (action.kind === "controls") on.controls();
     else {
-      // 2回目。マウスは1回目で再生を切り替えているので、それも戻す
+      // 2 回目。マウスは 1 回目で再生を切り替えているので、それも戻す
       if (action.undo) on.toggle();
       on.seekBy(action.by);
     }

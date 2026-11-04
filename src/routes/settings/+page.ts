@@ -6,7 +6,7 @@ import { FIRST_GROUP } from "#lib/settings-sections.js";
 /**
  * **広い画面では先頭のグループへ移る。** 狭い画面の `/settings` はグループの一覧だけを出す画面
  * (`+layout.svelte`)。幅はサーバでは分からないので、ブラウザで見る。
- * 最初に開いたとき (サーバで描いたあと) も、ブラウザでもう1度ここを通る
+ * 最初に開いたとき (サーバで描いたあと) も、ブラウザでもう 1 度ここを通る
  */
 export function load() {
   if (

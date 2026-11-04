@@ -4,7 +4,7 @@ import { expect, reserveSoon, syncEpg, test } from "./helpers";
  * 追っかけ再生を HTTP で流す API (`GET /api/recordings/<id>/chase`)。テレビのアプリ向け。
  *
  * 録っている最中の録画が一覧 (`GET /api/recordings`) に `recording: true` で出て、
- * その `chase` を開くと、元のTSなら伸びているファイルを追い読みして流し続ける。
+ * その `chase` を開くと、元の TS なら伸びているファイルを追い読みして流し続ける。
  * 再エンコード (`h264`) は画面の追っかけと同じ fMP4 を HTTP で流す
  */
 test.describe("追っかけ再生の API", () => {
@@ -45,7 +45,7 @@ test.describe("追っかけ再生の API", () => {
     };
     if (state.state === "recording") expect(state.durationMs).toBeNull();
 
-    // 元のTS: 頭は同期バイト 0x47。録っている間は伸びたぶんも届き続ける。
+    // 元の TS: 頭は同期バイト 0x47。録っている間は伸びたぶんも届き続ける。
     // **一覧に出るのは録り始めた時点で、ファイルにはまだ何も書かれていないことがある** —
     // そのあいだ chase は 404 (docs/api.md「録画が無い・まだ何も録れていなければ 404」)。アプリと同じく、
     // 届きはじめるまでリクエストし直す

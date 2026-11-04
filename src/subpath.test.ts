@@ -5,7 +5,7 @@ import { join } from "node:path";
 /**
  * **画面の中の URL は `resolve` (`$app/paths`) で頭を付ける** (前段の接頭辞の下でも動くように。server/paths.ts)。
  *
- * 根から書いた URL (`href="/guide"`・`` fetch(`/api/…`) ``) を1つ足すと、接頭辞の下で
+ * 根から書いた URL (`href="/guide"`・`` fetch(`/api/…`) ``) を 1 つ足すと、接頭辞の下で
  * その先だけが壊れる。根で動かしている限り気付けないので、ここで落とす。
  * サーバの中 (転送は相対・外に渡す URL は publicBase) と、コメントの中は見ない
  */

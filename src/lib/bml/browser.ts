@@ -1,5 +1,5 @@
 /**
- * `browser.*` (STD-B24 第二編 付属2 7 章の拡張関数)。実際の放送が呼ぶもの (9 局 16 本で 53 種) を
+ * `browser.*` (STD-B24 第二編 付属 2 7 章の拡張関数)。実際の放送が呼ぶもの (9 局 16 本で 53 種) を
  * 全部持ち、**動かせないものは規格どおり「失敗」を返す** (NaN・null・0)。呼ばれても例外は投げない。
  * 放送のアプリはその返事を見て「この機能はありません」と案内する。
  *
@@ -109,7 +109,7 @@ export interface BrowserHost {
 }
 
 /**
- * getBrowserSupport の APIGroup で「ある」と答えるもの。組の中身は STD-B24 第二編 付属1 表11-2 で、
+ * getBrowserSupport の APIGroup で「ある」と答えるもの。組の中身は STD-B24 第二編 付属 1 表 11-2 で、
  * **ここで動く関数の組だけ**を挙げる。無いと答えるもの: Com.IP.Connect・Com.IP.Params (PPP)・
  * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.startExtraBrowser・EPG.Basic2 (epgTuneToComponent)。
  * EPG.Basic は epgTune が動くので「ある」(予約は失敗を返す。録画の再生中は epgTune も失敗)。
@@ -214,7 +214,7 @@ function aitUri(args: Value[]): string | null {
   return null;
 }
 
-/** 文字列を `Denbun=` の形式に (付属2 7.10。英数と -_.!~*'() のほかは %XX) */
+/** 文字列を `Denbun=` の形式に (付属 2 7.10。英数と -_.!~*'() のほかは %XX) */
 function denbun(text: string): Uint8Array {
   let out = "Denbun=";
   for (const byte of encodeEuc(text)) {
@@ -608,7 +608,7 @@ export function defineBrowser(host: BrowserHost): HostObject {
 
 /**
  * `new BinaryTable(ファイル, 書式)`。ファイルが届くのを待つ。読めなければ null
- * (付属2 5.5。nrow・ncolumn・toNumber・toString・toArray・search・close)
+ * (付属 2 5.5。nrow・ncolumn・toNumber・toString・toArray・search・close)
  */
 export function defineBinaryTable(host: BrowserHost): JSFunction {
   const realm = host.realm;

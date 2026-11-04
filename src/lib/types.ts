@@ -55,7 +55,7 @@ export interface GuideSheet {
 
 /**
  * 番組詳細に出す分。番組表・ホーム (録画)・検索のどこから開いても同じ見た目で見せる。
- * 予約や録画からは局名しか手元に無いので、局IDではなく名前で持つ。
+ * 予約や録画からは局名しか手元に無いので、局 ID ではなく名前で持つ。
  */
 export interface ProgramDetail {
   name: string;
@@ -78,10 +78,10 @@ export interface ProgramDetail {
 }
 
 /**
- * CMの扱い。
+ * CM の扱い。
  * off     : 何もしない
- * chapter : CM区間をチャプターとして書き込むだけ(ファイルは切らない)
- * cut     : CM区間を実際に落とす。検出を誤ると本編が消えるので明示指定のときだけ
+ * chapter : CM 区間をチャプターとして書き込むだけ(ファイルは切らない)
+ * cut     : CM 区間を実際に落とす。検出を誤ると本編が消えるので明示指定のときだけ
  */
 export type CmMode = "off" | "chapter" | "cut";
 
@@ -91,7 +91,7 @@ export type CmMode = "off" | "chapter" | "cut";
  * av1  : 既定。同じ画質でファイルが小さいが、エンコードに時間がかかる
  * hevc : H.265。**GPU でだけエンコードする** (`#lib/hw.ts` の `SOFTWARE_CODECS`)。AV1 をデコードできない端末向けに H.264 より小さく
  * h264 : エンコードが速く、非力なマシンや古いクライアント向け
- * none : **エンコードしない。** 元のTSのまま保存先へ置く
+ * none : **エンコードしない。** 元の TS のまま保存先へ置く
  *
  * いくつもエンコードするときもこの型は主のほうだけ (一覧は `Settings.codecs`)。
  * 別に「エンコードする」のチェックを持っていた頃は、外したときにコーデックの
@@ -113,7 +113,7 @@ export type Rule = typeof rules.$inferSelect;
 /**
  * 画面に出す予約の状態。
  *
- * DBの列に入っているのは `scheduled | conflict | skipped | canceled | missed` だけ
+ * DB の列に入っているのは `scheduled | conflict | skipped | canceled | missed` だけ
  * (`Reservation['state']`)。録り始めてからの `recording | done | failed` は
  * **録画の行から引いた結果**で、一覧を組み立てるときに足す
  * (routes/+page.server.ts で録画の行から引く)。

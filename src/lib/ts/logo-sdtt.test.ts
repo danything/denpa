@@ -31,7 +31,7 @@ function downloadContent(componentTag: number): number[] {
   ];
 }
 
-/** 予定1つ: 2026-11-03 04:30:00 から 20 分 (MJD + BCD) */
+/** 予定 1 つ: 2026-11-03 04:30:00 から 20 分 (MJD + BCD) */
 const SCHEDULE = [0xef, 0xa3, 0x04, 0x30, 0x00, 0x00, 0x20, 0x00];
 
 function sdtt(

@@ -69,7 +69,7 @@ export function management(
     ...languages.flatMap((code, tag) => [
       (tag << 5) | 0x10, // 言語タグ / DMF 0000 (予約ビット 1)
       ...[...code].map((c) => c.charCodeAt(0)),
-      ((formats[tag] ?? format) << 4) | 0x00, // 書式 (言語ごと。`formats` で替えられる) / TCS 0 (8単位符号) / ロールアップ無し
+      ((formats[tag] ?? format) << 4) | 0x00, // 書式 (言語ごと。`formats` で替えられる) / TCS 0 (8 単位符号) / ロールアップ無し
     ]),
     ...u24(units.length),
     ...units,
@@ -109,7 +109,7 @@ export function drcsUnit(code: number, rows: string[]): number[] {
     0x41, // DRCS-1 の面 (上位) と
     code, // 符号
     1, // 字体の数
-    0x00, // 字体番号 0 / 方式 0000 (2階調)
+    0x00, // 字体番号 0 / 方式 0000 (2 階調)
     0, // 階調 - 2
     width,
     height,

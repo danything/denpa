@@ -5,7 +5,7 @@ import type { Notice } from "#lib/components/Toasts.svelte";
 import { canCompose, compose, type Composed } from "./compose";
 
 /**
- * ピクチャーインピクチャー (PiP)。**3画面 (ライブ・追っかけ・観る画面) で同じもの。**
+ * ピクチャーインピクチャー (PiP)。**3 画面 (ライブ・追っかけ・観る画面) で同じもの。**
  *
  * どこでボタンを出さないか・canvas で描いているときと字幕の出し方は docs/player.md (`pip.svelte.ts` の行)。
  *
@@ -13,7 +13,7 @@ import { canCompose, compose, type Composed } from "./compose";
  *   `navigator.standalone` で見分ける。標準の API が無い古い Safari は `webkitSetPresentationMode` で出す
  * - canvas で描いているとき (放送のままの MPEG-2・互換モード) は `<video>` が空なので、worker が描いた映像の
  *   ストリームを代わりの `<video>` に映して出す (`RawEngine.pipStream`)。代わりの `<video>` は canvas に切り替えた時点で
- *   1枚目まで用意しておく (`prepare`)。押されてから待つと iPhone の Safari では「押された直後」が切れて断られる
+ *   1 枚目まで用意しておく (`prepare`)。押されてから待つと iPhone の Safari では「押された直後」が切れて断られる
  * - 字幕はコマごとに重ねたストリームを作って出す (`compose.ts`。Chrome・Edge だけ)。`<video>` の映像は押した時点で
  *   字幕を出して再生しているときだけ、小窓に出している間だけ重ねる
  * - 小窓の再生ボタンは `<video>` を直に止めるので、ライブと追っかけは `paused` / `toggle` で player に合わせる
@@ -70,7 +70,7 @@ type WebkitVideo = HTMLVideoElement & {
 };
 
 const MODE = "picture-in-picture";
-/** 字幕を重ねたストリームの1枚目を待つ上限 (ms)。過ぎたら元の video をそのまま出す */
+/** 字幕を重ねたストリームの 1 枚目を待つ上限 (ms)。過ぎたら元の video をそのまま出す */
 const FIRST_FRAME = 2_000;
 
 /** `captureStream` は Chrome・Firefox にある (型には無い) */
@@ -283,8 +283,8 @@ export function pictureInPicture(options: Options): Pip {
   }
 
   /**
-   * 代わりの video にストリームを繋いで、1枚目まで受け取っておく。**押されてからでは遅い** (上の説明)。
-   * 1枚目が来たらストリームを切る。小窓に出すまで写し続けない
+   * 代わりの video にストリームを繋いで、1 枚目まで受け取っておく。**押されてからでは遅い** (上の説明)。
+   * 1 枚目が来たらストリームを切る。小窓に出すまで写し続けない
    */
   function prepare(): void {
     unprepared = null;
@@ -318,7 +318,7 @@ export function pictureInPicture(options: Options): Pip {
     });
   }
 
-  /** 代わりの video へ映像を流すか。**切っても1枚目の大きさは覚えたまま** (`readyState` は下がらない) */
+  /** 代わりの video へ映像を流すか。**切っても 1 枚目の大きさは覚えたまま** (`readyState` は下がらない) */
   function flowing(flow: boolean): void {
     const stream = proxy?.srcObject;
     if (stream instanceof MediaStream)
@@ -341,7 +341,7 @@ export function pictureInPicture(options: Options): Pip {
   /**
    * 変換した映像に字幕を重ねるか。**押した時点で字幕を出しているときだけ** (上の説明)。
    * 止めている間も重ねない。`captureStream` は止まった `<video>` からコマを出さないので、
-   * 1枚目を待ちきれずに元の `<video>` へ落ちるだけになる
+   * 1 枚目を待ちきれずに元の `<video>` へ落ちるだけになる
    */
   function composable(video: HTMLVideoElement): boolean {
     return (
@@ -355,7 +355,7 @@ export function pictureInPicture(options: Options): Pip {
   }
 
   /**
-   * 変換した映像に字幕を重ねて、代わりの video に1枚目まで受け取る。**押されてから作る**。
+   * 変換した映像に字幕を重ねて、代わりの video に 1 枚目まで受け取る。**押されてから作る**。
    * 重ねられるのは Chrome・Edge だけで、あちらは「押された直後」が数秒続く (Safari と違って
    * 待っても断られない)。小窓に出していない間まで重ね続けないため。
    * 作れなければ null (元の video をそのまま出す)
@@ -412,7 +412,7 @@ export function pictureInPicture(options: Options): Pip {
 
   /**
    * 小窓に出す。**リクエストするまでに `await` を挟まない**。挟むと Safari は「押された直後」と
-   * 見なさなくなって断る (`NotAllowedError`)。字幕を重ねるときだけ1枚目を待つ
+   * 見なさなくなって断る (`NotAllowedError`)。字幕を重ねるときだけ 1 枚目を待つ
    * (`composeBaked`。そこへ来るのは待っても断られない Chrome・Edge だけ)
    */
   async function enter(): Promise<void> {
@@ -437,7 +437,7 @@ export function pictureInPicture(options: Options): Pip {
     else if (webkit(video)) {
       /*
        * Safari の API は断っても何も言わない。切り替わったかを見て言う。
-       * **一度でも切り替わったかで見る**。1秒の間に閉じられた・画面を離れたものまで
+       * **一度でも切り替わったかで見る**。1 秒の間に閉じられた・画面を離れたものまで
        * 「切り替わらなかった」と言っていた
        */
       const target = video;
@@ -498,7 +498,7 @@ export function pictureInPicture(options: Options): Pip {
     toggle() {
       refused = null;
       if (on !== null) leave();
-      // 字幕を重ねる用意 (1枚目待ち) の間に押し直されたら、二重にリクエストしない
+      // 字幕を重ねる用意 (1 枚目待ち) の間に押し直されたら、二重にリクエストしない
       else if (!entering) {
         entering = true;
         void enter()

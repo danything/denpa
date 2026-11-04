@@ -3,9 +3,9 @@
  * Svelte に依存しないただの層にしてある ([docs/offline.md](../../docs/offline.md))。
  *
  * - `videos` … 落とした録画。動画の blob と、観るのに要る付属のデータ
- *   (字幕・チャプター・データ放送・ポスター) を1行にまとめて持つ
+ *   (字幕・チャプター・データ放送・ポスター) を 1 行にまとめて持つ
  * - `parts` … ページで受け取った動画の塊 (`OfflineVideo.parts`)。読むときに `videos` が
- *   1本の `video` につないで出すので、観る側は塊を知らなくてよい
+ *   1 本の `video` につないで出すので、観る側は塊を知らなくてよい
  * - `outbox` … オンラインに戻ったときにサーバへ伝えること (いまは削除だけ)
  * - `resume` … オフライン中に進んだ視聴位置。復帰時にまとめて送る
  */
@@ -59,7 +59,7 @@ const DB = "denpa-offline";
 /** 2 で `parts` を足した (前に保存したものは `video` のまま読める) */
 const VERSION = 2;
 
-/** 落とした録画1本。付属のデータは取れなかったら無いまま (観るときに諦める) */
+/** 落とした録画 1 本。付属のデータは取れなかったら無いまま (観るときに諦める) */
 export interface OfflineVideo {
   id: number;
   name: string;
@@ -123,9 +123,9 @@ interface ResumeItem {
 }
 
 /**
- * Background Fetch の登録ID。`rec-<録画ID>-<どちらを落とすか>-<試みの印>`。
+ * Background Fetch の登録 ID。`rec-<録画ID>-<どちらを落とすか>-<試みの印>`。
  *
- * **試みの印を含める。** 同じIDが生きている間は再登録できない
+ * **試みの印を含める。** 同じ ID が生きている間は再登録できない
  * (`There already is a registration for the given id`)。前回の失敗の残骸が
  * ブラウザに残っていると、やり直しがそのまま断られていた。試みごとに
  * 変えれば必ず登録でき、残骸は登録前に中止する (offline.svelte.ts)
@@ -138,12 +138,12 @@ export function fetchId(
   return `rec-${id}-${source}-${attempt}`;
 }
 
-/** その録画の登録IDか。残骸を探して中止するときの当たり判定 */
+/** その録画の登録 ID か。残骸を探して中止するときの当たり判定 */
 export function fetchIdPrefix(id: number): string {
   return `rec-${id}-`;
 }
 
-/** 登録IDを読み戻す。Background Fetch の成否イベントは ID しか持っていない */
+/** 登録 ID を読み戻す。Background Fetch の成否イベントは ID しか持っていない */
 export function parseFetchId(
   value: string,
 ): { id: number; source: EncodedSource; attempt: string } | null {
@@ -207,7 +207,7 @@ export async function storeResponse(
 type Store = "videos" | "outbox" | "resume" | "parts";
 const STORES: Exclude<Store, "parts">[] = ["videos", "outbox", "resume"];
 
-/** 動画の塊1つ。`[id, index]` で引く (同じ録画の塊は index の順に並ぶ) */
+/** 動画の塊 1 つ。`[id, index]` で引く (同じ録画の塊は index の順に並ぶ) */
 interface VideoPart {
   id: number;
   index: number;
@@ -252,7 +252,7 @@ async function tx<T>(
   }
 }
 
-/** 1つの置き場の読み書き。どの置き場も `id` で引く */
+/** 1 つの置き場の読み書き。どの置き場も `id` で引く */
 function table<T>(store: Store) {
   return {
     get: (id: number) => tx<T | undefined>(store, "readonly", (s) => s.get(id)),
@@ -267,7 +267,7 @@ function partRange(id: number): IDBKeyRange {
   return IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]);
 }
 
-/** 動画の塊を1つ書く。ページで受け取るとき、溜まった順に呼ぶ */
+/** 動画の塊を 1 つ書く。ページで受け取るとき、溜まった順に呼ぶ */
 export async function putPart(
   id: number,
   index: number,
@@ -282,7 +282,7 @@ export async function clearParts(id: number): Promise<void> {
 }
 
 /**
- * 塊で持っている動画を1本の `video` につなぐ。**中身は写さない。** 置き場から出した
+ * 塊で持っている動画を 1 本の `video` につなぐ。**中身は写さない。** 置き場から出した
  * Blob はファイルを指しているだけなので、つないでもメモリには載らない。
  * 塊が欠けていたら (書いている途中で落とされた) `video` 無しで返す
  */

@@ -30,7 +30,7 @@ test.describe("EPGStation からの引き継ぎ", () => {
     await syncEpg(request);
     await goto(page, "/settings/integrations");
     await page.getByTestId("epgstation-url").fill(stack.epgstationUrl);
-    // 既定は下見。チェックを入れない限りファイルもDBも触らない
+    // 既定は下見。チェックを入れない限りファイルも DB も触らない
     await expect(page.getByTestId("migrate-apply")).not.toBeChecked();
     await page.getByTestId("migrate-run").click();
     await expect(page.getByTestId("migrate-started")).toBeVisible();

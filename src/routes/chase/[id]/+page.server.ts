@@ -30,7 +30,7 @@ export const load: PageServerLoad = ({ params, url }) => {
   if (rec.deleted_at !== null) error(410, "この録画は削除されています");
   /*
    * **追っかけは録っている最中だけ。** 録り終えたら観る画面へ。エンコード済みがあればそれを、まだなら
-   * 元の TS をサーバがその場で変換して流す (`server/playback.ts`)。CM飛ばし・チャプターもそちらで揃う
+   * 元の TS をサーバがその場で変換して流す (`server/playback.ts`)。CM 飛ばし・チャプターもそちらで揃う
    */
   if (rec.library_path !== null || rec.finished_at !== null)
     redirect(302, relative(url, `/watch/${rec.id}`));

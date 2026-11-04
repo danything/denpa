@@ -20,13 +20,13 @@ import { services } from "#lib/server/schema.js";
 import type { ChannelType } from "#lib/types.js";
 
 /**
- * 局ごとのロゴ。**番組表に出す局ロゴと、CM検出のために覚えたロゴは別物** (logo.ts と logo-data.ts) だが、
+ * 局ごとのロゴ。**番組表に出す局ロゴと、CM 検出のために覚えたロゴは別物** (logo.ts と logo-data.ts) だが、
  * 確かめたいのはどちらも「この局のロゴが取れているか・合っているか」なので、受信できるチャンネルの表の局の行に
- * 列を2つ並べる (`Channels.svelte`。局名と種別を別の表で繰り返さない)。
+ * 列を 2 つ並べる (`Channels.svelte`。局名と種別を別の表で繰り返さない)。
  *
  * - `logo` … 局ロゴの具合 (`logo.logoState`)
- * - `cm` … CM検出のロゴを覚えた時刻 (`logo-data.learnedAt`)。覚えていなければ null。
- *   CM検出の対象でない局 (テレビでない局・同じ映像を流しているサブチャンネル) もいつも null
+ * - `cm` … CM 検出のロゴを覚えた時刻 (`logo-data.learnedAt`)。覚えていなければ null。
+ *   CM 検出の対象でない局 (テレビでない局・同じ映像を流しているサブチャンネル) もいつも null
  */
 function stationLogos() {
   const rows = orm()
@@ -43,8 +43,8 @@ function stationLogos() {
     .orderBy(services.service_id)
     .all();
   /*
-   * CM検出のロゴを出す局。数え上げ (`logo-data.stats`) と同じく、テレビの局で、同じ映像を流している
-   * サブチャンネルの枠は束ねて1局にする (覚えたものは写し合うので、束ねないと同じ画像が2つ並ぶ)
+   * CM 検出のロゴを出す局。数え上げ (`logo-data.stats`) と同じく、テレビの局で、同じ映像を流している
+   * サブチャンネルの枠は束ねて 1 局にする (覚えたものは写し合うので、束ねないと同じ画像が 2 つ並ぶ)
    */
   const cmShown = new Set(
     stations(rows.filter((row) => row.service_type === 1)).map((row) => row.id),
@@ -72,11 +72,11 @@ export function load() {
      */
     logos: logoStats(),
     /*
-     * 取得している最中の様子。1チャンネルに数分かかるので、出さないと
+     * 取得している最中の様子。1 チャンネルに数分かかるので、出さないと
      * 押しても何も起きていないように見える
      */
     logoSweep: sweepState(),
-    /** CM検出のロゴを何局ぶん覚えたか (logo-data.ts) */
+    /** CM 検出のロゴを何局ぶん覚えたか (logo-data.ts) */
     cmLogoStats: learnStats(),
   };
 }
@@ -108,14 +108,14 @@ export const actions = {
   },
 
   /**
-   * 局ロゴを取得する。**チューナー2つで、衛星も混ぜて。**
+   * 局ロゴを取得する。**チューナー 2 つで、衛星も混ぜて。**
    *
    * ロゴは放送波に数十秒〜数分に一度しか流れてこないので、押してもその場では
    * 出ない。どこまで進んだかを画面に流すので、押した人は待たなくていい。
    *
-   * 衛星も対象にする。ロゴを運ぶ中継は1つだけで、当たればカルーセルが来たところで
+   * 衛星も対象にする。ロゴを運ぶ中継は 1 つだけで、当たればカルーセルが来たところで
    * BS と CS の全局ぶんが揃い (十数分待つことがある。`config.logoCarouselWait`)、外れは
-   * PAT を見た時点 (1秒ほど) で次へ行く。当たり外れは覚えるので、二度目からは当たりだけを開く
+   * PAT を見た時点 (1 秒ほど) で次へ行く。当たり外れは覚えるので、二度目からは当たりだけを開く
    */
   logoSweep: async () => {
     const result = await sweepNow();

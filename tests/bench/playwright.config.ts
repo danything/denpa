@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 /**
  * **測るだけの Playwright** (CI では流さない。docs/stream.md#デコードしたフレームを持つ数)。E2E と同じ一式
- * (`tests/stack.ts`) を1つだけ立て、1本ずつ順に流す。並べると互いの CPU を取り合って、測りたいものが混ざる。
+ * (`tests/stack.ts`) を 1 つだけ立て、1 本ずつ順に流す。並べると互いの CPU を取り合って、測りたいものが混ざる。
  *
  *     docker compose --profile docs run --rm docs bunx playwright test -c tests/bench
  *

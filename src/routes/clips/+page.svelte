@@ -49,18 +49,18 @@
   import { dayName, dayStart } from "#lib/timeline.js";
 
   /**
-   * **切り抜き** (`/clips`)。観る画面・追っかけ・ライブで押した1コマ (字幕・コメントごと) を、撮った日の見出しの下に平らなグリッドで並べる。
+   * **切り抜き** (`/clips`)。観る画面・追っかけ・ライブで押した 1 コマ (字幕・コメントごと) を、撮った日の見出しの下に平らなグリッドで並べる。
    *
    * - 条件は URL で持つ (`GET /api/clips` と同じ名前。`#lib/clips.ts`)。最初の 60 枚は load、続きは下端で API から足す
    * - 広い形は右のサイドバーにカレンダー・ライブか録画か・局・使っている量。スマホの形は下のタブのすぐ上に
    *   「絞り込み」のメニュー。言葉で探すのはヘッダーの検索で、その結果の「切り抜き」から `?q=` 付きで来たときは
    *   一覧の上に探した言葉と外すボタンを出す
-   * - 1枚を開くと一覧の上に浮かぶ箱。右端の縦の列に閉じる・この場面から観る・字幕とコメントの出し入れ (撮ったときに出していたものだけ)・
-   *   クリップボードにコピー・端末に保存・削除 (2回押し。いちばん下)。
+   * - 1 枚を開くと一覧の上に浮かぶ箱。右端の縦の列に閉じる・この場面から観る・字幕とコメントの出し入れ (撮ったときに出していたものだけ)・
+   *   クリップボードにコピー・端末に保存・削除 (2 回押し。いちばん下)。
    *   列は観る画面と同じ部品 (`ControlBar`・`ControlButton`)
-   * - 選び方は写真のサービスと同じ。マウスでは乗せた1枚の左上に丸が出て、押すと選ぶ形に入る。指の端末は長押しで入る。
-   *   選ぶ形の間は1枚を押すと選ぶ・外す (開かない)。Shift を押しながらなら、前に押した1枚までをまとめて選ぶ。
-   *   選んだぶんは2回押しで消す。Esc か「選択をやめる」で抜け、全部外しても抜ける
+   * - 選び方は写真のサービスと同じ。マウスでは乗せた 1 枚の左上に丸が出て、押すと選ぶ形に入る。指の端末は長押しで入る。
+   *   選ぶ形の間は 1 枚を押すと選ぶ・外す (開かない)。Shift を押しながらなら、前に押した 1 枚までをまとめて選ぶ。
+   *   選んだぶんは 2 回押しで消す。Esc か「選択をやめる」で抜け、全部外しても抜ける
    */
   let { data } = $props();
 
@@ -89,7 +89,7 @@
   });
   const clips = $derived([...data.clips, ...more]);
 
-  /** 続きを1ページ取る。世代が替わっていたら捨てる */
+  /** 続きを 1 ページ取る。世代が替わっていたら捨てる */
   async function fetchMore(): Promise<boolean> {
     if (next === null) return false;
     const mine = generation;
@@ -198,7 +198,7 @@
   );
 
   /*
-   * ---- 1枚を開く ----
+   * ---- 1 枚を開く ----
    */
   let dialog = $state<HTMLDialogElement>();
   let viewing = $state<Clip | null>(null);
@@ -209,7 +209,7 @@
   function close(): void {
     dialog?.close();
   }
-  /** ← → で前後の1枚へ (並びの順。左が新しい) */
+  /** ← → で前後の 1 枚へ (並びの順。左が新しい) */
   function step(by: number): void {
     if (viewing === null) return;
     const index = clips.findIndex((clip) => clip.id === viewing?.id);
@@ -233,7 +233,7 @@
   const notices = $derived(notice === null ? [] : [notice]);
 
   /**
-   * いま見せている重ねの1枚 (サーバが重ねた AVIF)。出し入れを送っている途中なら、済むのを待ってから取る
+   * いま見せている重ねの 1 枚 (サーバが重ねた AVIF)。出し入れを送っている途中なら、済むのを待ってから取る
    * (先に取ると、押す前の重ねの画像が来る)
    */
   async function shownImage(clip: Clip): Promise<Blob> {
@@ -251,12 +251,12 @@
    * 押した人に聞かずに置くからで (`shot.svelte.ts`)、このボタンは置きたい人が押すもの
    */
   const copyable = canCopyImage();
-  /** コピーできた直後の1枚 (ボタンを一瞬チェックの形にする。長さは撮るボタンと同じ) */
+  /** コピーできた直後の 1 枚 (ボタンを一瞬チェックの形にする。長さは撮るボタンと同じ) */
   let copiedId = $state<number | null>(null);
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
   /**
-   * いま見せている重ねの1枚を PNG にしてクリップボードに置く (置けるのは PNG だけ)。
+   * いま見せている重ねの 1 枚を PNG にしてクリップボードに置く (置けるのは PNG だけ)。
    * Safari は押した直後の `clipboard.write` しか通さないので、画像を取る前に書き始め、中身は後から渡す。
    * うまくいったときはこの画面の保存・削除と同じくトーストを出さず (ボタンがチェックになるだけ)、失敗だけ通知する
    */
@@ -296,13 +296,13 @@
   }
 
   /**
-   * 字幕・コメントの出し入れ。開いた1枚は元の画像 (`/layer/*`) を重ねて見せているので、**見せ方はすぐ替える**
-   * (`shownLayers`)。残すのは `PATCH /api/clips/<id>` で、サーバが一覧・保存用の AVIF を重ね直す (1秒ほど) のは待たない。
-   * 送るのは1枚ごとに順に (押した順にサーバへ届く)。断られたらその切り替えを戻して知らせる。
+   * 字幕・コメントの出し入れ。開いた 1 枚は元の画像 (`/layer/*`) を重ねて見せているので、**見せ方はすぐ替える**
+   * (`shownLayers`)。残すのは `PATCH /api/clips/<id>` で、サーバが一覧・保存用の AVIF を重ね直す (1 秒ほど) のは待たない。
+   * 送るのは 1 枚ごとに順に (押した順にサーバへ届く)。断られたらその切り替えを戻して知らせる。
    * 送り終えたら読み直し、一覧の小さい画像も新しい重ね (`?v=`) にする
    */
   const shownLayers = new SvelteMap<number, ClipLayers>();
-  /** 1枚ごとの送っている途中の列 (済めば消す)。保存はこれを待つ */
+  /** 1 枚ごとの送っている途中の列 (済めば消す)。保存はこれを待つ */
   const sending = new Map<number, Promise<void>>();
   function layersShown(clip: Clip): ClipLayers {
     return shownLayers.get(clip.id) ?? clip.layers;
@@ -367,9 +367,9 @@
    * ---- 選ぶ (写真のサービスと同じ形) ----
    */
   const selected = new SvelteSet<number>();
-  /** 選ぶ形。1枚でも選んでいる間だけ (全部外したら抜ける) */
+  /** 選ぶ形。1 枚でも選んでいる間だけ (全部外したら抜ける) */
   const selecting = $derived(selected.size > 0);
-  /** Shift でまとめて選ぶときの起点 (最後に押した1枚) */
+  /** Shift でまとめて選ぶときの起点 (最後に押した 1 枚) */
   let anchor: number | null = null;
   function endSelecting(): void {
     selected.clear();
@@ -382,7 +382,7 @@
     for (const id of untrack(() => [...selected]))
       if (!shown.has(id)) selected.delete(id);
   });
-  /** 1枚を選ぶ・外す。Shift を押していれば、起点からその1枚までを選ぶ (並びの順) */
+  /** 1 枚を選ぶ・外す。Shift を押していれば、起点からその 1 枚までを選ぶ (並びの順) */
   function pick(clip: Clip, event: MouseEvent): void {
     const from =
       event.shiftKey && anchor !== null
@@ -405,7 +405,7 @@
     if (selecting) pick(clip, event);
     else open(clip);
   }
-  /** Esc で選ぶ形を抜ける (1枚を開いている間はダイアログが閉じるほう) */
+  /** Esc で選ぶ形を抜ける (1 枚を開いている間はダイアログが閉じるほう) */
   function onkey(event: KeyboardEvent): void {
     if (event.key !== "Escape" || !selecting || dialog?.open === true) return;
     event.preventDefault();
@@ -445,7 +445,7 @@
     clearTimeout(hold);
     hold = undefined;
   }
-  /** まとめて消すボタンの聞き返しの id (1つだけなので 0) */
+  /** まとめて消すボタンの聞き返しの id (1 つだけなので 0) */
   const MANY = 0;
 
   let filterOpen = $state(false);
@@ -502,7 +502,7 @@
   {/each}
 {/snippet}
 
-<!-- 選ぶ形の間だけ、選んだ数と2回押しの削除 -->
+<!-- 選ぶ形の間だけ、選んだ数と 2 回押しの削除 -->
 {#snippet selectTools()}
   <span class="small num c-picked" data-testid="clip-picked"
     >{selected.size} 枚を選択中</span
@@ -563,7 +563,7 @@
         </p>
       {/if}
       {#if selecting}
-        <!-- 広い形の選ぶ形の操作 (スマホの形では下の1行が替わる) -->
+        <!-- 広い形の選ぶ形の操作 (スマホの形では下の 1 行が替わる) -->
         <div class="c-select-wide" role="group" aria-label="選んだ切り抜き">
           {@render selectTools()}
         </div>
@@ -696,7 +696,7 @@
     </aside>
   </div>
 
-  <!-- スマホの形の絞り込み (下のタブのすぐ上)。選ぶ形の間は選んだぶんの操作の1行に替わる -->
+  <!-- スマホの形の絞り込み (下のタブのすぐ上)。選ぶ形の間は選んだぶんの操作の 1 行に替わる -->
   <div
     class="c-bar dock"
     data-selecting={selecting ? "" : undefined}
@@ -758,7 +758,7 @@
   </div>
 </div>
 
-<!-- 1枚を開いた所 (並びは頭の説明、形は下の `.viewer`) -->
+<!-- 1 枚を開いた所 (並びは頭の説明、形は下の `.viewer`) -->
 <dialog
   class="viewer"
   bind:this={dialog}
@@ -788,7 +788,7 @@
         />
       {:else}
         <!--
-          重ねを持つものは元の画像を重ねて見せる (観る画面の字幕・コメントと同じく画面で重ねる)。3枚は同じ縦横なので、
+          重ねを持つものは元の画像を重ねて見せる (観る画面の字幕・コメントと同じく画面で重ねる)。3 枚は同じ縦横なので、
           映像の形の箱に重ねればぴったり合う。出し入れは隠すだけ (隠した重ねも先に読んでおく)
         -->
         <div
@@ -901,7 +901,7 @@
 <style>
   /*
    * 並べ方は録画の一覧 (`home.css` の `.board`) と同じ: ページごと巻き、広い形は右のサイドバーをヘッダーの下に貼り付ける。
-   * スマホの形は絞り込みの1行を下のタブのすぐ上に浮かせる (docs/design.md の「浮かせ方」)
+   * スマホの形は絞り込みの 1 行を下のタブのすぐ上に浮かせる (docs/design.md の「浮かせ方」)
    */
   .clips {
     --c-day-gap: 0.5rem;
@@ -997,7 +997,7 @@
 
   /*
      * 平らなグリッド。件の面には乗せず、画像と字だけ (docs/design.md の「ふだんは平らに」)。
-     * 1枚の幅は 16rem から (11rem では何が写っているか読めなかった)。スマホの幅では1列に並ぶ
+     * 1 枚の幅は 16rem から (11rem では何が写っているか読めなかった)。スマホの幅では 1 列に並ぶ
      */
   .c-grid {
     display: grid;
@@ -1150,7 +1150,7 @@
   .c-picked {
     white-space: nowrap;
   }
-  /* スマホの形の絞り込みの1行。ほかの画面の操作の1行と同じく、下のタブのすぐ上にカプセルで浮かせる (`app.css` の `.dock`) */
+  /* スマホの形の絞り込みの 1 行。ほかの画面の操作の 1 行と同じく、下のタブのすぐ上にカプセルで浮かせる (`app.css` の `.dock`) */
   .c-bar {
     display: none;
   }
@@ -1183,7 +1183,7 @@
   :global(html[data-phone]) .c-main {
     order: 1;
   }
-  /* 少なくても絞り込みの1行が下のタブのすぐ上に来るよう、ページの高さいっぱいまで伸ばす */
+  /* 少なくても絞り込みの 1 行が下のタブのすぐ上に来るよう、ページの高さいっぱいまで伸ばす */
   :global(html[data-phone]) .clips {
     min-height: calc(
       100svh - env(safe-area-inset-top, 0px) - var(--dp-page-top, 0.5rem) -
@@ -1202,9 +1202,9 @@
   }
 
   /*
-   * 1枚を開いた所。**画面を覆わず、一覧の上に浮かぶ箱** (ダイアログと同じく後ろは幕 `--dp-backdrop`、幕を押すと閉じる)。
+   * 1 枚を開いた所。**画面を覆わず、一覧の上に浮かぶ箱** (ダイアログと同じく後ろは幕 `--dp-backdrop`、幕を押すと閉じる)。
    * 箱は 16:9 の黒い舞台 (テーマにかかわらず。映像の上と同じ色の決まり) で、画面に収まる大きさまで。
-   * 縦は右端の列 (7 つ) が1列に収まる高さ (48px の丸 7 つ、8px の間 6 つ、上下の余白 8px ずつで 25rem) を下限にする。スマホの縦の 16:9 では低すぎて列が折り返す。
+   * 縦は右端の列 (7 つ) が 1 列に収まる高さ (48px の丸 7 つ、8px の間 6 つ、上下の余白 8px ずつで 25rem) を下限にする。スマホの縦の 16:9 では低すぎて列が折り返す。
    * 並べ方 (真ん中に置く) は Pico の dialog のまま。ここで `display` を書くと閉じた幕が消えずに一覧を塞ぐ。
    * 開き方もダイアログの箱と同じ (少し縮んだ姿からばねで。app.css の `dialog > article`)
    */

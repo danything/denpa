@@ -93,7 +93,7 @@ test.describe("コピー禁止の番組", () => {
     const row = rows.first();
     await expect(row.getByTestId("reservation-state")).toHaveText("録画しない");
     await expect(row).toContainText(REASON);
-    // 予約済みのものは1つも無い (録れるように見せない)
+    // 予約済みのものは 1 つも無い (録れるように見せない)
     await expect(
       rows.filter({
         has: page.getByTestId("reservation-state").getByText("予約済み"),

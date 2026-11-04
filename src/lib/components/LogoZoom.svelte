@@ -8,15 +8,15 @@
   import { dateTime } from "#lib/format.js";
 
   /**
-   * **ロゴを大きく見る窓** (設定の「受信できるチャンネル」の表で、局ロゴ・CMロゴを押したとき)。
+   * **ロゴを大きく見る窓** (設定の「受信できるチャンネル」の表で、局ロゴ・CM ロゴを押したとき)。
    *
-   * 表の中のロゴは行の高さに合わせて小さく、CMロゴは白い縁だけの画像なので、
+   * 表の中のロゴは行の高さに合わせて小さく、CM ロゴは白い縁だけの画像なので、
    * ロゴの形になっているかは並べたままでは見分けにくい。**整数倍で拡大し、画素をぼかさない**
-   * (`image-rendering: pixelated`)。CMロゴは高さ 36px ほどなので 8〜10 倍になる。
+   * (`image-rendering: pixelated`)。CM ロゴは高さ 36px ほどなので 8〜10 倍になる。
    *
    * 窓は `<dialog>` を `showModal` で開く (×・Esc・幕を押すと閉じる)。見た目は `app.css` の `.modal-box`。
    * **閉じても中身は残す**。閉じる動き (`app.css` のダイアログ) の間に空にならないように。
-   * 見せていたCMロゴが消えたら (「覚え直す」) 閉じる。表の行もその時に消える
+   * 見せていた CM ロゴが消えたら (「覚え直す」) 閉じる。表の行もその時に消える
    */
   let {
     target,
@@ -27,13 +27,13 @@
       id: number;
       name: string;
       kind: "station" | "cm";
-      /** CMロゴを覚えた時刻。局ロゴでは使わない */
+      /** CM ロゴを覚えた時刻。局ロゴでは使わない */
       learnedAt: number | null;
     } | null;
     onclose: () => void;
   } = $props();
 
-  /** 拡大の上限。CMロゴ (高さ 36px ほど) が窓に収まる大きさ */
+  /** 拡大の上限。CM ロゴ (高さ 36px ほど) が窓に収まる大きさ */
   const MAX_SCALE = 10;
 
   let dialog = $state<HTMLDialogElement | null>(null);
@@ -180,7 +180,7 @@
   .kind {
     margin: var(--dp-space-1) 0 var(--dp-space-4);
   }
-  /* 画像を真ん中に置く台。CMロゴは白い縁だけの画像なので、暗い地に置く */
+  /* 画像を真ん中に置く台。CM ロゴは白い縁だけの画像なので、暗い地に置く */
   .frame {
     display: flex;
     align-items: center;
@@ -191,7 +191,7 @@
     background: var(--dp-subtle);
     overflow: hidden;
   }
-  /* CMロゴは録画のコマから切り出したもの。映像と同じ黒の上に置く */
+  /* CM ロゴは録画のコマから切り出したもの。映像と同じ黒の上に置く */
   .frame.dark {
     background: var(--dp-video);
   }

@@ -16,7 +16,7 @@ import {
 const NOTE_FOR = 1_500;
 
 /**
- * 音量。**3画面 (ライブ・追っかけ・観る画面) で同じもの。既定は 100% (放送より +6 dB)。**
+ * 音量。**3 画面 (ライブ・追っかけ・観る画面) で同じもの。既定は 100% (放送より +6 dB)。**
  *
  * 放送は動画サイトより小さめにそろえてある (`#lib/volume.ts` の `BOOST_DB`) ので、既定で少し大きく鳴らす。
  * つまみは 0%〜100% で、下げる向きにだけ動く。消音 (`muted`・RawEngine の `mute`) とは別で、消しても音量はそのまま。
@@ -52,7 +52,7 @@ export interface Volume {
   /** ↑↓ で変えた直後か。映像の上に今の音量を出す */
   readonly noted: boolean;
   set: (level: number) => void;
-  /** ↑↓ で1刻み (`stepLevel`) */
+  /** ↑↓ で 1 刻み (`stepLevel`) */
   step: (direction: number) => void;
 }
 
@@ -64,7 +64,7 @@ export function playerVolume(options: Options): Volume {
 
   let context: AudioContext | null = null;
   let outlet: Outlet | null = null;
-  /** 要素ごとの入口。**一度作ったら作り直せない** (同じ要素からは1つしか作れない) */
+  /** 要素ごとの入口。**一度作ったら作り直せない** (同じ要素からは 1 つしか作れない) */
   const sources = new WeakMap<HTMLVideoElement, MediaElementAudioSourceNode>();
   /** いま Web Audio に通している `<video>` */
   let tapped: HTMLVideoElement | null = null;

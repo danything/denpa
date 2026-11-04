@@ -81,7 +81,7 @@ function bottoms(page: Page, toolbar: string) {
     const narrow = matchMedia(
       "(min-width: 640px) and (max-width: 767px)",
     ).matches;
-    // 640〜767px は操作の1行が表の下に並ぶ (上の余白ぶん空ける)。スマホは表が画面の下の端まで伸び、1行はその上に浮く
+    // 640〜767px は操作の 1 行が表の下に並ぶ (上の余白ぶん空ける)。スマホは表が画面の下の端まで伸び、1 行はその上に浮く
     const bar = document.querySelector(toolbar) as HTMLElement;
     const limit = narrow
       ? bar.getBoundingClientRect().top -
@@ -177,7 +177,7 @@ for (const [width, height] of [
 }
 
 /*
- * スマホの形は表の最後の下を空けてある (下のタブと操作の1行が浮くぶん)。夜遅くに開くと「いま」へ送った位置が
+ * スマホの形は表の最後の下を空けてある (下のタブと操作の 1 行が浮くぶん)。夜遅くに開くと「いま」へ送った位置が
  * 表の最後に近く、その空きに骨組みを敷いていなかった頃は、下の端の手前で骨組みが切れていた。
  * 時刻で結果が変わらないよう、ブラウザの時計を今日の表の最後の 30 分 (翌 3:30) に止めて開く
  */

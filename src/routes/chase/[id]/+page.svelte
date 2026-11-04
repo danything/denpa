@@ -96,14 +96,14 @@
   let overlay = $state<HTMLCanvasElement | null>(null);
   /** 全画面にする枠 (`PlayerStage` が bind する)。キーの `f` から使う */
   let stageEl = $state<HTMLElement | null>(null);
-  /** 全画面の出入り (3画面共通。[fullscreen.svelte.ts](../../../lib/components/player/fullscreen.svelte.ts)) */
+  /** 全画面の出入り (3 画面共通。[fullscreen.svelte.ts](../../../lib/components/player/fullscreen.svelte.ts)) */
   const fullscreen = stageFullscreen(() => stageEl);
 
-  /** 右端を伸ばすための時計。1秒刻みで十分 (バーの目盛りより細かい) */
+  /** 右端を伸ばすための時計。1 秒刻みで十分 (バーの目盛りより細かい) */
   let clock = $state(Date.now());
 
   /**
-   * エンコードが終わったら観る画面へ案内する (CM飛ばし・チャプター・データ放送が揃う)。録画の通知が来るたびに
+   * エンコードが終わったら観る画面へ案内する (CM 飛ばし・チャプター・データ放送が揃う)。録画の通知が来るたびに
    * 状態を読む。勝手には移らない。移ると観ている最中に位置が飛ぶ。途中の位置は続き再生が覚えている
    */
   let encoded = $state(false);
@@ -218,7 +218,7 @@
     player.chaseSeek(Math.max(0, Math.min(value, Math.max(0, recorded - 5))));
   }
 
-  /** いまの場所から送る・戻す。キーと端2回タップが使う */
+  /** いまの場所から送る・戻す。キーと端 2 回タップが使う */
   function seekBy(seconds: number): void {
     seekTo(pos + seconds);
   }
@@ -242,7 +242,7 @@
   });
 
   /**
-   * 視聴位置をサーバへ (15秒おき)。エンコードが終わったら、観る画面の続き再生がここから読む
+   * 視聴位置をサーバへ (15 秒おき)。エンコードが終わったら、観る画面の続き再生がここから読む
    * (送り方は観る画面と共通。`#lib/resume.ts`)
    */
   function sendResume(leaving = false): void {
@@ -323,7 +323,7 @@
     stepVolume: volume.step,
   });
 
-  /** いまの1コマを字幕・コメントごと切り抜いてサーバに保存する (ライブ・観る画面と同じ。`shot.svelte.ts`) */
+  /** いまの 1 コマを字幕・コメントごと切り抜いてサーバに保存する (ライブ・観る画面と同じ。`shot.svelte.ts`) */
   const shooter = snapshotter(controls);
   const notices = $derived<Notice[]>([...shooter.notices, ...pip.notices]);
   function snapshot(): void {
@@ -454,7 +454,7 @@
             />
           {/if}
 
-          <!-- 読みものは3画面共通の二段 (InfoBlock)。上が番組、下が位置 -->
+          <!-- 読みものは 3 画面共通の二段 (InfoBlock)。上が番組、下が位置 -->
           <InfoBlock
             range={{ start: data.rec.start_at, end: data.rec.end_at }}
             service={data.rec.service_name}
@@ -612,7 +612,7 @@
   }}
 />
 
-<!-- 運転中の注意 (互換モードで初めて再生する前に1回)。押すまで再生を始めない -->
+<!-- 運転中の注意 (互換モードで初めて再生する前に 1 回)。押すまで再生を始めない -->
 <DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>

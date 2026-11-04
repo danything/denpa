@@ -11,7 +11,7 @@ import {
 } from "./hw";
 
 /*
- * 設定画面ではコーデックごとにエンコーダを1つ選ぶ (`hwChoice` / `chooseHw`)。
+ * 設定画面ではコーデックごとにエンコーダを 1 つ選ぶ (`hwChoice` / `chooseHw`)。
  * 持ち方はデバイス × 方式 × コーデックの `hwAllow` のまま
  */
 const A: HwUsable = {

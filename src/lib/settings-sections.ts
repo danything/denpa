@@ -1,5 +1,5 @@
 /**
- * **設定のグループと節の並び。** グループごとに1つの画面 (`/settings/<グループ>`) があり、
+ * **設定のグループと節の並び。** グループごとに 1 つの画面 (`/settings/<グループ>`) があり、
  * 節はその画面に上から積む。節へは `#<節>` で飛ぶ。左の一覧 (`routes/settings/+layout.svelte`) はこの順に
  * グループと、その下に節を出す。フォームと保存 (actions) はグループの画面が持つ。
  *
@@ -72,7 +72,7 @@ export const MOVED_SECTIONS: Readonly<Record<string, string>> = {
   diagnostics: "general#version",
   tuners: "reception#tuners",
   channels: "reception#channels",
-  // ロゴの節は受信できるチャンネルの表に入った (局ロゴ・CMロゴの列)
+  // ロゴの節は受信できるチャンネルの表に入った (局ロゴ・CM ロゴの列)
   logos: "reception#channels",
   broadcast: "reception#broadcast",
   notifications: "integrations#notifications",

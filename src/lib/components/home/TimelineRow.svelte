@@ -1,9 +1,9 @@
 <script lang="ts">
   /**
-   * 時間軸の1行 (予約・録画・録り逃し)。どれも同じ形にする: (録れたものは) ポスター、
-   * 時刻と番組名、局と尺、右に押すもの。状態を言うときだけ下に段を足す (`RowActivity`。2段まで):
+   * 時間軸の 1 行 (予約・録画・録り逃し)。どれも同じ形にする: (録れたものは) ポスター、
+   * 時刻と番組名、局と尺、右に押すもの。状態を言うときだけ下に段を足す (`RowActivity`。2 段まで):
    * いま動いているもの (録画中・エンコード中・端末に保存中) と、黙っていると「録れたつもり」になるもの
-   * (競合・失敗・欠ける・ロゴでCMを判定できなかった)
+   * (競合・失敗・欠ける・ロゴで CM を判定できなかった)
    */
   import "@anyblades/blades/components/progress";
   import type { SubmitFunction } from "$app/forms";
@@ -52,7 +52,7 @@
 
   /**
    * 置き場の使用量。**主を先に出し、あるものだけ括弧に添える** (`ts_size` は主のぶんだけ。
-   * 残りは `+page.server.ts` の `raw_size`・`hevc_size`・`alt_size`)。「消していいのか、どれだけ空くのか」を1行で読めるように
+   * 残りは `+page.server.ts` の `raw_size`・`hevc_size`・`alt_size`)。「消していいのか、どれだけ空くのか」を 1 行で読めるように
    */
   function sizeLabel(rec: Rec): string {
     const extra = [
@@ -89,7 +89,7 @@
       : [{ kind: "clip", tone: "warning", label: note }];
   }
 
-  /** 「● 録画中・あと21分」(あと何分かは `ctx.clock` で進む) */
+  /** 「● 録画中・あと 21 分」(あと何分かは `ctx.clock` で進む) */
   function recordingLine(
     label: string,
     end: number,
@@ -105,7 +105,7 @@
     };
   }
 
-  /** 予約の行の段。見てほしい状態 (競合・失敗・録画しない・取り消し済み) は理由と1段に */
+  /** 予約の行の段。見てほしい状態 (競合・失敗・録画しない・取り消し済み) は理由と 1 段に */
   function resLines(res: Res, live: boolean): RowStatus[] {
     if (live)
       return statusLines(
@@ -134,7 +134,7 @@
 
   /**
    * 録画の行の段。動いているもの (エンコード・待ち・録画中・端末に保存中) が先、
-   * 問題 (失敗・欠けた・ロゴでCMを判定できなかった・端末に保存できなかった) が後
+   * 問題 (失敗・欠けた・ロゴで CM を判定できなかった・端末に保存できなかった) が後
    */
   function recLines(rec: Rec): RowStatus[] {
     const shown = rowState(rec);
@@ -198,7 +198,7 @@
     return statusLines(activities, problems);
   }
 
-  /** 「45.0%・あと3分04秒」。SSE で届く進み (`encode-live`) があればそちら。読み直しを待たずに動く */
+  /** 「45.0%・あと 3 分 04 秒」。SSE で届く進み (`encode-live`) があればそちら。読み直しを待たずに動く */
   function encodeLine(rec: Rec): string {
     return encodeDetail(encodeLive.entries[rec.id], rec);
   }
@@ -267,7 +267,7 @@
       {/if}
     </div>
     <!--
-      録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは3段目が言う)。
+      録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは 3 段目が言う)。
       いちばん上の録画中の行は、バーの先に「いま」の時刻を出す (線の代わり。`TimelineHeading`)
     -->
     {#if item.zone === "now" && res.end_at > res.start_at}
@@ -330,7 +330,7 @@
       />
     </div>
     <div class="row-actions">
-      <!-- 2回押しの鍵は負の値にして、録画のIDと混ざらないようにする (deleting は録画と共用) -->
+      <!-- 2 回押しの鍵は負の値にして、録画の ID と混ざらないようにする (deleting は録画と共用) -->
       <ArmedDelete
         deleting={ctx.deleting}
         armKey={-res.id}
@@ -350,7 +350,7 @@
 
 <!--
     録画の行。押すと再生 (録っている最中は追っかけ)。中身を読みたいときは行の「詳細」から。
-    置き場と尺と切ったCMの位置は属性にだけ持たせる (確かめる手段は残しておきたい)
+    置き場と尺と切った CM の位置は属性にだけ持たせる (確かめる手段は残しておきたい)
 -->
 {#snippet recRow(item: Item & { kind: "rec" }, nested: boolean)}
   {@const rec = item.rec}
@@ -361,7 +361,7 @@
   {@const openDetail = () => ctx.openRecording(rec)}
   <!--
         **途中まで観たものは残りを出す。** 観た位置は続きから始めるために持っていて、末尾まで観たものは
-        消えるので、残っている = まだ途中。ポスターの下端に細いバー、2段目に「残り何分」
+        消えるので、残っている = まだ途中。ポスターの下端に細いバー、2 段目に「残り何分」
     -->
   {@const progress = link === null ? null : rec.progress}
   <div
@@ -436,7 +436,7 @@
     </div>
     <div class="row-actions">
       {#if link !== null || canDelete}
-        <!-- 狭い画面では詳細と削除を「⋯」1つにまとめ、番組名に幅を回す (削除は行の削除と同じ2回押し `deleting`) -->
+        <!-- 狭い画面では詳細と削除を「⋯」1 つにまとめ、番組名に幅を回す (削除は行の削除と同じ 2 回押し `deleting`) -->
         <div class="row-more">
           <Menu
             side="bottom"
@@ -522,8 +522,8 @@
       {/if}
       {#if rec.deleted_at === null}
         {#if rec.job_id !== null}
-          <!-- 動いている間は中断だけ。裏で ffmpeg が元のTSを読んでいるので、消させると道連れになる。
-                        狭い画面はアイコンだけ (3段目のエンコードの進みに幅を回す。字は読み上げに残す) -->
+          <!-- 動いている間は中断だけ。裏で ffmpeg が元の TS を読んでいるので、消させると道連れになる。
+                        狭い画面はアイコンだけ (3 段目のエンコードの進みに幅を回す。字は読み上げに残す) -->
           {#if rec.job_canceling}
             <button
               type="button"

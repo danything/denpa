@@ -11,7 +11,7 @@
   const migrate = $derived(data.migrate.status);
 </script>
 
-<!-- EPGStation の節と同じ作り。進み具合はサーバに1つだけなので、EDCB を走らせたときだけここに出す -->
+<!-- EPGStation の節と同じ作り。進み具合はサーバに 1 つだけなので、EDCB を走らせたときだけここに出す -->
 <div class="sections readable">
   <section class="section">
     <div class="section-head">
