@@ -2,7 +2,7 @@
  * **録画の観る画面で、回線に合わせて画質の段を上げ下げする** (段の決め方は `adapt.ts`、段の表は `rungs.ts`、
  * 切り替えは `remux-player.ts` の `switchTo`。docs/stream.md「回線に合わせて画質を下げる」)。
  *
- * ここは刻みと送り出しの具合 (`pace`) の読み出し、画面に出す文言だけを持つ。どの経路に移すか (ファイルの直再生から
+ * ここは 1 秒ごとの呼び出しと送り出しの状態 (`pace`) の読み出し、画面に出す文言だけを持つ。どの経路に移すか (ファイルの直再生から
  * 変換へ移す・同じ MSE のまま替える・音声だけは作り直す) は観る画面が決める。DOM は触らないので、ここだけ単体で確かめられる
  */
 
@@ -16,7 +16,7 @@ import { CODEC_LABEL } from "./hw";
 import type { LiveCodec } from "./live";
 import { type Pace, type Rung, rungLabel } from "./rungs";
 
-/** 刻みの間 (ms)。`adapt.ts` の数 (2〜3 秒続いたら) を読み分けられる細かさ */
+/** `adapt.ts` を呼ぶ間隔 (ms)。`adapt.ts` の数 (2〜3 秒続いたら) を読み分けられる細かさ */
 export const ADAPT_TICK = 1_000;
 /** 送り出しの具合を読み直す間 (ms)。WebSocket の `pace` と同じ 2 秒ごと */
 export const PACE_EVERY = 2_000;
@@ -61,7 +61,7 @@ export function busyNote(down: boolean): string {
     : "サーバが混んでいるため、画質を上げられませんでした";
 }
 
-/** 刻むたびに観る画面が渡すもの。`now`・`route`・`pace` はここで足す */
+/** 呼ぶたびに観る画面が渡すもの。`now`・`route`・`pace` はここで足す */
 export type WatchSample = Omit<AdaptSample, "now" | "route" | "pace"> & {
   /** 送り出しの具合を読む id (`remux-player.ts` の `StreamHeard`)。ファイルの直再生なら null */
   paceId: string | null;
@@ -79,7 +79,7 @@ export interface WatchAdaptHost {
 }
 
 export interface WatchAdapt {
-  /** 刻む (`ADAPT_TICK` ごと) */
+  /** `adapt.ts` を呼ぶ (`ADAPT_TICK` ごと) */
   tick(): void;
   /** シーク・CM スキップのあと。段は持ち越し、測った値だけ捨てる */
   reset(): void;
@@ -93,7 +93,7 @@ export function watchAdapt(host: WatchAdaptHost): WatchAdapt {
   let paceOf: string | null = null;
   let paceAt = Number.NEGATIVE_INFINITY;
   let reading = false;
-  /** 前の刻みで様子を読めなかったか (止めていた・切り替えの最中) */
+  /** 前の呼び出しで様子を読めなかったか (止めていた・切り替えの最中) */
   let idle = true;
 
   function poll(id: string | null, at: number): void {
