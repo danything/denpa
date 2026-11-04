@@ -2900,7 +2900,8 @@ type Asked =
       serviceId: number;
       /** 省かれていれば主音声 (`nowPlaying` が決める) */
       audio: string | undefined;
-      codec: LiveCodec;
+      /** `audio` は音声だけ (回線に合わせて下げる最後の手。`TuneCommand.codec`) */
+      codec: StreamCodec;
       caption: number;
       /** 字幕の第何言語か。省かれていれば前のまま (`Viewer.language`) */
       language: number | undefined;
@@ -2989,7 +2990,8 @@ export function parseCommand(message: Record<string, unknown>): Asked | null {
         channel,
         serviceId: Number(message["serviceId"]),
         audio,
-        codec,
+        // 音声だけは選局のときだけ受ける (追っかけには無い)
+        codec: asked === "audio" ? "audio" : codec,
         caption,
         language,
         raw: message["raw"] === true,
@@ -3079,9 +3081,13 @@ export function attend(connection: Connection): void {
      */
     const downgraded = asked.codec === "hevc" && !raw && !liveHevc();
     const plain = downgraded ? "h264" : asked.codec;
-    // 段を下げるなら、コーデックはサーバが選ぶ (`rungCodec`)。放送そのままでは下げない
+    /*
+     * 段を下げるなら、コーデックはサーバが選ぶ (`rungCodec`)。放送そのままでは下げない。
+     * 音声だけは段で音声のビットレートだけを下げる (`audioArgs`)。映像をエンコードしないので枠は使わない
+     */
     let rung: Rung = raw ? 0 : asked.rung;
-    let codec = rung === 0 ? plain : rungCodec(asked.playable, true);
+    let codec: StreamCodec =
+      rung === 0 || plain === "audio" ? plain : rungCodec(asked.playable, true);
 
     const now = nowPlaying(serviceId, audio);
 
@@ -3093,7 +3099,7 @@ export function attend(connection: Connection): void {
      * 押しても新しく起こさない。画面は待ち続けるだけになる。
      * `form` を省くと、段とコーデックは見ずに局・音声・字幕だけを比べる (下の枠の話)
      */
-    const sameAs = (form?: { codec: LiveCodec; rung: Rung }): boolean =>
+    const sameAs = (form?: { codec: StreamCodec; rung: Rung }): boolean =>
       current?.alive === true &&
       current.channelType === channelType &&
       current.channel === channel &&
@@ -3115,7 +3121,7 @@ export function attend(connection: Connection): void {
      */
     let release: (() => void) | null = () => undefined;
     let refused = false;
-    if (rung !== 0 && !same) {
+    if (rung !== 0 && !same && codec !== "audio") {
       const shared = () =>
         sharedSession(
           channelType,
