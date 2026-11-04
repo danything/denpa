@@ -1,10 +1,10 @@
 /**
- * **1局に絞った TS から、映像と音声の PES を取り出す** (denpa のライブを変換せずに送る経路。docs/stream.md#放送そのままmpeg-2を送る)。
+ * **1 局に絞った TS から、映像と音声の PES を取り出す** (denpa のライブを変換せずに送る経路。docs/stream.md#放送そのまま mpeg-2 を送る)。
  *
  * エンコードする経路ではここを ffmpeg がやっていた。変換せずに送ると TS がそのままブラウザへ来るので、
  * 映像も音声も WASM のデコーダ (denpa の `wasm/decoder.c`) に渡す前に、
- * こちらで PES に戻す。サーバが1局に絞ってある (`ServiceFilter`) ので、PAT に
- * 載っている局は1つだけ — その PMT を読んで、映像1本と音声 (並んだ順) を取り出す。
+ * こちらで PES に戻す。サーバが 1 局に絞ってある (`ServiceFilter`) ので、PAT に
+ * 載っている局は 1 つだけなので、その PMT を読んで、映像 1 本と音声 (並んだ順) を取り出す。
  *
  * DOM も WASM も触らないので、ここだけ単体で確かめられる (`pes.test.ts`)。
  */
@@ -21,7 +21,7 @@ import {
 
 /** PTS・PCR の刻み (90kHz)。denpa の取り決めの時刻もこの刻み (docs/stream.md#websocket-プロトコル) */
 export const CLOCK = 90_000;
-/** PTS の一周 (33ビット)。26.5 時間 */
+/** PTS の一周 (33 ビット)。26.5 時間 */
 export const WRAP = 2 ** 33;
 
 /** PMT の stream_type。**放送の映像は MPEG-2、音声は ADTS の AAC** (ARIB STD-B32) */
@@ -39,13 +39,13 @@ export interface Pes {
   data: Uint8Array;
 }
 
-/** PMT から分かったこと。**音声は並んだ順** — 画面の「何本目の音声」(`AudioTrack.stream`) と揃う */
+/** PMT から分かったこと。**音声は並んだ順** (画面の「何本目の音声」`AudioTrack.stream` と揃う) */
 export interface Streams {
   video: number | null;
   audio: number[];
 }
 
-/** 5バイトの PTS / DTS を読む (ISO/IEC 13818-1 2.4.3.7) */
+/** 5 バイトの PTS / DTS を読む (ISO/IEC 13818-1 2.4.3.7) */
 export function readStamp(data: Uint8Array, at: number): number {
   return (
     ((data[at]! >> 1) & 0x07) * 2 ** 30 +
@@ -84,24 +84,24 @@ const PES_START = 64 * 1024;
 interface Partial {
   buffer: Uint8Array;
   size: number;
-  /** 書いてある長さ (頭の6バイトを含む)。0 なら次の頭まで */
+  /** 書いてある長さ (頭の 6 バイトを含む)。0 なら次の頭まで */
   expected: number;
 }
 
 /**
- * TS を食わせて PES を吐く。**選局し直したら作り直す** (前の局の切れ端を持ち越さない)。
+ * TS を渡すと PES を返す。**選局し直したら作り直す** (前の局の切れ端を持ち越さない)。
  *
- * 映像は長さ 0 (次の頭で終わりが分かる) なので1枚ぶん遅れて出るが、貯めの中に収まる。
+ * 映像は長さ 0 (次の頭で終わりが分かる) なので 1 枚ぶん遅れて出るが、貯めの中に収まる。
  * 音声は長さが書いてあるので揃った時点で出す
  */
 export class PesDemuxer {
   private readonly packets = new PacketStream();
-  /** 絞ってあるので局は1つだけのはず。万一複数あっても先頭を採る */
+  /** 絞ってあるので局は 1 つだけのはず。万一複数あっても先頭を採る */
   private readonly pmt = new PmtTracker();
   private readonly partial = new Map<number, Partial>();
   /** いま分かっている ES。**変わったら `feed` の返りで知らせる** */
   streams: Streams = { video: null, audio: [] };
-  /** デコードする音声の PID。**選ばれた1本だけ**組み立てる (他は捨てる) */
+  /** デコードする音声の PID。**選ばれた 1 本だけ**組み立てる (他は捨てる) */
   audioPid: number | null = null;
   /** 何本目の音声を取り出すか (`AudioTrack.stream`)。無ければ先頭に落とす */
   audioIndex = 0;
@@ -229,14 +229,14 @@ export interface AdtsFrame {
   pts: number;
   sampleRate: number;
   channels: number;
-  /** このコマの長さ (90kHz)。AAC は1コマ 1024 標本 */
+  /** このコマの長さ (90kHz)。AAC は 1 コマ 1024 標本 */
   duration: number;
 }
 
 /**
  * PES の中身を ADTS のコマに割る。**コマは PES をまたぐことがある**ので、余りは持ち越す。
  *
- * 時刻は PES の PTS を頭のコマに付け、続くコマには1コマぶんずつ足す。持ち越した
+ * 時刻は PES の PTS を頭のコマに付け、続くコマには 1 コマぶんずつ足す。持ち越した
  * 余りから始まるコマは、前の続きの時刻になる
  */
 export class AdtsSplitter {
@@ -272,7 +272,7 @@ export class AdtsSplitter {
           data: buffer.slice(at, at + length),
           pts: this.next,
           sampleRate: rate,
-          // 0 は「中身に書いてある」(PCE)。放送のデュアルモノはここに来るので、2本とみなす
+          // 0 は「中身に書いてある」(PCE)。放送のデュアルモノはここに来るので、2 本とみなす
           channels: channels === 0 ? 2 : channels,
           duration,
         });
@@ -295,7 +295,7 @@ export class AdtsSplitter {
 }
 
 /**
- * **33ビットで一周する時刻を、手元の物差しの近くへ伸ばす。**
+ * **33 ビットで一周する時刻を、手元の物差しの近くへ伸ばす。**
  *
  * PTS は 26.5 時間で 0 に戻る。受け側は「いま鳴らしている時刻」を一周をまたいでも
  * 増え続ける数で持つので、届いた時刻は**それにいちばん近い周**に置き直して比べる

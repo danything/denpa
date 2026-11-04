@@ -828,6 +828,17 @@ describe("チャンネル", () => {
     expect(put.status).toBe(400);
     expect(readFileSync(paths().channels, "utf8")).toBe(before);
   });
+
+  test("文字列でない値の差し替えは 400 で断る", async () => {
+    const before = readFileSync(paths().channels, "utf8");
+    for (const body of [
+      { scanned: [1], channels: [{ type: "GR", channel: "T27" }] },
+      { scanned: ["GR"], channels: [{ type: "GR", channel: 27 }] },
+    ]) {
+      expect((await request("PUT", "/denpa/channels", body)).status).toBe(400);
+    }
+    expect(readFileSync(paths().channels, "utf8")).toBe(before);
+  });
 });
 
 /** `/denpa/logs` の形式 (agent/Denpa.Agent/Json.cs の LogRing) */
@@ -1118,6 +1129,11 @@ describe("カードとスクランブルの復号", () => {
     expect(readFileSync(join(paths().recorded, "keep-out.ts"), "utf8")).toBe(
       "録画",
     );
+  });
+
+  test("復号のパスが文字列でなければ 400", async () => {
+    const res = await post("/denpa/decode", { input: 5, output: "x.ts" });
+    expect(res.status).toBe(400);
   });
 
   test("置き場の外は復号に回さない", async () => {

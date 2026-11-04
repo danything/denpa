@@ -3,7 +3,7 @@
  *
  * - XML として 1 か所でも崩れていると、DOMParser は文書ごと `parsererror` にする。放送の
  *   文書は受信機向けに作られていて、閉じ忘れや `&` をそのまま書いたものがあっても受信機は読む。
- *   こちらも寛容に読む (閉じていない要素は親が閉じるときに閉じる、知らない実体参照はそのまま)
+ *   こちらも寛容に読む (閉じていない要素は親が閉じるときに閉じる、ほかの実体参照はそのまま)
  * - 単体テスト (bun) に DOM が無くても動く
  *
  * 名前は小文字にそろえる。`bml:` などの前置きは落とす (C プロファイルの名残)。
@@ -44,7 +44,7 @@ const ENTITIES: Record<string, string> = {
   apos: "'",
 };
 
-/** 実体参照を開く。知らないものはそのまま残す */
+/** 実体参照を開く。`ENTITIES` の 5 つと数字の参照のほかはそのまま残す */
 export function decodeEntities(text: string): string {
   if (!text.includes("&")) return text;
   return text.replace(

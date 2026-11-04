@@ -8,7 +8,7 @@
  * ```
  * PMT ─ ES に application_signalling_descriptor (0x6F) ─→ その PID に AIT
  * AIT ─ transport_protocol_descriptor (URL の頭)
- *     └ simple_application_location_descriptor (その先のパス)  →  アプリのURL
+ *     └ simple_application_location_descriptor (その先のパス)  →  アプリの URL
  * ```
  *
  * ここは読んで在ることを言うだけです。開くのはデータ放送が起動を求めたときで
@@ -89,7 +89,7 @@ export interface Ait {
 /**
  * PMT から「AIT が流れている PID」を読み取る。
  *
- * **記述子が付いている ES を見るだけ。** `stream_type` では決められません —
+ * **記述子が付いている ES を見るだけ。** `stream_type` では決められません。
  * AIT は DSM-CC セクション (0x0D) で運ばれ、データ放送のカルーセルと同じ型を
  * 名乗るので、型だけでは見分けが付きません
  */
@@ -124,8 +124,8 @@ function transportUrl(body: Uint8Array): string | null {
 /**
  * 名前を取り出す (application_name_descriptor)。
  *
- * 言語ごとに何本も入っていることがあるので**最初の1本**を採ります。中身は
- * ARIB の8単位符号なので、番組名と同じ方法で読みます (`aribtext.ts`)
+ * 言語ごとに何本も入っていることがあるので**最初の 1 本**を採ります。中身は
+ * ARIB の 8 単位符号なので、番組名と同じ方法で読みます (`aribtext.ts`)
  */
 function applicationName(body: Uint8Array): string {
   // [0..2] ISO_639_language_code, [3] application_name_length
@@ -136,7 +136,7 @@ function applicationName(body: Uint8Array): string {
 }
 
 /**
- * AIT のセクションを1つ読む。**壊れていたら `null`** (放送は途中から読むので、
+ * AIT のセクションを 1 つ読む。**壊れていたら `null`** (放送は途中から読むので、
  * 読めないものが来るのは普通のこと)
  */
 export function parseAit(section: Uint8Array): Ait | null {
@@ -189,16 +189,16 @@ export function parseAit(section: Uint8Array): Ait | null {
 /**
  * TS から Hybridcast のアプリを見つける。
  *
- * **PMT を見てから AIT を読む** という2段なので、繋いだ直後は何も返しません。
+ * **PMT を見てから AIT を読む** という 2 段なので、繋いだ直後は何も返しません。
  * 局を変えたら作り直します。
  *
- * 局に Hybridcast が無ければ、**PMT に印が無い**ので AIT を待つこともしません
- * — その局では永久に何も返さないのが正しい振る舞いです。
+ * 局に Hybridcast が無ければ、**PMT に印が無い**ので AIT を待つこともしません。
+ * その局では永久に何も返さないのが正しい振る舞いです。
  */
 export class AitReader {
   private readonly packets = new PacketStream();
   private readonly pmt: PmtTracker;
-  /** AIT を組み立てるもの。PID ごとに1つ */
+  /** AIT を組み立てるもの。PID ごとに 1 つ */
   private aits = new Map<number, SectionAssembler>();
 
   constructor(serviceId: number) {
@@ -206,9 +206,9 @@ export class AitReader {
   }
 
   /**
-   * TS を食べて、見つかったものを返す。**見つからない間は空**。
+   * TS を読んで、見つかったものを返す。**見つからない間は空**。
    *
-   * 同じものが何度も返るのは呼ぶ側で畳んでください — 放送は同じ表を
+   * 同じものが何度も返るのは呼ぶ側で畳んでください。放送は同じ表を
    * 繰り返し流すので、ここで覚えると「局を変えても消えない」になります
    */
   public feed(chunk: Uint8Array): Ait[] {
@@ -218,7 +218,7 @@ export class AitReader {
     return found;
   }
 
-  /** 切り分け済みのパケットを1つ。見つかったものは `found` に足す (`BmlDecoder.feedPacket` と同じ事情) */
+  /** 切り分け済みのパケットを 1 つ。見つかったものは `found` に足す (`BmlDecoder.feedPacket` と同じ事情) */
   public feedPacket(packet: Uint8Array, found: Ait[]): void {
     const pid = packetPid(packet);
     const before = this.pmt.pid;

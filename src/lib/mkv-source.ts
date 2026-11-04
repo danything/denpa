@@ -1,7 +1,7 @@
 /**
  * **端末に保存した録画 (Matroska の Blob) を、canvas に描くプレイヤーへ流す入口** (互換モード。`canvas-player.ts` の `request`)。
  *
- * サーバの `/stream` の代わりに、Blob を切り出して流す:
+ * サーバの `/stream` の代わりに、Blob を切り出して流す。
  *
  * - 開くときに先頭 (最初の Cluster まで: Info・Tracks) と、飛ぶ位置の表 (Cues。SeekHead が在りかを言う) を読む
  * - `from` 秒から観るときは、表で `from` より手前のいちばん近い Cluster を引き、**先頭 + その Cluster から末尾まで**

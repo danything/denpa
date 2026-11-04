@@ -271,7 +271,7 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>
     /// 開いた接続でカードに電源を入れ、INT と IDI を読む。**B-CAS でなければ投げる。**
-    /// 予備のリーダーを覗くのにも使う (<see cref="Card.Status"/>)
+    /// 予備のリーダーを覗くのにも使う (Card.cs の Peek と、Probe.cs の CECH-ZD1 J のカード)
     /// </summary>
     internal static CardInit Read(ICardLink link)
     {

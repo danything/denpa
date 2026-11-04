@@ -1,7 +1,6 @@
 import type { CaptionLanguage } from "@danything/arib/caption-text";
 
-import type { Step } from "#lib/adapt.js";
-import { stepFormatLabel } from "#lib/live-adapt.js";
+import { type Step, stepLabel } from "#lib/adapt.js";
 import {
   formatLabel,
   type LiveChoice,
@@ -102,7 +101,7 @@ export function liveCodecs(opts: {
     icon: opts.icon,
     value:
       opts.choice === "auto"
-        ? `自動 (${stepFormatLabel(opts.format, opts.step ?? 0)})`
+        ? `自動 (${stepLabel(opts.step ?? 0, formatLabel(opts.format))})`
         : formatLabel(opts.choice),
     options: [
       { key: AUTO, label: "自動", active: opts.choice === "auto" },
@@ -127,12 +126,14 @@ export function liveCodecs(opts: {
 
 /**
  * 観る画面のコーデック。録画ごとに観られるものが違い、「自動」も並ぶので、並びは渡されたまま
- * (`ts/playback.ts` の `codecChoices`)。`disabled` は互換モードでこの端末が描けない形式 (`canvasChoices`)
+ * (`ts/playback.ts` の `codecChoices`)。`disabled` は互換モードでこの端末が描けない形式 (`canvasChoices`)。
+ * 「自動」を選んでいる間の行の値は `auto` (段を下げていれば「自動 (H.264 540p)」。選択肢の名前は「自動」のまま)
  */
 export function recordingCodecs(opts: {
   icon: IconShape;
   choices: { key: string; label: string; disabled?: boolean }[];
   selected: string;
+  auto: string;
   onpick: (key: string) => void;
 }): SettingChoice {
   return {
@@ -140,8 +141,11 @@ export function recordingCodecs(opts: {
     label: "コーデック",
     icon: opts.icon,
     value:
-      (opts.choices.find((c) => c.key === opts.selected) ?? opts.choices[0])
-        ?.label ?? "",
+      opts.selected === "auto"
+        ? opts.auto
+        : ((
+            opts.choices.find((c) => c.key === opts.selected) ?? opts.choices[0]
+          )?.label ?? ""),
     options: opts.choices.map((c) => ({
       key: c.key,
       label: unplayable(c.label, c.disabled === true),

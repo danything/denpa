@@ -662,6 +662,25 @@ public class Dt295Tests
     }
 
     [Test]
+    public async Task 衛星は映像と_PCR_だけを専用のスロットに入れ_音声と_PMT_は一般のスロットに入れる()
+    {
+        // 専用のスロットに音声と PMT を入れると、機材が音声を流さず PMT の ES の一覧を映像だけに書き換える (実機の BS1)
+        var main = new Dt295Program(0x0400, 0x1F0, 0x113, 0x111, 0x02, 0x112, 0x0F);
+        var terrestrial = Dt295Routes.Plan(main, [0x0010]).ToDictionary(route => route.Pid);
+        await Assert.That(terrestrial[0x111].Slot).IsEqualTo(0);
+        await Assert.That(terrestrial[0x112].Slot).IsEqualTo(1);
+        await Assert.That(terrestrial[0x1F0].Slot).IsEqualTo(2);
+        await Assert.That(terrestrial[0x113].Slot).IsEqualTo(3);
+
+        var satellite = Dt295Routes.Plan(main, [0x0010, 0x112, 0x1F0], satellite: true).ToDictionary(route => route.Pid);
+        await Assert.That(satellite[0x111].Slot).IsEqualTo(0);
+        await Assert.That(satellite[0x113].Slot).IsEqualTo(3);
+        await Assert.That(satellite[0x112].Slot).IsGreaterThanOrEqualTo(5);
+        await Assert.That(satellite[0x1F0].Slot).IsGreaterThanOrEqualTo(5);
+        await Assert.That(satellite.Values.Any(route => route.Slot is 1 or 2)).IsFalse();
+    }
+
+    [Test]
     public async Task ルートをレジスターに書く()
     {
         var usb = new FakeDt295Usb();

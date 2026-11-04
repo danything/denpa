@@ -641,7 +641,7 @@ export class Vm {
           break;
         }
         default:
-          throw new Error(`知らない命令 ${op}`);
+          throw new Error(`定義されていない命令 ${op}`);
       }
     }
   }

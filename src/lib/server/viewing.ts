@@ -15,7 +15,8 @@ import {
   type LiveFormat,
   readChoice,
 } from "../live-choice";
-import { liveHevc } from "./live";
+import { parseRung, type Rung } from "../rungs";
+import { liveHevc, parsePlayable, rungCodec } from "./live";
 import { settings } from "./settings";
 
 /** 観るときの決まり。画面の load と `GET /api/playback/options` が同じものを返す */
@@ -37,9 +38,125 @@ interface ViewingOptions {
 export function viewingOptions(url: URL, hevc = liveHevc()): ViewingOptions {
   const current = settings();
   return {
-    indoor: indoorHost(url.hostname, current.indoorHosts),
+    indoor: indoorOf(url),
     hidden: current.hideH264Hevc ? [...HIDDEN_CODECS] : [],
     hevc,
+  };
+}
+
+/** リクエストの URL の名前が家の中か (`#lib/host.ts` の `indoorHost`。世帯の設定の「家の中の名前」も見る) */
+export function indoorOf(url: URL): boolean {
+  return indoorHost(url.hostname, settings().indoorHosts);
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * **`codec=auto` (テレビのアプリ向け)。** 端末は再生できる形式 (`?playable=`) を送り、サーバが「自動」の順
+ * (`autoOrder`) で選んで、応答ヘッダ `X-Denpa-Codec` で返す。順番を端末に持たせない (docs/api.md「形式をサーバに選ばせる」)
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * `?playable=` (`,` 区切り。`raw` / `av1` / `hevc` / `h264`) を読む。**省けば H.264 だけ** (どの端末でも再生できる)。
+ * 知らない値は捨て、重なりはまとめる。並びの順は使わない。何も残らなければ null (呼ぶ側が 406 にする)
+ */
+export function parseFormats(value: string | null): LiveFormat[] | null {
+  if (value === null) return ["h264"];
+  const known = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(
+      (item): item is LiveFormat =>
+        item === "raw" || item === "av1" || item === "hevc" || item === "h264",
+    );
+  return known.length === 0 ? null : [...new Set(known)];
+}
+
+/** ライブと追っかけのどちらか。**追っかけは段 0 では H.265 を出さない** (段を下げるときは `rungCodec` が選ぶ。WebSocket の `chase` と同じ) */
+type AutoScene = "live" | "chase";
+
+/**
+ * **`codec=auto` で流す形式。** 段 0 は `autoCodec` (家の中なら MPEG-2 → H.264 → AV1 → H.265、外なら AV1 → H.265 → H.264) で、
+ * 端末が再生できて (`formats`)、その場面で出せる最初のもの。H.265 はライブで、エンコーダが GPU のとき (`hevc`) だけ。
+ * 段を下げるなら、今までどおり `rungCodec` (`raw` は並びから外す)。選べなければ null。
+ * `hevc` と `pick` はテストで差し替えるときだけ渡す
+ */
+export function autoFormat(o: {
+  scene: AutoScene;
+  formats: readonly LiveFormat[];
+  indoor: boolean;
+  rung: Rung;
+  hevc?: boolean;
+  pick?: Parameters<typeof rungCodec>[2];
+}): LiveFormat | null {
+  if (o.rung !== 0) {
+    const codecs = o.formats.filter(
+      (format): format is LiveCodec => format !== "raw",
+    );
+    // `rungCodec` は何も合わなければ H.264 を返す。端末が H.264 を再生できないと言っていれば選ばない
+    const codec = rungCodec(codecs, true, o.pick);
+    return codecs.includes(codec) ? codec : null;
+  }
+  const has = (format: LiveFormat) => o.formats.includes(format);
+  return autoCodec({
+    indoor: o.indoor,
+    rawOk: has("raw"),
+    av1: has("av1"),
+    hevc: o.scene === "live" && has("hevc") && (o.hevc ?? liveHevc()),
+    h264: has("h264"),
+    compat: false,
+  });
+}
+
+/**
+ * **HTTP の `live`・`chase` が流す形式と段** (`?codec=`・`?rung=`・`?playable=`)。音声だけ (`?audio=only`) は呼ぶ側が先に見る。
+ *
+ * - `codec=auto` … `autoFormat`。選べなければ null (呼ぶ側が 406「再生できる形式がありません」にする)
+ * - `codec=h264` (省いたとき・知らない値も) / `av1` / `raw`、ライブなら `hevc` も … そのまま。H.265 を出せなければ H.264 にする
+ *   (応答ヘッダで分かる。WebSocket の `tune` と同じ)。段を下げるならコーデックは `rungCodec` が `?playable=` から選ぶ
+ * - `raw` は段を下げない
+ *
+ * `hevc` と `pick` はテストで差し替えるときだけ渡す
+ */
+export function askedFormat(
+  url: URL,
+  scene: AutoScene,
+  test: { hevc?: boolean; pick?: Parameters<typeof rungCodec>[2] } = {},
+): { codec: LiveFormat; rung: Rung } | null {
+  const query = url.searchParams;
+  const asked = query.get("codec");
+  if (asked === "auto") {
+    const formats = parseFormats(query.get("playable"));
+    if (formats === null) return null;
+    const rung = parseRung(query.get("rung"));
+    const codec = autoFormat({
+      scene,
+      formats,
+      indoor: indoorOf(url),
+      rung,
+      ...test,
+    });
+    return codec === null ? null : { codec, rung: codec === "raw" ? 0 : rung };
+  }
+  const hevc = scene === "live" && asked === "hevc";
+  const plain: LiveFormat =
+    asked === "av1" || asked === "raw"
+      ? asked
+      : hevc && (test.hevc ?? liveHevc())
+        ? "hevc"
+        : "h264";
+  if (plain === "raw") return { codec: "raw", rung: 0 };
+  const rung = parseRung(query.get("rung"));
+  return {
+    codec:
+      rung === 0
+        ? plain
+        : rungCodec(
+            parsePlayable(query.get("playable"), plain),
+            true,
+            test.pick,
+          ),
+    rung,
   };
 }
 

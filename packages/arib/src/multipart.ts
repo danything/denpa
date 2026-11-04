@@ -1,5 +1,5 @@
 /**
- * モジュールの中身を読む。**ヘッダ + 空行 + 本体** の形式 (STD-B24 第二編 第9章) で、
+ * モジュールの中身を読む。**ヘッダ + 空行 + 本体** の形式 (STD-B24 第二編 第 9 章) で、
  * 多くは `multipart/mixed` に BML と画像がまとめて入っている。
  *
  *     Content-Type: multipart/mixed; boundary=XXX
@@ -24,7 +24,7 @@ export interface EntityHeader {
   value: string;
 }
 
-/** 読んだ中身。`multipart/mixed` なら `parts` に1つずつ入る */
+/** 読んだ中身。`multipart/mixed` なら `parts` に 1 つずつ入る */
 export interface Entity {
   headers: EntityHeader[];
   body: Uint8Array;
@@ -48,7 +48,7 @@ function isTokenChar(char: string): boolean {
 /**
  * `type/subtype; a=b; c="d"` を読む。名前は小文字にそろえ、元の綴りも残す。
  *
- * **引数の途中で崩れていても、読めたところまでは返す** — 型と下位型が分かれば
+ * **引数の途中で崩れていても、読めたところまでは返す。** 型と下位型が分かれば
  * 読み方は決まる。型すら読めなければ null
  */
 export function parseMediaType(text: string): MediaType | null {
@@ -128,7 +128,7 @@ function find(haystack: Uint8Array, needle: Uint8Array, from: number): number {
 }
 
 /**
- * 中身を1つ読む。**ヘッダの終わり (空行) が無いものは null** — どこからが本体か
+ * 中身を 1 つ読む。**ヘッダの終わり (空行) が無いものは null。** どこからが本体か
  * 分からない。`multipart/mixed` なら中までデコードする (入れ子も同じ形式)。
  *
  * @param part multipart の中の部品か。部品はヘッダの行でちょうど終わってよい (下の説明)
@@ -177,8 +177,8 @@ export function readEntity(data: Uint8Array, part = false): Entity | null {
 }
 
 /**
- * 区切りで切る。**閉じの区切り (`--XXX--`) まで揃っていないものは捨てる** —
- * 最後の1つがどこで終わるか分からない
+ * 区切りで切る。**閉じの区切り (`--XXX--`) まで揃っていないものは捨てる。**
+ * 最後の 1 つがどこで終わるか分からない
  */
 function splitParts(body: Uint8Array, boundary: string): Entity[] | null {
   const open = encoder.encode(`--${boundary}\r\n`);
@@ -191,7 +191,7 @@ function splitParts(body: Uint8Array, boundary: string): Entity[] | null {
     const end = find(body, next, from);
     if (end === -1) return null;
     const after = end + next.length;
-    // `--` が続けば閉じ、CRLF なら次の1つ。どちらでもなければ本体の中の似た並び
+    // `--` が続けば閉じ、CRLF なら次の 1 つ。どちらでもなければ本体の中の似た並び
     const close = body[after] === 0x2d && body[after + 1] === 0x2d;
     if (!close && (body[after] !== CR || body[after + 1] !== LF)) {
       from = end + 1;

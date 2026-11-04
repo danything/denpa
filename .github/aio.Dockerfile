@@ -6,8 +6,8 @@
 # arm64 もエミュレーション無しで数秒で組める。
 #
 # **libssl はエージェントのイメージから写す。** 本体の土台は libssl の無い distroless (base-nossl。
-# Dockerfile の `distroless` 段) で、エージェントの土台 (cc) にはある。エージェントは CARD_URL を https で
-# 指したときと、IT930x のファームウェア・PIX-DT295 の公式パッケージを取ってくるときに libssl を読む (agent/Dockerfile)。置き場の名前が arch で違い、RUN 無しでは読み替えられないので、
+# Dockerfile の `distroless` 段) で、エージェントの土台 (cc) にはある。エージェントは自分のポートの HTTPS で
+# libssl を常に読む (agent/Dockerfile)。置き場の名前が arch で違い、RUN 無しでは読み替えられないので、
 # arch ごとの段を作って `ssl-${TARGETARCH}` で選ぶ。libssl が繋ぐ libzstd も土台に無いので一緒に写す
 # (zlib は本体の ffmpeg が繋ぐので本体にある)。パッケージの記録と copyright も一緒に写す
 #

@@ -248,7 +248,7 @@ export interface YieldedRecording {
 
 /**
  * 譲った録画の追っかけを**録れているところの少し手前から**観るときにリクエストする位置 (秒)。
- * サーバは録れている範囲に収める (`server/chase.ts` の `chasePlan`)。ライブの代わりに観るので、頭からではなく今に近いところ。
+ * サーバは録れている範囲に収める (`server/chase.ts` の `chasePlan`)。ライブの代わりに観るので、先頭からではなく今に近いところ。
  * どの録画よりも長い値 (1週間) にしてある
  */
 export const CHASE_EDGE = 7 * 24 * 60 * 60;
@@ -300,7 +300,7 @@ export type Command =
   | { type: "hold"; on: boolean };
 
 /**
- * 追っかけ再生。**録画中の録画を頭から観る** (issue #16)。
+ * 追っかけ再生。**録画中の録画を先頭から観る** (issue #16)。
  *
  * チューナーは使わない。録画が書き足している元のTSをサーバが追い読みして、
  * ライブと同じ形式 (fMP4 → この WebSocket) で再エンコードする (`server/chase.ts`)。
@@ -313,7 +313,7 @@ export type Command =
 type ChaseCommand = {
   type: "chase";
   recordingId: number;
-  /** 再生開始位置 (秒)。省くと頭から */
+  /** 再生開始位置 (秒)。省くと先頭から */
   at?: number;
   /** どの音声を出すか。`TuneCommand.audio` と同じ理屈 */
   audio?: string;

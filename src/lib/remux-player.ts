@@ -19,8 +19,7 @@
  *   `PROBE_EVERY` 測れていなければ、先を `PROBE_MORE` 秒だけ多く溜めて測る
  */
 
-import type { Rung } from "#lib/rungs.js";
-import { parseRung } from "#lib/rungs.js";
+import { parseRung, type Rung } from "#lib/rungs.js";
 import type { PickedMediaSource } from "#lib/ts/media-source.js";
 import { Meter } from "#lib/ts/meter.js";
 import {
@@ -157,6 +156,21 @@ export function remuxPlayer(
   const buffered = (): Ranges =>
     buffer === null ? [] : rangesOf(buffer.buffered);
 
+  /** SourceBuffer を作る。ストリームの時刻をそのまま使う (ページの物差し。`server/playback.ts`) */
+  function createBuffer(type: string): void {
+    buffer = media.addSourceBuffer(type);
+    buffer.mode = "segments";
+    bufferType = type;
+  }
+
+  /** 観て減るか、ブラウザが送り込んでよいと言うまで待つ (`nudge`)。待つ間は速さを数えない */
+  function sleep(): Promise<void> {
+    meter.pause();
+    return new Promise<void>((resolve) => {
+      wake = resolve;
+    });
+  }
+
   /** SourceBuffer の手が空くまで待つ */
   function idle(): Promise<void> {
     const target = buffer;
@@ -223,10 +237,7 @@ export function remuxPlayer(
         performance.now() - meter.measuredAt > PROBE_EVERY;
       const limit = AHEAD + (stale ? PROBE_MORE : 0);
       if (streaming && aheadOf(buffered(), video.currentTime) < limit) return;
-      meter.pause();
-      await new Promise<void>((resolve) => {
-        wake = resolve;
-      });
+      await sleep();
     }
   }
 
@@ -245,12 +256,7 @@ export function remuxPlayer(
           error instanceof DOMException && error.name === "QuotaExceededError"
         ))
           throw error;
-        if (!(await trim(mine))) {
-          meter.pause();
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-          });
-        }
+        if (!(await trim(mine))) await sleep();
       }
     }
   }
@@ -292,10 +298,7 @@ export function remuxPlayer(
     if (type === null)
       throw new Error(`中身の型が分かりません: ${heard.codec}`);
     if (buffer === null) {
-      buffer = media.addSourceBuffer(type);
-      // ストリームの時刻をそのまま使う (ページの物差し。`server/playback.ts`)
-      buffer.mode = "segments";
-      bufferType = type;
+      createBuffer(type);
       return;
     }
     if (type === bufferType) return;
@@ -486,11 +489,7 @@ export function remuxPlayer(
       media.duration = options.duration;
       opened = true;
       // 型が分かっていれば先に作る。分からなければ (段を下げた変換) 応答を受けてから (`prepare`)
-      if (wanted !== null) {
-        buffer = media.addSourceBuffer(wanted);
-        buffer.mode = "segments";
-        bufferType = wanted;
-      }
+      if (wanted !== null) createBuffer(wanted);
       /*
        * **始める位置を先に言っておく。** まだ何も無いうちに代入した位置は、尺が分かった
        * ところで効く。言わないと 0 にいると見なされ、詰まり (`waiting`) で先頭からリクエストし直す

@@ -104,7 +104,7 @@ export function tap(
   return { action: { kind: coarse && !again ? "controls" : "play" }, next };
 }
 
-/** チャプター1 つ。`start` / `end` は秒 */
+/** チャプター 1 つ。`start` / `end` は秒 */
 export interface Chapter {
   start: number;
   end: number;

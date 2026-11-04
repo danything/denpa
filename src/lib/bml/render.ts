@@ -11,7 +11,7 @@
 
 import { cssColor, type Rgba } from "./clut";
 import { parseUrl } from "./css";
-import type { BmlDocument, BmlElement, BmlNode } from "./document";
+import type { BmlDocument, BmlElement, BmlText } from "./document";
 import { isDrcs, toDisplay } from "./euc";
 import { visibleFrames } from "./mng";
 import type { Computed } from "./style";
@@ -149,7 +149,7 @@ function hole(rect: Rect): string {
 
 export class Renderer {
   private readonly views = new Map<BmlElement, View>();
-  private readonly texts = new Map<BmlNode, TextView>();
+  private readonly texts = new Map<BmlText, TextView>();
   private drawn = -1;
   /** 最後に知らせた映像の場所 (初めの描画では必ず知らせる) */
   private lastVideo: string | null = null;
@@ -533,8 +533,7 @@ export class Renderer {
   }
 
   /** 字を描く。DRCS は 1 字ずつ mask の span に (色は字の色) */
-  private text(node: BmlNode, view: TextView): void {
-    if (node.kind !== "text") return;
+  private text(node: BmlText, view: TextView): void {
     const s = node.parent?.style();
     const family = s?.fontFamily ?? "";
     const size = s?.fontSize ?? 24;

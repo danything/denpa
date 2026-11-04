@@ -5,8 +5,8 @@
  * 元は x0213.org の対応表 (jisx0213-2004-std.txt。「You can use, modify, distribute this table freely.」)。
  * 2009 年から変わっていないので、SHA-256 で留めて取る。
  *
- * 1面の 1〜84区は字幕の漢字の表 (EUC-JP + `KANJI_DIFF`) が元からほぼ同じ字を出す。違ってよいのは
- * 対応表が「Fullwidth」と書き添えた全角の字、`ARIB_CHOICES`、2つのコードポイントで表す字
+ * 1 面の 1〜84 区は字幕の漢字の表 (EUC-JP + `KANJI_DIFF`) が元からほぼ同じ字を出す。違ってよいのは
+ * 対応表が「Fullwidth」と書き添えた全角の字、`ARIB_CHOICES`、2 つのコードポイントで表す字
  * (`KANJI_SEQUENCES` に書く) だけ。ほかに違いがあれば止める
  */
 import { createHash } from "node:crypto";
@@ -42,12 +42,12 @@ const raw = new Uint8Array(await res.arrayBuffer());
 const sum = createHash("sha256").update(raw).digest("hex");
 if (sum !== SHA256) throw new Error(`${URL_} の SHA-256 が違う: ${sum}`);
 
-/** 面 → 区点 (0 から) → 字 (コードポイント1つか2つ) */
+/** 面 → 区点 (0 から) → 字 (コードポイント 1 つか 2 つ) */
 const planes = new Map<number, Map<number, string>>([
   [1, new Map()],
   [2, new Map()],
 ]);
-/** 1面で、対応表が全角の字も書き添えている区点 → 全角の字 */
+/** 1 面で、対応表が全角の字も書き添えている区点 → 全角の字 */
 const fullwidth = new Map<number, string>();
 for (const line of new TextDecoder().decode(raw).split("\n")) {
   const m = line.match(
@@ -64,7 +64,7 @@ for (const line of new TextDecoder().decode(raw).split("\n")) {
 const plane1 = planes.get(1)!;
 const plane2 = planes.get(2)!;
 
-// 1〜84区を字幕の表と突き合わせる
+// 1〜84 区を字幕の表と突き合わせる
 const eucjp = new TextDecoder("euc-jp");
 const diff = new Map<number, string>();
 for (const [start, chars] of KANJI_DIFF) {
