@@ -98,8 +98,8 @@ public sealed class Config(string tunersFile, string channelsFile)
     public string Zd1jLocksFile => Path.Combine(Dir, "zd1j-locks.json");
 
     /// <summary>
-    /// px4-userland の機材に流し込む IT930x のファームウェアを、取ってきて置く場所 (tuners.json の隣。
-    /// イメージには入れない。<see cref="Px4Firmware"/>)
+    /// px4-userland の機材に流し込む IT930x のファームウェアを、書き出して置く場所 (tuners.json の隣。
+    /// 同梱のものを書き出す。<see cref="Px4Firmware"/>)
     /// </summary>
     public string Px4FirmwareFile => Path.Combine(Dir, Px4Firmware.FileName);
 

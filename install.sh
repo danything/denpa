@@ -46,11 +46,7 @@ PX4_USERLAND_VERSION=0.2.1
 # renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
 SIANO_USERLAND_VERSION=0.1.10
 ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
-
-# IT930x のファームウェアは PLEX 公式ドライバから切り出す。取ってくる先と 3 つのハッシュは agent/Denpa.Agent/Px4Firmware.cs・install.ps1 と同じ
-PLEX_DRIVER_SHA256=bdf3b4eb84b69ccbacb4ba3df2f59c93c803ef6d3f61e7a90a531c22c301a200
-PXW3U4_SYS_SHA256=8c7b526e2c92f9b42440b55b99b309c33f2011f4e11de310acf0c1da58038722
-IT930X_FIRMWARE_SHA256=5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484
+# IT930x のファームウェアはエージェントに同梱している (agent/Denpa.Agent/Px4Firmware.cs)。ここでは置かない
 
 REPO=danything/denpa
 URL=http://localhost:3000
@@ -71,7 +67,7 @@ done
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[31mエラー:\033[0m %s\n' "$*" >&2; exit 1; }
-# 時間の上限を付ける。繋がったまま止まる相手 (落ちかけの PLEX のサイトや Internet Archive) だと、付けなければいつまでも待つ。
+# 時間の上限を付ける。繋がったまま止まる相手 (落ちかけのサイト) だと、付けなければいつまでも待つ。
 # 時間切れも --retry が試し直す
 CURL_LIMITS=(--connect-timeout 20 --max-time 300)
 fetch() { curl -fsSL --retry 3 "${CURL_LIMITS[@]}" -o "$2" "$1" || die "ダウンロードできません: $1"; }
@@ -405,19 +401,7 @@ mac_main() {
   fetch "$base/$px4" "$px4"
   fetch "$base/SHA256SUMS" px4.sums
   check_listed "$px4" px4.sums
-  mkdir -p new/px4-userland/firmware && tar -xzf "$px4" -C new/px4-userland
-
-  # 再配布の許諾は誰も持っていないので、PLEX の配布物から手元で切り出す (docs/tuner-px4.md)
-  say "IT930x のファームウェアを PLEX のドライバから切り出します"
-  # PLEX のサイトが落ちていることがある (2026-10-30 はサーバーの「無効な URL」のページと別の証明書を返した)。
-  # 中身はハッシュで確かめるので、取れなければ Internet Archive の写し (同じハッシュ) から取る
-  curl -fsSL --retry 3 "${CURL_LIMITS[@]}" -o driver.zip https://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip \
-    || fetch "https://web.archive.org/web/20260927060746id_/http://plex-net.co.jp/plex/pxw3u4/pxw3u4_BDA_ver1x64.zip" driver.zip
-  check driver.zip "$PLEX_DRIVER_SHA256"
-  unzip -p driver.zip pxw3u4_BDA_ver1x64/PXW3U4.sys > PXW3U4.sys
-  check PXW3U4.sys "$PXW3U4_SYS_SHA256"
-  dd if=PXW3U4.sys of=new/px4-userland/firmware/it930x-firmware.bin bs=1 skip=$((0x287d0)) count=2169 2>/dev/null
-  check new/px4-userland/firmware/it930x-firmware.bin "$IT930X_FIRMWARE_SHA256"
+  mkdir -p new/px4-userland && tar -xzf "$px4" -C new/px4-userland
 
   # --- siano-userland (PX-S1UD など) --------------------------------------
   say "siano-userland $SIANO_USERLAND_VERSION"
@@ -477,7 +461,6 @@ $agent_host
     <key>TUNERS_FILE</key><string>$DENPA_DIR/config/tuners.json</string>
     <key>CHANNELS_FILE</key><string>$DENPA_DIR/config/channels.json</string>
     <key>PX4_USERLAND_DIR</key><string>$PREFIX/px4-userland</string>
-    <key>PX4_FIRMWARE</key><string>$PREFIX/px4-userland/firmware/it930x-firmware.bin</string>
     <key>PX4_RUNTIME_DIR</key><string>$RUNTIME</string>
     <key>SIANO_USERLAND_DIR</key><string>$PREFIX/siano-userland</string>
     <key>SIANO_FIRMWARE</key><string>$PREFIX/siano-userland/firmware/isdbt_rio.inp</string>

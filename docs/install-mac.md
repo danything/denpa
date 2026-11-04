@@ -52,11 +52,10 @@ denpa と組むときの合言葉は、`~/denpa/.env` と同じものをエー�
 (環境変数では渡さないので、手で `denpa-agent --pair` を流しても同じ URL が出る。denpa には compose.mac.yml が `TUNER_AGENT_URL` の `#pair=` で渡す)。
 LaunchAgent の環境変数は、
 コンテナ既定の置き場を Mac の置き場に向け直すものです
-(`AGENT_PORT` (25252 のまま) `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_FIRMWARE` `PX4_RUNTIME_DIR`
+(`AGENT_PORT` (25252 のまま) `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_RUNTIME_DIR`
 `SIANO_USERLAND_DIR` `SIANO_FIRMWARE` `RAW_DIR`)。`PX4_RUNTIME_DIR` を
 `~/Library/Caches/denpa-agent` と短くしているのは、px4d の制御ソケットのパスが macOS では
-104 バイトまでだからです。IT930x のファームウェアは install.sh が PLEX のドライバから
-手元で切り出します (ハッシュ 3 つで確かめる。コンテナではエージェントが初めて使うときに取ってきます)。
+104 バイトまでだからです。IT930x のファームウェアはエージェントに同梱しているので、install.sh は置きません。
 denpa も Docker で動かすときは、もう 1 つ `AGENT_HOST=127.0.0.1` を書き、エージェントを Mac のループバックでだけ
 待ち受けさせます (ほかの機械から繋ぐ相手はいないため)。コンテナの denpa は `host.docker.internal` 越しにそこへ繋ぎます。
 `--no-docker` では書きません (別の機械の denpa から繋ぐため)。

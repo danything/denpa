@@ -550,7 +550,7 @@ public static class Px4Userland
         new(StringComparer.Ordinal);
 
     /// <remarks>
-    /// ファームウェアを取ってこられなかったときは、px4-userland の受信機すべてにその理由を出す
+    /// ファームウェアを用意できなかったときは、px4-userland の受信機すべてにその理由を出す
     /// (px4d を起こせず、どの受信機も使えない。<see cref="Px4Firmware.Problem"/>)
     /// </remarks>
     public static string? Notice(string? device) =>
@@ -915,7 +915,7 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
         if (!File.Exists(px4d)) throw new IOException($"px4-userland が入っていません: {px4d}");
         // ランタイムルートが px4d の決まりに合わなければ、px4d の分かりにくい INVALID_ARGUMENT の前に理由を言う
         if (Px4Userland.RuntimeProblem(Px4Userland.RuntimeDir, Id) is { } problem) throw new IOException(problem);
-        // イメージには入れていない。初めてなら取ってきて設定の置き場に置く (Px4Firmware.cs)
+        // 同梱のものを設定の置き場に書き出す (PX4_FIRMWARE が指定されていればそちら。Px4Firmware.cs)
         var firmware = Px4Firmware.Ensure();
 
         Launch(px4d,

@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 /// 要るのは 3 つ (仕様書 12.1): ASSP に毎回書き込む idle イメージ、受信の前に書き込む TRC イメージ、公式の Windows ドライバー
 /// <c>pxmb86m0x_usb.sys</c> から位置で切り出す定数 (認証の鍵の片割れ・表、チューナーの初期化表。5.2)。
 /// どれも StationTV X の更新パッケージ (PIX-DT295 StationTV X 1.20.3000.2) の zip に入っている (12.2・12.3)。
-/// 取り方は <see cref="Px4Firmware"/> と同じ: 取ってくる → zip の SHA-256 → 3 つのエントリーを取り出して SHA-256 →
+/// 取り方: 取ってくる → zip の SHA-256 → 3 つのエントリーを取り出して SHA-256 →
 /// ドライバーから位置で切り出して範囲ごとに SHA-256。取れたものは設定の置き場 (tuners.json の隣) に置いて次からはそれを使う。
 /// </para>
 ///
@@ -61,7 +61,7 @@ public static class Dt295Firmware
             new("ROWS", 0x75230, 512, "53887f7e32664a35fd4c1de5a69156776b27da5240a6df389b2aa769fb75b4d5"),
         ]);
 
-    /// <summary>取れなかったあと、次に試すまで待つ時間 (<see cref="Px4Firmware.Backoff"/> と同じ考え)</summary>
+    /// <summary>取れなかったあと、次に試すまで待つ時間。**選局のたびには取得しない** (番組表の取得や録画の予約は数分おきに選局する)</summary>
     internal static readonly TimeSpan Backoff = TimeSpan.FromMinutes(10);
 
     /// <summary>置き場 (tuners.json の隣)</summary>
@@ -188,7 +188,7 @@ internal sealed record Dt295FirmwareSource(
 
 /// <summary>
 /// 置き場 1 つ。置いてあってハッシュが合えばそれを使い、無ければ取ってきて置く。取れなければ
-/// <see cref="Dt295Firmware.Backoff"/> のあいだ取り直さず、同じ理由で断る (<see cref="Px4FirmwareStore"/> と同じ形)
+/// <see cref="Dt295Firmware.Backoff"/> のあいだ取り直さず、同じ理由で断る
 /// </summary>
 /// <param name="download">URL の中身を、渡したパスのファイルに書く。テストは偽の zip を書く</param>
 internal sealed class Dt295FirmwareStore(string folder, Dt295FirmwareSource source, Action<string, string> download, TimeProvider clock)

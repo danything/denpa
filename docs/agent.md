@@ -409,10 +409,10 @@ ATTACH_STREAM` (SPEC 6.3。px4-userland 0.1.6 から)。返す (`RELEASE`) の�
 - 起動時に顔ぶれの筐体ぶん `px4d` を起こします (`UserlandDaemon.Prepare` に `Px4Daemon.For` を渡す)。
   ファームウェアを流し込むので ready まで数秒かかります。起こせなくても
   他のチューナー (PT3 など) は動き、選局のときにもう一度試します
-- **IT930x のファームウェアはイメージに入っていません。** px4d を起こす前に `Px4Firmware.Ensure` が探し
-  (`PX4_FIRMWARE`、px4-userland の横、`tuners.json` の隣の順)、どこにも無ければ PLEX のドライバを取ってきて
-  切り出し、`tuners.json` の隣に置きます。それを px4d の `--firmware` に渡します。取れなければ px4d を起こさず、
-  理由を px4-userland の受信機すべての `error` に出して、10 分は取得し直しません ([tuner-px4.md](tuner-px4.md#ファームウェア))
+- **IT930x のファームウェアはエージェントに同梱しています** (`firmware/it930x-firmware.bin` を実行ファイルに埋め込む)。
+  px4d を起こす前に `Px4Firmware.Ensure` が、同梱のものを `tuners.json` の隣に書き出します (`PX4_FIRMWARE` が指定されていれば、そちらを使う)。
+  SHA-256 を確かめてから px4d の `--firmware` に渡し、違えば px4d を起こさず、
+  理由を px4-userland の受信機すべての `error` に出します ([tuner-px4.md](tuner-px4.md#ファームウェア))
 
 ### siano-userland の作り
 

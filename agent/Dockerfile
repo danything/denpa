@@ -47,8 +47,7 @@ RUN apt-get update && apt-get -y --no-install-recommends install curl ca-certifi
 # px4d / px4ctl は musl の完全静的 ELF。受信機もカードも px4d の制御ソケットで直に話すので
 # (Px4.cs / Px4Card.cs)、配布物の px4-ts と IFD ハンドラ (ifd/*.so、pcscd 用) は使わない。
 # **0.1.9 より下げない。** 筐体は `px4d --list-json` (0.1.9 から) でしか聞かない。
-# **IT930x のファームウェアは入れない** (再配布の許諾は誰も持っていない)。エージェントが初めて px4d を起こすときに
-# PLEX 公式の Windows ドライバから切り出して /config に置く (Px4Firmware.cs)。
+# IT930x のファームウェアはここでは入れない。エージェントの実行ファイルに埋め込んである (Px4Firmware.cs)。
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 ARG PX4_USERLAND_VERSION=0.2.1
 RUN set -eu && mkdir -p /opt/px4-userland && cd /tmp && \
@@ -129,7 +128,7 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 # 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
 # エージェントが要るのはこれで全部。実行ファイルが直に繋ぐのは libc と libm だけで、libssl は .NET が読む。
 # エージェントのポート (AGENT_PORT) は denpa と証明書で確かめ合う HTTPS なので、libssl を常に使う (AgentTls.cs)。
-# CARD_URL を https で指したときと、IT930x のファームウェア・PIX-DT295 の公式パッケージを取ってくるときも .NET の HttpClient が libssl を読み、
+# CARD_URL を https で指したときと、PIX-DT295 の公式パッケージを取ってくるときも .NET の HttpClient が libssl を読み、
 # 相手の証明書は ca-certificates で確かめる。
 # 子プロセスは px4d / px4ctl / siano-ts / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起こす。
 # シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
@@ -148,8 +147,8 @@ COPY --from=fetch /opt/ /opt/
 # **どちらも denpa の画面が書き、どちらも無くて構わない。** tuners.json が無ければ挿さっている機材を
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
 #
-# px4-userland の機材に流し込む IT930x のファームウェアも、初めて要ったときに
-# エージェントが取ってきてここに置く (/config/it930x-firmware.bin。Px4Firmware.cs)。PIX-DT295 のデータ (Dt295Firmware.cs) と、
+# px4-userland の機材に流し込む IT930x のファームウェアも、px4d に渡すときに
+# エージェントが同梱のものをここに書き出す (/config/it930x-firmware.bin。Px4Firmware.cs)。PIX-DT295 のデータ (Dt295Firmware.cs) と、
 # denpa と組むための鍵・証明書・合言葉 (/config/tls。AgentTls.cs) も同じ所に置く。
 COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
 
