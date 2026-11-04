@@ -34,7 +34,9 @@ describe("録画エンコードの引数", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
     expect(args).toContain("libsvtav1");
     // send_field だとコマ数が倍になり、時間もサイズも約 2 倍になる
-    expect(argValue(args, "-vf")).toBe("bwdif=mode=send_frame,format=yuv420p");
+    expect(argValue(args, "-vf")).toBe(
+      "bwdif=mode=send_frame:deint=interlaced,format=yuv420p",
+    );
     expect(args.at(-1)).toBe("/out.mkv");
   });
 
@@ -61,7 +63,7 @@ describe("録画エンコードの引数", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
       smoothMotion: true,
     });
-    expect(argValue(args, "-vf")).toBe("bwdif,format=yuv420p");
+    expect(argValue(args, "-vf")).toBe("bwdif=deint=interlaced,format=yuv420p");
   });
 
   // どちらも 8bit (理由と実測は encoder.videoArgs)
@@ -159,7 +161,9 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264");
     expect(args).toContain("libx264");
     expect(args).not.toContain("libsvtav1");
-    expect(argValue(args, "-vf")).toBe("bwdif=mode=send_frame,format=yuv420p");
+    expect(argValue(args, "-vf")).toBe(
+      "bwdif=mode=send_frame:deint=interlaced,format=yuv420p",
+    );
     expect(args).toContain("-preset");
   });
 
@@ -188,7 +192,7 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
     );
     expect(argValue(va, "-filter_hw_device")).toBe("va");
     expect(argValue(va, "-vf")).toBe(
-      "bwdif=mode=send_frame,format=nv12,hwupload",
+      "bwdif=mode=send_frame:deint=interlaced,format=nv12,hwupload",
     );
     expect(va).toContain("h264_vaapi");
     expect(argValue(va, "-rc_mode")).toBe("CQP");
@@ -212,7 +216,7 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
     expect(argValue(hd, "-rc")).toBe("avbr");
     // インタレ解除と引き伸ばしは CPU のまま
     expect(argValue(hd, "-vf")).toBe(
-      "bwdif=mode=send_frame,scale=1920:1080,setsar=1,format=nv12",
+      "bwdif=mode=send_frame:deint=interlaced,scale=1920:1080,setsar=1,format=nv12",
     );
     expect(argValue(hd, "-b:v")).toBe(
       String(hwBitrate("h264", { height: 1080, smooth: false })),
@@ -247,7 +251,7 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
         String(hwBitrate(codec, { height: 720, smooth: false })),
       );
       expect(argValue(args, "-vf")).toBe(
-        "bwdif=mode=send_frame,scale=1280:720,setsar=1,format=nv12",
+        "bwdif=mode=send_frame:deint=interlaced,scale=1280:720,setsar=1,format=nv12",
       );
     }
   });
@@ -367,14 +371,14 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
       displaySize: { width: 1920, height: 1080 },
     });
     expect(argValue(args, "-vf")).toBe(
-      "bwdif=mode=send_frame,scale=1920:1080,setsar=1,format=yuv420p",
+      "bwdif=mode=send_frame:deint=interlaced,scale=1920:1080,setsar=1,format=yuv420p",
     );
   });
 
   test("渡されなければ引き伸ばさない", () => {
     // もともと正方形の素材。同じ大きさへの scale は仕事が増えるだけ
     expect(argValue(buildArgs("/in.m2ts", "/out.mkv", 1, null), "-vf")).toBe(
-      "bwdif=mode=send_frame,format=yuv420p",
+      "bwdif=mode=send_frame:deint=interlaced,format=yuv420p",
     );
   });
 });
