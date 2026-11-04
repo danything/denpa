@@ -104,6 +104,8 @@ interface MediaFile {
   audios: string[];
   /** 尺 (秒)。読めなければ null */
   duration: number | null;
+  /** 映像のコマ数 (毎秒)。段を下げた変換で、30 コマ以下ならそのままのコマ数で縮める (`live.videoArgs`)。読めなければ null */
+  fps: number | null;
 }
 
 interface ProbedStream {
@@ -112,7 +114,17 @@ interface ProbedStream {
   profile?: string;
   level?: number;
   pix_fmt?: string;
+  /** 平均のコマ数 (`30000/1001`。読めなければ `0/0`) */
+  avg_frame_rate?: string;
   tags?: { title?: string; TITLE?: string };
+}
+
+/** ffprobe のコマ数 (`24000/1001`) を数にする。読めない・0 なら null */
+function frameRate(stream: ProbedStream | undefined): number | null {
+  const match = /^(\d+)\/(\d+)$/.exec(stream?.avg_frame_rate ?? "");
+  if (match === null) return null;
+  const rate = Number(match[1]) / Number(match[2]);
+  return Number.isFinite(rate) && rate > 0 ? rate : null;
 }
 
 /** H.264 の profile 名 → codecs の先頭 (profile_idc と制約の印) */
@@ -183,14 +195,16 @@ export function mediaInfo(source: EncodedSource, json: string): MediaFile {
   const streams = parsed.streams ?? [];
   const audios = streams.filter((stream) => stream.codec_type === "audio");
   const duration = Number(parsed.format?.duration);
+  const video = streams.find((stream) => stream.codec_type === "video");
   return {
     source,
-    video: videoCodec(streams.find((stream) => stream.codec_type === "video")),
+    video: videoCodec(video),
     audio: audioCodec(audios[0]),
     audios: audios.map(
       (stream) => stream.tags?.title ?? stream.tags?.TITLE ?? "",
     ),
     duration: Number.isFinite(duration) && duration > 0 ? duration : null,
+    fps: frameRate(video),
   };
 }
 
@@ -554,7 +568,8 @@ export function copyArgs(
 /**
  * **エンコード済みを別のコーデックに変換する引数。** 飛び方と時刻の運び方は詰め替え (`copyArgs`) と同じ。
  * 映像のエンコード方法はライブと同じ (`live.videoArgs`)。インタレ解除は済んでいるので挟まない。
- * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`)。段を下げるなら、エンコード済みと同じコーデックにも変換する
+ * `rung` は回線に合わせて下げた段 (`#lib/rungs.ts`)。段を下げるなら、エンコード済みと同じコーデックにも変換する。
+ * `fps` は元のコマ数 (`MediaFile.fps`)。段を下げるとき、30 コマ以下ならそのままのコマ数で縮める
  */
 export function fileTranscodeArgs(
   path: string,
@@ -563,8 +578,9 @@ export function fileTranscodeArgs(
   codec: LiveCodec,
   hw: LiveHw | null,
   rung: Rung = 0,
+  fps: number | null = null,
 ): string[] {
-  const video = videoArgs(codec, hw, false, rung);
+  const video = videoArgs(codec, hw, false, rung, fps);
   return [
     ...QUIET,
     ...video.input,
@@ -1017,7 +1033,7 @@ export async function streamResponse(
     attempts =
       source !== undefined
         ? fileAttempts(
-            source.path,
+            source,
             from,
             audioIndex(query.get("audio")),
             output,
@@ -1143,7 +1159,7 @@ function withFallback(
 }
 
 function fileAttempts(
-  path: string,
+  source: EncodedFile,
   from: number,
   audio: number,
   codec: LiveCodec,
@@ -1155,7 +1171,15 @@ function fileAttempts(
     (hw) => ({
       argv: [
         config.ffmpeg,
-        ...fileTranscodeArgs(path, from, audio, codec, hw, rung),
+        ...fileTranscodeArgs(
+          source.path,
+          from,
+          audio,
+          codec,
+          hw,
+          rung,
+          source.media.fps,
+        ),
       ],
     }),
     rung,

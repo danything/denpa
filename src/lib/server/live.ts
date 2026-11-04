@@ -397,9 +397,10 @@ export function panArgs(audio: AudioTrack): string[] {
  *
  * ## 回線に合わせて下げた段
  *
- * `rung` が 1〜3 なら、段の表 (`#lib/rungs.ts`) の高さ・30 コマ・ビットレートの上限で変換する (`rungVideo`)。
+ * `rung` が 1〜3 なら、段の表 (`#lib/rungs.ts`) の高さ・30 コマ以下・ビットレートの上限で変換する (`rungVideo`)。
  * 0 なら上のとおりで、今までと同じ引数になる
  *
+ * @param fps 元のコマ数 (エンコード済みを ffprobe で読んだもの)。分からなければ null。段を下げるときだけ使う
  * @returns `input` は `-i` より前、`filter` は `-vf` (無ければ空)、`encoder` は `-c:v` から
  */
 export function videoArgs(
@@ -407,8 +408,9 @@ export function videoArgs(
   hw: LiveHw | null,
   interlaced = true,
   rung: Rung = 0,
+  fps: number | null = null,
 ): { input: string[]; filter: string; encoder: string[] } {
-  if (rung !== 0) return rungVideo(codec, hw, interlaced, rung);
+  if (rung !== 0) return rungVideo(codec, hw, interlaced, rung, fps);
   if (hw !== null) {
     const gpu = liveHwArgs(interlaced ? hw : { ...hw, full: false }, codec);
     return {
@@ -504,10 +506,13 @@ function softwareArgs(codec: Exclude<LiveCodec, "hevc">): string[] {
 /**
  * **回線に合わせて下げた段の映像** (`videoArgs` の `rung`。段の表は `#lib/rungs.ts`)。
  *
- * - **30 コマにして縮める。** 放送 (インタレ) は `bwdif` を 1 コマずつの出し方 (`encoder.deinterlace(false)`) にして 29.97p にする。
- *   60 コマにするのに比べてエンコードが半分で、1 コマに使えるビットが倍になる。エンコード済み (インタレではない) は `fps` で 29.97 にそろえる
- *   (60 コマでエンコードした録画を 30 コマに間引く。24 コマの録画は同じコマを足して 29.97 になる)。高さは段の値、幅は縦横比を保って偶数にする (`scale=-2:H`)
- * - **キーフレームは 1 秒ごと** (`-g` に段のコマ数)。今の段 0 と同じ間隔で、共有しているライブに入る人の待ちも同じ
+ * - **30 コマ以下にして縮める。** 放送 (インタレ) は `bwdif` を 1 コマずつの出し方 (`encoder.deinterlace(false)`) にして 29.97p にする。
+ *   60 コマにするのに比べてエンコードが半分で、1 コマに使えるビットが倍になる。エンコード済み (インタレではない) は、元が 30 コマを
+ *   超えるとき (60 コマでエンコードした録画) だけ `fps` で 29.97 に間引く。元が 30 コマ以下 (24 コマ・29.97 コマ) ならそのままのコマ数で
+ *   縮める。同じコマを足して 29.97 にすると、エンコードが増えるうえに 1 コマに使えるビットが減る。元のコマ数が分からなければ
+ *   29.97 にそろえる (60 コマのまま出すと、段の上限の中で 1 コマに使えるビットが半分になる)。
+ *   高さは段の値、幅は縦横比を保って偶数にする (`scale=-2:H`)
+ * - **キーフレームは 1 秒ごと** (`-g` に出すコマ数を丸めたもの。24 コマなら 24)。今の段 0 と同じ間隔で、共有しているライブに入る人の待ちも同じ
  * - **x264 は上限つきの crf** (`-crf 23 -maxrate T -bufsize T`。T は段のビットレート)。静かな場面は crf のぶんだけ小さく、
  *   動きの多い場面は回線に収まるように上限で抑える。preset は `veryfast`。`ultrafast` は CABAC とデブロックを切るので、
  *   低いビットレートでは粗さが目立つ。`-tune zerolatency` は段 0 と同じ (B フレームを作らない)
@@ -521,12 +526,19 @@ function rungVideo(
   hw: LiveHw | null,
   interlaced: boolean,
   rung: Exclude<Rung, 0>,
+  fps: number | null,
 ): { input: string[]; filter: string; encoder: string[] } {
   const spec = RUNG_SPECS[rung];
   const bps = spec.videoKbps * 1000;
-  const gop = ["-g", String(spec.fps)];
+  // 元のコマ数のまま出すか (エンコード済みで、元が段のコマ数以下)
+  const keep = !interlaced && fps !== null && fps > 0 && fps <= spec.fps;
+  const gop = ["-g", String(keep ? Math.max(1, Math.round(fps)) : spec.fps)];
   const cpu = [
-    interlaced ? deinterlace(false) : `fps=${spec.fps * 1000}/1001`,
+    ...(interlaced
+      ? [deinterlace(false)]
+      : keep
+        ? []
+        : [`fps=${spec.fps * 1000}/1001`]),
     `scale=-2:${spec.height}`,
   ];
   if (hw !== null) {

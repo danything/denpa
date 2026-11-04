@@ -392,6 +392,33 @@ describe("ffmpeg の引数", () => {
     expect(fromTs).toContain("-fps_mode passthrough");
   });
 
+  test("段を下げた変換: 元が 30 コマ以下なら、コマを足さずにそのままのコマ数で縮める", () => {
+    const film = fileTranscodeArgs(
+      "/m/a.mkv",
+      0,
+      0,
+      "h264",
+      null,
+      2,
+      24000 / 1001,
+    ).join(" ");
+    expect(film).toContain("-vf scale=-2:540");
+    expect(film).not.toContain("fps=");
+    expect(film).toContain("-g 24");
+    // 60 コマの録画は今までどおり 30 コマに間引く
+    const smooth = fileTranscodeArgs(
+      "/m/a.mkv",
+      0,
+      0,
+      "h264",
+      null,
+      2,
+      60000 / 1001,
+    ).join(" ");
+    expect(smooth).toContain("-vf fps=30000/1001,scale=-2:540");
+    expect(smooth).toContain("-g 30");
+  });
+
   test("音声だけ: 映像を出さず、AAC 96k の fMP4 を同じ物差しで", () => {
     const file = audioOnlyArgs({ path: "/m/a.mkv", from: 12, audio: 1 });
     const joined = file.join(" ");
@@ -667,6 +694,7 @@ describe("ffprobe の読み (mediaInfo)", () => {
       audio: "opus",
       audios: ["主音声", ""],
       duration: 1800.5,
+      fps: null,
     });
   });
 
@@ -720,7 +748,20 @@ describe("ffprobe の読み (mediaInfo)", () => {
       audio: null,
       audios: [],
       duration: null,
+      fps: null,
     });
+  });
+
+  test("コマ数は平均のコマ数から読む。読めない (0/0) なら null", () => {
+    const fps = (avg_frame_rate: string) =>
+      mediaInfo(
+        "encoded",
+        probe([{ codec_type: "video", codec_name: "h264", avg_frame_rate }]),
+      ).fps;
+    expect(fps("24000/1001")).toBeCloseTo(23.976, 3);
+    expect(fps("60000/1001")).toBeCloseTo(59.94, 2);
+    expect(fps("0/0")).toBeNull();
+    expect(fps("")).toBeNull();
   });
 });
 

@@ -281,6 +281,107 @@ test.describe("互換モードの観る画面", () => {
   });
 
   /*
+   * **互換モードでも、回線が細ければ「自動」は段を下げる** (`+page.svelte` の `canvasStep`)。canvas のプレイヤーには
+   * 継ぎ目なく替える経路が無いので、いまの位置から段を下げた変換で作り直す。サーバが塊を捨てたと返す送り出しの具合
+   * (`pace`) で下げさせる。GPU が無ければ下げた先はソフトウェアの H.264 なので、H.264 を描ける端末のふりをする
+   * (流すものは AV1 に差し替えるので、H.264 はデコードしない)
+   */
+  test("回線が細いと、互換モードでも段を下げた変換で作り直して描き続ける", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    await setRecording(request, { codecs: [] });
+    const { id } = await recordOne(page, request);
+    const clip = readClip(
+      new Uint8Array(
+        readFileSync(new URL("../fake/live-av1.mp4", import.meta.url)),
+      ),
+    );
+    await page.addInitScript(() => {
+      const real = VideoDecoder.isConfigSupported.bind(VideoDecoder);
+      VideoDecoder.isConfigSupported = (config) =>
+        config.codec.startsWith("avc1")
+          ? Promise.resolve({ supported: true, config })
+          : real(config);
+    });
+    await page.route(`**/api/recordings/${id}/playback`, (route) =>
+      route.fulfill({
+        json: {
+          duration: 1800,
+          axis: "encoded",
+          audios: [{ id: "0", label: "" }],
+          offers: [
+            {
+              codec: "av1",
+              way: "file",
+              source: "encoded",
+              codecs: "av01.0.08M.08,opus",
+            },
+            { codec: "h264", way: "stream", codecs: "avc1.640028,mp4a.40.2" },
+            { codec: "av1", way: "stream", codecs: "av01.0.08M.08,opus" },
+          ],
+        },
+      }),
+    );
+    // 段 0 (詰め替え) は「捨てた」と返す具合の id を付ける。段を下げたものはサーバが AV1 を選んだことにする
+    await page.route(`**/api/recordings/${id}/stream?**`, (route) => {
+      const url = new URL(route.request().url());
+      const rung = url.searchParams.get("rung") ?? "0";
+      return route.fulfill({
+        status: 200,
+        contentType: "video/mp4",
+        headers: {
+          "X-Denpa-Codec": "av1",
+          "X-Denpa-Rung": rung,
+          "X-Denpa-Pace": rung === "0" ? "thin" : "fine",
+        },
+        body: Buffer.from(
+          clipFrom(clip, Number(url.searchParams.get("from") ?? 0), 60),
+        ),
+      });
+    });
+    await page.route("**/api/playback/pace?**", (route) =>
+      route.fulfill({
+        json: {
+          backlog: 0,
+          dropped:
+            new URL(route.request().url()).searchParams.get("id") === "thin"
+              ? 3
+              : 0,
+          speed: null,
+        },
+      }),
+    );
+    await compatOn(page);
+    const asked = streamRequests(page);
+
+    await goto(page, `/watch/${id}`);
+    await expectDrawn(page, "fmp4");
+    expect(asked[0]?.searchParams.get("rung")).toBeNull();
+
+    await expect(page.getByTestId("watch-adapt")).toHaveText(
+      "回線が細いため、720p に下げました",
+      { timeout: 30_000 },
+    );
+    const lowered = asked.find((url) => url.searchParams.has("rung"));
+    expect(lowered?.searchParams.get("rung")).toBe("1");
+    const playable = lowered?.searchParams.get("playable")?.split(",") ?? [];
+    expect(playable).toContain("h264");
+    expect(playable).not.toContain("hevc");
+    // いまの位置から作り直す (頭からではない)
+    expect(Number(lowered?.searchParams.get("from"))).toBeGreaterThan(0);
+    await expectDrawn(page, "fmp4");
+
+    // メニューの「自動」の行に、サーバが選んだ形式と高さを添える
+    await wakeControls(page, "watch-stage");
+    await openSettings(page, "watch");
+    await expect(page.getByTestId("watch-codec")).toContainText(
+      "自動 (AV1 720p)",
+    );
+  });
+
+  /*
    * **デコーダの読み込みが遅くても描ける** (遅い回線)。偽の録画は数秒しかなく、読み込みの間に尻まで
    * 読み切る。「尻まで読んだのに音が来ない」を 2 秒で終わりと見なしていた頃は、デコーダが 2 秒より
    * 遅れると1コマも出さずに「観終わった」になっていた (`RawEngine.finish`)
