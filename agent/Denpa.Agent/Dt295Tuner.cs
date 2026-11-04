@@ -33,6 +33,11 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
 
     private bool _synced;
 
+    /// <summary>先頭の位置を決めるまで溜めたもの</summary>
+    private readonly byte[] _head = new byte[(AlignSpan + 1) * PacketSize];
+
+    private int _headLen;
+
     /// <summary>渡したパケットの数</summary>
     public long Packets { get; private set; }
 
@@ -40,6 +45,7 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     public void Reset()
     {
         _carried = 0;
+        _headLen = 0;
         _synced = false;
     }
 
@@ -51,9 +57,9 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     /// 前の受信が途中で終わると、機材の中に残ったデータが次の受信の最初に混じる (パケットの途中の切れ端や、古いパケット)。
     /// 受信の途中では探し直さない (10.2)
     /// </summary>
-    internal static int Align(ReadOnlySpan<byte> data)
+    internal static bool Find(ReadOnlySpan<byte> data, out int at)
     {
-        for (var at = 0; at < AlignSpan * PacketSize && at < data.Length; at++)
+        for (at = 0; at < AlignSpan * PacketSize && at < data.Length; at++)
         {
             if (data[at] != 0x47) continue;
             var confirmed = 0;
@@ -67,10 +73,11 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
                 }
                 confirmed++;
             }
-            // 後ろに確かめるものが無いときは、先頭から始まっているときだけ認める
-            if (aligned && (confirmed > 0 || at == 0)) return at;
+            // 後ろに確かめるものが無いときは、先頭から 1 パケット分が揃っているときだけ認める
+            if (aligned && (confirmed > 0 || (at == 0 && data.Length >= PacketSize))) return true;
         }
-        return 0;
+        at = 0;
+        return false;
     }
 
     /// <summary>
@@ -80,11 +87,28 @@ public sealed class Dt295TsFilter(IDt295PacketDecryptor decryptor, byte[]? key =
     public int Feed(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain = null)
     {
         var written = 0;
-        if (!_synced && _carried == 0)
+        if (!_synced)
         {
-            data = data[Align(data)..];
+            // 先頭の位置が確かめられるまで溜める。最初の読みが短い切れ端だけのとき (古いデータの途中)、それで先頭を決めると
+            // 以後ずっとずれて「不正なパケット」で止まる。揃った並びが見つからないまま上限まで溜まったら、先頭から始まるものとして流す
+            var take = Math.Min(_head.Length - _headLen, data.Length);
+            data[..take].CopyTo(_head.AsSpan(_headLen));
+            _headLen += take;
+            data = data[take..];
+            var found = Find(_head.AsSpan(0, _headLen), out var at);
+            if (!found && _headLen < _head.Length) return 0;
             _synced = true;
+            var buffered = _head.AsSpan(at, _headLen - at);
+            written += Carry(buffered, output, plain);
+            _headLen = 0;
         }
+        return written + Carry(data, output, plain);
+    }
+
+    /// <summary>先頭が決まったあとの渡し方。端数は次の呼びにつなぐ</summary>
+    private int Carry(ReadOnlySpan<byte> data, IBufferWriter<byte> output, Action<ReadOnlySpan<byte>>? plain)
+    {
+        var written = 0;
         if (_carried > 0)
         {
             var take = Math.Min(PacketSize - _carried, data.Length);

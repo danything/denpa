@@ -244,6 +244,20 @@ public class Dt295TunerTests
     }
 
     [Test]
+    public async Task 最初の読みが短い切れ端だけなら_先頭が確かめられるまで溜めて待つ()
+    {
+        // 前の受信の切れ端 (パケットの途中の 100 バイト) だけが最初の読みで届き、そのあとに本物の並びが続く。
+        // 切れ端だけで先頭を決めると、以後ずっとずれて不正なパケットになる
+        var filter = new Dt295TsFilter(new Dt295PacketDecryptor());
+        var output = new ArrayBufferWriter<byte>();
+        var stale = Enumerable.Range(0, 100).Select(i => (byte)(i + 1)).ToArray();
+        byte[] real = [.. Dt295Ts.Payload(0x100), .. Dt295Ts.Payload(0x101), .. Dt295Ts.Payload(0x102), .. Dt295Ts.Payload(0x103)];
+        await Assert.That(filter.Feed(stale, output)).IsEqualTo(0);
+        await Assert.That(filter.Feed(real, output)).IsEqualTo(4);
+        await Assert.That(output.WrittenSpan.ToArray()).IsEquivalentTo(real);
+    }
+
+    [Test]
     public async Task Reset_のあとは先頭を探し直す()
     {
         var output = new ArrayBufferWriter<byte>();
@@ -261,7 +275,9 @@ public class Dt295TunerTests
     {
         var bad = Dt295Ts.Payload(0x100);
         bad[0] = 0x00;
-        var error = Assert.Throws<Dt295Exception>(() => new Dt295TsFilter(new Dt295PacketDecryptor()).Feed(bad, new ArrayBufferWriter<byte>()));
+        // 同期バイトの無い並びは、先頭を探せるだけ溜まったところで不正として止める (数パケットでは、古い切れ端かもしれないので待つ)
+        var garbage = new byte[188 * 40];
+        var error = Assert.Throws<Dt295Exception>(() => new Dt295TsFilter(new Dt295PacketDecryptor()).Feed(garbage, new ArrayBufferWriter<byte>()));
         await Assert.That(error.Message).IsEqualTo(Dt295TsFilter.Invalid);
         var tei = Dt295Ts.Payload(0x100, scrambling: 1);
         tei[1] |= 0x80;
