@@ -565,7 +565,7 @@
             href={resolve(`watch/${data.rec.id}`)}
             data-testid="chase-to-watch"
           >
-            エンコードが終わりました。続きは観る画面で観られます
+            エンコードが終わりました。続きは観る画面で再生できます
           </a>
         </span>
       {:else}
