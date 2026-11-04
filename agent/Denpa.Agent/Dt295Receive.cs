@@ -19,6 +19,17 @@ public sealed class Dt295FieldTable
     private const ushort InputSelect = 0x1002;
 
     /// <summary>
+    /// PID の選び方 (pix-userland の <c>INIT_S_AUTO_PID_MODE</c>) があるレジスター。ビットは <see cref="AutoPidShift"/>。
+    /// 1 なら機材が番組の映像・音声などの PID を選んで流し (衛星は PMT の ES の一覧が空に書き換わる)、
+    /// 0 ならルートのレジスター (0x101E 以降) に書いた PID だけが流れる。
+    /// 実機で確かめた (BS1): <see cref="Default"/> でこのビットだけ 0 にすると、SI の PID しか流れない
+    /// </summary>
+    public const ushort AutoPidRegister = 0x101A;
+
+    /// <summary><see cref="AutoPidRegister"/> の中のビットの位置</summary>
+    public const int AutoPidShift = 15;
+
+    /// <summary>
     /// 標準の受信設定。公式の StationTV X が機材に当てる 677 行を実機で調べたところ、最終的に値が 0 でないレジスターは 64 個で、
     /// そのうち 59 個は外しても受信できた (地上波 27ch と BS1 で、5 秒の受信を 33 回。同期バイト 100%・連続性カウンターの誤り 0・
     /// 停止して 0x11 に戻る)。残りの 5 個がこれ。BS・CS の ECM のルートや録画に別の設定が要るかは、まだ確かめていない
@@ -37,10 +48,14 @@ public sealed class Dt295FieldTable
     /// <summary>一時停止の状態番号 (9.3 の最後。1 なら 3、0 なら 4)</summary>
     public ushort Pause { get; }
 
+    /// <summary>機材が PID を選ぶ設定か (<see cref="AutoPidRegister"/> のビット <see cref="AutoPidShift"/>)</summary>
+    public bool AutoPidMode { get; }
+
     public Dt295FieldTable(IReadOnlyList<Dt295Field> rows)
     {
         if (rows.Count == 0) throw new InvalidDataException("受信設定が空です");
         ushort input = 0;
+        ushort autoPid = 0;
         for (var i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
@@ -48,13 +63,14 @@ public sealed class Dt295FieldTable
             ushort applied;
             try
             {
-                applied = Dt295Bridge.Field(row.Address == InputSelect ? input : (ushort)0, row.Shift, row.Width, row.Value);
+                applied = Dt295Bridge.Field(row.Address == InputSelect ? input : row.Address == AutoPidRegister ? autoPid : (ushort)0, row.Shift, row.Width, row.Value);
             }
             catch (ArgumentOutOfRangeException error)
             {
                 throw new InvalidDataException($"受信設定の {i} 行目: {error.Message}");
             }
             if (row.Address == InputSelect) input = applied;
+            if (row.Address == AutoPidRegister) autoPid = applied;
         }
         Pause = ((input >> 8) & 0x3) switch
         {
@@ -62,6 +78,7 @@ public sealed class Dt295FieldTable
             0 => 4,
             var other => throw new InvalidDataException($"受信設定で 0x1002 のビット 8〜9 が {other} になります (0 か 1 のはず。9.3)"),
         };
+        AutoPidMode = ((autoPid >> AutoPidShift) & 1) == 1;
         Rows = rows;
     }
 
