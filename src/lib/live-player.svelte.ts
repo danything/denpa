@@ -2235,7 +2235,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           audio = notice.audio;
           awaiting = false;
           const step = servedStep(notice);
-          if (stepOrder(step) < stepOrder(asked)) {
+          // 追っかけで音声だけを頼んでいたときは、実際には段 3 をリクエストしている (`wantedCommand`)
+          const requested =
+            chase !== null && asked === "audio" ? LOWEST_RUNG : asked;
+          if (stepOrder(step) < stepOrder(requested)) {
             // サーバが混んでいて下げられなかった (理由は続く `notice`)。段の切り替えとして数えられないので、20 秒は同じ段を返させない
             adapter.refused(Date.now());
             asked = step;
