@@ -273,13 +273,16 @@
                 data-testid="rule-switch"
               />
             </form>
-            <ArmedDelete
-              {deleting}
-              armKey={rule.id}
-              fields={{ id: rule.id }}
-              class="xs"
-              testid="rule-delete"
-            />
+            <!-- 削除は行の操作 (`app.css` の `.row-actions`。押す的は 40px。docs/design.md) -->
+            <div class="row-actions">
+              <ArmedDelete
+                {deleting}
+                armKey={rule.id}
+                fields={{ id: rule.id }}
+                class="small"
+                testid="rule-delete"
+              />
+            </div>
           </li>
         {:else}
           <li class="none small muted" data-testid="rule-none">
