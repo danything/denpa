@@ -105,7 +105,7 @@ import { notify } from "./webhook";
  *
  * **インタレのコマだけを解除する** (`deint=interlaced`)。既定 (`all`) はプログレッシブのコマにも同じことをするので、
  * 720p (59.94p) の局を通すとコマ数が倍の 119.88p になっていた (本番の ffmpeg で 3 秒 180 コマが 360 コマ)。
- * 1080i はどのコマもインタレの印が付いているので、今までどおり解除する
+ * 1080i はインタレの印が付いたコマなので、今までどおり解除する (確かめたのは ffmpeg で作った 1080i。実放送では確かめていない)
  */
 export function deinterlace(smooth: boolean): string {
   return smooth
