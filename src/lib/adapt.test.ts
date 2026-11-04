@@ -274,19 +274,19 @@ describe("行き来しない", () => {
     });
   });
 
-  test("速さが次の段の 1.5 倍に届かなければ上げない", () => {
+  test("速さが次の段の 2 倍に届かなければ上げない", () => {
     const a = new RungAdapter();
-    // 段 1 は 3.096 Mbit/s。1.5 倍は 4.644 Mbit/s
+    // 段 1 は 3.096 Mbit/s。2 倍は 6.192 Mbit/s
     expect(
-      first(a, 0, 120_000, { current: 2, throughput: 4_500_000 }),
+      first(a, 0, 120_000, { current: 2, throughput: 6_000_000 }),
     ).toBeNull();
   });
 });
 
 describe("上げる", () => {
-  test("観る画面は、次の段の 1.5 倍以上の速さが 20 秒続いたら 1 段上げる", () => {
+  test("観る画面は、次の段の 2 倍以上の速さが 20 秒続いたら 1 段上げる", () => {
     const a = new RungAdapter();
-    expect(first(a, 0, 120_000, { current: 2, throughput: 5_000_000 })).toEqual(
+    expect(first(a, 0, 120_000, { current: 2, throughput: 6_500_000 })).toEqual(
       {
         at: GRACE + UP_WAIT_WATCH,
         decision: { step: 1, reason: "restored" },
@@ -294,14 +294,14 @@ describe("上げる", () => {
     );
   });
 
-  test("段 0 へは、ファイルのビットレートの 1.5 倍以上が続いたときだけ戻す", () => {
+  test("段 0 へは、ファイルのビットレートの 2 倍以上が続いたときだけ戻す", () => {
     const a = new RungAdapter();
-    // 16 Mbit/s の MPEG-2。1.5 倍は 24 Mbit/s
+    // 16 Mbit/s の MPEG-2。2 倍は 32 Mbit/s
     expect(
       first(a, 0, 120_000, {
         current: 1,
         baseKbps: 16_000,
-        throughput: 20_000_000,
+        throughput: 30_000_000,
       }),
     ).toBeNull();
     const b = new RungAdapter();
@@ -309,7 +309,7 @@ describe("上げる", () => {
       first(b, 0, 120_000, {
         current: 1,
         baseKbps: 16_000,
-        throughput: 25_000_000,
+        throughput: 33_000_000,
       })?.decision,
     ).toEqual({ step: 0, reason: "restored" });
   });
@@ -473,11 +473,11 @@ describe("音声だけ", () => {
     ).toBeNull();
   });
 
-  test("音声だけから、段 3 の 1.5 倍の速さが続けば段 3 に戻す", () => {
+  test("音声だけから、段 3 の 2 倍の速さが続けば段 3 に戻す", () => {
     const a = new RungAdapter();
-    // 段 3 は 0.696 Mbit/s。1.5 倍は 1.044 Mbit/s
+    // 段 3 は 0.696 Mbit/s。2 倍は 1.392 Mbit/s
     expect(
-      first(a, 0, 120_000, { current: "audio", throughput: 1_100_000 })
+      first(a, 0, 120_000, { current: "audio", throughput: 1_400_000 })
         ?.decision,
     ).toEqual({ step: 3, reason: "restored" });
   });
