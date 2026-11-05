@@ -62,7 +62,8 @@ public sealed class CardsUnreadableException(IReadOnlyList<CardsUnreadableExcept
 }
 
 /// <summary>見つかったカードリーダー。開くまでは何も使わない</summary>
-public sealed record CardLinkCandidate(string Name, Func<ICardLink> Open);
+/// <param name="Device">チューナーの差し込み口なら、そのチューナーのデバイス (<c>dt295:3-5</c>)。使わない設定にしたとき、チューナーも使っていなければ USB を閉じる</param>
+public sealed record CardLinkCandidate(string Name, Func<ICardLink> Open, string? Device = null);
 
 /// <summary>
 /// カードとの接続。**APDU の単位**でやり取りする (T=1 の枠組みは接続の側が持つ)。

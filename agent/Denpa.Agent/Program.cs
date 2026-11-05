@@ -127,6 +127,8 @@ if (tls.Token.Length < 32)
 }
 // CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。Zd1j.cs)
 Zd1jBoard.Locks = new Zd1jLocks(config.Zd1jLocksFile);
+// 使わないカードリーダー (tuners.json の隣。CardChoice.cs)。カードを開く前に読む
+CardChoice.Load(config.CardsFile);
 var events = new Events();
 var (tuners, detected) = config.ResolveTuners();
 
@@ -531,6 +533,40 @@ app.MapGet("/denpa/card", async (HttpContext http) =>
 {
     var status = await Task.Run(() => Card.Status(pool.Descrambling));
     await Respond.Write(http, status);
+});
+
+/*
+ * 使わないカードリーダーを入れ替える。**画面のカードリーダーの表のスイッチから。**
+ * 受け取るのは使わないリーダーの名前の一覧 (disabled)。画面は挿さっているリーダーしか並べないので、
+ * **挿さっていないリーダーの「使わない」は残す** (抜いて挿し直したら勝手に使い始めない)。
+ * 使っている最中のリーダーなら手放して次のリーダーで繋ぎ直し、
+ * PIX-DT295・CECH-ZD1 J の差し込み口なら、チューナーも使っていなければ USB を閉じる
+ */
+app.MapPut("/denpa/card/readers", async (HttpContext http) =>
+{
+    var body = await Respond.Read(http);
+    if (body?["disabled"] is not JsonArray list || !list.All(node => Respond.IsText(node)))
+    {
+        await Respond.Error(http, "disabled は文字列の配列で書きます", 400);
+        return;
+    }
+    var present = await Task.Run(CardLinks.All);
+    var names = present.Select(candidate => candidate.Name).ToHashSet();
+    CardChoice.Save([.. list.Select(node => node!.GetValue<string>()), .. CardChoice.Disabled.Where(name => !names.Contains(name))]);
+    var disabled = CardChoice.Disabled;
+    await Task.Run(() =>
+    {
+        Keys.Local.Release(disabled);
+        // チューナーとして使っている機材は開いたまま (チューナーが閉じるときに閉じる)
+        var used = pool.Tuners.Where(spec => !spec.Disabled && spec.Device is not null).Select(spec => spec.Device!).ToHashSet();
+        foreach (var candidate in present.Where(candidate => disabled.Contains(candidate.Name)))
+        {
+            if (candidate.Device is not { } device || used.Contains(device)) continue;
+            if (Dt295.Parse(device) is { } dt295) Dt295ResidentBoard.CloseIfIdle(dt295);
+            else if (Zd1j.Parse(device) is { } zd1j) Zd1jBoard.CloseIfIdle(zd1j);
+        }
+    });
+    await Respond.Write(http, new JsonObject { ["disabled"] = Json.Strings(disabled.Order(StringComparer.Ordinal)) });
 });
 
 app.MapPost("/denpa/decode", async (HttpContext http) =>

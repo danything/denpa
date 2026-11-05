@@ -109,6 +109,32 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
+    /// 使っているリーダーが <paramref name="names"/> にあれば手放し、**すぐに次のリーダーで繋ぎ直す**
+    /// (画面で使わない設定にしたとき。<see cref="CardChoice"/>)。繋ぎ直せなくても投げない。
+    /// 次の ECM で、ふだんと同じく探し直す
+    /// </summary>
+    public void Release(IReadOnlySet<string> names)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _link is null || !names.Contains(_link.Name)) return;
+            var was = _link.Name;
+            Drop();
+            _failed = null;
+            try
+            {
+                Connect();
+                Log.Write($"{was} を使わない設定にしたため、{_link!.Name} に切り替えました");
+            }
+            catch (IOException error)
+            {
+                _failed = (_clock.GetUtcNow(), error);
+                Log.Write($"{was} を使わない設定にしました。ほかに使えるカードリーダーがありません ({error.Message})");
+            }
+        }
+    }
+
+    /// <summary>
     /// **いまカードと話せるか**、INT を 1 回通して確かめる (画面の「カードリーダー」行)。
     /// 切れていれば繋ぎ直し、駄目なら投げる
     /// </summary>

@@ -24,6 +24,26 @@
   const configSave = new SaveState();
   /** チューナーの行の削除は 2 回押し (ほかの画面の削除と同じ。`arming`) */
   const deleting = arming('[data-testid^="tuner-delete"]');
+  /** カードリーダーの「使う」の保存の様子 (その場で保存する) */
+  const readerSave = new SaveState();
+  /**
+   * **カードを読めている最後のカードリーダーをオフにするのは 2 回押し。** オフにすると復号できなくなるので、
+   * スイッチでは送らずに聞き返し、「オフを確定」で送る (削除の 2 回押しと同じ `arming`)
+   */
+  const turningOff = arming('[data-testid="card-reader-off-confirm"]');
+
+  /** 聞き返したリーダーのスイッチを外して送る。送るのは隠し欄の `change` (`autosave` が拾う) */
+  function confirmOff(form: HTMLFormElement | null, index: number) {
+    turningOff.fire();
+    const use = form?.querySelector<HTMLInputElement>(
+      `input[name="reader-use.${index}"]`,
+    );
+    if (use === null || use === undefined) return;
+    use.checked = false;
+    form
+      ?.querySelector(`input[name="reader.${index}"]`)
+      ?.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 
   /**
    * 衛星の給電の選び方。値はエージェントが読む字のまま (小文字。`agent/Denpa.Agent/Tuning.cs`)。
@@ -72,7 +92,12 @@
   };
 </script>
 
-<svelte:window onclick={deleting.stand} />
+<svelte:window
+  onclick={(event) => {
+    deleting.stand(event);
+    turningOff.stand(event);
+  }}
+/>
 
 <!--
   **選ばせる。打たせない。** エージェントが読むのは小文字の `15v` / `11v` だけで (`Tuning.cs`)、
@@ -404,6 +429,7 @@
     <div class="reader">
       <div class="cluster">
         <h3>カードリーダー</h3>
+        <SaveNote status={readerSave} />
         {#if shownCard.value === undefined}
           <!-- 答え待ち。「正常」「エラー」のバッジと同じ大きさの枠 -->
           <span
@@ -449,66 +475,135 @@
           </div>
         {/if}
         {#if card.readers.length > 0}
-          <div class="table-wrap row-cards-wrap">
-            <table class="row-cards">
-              <thead>
-                <tr>
-                  <th>カードリーダー</th>
-                  <th>カード (番号)</th>
-                  <th>状態</th>
-                  <th class="wide">使っているチューナー</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- 同じ型のリーダーを 2 つ挿すと名前が並ぶ。目印は番号で -->
-                {#each card.readers as reader, i (i)}
-                  {@const label = splitReaderName(reader.name)}
-                  <tr data-testid="card-reader-row" data-state={reader.state}>
-                    <!--
+          <!-- カードを読めているリーダー (使用中と予備)。これが 1 台だけなら、外すと復号できなくなる -->
+          {@const reading = card.readers.filter(
+            (reader) => reader.state === "active" || reader.state === "standby",
+          ).length}
+          <!--
+            **使うかどうかはリーダーごと。** 使わないリーダーは開かない (PIX-DT295・CECH-ZD1 J の差し込み口なら、
+            チューナーも使っていなければ USB を閉じる)。変えたらその場で保存する (`autosave`)。
+            カードを読めている最後の 1 台だけは 2 回押し (`turningOff`)
+          -->
+          <form
+            method="POST"
+            action="?/cards"
+            use:autosave={readerSave}
+            data-testid="card-reader-form"
+          >
+            <div class="table-wrap row-cards-wrap">
+              <table class="row-cards">
+                <thead>
+                  <tr>
+                    <th>カードリーダー</th>
+                    <th>カード (番号)</th>
+                    <th>状態</th>
+                    <th class="wide">使っているチューナー</th>
+                    <th>使う</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- 同じ型のリーダーを 2 つ挿すと名前が並ぶ。目印は番号で -->
+                  {#each card.readers as reader, i (i)}
+                    {@const label = splitReaderName(reader.name)}
+                    {@const last =
+                      reading === 1 &&
+                      (reader.state === "active" || reader.state === "standby")}
+                    <tr
+                      data-testid="card-reader-row"
+                      data-state={reader.state}
+                      class:off={reader.state === "disabled"}
+                    >
+                      <!--
                                         場所 (「usb 4-11」) は 2 行目に小さく。**文字の途中で折らない**。
                                         break-all にしていた頃は、狭い列で「Gempl / us US / B Sma…」と
                                         1 文字ずつ折れて読めなかった。折るのは単語の区切りで
                                     -->
-                    <td class="reader-name span" data-label="カードリーダー">
-                      <span data-testid="card-reader-name">{label.name}</span>
-                      {#if label.where !== null}
-                        <div
-                          class="tiny muted mono"
-                          data-testid="card-reader-where"
-                        >
-                          {label.where}
-                        </div>
-                      {/if}
-                    </td>
-                    <td class="nowrap small mono" data-label="カード (番号)">
-                      {#if reader.ids.length > 0}
-                        {reader.ids.join(" / ")}
-                      {:else}
-                        <span class="muted">—</span>
-                      {/if}
-                    </td>
-                    <td class="nowrap" data-label="状態">
-                      <span class="tag {READER_TONE[reader.state] ?? ''}">
-                        {READER_STATE_LABEL[reader.state]}
-                      </span>
-                      {#if reader.error !== undefined}
-                        <div class="text-error tiny">
-                          {reader.error}
-                        </div>
-                      {/if}
-                    </td>
-                    <td class="small span" data-label="使っているチューナー">
-                      {#if reader.tuners.length > 0}
-                        {reader.tuners.join("、")}
-                      {:else}
-                        <span class="muted">—</span>
-                      {/if}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+                      <td class="reader-name span" data-label="カードリーダー">
+                        <span data-testid="card-reader-name">{label.name}</span>
+                        {#if label.where !== null}
+                          <div
+                            class="tiny muted mono"
+                            data-testid="card-reader-where"
+                          >
+                            {label.where}
+                          </div>
+                        {/if}
+                      </td>
+                      <td class="nowrap small mono" data-label="カード (番号)">
+                        {#if reader.ids.length > 0}
+                          {reader.ids.join(" / ")}
+                        {:else}
+                          <span class="muted">—</span>
+                        {/if}
+                      </td>
+                      <td class="nowrap" data-label="状態">
+                        <span class="tag {READER_TONE[reader.state] ?? ''}">
+                          {READER_STATE_LABEL[reader.state]}
+                        </span>
+                        {#if reader.error !== undefined}
+                          <div class="text-error tiny">
+                            {reader.error}
+                          </div>
+                        {/if}
+                      </td>
+                      <td class="small span" data-label="使っているチューナー">
+                        {#if reader.tuners.length > 0}
+                          {reader.tuners.join("、")}
+                        {:else}
+                          <span class="muted">—</span>
+                        {/if}
+                      </td>
+                      <td class="use-cell" data-label="使う">
+                        <input
+                          type="hidden"
+                          name={`reader.${i}`}
+                          value={reader.name}
+                        />
+                        <!--
+                        カードを読めている最後の 1 台は、スイッチでは送らない (`data-no-autosave`)。外したら戻して聞き返す
+                      -->
+                        <label class="hit">
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            name={`reader-use.${i}`}
+                            checked={reader.state !== "disabled"}
+                            aria-checked={reader.state !== "disabled"}
+                            aria-label={`${reader.name} を使う`}
+                            data-testid="card-reader-use"
+                            data-no-autosave={last ? "" : undefined}
+                            onchange={(event) => {
+                              if (!last) return;
+                              event.currentTarget.checked = true;
+                              turningOff.arm(i);
+                            }}
+                          />
+                        </label>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            {#if turningOff.armed !== null}
+              {@const index = turningOff.armed}
+              <div class="notice warning small cluster" role="alert">
+                <span>
+                  カードを読めるカードリーダーはこれだけです。オフにすると、スクランブルを復号できなくなります
+                </span>
+                <button
+                  type="button"
+                  class="small danger"
+                  data-no-autosave
+                  data-testid="card-reader-off-confirm"
+                  onclick={(event) =>
+                    confirmOff(event.currentTarget.closest("form"), index)}
+                >
+                  オフを確定
+                </button>
+              </div>
+            {/if}
+          </form>
         {/if}
       {/if}
     </div>
@@ -572,7 +667,8 @@
     border-end-end-radius: 0;
   }
   /* 使わないチューナーは名前と状態を控えた字にする (印の「無効」と合わせて、色だけに頼らない。透かすと 4.5:1 を割る) */
-  .tuners .main.off :is(.name-cell, .state-cell) {
+  .tuners .main.off :is(.name-cell, .state-cell),
+  .row-cards tr.off :is(.reader-name, td:nth-child(2), td:nth-child(4)) {
     color: var(--dp-muted);
   }
   .name-cell {

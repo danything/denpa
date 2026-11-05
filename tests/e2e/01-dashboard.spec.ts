@@ -228,6 +228,59 @@ test.describe("ホームと画面遷移", () => {
   });
 
   /**
+   * **カードリーダーはリーダーごとに使うかを選べる** (エージェントの CardChoice.cs)。
+   * カードを読めている最後の 1 台を外すと復号できなくなるので、スイッチでは送らずに聞き返し、「オフを確定」で外す
+   */
+  test("カードリーダーごとに使うかを選べ、最後の 1 台は 2 回押しで外す", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    try {
+      await goto(page, "/settings/reception");
+      const card = page.getByTestId("tuner-section");
+      const rows = card.getByTestId("card-reader-row");
+      await expect(rows).toHaveCount(2);
+
+      // 予備を外すと、その場で保存して「無効」の行になる
+      await rows.nth(1).getByTestId("card-reader-use").click();
+      await expect(rows.nth(1)).toHaveAttribute("data-state", "disabled");
+      await expect(rows.nth(1)).toContainText("無効");
+      await expect(rows.nth(0)).toHaveAttribute("data-state", "active");
+
+      // カードを読めている最後の 1 台は、スイッチを外しても送らずに聞き返す
+      const last = rows.nth(0).getByTestId("card-reader-use");
+      await last.click();
+      await expect(last).toBeChecked();
+      const confirm = card.getByTestId("card-reader-off-confirm");
+      await expect(confirm).toBeVisible();
+      await expect(rows.nth(0)).toHaveAttribute("data-state", "active");
+
+      // ほかを触ると聞き返しを取り下げる
+      await card.getByRole("heading", { name: "カードリーダー" }).click();
+      await expect(confirm).toHaveCount(0);
+
+      // 「オフを確定」で外す
+      await last.click();
+      await card.getByTestId("card-reader-off-confirm").click();
+      await expect(rows.nth(0)).toHaveAttribute("data-state", "disabled");
+      await expect(card.getByTestId("card-message")).toHaveText(
+        "使うカードリーダーがありません。カードリーダーをオンにしてください",
+      );
+
+      // 戻すときは聞き返さない
+      await rows.nth(1).getByTestId("card-reader-use").click();
+      await expect(
+        rows.filter({ hasText: "Spare Card Reader" }),
+      ).toHaveAttribute("data-state", "active");
+    } finally {
+      await request.put(`${stack.agentUrl}/denpa/card/readers`, {
+        data: { disabled: [] },
+      });
+    }
+  });
+
+  /**
    * **外枠は表を待たずに出す** (`+page.server.ts`。マスは `+page.ts` が `/api/guide` から後で取る)。
    *
    * 種別のタブ・日送り・検索窓は URL だけで描けるのに、いちばん重い表を待って

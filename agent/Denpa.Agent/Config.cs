@@ -103,6 +103,9 @@ public sealed class Config(string tunersFile, string channelsFile)
     /// </summary>
     public string Px4FirmwareFile => Path.Combine(Dir, Px4Firmware.FileName);
 
+    /// <summary>使わないカードリーダーの名前 (tuners.json の隣。画面から書く。<see cref="CardChoice"/>)</summary>
+    public string CardsFile => Path.Combine(Dir, "cards.json");
+
     /// <summary>自分の鍵と証明書・合言葉・組んだ denpa の置き場 (tuners.json の隣の tls/。<see cref="AgentTls"/>)</summary>
     public string TlsDir => Path.Combine(Dir, "tls");
 

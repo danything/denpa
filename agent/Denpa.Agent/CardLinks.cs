@@ -17,10 +17,18 @@ public static class CardLinks
     /// USB のリーダーは、Linux なら usbfs を直に (Ccid.cs)、macOS と Windows なら OS の PC/SC 越しに
     /// (Pcsc.cs)。**macOS と Windows には usbfs が無い。** px4d の内蔵リーダーは Windows でも同じ IPC (AF_UNIX) で話す。
     /// asicen-userland の asicend も内蔵カードを px4d と同じ IPC で出す (Asicen.cs。Windows 用は無い)。
-    /// CECH-ZD1 J の内蔵の差し込み口と PIX-DT295 の差し込み口はいちばん後ろ (Zd1j.cs・Dt295.cs。ほかのチューナーの復号にも使う)
+    /// CECH-ZD1 J の内蔵の差し込み口と PIX-DT295 の差し込み口はいちばん後ろ (Zd1j.cs・Dt295.cs。ほかのチューナーの復号にも使う)。
+    /// **使わない設定にしたリーダーは入れない** (<see cref="CardChoice"/>)
     /// </para>
     /// </summary>
-    public static IReadOnlyList<CardLinkCandidate> Find() =>
+    public static IReadOnlyList<CardLinkCandidate> Find() => Without(All(), CardChoice.Disabled);
+
+    /// <summary>使わないリーダーを除く</summary>
+    internal static IReadOnlyList<CardLinkCandidate> Without(IReadOnlyList<CardLinkCandidate> found, IReadOnlySet<string> disabled) =>
+        disabled.Count == 0 ? found : [.. found.Where(candidate => !disabled.Contains(candidate.Name))];
+
+    /// <summary>使わないものも含めて、見えているリーダー全部。**探すだけで何も開かない**</summary>
+    public static IReadOnlyList<CardLinkCandidate> All() =>
         OperatingSystem.IsWindows() ? [.. PcscLink.Find(), .. Px4Card.Find(), .. Zd1j.Cards(), .. Dt295.Cards()]
         : [.. OperatingSystem.IsLinux() ? Ccid.Find() : PcscLink.Find(), .. Px4Card.Find(), .. AsicenUserland.Cards(), .. Zd1j.Cards(), .. Dt295.Cards()];
 

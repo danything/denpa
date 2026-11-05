@@ -450,6 +450,7 @@ export const READER_STATE_LABEL: Record<CardReaderState, string> = {
   standby: "予備",
   empty: "カードなし",
   error: "エラー",
+  disabled: "無効",
 };
 
 /** ロゴまで見て判定できたときの覚え書き (`cm.openCm`) */

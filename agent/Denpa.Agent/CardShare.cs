@@ -112,6 +112,18 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
 
     /// <summary>いまカードと話せるか。INT を 1 回通す (<see cref="BCas.Check"/>)</summary>
     public CardInit Check() => Card().Check();
+
+    /// <summary>使っているリーダーを使わない設定にしたら手放して繋ぎ直す (<see cref="BCas.Release"/>)。開いていなければ何もしない</summary>
+    public void Release(IReadOnlySet<string> names)
+    {
+        BCas? card;
+        lock (_gate)
+        {
+            card = _card;
+            _failed = null;
+        }
+        card?.Release(names);
+    }
 }
 
 /// <summary>
