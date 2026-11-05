@@ -60,6 +60,7 @@ import {
 } from "#lib/rungs.js";
 import { BroadcastClock, parseStart } from "#lib/ts/clock.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
+import { KeyGate } from "#lib/ts/key-gate.js";
 import { MkvSplitter } from "#lib/ts/mkv.js";
 import { BUSY } from "#lib/ts/playback.js";
 
@@ -788,6 +789,10 @@ interface Viewer {
   side?: boolean;
   /** 字幕の第何言語を出すか (1〜8)。省けば第 1 言語。**その人の選んだもの**で、局を変えても続く */
   language?: number;
+  /**
+   * 詰まって映像の塊を捨てたあと、次のキーフレームまで渡さない係 (`hand`)。捨てていなければ undefined
+   */
+  resume?: KeyGate | undefined;
 }
 
 /**
@@ -1451,8 +1456,26 @@ class Session {
    * (`openChase` の `held`)
    */
   private hand(viewer: Viewer, kind: number, data: Uint8Array): void {
-    if (kind === CHANNEL.videoInit) viewer.ready = true;
-    else if (!viewer.ready) return;
+    if (kind === CHANNEL.videoInit) {
+      viewer.ready = true;
+      viewer.resume = undefined;
+    } else if (!viewer.ready) return;
+    /*
+     * **捨てたあとは、次のキーフレームの塊まで捨て続ける。** 塊には映像と音声が両方入っているので、途中を捨てると
+     * 続きの映像はキーフレームが来るまでデコードできない。そのまま渡すと Chromium は音だけ先に鳴らし、
+     * 映像はキーフレームまで止まって、音と映像がずれる (`ts/key-gate.ts`)。映像の入らない塊は渡す
+     */
+    if (kind === CHANNEL.videoMedia && this.init !== null) {
+      if (viewer.connection.congested === true) {
+        if (viewer.resume === undefined) {
+          viewer.resume = new KeyGate();
+          viewer.resume.init(this.init);
+        }
+      } else if (viewer.resume !== undefined) {
+        if (!viewer.resume.pass(data)) return;
+        viewer.resume = undefined;
+      }
+    }
     viewer.connection.send(
       kind,
       0n,
