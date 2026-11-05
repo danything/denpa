@@ -345,6 +345,20 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
 }
 
 /**
+ * 音声の構成 (`component_type`) から、出すチャンネル数。モノラル 1・ステレオ 2・5.1ch 6。
+ * ほかの構成とデュアルモノは undefined (ffmpeg に任せる。デュアルモノは左右に割る)
+ */
+export function audioChannels(componentType: number): number | undefined {
+  return componentType === 1
+    ? 1
+    : componentType === 3
+      ? 2
+      : componentType === 9
+        ? 6
+        : undefined;
+}
+
+/**
  * エンコードしたものに入れる音声の名前 (番組表と同じ言い方。入れないとプレイヤーに「Audio 1」としか出ない)。
  * 数と並びはエンコードしたものに合わせる: デュアルモノは左右に割った 2 本 (`encoder.ts` の `channelsplit`)、
  * それ以外は放送の順。多すぎても ffmpeg は在りもしないトラックへの指定を黙って読み飛ばす

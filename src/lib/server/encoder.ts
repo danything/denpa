@@ -14,7 +14,7 @@ import { basename, dirname } from "node:path";
 
 import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 
-import { audioTitles, DUAL_MONO } from "#lib/arib.js";
+import { audioChannels, audioTitles, DUAL_MONO } from "#lib/arib.js";
 
 import {
   CODEC_LABEL,
@@ -25,7 +25,6 @@ import {
 } from "../hw";
 import { encodeSource, tsPathOf } from "../source";
 import type { EncodeKind, EncodePhase, Recording } from "../types";
-import { programSpec } from "./captions";
 import { fileSize } from "./chase";
 import {
   chapterMetadata,
@@ -83,12 +82,12 @@ import {
 } from "./metadata";
 import { saveRecordedBml } from "./recorded-bml";
 import { recordingSummary } from "./recording";
-import { encodeJobs, recordings, services } from "./schema";
+import { encodeJobs, recordings } from "./schema";
 import { descramble, isScrambled } from "./scramble";
 import { settings } from "./settings";
 import { chunks, lines, lowerPriority, run } from "./stream";
 import { displayTitle } from "./title";
-import { TS_PROBE } from "./ts-probe";
+import { tsProbe } from "./ts-probe";
 import { notify } from "./webhook";
 
 /**
@@ -354,8 +353,16 @@ interface EncodeOptions {
    * 読ませる。ロゴの枠は標準出力に来るので、進み具合は fd 3 で受ける (`-progress pipe:3`)
    */
   analysis?: string[];
-  /** 局の番号 (PMT の番組番号)。字幕のストリームを名指しする (`captionArgs`)。分からなければ入力の先頭の字幕 */
-  program?: number | undefined;
+  /**
+   * 録画の先頭から本編が始まるまで (秒)。**探りをこれだけ延ばす** (`ts-probe.tsProbe`)。前の番組に字幕が無いと、
+   * 本編の字幕は番組が変わってから現れるため (#2189)
+   */
+  probeLead?: number;
+  /**
+   * 音声の何本目 (`0:a:<n>`) を何チャンネルで出すか。**番組表の構成で決める** (`arib.audioChannels`)。
+   * ffmpeg は先頭の音声でエンコーダを開くので、前の番組がモノラルだと本編のステレオも 1 チャンネルになる (#2189)
+   */
+  audioChannels?: (number | undefined)[];
   /** 60 コマ/秒で出す。滑らかになる代わりに時間もサイズも約 2 倍 (measureSmoothMotion で決める) */
   smoothMotion?: boolean;
   /**
@@ -433,14 +440,15 @@ export function inputSkip(
  * 放送の ARIB 字幕を**そのまま写す** (`-c:s copy`。Matroska では `S_ARIBSUB`、CodecPrivate は ffmpeg が書く)。
  * 観る画面はこれをサーバでデコードして文字の配置で描く (`api/recordings/<id>/captions.json`)。
  *
- * **局と字幕のストリームを名指しする** (`0:p:<局>:s:0`。`captions.programSpec`)。名指ししない既定の選び方では ARIB の字幕が落ちる。
- * 局が分からなければ入力の先頭の字幕。? は字幕の無い番組でも止めないため。
+ * **字幕のストリームを名指しする** (`0:s:0`)。名指ししない既定の選び方では ARIB の字幕が落ちる。? は字幕の無い番組でも止めないため。
+ * 局 (`0:p:<局>`) では名指ししない。録画の TS は 1 局に絞ってあり、前の番組から録ると、番組が変わってから現れた字幕を
+ * ffmpeg が局の外に並べ、局の名指しに当たらず落ちる (#2189)。
  * 時刻は映像と同じだけ詰まる (先頭を捨てる `-ss` も、CM を切る concat もストリームごとに同じ)
  */
-function captionArgs(program: number | undefined): string[] {
+function captionArgs(): string[] {
   return [
     "-map",
-    `${programSpec(program ?? 0)}:s:0?`,
+    "0:s:0?",
     "-c:s",
     "copy",
     "-metadata:s:s:0",
@@ -500,7 +508,9 @@ export function buildArgs(
    *
    * 字幕は同じ入力から写すので、映像と同じだけ詰まる。
    */
-  args.push(...inputArgs(inputSkip(seek, options.videoStart)));
+  args.push(
+    ...inputArgs(inputSkip(seek, options.videoStart), options.probeLead ?? 0),
+  );
   args.push("-i", input);
   /*
    * チャプター (CM の位置) はここでは入れない。境目はエンコードし終えてから決まるので、どのコーデックも
@@ -539,11 +549,18 @@ export function buildArgs(
     const streams = options.audioStreams ?? [];
     if (streams.length === 0) args.push("-map", "0:a");
     for (const index of streams) args.push("-map", `0:a:${index}`);
+    // チャンネル数は番組表の構成にそろえる (`audioChannels`)。出す何本目 (out) と、入力の何本目 (index) は `audioStreams` で対応する
+    const channels = options.audioChannels ?? [];
+    const inputs = streams.length === 0 ? channels.map((_, i) => i) : streams;
+    inputs.forEach((index, out) => {
+      const count = channels[index];
+      if (count !== undefined) args.push(`-ac:a:${out}`, String(count));
+    });
   }
   args.push("-c:a", "libopus", "-b:a", "256k"); // 元の放送 (AAC 256kbps) と同じビットレート
 
   // 字幕は**映像・音声のあと**に map する (= 最後のトラック)。映像が先頭でないと弱いデマルチプレクサがある
-  args.push(...captionArgs(options.program));
+  args.push(...captionArgs());
 
   /*
    * **音声にも名前を付ける** (`arib.audioTitles`)。番組表と同じ言い方にするので、
@@ -1108,9 +1125,9 @@ async function runFfmpeg(
   return { code, stderrTail: failureReason(tail.join("\n")), outTimeUs };
 }
 
-/** エンコードするときと同じ入力の前の引数 (先頭を捨てる `-ss` と探りの長さ)。CM 検出で読み直すときもコマの並びを揃える */
-function inputArgs(skip: number): string[] {
-  return [...(skip > 0 ? ["-ss", String(skip)] : []), ...TS_PROBE];
+/** エンコードするときと同じ入力の前の引数 (先頭を捨てる `-ss` と、前の番組を越えて本編まで探る長さ `lead`)。CM 検出で読み直すときもコマの並びを揃える */
+function inputArgs(skip: number, lead: number): string[] {
+  return [...(skip > 0 ? ["-ss", String(skip)] : []), ...tsProbe(lead)];
 }
 
 /**
@@ -1124,13 +1141,18 @@ async function decide(
   found: Scan | null,
   skip: number,
   video: boolean,
+  lead: number,
 ): Promise<CmDetection> {
   const none = (note: string) => ({ cm: [], duration: Number.NaN, note });
   if (found === null) return none("CM 検出の読み込みが失敗しました");
   try {
     // ロゴを覚え直して枠だけ読み直すときも、エンコードしたときと同じだけ先頭を捨てる
     return shiftDetection(
-      await reading.decide(found, { skip, before: inputArgs(skip), video }),
+      await reading.decide(found, {
+        skip,
+        before: inputArgs(skip, lead),
+        video,
+      }),
       skip,
     );
   } catch (error) {
@@ -1330,6 +1352,10 @@ async function runJob(jobId: number): Promise<void> {
       recording.audios ?? [],
       recording.audio_type === DUAL_MONO,
     ),
+    audioChannels: (recording.audios ?? []).map((audio) =>
+      audioChannels(audio.componentType),
+    ),
+    probeLead: programSpan(recording).programStart,
     mediaTitle: displayTitle(recording.name),
   };
 
@@ -1379,7 +1405,10 @@ async function runJob(jobId: number): Promise<void> {
   const measured = await probeVideo(sourceTs);
   encodeOptions.probed = { duration: measured.duration, fps: measured.fps };
   encodeOptions.height = measured.height;
-  encodeOptions.audioStreams = await probeLiveAudio(sourceTs);
+  encodeOptions.audioStreams = await probeLiveAudio(
+    sourceTs,
+    encodeOptions.probeLead ?? 0,
+  );
   // 映像が出るまでの音声だけの区間。先頭から捨てて 0 秒から始める
   encodeOptions.videoStart = await probeLeadIn(
     sourceTs,
@@ -1401,13 +1430,6 @@ async function runJob(jobId: number): Promise<void> {
       encodeOptions.displaySize = { width, height: measured.height };
     }
   }
-
-  // 字幕のストリームを局で名指しするための局の番号 (`captionArgs`)
-  encodeOptions.program = orm()
-    .select({ program: services.service_id })
-    .from(services)
-    .where(eq(services.id, recording.service_id))
-    .get()?.program;
 
   if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
@@ -1683,7 +1705,7 @@ async function runJob(jobId: number): Promise<void> {
         const audio = await scan(sourceTs, {
           video: false,
           audio: true,
-          before: inputArgs(skip),
+          before: inputArgs(skip, encodeOptions.probeLead ?? 0),
           signal,
           timeoutMs: config.cmDetectTimeout,
         });
@@ -1899,7 +1921,13 @@ async function runJob(jobId: number): Promise<void> {
     if (done === null) return null;
     if (reading !== null) {
       stage("cm", "CM の境目を決めています");
-      detection = await decide(reading, done.found, done.skip, done.video);
+      detection = await decide(
+        reading,
+        done.found,
+        done.skip,
+        done.video,
+        encodeOptions.probeLead ?? 0,
+      );
       if (detection.material !== undefined)
         saveMaterial(recording.id, detection.material);
       /*
