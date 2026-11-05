@@ -1,0 +1,145 @@
+name: mAgicVISION
+
+# PIX-DT295 に入れる mAgicVISION (https://github.com/makeding/mAgicVISION) の、本家の更新を追う。
+# 固定しているもの (agent/Denpa.Agent/firmware/magicvision.json):
+#   - ファームウェア: 本家の最新リリースの firmware.bin。変わっていれば差し替え、SHA-256 の定数と docs も書き換える
+#   - 移植したコード (Dt295Resident*.cs) の元のコミット。MIT の部分が変わっていれば、変わったファイルを PR の本文に並べる
+#     (C# への移植は人がする。コミットの固定は、移し終えたら人が書き換える)
+#
+# 変わっていれば PR を出す。**自分でマージはしない** (実機で確かめてからマージする)。
+# PR は GITHUB_TOKEN で開くので GitHub は CI を動かさない。代わりに test.yml を workflow_dispatch でその枝に起こし、
+# 本物の CI の結果を PR に付ける (同梱のファームウェアを読めるか・ABI のバージョンなどは単体テストで確かめる。実機の動きは確かめられない)
+on:
+  schedule:
+    # 毎日 6:00 (JST)
+    - cron: "0 21 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  # 作った枝で test.yml を起こす
+  actions: write
+
+env:
+  UPSTREAM: makeding/mAgicVISION
+  BRANCH: bump/magicvision
+  PIN: agent/Denpa.Agent/firmware/magicvision.json
+  FIRMWARE: agent/Denpa.Agent/firmware/magicvision-firmware.bin
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Compare with upstream
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          old_sha=$(jq -r .sha256 "$PIN")
+          old_commit=$(jq -r .commit "$PIN")
+          release=$(gh release view -R "$UPSTREAM" --json tagName --jq .tagName)
+          asset=$(gh release view "$release" -R "$UPSTREAM" --json assets --jq '[.assets[].name | select(startswith("magicvision-firmware_") and endswith(".deb"))][0]')
+          [ -n "$asset" ] && [ "$asset" != null ] || { echo "リリース $release にファームウェアの .deb がありません" >&2; exit 1; }
+          work=$(mktemp -d)
+          gh release download "$release" -R "$UPSTREAM" --pattern "$asset" --dir "$work"
+          dpkg-deb -x "$work/$asset" "$work/x"
+          firmware="$work/x/usr/lib/firmware/magicvision/firmware.bin"
+          [ -f "$firmware" ] || { echo "$asset に firmware.bin がありません" >&2; exit 1; }
+          new_sha=$(sha256sum "$firmware" | cut -d' ' -f1)
+          # 変わったファイルは clone して git で並べる (compare API の files は 300 件で切れる)。中身は要らないので blob は取らない
+          git clone --quiet --filter=blob:none --no-checkout "https://github.com/$UPSTREAM" "$work/upstream"
+          head=$(git -C "$work/upstream" rev-parse HEAD)
+          # 移植した MIT の部分 (README の「ライセンス」の範囲)
+          changed=$(git -C "$work/upstream" diff --name-only --no-renames "$old_commit" "$head" \
+            | grep -E '^(core/|device/|include/mb86H/|usb/boot\.c|usb/window\.c|usb/host_contract\.h|usb/userland/|userland/)' || true)
+          {
+            echo "firmware=$firmware"
+            echo "release=$release"
+            echo "asset=$asset"
+            echo "old_sha=$old_sha"
+            echo "new_sha=$new_sha"
+            echo "head=$head"
+            echo "old_commit=$old_commit"
+            echo "changed<<EOF"
+            echo "$changed"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "ファームウェア: $old_sha -> $new_sha ($release)"
+          echo "コード: $old_commit..$head で変わった MIT の部分:"
+          echo "$changed"
+
+      - name: Open a PR
+        if: steps.upstream.outputs.old_sha != steps.upstream.outputs.new_sha || steps.upstream.outputs.changed != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIRMWARE_SRC: ${{ steps.upstream.outputs.firmware }}
+          RELEASE: ${{ steps.upstream.outputs.release }}
+          ASSET: ${{ steps.upstream.outputs.asset }}
+          OLD_SHA: ${{ steps.upstream.outputs.old_sha }}
+          NEW_SHA: ${{ steps.upstream.outputs.new_sha }}
+          HEAD_COMMIT: ${{ steps.upstream.outputs.head }}
+          OLD_COMMIT: ${{ steps.upstream.outputs.old_commit }}
+          CHANGED: ${{ steps.upstream.outputs.changed }}
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH" origin/main
+          body=$(mktemp)
+          echo "本家 ($UPSTREAM) の更新を取り込む PR です (.github/workflows/magicvision.yml が作りました)。**実機で確かめてからマージしてください。**" > "$body"
+          echo >> "$body"
+          if [ "$OLD_SHA" != "$NEW_SHA" ]; then
+            cp "$FIRMWARE_SRC" "$FIRMWARE"
+            size=$(stat -c %s "$FIRMWARE")
+            # SHA-256 の定数と、大きさ・SHA-256 を書いた docs
+            grep -rl "$OLD_SHA" agent docs | xargs -r sed -i "s/$OLD_SHA/$NEW_SHA/g"
+            jq --arg r "$RELEASE" --arg a "$ASSET" --arg s "$NEW_SHA" '.release=$r | .asset=$a | .sha256=$s' "$PIN" > "$PIN.new" && mv "$PIN.new" "$PIN"
+            {
+              echo "## ファームウェア"
+              echo
+              echo "- リリース \`$RELEASE\` の \`$ASSET\` に差し替えました ($size バイト)"
+              echo "- SHA-256: \`$OLD_SHA\` → \`$NEW_SHA\`"
+              echo "- docs の大きさとファイル名は、変わっていれば人が直してください (agent/Denpa.Agent/firmware/README.md・docs/licenses.md)"
+              echo
+            } >> "$body"
+          fi
+          if [ -n "$CHANGED" ]; then
+            {
+              echo "## 移植したコードの元"
+              echo
+              echo "\`$OLD_COMMIT\`..\`$HEAD_COMMIT\` で、移植した MIT の部分のうち次が変わりました。中身を見て、要るものを Dt295Resident*.cs に移してください。"
+              echo "移し終えたら、$PIN の \`commit\` を \`$HEAD_COMMIT\` にしてください。"
+              echo
+              echo "<https://github.com/$UPSTREAM/compare/$OLD_COMMIT...$HEAD_COMMIT>"
+              echo
+              printf '%s\n' "$CHANGED" | sed 's/^/- `/; s/$/`/'
+            } >> "$body"
+          fi
+          # 同じファームウェア・同じ本家のコミットの PR がもう開いていれば、作り直さない (CI を毎日起こさない)
+          marker="<!-- magicvision: sha256=$NEW_SHA upstream=$HEAD_COMMIT -->"
+          echo "$marker" >> "$body"
+          if gh pr view "$BRANCH" --json state,body --jq 'select(.state == "OPEN") | .body' 2>/dev/null | grep -qF "$marker"; then
+            echo "同じ内容の PR が開いています"
+            exit 0
+          fi
+          title="chore(agent): mAgicVISION の本家の更新を取り込む"
+          git add -A agent docs
+          # コードだけが変わったときは書き換えるファイルが無いので、空のコミットで PR を作る
+          # (コミットの固定は、移し終えたら人がこの PR で書き換える。書き換えずにマージすると、翌日また PR が開く)
+          git commit --allow-empty -m "$title"
+          git push --force origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" --title "$title" --body-file "$body" \
+            || gh pr edit "$BRANCH" --title "$title" --body-file "$body"
+          # GITHUB_TOKEN で開いた PR には CI が動かないので、test.yml をこの枝で起こす
+          gh workflow run test.yml --ref "$BRANCH"

@@ -27,4 +27,6 @@ boot0 の body・hook と、256 KiB の常駐イメージ)。エージェント�
   `magicvision-firmware_0.1.0+20261104.160644_all.deb` にある `usr/lib/firmware/magicvision/firmware.bin`。手を加えていません
 - 許諾: 上流の README の「`firmware.bin` などのファームウェア成果物は再配布できます」
 
-このファイルも変えないでください。エージェントは使う前に SHA-256 を確かめ、違えば使いません。
+このファイルも手で変えないでください。エージェントは使う前に SHA-256 を確かめ、違えば使いません。
+本家の更新は `.github/workflows/magicvision.yml` が毎日見ています。最新のリリースの `firmware.bin` が変わったとき、または移植した MIT のコードが変わったときに、
+差し替えた PR を作ります (固定している値は `magicvision.json`)。その PR は自分ではマージしないので、実機で確かめてからマージします。
