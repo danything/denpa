@@ -601,7 +601,7 @@ app.Lifetime.ApplicationStopped.Register(() =>
     pool.CloseAll();
     // CECH-ZD1 J は眠らせて LED を緑に戻してから閉じる (カードのために開いていても)
     Zd1jBoard.CloseAll();
-    // PIX-DT295 は idle イメージを書き戻して認証前に戻してから閉じる (認証済みのまま放っておくと約 61 秒でエラーの状態になる)
+    // PIX-DT295 は常駐イメージを機材に残したまま手放してから閉じる (カードのために開いていても)
     Dt295ResidentBoard.CloseAll();
     // 利用者を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
     UserlandDaemon.StopAll();

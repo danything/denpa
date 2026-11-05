@@ -128,14 +128,14 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 # 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
 # エージェントが要るのはこれで全部。実行ファイルが直に繋ぐのは libc と libm だけで、libssl は .NET が読む。
 # エージェントのポート (AGENT_PORT) は denpa と証明書で確かめ合う HTTPS なので、libssl を常に使う (AgentTls.cs)。
-# CARD_URL を https で指したときと、PIX-DT295 の公式パッケージを取ってくるときも .NET の HttpClient が libssl を読み、
+# CARD_URL を https で指したときも .NET の HttpClient が libssl を読み、
 # 相手の証明書は ca-certificates で確かめる。
 # 子プロセスは px4d / px4ctl / siano-ts / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起こす。
 # シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
 # 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。
 #
 # **`recisdb` も libaribb25 も pcscd も入れない。** 選局は自分でやり (ioctl)、
-# B25 も自分で復号し (B25.cs)、カードリーダーとも自分で話す (Ccid.cs / Px4Card.cs / Zd1j.cs)。
+# B25 も自分で復号し (B25.cs)、カードリーダーとも自分で話す (Ccid.cs / Px4Card.cs / Zd1j.cs / Dt295ResidentTuner.cs)。
 #
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
 # px4d のソケットを /run/px4-userland に作るので、今までどおり root で動かす

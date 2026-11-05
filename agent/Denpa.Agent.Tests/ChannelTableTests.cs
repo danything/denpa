@@ -90,7 +90,7 @@ public class ChannelTableTests
     [Test]
     public async Task 衛星の名前の後ろに番組番号を付けられる()
     {
-        // 機材が番組を選ぶもの (PIX-DT295 の衛星) に、受ける番組を伝える。TSID と同じ中継器の同じ周波数
+        // 衛星の名前に付けた番組番号を読む。TSID と同じ中継器の同じ周波数
         var plain = ChannelTable.Parse("BS01:16400")!;
         var service = ChannelTable.Parse("BS01:16400/152")!;
         await Assert.That(plain.ServiceId).IsNull();
