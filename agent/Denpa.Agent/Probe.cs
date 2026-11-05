@@ -23,6 +23,7 @@ namespace Denpa.Agent;
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)
 /// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
 /// denpa-agent --card zd1j:4-12.1                            # CECH-ZD1 J の内蔵の差し込み口だけ (ほかのリーダーに触らない)
+/// denpa-agent --card dt295:4-12.1                           # PIX-DT295 の差し込み口だけ (ほかのリーダーに触らない)
 /// </code>
 ///
 /// <para>
@@ -116,6 +117,7 @@ public static class Probe
         Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
         foreach (var found in Px4Card.Find().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
         Zd1j.DescribeCards(Zd1j.Cards(), Console.Out);
+        Dt295.DescribeCards(Dt295.Cards(), Console.Out);
         try
         {
             using var card = CardLinks.Open();
@@ -132,6 +134,7 @@ public static class Probe
         finally
         {
             Zd1jBoard.CloseAll();
+            Dt295ResidentBoard.CloseAll();
         }
     }
 

@@ -285,6 +285,25 @@ public class Dt295Tests
         card.Dispose();
         Dt295ResidentBoard.CloseIfIdle(port);
     }
+
+    [Test]
+    public async Task card_は_PIX_DT295_が無くても_1_行出し_どんな失敗も行にする()
+    {
+        var none = new StringWriter();
+        Dt295.DescribeCards([], none);
+        await Assert.That(none.ToString().Trim()).IsEqualTo("PIXELA PIX-DT295: 見つかりません");
+
+        var output = new StringWriter();
+        Dt295.DescribeCards(
+        [
+            new CardLinkCandidate("PIXELA PIX-DT295 9-15 Card Reader", () => throw new DllNotFoundException("IOKit を読み込めません")),
+            new CardLinkCandidate("PIXELA PIX-DT295 9-16 Card Reader", () => throw new IOException("usb 9-16 を開けません")),
+        ], output);
+        var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        await Assert.That(lines.Length).IsEqualTo(2);
+        await Assert.That(lines[0]).StartsWith("内蔵 PIXELA PIX-DT295 9-15 Card Reader: DllNotFoundException: IOKit を読み込めません (");
+        await Assert.That(lines[1]).StartsWith("内蔵 PIXELA PIX-DT295 9-16 Card Reader: usb 9-16 を開けません (");
+    }
 }
 
 /// <summary>
