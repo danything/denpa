@@ -326,6 +326,12 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
       audioStreams: [1],
     });
     expect(argValue(picked, "-ac:a:0")).toBe("6");
+    // 全部使うときは、出す何本目と入力の何本目が同じ
+    const all = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      audioChannels: [undefined, 1],
+    });
+    expect(all).not.toContain("-ac:a:0");
+    expect(argValue(all, "-ac:a:1")).toBe("1");
   });
 
   /**
