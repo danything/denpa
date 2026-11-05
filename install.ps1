@@ -233,10 +233,10 @@ function Move-FromDocker {
 }
 
 # 起こすスクリプト。**起こすたびに作り直すかを決める**: コンテナから Windows のエージェントへは
-# Hyper-V の Default Switch の IP で届くが (host.docker.internal は無い)、その IP は再起動で変わりうる。
+# WSL のホスト接続名 host.wslc.internal で届く。仮想スイッチの有無には依存しない。
 # 宛先 (合言葉も込みの TUNER_AGENT_URL) かバージョンか denpa.env が変わっていればコンテナを作り直す
 # (環境変数は作るときに埋め込まれる。DB はボリューム、録画は Windows のフォルダなので消えない)。
-# エージェントの名前は見ない (denpa は組んだときの証明書そのもので確かめる) ので、IP で書いてよい。
+# denpa は組んだときの証明書そのもので確かめるので、この接続名でも TLS の認証は変わらない。
 # wslc には restart の指定が無いので、ログオン時のタスクがこれを流す。
 # **ポートは 0.0.0.0 に出す** (既定は 127.0.0.1 だけで、LAN のほかの機器から開けない)
 function Write-StartScript([string]$Image, [string]$Token) {
@@ -248,9 +248,8 @@ $image = '__IMAGE__'
 $envFile = '__ENVFILE__'
 $raw = '__RAW__'
 $encoded = '__ENCODED__'
-$ip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'vEthernet (Default Switch)' -ErrorAction SilentlyContinue).IPAddress | Select-Object -First 1
-if (-not $ip) { $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -like 'vEthernet*' | Select-Object -First 1).IPAddress }
-$agent = "https://${ip}:__PORT__#pair=__TOKEN__"
+# WSL のホスト接続名を使う。仮想スイッチや LAN の IP は構成・再起動で変わる。
+$agent = "https://host.wslc.internal:__PORT__#pair=__TOKEN__"
 # Env vars are baked in at creation, so a changed denpa.env also means recreating
 $envHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $envFile).Hash
 $info = & wslc inspect __NAME__ 2>$null | Out-String
