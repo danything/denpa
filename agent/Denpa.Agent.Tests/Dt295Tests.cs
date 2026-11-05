@@ -255,33 +255,48 @@ public class Dt295Tests
     // ---------------------------------------------------------------------
 
     [Test]
-    public async Task カードは_ATR_を読み_APDU_を_32_バイトずつ渡す()
+    public async Task カードは_UART_で_ATR_と_IFSD_を決め_32_バイト超の応答も読む()
     {
         var (resident, usb, image) = Device();
         resident.CardInserted = true;
+        resident.FirmwareCardPowered = true;
         var port = NewPort();
         using (var card = new Dt295ResidentCard("DT295 Card Reader", () => Acquire(port, usb, image), () => resident.Now, ms => resident.Now += ms))
         {
             await Assert.That(card.Reset()).IsEquivalentTo(FakeResident.Atr);
-            // 電源が入ったままもう一度リセットしても通る (B-CAS を読む処理がリセットし直す)
+            // 常駐イメージ側が持っていた電源は手放させ、S(IFS) で IFSD 251 を取り決める
+            await Assert.That(resident.FirmwareCardPowered).IsFalse();
+            await Assert.That(resident.CardIfsd).IsEqualTo(251);
+            await Assert.That(resident.UartCardPowered).IsTrue();
+
+            // もう一度リセットしても通る (T=1 の番号を 0 からそろえ直す)
             await Assert.That(card.Reset()).IsEquivalentTo(FakeResident.Atr);
             var apdu = Enumerable.Range(0, 70).Select(i => (byte)i).ToArray();
             var answer = card.Transmit(apdu);
-            // 偽物はそのまま返して 90 00 を付ける
+            // 受信 FIFO が 32 バイトずつでも、72 バイトの応答を最後まで取り切る
             await Assert.That(answer).IsEquivalentTo(apdu.Concat(new byte[] { 0x90, 0x00 }).ToArray());
-            await Assert.That(resident.CardTxChunks).IsEqualTo(3);
+            // 2 回目の APDU (NS=1) も通る
+            await Assert.That(card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00])).IsEquivalentTo(new byte[] { 0x90, 0x32, 0x00, 0x00, 0x00, 0x90, 0x00 });
         }
         Dt295ResidentBoard.CloseIfIdle(port);
+        await Assert.That(resident.UartCardPowered).IsFalse();
         await Assert.That(usb.Disposed).IsTrue();
     }
 
     [Test]
     public async Task カードが無ければ_CardAbsentException()
     {
-        var (_, usb, image) = Device();
+        var (resident, usb, image) = Device();
         var port = NewPort();
-        using var card = new Dt295ResidentCard("DT295 Card Reader", () => Acquire(port, usb, image));
+        using var card = new Dt295ResidentCard("DT295 Card Reader", () => Acquire(port, usb, image), () => resident.Now, ms => resident.Now += ms);
         await Assert.That(() => card.Reset()).Throws<CardAbsentException>();
+
+        // 繋いだあとに抜かれたときも CardAbsentException になり、UART の電源を切る
+        resident.CardInserted = true;
+        await Assert.That(card.Reset()).IsEquivalentTo(FakeResident.Atr);
+        resident.CardInserted = false;
+        await Assert.That(() => card.Transmit([0x90, 0x30, 0x00, 0x00, 0x00])).Throws<CardAbsentException>();
+        await Assert.That(resident.UartCardPowered).IsFalse();
         card.Dispose();
         Dt295ResidentBoard.CloseIfIdle(port);
     }
