@@ -303,15 +303,29 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
     expect(args.filter((a) => a === "-i")).toHaveLength(1);
   });
 
-  test("字幕は放送の ARIB 字幕を局で名指しして写す", () => {
+  test("字幕は放送の ARIB 字幕を名指しして写す (局では名指ししない。#2189)", () => {
     // 名指ししない既定の選び方では ARIB の字幕が落ちる。Matroska には S_ARIBSUB で入る
-    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
-      program: 1024,
-    });
-    expect(args).toContain("0:p:1024:s:0?");
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1");
+    expect(args).toContain("0:s:0?");
+    expect(args.some((a) => a.includes("0:p:"))).toBe(false);
     expect(argValue(args, "-c:s")).toBe("copy");
-    // 局が分からなければ入力の先頭の字幕
-    expect(buildArgs("/in.m2ts", "/out.mkv", 1, null)).toContain("0:s:0?");
+  });
+
+  test("音声のチャンネル数は番組表の構成にそろえ、探りは本編の開始まで延ばす (#2189)", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      audioChannels: [2, undefined],
+      probeLead: 30,
+    });
+    expect(argValue(args, "-ac:a:0")).toBe("2");
+    expect(args).not.toContain("-ac:a:1");
+    expect(argValue(args, "-analyzeduration")).toBe("45000000");
+    expect(argValue(args, "-probesize")).toBe("90000000");
+    // 先頭に中身の無い音声を外したときは、入力の何本目で引く
+    const picked = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+      audioChannels: [1, 6],
+      audioStreams: [1],
+    });
+    expect(argValue(picked, "-ac:a:0")).toBe("6");
   });
 
   /**
