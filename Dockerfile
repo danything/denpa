@@ -86,7 +86,7 @@ COPY --from=mpeg2wasm /opt/denpa/mpeg2 /
 # 照らし、合うときだけ immutable にする (src/lib/server/font.ts)。
 # 段を分けてあるのは、本番イメージと画像を撮るイメージ (下の `docs` 段) の両方に同じものを置くため
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS denpa-font
+FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS denpa-font
 # renovate: datasource=github-releases depName=danything/denpa-font
 ARG DENPA_FONT_VERSION=v3.7
 ADD --chmod=644 https://github.com/danything/denpa-font/releases/download/${DENPA_FONT_VERSION}/SHA256SUMS \
@@ -153,7 +153,7 @@ CMD ["bun", "scripts/capture-docs.ts"]
 # agent/Dockerfile も同じ)。タグだけだと月に何度か中身が入れ替わり、CI は `pull: true` なので
 # その日の push が — CSS を1行直しただけでも — ffmpeg の組み直し (10分強) に巻き込まれる。
 # 固定しておけば組み直すのは Renovate が digest を上げる PR のときだけになる
-FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS ffmpeg
+FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS ffmpeg
 SHELL ["/bin/bash", "-c"]
 # **arch ごとに、その arch のランナーで組む** (CI は amd64 と arm64 を別の機械で。QEMU で
 # ffmpeg を組むと何倍も掛かる)。digest は複数 arch の索引を指しているので、上の FROM は
@@ -333,7 +333,7 @@ RUN case "${TARGETARCH}" in \
 # **Mesa は 25 系に留める** (renovate.json)。26 系は libdrm 2.4.133 以上を求め、trixie の libdrm は 2.4.124。
 # arm64 では組まない (AMD の GPU を載せた arm の機械はまず無い)。空の /out を残し、runtime-libs 段の COPY が通るようにする
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS mesa
+FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS mesa
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 ARG TARGETARCH
 # renovate: datasource=gitlab-tags depName=mesa/mesa registryUrl=https://gitlab.freedesktop.org extractVersion=^mesa-(?<version>\d+\.\d+\.\d+)$
@@ -394,7 +394,7 @@ FROM gcr.io/distroless/base-nossl-debian13:latest@sha256:d710a5c8bfe4cf7e726d7e1
 # AMD の VA-API ドライバ (radeonsi) は `mesa` 段で組んだもの。それが繋ぐライブラリ (libdrm-amdgpu1 など) と、
 # GPU の名前の一覧 (libdrm-common の amdgpu.ids) は Debian から入れる。これも amd64 だけ
 # ---------------------------------------------------------------------------
-FROM docker.io/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS runtime-libs
+FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS runtime-libs
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
