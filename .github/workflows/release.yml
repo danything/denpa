@@ -113,20 +113,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      # denpa もエージェントも**バージョンを 1 層足して**から名前を付ける (.github/release.Dockerfile)。
-      # main で組んだイメージを土台にするので中身は同じで、増えるのは ENV の 1 枚。
-      # 動いている denpa はこれで自分のバージョンを知り、新しいバージョンの通知を出す。
-      # エージェントは `GET /denpa/about` で返し (agent/Denpa.Agent/About.cs)、設定の「バージョンと環境」が
-      # denpa とずれていないかを見る。元のイメージが無ければここで落ちる (黙って古い latest が
-      # 残るより、そのほうがいい)。
-      #
-      # **どちらも multi-arch のまま名前を付ける** (main は amd64 と arm64 を束ねた索引を
-      # 出している)。土台の索引にある arch を全部並べて `--platform` に渡す。release.Dockerfile
-      # には RUN が無いので、このランナー (amd64) で arm64 も組める — FROM で arch ごとの
-      # 土台を引いて ENV を足すだけで、何も実行しない (QEMU は要らない。エージェントの土台は
-      # distroless でシェルも無いが、何も実行しないので構わない)。arch を土台から
-      # 読むのは、arm64 を出す前の `sha-…` を手で貼り直すとき (workflow_dispatch) に
-      # 無い arch を求めて落ちないため
       # **main のビルドが土台のイメージを出し終えるまで待つ。** タグを打つのは main に入れた直後のことが多く、
       # build-and-deploy がまだ組んでいる (束ねる前の) うちにここへ来る。待たずに探すと見つからずに落ち、
       # latest が前のバージョンのまま残っていた (v2.30.2〜v2.31.0。手で流し直した)。
@@ -149,6 +135,20 @@ jobs:
             echo "${base}/${image} があります"
           done
 
+      # denpa もエージェントも**バージョンを 1 層足して**から名前を付ける (.github/release.Dockerfile)。
+      # main で組んだイメージを土台にするので中身は同じで、増えるのは ENV の 1 枚。
+      # 動いている denpa はこれで自分のバージョンを知り、新しいバージョンの通知を出す。
+      # エージェントは `GET /denpa/about` で返し (agent/Denpa.Agent/About.cs)、設定の「バージョンと環境」が
+      # denpa とずれていないかを見る。元のイメージが 60 分待っても出なければ、上の待つ段で落ちる
+      # (黙って古い latest が残るより、そのほうがいい)。
+      #
+      # **どちらも multi-arch のまま名前を付ける** (main は amd64 と arm64 を束ねた索引を
+      # 出している)。土台の索引にある arch を全部並べて `--platform` に渡す。release.Dockerfile
+      # には RUN が無いので、このランナー (amd64) で arm64 も組める — FROM で arch ごとの
+      # 土台を引いて ENV を足すだけで、何も実行しない (QEMU は要らない。エージェントの土台は
+      # distroless でシェルも無いが、何も実行しないので構わない)。arch を土台から
+      # 読むのは、arm64 を出す前の `sha-…` を手で貼り直すとき (workflow_dispatch) に
+      # 無い arch を求めて落ちないため
       - name: Point the names at this release
         id: push
         run: |
