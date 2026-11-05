@@ -171,19 +171,22 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [@unlimish](https://github.com/unlimish) ([#431](https://github.com/danything/denpa/issues/431) [#1843](https://github.com/danything/denpa/issues/1843))
 - [@fetburner](https://github.com/fetburner) ([#662](https://github.com/danything/denpa/issues/662))
 - [@sirius128](https://github.com/sirius128) ([#775](https://github.com/danything/denpa/issues/775))
-- [@chiroru27](https://github.com/chiroru27) ([#1681](https://github.com/danything/denpa/issues/1681) [#1724](https://github.com/danything/denpa/issues/1724) [#1822](https://github.com/danything/denpa/issues/1822) [#1838](https://github.com/danything/denpa/issues/1838))
+- [@chiroru27](https://github.com/chiroru27) ([#1681](https://github.com/danything/denpa/issues/1681) [#1724](https://github.com/danything/denpa/issues/1724) [#1822](https://github.com/danything/denpa/issues/1822) [#1838](https://github.com/danything/denpa/issues/1838) [#2197](https://github.com/danything/denpa/issues/2197))
 - [@minetaro12](https://github.com/minetaro12) ([#1850](https://github.com/danything/denpa/issues/1850))
+- [@haruki0420](https://github.com/haruki0420) ([#2190](https://github.com/danything/denpa/issues/2190) [#2191](https://github.com/danything/denpa/issues/2191) [#2192](https://github.com/danything/denpa/issues/2192) [#2193](https://github.com/danything/denpa/issues/2193))
 
 **報告や提案をくれた人** (ありがとうございます):
 
 - [@Khronos31](https://github.com/Khronos31) ([#184](https://github.com/danything/denpa/issues/184) [#195](https://github.com/danything/denpa/issues/195) [#376](https://github.com/danything/denpa/issues/376) [#377](https://github.com/danything/denpa/issues/377))
 - [@unlimish](https://github.com/unlimish) ([#417](https://github.com/danything/denpa/issues/417) [#1834](https://github.com/danything/denpa/issues/1834))
-- [@kametani-mikihiro](https://github.com/kametani-mikihiro) ([#437](https://github.com/danything/denpa/issues/437) [#471](https://github.com/danything/denpa/issues/471) [#480](https://github.com/danything/denpa/issues/480) [#481](https://github.com/danything/denpa/issues/481) [#503](https://github.com/danything/denpa/issues/503) [#505](https://github.com/danything/denpa/issues/505) [#509](https://github.com/danything/denpa/issues/509))
+- [@kametani-mikihiro](https://github.com/kametani-mikihiro) ([#437](https://github.com/danything/denpa/issues/437) [#471](https://github.com/danything/denpa/issues/471) [#480](https://github.com/danything/denpa/issues/480) [#481](https://github.com/danything/denpa/issues/481) [#503](https://github.com/danything/denpa/issues/503) [#505](https://github.com/danything/denpa/issues/505) [#509](https://github.com/danything/denpa/issues/509) [#2157](https://github.com/danything/denpa/issues/2157))
 - [@fetburner](https://github.com/fetburner) ([#668](https://github.com/danything/denpa/issues/668))
-- [@shino-zxc](https://github.com/shino-zxc) ([#1210](https://github.com/danything/denpa/issues/1210) [#1713](https://github.com/danything/denpa/issues/1713))
-- [@eggplants](https://github.com/eggplants) ([#1617](https://github.com/danything/denpa/issues/1617) [#1709](https://github.com/danything/denpa/issues/1709) [#1930](https://github.com/danything/denpa/issues/1930) [#1931](https://github.com/danything/denpa/issues/1931))
+- [@shino-zxc](https://github.com/shino-zxc) ([#1210](https://github.com/danything/denpa/issues/1210) [#1713](https://github.com/danything/denpa/issues/1713) [#2209](https://github.com/danything/denpa/issues/2209))
+- [@eggplants](https://github.com/eggplants) ([#1617](https://github.com/danything/denpa/issues/1617) [#1709](https://github.com/danything/denpa/issues/1709) [#1930](https://github.com/danything/denpa/issues/1930) [#1931](https://github.com/danything/denpa/issues/1931) [#2152](https://github.com/danything/denpa/issues/2152))
 - [@ogatomo21](https://github.com/ogatomo21) ([#1708](https://github.com/danything/denpa/issues/1708))
 - [@yuki-untitled](https://github.com/yuki-untitled) ([#1806](https://github.com/danything/denpa/issues/1806))
+- [@orijie](https://github.com/orijie) ([#2188](https://github.com/danything/denpa/issues/2188))
+- [@emuiak](https://github.com/emuiak) ([#2189](https://github.com/danything/denpa/issues/2189))
 
 <!-- thanks:end -->
 
