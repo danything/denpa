@@ -60,12 +60,17 @@ public static class CardChoice
         }
     }
 
-    /// <summary>使わないリーダーを入れ替えて書く。空なら消す (どれも使う)</summary>
-    public static void Save(IEnumerable<string> names)
+    /// <summary>
+    /// 使わないリーダーを入れ替えて書く。空なら消す (どれも使う)。
+    /// **<paramref name="present"/> に無い (挿さっていない) リーダーの「使わない」は残す。** 画面は挿さっているリーダーしか並べない。
+    /// 読んで書き戻すまでを 1 つのロックの中でするので、同時に 2 つ来ても片方の変更が消えない
+    /// </summary>
+    public static void Save(IEnumerable<string> names, IReadOnlySet<string> present)
     {
-        HashSet<string> next = [.. names.Where(name => name.Length > 0)];
+        HashSet<string> next;
         lock (Gate)
         {
+            next = [.. names.Where(name => name.Length > 0), .. _disabled.Where(name => !present.Contains(name))];
             if (_file is { } file)
             {
                 if (next.Count == 0)

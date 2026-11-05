@@ -551,8 +551,7 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
         return;
     }
     var present = await Task.Run(CardLinks.All);
-    var names = present.Select(candidate => candidate.Name).ToHashSet();
-    CardChoice.Save([.. list.Select(node => node!.GetValue<string>()), .. CardChoice.Disabled.Where(name => !names.Contains(name))]);
+    CardChoice.Save(list.Select(node => node!.GetValue<string>()), present.Select(candidate => candidate.Name).ToHashSet());
     var disabled = CardChoice.Disabled;
     await Task.Run(() =>
     {

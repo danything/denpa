@@ -68,6 +68,35 @@ public class CardChoiceTests
     }
 
     [Test]
+    public async Task 挿さっていないリーダーの使わない設定は保存し直しても残す()
+    {
+        var dir = Directory.CreateTempSubdirectory("denpa-cards-");
+        var file = Path.Combine(dir.FullName, "cards.json");
+        try
+        {
+            CardChoice.Load(file);
+            CardChoice.Save(["抜いたリーダー"], new HashSet<string>());
+            // 画面は挿さっているリーダー (A・B) だけを送る。A を外す
+            CardChoice.Save(["A"], new HashSet<string> { "A", "B" });
+            await Assert.That(CardChoice.Disabled.Order().ToArray()).IsEquivalentTo(new[] { "A", "抜いたリーダー" });
+
+            // 読み直しても同じ
+            CardChoice.Load(file);
+            await Assert.That(CardChoice.Disabled.Count).IsEqualTo(2);
+
+            // 挿さっているリーダーは、送られてこなければ使う
+            CardChoice.Save([], new HashSet<string> { "A", "B", "抜いたリーダー" });
+            await Assert.That(CardChoice.Disabled.Count).IsEqualTo(0);
+            await Assert.That(File.Exists(file)).IsFalse();
+        }
+        finally
+        {
+            CardChoice.Set([]);
+            dir.Delete(true);
+        }
+    }
+
+    [Test]
     public async Task 使っているリーダーをオフにすると次のリーダーで繋ぎ直す()
     {
         var first = new FakeLink("Gemplus (usb 3-11)");
