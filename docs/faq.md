@@ -42,7 +42,7 @@ Windows ファイアウォールを確かめます ([EDCB からの引き継ぎ]
 ### カードリーダーが NG のままです
 
 まず設定の「受信」の「チューナー」にある「カードリーダー」の表を見ます (中身はエージェントの `/denpa/card`)。
-リーダーが1つも無ければ `/dev/bus/usb` がコンテナに見えていません。「別のプロセスがカードリーダーを使用中です」と出たら、ホストの pcscd を止めます。
+リーダーが 1 つも無ければ `/dev/bus/usb` がコンテナに見えていません。「別のプロセスがカードリーダーを使用中です」と出たら、ホストの pcscd を止めます。
 [tuners.md](tuners.md#直らないとき)。
 
 ### NG のまま録った録画はどうなりますか
@@ -84,7 +84,7 @@ Android TV と Fire TV は、専用のアプリ [denpa-tv](https://github.com/da
 
 ### 録画はどこに置かれますか
 
-Linux ではコンテナの `/media` の下 (Compose ではボリューム) で、元のTSは `raw`、エンコードしたものは `encoded` に分けて置きます。
+Linux ではコンテナの `/media` の下 (Compose ではボリューム) で、元の TS は `raw`、エンコードしたものは `encoded` に分けて置きます。
 Mac は `~/Movies/denpa/library`、Windows は `~/Videos/denpa/library` に出来上がった録画が並びます。
 別のディスクに移すときは、コンテナの中の場所は変えずにマウントを付け替えます。
 [config.md](config.md)・[library.md](library.md#置き場を別のディスクに移す)。

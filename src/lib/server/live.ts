@@ -60,6 +60,7 @@ import {
 } from "#lib/rungs.js";
 import { BroadcastClock, parseStart } from "#lib/ts/clock.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
+import { KeyGate } from "#lib/ts/key-gate.js";
 import { MkvSplitter } from "#lib/ts/mkv.js";
 import { BUSY } from "#lib/ts/playback.js";
 
@@ -345,6 +346,15 @@ export function panArgs(audio: AudioTrack): string[] {
 }
 
 /**
+ * 放送 (インタレ) のインタレ解除。**30 コマにするとき (`smooth` が false) は、そのあとで 29.97p にそろえる。**
+ * `bwdif` の 1 コマずつの出し方はプログレッシブのコマをそのまま通すので、720p (59.94p) の局は 60 コマのままになる。
+ * 1080i はもう 29.97p なので、そろえても何も変わらない
+ */
+function broadcastFilters(smooth: boolean): string[] {
+  return smooth ? [deinterlace(true)] : [deinterlace(false), "fps=30000/1001"];
+}
+
+/**
  * 映像のエンコード方式。**見ている人が選べる** (`LiveCodec`)。
  *
  * ## H.264
@@ -440,7 +450,7 @@ export function videoArgs(
       // 復号から GPU なら CPU のインタレ解除は挟まない (挟むとフレームを降ろすことになる)
       filter: (hw.full && interlaced
         ? gpu.filter
-        : [...(interlaced ? [deinterlace(smooth)] : []), ...gpu.filter]
+        : [...(interlaced ? broadcastFilters(smooth) : []), ...gpu.filter]
       ).join(","),
       // -g はソフトウェアと揃える
       encoder: [
@@ -455,7 +465,7 @@ export function videoArgs(
   if (codec === "hevc") throw new Error("H.265 は GPU でだけエンコードします");
   return {
     input: [],
-    filter: interlaced ? deinterlace(smooth) : "",
+    filter: interlaced ? broadcastFilters(smooth).join(",") : "",
     encoder: softwareArgs(codec, gop),
   };
 }
@@ -557,7 +567,7 @@ function rungVideo(
   const gop = ["-g", String(keep ? Math.max(1, Math.round(fps)) : spec.fps)];
   const cpu = [
     ...(interlaced
-      ? [deinterlace(false)]
+      ? broadcastFilters(false)
       : keep
         ? []
         : [`fps=${spec.fps * 1000}/1001`]),
@@ -613,7 +623,10 @@ function rungVideo(
 export function rungCodec(
   playable: readonly LiveCodec[],
   interlaced: boolean,
-  pick: (codec: LiveCodec, interlaced: boolean) => LiveHw | null = pickLiveHw,
+  pick: (
+    codec: LiveCodec,
+    interlaced: boolean,
+  ) => LiveHw | null = liveHwAvailable,
 ): LiveCodec {
   for (const codec of autoOrder("encoded")) {
     if (playable.includes(codec) && pick(codec, interlaced) !== null)
@@ -776,6 +789,10 @@ interface Viewer {
   side?: boolean;
   /** 字幕の第何言語を出すか (1〜8)。省けば第 1 言語。**その人の選んだもの**で、局を変えても続く */
   language?: number;
+  /**
+   * 詰まって映像の塊を捨てたあと、次のキーフレームまで渡さない係 (`hand`)。捨てていなければ undefined
+   */
+  resume?: KeyGate | undefined;
 }
 
 /**
@@ -951,10 +968,7 @@ export function pickLiveHw(
   interlaced = true,
   devices: HwDevice[] = hwEncode().devices,
 ): LiveHw | null {
-  const found = liveHw(codec, settings().liveHwAllow, liveTurn++, devices);
-  if (found === null) return null;
-  const hw = interlaced ? found : { ...found, full: false };
-  return liveHwFailed(codec, hw) ? null : hw;
+  return findLiveHw(codec, interlaced, liveTurn++, devices);
 }
 
 /**
@@ -963,8 +977,32 @@ export function pickLiveHw(
  * 受けるところ (`attend`。出せなければ H.264 にする) が使う。順番 (`liveTurn`) は進めない
  */
 export function liveHevc(devices: HwDevice[] = hwEncode().devices): boolean {
-  const found = liveHw("hevc", settings().liveHwAllow, 0, devices);
-  return found !== null && !liveHwFailed("hevc", found);
+  return liveHwAvailable("hevc", true, devices) !== null;
+}
+
+/**
+ * **GPU でエンコードできるかだけを見る** (段を下げるときのコーデック選び。`rungCodec`)。`pickLiveHw` と同じ決め方だが、
+ * 順番 (`liveTurn`) は進めない。選ぶたびに進めると、実際に起こすエンコードの GPU の振り分けがずれる
+ */
+export function liveHwAvailable(
+  codec: LiveCodec,
+  interlaced = true,
+  devices: HwDevice[] = hwEncode().devices,
+): LiveHw | null {
+  return findLiveHw(codec, interlaced, 0, devices);
+}
+
+/** `pickLiveHw` と `liveHwAvailable` の中身。`turn` は同じ種類の GPU が複数あるときの振り分けの順 */
+function findLiveHw(
+  codec: LiveCodec,
+  interlaced: boolean,
+  turn: number,
+  devices: HwDevice[],
+): LiveHw | null {
+  const found = liveHw(codec, settings().liveHwAllow, turn, devices);
+  if (found === null) return null;
+  const hw = interlaced ? found : { ...found, full: false };
+  return liveHwFailed(codec, hw) ? null : hw;
 }
 
 /** しばらくソフトウェアにしている (`blameLiveHw` で覚えた) 経路か */
@@ -1418,8 +1456,26 @@ class Session {
    * (`openChase` の `held`)
    */
   private hand(viewer: Viewer, kind: number, data: Uint8Array): void {
-    if (kind === CHANNEL.videoInit) viewer.ready = true;
-    else if (!viewer.ready) return;
+    if (kind === CHANNEL.videoInit) {
+      viewer.ready = true;
+      viewer.resume = undefined;
+    } else if (!viewer.ready) return;
+    /*
+     * **捨てたあとは、次のキーフレームの塊まで捨て続ける。** 塊には映像と音声が両方入っているので、途中を捨てると
+     * 続きの映像はキーフレームが来るまでデコードできない。そのまま渡すと Chromium は音だけ先に鳴らし、
+     * 映像はキーフレームまで止まって、音と映像がずれる (`ts/key-gate.ts`)。映像の入らない塊は渡す
+     */
+    if (kind === CHANNEL.videoMedia && this.init !== null) {
+      if (viewer.connection.congested === true) {
+        if (viewer.resume === undefined) {
+          viewer.resume = new KeyGate();
+          viewer.resume.init(this.init);
+        }
+      } else if (viewer.resume !== undefined) {
+        if (!viewer.resume.pass(data)) return;
+        viewer.resume = undefined;
+      }
+    }
     viewer.connection.send(
       kind,
       0n,

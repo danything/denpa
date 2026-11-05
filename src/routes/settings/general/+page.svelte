@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { SubmitFunction } from "$app/forms";
+  import { enhance, type SubmitFunction } from "$app/forms";
   import { resolve } from "$app/paths";
 
   import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import Lead from "#lib/components/Lead.svelte";
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
+  import { dateTime } from "#lib/format.js";
   import { liveTuner } from "#lib/live-tuner.svelte.js";
   import { measure } from "#lib/measure.svelte.js";
   import {
@@ -172,6 +173,75 @@
         {/snippet}
       </Lead>
     </section>
+    <!--
+            **ロゴを取りに行った結果を記録する** (開発者向け。`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)。
+            衛星のロゴが流れてくる期間を測るためのもの。世帯の設定で、既定はオフ
+        -->
+    <section class="section" data-testid="logo-record">
+      <div class="section-head">
+        <h2>ロゴの取得を記録する (開発者向け)</h2>
+      </div>
+      <!-- 送ったあとにフォームを戻すと、再描画までスイッチが一瞬もとに戻って見える -->
+      <form
+        method="POST"
+        action="?/recordLogo"
+        use:enhance={() =>
+          ({ update }) =>
+            update({ reset: false })}
+      >
+        <label class="check">
+          <input
+            type="checkbox"
+            role="switch"
+            name="recordLogo"
+            aria-checked={data.recordLogo}
+            checked={data.recordLogo}
+            onchange={(event) => event.currentTarget.form?.requestSubmit()}
+            data-testid="logo-record-toggle"
+          />
+          <span>ロゴを取りに行った結果を記録する</span>
+        </label>
+      </form>
+      <Lead class="indent">
+        オンの間、衛星のロゴを流す中継で待つたびに、いつ・どれだけ開いて・何が届いたかを残します
+        {#snippet more()}
+          <p>
+            衛星のロゴはダウンロードの期間にしか流れず、期間がいつ来るかは前もって分かりません。数週間ぶん記録すると、期間の間隔と長さが分かります。
+          </p>
+          <p>
+            新しいものから 2,000 件・60 日ぶんまで残します。CSV
+            はロゴが揃わないことを報告するときに添えてください。
+          </p>
+          <p>
+            1
+            行は、開き始めた時刻・中継・開いていた長さ・終わり方・ロゴのデータとして届いたパケットの数・ダウンロードを知らせる表
+            (SDTT) が届いた回数・取れた局の数です。
+          </p>
+        {/snippet}
+      </Lead>
+      {#if data.logoRecords.length > 0}
+        <ol class="logo-records small" data-testid="logo-records">
+          {#each data.logoRecords as record (record.id)}
+            <li data-testid="logo-record-row">
+              <span>{dateTime(record.started_at)}</span>
+              {record.channel}・{Math.round(record.opened_ms / 60_000)} 分・{record.outcome}・ロゴのデータ
+              {record.es_packets} パケット・ダウンロードの知らせ {record.sdtt} 回・{record.found}
+              局
+            </li>
+          {/each}
+        </ol>
+        <a
+          class="button small secondary"
+          href={resolve("api/logo-records")}
+          download
+          data-testid="logo-records-csv">CSV をダウンロード</a
+        >
+      {:else if data.recordLogo}
+        <p class="small muted" data-testid="logo-records-empty">
+          まだ記録はありません
+        </p>
+      {/if}
+    </section>
   </div>
 </div>
 
@@ -257,5 +327,12 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--dp-space-2);
+  }
+  .logo-records {
+    margin: var(--dp-space-2) 0;
+    padding: 0;
+    list-style: none;
+    max-height: 16rem;
+    overflow-y: auto;
   }
 </style>

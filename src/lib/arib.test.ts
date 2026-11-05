@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   askedTrack,
+  audioChannels,
   audioLabel,
   audioTitles,
   audioTracks,
@@ -393,5 +394,15 @@ describe("seriesLabels", () => {
     expect(labels(3, null, 1)).toEqual(["第 3 話", "再放送"]);
     expect(labels(3, null, 0)).toEqual(["第 3 話"]);
     expect(labels(null, null, null)).toEqual([]);
+  });
+});
+
+describe("audioChannels", () => {
+  test("モノラル 1・ステレオ 2・5.1ch 6、ほかの構成とデュアルモノは指定しない", () => {
+    expect(audioChannels(1)).toBe(1);
+    expect(audioChannels(3)).toBe(2);
+    expect(audioChannels(9)).toBe(6);
+    expect(audioChannels(2)).toBeUndefined();
+    expect(audioChannels(7)).toBeUndefined();
   });
 });
