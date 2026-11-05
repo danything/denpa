@@ -250,9 +250,6 @@ $raw = '__RAW__'
 $encoded = '__ENCODED__'
 $ip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'vEthernet (Default Switch)' -ErrorAction SilentlyContinue).IPAddress | Select-Object -First 1
 if (-not $ip) { $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -like 'vEthernet*' | Select-Object -First 1).IPAddress }
-# vEthernet が無い (WSL のミラーモードなど) ときは、既定のゲートウェイがある NIC の PC 自身のアドレスを使う
-if (-not $ip) { $ip = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1).IPv4Address.IPAddress }
-if (-not $ip) { Write-Error 'denpa: コンテナからエージェントに繋ぐアドレスが見つかりません。ネットワークに繋いでからもう一度起動してください'; exit 1 }
 $agent = "https://${ip}:__PORT__#pair=__TOKEN__"
 # Env vars are baked in at creation, so a changed denpa.env also means recreating
 $envHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $envFile).Hash
