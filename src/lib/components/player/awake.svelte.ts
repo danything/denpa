@@ -17,6 +17,12 @@
  *
  * **裏に回ると OS が勝手に外す。** 戻ってきたときに取り直す (`visibilitychange`)。
  * 取り直さないと、一度タブを離れただけで効かなくなる
+ *
+ * **Safari は、ユーザーが操作した直後でないと取らせない** (iOS・iPadOS・macOS の 27.2。#2209)。
+ * ライブを URL で直に開いたときや、PWA を起こし直して前のライブに戻ったときは、操作の前に
+ * 要求するので断られ、設定した時間で画面が消えていた。番組表から移ってきたときは、
+ * 移るためのクリックの直後なので取れていた。**取れていない間は、画面のクリック・キー・タッチの
+ * たびに取り直す** (その操作の中で呼ぶ。後回しにすると操作の直後と見なされない)。取れたら何もしない
  */
 export interface Awake {
   /** 起こしておきたいか。呼ぶ側が入れる (たいていは「その画面を開いている間」) */
@@ -31,29 +37,44 @@ export function screenAwake(): Awake {
     if (!want || api === undefined) return;
 
     let lock: WakeLockSentinel | null = null;
+    let asking = false;
     let dropped = false;
 
     const grab = (): void => {
-      if (dropped || lock !== null || document.visibilityState !== "visible")
+      if (
+        dropped ||
+        lock !== null ||
+        asking ||
+        document.visibilityState !== "visible"
+      )
         return;
+      asking = true;
       void api
         .request("screen")
         .then((next) => {
           if (dropped) void next.release().catch(() => undefined);
           else {
             lock = next;
-            // OS が外したら覚えておく。次に戻ったときに取り直せる
+            // OS が外したら覚えておく。次に戻ったとき・次に触ったときに取り直せる
             next.addEventListener("release", () => (lock = null));
           }
         })
-        .catch(() => undefined);
+        // 断られた (Safari で操作の前に呼んだ)。次の操作で取り直す
+        .catch(() => undefined)
+        .finally(() => (asking = false));
     };
 
+    // 操作の直後と見なされる出来事。押し始め (pointerdown) は Safari では数えないことがあるので、押し終わりで見る
+    const GESTURES = ["click", "keydown", "touchend"] as const;
     grab();
     document.addEventListener("visibilitychange", grab);
+    for (const type of GESTURES)
+      document.addEventListener(type, grab, { capture: true, passive: true });
     return () => {
       dropped = true;
       document.removeEventListener("visibilitychange", grab);
+      for (const type of GESTURES)
+        document.removeEventListener(type, grab, { capture: true });
       void lock?.release().catch(() => undefined);
       lock = null;
     };

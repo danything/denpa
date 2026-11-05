@@ -2672,3 +2672,62 @@ function later(clock: string, minutes: number): string {
   const total = ((hours ?? 0) * 60 + (mins ?? 0) + minutes) % (24 * 60);
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
+
+/**
+ * **Safari は、ユーザーが操作した直後でないと Screen Wake Lock を取らせない** (#2209)。
+ * ライブを URL で直に開くと操作の前に要求して断られ、画面が消えていた。
+ * 断られたら、次のクリックで取り直す (`awake.svelte.ts`)
+ */
+test.describe("ライブを直に開いたときの画面の消灯", () => {
+  test("操作の前に断られても、次のクリックで画面を消させない", async ({
+    page,
+  }) => {
+    /*
+     * Safari と同じく、操作の直後でなければ断る wakeLock。Chromium の `userActivation` はヘッドレスだと
+     * 操作が無くても立っていることがあるので使わず、クリック・キー・タッチから 1 秒の間だけ通す
+     */
+    await page.addInitScript(() => {
+      const state = { asked: 0, held: 0 };
+      let gestureAt = -Infinity;
+      for (const type of ["click", "keydown", "touchend"])
+        window.addEventListener(type, () => (gestureAt = performance.now()), {
+          capture: true,
+        });
+      (window as unknown as { __wake: typeof state }).__wake = state;
+      Object.defineProperty(navigator, "wakeLock", {
+        configurable: true,
+        value: {
+          request: () => {
+            state.asked++;
+            if (performance.now() - gestureAt > 1000) {
+              return Promise.reject(
+                new DOMException("not allowed", "NotAllowedError"),
+              );
+            }
+            state.held++;
+            const sentinel = new EventTarget() as EventTarget & {
+              release: () => Promise<void>;
+            };
+            sentinel.release = () => Promise.resolve();
+            return Promise.resolve(sentinel);
+          },
+        },
+      });
+    });
+    const wake = () =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __wake: { asked: number; held: number } })
+            .__wake,
+      );
+
+    await goto(page, "/live");
+    // 開いただけでは断られる
+    await expect.poll(async () => (await wake()).asked).toBeGreaterThan(0);
+    expect((await wake()).held).toBe(0);
+
+    // 画面を触ると、その操作の中で取り直す
+    await page.getByTestId("live-channel").first().click();
+    await expect.poll(async () => (await wake()).held).toBe(1);
+  });
+});
