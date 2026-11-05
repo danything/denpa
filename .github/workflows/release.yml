@@ -113,12 +113,34 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      # **main のビルドが土台のイメージを出し終えるまで待つ。** タグを打つのは main に入れた直後のことが多く、
+      # build-and-deploy がまだ組んでいる (束ねる前の) うちにここへ来る。待たずに探すと見つからずに落ち、
+      # latest が前のバージョンのまま残っていた (v2.30.2〜v2.31.0。手で流し直した)。
+      # 上限は 60 分 (main のビルドは失敗して流し直すと 1 時間ほど掛かったことがある)。それでも無ければ落とす
+      - name: Wait for the images built on main
+        run: |
+          set -eu
+          base="${{ env.REGISTRY }}/${{ github.repository_owner }}"
+          for image in "denpa-agent:${{ steps.tag.outputs.agent }}" "denpa:${{ steps.tag.outputs.denpa }}"; do
+            waited=0
+            until docker buildx imagetools inspect "${base}/${image}" > /dev/null 2>&1; do
+              if [ "$waited" -ge 3600 ]; then
+                echo "${base}/${image} が 60 分待っても出ません。main の build-and-deploy を確かめてください" >&2
+                exit 1
+              fi
+              echo "${base}/${image} はまだありません。main のビルドを待ちます (${waited} 秒)"
+              sleep 30
+              waited=$((waited + 30))
+            done
+            echo "${base}/${image} があります"
+          done
+
       # denpa もエージェントも**バージョンを 1 層足して**から名前を付ける (.github/release.Dockerfile)。
       # main で組んだイメージを土台にするので中身は同じで、増えるのは ENV の 1 枚。
       # 動いている denpa はこれで自分のバージョンを知り、新しいバージョンの通知を出す。
       # エージェントは `GET /denpa/about` で返し (agent/Denpa.Agent/About.cs)、設定の「バージョンと環境」が
-      # denpa とずれていないかを見る。元のイメージが無ければここで落ちる (黙って古い latest が
-      # 残るより、そのほうがいい)。
+      # denpa とずれていないかを見る。元のイメージが 60 分待っても出なければ、上の待つ段で落ちる
+      # (黙って古い latest が残るより、そのほうがいい)。
       #
       # **どちらも multi-arch のまま名前を付ける** (main は amd64 と arm64 を束ねた索引を
       # 出している)。土台の索引にある arch を全部並べて `--platform` に渡す。release.Dockerfile
