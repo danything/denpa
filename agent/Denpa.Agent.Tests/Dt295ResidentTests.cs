@@ -484,15 +484,19 @@ internal sealed class FakeResident : IDt295ResidentTransport
 
     public bool CardInserted { get; set; }
 
-    /// <summary>カードに渡した APDU の切れの数</summary>
-    public int CardTxChunks { get; private set; }
+    /// <summary>常駐イメージ側の CARD コマンドがカードの電源を持っているか</summary>
+    public bool FirmwareCardPowered { get; set; }
+
+    /// <summary>S(IFS) で決まった IFSD</summary>
+    public int CardIfsd { get; private set; }
+
+    /// <summary>UART のカードの電源が入っているか (0xFEA034)</summary>
+    public bool UartCardPowered => BinaryPrimitives.ReadUInt32BigEndian(Peek(Mb86h47.CardPower, 4)) != 0;
 
     public static readonly byte[] Atr = [0x3B, 0xF0, 0x12, 0x00, 0xFF, 0x91, 0x81, 0xB1, 0x7C, 0x45, 0x1F, 0x03, 0x99];
 
-    private uint _cardGeneration;
-    private bool _cardPowered;
-    private List<byte> _tx = [];
-    private byte[] _rx = [];
+    private readonly List<byte> _uartTx = [];
+    private readonly Queue<byte> _uartRx = [];
     public List<(uint Command, uint Channel, byte[] Data)> Commands { get; } = [];
 
     private uint _generation;
@@ -509,59 +513,74 @@ internal sealed class FakeResident : IDt295ResidentTransport
 
     public void Read(uint address, Span<byte> data)
     {
+        if (address == Mb86h47.CardCount && data.Length == 4)
+        {
+            // 実機の受信 FIFO と同じく、1 回で見えるのは 32 バイトまで
+            BinaryPrimitives.WriteUInt32BigEndian(data, (uint)Math.Min(_uartRx.Count, 32) << 16);
+            return;
+        }
+        if (address == Mb86h47.CardRx && data.Length == 4)
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(data, _uartRx.TryDequeue(out var next) ? next : 0u);
+            return;
+        }
         for (var i = 0; i < data.Length; i++) data[i] = _memory.GetValueOrDefault(address + (uint)i);
     }
 
-    public void Write(uint address, ReadOnlySpan<byte> data) => Poke(address, data);
+    public void Write(uint address, ReadOnlySpan<byte> data)
+    {
+        var prevLines = address == Mb86h47.CardLines ? BinaryPrimitives.ReadUInt32BigEndian(Peek(Mb86h47.CardLines, 4)) : 0u;
+        Poke(address, data);
+        if (data.Length != 4) return;
+        var value = BinaryPrimitives.ReadUInt32BigEndian(data);
+        switch (address)
+        {
+            case Mb86h47.CardCount when value == 0:
+                _uartRx.Clear();
+                return;
+            case Mb86h47.CardTxLrc when value == 0:
+                _uartTx.Clear();
+                return;
+            case Mb86h47.CardLines when (prevLines & 0x4) == 0 && (value & 0x4) != 0 && UartCardPowered:
+                foreach (var b in Atr) _uartRx.Enqueue(b);
+                return;
+            case Mb86h47.CardTx:
+                _uartTx.Add((byte)value);
+                return;
+            case Mb86h47.CardSend when value == 1 && _uartTx.Count >= 4:
+                var pcb = _uartTx[1];
+                var inf = _uartTx.Skip(3).Take(_uartTx[2]).ToArray();
+                byte[]? reply = null;
+                if (pcb == 0xC1 && inf is [var ifsd])
+                {
+                    CardIfsd = ifsd;
+                    reply = T1Protocol.Block(0xE1, [ifsd]);
+                }
+                else if ((pcb & 0x80) == 0)
+                {
+                    reply = T1Protocol.Block((byte)(pcb & 0x40), [.. inf, 0x90, 0x00]);
+                }
+                if (reply is not null)
+                {
+                    foreach (var b in reply) _uartRx.Enqueue(b);
+                }
+                return;
+        }
+    }
 
-    /// <summary>CARD コマンド (card.c の形)。APDU はそのまま返して 90 00 を付ける</summary>
-    private void Card(uint op, byte[] data, Span<byte> response)
+    /// <summary>CARD コマンド (STATUS と POWER_OFF)</summary>
+    private void Card(uint op, Span<byte> response)
     {
         response[24] = Dt295ResidentCard.Version;
-        Put(response, 16, _cardGeneration);
-        static void Read(byte[] data, Span<byte> response, byte[] bytes)
-        {
-            var at = (data[2] << 8) | data[3];
-            var n = Math.Min(Dt295ResidentCard.Chunk, bytes.Length - at);
-            response[25] = (byte)n;
-            response[26] = (byte)(bytes.Length >> 8);
-            response[27] = (byte)bytes.Length;
-            bytes.AsSpan(at, n).CopyTo(response[32..]);
-        }
         switch (op)
         {
             case Dt295ResidentCard.OpStatus:
-                Put(response, 12, _cardPowered ? 3u : 0u);
-                response[38] = _cardPowered ? (byte)1 : (byte)0;
+                Put(response, 12, FirmwareCardPowered ? 3u : 0u);
+                response[38] = FirmwareCardPowered ? (byte)1 : (byte)0;
                 response[39] = CardInserted ? (byte)1 : (byte)0;
                 return;
-            case Dt295ResidentCard.OpPowerOn when _cardPowered:
-                // 電源が入ったまま電源を入れると、使用中で断る (実機の常駐イメージと同じ)
-                Put(response, 20, unchecked((uint)-2600));
-                return;
-            case Dt295ResidentCard.OpPowerOn:
-            case Dt295ResidentCard.OpReset:
-                _cardPowered = true;
-                Put(response, 16, ++_cardGeneration);
-                return;
             case Dt295ResidentCard.OpPowerOff:
-                _cardPowered = false;
-                return;
-            case Dt295ResidentCard.OpTxBegin:
-                _tx = [];
-                return;
-            case Dt295ResidentCard.OpTxData:
-                _tx.AddRange(data.AsSpan(8, data[1]));
-                CardTxChunks++;
-                return;
-            case Dt295ResidentCard.OpTransmit:
-                _rx = [.. _tx, 0x90, 0x00];
-                return;
-            case Dt295ResidentCard.OpRxRead:
-                Read(data, response, _rx);
-                return;
-            case Dt295ResidentCard.OpAtrRead:
-                Read(data, response, Atr);
+                FirmwareCardPowered = false;
                 return;
         }
     }
@@ -634,7 +653,7 @@ internal sealed class FakeResident : IDt295ResidentTransport
             case CommandStatus:
                 return;
             case CommandCard:
-                Card(argument, data, response);
+                Card(argument, response);
                 return;
             case CommandDeviceQuery:
                 Put(response, 12, CommandDeviceQuery);

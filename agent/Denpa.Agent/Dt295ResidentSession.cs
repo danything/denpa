@@ -40,6 +40,8 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
     private readonly Func<long> _now = nowMs ?? (() => Stopwatch.GetTimestamp() * 1000 / Stopwatch.Frequency);
     private readonly Action<int> _delay = delay ?? Thread.Sleep;
 
+    public IDt295ResidentTransport Transport => transport;
+
     /// <summary>最後に振った要求の番号</summary>
     public uint Sequence { get; private set; }
 

@@ -1,9 +1,11 @@
 /*
- * カードの部分 (Dt295ResidentCard) は、mAgicVISION (https://github.com/makeding/mAgicVISION、commit c937107) の
- * core/card.c・core/card_atr.c と userland/pcsc/ifd.c の card_command を移したもの。Copyright (c) 2026 huggy、
- * MIT License (全文は licenses/mAgicVISION.txt)。ボード・TS の読み出し・チューナーは denpa のもの (Zd1j.cs と同じ形)。
+ * カードがあるかの確認と常駐イメージ側の電源オフ (Dt295ResidentCard.Present) は、mAgicVISION
+ * (https://github.com/makeding/mAgicVISION、commit c937107) の core/card.c を移したもの。Copyright (c) 2026 huggy、
+ * MIT License (全文は licenses/mAgicVISION.txt)。カードとのやり取りは MB86M01 の UART (0xFEA000〜0xFEA03C) を直に読み書きする。
+ * ボード・TS の読み出し・チューナー・UART の手順は denpa のもの (Zd1j.cs・Mb86h47.cs と同じ形)。
  */
 
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO.Pipelines;
 using static Denpa.Agent.Dt295ResidentProtocol;
@@ -188,6 +190,7 @@ public sealed class Dt295ResidentBoard
             {
                 try
                 {
+                    Dt295ResidentCard.PowerOff(Session.Transport);
                     Dt295ResidentLoader.Close(Session);
                 }
                 catch (Exception error) when (error is IOException or TimeoutException)
@@ -578,42 +581,36 @@ public sealed class Dt295ResidentTuner : ITuneDevice
 }
 
 /// <summary>
-/// 常駐方式の PIX-DT295 の差し込み口 (card.c)。CARD コマンドで APDU を渡し、T=1 の枠組みは常駐イメージが組む。
-/// 要求ごとに <see cref="Dt295ResidentBoard.Locked{T}"/> を取り、待つ間は手放す (受信中の SERVICE を止めない)
+/// 常駐方式の PIX-DT295 の差し込み口。カードがあるかは CARD コマンドの STATUS で確かめ、ATR と APDU は MB86M01 の UART
+/// (0xFEA000〜0xFEA03C。MB86H47A と同じレジスタ) を直に読み書きして <see cref="T1Protocol"/> で T=1 を組む
+/// (同梱の mAgicVISION_1 の TRANSMIT は 32 バイトの受信 FIFO を途中で抜かないため、B-CAS の INT の 61 バイト応答が溢れて失敗する)。
+/// 制御転送ごとに <see cref="Dt295ResidentBoard.Locked{T}"/> を取り、待ちと送信の切れ目では手放す (受信中の SERVICE を止めない)
 /// </summary>
 public sealed class Dt295ResidentCard : ICardLink
 {
-    // CARD コマンドの中身 (constants.h の MB86H_CARD_*)
+    // CARD コマンドの中身 (constants.h の MB86H_CARD_*。挿さっているかの確認と、常駐イメージ側の電源オフだけ使う)
     public const byte Version = 2;
     public const uint OpStatus = 0;
-    public const uint OpPowerOn = 1;
     public const uint OpService = 2;
     public const uint OpPowerOff = 3;
-    public const uint OpTxBegin = 4;
-    public const uint OpTxData = 5;
-    public const uint OpTransmit = 6;
-    public const uint OpRxRead = 7;
-    public const uint OpAtrRead = 8;
-    public const uint OpReset = 9;
     public const int MaxTx = 256;
-    public const int MaxRx = 512;
     public const int MaxAtr = 33;
-    public const int Chunk = 32;
 
-    /// <summary>APDU 1 つの応答を待つ上限を常駐イメージに渡す (card.c の 3000)</summary>
-    private const uint TransmitTimeoutMs = 3000;
-
-    /// <summary>常駐イメージがカードの操作を終えるのを待つ上限 (card.c の settle の 5000)</summary>
+    /// <summary>常駐イメージがカードの電源オフを終えるのを待つ上限 (card.c の settle の 5000)</summary>
     private const int SettleMs = 5000;
+
+    /// <summary>ATR を待つ上限 (Zd1jCard と同じ 1000 ms)</summary>
+    private const int AtrTimeoutMs = 1000;
+
+    /// <summary>1 回のロックで CardTx に積む上限。受信中の SERVICE を長く待たせない</summary>
+    private const int TxBurst = 16;
 
     private readonly Func<Dt295ResidentBoard> _acquire;
     private readonly Func<long> _now;
     private readonly Action<int> _delay;
     private Dt295ResidentBoard? _board;
-    private uint _generation;
-    private bool _active;
-
-    /// <summary>最後の STATUS で、カードの電源が入っていた</summary>
+    private T1Protocol? _t1;
+    private int _blockWaitMs = 500;
     private bool _powered;
     private Exception? _failed;
 
@@ -629,20 +626,45 @@ public sealed class Dt295ResidentCard : ICardLink
 
     private Dt295ResidentBoard Board => _board ??= _acquire();
 
-    /// <summary>
-    /// CARD コマンドを 1 つ (card.c の command)。応答の結果を返す (1 は「まだ」で、<see cref="Settle"/> が待つ)。
-    /// やり取りの失敗と応答の形の崩れは、この接続をそれきり使えなくする (要求が実行されたかもしれない)
-    /// </summary>
-    private int Command(uint op, byte[] data, out byte[] response)
+    private static uint Read32(IDt295ResidentTransport transport, uint address)
+    {
+        Span<byte> bytes = stackalloc byte[4];
+        transport.Read(address, bytes);
+        return BinaryPrimitives.ReadUInt32BigEndian(bytes);
+    }
+
+    private static void Write32(IDt295ResidentTransport transport, uint address, uint value)
+    {
+        Span<byte> bytes = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(bytes, value);
+        transport.Write(address, bytes);
+    }
+
+    private static void Modify(IDt295ResidentTransport transport, uint address, uint clear, uint set) =>
+        Write32(transport, address, (Read32(transport, address) & ~clear) | set);
+
+    /// <summary>UART のカードの電源を切る (Mb86h47.CardOff と同じ手順)</summary>
+    internal static void PowerOff(IDt295ResidentTransport transport)
+    {
+        Modify(transport, Mb86h47.CardLines, 0x4, 0);
+        Write32(transport, Mb86h47.CardCount, 0);
+        Modify(transport, Mb86h47.CardEnable, 0x4, 0);
+        Modify(transport, Mb86h47.CardLines, 0xA, 0);
+        Write32(transport, Mb86h47.CardMask, 1);
+        Write32(transport, Mb86h47.CardPower, 0);
+    }
+
+    /// <summary>STATUS・SERVICE・POWER_OFF を 1 つ送る (card.c の command)</summary>
+    private int Command(uint op, out byte[] response)
     {
         if (_failed is not null) throw new IOException($"{Name} は使えなくなっています ({_failed.Message})", _failed);
+        var data = new byte[DataSize];
         data[0] = Version;
-        Put(data, 4, _generation);
         try
         {
             response = Board.Locked(session => session.Command(CommandCard, op, data));
         }
-        catch (Exception error) when (error is IOException)
+        catch (IOException error)
         {
             _failed = error;
             throw;
@@ -651,19 +673,12 @@ public sealed class Dt295ResidentCard : ICardLink
         if (Result(response) != Ok && rc < 0) return Fail(op, rc);
         if (response[24] != Version || rc > 1 || Result(response) != Ok)
         {
-            _failed = new Dt295ResidentException($"{Name} の応答の形が違います (結果 {Result(response)}、理由 {rc})");
-            throw _failed;
-        }
-        if ((op == OpPowerOn || op == OpReset) && rc >= 0) _generation = Word(response, 16);
-        else if (op != OpStatus && op != OpPowerOff && Word(response, 16) != _generation)
-        {
-            _failed = new Dt295ResidentException($"{Name} の応答の世代が違います");
+            _failed = new Dt295ResidentException($"{Name} の応答の形式が違います (結果 {Result(response)}、理由 {rc})");
             throw _failed;
         }
         return rc < 0 ? Fail(op, rc) : rc;
     }
 
-    /// <summary>常駐イメージのカードの失敗 (card.c の result)。理由ごとに文言を決めて投げる</summary>
     private int Fail(uint op, int rc) => throw new IOException((rc switch
     {
         -2600 => $"{Name} のカードは使用中です",
@@ -674,7 +689,6 @@ public sealed class Dt295ResidentCard : ICardLink
         _ => $"{Name} のカードの操作が失敗しました",
     }) + $" (操作 {op}、理由 {rc})");
 
-    /// <summary>「まだ」の間、SERVICE を送って待つ (card.c の settle)。待つ間は <see cref="Dt295ResidentBoard.Locked{T}"/> を手放す</summary>
     private void Settle(uint op, int rc)
     {
         var start = _now();
@@ -688,7 +702,7 @@ public sealed class Dt295ResidentCard : ICardLink
             _delay(10);
             try
             {
-                rc = Command(OpService, new byte[DataSize], out _);
+                rc = Command(OpService, out _);
             }
             catch (IOException error)
             {
@@ -697,97 +711,175 @@ public sealed class Dt295ResidentCard : ICardLink
         }
     }
 
-    /// <summary>挿さっていれば true (card.c の mb86H_card_status)。抜けていて電源が入っていれば切る</summary>
-    private bool Present()
+    /// <summary>挿さっていれば true。常駐イメージ側が電源を持っていれば手放させ、抜けていれば UART の電源も切る</summary>
+    private bool Present(bool releaseFirmware = false)
     {
-        Command(OpStatus, new byte[DataSize], out var response);
-        _powered = response[38] != 0;
+        Command(OpStatus, out var response);
+        if ((releaseFirmware || response[39] == 0) && response[38] != 0)
+        {
+            Settle(OpPowerOff, Command(OpPowerOff, out _));
+        }
         if (response[39] != 0) return true;
-        _active = false;
-        if (_powered) Settle(OpPowerOff, Command(OpPowerOff, new byte[DataSize], out _));
-        _powered = false;
+        _t1 = null;
+        if (_powered)
+        {
+            Board.Locked(session => PowerOff(session.Transport));
+            _powered = false;
+        }
         return false;
     }
 
-    /// <summary>ATR か応答を 32 バイトずつ読む (card.c の read_bytes)</summary>
-    private byte[] ReadBytes(uint op, int limit)
+    private void UartReset()
     {
-        var bytes = new List<byte>();
-        var total = 0;
-        do
+        Board.Locked(session => PowerOff(session.Transport));
+        _powered = false;
+        _delay(10);
+        Board.Locked(session =>
         {
-            var data = new byte[DataSize];
-            data[1] = Chunk;
-            data[2] = (byte)(bytes.Count >> 8);
-            data[3] = (byte)bytes.Count;
-            Command(op, data, out var response);
-            var reported = (response[26] << 8) | response[27];
-            var n = (int)response[25];
-            if (reported > limit || (bytes.Count != 0 && reported != total) || n == 0 || n > Chunk || bytes.Count + n > reported)
-            {
-                _failed = new Dt295ResidentException($"{Name} の応答の長さが合いません ({bytes.Count} + {n} / {reported})");
-                throw _failed;
-            }
-            total = reported;
-            bytes.AddRange(response.AsSpan(32, n));
-        }
-        while (bytes.Count < total);
-        return [.. bytes];
+            var transport = session.Transport;
+            Write32(transport, Mb86h47.CardStatus, 0x3FF);
+            Write32(transport, Mb86h47.CardPower, 1);
+            Modify(transport, Mb86h47.CardLines, 0x4, 0);
+            Write32(transport, Mb86h47.CardCount, 0);
+            Write32(transport, Mb86h47.CardEnable, 0);
+            Write32(transport, Mb86h47.CardEnable, 7);
+            Modify(transport, Mb86h47.CardLines, 0, 0x8);
+            Write32(transport, Mb86h47.CardBaud, 0xBA7F);
+        });
+        _powered = true;
+        _delay(2);
+        Board.Locked(session =>
+        {
+            var transport = session.Transport;
+            Modify(transport, Mb86h47.CardLines, 0, 0x2);
+            Write32(transport, Mb86h47.CardRxLrc, 0x3B);
+            Write32(transport, Mb86h47.CardCwt, 9600);
+            Write32(transport, Mb86h47.CardBwt, 0);
+            Write32(transport, Mb86h47.CardMask, 0x1FF);
+        });
+        _delay(1);
+        Board.Locked(session => Modify(session.Transport, Mb86h47.CardLines, 0, 0x4));
     }
 
-    /// <summary>
-    /// 電源を入れて ATR を返す (card.c の mb86H_card_power_on)。この接続でもう電源を入れていれば、カードには触らずに前の ATR を返す
-    /// (B-CAS を読む処理がリセットし直すたびに、カードを起こし直さない)
-    /// </summary>
+    private byte[] CardRead(int max) => Board.Locked(session =>
+    {
+        var transport = session.Transport;
+        var waiting = (int)(Read32(transport, Mb86h47.CardCount) >> 16);
+        var count = Math.Min(waiting, Math.Max(0, max));
+        var received = new byte[count];
+        for (var i = 0; i < count; i++) received[i] = (byte)Read32(transport, Mb86h47.CardRx);
+        return received;
+    });
+
+    private void CardWrite(ReadOnlySpan<byte> block)
+    {
+        Board.Locked(session =>
+        {
+            Write32(session.Transport, Mb86h47.CardRxLrc, 0);
+            Write32(session.Transport, Mb86h47.CardTxLrc, 0);
+        });
+        for (var at = 0; at < block.Length;)
+        {
+            var chunk = block.Slice(at, Math.Min(TxBurst, block.Length - at)).ToArray();
+            Board.Locked(session =>
+            {
+                foreach (var b in chunk) Write32(session.Transport, Mb86h47.CardTx, b);
+            });
+            at += chunk.Length;
+        }
+        var length = block.Length;
+        Board.Locked(session =>
+        {
+            var transport = session.Transport;
+            Write32(transport, Mb86h47.CardStatus, 0x3FF);
+            Write32(transport, Mb86h47.CardControl, length >= 256 ? 0x280u : 0x200u);
+            Write32(transport, Mb86h47.CardSend, 1);
+        });
+    }
+
+    private byte[] ReadAtr()
+    {
+        var received = new List<byte>();
+        var start = _now();
+        while (_now() - start < AtrTimeoutMs)
+        {
+            var got = CardRead(MaxAtr - received.Count);
+            received.AddRange(got);
+            if (Zd1jCard.AtrLength(received) is { } length && received.Count >= length) return [.. received.Take(length)];
+            if (got.Length == 0) _delay(2);
+        }
+        if (received.Count == 0) throw new IOException($"{Name} のカードが ATR を返しません");
+        return [.. received];
+    }
+
     public byte[] Reset()
     {
-        if (!Present()) throw new CardAbsentException($"{Name} にカードが挿さっていません");
-        if (_active && _atr is not null && _powered) return _atr;
-        _active = false;
-        _atr = null;
-        // 電源が入っていればリセット、入っていなければ電源を入れる (card.c の activate。電源が入ったまま電源を入れると、使用中で断られる)
-        var op = _powered ? OpReset : OpPowerOn;
-        Settle(op, Command(op, new byte[DataSize], out _));
-        _powered = true;
-        var atr = ReadBytes(OpAtrRead, MaxAtr);
-        if (atr.Length < 2 || atr[0] is not (0x3B or 0x3F)) throw new IOException($"{Name} のカードの ATR が読めません ({Convert.ToHexString(atr)})");
-        _active = true;
-        _atr = atr;
-        return atr;
+        _t1 = null;
+        if (!Present(releaseFirmware: true)) throw new CardAbsentException($"{Name} にカードが挿さっていません");
+        byte[]? raw = null;
+        Atr? atr = null;
+        for (var attempt = 0; attempt < 2 && atr is null; attempt++)
+        {
+            UartReset();
+            raw = ReadAtr();
+            try
+            {
+                atr = Atr.Parse(raw);
+            }
+            catch (IOException) when (attempt == 0)
+            {
+            }
+        }
+        if (!atr!.T1) throw new IOException($"T=1 に対応していないカードです (ATR {Convert.ToHexString(raw!)})");
+
+        var (baud, control, cwt, bwt, rate) = Zd1jCard.Speed(atr);
+        Board.Locked(session =>
+        {
+            var transport = session.Transport;
+            Write32(transport, Mb86h47.CardBaud, baud);
+            Write32(transport, Mb86h47.CardControl, control);
+            Write32(transport, Mb86h47.CardCwt, cwt);
+            Write32(transport, Mb86h47.CardBwt, bwt);
+        });
+        _blockWaitMs = Math.Min(3000, 500 << Math.Max(0, atr.Bwi - 4));
+        _t1 = new T1Protocol(atr, Exchange);
+        _t1.NegotiateIfsd(rate >= 38400 ? 254 : 251);
+        return raw!;
     }
 
-    /// <summary>この接続で電源を入れたときの ATR</summary>
-    private byte[]? _atr;
+    private byte[]? Exchange(byte[] block, byte wtx)
+    {
+        CardWrite(block);
+        var limit = _blockWaitMs * Math.Max(1, (int)wtx);
+        var received = new List<byte>();
+        var start = _now();
+        while (_now() - start < limit)
+        {
+            var want = received.Count < 3 ? 3 - received.Count : received[2] + 4 - received.Count;
+            if (want <= 0) return [.. received];
+            var got = CardRead(want);
+            received.AddRange(got);
+            if (got.Length == 0) _delay(1);
+        }
+        return null;
+    }
 
     public byte[] Transmit(ReadOnlySpan<byte> apdu)
     {
-        if (!_active) throw new IOException($"{Name} のカードに繋いでいません (Reset を先に)");
+        if (_t1 is null) throw new IOException($"{Name} のカードに繋いでいません (Reset を先に)");
         if (apdu.IsEmpty || apdu.Length > MaxTx) throw new ArgumentException($"APDU は 1〜{MaxTx} バイトです", nameof(apdu));
         try
         {
-            var data = new byte[DataSize];
-            data[2] = (byte)(apdu.Length >> 8);
-            data[3] = (byte)apdu.Length;
-            Put(data, 8, TransmitTimeoutMs);
-            Command(OpTxBegin, data, out _);
-            for (var at = 0; at < apdu.Length;)
+            if (!Present())
             {
-                var n = Math.Min(Chunk, apdu.Length - at);
-                data = new byte[DataSize];
-                data[1] = (byte)n;
-                data[2] = (byte)(at >> 8);
-                data[3] = (byte)at;
-                apdu.Slice(at, n).CopyTo(data.AsSpan(8));
-                Command(OpTxData, data, out _);
-                at += n;
+                _t1 = null;
+                throw new CardAbsentException($"{Name} のカードが抜かれました");
             }
-            Settle(OpTransmit, Command(OpTransmit, new byte[DataSize], out _));
-            return ReadBytes(OpRxRead, MaxRx);
+            return _t1.Transmit(apdu);
         }
         catch (IOException error) when (error is not CardAbsentException)
         {
-            _active = false;
-            // 抜かれたのなら、そう伝える (B25 はカードを探し直す)。確かめられなければ元の失敗のまま
+            _t1 = null;
             bool present;
             try
             {
@@ -804,7 +896,7 @@ public sealed class Dt295ResidentCard : ICardLink
 
     public void Dispose()
     {
-        _active = false;
+        _t1 = null;
         var board = _board;
         _board = null;
         board?.Release();
