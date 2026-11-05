@@ -1101,7 +1101,7 @@
     margin-inline: calc(var(--dp-dock-inset) - var(--dp-gutter, 1rem));
     padding-inline: 0.5rem;
   }
-  /* 字のボタンは中身の幅。アイコンのボタン (絞り込み) は決まりの大きさのまま (auto にすると横に潰れる) */
+  /* ラベルのあるボタンは中身の幅。アイコンのボタン (絞り込み) は決まりの大きさのまま (auto にすると横に潰れる) */
   :global(html[data-phone]) .c-bar > :global(button) {
     margin: 0;
   }
