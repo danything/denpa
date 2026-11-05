@@ -57,9 +57,11 @@ jobs:
           firmware="$work/x/usr/lib/firmware/magicvision/firmware.bin"
           [ -f "$firmware" ] || { echo "$asset に firmware.bin がありません" >&2; exit 1; }
           new_sha=$(sha256sum "$firmware" | cut -d' ' -f1)
-          head=$(gh api "repos/$UPSTREAM/commits/HEAD" --jq .sha)
+          # 変わったファイルは clone して git で並べる (compare API の files は 300 件で切れる)。中身は要らないので blob は取らない
+          git clone --quiet --filter=blob:none --no-checkout "https://github.com/$UPSTREAM" "$work/upstream"
+          head=$(git -C "$work/upstream" rev-parse HEAD)
           # 移植した MIT の部分 (README の「ライセンス」の範囲)
-          changed=$(gh api "repos/$UPSTREAM/compare/$old_commit...$head" --jq '.files[].filename' \
+          changed=$(git -C "$work/upstream" diff --name-only "$old_commit" "$head" \
             | grep -E '^(core/|device/|include/mb86H/|usb/boot\.c|usb/window\.c|usb/host_contract\.h|usb/userland/|userland/)' || true)
           {
             echo "firmware=$firmware"
@@ -101,7 +103,7 @@ jobs:
             cp "$FIRMWARE_SRC" "$FIRMWARE"
             size=$(stat -c %s "$FIRMWARE")
             # SHA-256 の定数と、大きさ・SHA-256 を書いた docs
-            grep -rl "$OLD_SHA" agent docs | xargs sed -i "s/$OLD_SHA/$NEW_SHA/g"
+            grep -rl "$OLD_SHA" agent docs | xargs -r sed -i "s/$OLD_SHA/$NEW_SHA/g"
             jq --arg r "$RELEASE" --arg a "$ASSET" --arg s "$NEW_SHA" '.release=$r | .asset=$a | .sha256=$s' "$PIN" > "$PIN.new" && mv "$PIN.new" "$PIN"
             {
               echo "## ファームウェア"
@@ -123,16 +125,19 @@ jobs:
               echo
               printf '%s\n' "$CHANGED" | sed 's/^/- `/; s/$/`/'
             } >> "$body"
-            # コードだけが変わったときも、PR を出せるように印を残す (コミットの固定は人が書き換える)
-            jq --arg c "$HEAD_COMMIT" '.upstream=$c' "$PIN" > "$PIN.new" && mv "$PIN.new" "$PIN"
           fi
-          git add -A agent docs
-          if git diff --cached --quiet; then
-            echo "書き換えなし"
+          # 同じファームウェア・同じ本家のコミットの PR がもう開いていれば、作り直さない (CI を毎日起こさない)
+          marker="<!-- magicvision: sha256=$NEW_SHA upstream=$HEAD_COMMIT -->"
+          echo "$marker" >> "$body"
+          if gh pr view "$BRANCH" --json state,body --jq 'select(.state == "OPEN") | .body' 2>/dev/null | grep -qF "$marker"; then
+            echo "同じ内容の PR が開いています"
             exit 0
           fi
           title="chore(agent): mAgicVISION の本家の更新を取り込む"
-          git commit -m "$title"
+          git add -A agent docs
+          # コードだけが変わったときは書き換えるファイルが無いので、空のコミットで PR を作る
+          # (コミットの固定は、移し終えたら人がこの PR で書き換える。書き換えずにマージすると、翌日また PR が開く)
+          git commit --allow-empty -m "$title"
           git push --force origin "$BRANCH"
           gh pr create --base main --head "$BRANCH" --title "$title" --body-file "$body" \
             || gh pr edit "$BRANCH" --title "$title" --body-file "$body"
