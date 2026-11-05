@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Text;
 using Denpa.Agent;
@@ -194,23 +195,62 @@ public class Dt295Tests
         return bytes;
     }
 
+    private static byte[] MuxFrames(uint channel, ref uint sequence, ReadOnlySpan<byte> payload)
+    {
+        var bytes = new List<byte>();
+        for (var at = 0; at < payload.Length; at += Dt295ResidentTs.FramePayload)
+        {
+            var chunk = payload.Slice(at, Math.Min(Dt295ResidentTs.FramePayload, payload.Length - at));
+            var frame = new byte[Dt295ResidentTs.FrameBytes];
+            BinaryPrimitives.WriteUInt32BigEndian(frame, Dt295ResidentTs.MuxMagic);
+            BinaryPrimitives.WriteUInt32BigEndian(frame.AsSpan(4), channel);
+            BinaryPrimitives.WriteUInt32BigEndian(frame.AsSpan(8), sequence++);
+            BinaryPrimitives.WriteUInt32BigEndian(frame.AsSpan(12), (uint)chunk.Length);
+            chunk.CopyTo(frame.AsSpan(Dt295ResidentTs.FrameHeader));
+            bytes.AddRange(frame);
+        }
+        return [.. bytes];
+    }
+
     [Test]
-    public async Task 選局すると読みを出してから_TUNE_し_TS_を渡す()
+    public async Task 選局すると読みを出してから_TUNE_し_落ち着いたあとの_TS_を渡す()
     {
         var (resident, usb, image) = Device();
-        resident.OnTune = () => usb.Ts.Enqueue(Packets(10, 0x111));
+        resident.StreamFormat = FormatMux;
+        var activeChannel = 0u;
+        var muxSequence = 0u;
+        var serviceCalls = 0;
+        resident.OnTune = () =>
+        {
+            activeChannel = resident.Commands.Last(item => item.Command == CommandTune).Channel;
+            muxSequence = 0;
+            serviceCalls = 0;
+            // 選局の途中で出る MUX の 0 番 (まだ落ち着いていない TS)
+            usb.Ts.Enqueue(MuxFrames(activeChannel, ref muxSequence, Packets(2, 0x110)));
+        };
+        resident.OnService = () =>
+        {
+            // Settle の中の SERVICE (1 回目) も落ち着く前。Serve のあとの 2 回目から落ち着いたあとの TS を出す
+            var pid = ++serviceCalls == 1 ? 0x110 : 0x111;
+            if (serviceCalls <= 2) usb.Ts.Enqueue(MuxFrames(activeChannel, ref muxSequence, Packets(serviceCalls == 1 ? 2 : 10, pid)));
+        };
         var port = NewPort();
         using (var tuner = new Dt295ResidentTuner("DT295", () => Acquire(port, usb, image), () => Dt295ResidentBoard.CloseIfIdle(port)))
         {
             tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
             await Assert.That(tuner.Tuned).IsTrue();
+            await Assert.That(tuner.Board!.Session.TunePollMs).IsEqualTo(1);
             // 読みを出したのは TUNE より前
             await Assert.That(usb.StreamOpenedBeforeTune).IsTrue();
             var buffer = new byte[188 * 10];
             var got = 0;
             while (got < buffer.Length) got += await tuner.Output.ReadAsync(buffer.AsMemory(got));
-            await Assert.That(buffer[0]).IsEqualTo((byte)0x47);
-            await Assert.That(buffer[188 * 9 + 2]).IsEqualTo((byte)0x11);
+            // 落ち着く前の 0x110 は捨て、MUX の連番を保ったまま Serve のあとの 0x111 から流れる
+            for (var i = 0; i < 10; i++)
+            {
+                await Assert.That(buffer[188 * i]).IsEqualTo((byte)0x47);
+                await Assert.That(buffer[188 * i + 2]).IsEqualTo((byte)0x11);
+            }
 
             // 選局し直すと、前の受信を止めてから
             tuner.Tune(ChannelTable.Parse("BS15")!, ChannelTable.NoStreamId);
@@ -354,7 +394,7 @@ internal sealed class FakeResidentUsb(FakeResident resident) : IUsbDevice
                 chunk.CopyTo(buffer);
                 return chunk.Length;
             }
-            Thread.Sleep(Math.Min(timeoutMs, 5));
+            if (timeoutMs > 0) Thread.Sleep(Math.Min(timeoutMs, 5));
             return 0;
         }
 
