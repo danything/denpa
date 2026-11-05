@@ -61,7 +61,7 @@ jobs:
           git clone --quiet --filter=blob:none --no-checkout "https://github.com/$UPSTREAM" "$work/upstream"
           head=$(git -C "$work/upstream" rev-parse HEAD)
           # 移植した MIT の部分 (README の「ライセンス」の範囲)
-          changed=$(git -C "$work/upstream" diff --name-only "$old_commit" "$head" \
+          changed=$(git -C "$work/upstream" diff --name-only --no-renames "$old_commit" "$head" \
             | grep -E '^(core/|device/|include/mb86H/|usb/boot\.c|usb/window\.c|usb/host_contract\.h|usb/userland/|userland/)' || true)
           {
             echo "firmware=$firmware"
