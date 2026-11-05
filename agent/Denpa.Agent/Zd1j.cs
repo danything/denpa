@@ -86,7 +86,7 @@ public static class Zd1j
     public static CardLinkCandidate Card(string port)
     {
         var name = $"{Model} {port} Internal Card Reader";
-        return new CardLinkCandidate(name, () => new Zd1jCard(name, () => Zd1jBoard.Acquire(port)));
+        return new CardLinkCandidate(name, () => new Zd1jCard(name, () => Zd1jBoard.Acquire(port)), Device(port));
     }
 
     /// <summary>開く (Linux は usbfs、Windows は WinUSB、macOS は IOKit)</summary>

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { config } from "#lib/server/config.js";
 import { orm } from "#lib/server/db.js";
 import { recordings } from "#lib/server/schema.js";
-import { cardStatus } from "#lib/server/scramble.js";
+import { cardStatus, putCardReaders } from "#lib/server/scramble.js";
 import {
   type AgentTuner,
   putTuners,
@@ -192,6 +192,26 @@ export const actions = {
 
   /** 定義を消して自動検出に戻す。挿さっている機材をエージェントが自分で見つける */
   tunersAuto: () => save([]),
+
+  /**
+   * 使わないカードリーダーを入れ替える。行ごとに `reader.<番号>` にリーダーの名前、`reader-use.<番号>` にスイッチ
+   * (外れていれば送られてこない)。使う最後の 1 台をオフにする聞き返しは画面でする (`Tuners.svelte`)
+   */
+  cards: async ({ request }) => {
+    const form = await request.formData();
+    const disabled: string[] = [];
+    for (const [key, value] of form.entries()) {
+      const match = key.match(/^reader\.(\d+)$/);
+      if (match === null || typeof value !== "string") continue;
+      if (form.get(`reader-use.${match[1]}`) === null) disabled.push(value);
+    }
+    try {
+      await putCardReaders(disabled);
+    } catch (error) {
+      return fail(502, { message: String(error) });
+    }
+    return { success: true };
+  },
 } satisfies Actions;
 
 /** 定義をエージェントへ送る。画面はその場で保存して、見出しの横に「保存しました」を出す (`autosave`)。通知は出さない */

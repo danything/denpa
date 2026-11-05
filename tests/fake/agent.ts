@@ -37,6 +37,13 @@ const knobs: Knobs = {
 };
 /** チューナーが塞がっている状態。取り合いの見え方を確かめる */
 let busyTuners = false;
+/** 挿さっているカードリーダー。どちらにもカードが入っている */
+const CARD_READERS = [
+  { name: "Fake Card Reader (usb 1-1)", ids: ["0000000000000000"] },
+  { name: "Spare Card Reader (usb 1-2)", ids: ["0000000000000001"] },
+];
+/** 使わない設定のカードリーダー (`PUT /denpa/card/readers`) */
+let cardsOff = new Set<string>();
 
 /**
  * エージェントのログ (`GET /denpa/logs`)。本物と同じ形 (`{"lines":[{"at","text"}]}`。新しいほうから 2000 行まで、古い順)。
@@ -601,41 +608,54 @@ const options: Bun.ServeOptions = {
         });
     }
 
+    // 使わないカードリーダーを入れ替える (本物は agent/Denpa.Agent/CardChoice.cs)
+    if (url.pathname === "/denpa/card/readers" && request.method === "PUT") {
+      return request.json().then((body: { disabled: string[] }) => {
+        cardsOff = new Set(body.disabled);
+        return json({ disabled: [...cardsOff].sort() });
+      });
+    }
     if (url.pathname === "/denpa/card") {
       /*
        * 本物と同じ形 (agent/Denpa.Agent/Card.cs)。**予備のリーダーも 1 つ置く。**
-       * 使うのは 1 枚だけで、チューナーが並ぶのは使用中の行だけ、を画面で確かめる
+       * 使うのは 1 枚だけで、チューナーが並ぶのは使用中の行だけ、を画面で確かめる。
+       * 使わない設定のリーダーは開かずに後ろへ並べ、使うのは残りの先頭
        */
-      return json(
-        knobs.scrambled
-          ? {
-              ok: false,
-              message: "カードリーダーが見つかりません",
-              source: "local",
-              readers: [],
-            }
-          : {
-              ok: true,
-              message: "",
-              source: "local",
-              readers: [
-                {
-                  name: "Fake Card Reader (usb 1-1)",
-                  card: true,
-                  ids: ["0000000000000000"],
-                  active: true,
-                  tuners: ["Fake-T1"],
-                },
-                {
-                  name: "Spare Card Reader (usb 1-2)",
-                  card: true,
-                  ids: ["0000000000000001"],
-                  active: false,
-                  tuners: [],
-                },
-              ],
-            },
-      );
+      if (knobs.scrambled) {
+        return json({
+          ok: false,
+          message: "カードリーダーが見つかりません",
+          source: "local",
+          readers: [],
+        });
+      }
+      const on = CARD_READERS.filter((reader) => !cardsOff.has(reader.name));
+      const off = CARD_READERS.filter((reader) => cardsOff.has(reader.name));
+      return json({
+        ok: on.length > 0,
+        message:
+          on.length > 0
+            ? ""
+            : "使うカードリーダーがありません。カードリーダーをオンにしてください",
+        source: "local",
+        readers: [
+          ...on.map((reader, at) => ({
+            ...reader,
+            card: true,
+            active: at === 0,
+            tuners: at === 0 ? ["Fake-T1"] : [],
+            disabled: false,
+          })),
+          ...off.map((reader) => ({
+            name: reader.name,
+            card: false,
+            ids: [],
+            active: false,
+            tuners: [],
+            disabled: true,
+          })),
+        ],
+      });
     }
     if (url.pathname === "/denpa/logs" && request.method === "GET") {
       if (logsMode === "off") return new Response("failed", { status: 500 });

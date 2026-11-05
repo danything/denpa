@@ -171,7 +171,7 @@ public static class Dt295
     public static CardLinkCandidate Card(string port)
     {
         var name = $"{Model} {port} Card Reader";
-        return new CardLinkCandidate(name, () => new Dt295ResidentCard(name, () => Dt295ResidentBoard.Acquire(port)));
+        return new CardLinkCandidate(name, () => new Dt295ResidentCard(name, () => Dt295ResidentBoard.Acquire(port)), Device(port));
     }
 
     /// <summary>

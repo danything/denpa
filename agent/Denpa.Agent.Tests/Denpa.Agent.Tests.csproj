@@ -38,6 +38,7 @@
         <Compile Include="../Denpa.Agent/Px4Card.cs" />
         <Compile Include="../Denpa.Agent/Px4Control.cs" />
         <Compile Include="../Denpa.Agent/CardLinks.cs" />
+        <Compile Include="../Denpa.Agent/CardChoice.cs" />
         <Compile Include="../Denpa.Agent/UsbFs.cs" />
         <Compile Include="../Denpa.Agent/T1.cs" />
         <Compile Include="../Denpa.Agent/Ccid.cs" />

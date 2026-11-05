@@ -100,6 +100,33 @@ describe("カードリーダーの状態", () => {
     expect(card.readers[3]?.error).toBe("使えません");
   });
 
+  test("使わない設定のリーダーは 無効 にする", () => {
+    const card = readCardStatus({
+      ok: true,
+      message: "",
+      source: "local",
+      readers: [
+        {
+          name: "A",
+          card: true,
+          ids: ["0000000000000001"],
+          active: true,
+          tuners: [],
+          disabled: false,
+        },
+        {
+          name: "PIXELA PIX-DT295 3-5 Card Reader",
+          card: false,
+          ids: [],
+          active: false,
+          tuners: [],
+          disabled: true,
+        },
+      ],
+    });
+    expect(card.readers.map((r) => r.state)).toEqual(["active", "disabled"]);
+  });
+
   test("鍵を配る相手から貰っているときは相手と番号を持つ", () => {
     const card = readCardStatus({
       ok: true,

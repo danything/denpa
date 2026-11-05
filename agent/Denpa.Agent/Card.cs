@@ -65,7 +65,32 @@ public static class Card
             // リーダーを探すところで転んだ (sysfs が読めないなど)。画面には理由を出す
             survey = new CardSurvey(false, Unwrap(error).Message, [], [], (Keys.Source as RemoteCard)?.Url);
         }
-        return Report(survey, streaming());
+        return Report(WithDisabled(survey, CardChoice.Disabled, CardLinks.All), streaming());
+    }
+
+    /// <summary>
+    /// 使わない設定のリーダーを、**開かずに**後ろへ足す (画面でオンに戻せるように)。挿さっていないものは足さない。
+    /// 鍵を配る相手から貰っているときは手元のリーダーを並べないので足さない
+    /// </summary>
+    internal static CardSurvey WithDisabled(CardSurvey survey, IReadOnlySet<string> disabled, Func<IReadOnlyList<CardLinkCandidate>> all)
+    {
+        if (survey.Remote is not null || disabled.Count == 0) return survey;
+        IReadOnlyList<CardLinkCandidate> found;
+        try
+        {
+            found = all();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return survey;
+        }
+        var listed = survey.Readers.Select(reader => reader.Name).ToHashSet();
+        var off = found.Where(candidate => disabled.Contains(candidate.Name) && !listed.Contains(candidate.Name))
+            .Select(candidate => new ReaderState(candidate.Name, null, false, null, Disabled: true)).ToList();
+        if (off.Count == 0) return survey;
+        // 1 つも使っていないのに「見つかりません」と出すと、挿さっていないように見える
+        var message = survey.Ok || survey.Readers.Count > 0 ? survey.Message : "使うカードリーダーがありません。カードリーダーをオンにしてください";
+        return survey with { Message = message, Readers = [.. survey.Readers, .. off] };
     }
 
     /// <summary>間に合わなかった。**リーダーの名前だけは並べる** (探すだけなら何も開かない)</summary>
@@ -242,6 +267,7 @@ public static class Card
                 ["ids"] = Ids(reader.Ids ?? []),
                 ["active"] = reader.Active,
                 ["tuners"] = Json.Strings(reader.Active ? streaming : []),
+                ["disabled"] = reader.Disabled,
             };
             if (reader.Error is not null) row["error"] = reader.Error;
             readers.Add((JsonNode)row);
@@ -274,7 +300,8 @@ public static class Card
 /// <param name="Ids">カードの番号。**カードが読めなければ null**</param>
 /// <param name="Active">鍵の出どころが使っているリーダー</param>
 /// <param name="Error">覗けなかった理由 (挿さっていないだけなら null)</param>
-public sealed record ReaderState(string Name, long[]? Ids, bool Active, string? Error)
+/// <param name="Disabled">使わない設定のリーダー (<see cref="CardChoice"/>)。開いていないので、カードの有無も分からない</param>
+public sealed record ReaderState(string Name, long[]? Ids, bool Active, string? Error, bool Disabled = false)
 {
     public bool Card => Ids is not null;
 }

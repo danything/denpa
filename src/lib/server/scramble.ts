@@ -91,6 +91,8 @@ const CARD_READER = object({
   tuners: array(string),
   /** 覗けなかった理由。挿さっていないだけなら無い */
   error: optional(string),
+  /** 使わない設定のリーダー。開いていないので、カードの有無も分からない */
+  disabled: optional(boolean),
 });
 
 /** エージェントの `/denpa/card` の答え。形式はここで確かめる (`shape.ts`) */
@@ -109,7 +111,8 @@ const CARD_STATUS = object({
 });
 
 /** 画面での呼び分け */
-export type CardReaderState = "active" | "standby" | "empty" | "error";
+export type CardReaderState =
+  "active" | "standby" | "empty" | "error" | "disabled";
 
 type CardReader = {
   name: string;
@@ -139,6 +142,7 @@ function strings(value: unknown): string[] {
 type Loose<T> = { [K in keyof T]?: unknown };
 
 function stateOf(row: Loose<Infer<typeof CARD_READER>>): CardReaderState {
+  if (row.disabled === true) return "disabled";
   if (row.active === true) return "active";
   if (row.card === true) return "standby";
   return typeof row.error === "string" ? "error" : "empty";
@@ -183,6 +187,24 @@ export function readCardStatus(raw: unknown): CardStatus {
 /** 確かめられなかった。読めていない手元のカードとして、理由だけ出す */
 function failed(message: string): CardStatus {
   return normalize({ message });
+}
+
+/**
+ * 使わないカードリーダーを入れ替える (設定の「受信」のカードリーダーの表のスイッチ)。
+ * 渡すのは使わないリーダーの名前の一覧。使っている最中のリーダーなら、エージェントが手放して次のリーダーで繋ぎ直す
+ */
+export async function putCardReaders(disabled: string[]): Promise<void> {
+  const res = await agentFetch("/denpa/card/readers", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ disabled }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `カードリーダーの設定を保存できません (${res.status}) ${await res.text()}`,
+    );
+  }
 }
 
 /** `/denpa/decode` の答え。断られたときは `error` に理由 */
