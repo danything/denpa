@@ -51,6 +51,11 @@ describe("parseAgentUrl", () => {
     expect(() => parseAgentUrl("http://tuner-agent:25252")).toThrow("https://");
   });
 
+  test("ホストが空なら、合言葉を出さずに誤りにする (アドレスを取れなかったインストールの起動スクリプト)", () => {
+    expect(() => parseAgentUrl("https://:25252#pair=abc")).toThrow("ホスト");
+    expect(() => parseAgentUrl("https://:25252#pair=abc")).not.toThrow("abc");
+  });
+
   test("合言葉は伏せる値に入る", () => {
     config.agentUrl = "https://a:1#pair=secret-token";
     expect(agentSecrets()).toEqual(["secret-token"]);

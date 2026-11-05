@@ -48,6 +48,11 @@ export function parseAgentUrl(raw: string): AgentTarget {
       "TUNER_AGENT_URL は https:// で書きます (エージェントとは TLS で繋ぎます。docs/agent.md)",
     );
   }
+  if (!URL.canParse(base) || new URL(base).hostname === "") {
+    throw new Error(
+      `TUNER_AGENT_URL のホストが読めません (${base})。https://ホスト:ポート の形で書きます (docs/agent.md)`,
+    );
+  }
   const pair = new URLSearchParams(fragment).get("pair");
   return { origin: base, pair: pair && pair.length > 0 ? pair : null };
 }
