@@ -24,7 +24,7 @@ namespace Denpa.Agent;
 /// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など) と asicen-userland の機材 (PX-W3U3。同じ IPC)。<c>px4d</c> (asicen なら <c>asicend</c>) が持ち、受信機を取ったまま制御ソケットで選局し直す (Px4.cs)</item>
 /// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
 /// <item><see cref="Zd1jTuner"/> … Sony CECH-ZD1 J。エージェントが USB を直に持ち、ボードを開いたまま周波数まわりだけ書き換える (Zd1j.cs)</item>
-/// <item><see cref="Dt295Tuner"/> … PIXELA PIX-DT295 (試験的)。エージェントが USB を直に持ち、ボードを初めての選局で開いたまま選局し直す (Dt295Tuner.cs)</item>
+/// <item><see cref="Dt295ResidentTuner"/> … PIXELA PIX-DT295 (試験的)。エージェントが USB を直に持ち、ボードを初めての選局で開いたまま選局し直す (Dt295ResidentTuner.cs)</item>
 /// </list>
 ///
 /// <para>
@@ -155,7 +155,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>Pipe に詰めた TS の読み出し側 (<see cref="Piped"/>)。あれば fd は使わない</summary>
     private readonly Piped? _piped;
 
-    /// <summary>Pipe に詰めた TS (Px4Stream・Zd1jStream・Dt295Stream) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
+    /// <summary>Pipe に詰めた TS (Px4Stream・Zd1jStream・Dt295ResidentStream) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
     public DeviceStream(PipeReader reader, Func<string?>? ended = null)
         : this(new SafeFileHandle(), ended) => _piped = new Piped(reader);
 

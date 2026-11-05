@@ -68,22 +68,22 @@ public sealed class Mb86h47 : II2c
     private const byte CommandIn = 0x83;
     private const int CommandWords = Mb86h47Programs.BulkChunk / 4 - 3;
 
-    // カードの UART (13.1)
-    private const uint CardEnable = 0xFEA000;
-    private const uint CardLines = 0xFEA004;
-    private const uint CardBaud = 0xFEA008;
-    private const uint CardSend = 0xFEA00C;
-    private const uint CardControl = 0xFEA010;
-    private const uint CardCount = 0xFEA014;
-    private const uint CardMask = 0xFEA018;
-    private const uint CardStatus = 0xFEA01C;
-    private const uint CardCwt = 0xFEA020;
-    private const uint CardBwt = 0xFEA024;
-    private const uint CardTx = 0xFEA028;
-    private const uint CardRx = 0xFEA02C;
-    private const uint CardPower = 0xFEA034;
-    private const uint CardTxLrc = 0xFEA038;
-    private const uint CardRxLrc = 0xFEA03C;
+    // カードの UART (13.1。PIX-DT295 の MB86M01 も同じアドレス)
+    internal const uint CardEnable = 0xFEA000;
+    internal const uint CardLines = 0xFEA004;
+    internal const uint CardBaud = 0xFEA008;
+    internal const uint CardSend = 0xFEA00C;
+    internal const uint CardControl = 0xFEA010;
+    internal const uint CardCount = 0xFEA014;
+    internal const uint CardMask = 0xFEA018;
+    internal const uint CardStatus = 0xFEA01C;
+    internal const uint CardCwt = 0xFEA020;
+    internal const uint CardBwt = 0xFEA024;
+    internal const uint CardTx = 0xFEA028;
+    internal const uint CardRx = 0xFEA02C;
+    internal const uint CardPower = 0xFEA034;
+    internal const uint CardTxLrc = 0xFEA038;
+    internal const uint CardRxLrc = 0xFEA03C;
 
     /// <summary>主 CPU の処理の書き換える 5 語と、電源投入時の値 (4.2)</summary>
     private static readonly uint[] PatchAt = [0xE9AC0, 0xE9AC4, 0xE9E0C, 0xE9E10, 0xE9D94];

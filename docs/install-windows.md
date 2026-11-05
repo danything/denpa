@@ -86,7 +86,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   device の名前 (`zd1j:2-3.2` など) は、挿したポートから Linux と同じ形に作ります (1 台だけなら挿し替えても付いていく。[tuners.md](tuners.md#sony-cech-zd1-j))。
   Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#sony-cech-zd1-j))
 - **PIXELA PIX-DT295** (試験的。地上波・BS・CS)。エージェントが WinUSB で USB を直に持ちます。Zadig で `06b8:103b` に WinUSB を当てます。
-  PIXELA の公式パッケージは初めて使うときにエージェントが取ってきます。Windows の実機で地上波・BS・無料の CS の TS を受けられました
+  ファームウェアはエージェントに同梱しています。今の方式 (mAgicVISION のファームウェア) は Windows の実機では確かめていません。公式のファームウェアで動いたあとは、機材を挿し直してください
   ([tuners.md](tuners.md#pixela-pix-dt295-試験的))
 - WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
   **PX-Q3U4 / PX-W3U4 は USB の機材が 2 つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
@@ -138,7 +138,7 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
   そのアドレスは起動のたびに変わりうるので、ループバックには絞れません。LAN から届かないようにするのは Windows ファイアウォールの役目です
   (25252 の受信を許さないままにする)。LAN のほかの機械からエージェントに繋ぐとき (`-AgentOnly`) は、ファイアウォールでポート 25252 を
   許します。答えるのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
-- **Windows の実機で確かめたのは、PIX-DT295 で TS を受けるところまでです。** ほかのチューナーとカードは、CI (`agent-windows`・`agent-windows-install`) で
+- **Windows の実機で確かめたのは、以前の方式の PIX-DT295 で TS を受けるところまでです。** ほかのチューナーとカードは、CI (`agent-windows`・`agent-windows-install`) で
   ビルドして起こし、偽の px4d を相手に IPC と TS の受け渡しを流し、入れ方 (`-AgentOnly`) を最後まで流すところまでです。
   denpa 本体を wslc で起こすところは手元の Windows 11 (wslc 3.0.1) で確かめました (Docker Desktop からの移行は未確認)。
   実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`

@@ -36,7 +36,7 @@ public static class ChannelTable
     /// </param>
     /// <param name="ServiceId">
     /// 受ける番組の番組番号 (service_id)。名前に <c>/152</c> のように付いているときだけ入る。無ければ null。
-    /// 機材が番組を選ぶもの (PIX-DT295 の衛星) だけが使い、ほかの機材は選り分けずに TS をまるごと流す
+    /// いまはどの機材も番組を選り分けず、TS をまるごと流す
     /// </param>
     public sealed record Tuning(string Type, int Delivery, uint Frequency, uint StreamId, int? ServiceId = null)
     {
