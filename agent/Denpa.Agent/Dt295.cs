@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 
 namespace Denpa.Agent;
@@ -171,5 +172,28 @@ public static class Dt295
     {
         var name = $"{Model} {port} Card Reader";
         return new CardLinkCandidate(name, () => new Dt295ResidentCard(name, () => Dt295ResidentBoard.Acquire(port)));
+    }
+
+    /// <summary>
+    /// <c>--card</c> の差し込み口の行: ATR と、開いてから ATR までの時間。**見つからなくても 1 行出す**
+    /// (macOS・Windows で OS に見えていないのか、開けないのかを分けるため)。どんな例外でも行にして次へ進む
+    /// </summary>
+    public static void DescribeCards(IReadOnlyList<CardLinkCandidate> cards, TextWriter output)
+    {
+        if (cards.Count == 0) output.WriteLine($"{Model}: 見つかりません");
+        foreach (var found in cards)
+        {
+            var started = Stopwatch.StartNew();
+            try
+            {
+                using var link = found.Open();
+                var atr = link.Reset();
+                output.WriteLine($"内蔵 {found.Name}: ATR {Convert.ToHexString(atr)} ({started.ElapsedMilliseconds} ms。開いてカードの電源を入れるまで)");
+            }
+            catch (Exception error)
+            {
+                output.WriteLine($"内蔵 {found.Name}: {Zd1j.Reason(error)} ({started.ElapsedMilliseconds} ms)");
+            }
+        }
     }
 }
