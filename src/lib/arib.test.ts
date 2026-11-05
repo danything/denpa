@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  audioChannels,
   askedTrack,
+  audioChannels,
   audioLabel,
   audioTitles,
   audioTracks,
