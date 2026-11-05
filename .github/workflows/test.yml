@@ -180,6 +180,10 @@ jobs:
           $found | Format-Table -AutoSize | Out-String -Width 200
           if ($found) { throw "PSScriptAnalyzer: $($found.Count) findings" }
 
+      - name: Windows startup script with fake networking
+        shell: pwsh
+        run: ./tests/install-windows-start.ps1
+
       # Mac で denpa 本体を起こす compose。Mac のランナーには Docker が無いので、書き方だけここで見る
       # 合言葉は install.sh が ~/denpa/.env に作る。ここでは仮の値を渡し、無いときに止まることも見る
       - name: Mac compose file is valid

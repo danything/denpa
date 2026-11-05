@@ -28,12 +28,14 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 `denpa-start.ps1` は**起こすたびに、コンテナを作り直すか決めます。** 実機 (wslc 3.0.1) で確かめた wslc の癖に合わせています。
 
-- **コンテナから Windows のエージェントへは、Hyper-V の Default Switch の IP で届きます。**
-  `host.docker.internal` のような名前はありません。その IP は Windows を起こし直すと変わりうるので、
-  起こすたびに調べ、`TUNER_AGENT_URL` (`https://<その IP>:25252#pair=<合言葉>`。denpa は組んだときの証明書そのもので
-  確かめるので、IP で書いても通る) かバージョンか `denpa.env` (ハッシュをコンテナのラベルに持つ) が変わっていれば
+- **コンテナから Windows のエージェントへは、WSL のホスト接続名 `host.wslc.internal` で届きます。**
+  仮想スイッチの有無や LAN の IP に依存しません。`TUNER_AGENT_URL`
+  (`https://host.wslc.internal:25252#pair=<合言葉>`。denpa は組んだときの証明書そのもので確かめる) か
+  バージョンか `denpa.env` (ハッシュをコンテナのラベルに持つ) が変わっていれば
   作り直します (環境変数は作るときに埋め込まれる。DB はボリューム、録画は Windows のフォルダなので消えない)。
-  変わっていなければ `wslc start` だけ。`denpa.env` を直したら、install.ps1 を流し直すかログオンし直せば効く
+  変わっていなければ `wslc start` だけ。`denpa.env` を直したら、install.ps1 を流し直すかログオンし直せば効きます。
+  WSL の [`session.hostLoopback`](https://learn.microsoft.com/en-us/windows/wsl/wsl-container-settings) は既定の
+  `host.wslc.internal` を使います。独自の名前や `none` に変更している場合は、既定に戻す必要があります。
 - **自動で起こし直す指定 (`--restart`) がありません。** ログオン時のタスクが代わりに起こします
 - **ポートは既定で 127.0.0.1 にしか出ません。** `-p 0.0.0.0:3000:3000` で出して、LAN のほかの機器からも開けるようにします
 - **この PC のブラウザから入ると、送信元は `169.254.x.x` に見えます** (wslc がポートを中継するため)。
