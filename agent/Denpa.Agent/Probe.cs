@@ -169,6 +169,8 @@ public static class Probe
             return RunZd1j(zd1j, channels, decode ? keys : null, seconds, repeat);
         }
 
+        // PIX-DT295 は、鍵もその機材の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
+        IKeySource source = Dt295.Parse(device) is { } dt295 && cardAt < 0 ? new LocalCard(() => [Dt295.Card(dt295)]) : Keys.Source;
         using var closing = Dt295.Is(device) ? new Closing(Dt295ResidentBoard.CloseAll) : null;
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
@@ -200,7 +202,7 @@ public static class Probe
             }
             Console.WriteLine($"    同期 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
 
-            Measure(tuner.Output, name, decode ? new Descrambler(Keys.Source) : null, seconds);
+            Measure(tuner.Output, name, decode ? new Descrambler(source) : null, seconds);
         }
 
         return 0;

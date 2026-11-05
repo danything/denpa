@@ -6,7 +6,7 @@ namespace Denpa.Agent;
  * PIXELA PIX-DT295 (USB 06b8:103b。MB86 系の ASSP に地上波・衛星の復調器と B-CAS の差し込み口)。
  *
  * **試験的。** 設定の device は dt295:<USB のポート>。mAgicVISION のファームウェアを機材に入れて動かす (常駐方式)。
- * 機材の中では復号せず、スクランブルのままの TS を受けて、エージェントの B25 で (ほかのカードリーダーのカードで) 復号する。
+ * 機材の中では復号せず、スクランブルのままの TS を受けて、エージェントの B25 で復号する。差し込み口のカードも、ほかのチューナーの復号に使う。
  * ここは機材の識別と探す・開くだけ。常駐イメージとのやり取りは Dt295Resident*.cs、チューナーとカードは Dt295ResidentTuner.cs。
  * 同じ公式ドライバーの機材 (PIX-DT295 W・DT420・DT410 など。<see cref="Dt295.Family"/>) は見つけるが、未確認なので開かずに断る。
  */
@@ -152,10 +152,21 @@ public static class Dt295
         return open(model);
     }
 
-    /// <summary>
-    /// そのポートの差し込み口。**開くまでは何も開かない** (開くと常駐イメージを機材に入れる)。いまのファームウェアでは APDU が通らないので
-    /// (ATR までは読める。docs/tuners.md)、カードリーダーの並び (CardLinks) には入れず、<c>--card dt295:&lt;ポート&gt;</c> で確かめるときだけ使う
-    /// </summary>
+    /// <summary>差し込み口 (カードリーダー)。**開くまでは何も開かない** (開くと常駐イメージを機材に入れる)</summary>
+    public static IReadOnlyList<CardLinkCandidate> Cards()
+    {
+        try
+        {
+            return [.. Ports().Select(Card)];
+        }
+        catch (Exception error) when (error is IOException or DllNotFoundException or EntryPointNotFoundException)
+        {
+            Log.Write($"{Model} を探せません ({error.Message})");
+            return [];
+        }
+    }
+
+    /// <summary>そのポートの差し込み口。**開くまでは何も開かない**</summary>
     public static CardLinkCandidate Card(string port)
     {
         var name = $"{Model} {port} Card Reader";
