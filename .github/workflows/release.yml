@@ -127,6 +127,28 @@ jobs:
       # distroless でシェルも無いが、何も実行しないので構わない)。arch を土台から
       # 読むのは、arm64 を出す前の `sha-…` を手で貼り直すとき (workflow_dispatch) に
       # 無い arch を求めて落ちないため
+      # **main のビルドが土台のイメージを出し終えるまで待つ。** タグを打つのは main に入れた直後のことが多く、
+      # build-and-deploy がまだ組んでいる (束ねる前の) うちにここへ来る。待たずに探すと見つからずに落ち、
+      # latest が前のバージョンのまま残っていた (v2.30.2〜v2.31.0。手で流し直した)。
+      # 上限は 60 分 (main のビルドは失敗して流し直すと 1 時間ほど掛かったことがある)。それでも無ければ落とす
+      - name: Wait for the images built on main
+        run: |
+          set -eu
+          base="${{ env.REGISTRY }}/${{ github.repository_owner }}"
+          for image in "denpa-agent:${{ steps.tag.outputs.agent }}" "denpa:${{ steps.tag.outputs.denpa }}"; do
+            waited=0
+            until docker buildx imagetools inspect "${base}/${image}" > /dev/null 2>&1; do
+              if [ "$waited" -ge 3600 ]; then
+                echo "${base}/${image} が 60 分待っても出ません。main の build-and-deploy を確かめてください" >&2
+                exit 1
+              fi
+              echo "${base}/${image} はまだありません。main のビルドを待ちます (${waited} 秒)"
+              sleep 30
+              waited=$((waited + 30))
+            done
+            echo "${base}/${image} があります"
+          done
+
       - name: Point the names at this release
         id: push
         run: |
