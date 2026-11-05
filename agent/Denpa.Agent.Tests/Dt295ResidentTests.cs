@@ -477,6 +477,11 @@ internal sealed class FakeResident : IDt295ResidentTransport
     /// <summary>TS を出し始めたときに呼ぶ (TS を積むため)</summary>
     public Action? OnTune { get; set; }
 
+    /// <summary>受信中の SERVICE ごとに呼ぶ</summary>
+    public Action? OnService { get; set; }
+
+    public uint StreamFormat { get; set; } = FormatRaw;
+
     public bool CardInserted { get; set; }
 
     /// <summary>カードに渡した APDU の切れの数</summary>
@@ -624,6 +629,8 @@ internal sealed class FakeResident : IDt295ResidentTransport
                 _phase = PhaseQuiet;
                 return;
             case CommandService:
+                if (Capturing) OnService?.Invoke();
+                return;
             case CommandStatus:
                 return;
             case CommandCard:
@@ -638,7 +645,7 @@ internal sealed class FakeResident : IDt295ResidentTransport
                 var words = argument switch
                 {
                     PageOverview => new uint[] { 3, 3, AbiVersion, 0 },
-                    PageSource => data[1] == 0 ? new uint[] { 473142857, 707143000, 1, 188, FormatRaw, 0, 7 } : new uint[] { 950000, 2150000, 1, 188, FormatRaw, 0, 0 },
+                    PageSource => data[1] == 0 ? new uint[] { 473142857, 707143000, 1, 188, StreamFormat, 0, 7 } : new uint[] { 950000, 2150000, 1, 188, StreamFormat, 0, 0 },
                     _ => new uint[]
                     {
                         _generation, 0, 0, _phase,

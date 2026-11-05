@@ -88,7 +88,8 @@ public sealed class Dt295ResidentBoard
         var usb = open();
         var placed = false;
         var link = new Dt295ResidentLink(usb);
-        var session = new Dt295ResidentSession(link, nowMs, delay);
+        // 選局の途中から TS が出るので、選局が落ち着くのを待つ間も受信中と同じ 1 ms ごとに SERVICE を送る
+        var session = new Dt295ResidentSession(link, nowMs, delay) { TunePollMs = Dt295ResidentStream.ServiceMs };
         try
         {
             var (outcome, overview) = Dt295ResidentLoader.Start(link, session, image, placed: () => placed = true);
@@ -227,8 +228,10 @@ internal sealed class Dt295ResidentStream
 
     private const int ReadTimeoutMs = 100;
 
+    private const int SettleReadTimeoutMs = 5;
+
     /// <summary>SERVICE を送る間隔 (usbboot.c の capture_firmware と同じ 1 ms)</summary>
-    private const int ServiceMs = 1;
+    internal const int ServiceMs = 1;
 
     private readonly Pipe _pipe = Px4Stream.NewBuffer();
     private readonly Dt295ResidentBoard _board;
@@ -238,6 +241,8 @@ internal sealed class Dt295ResidentStream
     private readonly Action _stalled;
     private readonly Thread _pump;
     private readonly Thread _service;
+    private readonly ManualResetEventSlim _drained = new();
+    private volatile bool _settled;
     private volatile bool _stopped;
     private volatile bool _ended;
     private volatile string? _reason;
@@ -265,7 +270,10 @@ internal sealed class Dt295ResidentStream
         _service = new Thread(Service) { IsBackground = true, Name = $"{name} SERVICE" };
     }
 
-    /// <summary>読みを出して読み出しを始める。**選局の前に呼ぶ** (選局の途中から TS が出る)。SERVICE は <see cref="Serve"/> から</summary>
+    /// <summary>
+    /// 読みを出して読み出しを始める。**選局の前に呼ぶ** (選局の途中から MUX のフレームが 0 番から出る)。
+    /// 選局が落ち着く前の TS パケットは誤りや欠けが混じるので捨て、<see cref="Serve"/> のあとから <see cref="Output"/> に流す
+    /// </summary>
     public static Dt295ResidentStream Open(Dt295ResidentBoard board, Dt295ResidentSource source, int index, string name, Action stalled)
     {
         var ts = new Dt295ResidentTs(source.StreamFormat, index, (int)source.RecordSize);
@@ -274,8 +282,13 @@ internal sealed class Dt295ResidentStream
         return stream;
     }
 
-    /// <summary>選局が受理されたら、SERVICE を送り始める</summary>
-    public void Serve() => _service.Start();
+    /// <summary>選局が落ち着いたら、それまでに届いていた TS を読み捨ててから SERVICE を送り始める</summary>
+    public void Serve()
+    {
+        _settled = true;
+        _drained.Wait(TimeSpan.FromSeconds(1));
+        _service.Start();
+    }
 
     /// <summary>最初の TS を待つ。来なければ false</summary>
     public bool WaitFirst(TimeSpan timeout) => _first.Wait(timeout) || FirstAt != 0;
@@ -286,6 +299,28 @@ internal sealed class Dt295ResidentStream
         var writer = _pipe.Writer;
         try
         {
+            while (!_stopped && !_settled)
+            {
+                var got = _in.Read(raw, SettleReadTimeoutMs);
+                if (got == 0) continue;
+                if (!_ts.Push(raw.AsSpan(0, got), static _ => { }))
+                {
+                    End($"TS の並びが崩れました ({_ts.Broken})");
+                    return;
+                }
+            }
+            while (!_stopped)
+            {
+                var got = _in.Read(raw, 0);
+                if (got == 0) break;
+                if (!_ts.Push(raw.AsSpan(0, got), static _ => { }))
+                {
+                    End($"TS の並びが崩れました ({_ts.Broken})");
+                    return;
+                }
+            }
+            _drained.Set();
+
             while (!_stopped)
             {
                 var got = _in.Read(raw, ReadTimeoutMs);
@@ -317,6 +352,7 @@ internal sealed class Dt295ResidentStream
         finally
         {
             _ended = true;
+            _drained.Set();
             writer.Complete();
         }
     }
