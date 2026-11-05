@@ -1101,9 +1101,12 @@
     margin-inline: calc(var(--dp-dock-inset) - var(--dp-gutter, 1rem));
     padding-inline: 0.5rem;
   }
+  /* 字のボタンは中身の幅。アイコンのボタン (絞り込み) は決まりの大きさのまま (auto にすると横に潰れる) */
   :global(html[data-phone]) .c-bar > :global(button) {
-    width: auto;
     margin: 0;
+  }
+  :global(html[data-phone]) .c-bar > :global(button:not(.icon)) {
+    width: auto;
   }
   /* ふだんは「絞り込み」のボタンだけなので、右端に丸く寄せる (言葉で探すのはヘッダーの検索) */
   :global(html[data-phone]) .c-bar:not([data-selecting]) {
@@ -1162,6 +1165,14 @@
     background: var(--dp-video);
     box-shadow: var(--dp-shadow-pop);
     transition: transform var(--dp-duration-exit) var(--dp-ease-exit);
+  }
+  /* スマホの形は画面の横幅いっぱい (左右の余白と角の丸みを無くす) */
+  :global(html[data-phone]) .viewer {
+    padding: 0;
+  }
+  :global(html[data-phone]) .v-stage {
+    width: min(100vw, 100svh * 16 / 9);
+    border-radius: 0;
   }
   .viewer:not([open]) .v-stage {
     transform: translateY(0.5rem) scale(0.95);
