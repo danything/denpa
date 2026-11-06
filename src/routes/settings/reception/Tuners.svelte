@@ -1,6 +1,7 @@
 <script lang="ts">
   import "@anyblades/blades/content/table";
   import Ellipsis from "~icons/lucide/ellipsis";
+  import ShieldCheck from "~icons/lucide/shield-check";
 
   import { arming } from "#lib/arming.svelte.js";
   import { autosave, SaveState } from "#lib/autosave.svelte.js";
@@ -17,8 +18,12 @@
   import { CHANNEL_TYPES } from "#lib/types.js";
 
   import type { PageData } from "./$types";
+  import ContractDialog from "./ContractDialog.svelte";
 
   let { data }: { data: PageData } = $props();
+
+  /** 有料契約確認モーダルの開閉 */
+  let showContractDialog = $state(false);
 
   /** チューナーの設定の保存の様子 (その場で保存する。`autosave`) */
   const configSave = new SaveState();
@@ -68,6 +73,17 @@
   /** 読み直しの間も前の中身を出したままにする (`held`) */
   const shownTuners = held(() => data.tuners);
   const shownCard = held(() => data.card);
+  const shownContracts = held(() => data.contracts);
+
+  const activeCardId = $derived.by(() => {
+    const card = shownCard.value;
+    if (!card) return null;
+    if (card.source === "remote" && card.ids.length > 0)
+      return card.ids[0] ?? null;
+    const active = card.readers.find((r) => r.state === "active");
+    if (active && active.ids.length > 0) return active.ids[0] ?? null;
+    return card.readers.find((r) => r.ids.length > 0)?.ids[0] ?? null;
+  });
 
   /**
    * 「⋯」で開いている行 (名前・デバイス・LNB・削除)。開くのは 1 行だけ。
@@ -445,6 +461,16 @@
           >
             {card.ok ? "正常" : "エラー"}
           </span>
+          <button
+            type="button"
+            class="ghost small"
+            disabled={!card.ok}
+            onclick={() => (showContractDialog = true)}
+            data-testid="btn-open-contracts"
+          >
+            <ShieldCheck aria-hidden="true" />
+            有料契約を確認
+          </button>
           {#if card.source === "remote"}
             <!-- CARD_URL。手元のリーダーは使わず、鍵だけ貰っている -->
             <span class="small">
@@ -608,6 +634,13 @@
       {/if}
     </div>
   </section>
+
+  <ContractDialog
+    open={showContractDialog}
+    cardId={activeCardId}
+    initialContracts={shownContracts.value ?? []}
+    onclose={() => (showContractDialog = false)}
+  />
 </div>
 
 <style>
