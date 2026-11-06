@@ -5,6 +5,7 @@ CREATE TABLE `card_contracts` (
 	`code` integer,
 	`valid_until` integer,
 	`decode_ok` integer,
+	`decoded_at` integer,
 	`checked_at` integer NOT NULL,
 	PRIMARY KEY(`card_id`, `service_id`)
 );

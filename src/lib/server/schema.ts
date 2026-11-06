@@ -275,6 +275,11 @@ export const cardContracts = sqliteTable(
     valid_until: integer("valid_until"),
     /** 実ストリームでの復号可否 (true: 成功, false: スクランブル残存, null: 未確認) */
     decode_ok: flag("decode_ok"),
+    /**
+     * 復号できたと確かめた時刻 (epoch ms)。**番組表に契約の情報が無い局は、これが新しいときだけ契約中とみる**
+     * (`contracts.paidAllowed`。`DECODE_VALID_MS` より古ければ確かめ直すまで録らない)
+     */
+    decoded_at: integer("decoded_at"),
     /** 最後に確認した時刻 (epoch ms) */
     checked_at: integer("checked_at").notNull(),
   },

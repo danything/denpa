@@ -8,7 +8,7 @@ import { ServiceFilter } from "@danything/arib/service-filter";
  * また、実際にチューナーを開いて TS パケットのスクランブル制御ビットを検査し、
  * 復号できるかを確認する。
  */
-import { and, asc, desc, eq, gt, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lte } from "drizzle-orm";
 
 import { agentFetch } from "./agent-client";
 import { orm } from "./db";
@@ -23,6 +23,21 @@ export interface ConfirmResult {
 }
 
 export type ContractState = "subscribed" | "unsubscribed" | "expired";
+
+/**
+ * **復号テストで確かめた契約を信じる長さ (31 日)。** 番組表に契約の情報 (0xCB) が無い局はカードに聞けないので、
+ * 復号できたことだけが手がかりになる。CS の月額は月ごとに切れるので、確かめてから 1 か月を過ぎたら確かめ直すまで録らない。
+ * 録画が復号できずに終わったときは、それを待たずに下げる (`noteStillScrambled`)
+ */
+export const DECODE_VALID_MS = 31 * 86_400_000;
+
+/** 復号テストで確かめた契約が、まだ信じられる新しさか */
+export function freshDecode(
+  decodedAt: number | null | undefined,
+  now = Date.now(),
+): boolean {
+  return decodedAt != null && now - decodedAt < DECODE_VALID_MS;
+}
 
 export interface ContractRow {
   cardId: string;
@@ -120,42 +135,23 @@ export async function checkContracts(): Promise<ContractRow[]> {
     );
   }
 
-  // 有料番組（is_free = false）を持つサービスを抽出
-  const paidPrograms = orm()
+  // 有料番組を持つ局 (局の表にあるものだけ) と、その局の新しい番組の契約確認情報 (無ければ null)
+  const serviceVerifications = new Map<number, string | null>();
+  for (const prog of orm()
     .select({
       serviceId: programs.service_id,
       verification: programs.contract_verification,
-      startAt: programs.start_at,
     })
     .from(programs)
+    .innerJoin(services, eq(services.id, programs.service_id))
     .where(eq(programs.is_free, false))
     .orderBy(desc(programs.start_at))
-    .all();
-
-  // サービスごとに最新の verification（あれば）を保持
-  const serviceVerifications = new Map<number, string | null>();
-  for (const prog of paidPrograms) {
-    if (!serviceVerifications.has(prog.serviceId)) {
+    .all()) {
+    if (!serviceVerifications.get(prog.serviceId))
       serviceVerifications.set(prog.serviceId, prog.verification ?? null);
-    } else if (!serviceVerifications.get(prog.serviceId) && prog.verification) {
-      serviceVerifications.set(prog.serviceId, prog.verification);
-    }
   }
-
-  if (serviceVerifications.size === 0) {
-    return [];
-  }
-
+  if (serviceVerifications.size === 0) return [];
   const serviceIds = [...serviceVerifications.keys()];
-  const allServices = orm()
-    .select({
-      id: services.id,
-    })
-    .from(services)
-    .where(inArray(services.id, serviceIds))
-    .all();
-
-  const existingServiceIds = new Set(allServices.map((s) => s.id));
 
   // 既存の契約レコード（前回の復号結果等）を取得して保持する
   const existingContracts = orm()
@@ -163,6 +159,7 @@ export async function checkContracts(): Promise<ContractRow[]> {
       serviceId: cardContracts.service_id,
       state: cardContracts.state,
       decodeOk: cardContracts.decode_ok,
+      decodedAt: cardContracts.decoded_at,
     })
     .from(cardContracts)
     .where(
@@ -176,11 +173,9 @@ export async function checkContracts(): Promise<ContractRow[]> {
 
   const now = new Date();
   const todayMjd = toMjd(now);
-  const futureMjd = todayMjd + 7;
   const nowMs = Date.now();
 
   for (const [serviceId, verification] of serviceVerifications) {
-    if (!existingServiceIds.has(serviceId)) continue;
     const existing = existingMap.get(serviceId);
 
     let state: ContractState = "unsubscribed";
@@ -188,101 +183,47 @@ export async function checkContracts(): Promise<ContractRow[]> {
     let validUntil: number | null = null;
 
     if (verification) {
-      // 1. 本日の判定
-      const todayRes = await confirmCardContract(verification, todayMjd);
-      if (!todayRes.ok) {
-        throw new Error(
-          `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${todayRes.error}`,
-        );
-      }
-
-      code = todayRes.code;
-
-      if (isCodeSubscribed(todayRes.code)) {
-        // 本日有効。1週間後 (MJD + 7) も有効か確認
-        const futureRes = await confirmCardContract(verification, futureMjd);
-        if (!futureRes.ok) {
+      /** その日 (今日からの日数) に観られるか。カードに聞けなければ投げる (今の行を上書きしない) */
+      const valid = async (days: number): Promise<boolean> => {
+        const res = await confirmCardContract(verification, todayMjd + days);
+        if (!res.ok) {
           throw new Error(
-            `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${futureRes.error}`,
+            `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${res.error}`,
           );
         }
-        if (isCodeSubscribed(futureRes.code)) {
-          // 1週間以上先まで有効
-          state = "subscribed";
-        } else {
-          // 1 週間以内に期限が来る。**今日はまだ観られるので契約中のまま**にし、期限の日だけ覚える
-          // (期限切れにすると、まだ観られる局が録られなくなる)
-          state = "subscribed";
-          // 1〜6日後でバイナリサーチして有効期限日を特定
-          let low = 1;
-          let high = 6;
-          let lastValid = 0;
-          while (low <= high) {
-            const mid = Math.floor((low + high) / 2);
-            const midRes = await confirmCardContract(
-              verification,
-              todayMjd + mid,
-            );
-            if (!midRes.ok) {
-              throw new Error(
-                `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${midRes.error}`,
-              );
-            }
-            if (isCodeSubscribed(midRes.code)) {
-              lastValid = mid;
-              low = mid + 1;
-            } else {
-              high = mid - 1;
-            }
-          }
-          validUntil = fromMjd(todayMjd + lastValid + 1); // 期限日の翌日0時JST = 満了日時
+        if (days === 0) code = res.code;
+        return isCodeSubscribed(res.code);
+      };
+      /** `from` 日目は観られて `to` 日目は観られないとき、観られる最後の日 (2 分探索) */
+      const lastValid = async (from: number, to: number): Promise<number> => {
+        while (to - from > 1) {
+          const mid = Math.floor((from + to) / 2);
+          if (await valid(mid)) from = mid;
+          else to = mid;
         }
-      } else {
-        // 本日無効。過去30日前を確認して期限切れか未契約かを判別
-        const pastRes = await confirmCardContract(verification, todayMjd - 30);
-        if (!pastRes.ok) {
-          throw new Error(
-            `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${pastRes.error}`,
-          );
-        }
-        if (isCodeSubscribed(pastRes.code)) {
-          // 過去30日以内に期限切れとなった
-          state = "expired";
-          // 過去の日付でいつまで有効だったかをバイナリサーチ
-          let low = -30;
-          let high = -1;
-          let lastValid = -30;
-          while (low <= high) {
-            const mid = Math.floor((low + high) / 2);
-            const midRes = await confirmCardContract(
-              verification,
-              todayMjd + mid,
-            );
-            if (!midRes.ok) {
-              throw new Error(
-                `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${midRes.error}`,
-              );
-            }
-            if (isCodeSubscribed(midRes.code)) {
-              lastValid = mid;
-              low = mid + 1;
-            } else {
-              high = mid - 1;
-            }
-          }
-          validUntil = fromMjd(todayMjd + lastValid + 1);
-        } else {
-          state = "unsubscribed";
-        }
-      }
-    } else {
-      // 放送波 (EIT) に CA契約情報記述子 (0xCB) が載っていない局 (多くの CS 月額局など)
-      // 前回の実復号テストで復号成功していれば契約中とみなす
-      if (existing?.decodeOk === true) {
+        return from;
+      };
+      if (await valid(0)) {
+        // 今日は観られる。**1 週間以内に切れても契約中のまま**にし、期限の日だけ覚える
+        // (期限切れにすると、まだ観られる局が録られなくなる)
         state = "subscribed";
+        if (!(await valid(7)))
+          // 期限日の翌日 0 時 (JST) が満了
+          validUntil = fromMjd(todayMjd + (await lastValid(0, 7)) + 1);
+      } else if (await valid(-30)) {
+        // 30 日のうちに切れた
+        state = "expired";
+        validUntil = fromMjd(todayMjd + (await lastValid(-30, 0)) + 1);
       } else {
         state = "unsubscribed";
       }
+    } else {
+      // 放送波 (EIT) に CA契約情報記述子 (0xCB) が載っていない局 (多くの CS 月額局など)。
+      // 復号テストで 31 日以内に復号できていれば契約中とみなす (`DECODE_VALID_MS`)
+      state =
+        existing?.decodeOk === true && freshDecode(existing.decodedAt, nowMs)
+          ? "subscribed"
+          : "unsubscribed";
     }
 
     orm()
@@ -315,7 +256,7 @@ export async function checkContracts(): Promise<ContractRow[]> {
  * DB に記録されている契約情報を取得する。
  */
 export function getContractRows(cardId: string): ContractRow[] {
-  const rows = orm()
+  return orm()
     .select({
       cardId: cardContracts.card_id,
       serviceId: cardContracts.service_id,
@@ -333,19 +274,6 @@ export function getContractRows(cardId: string): ContractRow[] {
     .where(eq(cardContracts.card_id, cardId))
     .orderBy(asc(services.type), asc(services.service_id))
     .all();
-
-  return rows.map((r) => ({
-    cardId: r.cardId,
-    serviceId: r.serviceId,
-    serviceName: r.serviceName,
-    channel: r.channel,
-    type: r.type,
-    state: r.state,
-    code: r.code,
-    validUntil: r.validUntil,
-    decodeOk: r.decodeOk,
-    checkedAt: r.checkedAt,
-  }));
 }
 
 /**
@@ -482,12 +410,14 @@ export async function testDecode(
         code: null,
         valid_until: null,
         decode_ok: decodeOk,
+        decoded_at: decodeOk ? Date.now() : null,
         checked_at: Date.now(),
       })
       .onConflictDoUpdate({
         target: [cardContracts.card_id, cardContracts.service_id],
         set: {
           decode_ok: decodeOk,
+          decoded_at: decodeOk ? Date.now() : null,
           ...(decodeOk ? { state: "subscribed" } : {}),
           checked_at: Date.now(),
         },
@@ -510,51 +440,22 @@ export async function testDecode(
 export type ContractWarning = "expired" | "unsubscribed" | null;
 
 /**
- * サービスごとの契約警告状態のマップを取得する。
- * 契約中のカードがあれば警告なし。期限切れのカードがあれば "expired"、未契約のみなら "unsubscribed"。
- */
-export function getContractWarningsByService(): Map<
-  number,
-  "expired" | "unsubscribed"
-> {
-  const rows = orm()
-    .select({
-      serviceId: cardContracts.service_id,
-      state: cardContracts.state,
-    })
-    .from(cardContracts)
-    .all();
-
-  const byService = new Map<number, ContractState[]>();
-  for (const row of rows) {
-    const list = byService.get(row.serviceId) ?? [];
-    list.push(row.state);
-    byService.set(row.serviceId, list);
-  }
-
-  const result = new Map<number, "expired" | "unsubscribed">();
-  for (const [serviceId, states] of byService) {
-    if (states.includes("subscribed")) continue;
-    if (states.includes("expired")) {
-      result.set(serviceId, "expired");
-    } else if (states.includes("unsubscribed")) {
-      result.set(serviceId, "unsubscribed");
-    }
-  }
-  return result;
-}
-
-/**
- * 対象局・番組の契約警告状態 ("expired" | "unsubscribed" | null) を判定する。
- * 無料番組 (isFree = true) や契約中・未確認の局は null。
+ * 局の契約の警告 (予約・番組の詳しく・番組表のバッジ)。無料の番組と、契約中のカードがある局・確かめていない局は null。
+ * どのカードにも契約が無ければ、期限切れのカードがあれば "expired"、無ければ "unsubscribed"
  */
 export function getContractWarning(
   serviceId: number,
   isFree = false,
-): "expired" | "unsubscribed" | null {
+): ContractWarning {
   if (isFree) return null;
-  const warnings = getContractWarningsByService();
-  return warnings.get(serviceId) ?? null;
+  const states = orm()
+    .select({ state: cardContracts.state })
+    .from(cardContracts)
+    .where(eq(cardContracts.service_id, serviceId))
+    .all()
+    .map((row) => row.state);
+  if (states.length === 0 || states.includes("subscribed")) return null;
+  return states.includes("expired") ? "expired" : "unsubscribed";
 }
 
 /**
@@ -563,16 +464,48 @@ export function getContractWarning(
  * 未契約・期限切れの局と、まだ確かめていない局 (確かめる前・カードが無い・番組表に 0xCB が無く
  * 復号も試していない) は録らない。録ってもスクランブルのままで観られないため。
  * 設定の「無料放送だけ録る」はこれに置き換えた。カードを持たない人は、今までの既定 (無料だけ) と同じになる。
+ * カードに聞けない局 (番組表に 0xCB が無い) は、復号テストから 31 日のあいだだけ (`DECODE_VALID_MS`)。
  * 1 回の当てはめで 1 回だけ読む (呼ぶ側が関数を使い回す)
  */
-export function paidAllowed(): (serviceId: number) => boolean {
+export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
   const subscribed = new Set(
     orm()
-      .select({ serviceId: cardContracts.service_id })
+      .select({
+        serviceId: cardContracts.service_id,
+        code: cardContracts.code,
+        decodedAt: cardContracts.decoded_at,
+      })
       .from(cardContracts)
       .where(eq(cardContracts.state, "subscribed"))
       .all()
+      .filter((row) => row.code !== null || freshDecode(row.decodedAt, now))
       .map((row) => row.serviceId),
   );
   return (serviceId) => subscribed.has(serviceId);
+}
+
+/**
+ * **有料の番組の録画が、復号し直しても掛かったまま終わった。** 復号テストで契約中としていた局を未契約に下げる
+ * (`encoder.ts`)。契約が切れたあとも 31 日待たずに、次の回から録らなくなる。
+ *
+ * 下げるのは、カードに聞けない局 (`code` が無い行) だけ。カードが契約中と答えた局は、掛かったままの理由が
+ * ほかにある (ECM が流れていない など) ので、カードの答えを信じる (次の定期の確認で確かめ直す)
+ */
+export function noteStillScrambled(serviceId: number): void {
+  orm()
+    .update(cardContracts)
+    .set({
+      state: "unsubscribed",
+      decode_ok: false,
+      decoded_at: null,
+      checked_at: Date.now(),
+    })
+    .where(
+      and(
+        eq(cardContracts.service_id, serviceId),
+        eq(cardContracts.state, "subscribed"),
+        isNull(cardContracts.code),
+      ),
+    )
+    .run();
 }

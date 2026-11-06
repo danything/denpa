@@ -311,6 +311,7 @@ describe("自動録画ルールの局優先度とチューナー競合解決 (ru
           card_id: "0000111122223333",
           service_id: subscribedService,
           state: "subscribed",
+          code: 0x0800,
           checked_at: nowMs,
         },
       ])
@@ -518,6 +519,7 @@ describe("自動録画ルールの局優先度とチューナー競合解決 (ru
         card_id: "0000111122223333",
         service_id: unknownService,
         state: "subscribed",
+        code: 0x0800,
         checked_at: nowMs,
       })
       .run();

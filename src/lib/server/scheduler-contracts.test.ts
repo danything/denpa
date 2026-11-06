@@ -19,7 +19,7 @@ const { cardContracts, programs, services, webhooks } =
 const { toMjd } = await import("./contracts");
 const { resetContractScanTimeForTest, scanContracts, tick } =
   await import("./scheduler");
-const { fakeAgentUrl, serveFakeAgent } = await import("./fake-agent");
+const { fakeAgentUrl, ONE_CARD, serveFakeAgent } = await import("./fake-agent");
 
 afterAll(() => {
   config.agentUrl = realAgent;
@@ -88,20 +88,7 @@ describe("scanContracts: 有料放送契約の定期スキャンと期限切れ�
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/card/confirm") {
         const body = (await req.json()) as { date: number };
@@ -216,20 +203,7 @@ describe("scanContracts: 有料放送契約の定期スキャンと期限切れ�
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/card/confirm") {
         // 今日も1週間後も有効
@@ -312,20 +286,7 @@ describe("scanContracts: 有料放送契約の定期スキャンと期限切れ�
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/card/confirm") {
         const body = (await req.json()) as { date: number };

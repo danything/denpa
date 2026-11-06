@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "13b3a4b7-5615-4e2c-8a01-cb92f9f244f2",
+  "id": "44b8611a-4138-42b6-8c8a-0336b2e0b339",
   "prevId": "ca1b6b79-a1e2-4932-b1f7-5dd5bb033263",
   "tables": {
     "api_tokens": {
@@ -111,6 +111,13 @@
         },
         "decode_ok": {
           "name": "decode_ok",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decoded_at": {
+          "name": "decoded_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

@@ -28,12 +28,14 @@ const {
   fromMjd,
   getContractRows,
   getContractWarning,
-  getContractWarningsByService,
+  DECODE_VALID_MS,
   isCodeSubscribed,
+  noteStillScrambled,
+  paidAllowed,
   testDecode,
   toMjd,
 } = await import("./contracts");
-const { fakeAgentUrl, serveFakeAgent } = await import("./fake-agent");
+const { fakeAgentUrl, ONE_CARD, serveFakeAgent } = await import("./fake-agent");
 
 afterAll(() => {
   config.agentUrl = realAgent;
@@ -194,20 +196,7 @@ describe("checkContracts", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/card/confirm") {
         return Response.json({ ok: true, code: 0x0800 });
@@ -266,20 +255,7 @@ describe("checkContracts", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/card/confirm") {
         const body = (await req.json()) as { date: number };
@@ -340,20 +316,7 @@ describe("testDecode", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/stream") {
         return new Response(buf, {
@@ -395,20 +358,7 @@ describe("testDecode", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/stream") {
         return new Response(buf, {
@@ -446,20 +396,7 @@ describe("testDecode", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       return new Response("Not Found", { status: 404 });
     });
@@ -481,20 +418,7 @@ describe("testDecode", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/stream") {
         return new Response(buf, {
@@ -544,20 +468,7 @@ describe("testDecode", () => {
     airing(106, true);
     const server = serveFakeAgent(async (req) =>
       new URL(req.url).pathname === "/denpa/card"
-        ? Response.json({
-            ok: true,
-            message: "",
-            source: "local",
-            readers: [
-              {
-                name: "CardReader",
-                card: true,
-                ids: ["0000111122223333"],
-                active: true,
-                tuners: [],
-              },
-            ],
-          })
+        ? Response.json(ONE_CARD)
         : new Response("Not Found", { status: 404 }),
     );
     try {
@@ -577,20 +488,7 @@ describe("checkContracts エッジケース・異常系", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       return new Response("Not Found", { status: 404 });
     });
@@ -609,20 +507,7 @@ describe("checkContracts エッジケース・異常系", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/card/confirm") {
         const body = (await req.json()) as { date: number };
@@ -678,20 +563,7 @@ describe("checkContracts エッジケース・異常系", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname === "/denpa/card/confirm") {
         return new Response("card hardware error", { status: 500 });
@@ -741,7 +613,7 @@ describe("checkContracts エッジケース・異常系", () => {
     }
   });
 
-  describe("getContractWarning / getContractWarningsByService", () => {
+  describe("getContractWarning", () => {
     test("無料番組なら局の状態に関わらず null を返す", () => {
       orm()
         .insert(cardContracts)
@@ -791,11 +663,6 @@ describe("checkContracts エッジケース・異常系", () => {
       expect(getContractWarning(102, false)).toBe("unsubscribed");
       expect(getContractWarning(103, false)).toBeNull();
       expect(getContractWarning(999, false)).toBeNull();
-
-      const map = getContractWarningsByService();
-      expect(map.get(101)).toBe("expired");
-      expect(map.get(102)).toBe("unsubscribed");
-      expect(map.has(103)).toBe(false);
     });
 
     test("複数カードがある場合、契約中があれば警告なし、なければ expired 優先", () => {
@@ -846,20 +713,7 @@ describe("checkContracts エッジケース・異常系", () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
       if (url.pathname === "/denpa/card") {
-        return Response.json({
-          ok: true,
-          message: "",
-          source: "local",
-          readers: [
-            {
-              name: "CardReader",
-              card: true,
-              ids: ["0000111122223333"],
-              active: true,
-              tuners: [],
-            },
-          ],
-        });
+        return Response.json(ONE_CARD);
       }
       if (url.pathname.startsWith("/denpa/stream")) {
         // 局 (ARIB の service_id 311) のパケットは復号できている
@@ -926,5 +780,66 @@ describe("checkContracts エッジケース・異常系", () => {
     } finally {
       server.stop();
     }
+  });
+});
+
+describe("有料放送を録ってよい局 (paidAllowed)", () => {
+  const card = "0000111122223333";
+  const row = (
+    serviceId: number,
+    fields: Partial<typeof cardContracts.$inferInsert>,
+  ) =>
+    orm()
+      .insert(cardContracts)
+      .values({
+        card_id: card,
+        service_id: serviceId,
+        state: "subscribed",
+        checked_at: Date.now(),
+        ...fields,
+      })
+      .run();
+
+  test("カードが答えた契約は日数に関わらず録る。復号テストで確かめた契約は 31 日まで", () => {
+    const now = Date.now();
+    row(1, { code: 0x0800 });
+    row(2, {
+      code: null,
+      decode_ok: true,
+      decoded_at: now - DECODE_VALID_MS + 60_000,
+    });
+    row(3, {
+      code: null,
+      decode_ok: true,
+      decoded_at: now - DECODE_VALID_MS - 60_000,
+    });
+    row(4, { state: "unsubscribed", code: 0 });
+    const ok = paidAllowed(now);
+    expect([1, 2, 3, 4, 5].map(ok)).toEqual([true, true, false, false, false]);
+  });
+
+  test("録画が掛かったまま終わったら、カードに聞けない局だけ未契約に下げる", () => {
+    for (const id of [1, 2])
+      orm()
+        .insert(services)
+        .values({
+          id,
+          service_id: id,
+          network_id: 7,
+          name: `CS${id}`,
+          type: "CS",
+          channel: `CS${id * 2}`,
+          updated_at: Date.now(),
+        })
+        .run();
+    row(1, { code: 0x0800 });
+    row(2, { code: null, decode_ok: true, decoded_at: Date.now() });
+    noteStillScrambled(1);
+    noteStillScrambled(2);
+    const rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));
+    expect(rows.get(1)?.state).toBe("subscribed");
+    expect(rows.get(2)?.state).toBe("unsubscribed");
+    expect(rows.get(2)?.decodeOk).toBe(false);
+    expect(paidAllowed()(2)).toBe(false);
   });
 });
