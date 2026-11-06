@@ -1,5 +1,5 @@
 /*
- * mAgicVISION (https://github.com/makeding/mAgicVISION、commit c937107) の core/bootstrap.c (SBC2 の読み取り)・
+ * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 4dc8854) の core/bootstrap.c (SBC2 の読み取り)・
  * core/resident_image.c の検証・core/loader.c の mb86H_loader_parse_target のうち、PIX-DT295 の部分を移したもの。
  * Copyright (c) 2026 huggy、MIT License (全文は licenses/mAgicVISION.txt)。
  */
@@ -92,7 +92,7 @@ public sealed class Dt295ResidentImage
     public const string FileName = "magicvision-firmware.bin";
 
     /// <summary>同梱のファームウェアの SHA-256。違うものは使わない</summary>
-    public const string Sha256 = "d9f549b29d286c2ff1e7daf4237e2205bb8a5a2affbb98362bce137b8b42a33f";
+    public const string Sha256 = "0b2147e190afc7626165594fdedbedc6461c0e1f044b17742123b77fc5026fcc";
 
     private static readonly Lazy<Dt295ResidentImage> BundledImage = new(() =>
     {

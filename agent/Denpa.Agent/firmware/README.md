@@ -22,9 +22,9 @@
 boot0 の body・hook と、256 KiB の常駐イメージ)。エージェントの実行ファイルに埋め込んで配ります (`../Dt295ResidentImage.cs`)。
 
 - 大きさ: 289,424 バイト
-- SHA-256: `d9f549b29d286c2ff1e7daf4237e2205bb8a5a2affbb98362bce137b8b42a33f`
-- 出どころ: mAgicVISION (<https://github.com/makeding/mAgicVISION>、作者 huggy) のリリース v1 の
-  `magicvision-firmware_0.1.0+20261104.160644_all.deb` にある `usr/lib/firmware/magicvision/firmware.bin`。手を加えていません
+- SHA-256: `0b2147e190afc7626165594fdedbedc6461c0e1f044b17742123b77fc5026fcc`
+- 出どころ: mAgicVISION (<https://github.com/makeding/mAgicVISION>、作者 huggy) のリリース v2 の
+  `magicvision-firmware_0.1.1_all.deb` にある `usr/lib/firmware/magicvision/firmware.bin`。手を加えていません
 - 許諾: 上流の README の「`firmware.bin` などのファームウェア成果物は再配布できます」
 
 このファイルも手で変えないでください。エージェントは使う前に SHA-256 を確かめ、違えば使いません。

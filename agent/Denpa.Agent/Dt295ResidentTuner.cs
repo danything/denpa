@@ -1,6 +1,6 @@
 /*
  * カードがあるかの確認と常駐イメージ側の電源オフ (Dt295ResidentCard.Present) は、mAgicVISION
- * (https://github.com/makeding/mAgicVISION、commit c937107) の core/card.c を移したもの。Copyright (c) 2026 huggy、
+ * (https://github.com/makeding/mAgicVISION、commit 4dc8854) の core/card.c を移したもの。Copyright (c) 2026 huggy、
  * MIT License (全文は licenses/mAgicVISION.txt)。カードとのやり取りは MB86M01 の UART (0xFEA000〜0xFEA03C) を直に読み書きする。
  * ボード・TS の読み出し・チューナー・UART の手順は denpa のもの (Zd1j.cs・Mb86h47.cs と同じ形)。
  */

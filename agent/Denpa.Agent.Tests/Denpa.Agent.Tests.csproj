@@ -60,6 +60,7 @@
         <Compile Include="../Denpa.Agent/Dt295ResidentLink.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentLoader.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentProbe.cs" />
+        <Compile Include="../Denpa.Agent/ContinuityCount.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentProtocol.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentSession.cs" />
         <Compile Include="../Denpa.Agent/Dt295ResidentTs.cs" />

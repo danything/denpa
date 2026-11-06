@@ -1,5 +1,5 @@
 /*
- * mAgicVISION (https://github.com/makeding/mAgicVISION、commit c937107) の core/ts_mux.c・core/ts_framer.c・
+ * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 4dc8854) の core/ts_mux.c・core/ts_framer.c・
  * core/stream_input.c を移したもの。Copyright (c) 2026 huggy、MIT License (全文は licenses/mAgicVISION.txt)。
  */
 
