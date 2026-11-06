@@ -7,7 +7,7 @@
   import ShieldCheck from "~icons/lucide/shield-check";
   import X from "~icons/lucide/x";
 
-  import type { ContractRow } from "#lib/server/contracts.js";
+  import type { ContractRow, DecodeTestResult } from "#lib/server/contracts.js";
 
   let {
     open,
@@ -27,13 +27,14 @@
   let contracts = $state<ContractRow[]>([]);
   let checking = $state(false);
   let receivingEmm = $state(false);
+  let testingAll = $state(false);
   let testingServiceId = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
   let infoMessage = $state<string | null>(null);
 
   /** 契約確認・復号テスト・EMM受信の実行中フラグ (多重実行・同時実行の防止) */
   const isBusy = $derived(
-    checking || receivingEmm || testingServiceId !== null,
+    checking || receivingEmm || testingAll || testingServiceId !== null,
   );
 
   $effect(() => {
@@ -175,6 +176,52 @@
       receivingEmm = false;
     }
   }
+
+  async function handleTestDecodeAll() {
+    if (isBusy) return;
+    testingAll = true;
+    errorMessage = null;
+    infoMessage = null;
+    try {
+      const res = await fetch("?/testDecodeAll", {
+        method: "POST",
+        body: new FormData(),
+      });
+      const data = deserialize(await res.text());
+      const payload =
+        data.type === "success" || data.type === "failure"
+          ? (data.data as Record<string, unknown> | undefined)
+          : undefined;
+      const results = payload?.["results"] as DecodeTestResult[] | undefined;
+      const contractsList = payload?.["contracts"];
+      const message = payload?.["message"];
+      if (data.type === "success" && Array.isArray(results)) {
+        if (Array.isArray(contractsList)) {
+          contracts = contractsList as ContractRow[];
+        }
+        if (results.length === 0) {
+          infoMessage = "まとめて確かめる対象の局がありませんでした";
+        } else {
+          const tested = results.filter((r) => r.ok);
+          const ok = tested.filter((r) => r.decodeOk).length;
+          const ng = tested.length - ok;
+          const failed = results.length - tested.length;
+          const parts = [`復号テスト: ${ok}局成功`];
+          if (ng > 0) parts.push(`${ng}局は復号不可`);
+          if (failed > 0) parts.push(`${failed}局は確認できませんでした`);
+          infoMessage = parts.join(" / ");
+        }
+      } else if (message) {
+        errorMessage = String(message);
+      } else {
+        errorMessage = "まとめて復号テストに失敗しました";
+      }
+    } catch (err) {
+      errorMessage = String(err);
+    } finally {
+      testingAll = false;
+    }
+  }
 </script>
 
 <dialog
@@ -211,6 +258,7 @@
       カード内の契約情報（CA契約情報）を確認し、各局の契約状態と有効期限を表示します。
       選局せずにカードのみで判定するため、チューナーを塞ぎません。
       また、「復号を確かめる」で実際の放送ストリームを受信し、正常に復号できるかを検証できます。
+      「未確認をまとめて復号テスト」は、同じ中継器の局をまとめて1回の選局で確かめます。
     </p>
 
     {#if errorMessage}
@@ -245,6 +293,17 @@
       >
         <ShieldCheck class={receivingEmm ? "spin" : ""} aria-hidden="true" />
         {receivingEmm ? "EMM受信中 (約20秒)…" : "カード更新 (EMM受信)"}
+      </button>
+
+      <button
+        type="button"
+        class="secondary small"
+        disabled={isBusy}
+        onclick={handleTestDecodeAll}
+        data-testid="btn-test-decode-all"
+      >
+        <ShieldCheck class={testingAll ? "spin" : ""} aria-hidden="true" />
+        {testingAll ? "まとめて検証中…" : "未確認をまとめて復号テスト"}
       </button>
     </div>
 
