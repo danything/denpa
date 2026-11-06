@@ -111,6 +111,7 @@ import {
   SMOOTH,
   STEADY,
   type Steering,
+  steeringWhen,
 } from "#lib/ts/pacing.js";
 import { retryWait } from "#lib/ts/playback.js";
 import { MAX_LEVEL } from "#lib/volume.js";
@@ -265,8 +266,22 @@ function clearFloor(): void {
 }
 
 /**
+ * 小窓 (PiP) で何かを出しているか。標準の API と、それが無い古い Safari の `webkitPresentationMode` の両方を見る (`pip.svelte.ts` と同じ)。
+ * 映像を描く canvas の代わりの video を小窓にすることがあるので、この video に限らない
+ */
+function inPictureInPicture(): boolean {
+  if (document.pictureInPictureElement) return true;
+  return [...document.querySelectorAll("video")].some(
+    (video) =>
+      (video as HTMLVideoElement & { webkitPresentationMode?: string })
+        .webkitPresentationMode === "picture-in-picture",
+  );
+}
+
+/**
  * 速さの寄せ方 (`ts/pacing.ts` の `Steering`)。**Safari (Apple の WebKit) だけ、速さを触る回数を減らす** (`STEADY`)。
- * iPad と iPhone はどのブラウザも中身が WebKit なので、ここに入る
+ * iPad と iPhone はどのブラウザも中身が WebKit なので、ここに入る。
+ * ほかのブラウザも、画面が隠れている間は `STEADY` にする (`steeringWhen`)
  */
 function chooseSteering(): Steering {
   if (typeof navigator === "undefined") return SMOOTH;
@@ -1271,6 +1286,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       key < end &&
       video.currentTime < key - KEY_SLACK;
     const start = toKey ? key : first;
+    // 隠れている間は速さを触る回数を減らす (`steeringWhen`)。小窓 (PiP) で観ている間はタブが隠れていても見えているので、ふだんどおり
+    const hidden =
+      typeof document !== "undefined" &&
+      document.visibilityState === "hidden" &&
+      !inPictureInPicture();
+
     const next = pacing({
       start,
       end,
@@ -1283,7 +1304,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       low: lows.peek(performance.now() / 1000) ?? undefined,
       dip: dipNow(),
       rate: video.playbackRate,
-      steering,
+      steering: steeringWhen(hidden, steering),
     });
 
     /*

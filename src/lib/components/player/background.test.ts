@@ -27,6 +27,7 @@ describe("バックグラウンド再生", () => {
 
   test("押して開いた小窓を出している間は止めない。閉じたらそこで止める", () => {
     expect(step({ ...base, pip: true })).toBeNull();
+    // 小窓の ×で閉じたとき。裏にいれば `leavepictureinpicture` で見直して止める (background.svelte.ts)
     expect(step({ ...base, pip: false })).toBe("pause");
   });
 

@@ -88,10 +88,12 @@ export function backgroundPlayback(options: Options): Background {
       check();
     };
     document.addEventListener("visibilitychange", check);
+    document.addEventListener("leavepictureinpicture", check);
     window.addEventListener("pagehide", hide);
     window.addEventListener("pageshow", show);
     return () => {
       document.removeEventListener("visibilitychange", check);
+      document.removeEventListener("leavepictureinpicture", check);
       window.removeEventListener("pagehide", hide);
       window.removeEventListener("pageshow", show);
     };
