@@ -682,6 +682,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'tests/windows-smoke.ts failed' }
 
       - name: bun server.js answers
+        # 前の段が落ちても流す (どこまで動くかを 1 回で見る)
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -722,6 +724,8 @@ jobs:
       # 1 回目は irm | iex と同じやり方で。本体とエージェントのタスクが SYSTEM で起動時に動き、本体がエージェントと組めるか
       # (本体が TUNER_AGENT_URL の合言葉で組むと、エージェントの tls\clients に本体の証明書が載る)。2 回目は上げ直し、最後に外す
       - name: install.ps1 with the server
+        # 前の段が落ちても流す (どこまで動くかを 1 回で見る)
+        if: ${{ !cancelled() }}
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'

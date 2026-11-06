@@ -10,6 +10,8 @@
  * - スリープを止められるか (awake.ts)。`powercfg /requests` に bun が出るかを見る (管理者で動くランナーだけで読める)
  */
 
+import { createReadStream, readSync } from "node:fs";
+import { Socket } from "node:net";
 import { join } from "node:path";
 
 import { holdAwake } from "../src/lib/server/awake.ts";
@@ -200,42 +202,6 @@ await ff(
 );
 console.log("ffmpeg: ok");
 
-// 進み具合を fd 3 で受ける (encoder.ts の runEncode と同じ stdio と読み方)
-const proc = Bun.spawn(
-  [
-    ffmpeg,
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    "-nostdin",
-    "-y",
-    "-i",
-    at("in.ts"),
-    "-c:v",
-    "libx264",
-    "-preset",
-    "ultrafast",
-    "-c:a",
-    "libopus",
-    "-nostats",
-    "-progress",
-    "pipe:3",
-    "-f",
-    "matroska",
-    at("progress.mkv"),
-  ],
-  { stdio: ["ignore", "ignore", "pipe", "pipe"] },
-);
-const fd = proc.stdio[3] as number;
-const progress = await new Response(Bun.file(fd).stream()).text();
-const code = await proc.exited;
-if (code !== 0 || !progress.includes("progress=end")) {
-  throw new Error(
-    `fd 3 で進み具合を受けられません (終了コード ${code})\n${progress}`,
-  );
-}
-console.log("progress on fd 3: ok");
-
 if (!(await holdAwake(true)))
   throw new Error("SetThreadExecutionState が失敗しました");
 const requests = Bun.spawnSync(["powercfg.exe", "/requests"]).stdout.toString();
@@ -244,3 +210,91 @@ if (!/bun\.exe/i.test(requests))
   throw new Error("powercfg /requests に bun が出ません");
 await holdAwake(false);
 console.log("keep awake: ok");
+
+// 進み具合を fd 3 で受ける (encoder.ts の runEncode と同じ stdio)。受け方をいくつか試す
+const spawnProgress = () =>
+  Bun.spawn(
+    [
+      ffmpeg,
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-nostdin",
+      "-y",
+      "-i",
+      at("in.ts"),
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-c:a",
+      "libopus",
+      "-nostats",
+      "-progress",
+      "pipe:3",
+      "-f",
+      "matroska",
+      at("progress.mkv"),
+    ],
+    { stdio: ["ignore", "ignore", "pipe", "pipe"] },
+  );
+const readers: Record<
+  string,
+  (proc: ReturnType<typeof spawnProgress>) => Promise<string>
+> = {
+  bunFile: (proc) =>
+    new Response(Bun.file(proc.stdio[3] as number).stream()).text(),
+  createReadStream: (proc) =>
+    new Promise((resolve, reject) => {
+      let text = "";
+      const stream = createReadStream("", { fd: proc.stdio[3] as number });
+      stream.on("data", (chunk) => (text += chunk.toString()));
+      stream.on("end", () => resolve(text));
+      stream.on("error", reject);
+    }),
+  socket: (proc) =>
+    new Promise((resolve, reject) => {
+      let text = "";
+      const socket = new Socket({
+        fd: proc.stdio[3] as number,
+        readable: true,
+      });
+      socket.on("data", (chunk) => (text += chunk.toString()));
+      socket.on("end", () => resolve(text));
+      socket.on("error", reject);
+    }),
+  readSync: async (proc) => {
+    const buffer = Buffer.alloc(65536);
+    let text = "";
+    for (;;) {
+      const n = readSync(proc.stdio[3] as number, buffer);
+      if (n <= 0) break;
+      text += buffer.subarray(0, n).toString();
+    }
+    return text;
+  },
+};
+const worked: string[] = [];
+for (const [name, read] of Object.entries(readers)) {
+  const proc = spawnProgress();
+  console.log(
+    `${name}: stdio[3] is ${typeof proc.stdio[3]} ${String(proc.stdio[3])}`,
+  );
+  try {
+    const timeout = new Promise<string>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), 60_000),
+    );
+    const text = await Promise.race([read(proc), timeout]);
+    const code = await proc.exited;
+    const ok = code === 0 && text.includes("progress=end");
+    console.log(
+      `${name}: ${ok ? "ok" : `NG (exit ${code}, ${text.length} chars)`}`,
+    );
+    if (ok) worked.push(name);
+  } catch (error) {
+    proc.kill();
+    console.log(`${name}: NG ${String(error)}`);
+  }
+}
+if (worked.length === 0) throw new Error("fd 3 で進み具合を受けられません");
+console.log(`progress on fd 3: ${worked.join(", ")}`);
