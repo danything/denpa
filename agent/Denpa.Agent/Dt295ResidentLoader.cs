@@ -1,5 +1,5 @@
 /*
- * mAgicVISION (https://github.com/makeding/mAgicVISION、commit c937107) の core/loader.c (mb86H_loader_install・
+ * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 4dc8854) の core/loader.c (mb86H_loader_install・
  * native_install_hook・mb86H_loader_start・mb86H_loader_close) と core/recovery.c (mb86H_loader_adopt) のうち、
  * PIX-DT295 の部分を移したもの。Copyright (c) 2026 huggy、MIT License (全文は licenses/mAgicVISION.txt)。
  *

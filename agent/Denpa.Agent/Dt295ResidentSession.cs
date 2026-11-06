@@ -1,5 +1,5 @@
 /*
- * mAgicVISION (https://github.com/makeding/mAgicVISION、commit c937107) の core/session.c・core/device_query.c・
+ * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 4dc8854) の core/session.c・core/device_query.c・
  * core/resident_image.c (書き込みと照合) を移したもの。Copyright (c) 2026 huggy、MIT License (全文は licenses/mAgicVISION.txt)。
  */
 
@@ -62,7 +62,7 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
     /// <summary>選局が落ち着くのを待つ上限 (0 なら <see cref="SettleTimeoutMs"/>)</summary>
     public int TuneTimeoutMs { get; set; }
 
-    /// <summary>選局を待つ間の SERVICE の間隔 (0 なら 10 ms)</summary>
+    /// <summary>選局を待つ間の SERVICE の間隔 (0 なら 1 ms)</summary>
     public int TunePollMs { get; set; }
 
     public long NowMs => _now();
@@ -222,7 +222,8 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
             }
             if (Complete(state!, source, generation, ready, streaming)) return;
             if (_now() - start > timeout) throw new TimeoutException($"受信部 {source} が {timeout} ms のうちに落ち着きませんでした ({state})");
-            _delay(generation != 0 && TunePollMs != 0 ? TunePollMs : 10);
+            // 選局の間は 1 ms ごと (TunePollMs で変えられる)、初期化は 10 ms ごと (session.c の session_settle)
+            _delay(generation != 0 ? (TunePollMs != 0 ? TunePollMs : 1) : 10);
         }
     }
 
