@@ -440,3 +440,53 @@ export async function testDecode(
     abortController.abort();
   }
 }
+
+export type ContractWarning = "expired" | "unsubscribed" | null;
+
+/**
+ * サービスごとの契約警告状態のマップを取得する。
+ * 契約中のカードがあれば警告なし。期限切れのカードがあれば "expired"、未契約のみなら "unsubscribed"。
+ */
+export function getContractWarningsByService(): Map<
+  number,
+  "expired" | "unsubscribed"
+> {
+  const rows = orm()
+    .select({
+      serviceId: cardContracts.service_id,
+      state: cardContracts.state,
+    })
+    .from(cardContracts)
+    .all();
+
+  const byService = new Map<number, ContractState[]>();
+  for (const row of rows) {
+    const list = byService.get(row.serviceId) ?? [];
+    list.push(row.state);
+    byService.set(row.serviceId, list);
+  }
+
+  const result = new Map<number, "expired" | "unsubscribed">();
+  for (const [serviceId, states] of byService) {
+    if (states.includes("subscribed")) continue;
+    if (states.includes("expired")) {
+      result.set(serviceId, "expired");
+    } else if (states.includes("unsubscribed")) {
+      result.set(serviceId, "unsubscribed");
+    }
+  }
+  return result;
+}
+
+/**
+ * 対象局・番組の契約警告状態 ("expired" | "unsubscribed" | null) を判定する。
+ * 無料番組 (isFree = true) や契約中・未確認の局は null。
+ */
+export function getContractWarning(
+  serviceId: number,
+  isFree = false,
+): "expired" | "unsubscribed" | null {
+  if (isFree) return null;
+  const warnings = getContractWarningsByService();
+  return warnings.get(serviceId) ?? null;
+}

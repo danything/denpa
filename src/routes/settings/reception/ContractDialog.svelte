@@ -25,11 +25,15 @@
 
   let contracts = $state<ContractRow[]>([]);
   let checking = $state(false);
+  let receivingEmm = $state(false);
   let testingServiceId = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
+  let infoMessage = $state<string | null>(null);
 
-  /** 契約確認または復号テストの実行中フラグ (多重実行・同時実行の防止) */
-  const isBusy = $derived(checking || testingServiceId !== null);
+  /** 契約確認・復号テスト・EMM受信の実行中フラグ (多重実行・同時実行の防止) */
+  const isBusy = $derived(
+    checking || receivingEmm || testingServiceId !== null,
+  );
 
   $effect(() => {
     contracts = initialContracts;
@@ -116,6 +120,42 @@
       testingServiceId = null;
     }
   }
+
+  async function handleReceiveEmm() {
+    if (isBusy) return;
+    receivingEmm = true;
+    errorMessage = null;
+    infoMessage = null;
+    try {
+      const form = new FormData();
+      form.append("seconds", "20");
+      const res = await fetch("?/receiveEmm", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (data?.type === "success" && data?.data?.result) {
+        const result = data.data.result;
+        if (result.success > 0) {
+          infoMessage = `カードの契約更新メッセージを受信し適用しました (更新: ${result.success} 件)`;
+        } else if (result.processed > 0) {
+          infoMessage = `EMM を ${result.processed} 件受信しました (適用対象外)`;
+        } else {
+          infoMessage =
+            "EMM を受信しましたが、更新メッセージはありませんでした";
+        }
+        await handleCheckContracts();
+      } else if (data?.data?.message) {
+        errorMessage = data.data.message;
+      } else {
+        errorMessage = "EMM の受信に失敗しました";
+      }
+    } catch (err) {
+      errorMessage = String(err);
+    } finally {
+      receivingEmm = false;
+    }
+  }
 </script>
 
 <dialog
@@ -159,6 +199,11 @@
         {errorMessage}
       </div>
     {/if}
+    {#if infoMessage}
+      <div class="alert info" role="status">
+        {infoMessage}
+      </div>
+    {/if}
 
     <div class="toolbar">
       <button
@@ -170,6 +215,17 @@
       >
         <RefreshCw class={checking ? "spin" : ""} aria-hidden="true" />
         {checking ? "確認中…" : "契約情報を再確認"}
+      </button>
+
+      <button
+        type="button"
+        class="secondary small"
+        disabled={isBusy}
+        onclick={handleReceiveEmm}
+        data-testid="btn-receive-emm"
+      >
+        <ShieldCheck class={receivingEmm ? "spin" : ""} aria-hidden="true" />
+        {receivingEmm ? "EMM受信中 (約20秒)…" : "カード更新 (EMM受信)"}
       </button>
     </div>
 
@@ -309,6 +365,15 @@
   .alert.error {
     background-color: var(--dp-error-bg, rgba(239, 68, 68, 0.1));
     color: var(--dp-error, #ef4444);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .alert.info {
+    background-color: var(--dp-info-bg, rgba(59, 130, 246, 0.1));
+    color: var(--dp-info, #3b82f6);
     padding: 0.5rem 0.75rem;
     border-radius: 4px;
     margin-bottom: 0.75rem;

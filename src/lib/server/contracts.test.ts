@@ -21,6 +21,8 @@ const {
   confirmCardContract,
   fromMjd,
   getContractRows,
+  getContractWarning,
+  getContractWarningsByService,
   isCodeSubscribed,
   testDecode,
   toMjd,
@@ -640,5 +642,106 @@ describe("checkContracts エッジケース・異常系", () => {
     } finally {
       server.stop();
     }
+  });
+
+  describe("getContractWarning / getContractWarningsByService", () => {
+    test("無料番組なら局の状態に関わらず null を返す", () => {
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: "0000111122223333",
+          service_id: 101,
+          state: "expired",
+          checked_at: Date.now(),
+        })
+        .run();
+
+      expect(getContractWarning(101, true)).toBeNull();
+    });
+
+    test("有料番組で期限切れ局は 'expired'、未契約局は 'unsubscribed' を返す", () => {
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: "0000111122223333",
+          service_id: 101,
+          state: "expired",
+          checked_at: Date.now(),
+        })
+        .run();
+
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: "0000111122223333",
+          service_id: 102,
+          state: "unsubscribed",
+          checked_at: Date.now(),
+        })
+        .run();
+
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: "0000111122223333",
+          service_id: 103,
+          state: "subscribed",
+          checked_at: Date.now(),
+        })
+        .run();
+
+      expect(getContractWarning(101, false)).toBe("expired");
+      expect(getContractWarning(102, false)).toBe("unsubscribed");
+      expect(getContractWarning(103, false)).toBeNull();
+      expect(getContractWarning(999, false)).toBeNull();
+
+      const map = getContractWarningsByService();
+      expect(map.get(101)).toBe("expired");
+      expect(map.get(102)).toBe("unsubscribed");
+      expect(map.has(103)).toBe(false);
+    });
+
+    test("複数カードがある場合、契約中があれば警告なし、なければ expired 優先", () => {
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: "card_a",
+          service_id: 201,
+          state: "unsubscribed",
+          checked_at: Date.now(),
+        })
+        .run();
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: "card_b",
+          service_id: 201,
+          state: "subscribed",
+          checked_at: Date.now(),
+        })
+        .run();
+
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: "card_a",
+          service_id: 202,
+          state: "unsubscribed",
+          checked_at: Date.now(),
+        })
+        .run();
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: "card_b",
+          service_id: 202,
+          state: "expired",
+          checked_at: Date.now(),
+        })
+        .run();
+
+      expect(getContractWarning(201, false)).toBeNull();
+      expect(getContractWarning(202, false)).toBe("expired");
+    });
   });
 });

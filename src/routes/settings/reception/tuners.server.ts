@@ -9,6 +9,7 @@ import {
   testDecode as testDecodeStream,
 } from "#lib/server/contracts.js";
 import { orm } from "#lib/server/db.js";
+import { receiveEmm } from "#lib/server/emm.js";
 import { recordings } from "#lib/server/schema.js";
 import { cardStatus, putCardReaders } from "#lib/server/scramble.js";
 import {
@@ -250,6 +251,22 @@ export const actions = {
         });
       }
       return { success: true, decodeOk: result.decodeOk };
+    } catch (error) {
+      return fail(500, { message: String(error) });
+    }
+  },
+
+  /** チューナーを開いて EMM を受信し、B-CAS カードの期限切れ解消・契約更新を行う */
+  receiveEmm: async ({ request }) => {
+    const form = await request.formData();
+    const channel = form.get("channel")
+      ? String(form.get("channel"))
+      : undefined;
+    const type = form.get("type") ? String(form.get("type")) : undefined;
+    const seconds = form.get("seconds") ? Number(form.get("seconds")) : 15;
+    try {
+      const result = await receiveEmm({ channel, type, seconds });
+      return { success: true, result };
     } catch (error) {
       return fail(500, { message: String(error) });
     }
