@@ -130,7 +130,22 @@ for file in "${from_msys[@]}"; do
   pkg=$(pacman -Qqo "$file")
   pacman -Q "$pkg" >> "$out/licenses/msys2-packages.txt"
   mapfile -t texts < <(pacman -Qlq "$pkg" | grep -E '/share/licenses/.+[^/]$' || true)
-  if [ "${#texts[@]}" -eq 0 ]; then echo "$pkg にライセンスの文書がありません" >&2; exit 1; fi
+  # ライブラリだけを分けたパッケージ (libx264) は、文書を元のパッケージ (x264) が持っている
+  base=${pkg/x86_64-lib/x86_64-}
+  if [ "${#texts[@]}" -eq 0 ] && [ "$base" != "$pkg" ] && pacman -Q "$base" > /dev/null 2>&1; then
+    mapfile -t texts < <(pacman -Qlq "$base" | grep -E '/share/licenses/.+[^/]$' || true)
+  fi
+  # それでも無ければ、名前の似た文書の置き場 (libwinpthread → /ucrt64/share/licenses/winpthreads など) を探す
+  if [ "${#texts[@]}" -eq 0 ]; then
+    name=${pkg#mingw-w64-ucrt-x86_64-}
+    name=${name#lib}
+    name=${name%-git}
+    mapfile -t texts < <(find /ucrt64/share/licenses -type f -ipath "*/${name}*/*" 2>/dev/null || true)
+  fi
+  if [ "${#texts[@]}" -eq 0 ]; then
+    echo "$pkg にライセンスの文書がありません (/ucrt64/share/licenses の中身: $(ls /ucrt64/share/licenses | tr '\n' ' '))" >&2
+    exit 1
+  fi
   mkdir -p "$out/licenses/${pkg#mingw-w64-ucrt-x86_64-}"
   cp "${texts[@]}" "$out/licenses/${pkg#mingw-w64-ucrt-x86_64-}/"
 done
