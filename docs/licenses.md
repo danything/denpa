@@ -104,7 +104,7 @@ IT930x と mAgicVISION (PIX-DT295 用) のファームウェアは、エージ�
 libusb (LGPL-2.1+) が実行ファイルに静的リンクなのも上と同じで、
 配布物の `DEPENDENCY-NOTICE.txt` / `THIRD_PARTY_NOTICES.md` もそのまま置きます。
 USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼びます。
-denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker で動かします。
+denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker で動かします (Windows は下のとおり、Windows 用の配布物を入れる)。
 
 ### Windows に入れるもの (`install.ps1`)
 
@@ -114,6 +114,23 @@ px4-userland の配布 zip から置くのは `px4d.exe`・`px4ctl.exe` と、�
 `THIRD_PARTY_NOTICES.md`・`libusb/COPYING`・`toolchain/` の下の MinGW-w64 などのもの) だけで、`px4-ts.exe` と
 `WinSCard.dll` は置きません。libusb (LGPL-2.1+) が `px4d.exe` に静的リンクなのは上と同じです。
 asicen-userland は入れません (Windows 用が無い)。カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
+
+**denpa 本体は、リリースに添えた `denpa-<バージョン>-windows-x64.zip` を入れます** ([.github/workflows/windows-server.yml](../.github/workflows/windows-server.yml))。
+中身は上のコンテナイメージ `denpa` と同じものを Windows 用にしたものです。アプリ (`app/`)・Denpa Font (`font/`)・ブラウザへ配るデコーダ (`mpeg2/`) は
+イメージと同じ段 (Dockerfile の `app-files`・`denpa-font`・`mpeg2wasm`) から写します。ライセンスの文書は zip の `licenses/` と `ffmpeg/licenses/` に置きます。
+
+| 名前                                                              | 何に                                    | 出どころ                         | ライセンス                                                                          |
+| ----------------------------------------------------------------- | --------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| Bun (`bun.exe`。公式のリリースの `bun-windows-x64-baseline.zip`)  | denpa 本体を動かす                      | <https://github.com/oven-sh/bun> | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md`                    |
+| FFmpeg (`ffmpeg/`。MSYS2 の UCRT64 で組む。libav* は DLL)         | 上のイメージの ffmpeg と同じ            | <https://ffmpeg.org>             | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+                       |
+| SVT-AV1・Opus (ソースから組み、libavcodec に静的リンク)           | イメージと同じ                          | 上の表のとおり                   | 上の表のとおり                                                                      |
+| x264・dav1d・zlib (MSYS2 のパッケージの DLL)                      | H.264 のエンコード・AV1 のデコード・PNG | <https://packages.msys2.org>     | GPL-2.0+・BSD-2-Clause・zlib                                                        |
+| MinGW-w64 のランタイム (winpthreads など。ffmpeg が読む DLL だけ) | スレッドなど                            | <https://packages.msys2.org>     | パッケージのライセンスのとおり (MIT 系。GCC のものは GCC Runtime Library Exception) |
+
+zip に入れる DLL は、組むときに ffmpeg.exe・ffprobe.exe の取り込み表から辿って決めます (.github/ffmpeg-windows.sh)。MSYS2 から写した DLL は、
+そのパッケージのライセンスの文書を `ffmpeg/licenses/<パッケージ>/` に、パッケージとバージョンを `ffmpeg/licenses/msys2-packages.txt` に書きます。
+ソースは、自分で組むもの (FFmpeg・SVT-AV1・Opus) は Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball、MSYS2 のパッケージは
+[msys2/MINGW-packages](https://github.com/msys2/MINGW-packages) の同じバージョンのものです。GPU のエンコーダ (NVENC・QSV・AMF) はまだ組み込みません。
 
 ### `denpa-aio`
 

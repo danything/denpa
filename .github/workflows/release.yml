@@ -331,14 +331,17 @@ jobs:
         run: gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber
 
   # **Windows (x64) でそのまま動かす denpa 本体も添える** (install.ps1 が取りに来る)。組み方は windows-server.yml。
-  # エージェントと同じく、中身はタグのコミットそのもの。ffmpeg は main で組んだキャッシュがあれば使い回す
+  # エージェントと同じく、中身はタグのコミットそのもの。ffmpeg は main で組んだキャッシュがあれば使い回す。
+  # **リリースを作ったときだけ。** 手で回したとき (workflow_dispatch) の貼る先は入力のコミットで、それを取り出して組むと
+  # キャッシュを汚せるので組まない (windows-server.yml の冒頭)。添え損ねたら、その run の失敗したジョブを流し直す
   server-windows:
+    if: github.event_name == 'release'
     uses: ./.github/workflows/windows-server.yml
     with:
-      ref: ${{ github.event.inputs.ref || github.event.release.tag_name }}
-      tag: ${{ github.event.release.tag_name || github.event.inputs.ref }}
+      tag: ${{ github.event.release.tag_name }}
 
   server-windows-attach:
+    if: github.event_name == 'release'
     needs: server-windows
     runs-on: ubuntu-latest
     permissions:
@@ -360,7 +363,7 @@ jobs:
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.event.release.tag_name || github.event.inputs.ref }}
+          TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "$TAG" dist/denpa-*-windows-x64.zip dist/denpa-*-windows-x64.zip.sha256 --clobber -R "${{ github.repository }}"
 
   # **Helm chart もリリースのたびに出す** (README が案内している `oci://ghcr.io/danything/charts/…`)。

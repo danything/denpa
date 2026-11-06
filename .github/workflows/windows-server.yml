@@ -17,14 +17,13 @@ name: Windows server bundle
 # OS に依らないもの (アプリ・字・デコーダ) は Linux のイメージと同じ段を buildx で組んで取り出す (組み方を 2 か所に書かない)。
 # ffmpeg は Windows のランナーの MSYS2 で組む。**組んだものは actions/cache に置き、Dockerfile の ffmpeg 段と組む
 # スクリプトが変わるまで使い回す** (組み直すと 20 分を超える)。
+#
+# 組むのは呼んだ workflow のコミット (リリースならタグ)。コミットを入力で受けて取り出すことはしない
+# (入力のコミットを取り出したジョブがキャッシュに書けると、main のキャッシュを汚せる。CodeQL の cache poisoning)
 
 on:
   workflow_call:
     inputs:
-      ref:
-        description: "組むコミット (タグ名かコミット)。空なら呼んだ workflow のコミット"
-        type: string
-        default: ""
       tag:
         description: "配布物の名前に入れるバージョン (v1.2.3 の形。v は落とす)。CI は dev"
         type: string
@@ -44,8 +43,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.ref }}
+
 
       # 鍵は Dockerfile の ffmpeg 段 (土台の FROM の行は除く。digest が上がるたびに組み直さない) と、組むスクリプトと patches/
       - name: Cache key
@@ -107,8 +105,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.ref }}
+
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -134,8 +131,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.ref }}
+
 
       - name: Download ffmpeg
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

@@ -191,7 +191,7 @@ denpa と同じネットワークに置くと、前段越しの人が全員そ�
 docker-proxy が IPv6 の接続を Docker のゲートウェイのアドレスから繋ぎ直すときも同じです。
 そのため、denpa を動かしているマシンのブラウザから `localhost` で入ると (送信元が Docker のゲートウェイに見える)、
 既定では通りません。`http://<そのマシンの IP>:3000` で開くか、断られた画面に出る接続元を足します。
-Windows (wslc) はこの PC からの接続が `169.254.x.x` に見えるので、install.ps1 がそこを信頼します。
+Windows は denpa を Windows の上でそのまま動かすので、この PC のブラウザはループバック (`127.0.0.0/8`・`::1`) から来ます。install.ps1 がそこを信頼します ([install-windows.md](install-windows.md#環境変数を足す-denpaenv))。
 
 ### ログインなしで開ける名前 (`ALLOWED_HOSTS`)
 
