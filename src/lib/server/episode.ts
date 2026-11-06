@@ -538,7 +538,7 @@ export function earlierAirings<T extends Airing>(
  * 1. **確かに同じ回のもの**を繋ぐ。副題が揃うもの (飾りの違うシリーズ名は芯で繋がる) と、
  *    副題の無い、シリーズ名のぴったり同じもの
  * 2. **副題を出す局と出さない局、編を書く局と書かない局** (`sameEpisode`) は、
- *    互いに相手が 1 つに決まるときだけ繋ぐ。`X #5` に `「X」A編 #5` と `「X」B編 #5` の
+ *    同じ回と読める束どうしを集め、どの 2 つも互いに同じ回と読めるときだけ繋ぐ。`X #5` に `「X」A編 #5` と `「X」B編 #5` の
  *    両方が当たるなら、どちらとも繋がない。1 本多く録るだけで、取り違えて録り逃すよりよい
  */
 function episodes<T>(
@@ -576,17 +576,32 @@ function episodes<T>(
         ),
     ),
   );
+  /*
+   * 同じ回と読める束どうしを集め、**どの 2 つも互いに同じ回と読めるときだけ** 1 つにする。
+   * 3 局 (編と副題を書く局・編だけ書く局・どちらも書かない局) が同じ回を流すと、束は 3 つで、
+   * どれも残りの 2 つと読める。相手が 1 つに決まるときだけ繋いでいた頃は、3 つとも録っていた。
+   * どこか 1 組でも読めなければ (`X #5` と `「X」A編 #5` と `「X」B編 #5`)、どれも繋がない
+   */
   const merged: { airing: T; episode: Episode }[][] = [];
-  clusters.forEach((cluster, i) => {
-    const [only, ...more] = partners[i]!;
-    if (only === undefined || more.length > 0) {
-      merged.push(cluster);
-      return;
-    }
-    const j = clusters.indexOf(only);
-    // 相手も自分しか候補が無いときだけ 1 つにする。2 つ目の側で足す (二重に足さない)
-    if (partners[j]!.length !== 1) merged.push(cluster);
-    else if (j < i) merged.push([...only, ...cluster]);
+  const seen = new Set<number>();
+  clusters.forEach((_, i) => {
+    if (seen.has(i)) return;
+    const linked = [i];
+    seen.add(i);
+    for (let at = 0; at < linked.length; at++)
+      for (const other of partners[linked[at]!]!) {
+        const j = clusters.indexOf(other);
+        if (!seen.has(j)) {
+          seen.add(j);
+          linked.push(j);
+        }
+      }
+    linked.sort((a, b) => a - b);
+    const all = linked.every((a) =>
+      linked.every((b) => a === b || partners[a]!.includes(clusters[b]!)),
+    );
+    if (all) merged.push(linked.flatMap((j) => clusters[j]!));
+    else for (const j of linked) merged.push(clusters[j]!);
   });
   return merged;
 }
