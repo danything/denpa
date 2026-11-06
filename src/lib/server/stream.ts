@@ -1,4 +1,4 @@
-import { createServer } from "node:net";
+import { createServer, type Socket } from "node:net";
 import { constants, setPriority } from "node:os";
 
 /** ffmpeg の 4 本目の出口 (`sideOutput`) */
@@ -35,6 +35,7 @@ export function sideOutput(): SideOutput {
   }
   const url = `\\\\.\\pipe\\denpa-${process.pid}-${++sides}`;
   let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let socket: Socket | null = null;
   let connected = false;
   let done = false;
   const finish = () => {
@@ -51,17 +52,24 @@ export function sideOutput(): SideOutput {
     start(c) {
       controller = c;
     },
+    // 読む側が追いつかなければ受けるのを止め (下の pause)、読まれたら再開する。溜めすぎない
+    pull() {
+      socket?.resume();
+    },
     cancel: finish,
   });
-  const server = createServer((socket) => {
+  const server = createServer((accepted) => {
     // 受けるのは 1 本だけ
     connected = true;
+    socket = accepted;
     server.close();
-    socket.on("data", (chunk: Buffer) => {
-      if (!done) controller?.enqueue(new Uint8Array(chunk));
+    accepted.on("data", (chunk: Buffer) => {
+      if (done || controller === null) return;
+      controller.enqueue(new Uint8Array(chunk));
+      if ((controller.desiredSize ?? 1) <= 0) accepted.pause();
     });
-    socket.on("close", finish);
-    socket.on("error", finish);
+    accepted.on("close", finish);
+    accepted.on("error", finish);
   });
   server.on("error", finish);
   server.listen(url);

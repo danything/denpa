@@ -128,8 +128,6 @@ async function schtasks(args: string[]): Promise<boolean> {
     new Response(proc.stderr).text(),
   ]);
   if (code === 0) return true;
-  // 消すときに無いのは失敗ではない (初めての起動など)
-  if (args[0] === "/Delete") return true;
   if (!failed) {
     failed = true;
     console.warn(
@@ -143,7 +141,13 @@ async function schtasks(args: string[]): Promise<boolean> {
 async function scheduleWake(at: number | null, now: number): Promise<void> {
   if (at === written) return;
   if (at === null) {
-    if (await schtasks(["/Delete", "/TN", WAKE_TASK, "/F"])) written = null;
+    // 無いものは消さない (初めての起動など)。あるのに消せなければ、次に見たときにもう一度消す
+    const exists =
+      (await Bun.spawn(["schtasks.exe", "/Query", "/TN", WAKE_TASK], {
+        stdio: ["ignore", "ignore", "ignore"],
+      }).exited) === 0;
+    if (!exists || (await schtasks(["/Delete", "/TN", WAKE_TASK, "/F"])))
+      written = null;
     return;
   }
   // 起こす時刻を過ぎていれば書かない (もう起きている。録画が始まるまで `HOLD_BEFORE` でスリープさせない)

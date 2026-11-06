@@ -37,14 +37,14 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
   LAN のほかの機器から開けないときは、Windows の設定でこの PC のネットワークを「プライベート」にします (パブリックのネットワークには開けない)
 - 本体とエージェントの zip は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
 
-| 置き場                    | 中身                                                                                                                                                        |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `%ProgramFiles%\denpa\`   | エージェント (`bin\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・siano-userland・本体 (`server\`)・起こす `denpa.cmd` と `denpa-agent.cmd` |
-| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`。SYSTEM と管理者だけが読み書きできる              |
-| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)               |
-| `C:\denpa-run`            | px4d のソケットの置き場 (下)                                                                                                                                |
-| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                         |
-| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                |
+| 置き場                    | 中身                                                                                                                                                                                                      |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `%ProgramFiles%\denpa\`   | エージェント (`bin\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・siano-userland・本体 (`server\`)・エージェントを起こす `denpa-agent.cmd`                                                |
+| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起こす `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる |
+| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                             |
+| `C:\denpa-run`            | px4d のソケットの置き場 (下)                                                                                                                                                                              |
+| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                                                                       |
+| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                                                              |
 
 `%ProgramFiles%\denpa` と `%ProgramData%\denpa` を管理者だけのものにしてあるのは、SYSTEM で動くものと、その環境変数を
 ほかの人やほかのプログラムに書き換えさせないためです。ログはふつうのユーザーでも読めるように `~/denpa` に置きます (回さずに足していく)。

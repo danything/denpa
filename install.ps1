@@ -17,8 +17,8 @@
 #
 # 置き場:
 #   %ProgramFiles%\denpa\                 エージェント (bin\)・px4-userland・siano-userland・本体 (server\。bun・アプリ・ffmpeg・字・デコーダ)・
-#                                         起こす denpa.cmd と denpa-agent.cmd (管理者しか書けない。SYSTEM で動かすものを、ほかの人に書き換えさせない)
-#   %ProgramData%\denpa\                  DB (denpa.db) とその隣のもの (局ロゴ・鍵)・denpa.env (本体の環境変数。無いときだけ雛形を作る)。
+#                                         エージェントを起こす denpa-agent.cmd (管理者しか書けない。SYSTEM で動かすものを、ほかの人に書き換えさせない)
+#   %ProgramData%\denpa\                  DB (denpa.db) とその隣のもの (局ロゴ・鍵)・denpa.env (本体の環境変数。無いときだけ雛形を作る)・本体を起こす denpa.cmd。
 #                                         SYSTEM と管理者だけが読み書きできる
 #   ~/denpa (DENPA_HOME)                  エージェントの config/ (tls\pair-token は denpa とエージェントが組むときの合言葉。無いときだけ作る)・
 #                                         ログ (denpa.log・denpa-agent.log)
@@ -558,7 +558,8 @@ function Register-Server([string]$Ref, [string]$Token) {
         # bun が変換した .ts を SYSTEM のフォルダへ溜めない (本番のイメージと同じ)
         BUN_RUNTIME_TRANSPILER_CACHE_PATH = '0'
     }
-    $cmd = "$Prefix\denpa.cmd"
+    # 合言葉 (TUNER_AGENT_URL の #pair=) が入るので、SYSTEM と管理者だけが読める $Data に置く (Program Files はだれでも読める)
+    $cmd = "$Data\denpa.cmd"
     Write-Loop $cmd $vars $envFile "$server\app" "`"$server\bun.exe`" server.js" $ServerLog
     # 優先度は普通 (6)。エンコードの ffmpeg は denpa が自分でいちばん低くする (src/lib/server/stream.ts の lowerPriority)
     Register-Loop $DenpaTask $cmd 'denpa 本体 (install.ps1 が入れた)' 6
@@ -648,6 +649,9 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
         Remove-NetFirewallRule -Name $FirewallRule -ErrorAction SilentlyContinue
         foreach ($dir in $Prefix, $OldPrefix) {
             if (Test-Path -LiteralPath $dir) { Remove-Item -Recurse -Force -LiteralPath $dir }
+        }
+        foreach ($file in 'denpa.cmd', 'wake-task.xml') {
+            if (Test-Path -LiteralPath "$Data\$file") { Remove-Item -Force -LiteralPath "$Data\$file" }
         }
         if (Test-Path -LiteralPath $Px4Runtime) {
             $runtime = Get-Item -LiteralPath $Px4Runtime -Force

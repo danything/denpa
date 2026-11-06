@@ -740,7 +740,7 @@ jobs:
             $task | Format-List TaskName, State
             if ($task.Principal.UserId -notmatch 'SYSTEM$') { throw "$name runs as $($task.Principal.UserId)" }
           }
-          Get-Content "$prefix\denpa.cmd"
+          Get-Content "$data\denpa.cmd"
           $health = Invoke-RestMethod http://127.0.0.1:3000/api/health
           "health: $($health | ConvertTo-Json -Compress)"
           if (-not (Test-Path "$data\denpa.db")) { throw 'no DB in ProgramData' }

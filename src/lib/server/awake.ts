@@ -57,7 +57,7 @@ export async function holdAwake(busy: boolean): Promise<boolean> {
   console.log(
     busy
       ? "[power] 録画・視聴・エンコードの間、スリープさせません"
-      : "[power] スリープを止めるのをやめました",
+      : "[power] スリープの抑止を解除しました",
   );
   return true;
 }
