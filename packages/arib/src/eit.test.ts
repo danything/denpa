@@ -252,6 +252,17 @@ describe("EIT の解析", () => {
     ).toBe(false);
   });
 
+  test("CA契約情報記述子から契約確認情報を読む", () => {
+    // 0xCB, len=8, CA_system_id=0x0005, unit=1 & comp=0, cvi_len=4, cvi=[1,2,3,4]
+    const caDesc = [0xcb, 8, 0x00, 0x05, 0x10, 0x04, 0x01, 0x02, 0x03, 0x04];
+    const parsed = parseEit(
+      section([event({ rawDescriptors: caDesc, isFree: false })]),
+    );
+    expect(parsed?.events[0]?.contractVerification).toEqual(
+      Uint8Array.from([0x01, 0x02, 0x03, 0x04]),
+    );
+  });
+
   /*
    * コピー禁止の番組は録らない (docs/data.md「コピー禁止の番組は録らない」)。記録制御の 2 ビットが 11 のときだけ。
    * 1 世代のみ (10) は今までどおり録る
