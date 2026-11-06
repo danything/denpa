@@ -601,6 +601,11 @@ export function buildArgs(
   return args;
 }
 
+/** いまエンコード (CM 検出のやり直しも) が走っているか。Windows をスリープさせないかを決める (`power.ts`) */
+export function hasRunningEncodes(): boolean {
+  return runningJobs.size > 0;
+}
+
 /** その録画で今生きているジョブ (待ち・実行中) の id。無ければ undefined */
 export function activeEncodeJob(recordingId: number): number | undefined {
   return orm()
@@ -865,7 +870,7 @@ export function encodeProgress(totalFrames: number, inputBytes: number) {
  *
  * 子プロセスとは同じ名前空間にいるので、/proc/<pid>/fd から入力ファイルを
  * 指している fd を探せば、/proc/<pid>/fdinfo/<fd> の pos がそのまま読み位置。
- * Linux 専用だが、本番はコンテナでしか動かさない。読めない環境では
+ * Linux 専用で、Windows では読めない。読めない環境では、分母 (尺) を測れなかったときに
  * 割合が動かなくなるだけで、エンコードしたものには影響しない。
  */
 export function findInputFd(pid: number, path: string): number | null {

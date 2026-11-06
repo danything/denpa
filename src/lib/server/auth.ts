@@ -233,7 +233,7 @@ export function foreignHost(headers: Headers, address: string): string | null {
  * 自分のインターフェースのネットワークと `TRUSTED_NETWORKS` が重なっていて、`TRUSTED_PROXIES` が
  * 空のときに当たる。ループバックとリンクローカル (`169.254.0.0/16`・`fe80::/10`) は見ない。
  * ループバックは外から来ない。リンクローカルは IPv6 ならどのインターフェースにもあり、
- * wslc はこの PC からの接続を `169.254.x.x` に見せる (install.ps1 が信頼している)
+ * IPv4 のもの (`169.254.0.0/16`) は、アドレスを配られなかったときに OS が自分で付けるもの
  */
 export function sharedNetworks(
   trustedList: string,

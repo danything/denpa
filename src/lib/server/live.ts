@@ -2532,6 +2532,11 @@ export const key = (
   `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}${rung === 0 ? "" : `~${rung}`}`;
 const sessions = new Map<string, Session>();
 
+/** いまライブを観ている人がいるか (セッションが 1 つでもあるか)。Windows をスリープさせないかを決める (`power.ts`) */
+export function hasLiveViewers(): boolean {
+  return sessions.size > 0;
+}
+
 /** エンコードし始めて一覧に載せる。畳むのは見ている人がいなくなったとき。ここでは待たない */
 function begin(
   channelType: string,

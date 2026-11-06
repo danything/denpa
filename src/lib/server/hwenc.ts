@@ -913,6 +913,9 @@ export function describeDevice(device: HwDevice): string {
 
 function describe(devices: HwDevice[]): string {
   if (devices.length === 0) {
+    // Windows の GPU (NVENC・QSV・AMF) は探し方がまだ無い。上の探し方は Linux のデバイスファイルなので当たらない
+    if (process.platform === "win32")
+      return "Windows の GPU でのエンコードにはまだ対応していません。ソフトウェアでエンコードします";
     return `GPU が見つかりません (${config.hwDevices} に該当するデバイスも、NVIDIA の GPU (${config.nvidiaDir}/nvidia0 など) も、${config.rkmppDevice} もありません)。ソフトウェアでエンコードします`;
   }
   const usable = devices.filter((d) =>

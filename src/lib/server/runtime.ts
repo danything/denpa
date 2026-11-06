@@ -15,6 +15,7 @@ import { pruneHistory, reconcile } from "./files";
 import { probe } from "./hwenc";
 import { attend } from "./live";
 import { reconcile as logoReconcile, ride, sweep } from "./logo";
+import { checkPower } from "./power";
 import { activeRecordingIds, recoverOrphanedRecordings } from "./recorder";
 import { restoreWidths } from "./restore-width";
 import { fillSatellites } from "./satellite-lineup";
@@ -29,6 +30,8 @@ import { notify } from "./webhook";
 import { serve } from "./ws";
 
 let started = false;
+/** スリープの様子を見る間隔 (ms。power.ts)。起こしてから録画を始めるまで (`WAKE_LEAD`。3 分) より十分短くする */
+const POWER_CHECK = 30_000;
 const timers: ReturnType<typeof setInterval>[] = [];
 let unlisten: (() => void) | null = null;
 
@@ -173,6 +176,12 @@ export function start(): void {
     await tick();
     pump();
   });
+
+  /*
+   * **Windows では、録画・視聴・エンコードの間スリープさせず、次の録画の前にスリープから起こす** (power.ts)。
+   * Windows 以外では何もしない
+   */
+  nowAndEvery(POWER_CHECK, "power", checkPower);
 
   /*
    * 実体と DB を突き合わせ、外から消されたものを一覧から落とす。

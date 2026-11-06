@@ -103,6 +103,11 @@ export const config = {
    * /app に被せるため** (中に置くと隠れる)。無ければ放送そのままの経路は使えず、画面はエンコードしたものに戻る
    */
   mpeg2Dir: str("MPEG2_DIR", "/opt/denpa/mpeg2"),
+  /**
+   * データ放送と字幕を描く字 (Denpa Font) の置き場。Dockerfile の `denpa-font` 段が置く (`/api/font/` が配る)。
+   * Windows では install.ps1 が配布物の中を指す。無ければ 404 を返し、画面は端末の字で描く
+   */
+  fontDir: str("FONT_DIR", "/usr/share/denpa-font"),
   /** 録ったあとのエンコードを同時に走らせる本数。**ジョブではなく ffmpeg の本数で数える** (コーデックごとに 1 本。`encode-slots.ts`) */
   encodeConcurrency: num("ENCODE_CONCURRENCY", 2),
   /** 先頭が壊れていて初期化に失敗したときに先頭を捨てて再試行する秒数 (enc.js 由来) */
