@@ -563,6 +563,27 @@ describe("firstAirings", () => {
     });
   });
 
+  test("編と副題を書く局・編だけ書く局・どちらも書かない局の同じ回は、早いほうだけ録る", () => {
+    // どれも残りの 2 つと同じ回と読める。相手が 1 つに決まるときだけ束ねていた頃は 3 つとも録っていた
+    const tbs = airing(
+      "「東京リベンジャーズ」三天戦争編 第56話「Shows her color」【アニメイズム】",
+      base,
+    );
+    const bs = airing("東京リベンジャーズ　三天戦争編▼第56話", base + HOUR, {
+      type: "BS",
+    });
+    const atx = airing("🈚東京リベンジャーズ　#56 🈑", base + 20 * HOUR, {
+      type: "CS",
+    });
+    expect(kept([atx, bs, tbs])).toEqual([tbs.id]);
+  });
+
+  test("総集編はふつうの回と束ねない", () => {
+    const recap = airing("テストアニメ 総集編 #3", base);
+    const regular = airing("テストアニメ #3", base + DAY);
+    expect(kept([recap, regular])).toEqual([recap.id, regular.id]);
+  });
+
   test("同時放送で片方に副題が無くても 1 本にする", () => {
     const mx = airing(
       "[新]てつりょー!meet with 鉄道むすめ #1「どんなところに、行こうかな?」",
