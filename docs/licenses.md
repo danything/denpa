@@ -122,7 +122,7 @@ asicen-userland は入れません (Windows 用が無い)。カードリーダ�
 | 名前                                                              | 何に                                    | 出どころ                         | ライセンス                                                                          |
 | ----------------------------------------------------------------- | --------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
 | Bun (`bun.exe`。公式のリリースの `bun-windows-x64-baseline.zip`)  | denpa 本体を動かす                      | <https://github.com/oven-sh/bun> | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md`                    |
-| FFmpeg (`ffmpeg/`。MSYS2 の UCRT64 で組む。libav* は DLL)         | 上のイメージの ffmpeg と同じ            | <https://ffmpeg.org>             | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+                       |
+| FFmpeg (`ffmpeg/`。MSYS2 の UCRT64 で組み、libav* は静的リンク)   | 上のイメージの ffmpeg と同じ            | <https://ffmpeg.org>             | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+                       |
 | SVT-AV1・Opus (ソースから組み、libavcodec に静的リンク)           | イメージと同じ                          | 上の表のとおり                   | 上の表のとおり                                                                      |
 | x264・dav1d・zlib (MSYS2 のパッケージの DLL)                      | H.264 のエンコード・AV1 のデコード・PNG | <https://packages.msys2.org>     | GPL-2.0+・BSD-2-Clause・zlib                                                        |
 | MinGW-w64 のランタイム (winpthreads など。ffmpeg が読む DLL だけ) | スレッドなど                            | <https://packages.msys2.org>     | パッケージのライセンスのとおり (MIT 系。GCC のものは GCC Runtime Library Exception) |

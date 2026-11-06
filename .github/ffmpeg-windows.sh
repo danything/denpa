@@ -10,7 +10,9 @@
 # configure が黙って外す。patches/ の直しも Linux と同じく当てる。
 #
 # Linux と同じく、SVT-AV1 と Opus はソースから組んで libavcodec に静的に繋ぎ、x264 と dav1d は配布物
-# (MSYS2 のパッケージ。Linux は Debian のもの) の DLL を使う。libav* は DLL にする (ffmpeg と ffprobe が同じものを使う)。
+# (MSYS2 のパッケージ。Linux は Debian のもの) を使う。**libav* は Linux と違って静的に繋ぐ** (ffmpeg.exe と ffprobe.exe が
+# それぞれ抱える)。DLL にすると、libavfilter の DLL が libavformat の関数 (metadata フィルタの avio_closep) を解決できず組めない
+# (Linux の共有ライブラリは解決を実行時まで待つので組める)。
 #
 # **自動で見つけるもの (`--disable-autodetect`) は全部切ってから、要るものだけ足す。** 切らないと、MSYS2 に
 # 入っているものや Windows の API (Media Foundation・D3D11 など) を configure が勝手に繋ぎ、ランナーの中身しだいで
@@ -52,14 +54,16 @@ mkdir "$work/opus" && cd "$work/opus"
 $CURL "https://downloads.xiph.org/releases/opus/opus-${OPUS_VERSION}.tar.gz" | tar -xz --strip-components=1
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=OFF \
   -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF
-cmake --build build -j"$jobs" && cmake --install build
+cmake --build build -j"$jobs"
+cmake --install build
 mkdir -p "$out/licenses/opus" && cp COPYING "$out/licenses/opus/"
 
 # SVT-AV1
 mkdir "$work/svtav1" && cd "$work/svtav1"
 $CURL "https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz" | tar -xz --strip-components=1
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF
-cmake --build build -j"$jobs" && cmake --install build
+cmake --build build -j"$jobs"
+cmake --install build
 mkdir -p "$out/licenses/svt-av1" && cp LICENSE.md PATENTS.md "$out/licenses/svt-av1/"
 
 # FFmpeg
@@ -70,8 +74,8 @@ for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 -
   --prefix="$prefix" \
   --enable-gpl \
   --enable-version3 \
-  --enable-shared \
-  --disable-static \
+  --disable-shared \
+  --enable-static \
   --pkg-config-flags="--static" \
   --disable-autodetect \
   --enable-w32threads \
@@ -84,7 +88,8 @@ for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 -
   --disable-network \
   --disable-doc \
   "${components[@]}"
-make -j"$jobs" && make install
+make -j"$jobs"
+make install
 mkdir -p "$out/licenses/ffmpeg" && cp COPYING.GPLv3 LICENSE.md "$out/licenses/ffmpeg/"
 
 # 実行ファイルと、それが読む DLL。DLL は取り込み表から辿る (Windows の API の集まり api-ms-win-* と、
@@ -116,10 +121,13 @@ while [ "${#queue[@]}" -gt 0 ]; do
   done < <(objdump -p "$file" | sed -nE 's/^\s*DLL Name: (.+)$/\1/p' | tr -d '\r')
 done
 
-# MSYS2 から写した DLL のパッケージのライセンスの文書と、そのバージョン
+# MSYS2 から写した DLL と、静的に繋いだ MSYS2 のライブラリのパッケージの、ライセンスの文書とバージョン
+for lib in libx264.a libdav1d.a libz.a libwinpthread.a; do
+  if [ -e "/ucrt64/lib/$lib" ]; then from_msys+=("/ucrt64/lib/$lib"); fi
+done
 : > "$out/licenses/msys2-packages.txt"
-for dll in "${from_msys[@]}"; do
-  pkg=$(pacman -Qqo "$dll")
+for file in "${from_msys[@]}"; do
+  pkg=$(pacman -Qqo "$file")
   pacman -Q "$pkg" >> "$out/licenses/msys2-packages.txt"
   mapfile -t texts < <(pacman -Qlq "$pkg" | grep -E '/share/licenses/.+[^/]$' || true)
   if [ "${#texts[@]}" -eq 0 ]; then echo "$pkg にライセンスの文書がありません" >&2; exit 1; fi
