@@ -612,6 +612,49 @@ app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
     }
 });
 
+/*
+ * EMM 更新コマンド (0x90 0x36)。放送波から受信した EMM メッセージ (Base64) をカードに渡し、
+ * 返り値コード (0x2100 等) を返す。期限切れの解消や有料放送の契約更新を行う。
+ */
+app.MapPost("/denpa/card/emm", async (HttpContext http) =>
+{
+    var body = await Respond.Read(http);
+    var emmBase64 = body?["emm"] is { } node && Respond.IsText(node) ? node.GetValue<string>() : null;
+    if (string.IsNullOrEmpty(emmBase64))
+    {
+        await Respond.Error(http, "emm (Base64) が必要です", 400);
+        return;
+    }
+    byte[] emm;
+    try
+    {
+        emm = Convert.FromBase64String(emmBase64);
+    }
+    catch
+    {
+        await Respond.Error(http, "emm は Base64 で書きます", 400);
+        return;
+    }
+    if (emm.Length is < 1 or > 255)
+    {
+        await Respond.Error(http, "emm は 1〜255 バイトです", 400);
+        return;
+    }
+    try
+    {
+        var code = await Task.Run(() => Keys.Source.Emm(emm));
+        await Respond.Write(http, new JsonObject
+        {
+            ["ok"] = true,
+            ["code"] = code,
+        });
+    }
+    catch (Exception error)
+    {
+        await Respond.Error(http, error.Message, 500);
+    }
+});
+
 app.MapPost("/denpa/decode", async (HttpContext http) =>
 {
     var body = await Respond.Read(http);

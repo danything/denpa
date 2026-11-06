@@ -657,6 +657,24 @@ const options: Bun.ServeOptions = {
         ],
       });
     }
+    if (url.pathname === "/denpa/card/confirm" && request.method === "POST") {
+      return request
+        .json()
+        .then((body: { verification?: string; date?: number }) => {
+          if (!body.verification || body.date === undefined) {
+            return json({ error: "verification と date が必要です" }, 400);
+          }
+          return json({ ok: true, code: 0x0800 });
+        });
+    }
+    if (url.pathname === "/denpa/card/emm" && request.method === "POST") {
+      return request.json().then((body: { emm?: string }) => {
+        if (!body.emm) {
+          return json({ error: "emm が必要です" }, 400);
+        }
+        return json({ ok: true, code: 0x2100 });
+      });
+    }
     if (url.pathname === "/denpa/logs" && request.method === "GET") {
       if (logsMode === "off") return new Response("failed", { status: 500 });
       return json({ lines: agentLogLines() });

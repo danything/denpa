@@ -40,6 +40,7 @@ public class B25Tests
         }
 
         public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd) => Code;
+        public int Emm(ReadOnlySpan<byte> emmMessage) => Code;
     }
 
     private static byte[] Key(byte generation, bool even) =>

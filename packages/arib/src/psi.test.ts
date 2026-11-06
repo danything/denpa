@@ -1,15 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  catDescriptors,
+  EmmReceiver,
+  getEmmPids,
   NitReader,
   PacketStream,
+  parseEmmSection,
   parseNit,
   parseNitSection,
   parseSdt,
   parseSdtOther,
+  PID_CAT,
   SdtReader,
   SectionAssembler,
   ServiceReader,
+  TABLE_CAT,
+  TABLE_EMM_S,
   withCrc,
 } from "./psi.js";
 import {
@@ -667,5 +674,137 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
       ),
     ).toBe(true);
     expect(reader.tables()[0]?.services[0]?.name).toBe("BS12");
+  });
+});
+
+describe("CAT と EMM の解釈", () => {
+  function makeCatSection(descriptorsList: number[][]): Uint8Array {
+    const rawDesc = descriptorsList.flat();
+    const body = [
+      TABLE_CAT,
+      0xb0, // syntax=1, '0', reserved=11
+      0x00, // length placeholder (withCrc が計算)
+      0xff,
+      0xff, // reserved
+      0xc1, // version 0, current
+      0x00, // section 0
+      0x00, // last section 0
+      ...rawDesc,
+    ];
+    return withCrc(body);
+  }
+
+  function makeCaDescriptor(caSystemId: number, caPid: number): number[] {
+    return [
+      0x09, // tag
+      0x04, // len
+      (caSystemId >> 8) & 0xff,
+      caSystemId & 0xff,
+      0xe0 | ((caPid >> 8) & 0x1f),
+      caPid & 0xff,
+    ];
+  }
+
+  test("CAT から B-CAS (0x0005) の EMM PID を取得する", () => {
+    const cat = makeCatSection([
+      makeCaDescriptor(0x0001, 0x0100), // 他方式
+      makeCaDescriptor(0x0005, 0x0200), // B-CAS
+      makeCaDescriptor(0x0005, 0x0201), // B-CAS
+    ]);
+    const pids = getEmmPids(cat);
+    expect(pids).toEqual([0x0200, 0x0201]);
+
+    const descriptors = [...catDescriptors(cat)];
+    expect(descriptors).toHaveLength(3);
+    expect(descriptors[1]?.caSystemId).toBe(0x0005);
+    expect(descriptors[1]?.caPid).toBe(0x0200);
+
+    const otherPids = getEmmPids(cat, 0x0001);
+    expect(otherPids).toEqual([0x0100]);
+  });
+
+  test("EMM-S セクションから EMM メッセージを抽出する", () => {
+    // cardId: 0x0000_1234_5678_9012 (6B: 0x12, 0x34, 0x56, 0x78, 0x90, 0x12)
+    // protocol: 0x01, bGroupId: 0x02, updateNo: 0x0304, expDate: 55000 (0xD6D8)
+    // infoLength: 8 (protocol 1 + bGroupId 1 + updateNo 2 + expDate 2 + extra 2)
+    const cardIdBytes = [0x12, 0x34, 0x56, 0x78, 0x90, 0x12];
+    const infoLength = 8;
+    const infoData = [
+      0x01, // protocol
+      0x02, // bGroupId
+      0x03,
+      0x04, // updateNo
+      0xd6,
+      0xd8, // expDate
+      0xaa,
+      0xbb, // extra
+    ];
+    const emmElement = [...cardIdBytes, infoLength, ...infoData];
+
+    const body = [
+      TABLE_EMM_S,
+      0xb0,
+      0x00,
+      0x00,
+      0x00, // table_id_extension
+      0xc1,
+      0x00,
+      0x00,
+      ...emmElement,
+    ];
+    const section = withCrc(body);
+
+    const messages = [...parseEmmSection(section)];
+    expect(messages).toHaveLength(1);
+    const msg = messages[0]!;
+    expect(msg.cardId).toBe(0x123456789012n);
+    expect(msg.protocolNumber).toBe(0x01);
+    expect(msg.broadcasterGroupId).toBe(0x02);
+    expect(msg.updateNumber).toBe(0x0304);
+    expect(msg.expirationDate).toBe(55000);
+    expect([...msg.payload]).toEqual(emmElement);
+  });
+
+  test("EmmReceiver が TS パケットから EMM を受信して抽出する", () => {
+    const receiver = new EmmReceiver({ targetCardId: 0x123456789012n });
+
+    // 1. CAT パケット (PID 0x0001) で EMM PID 0x0200 を伝える
+    const cat = makeCatSection([makeCaDescriptor(0x0005, 0x0200)]);
+    const catPackets = packetize(PID_CAT, cat);
+    for (let i = 0; i < catPackets.length; i += 188) {
+      const msgs = receiver.feed(catPackets.subarray(i, i + 188));
+      expect(msgs).toHaveLength(0);
+    }
+    expect(receiver.pids.has(0x0200)).toBe(true);
+
+    // 2. EMM パケット (PID 0x0200) で自分宛てと他人宛てのメッセージを流す
+    const targetCardBytes = [0x12, 0x34, 0x56, 0x78, 0x90, 0x12];
+    const otherCardBytes = [0x99, 0x88, 0x77, 0x66, 0x55, 0x44];
+    const elem1 = [...targetCardBytes, 6, 0, 1, 0, 1, 0xcd, 0x14];
+    const elem2 = [...otherCardBytes, 6, 0, 1, 0, 1, 0xcd, 0x14];
+
+    const emmSec = withCrc([
+      TABLE_EMM_S,
+      0xb0,
+      0x00,
+      0x00,
+      0x00,
+      0xc1,
+      0x00,
+      0x00,
+      ...elem1,
+      ...elem2,
+    ]);
+    const emmPackets = packetize(0x0200, emmSec);
+
+    const extracted: bigint[] = [];
+    for (let i = 0; i < emmPackets.length; i += 188) {
+      for (const msg of receiver.feed(emmPackets.subarray(i, i + 188))) {
+        extracted.push(msg.cardId);
+      }
+    }
+
+    // targetCardId で絞り込まれているため、自分宛ての 1 件のみ抽出される
+    expect(extracted).toEqual([0x123456789012n]);
   });
 });

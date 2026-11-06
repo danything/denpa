@@ -113,6 +113,8 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
     public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd) =>
         Card().Confirm(verificationData, dateMjd);
 
+    public int Emm(ReadOnlySpan<byte> emmMessage) => Card().Emm(emmMessage);
+
     /// <summary>いまカードと話せるか。INT を 1 回通す (<see cref="BCas.Check"/>)</summary>
     public CardInit Check() => Card().Check();
 
@@ -186,6 +188,19 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         };
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         return CardWire.ReadConfirm(Send(request, "契約確認"));
+    }
+
+    public int Emm(ReadOnlySpan<byte> emmMessage)
+    {
+        if (emmMessage.Length is < 1 or > 255)
+            throw new IOException($"EMM メッセージの長さがおかしいです ({emmMessage.Length} バイト)");
+
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{Url}/denpa/card/emm")
+        {
+            Content = new ByteArrayContent(emmMessage.ToArray()),
+        };
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        return CardWire.ReadEmm(Send(request, "EMM更新"));
     }
 
     /// <summary>送って中身を受け取る。**受け取れなければ、何が起きたかの分かる文で投げる**</summary>
@@ -326,6 +341,12 @@ public static class CardWire
     public static int ReadConfirm(byte[] body)
     {
         if (body.Length < 2) throw new IOException("契約確認の答えが短すぎます");
+        return BinaryPrimitives.ReadUInt16BigEndian(body);
+    }
+
+    public static int ReadEmm(byte[] body)
+    {
+        if (body.Length < 2) throw new IOException("EMM更新の答えが短すぎます");
         return BinaryPrimitives.ReadUInt16BigEndian(body);
     }
 }

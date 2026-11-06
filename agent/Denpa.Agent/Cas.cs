@@ -41,6 +41,7 @@ public interface IKeySource
     CardInit Init();
     EcmAnswer Ecm(ReadOnlySpan<byte> ecm);
     int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd);
+    int Emm(ReadOnlySpan<byte> emmMessage);
 }
 
 /// <summary>

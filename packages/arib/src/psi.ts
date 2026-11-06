@@ -25,15 +25,22 @@ export function packetPid(packet: Uint8Array): number {
 
 /** PAT。どの PID に PMT があるかを持つ。**入口はいつもここ** */
 export const PID_PAT = 0x0000;
+export const PID_CAT = 0x0001;
 export const PID_NIT = 0x0010;
 export const PID_SDT = 0x0011;
 
 export const TABLE_PAT = 0x00;
+export const TABLE_CAT = 0x01;
 export const TABLE_PMT = 0x02;
 export const TABLE_NIT_ACTUAL = 0x40;
 export const TABLE_NIT_OTHER = 0x41;
 export const TABLE_SDT_ACTUAL = 0x42;
 export const TABLE_SDT_OTHER = 0x46;
+export const TABLE_EMM_S = 0x84;
+export const TABLE_EMM_M = 0x85;
+
+export const DESC_CONDITIONAL_ACCESS = 0x09;
+export const CA_SYSTEM_BCAS = 0x0005;
 
 const DESC_SERVICE_LIST = 0x41;
 const DESC_SATELLITE_DELIVERY = 0x43;
@@ -924,5 +931,171 @@ export class ServiceReader {
         transportStreamId,
         remoteControlKeyId,
       }));
+  }
+}
+
+/** CAT の conditional_access_descriptor (tag 0x09) */
+export interface CaDescriptor {
+  caSystemId: number;
+  caPid: number;
+  privateData: Uint8Array;
+}
+
+/**
+ * CAT (PID 0x0001, table_id 0x01) の記述子ループから CA 記述子を切り出す。
+ */
+export function* catDescriptors(section: Uint8Array): Generator<CaDescriptor> {
+  if (section[0] !== TABLE_CAT || section.length < 12) return;
+  // 8バイト目から末尾の CRC32 (4バイト) の手前までが記述子領域
+  const data = section.subarray(8, section.length - 4);
+  for (const [tag, body] of descriptors(data)) {
+    if (tag === DESC_CONDITIONAL_ACCESS && body.length >= 4) {
+      const caSystemId = (body[0]! << 8) | body[1]!;
+      const caPid = ((body[2]! & 0x1f) << 8) | body[3]!;
+      yield {
+        caSystemId,
+        caPid,
+        privateData: body.subarray(4),
+      };
+    }
+  }
+}
+
+/**
+ * CAT セクションから指定された CA_system_id (デフォルト 0x0005: B-CAS) の EMM PID 一覧を取得する。
+ */
+export function getEmmPids(
+  section: Uint8Array,
+  caSystemId: number = CA_SYSTEM_BCAS,
+): number[] {
+  const pids = new Set<number>();
+  for (const desc of catDescriptors(section)) {
+    if (
+      desc.caSystemId === caSystemId &&
+      desc.caPid !== 0x0000 &&
+      desc.caPid !== 0x1fff
+    ) {
+      pids.add(desc.caPid);
+    }
+  }
+  return [...pids];
+}
+
+/** EMM-S (0x84) セクション内の EMM メッセージ要素 */
+export interface EmmMessage {
+  /** 48ビットの B-CAS カードID */
+  cardId: bigint;
+  /** プロトコル種別 (0: 契約更新・有効期限更新など) */
+  protocolNumber: number;
+  /** 事業者グループ識別 */
+  broadcasterGroupId: number;
+  /** 更新番号 */
+  updateNumber: number;
+  /** 有効期限 (MJD) */
+  expirationDate: number;
+  /** B-CAS カードの APDU (0x90 0x36) に送るペイロード (card_id 6B + 長さ 1B + 更新データ) */
+  payload: Uint8Array;
+}
+
+/**
+ * EMM-S (table_id 0x84) セクションから EMM メッセージ一覧を抽出する (ARIB STD-B25)。
+ */
+export function* parseEmmSection(section: Uint8Array): Generator<EmmMessage> {
+  if (section[0] !== TABLE_EMM_S || section.length < 17) return;
+  // 8バイト目から CRC32 (4バイト) の手前まで
+  const data = section.subarray(8, section.length - 4);
+  let at = 0;
+  while (at + 7 <= data.length) {
+    let cardId = 0n;
+    for (let i = 0; i < 6; i++) {
+      cardId = (cardId << 8n) | BigInt(data[at + i]!);
+    }
+    const infoLength = data[at + 6]!;
+    const elementLength = 7 + infoLength;
+    if (at + elementLength > data.length) break;
+
+    const protocolNumber = infoLength >= 1 ? data[at + 7]! : 0;
+    const broadcasterGroupId = infoLength >= 2 ? data[at + 8]! : 0;
+    const updateNumber =
+      infoLength >= 4 ? (data[at + 9]! << 8) | data[at + 10]! : 0;
+    const expirationDate =
+      infoLength >= 6 ? (data[at + 11]! << 8) | data[at + 12]! : 0;
+
+    const emmPayload = data.subarray(at, at + elementLength);
+    yield {
+      cardId,
+      protocolNumber,
+      broadcasterGroupId,
+      updateNumber,
+      expirationDate,
+      payload: emmPayload,
+    };
+
+    at += elementLength;
+  }
+}
+
+/**
+ * TS パケットから CAT (PID 0x0001) を検知して EMM PID を特定し、
+ * EMM パケットから EMM メッセージを取り出す受信機。
+ */
+export class EmmReceiver {
+  private readonly cat = new SectionAssembler(PID_CAT);
+  private readonly emmAssemblers = new Map<number, SectionAssembler>();
+  private readonly emmPids = new Set<number>();
+  private readonly targetCardId?: bigint | undefined;
+  readonly caSystemId: number;
+
+  constructor(options?: {
+    caSystemId?: number | undefined;
+    targetCardId?: bigint | string | undefined;
+  }) {
+    this.caSystemId = options?.caSystemId ?? CA_SYSTEM_BCAS;
+    if (options?.targetCardId !== undefined) {
+      this.targetCardId =
+        typeof options.targetCardId === "bigint"
+          ? options.targetCardId
+          : BigInt(String(options.targetCardId).replace(/\s+/g, ""));
+    }
+  }
+
+  /** 検知した EMM PID 一覧 */
+  get pids(): ReadonlySet<number> {
+    return this.emmPids;
+  }
+
+  /**
+   * TS パケットを 1 つ投入する。
+   * 完成した EMM セクションから対象カード宛て (指定されていれば) のメッセージを返す。
+   */
+  feed(packet: Uint8Array): EmmMessage[] {
+    const pid = packetPid(packet);
+    if (pid === PID_CAT) {
+      for (const section of this.cat.feed(packet)) {
+        for (const emmPid of getEmmPids(section, this.caSystemId)) {
+          if (!this.emmPids.has(emmPid)) {
+            this.emmPids.add(emmPid);
+            this.emmAssemblers.set(emmPid, new SectionAssembler(emmPid));
+          }
+        }
+      }
+      return [];
+    }
+
+    const assembler = this.emmAssemblers.get(pid);
+    if (!assembler) return [];
+
+    const messages: EmmMessage[] = [];
+    for (const section of assembler.feed(packet)) {
+      for (const msg of parseEmmSection(section)) {
+        if (
+          this.targetCardId === undefined ||
+          msg.cardId === this.targetCardId
+        ) {
+          messages.push(msg);
+        }
+      }
+    }
+    return messages;
   }
 }
