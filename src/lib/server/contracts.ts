@@ -1,4 +1,5 @@
 import { PACKET, SYNC } from "@danything/arib/psi";
+import { ServiceFilter } from "@danything/arib/service-filter";
 /**
  * B-CAS カードの有料放送契約確認と実ストリーム復号テスト。
  *
@@ -7,7 +8,7 @@ import { PACKET, SYNC } from "@danything/arib/psi";
  * また、実際にチューナーを開いて TS パケットのスクランブル制御ビットを検査し、
  * 復号できるかを確認する。
  */
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lte } from "drizzle-orm";
 
 import { agentFetch } from "./agent-client";
 import { orm } from "./db";
@@ -209,8 +210,9 @@ export async function checkContracts(): Promise<ContractRow[]> {
           // 1週間以上先まで有効
           state = "subscribed";
         } else {
-          // 1週間以内に期限切れ
-          state = "expired";
+          // 1 週間以内に期限が来る。**今日はまだ観られるので契約中のまま**にし、期限の日だけ覚える
+          // (期限切れにすると、まだ観られる局が録られなくなる)
+          state = "subscribed";
           // 1〜6日後でバイナリサーチして有効期限日を特定
           let low = 1;
           let high = 6;
@@ -366,6 +368,7 @@ export async function testDecode(
   const targetService = orm()
     .select({
       id: services.id,
+      arib: services.service_id,
       name: services.name,
       channel: services.channel,
       type: services.type,
@@ -376,6 +379,33 @@ export async function testDecode(
 
   if (!targetService) {
     return { ok: false, decodeOk: false, error: "サービスが見つかりません" };
+  }
+
+  /*
+   * **いまその局で流れている番組が有料のときだけ確かめる。** 無料の時間帯は契約が無くても
+   * スクランブルが掛かっていないので、復号できたように見えて契約中と取り違える
+   */
+  const nowMs = Date.now();
+  const airing = orm()
+    .select({ isFree: programs.is_free })
+    .from(programs)
+    .where(
+      and(
+        eq(programs.service_id, serviceId),
+        lte(programs.start_at, nowMs),
+        gt(programs.end_at, nowMs),
+      ),
+    )
+    .get();
+  if (airing === undefined || airing.isFree) {
+    return {
+      ok: false,
+      decodeOk: false,
+      error:
+        airing === undefined
+          ? "いま流れている番組が番組表に無いため、復号を確かめられません"
+          : "いまは無料の番組を流しているため、復号を確かめられません。有料の番組の間にもう一度試してください",
+    };
   }
 
   const abortController = new AbortController();
@@ -393,35 +423,35 @@ export async function testDecode(
     );
 
     const reader = stream.getReader();
+    /*
+     * **その局のパケットだけを数える** (`ServiceFilter`)。物理チャンネルには同じ中継器のほかの局も入っていて、
+     * スクランブルの無い局のパケットまで数えると、復号できなくても割合が下がる
+     */
+    const filter = new ServiceFilter(targetService.arib);
     let totalPackets = 0;
     let scrambledPackets = 0;
-    let leftover = new Uint8Array(0);
 
     const targetPackets = 2000;
 
     while (totalPackets < targetPackets) {
-      const { done, value } = await reader.read();
+      // 15 秒で打ち切ったら、それまでに数えたぶんで判定する
+      const next = await reader.read().catch((error: unknown) => {
+        if (abortController.signal.aborted)
+          return { done: true, value: undefined };
+        throw error;
+      });
+      const { done, value } = next;
       if (done || !value) break;
 
-      const buf = new Uint8Array(leftover.length + value.length);
-      buf.set(leftover);
-      buf.set(value, leftover.length);
-
-      let offset = 0;
-      while (offset + PACKET <= buf.length) {
-        if (buf[offset] === SYNC) {
-          totalPackets++;
-          // 4バイト目 (buf[offset + 3]) の上位2ビットが transport_scrambling_control
-          if ((buf[offset + 3]! & 0xc0) !== 0) {
-            scrambledPackets++;
-          }
-          offset += PACKET;
-        } else {
-          // 同期バイトを探す
-          offset++;
-        }
+      const own = filter.filter(value);
+      for (let offset = 0; offset + PACKET <= own.length; offset += PACKET) {
+        if (own[offset] !== SYNC) continue;
+        // ペイロードの無いパケットはスクランブルの対象にならない
+        if ((own[offset + 3]! & 0x10) === 0) continue;
+        totalPackets++;
+        // 4 バイト目の上位 2 ビットが transport_scrambling_control
+        if ((own[offset + 3]! & 0xc0) !== 0) scrambledPackets++;
       }
-      leftover = buf.slice(offset);
     }
 
     try {
@@ -525,4 +555,24 @@ export function getContractWarning(
   if (isFree) return null;
   const warnings = getContractWarningsByService();
   return warnings.get(serviceId) ?? null;
+}
+
+/**
+ * **有料放送を自動予約してよい局** (`rules.PaidAllowed`)。どれかのカードで契約中と確かめた局だけ。
+ *
+ * 未契約・期限切れの局と、まだ確かめていない局 (確かめる前・カードが無い・番組表に 0xCB が無く
+ * 復号も試していない) は録らない。録ってもスクランブルのままで観られないため。
+ * 設定の「無料放送だけ録る」はこれに置き換えた。カードを持たない人は、今までの既定 (無料だけ) と同じになる。
+ * 1 回の当てはめで 1 回だけ読む (呼ぶ側が関数を使い回す)
+ */
+export function paidAllowed(): (serviceId: number) => boolean {
+  const subscribed = new Set(
+    orm()
+      .select({ serviceId: cardContracts.service_id })
+      .from(cardContracts)
+      .where(eq(cardContracts.state, "subscribed"))
+      .all()
+      .map((row) => row.serviceId),
+  );
+  return (serviceId) => subscribed.has(serviceId);
 }

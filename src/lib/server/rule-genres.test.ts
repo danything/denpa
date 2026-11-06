@@ -15,7 +15,7 @@ import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 
 import type { Rule } from "../types";
 import { bootstrap, MIGRATIONS } from "./db";
-import { compile, haystack, matchesCompiled } from "./rules";
+import { ANY_PAID, compile, haystack, matchesCompiled } from "./rules";
 import * as schema from "./schema";
 
 /**
@@ -86,7 +86,7 @@ describe("ルールのジャンルの条件を外す (0013_clear-rule-genres)", 
     const read = () =>
       drizzle({ client: db, schema }).select().from(schema.rules).get()!;
     const hits = (rule: Rule) =>
-      matchesCompiled(compile(rule), program, "GR", false, (fields) =>
+      matchesCompiled(compile(rule), program, "GR", ANY_PAID, (fields) =>
         haystack(program, fields),
       );
     expect(hits(read())).toBe(false);

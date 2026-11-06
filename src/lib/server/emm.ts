@@ -181,12 +181,14 @@ export async function receiveEmm(
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), seconds * 1000);
 
-  if (options.signal) {
-    options.signal.addEventListener("abort", () => {
-      clearTimeout(timeoutId);
-      abortController.abort();
-    });
-  }
+  // 呼ぶ側の中断も受ける。もう中断されていればすぐ止める。終わったら外す (下の finally)
+  const stopFromCaller = (): void => {
+    clearTimeout(timeoutId);
+    abortController.abort();
+  };
+  if (options.signal?.aborted) stopFromCaller();
+  else
+    options.signal?.addEventListener("abort", stopFromCaller, { once: true });
 
   let stream: ReadableStream<Uint8Array> | null = null;
   try {
@@ -221,6 +223,7 @@ export async function receiveEmm(
     };
   } finally {
     clearTimeout(timeoutId);
+    options.signal?.removeEventListener("abort", stopFromCaller);
     if (stream) {
       try {
         await stream.cancel();

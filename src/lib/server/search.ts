@@ -15,7 +15,7 @@ import { alias, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { globTerms, likePieces } from "../fold";
 import type { Rule } from "../types";
 import { now, orm } from "./db";
-import { compile, haystack, matchesCompiled } from "./rules";
+import { ANY_PAID, compile, haystack, matchesCompiled } from "./rules";
 import {
   cardContracts,
   programs,
@@ -234,7 +234,7 @@ export function searchPrograms(q: string, options: SearchOptions) {
         compiled,
         program,
         program.service_type,
-        false,
+        ANY_PAID,
         (fields) => haystack({ ...program, extended: null }, fields),
       ),
     () =>

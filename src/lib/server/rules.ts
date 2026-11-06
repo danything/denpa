@@ -19,7 +19,7 @@ import { hasTime, inTime, jstOf } from "../rule-time";
 import { parseSearchFields, type SearchField } from "../search";
 import type { Program, Rule } from "../types";
 import { config } from "./config";
-import { getContractWarningsByService } from "./contracts";
+import { getContractWarningsByService, paidAllowed } from "./contracts";
 import { now, orm } from "./db";
 import {
   type Airing,
@@ -157,7 +157,7 @@ export function globPatterns(compiled: CompiledRule): string[] | null {
 /**
  * **ルールに当たらない理由** ({@link missOf})。下見の行に「なぜ録らないか」を書くのに使う。
  *
- * - `paid` 有料放送 (全体設定で無料放送だけにしているとき)
+ * - `paid` 契約を確かめていない有料放送 (`PaidAllowed`)
  * - `service` 局の条件から外れる
  * - `genre` ジャンルの条件から外れる
  * - `time` 始まる時刻が時間帯の外
@@ -166,6 +166,19 @@ export function globPatterns(compiled: CompiledRule): string[] | null {
  * - `keyword` キーワードを含まない
  * - `ignore` 除外する言葉を含む
  */
+/**
+ * **その局の有料放送を自動予約してよいか。** カードで契約中と確かめた局だけ true (`contracts.paidAllowed`)。
+ * 未契約・期限切れの局と、まだ確かめていない局は録らない。録ってもスクランブルのままで観られないため。
+ * 無料放送だけにする設定 (`freeOnly`) はこれに置き換えた。契約が分かれば、局ごとに決められる
+ */
+export type PaidAllowed = (serviceId: number) => boolean;
+
+/** どの有料放送も当てない (契約を何も確かめていないとき) */
+export const NO_PAID: PaidAllowed = () => false;
+
+/** 有料放送も当てる。由来の推定や検索の「これからの放送」のように、録るかどうかを決めない所で使う */
+export const ANY_PAID: PaidAllowed = () => true;
+
 export type Miss =
   | "paid"
   | "service"
@@ -190,10 +203,10 @@ export function missOf(
   compiled: CompiledRule,
   program: Matchable,
   serviceType: string | undefined,
-  freeOnly: boolean,
+  paidOk: PaidAllowed,
   textOf: (fields: SearchField[]) => string,
 ): Miss | null {
-  if (freeOnly && !program.is_free) return "paid";
+  if (!program.is_free && !paidOk(program.service_id)) return "paid";
 
   const { services, types, genres, time, weekdays, keywords, ignores } =
     compiled;
@@ -246,29 +259,29 @@ export function matchesCompiled(
   compiled: CompiledRule,
   program: Matchable,
   serviceType: string | undefined,
-  freeOnly: boolean,
+  paidOk: PaidAllowed,
   textOf: (fields: SearchField[]) => string,
 ): boolean {
-  return missOf(compiled, program, serviceType, freeOnly, textOf) === null;
+  return missOf(compiled, program, serviceType, paidOk, textOf) === null;
 }
 
 /**
  * ルールに番組が当てはまるか。1 件だけ見るとき用 (いまはテストだけが使う。画面と予約は `matchesCompiled`)。
  *
- * 有料放送を対象にするかは全体設定なので、呼ぶ側が渡す
- * (ここで設定を読むと純粋関数でなくなり、テストから条件を作れない)。
+ * 有料放送を対象にするかは局の契約しだいなので、呼ぶ側が渡す (`PaidAllowed`。既定はどの有料放送も当てない)
+ * (ここで契約を読むと純粋関数でなくなり、テストから条件を作れない)。
  */
 export function matches(
   rule: Rule,
   program: Program,
   serviceType?: string,
-  freeOnly = true,
+  paidOk: PaidAllowed = NO_PAID,
 ): boolean {
   return matchesCompiled(
     compile(rule),
     program,
     serviceType,
-    freeOnly,
+    paidOk,
     (fields) => haystack(program, fields),
   );
 }
@@ -354,7 +367,7 @@ export function coveringRule(
   return [...rules]
     .sort((a, b) => Number(b.enabled) - Number(a.enabled))
     .find((rule) =>
-      matchesCompiled(compile(rule), program, serviceType, false, (fields) =>
+      matchesCompiled(compile(rule), program, serviceType, ANY_PAID, (fields) =>
         haystack(future, fields),
       ),
     );
@@ -762,18 +775,12 @@ export function duplicateAtStart(recordingId: number): string | null {
           .get();
   // 入れていないルールも当たるなら、そちらが受け持って録る (`applyRules` の keeper と同じ)
   if (program !== undefined) {
-    const freeOnly = settings().freeOnly;
+    const paidOk = paidAllowed();
     const textOf = textCache(program);
     const others = enabled.filter(
       (rule) =>
         !rule.dedupe &&
-        matchesCompiled(
-          compile(rule),
-          program,
-          service?.type,
-          freeOnly,
-          textOf,
-        ),
+        matchesCompiled(compile(rule), program, service?.type, paidOk, textOf),
     );
     if (others.length > 0) return null;
   }
@@ -934,6 +941,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
    */
   const simulcast = new Map<string, { serviceId: number; programId: number }>();
   const contractWarnings = getContractWarningsByService();
+  const paidOk = paidAllowed();
   for (const program of programs) {
     const textOf = textCache(program);
     // 先勝ちの持ち主のほかに、当たったルールを全部見る (下の dedupe / skip_earlier の受け手)
@@ -943,7 +951,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
           candidate,
           program,
           program.service_type,
-          recording.freeOnly,
+          paidOk,
           textOf,
         ),
       )

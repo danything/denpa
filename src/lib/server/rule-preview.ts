@@ -13,6 +13,7 @@ import {
 import type { Program, Rule } from "../types";
 import { config } from "./config";
 import { contentions, type Occupant, settled } from "./conflict";
+import { paidAllowed } from "./contracts";
 import { now, orm } from "./db";
 import {
   canceledBroadcasts,
@@ -26,7 +27,6 @@ import {
 } from "./rules";
 import { tunerState } from "./scheduler";
 import { programs, reservations, services as serviceTable } from "./schema";
-import { settings } from "./settings";
 
 /**
  * **ルールの下見。** 書きかけの条件で、これからの放送の何を録るか。
@@ -193,7 +193,8 @@ async function countPreview(
   conditions: Rule,
   { editing, ids = [] }: PreviewOptions,
 ): Promise<Omit<Preview, "failed">> {
-  const defaults = settings();
+  // 有料放送は、契約中と確かめた局だけ当てる (`contracts.paidAllowed`。予約を立てるときと同じ)
+  const paidOk = paidAllowed();
   const at = now();
   /*
    * チューナーの台数。**スケジューラと同じところから取る。**
@@ -277,12 +278,8 @@ async function countPreview(
     .all();
   // 判定が読むのは局・ジャンル・無料かどうか・始まる時刻・検索範囲の文字だけ (`Matchable`。読まない列は上で外した)
   const missFor = (program: (typeof all)[number]) =>
-    missOf(
-      compiled,
-      program,
-      program.service_type,
-      defaults.freeOnly,
-      (fields) => haystack(program, fields),
+    missOf(compiled, program, program.service_type, paidOk, (fields) =>
+      haystack(program, fields),
     );
   const hits = all.filter((program) => missFor(program) === null);
 

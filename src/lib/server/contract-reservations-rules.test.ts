@@ -49,7 +49,6 @@ const { reserve, recordAiring } = await import("./reservations");
 const { programsOf } = await import("./guide");
 const { applyRules } = await import("./rules");
 const { resolveConflicts } = await import("./scheduler");
-const { saveSettings } = await import("./settings");
 
 afterAll(() => {
   rmSync(testDir, { recursive: true, force: true });
@@ -348,8 +347,6 @@ describe("自動録画ルールの局優先度とチューナー競合解決 (ru
       ])
       .run();
 
-    saveSettings({ freeOnly: false });
-
     // dedupe=true のルールを作成
     orm()
       .insert(ruleTable)
@@ -445,8 +442,6 @@ describe("自動録画ルールの局優先度とチューナー競合解決 (ru
       ])
       .run();
 
-    saveSettings({ freeOnly: false });
-
     orm()
       .insert(ruleTable)
       .values({
@@ -468,6 +463,65 @@ describe("自動録画ルールの局優先度とチューナー競合解決 (ru
     expect(resList).toHaveLength(1);
     expect(resList[0]?.program_id).toBe(3102);
     expect(resList[0]?.service_id).toBe(freeService);
+  });
+
+  test("契約を確かめていない局の有料番組は自動予約しない", () => {
+    const unknownService = 321;
+    const nowMs = Date.now();
+    orm()
+      .insert(services)
+      .values({
+        id: unknownService,
+        service_id: 321,
+        network_id: 4,
+        name: "確かめていないCS",
+        type: "CS",
+        channel: "CS3",
+        updated_at: 0,
+      })
+      .run();
+    orm()
+      .insert(programs)
+      .values({
+        id: 3201,
+        service_id: unknownService,
+        network_id: 4,
+        event_id: 1,
+        start_at: nowMs + 3600_000,
+        end_at: nowMs + 5400_000,
+        name: "有料ドラマ #1",
+        description: "",
+        is_free: false,
+        updated_at: 0,
+      })
+      .run();
+    orm()
+      .insert(ruleTable)
+      .values({
+        name: "有料ドラマ",
+        keyword: "有料ドラマ",
+        search_fields: "name",
+        priority: 1,
+        dedupe: false,
+        skip_earlier: false,
+        enabled: true,
+        created_at: nowMs,
+      })
+      .run();
+
+    expect(applyRules().created).toBe(0);
+
+    // 契約中と確かめたら録る
+    orm()
+      .insert(cardContracts)
+      .values({
+        card_id: "0000111122223333",
+        service_id: unknownService,
+        state: "subscribed",
+        checked_at: nowMs,
+      })
+      .run();
+    expect(applyRules().created).toBe(1);
   });
 
   test("チューナー不足時に契約中/無料局を優先し、期限切れ局を競合 (conflict) に落とす", async () => {

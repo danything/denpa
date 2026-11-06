@@ -51,8 +51,6 @@ interface Settings {
   encode: boolean;
   /** エンコードしたあとも元の TS を残すか */
   keepOriginal: boolean;
-  /** 自動予約で無料放送だけを対象にするか */
-  freeOnly: boolean;
   /**
    * コマ数 (30/60) を本編映像から実測して決めるか。
    *
@@ -211,7 +209,6 @@ export function settings(): Settings {
     cmCut: isCmMode(cmCut) ? cmCut : config.cmCutDefault,
     encode: codecs.length > 0,
     keepOriginal: flag("keepOriginal", false),
-    freeOnly: flag("freeOnly", true),
     fpsDetect: flag("fpsDetect", true),
     postalCode: normalizePostalCode(stored("postalCode") ?? ""),
     prefecture: normalizePrefecture(stored("prefecture")),

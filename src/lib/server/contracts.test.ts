@@ -4,6 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { PACKET, SYNC } from "@danything/arib/psi";
+import {
+  packetize,
+  patSection,
+  programMap,
+  stream,
+} from "@danything/arib/synth";
 
 const { config } = await import("./config");
 const realAgent = config.agentUrl;
@@ -41,6 +47,62 @@ beforeEach(() => {
   orm().delete(programs).run();
   orm().delete(services).run();
 });
+
+/**
+ * 局 `serviceId` を含む物理チャンネルの TS (`testDecode` が局だけに絞って数える)。
+ * PAT・PMT のあとに、その局の映像のパケットを `count` 個と、同じ中継器の別の局 (9999) のパケットを同じ数だけ交互に並べる
+ */
+function channelStream(
+  serviceId: number,
+  count: number,
+  own: "clear" | "scrambled",
+  other: "clear" | "scrambled" = "clear",
+): Uint8Array<ArrayBuffer> {
+  const media = (pid: number, scrambled: boolean, counter: number) => {
+    const packet = new Uint8Array(PACKET).fill(0xff);
+    packet[0] = SYNC;
+    packet[1] = pid >> 8;
+    packet[2] = pid & 0xff;
+    // ペイロードあり。スクランブルなら transport_scrambling_control = 10
+    packet[3] = (scrambled ? 0x90 : 0x10) | (counter & 0x0f);
+    return packet;
+  };
+  const parts = [
+    packetize(
+      0x0000,
+      patSection([
+        [serviceId, 0x0101],
+        [9999, 0x0201],
+      ]),
+    ),
+    packetize(0x0101, programMap(serviceId, 0x0111, [[0x02, 0x0111]])),
+    packetize(0x0201, programMap(9999, 0x0211, [[0x02, 0x0211]])),
+  ];
+  for (let i = 0; i < count; i++) {
+    parts.push(media(0x0111, own === "scrambled", i));
+    parts.push(media(0x0211, other === "scrambled", i));
+  }
+  // Response に渡せるよう、ArrayBuffer を持つ形に写す
+  return new Uint8Array(stream(...parts));
+}
+
+/** 確かめる時刻に、その局で有料の番組 (`isFree` なら無料の番組) を流していることにする */
+function airing(serviceId: number, isFree = false): void {
+  orm()
+    .insert(programs)
+    .values({
+      id: serviceId * 1000 + 1,
+      service_id: serviceId,
+      network_id: 4,
+      event_id: 1,
+      start_at: Date.now() - 60_000,
+      end_at: Date.now() + 3600_000,
+      name: isFree ? "無料の時間帯" : "有料の番組",
+      is_free: isFree,
+      updated_at: Date.now(),
+    })
+    .run();
+}
 
 describe("MJD 計算とビットフラグ判定", () => {
   test("1970-01-01 JST 00:00:00 の MJD は 40587", () => {
@@ -199,7 +261,7 @@ describe("checkContracts", () => {
     }
   });
 
-  test("1週間後が無効な局は expired と判定される", async () => {
+  test("1 週間以内に期限が来る局は、今日はまだ観られるので契約中のまま。期限の日を覚える", async () => {
     const nowMjd = toMjd();
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
@@ -261,8 +323,9 @@ describe("checkContracts", () => {
       config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const results = await checkContracts();
       expect(results).toHaveLength(1);
-      expect(results[0]?.state).toBe("expired");
-      expect(results[0]?.validUntil).toBeDefined();
+      expect(results[0]?.state).toBe("subscribed");
+      // 2 日後まで観られる = 3 日後の 0 時 (JST) に切れる
+      expect(results[0]?.validUntil).toBe(fromMjd(nowMjd + 3));
     } finally {
       server.stop();
     }
@@ -271,13 +334,8 @@ describe("checkContracts", () => {
 
 describe("testDecode", () => {
   test("スクランブルが解除されているストリームで decodeOk: true", async () => {
-    // 正常パケット (transport_scrambling_control = 00)
-    const packets = 100;
-    const buf = new Uint8Array(PACKET * packets);
-    for (let i = 0; i < packets; i++) {
-      buf[i * PACKET] = SYNC;
-      buf[i * PACKET + 3] = 0x10; // scrambling = 00
-    }
+    // その局のパケットは復号できている。同じ中継器の別の局は掛かったまま (数えない)
+    const buf = channelStream(103, 100, "clear", "scrambled");
 
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
@@ -317,6 +375,7 @@ describe("testDecode", () => {
         updated_at: Date.now(),
       })
       .run();
+    airing(103);
 
     try {
       config.agentUrl = fakeAgentUrl(server.port ?? 0);
@@ -330,13 +389,8 @@ describe("testDecode", () => {
   });
 
   test("スクランブルが残存しているストリームで decodeOk: false", async () => {
-    // スクランブルパケット (transport_scrambling_control = 10)
-    const packets = 100;
-    const buf = new Uint8Array(PACKET * packets);
-    for (let i = 0; i < packets; i++) {
-      buf[i * PACKET] = SYNC;
-      buf[i * PACKET + 3] = 0x90; // scrambling = 10 (0x80)
-    }
+    // その局のパケットは掛かったまま。同じ中継器の無料の局が掛かっていなくても、復号できたことにしない
+    const buf = channelStream(104, 100, "scrambled", "clear");
 
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
@@ -376,6 +430,7 @@ describe("testDecode", () => {
         updated_at: Date.now(),
       })
       .run();
+    airing(104);
 
     try {
       config.agentUrl = fakeAgentUrl(server.port ?? 0);
@@ -420,12 +475,8 @@ describe("testDecode", () => {
   });
 
   test("受信パケットが50未満のときはエラーを返す", async () => {
-    const packets = 10; // 50未満
-    const buf = new Uint8Array(PACKET * packets);
-    for (let i = 0; i < packets; i++) {
-      buf[i * PACKET] = SYNC;
-      buf[i * PACKET + 3] = 0x10;
-    }
+    // その局のパケットが 50 個に届かない (PAT・PMT を足しても)
+    const buf = channelStream(105, 10, "clear");
 
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
@@ -465,12 +516,56 @@ describe("testDecode", () => {
         updated_at: Date.now(),
       })
       .run();
+    airing(105);
 
     try {
       config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecode(105);
       expect(res.ok).toBe(false);
       expect(res.error).toContain("十分なパケットを受信できませんでした");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("いま無料の番組を流している局は、確かめずに断る (契約中と取り違えない)", async () => {
+    orm()
+      .insert(services)
+      .values({
+        id: 106,
+        service_id: 106,
+        network_id: 4,
+        name: "無料の時間帯の局",
+        type: "BS",
+        channel: "BS11",
+        updated_at: Date.now(),
+      })
+      .run();
+    airing(106, true);
+    const server = serveFakeAgent(async (req) =>
+      new URL(req.url).pathname === "/denpa/card"
+        ? Response.json({
+            ok: true,
+            message: "",
+            source: "local",
+            readers: [
+              {
+                name: "CardReader",
+                card: true,
+                ids: ["0000111122223333"],
+                active: true,
+                tuners: [],
+              },
+            ],
+          })
+        : new Response("Not Found", { status: 404 }),
+    );
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      const res = await testDecode(106);
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain("無料の番組");
+      expect(getContractRows("0000111122223333")).toEqual([]);
     } finally {
       server.stop();
     }
@@ -572,7 +667,8 @@ describe("checkContracts エッジケース・異常系", () => {
       const results = await checkContracts();
       expect(results).toHaveLength(1);
       expect(results[0]?.state).toBe("expired");
-      expect(results[0]?.validUntil).toBeDefined();
+      // 5 日前まで観られた = 4 日前の 0 時 (JST) に切れた
+      expect(results[0]?.validUntil).toBe(fromMjd(nowMjd - 4));
     } finally {
       server.stop();
     }
@@ -766,10 +862,8 @@ describe("checkContracts エッジケース・異常系", () => {
         });
       }
       if (url.pathname.startsWith("/denpa/stream")) {
-        const packet = Buffer.alloc(188);
-        packet[0] = 0x47;
-        packet[3] = 0x10;
-        const body = Buffer.concat(Array(100).fill(packet));
+        // 局 (ARIB の service_id 311) のパケットは復号できている
+        const body = channelStream(311, 100, "clear");
         return new Response(body, {
           headers: { "Content-Type": "application/octet-stream" },
         });

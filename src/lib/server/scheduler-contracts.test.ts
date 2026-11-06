@@ -105,11 +105,12 @@ describe("scanContracts: 有料放送契約の定期スキャンと期限切れ�
       }
       if (url.pathname === "/denpa/card/confirm") {
         const body = (await req.json()) as { date: number };
-        // 本日有効 (0x0800)、1週間後は無効 (0x0000) => 期限切れ判定
-        if (body.date === nowMjd) {
-          return Response.json({ ok: true, code: 0x0800 });
-        }
-        return Response.json({ ok: true, code: 0x0000 });
+        // 3 日前まで有効 (0x0800)、そのあとは無効 (0x0000) => 期限切れ
+        // (今日まだ観られる局は、1 週間以内に切れても期限切れにしない)
+        return Response.json({
+          ok: true,
+          code: body.date <= nowMjd - 3 ? 0x0800 : 0x0000,
+        });
       }
       return new Response("Not Found", { status: 404 });
     });
@@ -331,11 +332,11 @@ describe("scanContracts: 有料放送契約の定期スキャンと期限切れ�
         if (confirmCode === 0x0800) {
           return Response.json({ ok: true, code: 0x0800 });
         }
-        // 期限切れシミュレーション
-        if (body.date === nowMjd) {
-          return Response.json({ ok: true, code: 0x0800 });
-        }
-        return Response.json({ ok: true, code: 0x0000 });
+        // 期限切れ: 3 日前まで有効だった
+        return Response.json({
+          ok: true,
+          code: body.date <= nowMjd - 3 ? 0x0800 : 0x0000,
+        });
       }
       return new Response("Not Found", { status: 404 });
     });
