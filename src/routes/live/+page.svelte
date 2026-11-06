@@ -436,7 +436,7 @@
 
   /** アンビエントモード。canvas に描いているときは worker から縮めた 1 枚をもらう */
   const ambient = ambientMode({
-    playing: () => !player.paused,
+    playing: () => !player.paused && !pip.active,
     canvas: () => (player.canvas ? player : null),
     video: () => video,
   });

@@ -1198,6 +1198,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (engine === null) countDropped(video);
     if (buffer === null || buffer.updating || buffer.buffered.length === 0)
       return;
+    // 裏タブで requestVideoFrameCallback が止まっている間も、再生位置が進んだ低いところを拾う
+    sampleLow(video);
     const end = buffer.buffered.end(buffer.buffered.length - 1);
     const behind = end - video.currentTime;
     // 0.1 秒刻みにする (塊は毎秒 20 個届く。そのたびに書き換えると画面を無駄に描き直す)
@@ -1271,6 +1273,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       key < end &&
       video.currentTime < key - KEY_SLACK;
     const start = toKey ? key : first;
+    /*
+     * 裏タブでは requestVideoFrameCallback が止まりサンプリングが疎になるため、
+     * わずかな遅れで 1.05倍速 (CATCH_UP) に張り付いて音程が狂いやすくなる。
+     * 裏タブ時は余裕を持って速めて追いついたら確実に等速に戻す STEADY を当てる。
+     * (裏での追いつき・再生速度制御のポリシーは議論の余地あり)
+     */
+    const hidden =
+      typeof document !== "undefined" && document.visibilityState === "hidden";
+    const activeSteering = hidden ? STEADY : steering;
+
     const next = pacing({
       start,
       end,
@@ -1283,7 +1295,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       low: lows.peek(performance.now() / 1000) ?? undefined,
       dip: dipNow(),
       rate: video.playbackRate,
-      steering,
+      steering: activeSteering,
     });
 
     /*
