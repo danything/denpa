@@ -65,6 +65,18 @@ public class BCasTests
 
     private static readonly byte[] SampleEcm = [.. Enumerable.Range(0, 0x94).Select(b => (byte)(b * 7))];
 
+    /// <summary>契約確認の応答。返り値 0x0800 (ティア有効など)</summary>
+    private static byte[] ConfirmResponse(int code = 0x0800)
+    {
+        var response = new byte[8];
+        response[1] = 0x04;
+        response[4] = (byte)(code >> 8);
+        response[5] = (byte)code;
+        response[6] = 0x90;
+        response[7] = 0x00;
+        return response;
+    }
+
     /// <summary>送られてきた APDU の頭 (CLA INS) で答えを決める接続</summary>
     private sealed class FakeLink(string name, Func<byte[], byte[]>? ecm = null) : ICardLink
     {
@@ -77,6 +89,7 @@ public class BCasTests
         public int Overlapped { get; private set; }
         public Func<byte[]> Int { get; set; } = () => IntResponse();
         public Func<byte[]> Idi { get; set; } = () => IdiResponse(CardNumber);
+        public Func<byte[], byte[]>? Confirm { get; set; }
 
         public byte[] Reset()
         {
@@ -99,6 +112,7 @@ public class BCasTests
                     0x30 => Int(),
                     0x32 => Idi(),
                     0x34 => (ecm ?? (_ => EcmResponse()))(sent),
+                    0x3c => (Confirm ?? (_ => ConfirmResponse()))(sent),
                     _ => [0x6d, 0x00],
                 };
             }
@@ -135,6 +149,85 @@ public class BCasTests
         await Assert.That(init.InitCbc).IsEquivalentTo(InitCbc);
         await Assert.That(init.CaSystemId).IsEqualTo(5);
         await Assert.That(card.Name).IsEqualTo("reader");
+    }
+
+    [Test]
+    public async Task 契約確認コマンドを通す()
+    {
+        var link = new FakeLink("reader");
+        using var card = BCas.Open(() => [Candidate(link)]);
+
+        byte[] verification = [0x01, 0x02, 0x03, 0x04];
+        var code = card.Confirm(verification, 60000);
+
+        await Assert.That(code).IsEqualTo(0x0800);
+        var apdu = link.Sent.Last();
+        await Assert.That(apdu[0]).IsEqualTo(0x90);
+        await Assert.That(apdu[1]).IsEqualTo(0x3C);
+        await Assert.That(apdu[2]).IsEqualTo(0x00);
+        await Assert.That(apdu[3]).IsEqualTo(0x00);
+        await Assert.That(apdu[4]).IsEqualTo(6); // 4 + 2
+        await Assert.That((apdu[5] << 8) | apdu[6]).IsEqualTo(60000);
+        await Assert.That(apdu.AsSpan(7, 4).ToArray()).IsEquivalentTo(verification);
+        await Assert.That(apdu[^1]).IsEqualTo(0x00);
+    }
+
+    [Test]
+    public async Task 契約確認データの長さが異常なら送らずに断る()
+    {
+        var link = new FakeLink("reader");
+        using var card = BCas.Open(() => [Candidate(link)]);
+
+        // 0 バイト
+        var errEmpty = Assert.Throws<IOException>(() => card.Confirm([], 60000));
+        await Assert.That(errEmpty?.Message).Contains("契約確認データの長さがおかしいです (0 バイト)");
+
+        // 254 バイト (上限 253 バイト超え)
+        var errTooLong = Assert.Throws<IOException>(() => card.Confirm(new byte[254], 60000));
+        await Assert.That(errTooLong?.Message).Contains("契約確認データの長さがおかしいです (254 バイト)");
+
+        // カードには送られていないこと
+        await Assert.That(link.Sent.Any(apdu => apdu[1] == 0x3C)).IsFalse();
+    }
+
+    [Test]
+    public async Task 契約確認で短い応答は2回まで送り直す()
+    {
+        var link = new FakeLink("reader");
+        var attempts = 0;
+        link.Confirm = _ =>
+        {
+            attempts++;
+            return attempts < 3 ? [0x90, 0x00] : ConfirmResponse(0x0800);
+        };
+
+        using var card = BCas.Open(() => [Candidate(link)]);
+        var code = card.Confirm([0x01], 60000);
+
+        await Assert.That(code).IsEqualTo(0x0800);
+        await Assert.That(attempts).IsEqualTo(3);
+
+        // 3 回とも短かったら CardRefusedException で断る
+        attempts = 0;
+        link.Confirm = _ =>
+        {
+            attempts++;
+            return [0x90, 0x00];
+        };
+        var error = Assert.Throws<CardRefusedException>(() => card.Confirm([0x01], 60000));
+        await Assert.That(error?.Message).Contains("カードが契約確認に応答しません (応答 2 バイト)");
+        await Assert.That(attempts).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task CardWire_Confirmのパックとアンパック()
+    {
+        var packed = CardWire.Pack(0x0800);
+        await Assert.That(packed.Length).IsEqualTo(2);
+        await Assert.That(CardWire.ReadConfirm(packed)).IsEqualTo(0x0800);
+
+        var err = Assert.Throws<IOException>(() => CardWire.ReadConfirm([0x08]));
+        await Assert.That(err?.Message).Contains("契約確認の答えが短すぎます");
     }
 
     /// <summary>

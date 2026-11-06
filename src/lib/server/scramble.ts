@@ -246,7 +246,7 @@ export async function descramble(
   input: string,
   output: string,
   signal?: AbortSignal,
-): Promise<{ ok: boolean; error: string }> {
+): Promise<{ ok: boolean; error: string; stillScrambled?: boolean }> {
   /*
    * 向こうのマウント先はこちらと同じとは限らないので、元の TS の置き場からの相対で渡す。
    * 掛かったままの TS は必ずここにある (引き継いだ録画も、移行のときに
@@ -293,7 +293,12 @@ export async function descramble(
     const why = card.ok
       ? "カードは読めているので、鍵が合わないか ECM が流れていません"
       : card.message;
-    return { ok: false, error: `復号してもスクランブルが残っています。${why}` };
+    // カードは読めていて掛かったまま = 鍵を貰えなかった (契約が無い・切れたことが多い。`contracts.noteStillScrambled`)
+    return {
+      ok: false,
+      error: `復号してもスクランブルが残っています。${why}`,
+      stillScrambled: card.ok,
+    };
   }
   return { ok: true, error: "" };
 }

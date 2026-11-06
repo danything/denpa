@@ -1,5 +1,6 @@
 bin/
 obj/
-# dotnet publish の出力 (CI とローカルの適合テストで作る)
+# dotnet publish の出力 (CI とローカルの適合テストで作る。手で -o out にしたときも)
 publish/
+out/
 TestResults/

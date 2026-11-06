@@ -568,6 +568,38 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
     await Respond.Write(http, new JsonObject { ["disabled"] = Json.Strings(disabled.Order(StringComparer.Ordinal)) });
 });
 
+/*
+ * 有料放送の契約をカードに聞く (契約確認。0x90 0x3C)。EIT の CA 契約情報記述子 (0xCB) にある verification (Base64) と、
+ * 聞きたい日 (date。MJD) を渡すと、カードの返り値 (0x0800 なら月額の契約あり など) を返す。選局は要らない (denpa の contracts.ts)
+ */
+app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
+{
+    var body = await Respond.Read(http);
+    byte[]? verification = null;
+    try
+    {
+        if (body?["verification"] is { } node && Respond.IsText(node)) verification = Convert.FromBase64String(node.GetValue<string>());
+    }
+    catch (FormatException)
+    {
+    }
+    var date = body?["date"] is JsonValue value && value.TryGetValue<int>(out var mjd) ? mjd : -1;
+    if (verification is not { Length: >= 1 and <= 253 } || date is < 0 or > 65535)
+    {
+        await Respond.Error(http, "verification (Base64 で 1〜253 バイト) と date (MJD) が必要です", 400);
+        return;
+    }
+    try
+    {
+        var code = await Task.Run(() => Keys.Source.Confirm(verification, (ushort)date));
+        await Respond.Write(http, new JsonObject { ["ok"] = true, ["code"] = code });
+    }
+    catch (Exception error) when (error is IOException or InvalidOperationException)
+    {
+        await Respond.Error(http, error.Message, 500);
+    }
+});
+
 app.MapPost("/denpa/decode", async (HttpContext http) =>
 {
     var body = await Respond.Read(http);

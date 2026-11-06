@@ -14,6 +14,7 @@ import { COPY_NEVER_REASON } from "../format";
 import type { Reservation } from "../types";
 import { config } from "./config";
 import { assign, type Busy, type Capacity, capacityOf } from "./conflict";
+import { checkContracts } from "./contracts";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
 import {
@@ -197,12 +198,29 @@ export async function resolveConflicts(): Promise<{
   return { accepted: accepted.length, rejected: rejected.length };
 }
 
+/** 有料放送の契約を確かめ直す間隔。契約の切り替わりは日の単位なので、1 日 2 回で足りる */
+const CONTRACT_SCAN_MS = 12 * 3_600_000;
+let lastContractScan = 0;
+let scanningContracts = false;
+
 /**
  * `schedulerTick` (既定 5 秒) ごとに呼ばれる本体。開始時刻に達した予約を録画に移し、終了時刻を過ぎた録画を止める。
  * 録画の終わり方 (完了・失敗) は recorder.ts が書く。
  */
 export async function tick(): Promise<void> {
   const at = now();
+
+  // 有料放送の契約を確かめ直す (12 時間ごと)。自動予約は契約中と確かめた局しか録らないので、確かめ直さないと
+  // 契約を足しても切れても予約に効かない。カードが無ければ断られて、記録に 1 行出る
+  if (!scanningContracts && at - lastContractScan >= CONTRACT_SCAN_MS) {
+    lastContractScan = at;
+    scanningContracts = true;
+    void checkContracts()
+      .catch((error: unknown) =>
+        console.warn(`[contracts] 契約を確かめ直せませんでした: ${error}`),
+      )
+      .finally(() => (scanningContracts = false));
+  }
 
   // 止めるほうを先にやる。次の番組が始まるときに前の録画がまだチューナーを
   // 使っていると、台数が足りない環境で後続が丸ごと録れない

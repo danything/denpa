@@ -62,7 +62,7 @@ export const actions = {
   /**
    * エンコード。番組ごとに変えたくなることが実際にはほとんど無いので全体で 1 つ。
    * コーデックごとのエンコーダ (GPU)・その場で変換する本数・元の TS・コマ数も同じ節で受ける。
-   * **節ごとにフォームが分かれている** (CM・自動予約は別の action)。ここで受けない値には触らない
+   * **節ごとにフォームが分かれている** (視聴・CM は別の action)。ここで受けない値には触らない
    */
   saveEncoding: async ({ request }) => {
     const form = await request.formData();
@@ -138,14 +138,6 @@ export const actions = {
       return fail(400, { message: "CM の指定が不正です" });
     }
     saveSettings({ cmCut });
-    return { success: true, saved: true };
-  },
-
-  /** 自動予約を無料放送だけにするか */
-  saveReserve: async ({ request }) => {
-    saveSettings({
-      freeOnly: (await request.formData()).get("freeOnly") === "on",
-    });
     return { success: true, saved: true };
   },
 

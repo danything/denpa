@@ -254,6 +254,38 @@ export const channelChanges = sqliteTable("channel_changes", {
   seen_at: integer("seen_at"),
 });
 
+/**
+ * B-CAS カードごとの有料放送契約・復号状態の控え。
+ * 設定の「有料契約確認」に出し、自動予約で有料放送を録る局を決めるのに使う (`contracts.paidAllowed`)。
+ */
+export const cardContracts = sqliteTable(
+  "card_contracts",
+  {
+    /** カード番号 (16桁の文字列) */
+    card_id: text("card_id").notNull(),
+    /** 局の内部 ID (services.id) */
+    service_id: integer("service_id").notNull(),
+    /** 契約状態: subscribed(契約中) / unsubscribed(未契約) / expired(期限切れ) */
+    state: text("state")
+      .$type<"subscribed" | "unsubscribed" | "expired">()
+      .notNull(),
+    /** B-CAS 契約確認コマンド (0x90 0x3C) の返り値コード (0x0800 等) */
+    code: integer("code"),
+    /** 契約の有効期限（epoch ms）。判定できた場合 */
+    valid_until: integer("valid_until"),
+    /** 実ストリームでの復号可否 (true: 成功, false: スクランブル残存, null: 未確認) */
+    decode_ok: flag("decode_ok"),
+    /**
+     * 復号できたと確かめた時刻 (epoch ms)。**番組表に契約の情報が無い局は、これが新しいときだけ契約中とみる**
+     * (`contracts.paidAllowed`。`DECODE_VALID_MS` より古ければ確かめ直すまで録らない)
+     */
+    decoded_at: integer("decoded_at"),
+    /** 最後に確認した時刻 (epoch ms) */
+    checked_at: integer("checked_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.card_id, t.service_id] })],
+);
+
 export const programs = sqliteTable(
   "programs",
   {
@@ -290,6 +322,8 @@ export const programs = sqliteTable(
     copy_never: flag("copy_never")
       .notNull()
       .default(sql`0`),
+    /** CA契約情報記述子 (0xCB) の verificationData (Base64)。有料放送の契約確認・復号判定に使う */
+    contract_verification: text("contract_verification"),
     /*
      * **シリーズ** (EIT のシリーズ記述子)。載せる局のぶんだけ入り、載っていない番組は全部 NULL。
      * docs/data.md「シリーズ」

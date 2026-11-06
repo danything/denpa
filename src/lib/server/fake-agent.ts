@@ -87,3 +87,19 @@ export function trustFakeAgent(): void {
   mkdirSync(dir, { recursive: true });
   writeFileSync(`${dir}/agent.crt`, fakeAgentIdentity().cert);
 }
+
+/** `/denpa/card` の答え。カードが 1 枚読めていて、それを使っている (契約・EMM のテスト用) */
+export const ONE_CARD = {
+  ok: true,
+  message: "",
+  source: "local",
+  readers: [
+    {
+      name: "CardReader",
+      card: true,
+      ids: ["0000111122223333"],
+      active: true,
+      tuners: [],
+    },
+  ],
+};

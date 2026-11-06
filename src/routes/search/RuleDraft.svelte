@@ -18,7 +18,7 @@
     time: "時間帯の外",
     weekday: "曜日の外",
     keyword: "キーワード",
-    paid: "有料放送",
+    paid: "契約を確かめていない有料放送",
     empty: "条件なし",
   };
 </script>
@@ -650,9 +650,8 @@
       </label>
     </div>
     <p class="tiny muted">
-      録画のしかた{draft.freeOnly ? "と、無料放送だけ録ること" : ""}は<a
-        href={resolve("settings/recording")}>設定</a
-      >で決めます
+      録画のしかたは<a href={resolve("settings/recording")}>設定</a
+      >で決めます。有料放送は、カードで契約を確かめた局だけ録ります
     </p>
   </form>
 

@@ -42,6 +42,7 @@ const DESC_EXTENDED_EVENT = 0x4e;
 const DESC_COMPONENT = 0x50;
 const DESC_CONTENT = 0x54;
 const DESC_AUDIO_COMPONENT = 0xc4;
+const DESC_CA_CONTRACT_INFO = 0xcb;
 const DESC_SERIES = 0xd5;
 
 /** 自局の表か (p/f 0x4E と schedule 0x50〜0x5F)。ほかの TS の schedule (0x60〜0x6F) は下、他局の p/f (0x4F) は読まない */
@@ -148,6 +149,12 @@ export interface EitEvent {
    * 詳細の表 (0x58〜) には載らない。詳細だけ届いた回で消さないため (`EpgReader.merge`)
    */
   series?: EitSeries | null;
+  /**
+   * CA契約情報記述子 (0xCB) の contract_verification_info。
+   * 有料放送の契約確認・復号判定に使う (B-CAS の 0x90 0x3C コマンド)。
+   * 載っていなければ null。詳細の表では言っていないので undefined。
+   */
+  contractVerification?: Uint8Array | null;
 }
 
 export interface EitSection {
@@ -374,6 +381,27 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
         event.copyNever = isCopyNever(data);
         break;
       }
+      case DESC_CA_CONTRACT_INFO: {
+        if (data.length < 4) break;
+        const caSystemId = (data[0]! << 8) | data[1]!;
+        const numOfComponent = data[2]! & 0x0f;
+        let at = 3 + numOfComponent;
+        if (at >= data.length) break;
+        const cviLength = data[at]!;
+        at++;
+        if (at + cviLength <= data.length && cviLength > 0) {
+          const cvi = data.subarray(at, at + cviLength);
+          // B-CAS (0x0005) を優先。まだ無ければ拾う
+          if (
+            caSystemId === 0x0005 ||
+            event.contractVerification === undefined ||
+            event.contractVerification === null
+          ) {
+            event.contractVerification = cvi;
+          }
+        }
+        break;
+      }
       /*
        * series_descriptor (ARIB STD-B10 第 2 部)。
        *
@@ -471,6 +499,9 @@ export function parseEit(
       copyNever: tableId >= SCHEDULE_ACTUAL_EXTENDED ? null : false,
       // シリーズも同じ。載っていなければ「シリーズではない」、詳細の表なら「言っていない」
       ...(tableId >= SCHEDULE_ACTUAL_EXTENDED ? {} : { series: null }),
+      ...(tableId >= SCHEDULE_ACTUAL_EXTENDED
+        ? {}
+        : { contractVerification: null }),
     };
     at += 12 + descriptorsLength;
     if (body.length < descriptorsLength) break;
@@ -753,6 +784,10 @@ export class EpgReader {
       copyNever: event.copyNever ?? old.copyNever,
       ...(event.series === undefined && old.series !== undefined
         ? { series: old.series }
+        : {}),
+      ...(event.contractVerification === undefined &&
+      old.contractVerification !== undefined
+        ? { contractVerification: old.contractVerification }
         : {}),
     });
   }

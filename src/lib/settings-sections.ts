@@ -19,7 +19,6 @@ export const SETTINGS_GROUPS = [
       { slug: "encoding", label: "エンコード" },
       { slug: "viewing", label: "視聴" },
       { slug: "cm", label: "CM" },
-      { slug: "reserve", label: "自動予約" },
     ],
   },
   {

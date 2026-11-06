@@ -36,6 +36,9 @@ public sealed class BCas : IKeySource, IDisposable
     /// <summary>ECM の応答の最短 (SW1 SW2 込み)</summary>
     private const int EcmLength = 25;
 
+    /// <summary>契約確認の応答の最短 (SW1 SW2 込み)</summary>
+    private const int ConfirmLength = 8;
+
     /// <summary>INT が「正常」のときの返り値</summary>
     private const int InitOk = 0x2100;
 
@@ -211,6 +214,48 @@ public sealed class BCas : IKeySource, IDisposable
             if (_cache.Count > 256) _cache.Clear();  // 溜め込まない。ECM は数秒で入れ替わる
             _cache[name] = (answer, _clock.GetUtcNow());
             return answer with { WaitedMs = waited };
+        }
+    }
+
+    /// <summary>
+    /// 契約確認コマンド (0x90 0x3C)。
+    ///
+    /// <para>
+    /// EIT の CA 契約情報記述子 (0xCB) に載っている verificationData と
+    /// 対象日時 (MJD) をカードに渡し、返り値コード (0x0800: ティア有効など) を返す。
+    /// 選局せずにカード単体でミリ秒で答えを返す。
+    /// </para>
+    /// </summary>
+    public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd)
+    {
+        if (verificationData.Length is < 1 or > 253)
+            throw new IOException($"契約確認データの長さがおかしいです ({verificationData.Length} バイト)");
+
+        var apdu = new byte[verificationData.Length + 8];
+        apdu[0] = 0x90;
+        apdu[1] = 0x3C;
+        apdu[2] = 0x00;
+        apdu[3] = 0x00;
+        apdu[4] = (byte)(verificationData.Length + 2);
+        BinaryPrimitives.WriteUInt16BigEndian(apdu.AsSpan(5), dateMjd);
+        verificationData.CopyTo(apdu.AsSpan(7));
+        apdu[^1] = 0x00;
+
+        lock (_gate)
+        {
+            return Run(link =>
+            {
+                var response = link.Transmit(apdu);
+                for (var retry = 0; retry < ShortRetries && response.Length < ConfirmLength; retry++)
+                {
+                    response = link.Transmit(apdu);
+                }
+                if (response.Length < ConfirmLength)
+                {
+                    throw new CardRefusedException($"カードが契約確認に応答しません (応答 {response.Length} バイト)");
+                }
+                return BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
+            });
         }
     }
 

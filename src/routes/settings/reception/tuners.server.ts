@@ -2,6 +2,12 @@ import { type Actions, fail } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 
 import { config } from "#lib/server/config.js";
+import {
+  checkContracts as verifyContracts,
+  getActiveCardId,
+  getContractRows,
+  testDecode as testDecodeStream,
+} from "#lib/server/contracts.js";
 import { orm } from "#lib/server/db.js";
 import { recordings } from "#lib/server/schema.js";
 import { cardStatus, putCardReaders } from "#lib/server/scramble.js";
@@ -116,6 +122,12 @@ export async function load() {
     // チューナーを譲り合う順。チューナーの節の「詳しく」に出す
     yieldOrder: yieldOrder(),
     card: cardStatus(),
+    contracts: cardStatus()
+      .then((card) => {
+        const id = getActiveCardId(card);
+        return id ? getContractRows(id) : [];
+      })
+      .catch(() => []),
   };
 }
 
@@ -211,6 +223,36 @@ export const actions = {
       return fail(502, { message: String(error) });
     }
     return { success: true };
+  },
+
+  /** B-CAS カード内の CA 契約情報を確認し、各有料局の契約・有効期限を更新する */
+  checkContracts: async () => {
+    try {
+      const rows = await verifyContracts();
+      return { success: true, contracts: rows };
+    } catch (error) {
+      return fail(500, { message: String(error) });
+    }
+  },
+
+  /** 対象サービスのストリームを数秒開いてスクランブル解除をテストする */
+  testDecode: async ({ request }) => {
+    const form = await request.formData();
+    const serviceId = Number(form.get("serviceId"));
+    if (!Number.isInteger(serviceId) || serviceId < 1) {
+      return fail(400, { message: "serviceId が不正です" });
+    }
+    try {
+      const result = await testDecodeStream(serviceId);
+      if (!result.ok) {
+        return fail(500, {
+          message: result.error ?? "復号テストに失敗しました",
+        });
+      }
+      return { success: true, decodeOk: result.decodeOk };
+    } catch (error) {
+      return fail(500, { message: String(error) });
+    }
   },
 } satisfies Actions;
 

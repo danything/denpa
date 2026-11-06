@@ -487,6 +487,7 @@ export function savePrograms(events: EitEvent[]): number {
     video_resolution: sql`excluded.video_resolution`,
     // コピー禁止か。**表が言っていない回 (NULL) は前のまま** (`EitEvent.copyNever`)
     copy_never: sql`COALESCE(${sql.placeholder("copy_never")}, ${programs.copy_never})`,
+    contract_verification: sql`COALESCE(${sql.placeholder("contract_verification")}, ${programs.contract_verification})`,
     // シリーズも同じ。**詳細の表 (載せない表) から来た回は前のまま** (`EitEvent.series`)
     series_id: kept(programs.series_id),
     series_repeat: kept(programs.series_repeat),
@@ -543,6 +544,7 @@ export function savePrograms(events: EitEvent[]): number {
         video_type: sql.placeholder("video_type"),
         video_resolution: sql.placeholder("video_resolution"),
         copy_never: sql`COALESCE(${sql.placeholder("copy_never")}, 0)`,
+        contract_verification: sql.placeholder("contract_verification"),
         series_id: sql.placeholder("series_id"),
         series_repeat: sql.placeholder("series_repeat"),
         series_episode: sql.placeholder("series_episode"),
@@ -613,6 +615,9 @@ export function savePrograms(events: EitEvent[]): number {
         video_type: event.video?.type ?? null,
         video_resolution: event.video?.resolution ?? null,
         copy_never: event.copyNever,
+        contract_verification: event.contractVerification
+          ? Buffer.from(event.contractVerification).toString("base64")
+          : null,
         series_said: event.series === undefined ? 0 : 1,
         series_id: event.series?.seriesId ?? null,
         series_repeat: event.series?.repeatLabel ?? null,

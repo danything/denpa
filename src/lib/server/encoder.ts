@@ -52,6 +52,7 @@ import {
 import { loadMaterial, saveMaterial } from "./cm-material-store";
 import { type Scan, scan, type ScanReader, scanReader } from "./cm-scan";
 import { config } from "./config";
+import { noteStillScrambled } from "./contracts";
 import { affected, now, orm } from "./db";
 import { slotPool } from "./encode-slots";
 import { type ChaptersChanged, emit, type EncodeProgress } from "./events";
@@ -82,7 +83,7 @@ import {
 } from "./metadata";
 import { saveRecordedBml } from "./recorded-bml";
 import { recordingSummary } from "./recording";
-import { encodeJobs, recordings } from "./schema";
+import { encodeJobs, programs, recordings } from "./schema";
 import { descramble, isScrambled } from "./scramble";
 import { settings } from "./settings";
 import { chunks, lines, lowerPriority, run } from "./stream";
@@ -1161,6 +1162,17 @@ async function decide(
   }
 }
 
+/** 有料の番組の録画か (番組表の `is_free`)。番組が番組表から消えていれば分からないので false */
+function paidRecording(recording: Recording): boolean {
+  if (recording.program_id === null) return false;
+  const program = orm()
+    .select({ isFree: programs.is_free })
+    .from(programs)
+    .where(eq(programs.id, recording.program_id))
+    .get();
+  return program !== undefined && !program.isFree;
+}
+
 /**
  * ジョブの元の TS から派生する中間ファイルを消す。
  *
@@ -1319,6 +1331,9 @@ async function runJob(jobId: number): Promise<void> {
       removeIfExists(target);
       // 中止で切ったときは失敗にしない。下の後始末で canceled として畳む
       if (canceled.has(jobId)) return finishCanceled(jobId, target);
+      // 有料の番組が、カードは読めているのに掛かったまま。その局は次の回から録らない (`contracts.noteStillScrambled`)
+      if (result.stillScrambled === true && paidRecording(recording))
+        noteStillScrambled(recording.service_id);
       fail(
         jobId,
         recording,

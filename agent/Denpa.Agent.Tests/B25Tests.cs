@@ -38,6 +38,8 @@ public class B25Tests
             if (Fail(copy) is { } error) throw error;
             return new EcmAnswer(Key(copy[0], even: false), Key(copy[0], even: true), Code, Cached, WaitedMs);
         }
+
+        public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd) => Code;
     }
 
     private static byte[] Key(byte generation, bool even) =>
