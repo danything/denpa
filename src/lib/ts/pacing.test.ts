@@ -16,6 +16,7 @@ import {
   speedLabel,
   STEADY,
   steer,
+  steeringWhen,
   stepSpeed,
 } from "./pacing";
 
@@ -545,5 +546,31 @@ describe("speedLabel", () => {
   test("速めているときは速さも読む (ボタンは数字だけ)", () => {
     expect(speedLabel("再生の速さ", 1.25)).toBe("再生の速さ 1.25 倍");
     expect(speedLabel("追っかけの速さ", 2)).toBe("追っかけの速さ 2 倍");
+  });
+});
+
+describe("steeringWhen", () => {
+  test("隠れている間は STEADY。見えていれば渡したもの", () => {
+    const smooth = {
+      slowDown: true,
+      catchUpRatio: 1.5,
+      catchUpPad: 0,
+      settleRatio: 1.1,
+    };
+    expect(steeringWhen(true, smooth)).toBe(STEADY);
+    expect(steeringWhen(false, smooth)).toBe(smooth);
+  });
+
+  test("隠れている間は、狙いより 1 秒多く貯まるまで速めない", () => {
+    // 狙い 0.4 秒で貯まり 1.2 秒。見えていれば (SMOOTH) 速める量だが、隠れていれば等速のまま
+    const smooth = {
+      slowDown: true,
+      catchUpRatio: 1.5,
+      catchUpPad: 0,
+      settleRatio: 1.1,
+    };
+    expect(steer(1.2, 0.4, 1, smooth)).toBe(CATCH_UP);
+    // null は今の速さ (等速) のまま
+    expect(steer(1.2, 0.4, 1, steeringWhen(true, smooth))).toBeNull();
   });
 });

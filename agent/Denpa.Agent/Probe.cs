@@ -8,7 +8,8 @@ namespace Denpa.Agent;
 /// <para>
 /// デバイスを確保したままの選局は、値が 1 つ違っても「ioctl は通るが同期しない」という
 /// 出方をする。単体テストでは踏めないので、実機で当てるための入口を用意した
-/// (チューナー自動検出のときと同じやり方)。
+/// (チューナー自動検出のときと同じやり方)。受けた TS は、量・同期バイトの割合・連続性の飛び (ContinuityCount.cs)・
+/// 掛かっているパケットの割合を出す。
 /// </para>
 ///
 /// <code>
@@ -341,6 +342,7 @@ public static class Probe
         long scrambledIn = 0;
         long outPackets = 0;
         long scrambledOut = 0;
+        var continuity = new ContinuityCount();
 
         while (DateTime.UtcNow < deadline)
         {
@@ -353,6 +355,7 @@ public static class Probe
             {
                 packets++;
                 if (buffer[at] == 0x47) sync++;
+                continuity.Push(buffer.AsSpan(at, 188), DateTime.UtcNow - started);
                 if (!Scrambled(buffer.AsSpan(at))) continue;
                 scrambledIn++;
                 scrambledPids.Add(Pid(buffer.AsSpan(at)));
@@ -377,6 +380,7 @@ public static class Probe
             $"    最初の 1 バイト {first.TotalMilliseconds:F0} ms  "
             + $"{total / 1024} KiB  {mbps:F2} Mbps  同期バイト {ratio:F1}%");
         if (total == 0) Console.Error.WriteLine($"    {name}: 1 バイトも来ていません");
+        Console.WriteLine($"    連続性の飛び {continuity.Jumps} 回 ({continuity.Places.Count} か所。最初の 1 秒は数えない){(continuity.Places.Count == 0 ? "" : "  " + string.Join(" ", continuity.Places.Take(20).Select(place => $"{place.At.TotalSeconds:F1}s({place.Pids} PID)")))}");
 
         var before = packets == 0 ? 0 : 100.0 * scrambledIn / packets;
         if (b25 is null)
