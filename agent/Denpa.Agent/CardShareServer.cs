@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -105,6 +106,7 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
         {
             "/denpa/card/init" when HttpMethods.IsGet(method) => Init(http),
             "/denpa/card/ecm" when HttpMethods.IsPost(method) => Ecm(http),
+            "/denpa/card/confirm" when HttpMethods.IsPost(method) => Confirm(http),
             _ => Respond.Error(http, "not found", 404),
         });
     }
@@ -137,6 +139,25 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
             return;
         }
         await Reply(http, () => CardWire.Pack(Keys.Local.Ecm(ecm)));
+    }
+
+    private static async Task Confirm(HttpContext http)
+    {
+        // MJD 2B + verification 最大 253B = 最大 255B
+        var body = await CardWire.ReadUpTo(http.Request.Body, 255);
+        if (body is null)
+        {
+            await Respond.Error(http, "契約確認のデータが長すぎます (255 バイトまで)", 400);
+            return;
+        }
+        if (body.Length < 3)
+        {
+            await Respond.Error(http, "契約確認のデータが短すぎます (3 バイト以上)", 400);
+            return;
+        }
+        var dateMjd = BinaryPrimitives.ReadUInt16BigEndian(body);
+        var verification = body[2..];
+        await Reply(http, () => CardWire.Pack(Keys.Local.Confirm(verification, dateMjd)));
     }
 
     /// <summary>カードに聞いて (別のスレッドで) バイト列で返す。カードが駄目なら 503</summary>

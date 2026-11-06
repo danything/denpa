@@ -568,6 +568,50 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
     await Respond.Write(http, new JsonObject { ["disabled"] = Json.Strings(disabled.Order(StringComparer.Ordinal)) });
 });
 
+/*
+ * 契約確認コマンド (0x90 0x3C)。EIT の CA 契約情報記述子 (0xCB) に載っている
+ * verification (Base64) と date (MJD) をカードに渡し、返り値コード (0x0800 等) を返す。
+ */
+app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
+{
+    var body = await Respond.Read(http);
+    var verificationBase64 = body?["verification"] is { } node && Respond.IsText(node) ? node.GetValue<string>() : null;
+    var dateMjd = body?["date"] is JsonValue dateValue && dateValue.TryGetValue<int>(out var d) ? d : (int?)null;
+    if (string.IsNullOrEmpty(verificationBase64) || dateMjd is null or < 0 or > 65535)
+    {
+        await Respond.Error(http, "verification (Base64) と date (MJD) が必要です", 400);
+        return;
+    }
+    byte[] verification;
+    try
+    {
+        verification = Convert.FromBase64String(verificationBase64);
+    }
+    catch
+    {
+        await Respond.Error(http, "verification は Base64 で書きます", 400);
+        return;
+    }
+    if (verification.Length is < 1 or > 253)
+    {
+        await Respond.Error(http, "verification は 1〜253 バイトです", 400);
+        return;
+    }
+    try
+    {
+        var code = await Task.Run(() => Keys.Source.Confirm(verification, (ushort)dateMjd.Value));
+        await Respond.Write(http, new JsonObject
+        {
+            ["ok"] = true,
+            ["code"] = code,
+        });
+    }
+    catch (Exception error)
+    {
+        await Respond.Error(http, error.Message, 500);
+    }
+});
+
 app.MapPost("/denpa/decode", async (HttpContext http) =>
 {
     var body = await Respond.Read(http);

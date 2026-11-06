@@ -110,6 +110,9 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
 
     public EcmAnswer Ecm(ReadOnlySpan<byte> ecm) => Card().Ecm(ecm);
 
+    public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd) =>
+        Card().Confirm(verificationData, dateMjd);
+
     /// <summary>いまカードと話せるか。INT を 1 回通す (<see cref="BCas.Check"/>)</summary>
     public CardInit Check() => Card().Check();
 
@@ -167,6 +170,22 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         };
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         return CardWire.ReadEcm(Send(request, "鍵"));
+    }
+
+    public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd)
+    {
+        if (verificationData.Length is < 1 or > 253)
+            throw new IOException($"契約確認データの長さがおかしいです ({verificationData.Length} バイト)");
+
+        var payload = new byte[2 + verificationData.Length];
+        BinaryPrimitives.WriteUInt16BigEndian(payload, dateMjd);
+        verificationData.CopyTo(payload.AsSpan(2));
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{Url}/denpa/card/confirm")
+        {
+            Content = new ByteArrayContent(payload),
+        };
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        return CardWire.ReadConfirm(Send(request, "契約確認"));
     }
 
     /// <summary>送って中身を受け取る。**受け取れなければ、何が起きたかの分かる文で投げる**</summary>
@@ -294,5 +313,19 @@ public static class CardWire
     {
         if (body.Length < 18) throw new IOException("鍵の答えが短すぎます");
         return new EcmAnswer(body[..8], body[8..16], BinaryPrimitives.ReadUInt16BigEndian(body.AsSpan(16)));
+    }
+
+    /// <summary>返り値コード (BE16)</summary>
+    public static byte[] Pack(int code)
+    {
+        var body = new byte[2];
+        BinaryPrimitives.WriteUInt16BigEndian(body, (ushort)code);
+        return body;
+    }
+
+    public static int ReadConfirm(byte[] body)
+    {
+        if (body.Length < 2) throw new IOException("契約確認の答えが短すぎます");
+        return BinaryPrimitives.ReadUInt16BigEndian(body);
     }
 }
