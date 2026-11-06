@@ -73,6 +73,7 @@ export function GET({ url }) {
         start_at: r.start_at,
         end_at: r.end_at,
         state: r.state,
+        contract_warning: r.contract_warning,
         chase: r.recording_id === null ? null : `chase/${r.recording_id}`,
       })),
     },

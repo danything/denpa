@@ -11,6 +11,7 @@ import type {
 import { orm } from "./db";
 import { airing, currentServices, SERVICE_ORDER } from "./epg";
 import {
+  cardContracts,
   latestRecordingId,
   programs as programTable,
   recordings,
@@ -131,6 +132,20 @@ export function programsOf(
         recording_state: rec.state,
         library_path: rec.library_path,
         ts_path: rec.ts_path,
+        contract_warning: sql<"expired" | "unsubscribed" | null>`CASE
+          WHEN ${p.is_free} = 1 THEN NULL
+          ELSE (
+            SELECT CASE
+              WHEN cc.state = 'expired' THEN 'expired'
+              WHEN cc.state = 'unsubscribed' THEN 'unsubscribed'
+              ELSE NULL
+            END
+            FROM ${cardContracts} cc
+            WHERE cc.service_id = ${p.service_id}
+            ORDER BY CASE cc.state WHEN 'subscribed' THEN 1 WHEN 'expired' THEN 2 ELSE 3 END
+            LIMIT 1
+          )
+        END`,
       })
       .from(p)
       .innerJoin(serviceTable, eq(serviceTable.id, p.service_id))

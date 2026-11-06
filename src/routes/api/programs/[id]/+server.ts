@@ -1,6 +1,7 @@
 import { error, json } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 
+import { getContractWarning } from "#lib/server/contracts.js";
 import { orm } from "#lib/server/db.js";
 import { programs, services } from "#lib/server/schema.js";
 import type { ProgramDetail } from "#lib/types.js";
@@ -18,8 +19,9 @@ export function GET({ params }) {
   const id = Number(params.id);
   if (!Number.isFinite(id)) error(400, "番組 ID が不正です");
 
-  const program: ProgramDetail | undefined = orm()
+  const row = orm()
     .select({
+      service_id: programs.service_id,
       name: programs.name,
       description: programs.description,
       extended: programs.extended,
@@ -40,7 +42,12 @@ export function GET({ params }) {
     .innerJoin(services, eq(services.id, programs.service_id))
     .where(eq(programs.id, id))
     .get();
-  if (program === undefined) error(404, "番組が見つかりません");
+  if (row === undefined) error(404, "番組が見つかりません");
+
+  const program: ProgramDetail = {
+    ...row,
+    contract_warning: getContractWarning(row.service_id, row.is_free),
+  };
 
   return json(program);
 }

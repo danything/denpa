@@ -19,6 +19,7 @@ import { hasTime, inTime, jstOf } from "../rule-time";
 import { parseSearchFields, type SearchField } from "../search";
 import type { Program, Rule } from "../types";
 import { config } from "./config";
+import { getContractWarningsByService } from "./contracts";
 import { now, orm } from "./db";
 import {
   type Airing,
@@ -589,6 +590,8 @@ function blockedPrograms(): Set<number> {
 type Candidate = Omit<Airing, "type"> & {
   service_type: string;
   copy_never: boolean;
+  is_free?: boolean;
+  contract_warning?: "expired" | "unsubscribed" | null;
 };
 
 /**
@@ -608,15 +611,44 @@ function episodeSkips<T extends Candidate>(
     return { dedupe: new Map(), earlier: new Map() };
   // 録画は、同じ回は直近だけ (`recordedEpisodes`)、前の回は同じシリーズを期間で切らずに (`seriesEpisodes`)
   const history = historyEpisodes();
+  const contractWarnings = getContractWarningsByService();
   const typed = (list: T[]) =>
-    list.map((program) => ({ ...program, type: program.service_type }));
+    list.map((program) => {
+      const warning =
+        program.contract_warning !== undefined
+          ? program.contract_warning
+          : program.is_free
+            ? null
+            : (contractWarnings.get(program.service_id) ?? null);
+      const subscribed =
+        program.is_free === true ||
+        (warning !== "expired" && warning !== "unsubscribed");
+      return {
+        ...program,
+        type: program.service_type,
+        subscribed,
+      };
+    });
   /*
-   * **コピー禁止の放送も弾かれているのと同じ。** 録らないので、同じ回の次の放送 (禁止でない局) を録る
-   * (`format.COPY_NEVER_REASON`)。前の回の相手にもしない (録らない 6 話のせいで、別の局の 5 話まで外さない)
+   * コピー禁止の放送や、期限切れ・未契約の放送も弾かれているのと同じ。
+   * 録らない (または優先度を下げる) ので、同じ回の次の放送 (契約中または無料局) を録る
    */
   const blocked = blockedPrograms();
-  for (const program of [...lists.dedupe, ...lists.earlier])
-    if (program.copy_never) blocked.add(program.id);
+  for (const program of [...lists.dedupe, ...lists.earlier]) {
+    const warning =
+      program.contract_warning !== undefined
+        ? program.contract_warning
+        : program.is_free
+          ? null
+          : (contractWarnings.get(program.service_id) ?? null);
+    if (
+      program.copy_never ||
+      (!program.is_free &&
+        (warning === "expired" || warning === "unsubscribed"))
+    ) {
+      blocked.add(program.id);
+    }
+  }
   return {
     dedupe:
       lists.dedupe.length === 0
@@ -879,7 +911,9 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     number,
     {
       rule: Rule;
-      program: (typeof programs)[number];
+      program: (typeof programs)[number] & {
+        contract_warning?: "expired" | "unsubscribed" | null;
+      };
       matched: Rule[];
     }
   >();
@@ -899,6 +933,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
    * 見えて両方が立っていた。開始とタイトルが同じなら同じ放送。
    */
   const simulcast = new Map<string, { serviceId: number; programId: number }>();
+  const contractWarnings = getContractWarningsByService();
   for (const program of programs) {
     const textOf = textCache(program);
     // 先勝ちの持ち主のほかに、当たったルールを全部見る (下の dedupe / skip_earlier の受け手)
@@ -921,19 +956,36 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
      * 枝番違いや event_id の変更ですり抜ける (上の `canceledBroadcasts`)
      */
     if (declined.has(program)) continue;
+    const progWarning = program.is_free
+      ? null
+      : (contractWarnings.get(program.service_id) ?? null);
+    const progWithWarning = { ...program, contract_warning: progWarning };
     const key = `${program.channel} ${program.start_at} ${program.name}`;
     const twin = simulcast.get(key);
     if (twin !== undefined) {
-      // 枝番の小さいほうが本線 (MX1 なら 23608)。並び順に左右されないよう、
-      // あとから小さいものが来たら入れ替える
-      if (twin.serviceId <= program.service_id) continue;
-      wanted.delete(twin.programId);
+      // 契約中/無料局を優先。両方同じなら枝番の小さいほう (MX1 なら 23608)
+      const twinProg = wanted.get(twin.programId)?.program;
+      const twinWarning = twinProg?.contract_warning ?? null;
+      const twinSubscribed =
+        twinProg?.is_free === true ||
+        (twinWarning !== "expired" && twinWarning !== "unsubscribed");
+      const currentSubscribed =
+        program.is_free === true ||
+        (progWarning !== "expired" && progWarning !== "unsubscribed");
+      if (twinSubscribed && !currentSubscribed) continue;
+      if (!twinSubscribed && currentSubscribed) {
+        wanted.delete(twin.programId);
+      } else if (twin.serviceId <= program.service_id) {
+        continue;
+      } else {
+        wanted.delete(twin.programId);
+      }
     }
     simulcast.set(key, {
       serviceId: program.service_id,
       programId: program.id,
     });
-    wanted.set(program.id, { rule: owner, program, matched });
+    wanted.set(program.id, { rule: owner, program: progWithWarning, matched });
   }
 
   /*

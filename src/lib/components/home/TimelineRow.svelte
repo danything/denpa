@@ -129,6 +129,23 @@
             testid: "reservation-state",
           },
         ];
+    if (res.contract_warning === "expired") {
+      problems.push({
+        kind: "expired",
+        tone: "warning",
+        label: "期限切れ",
+        detail: "有料契約が切れています",
+        testid: "reservation-contract-warning",
+      });
+    } else if (res.contract_warning === "unsubscribed") {
+      problems.push({
+        kind: "unsubscribed",
+        tone: "warning",
+        label: "未契約",
+        detail: "有料契約が確認されていません",
+        testid: "reservation-contract-warning",
+      });
+    }
     return statusLines([], [...problems, ...clipLine(res)]);
   }
 

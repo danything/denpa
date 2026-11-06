@@ -522,6 +522,17 @@
                     {#if !quietState(res.state)}{@render stateTag(
                         res.state,
                       )}{/if}
+                    {#if res.contract_warning === "expired"}
+                      <span class="tag" data-testid="search-reservation-expired"
+                        >期限切れ</span
+                      >
+                    {:else if res.contract_warning === "unsubscribed"}
+                      <span
+                        class="tag muted"
+                        data-testid="search-reservation-unsubscribed"
+                        >未契約</span
+                      >
+                    {/if}
                     <span class="truncate broadcast">{res.name}</span>
                   </span>
                   <span class="hit-meta tiny muted">

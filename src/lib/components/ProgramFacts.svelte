@@ -127,6 +127,13 @@
   {/each}
   {#if !program.is_free}
     <span class="tag warning">有料</span>
+    {#if program.contract_warning === "expired"}
+      <span class="tag" data-testid="detail-contract-expired">期限切れ</span>
+    {:else if program.contract_warning === "unsubscribed"}
+      <span class="tag muted" data-testid="detail-contract-unsubscribed"
+        >未契約</span
+      >
+    {/if}
   {/if}
   {#if program.copy_never}
     <!-- 録らない番組 (`COPY_NEVER_REASON`)。理由は title で添える。観るのはそのままできる -->

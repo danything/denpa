@@ -331,6 +331,8 @@ export interface Airing extends Described {
   service_id: number;
   /** 局の種別 (GR/BS/CS/SKY) */
   type: string;
+  /** 契約中または無料局か (false の場合は期限切れ・未契約) */
+  subscribed?: boolean;
 }
 
 /**
@@ -354,10 +356,11 @@ export type Skip<T extends Airing> =
 
 /**
  * 同時に流れているものの中で、どれを録るか。
- * **字幕のあるもの → 衛星 → 早く始まるもの** の順
+ * **契約中・無料局 → 字幕のあるもの → 衛星 → 早く始まるもの** の順
  */
 function better<T extends Airing>(a: T, b: T): number {
   return (
+    Number(b.subscribed ?? true) - Number(a.subscribed ?? true) ||
     Number(captioned(b.name)) - Number(captioned(a.name)) ||
     Number(satellite(b.type)) - Number(satellite(a.type)) ||
     a.start_at - b.start_at ||
@@ -437,7 +440,10 @@ export function firstAirings<T extends Airing>(
   /** 束ねたものから録る 1 本 (弾かれていれば次も) を選び、残りを録らないことにする */
   function settle(cluster: T[]): void {
     const rest = [...cluster].sort(
-      (a, b) => a.start_at - b.start_at || better(a, b),
+      (a, b) =>
+        Number(b.subscribed ?? true) - Number(a.subscribed ?? true) ||
+        a.start_at - b.start_at ||
+        better(a, b),
     );
     let chosen: T | undefined;
     while (rest.length > 0) {

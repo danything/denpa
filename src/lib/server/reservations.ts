@@ -3,6 +3,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 
 import { COPY_NEVER_REASON } from "../format";
 import type { Reservation, ReservationState } from "../types";
+import { getContractWarning } from "./contracts";
 import { now, orm } from "./db";
 import { stopRecording } from "./recorder";
 import { resolveConflicts } from "./scheduler";
@@ -30,8 +31,14 @@ const rerecord = sql`CASE
   ELSE ${reservations.started_at}
 END`;
 
+export type ReservationWithContract = Reservation & {
+  contract_warning?: "expired" | "unsubscribed" | null;
+};
+
 /** 手動予約。ルール由来の予約が既にあれば手動扱いに昇格させて優先度を上げる */
-export async function reserve(programId: number): Promise<Reservation> {
+export async function reserve(
+  programId: number,
+): Promise<ReservationWithContract> {
   const program = orm()
     .select()
     .from(programs)
@@ -87,11 +94,16 @@ export async function reserve(programId: number): Promise<Reservation> {
     .run();
 
   await resolveConflicts();
-  return orm()
+  const row = orm()
     .select()
     .from(reservations)
     .where(eq(reservations.program_id, programId))
     .get()!;
+  const warning = getContractWarning(program.service_id, program.is_free);
+  return {
+    ...row,
+    ...(warning ? { contract_warning: warning } : {}),
+  };
 }
 
 /** 画面の「予約」のアクション (番組表・検索)。フォームの `programId` を予約し、断ったときはその理由を返す */
@@ -175,7 +187,13 @@ export async function cancel(reservationId: number): Promise<void> {
 
 /** {@link recordAiring} の答え。断ったときは HTTP の状態と、そのまま出せる文言を持つ */
 type RecordAiring =
-  | { ok: true; programId: number; name: string; state: ReservationState }
+  | {
+      ok: true;
+      programId: number;
+      name: string;
+      state: ReservationState;
+      contract_warning?: "expired" | "unsubscribed" | null;
+    }
   | { ok: false; status: 400 | 404; message: string };
 
 /**
@@ -193,7 +211,11 @@ export async function recordAiring(
   at = now(),
 ): Promise<RecordAiring> {
   const program = orm()
-    .select({ id: programs.id, name: programs.name })
+    .select({
+      id: programs.id,
+      name: programs.name,
+      is_free: programs.is_free,
+    })
     .from(programs)
     .where(
       and(
@@ -228,7 +250,14 @@ export async function recordAiring(
    */
   const state =
     reservationStates([program.id]).get(program.id) ?? reservation.state;
-  return { ok: true, programId: program.id, name: program.name, state };
+  const contractWarning = getContractWarning(serviceId, program.is_free);
+  return {
+    ok: true,
+    programId: program.id,
+    name: program.name,
+    state,
+    ...(contractWarning ? { contract_warning: contractWarning } : {}),
+  };
 }
 
 /**

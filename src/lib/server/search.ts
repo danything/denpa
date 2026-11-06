@@ -17,6 +17,7 @@ import type { Rule } from "../types";
 import { now, orm } from "./db";
 import { compile, haystack, matchesCompiled } from "./rules";
 import {
+  cardContracts,
   programs,
   recordings,
   reservations,
@@ -361,6 +362,19 @@ export function searchReservations(q: string, options: SearchOptions) {
             recording_id: sql<
               number | null
             >`CASE WHEN ${rec.state} = 'recording' THEN ${rec.id} END`,
+            contract_warning: sql<"expired" | "unsubscribed" | null>`(
+              SELECT CASE
+                WHEN p.is_free = 1 THEN NULL
+                WHEN cc.state = 'expired' THEN 'expired'
+                WHEN cc.state = 'unsubscribed' THEN 'unsubscribed'
+                ELSE NULL
+              END
+              FROM ${cardContracts} cc
+              LEFT JOIN ${programs} p ON p.id = ${r.program_id}
+              WHERE cc.service_id = ${r.service_id}
+              ORDER BY CASE cc.state WHEN 'subscribed' THEN 1 WHEN 'expired' THEN 2 ELSE 3 END
+              LIMIT 1
+            )`,
           })
           .from(r)
           .innerJoin(services, eq(services.id, r.service_id))

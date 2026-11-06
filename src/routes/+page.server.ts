@@ -39,8 +39,10 @@ import { recordingFromForm } from "#lib/server/recording.js";
 import { cancel, restore } from "#lib/server/reservations.js";
 import {
   activeEncodeJobId,
+  cardContracts,
   encodeJobs,
   lastEncodeError,
+  programs as programTable,
   recordings as recordingTable,
   reservations as reservationTable,
   reservationState,
@@ -149,6 +151,7 @@ interface MissedRow {
   /** 「まとめて表示」でまとめるキーと見出し。録画の行と同じ決め方 (`seriesGroup`) */
   group_key: string;
   group_name: string;
+  contract_warning?: "expired" | "unsubscribed" | null;
 }
 
 interface ReservationRow extends Omit<Reservation, "state"> {
@@ -165,6 +168,7 @@ interface ReservationRow extends Omit<Reservation, "state"> {
   /** 「まとめて表示」でまとめるキーと見出し。録画の行と同じ決め方 (`seriesGroup`) */
   group_key: string;
   group_name: string;
+  contract_warning?: "expired" | "unsubscribed" | null;
 }
 
 /**
@@ -214,6 +218,19 @@ export function load({ url, cookies }) {
         sql<number>`EXISTS (SELECT 1 FROM recordings WHERE reservation_id = ${r.id})`.mapWith(
           Boolean,
         ),
+      contract_warning: sql<"expired" | "unsubscribed" | null>`(
+        SELECT CASE
+          WHEN p.is_free = 1 THEN NULL
+          WHEN cc.state = 'expired' THEN 'expired'
+          WHEN cc.state = 'unsubscribed' THEN 'unsubscribed'
+          ELSE NULL
+        END
+        FROM ${cardContracts} cc
+        LEFT JOIN ${programTable} p ON p.id = ${r.program_id}
+        WHERE cc.service_id = ${r.service_id}
+        ORDER BY CASE cc.state WHEN 'subscribed' THEN 1 WHEN 'expired' THEN 2 ELSE 3 END
+        LIMIT 1
+      )`,
     })
     .from(r)
     .innerJoin(services, eq(services.id, r.service_id))
@@ -316,6 +333,19 @@ export function load({ url, cookies }) {
       rule_name: ruleTable.name,
       service_name: services.name,
       has_logo: services.has_logo,
+      contract_warning: sql<"expired" | "unsubscribed" | null>`(
+        SELECT CASE
+          WHEN p.is_free = 1 THEN NULL
+          WHEN cc.state = 'expired' THEN 'expired'
+          WHEN cc.state = 'unsubscribed' THEN 'unsubscribed'
+          ELSE NULL
+        END
+        FROM ${cardContracts} cc
+        LEFT JOIN ${programTable} p ON p.id = ${r.program_id}
+        WHERE cc.service_id = ${r.service_id}
+        ORDER BY CASE cc.state WHEN 'subscribed' THEN 1 WHEN 'expired' THEN 2 ELSE 3 END
+        LIMIT 1
+      )`,
     })
     .from(r)
     .innerJoin(services, eq(services.id, r.service_id))
