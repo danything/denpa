@@ -142,6 +142,12 @@ for file in "${from_msys[@]}"; do
     name=${name%-git}
     mapfile -t texts < <(find /ucrt64/share/licenses -type f -ipath "*/${name}*/*" 2>/dev/null || true)
   fi
+  # x264 は MSYS2 のパッケージに文書が入っていない。ライセンスは GPL-2.0-or-later だけなので、FFmpeg のソースにある GPLv2 の文を置く
+  if [ "${#texts[@]}" -eq 0 ] && [ "${name:-}" = x264 ]; then texts=("$work/ffmpeg/COPYING.GPLv2"); fi
+  # winpthreads は MinGW-w64 の一部で、文書は MinGW-w64 の CRT のパッケージにある
+  if [ "${#texts[@]}" -eq 0 ] && [[ "${name:-}" == winpthread* ]]; then
+    mapfile -t texts < <(find /ucrt64/share/licenses/crt -type f 2>/dev/null || true)
+  fi
   if [ "${#texts[@]}" -eq 0 ]; then
     echo "$pkg にライセンスの文書がありません (/ucrt64/share/licenses の中身: $(ls /ucrt64/share/licenses | tr '\n' ' '))" >&2
     exit 1
