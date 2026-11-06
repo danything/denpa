@@ -14,6 +14,7 @@ import { COPY_NEVER_REASON } from "../format";
 import type { Reservation } from "../types";
 import { config } from "./config";
 import { assign, type Busy, type Capacity, capacityOf } from "./conflict";
+import { checkContracts, type ContractRow, getActiveCardId } from "./contracts";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
 import {
@@ -23,7 +24,14 @@ import {
   startRecording,
   stopRecording,
 } from "./recorder";
-import { programs, recordings, reservations, services } from "./schema";
+import {
+  cardContracts,
+  programs,
+  recordings,
+  reservations,
+  services,
+} from "./schema";
+import { cardStatus } from "./scramble";
 import { isDraining } from "./shutdown";
 import {
   type AgentTuner,
@@ -33,12 +41,14 @@ import {
   recordingUse,
   type StreamUse,
 } from "./tuner";
+import { notifyContractExpired } from "./webhook";
 
 interface Candidate extends Reservation {
   type: string;
   channel: string;
   /** 番組表でコピー禁止と言われているか。番組表から消えていれば false */
   copy_never: boolean;
+  contract_warning: "expired" | "unsubscribed" | null;
 }
 
 /**
@@ -95,6 +105,19 @@ export async function resolveConflicts(): Promise<{
       copy_never: sql<boolean>`COALESCE(${programs.copy_never}, 0) = 1`.mapWith(
         Boolean,
       ),
+      contract_warning: sql<"expired" | "unsubscribed" | null>`(
+        SELECT CASE
+          WHEN p.is_free = 1 THEN NULL
+          WHEN cc.state = 'expired' THEN 'expired'
+          WHEN cc.state = 'unsubscribed' THEN 'unsubscribed'
+          ELSE NULL
+        END
+        FROM ${cardContracts} cc
+        LEFT JOIN ${programs} p ON p.id = ${reservations.program_id}
+        WHERE cc.service_id = ${reservations.service_id}
+        ORDER BY CASE cc.state WHEN 'subscribed' THEN 1 WHEN 'expired' THEN 2 ELSE 3 END
+        LIMIT 1
+      )`,
     })
     .from(reservations)
     .innerJoin(services, eq(services.id, reservations.service_id))
@@ -197,12 +220,90 @@ export async function resolveConflicts(): Promise<{
   return { accepted: accepted.length, rejected: rejected.length };
 }
 
+let lastContractScan = 0;
+let scanningContracts = false;
+
+/** テスト用: 最後に契約確認スキャンを実行した時刻をリセットする */
+export function resetContractScanTimeForTest(time = 0): void {
+  lastContractScan = time;
+}
+
+/**
+ * 有料放送局の契約状態を確認し、直前のスキャン結果と比較して
+ * 新たに「期限切れ (state === 'expired')」となった局を検知して Webhook 通知を送る。
+ */
+export async function scanContracts(): Promise<{
+  scanned: ContractRow[];
+  expired: ContractRow[];
+}> {
+  if (scanningContracts) {
+    return { scanned: [], expired: [] };
+  }
+  scanningContracts = true;
+  try {
+    const card = await cardStatus();
+    const cardId = getActiveCardId(card);
+    if (!card.ok || !cardId) {
+      return { scanned: [], expired: [] };
+    }
+
+    const previousRows = orm()
+      .select({
+        serviceId: cardContracts.service_id,
+        state: cardContracts.state,
+      })
+      .from(cardContracts)
+      .where(eq(cardContracts.card_id, cardId))
+      .all();
+
+    const previousStateMap = new Map(
+      previousRows.map((r) => [r.serviceId, r.state]),
+    );
+
+    const currentContracts = await checkContracts();
+
+    const newlyExpired: ContractRow[] = [];
+    for (const contract of currentContracts) {
+      if (contract.state === "expired") {
+        const prevState = previousStateMap.get(contract.serviceId);
+        if (prevState !== "expired") {
+          newlyExpired.push(contract);
+        }
+      }
+    }
+
+    for (const contract of newlyExpired) {
+      notifyContractExpired({
+        cardId: contract.cardId,
+        serviceId: contract.serviceId,
+        serviceName: contract.serviceName,
+        validUntil: contract.validUntil,
+      });
+    }
+
+    return { scanned: currentContracts, expired: newlyExpired };
+  } finally {
+    scanningContracts = false;
+  }
+}
+
 /**
  * `schedulerTick` (既定 5 秒) ごとに呼ばれる本体。開始時刻に達した予約を録画に移し、終了時刻を過ぎた録画を止める。
  * 録画の終わり方 (完了・失敗) は recorder.ts が書く。
  */
 export async function tick(): Promise<void> {
   const at = now();
+
+  // 定期的な有料放送契約確認スキャン (既定: 12時間おき)
+  if (
+    config.contractScanInterval > 0 &&
+    at - lastContractScan >= config.contractScanInterval
+  ) {
+    lastContractScan = at;
+    void scanContracts().catch((error: unknown) => {
+      console.warn(`[contracts] 定期契約確認スキャンに失敗しました: ${error}`);
+    });
+  }
 
   // 止めるほうを先にやる。次の番組が始まるときに前の録画がまだチューナーを
   // 使っていると、台数が足りない環境で後続が丸ごと録れない

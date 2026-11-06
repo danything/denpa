@@ -30,6 +30,7 @@ function bool(key: string, fallback: boolean): boolean {
 
 const SEC = 1000;
 const MIN = 60 * SEC;
+const HOUR = 60 * MIN;
 
 const dbPath = str("DENPA_DB", "/data/denpa.db");
 /** DB の隣。運用でいちいち 2 つ指す意味が無い */
@@ -268,6 +269,11 @@ export const config = {
    * 一瞬の切れ (デプロイ・つなぎ直し) で鳴らさないための猶予 (agent-events.ts)
    */
   agentDownGrace: num("AGENT_DOWN_GRACE", 3 * MIN),
+  /**
+   * B-CAS 有料契約の定期確認スキャンの間隔。
+   * 既定は 12 時間 (1 日 2 回)。0 にすると定期スキャンは行わない
+   */
+  contractScanInterval: num("CONTRACT_SCAN_INTERVAL", 12 * HOUR),
   /**
    * 局ロゴの定期チェックの間隔。**ほかの選局を共有する** (`logo.sweep`)。自分で開くのは、衛星のロゴが足りない間に
    * 衛星のチューナーが空いているときに、当たりの中継で待つ (分からなければ探す。`logo.awaitCarousel`)。

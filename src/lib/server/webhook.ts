@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 
+import { fullDate } from "../format";
 import { cut } from "../issue-report";
 import type { WebhookEvent } from "../webhook-events";
 import { now, orm } from "./db";
@@ -25,6 +26,12 @@ export interface Payload {
     service: string;
     startAt: number;
     endAt: number;
+  };
+  contract?: {
+    cardId: string;
+    serviceId?: number | undefined;
+    serviceName: string;
+    validUntil: number | null;
   };
   error?: string;
 }
@@ -166,4 +173,35 @@ export function notify(payload: Payload): void {
     if (!subscribed(webhook, payload.event)) continue;
     void send(webhook, payload);
   }
+}
+
+/**
+ * B-CAS 有料契約の期限切れを通知する。
+ *
+ * 通知内容: B-CAS カード番号、局名、有効期限日時、注意喚起メッセージ
+ */
+export function notifyContractExpired(contract: {
+  cardId: string;
+  serviceId?: number;
+  serviceName: string;
+  validUntil: number | null;
+}): void {
+  const expiry = contract.validUntil
+    ? `${fullDate(contract.validUntil)} 00:00`
+    : null;
+  const isPast = contract.validUntil !== null && contract.validUntil <= now();
+  const text = expiry
+    ? `[契約期限切れ] B-CASカード: ${contract.cardId} / 局名: ${contract.serviceName} の契約が${isPast ? "期限切れとなりました" : "期限切れとなります"} (有効期限: ${expiry})。視聴・録画を継続するには契約の更新を行ってください。`
+    : `[契約期限切れ] B-CASカード: ${contract.cardId} / 局名: ${contract.serviceName} の契約期限切れが検知されました。視聴・録画を継続するには契約の更新を行ってください。`;
+
+  notify({
+    event: "contract.expired",
+    text,
+    contract: {
+      cardId: contract.cardId,
+      serviceId: contract.serviceId,
+      serviceName: contract.serviceName,
+      validUntil: contract.validUntil,
+    },
+  });
 }
