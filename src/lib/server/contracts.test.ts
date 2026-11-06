@@ -351,6 +351,50 @@ describe("testDecode", () => {
     }
   });
 
+  test("カードが期限切れと答えた局は、復号できても期限切れのまま (カードの答えを信じる)", async () => {
+    const buf = channelStream(107, 100, "clear");
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") return Response.json(ONE_CARD);
+      if (url.pathname === "/denpa/stream") return new Response(buf);
+      return new Response("Not Found", { status: 404 });
+    });
+    orm()
+      .insert(services)
+      .values({
+        id: 107,
+        service_id: 107,
+        network_id: 4,
+        name: "期限切れの局",
+        type: "BS",
+        channel: "BS13",
+        updated_at: Date.now(),
+      })
+      .run();
+    airing(107);
+    orm()
+      .insert(cardContracts)
+      .values({
+        card_id: "0000111122223333",
+        service_id: 107,
+        state: "expired",
+        code: 0,
+        checked_at: Date.now(),
+      })
+      .run();
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      const res = await testDecode(107);
+      expect(res.decodeOk).toBe(true);
+      const row = getContractRows("0000111122223333")[0];
+      expect(row?.state).toBe("expired");
+      expect(row?.decodeOk).toBe(true);
+      expect(paidAllowed()(107)).toBe(false);
+    } finally {
+      server.stop();
+    }
+  });
+
   test("スクランブルが残存しているストリームで decodeOk: false", async () => {
     // その局のパケットは掛かったまま。同じ中継器の無料の局が掛かっていなくても、復号できたことにしない
     const buf = channelStream(104, 100, "scrambled", "clear");
