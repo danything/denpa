@@ -62,8 +62,9 @@ export function fromMjd(mjd: number): number {
 
 /** 返り値コードから契約有効フラグ（月額TierまたはPPV）が立っているかを判定 */
 export function isCodeSubscribed(code: number): boolean {
-  // 0x0800: 月額Tier有効, 0x0400: 前払いPPV, 0x0200: 後払いPPV
-  return (code & 0x0e00) !== 0;
+  // 0x0800: 月額Tier有効, 0x0400: 前払いPPV, 0x0200: 後払いPPV。
+  // 上の桁や 0x0100 が立つ値 (実機の 0x8901 など) は契約の答えではないので、契約中とは見ない
+  return (code & 0x0e00) !== 0 && (code & 0xf100) === 0;
 }
 
 /**
@@ -350,7 +351,7 @@ export async function testDecode(
   }
 
   const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), 6_000);
+  const timeout = setTimeout(() => abortController.abort(), 15_000);
 
   let stream: ReadableStream<Uint8Array> | null = null;
   try {

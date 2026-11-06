@@ -60,6 +60,7 @@ describe("MJD 計算とビットフラグ判定", () => {
     expect(isCodeSubscribed(0x0400)).toBe(true); // 前払いPPV
     expect(isCodeSubscribed(0x0200)).toBe(true); // 後払いPPV
     expect(isCodeSubscribed(0x0800 | 0x0001)).toBe(true);
+    expect(isCodeSubscribed(0x8901)).toBe(false); // 契約の答えではない値
     expect(isCodeSubscribed(0x0000)).toBe(false);
     expect(isCodeSubscribed(0x0100)).toBe(false);
   });

@@ -149,16 +149,19 @@
           ? (data.data as Record<string, unknown> | undefined)
           : undefined;
       const emmResult = payload?.["result"] as
-        { success: number; processed: number; durationMs: number } | undefined;
+        { success: number; processed: number; emmPids: number[] } | undefined;
       const message = payload?.["message"];
       if (data.type === "success" && emmResult) {
         if (emmResult.success > 0) {
           infoMessage = `カードの契約更新メッセージを受信し適用しました (更新: ${emmResult.success} 件)`;
         } else if (emmResult.processed > 0) {
           infoMessage = `EMM を ${emmResult.processed} 件受信しました (適用対象外)`;
+        } else if (emmResult.emmPids.length === 0) {
+          infoMessage =
+            "放送の CAT を受け取れませんでした。時間をおいて、もう一度お試しください";
         } else {
           infoMessage =
-            "EMM を受信しましたが、更新メッセージはありませんでした";
+            "受信しましたが、このカード宛ての更新メッセージは流れていませんでした";
         }
         await handleCheckContracts();
       } else if (message) {

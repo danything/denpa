@@ -30,6 +30,8 @@ export interface EmmStreamStats {
   processed: number;
   success: number;
   errors: number;
+  /** CAT から見つけた B-CAS の EMM PID (空なら CAT を受け取れていない) */
+  emmPids: number[];
 }
 
 export interface EmmPipelineResult extends EmmStreamStats {
@@ -122,11 +124,18 @@ export async function processEmmStream(
         }
       }
     }
+  } catch (error) {
+    // 受信の時間切れ (signal) で止めたときの中断は、失敗ではなく正常な終わり方
+    if (!signal?.aborted) throw error;
   } finally {
-    reader.releaseLock();
+    try {
+      reader.releaseLock();
+    } catch {
+      // 読み取り中に中断されたときは解放できないことがある
+    }
   }
 
-  return { processed, success, errors };
+  return { processed, success, errors, emmPids: [...receiver.pids] };
 }
 
 /**
@@ -196,6 +205,17 @@ export async function receiveEmm(
     );
     return {
       ...stats,
+      cardId: typeof targetId === "string" ? targetId : targetId.toString(10),
+      channel,
+    };
+  } catch (error) {
+    // 選局に手間取って時間切れになったときは、何も受け取れなかったものとして返す
+    if (options.signal?.aborted || !abortController.signal.aborted) throw error;
+    return {
+      processed: 0,
+      success: 0,
+      errors: 0,
+      emmPids: [],
       cardId: typeof targetId === "string" ? targetId : targetId.toString(10),
       channel,
     };

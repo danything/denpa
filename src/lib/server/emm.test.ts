@@ -194,6 +194,31 @@ describe("processEmmStream パイプライン", () => {
   });
 });
 
+describe("processEmmStream 時間切れ", () => {
+  test("受信の時間切れで読み取りが中断されても、例外にせず集計を返す", async () => {
+    const controller = new AbortController();
+    const readable = new ReadableStream<Uint8Array>({
+      start(stream) {
+        controller.signal.addEventListener("abort", () =>
+          stream.error(new DOMException("aborted", "AbortError")),
+        );
+      },
+    });
+    setTimeout(() => controller.abort(), 20);
+    const stats = await processEmmStream(readable, 1n, controller.signal);
+    expect(stats).toEqual({ processed: 0, success: 0, errors: 0, emmPids: [] });
+  });
+
+  test("時間切れでないエラーはそのまま投げる", async () => {
+    const readable = new ReadableStream<Uint8Array>({
+      start(stream) {
+        stream.error(new Error("切れました"));
+      },
+    });
+    await expect(processEmmStream(readable, 1n)).rejects.toThrow("切れました");
+  });
+});
+
 describe("receiveEmm 異常系", () => {
   test("カード未認識時は例外を投げる", async () => {
     const server = serveFakeAgent(async (req) => {
