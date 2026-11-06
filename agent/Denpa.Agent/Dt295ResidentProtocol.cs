@@ -1,5 +1,5 @@
 /*
- * mAgicVISION (https://github.com/makeding/mAgicVISION、commit c937107) の include/mb86H/protocol/constants.h・
+ * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 4dc8854) の include/mb86H/protocol/constants.h・
  * include/mb86H/protocol/device_query.h・core/protocol.c のうち、PIX-DT295 の常駐方式で使うものを移したもの。
  * Copyright (c) 2026 huggy、MIT License (全文は licenses/mAgicVISION.txt)。
  */

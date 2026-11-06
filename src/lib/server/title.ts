@@ -45,6 +45,13 @@ const BRACKET_SUBTITLE = /[「『](.+?)[」』]\s*$/;
 // 先頭の「作品名」。後ろは編の名前 (`「東京リベンジャーズ」三天戦争編`)
 const LEADING_TITLE = /^[「『]([^「『」』]+)[」』]\s*(.*)$/;
 
+// 括弧の無い作品名の後ろの、空白で区切った編 (`東京リベンジャーズ 三天戦争編▼第56話` の「三天戦争編」)。
+// 鍵括弧で囲む局 (`「東京リベンジャーズ」三天戦争編`) と同じ作品名・編にそろえる。空白の無いもの (`続編`) は作品名のまま。
+// **編の名前が 3 文字以上のものだけ。** `前編` `後編` と、回の中身を表す語 (`総集編` `特別編` `番外編` `完結編`) は作品名に残す。
+// 編にすると、`X 総集編 #3` がふつうの `X #3` と同じ回になり、片方を録り逃す
+const TRAILING_ARC = /\s+([^\s「『」』]{3,14}編)$/;
+const NOT_ARC = /総集|特別|番外|完結/;
+
 // 第 2 期 / 第 3 シーズン (括弧ごと `【第2期】` も)。話数ではなく編として持つ。話数の前かタイトルの終わりにあるものだけ。
 // 「将棋)第 34 期 銀河戦」のように後ろに名前が続くものは、どこまでが編か分からない
 const SEASON =
@@ -270,6 +277,13 @@ export function parseTitle(rawName: string): ParsedTitle {
       .remove(TRAILING_SEPARATOR)
       .trim();
     if (arc.key !== "") arcs.unshift(arc.raw);
+  } else {
+    const tail = stripped.match(TRAILING_ARC);
+    if (tail !== null && !NOT_ARC.test(tail[1] ?? "")) {
+      const at = tail.index ?? 0;
+      arcs.unshift(stripped.slice(at).trim().raw);
+      series = stripped.slice(0, at);
+    }
   }
 
   // 区切り記号だけが残るケース (「番組名 - 」など) を掃除する

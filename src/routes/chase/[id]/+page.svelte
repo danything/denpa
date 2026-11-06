@@ -277,7 +277,7 @@
 
   /** アンビエントモード (`ambient.svelte.ts`)。ライブと同じ */
   const ambient = ambientMode({
-    playing: () => !player.paused,
+    playing: () => !player.paused && !pip.active,
     canvas: () => (player.canvas ? player : null),
     video: () => video,
   });

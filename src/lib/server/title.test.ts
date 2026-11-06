@@ -124,11 +124,25 @@ describe("parseTitle", () => {
     });
   });
 
-  test("話数の前の ▼ は区切り", () => {
-    expect(parseTitle("東京リベンジャーズ 三天戦争編▼第52話")).toMatchObject({
-      series: "東京リベンジャーズ 三天戦争編",
+  test("話数の前の ▼ は区切り。空白で区切った後ろの〇〇編は編", () => {
+    // 鍵括弧で囲む局 (`「東京リベンジャーズ」三天戦争編`) と同じ作品名・編にそろえる
+    expect(parseTitle("東京リベンジャーズ　三天戦争編▼第52話")).toMatchObject({
+      series: "東京リベンジャーズ",
+      arc: "三天戦争編",
       episode: 52,
     });
+    // 空白の無いものは作品名の一部
+    expect(parseTitle("テストアニメ続編 #3")).toMatchObject({
+      series: "テストアニメ続編",
+      arc: "",
+    });
+    // 前編・後編と、回の中身を表す語 (総集編・特別編) は編にしない
+    for (const name of [
+      "テストアニメ 総集編 #3",
+      "テストアニメ 後編 #3",
+      "テストアニメ 特別総集編",
+    ])
+      expect(parseTitle(name).arc).toBe("");
   });
 
   test("第2期 は話数ではなく編", () => {
