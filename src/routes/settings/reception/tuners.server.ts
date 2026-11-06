@@ -7,6 +7,7 @@ import {
   getActiveCardId,
   getContractRows,
   testDecode as testDecodeStream,
+  testDecodeUnconfirmed,
 } from "#lib/server/contracts.js";
 import { orm } from "#lib/server/db.js";
 import { recordings } from "#lib/server/schema.js";
@@ -250,6 +251,20 @@ export const actions = {
         });
       }
       return { success: true, decodeOk: result.decodeOk };
+    } catch (error) {
+      return fail(500, { message: String(error) });
+    }
+  },
+
+  /** カードが答えていない局を、物理チャンネルごとにまとめて復号テストする */
+  testDecodeAll: async () => {
+    try {
+      const { cardId, results } = await testDecodeUnconfirmed();
+      return {
+        success: true,
+        results,
+        contracts: getContractRows(cardId),
+      };
     } catch (error) {
       return fail(500, { message: String(error) });
     }

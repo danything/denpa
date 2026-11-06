@@ -32,6 +32,7 @@ const {
   noteStillScrambled,
   paidAllowed,
   testDecode,
+  testDecodeUnconfirmed,
   toMjd,
 } = await import("./contracts");
 const { fakeAgentUrl, ONE_CARD, serveFakeAgent } = await import("./fake-agent");
@@ -84,6 +85,41 @@ function channelStream(
     parts.push(media(0x0211, other === "scrambled", i));
   }
   // Response に渡せるよう、ArrayBuffer を持つ形に写す
+  return new Uint8Array(stream(...parts));
+}
+
+/**
+ * 同じ物理チャンネルに 2 局が入っている TS。`testDecodeUnconfirmed` が
+ * 1 回の選局で両方の局を数えられることを確かめるために使う
+ */
+function channelStreamTwo(
+  a: { serviceId: number; scrambled: boolean },
+  b: { serviceId: number; scrambled: boolean },
+  count: number,
+): Uint8Array<ArrayBuffer> {
+  const media = (pid: number, scrambled: boolean, counter: number) => {
+    const packet = new Uint8Array(PACKET).fill(0xff);
+    packet[0] = SYNC;
+    packet[1] = pid >> 8;
+    packet[2] = pid & 0xff;
+    packet[3] = (scrambled ? 0x90 : 0x10) | (counter & 0x0f);
+    return packet;
+  };
+  const parts = [
+    packetize(
+      0x0000,
+      patSection([
+        [a.serviceId, 0x0101],
+        [b.serviceId, 0x0201],
+      ]),
+    ),
+    packetize(0x0101, programMap(a.serviceId, 0x0111, [[0x02, 0x0111]])),
+    packetize(0x0201, programMap(b.serviceId, 0x0211, [[0x02, 0x0211]])),
+  ];
+  for (let i = 0; i < count; i++) {
+    parts.push(media(0x0111, a.scrambled, i));
+    parts.push(media(0x0211, b.scrambled, i));
+  }
   return new Uint8Array(stream(...parts));
 }
 
@@ -520,6 +556,88 @@ describe("testDecode", () => {
       expect(res.ok).toBe(false);
       expect(res.error).toContain("無料の番組");
       expect(getContractRows("0000111122223333")).toEqual([]);
+    } finally {
+      server.stop();
+    }
+  });
+});
+
+describe("testDecodeUnconfirmed", () => {
+  test("同じ物理チャンネルの局を 1 回の選局でまとめて確かめる", async () => {
+    const buf = channelStreamTwo(
+      { serviceId: 201, scrambled: false },
+      { serviceId: 202, scrambled: true },
+      100,
+    );
+    let streamRequests = 0;
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") return Response.json(ONE_CARD);
+      if (url.pathname === "/denpa/stream") {
+        streamRequests++;
+        return new Response(buf);
+      }
+      return new Response("Not Found", { status: 404 });
+    });
+
+    for (const id of [201, 202, 203]) {
+      orm()
+        .insert(services)
+        .values({
+          id,
+          service_id: id,
+          network_id: 4,
+          name: `テスト局 ${id}`,
+          type: "BS",
+          channel: "BS05",
+          updated_at: Date.now(),
+        })
+        .run();
+      airing(id);
+    }
+    for (const id of [201, 202]) {
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: "0000111122223333",
+          service_id: id,
+          state: "unsubscribed",
+          code: null,
+          valid_until: null,
+          decode_ok: null,
+          decoded_at: null,
+          checked_at: Date.now(),
+        })
+        .run();
+    }
+    // 新しく復号を確かめた局は、まとめての対象から外す
+    orm()
+      .insert(cardContracts)
+      .values({
+        card_id: "0000111122223333",
+        service_id: 203,
+        state: "subscribed",
+        code: null,
+        valid_until: null,
+        decode_ok: true,
+        decoded_at: Date.now(),
+        checked_at: Date.now(),
+      })
+      .run();
+
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      const { results } = await testDecodeUnconfirmed();
+      expect(streamRequests).toBe(1);
+      expect(results).toEqual([
+        { serviceId: 201, ok: true, decodeOk: true },
+        { serviceId: 202, ok: true, decodeOk: false },
+      ]);
+
+      const rows = getContractRows("0000111122223333");
+      expect(rows.find((r) => r.serviceId === 201)?.state).toBe("subscribed");
+      expect(rows.find((r) => r.serviceId === 202)?.state).toBe("unsubscribed");
+      expect(rows.find((r) => r.serviceId === 202)?.decodeOk).toBe(false);
     } finally {
       server.stop();
     }
