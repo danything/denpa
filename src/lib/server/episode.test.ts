@@ -578,6 +578,12 @@ describe("firstAirings", () => {
     expect(kept([atx, bs, tbs])).toEqual([tbs.id]);
   });
 
+  test("総集編はふつうの回と束ねない", () => {
+    const recap = airing("テストアニメ 総集編 #3", base);
+    const regular = airing("テストアニメ #3", base + DAY);
+    expect(kept([recap, regular])).toEqual([recap.id, regular.id]);
+  });
+
   test("同時放送で片方に副題が無くても 1 本にする", () => {
     const mx = airing(
       "[新]てつりょー!meet with 鉄道むすめ #1「どんなところに、行こうかな?」",

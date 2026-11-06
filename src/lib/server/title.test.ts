@@ -136,6 +136,13 @@ describe("parseTitle", () => {
       series: "テストアニメ続編",
       arc: "",
     });
+    // 前編・後編と、回の中身を表す語 (総集編・特別編) は編にしない
+    for (const name of [
+      "テストアニメ 総集編 #3",
+      "テストアニメ 後編 #3",
+      "テストアニメ 特別総集編",
+    ])
+      expect(parseTitle(name).arc).toBe("");
   });
 
   test("第2期 は話数ではなく編", () => {

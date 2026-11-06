@@ -538,8 +538,9 @@ export function earlierAirings<T extends Airing>(
  * 1. **確かに同じ回のもの**を繋ぐ。副題が揃うもの (飾りの違うシリーズ名は芯で繋がる) と、
  *    副題の無い、シリーズ名のぴったり同じもの
  * 2. **副題を出す局と出さない局、編を書く局と書かない局** (`sameEpisode`) は、
- *    同じ回と読める束どうしを集め、どの 2 つも互いに同じ回と読めるときだけ繋ぐ。`X #5` に `「X」A編 #5` と `「X」B編 #5` の
- *    両方が当たるなら、どちらとも繋がない。1 本多く録るだけで、取り違えて録り逃すよりよい
+ *    同じ回と読める束どうしを集め、どの 2 つも互いに同じ回と読めるときだけ繋ぐ。
+ *    `X #5` に `「X」A編 #5` と `「X」B編 #5` の両方が当たるなら、どれも繋がない。
+ *    1 本多く録るだけで、取り違えて録り逃すよりよい
  */
 function episodes<T>(
   list: { airing: T; episode: Episode }[],
@@ -566,15 +567,22 @@ function episodes<T>(
       if (sure(list[i]!.episode, list[j]!.episode)) group[root(j)] = root(i);
   const clusters = [...Map.groupBy(list, (_, i) => root(i)).values()];
 
-  /** 束どうしで、同じ回と読める組み合わせがあるもの。飾りの違う局は副題で束ねてあるので、どれか 1 つと読めればよい */
-  const partners = clusters.map((one) =>
-    clusters.filter(
-      (other) =>
-        other !== one &&
-        one.some(({ episode: a }) =>
-          other.some(({ episode: b }) => sameEpisode(a, b)),
+  /**
+   * 束どうしで、同じ回と読める組み合わせがある相手 (束の番号)。
+   * 飾りの違う局は副題で束ねてあるので、どれか 1 つと読めればよい
+   */
+  const partners = clusters.map(
+    (one, i) =>
+      new Set(
+        clusters.flatMap((other, j) =>
+          j !== i &&
+          one.some(({ episode: a }) =>
+            other.some(({ episode: b }) => sameEpisode(a, b)),
+          )
+            ? [j]
+            : [],
         ),
-    ),
+      ),
   );
   /*
    * 同じ回と読める束どうしを集め、**どの 2 つも互いに同じ回と読めるときだけ** 1 つにする。
@@ -589,8 +597,7 @@ function episodes<T>(
     const linked = [i];
     seen.add(i);
     for (let at = 0; at < linked.length; at++)
-      for (const other of partners[linked[at]!]!) {
-        const j = clusters.indexOf(other);
+      for (const j of partners[linked[at]!]!) {
         if (!seen.has(j)) {
           seen.add(j);
           linked.push(j);
@@ -598,7 +605,7 @@ function episodes<T>(
       }
     linked.sort((a, b) => a - b);
     const all = linked.every((a) =>
-      linked.every((b) => a === b || partners[a]!.includes(clusters[b]!)),
+      linked.every((b) => a === b || partners[a]!.has(b)),
     );
     if (all) merged.push(linked.flatMap((j) => clusters[j]!));
     else for (const j of linked) merged.push(clusters[j]!);
