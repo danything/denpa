@@ -8,7 +8,7 @@ import { ServiceFilter } from "@danything/arib/service-filter";
  * また、実際にチューナーを開いて TS パケットのスクランブル制御ビットを検査し、
  * 復号できるかを確認する。
  */
-import { and, asc, desc, eq, gt, inArray, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { agentFetch } from "./agent-client";
 import { orm } from "./db";
@@ -418,7 +418,13 @@ export async function testDecode(
         set: {
           decode_ok: decodeOk,
           decoded_at: decodeOk ? Date.now() : null,
-          ...(decodeOk ? { state: "subscribed" } : {}),
+          // **カードが答えた行 (code がある) は状態を変えない。** カードが期限切れと答えた局を、
+          // 復号できたことで契約中に戻すと、定期の確認まで録ってしまう (カードの答えを信じる)
+          ...(decodeOk
+            ? {
+                state: sql`CASE WHEN ${cardContracts.code} IS NULL THEN 'subscribed' ELSE ${cardContracts.state} END`,
+              }
+            : {}),
           checked_at: Date.now(),
         },
       })
