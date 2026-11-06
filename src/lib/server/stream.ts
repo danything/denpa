@@ -1,4 +1,82 @@
+import { createServer } from "node:net";
 import { constants, setPriority } from "node:os";
+
+/** ffmpeg の 4 本目の出口 (`sideOutput`) */
+export interface SideOutput {
+  /** ffmpeg に書かせる先 (`pipe:3` か名前付きパイプの名前) */
+  readonly url: string;
+  /** Bun.spawn の stdio の 4 本目 (Windows では無し) */
+  readonly stdio: readonly "pipe"[];
+  /** 起こした ffmpeg から受ける中身。ffmpeg が終われば終わる。1 回だけ呼ぶ */
+  read(proc: {
+    stdio: unknown[];
+    exited: Promise<number>;
+  }): ReadableStream<Uint8Array>;
+}
+
+let sides = 0;
+
+/**
+ * **ffmpeg の 4 本目の出口** (録画のエンコードの進み具合・ライブの字幕)。ffmpeg を起こす直前に作る。
+ *
+ * Linux・Mac は stdio の 4 本目のパイプを開けて `pipe:3` に書かせる。**Windows の bun は 4 本目のパイプを
+ * 開けても読めない** (`Bun.file(fd)` は EMFILE、`fs.read` は EBADF。tests/windows-smoke.ts で確かめた)。
+ * 読まずにいると、パイプが詰まったところで ffmpeg が止まる。そこで Windows では名前付きパイプを開けて待ち、
+ * ffmpeg にはその名前を出口として渡す (ffmpeg は名前付きパイプをファイルと同じく開いて書く)。
+ * 待ち受けはこの呼び出しの中で始まり、ffmpeg が出口を開くのは入力を読み始めたあとなので、起こすより先に開いている
+ */
+export function sideOutput(): SideOutput {
+  if (process.platform !== "win32") {
+    return {
+      url: "pipe:3",
+      stdio: ["pipe"],
+      read: (proc) => Bun.file(proc.stdio[3] as number).stream(),
+    };
+  }
+  const url = `\\\\.\\pipe\\denpa-${process.pid}-${++sides}`;
+  let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let connected = false;
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    server.close();
+    try {
+      controller?.close();
+    } catch {
+      // 読む側が先にやめた
+    }
+  };
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+    },
+    cancel: finish,
+  });
+  const server = createServer((socket) => {
+    // 受けるのは 1 本だけ
+    connected = true;
+    server.close();
+    socket.on("data", (chunk: Buffer) => {
+      if (!done) controller?.enqueue(new Uint8Array(chunk));
+    });
+    socket.on("close", finish);
+    socket.on("error", finish);
+  });
+  server.on("error", finish);
+  server.listen(url);
+  return {
+    url,
+    stdio: [],
+    read: (proc) => {
+      // 出口を開かないまま終わった (起こせなかった・入力が読めなかった) ときも終える
+      void proc.exited.then(() => {
+        if (!connected) finish();
+      });
+      return stream;
+    },
+  };
+}
 
 /**
  * ReadableStream を 1 チャンクずつ読む。

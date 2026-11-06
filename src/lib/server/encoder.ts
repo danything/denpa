@@ -86,7 +86,7 @@ import { recordingSummary } from "./recording";
 import { encodeJobs, programs, recordings } from "./schema";
 import { descramble, isScrambled } from "./scramble";
 import { settings } from "./settings";
-import { chunks, lines, lowerPriority, run } from "./stream";
+import { chunks, lines, lowerPriority, run, sideOutput } from "./stream";
 import { displayTitle } from "./title";
 import { tsProbe } from "./ts-probe";
 import { notify } from "./webhook";
@@ -359,6 +359,8 @@ interface EncodeOptions {
    * 本編の字幕は番組が変わってから現れるため (#2189)
    */
   probeLead?: number;
+  /** 進み具合を書き出す先 (`stream.sideOutput` の `url`)。無ければ `pipe:3` */
+  progress?: string;
   /**
    * 音声の何本目 (`0:a:<n>`) を何チャンネルで出すか。**番組表の構成で決める** (`arib.audioChannels`)。
    * ffmpeg は先頭の音声でエンコーダを開くので、前の番組がモノラルだと本編のステレオも 1 チャンネルになる (#2189)
@@ -587,7 +589,7 @@ export function buildArgs(
    * 混み合う (ログと進み具合は別のスレッドが書くので、同じ出力先では行が千切れることがある)。
    * 人間向けの進み具合の行 (`frame= …`) も止める
    */
-  args.push("-nostats", "-progress", "pipe:3");
+  args.push("-nostats", "-progress", options.progress ?? "pipe:3");
   /*
    * 入れ物は名前ではなくここで決める。出力は書いている間だけ別名 (`<名前>.<jobId>.<codec>.encoding`) にしており、
    * ffmpeg は拡張子から入れ物を決めるので、付けないと
@@ -1004,21 +1006,27 @@ async function runFfmpeg(
   /** CM 検出を一緒にするときの読み取り関数 (`options.analysis` と組で渡す) */
   reader?: ScanReader,
 ) {
-  // fd 3 は進み具合 (`-progress pipe:3`)。標準出力は CM 検出のロゴの枠 (読まないなら捨てる)
+  // 4 本目の出口は進み具合 (`-progress`。`stream.sideOutput`)。標準出力は CM 検出のロゴの枠 (読まないなら捨てる)
+  const side = sideOutput();
   const proc = Bun.spawn(
     [
       config.ffmpeg,
-      ...buildArgs(input, output, audioType, seek, codec, options),
+      ...buildArgs(input, output, audioType, seek, codec, {
+        ...options,
+        progress: side.url,
+      }),
     ],
     {
       stdio: [
         "ignore",
         reader?.onStdout !== undefined ? "pipe" : "ignore",
         "pipe",
-        "pipe",
-      ],
+        ...side.stdio,
+        // 型は Linux の形 (4 本) で見せる。Windows では 3 本 (`sideOutput`)
+      ] as ["ignore", "pipe" | "ignore", "pipe", "pipe"],
     },
   );
+  const progressPipe = side.read(proc as never);
   // 録画のエンコードは急がない。ライブに CPU を譲る (stream.lowerPriority)
   lowerPriority(proc.pid);
   const running = procs.get(jobId) ?? new Set<Bun.Subprocess>();
@@ -1078,8 +1086,7 @@ async function runFfmpeg(
 
   const readProgress = (async () => {
     let block: Record<string, string> = {};
-    const fd = proc.stdio[3] as number;
-    for await (const line of lines(Bun.file(fd).stream())) {
+    for await (const line of lines(progressPipe)) {
       const sep = line.indexOf("=");
       if (sep === -1) continue;
       block[line.slice(0, sep)] = line.slice(sep + 1).trim();

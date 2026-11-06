@@ -6,14 +6,14 @@
  *
  * - 同梱の ffmpeg で、denpa が使う経路の主なもの (.github/image-smoke.sh と同じ素材と引数) を流す。
  *   部品を Dockerfile から読んで組んでいるので、足りなければここで落ちる
- * - 進み具合を fd 3 (`-progress pipe:3`) で受けられるか。録画のエンコードと同じ受け方 (encoder.ts)
+ * - ffmpeg の 4 本目の出口 (stream.sideOutput。Windows では名前付きパイプ) で、進み具合と matroska を受けられるか
  * - スリープを止められるか (awake.ts)。`powercfg /requests` に bun が出るかを見る (管理者で動くランナーだけで読める)
  */
 
-import { createServer } from "node:net";
 import { join } from "node:path";
 
 import { holdAwake } from "../src/lib/server/awake.ts";
+import { sideOutput } from "../src/lib/server/stream.ts";
 
 const [root, work] = process.argv.slice(2);
 if (root === undefined || work === undefined) {
@@ -210,21 +210,12 @@ if (!/bun\.exe/i.test(requests))
 await holdAwake(false);
 console.log("keep awake: ok");
 
-// Windows では fd 3 を読めない。名前付きパイプで受けられるか試す
-const pipeName = `\\\\.\\pipe\\denpa-smoke-${process.pid}`;
-const received = new Promise<string>((resolve, reject) => {
-  const server = createServer((socket) => {
-    let text = "";
-    socket.on("data", (chunk) => (text += chunk.toString()));
-    socket.on("end", () => {
-      server.close();
-      resolve(text);
-    });
-    socket.on("error", reject);
-  });
-  server.on("error", reject);
-  server.listen(pipeName);
-});
+// 4 本目の出口 (stream.sideOutput)。Windows では名前付きパイプ。録画のエンコードの進み具合と同じ渡し方
+const timeout = (ms: number) =>
+  new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("timeout")), ms),
+  );
+const progressSide = sideOutput();
 const proc = Bun.spawn(
   [
     ffmpeg,
@@ -243,42 +234,27 @@ const proc = Bun.spawn(
     "libopus",
     "-nostats",
     "-progress",
-    pipeName,
+    progressSide.url,
     "-f",
     "matroska",
     at("progress.mkv"),
   ],
-  { stdio: ["ignore", "ignore", "pipe"] },
+  { stdio: ["ignore", "ignore", "pipe", ...progressSide.stdio] as never },
 );
-const timeout = new Promise<string>((_, reject) =>
-  setTimeout(() => reject(new Error("timeout")), 60_000),
-);
-const progress = await Promise.race([received, timeout]).catch(
-  (error: unknown) => `failed: ${String(error)}`,
-);
+const progress = await Promise.race([
+  new Response(progressSide.read(proc as never)).text(),
+  timeout(60_000),
+]);
 const code = await proc.exited;
-console.log(await new Response(proc.stderr).text());
 if (code !== 0 || !progress.includes("progress=end")) {
   throw new Error(
-    `名前付きパイプで進み具合を受けられません (終了コード ${code})\n${progress.slice(0, 500)}`,
+    `進み具合を受けられません (終了コード ${code})\n${progress.slice(0, 500)}`,
   );
 }
-console.log("progress on a named pipe: ok");
+console.log("progress on the side output: ok");
 
-// 字幕と同じく matroska をパイプへ流す
-const pipe2 = `\\\\.\\pipe\\denpa-smoke-mkv-${process.pid}`;
-const bytes = new Promise<number>((resolve, reject) => {
-  const server = createServer((socket) => {
-    let n = 0;
-    socket.on("data", (chunk) => (n += chunk.length));
-    socket.on("end", () => {
-      server.close();
-      resolve(n);
-    });
-    socket.on("error", reject);
-  });
-  server.listen(pipe2);
-});
+// ライブの字幕と同じく matroska を流す (字幕の代わりに音声)
+const mkvSide = sideOutput();
 const mkv = Bun.spawn(
   [
     ffmpeg,
@@ -291,14 +267,52 @@ const mkv = Bun.spawn(
     at("in.ts"),
     "-map",
     "0:a",
-    "-c",
-    "copy",
+    "-c:a",
+    "libopus",
+    "-cluster_time_limit",
+    "1",
+    "-flush_packets",
+    "1",
     "-f",
     "matroska",
-    pipe2,
+    mkvSide.url,
   ],
-  { stdio: ["ignore", "ignore", "pipe"] },
+  { stdio: ["ignore", "ignore", "pipe", ...mkvSide.stdio] as never },
 );
-const n = await Promise.race([bytes, timeout.catch(() => -1)]);
-console.log(`matroska on a named pipe: ${n} bytes, exit ${await mkv.exited}`);
-if (!(n > 0)) throw new Error("名前付きパイプに matroska を流せません");
+const body = await Promise.race([
+  new Response(mkvSide.read(mkv as never)).arrayBuffer(),
+  timeout(60_000),
+]);
+const mkvCode = await mkv.exited;
+console.log(
+  `matroska on the side output: ${body.byteLength} bytes, exit ${mkvCode}`,
+);
+if (mkvCode !== 0 || body.byteLength < 1000) {
+  throw new Error(
+    `4 本目の出口に matroska を流せません: ${await new Response(mkv.stderr as unknown as ReadableStream).text()}`,
+  );
+}
+
+// 出口を開かないまま ffmpeg が終わっても、読む側は終わる
+const failedSide = sideOutput();
+const failed = Bun.spawn(
+  [
+    ffmpeg,
+    "-hide_banner",
+    "-loglevel",
+    "quiet",
+    "-i",
+    at("missing.ts"),
+    "-f",
+    "null",
+    failedSide.url,
+  ],
+  {
+    stdio: ["ignore", "ignore", "ignore", ...failedSide.stdio] as never,
+  },
+);
+await Promise.race([
+  new Response(failedSide.read(failed as never)).arrayBuffer(),
+  timeout(30_000),
+]);
+console.log("side output closes when ffmpeg fails: ok");
