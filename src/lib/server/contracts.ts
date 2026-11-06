@@ -437,27 +437,6 @@ export async function testDecode(
   }
 }
 
-export type ContractWarning = "expired" | "unsubscribed" | null;
-
-/**
- * 局の契約の警告 (予約・番組の詳しく・番組表のバッジ)。無料の番組と、契約中のカードがある局・確かめていない局は null。
- * どのカードにも契約が無ければ、期限切れのカードがあれば "expired"、無ければ "unsubscribed"
- */
-export function getContractWarning(
-  serviceId: number,
-  isFree = false,
-): ContractWarning {
-  if (isFree) return null;
-  const states = orm()
-    .select({ state: cardContracts.state })
-    .from(cardContracts)
-    .where(eq(cardContracts.service_id, serviceId))
-    .all()
-    .map((row) => row.state);
-  if (states.length === 0 || states.includes("subscribed")) return null;
-  return states.includes("expired") ? "expired" : "unsubscribed";
-}
-
 /**
  * **有料放送を自動予約してよい局** (`rules.PaidAllowed`)。どれかのカードで契約中と確かめた局だけ。
  *

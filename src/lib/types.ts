@@ -45,8 +45,6 @@ export interface GridProgram extends Pick<
   /** 配信は library_path ?? ts_path を返すので、どちらかがあれば開ける */
   library_path: string | null;
   ts_path: string | null;
-  /** B-CAS 契約警告 (有料番組で期限切れまたは未契約の場合) */
-  contract_warning?: "expired" | "unsubscribed" | null;
 }
 
 /** 番組表の中身 (`/api/guide`)。組めなかったときは `programs` を空にして、理由を `failed` に入れる */
@@ -77,8 +75,6 @@ export interface ProgramDetail {
   series_episode: number | null;
   series_last_episode: number | null;
   series_repeat: number | null;
-  /** B-CAS 契約警告 (有料番組で期限切れまたは未契約の場合) */
-  contract_warning?: "expired" | "unsubscribed" | null;
 }
 
 /**
@@ -126,9 +122,7 @@ export type Rule = typeof rules.$inferSelect;
 export type ReservationState =
   Reservation["state"] | "recording" | "done" | "failed";
 
-export type Reservation = typeof reservations.$inferSelect & {
-  contract_warning?: "expired" | "unsubscribed" | null | undefined;
-};
+export type Reservation = typeof reservations.$inferSelect;
 
 export type Recording = typeof recordings.$inferSelect;
 

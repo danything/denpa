@@ -77,18 +77,6 @@ public class BCasTests
         return response;
     }
 
-    /// <summary>EMM更新の応答。返り値 0x2100 (正常完了など)</summary>
-    private static byte[] EmmResponse(int code = 0x2100)
-    {
-        var response = new byte[8];
-        response[1] = 0x04;
-        response[4] = (byte)(code >> 8);
-        response[5] = (byte)code;
-        response[6] = 0x90;
-        response[7] = 0x00;
-        return response;
-    }
-
     /// <summary>送られてきた APDU の頭 (CLA INS) で答えを決める接続</summary>
     private sealed class FakeLink(string name, Func<byte[], byte[]>? ecm = null) : ICardLink
     {
@@ -102,7 +90,6 @@ public class BCasTests
         public Func<byte[]> Int { get; set; } = () => IntResponse();
         public Func<byte[]> Idi { get; set; } = () => IdiResponse(CardNumber);
         public Func<byte[], byte[]>? Confirm { get; set; }
-        public Func<byte[], byte[]>? Emm { get; set; }
 
         public byte[] Reset()
         {
@@ -125,7 +112,6 @@ public class BCasTests
                     0x30 => Int(),
                     0x32 => Idi(),
                     0x34 => (ecm ?? (_ => EcmResponse()))(sent),
-                    0x36 => (Emm ?? (_ => EmmResponse()))(sent),
                     0x3c => (Confirm ?? (_ => ConfirmResponse()))(sent),
                     _ => [0x6d, 0x00],
                 };
@@ -242,80 +228,6 @@ public class BCasTests
 
         var err = Assert.Throws<IOException>(() => CardWire.ReadConfirm([0x08]));
         await Assert.That(err?.Message).Contains("契約確認の答えが短すぎます");
-    }
-
-    [Test]
-    public async Task EMM更新コマンドを通す()
-    {
-        var link = new FakeLink("reader");
-        using var card = BCas.Open(() => [Candidate(link)]);
-
-        byte[] emm = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
-        var code = card.Emm(emm);
-
-        await Assert.That(code).IsEqualTo(0x2100);
-        var apdu = link.Sent.Last();
-        await Assert.That(apdu[0]).IsEqualTo(0x90);
-        await Assert.That(apdu[1]).IsEqualTo(0x36);
-        await Assert.That(apdu[2]).IsEqualTo(0x00);
-        await Assert.That(apdu[3]).IsEqualTo(0x00);
-        await Assert.That(apdu[4]).IsEqualTo(emm.Length);
-        await Assert.That(apdu.AsSpan(5, emm.Length).ToArray()).IsEquivalentTo(emm);
-        await Assert.That(apdu[^1]).IsEqualTo(0x00);
-    }
-
-    [Test]
-    public async Task EMMメッセージの長さが異常なら送らずに断る()
-    {
-        var link = new FakeLink("reader");
-        using var card = BCas.Open(() => [Candidate(link)]);
-
-        var errEmpty = Assert.Throws<IOException>(() => card.Emm([]));
-        await Assert.That(errEmpty?.Message).Contains("EMM メッセージの長さがおかしいです (0 バイト)");
-
-        var errTooLong = Assert.Throws<IOException>(() => card.Emm(new byte[256]));
-        await Assert.That(errTooLong?.Message).Contains("EMM メッセージの長さがおかしいです (256 バイト)");
-
-        await Assert.That(link.Sent.Any(apdu => apdu[1] == 0x36)).IsFalse();
-    }
-
-    [Test]
-    public async Task EMM更新で短い応答は2回まで送り直す()
-    {
-        var link = new FakeLink("reader");
-        var attempts = 0;
-        link.Emm = _ =>
-        {
-            attempts++;
-            return attempts < 3 ? [0x90, 0x00] : EmmResponse(0x2100);
-        };
-
-        using var card = BCas.Open(() => [Candidate(link)]);
-        var code = card.Emm([0x01, 0x02]);
-
-        await Assert.That(code).IsEqualTo(0x2100);
-        await Assert.That(attempts).IsEqualTo(3);
-
-        attempts = 0;
-        link.Emm = _ =>
-        {
-            attempts++;
-            return [0x90, 0x00];
-        };
-        var error = Assert.Throws<CardRefusedException>(() => card.Emm([0x01]));
-        await Assert.That(error?.Message).Contains("カードが EMM に応答しません (応答 2 バイト)");
-        await Assert.That(attempts).IsEqualTo(3);
-    }
-
-    [Test]
-    public async Task CardWire_Emmのパックとアンパック()
-    {
-        var packed = CardWire.Pack(0x2100);
-        await Assert.That(packed.Length).IsEqualTo(2);
-        await Assert.That(CardWire.ReadEmm(packed)).IsEqualTo(0x2100);
-
-        var err = Assert.Throws<IOException>(() => CardWire.ReadEmm([0x21]));
-        await Assert.That(err?.Message).Contains("EMM更新の答えが短すぎます");
     }
 
     /// <summary>

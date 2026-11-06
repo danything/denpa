@@ -107,7 +107,6 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
             "/denpa/card/init" when HttpMethods.IsGet(method) => Init(http),
             "/denpa/card/ecm" when HttpMethods.IsPost(method) => Ecm(http),
             "/denpa/card/confirm" when HttpMethods.IsPost(method) => Confirm(http),
-            "/denpa/card/emm" when HttpMethods.IsPost(method) => Emm(http),
             _ => Respond.Error(http, "not found", 404),
         });
     }
@@ -159,22 +158,6 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
         var dateMjd = BinaryPrimitives.ReadUInt16BigEndian(body);
         var verification = body[2..];
         await Reply(http, () => CardWire.Pack(Keys.Local.Confirm(verification, dateMjd)));
-    }
-
-    private static async Task Emm(HttpContext http)
-    {
-        var emm = await CardWire.ReadUpTo(http.Request.Body, 255);
-        if (emm is null)
-        {
-            await Respond.Error(http, "EMM メッセージが長すぎます (255 バイトまで)", 400);
-            return;
-        }
-        if (emm.Length == 0)
-        {
-            await Respond.Error(http, "EMM メッセージが入っていません", 400);
-            return;
-        }
-        await Reply(http, () => CardWire.Pack(Keys.Local.Emm(emm)));
     }
 
     /// <summary>カードに聞いて (別のスレッドで) バイト列で返す。カードが駄目なら 503</summary>

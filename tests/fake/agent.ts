@@ -667,14 +667,6 @@ const options: Bun.ServeOptions = {
           return json({ ok: true, code: 0x0800 });
         });
     }
-    if (url.pathname === "/denpa/card/emm" && request.method === "POST") {
-      return request.json().then((body: { emm?: string }) => {
-        if (!body.emm) {
-          return json({ error: "emm が必要です" }, 400);
-        }
-        return json({ ok: true, code: 0x2100 });
-      });
-    }
     if (url.pathname === "/denpa/logs" && request.method === "GET") {
       if (logsMode === "off") return new Response("failed", { status: 500 });
       return json({ lines: agentLogLines() });

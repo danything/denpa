@@ -39,9 +39,6 @@ public sealed class BCas : IKeySource, IDisposable
     /// <summary>契約確認の応答の最短 (SW1 SW2 込み)</summary>
     private const int ConfirmLength = 8;
 
-    /// <summary>EMM の応答の最短 (返り値コード 2B 込み)</summary>
-    private const int EmmLength = 6;
-
     /// <summary>INT が「正常」のときの返り値</summary>
     private const int InitOk = 0x2100;
 
@@ -256,47 +253,6 @@ public sealed class BCas : IKeySource, IDisposable
                 if (response.Length < ConfirmLength)
                 {
                     throw new CardRefusedException($"カードが契約確認に応答しません (応答 {response.Length} バイト)");
-                }
-                return BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
-            });
-        }
-    }
-
-    /// <summary>
-    /// EMM (個別/共通管理情報) 更新コマンド (0x90 0x36)。
-    ///
-    /// <para>
-    /// 放送波から受信した EMM メッセージ要素 (card_id 6B + 付加情報長 1B + 更新データ) を
-    /// カードに渡し、返り値コード (0x2100: 正常完了など) を返す。
-    /// 期限切れの解消や契約更新をカードに反映する。
-    /// </para>
-    /// </summary>
-    public int Emm(ReadOnlySpan<byte> emmMessage)
-    {
-        if (emmMessage.Length is < 1 or > 255)
-            throw new IOException($"EMM メッセージの長さがおかしいです ({emmMessage.Length} バイト)");
-
-        var apdu = new byte[emmMessage.Length + 6];
-        apdu[0] = 0x90;
-        apdu[1] = 0x36;
-        apdu[2] = 0x00;
-        apdu[3] = 0x00;
-        apdu[4] = (byte)emmMessage.Length;
-        emmMessage.CopyTo(apdu.AsSpan(5));
-        apdu[^1] = 0x00;
-
-        lock (_gate)
-        {
-            return Run(link =>
-            {
-                var response = link.Transmit(apdu);
-                for (var retry = 0; retry < ShortRetries && response.Length < EmmLength; retry++)
-                {
-                    response = link.Transmit(apdu);
-                }
-                if (response.Length < EmmLength)
-                {
-                    throw new CardRefusedException($"カードが EMM に応答しません (応答 {response.Length} バイト)");
                 }
                 return BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
             });

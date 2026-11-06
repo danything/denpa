@@ -26,15 +26,12 @@
 
   let contracts = $state<ContractRow[]>([]);
   let checking = $state(false);
-  let receivingEmm = $state(false);
   let testingServiceId = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
   let infoMessage = $state<string | null>(null);
 
-  /** 契約確認・復号テスト・EMM受信の実行中フラグ (多重実行・同時実行の防止) */
-  const isBusy = $derived(
-    checking || receivingEmm || testingServiceId !== null,
-  );
+  /** 契約の確認か復号テストの最中 (同時に動かさない) */
+  const isBusy = $derived(checking || testingServiceId !== null);
 
   $effect(() => {
     contracts = initialContracts;
@@ -130,51 +127,6 @@
       testingServiceId = null;
     }
   }
-
-  async function handleReceiveEmm() {
-    if (isBusy) return;
-    receivingEmm = true;
-    errorMessage = null;
-    infoMessage = null;
-    try {
-      const form = new FormData();
-      form.append("seconds", "20");
-      const res = await fetch("?/receiveEmm", {
-        method: "POST",
-        body: form,
-      });
-      const data = deserialize(await res.text());
-      const payload =
-        data.type === "success" || data.type === "failure"
-          ? (data.data as Record<string, unknown> | undefined)
-          : undefined;
-      const emmResult = payload?.["result"] as
-        { success: number; processed: number; emmPids: number[] } | undefined;
-      const message = payload?.["message"];
-      if (data.type === "success" && emmResult) {
-        if (emmResult.success > 0) {
-          infoMessage = `カードの契約更新メッセージを受信し適用しました (更新: ${emmResult.success} 件)`;
-        } else if (emmResult.processed > 0) {
-          infoMessage = `EMM を ${emmResult.processed} 件受信しました (適用対象外)`;
-        } else if (emmResult.emmPids.length === 0) {
-          infoMessage =
-            "放送の CAT を受け取れませんでした。時間をおいて、もう一度お試しください";
-        } else {
-          infoMessage =
-            "受信しましたが、このカード宛ての更新メッセージは流れていませんでした";
-        }
-        await handleCheckContracts();
-      } else if (message) {
-        errorMessage = String(message);
-      } else {
-        errorMessage = "EMM の受信に失敗しました";
-      }
-    } catch (err) {
-      errorMessage = String(err);
-    } finally {
-      receivingEmm = false;
-    }
-  }
 </script>
 
 <dialog
@@ -234,17 +186,6 @@
       >
         <RefreshCw class={checking ? "spin" : ""} aria-hidden="true" />
         {checking ? "確認中…" : "契約情報を再確認"}
-      </button>
-
-      <button
-        type="button"
-        class="secondary small"
-        disabled={isBusy}
-        onclick={handleReceiveEmm}
-        data-testid="btn-receive-emm"
-      >
-        <ShieldCheck class={receivingEmm ? "spin" : ""} aria-hidden="true" />
-        {receivingEmm ? "EMM受信中 (約20秒)…" : "カード更新 (EMM受信)"}
       </button>
     </div>
 

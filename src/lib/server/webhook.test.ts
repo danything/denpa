@@ -3,8 +3,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { eq } from "drizzle-orm";
-
 /*
  * **通知先を足がかりに、別の所を覗かせない** ([webhook.ts](webhook.ts))。
  * 宛先のアドレスは縛らない (LAN の中の通知先がふつうにある) ので、リダイレクトを追わないこと・
@@ -20,7 +18,6 @@ const {
   discordBody,
   failure,
   hostOf,
-  notifyContractExpired,
   send,
   webhookUrl,
 } = await import("./webhook");
@@ -256,169 +253,6 @@ describe("Discord", () => {
       expect(received["text"]).toBe("テスト");
       expect(received["event"]).toBe("recording.finished");
       expect(received).not.toHaveProperty("content");
-    } finally {
-      other.stop(true);
-    }
-  });
-});
-
-describe("契約期限切れ通知 (notifyContractExpired)", () => {
-  test("未来の有効期限の局は期限切れ予告の通知が送られる", async () => {
-    let received: Record<string, unknown> = {};
-    const other = Bun.serve({
-      port: 0,
-      hostname: "127.0.0.1",
-      async fetch(request) {
-        received = (await request.json()) as Record<string, unknown>;
-        return new Response("ok");
-      },
-    });
-
-    try {
-      const hook = orm()
-        .insert(webhooks)
-        .values({
-          url: `${other.url.origin}/notify-test`,
-          events: ["contract.expired"],
-          enabled: true,
-          created_at: now(),
-        })
-        .returning()
-        .get();
-
-      // 未来の期限日 (例: 5日後)
-      const futureMs = now() + 5 * 86_400_000;
-      notifyContractExpired({
-        cardId: "0000123456789012",
-        serviceId: 101,
-        serviceName: "プレミアムTV",
-        validUntil: futureMs,
-      });
-
-      // notify は void send(...) なので少し待つ
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(received["event"]).toBe("contract.expired");
-      const text = String(received["text"]);
-      expect(text).toContain("0000123456789012");
-      expect(text).toContain("プレミアムTV");
-      expect(text).toContain("期限切れとなります");
-      expect(text).toContain("有効期限:");
-      expect(text).toContain(
-        "視聴・録画を継続するには契約の更新を行ってください。",
-      );
-      // 絵文字や「次期Kw」が含まれていないことを確認
-      expect(text).not.toContain("次期Kw");
-      expect(/\p{Extended_Pictographic}/u.test(text)).toBe(false);
-
-      expect(received["contract"]).toEqual({
-        cardId: "0000123456789012",
-        serviceId: 101,
-        serviceName: "プレミアムTV",
-        validUntil: futureMs,
-      });
-
-      orm().delete(webhooks).where(eq(webhooks.id, hook.id)).run();
-    } finally {
-      other.stop(true);
-    }
-  });
-
-  test("過去の有効期限の局は期限切れ済みの通知が送られる", async () => {
-    let received: Record<string, unknown> = {};
-    const other = Bun.serve({
-      port: 0,
-      hostname: "127.0.0.1",
-      async fetch(request) {
-        received = (await request.json()) as Record<string, unknown>;
-        return new Response("ok");
-      },
-    });
-
-    try {
-      const hook = orm()
-        .insert(webhooks)
-        .values({
-          url: `${other.url.origin}/notify-past`,
-          events: [], // 空は全イベント購読
-          enabled: true,
-          created_at: now(),
-        })
-        .returning()
-        .get();
-
-      // 過去の期限日 (例: 2日前)
-      const pastMs = now() - 2 * 86_400_000;
-      notifyContractExpired({
-        cardId: "0000123456789012",
-        serviceId: 102,
-        serviceName: "映画チャンネル",
-        validUntil: pastMs,
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(received["event"]).toBe("contract.expired");
-      const text = String(received["text"]);
-      expect(text).toContain("0000123456789012");
-      expect(text).toContain("映画チャンネル");
-      expect(text).toContain("期限切れとなりました");
-      expect(text).toContain(
-        "視聴・録画を継続するには契約の更新を行ってください。",
-      );
-      expect(text).not.toContain("次期Kw");
-      expect(/\p{Extended_Pictographic}/u.test(text)).toBe(false);
-
-      orm().delete(webhooks).where(eq(webhooks.id, hook.id)).run();
-    } finally {
-      other.stop(true);
-    }
-  });
-
-  test("有効期限が不明 (null) の場合も適切に注意喚起メッセージが送られる", async () => {
-    let received: Record<string, unknown> = {};
-    const other = Bun.serve({
-      port: 0,
-      hostname: "127.0.0.1",
-      async fetch(request) {
-        received = (await request.json()) as Record<string, unknown>;
-        return new Response("ok");
-      },
-    });
-
-    try {
-      const hook = orm()
-        .insert(webhooks)
-        .values({
-          url: `${other.url.origin}/notify-null`,
-          events: ["contract.expired"],
-          enabled: true,
-          created_at: now(),
-        })
-        .returning()
-        .get();
-
-      notifyContractExpired({
-        cardId: "0000123456789012",
-        serviceId: 103,
-        serviceName: "アニメ専門",
-        validUntil: null,
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(received["event"]).toBe("contract.expired");
-      const text = String(received["text"]);
-      expect(text).toContain("0000123456789012");
-      expect(text).toContain("アニメ専門");
-      expect(text).toContain("契約期限切れが検知されました");
-      expect(text).toContain(
-        "視聴・録画を継続するには契約の更新を行ってください。",
-      );
-      expect(text).not.toContain("次期Kw");
-      expect(/\p{Extended_Pictographic}/u.test(text)).toBe(false);
-
-      orm().delete(webhooks).where(eq(webhooks.id, hook.id)).run();
     } finally {
       other.stop(true);
     }

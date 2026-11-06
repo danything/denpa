@@ -20,11 +20,7 @@
   }: {
     service: string;
     parts: string[];
-    row: {
-      service_id: number;
-      has_logo: boolean | null;
-      contract_warning?: "expired" | "unsubscribed" | null;
-    };
+    row: { service_id: number; has_logo: boolean | null };
     rule:
       { rule_id: number | null; rule_name: string | null } | "manual" | null;
     /** 残りの幅を埋める番組の説明の頭 (1 行で「…」まで。狭い画面では出さない) */
@@ -43,13 +39,7 @@
     ><span class="broadcast">{service}</span>{service && rest ? "・" : ""}<span
       class="num">{rest}</span
     ></span
-  >
-  {#if row.contract_warning === "expired"}
-    <span class="tag" data-testid="reservation-expired">期限切れ</span>
-  {:else if row.contract_warning === "unsubscribed"}
-    <span class="tag muted" data-testid="reservation-unsubscribed">未契約</span>
-  {/if}
-  {#if rule === "manual"}<span class="t-rule"
+  >{#if rule === "manual"}<span class="t-rule"
       >・<span data-testid="rule-name">手動予約</span></span
     >{:else if rule !== null}<span class="t-rule"
       >・<span data-testid="rule-name">

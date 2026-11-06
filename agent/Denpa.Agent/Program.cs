@@ -569,87 +569,32 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
 });
 
 /*
- * 契約確認コマンド (0x90 0x3C)。EIT の CA 契約情報記述子 (0xCB) に載っている
- * verification (Base64) と date (MJD) をカードに渡し、返り値コード (0x0800 等) を返す。
+ * 有料放送の契約をカードに聞く (契約確認。0x90 0x3C)。EIT の CA 契約情報記述子 (0xCB) にある verification (Base64) と、
+ * 聞きたい日 (date。MJD) を渡すと、カードの返り値 (0x0800 なら月額の契約あり など) を返す。選局は要らない (denpa の contracts.ts)
  */
 app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
 {
     var body = await Respond.Read(http);
-    var verificationBase64 = body?["verification"] is { } node && Respond.IsText(node) ? node.GetValue<string>() : null;
-    var dateMjd = body?["date"] is JsonValue dateValue && dateValue.TryGetValue<int>(out var d) ? d : (int?)null;
-    if (string.IsNullOrEmpty(verificationBase64) || dateMjd is null or < 0 or > 65535)
-    {
-        await Respond.Error(http, "verification (Base64) と date (MJD) が必要です", 400);
-        return;
-    }
-    byte[] verification;
+    byte[]? verification = null;
     try
     {
-        verification = Convert.FromBase64String(verificationBase64);
+        if (body?["verification"] is { } node && Respond.IsText(node)) verification = Convert.FromBase64String(node.GetValue<string>());
     }
-    catch
+    catch (FormatException)
     {
-        await Respond.Error(http, "verification は Base64 で書きます", 400);
-        return;
     }
-    if (verification.Length is < 1 or > 253)
+    var date = body?["date"] is JsonValue value && value.TryGetValue<int>(out var mjd) ? mjd : -1;
+    if (verification is not { Length: >= 1 and <= 253 } || date is < 0 or > 65535)
     {
-        await Respond.Error(http, "verification は 1〜253 バイトです", 400);
+        await Respond.Error(http, "verification (Base64 で 1〜253 バイト) と date (MJD) が必要です", 400);
         return;
     }
     try
     {
-        var code = await Task.Run(() => Keys.Source.Confirm(verification, (ushort)dateMjd.Value));
-        await Respond.Write(http, new JsonObject
-        {
-            ["ok"] = true,
-            ["code"] = code,
-        });
+        var code = await Task.Run(() => Keys.Source.Confirm(verification, (ushort)date));
+        await Respond.Write(http, new JsonObject { ["ok"] = true, ["code"] = code });
     }
-    catch (Exception error)
-    {
-        await Respond.Error(http, error.Message, 500);
-    }
-});
-
-/*
- * EMM 更新コマンド (0x90 0x36)。放送波から受信した EMM メッセージ (Base64) をカードに渡し、
- * 返り値コード (0x2100 等) を返す。期限切れの解消や有料放送の契約更新を行う。
- */
-app.MapPost("/denpa/card/emm", async (HttpContext http) =>
-{
-    var body = await Respond.Read(http);
-    var emmBase64 = body?["emm"] is { } node && Respond.IsText(node) ? node.GetValue<string>() : null;
-    if (string.IsNullOrEmpty(emmBase64))
-    {
-        await Respond.Error(http, "emm (Base64) が必要です", 400);
-        return;
-    }
-    byte[] emm;
-    try
-    {
-        emm = Convert.FromBase64String(emmBase64);
-    }
-    catch
-    {
-        await Respond.Error(http, "emm は Base64 で書きます", 400);
-        return;
-    }
-    if (emm.Length is < 1 or > 255)
-    {
-        await Respond.Error(http, "emm は 1〜255 バイトです", 400);
-        return;
-    }
-    try
-    {
-        var code = await Task.Run(() => Keys.Source.Emm(emm));
-        await Respond.Write(http, new JsonObject
-        {
-            ["ok"] = true,
-            ["code"] = code,
-        });
-    }
-    catch (Exception error)
+    catch (Exception error) when (error is IOException or InvalidOperationException)
     {
         await Respond.Error(http, error.Message, 500);
     }

@@ -256,7 +256,7 @@ export const channelChanges = sqliteTable("channel_changes", {
 
 /**
  * B-CAS カードごとの有料放送契約・復号状態の控え。
- * 設定画面の「有料契約を確認」や予約時の期限切れ判定、録画ルールの選局優先度に使う。
+ * 設定の「有料契約確認」に出し、自動予約で有料放送を録る局を決めるのに使う (`contracts.paidAllowed`)。
  */
 export const cardContracts = sqliteTable(
   "card_contracts",

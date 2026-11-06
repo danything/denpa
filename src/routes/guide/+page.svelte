@@ -1150,17 +1150,6 @@
                           >コピー禁止</span
                         >
                       {/if}
-                      {#if program.contract_warning === "expired"}
-                        <span
-                          class="tag contract-expired"
-                          data-testid="grid-contract-expired">期限切れ</span
-                        >
-                      {:else if program.contract_warning === "unsubscribed"}
-                        <span
-                          class="tag muted contract-unsubscribed"
-                          data-testid="grid-contract-unsubscribed">未契約</span
-                        >
-                      {/if}
                       <!-- 予約してあれば説明の代わりに状態。`{#if}` にしないのは、マスごとの描く手間を増やさないため (名前の有無も同じ) -->
                       <span
                         class={program.reservation_state
@@ -2024,13 +2013,6 @@
     font-weight: var(--dp-weight);
     color: color-mix(in srgb, currentColor 70%, transparent);
     white-space: nowrap;
-  }
-  .program .contract-expired,
-  .program .contract-unsubscribed {
-    font-size: var(--dp-text-2xs);
-    padding: 0 0.35rem;
-    line-height: 1.4;
-    vertical-align: middle;
   }
   /*
      * 説明は番組名より一段だけ控える。0.6 まで落とすと淡い下地の上で字が溶けた。

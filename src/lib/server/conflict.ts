@@ -38,8 +38,6 @@ export interface Assignable {
   type: string;
   /** 物理チャンネル。同じチャンネルなら 1 台のチューナーを共有できる */
   channel: string;
-  /** 有料契約警告 (期限切れ・未契約の場合はチューナー割り当てで後回しにする) */
-  contract_warning?: "expired" | "unsubscribed" | null | undefined;
 }
 
 /**
@@ -337,16 +335,9 @@ export function assign<T extends Assignable>(
   margins: Margins = { start: 0, end: 0 },
   busy: readonly Busy[] = [],
 ): AssignResult<T> {
-  const ordered = [...candidates].sort((a, b) => {
-    const aValid = a.contract_warning == null ? 1 : 0;
-    const bValid = b.contract_warning == null ? 1 : 0;
-    return (
-      b.priority - a.priority ||
-      bValid - aValid ||
-      a.start_at - b.start_at ||
-      a.id - b.id
-    );
-  });
+  const ordered = [...candidates].sort(
+    (a, b) => b.priority - a.priority || a.start_at - b.start_at || a.id - b.id,
+  );
 
   const accepted: Accepted<T>[] = [];
   const rejected: { reservation: T; reason: string }[] = [];

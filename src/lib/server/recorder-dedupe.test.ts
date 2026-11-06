@@ -18,9 +18,7 @@ import { eq } from "drizzle-orm";
  * 実機の BS日テレのように、番組表では話数が無く p/f の概要にだけ「第 6 話　副題」がある番組で見る
  */
 const notified: { event: string }[] = [];
-const actualWebhook = await import("./webhook");
 mock.module("./webhook", () => ({
-  ...actualWebhook,
   notify: (payload: { event: string }) => notified.push(payload),
 }));
 
