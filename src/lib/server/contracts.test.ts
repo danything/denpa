@@ -745,4 +745,92 @@ describe("checkContracts エッジケース・異常系", () => {
       expect(getContractWarning(202, false)).toBe("expired");
     });
   });
+
+  test("contract_verification が null の局 (CS月額局など) も抽出され、復号テスト成功時に subscribed に更新される", async () => {
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") {
+        return Response.json({
+          ok: true,
+          message: "",
+          source: "local",
+          readers: [
+            {
+              name: "CardReader",
+              card: true,
+              ids: ["0000111122223333"],
+              active: true,
+              tuners: [],
+            },
+          ],
+        });
+      }
+      if (url.pathname.startsWith("/denpa/stream")) {
+        const packet = Buffer.alloc(188);
+        packet[0] = 0x47;
+        packet[3] = 0x10;
+        const body = Buffer.concat(Array(100).fill(packet));
+        return new Response(body, {
+          headers: { "Content-Type": "application/octet-stream" },
+        });
+      }
+      return new Response("Not Found", { status: 404 });
+    });
+
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      orm()
+        .insert(services)
+        .values({
+          id: 108,
+          network_id: 6,
+          service_id: 311,
+          type: "CS",
+          channel: "CS16:28928",
+          name: "アニメシアターX",
+          remote_control_key: 1,
+          updated_at: Date.now(),
+        })
+        .run();
+      orm()
+        .insert(programs)
+        .values({
+          id: 208,
+          service_id: 108,
+          network_id: 6,
+          event_id: 8,
+          start_at: Date.now(),
+          end_at: Date.now() + 3600_000,
+          name: "CS有料アニメ番組",
+          is_free: false,
+          contract_verification: null,
+          updated_at: Date.now(),
+        })
+        .run();
+
+      const rows = await checkContracts();
+      const atx = rows.find((r) => r.serviceId === 108);
+      expect(atx).toBeDefined();
+      expect(atx?.state).toBe("unsubscribed");
+      expect(atx?.code).toBeNull();
+      expect(atx?.validUntil).toBeNull();
+      expect(atx?.decodeOk).toBeNull();
+
+      const decodeResult = await testDecode(108);
+      expect(decodeResult.ok).toBe(true);
+      expect(decodeResult.decodeOk).toBe(true);
+
+      const updatedRows = getContractRows("0000111122223333");
+      const updatedAtx = updatedRows.find((r) => r.serviceId === 108);
+      expect(updatedAtx?.state).toBe("subscribed");
+      expect(updatedAtx?.decodeOk).toBe(true);
+
+      const recheckRows = await checkContracts();
+      const recheckAtx = recheckRows.find((r) => r.serviceId === 108);
+      expect(recheckAtx?.state).toBe("subscribed");
+      expect(recheckAtx?.decodeOk).toBe(true);
+    } finally {
+      server.stop();
+    }
+  });
 });

@@ -7,7 +7,7 @@ import { PACKET, SYNC } from "@danything/arib/psi";
  * また、実際にチューナーを開いて TS パケットのスクランブル制御ビットを検査し、
  * 復号できるかを確認する。
  */
-import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { agentFetch } from "./agent-client";
 import { orm } from "./db";
@@ -119,7 +119,7 @@ export async function checkContracts(): Promise<ContractRow[]> {
     );
   }
 
-  // 有料番組（is_free = false）があり、contract_verification を持っているサービスを抽出
+  // 有料番組（is_free = false）を持つサービスを抽出
   const paidPrograms = orm()
     .select({
       serviceId: programs.service_id,
@@ -127,19 +127,16 @@ export async function checkContracts(): Promise<ContractRow[]> {
       startAt: programs.start_at,
     })
     .from(programs)
-    .where(
-      and(
-        eq(programs.is_free, false),
-        isNotNull(programs.contract_verification),
-      ),
-    )
+    .where(eq(programs.is_free, false))
     .orderBy(desc(programs.start_at))
     .all();
 
-  // サービスごとに最新の verification を保持
-  const serviceVerifications = new Map<number, string>();
+  // サービスごとに最新の verification（あれば）を保持
+  const serviceVerifications = new Map<number, string | null>();
   for (const prog of paidPrograms) {
-    if (prog.verification && !serviceVerifications.has(prog.serviceId)) {
+    if (!serviceVerifications.has(prog.serviceId)) {
+      serviceVerifications.set(prog.serviceId, prog.verification ?? null);
+    } else if (!serviceVerifications.get(prog.serviceId) && prog.verification) {
       serviceVerifications.set(prog.serviceId, prog.verification);
     }
   }
@@ -159,6 +156,23 @@ export async function checkContracts(): Promise<ContractRow[]> {
 
   const existingServiceIds = new Set(allServices.map((s) => s.id));
 
+  // 既存の契約レコード（前回の復号結果等）を取得して保持する
+  const existingContracts = orm()
+    .select({
+      serviceId: cardContracts.service_id,
+      state: cardContracts.state,
+      decodeOk: cardContracts.decode_ok,
+    })
+    .from(cardContracts)
+    .where(
+      and(
+        eq(cardContracts.card_id, cardId),
+        inArray(cardContracts.service_id, serviceIds),
+      ),
+    )
+    .all();
+  const existingMap = new Map(existingContracts.map((c) => [c.serviceId, c]));
+
   const now = new Date();
   const todayMjd = toMjd(now);
   const futureMjd = todayMjd + 7;
@@ -166,90 +180,104 @@ export async function checkContracts(): Promise<ContractRow[]> {
 
   for (const [serviceId, verification] of serviceVerifications) {
     if (!existingServiceIds.has(serviceId)) continue;
-    // 1. 本日の判定
-    const todayRes = await confirmCardContract(verification, todayMjd);
-    if (!todayRes.ok) {
-      throw new Error(
-        `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${todayRes.error}`,
-      );
-    }
+    const existing = existingMap.get(serviceId);
 
     let state: ContractState = "unsubscribed";
-    const code: number | null = todayRes.code;
+    let code: number | null = null;
     let validUntil: number | null = null;
 
-    if (isCodeSubscribed(todayRes.code)) {
-      // 本日有効。1週間後 (MJD + 7) も有効か確認
-      const futureRes = await confirmCardContract(verification, futureMjd);
-      if (!futureRes.ok) {
+    if (verification) {
+      // 1. 本日の判定
+      const todayRes = await confirmCardContract(verification, todayMjd);
+      if (!todayRes.ok) {
         throw new Error(
-          `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${futureRes.error}`,
+          `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${todayRes.error}`,
         );
       }
-      if (isCodeSubscribed(futureRes.code)) {
-        // 1週間以上先まで有効
-        state = "subscribed";
-      } else {
-        // 1週間以内に期限切れ
-        state = "expired";
-        // 1〜6日後でバイナリサーチして有効期限日を特定
-        let low = 1;
-        let high = 6;
-        let lastValid = 0;
-        while (low <= high) {
-          const mid = Math.floor((low + high) / 2);
-          const midRes = await confirmCardContract(
-            verification,
-            todayMjd + mid,
+
+      code = todayRes.code;
+
+      if (isCodeSubscribed(todayRes.code)) {
+        // 本日有効。1週間後 (MJD + 7) も有効か確認
+        const futureRes = await confirmCardContract(verification, futureMjd);
+        if (!futureRes.ok) {
+          throw new Error(
+            `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${futureRes.error}`,
           );
-          if (!midRes.ok) {
-            throw new Error(
-              `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${midRes.error}`,
-            );
-          }
-          if (isCodeSubscribed(midRes.code)) {
-            lastValid = mid;
-            low = mid + 1;
-          } else {
-            high = mid - 1;
-          }
         }
-        validUntil = fromMjd(todayMjd + lastValid + 1); // 期限日の翌日0時JST = 満了日時
+        if (isCodeSubscribed(futureRes.code)) {
+          // 1週間以上先まで有効
+          state = "subscribed";
+        } else {
+          // 1週間以内に期限切れ
+          state = "expired";
+          // 1〜6日後でバイナリサーチして有効期限日を特定
+          let low = 1;
+          let high = 6;
+          let lastValid = 0;
+          while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            const midRes = await confirmCardContract(
+              verification,
+              todayMjd + mid,
+            );
+            if (!midRes.ok) {
+              throw new Error(
+                `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${midRes.error}`,
+              );
+            }
+            if (isCodeSubscribed(midRes.code)) {
+              lastValid = mid;
+              low = mid + 1;
+            } else {
+              high = mid - 1;
+            }
+          }
+          validUntil = fromMjd(todayMjd + lastValid + 1); // 期限日の翌日0時JST = 満了日時
+        }
+      } else {
+        // 本日無効。過去30日前を確認して期限切れか未契約かを判別
+        const pastRes = await confirmCardContract(verification, todayMjd - 30);
+        if (!pastRes.ok) {
+          throw new Error(
+            `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${pastRes.error}`,
+          );
+        }
+        if (isCodeSubscribed(pastRes.code)) {
+          // 過去30日以内に期限切れとなった
+          state = "expired";
+          // 過去の日付でいつまで有効だったかをバイナリサーチ
+          let low = -30;
+          let high = -1;
+          let lastValid = -30;
+          while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            const midRes = await confirmCardContract(
+              verification,
+              todayMjd + mid,
+            );
+            if (!midRes.ok) {
+              throw new Error(
+                `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${midRes.error}`,
+              );
+            }
+            if (isCodeSubscribed(midRes.code)) {
+              lastValid = mid;
+              low = mid + 1;
+            } else {
+              high = mid - 1;
+            }
+          }
+          validUntil = fromMjd(todayMjd + lastValid + 1);
+        } else {
+          state = "unsubscribed";
+        }
       }
     } else {
-      // 本日無効。過去30日前を確認して期限切れか未契約かを判別
-      const pastRes = await confirmCardContract(verification, todayMjd - 30);
-      if (!pastRes.ok) {
-        throw new Error(
-          `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${pastRes.error}`,
-        );
-      }
-      if (isCodeSubscribed(pastRes.code)) {
-        // 過去30日以内に期限切れとなった
-        state = "expired";
-        // 過去の日付でいつまで有効だったかをバイナリサーチ
-        let low = -30;
-        let high = -1;
-        let lastValid = -30;
-        while (low <= high) {
-          const mid = Math.floor((low + high) / 2);
-          const midRes = await confirmCardContract(
-            verification,
-            todayMjd + mid,
-          );
-          if (!midRes.ok) {
-            throw new Error(
-              `B-CAS カードへの問い合わせに失敗しました (${serviceId}): ${midRes.error}`,
-            );
-          }
-          if (isCodeSubscribed(midRes.code)) {
-            lastValid = mid;
-            low = mid + 1;
-          } else {
-            high = mid - 1;
-          }
-        }
-        validUntil = fromMjd(todayMjd + lastValid + 1);
+      // 放送波 (EIT) に CA契約情報記述子 (0xCB) が載っていない局 (多くの CS 月額局など)
+      // 前回の実復号テストで復号成功していれば契約中とみなす
+      if (existing?.decodeOk === true) {
+        state = "subscribed";
       } else {
         state = "unsubscribed";
       }
@@ -263,7 +291,7 @@ export async function checkContracts(): Promise<ContractRow[]> {
         state,
         code,
         valid_until: validUntil,
-        decode_ok: null,
+        decode_ok: existing?.decodeOk ?? null,
         checked_at: nowMs,
       })
       .onConflictDoUpdate({
@@ -414,19 +442,26 @@ export async function testDecode(
     // 0.5 以下なら復号成功とみなす (正常な復号 TS はスクランブル比率 0)
     const decodeOk = ratio < 0.5;
 
-    // card_contracts を更新
+    // card_contracts を更新。復号成功 (decodeOk = true) なら契約中 (subscribed) に更新
     orm()
-      .update(cardContracts)
-      .set({
+      .insert(cardContracts)
+      .values({
+        card_id: cardId,
+        service_id: serviceId,
+        state: decodeOk ? "subscribed" : "unsubscribed",
+        code: null,
+        valid_until: null,
         decode_ok: decodeOk,
         checked_at: Date.now(),
       })
-      .where(
-        and(
-          eq(cardContracts.card_id, cardId),
-          eq(cardContracts.service_id, serviceId),
-        ),
-      )
+      .onConflictDoUpdate({
+        target: [cardContracts.card_id, cardContracts.service_id],
+        set: {
+          decode_ok: decodeOk,
+          ...(decodeOk ? { state: "subscribed" } : {}),
+          checked_at: Date.now(),
+        },
+      })
       .run();
 
     return { ok: true, decodeOk };
