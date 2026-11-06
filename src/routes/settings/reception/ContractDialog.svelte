@@ -1,6 +1,7 @@
 <script lang="ts">
   import "@anyblades/blades/components/modal";
   import "@anyblades/blades/content/table";
+  import { deserialize } from "$app/forms";
   import { untrack } from "svelte";
   import RefreshCw from "~icons/lucide/refresh-cw";
   import ShieldCheck from "~icons/lucide/shield-check";
@@ -73,11 +74,17 @@
         method: "POST",
         body: new FormData(),
       });
-      const data = await res.json();
-      if (data?.type === "success" && Array.isArray(data?.data?.contracts)) {
-        contracts = data.data.contracts;
-      } else if (data?.data?.message) {
-        errorMessage = data.data.message;
+      const data = deserialize(await res.text());
+      const payload =
+        data.type === "success" || data.type === "failure"
+          ? (data.data as Record<string, unknown> | undefined)
+          : undefined;
+      const contractsList = payload?.["contracts"];
+      const message = payload?.["message"];
+      if (data.type === "success" && Array.isArray(contractsList)) {
+        contracts = contractsList as ContractRow[];
+      } else if (message) {
+        errorMessage = String(message);
       } else {
         errorMessage = "契約確認に失敗しました";
       }
@@ -99,18 +106,21 @@
         method: "POST",
         body: form,
       });
-      const data = await res.json();
-      if (
-        data?.type === "success" &&
-        typeof data?.data?.decodeOk === "boolean"
-      ) {
+      const data = deserialize(await res.text());
+      const payload =
+        data.type === "success" || data.type === "failure"
+          ? (data.data as Record<string, unknown> | undefined)
+          : undefined;
+      const decodeOk = payload?.["decodeOk"];
+      const message = payload?.["message"];
+      if (data.type === "success" && typeof decodeOk === "boolean") {
         contracts = contracts.map((c) =>
           c.serviceId === serviceId
-            ? { ...c, decodeOk: data.data.decodeOk, checkedAt: Date.now() }
+            ? { ...c, decodeOk, checkedAt: Date.now() }
             : c,
         );
-      } else if (data?.data?.message) {
-        errorMessage = data.data.message;
+      } else if (message) {
+        errorMessage = String(message);
       } else {
         errorMessage = "復号テストに失敗しました";
       }
@@ -133,20 +143,26 @@
         method: "POST",
         body: form,
       });
-      const data = await res.json();
-      if (data?.type === "success" && data?.data?.result) {
-        const result = data.data.result;
-        if (result.success > 0) {
-          infoMessage = `カードの契約更新メッセージを受信し適用しました (更新: ${result.success} 件)`;
-        } else if (result.processed > 0) {
-          infoMessage = `EMM を ${result.processed} 件受信しました (適用対象外)`;
+      const data = deserialize(await res.text());
+      const payload =
+        data.type === "success" || data.type === "failure"
+          ? (data.data as Record<string, unknown> | undefined)
+          : undefined;
+      const emmResult = payload?.["result"] as
+        { success: number; processed: number; durationMs: number } | undefined;
+      const message = payload?.["message"];
+      if (data.type === "success" && emmResult) {
+        if (emmResult.success > 0) {
+          infoMessage = `カードの契約更新メッセージを受信し適用しました (更新: ${emmResult.success} 件)`;
+        } else if (emmResult.processed > 0) {
+          infoMessage = `EMM を ${emmResult.processed} 件受信しました (適用対象外)`;
         } else {
           infoMessage =
             "EMM を受信しましたが、更新メッセージはありませんでした";
         }
         await handleCheckContracts();
-      } else if (data?.data?.message) {
-        errorMessage = data.data.message;
+      } else if (message) {
+        errorMessage = String(message);
       } else {
         errorMessage = "EMM の受信に失敗しました";
       }

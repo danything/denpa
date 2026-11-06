@@ -3,9 +3,12 @@ import {
   EmmReceiver,
   PacketStream,
 } from "@danything/arib/psi";
+import { eq } from "drizzle-orm";
 
 import { agentFetch } from "./agent-client";
 import { getActiveCardId } from "./contracts";
+import { orm } from "./db";
+import { services } from "./schema";
 import { cardStatus } from "./scramble";
 import { openChannelStream } from "./tuner";
 
@@ -153,7 +156,16 @@ export async function receiveEmm(
     );
   }
 
-  const channel = options.channel ?? "BS15_0";
+  let channel = options.channel;
+  if (!channel) {
+    const bsService = orm()
+      .select({ channel: services.channel })
+      .from(services)
+      .where(eq(services.type, "BS"))
+      .limit(1)
+      .get();
+    channel = bsService?.channel ?? "BS15:16625";
+  }
   const type = options.type ?? "BS";
   const seconds = options.seconds ?? 20;
 
