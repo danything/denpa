@@ -420,11 +420,13 @@ public sealed class Zd1jTuner : ITuneDevice
         }
     }
 
-    /// <summary>電波の強さと C/N (いまは API には出さない。<c>--tune</c> が出す)</summary>
+    /// <summary>電波の強さと C/N (<c>--tune</c> が出す。API には受信の状態と C/N だけを出す)</summary>
     public DibSignal? Signal()
     {
         lock (_gate) return _board?.Demod.Signal();
     }
+
+    TunerSignal? ITuneDevice.Signal() => Signal() is { } signal ? TunerSignal.From(signal) : null;
 
     public void Tune(ChannelTable.Tuning tuning, uint streamId)
     {

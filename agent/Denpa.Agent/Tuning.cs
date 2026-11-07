@@ -54,6 +54,12 @@ public interface ITuneDevice : IDisposable
     /// </summary>
     bool Tuned { get; }
 
+    /// <summary>
+    /// いま受けているチャンネルの受信の状態と C/N。受けていない・測れない機材は null。
+    /// **読むだけで、受信中の TS を乱さないこと** (TunerPool が使用中のチューナーを <see cref="TunerSignal.Every"/> ごとに呼ぶ。選局し直している最中は呼ばない)
+    /// </summary>
+    TunerSignal? Signal() => null;
+
     /// <summary>同期しなかったときの文言 (どの方式でも同じにする)</summary>
     const string SyncFailed = "同期しませんでした (電波が来ていないか、その周波数に放送がありません)";
 }
@@ -615,6 +621,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
 {
     // linux/dvb/frontend.h
     private const uint FeSetProperty = 0x40106f52;   // _IOW('o', 82, struct dtv_properties)
+    private const uint FeGetProperty = 0x80106f53;   // _IOR('o', 83, struct dtv_properties)
     private const uint FeReadStatus = 0x80046f45;    // _IOR('o', 69, fe_status_t)
     private const uint FeSetVoltage = 0x6f43;        // _IO('o', 67)。電圧は引数にそのまま渡す
     private const uint FeHasLock = 0x10;
@@ -632,6 +639,11 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private const uint DtvIsdbtSoundBroadcasting = 19;
     private const uint DtvIsdbtLayerEnabled = 41;
     private const uint DtvStreamId = 42;
+    private const uint DtvStatCnr = 62;
+
+    // struct dtv_stats の scale (linux/dvb/frontend.h の enum fecap_scale_params)
+    private const byte FeScaleDecibel = 1;
+    private const byte FeScaleRelative = 2;
 
     internal const int PropertySize = 76;            // packed。DeviceProbe の頭のコメントに実測値
     internal const int PropertyDataAt = 16;
@@ -774,6 +786,64 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     private int SetVoltage(int voltage) =>
         Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeSetVoltage, voltage) < 0 ? Marshal.GetLastPInvokeError() : 0;
+
+    /// <summary>
+    /// 受信の状態 (<c>FE_READ_STATUS</c>) と C/N (<c>FE_GET_PROPERTY</c> の <c>DTV_STAT_CNR</c>)。**dB に直すのはドライバ。**
+    /// カーネルの DVB の API (uAPI) は C/N を 0.001 dB 刻み (<c>FE_SCALE_DECIBEL</c>) か、ドライバが決めた 0〜65535 の相対値
+    /// (<c>FE_SCALE_RELATIVE</c>) で返す。どちらでもないドライバ (測れない) は C/N を null にする。ioctl を 2 つ呼ぶだけで、dvr の読み出しには触らない
+    /// </summary>
+    public TunerSignal? Signal()
+    {
+        if (!_streaming || _frontend.IsClosed) return null;
+        // 読んでいる間に閉じられても、番号を使い回した別のファイルに ioctl を送らないように
+        var added = false;
+        _frontend.DangerousAddRef(ref added);
+        try
+        {
+            return Read((int)_frontend.DangerousGetHandle());
+        }
+        finally
+        {
+            if (added) _frontend.DangerousRelease();
+        }
+    }
+
+    private TunerSignal? Read(int fd)
+    {
+        uint status = 0;
+        if (Sys.Ioctl(fd, FeReadStatus, (nint)(&status)) < 0) return null;
+        var locked = (status & FeHasLock) != 0;
+        var property = new byte[PropertySize];
+        BitConverter.TryWriteBytes(property.AsSpan(0), DtvStatCnr);
+        // struct dtv_properties { u32 num; struct dtv_property *props; } (SetProperties と同じ)
+        var header = new byte[16];
+        BitConverter.TryWriteBytes(header.AsSpan(0), 1u);
+        fixed (byte* props = property)
+        fixed (byte* headerAt = header)
+        {
+            BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
+            if (Sys.Ioctl(fd, FeGetProperty, (nint)headerAt) < 0) return new TunerSignal(locked, null, TunerSignal.Db);
+        }
+        return Cnr(locked, property);
+    }
+
+    /// <summary>
+    /// <c>DTV_STAT_CNR</c> の答え (struct dtv_property。packed) を読む。<c>u.st</c> は <see cref="PropertyDataAt"/> から
+    /// <c>u8 len</c> と <c>struct dtv_stats { u8 scale; s64 svalue; }</c> の並び。使うのは先頭 (全体の値) だけ
+    /// </summary>
+    internal static TunerSignal Cnr(bool locked, ReadOnlySpan<byte> property)
+    {
+        var length = property[PropertyDataAt];
+        var scale = property[PropertyDataAt + 1];
+        var value = BitConverter.ToInt64(property[(PropertyDataAt + 2)..]);
+        if (length == 0) return new TunerSignal(locked, null, TunerSignal.Db);
+        return scale switch
+        {
+            FeScaleDecibel => new TunerSignal(locked, value / 1000.0, TunerSignal.Db),
+            FeScaleRelative => new TunerSignal(locked, (ulong)value, TunerSignal.Raw),
+            _ => new TunerSignal(locked, null, TunerSignal.Db),
+        };
+    }
 
     private void SetProperties(List<(uint Command, uint Value)> properties)
     {

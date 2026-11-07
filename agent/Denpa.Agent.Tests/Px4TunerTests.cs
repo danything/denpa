@@ -57,6 +57,9 @@ public class Px4TunerTests
         /// <summary>stream.sock を相手が閉じた回数</summary>
         public int StreamsClosed;
 
+        /// <summary>TUNE の答えの C/N (0.001 dB。分からなければ INT32_MIN)</summary>
+        public int CnrMdb { get; init; } = int.MinValue;
+
         /// <summary>TUNE に番号で断る (0 なら通す)。引数は kHz</summary>
         public Func<ulong, uint> TuneError { get; init; } = _ => 0;
 
@@ -222,7 +225,7 @@ public class Px4TunerTests
                         _tuned = true;
                         var answer = new byte[5];
                         answer[0] = 1;
-                        BinaryPrimitives.WriteInt32LittleEndian(answer.AsSpan(1), int.MinValue);
+                        BinaryPrimitives.WriteInt32LittleEndian(answer.AsSpan(1), CnrMdb);
                         return (ok, answer);
                     }
                     case Px4Control.StartStream:
@@ -520,6 +523,25 @@ public class Px4TunerTests
         tuner.Tune(T27, ChannelTable.NoStreamId);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T27.Frequency / 1000));
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task 選局の答えのCNを_選局したときの値として返す(CancellationToken cancel)
+    {
+        await Task.Yield();
+        using var px4d = new FakePx4d { CnrMdb = 25_340 };
+        using var tuner = Open(px4d);
+        await Assert.That(((ITuneDevice)tuner).Signal()).IsNull();
+
+        tuner.Tune(T27, ChannelTable.NoStreamId);
+        await Assert.That(((ITuneDevice)tuner).Signal()).IsEqualTo(new TunerSignal(true, 25.34, TunerSignal.Db, AtTune: true));
+    }
+
+    [Test]
+    public async Task 選局の答えにCNが無ければ_CNはnull()
+    {
+        await Assert.That(Px4Tuner.TuneSignal([1, 0, 0, 0, 0x80])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
+        await Assert.That(Px4Tuner.TuneSignal([1])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
     }
 
     [Test]

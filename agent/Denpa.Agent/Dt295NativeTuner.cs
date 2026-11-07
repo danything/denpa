@@ -379,6 +379,8 @@ public sealed class Dt295NativeTuner : ITuneDevice
         lock (_gate) return _stream is { Ended: false } && _device is { } device ? device.Frontend.Signal(_satellite) : null;
     }
 
+    TunerSignal? ITuneDevice.Signal() => Signal() is { } signal ? TunerSignal.From(signal) : null;
+
     /// <summary>いま受けている側の復調のレジスタ 0x00〜0xFF の読み値 (診断用)。受けていなければ null</summary>
     public byte[]? DumpDemod()
     {

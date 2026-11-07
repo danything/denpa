@@ -1087,6 +1087,9 @@ public sealed class Px4Tuner : ITuneDevice
     /// <summary>15V を落としたことを記録に残したか (<see cref="WarnLnb"/>)</summary>
     private bool _lnbWarned;
 
+    /// <summary>最後の選局の答えの C/N (<see cref="Signal"/>)</summary>
+    private TunerSignal? _tuned;
+
     /// <summary>STATS を聞く目覚まし。流している間だけ (<see cref="StartStats"/>)</summary>
     private Timer? _statsTimer;
 
@@ -1148,6 +1151,26 @@ public sealed class Px4Tuner : ITuneDevice
         {
             lock (_gate) return _control is not null && _stream is { Ended: false };
         }
+    }
+
+    /// <summary>
+    /// 選局したときの C/N。**px4d は C/N を TUNE の答えでしか返さない** (STATS には無い) ので、受信中は選局したときの値のまま。
+    /// 聞き直すには選局し直すしかなく、それでは受信が途切れる
+    /// </summary>
+    public TunerSignal? Signal()
+    {
+        lock (_gate) return _control is not null && _stream is { Ended: false } ? _tuned : null;
+    }
+
+    /// <summary>
+    /// TUNE の答え <c>u8 locked, i32 cnr_mdb</c> (SPEC 6.4。little-endian) の C/N。<c>cnr_mdb</c> は 0.001 dB 刻みで、
+    /// 分からなければ <c>INT32_MIN</c>。C/N の付いていない答えなら C/N は null
+    /// </summary>
+    public static TunerSignal TuneSignal(ReadOnlySpan<byte> answer)
+    {
+        var locked = answer.Length >= 1 && answer[0] != 0;
+        double? cn = answer.Length >= 5 && BinaryPrimitives.ReadInt32LittleEndian(answer[1..]) is var mdb && mdb != int.MinValue ? mdb / 1000.0 : null;
+        return new TunerSignal(locked, cn, TunerSignal.Db, AtTune: true);
     }
 
     /// <summary>
@@ -1352,6 +1375,7 @@ public sealed class Px4Tuner : ITuneDevice
         }
         // u8 locked, i32 cnr_mdb。px4d は同期したときしか成功で答えないが、px4-ts と同じく locked も見る
         if (answer.Length < 1 || answer[0] == 0) throw new Px4Error(Px4Error.Timeout, ITuneDevice.SyncFailed);
+        _tuned = TuneSignal(answer);
 
         control.Request(Px4Control.StartStream, lease, RequestTimeout);
         _started = true;

@@ -128,6 +128,7 @@ describe("recordingHolds", () => {
     users: [],
     pid: 1234,
     error: null,
+    signal: null,
     ...over,
   });
 
