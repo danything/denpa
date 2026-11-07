@@ -80,6 +80,3 @@ export const OVERLAY_ROUND = "ov-round";
  * 隣のボタンが動き、同じ場所を押し直せなかった
  */
 export const OVERLAY_DANGER = "ov-danger";
-
-/** 押されている間の見た目 (字幕を出しているときなど。ライブにいるときは EdgeButton の OVERLAY_DANGER) */
-export const OVERLAY_ON = "ov-on";

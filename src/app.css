@@ -1270,16 +1270,23 @@ input[type="checkbox"]:not([role="switch"]) {
   top: calc(env(safe-area-inset-top, 0px) + var(--day-head-gap));
 }
 /*
- * **入っている切り替え (`aria-pressed="true"`) は、オンの印の主の色の短い下線と字** (番組表の「サブ ch」)。
+ * **並び (`role="group"`) の外で押されているボタン (`aria-pressed="true"`) はオンで、主の色の短い下線と字** (番組表の「サブ ch」・映像の上の字幕など)。
+ * 並びの中で押されているボタンは選んでいるもの (字の幅いっぱいの下線・左の縦線。下の `.pick-line`・`.segmented`・`.side-item`) なので、
+ * この線は引かない。どの部品も、置いた場所でどちらかの 1 本になる (1 つの部品に線は 1 本)。
+ * 線の色は `--dp-on-mark` (ふだんは主の色。映像の上は字の色に合わせる。`ControlButton`)。
+ * 映像の上の戻せないものの 2 回目 (`.ov-danger`) も、赤い字に同じ形の短い線を引く。
  * 選んでいるもの (字の幅いっぱいの下線) とは線の長さで分ける。塗らない。浮かせもしない (押すと何かが起きるボタンとは見分ける)
  */
-:where(button, a.button)[aria-pressed="true"]:where(
-    :not(.secondary, .outline, .ghost)
+:where(button, a.button):is([aria-pressed="true"], .ov-danger):where(
+    :not(.secondary, .outline, .ghost, [role="group"] *)
   ) {
   --pico-background-color: transparent;
   --pico-box-shadow: none;
   --pico-color: var(--dp-primary-text);
-  background-image: linear-gradient(var(--pico-primary), var(--pico-primary));
+  background-image: linear-gradient(
+    var(--dp-on-mark, var(--pico-primary)),
+    var(--dp-on-mark, var(--pico-primary))
+  );
   background-repeat: no-repeat;
   background-position: center bottom 0.2rem;
   background-size: 1rem var(--dp-mark);
@@ -1289,7 +1296,6 @@ input[type="checkbox"]:not([role="switch"]) {
  * 選んでいる項目 (`aria-pressed="true"`・`aria-current`・`.selected`) は主の色の太字と、疑似要素 1 本の下線
  * (`text-decoration` だと名前と数 (`.num`) に別々の線が付き、2 本に切れて見えた)。
  * 線の両端と下からの位置は項目の余白に合わせて `--pick-inset`・`--pick-bottom` で変える。
- * 入っている切り替えの短い下線 (上の `aria-pressed`) は引かない (1 つの部品に線は 1 本)。
  * 選び直すと前の場所から滑る並び (`.segmented` など。下の「滑る印」) は、並びの疑似要素で引くのでこれは使わない
  */
 .pick-line {
@@ -1301,7 +1307,6 @@ input[type="checkbox"]:not([role="switch"]) {
   .selected
 ) {
   --pico-color: var(--dp-primary-text);
-  background-image: none;
   color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
@@ -1556,8 +1561,6 @@ a.button {
   --pico-background-color: transparent;
   --pico-border-color: transparent;
   --pico-color: var(--dp-primary-text);
-  /* 入っている切り替えの短い下線 (上の `aria-pressed`) は引かない。印は下の 1 本だけ */
-  background-image: none;
   font-weight: var(--dp-weight-bold);
 }
 /*

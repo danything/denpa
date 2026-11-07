@@ -478,8 +478,11 @@ test.describe("録画を観る", () => {
     // **既定で出す。** ライブと同じ (テレビの字幕ボタンとは違い、観る画面は出す側)
     const button = page.getByTestId("watch-captions");
     await expect(button).toHaveAttribute("aria-pressed", "true");
-    // オンの線は 1 本 (切り替えの共通の短い下線を重ねない)
-    await expect(button).toHaveCSS("background-image", "none");
+    // オンの線は 1 本。ほかの所と同じ「入っている切り替え」の短い下線で、自前の線は重ねない
+    await expect(button).not.toHaveCSS("background-image", "none");
+    expect(
+      await button.evaluate((el) => getComputedStyle(el, "::after").content),
+    ).toBe("none");
     await wakeControls(page, "watch-stage");
     await button.click();
     await expect(button).toHaveAttribute("aria-pressed", "false");
@@ -1221,7 +1224,10 @@ test.describe("録画を観る", () => {
     await expect(speed).toHaveText("");
     await expect(speed.locator("svg")).toHaveCount(1);
     await expect(speed).toHaveAccessibleName("再生の速さ");
-    await expect(speed).toHaveAttribute("aria-pressed", "false");
+    // メニューの引き金なので、押されているかではなく開いているかを言う (速さは名前が言う)
+    await expect(speed).not.toHaveAttribute("aria-pressed");
+    await expect(speed).toHaveAttribute("aria-haspopup", "menu");
+    await expect(speed).toHaveAttribute("aria-expanded", "false");
     await speed.click();
     await page
       .getByTestId("watch-speed-option")
@@ -1230,7 +1236,7 @@ test.describe("録画を観る", () => {
     await expect(speed).toHaveText("1.5");
     await expect(speed.locator("svg")).toHaveCount(0);
     await expect(speed).toHaveAccessibleName("再生の速さ 1.5 倍");
-    await expect(speed).toHaveAttribute("aria-pressed", "true");
+    await expect(speed).not.toHaveAttribute("aria-pressed");
     // 選んだ速さは覚える。開き直しても同じ速さで始まる
     await goto(page, `/watch/${id}`);
     await expect(page.getByTestId("watch-speed")).toHaveText("1.5");

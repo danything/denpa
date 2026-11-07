@@ -731,10 +731,12 @@
           </button>
         {/snippet}
         <div class="c-menu-head small muted">種類</div>
-        <div class="side-list">{@render kinds(() => (filterOpen = false))}</div>
+        <div class="side-list" role="group" aria-label="ライブか録画か">
+          {@render kinds(() => (filterOpen = false))}
+        </div>
         {#if data.facets.services.length > 0}
           <div class="c-menu-head small muted">局</div>
-          <div class="side-list">
+          <div class="side-list" role="group" aria-label="局">
             {@render services(() => (filterOpen = false))}
           </div>
         {/if}

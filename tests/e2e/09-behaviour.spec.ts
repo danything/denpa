@@ -25,6 +25,31 @@ test.describe("操作したときの反応", () => {
     await cancelAllReservations(page);
   });
 
+  /**
+   * **番組の詳細は番組名を名前にし、開いたら焦点が中へ移り、閉じたら押したマスへ戻る** (読み上げとキーボードで迷わない)
+   */
+  test("番組の詳細は番組名で読まれ、焦点が中へ移って閉じると戻る", async ({
+    page,
+  }) => {
+    await goto(page, "/guide?type=GR");
+    const [target] = await upcoming(page);
+    const opener = cellOf(page, target.programId).getByTestId("program-button");
+    await opener.focus();
+    await page.keyboard.press("Enter");
+
+    const detail = page.getByTestId("program-detail");
+    await expect(detail).toBeVisible();
+    const name = (await detail.locator("h3").first().textContent())!.trim();
+    await expect(page.getByRole("dialog", { name })).toBeVisible();
+    expect(
+      await detail.evaluate((node) => node.contains(document.activeElement)),
+    ).toBe(true);
+
+    await page.keyboard.press("Escape");
+    await expect(detail).toBeHidden();
+    await expect(opener).toBeFocused();
+  });
+
   test("番組表で予約すると詳細が閉じ、予約済みになる", async ({ page }) => {
     await goto(page, "/guide?type=GR");
 
