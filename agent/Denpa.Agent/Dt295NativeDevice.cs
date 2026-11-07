@@ -159,6 +159,11 @@ public sealed class Dt295NativeDevice
             {
                 i2c.UseSequencer = link.ProbeI2cSequencer();
             }
+            if (timeline is { TraceI2c: true })
+            {
+                TraceStart(timeline, link, i2c);
+                if (!i2c.UseSequencer) timeline.TraceLines.Add("(機材の中の診断は、順次実行が使えないので取っていない)");
+            }
             using (timeline.Step("復調とチューナーの初期化 (INITIALIZE の I2C)", "仕様書 7.1")) frontend.Initialize();
             undo.Push(("地上波側を休ませる", frontend.RestTerrestrial));
             return new Dt295NativeDevice(port, usb, link, board, frontend, undo, (clock.Elapsed, link.Controls), idlePolls, timeline);
@@ -169,6 +174,27 @@ public sealed class Dt295NativeDevice
             usb.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// I2C の最初の転送 (地上波の復調 0x10 へのアドレスだけの書き) の START を、ホストから出した場合と機材の中から出した場合で、
+    /// 状態 (0xFD8FE0) と制御 (0xFD8FE4) の読み値を並べて <see cref="Dt295Timeline.TraceLines"/> に書く。違いが出る所が、機材の中の手順の直す所
+    /// </summary>
+    private static void TraceStart(Dt295Timeline timeline, Dt295NativeLink link, Dt295NativeI2c i2c)
+    {
+        string Row(uint[] words, int sample) => $"{sample,3}: 状態 0x{words[3 + 2 * sample]:X8} 制御 0x{words[4 + 2 * sample]:X8}";
+        var host = i2c.HostTrace(Dt295NativeFrontend.Terrestrial, 16);
+        timeline.TraceLines.Add($"I2C の START の診断 (0x10 へのアドレスだけの書き)。始めの 状態 0x{host[0]:X8} 制御 0x{host[1]:X8} データ 0x{host[2]:X8}");
+        timeline.TraceLines.Add("ホストから (読み 1 回 約 60 µs):");
+        for (var i = 0; i < 16; i++) timeline.TraceLines.Add("  " + Row(host, i));
+        timeline.TraceLines.Add($"  STOP のあと 状態 0x{host[3 + 32]:X8} 制御 0x{host[4 + 32]:X8}");
+        Thread.Sleep(5);
+        if (!i2c.UseSequencer) return;
+        var device = link.TraceI2c(Dt295NativeFrontend.Terrestrial);
+        timeline.TraceLines.Add($"機材の中から (待たずに続けて読む)。始めの 状態 0x{device[0]:X8} 制御 0x{device[1]:X8} データ 0x{device[2]:X8}");
+        for (var i = 0; i < 32; i++) timeline.TraceLines.Add("  " + Row(device, i));
+        timeline.TraceLines.Add($"  STOP のあと 状態 0x{device[3 + 64]:X8} 制御 0x{device[4 + 64]:X8}");
+        i2c.Reset();
     }
 
     /// <summary>設定を逆順に戻す。USB の制御が止まっていれば省く。失敗しても続ける</summary>

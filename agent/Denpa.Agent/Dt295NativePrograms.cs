@@ -138,6 +138,8 @@ public static class Dt295NativePrograms
         asm.Ld(R12, R0);
         asm.CmpI(2, R0);
         asm.Far(Fr30Cond.Eq, "i2c", R12);
+        asm.CmpI(3, R0);
+        asm.Far(Fr30Cond.Eq, "i2c_trace", R12);
         asm.Ldi32(RingCpu, R4);
         asm.Ldi32(RingLength, R5);
         asm.Ldi20(Staging + 8, R12);
@@ -385,6 +387,18 @@ public static class Dt295NativePrograms
         asm.Label("t_loop");
         asm.CmpI(0, R5);
         asm.Far(Fr30Cond.Eq, "i2c_done", R12);
+        // バスが空くまで待つ (状態の bit7)。直前の STOP のすぐあとに次の START を出さない。ホストは制御転送の間隔 (約 60 µs) でこの間が空いている
+        asm.Ldi32(0x20000, R12);
+        asm.Label("idle_wait");
+        asm.Ld(R7, R0);
+        asm.Ldi8(0x80, R11);
+        asm.And(R11, R0);
+        asm.B(Fr30Cond.Eq, "idle_ok");
+        asm.Add2(-1, R12);
+        asm.B(Fr30Cond.Ne, "idle_wait");
+        asm.Ldi8((uint)I2cTimeout, R0);
+        asm.Far(Fr30Cond.Ra, "i2c_fail", R12);
+        asm.Label("idle_ok");
         asm.LdubAc(R4, R1);
         asm.AddI(1, R4);
         asm.LdubAc(R4, R2);
@@ -533,6 +547,19 @@ public static class Dt295NativePrograms
 
         // 制御の bit0 (1 バイト終わった) が立つまで読む。R0 = 0 (済んだ)・2 (バスエラー、bit7)・3 (時間切れ)。済んだときの制御の値は R10
         asm.Label("wait_byte");
+        // 先に、制御の bit0 が 0 になっているのを少しの間 (64 回の読みまで) 見る。書いた値が効いて、前の転送の「終わった」の印が消えたことの確認で、
+        // 見ずに bit0 が立つのを待つと、書いた直後の古い bit0 を「終わった」と読み違えるおそれがある。0 が見えなくても (書いた直後にもう終わった)
+        // 先へ進む。0 の間に「終わった」の印が立つのを待つのは、次の wb_loop
+        asm.Ldi8(64, R12);
+        asm.Label("wb_clear");
+        asm.Ld(R8, R10);
+        asm.Mov(R10, R0);
+        asm.Ldi8(1, R11);
+        asm.And(R11, R0);
+        asm.B(Fr30Cond.Eq, "wb_start");
+        asm.Add2(-1, R12);
+        asm.B(Fr30Cond.Ne, "wb_clear");
+        asm.Label("wb_start");
         asm.Ldi32(0x20000, R12);
         asm.Label("wb_loop");
         asm.Ld(R8, R10);
@@ -554,6 +581,55 @@ public static class Dt295NativePrograms
         asm.Label("wb_ok");
         asm.Ldi8(0, R0);
         asm.Ret();
+
+        // --- 操作 3: 診断。最初の転送の START を出して、状態と制御の読み値をそのまま並べる ---
+        // 要求: +12 結果の置き場 (CPU)、+16 アドレス (7 ビット)。結果 (語): 始めの状態・制御・データ、START のあとの (状態, 制御) × 32、STOP のあとの (状態, 制御)。
+        // 応答: +4 結果 0、+8 0、+12 結果のバイト数。待たずに読むので、バスが START を受けてから bit0 が立つまでの経過が見える
+        asm.Label("i2c_trace");
+        asm.Ldi20(Staging + 12, R12);
+        asm.Ld(R12, R13);
+        asm.AddI(4, R12);
+        asm.Ld(R12, R1);                     // アドレス
+        asm.Ldi8(0, R4);
+        asm.Ldi32(0xFD8FE0, R7);
+        asm.Ldi32(0xFD8FE4, R8);
+        asm.Ldi32(0xFD8FF0, R9);
+        foreach (var source in new[] { R7, R8, R9 })
+        {
+            asm.Ld(source, R0);
+            asm.StAc(R0, R4);
+            asm.AddI(4, R4);
+        }
+        asm.Lsl(1, R1);
+        asm.St(R1, R9);                      // データ = アドレス << 1 (書き)
+        asm.Ldi8(0x52, R0);
+        asm.St(R0, R8);                      // 制御 = 0x42 | 0x10 (START)
+        asm.Ldi8(32, R3);
+        asm.Label("tr_loop");
+        asm.Ld(R7, R0);
+        asm.StAc(R0, R4);
+        asm.AddI(4, R4);
+        asm.Ld(R8, R0);
+        asm.StAc(R0, R4);
+        asm.AddI(4, R4);
+        asm.Add2(-1, R3);
+        asm.B(Fr30Cond.Ne, "tr_loop");
+        asm.Ldi8(0x42, R0);
+        asm.St(R0, R8);                      // STOP
+        asm.Ld(R7, R0);
+        asm.StAc(R0, R4);
+        asm.AddI(4, R4);
+        asm.Ld(R8, R0);
+        asm.StAc(R0, R4);
+        asm.AddI(4, R4);
+        asm.Ldi20(Staging + 4, R12);
+        asm.Ldi8(0, R0);
+        asm.St(R0, R12);
+        asm.AddI(4, R12);
+        asm.St(R0, R12);
+        asm.AddI(4, R12);
+        asm.St(R4, R12);
+        asm.Far(Fr30Cond.Ra, "leave", R12);
     }
 
     /// <summary>[address] を size バイトで読み、expected と違えば "orig" へ。R0 と R12 だけを使う</summary>

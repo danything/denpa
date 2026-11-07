@@ -19,6 +19,12 @@ public sealed class Dt295Timeline
 
     public Func<long> Transfers { get; set; } = () => 0;
 
+    /// <summary>true なら、機材を開くとき I2C の順次実行の確認のあとに、最初の転送の START の診断を取る (--dt295-probe --i2c-trace)</summary>
+    public bool TraceI2c { get; set; }
+
+    /// <summary>診断の出力 (1 行ずつ)</summary>
+    public List<string> TraceLines { get; } = [];
+
     public sealed class Row
     {
         public int Depth;
@@ -111,6 +117,7 @@ public sealed class Dt295Timeline
         // 待ちの合計 (入れ子の待ちは数えない。待ちの中に待ちは入らない)
         var waits = rows.Where(row => row.IsWait && row.Ms >= 0).ToArray();
         output.WriteLine($"固定の待ち: {waits.Length} 回、合計 {waits.Sum(row => row.Ms):F0} ms");
+        foreach (var line in TraceLines) output.WriteLine(line);
     }
 }
 
