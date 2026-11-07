@@ -123,6 +123,7 @@ internal sealed class Dt295NativeStream
         var timeline = _device.Timeline;
         using (timeline.Step("取り込みの設定", "仕様書 8.1.3。28 項目を書いて読み戻す")) _capture = board.ConfigureCapture();
         using (timeline.Step("端点の開始", "仕様書 8.3.1")) _endpoint = board.StartEndpoint();
+        board.ResetPumpState();
         using (timeline.Step("取り込みの開始", "0x1902010 = 0x02000000")) board.StartCapture();
         _capturing = true;
     }
@@ -332,6 +333,8 @@ public sealed class Dt295NativeTuner : ITuneDevice
             Px4Userland.ClearNotice(_key, this);
             var device = _device;
             var timeline = device.Timeline;
+            // 同じ機材のカードの準備を、選局と並べて始める (復号は TS が届いてからすぐ始められる)
+            device.WarmCard();
             using var whole = timeline.Step("選局から最初の TS まで");
             try
             {

@@ -31,6 +31,10 @@ public sealed class Dt295NativeCard : ICardLink
     private T1Protocol? _t1;
     private int _blockWaitMs = 500;
     private bool _powered;
+    private byte[]? _atr;
+
+    /// <summary>電源の入れ方から T=1 までの流れ (<see cref="Reset"/>)、送受信 (<see cref="Transmit"/>)、電源を切る (<see cref="Dispose"/>) を 1 つずつ通す (準備を別のスレッドで進めるため)</summary>
+    private readonly Lock _session = new();
 
     public string Name { get; }
 
@@ -119,22 +123,31 @@ public sealed class Dt295NativeCard : ICardLink
         }
     }
 
+    /// <summary>
+    /// 電源を入れて ATR を返す。**電源が入って T=1 の話し方が決まっていて、カードが挿さっていれば、入れ直さずにその ATR を返す**
+    /// (機材を開いたあと、選局と並べて準備しておくため。<see cref="Dt295NativeDevice.WarmCard"/>)。送受信が失敗したあとは入れ直す
+    /// </summary>
     public byte[] Reset()
     {
-        try
+        lock (_session)
         {
-            return ResetCore();
-        }
-        catch (Exception error) when (error is IOException or TimeoutException)
-        {
-            _fail?.Invoke(error);
-            throw;
+            if (_t1 is not null && _atr is { } ready && Present()) return ready;
+            try
+            {
+                return _atr = ResetCore();
+            }
+            catch (Exception error) when (error is IOException or TimeoutException)
+            {
+                _fail?.Invoke(error);
+                throw;
+            }
         }
     }
 
     private byte[] ResetCore()
     {
         _t1 = null;
+        _atr = null;
         if (_powered) PowerOff();
         // 電源を入れてから ATR を受け切るまで、TS の要求を小さくさせる (受信 FIFO が溢れないように)
         byte[] raw;
@@ -164,20 +177,27 @@ public sealed class Dt295NativeCard : ICardLink
 
     public byte[] Transmit(ReadOnlySpan<byte> apdu)
     {
-        if (_t1 is null) throw new IOException($"{Name} のカードに繋いでいません (Reset を先に)");
-        try
+        lock (_session)
         {
-            if (!Present())
+            if (_t1 is null) throw new IOException($"{Name} のカードに繋いでいません (Reset を先に)");
+            try
             {
-                _t1 = null;
-                throw new CardAbsentException($"{Name} のカードが抜かれました");
+                if (!Present())
+                {
+                    _t1 = null;
+                    _atr = null;
+                    throw new CardAbsentException($"{Name} のカードが抜かれました");
+                }
+                return _t1.Transmit(apdu);
             }
-            return _t1.Transmit(apdu);
-        }
-        catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
-        {
-            _fail?.Invoke(error);
-            throw;
+            catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
+            {
+                // 話し方が崩れたかもしれない。次の Reset は電源から入れ直す
+                _t1 = null;
+                _atr = null;
+                _fail?.Invoke(error);
+                throw;
+            }
         }
     }
 
@@ -245,23 +265,69 @@ public sealed class Dt295NativeCard : ICardLink
 
     public void Dispose()
     {
-        _t1 = null;
-        if (_link is null) return;
+        lock (_session)
+        {
+            _t1 = null;
+            _atr = null;
+            if (_link is null) return;
+            try
+            {
+                if (_powered && !_link.Dead) PowerOff();
+            }
+            catch (Exception error) when (error is IOException or TimeoutException or ObjectDisposedException)
+            {
+                // 機材が先に閉じられていたとき (エージェントを止めるとき) も、ここから例外を出さない
+                _log?.Invoke($"カードの電源を切れませんでした: {error.Message}");
+            }
+            finally
+            {
+                // カードを閉じたあとは、カードの UART に書けないようにする (許可はカードが使っている間だけ)
+                _link.AllowCardUart = false;
+                _link = null;
+                _release?.Invoke();
+            }
+        }
+    }
+}
+
+/// <summary>
+/// 機材 1 台のカード (<see cref="Dt295NativeDevice.Card"/>) を、カードリーダーの並び (CardLinks) に出す入れ物。
+/// カードは機材を開いている間は電源が入ったままで (選局と並べて準備するため)、これを閉じても電源は切らない。機材を閉じるときに切る
+/// </summary>
+public sealed class Dt295NativeCardHandle(string name, Dt295NativeDevice device) : ICardLink
+{
+    private int _disposed;
+
+    public string Name { get; } = name;
+
+    public byte[] Reset()
+    {
         try
         {
-            if (_powered && !_link.Dead) PowerOff();
+            return device.Card.Reset();
         }
-        catch (Exception error) when (error is IOException or TimeoutException or ObjectDisposedException)
+        catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
         {
-            // 機材が先に閉じられていたとき (エージェントを止めるとき) も、ここから例外を出さない
-            _log?.Invoke($"カードの電源を切れませんでした: {error.Message}");
+            device.Fail(error);
+            throw;
         }
-        finally
+    }
+
+    public byte[] Transmit(ReadOnlySpan<byte> apdu)
+    {
+        try
         {
-            // カードを閉じたあとは、カードの UART に書けないようにする (許可はカードが使っている間だけ)
-            _link.AllowCardUart = false;
-            _link = null;
-            _release?.Invoke();
+            return device.Card.Transmit(apdu);
         }
+        catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
+        {
+            device.Fail(error);
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0) device.Release();
     }
 }

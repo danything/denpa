@@ -66,6 +66,15 @@ public sealed class Dt295Timeline
         }
     }
 
+    /// <summary>ここまでの行 (終わっていない行は <see cref="Row.Ms"/> が負)</summary>
+    public IReadOnlyList<Row> Rows
+    {
+        get
+        {
+            lock (_gate) return [.. _rows];
+        }
+    }
+
     /// <summary>段を始める</summary>
     public Scope Begin(string name, string? reason = null, bool wait = false)
     {

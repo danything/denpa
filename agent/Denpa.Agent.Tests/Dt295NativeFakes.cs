@@ -298,6 +298,8 @@ internal sealed class Dt295Fake : IUsbDevice
             case 0x1902010:
                 return;
             case 0x1902028:
+                // 取り込みを止めて設定を戻すとき、書き込み位置は 0 に書き戻される (取り込みを始めると WpOnStart になる)
+                if (!CaptureStarted) Wp = value;
                 return;
             case 0xFDBD10 or 0xFDBD38 when value == 1:
                 Put(address, 4, 0);          // 書くと 0 に戻る (仕様書 8.4 の 6・7)

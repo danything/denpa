@@ -257,4 +257,34 @@ public class Dt295NativeSequencerTests
         var done = other ?? throw new InvalidOperationException("別のスレッドの要求が出ていません");
         await Assert.That((await done).Single()).IsEqualTo((byte)0x5A);
     }
+
+    [Test]
+    public async Task 要求を続けて出すスレッドがいても_ほかの読み書きは待たされ続けない()
+    {
+        // TS の要求を休みなく出す側が、放してすぐ取り直してほかの呼び出しを待たせ続けない (カードの準備が TS の送り出しに押される問題)
+        var (fake, link, _) = Rig(true);
+        var ring = new List<byte>();
+        for (var i = 0; i < 40; i++)
+        {
+            var record = new byte[192];
+            record[0] = 0x47;
+            ring.AddRange(record);
+        }
+        fake.PutRing(0, ring.ToArray());
+        fake.WpOnStart = (uint)ring.Count;
+        fake.Put(0x190202C, 4, 0);
+        var stop = false;
+        var pump = Task.Run(() =>
+        {
+            while (!Volatile.Read(ref stop)) link.Pump(1, 20, 1000);
+        });
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < 200; i++) link.Read32(0xFD8010);
+        var elapsed = clock.Elapsed;
+        Volatile.Write(ref stop, true);
+        await pump;
+
+        await Assert.That(elapsed).IsLessThan(TimeSpan.FromSeconds(5));
+    }
 }
