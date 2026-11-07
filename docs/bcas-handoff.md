@@ -85,10 +85,10 @@
 
 - `expired` の局は予約・番組表で「期限切れ」バッジを出す。
 - 自動録画の対象から外す。
-- `scheduler.tick()` が `CONTRACT_SCAN_INTERVAL` ごとに `scanContracts()` を呼ぶ。
-  既定は 12 時間ごと。深夜 1 回ではない。
-- 前回の状態と比べて **新たに `expired` になった局だけ**
-  `contract.expired` Webhook を送る。
+- `scheduler.tick()` が `CONTRACT_SCAN_INTERVAL` (既定 12 時間) または深夜 JST 03:00 に `scanContracts()` を呼ぶ。
+- 前回の状態と比べて **新たに `expired` になった局** に `contract.expired` Webhook を送る。
+- `subscribed` かつ `valid_until` が 7 日以内の局に **`contract.expiring` (期限切れ予告) Webhook** を送る。
+- `contract_notifications` テーブルに記録し、同一期限に対する二重通知を防ぐ。
 
 ### 2.4 EMM
 
@@ -192,25 +192,22 @@
 
 ## 7. まだ無いものと次の PR
 
-### PR A: 状態モデルの整理と「未確認」表示
+### PR A: 状態モデルの整理と「未確認」表示 (実装完了)
 
-- `card_contracts.state` に `unknown` を足すか、`confirmed` フラグを追加する。
-- いまの `unsubscribed` は「契約が無い」と「まだ確かめていない」を兼ねている。
-- 0xCB が無く、復号も未実施の局を「未確認」と表示する。
-- `source` (`eit_ca` / `decode` / `manual`) を持たせ、判定根拠を残す。
-- 既存 DB の移行を含む。UI の文言も「未契約」と「未確認」を分ける。
+- `card_contracts.state` に `unknown` を追加。
+- 判定根拠 `source` (`eit_ca` / `decode` / `manual`) を追加。
+- 0xCB が無く復号テスト未実施の局を「未確認」と判定・記録。
+- `ContractDialog.svelte` で「契約中」「期限切れ」「未確認」「未契約」の表示と判定元（カード判定 / 復号テスト）を整理。
 
-### PR B: 7 日前通知と深夜スキャン (次に着手しやすい)
+### PR B: 7 日前通知と深夜スキャン (実装完了)
 
-- `subscribed` かつ `valid_until` が 7 日以内の局を検出する。
-- `contract.expiring` を追加し、Discord などへ「7 日後に期限切れ」を送る。
-- 通知済みの期限を DB に記録し、同じ期限で繰り返さない。
-- 深夜 (例: 03:00 JST) に 1 日 1 回実行する。
-- `0x90 0x3C` は選局しないので、チューナーを塞がない。
-- 0xCB が無い局は対象外とし、「未確認」または「復号テストの再確認が必要」
-  として別に扱う。
+- `subscribed` かつ `valid_until` が 7 日以内の局を検知。
+- `contract.expiring` イベントを追加し、Discord などへ「7 日後に期限切れ」予告を送信。
+- `contract_notifications` テーブルに記録し、同一期限での重複通知を抑止。
+- 深夜 (JST 03:00) を跨いだタイミングでの定期スキャン実行を追加。
+- 0xCB が無い局は 7 日後判定の対象外（復号テスト有効期限に基づく）。
 
-### PR C: 契約確認方式の抽象化と拡張
+### PR C: 契約確認方式の抽象化と拡張 (次)
 
 - `ContractChecker` のような形で、EIT 0xCB、復号テスト、ECM 確認、
   手動設定を同じ結果にまとめる。
