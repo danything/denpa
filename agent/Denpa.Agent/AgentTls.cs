@@ -167,6 +167,48 @@ public sealed class AgentTls
         }
     }
 
+    /// <summary>
+    /// <c>POST /denpa/pair</c> の本文の上限 (バイト)。中身は指紋 (64 字) と proof (43 字) だけで 130 バイトほど。
+    /// **組む前の相手からも受ける**ので、Kestrel の既定 (30MB) のままにせず、要る大きさに余裕を足したところで切る
+    /// </summary>
+    public const int PairBodyLimit = 1024;
+
+    public const string PairBodyTooLarge = "本文が大きすぎます";
+
+    /// <summary>
+    /// <c>POST /denpa/pair</c> の本文を読む。<see cref="PairBodyLimit"/> を越えたら読むのをやめて <c>TooLarge</c>
+    /// (<paramref name="length"/> は Content-Length。越えていれば読まない)。JSON でなければ null
+    /// </summary>
+    public static async Task<(JsonNode? Body, bool TooLarge)> ReadPairBody(Stream body, long? length)
+    {
+        if (length > PairBodyLimit) return (null, true);
+        // 1 バイト多く読めたら越えている
+        var buffer = new byte[PairBodyLimit + 1];
+        var filled = 0;
+        try
+        {
+            while (filled < buffer.Length)
+            {
+                var read = await body.ReadAsync(buffer.AsMemory(filled));
+                if (read == 0) break;
+                filled += read;
+            }
+        }
+        catch (IOException)
+        {
+            return (null, false);
+        }
+        if (filled > PairBodyLimit) return (null, true);
+        try
+        {
+            return (JsonNode.Parse(buffer.AsSpan(0, filled)), false);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return (null, false);
+        }
+    }
+
     /// <summary><c>POST /denpa/pair</c> の答え。断ったら <c>Error</c>、組めたら返す <c>Proof</c> が入る</summary>
     public readonly record struct PairResult(int Status, string? Error, string? Proof);
 

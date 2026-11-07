@@ -145,4 +145,39 @@ public class AgentTlsTests
 
         await Assert.That(tls.Clients.Count).IsEqualTo(0);
     }
+
+    /*
+     * 組む API は組む前の相手からも受けるので、本文は要る大きさ (130 バイトほど) に余裕を足したところで切る。
+     * 越えた本文は上限の 1 バイト先までしか読まない
+     */
+    [Test]
+    public async Task 組むAPIの本文は上限までしか読まない()
+    {
+        var proof = AgentTls.Proof("token-for-test", "client", A, D);
+        var real = Encoding.UTF8.GetBytes(new JsonObject { ["client"] = D, ["proof"] = proof }.ToJsonString());
+        var (body, tooLarge) = await AgentTls.ReadPairBody(new MemoryStream(real), real.Length);
+        await Assert.That(tooLarge).IsFalse();
+        await Assert.That(body?["proof"]?.GetValue<string>()).IsEqualTo(proof);
+
+        // ちょうど上限なら読む (JSON の後ろの空白で埋める)
+        var padded = new byte[AgentTls.PairBodyLimit];
+        Array.Fill(padded, (byte)' ');
+        real.CopyTo(padded, 0);
+        await Assert.That((await AgentTls.ReadPairBody(new MemoryStream(padded), null)).TooLarge).IsFalse();
+
+        // Content-Length の無い (chunked の) 大きな本文は、上限の 1 バイト先で読むのをやめる
+        var huge = new MemoryStream(new byte[30 * 1024 * 1024]);
+        await Assert.That((await AgentTls.ReadPairBody(huge, null)).TooLarge).IsTrue();
+        await Assert.That(huge.Position).IsEqualTo(AgentTls.PairBodyLimit + 1);
+
+        // Content-Length が上限を越えていれば読まない
+        var declared = new MemoryStream(new byte[2048]);
+        await Assert.That((await AgentTls.ReadPairBody(declared, 2048)).TooLarge).IsTrue();
+        await Assert.That(declared.Position).IsEqualTo(0);
+
+        // JSON でなければ本文なし (Pair が 400 で断る)
+        var broken = await AgentTls.ReadPairBody(new MemoryStream("{"u8.ToArray()), 1);
+        await Assert.That(broken.Body).IsNull();
+        await Assert.That(broken.TooLarge).IsFalse();
+    }
 }

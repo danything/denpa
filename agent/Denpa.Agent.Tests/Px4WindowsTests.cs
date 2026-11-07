@@ -176,6 +176,7 @@ public class Px4WindowsTests
     {
         public string Ready { get; } = Path.Combine(dir, "ready");
         public string Cleaned { get; } = Path.Combine(dir, "cleaned");
+        public override string CardName => "fake";
 
         public override void Ensure() => Launch(
             "powershell.exe",

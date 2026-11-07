@@ -609,7 +609,16 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
             if (result == Success)
             {
                 var length = (int)(nint)transferred;
-                if (length > 0) stream._chunks.Add(new ReadOnlySpan<byte>(stream._buffers[slot.Index], length).ToArray());
+                /*
+                 * **溜めるのは読みの本数ぶんまで。** 越えたら届いたものを捨てる。Linux (usbfs) と Windows (WinUSB) は済んだ読みを
+                 * 読む側が受け取るまで出し直さないので、溜まるのは読みの本数ぶんで、その間に来た TS は機材の側で抜ける。
+                 * ここは済んだその場で出し直すので、上限が無いと読む側が詰まっている間 (最大 5 秒) 溜まり続けた。
+                 * 足すのはこのスレッドだけなので、数えてから足しても越えない
+                 */
+                if (length > 0 && stream._chunks.Count < stream._buffers.Length)
+                {
+                    stream._chunks.Add(new ReadOnlySpan<byte>(stream._buffers[slot.Index], length).ToArray());
+                }
             }
             else if (result != Aborted)
             {

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -9,10 +8,11 @@ namespace Denpa.Agent.Tests;
  * 偽の px4d (Px4TunerTests.FakePx4d) を 8 台立て、それぞれ 5MB/秒 (合計 40MB/秒。地上波 1 本が 2.3MB/秒ほど
  * なので、8 本ぶんを超える) で流し、読む側が読み続ける間の CPU 時間と確保量を出す。
  * 偽の px4d も同じプロセスにいるので、数字はその分も含む (比べるときは同じテストを書き換えの前後で流す)。
- * 合否は「流したぶんが読む側に届いたか」だけで、数字は記録に出す (CI の Unit tests の出力で見る)
+ * 合否は「流したぶんが読む側に届いたか」だけで、数字は記録に出す。
  */
-// 測るだけなので Windows の CI では流さない (並べずに 1 本で流れて、そのぶん全体が延びる)。数字は Linux と Mac で出る
-[ExcludeOn(OS.Windows)]
+// **名指ししたときだけ流す** (Explicit)。並べずに 1 本で流れるので、毎回の単体テストが 5 秒以上延びていた。測るときは
+// dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --treenode-filter '/*/*/Px4StreamBenchTests/*'
+[Explicit]
 [NotInParallel]
 [Timeout(120_000)]
 public class Px4StreamBenchTests

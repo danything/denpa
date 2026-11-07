@@ -670,12 +670,12 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bo
 }
 
 /// <summary>
-/// 筐体を持つ常駐 (<c>px4d</c> / <c>asicend</c>)。**筐体 1 台につき 1 つ、起こしたら止めるまで動き続ける。**
+/// 筐体を持つ常駐 (<c>px4d</c> / <c>asicend</c>)。**筐体 1 台につき 1 つ、使う受信機がある間だけ動かす。**
 ///
 /// <para>
-/// 起こすのは最初に要ったとき (起動時の <see cref="Prepare"/> か、初めての選局)。
+/// 起こすのは最初に要ったとき (起動時の <see cref="Prepare{T}"/> か、初めての選局)。
 /// ファームウェアを流し込んでから ready になるので、数秒かかる。
-/// 落ちていたら次に要ったときに起こし直す。
+/// 落ちていたら次に要ったときに起こし直す。受信機を全部使わない設定にしたら止める (<see cref="Prepare{T}"/>)。
 /// </para>
 /// </summary>
 public abstract class UserlandDaemon(string name, string id)
@@ -725,17 +725,43 @@ public abstract class UserlandDaemon(string name, string id)
         lock (Registry) return [.. All.Values.OfType<T>().Where(daemon => daemon.Running)];
     }
 
+    /// <summary>内蔵カードリーダーの名前 (カードの候補に出る名前)</summary>
+    public abstract string CardName { get; }
+
     /// <summary>
-    /// 挙げた筐体ぶん起こして ready まで待つ。**起動時と、設定を書き換えたとき。**
+    /// 挙げた筐体ぶん起こして ready まで待ち、**挙げなかった <typeparamref name="T"/> は止める。**
+    /// 起動時と、設定 (チューナー・カードリーダー) を書き換えたときと、機材を挿したとき。
     ///
     /// <para>
     /// **起こせなくても止まらない。** 筐体が抜けている・ファームウェアが無い、は
     /// その筐体だけの話で、他のチューナー (PT3 など) は変わらず使える。
     /// 理由は記録に残し、選局のときにもう一度試す。
     /// </para>
+    ///
+    /// <para>
+    /// **受信機を全部使わない設定にした筐体は、常駐を止めて USB を手放す。** 動いたままだと、ほかのソフトに
+    /// 機材を渡せない (docs/switch.md「並べて動かすとき」)。使う設定に戻せば、ここか次の選局で起こし直す。
+    /// 起動したときに使う受信機の無い筐体を起こさないのと同じ。
+    /// ただし、**内蔵カードリーダーをいま復号に使っているなら止めない** (<paramref name="cardInUse"/>)。
+    /// 止めるとほかのチューナーの復号まで止まる。カードリーダーも使わない設定にすれば止まる
+    /// </para>
     /// </summary>
-    public static void Prepare(IEnumerable<string> ids, Func<string, UserlandDaemon> daemon)
+    public static void Prepare<T>(IReadOnlyCollection<string> ids, Func<string, T> daemon, Func<string, bool> cardInUse)
+        where T : UserlandDaemon
     {
+        List<T> unused;
+        lock (Registry) unused = [.. All.Values.OfType<T>().Where(target => target.Running && !ids.Contains(target.Id))];
+        foreach (var target in unused)
+        {
+            if (cardInUse(target.CardName))
+            {
+                target.Write("使う受信機はありませんが、内蔵カードリーダーを復号に使っているので止めません");
+                continue;
+            }
+            target.Write("使う受信機が無くなったので止めます");
+            target.Stop();
+        }
+
         foreach (var id in ids)
         {
             var target = daemon(id);
@@ -892,6 +918,8 @@ public abstract class UserlandDaemon(string name, string id)
 public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
 {
     public static Px4Daemon For(string id) => For(id, () => new Px4Daemon(id));
+
+    public override string CardName => Px4Card.ReaderName(Id);
 
     /// <summary>
     /// 起こしたときの筐体 (一覧で聞いたもの)。動いている間、一覧に出なくなっても (Windows では px4d が使っている

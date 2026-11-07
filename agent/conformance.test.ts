@@ -1414,6 +1414,29 @@ describe("止まれと言われたとき", () => {
   }, 60_000);
 
   /*
+   * **2 回目の合図で待つのをやめる** (Program.cs の Drain)。無かった頃は、手で動かしているときの Ctrl+C も
+   * SIGTERM も受け流され、SHUTDOWN_WAIT (既定 6 時間) まで止まらなかった
+   */
+  test("録画中でも、2 回目の止まれの合図では待たずに落ちる", async () => {
+    const { other, stop } = await spawnOther();
+    try {
+      const rec = await openOn(
+        "/denpa/stream?type=GR&channel=T16&use=rec&priority=10",
+      );
+
+      other.kill("SIGINT");
+      await sleep(1500);
+      expect(other.exitCode).toBeNull();
+
+      other.kill("SIGINT");
+      expect(await exitsWithin(other, 15_000)).toBe(true);
+      rec.abort();
+    } finally {
+      await stop();
+    }
+  }, 60_000);
+
+  /*
    * **止まる途中に来た選局も受ける** (Program.cs の Drain)。断っていた頃は、入れ替えの最中に始まる
    * 録画の頭が欠けた。Recreate なので新しい Pod はこちらが終わるまで立たず、断っても誰も録れない。
    * ライブは受けるが、それを理由には待たない

@@ -51,9 +51,10 @@ public sealed class Px4Card : ICardLink
     public static IReadOnlyList<CardLinkCandidate> Find() => Find(Px4Userland.RuntimeDir);
 
     internal static IReadOnlyList<CardLinkCandidate> Find(string runtimeDir) => Find(
-        runtimeDir, Px4Wire.Px4, id => id.Length >= 4 && Px4Userland.ValidId(id),
-        // pcscd に見せていた頃と同じ名前 (画面で見分けがつくように)
-        id => $"px4-userland {Px4Userland.Label(id)} Internal Card Reader");
+        runtimeDir, Px4Wire.Px4, id => id.Length >= 4 && Px4Userland.ValidId(id), ReaderName);
+
+    /// <summary>筐体の内蔵カードリーダーの名前。pcscd に見せていた頃と同じ (画面で見分けがつくように)</summary>
+    public static string ReaderName(string id) => $"px4-userland {Px4Userland.Label(id)} Internal Card Reader";
 
     /// <summary>
     /// <paramref name="wire"/> のデーモンが起きている筐体ぶん。asicen-userland の asicend も
