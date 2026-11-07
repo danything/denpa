@@ -58,6 +58,13 @@ jobs:
           stage=$(awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile)
           version() { sed -nE "s/^(ARG|ENV) $1=(.+)$/\2/p" <<< "$stage" | head -1; }
           recipe() { sed -n "/^# recipe:$1:begin/,/^# recipe:$1:end/p" .github/ffmpeg-windows.sh | sha256sum | cut -c1-16; }
+          # 読めなかったら止める (空のままだと、バージョンや組み方を変えても鍵が変わらない)
+          for v in OPUS_VERSION SVT_AV1_VERSION; do
+            test -n "$(version $v)" || { echo "Dockerfile の ffmpeg 段に $v がありません" >&2; exit 1; }
+          done
+          for r in opus svt-av1; do
+            grep -q "^# recipe:$r:end" .github/ffmpeg-windows.sh || { echo "ffmpeg-windows.sh に recipe:$r がありません" >&2; exit 1; }
+          done
           echo "opus=ffmpeg-windows-x64-opus-$(version OPUS_VERSION)-$(recipe opus)" >> "$GITHUB_OUTPUT"
           echo "svtav1=ffmpeg-windows-x64-svt-av1-$(version SVT_AV1_VERSION)-$(recipe svt-av1)" >> "$GITHUB_OUTPUT"
 
