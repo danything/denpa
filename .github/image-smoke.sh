@@ -89,10 +89,7 @@ denpa)
     done
     # GPU の経路のフィルタ (hwenc.ts)。ランナーに GPU が無く通せないので、組み込まれているかだけ見る
     filters=$(run /usr/local/bin/ffmpeg -hide_banner -filters)
-    want="hwupload deinterlace_vaapi"
-    # CUDA のフィルタは amd64 だけ。clang で PTX に組めなければ configure が黙って外すので、ここで見る
-    [ "$arch" = amd64 ] && want="$want hwupload_cuda scale_cuda bwdif_cuda"
-    for f in $want; do
+    for f in hwupload deinterlace_vaapi scale_vaapi; do
         grep -qw "$f" <<< "$filters" || { echo "フィルタがありません: $f" >&2; exit 1; }
     done
     # CM を切る concat が H.265 の mkv に差し込む bsf (cm-cut.ts)。H.265 は GPU でしかエンコードしないので

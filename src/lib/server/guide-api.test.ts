@@ -54,7 +54,7 @@ const { broadcastDayStart, guideOf, HOUR, programRange, programsOf } =
   await import("./guide");
 const { cancelProgram, recordedBody, recordProgram } =
   await import("./reservations");
-const { COPY_NEVER_REASON } = await import("../format");
+const { COPY_NEVER_REASON, NOT_CANCELABLE_REASON } = await import("../format");
 
 const MINUTE = 60_000;
 const NOW = Date.now();
@@ -372,14 +372,49 @@ describe("番組を録る・取り消す", () => {
     const live = reservation(2, { started_at: NOW - 30 * MINUTE });
     recording(live, 2);
 
-    expect(await cancelProgram(1)).toEqual({ stopped: false });
-    expect(await cancelProgram(2)).toEqual({ stopped: true });
+    expect(await cancelProgram(1)).toEqual({ ok: true, stopped: false });
+    expect(await cancelProgram(2)).toEqual({ ok: true, stopped: true });
     expect(orm().select().from(recordings).all()).toHaveLength(1);
     // 取り消したものは番組表で予約無しに戻る
     const listed = guideOf("GR", FROM, TO).services[0]!.programs;
     expect(listed.map((p) => p.reservation)).toEqual([null, null]);
     // 2 度目は予約が無い
-    expect(await cancelProgram(1)).toBeNull();
-    expect(await cancelProgram(99)).toBeNull();
+    const missing = {
+      ok: false,
+      status: 404,
+      message: "予約が見つかりません",
+    } as const;
+    expect(await cancelProgram(1)).toEqual(missing);
+    expect(await cancelProgram(99)).toEqual(missing);
+  });
+
+  test("録り逃したもの・放送が終わった「録画しない」は取り消さない (409)", async () => {
+    reset();
+    program(1, MAIN, NOW - 60 * MINUTE, NOW - 30 * MINUTE);
+    program(2, MAIN, NOW - 30 * MINUTE, NOW - MINUTE);
+    program(3, MAIN, NOW - 30 * MINUTE, NOW + 30 * MINUTE);
+    reservation(1, { state: "missed" });
+    reservation(2, { state: "skipped" });
+    reservation(3, { state: "skipped" });
+
+    const refused = {
+      ok: false,
+      status: 409,
+      message: NOT_CANCELABLE_REASON,
+    } as const;
+    expect(await cancelProgram(1)).toEqual(refused);
+    expect(await cancelProgram(2)).toEqual(refused);
+    // 放送中の「録画しない」は取り消せる
+    expect(await cancelProgram(3)).toEqual({ ok: true, stopped: false });
+    const states = orm()
+      .select({ state: reservations.state })
+      .from(reservations)
+      .orderBy(reservations.program_id)
+      .all();
+    expect(states.map((r) => r.state)).toEqual([
+      "missed",
+      "skipped",
+      "canceled",
+    ]);
   });
 });

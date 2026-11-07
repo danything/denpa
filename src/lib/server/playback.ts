@@ -281,7 +281,7 @@ interface TsFile {
 interface PlaybackPlan {
   info: PlaybackInfo;
   encoded: EncodedFile[];
-  /** 元の TS。録り終えていて、読めるときだけ */
+  /** 元の TS。録り終えていて読めて、時刻を物差しに乗せられるときだけ */
   ts: TsFile | null;
   /** 物差しの 0 が、TS の先頭から何秒か (`encode_skip`)。TS が物差しなら 0 */
   skip: number;
@@ -363,7 +363,7 @@ async function probeTs(path: string): Promise<TsFile | null> {
   return ts;
 }
 
-/** 録画の尺 (秒)。番組表の尺ではなく録れた長さ。古い行は予定の長さ */
+/** 録画の尺 (秒)。番組表の尺ではなく録れた長さで、エンコードし終えたら出来上がりの長さ (`encoder.ts`)。古い行は予定の長さ */
 function recordedSec(recording: Recording): number {
   return (
     (recording.duration_ms ?? recording.end_at - recording.start_at) / 1000
@@ -474,8 +474,8 @@ export async function playbackPlan(
       : tracks.map((track) => ({ id: track.id, label: track.label }));
   const duration =
     axis === "encoded"
-      ? (encoded[0]?.media.duration ??
-        Math.max(0, recordedSec(recording) - skip))
+      ? // エンコードし終えた行の `duration_ms` は出来上がりの長さ (頭を捨て、CM を切ったあと) なので、skip は引かない
+        (encoded[0]?.media.duration ?? recordedSec(recording))
       : (ts?.duration ?? recordedSec(recording));
 
   return {
@@ -490,7 +490,15 @@ export async function playbackPlan(
         : {}),
     },
     encoded,
-    ts,
+    /*
+     * エンコードしたものの物差しで TS から変換するのは、TS の時刻を物差しに乗せられるときだけ (MPEG-2 と同じ条件)。
+     * CM を切ったものと、捨てた先頭を覚えていない古い録画は、字幕・チャプター・続きの位置とずれる
+     */
+    ts:
+      axis === "ts" ||
+      (recording.cm_kept === null && recording.encode_skip !== null)
+        ? ts
+        : null,
     skip,
     tracks,
     program: aribServiceId(recording.service_id),
@@ -797,7 +805,13 @@ export function transcodeBody(
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      proc = spawnAttempt(attempts[0]!);
+      // 起こせなければ (ffmpeg が無いなど) 枠を返してから断る。返さないと変換の枠が減ったままになる
+      try {
+        proc = spawnAttempt(attempts[0]!);
+      } catch (error) {
+        finish();
+        throw error;
+      }
       timer = setInterval(() => {
         const now = Date.now();
         // 待っている間は ffmpeg の側、待っていなければ相手の側を見る
@@ -862,7 +876,13 @@ export function transcodeBody(
         console.warn(`${what}をやり直します (${code}): ${why}`);
         failed = await current.log();
         index++;
-        proc = spawnAttempt(attempts[index]!);
+        try {
+          proc = spawnAttempt(attempts[index]!);
+        } catch (error) {
+          finish();
+          controller.error(error);
+          return;
+        }
         continue;
       }
       console.warn(`${what}が止まりました (${code}): ${why}`);
@@ -897,6 +917,8 @@ function spawnAttempt(attempt: Attempt) {
         }
       } finally {
         endInput(proc);
+        // ffmpeg が先に降りたときも、読みかけのファイルを閉じる
+        source.cancel().catch(() => undefined);
       }
     })().catch(() => undefined);
   }

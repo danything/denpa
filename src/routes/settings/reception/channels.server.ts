@@ -142,7 +142,7 @@ export const actions = {
     if (types.length === 0)
       return fail(400, { message: "スキャンする種別を選んでください" });
 
-    const result = await start({ types });
+    const result = start({ types });
     if (!result.started) return fail(409, { message: result.message });
     return { success: true, scan: result.message };
   },
@@ -151,14 +151,14 @@ export const actions = {
    * チャンネルを書き換えたお知らせを消す。**開いた画面が呼ぶ** (`Channels.svelte`)。load で消すと、
    * リンクに指を乗せただけの先読みでも消える
    */
-  seenLineup: async () => {
+  seenLineup: () => {
     seenLineupChanges();
     return { success: true };
   },
 
   /** 走っているスキャンを中断する。設定は書き換えないまま止まる */
-  scanStop: async () => {
-    const result = await stop();
+  scanStop: () => {
+    const result = stop();
     if (!result.stopped) return fail(409, { message: result.message });
     return { success: true, scan: result.message };
   },
