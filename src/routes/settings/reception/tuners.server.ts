@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { config } from "#lib/server/config.js";
 import {
   checkContracts as verifyContracts,
+  type ContractSettings,
   getActiveCardId,
   getContractRows,
   getContractSettings,
@@ -11,7 +12,6 @@ import {
   setManualContract,
   testDecode as testDecodeStream,
   testDecodeUnconfirmed,
-  type ContractSettings,
 } from "#lib/server/contracts.js";
 import { orm } from "#lib/server/db.js";
 import { receiveEmm } from "#lib/server/emm.js";
@@ -279,11 +279,25 @@ export const actions = {
   /** 契約設定を保存する */
   saveContractSettings: async ({ request }) => {
     const form = await request.formData();
-    const skyperfectSync = form.get("skyperfectSync") === "true";
-    const modalMode = form.get("modalMode") as "modal" | "banner" | "none";
+    const patch: Partial<ContractSettings> = {};
+    if (form.has("skyperfectSync")) {
+      patch.skyperfectSync = form.get("skyperfectSync") === "true";
+    }
+    if (form.has("modalMode")) {
+      const mode = form.get("modalMode");
+      if (mode === "modal" || mode === "banner" || mode === "none") {
+        patch.modalMode = mode;
+      }
+    }
     try {
-      saveContractSettings({ skyperfectSync, modalMode });
-      return { success: true };
+      const updated = saveContractSettings(patch);
+      const card = await cardStatus();
+      const id = getActiveCardId(card);
+      return {
+        success: true,
+        settings: updated,
+        contracts: id ? getContractRows(id) : [],
+      };
     } catch (error) {
       return fail(500, { message: String(error) });
     }

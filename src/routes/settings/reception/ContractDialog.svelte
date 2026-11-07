@@ -23,7 +23,7 @@
     open: boolean;
     cardId: string | null;
     initialContracts: ContractRow[];
-    initialSettings: ContractSettings;
+    initialSettings?: ContractSettings | undefined;
     onclose: () => void;
   } = $props();
 
@@ -52,17 +52,37 @@
       settingServiceId !== null,
   );
 
+  const PROVIDER_ORDER: Record<string, number> = {
+    wowow: 1,
+    japanet: 2,
+    skyperfect: 3,
+    other: 4,
+  };
+
   let groupedContracts = $derived.by(() => {
     const groups: Record<string, ContractRow[]> = {};
     for (const row of contracts) {
-      if (!groups[row.providerId]) groups[row.providerId] = [];
-      groups[row.providerId].push(row);
+      const list = groups[row.providerId] ?? (groups[row.providerId] = []);
+      list.push(row);
     }
-    return Object.entries(groups).map(([providerId, rows]) => ({
-      providerId,
-      providerName: rows[0].providerName,
-      rows,
-    }));
+    return Object.entries(groups)
+      .map(([providerId, rows]) => ({
+        providerId,
+        providerName: rows[0]?.providerName ?? providerId,
+        rows,
+      }))
+      .sort(
+        (a, b) =>
+          (PROVIDER_ORDER[a.providerId] ?? 99) -
+          (PROVIDER_ORDER[b.providerId] ?? 99),
+      );
+  });
+
+  $effect(() => {
+    contracts = initialContracts;
+    if (initialSettings) {
+      settings = initialSettings;
+    }
   });
 
   $effect(() => {
@@ -248,21 +268,44 @@
   }
 
   async function handleSaveSettings(patch: Partial<ContractSettings>) {
+    if (isBusy) return;
+    errorMessage = null;
     try {
-        const form = new FormData();
-        Object.entries(patch).forEach(([key, value]) => {
-            form.append(key, String(value));
-        });
-        const res = await fetch("?/saveContractSettings", {
-            method: "POST",
-            body: form,
-        });
-        const data = deserialize(await res.text());
-        if (data.type === "success") {
-            // 設定保存成功
+      const form = new FormData();
+      Object.entries(patch).forEach(([key, value]) => {
+        form.append(key, String(value));
+      });
+      const res = await fetch("?/saveContractSettings", {
+        method: "POST",
+        body: form,
+      });
+      const data = deserialize(await res.text());
+      const payload =
+        data.type === "success" || data.type === "failure"
+          ? (data.data as Record<string, unknown> | undefined)
+          : undefined;
+      const updatedSettings = payload?.["settings"] as
+        ContractSettings | undefined;
+      const updatedContracts = payload?.["contracts"] as
+        ContractRow[] | undefined;
+      const message = payload?.["message"];
+
+      if (data.type === "success") {
+        if (updatedSettings) {
+          settings = updatedSettings;
+        } else {
+          settings = { ...settings, ...patch };
         }
+        if (Array.isArray(updatedContracts)) {
+          contracts = updatedContracts;
+        }
+      } else if (message) {
+        errorMessage = String(message);
+      } else {
+        errorMessage = "設定の保存に失敗しました";
+      }
     } catch (err) {
-        errorMessage = String(err);
+      errorMessage = String(err);
     }
   }
 
@@ -353,12 +396,36 @@
     {/if}
 
     <div class="contract-settings">
-        <label>
-            <input type="checkbox" checked={settings.skyperfectSync} onchange={(e) => handleSaveSettings({ skyperfectSync: e.currentTarget.checked })} />
-            スカパー！の期限・契約情報を全局で同期する
-        </label>
+      <label class="setting-item">
+        <input
+          type="checkbox"
+          checked={settings.skyperfectSync}
+          disabled={isBusy}
+          onchange={(e) =>
+            handleSaveSettings({ skyperfectSync: e.currentTarget.checked })}
+          data-testid="checkbox-skyperfect-sync"
+        />
+        <span>スカパー！の期限・契約情報を全局で同期する</span>
+      </label>
+      <label class="setting-item">
+        <span class="setting-label">契約期限・更新案内:</span>
+        <select
+          class="small"
+          value={settings.modalMode}
+          disabled={isBusy}
+          onchange={(e) =>
+            handleSaveSettings({
+              modalMode: e.currentTarget.value as "modal" | "banner" | "none",
+            })}
+          data-testid="select-modal-mode"
+        >
+          <option value="modal">モーダルで通知</option>
+          <option value="banner">控えめに通知 (バナーのみ)</option>
+          <option value="none">通知しない</option>
+        </select>
+      </label>
     </div>
-    
+
     <div class="toolbar">
       <button
         type="button"
@@ -400,119 +467,119 @@
       </p>
     {:else}
       <div class="table-wrap">
-    {#each groupedContracts as group (group.providerId)}
-        <h3 class="provider-header">{group.providerName}</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>局名</th>
-              <th>種別</th>
-              <th>対応方式</th>
-              <th>契約状態</th>
-              <th>有効期限</th>
-              <th>手動設定</th>
-              <th>復号テスト</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each group.rows as row (row.serviceId)}
+        {#each groupedContracts as group (group.providerId)}
+          <h3 class="provider-header">{group.providerName}</h3>
+          <table>
+            <thead>
               <tr>
-                <td class="name-cell">
-                  <strong>{row.serviceName}</strong>
-                </td>
-                <td>
-                  <span class="mono">{row.type} / {row.channel}</span>
-                </td>
-                <td>
-                  {#if row.availableMethods?.includes("eit_ca")}
-                    <span
-                      class="small"
-                      title="番組表 (EIT 0xCB) からカードで確認可能"
-                      >カード・復号</span
-                    >
-                  {:else}
-                    <span
-                      class="small muted"
-                      title="番組表に契約情報が無いため復号テストで確認"
-                      >復号テストのみ</span
-                    >
-                  {/if}
-                </td>
-                <td>
-                  {#if row.state === "subscribed"}
-                    <span class="tag success">契約中</span>
-                  {:else if row.state === "expired"}
-                    <span class="tag">期限切れ</span>
-                  {:else if row.state === "unknown"}
-                    <span class="tag muted">未確認</span>
-                  {:else}
-                    <span class="tag muted">未契約</span>
-                  {/if}
-                  {#if row.source === "manual"}
-                    <span class="tag source-tag" title="手動で設定された状態"
-                      >手動</span
-                    >
-                  {:else if row.source === "eit_ca"}
-                    <span
-                      class="tiny muted source-tag"
-                      title="番組表 (EIT 0xCB) と B-CAS カードで確認"
-                      >カード判定</span
-                    >
-                  {:else if row.source === "decode"}
-                    <span
-                      class="tiny muted source-tag"
-                      title="実際の放送波ストリームの復号テストで確認"
-                      >復号テスト</span
-                    >
-                  {/if}
-                </td>
-                <td>
-                  <span class="mono">{formatDate(row.validUntil)}</span>
-                </td>
-                <td>
-                  <select
-                    class="small manual-select"
-                    value={row.manualState ?? ""}
-                    disabled={isBusy}
-                    onchange={(e) =>
-                      handleSetManualContract(
-                        row.serviceId,
-                        e.currentTarget.value,
-                      )}
-                    data-testid="select-manual-{row.serviceId}"
-                  >
-                    <option value="">自動判定</option>
-                    <option value="subscribed">契約中 (手動)</option>
-                    <option value="unsubscribed">未契約・除外 (手動)</option>
-                    <option value="unknown">未確認 (手動)</option>
-                  </select>
-                </td>
-                <td class="decode-cell">
-                  {#if row.decodeOk === true}
-                    <span class="tag success">復号成功</span>
-                  {:else if row.decodeOk === false}
-                    <span class="tag error">復号不可</span>
-                  {:else}
-                    <span class="small muted">未確認</span>
-                  {/if}
-                  <button
-                    type="button"
-                    class="ghost small test-btn"
-                    disabled={isBusy}
-                    onclick={() => handleTestDecode(row.serviceId)}
-                    data-testid="btn-test-decode-{row.serviceId}"
-                  >
-                    <ShieldCheck aria-hidden="true" />
-                    {testingServiceId === row.serviceId
-                      ? "検証中…"
-                      : "復号を確かめる"}
-                  </button>
-                </td>
+                <th>局名</th>
+                <th>種別</th>
+                <th>対応方式</th>
+                <th>契約状態</th>
+                <th>有効期限</th>
+                <th>手動設定</th>
+                <th>復号テスト</th>
               </tr>
-            {/each}
-          </tbody>
-        </table>
-    {/each}
+            </thead>
+            <tbody>
+              {#each group.rows as row (row.serviceId)}
+                <tr>
+                  <td class="name-cell">
+                    <strong>{row.serviceName}</strong>
+                  </td>
+                  <td>
+                    <span class="mono">{row.type} / {row.channel}</span>
+                  </td>
+                  <td>
+                    {#if row.availableMethods?.includes("eit_ca")}
+                      <span
+                        class="small"
+                        title="番組表 (EIT 0xCB) からカードで確認可能"
+                        >カード・復号</span
+                      >
+                    {:else}
+                      <span
+                        class="small muted"
+                        title="番組表に契約情報が無いため復号テストで確認"
+                        >復号テストのみ</span
+                      >
+                    {/if}
+                  </td>
+                  <td>
+                    {#if row.state === "subscribed"}
+                      <span class="tag success">契約中</span>
+                    {:else if row.state === "expired"}
+                      <span class="tag">期限切れ</span>
+                    {:else if row.state === "unknown"}
+                      <span class="tag muted">未確認</span>
+                    {:else}
+                      <span class="tag muted">未契約</span>
+                    {/if}
+                    {#if row.source === "manual"}
+                      <span class="tag source-tag" title="手動で設定された状態"
+                        >手動</span
+                      >
+                    {:else if row.source === "eit_ca"}
+                      <span
+                        class="tiny muted source-tag"
+                        title="番組表 (EIT 0xCB) と B-CAS カードで確認"
+                        >カード判定</span
+                      >
+                    {:else if row.source === "decode"}
+                      <span
+                        class="tiny muted source-tag"
+                        title="実際の放送波ストリームの復号テストで確認"
+                        >復号テスト</span
+                      >
+                    {/if}
+                  </td>
+                  <td>
+                    <span class="mono">{formatDate(row.validUntil)}</span>
+                  </td>
+                  <td>
+                    <select
+                      class="small manual-select"
+                      value={row.manualState ?? ""}
+                      disabled={isBusy}
+                      onchange={(e) =>
+                        handleSetManualContract(
+                          row.serviceId,
+                          e.currentTarget.value,
+                        )}
+                      data-testid="select-manual-{row.serviceId}"
+                    >
+                      <option value="">自動判定</option>
+                      <option value="subscribed">契約中 (手動)</option>
+                      <option value="unsubscribed">未契約・除外 (手動)</option>
+                      <option value="unknown">未確認 (手動)</option>
+                    </select>
+                  </td>
+                  <td class="decode-cell">
+                    {#if row.decodeOk === true}
+                      <span class="tag success">復号成功</span>
+                    {:else if row.decodeOk === false}
+                      <span class="tag error">復号不可</span>
+                    {:else}
+                      <span class="small muted">未確認</span>
+                    {/if}
+                    <button
+                      type="button"
+                      class="ghost small test-btn"
+                      disabled={isBusy}
+                      onclick={() => handleTestDecode(row.serviceId)}
+                      data-testid="btn-test-decode-{row.serviceId}"
+                    >
+                      <ShieldCheck aria-hidden="true" />
+                      {testingServiceId === row.serviceId
+                        ? "検証中…"
+                        : "復号を確かめる"}
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/each}
       </div>
     {/if}
   </article>
@@ -627,6 +694,42 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  .contract-settings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.25rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    background: var(--dp-pop, rgba(255, 255, 255, 0.05));
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+
+  .setting-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .setting-label {
+    color: var(--dp-muted, #888);
+  }
+
+  .provider-header {
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .provider-header:first-of-type {
+    margin-top: 0.25rem;
   }
 
   .empty {

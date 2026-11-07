@@ -221,27 +221,29 @@
 - `paidAllowed` が手動契約中 (`manualState === 'subscribed'`) を自動録画対象として認識。
 - `ContractDialog.svelte` の行ごとに手動設定ドロップダウンを追加。
 
-### PR E: 事業者単位の管理・促進 (次)
+### PR E: 事業者単位の管理・促進 (実装完了)
 
-- 契約事業者（WOWOW / スカパー! / ジャパネット等）のマスタデータを整備。
-- 期限切れ・予告通知を事業者単位でグループ化し、まとめて更新促進を行う。
-- 期限切れの局だけでなく、その事業者の全契約状況を俯瞰できるようにする。
+- 契約事業者（WOWOW / スカパー! / ジャパネット / その他）の判別マスタ `getContractProvider` を新設。
+- WOWOW は 3 局直契約（プライム / ライブ / シネマ）の契約状態・有効期限を連動同期。
+- スカパー！は局ごとの個別契約と、代表局（スカチャン 1 等）との一括同期をシステム設定で切り替え可能に両対応。
+- `ContractDialog.svelte` を事業者ごとのグループヘッダー表示に改修。
 
-### PR F: モーダル表示のオプション設定 (次)
+### PR F: モーダル表示のオプション設定 (実装完了)
 
-- 設定画面に「契約期限・更新案内」の表示設定（モーダルで通知 / 控えめに通知 / 無効）を追加。
-- ユーザーごとの設定を `settings` テーブルに保持し、UI に適用。
+- 設定画面・契約確認ダイアログに「契約期限・更新案内」（モーダルで通知 / 控えめに通知 / 通知しない）および「スカパー！の期限・契約情報を全局で同期する」の設定 UI を実装。
+- 設定値（`contract_skyperfect_sync`, `contract_modal_mode`）を `settings` テーブルに永続化し、サーバー側・UI 側でリアルタイム連動。
+- `tuners.server.ts` に `saveContractSettings` アクションを新設。
 
 ## 8. 検証
 
 この引き継ぎ書を書いた時点の結果:
 
-- `TZ=Asia/Tokyo npx -y bun test --isolate src packages scripts`
-  - 3104 pass / 0 fail / 14081 expect() calls
-- `npx -y bun run check`
+- `PATH="/home/kuni/.bun/bin:$PATH" TZ=Asia/Tokyo bun test --isolate src packages scripts`
+  - 3126 pass / 0 fail / 14273 expect() calls
+- `PATH="/home/kuni/.bun/bin:$PATH" bun run check`
   - svelte-check 0 errors / 0 warnings
-- `npx -y bun run lint`
-  - pass
+- `PATH="/home/kuni/.bun/bin:$PATH" bun run lint`
+  - pass (oxlint 0 errors, bun fmt pass)
 
 注意:
 

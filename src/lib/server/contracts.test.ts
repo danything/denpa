@@ -27,8 +27,12 @@ const {
   confirmCardContract,
   ContractChecker,
   fromMjd,
+  getContractProvider,
   getContractRows,
+  getContractSettings,
   getContractWarning,
+  saveContractSettings,
+  CONTRACT_PROVIDERS,
   DECODE_VALID_MS,
   isCodeSubscribed,
   noteStillScrambled,
@@ -1346,5 +1350,273 @@ describe("ContractChecker と手動設定 (Phase C/D)", () => {
     } finally {
       server.stop();
     }
+  });
+
+  describe("契約事業者とスカパー同期・設定 (PR E/F)", () => {
+    test("getContractProvider: サービスIDや局名から事業者を正しく判別する", () => {
+      expect(CONTRACT_PROVIDERS.wowow.name).toBe("WOWOW");
+      expect(CONTRACT_PROVIDERS.japanet.name).toBe("BS10 (ジャパネット)");
+      expect(CONTRACT_PROVIDERS.skyperfect.name).toBe("スカパー！");
+
+      // WOWOW
+      expect(getContractProvider(191, "BS", "WOWOWプライム").id).toBe("wowow");
+      expect(getContractProvider(192, "BS", "WOWOWライブ").id).toBe("wowow");
+      expect(getContractProvider(193, "BS", "WOWOWシネマ").id).toBe("wowow");
+      expect(getContractProvider(999, "BS", "WOWOW特別番組").id).toBe("wowow");
+
+      // WOWOWプラスはスカパー経由
+      expect(getContractProvider(252, "BS", "WOWOWプラス").id).toBe(
+        "skyperfect",
+      );
+
+      // ジャパネット (BS10 / スターチャンネル)
+      expect(getContractProvider(201, "BS", "BS10 プレミアム").id).toBe(
+        "japanet",
+      );
+      expect(getContractProvider(998, "BS", "スターチャンネル1").id).toBe(
+        "japanet",
+      );
+
+      // スカパー (CS または BS234以降)
+      expect(getContractProvider(800, "CS", "スカチャン1").id).toBe(
+        "skyperfect",
+      );
+      expect(getContractProvider(242, "BS", "J SPORTS 1").id).toBe(
+        "skyperfect",
+      );
+
+      // その他
+      expect(getContractProvider(101, "GR", "NHK総合").id).toBe("other");
+    });
+
+    test("getContractSettings / saveContractSettings: 設定の永続化と部分更新", () => {
+      // 初期値または更新
+      const initial = getContractSettings();
+      expect(typeof initial.skyperfectSync).toBe("boolean");
+      expect(["modal", "banner", "none"]).toContain(initial.modalMode);
+
+      saveContractSettings({ skyperfectSync: true, modalMode: "banner" });
+      const updated = getContractSettings();
+      expect(updated.skyperfectSync).toBe(true);
+      expect(updated.modalMode).toBe("banner");
+
+      // 部分更新で他方の設定が消えないこと
+      saveContractSettings({ skyperfectSync: false });
+      const partial = getContractSettings();
+      expect(partial.skyperfectSync).toBe(false);
+      expect(partial.modalMode).toBe("banner");
+
+      saveContractSettings({ modalMode: "none" });
+      const partial2 = getContractSettings();
+      expect(partial2.skyperfectSync).toBe(false);
+      expect(partial2.modalMode).toBe("none");
+    });
+
+    test("WOWOW 3 局連動: プライム (191) の契約がライブ (192)・シネマ (193) に同期される", () => {
+      const now = Date.now();
+      for (const wid of [191, 192, 193]) {
+        orm()
+          .insert(services)
+          .values({
+            id: wid,
+            service_id: wid,
+            network_id: 4,
+            name:
+              wid === 191
+                ? "WOWOWプライム"
+                : wid === 192
+                  ? "WOWOWライブ"
+                  : "WOWOWシネマ",
+            type: "BS",
+            channel: "BS03",
+            updated_at: now,
+          })
+          .run();
+      }
+
+      // 191 はカード判定で契約中 (code あり)
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 191,
+          state: "subscribed",
+          source: "eit_ca",
+          code: 0x0800,
+          valid_until: 40000,
+          checked_at: now,
+        })
+        .run();
+
+      // 192 は未確認行
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 192,
+          state: "unknown",
+          source: null,
+          code: null,
+          checked_at: now,
+        })
+        .run();
+
+      // 193 は手動で未契約に指定された行 (保護されるべき)
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 193,
+          state: "unsubscribed",
+          source: "manual",
+          manual_state: "unsubscribed",
+          code: null,
+          checked_at: now,
+        })
+        .run();
+
+      const rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));
+      // 191 はそのまま契約中
+      expect(rows.get(191)?.state).toBe("subscribed");
+      expect(rows.get(191)?.providerId).toBe("wowow");
+
+      // 192 は 191 に連動して契約中・期限共有
+      expect(rows.get(192)?.state).toBe("subscribed");
+      expect(rows.get(192)?.source).toBe("eit_ca");
+      expect(rows.get(192)?.validUntil).toBe(40000);
+
+      // 193 は手動設定が保護されて未契約のまま
+      expect(rows.get(193)?.state).toBe("unsubscribed");
+      expect(rows.get(193)?.source).toBe("manual");
+
+      // paidAllowed でも連動して 191 と 192 が録画許可、193 は不許可
+      const allowed = paidAllowed(now);
+      expect(allowed(191)).toBe(true);
+      expect(allowed(192)).toBe(true);
+      expect(allowed(193)).toBe(false);
+    });
+
+    test("スカパー！同期: skyperfectSync オフ時は個別、オン時は代表局と同期する", () => {
+      const now = Date.now();
+      // スカチャン1 (800) と J SPORTS 1 (601)
+      for (const [id, name, type, ch] of [
+        [800, "スカチャン1", "CS", "CS02"],
+        [601, "J SPORTS 1", "CS", "CS04"],
+        [602, "個別除外局", "CS", "CS06"],
+      ] as const) {
+        orm()
+          .insert(services)
+          .values({
+            id,
+            service_id: id,
+            network_id: 7,
+            name,
+            type,
+            channel: ch,
+            updated_at: now,
+          })
+          .run();
+      }
+
+      // 800 (スカチャン1) は契約中
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 800,
+          state: "subscribed",
+          source: "eit_ca",
+          code: 0x0800,
+          valid_until: 40500,
+          checked_at: now,
+        })
+        .run();
+
+      // 601 は未確認
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 601,
+          state: "unknown",
+          source: null,
+          code: null,
+          checked_at: now,
+        })
+        .run();
+
+      // 602 は手動で除外
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 602,
+          state: "unsubscribed",
+          source: "manual",
+          manual_state: "unsubscribed",
+          code: null,
+          checked_at: now,
+        })
+        .run();
+
+      // 1. 同期オフのとき
+      saveContractSettings({ skyperfectSync: false });
+      let rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));
+      expect(rows.get(800)?.state).toBe("subscribed");
+      expect(rows.get(601)?.state).toBe("unknown"); // 同期されない
+      expect(paidAllowed(now)(601)).toBe(false);
+
+      // 2. 同期オンのとき
+      saveContractSettings({ skyperfectSync: true });
+      rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));
+      expect(rows.get(800)?.state).toBe("subscribed");
+      expect(rows.get(601)?.state).toBe("subscribed"); // 800 と同期される
+      expect(rows.get(601)?.validUntil).toBe(40500);
+      expect(rows.get(602)?.state).toBe("unsubscribed"); // 手動設定は維持
+
+      expect(paidAllowed(now)(800)).toBe(true);
+      expect(paidAllowed(now)(601)).toBe(true);
+      expect(paidAllowed(now)(602)).toBe(false);
+    });
+
+    test("tuners.server.ts actions.saveContractSettings: 設定更新アクションの動作", async () => {
+      const { actions } =
+        await import("../../routes/settings/reception/tuners.server");
+
+      const server = serveFakeAgent(async (req) => {
+        const url = new URL(req.url);
+        if (url.pathname === "/denpa/card") {
+          return Response.json(ONE_CARD);
+        }
+        return new Response("Not Found", { status: 404 });
+      });
+
+      try {
+        const form = new FormData();
+        form.append("skyperfectSync", "true");
+        form.append("modalMode", "banner");
+
+        type ActionEvent = Parameters<typeof actions.saveContractSettings>[0];
+        type ActionResult = {
+          success?: boolean;
+          settings?: { skyperfectSync: boolean; modalMode: string };
+          contracts?: unknown[];
+        };
+
+        const res = (await actions.saveContractSettings({
+          request: new Request("http://localhost", {
+            method: "POST",
+            body: form,
+          }),
+        } as unknown as ActionEvent)) as ActionResult;
+
+        expect(res?.success).toBe(true);
+        expect(res?.settings?.skyperfectSync).toBe(true);
+        expect(res?.settings?.modalMode).toBe("banner");
+        expect(Array.isArray(res?.contracts)).toBe(true);
+      } finally {
+        server.stop();
+      }
+    });
   });
 });

@@ -35,7 +35,10 @@ export interface ContractProviderInfo {
   name: string;
 }
 
-export const CONTRACT_PROVIDERS: Record<ContractProviderId, ContractProviderInfo> = {
+export const CONTRACT_PROVIDERS: Record<
+  ContractProviderId,
+  ContractProviderInfo
+> = {
   wowow: { id: "wowow", name: "WOWOW" },
   japanet: { id: "japanet", name: "BS10 (ジャパネット)" },
   skyperfect: { id: "skyperfect", name: "スカパー！" },
@@ -1001,8 +1004,11 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
       state: cardContracts.state,
       code: cardContracts.code,
       decodedAt: cardContracts.decoded_at,
+      serviceType: services.type,
+      serviceName: services.name,
     })
     .from(cardContracts)
+    .leftJoin(services, eq(services.id, cardContracts.service_id))
     .where(eq(cardContracts.state, "subscribed"))
     .all();
 
@@ -1019,7 +1025,11 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
 
     if (isDirectlyAllowed) {
       subscribed.add(row.serviceId);
-      const provider = getContractProvider(row.serviceId);
+      const provider = getContractProvider(
+        row.serviceId,
+        row.serviceType ?? undefined,
+        row.serviceName ?? undefined,
+      );
       if (provider.id === "wowow") {
         wowowSubscribed = true;
       }
