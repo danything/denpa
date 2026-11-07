@@ -5,7 +5,7 @@ import { error } from "@sveltejs/kit";
 
 import { pagesFromMkv } from "#lib/server/captions.js";
 import { config } from "#lib/server/config.js";
-import { fileMemo } from "#lib/server/file-memo.js";
+import { fileMemo, sharing } from "#lib/server/file-memo.js";
 import { captionArgs } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { etagMatches, fileEtag } from "#lib/server/serve.js";
@@ -22,7 +22,7 @@ import { run } from "#lib/server/stream.js";
  *
  * **まだエンコードできていない録画は元の TS から抜く** (`playback.captionArgs`)。時刻は観る画面の物差し
  * (TS の先頭を 0) に揃える。TS は丸ごと舐めるのでエンコードしたものより時間がかかる (1 時間の BS で 7GB)。
- * エンコードが終わると物差しが変わるので、こちらは覚えない
+ * エンコードが終わると物差しが変わるので、こちらは覚えない (同時に来たリクエストだけ、1 回の取り出しを共有する)
  */
 
 /** 待ち時間の上限。壊れたファイルで ffmpeg を待ち続けない。元の TS は大きいぶん長く待つ */
@@ -35,6 +35,11 @@ const LIMIT = 32 * 1024 * 1024;
 /** 作ったもの。JSON か、字幕が無い理由。1 本で数百 KB なので、最近観た十数本ぶん */
 type Made = { json: string } | { missing: string };
 const made = fileMemo<Made>(16);
+/**
+ * 元の TS から抜いている最中のもの。覚えはしないが、**同じ録画に同時に来たリクエストは 1 回の取り出しを待たせる**
+ * (TS を丸ごと読む ffmpeg を 2 本起こさない。画面を開き直す・端末を 2 台で開くと重なる)
+ */
+const extracting = sharing<Made>();
 
 const MISSING = "字幕がありません";
 
@@ -99,7 +104,7 @@ export async function GET({ params, request }) {
 
   const result =
     path === null
-      ? await build(argv, ts)
+      ? await extracting(String(recording.id), () => build(argv, ts))
       : await made.get(path, () => build(argv, ts));
   if ("missing" in result) error(404, result.missing);
 

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { fileMemo } from "./file-memo";
+import { fileMemo, sharing } from "./file-memo";
 
 /**
  * **録画の字幕を作り直さない** (`captions.json`)。取り出すには ffmpeg が動画を丸ごと読み、
@@ -90,5 +90,58 @@ describe("fileMemo", () => {
     await memo.get(path, make);
     await memo.get(path, make);
     expect(made).toBe(2);
+  });
+});
+
+/**
+ * **作っている最中だけ共有する** (`sharing`)。元の TS から字幕を抜くとき (`captions.json`) に使う。
+ * 覚えはしないので、終わったあとに求められたら作り直す
+ */
+describe("sharing", () => {
+  test("同じ鍵で同時に求められたら 1 回だけ作り、終わったら作り直す", async () => {
+    const share = sharing<number>();
+    let made = 0;
+    let finish: (value: number) => void = () => undefined;
+    const make = () => {
+      made++;
+      return new Promise<number>((resolve) => (finish = resolve));
+    };
+    const first = share("1", make);
+    const second = share("1", make);
+    finish(7);
+    expect(await Promise.all([first, second])).toEqual([7, 7]);
+    expect(made).toBe(1);
+    const third = share("1", make);
+    finish(8);
+    expect(await third).toBe(8);
+    expect(made).toBe(2);
+  });
+
+  test("鍵が違えば別々に作る", async () => {
+    const share = sharing<string>();
+    const [a, b] = await Promise.all([
+      share("1", () => Promise.resolve("a")),
+      share("2", () => Promise.resolve("b")),
+    ]);
+    expect([a, b]).toEqual(["a", "b"]);
+  });
+
+  test("失敗も待っている全員に同じものを返し、次は作り直す", async () => {
+    const share = sharing<number>();
+    let made = 0;
+    let fail: (error: Error) => void = () => undefined;
+    const make = () => {
+      made++;
+      return new Promise<number>((_, reject) => (fail = reject));
+    };
+    const first = share("1", make);
+    const second = share("1", make);
+    fail(new Error("降りた"));
+    const settled = await Promise.allSettled([first, second]);
+    expect(
+      settled.map((r) => r.status === "rejected" && String(r.reason)),
+    ).toEqual(["Error: 降りた", "Error: 降りた"]);
+    expect(made).toBe(1);
+    expect(await share("1", () => Promise.resolve(3))).toBe(3);
   });
 });

@@ -516,3 +516,28 @@ await Promise.race([
   timeout(30_000),
 ]);
 console.log("side output closes when ffmpeg fails: ok");
+
+// ffmpeg を起こせなかった (Bun.spawn が投げた) ときも、名前付きパイプを待ち受けたまま残さない
+if (windows) {
+  const { connect } = await import("node:net");
+  const unspawned = sideOutput();
+  try {
+    Bun.spawn([at("no-such-ffmpeg.exe"), unspawned.url]);
+  } catch {
+    // 起こせない。ここで read を呼ばない
+  }
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const left = await new Promise<boolean>((resolve) => {
+    const socket = connect(unspawned.url);
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", () => resolve(false));
+  });
+  if (left)
+    throw new Error(
+      "ffmpeg を起こせなかったのに、名前付きパイプが残っています",
+    );
+  console.log("side output closes when ffmpeg cannot start: ok");
+}
