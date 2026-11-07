@@ -617,4 +617,28 @@ public class Dt295NativeTests
         await Assert.That(text).Contains("結果: 成功 3/3 (100.0%)");
         await Assert.That(text).Contains("受信の確認 最小");
     }
+
+    [Test]
+    public async Task 復調のレジスタの経過は_ロックの印が立つまでと立ってからの標本を読み_書き込みをしない()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromSeconds(1), false, IdlePolls: 2000, DemodTrace: true);
+        var output = new StringWriter();
+        var storesBefore = 0;
+
+        var code = Dt295NativeProbe.DemodTrace(options, timeline =>
+        {
+            var device = Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000, timeline);
+            storesBefore = fake.Stores.Count;
+            return device;
+        }, () => Dt295NativeDevice.CloseIfIdle(port), output);
+
+        var text = output.ToString();
+        await Assert.That(code).IsEqualTo(0);
+        await Assert.That(text).Contains("T 復調のレジスタの経過: T25");
+        await Assert.That(text).Contains("ロックの印 (0x81 の bit4)");
+        // 選局のあと標本を読むだけで、USB のレジスタには書かない
+        await Assert.That(fake.Stores.Skip(storesBefore).Any(s => s.Address is >= 0xFD8000 and <= 0xFD80FF)).IsFalse();
+    }
 }

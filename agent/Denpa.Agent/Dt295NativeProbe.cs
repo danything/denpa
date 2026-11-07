@@ -19,10 +19,10 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Dt295NativeProbe
 {
-    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--switch <チャンネル,…>] [--lock-test N [--reopen] [--alt <チャンネル>]] [--trace]";
+    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--switch <チャンネル,…>] [--lock-test N [--reopen] [--alt <チャンネル>]] [--demod-trace] [--trace]";
 
     internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, uint IdlePolls = Dt295NativeDevice.IdlePollsDefault, bool DemodDump = false, string[]? Switch = null,
-        int LockTest = 0, bool Reopen = false, string? Alt = null);
+        int LockTest = 0, bool Reopen = false, string? Alt = null, bool DemodTrace = false);
 
     internal static Options? Parse(string[] args)
     {
@@ -36,7 +36,69 @@ public static class Dt295NativeProbe
         if (args.Contains("--seconds") && !int.TryParse(Value("--seconds"), NumberStyles.None, CultureInfo.InvariantCulture, out seconds)) return null;
         return seconds <= 0 ? null : new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), args.Contains("--trace"), args.Contains("--replug"), Value("--output"), DemodDump: args.Contains("--demod-dump"), Switch: Value("--switch")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             LockTest: int.TryParse(Value("--lock-test"), NumberStyles.None, CultureInfo.InvariantCulture, out var lockTest) ? lockTest : 0,
-            Reopen: args.Contains("--reopen"), Alt: Value("--alt"));
+            Reopen: args.Contains("--reopen"), Alt: Value("--alt"), DemodTrace: args.Contains("--demod-trace"));
+    }
+
+    /// <summary>
+    /// 地上波を選局してから受信を確認するまでの間、T 復調のレジスタ 0x00〜0xFF を約 10 ms ごとに読んで、途中で値が変わったものを時刻つきで出す。
+    /// ロックの前後で動くレジスタから、復調が検出した結果 (モード・ガード・階層など) を返すものを探すため。読むだけで、復調にも USB にも書かない。
+    /// ロックの印 (0x81 の bit4) が立ってからも 15 回読む。選局が終わったところ (選局の呼び出しが戻ったとき) を 0 ms とする
+    /// </summary>
+    internal static int DemodTrace(Options options, Func<Dt295Timeline, Dt295NativeDevice> acquire, Action closeAll, TextWriter output)
+    {
+        if (options.Tuning.Satellite)
+        {
+            output.WriteLine("--demod-trace は地上波だけです");
+            return 2;
+        }
+        var timeline = new Dt295Timeline();
+        try
+        {
+            var device = acquire(timeline);
+            var frontend = device.Frontend;
+            frontend.TuneTerrestrial((uint)((options.Tuning.Frequency + 500UL) / 1000));
+            var samples = new List<(double Ms, byte[] Regs)>();
+            var clock = Stopwatch.StartNew();
+            double? lockedAt = null;
+            var after = 0;
+            while (clock.Elapsed < TimeSpan.FromSeconds(2) && after < 15)
+            {
+                var regs = frontend.DumpDemod(false);
+                samples.Add((clock.Elapsed.TotalMilliseconds, regs));
+                if ((regs[0x81] & 0x10) != 0)
+                {
+                    lockedAt ??= clock.Elapsed.TotalMilliseconds;
+                    after++;
+                }
+                Thread.Sleep(10);
+            }
+            output.WriteLine($"T 復調のレジスタの経過: {options.Channel}、標本 {samples.Count} 回 (1 回 {(samples.Count > 1 ? (samples[^1].Ms - samples[0].Ms) / (samples.Count - 1) : 0):F1} ms 間隔)、"
+                + $"ロックの印 (0x81 の bit4) {(lockedAt is { } lockMs ? $"{lockMs:F0} ms" : "立たず")}。選局が終わったところが 0 ms");
+            var changed = 0;
+            for (var register = 0; register < 256; register++)
+            {
+                var transitions = new List<string>();
+                var previous = -1;
+                foreach (var (ms, regs) in samples)
+                {
+                    if (regs[register] == previous) continue;
+                    transitions.Add($"{ms:F0}:{regs[register]:X2}");
+                    previous = regs[register];
+                }
+                if (transitions.Count < 2) continue;
+                changed++;
+                output.WriteLine($"  0x{register:X2}: {string.Join(" ", transitions.Take(40))}{(transitions.Count > 40 ? $" …(変わった回数 {transitions.Count})" : "")}");
+            }
+            if (changed == 0) output.WriteLine("  途中で値が変わったレジスタはありません");
+            output.WriteLine("ロック後の値 (変わらなかったものも含めて、0x80〜0xBF):");
+            var last = samples[^1].Regs;
+            for (var at = 0x80; at < 0xC0; at += 16) output.WriteLine($"  {at:X2}: {Convert.ToHexString(last.AsSpan(at, 16))}");
+            return lockedAt is null ? 1 : 0;
+        }
+        finally
+        {
+            closeAll();
+        }
     }
 
     /// <summary>次の選局に使う、前の選局から離れるための同じ種別のチャンネル (チャンネル番号 + 2)。指定が無いときの既定</summary>
@@ -146,6 +208,7 @@ public static class Dt295NativeProbe
             }
             Console.Error.WriteLine($"USB のポート {port} の電源を入れ直しました");
         }
+        if (options.DemodTrace) return DemodTrace(options with { Port = port }, timeline => Dt295NativeDevice.Acquire(port, timeline), Dt295NativeDevice.CloseAll, Console.Out);
         if (options.LockTest > 0) return LockTest(options with { Port = port }, timeline => Dt295NativeDevice.Acquire(port, timeline), () => Dt295NativeDevice.CloseIfIdle(port), Dt295NativeDevice.CloseAll, Console.Out);
         try
         {
