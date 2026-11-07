@@ -279,4 +279,3 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         }
     }
 }
-

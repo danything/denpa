@@ -84,7 +84,8 @@ public sealed class Dt295I2cBatch
 
     /// <summary>
     /// 機材に 1 回で渡せる大きさ (<paramref name="opLimit"/> バイト・<paramref name="resultLimit"/> バイトの結果) ごとに分ける。
-    /// 読みの結果を使う書き (種類 1) は、その読みと同じ塊に入れる
+    /// 読みの結果を使う書き (種類 1) は、その読みと同じ塊に入れる。種類 1 が続くと、1 つの塊が上限を 1 転送ぶん (最大 43 バイト) 超えることがある
+    /// (機材に渡せる大きさ <c>BatchLimit</c> は上限よりずっと大きい)。いまの並びでは起きない
     /// </summary>
     public IEnumerable<IReadOnlyList<Op>> Split(int opLimit, int resultLimit)
     {
