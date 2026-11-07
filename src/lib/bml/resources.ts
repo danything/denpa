@@ -17,6 +17,7 @@ import type {
   ProgramInfoMessage,
   ResponseMessage,
 } from "@danything/arib/bml-protocol";
+import { parseMediaType } from "@danything/arib/multipart";
 
 import type { ImageSource } from "./render";
 
@@ -665,34 +666,17 @@ function remoteRef(url: string): Ref | null {
   return { component: REMOTE, module: 0, file: null, url: parsed.href };
 }
 
-/** 中継が返した Content-Type を、カルーセルのファイルと同じ形式に (`text/X-arib-bml; charset=…`) */
+/** 中継が返した Content-Type を、カルーセルのファイルと同じ形式に (`text/X-arib-bml; charset=…`)。読めなければバイト列 */
 function mediaType(contentType: string): MediaType {
-  const [head = "", ...rest] = contentType.split(";");
-  const [major = "application", minor = "octet-stream"] = head
-    .trim()
-    .split("/");
-  return {
-    type: major.toLowerCase(),
-    originalType: major,
-    subtype: minor.toLowerCase(),
-    originalSubtype: minor,
-    parameters: rest.flatMap((part) => {
-      const at = part.indexOf("=");
-      if (at < 0) return [];
-      const attribute = part.slice(0, at).trim();
-      const value = part
-        .slice(at + 1)
-        .trim()
-        .replace(/^"(.*)"$/, "$1");
-      return [
-        {
-          attribute: attribute.toLowerCase(),
-          originalAttribute: attribute,
-          value,
-        },
-      ];
-    }),
-  };
+  return (
+    parseMediaType(contentType) ?? {
+      type: "application",
+      originalType: "application",
+      subtype: "octet-stream",
+      originalSubtype: "octet-stream",
+      parameters: [],
+    }
+  );
 }
 
 function fromBase64(text: string): Uint8Array {

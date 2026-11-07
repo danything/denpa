@@ -35,6 +35,10 @@ export interface GridProgram extends Pick<
   | "copy_never"
 > {
   reservation_state: ReservationState | null;
+  /** 録らない理由 (`reservations.conflict_reason`)。競合・コピー禁止など。予約が無ければ null */
+  conflict_reason: string | null;
+  /** 予約を立てたルール。手で入れた予約と、予約の無い番組は null */
+  rule_id: number | null;
   /**
    * その番組で録れたもの。番組表から詳細を開いたときに、そのまま再生できるようにする。
    * 録画一覧まで戻って同じ番組を探し直させないため

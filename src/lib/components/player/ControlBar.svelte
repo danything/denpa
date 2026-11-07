@@ -9,7 +9,7 @@
    *   番組名だけ (中身の幅で並べると長い名前で操作バーが二段に折れた)
    * - 狭い枠 (`data-compact`。`PlayerStage`) では余白も削る
    * - **影とボタンは別の段に置き、間に実況のコメントと字幕を通す。** 枠の中の重なりは
-   *   映像 (データ放送 5・その小窓 6 を含む) → 影 (7) → 実況 (8。`JikkyoLayer`) → 字幕・幕 (9) → ボタン (10)。
+   *   映像 (データ放送を含む) → 影 → 実況 (`JikkyoLayer`) → 字幕・幕 → ボタン (`app.css` の `--dp-z-stage-*`)。
    *   影とボタンを 1 つの段にしていた頃は、右端の列の所でコメントが影に潜り、暗く欠けて見えた。
    *   そのため外の箱 (`.bar`) には段 (`z-index`) も透明度も付けない。どちらかを付けると箱が 1 つの段にまとまり、
    *   影 (`::before`) をコメントの下へ置けなくなる。出し入れの透明度は影と中身 (`.items`) にそれぞれ掛ける
@@ -48,13 +48,13 @@
   .bar::before {
     content: "";
     position: absolute;
-    z-index: 7;
+    z-index: var(--dp-z-stage-shade);
     pointer-events: none;
     transition: opacity var(--dp-duration);
   }
   .items {
     position: relative;
-    z-index: 10;
+    z-index: var(--dp-z-stage-controls);
     transition: opacity var(--dp-duration);
   }
   .bar.away {

@@ -1,11 +1,14 @@
+import { statSync } from "node:fs";
+
 import { joinBytes } from "@danything/arib/bytes";
 import { error } from "@sveltejs/kit";
 
 import { pagesFromMkv } from "#lib/server/captions.js";
 import { config } from "#lib/server/config.js";
-import { fileMemo } from "#lib/server/file-memo.js";
+import { fileMemo, sharing } from "#lib/server/file-memo.js";
 import { captionArgs } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
+import { etagMatches, fileEtag } from "#lib/server/serve.js";
 import { run } from "#lib/server/stream.js";
 
 /**
@@ -15,12 +18,11 @@ import { run } from "#lib/server/stream.js";
  * エンコードしたもの (mkv) に入っている放送の字幕そのもの (`S_ARIBSUB`) を抜いて、サーバでデコードする。
  * 抜くには ffmpeg が動画を先頭から末尾まで読む (実測 0.1〜1 秒。ディスクが遅いと観はじめの読み込みと取り合う)。
  * **一度作ったものは覚えておき、同じファイルなら作り直さない** (`file-memo.ts`)。
- * **ずっと前にエンコードした録画は画像 (PGS) が入っている**ことがあり、それは読まずに 404 を返す (字幕なし)。
- * 元の TS が残っていれば、再エンコードすると ARIB の字幕が入る。
+ * 画像の字幕 (PGS) は読まずに 404 を返す (扱いは docs/encode.md「字幕は放送の ARIB 字幕をそのまま」)。
  *
  * **まだエンコードできていない録画は元の TS から抜く** (`playback.captionArgs`)。時刻は観る画面の物差し
  * (TS の先頭を 0) に揃える。TS は丸ごと舐めるのでエンコードしたものより時間がかかる (1 時間の BS で 7GB)。
- * エンコードが終わると物差しが変わるので、こちらは覚えない
+ * エンコードが終わると物差しが変わるので、こちらは覚えない (同時に来たリクエストだけ、1 回の取り出しを共有する)
  */
 
 /** 待ち時間の上限。壊れたファイルで ffmpeg を待ち続けない。元の TS は大きいぶん長く待つ */
@@ -33,6 +35,11 @@ const LIMIT = 32 * 1024 * 1024;
 /** 作ったもの。JSON か、字幕が無い理由。1 本で数百 KB なので、最近観た十数本ぶん */
 type Made = { json: string } | { missing: string };
 const made = fileMemo<Made>(16);
+/**
+ * 元の TS から抜いている最中のもの。覚えはしないが、**同じ録画に同時に来たリクエストは 1 回の取り出しを待たせる**
+ * (TS を丸ごと読む ffmpeg を 2 本起こさない。画面を開き直す・端末を 2 台で開くと重なる)
+ */
+const extracting = sharing<Made>();
 
 const MISSING = "字幕がありません";
 
@@ -63,28 +70,43 @@ async function build(argv: string[], ts: boolean): Promise<Made> {
   if (out.length === 0) return { missing: MISSING };
   const pages = pagesFromMkv(out);
   return pages === null
-    ? { missing: "字幕がありません (画像の字幕 (PGS) には対応していません)" }
+    ? {
+        missing:
+          "画像の字幕 (PGS) には対応していません。元の TS が残っていれば、再エンコードすると字幕が入ります",
+      }
     : { json: JSON.stringify(pages) };
 }
 
-export async function GET({ params }) {
+export async function GET({ params, request }) {
   const recording = recordingOr404(params.id);
   const args = await captionArgs(recording);
   if (args === null) error(404, MISSING);
   const { argv, path } = args;
   const ts = path === null;
 
+  /*
+   * **持たせてよいが、毎回確かめさせる** (チャプターと同じ)。再エンコードしても置き場所は同じ名前のことがあり、
+   * CM を切れば字幕の時刻も変わる。`no-cache` + ETag (ファイルの大きさと更新時刻) にして、変わっていなければ 304。
+   * 元の TS はエンコードが終わると物差しが変わるので控えさせない
+   */
+  const stat =
+    path === null ? undefined : statSync(path, { throwIfNoEntry: false });
+  const tag = stat === undefined ? null : fileEtag(stat);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Cache-Control": ts ? "no-store" : "private, no-cache",
+  };
+  if (tag !== null) {
+    headers["ETag"] = tag;
+    if (etagMatches(request, tag))
+      return new Response(null, { status: 304, headers });
+  }
+
   const result =
     path === null
-      ? await build(argv, ts)
+      ? await extracting(String(recording.id), () => build(argv, ts))
       : await made.get(path, () => build(argv, ts));
   if ("missing" in result) error(404, result.missing);
 
-  return new Response(result.json, {
-    headers: {
-      "Content-Type": "application/json",
-      // 同じファイルなら中身は変わらない。再エンコードすればパスごと変わる。元の TS はエンコードが終わると物差しが変わる
-      "Cache-Control": ts ? "no-store" : "private, max-age=3600",
-    },
-  });
+  return new Response(result.json, { headers });
 }

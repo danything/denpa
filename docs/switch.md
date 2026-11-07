@@ -27,7 +27,7 @@ denpa だけで録って観るなら、次のものは要りません。
 - **B25 のデコーダ**。復号はエージェントがします。Linux では pcscd も要りません (USB のカードリーダーを直接扱う。[tuners.md](tuners.md#カードリーダー))
 - **チャンネルの設定ファイル**。設定の「受信」の「チャンネル」でスキャンします。衛星は最初から局が入っています
 - **データベースのサーバ** (MariaDB など)。denpa は SQLite を自分で持ちます ([config.md](config.md))
-- **PX-Q3U4・PX-S1UD などのホストのドライバ**。px4-userland・siano-userland をイメージに同梱しています
+- **PX-Q3U4・PX-S1UD などのホストのドライバ**。px4-userland・siano-userland を同梱しています (Linux はイメージに、Mac と Windows はインストーラが入れる)
   ([tuner-px4.md](tuner-px4.md)・[tuner-px-s1ud.md](tuner-px-s1ud.md))。PT3 などの DVB のドライバは要ります ([tuner-pt3.md](tuner-pt3.md))
 
 ## 移せるもの・移せないもの
@@ -57,6 +57,9 @@ Mirakurun・KonomiTV から取り込む仕組みはありません。チャン�
 - **一度選局したチューナーは、エージェントを止めるか、チューナーの設定を変えるまで開いたままです。**
   同じチューナーをほかのソフトと分け合う仕組みはありません
 - **ほかのソフトに残すチューナーは、設定の「受信」の「チューナー」で「使う」のスイッチを外します。** 外したチューナーは選局に使いません
+- **px4-userland・asicen-userland の機材 (PX-Q3U4・PX-W3U3 など) は、筐体の受信機を全部外すと px4d・asicend を止めて USB を手放します** ([agent.md](agent.md#px4-userland-の作り))。
+  内蔵カードリーダーで復号しているときは止まらないので、同じ画面のカードリーダーの表で、そのリーダーの「使う」も外します。
+  1 つでも「使う」に戻すと、また起こします
 - **Linux では、ホストや別のコンテナで pcscd が動いていると USB のカードリーダーを使えません**
   (「別のプロセスがカードリーダーを使用中です」と出ます。[tuners.md](tuners.md#直らないとき))
 - **PX-S1UD は、カーネルのドライバが使っているものには siano-userland から触りません** ([tuner-px-s1ud.md](tuner-px-s1ud.md))

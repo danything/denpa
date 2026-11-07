@@ -8,9 +8,9 @@ namespace Denpa.Agent;
 /// 手元の B-CAS カード。**カードに送る APDU はここで組み立てる。**
 ///
 /// <para>
-/// 使うコマンドは 3 つ。初期設定条件 (INT, <c>90 30</c>) で鍵を作るための定数を、
+/// 使うコマンドは 4 つ。初期設定条件 (INT, <c>90 30</c>) で鍵を作るための定数を、
 /// カード ID 情報 (IDI, <c>90 32</c>) でカードの番号を、ECM 受信 (<c>90 34</c>) で
-/// スクランブル鍵を貰う。**応答の読み方は libaribb25 と同じにしてある。**
+/// スクランブル鍵を、契約確認 (<c>90 3C</c>) で有料放送の契約の有無を貰う。**応答の読み方は libaribb25 と同じにしてある。**
 /// 番号の出し方も鍵の順も、前と同じ値が出ないと画面の番号が変わって見える。
 /// </para>
 ///
@@ -41,7 +41,6 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>EMM の応答の最短 (返り値コード 2B 込み)</summary>
     private const int EmmLength = 6;
-
     /// <summary>INT が「正常」のときの返り値</summary>
     private const int InitOk = 0x2100;
 

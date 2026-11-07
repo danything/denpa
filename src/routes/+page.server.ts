@@ -42,12 +42,14 @@ import {
   cardContracts,
   encodeJobs,
   lastEncodeError,
+  latestReservationRecordingId,
   programs as programTable,
   recordings as recordingTable,
   reservations as reservationTable,
   reservationState,
   rules as ruleTable,
   services,
+  TO_RECORD_STATES,
 } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
 import { parseTitle } from "#lib/server/title.js";
@@ -199,7 +201,7 @@ export function load({ url, cookies }) {
   const pending = showFinished
     ? not(and(eq(r.state, "missed"), isNull(r.started_at))!)
     : or(
-        and(inArray(r.state, ["scheduled", "conflict"]), isNull(r.started_at)),
+        and(inArray(r.state, TO_RECORD_STATES), isNull(r.started_at)),
         and(eq(r.state, "skipped"), gt(r.end_at, now())),
         eq(rec.state, "recording"),
       );
@@ -236,13 +238,7 @@ export function load({ url, cookies }) {
     .innerJoin(services, eq(services.id, r.service_id))
     .leftJoin(ruleTable, eq(ruleTable.id, r.rule_id))
     // その予約で録れた最新の録画
-    .leftJoin(
-      rec,
-      eq(
-        rec.id,
-        sql`(SELECT id FROM recordings WHERE reservation_id = ${r.id} ORDER BY id DESC LIMIT 1)`,
-      ),
-    )
+    .leftJoin(rec, eq(rec.id, latestReservationRecordingId(r.id)))
     .where(pending)
     .orderBy(desc(sql`${rec.state} = 'recording'`), asc(r.start_at))
     .limit(300)

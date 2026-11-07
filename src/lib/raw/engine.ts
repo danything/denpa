@@ -28,7 +28,7 @@ import { type Chunk, Playout, type Scheduled } from "./playout";
 
 /** 刻み (ms)。音の予約と時計の配り直しをここで回す */
 const TICK = 20;
-/** 映像は出ているのに音が来ないまま、これだけたったら諦める (ms) */
+/** 映像は出ているのに音が来ないまま、これだけたったら打ち切る (ms) */
 const NO_AUDIO = 5_000;
 /** 切り抜きの返事を待つ上限 (ms)。1080 の 1 枚を読み出して渡すのは数十 ms */
 const GRAB_WAIT = 2_000;
@@ -87,7 +87,7 @@ export class RawEngine {
   private frame = 0;
   /** 壁時計を時計にしているか。**音を鳴らせない間 (自動再生を断られた) はこちら** */
   private wall: boolean;
-  /** 選局し直してから音が来たか。来ないまま映像だけ出ているなら諦める (`NO_AUDIO`) */
+  /** 選局し直してから音が来たか。来ないまま映像だけ出ているなら打ち切る (`NO_AUDIO`) */
   private heardAt = 0;
   private shownAt = 0;
   /** 最後に届いた描いたコマ数 (`stats`) */
@@ -159,7 +159,7 @@ export class RawEngine {
       "position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; pointer-events:none;";
     host.insertBefore(this.canvas, before);
 
-    // 途中で転んだら (呼ぶ側がエンコードしたものに戻す) 作ったものを残さない
+    // 途中で失敗したら (呼ぶ側がエンコードしたものに戻す) 作ったものを残さない
     let context: AudioContext | null = null;
     let worker: Worker | null = null;
     try {
@@ -366,7 +366,7 @@ export class RawEngine {
 
   /**
    * いま出しているコマを 1 枚 (切り抜き)。**映像は worker の canvas にある**ので、
-   * リクエストして返してもらう。返事が来ない (worker が詰まっている) ときは諦めて null。
+   * リクエストして返してもらう。返事が来ない (worker が詰まっている) ときは打ち切って null。
    * `size` を付けると worker の中で縮めたものが返る (アンビエントモード)
    */
   grab(size?: GrabSize): Promise<ImageBitmap | null> {
@@ -510,7 +510,7 @@ export class RawEngine {
         break;
       case "frame": {
         const settle = this.grabs.get(message.id);
-        // 待ちきれずに諦めたあとに届いたもの。持たずに捨てる
+        // 待ちきれずに打ち切ったあとに届いたもの。持たずに捨てる
         if (settle === undefined) message.bitmap?.close();
         else settle(message.bitmap);
         break;
@@ -547,9 +547,7 @@ export class RawEngine {
       const pts = this.playout.position(contextTime + ahead);
       return pts === null ? null : { pts, at: stamp.performanceTime };
     }
-    const latency = this.outlet.through
-      ? STREAM_OUT
-      : this.context.outputLatency || this.context.baseLatency || 0;
+    const latency = this.outlet.through ? STREAM_OUT : page;
     const pts = this.playout.position(this.context.currentTime - latency);
     return pts === null ? null : { pts, at: performance.now() };
   }

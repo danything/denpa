@@ -3,8 +3,9 @@
   import { page } from "$app/state";
   import { onMount } from "svelte";
 
+  import { arming } from "#lib/arming.svelte.js";
   import { autosave, SaveState } from "#lib/autosave.svelte.js";
-  import ActionButton from "#lib/components/ActionButton.svelte";
+  import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import Lead from "#lib/components/Lead.svelte";
   import SaveNote from "#lib/components/SaveNote.svelte";
   import { dateTime } from "#lib/format.js";
@@ -28,7 +29,14 @@
   onMount(() => {
     named = !homeHost(location.hostname);
   });
+  /**
+   * 連携を外すのは 2 回押させる (削除と同じ `arming`)。外すと手元のトークンを消すので、戻すにはニコニコでもう一度許可する。
+   * 押す場所は 1 つなので、`armKey` は 0 で足りる
+   */
+  const unlinking = arming('[data-testid^="niconico-unlink"]');
 </script>
+
+<svelte:window onclick={unlinking.stand} />
 
 <!--
     **実況のコメント (世帯の設定。既定はオフ)。** オンにすると、端末の ⚙ に「実況」の行が出る
@@ -132,13 +140,15 @@
               data.niconico.linkedAt,
             )} から</span
           >
-          <ActionButton
+          <ArmedDelete
+            deleting={unlinking}
+            armKey={0}
             action="?/unlinkNiconico"
-            class="small outline danger"
+            class="small"
             testid="niconico-unlink"
-          >
-            連携を外す
-          </ActionButton>
+            label="連携を外す"
+            confirmLabel="連携の解除を確定"
+          />
         </div>
         <span class="hint"
           >ライブの書き込みは、denpa

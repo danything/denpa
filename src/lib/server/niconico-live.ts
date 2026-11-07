@@ -168,7 +168,12 @@ class Session {
     let got = await this.watch(token, user);
     if ("error" in got && got.status === 401) {
       // アクセストークンが断られた。1 回だけ更新してやり直す
-      token = await this.deps.renew().catch(() => null);
+      // hub に届かないのは連携が切れたのとは別 (`niconico.accessToken`)。最初の取得と同じく down にする
+      token = await this.deps.renew().catch(() => {
+        this.fail("トークンを更新できません (denpa-hub に届きません)");
+        return undefined;
+      });
+      if (token === undefined || this.closed) return;
       if (token === null) return this.settle("unlinked");
       got = await this.watch(token, user);
     }

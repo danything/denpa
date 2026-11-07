@@ -88,7 +88,6 @@ public class BCasTests
         response[7] = 0x00;
         return response;
     }
-
     /// <summary>送られてきた APDU の頭 (CLA INS) で答えを決める接続</summary>
     private sealed class FakeLink(string name, Func<byte[], byte[]>? ecm = null) : ICardLink
     {

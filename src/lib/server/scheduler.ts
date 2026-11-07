@@ -27,10 +27,12 @@ import {
 import {
   cardContracts,
   contractNotifications,
+  HELD_STATES,
   programs,
   recordings,
   reservations,
   services,
+  TO_RECORD_STATES,
 } from "./schema";
 import { cardStatus } from "./scramble";
 import { isDraining } from "./shutdown";
@@ -125,7 +127,7 @@ export async function resolveConflicts(): Promise<{
     .leftJoin(programs, eq(programs.id, reservations.program_id))
     .where(
       and(
-        inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+        inArray(reservations.state, HELD_STATES),
         // 録り始めたものは数え直さない。使うチューナーはもう決まっている
         isNull(reservations.started_at),
         gt(reservations.end_at, now()),
@@ -164,7 +166,7 @@ export async function resolveConflicts(): Promise<{
         .where(
           and(
             eq(reservations.id, s.id),
-            inArray(reservations.state, ["scheduled", "conflict"]),
+            inArray(reservations.state, TO_RECORD_STATES),
           ),
         )
         .run();
@@ -423,7 +425,7 @@ export async function tick(): Promise<void> {
       .set({ state: "missed", updated_at: at })
       .where(
         and(
-          inArray(reservations.state, ["scheduled", "conflict"]),
+          inArray(reservations.state, TO_RECORD_STATES),
           isNull(reservations.started_at),
           lte(reservations.end_at, at),
         ),

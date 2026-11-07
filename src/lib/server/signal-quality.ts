@@ -1,264 +1,172 @@
+import { PACKET, packetPid, PacketStream } from "@danything/arib/psi";
+
+import type { ChannelType } from "../types";
 import { config } from "./config";
-import { openChannelStream } from "./tuner";
-
-export interface SignalQualityMetrics {
-  durationMs: number;
-  totalPackets: number;
-  errorPackets: number;
-  dropPackets: number;
-  errorRate: number;
-  dropRate: number;
-  bitrateMbps: number;
-  effectiveBitrateMbps: number;
-  /** C/N 比 (dB)。パケット整合性・変調方式からの推定値 */
-  cnDb: number | null;
-  quality: "excellent" | "good" | "poor" | "bad" | "none";
-  qualityLabel: string;
-}
-
-export interface SignalQualityResult extends SignalQualityMetrics {
-  ok: boolean;
-  channel: string;
-  type: string;
-  error?: string | undefined;
-}
+import { chunks } from "./stream";
+import {
+  getTuners,
+  openChannelStream,
+  type StreamUse,
+  type TunerSignal,
+} from "./tuner";
 
 /**
- * TS ストリームのパケットを検査して受信品質（エラー、ドロップ、ビットレート）を算出するクラス。
+ * 測る長さ (ms)。最初のパケットが届いてから数える (選局にかかる時間を速さに入れない)。
+ * エージェントが C/N を読む間隔 (5 秒) と同じにして、終わるまでに 1 回は読まれるようにする
  */
-export class TsQualityAnalyzer {
-  private totalPackets = 0;
-  private errorPackets = 0;
-  private dropPackets = 0;
-  private nullPackets = 0;
-  private lastCcByPid = new Map<number, number>();
-  private remainder: Uint8Array | null = null;
+const MEASURE = 5_000;
+/**
+ * エージェントが C/N を読む間隔 (ms。agent の `TunerSignal.Every`) に、読み終わるまでの 1 秒を足したもの。
+ * エージェントは選局と関係ない時刻に 5 秒ごとに読むので、選局からこれだけ待てば 1 回は読まれている
+ */
+const SIGNAL_READ = 5_000 + 1_000;
+/** C/N を 1 回読むのを待つ上限 (ms)。エージェントは覚えている値を返すだけなので、ふだんはすぐ返る */
+const READ_LIMIT = 2_000;
+/** パケットが届かないときに諦めるまで (ms)。選局で同期を待つ 5 秒と、測る長さを足したぶんより長く */
+const GIVE_UP = 15_000;
 
-  /** チャンクを受け取って TS パケット（188バイト）ごとに解析 */
+/**
+ * 名乗りが `use` の利用者がいるチューナーの受信の状態と C/N。読めなければ null。
+ * `stop` が立つか `READ_LIMIT` を過ぎたら待たずに null を返す (エージェントが遅くても、チューナーを放すのを遅らせない)
+ */
+async function readSignal(
+  use: StreamUse,
+  stop: AbortSignal,
+): Promise<TunerSignal | null> {
+  if (stop.aborted) return null;
+  const limit = AbortSignal.any([stop, AbortSignal.timeout(READ_LIMIT)]);
+  const gaveUp = new Promise<null>((resolve) =>
+    limit.addEventListener("abort", () => resolve(null), { once: true }),
+  );
+  try {
+    const tuners = await Promise.race([getTuners(), gaveUp]);
+    return (
+      tuners?.find((tuner) => tuner.users.some((user) => user.use === use))
+        ?.signal ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** 受信品質の測定結果 */
+export interface SignalQuality {
+  /** 受け取ったパケットの数 */
+  packets: number;
+  /** 誤りの印 (transport_error_indicator) が立っていたパケットの数 */
+  errors: number;
+  /** 連続性カウンタの飛びから数えた、欠けたパケットの数 */
+  drops: number;
+  /** 受け取った速さ (Mbps) */
+  mbps: number;
+  /** 測っている間のチューナーの受信の状態と C/N。機材が測れなければ null (docs/tuners.md「信号レベル」) */
+  signal: TunerSignal | null;
+}
+
+/** TS のパケットを数え、誤りと欠けを数える */
+export class PacketCheck {
+  packets = 0;
+  errors = 0;
+  drops = 0;
+  private readonly stream = new PacketStream();
+  /** PID ごとの、前のパケットの連続性カウンタ */
+  private readonly last = new Map<number, number>();
+
   feed(chunk: Uint8Array): void {
-    let buf: Uint8Array;
-    if (this.remainder !== null && this.remainder.length > 0) {
-      buf = new Uint8Array(this.remainder.length + chunk.length);
-      buf.set(this.remainder, 0);
-      buf.set(chunk, this.remainder.length);
-      this.remainder = null;
-    } else {
-      buf = chunk;
-    }
-
-    let offset = 0;
-    const len = buf.length;
-
-    while (offset + 188 <= len) {
-      // TS 同期バイト (0x47) の探索
-      if (buf[offset] !== 0x47) {
-        let syncIndex = offset + 1;
-        while (syncIndex < len && buf[syncIndex] !== 0x47) {
-          syncIndex++;
-        }
-        if (syncIndex >= len) {
-          // 残りは同期バイトの手前まで破棄して待機
-          break;
-        }
-        offset = syncIndex;
-        if (offset + 188 > len) break;
+    for (const packet of this.stream.feed(chunk)) {
+      this.packets++;
+      const pid = packetPid(packet);
+      // 誤りのあるパケットは PID もカウンタも当てにならない。その PID は次のパケットから数え直す
+      if ((packet[1]! & 0x80) !== 0) {
+        this.errors++;
+        this.last.delete(pid);
+        continue;
       }
-
-      this.analyzePacket(buf, offset);
-      offset += 188;
+      // NULL パケットのカウンタは意味を持たない
+      if (pid === 0x1fff) continue;
+      const control = packet[3]! >> 4;
+      // ペイロードの無いパケットはカウンタを進めない
+      if ((control & 0x1) === 0) continue;
+      const cc = packet[3]! & 0x0f;
+      // discontinuity_indicator が立っていれば、カウンタは飛んでよい
+      const reset =
+        (control & 0x2) !== 0 && packet[4]! > 0 && (packet[5]! & 0x80) !== 0;
+      const prev = reset ? undefined : this.last.get(pid);
+      // 同じ値は 2 度送り (規格で 1 回まで許されている)
+      if (prev !== undefined && cc !== prev)
+        this.drops += (cc - prev - 1) & 0x0f;
+      this.last.set(pid, cc);
     }
-
-    if (offset < len) {
-      this.remainder = buf.slice(offset);
-    }
-  }
-
-  private analyzePacket(buf: Uint8Array, offset: number): void {
-    this.totalPackets++;
-
-    // Transport Error Indicator (TEI): 第2バイトの先頭ビット
-    const b1 = buf[offset + 1]!;
-    const tei = (b1 & 0x80) !== 0;
-    if (tei) {
-      this.errorPackets++;
-    }
-
-    // PID: 13ビット
-    const b2 = buf[offset + 2]!;
-    const pid = ((b1 & 0x1f) << 8) | b2;
-
-    if (pid === 0x1fff) {
-      this.nullPackets++;
-      return;
-    }
-
-    // Continuity Counter (CC): 第4バイトの下位4ビット
-    const b3 = buf[offset + 3]!;
-    const adaptationFieldControl = (b3 >> 4) & 0x03;
-    const cc = b3 & 0x0f;
-
-    // ペイロードが存在するパケット (0x01 または 0x03) で CC を検証
-    const hasPayload = (adaptationFieldControl & 0x01) !== 0;
-    if (hasPayload) {
-      const prevCc = this.lastCcByPid.get(pid);
-      if (prevCc !== undefined) {
-        const expectedCc = (prevCc + 1) & 0x0f;
-        if (cc !== expectedCc && cc !== prevCc) {
-          // パケットドロップを検知
-          const lost = (cc - expectedCc + 16) & 0x0f;
-          this.dropPackets += lost;
-        }
-      }
-      this.lastCcByPid.set(pid, cc);
-    }
-  }
-
-  /** 計測時間からメトリクスを算出 */
-  metrics(durationMs: number, type = "GR"): SignalQualityMetrics {
-    const total = this.totalPackets;
-    const errors = this.errorPackets;
-    const drops = this.dropPackets;
-    const nulls = this.nullPackets;
-    const seconds = Math.max(0.1, durationMs / 1000);
-
-    const totalBits = total * 188 * 8;
-    const effectiveBits = (total - nulls) * 188 * 8;
-
-    const bitrateMbps = Number((totalBits / seconds / 1_000_000).toFixed(2));
-    const effectiveBitrateMbps = Number(
-      (effectiveBits / seconds / 1_000_000).toFixed(2),
-    );
-
-    const errorRate = total > 0 ? Number((errors / total).toFixed(4)) : 0;
-    const dropRate =
-      total + drops > 0 ? Number((drops / (total + drops)).toFixed(4)) : 0;
-
-    let quality: SignalQualityMetrics["quality"] = "excellent";
-    let qualityLabel = "受信良好";
-    let cnDb: number | null = null;
-
-    const isSat = type === "BS" || type === "CS";
-
-    if (total < 50) {
-      quality = "none";
-      qualityLabel = "電波なし / 受信不可";
-      cnDb = null;
-    } else if (dropRate > 0.05 || errorRate > 0.05) {
-      quality = "bad";
-      qualityLabel = "電波状態不良 (乱れ大)";
-      cnDb = isSat ? 8.5 : 17.0;
-    } else if (dropRate > 0.01 || errorRate > 0.01) {
-      quality = "poor";
-      qualityLabel = "注意 (ドロップ・誤りあり)";
-      cnDb = isSat ? 10.5 : 19.5;
-    } else if (dropRate > 0 || errorRate > 0) {
-      quality = "poor";
-      qualityLabel = "注意 (わずかにドロップあり)";
-      cnDb = isSat ? 12.0 : 21.0;
-    } else {
-      quality = "excellent";
-      qualityLabel = "受信良好 (ドロップなし)";
-      cnDb = isSat ? 16.5 : 28.5;
-    }
-
-    return {
-      durationMs,
-      totalPackets: total,
-      errorPackets: errors,
-      dropPackets: drops,
-      errorRate,
-      dropRate,
-      bitrateMbps,
-      effectiveBitrateMbps,
-      cnDb,
-      quality,
-      qualityLabel,
-    };
   }
 }
 
 /**
- * 指定のチャンネルを選局し、短時間 (約2〜3秒) TS パケットを読み込んで電波受信品質を測定する。
+ * チャンネルを選局し、受けた TS の誤り・欠け・速さと、チューナーの C/N を測る。
+ *
+ * **スキャンと同じ順でチューナーを取る** (録画・ライブ視聴・番組表をいますぐ集める処理・スキャンからは取り上げない。
+ * 名乗りの先頭が `scan` なので、エージェントはカードに聞かずに流す)。
+ * 選局できなければ `openChannelStream` の失敗をそのまま投げる。届いたパケットが無ければ `packets` が 0
  */
-export async function measureChannelSignal(
-  type: string,
+export async function measureSignal(
+  type: ChannelType,
   channel: string,
-  measureMs = 2500,
-): Promise<SignalQualityResult> {
-  const abortController = new AbortController();
-  const analyzer = new TsQualityAnalyzer();
-  const startTime = Date.now();
-
-  const timeout = setTimeout(() => {
-    abortController.abort();
-  }, measureMs + 1000);
-
-  let stream: ReadableStream<Uint8Array>;
+  signal: AbortSignal,
+): Promise<SignalQuality> {
+  const use: StreamUse = `scan quality ${channel}`;
+  const done = new AbortController();
+  const stop = AbortSignal.any([
+    signal,
+    done.signal,
+    AbortSignal.timeout(GIVE_UP),
+  ]);
+  const check = new PacketCheck();
+  let started = 0;
+  let ms = 0;
+  let tuned: Promise<TunerSignal | null> = Promise.resolve(null);
   try {
-    stream = await openChannelStream(
+    const stream = await openChannelStream(
       type,
       channel,
-      abortController.signal,
-      `scan quality ${channel}`,
-      config.priority.epg,
+      stop,
+      use,
+      config.priority.scan,
     );
-  } catch (err) {
-    clearTimeout(timeout);
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      ok: false,
-      channel,
-      type,
-      durationMs: 0,
-      totalPackets: 0,
-      errorPackets: 0,
-      dropPackets: 0,
-      errorRate: 0,
-      dropRate: 0,
-      bitrateMbps: 0,
-      effectiveBitrateMbps: 0,
-      cnDb: null,
-      quality: "none",
-      qualityLabel: "チューナー確保失敗",
-      error: `選局に失敗しました: ${msg}`,
-    };
+    /*
+     * C/N はチューナーを持っている間に読む (エージェントは使用中のチューナーの値だけを返す)。
+     * パケットが届かずに測り終わらないときのために、読む間隔が過ぎたら一度読んでおく
+     */
+    tuned = Bun.sleep(SIGNAL_READ).then(() => readSignal(use, stop));
+    for await (const chunk of chunks(stream)) {
+      started ||= Date.now();
+      check.feed(chunk);
+      ms = Date.now() - started;
+      if (ms >= MEASURE) {
+        /*
+         * 測り終えたら、ループを抜けてチューナーを放す前に読む。抜けるとストリームが閉じ、
+         * エージェントはそのチューナーの C/N を返さなくなる。最初のパケットから MEASURE 経っているので、
+         * 選局からは読む間隔より長い。ここで読んだ値を使い、パケットが届かないときの読みは待たない
+         * (まだ走っていなければ、チューナーを放したあとに走って null になるだけ)
+         */
+        tuned = readSignal(use, stop);
+        await tuned;
+        break;
+      }
+    }
+  } catch (error) {
+    // 時間切れと、画面を閉じたとき。読めたぶんで返す
+    if (!stop.aborted) throw error;
   }
-
-  const reader = stream.getReader();
   try {
-    while (true) {
-      const elapsed = Date.now() - startTime;
-      if (elapsed >= measureMs) {
-        break;
-      }
-      const { done, value } = await reader.read();
-      if (done || !value) {
-        break;
-      }
-      analyzer.feed(value);
-    }
-  } catch (err) {
-    if (!abortController.signal.aborted) {
-      console.warn(`[signal-quality] 読み込み中にエラー: ${err}`);
-    }
+    const { packets, errors, drops } = check;
+    return {
+      packets,
+      errors,
+      drops,
+      mbps: ms > 0 ? (packets * PACKET * 8) / ms / 1000 : 0,
+      // 画面を閉じたなら、読み終わるのを待たない
+      signal: signal.aborted ? null : await tuned,
+    };
   } finally {
-    clearTimeout(timeout);
-    try {
-      await reader.cancel();
-    } catch {
-      // 無視
-    }
-    abortController.abort();
+    done.abort();
   }
-
-  const durationMs = Date.now() - startTime;
-  const metrics = analyzer.metrics(durationMs, type);
-
-  return {
-    ok: metrics.quality !== "none",
-    channel,
-    type,
-    ...metrics,
-    cnDb: metrics.cnDb,
-  };
 }

@@ -4,7 +4,7 @@
  * - `denpa-font.woff2`: 基本の字 (JIS X 0208・ARIB の外字・JIS X 0213 の記号やかななど漢字でない字)。データ放送はこれだけで足りる
  * - `denpa-font-jisx0213.woff2`: JIS X 0213 で足された漢字 (第 3・第 4 水準。字幕・番組表にはめったに出ない)
  * - `denpa-font.css`: 2 つを同じファミリ名で名乗らせる CSS (`#lib/server/font.ts` の `fontCss`)。
- *   後のほうは `unicode-range` 付きなので、その字が出たときだけブラウザが取りに来る
+ *   後のほうは `unicode-range` 付きなので、その字が出たときだけブラウザが取得する
  *
  * BML は仕様で**等幅**を求めていて (狭い画面で空白を使って組むため)、
  * **丸ゴシック**を名指しし、**ARIB の外字**を使う。Denpa Font は 3 つとも満たす
@@ -20,18 +20,19 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { error } from "@sveltejs/kit";
 
+import { config } from "#lib/server/config.js";
 import { FONT_FILES, fontCacheControl, fontCss } from "#lib/server/font.js";
 import { etagMatches } from "#lib/server/serve.js";
 
 import type { RequestHandler } from "./$types";
 
-/** Dockerfile が置く場所 (リリースのファイルそのまま) */
-const DIR = "/usr/share/denpa-font";
+/** 置き場 (リリースのファイルそのまま。`FONT_DIR`。イメージは Dockerfile が、Mac と Windows は配布物の `server/font` に置く) */
+const DIR = config.fontDir;
 /** 入っているバージョン (`v2.1` など。Dockerfile が `DENPA_FONT_VERSION` を書く) */
 const VERSION = `${DIR}/VERSION`;
 
 /**
- * 指紋と、作った CSS (woff2 は null。中身は置き場から流すので持たない)。字はイメージに組み込んであり、
+ * 指紋と、作った CSS (woff2 は null。中身は置き場から流すので持たない)。字はイメージか配布物に入っていて、
  * 動いている間は変わらないので 1 度だけ読む
  */
 const loaded = new Map<string, { css: string | null; tag: string } | null>();

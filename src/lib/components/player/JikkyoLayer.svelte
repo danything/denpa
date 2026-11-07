@@ -37,7 +37,7 @@
    *   透明度 0.5。読み上げには出さない
    * - 動きを減らす設定では流さず、上の行に 3 秒置いて消す (`shita` は下の行)
    *   (長さは `!important` で書く。Pico は動きを減らす設定で `animation-duration` を 1ms にするので、置いたものがすぐ消えていた)
-   * - この端末から書き込んだものは、字の頭に短い縦線 (`mine-line`。映像の上のオンと同じ空色)
+   * - この端末から書き込んだものは、字の先頭に短い縦線 (`mine-line`。映像の上のオンと同じ空色)
    * - 同時に流すのは 60 件まで (`data-lite` の端末では 15 件)。空いた行が無ければ捨てる
    * - 切り抜きは、いま枠に見えているものを見えている位置のまま写す (`snapshot.ts` の `commentLayer`。枠は `data-frame` で探す。
    *   外の写しは入らない)
@@ -313,11 +313,11 @@
 {/if}
 
 <style>
-  /* 操作バーの影 (7) より上、字幕 (9) と操作バーのボタン (10) より下 (`ControlBar`) */
+  /* 操作バーの影より上、字幕と操作バーのボタンより下 (`app.css` の `--dp-z-stage-*`) */
   .jikkyo {
     position: absolute;
     inset: 0;
-    z-index: 8;
+    z-index: var(--dp-z-stage-comments);
     overflow: hidden;
     pointer-events: none;
   }

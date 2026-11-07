@@ -12,7 +12,7 @@ import type { GuideSheet } from "#lib/types.js";
  * この load がブラウザでもう一度走るので、そこから取る。前日・翌日の先読み (`preloadData`) も
  * この load を通るので、マスまで取っておける。
  *
- * **転んでも投げ返さない。** 拒否のままだと骨組みで止まるうえ、先読みしたぶんは誰も受け取らない。
+ * **失敗しても例外を投げない。** 拒否のままだと骨組みで止まるうえ、先読みしたぶんは誰も受け取らない。
  * 理由を中身として返す (`GuideSheet.failed`)
  */
 export function load({ data, fetch }) {

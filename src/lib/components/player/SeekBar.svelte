@@ -239,8 +239,8 @@
   .seek {
     --seek-track: color-mix(in srgb, var(--dp-on-video) 22%, transparent);
     --seek-played: var(--dp-video-fill);
-    --seek-cm: rgb(255 200 95 / 0.55);
-    --seek-cm-played: rgb(255 179 0);
+    --seek-cm: var(--dp-video-cm);
+    --seek-cm-played: var(--dp-video-cm-played);
     position: relative;
     height: 1.5rem;
     border-radius: var(--dp-radius-sm);
@@ -348,7 +348,7 @@
   /*
      * 入力欄は溝の上に重ねて透かす。**指とマウスは受けない** (つまむのは `.seek` が受け持つ)。
      * つまみは幅 1px にして、値と溝の位置が端から端までまっすぐ対応するようにする (`seek-track.ts`)。
-     * 2 つのブラウザの擬似要素は 1 つの規則にまとめられない (知らないほうが規則ごと捨てる)
+     * 2 つのブラウザの擬似要素は 1 つの規則にまとめられない (片方に対応していないブラウザは規則ごと無視する)
      */
   input {
     position: absolute;

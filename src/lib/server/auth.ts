@@ -22,6 +22,9 @@ import { enabled as oidcEnabled } from "./oidc";
  * (公開の注意は docs/auth.md)。
  */
 
+/** Hybridcast の中継のトークンの形 (16 バイトを 16 進で書いたもの)。`hc-relay.ts` もこれで確かめる */
+export const HC_TOKEN = "[0-9a-f]{32}";
+
 /**
  * 素通しにするエンドポイント。
  *
@@ -30,7 +33,7 @@ import { enabled as oidcEnabled } from "./oidc";
  * - **`/api/health`。** Kubernetes の `livenessProbe` が呼ぶ。守ると**Pod が
  *   再起動を繰り返す** (掛ける範囲を選べるのをやめたときに実際に起き、
  *   E2E のスタックが起動待ちで固まった)。出しているのは
- *   「生きているか・動いているバージョンと新しいバージョン・局が何件か・録画が何本か」だけ
+ *   「生きているか・動いているバージョンと新しいバージョン・局が何件か・録画が何本か・エンコードが何本動いているか」だけ
  * - **`/manifest.webmanifest`。** ブラウザは**資格情報を付けずに**取得する
  *   ので (`<link rel="manifest">` に `crossorigin` を書かない限り)、守ると
  *   ホーム画面に置けなくなる。出しているのはアプリの名前・色・アイコンの場所だけ
@@ -47,7 +50,7 @@ const OPEN_PATHS = [
   /^\/api\/health$/,
   /^\/manifest\.webmanifest$/,
   /^\/api\/device\/(code|token)$/,
-  /^\/api\/bml\/hc\/[0-9a-f]{32}\//,
+  new RegExp(`^/api/bml/hc/${HC_TOKEN}/`),
 ];
 
 export function isOpenPath(pathname: string): boolean {
@@ -233,7 +236,7 @@ export function foreignHost(headers: Headers, address: string): string | null {
  * 自分のインターフェースのネットワークと `TRUSTED_NETWORKS` が重なっていて、`TRUSTED_PROXIES` が
  * 空のときに当たる。ループバックとリンクローカル (`169.254.0.0/16`・`fe80::/10`) は見ない。
  * ループバックは外から来ない。リンクローカルは IPv6 ならどのインターフェースにもあり、
- * wslc はこの PC からの接続を `169.254.x.x` に見せる (install.ps1 が信頼している)
+ * IPv4 のもの (`169.254.0.0/16`) は、アドレスを配られなかったときに OS が自分で付けるもの
  */
 export function sharedNetworks(
   trustedList: string,
@@ -254,8 +257,13 @@ export function sharedNetworks(
   return shared;
 }
 
-/** 前段と同じネットワークを信頼していそうなら (`sharedNetworks`)、起動ログに出す */
+/**
+ * 前段と同じネットワークを信頼していそうなら (`sharedNetworks`)、起動ログに出す。
+ * **Mac と Windows では見ない。** OS の上でそのまま動くので自分のインターフェースは LAN そのもので、
+ * インストーラの既定の `TRUSTED_NETWORKS` と必ず重なる (前段を同じネットワークに置く構成ではない)
+ */
 export function warnIfProxyHidden(): void {
+  if (process.platform === "win32" || process.platform === "darwin") return;
   const shared = sharedNetworks(
     config.trustedNetworks,
     config.trustedProxies,

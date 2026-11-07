@@ -275,8 +275,10 @@ public static class CardLan
         var host = target.Host.Trim('[', ']');
         var addresses = IPAddress.TryParse(host, out var literal) ? new[] { literal } : await Dns.GetHostAddressesAsync(host, cancel);
         Exception? failure = null;
-        foreach (var address in addresses)
+        foreach (var given in addresses)
         {
+            // IPv4 射影アドレスは IPv4 のソケットで繋ぐ (IPv6 のソケットでは、付けた hop limit が IPv4 の TTL に効かない)
+            var address = given.IsIPv4MappedToIPv6 ? given.MapToIPv4() : given;
             var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
             try
             {

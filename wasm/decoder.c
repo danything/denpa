@@ -243,14 +243,15 @@ EMSCRIPTEN_KEEPALIVE int opus_open(const uint8_t *extra, int len) {
  * **次の audio_push までしか持たない** (同じ AVFrame を使い回す)
  */
 EMSCRIPTEN_KEEPALIVE int audio_push(const uint8_t *data, int len) {
-    if (audio == NULL) return -1;
+    // 開くのに失敗したあと (最初の audio_open が -3) は audio だけがあり、audio_pkt はまだ無い
+    if (audio == NULL || audio_pkt == NULL || audio_frame == NULL) return -1;
     audio_pkt->data = (uint8_t *)data;
     audio_pkt->size = len;
     int sent = avcodec_send_packet(audio, audio_pkt);
     if (sent < 0) return sent;
     av_frame_unref(audio_frame);
     if (avcodec_receive_frame(audio, audio_frame) != 0) return 0;
-    // `aac` も `opus` も面ごとの float で出す (Web Audio がそのまま受け取る形式)。違えば読み違えるので転ばせる
+    // `aac` も `opus` も面ごとの float で出す (Web Audio がそのまま受け取る形式)。違えば読み違えるのでエラーにする
     if (audio_frame->format != AV_SAMPLE_FMT_FLTP) return -2;
     int channels = audio_frame->ch_layout.nb_channels;
     if (channels > AUDIO_PLANES) channels = AUDIO_PLANES;

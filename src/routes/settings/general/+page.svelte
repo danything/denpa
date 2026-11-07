@@ -174,20 +174,33 @@
       </Lead>
     </section>
     <!--
-            **ロゴを取りに行った結果を記録する** (開発者向け。`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)。
+            **ロゴを取得した結果を記録する** (開発者向け。`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)。
             衛星のロゴが流れてくる期間を測るためのもの。世帯の設定で、既定はオフ
         -->
     <section class="section" data-testid="logo-record">
       <div class="section-head">
-        <h2>ロゴの取得を記録する (開発者向け)</h2>
+        <h2>ロゴを集めた結果を記録する (開発者向け)</h2>
       </div>
-      <!-- 送ったあとにフォームを戻すと、再描画までスイッチが一瞬もとに戻って見える -->
+      <!--
+        送ったあとにフォームを戻すと、再描画までスイッチが一瞬もとに戻って見える。
+        断られたら見た目をサーバの値に戻す (load が同じ値を返すと DOM は書き換わらない。ルールの行のスイッチと同じ)
+      -->
       <form
         method="POST"
         action="?/recordLogo"
-        use:enhance={() =>
-          ({ update }) =>
-            update({ reset: false })}
+        use:enhance={({ formElement }) =>
+          async ({ result, update }) => {
+            await update({ reset: false });
+            const box = formElement.querySelector<HTMLInputElement>(
+              'input[role="switch"]',
+            );
+            if (
+              box !== null &&
+              result.type !== "success" &&
+              result.type !== "redirect"
+            )
+              box.checked = data.recordLogo;
+          }}
       >
         <label class="check">
           <input
@@ -199,7 +212,7 @@
             onchange={(event) => event.currentTarget.form?.requestSubmit()}
             data-testid="logo-record-toggle"
           />
-          <span>ロゴを取りに行った結果を記録する</span>
+          <span>ロゴを集めた結果を記録する</span>
         </label>
       </form>
       <Lead class="indent">
@@ -225,7 +238,7 @@
             <li data-testid="logo-record-row">
               <span>{dateTime(record.started_at)}</span>
               {record.channel}・{Math.round(record.opened_ms / 60_000)} 分・{record.outcome}・ロゴのデータ
-              {record.es_packets} パケット・ダウンロードの知らせ {record.sdtt} 回・{record.found}
+              {record.es_packets} パケット・ダウンロードの通知 {record.sdtt} 回・{record.found}
               局
             </li>
           {/each}
@@ -276,7 +289,7 @@
             {:else}
               <button
                 type="button"
-                class="small secondary outline"
+                class="small outline danger"
                 onclick={() => confirming.arm(0)}
                 data-testid="logout-others"
               >

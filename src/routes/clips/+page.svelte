@@ -68,7 +68,7 @@
   liveUpdates(["clips"]);
 
   /**
-   * 下端で足した続き。load が回り直したら頭から作り直す。**条件が変わったときだけ捨てる**。
+   * 下端で足した続き。load が回り直したら最初から作り直す。**条件が変わったときだけ捨てる**。
    * ほかの端末で撮った・消した (`clips` の通知) ときは、読み進めていたぶんまで取り直して、位置を引き戻さない
    */
   let more = $state<Clip[]>([]);
@@ -445,7 +445,7 @@
     clearTimeout(hold);
     hold = undefined;
   }
-  /** まとめて消すボタンの聞き返しの id (1 つだけなので 0) */
+  /** まとめて消すボタンの確認の id (1 つだけなので 0) */
   const MANY = 0;
 
   let filterOpen = $state(false);
@@ -546,7 +546,7 @@
             type="button"
             class="ghost small"
             onclick={() => apply({ recording: undefined })}
-            data-testid="clip-recording-clear">すべて表示</button
+            data-testid="clip-recording-clear">絞り込みを外す</button
           >
         </p>
       {/if}
@@ -731,10 +731,12 @@
           </button>
         {/snippet}
         <div class="c-menu-head small muted">種類</div>
-        <div class="side-list">{@render kinds(() => (filterOpen = false))}</div>
+        <div class="side-list" role="group" aria-label="ライブか録画か">
+          {@render kinds(() => (filterOpen = false))}
+        </div>
         {#if data.facets.services.length > 0}
           <div class="c-menu-head small muted">局</div>
-          <div class="side-list">
+          <div class="side-list" role="group" aria-label="局">
             {@render services(() => (filterOpen = false))}
           </div>
         {/if}
@@ -758,7 +760,7 @@
   </div>
 </div>
 
-<!-- 1 枚を開いた所 (並びは頭の説明、形は下の `.viewer`) -->
+<!-- 1 枚を開いた所 (並びは冒頭の説明、形は下の `.viewer`) -->
 <dialog
   class="viewer"
   bind:this={dialog}
@@ -1066,10 +1068,14 @@
     width: auto;
     margin: 0;
   }
+  /* 浮いた 1 行なので、中の主のボタン (削除を確定) は浮かせず太字だけ (docs/design.md の「3 つの層」。`app.css` の `.dock` と同じ値) */
   .c-select-wide {
+    --dp-btn-solid: transparent;
+    --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
+    --dp-btn-lift: none;
     position: sticky;
-    top: calc(var(--dp-header-bottom, 0px) + var(--dp-bar-gap, 0.25rem));
-    z-index: 4;
+    top: var(--dp-header-space, 0px);
+    z-index: var(--dp-z-pagebar);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -1093,7 +1099,7 @@
   :global(html[data-phone]) .c-bar {
     position: sticky;
     order: 2;
-    z-index: 5;
+    z-index: var(--dp-z-pagebar);
     display: flex;
     align-items: center;
     gap: 0.25rem;

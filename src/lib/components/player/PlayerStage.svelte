@@ -505,12 +505,12 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: 10;
+    z-index: var(--dp-z-stage-controls);
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.25rem;
-    /* 右端の縦の列 (`ControlBar`。48px の丸と右の余白 8px) に掛けない。真ん中に置くので左も同じだけ空ける */
+    /* 右端の縦の列 (`ControlBar`。右の余白 8px・48px の丸・間の 8px で 4rem) に掛けない。真ん中に置くので左も同じだけ空ける */
     padding: 0.5rem 4rem;
   }
   .notes:empty {
@@ -550,7 +550,7 @@
     right: env(safe-area-inset-right, 0px);
     bottom: env(safe-area-inset-bottom, 0px);
     left: env(safe-area-inset-left, 0px);
-    z-index: 90;
+    z-index: var(--dp-z-stage-full);
     width: auto;
     margin: 0;
     aspect-ratio: auto;

@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { pad } from "#lib/format.js";
 import { HW_CODECS, type HwCodec } from "#lib/hw.js";
+import type { EncodedSource } from "#lib/ts/playback.js";
+import type { Recording } from "#lib/types.js";
 
 import { config } from "./config";
 import { parseTitle, sanitizeFileName } from "./title";
@@ -39,7 +41,7 @@ export function seriesFolder(series: string, name: string): string {
  * シリーズ名のフォルダにまとめるのは**ディスク上で見やすくするため**。
  * 隣にはサムネ (`-poster.jpg`) を録画ごとに置く (metadata.ts)。
  *
- * 日時はコンテナの TZ (Asia/Tokyo) のローカル時刻。放送日で並ぶのが期待値なので UTC にはしない。
+ * 日時はプロセスの TZ (compose・Helm・インストーラが Asia/Tokyo を渡す) のローカル時刻。放送日で並ぶのが期待値なので UTC にはしない。
  */
 function libraryRelPath(rec: LibraryNameInput, ext: string): string {
   const d = new Date(rec.start_at);
@@ -98,6 +100,43 @@ export function encodedPaths(rec: {
   return [rec.library_path, rec.hevc_path, rec.alt_path].filter(
     (path): path is string => path !== null,
   );
+}
+
+/** エンコード済みがあるかを決めるのに要る列 */
+export type EncodedColumns = Pick<
+  Recording,
+  "library_path" | "hevc_path" | "alt_path"
+>;
+
+/**
+ * **置き場に在るエンコード済み (Matroska)。エンコード済みがあるかは、どこもこれで決める**
+ * (観る画面の出し方 `playback.playbackPlan`、物差し `rulerOf`、字幕 `captionArgs`、チャプター、アプリ向けの一覧の `files`、
+ * CM 検出のやり直し `encoder.runCmJob`)。並びは `encodedPaths` と同じ。
+ *
+ * 名前だけでなく、ファイルが在るかまで見る。外から消されたもの (`files.reconcile` が行を直す前) を名前だけで
+ * 在るとすると、`playbackPlan` は元の TS で流すのに、続きの位置・字幕・チャプターはエンコードしたものの物差しで出して食い違う。
+ * 見るのは列ごとに stat 1 回で、控えは持たない。アプリ向けの一覧 (`GET api/recordings`) は全部の行で呼ぶ。
+ * エンコード済みが 2 本ずつの録画 5000 件で stat は 1 万回、ローカルのディスクで 40 ms ほど (一覧の全体は 160 ms ほど)
+ */
+export function encodedFiles(
+  recording: EncodedColumns,
+): { source: EncodedSource; path: string }[] {
+  return (
+    [
+      ["encoded", recording.library_path],
+      ["hevc", recording.hevc_path],
+      ["alt", recording.alt_path],
+    ] as const
+  ).flatMap(([source, path]) =>
+    path?.endsWith(".mkv") === true && existsSync(path)
+      ? [{ source, path }]
+      : [],
+  );
+}
+
+/** 物差しになるエンコード済み (`encodedFiles` の先頭。`playback` の `PlayAxis`)。無ければ null */
+export function encodedFile(recording: EncodedColumns): string | null {
+  return encodedFiles(recording)[0]?.path ?? null;
 }
 
 /** コーデックごとの名前の終わり (`encodedPath`)。AV1 は印を付けない */

@@ -18,6 +18,7 @@ import {
 import { draftRule, originOf } from "#lib/server/rule-form.js";
 import { previewFor } from "#lib/server/rule-preview.js";
 import {
+  HELD_STATES,
   programs,
   reservations,
   rules as ruleTable,
@@ -62,6 +63,8 @@ function focusOf(url: URL) {
         end_at: programs.end_at,
         copy_never: programs.copy_never,
         reservation_id: reservations.id,
+        // 詳細のボタンを決める (`ProgramActions`)。ここで引く状態はどれも取り消せるもの
+        reservation_state: reservations.state,
       })
       .from(programs)
       .innerJoin(serviceTable, eq(serviceTable.id, programs.service_id))
@@ -69,7 +72,7 @@ function focusOf(url: URL) {
         reservations,
         and(
           eq(reservations.program_id, programs.id),
-          inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+          inArray(reservations.state, HELD_STATES),
         ),
       )
       .where(eq(programs.id, id))
@@ -149,7 +152,7 @@ export function load({ url }) {
     recordings: searchRecordings(q, options),
     reservations: searchReservations(q, options),
     rules: searchRules(q, options),
-    /** 切り抜き。並べるのは頭の数枚だけで、続きは切り抜きの画面で */
+    /** 切り抜き。並べるのは先頭の数枚だけで、続きは切り抜きの画面で */
     clips:
       q === ""
         ? { total: 0, rows: [] }

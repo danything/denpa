@@ -75,7 +75,7 @@ function json<T>(name: string, read: (value: unknown) => T) {
  * 相対なら、置き場のマウント先をどこへ移しても DB は触らずに済む。読み替えはここだけで済ませ、使う側は今までどおり
  * 絶対パスで扱う (`eq()` や `set()` に渡した値もここを通る)。
  *
- * 置き場の外のもの (Windows で書かれた古い行など) は絶対のまま持ち、そのまま返す。
+ * 置き場の外のものは絶対のまま持ち、そのまま返す。
  * 置き場は呼ばれるたびに config から引く (テストが差し替える)
  */
 function mediaPath(name: string, root: () => string) {
@@ -169,6 +169,14 @@ export function latestRecordingId(programId: AnySQLiteColumn) {
   return sql<number>`(SELECT id FROM recordings WHERE program_id = ${programId} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1)`;
 }
 
+/**
+ * 予約で録れたいちばん新しい録画。予約の一覧と検索が `reservationState` に渡すのに使う。
+ * **消したものも含める。** 外すと、録り終えてから消した予約が「完了」でなく予約の状態のまま出る
+ */
+export function latestReservationRecordingId(reservationId: AnySQLiteColumn) {
+  return sql<number>`(SELECT id FROM recordings WHERE reservation_id = ${reservationId} ORDER BY id DESC LIMIT 1)`;
+}
+
 /** 画面から変えられる設定 (settings.ts)。初期値は config.ts が持ち、ここに行があればそちらが勝つ */
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
@@ -191,6 +199,16 @@ export const webhooks = sqliteTable("webhooks", {
   created_at: integer("created_at").notNull(),
 });
 
+/**
+ * テレビの局のサービス種別 (ARIB STD-B10 のデジタル TV)。録画できるのはこの種別だけ。
+ *
+ * スキャンはデータ放送 (NHKデータ1、Gガイド) もワンセグ (tvkワンセグ1) も
+ * ラジオも同じ一覧に入れる。これらを録っても映像は入っておらず、
+ * データ放送は番組表上「24 時間ぶんの 1 番組」になっていたりする。
+ * ルールが引っかけて録画が失敗するので、取り込む時点で落とす (`epg.syncServices`)
+ */
+export const DIGITAL_TV = 1;
+
 export const services = sqliteTable("services", {
   /** 局の内部 ID (tuner.ts の serviceKey) */
   id: integer("id").primaryKey(),
@@ -202,7 +220,7 @@ export const services = sqliteTable("services", {
    * ARIB のサービス種別 (STD-B10)。1 = デジタル TV、2 = デジタル音声、
    * 192 = データ/ワンセグ、164 = エンジニアリング。録るのは 1 だけ
    */
-  service_type: integer("service_type").notNull().default(1),
+  service_type: integer("service_type").notNull().default(DIGITAL_TV),
   /** 物理チャンネル。同一チャンネルの同時録画はチューナーを共有できる */
   channel: text("channel").notNull(),
   remote_control_key: integer("remote_control_key"),
@@ -210,6 +228,12 @@ export const services = sqliteTable("services", {
     .notNull()
     .default(sql`0`),
   updated_at: integer("updated_at").notNull(),
+  /**
+   * 番組表の取得 (`epg-collect.ts`) がこの局の番組を最後に書いた時刻。まだなら null。
+   * 次に集めに行くかをこれで決める。ライブや録画が p/f (現在と次の番組) だけを書いても変えない
+   * (`programs.updated_at` で数えると、p/f を書いただけで集めたことになっていた)
+   */
+  epg_at: integer("epg_at"),
 });
 
 /**
@@ -257,7 +281,9 @@ export const channelChanges = sqliteTable("channel_changes", {
 
 /**
  * B-CAS カードごとの有料放送契約・復号状態の控え。
- * 設定画面の「有料契約を確認」や予約時の期限切れ判定、録画ルールの選局優先度に使う。
+/**
+ * B-CAS カードごとの有料放送契約・復号状態の控え。
+ * 設定の「有料契約確認」に出し、自動予約で有料放送を録る局を決めるのに使う (`contracts.paidAllowed`)。
  */
 export const cardContracts = sqliteTable(
   "card_contracts",
@@ -474,6 +500,22 @@ const RESERVATION_STATES = [
   "canceled",
   "missed",
 ] as const;
+
+type StoredReservationState = (typeof RESERVATION_STATES)[number];
+
+/** 録る予定の予約の状態 (チューナーが足りないものも含む)。録り始めたかは `started_at` で別に見る */
+export const TO_RECORD_STATES: StoredReservationState[] = [
+  "scheduled",
+  "conflict",
+];
+/**
+ * 予約として残っている状態。録る予定のものに、録らないと決めたもの (`skipped`) を足したもの。
+ * 取り消したもの・録り逃したものは入らない
+ */
+export const HELD_STATES: StoredReservationState[] = [
+  ...TO_RECORD_STATES,
+  "skipped",
+];
 
 export const reservations = sqliteTable(
   "reservations",
@@ -722,6 +764,7 @@ export const encodeJobs = sqliteTable(
     /** 残り時間の見込み(ms)。ffmpeg の speed から出す。分からない間は NULL */
     eta_ms: integer("eta_ms"),
     log: text("log").notNull().default(""),
+    /** ジョブを取り出した回数 (`encoder.pump`)。1 回の実行の中の ffmpeg の起こし直しは数えない (`config.encodeMaxAttempts`) */
     attempts: integer("attempts").notNull().default(0),
     error: text("error"),
     created_at: integer("created_at").notNull(),

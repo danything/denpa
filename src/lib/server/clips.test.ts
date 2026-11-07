@@ -274,6 +274,9 @@ describe("撮った場所から番組を引く", () => {
   });
 
   test("録画: 観ているものの物差しから、番組の始めからの位置にする (CM を切ったもの)", () => {
+    // 観る画面の物差しは、置き場に在るエンコード済みで決まる (`playback.encodedFile`)
+    mkdirSync(config.encodedDir, { recursive: true });
+    writeFileSync(join(config.encodedDir, "x.mkv"), "mkv");
     const recording = orm()
       .insert(recordings)
       .values({

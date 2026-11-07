@@ -41,7 +41,7 @@ interface Options {
   captions?: () => boolean;
 }
 
-/** どこで断られたか。**押しても何も起きない、で終わらせない**。端末ごとに転ぶ所が違う */
+/** どこで断られたか。**押しても何も起きない、で終わらせない**。端末ごとに失敗する所が違う */
 class Refused extends Error {}
 
 function reason(error: unknown): string {
@@ -222,7 +222,7 @@ export function pictureInPicture(options: Options): Pip {
   /**
    * **canvas に移った・`<video>` に戻ったら小窓を閉じる。** 出しているほうにはもう映像が
    * 流れてこない (canvas では `<video>` は空、戻れば canvas は畳まれる)。黙って残すと、
-   * 止まった映像の小窓が居座る
+   * 止まった映像の小窓が残り続ける
    */
   $effect(() => {
     const isRaw = raw();
@@ -341,7 +341,7 @@ export function pictureInPicture(options: Options): Pip {
   /**
    * 変換した映像に字幕を重ねるか。**押した時点で字幕を出しているときだけ** (上の説明)。
    * 止めている間も重ねない。`captureStream` は止まった `<video>` からコマを出さないので、
-   * 1 枚目を待ちきれずに元の `<video>` へ落ちるだけになる
+   * 1 枚目が届かないまま元の `<video>` へ落ちるだけになる
    */
   function composable(video: HTMLVideoElement): boolean {
     return (

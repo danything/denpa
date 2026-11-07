@@ -19,7 +19,7 @@ import { open } from "node:fs/promises";
 
 import { PACKET } from "@danything/arib/psi";
 
-import { tsHead } from "#lib/ts/seek.js";
+import { readHead } from "#lib/ts/seek.js";
 
 /** 1 回に読む量。小さすぎると read の回数だけ損する */
 const READ_SIZE = 256 * 1024;
@@ -163,7 +163,7 @@ export function followFile(
   let cancelled = false;
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      const started = Date.now();
+      let started = Date.now();
       let sent = 0;
       let position = offset;
       const handle = await open(path, "r");
@@ -171,7 +171,10 @@ export function followFile(
         const buffer = new Uint8Array(READ_SIZE);
         while (!cancelled) {
           if ((controller.desiredSize ?? 1) <= 0 || hold()) {
+            // 止めていた間は倍速の持ち分に数えない。数えると、止めたあとにそのぶんを縛り無しで読む
+            const waited = Date.now();
             await Bun.sleep(WAIT_READER);
+            started += Date.now() - waited;
             continue;
           }
           const { bytesRead } = await handle.read(
@@ -217,9 +220,6 @@ export function fileSize(path: string): number | null {
   }
 }
 
-/** 先頭の PTS を探すのに読む量。映像と音声の最初の PES が必ず入る長さ (`playback.ts` の `PROBE_BYTES` と同じ) */
-const HEAD_BYTES = 4 * 1024 * 1024;
-
 /** 読んだ先頭の控え。録画中も先頭は変わらないので、読めたものはパスごとに覚える (追っかけはシークのたびに聞く) */
 const heads = new Map<string, number>();
 /** 覚えておく数。録画中の録画は同時にいくつもない */
@@ -230,7 +230,7 @@ const unreadable = new Map<string, number>();
 const HEAD_RETRY = 5_000;
 
 /**
- * **元の TS の先頭の PTS** (90kHz。`ts/seek.ts` の `tsHead`)。追っかけを元の TS で送るとき、画面が再生位置を
+ * **元の TS の先頭の PTS** (90kHz。`ts/seek.ts` の `readHead`)。追っかけを元の TS で送るとき、画面が再生位置を
  * 出す物差しの 0 (`live.ts` の `openChase`)。読めたものは覚える。録り始めたばかりで先頭の PES が揃わない・読めなければ
  * null で、`HEAD_RETRY` の間は読み直さずに null を返す
  */
@@ -245,9 +245,11 @@ export async function tsFileHead(
   try {
     const handle = await open(path, "r");
     try {
-      const buffer = new Uint8Array(HEAD_BYTES);
-      const { bytesRead } = await handle.read(buffer, 0, HEAD_BYTES, 0);
-      head = tsHead(buffer.subarray(0, bytesRead));
+      head = await readHead(async (offset, length) => {
+        const buffer = new Uint8Array(length);
+        const { bytesRead } = await handle.read(buffer, 0, length, offset);
+        return buffer.subarray(0, bytesRead);
+      });
     } finally {
       await handle.close();
     }

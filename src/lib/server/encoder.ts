@@ -67,9 +67,10 @@ import {
   UNMEASURED,
   windowLabel,
 } from "./fps";
-import { removeIfExists } from "./fsx";
+import { pruneEmptyDirs, removeIfExists } from "./fsx";
 import { hwArgs, hwChain, hwReady, type HwWay } from "./hwenc";
 import {
+  encodedFiles,
   encodedPath,
   encodedPaths,
   libraryFamily,
@@ -86,7 +87,7 @@ import { recordingSummary } from "./recording";
 import { encodeJobs, programs, recordings } from "./schema";
 import { descramble, isScrambled } from "./scramble";
 import { settings } from "./settings";
-import { chunks, lines, lowerPriority, run } from "./stream";
+import { chunks, lines, lowerPriority, run, sideOutput } from "./stream";
 import { displayTitle } from "./title";
 import { tsProbe } from "./ts-probe";
 import { notify } from "./webhook";
@@ -223,8 +224,10 @@ type Keyframes = "scene" | number[];
 
 /**
  * キーフレームを置かせる引数。どのエンコーダも、印の付いたコマ (`pict_type = I`) を
- * キーフレームにする。**NVENC は指定しないと IDR にならない** (`-forced-idr`)。
+ * キーフレームにする。**NVENC は指定しないと IDR にならない** (`-forced-idr`。QSV・AMF は `-forced_idr`。
+ * 3 つとも H.264・H.265・AV1 の全部が持つオプション)。
  * IDR でないと入れ物にキーフレームとして書かれず、そこで切れない。VA-API は印だけで IDR になる。
+ * VideoToolbox (Mac) も印だけで、FFmpeg の videotoolboxenc.c がそのコマをキーフレームにするよう求める (`ForceKeyFrame`。実機では見ていない)。
  *
  * **Rockchip MPP (h264_rkmpp・hevc_rkmpp) は印を見ない** (本家 FFmpeg の rkmppenc.c はコマの `pict_type` を
  * MPP に渡さない)。渡しても害は無く、境目にキーフレームが無ければ CM を切るところで
@@ -248,6 +251,9 @@ function keyframeArgs(
     "-force_key_frames:v",
     at,
     ...(hardware?.kind === "nvenc" ? ["-forced-idr", "1"] : []),
+    ...(hardware?.kind === "qsv" || hardware?.kind === "amf"
+      ? ["-forced_idr", "1"]
+      : []),
   ];
 }
 
@@ -272,9 +278,9 @@ function videoArgs(
   const keys = keyframeArgs(keyframes, hardware);
   if (hardware !== null) {
     /*
-     * **GPU (VA-API・NVIDIA NVENC・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
+     * **GPU (VA-API・NVENC・QSV・AMF・VideoToolbox・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
      * 済ませ、エンコードするところだけ GPU に渡す。引数と画質の決め方は hwenc.hwArgs
-     * (Rockchip MPP と NVENC は出す高さとコマ数でビットレートを決める)。
+     * (Rockchip MPP・NVENC・AMF・VideoToolbox は出す高さとコマ数でビットレートを決める)。
      * 使うかどうかは `hwChain` (起動時の試しのエンコードと設定)。**落ちたら次の方式か
      * ソフトウェアで再エンコードする** (runJob) ので、ここで保険はかけない
      */
@@ -359,6 +365,8 @@ interface EncodeOptions {
    * 本編の字幕は番組が変わってから現れるため (#2189)
    */
   probeLead?: number;
+  /** 進み具合を書き出す先 (`stream.sideOutput` の `url`)。無ければ `pipe:3` */
+  progress?: string;
   /**
    * 音声の何本目 (`0:a:<n>`) を何チャンネルで出すか。**番組表の構成で決める** (`arib.audioChannels`)。
    * ffmpeg は先頭の音声でエンコーダを開くので、前の番組がモノラルだと本編のステレオも 1 チャンネルになる (#2189)
@@ -381,7 +389,7 @@ interface EncodeOptions {
   displaySize?: { width: number; height: number };
   /**
    * 映像の高さ (`probeVideo`。引き伸ばすのは横だけなので、出すものも同じ高さ)。
-   * Rockchip MPP と NVENC のビットレートを決めるのに使う (`hwenc.hwBitrate`)。測れなければ 1080 の値
+   * Rockchip MPP・NVENC・AMF・VideoToolbox のビットレートを決めるのに使う (`hwenc.hwBitrate`)。測れなければ 1080 の値
    */
   height?: number;
   /** 音声トラックの名前。**番組表と同じ言い方** (`arib.audioTitles`) */
@@ -394,7 +402,7 @@ interface EncodeOptions {
   /** 入れ物 (mkv) の title に埋め込む番組名 (`title.displayTitle`) */
   mediaTitle?: string;
   /**
-   * GPU でエンコードする経路 (どのデバイスを `vaapi` / `rkmpp` / `nvenc` のどれで)。使えるかどうかは
+   * GPU でエンコードする経路 (どのデバイスを `vaapi` / `rkmpp` / `nvenc` / `qsv` / `amf` / `videotoolbox` のどれで)。使えるかどうかは
    * `hwenc.hwChain` が決めていて、runJob がその順に渡す。落ちたら次、
    * 最後はソフトウェア (undefined)
    */
@@ -587,7 +595,7 @@ export function buildArgs(
    * 混み合う (ログと進み具合は別のスレッドが書くので、同じ出力先では行が千切れることがある)。
    * 人間向けの進み具合の行 (`frame= …`) も止める
    */
-  args.push("-nostats", "-progress", "pipe:3");
+  args.push("-nostats", "-progress", options.progress ?? "pipe:3");
   /*
    * 入れ物は名前ではなくここで決める。出力は書いている間だけ別名 (`<名前>.<jobId>.<codec>.encoding`) にしており、
    * ffmpeg は拡張子から入れ物を決めるので、付けないと
@@ -599,6 +607,14 @@ export function buildArgs(
   if (options.analysis !== undefined) args.push(...options.analysis);
 
   return args;
+}
+
+/**
+ * いま走っているエンコード (CM 検出のやり直しも) の本数。Windows と Mac をスリープさせないか (`power.ts`) と、
+ * 通知領域・メニューバーのアプリが更新の前に確かめるとき (`/api/health`) に使う
+ */
+export function runningEncodes(): number {
+  return runningJobs.size;
 }
 
 /** その録画で今生きているジョブ (待ち・実行中) の id。無ければ undefined */
@@ -701,13 +717,18 @@ export async function cancel(jobId: number): Promise<void> {
     emit("recordings");
     return;
   }
+  // 待ってもいない・動いてもいない (終わったあとに押された)。印を残すと `isCanceling` が true のままになる
+  if (!runningJobs.has(jobId)) {
+    canceled.delete(jobId);
+    return;
+  }
 
   /*
    * 動いている分。**段階の名前を先に書き換えてから待つ**。上限に間に合わな
    * かったときでも、押した直後の読み直しが「中止しています」を読める
    * (割合を出している段階では出ないが、CM 検出のように数分かかる段階で効く)
    */
-  if (runningJobs.has(jobId)) writeStep(jobId, "中止しています");
+  writeStep(jobId, "中止しています");
   await settled(jobId);
 }
 
@@ -865,7 +886,7 @@ export function encodeProgress(totalFrames: number, inputBytes: number) {
  *
  * 子プロセスとは同じ名前空間にいるので、/proc/<pid>/fd から入力ファイルを
  * 指している fd を探せば、/proc/<pid>/fdinfo/<fd> の pos がそのまま読み位置。
- * Linux 専用だが、本番はコンテナでしか動かさない。読めない環境では
+ * Linux 専用で、Windows・Mac では読めない。読めない環境では、分母 (尺) を測れなかったときに
  * 割合が動かなくなるだけで、エンコードしたものには影響しない。
  */
 export function findInputFd(pid: number, path: string): number | null {
@@ -999,21 +1020,27 @@ async function runFfmpeg(
   /** CM 検出を一緒にするときの読み取り関数 (`options.analysis` と組で渡す) */
   reader?: ScanReader,
 ) {
-  // fd 3 は進み具合 (`-progress pipe:3`)。標準出力は CM 検出のロゴの枠 (読まないなら捨てる)
+  // 4 本目の出口は進み具合 (`-progress`。`stream.sideOutput`)。標準出力は CM 検出のロゴの枠 (読まないなら捨てる)
+  const side = sideOutput();
   const proc = Bun.spawn(
     [
       config.ffmpeg,
-      ...buildArgs(input, output, audioType, seek, codec, options),
+      ...buildArgs(input, output, audioType, seek, codec, {
+        ...options,
+        progress: side.url,
+      }),
     ],
     {
       stdio: [
         "ignore",
         reader?.onStdout !== undefined ? "pipe" : "ignore",
         "pipe",
-        "pipe",
-      ],
+        ...side.stdio,
+        // 型は Linux の形 (4 本) で見せる。Windows では 3 本 (`sideOutput`)
+      ] as ["ignore", "pipe" | "ignore", "pipe", "pipe"],
     },
   );
+  const progressPipe = side.read(proc as never);
   // 録画のエンコードは急がない。ライブに CPU を譲る (stream.lowerPriority)
   lowerPriority(proc.pid);
   const running = procs.get(jobId) ?? new Set<Bun.Subprocess>();
@@ -1073,8 +1100,7 @@ async function runFfmpeg(
 
   const readProgress = (async () => {
     let block: Record<string, string> = {};
-    const fd = proc.stdio[3] as number;
-    for await (const line of lines(Bun.file(fd).stream())) {
+    for await (const line of lines(progressPipe)) {
       const sep = line.indexOf("=");
       if (sep === -1) continue;
       block[line.slice(0, sep)] = line.slice(sep + 1).trim();
@@ -1291,6 +1317,27 @@ function saveCm(recordingId: number, detection: CmDetection): void {
     .run();
 }
 
+/**
+ * **1 本エンコードするときに ffmpeg を起こす順** (`runJob` の `encodeWays`)。GPU の方式 (`hwChain` の順) のあとにソフトウェア
+ * (H.265 を除く。`SOFTWARE_CODECS`) で、**どの方式も「素のまま → 先頭を少し捨てて」の 2 回だけ**。
+ * 1 回の実行の中の起こし直しはこの並びで尽きる (`encode_jobs.attempts` に数えない理由)。
+ * `pointed` は境目を指して再エンコードするとき。指定を聞かない Rockchip MPP を外す
+ */
+export function encodeAttempts(
+  codec: HwCodec,
+  hardware: HwWay[],
+  pointed: boolean,
+): { seek: number | null; hardware: HwWay | undefined }[] {
+  const ways: (HwWay | undefined)[] = [
+    ...hardware.filter((way) => !(pointed && way.kind === "rkmpp")),
+    ...(SOFTWARE_CODECS.includes(codec) ? [undefined] : []),
+  ];
+  return ways.flatMap((way) => [
+    { seek: null, hardware: way },
+    { seek: config.encodeRetrySeek, hardware: way },
+  ]);
+}
+
 async function runJob(jobId: number): Promise<void> {
   const { signal, recording } = startJob(jobId);
   const input = recording === undefined ? null : encodeSource(recording);
@@ -1309,6 +1356,34 @@ async function runJob(jobId: number): Promise<void> {
    * 前の失敗の理由もジョブ側にあり、いちばん新しいジョブだけを見ているので消して回る必要もない
    */
   emit("recordings");
+
+  /*
+   * **エンコードするコーデックを先に決める。** H.265 は GPU でだけエンコードする (`SOFTWARE_CODECS`) ので、
+   * いま H.265 をエンコードできる GPU が無ければ (抜いた・設定で外した) H.265 は飛ばし、
+   * H.265 しか選んでいなければここで失敗にする。復号や前のものを消すより前に決めるのは、
+   * 作れないと分かっている再エンコードで、いま観られる mkv を消さないため (元の TS は残るので、GPU を戻せば作り直せる)。
+   *
+   * **GPU を確かめ終わるのを待ってから決める** (`hwReady`)。起動した直後のジョブが、確かめる前の
+   * 「GPU 無し」で H.265 を飛ばし、H.264 を CPU でエンコードしないように
+   */
+  await hwReady();
+  const chosen: readonly HwCodec[] =
+    settings().codecs.length > 0 ? settings().codecs : ["av1"];
+  const hevcReady = hwChain("hevc", settings().hwAllow).length > 0;
+  if (chosen.includes("hevc") && !hevcReady && chosen.length > 1) {
+    console.warn(
+      `[encode] H.265 をエンコードできる GPU が無いため、H.265 は飛ばします (録画 ${recording.id})`,
+    );
+  }
+  const codecs = encodeOrder(chosen, hevcReady);
+  if (codecs.length === 0) {
+    fail(
+      jobId,
+      recording,
+      "H.265 をエンコードできる GPU がありません (H.265 はソフトウェアではエンコードしません)",
+    );
+    return;
+  }
 
   /*
    * **置き場所は出来上がってから決める** (下の `renameSync` の直前)。
@@ -1500,29 +1575,13 @@ async function runJob(jobId: number): Promise<void> {
    * 「切る」ではどのコーデックも場面の切れ目ごとにキーフレームを置いてエンコードし、境目にキーフレームが無ければ
    * そのコーデックだけ境目を指して再エンコードしてから切る。
    *
-   * **H.265 は GPU でだけエンコードする** (ソフトウェアのエンコーダを組んでいない。`SOFTWARE_CODECS`)。
-   * いま H.265 をエンコードできる GPU が無ければ (抜いた・設定で外した) H.265 は飛ばしてほかのコーデックだけ作り、
-   * H.265 しか選んでいなければ失敗にする (元の TS は残るので、GPU を戻して再エンコードすればよい)。
-   *
    * **H.265 を選んでいれば 1 本目にする** (`encodeOrder`)。主 (`library_path`) にするのは、エンコードした順ではなく
    * AV1 → H.265 → H.264 の先頭 (下の `primary`)
    *
    * **どれかが失敗しても、出来たものは置く** (観られるものを捨てない)。ジョブは失敗にして理由を残し、元の TS は消さない
    * (再エンコードすれば全部作り直せる)。全部失敗したら、置きかけを消して失敗にする。
-   *
-   * **GPU を確かめ終わるのを待ってから決める** (`hwReady`)。起動した直後のジョブが、確かめる前の
-   * 「GPU 無し」で H.265 を飛ばし、H.264 を CPU でエンコードしないように
+   * エンコードするコーデック (`codecs`) は、ジョブの最初に決めてある
    */
-  await hwReady();
-  const chosen: readonly HwCodec[] =
-    settings().codecs.length > 0 ? settings().codecs : ["av1"];
-  const hevcReady = hwChain("hevc", settings().hwAllow).length > 0;
-  if (chosen.includes("hevc") && !hevcReady && chosen.length > 1) {
-    console.warn(
-      `[encode] H.265 をエンコードできる GPU が無いため、H.265 は飛ばします (録画 ${recording.id})`,
-    );
-  }
-  const codecs = encodeOrder(chosen, hevcReady);
   /** CM 検出の結果 (入れ物の先頭からの秒)。1 本目をエンコードし終えたら決まる */
   let detection = null as CmDetection | null;
   /** 1 本目で読んだ最初のコマの時刻 (入れ物の先頭から)。切るとき、エンコードしたものの時刻と突き合わせる */
@@ -1618,21 +1677,14 @@ async function runJob(jobId: number): Promise<void> {
       software?: boolean;
     },
   ) => {
-    // H.265 はソフトウェアに切り替えない (`SOFTWARE_CODECS`)。GPU が全部落ちたら、その 1 本は失敗
     const software = SOFTWARE_CODECS.includes(codec);
-    const ways: (HwWay | undefined)[] =
+    const attempts = encodeAttempts(
+      codec,
       extra.software === true && software
-        ? [undefined]
-        : [
-            ...hwChain(codec, settings().hwAllow, hwTurn++).filter(
-              (way) => !(extra.software === true && way.kind === "rkmpp"),
-            ),
-            ...(software ? [undefined] : []),
-          ];
-    const attempts = ways.flatMap((hardware) => [
-      { seek: null, hardware },
-      { seek: config.encodeRetrySeek, hardware },
-    ]);
+        ? []
+        : hwChain(codec, settings().hwAllow, hwTurn++),
+      extra.software === true,
+    );
     const report = meter.part(codec);
     let result = { code: -1, stderrTail: "", outTimeUs: 0 };
     let found: Scan | null = null;
@@ -1640,15 +1692,12 @@ async function runJob(jobId: number): Promise<void> {
     for (const [i, attempt] of attempts.entries()) {
       if (i > 0) {
         if (canceled.has(jobId)) break;
-        // 数えるのは先頭を捨てる再試行だけ (毒ジョブの見立て `encodeMaxAttempts` の物差し)。
-        // GPU から次の方式へ移るのは、その素材ではその方式が使えないというだけで、毒ではない
-        if (attempt.seek !== null) {
-          orm()
-            .update(encodeJobs)
-            .set({ attempts: sql`${encodeJobs.attempts} + 1` })
-            .where(eq(encodeJobs.id, jobId))
-            .run();
-        }
+        /*
+         * ffmpeg の起こし直しは `encode_jobs.attempts` に数えない。あれはジョブを取り出した回数で、上限 (`encodeMaxAttempts`)
+         * はジョブのやり直しにだけ当てる。1 回の実行の中の起こし直しは `encodeAttempts` の並び (方式ごとに 2 回) で尽きるので、上限は要らない。
+         * 数えていた頃は、コーデックをいくつも選んで GPU からソフトウェアへ倒れた 1 回の実行だけで上限の 5 に届き、
+         * その実行の途中でポッドが止まると、起動したときに 1 度もやり直さず失敗にしていた
+         */
         const before = attempts[i - 1]!.hardware;
         if (attempt.hardware !== before) {
           setStep(
@@ -1694,7 +1743,7 @@ async function runJob(jobId: number): Promise<void> {
     /** 映像まで読めたか。探さずに再エンコードしたら音だけ読み直す */
     let video = true;
     // 探さずにエンコードし直すのはソフトウェアで。H.265 はソフトウェアが無いので、いちばん先の GPU で
-    const plain = software ? undefined : ways[0];
+    const plain = software ? undefined : attempts[0]?.hardware;
     if (
       result.code !== 0 &&
       extra.analysis &&
@@ -1838,17 +1887,6 @@ async function runJob(jobId: number): Promise<void> {
   const canPoint = (codec: HwCodec): boolean =>
     SOFTWARE_CODECS.includes(codec) ||
     hwChain(codec, settings().hwAllow).some((way) => way.kind !== "rkmpp");
-
-  // H.265 だけを選んでいて、H.265 をエンコードできる GPU がいま無い (上の `codecs`)
-  if (codecs.length === 0) {
-    cleanup();
-    fail(
-      jobId,
-      recording,
-      "H.265 をエンコードできる GPU がありません (H.265 はソフトウェアではエンコードしません)",
-    );
-    return;
-  }
 
   /** エンコードし終えた 1 本。`skip` はこの 1 本で先頭から捨てた長さ (境目を指して再エンコードしたら変わる) */
   interface Made {
@@ -2124,6 +2162,26 @@ async function runJob(jobId: number): Promise<void> {
   const length = Number.isFinite(probed)
     ? probed * 1000
     : primary.outTimeUs / 1000;
+  /*
+   * **エンコードしている間に録画が消されていたら、置いたものを消して中止にする。** 削除 (`files.deleteRecordingFiles`。
+   * 端末の削除の再送も来る) は走っているジョブを待たないので、ここで行に書き戻すと、消した行に置き場のパスが入り、
+   * どの片付け (`reconcile` は消していない行だけを見る) にも拾われないファイルが残る。ここから行を書くまで await を挟まない
+   */
+  const current = orm()
+    .select({ deleted: recordings.deleted_at })
+    .from(recordings)
+    .where(eq(recordings.id, recording.id))
+    .get();
+  if (current === undefined || current.deleted !== null) {
+    for (const path of [output, hevc, alt]) {
+      if (path === null || usedByOther(path, recording.id)) continue;
+      removeIfExists(path);
+      removeSidecars(path);
+      pruneEmptyDirs(path);
+    }
+    finishCanceled(jobId, null);
+    return;
+  }
   if (Number.isFinite(length) && length > 0) {
     orm()
       .update(recordings)
@@ -2200,9 +2258,7 @@ async function runCmJob(jobId: number): Promise<void> {
   // エンコードせずに置いた録画 (「エンコードしない」) は、置き場の TS が元の TS そのもの (`tsPathOf`)
   const raw = tsPathOf(recording);
   const ts = raw !== null && !isScrambled(raw) ? raw : null;
-  const files = encodedPaths(recording).filter(
-    (path) => path.endsWith(".mkv") && existsSync(path),
-  );
+  const files = encodedFiles(recording).map((entry) => entry.path);
   const input = ts ?? files[0];
   if (input === undefined) {
     fail(jobId, recording, "CM 検出に使えるファイルがありません", what);
@@ -2332,6 +2388,8 @@ async function runCmJob(jobId: number): Promise<void> {
     }
     for (const [i, file] of files.entries()) renameSync(outputs[i]!, file);
   } finally {
+    // 投げたときも書きかけ (`.post`) を残さない。動画が残っているので、片付け (`files.orphan`) は拾わない
+    discard();
     removeIfExists(chapters);
   }
   saveCm(recording.id, detection);
@@ -2399,7 +2457,7 @@ export function pump(): void {
     if (next === undefined) return;
 
     // **試し過ぎたジョブは失敗にする。** プロセスごと落とす毒ジョブは running→queued
-    // へ戻り続け、id 順・同時実行 1 だと毎回ここで先頭に来る。上限を超えたら failed に
+    // へ戻り続け、id 順なので毎回ここで先頭に来る。上限を超えたら failed に
     // して後ろを進める。failed の確定は runJob を呼ぶ前なので、直後にまた落ちても
     // 同じジョブを取り直すことはない
     if (next.attempts >= config.encodeMaxAttempts) {
@@ -2442,7 +2500,12 @@ export function pump(): void {
     // 待機中が動き出したことも伝える。押した直後に何も変わらないと止まって見える
     emit("recordings");
     void (next.kind === "cm" ? runCmJob(jobId) : runJob(jobId))
-      .catch((error) => markFailed(jobId, String(error)))
+      // 中止したあとに投げたものは失敗にしない (中止として畳む)
+      .catch((error) =>
+        canceled.has(jobId)
+          ? finishCanceled(jobId, null)
+          : markFailed(jobId, String(error)),
+      )
       .finally(() => {
         runningJobs.delete(jobId);
         procs.delete(jobId);

@@ -44,7 +44,7 @@ import {
   STREAM_RETRIES,
   type StreamState,
 } from "#lib/ts/playback.js";
-import { sinceHead } from "#lib/ts/seek.js";
+import { inWrap, sinceHead } from "#lib/ts/seek.js";
 
 /** 鳴らし始めるまでに貯める長さ (秒) */
 const TARGET = 1;
@@ -72,7 +72,10 @@ interface CanvasOptions {
    * 端末に保存した録画は Blob を切り出したもの (`mkv-source.ts`)。どちらも Response で返す
    */
   request(from: number, audio: string, signal: AbortSignal): Promise<Response>;
-  /** 尺 (秒)。**ここまで飛んだらリクエストせずに終わりにする** (`<video>` が末尾へ飛ぶと `ended` になるのと同じ) */
+  /**
+   * 尺 (秒)。**ここまで飛んだらリクエストせずに終わりにする** (`<video>` が末尾へ飛ぶと `ended` になるのと同じ)。
+   * 0 は尺が分からないとき。終わりは届いたストリームの終わりで決める
+   */
   duration: number;
   /**
    * 読み込み元の平均の速さ (バイト/秒)。読むのが速すぎる元 (端末に保存した録画の Blob) だけ渡す。
@@ -86,9 +89,9 @@ interface CanvasOptions {
   background: boolean;
   /** 止めて始めるか */
   paused: boolean;
-  /** 繋ぎ直している・諦めた・戻った・混んでいて断られた */
+  /** 繋ぎ直している・打ち切った・戻った・混んでいて断られた */
   state(state: StreamState): void;
-  /** 描けなくなった (間に合わない・デコーダが転び続ける・音が来ない)。**画面がほかの方式へ移す** */
+  /** 描けなくなった (間に合わない・デコーダが失敗し続ける・音が来ない)。**画面がほかの方式へ移す** */
   gaveUp(reason: string): void;
   /** 外 (ロック画面・車の操作) から止められた・再開された */
   remote(paused: boolean): void;
@@ -295,7 +298,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
      * **末尾 (の手前 `END_EDGE`) へ飛んだらリクエストせずに終わり**。最後が CM の録画で CM を飛ばした・シークバーを
      * 右端まで動かした。サーバは末尾の先からは流せない (`<video>` も末尾へ飛ぶと `ended` になる)
      */
-    if (from >= options.duration - END_EDGE) {
+    if (options.duration > 0 && from >= options.duration - END_EDGE) {
       time = options.duration;
       finished();
       return;
@@ -321,7 +324,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         if (!Number.isFinite(head))
           throw new Error(`${ORIGIN_HEADER} がありません`);
         origin = head;
-        start = (((origin + start) % WRAP) + WRAP) % WRAP;
+        start = inWrap(origin + start);
       }
       engine.reset(start);
       const splitter = input === "fmp4" ? new Fmp4Splitter() : null;

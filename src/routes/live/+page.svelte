@@ -5,9 +5,6 @@
   import { submitting } from "#lib/actions.js";
   import type { Service } from "#lib/bml/engine.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
-  import { ambientMode } from "#lib/components/player/ambient.svelte.js";
-  import { screenAwake } from "#lib/components/player/awake.svelte.js";
-  import { backgroundPlayback } from "#lib/components/player/background.svelte.js";
   import { centerTap } from "#lib/components/player/center-tap.js";
   import ControlBar from "#lib/components/player/ControlBar.svelte";
   import ControlButton from "#lib/components/player/ControlButton.svelte";
@@ -42,9 +39,9 @@
   import JikkyoCompose from "#lib/components/player/JikkyoCompose.svelte";
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
-  import { playerKeys } from "#lib/components/player/keys.js";
+  import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
+  import { liveWiring } from "#lib/components/player/live-wiring.svelte.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
-  import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import PlayerLayout, {
     PHONE_LANDSCAPE,
   } from "#lib/components/player/PlayerLayout.svelte";
@@ -69,7 +66,7 @@
   import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
-  import { playerVolume } from "#lib/components/player/volume.svelte.js";
+  import VolumeNote from "#lib/components/player/VolumeNote.svelte";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, {
@@ -82,7 +79,7 @@
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { slides } from "#lib/jikkyo/ranking.js";
   import { JikkyoRanking } from "#lib/jikkyo/ranking.svelte.js";
-  import { JIKKYO_LIST_KEY, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
+  import { jikkyoListSwitch, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
@@ -369,13 +366,11 @@
    * 書ける間は一覧の下に書き込む 1 行を付ける (上の `canWrite`)。右の列の無い形 (横にしたスマホ・全画面) では出さず、
    * 同じボタンで映像の上の 1 行を開く (書けなければボタンも置かない)
    */
-  const jikkyoList = jikkyoSwitch(JIKKYO_LIST_KEY);
-  const canList = $derived(
-    jikkyoActive &&
-      jikkyoChannel !== null &&
-      !phoneLandscape.current &&
-      !fullscreen.active,
+  const jikkyoList = jikkyoListSwitch(
+    () => jikkyoActive && jikkyoChannel !== null,
+    () => fullscreen.active,
   );
+  const canList = $derived(jikkyoList.can);
   /** 映像の上の 1 行を開いている (一覧を出せない形だけ) */
   let writing = $state(false);
   $effect(() => {
@@ -410,19 +405,16 @@
   /** 書きかけ (一覧の下と映像の上で同じもの。番組の中身との行き来で一覧を描き直しても残す) */
   let draft = $state("");
 
-  /** 画面を落とさせない。止めている間も掛けたまま (追っかけの始まりで、画面を見ていることが多い) */
-  const awake = screenAwake();
-  $effect(() => {
-    awake.on = player.state !== "idle" && player.state !== "error";
-  });
-
-  /** バックグラウンド再生。戻ったら、張り付いていたなら放送の今へ (止めた所からではなく) */
+  /**
+   * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓・音量 (追っかけと共通。`live-wiring.svelte.ts`)。
+   * 裏から戻ったら、張り付いていたなら放送の今へ (止めた所からではなく)
+   */
   let wasLive = false;
-  const background = backgroundPlayback({
-    nativeVideo: () => (player.canvas ? null : video),
-    pip: () => pip.active,
-    paused: () => player.paused,
-    muted: () => player.silenced,
+  const { background, ambient, pip, volume } = liveWiring({
+    player,
+    video: () => video,
+    overlay: () => overlay,
+    separateAudio: separateLiveAudio,
     pause: () => {
       wasLive = player.live;
       player.toggle();
@@ -432,43 +424,6 @@
       // 戻る先がまだ無い (貯まりが空) と goLive は何もしないので、そのときは再開だけ
       if (player.paused) player.toggle();
     },
-  });
-
-  /** アンビエントモード。canvas に描いているときは worker から縮めた 1 枚をもらう */
-  const ambient = ambientMode({
-    playing: () => !player.paused && !pip.active,
-    canvas: () => (player.canvas ? player : null),
-    video: () => video,
-  });
-
-  /** 小窓 (PiP)。MPEG-2 は worker の canvas からストリームを取って出す。小窓で押された止める・再開は player に合わせる */
-  const pip = pictureInPicture({
-    video: () => video,
-    raw: () => player.canvas,
-    capture: () => player.capture(),
-    flow: (on) => player.captureFlow(on),
-    paused: () => player.paused,
-    toggle: () => player.toggle(),
-    auto: () => background.on,
-    overlay: () => overlay,
-    captions: () => player.captions && player.hasCaptions,
-  });
-  // MPEG-2 をデコードした音を「再生する音」と言うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
-  $effect(() => {
-    player.playback = background.on || pip.active;
-  });
-
-  /** 音量 (`volume.svelte.ts`)。canvas はエンジンの中で、`<video>` は Web Audio に通して掛ける */
-  const volume = playerVolume({
-    separateAudio: separateLiveAudio,
-    video: () => (player.canvas ? null : video),
-    through: () => background.on || pip.active,
-    remote: (paused) => {
-      if (paused !== player.paused) player.toggle();
-    },
-  });
-  $effect(() => {
-    player.volume = volume.level;
   });
 
   /** 真ん中あたりを素早く 2 回で再生/一時停止 (`center-tap.ts`)。1 回目は操作バーの出し入れ */
@@ -485,7 +440,7 @@
           {
             key: `record-${form.recorded}`,
             kind: "info" as const,
-            text: `録画を始めます: ${form.recorded}`,
+            text: `「${form.recorded}」の録画を始めます`,
           },
         ]
       : []),
@@ -526,11 +481,7 @@
   });
   /** データ放送を出している間は、空白・十字キー・f はあちらのリモコン (`bml/engine.ts` の `aribKey`) */
   function keys(event: KeyboardEvent): void {
-    if (
-      player.showData &&
-      (event.key === " " || event.key === "f" || event.key.startsWith("Arrow"))
-    )
-      return;
+    if (player.showData && dataRemoteKey(event)) return;
     playerKey(event);
   }
 
@@ -650,7 +601,7 @@
             onclick={() => void snapshot()}
           />
           <!--
-            右の列の頭に「コメントの一覧」(書ける間は下に書き込む 1 行) を出す・しまう (`canList`)。
+            右の列の先頭に「コメントの一覧」(書ける間は下に書き込む 1 行) を出す・しまう (`canList`)。
             一覧を出せない形では、映像の上に書き込む 1 行を開く (`canWrite`。追い付いていないときも出し、1 行のほうで理由を言う)
           -->
           {#if canList || canWrite}
@@ -682,7 +633,7 @@
           {/if}
           <!--
                         上に位置、下に押すもの (観る画面と同じ二段)。放送の今にいる間は右端に張り付かせる
-                        (貯めているぶん後ろにいるが、描くと摘みが左へ動いて見える)。MPEG-2 では出さない
+                        (貯めているぶん後ろにいるが、描くとつまみが左へ動いて見える)。MPEG-2 では出さない
                         (遡れるほど持っていない)。録画に譲っている間も出さない (戻るのは通知の「ライブに戻る」)
                     -->
           {#if !player.canvas && player.yielded === null}
@@ -705,7 +656,7 @@
               testid="live-play"
               onclick={() => player.toggle()}
             />
-            <!-- 畳むときは音・Hybridcast・速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
+            <!-- 畳むときは音・Hybridcast・速さを ⚙ の先頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
             <Extras>
               <SoundButton
                 silenced={player.silenced}
@@ -825,6 +776,7 @@
             {#if player.chasing}
               <Extras>
                 <SpeedMenu
+                  testid="live-speed"
                   label="追っかけの速さ"
                   speed={player.speed}
                   onselect={(speed) => player.setSpeed(speed)}
@@ -916,7 +868,7 @@
         <PlayerVeil
           holding={player.holding}
           busy={player.state === "connecting"}
-          note={player.resuming ? "繋ぎ直しています" : ""}
+          resuming={player.resuming}
           error={player.state === "error" ? player.message : ""}
           idle="局を選んでください"
           testid="live-status"
@@ -971,9 +923,7 @@
       {#if player.warning}
         <StageNote testid="live-warning">{player.warning}</StageNote>
       {/if}
-      {#if volume.noted}
-        <StageNote testid="live-volume-note">音量 {volume.level}%</StageNote>
-      {/if}
+      <VolumeNote {volume} testid="live-volume-note" />
     {/snippet}
   </PlayerStage>
 
@@ -981,7 +931,7 @@
         右の列。幅は固定で、映像側だけ伸ばす。番組表と同じ並びで、高さは残りぜんぶ
     -->
   {#snippet aside()}
-    <!-- 右の列の頭のコメントの一覧。書ける間は下に書き込む 1 行を付ける (局の一覧・番組の中身のどちらでも同じ) -->
+    <!-- 右の列の先頭のコメントの一覧。書ける間は下に書き込む 1 行を付ける (局の一覧・番組の中身のどちらでも同じ) -->
     {#snippet commentList()}
       <JikkyoList feed={jikkyo} air={() => player.airTime()}>
         {#if canWrite}
@@ -1012,8 +962,11 @@
         }}
       >
         {#snippet top()}
-          <!-- 番組の中身を開いていても、コメントの一覧は列の頭に残す (局の一覧のときと同じ) -->
-          {#if canList && jikkyoList.on}
+          <!-- 番組の中身を開いていても、リモコンとコメントの一覧は列の先頭に残す (局の一覧のときと同じ) -->
+          {#if dataPress !== null}
+            <Remote press={dataPress} />
+          {/if}
+          {#if jikkyoList.shown}
             {@render commentList()}
           {/if}
         {/snippet}
@@ -1030,7 +983,7 @@
           <Remote press={dataPress} />
         {/if}
         <!-- 実況のコメントの一覧も、出している間は一覧の上 (リモコンの下) -->
-        {#if canList && jikkyoList.on}
+        {#if jikkyoList.shown}
           {@render commentList()}
         {/if}
 
@@ -1054,7 +1007,7 @@
             </button>
           {/each}
         </div>
-        <!-- 勢いを読めないときは一覧の頭に 1 行だけ (通知は出さない。並びは番号順) -->
+        <!-- 勢いを読めないときは一覧の先頭に 1 行だけ (通知は出さない。並びは番号順) -->
         {#if shown === JIKKYO_TAB && ranking.failed}
           <p class="ranking-note" data-testid="live-ranking-note">
             いまは勢いを読めません
@@ -1087,7 +1040,7 @@
           {#each listed as channel (channel.id)}
             <!-- いま映しているものかどうかは、この行の中で何度も使う -->
             {@const tuned = current?.id === channel.id}
-            <!-- 「実況」タブでは 2 段目の頭に勢い (1 分あたりのコメント数)。ほかのタブには付けない -->
+            <!-- 「実況」タブでは 2 段目の先頭に勢い (1 分あたりのコメント数)。ほかのタブには付けない -->
             {@const force =
               shown === JIKKYO_TAB
                 ? ranking.forces?.get(channel.id)
@@ -1107,7 +1060,7 @@
                 data-channel="{channel.type}/{channel.channel}"
                 data-service={channel.id}
               >
-                <!-- ロゴのまだ無い局は局名の頭の 1 字 (種別のラベルだとどの局も同じ箱になる) -->
+                <!-- ロゴのまだ無い局は局名の先頭の 1 字 (種別のラベルだとどの局も同じ箱になる) -->
                 <ServiceLogo
                   id={channel.id}
                   has={channel.hasLogo}
@@ -1120,8 +1073,8 @@
                             -->
                 <span class="channel-text">
                   <!--
-                                    テレビの番号を局名の頭に添える (地上波はリモコン番号、BS/CS は 3 桁)。
-                                    番号の無い局も幅は取る。局名の頭がそろう
+                                    テレビの番号を局名の先頭に添える (地上波はリモコン番号、BS/CS は 3 桁)。
+                                    番号の無い局も幅は取る。局名の先頭がそろう
                                 -->
                   <span class="channel-name broadcast">
                     {#if tuned}<span
@@ -1247,7 +1200,7 @@
     position: absolute;
     top: 0.75rem;
     left: 0.75rem;
-    z-index: 10;
+    z-index: var(--dp-z-stage-controls);
   }
   /* 列の幅いっぱいに伸びるので、タブを均等に広げる。左に寄せると右に溝だけが余った */
   .type-tabs {
@@ -1306,7 +1259,7 @@
     cursor: pointer;
   }
   /*
-     * 番号は局名の頭に小さく淡く。2 桁ぶん取って右に寄せ、局名の頭をそろえる
+     * 番号は局名の先頭に小さく淡く。2 桁ぶん取って右に寄せ、局名の先頭をそろえる
      * (E2E 20 の「種別のタブと下の一覧の端がそろう」)
      */
   .channel-number {

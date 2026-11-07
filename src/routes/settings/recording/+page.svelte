@@ -220,7 +220,9 @@
                 {#snippet more()}
                   <p>
                     使える GPU は Intel・AMD (VA-API)・NVIDIA (NVENC)・Rockchip
-                    (MPP) です。見つかれば自動で使います。
+                    (MPP) です。Windows では Intel (QSV)・AMD (AMF)・NVIDIA
+                    (NVENC)、Mac では Apple (VideoToolbox)
+                    です。見つかれば自動で使います。
                   </p>
                   <p>
                     GPU →

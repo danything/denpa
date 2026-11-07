@@ -197,7 +197,7 @@ public static class Card
     /// 予備のリーダーを並べて同時に覗く。**間に合わなかったものは待たない。**
     /// 固まったリーダー 1 つのせいで表ごと出なくなるより、その行だけ理由を出す
     /// </summary>
-    internal static ReaderState[] Probe(IReadOnlyList<CardLinkCandidate> candidates, TimeSpan within)
+    private static ReaderState[] Probe(IReadOnlyList<CardLinkCandidate> candidates, TimeSpan within)
     {
         /*
          * **1 つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用のスレッドプールから
@@ -335,7 +335,7 @@ public static class Scramble
         var source = Inside(recorded, input);
         var target = Inside(recorded, output);
         if (source is null || target is null) return Failed("元の TS の保存先の外にあるファイルは復号できません");
-        if (!File.Exists(source)) return Failed($"{source} が見つかりません。denpa と同じ保存先をこのコンテナにもマウントしてください");
+        if (!File.Exists(source)) return Failed($"{source} が見つかりません。エージェントにも denpa と同じ保存先 (RAW_DIR) を見せてください");
         // 書き出す先は新しく作る。もうあるファイルは上書きしない (置き場の中の録画を潰させない)
         if (File.Exists(target)) return Failed($"{target} はもうあります。上書きはしません");
 

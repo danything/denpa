@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3f656cf1-81ab-4984-89ce-d6284fed39ff",
+  "id": "b9ddda5d-53d0-4058-a9ab-9045ef6079ca",
   "prevId": "44b8611a-4138-42b6-8c8a-0336b2e0b339",
   "tables": {
     "api_tokens": {
@@ -488,69 +488,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "contract_notifications": {
-      "name": "contract_notifications",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "card_id": {
-          "name": "card_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "service_id": {
-          "name": "service_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "event": {
-          "name": "event",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "valid_until": {
-          "name": "valid_until",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "notified_at": {
-          "name": "notified_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "contract_notifications_event_idx": {
-          "name": "contract_notifications_event_idx",
-          "columns": [
-            "card_id",
-            "service_id",
-            "event",
-            "valid_until"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -1940,6 +1877,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "epg_at": {
+          "name": "epg_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
         }
       },
       "indexes": {},

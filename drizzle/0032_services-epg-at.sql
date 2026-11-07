@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `epg_at` integer;

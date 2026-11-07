@@ -299,6 +299,10 @@ export async function scan(
       if (line !== "" && !line.includes("=")) other.push(line);
       if (other.length > 5) other.shift();
     },
+  }).catch((error) => {
+    // 一時フォルダを消す (`result` が消す)
+    reader.result(-1, "");
+    throw error;
   });
   return reader.result(result.code, other.join("\n"));
 }

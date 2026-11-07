@@ -106,7 +106,7 @@ test.describe("局ロゴ", () => {
     await expect(async () => {
       await goto(page, "/settings/reception");
       await expect(page.getByTestId("logo-sweep-done")).toContainText(
-        "ロゴを取得しました",
+        "ロゴを集めました",
       );
     }).toPass({ timeout: 60_000 });
 

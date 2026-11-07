@@ -4,12 +4,12 @@ using System.Text;
 namespace Denpa.Agent;
 
 /*
- * FR30 (富士通 FR ファミリー) の小さなアセンブラ。CECH-ZD1 J のブリッジ (MB86H47A) の中で動かすプログラムを組む (Mb86h47Programs.cs)。
+ * FR30 (富士通 FR ファミリー) の小さなアセンブラ。CECH-ZD1 J のブリッジ (MB86H47A) と PIX-DT295 の中で動かすプログラムを組む (Mb86h47Programs.cs・Dt295NativePrograms.cs)。
  *
  * 命令の符号化は富士通の公開している FR30 の命令の手引きに従い、命令ごとに binutils の fr30-elf-as の出力と突き合わせた
  * (Fr30Tests.cs の期待値は、その突き合わせで fr30-elf-as が出した語)。使う命令だけを持つ。命令は 16 ビットでビッグエンディアン。
  *
- * 組みながら GNU の書き方の一覧 (Listing) も残すので、プログラム全体を fr30-elf-as に通して突き合わせられる。
+ * 組みながら GNU の書き方の一覧 (Listing) も残すので、プログラム全体を fr30-elf-as に通して突き合わせられる (PIX-DT295 のプログラムは Dt295NativeProgramsTests.cs で突き合わせている)。
  */
 
 /// <summary>FR30 の汎用レジスタ。R13 = AC、R14 = FP、R15 = SP</summary>
@@ -125,6 +125,12 @@ public sealed class Fr30Assembler(uint origin)
     /// <summary>LD @(R13, Rj), Ri (R13 + Rj のアドレス)</summary>
     public void LdAc(Fr30Reg rj, Fr30Reg ri) => Emit((ushort)(0x0000 | (R(rj) << 4) | R(ri)), $"ld @(r13, {N(rj)}), {N(ri)}");
 
+    /// <summary>LDUB @(R13, Rj), Ri (R13 + Rj のアドレスから 1 バイト。DT295 の自前プログラムが、置き換えた元の命令列を写すのに使う)</summary>
+    public void LdubAc(Fr30Reg rj, Fr30Reg ri) => Emit((ushort)(0x0200 | (R(rj) << 4) | R(ri)), $"ldub @(r13, {N(rj)}), {N(ri)}");
+
+    /// <summary>STB Ri, @(R13, Rj) (R13 + Rj のアドレスへ 1 バイト)</summary>
+    public void StbAc(Fr30Reg ri, Fr30Reg rj) => Emit((ushort)(0x1200 | (R(rj) << 4) | R(ri)), $"stb {N(ri)}, @(r13, {N(rj)})");
+
     /// <summary>ST Ri, @(R13, Rj)</summary>
     public void StAc(Fr30Reg ri, Fr30Reg rj) => Emit((ushort)(0x1000 | (R(rj) << 4) | R(ri)), $"st {N(ri)}, @(r13, {N(rj)})");
 
@@ -177,6 +183,12 @@ public sealed class Fr30Assembler(uint origin)
 
     /// <summary>LSR #0〜31, Ri (16 以上は LSR2)</summary>
     public void Lsr(uint count, Fr30Reg ri) => Shift(0xB0, "lsr", count, ri);
+
+    /// <summary>LSL Rj, Ri (Ri を Rj の下位 5 ビットだけ左へ。Rj が 0 のときは動かない)</summary>
+    public void LslR(Fr30Reg rj, Fr30Reg ri) => Emit((ushort)(0xB600 | (R(rj) << 4) | R(ri)), $"lsl {N(rj)}, {N(ri)}");
+
+    /// <summary>LSR Rj, Ri (Ri を Rj の下位 5 ビットだけ右へ)</summary>
+    public void LsrR(Fr30Reg rj, Fr30Reg ri) => Emit((ushort)(0xB200 | (R(rj) << 4) | R(ri)), $"lsr {N(rj)}, {N(ri)}");
 
     private void Shift(int op, string name, uint count, Fr30Reg ri)
     {

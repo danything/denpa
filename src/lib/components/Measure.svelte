@@ -79,7 +79,7 @@
    *
    * 同じ `@media` の中の 3 つのうち 2 つだけ効く、ということは起こらない。
    * 起きているように見えるなら、**片方の決まりがそこに無い** (配られた
-   * CSS が古い) を疑う。当てずっぽうで直す前に、載っている CSS を数える
+   * CSS が古い) を疑う。推測で直す前に、載っている CSS を数える
    */
   function ruleState(): string {
     const sheets = Array.from(document.styleSheets);
@@ -166,7 +166,7 @@
    *
    * **ページが動かないなら何も出さない。** 中で自分だけスクロールする枠
    * (番組表の表など) の中身は、画面の下より深いところにいるのが正しい。
-   * それを並べると、はみ出していない画面にまで犯人が出る
+   * それを並べると、はみ出していない画面にまで要素が出る
    */
   function findCulprits(limit: number): Culprit[] {
     if (scroll - client <= 1) return [];
@@ -283,7 +283,7 @@
   {#if units !== null}
     <div>
       dvh {units.dvh} / svh {units.svh} / lvh {units.lvh} / vh {units.vh} / 流れの中
-      {plain} — {mode}
+      {plain} / {mode}
     </div>
   {/if}
   <div class="wrap">{rules}</div>
@@ -298,7 +298,7 @@
     position: fixed;
     right: 0.25rem;
     bottom: 0.25rem;
-    z-index: 100;
+    z-index: var(--dp-z-measure);
     max-width: 95vw;
     padding: 0.25rem 0.5rem;
     border-radius: var(--dp-radius-sm);

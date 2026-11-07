@@ -4,6 +4,7 @@
   import { arming } from "#lib/arming.svelte.js";
   import type { CanvasPlayer } from "#lib/canvas-player.js";
   import { clock, dateTime, durationMs, percent, size } from "#lib/format.js";
+  import { CODEC_LABEL } from "#lib/hw.js";
   import { type OfflineVideo, resumeQueue, videos } from "#lib/offline-db.js";
   import {
     offline,
@@ -124,11 +125,11 @@
     ]);
     if (mine !== session) return;
     if (source?.codec == null) {
-      problem = "この録画を読み込めませんでした";
+      problem = "録画を読み込めませんでした";
       return;
     }
     if (!support[source.codec]) {
-      problem = `この端末では再生できません (${source.codec === "av1" ? "AV1" : "H.264"} をデコードできません)`;
+      problem = `再生できない形式です (${CODEC_LABEL[source.codec]} をデコードできません)`;
       return;
     }
     await tick();
@@ -242,7 +243,7 @@
   <title>端末に保存した録画 - denpa</title>
 </svelte:head>
 
-<!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
+<!-- 削除の確認はほかの所を押したら取り下げる (`stand`) -->
 <svelte:window onclick={deleting.stand} />
 
 <div class="page">
@@ -336,8 +337,8 @@
             <div class="thumb blank"></div>
           {/if}
           <div class="info">
-            <div class="name truncate small broadcast">{item.name}</div>
-            <div class="tiny muted">
+            <div class="name truncate broadcast">{item.name}</div>
+            <div class="small muted">
               <span class="broadcast">{item.serviceName}</span>・{dateTime(
                 item.startAt,
               )}{#if item.durationMs !== null}・{durationMs(
@@ -369,7 +370,7 @@
                 await load();
               }}
             >
-              失敗した保存データを消す
+              失敗した保存データを削除
             </button>
           {:else}
             <button

@@ -5,23 +5,25 @@
   import { page } from "$app/state";
   import { onMount, tick, untrack } from "svelte";
 
-  import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import { clipVersionQuery } from "#lib/clips.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
+  import ProgramActions from "#lib/components/ProgramActions.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import { type DetailSeed, programDetail } from "#lib/detail.svelte.js";
   import {
     badgeClass,
+    cancelable,
     dateTime,
     quietState,
     recordedDuration,
     stateLabel,
     time,
   } from "#lib/format.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { loadRecent, pushRecent, saveRecent } from "#lib/recent-searches.js";
 
   import type { Preview, PreviewRow } from "./+page.server";
@@ -51,7 +53,7 @@
     return expanded[key] ? rows : rows.slice(0, FIRST);
   }
 
-  /** 最近の検索。端末ごと (`#lib/recent-searches.ts`)。描いたあとに読む (サーバは知らない) */
+  /** 最近の検索。端末ごと (`#lib/recent-searches.ts`)。描いたあとに読む (サーバには送らない) */
   let recent = $state<string[]>([]);
   onMount(() => {
     recent = loadRecent();
@@ -100,17 +102,14 @@
   );
 
   /** いま放送中かの判定に使う時計。分で刻む (番組表と同じ) */
-  let clock = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => (clock = Date.now()), 60_000);
-    return () => clearInterval(timer);
-  });
+  const minute = minuteClock();
+  const clock = $derived(minute.now);
   const watchable = $derived(new Set(data.watchable));
   /** 切り抜きの節の行き先。同じ言葉のまま切り抜きの画面へ */
   const clipsHref = $derived(resolve(`clips?${new URLSearchParams({ q })}`));
 
   /**
-   * 番組の詳細。押すもの (視聴・予約・取消・ルールを作る) を出すのに、開いた行を覚えておく。
+   * 番組の詳細。押すもの (視聴・予約・取消・ルールを作る。`ProgramActions`) を出すのに、開いた行を覚えておく。
    * 中身は番組表から引く (`detail.svelte.ts`。ホームと同じ)
    */
   interface Opened {
@@ -119,6 +118,8 @@
     start_at: number;
     end_at: number;
     reservation_id: number | null;
+    /** 予約の状態。予約が無ければ null */
+    reservation_state: string | null;
     copy_never: boolean;
   }
   const detail = programDetail();
@@ -137,18 +138,25 @@
       {
         ...row,
         program_id: row.id,
-        reservation_id:
-          row.reservation_state === "skipped" ? null : row.reservation_id,
         copy_never: row.skip?.kind === "copy-never",
       },
       row,
     );
   }
   function showReservation(row: (typeof data.reservations.rows)[number]): void {
-    show({ ...row, reservation_id: row.id, copy_never: false }, row);
+    show(
+      {
+        ...row,
+        reservation_id: row.id,
+        reservation_state: row.state,
+        copy_never: false,
+      },
+      row,
+    );
   }
   function close(): void {
     opened = null;
+    failedFor = null;
     detail.close();
     // 候補から来た番組 (`?program=`) を閉じたら URL からも外す。読み直しても開き直さない
     if (page.url.searchParams.has("program")) {
@@ -157,13 +165,28 @@
       void goto(url, { replace: true, shallow: true, state: page.state });
     }
   }
+  /**
+   * 詳細の中の予約・取消に失敗した番組。理由はこの番組の詳細の中にだけ出す
+   * (`form` は次に送るまで残るので、閉じて別の番組を開くと前の理由や行のボタンの理由が出ていた)
+   */
+  let failedFor = $state<number | null>(null);
+  /**
+   * いまの返事 (`form`) が詳細から送ったものか。**失敗の理由は送ったところに 1 か所だけ出す** (番組表と同じ決まり)。
+   * 詳細から送ったものは詳細の中 (モーダルは通知より上に出るので、通知では読めない)、行のボタンなど
+   * ほかから送ったものは右下の通知。詳細を閉じたあとも、詳細から送った理由を通知に出し直さない
+   */
+  let fromDetail = $state(false);
   /** 詳細の中の予約・取消。失敗したときは開いたままにして、中に理由を出す */
-  const closeOnSuccess: SubmitFunction =
-    () =>
-    async ({ result, update }) => {
+  const closeOnSuccess: SubmitFunction = () => {
+    const sentFor = opened?.program_id ?? null;
+    return async ({ result, update }) => {
+      // 返事を当てる前に立てる。あとにすると、断られた理由が一瞬だけ通知にも出る
+      fromDetail = true;
       await update();
+      failedFor = result.type === "success" ? null : sentFor;
       if (result.type === "success") close();
     };
+  };
 
   /**
    * **候補から選んだ番組は、開いたら詳細を出す** (`?program=`。ヘッダーの候補の番組・予約)。
@@ -216,11 +239,28 @@
   function verdictOf(id: number) {
     return preview?.verdicts[id] ?? null;
   }
+  /**
+   * 録画を待っている予約か。録画中と録画しない (`skipped`。コピー禁止・同じ回を録画済み) は待っていない
+   */
+  function waitingToRecord(state: string | null): boolean {
+    return state !== "recording" && state !== "skipped";
+  }
+  /**
+   * **行のボタンで取り消せるか** (これからの放送・予約の節・下見の行で同じ)。取り消せる予約 (`cancelable`。
+   * サーバ・番組表・詳細と同じ判定) のうち、録画を待っているもの (`waitingToRecord`) だけ。
+   * 録画中を行の 1 押しで取り消すと録画が止まり (予約の節は代わりに追っかけを出す)、録画しないものは取り消しても何も変わらない。
+   * どちらも詳細の「予約取消」からは取り消せる (`ProgramActions`)
+   */
+  function rowCancelable(state: string | null, endAt: number): boolean {
+    return cancelable(state, endAt, clock) && waitingToRecord(state);
+  }
+
   /** ルールの削除の 2 回押し (書く欄の「削除」) */
   const ruleDeleting = arming('[data-testid^="rule-delete"]');
 
   const notices = $derived.by(() => {
-    const list = errorNotice(form, "search-error");
+    // 詳細から送って断られた理由は、詳細の中にだけ出す (`fromDetail`)
+    const list = errorNotice(fromDetail ? null : form, "search-error");
     if (form?.deletedRule !== undefined) {
       const { canceled } = form.deletedRule;
       list.push({
@@ -236,7 +276,11 @@
       list.push({
         key: "rule-toggled",
         kind: "success",
-        text: "ルールを切り替えました",
+        // 送ったあとの読み直しで `draft.editing` は切り替えたあとの状態になっている
+        text:
+          data.draft.editing?.enabled === false
+            ? "ルールを無効にしました"
+            : "ルールを有効にしました",
       });
     return list;
   });
@@ -246,6 +290,10 @@
   onclick={(event) => {
     deleting.stand(event);
     ruleDeleting.stand(event);
+  }}
+  onsubmitcapture={() => {
+    // どこから送っても、まず「詳細からではない」に戻す。詳細から送ったものは返事のあとで立て直す (`closeOnSuccess`)
+    fromDetail = false;
   }}
 />
 
@@ -271,7 +319,7 @@
             <h2 id="recent-head">最近の検索</h2>
             <button
               type="button"
-              class="link-button small ghost"
+              class="small ghost"
               onclick={clearRecent}
               data-testid="recent-clear">履歴を消す</button
             >
@@ -343,7 +391,7 @@
                     {/if}
                     <span class="truncate broadcast">{program.name}</span>
                   </span>
-                  <span class="hit-meta tiny muted">
+                  <span class="hit-meta small muted">
                     {@render service(program)}<span class="num"
                       >{dateTime(program.start_at)}〜{time(
                         program.end_at,
@@ -361,15 +409,18 @@
                   </span>
                 </button>
                 <div class="row-actions">
+                  <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`rowCancelable`) -->
                   {#if program.reservation_id !== null}
-                    <ActionButton
-                      action="?/cancel"
-                      fields={{ reservationId: program.reservation_id }}
-                      class="small outline danger"
-                      testid="search-cancel"
-                    >
-                      取消
-                    </ActionButton>
+                    {#if rowCancelable(program.reservation_state, program.end_at)}
+                      <ActionButton
+                        action="?/cancel"
+                        fields={{ reservationId: program.reservation_id }}
+                        class="small outline danger"
+                        testid="search-cancel"
+                      >
+                        取消
+                      </ActionButton>
+                    {/if}
                   {:else if !program.copy_never}
                     <ActionButton
                       action="?/reserve"
@@ -425,7 +476,7 @@
                       )}{/if}
                     <span class="truncate broadcast">{rec.name}</span>
                   </span>
-                  <span class="hit-meta tiny muted">
+                  <span class="hit-meta small muted">
                     {@render service(rec)}<span class="num"
                       >{dateTime(rec.start_at)}・{recordedDuration(rec)}</span
                     >
@@ -453,7 +504,7 @@
         {/if}
       </section>
 
-      <!-- 切り抜き (番組名・局名・字幕)。頭の数枚だけ並べ、続きは切り抜きの画面で同じ言葉のまま -->
+      <!-- 切り抜き (番組名・局名・字幕)。先頭の数枚だけ並べ、続きは切り抜きの画面で同じ言葉のまま -->
       <section
         class="hits-section"
         aria-labelledby="clips-head"
@@ -535,7 +586,7 @@
                     {/if}
                     <span class="truncate broadcast">{res.name}</span>
                   </span>
-                  <span class="hit-meta tiny muted">
+                  <span class="hit-meta small muted">
                     {@render service(res)}<span class="num"
                       >{dateTime(res.start_at)}〜{time(res.end_at)}</span
                     >・{res.manual
@@ -549,7 +600,7 @@
                       class="button small ghost"
                       href={resolve(`chase/${res.recording_id}`)}>追っかけ</a
                     >
-                  {:else}
+                  {:else if rowCancelable(res.state, res.end_at)}
                     <ActionButton
                       action="?/cancel"
                       fields={{ reservationId: res.id }}
@@ -592,7 +643,7 @@
                     {#if !rule.enabled}<span class="tag">無効</span>{/if}
                     <span class="truncate">{rule.name}</span>
                   </span>
-                  <span class="hit-meta tiny muted">
+                  <span class="hit-meta small muted">
                     {#if rule.keyword !== ""}キーワード: {rule.keyword}・{/if}優先度
                     {rule.priority}・予約 {rule.reservations} 件
                   </span>
@@ -671,7 +722,7 @@
                 <span class="truncate broadcast">{row.name}</span>
               </span>
               <!-- 録るかどうかは事実なので補足の字で (docs/design.md の「印の意味」)。録らない行は薄くもなる (`.dim`) -->
-              <span class="hit-meta tiny muted">
+              <span class="hit-meta small muted">
                 <span class="broadcast">{row.service_name}</span>・<span
                   class="num">{dateTime(row.start_at)}〜{time(row.end_at)}</span
                 >{#if !row.matched}・録らない (条件から外れました){:else if row.skip !== null}・録らない
@@ -685,9 +736,9 @@
                 {/if}
               </span>
             </button>
-            <!-- 1 件ずつ: 立っている予約は取り消し、録る行はその 1 本だけ予約できる (ホーム・結果の行と同じ action) -->
+            <!-- 1 件ずつ: 取り消せる予約 (`rowCancelable`) は取り消し、録る行はその 1 本だけ予約できる (ホーム・結果の行と同じ action) -->
             <div class="row-actions">
-              {#if row.reservation_id !== null && row.reservation_state !== "skipped"}
+              {#if row.reservation_id !== null && rowCancelable(row.reservation_state, row.end_at)}
                 <ActionButton
                   action="?/cancel"
                   fields={{ reservationId: row.reservation_id }}
@@ -719,7 +770,7 @@
   </section>
 {/snippet}
 
-<!-- 行の 2 段目の頭 (局のロゴと名前) と、状態のバッジ -->
+<!-- 行の 2 段目の先頭 (局のロゴと名前) と、状態のバッジ -->
 {#snippet service(row: {
   service_id: number;
   has_logo: boolean | null;
@@ -738,16 +789,16 @@
   >
 {/snippet}
 
-<!-- 「もっと見る」。受け取ったぶんを出し切っても残りがあれば、言葉を足してもらう -->
+<!-- 「もっと見る」。数は開くと増えるぶん (受け取った 100 件まで)。出し切っても残りがあれば、言葉を足してもらう -->
 {#snippet more(key: Key, received: number, all: number)}
   {#if !expanded[key] && received > FIRST}
     <button
       type="button"
-      class="link-button small ghost more"
+      class="small ghost more"
       onclick={() => (expanded = { ...expanded, [key]: true })}
       data-testid="search-more-{key}"
     >
-      もっと見る ({all - FIRST} 件)
+      もっと見る ({received - FIRST} 件)
     </button>
   {:else if expanded[key] && all > received}
     <p class="none tiny muted">
@@ -759,42 +810,20 @@
 {#if detail.current}
   <ProgramDetail program={detail.current} onclose={close}>
     {#snippet actions()}
-      {#if form?.message}
-        <div class="notice error">{form.message}</div>
-      {/if}
-      <!-- 並びは控えから主へ (主の「予約」がいちばん右)。閉じるは左下 (`ProgramDetail`) -->
+      <!-- 何を出すか・どれを主にするかは番組表の詳細と同じ (`ProgramActions`)。録画の再生は出さない (結果の録画の節から観る) -->
       {#if opened !== null}
-        <a
-          class="button secondary"
-          href={resolve(`search?from=program:${opened.program_id}`)}
-          >ルールを作る</a
-        >
-      {/if}
-      {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
-        <a
-          class="button outline"
-          href={resolve(`live?service=${opened.service_id}`)}>視聴</a
-        >
-      {/if}
-      {#if opened !== null && opened.reservation_id !== null}
-        <form method="POST" action="?/cancel" use:submitting={closeOnSuccess}>
-          <input
-            type="hidden"
-            name="reservationId"
-            value={opened.reservation_id}
-          />
-          <button
-            type="submit"
-            class="outline danger"
-            data-testid="search-detail-cancel">予約取消</button
-          >
-        </form>
-      {:else if opened !== null && opened.end_at > clock && !opened.copy_never}
-        <form method="POST" action="?/reserve" use:submitting={closeOnSuccess}>
-          <input type="hidden" name="programId" value={opened.program_id} />
-          <button type="submit" data-testid="search-detail-reserve">予約</button
-          >
-        </form>
+        <ProgramActions
+          program={{ ...opened, id: opened.program_id }}
+          cancel={opened.reservation_id === null
+            ? {}
+            : { reservationId: opened.reservation_id }}
+          watchable={watchable.has(opened.service_id)}
+          {clock}
+          message={fromDetail && failedFor === opened.program_id
+            ? (form?.message ?? null)
+            : null}
+          onsubmit={closeOnSuccess}
+        />
       {/if}
     {/snippet}
   </ProgramDetail>
@@ -840,7 +869,7 @@
     position: fixed;
     inset-inline: 0.75rem;
     bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
-    z-index: 30;
+    z-index: var(--dp-z-dock);
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   :global(:where(html[data-phone])) .sheet-bar button {
@@ -963,21 +992,8 @@
     margin: 0;
     padding: var(--dp-space-2);
   }
-  .link-button {
-    width: auto;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--pico-primary);
-    cursor: pointer;
-  }
-  .link-button:hover {
-    text-decoration: underline;
-  }
   .more {
     align-self: flex-start;
-    padding: var(--dp-space-2);
   }
   /* 狭い画面では操作を名前の下に回す (名前を潰さない) */
   @media (max-width: 639.98px) {

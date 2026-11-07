@@ -23,23 +23,20 @@ import { emit } from "./events";
 import { pruneReception, unreceivableChannels } from "./reception";
 import { applyRules } from "./rules";
 import { resolveConflicts } from "./scheduler";
-import { programs, recordings, reservations, services } from "./schema";
+import {
+  DIGITAL_TV,
+  HELD_STATES,
+  programs,
+  recordings,
+  reservations,
+  services,
+} from "./schema";
 import {
   type AgentChannel,
   getChannels,
   programKey,
   serviceKey,
 } from "./tuner";
-
-/**
- * 録画できるサービスかどうか。ARIB のサービス種別 (STD-B10) で決める。
- *
- * スキャンはデータ放送 (NHKデータ1、Gガイド) もワンセグ (tvkワンセグ1) も
- * ラジオも同じ一覧に入れる。これらを録っても映像は入っておらず、
- * データ放送は番組表上「24 時間ぶんの 1 番組」になっていたりする。
- * ルールが引っかけて録画が失敗するので、取り込む時点で落とす。
- */
-const DIGITAL_TV = 1;
 
 /**
  * 「いまエージェントの一覧にある局」だけに絞る条件。
@@ -338,7 +335,7 @@ function clearBelongings(
       .where(
         and(
           eq(reservations.service_id, serviceId),
-          inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+          inArray(reservations.state, HELD_STATES),
           // 録り始めたものは触らない。取り消しても録画は戻らない
           isNull(reservations.started_at),
         ),
@@ -454,8 +451,17 @@ function serviceIdIndex(): Map<string, number> {
   return new Map(rows.map((s) => [`${s.network_id}:${s.service_id}`, s.id]));
 }
 
-/** 読み取った番組を DB に書く。取り込めた件数を返す */
-export function savePrograms(events: EitEvent[]): number {
+/**
+ * 読み取った番組を DB に書く。取り込めた件数を返す。
+ *
+ * 書いた局には番組表を集めた時刻 (`services.epg_at`) を付ける。番組表の取得が次に行くかをこれで決める
+ * (`epg-collect.lastCollected`)。ライブが写す p/f (`followOnAir`) は `onAir` を渡して付けない。
+ * p/f は現在と次の番組だけで、その先の番組表は埋まっていないため
+ */
+export function savePrograms(
+  events: EitEvent[],
+  { onAir = false }: { onAir?: boolean } = {},
+): number {
   const index = serviceIdIndex();
   /** その表がシリーズを言っていれば (`series_said`) 新しい値、言っていなければ前のまま */
   const kept = (column: AnyColumn) =>
@@ -508,6 +514,7 @@ export function savePrograms(events: EitEvent[]): number {
    */
   const at = now();
   let count = 0;
+  const written = new Set<number>();
   orm().transaction((tx) => {
     /*
      * **文は 1 回だけ組んで使い回す** (番組ごとに組むと 1 番組 190µs かかり、全局ぶんで数秒止まる)
@@ -627,6 +634,13 @@ export function savePrograms(events: EitEvent[]): number {
         updated_at: at,
       });
       count++;
+      written.add(serviceId);
+    }
+    if (!onAir && written.size > 0) {
+      tx.update(services)
+        .set({ epg_at: at })
+        .where(inArray(services.id, [...written]))
+        .run();
     }
   });
   return count;
@@ -674,7 +688,8 @@ export function followOnAir(events: readonly EitEvent[]): boolean {
     );
   });
   // 知らない局 (チャンネル設定に無い) のぶんは書かれない。書けなければ知らせない
-  if (!differs || savePrograms([...events]) === 0) return false;
+  if (!differs || savePrograms([...events], { onAir: true }) === 0)
+    return false;
   emit("programs");
   return true;
 }
@@ -718,7 +733,7 @@ function syncReservationTimes(): number {
       .where(
         and(
           eq(programs.id, reservations.program_id),
-          inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+          inArray(reservations.state, HELD_STATES),
           // 録り始めた予約は動かさない。延長への追従は録画の行のほうでやる
           isNull(reservations.started_at),
           or(
@@ -770,7 +785,7 @@ export function settle(): SettleResult {
 }
 
 /**
- * 局と番組表を取り込み直す。手で押したとき (`/api/sync`)・起動直後・スキャンのあと。
+ * 局と番組表を取り込み直す。E2E と docs の画像を撮るスクリプトが呼ぶとき (`/api/sync`)・起動直後・スキャンのあと。
  *
  * 番組そのものを集めるのは `epg-collect.ts` で、こちらは**溜まっているものを
  * 使って予約を組み直すだけ**。

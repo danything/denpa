@@ -210,6 +210,11 @@ describe("CM 判定が多すぎないか", () => {
     expect(tooMuchCm(normal, 1802)).toBe(false);
     expect(cmRatio(normal, 1802)).toBe(10);
   });
+
+  test("ちょうど半分から捨てる (丸めた % では比べない)", () => {
+    expect(tooMuchCm([{ start: 0, end: 900 }], 1800)).toBe(true);
+    expect(tooMuchCm([{ start: 0, end: 899 }], 1800)).toBe(false);
+  });
 });
 
 describe("ロゴで判定できなかったと扱うか", () => {

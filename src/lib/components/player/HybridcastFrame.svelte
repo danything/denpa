@@ -16,6 +16,7 @@
   import { onDestroy } from "svelte";
 
   import type { Service } from "#lib/bml/engine.js";
+  import { fetchRelayed } from "#lib/bml/relay.js";
   import {
     decodeHtml,
     type FrameMessage,
@@ -126,11 +127,8 @@
     // 読み込んでいる間に別のページへ移ったら、古いほうは捨てる (後から届いて新しいページを上書きしない)
     const target = url;
     try {
-      const response = await fetch(
-        resolve(`api/bml/proxy?url=${encodeURIComponent(target)}`),
-      );
-      if (response.headers.get("x-bml-relayed") !== "1" || !response.ok)
-        throw new Error(String(response.status));
+      const { relayed, response } = await fetchRelayed(target);
+      if (!relayed || !response.ok) throw new Error(String(response.status));
       const body = new Uint8Array(await response.arrayBuffer());
       const text = decodeHtml(body, response.headers.get("content-type") ?? "");
       const relay = await relayFor(target);
@@ -189,28 +187,37 @@
   async function relay(
     message: Extract<FrameMessage, { type: "fetch" }>,
   ): Promise<void> {
+    /*
+     * **移る前のページの返りは捨てる。** 入れ物を読み直しても `contentWindow` は同じで、
+     * 新しいページは id を 1 から数え直すので、届けると別の通信の返りとして受け取られる
+     */
+    const mine = round;
+    const reply = (
+      message: Record<string, unknown>,
+      transfer: Transferable[] = [],
+    ) => {
+      if (mine === round) post(message, transfer);
+    };
     try {
       const target = new URL(message.url);
       if (target.protocol !== "http:" && target.protocol !== "https:")
         throw new Error(target.protocol);
-      const query = `url=${encodeURIComponent(target.href)}`;
-      let response: Response;
-      if (message.method === "GET" || message.method === "HEAD") {
-        response = await fetch(resolve(`api/bml/proxy?${query}`));
-      } else if (message.method === "POST") {
-        response = await fetch(resolve(`api/bml/post?${query}`), {
-          method: "POST",
-          headers:
-            message.contentType === null
-              ? {}
-              : { "content-type": message.contentType },
-          body: message.body ?? new ArrayBuffer(0),
-        });
-      } else {
+      if (
+        message.method !== "GET" &&
+        message.method !== "HEAD" &&
+        message.method !== "POST"
+      )
         throw new Error(message.method);
-      }
-      if (response.headers.get("x-bml-relayed") !== "1")
-        throw new Error(String(response.status));
+      const { relayed, response } = await fetchRelayed(
+        target.href,
+        message.method === "POST"
+          ? {
+              contentType: message.contentType,
+              body: message.body ?? new ArrayBuffer(0),
+            }
+          : undefined,
+      );
+      if (!relayed) throw new Error(String(response.status));
       const contentType =
         response.headers.get("content-type") ?? "application/octet-stream";
       // 通信で取って実行する script (jQuery の `getScript` など) も、中の `location.*` をアプリの元の場所に (`location.ts`)
@@ -218,7 +225,7 @@
       const body = scriptable(contentType)
         ? rewriteLocationBytes(new Uint8Array(got)).slice().buffer
         : got;
-      post(
+      reply(
         {
           type: "response",
           id: message.id,
@@ -232,7 +239,7 @@
       console.warn(
         `[hybridcast] 通信を中継できません: ${message.method} ${message.url} (${String(failure)})`,
       );
-      post({ type: "response", id: message.id, error: true });
+      reply({ type: "response", id: message.id, error: true });
     }
   }
 
@@ -392,7 +399,7 @@
     position: absolute;
     top: 0.75rem;
     right: 0.75rem;
-    z-index: 10;
+    z-index: var(--dp-z-stage-controls);
     display: flex;
   }
 </style>

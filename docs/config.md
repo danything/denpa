@@ -13,17 +13,18 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 | `MEDIA_DIR`                             | `/media`                                       | 録画の置き場の親。元の TS は `raw`、エンコードしたものは `encoded` に分けて置く。エージェントも同じ変数を見る                                                                                                                                                                                                                      |
 | `RAW_DIR`                               | `$MEDIA_DIR/raw`                               | 元の TS の作業領域。別のディスクへ移すときは `ENCODED_DIR` と同じく、マウントを付け替える                                                                                                                                                                                                                                          |
 | `ENCODED_DIR`                           | `$MEDIA_DIR/encoded`                           | エンコード済みの置き場。ここから配る。録画を入れたあとに別のディスクへ移すなら、これは変えずにマウントを付け替える ([library.md](library.md#置き場を別のディスクに移す))。切り抜きの画像もこの下 (`clips/`) に置く                                                                                                                 |
-| `FFMPEG` / `FFPROBE`                    | `/usr/local/bin/...`                           | 開発時は偽物に差し替える                                                                                                                                                                                                                                                                                                           |
-| `MPEG2_DIR`                             | `/opt/denpa/mpeg2`                             | ブラウザへ配る MPEG-2・AAC・Opus のデコーダ (WASM) の置き場。変換せずに観るライブと録画、互換モードの音で使う。イメージの `mpeg2wasm` 段が置く。無ければこの方式は使えず、エンコードしたものに戻る ([stream.md](stream.md#放送そのままmpeg-2を送る))                                                                               |
-| `DENPA_VERSION`                         | `dev`                                          | 動いているバージョン。リリースのイメージにだけ入る (`.github/release.Dockerfile`)。`dev` なら新しいバージョンの通知を出さない                                                                                                                                                                                                      |
+| `FFMPEG` / `FFPROBE`                    | `/usr/local/bin/...`                           | 開発時は偽物に差し替える。Mac と Windows はインストーラが配布物の中を指す                                                                                                                                                                                                                                                          |
+| `MPEG2_DIR`                             | `/opt/denpa/mpeg2`                             | ブラウザへ配る MPEG-2・AAC・Opus のデコーダ (WASM) の置き場。変換せずに観るライブと録画、互換モードの音で使う。イメージの `mpeg2wasm` 段が置き、Mac と Windows はインストーラが配布物の中を指す。無ければこの方式は使えず、エンコードしたものに戻る ([stream.md](stream.md#放送そのままmpeg-2を送る))                              |
+| `FONT_DIR`                              | `/usr/share/denpa-font`                        | データ放送・字幕を描く字 (Denpa Font) の置き場。`/api/font/` が配る。イメージの `denpa-font` 段が置き、Mac は install.sh、Windows は install.ps1 が配布物の中を指す。無ければ 404 を返し、画面は端末の字で描く                                                                                                                     |
+| `DENPA_VERSION`                         | `dev`                                          | 動いているバージョン。リリースのイメージ (`.github/release.Dockerfile`) と、Mac・Windows のインストーラが書く起動スクリプトにだけ入る。`dev` なら新しいバージョンの通知を出さない                                                                                                                                                  |
 | `DENPA_GITHUB_API`                      | `https://api.github.com/repos/danything/denpa` | 新しいバージョンを確かめる先 (`releases/latest`)。テストでは偽物を指す                                                                                                                                                                                                                                                             |
 | `DENPA_HUB`                             | `https://dh.doany.io`                          | ニコニコの OAuth を中継する denpa-hub。ニコニコとの連携の入口、トークンの更新、公式の実況の接続先の受け取りに使う ([architecture.md](architecture.md#ニコニコとの連携-denpa-hub))。テストでは偽物を指す                                                                                                                            |
 | `UPDATE_CHECK_INTERVAL`                 | `3600000`                                      | 新しいバージョンを確かめる間隔(ms)                                                                                                                                                                                                                                                                                                 |
 | `ENCODE_CONCURRENCY`                    | `2`                                            | 録ったあとのエンコードを同時に走らせる本数。ジョブではなく ffmpeg の本数で数える (コーデックごとに 1 本。[encode.md](encode.md#同時に走る本数は-ffmpeg-の本数で数える))                                                                                                                                                            |
-| `ENCODE_MAX_ATTEMPTS`                   | `5`                                            | 1 つのエンコードを試す上限。超えたら failed にして後ろを進める (プロセスごと落とすジョブでキューを塞がないため)                                                                                                                                                                                                                    |
-| `HW_DEVICES`                            | `/dev/dri/renderD*`                            | GPU のデバイスを探すパターン。当たったデバイスを全部試し、VA-API が初期化できたものでエンコードする。NVIDIA の GPU は `NVIDIA_DIR` で別に探す ([encode.md](encode.md#gpu-でエンコードする-va-api))                                                                                                                                 |
-| `RKMPP_DEVICE`                          | `/dev/mpp_service`                             | Rockchip MPP のデバイス。在れば h264_rkmpp・hevc_rkmpp を試す ([encode.md](encode.md#rockchip-rk3588-でエンコードする))。MPP は決まった場所を自分で開くので、変えるのはテストで偽のデバイスを置くときだけ                                                                                                                          |
-| `NVIDIA_DIR`                            | `/dev`                                         | NVIDIA の GPU のデバイスファイル (`nvidia0`・`nvidia1` …) を探すフォルダ。在れば NVENC を試す ([encode.md](encode.md#nvidia-でエンコードする))。ffmpeg は GPU を番号で受けるので、変えるのはテストで偽のデバイスを置くときだけ                                                                                                     |
+| `ENCODE_MAX_ATTEMPTS`                   | `5`                                            | 1 つのエンコードのジョブを取り出す上限。超えたら failed にして後ろを進める (プロセスごと落とすジョブでキューを塞がないため)。1 回の実行の中の ffmpeg の起こし直しは数えない                                                                                                                                                        |
+| `HW_DEVICES`                            | `/dev/dri/renderD*`                            | Linux だけ。GPU のデバイスを探すパターン。当たったデバイスを全部試し、VA-API が初期化できたものでエンコードする。NVIDIA の GPU は `NVIDIA_DIR` で別に探す ([encode.md](encode.md#gpu-でエンコードする-va-api))                                                                                                                     |
+| `RKMPP_DEVICE`                          | `/dev/mpp_service`                             | Linux だけ。Rockchip MPP のデバイス。在れば h264_rkmpp・hevc_rkmpp を試す ([encode.md](encode.md#rockchip-rk3588-でエンコードする))。MPP は決まった場所を自分で開くので、変えるのはテストで偽のデバイスを置くときだけ                                                                                                              |
+| `NVIDIA_DIR`                            | `/dev`                                         | Linux だけ。NVIDIA の GPU のデバイスファイル (`nvidia0`・`nvidia1` …) を探すフォルダ。在れば NVENC を試す ([encode.md](encode.md#nvidia-でエンコードする))。ffmpeg は GPU を番号で受けるので、変えるのはテストで偽のデバイスを置くときだけ                                                                                         |
 | `HW_PROBE_TIMEOUT`                      | `20000`                                        | GPU の試しのエンコード 1 本に待つ上限(ms)                                                                                                                                                                                                                                                                                          |
 | `START_MARGIN` / `END_MARGIN`           | `10000` / `15000`                              | 録画の前後マージン(ms)。延長には EIT[p/f] で追従する                                                                                                                                                                                                                                                                               |
 | `SCHEDULER_TICK`                        | `5000`                                         | 予約チェックの間隔(ms)                                                                                                                                                                                                                                                                                                             |
@@ -65,11 +66,11 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 | 変数                                                                                                                                                               | 既定値                                                                                                                   | 説明                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AGENT_PORT`                                                                                                                                                       | `25252`                                                                                                                  | 待ち受けるポート                                                                                                                                                                                                                                                                                                                                          |
-| `AGENT_HOST`                                                                                                                                                       | 全部のインターフェース                                                                                                   | 待ち受けるアドレス (IP アドレス)。Mac の `install.sh` は Docker の denpa と組むとき `127.0.0.1` にする。組んだ denpa しか通さないが、届く範囲も絞る ([agent.md](agent.md#denpa-とは-tls-で組む))                                                                                                                                                          |
+| `AGENT_HOST`                                                                                                                                                       | 全部のインターフェース                                                                                                   | 待ち受けるアドレス (IP アドレス)。Mac の `install.sh` は同じ Mac の denpa と組むとき `127.0.0.1` にする。組んだ denpa しか通さないが、届く範囲も絞る ([agent.md](agent.md#denpa-とは-tls-で組む))                                                                                                                                                         |
 | `AGENT_PAIR_TOKEN`                                                                                                                                                 | (空。`tls/pair-token` に作る)                                                                                            | denpa と組むときの合言葉。denpa の `TUNER_AGENT_URL` の `#pair=` と同じ値。compose・Helm は両方に同じ値を渡す。空ならエージェントが `tuners.json` の隣の `tls/pair-token` に作る ([agent.md](agent.md#denpa-とは-tls-で組む))                                                                                                                             |
 | `TUNERS_FILE` / `CHANNELS_FILE`                                                                                                                                    | `/config/tuners.json` / `/config/channels.json` (Mac・Windows は `$DENPA_HOME/config/`。`DENPA_HOME` の既定は `~/denpa`) | チューナーとチャンネルの設定 ([agent.md](agent.md#設定は-2-つのファイルに分ける))                                                                                                                                                                                                                                                                         |
 | `MEDIA_DIR` / `RAW_DIR`                                                                                                                                            | denpa と同じ                                                                                                             | 元の TS の置き場                                                                                                                                                                                                                                                                                                                                          |
-| `SHUTDOWN_WAIT`                                                                                                                                                    | denpa と同じ                                                                                                             | 止められたとき、録画が終わるまで待つ上限(ms)                                                                                                                                                                                                                                                                                                              |
+| `SHUTDOWN_WAIT`                                                                                                                                                    | denpa と同じ                                                                                                             | 止められたとき、録画が終わるまで待つ上限(ms)。待っている間にもう一度止めると、待たずに止まる ([agent.md](agent.md#止められたら録画が終わるまで待つ))                                                                                                                                                                                                      |
 | `DENPA_VERSION`                                                                                                                                                    | denpa と同じ                                                                                                             | 動いているバージョン (Linux のイメージだけ。Mac と Windows の実行ファイルは中に持つ。About.cs)                                                                                                                                                                                                                                                            |
 | `CARD_URL`                                                                                                                                                         | (空)                                                                                                                     | 手元にカードが無い拠点だけ。鍵を貰う先 (配る側の `CARD_SHARE_PORT`)                                                                                                                                                                                                                                                                                       |
 | `CARD_SHARE_PORT` / `CARD_SHARE_NETWORKS` / `CARD_TTL` / `CARD_SHARE_MAX_RTT`                                                                                      | 配らない                                                                                                                 | 鍵を配る拠点の決まり。既定と書ける範囲は [agent.md](agent.md#鍵を配るのは-lan-の中だけ)                                                                                                                                                                                                                                                                   |
@@ -85,26 +86,8 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 - compose.prod.yml を写して使っているなら、新しいものに置き換え、同じ場所の `.env` に `AGENT_PAIR_TOKEN` を作る
   ([作り方](install.md#docker-compose-を手で置く))。無いと compose は止まる
 - Linux・Mac・Windows のインストーラは流し直せば合言葉を作って両方に渡す。`denpa-aio` と Helm の `charts/denpa` は何もしなくてよい。
-  エージェントだけ別に置いたとき (`charts/denpa-agent`・`--no-docker`・`-AgentOnly`) は、インストーラか `helm install` のあとに出る URL を denpa の `TUNER_AGENT_URL` に書く
+  エージェントだけ別に置いたとき (`charts/denpa-agent`・`--agent-only`・`-AgentOnly`) は、インストーラか `helm install` のあとに出る URL を denpa の `TUNER_AGENT_URL` に書く
 - エージェントの `AGENT_ALLOWED_HOSTS` は読まない (組んだ denpa しか通さないので要らなくなった)
-
-## 録画のダウンロードを無くした (前のバージョンから上げるとき)
-
-**録画をファイルとして外へ持ち出す機能はやめました** (理由は [library.md](library.md#観るのはブラウザで))。
-録画の詳細と番組表の詳細からダウンロードのボタンが無くなり、`/api/recordings/<id>/file` は `?download=1` を読まず、
-添付 (`Content-Disposition`) も付けません。ブラウザ・テレビのアプリでの再生と、端末に保存はこれまでどおりです。
-
-## 再生リンクをやめた (前のバージョンから上げるとき)
-
-**「再生リンクをコピー」と、それが作っていた期限付きの URL (`/api/recordings/<id>/file?token=…`) をやめました。**
-外部のプレイヤーには対応しないので、ログインせずに録画を開ける URL を出す理由が無くなりました。
-
-- **出したリンクは、上げた時点で開けなくなる** (期限内でも)。テーブル (`share_links`) はマイグレーションで消える
-  (`drizzle/0011_drop-share-links.sql`)。リンクを作る API (`POST /api/recordings/<id>/share`) も無くなった
-- 画面からの再生は、画面と同じ資格 (信頼するネットワークか、ログインの Cookie) でファイルのエンドポイントから取得する
-- ファイルのエンドポイントを資格なしで呼んだときの答えが、403 (text/plain) から、ほかの API と同じ 401 の JSON に
-  なった (ログイン方法を何も設定していない denpa は、これまでどおり 403)
-- テレビのアプリ (denpa-tv) はアクセストークンで開くので、何もしなくてよい
 
 ## 接続元の読み方を変えた (前のバージョンから上げるとき)
 
@@ -118,8 +101,8 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
 - **置き換えないまま上げると**、前段越しの接続元が前段のアドレスになる。前段のアドレスが `TRUSTED_NETWORKS` に
   入っていなければ、`TRUSTED_NETWORKS` から来ていた人にもログインを求める (OIDC が無ければ断る)。
   入っていると前段越しの全員が通るので、起動時に警告を出す ([下記](#信頼するネットワークを絞った-前のバージョンから上げるとき))
-- 前段が無い構成 (compose の既定・Windows のインストーラ・`denpa-aio`) は何もしなくてよい。
-  Linux・Mac のインストーラが前に立てる genkan (Caddy) は、下の「信頼するネットワークを絞った」を見る
+- 前段が無い構成 (compose の既定・Mac と Windows のインストーラ・`denpa-aio`) は何もしなくてよい。
+  Linux のインストーラが前に立てる genkan (Caddy) は、下の「信頼するネットワークを絞った」を見る
 
 ## 信頼するネットワークを絞った (前のバージョンから上げるとき)
 
@@ -135,11 +118,11 @@ LAN の人のブラウザから読み書きされることを防ぐためです�
 - compose の既定は `192.168.0.0/16,10.0.0.0/8` になった。前の compose を写して使っているなら、`172.16.0.0/12` を
   消すのを勧める (残したままで前段がいなければ開きはしないが、起動時に警告が出る)。
   Docker を動かしているマシンのブラウザから `localhost:3000` で入っていたなら、`http://<そのマシンの IP>:3000` で開く
-- **Linux・Mac のインストーラで genkan (`http://denpa.localhost`) を使っているなら、install.sh を流し直す。**
+- **Linux のインストーラで genkan (`http://denpa.localhost`) を使っているなら、install.sh を流し直す。**
   compose.override.yml には触らないので、足す行 (`TRUSTED_PROXIES` と genkan のゲートウェイ) を画面に出す。
   新しく入れるときは install.sh が書く
 - Windows のインストーラは、`denpa.env` が無いときだけ作る。前に作った `denpa.env` の `172.16.0.0/12` は消してよい
-  (この PC から `169.254.x.x`、LAN の機器は本当の IP で届くので要らない)
+  (この PC のブラウザはループバック、LAN の機器は本当の IP で届くので要らない)
 
 ## 置き場を変えた (前のバージョンから上げるとき)
 
@@ -164,22 +147,4 @@ LAN の人のブラウザから読み書きされることを防ぐためです�
   置き場の外に録画を置いていたなら、先に置き場へ寄せる
 - このリポジトリの compose・chart・`denpa-aio`・Mac / Windows のインストーラは一緒に直してある。
   Mac / Windows はインストーラを流し直すとエージェントの変数 (`RAW_DIR`) が書き直る
-
-## Helm の PVC の名前も置き場にそろえた
-
-**chart の PVC と values のキーを `raw` / `encoded` に改めました。**
-
-| 中身               | 前 (PVC / values のキー)                  | いま                                    |
-| ------------------ | ----------------------------------------- | --------------------------------------- |
-| 元の TS            | `denpa-recorded` / `persistence.recorded` | `denpa-raw` / `persistence.raw`         |
-| エンコードしたもの | `denpa-library` / `persistence.library`   | `denpa-encoded` / `persistence.encoded` |
-
-**そのまま上げると、新しい名前の空の PVC ができます。** 古い PVC は `helm.sh/resource-policy: keep`
-で残るので消えはしませんが、録画は見えなくなります。どちらかで繋ぎます。
-
-- **古い PVC をそのまま使う**: `persistence.raw.existingClaim: denpa-recorded` /
-  `persistence.encoded.existingClaim: denpa-library`(denpa-agent の chart は `persistence.raw.existingClaim`)
-- **名前ごと移す**: アプリを止め、PV の reclaim を `Retain` にして古い PVC を消し、PV の
-  `claimRef` を外してから、新しい名前の PVC を `volumeName` で同じ PV に結ぶ。中身はコピーしない
-
-compose の名前付きボリューム (`denpa-recorded` / `denpa-library`) は変えていません。
+- Helm は PVC の名前も変えた ([install.md](install.md#pvc-の名前を変えた-前のバージョンから上げるとき))

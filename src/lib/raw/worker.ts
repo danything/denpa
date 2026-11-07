@@ -344,7 +344,7 @@ function onAudio(pes: Pes): void {
 
 /**
  * ADTS の 1 コマをデコードして画面へ渡す。**壊れたコマは飛ばす** (放送の取りこぼし)。
- * 続けて転ぶなら諦める
+ * 続けて失敗するなら打ち切る
  */
 function decodeAudio(audio: WasmAudio, data: Uint8Array, pts: number): void {
   const pcm = audio.decode(data);
@@ -931,7 +931,7 @@ scope.onmessage = (event: MessageEvent<ToWorker>) => {
         reset(message.from ?? null);
       } finally {
         // ここより前に出した音は前の局のもの。画面はこの返事まで捨てる (`engine.ts` の `resetting`)。
-        // 転んでも返す。返さないと、画面はこのあとの音をずっと捨て続ける
+        // 失敗しても返す。返さないと、画面はこのあとの音をずっと捨て続ける
         post({ type: "reset" });
       }
       break;

@@ -20,7 +20,7 @@
  *
  * サーバは受け取りの詰まった接続には映像の塊を捨てて送る (`server/live.ts` の `hand`) ので、**コマの時刻が
  * 飛んだら次のキーフレームまで捨てる**。参照するコマが欠けたまま渡すと、デコーダは崩れたフレームを
- * 出すか転ぶ。転んだら (`error`) 開き直してキーフレームから入り直し、続けて転ぶなら諦める。
+ * 出すか失敗する。失敗したら (`error`) 開き直してキーフレームから入り直し、続けて失敗するなら打ち切る。
  */
 
 import { concatBytes } from "@danything/arib/bytes";
@@ -63,7 +63,7 @@ const FRAME = 1501;
 const FOLLOW_AHEAD_MOST = 120 * CLOCK;
 /** MPEG-2 の worker の録画 (`worker.ts`) も同じ量で切る */
 export const FOLLOW_BYTES_MOST = 120 * 1024 * 1024;
-/** デコーダが転んでも開き直す回数。**これより続けて転んだら諦める** (1 コマでも描ければ数え直す) */
+/** デコーダが失敗しても開き直す回数。**これより続けて失敗したら打ち切る** (1 コマでも描ければ数え直す) */
 const ERRORS_MOST = 3;
 
 /**
@@ -279,18 +279,18 @@ export class Fmp4Video {
     }
   }
 
-  /** 転んだ (壊れたコマ・端末の都合)。**開き直してキーフレームから入り直す**。続けて転ぶなら諦める */
+  /** 失敗した (壊れたコマ・端末の都合)。**開き直してキーフレームから入り直す**。続けて失敗するなら打ち切る */
   private broke(): void {
     if (++this.errors > ERRORS_MOST) {
       this.host.fail("映像を再生できません");
       return;
     }
-    // 転んだデコーダは閉じている。作り直す
+    // 失敗したデコーダは閉じている。作り直す
     this.decoder = null;
     this.open();
     /*
      * **待たせている圧縮の先頭も、次のキーフレームまで捨てる。** 開き直したデコーダに差分のコマから
-     * 渡すと、また転ぶ (`ERRORS_MOST` を使い切って諦めてしまう)。キーフレームが無ければこれから来るぶんを待つ
+     * 渡すと、また失敗する (`ERRORS_MOST` を使い切って打ち切ってしまう)。キーフレームが無ければこれから来るぶんを待つ
      */
     const key = this.pending.findIndex((item) => item.key);
     this.keep(key < 0 ? [] : this.pending.slice(key));

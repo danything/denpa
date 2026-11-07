@@ -12,14 +12,14 @@ import { type LiveCodec, type Notice } from "./live";
 import { LOWEST_RUNG, type Rung } from "./rungs";
 
 /** 段を指示に足すもの (`ChaseCommand` に重ねる。追っかけには音声だけが無い) */
-export interface RungFields {
+interface RungFields {
   rung?: Rung;
   playable?: LiveCodec[];
   raw?: false;
 }
 
 /** 段を選局の指示に足すもの (`TuneCommand` に重ねる) */
-export interface StepFields extends RungFields {
+interface StepFields extends RungFields {
   codec?: "audio";
 }
 

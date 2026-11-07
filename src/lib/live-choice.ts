@@ -1,7 +1,7 @@
 /**
  * **どの形式で観るか** (コーデックのメニュー)。「自動」の順はライブ・追っかけ・録画の観る画面で同じ関数 (`autoOrder`) から出す。
- * 例外は録画の観る画面の互換モードで、`ts/playback.ts` の `pickCanvas` がエンコード済みと同じ形式 → H.264 → AV1 → MPEG-2 の順に選ぶ
- * (下の `autoOrder` の表)。画面 (`live-player.svelte.ts`・`ts/playback.ts`) とサーバ (`server/viewing.ts` の先回りと、テレビのアプリ向けの `codec=auto`) が同じ決め方をするので、
+ * 録画の観る画面の互換モードは、エンコード済みと同じ形式の詰め替えを先にして、そのあとは互換モードの順 (`ts/playback.ts` の `pickCanvas`。下の `autoOrder` の表)。
+ * 画面 (`live-player.svelte.ts`・`ts/playback.ts`) とサーバ (`server/viewing.ts` の先回りと、テレビのアプリ向けの `codec=auto`) が同じ決め方をするので、
  * ここに置く (docs/stream.md「どの形式で流すか」)。
  */
 
@@ -40,16 +40,16 @@ export function readChoice(value: unknown, hidden: boolean): LiveChoice {
 }
 
 /** エンコード済みのコーデック (録画の観る画面で選ぶもの) */
-export type EncodedCodec = "av1" | "hevc" | "h264";
+type EncodedCodec = "av1" | "hevc" | "h264";
 
 /**
  * **「自動」の順。ライブ・追っかけ・録画の観る画面で、この 1 つで決める。** その画面で出せない形式
- * (追っかけの H.265 など) は呼ぶ側が並びから外すだけにする。例外は録画の観る画面の互換モードだけ (表の右下)。
+ * (追っかけの H.265 など) は呼ぶ側が並びから外すだけにする。
  *
  * | 場面 | 家の中 (`indoor`) | 外 | 互換モード (`compat`。canvas に描く) |
  * | --- | --- | --- | --- |
  * | その場でエンコード (ライブ・追っかけ) | MPEG-2 → H.264 → AV1 → H.265 | AV1 → H.265 → H.264 | AV1 → H.264 → MPEG-2 |
- * | エンコード済み (`encoded`。録画の観る画面) | AV1 → H.265 → H.264 | AV1 → H.265 → H.264 | (`ts/playback.ts` の `pickCanvas`) |
+ * | エンコード済み (`encoded`。録画の観る画面) | AV1 → H.265 → H.264 | AV1 → H.265 → H.264 | 同じ形式の詰め替え → 上の互換モードの順 (`ts/playback.ts` の `pickCanvas`) |
  *
  * - 家の中は**開くまでの速さ**を採る。MPEG-2 はエンコードせずに済み、画質も放送のまま。次はエンコードの立ち上がりが速い H.264
  * - 外は**回線**を採る。放送のままは 1 局で 15Mbit/s ほどあり太すぎる。同じ画質で小さい順 (AV1 → H.265 → H.264)
@@ -75,9 +75,9 @@ export function autoOrder(
  * **ライブと追っかけの「自動」の形式。** `autoOrder` の順で、使えるもの (`rawOk`・`av1`・`hevc`・`h264`) の先頭。どれも
  * 使えなければ null。
  *
- * `rawOk` は「この端末で MPEG-2 をデコードできて、まだ諦めていない」、`av1`・`hevc`・`h264` は「受け取れて (互換モードなら
- * 描けて)、まだ諦めていない」。`hevc` はそのうえでライブのエンコーダが GPU のとき (`server/viewing.ts` の
- * `ViewingOptions.hevc`)。追っかけと互換モードでは呼ぶ側が false にする。どれが諦められたかは呼ぶ側が持つ
+ * `rawOk` は「この端末で MPEG-2 をデコードできて、まだ打ち切っていない」、`av1`・`hevc`・`h264` は「受け取れて (互換モードなら
+ * 描けて)、まだ打ち切っていない」。`hevc` はそのうえでライブのエンコーダが GPU のとき (`server/viewing.ts` の
+ * `ViewingOptions.hevc`)。追っかけと互換モードでは呼ぶ側が false にする。どれをやめたかは呼ぶ側が持つ
  */
 export function autoCodec(o: {
   indoor: boolean;

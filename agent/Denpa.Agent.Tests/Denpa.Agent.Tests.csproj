@@ -19,6 +19,7 @@
         <Compile Include="../Denpa.Agent/AgentTls.cs" />
         <Compile Include="../Denpa.Agent/Config.cs" />
         <Compile Include="../Denpa.Agent/TunerPool.cs" />
+        <Compile Include="../Denpa.Agent/TunerSignal.cs" />
         <Compile Include="../Denpa.Agent/Interop.cs" />
         <Compile Include="../Denpa.Agent/DeviceProbe.cs" />
         <Compile Include="../Denpa.Agent/ChannelTable.cs" />
@@ -56,24 +57,27 @@
         <Compile Include="../Denpa.Agent/Dib8096.cs" />
         <Compile Include="../Denpa.Agent/Zd1j.cs" />
         <Compile Include="../Denpa.Agent/Dt295.cs" />
-        <Compile Include="../Denpa.Agent/Dt295ResidentImage.cs" />
-        <Compile Include="../Denpa.Agent/Dt295ResidentLink.cs" />
-        <Compile Include="../Denpa.Agent/Dt295ResidentLoader.cs" />
-        <Compile Include="../Denpa.Agent/Dt295ResidentProbe.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativePrograms.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeLink.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeI2c.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeI2cBatch.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeFrontend.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeBoard.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeCard.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeDevice.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeTuner.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeTimeline.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeProbe.cs" />
         <Compile Include="../Denpa.Agent/ContinuityCount.cs" />
-        <Compile Include="../Denpa.Agent/Dt295ResidentProtocol.cs" />
-        <Compile Include="../Denpa.Agent/Dt295ResidentSession.cs" />
-        <Compile Include="../Denpa.Agent/Dt295ResidentTs.cs" />
-        <Compile Include="../Denpa.Agent/Dt295ResidentTuner.cs" />
+        <Compile Include="../Denpa.Agent/Probe.cs" />
         <!-- 本体と同じ名前で埋め込む (Px4Firmware.Bundled が読む) -->
         <EmbeddedResource Include="../Denpa.Agent/firmware/it930x-firmware.bin" LogicalName="it930x-firmware.bin" />
-        <EmbeddedResource Include="../Denpa.Agent/firmware/magicvision-firmware.bin" LogicalName="magicvision-firmware.bin" />
     </ItemGroup>
 
     <ItemGroup>
         <!-- MTP (global.json の test.runner) で回す (旧 VSTest 系を持たないわけは上)。
              TUnit はソースジェネレータで動くので、本体と同じく Native AOT でも通る -->
-        <PackageReference Include="TUnit" Version="1.81.0" />
+        <PackageReference Include="TUnit" Version="1.81.10" />
     </ItemGroup>
 
 </Project>

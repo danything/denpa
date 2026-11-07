@@ -8,23 +8,27 @@
   import Layers from "~icons/lucide/layers";
   import Palette from "~icons/lucide/palette";
 
-  import { dragScroll, submitting } from "#lib/actions.js";
+  import { dragScroll } from "#lib/actions.js";
   import { GENRE_TREE } from "#lib/arib.js";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
   import { guideNavigation } from "#lib/components/GuidePending.svelte";
   import Menu from "#lib/components/Menu.svelte";
   import NowLine from "#lib/components/NowLine.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
+  import ProgramActions from "#lib/components/ProgramActions.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import {
+    badgeClass,
     channelNumber,
     date,
+    playableRecordingId,
     SERVICE_TYPE_LABEL,
     stateLabel,
     time,
   } from "#lib/format.js";
   import { skeletonMask } from "#lib/guide-skeleton.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { PHONE_FORM } from "#lib/phone-form.js";
   import { reload } from "#lib/reload.svelte.js";
   import {
@@ -49,9 +53,9 @@
    *
    * **読み直したときに骨組みへ戻さない。** 番組表は予約・取消のあとや画面に
    * 戻ったときに読み直すので、そのたびマスが消えては現れるとちらつく。
-   * 同じ日・同じ放送波なら前のものを出したままにして、届いたら差し替える
+   * 同じ日・同じ種別なら前のものを出したままにして、届いたら差し替える
    * (`live-updates.svelte.ts` の `held` と同じ考え方)。
-   * **別の日・別の放送波へ移ったときだけ**捨てる。選び直したのに前のマスが
+   * **別の日・別の種別へ移ったときだけ**捨てる。選び直したのに前のマスが
    * 残っていると、タブと中身が食い違って見える
    */
   let sheet = $state<GuideSheet | null>(null);
@@ -68,9 +72,9 @@
       if (stale) return;
       /*
        * **一度きりの失敗で、見えている表を消さない。** 何度も
-       * 読み直すので、そのうち 1 回が転んだだけで番組表が消えるのは割に
+       * 読み直すので、そのうち 1 回失敗しただけで番組表が消えるのは割に
        * 合わない (`held` と同じ考え方)。まだ何も出していないときと、
-       * 別の日・別の放送波へ移ったあと (`sheet` は null に戻してある) は、
+       * 別の日・別の種別へ移ったあと (`sheet` は null に戻してある) は、
        * 出すものが無いので理由を出す
        */
       if (next.failed !== null && sheet !== null && sheet.failed === null)
@@ -88,14 +92,14 @@
   });
 
   /**
-   * **押した先の日・放送波を待っている間も、マスは骨組みにする。**
+   * **押した先の日・種別を待っている間も、マスは骨組みにする。**
    *
    * 外枠 (局の並び) が届くまでは前の表がそのまま残り、押しても何も起きていないように見えた。
-   * 押したらすぐマスを骨組みに替え、放送波が変わるなら局名の行も骨組みにする
-   * (同じ放送波の別の日なら局の並びはほぼ同じなので、そのまま残す)
+   * 押したらすぐマスを骨組みに替え、種別が変わるなら局名の行も骨組みにする
+   * (同じ種別の別の日なら局の並びはほぼ同じなので、そのまま残す)
    */
   const toGuide = guideNavigation();
-  /** 押した先の放送波。今と同じ日・同じ放送波 (読み直し・同じリンク) なら null */
+  /** 押した先の種別。今と同じ日・同じ種別 (読み直し・同じリンク) なら null */
   const switching = $derived.by(() => {
     const to = toGuide.to;
     if (to === null) return null;
@@ -105,11 +109,11 @@
     if (type === data.type && start === data.start) return null;
     return { type };
   });
-  /** マスを出すか (届いていて、ほかの日・放送波へ移る途中でもない) */
+  /** マスを出すか (届いていて、ほかの日・種別へ移る途中でもない) */
   const showCells = $derived(
     sheet !== null && sheet.failed === null && switching === null,
   );
-  /** 局名の行を骨組みにするか (別の放送波へ移る途中) */
+  /** 局名の行を骨組みにするか (別の種別へ移る途中) */
   const headSkeleton = $derived(
     switching !== null && switching.type !== data.type,
   );
@@ -247,7 +251,7 @@
       group.cells.push({
         key: cell.key,
         program: cell.program,
-        // `--s` / `--e` は番組の頭と尻のマスの位置 (端数つき)。過ぎた所を暗くするのに使う (`.program` の背景の覆い)
+        // `--s` / `--e` は番組の始まりと終わりのマスの位置 (端数つき)。過ぎた所を暗くするのに使う (`.program` の背景の覆い)
         style: `grid-column: ${cell.column - group.first + 1} / span ${cell.span}; grid-row: ${from + 1} / span ${span}; --lines: ${lines(span)}; --s: ${(cell.start_at - data.start) / SLOT}; --e: ${(cell.end_at - data.start) / SLOT};`,
       });
     }
@@ -312,15 +316,23 @@
     opening++;
     selected = null;
     facts = null;
+    failedFor = null;
   }
 
+  /**
+   * 予約・取消に失敗した番組。理由はこの番組の詳細の中にだけ出す
+   * (`form` は次に送るまで残るので、閉じて別のマスを開くと前の番組の理由が出ていた)
+   */
+  let failedFor = $state<number | null>(null);
   /** 予約・取消を送ったあと。失敗したときは開いたままにして、中に理由を出す */
-  const closeOnSuccess: SubmitFunction =
-    () =>
-    async ({ result, update }) => {
+  const closeOnSuccess: SubmitFunction = () => {
+    const sentFor = selected?.id ?? null;
+    return async ({ result, update }) => {
       await update();
+      failedFor = result.type === "success" ? null : sentFor;
       if (result.type === "success") close();
     };
+  };
 
   const serviceName = (id: number) =>
     services.find((s) => s.id === id)?.name ?? "";
@@ -351,14 +363,11 @@
   }
 
   /** いま何時か。時の列の「いま」の時刻と、過ぎた所を暗くする位置に使う。1 分ごとに進める */
-  let clock = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => (clock = Date.now()), 60_000);
-    return () => clearInterval(timer);
-  });
+  const minute = minuteClock();
+  const clock = $derived(minute.now);
 
   /**
-   * 表示中の日にいまが含まれていれば、表の頭 (4:00) から何マスぶん下か (端数つき)。
+   * 表示中の日にいまが含まれていれば、表の先頭 (4:00) から何マスぶん下か (端数つき)。
    *
    * **時刻は 1 マス (5 分) ごとに飛ばさず、分の位置へ `translate` で送る。** 行 (`grid-row`) で
    * 置いていた頃は 5 分ごとに 1 マスずつ飛んでいた。1 分ごとの移りは短い transition でなめらかに
@@ -370,7 +379,7 @@
       : null,
   );
   /**
-   * **過ぎた所を暗くする位置** (表の頭から何マスぶん。マスの `--s` / `--e` と比べる。`.program` の背景の覆い)。
+   * **過ぎた所を暗くする位置** (表の先頭から何マスぶん。マスの `--s` / `--e` と比べる。`.program` の背景の覆い)。
    * 前の日は全部、先の日は何も暗くしないよう、表の外は端の外へ寄せる。2,000 を超えるマスを毎分書き直さないよう、表に 1 つだけ持つ
    */
   const elapsedSlots = $derived(
@@ -402,7 +411,7 @@
    *
    * **マスを待たずに動かす。** 局名の行と時刻の列は先に出ていて、行の高さも決まっているので、
    * 骨組みのうちに「いま」の位置まで送っておける (届いたときに動かない)。
-   * 放送波や日を選び直しても表の枠は作り直さないので、縦位置 (時刻) はそのまま残る
+   * 種別や日を選び直しても表の枠は作り直さないので、縦位置 (時刻) はそのまま残る
    */
   let scrolledBox: HTMLElement | null = null;
   $effect(() => {
@@ -557,17 +566,17 @@
     const rem = Number.parseFloat(
       getComputedStyle(document.documentElement).fontSize,
     );
-    // 表の頭は 4:00。5 分で 1 マス
+    // 表の先頭は 4:00。5 分で 1 マス
     const slot = (((hour - 4 + 24) % 24) * HOUR) / SLOT;
     scrollGrid(slot * Number.parseFloat(SLOT_HEIGHT) * rem);
   }
 
   /**
    * 「いま」を表の 4 分の 1 あたりに置く縦位置。上端ちょうどに置くと直前の番組が見えず、
-   * 放送中のものが頭から切れて分かりにくい。
+   * 放送中のものの始まりが切れて分かりにくい。
    *
    * 広い形では箱の上がヘッダーと操作の 1 行の裏に隠れている (`--guide-head`)。その下の見えている所で
-   * 4 分の 1 に置く。隠れている高さは `scroll-padding-top` (表の頭 + 局名の行) から局名の行を引いて出す
+   * 4 分の 1 に置く。隠れている高さは `scroll-padding-top` (表の先頭 + 局名の行) から局名の行を引いて出す
    */
   function nowTop(box: HTMLElement, mark: HTMLElement): number {
     const top =
@@ -605,12 +614,12 @@
   const menuSide = $derived(phoneForm.current ? "top" : "bottom");
 
   /*
-   * 放送波を切り替えたら横位置を先頭へ戻す。
+   * 種別を切り替えたら横位置を先頭へ戻す。
    *
    * 同じ画面のまま中身だけ入れ替わるので、DOM は使い回され、横スクロールの
    * 位置がそのまま残る。地上波で右のほうを見ていたあと BS を開くと、
    * 局の並びは別物なのに同じ位置から始まり、左端の局が隠れていた。
-   * 縦(時刻)はどの放送波でも同じ意味なので、そのままにする
+   * 縦(時刻)はどの種別でも同じ意味なので、そのままにする
    */
   $effect(() => {
     data.type;
@@ -623,7 +632,7 @@
    * **マスを描き終わってから** (`drawing` が下りてから) 取得する。表が届いた時点で取得していた頃は、BS で 1 件 1 MB 超の
    * 応答の解読が描画と取り合っていた。描き終わった直後もレイアウトが走っているので、少し置いて (`PREFETCH_DELAY`)
    * 空いたとき (`requestIdleCallback`。Safari には無いので置くだけ) に取得する。
-   * 同じ日・同じ放送波の読み直しでは取り直さない (`prefetchedFor`)
+   * 同じ日・同じ種別の読み直しでは取り直さない (`prefetchedFor`)
    */
   const PREFETCH_DELAY = 1000;
   let prefetchedFor = "";
@@ -651,9 +660,6 @@
       cancelIdleCallback(handle);
     };
   });
-
-  /** 予約を取り消せるのはこれから録るものだけ。録り終わったものに出しても何も起きない */
-  const CANCELABLE = ["scheduled", "conflict", "skipped", "recording"];
 </script>
 
 <!--
@@ -724,7 +730,6 @@
               title="番組表がまだありません"
               data-testid="guide-day"
               data-start={day.start}
-              aria-disabled="true"
               >{day.label}<span class="visually-hidden">
                 (番組表なし)</span
               ></span
@@ -1020,13 +1025,13 @@
               : "guide-service"}
           >
             {#if headSkeleton}
-              <!-- 別の放送波へ移る途中。局の並びが届くまで名前は出さない (上の `switching`) -->
+              <!-- 別の種別へ移る途中。局の並びが届くまで名前は出さない (上の `switching`) -->
               <span class="skeleton-head head-skeleton" aria-hidden="true"
               ></span>
             {:else}
               <!--
                         ロゴを持たない局もあるので、有るものだけ出す。場所は
-                        どちらでも空けておく。局名の頭が列ごとにずれると、
+                        どちらでも空けておく。局名の始まりが列ごとにずれると、
                         横に並べたときにどれがどの局か追いにくい
                     -->
               <ServiceLogo
@@ -1210,35 +1215,14 @@
 <!-- 番組の中身。**表の外に置く** (中に入れると巻き取る箱の中で開くことになる) -->
 {#if selected && facts}
   {@const program = selected}
-  <!-- 録れているなら、録画一覧へ戻らずここからそのまま観られるようにする (一覧の `hasFile` と同じ判定) -->
-  {@const canPlay =
-    program.recording_id !== null &&
-    program.recording_state !== "failed" &&
-    (program.library_path ?? program.ts_path) !== null}
-  {@const canWatch =
-    program.start_at <= clock &&
-    program.end_at > clock &&
-    watchable.has(program.service_id)}
-  {@const canCancel =
-    CANCELABLE.includes(program.reservation_state ?? "") &&
-    !(program.reservation_state === "skipped" && program.end_at <= clock)}
-  {@const canReserve =
-    !canCancel &&
-    program.reservation_state === null &&
-    program.end_at > clock &&
-    !program.copy_never}
-  <!-- **主は 1 つだけ。** 予約できるなら予約、録れていれば再生、いま流れていれば視聴 -->
-  {@const primary = canReserve
-    ? "reserve"
-    : canPlay
-      ? "play"
-      : canWatch
-        ? "watch"
-        : null}
   <ProgramDetail program={facts} onclose={close}>
     {#snippet status()}
       {#if program.reservation_state}
-        <span class="tag info" data-testid="detail-state">
+        <!-- バッジの色は検索・ホームと同じ決め方 (`badgeClass`。予約済みは色を付けない) -->
+        <span
+          class="tag {badgeClass(program.reservation_state)}"
+          data-testid="detail-state"
+        >
           {stateLabel(program.reservation_state)}
         </span>
       {:else if program.end_at <= clock}
@@ -1251,84 +1235,18 @@
     {/snippet}
     {#snippet actions()}
       <!--
-                失敗の理由は詳細の中に出す。番組表にインラインで足すと、その分だけ
-                グリッドが下にずれてスクロールバーが出る。
-
-                **ここだけ Toasts に寄せていない。** 他の画面の通知は右下に浮かせて
-                いるが、押したのはこのモーダルの中のボタンで、モーダルは浮かせた表示より
-                上に出る。下に隠れるものを出しても読めないので、押したボタンの隣に置く
+                何を出すか・どれを主にするかは検索の詳細と同じ (`ProgramActions`)。
+                失敗の理由も詳細の中に出す。番組表にインラインで足すと、その分だけグリッドが下にずれてスクロールバーが出る
             -->
-      {#if form?.message}
-        <div class="notice error">{form.message}</div>
-      {/if}
-
-      <!--
-                **並びは控えから主へ。** 主 (クラスの無いボタン) はいちばん右 (狭い画面では下の段の右端)。
-                閉じるは左下 (`ProgramDetail`)
-            -->
-
-      <!--
-                **ルールを作る。** 予約・録画の詳細と同じ入口
-                (`search/+page.server.ts`。`rule-form.originOf`)。毎回録りたい番組を番組表で
-                見つけたとき、検索で探し直さずに済む
-            -->
-      <a
-        class="button secondary"
-        href={resolve(`search?from=program:${program.id}`)}
-        data-testid="detail-rule"
-      >
-        ルールを作る
-      </a>
-
-      {#if canCancel}
-        <!-- 予約したあと番組表から止められないと、わざわざ予約一覧まで行くことになる -->
-        <form method="POST" action="?/cancel" use:submitting={closeOnSuccess}>
-          <input type="hidden" name="programId" value={program.id} />
-          <button
-            type="submit"
-            class="danger outline"
-            data-testid="detail-cancel">予約取消</button
-          >
-        </form>
-      {/if}
-
-      {#if canWatch}
-        <!--
-                    **いま流れている番組は、その場で観られるようにする** (ライブ画面で同じ局を探し直させない)。
-                    **ライブ画面が持っている局にだけ出す** (`watchable`)。マスは名前の無い枠でも出るので、そのまま出すと
-                    押した先で別の局が映る (分割放送をしていない間のサブチャンネル)。選局は押した先でやり直すのでリンクにする
-                -->
-        <a
-          class="button"
-          class:secondary={primary !== "watch"}
-          href={resolve(`live?service=${program.service_id}`)}
-          data-testid="detail-watch"
-        >
-          視聴
-        </a>
-      {/if}
-
-      {#if canPlay}
-        <!-- 録っている最中なら観る画面が追っかけ (`/chase`) へ送る -->
-        <a
-          class="button"
-          class:secondary={primary !== "play"}
-          href={resolve(`watch/${program.recording_id}`)}
-        >
-          再生
-        </a>
-      {/if}
-
-      {#if canReserve}
-        <!--
-                    録画のしかたは選ばせない (`+page.server.ts` の `reserve`)。コピー禁止の番組には出さない。
-                    押しても断るだけ (`reservations.reserve`)。理由は詳細の「コピー禁止」に添えてある
-                -->
-        <form method="POST" action="?/reserve" use:submitting={closeOnSuccess}>
-          <input type="hidden" name="programId" value={program.id} />
-          <button type="submit" data-testid="detail-reserve">予約</button>
-        </form>
-      {/if}
+      <ProgramActions
+        {program}
+        cancel={{ programId: program.id }}
+        recordingId={playableRecordingId(program)}
+        watchable={watchable.has(program.service_id)}
+        {clock}
+        message={failedFor === program.id ? (form?.message ?? null) : null}
+        onsubmit={closeOnSuccess}
+      />
     {/snippet}
   </ProgramDetail>
 {/if}
@@ -1417,9 +1335,9 @@
   .day-chip.selected.sun {
     color: var(--dp-rec-text);
   }
-  /* 番組表がまだ届いていない日。並びに置くだけで押せない */
+  /* 番組表がまだ届いていない日。並びに置くだけで押せない。控えた字 (カレンダーの押せない日と同じ。透かすと 4.5:1 を割る) */
   .day-chip.disabled {
-    opacity: 0.45;
+    color: var(--dp-muted);
     cursor: not-allowed;
   }
   /*
@@ -1564,7 +1482,7 @@
   }
   /*
      * **広い形 (スマホの形でないとき。`#lib/phone-form.ts`) では表をヘッダーの裏まで伸ばす** (docs/design.md の「浮かせ方」)。箱は画面の上端から始め、
-     * 中身は表の頭 (`--guide-head`。`app.css`) の下から並べる。巻くとマスが操作の 1 行とヘッダーの裏を流れ、
+     * 中身は表の先頭 (`--guide-head`。`app.css`) の下から並べる。巻くとマスが操作の 1 行とヘッダーの裏を流れ、
      * ヘッダーは表の巻いた量で浮く。スクロールバーは出さない (ヘッダーの裏に透けて見える)。
      * つかんで動かす・ホイール・キー・指では今までどおり動く
      */
@@ -1587,7 +1505,7 @@
     }
   }
   /*
-     * **Pico の回るもの (`[aria-busy]::before`) は出さない。** 表の頭に 1 行ぶん差し込まれ、
+     * **Pico のスピナー (`[aria-busy]::before`) は出さない。** 表の先頭に 1 行ぶん差し込まれ、
      * マスを待つ間だけ表が下にずれて、届いた瞬間に跳ねていた。待っていることは骨組みで見せる
      */
   .grid-box[aria-busy="true"]::before {
@@ -1607,7 +1525,7 @@
      * **面は、裏に何か来たときだけ出す。** 時の列の裏にマスが来るのは横に送ったときだけ (`--guide-x`)。
      * 角は地の色で平らに塗り (縦に巻くと裏に来る時の数字と「いま」の時刻を隠すだけ。面にすると局名の左に色の塊が見えた)、
      * 面は時の列と同じく横に送ったときだけ、上に重ねた一枚 (`::after`) で出す。面は透明度だけで出し入れする。
-     * 知らないブラウザと動きを減らす設定の端末 (Pico がアニメーションをすぐ終わらせる) は、いつも面が出ている
+     * 対応していないブラウザと動きを減らす設定の端末 (Pico がアニメーションをすぐ終わらせる) は、いつも面が出ている
      */
   .corner::after,
   .hour::before {
@@ -1747,7 +1665,7 @@
     margin-inline: 0.125rem;
     background: var(--dp-subtle);
   }
-  /* 別の放送波へ移る途中の局名 (高さは局名の字の行と同じ) */
+  /* 別の種別へ移る途中の局名 (高さは局名の字の行と同じ) */
   .head-skeleton {
     display: block;
     width: 70%;
@@ -1805,7 +1723,7 @@
     line-height: normal;
   }
   /*
-     * **放送が過ぎた所は、マスの上から暗くしていく** (赤い線を表に引く代わり)。終わった番組はマス全体、放送中の番組は頭からいまの位置まで。
+     * **放送が過ぎた所は、マスの上から暗くしていく** (赤い線を表に引く代わり)。終わった番組はマス全体、放送中の番組は始まりからいまの位置まで。
      * 割合は表の `--now` とマスの `--s` / `--e` から CSS だけで出す (毎分書き直すのは表の 1 つだけ)。
      * 覆いは地の色の上に重ねる背景の 1 枚目 (`background-image`)。字は読めたまま、面だけが沈む。
      *
@@ -1836,7 +1754,7 @@
   }
   /*
    * **放送中の番組は、過ぎた所を浅く沈める** (終わった番組と同じ濃さだと、いま見られる番組まで終わって見えた)。
-   * `--past` が 1 に届いていないマスだけ 45% にする。`round()` を知らないブラウザはどちらも 78%
+   * `--past` が 1 に届いていないマスだけ 45% にする。`round()` に対応していないブラウザはどちらも 78%
    */
   @supports (width: round(down, 1px, 1px)) {
     .program {
@@ -1985,7 +1903,7 @@
     display: block;
   }
   /*
-     * 予約の状態。説明の代わりに太字で出す。印は時刻のすぐ後ろに添える (色だけに頼らない。説明の行が切れる短いマスでも見える):
+     * 予約の状態。説明の代わりに太字で出す。印は時刻のすぐ後ろに添える (色だけに頼らない。説明の行が切れる短いマスでも見える)。
      * 予約済みは主の色の ✓、録画中は録画の赤の ●、競合は赤い ⚠ (一覧の競合と同じ印)。
      * **競合は予約済みと同じ青にしない**。青だと「録れる」に見え、チューナーが足りずに落ちる番組を見落とす
      */

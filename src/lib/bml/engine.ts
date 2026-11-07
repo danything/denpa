@@ -1232,7 +1232,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   canStartApp(): boolean {
-    return this.online() && this.options.hybridcast?.ready() === true;
+    return this.appable() && this.options.hybridcast?.ready() === true;
   }
 
   startApp(hint: number[]): boolean {
@@ -1240,7 +1240,15 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   canFetchAit(): boolean {
-    return this.online() && this.options.hybridcast?.startFrom !== undefined;
+    return this.appable() && this.options.hybridcast?.startFrom !== undefined;
+  }
+
+  /**
+   * 外のアプリを開けるか。**開く前 (常に受信しているだけ) は開けない。** 画面が開く前の起動を断るので、
+   * 問い合わせに 1 と答えると、文書は起動を求めたまま返らなくなる
+   */
+  private appable(): boolean {
+    return this.online() && this.options.opened?.() !== false;
   }
 
   private online(): boolean {

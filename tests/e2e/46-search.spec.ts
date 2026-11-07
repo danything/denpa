@@ -18,7 +18,9 @@ test.describe("検索", () => {
     await goto(page, "/guide");
     const field = page.getByTestId("header-search-input");
     await expect(page.getByRole("search", { name: "サイト内" })).toBeVisible();
-    await expect(field).toHaveAccessibleName("番組・録画・予約・ルールを検索");
+    await expect(field).toHaveAccessibleName(
+      "番組・録画・切り抜き・予約・ルールを検索",
+    );
 
     await page.keyboard.press("/");
     await expect(field).toBeFocused();
@@ -101,7 +103,7 @@ test.describe("検索", () => {
     // 行を押すと番組の詳細
     await picked.getByTestId("search-open").click();
     await expect(page.getByTestId("program-detail")).toBeVisible();
-    await page.getByTestId("search-detail-cancel").click();
+    await page.getByTestId("detail-cancel").click();
     await expect(page.getByTestId("program-detail")).toBeHidden();
     await expect(picked.getByTestId("search-program-state")).toHaveCount(0);
 

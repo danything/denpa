@@ -7,14 +7,14 @@ import { expect, goto, makeRule, syncEpg, test } from "./helpers";
  * 見えている地の色を計算値から採り、コントラストが 4.5:1 以上あるかを、乗せる前と後の両方で確かめる。
  * 地は祖先の背景を下から重ねて求める (行の地・ガラスの面のような半透明も混ぜる)。
  *
- * 字で見せるボタンは「確かめ直す」「詳しく」(`.text-button`)・説明の ⓘ (`Lead`)・検索の「もっと見る」(`.link-button`)。
+ * 字で見せるボタンは「確かめ直す」「詳しく」(`.text-button`)・説明の ⓘ (`Lead`)。
  * ボタンの規則は `--pico-color` を主のボタンの字 (= 地の色) にするので、乗せたときにそれを指すと字が消えていた。
  * ボタンの形のもの (`a.button`・ふつうのボタン) は `45-buttons` が見る
  */
 const MIN = 4.5;
 const TEXTLIKE = [
   'a[href]:not(.button):not([role="button"])',
-  "button:is(.text-button, .link-button)",
+  "button.text-button",
   ".lead button.info",
 ].join(", ");
 
@@ -119,7 +119,7 @@ for (const theme of ["dark", "light"] as const) {
       await page.addInitScript((t) => localStorage.setItem("theme", t), theme);
 
       let total = 0;
-      // ホームの行のルール名・設定の説明と ⓘ・検索の説明と「もっと見る」・ルールの一覧
+      // ホームの行のルール名・設定の説明と ⓘ・検索の説明・ルールの一覧
       for (const url of [
         "/",
         "/settings/general",

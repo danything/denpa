@@ -5,6 +5,7 @@ import { audioTracks, parseAudios } from "#lib/arib.js";
 import { encodedCodec } from "#lib/encoded-codec.js";
 import { logoUnusable } from "#lib/format.js";
 import { orm } from "#lib/server/db.js";
+import { encodedFiles } from "#lib/server/library.js";
 import { rulerOf } from "#lib/server/playback.js";
 import { recordings } from "#lib/server/schema.js";
 import { displayTitle } from "#lib/server/title.js";
@@ -74,6 +75,14 @@ export function GET({ url }) {
     query.all().map((row) => {
       const file = (source: string) =>
         `api/recordings/${row.id}/file?source=${source}`;
+      // エンコード済み (Matroska) は置き場に在るものだけ出す (`encodedFiles`。観る画面と同じ判定)。
+      // 続きの位置の物差しも同じ結果で決める (行ごとに stat し直さない)
+      const encoded = encodedFiles({
+        library_path: row.library,
+        hevc_path: row.hevc,
+        alt_path: row.alt,
+      });
+      const present = new Set(encoded.map((entry) => entry.path));
       const files = (
         [
           ["encoded", row.library],
@@ -82,7 +91,7 @@ export function GET({ url }) {
           ["ts", row.ts],
         ] as const
       ).flatMap(([source, path]) =>
-        path === null
+        path === null || (path.endsWith(".mkv") && !present.has(path))
           ? []
           : [
               {
@@ -112,10 +121,12 @@ export function GET({ url }) {
                   rulerOf(
                     {
                       library_path: row.library,
+                      hevc_path: row.hevc,
+                      alt_path: row.alt,
                       cm_kept: row.cmKept,
                       encode_skip: row.encodeSkip,
                     },
-                    null,
+                    encoded[0]?.source ?? "ts",
                   ),
                 ) * 1000,
               ),

@@ -4,10 +4,10 @@
    *
    * - 行のある日 (一覧に出ている行。絞り込みが効く) は本文の字。押すとその日の見出しへ送る
    * - 行の無い日は控えた字で押せない。今日は赤い点 (行が無くても押せる。今日の見出しは「いま」の線と一緒にいつもある)
-   * - いま一覧の頭に貼り付いている日は主の色の下線と太字。送ると付いて動き、月もその日の月に替わる
+   * - いま一覧の先頭に貼り付いている日は主の色の下線と太字。送ると付いて動き、月もその日の月に替わる
    * - ‹ › は行のある月だけを行き来する (間の空の月は飛ばす)
    *
-   * 日の数え方と升目は `#lib/calendar.ts`。どの日を頭に送るか (まだ描いていない古い日を描かせるのも) はホームが持つ。
+   * 日の数え方と升目は `#lib/calendar.ts`。どの日を一覧の先頭に送るか (まだ描いていない古い日を描かせるのも) はホームが持つ。
    * 切り抜きの画面 (`/clips`) も同じものを使う (撮った日を押すとその日で絞る。選んでいる日が `pinned`)
    */
   import "@anyblades/blades/content/table";
@@ -40,7 +40,7 @@
     marks: Map<number, DayMark | number>;
     /** 今日の 0 時 */
     today: number;
-    /** いま一覧の頭に貼り付いている日 (無ければ null) */
+    /** いま一覧の先頭に貼り付いている日 (無ければ null) */
     pinned: number | null;
     /** 日を押した */
     onpick: (day: number) => void;
@@ -50,7 +50,7 @@
 
   // svelte-ignore state_referenced_locally
   let month = $state(monthOf(pinned ?? today));
-  // 頭の日が替わったら、その日の月を出す (‹ › で離れても、送ればまた付いてくる)
+  // 一覧の先頭の日が替わったら、その日の月を出す (‹ › で離れても、送ればまた付いてくる)
   $effect(() => {
     if (pinned !== null) month = monthOf(pinned);
   });
@@ -65,7 +65,7 @@
 
   const enabled = (day: number) => marks.has(day) || day === today;
 
-  /** 矢印キーで動かしている日。Tab で入る升はこれ、無ければ頭の日・今日・その月の最初の押せる日 */
+  /** 矢印キーで動かしている日。Tab で入る升はこれ、無ければ一覧の先頭の日・今日・その月の最初の押せる日 */
   let focused = $state<number | null>(null);
   const entry = $derived.by(() => {
     const days = weeks.flat().filter((day) => day !== null);
@@ -172,7 +172,11 @@
   .cal-head {
     display: flex;
     align-items: center;
-    margin-top: 1.75rem;
+    /* ほかのグループの見出し (`app.css` の `.side-label`) と同じく上に 20px。サイドバーのいちばん上に来たときは空けない */
+    margin-top: 1.25rem;
+  }
+  .cal:first-child > .cal-head {
+    margin-top: 0;
   }
   .cal-head .side-label {
     flex: 1;
@@ -187,7 +191,8 @@
     margin: 0;
     padding: 0;
     border: 0;
-    border-radius: var(--dp-radius);
+    /* アイコンだけのボタンは円 (docs/design.md の「ボタン」) */
+    border-radius: var(--dp-radius-full);
     background: transparent;
     box-shadow: none;
     color: var(--dp-fg);
@@ -199,7 +204,6 @@
   .cal-step:disabled {
     background: transparent;
     color: var(--dp-muted);
-    opacity: 0.4;
   }
   .cal-grid {
     width: calc(100% - 0.75rem);

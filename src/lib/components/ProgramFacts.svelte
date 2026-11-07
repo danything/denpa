@@ -28,6 +28,7 @@
     program,
     notes = [],
     cmNote = null,
+    titleId,
     fps = null,
     status,
   }: {
@@ -52,6 +53,8 @@
      * (モーダルから渡すときだけ)
      */
     status?: Snippet | undefined;
+    /** 番組名の見出しの id。モーダルがこれで自分の名前にする (`aria-labelledby`) */
+    titleId?: string | undefined;
   } = $props();
 
   /** 詳細情報。EIT から読み取った「出演者」などの見出し付きテキスト */
@@ -91,7 +94,7 @@
         rel="noopener noreferrer">{part.text}</a
       >{:else}{part.text}{/if}{/each}{/snippet}
 
-<h3 class="title broadcast">{program.name}</h3>
+<h3 class="title broadcast" id={titleId}>{program.name}</h3>
 <p class="meta small muted num">
   <span class="broadcast">{program.service_name}</span>・{dateTime(
     program.start_at,

@@ -100,10 +100,15 @@ export const config = {
   ffmpeg: str("FFMPEG", "/usr/local/bin/ffmpeg"),
   /**
    * ブラウザで MPEG-2・AAC・Opus をデコードする WebAssembly の置き場 (変換せずに観るライブと録画・互換モードの音。docs/stream.md#放送そのままmpeg-2を送る)。
-   * Dockerfile の `mpeg2wasm` 段が置く。**アプリの外にあるのは、開発の compose がソースを
+   * Dockerfile の `mpeg2wasm` 段が置き、Mac と Windows はインストーラが配布物の中を指す。**アプリの外にあるのは、開発の compose がソースを
    * /app に被せるため** (中に置くと隠れる)。無ければ放送そのままの経路は使えず、画面はエンコードしたものに戻る
    */
   mpeg2Dir: str("MPEG2_DIR", "/opt/denpa/mpeg2"),
+  /**
+   * データ放送と字幕を描く字 (Denpa Font) の置き場。Dockerfile の `denpa-font` 段が置く (`/api/font/` が配る)。
+   * Mac と Windows はインストーラが配布物の中を指す。無ければ 404 を返し、画面は端末の字で描く
+   */
+  fontDir: str("FONT_DIR", "/usr/share/denpa-font"),
   /** 録ったあとのエンコードを同時に走らせる本数。**ジョブではなく ffmpeg の本数で数える** (コーデックごとに 1 本。`encode-slots.ts`) */
   encodeConcurrency: num("ENCODE_CONCURRENCY", 2),
   /** 先頭が壊れていて初期化に失敗したときに先頭を捨てて再試行する秒数 (enc.js 由来) */
@@ -113,7 +118,8 @@ export const config = {
    *
    * プロセスごと落とすジョブ (メモリ超過など) は、再起動のたびに running→queued
    * へ戻され、id 順なので毎回先頭に来てキューを塞ぎ続ける。取り出すたびに
-   * attempts を数えていて (先頭を捨てる再試行も 1 回と数える)、ここを超えたら諦めて failed にし、後ろを進める
+   * attempts を数えていて、ここを超えたら諦めて failed にし、後ろを進める。
+   * 数えるのはジョブのやり直しだけで、1 回の実行の中の ffmpeg の起こし直し (GPU → ソフトウェア・先頭を捨てる再試行) は数えない
    */
   encodeMaxAttempts: num("ENCODE_MAX_ATTEMPTS", 5),
   ffprobe: str("FFPROBE", "/usr/local/bin/ffprobe"),
@@ -174,8 +180,8 @@ export const config = {
   bmlDns: str("BML_DNS", "1.1.1.1,8.8.8.8"),
 
   /**
-   * 動いているバージョン (`v1.8.1` の形式)。**リリースのイメージにだけ入る。** リリースのとき、
-   * main で組んだイメージに 1 層足す (.github/release.Dockerfile)。main (develop) の
+   * 動いているバージョン (`v1.8.1` の形式)。**リリースのイメージと、Mac・Windows のインストーラが書く起動スクリプトにだけ入る。**
+   * イメージはリリースのとき、main で組んだものに 1 層足す (.github/release.Dockerfile)。main (develop) の
    * イメージと手元・テストは `dev` で、そのときは新しいバージョンの通知を出さない (update.ts)
    */
   version: str("DENPA_VERSION", "dev"),
@@ -251,8 +257,8 @@ export const config = {
   /**
    * 止められたとき、録画が終わるまで待つ上限。
    *
-   * 0 で待たずに止まる。**Kubernetes の terminationGracePeriodSeconds と
-   * docker compose の stop_grace_period をこれ以上にしておくこと** (runtime.ts)
+   * 0 で待たずに止まる。**Kubernetes の terminationGracePeriodSeconds・
+   * docker compose の stop_grace_period・Mac の plist の ExitTimeOut (install.sh) をこれ以上にしておくこと** (runtime.ts)
    */
   shutdownWait: num("SHUTDOWN_WAIT", 6 * 60 * MIN),
   schedulerTick: num("SCHEDULER_TICK", 5 * SEC),

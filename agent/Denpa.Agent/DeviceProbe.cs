@@ -8,8 +8,8 @@ namespace Denpa.Agent;
 /// <para>
 /// 台数はデバイスの数を数えれば分かるが、**種別 (地上波か衛星か) はどこにも
 /// 書かれていない。** sysfs には出ておらず (実機で確認: `dev` `device` `power`
-/// `subsystem` `uevent` しか無く、4 つとも同じ PCI デバイスの下にぶら下がる)、
-/// `recisdb` にも列挙の手段が無い。ioctl で聞くしかない。
+/// `subsystem` `uevent` しか無く、4 つとも同じ PCI デバイスの下にぶら下がる)。
+/// ioctl で聞くしかない。
 /// </para>
 ///
 /// <para>
@@ -91,7 +91,7 @@ public static class DeviceProbe
 
     private static unsafe string[] Ask(string device)
     {
-        var fd = Sys.Open(device, Sys.ReadOnly | Sys.NonBlocking);
+        var fd = Sys.Open(device, Sys.ReadOnly | Sys.NonBlocking | Sys.CloseOnExec);
         if (fd < 0) return [];
         try
         {
@@ -168,7 +168,7 @@ public static class DeviceProbe
         found.AddRange(Zd1j.Detect());
 
         /*
-         * PIXELA PIX-DT295 も並べるだけで開かない (開くと常駐イメージを機材に入れる。試験的。Dt295.cs)
+         * PIXELA PIX-DT295 も並べるだけで開かない (開くと機材に設定を書く。試験的。Dt295.cs)
          */
         found.AddRange(Dt295.Detect());
 

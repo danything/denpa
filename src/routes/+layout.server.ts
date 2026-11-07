@@ -2,7 +2,7 @@ import { getExpiringContractNotices } from "#lib/server/contracts.js";
 import { updateAvailable } from "#lib/server/update.js";
 
 /**
- * ログインしているかどうか。**OIDC を通って入ったときだけ入る。**
+ * ログインしているかどうか。**OIDC かアクセストークンで入ったときに入る。**
  *
  * 素通し (LAN) で入っている人は `null` のまま。切る控えを持っていないので、
  * 設定の「その他」のログアウトもそのとき出しません。

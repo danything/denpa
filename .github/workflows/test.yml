@@ -106,8 +106,12 @@ jobs:
       # 設定の読み書き、選局表、チューナー自動検出の値の読み取り。
       # MTP の方式 (global.json の test.runner) ではプロジェクトは --project で渡す
       - name: Unit tests (.NET agent)
-        # 通ったテストの出力も出す (Px4StreamBenchTests の数字を残すため)
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed
+
+      # Windows の通知領域のアプリのうち、Win32 に触らないところ (/api/health の読み方・更新の前に確かめる文・install.ps1 の流し方)。
+      # Win32 の側は agent-windows-install でビルドして起こす
+      - name: Unit tests (.NET tray)
+        run: dotnet test --project tray/Denpa.Tray.Tests/Denpa.Tray.Tests.csproj
 
       # エージェントの API に直接当てるテスト。**本物をビルドして起こして**、偽の選局
       # コマンドで流す (bun で書いたものがあった頃は、同じものを 2 つの実装に通していた)。
@@ -180,16 +184,10 @@ jobs:
           $found | Format-Table -AutoSize | Out-String -Width 200
           if ($found) { throw "PSScriptAnalyzer: $($found.Count) findings" }
 
-      - name: Windows startup script with fake networking
+      # 前のバージョン (wslc の本体) から DB を写すところ。ランナーに wslc は無いので、偽の wslc で
+      - name: Windows migration from wslc with a fake wslc
         shell: pwsh
-        run: ./tests/install-windows-start.ps1
-
-      # Mac で denpa 本体を起こす compose。Mac のランナーには Docker が無いので、書き方だけここで見る
-      # 合言葉は install.sh が ~/denpa/.env に作る。ここでは仮の値を渡し、無いときに止まることも見る
-      - name: Mac compose file is valid
-        run: |
-          AGENT_PAIR_TOKEN=x docker compose -f compose.mac.yml config -q
-          if docker compose -f compose.mac.yml config -q 2>/dev/null; then exit 1; fi
+        run: ./tests/install-windows-migrate.ps1
 
       - name: install.sh end to end
         env:
@@ -306,8 +304,12 @@ jobs:
         timeout-minutes: 8
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
 
+      # 署名は ad-hoc (`codesign -s -`。リリースと同じ。curl で取ったものには隔離の印が付かないので、Developer ID は要らない)
       - name: Publish (Native AOT, osx-arm64)
-        run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -o out
+        run: |
+          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -o out
+          codesign --force -s - out/denpa-agent
+          codesign -v out/denpa-agent
 
       - name: Lint install.sh
         run: |
@@ -359,51 +361,110 @@ jobs:
           if kill -0 "$pid" 2>/dev/null; then echo "SIGTERM で終わりません" >&2; exit 1; fi
           cat agent.log
 
-      # 入れ方を通しで。エージェントはリリースから取らずにいまビルドしたものを入れ、
+      # 入れ方を通しで (エージェントだけ。denpa 本体ごとは下の server-macos)。エージェントはリリースから取らずにいまビルドしたものを入れ、
       # px4-userland / siano-userland / ファームウェアは本物を取ってきてハッシュを確かめ、
-      # launchd に載せて API が答えるまで。最後に消す。
-      # denpa 本体 (docker compose) は Mac のランナーに Docker が無いので --no-docker で外す
+      # root の LaunchDaemon に載せて API が答えるまで。最後に消す。
+      # sudo は環境変数を落とすので -E で渡す (PATH も。ランナーの sudo は PATH を決め直しうる)
       - name: install.sh end to end
         run: |
           set -euo pipefail
           tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent
-          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" bash install.sh --no-docker
+          export DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz"
+          prefix="/Library/Application Support/denpa"
+          plist=/Library/LaunchDaemons/io.github.danything.denpa-agent.plist
+          log=/Library/Logs/denpa/denpa-agent.log
+          sudo -E env PATH="$PATH" bash install.sh --agent-only
+          # root で、起動したら動く (誰もログインしていなくても)
+          sudo launchctl print system/io.github.danything.denpa-agent | grep -E 'state|program'
           # install.sh は denpa-agent --status で応答を確かめている (API は組んだ denpa にしか答えない)。
-          # 合言葉 (~/denpa/.env) がエージェント自身の置き場 (config/tls/pair-token) に同じ値で書かれ、エージェントがそれを読んで
+          # 合言葉がエージェント自身の置き場 (config/tls/pair-token) にあり、plist には無く、エージェントがそれを読んで
           # 組むための URL をログに出していること (まだ誰とも組んでいないので出す。docs/agent.md)
-          token=$(sed -n 's/^AGENT_PAIR_TOKEN=//p' "$HOME/denpa/.env")
+          token=$(cat "$HOME/denpa/config/tls/pair-token")
           test "${#token}" = 43
-          test "$(cat "$HOME/denpa/config/tls/pair-token")" = "$token"
-          if grep -q AGENT_PAIR_TOKEN "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"; then exit 1; fi
-          for _ in $(seq 15); do grep -qF "#pair=$token" "$HOME/Library/Logs/denpa-agent.log" && break; sleep 1; done
-          grep -qF "#pair=$token" "$HOME/Library/Logs/denpa-agent.log"
+          if grep -q AGENT_PAIR_TOKEN "$plist"; then exit 1; fi
+          # --agent-only は別の機械の denpa から繋ぐので、ループバックに絞らない
+          if grep -q AGENT_HOST "$plist"; then exit 1; fi
+          for _ in $(seq 15); do grep -qF "#pair=$token" "$log" && break; sleep 1; done
+          grep -qF "#pair=$token" "$log"
           # 平文の HTTP には答えない
           if curl -fsS --max-time 5 http://127.0.0.1:25252/denpa/card; then exit 1; fi
+          # --agent-only は本体を入れない
+          test ! -e "$prefix/server"
+          test ! -e /Library/LaunchDaemons/io.github.danything.denpa.plist
           # 上げ直しても合言葉は変えない
-          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" bash install.sh --no-docker
-          test "$(sed -n 's/^AGENT_PAIR_TOKEN=//p' "$HOME/denpa/.env")" = "$token"
-          ls -l "$HOME/Library/Application Support/denpa-agent/px4-userland" "$HOME/Library/Application Support/denpa-agent/siano-userland"
+          sudo -E env PATH="$PATH" bash install.sh --agent-only
+          test "$(cat "$HOME/denpa/config/tls/pair-token")" = "$token"
+          ls -l "$prefix/px4-userland" "$prefix/siano-userland"
+          # px4d のソケットの置き場は root のもので、ほかの人は入れない (px4d がそう求める)
+          test "$(stat -f '%Su %Lp' "$prefix/run")" = "root 700"
           # libusb は中に抱えている (Homebrew のものに繋がない)。ランナーには Homebrew の libusb が
           # 入りうるので、動いたことでは確かめられない。繋ぎ先を直に見る
           for bin in px4-userland/px4d siano-userland/siano-ts; do
-            otool -L "$HOME/Library/Application Support/denpa-agent/$bin"
-            if otool -L "$HOME/Library/Application Support/denpa-agent/$bin" | grep -q libusb; then
+            otool -L "$prefix/$bin"
+            if otool -L "$prefix/$bin" | grep -q libusb; then
               echo "$bin が外の libusb に繋いでいます" >&2; exit 1
             fi
           done
-          "$HOME/Library/Application Support/denpa-agent/px4-userland/px4d" --list || true
-          bash install.sh --uninstall
-          test ! -e "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"
-          test ! -e "$HOME/Library/Application Support/denpa-agent"
+          "$prefix/px4-userland/px4d" --list || true
+          sudo -E env PATH="$PATH" bash install.sh --uninstall
+          test ! -e "$plist"
+          test ! -e "$prefix/bin"
+          if sudo launchctl print system/io.github.danything.denpa-agent >/dev/null 2>&1; then exit 1; fi
           # 設定の置き場 (~/denpa/config) は外しても残す
           test -d "$HOME/denpa/config"
-          cat "$HOME/Library/Logs/denpa-agent.log"
+          cat "$log"
+
+      # 本体ごと入れるジョブ (server-macos) が同じエージェントを使う
+      - name: Upload the agent tarball
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-agent-macos
+          path: ${{ runner.temp }}/denpa-agent.tar.gz
+          retention-days: 3
+
+  # Mac のメニューバーのアプリ (tray/mac)。/api/health の読み方と文言をテストし、組んで起こし、落ちずに動き続けることを見る
+  # (denpa はいないので、斜線の入ったアイコンのまま)。メニューは人が開くものなので見ない。
+  # **必須チェックにはしない** (agent-macos と同じ理由)
+  tray-macos:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Unit tests
+        run: swift test --package-path tray/mac
+
+      - name: Build
+        run: swift build -c release --package-path tray/mac
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          bin="$(swift build -c release --package-path tray/mac --show-bin-path)/denpa-tray"
+          # 配るときと同じく ad-hoc で署名して起こす (release.yml)
+          codesign --force --sign - "$bin"
+          "$bin" > tray.log 2>&1 &
+          pid=$!
+          sleep 5
+          if ! kill -0 "$pid" 2>/dev/null; then cat tray.log; echo "denpa-tray が終わってしまいました" >&2; exit 1; fi
+          kill "$pid"
+          cat tray.log
+          cp "$bin" "$RUNNER_TEMP/denpa-tray"
+
+      # 本体ごと入れるジョブ (server-macos) が、エージェントと同じ tar.gz に入れて install.sh で入れる (リリースと同じ形)
+      - name: Upload the tray
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-tray-macos
+          path: ${{ runner.temp }}/denpa-tray
+          retention-days: 3
 
   # Windows (x64) で動かすエージェント (docs/install-windows.md)。
   #
   # agent-macos と同じく、Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーでビルドして起こす。
   # 実機は無いので、確かめるのは「ビルドできる・テストが通る・起動して API が答える・入れ方が最後まで通る」まで。
-  # ランナーには wslc (WSL のコンテナ) が無いので、denpa 本体は -AgentOnly で外す。
+  # 入れ方は denpa 本体ごと (下の server-windows-bundle が組んだ zip で)。
   # **必須チェックにはしない** (agent-macos と同じ理由)
   #
   # **2 つのジョブに分けて同時に流す。** 1 本に並べていた頃は平均 3 分 (遅い回で 4 分半) で、
@@ -444,7 +505,6 @@ jobs:
           dotnet-version: "10.0.403"
 
       # Linux でしか意味の無いテスト (sysfs・/dev のパス・libc の pipe・/bin/sh の偽物) は中で飛ばしてある。
-      # 測るだけのテスト (Px4StreamBenchTests。並べずに 1 本で流れる) も Windows では飛ばす (Linux と Mac で流れる)
       - name: Unit tests (.NET agent)
         timeout-minutes: 8
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
@@ -473,7 +533,7 @@ jobs:
           path: |
             ${{ runner.temp }}\dotnet
             ${{ runner.temp }}\nuget
-          key: agent-windows-publish-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj') }}
+          key: agent-windows-publish-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj', 'tray/**/*.csproj') }}
 
       - name: Set up .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -482,6 +542,24 @@ jobs:
 
       - name: Publish (Native AOT, win-x64)
         run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -o out
+
+      # 通知領域のアイコン (tray/Denpa.Tray)。エージェントと同じ zip に入れる
+      - name: Publish the tray (Native AOT, win-x64)
+        run: dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
+
+      # 起こして、落ちずに動き続けることを見る (denpa はいないので、注意のアイコンのまま)。メニューは人が開くものなので見ない。
+      # 2 つ目は二重に起こしたときで、すぐ終わる
+      - name: Smoke test (tray)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tray = Start-Process .\out\denpa-tray.exe -PassThru
+          Start-Sleep 3
+          if ($tray.HasExited) { throw "denpa-tray exited with $($tray.ExitCode)" }
+          $second = Start-Process .\out\denpa-tray.exe -PassThru
+          if (-not $second.WaitForExit(10000)) { throw 'second denpa-tray did not exit' }
+          if ($second.ExitCode -ne 0) { throw "second denpa-tray exited with $($second.ExitCode)" }
+          Stop-Process -Id $tray.Id
 
       # **このジョブの PowerShell の段には日本語を書かない** (5.1 が ANSI で読んで、引用符が崩れうる)
       # 何も設定せずに起こす。チューナーは自動検出で空、カードはリーダーが無いので ok:false が返るはず。
@@ -544,21 +622,25 @@ jobs:
           # --card exits 1 (no card); do not fail on the last native exit code
           exit 0
 
-      # 入れ方を通しで。エージェントはいまビルドしたものを zip にして入れ、px4-userland・siano-userland と
-      # siano のファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに載せて API が答えるまで。
-      # IT930x のファームウェアはエージェントに同梱しているので、install.ps1 は置かない。
+      # 入れ方を通しで (エージェントだけ。denpa 本体ごとは下の server-windows)。エージェントはいまビルドしたものを zip にして入れ、
+      # px4-userland・siano-userland と siano のファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに
+      # SYSTEM で載せて API が答えるまで。IT930x のファームウェアはエージェントに同梱しているので、install.ps1 は置かない。
       # 1 回目は irm | iex と同じやり方 (取ってきた中身を scriptblock にして) で流す。2 回目は上げ直し
       # (動いているエージェントを止めて入れ替える)。最後に外す
       - name: install.ps1 end to end
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          Compress-Archive -Path out\denpa-agent.exe -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
+          Compress-Archive -Path out\denpa-agent.exe, out\denpa-tray.exe -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
           $env:DENPA_AGENT_ZIP = "$env:RUNNER_TEMP\denpa-agent.zip"
           $script = [scriptblock]::Create((Get-Content install.ps1 -Raw -Encoding UTF8))
           & $script -AgentOnly -NoOpen
-          $prefix = "$env:LOCALAPPDATA\denpa-agent"
-          Get-ScheduledTask -TaskName denpa-agent | Format-List TaskName, State
+          $prefix = "$env:ProgramFiles\denpa"
+          $task = Get-ScheduledTask -TaskName denpa-agent
+          $task | Format-List TaskName, State
+          # Runs as SYSTEM at startup, so nobody has to log on
+          if ($task.Principal.UserId -notmatch 'SYSTEM$') { throw "task runs as $($task.Principal.UserId)" }
+          if (@($task.Triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskBootTrigger' }).Count -ne 1) { throw 'task does not start at boot' }
           # install.ps1 checks the agent with denpa-agent --status (the API answers only paired denpa).
           # The pair token is in the agent's own place (config\tls\pair-token), not in the .cmd, and the agent
           # logs the URL to pair with (nobody is paired yet)
@@ -572,9 +654,15 @@ jobs:
           "siano-ts --list: exit $LASTEXITCODE"
           Get-Content "$prefix\denpa-agent.cmd"
           if (Select-String -LiteralPath "$prefix\denpa-agent.cmd" -SimpleMatch 'PX4_FIRMWARE' -Quiet) { throw 'PX4_FIRMWARE should not be in the .cmd (the agent uses its bundled firmware)' }
+          # -AgentOnly installs no server
+          if (Get-ScheduledTask -TaskName denpa -ErrorAction SilentlyContinue) { throw 'denpa task with -AgentOnly' }
+          if (Test-Path "$prefix\server") { throw 'server installed with -AgentOnly' }
+          # No tray at sign-in either (it shows the server)
+          if (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name denpa -ErrorAction SilentlyContinue) { throw 'tray registered with -AgentOnly' }
 
           # px4-userland: only px4d.exe / px4ctl.exe / license files, no px4-ts.exe or WinSCard.dll, no firmware (bundled in the agent).
-          # No tuner on the runner, so check that the real binaries run and take our arguments
+          # No tuner on the runner, so check that the real binaries run and take our arguments.
+          # px4d wants a runtime dir owned by the user running it (C:\denpa-run is SYSTEM's), so make one for this user
           $px4 = "$prefix\px4-userland"
           foreach ($file in 'px4d.exe', 'px4ctl.exe', 'LICENSE', 'DEPENDENCY-NOTICE.txt') {
             if (-not (Test-Path "$px4\$file")) { throw "px4-userland: $file missing" }
@@ -582,22 +670,33 @@ jobs:
           foreach ($file in 'px4-ts.exe', 'winscard', 'firmware\it930x-firmware.bin') {
             if (Test-Path "$px4\$file") { throw "px4-userland: $file should not be installed" }
           }
+          $rt = 'C:\denpa-run-test'
+          New-Item -ItemType Directory -Force $rt | Out-Null
+          $me = [Security.Principal.WindowsIdentity]::GetCurrent().User
+          $rtAcl = New-Object Security.AccessControl.DirectorySecurity
+          $rtAcl.SetOwner($me)
+          $rtAcl.SetAccessRuleProtection($true, $false)
+          foreach ($sid in $me, (New-Object Security.Principal.SecurityIdentifier 'S-1-5-18')) {
+            $rtAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule $sid, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))
+          }
+          (Get-Item $rt).SetAccessControl($rtAcl)
           $ErrorActionPreference = 'Continue'
           $json = & "$px4\px4d.exe" --list-json
           "px4d --list-json: exit $LASTEXITCODE $json"
           if ($LASTEXITCODE -ne 0 -or $json -notmatch '"enclosures"') { throw 'px4d --list-json failed' }
-          & "$px4\px4d.exe" --device 00000000000000 --firmware agent\Denpa.Agent\firmware\it930x-firmware.bin --runtime-dir C:\denpa-run --allow-lnb-power --exit-on-stdin-eof
+          & "$px4\px4d.exe" --device 00000000000000 --firmware agent\Denpa.Agent\firmware\it930x-firmware.bin --runtime-dir $rt --allow-lnb-power --exit-on-stdin-eof
           "px4d without a tuner: exit $LASTEXITCODE"
           if ($LASTEXITCODE -ne 3) { throw 'px4d should say NOT_FOUND (exit 3)' }
-          & "$px4\px4ctl.exe" --device 00000000000000 --runtime-dir C:\denpa-run status
+          & "$px4\px4ctl.exe" --device 00000000000000 --runtime-dir $rt status
           "px4ctl status without px4d: exit $LASTEXITCODE"
           if ($LASTEXITCODE -eq 0) { throw 'px4ctl status should fail without px4d' }
           $ErrorActionPreference = 'Stop'
-          # C:\denpa-run: owned by the user, protected DACL with the user, SYSTEM and Administrators only
+          # C:\denpa-run: owned by SYSTEM (the agent runs as SYSTEM), protected DACL with SYSTEM and Administrators only
           $acl = Get-Acl C:\denpa-run
           $acl.Access | Format-Table IdentityReference, FileSystemRights, IsInherited -AutoSize
-          if ($acl.Owner -ne [Security.Principal.WindowsIdentity]::GetCurrent().Name) { throw "C:\denpa-run owner is $($acl.Owner)" }
-          if (-not $acl.AreAccessRulesProtected -or @($acl.Access).Count -ne 3) { throw 'C:\denpa-run DACL is not the expected one' }
+          $owner = (New-Object Security.Principal.NTAccount $acl.Owner).Translate([Security.Principal.SecurityIdentifier]).Value
+          if ($owner -ne 'S-1-5-18') { throw "C:\denpa-run owner is $($acl.Owner)" }
+          if (-not $acl.AreAccessRulesProtected -or @($acl.Access).Count -ne 2) { throw 'C:\denpa-run DACL is not the expected one' }
 
           # install.ps1 waits until denpa-agent --status answers again, and keeps the pair token
           & $script -AgentOnly -NoOpen
@@ -612,6 +711,309 @@ jobs:
           if (-not (Test-Path "$env:USERPROFILE\denpa\config")) { throw '~/denpa/config removed' }
           Get-Content "$env:USERPROFILE\denpa\denpa-agent.log"
           exit 0
+
+      # 本体ごと入れるジョブ (server-windows) が同じエージェントを使う
+      - name: Upload the agent zip
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-agent-windows
+          path: ${{ runner.temp }}\denpa-agent.zip
+          retention-days: 3
+
+  # **Windows でそのまま動かす denpa 本体の配布物** (windows-server.yml が組む。リリースと同じ組み方)
+  server-windows-bundle:
+    uses: ./.github/workflows/windows-server.yml
+
+  # 配布物を Windows のランナーで確かめる。**必須チェックにはしない** (agent-windows と同じ理由)。
+  # 1. 同梱の ffmpeg で denpa の経路を流し、名前付きパイプで受ける進み具合と、スリープを止める呼び出しを見る (tests/native-smoke.ts)
+  # 2. 本体をそのまま `bun server.js` で起こし、/api/health・画面・字・デコーダが返るか
+  # 3. install.ps1 で本体ごと入れて (タスクは SYSTEM)、本体がエージェントと組めるか。上げ直して、外す
+  server-windows:
+    needs: [server-windows-bundle, agent-windows-install]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the server zip
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-windows-x64
+          path: ${{ runner.temp }}\server
+
+      - name: Download the agent zip
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-agent-windows
+          path: ${{ runner.temp }}\agent
+
+      - name: Bundled ffmpeg, progress on a named pipe, keep awake
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Get-ChildItem "$env:RUNNER_TEMP\server\denpa-*-windows-x64.zip" | Select-Object -First 1
+          $dir = "$env:RUNNER_TEMP\denpa"
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $dir
+          $work = "$env:RUNNER_TEMP\smoke"
+          New-Item -ItemType Directory -Force $work | Out-Null
+          & "$dir\bun.exe" tests\native-smoke.ts $dir $work
+          if ($LASTEXITCODE -ne 0) { throw 'tests/native-smoke.ts failed' }
+
+      - name: bun server.js answers
+        # 前の段が落ちても流す (どこまで動くかを 1 回で見る)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = "$env:RUNNER_TEMP\denpa"
+          $data = "$env:RUNNER_TEMP\data"
+          New-Item -ItemType Directory -Force $data | Out-Null
+          $env:NODE_ENV = 'production'
+          $env:DENPA_DB = "$data\denpa.db"
+          $env:MEDIA_DIR = "$data\media"
+          $env:FFMPEG = "$dir\ffmpeg\ffmpeg.exe"
+          $env:FFPROBE = "$dir\ffmpeg\ffprobe.exe"
+          $env:MPEG2_DIR = "$dir\mpeg2"
+          $env:FONT_DIR = "$dir\font"
+          # No agent here: the server keeps running and retries
+          $env:TUNER_AGENT_URL = 'https://127.0.0.1:25999#pair=smoke'
+          $env:TRUSTED_NETWORKS = '127.0.0.0/8'
+          $env:PORT = '3100'
+          $server = Start-Process "$dir\bun.exe" -ArgumentList 'server.js' -WorkingDirectory "$dir\app" -PassThru `
+            -RedirectStandardOutput "$data\out.log" -RedirectStandardError "$data\err.log"
+          try {
+            $health = $null
+            for ($i = 0; $i -lt 60 -and -not $health; $i++) {
+              try { $health = Invoke-RestMethod http://127.0.0.1:3100/api/health } catch { Start-Sleep 1 }
+            }
+            if (-not $health.ok) { throw 'no /api/health' }
+            "health: $($health | ConvertTo-Json -Compress)"
+            foreach ($path in '/', '/api/font/denpa-font.css', '/api/font/denpa-font.woff2', '/api/live/mpeg2/decoder.wasm') {
+              $res = Invoke-WebRequest "http://127.0.0.1:3100$path" -UseBasicParsing
+              "$path -> $($res.StatusCode) $($res.RawContentLength) bytes"
+              if ($res.StatusCode -ne 200) { throw "$path answered $($res.StatusCode)" }
+            }
+            if (-not (Test-Path "$data\denpa.db")) { throw 'no DB' }
+          } finally {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+            Get-Content "$data\out.log", "$data\err.log" -ErrorAction SilentlyContinue
+          }
+
+      # 1 回目は irm | iex と同じやり方で。本体とエージェントのタスクが SYSTEM で起動時に動き、本体がエージェントと組めるか
+      # (本体が TUNER_AGENT_URL の合言葉で組むと、エージェントの tls\clients に本体の証明書が載る)。2 回目は上げ直し、最後に外す
+      - name: install.ps1 with the server
+        # 前の段が落ちても流す (どこまで動くかを 1 回で見る)
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:DENPA_AGENT_ZIP = "$env:RUNNER_TEMP\agent\denpa-agent.zip"
+          $env:DENPA_SERVER_ZIP = (Get-ChildItem "$env:RUNNER_TEMP\server\denpa-*-windows-x64.zip" | Select-Object -First 1).FullName
+          $script = [scriptblock]::Create((Get-Content install.ps1 -Raw -Encoding UTF8))
+          & $script -NoOpen
+          $prefix = "$env:ProgramFiles\denpa"
+          $data = "$env:ProgramData\denpa"
+          foreach ($name in 'denpa', 'denpa-agent') {
+            $task = Get-ScheduledTask -TaskName $name
+            $task | Format-List TaskName, State
+            if ($task.Principal.UserId -notmatch 'SYSTEM$') { throw "$name runs as $($task.Principal.UserId)" }
+          }
+          Get-Content "$data\denpa.cmd"
+          $health = Invoke-RestMethod http://127.0.0.1:3000/api/health
+          "health: $($health | ConvertTo-Json -Compress)"
+          if (-not (Test-Path "$data\denpa.db")) { throw 'no DB in ProgramData' }
+          if (-not (Test-Path "$data\denpa.env")) { throw 'no denpa.env' }
+          # ProgramData\denpa: SYSTEM and Administrators only
+          $acl = Get-Acl $data
+          $acl.Access | Format-Table IdentityReference, FileSystemRights, IsInherited -AutoSize
+          if (-not $acl.AreAccessRulesProtected -or @($acl.Access).Count -ne 2) { throw "$data DACL is not the expected one" }
+          # The server pairs with the agent on its own (the agent lists the server's certificate)
+          $clients = "$env:USERPROFILE\denpa\config\tls\clients"
+          for ($i = 0; $i -lt 60 -and -not ((Test-Path $clients) -and (Get-Content $clients)); $i++) { Start-Sleep 1 }
+          if (-not ((Test-Path $clients) -and (Get-Content $clients))) { throw 'the server did not pair with the agent' }
+          if (-not (Get-NetFirewallRule -Name denpa -ErrorAction SilentlyContinue)) { throw 'no firewall rule' }
+          # The tray starts at sign-in for everyone (HKLM Run), from the agent's bin
+          $run = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+          $entry = (Get-ItemProperty $run -Name denpa).denpa
+          "tray at sign-in: $entry"
+          if ($entry -ne "`"$prefix\bin\denpa-tray.exe`"") { throw "unexpected Run entry: $entry" }
+          if (-not (Test-Path "$prefix\bin\denpa-tray.exe")) { throw 'no denpa-tray.exe' }
+          # The tray reads /api/health: the recording and encoding counts it asks about before updating
+          if ($null -eq $health.recording -or $null -eq $health.encoding) { throw 'no recording/encoding in /api/health' }
+
+          # Upgrading replaces bin\ while the tray runs (the tray started it), so install.ps1 must stop it first.
+          # install.ps1 may have started one already (when explorer runs in this session)
+          $trays = @(Get-Process denpa-tray -ErrorAction SilentlyContinue)
+          if ($trays.Count -eq 0) {
+            $trays = @(Start-Process "$prefix\bin\denpa-tray.exe" -PassThru)
+            Start-Sleep 2
+          }
+          if (@($trays | Where-Object { -not $_.HasExited }).Count -eq 0) { throw 'denpa-tray is not running' }
+          & $script -NoOpen
+          if (@($trays | Where-Object { -not $_.HasExited }).Count -ne 0) { throw 'install.ps1 left the old denpa-tray running' }
+          (Invoke-RestMethod http://127.0.0.1:3000/api/health) | ConvertTo-Json -Compress
+
+          & $script -Uninstall
+          foreach ($name in 'denpa', 'denpa-agent', 'denpa-wake') {
+            if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) { throw "task $name left" }
+          }
+          if (Test-Path $prefix) { throw "$prefix left" }
+          if (Get-Process bun, denpa-agent, denpa-tray -ErrorAction SilentlyContinue) { throw 'still running' }
+          if (Get-NetFirewallRule -Name denpa -ErrorAction SilentlyContinue) { throw 'firewall rule left' }
+          if (Get-ItemProperty $run -Name denpa -ErrorAction SilentlyContinue) { throw 'tray left in Run' }
+          # keeps the DB
+          if (-not (Test-Path "$data\denpa.db")) { throw 'DB removed' }
+          Get-Content "$env:USERPROFILE\denpa\denpa.log" -Tail 80
+          exit 0
+
+  # **Mac でそのまま動かす denpa 本体の配布物** (macos-server.yml が組む。リリースと同じ組み方)
+  server-macos-bundle:
+    uses: ./.github/workflows/macos-server.yml
+
+  # 配布物を Mac のランナーで確かめる。**必須チェックにはしない** (agent-macos と同じ理由)。
+  # Mac のランナーは混むので、確かめることは 1 つのジョブにまとめる (server-windows と同じ並び)。
+  # 1. 同梱の ffmpeg で denpa の経路を流し、VideoToolbox が組み込まれていること、GPU で試せなければソフトウェアに戻ること、
+  #    fd 3 の進み具合、スリープを止める呼び出しと、録画の前に起こす予約を見る (tests/native-smoke.ts。予約は root が要るので sudo で)
+  # 2. 本体をそのまま `bun server.js` で起こし、/api/health・画面・字・デコーダが返るか
+  # 3. 前のバージョン (本体が Docker) から移る形で install.sh を流し (偽の docker。tests/install-mac-migrate.sh)、本体ごと入れて
+  #    (LaunchDaemon は root)、本体がエージェントと組めるか。上げ直して、外す
+  server-macos:
+    needs: [server-macos-bundle, agent-macos, tray-macos]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the server tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-darwin-arm64
+          path: ${{ runner.temp }}/server
+
+      - name: Download the agent tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-agent-macos
+          path: ${{ runner.temp }}/agent
+
+      - name: Download the tray
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-tray-macos
+          path: ${{ runner.temp }}/tray
+
+      - name: Bundled ffmpeg, VideoToolbox, progress on fd 3, keep awake and wake
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/denpa"
+          mkdir -p "$dir" "$RUNNER_TEMP/smoke"
+          tar -xzf "$RUNNER_TEMP"/server/denpa-*-darwin-arm64.tar.gz -C "$dir"
+          codesign -v "$dir/ffmpeg/ffmpeg" "$dir/ffmpeg/ffprobe" "$dir/bun"
+          sudo "$dir/bun" tests/native-smoke.ts "$dir" "$RUNNER_TEMP/smoke"
+
+      - name: bun server.js answers
+        # 前の段が落ちても流す (どこまで動くかを 1 回で見る)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/denpa"
+          data="$RUNNER_TEMP/data"
+          mkdir -p "$data"
+          # エージェントはいない (本体は動き続けて繋ぎ直す)
+          (cd "$dir/app" && NODE_ENV=production DENPA_DB="$data/denpa.db" MEDIA_DIR="$data/media" \
+            FFMPEG="$dir/ffmpeg/ffmpeg" FFPROBE="$dir/ffmpeg/ffprobe" MPEG2_DIR="$dir/mpeg2" FONT_DIR="$dir/font" \
+            TUNER_AGENT_URL='https://127.0.0.1:25999#pair=smoke' TRUSTED_NETWORKS=127.0.0.0/8 PORT=3100 \
+            "$dir/bun" server.js > "$data/server.log" 2>&1) &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; cat "$data/server.log"' EXIT
+          for _ in $(seq 60); do curl -fsS -o /dev/null http://127.0.0.1:3100/api/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:3100/api/health; echo
+          for path in / /api/font/denpa-font.css /api/font/denpa-font.woff2 /api/live/mpeg2/decoder.wasm; do
+            curl -fsS -o /dev/null -w "$path -> %{http_code} %{size_download} bytes\n" "http://127.0.0.1:3100$path"
+          done
+          test -f "$data/denpa.db"
+          kill "$pid"
+          wait "$pid" || true
+
+      # 1 回目は前のバージョン (本体が Docker) から移る形で。2 回目は上げ直し、最後に外す
+      - name: install.sh with the server
+        # 前の段が落ちても流す (どこまで動くかを 1 回で見る)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          # リリースと同じく、エージェントとメニューバーのアプリを 1 つの tar.gz に (artifact は実行の印を落とすので付け直す)
+          bundle="$RUNNER_TEMP/agent-bundle"
+          mkdir -p "$bundle"
+          tar -xzf "$RUNNER_TEMP/agent/denpa-agent.tar.gz" -C "$bundle"
+          cp "$RUNNER_TEMP/tray/denpa-tray" "$bundle/denpa-tray"
+          chmod 755 "$bundle/denpa-agent" "$bundle/denpa-tray"
+          tar -czf "$RUNNER_TEMP/denpa-agent-tray.tar.gz" -C "$bundle" denpa-agent denpa-tray
+          export DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent-tray.tar.gz"
+          tray_plist=/Library/LaunchAgents/io.github.danything.denpa-tray.plist
+          DENPA_SERVER_TARBALL=$(ls "$RUNNER_TEMP"/server/denpa-*-darwin-arm64.tar.gz)
+          export DENPA_SERVER_TARBALL
+          prefix="/Library/Application Support/denpa"
+          # 前の段の本体が作った DB を、Docker のボリュームにあったことにして写させる
+          bash tests/install-mac-migrate.sh "$RUNNER_TEMP/data"
+          for label in denpa denpa-agent; do
+            sudo launchctl print "system/io.github.danything.$label" | grep -E 'state|program'
+          done
+          curl -fsS http://127.0.0.1:3000/api/health; echo
+          # 画面はこの Mac のブラウザ (127.0.0.1) からログインなしで開ける (denpa.env の TRUSTED_NETWORKS)
+          curl -fsS -o /dev/null http://127.0.0.1:3000/
+          # 置き場の DB・denpa.env・denpa.sh は root だけのもの。合言葉は denpa.sh にあり、だれでも読める plist には無い
+          test "$(sudo stat -f '%Su %Lp' "$prefix/data")" = "root 700"
+          sudo test -f "$prefix/data/denpa.env"
+          token=$(cat "$HOME/denpa/config/tls/pair-token")
+          sudo grep -qF "#pair=$token" "$prefix/data/denpa.sh"
+          if grep -qF "$token" /Library/LaunchDaemons/io.github.danything.denpa.plist; then exit 1; fi
+          # 本体がエージェントと組む (エージェントの tls/clients に本体の証明書が載る)
+          clients="$HOME/denpa/config/tls/clients"
+          for _ in $(seq 60); do sudo test -s "$clients" && break; sleep 1; done
+          sudo test -s "$clients"
+          # 録画の置き場はその人のもの (root の本体が書いたものも、グループ staff で触れる)
+          test "$(stat -f %Su "$HOME/Movies/denpa/recorded")" = "$(id -un)"
+          # メニューバーのアプリはログインで起きる (/Library/LaunchAgents。root のもので、ほかの人は書けない)
+          test "$(stat -f '%Su %Lp' "$tray_plist")" = "root 644"
+          plutil -extract ProgramArguments.0 raw "$tray_plist" | grep -qxF "$prefix/bin/denpa-tray"
+          # /api/health にメニューバーのアプリが更新の前に確かめる本数がある
+          curl -fsS http://127.0.0.1:3000/api/health | jq -e '(.recording | type) == "number" and (.encoding | type) == "number"'
+          # ランナーにログインした画面 (gui のドメイン) があれば、install.sh がここで起こしている
+          if launchctl print "gui/$(id -u)" >/dev/null 2>&1; then
+            launchctl print "gui/$(id -u)/io.github.danything.denpa-tray" | grep -E 'state|program'
+          fi
+          # 上げ直す前に動いているもの (メニューから更新を始めたときと同じ)。上げ直しで止まること
+          if ! pgrep -f "$prefix/bin/denpa-tray" >/dev/null; then
+            "$prefix/bin/denpa-tray" > "$RUNNER_TEMP/tray.log" 2>&1 &
+            sleep 3
+          fi
+          before=$(pgrep -f "$prefix/bin/denpa-tray" | sort)
+          test -n "$before"
+
+          sudo -E env PATH="$PATH" bash install.sh --no-open
+          curl -fsS http://127.0.0.1:3000/api/health; echo
+          for pid in $before; do
+            if kill -0 "$pid" 2>/dev/null; then echo "install.sh が前の denpa-tray ($pid) を止めていません" >&2; exit 1; fi
+          done
+
+          sudo -E env PATH="$PATH" bash install.sh --uninstall
+          for label in denpa denpa-agent; do
+            if sudo launchctl print "system/io.github.danything.$label" >/dev/null 2>&1; then echo "$label が残っています" >&2; exit 1; fi
+            test ! -e "/Library/LaunchDaemons/io.github.danything.$label.plist"
+          done
+          test ! -e "$prefix/server"
+          test ! -e "$prefix/bin"
+          test ! -e "$tray_plist"
+          if launchctl print "gui/$(id -u)/io.github.danything.denpa-tray" >/dev/null 2>&1; then echo "denpa-tray が launchd に残っています" >&2; exit 1; fi
+          if pgrep -f "$prefix/" >/dev/null; then echo "まだ動いています" >&2; exit 1; fi
+          # DB は残す
+          sudo test -f "$prefix/data/denpa.db"
+          sudo tail -n 80 /Library/Logs/denpa/denpa.log
 
   # 予約から録画・エンコード・保存先への配置まで、偽の放送で通しで流す
   e2e:

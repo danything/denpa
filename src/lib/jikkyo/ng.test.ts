@@ -50,6 +50,8 @@ describe("parseNg", () => {
     expect(parseNg("あ".repeat(NG_LENGTH + 1))).toHaveProperty("error");
     // 絵文字も 1 文字と数える
     expect(parseNg("😀".repeat(NG_LENGTH))).toHaveProperty("words");
+    // ZWJ でつないだ絵文字も 1 文字 (書き込みと同じ書記素の数)
+    expect(parseNg("👨‍👩‍👧".repeat(NG_LENGTH))).toHaveProperty("words");
   });
 });
 

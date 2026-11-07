@@ -45,7 +45,7 @@ const LIMIT = 4 * 1024 * 1024;
 const TIMEOUT = 10_000;
 /**
  * 同時に中継する上限。データ放送や Hybridcast のアプリは文書を開くと画像や script をまとめて
- * 取りに来る (HTTP/2 の前段ならブラウザは一度に何十本もリクエストする) ので、ゆとりを持たせて 32。
+ * リクエストする (HTTP/2 の前段ならブラウザは一度に何十本もリクエストする) ので、ゆとりを持たせて 32。
  * 待たせると溜まるだけなので、あふれたら断る
  */
 const CONCURRENCY = 32;
@@ -76,26 +76,52 @@ export function refusalMessage(failure: unknown, fallback: string): string {
 }
 
 /**
- * 中継した答えを返す (`/api/bml/proxy` と `/api/bml/post`)。
+ * 中継して返す本文。204・205・304 は本文を持てない (`new Response` に渡すと TypeError になり、中継が 502 になる)
+ */
+function relayBody(status: number, body: Uint8Array): BodyInit | null {
+  return status === 204 || status === 205 || status === 304
+    ? null
+    : (body as BodyInit);
+}
+
+/** 中継の返りに付ける CSP と `cache-control` */
+export interface RelayHeaders {
+  csp: string;
+  cache: string;
+}
+
+/**
+ * `/api/bml/proxy` と `/api/bml/post` の返り。**溜めさせない** (放送の通信は「いまの値」を取得するもの)。
+ * 画面は fetch で読むだけなので、CSP で何も読ませない
+ */
+const BML_HEADERS: RelayHeaders = {
+  csp: "sandbox; default-src 'none'",
+  cache: "no-store",
+};
+
+/**
+ * 中継した答えを返す (`/api/bml/proxy`・`/api/bml/post` と、Hybridcast の `hc-relay.ts` の `relayAsset`)。
  *
  * - **相手の返した符号をそのまま返す。** 放送のアプリは 404 や 503 を見て出し分けることがあるので、
  *   こちらで 200 に均すと判断を奪う
- * - **溜めさせない。** 放送の通信は「いまの値」を取りに来るもの
  * - `x-bml-relayed` は相手まで行けた印。相手の 502 をそのまま返すので、符号だけではこちらで断った
- *   502 と見分けが付かない。画面側はこれを見て成否を決める
+ *   502 と見分けが付かない。画面側はこれを見て成否を決める (`bml/relay.ts`)
  * - **返したものを denpa の権限で動かさない。** 中身も形式も相手の言うままなので、`text/html` や SVG が
  *   来ることがある。`sandbox` の CSP と `nosniff` を付け、直に開かれても denpa のオリジンの文書には
- *   ならないようにする (`hc-relay.ts` と同じ考え)。形式は変えない。画面側は fetch で読み、`content-type`
- *   を見て文字コードや BML の文書かどうかを決める。CSP は fetch で読む分には効かない
+ *   ならないようにする。形式は変えない。画面側は fetch で読み、`content-type`
+ *   を見て文字コードや BML の文書かどうかを決める。CSP は fetch や script・画像・CSS として読む分には効かない
  */
-export function relayed(got: Fetched): Response {
-  return new Response(got.body as BodyInit, {
+export function relayed(
+  got: Fetched,
+  { csp, cache }: RelayHeaders = BML_HEADERS,
+): Response {
+  return new Response(relayBody(got.status, got.body), {
     status: got.status,
     headers: {
       "content-type": got.contentType,
-      "content-security-policy": "sandbox; default-src 'none'",
+      "content-security-policy": csp,
       "x-content-type-options": "nosniff",
-      "cache-control": "no-store",
+      "cache-control": cache,
       "x-bml-relayed": "1",
     },
   });
@@ -478,10 +504,11 @@ export async function confirmReachable(
   ipAddress: string | null;
   responseTimeMillis: number | null;
 }> {
-  // `example.jp` でも `https://example.jp/x` でも受ける
+  // `example.jp` でも `example.jp:443` でも `https://example.jp/x` でも受ける (繋ぐのはどれも 443 番)
+  const bare = destination.replace(/^\/+/, "").split("/")[0] ?? "";
   const host = destination.includes("://")
     ? new URL(destination).hostname
-    : (destination.replace(/^\/+/, "").split("/")[0] ?? "");
+    : bare.replace(/^([^:[\]]+):\d+$/, "$1");
   if (host === "") throw new Refused("宛先がありません");
 
   return limited(async () => {

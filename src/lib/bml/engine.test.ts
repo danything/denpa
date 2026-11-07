@@ -575,7 +575,7 @@ describe("移れない文書へ移ろうとしても閉じない", () => {
     });
   }
 
-  /** 双方向をオンにして、決めた URL に決めたものを返す中継 (取りに来た URL を控える) */
+  /** 双方向をオンにして、決めた URL に決めたものを返す中継 (リクエストされた URL を控える) */
   function relay(
     pages: Record<string, { status?: number; type: string; body: string }>,
   ) {
@@ -824,6 +824,36 @@ describe("開く前の入口", () => {
     second.reset();
     await watch(() => false, 50);
     expect(second.path).toBeNull();
+  });
+
+  /** 画面は開く前の起動を断る。1 と答えると、文書は起動を求めたまま返らなくなる */
+  test("開く前は、Hybridcast のアプリを開けないと答える", () => {
+    let shown = false;
+    const { bml } = open({
+      opened: () => shown,
+      ip: {
+        connected: () => true,
+        transmit: async () => ({
+          resultCode: 0,
+          status: "",
+          body: new Uint8Array(),
+        }),
+        confirm: async () => null,
+        get: async () => null,
+      },
+      hybridcast: {
+        ready: () => true,
+        start: () => true,
+        startFrom: () => true,
+      },
+    });
+    const host = bml as unknown as {
+      canStartApp(): boolean;
+      canFetchAit(): boolean;
+    };
+    expect([host.canStartApp(), host.canFetchAit()]).toEqual([false, false]);
+    shown = true;
+    expect([host.canStartApp(), host.canFetchAit()]).toEqual([true, true]);
   });
 });
 
@@ -1113,7 +1143,7 @@ describe("ライブのように流し続けても、持つものと握る時間�
   test("バージョンの更新・イベントメッセージ・TOT を何千回流しても、増え続けない", async () => {
     const urls = countUrls();
     try {
-      // 見張りで止めずに、持つものだけを見る (流す速さはライブの何百倍)。時計はライブと同じ TOT
+      // 実行の上限で止めずに、持つものだけを見る (流す速さはライブの何百倍)。時計はライブと同じ TOT
       const { bml, logs } = open({ clock: () => null, budget: { ratio: 1 } });
       // 本番の局の書き方に寄せる: 1 回きりのタイマーを受け手のたびに作り直す (chkRen)、
       // バージョンが上がったら押さえ直して字を書き換える、イベントのたびに消さないタイマーを足す (後始末し忘れ)

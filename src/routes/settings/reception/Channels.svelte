@@ -3,7 +3,6 @@
   import "@anyblades/blades/components/accordion";
   import "@anyblades/blades/components/progress";
   import { resolve } from "$app/paths";
-  import Activity from "~icons/lucide/activity";
 
   import { submitting } from "#lib/actions.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
@@ -11,12 +10,17 @@
   import Lead from "#lib/components/Lead.svelte";
   import LogoZoom from "#lib/components/LogoZoom.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
-  import { SERVICE_TYPE_LABEL, stateLabel } from "#lib/format.js";
+  import {
+    SERVICE_TYPE_LABEL,
+    SIGNAL_RAW_NOTE,
+    signalText,
+    stateLabel,
+  } from "#lib/format.js";
+  import type { SignalQuality } from "#lib/server/signal-quality.js";
 
-  import type { PageData } from "./$types";
-  import SignalDialog from "./SignalDialog.svelte";
+  import type { ActionData, PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 
   /*
    * **チャンネルを書き換えたお知らせは、この画面を開いたら消す** (書き換えたチャンネルはここに並んでいる)。
@@ -78,29 +82,29 @@
   ];
   /*
    * 物理チャンネルと、そこに入っている局。**denpa 自身の DB から来る。**
-   * エージェントにも控えはあるが、聞きに行かない (`channels.server.ts`)
+   * エージェントにも控えはあるが、問い合わせない (`channels.server.ts`)
    */
   const coverage = $derived(data.channels);
   /** 入っている局をすべて並べたもの */
   const services = $derived(coverage.flatMap((channel) => channel.services));
 
-  /** 電波レベル測定ダイアログ */
-  let showSignalDialog = $state(false);
-  let signalTargetType = $state("");
-  let signalTargetChannel = $state("");
+  /** 最後に測った受信品質 (`channels.server.ts` の `measureSignal`)。そのチャンネルの行の下に出す */
+  const measured = $derived(form?.measured ?? null);
 
-  const channelOptions = $derived(
-    coverage.map((ch) => ({
-      type: ch.type,
-      channel: ch.channel,
-      name: ch.services[0]?.name ?? ch.channel,
-    })),
-  );
-
-  function openSignal(type = "", channel = "") {
-    signalTargetType = type;
-    signalTargetChannel = channel;
-    showSignalDialog = true;
+  /** 「誤り 0.00%・ドロップ 0.01%・16.9 Mbps・同期しています・C/N: 25.3 dB」。C/N は設定の「チューナー」と同じ出し方 */
+  function qualityText(quality: SignalQuality): string {
+    const rate = (count: number, total: number) =>
+      `${((count / total) * 100).toFixed(2)}%`;
+    const parts =
+      quality.packets === 0
+        ? ["パケットが届きませんでした"]
+        : [
+            `誤り ${rate(quality.errors, quality.packets)}`,
+            `ドロップ ${rate(quality.drops, quality.packets + quality.drops)}`,
+            `${quality.mbps.toFixed(1)} Mbps`,
+          ];
+    if (quality.signal !== null) parts.push(signalText(quality.signal));
+    return parts.join("・");
   }
 
   /** 番組表がどこまで埋まっているか。「8/9 まで」の形で出す */
@@ -174,15 +178,6 @@
                 : "ロゴをいますぐ集める"}
             </ActionButton>
           {/if}
-          <button
-            type="button"
-            class="secondary small outline"
-            onclick={() => openSignal()}
-            data-testid="btn-open-signal-dialog"
-          >
-            <Activity aria-hidden="true" />
-            電波レベル測定
-          </button>
         </div>
       {/if}
     </div>
@@ -226,7 +221,7 @@
         <!--
                     取れないものを「まだ取れていない」と出し続けると、こちらの不具合と見分けが付かない。
                     **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
-                    CS のロゴは BS の中継から降ってくる
+                    CS のロゴは BS の中継で送られてくる
                 -->
         <div class="tiny muted" data-testid="logo-unavailable">
           <span class="num">{data.logos.unavailable}</span> 局はロゴが放送に載っていないため取れません
@@ -242,9 +237,9 @@
           BS・CS の <span class="num">{data.logos.satellite.missing}</span>
           局は、{#if data.logos.satellite.carrier !== null}
             {data.logos.satellite.carrier} にときどきまとめて流れてくるのを待っています。
-            番組表集めがこの中継を開いたときと、チューナーが空いているときに、続きから読みます
+            番組表を集めるときにこの中継を開いたときと、チューナーが空いているときに、続きから読みます
           {:else}
-            ロゴを流している中継をまだ探しています。チューナーが空いているときと、番組表集めが衛星の中継を開いたときに確かめます
+            ロゴを流している中継をまだ探しています。チューナーが空いているときと、番組表を集めるときに衛星の中継を開いたときに確かめます
           {/if}
         </div>
       {/if}
@@ -354,11 +349,19 @@
           <p>
             待てないときは<strong>「番組表をいますぐ集める」</strong
             >で、録画とライブ視聴に使っていないチューナーを全部使って集められます
-            (スキャンやロゴの取得は止めます)。
+            (動いているスキャンと、ロゴを集める処理は止めます)。
+          </p>
+          <p>
+            チャンネルの<strong>「測定」</strong
+            >は、空いているチューナーでそのチャンネルを 5 秒ほど受信し、 誤り
+            (誤りの印が立っていたパケットの割合)・ドロップ
+            (欠けたパケットの割合)・受信した速さと、受信の状態と C/N
+            を行の下に出します。
+            録画・ライブ視聴・スキャン・「番組表をいますぐ集める」に使っているチューナーは取り上げません。
           </p>
           <p>
             <strong>局ロゴ</strong
-            >は番組表と一覧に出すもので、番組表を集めるときにあわせて取得します。
+            >は番組表と一覧に出すもので、番組表を集めるときにあわせて集めます。
             放送波に流れるのは数十秒〜数分に一度、<strong
               >衛星は流れる期間が限られ、その間も十数分に一度</strong
             >で、取れたロゴも 1 週間ごとに取り直します。
@@ -430,6 +433,16 @@
                       {:else if channel.reception === "checking"}
                         <span class="reception tiny faint">確認中</span>
                       {/if}
+                      <!-- 空いているチューナーで 5 秒ほど受信する。結果はこのチャンネルの行の下 -->
+                      <ActionButton
+                        action="?/measureSignal"
+                        fields={{
+                          type: channel.type,
+                          channel: channel.channel,
+                        }}
+                        class="xs secondary outline"
+                        testid="signal-measure">測定</ActionButton
+                      >
                     </td>
                   {/if}
                   <td class="small">
@@ -461,6 +474,17 @@
                   </td>
                 </tr>
               {/each}
+              {#if measured?.type === channel.type && measured.channel === channel.channel}
+                <tr data-testid="signal-result" data-channel={channel.channel}>
+                  <td colspan="6" class="small">
+                    <span class="muted">受信品質</span>
+                    {qualityText(measured)}
+                    {#if measured.signal?.unit === "raw"}
+                      <div class="tiny muted">{SIGNAL_RAW_NOTE}</div>
+                    {/if}
+                  </td>
+                </tr>
+              {/if}
             {/each}
           </tbody>
         </table>
@@ -470,14 +494,6 @@
 </div>
 
 <LogoZoom target={zoomTarget} onclose={() => (zoom = null)} />
-
-<SignalDialog
-  open={showSignalDialog}
-  channels={channelOptions}
-  initialType={signalTargetType}
-  initialChannel={signalTargetChannel}
-  onclose={() => (showSignalDialog = false)}
-/>
 
 <!--
     局ロゴ。押すと大きく見る (`LogoZoom`)。まだのものは点線の枠、放送に載っていないものは列では「—」。
@@ -502,7 +518,7 @@
   {:else if column}
     <span class="muted small" title="ロゴは放送に載っていません">—</span>
   {:else}
-    <!-- 局名の頭がずれないよう、場所だけ空けておく -->
+    <!-- 局名の先頭がずれないよう、場所だけ空けておく -->
     <span class="logo-space"></span>
   {/if}
 {/snippet}

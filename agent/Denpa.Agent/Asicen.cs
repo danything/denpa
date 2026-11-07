@@ -252,7 +252,10 @@ public static class AsicenUserland
     public static IReadOnlyList<CardLinkCandidate> Cards() => Cards(RuntimeDir);
 
     internal static IReadOnlyList<CardLinkCandidate> Cards(string runtimeDir) =>
-        Px4Card.Find(runtimeDir, Px4Wire.Asicen, ValidId, id => $"asicen-userland {id} Internal Card Reader");
+        Px4Card.Find(runtimeDir, Px4Wire.Asicen, ValidId, ReaderName);
+
+    /// <summary>筐体の内蔵カードリーダーの名前</summary>
+    public static string ReaderName(string id) => $"asicen-userland {id} Internal Card Reader";
 }
 
 /// <summary>
@@ -280,6 +283,8 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
     public static AsicenDaemon For(string id) => For(id, () => new AsicenDaemon(
         id, AsicenUserland.Dir, AsicenUserland.RuntimeDir,
         () => Hardware(id, AsicenUserland.Firmware, () => AsicenUserland.Enclosures(_ => { }))));
+
+    public override string CardName => AsicenUserland.ReaderName(Id);
 
     /// <summary>
     /// 本物の機材を使う引数。**ファームウェアが無ければ起こさない** (上流の配布物に入っていなかった)。

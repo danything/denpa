@@ -14,7 +14,7 @@ function second(
 }
 
 describe("DecodeBudget", () => {
-  test("間に合っていれば諦めない", () => {
+  test("間に合っていれば打ち切らない", () => {
     const budget = new DecodeBudget();
     budget.tick(0, 33.4, 0);
     for (let s = 1; s <= 20; s++)
@@ -22,7 +22,7 @@ describe("DecodeBudget", () => {
     expect(budget.p95).toBe(10);
   });
 
-  test("重いのが 3 秒続いたら諦める。**1 回の重さでは戻さない**", () => {
+  test("重いのが 3 秒続いたら打ち切る。**1 回の重さでは戻さない**", () => {
     const budget = new DecodeBudget();
     budget.tick(0, 33.4, 0);
     const results = [1, 2, 3].map((s) => second(budget, s * WINDOW, 30));
@@ -53,10 +53,10 @@ describe("DecodeBudget", () => {
   });
 
   /*
-   * **デコードの時間がぎりぎり間に合っていても、コマを捨て続けていれば諦める** (同じ端末で 2 本見ていたとき)
+   * **デコードの時間がぎりぎり間に合っていても、コマを捨て続けていれば打ち切る** (同じ端末で 2 本見ていたとき)
    */
 
-  test("出すはずのコマの 15% 以上を捨て続けたら諦める", () => {
+  test("出すはずのコマの 15% 以上を捨て続けたら打ち切る", () => {
     const budget = new DecodeBudget();
     budget.tick(0, 33.4, 0, 0, 0);
     const window = (s: number, dropped: number) => {
@@ -87,7 +87,7 @@ describe("DecodeBudget", () => {
     expect(second(budget, 6 * WINDOW, 30)).toBe(true);
   });
 
-  test("デコードする時間が軽くても、映像が遅れ続けていれば諦める", () => {
+  test("デコードする時間が軽くても、映像が遅れ続けていれば打ち切る", () => {
     const budget = new DecodeBudget();
     budget.tick(0, 33.4, 0);
     const results = [1, 2, 3, 4, 5].map((s) =>
@@ -104,7 +104,7 @@ describe("DecodeBudget", () => {
   });
 
   /*
-   * **止めていたのを再開した直後の遅れでは諦めない。** 再開すると時計は放送の今から動き、映像は次の I まで
+   * **止めていたのを再開した直後の遅れでは打ち切らない。** 再開すると時計は放送の今から動き、映像は次の I まで
    * 飛んで追いつくまで 1 秒ほど遅れる。続けて止める・再開すると、それを 3 回続けて数えてエンコードしたものに戻っていた
    */
   test("再開してから追いつくまで (`reset` の `until`) は数えず、そのあとは数える", () => {
@@ -113,7 +113,7 @@ describe("DecodeBudget", () => {
     for (let s = 1; s <= 4; s++)
       expect(second(budget, s * WINDOW, 5, 1)).toBe(false);
     for (const s of [5, 6]) expect(second(budget, s * WINDOW, 5)).toBe(false);
-    // 追いついたあとも遅れ続けるなら、いつもどおり 3 秒で諦める
+    // 追いついたあとも遅れ続けるなら、いつもどおり 3 秒で打ち切る
     const results = [7, 8, 9].map((s) => second(budget, s * WINDOW, 5, 0.5));
     expect(results).toEqual([false, false, true]);
   });
@@ -139,7 +139,7 @@ describe("DecodeBudget (WebCodecs の経路)", () => {
     return result;
   }
 
-  test("1 コマの時間が長くても (GPU 経由の溜め) 詰まっていなければ諦めない", () => {
+  test("1 コマの時間が長くても (GPU 経由の溜め) 詰まっていなければ打ち切らない", () => {
     const budget = new DecodeBudget(false);
     budget.tick(0, 16.7, 0, 0);
     for (let s = 1; s <= 10; s++)
@@ -147,7 +147,7 @@ describe("DecodeBudget (WebCodecs の経路)", () => {
     expect(budget.p95).toBe(60);
   });
 
-  test("窓の間ずっと捌けきらないのが 3 秒続いたら諦める", () => {
+  test("窓の間ずっと捌けきらないのが 3 秒続いたら打ち切る", () => {
     const budget = new DecodeBudget(false);
     budget.tick(0, 16.7, 0, QUEUE_STUCK);
     const results = [1, 2, 3].map((s) =>

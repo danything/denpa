@@ -1,4 +1,107 @@
+import { createServer, type Socket } from "node:net";
 import { constants, setPriority } from "node:os";
+
+/** ffmpeg の 4 本目の出口 (`sideOutput`) */
+export interface SideOutput {
+  /** ffmpeg に書かせる先 (`pipe:3` か名前付きパイプの名前) */
+  readonly url: string;
+  /** Bun.spawn の stdio の 4 本目 (Windows では無し) */
+  readonly stdio: readonly "pipe"[];
+  /** 起こした ffmpeg から受ける中身。ffmpeg が終われば終わる。1 回だけ呼ぶ */
+  read(proc: {
+    stdio: unknown[];
+    exited: Promise<number>;
+  }): ReadableStream<Uint8Array>;
+}
+
+let sides = 0;
+
+/**
+ * **ffmpeg の 4 本目の出口** (録画のエンコードの進み具合・ライブの字幕)。ffmpeg を起こす直前に作り、
+ * 起こしたら間に `await` を挟まずに `read` を呼ぶ (Windows では、呼ばれないまま次の周回に入ると、起こせなかったとみなして閉じる)。
+ *
+ * Linux・Mac は stdio の 4 本目のパイプを開けて `pipe:3` に書かせる。**Windows の bun は 4 本目のパイプを
+ * 開けても読めない** (`Bun.file(fd)` は EMFILE、`fs.read` は EBADF。tests/native-smoke.ts で確かめた)。
+ * 読まずにいると、パイプが詰まったところで ffmpeg が止まる。そこで Windows では名前付きパイプを開けて待ち、
+ * ffmpeg にはその名前を出口として渡す (ffmpeg は名前付きパイプをファイルと同じく開いて書く)。
+ * 待ち受けはこの呼び出しの中で始まり、ffmpeg が出口を開くのは入力を読み始めたあとなので、起こすより先に開いている
+ *
+ * **ffmpeg には `-y` を付ける。** 付けないと ffmpeg は出口が既にあるかを `access` で確かめ、Windows ではそれが
+ * 名前付きパイプへの 1 本目の接続になる。受けるのは 1 本だけなので、本物の書き込みが開けずに
+ * 「Error opening output file」で降りる (ライブの字幕で起きた)
+ */
+export function sideOutput(): SideOutput {
+  if (process.platform !== "win32") {
+    return {
+      url: "pipe:3",
+      stdio: ["pipe"],
+      read: (proc) => Bun.file(proc.stdio[3] as number).stream(),
+    };
+  }
+  const url = `\\\\.\\pipe\\denpa-${process.pid}-${++sides}`;
+  let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let socket: Socket | null = null;
+  let connected = false;
+  let done = false;
+  // 読む側がやめた (cancel) ときもソケットを閉じる。開いたままだと、ffmpeg が終わるまで書いたものを受けては捨て続ける
+  const finish = () => {
+    if (done) return;
+    done = true;
+    server.close();
+    socket?.destroy();
+    try {
+      controller?.close();
+    } catch {
+      // 読む側が先にやめた
+    }
+  };
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+    },
+    // 読む側が追いつかなければ受けるのを止め (下の pause)、読まれたら再開する。溜めすぎない
+    pull() {
+      socket?.resume();
+    },
+    cancel: finish,
+  });
+  const server = createServer((accepted) => {
+    // 受けるのは 1 本だけ
+    connected = true;
+    socket = accepted;
+    server.close();
+    accepted.on("data", (chunk: Buffer) => {
+      if (done || controller === null) return;
+      controller.enqueue(new Uint8Array(chunk));
+      if ((controller.desiredSize ?? 1) <= 0) accepted.pause();
+    });
+    accepted.on("close", finish);
+    accepted.on("error", finish);
+  });
+  server.on("error", finish);
+  server.listen(url);
+  /*
+   * **ffmpeg を起こせなかったら閉じる。** 起こしたら同じ流れのまま `read` を呼ぶ決まり (上) なので、
+   * 次の周回までに呼ばれていなければ、起こすところで投げている (`Bun.spawn` が ffmpeg を見つけられないなど)。
+   * 閉じないと、名前付きパイプが待ち受けたまま残る
+   */
+  let reading = false;
+  setImmediate(() => {
+    if (!reading) finish();
+  });
+  return {
+    url,
+    stdio: [],
+    read: (proc) => {
+      reading = true;
+      // 出口を開かないまま終わった (起こせなかった・入力が読めなかった) ときも終える
+      void proc.exited.then(() => {
+        if (!connected) finish();
+      });
+      return stream;
+    },
+  };
+}
 
 /**
  * ReadableStream を 1 チャンクずつ読む。
@@ -6,18 +109,35 @@ import { constants, setPriority } from "node:os";
  * Bun の ReadableStream は実際には for-await できるが、TypeScript の DOM 型定義には
  * Symbol.asyncIterator が無く型エラーになる。reader を明示的に回すことで型を通しつつ、
  * abort 時に read() が reject する挙動もそのまま使える。
+ *
+ * **途中で抜けたら (`break`・`return`・投げた) 読み元を cancel する。** 手放すだけだと、読み元は
+ * 誰も読まないまま動き続ける。追っかけの `chase.followFile` は、録画が終わるまでファイルを読み足し続けていた。
+ * 抜けたあとも同じストリームを読み続ける所は無い。ライブの TS を起こし直しても使い回す `live.ts` の流し込みは、
+ * `for await` にせず `next()` で読むので抜けない。cancel は待たない (読み元の後始末で、抜けるのを遅らせない)
  */
 export async function* chunks(
   stream: ReadableStream<Uint8Array>,
 ): AsyncGenerator<Uint8Array> {
   const reader = stream.getReader();
+  let ended = false;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) return;
-      if (value !== undefined) yield value;
+      let next: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        next = await reader.read();
+      } catch (error) {
+        // 読み元が失敗で終わった。cancel するものは無い
+        ended = true;
+        throw error;
+      }
+      if (next.done) {
+        ended = true;
+        return;
+      }
+      if (next.value !== undefined) yield next.value;
     }
   } finally {
+    if (!ended) reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }
@@ -62,7 +182,7 @@ let lowerFailed = false;
  * 他に何も動いていなければ空いた CPU をそのまま使うので、速さは変わらない。GPU でエンコードするときも
  * 同じ処理を通るが、下がるのは CPU の順番だけなので困らない。
  *
- * - Linux では `setpriority`。起こした直後に下げるので、ffmpeg が後から作るスレッドも引き継ぐ
+ * - Linux と Mac では `setpriority`。起こした直後に下げるので、ffmpeg が後から作るスレッドも引き継ぐ
  * - Windows では libuv が 19 を IDLE_PRIORITY_CLASS に当てる
  *
  * 下げられなくても止めない (いつもの優先度で走るだけ)

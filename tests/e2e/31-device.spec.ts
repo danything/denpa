@@ -1,5 +1,5 @@
 import { bootClosed } from "../stack";
-import { expect, goto, test } from "./helpers";
+import { expect, goto, syncEpg, test } from "./helpers";
 
 /**
  * **テレビのアプリのペアリング** (docs/auth.md「アプリのペアリング」、device-auth.ts)。
@@ -76,6 +76,46 @@ test.describe("テレビのペアリング", () => {
       (await request.get("/api/recordings", { headers: auth })).status(),
     ).toBe(200);
 
+    // 番組表を見て、予約して、取り消す (テレビのアプリの番組表。docs/api.md)
+    await syncEpg(request);
+    const guide = await request.get("/api/programs?type=GR", {
+      headers: auth,
+    });
+    expect(guide.status()).toBe(200);
+    const upcoming = (
+      (await guide.json()) as {
+        services: {
+          programs: {
+            id: number;
+            startAt: number;
+            copyNever: boolean;
+            reservation: unknown;
+          }[];
+        }[];
+      }
+    ).services
+      .flatMap((service) => service.programs)
+      .find(
+        (p) =>
+          p.startAt > Date.now() + 5 * 60_000 &&
+          !p.copyNever &&
+          p.reservation === null,
+      )!;
+    const write = { ...auth, "content-type": "application/json" };
+    expect(
+      (
+        await request.post(`/api/programs/${upcoming.id}/record`, {
+          headers: write,
+        })
+      ).status(),
+    ).toBe(200);
+    const canceled = await request.delete(
+      `/api/programs/${upcoming.id}/record`,
+      { headers: write },
+    );
+    expect(canceled.status()).toBe(200);
+    expect(await canceled.json()).toEqual({ stopped: false });
+
     // アクセストークンでは、別のペアリングコードを済ませられない (盗まれたもので増やせないように)
     const other = await (
       await request.post("/api/device/code", { data: { name: "別の端末" } })
@@ -100,9 +140,21 @@ test.describe("テレビのペアリング", () => {
 
     // 設定画面に並ぶ
     await goto(page, "/settings/integrations");
-    await expect(
-      page.getByTestId("device-row").filter({ hasText: "E2E のテレビ" }),
-    ).toBeVisible();
+    const row = page
+      .getByTestId("device-row")
+      .filter({ hasText: "E2E のテレビ" });
+    await expect(row).toBeVisible();
+
+    // 取消は 2 回押し。1 回目は聞き返すだけで、ほかを触れば取り下げる (取り消すのは下でアプリが自分で外す)
+    await row.getByTestId("device-revoke").click();
+    await expect(row.getByTestId("device-revoke-confirm")).toHaveText(
+      "取消を確定",
+    );
+    await page
+      .getByRole("heading", { name: "テレビのアプリ", exact: true })
+      .click();
+    await expect(row.getByTestId("device-revoke-confirm")).toHaveCount(0);
+    await expect(row.getByTestId("device-revoke")).toBeVisible();
 
     // アプリが自分で外す。無効にしたアクセストークンは信頼するネットワークからでも 401 (ペアリングし直しと分かるように)
     expect(

@@ -28,7 +28,7 @@ import { run } from "./stream";
  * (既定 `/dev/dri/renderD*`) に当たるデバイスを全部探し、**デバイスごとに** VA-API で
  * 3 つのコーデックを `nullsrc` で実際に 1 コマエンコードして確かめる。結果は
  * 設定の「エンコード」に出て、使えるものは自動で使う (コーデックごとのエンコーダ。`settings().hwAllow` (録画)・`liveHwAllow` (ライブ) と
- * 突き合わせるのは `hwChain`)。**Intel も VA-API だけで、QSV は使わない。** QSV は VA-API の上に
+ * 突き合わせるのは `hwChain`)。**Linux では Intel も VA-API だけで、QSV は使わない。** QSV は VA-API の上に
  * かぶさる層で速さは同じ。QSV にしか無い先読みなどは使っておらず、Tiger Lake より前の世代では
  * QSV のランタイムが動かない (docs/encode.md「QSV を使わない理由」)。
  *
@@ -40,6 +40,15 @@ import { run } from "./stream";
  * 1 枚ごとに h264_nvenc / hevc_nvenc / av1_nvenc を同じく 1 コマ試す (AV1 は RTX 40 以降だけで、通るかは試しのエンコードで決まる)。
  * ffmpeg は GPU を番号 (`-gpu N`) で受けるので、番号はデバイスファイルの並びから決める (`findNvidia`)。
  * 消費者向けの GPU は同時に開けるエンコードの数に上限がある (`nvencBusy`)。
+ *
+ * **Windows は OS が別なので、探し方も方式も別** (`probeWindows`)。VA-API も `/dev` のデバイスファイルも無く、
+ * GPU の作り手ごとのエンコーダを番号 (`-gpu`・Direct3D 11 のアダプタ) で試す。NVIDIA は NVENC (Linux と同じ引数)、
+ * Intel は QSV (libvpl)、AMD は AMF。**Linux の Intel で QSV を使わない理由は、Windows には当てはまらない**
+ * (Windows の Intel の GPU で使えるエンコーダは QSV だけ。docs/encode.md「Windows でエンコードする」)。
+ *
+ * **Mac は VideoToolbox だけ** (`probeMac`)。Apple Silicon のメディアエンジンは 1 つの方式 (`videotoolbox`) で、
+ * 番号もデバイスファイルも無い。H.264 と H.265 を 1 コマずつ試す (VideoToolbox に AV1 のエンコーダは無い。
+ * docs/encode.md「Mac でエンコードする」)。
  *
  * **H.265 (`hevc`) は GPU でだけエンコードする。** 試しのエンコードは AV1・H.264 と同じく方式ごとに 1 コマ試す。
  * ソフトウェアのエンコーダは無いので、ライブはライブのエンコーダが GPU のときだけ H.265 を出す (`live.liveHevc`)。
@@ -60,15 +69,30 @@ export interface HwDevice {
   vaapi: HwCodec[];
   /** Rockchip MPP でエンコードできたコーデック (`/dev/mpp_service` のときだけ。H.264 と H.265 だけ試す) */
   rkmpp: HwCodec[];
-  /** NVENC でエンコードできたコーデック (`/dev/nvidia0` などのときだけ) */
+  /** NVENC でエンコードできたコーデック (`/dev/nvidia0` などのときだけ。Windows では `nvidia0`) */
   nvenc: HwCodec[];
-  /** NVIDIA の GPU の番号 (ffmpeg の `-gpu`。`findNvidia`)。NVIDIA のデバイスにだけある */
+  /** QSV でエンコードできたコーデック (Windows の `qsv0` などのときだけ) */
+  qsv: HwCodec[];
+  /** AMF でエンコードできたコーデック (Windows の `amf0` などのときだけ) */
+  amf: HwCodec[];
+  /** VideoToolbox でエンコードできたコーデック (Mac の `videotoolbox` のときだけ。H.264 と H.265 だけ試す) */
+  videotoolbox: HwCodec[];
+  /**
+   * GPU の番号。NVENC は ffmpeg の `-gpu` (Linux は `findNvidia` の並び、Windows は番号を順に試したもの)、
+   * QSV・AMF は Direct3D 11 のアダプタの番号 (Windows。`probeWindows`)。それぞれのデバイスにだけある
+   */
   gpu?: number;
   /**
    * VA-API の AV1 が **ICQ で通らず CQP でだけエンコードできた**とき `["av1"]`。
    * i965・Mesa は ICQ を持たない (`hwArgs`)。H.264・H.265 はいつも CQP なので入らない
    */
   cqp: HwCodec[];
+  /**
+   * AMF の高画質の指定 (`-usage high_quality -quality high_quality`) が通らず、**古い世代向けの指定
+   * (`-usage transcoding -quality quality`) でだけエンコードできた**コーデック (`probeWindows`)。
+   * VCN 1.0 (Raven Ridge) のような古い世代と古いドライバ向け (`hwArgs`)
+   */
+  amfTranscoding: HwCodec[];
   /**
    * VA-API のうち、**放送の MPEG-2 を GPU でデコードして、GPU でインタレ解除してエンコードできる**と
    * 確かめられたコーデック (`probeFull`)。ライブはこれなら CPU にフレームを降ろさない (`liveHwArgs`)
@@ -91,7 +115,9 @@ export interface HwWay {
   kind: HwKind;
   /** VA-API の AV1 を ICQ ではなく CQP で指定する (`HwDevice.cqp`)。試しのエンコードの結果から `hwChain` が付ける */
   cqp?: true;
-  /** NVIDIA の GPU の番号 (`HwDevice.gpu`)。NVENC のときだけ */
+  /** AMF を古い世代向けの指定でエンコードする (`HwDevice.amfTranscoding`)。試しのエンコードの結果から `hwChain` が付ける */
+  amfTranscoding?: true;
+  /** GPU の番号 (`HwDevice.gpu`)。NVENC・QSV・AMF のときだけ */
   gpu?: number;
 }
 
@@ -133,10 +159,21 @@ export function hwChain(
 
 /**
  * そのデバイスでの方式。AV1 の ICQ が通らなかった VA-API には CQP の印を付ける (`HwDevice.cqp`)。
- * NVENC には GPU の番号を添える
+ * NVENC・QSV・AMF には GPU の番号を添え、高画質の指定が通らなかった AMF には古い世代向けの印を付ける
+ * (`HwDevice.amfTranscoding`)
  */
 function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
-  if (kind === "nvenc" && device.gpu !== undefined)
+  if (kind === "amf" && device.amfTranscoding.includes(codec))
+    return {
+      device: device.path,
+      kind,
+      gpu: device.gpu ?? 0,
+      amfTranscoding: true,
+    };
+  if (
+    (kind === "nvenc" || kind === "qsv" || kind === "amf") &&
+    device.gpu !== undefined
+  )
     return { device: device.path, kind, gpu: device.gpu };
   return kind === "vaapi" && device.cqp.includes(codec)
     ? { device: device.path, kind, cqp: true }
@@ -154,16 +191,9 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * **VA-API の画質は、H.264・H.265 は CQP (`-qp`)、AV1 は ICQ (`-global_quality`)。** どちらも
  * ビットレートを決めずに画質で指定する。CQP は量子化の幅を固定し (0〜51)、ICQ は x264 の crf に当たる
  * 「この画質で」の指定 (1〜51)。**値はコーデックごとに、ソフトウェアのエンコードと同じ画質になる所**
- * (`VAAPI_QP`・`AV1_ICQ`)。Arc A310 (iHD) で放送の 1440x1080 を 60 秒ずつ 2 か所エンコードし、
- * XPSNR が svt-av1 preset 9・crf 35 (前の設定) と x264 crf 23 の高いほうに 2 か所とも −0.26 dB 以内で
- * そろう値を選んだ (H.265 はソフトウェアのエンコーダが無いので同じ目標に合わせる)。どれも下の `VAAPI_SLOW` を足して測った値。
- *
- * - H.264 は **qp 24** (目標との差 −0.10・−0.18 dB)。同じ XPSNR で ICQ より 5〜7% 小さい
- * - H.265 は **qp 24** (−0.20・−0.19 dB)。同じ XPSNR で ICQ より 9〜17% 小さく、ICQ は 25〜26 で画質が頭打ちになった
- * - AV1 は **ICQ 26** (+0.47・−0.16 dB)。AV1 は ICQ のほうがはっきり良い
- *
- * 3 つとも 1 段粗くすると (qp 25・ICQ 27) 目標から外れる。ビットレートと XPSNR の表・測り方は
- * docs/encode.md「GPU でエンコードする (VA-API)」
+ * (`VAAPI_QP`・`AV1_ICQ`)。H.264・H.265 は **qp 24**、AV1 は **ICQ 26** で、どれも下の `VAAPI_SLOW` を足して
+ * Arc A310 (iHD) の XPSNR で決めた。H.264・H.265 は同じ XPSNR で CQP のほうが小さく、AV1 は ICQ のほうが良い。
+ * 測った値と測り方は docs/encode.md「GPU でエンコードする (VA-API)」
  *
  * **`-global_quality` は `:v` を付けて映像にだけ効かせる。** 付けないとどのストリームにも効き、音のエンコーダが
  * 画質での指定として受け取る。libopus は「画質での指定はできない」で開けずに失敗し、aac は VBR に切り替わる
@@ -174,15 +204,13 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * 録画は急がないので、同じ画質で小さくなる指定を足す。**ライブには足さない** (`liveHwArgs`)。
  *
  * - `-compression_level:v 1` … ドライバの品質と速さの段 (iHD は 1〜7 で、渡さないときは 4 と同じ出力)。
- *   1 は 3 つとも同じ XPSNR で 3〜5% 小さい。**これも `:v` を付ける。** 付けないと音のエンコーダにも効き、
+ *   1 がいちばん小さい。**これも `:v` を付ける。** 付けないと音のエンコーダにも効き、
  *   libopus はこれを計算の手間 (complexity) として読み、10 から 1 に落とす
  * - `-bf 3 -b_depth 2 -b_qfactor` (H.264・H.265 だけ) … B フレームを 3 枚にして、真ん中の B を
  *   残りの B の参照にするピラミッドにし、B の qp を P の 1.3 倍 (H.265 は 1.4 倍。どちらも +1.25) にする。同じ qp では XPSNR が
  *   少し下がるので、qp を 25 から 24 に上げてある。**`-bf 7 -b_depth 3` は映像が壊れる** (A310 で XPSNR が
  *   14〜35 dB に落ちた) ので使わない。AV1 は B フレームの数や GOP の長さを変えると、大きくなるか
  *   場所によって良し悪しが割れたので既定のまま
- *
- * 1 分の映像のエンコードは H.264・H.265 で 4.7〜5.0 秒 (前は 3.4〜4.2 秒)、AV1 で 6.4〜6.8 秒 (前は 4.2〜4.4 秒)。
  *
  * **どれもドライバが持たなくても落ちない指定なので、試しのエンコード (`probeOnce`) はこのまま試す。**
  * FFmpeg は `-compression_level` を、ドライバが段を持たなければ警告して無視し、段より大きければ丸める
@@ -207,8 +235,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * **AV1 の CQP は、同じ画質で ICQ より 5 割ほど大きい。** FFmpeg の av1_vaapi は CQP のとき CDEF を使わず
  * (vaapi_encode_av1.c が `enable_cdef` を立てるのは CQP でないときだけ)、ループフィルタの強さも渡さない
  * (ICQ ではドライバのレート制御が決める)。A310 で CQP にすると、CDEF もループフィルタも全部のコマで 0 だった。
- * 300 秒の所で b_qfactor 1.1 の 75 が ICQ 26 とほぼ同じ XPSNR (前の測り方で 37.23 と 37.16 dB) で 3368 kbps と、
- * ICQ の 2182 kbps の 1.5 倍 (既定の b_qfactor の 75 は測っていない)。それでも Mesa (AMD) で AV1 を
+ * 75 は ICQ 26 とほぼ同じ XPSNR になる値 (測った値は docs/encode.md)。それでも Mesa (AMD) で AV1 を
  * エンコードできるように残す。**直すには FFmpeg の側を変える必要がある** (CQP でもフィルタを使うように)。
  * CQP は場面に応じて量を変えないので、動きの多い場面で ICQ より大きく、静かな場面で小さくなる
  *
@@ -224,7 +251,47 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  *
  * NVENC は `-global_quality` (ICQ) を受けない (FFmpeg の nvenc.c が断る)。Rockchip MPP と同じ表のビットレートを
  * **VBR** で渡す (`nvencRate`)。GPU は番号 (`-gpu`) で選び、デバイスは開かない。CPU で作ったフレームを nv12 で
- * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は 7 段 (p1〜p7) の真ん中
+ * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は 7 段 (p1〜p7) の真ん中。遅い段は録画の時間が延びるので、
+ * p7 などへ変えるなら実機で測ってから別の変更で行う。**実機では測っていない** (手元に NVIDIA の GPU が無い)
+ *
+ * ## Windows の Intel (QSV) は ICQ で指定する
+ *
+ * QSV は `-global_quality` を ICQ (画質で指定。x264 の crf に当たる 1〜51) として受ける。**`-preset veryslow`** (QSV の
+ * target usage でいちばん画質が良い段。7 段のうち 1) を付け、値は H.264・H.265 が **23** (ソフトウェアの H.264 の crf 23 と同じ数)、
+ * AV1 が **26** (VA-API の AV1 の ICQ と同じ数。`QSV_ICQ`)。**どれも実機では測っていない。**
+ * GPU はアダプタの番号で選び (`-init_hw_device qsv=…,child_device=<番号>,child_device_type=d3d11va`)、CPU で作ったフレームを
+ * `hwupload` で GPU に渡す (`format=qsv`)。`-global_quality` は `:v` を付けて映像にだけ効かせる (VA-API と同じ理由)。
+ * 先読み (`look_ahead`) は H.264 だけで、Arc A310 で足しても変わらなかったので使わない
+ * (docs/encode.md「QSV を使わない理由」。Linux の話で、Windows の Intel のドライバでは測っていない)
+ *
+ * ## Windows の AMD (AMF) はビットレートで指定する
+ *
+ * h264_amf・hevc_amf・av1_amf にも CQP と QVBR (画質で指定) はあるが、値と画質の対応を実機で測れていないので、
+ * NVENC と同じ表のビットレートを渡す。**`-usage high_quality`** (高画質の変換向け)・**`-quality high_quality`** (画質のプリセット)・
+ * **`-rc vbr_peak`** (ピークを抑えた VBR。目標は平均、上限は目標の 2 倍)。GPU の世代で落ちうる指定 (`hqvbr`・先読み) は渡さない。
+ *
+ * **高画質の指定が通らない世代には、古い世代向けの指定 `-usage transcoding -quality quality` を渡す** (`HwWay.amfTranscoding`)。
+ * `high_quality` は usage も quality も AMF の SDK にあとから足された値で (FFmpeg の選択肢でも後ろにある)、VCN 1.0 (Ryzen 5 2500U などの
+ * Raven Ridge) では GPU があるのに「GPU がありません」と出たと報告があった (同じ PC で VCEEnc は使えていた)。`transcoding` は usage の最初の値 (録画のような変換向け)、
+ * `quality` は `high_quality` の無い頃からある画質寄りの段で、FFmpeg 9.0.2 の h264_amf・hevc_amf・av1_amf のどれも持つ。
+ * レート制御 (`vbr_peak`) とビットレートは同じ。**画質を取るため、古い世代向けの指定は高画質の指定で試しのエンコードが
+ * 落ちたときだけ使う** (`probeWindows`)
+ *
+ * GPU は Direct3D 11 のアダプタの番号 (`-init_hw_device d3d11va=…:<番号>`。AMF のエンコーダが、その場にあるデバイスを使う)。
+ * CPU で作ったフレームは nv12 で渡す。`-g 250` は同じ。**実機では測っていない** (手元に AMD の GPU が無い)
+ *
+ * ## Mac (VideoToolbox) もビットレートで指定する
+ *
+ * VideoToolbox にも画質での指定 (`-q:v`。Apple Silicon の constant quality) はあるが、値と画質の対応を測れていないので、
+ * AMF と同じく NVENC と同じ表のビットレートを渡す (`vtRate`。平均を表の値に、上限を 2 倍に)。
+ * **`-prio_speed 0`** (速さより画質を取る。macOS 13 から) を付ける。H.264 は **`-profile:v high`**
+ * (B フレームと CABAC を使える段。渡さないと何を選ぶかはエンコーダ任せ)。**`-bf 2`** で B フレームを使わせる
+ * (同じビットレートで画質が上がる。FFmpeg は枚数を渡さず、使うかどうかだけを VideoToolbox に渡す。既定の 0 では使わない)。
+ * **ハードウェアでだけエンコードする。** FFmpeg の videotoolboxenc.c は `-allow_sw` を渡さなければ
+ * ハードウェアのエンコーダを求め (`RequireHardwareAcceleratedVideoEncoder`)、無ければ開けずに落ちる。
+ * Apple のソフトウェアのエンコーダに黙って倒れず、試しのエンコードが落ちて x264 に戻る。
+ * デバイスは開かない (VideoToolbox が自分でメディアエンジンを選ぶ)。CPU で作ったフレームを nv12 で渡す。
+ * `-g 250` は同じ。**画質と大きさは測っていない** (CI の Mac のランナーで試しのエンコードが通り、放送に似せた素材をエンコードできるところまで見ている)
  */
 export function hwArgs(
   way: HwWay,
@@ -253,6 +320,51 @@ export function hwArgs(
         "-preset",
         "p4",
         ...nvencRate(hwBitrate(codec, picture)),
+        "-g",
+        "250",
+      ],
+    };
+  }
+  if (way.kind === "qsv") {
+    return {
+      device: qsvDevice(way),
+      filter: QSV_FILTER,
+      encoder: [
+        `${codec}_qsv`,
+        "-preset:v",
+        "veryslow",
+        "-global_quality:v",
+        String(QSV_ICQ[codec]),
+        "-g",
+        "250",
+      ],
+    };
+  }
+  if (way.kind === "amf") {
+    return {
+      device: amfDevice(way),
+      filter: ["format=nv12"],
+      encoder: [
+        `${codec}_amf`,
+        ...amfPreset(way),
+        ...amfRate(hwBitrate(codec, picture)),
+        "-g",
+        "250",
+      ],
+    };
+  }
+  if (way.kind === "videotoolbox") {
+    return {
+      device: [],
+      filter: ["format=nv12"],
+      encoder: [
+        `${codec}_videotoolbox`,
+        ...vtProfile(codec),
+        "-prio_speed",
+        "0",
+        "-bf",
+        "2",
+        ...vtRate(hwBitrate(codec, picture)),
         "-g",
         "250",
       ],
@@ -347,8 +459,8 @@ function vaapiQuality(
 }
 
 /**
- * 出す映像の大きさとコマ数。Rockchip MPP と NVENC のビットレートを決める (`hwBitrate`)。
- * ほかの方式は画質で指定するので見ない
+ * 出す映像の大きさとコマ数。Rockchip MPP・NVENC・AMF・VideoToolbox のビットレートを決める (`hwBitrate`)。
+ * VA-API・QSV は画質で指定するので見ない
  */
 interface Picture {
   /** 出す映像の高さ (画素を正方形に直したあと) */
@@ -365,17 +477,9 @@ interface Picture {
 const LARGEST: Picture = { height: 1080, smooth: true };
 
 /**
- * **Rockchip MPP と NVENC に渡すビットレート (bit/s)。** H.264 は、今の CPU の H.264 (libx264 medium crf 23) と
- * 同じくらいの画質になる値を、放送を使わずに測って決めた (docs/encode.md「画質はビットレートで決める」)。
- *
- * Blender の公開映像 (Big Buck Bunny・Tears of Steel、CC BY 3.0) 4 か所を放送に似せた MPEG-2 にして、
- * denpa と同じフィルタを通し、libx264 medium crf 23 の VMAF を測る。ハードウェアの代わりに
- * libx264 veryfast・B フレームなし・ビットレート指定で同じ VMAF に届くビットレートを内挿し、
- * 4 か所のいちばん大きい値に 2 割足して 500 kbit/s 単位で切り上げた。測ったいちばん大きい値は
- * 1080 の 30 コマ 7.3 Mbit/s・60 コマ 8.6、720 の 60 コマ 5.0、480 の 60 コマ 2.3。720 と 480 の 30 コマは
- * 測っておらず、1080 の 30 コマと 60 コマの比 (0.85) で出した。
- * **実機の h264_rkmpp・h264_nvenc では測っていない。** 代わりより効率が悪ければ、2 割で足りないことがある。
- * NVENC の H.264 は B フレームを作れるぶん、代わりより効率は良いはず (それも測っていない)。
+ * **Rockchip MPP・NVENC・AMF・VideoToolbox に渡すビットレート (bit/s)。** H.264 は、今の CPU の H.264 (libx264 medium crf 23) と
+ * 同じくらいの画質になる値を、放送を使わずに公開のテスト映像で測って決めた。測り方と測った値は
+ * docs/encode.md「画質はビットレートで決める」。**実機の h264_rkmpp・h264_nvenc では測っていない。**
  *
  * AV1 (av1_nvenc) は `AV1_KBPS`、H.265 (hevc_nvenc・hevc_rkmpp) は `HEVC_KBPS`
  */
@@ -395,25 +499,11 @@ const H264_KBPS = [
 ] as const;
 
 /**
- * **AV1 の高さごとの kbit/s。いまは H.264 と同じ値で、AV1 のハードウェアのエンコーダでは何も測っていない。**
- *
- * 表はいちばん重い素材で決めている (`hwBitrate`)。手元にある AV1 と H.264 の比べは CPU のもの
- * (docs/encode.md「H.264 は crf 23」) だけで、同じ画質で並べると忙しい実写では AV1 のほうが 1.2 倍大きく、
- * 小さくなったのは簡単な映像だけだった。重い素材で決める表を AV1 だからと下げる根拠は無いので、
- * 実機の av1_nvenc で測るまでは H.264 の値を使う。**VBR は平均をこの値に寄せるので、ファイルは
- * H.264 とほぼ同じ大きさになり、AV1 で浮くぶんは画質に回る** (小さくしたいなら、測ってからここを下げる)
+ * **AV1 と H.265 の高さごとの kbit/s。いまは H.264 と同じ値で、どちらも何も測っていない。**
+ * 表はいちばん重い素材で決めていて、下げる根拠が無いため (docs/encode.md「NVIDIA でエンコードする」)。
+ * ファイルは H.264 とほぼ同じ大きさになり、浮くぶんは画質に回る。小さくしたいなら、実機で測ってからここを下げる
  */
 const AV1_KBPS = H264_KBPS;
-
-/**
- * **H.265 の高さごとの kbit/s。いまは H.264 と同じ値で、H.265 では何も測っていない** (CPU でも GPU でも)。
- *
- * 下げない理由は AV1 (`AV1_KBPS`) と同じ。同じ画質で H.265 が H.264 よりどれだけ小さいかを、放送に似せた素材で
- * 測ったものが手元に無い。忙しい実写では AV1 ですら H.264 と互角だった (docs/encode.md「H.264 は crf 23」) ので、
- * いちばん重い素材で決める表を測らずに下げると足りなくなりうる。**NVENC の VBR は平均を、Rockchip MPP の AVBR は
- * 上限をこの値に寄せるので、ファイルは H.264 とほぼ同じ大きさになり、H.265 で浮くぶんは画質に回る** (小さくしたいなら、
- * 実機の hevc_nvenc・hevc_rkmpp で測ってからここを下げる)
- */
 const HEVC_KBPS = H264_KBPS;
 
 /**
@@ -456,6 +546,74 @@ function nvencRate(bps: number): string[] {
 /** NVENC で使う GPU (`HwWay.gpu`)。番号が無ければ 0 (1 枚目) */
 function nvencGpu(way: HwWay): string[] {
   return ["-gpu", String(way.gpu ?? 0)];
+}
+
+/** QSV の ICQ の値 (1〜51)。決め方は `hwArgs` の説明。測っていない */
+const QSV_ICQ: Record<HwCodec, number> = { h264: 23, hevc: 23, av1: 26 };
+
+/**
+ * QSV に CPU のフレームを渡す映像フィルタ。`hwupload` が `-filter_hw_device` の QSV のデバイスへ転送する。
+ * `extra_hw_frames` は QSV のエンコーダが先に抱えておくフレームの数 (FFmpeg の QSV の例が 64 を置く値)
+ */
+const QSV_FILTER = ["format=nv12", "hwupload=extra_hw_frames=64", "format=qsv"];
+
+/**
+ * QSV のデバイスを開ける引数。GPU は Direct3D 11 のアダプタの番号 (`HwWay.gpu`。無ければ 0) で選ぶ。
+ * libvpl は渡したアダプタに合うランタイムだけを選ぶので、Intel でないアダプタの番号では開けずに落ちる
+ */
+function qsvDevice(way: HwWay): string[] {
+  return [
+    "-init_hw_device",
+    `qsv=qs,child_device=${way.gpu ?? 0},child_device_type=d3d11va`,
+    "-filter_hw_device",
+    "qs",
+  ];
+}
+
+/**
+ * AMF のデバイスを開ける引数。AMF のエンコーダは、開いてある Direct3D 11 のデバイスを使う
+ * (ffmpeg が `-init_hw_device` で開いたデバイスを、エンコーダが対応する型から選ぶ)。アダプタの番号は `HwWay.gpu`
+ */
+function amfDevice(way: HwWay): string[] {
+  return ["-init_hw_device", `d3d11va=d3d:${way.gpu ?? 0}`];
+}
+
+/** AMF の usage と画質の段。高画質の指定を持たない世代には古い世代向けの指定 (`hwArgs` の説明) */
+function amfPreset(way: HwWay): string[] {
+  return way.amfTranscoding === true
+    ? ["-usage", "transcoding", "-quality", "quality"]
+    : ["-usage", "high_quality", "-quality", "high_quality"];
+}
+
+/**
+ * AMF のレート制御の引数。**ピークを抑えた VBR (`vbr_peak`) で、平均を表の値に寄せる。**
+ * 上限は NVENC と同じく目標の 2 倍で、測っていない。バッファは上限と同じ
+ */
+function amfRate(bps: number): string[] {
+  return [
+    "-rc",
+    "vbr_peak",
+    "-b:v",
+    String(bps),
+    "-maxrate",
+    String(bps * 2),
+    "-bufsize",
+    String(bps * 2),
+  ];
+}
+
+/** VideoToolbox の H.264 は High にする (`hwArgs` の説明)。H.265 はエンコーダの既定の Main のまま */
+function vtProfile(codec: HwCodec): string[] {
+  return codec === "h264" ? ["-profile:v", "high"] : [];
+}
+
+/**
+ * VideoToolbox のレート制御の引数。**平均を表の値に寄せ、上限を 2 倍に** (NVENC と同じ幅で、測っていない)。
+ * `-maxrate` は FFmpeg が VideoToolbox の `DataRateLimits` (1 秒あたりのバイト数) に渡す。
+ * FFmpeg の videotoolboxenc.c は `-bufsize` を読まないので渡さない
+ */
+function vtRate(bps: number): string[] {
+  return ["-b:v", String(bps), "-maxrate", String(bps * 2)];
 }
 
 /**
@@ -531,6 +689,15 @@ export function liveHw(
  * `-bf 0`。preset は `p2` (7 段の速いほうから 2 つ目)。**どれも実機では見ていない**。
  * デコードとインタレ解除を GPU に寄せる (`full`) のは VA-API だけで、NVENC は実機で確かめてから
  *
+ * **QSV・AMF (Windows) は低遅延の速い段で、CPU のデコードのまま。** QSV は `-preset veryfast -bf 0 -async_depth 1` (ICQ は録画と同じ値、
+ * 段を下げたときは VBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。**どちらも実機では見ていない。**
+ * AMF のライブの指定は `high_quality` の無い頃からある値なので、録画が古い世代向けの指定になった GPU (`HwWay.amfTranscoding`) にも同じものを渡す。
+ * 落ちればソフトウェアでエンコードし直し、その方式を 15 分外す (`live.ts` の `blameLiveHw`)
+ *
+ * **VideoToolbox (Mac) も低遅延の指定で、CPU のデコードのまま。** `-realtime 1` (実時間でエンコードする)・
+ * `-prio_speed 1` (画質より速さ)・`-bf 0`。ビットレートは録画と同じ表の、いちばん重い映像の値。段を下げたときは平均も上限も段の値にする。
+ * **実機では見ていない**
+ *
  * ## `full`: デコードとインタレ解除も GPU (VA-API だけ)
  *
  * `-hwaccel vaapi -hwaccel_output_format vaapi` で放送の MPEG-2 を GPU でデコードし、フレームを GPU に
@@ -548,6 +715,8 @@ export function liveHw(
  * 回線に合わせて下げた段 (`#lib/rungs.ts`) では、`cap` に段の高さとビットレートの上限を渡す。
  *
  * - Rockchip MPP・NVENC は、表の値 (`hwBitrate`) の代わりに段の上限を同じレート制御 (`rkmppRate`・`nvencRate`) に渡す
+ * - QSV は ICQ をやめて **VBR** にする (`-b:v` に段の上限、`-maxrate` にその 2 倍。NVENC・AMF と同じ幅)。FFmpeg の qsvenc.c は
+ *   `-maxrate` が `-b:v` と同じだと CBR を、上回ると VBR を選ぶ
  * - VA-API は CQP をやめて **VBR で上限を決める** (`-b:v` と `-maxrate:v` に同じ値)。CQP は量を場面に任せるので、回線に収まる保証が無い
  * - `full` なら GPU の上でインタレ解除して 30 コマにし (`rate=frame`)、そのまま `scale_vaapi` で縮める。フレームを CPU に降ろさない。
  *   `full` でなければ、縮めるのは呼ぶ側の CPU の `scale` (`live.ts` の `rungVideo`)
@@ -568,6 +737,66 @@ export function liveHwArgs(
       input: base.device,
       filter: base.filter,
       encoder: [`${codec}_rkmpp`, ...rkmppRate(bps)],
+    };
+  }
+  if (way.kind === "qsv") {
+    // 録画の遅くても画質を取る指定 (`-preset veryslow`) はやめ、速い段にして先積みを止める。ICQ は録画と同じ値
+    return {
+      input: base.device,
+      filter: base.filter,
+      encoder: [
+        `${codec}_qsv`,
+        "-preset:v",
+        "veryfast",
+        ...(cap === null
+          ? ["-global_quality:v", String(QSV_ICQ[codec])]
+          : ["-b:v", String(bps), "-maxrate", String(bps * 2)]),
+        "-bf",
+        "0",
+        "-async_depth",
+        "1",
+      ],
+    };
+  }
+  if (way.kind === "amf") {
+    return {
+      input: base.device,
+      filter: base.filter,
+      encoder: [
+        `${codec}_amf`,
+        "-usage",
+        "ultralowlatency",
+        "-quality",
+        "speed",
+        "-rc",
+        "vbr_latency",
+        "-b:v",
+        String(bps),
+        "-maxrate",
+        String(bps * 2),
+        "-async_depth",
+        "1",
+      ],
+    };
+  }
+  if (way.kind === "videotoolbox") {
+    return {
+      input: base.device,
+      filter: base.filter,
+      encoder: [
+        `${codec}_videotoolbox`,
+        ...vtProfile(codec),
+        "-realtime",
+        "1",
+        "-prio_speed",
+        "1",
+        // 段を下げたときは回線に収まるよう、上限も段の値にする (VA-API と同じ)
+        ...(cap === null
+          ? vtRate(bps)
+          : ["-b:v", String(bps), "-maxrate", String(bps)]),
+        "-bf",
+        "0",
+      ],
     };
   }
   if (way.kind === "nvenc") {
@@ -630,16 +859,35 @@ interface RungCap {
 
 /**
  * 1 本だけ試しにエンコードする。**時間で切る。** ドライバが固まって返ってこないとき
- * (実機で見たことはないが) に起動が止まらないように
+ * (実機で見たことはないが) に起動が止まらないように。
+ *
+ * **落ちたら ffmpeg のエラーの最後の数行をログに出す** (`label` はエンコーダとデバイス)。何が原因で
+ * 落ちたか (ドライバが無い・オプションを受け付けない・時間切れ) を、報告のログから読めるように
  */
-async function tryEncode(args: string[]): Promise<boolean> {
+async function tryEncode(args: string[], label: string): Promise<boolean> {
   const result = await run(
     [config.ffmpeg, "-v", "error", "-nostdin", ...args, "-f", "null", "-"],
-    {
-      timeoutMs: config.hwProbeTimeout,
-    },
+    { timeoutMs: config.hwProbeTimeout, stderr: true },
   );
-  return result.code === 0;
+  if (result.code === 0) return true;
+  console.warn(
+    `[hwenc] ${label} の試しのエンコードが落ちました (終了コード ${result.code}): ${errorTail(result.stderr)}`,
+  );
+  return false;
+}
+
+/** ログに出す ffmpeg のエラーの行数 */
+const ERROR_LINES = 3;
+
+/** ffmpeg のエラーの最後の数行を 1 行にまとめる。何も出していなければそう書く */
+function errorTail(stderr: string): string {
+  const lines = stderr
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  return lines.length === 0
+    ? "(エラーの出力はありません)"
+    : lines.slice(-ERROR_LINES).join(" / ");
 }
 
 /** 試しのエンコードの素材。小さく短くする (何が使えるかを見るだけで、速さは測らない) */
@@ -745,7 +993,11 @@ function emptyDevice(path: string, label: string): HwDevice {
     vaapi: [],
     rkmpp: [],
     nvenc: [],
+    qsv: [],
+    amf: [],
+    videotoolbox: [],
     cqp: [],
+    amfTranscoding: [],
     full: [],
   };
 }
@@ -753,7 +1005,110 @@ function emptyDevice(path: string, label: string): HwDevice {
 /** Rockchip MPP で試すコーデック。RK3588 は AV1 をエンコードできない (並びは HW_CODECS と同じ) */
 const RKMPP_CODECS = ["hevc", "h264"] as const;
 
+/** VideoToolbox で試すコーデック。VideoToolbox に AV1 のエンコーダは無い (並びは HW_CODECS と同じ) */
+const VIDEOTOOLBOX_CODECS = ["hevc", "h264"] as const;
+
 async function probeOnce(): Promise<HwEncode> {
+  const devices =
+    process.platform === "win32"
+      ? await probeWindows()
+      : process.platform === "darwin"
+        ? await probeMac()
+        : await probeLinux();
+  await probeFull(devices);
+  const next: HwEncode = { probed: true, devices, message: describe(devices) };
+  state = next;
+  console.log(`[hwenc] ${next.message}`);
+  return next;
+}
+
+/**
+ * **Mac は VideoToolbox で H.264 と H.265 を 1 コマずつ試す。** 行は `videotoolbox` の 1 つだけ
+ * (Apple Silicon のメディアエンジンは VideoToolbox が選ぶので、番号もデバイスファイルも無い)。
+ * どちらも落ちれば (ハードウェアのエンコーダが見えない) 行は 0 になり、ソフトウェアでエンコードする (Windows と同じ)
+ */
+async function probeMac(): Promise<HwDevice[]> {
+  const path = "videotoolbox";
+  const device = emptyDevice(path, `${path} (Apple)`);
+  for (const codec of VIDEOTOOLBOX_CODECS) {
+    if (await tryWay({ device: path, kind: "videotoolbox" }, codec))
+      device.videotoolbox.push(codec);
+  }
+  return device.videotoolbox.length > 0 ? [device] : [];
+}
+
+/** Windows で試す GPU の番号の数。NVENC は ffmpeg の `-gpu`、QSV・AMF は Direct3D 11 のアダプタの番号 */
+const WINDOWS_GPUS = 4;
+
+/**
+ * **Windows は NVENC・QSV・AMF を、番号ごとに試す。** Windows には `/dev` のデバイスファイルが無く、GPU の一覧を
+ * ffmpeg に問い合わせる方法も無いので、番号 0 から順に 1 コマエンコードして、通った番号だけを行にする
+ * (`nvidia0`・`qsv0`・`amf0`。Linux の NVIDIA の行 `nvidia0` と同じ名前)。
+ *
+ * - 番号ごとに **まず H.264 を試し**、落ちたらその番号に GPU は無いとして、AV1・H.265 は試さない。
+ *   どのエンコーダも H.264 は持つので、無駄な起動を減らすため。通ったら AV1・H.265 を試す
+ * - NVENC は番号がつながっている (0 のあとは 1) ので、落ちた番号で止める。
+ *   QSV・AMF は Direct3D 11 のアダプタの番号で、Intel でも AMD でもないアダプタ (NVIDIA・ソフトウェア) が先頭にあることがあるので、
+ *   落ちても `WINDOWS_GPUS` 番まで試す
+ * - **AMF は高画質の指定で落ちたら、古い世代向けの指定でもう一度試す** (`hwArgs` の説明)。通ったらそのコーデックに
+ *   印を付け (`HwDevice.amfTranscoding`)、録画もその指定でエンコードする。NVENC と QSV は同じ仕組みに乗せない。
+ *   NVENC はドライバが FFmpeg の求める API のバージョンを持たなければどの指定でも開けず、指定を替えても通らない。
+ *   QSV の `-preset` (target usage) はランタイムへの希望で、持たない段は近い段に寄せて受ける
+ * - どの番号も落ちた (ドライバが無い・GPU が無い・ffmpeg にエンコーダが無い) ときは行が 0 になり、ソフトウェアでエンコードする
+ */
+async function probeWindows(): Promise<HwDevice[]> {
+  const devices: HwDevice[] = [];
+  const makers = [
+    { kind: "nvenc", prefix: "nvidia", label: "NVIDIA" },
+    { kind: "qsv", prefix: "qsv", label: "Intel" },
+    { kind: "amf", prefix: "amf", label: "AMD" },
+  ] as const;
+  for (const { kind, prefix, label } of makers) {
+    for (let gpu = 0; gpu < WINDOWS_GPUS; gpu++) {
+      const path = `${prefix}${gpu}`;
+      const device = { ...emptyDevice(path, `${path} (${label})`), gpu };
+      if (!(await tryOn(device, kind, "h264"))) {
+        if (kind === "nvenc") break;
+        continue;
+      }
+      const ok = new Set<HwCodec>(["h264"]);
+      for (const codec of HW_CODECS) {
+        if (codec !== "h264" && (await tryOn(device, kind, codec)))
+          ok.add(codec);
+      }
+      device[kind] = HW_CODECS.filter((codec) => ok.has(codec));
+      // 試した順 (H.264 が先) ではなく、`device[kind]` と同じ HW_CODECS の順にそろえる
+      device.amfTranscoding = HW_CODECS.filter((codec) =>
+        device.amfTranscoding.includes(codec),
+      );
+      devices.push(device);
+    }
+  }
+  return devices;
+}
+
+/**
+ * Windows のデバイスで 1 コマ試す。AMF は高画質の指定が落ちたら古い世代向けの指定でも試し、
+ * そちらで通ったコーデックに印を付ける (`HwDevice.amfTranscoding`)
+ */
+async function tryOn(
+  device: HwDevice,
+  kind: "nvenc" | "qsv" | "amf",
+  codec: HwCodec,
+): Promise<boolean> {
+  const way: HwWay = { device: device.path, kind, gpu: device.gpu ?? 0 };
+  if (await tryWay(way, codec)) return true;
+  if (kind !== "amf") return false;
+  if (!(await tryWay({ ...way, amfTranscoding: true }, codec))) return false;
+  // 直前の警告 (高画質の指定で落ちた) のあとに、古い世代向けの指定で使えることを出す
+  console.log(
+    `[hwenc] ${codec}_amf (${device.path}) は古い世代向けの指定でエンコードできました。この指定で使います`,
+  );
+  device.amfTranscoding.push(codec);
+  return true;
+}
+
+async function probeLinux(): Promise<HwDevice[]> {
   const devices: HwDevice[] = [];
   for (const path of findDevices()) {
     const device = emptyDevice(path, labelOf(path));
@@ -802,24 +1157,30 @@ async function probeOnce(): Promise<HwEncode> {
     }
     devices.push(device);
   }
-  await probeFull(devices);
-  const next: HwEncode = { probed: true, devices, message: describe(devices) };
-  state = next;
-  console.log(`[hwenc] ${next.message}`);
-  return next;
+  return devices;
 }
 
 /** 録画と同じ引数で 1 コマエンコードしてみる */
 function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
   const hw = hwArgs(way, codec);
-  return tryEncode([
-    ...hw.device,
-    ...SOURCE,
-    "-vf",
-    hw.filter.join(","),
-    "-c:v",
-    ...hw.encoder,
-  ]);
+  return tryEncode(
+    [
+      ...hw.device,
+      ...SOURCE,
+      "-vf",
+      hw.filter.join(","),
+      "-c:v",
+      ...hw.encoder,
+    ],
+    `${hw.encoder[0]} (${way.device}${wayNote(way)})`,
+  );
+}
+
+/** ログに添える、試した指定の違い */
+function wayNote(way: HwWay): string {
+  if (way.cqp === true) return "、CQP";
+  if (way.amfTranscoding === true) return "、古い世代向けの指定";
+  return "";
 }
 
 /**
@@ -868,15 +1229,18 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
       for (const codec of device.vaapi) {
         const way = wayOf(device, "vaapi", codec);
         const hw = liveHwArgs({ way, full: true }, codec);
-        const ok = await tryEncode([
-          ...hw.input,
-          "-i",
-          sample,
-          "-vf",
-          hw.filter.join(","),
-          "-c:v",
-          ...hw.encoder,
-        ]);
+        const ok = await tryEncode(
+          [
+            ...hw.input,
+            "-i",
+            sample,
+            "-vf",
+            hw.filter.join(","),
+            "-c:v",
+            ...hw.encoder,
+          ],
+          `${hw.encoder[0]} (${device.path}、デコードから GPU)`,
+        );
         if (ok) device.full.push(codec);
       }
     }
@@ -887,7 +1251,8 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
 
 /**
  * デバイスごとの一言。「VA-API: AV1 (CQP) / H.264」か「GPU でエンコードできません」。
- * ICQ を持たないドライバで AV1 を CQP に落としたときだけ (CQP) を添え (H.264・H.265 はいつも CQP)、デコードから GPU で
+ * ICQ を持たないドライバで AV1 を CQP に落としたときだけ (CQP) を、AMF を古い世代向けの指定にしたときは
+ * (古い世代向けの指定) を添え (H.264・H.265 はいつも CQP)、デコードから GPU で
  * 通せるもの (ライブで使う) は最後に分けて書く
  */
 export function describeDevice(device: HwDevice): string {
@@ -897,7 +1262,9 @@ export function describeDevice(device: HwDevice): string {
         .map((c) =>
           kind === "vaapi" && device.cqp.includes(c)
             ? `${CODEC_LABEL[c]} (CQP)`
-            : CODEC_LABEL[c],
+            : kind === "amf" && device.amfTranscoding.includes(c)
+              ? `${CODEC_LABEL[c]} (古い世代向けの指定)`
+              : CODEC_LABEL[c],
         )
         .join(" / ")}`,
   );
@@ -913,6 +1280,10 @@ export function describeDevice(device: HwDevice): string {
 
 function describe(devices: HwDevice[]): string {
   if (devices.length === 0) {
+    if (process.platform === "win32")
+      return "GPU (NVENC・QSV・AMF) でエンコードできるものが見つかりません (ドライバが入っていないか、GPU がありません)。ソフトウェアでエンコードします";
+    if (process.platform === "darwin")
+      return "VideoToolbox のハードウェアのエンコーダでエンコードできません。ソフトウェアでエンコードします";
     return `GPU が見つかりません (${config.hwDevices} に該当するデバイスも、NVIDIA の GPU (${config.nvidiaDir}/nvidia0 など) も、${config.rkmppDevice} もありません)。ソフトウェアでエンコードします`;
   }
   const usable = devices.filter((d) =>

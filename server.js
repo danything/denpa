@@ -19,9 +19,6 @@
  * Bun のバージョンの確認も環境変数の読み方も adapter のものがそのまま効く。
  * 頼っているのは「adapter の入口が `Bun.serve` を 1 回呼ぶ」ことだけで、呼ばれなければ起動を止める。
  *
- * 以前は adapter-node を内側に置いて HTTP を中継していた (bun の `node:http` は WebSocket の
- * ハンドシェイクができないため)。その 1 ホップと `Accept-Encoding` の食い違いはもう無い。
- *
  * **停止のシグナル (SIGTERM) は adapter のものを使わない。** adapter は受けたその場で listen を
  * 閉じるので、録画が終わるまで居座る間に画面が開けなくなる。アプリ (`runtime.ts` の
  * `takeOverSignals`) が引き取る。adapter が合図を登録するのは `build/index.js` のいちばん最後なので、

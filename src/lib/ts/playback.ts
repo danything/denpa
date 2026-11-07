@@ -75,7 +75,7 @@ export interface PlaybackInfo {
  * **サーバが選んだ観方** (`GET /api/recordings/<id>/playback?playable=` の `auto`。テレビのアプリ向け)。
  * `file` は `file?source=`、`stream` は `stream?codec=`、`raw` は `stream?codec=mpeg2` で開く
  */
-export type AutoPick =
+type AutoPick =
   | { way: "file"; codec: PlayCodec; source: EncodedSource }
   | { way: "stream"; codec: LiveCodec }
   | { way: "raw"; codec: "mpeg2" };
@@ -138,7 +138,7 @@ export async function busyAnswer(response: Response): Promise<boolean> {
  * ---------------------------------------------------------------------------
  */
 
-/** 流しているものの様子。流れている・繋ぎ直している・諦めた・混んでいて断られた */
+/** 流しているものの様子。流れている・繋ぎ直している・打ち切った・混んでいて断られた */
 export type StreamState = "flowing" | "retrying" | "failed" | "busy";
 
 /** 続けてリクエストし直す上限 */
@@ -381,7 +381,14 @@ export function streamForAudio(
 }
 
 /**
- * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → H.265 → AV1 → MPEG-2)。
+ * **コーデックのメニューの並び。** `ENCODED_ORDER` (AV1 → H.265 → H.264) の後ろに MPEG-2。
+ * ライブ・追っかけのメニュー (`components/player/settings.ts` の `liveCodecs`) と同じ並びにする。
+ * 選ぶ順 (`pickOffer`・`pickCanvas`) とは別で、並べるだけに使う
+ */
+export const MENU_ORDER: readonly PlayCodec[] = [...ENCODED_ORDER, "mpeg2"];
+
+/**
+ * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデックを `MENU_ORDER` の順に。
  * H.265 はエンコード済みがある録画にだけある (その場の変換では作らない)。MPEG-2 は元の TS が残っていて、この端末で
  * デコードできるときだけ。`hidden` (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) は並べない。外すのはメニューだけで、
  * 自動 (`pickOffer`) は今までどおり選ぶ
@@ -391,7 +398,7 @@ export function codecChoices(
   can: MediaAbility,
   hidden: readonly PlayCodec[] = [],
 ): PlayCodec[] {
-  const encoded = (["h264", "hevc", "av1"] as const).filter(
+  const encoded = ENCODED_ORDER.filter(
     (codec) =>
       !hidden.includes(codec) &&
       info.offers.some(
@@ -441,10 +448,9 @@ export function canvasChoices(
  * **互換モードでどれで観るか。** 選んだものが描ければそれ。`auto` か、選んだものが描けなければ次の順。
  *
  * 1. エンコード済みと同じ形式の fMP4 (詰め替え。サーバは軽い)
- * 2. 変換する fMP4 (H.264 → AV1)
- * 3. 元の TS (MPEG-2)
+ * 2. ライブの互換モードと同じ順 (`autoOrder`。変換する AV1 → H.264 → 元の TS の MPEG-2)
  *
- * `avoid` は諦めた形式 (描いている途中で間に合わなくなった)。何も描けなければ null
+ * `avoid` は打ち切った形式 (描いている途中で間に合わなくなった)。何も描けなければ null
  */
 export function pickCanvas(
   info: PlaybackInfo,
@@ -458,7 +464,14 @@ export function pickCanvas(
   if (choice !== "auto" && choice !== "hevc" && usable.includes(choice))
     return choice;
   const light = usable.filter((c) => c !== "mpeg2" && hasFile(info, c));
-  return [...light, ...usable][0] ?? null;
+  // 互換モードの順は家の中か外かで変わらない
+  const order = autoOrder({ indoor: false, compat: true }).map((format) =>
+    format === "raw" ? "mpeg2" : format,
+  );
+  const rest = order.filter((c): c is CanvasCodec =>
+    usable.includes(c as CanvasCodec),
+  );
+  return [...light, ...rest][0] ?? null;
 }
 
 /** その形式のエンコード済みのファイルがあるか (無ければ、流すときにサーバがその場でエンコードする) */

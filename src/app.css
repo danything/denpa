@@ -19,10 +19,10 @@
  *
  * **限られた画面にしか出ない部品は、それを描くコンポーネントが <script> で読む**
  * (`import "@anyblades/blades/components/modal";`)。その画面の CSS にだけ入る。
- * - content/table … `HomeCalendar`・設定の `Channels`・`Tuners`
+ * - content/table … `HomeCalendar`・設定の `Channels`・`Tuners`・`ContractDialog`
  * - forms/input-range … `player/SeekBar`
  * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `MigrateProgress`・`Channels`
- * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`・設定の `IssueDialog`
+ * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`・設定の `IssueDialog`・`ContractDialog`
  * - components/progress … `home/TimelineRow`・`JobProgress`・設定の `Channels`
  *
  * 部品を足すとき: 当てる要素がどの画面にも出るならここに (並びを守って)、そうでなければ描くコンポーネントの
@@ -98,6 +98,25 @@
   --dp-space-4: 1rem;
   --dp-space-5: 1.5rem;
   --dp-space-6: 2rem;
+  /*
+     * **重なりの段 (`z-index`)。** ページの段と、映像の舞台の中の段に分けて、数字はここにだけ書く。
+     * 1 つの部品の中だけで前後を決めるもの (面の上の線・裏に敷く 1 枚の 1・2・-1、番組表の箱の中の段) は部品に書く
+     */
+  --dp-z-heading: 3; /* 貼り付く日付の見出し */
+  --dp-z-pagebar: 5; /* ページの中で貼り付く操作の 1 行 (ホーム・切り抜き)。見出しより上 */
+  --dp-z-dock: 30; /* 下のタブのすぐ上に浮かせる操作の 1 行 (`.dock`) */
+  --dp-z-header: 40; /* ヘッダー・下のタブ */
+  --dp-z-toast: 50; /* トースト・検索の候補。ダイアログより下 */
+  --dp-z-modal: 60; /* ダイアログ・番組の詳細・下から出す一枚・ページを移る途中の線・ステータスバーの面 */
+  --dp-z-skip: 70; /* 本文へ移動のリンク (どれよりも上) */
+  --dp-z-stage-full: 90; /* 広げた全画面の舞台 (iPhone) */
+  --dp-z-measure: 100; /* 開発用の測り (`Measure`) */
+  /* 映像の舞台の中。映像 → データ放送 → 操作バーの影 → 実況のコメント → 字幕・幕 → ボタン (docs/design.md の「映像の上の操作」) */
+  --dp-z-stage-data: 5;
+  --dp-z-stage-shade: 7;
+  --dp-z-stage-comments: 8;
+  --dp-z-stage-captions: 9;
+  --dp-z-stage-controls: 10;
   /* 何行かある一覧の件と件の間。件は面に乗っていて面の切れ目が境目になるので、詰めておく */
   --dp-list-gap: 0.375rem;
   /* 何行かある一覧の件の高さ (64px。指で押す端末では 72px。下の `pointer: coarse`) */
@@ -131,7 +150,7 @@
      * 時間 (`--dp-duration`・`-enter`・`-move`・`-exit`) と曲線 (`--dp-ease`・`-spring`・`-exit`) の使い分けは docs/design.md の表
      *
      * - `--dp-pulse` … 録画中の点の脈 (繰り返し。ゆっくり控えめに)
-     * - `--dp-shine` … 動いているバーの上を流れる光の筋 (繰り返し)
+     * - `--dp-shine` … 動いているバーの脈と、骨組み・遷移中のバーの上を流れる光の筋 (繰り返し)
      */
   --dp-duration: 120ms;
   --dp-duration-enter: 240ms;
@@ -196,6 +215,9 @@
   --dp-video-fill: rgb(1 114 173 / 0.8);
   --dp-video-veil: rgb(0 0 0 / 0.6);
   --dp-video-veil-strong: rgb(0 0 0 / 0.8);
+  /* 再生位置のバーの CM の所。観ていないところは淡く、観たところは濃い琥珀色 (`SeekBar`) */
+  --dp-video-cm: rgb(255 200 95 / 0.55);
+  --dp-video-cm-played: rgb(255 179 0);
 }
 /* 指で押す端末の件は 72px (低い行は押したつもりの隣が開いた。docs/design.md の「何行かある一覧」) */
 @media (pointer: coarse) {
@@ -552,7 +574,7 @@ html[data-status-bar="translucent"]:not([data-stage-fullscreen]) body::before {
   content: "";
   position: fixed;
   inset: 0 0 auto;
-  z-index: 60;
+  z-index: var(--dp-z-modal);
   height: env(safe-area-inset-top);
   background: color-mix(in srgb, var(--dp-bg) 85%, transparent);
   pointer-events: none;
@@ -573,13 +595,18 @@ html[data-stage-fullscreen] body {
   background: var(--dp-video);
 }
 /*
- * **ダイアログ (`showModal()` で開いた `<dialog>`) を開いている間は、後ろのページを巻かない。**
+ * **ダイアログ (`showModal()` で開いた `<dialog>` と、`aria-modal="true"` の箱。番組の詳細 `ProgramDetail` は `<div>`) を
+ * 開いている間は、後ろのページを巻かない。**
  * Esc・背景のクリック・`closedby` で閉じても `:modal` が外れるので、ひとりでに戻る (JS は要らない)。
- * スクロールバーが消えて中身が横にずれないよう、その幅は空けたままにする (`scrollbar-gutter`)。
- * 舞台を広げている間の指定 (上) とは、どちらも止めるだけなので重なっても食い違わない
+ * 舞台を広げている間の指定 (上) とは、どちらも止めるだけなので重なっても食い違わない。
+ * `<dialog>` のときは、スクロールバーが消えて中身が横にずれないよう、その幅を空けたままにする (`scrollbar-gutter`)。
+ * `aria-modal` の箱には付けない。箱は `position: fixed` で画面いっぱいに置くので、空けた幅の分だけ箱が狭くなり、
+ * 狭い画面で下から出す一枚の右端が画面の端に届かない
  */
-html:has(dialog:modal) {
+html:has(dialog:modal, [aria-modal="true"]) {
   overflow: hidden;
+}
+html:has(dialog:modal) {
   scrollbar-gutter: stable;
 }
 /*
@@ -818,7 +845,7 @@ progress[value]::-webkit-progress-value {
  * 広い形では右のサイドバーに入る。docs/design.md の「浮かせ方」)。上端では平らで、巻いて中身が裏に入ると
  * 面と近い影 (`--dp-shadow-tight`) が出る。時間の軸は表の箱の `--guide` (`guide/+page.svelte` も同じ動きを使う)。
  * 使う側は `@supports (animation-timeline: scroll())` の中で面と影を消してから動かす (ヘッダーと同じ)。
- * 巻けないうちは軸が止まり、平らなまま。知らないブラウザと動きを減らす設定の端末
+ * 巻けないうちは軸が止まり、平らなまま。対応していないブラウザと動きを減らす設定の端末
  * (Pico がアニメーションをすぐ終わらせる) は、いつも面が出ている
  */
 @keyframes dp-bar-float {
@@ -912,7 +939,7 @@ progress[value]::-webkit-progress-value {
 :where(html[data-phone]) .guide-bar {
   position: fixed;
   inset-inline: var(--dp-dock-inset);
-  z-index: 30;
+  z-index: var(--dp-z-dock);
   padding: 0.25rem 0.5rem;
 }
 
@@ -1217,7 +1244,7 @@ input[type="checkbox"]:not([role="switch"]) {
   --day-head-gap: 0.5rem;
   position: sticky;
   top: var(--day-head-gap);
-  z-index: 3;
+  z-index: var(--dp-z-heading);
   width: fit-content;
   margin: 0.5rem 0 0.25rem;
   color: var(--dp-muted);
@@ -1237,7 +1264,7 @@ input[type="checkbox"]:not([role="switch"]) {
     background-color var(--dp-duration) var(--dp-ease),
     box-shadow var(--dp-duration) var(--dp-ease);
 }
-/* 貼り付いたかは `scroll-state(stuck: top)` で見る。知らないブラウザは、いつもカプセル */
+/* 貼り付いたかは `scroll-state(stuck: top)` で見る。対応していないブラウザは、いつもカプセル */
 @supports (container-type: scroll-state) {
   .day-head-chip {
     background: transparent;
@@ -1265,16 +1292,23 @@ input[type="checkbox"]:not([role="switch"]) {
   top: calc(env(safe-area-inset-top, 0px) + var(--day-head-gap));
 }
 /*
- * **入っている切り替え (`aria-pressed="true"`) は、オンの印の主の色の短い下線と字** (番組表の「サブ ch」)。
+ * **並び (`role="group"`) の外で押されているボタン (`aria-pressed="true"`) はオンで、主の色の短い下線と字** (番組表の「サブ ch」・映像の上の字幕など)。
+ * 並びの中で押されているボタンは選んでいるもの (字の幅いっぱいの下線・左の縦線。下の `.pick-line`・`.segmented`・`.side-item`) なので、
+ * この線は引かない。どの部品も、置いた場所でどちらかの 1 本になる (1 つの部品に線は 1 本)。
+ * 線の色は `--dp-on-mark` (ふだんは主の色。映像の上は字の色に合わせる。`ControlButton`)。
+ * 映像の上の戻せないものの 2 回目 (`.ov-danger`) も、赤い字に同じ形の短い線を引く。
  * 選んでいるもの (字の幅いっぱいの下線) とは線の長さで分ける。塗らない。浮かせもしない (押すと何かが起きるボタンとは見分ける)
  */
-:where(button, a.button)[aria-pressed="true"]:where(
-    :not(.secondary, .outline, .ghost)
+:where(button, a.button):is([aria-pressed="true"], .ov-danger):where(
+    :not(.secondary, .outline, .ghost, [role="group"] *)
   ) {
   --pico-background-color: transparent;
   --pico-box-shadow: none;
   --pico-color: var(--dp-primary-text);
-  background-image: linear-gradient(var(--pico-primary), var(--pico-primary));
+  background-image: linear-gradient(
+    var(--dp-on-mark, var(--pico-primary)),
+    var(--dp-on-mark, var(--pico-primary))
+  );
   background-repeat: no-repeat;
   background-position: center bottom 0.2rem;
   background-size: 1rem var(--dp-mark);
@@ -1284,7 +1318,6 @@ input[type="checkbox"]:not([role="switch"]) {
  * 選んでいる項目 (`aria-pressed="true"`・`aria-current`・`.selected`) は主の色の太字と、疑似要素 1 本の下線
  * (`text-decoration` だと名前と数 (`.num`) に別々の線が付き、2 本に切れて見えた)。
  * 線の両端と下からの位置は項目の余白に合わせて `--pick-inset`・`--pick-bottom` で変える。
- * 入っている切り替えの短い下線 (上の `aria-pressed`) は引かない (1 つの部品に線は 1 本)。
  * 選び直すと前の場所から滑る並び (`.segmented` など。下の「滑る印」) は、並びの疑似要素で引くのでこれは使わない
  */
 .pick-line {
@@ -1296,7 +1329,6 @@ input[type="checkbox"]:not([role="switch"]) {
   .selected
 ) {
   --pico-color: var(--dp-primary-text);
-  background-image: none;
   color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
@@ -1490,19 +1522,19 @@ a.button {
  * **入力欄とつなげたボタン (`role="group"`) は、つなぐ側の角を落とす。** Pico も
  * 落とすが、層の外のこちらのボタンの角 (`--dp-btn-radius`) が必ず勝つので、ここで落とし直す。
  * 外側の角は入力欄と同じ丸み (ボタンだけ丸いと、つないだ形が崩れる)。
- * タブ (`.segmented`) は下で別に決める。サイドバーの行 (`.side-list`) はつないだ形ではないので外す
- * (外さないと、まん中の行の塗りが角の無い四角になっていた)
+ * タブ (`.segmented`) は下で別に決める。サイドバーの行 (`.side-list`) とチップ (`.chips`) はつないだ形ではないので外す
+ * (外さないと、まん中の行やチップに乗せた地が角の無い四角になっていた)
  */
-[role="group"]:not(.segmented, .side-list) > :is(button, a.button) {
+[role="group"]:not(.segmented, .side-list, .chips) > :is(button, a.button) {
   margin: 0;
   border-radius: var(--pico-border-radius);
 }
-[role="group"]:not(.segmented, .side-list)
+[role="group"]:not(.segmented, .side-list, .chips)
   > :is(button, a.button):not(:first-child) {
   border-start-start-radius: 0;
   border-end-start-radius: 0;
 }
-[role="group"]:not(.segmented, .side-list)
+[role="group"]:not(.segmented, .side-list, .chips)
   > :is(button, a.button):not(:last-child) {
   border-start-end-radius: 0;
   border-end-end-radius: 0;
@@ -1551,14 +1583,12 @@ a.button {
   --pico-background-color: transparent;
   --pico-border-color: transparent;
   --pico-color: var(--dp-primary-text);
-  /* 入っている切り替えの短い下線 (上の `aria-pressed`) は引かない。印は下の 1 本だけ */
-  background-image: none;
   font-weight: var(--dp-weight-bold);
 }
 /*
  * 下線。押す場所の内側に引くので高さは変わらない。
  * **選び直すと、下線が前の場所から横へ滑る** (CSS だけ。下の「滑る印」)。
- * アンカーを知らないブラウザは、選んでいるタブの中に線を引く (滑らない)
+ * アンカーに対応していないブラウザは、選んでいるタブの中に線を引く (滑らない)
  */
 [role="group"].segmented
   > :is(button, a.button):is(
@@ -1785,7 +1815,7 @@ button.text-button:hover {
   inset: auto;
   margin: 0;
   min-width: 10rem;
-  /* anchor-size を知らないブラウザは上の 10rem を使う */
+  /* anchor-size に対応していないブラウザは上の 10rem を使う */
   min-width: max(10rem, anchor-size(width));
   max-height: 100%;
   overflow-y: auto;
@@ -1810,7 +1840,7 @@ button.text-button:hover {
    * 開いているときだけ flex にする (閉じているときはブラウザの `display: none`)。
    * **引き金の側から、少し縮んだ透明な姿で開き、閉じるときは引っ込む。**
    * 閉じる間も描いておくため、`display` と最前面 (`overlay`) も一緒に移す (`allow-discrete`。
-   * 知らないブラウザはすぐ消える)。動かすのは transform と透明度だけ。`Menu` が JS で置くときに測る大きさは変わらない。
+   * 対応していないブラウザはすぐ消える)。動かすのは transform と透明度だけ。`Menu` が JS で置くときに測る大きさは変わらない。
    * 並べる向きは閉じている間も持たせる。開いているときだけにすると、閉じる動きの間に一瞬横向きのメニューが見えた
    */
   flex-direction: column;
@@ -1916,7 +1946,10 @@ button.text-button:hover {
   color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
-.menu-item:where([aria-current]:not([aria-current="false"]))::before {
+.menu-item:where(
+    [aria-current]:not([aria-current="false"]),
+    [role="menuitemradio"][aria-checked="true"]
+  )::before {
   content: "";
   position: absolute;
   inset-block: 0.5rem;
@@ -1927,7 +1960,7 @@ button.text-button:hover {
 }
 
 /*
- * **メニューの中のオン/オフ** (`menuitemcheckbox`) は、項目の右のスイッチで見せる (ホームの表示の切り替え・番組表のサブチャンネル)。
+ * **メニューとサイドバーのオン/オフ** (`menuitemcheckbox`・`role="switch"`) は、項目の右のスイッチで見せる (ホームの表示の切り替え・番組表のサブチャンネル)。
  * 押せるのは項目ぜんぶで、これは入っているかの印だけ (`aria-hidden`)。選んでいる印 (左の縦線) とは混ぜない
  */
 .s-switch {
@@ -1963,7 +1996,7 @@ button.text-button:hover {
  * **マウスで使う画面では、開いた一覧をメニュー (上の `.menu`) と同じ姿にする** (`appearance: base-select`。CSS だけ)。
  * ブラウザの一覧はテーマや字の大きさが合わず、暗いテーマで読みにくかった。
  * **指で使う端末 (スマホ・タブレット) はブラウザ・OS の選び方のまま** (画面の下から大きく出て、指で選びやすい)。
- * 知らないブラウザもそのまま (`color-scheme` でテーマの明るさだけ合う)。
+ * 対応していないブラウザもそのまま (`color-scheme` でテーマの明るさだけ合う)。
  * 閉じた欄の見た目は今までどおり (Pico の矢印を使い、ブラウザの矢印 `::picker-icon` は出さない)
  */
 @supports (appearance: base-select) {
@@ -2080,13 +2113,8 @@ button.text-button:hover {
   color: var(--dp-on-video-on);
   font-weight: var(--dp-weight-bold);
 }
+/* 左の縦線は `.menu-item` の選んでいる項目と同じ (`menuitemradio`)。色だけ空色の字に合わせる */
 .overlay-menu .option[data-active]::before {
-  content: "";
-  position: absolute;
-  inset-block: 0.5rem;
-  left: 0;
-  width: var(--dp-mark);
-  border-radius: var(--dp-mark);
   background: currentColor;
 }
 /* 映像の上に出す短い通知 (`StageNote`・追っかけの「続きは観る画面で」・ライブの「録画が始まったため、局を切り替えました」) */
@@ -2131,7 +2159,7 @@ dialog {
   outline: none;
 }
 /*
- * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)。
+ * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`・`ContractDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)。
  * 右上の ✕ は箱の角に置き、見出しはその分だけ右を空ける
  */
 .modal-backdrop {
@@ -2363,28 +2391,60 @@ dialog[open] > article {
 }
 
 /*
- * **小さな切り替え (チップ)。** チェックボックスを字と一緒に丸い形に入れ、横に並べる。枠も地も付けない
- * (ルールの書く欄の当てる範囲・種別・曜日、チューナーの受信できる種別、ログの絞り込み)。
- * 入っているものは、ほかの選んでいるものと同じく主の色の太字と字の幅いっぱいの下線 (色だけにしない)
+ * **チップ** (`.chip`)。横に並べる小さな切り替えと絞り込み。枠も地も付けず、乗せたら薄い地。どの画面も同じ形と大きさ。
+ * 切り替えはチェックボックスを字と一緒に入れた `<label class="chip">` (ルールの当てる範囲・種別・曜日、チューナーの受信できる種別、ログの絞り込み)。
+ * 1 つを選ぶ絞り込みと節へ飛ぶリンクは `.chip.pick-line` (ホームとルールの下に浮く 1 行、設定の節へ飛ぶ行)。件数は `.num` に控えた字で添える。
+ * 入っている・選んでいるものは、ほかの選んでいるものと同じく主の色の太字と字の幅いっぱいの下線 (色だけにしない)
  */
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--dp-space-1);
 }
+/* 下に浮く 1 行のチップは折り返さず横に送る。右端は淡く消して、横に送れると分かるようにする */
+.chips.scroll {
+  flex: 1 1 0%;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+}
+.chips.scroll::-webkit-scrollbar {
+  display: none;
+}
 .chip {
+  --pico-background-color: transparent;
+  --pico-color: var(--dp-btn-text);
+  --pico-box-shadow: none;
+  --pick-inset: 0.75rem;
+  --pick-bottom: 0.3rem;
   position: relative;
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.35rem;
+  width: auto;
+  min-height: var(--dp-btn-h-sm);
   margin: 0;
-  padding: 0.15rem 0.55rem;
+  padding: 0 0.75rem;
+  border: 0;
   border-radius: var(--dp-radius-full);
+  background-color: var(--pico-background-color);
+  color: var(--pico-color);
   transition: background-color var(--dp-duration) var(--dp-ease);
-  font-size: var(--dp-text-xs);
-  line-height: 1.6;
+  font-size: var(--dp-text-sm);
+  font-weight: var(--dp-weight);
+  line-height: 1.2;
+  text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
+}
+.chip:hover {
+  --pico-background-color: var(--dp-hover-soft);
+}
+.chip .num {
+  color: var(--dp-muted);
 }
 /*
  * チップの中の印は見せない (選んでいるかは字と下線で分かる。印を青く塗るとそこだけ色が付いて見えた)。
@@ -2403,13 +2463,8 @@ dialog[open] > article {
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
 }
-.chip:hover {
-  background-color: var(--dp-hover-soft);
-}
-/* 選んでいるものは塗らず、主の色の太字と字の幅いっぱいの下線。下線は `.pick-line` と同じ疑似要素 1 本 */
+/* 入っているものは塗らず、主の色の太字と字の幅いっぱいの下線。下線は `.pick-line` と同じ疑似要素 1 本 */
 .chip:has(input:checked) {
-  --pick-inset: 0.55rem;
-  --pick-bottom: 0.05rem;
   color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
@@ -2574,7 +2629,7 @@ dialog[open] > article {
  * **選び直すと、左の縦線が前の場所から縦に滑る** (タブの下線と同じ「滑る印」。上の `.segmented` の説明)。
  * 並び (`.side-list`) の疑似要素 1 本を、選んでいる行に CSS のアンカーで付ける。行ごとに線を描くと、選び直したときに
  * 前の線が消えて次の線が出るだけで、滑らなかった (ライブの局を替えたとき)。並びをまたぐ (設定の別の節の束) ときはその場に出る。
- * 並びの外の行 (並びに入れずに使う `.side-item`) とアンカーを知らないブラウザは、上の行ごとの線のまま
+ * 並びの外の行 (並びに入れずに使う `.side-item`) とアンカーに対応していないブラウザは、上の行ごとの線のまま
  */
 @supports (anchor-name: --a) {
   .side-list {
@@ -2680,7 +2735,7 @@ dialog[open] > article {
 }
 
 /*
- * **動き続けるもの (録画中の点・光の筋・「保存しました」・骨組みの光) は、動かしてよい端末でだけ動かす。**
+ * **動き続けるもの (録画中の点・動いているバーの脈・「保存しました」・骨組みの光) は、動かしてよい端末でだけ動かす。**
  * 動きを減らす設定と、ソフトウェアで描いている端末 (`<html data-lite>`。`#lib/lite.ts`) では動きを足さず、
  * 上の止まった姿のまま見せる (docs/design.md の「動き」)。遷移中のバー (`+layout.svelte` の `.nav-progress`) も同じ決まり
  */
@@ -2692,7 +2747,7 @@ dialog[open] > article {
     animation: flash var(--flash-for, 2.5s) linear both;
   }
   /* 伸びたところを明るさで脈打たせる (透明度だけ。背景の位置は動かさない。docs/design.md 7 章) */
-  /* 片方の擬似要素を知らない画面が規則ごと捨てないよう、2 つに分ける */
+  /* 片方の擬似要素に対応していないブラウザが規則ごと無視しないよう、2 つに分ける */
   :root:not([data-lite]) progress.running[value]::-webkit-progress-value {
     animation: progress-shine var(--dp-shine) ease-in-out infinite;
   }

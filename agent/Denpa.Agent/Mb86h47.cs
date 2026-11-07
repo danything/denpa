@@ -96,8 +96,8 @@ public sealed class Mb86h47 : II2c
     private const uint JumpSecond = 0x970C9FA0;
 
     private static readonly Lazy<Mb86h47Programs.Routine[]> Routines = new(() => [Mb86h47Programs.Addressing(0), Mb86h47Programs.Addressing(1)]);
-    private static readonly Lazy<uint[]> Core0Program = new(() => Mb86h47Programs.Core0().Words);
-    private static readonly Lazy<uint[]> Core1Program = new(() => Mb86h47Programs.Core1().Words);
+    private static readonly Lazy<uint[]> Core0Program = new(() => Mb86h47Programs.Core0());
+    private static readonly Lazy<uint[]> Core1Program = new(() => Mb86h47Programs.Core1());
 
     private readonly IUsbDevice _usb;
     private readonly Action<string>? _trace;

@@ -111,7 +111,7 @@
 </script>
 
 {#if shown.length > 0}
-  <!-- 右下に浮かせる。z-index はモーダル(60)の下・本文の上 -->
+  <!-- 右下に浮かせる。段はダイアログの下・本文の上 (`--dp-z-toast`) -->
   <div class="toasts">
     {#each shown as notice (notice.key)}
       <!-- 見た目は app.css の notice (error / info / success。kind と同じ名前) -->
@@ -136,7 +136,7 @@
     position: fixed;
     right: 1rem;
     bottom: calc(1rem + var(--dp-tabbar, 0px));
-    z-index: 50;
+    z-index: var(--dp-z-toast);
     display: flex;
     flex-direction: column;
     align-items: flex-end;

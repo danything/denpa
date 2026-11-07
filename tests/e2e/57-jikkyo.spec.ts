@@ -1419,7 +1419,11 @@ async function linkNiconico(page: Page): Promise<void> {
 async function unlinkNiconico(page: Page): Promise<void> {
   await goto(page, "/settings/integrations#jikkyo");
   const unlink = page.getByTestId("niconico-unlink");
-  if ((await unlink.count()) > 0) await unlink.click();
+  // 外すのは 2 回押し (`ArmedDelete`)
+  if ((await unlink.count()) > 0) {
+    await unlink.click();
+    await page.getByTestId("niconico-unlink-confirm").click();
+  }
   await expect(page.getByTestId("niconico-link")).toBeVisible();
 }
 

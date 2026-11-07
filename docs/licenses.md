@@ -82,14 +82,13 @@ PX4 host facade と Core host adapters (どちらも GPL-2.0-only) をリンク�
 (Core engine library は MIT。上流の README)。それより前のリリースの配布物は、本体の GPL-2.0-or-later だけです。
 入っているリリースの条件は、同梱の `DEPENDENCY-NOTICE.txt` に書いてあります。
 
-IT930x と mAgicVISION (PIX-DT295 用) のファームウェアは、エージェントの実行ファイルに埋め込んであります ([下](#チューナーエージェントに同梱するファームウェア))。
+IT930x のファームウェアは、エージェントの実行ファイルに埋め込んであります ([下](#チューナーエージェントに同梱するファームウェア))。
 
 ### チューナーエージェントに同梱するファームウェア
 
-| 名前                                                                      | 何に                                                                                                                                                 | 出どころ                                                                                                                                                                                                                                                                                    | ライセンス                                                                                                                                                      |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| IT930x のファームウェア (`it930x-firmware.bin`、2,169 バイト)             | px4-userland の機材 (USB ブリッジ IT930x) に挿すたびに流し込む。エージェントの実行ファイルに埋め込み、px4d に渡すときに `tuners.json` の隣へ書き出す | ITE Tech. の IT930x の Linux ドライバの `api/brfirmware.h` にある `brFirmware_codes[]` (`V1_3_0_0`) をそのままバイト列に書き出したもの。SHA-256 `5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484` ([agent/Denpa.Agent/firmware/](../agent/Denpa.Agent/firmware/README.md)) | **ITE Tech. の再配布許諾** (無改変のままチューナーエージェントに同梱して再配布してよい。エージェントの MPL-2.0 はこのファイルには及ばない)                      |
-| mAgicVISION のファームウェア (`magicvision-firmware.bin`、289,424 バイト) | PIX-DT295 の常駐方式で、冷えた機材に入れる boot0 の body・hook と常駐イメージ。エージェントの実行ファイルに埋め込む                                  | mAgicVISION (huggy) のリリース v2 の `magicvision-firmware_0.1.1_all.deb` にある `firmware.bin` をそのまま。SHA-256 `0b2147e190afc7626165594fdedbedc6461c0e1f044b17742123b77fc5026fcc` ([agent/Denpa.Agent/firmware/](../agent/Denpa.Agent/firmware/README.md))                             | **作者が再配布を認めている** (上流の README の「`firmware.bin` などのファームウェア成果物は再配布できます」。エージェントの MPL-2.0 はこのファイルには及ばない) |
+| 名前                                                          | 何に                                                                                                                                                 | 出どころ                                                                                                                                                                                                                                                                                    | ライセンス                                                                                                                                 |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| IT930x のファームウェア (`it930x-firmware.bin`、2,169 バイト) | px4-userland の機材 (USB ブリッジ IT930x) に挿すたびに流し込む。エージェントの実行ファイルに埋め込み、px4d に渡すときに `tuners.json` の隣へ書き出す | ITE Tech. の IT930x の Linux ドライバの `api/brfirmware.h` にある `brFirmware_codes[]` (`V1_3_0_0`) をそのままバイト列に書き出したもの。SHA-256 `5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484` ([agent/Denpa.Agent/firmware/](../agent/Denpa.Agent/firmware/README.md)) | **ITE Tech. の再配布許諾** (無改変のままチューナーエージェントに同梱して再配布してよい。エージェントの MPL-2.0 はこのファイルには及ばない) |
 
 許諾は、ITE Tech. の Mike Huang 氏 (Marketing & Sales BU) から 2026-11-04 14:16 (日本時間) のメール
 (Message-ID `<d1d67cb55ae74a32a6a232a172ccf622@ite.com.tw>`) で得ています。ITE の IT930x の Linux ドライバに入っているファームウェアのデータ
@@ -99,21 +98,54 @@ IT930x と mAgicVISION (PIX-DT295 用) のファームウェアは、エージ�
 
 ### Mac に入れるもの (`install.sh`)
 
-リリースに添えた `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリ 1 個) と、
+リリースに添えた `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリと、メニューバーのアプリ `denpa-tray`。
+`denpa-tray` は denpa 本体と同じ AGPL-3.0 で、Swift で書き、OS の AppKit だけを使う) と、
 上と同じ px4-userland / siano-userland の **Mac 用** (`darwin-arm64`)・同じファームウェア (IT930x のものはエージェントに埋め込んである。asicen-userland は Mac 用が出ていないので入れません)。
 libusb (LGPL-2.1+) が実行ファイルに静的リンクなのも上と同じで、
 配布物の `DEPENDENCY-NOTICE.txt` / `THIRD_PARTY_NOTICES.md` もそのまま置きます。
 USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼びます。
-denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker で動かします。
+
+**denpa 本体は、リリースに添えた `denpa-<バージョン>-darwin-arm64.tar.gz` を入れます** ([.github/workflows/macos-server.yml](../.github/workflows/macos-server.yml))。
+Windows (下) と同じく、上のコンテナイメージ `denpa` と同じものを Mac 用にしたものです。アプリ・Denpa Font・ブラウザへ配るデコーダは
+イメージと同じ段から写します。ライセンスの文書は tar.gz の `licenses/` と `ffmpeg/licenses/` に置きます。
+
+| 名前                                                                     | 何に                               | 出どころ                                                                              | ライセンス                                                       |
+| ------------------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Bun (`bun`。公式のリリースの `bun-darwin-aarch64.zip`)                   | denpa 本体を動かす                 | <https://github.com/oven-sh/bun>                                                      | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md` |
+| FFmpeg (`ffmpeg/`。CI の Mac のランナーで組み、libav* は静的リンク)      | 上のイメージの ffmpeg と同じ       | <https://ffmpeg.org>                                                                  | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+    |
+| SVT-AV1・Opus (ソースから組み、静的リンク)                               | イメージと同じ                     | 上の表のとおり                                                                        | 上の表のとおり                                                   |
+| x264・dav1d (ソースから組み、静的リンク。Debian trixie と同じバージョン) | H.264 のエンコード・AV1 のデコード | <https://code.videolan.org/videolan/x264>・<https://code.videolan.org/videolan/dav1d> | GPL-2.0+・BSD-2-Clause。`ffmpeg/licenses/` に文書                |
+
+VideoToolbox (GPU でのエンコード)・zlib・スレッドは macOS の一部を呼ぶので、tar.gz には入れません。
+ソースは Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball と、.github/ffmpeg-macos.sh に書いた x264 のコミット・dav1d のバージョンです。
 
 ### Windows に入れるもの (`install.ps1`)
 
-リリースに添えた `denpa-agent-<バージョン>-windows-x64.zip` (`denpa-agent.exe` 1 個) と、px4-userland / siano-userland の
+リリースに添えた `denpa-agent-<バージョン>-windows-x64.zip` (`denpa-agent.exe` と、通知領域のアイコンの `denpa-tray.exe`。
+`denpa-tray.exe` は denpa 本体と同じ AGPL-3.0 の .NET の Native AOT のバイナリで、依存は足していない) と、px4-userland / siano-userland の
 **Windows 用** (`windows-x86_64` / `windows-x64`)・同じファームウェア (IT930x のものは Mac と同じくエージェントに埋め込んである)。
 px4-userland の配布 zip から置くのは `px4d.exe`・`px4ctl.exe` と、ライセンスの文書 (`LICENSE`・`DEPENDENCY-NOTICE.txt`・
 `THIRD_PARTY_NOTICES.md`・`libusb/COPYING`・`toolchain/` の下の MinGW-w64 などのもの) だけで、`px4-ts.exe` と
 `WinSCard.dll` は置きません。libusb (LGPL-2.1+) が `px4d.exe` に静的リンクなのは上と同じです。
 asicen-userland は入れません (Windows 用が無い)。カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
+
+**denpa 本体は、リリースに添えた `denpa-<バージョン>-windows-x64.zip` を入れます** ([.github/workflows/windows-server.yml](../.github/workflows/windows-server.yml))。
+中身は上のコンテナイメージ `denpa` と同じものを Windows 用にしたものです。アプリ (`app/`)・Denpa Font (`font/`)・ブラウザへ配るデコーダ (`mpeg2/`) は
+イメージと同じ段 (Dockerfile の `app-files`・`denpa-font`・`mpeg2wasm`) から写します。ライセンスの文書は zip の `licenses/` と `ffmpeg/licenses/` に置きます。
+
+| 名前                                                                                                        | 何に                                                                                                            | 出どころ                         | ライセンス                                                                          |
+| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| Bun (`bun.exe`。公式のリリースの `bun-windows-x64-baseline.zip`)                                            | denpa 本体を動かす                                                                                              | <https://github.com/oven-sh/bun> | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md`                    |
+| FFmpeg (`ffmpeg/`。MSYS2 の UCRT64 で組み、libav* は静的リンク)                                             | 上のイメージの ffmpeg と同じ                                                                                    | <https://ffmpeg.org>             | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+                       |
+| SVT-AV1・Opus (ソースから組み、libavcodec に静的リンク)                                                     | イメージと同じ                                                                                                  | 上の表のとおり                   | 上の表のとおり                                                                      |
+| x264・dav1d・zlib (MSYS2 のパッケージの DLL)                                                                | H.264 のエンコード・AV1 のデコード・PNG                                                                         | <https://packages.msys2.org>     | GPL-2.0+・BSD-2-Clause・zlib                                                        |
+| libvpl (静的リンク)・nv-codec-headers・AMF のヘッダ (MSYS2 のパッケージ。あとの 2 つは組むときのヘッダだけ) | GPU でエンコードする (Intel の QSV・NVIDIA の NVENC・AMD の AMF)。ドライバのライブラリは GPU のドライバが入れる | <https://packages.msys2.org>     | MIT。`ffmpeg/licenses/` に文書                                                      |
+| MinGW-w64 のランタイム (winpthreads など。ffmpeg が読む DLL だけ)                                           | スレッドなど                                                                                                    | <https://packages.msys2.org>     | パッケージのライセンスのとおり (MIT 系。GCC のものは GCC Runtime Library Exception) |
+
+zip に入れる DLL は、組むときに ffmpeg.exe・ffprobe.exe の取り込み表から辿って決めます (.github/ffmpeg-windows.sh)。MSYS2 から写した DLL は、
+そのパッケージのライセンスの文書を `ffmpeg/licenses/<パッケージ>/` に、パッケージとバージョンを `ffmpeg/licenses/msys2-packages.txt` に書きます。
+ソースは、自分で組むもの (FFmpeg・SVT-AV1・Opus) は Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball、MSYS2 のパッケージは
+[msys2/MINGW-packages](https://github.com/msys2/MINGW-packages) の同じバージョンのものです。GPU のエンコーダ (NVENC・QSV・AMF) のヘッダとライブラリも MSYS2 のパッケージです。
 
 ### `denpa-aio`
 
@@ -121,11 +153,6 @@ asicen-userland は入れません (Windows 用が無い)。カードリーダ�
 写しただけのもの (`.github/aio.Dockerfile`)。中身もライセンスも上の 2 つと同じです。
 
 ## リポジトリに写してあるもの・借りた表
-
-PIX-DT295 の常駐方式のコード (`agent/Denpa.Agent/Dt295Resident*.cs`) は、mAgicVISION (<https://github.com/makeding/mAgicVISION>、commit `4dc8854`) の
-MIT のコード (`core/`・`usb/window.c`・`userland/cli/usbboot.c` のうち DT295 の部分) を C# に移したものです。ファイルの先頭に移した元と著作権
-(Copyright (c) 2026 huggy) を書き、MIT の全文を [agent/Denpa.Agent/licenses/mAgicVISION.txt](../agent/Denpa.Agent/licenses/mAgicVISION.txt) に置いて、
-エージェントの実行ファイルにも埋め込んでいます。上流の GPL-2.0-only の部分 (`linux/`・`usb/linux/`) は読んでいません。
 
 | 名前                         | 場所                                                                                                                                                                                            | 何に                                                                                                                                                                                                                                 | 出どころ                                                                                                                                                                                                                                                                                                                                                      | ライセンス                                                                                                        |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |

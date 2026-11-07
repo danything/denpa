@@ -286,6 +286,13 @@ interface TunerStatus {
   lnb: string | null;
   channel: { type: string; channel: string } | null;
   users: { use: string; priority: number }[];
+  /** 受信の状態と C/N。使用中で、機材が測れるときだけ (TunerSignal.cs) */
+  signal: {
+    locked: boolean;
+    cn: number | null;
+    unit: "dB" | "raw";
+    atTune: boolean;
+  } | null;
 }
 
 async function tuners(): Promise<TunerStatus[]> {
@@ -646,6 +653,8 @@ describe("チューナー", () => {
     const gr = (await tuners())[0];
     expect(gr.channel).toEqual({ type: "GR", channel: "T16" });
     expect(gr.users).toEqual([{ use: "rec 12", priority: 10 }]);
+    // 偽の選局は機材を持たないので、受信の状態と C/N は測れない (null)
+    expect(gr.signal).toBeNull();
     stream.close();
   });
 
@@ -1399,6 +1408,29 @@ describe("止まれと言われたとき", () => {
       // 離せばそこで畳む
       rec.abort();
       expect(await exitsWithin(other, 15_000)).toBe(true);
+    } finally {
+      await stop();
+    }
+  }, 60_000);
+
+  /*
+   * **2 回目の合図で待つのをやめる** (Program.cs の Drain)。無かった頃は、手で動かしているときの Ctrl+C も
+   * SIGTERM も受け流され、SHUTDOWN_WAIT (既定 6 時間) まで止まらなかった
+   */
+  test("録画中でも、2 回目の止まれの合図では待たずに落ちる", async () => {
+    const { other, stop } = await spawnOther();
+    try {
+      const rec = await openOn(
+        "/denpa/stream?type=GR&channel=T16&use=rec&priority=10",
+      );
+
+      other.kill("SIGINT");
+      await sleep(1500);
+      expect(other.exitCode).toBeNull();
+
+      other.kill("SIGINT");
+      expect(await exitsWithin(other, 15_000)).toBe(true);
+      rec.abort();
     } finally {
       await stop();
     }

@@ -14,8 +14,8 @@ denpa ごと別の機械へ移すとき (Windows から Linux へ、など) は�
 
 - **v2 と v3 に対応しています。** v1 は API が別物なので、始める前に「対応していません」と出て止まります。
   バージョンは `/api/version` で見分け、どちらとも読めないときはログに残して v3 として続けます
-- URL はサブディレクトリ込みで書けます (例: `http://epgstation:8888`、`https://example.com/epgstation`)
-- リバースプロキシの Basic 認証があるなら `http://ユーザー:パスワード@epgstation:8888` の形で入れます。
+- URL はサブディレクトリ込みで書けます (例: `http://192.168.1.10:8888`、`https://example.com/epgstation`)
+- リバースプロキシの Basic 認証があるなら `http://ユーザー:パスワード@192.168.1.10:8888` の形で入れます。
   資格情報は `Authorization` ヘッダに直して送り、ログやエラーには出しません
 - **URL は保存しません。** メモリにだけ持って入力欄に戻します (denpa を再起動すると消えます)
 
@@ -160,19 +160,18 @@ EPGStation と同じく下見 → 取り込みの順で実行します。何度�
 
 1. EpgTimer の設定の「その他」の「全般」で **「ネットワーク接続を許可する (EpgTimerNW 用)」** を入れ、ポート (既定 4510) を見ておく
 2. 同じところの **「アクセス制御」に denpa の接続元を足す。** 既定は `+127.0.0.1,+192.168.0.0/16` です。
-   **denpa を wslc で動かしているなら、コンテナは Hyper-V の Default Switch (172.16.0.0/12 のどこか) から繋ぐので、
-   既定のままでは断られます。** 例: `+127.0.0.1,+192.168.0.0/16,+172.16.0.0/12`。別の機械やクラスタから繋ぐなら、その IP を足します
-3. **Windows ファイアウォールで、受信の TCP 4510 を許可する。** Default Switch はパブリックのネットワークとして扱われるので、
-   プロファイルにパブリックを含め、相手のアドレスで絞ります。管理者の PowerShell で次を実行します。
+   **EDCB と同じ Windows で denpa を動かしているなら、既定のままで通ります** (denpa は 127.0.0.1 から繋ぐ)。
+   別の機械やクラスタから繋ぐなら、その IP を足します
+3. **別の機械から繋ぐなら、Windows ファイアウォールで受信の TCP 4510 を許可する。** 相手のアドレスで絞ります。
+   管理者の PowerShell で次を実行します (同じ Windows なら要りません)。
 
    ```powershell
-   New-NetFirewallRule -DisplayName EpgTimerSrv -Direction Inbound -Protocol TCP -LocalPort 4510 -RemoteAddress 172.16.0.0/12,192.168.0.0/16 -Action Allow
+   New-NetFirewallRule -DisplayName EpgTimerSrv -Direction Inbound -Protocol TCP -LocalPort 4510 -RemoteAddress 192.168.0.0/16 -Action Allow
    ```
 
-4. 画面に入れる宛先を調べる。**wslc の denpa からは、Windows の Default Switch 側の IP** (`ipconfig` の
-   「イーサネット アダプター vEthernet (Default Switch)」の IPv4 アドレス) です。LAN のほかの機械からなら、Windows の LAN の IP です
+4. 画面に入れる宛先を調べる。**同じ Windows の denpa からは `127.0.0.1`** です。LAN のほかの機械からなら、Windows の LAN の IP です
 
-宛先は `host:port` の形で入れます (例: `172.20.32.1:4510`。ポートを省けば 4510、IPv6 は `[::1]:4510`)。
+宛先は `host:port` の形で入れます (例: `127.0.0.1:4510`。ポートを省けば 4510、IPv6 は `[::1]:4510`)。
 **宛先は保存しません。** メモリにだけ持って入力欄に戻します。
 
 **認証が無いので、移し終えたら「ネットワーク接続を許可する」は外してかまいません。**
@@ -256,11 +255,13 @@ EPGStation の履歴と同じく、「録ったことのある回」として移
 ### 移る順番
 
 1. **新しい機械に denpa とエージェントを入れ、チャンネルスキャンまで済ませる** (まだ何も録らない。ルールも作らない)。
-   環境変数 (`TRUSTED_NETWORKS`・`ALLOWED_HOSTS`・OIDC・`PWA_NAMES` など) は、Windows なら `~/denpa/denpa.env` から
-   `compose.override.yml` か Helm の values へ書き移す。環境変数は書き出しに入りません
+   環境変数 (`TRUSTED_NETWORKS`・`ALLOWED_HOSTS`・OIDC・`PWA_NAMES` など) は書き出しに入らないので、新しい機械へ手で書き移す。
+   置き場は Mac と Windows なら `denpa.env` (Mac は `/Library/Application Support/denpa/data/`、Windows は `%ProgramData%\denpa\`)、
+   Docker Compose なら `compose.override.yml`、Helm なら values
 2. 古い denpa の「denpa を別の機械へ移す」で **「書き出す」** を押す。`denpa-export-<日時>.tar.zst` がブラウザでダウンロードされます
 3. **古い denpa を止める。** 動かしたままだと、新しい denpa と同じ番組を二重に録ります。録画中なら終わってから止めます
-   (Windows ならタスク スケジューラの `denpa` を止めてから `wslc stop denpa`。Docker Compose なら `docker compose stop denpa`)。
+   (Mac なら install.sh を `--uninstall`、Windows なら install.ps1 を `-Uninstall` で流す。録画中なら終わるまで待ち、DB と録画は残す。
+   Docker Compose なら `docker compose stop denpa`)。
    書き出したあとに古い denpa が録ったもの・足したルールは移りません
 4. **録画のフォルダを新しい機械へ写す** ([下記](#録画のフォルダを写す))
 5. 新しい denpa の「denpa を別の機械へ移す」で書き出したファイルを選び、**「送って確かめる」** を押す。
@@ -292,7 +293,8 @@ EPGStation の履歴と同じく、「録ったことのある回」として移
 入れたばかりでも持っていますが、数えずに丸ごと置き換えます。混ぜて取り込むことはしません。
 
 やり直したいときは、新しい denpa の DB の置き場を空にしてから入れ直します (Docker Compose なら
-`docker compose down` のあと `docker volume rm denpa_denpa-data`、Helm なら data の PVC を消す)。
+`docker compose down` のあと `docker volume rm denpa_denpa-data`、Helm なら data の PVC を消す。
+Mac と Windows なら denpa を止めて、`denpa.env` と同じフォルダの `denpa.db` を消す)。
 取り込んで入れ替えたときの前の DB とロゴは、DB の置き場に `denpa.db.before-import-<日時>`・`logos.before-import-<日時>` として残ります。
 
 ### 書き出したバージョンと取り込むバージョン
@@ -306,11 +308,11 @@ EPGStation の履歴と同じく、「録ったことのある回」として移
 **フォルダの中身を、フォルダの形を変えずにそのまま写します。** DB は録画の場所を置き場からの相対で持つので、
 新しい機械の置き場の下に同じ形で写せば辿れます。写し方は環境次第です (外付けのディスク・ネットワークの共有・`rsync` など)。
 
-| 中身               | Windows (wslc)                 | Linux (Docker Compose)                        | Helm                     |
-| ------------------ | ------------------------------ | --------------------------------------------- | ------------------------ |
-| エンコードしたもの | `~/Videos/denpa/library`       | ボリューム `denpa-library` (`/media/encoded`) | `persistence.encoded`    |
-| 元の TS            | `~/Videos/denpa/recorded`      | ボリューム `denpa-recorded` (`/media/raw`)    | `persistence.raw`        |
-| DB                 | wslc のボリューム `denpa-data` | 書き出しのファイルで移す                      | 書き出しのファイルで移す |
+| 中身               | Mac                       | Windows                   | Linux (Docker Compose)                        | Helm                     |
+| ------------------ | ------------------------- | ------------------------- | --------------------------------------------- | ------------------------ |
+| エンコードしたもの | `~/Movies/denpa/library`  | `~/Videos/denpa/library`  | ボリューム `denpa-library` (`/media/encoded`) | `persistence.encoded`    |
+| 元の TS            | `~/Movies/denpa/recorded` | `~/Videos/denpa/recorded` | ボリューム `denpa-recorded` (`/media/raw`)    | `persistence.raw`        |
+| DB                 | 書き出しのファイルで移す  | 書き出しのファイルで移す  | 書き出しのファイルで移す                      | 書き出しのファイルで移す |
 
 - 元の TS は、元の TS を残す設定にしていたときと、エンコードを待っている録画があるときだけ写せば足ります
 - Docker Compose なら、写した場所を `compose.override.yml` で `/media/encoded`・`/media/raw` に重ねます
@@ -330,7 +332,7 @@ EPGStation の履歴と同じく、「録ったことのある回」として移
 
 - **ファイルは画面から 256 KiB ずつ送ります** (リクエストの本文の上限 `BODY_SIZE_LIMIT` は既定 512K のまま)。止まっても、
   同じファイルを選び直せば続きから送ります。送りかけのまま 1 日たったものは消します
-- 送る前に、DB の置き場 (`/data`) にファイルの 3 倍ほどの空きがあるかを見ます (送ったもの・開いたもの・マイグレーションを当てる写し)
+- 送る前に、DB の置き場 (`DENPA_DB` のフォルダ) にファイルの 3 倍ほどの空きがあるかを見ます (送ったもの・開いたもの・マイグレーションを当てる写し)
 - **開くときに確かめます。** 中身は普通のファイルとフォルダだけ (リンクやデバイスは断る)、名前は `denpa-export.json`・`denpa.db`・`logos/` の下の
   決まったものだけ、中身の合計は 4 GiB まで。DB は SQLite のファイルか、整合性 (`integrity_check`・`foreign_key_check`)、
   denpa の作らないトリガーやビューが無いかを見ます。使えないファイルなら、送ったものを消して理由を出します
@@ -340,12 +342,12 @@ EPGStation の履歴と同じく、「録ったことのある回」として移
 ### 取り込んだあとに確かめること
 
 - 録画の一覧のサムネイルと再生
-- 設定の「チャンネル」の受信できるチャンネルが、新しいエージェントのスキャンで埋まっているか
+- 設定の「受信」の「受信できるチャンネル」(`/settings/reception#channels`) が、新しいエージェントのスキャンで埋まっているか
   (受信できない局の予約は、しばらくすると取り消されます)
 - 受信できるチャンネルの表の CM ロゴの列
 - テレビのアプリ (URL が変わったならアプリで直す)
 - OIDC を使っているなら、ログインし直す
 
-**自動で再起動しない環境では、自分で起動します。** compose (`restart: unless-stopped`) と Helm は、取り込むと denpa が終了して
-自動で起動し直します。Windows (wslc) のように自動で起動し直さないときは、画面に「再起動してください」と出るので、
-起動し直します (Windows ならタスク スケジューラの `denpa` を実行する)。入れ替えは起動の最初にするので、手で起動しても同じです。
+**自動で再起動しない環境では、自分で起動します。** compose (`restart: unless-stopped`)・Helm・Mac (LaunchDaemon の `KeepAlive`)・Windows (install.ps1 が書く `denpa.cmd` のループ) は、
+取り込むと denpa が終了して自動で起動し直します。自動で起動し直さないときは、画面に「再起動してください」と出るので、
+起動し直します。入れ替えは起動の最初にするので、手で起動しても同じです。

@@ -54,6 +54,8 @@ function harness(
     watch?: (token: string, channel: string) => WatchResult;
     token?: () => string | null;
     user?: string | null;
+    /** 更新で hub に届かない */
+    renewFails?: boolean;
   } = {},
 ) {
   const sockets: FakeSocket[] = [];
@@ -80,6 +82,7 @@ function harness(
     token: async () => (opts.token === undefined ? token : opts.token()),
     renew: async () => {
       renewed++;
+      if (opts.renewFails === true) throw new Error("hub に届きません");
       token = `access-${renewed + 1}`;
       return token;
     },
@@ -174,6 +177,18 @@ describe("繋ぐ", () => {
     expect(h.renewed()).toBe(1);
     expect(h.asked.map((a) => a.token)).toEqual(["access-1", "access-2"]);
     expect(h.sockets).toHaveLength(1);
+  });
+
+  test("更新で hub に届かなければ、連携は切れたことにせず down にする", async () => {
+    const h = harness({
+      watch: () => ({ error: "invalid_token", status: 401 }),
+      renewFails: true,
+    });
+    h.live.touch("jk1");
+    await h.flush();
+    await h.flush();
+    expect(h.renewed()).toBe(1);
+    expect(h.live.touch("jk1")).toBe("down");
   });
 
   test("連携していなければ繋がない", async () => {

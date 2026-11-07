@@ -31,12 +31,12 @@ RUN bun install
 #   https の Chrome・Edge・Firefox だけで、重くて困るはずの iPhone・iPad には効かない
 #   (docs/stream.md「スライスのスレッドを見送った理由」)
 # - **SIMD は付けておく** (`-msimd128`。コンパイラが自動でベクトルにする)。MPEG-2 では測っても差が揺れの中だった
-#   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream.md「組み方を変えて測ったこと」)。今のブラウザはどれも対応している
+#   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream-history.md「WASM のデコーダの組み方を決めたときの測定」)。今のブラウザはどれも対応している
 # - **LTO を掛ける** (`-flto`)。デコードが 2〜8% 速くなり、brotli 後はかえって 2 KB ほど縮む (同じ節)
 # - **ローダーは ES の module にして、ワーカーの中からだけ読む** (`ENVIRONMENT=worker`)。
 #   ファイルの読み書き (`FILESYSTEM`) は使わないので外す — それだけで 40KB ほど縮む
 # ---------------------------------------------------------------------------
-FROM docker.io/emscripten/emsdk:6.0.13@sha256:fb7864e398acfda863dfcea78b8bc8adad359fa60c6a0bbeb845931de64aa68a AS mpeg2wasm
+FROM docker.io/emscripten/emsdk:7.0.0@sha256:6bd7aef93408b10bf7b36642cb7c91119b302f720b9ec2d20439f73cf07fe894 AS mpeg2wasm
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ARG FFMPEG_VERSION=9.0.2
 COPY wasm/decoder.c /src/decoder.c
@@ -187,7 +187,8 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # libnvidia-encode) は ffmpeg が実行時に dlopen する。**実行イメージには何も足さない** — NVIDIA Container
 # Toolkit がホストのドライバのライブラリをコンテナに差し込む (docs/encode.md「NVIDIA でエンコードする」)。
 # GPU が無ければ試しのエンコードが落ちて使わないだけなのは VA-API と同じ。
-# clang は CUDA のフィルタ (scale_cuda・bwdif_cuda) を PTX に組むため (`--enable-cuda-llvm`。CUDA の SDK は要らない)
+# デコードとインタレ解除は CPU でするので、NVIDIA のデコーダ (nvdec) と CUDA のフィルタは組まない
+# (GPU に寄せるときは `--enable-nvdec`・`--enable-cuda-llvm` と clang を足す。docs/encode.md「NVIDIA でエンコードする」)
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libx264-dev libdav1d-dev libva-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
@@ -234,9 +235,6 @@ COPY patches/ /patches/
 #   rawvideo は CM 検出のロゴのコマ。H.265 (hevc_*) は GPU のものだけで、libx265 は組まない
 #   (ソフトウェアでは H.265 をエンコードしない。docs/encode.md「H.265 は GPU でだけ」)。
 #   nvenc は amd64、rkmpp は arm64 だけで、相手の arch では configure が黙って外す
-# - hwaccel の nvdec と、フィルタの hwupload_cuda・scale_cuda・bwdif_cuda は、NVIDIA の GPU で放送の MPEG-2 を
-#   デコードしてインタレ解除まで済ませるためのもの。**denpa はまだ使わない** (実機で確かめてから引数に足す。
-#   docs/encode.md「NVIDIA でエンコードする」)。clang で組めているかは、イメージの確かめで先に見ておく
 # - パーサ: demuxer が頼るのに configure が自分で足さないもの。画像の *_pipe は区切りをパーサに任せる
 # - bsf: h264_mp4toannexb・hevc_mp4toannexb は concat の demuxer が H.264・H.265 の mkv に差し込む (cm-cut.ts)。
 #   extract_extradata は libavformat が入力を調べるときに使う (無いと `-ss` で途中から読んだ MPEG-2 が次のシーケンスヘッダまで
@@ -249,8 +247,7 @@ COPY patches/ /patches/
 # - testsrc2・sine・telecine・tinterlace・noise は denpa は使わず、イメージの確かめで素材を作るためだけ
 #   (.github/image-smoke.sh と scripts/fps-smoke.ts)。合わせても数百 KB
 RUN case "${TARGETARCH}" in \
-      amd64) arch_dev="libffmpeg-nvenc-dev clang" \
-             arch_flags="--enable-ffnvcodec --enable-nvenc --enable-nvdec --enable-cuda-llvm" ;; \
+      amd64) arch_dev=libffmpeg-nvenc-dev arch_flags="--enable-ffnvcodec --enable-nvenc" ;; \
       arm64) arch_dev=libdrm-dev arch_flags="--enable-libdrm --enable-rkmpp" ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
@@ -296,12 +293,12 @@ RUN case "${TARGETARCH}" in \
       --disable-network \
       --enable-decoder=mpeg2video,h264,aac,opus,libdav1d,png,mjpeg,webp,hevc,ac3,eac3,mp2,aac_latm,wrapped_avframe,pcm_s16le \
       --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,hevc_vaapi,h264_nvenc,av1_nvenc,hevc_nvenc,h264_rkmpp,hevc_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
-      --enable-hwaccel=mpeg2_vaapi,h264_vaapi,mpeg2_nvdec,h264_nvdec \
+      --enable-hwaccel=mpeg2_vaapi,h264_vaapi \
       --enable-demuxer=mpegts,matroska,mov,concat,ffmetadata,image2,png_pipe,jpeg_pipe,webp_pipe \
       --enable-muxer=matroska,mp4,adts,avif,rawvideo,null,image2,mpegts \
       --enable-parser=mpegvideo,h264,aac,av1,opus,png,mjpeg,webp,hevc,ac3,mpegaudio,aac_latm \
       --enable-bsf=h264_mp4toannexb,hevc_mp4toannexb,aac_adtstoasc,extract_extradata \
-      --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,scale_vaapi,hwupload_cuda,scale_cuda,bwdif_cuda,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay \
+      --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,scale_vaapi,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay \
       --enable-indev=lavfi \
       --enable-protocol=file,pipe \
     && \
@@ -365,6 +362,51 @@ COPY . .
 # ソースマップ (*.map。サーバの分で 6MB ほど) は本番に入れない。サーバのコードは圧縮していないので、
 # エラーの場所はマップが無くても読める
 RUN bun run build && find build -name "*.map" -delete
+
+# ---------------------------------------------------------------------------
+# 本番で動かすアプリのファイル。本番イメージ (`runtime` 段) と、Windows・Mac の配布物 (`native-files` 段。
+# .github/workflows/windows-server.yml・macos-server.yml) の両方がここから写す (置くものを 1 か所で決める)
+#
+# **node_modules は載せない。**
+#
+# adapter-bun の出力は要るものを畳み込んでいて、外から引くのは `node:*` と
+# bun の組み込み (`bun:sqlite`・`bun:ffi`) だけ。載せていた頃は playwright も vite も
+# typescript もイメージに入っていて、**312MB がまるごと無駄**だった。
+# 置くのは下のものだけ: build/ (アプリ)、server.js (入口) とそれが読む
+# src/lib/server/address.ts・compress.ts・fresh-worker.ts・hold-signals.ts、package.json (`"type": "module"` の宣言)、drizzle/
+# (マイグレーション)。これで起動して /api/health が答えるかは CI で毎回見ている
+# (.github/image-smoke.sh。PR の docker-build-check と、push の前の build-and-deploy。Windows・Mac は test.yml の server-windows・server-macos)
+#
+# 引き換えに、**外から引くものを増やすなら畳み込ませること** — package.json の
+# `dependencies` に足すと adapter-bun がそれを外に出すので、ここで転ぶ。
+# 依存を全部 devDependencies に置いて `dependencies` を空にしてあるのはそのため
+# ---------------------------------------------------------------------------
+FROM scratch AS app-files
+COPY --from=build /app/build /app/build
+COPY --from=build /app/package.json /app/package.json
+# DB のマイグレーション (drizzle-kit が出した SQL)。起動時に `drizzle/` を cwd から
+# 読んで当てる (src/lib/server/db.ts)。束ねられないので SQL ファイルのまま置く
+COPY --from=build /app/drizzle /app/drizzle
+# ライブ視聴の WebSocket を受ける入口。中身の理由はファイルの頭に書いてある
+COPY --from=build /app/server.js /app/server.js
+# 入口が接続元を決めるのに使う (アプリと同じものを共有する。bun は .ts をそのまま読む)
+COPY --from=build /app/src/lib/server/address.ts /app/src/lib/server/address.ts
+# 入口が画面の HTML とデータを縮めるのに使う (`src/lib/server/compress.ts`。同じく `node:zlib` しか引かない)
+COPY --from=build /app/src/lib/server/compress.ts /app/src/lib/server/compress.ts
+# 入口がサービスワーカーに Cache-Control: no-cache を付けるのに使う (`src/lib/server/fresh-worker.ts`。何も引かない)
+COPY --from=build /app/src/lib/server/fresh-worker.ts /app/src/lib/server/fresh-worker.ts
+# 入口がいちばん先に読む。起動の途中に来た止まれの合図を取っておく (`src/lib/server/hold-signals.ts`。何も引かない)
+COPY --from=build /app/src/lib/server/hold-signals.ts /app/src/lib/server/hold-signals.ts
+
+# ---------------------------------------------------------------------------
+# Windows・Mac の配布物 (`denpa-<バージョン>-windows-x64.zip`・`denpa-<バージョン>-darwin-arm64.tar.gz`) に入れる、OS に依らないもの。
+# アプリ (`app-files`)・字 (`denpa-font`)・ブラウザへ配るデコーダ (`mpeg2wasm`) を、本番イメージと同じ段から写す。
+# bun と ffmpeg は OS ごとに、.github/workflows/windows-server.yml と macos-server.yml が別に用意して足す
+# ---------------------------------------------------------------------------
+FROM scratch AS native-files
+COPY --from=app-files /app/ /app/
+COPY --from=denpa-font /usr/share/denpa-font /font
+COPY --from=mpeg2wasm /opt/denpa/mpeg2 /mpeg2
 
 # ---------------------------------------------------------------------------
 # 本番イメージの土台 (distroless。Debian 13 = trixie から glibc・ca-certificates・tzdata など
@@ -473,7 +515,7 @@ RUN --mount=type=bind,from=distroless,target=/distroless \
 # (Bun.spawn に引数の配列を渡す)。時刻 (TZ) と証明書は土台の tzdata と ca-certificates を使う。
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** 今までどおり root で動かす
 # (/data や録画の置き場の持ち主と、/dev/dri を開く権限を変えないため)。
-# 中を見たいときはシェルのあるコンテナを横に付ける (docs/development.md)
+# 中を見たいときはシェルのあるコンテナを横に付ける (docs/install.md「うまくいかないとき」)
 # ---------------------------------------------------------------------------
 FROM distroless AS runtime
 WORKDIR /app
@@ -481,8 +523,6 @@ WORKDIR /app
 # (bun の公式イメージと同じ。コンテナを作り直せば消えるので、溜めても得が無い)
 ENV NODE_ENV=production \
     TZ=Asia/Tokyo \
-    FFMPEG=/usr/local/bin/ffmpeg \
-    FFPROBE=/usr/local/bin/ffprobe \
     BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 # NVIDIA の GPU を渡されたとき (ffmpeg 段の説明) に、NVIDIA Container Toolkit が差し込むドライバのライブラリ。
 # 既定 (compute,utility) には NVENC の libnvidia-encode が入らないので video を足す。
@@ -508,34 +548,8 @@ COPY --from=denpa-font /usr/share/denpa-font /usr/share/denpa-font
 # ブラウザへ配るデコーダ (MPEG-2・AAC・Opus。`mpeg2wasm` 段)
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /opt/denpa/mpeg2
 
-# **node_modules は載せない。**
-#
-# adapter-bun の出力は要るものを畳み込んでいて、外から引くのは `node:*` と
-# bun の組み込み (`bun:sqlite`) だけ。載せていた頃は playwright も vite も
-# typescript もイメージに入っていて、**312MB がまるごと無駄**だった。
-# 置くのは下のものだけ: build/ (アプリ)、server.js (入口) とそれが読む
-# src/lib/server/address.ts・compress.ts・fresh-worker.ts・hold-signals.ts、package.json (`"type": "module"` の宣言)、drizzle/
-# (マイグレーション)。これで起動して /api/health が答えるかは CI で毎回見ている
-# (.github/image-smoke.sh。PR の docker-build-check と、push の前の build-and-deploy)
-#
-# 引き換えに、**外から引くものを増やすなら畳み込ませること** — package.json の
-# `dependencies` に足すと adapter-bun がそれを外に出すので、ここで転ぶ。
-# 依存を全部 devDependencies に置いて `dependencies` を空にしてあるのはそのため
-COPY --from=build /app/build ./build
-COPY --from=build /app/package.json ./package.json
-# DB のマイグレーション (drizzle-kit が出した SQL)。起動時に `drizzle/` を cwd から
-# 読んで当てる (src/lib/server/db.ts)。束ねられないので SQL ファイルのまま置く
-COPY --from=build /app/drizzle ./drizzle
-# ライブ視聴の WebSocket を受ける入口。中身の理由はファイルの頭に書いてある
-COPY --from=build /app/server.js ./server.js
-# 入口が接続元を決めるのに使う (アプリと同じものを共有する。bun は .ts をそのまま読む)
-COPY --from=build /app/src/lib/server/address.ts ./src/lib/server/address.ts
-# 入口が画面の HTML とデータを縮めるのに使う (`src/lib/server/compress.ts`。同じく `node:zlib` しか引かない)
-COPY --from=build /app/src/lib/server/compress.ts ./src/lib/server/compress.ts
-# 入口がサービスワーカーに Cache-Control: no-cache を付けるのに使う (`src/lib/server/fresh-worker.ts`。何も引かない)
-COPY --from=build /app/src/lib/server/fresh-worker.ts ./src/lib/server/fresh-worker.ts
-# 入口がいちばん先に読む。起動の途中に来た止まれの合図を取っておく (`src/lib/server/hold-signals.ts`。何も引かない)
-COPY --from=build /app/src/lib/server/hold-signals.ts ./src/lib/server/hold-signals.ts
+# アプリ (`app-files` 段。何を置くかと、node_modules を載せない理由もそこに)
+COPY --from=app-files /app/ ./
 
 EXPOSE 3000
 # 動いているバージョン。ここでは `dev` のまま — リリースのときに、このイメージを土台に

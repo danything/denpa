@@ -37,6 +37,24 @@ const knobs: Knobs = {
 };
 /** チューナーが塞がっている状態。取り合いの見え方を確かめる */
 let busyTuners = false;
+/**
+ * 塞がっているチューナーの受信の状態と C/N (`GET /denpa/tuners` の `signal`。`POST /__control/signal` で変える)。
+ * 本物は C/N が変わっても通知 (`tuners`) を出さないので、変えても出さない。画面は 5 秒ごとに読み直して追う
+ */
+type FakeSignal = {
+  locked: boolean;
+  cn: number | null;
+  unit: "dB" | "raw";
+  atTune: boolean;
+} | null;
+const SIGNALS: Record<string, FakeSignal> = {
+  // PIX-DT295 の地上波で実機に出た値のあたり
+  raw: { locked: true, cn: 2748, unit: "raw", atTune: false },
+  db: { locked: true, cn: 25.3, unit: "dB", atTune: false },
+  tune: { locked: true, cn: 18.2, unit: "dB", atTune: true },
+  unlocked: { locked: false, cn: null, unit: "dB", atTune: false },
+};
+let busySignal: FakeSignal = SIGNALS["raw"] ?? null;
 /** 挿さっているカードリーダー。どちらにもカードが入っている */
 const CARD_READERS = [
   { name: "Fake Card Reader (usb 1-1)", ids: ["0000000000000000"] },
@@ -267,6 +285,7 @@ function tunerStatus() {
         ],
         pid: 1234,
         error: null,
+        signal: busySignal,
       };
     }
     const lease = leases.get(tuner.index);
@@ -279,6 +298,8 @@ function tunerStatus() {
       users: lease?.users ?? [],
       pid: lease === undefined ? null : 1234,
       error: null,
+      // 偽の選局は機材を持たないので測れない (本物の偽の選局 `FAKE_TUNE` と同じ)
+      signal: null,
     };
   });
 }
@@ -478,6 +499,10 @@ const options: Bun.ServeOptions = {
       busyTuners = url.searchParams.get("busy") === "1";
       emit("tuners");
       return json({ busy: busyTuners });
+    }
+    if (url.pathname === "/__control/signal" && request.method === "POST") {
+      busySignal = SIGNALS[url.searchParams.get("value") ?? ""] ?? null;
+      return json({ signal: busySignal });
     }
     /*
      * 放送の延長。ここを動かすと EIT[p/f] の終了時刻が後ろへ動く。

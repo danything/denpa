@@ -89,7 +89,7 @@
       : [{ kind: "clip", tone: "warning", label: note }];
   }
 
-  /** 「● 録画中・あと 21 分」(あと何分かは `ctx.clock` で進む) */
+  /** 「● 録画中・あと 21 分」(あと何分かは `ctx.now` で分ごとに進む) */
   function recordingLine(
     label: string,
     end: number,
@@ -100,7 +100,7 @@
       tone: "rec",
       running: true,
       label,
-      detail: recordingLeft(ctx.clock, end),
+      detail: recordingLeft(ctx.now, end),
       testid,
     };
   }
@@ -209,7 +209,7 @@
         tone: "warning",
         label: "ロゴで CM を判定できませんでした",
         detail:
-          "無音だけで判定しました。覚えたロゴは設定の「受信できるチャンネル」の「CM ロゴ」で確かめられます",
+          "無音だけで判定しました。判定に使う CM ロゴは、設定の「受信できるチャンネル」の「CM ロゴ」で確かめられます",
       });
     }
     return statusLines(activities, problems);
@@ -284,13 +284,13 @@
       {/if}
     </div>
     <!--
-      録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは 3 段目が言う)。
+      録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは 3 段目に出る)。
       いちばん上の録画中の行は、バーの先に「いま」の時刻を出す (線の代わり。`TimelineHeading`)
     -->
     {#if item.zone === "now" && res.end_at > res.start_at}
       {@const done = Math.min(
         1,
-        Math.max(0, (ctx.clock - res.start_at) / (res.end_at - res.start_at)),
+        Math.max(0, (ctx.now - res.start_at) / (res.end_at - res.start_at)),
       )}
       <progress
         class="row-bar rec"
@@ -304,7 +304,7 @@
           class="row-bar-now num"
           style:--done={done}
           aria-hidden="true"
-          data-testid="recording-now">{time(ctx.clock)}</span
+          data-testid="recording-now">{time(ctx.now)}</span
         >
       {/if}
     {/if}
@@ -587,6 +587,7 @@
         class:running={known}
         value={known ? barPercent : undefined}
         max="1"
+        aria-label="エンコードの進み"
       ></progress>
     {:else if held?.state === "downloading"}
       <progress
@@ -594,6 +595,7 @@
         class:running={held.progress !== null}
         value={held.progress ?? undefined}
         max="1"
+        aria-label="端末への保存の進み"
       ></progress>
     {/if}
   </div>

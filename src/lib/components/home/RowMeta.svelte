@@ -7,7 +7,7 @@
    * 局名は放送から来た字なので放送の字 (`.broadcast`)。残りはこちらで書いた字。
    *
    * **何でこの 1 本が立ったのか** (`rule`)。要らないものが混ざっていたときに直す先 (どのルールか) が分かるよう、
-   * ルール名をそのままルールの編集への入口にする。手動予約は、録れたもの (後から見返すもの) にだけ書く
+   * ルール名をそのままルールの編集への入口にする。手動予約は、録れたもの (後から見返すもの) と録り逃しにだけ書く
    */
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
 
@@ -27,7 +27,7 @@
     };
     rule:
       { rule_id: number | null; rule_name: string | null } | "manual" | null;
-    /** 残りの幅を埋める番組の説明の頭 (1 行で「…」まで。狭い画面では出さない) */
+    /** 残りの幅を埋める番組の説明の冒頭 (1 行で「…」まで。狭い画面では出さない) */
     excerpt?: string;
   } = $props();
   const rest = $derived(parts.filter(Boolean).join("・"));

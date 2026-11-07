@@ -56,15 +56,17 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 
 ### 1. 要るもの
 
-チューナー・B-CASカードとカードリーダー・OS (Linux / Mac / Windows)・Docker (Windows は WSL) が要ります。使えるチューナーの一覧と細かいことは [docs/tuners.md](docs/tuners.md#要るもの)。
+チューナー・B-CASカードとカードリーダー・OS (Linux / Mac / Windows)・Docker (Linux だけ) が要ります。使えるチューナーの一覧と細かいことは [docs/tuners.md](docs/tuners.md#要るもの)。
 
 ### 2. 入れる
 
 **1行で、denpa 本体とチューナーのエージェントの両方が立ち上がり、ブラウザが開きます。** clone は要りません。
 
 ```sh
-# Linux / Mac
+# Linux
 curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
+# Mac (Apple Silicon。管理者のパスワードを聞かれる)
+curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | sudo bash
 ```
 
 ```powershell
@@ -76,8 +78,8 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 ### 3. 開く
 
-- <http://denpa.localhost> (Linux・Mac で [genkan](https://github.com/danything/genkan) を入れられたとき) か
-  `http://<IP>:3000` (Windows は <http://localhost:3000>)。LAN のほかの機器 (テレビ・スマホ) からも `http://<IP>:3000`
+- <http://denpa.localhost> (Linux で [genkan](https://github.com/danything/genkan) を入れられたとき) か
+  `http://<IP>:3000` (Mac と Windows は <http://localhost:3000>)。LAN のほかの機器 (テレビ・スマホ) からも `http://<IP>:3000`
 - **誰を通すか** — 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、
   ここからはログインなしで通ります。範囲の変え方と、画面をログイン (OIDC) で守るときは
   [docs/install.md](docs/install.md#誰を通すか)

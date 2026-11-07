@@ -485,7 +485,7 @@ function send(
       () =>
         finish(
           new EdcbError(
-            `${where} に ${seconds(timing.connect)}待っても繋がりません。宛先の IP と、Windows ファイアウォールで TCP ${target.port} の受信を許可しているか (プロファイルにパブリックを含めて) を確かめてください。wslc から繋ぐときの宛先は、Windows の「vEthernet (Default Switch)」の IP です`,
+            `${where} に ${seconds(timing.connect)}待っても繋がりません。宛先の IP と、Windows ファイアウォールで TCP ${target.port} の受信を許可しているかを確かめてください。denpa と同じ Windows で動かしているなら、宛先は 127.0.0.1 です`,
           ),
         ),
       timing.connect,
@@ -493,7 +493,7 @@ function send(
     /** 受けたあと何も返さずに切られた。EpgTimerSrv はアクセス制御から外れた IP をこう扱う */
     const denied = () =>
       new EdcbError(
-        `${where} は接続を受けましたが、何も返さずに切りました。EpgTimerSrv のアクセス制御 (TCPAccessControlList) に denpa の IP が入っていないと思われます。wslc から繋ぐなら +172.16.0.0/12 を足してください`,
+        `${where} は接続を受けましたが、何も返さずに切りました。EpgTimerSrv のアクセス制御 (TCPAccessControlList) に denpa の IP が入っていないと思われます。足すのは denpa を動かしている機械の IP です (同じ Windows なら +127.0.0.1)`,
       );
 
     socket.on("connect", () => {

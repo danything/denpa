@@ -1,0 +1,245 @@
+name: Windows server bundle
+
+# **Windows (x64) でそのまま動かす denpa 本体の配布物** (`denpa-<バージョン>-windows-x64.zip`) を組む。
+# install.ps1 が取りに来る。リリース (release.yml) と CI (test.yml) の両方がここを呼ぶ。
+#
+# 中身は Linux の本番イメージ (Dockerfile の `runtime` 段) と同じものを、Windows の形で並べたもの。
+#
+# | 置き場         | 中身                                                                                |
+# | -------------- | ----------------------------------------------------------------------------------- |
+# | `bun.exe`      | bun の Windows 用 (公式のリリース。バージョンは Dockerfile の `oven/bun` と同じ)     |
+# | `app/`         | アプリ (Dockerfile の `app-files` 段)                                               |
+# | `font/`        | Denpa Font (`denpa-font` 段)                                                        |
+# | `mpeg2/`       | ブラウザへ配るデコーダ (`mpeg2wasm` 段)                                             |
+# | `ffmpeg/`      | ffmpeg.exe・ffprobe.exe と DLL、ライセンスの文書 (.github/ffmpeg-windows.sh)         |
+# | `licenses/`    | denpa と bun のライセンス                                                           |
+#
+# OS に依らないもの (アプリ・字・デコーダ) は Linux のイメージと同じ段を buildx で組んで取り出す (組み方を 2 か所に書かない)。
+# ffmpeg は Windows のランナーの MSYS2 で組む。**組んだものは actions/cache に置き、Dockerfile の ffmpeg 段と組む
+# スクリプトが変わるまで使い回す** (組み直すと 20 分を超える)。Opus と SVT-AV1 の組み上がりは ffmpeg とは別のキャッシュに置き、
+# バージョンと組み方が変わるまで使い回す (ffmpeg の configure の引数だけを変えたときに、この 2 つを組み直さないため)。
+#
+# 組むのは呼んだ workflow のコミット (リリースならタグ)。コミットを入力で受けて取り出すことはしない
+# (入力のコミットを取り出したジョブがキャッシュに書けると、main のキャッシュを汚せる。CodeQL の cache poisoning)
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "配布物の名前に入れるバージョン (v1.2.3 の形。v は落とす)。CI は dev"
+        type: string
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  ffmpeg:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      # ランナーの git は改行を CRLF に変えて取り出す。MSYS2 の bash と、Dockerfile を読む awk が困る
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # 鍵は Dockerfile の ffmpeg 段 (土台の FROM の行は除く。digest が上がるたびに組み直さない) と、組むスクリプトと patches/
+      - name: Cache key
+        id: key
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$( { awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile; cat .github/ffmpeg-windows.sh patches/*; } | sha256sum | cut -c1-16)
+          echo "key=ffmpeg-windows-x64-$hash" >> "$GITHUB_OUTPUT"
+          # Opus と SVT-AV1 の組み上がりは、ffmpeg とは別のキャッシュ。鍵はバージョンと、スクリプトの
+          # `# recipe:<名前>:begin` から `:end` までの組み方 (ffmpeg の configure の引数を変えても組み直さない)
+          stage=$(awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile)
+          version() { sed -nE "s/^(ARG|ENV) $1=(.+)$/\2/p" <<< "$stage" | head -1; }
+          recipe() { sed -n "/^# recipe:$1:begin/,/^# recipe:$1:end/p" .github/ffmpeg-windows.sh | sha256sum | cut -c1-16; }
+          # 読めなかったら止める (空のままだと、バージョンや組み方を変えても鍵が変わらない)
+          for v in OPUS_VERSION SVT_AV1_VERSION; do
+            test -n "$(version $v)" || { echo "Dockerfile の ffmpeg 段に $v がありません" >&2; exit 1; }
+          done
+          for r in opus svt-av1; do
+            grep -q "^# recipe:$r:end" .github/ffmpeg-windows.sh || { echo "ffmpeg-windows.sh に recipe:$r がありません" >&2; exit 1; }
+          done
+          echo "opus=ffmpeg-windows-x64-opus-$(version OPUS_VERSION)-$(recipe opus)" >> "$GITHUB_OUTPUT"
+          echo "svtav1=ffmpeg-windows-x64-svt-av1-$(version SVT_AV1_VERSION)-$(recipe svt-av1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore ffmpeg
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ffmpeg-out
+          key: ${{ steps.key.outputs.key }}
+
+      - name: Set up MSYS2
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make diffutils patch tar bzip2 curl
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-nasm
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-x264
+            mingw-w64-ucrt-x86_64-dav1d
+            mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-libvpl
+            mingw-w64-ucrt-x86_64-ffnvcodec-headers
+            mingw-w64-ucrt-x86_64-amf-headers
+
+      # 組み上がり (入れ先は .github/ffmpeg-windows.sh の `deps`)。ffmpeg が当たらなかったときだけ使う
+      - name: Restore Opus
+        id: opus
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\ffmpeg-deps\opus
+          key: ${{ steps.key.outputs.opus }}
+
+      - name: Restore SVT-AV1
+        id: svtav1
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\ffmpeg-deps\svt-av1
+          key: ${{ steps.key.outputs.svtav1 }}
+
+      # 依存は組み終えた直後に保存する (ffmpeg のビルドが落ちても残る)。ffmpeg 本体は成功したときだけ保存する
+      - name: Build Opus
+        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash .github/ffmpeg-windows.sh ffmpeg-out opus
+
+      - name: Save Opus
+        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\ffmpeg-deps\opus
+          key: ${{ steps.key.outputs.opus }}
+
+      - name: Build SVT-AV1
+        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash .github/ffmpeg-windows.sh ffmpeg-out svt-av1
+
+      - name: Save SVT-AV1
+        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\ffmpeg-deps\svt-av1
+          key: ${{ steps.key.outputs.svtav1 }}
+
+      - name: Build ffmpeg
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash .github/ffmpeg-windows.sh ffmpeg-out
+
+      - name: Save ffmpeg
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ffmpeg-out
+          key: ${{ steps.key.outputs.key }}
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-ffmpeg
+          path: ffmpeg-out
+          retention-days: 3
+
+  # アプリ・字・デコーダ (Dockerfile の `native-files` 段)。main のビルドが置いたキャッシュ (amd64、mode=max) から組む
+  files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build
+        run: |
+          docker buildx build --target native-files --platform linux/amd64 \
+            --cache-from "type=registry,ref=ghcr.io/${{ github.repository_owner }}/denpa:buildcache-amd64" \
+            --output type=local,dest=files .
+          find files -maxdepth 2 | sort
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-files
+          path: files
+          retention-days: 3
+
+  bundle:
+    needs: [ffmpeg, files]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download ffmpeg
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-ffmpeg
+          path: ffmpeg
+
+      - name: Download app files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-files
+          path: files
+
+      # bun は公式のリリースの **baseline** (AVX2 の無い CPU でも動くもの)。録画用の古い PC や Celeron でも動くように。
+      # バージョンは Dockerfile の `oven/bun` から読む (Renovate が上げるのはそこだけ)。中身は同じリリースの SHASUMS256.txt で照らす
+      - name: Assemble
+        id: zip
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          bun=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)
+          base="https://github.com/oven-sh/bun/releases/download/bun-v${bun}"
+          curl -fsSL --retry 5 --retry-all-errors -o bun.zip "$base/bun-windows-x64-baseline.zip"
+          curl -fsSL --retry 5 --retry-all-errors -o SHASUMS256.txt "$base/SHASUMS256.txt"
+          want=$(awk '$2 == "bun-windows-x64-baseline.zip" { print $1 }' SHASUMS256.txt)
+          test -n "$want"
+          echo "$want  bun.zip" | sha256sum -c
+          d=denpa
+          mkdir -p "$d/licenses"
+          unzip -j bun.zip '*/bun.exe' -d "$d"
+          curl -fsSL --retry 5 --retry-all-errors -o "$d/licenses/bun-LICENSE.md" "https://raw.githubusercontent.com/oven-sh/bun/bun-v${bun}/LICENSE.md"
+          cp LICENSE "$d/licenses/denpa-LICENSE"
+          cp -r files/app "$d/app"
+          cp -r files/font "$d/font"
+          cp -r files/mpeg2 "$d/mpeg2"
+          cp -r ffmpeg "$d/ffmpeg"
+          for f in bun.exe app/server.js app/build/index.js font/denpa-font.woff2 font/VERSION mpeg2/decoder.wasm ffmpeg/ffmpeg.exe ffmpeg/ffprobe.exe; do
+            test -f "$d/$f" || { echo "$f がありません" >&2; exit 1; }
+          done
+          asset="denpa-${TAG#v}-windows-x64.zip"
+          (cd "$d" && zip -qr9 "../$asset" .)
+          sha256sum "$asset" > "$asset.sha256"
+          ls -la "$asset"
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-windows-x64
+          path: |
+            ${{ steps.zip.outputs.asset }}
+            ${{ steps.zip.outputs.asset }}.sha256
+          retention-days: 7

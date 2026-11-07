@@ -1,5 +1,5 @@
 import { closeSync, openSync, readSync } from "node:fs";
-import { relative } from "node:path";
+import { isAbsolute, relative, sep } from "node:path";
 
 import { PACKET, SYNC } from "@danything/arib/psi";
 
@@ -27,7 +27,7 @@ import { config } from "./config";
  * 代わりにエンコードの前に見て、掛かったままならその場で復号する。
  *
  * 復号するのはエージェント側 (`/denpa/decode`)。カードリーダーを使うのは
- * あちらなので、カードを持っている側に任せるようにしてある。元の TS の置き場は両方のコンテナに見せてあり、
+ * あちらなので、カードを持っている側に任せるようにしてある。元の TS の置き場は denpa とエージェントの両方から同じパスで見えるようにしてあり、
  * やり取りするのはパスだけ。
  */
 
@@ -253,9 +253,15 @@ export async function descramble(
    * 未エンコードのものは元の TS としてここへ入る)
    */
   const base = config.rawDir;
-  const from = relative(base, input);
-  const to = relative(base, output);
-  if (from.startsWith("..") || to.startsWith("..")) {
+  // 区切りは / にそろえる (Windows の `\` のまま渡すと、Linux のエージェントには 1 つの名前に見える)
+  const from = relative(base, input).split(sep).join("/");
+  const to = relative(base, output).split(sep).join("/");
+  if (
+    from.startsWith("..") ||
+    to.startsWith("..") ||
+    isAbsolute(from) ||
+    isAbsolute(to)
+  ) {
     return {
       ok: false,
       error: `元の TS の保存先 (${base}) の外にあるファイルは復号できません`,

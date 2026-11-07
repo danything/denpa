@@ -13,17 +13,29 @@ export const HW_CODECS = ["av1", "hevc", "h264"] as const;
 export type HwCodec = (typeof HW_CODECS)[number];
 
 /**
- * GPU でエンコードする方式。並びがそのまま試す順。Intel・AMD は VA-API (QSV を使わない理由は server/hwenc.ts)。
+ * GPU でエンコードする方式。並びがそのまま試す順。Linux の Intel・AMD は VA-API (QSV を使わない理由は server/hwenc.ts)。
  * `rkmpp` は Rockchip (RK3588 / RK3588S) のハードウェアエンコーダ、`nvenc` は NVIDIA の GPU の
- * エンコーダで、どちらもデバイスが VA-API と別 (`/dev/mpp_service`・`/dev/nvidia0`。server/hwenc.ts)
+ * エンコーダで、どちらもデバイスが VA-API と別 (`/dev/mpp_service`・`/dev/nvidia0`。server/hwenc.ts)。
+ * `qsv` (Intel) と `amf` (AMD) は Windows だけ。Windows には VA-API が無いので、GPU の作り手ごとのエンコーダを使う。
+ * `videotoolbox` は Mac だけ (Apple の VideoToolbox。H.264 と H.265)
  */
-export const HW_KINDS = ["vaapi", "rkmpp", "nvenc"] as const;
+export const HW_KINDS = [
+  "vaapi",
+  "rkmpp",
+  "nvenc",
+  "qsv",
+  "amf",
+  "videotoolbox",
+] as const;
 export type HwKind = (typeof HW_KINDS)[number];
 
 export const HW_KIND_LABEL: Record<HwKind, string> = {
   vaapi: "VA-API",
   rkmpp: "Rockchip MPP",
   nvenc: "NVENC",
+  qsv: "QSV",
+  amf: "AMF",
+  videotoolbox: "VideoToolbox",
 };
 export const CODEC_LABEL: Record<HwCodec, string> = {
   av1: "AV1",

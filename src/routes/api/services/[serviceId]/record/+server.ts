@@ -1,6 +1,6 @@
 import { error, json } from "@sveltejs/kit";
 
-import { recordAiring } from "#lib/server/reservations.js";
+import { recordAiring, recordedBody } from "#lib/server/reservations.js";
 
 /**
  * **いま流れている番組を録る** (画面の外のもの向けの API。docs/api.md)。
@@ -15,10 +15,5 @@ export async function POST({ params }) {
 
   const result = await recordAiring(serviceId);
   if (!result.ok) error(result.status, result.message);
-  return json({
-    recorded: result.name,
-    programId: result.programId,
-    // 競合で弾かれたときは false (チューナーが足りない)。予約そのものは残る
-    reserved: result.state === "scheduled" || result.state === "recording",
-  });
+  return json(recordedBody(result));
 }

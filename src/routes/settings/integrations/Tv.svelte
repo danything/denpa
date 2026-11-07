@@ -1,12 +1,17 @@
 <script lang="ts">
-  import ActionButton from "#lib/components/ActionButton.svelte";
+  import { arming } from "#lib/arming.svelte.js";
+  import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import Lead from "#lib/components/Lead.svelte";
   import { dateTime } from "#lib/format.js";
 
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
+  /** 取消は 2 回押させる (削除と同じ `arming`)。取り消したテレビはペアリングし直しになり、戻せない */
+  const revoking = arming('[data-testid^="device-revoke"]');
 </script>
+
+<svelte:window onclick={revoking.stand} />
 
 <!--
     テレビのアプリ (danything/denpa-tv) に渡したアクセストークン。家の外から OIDC 越しに使うテレビは
@@ -33,8 +38,8 @@
         {#each data.devices as device (device.id)}
           <div class="device item" data-testid="device-row">
             <div class="grow">
-              <div class="small"><strong>{device.name}</strong></div>
-              <div class="tiny muted">
+              <div><strong>{device.name}</strong></div>
+              <div class="small muted">
                 ペアリング {dateTime(device.created_at)}・最後に使った
                 {device.last_used_at === null
                   ? "まだ"
@@ -42,13 +47,16 @@
               </div>
             </div>
             <div class="row-actions">
-              <ActionButton
+              <ArmedDelete
+                deleting={revoking}
+                armKey={device.id}
                 action="?/revokeDevice"
                 fields={{ id: device.id }}
-                class="small outline danger"
-              >
-                取消
-              </ActionButton>
+                class="small"
+                testid="device-revoke"
+                label="取消"
+                confirmLabel="取消を確定"
+              />
             </div>
           </div>
         {/each}

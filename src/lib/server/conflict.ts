@@ -381,7 +381,7 @@ export function assign<T extends Assignable>(
     if (found === null) {
       rejected.push({
         reservation: candidate,
-        reason: `${poolOf(candidate.type)} を受けられるチューナーが足りません (同時に ${worst(candidate, mine, rivals, busy)} チャンネル必要です)`,
+        reason: `${poolOf(candidate.type)} を受けられるチューナーが足りません (同時に ${worst(capacity, candidate, mine, rivals, busy)} チャンネル必要です)`,
       });
       continue;
     }
@@ -732,8 +732,12 @@ function room<T extends Assignable>(
   return plain;
 }
 
-/** 断るときに添える数。候補の区間のうち、同時に要るチャンネルがいちばん多い瞬間の数 */
+/**
+ * 断るときに添える数。候補の区間のうち、同時に要るチャンネルがいちばん多い瞬間の数。
+ * 数えるのは候補と同じチューナーを取り合うもの (同じ組で受けられる種別) だけ。別の組のチューナーで録る地上波は BS の不足に入れない
+ */
 function worst<T extends Assignable>(
+  capacity: Capacity,
   candidate: T,
   mine: { from: number; to: number },
   rivals: Accepted<T>[],
@@ -742,14 +746,17 @@ function worst<T extends Assignable>(
   const points = [mine.from, ...rivals.map((a) => a.from)].filter(
     (p) => p >= mine.from && p < mine.to,
   );
+  const shares = (type: string) =>
+    capacity.some((g) => g.types.has(candidate.type) && g.types.has(type));
   let most = 0;
   for (const at of points) {
     const keys = new Set([keyOf(candidate.type, candidate.channel)]);
     for (const a of rivals) {
-      if (a.from <= at && at < a.to)
+      if (a.from <= at && at < a.to && shares(a.reservation.type))
         keys.add(keyOf(a.reservation.type, a.reservation.channel));
     }
-    for (const b of busy) if (at < b.until) keys.add(keyOf(b.type, b.channel));
+    for (const b of busy)
+      if (at < b.until && shares(b.type)) keys.add(keyOf(b.type, b.channel));
     most = Math.max(most, keys.size);
   }
   return most;

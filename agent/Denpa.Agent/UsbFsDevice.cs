@@ -75,7 +75,6 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
 
     private const byte UrbTypeBulk = 3;
     private const short PollOut = 0x004;
-    private const int CloseOnExec = 0x80000;
 
     /// <summary>EP の止まりや化けで続けて捨ててよい読みの数。超えたら読みを失敗で終える</summary>
     private const int MaxStalls = 8;
@@ -116,7 +115,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
             throw new IOException($"USB のポート {port} に機材がありません (抜かれたか、コンテナに /sys が見えていません)");
         }
         var path = Path.Combine(devUsb, bus.ToString("D3", CultureInfo.InvariantCulture), device.ToString("D3", CultureInfo.InvariantCulture));
-        var fd = Sys.Open(path, Sys.ReadWrite | CloseOnExec);
+        var fd = Sys.Open(path, Sys.ReadWrite | Sys.CloseOnExec);
         if (fd < 0)
         {
             var errno = Marshal.GetLastPInvokeError();
@@ -211,19 +210,6 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
             var sent = Sys.Ioctl(Fd, UsbFsPipe.Bulk, (nint)(&transfer));
             if (sent < 0) throw Failure($"EP 0x{endpoint:X2} に送れません");
             if (sent != data.Length) throw new IOException($"{Name}: EP 0x{endpoint:X2} に送りきれません ({sent}/{data.Length} バイト)");
-        }
-    }
-
-    /// <summary>IN を 1 回。時間切れは 0</summary>
-    private int Transfer(byte endpoint, Span<byte> buffer, int timeoutMs)
-    {
-        fixed (byte* start = buffer)
-        {
-            var transfer = new UsbFsPipe.BulkTransfer { Endpoint = endpoint, Length = (uint)buffer.Length, TimeoutMs = (uint)timeoutMs, Data = start };
-            var got = Sys.Ioctl(Fd, UsbFsPipe.Bulk, (nint)(&transfer));
-            if (got >= 0) return got;
-            if (Marshal.GetLastPInvokeError() == Etimedout) return 0;
-            throw Failure($"EP 0x{endpoint:X2} から読めません");
         }
     }
 

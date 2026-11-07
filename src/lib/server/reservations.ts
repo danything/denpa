@@ -1,7 +1,11 @@
 import { and, desc, eq, gt, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
-import { COPY_NEVER_REASON } from "../format";
+import {
+  cancelable,
+  COPY_NEVER_REASON,
+  NOT_CANCELABLE_REASON,
+} from "../format";
 import type { Reservation, ReservationState } from "../types";
 import { getContractWarning } from "./contracts";
 import { now, orm } from "./db";
@@ -35,7 +39,7 @@ export type ReservationWithContract = Reservation & {
   contract_warning?: "expired" | "unsubscribed" | null;
 };
 
-/** 手動予約。ルール由来の予約が既にあれば手動扱いに昇格させて優先度を上げる */
+/** 手動予約。ルール由来の予約が既にあれば手動扱いにし、優先度は 2 とルールの優先度の高いほうにする */
 export async function reserve(
   programId: number,
 ): Promise<ReservationWithContract> {
@@ -82,7 +86,8 @@ export async function reserve(
       target: reservations.program_id,
       set: {
         manual: true,
-        priority: sql`excluded.priority`,
+        // ルールの優先度のほうが高ければそのまま (押して下がると、それまで勝っていた競合に黙って負ける)
+        priority: sql`MAX(${reservations.priority}, excluded.priority)`,
         encode: sql`excluded.encode`,
         state: sql`CASE WHEN ${reservations.state} = 'canceled' THEN 'scheduled' ELSE ${reservations.state} END`,
         started_at: rerecord,
@@ -109,13 +114,18 @@ export async function reserve(
 /** 画面の「予約」のアクション (番組表・検索)。フォームの `programId` を予約し、断ったときはその理由を返す */
 export async function reserveFromForm(form: FormData): Promise<string | null> {
   const programId = Number(form.get("programId"));
-  if (!Number.isFinite(programId)) return "番組 ID が不正です";
+  if (!Number.isSafeInteger(programId)) return "番組 ID が不正です";
   try {
     await reserve(programId);
     return null;
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return reason(error);
   }
+}
+
+/** `reserve` が断った理由の文 */
+function reason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -157,11 +167,11 @@ function byId(reservationId: number): Reservation | undefined {
 
 /**
  * 予約の取り消し。録画中なら止めて、そこまでの分は録画済みとして残す
- * (途中まででも見たいことがあるのでファイルは捨てない)。
+ * (途中まででも見たいことがあるのでファイルは捨てない)。録画を止めたら true
  */
-export async function cancel(reservationId: number): Promise<void> {
+export async function cancel(reservationId: number): Promise<boolean> {
   const reservation = byId(reservationId);
-  if (reservation === undefined) return;
+  if (reservation === undefined) return false;
 
   // 録っている最中なら止める。録っている最中かは録画の行で分かる
   const recording = orm()
@@ -183,9 +193,41 @@ export async function cancel(reservationId: number): Promise<void> {
     .where(eq(reservations.id, reservationId))
     .run();
   await resolveConflicts();
+  return recording !== undefined;
 }
 
-/** {@link recordAiring} の答え。断ったときは HTTP の状態と、そのまま出せる文言を持つ */
+/**
+ * **番組の予約を取り消す** (番組表の「予約取消」と、アプリの `DELETE /api/programs/<id>/record`)。
+ * 予約は番組ごとに 1 本 (`reservations.program_id` が一意)。取り消していない予約が無ければ 404、
+ * 録り終えた・録り逃したものは 409 ({@link cancelable}。取り消しにすると記録だけが書き換わるため)。
+ * 録画中なら止めて、そこまでの録画は残す ({@link cancel})
+ */
+export async function cancelProgram(
+  programId: number,
+  at = now(),
+): Promise<
+  | { ok: true; stopped: boolean }
+  | { ok: false; status: 404 | 409; message: string }
+> {
+  const reservation = orm()
+    .select({ id: reservations.id, end_at: reservations.end_at })
+    .from(reservations)
+    .where(
+      and(
+        eq(reservations.program_id, programId),
+        ne(reservations.state, "canceled"),
+      ),
+    )
+    .get();
+  if (reservation === undefined)
+    return { ok: false, status: 404, message: "予約が見つかりません" };
+  const state = reservationStates([programId]).get(programId) ?? null;
+  if (!cancelable(state, reservation.end_at, at))
+    return { ok: false, status: 409, message: NOT_CANCELABLE_REASON };
+  return { ok: true, stopped: await cancel(reservation.id) };
+}
+
+/** {@link recordAiring}・{@link recordProgram} の答え。断ったときは HTTP の状態と、そのまま出せる文言を持つ */
 type RecordAiring =
   | {
       ok: true;
@@ -193,8 +235,68 @@ type RecordAiring =
       name: string;
       state: ReservationState;
       contract_warning?: "expired" | "unsubscribed" | null;
+      /** 録らない理由 (`conflict_reason`)。競合・コピー禁止など。録るなら null */
+      reason: string | null;
     }
   | { ok: false; status: 400 | 404; message: string };
+
+/** 録画の API の答え (`POST /api/services/<id>/record`・`POST /api/programs/<id>/record`。docs/api.md) */
+export function recordedBody(result: Extract<RecordAiring, { ok: true }>) {
+  return {
+    recorded: result.name,
+    programId: result.programId,
+    // 競合で弾かれたときは false (チューナーが足りない)。予約そのものは残る
+    reserved: result.state === "scheduled" || result.state === "recording",
+    // 番組表のマスと同じ物差し (`reservationStates`) と、録らない理由
+    state: result.state,
+    reason: result.reason,
+  };
+}
+
+/**
+ * **番組 ID を指定して録る** (アプリの `POST /api/programs/<id>/record`)。
+ * 番組表に無ければ 404、予約できなければ (放送が終わっている、コピー禁止) 400。
+ * 予約は手動予約と同じ処理 ({@link reserve}) で、何度呼んでも二重には録らない
+ */
+export async function recordProgram(programId: number): Promise<RecordAiring> {
+  const program = orm()
+    .select({ id: programs.id, name: programs.name })
+    .from(programs)
+    .where(eq(programs.id, programId))
+    .get();
+  if (program === undefined)
+    return { ok: false, status: 404, message: "番組が見つかりません" };
+  return reserveProgram(program);
+}
+
+/** 予約して、番組表と同じ物差しの状態を添えて返す (`recordAiring`・`recordProgram`) */
+async function reserveProgram(program: {
+  id: number;
+  name: string;
+}): Promise<RecordAiring> {
+  let reservation: ReservationWithContract;
+  try {
+    reservation = await reserve(program.id);
+  } catch (error) {
+    return { ok: false, status: 400, message: reason(error) };
+  }
+  /*
+   * 競合で弾かれたかは予約のあとでしか分からない。番組表と同じ物差しで読む (録画中かは録画の行を見ないと
+   * 分からないため)。取り消し扱いで引けなければ、予約の行の状態をそのまま答える
+   */
+  const state =
+    reservationStates([program.id]).get(program.id) ?? reservation.state;
+  return {
+    ok: true,
+    programId: program.id,
+    name: program.name,
+    state,
+    reason: reservation.conflict_reason,
+    ...(reservation.contract_warning
+      ? { contract_warning: reservation.contract_warning }
+      : {}),
+  };
+}
 
 /**
  * **局でいま流れている番組を録る** (ライブの録画ボタンと、アプリの `POST /api/services/<id>/record`)。
@@ -234,30 +336,7 @@ export async function recordAiring(
       message: "いま流れている番組が番組表に見つかりません",
     };
   }
-  let reservation: Reservation;
-  try {
-    reservation = await reserve(program.id);
-  } catch (error) {
-    return {
-      ok: false,
-      status: 400,
-      message: error instanceof Error ? error.message : String(error),
-    };
-  }
-  /*
-   * 競合で弾かれたかは予約のあとでしか分からない。番組表と同じ物差しで読む (録画中かは録画の行を見ないと
-   * 分からないため)。取り消し扱いで引けなければ、予約の行の状態をそのまま答える
-   */
-  const state =
-    reservationStates([program.id]).get(program.id) ?? reservation.state;
-  const contractWarning = getContractWarning(serviceId, program.is_free);
-  return {
-    ok: true,
-    programId: program.id,
-    name: program.name,
-    state,
-    ...(contractWarning ? { contract_warning: contractWarning } : {}),
-  };
+  return reserveProgram(program);
 }
 
 /**

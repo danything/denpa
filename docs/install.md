@@ -21,7 +21,8 @@ Mac と Windows の入れ方の中身は [install-mac.md](install-mac.md) と [i
 **イメージは公開してあるので、clone は要りません。** 立ち上がるとブラウザが開きます。
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | bash        # Linux
+curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | sudo bash   # Mac (Apple Silicon)
 ```
 
 ```powershell
@@ -29,23 +30,21 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
 ```
 
 - **Linux** (amd64 / arm64): 全部 Docker Compose。`~/denpa` に compose.prod.yml を `compose.yml` として置いて起動します
-- **Mac** (Apple Silicon): エージェントは Mac の上で直接 (LaunchAgent)、denpa 本体は Docker。USB をコンテナに渡せないため ([install-mac.md](install-mac.md))
-- **Windows** (x64): エージェントは Windows の上で直接 (タスク スケジューラ)、denpa 本体は WSL のコンテナ (`wslc`)。Docker Desktop は要りません。
+- **Mac** (Apple Silicon): denpa 本体もエージェントも Mac の上で直接 (root の LaunchDaemon)。Docker は要りません。sudo で流します ([install-mac.md](install-mac.md))
+- **Windows** (x64): denpa 本体もエージェントも Windows の上で直接 (タスク スケジューラの SYSTEM のタスク)。WSL・Docker Desktop は要りません。管理者の PowerShell で流します。
   チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
-- **Docker・WSL は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
-  Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
-- **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux・Mac)。
+- **Docker は入れません** (Linux)。無ければ入れ方 (<https://get.docker.com>) を示して止まります
+- **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux)。
   動いていればそれを使い、無ければ 80 と 443 が空いているときだけ `~/genkan` に入れて <http://denpa.localhost> で開きます。
   入れられなければ `http://<IP>:3000` (localhost は Docker の中継を通って送信元が Docker のゲートウェイに見え、
   既定では信頼しないため。[auth.md](auth.md#ネットワークの中なら何も聞かない))。`denpa.localhost` はそのマシンでしか
-  引けないので、LAN のほかの機器 (テレビ・スマホ) からも `http://<IP>:3000` で開きます。Windows はいつも <http://localhost:3000>
+  引けないので、LAN のほかの機器 (テレビ・スマホ) からも `http://<IP>:3000` で開きます。Mac と Windows はいつも <http://localhost:3000>
 - 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は更新のたびに上書きするので、
   **変えたいことは同じ場所の `compose.override.yml` に書きます** (Compose が重ねて読み、install.sh は触らない)。
-  Windows は `~/denpa/denpa.env`
-- denpa とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、install.sh が `~/denpa/.env` の `AGENT_PAIR_TOKEN` に、
-  install.ps1 が `~/denpa/config/tls/pair-token` (エージェント自身の置き場) に、無いときだけ作って両方へ渡します。Mac は `.env` と同じ値を
-  `~/denpa/config/tls/pair-token` にも書きます。上げ直しても変えません
-- もう一度流すと最新のリリースに上がります。`… | bash -s -- --uninstall` で止めて外します
+  Mac は `/Library/Application Support/denpa/data/denpa.env`、Windows は `%ProgramData%\denpa\denpa.env`
+- denpa とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、Linux は `~/denpa/.env` の `AGENT_PAIR_TOKEN` に、
+  Mac と Windows は `~/denpa/config/tls/pair-token` (エージェント自身の置き場) に、無いときだけ作って両方へ渡します。上げ直しても変えません
+- もう一度流すと最新のリリースに上がります。`… | bash -s -- --uninstall` (Mac は `… | sudo bash -s -- --uninstall`) で止めて外します
   (`~/denpa`・録画・DB は残す)。ブラウザを開かないなら `--no-open`。Windows は `-Uninstall` / `-NoOpen`
   (渡し方は install.ps1 の冒頭)
 
@@ -109,6 +108,23 @@ ArgoCD はクラスタを見ずに描くので chart に作らせると値が変
 `denpa-agent` の chart も同じで `pairSecret`)。値の一覧と意味は
 [charts/denpa/values.yaml](../charts/denpa/values.yaml) のコメントにあります。
 
+#### PVC の名前を変えた (前のバージョンから上げるとき)
+
+**chart の PVC と values のキーを `raw` / `encoded` に改めました。**
+
+| 中身               | 前 (PVC / values のキー)                  | いま                                    |
+| ------------------ | ----------------------------------------- | --------------------------------------- |
+| 元の TS            | `denpa-recorded` / `persistence.recorded` | `denpa-raw` / `persistence.raw`         |
+| エンコードしたもの | `denpa-library` / `persistence.library`   | `denpa-encoded` / `persistence.encoded` |
+
+**そのまま上げると、新しい名前の空の PVC ができます。** 古い PVC は `helm.sh/resource-policy: keep`
+で残るので消えはしませんが、録画は見えなくなります。どちらかで繋ぎます。
+
+- 古い PVC をそのまま使う: `persistence.raw.existingClaim: denpa-recorded` /
+  `persistence.encoded.existingClaim: denpa-library` (denpa-agent の chart は `persistence.raw.existingClaim`)
+- 名前ごと移す: アプリを止め、PV の reclaim を `Retain` にして古い PVC を消し、PV の
+  `claimRef` を外してから、新しい名前の PVC を `volumeName` で同じ PV に結ぶ。中身はコピーしない
+
 ### Talos Linux に OS ごと
 
 PT3 を挿した機械を Talos Linux の 1 台のクラスタにして、OS の設定から denpa まで 1 行で立てます
@@ -125,8 +141,8 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.
 
 ### 配布物を確かめる
 
-リリースのイメージ (`denpa`・`denpa-agent`・`denpa-aio`) と、Mac・Windows 用のエージェント
-(リリースに添えた `denpa-agent-…-darwin-arm64.tar.gz`・`denpa-agent-…-windows-x64.zip`) には、
+リリースのイメージ (`denpa`・`denpa-agent`・`denpa-aio`) と、Mac・Windows 用のエージェントと denpa 本体
+(リリースに添えた `denpa-agent-…-darwin-arm64.tar.gz`・`denpa-agent-…-windows-x64.zip`・`denpa-…-darwin-arm64.tar.gz`・`denpa-…-windows-x64.zip`) には、
 **出所の証明 (attestation)** を付けています (2.13.0 から)。このリポジトリのリリースの
 workflow が作ったものかを、[GitHub CLI](https://cli.github.com/) で確かめられます。
 
@@ -158,7 +174,7 @@ services:
       OIDC_CLIENT_SECRET: <クライアントシークレット>
 ```
 
-Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `denpa.trustedNetworks` と
+Mac と Windows は同じ名前を `KEY=値` で `denpa.env` ([install-mac.md](install-mac.md#環境変数を足す-denpaenv)・[install-windows.md](install-windows.md#環境変数を足す-denpaenv)) に、Helm は `denpa.trustedNetworks` と
 `denpa.oidcSecretName` に書きます。
 **`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います。
 ログインの細かいことは [auth.md](auth.md)、変数の一覧は [config.md](config.md)。

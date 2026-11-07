@@ -22,16 +22,18 @@ import { now, orm } from "./db";
 import { emit } from "./events";
 import {
   knownNames,
+  type Lineup,
   lineupFrom,
   readLineup,
   type SatelliteType,
 } from "./satellite";
-import { channelChanges } from "./schema";
+import { channelChanges, DIGITAL_TV } from "./schema";
 import {
   type AgentChannel,
   getChannels,
   openChannelStream,
   putChannels,
+  TunerBusyError,
 } from "./tuner";
 import { notify } from "./webhook";
 
@@ -43,9 +45,6 @@ const KEEP_FOR = 30 * 24 * 60 * 60_000;
 
 /** 録画の失敗で読み直す間隔 (同じ種別)。録画は失敗すると数秒おきに掛け直す */
 const REFRESH_EVERY = 10 * 60_000;
-
-/** 1 中継器を読む上限 (スキャンと同じ) */
-const READ_TIMEOUT = 30_000;
 
 /** 確かめた version (`種別:ネットワーク ID`)。同じなら読み比べない */
 const checked = new Map<string, number>();
@@ -89,7 +88,7 @@ export function lineupDiff(
     const map = new Map<string, string>();
     for (const channel of list) {
       for (const service of channel.services) {
-        if (service.serviceType !== 1) continue;
+        if (service.serviceType !== DIGITAL_TV) continue;
         map.set(`${channel.networkId}:${service.serviceId}`, channel.channel);
       }
     }
@@ -226,7 +225,25 @@ export async function refreshLineup(
 ): Promise<void> {
   if (at - (refreshedAt.get(type) ?? -Infinity) < REFRESH_EVERY) return;
   refreshedAt.set(type, at);
-  await readLineup(
+  await readFromAir(type, {
+    onTables: (nit, sdt) => followLineup(type, nit, sdt),
+  });
+}
+
+/** 1 中継器を読む上限 (スキャンと同じ) */
+const READ_TIMEOUT = 30_000;
+
+/**
+ * **衛星の放送の一覧を、中継器を開いて読む** (`satellite.readLineup`)。スキャンの最中でないときに読むもの
+ * (再編の読み直しと、`satellite-lineup.ts` の局を入れる回) が使う。チューナーはスキャンと同じ優先度で取る。
+ * チューナーが塞がっていて開けなかった中継器があれば `busy`
+ */
+export async function readFromAir(
+  type: SatelliteType,
+  options: Omit<Parameters<typeof readLineup>[2], "timeout">,
+): Promise<{ lineup: Lineup; busy: boolean }> {
+  let busy = false;
+  const lineup = await readLineup(
     type,
     (channel) =>
       openChannelStream(
@@ -235,12 +252,13 @@ export async function refreshLineup(
         AbortSignal.timeout(READ_TIMEOUT * 4),
         `scan ${channel}`,
         config.priority.scan,
-      ),
-    {
-      timeout: READ_TIMEOUT,
-      onTables: (nit, sdt) => followLineup(type, nit, sdt),
-    },
+      ).catch((error: unknown) => {
+        if (error instanceof TunerBusyError) busy = true;
+        throw error;
+      }),
+    { ...options, timeout: READ_TIMEOUT },
   );
+  return { lineup, busy };
 }
 
 /** お知らせの 1 行。書き換えてから `NOTICE_FOR` の間で、設定の「受信」をまだ開いていないもの */

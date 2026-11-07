@@ -18,7 +18,7 @@ import {
   stop,
 } from "#lib/server/scan.js";
 import { programs, services } from "#lib/server/schema.js";
-import { measureChannelSignal } from "#lib/server/signal-quality.js";
+import { measureSignal } from "#lib/server/signal-quality.js";
 import type { ChannelType } from "#lib/types.js";
 
 /** 物理チャンネル 1 本と、そこに入っている局 */
@@ -142,7 +142,7 @@ export const actions = {
     if (types.length === 0)
       return fail(400, { message: "スキャンする種別を選んでください" });
 
-    const result = await start({ types });
+    const result = start({ types });
     if (!result.started) return fail(409, { message: result.message });
     return { success: true, scan: result.message };
   },
@@ -151,30 +151,40 @@ export const actions = {
    * チャンネルを書き換えたお知らせを消す。**開いた画面が呼ぶ** (`Channels.svelte`)。load で消すと、
    * リンクに指を乗せただけの先読みでも消える
    */
-  seenLineup: async () => {
+  seenLineup: () => {
     seenLineupChanges();
     return { success: true };
   },
 
   /** 走っているスキャンを中断する。設定は書き換えないまま止まる */
-  scanStop: async () => {
-    const result = await stop();
+  scanStop: () => {
+    const result = stop();
     if (!result.stopped) return fail(409, { message: result.message });
     return { success: true, scan: result.message };
   },
 
   /**
-   * 指定したチャンネルの電波受信品質を測定する。
-   * 約 2〜3 秒間ストリームを受信してパケット誤り率・ドロップ率・ビットレートを算出する。
+   * 1 つのチャンネルの受信品質を測る (`signal-quality.ts`)。**測り終えるまで待つ** (5 秒ほど)。
+   * 結果はそのチャンネルの行の下に出す。選局できなければ、その理由を通知に出す。
+   * 測れるのは一覧に並んでいるチャンネルだけ (チャンネル名はエージェントへのリクエストと名乗りにそのまま入る)
    */
   measureSignal: async ({ request }) => {
     const form = await request.formData();
-    const type = String(form.get("type") ?? "");
-    const channel = String(form.get("channel") ?? "");
-    if (!type || !channel) {
-      return fail(400, { message: "チャンネルを指定してください" });
+    const found = coverage().find(
+      (entry) =>
+        entry.type === form.get("type") &&
+        entry.channel === form.get("channel"),
+    );
+    if (found === undefined)
+      return fail(400, { message: "チャンネルを選んでください" });
+    const { type, channel } = found;
+    try {
+      const quality = await measureSignal(type, channel, request.signal);
+      return { success: true, measured: { type, channel, ...quality } };
+    } catch (error) {
+      return fail(502, {
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
-    const result = await measureChannelSignal(type, channel);
-    return { success: true, signal: result };
   },
 } satisfies Actions;

@@ -73,7 +73,7 @@ export function* pesMarks(bytes: Uint8Array): Generator<PesMark> {
 }
 
 /** 0〜一周の手前に置き直す (90kHz) */
-const inWrap = (value: number) => ((value % WRAP) + WRAP) % WRAP;
+export const inWrap = (value: number) => ((value % WRAP) + WRAP) % WRAP;
 
 /** 一周の中の差 `a - b` を、-半周〜+半周に置き直す (90kHz) */
 function delta(a: number, b: number): number {
@@ -121,6 +121,14 @@ export function lastVideoPts(bytes: Uint8Array): number | null {
 
 /** ファイルを少しずつ読む関数。`length` より短く返ってよい (尻) */
 export type ReadAt = (offset: number, length: number) => Promise<Uint8Array>;
+
+/** 先頭の PTS を探すのに読む量。映像と音声の最初の PES が必ず入る長さ */
+const HEAD_BYTES = 4 * 1024 * 1024;
+
+/** **録画の先頭を読んで、入れ物の始まり (`tsHead`) を返す。** 読めなければ null */
+export async function readHead(read: ReadAt): Promise<number | null> {
+  return tsHead(await read(0, HEAD_BYTES));
+}
 
 /** 1 回に読む量。放送の 1 秒ぶん (地上波 17Mbps ≒ 2MB) より短い間に映像の PES は何度も来る */
 const WINDOW = 256 * 1024;

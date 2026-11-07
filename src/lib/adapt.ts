@@ -66,7 +66,7 @@ export type Step = Rung | "audio";
  * - `watch`: 観る画面の HTTP fMP4。受け取る速さが送る側に縛られないので、余裕を測れる
  * - `live`: WebSocket (ライブ・追っかけ・MPEG-2)。実時間でしか送られないので、速さは余裕を表さない
  */
-export type AdaptRoute = "watch" | "live";
+type AdaptRoute = "watch" | "live";
 
 /**
  * 画面に返す理由 (断り書きに使う)。
@@ -76,7 +76,7 @@ export type AdaptRoute = "watch" | "live";
  * - `encode`: サーバのエンコードが間に合わない。段はそのまま
  * - `pinned`: 回線が細いが、形式を手で選んでいるので段を動かさない
  */
-export type AdaptReason = "slow" | "restored" | "encode" | "pinned";
+type AdaptReason = "slow" | "restored" | "encode" | "pinned";
 
 export interface AdaptDecision {
   /** 次の段。`encode` と `pinned` ではいまの段のまま */

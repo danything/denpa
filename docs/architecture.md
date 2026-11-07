@@ -34,9 +34,9 @@ TS は追記で開き、次の起動で `recoverOrphanedRecordings` が続きか
 どうやっても落ちるからです。ArgoCD の同期は待てますが、放送は待ちません。
 
 すぐ入れ替えたいときは `SHUTDOWN_WAIT=0` にすると「落ちて、続きから録り直す」になります。
-Kubernetes の `terminationGracePeriodSeconds` と docker compose の
-`stop_grace_period` は `SHUTDOWN_WAIT` より長くしておくこと。短いと待っている
-途中で SIGKILL されます。
+Kubernetes の `terminationGracePeriodSeconds`・docker compose の
+`stop_grace_period`・Mac の plist の `ExitTimeOut` (install.sh) は `SHUTDOWN_WAIT` より長くしておくこと。短いと待っている
+途中で SIGKILL されます。Windows には止まれの合図が無いので、install.ps1 が録画の終わりを待ってから止めます。
 
 **待っている間も画面は開けます。** ここは 2 箇所で落ちていました
 (実機では、録画中に同期が来て 34 分間ずっと画面だけ開けなかった)。
@@ -58,7 +58,7 @@ Kubernetes の `terminationGracePeriodSeconds` と docker compose の
 ### 待っている間も、始まる録画は始めます
 
 始めないでいた頃は、デプロイの最中に始まった番組の冒頭が **9 分 42 秒ぶん欠けて**いました
-(`server/scheduler.ts` に実測)。始めればそのぶん待ちが伸びますが、`SHUTDOWN_WAIT` が歯止めになります。
+(`scheduler.ts` に実測)。始めればそのぶん待ちが伸びますが、`SHUTDOWN_WAIT` が歯止めになります。
 
 ### エージェントも録画が終わるまで待ちます
 
@@ -165,7 +165,7 @@ NVIDIA の NVENC は amd64 に、Rockchip の MPP は arm64 にだけ入れて�
 - StorageClass は `persistence.storageClassName` (空ならクラスタの既定)。PVC を消させない設定は
   `persistence.protectFromPruning` (values.yaml に理由つき)
 - Gateway API の Gateway か Ingress。chart の `httpRoute.parentRefs` / `ingress` が指す先です。証明書は
-  Gateway 側のリスナーが持ちます
+  Gateway 側のリスナーが持ちます。前段を置かずにノードの IP で開くなら `service.type=NodePort` ([install-talos.md](install-talos.md))
 - DNS で、denpa の名前が Gateway のアドレスを指すこと
 - チューナードライバ。エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
   hostPath でマウントするので、DVB の機材はノード側にドライバが読み込まれていること。

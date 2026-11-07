@@ -39,8 +39,11 @@ export class Fmp4Splitter {
   private started = false;
   /** 組み立て中の媒体セグメント (moof から次の moof の手前まで) */
   private pending: Uint8Array[] = [];
+  /** 読めない箱が来た。以降は持ち越さずに捨てる (持ったままだと、届くたびに溜まり続ける) */
+  private broken = false;
 
   feed(chunk: Uint8Array): Segment[] {
+    if (this.broken) return [];
     this.buffer = concatBytes([this.buffer, chunk]);
     const out: Segment[] = [];
     let at = 0;
@@ -48,10 +51,15 @@ export class Fmp4Splitter {
       const size = u32(this.buffer, at);
       /*
        * 大きさ 0 は「ここから最後まで」、1 は「次の 8 バイトに本当の大きさ」。
-       * ffmpeg の fMP4 では出てこないが、来たら読めないので諦める
+       * ffmpeg の fMP4 では出てこないが、来たら読めないので打ち切る
        * (黙って詰めると、以降ずっとずれたまま流れ続ける)
        */
-      if (size < HEADER || this.buffer.length - at < size) break;
+      if (size < HEADER) {
+        this.broken = true;
+        this.buffer = new Uint8Array(0);
+        return out;
+      }
+      if (this.buffer.length - at < size) break;
       const type = ascii(this.buffer, at + 4, 4);
       const box = this.buffer.slice(at, at + size);
       at += size;

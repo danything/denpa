@@ -1,7 +1,8 @@
 import { and, eq, gt, gte, lt, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
-import { mainOf, splitOf } from "../subchannels";
+import { playableRecordingId } from "../format";
+import { columnsOf, mainOf, splitOf } from "../subchannels";
 import type {
   ChannelType,
   GridProgram,
@@ -128,6 +129,9 @@ export function programsOf(
          * 取消ボタンまで出ていた (予約側は録り始めた時刻しか持たないため)
          */
         reservation_state: sql<ReservationState | null>`CASE WHEN ${r.id} IS NULL THEN NULL ELSE ${reservationState(r, rec)} END`,
+        // 外から使う API (`GET /api/programs`) が予約の中身として返す
+        conflict_reason: r.conflict_reason,
+        rule_id: r.rule_id,
         recording_id: rec.id,
         recording_state: rec.state,
         library_path: rec.library_path,
@@ -219,4 +223,138 @@ export function daysOf(type: ChannelType, today: number) {
     days.unshift({ start, has: true });
   }
   return days;
+}
+
+/** 外から使う番組表 (`GET /api/programs`) の 1 番組。キーは camelCase (docs/api.md) */
+export interface ApiProgram {
+  id: number;
+  name: string;
+  startAt: number;
+  endAt: number;
+  description: string;
+  /** ジャンルの大分類 (ARIB の lv1)。番組表のマスの色と同じく先頭の 1 つ */
+  genre: number | null;
+  copyNever: boolean;
+  reservation: {
+    state: ReservationState;
+    reason: string | null;
+    ruleId: number | null;
+  } | null;
+  /** そのまま観られる録画 (番組表の詳細の再生ボタンと同じ判定) */
+  recordingId: number | null;
+}
+
+export interface ApiGuide {
+  type: ChannelType;
+  from: number;
+  to: number;
+  /** その種別でいちばん遅い番組の終わり。番組表が空なら null */
+  until: number | null;
+  services: {
+    id: number;
+    name: string;
+    /** サブチャンネルの列なら、その本チャンネルの id。本チャンネルは null */
+    mainId: number | null;
+    remoteControlKey: number | null;
+    logo: string | null;
+    programs: ApiProgram[];
+  }[];
+}
+
+/**
+ * `GET /api/programs` の範囲 (`from`・`to`)。読めない値と、`to` が `from` 以前なら null。
+ * **省いたら今日の放送日** (4:00 から 24 時間)。`to` だけ省けば `from` から 24 時間。
+ * 1 回で返すのは 24 時間まで (番組表のマスと同じ量)。超えたら `from` から 24 時間で切る
+ */
+export function programRange(
+  rawFrom: string | null,
+  rawTo: string | null,
+  at = Date.now(),
+): { from: number; to: number } | null {
+  const read = (raw: string) => {
+    const value = Number(raw);
+    return raw.trim() !== "" && Number.isSafeInteger(value) ? value : null;
+  };
+  const from = rawFrom === null ? broadcastDayStart(at) : read(rawFrom);
+  if (from === null) return null;
+  const limit = from + WINDOW_HOURS * HOUR;
+  const to = rawTo === null ? limit : read(rawTo);
+  if (to === null || to <= from) return null;
+  return { from, to: Math.min(to, limit) };
+}
+
+/** その種別でいちばん遅い番組の終わり (取り残しの局は数えない)。番組表が空なら null */
+function lastEndOf(type: ChannelType): number | null {
+  const row = orm()
+    .select({ until: sql<number | null>`MAX(${programTable.end_at})` })
+    .from(programTable)
+    .innerJoin(serviceTable, eq(serviceTable.id, programTable.service_id))
+    .where(and(eq(serviceTable.type, type), currentServices()))
+    .get();
+  return row?.until ?? null;
+}
+
+/**
+ * **外から使う番組表** (`GET /api/programs`。テレビのアプリの番組表)。
+ *
+ * 局と並びは Web の番組表と同じ `stationsOf`、番組と予約の状態はマスと同じ `programsOf` から組む。
+ * 引き方を別に書くと、マスとアプリで予約の状態が食い違う。
+ *
+ * `subchannels` なら、サブチャンネルの列も Web の番組表と同じ決め方 (`splitOf`・`columnsOf`) で足す。
+ * 列を立てるのは範囲の中に分割放送のあるサブだけで、置くのは本チャンネルのすぐ右。
+ * サブの列の番組は分割放送のものだけにする (ほかの時間は本チャンネルと同じ番組を流している)
+ */
+export function guideOf(
+  type: ChannelType,
+  from: number,
+  to: number,
+  subchannels = false,
+): ApiGuide {
+  const { services } = stationsOf(type, from, to);
+  const main = mainOf(services);
+  const programs = programsOf(type, from, to);
+  const split = subchannels ? splitOf(programs, main) : null;
+  const splitIds = new Set(
+    [...(split?.values() ?? [])].flat().map((program) => program.id),
+  );
+  const columns = columnsOf(services, main, split).map((service) => {
+    const of = main.get(service.id) ?? service.id;
+    return {
+      id: service.id,
+      name: service.name,
+      mainId: of === service.id ? null : of,
+      remoteControlKey: service.remote_control_key,
+      logo: service.has_logo ? `api/services/${service.id}/logo` : null,
+      programs: [] as ApiProgram[],
+    };
+  });
+  const byService = new Map(columns.map((column) => [column.id, column]));
+  for (const program of programs) {
+    const column = byService.get(program.service_id);
+    // サブの列には、本チャンネルと違う番組だけを置く
+    if (
+      column === undefined ||
+      (column.mainId !== null && !splitIds.has(program.id))
+    )
+      continue;
+    column.programs.push({
+      id: program.id,
+      name: program.name,
+      startAt: program.start_at,
+      endAt: program.end_at,
+      description: program.description,
+      genre: program.genres?.[0] ?? null,
+      copyNever: program.copy_never,
+      reservation:
+        program.reservation_state === null
+          ? null
+          : {
+              state: program.reservation_state,
+              reason: program.conflict_reason,
+              ruleId: program.rule_id,
+            },
+      recordingId: playableRecordingId(program),
+    });
+  }
+  return { type, from, to, until: lastEndOf(type), services: columns };
 }

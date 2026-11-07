@@ -771,11 +771,19 @@ describe("ffprobe の読み (mediaInfo)", () => {
 describe("続きの位置の物差し", () => {
   const kept = [{ start: 10, end: 100 }];
   const encoded = {
-    library_path: "/library/a.mkv",
+    library_path: av1,
+    hevc_path: null,
+    alt_path: null,
     cm_kept: kept,
     encode_skip: 3,
   };
-  const tsOnly = { library_path: null, cm_kept: null, encode_skip: null };
+  const tsOnly = {
+    library_path: null,
+    hevc_path: null,
+    alt_path: null,
+    cm_kept: null,
+    encode_skip: null,
+  };
 
   test("source を省くと観る画面と同じ。エンコードしたものがあればそれ、無ければ元の TS", () => {
     expect(rulerOf(encoded, null)).toEqual({ kept, skip: 3 });
@@ -784,6 +792,15 @@ describe("続きの位置の物差し", () => {
     expect(
       rulerOf({ ...tsOnly, library_path: "/library/a.ts" }, null),
     ).toBeNull();
+  });
+
+  test("名前があってもファイルが無ければ元の TS の物差し (観る画面の `axis` と同じ)", async () => {
+    const gone = { ...encoded, library_path: join(media, "gone.mkv") };
+    expect(rulerOf(gone, null)).toBeNull();
+    const plan = await playbackPlan(
+      seed({ library_path: gone.library_path, ts_path: ts }),
+    );
+    expect(plan?.info.axis).toBe("ts");
   });
 
   test("名指しされたらそれ。alt も同じ切り方 (2 本目は 1 本目と同じ区間で切る)", () => {
@@ -803,9 +820,14 @@ describe("一覧の残り", () => {
     { start: 10, end: 100 },
     { start: 160, end: 300 },
   ];
-  const times = { start_at: 0, end_at: 310_000 };
+  const times = {
+    start_at: 0,
+    end_at: 310_000,
+    hevc_path: null,
+    alt_path: null,
+  };
   const cut = {
-    library_path: "/library/a.mkv",
+    library_path: av1,
     cm_kept: kept,
     encode_skip: 0,
     duration_ms: 230_000,
@@ -822,7 +844,7 @@ describe("一覧の残り", () => {
 
   test("切っていないものは、捨てた先頭のぶんだけずらす", () => {
     const plain = {
-      library_path: "/library/a.mkv",
+      library_path: av1,
       cm_kept: null,
       encode_skip: 3,
       duration_ms: 297_000,

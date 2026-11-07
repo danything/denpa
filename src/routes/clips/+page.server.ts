@@ -11,7 +11,7 @@ import { recordings } from "#lib/server/schema.js";
  */
 export function load({ url }) {
   const query = parseClipQuery(url.searchParams);
-  // 続き (`before`) は画面が API で足す。URL に残っていても頭から出す
+  // 続き (`before`) は画面が API で足す。URL に残っていても先頭から出す
   delete query.before;
   const { clips, next } = findClips(query);
   /** 録画で絞っているときは、その名前を出す (外す印に添える) */

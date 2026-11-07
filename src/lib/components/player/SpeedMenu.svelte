@@ -2,10 +2,10 @@
   import { read } from "#lib/keep.js";
   import { SPEEDS } from "#lib/ts/pacing.js";
 
-  /** 録画の速さを覚える鍵。観る画面と追っかけで共通 (エンコードする前と後で同じ録画を観る) */
+  /** 録画の速さを覚えるキー。観る画面と追っかけで共通 (エンコードする前と後で同じ録画を観る) */
   export const SPEED_KEY = "watch-speed";
 
-  /** 前に選んだ速さ。読めない・知らない値なら等速 */
+  /** 前に選んだ速さ。読めない値と `SPEEDS` に無い値は等速 */
   export function storedSpeed(): number {
     const saved = Number(read(SPEED_KEY));
     return SPEEDS.includes(saved as (typeof SPEEDS)[number]) ? saved : 1;
@@ -25,8 +25,9 @@
    * `label` だけ画面の言葉 (ライブは「追っかけの速さ」、他は「再生の速さ」)。
    *
    * **ボタンは、等速ならメーターのアイコンだけの丸、速めている間は数字だけ (「1.25」)。**
-   * 速めているときだけ数字が出れば、それ自体が「いま速めている」の印になる (押されている
-   * 見た目 `on` も同じとき)。ボタンの上では × を付けない。速さのボタンだと分かっているので要らない。
+   * 速めているときだけ数字が出れば、それ自体が「いま速めている」の印になる (オンの短い線は重ねない。1 つの意味に印は 1 つ)。
+   * メニューの引き金なので `aria-pressed` は付けず、開いているかを `aria-expanded` で言う (`Menu`)。いまの速さは名前が言う。
+   * ボタンの上では × を付けない。速さのボタンだと分かっているので要らない。
    *
    * **選択肢は「×1.25」のまま。** 開いた並びは数字だけが縦に並ぶので、何の数か (倍) を書いておく。
    * 開け閉めは `Menu` (popover。最前面に出るので、舞台を全画面にしている間も隠れない)。
@@ -71,7 +72,6 @@
         {menu}
         label={speedLabel(label, speed)}
         {testid}
-        on={speed !== 1}
         icon={speed === 1 ? SPEED : undefined}
         children={speed === 1 ? undefined : number}
       />
@@ -80,13 +80,13 @@
   {#each SPEEDS as value (value)}
     <button
       type="button"
-      role="menuitem"
+      role="menuitemradio"
       class="menu-item option"
+      aria-checked={value === speed}
       onclick={() => onselect(value)}
       data-testid={testid && `${testid}-option`}
       data-speed={value}
       data-active={value === speed ? "" : undefined}
-      aria-current={value === speed ? "true" : undefined}
     >
       ×{value}
     </button>
@@ -112,7 +112,7 @@
   }
   /*
      * 箱と選択肢の地・項目の間は `SettingsMenu` と同じなので app.css (`.menu`・`.overlay-menu`) に置く。
-     * ここは数字を大きく真ん中にそろえるだけ。畳むときは速さのボタンごと ⚙ の頭に入れるので (`Extras`)、
+     * ここは数字を大きく真ん中にそろえるだけ。畳むときは速さのボタンごと ⚙ の先頭に入れるので (`Extras`)、
      * このメニューは畳まないときだけ出る
      */
   :global(.overlay-menu.speed-menu) {

@@ -70,9 +70,18 @@ public static class Px4Userland
     /// </summary>
     public static string AliasOf(string serial, IEnumerable<string> places) => $"{serial}_{string.Join('_', places)}";
 
-    /// <summary>配布アーカイブを展開した場所 (Dockerfile)</summary>
+    /// <summary>配布アーカイブを展開した場所 (Linux は Dockerfile の <c>/opt</c>。Mac と Windows は <see cref="Beside"/>)</summary>
     public static string Dir =>
-        Environment.GetEnvironmentVariable("PX4_USERLAND_DIR") ?? "/opt/px4-userland";
+        Environment.GetEnvironmentVariable("PX4_USERLAND_DIR") ?? Beside("px4-userland", "/opt/px4-userland");
+
+    /// <summary>
+    /// 同梱物の既定の置き場。Linux (コンテナ) は <paramref name="linux"/>、Mac と Windows はインストーラと同じ
+    /// 実行ファイルの隣 (<c>bin/</c> の 1 つ上の <paramref name="name"/>)。常駐を止めて手で <c>--tune</c> を流したときに、
+    /// 環境変数を渡さなくても常駐と同じものを使う (Config の置き場と同じ考え)
+    /// </summary>
+    public static string Beside(string name, string linux) => OperatingSystem.IsLinux()
+        ? linux
+        : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", name));
 
     /// <summary>px4d / px4ctl の実行ファイル。Windows だけ <c>.exe</c> が付く (配布 zip の中身のまま)</summary>
     public static string Executable(string dir, string name) =>
@@ -85,12 +94,13 @@ public static class Px4Userland
     /// **Windows は <c>C:\denpa-run</c>** (install.ps1 が作る)。px4d はここを、持ち主が本人で、本人・SYSTEM・
     /// Administrators のほかに書ける人がいないときだけ使う。ユーザーのフォルダ (<c>%LOCALAPPDATA%</c>) の下に
     /// しないのは、ソケットのパスが UTF-8 で 108 バイトまでで、日本語のユーザー名だとすぐ溢れるのと、
-    /// 非 ASCII のパスだと px4d の ready の行が途切れる (px4-userland #52) から (<see cref="RuntimeProblem"/>)
+    /// 非 ASCII のパスだと px4d の ready の行が途切れる (px4-userland #52) から (<see cref="RuntimeProblem"/>)。
+    /// Mac は実行ファイルの隣の <c>run</c> (install.sh が作る)
     /// </para>
     /// </summary>
     public static string RuntimeDir =>
         Environment.GetEnvironmentVariable("PX4_RUNTIME_DIR")
-        ?? (OperatingSystem.IsWindows() ? @"C:\denpa-run" : "/run/px4-userland");
+        ?? (OperatingSystem.IsWindows() ? @"C:\denpa-run" : Beside("run", "/run/px4-userland"));
 
     /// <summary>
     /// ソケットのパスの上限 (UTF-8、末尾の NUL を入れて)。<c>sockaddr_un.sun_path</c> の大きさで、
@@ -488,7 +498,8 @@ public static class Px4Userland
             + (status != "open_failed" ? ""
                 // Windows の libusb は WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ
                 : OperatingSystem.IsWindows() ? $" ({WinUsbHint})"
-                : " (/dev/bus/usb を開く権限が無いかもしれません)"));
+                : OperatingSystem.IsLinux() ? " (/dev/bus/usb を開く権限が無いかもしれません)"
+                : " (別のプロセスが使っているかもしれません)"));
 
     /// <summary>Windows で筐体を開けないときの手当て</summary>
     private const string WinUsbHint =
@@ -659,12 +670,12 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bo
 }
 
 /// <summary>
-/// 筐体を持つ常駐 (<c>px4d</c> / <c>asicend</c>)。**筐体 1 台につき 1 つ、起こしたら止めるまで動き続ける。**
+/// 筐体を持つ常駐 (<c>px4d</c> / <c>asicend</c>)。**筐体 1 台につき 1 つ、使う受信機がある間だけ動かす。**
 ///
 /// <para>
-/// 起こすのは最初に要ったとき (起動時の <see cref="Prepare"/> か、初めての選局)。
+/// 起こすのは最初に要ったとき (起動時の <see cref="Prepare{T}"/> か、初めての選局)。
 /// ファームウェアを流し込んでから ready になるので、数秒かかる。
-/// 落ちていたら次に要ったときに起こし直す。
+/// 落ちていたら次に要ったときに起こし直す。受信機を全部使わない設定にしたら止める (<see cref="Prepare{T}"/>)。
 /// </para>
 /// </summary>
 public abstract class UserlandDaemon(string name, string id)
@@ -714,17 +725,43 @@ public abstract class UserlandDaemon(string name, string id)
         lock (Registry) return [.. All.Values.OfType<T>().Where(daemon => daemon.Running)];
     }
 
+    /// <summary>内蔵カードリーダーの名前 (カードの候補に出る名前)</summary>
+    public abstract string CardName { get; }
+
     /// <summary>
-    /// 挙げた筐体ぶん起こして ready まで待つ。**起動時と、設定を書き換えたとき。**
+    /// 挙げた筐体ぶん起こして ready まで待ち、**挙げなかった <typeparamref name="T"/> は止める。**
+    /// 起動時と、設定 (チューナー・カードリーダー) を書き換えたときと、機材を挿したとき。
     ///
     /// <para>
     /// **起こせなくても止まらない。** 筐体が抜けている・ファームウェアが無い、は
     /// その筐体だけの話で、他のチューナー (PT3 など) は変わらず使える。
     /// 理由は記録に残し、選局のときにもう一度試す。
     /// </para>
+    ///
+    /// <para>
+    /// **受信機を全部使わない設定にした筐体は、常駐を止めて USB を手放す。** 動いたままだと、ほかのソフトに
+    /// 機材を渡せない (docs/switch.md「並べて動かすとき」)。使う設定に戻せば、ここか次の選局で起こし直す。
+    /// 起動したときに使う受信機の無い筐体を起こさないのと同じ。
+    /// ただし、**内蔵カードリーダーをいま復号に使っているなら止めない** (<paramref name="cardInUse"/>)。
+    /// 止めるとほかのチューナーの復号まで止まる。カードリーダーも使わない設定にすれば止まる
+    /// </para>
     /// </summary>
-    public static void Prepare(IEnumerable<string> ids, Func<string, UserlandDaemon> daemon)
+    public static void Prepare<T>(IReadOnlyCollection<string> ids, Func<string, T> daemon, Func<string, bool> cardInUse)
+        where T : UserlandDaemon
     {
+        List<T> unused;
+        lock (Registry) unused = [.. All.Values.OfType<T>().Where(target => target.Running && !ids.Contains(target.Id))];
+        foreach (var target in unused)
+        {
+            if (cardInUse(target.CardName))
+            {
+                target.Write("使う受信機はありませんが、内蔵カードリーダーを復号に使っているので止めません");
+                continue;
+            }
+            target.Write("使う受信機が無くなったので止めます");
+            target.Stop();
+        }
+
         foreach (var id in ids)
         {
             var target = daemon(id);
@@ -881,6 +918,8 @@ public abstract class UserlandDaemon(string name, string id)
 public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
 {
     public static Px4Daemon For(string id) => For(id, () => new Px4Daemon(id));
+
+    public override string CardName => Px4Card.ReaderName(Id);
 
     /// <summary>
     /// 起こしたときの筐体 (一覧で聞いたもの)。動いている間、一覧に出なくなっても (Windows では px4d が使っている
@@ -1053,8 +1092,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// 区切りは筐体 (制御ソケット) 単位。どの受信機が同じキューかは px4d の中の作りなので当てにしない
     /// (Q3U4 のようにキューが 2 つある筐体でも、ブリッジをまたいだ選局が少し待つだけ)。
     /// START_STREAM から ATTACH_STREAM までは px4d が 5 秒しか待たないので、その間も放さない。
-    /// 閉じるとき (<see cref="Dispose"/>) は並ばない。答えが来なくても接続を閉じれば px4d が返すし、
-    /// <c>TunerPool</c> のロックを持ったまま呼ばれるので、ほかの受信機の選局を待つと取り合いごと止まる。
+    /// 閉じるとき (<see cref="Dispose"/>) は並ばない。答えが来なくても接続を閉じれば px4d が返す。
     /// カード (Px4Card.cs) は px4d の別のキューなので入れない
     /// </para>
     /// </summary>
@@ -1075,6 +1113,9 @@ public sealed class Px4Tuner : ITuneDevice
 
     /// <summary>15V を落としたことを記録に残したか (<see cref="WarnLnb"/>)</summary>
     private bool _lnbWarned;
+
+    /// <summary>最後の選局の答えの C/N (<see cref="Signal"/>)</summary>
+    private TunerSignal? _tuned;
 
     /// <summary>STATS を聞く目覚まし。流している間だけ (<see cref="StartStats"/>)</summary>
     private Timer? _statsTimer;
@@ -1112,7 +1153,7 @@ public sealed class Px4Tuner : ITuneDevice
         _prepare = prepare;
         _wire = wire ?? Px4Wire.Px4;
         _device = device ?? Px4Userland.Device(id, receiver);
-        _name = name ?? $"px4-{Px4Userland.Tail(id)} #{receiver}";
+        _name = name ?? $"px4-{Px4Userland.Label(id)} #{receiver}";
         _turn = Turns.GetOrAdd(Px4Control.Endpoint(runtimeDir, id, "control.sock", _wire), _ => new Lock());
     }
 
@@ -1128,8 +1169,8 @@ public sealed class Px4Tuner : ITuneDevice
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
     /// <summary>
-    /// 受信機を取っていて、TS がまだ流れているか。**ロックの下で読む。** <c>Dispose</c> は別の
-    /// ロック (<c>TunerPool._deviceGate</c>) から来るので、畳んでいる最中のものに触らないように
+    /// 受信機を取っていて、TS がまだ流れているか。**ロックの下で読む。** <c>Dispose</c> は TunerPool の <c>Held.Close</c>
+    /// や STATS の定期取得と別のスレッドから来るので、畳んでいる最中のものに触らないように
     /// </summary>
     public bool Tuned
     {
@@ -1137,6 +1178,25 @@ public sealed class Px4Tuner : ITuneDevice
         {
             lock (_gate) return _control is not null && _stream is { Ended: false };
         }
+    }
+
+    /// <summary>
+    /// 選局したときの C/N。**px4d は C/N を TUNE の答えでしか返さない** (STATS には無い) ので、受信中は選局したときの値のまま。
+    /// 取得し直すには選局し直すしかなく、それでは受信が途切れる。
+    /// **ロックを取らない。** STATS の定期取得が <c>_gate</c> を握ったまま筐体の順番を最長数秒待つので、取ると TunerPool.ReadSignals がそこで止まる
+    /// (3 つを別々に読む。選局し直しの最中に前の値か null が返るだけ)
+    /// </summary>
+    public TunerSignal? Signal() => Volatile.Read(ref _control) is not null && Volatile.Read(ref _stream) is { Ended: false } ? Volatile.Read(ref _tuned) : null;
+
+    /// <summary>
+    /// TUNE の答え <c>u8 locked, i32 cnr_mdb</c> (SPEC 6.4。little-endian) の C/N。<c>cnr_mdb</c> は 0.001 dB 刻みで、
+    /// 分からなければ <c>INT32_MIN</c>。C/N の付いていない答えなら C/N は null
+    /// </summary>
+    public static TunerSignal TuneSignal(ReadOnlySpan<byte> answer)
+    {
+        var locked = answer.Length >= 1 && answer[0] != 0;
+        double? cn = answer.Length >= 5 && BinaryPrimitives.ReadInt32LittleEndian(answer[1..]) is var mdb && mdb != int.MinValue ? mdb / 1000.0 : null;
+        return new TunerSignal(locked, cn, TunerSignal.Db, AtTune: true);
     }
 
     /// <summary>
@@ -1319,6 +1379,8 @@ public sealed class Px4Tuner : ITuneDevice
             _started = false;
         }
 
+        // 選局し直しが失敗したら、前のチャンネルの C/N を残さない
+        _tuned = null;
         var tune = TuneRequest(_lease, tuning, streamId, lnb);
         var busyUntil = DateTime.UtcNow + BusyRetry;
         byte[] answer;
@@ -1341,6 +1403,7 @@ public sealed class Px4Tuner : ITuneDevice
         }
         // u8 locked, i32 cnr_mdb。px4d は同期したときしか成功で答えないが、px4-ts と同じく locked も見る
         if (answer.Length < 1 || answer[0] == 0) throw new Px4Error(Px4Error.Timeout, ITuneDevice.SyncFailed);
+        _tuned = TuneSignal(answer);
 
         control.Request(Px4Control.StartStream, lease, RequestTimeout);
         _started = true;
@@ -1523,7 +1586,7 @@ internal sealed class Px4Stream
 
     /// <summary>
     /// 溜め (<see cref="Depth"/>)。待ちは Inline で起こす (スレッドプールに回さない。pump は専用のスレッドで、
-    /// 読む側も 200ms ごとに自分で起きる)。CECH-ZD1 J の TS も同じ溜めに詰める (Zd1jStream)
+    /// 読む側も 200ms ごとに自分で起きる)。CECH-ZD1 J と PIX-DT295 の TS も同じ溜めに詰める (Zd1jStream・Dt295NativeStream)
     /// </summary>
     internal static Pipe NewBuffer() => new(new PipeOptions(
         pauseWriterThreshold: Depth,

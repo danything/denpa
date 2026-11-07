@@ -87,7 +87,7 @@ describe("prepareApp", () => {
       '<script src="https://denpa.example/api/bml/hc/0123/common/a.js">',
     );
     expect(html).toContain("http://other.example/b.png");
-    // `/` から始まる住所も中継の頭へ (NHK のアプリはこう書く)。`//` から始まるものは別の配信元なので触らない
+    // `/` から始まる URL も中継のルートへ (NHK のアプリはこう書く)。`//` から始まるものは別の配信元なので触らない
     const rooted = prepareApp(
       '<head><script src="/common/b.js"></script><img src="//cdn.example/c.png"></head>',
       {
@@ -122,7 +122,7 @@ describe("prepareApp", () => {
     expect(html).toContain('"url":"http://hc.example.jp/p/index.html"');
   });
 
-  test("head も html も無ければ頭に入れる", () => {
+  test("head も html も無ければ先頭に入れる", () => {
     expect(prepareApp("<p>x</p>", INIT, COMPAT).startsWith("<base ")).toBe(
       true,
     );

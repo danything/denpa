@@ -1,10 +1,10 @@
 /**
  * 新しいバージョンが出ているか。**動いているバージョンと GitHub の最新のリリースを数で比べる。**
  *
- * 動いているバージョン (`config.version`) はリリースのイメージにだけ入っている。リリースの
- * とき、main で組んだイメージに 1 層足す (.github/release.Dockerfile)。GitHub の
+ * 動いているバージョン (`config.version`) はリリースのイメージと、Mac・Windows のインストーラが書く
+ * 起動スクリプトにだけ入っている。GitHub の
  * 「最新のリリース」のタグを 1 時間に 1 度取り、向こうが新しければ設定の入口に点を付ける
- * (`+layout.svelte`)。
+ * (`+layout.svelte`)。Windows の通知領域と Mac のメニューバーのアプリ (`tray/`) は、同じものを `/api/health` で読む。
  *
  * **リリースを消せば通知も消える。**「最新」は消したあとのバージョンになるので、次に
  * 見比べたときに引っ込む。main (develop) のイメージと手元・試験は `dev` で、何も
@@ -14,7 +14,7 @@
  */
 
 import { boolean, type Infer, object, optional, read, string } from "../shape";
-import { config } from "./config";
+import { config, userAgent } from "./config";
 
 const RELEASE = object({
   tag_name: string,
@@ -76,7 +76,10 @@ export async function checkForUpdate(
   }
   try {
     const res = await fetcher(`${config.githubApi}/releases/latest`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": "denpa" },
+      headers: {
+        accept: "application/vnd.github+json",
+        "user-agent": userAgent(),
+      },
       signal: AbortSignal.timeout(10_000),
     });
     if (res.status === 404) {

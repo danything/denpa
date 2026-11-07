@@ -29,7 +29,7 @@
           Discord や Slack の Incoming Webhook の URL をそのまま入れられます。
         </p>
         <p>
-          録画の失敗は画面を開くまで気づけないので、せめて「録画失敗」は送っておくと安心です。
+          録画の失敗は画面を開くまで分かりません。「録画失敗」を送れば、失敗したときにすぐ気づけます。
         </p>
       {/snippet}
     </Lead>
@@ -79,7 +79,7 @@
               <span class="tag {webhook.enabled ? 'success' : ''}">
                 {webhook.enabled ? "有効" : "無効"}
               </span>
-              <span class="truncate mono tiny">{webhook.url}</span>
+              <span class="truncate mono">{webhook.url}</span>
             </div>
             <div class="small">
               <span class="muted">送る通知:</span>
@@ -93,7 +93,7 @@
                 <span class={webhook.last_status === "ok" ? "" : "text-error"}>
                   {webhook.last_status === "ok" ? "成功" : webhook.last_status}
                 </span>
-                <span class="muted tiny">
+                <span class="muted">
                   {dateTime(webhook.last_sent_at)}
                 </span>
               {:else}

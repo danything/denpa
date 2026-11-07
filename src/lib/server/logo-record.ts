@@ -6,7 +6,7 @@ import { logoRecords } from "./schema";
 import { settings } from "./settings";
 
 /**
- * **ロゴを取りに行った記録** (docs/logo.md「ロゴの取得を記録する」)。デバッグ用で、設定の `recordLogo` がオンの間だけ書く。
+ * **ロゴを取得した記録** (docs/logo.md「ロゴの取得を記録する」)。デバッグ用で、設定の `recordLogo` がオンの間だけ書く。
  *
  * 衛星のロゴは全受信機共通データとして、ダウンロードの期間の間だけ流れる。期間がいつ来るかは前もって分からないので、
  * 当たりの中継で待つたびに、いつ・どれだけ開いて・何が来たかを残し、期間の間隔と長さを実測で知る。
@@ -73,7 +73,7 @@ function write(attempt: LogoAttempt, now: number): void {
 }
 
 /** 古い行と、上限を越えた行を消す */
-export function pruneLogoRecords(now = Date.now()): void {
+function pruneLogoRecords(now = Date.now()): void {
   const db = orm();
   db.delete(logoRecords)
     .where(lt(logoRecords.started_at, now - LOGO_RECORD_DAYS * 86_400_000))

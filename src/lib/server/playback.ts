@@ -35,7 +35,7 @@
  * 5 分で畳む** (止めたまま放っておかれた画面のぶんの枠を返すため)
  */
 
-import { existsSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 
 import { CLOCK, WRAP } from "@danything/arib/pes";
 import { error } from "@sveltejs/kit";
@@ -64,11 +64,12 @@ import {
   RUNG_HEADER,
 } from "#lib/ts/playback.js";
 import {
+  inWrap,
   lastVideoPts,
   type ReadAt,
+  readHead,
   seekTs,
   sinceHead,
-  tsHead,
 } from "#lib/ts/seek.js";
 import { fromTsTime, type Ruler } from "#lib/ts/watch.js";
 import type { Recording } from "#lib/types.js";
@@ -77,6 +78,7 @@ import { programSpec } from "./captions";
 import { chapterList } from "./cm";
 import { config } from "./config";
 import { type LiveHw, nvencBusy } from "./hwenc";
+import { type EncodedColumns, encodedFile, encodedFiles } from "./library";
 import {
   aribServiceId,
   audioArgs,
@@ -281,7 +283,7 @@ interface TsFile {
 interface PlaybackPlan {
   info: PlaybackInfo;
   encoded: EncodedFile[];
-  /** 元の TS。録り終えていて、読めるときだけ */
+  /** 元の TS。録り終えていて読めて、時刻を物差しに乗せられるときだけ */
   ts: TsFile | null;
   /** 物差しの 0 が、TS の先頭から何秒か (`encode_skip`)。TS が物差しなら 0 */
   skip: number;
@@ -323,8 +325,8 @@ function reader(path: string): ReadAt {
     );
 }
 
-/** 先頭と末尾を読む量。先頭は映像と音声の最初の PES が必ず入る長さ、末尾は最後の映像の PES が入る長さ */
-const PROBE_BYTES = 4 * 1024 * 1024;
+/** 尺を出すのに末尾から読む量。最後の映像の PES が入る長さ */
+const TAIL_BYTES = 4 * 1024 * 1024;
 
 /** 読んだ TS の控え。開くたびに聞くので、同じファイル (パス・大きさ・更新時刻) なら読み直さない */
 const tsProbed = new Map<string, { key: string; ts: TsFile | null }>();
@@ -345,11 +347,11 @@ async function probeTs(path: string): Promise<TsFile | null> {
   const held = tsProbed.get(path);
   if (held?.key === key) return held.ts;
   const read = reader(path);
-  const head = tsHead(await read(0, PROBE_BYTES));
+  const head = await readHead(read);
   let ts: TsFile | null = null;
   if (head !== null) {
     const last = lastVideoPts(
-      await read(Math.max(0, size - PROBE_BYTES), PROBE_BYTES),
+      await read(Math.max(0, size - TAIL_BYTES), TAIL_BYTES),
     );
     const duration = last === null ? null : sinceHead(last, head);
     ts = {
@@ -363,7 +365,7 @@ async function probeTs(path: string): Promise<TsFile | null> {
   return ts;
 }
 
-/** 録画の尺 (秒)。番組表の尺ではなく録れた長さ。古い行は予定の長さ */
+/** 録画の尺 (秒)。番組表の尺ではなく録れた長さで、エンコードし終えたら出来上がりの長さ (`encoder.ts`)。古い行は予定の長さ */
 function recordedSec(recording: Recording): number {
   return (
     (recording.duration_ms ?? recording.end_at - recording.start_at) / 1000
@@ -379,19 +381,8 @@ function recordedSec(recording: Recording): number {
 export async function playbackPlan(
   recording: Recording,
 ): Promise<PlaybackPlan | null> {
-  // 並びは主 → H.265 → H.264 (`library.encodedPaths` と同じ)
-  const files = (
-    [
-      ["encoded", recording.library_path],
-      ["hevc", recording.hevc_path],
-      ["alt", recording.alt_path],
-    ] as const
-  ).filter(
-    (entry): entry is readonly [EncodedSource, string] =>
-      entry[1]?.endsWith(".mkv") === true && existsSync(entry[1]),
-  );
   const encoded: EncodedFile[] = await Promise.all(
-    files.map(async ([source, path]) => {
+    encodedFiles(recording).map(async ({ source, path }) => {
       const media = await probeMedia(source, path);
       return { source, path, codec: codecOf(media.video), media };
     }),
@@ -474,8 +465,8 @@ export async function playbackPlan(
       : tracks.map((track) => ({ id: track.id, label: track.label }));
   const duration =
     axis === "encoded"
-      ? (encoded[0]?.media.duration ??
-        Math.max(0, recordedSec(recording) - skip))
+      ? // エンコードし終えた行の `duration_ms` は出来上がりの長さ (頭を捨て、CM を切ったあと) なので、skip は引かない
+        (encoded[0]?.media.duration ?? recordedSec(recording))
       : (ts?.duration ?? recordedSec(recording));
 
   return {
@@ -490,7 +481,15 @@ export async function playbackPlan(
         : {}),
     },
     encoded,
-    ts,
+    /*
+     * エンコードしたものの物差しで TS から変換するのは、TS の時刻を物差しに乗せられるときだけ (MPEG-2 と同じ条件)。
+     * CM を切ったものと、捨てた先頭を覚えていない古い録画は、字幕・チャプター・続きの位置とずれる
+     */
+    ts:
+      axis === "ts" ||
+      (recording.cm_kept === null && recording.encode_skip !== null)
+        ? ts
+        : null,
     skip,
     tracks,
     program: aribServiceId(recording.service_id),
@@ -797,7 +796,13 @@ export function transcodeBody(
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      proc = spawnAttempt(attempts[0]!);
+      // 起こせなければ (ffmpeg が無いなど) 枠を返してから断る。返さないと変換の枠が減ったままになる
+      try {
+        proc = spawnAttempt(attempts[0]!);
+      } catch (error) {
+        finish();
+        throw error;
+      }
       timer = setInterval(() => {
         const now = Date.now();
         // 待っている間は ffmpeg の側、待っていなければ相手の側を見る
@@ -862,7 +867,13 @@ export function transcodeBody(
         console.warn(`${what}をやり直します (${code}): ${why}`);
         failed = await current.log();
         index++;
-        proc = spawnAttempt(attempts[index]!);
+        try {
+          proc = spawnAttempt(attempts[index]!);
+        } catch (error) {
+          finish();
+          controller.error(error);
+          return;
+        }
         continue;
       }
       console.warn(`${what}が止まりました (${code}): ${why}`);
@@ -897,6 +908,8 @@ function spawnAttempt(attempt: Attempt) {
         }
       } finally {
         endInput(proc);
+        // ffmpeg が先に降りたときも、読みかけのファイルを閉じる
+        source.cancel().catch(() => undefined);
       }
     })().catch(() => undefined);
   }
@@ -1225,8 +1238,7 @@ async function rawResponse(
   if (ts === null) error(404, "この形式では再生できません");
   const mark = await seekFrom(ts, plan.skip, from);
   if (mark === null) error(404, "この形式では再生できません");
-  const origin =
-    (((ts.head + Math.round(plan.skip * CLOCK)) % WRAP) + WRAP) % WRAP;
+  const origin = inWrap(ts.head + Math.round(plan.skip * CLOCK));
   return new Response(Bun.file(ts.path).slice(mark.at).stream(), {
     headers: {
       "Content-Type": "video/mp2t",
@@ -1238,22 +1250,13 @@ async function rawResponse(
   });
 }
 
-/** エンコード済みのファイル (Matroska)。無ければ null。在るものが物差しになる (`PlayAxis`) */
-export function encodedFile(
-  recording: Pick<Recording, "library_path">,
-): string | null {
-  return recording.library_path?.endsWith(".mkv") === true
-    ? recording.library_path
-    : null;
-}
-
 /**
  * 続きの位置の物差し (`ts/watch.ts` の `Ruler`)。`source` は観ているファイル (`?source=` と同じ語彙)。
  * null なら観る画面と同じ決め方 (エンコードしたものがあればそれ、無ければ元の TS。`playbackPlan` の `axis`)。
  * 元の TS の物差しなら null
  */
 export function rulerOf(
-  recording: Pick<Recording, "library_path" | "cm_kept" | "encode_skip">,
+  recording: EncodedColumns & Pick<Recording, "cm_kept" | "encode_skip">,
   source: FileSource | null,
 ): Ruler | null {
   const encoded =
@@ -1278,6 +1281,8 @@ export function watchProgress(
   recording: Pick<
     Recording,
     | "library_path"
+    | "hevc_path"
+    | "alt_path"
     | "cm_kept"
     | "encode_skip"
     | "resume_ms"

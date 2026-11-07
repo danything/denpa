@@ -27,12 +27,12 @@ export const overrides: Record<string, PageOverride> = {
   "install-mac": {
     title: "Mac でテレビ録画サーバを立てる",
     description:
-      "Apple Silicon の Mac に、テレビ録画サーバ denpa を1行で入れる方法。チューナーのエージェントは Mac の上で、denpa 本体は Docker で動かします。",
+      "Apple Silicon の Mac に、テレビ録画サーバ denpa を1行で入れる方法。Docker は要らず、denpa 本体もエージェントも Mac の上でそのまま動かします。",
   },
   "install-windows": {
     title: "Windows でテレビ録画サーバを立てる",
     description:
-      "x64 の Windows に、PowerShell の1行でテレビ録画サーバ denpa を入れる方法。Docker Desktop は要らず、denpa 本体は WSL のコンテナで動かします。",
+      "x64 の Windows に、PowerShell の1行でテレビ録画サーバ denpa を入れる方法。Docker Desktop も WSL も要らず、denpa 本体もエージェントも Windows の上でそのまま動かします。",
   },
   tuners: {
     title: "使えるチューナー (PT3・PX-Q3U4・PX-W3U4・PX-S1UD ほか)",

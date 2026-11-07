@@ -53,8 +53,8 @@
           data-testid="edcb-target"
         />
         <span class="hint">
-          IP とポート (既定 4510)。denpa を wslc で動かしているなら、Windows
-          の「vEthernet (Default Switch)」の IP。保存はしません
+          IP とポート (既定 4510)。EDCB と同じ Windows で denpa
+          を動かしているなら 127.0.0.1:4510。保存はしません
         </span>
       </label>
       <CheckRow

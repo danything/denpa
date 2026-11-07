@@ -297,7 +297,7 @@
     };
   /**
    * 直しているルールを消したら、`?rule=` を外して出直す。残すと、無くなったルールの画面が
-   * 新しいルールの欄に化けて見える。戻る先の履歴にも残さない。「削除しました」は移ったあとに当てる
+   * 新しいルールの欄に見える。戻る先の履歴にも残さない。「削除しました」は移ったあとに当てる
    */
   const leaveDeleted: SubmitFunction =
     () =>
@@ -519,7 +519,7 @@
                 局がまだありません。<a
                   href={`${resolve("settings/reception")}#channels`}
                   >チャンネルスキャン</a
-                >をしてください。
+                >をしてください
               </p>
             {/each}
           </div>
@@ -627,7 +627,7 @@
                 timeTo = "";
                 weekdays = [];
               }}
-              data-testid="rule-slot-clear">いつでもに戻す</button
+              data-testid="rule-slot-clear">時間帯と曜日の指定を外す</button
             >
           {/if}
         </div>
@@ -658,7 +658,7 @@
   <div class="draft-foot" aria-busy={counting}>
     <p class="small muted" role="status" data-testid="rule-draft-status">
       {#if empty}
-        キーワードか局を入れると、一覧の番組を録るかどうかが出ます
+        キーワード・局・ジャンルのどれかを入れると、一覧の番組を録るかどうかが出ます
       {:else if slotError !== null}
         時間帯の{slotError}
       {:else if preview?.failed}
@@ -672,11 +672,10 @@
     </p>
     {#if saved !== null}
       <p class="notice success small" data-testid="rule-saved">
-        {saved.created ? "保存しました" : "更新しました"}:
-        <a
+        ルール「<a
           href={resolve(`search?rule=${saved.id}`)}
           data-testid="rule-saved-link">{saved.name}</a
-        >
+        >」を{saved.created ? "保存しました" : "更新しました"}
       </p>
     {/if}
     {#if draft.editing !== null}
@@ -762,7 +761,7 @@
     --dp-btn-lift: none;
     position: fixed;
     inset: auto 0 0;
-    z-index: 60;
+    z-index: var(--dp-z-modal);
     max-height: 80svh;
     overflow-y: auto;
     border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
@@ -782,7 +781,7 @@
   :global(:where(html[data-phone])) .sheet-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 59;
+    z-index: calc(var(--dp-z-modal) - 1);
     margin: 0;
     padding: 0;
     border: 0;
@@ -818,7 +817,7 @@
   }
   /*
      * 同じ回・前の回・局・ジャンル・時間帯と曜日・優先度。枠の箱にも線にもせず、サイドバーの行 (`app.css` の `.side-item`) と同じ形。
-     * 行の塗りは左右に字の余白ぶんはみ出し、字の頭は上の欄の頭にそろえる
+     * 行の塗りは左右に字の余白ぶんはみ出し、字の左端は上の欄の左端にそろえる
      */
   .rows {
     margin-inline: -0.75rem;
@@ -835,9 +834,6 @@
     flex-shrink: 0;
     float: none;
     margin-inline-start: 0;
-  }
-  .chips .chip {
-    width: auto;
   }
   .value {
     margin-inline-start: auto;
@@ -917,9 +913,9 @@
     background: var(--dp-bg);
   }
   /*
-     * **数えている間 (`aria-busy`) も形を変えない。** Pico の `aria-busy` は 1 行の字に回るものを付ける前提で、
-     * `white-space: nowrap` と `::before` の回るものを足す。ここは字の段落とボタンを縦に並べた箱なので、
-     * 案内の字が 1 行に伸びて列の幅からはみ出し (列が横にスクロールできてしまう)、回るものも 1 行ぶん場所を取る。
+     * **数えている間 (`aria-busy`) も形を変えない。** Pico の `aria-busy` は 1 行の字にスピナーを付ける前提で、
+     * `white-space: nowrap` と `::before` のスピナーを足す。ここは字の段落とボタンを縦に並べた箱なので、
+     * 案内の字が 1 行に伸びて列の幅からはみ出し (列が横にスクロールできてしまう)、スピナーも 1 行ぶん場所を取る。
      * 開いた直後の 1 回目の下見でも、数え終わるまでの一瞬だけ崩れて見えていた
      */
   .draft-foot[aria-busy="true"] {

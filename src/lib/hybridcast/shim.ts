@@ -1,5 +1,5 @@
 /**
- * Hybridcast のアプリの頭に差し込むもの。**アプリの文書の中で動く** (`prepareApp` が
+ * Hybridcast のアプリの先頭に差し込むもの。**アプリの文書の中で動く** (`prepareApp` が
  * `(${shim})(init)` の形で HTML に入れる)。
  *
  * アプリは sandbox の iframe (使い捨てのオリジン) にいて、外へは直に繋げない (CSP の
@@ -48,7 +48,7 @@ export interface ShimInit {
   /**
    * **アプリを denpa 越しに読ませる中継** (`server/hc-relay.ts`)。http のアプリは https の画面から読めず (Mixed Content)、
    * https のアプリも中の script の `location.*` を置き換えないと iframe ごと外へ移ろうとして止められる (`location.ts`)。
-   * `root` は中継の頭 (絶対 URL。末尾は /)、`origin` はアプリの配信元 (http(s)://host)。`<base>` と HTML の中の
+   * `root` は中継のルート (絶対 URL 。末尾は /)、`origin` はアプリの配信元 (http(s)://host)。`<base>` と HTML の中の
    * 配信元の URL は `prepareApp` が中継へ書き換え、後から作られる要素の URL はここで書き換える
    */
   relay: { root: string; origin: string };
@@ -114,11 +114,11 @@ export function shim(init: ShimInit): void {
   const relayRoot = init.relay.root;
   const relayFrom = `${init.relay.origin}/`;
   /**
-   * denpa の頭 (https://denpa/)。**`/` から始まる住所はここへ解決される** — `<base>` を中継にしても、
-   * NHK のアプリの `/common/…` は中継の外 (denpa の頭) を指す。配信元の頭として扱う
+   * denpa の先頭 (https://denpa/)。**`/` から始まる URL はここへ解決される。** `<base>` を中継にしても、
+   * NHK のアプリの `/common/…` は中継の外 (denpa の先頭) を指す。配信元のルートとして扱う
    */
   const denpaTop = `${new URL(relayRoot).origin}/`;
-  /** 配信元の URL を中継へ (読み込み用)。`/` から始まって denpa の頭に解決されたものも。ほかはそのまま */
+  /** 配信元の URL を中継へ (読み込み用)。`/` から始まって denpa の先頭に解決されたものも。ほかはそのまま */
   const toRelay = (url: string): string => {
     if (url.startsWith(relayFrom))
       return relayRoot + url.slice(relayFrom.length);
@@ -126,7 +126,7 @@ export function shim(init: ShimInit): void {
       return relayRoot + url.slice(denpaTop.length);
     return url;
   };
-  /** 中継の URL (と denpa の頭に解決された URL) を配信元へ戻す (通信は親が中継で取るので、元の行き先を渡す) */
+  /** 中継の URL (と denpa の先頭に解決された URL) を配信元へ戻す (通信は親が中継で取るので、元の行き先を渡す) */
   const toOrigin = (url: string): string => {
     if (url.startsWith(relayRoot))
       return relayFrom + url.slice(relayRoot.length);
@@ -134,7 +134,7 @@ export function shim(init: ShimInit): void {
     return url;
   };
   /*
-   * 後から作る script・画像・CSS の URL。属性でもプロパティでも入るので両方を見る。
+   * 後から作る script・画像・CSS の URL 。属性でもプロパティでも入るので両方を見る。
    * **読み込む要素だけ。** iframe・a の行き先まで中継にすると、中継の返り (sandbox の CSP) の中で script が
    * 動かなくなる。iframe は CSP の frame-src で止めてあり、a で移った先はアプリの外
    */
@@ -152,8 +152,8 @@ export function shim(init: ShimInit): void {
   ];
   const watched = ["src", "href", "data", "poster"];
   /**
-   * style の中の `url(…)` も中継へ (NHK は `style="background:url(/hc-data/…)"` と書く。`/` から始まる住所は
-   * denpa の頭に解決されて 404 になる)
+   * style の中の `url(…)` も中継へ (NHK は `style="background:url(/hc-data/…)"` と書く。`/` から始まる URL は
+   * denpa の先頭に解決されて 404 になる)
    */
   const styleUrls = (css: string): string =>
     css.replace(
@@ -178,14 +178,14 @@ export function shim(init: ShimInit): void {
       loads.includes(this.tagName.toUpperCase()) &&
       watched.includes(String(name).toLowerCase());
     if (!rewrite) return setAttribute.call(this, name, value);
-    // `/common/…` のような住所は、解決してから中継へ (そのままでは denpa の頭を指す)
+    // `/common/…` のような URL は、解決してから中継へ (そのままでは denpa の先頭を指す)
     let resolved = String(value);
     // 空は解決しない (<base> の URL になってしまう)
     if (resolved === "") return setAttribute.call(this, name, value);
     try {
       resolved = new URL(resolved, document.baseURI).href;
     } catch {
-      // 読めない住所はそのまま
+      // 読めない URL はそのまま
     }
     return setAttribute.call(this, name, toRelay(resolved));
   };
@@ -538,7 +538,7 @@ export function shim(init: ShimInit): void {
   } catch {
     unsupported("localStorage");
   }
-  // cookie は持たない (端末を見分ける値を局へ出さない)。触っても転ばないように空を返す
+  // cookie は持たない (端末を見分ける値を局へ出さない)。触っても失敗しないように空を返す
   try {
     Object.defineProperty(document, "cookie", {
       get: () => "",
@@ -669,7 +669,7 @@ export function shim(init: ShimInit): void {
     method(name, () => unsupported(`object.${name}`));
 
   /**
-   * object が見えているか。**隠した object には出さない** — NHK の番組表は画面いっぱいの object を
+   * object が見えているか。**隠した object には出さない。** NHK の番組表は画面いっぱいの object を
    * `visibility: hidden` で置いたままにする。映像はアプリの上に重ねるので、出すと番組表を覆う
    */
   const seen = (o: HTMLObjectElement): boolean =>
@@ -809,7 +809,7 @@ export function shim(init: ShimInit): void {
   };
   for (let i = 0; i <= 9; i++) VK[`VK_${i}`] = 48 + i;
   if (w.KeyEvent === undefined) w.KeyEvent = VK;
-  // **素の名前でも読む** (NHK のアプリは `case VK_LEFT:` と書く。無いと switch の途中で転び、キーが効かない)
+  // **素の名前でも読む** (NHK のアプリは `case VK_LEFT:` と書く。無いと switch の途中で止まり、キーが効かない)
   for (const name of Object.keys(VK)) if (!(name in w)) w[name] = VK[name];
   const COLOR: Record<string, number> = { r: 403, g: 404, y: 405, b: 406 };
   /** 受信機のキーとして打つ */

@@ -50,7 +50,7 @@
           value={data.migrate.epgstationUrl}
           defaultValue={data.migrate.epgstationUrl}
           class="mono"
-          placeholder="http://epgstation:8888"
+          placeholder="http://192.168.1.10:8888"
           autocomplete="off"
           spellcheck="false"
           data-testid="epgstation-url"

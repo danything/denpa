@@ -4,6 +4,7 @@
   /**
    * 「今」へ張り付くボタン。ライブの「ライブ」と追っかけの「最新」。
    * 張り付いている間は赤い字と赤い短い線 (`OVERLAY_DANGER`)、離れていれば白い字に赤い点。
+   * 張り付いているかは読み上げにも `aria-pressed` で渡す (色だけにしない)。線は「入っている切り替え」の 1 本 (`app.css`)。
    * 文字は小さくして、幅は詰める (大きい余白のままだと
    * 操作バーの中でこれだけ太って見えた)
    */
@@ -25,6 +26,7 @@
   type="button"
   class="{OVERLAY_BTN} edge {active ? OVERLAY_DANGER : OVERLAY}"
   {onclick}
+  aria-pressed={active}
   data-testid={testid}
 >
   <span class="dot" class:active></span>

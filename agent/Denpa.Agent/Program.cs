@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Denpa.Agent;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 
 /*
@@ -12,7 +13,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *
  * denpa から触れないものが 3 つある。
  *
- * - B-CASカード … USB のリーダーも px4d / asicend の内蔵リーダーも、こちらが直接扱う (CardLinks.cs。
+ * - B-CASカード … USB のリーダーも px4d / asicend の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland / siano-userland /
@@ -43,9 +44,13 @@ if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
 if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
 
-var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out var configured)
-    ? configured
-    : 25252;
+// 読めない値は既定に戻さずに止める (打ち間違えたまま別のポートで立たないように。CARD_* と同じ)
+var port = 25252;
+if (Environment.GetEnvironmentVariable("AGENT_PORT") is { Length: > 0 } portText && !(int.TryParse(portText, out port) && port is > 0 and < 65536))
+{
+    Log.Write($"AGENT_PORT は 1〜65535 の数で書きます (いまは「{portText}」)");
+    return 2;
+}
 var config = Config.FromEnvironment();
 
 /*
@@ -73,8 +78,8 @@ if (args is ["--status"])
         : "127.0.0.1";
     return await AgentTls.Status(config.TlsDir, target, port);
 }
-// PIX-DT295 を確かめる。常駐イメージを入れて (引き継いで) 選局し、受信の統計を出す (Dt295ResidentProbe.cs)
-if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295ResidentProbe.Run(args);
+// PIX-DT295 を確かめる。機材を設定して選局し (--card ならカードを読み)、受信の統計を出す (Dt295NativeProbe.cs)
+if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295NativeProbe.Run(args);
 /*
  * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
@@ -89,7 +94,7 @@ if (args.Length > 0)
     Console.Error.WriteLine($"       {Probe.TuneUsage}");
     Console.Error.WriteLine($"       {Probe.DecodeUsage}");
     Console.Error.WriteLine($"       {Probe.CardUsage}");
-    Console.Error.WriteLine($"       {Dt295ResidentProbe.Usage}");
+    Console.Error.WriteLine($"       {Dt295NativeProbe.Usage}");
     return 2;
 }
 
@@ -112,8 +117,8 @@ if (Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } hostText
  */
 // 末尾の `/` は落とす (置き場の中かを `<置き場>/` で始まるかで見るので、`/media/raw/` だとどれも外になる)
 var recorded = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
-    Environment.GetEnvironmentVariable("RAW_DIR")
-    ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") ?? "/media", "raw")));
+    (Environment.GetEnvironmentVariable("RAW_DIR") is { Length: > 0 } rawDir ? rawDir : null)
+    ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") is { Length: > 0 } mediaDir ? mediaDir : "/media", "raw")));
 
 // 自分の鍵と証明書、合言葉、組んだ denpa (tuners.json の隣の tls/。AgentTls.cs)
 var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN"));
@@ -123,7 +128,7 @@ var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT
  */
 if (tls.Token.Length < 32)
 {
-    Log.Write($"AGENT_PAIR_TOKEN が短すぎます ({tls.Token.Length} 字)。推測されないよう 32 字以上の乱数にしてください (docs/agent.md)");
+    Log.Write($"合言葉 (AGENT_PAIR_TOKEN か {tls.Dir} の pair-token) が短すぎます ({tls.Token.Length} 字)。推測されないよう 32 字以上の乱数にしてください (docs/agent.md)");
 }
 // CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。Zd1j.cs)
 Zd1jBoard.Locks = new Zd1jLocks(config.Zd1jLocksFile);
@@ -165,14 +170,21 @@ var tune = new TuneOptions(
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
 
 /*
- * **px4-userland の筐体の px4d を起こす。** 顔ぶれ (設定か、自動で見つけたもの) にある筐体ぶん。
- * 筐体も受信機も px4d --list-json で分かっているので、ここで顔ぶれは変わらない (Px4.cs)
+ * **px4-userland の筐体の px4d を起こす。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
+ * 使う受信機が無くなった筐体の px4d は止める (内蔵カードリーダーを復号に使っていれば止めない。UserlandDaemon.Prepare)。
+ * 筐体も受信機も px4d --list-json で分かっているので、ここで顔ぶれは変わらない (Px4.cs)。
+ * 画面からの書き換えと抜き差しで同時に呼ばれても、あとから呼んだほうが最後の設定で揃えるよう 1 つずつ通す
  */
+var daemonsGate = new Lock();
 void PrepareDaemons()
 {
-    UserlandDaemon.Prepare(Px4Userland.IdsIn(pool.Tuners).ToList(), Px4Daemon.For);
-    // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
-    UserlandDaemon.Prepare(AsicenUserland.IdsIn(pool.Tuners).ToList(), AsicenDaemon.For);
+    lock (daemonsGate)
+    {
+        bool CardInUse(string name) => Keys.Local.Name == name;
+        UserlandDaemon.Prepare<Px4Daemon>([.. Px4Userland.IdsIn(pool.Tuners)], Px4Daemon.For, CardInUse);
+        // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
+        UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For, CardInUse);
+    }
 }
 
 /*
@@ -235,11 +247,16 @@ var https = new HttpsConnectionAdapterOptions
 };
 builder.WebHost.ConfigureKestrel(options =>
 {
-    if (host is null) options.ListenAnyIP(port, listen => listen.UseHttps(https));
-    else options.Listen(host, port, listen => listen.UseHttps(https));
+    // HTTP/1.1 の chunked だけ (h2 は流しっぱなしの接続にフロー制御の窓が増えるだけ。docs/agent.md「通信は HTTPS」)
+    void Secure(ListenOptions listen)
+    {
+        listen.Protocols = HttpProtocols.Http1;
+        listen.UseHttps(https);
+    }
+    if (host is null) options.ListenAnyIP(port, Secure);
+    else options.Listen(host, port, Secure);
     sharing?.Listen(options);
-    // 選局は何時間も開きっぱなしになる。既定のまま切られると録画が落ちる
-    options.Limits.KeepAliveTimeout = TimeSpan.FromDays(365);
+    // 選局は何時間も流しっぱなしになる。読む側が遅くても、送る速さの下限を理由に応答を切らない
     options.Limits.MinResponseDataRate = null;
 });
 builder.Logging.ClearProviders();
@@ -278,7 +295,18 @@ app.Use(async (HttpContext http, RequestDelegate next) =>
             await next(http);
             return;
         case AgentTls.Gate.Pair:
-            var result = tls.Pair(peer, await Respond.Read(http));
+            /*
+             * 本文は AgentTls.PairBodyLimit まで (1 バイト多く読めたら断る)。Kestrel の上限もそこに合わせ、
+             * 応答のあとに Kestrel が残りを読み捨てるときも、上限を越えたところで接続を切らせる
+             */
+            if (http.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } size) size.MaxRequestBodySize = AgentTls.PairBodyLimit + 1;
+            var (body, tooLarge) = await AgentTls.ReadPairBody(http.Request.Body, http.Request.ContentLength);
+            if (tooLarge)
+            {
+                await Respond.Error(http, $"{AgentTls.PairBodyTooLarge} (上限 {AgentTls.PairBodyLimit} バイト)", 413);
+                return;
+            }
+            var result = tls.Pair(peer, body);
             if (result.Proof is { } proof) await Respond.Write(http, new JsonObject { ["proof"] = proof });
             else await Respond.Error(http, result.Error!, result.Status);
             return;
@@ -557,56 +585,50 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
     {
         Keys.Local.Release(disabled);
         // チューナーとして使っている機材は開いたまま (チューナーが閉じるときに閉じる)
-        var used = pool.Tuners.Where(spec => !spec.Disabled && spec.Device is not null).Select(spec => spec.Device!).ToHashSet();
+        // CECH-ZD1 J が設定に 1 台だけなら、チューナーは挿し替えた先のポートを開いている (TunerPool.Acquire と同じく Zd1j.Follow で解く)
+        var follow = pool.Tuners.Count(spec => Zd1j.Is(spec.Device)) == 1;
+        var used = pool.Tuners.Where(spec => !spec.Disabled && spec.Device is not null)
+            .Select(spec => follow && Zd1j.Parse(spec.Device!) is { } configured ? $"{Zd1j.Scheme}{Zd1j.Follow(configured)}" : spec.Device!)
+            .ToHashSet();
         foreach (var candidate in present.Where(candidate => disabled.Contains(candidate.Name)))
         {
             if (candidate.Device is not { } device || used.Contains(device)) continue;
-            if (Dt295.Parse(device) is { } dt295) Dt295ResidentBoard.CloseIfIdle(dt295);
+            if (Dt295.Parse(device) is { } dt295) Dt295NativeDevice.CloseIfIdle(dt295);
             else if (Zd1j.Parse(device) is { } zd1j) Zd1jBoard.CloseIfIdle(zd1j);
         }
     });
+    // 内蔵カードリーダーのためだけに動かしていた px4d / asicend を止める (UserlandDaemon.Prepare)。返事は待たせない
+    _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, new JsonObject { ["disabled"] = Json.Strings(disabled.Order(StringComparer.Ordinal)) });
 });
 
 /*
- * 契約確認コマンド (0x90 0x3C)。EIT の CA 契約情報記述子 (0xCB) に載っている
- * verification (Base64) と date (MJD) をカードに渡し、返り値コード (0x0800 等) を返す。
+ * 有料放送の契約をカードに聞く (契約確認。0x90 0x3C)。EIT の CA 契約情報記述子 (0xCB) にある verification (Base64) と、
+ * 聞きたい日 (date。MJD) を渡すと、カードの返り値 (0x0800 なら月額の契約あり など) を返す。選局は要らない (denpa の contracts.ts)
  */
 app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
 {
     var body = await Respond.Read(http);
-    var verificationBase64 = body?["verification"] is { } node && Respond.IsText(node) ? node.GetValue<string>() : null;
-    var dateMjd = body?["date"] is JsonValue dateValue && dateValue.TryGetValue<int>(out var d) ? d : (int?)null;
-    if (string.IsNullOrEmpty(verificationBase64) || dateMjd is null or < 0 or > 65535)
-    {
-        await Respond.Error(http, "verification (Base64) と date (MJD) が必要です", 400);
-        return;
-    }
-    byte[] verification;
+    byte[]? verification = null;
     try
     {
-        verification = Convert.FromBase64String(verificationBase64);
+        if (body?["verification"] is { } node && Respond.IsText(node)) verification = Convert.FromBase64String(node.GetValue<string>());
     }
-    catch
+    catch (FormatException)
     {
-        await Respond.Error(http, "verification は Base64 で書きます", 400);
-        return;
     }
-    if (verification.Length is < 1 or > 253)
+    var date = body?["date"] is JsonValue value && value.TryGetValue<int>(out var mjd) ? mjd : -1;
+    if (verification is not { Length: >= 1 and <= 253 } || date is < 0 or > 65535)
     {
-        await Respond.Error(http, "verification は 1〜253 バイトです", 400);
+        await Respond.Error(http, "verification (Base64 で 1〜253 バイト) と date (MJD) が必要です", 400);
         return;
     }
     try
     {
-        var code = await Task.Run(() => Keys.Source.Confirm(verification, (ushort)dateMjd.Value));
-        await Respond.Write(http, new JsonObject
-        {
-            ["ok"] = true,
-            ["code"] = code,
-        });
+        var code = await Task.Run(() => Keys.Source.Confirm(verification, (ushort)date));
+        await Respond.Write(http, new JsonObject { ["ok"] = true, ["code"] = code });
     }
-    catch (Exception error)
+    catch (Exception error) when (error is IOException or InvalidOperationException or CardRefusedException)
     {
         await Respond.Error(http, error.Message, 500);
     }
@@ -619,37 +641,29 @@ app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
 app.MapPost("/denpa/card/emm", async (HttpContext http) =>
 {
     var body = await Respond.Read(http);
-    var emmBase64 = body?["emm"] is { } node && Respond.IsText(node) ? node.GetValue<string>() : null;
-    if (string.IsNullOrEmpty(emmBase64))
-    {
-        await Respond.Error(http, "emm (Base64) が必要です", 400);
-        return;
-    }
-    byte[] emm;
+    byte[]? emm = null;
     try
     {
-        emm = Convert.FromBase64String(emmBase64);
+        if (body?["emm"] is { } node && Respond.IsText(node)) emm = Convert.FromBase64String(node.GetValue<string>());
     }
-    catch
+    catch (FormatException)
     {
-        await Respond.Error(http, "emm は Base64 で書きます", 400);
-        return;
     }
-    if (emm.Length is < 1 or > 255)
+    if (emm is not { Length: >= 1 and <= 255 })
     {
-        await Respond.Error(http, "emm は 1〜255 バイトです", 400);
+        await Respond.Error(http, "emm (Base64 で 1〜255 バイト) が必要です", 400);
         return;
     }
     try
     {
         var code = await Task.Run(() => Keys.Source.Emm(emm));
-        await Respond.Write(http, new JsonObject
-        {
-            ["ok"] = true,
-            ["code"] = code,
-        });
+        await Respond.Write(http, new JsonObject { ["ok"] = true, ["code"] = code });
     }
-    catch (Exception error)
+    catch (Exception error) when (error is IOException or InvalidOperationException or CardRefusedException)
+    {
+        await Respond.Error(http, error.Message, 500);
+    }
+});
     {
         await Respond.Error(http, error.Message, 500);
     }
@@ -663,7 +677,10 @@ app.MapPost("/denpa/decode", async (HttpContext http) =>
         await Respond.Error(http, "input と output は文字列で書きます", 400);
         return;
     }
-    var result = Scramble.Decode(recorded, body?["input"]?.GetValue<string>(), body?["output"]?.GetValue<string>());
+    // 数 GB を復号するので、要求のスレッドを塞がないよう別のスレッドで復号する (/denpa/card と同じ)
+    var input = body?["input"]?.GetValue<string>();
+    var output = body?["output"]?.GetValue<string>();
+    var result = await Task.Run(() => Scramble.Decode(recorded, input, output));
     await Respond.Write(http, result, result["ok"]!.GetValue<bool>() ? 200 : 500);
 });
 
@@ -723,8 +740,8 @@ app.Lifetime.ApplicationStopped.Register(() =>
     pool.CloseAll();
     // CECH-ZD1 J は眠らせて LED を緑に戻してから閉じる (カードのために開いていても)
     Zd1jBoard.CloseAll();
-    // PIX-DT295 は常駐イメージを機材に残したまま手放してから閉じる (カードのために開いていても)
-    Dt295ResidentBoard.CloseAll();
+    // PIX-DT295 は書いた設定を戻してから閉じる (カードのために開いていても)
+    Dt295NativeDevice.CloseAll();
     // 利用者を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
     UserlandDaemon.StopAll();
 });
@@ -790,7 +807,8 @@ internal static class Respond
 ///
 /// <para>
 /// 待つのは録画だけ (<see cref="TunerPool.Recording"/>)。待ち終えたら
-/// <c>StopApplication</c> を呼んで、いつもどおり畳ませる。
+/// <c>StopApplication</c> を呼んで、いつもどおり畳ませる。**待っている間に 2 回目の合図が来たら、待たずに畳む**
+/// (docs/agent.md「止められたら録画が終わるまで待つ」)。
 /// </para>
 ///
 /// <para>
@@ -806,6 +824,9 @@ internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetim
     private readonly List<PosixSignalRegistration> _signals = [];
     private int _stopping;
 
+    /// <summary>待ち終えた (録画が終わった・上限を過ぎた・2 回目の合図が来た) ら済む</summary>
+    private readonly TaskCompletionSource _waiting = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public Task WaitForStartAsync(CancellationToken token)
     {
         foreach (var signal in new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT, PosixSignal.SIGQUIT })
@@ -819,19 +840,37 @@ internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetim
     {
         // 既定ではその場で終了する。それを止め、畳むのはこちらから指示する
         context.Cancel = true;
-        if (Interlocked.Exchange(ref _stopping, 1) == 1) return;
-        _ = Task.Run(WaitThenStop);
+        if (Interlocked.Exchange(ref _stopping, 1) == 0)
+        {
+            _ = Task.Run(WaitThenStop);
+            return;
+        }
+        /*
+         * **2 回目の合図で待つのをやめる。** 待っている間は 1 回目と同じく合図を受け流すので、これが無いと
+         * 手で動かしているときの Ctrl+C も SIGTERM も効かず、SHUTDOWN_WAIT (既定 6 時間) まで止まらなかった。
+         * 録画のストリームは切れる (denpa はエージェントがまた動いてから終了時刻まで録り続ける)
+         */
+        // 録画を待っていたときだけ記録に出す (待たずに畳んでいる途中の合図では出さない)
+        if (_waiting.TrySetResult() && _holding) Log.Write("止まれの合図をもう一度受けたので、録画を待たずに畳みます");
     }
+
+    /// <summary>録画が終わるのを待っている間だけ true</summary>
+    private volatile bool _holding;
 
     private async Task WaitThenStop()
     {
         if (waitMs > 0 && pool.Recording)
         {
-            Log.Write($"止まれの合図。録画が終わるまで待ちます (上限 {waitMs / 1000} 秒)");
+            _holding = true;
+            Log.Write($"止まれの合図。録画が終わるまで待ちます (上限 {waitMs / 1000} 秒。もう一度合図を送ると待たずに畳みます)");
             var until = DateTime.UtcNow.AddMilliseconds(waitMs);
-            while (pool.Recording && DateTime.UtcNow < until) await Task.Delay(1000);
-            Log.Write(pool.Recording ? "待ちきれないので畳みます" : "録画が終わったので畳みます");
+            while (pool.Recording && DateTime.UtcNow < until && !_waiting.Task.IsCompleted)
+            {
+                await Task.WhenAny(_waiting.Task, Task.Delay(1000));
+            }
+            if (!_waiting.Task.IsCompleted) Log.Write(pool.Recording ? "待ちきれないので畳みます" : "録画が終わったので畳みます");
         }
+        _waiting.TrySetResult();
         lifetime.StopApplication();
     }
 

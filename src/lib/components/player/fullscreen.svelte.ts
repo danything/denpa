@@ -25,7 +25,7 @@ import {
  *
  * - 枠を `position: fixed` で画面いっぱいに (`PlayerStage` の `data-pseudo`)。
  *   重ねもの (字幕・データ放送・操作バー) は枠の大きさから測るので、そのまま付いてくる
- * - 後ろのページは**転がらないようにし、周りを黒に** (`html[data-stage-fullscreen]`、`app.css`)。
+ * - 後ろのページは**スクロールしないようにし、周りを黒に** (`html[data-stage-fullscreen]`、`app.css`)。
  *   横持ちの切り欠きの帯は Safari がページの地の色で塗るので、それも黒になる
  * - 出口は**同じボタン・Esc・戻る**。本物の全画面なら OS が持っている「戻る」を、
  *   こちらでは**履歴を 1 段積んで** (`page.state.fullscreen`) 作る。戻るで広げたのを

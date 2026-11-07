@@ -127,6 +127,7 @@ describe("いま流れている番組を録る", () => {
       programId: 2,
       name: "ニュース",
       state: "scheduled",
+      reason: null,
     });
     const rows = orm().select().from(reservations).all();
     expect(rows.map((row) => row.program_id)).toEqual([2]);
@@ -178,6 +179,46 @@ describe("いま流れている番組を録る", () => {
       "この番組は放送が終わっています",
     );
     expect(await reserveFromForm(form("x"))).toBe("番組 ID が不正です");
+  });
+
+  test("ルールが立てた予約を押すと手動になる。優先度は 2 とルールの優先度の高いほう", async () => {
+    reset();
+    for (const [id, priority] of [
+      [7, 5],
+      [8, 1],
+    ] as const) {
+      program(id, NOW + 20 * MINUTE, NOW + 60 * MINUTE);
+      orm()
+        .insert(reservations)
+        .values({
+          program_id: id,
+          rule_id: 1,
+          service_id: SERVICE,
+          name: `番組${id}`,
+          start_at: NOW + 20 * MINUTE,
+          end_at: NOW + 60 * MINUTE,
+          priority,
+          created_at: 0,
+          updated_at: 0,
+        })
+        .run();
+      const out = new FormData();
+      out.set("programId", String(id));
+      expect(await reserveFromForm(out)).toBeNull();
+    }
+    const rows = orm()
+      .select({
+        id: reservations.program_id,
+        manual: reservations.manual,
+        priority: reservations.priority,
+      })
+      .from(reservations)
+      .orderBy(reservations.program_id)
+      .all();
+    expect(rows).toEqual([
+      { id: 7, manual: true, priority: 5 },
+      { id: 8, manual: true, priority: 2 },
+    ]);
   });
 
   test("チューナーが足りなければ競合として返す (予約は残る)", async () => {

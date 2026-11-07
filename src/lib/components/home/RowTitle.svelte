@@ -47,7 +47,7 @@
     >{time(start)}<span class="t-end">–{time(end)}</span></span
   >
   {#if typeof open === "string"}
-    <!-- 行いっぱいが押せる範囲なので、先読みは押したときだけ (一覧を撫でるだけで何本も読みに行かない) -->
+    <!-- 行いっぱいが押せる範囲なので、先読みは押したときだけ (一覧の上でマウスを動かすだけで何本も読み込まない) -->
     <a
       class="row-name row-open broadcast"
       href={open}

@@ -25,6 +25,31 @@ test.describe("操作したときの反応", () => {
     await cancelAllReservations(page);
   });
 
+  /**
+   * **番組の詳細は番組名を名前にし、開いたら焦点が中へ移り、閉じたら押したマスへ戻る** (読み上げとキーボードで迷わない)
+   */
+  test("番組の詳細は番組名で読まれ、焦点が中へ移って閉じると戻る", async ({
+    page,
+  }) => {
+    await goto(page, "/guide?type=GR");
+    const [target] = await upcoming(page);
+    const opener = cellOf(page, target.programId).getByTestId("program-button");
+    await opener.focus();
+    await page.keyboard.press("Enter");
+
+    const detail = page.getByTestId("program-detail");
+    await expect(detail).toBeVisible();
+    const name = (await detail.locator("h3").first().textContent())!.trim();
+    await expect(page.getByRole("dialog", { name })).toBeVisible();
+    expect(
+      await detail.evaluate((node) => node.contains(document.activeElement)),
+    ).toBe(true);
+
+    await page.keyboard.press("Escape");
+    await expect(detail).toBeHidden();
+    await expect(opener).toBeFocused();
+  });
+
   test("番組表で予約すると詳細が閉じ、予約済みになる", async ({ page }) => {
     await goto(page, "/guide?type=GR");
 
@@ -389,13 +414,16 @@ test.describe("操作したときの反応", () => {
     );
     expect(bar.height - top).toBeLessThan(80);
 
-    // 番組の無い日は押せない (偽の放送は 30 時間ぶんなので、朝に流すと翌日はまだ無い)
+    /*
+     * 番組の無い日は押せない (偽の放送は 30 時間ぶんなので、朝に流すと翌日はまだ無い)。
+     * リンクではない字で、読み上げには「(番組表なし)」と添える (役割の無い字に aria-disabled は効かない)
+     */
     const later = page.locator(
       'a[data-testid="guide-day"]:not([aria-current])',
     );
     await expect(
       page.locator('span[data-testid="guide-day"]').first(),
-    ).toHaveAttribute("aria-disabled", "true");
+    ).toContainText("(番組表なし)");
     if ((await later.count()) === 0) return;
     // 別の日を押すとその日が選ばれ、「今」は押せなくなる
     const start = await later.first().getAttribute("data-start");
@@ -513,7 +541,7 @@ test.describe("操作したときの反応", () => {
     // ライブの種別のタブ (並びの印) と、ホームの頭の 1 行のチップ (自分の `::after`)
     for (const [url, selector] of [
       ["/live", '[data-testid^="live-type-"][aria-pressed="true"]'],
-      ["/", '.t-chip[aria-pressed="true"]'],
+      ["/", '[data-testid="filter-chip"][aria-pressed="true"]'],
     ] as const) {
       await goto(page, url);
       const pressed = page.locator(selector).first();

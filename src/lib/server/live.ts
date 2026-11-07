@@ -107,7 +107,7 @@ import { tunerOf, yieldedTo } from "./live-yield";
 import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
 import { programs, recordings, services } from "./schema";
 import { settings } from "./settings";
-import { chunks, endInput, lines } from "./stream";
+import { chunks, endInput, lines, sideOutput } from "./stream";
 import { holdTranscode, transcodeRoom } from "./transcode";
 import { getTuners, openWhenFree, type StreamUse } from "./tuner";
 import type { Connection } from "./ws";
@@ -162,7 +162,7 @@ type StreamCodec = LiveCodec | "audio";
  * 合成の TS (1080i の MPEG-2・GOP 0.5 秒) を実時間で流し込み、最初の moof が出るまでを
  * 8 回ずつ測ったもの:
  *
- *     I フレームが頭から 40ms     付けると 781〜803ms   外すと 270〜291ms
+ *     I フレームが先頭から 40ms     付けると 781〜803ms   外すと 270〜291ms
  *     I フレームの位置がばらばら  どちらも約 300〜710ms (I フレームまでの距離 + 約 240ms)
  *
  * **外しても遅れは増えない。** 1 秒ぶんの映像が出そろう時刻はどちらも 1031〜1131ms で、
@@ -254,6 +254,7 @@ type StreamCodec = LiveCodec | "audio";
  * @param hw GPU でエンコードするならその経路 (`hwenc.liveHw`)。null ならソフトウェア (`videoArgs`)
  * @param rung 回線に合わせて下げた段 (`#lib/rungs.ts`)。0 なら下げない
  * @param half エンコードが遅れたので 30 コマにするか (`videoArgs` の `half`。`Session` の `lighten`)
+ * @param side 字幕を書き出す先 (`stream.sideOutput` の `url`)
  */
 export function encodeArgs(
   program: number,
@@ -263,12 +264,15 @@ export function encodeArgs(
   hw: LiveHw | null = null,
   rung: Rung = 0,
   half = false,
+  side = "pipe:3",
 ): string[] {
   const picture =
     codec === "audio" ? null : videoArgs(codec, hw, true, rung, null, half);
   const from = programSpec(program);
   return [
     "-hide_banner",
+    // 字幕の出口が名前付きパイプ (Windows) でも、あるかを確かめさせない (`stream.sideOutput`)
+    "-y",
     // 数字の進み具合だけ止める。`-loglevel` は下げられない (上の説明)
     "-nostats",
     // `-fflags nobuffer` は付けない。解析の間に読んだ I フレームを捨てて次の GOP を待つ (上の説明)
@@ -334,7 +338,7 @@ export function encodeArgs(
     // **2 つ目の出口。** 字幕をそのまま、映像と同じ物差しの時刻付きで出す
     ...(caption === null || picture === null
       ? []
-      : captionOutput(from, caption)),
+      : captionOutput(from, caption, side)),
   ];
 }
 
@@ -849,7 +853,7 @@ export function takeLight(id: string, now = Date.now()): Light | null {
  * **次に何を軽くするか。** 順に 60 コマ → 30 コマ (段 0 だけ。段 1〜3 はもう 30 コマ)、ソフトウェア → GPU (同じコーデックを
  * GPU でエンコードできるときだけ)。どれも済んでいれば null (断り書きだけ)。
  * 30 コマを先にするのは、コーデックとエンコーダを替えずに済み、GPU が降りる心配が無いため。
- * `gpuReady` は `pickLiveHw` が経路を返すか。GPU に移せるときだけ呼ぶ (`pickLiveHw` は GPU の振り分けの順を進める)
+ * `gpuReady` は GPU でエンコードできるか (`liveHwAvailable`。振り分けの順は進めない)。GPU に移せるときだけ呼ぶ
  */
 export function nextLight(o: {
   codec: StreamCodec;
@@ -984,7 +988,7 @@ export function liveHevc(devices: HwDevice[] = hwEncode().devices): boolean {
  * **GPU でエンコードできるかだけを見る** (段を下げるときのコーデック選び。`rungCodec`)。`pickLiveHw` と同じ決め方だが、
  * 順番 (`liveTurn`) は進めない。選ぶたびに進めると、実際に起こすエンコードの GPU の振り分けがずれる
  */
-export function liveHwAvailable(
+function liveHwAvailable(
   codec: LiveCodec,
   interlaced = true,
   devices: HwDevice[] = hwEncode().devices,
@@ -1073,22 +1077,25 @@ function captionsNotice(
 }
 
 /**
- * 字幕だけを写す ffmpeg を起こす (`rawCaptionArgs`)。字幕は 4 本目のパイプに出る。
+ * 字幕だけを写す ffmpeg を起こす (`rawCaptionArgs`)。字幕は 4 本目の出口 (`stream.sideOutput`) に出て、`pipe` で受ける。
  * 標準出力には何も出さないはずだが、**汲まずに放っておくと詰まったときに止まる**ので読み捨てる
  */
 function spawnCaptioner(
   program: number,
   track: number,
-): ReturnType<typeof Bun.spawn> {
-  const proc = Bun.spawn([config.ffmpeg, ...rawCaptionArgs(program, track)], {
-    stdio: ["pipe", "pipe", "pipe", "pipe"] as never,
-  });
+): { proc: ReturnType<typeof Bun.spawn>; pipe: ReadableStream<Uint8Array> } {
+  const side = sideOutput();
+  const proc = Bun.spawn(
+    [config.ffmpeg, ...rawCaptionArgs(program, track, side.url)],
+    { stdio: ["pipe", "pipe", "pipe", ...side.stdio] as never },
+  );
+  const pipe = side.read(proc as never);
   void (async () => {
     for await (const _ of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
       // 読み捨てる
     }
   })().catch(() => undefined);
-  return proc;
+  return { proc, pipe };
 }
 
 /**
@@ -1252,11 +1259,11 @@ class Session {
     /**
      * 入力の差し替え。無ければチューナーから (ライブ)。
      * 追っかけ再生はこれで録画中のファイルを渡す (`openChase`)。
-     * 呼ぶたびに読み直したストリームを返すこと。起こし直す (字幕なし・ソフトウェア) たびに頭から読む
+     * 呼ぶたびに読み直したストリームを返すこと。起こし直す (字幕なし・ソフトウェア) たびに先頭から読む
      */
     private readonly source?: () => ReadableStream<Uint8Array>,
     /**
-     * 追っかけで、番組が替わって作り直した (`restart`)。`consumed` は `source` の頭から読んだ量 (バイト)。
+     * 追っかけで、番組が替わって作り直した (`restart`)。`consumed` は `source` の先頭から読んだ量 (バイト)。
      * 作り直したところを覚えるのに使う (`chase.ts` の `resumeFrom`)
      */
     private readonly restarted?: (consumed: number) => void,
@@ -1337,7 +1344,7 @@ class Session {
 
   add(viewer: Viewer): void {
     this.viewers.add(viewer);
-    // そのままの TS に init は無い。**どこから受け取っても頭から読める** (PAT/PMT は繰り返し来る)
+    // そのままの TS に init は無い。**どこから受け取っても先頭から読める** (PAT/PMT は繰り返し来る)
     if (this.raw) viewer.ready = true;
     if (this.init !== null) this.hand(viewer, CHANNEL.videoInit, this.init);
     // 選べる字幕と、いま出ている 1 枚。**どちらも待たせない**
@@ -1545,6 +1552,7 @@ class Session {
          */
         if (wanted !== null && !peeked && this.program > 0) {
           peeked = true;
+          const read = stream;
           const head = await peekCaptions(
             stream,
             this.program,
@@ -1556,7 +1564,7 @@ class Session {
                 },
           );
           stream = head.stream;
-          // 読んだぶんは返ってきたストリームの頭にある。ライブは起こし直してもこちらを使う
+          // 読んだぶんは返ってきたストリームの先頭にある。ライブは起こし直してもこちらを使う
           if (feed !== null) feed = head.stream;
           /*
            * 指定した本数目が無ければ指定しない。`captionless` には覚えない。毎回 PMT を読むので、
@@ -1564,7 +1572,12 @@ class Session {
            */
           if (head.count !== null && head.count <= wanted) wanted = null;
           if (this.stopped) {
-            if (feed === null) await stream.return(undefined);
+            /*
+             * 追っかけは読み元を閉じる (`stream.chunks` が cancel する)。返ってきた `head.stream` はまだ読み始めて
+             * いないので、閉じても中の finally が走らない。元の `read` を閉じる。読みかけがあると
+             * それが届くまで閉じられないので、待たない
+             */
+            if (feed === null) void read.return(undefined);
             return;
           }
         }
@@ -1574,6 +1587,16 @@ class Session {
         // 遅れと速さは ffmpeg ごとに数え直す (前の ffmpeg の遅れと、起こし直した直後の速さを合わせない)
         this.lag.reset();
         this.meter = new SpeedMeter();
+        // 選べる字幕も ffmpeg ごとに数え直す。新しい ffmpeg も同じ見出しを出すので、続けて数えると同じ字幕が 2 本並ぶ
+        this.list = new TrackList(this.program);
+        /*
+         * **0 に寄せた量 (`start:`) も ffmpeg ごとに読み直す。** 新しい ffmpeg は mp4 の時刻を 0 から数え直し
+         * (受け側は init で作り直す)、そのとき寄せる量は起こし直した時点の PTS になる。前の値のまま
+         * 時計 (`clockNotice`) を配ると、起こし直すまでに流れた秒数だけ放送時刻がずれる
+         * (放送からの遅れの表示・実況のコメント)。読めるまでは時計を配らない
+         */
+        this.startPts = Number.NaN;
+        const side = wanted === null ? null : sideOutput();
         const proc = Bun.spawn(
           [
             config.ffmpeg,
@@ -1585,16 +1608,12 @@ class Session {
               hw,
               this.rung,
               this.light.half,
+              side?.url,
             ),
           ],
-          // 字幕は 4 本目のパイプ (pipe:3) へ出させる。**stdio の配列でしか増やせない**
+          // 字幕は 4 本目の出口 (stream.sideOutput) へ出させる。**stdio の配列でしか増やせない**
           {
-            stdio: [
-              "pipe",
-              "pipe",
-              "pipe",
-              ...(wanted === null ? [] : ["pipe"]),
-            ] as never,
+            stdio: ["pipe", "pipe", "pipe", ...(side?.stdio ?? [])] as never,
           },
         );
         this.proc = proc;
@@ -1622,7 +1641,7 @@ class Session {
           this.pump(stream, proc, feed === null),
           this.drain(proc),
           watching,
-          wanted === null ? Promise.resolve() : this.subtitles(proc),
+          side === null ? Promise.resolve() : this.subtitles(side.read(proc)),
         ]).catch((error: unknown) => {
           // 相手が降りたあとの EPIPE。**ここで受け止めないと再エンコードに来られない**
           trouble = error;
@@ -1804,7 +1823,7 @@ class Session {
    * リクエストし直すこと (観ていない先を飛ばさない)。その近くをリクエストされたら変わったところのバイトから
    * 読むので (`restarted`・`chase.ts` の `resumePlan`)、前の番組の並びを読み直して作り直しを繰り返すことはない
    *
-   * @param consumed 追っかけで、`source` の頭から読んだ量 (バイト)
+   * @param consumed 追っかけで、`source` の先頭から読んだ量 (バイト)
    */
   private restart(consumed: number): void {
     if (this.stopped) return;
@@ -1911,7 +1930,7 @@ class Session {
     const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
     /** この ffmpeg を起こしてから、映像・音声・字幕の並びが変わったか */
     const streams = new StreamsWatch();
-    /** 頭から読んだ量 (バイト)。追っかけで作り直したところを覚えるのに使う (`restart`) */
+    /** 先頭から読んだ量 (バイト)。追っかけで作り直したところを覚えるのに使う (`restart`) */
     let consumed = 0;
     try {
       for (;;) {
@@ -1990,7 +2009,7 @@ class Session {
       rung: this.rung,
       light: this.light,
       software: this.software,
-      gpuReady: () => codec !== "audio" && pickLiveHw(codec) !== null,
+      gpuReady: () => codec !== "audio" && liveHwAvailable(codec) !== null,
     });
     if (verdict === null) return;
     if (verdict === "heavy") {
@@ -2061,13 +2080,11 @@ class Session {
    * コンテナは Matroska ([ts/mkv.ts](../ts/mkv.ts))。並べただけでは
    * 時刻が乗らず、別の ffmpeg で出させると入口の寄せ幅が違ってずれる (`captions.ts`)
    */
-  private async subtitles(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
-    const fd = (proc.stdio as unknown as number[])[3];
-    if (typeof fd !== "number") return;
+  private async subtitles(pipe: ReadableStream<Uint8Array>): Promise<void> {
     // 割る道具もデコードする側も ffmpeg ごと (`drain` と同じ理由。デコードする側は書式を字幕文を跨いで持つ)
     const frames = new MkvSplitter();
     const text = new CaptionText();
-    for await (const chunk of chunks(Bun.file(fd).stream())) {
+    for await (const chunk of chunks(pipe)) {
       for (const found of frames.feed(chunk)) {
         for (const shown of text.feed(found)) this.deliverText(shown);
         // 載っている言語が分かった・変わった。選べるように知らせ直す
@@ -2273,6 +2290,8 @@ class Session {
       // 入口の見出しに出ている「0 に寄せたぶん」。時計を配るのに要る
       if (!Number.isFinite(this.startPts) && line.includes("start:")) {
         this.startPts = parseStart(line);
+        // 起こし直したあとの新しい対応は、次の塊で配る (`CLOCK_EVERY` を待たない)
+        this.toldClockAt = 0;
       }
       // 字幕が無い放送。**映像ごと落ちる**ので、字幕なしで再エンコードする (`run`)
       if (NO_SUBTITLE.test(line)) this.noSubtitle = true;
@@ -2445,7 +2464,7 @@ class Session {
   private captions(): RawCaptions {
     this.list = new TrackList(this.program);
     this.noSubtitle = false;
-    const proc = spawnCaptioner(this.program, this.track);
+    const { proc, pipe } = spawnCaptioner(this.program, this.track);
     const list = this.list;
     void this.watch(proc)
       .then(() => {
@@ -2454,7 +2473,7 @@ class Session {
           captionless.set(this.serviceId, Date.now());
       })
       .catch(() => undefined);
-    void this.subtitles(proc).catch(() => undefined);
+    void this.subtitles(pipe).catch(() => undefined);
     return new RawCaptions(proc);
   }
 }
@@ -2531,6 +2550,11 @@ export const key = (
 ) =>
   `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}${rung === 0 ? "" : `~${rung}`}`;
 const sessions = new Map<string, Session>();
+
+/** いまライブを観ている人がいるか (セッションが 1 つでもあるか)。Windows と Mac をスリープさせないかを決める (`power.ts`) */
+export function hasLiveViewers(): boolean {
+  return sessions.size > 0;
+}
 
 /** エンコードし始めて一覧に載せる。畳むのは見ている人がいなくなったとき。ここでは待たない */
 function begin(
@@ -2809,7 +2833,7 @@ export function liveCaptions(
 /** 録画の字幕を、求められた位置のどれだけ手前から読むか (秒)。**いま出ている字幕も出すため** (字幕は次が来るまで出しっぱなし) */
 const CAPTION_LEAD = 10;
 
-/** 観ている位置より先に読んでおく量 (秒)。頭のここまでは倍速の縛りを掛けずに読む (`followFile` の `burst`) */
+/** 観ている位置より先に読んでおく量 (秒)。先頭のここまでは倍速の縛りを掛けずに読む (`followFile` の `burst`) */
 const CAPTION_AHEAD = 10;
 
 /**
@@ -2834,7 +2858,7 @@ const recordingCaptioners = new Map<number, (() => void)[]>();
  *
  * **録り終えた録画でも、まるごと返さずに流す。** 1 時間の BS は 7GB あり、字幕を全部抜くには
  * それを読み切る必要がある (観はじめが待たされる)。流すなら観る位置から読むだけで済み、
- * 追っかけと同じ仕組みで両方に答えられる。送り込みは追っかけと同じ倍速まで (頭の
+ * 追っかけと同じ仕組みで両方に答えられる。送り込みは追っかけと同じ倍速まで (先頭の
  * `CAPTION_LEAD + CAPTION_AHEAD` 秒ぶんは縛らず読んで、観ている位置を追い越しておく)。受け側が
  * 読まなくなったら (アプリは先読みする枚数に上限がある) 録画を読むのも止める。
  * シークしたら `from` を変えてリクエストし直す
@@ -2950,7 +2974,7 @@ function spawnRecordingCaptioner(
   out: CaptionOut,
   current: () => ReturnType<typeof Bun.spawn>,
 ): ReturnType<typeof Bun.spawn> {
-  const proc = spawnCaptioner(program, 0);
+  const { proc, pipe } = spawnCaptioner(program, 0);
   // 選べる字幕は入口の見出しから (`TrackList`)。ffmpeg ごとに数え直す。失敗は残す
   const list = new TrackList(program);
   const text = new CaptionText();
@@ -2972,11 +2996,9 @@ function spawnRecordingCaptioner(
   })().catch(() => undefined);
 
   // 字幕。文字の配置は変わったときしか出てこないので、間引かない
-  const fd = (proc.stdio as unknown as number[])[3];
   const frames = new MkvSplitter();
   const captions = (async () => {
-    if (typeof fd !== "number") return;
-    for await (const chunk of chunks(Bun.file(fd).stream())) {
+    for await (const chunk of chunks(pipe)) {
       for (const frame of frames.feed(chunk)) {
         for (const shown of text.feed(frame)) {
           // 求められた言語だけ (`?language=`)
@@ -3576,14 +3598,20 @@ function openChase(
   if (size === 0) return refuseHeld("まだ何も録画されていません");
   const release = raw ? (held ?? (() => undefined)) : (held ?? holdTranscode());
   if (release === null) return refuse(BUSY);
-  const stopReading = raw
-    ? () =>
-        chaseReadHeld({
+  /*
+   * **畳んだら読むのをやめる** (`session.whenStopped` で立てる)。止めている間 (`hold`) に畳まれると、`followFile` は
+   * 止めたまま回り続け、録画のファイルと字幕の ffmpeg (`runRaw` の finally に来ない) が残っていた
+   */
+  const reading = { stopped: false };
+  const stopReading = () =>
+    !reading.stopped &&
+    (raw
+      ? chaseReadHeld({
           asked: viewer.held === true,
           congested: viewer.connection.congested === true,
           outside: hold?.() === true,
         })
-    : hold;
+      : hold?.() === true);
 
   const finished = rec.finished_at !== null;
   // 番組が替わって作り直したところの近くなら、そのバイトから (`chase.ts` の `resumePlan`)
@@ -3637,7 +3665,7 @@ function openChase(
           path,
           plan.offset,
           plan.paceBytesPerSec,
-          () => recordingDone(rec.id),
+          () => reading.stopped || recordingDone(rec.id),
           stopReading,
         ),
       (consumed) => rememberResume(rec.id, resumeFrom(plan, consumed)),
@@ -3650,6 +3678,9 @@ function openChase(
     throw failure;
   }
   session.whenStopped(release);
+  session.whenStopped(() => {
+    reading.stopped = true;
+  });
   session.add(viewer);
   if (!raw) {
     void session.run();

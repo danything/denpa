@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from "bun:test";
+import { afterAll, expect, mock, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,12 +22,19 @@ const real = await import("./stream");
 const realRun = real.run;
 const calls: string[][] = [];
 let answer: ((argv: string[]) => number) | null = null;
+/** 落ちたときに ffmpeg が標準エラーに出すもの */
+let failText = "";
 mock.module("./stream", () => ({
   ...real,
   run: async (argv: string[], options?: Parameters<typeof realRun>[1]) => {
     if (answer === null) return realRun(argv, options);
     calls.push(argv);
-    return { code: answer(argv), stdout: new Uint8Array(), stderr: "" };
+    const code = answer(argv);
+    return {
+      code,
+      stdout: new Uint8Array(),
+      stderr: code === 0 ? "" : failText,
+    };
   },
 }));
 
@@ -52,7 +59,7 @@ afterAll(() => {
   config.nvidiaDir = nvidiaDirBefore;
 });
 
-const { probe, describeDevice, liveHw, hwReady, hwEncode } =
+const { probe, describeDevice, liveHw, hwArgs, hwChain, hwReady, hwEncode } =
   await import("./hwenc");
 
 /** i965 らしい返事 */
@@ -223,6 +230,9 @@ test("/dev/mpp_service があれば、別の行で H.264 と H.265 だけ MPP �
       vaapi: [],
       rkmpp: ["hevc", "h264"],
       nvenc: [],
+      qsv: [],
+      amf: [],
+      videotoolbox: [],
       full: [],
     });
     const tried = calls.filter((argv) =>
@@ -271,9 +281,18 @@ test("NVIDIA の GPU は 1 枚ずつ別の行で NVENC を試し、GPU の番号
       gpu: 0,
       vaapi: [],
       nvenc: ["hevc", "h264"],
+      qsv: [],
+      amf: [],
+      videotoolbox: [],
       full: [],
     });
-    expect(n1).toMatchObject({ gpu: 1, nvenc: ["av1", "hevc", "h264"] });
+    expect(n1).toMatchObject({
+      gpu: 1,
+      nvenc: ["av1", "hevc", "h264"],
+      qsv: [],
+      amf: [],
+      videotoolbox: [],
+    });
     // GPU の番号はデバイスファイルの並びの位置。デバイスファイルは ffmpeg に渡さない
     const tried = calls.filter((argv) =>
       argv.some((a) => a.endsWith("_nvenc")),
@@ -296,4 +315,212 @@ test("NVIDIA の GPU は 1 枚ずつ別の行で NVENC を試し、GPU の番号
     rmSync(nvidiaDir, { recursive: true, force: true });
     mkdirSync(nvidiaDir);
   }
+});
+
+/** Windows の探し方 (`probeWindows`)。OS の名前だけ差し替えて、ffmpeg の返事を作る */
+async function onWindows<T>(body: () => Promise<T>): Promise<T> {
+  const before = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", { value: "win32" });
+  try {
+    return await body();
+  } finally {
+    Object.defineProperty(process, "platform", before);
+  }
+}
+
+test("Windows で GPU が無ければ、行は 0 でソフトウェアにする", async () => {
+  answer = () => 1;
+  calls.length = 0;
+  const { devices, message } = await onWindows(() => probe());
+  expect(devices).toEqual([]);
+  expect(liveHw("h264", {}, 0, devices)).toBeNull();
+  expect(hwChain("h264", {}, 0, devices)).toEqual([]);
+  expect(message).toContain("ソフトウェアでエンコードします");
+  // /dev の探し方は使わない。NVENC は 0 番が落ちたら止め、QSV・AMF は 4 番まで H.264 だけ試す
+  // (AMF は番号ごとに高画質の指定と古い世代向けの指定の 2 回)
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(lines.filter((l) => l.includes("_nvenc"))).toHaveLength(1);
+  expect(lines.filter((l) => l.includes("_qsv"))).toHaveLength(4);
+  expect(lines.filter((l) => l.includes("_amf"))).toHaveLength(8);
+  expect(lines.some((l) => l.includes("_vaapi"))).toBe(false);
+});
+
+test("Windows は NVENC・QSV・AMF を番号ごとに試し、通った番号だけを行にする", async () => {
+  // NVIDIA 1 枚 (AV1 は RTX 40 より前で無い)、Intel (アダプタ 1。0 は NVIDIA で QSV が落ちる)、AMD 無し
+  answer = (argv) => {
+    const line = argv.join(" ");
+    if (line.includes("av1_")) return 1;
+    if (line.includes("_nvenc -gpu 0")) return 0;
+    if (line.includes("child_device=1")) return 0;
+    return 1;
+  };
+  calls.length = 0;
+  const { devices, message } = await onWindows(() => probe());
+  expect(devices.map((d) => d.path)).toEqual(["nvidia0", "qsv1"]);
+  expect(devices[0]).toMatchObject({
+    label: "nvidia0 (NVIDIA)",
+    gpu: 0,
+    nvenc: ["hevc", "h264"],
+    qsv: [],
+    amf: [],
+    videotoolbox: [],
+  });
+  expect(devices[1]).toMatchObject({
+    label: "qsv1 (Intel)",
+    gpu: 1,
+    qsv: ["hevc", "h264"],
+    nvenc: [],
+  });
+  expect(describeDevice(devices[1]!)).toBe("QSV: H.265 / H.264");
+  expect(message).toBe(
+    "デバイスが 2 個見つかり、2 個で GPU エンコードできます",
+  );
+  // 同じコーデックを両方で使える。QSV はアダプタの番号を添える
+  expect(hwChain("h264", {}, 1, devices)).toEqual([
+    { device: "qsv1", kind: "qsv", gpu: 1 },
+    { device: "nvidia0", kind: "nvenc", gpu: 0 },
+  ]);
+  // 通らなかった H.264 の番号 (AMF) では、AV1・H.265 を試さない
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(lines.filter((l) => l.includes("_amf"))).toHaveLength(8);
+  expect(lines.some((l) => l.includes("hevc_amf"))).toBe(false);
+});
+
+test("AMF は高画質の指定で落ちたら古い世代向けの指定で試し、通ったほうで録画する", async () => {
+  // VCN 1.0 (Raven Ridge) らしい返事。アダプタ 0 の AMD で、AV1 は持たず、`-usage high_quality` を受けない
+  answer = (argv) => {
+    const line = argv.join(" ");
+    if (!line.includes("d3d11va=d3d:0") || !line.includes("_amf")) return 1;
+    if (line.includes("av1_amf")) return 1;
+    return line.includes("-usage high_quality") ? 1 : 0;
+  };
+  failText = [
+    "[h264_amf @ 0000020] encoder->Init() failed with error 9",
+    "[vost#0:0/h264_amf @ 0000021] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.",
+    "Error while filtering: Generic error in an external library",
+    "Conversion failed!",
+  ].join("\n");
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  calls.length = 0;
+  try {
+    const { devices } = await onWindows(() => probe());
+    expect(devices.map((d) => d.path)).toEqual(["amf0"]);
+    const device = devices[0]!;
+    expect(device).toMatchObject({
+      label: "amf0 (AMD)",
+      gpu: 0,
+      amf: ["hevc", "h264"],
+      amfTranscoding: ["hevc", "h264"],
+    });
+    expect(describeDevice(device)).toBe(
+      "AMF: H.265 (古い世代向けの指定) / H.264 (古い世代向けの指定)",
+    );
+    // 録画もライブも、その行の指定で GPU に載る
+    const way = hwChain("h264", {}, 0, devices)[0]!;
+    expect(way).toEqual({
+      device: "amf0",
+      kind: "amf",
+      gpu: 0,
+      amfTranscoding: true,
+    });
+    expect(hwArgs(way, "h264").encoder.slice(0, 5)).toEqual([
+      "h264_amf",
+      "-usage",
+      "transcoding",
+      "-quality",
+      "quality",
+    ]);
+    expect(liveHw("hevc", {}, 0, devices)?.way).toMatchObject({
+      kind: "amf",
+      amfTranscoding: true,
+    });
+    // 高画質の指定を先に試し、落ちたときだけ古い世代向けの指定で試す
+    const amf0 = calls
+      .map((argv) => argv.join(" "))
+      .filter((l) => l.includes("h264_amf") && l.includes("d3d11va=d3d:0"));
+    expect(amf0).toHaveLength(2);
+    expect(amf0[0]).toContain("-usage high_quality -quality high_quality");
+    expect(amf0[1]).toContain("-usage transcoding -quality quality");
+    // 落ちた理由は ffmpeg のエラーの最後の 3 行をログに出す
+    const logged = warn.mock.calls.map((args) => String(args[0]));
+    expect(logged).toContain(
+      "[hwenc] h264_amf (amf0) の試しのエンコードが落ちました (終了コード 1): [vost#0:0/h264_amf @ 0000021] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height. / Error while filtering: Generic error in an external library / Conversion failed!",
+    );
+    // 警告のあとに、古い世代向けの指定で使えることも出す
+    expect(log.mock.calls.map((args) => String(args[0]))).toContain(
+      "[hwenc] h264_amf (amf0) は古い世代向けの指定でエンコードできました。この指定で使います",
+    );
+  } finally {
+    warn.mockRestore();
+    log.mockRestore();
+    failText = "";
+  }
+});
+
+test("AMF は高画質の指定が通れば、古い世代向けの指定を試さない", async () => {
+  answer = (argv) => {
+    const line = argv.join(" ");
+    return line.includes("d3d11va=d3d:0") && line.includes("_amf") ? 0 : 1;
+  };
+  calls.length = 0;
+  const { devices } = await onWindows(() => probe());
+  expect(devices.map((d) => d.path)).toEqual(["amf0"]);
+  expect(devices[0]).toMatchObject({
+    amf: ["av1", "hevc", "h264"],
+    amfTranscoding: [],
+  });
+  expect(hwChain("av1", {}, 0, devices)).toEqual([
+    { device: "amf0", kind: "amf", gpu: 0 },
+  ]);
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(
+    lines.some(
+      (l) => l.includes("d3d11va=d3d:0") && l.includes("-usage transcoding"),
+    ),
+  ).toBe(false);
+});
+
+/** Mac の探し方 (`probeMac`)。Windows と同じく OS の名前だけ差し替える */
+async function onMac<T>(body: () => Promise<T>): Promise<T> {
+  const before = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", { value: "darwin" });
+  try {
+    return await body();
+  } finally {
+    Object.defineProperty(process, "platform", before);
+  }
+}
+
+test("Mac でハードウェアのエンコーダが見えなければ、行は 0 でソフトウェアにする", async () => {
+  answer = () => 1;
+  calls.length = 0;
+  const { devices, message } = await onMac(() => probe());
+  expect(devices).toEqual([]);
+  expect(liveHw("hevc", {}, 0, devices)).toBeNull();
+  expect(message).toContain("ソフトウェアでエンコードします");
+  // VideoToolbox の H.265 と H.264 だけを試す (AV1 のエンコーダは無い)。/dev の探し方は使わない
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(lines).toHaveLength(2);
+  expect(lines.every((l) => /(hevc|h264)_videotoolbox/.test(l))).toBe(true);
+});
+
+test("Mac は VideoToolbox の 1 行で、通ったコーデックだけ使う", async () => {
+  answer = (argv) => (argv.join(" ").includes("hevc_videotoolbox") ? 1 : 0);
+  const { devices, message } = await onMac(() => probe());
+  expect(devices).toHaveLength(1);
+  expect(devices[0]).toMatchObject({
+    path: "videotoolbox",
+    label: "videotoolbox (Apple)",
+    videotoolbox: ["h264"],
+    vaapi: [],
+  });
+  expect(describeDevice(devices[0]!)).toBe("VideoToolbox: H.264");
+  expect(message).toBe(
+    "デバイスが 1 個見つかり、1 個で GPU エンコードできます",
+  );
+  expect(hwChain("h264", {}, 0, devices)).toEqual([
+    { device: "videotoolbox", kind: "videotoolbox" },
+  ]);
+  expect(hwChain("hevc", {}, 0, devices)).toEqual([]);
 });

@@ -31,6 +31,7 @@ import {
   DsmccLogoCollector,
 } from "./logo-dsmcc";
 import { withPalette } from "./logo-palette";
+import { PNG_SIGNATURE } from "./png";
 
 const PID_CDT = 0x0029;
 
@@ -65,7 +66,8 @@ const LOGO_SIZES: readonly (readonly [number, number])[] = [
  */
 export function logoTypeOfPng(png: Uint8Array): number | null {
   // 署名 8 + IHDR の長さと名前 8 のあとに、幅と高さが 4 バイトずつ
-  if (png.length < 24 || png[0] !== 0x89 || png[1] !== 0x50) return null;
+  if (png.length < 24 || PNG_SIGNATURE.some((byte, i) => png[i] !== byte))
+    return null;
   const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
   const width = view.getUint32(16);
   const height = view.getUint32(20);

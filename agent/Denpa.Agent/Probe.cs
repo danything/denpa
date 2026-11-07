@@ -35,7 +35,7 @@ namespace Denpa.Agent;
 public static class Probe
 {
     // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
-    public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N]";
+    public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)]";
     public const string DecodeUsage = "denpa-agent --decode-file <in.ts> <out.ts>";
     public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート>]";
 
@@ -107,7 +107,7 @@ public static class Probe
     {
         if (args.ElementAtOrDefault(1) is { } device)
         {
-            if (Dt295.Parse(device) is { } dt295) return OneCard(Dt295.Card(dt295), Dt295ResidentBoard.CloseAll);
+            if (Dt295.Parse(device) is { } dt295) return OneCard(Dt295.Card(dt295), Dt295NativeDevice.CloseAll);
             if (Zd1j.Parse(device) is not { } port)
             {
                 Console.Error.WriteLine($"usage: {CardUsage}");
@@ -135,7 +135,7 @@ public static class Probe
         finally
         {
             Zd1jBoard.CloseAll();
-            Dt295ResidentBoard.CloseAll();
+            Dt295NativeDevice.CloseAll();
         }
     }
 
@@ -175,7 +175,7 @@ public static class Probe
 
         // PIX-DT295 は、鍵もその機材の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
         IKeySource source = Dt295.Parse(device) is { } dt295 && cardAt < 0 ? new LocalCard(() => [Dt295.Card(dt295)]) : Keys.Source;
-        using var closing = Dt295.Is(device) ? new Closing(Dt295ResidentBoard.CloseAll) : null;
+        using var closing = Dt295.Is(device) ? new Closing(Dt295NativeDevice.CloseAll) : null;
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
@@ -306,7 +306,7 @@ public static class Probe
         }
         catch (Exception error)
         {
-            Console.Error.WriteLine($"{found.Name}: {Zd1j.Reason(error)} ({started.ElapsedMilliseconds} ms)");
+            Console.Error.WriteLine($"{found.Name}: {UsbDevices.Reason(error)} ({started.ElapsedMilliseconds} ms)");
             return 1;
         }
         finally
@@ -324,10 +324,17 @@ public static class Probe
     }
 
     /// <summary>
+    /// 平均の Mbps。**最初の読みから最後の読みまでで割る** (最初の読みのぶんは除く。<c>--dt295-probe</c> と同じ)。
+    /// 決めた秒数で割ると、最初の TS が遅れたぶん少なく出る。読みが 1 回だけなら測れないので null
+    /// </summary>
+    internal static double? Rate(long total, long firstChunk, TimeSpan receiving) =>
+        receiving > TimeSpan.Zero ? (total - firstChunk) * 8.0 / receiving.TotalSeconds / 1_000_000 : null;
+
+    /// <summary>
     /// 読めたバイト数と、それが TS の形式になっているか。復号させたなら復号できたか。<paramref name="lockedAt"/> (Stopwatch の時刻) を渡せば、
     /// そこから最初の復号できたパケット (掛かっていた PID の、掛かっていないペイロード) までの ms を出して返す (最初の ECM を待つ時間)
     /// </summary>
-    private static double? Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration, long lockedAt = 0)
+    internal static double? Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration, long lockedAt = 0)
     {
         var scrambledPids = new HashSet<int>();
         long decodedAt = 0;
@@ -336,6 +343,8 @@ public static class Probe
         var started = DateTime.UtcNow;
         var deadline = started + duration;
         var first = TimeSpan.Zero;
+        var last = TimeSpan.Zero;
+        long firstChunk = 0;
         long total = 0;
         long sync = 0;
         long packets = 0;
@@ -346,9 +355,15 @@ public static class Probe
 
         while (DateTime.UtcNow < deadline)
         {
-            var read = stream.Read(buffer);
+            // DeviceStream は TS が来ない間は戻らないので、決めた時間で降りる合図を渡す
+            var read = stream is DeviceStream device ? device.Read(buffer, 0, buffer.Length, () => DateTime.UtcNow >= deadline) : stream.Read(buffer);
             if (read <= 0) break;
-            if (total == 0) first = DateTime.UtcNow - started;
+            last = DateTime.UtcNow - started;
+            if (total == 0)
+            {
+                first = last;
+                firstChunk = read;
+            }
             total += read;
             // 188 バイトごとに 0x47 が来ているか。来ていなければ TS ではない
             for (var at = 0; at + 188 <= read; at += 188)
@@ -374,11 +389,11 @@ public static class Probe
             }
         }
 
-        var mbps = total * 8.0 / duration.TotalSeconds / 1_000_000;
+        var mbps = Rate(total, firstChunk, last - first) is { } rate ? $"{rate:F2}" : "-";
         var ratio = packets == 0 ? 0 : 100.0 * sync / packets;
         Console.WriteLine(
             $"    最初の 1 バイト {first.TotalMilliseconds:F0} ms  "
-            + $"{total / 1024} KiB  {mbps:F2} Mbps  同期バイト {ratio:F1}%");
+            + $"{total / 1024} KiB  {mbps} Mbps  同期バイト {ratio:F1}%");
         if (total == 0) Console.Error.WriteLine($"    {name}: 1 バイトも来ていません");
         Console.WriteLine($"    連続性の飛び {continuity.Jumps} 回 ({continuity.Places.Count} か所。最初の 1 秒は数えない){(continuity.Places.Count == 0 ? "" : "  " + string.Join(" ", continuity.Places.Take(20).Select(place => $"{place.At.TotalSeconds:F1}s({place.Pids} PID)")))}");
 

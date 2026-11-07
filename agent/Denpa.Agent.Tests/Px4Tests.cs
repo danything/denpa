@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using TUnit.Assertions.Enums;
+using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -263,7 +264,7 @@ public class Px4Tests
         await Assert.That(warned[0]).Contains("USB 2-1");
         await Assert.That(warned[1]).Contains("open_failed");
         // Windows では「WinUSB になっていない・別のソフトが使っている」
-        await Assert.That(warned[1]).Contains(OperatingSystem.IsWindows() ? "WinUSB" : "権限");
+        await Assert.That(warned[1]).Contains(OperatingSystem.IsWindows() ? "WinUSB" : OperatingSystem.IsLinux() ? "権限" : "別のプロセス");
         // 形式は思っていたとおりなので、バージョンのずれの話はしない
         await Assert.That(warned.Any(w => w.Contains("バージョン"))).IsFalse();
     }
@@ -355,5 +356,65 @@ public class Px4Tests
         await Assert.That(Px4Userland.Notice(device)).IsEqualTo("0V で選局しています");
         Px4Userland.ClearNotice(device, fresh);
         await Assert.That(Px4Userland.Notice(device)).IsNull();
+    }
+}
+
+/*
+ * px4d・asicend は使う受信機がある間だけ動かす (UserlandDaemon.Prepare)。受信機を全部使わない設定にした筐体は止めて
+ * USB を手放し、使う設定に戻したら起こし直す。内蔵カードリーダーを復号に使っている間は止めない。
+ * 常駐の代わりに sleep を起こす (止めるのは SIGTERM。Windows の px4d は標準入力で止めるので Px4WindowsTests が見る)
+ */
+[ExcludeOn(OS.Windows)]
+public class UserlandDaemonTests
+{
+    private sealed class SleepDaemon(string id, string dir) : UserlandDaemon("sleep", id)
+    {
+        public static SleepDaemon For(string id, string dir) => For(id, () => new SleepDaemon(id, dir));
+
+        public override string CardName => $"sleep {Id} Internal Card Reader";
+
+        public override void Ensure()
+        {
+            if (Running) return;
+            Launch("sleep", ["60"], dir, () => true, () => { });
+        }
+    }
+
+    [Test]
+    public async Task 使う受信機が無くなった筐体は止め_戻したら起こし直す()
+    {
+        await Task.Yield();
+        var dir = Directory.CreateTempSubdirectory("daemon").FullName;
+        var tag = Guid.NewGuid().ToString("N");
+        var a = SleepDaemon.For($"{tag}a", dir);
+        var b = SleepDaemon.For($"{tag}b", dir);
+        SleepDaemon Daemon(string id) => SleepDaemon.For(id, dir);
+        string[] both = [$"{tag}a", $"{tag}b"];
+        try
+        {
+            UserlandDaemon.Prepare(both, Daemon, _ => false);
+            await Assert.That(a.Running && b.Running).IsTrue();
+
+            // b の受信機を全部使わない設定にした
+            UserlandDaemon.Prepare([$"{tag}a"], Daemon, _ => false);
+            await Assert.That(a.Running).IsTrue();
+            await Assert.That(b.Running).IsFalse();
+
+            // 内蔵カードリーダーを復号に使っている間は止めない。カードリーダーも使わない設定にしたら止まる
+            UserlandDaemon.Prepare([], Daemon, name => name == a.CardName);
+            await Assert.That(a.Running).IsTrue();
+            UserlandDaemon.Prepare([], Daemon, _ => false);
+            await Assert.That(a.Running).IsFalse();
+
+            // 使う設定に戻した
+            UserlandDaemon.Prepare(both, Daemon, _ => false);
+            await Assert.That(a.Running && b.Running).IsTrue();
+        }
+        finally
+        {
+            a.Stop();
+            b.Stop();
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }

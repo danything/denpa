@@ -189,7 +189,7 @@ describe("ロゴを集める", () => {
   });
 });
 
-/** 署名と IHDR の頭だけの PNG。寸法を読むのに要るのはここまで */
+/** 署名と IHDR の先頭だけの PNG。寸法を読むのに要るのはここまで */
 function pngOf(width: number, height: number): Uint8Array {
   const out = new Uint8Array(24);
   out.set([

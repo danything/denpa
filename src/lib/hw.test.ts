@@ -19,6 +19,9 @@ const A: HwUsable = {
   vaapi: ["av1", "h264"],
   rkmpp: [],
   nvenc: [],
+  qsv: [],
+  amf: [],
+  videotoolbox: [],
 };
 /** AV1 をエンコードできない (Arc より前) */
 const B: HwUsable = {
@@ -26,6 +29,9 @@ const B: HwUsable = {
   vaapi: ["h264"],
   rkmpp: [],
   nvenc: [],
+  qsv: [],
+  amf: [],
+  videotoolbox: [],
 };
 /** Rockchip MPP (`/dev/mpp_service`)。H.264 だけ */
 const R: HwUsable = {
@@ -33,6 +39,9 @@ const R: HwUsable = {
   vaapi: [],
   rkmpp: ["h264"],
   nvenc: [],
+  qsv: [],
+  amf: [],
+  videotoolbox: [],
 };
 
 describe("エンコーダの選択", () => {
@@ -52,6 +61,9 @@ describe("エンコーダの選択", () => {
       vaapi: ["av1", "hevc"],
       rkmpp: ["av1", "hevc", "h264"],
       nvenc: ["av1", "hevc", "h264"],
+      qsv: ["av1", "hevc", "h264"],
+      amf: ["av1", "hevc", "h264"],
+      videotoolbox: ["av1", "hevc", "h264"],
     });
   });
 
@@ -69,13 +81,23 @@ describe("エンコーダの選択", () => {
       vaapi: ["av1", "hevc", "h264"],
       rkmpp: ["av1", "hevc", "h264"],
       nvenc: ["av1", "hevc", "h264"],
+      qsv: ["av1", "hevc", "h264"],
+      amf: ["av1", "hevc", "h264"],
+      videotoolbox: ["av1", "hevc", "h264"],
     });
   });
 
   test("H.265 のエンコーダを選んでも、ほかのコーデックの印は崩さない。並びは AV1 → H.265 → H.264", () => {
     // A は H.264 だけ GPU、AV1 はソフトウェアにしてある。H.265 を B だけに寄せる
     const allow: HwAllow = {
-      [A.path]: { vaapi: ["h264"], rkmpp: [], nvenc: [] },
+      [A.path]: {
+        vaapi: ["h264"],
+        rkmpp: [],
+        nvenc: [],
+        qsv: [],
+        amf: [],
+        videotoolbox: [],
+      },
     };
     const C: HwUsable = {
       ...A,
@@ -94,12 +116,22 @@ describe("エンコーダの選択", () => {
       vaapi: ["hevc", "h264"],
       rkmpp: [],
       nvenc: [],
+      qsv: [],
+      amf: [],
+      videotoolbox: [],
     });
   });
 
   test("すでに選んであるデバイスは、印をそのままにする", () => {
     const allow: HwAllow = {
-      [A.path]: { vaapi: ["av1"], rkmpp: [], nvenc: [] },
+      [A.path]: {
+        vaapi: ["av1"],
+        rkmpp: [],
+        nvenc: [],
+        qsv: [],
+        amf: [],
+        videotoolbox: [],
+      },
     };
     expect(hwChoice(allow, [A], "av1")).toBe(A.path);
     expect(chooseHw(allow, [A], "av1", A.path)).toEqual(allow);
@@ -107,7 +139,14 @@ describe("エンコーダの選択", () => {
 
   test("いま見えていないデバイスの印は前のまま", () => {
     const allow: HwAllow = {
-      "/dev/dri/renderD130": { vaapi: ["h264"], rkmpp: [], nvenc: [] },
+      "/dev/dri/renderD130": {
+        vaapi: ["h264"],
+        rkmpp: [],
+        nvenc: [],
+        qsv: [],
+        amf: [],
+        videotoolbox: [],
+      },
     };
     expect(
       chooseHw(allow, [A], "h264", HW_SOFTWARE)["/dev/dri/renderD130"],
@@ -115,6 +154,9 @@ describe("エンコーダの選択", () => {
       vaapi: ["h264"],
       rkmpp: [],
       nvenc: [],
+      qsv: [],
+      amf: [],
+      videotoolbox: [],
     });
   });
 });

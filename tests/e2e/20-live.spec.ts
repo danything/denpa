@@ -1311,6 +1311,11 @@ test.describe("ライブ視聴", () => {
     await expect(page.getByTestId("live-controls")).toBeVisible();
     await expect(page.getByTestId("live-edge")).toBeVisible();
     await expect(page.getByTestId("live-play")).toBeVisible();
+    // 張り付いているかは色だけでなく読み上げにも渡す
+    await expect(page.getByTestId("live-edge")).toHaveAttribute(
+      "aria-pressed",
+      /^(true|false)$/,
+    );
 
     /*
      * **放送の今にいる間は右端に張り付く。** 実際には貯めているぶん後ろに

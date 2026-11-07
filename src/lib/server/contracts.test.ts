@@ -997,10 +997,10 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
         .values({
           id,
           service_id: id,
-          network_id: 1,
-          name: `GR${id}`,
-          type: "GR",
-          channel: `GR${id * 2}`,
+          network_id: 7,
+          name: `CS${id}`,
+          type: "CS",
+          channel: `CS${id * 2}`,
           updated_at: Date.now(),
         })
         .run();

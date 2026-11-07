@@ -7,6 +7,7 @@
   import ShieldCheck from "~icons/lucide/shield-check";
   import X from "~icons/lucide/x";
 
+  import { fullDate, SERVICE_TYPE_LABEL } from "#lib/format.js";
   import type {
     ContractRow,
     ContractSettings,
@@ -136,7 +137,7 @@
       } else if (message) {
         errorMessage = String(message);
       } else {
-        errorMessage = "契約確認に失敗しました";
+        errorMessage = "契約を確認できませんでした";
       }
     } catch (err) {
       errorMessage = String(err);
@@ -172,7 +173,7 @@
       } else if (message) {
         errorMessage = String(message);
       } else {
-        errorMessage = "復号テストに失敗しました";
+        errorMessage = "復号を確かめられませんでした";
       }
     } catch (err) {
       errorMessage = String(err);
@@ -398,6 +399,7 @@
   aria-labelledby="contract-dialog-title"
   data-testid="contract-dialog"
 >
+  <!-- 幕を押したら閉じる (`app.css` の `.modal-backdrop`) -->
   <button
     type="button"
     class="modal-backdrop"
@@ -415,28 +417,23 @@
     >
       <X aria-hidden="true" />
     </button>
-    <div class="header-group">
-      <h2 id="contract-dialog-title">有料契約の確認</h2>
-      {#if cardId}
-        <span class="card-id mono">B-CAS: {cardId}</span>
-      {/if}
-    </div>
+    <h2 id="contract-dialog-title">有料契約の確認</h2>
     <p class="small muted intro">
-      B-CAS
-      カード内の契約情報（CA契約情報）を確認し、各局の契約状態と有効期限を表示します。
-      選局せずにカードのみで判定するため、チューナーを塞ぎません。
-      契約している局の「契約対象」にチェックを入れることで、自動録画や期限通知の対象として管理できます。
-      また、「復号を確かめる」で実際の放送ストリームを受信し、正常に復号できるかを検証できます。
-      「未確認をまとめて復号テスト」は、同じ中継器の局をまとめて1回の選局で確かめます。
+      {#if cardId}
+        <span class="mono">B-CAS: {cardId}</span><br />
+      {/if}
+      カードにある契約の情報 (CA 契約情報) から、局ごとの契約と有効期限を出します。
+      選局しないので、チューナーは使いません。契約している局の「契約対象」にチェックを入れると、自動録画や期限通知の対象になります。
+      「復号を確かめる」は、その局を受信して復号できるかを確かめます。「未確認をまとめて復号テスト」は、同じ中継器の局をまとめて1回で確かめます。
     </p>
 
     {#if errorMessage}
-      <div class="alert error" role="alert">
+      <div class="notice error small" role="alert">
         {errorMessage}
       </div>
     {/if}
     {#if infoMessage}
-      <div class="alert info" role="status">
+      <div class="notice info small" role="status">
         {infoMessage}
       </div>
     {/if}
@@ -587,8 +584,8 @@
     </div>
 
     {#if contracts.length === 0}
-      <p class="muted empty">
-        有料放送の番組情報がまだ取得されていないか、有料局がありません。
+      <p class="small muted empty">
+        有料の局が無いか、その局の番組表をまだ集めていません
       </p>
     {:else}
       <div class="table-wrap">
@@ -601,12 +598,12 @@
                 >契約対象</th
               >
               <th>局名</th>
-              <th>種別</th>
+              <th>チャンネル</th>
               <th>対応方式</th>
               <th>契約状態</th>
               <th>有効期限</th>
               <th>手動設定</th>
-              <th>復号テスト</th>
+              <th>復号</th>
             </tr>
           </thead>
           <tbody>
@@ -634,8 +631,9 @@
                   <td class="name-cell">
                     <strong>{row.serviceName}</strong>
                   </td>
-                  <td>
-                    <span class="mono">{row.type} / {row.channel}</span>
+                  <td class="nowrap">
+                    {SERVICE_TYPE_LABEL[row.type] ?? row.type}
+                    <span class="mono">{row.channel}</span>
                   </td>
                   <td>
                     {#if row.availableMethods?.includes("eit_ca")}
@@ -680,8 +678,8 @@
                       >
                     {/if}
                   </td>
-                  <td>
-                    <span class="mono">{formatDate(row.validUntil)}</span>
+                  <td class="nowrap num">
+                    {row.validUntil ? fullDate(row.validUntil) : "—"}
                   </td>
                   <td>
                     <select
@@ -703,22 +701,22 @@
                   </td>
                   <td class="decode-cell">
                     {#if row.decodeOk === true}
-                      <span class="tag success">復号成功</span>
+                      <span class="tag success">復号できました</span>
                     {:else if row.decodeOk === false}
-                      <span class="tag error">復号不可</span>
+                      <span class="tag error">復号できませんでした</span>
                     {:else}
                       <span class="small muted">未確認</span>
                     {/if}
                     <button
                       type="button"
-                      class="ghost small test-btn"
+                      class="ghost small"
                       disabled={isBusy}
                       onclick={() => handleTestDecode(row.serviceId)}
                       data-testid="btn-test-decode-{row.serviceId}"
                     >
                       <ShieldCheck aria-hidden="true" />
                       {testingServiceId === row.serviceId
-                        ? "検証中…"
+                        ? "確かめています…"
                         : "復号を確かめる"}
                     </button>
                   </td>
@@ -733,32 +731,30 @@
 </dialog>
 
 <style>
+  /* 8列の表を並べるので、幅を広く取る */
   .modal-box-wide {
     max-width: 56rem;
     width: 100%;
   }
 
-  .header-group {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-  }
-
-  .card-id {
-    font-size: 0.875rem;
-    color: var(--dp-muted, #888);
-  }
-
   .intro {
-    margin-block: 0.5rem 1rem;
-    line-height: 1.5;
+    margin: var(--dp-space-1) 0 var(--dp-space-4);
   }
 
   .toolbar {
     display: flex;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
     margin-bottom: 0.75rem;
+  }
+
+  .toolbar-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
   }
 
   .table-wrap {
@@ -769,7 +765,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.875rem;
+    font-size: var(--dp-text-sm);
   }
 
   th,
@@ -786,16 +782,12 @@
   .decode-cell {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
     white-space: nowrap;
   }
 
-  .test-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
+  .decode-cell button {
+    margin: 0;
   }
 
   .source-tag {
@@ -810,24 +802,6 @@
     width: auto;
     max-width: 9.5rem;
     margin: 0;
-  }
-
-  .alert.error {
-    background-color: var(--dp-error-bg, rgba(239, 68, 68, 0.1));
-    color: var(--dp-error, #ef4444);
-    padding: 0.5rem 0.75rem;
-    border-radius: 4px;
-    margin-bottom: 0.75rem;
-    font-size: 0.875rem;
-  }
-
-  .alert.info {
-    background-color: var(--dp-info-bg, rgba(59, 130, 246, 0.1));
-    color: var(--dp-info, #3b82f6);
-    padding: 0.5rem 0.75rem;
-    border-radius: 4px;
-    margin-bottom: 0.75rem;
-    font-size: 0.875rem;
   }
 
   :global(.spin) {
@@ -902,22 +876,6 @@
     width: 100%;
   }
 
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem 1rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .toolbar-group {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-  }
-
   .intended-col {
     width: 5.5rem;
     text-align: center;
@@ -951,7 +909,7 @@
   }
 
   .empty {
+    margin: var(--dp-space-4) 0;
     text-align: center;
-    padding: 2rem;
   }
 </style>

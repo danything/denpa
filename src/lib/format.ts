@@ -1,4 +1,5 @@
 import type { CardReaderState } from "./server/scramble";
+import type { TunerSignal } from "./server/tuner";
 
 export const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -407,6 +408,48 @@ export function duplicateReason(serviceName: string): string {
 }
 
 /**
+ * **番組表の番組から、そのまま観られる録画。** 無ければ null。
+ * 録画そのものが失敗したものと、ファイルの無いものは除く (配信は library_path ?? ts_path を返す)。
+ * 番組表の詳細の再生ボタンと、外から使う API (`GET /api/programs` の `recordingId`) が同じ判定を使う
+ */
+export function playableRecordingId(program: {
+  recording_id: number | null;
+  recording_state: string | null;
+  library_path: string | null;
+  ts_path: string | null;
+}): number | null {
+  if (program.recording_id === null || program.recording_state === "failed")
+    return null;
+  return (program.library_path ?? program.ts_path) === null
+    ? null
+    : program.recording_id;
+}
+
+/** 予約を取り消せる状態。録り終えたもの・録り逃したものを取り消しにしても何も止まらず、記録だけが書き換わる */
+const CANCELABLE_STATES: readonly string[] = [
+  "scheduled",
+  "conflict",
+  "skipped",
+  "recording",
+];
+
+/**
+ * **予約を取り消せるか** (これから録るものと、いま録っているものだけ)。「録画しない」(`skipped`) は
+ * 放送が終わるまで。番組表の「予約取消」と、`DELETE /api/programs/<id>/record` (`reservations.cancelProgram`) が同じ判定を使う
+ */
+export function cancelable(
+  state: string | null,
+  endAt: number,
+  at: number,
+): boolean {
+  if (state === null || !CANCELABLE_STATES.includes(state)) return false;
+  return !(state === "skipped" && endAt <= at);
+}
+
+/** 取り消せない予約 ({@link cancelable}) を取り消そうとしたときの理由 */
+export const NOT_CANCELABLE_REASON = "放送か録画が終わった予約は取り消せません";
+
+/**
  * ロゴでの判定が使えなかったときに、CM 検出の覚え書き (`recordings.cm_note`) へ
  * 入れる目印。無音検出に落ちた理由はこの後ろに続く。
  */
@@ -452,6 +495,25 @@ export const READER_STATE_LABEL: Record<CardReaderState, string> = {
   error: "エラー",
   disabled: "無効",
 };
+
+/**
+ * 受信の状態と C/N の出し方 (設定の「チューナー」と、チャンネルの受信品質の測定)。
+ * **生の値は dB と読まれないように「(生の値)」を付け、単位を付けない** (機材やドライバが返した値のまま。docs/tuners.md「信号レベル」)。
+ * 選局したときに測った値 (px4d) はそう言う
+ */
+export function signalText(signal: TunerSignal): string {
+  const state = signal.locked ? "同期しています" : "同期していません";
+  if (signal.cn === null) return state;
+  const cn =
+    signal.unit === "dB"
+      ? `C/N: ${signal.cn.toFixed(1)} dB${signal.atTune ? " (選局したとき)" : ""}`
+      : `C/N (生の値): ${signal.cn.toLocaleString("ja-JP")}`;
+  return `${state}・${cn}`;
+}
+
+/** 生の値の C/N に添える注記。何と比べるものかを言う */
+export const SIGNAL_RAW_NOTE =
+  "C/N (生の値) は機材やドライバが返した値のままで、dB ではありません。同じチューナー・同じチャンネルで、配線を変える前とあとを比べる目安です";
 
 /** ロゴまで見て判定できたときの覚え書き (`cm.openCm`) */
 export const LOGO_OK = "ロゴ";
