@@ -79,10 +79,15 @@ export function worthLogging(line: string): boolean {
  *   1 枚ごとに書き出させる (溜められるとそのぶん遅れる)
  *
  * @param from ffmpeg に渡す局の指定 (`0:p:<局>` か `0`)
+ * @param out 書き出す先 (`stream.sideOutput` の `url`。Windows では名前付きパイプ)
  * @param track その局の中で何本目の字幕を出すか。**言語が複数ある放送**では
  *   2 本以上入っている (`TrackList`)
  */
-export function captionOutput(from: string, track: number): string[] {
+export function captionOutput(
+  from: string,
+  track: number,
+  out = "pipe:3",
+): string[] {
   return [
     "-map",
     `${from}:s:${track}`,
@@ -96,7 +101,7 @@ export function captionOutput(from: string, track: number): string[] {
     "1",
     "-f",
     "matroska",
-    "pipe:3",
+    out,
   ];
 }
 
@@ -124,8 +129,13 @@ export function programSpec(program: number): string {
  *
  * @param program ffmpeg に名指しさせる局の番号 (0 以下なら最初の局)
  * @param track その局の中で何本目の字幕か
+ * @param out 字幕を書き出す先 (`captionOutput`)
  */
-export function rawCaptionArgs(program: number, track: number): string[] {
+export function rawCaptionArgs(
+  program: number,
+  track: number,
+  out = "pipe:3",
+): string[] {
   const from = programSpec(program);
   return [
     "-hide_banner",
@@ -137,7 +147,7 @@ export function rawCaptionArgs(program: number, track: number): string[] {
     "-copyts",
     "-i",
     "pipe:0",
-    ...captionOutput(from, track),
+    ...captionOutput(from, track, out),
   ];
 }
 

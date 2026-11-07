@@ -30,10 +30,10 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
 
 - **Linux** (amd64 / arm64): 全部 Docker Compose。`~/denpa` に compose.prod.yml を `compose.yml` として置いて起動します
 - **Mac** (Apple Silicon): エージェントは Mac の上で直接 (LaunchAgent)、denpa 本体は Docker。USB をコンテナに渡せないため ([install-mac.md](install-mac.md))
-- **Windows** (x64): エージェントは Windows の上で直接 (タスク スケジューラ)、denpa 本体は WSL のコンテナ (`wslc`)。Docker Desktop は要りません。
+- **Windows** (x64): denpa 本体もエージェントも Windows の上で直接 (タスク スケジューラの SYSTEM のタスク)。WSL・Docker Desktop は要りません。管理者の PowerShell で流します。
   チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
-- **Docker・WSL は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
-  Mac は Docker Desktop か OrbStack、Windows は `wsl --update`)
+- **Docker は入れません。** 無ければ入れ方を示して止まります (Linux は <https://get.docker.com>、
+  Mac は Docker Desktop か OrbStack)
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux・Mac)。
   動いていればそれを使い、無ければ 80 と 443 が空いているときだけ `~/genkan` に入れて <http://denpa.localhost> で開きます。
   入れられなければ `http://<IP>:3000` (localhost は Docker の中継を通って送信元が Docker のゲートウェイに見え、
@@ -41,7 +41,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
   引けないので、LAN のほかの機器 (テレビ・スマホ) からも `http://<IP>:3000` で開きます。Windows はいつも <http://localhost:3000>
 - 置き場は `~/denpa` (`DENPA_HOME`)。`compose.yml` は更新のたびに上書きするので、
   **変えたいことは同じ場所の `compose.override.yml` に書きます** (Compose が重ねて読み、install.sh は触らない)。
-  Windows は `~/denpa/denpa.env`
+  Windows は `%ProgramData%\denpa\denpa.env`
 - denpa とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、install.sh が `~/denpa/.env` の `AGENT_PAIR_TOKEN` に、
   install.ps1 が `~/denpa/config/tls/pair-token` (エージェント自身の置き場) に、無いときだけ作って両方へ渡します。Mac は `.env` と同じ値を
   `~/denpa/config/tls/pair-token` にも書きます。上げ直しても変えません
@@ -125,8 +125,8 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.
 
 ### 配布物を確かめる
 
-リリースのイメージ (`denpa`・`denpa-agent`・`denpa-aio`) と、Mac・Windows 用のエージェント
-(リリースに添えた `denpa-agent-…-darwin-arm64.tar.gz`・`denpa-agent-…-windows-x64.zip`) には、
+リリースのイメージ (`denpa`・`denpa-agent`・`denpa-aio`) と、Mac・Windows 用のエージェントと Windows 用の denpa 本体
+(リリースに添えた `denpa-agent-…-darwin-arm64.tar.gz`・`denpa-agent-…-windows-x64.zip`・`denpa-…-windows-x64.zip`) には、
 **出所の証明 (attestation)** を付けています (2.13.0 から)。このリポジトリのリリースの
 workflow が作ったものかを、[GitHub CLI](https://cli.github.com/) で確かめられます。
 
@@ -158,7 +158,7 @@ services:
       OIDC_CLIENT_SECRET: <クライアントシークレット>
 ```
 
-Windows は同じ名前を `KEY=値` で `~/denpa/denpa.env` に、Helm は `denpa.trustedNetworks` と
+Windows は同じ名前を `KEY=値` で `%ProgramData%\denpa\denpa.env` に、Helm は `denpa.trustedNetworks` と
 `denpa.oidcSecretName` に書きます。
 **`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います。
 ログインの細かいことは [auth.md](auth.md)、変数の一覧は [config.md](config.md)。

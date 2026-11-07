@@ -899,7 +899,7 @@ compose と Helm は同じ合言葉を環境変数で両方に渡すので、何
 | compose (`compose.prod.yml`)                 | denpa とは compose のネットワークの中で繋ぐ。ホストへはループバック (`127.0.0.1:25252`) にだけ出す                                                                                                                                   |
 | Mac (`install.sh`)                           | `AGENT_HOST=127.0.0.1`。コンテナの denpa は `host.docker.internal` 越しに Mac のループバックへ繋ぐ                                                                                                                                   |
 | Mac のエージェントだけ (`--no-docker`)       | 全部のインターフェース。別の機械の denpa から繋ぐため                                                                                                                                                                                |
-| Windows (`install.ps1`)                      | 全部のインターフェース。WSL のコンテナは vEthernet のアドレスで繋いでくるので、ループバックに絞れない。LAN からは Windows ファイアウォールで守る ([install-windows.md](install-windows.md))                                          |
+| Windows (`install.ps1`)                      | 全部のインターフェース。同じ PC の denpa は 127.0.0.1 で繋ぎ、`-AgentOnly` では別の機械の denpa が LAN から繋ぐ。LAN からは Windows ファイアウォールで守る ([install-windows.md](install-windows.md))                                |
 | Helm (`charts/denpa` / `charts/denpa-agent`) | Service は ClusterIP。NetworkPolicy も出せる (既定はオフ。CNI が対応していれば効く): `charts/denpa` は `agent.networkPolicy.enabled` で denpa の Pod からだけ、`charts/denpa-agent` は `networkPolicy.from` に書いた相手からだけ通す |
 
 **名前を見るチェック (`AGENT_ALLOWED_HOSTS`) と、本文を JSON に限るチェックは外しました。** どちらもブラウザ越しの攻撃

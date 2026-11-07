@@ -1,5 +1,5 @@
 import { closeSync, openSync, readSync } from "node:fs";
-import { relative } from "node:path";
+import { isAbsolute, relative, sep } from "node:path";
 
 import { PACKET, SYNC } from "@danything/arib/psi";
 
@@ -253,9 +253,15 @@ export async function descramble(
    * 未エンコードのものは元の TS としてここへ入る)
    */
   const base = config.rawDir;
-  const from = relative(base, input);
-  const to = relative(base, output);
-  if (from.startsWith("..") || to.startsWith("..")) {
+  // 区切りは / にそろえる (Windows の `\` のまま渡すと、Linux のエージェントには 1 つの名前に見える)
+  const from = relative(base, input).split(sep).join("/");
+  const to = relative(base, output).split(sep).join("/");
+  if (
+    from.startsWith("..") ||
+    to.startsWith("..") ||
+    isAbsolute(from) ||
+    isAbsolute(to)
+  ) {
     return {
       ok: false,
       error: `元の TS の保存先 (${base}) の外にあるファイルは復号できません`,

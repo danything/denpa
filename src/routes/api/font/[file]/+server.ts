@@ -20,13 +20,14 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { error } from "@sveltejs/kit";
 
+import { config } from "#lib/server/config.js";
 import { FONT_FILES, fontCacheControl, fontCss } from "#lib/server/font.js";
 import { etagMatches } from "#lib/server/serve.js";
 
 import type { RequestHandler } from "./$types";
 
-/** Dockerfile が置く場所 (リリースのファイルそのまま) */
-const DIR = "/usr/share/denpa-font";
+/** Dockerfile が置く場所 (リリースのファイルそのまま。`FONT_DIR`) */
+const DIR = config.fontDir;
 /** 入っているバージョン (`v2.1` など。Dockerfile が `DENPA_FONT_VERSION` を書く) */
 const VERSION = `${DIR}/VERSION`;
 

@@ -107,7 +107,7 @@ import { tunerOf, yieldedTo } from "./live-yield";
 import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
 import { programs, recordings, services } from "./schema";
 import { settings } from "./settings";
-import { chunks, endInput, lines } from "./stream";
+import { chunks, endInput, lines, sideOutput } from "./stream";
 import { holdTranscode, transcodeRoom } from "./transcode";
 import { getTuners, openWhenFree, type StreamUse } from "./tuner";
 import type { Connection } from "./ws";
@@ -254,6 +254,7 @@ type StreamCodec = LiveCodec | "audio";
  * @param hw GPU でエンコードするならその経路 (`hwenc.liveHw`)。null ならソフトウェア (`videoArgs`)
  * @param rung 回線に合わせて下げた段 (`#lib/rungs.ts`)。0 なら下げない
  * @param half エンコードが遅れたので 30 コマにするか (`videoArgs` の `half`。`Session` の `lighten`)
+ * @param side 字幕を書き出す先 (`stream.sideOutput` の `url`)
  */
 export function encodeArgs(
   program: number,
@@ -263,6 +264,7 @@ export function encodeArgs(
   hw: LiveHw | null = null,
   rung: Rung = 0,
   half = false,
+  side = "pipe:3",
 ): string[] {
   const picture =
     codec === "audio" ? null : videoArgs(codec, hw, true, rung, null, half);
@@ -334,7 +336,7 @@ export function encodeArgs(
     // **2 つ目の出口。** 字幕をそのまま、映像と同じ物差しの時刻付きで出す
     ...(caption === null || picture === null
       ? []
-      : captionOutput(from, caption)),
+      : captionOutput(from, caption, side)),
   ];
 }
 
@@ -1073,22 +1075,25 @@ function captionsNotice(
 }
 
 /**
- * 字幕だけを写す ffmpeg を起こす (`rawCaptionArgs`)。字幕は 4 本目のパイプに出る。
+ * 字幕だけを写す ffmpeg を起こす (`rawCaptionArgs`)。字幕は 4 本目の出口 (`stream.sideOutput`) に出て、`pipe` で受ける。
  * 標準出力には何も出さないはずだが、**汲まずに放っておくと詰まったときに止まる**ので読み捨てる
  */
 function spawnCaptioner(
   program: number,
   track: number,
-): ReturnType<typeof Bun.spawn> {
-  const proc = Bun.spawn([config.ffmpeg, ...rawCaptionArgs(program, track)], {
-    stdio: ["pipe", "pipe", "pipe", "pipe"] as never,
-  });
+): { proc: ReturnType<typeof Bun.spawn>; pipe: ReadableStream<Uint8Array> } {
+  const side = sideOutput();
+  const proc = Bun.spawn(
+    [config.ffmpeg, ...rawCaptionArgs(program, track, side.url)],
+    { stdio: ["pipe", "pipe", "pipe", ...side.stdio] as never },
+  );
+  const pipe = side.read(proc as never);
   void (async () => {
     for await (const _ of chunks(proc.stdout as ReadableStream<Uint8Array>)) {
       // 読み捨てる
     }
   })().catch(() => undefined);
-  return proc;
+  return { proc, pipe };
 }
 
 /**
@@ -1574,6 +1579,7 @@ class Session {
         // 遅れと速さは ffmpeg ごとに数え直す (前の ffmpeg の遅れと、起こし直した直後の速さを合わせない)
         this.lag.reset();
         this.meter = new SpeedMeter();
+        const side = wanted === null ? null : sideOutput();
         const proc = Bun.spawn(
           [
             config.ffmpeg,
@@ -1585,16 +1591,12 @@ class Session {
               hw,
               this.rung,
               this.light.half,
+              side?.url,
             ),
           ],
-          // 字幕は 4 本目のパイプ (pipe:3) へ出させる。**stdio の配列でしか増やせない**
+          // 字幕は 4 本目の出口 (stream.sideOutput) へ出させる。**stdio の配列でしか増やせない**
           {
-            stdio: [
-              "pipe",
-              "pipe",
-              "pipe",
-              ...(wanted === null ? [] : ["pipe"]),
-            ] as never,
+            stdio: ["pipe", "pipe", "pipe", ...(side?.stdio ?? [])] as never,
           },
         );
         this.proc = proc;
@@ -1622,7 +1624,7 @@ class Session {
           this.pump(stream, proc, feed === null),
           this.drain(proc),
           watching,
-          wanted === null ? Promise.resolve() : this.subtitles(proc),
+          side === null ? Promise.resolve() : this.subtitles(side.read(proc)),
         ]).catch((error: unknown) => {
           // 相手が降りたあとの EPIPE。**ここで受け止めないと再エンコードに来られない**
           trouble = error;
@@ -2061,13 +2063,11 @@ class Session {
    * コンテナは Matroska ([ts/mkv.ts](../ts/mkv.ts))。並べただけでは
    * 時刻が乗らず、別の ffmpeg で出させると入口の寄せ幅が違ってずれる (`captions.ts`)
    */
-  private async subtitles(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
-    const fd = (proc.stdio as unknown as number[])[3];
-    if (typeof fd !== "number") return;
+  private async subtitles(pipe: ReadableStream<Uint8Array>): Promise<void> {
     // 割る道具もデコードする側も ffmpeg ごと (`drain` と同じ理由。デコードする側は書式を字幕文を跨いで持つ)
     const frames = new MkvSplitter();
     const text = new CaptionText();
-    for await (const chunk of chunks(Bun.file(fd).stream())) {
+    for await (const chunk of chunks(pipe)) {
       for (const found of frames.feed(chunk)) {
         for (const shown of text.feed(found)) this.deliverText(shown);
         // 載っている言語が分かった・変わった。選べるように知らせ直す
@@ -2445,7 +2445,7 @@ class Session {
   private captions(): RawCaptions {
     this.list = new TrackList(this.program);
     this.noSubtitle = false;
-    const proc = spawnCaptioner(this.program, this.track);
+    const { proc, pipe } = spawnCaptioner(this.program, this.track);
     const list = this.list;
     void this.watch(proc)
       .then(() => {
@@ -2454,7 +2454,7 @@ class Session {
           captionless.set(this.serviceId, Date.now());
       })
       .catch(() => undefined);
-    void this.subtitles(proc).catch(() => undefined);
+    void this.subtitles(pipe).catch(() => undefined);
     return new RawCaptions(proc);
   }
 }
@@ -2531,6 +2531,11 @@ export const key = (
 ) =>
   `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}${rung === 0 ? "" : `~${rung}`}`;
 const sessions = new Map<string, Session>();
+
+/** いまライブを観ている人がいるか (セッションが 1 つでもあるか)。Windows をスリープさせないかを決める (`power.ts`) */
+export function hasLiveViewers(): boolean {
+  return sessions.size > 0;
+}
 
 /** エンコードし始めて一覧に載せる。畳むのは見ている人がいなくなったとき。ここでは待たない */
 function begin(
@@ -2950,7 +2955,7 @@ function spawnRecordingCaptioner(
   out: CaptionOut,
   current: () => ReturnType<typeof Bun.spawn>,
 ): ReturnType<typeof Bun.spawn> {
-  const proc = spawnCaptioner(program, 0);
+  const { proc, pipe } = spawnCaptioner(program, 0);
   // 選べる字幕は入口の見出しから (`TrackList`)。ffmpeg ごとに数え直す。失敗は残す
   const list = new TrackList(program);
   const text = new CaptionText();
@@ -2972,11 +2977,9 @@ function spawnRecordingCaptioner(
   })().catch(() => undefined);
 
   // 字幕。文字の配置は変わったときしか出てこないので、間引かない
-  const fd = (proc.stdio as unknown as number[])[3];
   const frames = new MkvSplitter();
   const captions = (async () => {
-    if (typeof fd !== "number") return;
-    for await (const chunk of chunks(Bun.file(fd).stream())) {
+    for await (const chunk of chunks(pipe)) {
       for (const frame of frames.feed(chunk)) {
         for (const shown of text.feed(frame)) {
           // 求められた言語だけ (`?language=`)

@@ -56,7 +56,7 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 
 ### 1. 要るもの
 
-チューナー・B-CASカードとカードリーダー・OS (Linux / Mac / Windows)・Docker (Windows は WSL) が要ります。使えるチューナーの一覧と細かいことは [docs/tuners.md](docs/tuners.md#要るもの)。
+チューナー・B-CASカードとカードリーダー・OS (Linux / Mac / Windows)・Docker (Windows は要らない) が要ります。使えるチューナーの一覧と細かいことは [docs/tuners.md](docs/tuners.md#要るもの)。
 
 ### 2. 入れる
 

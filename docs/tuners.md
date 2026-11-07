@@ -26,7 +26,7 @@
 
 - **B-CASカード** と USB のカードリーダー (px4-userland・asicen-userland の機材と CECH-ZD1 J・PIX-DT295 は内蔵リーダーでもよい。[下記](#カードリーダー))
 - **OS**: Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)。Talos Linux の 1 台に OS ごと入れるなら [install-talos.md](install-talos.md) (amd64・PT3。実機で確かめていない)
-- **Docker** (Linux・Mac。Compose 込み) か、Windows は WSL (`wsl --update` で入る `wslc`。Docker Desktop は要らない)。
+- **Docker** (Linux・Mac。Compose 込み)。Windows は要らない (denpa 本体もエージェントも Windows の上でそのまま動かす)。
   Kubernetes なら Helm
 - あれば Intel か AMD の GPU (`/dev/dri` を渡す) か NVIDIA の GPU (NVIDIA Container Toolkit で渡す。[install.md](install.md#用意するもの))。無ければソフトウェアでエンコードします
 
