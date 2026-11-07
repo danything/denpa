@@ -112,6 +112,8 @@ export function GET({ url }) {
                   rulerOf(
                     {
                       library_path: row.library,
+                      hevc_path: row.hevc,
+                      alt_path: row.alt,
                       cm_kept: row.cmKept,
                       encode_skip: row.encodeSkip,
                     },

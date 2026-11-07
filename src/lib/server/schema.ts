@@ -701,6 +701,7 @@ export const encodeJobs = sqliteTable(
     /** 残り時間の見込み(ms)。ffmpeg の speed から出す。分からない間は NULL */
     eta_ms: integer("eta_ms"),
     log: text("log").notNull().default(""),
+    /** ジョブを取り出した回数 (`encoder.pump`)。1 回の実行の中の ffmpeg の起こし直しは数えない (`config.encodeMaxAttempts`) */
     attempts: integer("attempts").notNull().default(0),
     error: text("error"),
     created_at: integer("created_at").notNull(),
