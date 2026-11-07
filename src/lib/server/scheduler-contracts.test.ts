@@ -14,11 +14,15 @@ config.dbPath = join(testDir, "denpa.db");
 config.contractScanInterval = 12 * 60 * 60 * 1000;
 
 const { orm } = await import("./db");
-const { cardContracts, programs, services, webhooks } =
+const { cardContracts, contractNotifications, programs, services, webhooks } =
   await import("./schema");
 const { toMjd } = await import("./contracts");
-const { resetContractScanTimeForTest, scanContracts, tick } =
-  await import("./scheduler");
+const {
+  resetContractScanTimeForTest,
+  scanContracts,
+  shouldScanContracts,
+  tick,
+} = await import("./scheduler");
 const { fakeAgentUrl, ONE_CARD, serveFakeAgent } = await import("./fake-agent");
 
 afterAll(() => {
@@ -30,6 +34,7 @@ afterAll(() => {
 
 beforeEach(() => {
   orm().delete(cardContracts).run();
+  orm().delete(contractNotifications).run();
   orm().delete(programs).run();
   orm().delete(services).run();
   orm().delete(webhooks).run();
@@ -368,9 +373,137 @@ describe("scanContracts: 有料放送契約の定期スキャンと期限切れ�
       webhookServer.stop(true);
     }
   });
+
+  test("7日以内に切れる契約 (contract.expiring) を検知し、同一期限では二重通知しない", async () => {
+    const receivedWebhooks: Record<string, unknown>[] = [];
+    const webhookServer = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      async fetch(request) {
+        receivedWebhooks.push(
+          (await request.json()) as Record<string, unknown>,
+        );
+        return new Response("ok");
+      },
+    });
+
+    orm()
+      .insert(webhooks)
+      .values({
+        url: `${webhookServer.url.origin}/webhook`,
+        events: ["contract.expiring"],
+        enabled: true,
+        created_at: Date.now(),
+      })
+      .run();
+
+    const nowMjd = toMjd();
+    // 今日は有効だが、3日後に無効になる局 (7日以内に切れる)
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") {
+        return Response.json(ONE_CARD);
+      }
+      if (url.pathname === "/denpa/card/confirm") {
+        const body = (await req.json()) as { date: number };
+        return Response.json({
+          ok: true,
+          // 今日から2日後までは有効 (0x0800)、3日後以降は無効 (0x0000)
+          code: body.date <= nowMjd + 2 ? 0x0800 : 0x0000,
+        });
+      }
+      return new Response("Not Found", { status: 404 });
+    });
+
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+
+      orm()
+        .insert(services)
+        .values({
+          id: 201,
+          type: "BS",
+          channel: "BS01_0",
+          service_id: 201,
+          network_id: 4,
+          name: "有料BSプレミアム",
+          updated_at: Date.now(),
+        })
+        .run();
+
+      const futureLimit = Date.now() + 10 * 86_400_000;
+      orm()
+        .insert(programs)
+        .values({
+          id: 2001,
+          service_id: 201,
+          network_id: 4,
+          event_id: 1,
+          start_at: Date.now() - 3600_000,
+          end_at: futureLimit,
+          name: "有料番組",
+          is_free: false,
+          contract_verification: "AQIDBAU=",
+          updated_at: Date.now(),
+        })
+        .run();
+
+      // 1回目のスキャン: expiring が検知され、Webhook が飛ぶ
+      const r1 = await scanContracts();
+      expect(r1.scanned[0]?.state).toBe("subscribed");
+      expect(r1.expired).toHaveLength(0);
+      expect(r1.expiring).toHaveLength(1);
+      expect(r1.expiring[0]?.serviceId).toBe(201);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(receivedWebhooks).toHaveLength(1);
+      expect(receivedWebhooks[0]?.["event"]).toBe("contract.expiring");
+
+      // 2回目のスキャン: 状態も validUntil も同じ => 二重通知されない
+      receivedWebhooks.length = 0;
+      const r2 = await scanContracts();
+      expect(r2.expiring).toHaveLength(0);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(receivedWebhooks).toHaveLength(0);
+    } finally {
+      server.stop();
+      webhookServer.stop(true);
+    }
+  });
 });
 
-describe("scheduler tick での定期実行", () => {
+describe("scheduler tick での定期実行と shouldScanContracts", () => {
+  test("shouldScanContracts: JST 03:00 跨ぎや間隔経過の判定", () => {
+    const interval = 12 * 60 * 60 * 1000;
+
+    // interval <= 0 なら無効
+    expect(shouldScanContracts(Date.now(), Date.now() - 1000, 0)).toBe(false);
+
+    // 初回 (lastScan === 0) は実行
+    expect(shouldScanContracts(Date.now(), 0, interval)).toBe(true);
+
+    // 2026-11-07 02:50 JST (= 2026-11-06 17:50 UTC)
+    const t0250 = new Date("2026-11-07T02:50:00+09:00").getTime();
+    // 2026-11-07 02:55 JST (5分後、03:00 前)
+    const t0255 = new Date("2026-11-07T02:55:00+09:00").getTime();
+    // 2026-11-07 03:05 JST (03:00 を跨いだ後)
+    const t0305 = new Date("2026-11-07T03:05:00+09:00").getTime();
+
+    // 02:50 から 02:55: 03:00 を跨いでおらず、interval 未満 => false
+    expect(shouldScanContracts(t0255, t0250, interval)).toBe(false);
+
+    // 02:50 から 03:05: 03:00 を跨いだ => true
+    expect(shouldScanContracts(t0305, t0250, interval)).toBe(true);
+
+    // 03:05 から 03:10: 同じサイクル内、interval 未満 => false
+    const t0310 = new Date("2026-11-07T03:10:00+09:00").getTime();
+    expect(shouldScanContracts(t0310, t0305, interval)).toBe(false);
+
+    // interval (12時間) 経過した場合 => true
+    expect(shouldScanContracts(t0305 + interval, t0305, interval)).toBe(true);
+  });
+
   test("contractScanInterval が経過したとき scanContracts がバックグラウンドで呼ばれる", async () => {
     let cardCalled = false;
     const server = serveFakeAgent(async (req) => {

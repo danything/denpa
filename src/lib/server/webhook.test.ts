@@ -21,6 +21,7 @@ const {
   failure,
   hostOf,
   notifyContractExpired,
+  notifyContractExpiring,
   send,
   webhookUrl,
 } = await import("./webhook");
@@ -417,6 +418,66 @@ describe("契約期限切れ通知 (notifyContractExpired)", () => {
       );
       expect(text).not.toContain("次期Kw");
       expect(/\p{Extended_Pictographic}/u.test(text)).toBe(false);
+
+      orm().delete(webhooks).where(eq(webhooks.id, hook.id)).run();
+    } finally {
+      other.stop(true);
+    }
+  });
+
+  test("7日以内の契約に対して期限切れ予告 (notifyContractExpiring) が送られる", async () => {
+    let received: Record<string, unknown> = {};
+    const other = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      async fetch(request) {
+        received = (await request.json()) as Record<string, unknown>;
+        return new Response("ok");
+      },
+    });
+
+    try {
+      const hook = orm()
+        .insert(webhooks)
+        .values({
+          url: `${other.url.origin}/notify-expiring-test`,
+          events: ["contract.expiring"],
+          enabled: true,
+          created_at: now(),
+        })
+        .returning()
+        .get();
+
+      const futureMs = now() + 6 * 86_400_000;
+      notifyContractExpiring({
+        cardId: "0000123456789012",
+        serviceId: 101,
+        serviceName: "プレミアムTV",
+        validUntil: futureMs,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(received["event"]).toBe("contract.expiring");
+      const text = String(received["text"]);
+      expect(text).toContain("[契約期限切れ予告]");
+      expect(text).toContain("0000123456789012");
+      expect(text).toContain("プレミアムTV");
+      expect(text).toContain("期限が近づいています");
+      expect(text).toContain("有効期限:");
+      expect(text).toContain("残り7日以内");
+      expect(text).toContain(
+        "継続して視聴・録画を行う場合は契約の更新を行ってください。",
+      );
+      expect(text).not.toContain("次期Kw");
+      expect(/\p{Extended_Pictographic}/u.test(text)).toBe(false);
+
+      expect(received["contract"]).toEqual({
+        cardId: "0000123456789012",
+        serviceId: 101,
+        serviceName: "プレミアムTV",
+        validUntil: futureMs,
+      });
 
       orm().delete(webhooks).where(eq(webhooks.id, hook.id)).run();
     } finally {

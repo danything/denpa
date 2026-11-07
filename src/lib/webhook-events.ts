@@ -11,8 +11,10 @@ export const EVENTS = [
   "agent.up",
   // 放送の一覧が変わり、受信できるチャンネルを書き換えた (BS・CS の再編。lineup-follow.ts)
   "channels.changed",
-  // 有料放送の契約期限切れ (1週間以内に切れる、または最近切れた。contracts.ts)
+  // 有料放送の契約期限切れ (最近切れた。contracts.ts)
   "contract.expired",
+  // 有料放送の契約期限切れ予告 (7日以内に切れる。contracts.ts)
+  "contract.expiring",
 ] as const;
 
 export type WebhookEvent = (typeof EVENTS)[number];
@@ -28,4 +30,5 @@ export const EVENT_LABEL: Record<string, string> = {
   "agent.up": "チューナーエージェント復帰",
   "channels.changed": "チャンネルの変更",
   "contract.expired": "契約期限切れ",
+  "contract.expiring": "契約期限切れ予告",
 };

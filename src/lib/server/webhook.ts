@@ -205,3 +205,29 @@ export function notifyContractExpired(contract: {
     },
   });
 }
+
+/**
+ * B-CAS 有料契約の期限切れ予告 (7日以内) を通知する。
+ *
+ * 通知内容: B-CAS カード番号、局名、有効期限日時、注意喚起メッセージ
+ */
+export function notifyContractExpiring(contract: {
+  cardId: string;
+  serviceId?: number;
+  serviceName: string;
+  validUntil: number;
+}): void {
+  const expiry = `${fullDate(contract.validUntil)} 00:00`;
+  const text = `[契約期限切れ予告] B-CASカード: ${contract.cardId} / 局名: ${contract.serviceName} の契約期限が近づいています (有効期限: ${expiry}、残り7日以内)。継続して視聴・録画を行う場合は契約の更新を行ってください。`;
+
+  notify({
+    event: "contract.expiring",
+    text,
+    contract: {
+      cardId: contract.cardId,
+      serviceId: contract.serviceId,
+      serviceName: contract.serviceName,
+      validUntil: contract.validUntil,
+    },
+  });
+}

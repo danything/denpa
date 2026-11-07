@@ -225,6 +225,13 @@
       "when": 1793981913810,
       "tag": "0031_card-contracts",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1793993086930,
+      "tag": "0032_contract-notifications",
+      "breakpoints": true
     }
   ]
 }

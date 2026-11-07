@@ -26,6 +26,7 @@ import {
 } from "./recorder";
 import {
   cardContracts,
+  contractNotifications,
   programs,
   recordings,
   reservations,
@@ -41,7 +42,7 @@ import {
   recordingUse,
   type StreamUse,
 } from "./tuner";
-import { notifyContractExpired } from "./webhook";
+import { notifyContractExpired, notifyContractExpiring } from "./webhook";
 
 interface Candidate extends Reservation {
   type: string;
@@ -229,22 +230,50 @@ export function resetContractScanTimeForTest(time = 0): void {
 }
 
 /**
+ * 定期契約確認スキャンを実行すべきか判定する。
+ * - contractScanInterval が 0 の場合は無効。
+ * - 初回 (lastScan === 0) または interval 以上経過したとき。
+ * - 深夜 (JST 03:00) を跨いだとき。
+ */
+export function shouldScanContracts(
+  at: number,
+  lastScan: number,
+  interval: number,
+): boolean {
+  if (interval <= 0) return false;
+  if (lastScan === 0) return true;
+  if (at - lastScan >= interval) return true;
+
+  // JST 03:00 (UTC+9 の 03:00 = UTC の前日 18:00) を跨いだかを日番号で判定
+  const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+  const TARGET_HOUR_MS = 3 * 60 * 60 * 1000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const prevDay = Math.floor(
+    (lastScan + JST_OFFSET_MS - TARGET_HOUR_MS) / DAY_MS,
+  );
+  const currentDay = Math.floor((at + JST_OFFSET_MS - TARGET_HOUR_MS) / DAY_MS);
+  return currentDay > prevDay;
+}
+
+/**
  * 有料放送局の契約状態を確認し、直前のスキャン結果と比較して
- * 新たに「期限切れ (state === 'expired')」となった局を検知して Webhook 通知を送る。
+ * 新たに「期限切れ (state === 'expired')」または「7日以内の期限切れ予告 (contract.expiring)」を
+ * 検知して Webhook 通知を送る。
  */
 export async function scanContracts(): Promise<{
   scanned: ContractRow[];
   expired: ContractRow[];
+  expiring: ContractRow[];
 }> {
   if (scanningContracts) {
-    return { scanned: [], expired: [] };
+    return { scanned: [], expired: [], expiring: [] };
   }
   scanningContracts = true;
   try {
     const card = await cardStatus();
     const cardId = getActiveCardId(card);
     if (!card.ok || !cardId) {
-      return { scanned: [], expired: [] };
+      return { scanned: [], expired: [], expiring: [] };
     }
 
     const previousRows = orm()
@@ -263,11 +292,45 @@ export async function scanContracts(): Promise<{
     const currentContracts = await checkContracts();
 
     const newlyExpired: ContractRow[] = [];
+    const newlyExpiring: ContractRow[] = [];
+    const nowMs = now();
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+    // 既に通知済みの期限切れ予告 (contract.expiring) を取得
+    const notifiedExpiringRows = orm()
+      .select({
+        serviceId: contractNotifications.service_id,
+        validUntil: contractNotifications.valid_until,
+      })
+      .from(contractNotifications)
+      .where(
+        and(
+          eq(contractNotifications.card_id, cardId),
+          eq(contractNotifications.event, "contract.expiring"),
+        ),
+      )
+      .all();
+
+    const notifiedExpiringSet = new Set(
+      notifiedExpiringRows.map((r) => `${r.serviceId}:${r.validUntil}`),
+    );
+
     for (const contract of currentContracts) {
       if (contract.state === "expired") {
         const prevState = previousStateMap.get(contract.serviceId);
         if (prevState !== "expired") {
           newlyExpired.push(contract);
+        }
+      } else if (
+        contract.state === "subscribed" &&
+        contract.validUntil !== null &&
+        contract.validUntil > nowMs &&
+        contract.validUntil <= nowMs + SEVEN_DAYS_MS
+      ) {
+        // 7日以内に切れる有料契約
+        const key = `${contract.serviceId}:${contract.validUntil}`;
+        if (!notifiedExpiringSet.has(key)) {
+          newlyExpiring.push(contract);
         }
       }
     }
@@ -281,7 +344,32 @@ export async function scanContracts(): Promise<{
       });
     }
 
-    return { scanned: currentContracts, expired: newlyExpired };
+    for (const contract of newlyExpiring) {
+      if (contract.validUntil !== null) {
+        notifyContractExpiring({
+          cardId: contract.cardId,
+          serviceId: contract.serviceId,
+          serviceName: contract.serviceName,
+          validUntil: contract.validUntil,
+        });
+        orm()
+          .insert(contractNotifications)
+          .values({
+            card_id: contract.cardId,
+            service_id: contract.serviceId,
+            event: "contract.expiring",
+            valid_until: contract.validUntil,
+            notified_at: nowMs,
+          })
+          .run();
+      }
+    }
+
+    return {
+      scanned: currentContracts,
+      expired: newlyExpired,
+      expiring: newlyExpiring,
+    };
   } finally {
     scanningContracts = false;
   }
@@ -294,11 +382,8 @@ export async function scanContracts(): Promise<{
 export async function tick(): Promise<void> {
   const at = now();
 
-  // 定期的な有料放送契約確認スキャン (既定: 12時間おき)
-  if (
-    config.contractScanInterval > 0 &&
-    at - lastContractScan >= config.contractScanInterval
-  ) {
+  // 定期的な有料放送契約確認スキャン (深夜 JST 03:00、または既定12時間間隔)
+  if (shouldScanContracts(at, lastContractScan, config.contractScanInterval)) {
     lastContractScan = at;
     void scanContracts().catch((error: unknown) => {
       console.warn(`[contracts] 定期契約確認スキャンに失敗しました: ${error}`);

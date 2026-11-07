@@ -12,6 +12,7 @@ import {
   real,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 import type { Audio } from "../arib";
@@ -284,6 +285,36 @@ export const cardContracts = sqliteTable(
     checked_at: integer("checked_at").notNull(),
   },
   (t) => [primaryKey({ columns: [t.card_id, t.service_id] })],
+);
+
+/**
+ * B-CAS 有料契約に関する Webhook 通知履歴。
+ * 同じ期限に対する期限切れ予告 (contract.expiring) などの二重通知を防ぐために記録する。
+ */
+export const contractNotifications = sqliteTable(
+  "contract_notifications",
+  {
+    /** 自動採番 ID */
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** カード番号 (16桁の文字列) */
+    card_id: text("card_id").notNull(),
+    /** 局の内部 ID (services.id) */
+    service_id: integer("service_id").notNull(),
+    /** 通知イベント種別 (例: contract.expiring) */
+    event: text("event").notNull(),
+    /** 通知対象となった契約期限 (epoch ms)。期限単位での重複通知抑止に使う */
+    valid_until: integer("valid_until").notNull(),
+    /** 通知を送信した時刻 (epoch ms) */
+    notified_at: integer("notified_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("contract_notifications_event_idx").on(
+      t.card_id,
+      t.service_id,
+      t.event,
+      t.valid_until,
+    ),
+  ],
 );
 
 export const programs = sqliteTable(
