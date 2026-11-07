@@ -35,7 +35,7 @@ namespace Denpa.Agent;
 public static class Probe
 {
     // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
-    public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: だけ)]";
+    public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)]";
     public const string DecodeUsage = "denpa-agent --decode-file <in.ts> <out.ts>";
     public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート>]";
 

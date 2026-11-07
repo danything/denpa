@@ -159,7 +159,6 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     internal static readonly uint ReleaseInterface = Ioc(2, 16, sizeof(uint));
     internal static readonly uint Reset = Ioc(0, 20, 0);
 
-
     private const int Eperm = 1;
     private const int Enoent = 2;
     private const int Eacces = 13;
