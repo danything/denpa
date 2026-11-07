@@ -73,8 +73,8 @@ if (args is ["--status"])
         : "127.0.0.1";
     return await AgentTls.Status(config.TlsDir, target, port);
 }
-// PIX-DT295 を確かめる。常駐イメージを入れて (引き継いで) 選局し、受信の統計を出す (Dt295ResidentProbe.cs)
-if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295ResidentProbe.Run(args);
+// PIX-DT295 を確かめる。機材を設定して選局し (--card ならカードを読み)、受信の統計を出す (Dt295NativeProbe.cs)
+if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295NativeProbe.Run(args);
 /*
  * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
@@ -89,7 +89,7 @@ if (args.Length > 0)
     Console.Error.WriteLine($"       {Probe.TuneUsage}");
     Console.Error.WriteLine($"       {Probe.DecodeUsage}");
     Console.Error.WriteLine($"       {Probe.CardUsage}");
-    Console.Error.WriteLine($"       {Dt295ResidentProbe.Usage}");
+    Console.Error.WriteLine($"       {Dt295NativeProbe.Usage}");
     return 2;
 }
 
@@ -561,7 +561,7 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
         foreach (var candidate in present.Where(candidate => disabled.Contains(candidate.Name)))
         {
             if (candidate.Device is not { } device || used.Contains(device)) continue;
-            if (Dt295.Parse(device) is { } dt295) Dt295ResidentBoard.CloseIfIdle(dt295);
+            if (Dt295.Parse(device) is { } dt295) Dt295NativeDevice.CloseIfIdle(dt295);
             else if (Zd1j.Parse(device) is { } zd1j) Zd1jBoard.CloseIfIdle(zd1j);
         }
     });
@@ -668,8 +668,8 @@ app.Lifetime.ApplicationStopped.Register(() =>
     pool.CloseAll();
     // CECH-ZD1 J は眠らせて LED を緑に戻してから閉じる (カードのために開いていても)
     Zd1jBoard.CloseAll();
-    // PIX-DT295 は常駐イメージを機材に残したまま手放してから閉じる (カードのために開いていても)
-    Dt295ResidentBoard.CloseAll();
+    // PIX-DT295 は書いた設定を戻してから閉じる (カードのために開いていても)
+    Dt295NativeDevice.CloseAll();
     // 利用者を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
     UserlandDaemon.StopAll();
 });

@@ -107,7 +107,7 @@ public static class Probe
     {
         if (args.ElementAtOrDefault(1) is { } device)
         {
-            if (Dt295.Parse(device) is { } dt295) return OneCard(Dt295.Card(dt295), Dt295ResidentBoard.CloseAll);
+            if (Dt295.Parse(device) is { } dt295) return OneCard(Dt295.Card(dt295), Dt295NativeDevice.CloseAll);
             if (Zd1j.Parse(device) is not { } port)
             {
                 Console.Error.WriteLine($"usage: {CardUsage}");
@@ -135,7 +135,7 @@ public static class Probe
         finally
         {
             Zd1jBoard.CloseAll();
-            Dt295ResidentBoard.CloseAll();
+            Dt295NativeDevice.CloseAll();
         }
     }
 
@@ -175,7 +175,7 @@ public static class Probe
 
         // PIX-DT295 は、鍵もその機材の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
         IKeySource source = Dt295.Parse(device) is { } dt295 && cardAt < 0 ? new LocalCard(() => [Dt295.Card(dt295)]) : Keys.Source;
-        using var closing = Dt295.Is(device) ? new Closing(Dt295ResidentBoard.CloseAll) : null;
+        using var closing = Dt295.Is(device) ? new Closing(Dt295NativeDevice.CloseAll) : null;
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");

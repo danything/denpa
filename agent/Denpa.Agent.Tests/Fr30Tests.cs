@@ -51,6 +51,10 @@ public class Fr30Tests
          nop
          st rp, @-r15
          ld @r15+, rp
+         ldub @(r13, r11), r0
+         lsl r1, r0
+         lsr r12, r2
+         stb r0, @(r13, r12)
         top:
          nop
          beq top
@@ -69,7 +73,7 @@ public class Fr30Tests
     private const string Expected =
         "c400cfff9bec9ae69b8100009f8100f000009f81b01c0de5041005100601140415101601" +
         "21f031fb2d003d0800c010c28b80a680a440a5f5a580ac20aa04a801a8a982149214" +
-        "b420b581b503b041b1f0b121970097209fa0178107819fa0e2fee305e404e503e602ee01e000d7f7";
+        "b420b581b503b041b1f0b121970097209fa01781078102b0b610b2c212c09fa0e2fee305e404e503e602ee01e000d7f7";
 
     [Test]
     public async Task どの形の命令も_fr30_elf_as_と同じ語になる()
@@ -115,6 +119,10 @@ public class Fr30Tests
         asm.Nop();
         asm.PushRp();
         asm.PopRp();
+        asm.LdubAc(R11, R0);
+        asm.LslR(R1, R0);
+        asm.LsrR(R12, R2);
+        asm.StbAc(R0, R12);
         asm.Label("top");
         asm.Nop();
         asm.B(Fr30Cond.Eq, "top");

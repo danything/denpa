@@ -167,7 +167,7 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
   本体を `bun server.js` で起こして画面・字・デコーダが返ることを見る。install.sh で本体ごと入れて root の LaunchDaemon で動き、
   本体がエージェントと組むところまで。Docker の本体からの移行は偽の docker で流す (`tests/install-mac-migrate.sh`)。メニューバーのアプリは、組んで起こして落ちないこと・
   LaunchAgent に載ること・上げ直すと動いているものを止めること・外すと消えることまで
-- **Mac の実機でチューナーとカードを繋いで確かめたのは、PIX-DT295 の報告 (#2218) だけです** ([tuners.md](tuners.md#pixela-pix-dt295-試験的))。それも前のバージョン
+- **Mac の実機でチューナーとカードを繋いで確かめたのは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 の報告 (#2218) だけです** ([tuners.md](tuners.md#pixela-pix-dt295-試験的))。それも前のバージョン
   (エージェントがユーザーの LaunchAgent) のときのものです
 - **まだ確かめていないこと**: root の LaunchDaemon で動くエージェントから USB の機材とカードリーダー (PC/SC) を使えるか、VideoToolbox で
   エンコードした録画の画質と大きさ、スリープから起こす予約で録画が始まるか、実機の Docker からの移行、メニューバーのアプリの見た目と、
