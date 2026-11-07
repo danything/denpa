@@ -110,7 +110,7 @@ fi
 # recipe:svt-av1:end
 cp -r "$deps/opus/licenses/." "$deps/svt-av1/licenses/." "$out/licenses/"
 
-# FFmpeg
+# FFmpeg (キャッシュの鍵はこのスクリプト全体。ここから下を変えても、上の Opus と SVT-AV1 は組み直さない)
 mkdir "$work/ffmpeg" && cd "$work/ffmpeg"
 fetch_tar "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2" j
 for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 --fuzz=0 < "$p"; done
