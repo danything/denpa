@@ -122,7 +122,9 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
             0xA5, 0x09, 0xC2, 0xA9, 0xC5, 0x7C, 0xCD, 0xE8, 0xCE, 0x7F, 0xD5, 0x03, 0xD9, 0x04, 0xEA, 0x0D, 0xDC, 0x1C, 0x6D, 0x0A);
         T(0x03, 0x00);
         T(0x03, 0x01);
-        Wait(100, "仕様書 7.1.2。03=01 のあと");
+        // 03=01 のあとの 100 ms は、T チューナーだけの待ち。別の I2C アドレス (0x11) の S 側の初期化 (7.1.3〜7.1.4) はこの間に行う。
+        // 仕様書の時刻順とは違うが、S 側は T 側のレジスタに触らない (仕様書に無い判断)
+        WaitDoing(100, "仕様書 7.1.2。03=01 のあと。この間に S 側 7.1.3〜7.1.4 を行う", InitializeSatellite);
         TunerRmw(Terrestrial, 0x0D, 0xFE, 0x00);
         T(0x0F, 0x20);
         T(0x10, 0x49);
@@ -137,6 +139,17 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         T(0x12, 0x00);
         T(0x0B, 0x00);
 
+        // 7.1.5 締め
+        phases.Next("締め", "7.1.5");
+        Demod(Terrestrial, 0x47, 0x00);
+        Demod(Terrestrial, 0x4F, 0x05);
+        Demod(Terrestrial, 0x72, 0x00);
+    }
+
+    /// <summary>S 側の初期化 (仕様書 7.1.3・7.1.4)。T チューナーの待ちの間に行う</summary>
+    private void InitializeSatellite()
+    {
+        using var phases = new Dt295Timeline.Phases(timeline);
         // 7.1.3 S 復調の初期値
         phases.Next("S 復調の初期値", "7.1.3");
         DemodPairs(Satellite,
@@ -158,14 +171,21 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         S(0x1C, 0x00);
         S(0x11, 0xC0, 0xA7);
         Wait(6, "仕様書 7.1.4 の終わり");
-
-        // 7.1.5 締め
-        phases.Next("締め", "7.1.5");
-        Demod(Terrestrial, 0x47, 0x00);
-        Demod(Terrestrial, 0x4F, 0x05);
-        Demod(Terrestrial, 0x72, 0x00);
     }
 
+    /// <summary>
+    /// <paramref name="ms"/> の待ちの間に <paramref name="work"/> を行い、残りの時間だけ待つ (仕事が長引いて足りていれば待たない)。
+    /// 待ちの間にバスを使う相手が、待っている機器と別のアドレスのときだけ使う
+    /// </summary>
+    private void WaitDoing(int ms, string reason, Action work)
+    {
+        using var scope = timeline?.Begin($"待ち {ms} ms (この間に別の仕事)", reason, wait: true);
+        var clock = Stopwatch.StartNew();
+        work();
+        var rest = ms - (int)clock.ElapsedMilliseconds;
+        scope?.Note($"仕事 {clock.ElapsedMilliseconds} ms、残りの待ち {Math.Max(0, rest)} ms");
+        if (rest > 0) sleep(rest);
+    }
     /// <summary>T 側を休ませる (仕様書 7.3.2 の t=1、9 章の SHUTDOWN)</summary>
     public void RestTerrestrial()
     {

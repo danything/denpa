@@ -431,6 +431,22 @@ public class Dt295NativeTests
         await Assert.That(i2c).Contains("11 W 1C59AA2019");    }
 
     [Test]
+    public async Task S_側の初期化は_T_チューナーの_100_ms_の待ちの間に入る()
+    {
+        var fake = Rig();
+        Run(fake, "T25");
+        var i2c = fake.I2cLog;
+        var afterWait = Index(i2c, "10 W FEC00301");          // T チューナーの 03=01。ここから 100 ms の待ち
+        var firstS = Index(i2c, "11 W 0190");                  // S 復調の最初の書き込み
+        var lastS = Index(i2c, "11 W FEC011C0A7");             // S チューナーの最後の書き込み
+        var resumed = Index(i2c, "10 W FEC00D", afterWait);    // 待ちのあとの T チューナーの 0x0D の読み・変更・書き
+        await Assert.That(afterWait).IsGreaterThan(0);
+        await Assert.That(firstS).IsGreaterThan(afterWait);
+        await Assert.That(lastS).IsGreaterThan(firstS);
+        await Assert.That(resumed == -1 || resumed > lastS).IsTrue();
+    }
+
+    [Test]
     public async Task 時間の内訳は設定_各待ち_選局_ロック待ち_取り込み_最初の_TS_を制御転送と_I2C_の数つきで出す()
     {
         var fake = Rig();
@@ -446,7 +462,7 @@ public class Dt295NativeTests
         // チップの設定の段、I2C の段、各待ち (理由つき)、選局、受信の確認の周回、取り込み、最初の TS
         foreach (var expected in new[]
         {
-            "手順 1〜3", "手順 10〜12", "T 復調の初期値", "T チューナーの初期化", "S 復調の初期値", "待ち 100 ms (仕様書 7.1.2", "待ち 4 ms (仕様書 7.1.3",
+            "手順 1〜3", "手順 10〜12", "T 復調の初期値", "T チューナーの初期化", "S 復調の初期値", "待ち 100 ms (この間に別の仕事) (仕様書 7.1.2", "待ち 4 ms (仕様書 7.1.3",
             "t=23 周波数の設定", "待ち 100 ms (仕様書 7.2.2。t=46", "受信の確認 (地上波)", "取り込みの設定", "取り込みの開始", "最初の TS を待つ", "固定の待ち:",
         })
         {
