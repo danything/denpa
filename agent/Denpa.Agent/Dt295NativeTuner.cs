@@ -405,7 +405,8 @@ public sealed class Dt295NativeTuner : ITuneDevice
                 var tsid = streamId == ChannelTable.NoStreamId ? null : (int?)streamId;
                 // 同じ機材が同じチャンネルに合ったまま (機材は開いたまま) なら、選局を省いて、受信が続いているかだけ確かめる
                 var reuse = false;
-                if (before is { } was && ReferenceEquals(was.Device, device) && was.Tuning == tuning && was.StreamId == streamId)
+                if (before is { } was && ReferenceEquals(was.Device, device) && was.Tuning == tuning && was.StreamId == streamId
+                    && frontend.IsTuned(tuning.Satellite, tuning.Satellite ? (uint)tuning.Frequency : (uint)((tuning.Frequency + 500UL) / 1000)))
                 {
                     using (timeline.Step("同じチャンネル: 受信が続いているかを確かめる", "選局を省く"))
                     {

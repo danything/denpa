@@ -232,6 +232,11 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     /// </summary>
     private Last _last = Last.None;
 
+    private uint _tunedKHz;
+
+    /// <summary>最後に選局を終えた側と周波数が、これと同じか。ほかの手段 (診断の離れる選局など) で復調の周波数が替わると false になる</summary>
+    public bool IsTuned(bool satellite, uint kHz) => _last == (satellite ? Last.Satellite : Last.Terrestrial) && _tunedKHz == kHz;
+
     /// <summary>S 側を休ませる (仕様書 7.2.2 の「衛星を選んでいたあとは、先に S 側を休ませる表 0x803ADB98」。推定)</summary>
     private void RestSatellite()
     {
@@ -339,6 +344,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         Demod(Terrestrial, 0x1F, 0x8A);
         Flush();
         _last = Last.Terrestrial;
+        _tunedKHz = kHz;
     }
 
     /// <summary>
@@ -510,6 +516,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         DemodRmw(Satellite, 0xA3, 0x88, 0x11);
         Flush();
         _last = Last.Satellite;
+        _tunedKHz = ifKhz;
     }
 
     /// <summary>

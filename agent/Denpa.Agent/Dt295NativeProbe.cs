@@ -485,6 +485,8 @@ public sealed class Dt295TsStats
     public long Packets { get; private set; }
     public long Synced { get; private set; }
     public long Errors { get; private set; }
+    public long FirstError { get; private set; }
+    public long LastError { get; private set; }
     public long[] Scrambling { get; } = new long[4];
     public SortedDictionary<int, long> Pids { get; } = [];
 
@@ -498,6 +500,8 @@ public sealed class Dt295TsStats
         if ((packet[1] & 0x80) != 0)
         {
             Errors++;
+            if (FirstError == 0) FirstError = Packets;
+            LastError = Packets;
             return;
         }
         Scrambling[packet[3] >> 6]++;
@@ -509,6 +513,7 @@ public sealed class Dt295TsStats
     {
         output.WriteLine($"bytes: {Bytes}");
         output.WriteLine($"packets: {Packets}  sync 0x47: {Synced} ({(Packets == 0 ? 0 : 100.0 * Synced / Packets):F2}%)  transport_error_indicator: {Errors}");
+        if (Errors > 0) output.WriteLine($"transport_error_indicator の位置: 最初 {FirstError} 番目、最後 {LastError} 番目 (全 {Packets} パケット)");
         output.WriteLine($"transport_scrambling_control: 00={Scrambling[0]} 01={Scrambling[1]} 10={Scrambling[2]} 11={Scrambling[3]}");
         output.WriteLine($"PID: {Pids.Count} 種類  PAT: {(Pids.ContainsKey(0) ? "来た" : "来ない")}");
     }

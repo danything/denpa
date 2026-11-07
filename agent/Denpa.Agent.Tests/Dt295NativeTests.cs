@@ -680,6 +680,15 @@ public class Dt295NativeTests
             // 別のチャンネルでは周波数を書く
             tuner.Tune(t26, t26.StreamId);
             await Assert.That(Writes()).IsGreaterThan(first);
+
+            // 別の手段で復調の周波数が替わっていたら (診断の離れる選局など)、同じチャンネルでも選局し直す
+            tuner.Tune(t25, t25.StreamId);
+            var settled = Writes();
+            tuner.Device!.Frontend.TuneTerrestrial((uint)((t26.Frequency + 500UL) / 1000));
+            var away = Writes();
+            await Assert.That(away).IsGreaterThan(settled);
+            tuner.Tune(t25, t25.StreamId);
+            await Assert.That(Writes()).IsGreaterThan(away);
         }
         finally
         {
