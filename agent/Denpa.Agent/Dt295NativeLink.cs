@@ -175,6 +175,19 @@ public sealed class Dt295NativeLink
     /// </summary>
     public bool AllowCardUart { get; set; }
 
+    private int _cardBusy;
+
+    /// <summary>
+    /// カードが読み書きの途中か。TS を流している間、機材のプログラムへの要求は終わるまで制御転送が返らないので、
+    /// カードの UART (受信 FIFO は 32 バイト) の読みが遅れる。カードが使っている間は、要求を小さくして遅れを短くする (<see cref="Dt295NativeStream"/>)
+    /// </summary>
+    public bool CardBusy => Volatile.Read(ref _cardBusy) > 0;
+
+    /// <summary>カードの読み書きを始める。終わったら <see cref="LeaveCard"/></summary>
+    public void EnterCard() => Interlocked.Increment(ref _cardBusy);
+
+    public void LeaveCard() => Interlocked.Decrement(ref _cardBusy);
+
     private void Guard(uint address)
     {
         // カードの端子の向き・極性 (0xF00222〜0xF0022E。仕様書 §10 の設定確認) は、常駐イメージも読んで確かめるだけ。書かない

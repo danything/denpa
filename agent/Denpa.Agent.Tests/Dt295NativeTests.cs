@@ -413,6 +413,61 @@ public class Dt295NativeTests
     }
 
     [Test]
+    public async Task 止めたあとに残った読み手はスレッドから例外を出さずに終わり_Output_を取り直すと例外になる()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var tuner = new Dt295NativeTuner("test", () => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000), () => Dt295NativeDevice.CloseIfIdle(port));
+        var tuning = ChannelTable.Parse("T25")!;
+        tuner.Tune(tuning, tuning.StreamId);
+        // 本番の読み手 (TunerPool.Read) と同じく、Output は 1 回だけ取って DeviceStream として読み続ける
+        var ring = (DeviceStream)tuner.Output;
+        var reader = Task.Run(() =>
+        {
+            var buffer = new byte[188 * 64];
+            try
+            {
+                while (ring.Read(buffer, 0, buffer.Length, () => false) > 0)
+                {
+                }
+            }
+            catch (Exception error) when (error is IOException or ObjectDisposedException)
+            {
+                // TunerPool.Read も catch して記録するだけ
+            }
+        });
+
+        tuner.Dispose();
+
+        await Assert.That(await Task.WhenAny(reader, Task.Delay(TimeSpan.FromSeconds(10)))).IsSameReferenceAs(reader);
+        await reader;
+        Assert.Throws<InvalidOperationException>(() => _ = tuner.Output);
+    }
+
+    [Test]
+    public async Task カードが読み書きしている間だけ_TS_の要求を小さくする()
+    {
+        var fake = Rig();
+        var link = new Dt295NativeLink(fake);
+        await Assert.That(link.CardBusy).IsFalse();
+        link.EnterCard();
+        await Assert.That(link.CardBusy).IsTrue();
+        link.LeaveCard();
+        await Assert.That(link.CardBusy).IsFalse();
+        await Assert.That(Dt295NativeStream.CardKickPackets).IsLessThan(Dt295NativeStream.KickPackets);
+
+        // カードの送受信の間だけ立ち、終わったら戻る
+        var atr = Convert.FromHexString("3BF01200FF9181B17C451F0399");
+        fake.CardAtr = atr;
+        fake.CardResponder = block => (block[1] & 0xC0) == 0xC0 ? T1Protocol.Block((byte)(block[1] | 0x20), block[3..^1]) : T1Protocol.Block(0x00, [0x90, 0x00]);
+        using var card = new Dt295NativeCard("DT295 カード", () => link, delay: _ => { });
+        card.Reset();
+        await Assert.That(link.CardBusy).IsFalse();
+        card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00]);
+        await Assert.That(link.CardBusy).IsFalse();
+    }
+
+    [Test]
     public async Task 制御転送が通らなくなった機材は_後始末の書き込みを省いて閉じ_次に取るときは開き直す()
     {
         var fake = Rig();

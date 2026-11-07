@@ -198,6 +198,21 @@ public sealed class Dt295NativeCard : ICardLink
     /// <summary>T=1 のブロックを 1 つ送って 1 つ受ける (Zd1jCard と同じ。時間切れは null)</summary>
     private byte[]? Exchange(byte[] block, byte wtx)
     {
+        // 送ってから受け切るまで、TS の要求を小さくさせる (受信 FIFO が溢れないように)
+        var link = Link;
+        link.EnterCard();
+        try
+        {
+            return ExchangeCore(block, wtx);
+        }
+        finally
+        {
+            link.LeaveCard();
+        }
+    }
+
+    private byte[]? ExchangeCore(byte[] block, byte wtx)
+    {
         Write(Mb86h47.CardRxLrc, 0);
         Write(Mb86h47.CardTxLrc, 0);
         foreach (var b in block) Write(Mb86h47.CardTx, b);

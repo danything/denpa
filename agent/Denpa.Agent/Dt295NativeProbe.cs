@@ -115,6 +115,8 @@ public static class Dt295NativeProbe
             output.WriteLine($"選局から最初の TS: {tuneClock.ElapsedMilliseconds} ms");
             firstTsMs = tuneClock.ElapsedMilliseconds;
             var reading = Stopwatch.StartNew();
+            // 読む側は Output を 1 回だけ取る (止めたあとに tuner.Output を取り直すと、選局していないとして例外になる)
+            var tsStream = tuner.Output;
             reader = new Thread(() =>
             {
                 var buffer = new byte[188 * 1024];
@@ -122,7 +124,7 @@ public static class Dt295NativeProbe
                 {
                     while (true)
                     {
-                        var got = tuner.Output.Read(buffer, 0, buffer.Length);
+                        var got = tsStream.Read(buffer, 0, buffer.Length);
                         if (got == 0)
                         {
                             if (!Volatile.Read(ref stopReading)) problem = "TS の読みが終わりました";
@@ -136,7 +138,7 @@ public static class Dt295NativeProbe
                         });
                     }
                 }
-                catch (Exception error) when (error is IOException or ObjectDisposedException)
+                catch (Exception error) when (error is IOException or ObjectDisposedException or InvalidOperationException)
                 {
                     if (!Volatile.Read(ref stopReading)) problem = error.Message;
                 }
