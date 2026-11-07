@@ -31,6 +31,7 @@ public static class Dt295NativeProbe
             var at = Array.IndexOf(args, name);
             return at >= 0 ? args.ElementAtOrDefault(at + 1) : null;
         }
+        if (args.Contains("--lock-bit-only")) Dt295NativeTuner.ExperimentLayers = 0; // 実験用 (あとで削除)
         if (Value("--channel") is not { } channel || ChannelTable.Parse(channel) is not { } tuning) return null;
         var seconds = 5;
         if (args.Contains("--seconds") && !int.TryParse(Value("--seconds"), NumberStyles.None, CultureInfo.InvariantCulture, out seconds)) return null;

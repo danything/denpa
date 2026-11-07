@@ -93,41 +93,63 @@ internal sealed class Dt295NativeStream
         _name = name;
         _stalled = stalled;
         Output = new DeviceStream(_pipe.Reader, () => _reason);
-        _reader = new Thread(Read) { IsBackground = true, Name = $"{name} TS" };
-        _kicker = new Thread(Kick) { IsBackground = true, Name = $"{name} 要求" };
+        // Linux のスレッド名は 15 文字まで。CPU 時間をスレッドごとに見分けるため、機材の名前は付けない (--dt295-probe)
+        _reader = new Thread(Read) { IsBackground = true, Name = "dt295-ts" };
+        _kicker = new Thread(Kick) { IsBackground = true, Name = "dt295-kick" };
     }
 
-    /// <summary>取り込みを始めて、読みと要求を動かす。選局とロックの確認が済んでから呼ぶ</summary>
-    public static Dt295NativeStream Start(Dt295NativeDevice device, string name, Action stalled)
+    /// <summary>
+    /// 取り込みの設定と端点の開始までを済ませ、読みの口を開く。**取り込みはまだ始めない** (TS は出ない)。選局のあとの受信の確認の間に呼んで、
+    /// 受信を確認できたらすぐ <see cref="Begin"/> できるようにする。受信が確認できなければ <see cref="Abort"/>
+    /// </summary>
+    public static Dt295NativeStream Prepare(Dt295NativeDevice device, string name, Action stalled)
     {
         var stream = new Dt295NativeStream(device, device.Usb.OpenInStream(Endpoint, TransferSize, Depth), name, stalled);
         try
         {
-            stream.BeginCapture();
+            stream.ArmCapture();
         }
         catch
         {
-            stream.EndCapture();
-            stream._in.Dispose();
-            stream.Output.Dispose();
+            stream.Abort();
             throw;
         }
-        stream._reader.Start();
-        stream._kicker.Start();
         return stream;
     }
 
-    private void BeginCapture()
+    /// <summary>機材のプログラムの状態を戻し、取り込みを始めて、読みと要求を動かす。TS はここから出る (<see cref="Prepare"/> のあと、受信を確認してから)</summary>
+    public void Begin()
+    {
+        try
+        {
+            _device.Board.ResetPumpState();
+            using (_device.Timeline.Step("取り込みの開始", "0x1902010 = 0x02000000")) _device.Board.StartCapture();
+            _capturing = true;
+        }
+        catch
+        {
+            Abort();
+            throw;
+        }
+        _reader.Start();
+        _kicker.Start();
+    }
+
+    /// <summary><see cref="Begin"/> の前に取りやめる。設定を戻して、読みの口を閉じる</summary>
+    public void Abort()
+    {
+        EndCapture();
+        _in.Dispose();
+        Output.Dispose();
+    }
+
+    private void ArmCapture()
     {
         var board = _device.Board;
         var timeline = _device.Timeline;
         using (timeline.Step("取り込みの設定", "仕様書 8.1.3。28 項目を書いて読み戻す")) _capture = board.ConfigureCapture();
         using (timeline.Step("端点の開始", "仕様書 8.3.1")) _endpoint = board.StartEndpoint();
-        board.ResetPumpState();
-        using (timeline.Step("取り込みの開始", "0x1902010 = 0x02000000")) board.StartCapture();
-        _capturing = true;
     }
-
     /// <summary>取り込みを止めて、端点と取り込みの設定を戻す。USB の制御が止まっていれば省く</summary>
     private void EndCapture()
     {
@@ -287,6 +309,15 @@ public sealed class Dt295NativeTuner : ITuneDevice
     private Dt295NativeStream? _stream;
     private bool _satellite;
 
+    /// <summary>最後に合わせて受信を確認したもの (どの機材で、どのチャンネルか)。選局が途中で失敗したら null</summary>
+    private (Dt295NativeDevice Device, ChannelTable.Tuning Tuning, uint StreamId)? _last;
+
+    /// <summary>同じチャンネルのまま受信が続いているかを確かめる時間の上限 (1 回の読みで済む。地上波は 1 周、衛星は数周)</summary>
+    /// <summary>実験用 (あとで削除)。0 にすると地上波の受信の確認がロックの印だけで済む</summary>
+    internal static int ExperimentLayers = 0xE0;
+
+    internal static readonly TimeSpan StillLockedWait = TimeSpan.FromMilliseconds(30);
+
     /// <summary>設定の device (画面に出す理由の持ち主のキー)</summary>
     private readonly string _key;
 
@@ -336,32 +367,57 @@ public sealed class Dt295NativeTuner : ITuneDevice
             // 同じ機材のカードの準備を、選局と並べて始める (復号は TS が届いてからすぐ始められる)
             device.WarmCard();
             using var whole = timeline.Step("選局から最初の TS まで");
+            Dt295NativeStream? prepared = null;
+            var before = _last;
+            _last = null;
             try
             {
                 var frontend = device.Frontend;
                 _satellite = tuning.Satellite;
-                bool locked;
-                if (tuning.Satellite)
+                var tsid = streamId == ChannelTable.NoStreamId ? null : (int?)streamId;
+                // 同じ機材が同じチャンネルに合ったまま (機材は開いたまま) なら、選局を省いて、受信が続いているかだけ確かめる
+                var reuse = false;
+                if (before is { } was && ReferenceEquals(was.Device, device) && was.Tuning == tuning && was.StreamId == streamId)
                 {
-                    using (timeline.Step("選局 (衛星の周波数の設定)", "仕様書 7.3.2")) frontend.TuneSatellite(tuning.Frequency);
-                    locked = frontend.WaitSatelliteLock(LockWait, streamId == ChannelTable.NoStreamId ? null : (int)streamId);
+                    using (timeline.Step("同じチャンネル: 受信が続いているかを確かめる", "選局を省く"))
+                    {
+                        reuse = tuning.Satellite
+                            ? frontend.WaitSatelliteLock(StillLockedWait, tsid)
+                            : frontend.WaitTerrestrialLock(StillLockedWait);
+                    }
+                }
+                if (reuse)
+                {
+                    prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall));
                 }
                 else
                 {
-                    using (timeline.Step("選局 (地上波の周波数の設定)", "仕様書 7.2.2")) frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
-                    locked = frontend.WaitTerrestrialLock(LockWait);
+                    if (tuning.Satellite)
+                    {
+                        using (timeline.Step("選局 (衛星の周波数の設定)", "仕様書 7.3.2")) frontend.TuneSatellite(tuning.Frequency);
+                    }
+                    else
+                    {
+                        using (timeline.Step("選局 (地上波の周波数の設定)", "仕様書 7.2.2")) frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
+                    }
+                    // 取り込みの設定は、受信の確認を待つ間に済ませておく (取り込みを始めるのは受信を確認してから。TS は出ない)
+                    prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall));
+                    var locked = tuning.Satellite ? frontend.WaitSatelliteLock(LockWait, tsid) : frontend.WaitTerrestrialLock(LockWait, ExperimentLayers);
+                    if (!locked) throw new IOException(ITuneDevice.SyncFailed);
                 }
-                if (!locked) throw new IOException(ITuneDevice.SyncFailed);
-                _stream = Dt295NativeStream.Start(device, _name, () => Task.Run(Stall));
+                prepared.Begin();
+                _stream = prepared;
+                prepared = null;
+                _last = (device, tuning, streamId);
             }
             catch (Exception error) when (error is IOException or InvalidOperationException or TimeoutException)
             {
+                prepared?.Abort();
                 if (error is UsbGoneException) device.Fail(error);
                 Stop(release: device.Faulted);
                 if (error is IOException) throw;
                 throw new IOException(error.Message, error);
             }
-
             bool arrived;
             using (timeline.Step("最初の TS を待つ", "取り込みを始めてから、読み手が最初のパケットを詰めるまで")) arrived = _stream.WaitFirst(FirstTs);
             if (!arrived)
