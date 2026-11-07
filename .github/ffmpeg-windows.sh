@@ -158,6 +158,7 @@ for lib in lib/libx264.a lib/libdav1d.a lib/libz.a lib/libwinpthread.a lib/libvp
 done
 : > "$out/licenses/msys2-packages.txt"
 for file in "${from_msys[@]}"; do
+  name=
   pkg=$(pacman -Qqo "$file")
   pacman -Q "$pkg" >> "$out/licenses/msys2-packages.txt"
   mapfile -t texts < <(pacman -Qlq "$pkg" | grep -E '/share/licenses/.+[^/]$' || true)
