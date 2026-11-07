@@ -239,6 +239,31 @@ const options: Record<string, string[]> = {
   amf: ["usage", "quality", "rc", "forced_idr", "async_depth"],
   videotoolbox: ["profile", "prio_speed", "realtime"],
 };
+/**
+ * 名前の付いた値で渡すオプションは、その値も選択肢にあるか見る。AMF は録画の高画質の指定 (`high_quality`)、
+ * 高画質の指定が通らない世代向けの指定 (`transcoding`・`quality`)、ライブの指定 (`ultralowlatency`・`speed`・`vbr_latency`)
+ */
+const choices: Record<string, Record<string, string[]>> = {
+  amf: {
+    usage: ["high_quality", "transcoding", "ultralowlatency"],
+    quality: ["high_quality", "quality", "speed"],
+    rc: ["vbr_peak", "vbr_latency"],
+  },
+};
+/** `-h encoder=…` の、あるオプションの下に並ぶ選択肢の名前 */
+function choicesOf(help: string, option: string): string[] {
+  const lines = help.split(/\r?\n/);
+  const start = lines.findIndex((line) =>
+    new RegExp(`^\\s+-${option}\\s`).test(line),
+  );
+  if (start < 0) return [];
+  const names: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s+-/.test(line) || !/^\s{3,}\S/.test(line)) break;
+    names.push(line.trim().split(/\s+/)[0]!);
+  }
+  return names;
+}
 for (const name of gpuEncoders) {
   const help = Bun.spawnSync([
     ffmpeg,
@@ -249,6 +274,15 @@ for (const name of gpuEncoders) {
   for (const option of options[name.split("_")[1]!]!) {
     if (!new RegExp(`^\\s+-${option}\\s`, "m").test(help))
       throw new Error(`${name} にオプション -${option} がありません`);
+  }
+  for (const [option, values] of Object.entries(
+    choices[name.split("_")[1]!] ?? {},
+  )) {
+    const have = choicesOf(help, option);
+    for (const value of values) {
+      if (!have.includes(value))
+        throw new Error(`${name} の -${option} に ${value} がありません`);
+    }
   }
 }
 const { config } = await import("../src/lib/server/config.ts");
@@ -273,7 +307,7 @@ function tryArgs(label: string, args: string[]): number {
   const err = run.stderr.toString();
   console.log(`${label}: exit ${run.exitCode}`);
   if (
-    /Unknown encoder|Unrecognized option|No such filter|Option not found/.test(
+    /Unknown encoder|Unrecognized option|No such filter|Option not found|Unable to parse option value|Error setting option/.test(
       err,
     )
   )
@@ -295,6 +329,18 @@ for (const kind of gpuKinds) {
       "-c:v",
       ...hw.encoder,
     ]);
+    // AMF の古い世代向けの指定 (高画質の指定が通らない GPU で録画に使う)
+    if (kind === "amf") {
+      const old = hwArgs({ ...way, amfTranscoding: true }, codec);
+      tryArgs(`${codec}_${kind} (transcoding)`, [
+        ...old.device,
+        ...source,
+        "-vf",
+        old.filter.join(","),
+        "-c:v",
+        ...old.encoder,
+      ]);
+    }
     const live = liveHwArgs({ way, full: false }, codec);
     tryArgs(`${codec}_${kind} (live)`, [
       ...live.input,

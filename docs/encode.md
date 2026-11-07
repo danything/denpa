@@ -400,6 +400,17 @@ GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.prob
 | QSV        | `-preset veryslow -global_quality:v 23` (ICQ)。AV1 は 26                                     | veryslow は target usage の最良品質。H.264・H.265 の 23 はソフトウェアの H.264 の crf と同じ数、AV1 の 26 は VA-API の AV1 の ICQ と同じ数 |
 | AMF        | `-usage high_quality -quality high_quality -rc vbr_peak` (同じ表のビットレート。上限は 2 倍) | 高画質の変換向けの指定。`hqvbr`・先読みは世代で開けないことがあるので渡さない。CQP・QVBR は値と画質の対応を測れていない                    |
 
+- **AMF は GPU の世代で指定を替えます。** 試しのエンコードはまず上の高画質の指定で行い、落ちたら古い世代向けの指定
+  `-usage transcoding -quality quality` でもう一度試します。通ったほうの指定をその GPU の行に覚え、録画もその指定でエンコードします
+  (設定の「エンコード」に「(古い世代向けの指定)」と出ます)。`high_quality` は usage も quality も AMF にあとから足された値で、
+  VCN 1.0 (Ryzen 5 2500U などの Raven Ridge) では、同じ PC で VCEEnc は使えるのに denpa では GPU が見つからないと報告がありました。
+  `transcoding` は usage の最初の値 (変換向け)、`quality` は `high_quality` より前からある画質寄りの段で、FFmpeg 9.0.2 の
+  h264_amf・hevc_amf・av1_amf のどれも持ちます。レート制御とビットレートは同じです。画質を取るため、古い世代向けの指定は
+  高画質の指定が落ちたときだけ使います。ライブの指定 (下) は初めから古い世代も持つ値なので替えません
+- NVENC と QSV は世代で指定を替えません。NVENC はドライバが FFmpeg の求める API のバージョンを持たなければ、どの指定でも開けません。
+  QSV の `-preset` (target usage) はランタイムへの希望で、持たない段は近い段に寄せて受けます
+- **試しのエンコードが落ちたら、ffmpeg のエラーの最後の 3 行をログに出します** (`[hwenc] h264_amf (amf0) の試しのエンコードが落ちました …`)。
+  GPU があるのに使えないときは、ここで落ちた理由 (ドライバが無い・オプションを受け付けない・時間切れ) を読めます
 - **Linux で QSV を使わない理由 ([上](#qsv-を使わない理由)) は Windows に当てはまりません。** Windows の Intel の GPU で使えるのは QSV で、
   VA-API は無いためです。H.265・AV1 の QSV が Arc で落ちたのは Linux で、Windows のドライバでは確かめていません。
   通らなければ、その GPU のそのコーデックは試しのエンコードで外れます
@@ -412,14 +423,16 @@ GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.prob
   **AMF は `-init_hw_device d3d11va=…:<番号>` で開いたデバイスを使います**
 
 **CI** (test.yml の `server-windows`) は GPU の無いランナーで、`tests/native-smoke.ts` が次の 3 つを確かめます。
-`ffmpeg -encoders` に h264・hevc・av1 の `_nvenc`・`_qsv`・`_amf` の 9 つが出ること、denpa が渡すオプションを各エンコーダが持つこと、
-試しのエンコードが全部落ちて GPU の方式が 0 になること (録画もライブもソフトウェアに戻る)。単体テストは `hwenc-probe.test.ts` が
-Windows の探し方 (GPU 無し・NVIDIA と Intel の 2 枚) を偽の ffmpeg の返事で流します。
+`ffmpeg -encoders` に h264・hevc・av1 の `_nvenc`・`_qsv`・`_amf` の 9 つが出ること、denpa が渡すオプションを各エンコーダが持つこと
+(AMF は `-usage`・`-quality`・`-rc` に渡す値が選択肢にあることも)、試しのエンコードが全部落ちて GPU の方式が 0 になること
+(録画もライブもソフトウェアに戻る)。単体テストは `hwenc-probe.test.ts` が Windows の探し方 (GPU 無し・NVIDIA と Intel の 2 枚・
+高画質の指定だけ落ちる AMD) を偽の ffmpeg の返事で流します。
 
 **実機で確かめていないこと** (手元の Windows に NVIDIA・Intel・AMD の GPU がありません): どの GPU でも試しのエンコードが通るか、上の値で見た目が今の
 H.264 と揃うか・どれだけ小さくなるか、libvpl を静的に繋いだ ffmpeg が Intel のランタイムを見つけるか、2 枚挿しや Intel + NVIDIA の
 ノート PC でアダプタの番号が使いたい GPU に当たるか (libvpl が渡したアダプタ以外の Intel のランタイムを選ぶと、同じ GPU が `qsv0` と `qsv1` の 2 行に出ます)、
-AMF が開いてある Direct3D 11 のデバイスを使うか (FFmpeg の amfenc.c の読みで、実機では見ていない)、CM の境目のキーフレームが IDR になるか、ライブの低遅延の指定。
+AMF が開いてある Direct3D 11 のデバイスを使うか (FFmpeg の amfenc.c の読みで、実機では見ていない)、CM の境目のキーフレームが IDR になるか、ライブの低遅延の指定、
+VCN 1.0 で落ちていたのが `high_quality` の指定だったか (報告から推定。古い世代向けの指定で通るかも、画質の差も見ていない)。
 
 ## Mac でエンコードする
 
