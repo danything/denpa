@@ -26,12 +26,12 @@ import {
 
 /**
  * **「このブラウザでは再生できませんでした」の幕を畳む** (画像で字幕を確かめるテストだけ)。
- * 偽の録画は中身が無く、ブラウザは再生に転んで幕 (`watch-broken`。映像の箱を暗く覆う) を出す。
+ * 偽の録画は中身が無く、ブラウザは再生に転んで幕 (`watch-status`。映像の箱を暗く覆う) を出す。
  * データ放送の小窓に寄せた映像の箱もその下にあるので、塗った字幕が暗く写る。本物の録画では出ない
  */
 async function hideBroken(page: Page): Promise<void> {
   await page.addStyleTag({
-    content: '[data-testid="watch-broken"] { display: none !important; }',
+    content: '[data-testid="watch-status"] { display: none !important; }',
   });
 }
 

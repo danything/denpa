@@ -5,17 +5,18 @@
   import { page } from "$app/state";
   import { onMount, tick, untrack } from "svelte";
 
-  import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
   import { clipVersionQuery } from "#lib/clips.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
+  import ProgramActions from "#lib/components/ProgramActions.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import { type DetailSeed, programDetail } from "#lib/detail.svelte.js";
   import {
     badgeClass,
+    cancelable,
     dateTime,
     quietState,
     recordedDuration,
@@ -51,7 +52,7 @@
     return expanded[key] ? rows : rows.slice(0, FIRST);
   }
 
-  /** 最近の検索。端末ごと (`#lib/recent-searches.ts`)。描いたあとに読む (サーバは知らない) */
+  /** 最近の検索。端末ごと (`#lib/recent-searches.ts`)。描いたあとに読む (サーバには送らない) */
   let recent = $state<string[]>([]);
   onMount(() => {
     recent = loadRecent();
@@ -110,7 +111,7 @@
   const clipsHref = $derived(resolve(`clips?${new URLSearchParams({ q })}`));
 
   /**
-   * 番組の詳細。押すもの (視聴・予約・取消・ルールを作る) を出すのに、開いた行を覚えておく。
+   * 番組の詳細。押すもの (視聴・予約・取消・ルールを作る。`ProgramActions`) を出すのに、開いた行を覚えておく。
    * 中身は番組表から引く (`detail.svelte.ts`。ホームと同じ)
    */
   interface Opened {
@@ -119,6 +120,8 @@
     start_at: number;
     end_at: number;
     reservation_id: number | null;
+    /** 予約の状態。予約が無ければ null */
+    reservation_state: string | null;
     copy_never: boolean;
   }
   const detail = programDetail();
@@ -137,15 +140,21 @@
       {
         ...row,
         program_id: row.id,
-        reservation_id:
-          row.reservation_state === "skipped" ? null : row.reservation_id,
         copy_never: row.skip?.kind === "copy-never",
       },
       row,
     );
   }
   function showReservation(row: (typeof data.reservations.rows)[number]): void {
-    show({ ...row, reservation_id: row.id, copy_never: false }, row);
+    show(
+      {
+        ...row,
+        reservation_id: row.id,
+        reservation_state: row.state,
+        copy_never: false,
+      },
+      row,
+    );
   }
   function close(): void {
     opened = null;
@@ -163,10 +172,18 @@
    * (`form` は次に送るまで残るので、閉じて別の番組を開くと前の理由や行のボタンの理由が出ていた)
    */
   let failedFor = $state<number | null>(null);
+  /**
+   * いまの返事 (`form`) が詳細から送ったものか。**失敗の理由は送ったところに 1 か所だけ出す** (番組表と同じ決まり)。
+   * 詳細から送ったものは詳細の中 (モーダルは通知より上に出るので、通知では読めない)、行のボタンなど
+   * ほかから送ったものは右下の通知。詳細を閉じたあとも、詳細から送った理由を通知に出し直さない
+   */
+  let fromDetail = $state(false);
   /** 詳細の中の予約・取消。失敗したときは開いたままにして、中に理由を出す */
   const closeOnSuccess: SubmitFunction = () => {
     const sentFor = opened?.program_id ?? null;
     return async ({ result, update }) => {
+      // 返事を当てる前に立てる。あとにすると、断られた理由が一瞬だけ通知にも出る
+      fromDetail = true;
       await update();
       failedFor = result.type === "success" ? null : sentFor;
       if (result.type === "success") close();
@@ -224,11 +241,28 @@
   function verdictOf(id: number) {
     return preview?.verdicts[id] ?? null;
   }
+  /**
+   * 録画を待っている予約か。録画中と録画しない (`skipped`。コピー禁止・同じ回を録画済み) は待っていない
+   */
+  function waitingToRecord(state: string | null): boolean {
+    return state !== "recording" && state !== "skipped";
+  }
+  /**
+   * **行のボタンで取り消せるか** (これからの放送・予約の節・下見の行で同じ)。取り消せる予約 (`cancelable`。
+   * サーバ・番組表・詳細と同じ判定) のうち、録画を待っているもの (`waitingToRecord`) だけ。
+   * 録画中を行の 1 押しで取り消すと録画が止まり (予約の節は代わりに追っかけを出す)、録画しないものは取り消しても何も変わらない。
+   * どちらも詳細の「予約取消」からは取り消せる (`ProgramActions`)
+   */
+  function rowCancelable(state: string | null, endAt: number): boolean {
+    return cancelable(state, endAt, clock) && waitingToRecord(state);
+  }
+
   /** ルールの削除の 2 回押し (書く欄の「削除」) */
   const ruleDeleting = arming('[data-testid^="rule-delete"]');
 
   const notices = $derived.by(() => {
-    const list = errorNotice(form, "search-error");
+    // 詳細から送って断られた理由は、詳細の中にだけ出す (`fromDetail`)
+    const list = errorNotice(fromDetail ? null : form, "search-error");
     if (form?.deletedRule !== undefined) {
       const { canceled } = form.deletedRule;
       list.push({
@@ -258,6 +292,10 @@
   onclick={(event) => {
     deleting.stand(event);
     ruleDeleting.stand(event);
+  }}
+  onsubmitcapture={() => {
+    // どこから送っても、まず「詳細からではない」に戻す。詳細から送ったものは返事のあとで立て直す (`closeOnSuccess`)
+    fromDetail = false;
   }}
 />
 
@@ -373,15 +411,18 @@
                   </span>
                 </button>
                 <div class="row-actions">
+                  <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`rowCancelable`) -->
                   {#if program.reservation_id !== null}
-                    <ActionButton
-                      action="?/cancel"
-                      fields={{ reservationId: program.reservation_id }}
-                      class="small outline danger"
-                      testid="search-cancel"
-                    >
-                      取消
-                    </ActionButton>
+                    {#if rowCancelable(program.reservation_state, program.end_at)}
+                      <ActionButton
+                        action="?/cancel"
+                        fields={{ reservationId: program.reservation_id }}
+                        class="small outline danger"
+                        testid="search-cancel"
+                      >
+                        取消
+                      </ActionButton>
+                    {/if}
                   {:else if !program.copy_never}
                     <ActionButton
                       action="?/reserve"
@@ -550,7 +591,7 @@
                       class="button small ghost"
                       href={resolve(`chase/${res.recording_id}`)}>追っかけ</a
                     >
-                  {:else}
+                  {:else if rowCancelable(res.state, res.end_at)}
                     <ActionButton
                       action="?/cancel"
                       fields={{ reservationId: res.id }}
@@ -686,9 +727,9 @@
                 {/if}
               </span>
             </button>
-            <!-- 1 件ずつ: 立っている予約は取り消し、録る行はその 1 本だけ予約できる (ホーム・結果の行と同じ action) -->
+            <!-- 1 件ずつ: 取り消せる予約 (`rowCancelable`) は取り消し、録る行はその 1 本だけ予約できる (ホーム・結果の行と同じ action) -->
             <div class="row-actions">
-              {#if row.reservation_id !== null && row.reservation_state !== "skipped"}
+              {#if row.reservation_id !== null && rowCancelable(row.reservation_state, row.end_at)}
                 <ActionButton
                   action="?/cancel"
                   fields={{ reservationId: row.reservation_id }}
@@ -760,52 +801,20 @@
 {#if detail.current}
   <ProgramDetail program={detail.current} onclose={close}>
     {#snippet actions()}
-      {#if form?.message && opened !== null && failedFor === opened.program_id}
-        <div class="notice error">{form.message}</div>
-      {/if}
-      <!--
-        並びは番組表の詳細と同じく、控えから主へ (ルールを作る → 予約取消 → 視聴 → 予約)。閉じるは左下 (`ProgramDetail`)。
-        **主は 1 つだけ。** 予約できるなら予約、できなければ視聴
-      -->
-      {@const canReserve =
-        opened !== null &&
-        opened.reservation_id === null &&
-        opened.end_at > clock &&
-        !opened.copy_never}
+      <!-- 何を出すか・どれを主にするかは番組表の詳細と同じ (`ProgramActions`)。録画の再生は出さない (結果の録画の節から観る) -->
       {#if opened !== null}
-        <a
-          class="button secondary"
-          href={resolve(`search?from=program:${opened.program_id}`)}
-          >ルールを作る</a
-        >
-      {/if}
-      {#if opened !== null && opened.reservation_id !== null}
-        <form method="POST" action="?/cancel" use:submitting={closeOnSuccess}>
-          <input
-            type="hidden"
-            name="reservationId"
-            value={opened.reservation_id}
-          />
-          <button
-            type="submit"
-            class="outline danger"
-            data-testid="search-detail-cancel">予約取消</button
-          >
-        </form>
-      {/if}
-      {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
-        <a
-          class="button"
-          class:secondary={canReserve}
-          href={resolve(`live?service=${opened.service_id}`)}>視聴</a
-        >
-      {/if}
-      {#if opened !== null && canReserve}
-        <form method="POST" action="?/reserve" use:submitting={closeOnSuccess}>
-          <input type="hidden" name="programId" value={opened.program_id} />
-          <button type="submit" data-testid="search-detail-reserve">予約</button
-          >
-        </form>
+        <ProgramActions
+          program={{ ...opened, id: opened.program_id }}
+          cancel={opened.reservation_id === null
+            ? {}
+            : { reservationId: opened.reservation_id }}
+          watchable={watchable.has(opened.service_id)}
+          {clock}
+          message={fromDetail && failedFor === opened.program_id
+            ? (form?.message ?? null)
+            : null}
+          onsubmit={closeOnSuccess}
+        />
       {/if}
     {/snippet}
   </ProgramDetail>

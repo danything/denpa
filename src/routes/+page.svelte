@@ -46,6 +46,7 @@
   import { type DetailSeed, programDetail } from "#lib/detail.svelte.js";
   import { applyEncodeProgress } from "#lib/encode-live.svelte.js";
   import {
+    cancelable as isCancelable,
     cmNoteWorthShowing,
     fullDate,
     logoUnusable,
@@ -86,11 +87,9 @@
   // エンコードの進み具合だけは中身ごと届き、読み直さず行の数字を書き換える
   liveUpdates(["recordings", "reservations"], { encode: applyEncodeProgress });
 
-  const active = ["scheduled", "conflict", "skipped", "recording"];
-  /** 取り消せるか。録画しない (`skipped`) は放送が終われば履歴なので出さない */
+  /** 取り消せるか。サーバ・番組表・検索と同じ判定 (`format.cancelable`) */
   const cancelable = (res: { state: string; end_at: number }) =>
-    active.includes(res.state) &&
-    !(res.state === "skipped" && res.end_at <= Date.now());
+    isCancelable(res.state, res.end_at, Date.now());
 
   /** 端末への保存の結果。フォームではないので自前で持つ */
   let offlineNote = $state<Notice | null>(null);

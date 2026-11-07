@@ -25,7 +25,10 @@ test.describe("ニコニコとの連携", () => {
       "連携中・ユーザー ID 12345678",
     );
 
+    // 外すのは 2 回押し。1 回目は聞き返すだけ
     await page.getByTestId("niconico-unlink").click();
+    await expect(page.getByTestId("niconico-state")).toContainText("連携中");
+    await page.getByTestId("niconico-unlink-confirm").click();
     await expect(
       page.getByText("連携を外しました。ニコニコの側の許可は"),
     ).toBeVisible();

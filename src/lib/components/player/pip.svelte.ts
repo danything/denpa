@@ -341,7 +341,7 @@ export function pictureInPicture(options: Options): Pip {
   /**
    * 変換した映像に字幕を重ねるか。**押した時点で字幕を出しているときだけ** (上の説明)。
    * 止めている間も重ねない。`captureStream` は止まった `<video>` からコマを出さないので、
-   * 1 枚目を待ちきれずに元の `<video>` へ落ちるだけになる
+   * 1 枚目が届かないまま元の `<video>` へ落ちるだけになる
    */
   function composable(video: HTMLVideoElement): boolean {
     return (

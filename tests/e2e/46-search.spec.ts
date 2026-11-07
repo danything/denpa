@@ -103,7 +103,7 @@ test.describe("検索", () => {
     // 行を押すと番組の詳細
     await picked.getByTestId("search-open").click();
     await expect(page.getByTestId("program-detail")).toBeVisible();
-    await page.getByTestId("search-detail-cancel").click();
+    await page.getByTestId("detail-cancel").click();
     await expect(page.getByTestId("program-detail")).toBeHidden();
     await expect(picked.getByTestId("search-program-state")).toHaveCount(0);
 

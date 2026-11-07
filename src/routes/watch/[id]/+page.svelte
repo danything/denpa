@@ -75,6 +75,7 @@
     PHONE_LANDSCAPE,
   } from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
+  import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
   import Remote from "#lib/components/player/Remote.svelte";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
   import {
@@ -271,11 +272,11 @@
   /** 互換モードか。開いたときに決める (⚙ で切り替えたら読み直す。`StageTail`) */
   let compat = $state(false);
   /**
-   * 互換モードでないとき、元の TS (MPEG-2) をこの端末でデコードできて、まだ諦めていないか (`MediaAbility.mpeg2`)。
-   * できれば互換モードと同じく canvas に描く (`pickOffer` の `raw`)。諦めたかは `rawGaveUp`
+   * 互換モードでないとき、元の TS (MPEG-2) をこの端末でデコードできて、まだ打ち切っていないか (`MediaAbility.mpeg2`)。
+   * できれば互換モードと同じく canvas に描く (`pickOffer` の `raw`)。打ち切ったかは `rawGaveUp`
    */
   let rawCapable = $state(false);
-  /** MPEG-2 を描いている途中で諦めたか。**選び直すまで MPEG-2 にしない** (`canvasFallBack`) */
+  /** MPEG-2 を描いている途中で打ち切ったか。**選び直すまで MPEG-2 にしない** (`canvasFallBack`) */
   let rawGaveUp = $state(false);
   /** この端末で描ける形式 (`raw/support.ts`)。調べるまで null */
   let canvasAbility = $state.raw<CanvasAbility | null>(null);
@@ -289,7 +290,7 @@
   let localMkv: MkvSource | null = null;
   /** 端末に保存した録画を canvas に描いているか (操作バーの「端末」の印・メニューの出し分け) */
   let drawingLocal = $state(false);
-  /** 描いている途中で諦めた形式。**選び直すまでリクエストし直さない** (戻しては諦めるを繰り返さない) */
+  /** 描いている途中で打ち切った形式。**選び直すまでリクエストし直さない** (戻しては打ち切るを繰り返さない) */
   let canvasGaveUp: CanvasCodec[] = [];
   /** 互換モードで観られない理由。出したら `<video>` には戻らずに止まる */
   let canvasProblem = $state<string | null>(null);
@@ -455,7 +456,7 @@
     );
   }
 
-  /** 互換モードで描けるコーデック (`?playable=`)。描いている途中で諦めたものは外す。H.265 は描かない (`raw/support.ts`) */
+  /** 互換モードで描けるコーデック (`?playable=`)。描いている途中で打ち切ったものは外す。H.265 は描かない (`raw/support.ts`) */
   function canvasPlayable(): LiveCodec[] {
     const can = canvasAbility;
     if (can === null) return [];
@@ -496,12 +497,12 @@
     noteAdapt(busyNote(down));
   }
 
-  /** canvas のプレイヤーを畳む (切り替える・諦める) */
+  /** canvas のプレイヤーを畳む (切り替える・打ち切る) */
   function stopCanvas(): void {
     canvas?.destroy();
     canvas = null;
     canvasStuck = false;
-    // 作り直しの途中で畳んだ (失敗した・諦めた・選び直した)。替える前の段は忘れる (残すと段を動かさなくなる)
+    // 作り直しの途中で畳んだ (失敗した・打ち切った・選び直した)。替える前の段は忘れる (残すと段を動かさなくなる)
     stepFrom = null;
     drawing = false;
     drawingLocal = false;
@@ -511,11 +512,11 @@
   }
 
   /**
-   * 描くのを諦めた。理由は断り書きに残す。ライブと同じ順 (`live-player.svelte.ts` の `fallBack`):
-   * H.264 / AV1 を諦めたら MPEG-2 へ、MPEG-2 を諦めたら描ける H.264 / AV1 へ。端末に保存した録画なら
+   * 描くのを打ち切った。理由は断り書きに残す。ライブと同じ順で替える (`live-player.svelte.ts` の `fallBack`)。
+   * H.264 / AV1 を打ち切ったら MPEG-2 へ、MPEG-2 を打ち切ったら描ける H.264 / AV1 へ。端末に保存した録画なら
    * サーバから流すものへ。どれも無理なら理由を出して止まる (`<video>` には戻らない)。
    *
-   * 互換モードでないのに描いているのは MPEG-2 を選んだときだけ (`pickOffer` の `raw`)。諦めたらこの画面を開いている間は
+   * 互換モードでないのに描いているのは MPEG-2 を選んだときだけ (`pickOffer` の `raw`)。打ち切ったらこの画面を開いている間は
    * MPEG-2 を外し (`rawGaveUp`)、自動と同じ決め方で `<video>` に戻す
    */
   function canvasFallBack(reason: string): void {
@@ -1071,7 +1072,7 @@
       chooseCanvas(next);
       return;
     }
-    // 選んだものは諦めていても試す (互換モードの `chooseCanvas` と同じ)
+    // 選んだものは打ち切っていても試す (互換モードの `chooseCanvas` と同じ)
     if (next === "mpeg2") rawGaveUp = false;
     const fresh = pickOffer(info, ability(), next, data.indoor);
     if (JSON.stringify(fresh) === JSON.stringify(picked) && !busy && step === 0)
@@ -1114,7 +1115,7 @@
   }
 
   /**
-   * 互換モードで選び直す。**選んだものは諦めていても試す** (選び直すまでリクエストし直さない、の「選び直し」)。
+   * 互換モードで選び直す。**選んだものは打ち切っていても試す** (選び直すまでリクエストし直さない、の「選び直し」)。
    * 描く形式が変わるなら、いまの位置からプレイヤーを作り直す
    */
   function chooseCanvas(next: CodecChoice | "mpeg2"): void {
@@ -1455,14 +1456,30 @@
   const unslip = unslipper();
   /** 読めなかったとき。黙って黒いままにしない */
   let broken = $state(false);
-  /** 読み込み待ちで止まっているか (「読み込み中」を出す) */
+  /**
+   * 読み込み待ちで止まっているか (「読み込み中」を出す)。出すまでの間は幕の側が持つ (`PlayerVeil`。ライブ・追っかけと同じ 1.5 秒)。
+   * コマ落ち程度の詰まりで毎回出すと点滅するだけになる
+   */
   let buffering = $state(false);
-  let bufferTimer: ReturnType<typeof setTimeout> | null = null;
-  /** 「読み込み中」を出すまでの間 (ms)。コマ落ち程度の詰まりで毎回出すと点滅するだけになる */
-  const BUFFER_NOTICE = 400;
+  /**
+   * 観られないわけ (幕の文言)。無ければ空。
+   * サーバが混んでいて、その場の変換を断られた (同時に変換する本数の上限) ときは、待っても空くとは限らないので、
+   * サーバに変換させずに観られるもの (`lighter`) を勧める。
+   * 互換モードで出せないとき (`canvasProblem`) は、互換モードが `<video>` の止まる端末のためのものなので、ほかのブラウザを勧めない
+   */
+  const problem = $derived(
+    busy
+      ? lighter.length > 0
+        ? "サーバが混んでいます"
+        : "サーバが混んでいます。しばらくしてから開き直してください"
+      : (canvasProblem ??
+          (broken
+            ? "このブラウザでは再生できませんでした。Chrome・Edge か、テレビのアプリ (denpa-tv) で観てください"
+            : "")),
+  );
   /** 繋ぎが切れて繋ぎ直している最中か (`recover`) */
   let resuming = $state(false);
-  /** 続けて何回繋ぎ直したか。諦める分かれ目 */
+  /** 続けて何回繋ぎ直したか。繋ぎ直しを打ち切る分かれ目 */
   let retries = 0;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   /** 繋ぎ直したあとに戻る位置 (秒)。0 は「戻る先は無い」 */
@@ -1644,7 +1661,6 @@
       deleting.fire();
       if (skipNotice !== null) clearTimeout(skipNotice);
       if (hopGiveUp !== null) clearTimeout(hopGiveUp);
-      if (bufferTimer !== null) clearTimeout(bufferTimer);
       if (retryTimer !== null) clearTimeout(retryTimer);
       if (captionWait !== null) clearTimeout(captionWait);
     };
@@ -2086,22 +2102,15 @@
     }
   }
 
-  /** 詰まった。**少し待ってから**「読み込み中」を出す */
+  /** 詰まった。「読み込み中」は幕が少し待ってから出す (`PlayerVeil`) */
   function stall(): void {
     // CM を跨いでいる間は覆いがある。そちらに任せる
-    if (hopping || bufferTimer !== null || buffering) return;
-    bufferTimer = setTimeout(() => {
-      bufferTimer = null;
-      buffering = true;
-    }, BUFFER_NOTICE);
+    if (hopping || buffering) return;
+    buffering = true;
   }
 
   /** 動き出した。「読み込み中」を引っ込める */
   function flowing(): void {
-    if (bufferTimer !== null) {
-      clearTimeout(bufferTimer);
-      bufferTimer = null;
-    }
     if (buffering) buffering = false;
   }
 
@@ -2462,54 +2471,20 @@
           tune={refuseTune}
         />
 
-        {#if buffering || resuming}
-          <!--
-                        詰まりか繋ぎ直しの最中かを言う。黙って止まっていると壊れたように見え、
-                        待てばいいのかが決められない (サーバの入れ替えでは数十秒帰ってこない)
-                    -->
-          <div class="wait">
-            <span class="wait-box" aria-busy="true"
-              >{resuming ? "繋ぎ直しています" : "読み込み中"}</span
-            >
-          </div>
-        {/if}
-
-        {#if busy}
-          <!--
-                        サーバが混んでいて、その場の変換を断られた (同時に変換する本数の上限)。
-                        待っても空くとは限らないので、サーバに変換させずに観られるものを勧める
-                    -->
-          <div class="broken" data-testid="watch-busy">
-            <p class="small">サーバが混んでいます</p>
-            {#if lighter.length > 0}
-              <div class="cluster">
-                {#each lighter as codec (codec)}
-                  <button
-                    type="button"
-                    class="small"
-                    data-testid="watch-busy-switch"
-                    onclick={() => chooseCodec(codec)}
-                  >
-                    {codecLabel(codec)} で観る
-                  </button>
-                {/each}
-              </div>
-            {:else}
-              <p class="small">しばらくしてから開き直してください</p>
-            {/if}
-          </div>
-        {:else if canvasProblem !== null}
-          <!-- 互換モードは `<video>` が止まる端末のためのものなので、ほかのブラウザを勧めない -->
-          <div class="broken" data-testid="watch-broken">
-            <p class="small">{canvasProblem}</p>
-          </div>
-        {:else if broken}
-          <div class="broken" data-testid="watch-broken">
-            <p class="small">
-              このブラウザでは再生できませんでした。<br />Chrome・Edge
-              か、テレビのアプリ (denpa-tv) で観てください。
-            </p>
-          </div>
+        <!--
+                    観られないわけと、待っていることを言う幕 (`problem`)。見た目の決まりはライブ・追っかけと共通 (`PlayerVeil`)。
+                    観られないときは映像を暗く覆い、詰まりと繋ぎ直しの最中は映っている映像を覆わずに回るものだけを出す。
+                    黙って止まっていると壊れたように見え、待てばいいのかが決められない (サーバの入れ替えでは数十秒帰ってこない)
+                -->
+        {#if problem !== "" || buffering || resuming}
+          <PlayerVeil
+            holding={problem === ""}
+            busy
+            note={resuming ? "繋ぎ直しています" : "読み込み中"}
+            error={problem}
+            actions={busy && lighter.length > 0 ? lighterChoices : undefined}
+            testid="watch-status"
+          />
         {/if}
 
         <!--
@@ -2816,6 +2791,22 @@
   {/snippet}
 </PlayerLayout>
 
+<!-- サーバが混んでいるときに勧める、変換させずに観られるもの (幕の「サーバが混んでいます」の下) -->
+{#snippet lighterChoices()}
+  <div class="cluster choices">
+    {#each lighter as codec (codec)}
+      <button
+        type="button"
+        class="small"
+        data-testid="watch-busy-switch"
+        onclick={() => chooseCodec(codec)}
+      >
+        {codecLabel(codec)} で観る
+      </button>
+    {/each}
+  </div>
+{/snippet}
+
 <Toasts
   {notices}
   source={form}
@@ -2833,39 +2824,9 @@
   .not-ready h2 {
     font-size: var(--dp-text-base);
   }
-  .wait {
-    pointer-events: none;
-    position: absolute;
-    inset: 0;
-    z-index: 10;
-    display: flex;
-    align-items: center;
+  /* 幕の押しものは文言の下の真ん中に (`PlayerVeil`) */
+  .choices {
     justify-content: center;
-  }
-  .wait-box {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--dp-radius-lg);
-    background: var(--dp-video-veil);
-    color: var(--dp-on-video);
-    --pico-color: var(--dp-on-video);
-  }
-  /* 段は字幕と同じ 9 (実況のコメントを上に流さない。`ControlBar`) */
-  .broken {
-    position: absolute;
-    inset: 0;
-    z-index: 9;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.75rem;
-    padding: 1rem;
-    background: var(--dp-video-veil-strong);
-    text-align: center;
-    color: var(--dp-on-video);
   }
   /* 時間帯・局と同じ並びに、控えた字で「・」でつなぐ (「・」の両側は並びの隙間で、InfoBlock の `.sep` と同じ空き) */
   .local {
