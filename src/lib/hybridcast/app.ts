@@ -1,5 +1,5 @@
 /**
- * Hybridcast のアプリを denpa の中で開く — 画面の側の決まり
+ * Hybridcast のアプリを denpa の中で開く (画面の側の決まり)
  * ([docs/stream.md](../../../docs/stream.md#hybridcast))。
  *
  * ```
@@ -25,7 +25,7 @@ export const VIEWPORT = { width: 1920, height: 1080 } as const;
 
 /**
  * 受信機の記憶の置き場 (アプリの配信元のオリジンごと。denpa のほかの記憶とは混ぜない)。テレビのブラウザの
- * localStorage と同じくオリジンで分ける — AIT が名乗る organisation_id・application_id で分けると、
+ * localStorage と同じくオリジンで分ける。AIT が名乗る organisation_id・application_id で分けると、
  * 別の配信元のアプリが同じ番号を名乗って、ほかのアプリの記憶を読める。http(s) の URL でないものは
  * (オリジンが "null" になって混ざらないよう) URL のまま。AIT は http(s) の URL しか出さないので、ふだんは来ない
  */
@@ -95,7 +95,7 @@ export function prepareApp(
   html = html.split(from).join(init.relay.root);
   /*
    * `/` から始まる URL は <base> を中継にしても denpa の先頭へ解決される (NHK の `/common/…`)。中継のルートへ。
-   * **読み込む要素のタグの中だけ** — a の行き先には触らない (script の中の文字列に読み込む要素のタグがあれば、それは書き換わる)
+   * **読み込む要素のタグの中だけ**。a の行き先には触らない (script の中の文字列に読み込む要素のタグがあれば、それは書き換わる)
    */
   const root = init.relay.root;
   html = html.replace(
@@ -240,7 +240,7 @@ export function frameMessage(data: unknown): FrameMessage | null {
 
 /**
  * リモコン (AribKeyCode) を受信機のキー (KeyboardEvent の key と keyCode) に。
- * 戻る (19) と d (20) は null — アプリを閉じる
+ * 戻る (19) と d (20) は null (アプリを閉じる)
  */
 export function receiverKey(
   code: number,

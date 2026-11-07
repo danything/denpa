@@ -338,9 +338,13 @@ describe("互換モード (canvasChoices / pickCanvas)", () => {
     ]);
   });
 
-  test("自動は、エンコード済みと同じ形式 (詰め替え) → 変換 (H.264 → AV1) → MPEG-2", () => {
+  test("自動は、エンコード済みと同じ形式 (詰め替え) → 変換 (ライブの互換モードと同じ AV1 → H.264) → MPEG-2", () => {
     expect(pickCanvas(withTs, all)).toBe("av1");
     expect(pickCanvas(h264Only, all)).toBe("h264");
+    // H.264 だけの録画で H.264 を描けなければ、AV1 に変換する
+    expect(pickCanvas(h264Only, { ...all, h264: false })).toBe("av1");
+    // エンコード済みが無ければ、変換は AV1 を先にする
+    expect(pickCanvas(tsOnly, all)).toBe("av1");
     expect(pickCanvas(withTs, { ...all, av1: false })).toBe("h264");
     expect(pickCanvas(withTs, { h264: false, av1: false, mpeg2: true })).toBe(
       "mpeg2",

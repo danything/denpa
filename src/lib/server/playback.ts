@@ -64,6 +64,7 @@ import {
   RUNG_HEADER,
 } from "#lib/ts/playback.js";
 import {
+  inWrap,
   lastVideoPts,
   type ReadAt,
   readHead,
@@ -1237,8 +1238,7 @@ async function rawResponse(
   if (ts === null) error(404, "この形式では再生できません");
   const mark = await seekFrom(ts, plan.skip, from);
   if (mark === null) error(404, "この形式では再生できません");
-  const origin =
-    (((ts.head + Math.round(plan.skip * CLOCK)) % WRAP) + WRAP) % WRAP;
+  const origin = inWrap(ts.head + Math.round(plan.skip * CLOCK));
   return new Response(Bun.file(ts.path).slice(mark.at).stream(), {
     headers: {
       "Content-Type": "video/mp2t",

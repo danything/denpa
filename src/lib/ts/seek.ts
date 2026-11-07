@@ -73,7 +73,7 @@ export function* pesMarks(bytes: Uint8Array): Generator<PesMark> {
 }
 
 /** 0〜一周の手前に置き直す (90kHz) */
-const inWrap = (value: number) => ((value % WRAP) + WRAP) % WRAP;
+export const inWrap = (value: number) => ((value % WRAP) + WRAP) % WRAP;
 
 /** 一周の中の差 `a - b` を、-半周〜+半周に置き直す (90kHz) */
 function delta(a: number, b: number): number {

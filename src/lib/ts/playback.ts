@@ -448,8 +448,7 @@ export function canvasChoices(
  * **互換モードでどれで観るか。** 選んだものが描ければそれ。`auto` か、選んだものが描けなければ次の順。
  *
  * 1. エンコード済みと同じ形式の fMP4 (詰め替え。サーバは軽い)
- * 2. 変換する fMP4 (H.264 → AV1)
- * 3. 元の TS (MPEG-2)
+ * 2. ライブの互換モードと同じ順 (`autoOrder`。変換する AV1 → H.264 → 元の TS の MPEG-2)
  *
  * `avoid` は打ち切った形式 (描いている途中で間に合わなくなった)。何も描けなければ null
  */
@@ -465,7 +464,14 @@ export function pickCanvas(
   if (choice !== "auto" && choice !== "hevc" && usable.includes(choice))
     return choice;
   const light = usable.filter((c) => c !== "mpeg2" && hasFile(info, c));
-  return [...light, ...usable][0] ?? null;
+  // 互換モードの順は家の中か外かで変わらない
+  const order = autoOrder({ indoor: false, compat: true }).map((format) =>
+    format === "raw" ? "mpeg2" : format,
+  );
+  const rest = order.filter((c): c is CanvasCodec =>
+    usable.includes(c as CanvasCodec),
+  );
+  return [...light, ...rest][0] ?? null;
 }
 
 /** その形式のエンコード済みのファイルがあるか (無ければ、流すときにサーバがその場でエンコードする) */

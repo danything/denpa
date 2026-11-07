@@ -23,25 +23,25 @@
 
 3 行目の実害を踏んだら入れる。
 
-### ブラウザ側での字幕デコード（aribb24.js）— 不採用
+### ブラウザ側での字幕デコード（aribb24.js）
 
 B24 をそのままブラウザへ送り、クライアントでデコードして描く構成。**デコード方法が受け側ごとに別実装になり
 (ブラウザとテレビのアプリで 2 つ)、置き場所や外字の置き換えが揃わない。** デコードするのはサーバ (libaribcaption を
 写したもの) に寄せ、受け側は描くだけにした ([下の比較](#字幕を画像で配っていた頃))。
 
-### H.264 + MPEG-TS + mpegts.js で先に全機能を通す — 不採用
+### H.264 + MPEG-TS + mpegts.js で先に全機能を通す
 
 前例が豊富 (KonomiTV / web-bml と同一構成) で、段階を踏む案として有力だった。
 **字幕の経路が録画側で先に完成した**ので、あとで捨てるコードを書く理由が無くなった。
-H.264 は段階ではなく、既定のコーデックとして残した。
+H.264 は段階ではなく、選べるコーデックの 1 つとして残した。
 
-### GStreamer — 不採用
+### GStreamer
 
 「tsdemux の private pad で B24 を映像と同一クロック上で取れる」ことを理由に有力視したが、字幕は ffmpeg の
 2 つ目の出口で同じ時計に乗り、データ放送は denpa の中で自前でデコードするので、**この論拠は無くなった**。
 周辺 (tsreadex / psisiarc / KonomiTV) も CLI パイプラインの構成で、GStreamer には ARIB/ISDB の知識も前例も無い。
 
-### WebRTC / WHEP による低遅延化 — 不採用
+### WebRTC / WHEP による低遅延化
 
 **縮むのは待っている間だけで、開いてから映像が出るまではむしろ伸びる。** WHEP で消せるのは受け側の貯め
 (`ts/pacing.ts`。宅内で 0.2〜0.9 秒) だけで、エンコードするのに掛かるぶんは運び方では消えない。
@@ -60,7 +60,7 @@ H.264 は段階ではなく、既定のコーデックとして残した。
 **本当に縮めたいなら、エンコードするのをやめるほうが桁違いに効く** ([放送そのまま (MPEG-2) を送る](stream.md#放送そのままmpeg-2を送る))。
 ffmpeg の WHIP muxer も H.264/Opus 固定の experimental で AV1 が使えない。
 
-### Media over QUIC (MoQ) — 不採用
+### Media over QUIC (MoQ)
 
 **縮まないのは WHEP と同じで、MoQ が効くのはパケットがよく欠ける回線だけ。家の外から見る経路の多くでは WebSocket か TCP に落ちて、今と変わらない。**
 MoQ は運び方を変えるだけで、エンコードするのに掛かるぶんは残る。受け側の受信バッファも消えない。どれだけ貯めるかは受け側が決める。
@@ -109,7 +109,7 @@ AV1 は載らず、取り込まれたかは確かめていない。
 Cloudflare Tunnel が WebTransport を通さないことは、配信元へ HTTP/3 で繋がないことからの推定で、確かめていない。
 テスラの車載ブラウザの Chromium のバージョンと WebTransport の有無、Safari の `serverCertificateHashes` (自己署名の証明書で LAN から繋ぐ方法) の対応も確かめていない。
 
-### mpeg2toh264 で H.264 に書き換える — 不採用
+### mpeg2toh264 で H.264 に書き換える
 
 [otya128/mpeg2toh264](https://github.com/otya128/mpeg2toh264) (2026-09-19 のコミット `7b008c6` で試した) は、MPEG-2 を画素まで戻さずに
 H.264 へ書き換える変換です。量子化した係数・マクロブロックの種類・動きベクトル・参照の関係をそのまま使い、H.264 (High プロファイル・CAVLC) の
@@ -242,7 +242,17 @@ HLS を作って自分の `<video>` に映すので**映像を出すプレイヤ
 
 ## DECODED_MOST を決めたときの測定
 
-[デコードしたフレームを持つ数](stream.md#デコードしたフレームを持つ数) の元の表。測り方は stream.md に。
+[デコードしたフレームを持つ数](stream.md#デコードしたフレームを持つ数) の元の表。
+
+測り方は `tests/bench` (CI では流さない)。互換モードの観る画面に ffmpeg の testsrc2 で作った映像 (1440x1080i の
+MPEG-2・1920x1080p 59.94 の H.264 / AV1) を流し、worker の比べている所を書き換えて振ります。
+GPU 無しで測るなら 1 行目、ふだんの Chrome で測るなら 2 行目です。2 行目は立てたままにして http://localhost:4180/ を開き、
+`probe.js` の先頭のコメントの手順で測って `report.ts` で表にします (`tests/bench/proxy.ts` は認証なしで結果を書き込めるので、測る間だけ立てる)。
+
+```sh
+docker compose --profile docs run --rm docs bunx playwright test -c tests/bench
+docker compose --profile docs run --rm -p 4180:4180 -e BENCH_SERVE=1 docs bunx playwright test -c tests/bench
+```
 
 **GPU のある Chrome** (Edge 155・Radeon RX 5700 XT・D3D11。H.264 は GPU でデコード、AV1 はこの GPU が
 デコードできないので CPU)。窓が隠れていたので、数えたのは描いた回:

@@ -114,7 +114,7 @@ export function shim(init: ShimInit): void {
   const relayRoot = init.relay.root;
   const relayFrom = `${init.relay.origin}/`;
   /**
-   * denpa の先頭 (https://denpa/)。**`/` から始まる URL はここへ解決される** — `<base>` を中継にしても、
+   * denpa の先頭 (https://denpa/)。**`/` から始まる URL はここへ解決される。** `<base>` を中継にしても、
    * NHK のアプリの `/common/…` は中継の外 (denpa の先頭) を指す。配信元のルートとして扱う
    */
   const denpaTop = `${new URL(relayRoot).origin}/`;
@@ -669,7 +669,7 @@ export function shim(init: ShimInit): void {
     method(name, () => unsupported(`object.${name}`));
 
   /**
-   * object が見えているか。**隠した object には出さない** — NHK の番組表は画面いっぱいの object を
+   * object が見えているか。**隠した object には出さない。** NHK の番組表は画面いっぱいの object を
    * `visibility: hidden` で置いたままにする。映像はアプリの上に重ねるので、出すと番組表を覆う
    */
   const seen = (o: HTMLObjectElement): boolean =>
