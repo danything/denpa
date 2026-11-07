@@ -67,9 +67,10 @@ import {
   UNMEASURED,
   windowLabel,
 } from "./fps";
-import { removeIfExists } from "./fsx";
+import { pruneEmptyDirs, removeIfExists } from "./fsx";
 import { hwArgs, hwChain, hwReady, type HwWay } from "./hwenc";
 import {
+  encodedFiles,
   encodedPath,
   encodedPaths,
   libraryFamily,
@@ -1316,6 +1317,27 @@ function saveCm(recordingId: number, detection: CmDetection): void {
     .run();
 }
 
+/**
+ * **1 本エンコードするときに ffmpeg を起こす順** (`runJob` の `encodeWays`)。GPU の方式 (`hwChain` の順) のあとにソフトウェア
+ * (H.265 を除く。`SOFTWARE_CODECS`) で、**どの方式も「素のまま → 先頭を少し捨てて」の 2 回だけ**。
+ * 1 回の実行の中の起こし直しはこの並びで尽きる (`encode_jobs.attempts` に数えない理由)。
+ * `pointed` は境目を指して再エンコードするとき。指定を聞かない Rockchip MPP を外す
+ */
+export function encodeAttempts(
+  codec: HwCodec,
+  hardware: HwWay[],
+  pointed: boolean,
+): { seek: number | null; hardware: HwWay | undefined }[] {
+  const ways: (HwWay | undefined)[] = [
+    ...hardware.filter((way) => !(pointed && way.kind === "rkmpp")),
+    ...(SOFTWARE_CODECS.includes(codec) ? [undefined] : []),
+  ];
+  return ways.flatMap((way) => [
+    { seek: null, hardware: way },
+    { seek: config.encodeRetrySeek, hardware: way },
+  ]);
+}
+
 async function runJob(jobId: number): Promise<void> {
   const { signal, recording } = startJob(jobId);
   const input = recording === undefined ? null : encodeSource(recording);
@@ -1655,21 +1677,14 @@ async function runJob(jobId: number): Promise<void> {
       software?: boolean;
     },
   ) => {
-    // H.265 はソフトウェアに切り替えない (`SOFTWARE_CODECS`)。GPU が全部落ちたら、その 1 本は失敗
     const software = SOFTWARE_CODECS.includes(codec);
-    const ways: (HwWay | undefined)[] =
+    const attempts = encodeAttempts(
+      codec,
       extra.software === true && software
-        ? [undefined]
-        : [
-            ...hwChain(codec, settings().hwAllow, hwTurn++).filter(
-              (way) => !(extra.software === true && way.kind === "rkmpp"),
-            ),
-            ...(software ? [undefined] : []),
-          ];
-    const attempts = ways.flatMap((hardware) => [
-      { seek: null, hardware },
-      { seek: config.encodeRetrySeek, hardware },
-    ]);
+        ? []
+        : hwChain(codec, settings().hwAllow, hwTurn++),
+      extra.software === true,
+    );
     const report = meter.part(codec);
     let result = { code: -1, stderrTail: "", outTimeUs: 0 };
     let found: Scan | null = null;
@@ -1679,7 +1694,7 @@ async function runJob(jobId: number): Promise<void> {
         if (canceled.has(jobId)) break;
         /*
          * ffmpeg の起こし直しは `encode_jobs.attempts` に数えない。あれはジョブを取り出した回数で、上限 (`encodeMaxAttempts`)
-         * はジョブのやり直しにだけ当てる。1 回の実行の中の起こし直しは `attempts` の並び (方式ごとに 2 回) で尽きるので、上限は要らない。
+         * はジョブのやり直しにだけ当てる。1 回の実行の中の起こし直しは `encodeAttempts` の並び (方式ごとに 2 回) で尽きるので、上限は要らない。
          * 数えていた頃は、コーデックをいくつも選んで GPU からソフトウェアへ倒れた 1 回の実行だけで上限の 5 に届き、
          * その実行の途中でポッドが止まると、起動したときに 1 度もやり直さず失敗にしていた
          */
@@ -1728,7 +1743,7 @@ async function runJob(jobId: number): Promise<void> {
     /** 映像まで読めたか。探さずに再エンコードしたら音だけ読み直す */
     let video = true;
     // 探さずにエンコードし直すのはソフトウェアで。H.265 はソフトウェアが無いので、いちばん先の GPU で
-    const plain = software ? undefined : ways[0];
+    const plain = software ? undefined : attempts[0]?.hardware;
     if (
       result.code !== 0 &&
       extra.analysis &&
@@ -2147,6 +2162,26 @@ async function runJob(jobId: number): Promise<void> {
   const length = Number.isFinite(probed)
     ? probed * 1000
     : primary.outTimeUs / 1000;
+  /*
+   * **エンコードしている間に録画が消されていたら、置いたものを消して中止にする。** 削除 (`files.deleteRecordingFiles`。
+   * 端末の削除の再送も来る) は走っているジョブを待たないので、ここで行に書き戻すと、消した行に置き場のパスが入り、
+   * どの片付け (`reconcile` は消していない行だけを見る) にも拾われないファイルが残る。ここから行を書くまで await を挟まない
+   */
+  const current = orm()
+    .select({ deleted: recordings.deleted_at })
+    .from(recordings)
+    .where(eq(recordings.id, recording.id))
+    .get();
+  if (current === undefined || current.deleted !== null) {
+    for (const path of [output, hevc, alt]) {
+      if (path === null || usedByOther(path, recording.id)) continue;
+      removeIfExists(path);
+      removeSidecars(path);
+      pruneEmptyDirs(path);
+    }
+    finishCanceled(jobId, null);
+    return;
+  }
   if (Number.isFinite(length) && length > 0) {
     orm()
       .update(recordings)
@@ -2223,9 +2258,7 @@ async function runCmJob(jobId: number): Promise<void> {
   // エンコードせずに置いた録画 (「エンコードしない」) は、置き場の TS が元の TS そのもの (`tsPathOf`)
   const raw = tsPathOf(recording);
   const ts = raw !== null && !isScrambled(raw) ? raw : null;
-  const files = encodedPaths(recording).filter(
-    (path) => path.endsWith(".mkv") && existsSync(path),
-  );
+  const files = encodedFiles(recording).map((entry) => entry.path);
   const input = ts ?? files[0];
   if (input === undefined) {
     fail(jobId, recording, "CM 検出に使えるファイルがありません", what);
@@ -2355,6 +2388,8 @@ async function runCmJob(jobId: number): Promise<void> {
     }
     for (const [i, file] of files.entries()) renameSync(outputs[i]!, file);
   } finally {
+    // 投げたときも書きかけ (`.post`) を残さない。動画が残っているので、片付け (`files.orphan`) は拾わない
+    discard();
     removeIfExists(chapters);
   }
   saveCm(recording.id, detection);
@@ -2422,7 +2457,7 @@ export function pump(): void {
     if (next === undefined) return;
 
     // **試し過ぎたジョブは失敗にする。** プロセスごと落とす毒ジョブは running→queued
-    // へ戻り続け、id 順・同時実行 1 だと毎回ここで先頭に来る。上限を超えたら failed に
+    // へ戻り続け、id 順なので毎回ここで先頭に来る。上限を超えたら failed に
     // して後ろを進める。failed の確定は runJob を呼ぶ前なので、直後にまた落ちても
     // 同じジョブを取り直すことはない
     if (next.attempts >= config.encodeMaxAttempts) {

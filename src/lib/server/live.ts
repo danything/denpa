@@ -2551,7 +2551,7 @@ export const key = (
   `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}${rung === 0 ? "" : `~${rung}`}`;
 const sessions = new Map<string, Session>();
 
-/** いまライブを観ている人がいるか (セッションが 1 つでもあるか)。Windows をスリープさせないかを決める (`power.ts`) */
+/** いまライブを観ている人がいるか (セッションが 1 つでもあるか)。Windows と Mac をスリープさせないかを決める (`power.ts`) */
 export function hasLiveViewers(): boolean {
   return sessions.size > 0;
 }
@@ -3598,14 +3598,20 @@ function openChase(
   if (size === 0) return refuseHeld("まだ何も録画されていません");
   const release = raw ? (held ?? (() => undefined)) : (held ?? holdTranscode());
   if (release === null) return refuse(BUSY);
-  const stopReading = raw
-    ? () =>
-        chaseReadHeld({
+  /*
+   * **畳んだら読むのをやめる** (`session.whenStopped` で立てる)。止めている間 (`hold`) に畳まれると、`followFile` は
+   * 止めたまま回り続け、録画のファイルと字幕の ffmpeg (`runRaw` の finally に来ない) が残っていた
+   */
+  const reading = { stopped: false };
+  const stopReading = () =>
+    !reading.stopped &&
+    (raw
+      ? chaseReadHeld({
           asked: viewer.held === true,
           congested: viewer.connection.congested === true,
           outside: hold?.() === true,
         })
-    : hold;
+      : hold?.() === true);
 
   const finished = rec.finished_at !== null;
   // 番組が替わって作り直したところの近くなら、そのバイトから (`chase.ts` の `resumePlan`)
@@ -3659,7 +3665,7 @@ function openChase(
           path,
           plan.offset,
           plan.paceBytesPerSec,
-          () => recordingDone(rec.id),
+          () => reading.stopped || recordingDone(rec.id),
           stopReading,
         ),
       (consumed) => rememberResume(rec.id, resumeFrom(plan, consumed)),
@@ -3672,6 +3678,9 @@ function openChase(
     throw failure;
   }
   session.whenStopped(release);
+  session.whenStopped(() => {
+    reading.stopped = true;
+  });
   session.add(viewer);
   if (!raw) {
     void session.run();
