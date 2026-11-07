@@ -89,24 +89,6 @@ Helm では `charts/denpa/values.yaml` のキーで渡します。チューナ�
   エージェントだけ別に置いたとき (`charts/denpa-agent`・`--agent-only`・`-AgentOnly`) は、インストーラか `helm install` のあとに出る URL を denpa の `TUNER_AGENT_URL` に書く
 - エージェントの `AGENT_ALLOWED_HOSTS` は読まない (組んだ denpa しか通さないので要らなくなった)
 
-## 録画のダウンロードを無くした (前のバージョンから上げるとき)
-
-**録画をファイルとして外へ持ち出す機能はやめました** (理由は [library.md](library.md#観るのはブラウザで))。
-録画の詳細と番組表の詳細からダウンロードのボタンが無くなり、`/api/recordings/<id>/file` は `?download=1` を読まず、
-添付 (`Content-Disposition`) も付けません。ブラウザ・テレビのアプリでの再生と、端末に保存はこれまでどおりです。
-
-## 再生リンクをやめた (前のバージョンから上げるとき)
-
-**「再生リンクをコピー」と、それが作っていた期限付きの URL (`/api/recordings/<id>/file?token=…`) をやめました。**
-外部のプレイヤーには対応しないので、ログインせずに録画を開ける URL を出す理由が無くなりました。
-
-- **出したリンクは、上げた時点で開けなくなる** (期限内でも)。テーブル (`share_links`) はマイグレーションで消える
-  (`drizzle/0011_drop-share-links.sql`)。リンクを作る API (`POST /api/recordings/<id>/share`) も無くなった
-- 画面からの再生は、画面と同じ資格 (信頼するネットワークか、ログインの Cookie) でファイルのエンドポイントから取得する
-- ファイルのエンドポイントを資格なしで呼んだときの答えが、403 (text/plain) から、ほかの API と同じ 401 の JSON に
-  なった (ログイン方法を何も設定していない denpa は、これまでどおり 403)
-- テレビのアプリ (denpa-tv) はアクセストークンで開くので、何もしなくてよい
-
 ## 接続元の読み方を変えた (前のバージョンから上げるとき)
 
 **`ADDRESS_HEADER` を読まなくなりました。** 前段 (リバースプロキシ) の後ろに置いているなら、前段の
@@ -165,22 +147,4 @@ LAN の人のブラウザから読み書きされることを防ぐためです�
   置き場の外に録画を置いていたなら、先に置き場へ寄せる
 - このリポジトリの compose・chart・`denpa-aio`・Mac / Windows のインストーラは一緒に直してある。
   Mac / Windows はインストーラを流し直すとエージェントの変数 (`RAW_DIR`) が書き直る
-
-## Helm の PVC の名前も置き場にそろえた
-
-**chart の PVC と values のキーを `raw` / `encoded` に改めました。**
-
-| 中身               | 前 (PVC / values のキー)                  | いま                                    |
-| ------------------ | ----------------------------------------- | --------------------------------------- |
-| 元の TS            | `denpa-recorded` / `persistence.recorded` | `denpa-raw` / `persistence.raw`         |
-| エンコードしたもの | `denpa-library` / `persistence.library`   | `denpa-encoded` / `persistence.encoded` |
-
-**そのまま上げると、新しい名前の空の PVC ができます。** 古い PVC は `helm.sh/resource-policy: keep`
-で残るので消えはしませんが、録画は見えなくなります。どちらかで繋ぎます。
-
-- **古い PVC をそのまま使う**: `persistence.raw.existingClaim: denpa-recorded` /
-  `persistence.encoded.existingClaim: denpa-library`(denpa-agent の chart は `persistence.raw.existingClaim`)
-- **名前ごと移す**: アプリを止め、PV の reclaim を `Retain` にして古い PVC を消し、PV の
-  `claimRef` を外してから、新しい名前の PVC を `volumeName` で同じ PV に結ぶ。中身はコピーしない
-
-compose の名前付きボリューム (`denpa-recorded` / `denpa-library`) は変えていません。
+- Helm は PVC の名前も変えた ([install.md](install.md#pvc-の名前を変えた-前のバージョンから上げるとき))

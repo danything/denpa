@@ -108,6 +108,23 @@ ArgoCD はクラスタを見ずに描くので chart に作らせると値が変
 `denpa-agent` の chart も同じで `pairSecret`)。値の一覧と意味は
 [charts/denpa/values.yaml](../charts/denpa/values.yaml) のコメントにあります。
 
+#### PVC の名前を変えた (前のバージョンから上げるとき)
+
+**chart の PVC と values のキーを `raw` / `encoded` に改めました。**
+
+| 中身               | 前 (PVC / values のキー)                  | いま                                    |
+| ------------------ | ----------------------------------------- | --------------------------------------- |
+| 元の TS            | `denpa-recorded` / `persistence.recorded` | `denpa-raw` / `persistence.raw`         |
+| エンコードしたもの | `denpa-library` / `persistence.library`   | `denpa-encoded` / `persistence.encoded` |
+
+**そのまま上げると、新しい名前の空の PVC ができます。** 古い PVC は `helm.sh/resource-policy: keep`
+で残るので消えはしませんが、録画は見えなくなります。どちらかで繋ぎます。
+
+- 古い PVC をそのまま使う: `persistence.raw.existingClaim: denpa-recorded` /
+  `persistence.encoded.existingClaim: denpa-library` (denpa-agent の chart は `persistence.raw.existingClaim`)
+- 名前ごと移す: アプリを止め、PV の reclaim を `Retain` にして古い PVC を消し、PV の
+  `claimRef` を外してから、新しい名前の PVC を `volumeName` で同じ PV に結ぶ。中身はコピーしない
+
 ### Talos Linux に OS ごと
 
 PT3 を挿した機械を Talos Linux の 1 台のクラスタにして、OS の設定から denpa まで 1 行で立てます

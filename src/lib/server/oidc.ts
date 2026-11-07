@@ -57,7 +57,20 @@ async function discover(): Promise<Discovery> {
   const res = await fetch(url);
   if (!res.ok)
     throw new Error(`OIDC の設定を読めません (${res.status}) ${url}`);
-  discovered = read(DISCOVERY, await res.json(), "OIDC の設定");
+  const doc = read(DISCOVERY, await res.json(), "OIDC の設定");
+  /*
+   * **返ってきた issuer が設定と同じでなければ使わない** (OpenID Connect Discovery 1.0 の 4.3)。
+   * 違うものを受けると、別の発行元の鍵とエンドポイントでログインを通してしまう。
+   * ID トークンの `iss` はこの値と比べる (`verify`)。
+   * 末尾の `/` だけは除いて比べる。設定のほうも除いてあり (`config.ts`)、
+   * Auth0 のように `/` で終わる issuer を返す相手もいるため
+   */
+  if (doc.issuer.replace(/\/+$/, "") !== config.oidcIssuer) {
+    throw new Error(
+      `OIDC の設定の issuer (${doc.issuer}) が OIDC_ISSUER (${config.oidcIssuer}) と一致しません`,
+    );
+  }
+  discovered = doc;
   return discovered;
 }
 

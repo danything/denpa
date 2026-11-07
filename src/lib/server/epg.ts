@@ -25,6 +25,7 @@ import { applyRules } from "./rules";
 import { resolveConflicts } from "./scheduler";
 import {
   DIGITAL_TV,
+  HELD_STATES,
   programs,
   recordings,
   reservations,
@@ -334,7 +335,7 @@ function clearBelongings(
       .where(
         and(
           eq(reservations.service_id, serviceId),
-          inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+          inArray(reservations.state, HELD_STATES),
           // 録り始めたものは触らない。取り消しても録画は戻らない
           isNull(reservations.started_at),
         ),
@@ -732,7 +733,7 @@ function syncReservationTimes(): number {
       .where(
         and(
           eq(programs.id, reservations.program_id),
-          inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+          inArray(reservations.state, HELD_STATES),
           // 録り始めた予約は動かさない。延長への追従は録画の行のほうでやる
           isNull(reservations.started_at),
           or(

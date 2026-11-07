@@ -163,6 +163,49 @@ describe("ID トークンを確かめる", () => {
     ).rejects.toThrow("発行元");
   });
 
+  /*
+   * **discovery の issuer が設定と違えば、その設定を使わない** (OpenID Connect Discovery 1.0 の 4.3)。
+   * 使うと、別の発行元の鍵で署名したトークンが、その発行元の `iss` のまま通る
+   */
+  test("discovery の issuer が設定と違えば通さない", async () => {
+    const answer = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const res = await answer(input);
+      if (!String(input).endsWith("/.well-known/openid-configuration"))
+        return res;
+      return Response.json({
+        ...((await res.json()) as object),
+        issuer: "https://evil.example",
+      });
+    }) as typeof fetch;
+    await expect(
+      verify(
+        await idToken({ ...base, iss: "https://evil.example" }),
+        "nonce-1",
+        NOW,
+      ),
+    ).rejects.toThrow("issuer");
+  });
+
+  test("discovery の issuer の末尾の / は除いて比べる", async () => {
+    const answer = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const res = await answer(input);
+      if (!String(input).endsWith("/.well-known/openid-configuration"))
+        return res;
+      return Response.json({
+        ...((await res.json()) as object),
+        issuer: `${ISSUER}/`,
+      });
+    }) as typeof fetch;
+    const claims = await verify(
+      await idToken({ ...base, iss: `${ISSUER}/` }),
+      "nonce-1",
+      NOW,
+    );
+    expect(claims.sub).toBe("user-1");
+  });
+
   test("期限が切れていれば通さない", async () => {
     const expired = { ...base, exp: Math.floor(NOW / 1000) - 3600 };
     await expect(

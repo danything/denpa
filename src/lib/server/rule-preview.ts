@@ -26,7 +26,12 @@ import {
   previewSkips,
 } from "./rules";
 import { tunerState } from "./scheduler";
-import { programs, reservations, services as serviceTable } from "./schema";
+import {
+  HELD_STATES,
+  programs,
+  reservations,
+  services as serviceTable,
+} from "./schema";
 
 /**
  * **ルールの下見。** 書きかけの条件で、これからの放送の何を録るか。
@@ -43,7 +48,7 @@ import { programs, reservations, services as serviceTable } from "./schema";
  */
 const stillHeld = () =>
   and(
-    inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+    inArray(reservations.state, HELD_STATES),
     isNull(reservations.started_at),
     or(ne(reservations.state, "skipped"), gt(reservations.end_at, now())),
   );

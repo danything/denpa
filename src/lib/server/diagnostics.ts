@@ -6,6 +6,7 @@ import { agentFetch, agentHostname, agentSecrets } from "./agent-client";
 import { config } from "./config";
 import { orm } from "./db";
 import { serverLogs } from "./log-buffer";
+import { pwaNames } from "./manifest";
 import { webhooks } from "./schema";
 
 /**
@@ -139,10 +140,8 @@ export function knownValues(requestHost: string): {
   const hosts = [requestHost];
   const agentHost = agentHostname();
   if (agentHost !== null) hosts.push(agentHost);
-  for (const pair of config.pwaNames.split(",")) {
-    const host = pair.split("=")[0]?.trim();
-    if (host) hosts.push(host);
-  }
+  // 自分の名前として通すものと同じ読み方 (`manifest.pwaNames`。`=` の無いものは名前にしない)
+  for (const { host } of pwaNames()) hosts.push(host);
   return { secrets: secrets.filter(Boolean), hosts: hosts.filter(Boolean) };
 }
 

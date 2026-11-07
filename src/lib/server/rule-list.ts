@@ -11,7 +11,12 @@ import {
 } from "drizzle-orm";
 
 import { now, orm } from "./db";
-import { recordings, reservations, rules as ruleTable } from "./schema";
+import {
+  recordings,
+  reservations,
+  rules as ruleTable,
+  TO_RECORD_STATES,
+} from "./schema";
 
 /**
  * **ルールの一覧** (`/rules`)。書く欄は検索の画面に移したので、ここは並べて見比べ、止める・消すだけ。
@@ -28,7 +33,7 @@ const WEEK = 7 * 24 * 60 * 60 * 1000;
  * 下の数えるところは予約を `r`、録画を `v`、局を `s` と呼ぶ (局・予約・ルールはどれも `name` を持つので、別名で引く)
  */
 const PENDING = sql.raw(
-  `r.state IN ('scheduled', 'conflict') AND r.started_at IS NULL`,
+  `r.state IN (${TO_RECORD_STATES.map((state) => `'${state}'`).join(", ")}) AND r.started_at IS NULL`,
 );
 /** 外側のルール */
 const RULE = sql.raw('"rules"."id"');
@@ -123,7 +128,7 @@ export function ruleSummary(at = now()): RuleSummary {
     .from(reservations)
     .where(
       and(
-        inArray(reservations.state, ["scheduled", "conflict"]),
+        inArray(reservations.state, TO_RECORD_STATES),
         isNull(reservations.started_at),
         gt(reservations.start_at, at),
         lte(reservations.start_at, at + WEEK),
