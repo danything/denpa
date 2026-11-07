@@ -145,11 +145,11 @@ function byId(reservationId: number): Reservation | undefined {
 
 /**
  * 予約の取り消し。録画中なら止めて、そこまでの分は録画済みとして残す
- * (途中まででも見たいことがあるのでファイルは捨てない)。
+ * (途中まででも見たいことがあるのでファイルは捨てない)。録画を止めたら true
  */
-export async function cancel(reservationId: number): Promise<void> {
+export async function cancel(reservationId: number): Promise<boolean> {
   const reservation = byId(reservationId);
-  if (reservation === undefined) return;
+  if (reservation === undefined) return false;
 
   // 録っている最中なら止める。録っている最中かは録画の行で分かる
   const recording = orm()
@@ -171,12 +171,100 @@ export async function cancel(reservationId: number): Promise<void> {
     .where(eq(reservations.id, reservationId))
     .run();
   await resolveConflicts();
+  return recording !== undefined;
 }
 
-/** {@link recordAiring} の答え。断ったときは HTTP の状態と、そのまま出せる文言を持つ */
+/**
+ * **番組の予約を取り消す** (番組表の「予約取消」と、アプリの `DELETE /api/programs/<id>/record`)。
+ * 取り消していない予約が無ければ null。録画中なら止めて、そこまでの録画は残す ({@link cancel})
+ */
+export async function cancelProgram(
+  programId: number,
+): Promise<{ stopped: boolean } | null> {
+  const reservation = orm()
+    .select({ id: reservations.id })
+    .from(reservations)
+    .where(
+      and(
+        eq(reservations.program_id, programId),
+        ne(reservations.state, "canceled"),
+      ),
+    )
+    .get();
+  if (reservation === undefined) return null;
+  return { stopped: await cancel(reservation.id) };
+}
+
+/** {@link recordAiring}・{@link recordProgram} の答え。断ったときは HTTP の状態と、そのまま出せる文言を持つ */
 type RecordAiring =
-  | { ok: true; programId: number; name: string; state: ReservationState }
+  | {
+      ok: true;
+      programId: number;
+      name: string;
+      state: ReservationState;
+      /** 録らない理由 (`conflict_reason`)。競合・コピー禁止など。録るなら null */
+      reason: string | null;
+    }
   | { ok: false; status: 400 | 404; message: string };
+
+/** 録画の API の答え (`POST /api/services/<id>/record`・`POST /api/programs/<id>/record`。docs/api.md) */
+export function recordedBody(result: Extract<RecordAiring, { ok: true }>) {
+  return {
+    recorded: result.name,
+    programId: result.programId,
+    // 競合で弾かれたときは false (チューナーが足りない)。予約そのものは残る
+    reserved: result.state === "scheduled" || result.state === "recording",
+    // 番組表のマスと同じ物差し (`reservationStates`) と、録らない理由
+    state: result.state,
+    reason: result.reason,
+  };
+}
+
+/**
+ * **番組 ID を指定して録る** (アプリの `POST /api/programs/<id>/record`)。
+ * 番組表に無ければ 404、予約できなければ (放送が終わっている、コピー禁止) 400。
+ * 予約は手動予約と同じ処理 ({@link reserve}) で、何度呼んでも二重には録らない
+ */
+export async function recordProgram(programId: number): Promise<RecordAiring> {
+  const program = orm()
+    .select({ id: programs.id, name: programs.name })
+    .from(programs)
+    .where(eq(programs.id, programId))
+    .get();
+  if (program === undefined)
+    return { ok: false, status: 404, message: "番組が見つかりません" };
+  return reserveProgram(program);
+}
+
+/** 予約して、番組表と同じ物差しの状態を添えて返す (`recordAiring`・`recordProgram`) */
+async function reserveProgram(program: {
+  id: number;
+  name: string;
+}): Promise<RecordAiring> {
+  let reservation: Reservation;
+  try {
+    reservation = await reserve(program.id);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+  /*
+   * 競合で弾かれたかは予約のあとでしか分からない。番組表と同じ物差しで読む (録画中かは録画の行を見ないと
+   * 分からないため)。取り消し扱いで引けなければ、予約の行の状態をそのまま答える
+   */
+  const state =
+    reservationStates([program.id]).get(program.id) ?? reservation.state;
+  return {
+    ok: true,
+    programId: program.id,
+    name: program.name,
+    state,
+    reason: reservation.conflict_reason,
+  };
+}
 
 /**
  * **局でいま流れている番組を録る** (ライブの録画ボタンと、アプリの `POST /api/services/<id>/record`)。
@@ -212,23 +300,7 @@ export async function recordAiring(
       message: "いま流れている番組が番組表に見つかりません",
     };
   }
-  let reservation: Reservation;
-  try {
-    reservation = await reserve(program.id);
-  } catch (error) {
-    return {
-      ok: false,
-      status: 400,
-      message: error instanceof Error ? error.message : String(error),
-    };
-  }
-  /*
-   * 競合で弾かれたかは予約のあとでしか分からない。番組表と同じ物差しで読む (録画中かは録画の行を見ないと
-   * 分からないため)。取り消し扱いで引けなければ、予約の行の状態をそのまま答える
-   */
-  const state =
-    reservationStates([program.id]).get(program.id) ?? reservation.state;
-  return { ok: true, programId: program.id, name: program.name, state };
+  return reserveProgram(program);
 }
 
 /**

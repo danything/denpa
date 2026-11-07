@@ -407,6 +407,24 @@ export function duplicateReason(serviceName: string): string {
 }
 
 /**
+ * **番組表の番組から、そのまま観られる録画。** 無ければ null。
+ * 録画そのものが失敗したものと、ファイルの無いものは除く (配信は library_path ?? ts_path を返す)。
+ * 番組表の詳細の再生ボタンと、外から使う API (`GET /api/programs` の `recordingId`) が同じ判定を使う
+ */
+export function playableRecordingId(program: {
+  recording_id: number | null;
+  recording_state: string | null;
+  library_path: string | null;
+  ts_path: string | null;
+}): number | null {
+  if (program.recording_id === null || program.recording_state === "failed")
+    return null;
+  return (program.library_path ?? program.ts_path) === null
+    ? null
+    : program.recording_id;
+}
+
+/**
  * ロゴでの判定が使えなかったときに、CM 検出の覚え書き (`recordings.cm_note`) へ
  * 入れる目印。無音検出に落ちた理由はこの後ろに続く。
  */
