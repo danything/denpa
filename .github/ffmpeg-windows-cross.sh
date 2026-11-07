@@ -41,7 +41,7 @@ cmk() { cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE="$work/toolchain.cma
 t() { echo "[time] $1 $(( $(date +%s) - start ))s"; }
 
 fetch_tar "https://zlib.net/current/zlib.tar.gz" z zlib || fetch_tar "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz" z zlib
-cmk -DZLIB_BUILD_EXAMPLES=OFF; rm -f "$prefix"/lib/libzlib.dll.a; ls "$prefix/lib"; [ -e "$prefix/lib/libz.a" ] || cp "$prefix/lib/libzlibstatic.a" "$prefix/lib/libz.a"; t zlib
+cmk -DZLIB_BUILD_EXAMPLES=OFF; rm -f "$prefix"/lib/libzlib.dll.a; rm -f "$prefix/lib/libz.dll.a"; cp "$prefix/lib/libzs.a" "$prefix/lib/libz.a"; t zlib
 
 fetch_tar "https://downloads.xiph.org/releases/opus/opus-${OPUS_VERSION}.tar.gz" z opus
 cmk -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF; t opus
