@@ -3,6 +3,7 @@
   import "@anyblades/blades/components/accordion";
   import "@anyblades/blades/components/progress";
   import { resolve } from "$app/paths";
+  import Activity from "~icons/lucide/activity";
 
   import { submitting } from "#lib/actions.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
@@ -13,6 +14,7 @@
   import { SERVICE_TYPE_LABEL, stateLabel } from "#lib/format.js";
 
   import type { PageData } from "./$types";
+  import SignalDialog from "./SignalDialog.svelte";
 
   let { data }: { data: PageData } = $props();
 
@@ -81,6 +83,25 @@
   const coverage = $derived(data.channels);
   /** 入っている局をすべて並べたもの */
   const services = $derived(coverage.flatMap((channel) => channel.services));
+
+  /** 電波レベル測定ダイアログ */
+  let showSignalDialog = $state(false);
+  let signalTargetType = $state("");
+  let signalTargetChannel = $state("");
+
+  const channelOptions = $derived(
+    coverage.map((ch) => ({
+      type: ch.type,
+      channel: ch.channel,
+      name: ch.services.map((s) => s.name).join(", "),
+    })),
+  );
+
+  function openSignal(type = "", channel = "") {
+    signalTargetType = type;
+    signalTargetChannel = channel;
+    showSignalDialog = true;
+  }
 
   /** 番組表がどこまで埋まっているか。「8/9 まで」の形で出す */
   function until(at: number): string {
@@ -153,6 +174,15 @@
                 : "ロゴをいますぐ集める"}
             </ActionButton>
           {/if}
+          <button
+            type="button"
+            class="secondary small outline"
+            onclick={() => openSignal()}
+            data-testid="btn-open-signal-dialog"
+          >
+            <Activity aria-hidden="true" />
+            電波レベル測定
+          </button>
         </div>
       {/if}
     </div>
@@ -393,7 +423,19 @@
                       data-testid="channel-reception"
                       data-reception={channel.reception}
                     >
-                      {channel.channel}
+                      <span class="channel-label-wrap">
+                        {channel.channel}
+                        <button
+                          type="button"
+                          class="ghost circle tiny measure-btn"
+                          title="このチャンネルの電波レベルを測定"
+                          aria-label="{channel.channel} の電波レベルを測定"
+                          onclick={() =>
+                            openSignal(channel.type, channel.channel)}
+                        >
+                          <Activity aria-hidden="true" />
+                        </button>
+                      </span>
                       <!-- 受信できるかは番組表集めのついでに確かめる (reception.ts)。受信できるものには何も付けない -->
                       {#if channel.reception === "unreceivable"}
                         <span class="reception tiny muted">受信できません</span>
@@ -440,6 +482,14 @@
 </div>
 
 <LogoZoom target={zoomTarget} onclose={() => (zoom = null)} />
+
+<SignalDialog
+  open={showSignalDialog}
+  channels={channelOptions}
+  initialType={signalTargetType}
+  initialChannel={signalTargetChannel}
+  onclose={() => (showSignalDialog = false)}
+/>
 
 <!--
     局ロゴ。押すと大きく見る (`LogoZoom`)。まだのものは点線の枠、放送に載っていないものは列では「—」。
@@ -593,6 +643,22 @@
   /* 受信の様子はチャンネルの名前の下に 1 行で (塗らない。字の色だけ) */
   .reception {
     display: block;
+  }
+
+  .channel-label-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .measure-btn {
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    padding: 2px;
+  }
+
+  .measure-btn:hover {
+    opacity: 1;
   }
 
   /* **狭い幅ではロゴの列をたたみ、局名の前に出す** (表が横にはみ出さないように) */
