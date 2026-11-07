@@ -373,7 +373,7 @@ public sealed class Dt295NativeLink
     }
 
     /// <summary>
-    /// 機材の中で I2C の転送を順に行わせる (Dt295NativePrograms の操作 2)。<paramref name="ops"/> は <see cref="Dt295I2cBatch.Encode"/> の形。
+    /// 機材の中で I2C の転送を順に行わせる (Dt295NativePrograms の操作 2)。<paramref name="ops"/> は <see cref="Dt295I2cBatch.Encode"/> の形式。
     /// 短ければ (操作列 32 バイト・結果 16 バイトまで) 要求の中に入れて、制御転送は要求と応答の 2 回で済む。
     /// 長ければ操作列を SDRAM (0x380000) に書き、結果もそこから読む。機材のプログラムが触るのは I2C のブロック (0xFD8FE0〜0xFD8FF0) だけ
     /// </summary>

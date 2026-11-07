@@ -31,7 +31,7 @@ public static class Mb86h47Programs
     /// <param name="Words">置く語 (バンクの先頭から)</param>
     /// <param name="Read">読む側の入口</param>
     /// <param name="Write">書く側の入口</param>
-    public sealed record Routine(uint[] Words, uint Read, uint Write, string Listing);
+    public sealed record Routine(uint[] Words, uint Read, uint Write);
 
     /// <summary>
     /// アドレスを広げるルーチン。入ったとき R4 = 要求の 24 ビットのアドレス、要求の状態の塊を指すのは読む側 R8・書く側 R10。
@@ -55,7 +55,7 @@ public static class Mb86h47Programs
         AddressingSide(asm, "w", R10, WriteContinue, clear: true);
         var words = asm.Words32();
         if (words.Length * 4 > BankSize) throw new InvalidOperationException("主 CPU のルーチンがバンクに収まりません");
-        return new Routine(words, asm.AddressOf("read"), asm.AddressOf("write"), asm.Listing);
+        return new Routine(words, asm.AddressOf("read"), asm.AddressOf("write"));
     }
 
     private static void AddressingSide(Fr30Assembler asm, string p, Fr30Reg state, uint next, bool clear)
@@ -101,7 +101,7 @@ public static class Mb86h47Programs
     public const uint CoreOrigin = 0xA0000;
 
     /// <summary>コア 0 の TS の送り出し。止まらずに回り続ける</summary>
-    public static (uint[] Words, string Listing) Core0()
+    public static uint[] Core0()
     {
         var asm = new Fr30Assembler(CoreOrigin);
         asm.Label("start");
@@ -230,7 +230,7 @@ public static class Mb86h47Programs
         asm.Ldi(0xD0202C, R1);
         asm.St(R0, R1);
         asm.Far(Fr30Cond.Ra, "loop", R12);
-        return (asm.Words32(), asm.Listing);
+        return asm.Words32();
     }
 
     /// <summary>FIFO を満たす: DMA 2 に次の 0x460 バイトを持ってこさせる</summary>
@@ -314,7 +314,7 @@ public static class Mb86h47Programs
     private const int VarSequence = 0x9C;
 
     /// <summary>コア 1 の I2C の代行</summary>
-    public static (uint[] Words, string Listing) Core1()
+    public static uint[] Core1()
     {
         var asm = new Fr30Assembler(CoreOrigin);
         asm.Label("start");
@@ -495,7 +495,7 @@ public static class Mb86h47Programs
         asm.Far(Fr30Cond.Ra, "main", R12);
 
         I2cRoutines(asm);
-        return (asm.Words32(), asm.Listing);
+        return asm.Words32();
     }
 
     /*

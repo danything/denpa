@@ -483,14 +483,14 @@ public class Dt295NativeTests
     }
 
     [Test]
-    public async Task 止めたあとに残った読み手はスレッドから例外を出さずに終わり_Output_を取り直すと例外になる()
+    public async Task 止めたあとに残った読み取りはスレッドから例外を出さずに終わり_Output_を取り直すと例外になる()
     {
         var fake = Rig();
         var port = $"test-{Guid.NewGuid():N}";
         var tuner = new Dt295NativeTuner("test", () => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000), () => Dt295NativeDevice.CloseIfIdle(port));
         var tuning = ChannelTable.Parse("T25")!;
         tuner.Tune(tuning, tuning.StreamId);
-        // 本番の読み手 (TunerPool.Read) と同じく、Output は 1 回だけ取って DeviceStream として読み続ける
+        // 本番の読み出し (TunerPool.Read) と同じく、Output は 1 回だけ取って DeviceStream として読み続ける
         var ring = (DeviceStream)tuner.Output;
         var reader = Task.Run(() =>
         {

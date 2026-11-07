@@ -4,12 +4,12 @@ using System.Text;
 namespace Denpa.Agent;
 
 /*
- * FR30 (富士通 FR ファミリー) の小さなアセンブラ。CECH-ZD1 J のブリッジ (MB86H47A) の中で動かすプログラムを組む (Mb86h47Programs.cs)。
+ * FR30 (富士通 FR ファミリー) の小さなアセンブラ。CECH-ZD1 J のブリッジ (MB86H47A) と PIX-DT295 の中で動かすプログラムを組む (Mb86h47Programs.cs・Dt295NativePrograms.cs)。
  *
  * 命令の符号化は富士通の公開している FR30 の命令の手引きに従い、命令ごとに binutils の fr30-elf-as の出力と突き合わせた
  * (Fr30Tests.cs の期待値は、その突き合わせで fr30-elf-as が出した語)。使う命令だけを持つ。命令は 16 ビットでビッグエンディアン。
  *
- * 組みながら GNU の書き方の一覧 (Listing) も残すので、プログラム全体を fr30-elf-as に通して突き合わせられる。
+ * 組みながら GNU の書き方の一覧 (Listing) も残すので、プログラム全体を fr30-elf-as に通して突き合わせられる (PIX-DT295 のプログラムは Dt295NativeProgramsTests.cs で突き合わせている)。
  */
 
 /// <summary>FR30 の汎用レジスタ。R13 = AC、R14 = FP、R15 = SP</summary>

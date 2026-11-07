@@ -41,7 +41,7 @@ public static class Dt295NativeProbe
 
     /// <summary>
     /// 地上波を選局してから受信を確認するまでの間、T 復調のレジスタ 0x00〜0xFF を約 10 ms ごとに読んで、途中で値が変わったものを時刻つきで出す。
-    /// ロックの前後で動くレジスタから、復調が検出した結果 (モード・ガード・階層など) を返すものを探すため。読むだけで、復調にも USB にも書かない。
+    /// ロックの前後で動くレジスタから、復調が検出した結果 (モード・ガード・階層など) を返すものを探すため。選局のあとは読むだけで、復調には書かない。
     /// ロックの印 (0x81 の bit4) が立ってからも 15 回読む。選局が終わったところ (選局の呼び出しが戻ったとき) を 0 ms とする
     /// </summary>
     internal static int DemodTrace(Options options, Func<Dt295Timeline, Dt295NativeDevice> acquire, Action closeAll, TextWriter output)
@@ -111,7 +111,7 @@ public static class Dt295NativeProbe
 
     /// <summary>
     /// 選局を <paramref name="options"/>.LockTest 回くり返して、成功した割合と時間を出す (選局の手順や待ちを変えたときの確認用)。
-    /// 毎回、同じ種別の別のチャンネル (--alt) に周波数だけ合わせて前の選局から離してから、測るチャンネルを選局する。
+    /// 毎回、同じ種別の別のチャンネル (--alt) に周波数だけ合わせて前の選局から離してから、測るチャンネルを選局する。--alt が選局表に無い名前 (none) なら離さず、同じチャンネルの選局し直しを測る。
     /// --reopen を付けると毎回機材を閉じて開き直す (INITIALIZE の待ちを試すとき)。成功は、選局が受信を確認して最初の TS が届くこと
     /// </summary>
     internal static int LockTest(Options options, Func<Dt295Timeline, Dt295NativeDevice> acquire, Action closeIdle, Action closeAll, TextWriter output)
@@ -347,7 +347,7 @@ public static class Dt295NativeProbe
                 }
                 lastSignal = reading.Elapsed;
             }
-            // 決めた秒数のあいだ受ける。1 バイトも読めていなければ、読み手が動くまで 5 秒まで待つ (遅い環境で読み手より先に時間が来ない)
+            // 決めた秒数のあいだ受ける。1 バイトも読めていなければ、読み取りのスレッドが動くまで 5 秒まで待つ (遅い環境で、読み始める前に時間が切れないように)
             while ((reading.Elapsed < options.Duration || (Interlocked.Read(ref seenBytes) == 0 && reading.Elapsed < TimeSpan.FromSeconds(5))) && problem is null)
             {
                 Thread.Sleep(10);

@@ -31,7 +31,7 @@ public class Dt295NativeCardTests
 
         await Assert.That(atr).IsEquivalentTo(BcasAtr);
         var uart = fake.Stores.Where(s => s.Address is >= 0xFEA000 and <= 0xFEA03F).Take(17).ToArray();
-        // 仕様書 §10 の投入の表: 段ごとの番地。0xFEA004 の値は極性 (0xF00223 = 0) から bit3、段 7 は | 2、段 16 は | 6
+        // 仕様書 §10 の投入の表: 段ごとのアドレス。0xFEA004 の値は極性 (0xF00223 = 0) から bit3、段 7 は | 2、段 16 は | 6
         await Assert.That(uart.Select(s => s.Address)).IsEquivalentTo(new uint[]
         {
             0xFEA01C, 0xFEA004, 0xFEA014, 0xFEA000, 0xFEA000, 0xFEA004, 0xFEA008, 0xFEA004, 0xFEA000, 0xFEA000,

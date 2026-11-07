@@ -180,6 +180,7 @@ internal sealed class Dt295NativeStream
         using (timeline.Step("取り込みの設定", "仕様書 8.1.3。28 項目を書いて読み戻す")) _capture = board.ConfigureCapture();
         using (timeline.Step("端点の開始", "仕様書 8.3.1")) _endpoint = board.StartEndpoint();
     }
+
     /// <summary>取り込みを止めて、端点と取り込みの設定を戻す。USB の制御が止まっていれば省く</summary>
     private void EndCapture()
     {
@@ -343,7 +344,7 @@ public sealed class Dt295NativeTuner : ITuneDevice
     /// <summary>最後に合わせて受信を確認したもの (どの機材で、どのチャンネルか)。選局が途中で失敗したら null</summary>
     private (Dt295NativeDevice Device, ChannelTable.Tuning Tuning, uint StreamId)? _last;
 
-    /// <summary>同じチャンネルのまま受信が続いているかを確かめる時間の上限 (1 回の読みで済む。地上波は 1 周、衛星は数周)</summary>
+    /// <summary>同じチャンネルのまま受信が続いているかを確かめる時間の上限 (受かっていれば地上波は 1 周、衛星は数周で済む)</summary>
     internal static readonly TimeSpan StillLockedWait = TimeSpan.FromMilliseconds(30);
 
     /// <summary>設定の device (画面に出す理由の持ち主のキー)</summary>
@@ -415,11 +416,7 @@ public sealed class Dt295NativeTuner : ITuneDevice
                             : frontend.WaitTerrestrialLock(StillLockedWait);
                     }
                 }
-                if (reuse)
-                {
-                    prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall));
-                }
-                else
+                if (!reuse)
                 {
                     if (tuning.Satellite)
                     {
@@ -429,11 +426,13 @@ public sealed class Dt295NativeTuner : ITuneDevice
                     {
                         using (timeline.Step("選局 (地上波の周波数の設定)", "仕様書 7.2.2")) frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
                     }
-                    // 取り込みの設定は、受信の確認を待つ間に済ませておく (取り込みを始めるのは受信を確認してから。TS は出ない)
-                    prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall));
-                    // 取り込みを始めるのは、7.2.4 の確認が済んでから (TMCC が確定する前の TS には transport_error_indicator が付く)
-                    var locked = tuning.Satellite ? frontend.WaitSatelliteLock(LockWait, tsid) : frontend.WaitTerrestrialLock(LockWait);
-                    if (!locked) throw new IOException(ITuneDevice.SyncFailed);
+                }
+                // 取り込みの設定は、受信の確認を待つ間に済ませておく (TS はまだ出ない)
+                prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall));
+                // 取り込みを始めるのは、受信の確認 (7.2.4・7.3.4) が済んでから (TMCC が確定する前の TS には transport_error_indicator が付く)
+                if (!reuse && !(tuning.Satellite ? frontend.WaitSatelliteLock(LockWait, tsid) : frontend.WaitTerrestrialLock(LockWait)))
+                {
+                    throw new IOException(ITuneDevice.SyncFailed);
                 }
                 prepared.Begin();
                 _stream = prepared;
