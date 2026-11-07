@@ -216,6 +216,7 @@ public sealed class TunerPool(
             spec = Tuners[index];
             lease = new Lease(index, type, channel);
             _leases[index] = lease;
+            _signals ??= new Timer(_ => ReadSignals(), null, TunerSignal.Every, TunerSignal.Every);
             /*
              * **利用者を入れてからロックを放す。** 選局はこの下、ロックの外でやるので、
              * 入れないまま放すと `Pick` に「誰も読んでいないチューナー」と見えて、
@@ -627,9 +628,67 @@ public sealed class TunerPool(
                      * Px4Userland.Notice)。画面は空いているチューナーの error を出すので、新しい欄は作らない
                      */
                     ["error"] = lease?.Error ?? Px4Userland.Notice(spec.Device),
+                    // 受信の状態と C/N。使用中で、機材が測れるときだけ (ReadSignals)
+                    ["signal"] = lease?.Signal?.ToJson(),
                 });
             }
             return list;
+        }
+    }
+
+    /// <summary>
+    /// 使用中のチューナーから受信の状態と C/N を読むタイマー。最初の選局で作り、<see cref="CloseAll"/> で止める (止めたあとの選局では作り直す)。
+    /// 読むのは選局しているチューナーだけで、空いているチューナーは読まない
+    /// </summary>
+    private Timer? _signals;
+
+    private int _readingSignals;
+
+    /// <summary>
+    /// 使用中のチューナーの受信の状態と C/N を読み、選局 (<see cref="Lease.Signal"/>) に置く (<see cref="TunerSignal.Every"/> ごと)。
+    /// **選局し直している最中のチューナーは飛ばす** (<see cref="Held.Gate"/> を待たない。次の周期で読む)。
+    /// 読めなくても選局は止めず、その選局では 1 回だけ記録に残す
+    /// </summary>
+    private void ReadSignals()
+    {
+        // 前の周期がまだ読んでいる (機材の答えが遅い) なら重ねない
+        if (Interlocked.Exchange(ref _readingSignals, 1) != 0) return;
+        try
+        {
+            List<(Lease Lease, Held Held)> live = [];
+            lock (_gate)
+            {
+                lock (_deviceGate)
+                {
+                    foreach (var (index, lease) in _leases)
+                        if (_held.TryGetValue(index, out var held)) live.Add((lease, held));
+                }
+            }
+            foreach (var (lease, held) in live)
+            {
+                if (!held.Gate.TryEnter()) continue;
+                try
+                {
+                    lease.Signal = held.Channel == lease.Channel ? held.Device.Signal() : null;
+                }
+                catch (Exception error)
+                {
+                    lease.Signal = null;
+                    if (!lease.SignalFailed)
+                    {
+                        lease.SignalFailed = true;
+                        Log.Write($"[{Tuners.ElementAtOrDefault(lease.Tuner)?.Name}] 受信の状態と C/N を読めませんでした ({error.Message})");
+                    }
+                }
+                finally
+                {
+                    held.Gate.Exit();
+                }
+            }
+        }
+        finally
+        {
+            Volatile.Write(ref _readingSignals, 0);
         }
     }
 
@@ -666,6 +725,8 @@ public sealed class TunerPool(
     {
         lock (_gate)
         {
+            _signals?.Dispose();
+            _signals = null;
             foreach (var lease in _leases.Values.ToList()) Release(lease, "停止します");
             // _held は選局 (Acquire) が _gate の外で足すので、写すのは _deviceGate の中で (Replace と同じ)
             List<int> held;
@@ -802,6 +863,13 @@ internal sealed class Lease(int tuner, string type, string channel)
     }
 
     public string? Error { get; private set; }
+
+    /// <summary>最後に読んだ受信の状態と C/N (<see cref="TunerPool"/> の ReadSignals)。まだ読んでいない・測れない機材は null</summary>
+    public volatile TunerSignal? Signal;
+
+    /// <summary>C/N を読めなかったことを記録に残した (1 回の選局で 1 回だけ)</summary>
+    public bool SignalFailed { get; set; }
+
     public int? Pid => _child?.HasExited == false ? _child.Id : null;
 
     private volatile bool _stopped;

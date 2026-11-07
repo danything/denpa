@@ -239,6 +239,55 @@ test.describe("設定のチューナーとチャンネル", () => {
     await expect(coverage).toContainText("局");
     await expect(coverage).toContainText("番組表のある局");
   });
+
+  /*
+   * **使用中のチューナーに、受信の状態と C/N が出る** (#2239。分配器のあとでブースターが要るかを見る)。
+   * 生の値は dB と読まれないように「(生の値)」を付けて単位を付けず、何と比べる目安かを表の下に言う。
+   * C/N が変わってもエージェントは通知を出さないので、画面は 5 秒ごとに読み直して追う (読み直すのは C/N だけ)
+   */
+  test("使用中のチューナーに受信の状態と C/N が出て、読み直しで追う", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await request.post(`${stack.agentUrl}/__control/signal?value=raw`);
+    await request.post(`${stack.agentUrl}/__control/tuners?busy=1`);
+    await goto(page, "/settings/reception");
+
+    const tuners = page.getByTestId("tuner-list");
+    const using = tuners.getByTestId("tuner-row").nth(0);
+    await expect(using.getByTestId("tuner-signal")).toHaveText(
+      "同期しています・C/N (生の値): 2,748",
+    );
+    await expect(page.getByTestId("tuner-signal-raw-note")).toContainText(
+      "dB ではありません",
+    );
+    // 空いているチューナーには出さない
+    await expect(
+      tuners.getByTestId("tuner-row").nth(1).getByTestId("tuner-signal"),
+    ).toHaveCount(0);
+
+    // 画面を開き直さずに追う
+    await request.post(`${stack.agentUrl}/__control/signal?value=db`);
+    await expect(using.getByTestId("tuner-signal")).toHaveText(
+      "同期しています・C/N: 25.3 dB",
+      { timeout: 15_000 },
+    );
+    await expect(page.getByTestId("tuner-signal-raw-note")).toHaveCount(0);
+
+    await request.post(`${stack.agentUrl}/__control/signal?value=tune`);
+    await expect(using.getByTestId("tuner-signal")).toHaveText(
+      "同期しています・C/N: 18.2 dB (選局したとき)",
+      { timeout: 15_000 },
+    );
+
+    await request.post(`${stack.agentUrl}/__control/signal?value=unlocked`);
+    await expect(using.getByTestId("tuner-signal")).toHaveText(
+      "同期していません",
+      { timeout: 15_000 },
+    );
+    await request.post(`${stack.agentUrl}/__control/signal?value=raw`);
+  });
 });
 
 /**

@@ -1,5 +1,6 @@
 <script lang="ts">
   import "@anyblades/blades/content/table";
+  import { resolve } from "$app/paths";
   import Ellipsis from "~icons/lucide/ellipsis";
   import ShieldCheck from "~icons/lucide/shield-check";
 
@@ -15,6 +16,7 @@
   } from "#lib/format.js";
   import { held } from "#lib/live-updates.svelte.js";
   import type { CardReaderState } from "#lib/server/scramble.js";
+  import type { TunerSignal } from "#lib/server/tuner.js";
   import { CHANNEL_TYPES } from "#lib/types.js";
 
   import type { PageData } from "./$types";
@@ -100,6 +102,57 @@
     if (count < lastCount) opened = null;
     lastCount = count;
   });
+
+  /**
+   * 受信の状態と C/N の新しい値 (チューナーの番号ごと)。**使用中のチューナーがある間、見えているときだけ 5 秒ごとに読む**
+   * (`signal/+server.ts`。エージェントが読む間隔と同じ)。画面ごと読み直すと、カードリーダーの表のためにカードへ INT を通してしまう。
+   * 一覧が読み直されたら (使い始めた・離した) 捨てて、一覧の値に戻る
+   */
+  let signals = $state<Record<number, TunerSignal | null> | null>(null);
+  $effect(() => {
+    const busy =
+      shownTuners.value?.list.some((tuner) => tuner.channel !== null) ?? false;
+    signals = null;
+    if (!busy) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void fetch(resolve("settings/reception/signal"))
+        .then(async (res) => {
+          if (!res.ok) return;
+          const body = (await res.json()) as {
+            tuners: { index: number; signal: TunerSignal | null }[];
+          };
+          signals = Object.fromEntries(
+            body.tuners.map((tuner) => [tuner.index, tuner.signal]),
+          );
+        })
+        .catch(() => {
+          // 読めなければ前の値のまま。次の周期で読む
+        });
+    }, 5000);
+    return () => clearInterval(timer);
+  });
+  const signalOf = (tuner: {
+    index: number;
+    signal: TunerSignal | null;
+  }): TunerSignal | null =>
+    signals !== null && tuner.index in signals
+      ? (signals[tuner.index] ?? null)
+      : tuner.signal;
+
+  /**
+   * C/N の出し方。**生の値は dB と読まれないように「(生の値)」を付け、単位を付けない** (機材やドライバが返した値のまま。docs/tuners.md「信号レベル」)。
+   * 選局したときに測った値 (px4d) はそう言う
+   */
+  function signalText(signal: TunerSignal): string {
+    const state = signal.locked ? "同期しています" : "同期していません";
+    if (signal.cn === null) return state;
+    const cn =
+      signal.unit === "dB"
+        ? `C/N: ${signal.cn.toFixed(1)} dB${signal.atTune ? " (選局したとき)" : ""}`
+        : `C/N (生の値): ${signal.cn.toLocaleString("ja-JP")}`;
+    return `${state}・${cn}`;
+  }
 
   /** カードリーダーの状態のバッジの色。ほかは色なし */
   const READER_TONE: Partial<Record<CardReaderState, string>> = {
@@ -271,6 +324,18 @@
                           <span class="tag success">空き</span>
                         {/if}
                       </div>
+                      {#if !tuner.disabled && tuner.channel !== null}
+                        {@const signal = signalOf(tuner)}
+                        {#if signal !== null}
+                          <div
+                            class="tiny"
+                            class:text-error={!signal.locked}
+                            data-testid="tuner-signal"
+                          >
+                            {signalText(signal)}
+                          </div>
+                        {/if}
+                      {/if}
                       {#each tuner.users as user, i (i)}
                         <div
                           class="truncate"
@@ -375,6 +440,13 @@
               </tbody>
             </table>
           </div>
+          <!-- 生の値は dB ではない。何と比べるものかを言う (docs/tuners.md「信号レベル」) -->
+          {#if tuners.some((tuner) => tuner.channel !== null && signalOf(tuner)?.unit === "raw")}
+            <p class="tiny muted" data-testid="tuner-signal-raw-note">
+              C/N (生の値) は機材やドライバが返した値のままで、dB
+              ではありません。同じチューナーで、ほかのチャンネルや配線と比べる目安です
+            </p>
+          {/if}
         {/if}
 
         {#if adding}

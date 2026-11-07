@@ -48,6 +48,14 @@ const AGENT_CHANNEL = object({
 });
 export type AgentChannel = Infer<typeof AGENT_CHANNEL>;
 
+const SIGNAL = object({
+  locked: boolean,
+  cn: nullable(number),
+  unit: literal("dB", "raw"),
+  atTune: boolean,
+});
+export type TunerSignal = Infer<typeof SIGNAL>;
+
 const AGENT_TUNER = object({
   index: number,
   name: string,
@@ -69,6 +77,12 @@ const AGENT_TUNER = object({
   users: array(object({ use: string, priority: number })),
   pid: nullable(number),
   error: nullable(string),
+  /**
+   * 受信の状態と C/N。使用中で、機材が測れるときだけ (エージェントが 5 秒ごとに読む)。
+   * `unit` が `raw` なら dB ではなく、機材やドライバが返した値のまま (同じチューナーで比べる目安)。
+   * `atTune` は選局したときの値 (px4d は選局の答えでしか返さない)。docs/tuners.md「信号レベル」
+   */
+  signal: nullable(SIGNAL),
 });
 export type AgentTuner = Infer<typeof AGENT_TUNER>;
 

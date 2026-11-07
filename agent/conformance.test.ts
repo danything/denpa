@@ -286,6 +286,13 @@ interface TunerStatus {
   lnb: string | null;
   channel: { type: string; channel: string } | null;
   users: { use: string; priority: number }[];
+  /** 受信の状態と C/N。使用中で、機材が測れるときだけ (TunerSignal.cs) */
+  signal: {
+    locked: boolean;
+    cn: number | null;
+    unit: "dB" | "raw";
+    atTune: boolean;
+  } | null;
 }
 
 async function tuners(): Promise<TunerStatus[]> {
@@ -646,6 +653,8 @@ describe("チューナー", () => {
     const gr = (await tuners())[0];
     expect(gr.channel).toEqual({ type: "GR", channel: "T16" });
     expect(gr.users).toEqual([{ use: "rec 12", priority: 10 }]);
+    // 偽の選局は機材を持たないので、受信の状態と C/N は測れない (null)
+    expect(gr.signal).toBeNull();
     stream.close();
   });
 
