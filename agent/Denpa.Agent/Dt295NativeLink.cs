@@ -69,7 +69,7 @@ public sealed class Dt295NativeLink
     // --- 24 ビットの範囲 ---
 
     /// <summary>
-    /// 制御転送 1 回ごとと、機材のプログラムへの要求と応答の組 (<see cref="Pump"/>・<see cref="RunI2c"/>・<see cref="TraceI2c"/>) を、1 つのスレッドずつ通す。
+    /// 制御転送 1 回ごとと、機材のプログラムへの要求と応答の組 (<see cref="Pump"/>・<see cref="RunI2c"/>) を、1 つのスレッドずつ通す。
     /// 書き込みのデータも、機材のプログラムの要求と応答も、同じ 64 バイトの場所 (0xC4620。仕様書 3.1) を通るので、要求と応答の読みの間に
     /// 別のスレッドが書き込むと、応答が壊れる (受信中にカードや信号の読みが入るとき)
     /// </summary>
@@ -395,40 +395,6 @@ public sealed class Dt295NativeLink
                 : ReadBytes(Dt295NativePrograms.BatchPhysical + Dt295NativePrograms.BatchResultOffset, count);
         }
         return new I2cReply(code, index, read);
-    }
-
-    /// <summary>
-    /// 診断 (Dt295NativePrograms の操作 3)。機材の中で、アドレスだけの書き (START とアドレスのバイト) を出して、状態と制御の読み値を待たずに並べて返す。
-    /// 返す語: 始めの状態・制御・データ、START のあとの (状態, 制御) × 32、STOP のあとの (状態, 制御)
-    /// </summary>
-    public uint[] TraceI2c(int address)
-    {
-        lock (_gate) return TraceI2cLocked(address);
-    }
-
-    private uint[] TraceI2cLocked(int address)
-    {
-        var request = new byte[64];
-        BinaryPrimitives.WriteUInt32BigEndian(request, Dt295NativePrograms.Magic);
-        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(4), 3);
-        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(12), Dt295NativePrograms.BatchCpu + Dt295NativePrograms.BatchResultOffset);
-        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(16), (uint)address);
-        Controls++;
-        try
-        {
-            _usb.ControlOut(RequestOut, Request, Dt295NativePrograms.RequestValue, Dt295NativePrograms.RequestIndex, request, ControlTimeoutMs);
-        }
-        catch (IOException)
-        {
-            Dead = true;
-            throw;
-        }
-        var reply = new byte[64];
-        DirectRead(Dt295NativePrograms.Staging, reply);
-        var bytes = (int)BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(12));
-        if (bytes is <= 0 or > 1024 || bytes % 4 != 0) throw new Dt295NativeException($"I2C の診断が返したバイト数 {bytes} が想定と違います");
-        var data = ReadBytes(Dt295NativePrograms.BatchPhysical + Dt295NativePrograms.BatchResultOffset, bytes);
-        return [.. Enumerable.Range(0, bytes / 4).Select(i => BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(4 * i)))];
     }
 
     /// <summary>

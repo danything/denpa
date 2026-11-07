@@ -19,9 +19,9 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Dt295NativeProbe
 {
-    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--i2c-trace] [--trace]";
+    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--trace]";
 
-    internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, uint IdlePolls = Dt295NativeDevice.IdlePollsDefault, bool DemodDump = false, bool I2cTrace = false);
+    internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, uint IdlePolls = Dt295NativeDevice.IdlePollsDefault, bool DemodDump = false);
 
     internal static Options? Parse(string[] args)
     {
@@ -33,7 +33,7 @@ public static class Dt295NativeProbe
         if (Value("--channel") is not { } channel || ChannelTable.Parse(channel) is not { } tuning) return null;
         var seconds = 5;
         if (args.Contains("--seconds") && !int.TryParse(Value("--seconds"), NumberStyles.None, CultureInfo.InvariantCulture, out seconds)) return null;
-        return seconds <= 0 ? null : new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), args.Contains("--trace"), args.Contains("--replug"), Value("--output"), DemodDump: args.Contains("--demod-dump"), I2cTrace: args.Contains("--i2c-trace"));
+        return seconds <= 0 ? null : new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), args.Contains("--trace"), args.Contains("--replug"), Value("--output"), DemodDump: args.Contains("--demod-dump"));
     }
 
     public static int Run(string[] args)
@@ -68,7 +68,7 @@ public static class Dt295NativeProbe
         }
         try
         {
-            var timeline = new Dt295Timeline { TraceI2c = options.I2cTrace };
+            var timeline = new Dt295Timeline();
             return Execute(() => Dt295NativeDevice.Acquire(port, timeline), () => Dt295NativeDevice.CloseIfIdle(port), options, Console.Out, Console.Error, timeline);
         }
         finally

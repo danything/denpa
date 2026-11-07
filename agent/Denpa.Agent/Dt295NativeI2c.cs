@@ -235,28 +235,6 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         return [.. results];
     }
 
-    /// <summary>
-    /// 診断。ホストから、機材の中の診断 (<see cref="Dt295NativeLink.TraceI2c"/>) と同じ START とアドレスのバイトを出して、状態と制御を <paramref name="samples"/> 回読む。
-    /// 返す語は機材の診断と同じ並び (始めの状態・制御・データ、(状態, 制御) × samples、STOP のあとの 2 つ)。ホストの読みは 1 回約 60 µs
-    /// </summary>
-    public uint[] HostTrace(int address, int samples)
-    {
-        var words = new List<uint> { link.Read32(Status), link.Read32(Control), link.Read32(Data) };
-        link.Write32(Data, (uint)(address << 1));
-        link.Write32(Control, 0x52);
-        for (var i = 0; i < samples; i++)
-        {
-            words.Add(link.Read32(Status));
-            words.Add(link.Read32(Control));
-        }
-        link.Write32(Control, 0x42);
-        _control = 0x42;
-        words.Add(link.Read32(Status));
-        words.Add(link.Read32(Control));
-        _checkIdle = true;
-        return [.. words];
-    }
-
     public void Write(int address, params byte[] bytes) => Transfer(address, bytes, 0);
 
     public byte[] Read(int address, int count) => Transfer(address, [], count);

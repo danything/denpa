@@ -138,29 +138,6 @@ public class Dt295NativeSequencerTests
     }
 
     [Test]
-    public async Task 診断は_START_のあとの状態と制御を待たずに並べて返し_ホストの診断と同じ並びになる()
-    {
-        var (fake, link, i2c) = Rig(true);
-
-        var device = link.TraceI2c(0x10);
-        var host = i2c.HostTrace(0x10, 16);
-
-        // 始めの 3 語 + (状態, 制御) × 32 + STOP のあとの 2 語 = 69 語。ホストは (状態, 制御) × 16 なので 3 + 32 + 2 = 37 語
-        await Assert.That(device.Length).IsEqualTo(69);
-        await Assert.That(host.Length).IsEqualTo(37);
-        // どちらも START のあとの制御は bit0 を落とした 0x52 から始まり、アドレスだけの書きでバスが使用中 (状態の bit7) になる
-        await Assert.That(device[3 + 1] & 0x10u).IsNotEqualTo(0u);
-        await Assert.That((device[3] & 0x80u) != 0 || (device[3 + 2] & 0x80u) != 0).IsTrue();
-        // 診断のあとも、通常の転送が通る
-        var batch = new Dt295I2cBatch();
-        batch.Write(0x10, 0x01, 0x23);
-        batch.Write(0x10, 0x01);
-        batch.Read(0x10, 1);
-        i2c.Reset();
-        await Assert.That(i2c.Run(batch)[0]).IsEqualTo((byte)0x23);
-    }
-
-    [Test]
     public async Task TS_の要求と_I2C_の順次実行を別のスレッドから交互に出しても_応答が混ざらない()
     {
         // 機材のプログラムの要求と応答は同じ 64 バイトの場所を通る。要求と応答の読みの間に別の要求が入ると、応答が壊れる
