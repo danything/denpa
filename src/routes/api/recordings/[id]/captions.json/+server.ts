@@ -18,8 +18,7 @@ import { run } from "#lib/server/stream.js";
  * エンコードしたもの (mkv) に入っている放送の字幕そのもの (`S_ARIBSUB`) を抜いて、サーバでデコードする。
  * 抜くには ffmpeg が動画を先頭から末尾まで読む (実測 0.1〜1 秒。ディスクが遅いと観はじめの読み込みと取り合う)。
  * **一度作ったものは覚えておき、同じファイルなら作り直さない** (`file-memo.ts`)。
- * **ずっと前にエンコードした録画は画像 (PGS) が入っている**ことがあり、それは読まずに 404 を返す (字幕なし)。
- * 元の TS が残っていれば、再エンコードすると ARIB の字幕が入る。
+ * 画像の字幕 (PGS) は読まずに 404 を返す (扱いは docs/encode.md「字幕は放送の ARIB 字幕をそのまま」)。
  *
  * **まだエンコードできていない録画は元の TS から抜く** (`playback.captionArgs`)。時刻は観る画面の物差し
  * (TS の先頭を 0) に揃える。TS は丸ごと舐めるのでエンコードしたものより時間がかかる (1 時間の BS で 7GB)。
@@ -66,7 +65,10 @@ async function build(argv: string[], ts: boolean): Promise<Made> {
   if (out.length === 0) return { missing: MISSING };
   const pages = pagesFromMkv(out);
   return pages === null
-    ? { missing: "字幕がありません (画像の字幕 (PGS) には対応していません)" }
+    ? {
+        missing:
+          "画像の字幕 (PGS) には対応していません。元の TS が残っていれば、再エンコードすると字幕が入ります",
+      }
     : { json: JSON.stringify(pages) };
 }
 

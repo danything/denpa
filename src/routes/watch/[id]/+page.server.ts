@@ -109,7 +109,7 @@ export const actions = {
       return fail(400, { message: "録画が見つかりません" });
     deleteRecordingFiles(recording, "手動削除");
     /*
-     * 消したら一覧へ戻す。ここで返すと SvelteKit が `load` を回し直し、消えた録画に 410 を投げて
+     * 消したら一覧へ戻す。ここで返すと SvelteKit が `load` を回し直し、消えた録画に 410 を返して
      * 観ていた画面がエラー画面に変わる
      */
     redirect(303, relative(url, "/"));
