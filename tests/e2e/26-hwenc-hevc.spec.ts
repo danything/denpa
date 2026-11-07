@@ -24,7 +24,7 @@ test.describe("GPU で H.265 をエンコードする", () => {
     request,
     stack,
   }) => {
-    // 録画を 2 本録ってエンコードする。どちらもすぐ次の番組 (BS は 5 秒ずつ) を録る。CI で 1.2 分の頃の倍あまりを見る
+    // 録画を 2 本録ってエンコードする。どちらもすぐ次の番組 (BS は 5 秒ずつ) を録る。CI で 1.2 分かかっていた (縮める前)。その倍あまりを見る
     test.setTimeout(180_000);
     clearGpus(stack.hwDir);
     await goto(page, "/settings/recording");

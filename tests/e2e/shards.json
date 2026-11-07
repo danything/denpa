@@ -20,6 +20,7 @@
     "62-chase-raw"
   ],
   "2": [
+    "01-dashboard",
     "11-rule-edit",
     "20-live",
     "20-onair",
@@ -66,7 +67,6 @@
     "61-live-auto"
   ],
   "5": [
-    "01-dashboard",
     "03-recording",
     "22-watch",
     "57-jikkyo",
