@@ -485,7 +485,7 @@
           {
             key: `record-${form.recorded}`,
             kind: "info" as const,
-            text: `録画を始めます: ${form.recorded}`,
+            text: `「${form.recorded}」の録画を始めます`,
           },
         ]
       : []),
@@ -682,7 +682,7 @@
           {/if}
           <!--
                         上に位置、下に押すもの (観る画面と同じ二段)。放送の今にいる間は右端に張り付かせる
-                        (貯めているぶん後ろにいるが、描くと摘みが左へ動いて見える)。MPEG-2 では出さない
+                        (貯めているぶん後ろにいるが、描くとつまみが左へ動いて見える)。MPEG-2 では出さない
                         (遡れるほど持っていない)。録画に譲っている間も出さない (戻るのは通知の「ライブに戻る」)
                     -->
           {#if !player.canvas && player.yielded === null}
@@ -825,6 +825,7 @@
             {#if player.chasing}
               <Extras>
                 <SpeedMenu
+                  testid="live-speed"
                   label="追っかけの速さ"
                   speed={player.speed}
                   onselect={(speed) => player.setSpeed(speed)}

@@ -66,7 +66,7 @@
     onclose,
   }: Props = $props();
 
-  /** 色・位置・大きさを覚えておく鍵 (端末ごと。接頭辞の `player-` は画面をまたいで効くもの) */
+  /** 色・位置・大きさを覚えておくキー (端末ごと。接頭辞の `player-` は画面をまたいで効くもの) */
   const JIKKYO_STYLE_KEY = "player-jikkyo-style";
 
   const COLOR_NAMES: Record<PostColor, string> = {

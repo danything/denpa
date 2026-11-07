@@ -37,7 +37,7 @@
    */
   const turningOff = arming('[data-testid="card-reader-off-confirm"]');
 
-  /** 聞き返したリーダーのスイッチを外して送る。送るのは隠し欄の `change` (`autosave` が拾う) */
+  /** 聞き返したリーダーのスイッチを外して送る。送るのは隠し欄の `change` (`autosave` が受け取る) */
   function confirmOff(form: HTMLFormElement | null, index: number) {
     turningOff.fire();
     const use = form?.querySelector<HTMLInputElement>(

@@ -568,7 +568,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let rawChosen = false;
   /**
    * MPEG-2 をやめたか (デコードするのが間に合わない・音がデコードできない・デコーダが無い)。**この画面を開いている
-   * 間はリクエストし直さない**。戻しては打ち切るを繰り返すと、そのたびに映像が止まる
+   * 間はリクエストし直さない**。MPEG-2 に戻すたびに同じ理由でまたやめることになり、そのたびに映像が止まる
    */
   let rawGaveUp = false;
   /** この端末でデコードできない理由 (`raw/support.ts`)。調べるまでは undefined */

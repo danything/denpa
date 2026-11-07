@@ -1447,10 +1447,10 @@
   let following: HTMLVideoElement | null = null;
   /** 読めなかったとき。黙って黒いままにしない */
   let broken = $state(false);
-  /** 読み込み待ちで止まっているか (輪を出す) */
+  /** 読み込み待ちで止まっているか (「読み込み中」を出す) */
   let buffering = $state(false);
   let bufferTimer: ReturnType<typeof setTimeout> | null = null;
-  /** 輪を出すまでの間 (ms)。コマ落ち程度の詰まりで毎回出すと点滅するだけになる */
+  /** 「読み込み中」を出すまでの間 (ms)。コマ落ち程度の詰まりで毎回出すと点滅するだけになる */
   const BUFFER_NOTICE = 400;
   /** 繋ぎが切れて繋ぎ直している最中か (`recover`) */
   let resuming = $state(false);
@@ -1551,32 +1551,32 @@
   let skipped = $state(false);
   let skipNotice: ReturnType<typeof setTimeout> | null = null;
   /**
-   * 跨いでいる間、最後の本編のコマで蓋をする面。先読み (`CM_LEAD`) だけでは、コンポジタへ渡し済みの
+   * 跨いでいる間、最後の本編のコマで覆う面。先読み (`CM_LEAD`) だけでは、コンポジタへ渡し済みの
    * コマが出てしまう。黒で塗らないのは、止まったコマのほうが飛んだように見えるため
    */
   let cover = $state<HTMLCanvasElement | null>(null);
-  /** 蓋をしているか */
+  /** 覆っているか */
   let hopping = $state(false);
   /**
-   * 飛んだ先が映るのを待っているか。`hopping` とは別。開いた直後は蓋だけ先に出してチャプターを待つが、
-   * まだ飛ぶ判断はしていないので、蓋を理由に `hopCm` を止めてはいけない
+   * 飛んだ先が映るのを待っているか。`hopping` とは別。開いた直後は覆いだけ先に出してチャプターを待つが、
+   * まだ飛ぶ判断はしていないので、覆いを理由に `hopCm` を止めてはいけない
    */
   let waiting = false;
-  /** 蓋が黒塗りか (写したコマではないか。`shut`) */
+  /** 覆いが黒塗りか (写したコマではないか。`shut`) */
   let blanked = false;
-  /** 飛んだ先 (秒)。ここまで来たら蓋を外す */
+  /** 飛んだ先 (秒)。ここまで来たら覆いを外す */
   let hopTo = 0;
-  /** 飛んだ先に着いたと数えたコマ数。`SETTLED` まで数えてから蓋を外す */
+  /** 飛んだ先に着いたと数えたコマ数。`SETTLED` まで数えてから覆いを外す */
   let settled = 0;
   /**
-   * 蓋を外すまでに待つコマ数。`requestVideoFrameCallback` はコンポジタへ渡したところで呼ばれ、
+   * 覆いを外すまでに待つコマ数。`requestVideoFrameCallback` はコンポジタへ渡したところで呼ばれ、
    * Windows の Chrome / Edge は映像を DOM と別の面に出すので、1 コマで外すと画面だけ CM のまま残る
    * (実機)。4 コマ (0.13 秒) なら飛んだ間合いに紛れる。`mediaTime` の無いブラウザは `currentTime` で数える
    */
   const SETTLED = 4;
-  /** 蓋の外し忘れ止め。飛んだ先が来ないまま止まっても、いつかは外す */
+  /** 覆いの外し忘れ止め。飛んだ先が来ないまま止まっても、いつかは外す */
   let hopGiveUp: ReturnType<typeof setTimeout> | null = null;
-  /** 蓋をしておく上限 (ms) */
+  /** 覆っておく上限 (ms) */
   const HOP_GIVE_UP = 2_000;
 
   /** どこまで観たかを書き送る間隔 (ms) */
@@ -1596,7 +1596,7 @@
   onMount(() => {
     setSpeed(storedSpeed(), false);
     skipCm = skipCmAtStart(rec.cm_note, stored(SKIP_CM_KEY));
-    // チャプターが来るまで蓋をしておく (頭が CM のことが多い。`settle`)
+    // チャプターが来るまで覆っておく (頭が CM のことが多い。`settle`)
     if (skipCm) shut();
     void loadChapters().then(() => {
       chaptersReady = true;
@@ -1699,7 +1699,7 @@
     }
     if (resumed || video === null) return;
     resumed = true;
-    // この場面から観るときも `settle` を通す (通らないと蓋が待つ上限の時間まで残る)
+    // この場面から観るときも `settle` を通す (通らないと覆いが待つ上限の時間まで残る)
     if (sceneAt !== null) {
       video.currentTime = sceneAt;
       sceneAt = null;
@@ -1911,7 +1911,7 @@
     const to = skipTarget(chapters, mediaTime(), CM_LEAD);
     if (to === null) return;
     /*
-     * canvas は蓋をしない。プレイヤーは飛び先より前のフレームを捨て、描けるまで本編の最後のコマを
+     * canvas は覆わない。プレイヤーは飛び先より前のフレームを捨て、描けるまで本編の最後のコマを
      * 出したままにする (`raw/worker.ts` の `floor`)。字幕だけ消す
      */
     if (canvas === null) shut();
@@ -1927,8 +1927,8 @@
   }
 
   /**
-   * いま映っているコマを写して蓋をする (飛ぶ前に呼ぶ)。写すのは本編にいるときだけ。CM の中
-   * (チャプターがまだ無いときも) で写すと蓋が CM の 1 コマになる。写せないときは黒で塗って枠ごと覆う。
+   * いま映っているコマを写して覆う (飛ぶ前に呼ぶ)。写すのは本編にいるときだけ。CM の中
+   * (チャプターがまだ無いときも) で写すと覆いが CM の 1 コマになる。写せないときは黒で塗って枠ごと覆う。
    * CM の字幕も一緒に消す
    */
   function shut(): void {
@@ -1963,7 +1963,7 @@
     hopGiveUp = setTimeout(open, HOP_GIVE_UP);
   }
 
-  /** 蓋を外す。飛んだ先が映ったとき (`follow`) と、待つ上限の時間を過ぎたとき */
+  /** 覆いを外す。飛んだ先が映ったとき (`follow`) と、待つ上限の時間を過ぎたとき */
   function open(): void {
     hopping = false;
     waiting = false;
@@ -1976,14 +1976,14 @@
 
   /**
    * 観はじめの 1 回。チャプターが揃い、始める位置 (続きか頭か。`resume`) も決まってから、始まりが CM なら飛ぶ。
-   * 取得している間は黒い蓋をしておく (本編前の CM が一瞬流れていた)。位置を待たないと頭の CM を
+   * 取得している間は黒く覆っておく (本編前の CM が一瞬流れていた)。位置を待たないと頭の CM を
    * 飛んでから続きへ移り、リロードのたびに「CM を飛ばしました」が出ていた。両方から呼び、遅いほうで決める
    */
   let chaptersReady = false;
   function settle(): void {
     if (!chaptersReady || !resumed) return;
     hopCm();
-    // 飛ばなかった (CM ではなかった・切ってある)。蓋は要らない
+    // 飛ばなかった (CM ではなかった・切ってある)。覆いは要らない
     if (!waiting) open();
   }
 
@@ -2078,9 +2078,9 @@
     }
   }
 
-  /** 詰まった。**少し待ってから**輪を出す */
+  /** 詰まった。**少し待ってから**「読み込み中」を出す */
   function stall(): void {
-    // CM を跨いでいる間は蓋がある。そちらに任せる
+    // CM を跨いでいる間は覆いがある。そちらに任せる
     if (hopping || bufferTimer !== null || buffering) return;
     bufferTimer = setTimeout(() => {
       bufferTimer = null;
@@ -2088,7 +2088,7 @@
     }, BUFFER_NOTICE);
   }
 
-  /** 動き出した。輪を引っ込める */
+  /** 動き出した。「読み込み中」を引っ込める */
   function flowing(): void {
     if (bufferTimer !== null) {
       clearTimeout(bufferTimer);
@@ -2131,7 +2131,7 @@
     });
   }
 
-  /** 字幕と CM の蓋を映像が出ているところにぴったり重ねる (`fitRect`) */
+  /** 字幕と CM の覆いを映像が出ているところにぴったり重ねる (`fitRect`) */
   function place(): void {
     if (video === null) return;
     // canvas に描いているときは `<video>` は空なので、放送の 16:9 とみなす
@@ -2139,7 +2139,7 @@
       ? [16, 9]
       : [video.videoWidth, video.videoHeight];
     const rect = fitRect(video.clientWidth, video.clientHeight, width, height);
-    // 画面の画素の境目に揃える (端数だと字の縁が滲む)。端は外へ丸め、蓋が映像の縁を残さず覆うように
+    // 画面の画素の境目に揃える (端数だと字の縁が滲む)。端は外へ丸め、覆いが映像の縁を残さず覆うように
     const dpr = window.devicePixelRatio || 1;
     const left = Math.floor((video.offsetLeft + rect.left) * dpr) / dpr;
     const top = Math.floor((video.offsetTop + rect.top) * dpr) / dpr;
@@ -2154,7 +2154,7 @@
       layer.style.width = `${right - left}px`;
       layer.style.height = `${bottom - top}px`;
     }
-    // 黒塗りの蓋は枠ごと覆う (開いた直後はまだ映像の大きさが分からず、`fitRect` が当てにならない)
+    // 黒塗りの覆いは枠ごと覆う (開いた直後はまだ映像の大きさが分からず、`fitRect` が当てにならない)
     if (blanked && cover !== null) {
       cover.style.left = "0";
       cover.style.top = "0";
@@ -2182,7 +2182,7 @@
 
   /**
    * いまの位置に合う 1 枚を重ねる (描き方はライブと同じ `caption-draw.ts`)。変わったときだけ描く。
-   * 蓋の下では描かない (CM の字幕を仕込むことになる)
+   * 覆いの下では描かない (CM の字幕を仕込むことになる)
    */
   function paint(): void {
     if (hopping || !captions || overlay === null) return;
@@ -2368,7 +2368,7 @@
             }}
             onpause={() => {
               playing = false;
-              // 止めたのは詰まりではない。輪は引っ込める
+              // 止めたのは詰まりではない。「読み込み中」は引っ込める
               flowing();
             }}
             onended={finished}
@@ -2422,7 +2422,7 @@
             aria-hidden="true"
           ></canvas>
           <!--
-                    CM を跨ぐ間の蓋。字幕の上、操作バーや通知 (z-index 10) の下。出し入れは `hidden` で。
+                    CM を跨ぐ間の覆い。字幕の上、操作バーや通知 (z-index 10) の下。出し入れは `hidden` で。
                     style に式を書くと `hopping` が変わるたびに書き直され、`place` が書いた位置と大きさが消える
                 -->
           <canvas

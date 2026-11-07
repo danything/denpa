@@ -187,7 +187,8 @@
     margin: 0;
     padding: 0;
     border: 0;
-    border-radius: var(--dp-radius);
+    /* アイコンだけのボタンは円 (docs/design.md の「ボタン」) */
+    border-radius: var(--dp-radius-full);
     background: transparent;
     box-shadow: none;
     color: var(--dp-fg);

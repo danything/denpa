@@ -19,10 +19,10 @@
  *
  * **限られた画面にしか出ない部品は、それを描くコンポーネントが <script> で読む**
  * (`import "@anyblades/blades/components/modal";`)。その画面の CSS にだけ入る。
- * - content/table … `HomeCalendar`・設定の `Channels`・`Tuners`
+ * - content/table … `HomeCalendar`・設定の `Channels`・`Tuners`・`ContractDialog`
  * - forms/input-range … `player/SeekBar`
  * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `MigrateProgress`・`Channels`
- * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`・設定の `IssueDialog`
+ * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`・設定の `IssueDialog`・`ContractDialog`
  * - components/progress … `home/TimelineRow`・`JobProgress`・設定の `Channels`
  *
  * 部品を足すとき: 当てる要素がどの画面にも出るならここに (並びを守って)、そうでなければ描くコンポーネントの
@@ -131,7 +131,7 @@
      * 時間 (`--dp-duration`・`-enter`・`-move`・`-exit`) と曲線 (`--dp-ease`・`-spring`・`-exit`) の使い分けは docs/design.md の表
      *
      * - `--dp-pulse` … 録画中の点の脈 (繰り返し。ゆっくり控えめに)
-     * - `--dp-shine` … 動いているバーの上を流れる光の筋 (繰り返し)
+     * - `--dp-shine` … 動いているバーの脈と、骨組み・遷移中のバーの上を流れる光の筋 (繰り返し)
      */
   --dp-duration: 120ms;
   --dp-duration-enter: 240ms;
@@ -1921,7 +1921,10 @@ button.text-button:hover {
   color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
-.menu-item:where([aria-current]:not([aria-current="false"]))::before {
+.menu-item:where(
+    [aria-current]:not([aria-current="false"]),
+    [role="menuitemradio"][aria-checked="true"]
+  )::before {
   content: "";
   position: absolute;
   inset-block: 0.5rem;
@@ -2085,13 +2088,8 @@ button.text-button:hover {
   color: var(--dp-on-video-on);
   font-weight: var(--dp-weight-bold);
 }
+/* 左の縦線は `.menu-item` の選んでいる項目と同じ (`menuitemradio`)。色だけ空色の字に合わせる */
 .overlay-menu .option[data-active]::before {
-  content: "";
-  position: absolute;
-  inset-block: 0.5rem;
-  left: 0;
-  width: var(--dp-mark);
-  border-radius: var(--dp-mark);
   background: currentColor;
 }
 /* 映像の上に出す短い通知 (`StageNote`・追っかけの「続きは観る画面で」・ライブの「録画が始まったため、局を切り替えました」) */
@@ -2136,7 +2134,7 @@ dialog {
   outline: none;
 }
 /*
- * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)。
+ * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`・`ContractDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)。
  * 右上の ✕ は箱の角に置き、見出しはその分だけ右を空ける
  */
 .modal-backdrop {
@@ -2685,7 +2683,7 @@ dialog[open] > article {
 }
 
 /*
- * **動き続けるもの (録画中の点・光の筋・「保存しました」・骨組みの光) は、動かしてよい端末でだけ動かす。**
+ * **動き続けるもの (録画中の点・動いているバーの脈・「保存しました」・骨組みの光) は、動かしてよい端末でだけ動かす。**
  * 動きを減らす設定と、ソフトウェアで描いている端末 (`<html data-lite>`。`#lib/lite.ts`) では動きを足さず、
  * 上の止まった姿のまま見せる (docs/design.md の「動き」)。遷移中のバー (`+layout.svelte` の `.nav-progress`) も同じ決まり
  */
