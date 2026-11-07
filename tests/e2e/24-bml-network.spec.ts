@@ -403,13 +403,12 @@ test.describe("データ放送の双方向", () => {
         ),
       )
       .toBe("50%");
-    // テレビと同じく、映像はアプリの上に出す (アプリは枠の周りを塗る)
+    // テレビと同じく、映像はアプリの上に出す (アプリは枠の周りを塗る。`--dp-z-stage-window`)
     expect(
-      await page.evaluate(
-        () =>
-          document.querySelector<HTMLElement>("[data-bml-window]")?.style
-            .zIndex,
-      ),
+      await page.evaluate(() => {
+        const media = document.querySelector("[data-bml-window]");
+        return media === null ? null : getComputedStyle(media).zIndex;
+      }),
     ).toBe("6");
     // object を隠したら映像も出さない (NHK の番組表は画面いっぱいの object を visibility: hidden で置く。出すと覆う)
     await page

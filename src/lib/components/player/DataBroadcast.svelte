@@ -431,9 +431,9 @@
       media.style.opacity = "";
       /*
        * **アプリの上に出す。** テレビは映像を放送の object の場所に描く。アプリは枠の周りを塗る
-       * (NHK は枠を黒、画面を灰色) ので、下に敷いたままだと隠れる。操作バー (10) よりは下
+       * (NHK は枠を黒、画面を灰色) ので、下に敷いたままだと隠れる。操作バーの影よりは下 (`--dp-z-stage-window`)
        */
-      media.style.zIndex = "6";
+      media.style.zIndex = "var(--dp-z-stage-window)";
       media.style.inset = "auto";
       media.style.left = share(appVideo.left / VIEWPORT.width);
       media.style.top = share(appVideo.top / VIEWPORT.height);

@@ -612,7 +612,7 @@ start_time (パケット)    6115.872   ← これを信じると 0.363
 | AV1        | 無し     | 16 と 9 (DisplayUnit 3) | `pasp` 4:3                      |
 
 CM を切るときの concat と、チャプターを書き足すときの `-c copy` でも DisplayWidth・DisplayHeight は残ります。
-H.265 は libx265 で作って確かめました。denpa は GPU でだけエンコードするため、GPU の経路は試せていません。
+H.265 は libx265 で作って確かめました。denpa は H.265 を GPU でだけエンコードしますが、GPU の経路は試せていません。
 
 再生先で 16:9 に映るかは、Playwright のブラウザで 640x360 の枠に `object-fit: contain` で置いて見ました
 (`videoWidth`・`videoHeight` と、枠の左右の帯に映像が出ているか)。
