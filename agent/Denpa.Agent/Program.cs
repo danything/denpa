@@ -170,14 +170,21 @@ var tune = new TuneOptions(
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
 
 /*
- * **px4-userland の筐体の px4d を起こす。** 顔ぶれ (設定か、自動で見つけたもの) にある筐体ぶん。
- * 筐体も受信機も px4d --list-json で分かっているので、ここで顔ぶれは変わらない (Px4.cs)
+ * **px4-userland の筐体の px4d を起こす。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
+ * 使う受信機が無くなった筐体の px4d は止める (内蔵カードリーダーを復号に使っていれば止めない。UserlandDaemon.Prepare)。
+ * 筐体も受信機も px4d --list-json で分かっているので、ここで顔ぶれは変わらない (Px4.cs)。
+ * 画面からの書き換えと抜き差しで同時に呼ばれても、あとから呼んだほうが最後の設定で揃えるよう 1 つずつ通す
  */
+var daemonsGate = new Lock();
 void PrepareDaemons()
 {
-    UserlandDaemon.Prepare(Px4Userland.IdsIn(pool.Tuners).ToList(), Px4Daemon.For);
-    // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
-    UserlandDaemon.Prepare(AsicenUserland.IdsIn(pool.Tuners).ToList(), AsicenDaemon.For);
+    lock (daemonsGate)
+    {
+        bool CardInUse(string name) => Keys.Local.Name == name;
+        UserlandDaemon.Prepare<Px4Daemon>([.. Px4Userland.IdsIn(pool.Tuners)], Px4Daemon.For, CardInUse);
+        // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
+        UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For, CardInUse);
+    }
 }
 
 /*
@@ -288,7 +295,18 @@ app.Use(async (HttpContext http, RequestDelegate next) =>
             await next(http);
             return;
         case AgentTls.Gate.Pair:
-            var result = tls.Pair(peer, await Respond.Read(http));
+            /*
+             * 本文は AgentTls.PairBodyLimit まで (1 バイト多く読めたら断る)。Kestrel の上限もそこに合わせ、
+             * 応答のあとに Kestrel が残りを読み捨てるときも、上限を越えたところで接続を切らせる
+             */
+            if (http.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } size) size.MaxRequestBodySize = AgentTls.PairBodyLimit + 1;
+            var (body, tooLarge) = await AgentTls.ReadPairBody(http.Request.Body, http.Request.ContentLength);
+            if (tooLarge)
+            {
+                await Respond.Error(http, $"{AgentTls.PairBodyTooLarge} (上限 {AgentTls.PairBodyLimit} バイト)", 413);
+                return;
+            }
+            var result = tls.Pair(peer, body);
             if (result.Proof is { } proof) await Respond.Write(http, new JsonObject { ["proof"] = proof });
             else await Respond.Error(http, result.Error!, result.Status);
             return;
@@ -579,6 +597,8 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
             else if (Zd1j.Parse(device) is { } zd1j) Zd1jBoard.CloseIfIdle(zd1j);
         }
     });
+    // 内蔵カードリーダーのためだけに動かしていた px4d / asicend を止める (UserlandDaemon.Prepare)。返事は待たせない
+    _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, new JsonObject { ["disabled"] = Json.Strings(disabled.Order(StringComparer.Ordinal)) });
 });
 
@@ -752,7 +772,8 @@ internal static class Respond
 ///
 /// <para>
 /// 待つのは録画だけ (<see cref="TunerPool.Recording"/>)。待ち終えたら
-/// <c>StopApplication</c> を呼んで、いつもどおり畳ませる。
+/// <c>StopApplication</c> を呼んで、いつもどおり畳ませる。**待っている間に 2 回目の合図が来たら、待たずに畳む**
+/// (docs/agent.md「止められたら録画が終わるまで待つ」)。
 /// </para>
 ///
 /// <para>
@@ -768,6 +789,9 @@ internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetim
     private readonly List<PosixSignalRegistration> _signals = [];
     private int _stopping;
 
+    /// <summary>待ち終えた (録画が終わった・上限を過ぎた・2 回目の合図が来た) ら済む</summary>
+    private readonly TaskCompletionSource _waiting = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public Task WaitForStartAsync(CancellationToken token)
     {
         foreach (var signal in new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT, PosixSignal.SIGQUIT })
@@ -781,19 +805,37 @@ internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetim
     {
         // 既定ではその場で終了する。それを止め、畳むのはこちらから指示する
         context.Cancel = true;
-        if (Interlocked.Exchange(ref _stopping, 1) == 1) return;
-        _ = Task.Run(WaitThenStop);
+        if (Interlocked.Exchange(ref _stopping, 1) == 0)
+        {
+            _ = Task.Run(WaitThenStop);
+            return;
+        }
+        /*
+         * **2 回目の合図で待つのをやめる。** 待っている間は 1 回目と同じく合図を受け流すので、これが無いと
+         * 手で動かしているときの Ctrl+C も SIGTERM も効かず、SHUTDOWN_WAIT (既定 6 時間) まで止まらなかった。
+         * 録画のストリームは切れる (denpa はエージェントがまた動いてから終了時刻まで録り続ける)
+         */
+        // 録画を待っていたときだけ記録に出す (待たずに畳んでいる途中の合図では出さない)
+        if (_waiting.TrySetResult() && _holding) Log.Write("止まれの合図をもう一度受けたので、録画を待たずに畳みます");
     }
+
+    /// <summary>録画が終わるのを待っている間だけ true</summary>
+    private volatile bool _holding;
 
     private async Task WaitThenStop()
     {
         if (waitMs > 0 && pool.Recording)
         {
-            Log.Write($"止まれの合図。録画が終わるまで待ちます (上限 {waitMs / 1000} 秒)");
+            _holding = true;
+            Log.Write($"止まれの合図。録画が終わるまで待ちます (上限 {waitMs / 1000} 秒。もう一度合図を送ると待たずに畳みます)");
             var until = DateTime.UtcNow.AddMilliseconds(waitMs);
-            while (pool.Recording && DateTime.UtcNow < until) await Task.Delay(1000);
-            Log.Write(pool.Recording ? "待ちきれないので畳みます" : "録画が終わったので畳みます");
+            while (pool.Recording && DateTime.UtcNow < until && !_waiting.Task.IsCompleted)
+            {
+                await Task.WhenAny(_waiting.Task, Task.Delay(1000));
+            }
+            if (!_waiting.Task.IsCompleted) Log.Write(pool.Recording ? "待ちきれないので畳みます" : "録画が終わったので畳みます");
         }
+        _waiting.TrySetResult();
         lifetime.StopApplication();
     }
 

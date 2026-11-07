@@ -33,6 +33,20 @@ public class ProbeTests
     }
 
     /*
+     * `--tune` の Mbps は、`--dt295-probe` と同じく最初の読みから最後の読みまでで割る。
+     * 最初の TS が遅れても、決めた秒数で割ったときのように少なく出ない
+     */
+    [Test]
+    public async Task tune_の_Mbps_は最初の読みから最後の読みまでで割る()
+    {
+        await Task.Yield();
+        // 最初の読み 1 MB のあと、2 秒で 5 MB 読んだ (20 Mbps)。決めた秒数 (たとえば 10 秒) には左右されない
+        await Assert.That(Probe.Rate(6_000_000, 1_000_000, TimeSpan.FromSeconds(2))).IsEqualTo(20.0);
+        // 読みが 1 回だけなら測れない
+        await Assert.That(Probe.Rate(1_000_000, 1_000_000, TimeSpan.Zero)).IsNull();
+    }
+
+    /*
      * `--dt295-probe --trace` は、機材への読み書きを 1 行ずつ渡す (Dt295NativeDevice.Acquire の trace)。
      * 開くときの読み書き (窓の切り替え・レジスタの読み書き) が届けばよい
      */

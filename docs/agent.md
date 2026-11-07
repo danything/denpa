@@ -241,6 +241,17 @@ CM 検出用のロゴはチューナーを使いません。録れたものか�
   `sh -c` 越しに起こすので、中身が生き残って次の選局とぶつからないように。
   イメージにはシェルが無いので、`FAKE_TUNE` はホストで組んだ実行ファイルで使います (適合テストもそう)
 
+## 止められたら録画が終わるまで待つ
+
+**1 回目の止まれの合図 (SIGTERM・SIGINT・Ctrl+C) では、録画が終わってから止まります** (`Program.cs` の `Drain`)。
+待つ上限は `SHUTDOWN_WAIT` (既定 6 時間。[config.md](config.md#チューナーエージェント)) で、録画していなければすぐ止まります。
+待つ理由は [architecture.md](architecture.md#エージェントも録画が終わるまで待ちます) にあります。
+
+**待っている間にもう一度合図を送ると、待つのをやめて止まります。** 手で動かしているなら Ctrl+C をもう一度押します。
+録画のストリームは途中で切れ、denpa はエージェントがまた動いてから終了時刻まで録り続けます (`recorder.ts`)。
+止まっていた間のぶんは欠けます。
+2 回目が無かった頃は、待っている間の Ctrl+C と SIGTERM がすべて受け流され、`SHUTDOWN_WAIT` まで止まりませんでした。
+
 ## 設定は 2 つのファイルに分ける
 
 既定は Linux (コンテナ) が `/config/tuners.json` と `/config/channels.json`、Mac と Windows が `~/denpa/config/` (`DENPA_HOME` の `config`。インストーラと同じなので、常駐を止めて手で `--tune` などを流しても同じファイルを使う)。`TUNERS_FILE` / `CHANNELS_FILE` で変えられます。どちらも無くて構いません (機材は自分で見つけ、
@@ -430,6 +441,11 @@ ATTACH_STREAM` (SPEC 6.3)。返す (`RELEASE`) のはデバイスを閉じると
 - 起動時に顔ぶれの筐体ぶん `px4d` を起こします (`UserlandDaemon.Prepare` に `Px4Daemon.For` を渡す)。
   ファームウェアを流し込むので ready まで数秒かかります。起こせなくても
   他のチューナー (PT3 など) は動き、選局のときにもう一度試します
+- **使う受信機が無い筐体の `px4d` は動かしません。** 受信機を全部「使わない」にしたら止めて USB を手放し、
+  「使う」に戻したら起こし直します。起動したときも、使う受信機が無い筐体は起こしません。
+  止めるのは、ほかのソフトに機材を渡せるようにするためです ([switch.md](switch.md#並べて動かすとき))。
+  ただし、内蔵カードリーダーをいま復号に使っている間は止めません。止めると、ほかのチューナーの復号まで止まるためです。
+  カードリーダーの表でそのリーダーの「使う」も外すと止まります。asicend も同じです
 - **IT930x のファームウェアはエージェントに同梱しています。** px4d を起こす前に `Px4Firmware.Ensure` が `tuners.json` の隣に書き出し、
   SHA-256 を確かめてから `--firmware` に渡します。違えば px4d を起こさず、理由を px4-userland の受信機すべての `error` に出します
   ([tuner-px4.md](tuner-px4.md#ファームウェア))
@@ -480,7 +496,7 @@ ATTACH_STREAM` (SPEC 6.3)。返す (`RELEASE`) のはデバイスを閉じると
   `/sys/bus/usb/devices` の USB ID とアドレスを読みます。見る USB ID は上流の asicend が受け付けるもの
   (`0b06:0005`、ファームウェア待ちの `1738:5211` / `1738:5216`) だけ。`.1` がファームウェア待ちの筐体は使いません
   (`.2` は待ちのままでも asicend が受け付ける)。上流が一覧を返す API を出したら、そちらに聞くよう変えます
-- **asicend は筐体 1 台につき 1 つ、起動時に起こします** (`AsicenDaemon`)。アドレスは挿し直すたびに変わるので
+- **asicend は筐体 1 台につき 1 つ、起動時に起こします** (`AsicenDaemon`。使う受信機が無い筐体は px4d と同じく止める)。アドレスは挿し直すたびに変わるので
   起こす直前に読み直し、ready は `asicenctl list` が通ることで見ます (`status` はカードの様子も要る)。
   受信機も `asicenctl list` に聞きます (形式は `px4ctl list` と同じ)
 - **カードは asicend の内蔵リーダーを、px4d と同じ IPC で読みます** (`AsicenUserland.Cards`)。上流が用意する
@@ -559,7 +575,8 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
 - **前面の LED は流している間ずっと赤** (DiB8000 の GPIO 1)。選局しなおしでは触らず、止めたら緑に戻します
 - **USB は OS ごとに P/Invoke だけで持ちます** (外のライブラリなし)。Linux は usbfs の ioctl (TS は URB を 16 本出しっぱなし)、
   Windows は WinUSB (利用者が Zadig で WinUSB を当てる。`OVERLAPPED` の読みを 16 本)、macOS は IOKit の IOUSBLib (カーネルの拡張なし。
-  `ReadPipeAsync` を 16 本、CFRunLoop を回す専用のスレッドで受ける)。IOUSBLib では interrupt の読みに時間切れが効かないので、
+  `ReadPipeAsync` を 16 本、CFRunLoop を回す専用のスレッドで受ける)。IOKit では済んだ読みをその場で出し直すので、読む側が詰まったときに
+  溜めるのは、ほかの OS と同じく読みの本数ぶんまでにし、越えたぶんは捨てます。IOUSBLib では interrupt の読みに時間切れが効かないので、
   コア 1 の答えの EP 0x83 は時間切れの無い `ReadPipe` を専用のスレッドで出し続け、届いた答えを自前の時間で待ちます (`UsbReadPump`)。
   device の名前は Windows ならホストコントローラーの並び + ハブのポート、macOS なら `locationID` から、Linux の sysfs と同じ形 (`2-3.2`) に作ります。
   Windows と macOS は実機ではまだ確かめていません
@@ -936,6 +953,8 @@ protocol の選び方ではありません。なので、いちばん退屈な H
 | `POST /denpa/pair` 本文  | `{"client":"<D>","proof":"<base64url>"}`。D が接続の証明書の指紋と違えば 403 (`証明書が名乗りと違います`)                   |
 | denpa が出す proof       | base64url(HMAC-SHA256(合言葉, `denpa-pair/client\n` + A + `\n` + D))。違えば 403 (`合言葉が違います`)                       |
 | エージェントが返す proof | 200 `{"proof": base64url(HMAC-SHA256(合言葉, "denpa-pair/agent\n" + A + "\n" + D))}`。組んだ相手から来ても受ける (組み直し) |
+
+`POST /denpa/pair` の本文は 1024 バイトまでです (`AgentTls.PairBodyLimit`)。組む前の相手からも受けるので、中身 (130 バイトほど) に余裕を足したところで切り、越えたら 413 で断ります。
 
 **置き場は tuners.json の隣の `tls/`** です (コンテナなら `/config/tls`、Mac と Windows は `~/denpa/config/tls`)。
 
