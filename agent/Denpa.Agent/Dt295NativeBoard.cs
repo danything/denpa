@@ -411,6 +411,13 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     /// <summary>0x1902010 に書く開始・停止の値 (実機の観測。仕様書 8.1.4 の 0x200・0x400 は書いても 0 と読めて TS が出ない)</summary>
     private const uint CaptureStartCommand = 0x02000000, CaptureStopCommand = 0x04000000;
 
+    /// <summary>
+    /// 機材のプログラムが要求をまたいで持つ状態 (読み出し位置・パケット内位置・揃え位置・揃えたか。Dt295NativePrograms の作業域) を 0 に戻す。
+    /// 取り込みを設定し直すと書き込み位置・読み出し位置が 0 に戻るので、前の選局の状態を持ち越すと、リングの古い中身を先に送ってしまう。
+    /// 取り込みを始める前 (要求を出す前) に呼ぶ
+    /// </summary>
+    public void ResetPumpState() => link.WriteBytes(Dt295NativePrograms.Frame + Dt295NativePrograms.StateRp, new byte[16]);
+
     /// <summary>取り込みの元の値</summary>
     public sealed record CaptureSaved(uint[] Table, uint R1900404, uint R1900020 = 0);
 

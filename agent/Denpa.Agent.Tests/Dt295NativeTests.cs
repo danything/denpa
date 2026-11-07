@@ -597,4 +597,24 @@ public class Dt295NativeTests
         device.Release();
         Dt295NativeDevice.CloseIfIdle(port);
     }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ロックの試験は_くり返した回数と成功の割合と時間を出し_全部成功なら_0_を返す(bool reopen)
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromSeconds(1), false, IdlePolls: 2000, LockTest: 3, Reopen: reopen);
+        var output = new StringWriter();
+
+        var code = Dt295NativeProbe.LockTest(options, timeline => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000, timeline),
+            () => Dt295NativeDevice.CloseIfIdle(port), () => Dt295NativeDevice.CloseIfIdle(port), output);
+
+        var text = output.ToString();
+        await Assert.That(code).IsEqualTo(0);
+        await Assert.That(text).Contains($"機材を開き直す: {(reopen ? "はい" : "いいえ")}");
+        await Assert.That(text).Contains("結果: 成功 3/3 (100.0%)");
+        await Assert.That(text).Contains("受信の確認 最小");
+    }
 }

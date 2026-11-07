@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Buffers.Binary;
 
 namespace Denpa.Agent;
@@ -77,9 +78,29 @@ public sealed class Dt295NativeLink
     /// </summary>
     private readonly Lock _gate = new();
 
+    /// <summary>
+    /// ロックを待っている呼び出しの数。**<see cref="Pump"/> は、待っている呼び出しがいる間は次の要求を出さずに譲る。**
+    /// .NET のロックは公平ではなく、TS の要求を続けて出すスレッドが、放してすぐ取り直して、カードや I2C の読み書きを長く待たせた
+    /// (衛星は選局が短く、カードの準備と TS の送り出しが重なる)
+    /// </summary>
+    private int _waiters;
+
+    private Lock.Scope Enter()
+    {
+        Interlocked.Increment(ref _waiters);
+        try
+        {
+            return _gate.EnterScope();
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _waiters);
+        }
+    }
+
     private void DirectRead(uint address, Span<byte> data)
     {
-        lock (_gate)
+        using (Enter())
         {
             var (value, index) = Setup(address);
             Controls++;
@@ -99,7 +120,7 @@ public sealed class Dt295NativeLink
 
     private void DirectWrite(uint address, ReadOnlySpan<byte> data, ushort valueLow = 0)
     {
-        lock (_gate)
+        using (Enter())
         {
             var (value, index) = Setup(address);
             Controls++;
@@ -318,7 +339,11 @@ public sealed class Dt295NativeLink
     /// </summary>
     public NativeReply Pump(uint packets, uint idleLimit, int timeoutMs)
     {
-        lock (_gate) return PumpLocked(packets, idleLimit, timeoutMs);
+        // 待っている呼び出しに先に譲る (最大 20 ms。カードの 1 回の読み書きや I2C の 1 回の要求は、それより短く済む)
+        var spin = new SpinWait();
+        var until = Stopwatch.GetTimestamp() + Stopwatch.Frequency / 50;
+        while (Volatile.Read(ref _waiters) > 0 && Stopwatch.GetTimestamp() < until) spin.SpinOnce();
+        using (Enter()) return PumpLocked(packets, idleLimit, timeoutMs);
     }
 
     private NativeReply PumpLocked(uint packets, uint idleLimit, int timeoutMs)
@@ -352,7 +377,7 @@ public sealed class Dt295NativeLink
     /// </summary>
     public I2cReply RunI2c(ReadOnlySpan<byte> ops, int transfers, int readBytes)
     {
-        lock (_gate) return RunI2cLocked(ops, transfers, readBytes);
+        using (Enter()) return RunI2cLocked(ops, transfers, readBytes);
     }
 
     private I2cReply RunI2cLocked(ReadOnlySpan<byte> ops, int transfers, int readBytes)

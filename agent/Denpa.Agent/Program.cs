@@ -73,6 +73,19 @@ if (args is ["--status"])
         : "127.0.0.1";
     return await AgentTls.Status(config.TlsDir, target, port);
 }
+/*
+ * 動いているエージェントの /denpa/stream を使って、選局の要求から最初の TS までの時間と平均の Mbps を測る (StreamBench.cs)。
+ * DVB (PT3 など) と PIX-DT295 を、エージェントの同じ道で比べるための道具。本番の利用者がいるチューナーでは動かさない
+ */
+if (args.ElementAtOrDefault(0) == "--stream-bench")
+{
+    var benchTarget = Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } benchBound
+        && IPAddress.TryParse(benchBound, out var benchAddress)
+        && !benchAddress.Equals(IPAddress.Any) && !benchAddress.Equals(IPAddress.IPv6Any)
+        ? benchBound
+        : "127.0.0.1";
+    return await StreamBench.Run(args, config.TlsDir, benchTarget, port);
+}
 // PIX-DT295 を確かめる。機材を設定して選局し (--card ならカードを読み)、受信の統計を出す (Dt295NativeProbe.cs)
 if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295NativeProbe.Run(args);
 /*
@@ -90,6 +103,7 @@ if (args.Length > 0)
     Console.Error.WriteLine($"       {Probe.DecodeUsage}");
     Console.Error.WriteLine($"       {Probe.CardUsage}");
     Console.Error.WriteLine($"       {Dt295NativeProbe.Usage}");
+    Console.Error.WriteLine($"       {StreamBench.Usage}");
     return 2;
 }
 

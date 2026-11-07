@@ -167,6 +167,26 @@ public sealed class AgentTls
         }
     }
 
+    /// <summary>
+    /// 動いているエージェントに自分の証明書で繋ぐクライアント (<c>--status</c>・<c>--stream-bench</c>)。サーバの証明書が agent.crt と同じかも確かめる。
+    /// 呼んだ側が <see cref="IDisposable"/> を閉じる
+    /// </summary>
+    public static HttpClient OwnClient(string dir, TimeSpan timeout)
+    {
+        var certificate = LoadCertificate(dir);
+        var expected = FingerprintOf(certificate);
+        var handler = new SocketsHttpHandler
+        {
+            SslOptions =
+            {
+                ClientCertificates = [certificate],
+                RemoteCertificateValidationCallback = (_, server, _, _) =>
+                    server is not null && FingerprintOf(server.GetRawCertData()) == expected,
+            },
+        };
+        return new HttpClient(handler) { Timeout = timeout };
+    }
+
     /// <summary><c>POST /denpa/pair</c> の答え。断ったら <c>Error</c>、組めたら返す <c>Proof</c> が入る</summary>
     public readonly record struct PairResult(int Status, string? Error, string? Proof);
 

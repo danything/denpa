@@ -123,6 +123,7 @@ internal sealed class Dt295NativeStream
         var timeline = _device.Timeline;
         using (timeline.Step("取り込みの設定", "仕様書 8.1.3。28 項目を書いて読み戻す")) _capture = board.ConfigureCapture();
         using (timeline.Step("端点の開始", "仕様書 8.3.1")) _endpoint = board.StartEndpoint();
+        board.ResetPumpState();
         using (timeline.Step("取り込みの開始", "0x1902010 = 0x02000000")) board.StartCapture();
         _capturing = true;
     }
