@@ -35,11 +35,14 @@ public sealed class Dt295NativeDevice
 
     internal uint IdlePolls { get; }
 
+    /// <summary>時間の内訳を取るとき (--dt295-probe)。取らなければ null</summary>
+    internal Dt295Timeline? Timeline { get; }
+
     /// <summary>設定の書き込みにかかった時間と、そのときの制御転送の数 (記録と比較用)</summary>
     public (TimeSpan Time, long Controls) SetUp { get; }
 
     private Dt295NativeDevice(string port, IUsbDevice usb, Dt295NativeLink link, Dt295NativeBoard board, Dt295NativeFrontend frontend,
-        Stack<(string, Action)> undo, (TimeSpan, long) setUp, uint idlePolls)
+        Stack<(string, Action)> undo, (TimeSpan, long) setUp, uint idlePolls, Dt295Timeline? timeline)
     {
         Port = port;
         Usb = usb;
@@ -49,18 +52,19 @@ public sealed class Dt295NativeDevice
         _undo = undo;
         SetUp = setUp;
         IdlePolls = idlePolls;
+        Timeline = timeline;
     }
 
     /// <summary>USB が抜けた・制御転送が通らなくなったなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
     public bool Faulted => _faulted || Link.Dead;
 
     /// <summary>取る。開いていなければ、そのとき開いて設定する。**返すのは <see cref="Release"/>**</summary>
-    public static Dt295NativeDevice Acquire(string port) =>
-        Acquire(port, () => Dt295.OpenUsb(port), OperatingSystem.IsLinux() ? () => UsbSysfs.PowerCycle(UsbSysfs.Devices, port, TimeSpan.FromSeconds(10)) : null);
+    public static Dt295NativeDevice Acquire(string port, Dt295Timeline? timeline = null) =>
+        Acquire(port, () => Dt295.OpenUsb(port), OperatingSystem.IsLinux() ? () => UsbSysfs.PowerCycle(UsbSysfs.Devices, port, TimeSpan.FromSeconds(10)) : null, timeline: timeline);
 
     /// <param name="open">USB を開く</param>
     /// <param name="powerCycle">ポートの電源を入れ直す (Linux)。null なら挿し直しを求めて断る</param>
-    internal static Dt295NativeDevice Acquire(string port, Func<IUsbDevice> open, Action? powerCycle, Action<int>? sleep = null, uint idlePolls = IdlePollsDefault)
+    internal static Dt295NativeDevice Acquire(string port, Func<IUsbDevice> open, Action? powerCycle, Action<int>? sleep = null, uint idlePolls = IdlePollsDefault, Dt295Timeline? timeline = null)
     {
         // 開く間 (電源の入れ直しは最大 10 秒) は同じポートだけを待たせる。別のポートの DT295 は待たない
         lock (PortGate(port))
@@ -81,7 +85,7 @@ public sealed class Dt295NativeDevice
             Dt295NativeDevice device;
             try
             {
-                device = Open(port, open, sleep, idlePolls);
+                device = Open(port, open, sleep, idlePolls, timeline);
             }
             catch (Dt295NativeWarmException error)
             {
@@ -92,7 +96,7 @@ public sealed class Dt295NativeDevice
                 // 前の実行が途中で止まった・ほかのファームウェアが動いたあとの機材。ポートの電源を入れ直すと、起動直後の状態に戻る
                 Log.Write($"[{Dt295.Model} {port}] {error.Message}。USB のポートの電源を入れ直します");
                 powerCycle();
-                device = Open(port, open, sleep, idlePolls);
+                device = Open(port, open, sleep, idlePolls, timeline);
             }
             device._users = 1;
             lock (Registry) Devices[port] = device;
@@ -111,9 +115,11 @@ public sealed class Dt295NativeDevice
             return gate;
         }
     }
-    private static Dt295NativeDevice Open(string port, Func<IUsbDevice> open, Action<int>? sleep, uint idlePolls)
+    private static Dt295NativeDevice Open(string port, Func<IUsbDevice> open, Action<int>? sleep, uint idlePolls, Dt295Timeline? timeline)
     {
-        var usb = open();
+        using var opening = timeline.Step("機材を開いて設定する");
+        IUsbDevice usb;
+        using (timeline.Step("USB を開く")) usb = open();
         var link = new Dt295NativeLink(usb);
         var undo = new Stack<(string, Action)>();
         var clock = Stopwatch.StartNew();
@@ -121,28 +127,36 @@ public sealed class Dt295NativeDevice
         {
             // 書いてよい USB コアのレジスタは、I2C の準備の 4 つだけ (許可したものしか書けない。Dt295NativeLink.AllowedCoreWrites)
             foreach (var register in Dt295NativeI2c.ClockRegisters) link.AllowedCoreWrites.Add(register);
-            var board = new Dt295NativeBoard(link);
+            var board = new Dt295NativeBoard(link, timeline: timeline);
             var i2c = new Dt295NativeI2c(link);
-            var frontend = new Dt295NativeFrontend(i2c, sleep ?? Thread.Sleep);
-            link.ResetWindows();
-            board.Preflight();
-            board.EnableExternalMemory();
-            board.InstallBody(Dt295NativePrograms.Build());
+            if (timeline is not null)
+            {
+                timeline.Controls = () => link.Controls;
+                timeline.Transfers = () => i2c.Transfers;
+            }
+            var frontend = new Dt295NativeFrontend(i2c, sleep ?? Thread.Sleep, timeline);
+            using (timeline.Step("窓を既定にする", "仕様書 3.1")) link.ResetWindows();
+            using (timeline.Step("起動直後の確認", "仕様書 3.1。hook と 0x82008 を読む")) board.Preflight();
+            using (timeline.Step("外部メモリーの有効化", "仕様書 3.3")) board.EnableExternalMemory();
+            using (timeline.Step("body と hook を書く", "仕様書 3.2。書いて読み戻す")) board.InstallBody(Dt295NativePrograms.Build());
             undo.Push(("hook を元に戻す", board.RemoveHook));
-            board.SetUpF10080();
+            using (timeline.Step("0xF10080〜0xF10098 に書く", "仕様書に無い。実機の観測。読まない")) board.SetUpF10080();
             undo.Push(("0xF10080〜0xF10098 を戻す", board.RestoreF10080));
-            var chip = board.Initialize();
+            Dt295NativeBoard.Saved chip;
+            using (timeline.Step("チップの設定 (INITIALIZE)", "仕様書 6 章")) chip = board.Initialize();
             undo.Push(("チップの設定を戻す", () => board.Restore(chip)));
-            board.EnableAfterInitialize();
-            board.SetUpUsb();
-            var f10114 = board.SetUpF10114();
+            using (timeline.Step("0xF10018・0xF1001C を立てる", "仕様書 6 章。実機の観測")) board.EnableAfterInitialize();
+            using (timeline.Step("USB のレジスタ", "仕様書 8.4。書いて読み戻す")) board.SetUpUsb();
+            uint f10114;
+            using (timeline.Step("0xF10114 のビット 21", "仕様書に無い。実機の観測")) f10114 = board.SetUpF10114();
             undo.Push(("0xF10114 を戻す", () => board.RestoreF10114(f10114)));
-            var i2cSaved = i2c.Prepare();
+            IReadOnlyList<(uint Address, uint Value)> i2cSaved;
+            using (timeline.Step("I2C の準備", "仕様書 6.4。書いて読み戻す")) i2cSaved = i2c.Prepare();
             undo.Push(("I2C の設定を戻す", () => i2c.Restore(i2cSaved)));
             if (!i2c.Alive) throw new Dt295NativeException("I2C のレジスタが書いた値で読めません");
-            frontend.Initialize();
+            using (timeline.Step("復調とチューナーの初期化 (INITIALIZE の I2C)", "仕様書 7.1")) frontend.Initialize();
             undo.Push(("地上波側を休ませる", frontend.RestTerrestrial));
-            return new Dt295NativeDevice(port, usb, link, board, frontend, undo, (clock.Elapsed, link.Controls), idlePolls);
+            return new Dt295NativeDevice(port, usb, link, board, frontend, undo, (clock.Elapsed, link.Controls), idlePolls, timeline);
         }
         catch
         {

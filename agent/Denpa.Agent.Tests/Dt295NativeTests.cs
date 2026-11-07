@@ -413,6 +413,37 @@ public class Dt295NativeTests
     }
 
     [Test]
+    public async Task 時間の内訳は設定_各待ち_選局_ロック待ち_取り込み_最初の_TS_を制御転送と_I2C_の数つきで出す()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var timeline = new Dt295Timeline();
+        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromMilliseconds(30), false, IdlePolls: 2000);
+        var output = new StringWriter();
+        var code = Dt295NativeProbe.Execute(() => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000, timeline),
+            () => Dt295NativeDevice.CloseIfIdle(port), options, output, new StringWriter(), timeline);
+        await Assert.That(code).IsEqualTo(0);
+        var text = output.ToString();
+        await Assert.That(text).Contains("時間の内訳");
+        // チップの設定の段、I2C の段、各待ち (理由つき)、選局、受信の確認の周回、取り込み、最初の TS
+        foreach (var expected in new[]
+        {
+            "手順 1〜3", "手順 10〜12", "T 復調の初期値", "T チューナーの初期化", "S 復調の初期値", "待ち 100 ms (仕様書 7.1.2", "待ち 4 ms (仕様書 7.1.3",
+            "t=23 周波数の設定", "待ち 100 ms (仕様書 7.2.2。t=46", "受信の確認 (地上波)", "取り込みの設定", "取り込みの開始", "最初の TS を待つ", "固定の待ち:",
+        })
+        {
+            await Assert.That(text).Contains(expected);
+        }
+        // 受信の確認は周回と待ちの合計を補足に出す
+        await Assert.That(text).Contains("周、周の間の待ち");
+        // 待ちの合計は、7.1 の 130 ms と 7.2.2 の 140 ms を含む
+        var waits = text.Split('\n').First(line => line.StartsWith("固定の待ち:", StringComparison.Ordinal));
+        await Assert.That(waits).Contains("合計");
+        // 受信の平均は、最初の読みから最後の読みまでの秒数で割る (読みが 1 回だけなら求められないと出す)
+        await Assert.That(text).Contains("受信の平均:");
+    }
+
+    [Test]
     public async Task 止めたあとに残った読み手はスレッドから例外を出さずに終わり_Output_を取り直すと例外になる()
     {
         var fake = Rig();

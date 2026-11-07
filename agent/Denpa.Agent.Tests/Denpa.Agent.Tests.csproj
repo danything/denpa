@@ -64,6 +64,7 @@
         <Compile Include="../Denpa.Agent/Dt295NativeCard.cs" />
         <Compile Include="../Denpa.Agent/Dt295NativeDevice.cs" />
         <Compile Include="../Denpa.Agent/Dt295NativeTuner.cs" />
+        <Compile Include="../Denpa.Agent/Dt295NativeTimeline.cs" />
         <Compile Include="../Denpa.Agent/Dt295NativeProbe.cs" />
         <Compile Include="../Denpa.Agent/ContinuityCount.cs" />
         <!-- 本体と同じ名前で埋め込む (Px4Firmware.Bundled が読む) -->

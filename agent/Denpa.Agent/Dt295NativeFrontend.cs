@@ -14,8 +14,11 @@ namespace Denpa.Agent;
 ///   仕様書が「待つ」と書いた所 (100 ms・20 ms・4 ms・6 ms・10 ms・約 40 ms) だけ待ち、あとは順に出す
 /// - 受信の確認は 1 周ごとに 10 ms 空ける (常駐イメージは 1500 回 × 10 ms で 15 秒回しても失敗にしなかった。仕様書 7.2.4)
 /// </summary>
-public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
+public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, Dt295Timeline? timeline = null)
 {
+    /// <summary>決めた時間だけ待つ。待ちは <see cref="Dt295Timeline"/> の表に出る</summary>
+    private void Wait(int ms, string reason) => timeline.Wait(sleep, ms, reason);
+
     public const int Terrestrial = 0x10, Satellite = 0x11;
 
     /// <summary>衛星の LNB の局発 (kHz)。TUNE の受信周波数 = IF + これ (仕様書 7.3.1)。選局には IF を使う</summary>
@@ -56,13 +59,16 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
     /// <summary>仕様書 7.1.1 から 7.1.5 までを順に</summary>
     public void Initialize()
     {
+        using var phases = new Dt295Timeline.Phases(timeline);
         // 7.1.1 T 復調の初期値 (表の順に 1 レジスタ 1 転送)
+        phases.Next("T 復調の初期値", "7.1.1。1 レジスタ 1 転送");
         Pairs((reg, value) => Demod(Terrestrial, reg, value),
             0x01, 0x00, 0x03, 0x90, 0x06, 0x80, 0x1C, 0x20, 0x1D, 0x56, 0x1E, 0x6A, 0x1F, 0x9A, 0x23, 0x4D,
             0x25, 0x00, 0x26, 0x00, 0x32, 0x21, 0x3B, 0x21, 0x3C, 0x3F, 0x70, 0x18, 0x73, 0x45, 0x74, 0x11,
             0x75, 0x02, 0x76, 0x00, 0x77, 0x01, 0x7D, 0xD2, 0xE4, 0xF4, 0xF4, 0x80);
 
         // 7.1.2 T チューナーの初期化
+        phases.Next("T チューナーの初期化", "7.1.2");
         void T(int reg, params int[] data) => Tuner(Terrestrial, reg, data);
         T(0xFF);                              // リセット指示と推定 (仕様書)
         T(0x00, 0x01);
@@ -90,7 +96,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
             0xA5, 0x09, 0xC2, 0xA9, 0xC5, 0x7C, 0xCD, 0xE8, 0xCE, 0x7F, 0xD5, 0x03, 0xD9, 0x04, 0xEA, 0x0D, 0xDC, 0x1C, 0x6D, 0x0A);
         T(0x03, 0x00);
         T(0x03, 0x01);
-        sleep(100);
+        Wait(100, "仕様書 7.1.2。03=01 のあと");
         TunerRmw(Terrestrial, 0x0D, 0xFE, 0x00);
         T(0x0F, 0x20);
         T(0x10, 0x49);
@@ -101,17 +107,19 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
         T(0x7C, 0x1F);
         T(0x0B, 0x01);
         T(0x12, 0x01);
-        sleep(20);
+        Wait(20, "仕様書 7.1.2。12=01 のあと");
         T(0x12, 0x00);
         T(0x0B, 0x00);
 
         // 7.1.3 S 復調の初期値
+        phases.Next("S 復調の初期値", "7.1.3");
         Pairs((reg, value) => Demod(Satellite, reg, value),
             0x01, 0x90, 0x03, 0x00, 0x04, 0x02, 0x07, 0x33, 0x08, 0x11, 0x10, 0xB0, 0x11, 0x00, 0x13, 0x80, 0x15, 0x00, 0x17, 0x01,
             0x1C, 0x59, 0x1D, 0xAA, 0x1E, 0x20, 0x1F, 0x19, 0x85, 0x7A, 0x87, 0x04, 0x8E, 0x26, 0xA3, 0x91, 0xA5, 0x40);
-        sleep(4);
+        Wait(4, "仕様書 7.1.3 の終わり");
 
         // 7.1.4 S チューナーの初期化
+        phases.Next("S チューナーの初期化", "7.1.4");
         void S(int reg, params int[] data) => Tuner(Satellite, reg, data);
         S(0x2A, 0xB9);
         S(0x06, 0x10, 0x10, 0x00);
@@ -123,9 +131,10 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
         S(0x2A, 0x19);
         S(0x1C, 0x00);
         S(0x11, 0xC0, 0xA7);
-        sleep(6);
+        Wait(6, "仕様書 7.1.4 の終わり");
 
         // 7.1.5 締め
+        phases.Next("締め", "7.1.5");
         Demod(Terrestrial, 0x47, 0x00);
         Demod(Terrestrial, 0x4F, 0x05);
         Demod(Terrestrial, 0x72, 0x00);
@@ -161,11 +170,14 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
         var divider = TerrestrialDivider(kHz);
         var high = kHz > 699999;               // 帯の切り替えは 1 か所だけ (仕様書 7.2.3)
         void T(int reg, params int[] data) => Tuner(Terrestrial, reg, data);
+        using var phases = new Dt295Timeline.Phases(timeline);
         // t=1〜2: 前に地上波を選んでいないときだけ先頭に入る 0B=01 (仕様書 7.2.2)。この試作は選局の前に必ず入れる
+        phases.Next("t=1〜2 チューナーを動かす", "7.2.2");
         T(0x0B, 0x01);
         T(0x12, 0x01);
-        sleep(20);
+        Wait(20, "仕様書 7.2.2。t=2 から t=22");
         // t=22
+        phases.Next("t=22 復調の準備", "7.2.2");
         Demod(Terrestrial, 0x03, 0x00);
         Demod(Terrestrial, 0x1D, 0xAA);
         Demod(Terrestrial, 0x1E, 0xAA);
@@ -175,6 +187,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
         TunerRmw(Terrestrial, 0x0D, 0xFE, 0x00);
         T(0x0F, 0x20);
         // t=23
+        phases.Next("t=23 周波数の設定", "7.2.2。7.2.3 の式");
         T(0x10, divider & 0xFF);
         T(0x11, divider >> 8);
         T(0x00, 0x01);
@@ -184,20 +197,24 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
         T(0x12, 0x00);
         TunerRmw(Terrestrial, 0x6E, 0xFF, 0x80);
         // t=24
+        phases.Next("t=24〜25", "7.2.2");
         TunerRmw(Terrestrial, 0x14, 0xDF, 0x00);
         // t=25
         T(0x12, 0x01);
-        sleep(20);
+        Wait(20, "仕様書 7.2.2。t=25 から t=45");
         // t=45。TS の出し元は T 復調 (仕様書 8.1.5)
+        phases.Next("t=45 TS の出し元を T 復調に", "7.2.2。8.1.5");
         TunerRmw(Terrestrial, 0x6E, 0x7F, 0x00);
         DemodRmw(Terrestrial, 0x0E, 0x70, 0x01);
         Demod(Terrestrial, 0x0F, 0x10);
         Demod(Terrestrial, 0x4F, 0x05);
         Demod(Terrestrial, 0x01, 0x40);
         // t=46
+        phases.Next("t=46", "7.2.2");
         Demod(Terrestrial, 0x23, 0x4C);
-        sleep(100);
+        Wait(100, "仕様書 7.2.2。t=46 から t=146");
         // t=146
+        phases.Next("t=146 復調の仕上げ", "7.2.2");
         Demod(Terrestrial, 0x1D, 0x02);
         Demod(Terrestrial, 0x1E, 0x2A);
         Demod(Terrestrial, 0x1F, 0x8A);
@@ -210,22 +227,41 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
     public bool WaitTerrestrialLock(TimeSpan timeout, int layers = 0xE0)
     {
         var clock = Stopwatch.StartNew();
+        // 1 周の読み (0x96 と 0x80 の 2 転送) の回数と、周の間の待ち (10 ms) の合計を表に出す
+        using var scope = timeline.Step("受信の確認 (地上波)", "7.2.4");
+        var polls = 0;
+        var waited = 0;
+        void Report() => scope?.Note($"{polls} 周、周の間の待ち {waited} ms (1 回 10 ms)");
         while (true)
         {
+            polls++;
             var v96 = DemodRead(Terrestrial, 0x96, 1)[0];
             var v80 = DemodRead(Terrestrial, 0x80, 2);
             var layerOk = (v96 & layers) == layers;
             var lockedBit = (v80[1] & 0x10) != 0;
-            if (layerOk && lockedBit) return true;
+            if (layerOk && lockedBit)
+            {
+                Report();
+                return true;
+            }
             if (lockedBit && (v80[0] & 0x20) == 0 && (v96 & layers) != 0)
             {
                 // 段 2: TMCC の階層ごとのセグメント数から、実在する階層だけで確かめる
                 var tmcc = DemodRead(Terrestrial, 0xB2, 8);
                 var present = PresentLayers(tmcc);
-                if (present != 0 && (present & layers) != 0 && (v96 & present & layers) == (present & layers)) return true;
+                if (present != 0 && (present & layers) != 0 && (v96 & present & layers) == (present & layers))
+                {
+                    Report();
+                    return true;
+                }
             }
-            if (clock.Elapsed > timeout) return false;
+            if (clock.Elapsed > timeout)
+            {
+                Report();
+                return false;
+            }
             sleep(10);
+            waited += 10;
         }
     }
 
@@ -282,12 +318,15 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
         if (ifKhz is < 950000 or > 2150000) throw new Dt295NativeException($"衛星の IF {ifKhz} kHz は 950000〜2150000 kHz の外です");
         var (registers, band) = SatelliteDivider(ifKhz);
         void S(int reg, params int[] data) => Tuner(Satellite, reg, data);
+        using var phases = new Dt295Timeline.Phases(timeline);
         // t=1: T 側を休ませる
+        phases.Next("t=1 T 側を休ませる", "7.3.2");
         RestTerrestrial();
         DemodRmw(Satellite, 0x1E, 0xCF, 0x20);
         S(0x11, 0x00, 0xA7);
         S(0x2A, 0xB9);
         // t=2
+        phases.Next("t=2〜3 復調の準備", "7.3.2");
         S(0x1C, 0xC0);
         S(0x29, 0x71);
         Demod(Satellite, 0x17, 0x00);
@@ -306,6 +345,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
         S(0x2A, 0xB9);
         S(0x1C, 0xC0);
         // t=4: 周波数 (reg 00〜04 を 1 転送)、VCO 帯 (reg 09)
+        phases.Next("t=4〜5 周波数と VCO 帯", "7.3.2。7.3.3");
         S(0x29, 0x71);
         i2c.Write(Satellite, [0xFE, 0xC0, 0x00, .. registers]);
         S(0x09, band);
@@ -313,8 +353,9 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
         S(0x05, 0x80);
         // t=5
         S(0x2A, 0xBB);
-        sleep(10);
+        Wait(10, "仕様書 7.3.2。t=5 から t=15");
         // t=15。T 復調の 0E/0F = 77 は TS の出し元を衛星にする (仕様書 8.1.5)
+        phases.Next("t=15〜16 TS の出し元を衛星に", "7.3.2。8.1.5");
         Demod(Satellite, 0x1E, 0x20);
         Demod(Satellite, 0x0A, 0xFF);
         Demod(Satellite, 0x03, 0x01);
@@ -328,14 +369,16 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
         i2c.Write(Satellite, 0xFE, 0xC1);
         var read = i2c.Read(Satellite, 2);
         S(0x50, 0xF0 | (read[0] & 1));
-        sleep(40);
+        Wait(40, "仕様書 7.3.2。t=16 から t=56");
         // t=56
+        phases.Next("t=56", "7.3.2");
         Demod(Satellite, 0x1E, 0x20);
         Demod(Satellite, 0x0A, 0xFF);
         Demod(Satellite, 0x03, 0x01);
         Demod(Satellite, 0x03, 0x01);
-        sleep(100);
+        Wait(100, "仕様書 7.3.2。t=56 から t=157");
         // t=157
+        phases.Next("t=157 復調の仕上げ", "7.3.2");
         Demod(Satellite, 0x1C, 0x08);
         Demod(Satellite, 0x1F, 0x08);
         DemodRmw(Satellite, 0xA5, 0xFF, 0x40);
@@ -349,19 +392,34 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep)
     public bool WaitSatelliteLock(TimeSpan timeout, int? tsid)
     {
         var clock = Stopwatch.StartNew();
+        using var scope = timeline.Step("受信の確認と TSID の選択 (衛星)", "7.3.4");
+        var polls = 0;
+        var waited = 0;
+        void Report() => scope?.Note($"{polls} 周、周の間の待ち {waited} ms (1 回 7 ms。段 3 の待ちは 10 ms)");
         while (clock.Elapsed <= timeout)
         {
+            polls++;
             // 段 0: 0xC3 の上位 4 ビットが 0 なら同期
             if (DemodRead(Satellite, 0xC3, 1)[0] <= 0x0F && Select(tsid) is { } selected)
             {
                 // 段 3: 0xC5 の bit1
-                while (clock.Elapsed <= timeout && (DemodRead(Satellite, 0xC5, 1)[0] & 0x02) == 0) sleep(10);
+                while (clock.Elapsed <= timeout && (DemodRead(Satellite, 0xC5, 1)[0] & 0x02) == 0)
+                {
+                    sleep(10);
+                    waited += 10;
+                }
                 // 段 4: 0xE6 の TSID が選んだものと同じなら受かった
                 var now = DemodRead(Satellite, 0xE6, 2);
-                if (((now[0] << 8) | now[1]) == selected) return true;
+                if (((now[0] << 8) | now[1]) == selected)
+                {
+                    Report();
+                    return true;
+                }
             }
-            sleep(7);                         // 常駐イメージは約 7 ms 周期で C3 → C5 → E6 をくり返した (仕様書 7.3.4)
+            sleep(7);
+            waited += 7;                         // 常駐イメージは約 7 ms 周期で C3 → C5 → E6 をくり返した (仕様書 7.3.4)
         }
+        Report();
         return false;
     }
 
