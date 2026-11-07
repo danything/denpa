@@ -30,4 +30,5 @@ jobs:
           bash .github/ffmpeg-windows-cross.sh out 2>&1 | tee cross.log | grep -E "^\[time\]|encoder |DLL Name|ffmpeg.exe|error" || true
           echo "wall: $(( $(date +%s) - s ))s"
           grep -n "ERROR" cross.log || true
+          tail -15 cross.log
           f=$(find /tmp -name config.log -path '*ffmpeg*' | head -1); [ -z "$f" ] || tail -40 "$f"
