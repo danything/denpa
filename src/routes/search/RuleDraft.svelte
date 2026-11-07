@@ -761,7 +761,7 @@
     --dp-btn-lift: none;
     position: fixed;
     inset: auto 0 0;
-    z-index: 60;
+    z-index: var(--dp-z-modal);
     max-height: 80svh;
     overflow-y: auto;
     border-radius: var(--dp-radius-lg) var(--dp-radius-lg) 0 0;
@@ -781,7 +781,7 @@
   :global(:where(html[data-phone])) .sheet-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 59;
+    z-index: calc(var(--dp-z-modal) - 1);
     margin: 0;
     padding: 0;
     border: 0;

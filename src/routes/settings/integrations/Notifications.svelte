@@ -79,7 +79,7 @@
               <span class="tag {webhook.enabled ? 'success' : ''}">
                 {webhook.enabled ? "有効" : "無効"}
               </span>
-              <span class="truncate mono tiny">{webhook.url}</span>
+              <span class="truncate mono">{webhook.url}</span>
             </div>
             <div class="small">
               <span class="muted">送る通知:</span>
@@ -93,7 +93,7 @@
                 <span class={webhook.last_status === "ok" ? "" : "text-error"}>
                   {webhook.last_status === "ok" ? "成功" : webhook.last_status}
                 </span>
-                <span class="muted tiny">
+                <span class="muted">
                   {dateTime(webhook.last_sent_at)}
                 </span>
               {:else}

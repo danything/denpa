@@ -731,10 +731,12 @@
           </button>
         {/snippet}
         <div class="c-menu-head small muted">種類</div>
-        <div class="side-list">{@render kinds(() => (filterOpen = false))}</div>
+        <div class="side-list" role="group" aria-label="ライブか録画か">
+          {@render kinds(() => (filterOpen = false))}
+        </div>
         {#if data.facets.services.length > 0}
           <div class="c-menu-head small muted">局</div>
-          <div class="side-list">
+          <div class="side-list" role="group" aria-label="局">
             {@render services(() => (filterOpen = false))}
           </div>
         {/if}
@@ -1073,7 +1075,7 @@
     --dp-btn-lift: none;
     position: sticky;
     top: var(--dp-header-space, 0px);
-    z-index: 4;
+    z-index: var(--dp-z-pagebar);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -1097,7 +1099,7 @@
   :global(html[data-phone]) .c-bar {
     position: sticky;
     order: 2;
-    z-index: 5;
+    z-index: var(--dp-z-pagebar);
     display: flex;
     align-items: center;
     gap: 0.25rem;

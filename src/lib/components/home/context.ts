@@ -51,8 +51,10 @@ export interface HomeControls extends ViewControls {
 }
 
 interface HomeContext {
-  /** 描いた時刻。「いま」の線と予約の側分けの物差し */
+  /** 描いた時刻。予約の側分けと並べ方の物差し (読み直すまで変えない) */
   readonly clock: number;
+  /** 分ごとに進むいまの時刻 (`#lib/minute-clock.svelte.ts`)。「いま」の時刻・あと何分か・進み具合のバーに使う。一覧は並べ直さない */
+  readonly now: number;
   /** 「いま」の線に添える一言 (次の録画まで)。次の予約が無ければ null */
   readonly nowStatus: NowStatus | null;
   /** バーの先に「いま」の時刻を出す、いちばん上の録画中の行のキー (無ければ null で、「いま」の線を見せる。`TimelineHeading`) */

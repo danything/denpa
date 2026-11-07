@@ -22,6 +22,7 @@
     setHome,
   } from "#lib/components/home/context.js";
   import Menu from "#lib/components/Menu.svelte";
+  import ProgramActions from "#lib/components/ProgramActions.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
   import Toasts, {
     errorNotice,
@@ -54,6 +55,7 @@
   } from "#lib/format.js";
   import { GROUPED_COOKIE } from "#lib/grouping.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
   import {
     clearFailed,
     offline,
@@ -319,11 +321,13 @@
     return res.end_at > now ? "future" : "past";
   }
 
-  /** 描いた時刻 (`HomeContext.clock`)。読み直すたびに取り直す */
+  /** 描いた時刻 (`HomeContext.clock`)。読み直すたびに取り直す。並べ方はこれで決め、分ごとには並べ直さない */
   const clock = $derived.by(() => {
     void data;
     return Date.now();
   });
+  /** 分ごとに進むいまの時刻 (`HomeContext.now`)。「いま」の時刻・あと何分か・進み具合のバーだけが使う */
+  const minute = minuteClock();
 
   /** 終わった予約と、それで録れた録画を 1 本に (`mergeRecorded`)。録画の行が代わりに立つ */
   const merged = $derived(
@@ -562,7 +566,7 @@
     return next;
   });
   /** 「いま」の線に添える一言。次の録画まで (絞り込みに関係なく。録画中のあと何分かは行の 3 段目) */
-  const lineStatus = $derived(nowStatus(clock, nextRes));
+  const lineStatus = $derived(nowStatus(minute.now, nextRes));
   function dayLabel(at: number): string {
     return dayName(at, clock) ?? fullDate(at);
   }
@@ -725,6 +729,9 @@
     get clock() {
       return clock;
     },
+    get now() {
+      return minute.now;
+    },
     get nowStatus() {
       return lineStatus;
     },
@@ -886,34 +893,29 @@
     予約の詳細から取り消す。**行の「取消」と同じアクション** (`?/cancel`) なので、
     ルールが立てた予約でも作り直されない (戻すのは行の「戻す」から)。
     中身を確かめてから、閉じずに取り消せるように。**取り消せたら閉じる**。番組表の詳細と同じ。
-    取り消した行は一覧から消える (完了した予約も出しているときは「戻す」に変わる)
+    取り消した行は一覧から消える (完了した予約も出しているときは「戻す」に変わる)。
+    並べるものとその順は番組表・検索の詳細と同じ (`ProgramActions`)。視聴と再生は行から押す (行の「追っかけ」・観る画面) ので出さない
 -->
 {#snippet reservationActions()}
   {#if detailRes !== null}
-    <!-- 録画の詳細と同じ入口。予約は番組を指しているので番組から作る -->
-    <a
-      class="button secondary outline"
-      href={ruleFrom("program", detailRes.program_id)}
-      data-testid="detail-rule"
-    >
-      ルールを作る
-    </a>
-  {/if}
-  {#if detailRes !== null && cancelable(detailRes)}
-    <form
-      method="POST"
-      action="?/cancel"
-      use:submitting={() =>
+    <ProgramActions
+      program={{
+        id: detailRes.program_id,
+        service_id: detailRes.service_id,
+        start_at: detailRes.start_at,
+        end_at: detailRes.end_at,
+        reservation_state: detailRes.state,
+        copy_never: false,
+      }}
+      cancel={{ id: detailRes.id }}
+      watchable={false}
+      clock={minute.now}
+      onsubmit={() =>
         async ({ result, update }) => {
           await update();
           if (result.type === "success") detail.close();
         }}
-    >
-      <input type="hidden" name="id" value={detailRes.id} />
-      <button type="submit" class="outline danger" data-testid="detail-cancel"
-        >予約取消</button
-      >
-    </form>
+    />
   {/if}
 {/snippet}
 

@@ -66,6 +66,7 @@
   import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
+  import VolumeNote from "#lib/components/player/VolumeNote.svelte";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, {
@@ -78,7 +79,7 @@
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { slides } from "#lib/jikkyo/ranking.js";
   import { JikkyoRanking } from "#lib/jikkyo/ranking.svelte.js";
-  import { JIKKYO_LIST_KEY, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
+  import { jikkyoListSwitch, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import type { HybridcastLink } from "#lib/live.js";
@@ -365,13 +366,11 @@
    * 書ける間は一覧の下に書き込む 1 行を付ける (上の `canWrite`)。右の列の無い形 (横にしたスマホ・全画面) では出さず、
    * 同じボタンで映像の上の 1 行を開く (書けなければボタンも置かない)
    */
-  const jikkyoList = jikkyoSwitch(JIKKYO_LIST_KEY);
-  const canList = $derived(
-    jikkyoActive &&
-      jikkyoChannel !== null &&
-      !phoneLandscape.current &&
-      !fullscreen.active,
+  const jikkyoList = jikkyoListSwitch(
+    () => jikkyoActive && jikkyoChannel !== null,
+    () => fullscreen.active,
   );
+  const canList = $derived(jikkyoList.can);
   /** 映像の上の 1 行を開いている (一覧を出せない形だけ) */
   let writing = $state(false);
   $effect(() => {
@@ -869,7 +868,7 @@
         <PlayerVeil
           holding={player.holding}
           busy={player.state === "connecting"}
-          note={player.resuming ? "繋ぎ直しています" : ""}
+          resuming={player.resuming}
           error={player.state === "error" ? player.message : ""}
           idle="局を選んでください"
           testid="live-status"
@@ -924,9 +923,7 @@
       {#if player.warning}
         <StageNote testid="live-warning">{player.warning}</StageNote>
       {/if}
-      {#if volume.noted}
-        <StageNote testid="live-volume-note">音量 {volume.level}%</StageNote>
-      {/if}
+      <VolumeNote {volume} testid="live-volume-note" />
     {/snippet}
   </PlayerStage>
 
@@ -969,7 +966,7 @@
           {#if dataPress !== null}
             <Remote press={dataPress} />
           {/if}
-          {#if canList && jikkyoList.on}
+          {#if jikkyoList.shown}
             {@render commentList()}
           {/if}
         {/snippet}
@@ -986,7 +983,7 @@
           <Remote press={dataPress} />
         {/if}
         <!-- 実況のコメントの一覧も、出している間は一覧の上 (リモコンの下) -->
-        {#if canList && jikkyoList.on}
+        {#if jikkyoList.shown}
           {@render commentList()}
         {/if}
 
@@ -1203,7 +1200,7 @@
     position: absolute;
     top: 0.75rem;
     left: 0.75rem;
-    z-index: 10;
+    z-index: var(--dp-z-stage-controls);
   }
   /* 列の幅いっぱいに伸びるので、タブを均等に広げる。左に寄せると右に溝だけが余った */
   .type-tabs {

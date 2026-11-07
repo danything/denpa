@@ -324,7 +324,7 @@
  */
 .board .t-toolbar {
   position: sticky;
-  z-index: 5;
+  z-index: var(--dp-z-pagebar);
   display: flex;
   align-items: center;
   gap: 0.25rem;

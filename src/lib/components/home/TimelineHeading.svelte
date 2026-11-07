@@ -46,7 +46,7 @@
   <NowLine
     heading
     class="t-now {ctx.firstLiveKey === null ? '' : 'visually-hidden'}"
-    time={time(ctx.clock)}
+    time={time(ctx.now)}
     status={ctx.nowStatus}
     data-testid="timeline-now"
   />

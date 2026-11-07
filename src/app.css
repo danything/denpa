@@ -98,6 +98,25 @@
   --dp-space-4: 1rem;
   --dp-space-5: 1.5rem;
   --dp-space-6: 2rem;
+  /*
+     * **重なりの段 (`z-index`)。** ページの段と、映像の舞台の中の段に分けて、数字はここにだけ書く。
+     * 1 つの部品の中だけで前後を決めるもの (面の上の線・裏に敷く 1 枚の 1・2・-1、番組表の箱の中の段) は部品に書く
+     */
+  --dp-z-heading: 3; /* 貼り付く日付の見出し */
+  --dp-z-pagebar: 5; /* ページの中で貼り付く操作の 1 行 (ホーム・切り抜き)。見出しより上 */
+  --dp-z-dock: 30; /* 下のタブのすぐ上に浮かせる操作の 1 行 (`.dock`) */
+  --dp-z-header: 40; /* ヘッダー・下のタブ */
+  --dp-z-toast: 50; /* トースト・検索の候補。ダイアログより下 */
+  --dp-z-modal: 60; /* ダイアログ・番組の詳細・下から出す一枚・ページを移る途中の線・ステータスバーの面 */
+  --dp-z-skip: 70; /* 本文へ移動のリンク (どれよりも上) */
+  --dp-z-stage-full: 90; /* 広げた全画面の舞台 (iPhone) */
+  --dp-z-measure: 100; /* 開発用の測り (`Measure`) */
+  /* 映像の舞台の中。映像 → データ放送 → 操作バーの影 → 実況のコメント → 字幕・幕 → ボタン (docs/design.md の「映像の上の操作」) */
+  --dp-z-stage-data: 5;
+  --dp-z-stage-shade: 7;
+  --dp-z-stage-comments: 8;
+  --dp-z-stage-captions: 9;
+  --dp-z-stage-controls: 10;
   /* 何行かある一覧の件と件の間。件は面に乗っていて面の切れ目が境目になるので、詰めておく */
   --dp-list-gap: 0.375rem;
   /* 何行かある一覧の件の高さ (64px。指で押す端末では 72px。下の `pointer: coarse`) */
@@ -196,6 +215,9 @@
   --dp-video-fill: rgb(1 114 173 / 0.8);
   --dp-video-veil: rgb(0 0 0 / 0.6);
   --dp-video-veil-strong: rgb(0 0 0 / 0.8);
+  /* 再生位置のバーの CM の所。観ていないところは淡く、観たところは濃い琥珀色 (`SeekBar`) */
+  --dp-video-cm: rgb(255 200 95 / 0.55);
+  --dp-video-cm-played: rgb(255 179 0);
 }
 /* 指で押す端末の件は 72px (低い行は押したつもりの隣が開いた。docs/design.md の「何行かある一覧」) */
 @media (pointer: coarse) {
@@ -552,7 +574,7 @@ html[data-status-bar="translucent"]:not([data-stage-fullscreen]) body::before {
   content: "";
   position: fixed;
   inset: 0 0 auto;
-  z-index: 60;
+  z-index: var(--dp-z-modal);
   height: env(safe-area-inset-top);
   background: color-mix(in srgb, var(--dp-bg) 85%, transparent);
   pointer-events: none;
@@ -917,7 +939,7 @@ progress[value]::-webkit-progress-value {
 :where(html[data-phone]) .guide-bar {
   position: fixed;
   inset-inline: var(--dp-dock-inset);
-  z-index: 30;
+  z-index: var(--dp-z-dock);
   padding: 0.25rem 0.5rem;
 }
 
@@ -1222,7 +1244,7 @@ input[type="checkbox"]:not([role="switch"]) {
   --day-head-gap: 0.5rem;
   position: sticky;
   top: var(--day-head-gap);
-  z-index: 3;
+  z-index: var(--dp-z-heading);
   width: fit-content;
   margin: 0.5rem 0 0.25rem;
   color: var(--dp-muted);
@@ -1270,16 +1292,23 @@ input[type="checkbox"]:not([role="switch"]) {
   top: calc(env(safe-area-inset-top, 0px) + var(--day-head-gap));
 }
 /*
- * **入っている切り替え (`aria-pressed="true"`) は、オンの印の主の色の短い下線と字** (番組表の「サブ ch」)。
+ * **並び (`role="group"`) の外で押されているボタン (`aria-pressed="true"`) はオンで、主の色の短い下線と字** (番組表の「サブ ch」・映像の上の字幕など)。
+ * 並びの中で押されているボタンは選んでいるもの (字の幅いっぱいの下線・左の縦線。下の `.pick-line`・`.segmented`・`.side-item`) なので、
+ * この線は引かない。どの部品も、置いた場所でどちらかの 1 本になる (1 つの部品に線は 1 本)。
+ * 線の色は `--dp-on-mark` (ふだんは主の色。映像の上は字の色に合わせる。`ControlButton`)。
+ * 映像の上の戻せないものの 2 回目 (`.ov-danger`) も、赤い字に同じ形の短い線を引く。
  * 選んでいるもの (字の幅いっぱいの下線) とは線の長さで分ける。塗らない。浮かせもしない (押すと何かが起きるボタンとは見分ける)
  */
-:where(button, a.button)[aria-pressed="true"]:where(
-    :not(.secondary, .outline, .ghost)
+:where(button, a.button):is([aria-pressed="true"], .ov-danger):where(
+    :not(.secondary, .outline, .ghost, [role="group"] *)
   ) {
   --pico-background-color: transparent;
   --pico-box-shadow: none;
   --pico-color: var(--dp-primary-text);
-  background-image: linear-gradient(var(--pico-primary), var(--pico-primary));
+  background-image: linear-gradient(
+    var(--dp-on-mark, var(--pico-primary)),
+    var(--dp-on-mark, var(--pico-primary))
+  );
   background-repeat: no-repeat;
   background-position: center bottom 0.2rem;
   background-size: 1rem var(--dp-mark);
@@ -1289,7 +1318,6 @@ input[type="checkbox"]:not([role="switch"]) {
  * 選んでいる項目 (`aria-pressed="true"`・`aria-current`・`.selected`) は主の色の太字と、疑似要素 1 本の下線
  * (`text-decoration` だと名前と数 (`.num`) に別々の線が付き、2 本に切れて見えた)。
  * 線の両端と下からの位置は項目の余白に合わせて `--pick-inset`・`--pick-bottom` で変える。
- * 入っている切り替えの短い下線 (上の `aria-pressed`) は引かない (1 つの部品に線は 1 本)。
  * 選び直すと前の場所から滑る並び (`.segmented` など。下の「滑る印」) は、並びの疑似要素で引くのでこれは使わない
  */
 .pick-line {
@@ -1301,7 +1329,6 @@ input[type="checkbox"]:not([role="switch"]) {
   .selected
 ) {
   --pico-color: var(--dp-primary-text);
-  background-image: none;
   color: var(--dp-primary-text);
   font-weight: var(--dp-weight-bold);
 }
@@ -1556,8 +1583,6 @@ a.button {
   --pico-background-color: transparent;
   --pico-border-color: transparent;
   --pico-color: var(--dp-primary-text);
-  /* 入っている切り替えの短い下線 (上の `aria-pressed`) は引かない。印は下の 1 本だけ */
-  background-image: none;
   font-weight: var(--dp-weight-bold);
 }
 /*

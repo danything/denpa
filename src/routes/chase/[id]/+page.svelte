@@ -1,7 +1,6 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { onMount, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
 
   import DriveNotice from "#lib/components/DriveNotice.svelte";
   import CloseLink from "#lib/components/player/CloseLink.svelte";
@@ -31,9 +30,7 @@
   import { playerKeys } from "#lib/components/player/keys.js";
   import { liveWiring } from "#lib/components/player/live-wiring.svelte.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
-  import PlayerLayout, {
-    PHONE_LANDSCAPE,
-  } from "#lib/components/player/PlayerLayout.svelte";
+  import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
   import SeekBar from "#lib/components/player/SeekBar.svelte";
@@ -58,6 +55,7 @@
   import { stageTap } from "#lib/components/player/stage-tap.js";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
+  import VolumeNote from "#lib/components/player/VolumeNote.svelte";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
   import { programDetail, recordingFacts } from "#lib/detail.svelte.js";
@@ -65,7 +63,7 @@
   import { clock as clockLabel } from "#lib/format.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { KAKOLOG_LAG } from "#lib/jikkyo/kakolog.js";
-  import { JIKKYO_LIST_KEY, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
+  import { jikkyoListSwitch, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { write as remind } from "#lib/keep.js";
   import { livePlayer } from "#lib/live-player.svelte.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
@@ -176,15 +174,11 @@
 
   /**
    * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端の列のボタンで出す (端末ごとに覚える)。
-   * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない
+   * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない (`jikkyoListSwitch`。3 画面で同じ)
    */
-  const jikkyoList = jikkyoSwitch(JIKKYO_LIST_KEY);
-  const phoneLandscape = new MediaQuery(PHONE_LANDSCAPE);
-  const canList = $derived(
-    jikkyoActive &&
-      data.jikkyo !== null &&
-      !phoneLandscape.current &&
-      !fullscreen.active,
+  const jikkyoList = jikkyoListSwitch(
+    () => jikkyoActive && data.jikkyo !== null,
+    () => fullscreen.active,
   );
   /** いま観ている場面の放送時刻 (元の TS の頭の放送時刻 + 追っかけの再生位置) */
   function airTime(): number | null {
@@ -349,8 +343,8 @@
           testid="chase-shot"
           onclick={() => void snapshot()}
         />
-        <!-- 右の列の先頭に「コメントの一覧」を出す・しまう (`canList`) -->
-        {#if canList}
+        <!-- 右の列の先頭に「コメントの一覧」を出す・しまう (`jikkyoList`) -->
+        {#if jikkyoList.can}
           <ControlButton
             icon={JIKKYO}
             label="コメントの一覧"
@@ -489,8 +483,8 @@
         <!-- 見た目の決まりはライブと共通 (`PlayerVeil`)。前のフレームを貼っている間は塗り潰さない -->
         <PlayerVeil
           holding={player.holding}
-          busy={player.state !== "error"}
-          note={player.resuming ? "繋ぎ直しています" : ""}
+          busy={player.state === "connecting"}
+          resuming={player.resuming}
           error={player.state === "error" ? player.message : ""}
           testid="chase-status"
         >
@@ -534,9 +528,7 @@
           <!-- リクエストどおりにできなかった断り書き (GPU でエンコードできずにソフトウェアへ降りた、など) -->
           <StageNote>{player.warning}</StageNote>
         {/if}
-        {#if volume.noted}
-          <StageNote testid="chase-volume-note">音量 {volume.level}%</StageNote>
-        {/if}
+        <VolumeNote {volume} testid="chase-volume-note" />
       {/if}
     {/snippet}
   </PlayerStage>
@@ -546,7 +538,7 @@
     <FactsAside testid="chase-facts">
       {#snippet top()}
         <!-- 実況のコメントの一覧は、出している間だけ列の先頭に (観る画面と同じ) -->
-        {#if canList && jikkyoList.on}
+        {#if jikkyoList.shown}
           <JikkyoList
             feed={jikkyo}
             air={airTime}
