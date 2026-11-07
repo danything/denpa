@@ -129,7 +129,7 @@ internal sealed class Dt295NativeStream
     }
 
     /// <summary>
-    /// 取り込みの設定と端点の開始までを済ませ、読みの口を開く。**取り込みはまだ始めない** (TS は出ない)。選局のあとの受信の確認の間に呼んで、
+    /// 取り込みの設定と端点の開始までを済ませ、読み出し側を開く。**取り込みはまだ始めない** (TS は出ない)。選局のあとの受信の確認の間に呼んで、
     /// 受信を確認できたらすぐ <see cref="Begin"/> できるようにする。受信が確認できなければ <see cref="Abort"/>
     /// </summary>
     public static Dt295NativeStream Prepare(Dt295NativeDevice device, string name, Action stalled)
@@ -165,7 +165,7 @@ internal sealed class Dt295NativeStream
         _kicker.Start();
     }
 
-    /// <summary><see cref="Begin"/> の前に取りやめる。設定を戻して、読みの口を閉じる</summary>
+    /// <summary><see cref="Begin"/> の前に取りやめる。設定を戻して、読み出し側を閉じる</summary>
     public void Abort()
     {
         EndCapture();
@@ -494,7 +494,7 @@ public sealed class Dt295NativeTuner : ITuneDevice
                 throw new IOException(error.Message, error);
             }
             bool arrived;
-            using (timeline.Step("最初の TS を待つ", "取り込みを始めてから、読み手が最初のパケットを詰めるまで")) arrived = _stream.WaitFirst(FirstTs);
+            using (timeline.Step("最初の TS を待つ", "取り込みを始めてから、読み取り側が最初のパケットを詰めるまで")) arrived = _stream.WaitFirst(FirstTs);
             if (!arrived)
             {
                 var reason = _stream.Reason ?? $"選局から {FirstTs.TotalSeconds:0} 秒、TS が来ません";
