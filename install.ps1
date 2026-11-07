@@ -16,7 +16,7 @@
 # 前のバージョン (本体を wslc のコンテナで動かしていた) からは、DB を写して移る (Move-FromWslc)。
 #
 # 置き場:
-#   %ProgramFiles%\denpa\                 エージェント (bin\)・px4-userland・siano-userland・本体 (server\。bun・アプリ・ffmpeg・字・デコーダ)・
+#   %ProgramFiles%\denpa\                 エージェントと通知領域のアイコン (bin\)・px4-userland・siano-userland・本体 (server\。bun・アプリ・ffmpeg・字・デコーダ)・
 #                                         エージェントを起こす denpa-agent.cmd (管理者しか書けない。SYSTEM で動かすものを、ほかの人に書き換えさせない)
 #   %ProgramData%\denpa\                  DB (denpa.db) とその隣のもの (局ロゴ・鍵)・denpa.env (本体の環境変数。無いときだけ雛形を作る)・本体を起こす denpa.cmd。
 #                                         SYSTEM と管理者だけが読み書きできる
@@ -66,6 +66,10 @@ $DenpaTask = 'denpa'
 # 本体が次の録画の前にスリープから起こすタスク (本体が書き直す。src/lib/server/power.ts)
 $WakeTask = 'denpa-wake'
 $FirewallRule = 'denpa'
+# 通知領域のアイコン (tray/Denpa.Tray)。エージェントと同じ zip に入っていて、サインインしたら HKLM の Run から起きる
+$TrayExe = Join-Path $Prefix 'bin\denpa-tray.exe'
+$RunKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+$RunName = 'denpa'
 $Port = 25252
 # 前のバージョンの wslc のコンテナとボリューム
 $Container = 'denpa'
@@ -175,7 +179,8 @@ function Test-Recording([string]$Exe) {
 # -Server を付けなければエージェントだけ (-AgentOnly のとき)。エンコードの途中なら、次に起きたときにやり直す
 function Stop-Denpa([string]$Exe, [switch]$Server) {
     $tasks = @($TaskName)
-    $names = @('conhost.exe', 'cmd.exe', 'denpa-agent.exe', 'siano-ts.exe', 'px4d.exe', 'px4ctl.exe')
+    # 通知領域のアイコン (denpa-tray.exe) もエージェントと同じ bin\ にあるので、入れ替える前に落とす
+    $names = @('conhost.exe', 'cmd.exe', 'denpa-agent.exe', 'denpa-tray.exe', 'siano-ts.exe', 'px4d.exe', 'px4ctl.exe')
     if ($Server) {
         $tasks += $DenpaTask
         $names += 'bun.exe', 'ffmpeg.exe', 'ffprobe.exe'
@@ -581,6 +586,20 @@ function Register-Server([string]$Ref, [string]$Token) {
     throw "denpa が応答しません。ログを見てください: $ServerLog"
 }
 
+# 通知領域のアイコン (denpa-tray.exe)。**サインインしたら起きる**ように HKLM の Run に載せる (誰がサインインしても出る)。
+# 出すのは本体の様子と新しいバージョンで、更新はメニューから人が選んだときにこの install.ps1 を流す (docs/install-windows.md)。
+# いまサインインしている人にはここで起こす。管理者の窓から起こすと管理者で動いてしまうので、エクスプローラーに起こさせる
+# (ブラウザを開くのと同じ)。この窓のセッションにエクスプローラーがいなければ (CI など) 起こさず、次のサインインを待つ。
+# zip に入っていなければ (DENPA_VERSION で通知領域のアイコンより前のバージョンを入れたとき) 載せない
+function Register-Tray {
+    if (-not (Test-Path -LiteralPath $TrayExe)) { return }
+    New-ItemProperty -Path $RunKey -Name $RunName -Value "`"$TrayExe`"" -PropertyType String -Force | Out-Null
+    $session = (Get-Process -Id $PID).SessionId
+    if (Get-Process explorer -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $session }) {
+        Start-Process "$env:WINDIR\explorer.exe" "`"$TrayExe`""
+    }
+}
+
 function Install-Denpa([string]$Ref, [string]$Token, [switch]$AgentOnly) {
     $work = Join-Path ([IO.Path]::GetTempPath()) "denpa-install-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Force -Path "$work\new" | Out-Null
@@ -620,7 +639,10 @@ function Install-Denpa([string]$Ref, [string]$Token, [switch]$AgentOnly) {
     Set-Owned $Px4Runtime @($System, $Administrators) $System
     Show-Px4
     Register-Agent
-    if (-not $AgentOnly) { Register-Server $(if ($Ref) { $Ref } elseif ($env:DENPA_SERVER_ZIP) { '' } else { Get-Version }) $Token }
+    if (-not $AgentOnly) {
+        Register-Server $(if ($Ref) { $Ref } elseif ($env:DENPA_SERVER_ZIP) { '' } else { Get-Version }) $Token
+        Register-Tray
+    }
 }
 
 function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
@@ -647,6 +669,7 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
             Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue
         }
         Remove-NetFirewallRule -Name $FirewallRule -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue
         foreach ($dir in $Prefix, $OldPrefix) {
             if (Test-Path -LiteralPath $dir) { Remove-Item -Recurse -Force -LiteralPath $dir }
         }
