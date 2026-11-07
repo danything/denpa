@@ -14,6 +14,36 @@ internal sealed class NativeTsFramer
 
     public long Discarded { get; private set; }
 
+    /// <summary>
+    /// <see cref="Push"/> と同じく 188 バイトのパケットを取り出すが、同期バイトが続く範囲を 1 回でまとめて渡す (パケットごとの呼び出しとコピーを省く)。
+    /// 前の呼び出しの残りが無ければ、<paramref name="data"/> を直接見て、足りない端数だけ持ち越す
+    /// </summary>
+    public void PushRuns(ReadOnlySpan<byte> data, Action<ReadOnlySpan<byte>> sink)
+    {
+        if (_used > 0)
+        {
+            Push(data, packet => sink(packet));
+            return;
+        }
+        var at = 0;
+        while (data.Length - at >= 188)
+        {
+            if (data[at] != 0x47)
+            {
+                at++;
+                Discarded++;
+                continue;
+            }
+            var start = at;
+            while (data.Length - at >= 188 && data[at] == 0x47) at += 188;
+            sink(data[start..at]);
+        }
+        var rest = data[at..];
+        if (rest.Length > _store.Length) Array.Resize(ref _store, rest.Length);
+        rest.CopyTo(_store);
+        _used = rest.Length;
+    }
+
     public void Push(ReadOnlySpan<byte> data, Action<ReadOnlySpan<byte>> sink)
     {
         if (_used + data.Length > _store.Length) Array.Resize(ref _store, Math.Max(_store.Length * 2, _used + data.Length));
@@ -177,6 +207,7 @@ internal sealed class Dt295NativeStream
     {
         var raw = new byte[TransferSize * Depth];
         var framer = new NativeTsFramer();
+        var settle = new Settled();
         var writer = _pipe.Writer;
         try
         {
@@ -185,12 +216,26 @@ internal sealed class Dt295NativeStream
                 var got = _in.Read(raw, ReadTimeoutMs);
                 if (got == 0) continue;
                 var wrote = false;
-                framer.Push(raw.AsSpan(0, got), packet =>
+                if (settle.IsOpen)
                 {
-                    packet.CopyTo(writer.GetSpan(packet.Length));
-                    writer.Advance(packet.Length);
-                    wrote = true;
-                });
+                    // 通すだけの間は、同期が続く範囲ごとにまとめて詰める (パケットごとのコピーと呼び出しを省く)
+                    framer.PushRuns(raw.AsSpan(0, got), run =>
+                    {
+                        run.CopyTo(writer.GetSpan(run.Length));
+                        writer.Advance(run.Length);
+                        wrote = true;
+                    });
+                }
+                else
+                {
+                    framer.Push(raw.AsSpan(0, got), packet =>
+                    {
+                        if (!settle.Accept(packet)) return;
+                        packet.CopyTo(writer.GetSpan(packet.Length));
+                        writer.Advance(packet.Length);
+                        wrote = true;
+                    });
+                }
                 if (!wrote) continue;
                 if (FirstAt == 0)
                 {
@@ -209,6 +254,38 @@ internal sealed class Dt295NativeStream
         {
             _ended = true;
             writer.Complete();
+        }
+    }
+
+    /// <summary>
+    /// 地上波は復調のロックの印が立った時点で取り込みを始めるため、TMCC が確定するまで (ロックの約 400 ms 後まで) 復調が TEI 付きのパケットを出す。
+    /// TEI の付かないパケットが <see cref="CleanRun"/> 個続くまでを捨て、続いたら以降は TEI の有無にかかわらず通す。
+    /// TEI が <see cref="Give"/> を過ぎても続くときは、受信が悪いだけなので捨てるのをやめて全部通す
+    /// </summary>
+    internal sealed class Settled
+    {
+        public const int CleanRun = 32;
+        public static readonly long Give = Stopwatch.Frequency * 2;
+
+        private readonly long _since = Stopwatch.GetTimestamp();
+        private int _clean;
+        private bool _open;
+
+        public bool IsOpen => _open;
+
+        public bool Accept(ReadOnlySpan<byte> packet)
+        {
+            if (_open) return true;
+            if ((packet[1] & 0x80) == 0)
+            {
+                if (++_clean >= CleanRun) _open = true;
+            }
+            else
+            {
+                _clean = 0;
+            }
+            if (!_open && Stopwatch.GetTimestamp() - _since > Give) _open = true;
+            return _open;
         }
     }
 
@@ -313,9 +390,6 @@ public sealed class Dt295NativeTuner : ITuneDevice
     private (Dt295NativeDevice Device, ChannelTable.Tuning Tuning, uint StreamId)? _last;
 
     /// <summary>同じチャンネルのまま受信が続いているかを確かめる時間の上限 (1 回の読みで済む。地上波は 1 周、衛星は数周)</summary>
-    /// <summary>実験用 (あとで削除)。0 にすると地上波の受信の確認がロックの印だけで済む</summary>
-    internal static int ExperimentLayers = 0xE0;
-
     internal static readonly TimeSpan StillLockedWait = TimeSpan.FromMilliseconds(30);
 
     /// <summary>設定の device (画面に出す理由の持ち主のキー)</summary>
@@ -383,7 +457,7 @@ public sealed class Dt295NativeTuner : ITuneDevice
                     {
                         reuse = tuning.Satellite
                             ? frontend.WaitSatelliteLock(StillLockedWait, tsid)
-                            : frontend.WaitTerrestrialLock(StillLockedWait);
+                            : frontend.WaitTerrestrialLock(StillLockedWait, layers: 0);
                     }
                 }
                 if (reuse)
@@ -402,7 +476,8 @@ public sealed class Dt295NativeTuner : ITuneDevice
                     }
                     // 取り込みの設定は、受信の確認を待つ間に済ませておく (取り込みを始めるのは受信を確認してから。TS は出ない)
                     prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall));
-                    var locked = tuning.Satellite ? frontend.WaitSatelliteLock(LockWait, tsid) : frontend.WaitTerrestrialLock(LockWait, ExperimentLayers);
+                    // 地上波は復調のロックの印だけで取り込みを始める。TMCC が確定するまでの TEI 付きのパケットは、読み取り側が捨てる (Dt295NativeStream.Settled)
+                    var locked = tuning.Satellite ? frontend.WaitSatelliteLock(LockWait, tsid) : frontend.WaitTerrestrialLock(LockWait, layers: 0);
                     if (!locked) throw new IOException(ITuneDevice.SyncFailed);
                 }
                 prepared.Begin();

@@ -641,4 +641,83 @@ public class Dt295NativeTests
         // 選局のあと標本を読むだけで、USB のレジスタには書かない
         await Assert.That(fake.Stores.Skip(storesBefore).Any(s => s.Address is >= 0xFD8000 and <= 0xFD80FF)).IsFalse();
     }
+
+    [Test]
+    public async Task 同じチャンネルをもう一度選局すると_受信が続いていれば周波数を書き直さず_取り込みは始め直して_TS_が届く()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var tuner = new Dt295NativeTuner("test", () => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000), () => Dt295NativeDevice.CloseIfIdle(port));
+        var t25 = ChannelTable.Parse("T25")!;
+        var t26 = ChannelTable.Parse("T26")!;
+        int Writes() => fake.I2cLog.Count(line => line.StartsWith("10 W FEC011"));
+        try
+        {
+            tuner.Tune(t25, t25.StreamId);
+            var first = Writes();
+            await Assert.That(first).IsGreaterThan(0);
+            var starts = fake.Stores.Count(s => s.Address == 0x1902010 && s.Value == 0x02000000);
+
+            tuner.Tune(t25, t25.StreamId);
+            await Assert.That(Writes()).IsEqualTo(first);
+            await Assert.That(fake.Stores.Count(s => s.Address == 0x1902010 && s.Value == 0x02000000)).IsEqualTo(starts + 1);
+            var ring = (DeviceStream)tuner.Output;
+            var buffer = new byte[188 * 8];
+            var got = 0;
+            while (got < buffer.Length)
+            {
+                var n = ring.Read(buffer, got, buffer.Length - got, () => false);
+                if (n <= 0) break;
+                got += n;
+            }
+            await Assert.That(got).IsEqualTo(buffer.Length);
+            await Assert.That(buffer[0]).IsEqualTo((byte)0x47);
+
+            // 別のチャンネルでは周波数を書く
+            tuner.Tune(t26, t26.StreamId);
+            await Assert.That(Writes()).IsGreaterThan(first);
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task 同期が続く範囲をまとめて渡し_端数は次に持ち越し_同期のずれは捨てる()
+    {
+        byte[] Packets(int count, byte tag) => Enumerable.Range(0, count).SelectMany(i => new byte[188].Select((_, at) => at == 0 ? (byte)0x47 : tag)).ToArray();
+        var framer = new NativeTsFramer();
+        var runs = new List<byte[]>();
+        // 3 パケットと 100 バイトの端数。まとめて 1 つ
+        var data = Packets(3, 1).Concat(new byte[100].Select((_, at) => at == 0 ? (byte)0x47 : (byte)2)).ToArray();
+        framer.PushRuns(data, run => runs.Add(run.ToArray()));
+        await Assert.That(runs.Count).IsEqualTo(1);
+        await Assert.That(runs[0].Length).IsEqualTo(188 * 3);
+        // 続きで端数が 1 パケットになる (持ち越しがあるときは 1 パケットずつ)
+        framer.PushRuns(new byte[88].Select(_ => (byte)2).Concat(Packets(1, 3)).ToArray(), run => runs.Add(run.ToArray()));
+        await Assert.That(runs.Sum(r => r.Length)).IsEqualTo(188 * 5);
+        await Assert.That(runs[1][0]).IsEqualTo((byte)0x47);
+        // 同期のずれは 1 バイトずつ捨て、そのあとの範囲を 1 つで渡す
+        runs.Clear();
+        framer.PushRuns(new byte[] { 0, 0, 0 }.Concat(Packets(2, 4)).ToArray(), run => runs.Add(run.ToArray()));
+        await Assert.That(runs.Count).IsEqualTo(1);
+        await Assert.That(runs[0].Length).IsEqualTo(188 * 2);
+        await Assert.That(framer.Discarded).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task TEI_付きのパケットは_付かないパケットが続くまで捨て_続いたあとは_TEI_も通す()
+    {
+        var settled = new Dt295NativeStream.Settled();
+        byte[] Packet(bool tei) => [0x47, (byte)(tei ? 0x80 : 0x00), 0x00, 0x10];
+        for (var i = 0; i < 100; i++) await Assert.That(settled.Accept(Packet(true))).IsFalse();
+        // 途中で TEI が入ると数え直す
+        for (var i = 0; i < Dt295NativeStream.Settled.CleanRun - 1; i++) await Assert.That(settled.Accept(Packet(false))).IsFalse();
+        await Assert.That(settled.Accept(Packet(true))).IsFalse();
+        for (var i = 0; i < Dt295NativeStream.Settled.CleanRun - 1; i++) await Assert.That(settled.Accept(Packet(false))).IsFalse();
+        await Assert.That(settled.Accept(Packet(false))).IsTrue();
+        // 以降は TEI も通す
+        await Assert.That(settled.Accept(Packet(true))).IsTrue();
+    }
 }

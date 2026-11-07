@@ -31,7 +31,6 @@ public static class Dt295NativeProbe
             var at = Array.IndexOf(args, name);
             return at >= 0 ? args.ElementAtOrDefault(at + 1) : null;
         }
-        if (args.Contains("--lock-bit-only")) Dt295NativeTuner.ExperimentLayers = 0; // 実験用 (あとで削除)
         if (Value("--channel") is not { } channel || ChannelTable.Parse(channel) is not { } tuning) return null;
         var seconds = 5;
         if (args.Contains("--seconds") && !int.TryParse(Value("--seconds"), NumberStyles.None, CultureInfo.InvariantCulture, out seconds)) return null;
@@ -223,6 +222,33 @@ public static class Dt295NativeProbe
         }
     }
 
+    /// <summary>
+    /// このプロセスのスレッドごとの CPU 時間 (Linux の /proc/self/task。10 ms 単位)。「名前 ms」を、使った順に並べる。Linux 以外は空
+    /// </summary>
+    internal static string ThreadCpu()
+    {
+        try
+        {
+            var times = new List<(string Name, int Ms)>();
+            foreach (var dir in Directory.GetDirectories("/proc/self/task"))
+            {
+                var stat = File.ReadAllText(Path.Combine(dir, "stat"));
+                var open = stat.IndexOf('(');
+                var close = stat.LastIndexOf(')');
+                var fields = stat[(close + 2)..].Split(' ');
+                // close の後ろは状態 (3 番目) から始まる。utime は 14 番目、stime は 15 番目
+                var ticks = long.Parse(fields[11], CultureInfo.InvariantCulture) + long.Parse(fields[12], CultureInfo.InvariantCulture);
+                times.Add((stat[(open + 1)..close], (int)(ticks * 10)));
+            }
+            return string.Join("、", times.GroupBy(t => t.Name).Select(g => (Name: g.Key, Ms: g.Sum(t => t.Ms))).Where(t => t.Ms > 0)
+                .OrderByDescending(t => t.Ms).Select(t => $"{t.Name} {t.Ms} ms"));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or IndexOutOfRangeException or ArgumentOutOfRangeException)
+        {
+            return "";
+        }
+    }
+
     /// <summary>機材を取って選局し、<see cref="Options.Duration"/> だけ受けて統計を出す。テストは偽の機材を取る関数と閉じる関数を渡す</summary>
     internal static int Execute(Func<Dt295NativeDevice> acquire, Action? closeIdle, Options options, TextWriter output, TextWriter log, Dt295Timeline? timeline = null, Func<ICardLink>? openCard = null)
     {
@@ -250,6 +276,7 @@ public static class Dt295NativeProbe
         long firstChunk = 0;
         long mainControls = 0;
         var mainCpu = TimeSpan.Zero;
+        var threadCpu = "";
         long mainElapsed = 0;
         Dt295NativeDevice? device = null;
         Thread? reader = null;
@@ -334,6 +361,7 @@ public static class Dt295NativeProbe
             Volatile.Write(ref stopReading, true);
             mainControls = device?.Link.Controls ?? 0;
             mainCpu = Cpu();
+            threadCpu = ThreadCpu();
             mainElapsed = total.ElapsedMilliseconds;
             reader.Join(TimeSpan.FromSeconds(2));
             if (device is not null) MeasureCard(device, firstTsMs, openCard, output);
@@ -352,9 +380,11 @@ public static class Dt295NativeProbe
         {
             mainControls = device?.Link.Controls ?? 0;
             mainCpu = Cpu();
+            threadCpu = ThreadCpu();
             mainElapsed = total.ElapsedMilliseconds;
         }
         output.WriteLine($"制御転送: 合計 {mainControls} 回、ホストの CPU 時間 {(mainCpu - cpuStart).TotalMilliseconds:F0} ms、経過 {mainElapsed} ms");
+        if (threadCpu.Length > 0) output.WriteLine($"スレッドごとの CPU 時間: {threadCpu}");
         var receiving = firstRead == TimeSpan.MinValue ? TimeSpan.Zero : lastRead - firstRead;
         if (firstRead != TimeSpan.MinValue && receiving > TimeSpan.Zero)
         {
