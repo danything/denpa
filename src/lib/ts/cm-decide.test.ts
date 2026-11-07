@@ -568,6 +568,32 @@ describe("録画の頭の CM は番組表どおりの頭まで", () => {
     expect(cm[0]).toEqual({ start: 0, end: 18 });
   });
 
+  test("番組表どおりの頭まで無音が無ければ、頭の近くの強い切れ目で頭の CM を終え、続く 15 秒の倍数の CM も CM にする", () => {
+    /*
+     * 本番の TBS のアニメの並び。番組が番組表より約 1 分遅れて始まり、局の切り替わりに無音が無かった。
+     * 番組表どおりの頭 (9.4 秒) の 0.5 秒前に無音の無い切れ目、そこから 15.5 秒と 15 秒 × 3 本の CM、ロゴは 69.7 秒から
+     */
+    const late = [24.4, 39.4, 54.4, 69.4, ...joints.slice(1)];
+    const lit = [{ start: 69.7, end: 466.9 }, logo[1]!];
+    const input = {
+      ...recording(1820, late, lit, span),
+      ...frames(1820, [8.9, ...late]),
+    };
+    const cm = round(decideCm(input));
+    expect(cm[0]).toEqual({ start: 0, end: 69.4 });
+    expect(cm[1]).toEqual({ start: 467.2, end: 527.2 });
+  });
+
+  test("頭の近くの無音の無い切れ目は、それより前に無音の候補があれば使わない", () => {
+    // 本番のテレ東のアニメの並びに、番組の冒頭のロゴの無い所の強い切れ目 (11.8 秒) を足したもの
+    const input = {
+      ...recording(1820, joints, logo, span),
+      ...frames(1820, [11.8, ...joints]),
+    };
+    const cm = round(decideCm(input));
+    expect(cm[0]).toEqual({ start: 0, end: 6.1 });
+  });
+
   test("番組表どおりの頭が分からなければ、頭の CM はロゴが出るまで", () => {
     const cm = round(decideCm(recording(1820, joints, logo)));
     expect(cm[0]).toEqual({ start: 0, end: 17.3 });
