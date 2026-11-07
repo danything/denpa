@@ -85,7 +85,7 @@ for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 -
 ./configure --prefix="$prefix" --enable-cross-compile --arch=x86_64 --target-os=mingw32 --cross-prefix=$TRIPLE- \
   --cc=$CC --cxx=$CXX --pkg-config=pkg-config \
   --enable-gpl --enable-version3 --disable-shared --enable-static --pkg-config-flags="--static" \
-  --extra-ldflags="-static" --extra-cflags="-I$prefix/include" --extra-ldflags="-L$prefix/lib" \
+  --extra-libs="-lstdc++" --extra-ldflags="-static" --extra-cflags="-I$prefix/include" --extra-ldflags="-L$prefix/lib" \
   --disable-autodetect --enable-w32threads --enable-zlib --enable-libopus --enable-libsvtav1 --enable-libx264 --enable-libdav1d \
   --enable-ffnvcodec --enable-nvenc --enable-libvpl --enable-d3d11va --enable-amf \
   --disable-everything --disable-network --disable-doc \
