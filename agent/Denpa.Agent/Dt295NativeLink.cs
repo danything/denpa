@@ -161,6 +161,8 @@ public sealed class Dt295NativeLink
         {
             throw new ArgumentOutOfRangeException(nameof(address));
         }
+        // 書いてよいかは 32 ビットの書き込みと同じく語ごとに確かめる (書けない語が 1 つでもあれば、何も書かない)
+        for (var at = 0u; at < data.Length; at += 4) Guard(address + at);
         _trace?.Invoke($"書く 0x{address:X8} [{data.Length}]");
         for (var at = 0; at < data.Length;)
         {
@@ -226,7 +228,7 @@ public sealed class Dt295NativeLink
 
     private void Guard(uint address)
     {
-        // カードの端子の向き・極性 (0xF00222〜0xF0022E。仕様書 §10 の設定確認) は、常駐イメージも読んで確かめるだけ。書かない
+        // カードの端子の向き・極性 (0xF00222〜0xF0022E。仕様書 §10 の設定確認) は、仕様書の常駐イメージも読んで確かめるだけ。書かない
         if (address is >= 0xF00200 and <= 0xF002FF)
         {
             throw new Dt295NativeException($"0x{address:X} はカードの端子の向きのレジスタで、読むだけです。書きません");

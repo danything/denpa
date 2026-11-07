@@ -47,7 +47,7 @@ internal sealed class Dt295NativeStream
 {
     private const byte Endpoint = 0x81;
 
-    /// <summary>1 本の読みの大きさと数 (8 KiB を 64 本)。常駐方式のときに実機で測って決めた値</summary>
+    /// <summary>1 本の読みの大きさと数 (8 KiB を 64 本)。以前の方式 (mAgicVISION のファームウェアを入れる方式) のときに実機で測って決めた値</summary>
     private const int TransferSize = 8192;
 
     private const int Depth = 64;

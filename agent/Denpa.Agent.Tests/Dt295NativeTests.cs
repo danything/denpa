@@ -28,7 +28,7 @@ public class Dt295NativeTests
     private static (int Code, string Output, string Log) Run(Dt295Fake fake, string channel, Action? powerCycle = null)
     {
         var port = $"test-{Guid.NewGuid():N}";
-        var options = new Dt295NativeProbe.Options(port, channel, ChannelTable.Parse(channel)!, TimeSpan.FromMilliseconds(30), false, IdlePolls: 2000);
+        var options = new Dt295NativeProbe.Options(port, channel, ChannelTable.Parse(channel)!, TimeSpan.FromMilliseconds(30), false);
         var output = new StringWriter();
         var log = new StringWriter();
         var code = Dt295NativeProbe.Execute(() => Dt295NativeDevice.Acquire(port, () => fake, powerCycle, _ => { }, 2000),
@@ -235,6 +235,9 @@ public class Dt295NativeTests
         var link = new Dt295NativeLink(fake);
         Assert.Throws<Dt295NativeException>(() => link.Write32(0xFD8010, 0x08080000));
         Assert.Throws<Dt295NativeException>(() => link.MaskWrite(0xFD8300, 1, 1));
+        // 範囲の書き込みも同じ。書けない語が途中にあれば、前の語も書かない
+        Assert.Throws<Dt295NativeException>(() => link.WriteBytes(0xFD7FFC, new byte[8]));
+        Assert.Throws<Dt295NativeException>(() => link.WriteBytes(0xFEA000, new byte[4]));
         await Assert.That(fake.Stores.Count).IsEqualTo(0);
         link.AllowedCoreWrites.Add(0xFD8010);
         link.Write32(0xFD8010, 0x10);
@@ -452,7 +455,7 @@ public class Dt295NativeTests
         var fake = Rig();
         var port = $"test-{Guid.NewGuid():N}";
         var timeline = new Dt295Timeline();
-        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromMilliseconds(30), false, IdlePolls: 2000);
+        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromMilliseconds(30), false);
         var output = new StringWriter();
         var code = Dt295NativeProbe.Execute(() => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000, timeline),
             () => Dt295NativeDevice.CloseIfIdle(port), options, output, new StringWriter(), timeline);
@@ -605,7 +608,7 @@ public class Dt295NativeTests
     {
         var fake = Rig();
         var port = $"test-{Guid.NewGuid():N}";
-        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromSeconds(1), false, IdlePolls: 2000, LockTest: 3, Reopen: reopen);
+        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromSeconds(1), false, LockTest: 3, Reopen: reopen);
         var output = new StringWriter();
 
         var code = Dt295NativeProbe.LockTest(options, timeline => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000, timeline),

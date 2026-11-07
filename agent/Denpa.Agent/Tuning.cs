@@ -81,6 +81,12 @@ internal static unsafe partial class Sys
     public const int ReadOnly = 0;
     public const int ReadWrite = 2;
 
+    /// <summary>
+    /// <c>O_CLOEXEC</c>。Linux は 0x80000、macOS は 0x1000000。.NET の Process.Start は付いていない fd を閉じないので、
+    /// 付けずに開くと、あとから起こした px4d・asicend・siano-ts がデバイスを開いたまま持ち続け、閉じたあとに開き直すと Device or resource busy になる
+    /// </summary>
+    public static readonly int CloseOnExec = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
+
     [LibraryImport("libc", EntryPoint = "open", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
     public static partial int Open(string path, int flags);
 
@@ -685,11 +691,11 @@ public sealed unsafe class DvbTuner : ITuneDevice
     {
         var (adapter, number) = Split(frontend);
         _adapter = $"{adapter}/{number}";
-        _frontend = Sys.Must(frontend, Sys.ReadWrite);
+        _frontend = Sys.Must(frontend, Sys.ReadWrite | Sys.CloseOnExec);
         try
         {
-            _demux = Sys.Must($"{adapter}/demux{number}", Sys.ReadWrite);
-            _dvr = new DeviceStream(Sys.Must($"{adapter}/dvr{number}", Sys.ReadOnly | Sys.NonBlocking));
+            _demux = Sys.Must($"{adapter}/demux{number}", Sys.ReadWrite | Sys.CloseOnExec);
+            _dvr = new DeviceStream(Sys.Must($"{adapter}/dvr{number}", Sys.ReadOnly | Sys.NonBlocking | Sys.CloseOnExec));
         }
         catch
         {

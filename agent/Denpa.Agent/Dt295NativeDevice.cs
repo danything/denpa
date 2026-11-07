@@ -100,13 +100,19 @@ public sealed class Dt295NativeDevice
     /// <summary>USB が抜けた・制御転送が通らなくなったなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
     public bool Faulted => _faulted || Link.Dead;
 
-    /// <summary>取る。開いていなければ、そのとき開いて設定する。**返すのは <see cref="Release"/>**</summary>
-    public static Dt295NativeDevice Acquire(string port, Dt295Timeline? timeline = null) =>
-        Acquire(port, () => Dt295.OpenUsb(port), OperatingSystem.IsLinux() ? () => UsbSysfs.PowerCycle(UsbSysfs.Devices, port, TimeSpan.FromSeconds(10)) : null, timeline: timeline);
+    /// <summary>
+    /// 取る。開いていなければ、そのとき開いて設定する。**返すのは <see cref="Release"/>**。
+    /// <paramref name="timeline"/> と <paramref name="trace"/> は --dt295-probe だけが渡す (開くときだけ効く)
+    /// </summary>
+    public static Dt295NativeDevice Acquire(string port, Dt295Timeline? timeline = null, Action<string>? trace = null) =>
+        Acquire(port, () => Dt295.OpenUsb(port), OperatingSystem.IsLinux() ? () => UsbSysfs.PowerCycle(UsbSysfs.Devices, port, TimeSpan.FromSeconds(10)) : null,
+            timeline: timeline, trace: trace);
 
     /// <param name="open">USB を開く</param>
     /// <param name="powerCycle">ポートの電源を入れ直す (Linux)。null なら挿し直しを求めて断る</param>
-    internal static Dt295NativeDevice Acquire(string port, Func<IUsbDevice> open, Action? powerCycle, Action<int>? sleep = null, uint idlePolls = IdlePollsDefault, Dt295Timeline? timeline = null)
+    /// <param name="trace">機材への読み書きと、設定の読み戻しを 1 行ずつ渡す (--dt295-probe --trace)</param>
+    internal static Dt295NativeDevice Acquire(string port, Func<IUsbDevice> open, Action? powerCycle, Action<int>? sleep = null, uint idlePolls = IdlePollsDefault,
+        Dt295Timeline? timeline = null, Action<string>? trace = null)
     {
         // 開く間 (電源の入れ直しは最大 10 秒) は同じポートだけを待たせる。別のポートの DT295 は待たない
         lock (PortGate(port))
@@ -127,7 +133,7 @@ public sealed class Dt295NativeDevice
             Dt295NativeDevice device;
             try
             {
-                device = Open(port, open, sleep, idlePolls, timeline);
+                device = Open(port, open, sleep, idlePolls, timeline, trace);
             }
             catch (Dt295NativeWarmException error)
             {
@@ -138,7 +144,7 @@ public sealed class Dt295NativeDevice
                 // 前の実行が途中で止まった・ほかのファームウェアが動いたあとの機材。ポートの電源を入れ直すと、起動直後の状態に戻る
                 Log.Write($"[{Dt295.Model} {port}] {error.Message}。USB のポートの電源を入れ直します");
                 powerCycle();
-                device = Open(port, open, sleep, idlePolls, timeline);
+                device = Open(port, open, sleep, idlePolls, timeline, trace);
             }
             device._users = 1;
             lock (Registry) Devices[port] = device;
@@ -157,21 +163,22 @@ public sealed class Dt295NativeDevice
             return gate;
         }
     }
-    private static Dt295NativeDevice Open(string port, Func<IUsbDevice> open, Action<int>? sleep, uint idlePolls, Dt295Timeline? timeline)
+
+    private static Dt295NativeDevice Open(string port, Func<IUsbDevice> open, Action<int>? sleep, uint idlePolls, Dt295Timeline? timeline, Action<string>? trace)
     {
         using var opening = timeline.Step("機材を開いて設定する");
         var opened = Stopwatch.StartNew();
         IUsbDevice usb;
         using (timeline.Step("USB を開く")) usb = open();
-        var link = new Dt295NativeLink(usb);
+        var link = new Dt295NativeLink(usb, trace);
         var undo = new Stack<(string, Action)>();
         var clock = Stopwatch.StartNew();
         try
         {
             // 書いてよい USB コアのレジスタは、I2C の準備の 4 つだけ (許可したものしか書けない。Dt295NativeLink.AllowedCoreWrites)
             foreach (var register in Dt295NativeI2c.ClockRegisters) link.AllowedCoreWrites.Add(register);
-            var board = new Dt295NativeBoard(link, timeline: timeline);
-            var i2c = new Dt295NativeI2c(link);
+            var board = new Dt295NativeBoard(link, trace, timeline);
+            var i2c = new Dt295NativeI2c(link, trace);
             if (timeline is not null)
             {
                 timeline.Controls = () => link.Controls;

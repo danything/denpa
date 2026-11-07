@@ -21,7 +21,7 @@ public static class Dt295NativeProbe
 {
     public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--switch <チャンネル,…>] [--lock-test N [--reopen] [--alt <チャンネル>]] [--trace]";
 
-    internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, uint IdlePolls = Dt295NativeDevice.IdlePollsDefault, bool DemodDump = false, string[]? Switch = null,
+    internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, bool DemodDump = false, string[]? Switch = null,
         int LockTest = 0, bool Reopen = false, string? Alt = null);
 
     internal static Options? Parse(string[] args)
@@ -48,7 +48,7 @@ public static class Dt295NativeProbe
     }
 
     /// <summary>
-    /// 選局を <paramref name="options"/>.LockTest 回くり返して、成功した割合と時間を出す (固定の待ちを短くする実験用)。
+    /// 選局を <paramref name="options"/>.LockTest 回くり返して、成功した割合と時間を出す (選局の手順や待ちを変えたときの確認用)。
     /// 毎回、同じ種別の別のチャンネル (--alt) に周波数だけ合わせて前の選局から離してから、測るチャンネルを選局する。
     /// --reopen を付けると毎回機材を閉じて開き直す (INITIALIZE の待ちを試すとき)。成功は、選局が受信を確認して最初の TS が届くこと
     /// </summary>
@@ -146,11 +146,13 @@ public static class Dt295NativeProbe
             }
             Console.Error.WriteLine($"USB のポート {port} の電源を入れ直しました");
         }
-        if (options.LockTest > 0) return LockTest(options with { Port = port }, timeline => Dt295NativeDevice.Acquire(port, timeline), () => Dt295NativeDevice.CloseIfIdle(port), Dt295NativeDevice.CloseAll, Console.Out);
+        // --trace: 機材への読み書きと設定の読み戻しを 1 行ずつ、標準エラー出力に出す
+        Action<string>? trace = options.Trace ? message => Console.Error.WriteLine($"  {message}") : null;
+        if (options.LockTest > 0) return LockTest(options with { Port = port }, timeline => Dt295NativeDevice.Acquire(port, timeline, trace), () => Dt295NativeDevice.CloseIfIdle(port), Dt295NativeDevice.CloseAll, Console.Out);
         try
         {
             var timeline = new Dt295Timeline();
-            return Execute(() => Dt295NativeDevice.Acquire(port, timeline), () => Dt295NativeDevice.CloseIfIdle(port), options, Console.Out, Console.Error, timeline,
+            return Execute(() => Dt295NativeDevice.Acquire(port, timeline, trace), () => Dt295NativeDevice.CloseIfIdle(port), options, Console.Out, Console.Error, timeline,
                 () => Dt295.Card(port).Open());
         }
         finally
