@@ -1,6 +1,6 @@
 /*
  * カードがあるかの確認と常駐イメージ側の電源オフ (Dt295ResidentCard.Present) は、mAgicVISION
- * (https://github.com/makeding/mAgicVISION、commit 4dc8854) の core/card.c を移したもの。Copyright (c) 2026 huggy、
+ * (https://github.com/makeding/mAgicVISION、commit 889a435) の core/card.c を移したもの。Copyright (c) 2026 huggy、
  * MIT License (全文は licenses/mAgicVISION.txt)。カードとのやり取りは MB86M01 の UART (0xFEA000〜0xFEA03C) を直に読み書きする。
  * ボード・TS の読み出し・チューナー・UART の手順は denpa のもの (Zd1j.cs・Mb86h47.cs と同じ形)。
  */
@@ -583,13 +583,12 @@ public sealed class Dt295ResidentTuner : ITuneDevice
 /// <summary>
 /// 常駐方式の PIX-DT295 の差し込み口。カードがあるかは CARD コマンドの STATUS で確かめ、ATR と APDU は MB86M01 の UART
 /// (0xFEA000〜0xFEA03C。MB86H47A と同じレジスタ) を直に読み書きして <see cref="T1Protocol"/> で T=1 を組む
-/// (同梱の mAgicVISION_1 の TRANSMIT は 32 バイトの受信 FIFO を途中で抜かないため、B-CAS の INT の 61 バイト応答が溢れて失敗する)。
+/// (同梱の mAgicVISION_2 の TRANSMIT は 32 バイトの受信 FIFO を途中で抜かないため、B-CAS の INT の 61 バイト応答が溢れて失敗する)。
 /// 制御転送ごとに <see cref="Dt295ResidentBoard.Locked{T}"/> を取り、待ちと送信の切れ目では手放す (受信中の SERVICE を止めない)
 /// </summary>
 public sealed class Dt295ResidentCard : ICardLink
 {
     // CARD コマンドの中身 (constants.h の MB86H_CARD_*。挿さっているかの確認と、常駐イメージ側の電源オフだけ使う)
-    public const byte Version = 2;
     public const uint OpStatus = 0;
     public const uint OpService = 2;
     public const uint OpPowerOff = 3;
@@ -659,7 +658,6 @@ public sealed class Dt295ResidentCard : ICardLink
     {
         if (_failed is not null) throw new IOException($"{Name} は使えなくなっています ({_failed.Message})", _failed);
         var data = new byte[DataSize];
-        data[0] = Version;
         try
         {
             response = Board.Locked(session => session.Command(CommandCard, op, data));
@@ -671,7 +669,7 @@ public sealed class Dt295ResidentCard : ICardLink
         }
         var rc = Error(response);
         if (Result(response) != Ok && rc < 0) return Fail(op, rc);
-        if (response[24] != Version || rc > 1 || Result(response) != Ok)
+        if (rc > 1 || Result(response) != Ok)
         {
             _failed = new Dt295ResidentException($"{Name} の応答の形式が違います (結果 {Result(response)}、理由 {rc})");
             throw _failed;

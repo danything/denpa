@@ -207,6 +207,29 @@ public class Dt295ResidentTests
         await Assert.That(resident.Commands.Count(item => item.Command == CommandRecover)).IsEqualTo(0);
     }
 
+    [Test]
+    public async Task 前のバージョンの常駐イメージが残っていれば引き継がずつなぎ直しを求める()
+    {
+        var bundle = FakeBundle.Create();
+        var image = Dt295ResidentImage.Parse(bundle.Bytes);
+        var resident = new FakeResident(bundle);
+        Dt295ResidentLoader.Start(resident, new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms), image);
+        resident.PingAbi = 1;
+        var session = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
+        await Assert.That(() => Dt295ResidentLoader.Start(resident, session, image)).Throws<Dt295ResidentColdException>();
+        await Assert.That(resident.Commands.Count(item => item.Command == CommandRecover)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task 入れるときの_PING_の_ABI_が違えば投げる()
+    {
+        var bundle = FakeBundle.Create();
+        var image = Dt295ResidentImage.Parse(bundle.Bytes);
+        var resident = new FakeResident(bundle) { PingAbi = 1 };
+        var session = new Dt295ResidentSession(resident, () => resident.Now, ms => resident.Now += ms);
+        await Assert.That(() => Dt295ResidentLoader.Start(resident, session, image)).Throws<Dt295ResidentException>();
+    }
+
     // ---------------------------------------------------------------------
     // TS
     // ---------------------------------------------------------------------
@@ -454,6 +477,9 @@ internal sealed class FakeResident : IDt295ResidentTransport
 {
     private readonly Dictionary<uint, byte> _memory = [];
 
+    /// <summary>PING の応答に載せる ABI (前のバージョンの常駐イメージは 1 を返す)</summary>
+    public uint PingAbi { get; set; } = AbiVersion;
+
     public FakeResident(FakeBundle? bundle = null)
     {
         if (bundle is null)
@@ -571,7 +597,6 @@ internal sealed class FakeResident : IDt295ResidentTransport
     /// <summary>CARD コマンド (STATUS と POWER_OFF)</summary>
     private void Card(uint op, Span<byte> response)
     {
-        response[24] = Dt295ResidentCard.Version;
         switch (op)
         {
             case Dt295ResidentCard.OpStatus:
@@ -600,6 +625,7 @@ internal sealed class FakeResident : IDt295ResidentTransport
         {
             case Dt295ResidentProtocol.Ping:
                 Put(response, 12, 1);
+                Put(response, 20, PingAbi);
                 return;
             case ResidentBlock:
                 if (argument == 1) data.AsSpan(0, (int)budget).CopyTo(Resident.AsSpan((int)address));
@@ -658,12 +684,11 @@ internal sealed class FakeResident : IDt295ResidentTransport
             case CommandDeviceQuery:
                 Put(response, 12, CommandDeviceQuery);
                 Put(response, 16, argument);
-                response[24] = QueryVersion;
-                response[25] = (byte)argument;
-                response[26] = data[1];
+                response[24] = (byte)argument;
+                response[25] = data[1];
                 var words = argument switch
                 {
-                    PageOverview => new uint[] { 3, 3, AbiVersion, 0 },
+                    PageOverview => new uint[] { 3, 3 },
                     PageSource => data[1] == 0 ? new uint[] { 473142857, 707143000, 1, 188, StreamFormat, 0, 7 } : new uint[] { 950000, 2150000, 1, 188, StreamFormat, 0, 0 },
                     _ => new uint[]
                     {

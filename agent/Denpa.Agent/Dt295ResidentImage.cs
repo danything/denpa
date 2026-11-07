@@ -1,5 +1,5 @@
 /*
- * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 4dc8854) の core/bootstrap.c (SBC2 の読み取り)・
+ * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 889a435) の core/bootstrap.c (SBC2 の読み取り)・
  * core/resident_image.c の検証・core/loader.c の mb86H_loader_parse_target のうち、PIX-DT295 の部分を移したもの。
  * Copyright (c) 2026 huggy、MIT License (全文は licenses/mAgicVISION.txt)。
  */
