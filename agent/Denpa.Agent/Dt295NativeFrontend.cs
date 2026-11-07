@@ -12,7 +12,7 @@ namespace Denpa.Agent;
 /// 仕様書に無くて決めた所:
 /// - 仕様書の手順は、常駐イメージの時刻 (ms) で書かれている。ホストの I2C は 1 転送が数 ms かかるので、時刻には合わせず、
 ///   仕様書が「待つ」と書いた所 (100 ms・20 ms・4 ms・6 ms・10 ms・約 40 ms) だけ待ち、あとは順に出す。衛星の約 40 ms だけは、実機の試験で 20 ms に短くした
-/// - 受信の確認は 1 周ごとに 10 ms 空ける (常駐イメージは 1500 回 × 10 ms で 15 秒回しても失敗にしなかった。仕様書 7.2.4)
+/// - 受信の確認の周の間は、地上波は <see cref="TerrestrialPollMs"/>、衛星は <see cref="SatellitePollMs"/> だけ空ける (仕様書 7.2.4 の常駐イメージは 10 ms 周期で、1500 回 × 10 ms で 15 秒回しても失敗にしなかった)
 /// </summary>
 public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, Dt295Timeline? timeline = null)
 {
@@ -362,7 +362,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         while (true)
         {
             polls++;
-            // ロックの印 (0x80 の bit4) が立っていなければ、段 1 も段 2 も成り立たないので、0x96 は読まない (1 周の転送が半分になる)
+            // ロックの印 (0x81 の bit4) が立っていなければ、段 1 も段 2 も成り立たないので、0x96 は読まない (1 周の転送が半分になる)
             var v80 = DemodRead(Terrestrial, 0x80, 2);
             if ((v80[1] & 0x10) != 0)
             {
@@ -562,7 +562,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     /// 仕様書に C/N のレジスタは無い。復調は TC90522 系と推定されている (仕様書 11.1) ので、その系統で C/N を持つレジスタを読む
     /// (地上波は 0x8B から 3 バイト、衛星は 0xBC から 2 バイト。実機で確かめるまで、候補)。値の向き (大きいほど良いか悪いか) も未確認で、
     /// dB への換算式は仕様書に無いので付けない。受信の状態は <see cref="WaitTerrestrialLock"/>・<see cref="WaitSatelliteLock"/> の段と同じレジスタ
-    /// (地上波は 0x80 の bit4、衛星は 0xC3 の上位 4 ビットが 0)。読むだけで、書かない
+    /// (地上波は 0x81 の bit4、衛星は 0xC3 の上位 4 ビットが 0)。読むだけで、書かない
     /// </summary>
     public Dt295Signal Signal(bool satellite)
     {

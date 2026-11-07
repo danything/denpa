@@ -179,7 +179,7 @@ public class Mb86h47ProgramsTests
         public Core1Rig()
         {
             I2c = new I2cMaster(Dib);
-            var (words, _) = Mb86h47Programs.Core1();
+            var words = Mb86h47Programs.Core1();
             Ram.Put(Mb86h47Programs.CoreOrigin, words);
             Cpu = new Fr30Machine
             {
@@ -330,7 +330,7 @@ public class Mb86h47ProgramsTests
 
         public Core0Rig()
         {
-            var (words, _) = Mb86h47Programs.Core0();
+            var words = Mb86h47Programs.Core0();
             Ram.Put(Mb86h47Programs.CoreOrigin, words);
             Cpu = new Fr30Machine
             {

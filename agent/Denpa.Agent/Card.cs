@@ -197,7 +197,7 @@ public static class Card
     /// 予備のリーダーを並べて同時に覗く。**間に合わなかったものは待たない。**
     /// 固まったリーダー 1 つのせいで表ごと出なくなるより、その行だけ理由を出す
     /// </summary>
-    internal static ReaderState[] Probe(IReadOnlyList<CardLinkCandidate> candidates, TimeSpan within)
+    private static ReaderState[] Probe(IReadOnlyList<CardLinkCandidate> candidates, TimeSpan within)
     {
         /*
          * **1 つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用のスレッドプールから

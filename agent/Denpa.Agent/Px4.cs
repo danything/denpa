@@ -1064,8 +1064,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// 区切りは筐体 (制御ソケット) 単位。どの受信機が同じキューかは px4d の中の作りなので当てにしない
     /// (Q3U4 のようにキューが 2 つある筐体でも、ブリッジをまたいだ選局が少し待つだけ)。
     /// START_STREAM から ATTACH_STREAM までは px4d が 5 秒しか待たないので、その間も放さない。
-    /// 閉じるとき (<see cref="Dispose"/>) は並ばない。答えが来なくても接続を閉じれば px4d が返すし、
-    /// <c>TunerPool</c> のロックを持ったまま呼ばれるので、ほかの受信機の選局を待つと取り合いごと止まる。
+    /// 閉じるとき (<see cref="Dispose"/>) は並ばない。答えが来なくても接続を閉じれば px4d が返す。
     /// カード (Px4Card.cs) は px4d の別のキューなので入れない
     /// </para>
     /// </summary>
@@ -1126,7 +1125,7 @@ public sealed class Px4Tuner : ITuneDevice
         _prepare = prepare;
         _wire = wire ?? Px4Wire.Px4;
         _device = device ?? Px4Userland.Device(id, receiver);
-        _name = name ?? $"px4-{Px4Userland.Tail(id)} #{receiver}";
+        _name = name ?? $"px4-{Px4Userland.Label(id)} #{receiver}";
         _turn = Turns.GetOrAdd(Px4Control.Endpoint(runtimeDir, id, "control.sock", _wire), _ => new Lock());
     }
 
@@ -1142,8 +1141,8 @@ public sealed class Px4Tuner : ITuneDevice
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
     /// <summary>
-    /// 受信機を取っていて、TS がまだ流れているか。**ロックの下で読む。** <c>Dispose</c> は別の
-    /// ロック (<c>TunerPool._deviceGate</c>) から来るので、畳んでいる最中のものに触らないように
+    /// 受信機を取っていて、TS がまだ流れているか。**ロックの下で読む。** <c>Dispose</c> は TunerPool の <c>Held.Close</c>
+    /// や STATS の定期取得と別のスレッドから来るので、畳んでいる最中のものに触らないように
     /// </summary>
     public bool Tuned
     {
@@ -1155,12 +1154,11 @@ public sealed class Px4Tuner : ITuneDevice
 
     /// <summary>
     /// 選局したときの C/N。**px4d は C/N を TUNE の答えでしか返さない** (STATS には無い) ので、受信中は選局したときの値のまま。
-    /// 取得し直すには選局し直すしかなく、それでは受信が途切れる
+    /// 取得し直すには選局し直すしかなく、それでは受信が途切れる。
+    /// **ロックを取らない。** STATS の定期取得が <c>_gate</c> を握ったまま筐体の順番を最長数秒待つので、取ると TunerPool.ReadSignals がそこで止まる
+    /// (参照を読むだけなので、選局し直しの最中に前の値か null が返るだけ)
     /// </summary>
-    public TunerSignal? Signal()
-    {
-        lock (_gate) return _control is not null && _stream is { Ended: false } ? _tuned : null;
-    }
+    public TunerSignal? Signal() => Volatile.Read(ref _control) is not null && Volatile.Read(ref _stream) is { Ended: false } ? Volatile.Read(ref _tuned) : null;
 
     /// <summary>
     /// TUNE の答え <c>u8 locked, i32 cnr_mdb</c> (SPEC 6.4。little-endian) の C/N。<c>cnr_mdb</c> は 0.001 dB 刻みで、
@@ -1560,7 +1558,7 @@ internal sealed class Px4Stream
 
     /// <summary>
     /// 溜め (<see cref="Depth"/>)。待ちは Inline で起こす (スレッドプールに回さない。pump は専用のスレッドで、
-    /// 読む側も 200ms ごとに自分で起きる)。CECH-ZD1 J の TS も同じ溜めに詰める (Zd1jStream)
+    /// 読む側も 200ms ごとに自分で起きる)。CECH-ZD1 J と PIX-DT295 の TS も同じ溜めに詰める (Zd1jStream・Dt295NativeStream)
     /// </summary>
     internal static Pipe NewBuffer() => new(new PipeOptions(
         pauseWriterThreshold: Depth,

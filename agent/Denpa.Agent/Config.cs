@@ -113,8 +113,11 @@ public sealed class Config(string tunersFile, string channelsFile)
     public string Dir => Path.GetDirectoryName(Path.GetFullPath(TunersFile))!;
 
     public static Config FromEnvironment() => new(
-        Environment.GetEnvironmentVariable("TUNERS_FILE") ?? Path.Combine(DefaultDir(), "tuners.json"),
-        Environment.GetEnvironmentVariable("CHANNELS_FILE") ?? Path.Combine(DefaultDir(), "channels.json"));
+        Given("TUNERS_FILE") ?? Path.Combine(DefaultDir(), "tuners.json"),
+        Given("CHANNELS_FILE") ?? Path.Combine(DefaultDir(), "channels.json"));
+
+    /// <summary>環境変数。空は書いていないのと同じ (空のパスは開けず、起動ごと落ちる)</summary>
+    private static string? Given(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
 
     /// <summary>
     /// 変数が無いときの置き場。Linux はコンテナの <c>/config</c>。Mac と Windows はインストーラと同じ

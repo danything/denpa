@@ -8,8 +8,8 @@ namespace Denpa.Agent;
 /// <para>
 /// 台数はデバイスの数を数えれば分かるが、**種別 (地上波か衛星か) はどこにも
 /// 書かれていない。** sysfs には出ておらず (実機で確認: `dev` `device` `power`
-/// `subsystem` `uevent` しか無く、4 つとも同じ PCI デバイスの下にぶら下がる)、
-/// `recisdb` にも列挙の手段が無い。ioctl で聞くしかない。
+/// `subsystem` `uevent` しか無く、4 つとも同じ PCI デバイスの下にぶら下がる)。
+/// ioctl で聞くしかない。
 /// </para>
 ///
 /// <para>

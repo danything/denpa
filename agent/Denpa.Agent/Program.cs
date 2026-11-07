@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Denpa.Agent;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 
 /*
@@ -12,7 +13,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *
  * denpa から触れないものが 3 つある。
  *
- * - B-CASカード … USB のリーダーも px4d / asicend の内蔵リーダーも、こちらが直接扱う (CardLinks.cs。
+ * - B-CASカード … USB のリーダーも px4d / asicend の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland / siano-userland /
@@ -43,9 +44,13 @@ if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
 if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);
 
-var port = int.TryParse(Environment.GetEnvironmentVariable("AGENT_PORT"), out var configured)
-    ? configured
-    : 25252;
+// 読めない値は既定に戻さずに止める (打ち間違えたまま別のポートで立たないように。CARD_* と同じ)
+var port = 25252;
+if (Environment.GetEnvironmentVariable("AGENT_PORT") is { Length: > 0 } portText && !(int.TryParse(portText, out port) && port is > 0 and < 65536))
+{
+    Log.Write($"AGENT_PORT は 1〜65535 の数で書きます (いまは「{portText}」)");
+    return 2;
+}
 var config = Config.FromEnvironment();
 
 /*
@@ -112,8 +117,8 @@ if (Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } hostText
  */
 // 末尾の `/` は落とす (置き場の中かを `<置き場>/` で始まるかで見るので、`/media/raw/` だとどれも外になる)
 var recorded = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
-    Environment.GetEnvironmentVariable("RAW_DIR")
-    ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") ?? "/media", "raw")));
+    (Environment.GetEnvironmentVariable("RAW_DIR") is { Length: > 0 } rawDir ? rawDir : null)
+    ?? Path.Combine(Environment.GetEnvironmentVariable("MEDIA_DIR") is { Length: > 0 } mediaDir ? mediaDir : "/media", "raw")));
 
 // 自分の鍵と証明書、合言葉、組んだ denpa (tuners.json の隣の tls/。AgentTls.cs)
 var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN"));
@@ -235,11 +240,16 @@ var https = new HttpsConnectionAdapterOptions
 };
 builder.WebHost.ConfigureKestrel(options =>
 {
-    if (host is null) options.ListenAnyIP(port, listen => listen.UseHttps(https));
-    else options.Listen(host, port, listen => listen.UseHttps(https));
+    // HTTP/1.1 の chunked だけ (h2 は流しっぱなしの接続にフロー制御の窓が増えるだけ。docs/agent.md「通信は HTTPS」)
+    void Secure(ListenOptions listen)
+    {
+        listen.Protocols = HttpProtocols.Http1;
+        listen.UseHttps(https);
+    }
+    if (host is null) options.ListenAnyIP(port, Secure);
+    else options.Listen(host, port, Secure);
     sharing?.Listen(options);
-    // 選局は何時間も開きっぱなしになる。既定のまま切られると録画が落ちる
-    options.Limits.KeepAliveTimeout = TimeSpan.FromDays(365);
+    // 選局は何時間も流しっぱなしになる。読む側の遅い (番組表だけ読むなど) 応答を、送る速さの下限で切らない
     options.Limits.MinResponseDataRate = null;
 });
 builder.Logging.ClearProviders();
@@ -557,7 +567,11 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
     {
         Keys.Local.Release(disabled);
         // チューナーとして使っている機材は開いたまま (チューナーが閉じるときに閉じる)
-        var used = pool.Tuners.Where(spec => !spec.Disabled && spec.Device is not null).Select(spec => spec.Device!).ToHashSet();
+        // CECH-ZD1 J が設定に 1 台だけなら、チューナーは挿し替えた先のポートを開いている (TunerPool.Acquire と同じく Zd1j.Follow で解く)
+        var follow = pool.Tuners.Count(spec => Zd1j.Is(spec.Device)) == 1;
+        var used = pool.Tuners.Where(spec => !spec.Disabled && spec.Device is not null)
+            .Select(spec => follow && Zd1j.Parse(spec.Device!) is { } configured ? $"{Zd1j.Scheme}{Zd1j.Follow(configured)}" : spec.Device!)
+            .ToHashSet();
         foreach (var candidate in present.Where(candidate => disabled.Contains(candidate.Name)))
         {
             if (candidate.Device is not { } device || used.Contains(device)) continue;

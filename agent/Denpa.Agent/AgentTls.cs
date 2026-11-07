@@ -230,7 +230,7 @@ public sealed class AgentTls
     /// (付けて keyCertSign が無いと、自分で自分を発行したと見なされなくなる)
     /// </para>
     /// </summary>
-    public static (string Key, string Certificate) CreatePem()
+    private static (string Key, string Certificate) CreatePem()
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var request = new CertificateRequest("CN=denpa-agent", key, HashAlgorithmName.SHA256);
