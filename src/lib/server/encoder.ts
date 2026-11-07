@@ -1677,15 +1677,12 @@ async function runJob(jobId: number): Promise<void> {
     for (const [i, attempt] of attempts.entries()) {
       if (i > 0) {
         if (canceled.has(jobId)) break;
-        // 数えるのは先頭を捨てる再試行だけ (毒ジョブの見立て `encodeMaxAttempts` の物差し)。
-        // GPU から次の方式へ移るのは、その素材ではその方式が使えないというだけで、毒ではない
-        if (attempt.seek !== null) {
-          orm()
-            .update(encodeJobs)
-            .set({ attempts: sql`${encodeJobs.attempts} + 1` })
-            .where(eq(encodeJobs.id, jobId))
-            .run();
-        }
+        /*
+         * ffmpeg の起こし直しは `encode_jobs.attempts` に数えない。あれはジョブを取り出した回数で、上限 (`encodeMaxAttempts`)
+         * はジョブのやり直しにだけ当てる。1 回の実行の中の起こし直しは `attempts` の並び (方式ごとに 2 回) で尽きるので、上限は要らない。
+         * 数えていた頃は、コーデックをいくつも選んで GPU からソフトウェアへ倒れた 1 回の実行だけで上限の 5 に届き、
+         * その実行の途中でポッドが止まると、起動したときに 1 度もやり直さず失敗にしていた
+         */
         const before = attempts[i - 1]!.hardware;
         if (attempt.hardware !== before) {
           setStep(

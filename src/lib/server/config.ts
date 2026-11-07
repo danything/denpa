@@ -117,7 +117,8 @@ export const config = {
    *
    * プロセスごと落とすジョブ (メモリ超過など) は、再起動のたびに running→queued
    * へ戻され、id 順なので毎回先頭に来てキューを塞ぎ続ける。取り出すたびに
-   * attempts を数えていて (先頭を捨てる再試行も 1 回と数える)、ここを超えたら諦めて failed にし、後ろを進める
+   * attempts を数えていて、ここを超えたら諦めて failed にし、後ろを進める。
+   * 数えるのはジョブのやり直しだけで、1 回の実行の中の ffmpeg の起こし直し (GPU → ソフトウェア・先頭を捨てる再試行) は数えない
    */
   encodeMaxAttempts: num("ENCODE_MAX_ATTEMPTS", 5),
   ffprobe: str("FFPROBE", "/usr/local/bin/ffprobe"),

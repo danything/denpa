@@ -379,19 +379,8 @@ function recordedSec(recording: Recording): number {
 export async function playbackPlan(
   recording: Recording,
 ): Promise<PlaybackPlan | null> {
-  // 並びは主 → H.265 → H.264 (`library.encodedPaths` と同じ)
-  const files = (
-    [
-      ["encoded", recording.library_path],
-      ["hevc", recording.hevc_path],
-      ["alt", recording.alt_path],
-    ] as const
-  ).filter(
-    (entry): entry is readonly [EncodedSource, string] =>
-      entry[1]?.endsWith(".mkv") === true && existsSync(entry[1]),
-  );
   const encoded: EncodedFile[] = await Promise.all(
-    files.map(async ([source, path]) => {
+    encodedFiles(recording).map(async ({ source, path }) => {
       const media = await probeMedia(source, path);
       return { source, path, codec: codecOf(media.video), media };
     }),
@@ -1260,13 +1249,40 @@ async function rawResponse(
   });
 }
 
-/** エンコード済みのファイル (Matroska)。無ければ null。在るものが物差しになる (`PlayAxis`) */
-export function encodedFile(
-  recording: Pick<Recording, "library_path">,
-): string | null {
-  return recording.library_path?.endsWith(".mkv") === true
-    ? recording.library_path
-    : null;
+/** エンコード済みがあるかを決めるのに要る列 */
+type EncodedColumns = Pick<
+  Recording,
+  "library_path" | "hevc_path" | "alt_path"
+>;
+
+/**
+ * **置き場に在るエンコード済み (Matroska)。エンコード済みがあるかは、どこもこれで決める**
+ * (観る画面の出し方 `playbackPlan`、物差し `rulerOf`、字幕 `captionArgs`、チャプター)。
+ * 並びは主 → H.265 → H.264 (`library.encodedPaths` と同じ)。
+ *
+ * 名前だけでなく、ファイルが在るかまで見る。外から消されたもの (`files.reconcile` が行を直す前) を名前だけで
+ * 在るとすると、`playbackPlan` は元の TS で流すのに、続きの位置・字幕・チャプターはエンコードしたものの物差しで出して食い違う。
+ * 見るのは列ごとに stat 1 回で、控えは持たない。一覧で呼ぶのは続きの位置がある行だけで、一覧はもともと行ごとに大きさを stat している
+ */
+export function encodedFiles(
+  recording: EncodedColumns,
+): { source: EncodedSource; path: string }[] {
+  return (
+    [
+      ["encoded", recording.library_path],
+      ["hevc", recording.hevc_path],
+      ["alt", recording.alt_path],
+    ] as const
+  ).flatMap(([source, path]) =>
+    path?.endsWith(".mkv") === true && existsSync(path)
+      ? [{ source, path }]
+      : [],
+  );
+}
+
+/** 物差しになるエンコード済み (`encodedFiles` の先頭。`PlayAxis`)。無ければ null */
+export function encodedFile(recording: EncodedColumns): string | null {
+  return encodedFiles(recording)[0]?.path ?? null;
 }
 
 /**
@@ -1275,7 +1291,7 @@ export function encodedFile(
  * 元の TS の物差しなら null
  */
 export function rulerOf(
-  recording: Pick<Recording, "library_path" | "cm_kept" | "encode_skip">,
+  recording: EncodedColumns & Pick<Recording, "cm_kept" | "encode_skip">,
   source: FileSource | null,
 ): Ruler | null {
   const encoded =
@@ -1300,6 +1316,8 @@ export function watchProgress(
   recording: Pick<
     Recording,
     | "library_path"
+    | "hevc_path"
+    | "alt_path"
     | "cm_kept"
     | "encode_skip"
     | "resume_ms"
