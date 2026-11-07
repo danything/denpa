@@ -32,6 +32,7 @@
 #                                                     字・デコーダ)・run/ (px4d のソケット)・data/ (DB とその隣のもの・denpa.env・
 #                                                     本体を起こす denpa.sh。root だけが読み書きできる)
 #                /Library/LaunchDaemons/io.github.danything.{denpa,denpa-agent}.plist  起動したら起こし、落ちたら起こし直す
+#                /Library/LaunchAgents/io.github.danything.denpa-tray.plist          メニューバーのアプリ (bin/denpa-tray) をログインしたら起こす
 #                /Library/Logs/denpa/{denpa,denpa-agent}.log                          ログ
 #                ~/denpa/config (DENPA_HOME)          エージェントの tuners.json・channels.json・tls/ (tls/pair-token は組むときの合言葉)
 #                ~/Movies/denpa/{recorded,library}    元の TS と出来上がった録画
@@ -342,6 +343,9 @@ DATA="$PREFIX/data"
 RUNTIME="$PREFIX/run"
 AGENT_PLIST="/Library/LaunchDaemons/$LABEL.plist"
 SERVER_PLIST="/Library/LaunchDaemons/$SERVER_LABEL.plist"
+# メニューバーのアプリ (tray/mac)。エージェントと同じ tar.gz に入っていて、ログインしたら /Library/LaunchAgents から起きる
+TRAY_LABEL=io.github.danything.denpa-tray
+TRAY_PLIST="/Library/LaunchAgents/$TRAY_LABEL.plist"
 LOGS=/Library/Logs/denpa
 PORT=25252
 
@@ -426,6 +430,47 @@ mac_remove_launch_agent() {
   mac_stop "gui/$USER_ID/$LABEL"
   rm -f "$USER_HOME/Library/LaunchAgents/$LABEL.plist"
   rm -rf "$USER_HOME/Library/Application Support/denpa-agent" "$USER_HOME/Library/Caches/denpa-agent"
+}
+
+# メニューバーのアプリを止める (bin/ を入れ替える前と、外すとき)。sudo を流した人のものは launchd から外し、
+# ほかの人がログインして動かしているものは終わらせる (次のログインで新しいものが起きる)。録画には関わらないので待たない
+mac_stop_tray() {
+  launchctl bootout "gui/$USER_ID/$TRAY_LABEL" 2>/dev/null || true
+  pkill -f "$PREFIX/bin/denpa-tray" 2>/dev/null || true
+}
+
+# メニューバーのアプリ (denpa-tray)。**ログインしたら起きる**ように /Library/LaunchAgents に載せる (誰がログインしても出る)。
+# 出すのは本体の様子と新しいバージョンで、更新はメニューから人が選んだときにこの install.sh を Terminal で流す (docs/install-mac.md)。
+# KeepAlive は付けない (メニューの「終了」で終えたら、次のログインまで出さない)。
+# sudo を流した人がログインしていれば (gui のドメインがあれば) ここで起こす。無ければ次のログインを待つ。
+# tar.gz に入っていなければ (DENPA_VERSION でメニューバーのアプリより前のバージョンを入れたとき) 載せず、前に載せたものも消す
+# (残すと、ログインのたびに launchd が無い実行ファイルを起こそうとする)
+mac_register_tray() {
+  if [ ! -x "$PREFIX/bin/denpa-tray" ]; then
+    rm -f "$TRAY_PLIST"
+    return 0
+  fi
+  mkdir -p /Library/LaunchAgents
+  cat > "$TRAY_PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$TRAY_LABEL</string>
+  <key>ProgramArguments</key><array><string>$PREFIX/bin/denpa-tray</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>ProcessType</key><string>Interactive</string>
+</dict>
+</plist>
+EOF
+  chown root:wheel "$TRAY_PLIST"
+  chmod 644 "$TRAY_PLIST"
+  plutil -lint "$TRAY_PLIST" >/dev/null
+  if launchctl print "gui/$USER_ID" >/dev/null 2>&1; then
+    launchctl bootstrap "gui/$USER_ID" "$TRAY_PLIST" 2>/dev/null \
+      || say "メニューバーのアプリを起こせませんでした。次のログインで起きます"
+  fi
 }
 
 # 本体の置き場 ($DATA)。DB・鍵・denpa.env・合言葉の入る denpa.sh があるので、root だけにする
@@ -668,7 +713,8 @@ mac_main() {
     mac_stop "system/$SERVER_LABEL"
     mac_stop "system/$LABEL"
     mac_remove_launch_agent
-    rm -f "$SERVER_PLIST" "$AGENT_PLIST" "$DATA/denpa.sh" "$DATA/wake-at"
+    mac_stop_tray
+    rm -f "$SERVER_PLIST" "$AGENT_PLIST" "$TRAY_PLIST" "$DATA/denpa.sh" "$DATA/wake-at"
     for part in bin px4-userland siano-userland server run; do rm -rf "${PREFIX:?}/$part"; done
     say "外しました。残してあるもの (要らなければ手で消してください):"
     say "  DB と denpa.env $DATA / エージェントの設定 $DENPA_DIR / 録画 $MEDIA / ログ $LOGS"
@@ -694,6 +740,8 @@ mac_main() {
   mac_stop "system/$SERVER_LABEL"
   mac_stop "system/$LABEL"
   mac_remove_launch_agent
+  # メニューバーのアプリも bin/ にある (更新をメニューから始めたときは、それがまだ動いている)
+  mac_stop_tray
   mkdir -p "$PREFIX" "$LOGS"
   chown root:wheel "$PREFIX"
   chmod 755 "$PREFIX"
@@ -721,6 +769,7 @@ mac_main() {
     return 0
   fi
   mac_register_server "$server_version"
+  mac_register_tray
   # sudo の中から開くとブラウザまで root で動くので、その人として開く
   if [ "$open_browser" = yes ]; then launchctl asuser "$USER_ID" sudo -u "$USER_NAME" open "$URL" || true; fi
 }

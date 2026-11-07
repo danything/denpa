@@ -4,19 +4,16 @@ import Foundation
 
 /// denpa の `GET /api/health` の答えのうち、メニューバーに出すもの。
 /// 新しいバージョンがあるかは denpa が GitHub の releases/latest と見比べた結果 (src/lib/server/update.ts) をそのまま使い、ここでは比べない
-public struct Health: Equatable {
+public struct Health: Equatable, Sendable {
     public let version: String
     /// 新しいバージョン (`v2.31.0` の形)。無ければ nil
     public let latest: String?
-    /// 新しいバージョンのリリースのページ
-    public let releaseURL: URL?
     public let recording: Int
     public let encoding: Int
 
-    public init(version: String, latest: String?, releaseURL: URL?, recording: Int, encoding: Int) {
+    public init(version: String, latest: String?, recording: Int, encoding: Int) {
         self.version = version
         self.latest = latest
-        self.releaseURL = releaseURL
         self.recording = recording
         self.encoding = encoding
     }
@@ -31,7 +28,6 @@ public struct Health: Equatable {
         return Health(
             version: root["version"] as? String ?? "?",
             latest: update?["version"] as? String,
-            releaseURL: (update?["url"] as? String).flatMap(URL.init(string:)),
             recording: count(root["recording"]),
             encoding: count(root["encoding"])
         )
@@ -53,9 +49,35 @@ public enum Words {
         return line
     }
 
-    /// 新しいバージョンのリリースのページを開く項目。
-    /// 更新そのもの (install.sh を流す) は、本体を LaunchDaemon で動かす作り (#2219 の段階 3) に入れるときに足す
-    public static func releaseItem(_ latest: String) -> String {
-        "新しいバージョン \(latest) のリリースを開く"
+    /// メニューの更新の項目
+    public static func updateItem(_ latest: String) -> String {
+        "\(latest) に更新…"
     }
+
+    /// 更新を始める前に確かめる文。録画もエンコードもしていなければ nil (確かめずに始める)。
+    /// 録画は止めない。install.sh が録画の終わりを待ってから入れ替える (mac_stop。本体は SIGTERM を受けると録画を待つ)。
+    /// エンコードは待たずに止まり、起き直したあとで最初からやり直しになる (encoder.ts の requeueOrphanedJobs) ので、そう言って選んでもらう
+    public static func askBeforeUpdate(_ health: Health) -> String? {
+        if health.recording == 0 && health.encoding == 0 { return nil }
+        var text = ""
+        if health.recording > 0 { text += "録画中です (\(health.recording) 本)。録画が終わるまで待ってから入れ替えます。\n" }
+        if health.encoding > 0 { text += "エンコード中です (\(health.encoding) 本)。更新するとエンコードを中断し、更新のあとで最初からやり直します。\n" }
+        return text + "\n更新しますか"
+    }
+}
+
+public enum Installer {
+    /// 更新に流すシェルスクリプト (Terminal で開く .command)。入れたときと同じ install.sh の 1 行 (docs/install-mac.md)。
+    /// sudo のパスワードを聞き、録画を待つ間の表示と結果を Terminal に出す。ブラウザは開かない。
+    /// 読み込まれたら自分を消す。失敗したら Enter を押すまで閉じない
+    public static let command = """
+        #!/bin/bash
+        # denpa-tray が書いた (denpa を更新するために Terminal で開く)
+        rm -f "$0"
+        curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | sudo bash -s -- --no-open || {
+          echo
+          read -r -p '更新できませんでした。Enter で閉じます'
+        }
+
+        """
 }

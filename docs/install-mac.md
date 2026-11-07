@@ -11,7 +11,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 
 **denpa 本体もエージェントも、Mac の上でそのまま動かします。** Docker Desktop・OrbStack・コンテナは使いません。
 本体はリリースに添えた `denpa-<バージョン>-darwin-arm64.tar.gz` (bun・アプリ・ffmpeg・字・ブラウザへ配るデコーダ) で、
-エージェントは `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (.NET の実行ファイル 1 個) です。どちらも同じバージョンを入れます。
+エージェントは `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (.NET の実行ファイル。[メニューバーのアプリ](#メニューバーのアプリ)も入っている) です。どちらも同じバージョンを入れます。
 
 1. **エージェント**: LaunchDaemon (`/Library/LaunchDaemons/io.github.danything.denpa-agent.plist`) に root で載せます。
    起動したら起き、落ちたら起き直し、止めるときは録画の終わりを待ちます (launchd に強制終了されないよう、待ちの上限を 6 時間より長くしてある)
@@ -32,15 +32,16 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 - genkan (`http://denpa.localhost`) には繋ぎません。この Mac からは <http://localhost:3000>、LAN のほかの機器からは `http://<Mac の名前>.local:3000` で開きます
 - 本体とエージェントの tar.gz は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
 
-| 置き場                                     | 中身                                                                                                                                    |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `/Library/Application Support/denpa/`      | エージェント (`bin/`)・px4-userland・siano-userland・本体 (`server/`)・px4d のソケットの置き場 (`run/`。root だけ)                      |
-| `/Library/Application Support/denpa/data/` | DB (`denpa.db`) と、その隣の局ロゴ・鍵・本体の環境変数 `denpa.env`・本体を起こす `denpa.sh` (エージェントと組む合言葉が入る)。root だけ |
-| `/Library/LaunchDaemons/`                  | `io.github.danything.denpa.plist`・`io.github.danything.denpa-agent.plist`                                                              |
-| `/Library/Logs/denpa/`                     | ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント。回さずに足していく)                                                         |
-| `~/denpa/config/` (`DENPA_HOME`)           | エージェントの `tuners.json` / `channels.json`・`tls/` (`tls/pair-token` は組むときの合言葉)                                            |
-| `~/Movies/denpa/recorded`                  | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                     |
-| `~/Movies/denpa/library`                   | 出来上がった録画 (`ENCODED_DIR`。Finder から見える)                                                                                     |
+| 置き場                                     | 中身                                                                                                                                     |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `/Library/Application Support/denpa/`      | エージェントとメニューバーのアプリ (`bin/`)・px4-userland・siano-userland・本体 (`server/`)・px4d のソケットの置き場 (`run/`。root だけ) |
+| `/Library/Application Support/denpa/data/` | DB (`denpa.db`) と、その隣の局ロゴ・鍵・本体の環境変数 `denpa.env`・本体を起こす `denpa.sh` (エージェントと組む合言葉が入る)。root だけ  |
+| `/Library/LaunchDaemons/`                  | `io.github.danything.denpa.plist`・`io.github.danything.denpa-agent.plist`                                                               |
+| `/Library/LaunchAgents/`                   | `io.github.danything.denpa-tray.plist` (メニューバーのアプリをログインしたら起こす)                                                      |
+| `/Library/Logs/denpa/`                     | ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント。回さずに足していく)                                                          |
+| `~/denpa/config/` (`DENPA_HOME`)           | エージェントの `tuners.json` / `channels.json`・`tls/` (`tls/pair-token` は組むときの合言葉)                                             |
+| `~/Movies/denpa/recorded`                  | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                      |
+| `~/Movies/denpa/library`                   | 出来上がった録画 (`ENCODED_DIR`。Finder から見える)                                                                                      |
 
 `~` は sudo を流した人のホームです。`data/` を root だけのものにしてあるのは、root で動くものの環境変数と合言葉を、ほかの人やほかのプログラムに
 読ませたり書き換えさせたりしないためです (`/Library/LaunchDaemons` の plist はだれでも読めるので、合言葉は書かない)。
@@ -62,6 +63,23 @@ LaunchDaemon の環境変数は、コンテナ既定の置き場を Mac の置�
 `PX4_RUNTIME_DIR` を `/Library/Application Support/denpa/run` と短くしているのは、px4d の制御ソケットのパスが macOS では 104 バイトまでだからです。
 px4d は、持ち主が自分 (root) でほかの人が書けないフォルダしか使わないので、install.sh が root の 700 で作ります。
 IT930x のファームウェアはエージェントに同梱しているので、install.sh は置きません。
+
+## メニューバーのアプリ
+
+**ログインすると、メニューバーに denpa のアイコン (`denpa-tray`) が出ます。** install.sh が `/Library/LaunchAgents` に載せるので、
+この Mac の誰がログインしても出ます。同じ Mac の denpa の `/api/health` を 10 秒ごとに呼び、その答えを出すだけです。
+
+- denpa が答えれば電波塔のアイコン、答えなければ斜線の入ったアイコンになります。新しいバージョン (denpa が GitHub の最新のリリースと見比べたもの) があると、
+  アイコンの横に「更新」と出ます。**更新は勝手には始めません**
+- メニューは、バージョンと録画・エンコードの本数の 1 行・「denpa を開く」・新しいバージョンがあるときだけの「v2.31.0 に更新…」・「終了」です
+- 「終了」で消したアイコンは、次のログインでまた出ます。`--agent-only` では載せません (出すのは本体の様子なので)。外すと LaunchAgent も消します
+
+**「v2.31.0 に更新…」を選ぶと、入れたときと同じ install.sh の 1 行をターミナルで流します** (`--no-open` 付き。sudo のパスワードはターミナルで聞く)。
+
+- 録画中・エンコード中なら、流す前に確かめます。録画中なら、install.sh が録画の終わりを待ってから入れ替えます。
+  エンコード中なら中断し、更新のあとで最初からやり直します
+- ターミナルに進み具合が出ます。録画を待つ間も、そこで待ちます。失敗したら、Enter を押すまで閉じません
+- 入れ替える前にメニューバーのアプリも止め、入れ終えたら起動し直します (ほかの人のものは次のログインで新しくなる)
 
 ## 環境変数を足す (`denpa.env`)
 
@@ -147,11 +165,13 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
   denpa が渡すオプションを持つこと、通れば放送に似せた素材をエンコードできること (ランナーでは通る)、試しのエンコードが落ちればソフトウェアに戻ることを見る。
   進み具合を fd 3 で受け、スリープを止める呼び出しが `pmset -g assertions` に、起こす予約が `pmset -g sched` に出て取り消せることを見る。
   本体を `bun server.js` で起こして画面・字・デコーダが返ることを見る。install.sh で本体ごと入れて root の LaunchDaemon で動き、
-  本体がエージェントと組むところまで。Docker の本体からの移行は偽の docker で流す (`tests/install-mac-migrate.sh`)
+  本体がエージェントと組むところまで。Docker の本体からの移行は偽の docker で流す (`tests/install-mac-migrate.sh`)。メニューバーのアプリは、組んで起こして落ちないこと・
+  LaunchAgent に載ること・上げ直すと動いているものを止めること・外すと消えることまで
 - **Mac の実機でチューナーとカードを繋いで確かめたのは、PIX-DT295 の報告 (#2218) だけです** ([tuners.md](tuners.md#pixela-pix-dt295-試験的))。それも前のバージョン
   (エージェントがユーザーの LaunchAgent) のときのものです
 - **まだ確かめていないこと**: root の LaunchDaemon で動くエージェントから USB の機材とカードリーダー (PC/SC) を使えるか、VideoToolbox で
-  エンコードした録画の画質と大きさ、スリープから起こす予約で録画が始まるか、実機の Docker からの移行。実機で当てるのは
+  エンコードした録画の画質と大きさ、スリープから起こす予約で録画が始まるか、実機の Docker からの移行、メニューバーのアプリの見た目と、
+  そこからターミナルで更新する流れ。実機で当てるのは
   `sudo "/Library/Application Support/denpa/bin/denpa-agent" --card` など (下の手順でエージェントを止めてから)
 
 ## カードが読めないとき
