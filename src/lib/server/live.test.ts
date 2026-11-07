@@ -130,6 +130,11 @@ describe("ライブのエンコード方法", () => {
    * 動きのある場面が櫛状になる。録画と違い、ライブは映像が来る前に決める
    * しかないので、動きが絶対に落ちない側 (60) に倒す
    */
+  // 字幕の出口が名前付きパイプ (Windows) のとき、あるかを確かめるだけでパイプの 1 本を使ってしまう (`stream.sideOutput`)
+  test("出口があるかを確かめさせない (-y)", () => {
+    expect(plain()).toContain("-y");
+  });
+
   test("インタレを 60 コマでデコードする", () => {
     const live = encodeArgs(1024, stereo);
     expect(live[live.indexOf("-vf") + 1]).toBe("bwdif=deint=interlaced");

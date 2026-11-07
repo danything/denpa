@@ -91,6 +91,21 @@ describe("assign", () => {
     );
   });
 
+  test("足りない数には、別の組のチューナーで録る種別を数えない", () => {
+    const { rejected } = assign(
+      [
+        res({ id: 1, channel: "T16" }),
+        res({ id: 2, channel: "T21" }),
+        res({ id: 3, type: "BS", channel: "BS01_0" }),
+        res({ id: 4, type: "BS", channel: "BS03_1" }),
+        res({ id: 5, type: "BS", channel: "BS05_0" }),
+      ],
+      GR2,
+    );
+    expect(rejected.map((r) => r.reservation.id)).toEqual([5]);
+    expect(rejected[0]!.reason).toContain("同時に 3 チャンネル必要です");
+  });
+
   test("優先度が高いものを残す", () => {
     const { accepted, rejected } = assign(
       [

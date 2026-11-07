@@ -139,6 +139,8 @@ export function rawCaptionArgs(
   const from = programSpec(program);
   return [
     "-hide_banner",
+    // 出口が名前付きパイプ (Windows) でも、あるかを確かめさせない (`stream.sideOutput`)
+    "-y",
     "-nostats",
     "-fflags",
     "nobuffer",

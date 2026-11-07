@@ -16,6 +16,7 @@
   import { type DetailSeed, programDetail } from "#lib/detail.svelte.js";
   import {
     badgeClass,
+    cancelable,
     dateTime,
     quietState,
     recordedDuration,
@@ -241,11 +242,20 @@
     return preview?.verdicts[id] ?? null;
   }
   /**
-   * **行のボタンで取り消せる予約の状態** (これからの放送・予約の節・下見の行で同じ)。これから録るものだけ。
-   * 録画中を行から取り消すと録画が止まるので出さない (予約の節は代わりに追っかけを出す)。録画しない (`skipped`。
-   * コピー禁止・同じ回を録画済み) はもう録らないので出さない。どちらも詳細の「予約取消」からは取り消せる (`ProgramActions`)
+   * 録画を待っている予約か。録画中と録画しない (`skipped`。コピー禁止・同じ回を録画済み) は待っていない
    */
-  const ROW_CANCELABLE = ["scheduled", "conflict"];
+  function waitingToRecord(state: string | null): boolean {
+    return state !== "recording" && state !== "skipped";
+  }
+  /**
+   * **行のボタンで取り消せるか** (これからの放送・予約の節・下見の行で同じ)。取り消せる予約 (`cancelable`。
+   * サーバ・番組表・詳細と同じ判定) のうち、録画を待っているもの (`waitingToRecord`) だけ。
+   * 録画中を行の 1 押しで取り消すと録画が止まり (予約の節は代わりに追っかけを出す)、録画しないものは取り消しても何も変わらない。
+   * どちらも詳細の「予約取消」からは取り消せる (`ProgramActions`)
+   */
+  function rowCancelable(state: string | null, endAt: number): boolean {
+    return cancelable(state, endAt, clock) && waitingToRecord(state);
+  }
 
   /** ルールの削除の 2 回押し (書く欄の「削除」) */
   const ruleDeleting = arming('[data-testid^="rule-delete"]');
@@ -401,9 +411,9 @@
                   </span>
                 </button>
                 <div class="row-actions">
-                  <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`ROW_CANCELABLE`) -->
+                  <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`rowCancelable`) -->
                   {#if program.reservation_id !== null}
-                    {#if ROW_CANCELABLE.includes(program.reservation_state ?? "")}
+                    {#if rowCancelable(program.reservation_state, program.end_at)}
                       <ActionButton
                         action="?/cancel"
                         fields={{ reservationId: program.reservation_id }}
@@ -581,7 +591,7 @@
                       class="button small ghost"
                       href={resolve(`chase/${res.recording_id}`)}>追っかけ</a
                     >
-                  {:else if ROW_CANCELABLE.includes(res.state)}
+                  {:else if rowCancelable(res.state, res.end_at)}
                     <ActionButton
                       action="?/cancel"
                       fields={{ reservationId: res.id }}
@@ -717,9 +727,9 @@
                 {/if}
               </span>
             </button>
-            <!-- 1 件ずつ: 取り消せる予約 (`ROW_CANCELABLE`) は取り消し、録る行はその 1 本だけ予約できる (ホーム・結果の行と同じ action) -->
+            <!-- 1 件ずつ: 取り消せる予約 (`rowCancelable`) は取り消し、録る行はその 1 本だけ予約できる (ホーム・結果の行と同じ action) -->
             <div class="row-actions">
-              {#if row.reservation_id !== null && ROW_CANCELABLE.includes(row.reservation_state ?? "")}
+              {#if row.reservation_id !== null && rowCancelable(row.reservation_state, row.end_at)}
                 <ActionButton
                   action="?/cancel"
                   fields={{ reservationId: row.reservation_id }}

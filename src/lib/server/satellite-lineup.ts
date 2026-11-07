@@ -15,32 +15,22 @@
  * `RETRY_AFTER` たってから試し直す (局の一覧は 1 分ごとに読むので、そのたびに選局しない)
  */
 import type { ChannelType } from "../types";
-import { config } from "./config";
 import { orm } from "./db";
+import { readFromAir } from "./lineup-follow";
 import {
   isLineupName,
   knownNames,
   type Lineup,
-  readLineup,
   type SatelliteType,
 } from "./satellite";
 import { scanState } from "./scan";
 import { services } from "./schema";
-import {
-  type AgentChannel,
-  getTuners,
-  openChannelStream,
-  putChannels,
-  TunerBusyError,
-} from "./tuner";
+import { type AgentChannel, getTuners, putChannels } from "./tuner";
 
 const TYPES: SatelliteType[] = ["BS", "CS"];
 
 /** 読めなかった種別を試し直すまで */
 const RETRY_AFTER = 60 * 60_000;
-
-/** 1 中継器を読む上限 (スキャンと同じ) */
-const READ_TIMEOUT = 30_000;
 
 /** 最後に試して読めなかった時刻 (種別ごと) */
 const failedAt = new Map<SatelliteType, number>();
@@ -162,28 +152,12 @@ async function fill(
   const known = knownNames(channels);
   const filled: ChannelType[] = [];
   for (const type of wanted.filter((type) => receivable.has(type))) {
-    /** チューナーが塞がっていて開けなかったか。それだけなら 1 時間待たず、次の取り込みで試し直す */
-    let busy = false;
-    const lineup = await readLineup(
-      type,
-      (channel) =>
-        openChannelStream(
-          type,
-          channel,
-          AbortSignal.timeout(READ_TIMEOUT * 4),
-          `scan ${channel}`,
-          config.priority.scan,
-        ).catch((error: unknown) => {
-          if (error instanceof TunerBusyError) busy = true;
-          throw error;
-        }),
-      {
-        timeout: READ_TIMEOUT,
-        known,
-        previous: channels,
-        expected: leftoverNetworks(channels, type, stored),
-      },
-    );
+    // `busy` はチューナーが塞がっていて開けなかったか。それだけなら 1 時間待たず、次の取り込みで試し直す
+    const { lineup, busy } = await readFromAir(type, {
+      known,
+      previous: channels,
+      expected: leftoverNetworks(channels, type, stored),
+    });
     if (lineup.channels.length === 0) {
       if (!busy) failedAt.set(type, now);
       console.warn(

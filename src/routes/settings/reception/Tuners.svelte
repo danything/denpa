@@ -12,6 +12,8 @@
   import {
     READER_STATE_LABEL,
     SERVICE_TYPE_LABEL,
+    SIGNAL_RAW_NOTE,
+    signalText,
     splitReaderName,
   } from "#lib/format.js";
   import { held } from "#lib/live-updates.svelte.js";
@@ -139,20 +141,6 @@
     signals !== null && tuner.index in signals
       ? (signals[tuner.index] ?? null)
       : tuner.signal;
-
-  /**
-   * C/N の出し方。**生の値は dB と読まれないように「(生の値)」を付け、単位を付けない** (機材やドライバが返した値のまま。docs/tuners.md「信号レベル」)。
-   * 選局したときに測った値 (px4d) はそう言う
-   */
-  function signalText(signal: TunerSignal): string {
-    const state = signal.locked ? "同期しています" : "同期していません";
-    if (signal.cn === null) return state;
-    const cn =
-      signal.unit === "dB"
-        ? `C/N: ${signal.cn.toFixed(1)} dB${signal.atTune ? " (選局したとき)" : ""}`
-        : `C/N (生の値): ${signal.cn.toLocaleString("ja-JP")}`;
-    return `${state}・${cn}`;
-  }
 
   /** カードリーダーの状態のバッジの色。ほかは色なし */
   const READER_TONE: Partial<Record<CardReaderState, string>> = {
@@ -443,8 +431,7 @@
           <!-- 生の値は dB ではない。何と比べるものかを言う (docs/tuners.md「信号レベル」) -->
           {#if tuners.some((tuner) => tuner.channel !== null && signalOf(tuner)?.unit === "raw")}
             <p class="tiny muted" data-testid="tuner-signal-raw-note">
-              C/N (生の値) は機材やドライバが返した値のままで、dB
-              ではありません。同じチューナー・同じチャンネルで、配線を変える前とあとを比べる目安です
+              {SIGNAL_RAW_NOTE}
             </p>
           {/if}
         {/if}

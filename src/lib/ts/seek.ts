@@ -122,6 +122,14 @@ export function lastVideoPts(bytes: Uint8Array): number | null {
 /** ファイルを少しずつ読む関数。`length` より短く返ってよい (尻) */
 export type ReadAt = (offset: number, length: number) => Promise<Uint8Array>;
 
+/** 先頭の PTS を探すのに読む量。映像と音声の最初の PES が必ず入る長さ */
+const HEAD_BYTES = 4 * 1024 * 1024;
+
+/** **録画の先頭を読んで、入れ物の始まり (`tsHead`) を返す。** 読めなければ null */
+export async function readHead(read: ReadAt): Promise<number | null> {
+  return tsHead(await read(0, HEAD_BYTES));
+}
+
 /** 1 回に読む量。放送の 1 秒ぶん (地上波 17Mbps ≒ 2MB) より短い間に映像の PES は何度も来る */
 const WINDOW = 256 * 1024;
 /** 映像の PES を探して読み進める上限。これだけ読んで無ければ、その位置には無いことにする */

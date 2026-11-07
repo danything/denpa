@@ -31,7 +31,7 @@ RUN bun install
 #   https の Chrome・Edge・Firefox だけで、重くて困るはずの iPhone・iPad には効かない
 #   (docs/stream.md「スライスのスレッドを見送った理由」)
 # - **SIMD は付けておく** (`-msimd128`。コンパイラが自動でベクトルにする)。MPEG-2 では測っても差が揺れの中だった
-#   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream.md「組み方を変えて測ったこと」)。今のブラウザはどれも対応している
+#   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream-history.md「WASM のデコーダの組み方を決めたときの測定」)。今のブラウザはどれも対応している
 # - **LTO を掛ける** (`-flto`)。デコードが 2〜8% 速くなり、brotli 後はかえって 2 KB ほど縮む (同じ節)
 # - **ローダーは ES の module にして、ワーカーの中からだけ読む** (`ENVIRONMENT=worker`)。
 #   ファイルの読み書き (`FILESYSTEM`) は使わないので外す — それだけで 40KB ほど縮む
@@ -187,7 +187,8 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # libnvidia-encode) は ffmpeg が実行時に dlopen する。**実行イメージには何も足さない** — NVIDIA Container
 # Toolkit がホストのドライバのライブラリをコンテナに差し込む (docs/encode.md「NVIDIA でエンコードする」)。
 # GPU が無ければ試しのエンコードが落ちて使わないだけなのは VA-API と同じ。
-# clang は CUDA のフィルタ (scale_cuda・bwdif_cuda) を PTX に組むため (`--enable-cuda-llvm`。CUDA の SDK は要らない)
+# デコードとインタレ解除は CPU でするので、NVIDIA のデコーダ (nvdec) と CUDA のフィルタは組まない
+# (GPU に寄せるときは `--enable-nvdec`・`--enable-cuda-llvm` と clang を足す。docs/encode.md「NVIDIA でエンコードする」)
 ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libx264-dev libdav1d-dev libva-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
@@ -234,9 +235,6 @@ COPY patches/ /patches/
 #   rawvideo は CM 検出のロゴのコマ。H.265 (hevc_*) は GPU のものだけで、libx265 は組まない
 #   (ソフトウェアでは H.265 をエンコードしない。docs/encode.md「H.265 は GPU でだけ」)。
 #   nvenc は amd64、rkmpp は arm64 だけで、相手の arch では configure が黙って外す
-# - hwaccel の nvdec と、フィルタの hwupload_cuda・scale_cuda・bwdif_cuda は、NVIDIA の GPU で放送の MPEG-2 を
-#   デコードしてインタレ解除まで済ませるためのもの。**denpa はまだ使わない** (実機で確かめてから引数に足す。
-#   docs/encode.md「NVIDIA でエンコードする」)。clang で組めているかは、イメージの確かめで先に見ておく
 # - パーサ: demuxer が頼るのに configure が自分で足さないもの。画像の *_pipe は区切りをパーサに任せる
 # - bsf: h264_mp4toannexb・hevc_mp4toannexb は concat の demuxer が H.264・H.265 の mkv に差し込む (cm-cut.ts)。
 #   extract_extradata は libavformat が入力を調べるときに使う (無いと `-ss` で途中から読んだ MPEG-2 が次のシーケンスヘッダまで
@@ -249,8 +247,7 @@ COPY patches/ /patches/
 # - testsrc2・sine・telecine・tinterlace・noise は denpa は使わず、イメージの確かめで素材を作るためだけ
 #   (.github/image-smoke.sh と scripts/fps-smoke.ts)。合わせても数百 KB
 RUN case "${TARGETARCH}" in \
-      amd64) arch_dev="libffmpeg-nvenc-dev clang" \
-             arch_flags="--enable-ffnvcodec --enable-nvenc --enable-nvdec --enable-cuda-llvm" ;; \
+      amd64) arch_dev=libffmpeg-nvenc-dev arch_flags="--enable-ffnvcodec --enable-nvenc" ;; \
       arm64) arch_dev=libdrm-dev arch_flags="--enable-libdrm --enable-rkmpp" ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
@@ -296,12 +293,12 @@ RUN case "${TARGETARCH}" in \
       --disable-network \
       --enable-decoder=mpeg2video,h264,aac,opus,libdav1d,png,mjpeg,webp,hevc,ac3,eac3,mp2,aac_latm,wrapped_avframe,pcm_s16le \
       --enable-encoder=libsvtav1,libx264,libopus,aac,h264_vaapi,av1_vaapi,hevc_vaapi,h264_nvenc,av1_nvenc,hevc_nvenc,h264_rkmpp,hevc_rkmpp,mpeg2video,mjpeg,rawvideo,wrapped_avframe,pcm_s16le \
-      --enable-hwaccel=mpeg2_vaapi,h264_vaapi,mpeg2_nvdec,h264_nvdec \
+      --enable-hwaccel=mpeg2_vaapi,h264_vaapi \
       --enable-demuxer=mpegts,matroska,mov,concat,ffmetadata,image2,png_pipe,jpeg_pipe,webp_pipe \
       --enable-muxer=matroska,mp4,adts,avif,rawvideo,null,image2,mpegts \
       --enable-parser=mpegvideo,h264,aac,av1,opus,png,mjpeg,webp,hevc,ac3,mpegaudio,aac_latm \
       --enable-bsf=h264_mp4toannexb,hevc_mp4toannexb,aac_adtstoasc,extract_extradata \
-      --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,scale_vaapi,hwupload_cuda,scale_cuda,bwdif_cuda,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay \
+      --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,scale_vaapi,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay \
       --enable-indev=lavfi \
       --enable-protocol=file,pipe \
     && \

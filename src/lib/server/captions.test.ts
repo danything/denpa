@@ -92,6 +92,13 @@ describe("放送そのままの経路の字幕", () => {
     expect(args).not.toContain("-sub_type");
   });
 
+  // 出口が名前付きパイプ (Windows) のとき、あるかを確かめるだけでパイプの 1 本を使ってしまう (`stream.sideOutput`)
+  test("出口があるかを確かめさせない (-y)", () => {
+    expect(rawCaptionArgs(1024, 0, String.raw`\.pipedenpa-1-1`)).toContain(
+      "-y",
+    );
+  });
+
   test("何本目の字幕かを選べる", () => {
     expect(rawCaptionArgs(1024, 1).join(" ")).toContain("-map 0:p:1024:s:1");
   });

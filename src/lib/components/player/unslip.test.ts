@@ -39,4 +39,15 @@ describe("映像だけ遅れたら飛び直す", () => {
     expect(fix.check(fakeVideo(10, true), 9)).toBe(false);
     expect(fix.check(fakeVideo(10, false, true), 9)).toBe(false);
   });
+
+  test("`jump` は遅れを見ずに飛び、`check` と同じく 3 秒に 1 回まで", () => {
+    let now = 0;
+    const video = fakeVideo(10);
+    const fix = unslipper(() => now);
+    expect(fix.jump(video)).toBe(true);
+    expect(video.currentTime).toBeCloseTo(10 + UNSLIP_STEP, 6);
+    now = UNSLIP_EVERY - 1;
+    expect(fix.check(video, 9)).toBe(false);
+    expect(fix.jump(video)).toBe(false);
+  });
 });

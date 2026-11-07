@@ -271,6 +271,8 @@ export function encodeArgs(
   const from = programSpec(program);
   return [
     "-hide_banner",
+    // 字幕の出口が名前付きパイプ (Windows) でも、あるかを確かめさせない (`stream.sideOutput`)
+    "-y",
     // 数字の進み具合だけ止める。`-loglevel` は下げられない (上の説明)
     "-nostats",
     // `-fflags nobuffer` は付けない。解析の間に読んだ I フレームを捨てて次の GOP を待つ (上の説明)
@@ -851,7 +853,7 @@ export function takeLight(id: string, now = Date.now()): Light | null {
  * **次に何を軽くするか。** 順に 60 コマ → 30 コマ (段 0 だけ。段 1〜3 はもう 30 コマ)、ソフトウェア → GPU (同じコーデックを
  * GPU でエンコードできるときだけ)。どれも済んでいれば null (断り書きだけ)。
  * 30 コマを先にするのは、コーデックとエンコーダを替えずに済み、GPU が降りる心配が無いため。
- * `gpuReady` は `pickLiveHw` が経路を返すか。GPU に移せるときだけ呼ぶ (`pickLiveHw` は GPU の振り分けの順を進める)
+ * `gpuReady` は GPU でエンコードできるか (`liveHwAvailable`。振り分けの順は進めない)。GPU に移せるときだけ呼ぶ
  */
 export function nextLight(o: {
   codec: StreamCodec;
@@ -1579,6 +1581,8 @@ class Session {
         // 遅れと速さは ffmpeg ごとに数え直す (前の ffmpeg の遅れと、起こし直した直後の速さを合わせない)
         this.lag.reset();
         this.meter = new SpeedMeter();
+        // 選べる字幕も ffmpeg ごとに数え直す。新しい ffmpeg も同じ見出しを出すので、続けて数えると同じ字幕が 2 本並ぶ
+        this.list = new TrackList(this.program);
         const side = wanted === null ? null : sideOutput();
         const proc = Bun.spawn(
           [
@@ -1992,7 +1996,7 @@ class Session {
       rung: this.rung,
       light: this.light,
       software: this.software,
-      gpuReady: () => codec !== "audio" && pickLiveHw(codec) !== null,
+      gpuReady: () => codec !== "audio" && liveHwAvailable(codec) !== null,
     });
     if (verdict === null) return;
     if (verdict === "heavy") {

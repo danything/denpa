@@ -29,19 +29,23 @@ export function slipOf(currentTime: number, mediaTime: number): number {
 }
 
 /**
- * 観る画面の飛び直し。映した 1 枚ごとに `check` を呼ぶ。飛び直したら true。
- * 止めている間・飛んでいる最中は飛ばない。連発はさせない (`UNSLIP_EVERY`)
+ * 飛び直しの係 (ライブと観る画面で 1 つずつ)。映した 1 枚ごとに `check` を呼ぶ。遅れが測れなくても飛び直すときは `jump`。
+ * どちらも飛び直したら true。止めている間・飛んでいる最中は飛ばない。連発はさせない (`UNSLIP_EVERY`)
  */
 export function unslipper(now: () => number = Date.now) {
   let after = 0;
+  function jump(video: HTMLVideoElement): boolean {
+    const at = now();
+    if (at < after || video.paused || video.seeking) return false;
+    after = at + UNSLIP_EVERY;
+    video.currentTime += UNSLIP_STEP;
+    return true;
+  }
   return {
     check(video: HTMLVideoElement, mediaTime: number): boolean {
       if (slipOf(video.currentTime, mediaTime) <= SLIP_MOST) return false;
-      const at = now();
-      if (at < after || video.paused || video.seeking) return false;
-      after = at + UNSLIP_EVERY;
-      video.currentTime += UNSLIP_STEP;
-      return true;
+      return jump(video);
     },
+    jump,
   };
 }

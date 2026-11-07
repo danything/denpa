@@ -50,12 +50,14 @@ export function ambientMode(options: Options): Ambient {
   let broken = false;
   let asked = 0;
   const waiting = new Map<number, (bitmap: ImageBitmap | null) => void>();
-  $effect(() => () => {
+  /** worker を畳み、待っているものには null を返す */
+  function retire(): void {
     worker?.terminate();
     worker = null;
     for (const settle of waiting.values()) settle(null);
     waiting.clear();
-  });
+  }
+  $effect(() => retire);
 
   function viaWorker(
     video: HTMLVideoElement,
@@ -83,10 +85,10 @@ export function ambientMode(options: Options): Ambient {
         if (settle === undefined) event.data.bitmap?.close();
         else settle(event.data.bitmap);
       };
-      // 読み込めない (CSP など) なら、もう使わない。画面の側で縮める
+      // 読み込めない (CSP など) なら、もう使わない。worker は畳み、画面の側で縮める
       worker.onerror = () => {
         broken = true;
-        for (const settle of waiting.values()) settle(null);
+        retire();
       };
     }
     const id = ++asked;
@@ -106,7 +108,7 @@ export function ambientMode(options: Options): Ambient {
         // コマを worker へ渡せないブラウザ。もう使わない
         frame.close();
         broken = true;
-        settle(null);
+        retire();
       }
     });
   }

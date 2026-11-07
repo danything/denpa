@@ -70,11 +70,11 @@ export const actions = {
   cancel: async ({ request }) => {
     const form = await request.formData();
     const programId = Number(form.get("programId"));
-    if (!Number.isFinite(programId))
+    if (!Number.isSafeInteger(programId))
       return fail(400, { message: "番組 ID が不正です" });
     // アプリの `DELETE /api/programs/<id>/record` と同じ処理
-    if ((await cancelProgram(programId)) === null)
-      return fail(404, { message: "予約が見つかりません" });
+    const result = await cancelProgram(programId);
+    if (!result.ok) return fail(result.status, { message: result.message });
     return { success: true };
   },
 

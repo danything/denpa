@@ -200,6 +200,7 @@ Helm は既定で `/dev/dri` を hostPath で渡してあります (`denpa.gpu.h
 | Rockchip MPP | 今の AVBR (`hwenc.rkmppRate`) に段の上限を渡す                       | CPU                                                                                       |
 | NVENC        | 今の VBR (`hwenc.nvencRate`) に段の上限を渡す                        | CPU                                                                                       |
 | VA-API       | CQP をやめて VBR (`-b:v` と `-maxrate:v` に上限)                     | デコードから GPU なら GPU (`deinterlace_vaapi=rate=frame,scale_vaapi`)、ほかは CPU        |
+| QSV          | ICQ をやめて VBR (`-b:v` に上限、`-maxrate` にその 2 倍)             | CPU                                                                                       |
 
 - x264 は `ultrafast` にしません。CABAC とデブロックを切るので、低いビットレートでは粗さが目立ちます。静かな場面は crf のぶんだけ小さく、動きの多い場面は上限で抑えます
 - 段 1〜3 の音声は 96k です (256k は 2.4 Mbit/s の回線の 1 割を使う)
@@ -356,7 +357,7 @@ NVENC を 1 コマ試し、通れば設定の「エンコード」でエンコ�
 - **CM を切る境目にもキーフレームを置けます。** NVENC は指定しないと IDR にならないので、`-forced-idr 1` を付けます
 - **ライブは低遅延の引数に替えます** (`hwenc.liveHwArgs`): `-preset p2 -tune ll -bf 0 -zerolatency 1 -delay 0`。
   VA-API の `-async_depth` は NVENC に無く、渡すと降ります。**デコードとインタレ解除は CPU のまま**です
-  (NVENC の側でデコードから GPU に寄せるのは、実機で確かめてから)
+  (イメージの ffmpeg に NVIDIA のデコーダ (nvdec) と CUDA のフィルタは組んでいません。GPU に寄せるなら、実機で確かめてから `Dockerfile` の ffmpeg 段に足します)
 - **消費者向けの GPU (GeForce) は、同時に開けるエンコードの数に上限があります** (いまの NVIDIA の一覧で 12。システム全体で)。
   超えた 1 本はエンコードを開くところで降りるので、ライブとその場の変換はその 1 本だけソフトウェアでエンコードし、**方式は覚えません**
   (ほかの理由で降りたときのように 15 分外すと、空いたあとの選局までソフトウェアになるため)。見分けは ffmpeg の言い分で

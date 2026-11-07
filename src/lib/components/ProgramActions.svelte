@@ -1,24 +1,9 @@
-<script lang="ts" module>
-  /** 予約を取り消せるのは、これから録るものと録画中のもの (録画中は止めて、そこまでを残す)。録り終わったものには出さない */
-  const CANCELABLE = ["scheduled", "conflict", "skipped", "recording"];
-
-  /** 番組の詳細から予約を取り消せるか。録画しない (`skipped`) は放送が終われば履歴なので出さない */
-  export function detailCancelable(
-    state: string | null,
-    endAt: number,
-    now: number,
-  ): boolean {
-    return (
-      CANCELABLE.includes(state ?? "") && !(state === "skipped" && endAt <= now)
-    );
-  }
-</script>
-
 <script lang="ts">
   import type { SubmitFunction } from "$app/forms";
   import { resolve } from "$app/paths";
 
   import { submitting } from "#lib/actions.js";
+  import { cancelable } from "#lib/format.js";
 
   /**
    * **番組の詳細の下に並べるボタン** (番組表と検索。`ProgramDetail` の `actions` に入れる)。
@@ -73,7 +58,8 @@
     program.start_at <= clock && program.end_at > clock && watchable,
   );
   const canCancel = $derived(
-    detailCancelable(program.reservation_state, program.end_at, clock),
+    // サーバの取消 (`reservations.cancelProgram`) と同じ判定。録画中は止めて、そこまでを残す
+    cancelable(program.reservation_state, program.end_at, clock),
   );
   /** 録画のしかたは選ばせない (`reservations.reserve`)。コピー禁止の番組には出さない (押しても断るだけ。理由は詳細の「コピー禁止」) */
   const canReserve = $derived(
