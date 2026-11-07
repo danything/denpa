@@ -19,6 +19,8 @@ final class Tray: NSObject, NSApplicationDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var health: Health?
     private var fetching = false
+    /// 最後にメニューに出した様子。変わらなければメニューを作り直さない (開いている最中に差し替えない)
+    private var shown: Health?
 
     func applicationDidFinishLaunching(_: Notification) {
         render()
@@ -44,6 +46,8 @@ final class Tray: NSObject, NSApplicationDelegate {
 
     private func render() {
         guard let button = item.button else { return }
+        if item.menu != nil, shown == health { return }
+        shown = health
         let symbol = health == nil ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right"
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: Words.summary(health))
         image?.isTemplate = true

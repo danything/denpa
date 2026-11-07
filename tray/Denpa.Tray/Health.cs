@@ -42,7 +42,7 @@ public sealed record Health(string Version, string? Latest, int Recording, int E
 
 public static class Words
 {
-    /// <summary>メニューの先頭に出す 1 行 (選べない)。答えが無ければ止まっていると言う</summary>
+    /// <summary>メニューの先頭に出す 1 行 (選べない)。答えが無ければ、応答しないと出す</summary>
     public static string Summary(Health? health)
     {
         if (health is null) return "denpa が応答しません";

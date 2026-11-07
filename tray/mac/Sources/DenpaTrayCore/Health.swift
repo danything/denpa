@@ -44,7 +44,7 @@ public struct Health: Equatable {
 }
 
 public enum Words {
-    /// メニューの先頭に出す 1 行 (選べない)。答えが無ければ止まっていると言う
+    /// メニューの先頭に出す 1 行 (選べない)。答えが無ければ、応答しないと出す
     public static func summary(_ health: Health?) -> String {
         guard let health else { return "denpa が応答しません" }
         var line = "denpa \(health.version)"

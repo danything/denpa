@@ -20,13 +20,13 @@ internal static unsafe partial class Program
 {
     const string Url = "http://localhost:3000";
     const uint WmTrayIcon = 0x8000 + 1; // WM_APP + 1。アイコンの上のマウス
-    const uint WmHealth = 0x8000 + 2; // WM_APP + 2。裏で取ってきた様子を出す
+    const uint WmHealth = 0x8000 + 2; // WM_APP + 2。バックグラウンドで取得した様子を出す
     const int MenuOpen = 1, MenuUpdate = 2, MenuExit = 9;
 
     static nint hwnd, appIcon, warnIcon;
     static uint taskbarCreated;
 
-    /// <summary>最後に取ってきた様子。答えなければ null。裏のスレッドが書き、WmHealth で画面のスレッドに知らせる</summary>
+    /// <summary>最後に取ってきた様子。答えなければ null。バックグラウンドのスレッドが書き、WmHealth で画面のスレッドに知らせる</summary>
     static volatile Health? health;
     static volatile bool fetching;
     /// <summary>通知を出したバージョン。同じバージョンでは 1 回だけ出す</summary>
@@ -100,7 +100,9 @@ internal static unsafe partial class Program
                     return 0;
                 case 0x0011: // WM_QUERYENDSESSION。サインアウトで来る。閉じてよいと答える
                     return 1;
-                case 0x0016: // WM_ENDSESSION
+                case 0x0016: // WM_ENDSESSION。w が 0 なら、サインアウトは取り消された
+                    if (w != 0) Quit();
+                    return 0;
                 case 0x0010: // WM_CLOSE
                     Quit();
                     return 0;
@@ -131,7 +133,7 @@ internal static unsafe partial class Program
         }, TaskScheduler.Default);
     }
 
-    /// <summary>取ってきた様子をアイコンと説明に出す。新しいバージョンが出ていれば、そのバージョンでは 1 回だけ通知する</summary>
+    /// <summary>取得した様子をアイコンと説明に出す。新しいバージョンが出ていれば、そのバージョンでは 1 回だけ通知する</summary>
     static void Apply()
     {
         var now = health;
@@ -172,11 +174,13 @@ internal static unsafe partial class Program
     static void Open() => ShellExecuteW(0, "open", Url, null, null, 1 /* SW_SHOWNORMAL */);
 
     /// <summary>
-    /// 更新する。録画中・エンコード中なら先に確かめ、選ばれたら install.ps1 を管理者の PowerShell で流す。
+    /// 更新する。**確かめる前に様子を取得し直す** (メニューを開いている間に録画やエンコードが始まることがある。
+    /// 答えなければ、メニューを開いたときの様子で確かめる)。録画中・エンコード中なら先に確かめ、選ばれたら install.ps1 を管理者の PowerShell で流す。
     /// UAC で断られたら何もしない (ShellExecute がエラーを返すだけ)
     /// </summary>
-    static void Update(Health now)
+    static void Update(Health opened)
     {
+        var now = Net.Get().GetAwaiter().GetResult() ?? opened;
         if (Words.AskBeforeUpdate(now) is { } question &&
             MessageBoxW(hwnd, question, "denpa の更新", 0x1 /* MB_OKCANCEL */ | 0x20 /* MB_ICONQUESTION */ | 0x10000 /* MB_SETFOREGROUND */) != 1 /* IDOK */)
         {
