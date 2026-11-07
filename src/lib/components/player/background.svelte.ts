@@ -88,12 +88,40 @@ export function backgroundPlayback(options: Options): Background {
       check();
     };
     document.addEventListener("visibilitychange", check);
+    /*
+     * 小窓が閉じたことを受ける。**`check()` は「小窓の状態 (on) が null に戻った後」に走らせる。**
+     * on を戻すのは video のリスナー (`pip.svelte.ts`)。document のリスナーがそれより先に走ると、
+     * `pip` がまだ true で「小窓を出している」と読んで止めない (2.32.0 のキャプチャ版がこれで、
+     * 実機では止まらなかった)。
+     *
+     * - `leavepictureinpicture` は仕様上バブルする (`bubbles: true`。W3C PiP 3.3)。document の
+     *   バブル相で受ければ video のリスナーの後に呼ばれるので、on は戻っている
+     * - Safari の `webkitpresentationmodechanged` はバブルしない。キャプチャ相でしか拾えないが、
+     *   キャプチャ相は video のリスナーより先なので、`setTimeout(…, 0)` で配送の後ろへ回す
+     * - バブルしない `leavepictureinpicture` を出す実装に備えて、そちらも同じ受け方で拾う
+     *   (二重に `check()` が走るが、`step()` は `held` で守るので止め直しはしない)
+     */
+    const onLeavePip = (): void => {
+      setTimeout(check, 0);
+    };
     document.addEventListener("leavepictureinpicture", check);
+    document.addEventListener("leavepictureinpicture", onLeavePip, true);
+    document.addEventListener(
+      "webkitpresentationmodechanged",
+      onLeavePip,
+      true,
+    );
     window.addEventListener("pagehide", hide);
     window.addEventListener("pageshow", show);
     return () => {
       document.removeEventListener("visibilitychange", check);
       document.removeEventListener("leavepictureinpicture", check);
+      document.removeEventListener("leavepictureinpicture", onLeavePip, true);
+      document.removeEventListener(
+        "webkitpresentationmodechanged",
+        onLeavePip,
+        true,
+      );
       window.removeEventListener("pagehide", hide);
       window.removeEventListener("pageshow", show);
     };
