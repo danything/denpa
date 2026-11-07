@@ -608,7 +608,10 @@ app.MapPost("/denpa/decode", async (HttpContext http) =>
         await Respond.Error(http, "input と output は文字列で書きます", 400);
         return;
     }
-    var result = Scramble.Decode(recorded, body?["input"]?.GetValue<string>(), body?["output"]?.GetValue<string>());
+    // 数 GB を復号するので、要求のスレッドを塞がないよう別のスレッドで復号する (/denpa/card と同じ)
+    var input = body?["input"]?.GetValue<string>();
+    var output = body?["output"]?.GetValue<string>();
+    var result = await Task.Run(() => Scramble.Decode(recorded, input, output));
     await Respond.Write(http, result, result["ok"]!.GetValue<bool>() ? 200 : 500);
 });
 

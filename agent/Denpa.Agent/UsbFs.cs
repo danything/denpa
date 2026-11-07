@@ -159,7 +159,6 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     internal static readonly uint ReleaseInterface = Ioc(2, 16, sizeof(uint));
     internal static readonly uint Reset = Ioc(0, 20, 0);
 
-    private const int CloseOnExec = 0x80000;
 
     private const int Eperm = 1;
     private const int Enoent = 2;
@@ -191,7 +190,7 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     /// </summary>
     public static UsbFsPipe Open(string path, int vendor, int product, int configValue, int interfaceNumber)
     {
-        var fd = Sys.Open(path, Sys.ReadWrite | CloseOnExec);
+        var fd = Sys.Open(path, Sys.ReadWrite | Sys.CloseOnExec);
         if (fd < 0)
         {
             var errno = Marshal.GetLastPInvokeError();
