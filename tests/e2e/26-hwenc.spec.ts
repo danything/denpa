@@ -19,7 +19,7 @@ import {
 
 /**
  * GPU でエンコードする (server/hwenc.ts)。GPU の偽物の作り方は `hwenc.ts`。
- * H.265 は `26-hwenc-hevc` (録画を 2 本エンコードして 1 分ほどかかるので、CI の別の組で流す)
+ * H.265 は `26-hwenc-hevc` (録画を 2 本エンコードするので、CI の別の組で流す)
  */
 
 test.describe("GPU でエンコードする", () => {
@@ -110,7 +110,7 @@ test.describe("GPU でエンコードする", () => {
     rmSync(`${stack.hwDir}/renderD129`, { force: true });
     rmSync(stack.encodeArgsFile, { force: true });
     await setRecording(request, { codecs: ["h264"] });
-    programId = await reserveSoon(page, request, "BS", 1);
+    programId = await reserveSoon(page, request, "BS");
     row = page.locator(
       `[data-testid="recording-row"][data-program-id="${programId}"]`,
     );
@@ -148,7 +148,7 @@ test.describe("GPU でエンコードする", () => {
     await syncEpg(request);
     rmSync(stack.encodeArgsFile, { force: true });
     await setRecording(request, { codecs: ["av1", "h264"] });
-    const programId = await reserveSoon(page, request, "BS", 2);
+    const programId = await reserveSoon(page, request, "BS");
     const row = page.locator(
       `[data-testid="recording-row"][data-program-id="${programId}"]`,
     );
@@ -190,7 +190,7 @@ test.describe("GPU でエンコードする", () => {
     await syncEpg(request);
     rmSync(stack.encodeArgsFile, { force: true });
     await setRecording(request, { codecs: ["h264"] });
-    const programId = await reserveSoon(page, request, "BS", 3);
+    const programId = await reserveSoon(page, request, "BS");
     const row = page.locator(
       `[data-testid="recording-row"][data-program-id="${programId}"]`,
     );

@@ -1141,11 +1141,14 @@ jobs:
           key: ${{ steps.mpeg2-cache.outputs.cache-primary-key }}
 
       # アプリを1度だけ組んでから、ワーカーの数だけ立てる。
-      # 偽エージェント・偽通知先もワーカーごとに1式ずつ (tests/stack.ts)
+      # 偽エージェント・偽通知先もワーカーごとに1式ずつ (tests/stack.ts)。
+      # **6 組は 1 ワーカー。** ライブの貯め方 (50-live-pacing・51-live-gaps) は、ほかのワーカーが動くと届く間隔が乱れて
+      # 落ちるので、2 本を順に流す (shards.json の注記)
       - name: E2E tests
         env:
           MPEG2_DIR: ${{ runner.temp }}/mpeg2
-        run: bunx playwright test ${{ steps.specs.outputs.files }}
+          WORKERS: ${{ matrix.shard == 6 && '--workers=1' || '' }}
+        run: bunx playwright test $WORKERS ${{ steps.specs.outputs.files }}
 
       - name: Upload Playwright report
         if: failure()
