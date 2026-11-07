@@ -63,9 +63,16 @@ mkdir -p "$prefix" "$work" "$out/licenses"
 export PKG_CONFIG_PATH="$prefix/lib/pkgconfig"
 jobs=$(nproc)
 
+# ファイルに落としてから開く。パイプで渡すと、ダウンロードが途中で切れたとき、curl の再試行が最初からやり直しても tar は壊れた入力で落ちる
+fetch_tar() {
+  $CURL -o "$work/src.tar" "$1"
+  tar -x"$2" -f "$work/src.tar" --strip-components=1
+  rm -f "$work/src.tar"
+}
+
 # Opus (Dockerfile と同じく、パケットの欠けを補う機能は既定のまま切って組む)
 mkdir "$work/opus" && cd "$work/opus"
-$CURL "https://downloads.xiph.org/releases/opus/opus-${OPUS_VERSION}.tar.gz" | tar -xz --strip-components=1
+fetch_tar "https://downloads.xiph.org/releases/opus/opus-${OPUS_VERSION}.tar.gz" z
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=OFF \
   -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF
 cmake --build build -j"$jobs"
@@ -74,7 +81,7 @@ mkdir -p "$out/licenses/opus" && cp COPYING "$out/licenses/opus/"
 
 # SVT-AV1
 mkdir "$work/svtav1" && cd "$work/svtav1"
-$CURL "https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz" | tar -xz --strip-components=1
+fetch_tar "https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz" z
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF
 cmake --build build -j"$jobs"
 cmake --install build
@@ -82,7 +89,7 @@ mkdir -p "$out/licenses/svt-av1" && cp LICENSE.md PATENTS.md "$out/licenses/svt-
 
 # FFmpeg
 mkdir "$work/ffmpeg" && cd "$work/ffmpeg"
-$CURL "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2" | tar -xj --strip-components=1
+fetch_tar "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2" j
 for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 --fuzz=0 < "$p"; done
 ./configure \
   --prefix="$prefix" \
