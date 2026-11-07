@@ -249,7 +249,7 @@ builder.WebHost.ConfigureKestrel(options =>
     if (host is null) options.ListenAnyIP(port, Secure);
     else options.Listen(host, port, Secure);
     sharing?.Listen(options);
-    // 選局は何時間も流しっぱなしになる。読む側の遅い (番組表だけ読むなど) 応答を、送る速さの下限で切らない
+    // 選局は何時間も流しっぱなしになる。読む側が遅くても、送る速さの下限を理由に応答を切らない
     options.Limits.MinResponseDataRate = null;
 });
 builder.Logging.ClearProviders();

@@ -231,3 +231,29 @@ public class DeviceProbeTests
         await Assert.That(DeviceProbe.ParseDelivery(new byte[76])).IsEmpty();
     }
 }
+
+[NotInParallel]
+public class ConfigEnvironmentTests
+{
+    [Test]
+    public async Task 空の_TUNERS_FILE_と_CHANNELS_FILE_は書いていないのと同じ()
+    {
+        var tuners = Environment.GetEnvironmentVariable("TUNERS_FILE");
+        var channels = Environment.GetEnvironmentVariable("CHANNELS_FILE");
+        try
+        {
+            Environment.SetEnvironmentVariable("TUNERS_FILE", "");
+            Environment.SetEnvironmentVariable("CHANNELS_FILE", "");
+            var config = Config.FromEnvironment();
+            // 空のパスのままだと Dir (Path.GetFullPath) が例外になり、起動ごと落ちていた
+            await Assert.That(Path.GetFileName(config.TunersFile)).IsEqualTo("tuners.json");
+            await Assert.That(Path.GetFileName(config.ChannelsFile)).IsEqualTo("channels.json");
+            await Assert.That(config.Dir.Length).IsGreaterThan(0);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("TUNERS_FILE", tuners);
+            Environment.SetEnvironmentVariable("CHANNELS_FILE", channels);
+        }
+    }
+}

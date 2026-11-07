@@ -416,13 +416,16 @@ public sealed class Dt295NativeTuner : ITuneDevice
                             : frontend.WaitTerrestrialLock(StillLockedWait);
                     }
                 }
-                if (!reuse && tuning.Satellite)
+                if (!reuse)
                 {
-                    using (timeline.Step("選局 (衛星の周波数の設定)", "仕様書 7.3.2")) frontend.TuneSatellite(tuning.Frequency);
-                }
-                else if (!reuse)
-                {
-                    using (timeline.Step("選局 (地上波の周波数の設定)", "仕様書 7.2.2")) frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
+                    if (tuning.Satellite)
+                    {
+                        using (timeline.Step("選局 (衛星の周波数の設定)", "仕様書 7.3.2")) frontend.TuneSatellite(tuning.Frequency);
+                    }
+                    else
+                    {
+                        using (timeline.Step("選局 (地上波の周波数の設定)", "仕様書 7.2.2")) frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
+                    }
                 }
                 // 取り込みの設定は、受信の確認を待つ間に済ませておく (TS はまだ出ない)
                 prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall));

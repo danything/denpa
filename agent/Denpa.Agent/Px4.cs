@@ -1156,7 +1156,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// 選局したときの C/N。**px4d は C/N を TUNE の答えでしか返さない** (STATS には無い) ので、受信中は選局したときの値のまま。
     /// 取得し直すには選局し直すしかなく、それでは受信が途切れる。
     /// **ロックを取らない。** STATS の定期取得が <c>_gate</c> を握ったまま筐体の順番を最長数秒待つので、取ると TunerPool.ReadSignals がそこで止まる
-    /// (参照を読むだけなので、選局し直しの最中に前の値か null が返るだけ)
+    /// (3 つを別々に読む。選局し直しの最中に前の値か null が返るだけ)
     /// </summary>
     public TunerSignal? Signal() => Volatile.Read(ref _control) is not null && Volatile.Read(ref _stream) is { Ended: false } ? Volatile.Read(ref _tuned) : null;
 
