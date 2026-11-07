@@ -19,6 +19,7 @@ import { randomBytes } from "node:crypto";
 import { error } from "@sveltejs/kit";
 
 import { rewriteLocationBytes, scriptable } from "../hybridcast/location";
+import { HC_TOKEN } from "./auth";
 import {
   type Fetched,
   fetchForBml,
@@ -38,8 +39,8 @@ interface Grant {
 
 const grants = new Map<string, Grant>();
 
-/** トークンの形。`auth.ts` の `OPEN_PATHS` も同じ形を別に書いている */
-export const TOKEN = /^[0-9a-f]{32}$/;
+/** トークンの形。`auth.ts` の `OPEN_PATHS` と同じもの (`HC_TOKEN`) */
+export const TOKEN = new RegExp(`^${HC_TOKEN}$`);
 
 /** `origin` (`http(s)://host[:port]`) へ中継するトークンを出す */
 export function grant(origin: string, now = Date.now()): string {

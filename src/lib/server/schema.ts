@@ -168,6 +168,14 @@ export function latestRecordingId(programId: AnySQLiteColumn) {
   return sql<number>`(SELECT id FROM recordings WHERE program_id = ${programId} AND deleted_at IS NULL ORDER BY id DESC LIMIT 1)`;
 }
 
+/**
+ * 予約で録れたいちばん新しい録画。予約の一覧と検索が `reservationState` に渡すのに使う。
+ * **消したものも含める。** 外すと、録り終えてから消した予約が「完了」でなく予約の状態のまま出る
+ */
+export function latestReservationRecordingId(reservationId: AnySQLiteColumn) {
+  return sql<number>`(SELECT id FROM recordings WHERE reservation_id = ${reservationId} ORDER BY id DESC LIMIT 1)`;
+}
+
 /** 画面から変えられる設定 (settings.ts)。初期値は config.ts が持ち、ここに行があればそちらが勝つ */
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
@@ -453,6 +461,22 @@ const RESERVATION_STATES = [
   "canceled",
   "missed",
 ] as const;
+
+type StoredReservationState = (typeof RESERVATION_STATES)[number];
+
+/** 録る予定の予約の状態 (チューナーが足りないものも含む)。録り始めたかは `started_at` で別に見る */
+export const TO_RECORD_STATES: StoredReservationState[] = [
+  "scheduled",
+  "conflict",
+];
+/**
+ * 予約として残っている状態。録る予定のものに、録らないと決めたもの (`skipped`) を足したもの。
+ * 取り消したもの・録り逃したものは入らない
+ */
+export const HELD_STATES: StoredReservationState[] = [
+  ...TO_RECORD_STATES,
+  "skipped",
+];
 
 export const reservations = sqliteTable(
   "reservations",

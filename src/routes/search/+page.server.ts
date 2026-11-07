@@ -18,6 +18,7 @@ import {
 import { draftRule, originOf } from "#lib/server/rule-form.js";
 import { previewFor } from "#lib/server/rule-preview.js";
 import {
+  HELD_STATES,
   programs,
   reservations,
   rules as ruleTable,
@@ -71,7 +72,7 @@ function focusOf(url: URL) {
         reservations,
         and(
           eq(reservations.program_id, programs.id),
-          inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+          inArray(reservations.state, HELD_STATES),
         ),
       )
       .where(eq(programs.id, id))

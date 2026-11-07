@@ -32,6 +32,7 @@ import {
   type Taken,
 } from "./episode";
 import {
+  HELD_STATES,
   programs as programTable,
   recordedHistory,
   recordings,
@@ -992,7 +993,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
           and(
             eq(reservations.manual, false),
             isNull(reservations.started_at),
-            inArray(reservations.state, ["scheduled", "conflict", "skipped"]),
+            inArray(reservations.state, HELD_STATES),
           ),
         )
         .all();

@@ -523,8 +523,6 @@ WORKDIR /app
 # (bun の公式イメージと同じ。コンテナを作り直せば消えるので、溜めても得が無い)
 ENV NODE_ENV=production \
     TZ=Asia/Tokyo \
-    FFMPEG=/usr/local/bin/ffmpeg \
-    FFPROBE=/usr/local/bin/ffprobe \
     BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 # NVIDIA の GPU を渡されたとき (ffmpeg 段の説明) に、NVIDIA Container Toolkit が差し込むドライバのライブラリ。
 # 既定 (compute,utility) には NVENC の libnvidia-encode が入らないので video を足す。

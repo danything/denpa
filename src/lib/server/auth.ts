@@ -22,6 +22,9 @@ import { enabled as oidcEnabled } from "./oidc";
  * (公開の注意は docs/auth.md)。
  */
 
+/** Hybridcast の中継のトークンの形 (16 バイトを 16 進で書いたもの)。`hc-relay.ts` もこれで確かめる */
+export const HC_TOKEN = "[0-9a-f]{32}";
+
 /**
  * 素通しにするエンドポイント。
  *
@@ -47,7 +50,7 @@ const OPEN_PATHS = [
   /^\/api\/health$/,
   /^\/manifest\.webmanifest$/,
   /^\/api\/device\/(code|token)$/,
-  /^\/api\/bml\/hc\/[0-9a-f]{32}\//,
+  new RegExp(`^/api/bml/hc/${HC_TOKEN}/`),
 ];
 
 export function isOpenPath(pathname: string): boolean {

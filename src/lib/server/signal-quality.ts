@@ -15,8 +15,26 @@ import {
  * エージェントが C/N を読む間隔 (5 秒) と同じにして、終わるまでに 1 回は読まれるようにする
  */
 const MEASURE = 5_000;
+/**
+ * エージェントが C/N を読む間隔 (ms。agent の `TunerSignal.Every`) に、読み終わるまでの 1 秒を足したもの。
+ * エージェントは選局と関係ない時刻に 5 秒ごとに読むので、選局からこれだけ待てば 1 回は読まれている
+ */
+const SIGNAL_READ = 5_000 + 1_000;
 /** パケットが届かないときに諦めるまで (ms)。選局で同期を待つ 5 秒と、測る長さを足したぶんより長く */
 const GIVE_UP = 15_000;
+
+/** 名乗りが `use` の利用者がいるチューナーの受信の状態と C/N。読めなければ null */
+async function readSignal(use: StreamUse): Promise<TunerSignal | null> {
+  try {
+    const tuners = await getTuners();
+    return (
+      tuners.find((tuner) => tuner.users.some((user) => user.use === use))
+        ?.signal ?? null
+    );
+  } catch {
+    return null;
+  }
+}
 
 /** 受信品質の測定結果 */
 export interface SignalQuality {
@@ -100,20 +118,26 @@ export async function measureSignal(
       use,
       config.priority.scan,
     );
-    // C/N はチューナーを持っている間に読む (エージェントは使用中のチューナーの値だけを返す)。届かなくても読む
-    tuned = Bun.sleep(MEASURE)
-      .then(getTuners)
-      .then(
-        (tuners) =>
-          tuners.find((tuner) => tuner.users.some((user) => user.use === use))
-            ?.signal ?? null,
-        () => null,
-      );
+    /*
+     * C/N はチューナーを持っている間に読む (エージェントは使用中のチューナーの値だけを返す)。
+     * パケットが届かずに測り終わらないときのために、読む間隔が過ぎたら一度読んでおく
+     */
+    tuned = Bun.sleep(SIGNAL_READ).then(() => readSignal(use));
     for await (const chunk of chunks(stream)) {
       started ||= Date.now();
       check.feed(chunk);
       ms = Date.now() - started;
-      if (ms >= MEASURE) break;
+      if (ms >= MEASURE) {
+        /*
+         * 測り終えたら、ループを抜けてチューナーを放す前に読む。抜けるとストリームが閉じ、
+         * エージェントはそのチューナーの C/N を返さなくなる。最初のパケットから MEASURE 経っているので、
+         * 選局からは読む間隔より長い
+         */
+        const early = tuned;
+        const last = await readSignal(use);
+        tuned = last === null ? early : Promise.resolve(last);
+        break;
+      }
     }
   } catch (error) {
     // 時間切れと、画面を閉じたとき。読めたぶんで返す
