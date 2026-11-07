@@ -62,7 +62,7 @@ Amazon で見る (広告): [PT3](https://www.amazon.co.jp/dp/B00857CQAM?tag=doa0
 | チューナー                           | 出るもの                                                      | dB の根拠                                                                 |
 | ------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | Linux DVB (PT3 など)                 | 受信の状態と C/N (dB)。ドライバが C/N を返さなければ C/N なし | ドライバが返す値 (`DTV_STAT_CNR`)。相対値で返すドライバは「C/N (生の値)」 |
-| px4-userland・asicen-userland の機材 | 受信の状態と C/N (dB)。どちらも選局したときの値              | px4d・asicend の選局の答え (`cnr_mdb`)                                    |
+| px4-userland・asicen-userland の機材 | 受信の状態と C/N (dB)。どちらも選局したときの値               | px4d・asicend の選局の答え (`cnr_mdb`)                                    |
 | CECH-ZD1 J                           | 受信の状態と C/N (dB)                                         | DiB8000 の仕様書の式                                                      |
 | PIX-DT295                            | 受信の状態と C/N の生の値 (「C/N (生の値): 2,748」)           | なし (下記)                                                               |
 | PX-S1UD (siano-userland)             | 出ない                                                        | siano-ts が C/N を返さない                                                |
