@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        Windows の通知領域に出す denpa のアイコン (docs/install-windows.md「通知領域のアイコン」)。
+
+        **Native AOT で、WinForms は使わない。** WinForms は Native AOT に対応していないので、
+        Shell_NotifyIcon と隠しウィンドウを Win32 で直に呼ぶ (Program.cs)。
+        エージェントと同じ zip に入れて配る (install.ps1 が %ProgramFiles%\denpa\bin に置く)。
+    -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <!-- コンソールの窓を出さない -->
+        <OutputType>WinExe</OutputType>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <PublishAot>true</PublishAot>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <OptimizationPreference>Size</OptimizationPreference>
+        <AssemblyName>denpa-tray</AssemblyName>
+        <RootNamespace>Denpa.Tray</RootNamespace>
+        <!-- 形は static/favicon.svg と同じ電波塔。作り直すのは dotnet run tray/Denpa.Tray/make-icon.cs tray/Denpa.Tray/denpa.ico -->
+        <ApplicationIcon>denpa.ico</ApplicationIcon>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- アイコンを作る小さなスクリプト。本体には入れない -->
+        <Compile Remove="make-icon.cs" />
+    </ItemGroup>
+
+</Project>

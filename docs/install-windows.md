@@ -13,7 +13,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 **denpa 本体もエージェントも、Windows の上でそのまま動かします。** WSL・Docker Desktop・コンテナは使いません。
 本体はリリースに添えた `denpa-<バージョン>-windows-x64.zip` (bun・アプリ・ffmpeg・字・ブラウザへ配るデコーダ) で、
-エージェントは `denpa-agent-<バージョン>-windows-x64.zip` (.NET の実行ファイル 1 個) です。どちらも同じバージョンを入れます。
+エージェントは `denpa-agent-<バージョン>-windows-x64.zip` (.NET の実行ファイル。[通知領域のアイコン](#通知領域のアイコン)も入っている) です。どちらも同じバージョンを入れます。
 
 1. **エージェント**: タスク スケジューラに「起動したら起こす」タスク (`denpa-agent`) を SYSTEM で載せます。
    起こすのは `denpa-agent.cmd` のループで、落ちたら 5 秒置いて起こし直します
@@ -39,7 +39,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 | 置き場                    | 中身                                                                                                                                                                                                      |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `%ProgramFiles%\denpa\`   | エージェント (`bin\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・siano-userland・本体 (`server\`)・エージェントを起こす `denpa-agent.cmd`                                                |
+| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・siano-userland・本体 (`server\`)・エージェントを起こす `denpa-agent.cmd`                            |
 | `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起こす `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる |
 | `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                             |
 | `C:\denpa-run`            | px4d のソケットの置き場 (下)                                                                                                                                                                              |
@@ -48,6 +48,23 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 `%ProgramFiles%\denpa` と `%ProgramData%\denpa` を管理者だけのものにしてあるのは、SYSTEM で動くものと、その環境変数を
 ほかの人やほかのプログラムに書き換えさせないためです。ログはふつうのユーザーでも読めるように `~/denpa` に置きます (回さずに足していく)。
+
+## 通知領域のアイコン
+
+**サインインすると、通知領域に denpa のアイコン (`denpa-tray.exe`) が出ます。** install.ps1 が HKLM の Run (`denpa`) に載せるので、
+この PC の誰がサインインしても出ます。同じ PC の denpa の `/api/health` を 10 秒ごとに呼び、その答えを出すだけです。
+
+- denpa が答えれば電波塔のアイコン、答えなければ注意のアイコンになります。マウスを重ねると、バージョンと録画・エンコードの本数が出ます
+- 右クリックのメニューは「denpa を開く」(アイコンのダブルクリックでも開く)・新しいバージョンがあるときだけの「v2.31.0 に更新…」・「終了」です
+- 新しいバージョン (denpa が GitHub の最新のリリースと見比べたもの) が出ると、そのバージョンにつき 1 回だけ通知を出します。**更新は勝手には始めません**
+- 「終了」で消したアイコンは、次のサインインでまた出ます。`-AgentOnly` では載せません (出すのは本体の様子なので)。外すと Run からも消します
+
+**「v2.31.0 に更新…」を選ぶと、入れたときと同じ install.ps1 の 1 行を管理者の PowerShell で流します** (UAC で許可を求める。ブラウザは開かない)。
+
+- 録画中・エンコード中なら、流す前に確かめます。録画中なら、install.ps1 が録画の終わりを待ってから入れ替えます。
+  エンコード中なら中断し、更新のあとで最初からやり直します
+- PowerShell の窓に進み具合が出ます。録画を待つ間も、その窓で待ちます。失敗したら、理由を出して Enter を押すまで閉じません
+- 入れ替える前に通知領域のアイコンも止め、入れ終えたら起こし直します
 
 ## 環境変数を足す (`denpa.env`)
 
@@ -180,9 +197,10 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 - **CI** (test.yml の `server-windows`・`agent-windows`・`agent-windows-install`): 配布物の ffmpeg で denpa が使う経路を流し、
   進み具合を fd 3 で受け、`SetThreadExecutionState` が `powercfg /requests` に出ることを見る。本体を `bun server.js` で起こして
   画面・字・デコーダが返ることを見る。install.ps1 で本体ごと入れて SYSTEM のタスクで動き、本体がエージェントと組むところまで。
-  wslc からの移行は偽の wslc で流す (`tests/install-windows-migrate.ps1`)
+  wslc からの移行は偽の wslc で流す (`tests/install-windows-migrate.ps1`)。通知領域のアイコンは、組んで起こして落ちないこと・二重に起こすとすぐ終わること・
+  Run に載ること・上げ直すと動いているものを止めること・外すと消えることまで
 - **Windows の実機で確かめたのは、以前の方式の PIX-DT295 で TS を受けるところまでです。** ほかのチューナーとカードは、CI で
   ビルドして起こし、偽の px4d を相手に IPC と TS の受け渡しを流すところまでです
 - **まだ確かめていないこと**: SYSTEM で動くエージェントから WinUSB の機材とカードリーダー (PC/SC) を使えるか、スリープから起こすタスクで
-  録画が始まるか、wslc の本体からの移行 (実機の wslc で)。実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`
+  録画が始まるか、wslc の本体からの移行 (実機の wslc で)、通知領域のアイコンの見た目とメニュー・通知と、そこから UAC を通して更新する流れ。実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`
   (管理者の PowerShell で、エージェントのタスクを止めてから)

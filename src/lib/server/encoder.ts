@@ -607,9 +607,12 @@ export function buildArgs(
   return args;
 }
 
-/** いまエンコード (CM 検出のやり直しも) が走っているか。Windows をスリープさせないかを決める (`power.ts`) */
-export function hasRunningEncodes(): boolean {
-  return runningJobs.size > 0;
+/**
+ * いま走っているエンコード (CM 検出のやり直しも) の本数。Windows をスリープさせないか (`power.ts`) と、
+ * 通知領域・メニューバーのアプリが更新の前に確かめるとき (`/api/health`) に使う
+ */
+export function runningEncodes(): number {
+  return runningJobs.size;
 }
 
 /** その録画で今生きているジョブ (待ち・実行中) の id。無ければ undefined */

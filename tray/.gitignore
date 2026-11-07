@@ -1,0 +1,5 @@
+bin/
+obj/
+TestResults/
+# Swift Package Manager (tray/mac)
+.build/
