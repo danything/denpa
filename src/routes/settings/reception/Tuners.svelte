@@ -443,7 +443,7 @@
           <!-- 生の値は dB ではない。何と比べるものかを言う (docs/tuners.md「信号レベル」) -->
           {#if tuners.some((tuner) => tuner.channel !== null && signalOf(tuner)?.unit === "raw")}
             <p class="tiny muted" data-testid="tuner-signal-raw-note">
-              C/N (生の値) は機材のレジスタの値で、dB
+              C/N (生の値) は機材やドライバが返した値のままで、dB
               ではありません。同じチューナーで、ほかのチャンネルや配線と比べる目安です
             </p>
           {/if}

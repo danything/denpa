@@ -637,7 +637,7 @@ public sealed class TunerPool(
     }
 
     /// <summary>
-    /// 使用中のチューナーの受信の状態と C/N を読む目覚まし。最初の選局で起こし、<see cref="CloseAll"/> で止める。
+    /// 使用中のチューナーから受信の状態と C/N を読むタイマー。最初の選局で作り、<see cref="CloseAll"/> で止める (止めたあとの選局では作り直す)。
     /// 読むのは選局しているチューナーだけで、空いているチューナーは読まない
     /// </summary>
     private Timer? _signals;
@@ -867,7 +867,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// <summary>最後に読んだ受信の状態と C/N (<see cref="TunerPool"/> の ReadSignals)。まだ読んでいない・測れない機材は null</summary>
     public volatile TunerSignal? Signal;
 
-    /// <summary>C/N を読めなかったことを記録に残した (選局 1 本で 1 回だけ)</summary>
+    /// <summary>C/N を読めなかったことを記録に残した (1 回の選局で 1 回だけ)</summary>
     public bool SignalFailed { get; set; }
 
     public int? Pid => _child?.HasExited == false ? _child.Id : null;

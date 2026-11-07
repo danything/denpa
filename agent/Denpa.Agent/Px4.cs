@@ -1155,7 +1155,7 @@ public sealed class Px4Tuner : ITuneDevice
 
     /// <summary>
     /// 選局したときの C/N。**px4d は C/N を TUNE の答えでしか返さない** (STATS には無い) ので、受信中は選局したときの値のまま。
-    /// 聞き直すには選局し直すしかなく、それでは受信が途切れる
+    /// 取得し直すには選局し直すしかなく、それでは受信が途切れる
     /// </summary>
     public TunerSignal? Signal()
     {
