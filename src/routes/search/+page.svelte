@@ -181,8 +181,9 @@
   const closeOnSuccess: SubmitFunction = () => {
     const sentFor = opened?.program_id ?? null;
     return async ({ result, update }) => {
-      await update();
+      // 返事を当てる前に立てる。あとにすると、断られた理由が一瞬だけ通知にも出る
       fromDetail = true;
+      await update();
       failedFor = result.type === "success" ? null : sentFor;
       if (result.type === "success") close();
     };
@@ -244,7 +245,7 @@
    * 録画中を行から取り消すと録画が止まるので出さない (予約の節は代わりに追っかけを出す)。録画しない (`skipped`。
    * コピー禁止・同じ回を録画済み) はもう録らないので出さない。どちらも詳細の「予約取消」からは取り消せる (`ProgramActions`)
    */
-  const CANCELABLE = ["scheduled", "conflict"];
+  const ROW_CANCELABLE = ["scheduled", "conflict"];
 
   /** ルールの削除の 2 回押し (書く欄の「削除」) */
   const ruleDeleting = arming('[data-testid^="rule-delete"]');
@@ -400,9 +401,9 @@
                   </span>
                 </button>
                 <div class="row-actions">
-                  <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`CANCELABLE`) -->
+                  <!-- 取り消せるかは「予約」の節・下見の行と同じ決め方 (`ROW_CANCELABLE`) -->
                   {#if program.reservation_id !== null}
-                    {#if CANCELABLE.includes(program.reservation_state ?? "")}
+                    {#if ROW_CANCELABLE.includes(program.reservation_state ?? "")}
                       <ActionButton
                         action="?/cancel"
                         fields={{ reservationId: program.reservation_id }}
@@ -580,7 +581,7 @@
                       class="button small ghost"
                       href={resolve(`chase/${res.recording_id}`)}>追っかけ</a
                     >
-                  {:else if CANCELABLE.includes(res.state)}
+                  {:else if ROW_CANCELABLE.includes(res.state)}
                     <ActionButton
                       action="?/cancel"
                       fields={{ reservationId: res.id }}
@@ -716,9 +717,9 @@
                 {/if}
               </span>
             </button>
-            <!-- 1 件ずつ: 取り消せる予約 (`CANCELABLE`) は取り消し、録る行はその 1 本だけ予約できる (ホーム・結果の行と同じ action) -->
+            <!-- 1 件ずつ: 取り消せる予約 (`ROW_CANCELABLE`) は取り消し、録る行はその 1 本だけ予約できる (ホーム・結果の行と同じ action) -->
             <div class="row-actions">
-              {#if row.reservation_id !== null && CANCELABLE.includes(row.reservation_state ?? "")}
+              {#if row.reservation_id !== null && ROW_CANCELABLE.includes(row.reservation_state ?? "")}
                 <ActionButton
                   action="?/cancel"
                   fields={{ reservationId: row.reservation_id }}
