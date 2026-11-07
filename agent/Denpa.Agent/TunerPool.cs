@@ -34,8 +34,9 @@ public sealed record TuneOptions(string? FakeTune = null);
 /// (Tuning.cs / B25.cs)。
 /// </para>
 /// </summary>
+/// <param name="openDevice">デバイスを開く。テストが偽のチューナーを渡す。無ければ <see cref="OpenDevice"/></param>
 public sealed class TunerPool(
-    IReadOnlyList<TunerSpec> specs, Action onChange, TuneOptions tune)
+    IReadOnlyList<TunerSpec> specs, Action onChange, TuneOptions tune, Func<TunerSpec, ITuneDevice>? openDevice = null)
 {
     private readonly TuneOptions _tune = tune;
 
@@ -71,8 +72,15 @@ public sealed class TunerPool(
     /// </summary>
     private readonly Lock _deviceGate = new();
 
+    /// <summary>
+    /// 手放したデバイスを閉じ終わる合図 (<see cref="Retire"/>)。<see cref="_deviceGate"/> の中で読み書きする。
+    /// **新しく開く前に待つ** (<see cref="Acquire"/>)。並べ替えで同じデバイスが別の番号に移ると、閉じる前に開きに行って
+    /// <c>Device or resource busy</c> で落ちる
+    /// </summary>
+    private Task _closing = Task.CompletedTask;
+
     /// <summary>1 台ぶんの実体。**閉じるのは定義が変わったときと、止めるときだけ**</summary>
-    private sealed class Held(ITuneDevice device) : IDisposable
+    private sealed class Held(ITuneDevice device)
     {
         public ITuneDevice Device { get; } = device;
 
@@ -90,7 +98,25 @@ public sealed class TunerPool(
         /// <summary>いま合わせているところ。**同じなら選局し直さない**</summary>
         public string? Channel { get; set; }
 
-        public void Dispose() => Device.Dispose();
+        /// <summary>最後にこのデバイスから読み始めた選局。<see cref="Gate"/> の中で読み書きする</summary>
+        public Lease? Reader { get; set; }
+
+        /// <summary>閉じた。<see cref="Gate"/> の中で読み書きする (閉じたデバイスに C/N を聞かないように)</summary>
+        public bool Closed { get; private set; }
+
+        /// <summary>
+        /// **選局し直しと読み出しが終わってから閉じる。** 取り合いのロックの外で呼ぶ (選局の同期待ちは最長 5 秒、
+        /// 読み出しが止まるのを待つのは最長 2 秒)。閉じた fd を読み出しが読まないように
+        /// </summary>
+        public void Close()
+        {
+            lock (Gate)
+            {
+                Reader?.Await();
+                Closed = true;
+                Device.Dispose();
+            }
+        }
     }
 
     private IReadOnlyList<TunerSpec> _specs = specs;
@@ -108,9 +134,16 @@ public sealed class TunerPool(
     /// 失敗として畳み、開いているデバイスも手放す。使っているデバイスが別物になったのに流し続けると、
     /// 何が録れているのか分からなくなる。無効にしたのに使い続けると、ほかのソフトから使えない。
     /// </para>
+    ///
+    /// <para>
+    /// **デバイスを閉じるのは取り合いのロックを放してから、読み出しと選局が終わるのを待って** (<see cref="Held.Close"/>)。
+    /// ロックの中で閉じると、読み出し中のデバイスを閉じて閉じた fd を読ませる。ロックの中で選局が終わるのを待てば、
+    /// その間 (最長 5 秒) どのチューナーも開けない
+    /// </para>
     /// </summary>
     public void Replace(IReadOnlyList<TunerSpec> next)
     {
+        Task closing;
         lock (_gate)
         {
             var before = _specs;
@@ -127,17 +160,14 @@ public sealed class TunerPool(
                 if (Kept(index)) continue;
                 var disabled = index < next.Count && next[index].Disabled;
                 Release(lease, disabled ? "チューナーを無効にしました" : "チューナーの設定が変わりました");
-                // 別の機材になったかもしれない。取り直す
-                Drop(index);
             }
             /*
-             * **選局していなくても、開いたままのデバイスは手放す。** PIX-DT295 のように最初の選局で開いたまま持つ機材は、
-             * 無効にしても USB を握ったままで、ほかのソフトから使えなかった
+             * 別の機材になったかもしれないので、デバイスは取り直す。**選局していなくても、開いたままのデバイスは手放す。**
+             * PIX-DT295 のように最初の選局で開いたまま持つ機材は、無効にしても USB を握ったままで、ほかのソフトから使えなかった
              */
-            List<int> idle;
-            lock (_deviceGate) idle = [.. _held.Keys.Where(index => !Kept(index))];
-            foreach (var index in idle) Drop(index);
+            closing = Retire(index => !Kept(index));
         }
+        closing.Wait();
         onChange();
     }
 
@@ -243,9 +273,14 @@ public sealed class TunerPool(
             // 自分で選局する。偽の選局を起こすのは適合テストだけ (TuneOptions.FakeTune)
             if (_tune.FakeTune is not { } fake)
             {
-                var held = Acquire(index, spec);
+                /*
+                 * **待つ間に取り上げられた・定義が変わった選局は、開きも選局もしない。** `spec` はロックの中で写したもので、
+                 * 定義が並べ替わったあとに開くと、古いデバイスが新しい定義の番号に残る。利用者には畳んだ側が理由を伝えてある
+                 */
+                if (Acquire(index, spec, lease) is not { } held) return sink;
                 lock (held.Gate)
                 {
+                    if (lease.Stopped) return sink;
                     /*
                      * **合っていても、生きていなければ選局し直す。** DVB は合ったまま
                      * だが、px4-userland は利用者がいなくなると TS のストリームを畳む
@@ -262,6 +297,8 @@ public sealed class TunerPool(
                         lease.TunedMs = lease.Clock.ElapsedMilliseconds;
                     }
                     lease.StartNative(held.Device, () => OnExit(lease));
+                    // 閉じる側 (Held.Close) は、この読み出しが止まるのを待ってから閉じる
+                    held.Reader = lease;
                 }
             }
             else
@@ -295,19 +332,31 @@ public sealed class TunerPool(
         return sink;
     }
 
-    /// <summary>開きっぱなしの実体を取り出す。**無ければ、そのとき 1 度だけ開く。**</summary>
-    private Held Acquire(int index, TunerSpec spec)
+    /// <summary>
+    /// 開きっぱなしの実体を取り出す。**無ければ、そのとき 1 度だけ開く。** 手放したデバイスがまだ閉じていなければ、閉じ終わるまで待ってから開く。
+    /// <paramref name="lease"/> がもう畳まれていれば開かずに null (<see cref="Open"/>)
+    /// </summary>
+    private Held? Acquire(int index, TunerSpec spec, Lease lease)
     {
+        Task closing;
         lock (_deviceGate)
         {
-            if (_held.TryGetValue(index, out var open))
-            {
-                return open;
-            }
+            if (_held.TryGetValue(index, out var open)) return open;
+            closing = _closing;
+        }
+        closing.Wait();
+        lock (_deviceGate)
+        {
+            if (_held.TryGetValue(index, out var open)) return open;
+            /*
+             * **畳まれた選局は開かない。** 定義を書き換える側 (Replace) は、選局を畳んでから `_deviceGate` を取って手放すデバイスを選ぶ。
+             * ここで畳まれていなければ、定義はロックの中で写したときのままか、ここで開いたデバイスをこのあと Replace が手放す
+             */
+            if (lease.Stopped) return null;
 
             var path = spec.Device ?? throw new IOException($"{spec.Name} のデバイスが指定されていません");
             // CECH-ZD1 J は、設定に 1 台だけなら挿し替えたポートに付いていく (2 台以上はポートで見分ける。Zd1j.Follow)
-            var device = OpenDevice(path, spec.Lnb, followZd1j: _specs.Count(other => Zd1j.Is(other.Device)) == 1);
+            var device = openDevice?.Invoke(spec) ?? OpenDevice(path, spec.Lnb, followZd1j: _specs.Count(other => Zd1j.Is(other.Device)) == 1);
 
             var held = new Held(device);
             _held[index] = held;
@@ -352,13 +401,34 @@ public sealed class TunerPool(
             $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機> か {SianoUserland.Scheme}<USB のポート> か {AsicenUserland.Scheme}<USB のポート>:<受信機> か {Zd1j.Scheme}<USB のポート> か {Dt295.Scheme}<USB のポート>)");
     }
 
-    /// <summary>実体を手放す。**定義が変わったときと、止めるときだけ**</summary>
-    private void Drop(int index)
+    /// <summary>
+    /// 実体を手放す。**定義が変わったときと、止めるときだけ。** 取り合いのロックの中で呼び、選局を畳んだあとで呼ぶ。
+    /// 一覧から外すのはここで、閉じるのは別のスレッド (<see cref="Held.Close"/>)。返す Task はロックの外で待つ
+    /// </summary>
+    private Task Retire(Func<int, bool> which)
     {
         lock (_deviceGate)
         {
-            if (!_held.Remove(index, out var held)) return;
-            held.Dispose();
+            var retired = _held.Where(pair => which(pair.Key)).ToList();
+            if (retired.Count == 0) return Task.CompletedTask;
+            foreach (var (index, _) in retired) _held.Remove(index);
+            var closing = Task.Run(() =>
+            {
+                foreach (var (index, held) in retired)
+                {
+                    try
+                    {
+                        held.Close();
+                    }
+                    catch (Exception error)
+                    {
+                        // 閉じられなくても、次に開く処理は待たせたままにしない
+                        Log.Write($"[{index}] デバイスを閉じられませんでした ({error.Message})");
+                    }
+                }
+            });
+            _closing = _closing.IsCompleted ? closing : Task.WhenAll(_closing, closing);
+            return closing;
         }
     }
 
@@ -669,6 +739,8 @@ public sealed class TunerPool(
                 if (!held.Gate.TryEnter()) continue;
                 try
                 {
+                    // 一覧を写したあとで閉じたデバイスには聞かない
+                    if (held.Closed) continue;
                     lease.Signal = held.Channel == lease.Channel ? held.Device.Signal() : null;
                 }
                 catch (Exception error)
@@ -720,19 +792,18 @@ public sealed class TunerPool(
         lock (_gate) return [.. _leases.Where(pair => pair.Value.Descrambling).OrderBy(pair => pair.Key).Select(pair => Tuners[pair.Key].Name)];
     }
 
-    /// <summary>全部畳む。止めるときに使う</summary>
+    /// <summary>全部畳む。止めるときに使う。デバイスを閉じるのは、読み出しと選局が終わってから (<see cref="Replace"/> と同じ)</summary>
     public void CloseAll()
     {
+        Task closing;
         lock (_gate)
         {
             _signals?.Dispose();
             _signals = null;
             foreach (var lease in _leases.Values.ToList()) Release(lease, "停止します");
-            // _held は選局 (Acquire) が _gate の外で足すので、写すのは _deviceGate の中で (Replace と同じ)
-            List<int> held;
-            lock (_deviceGate) held = [.. _held.Keys];
-            foreach (var index in held) Drop(index);
+            closing = Retire(_ => true);
         }
+        closing.Wait();
     }
 }
 
@@ -873,7 +944,11 @@ internal sealed class Lease(int tuner, string type, string channel)
     public int? Pid => _child is { HasExited: false } child ? child.Id : null;
 
     private volatile bool _stopped;
-    private Task? _pump;
+
+    /// <summary>畳めと言われた (<see cref="Stop"/>)。取り上げられたか、定義が変わったか、止めるとき</summary>
+    public bool Stopped => _stopped;
+
+    private volatile Task? _pump;
     /// <summary>デスクランブラが終わった (失敗も含む)。残ると読み出し側を開いたまま回り続けるので、**読み出しも止まる**</summary>
     private volatile bool _drained;
     /// <summary>デスクランブラが回っている (<see cref="TunerPool.Descrambling"/>)</summary>
@@ -1169,13 +1244,12 @@ internal sealed class Lease(int tuner, string type, string channel)
     /**
      * **止まりきるまで待つ。呼ぶのはロックの外で。** 次の選局はこれが返ってから始める (<see cref="TunerPool.Open"/>)。
      * 待つのは読み出しだけ。デスクランブラはデバイスに触らず、配り先も畳むときに空になっている。
-     * それでも止まらないときは記録に残す (黙って進むと、取り合いの窓が開いていたのか確かめようが無い)
+     * それでも止まらないときは記録に残す (黙って進むと、取り合いの窓が開いていたのか確かめようが無い)。
+     * **何度呼んでも、どれも止まるまで待つ** (取り上げた側とデバイスを閉じる側が同時に待つことがある)
      */
     public void Await()
     {
-        var pump = _pump;
-        _pump = null;
-        if (pump?.Wait(StopWait) == false) Log.Write($"[{Tuner}] {Channel}: 読み出しが {StopWait.TotalSeconds} 秒で止まりませんでした");
+        if (_pump?.Wait(StopWait) == false) Log.Write($"[{Tuner}] {Channel}: 読み出しが {StopWait.TotalSeconds} 秒で止まりませんでした");
     }
 
     /// <summary>止まるのを待つ上限。読み出し側は 200ms ごとに起きるので、十分に長い</summary>

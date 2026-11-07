@@ -69,6 +69,7 @@
         <Compile Include="../Denpa.Agent/Dt295NativeTimeline.cs" />
         <Compile Include="../Denpa.Agent/Dt295NativeProbe.cs" />
         <Compile Include="../Denpa.Agent/ContinuityCount.cs" />
+        <Compile Include="../Denpa.Agent/Probe.cs" />
         <!-- 本体と同じ名前で埋め込む (Px4Firmware.Bundled が読む) -->
         <EmbeddedResource Include="../Denpa.Agent/firmware/it930x-firmware.bin" LogicalName="it930x-firmware.bin" />
     </ItemGroup>
