@@ -298,7 +298,7 @@
     position: fixed;
     right: 0.25rem;
     bottom: 0.25rem;
-    z-index: 100;
+    z-index: var(--dp-z-measure);
     max-width: 95vw;
     padding: 0.25rem 0.5rem;
     border-radius: var(--dp-radius-sm);

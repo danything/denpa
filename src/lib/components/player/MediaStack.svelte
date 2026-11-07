@@ -93,8 +93,8 @@
   .still {
     transition: opacity var(--dp-duration);
   }
-  /* 字幕は実況 (8) より上、操作バーのボタン (10) より下 (`ControlBar`) */
+  /* 字幕は実況より上、操作バーのボタンより下 (`app.css` の `--dp-z-stage-*`) */
   .captions {
-    z-index: 9;
+    z-index: var(--dp-z-stage-captions);
   }
 </style>

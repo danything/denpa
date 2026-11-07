@@ -10,6 +10,7 @@
     type Notice,
   } from "#lib/components/Toasts.svelte";
   import { date } from "#lib/format.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { Paged, sentinel } from "#lib/paging.svelte.js";
   import { conditionSummary, upcomingLabel } from "#lib/rule-summary.js";
 
@@ -80,11 +81,8 @@
     new Map(data.services.map((s) => [s.id, s.name])),
   );
   /** 「今日」「明日」の切れ目に使う時計。分で刻む */
-  let clock = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => (clock = Date.now()), 60_000);
-    return () => clearInterval(timer);
-  });
+  const minute = minuteClock();
+  const clock = $derived(minute.now);
 
   /** ルールの削除は 2 回押させる (録画・通知先と同じ。[arming.svelte.ts](../../lib/arming.svelte.ts)) */
   const deleting = arming('[data-testid^="rule-delete"]');
@@ -557,7 +555,7 @@
     gap: var(--dp-space-2);
     position: fixed;
     inset-inline: var(--dp-dock-inset);
-    z-index: 30;
+    z-index: var(--dp-z-dock);
     padding: var(--dp-space-1) var(--dp-space-1) var(--dp-space-1)
       var(--dp-space-3);
   }

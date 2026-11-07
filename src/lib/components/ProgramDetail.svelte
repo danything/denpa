@@ -1,6 +1,6 @@
 <script lang="ts">
   import "@anyblades/blades/components/modal";
-  import type { Snippet } from "svelte";
+  import { onMount, type Snippet } from "svelte";
 
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import type { ProgramDetail } from "#lib/types.js";
@@ -43,6 +43,23 @@
   let box: HTMLDivElement | undefined = $state();
   /** 下に重ねたボタンの並びの高さ。中身の最後の行がその上まで巻き上がるよう、下に同じだけ空ける */
   let actionsHeight = $state(0);
+  /** 番組名の見出しの id。箱の名前にする (読み上げは開いたときに番組名を言う) */
+  const titleId = $props.id();
+
+  /**
+   * **開いたら箱へ焦点を移し、閉じたら開く前の場所へ戻す。** 開いた画面は `{#if}` で外すので、外れるときに戻す。
+   * 戻す先が消えていれば (行が読み直しで作り直されたなど) 戻さない
+   */
+  onMount(() => {
+    const before =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    box?.focus({ preventScroll: true });
+    return () => {
+      if (before?.isConnected) before.focus({ preventScroll: true });
+    };
+  });
 </script>
 
 <svelte:window
@@ -70,6 +87,7 @@
   class="detail-modal"
   role="dialog"
   aria-modal="true"
+  aria-labelledby={titleId}
   data-testid="program-detail"
 >
   <button
@@ -85,7 +103,7 @@
         中身はボタンの間と後ろに透けて見える。
         続きがあるときは、ボタンの手前で中身を薄く消していく (下の CSS)
     -->
-  <div bind:this={box} class="detail-box modal-box">
+  <div bind:this={box} class="detail-box modal-box" tabindex="-1">
     <!--
             フェードの長さ (`animation-duration`) は要素に直に書く。時間で動くものではない (巻き取った量で濃さが
             決まるだけ) が、動きを減らす設定で Pico の層が `!important` で 1ms に縮める。層の中の `!important` には
@@ -96,7 +114,7 @@
       style:--detail-bottom={`calc(${actionsHeight}px + 2 * var(--dp-space-5))`}
       style:animation-duration|important="auto"
     >
-      <ProgramFacts {program} {notes} {cmNote} {fps} {status} />
+      <ProgramFacts {program} {notes} {cmNote} {fps} {status} {titleId} />
     </div>
 
     <!--
@@ -123,7 +141,7 @@
   .detail-modal {
     position: fixed;
     inset: 0;
-    z-index: 60;
+    z-index: var(--dp-z-modal);
     /* grid だと箱の max-height: 100% が行の高さ (auto) に対して解決されて効かず、低い画面ではみ出した。flex なら外枠の高さに効く */
     display: flex;
     align-items: center;

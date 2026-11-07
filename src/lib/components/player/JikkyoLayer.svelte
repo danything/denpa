@@ -313,11 +313,11 @@
 {/if}
 
 <style>
-  /* 操作バーの影 (7) より上、字幕 (9) と操作バーのボタン (10) より下 (`ControlBar`) */
+  /* 操作バーの影より上、字幕と操作バーのボタンより下 (`app.css` の `--dp-z-stage-*`) */
   .jikkyo {
     position: absolute;
     inset: 0;
-    z-index: 8;
+    z-index: var(--dp-z-stage-comments);
     overflow: hidden;
     pointer-events: none;
   }

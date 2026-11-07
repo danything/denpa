@@ -392,7 +392,7 @@
     position: absolute;
     top: calc(100% + var(--dp-space-1));
     left: 50%;
-    z-index: 50;
+    z-index: var(--dp-z-toast);
     width: max(100%, min(36rem, calc(100vw - 2rem)));
     max-height: min(70vh, 36rem);
     overflow-y: auto;

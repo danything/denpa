@@ -391,7 +391,7 @@
      * はみ出す分は横に巻く (行を折り返すと高さが変わり、飛んだ先の余白が合わなくなる)
      */
   .jump {
-    z-index: 30;
+    z-index: var(--dp-z-dock);
     display: flex;
     align-items: center;
     gap: var(--dp-space-1);
@@ -454,7 +454,7 @@
     --dock-gap: calc(var(--dp-dock-gap) + var(--jump-room));
     position: fixed;
     inset-inline: var(--dp-dock-inset);
-    z-index: 30;
+    z-index: var(--dp-z-dock);
     display: flex;
     flex-wrap: nowrap;
     align-items: center;

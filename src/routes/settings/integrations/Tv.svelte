@@ -38,8 +38,8 @@
         {#each data.devices as device (device.id)}
           <div class="device item" data-testid="device-row">
             <div class="grow">
-              <div class="small"><strong>{device.name}</strong></div>
-              <div class="tiny muted">
+              <div><strong>{device.name}</strong></div>
+              <div class="small muted">
                 ペアリング {dateTime(device.created_at)}・最後に使った
                 {device.last_used_at === null
                   ? "まだ"

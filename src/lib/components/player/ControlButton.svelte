@@ -5,7 +5,6 @@
     OVERLAY,
     OVERLAY_BTN,
     OVERLAY_DANGER,
-    OVERLAY_ON,
     OVERLAY_ROUND,
   } from "./icons";
 
@@ -49,11 +48,9 @@
 
 <button
   type={submit ? "submit" : "button"}
-  class="{OVERLAY_BTN} {children === undefined ? OVERLAY_ROUND : ''} {on
-    ? OVERLAY_ON
-    : danger
-      ? OVERLAY_DANGER
-      : OVERLAY}"
+  class="{OVERLAY_BTN} {children === undefined ? OVERLAY_ROUND : ''} {danger
+    ? OVERLAY_DANGER
+    : OVERLAY}"
   {onclick}
   aria-label={label}
   aria-pressed={on}
@@ -121,25 +118,17 @@
   :global(.ov-btn:is(:hover, :focus-visible)) {
     --pico-background-color: var(--dp-on-video-hover);
   }
-  /* オンは空色のアイコンと下の短い線、戻せないものの 2 回目と「今」に張り付いた「ライブ」「最新」は赤 (塗らない) */
-  :global(.ov-btn.ov-on) {
+  /*
+     * オン (`aria-pressed="true"`) は空色のアイコンと下の短い線。線はほかの所と同じ「入っている切り替え」の 1 本 (`app.css`) で、
+     * 色だけ字に合わせる。戻せないものの 2 回目と「今」に張り付いた「ライブ」「最新」は赤 (塗らない)
+     */
+  :global(.ov-btn[aria-pressed="true"]) {
     --pico-color: var(--dp-on-video-on);
-    /* 入っている切り替えの共通の短い下線 (app.css の `aria-pressed`) は引かない。線は下の `::after` 1 本 */
-    background-image: none;
+    --dp-on-mark: currentColor;
   }
   :global(.ov-btn.ov-danger) {
     --pico-color: var(--dp-on-video-danger);
-  }
-  :global(.ov-btn:is(.ov-on, .ov-danger))::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: 0.125rem;
-    width: 1rem;
-    height: 2px;
-    border-radius: 1px;
-    background: currentColor;
-    transform: translateX(-50%);
+    --dp-on-mark: currentColor;
   }
   /* 透かしを減らす設定では、乗せたときの地も透かさない (並びの裏の影は `ControlBar` が濃くする) */
   @media (prefers-reduced-transparency: reduce) {

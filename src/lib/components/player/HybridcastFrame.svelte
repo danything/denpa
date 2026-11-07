@@ -399,7 +399,7 @@
     position: absolute;
     top: 0.75rem;
     right: 0.75rem;
-    z-index: 10;
+    z-index: var(--dp-z-stage-controls);
     display: flex;
   }
 </style>
