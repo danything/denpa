@@ -175,7 +175,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [@sirius128](https://github.com/sirius128) ([#775](https://github.com/danything/denpa/issues/775))
 - [@chiroru27](https://github.com/chiroru27) ([#1681](https://github.com/danything/denpa/issues/1681) [#1724](https://github.com/danything/denpa/issues/1724) [#1822](https://github.com/danything/denpa/issues/1822) [#1838](https://github.com/danything/denpa/issues/1838) [#2197](https://github.com/danything/denpa/issues/2197))
 - [@minetaro12](https://github.com/minetaro12) ([#1850](https://github.com/danything/denpa/issues/1850))
-- [@haruki0420](https://github.com/haruki0420) ([#2190](https://github.com/danything/denpa/issues/2190) [#2191](https://github.com/danything/denpa/issues/2191) [#2192](https://github.com/danything/denpa/issues/2192) [#2193](https://github.com/danything/denpa/issues/2193))
+- [@haruki0420](https://github.com/haruki0420) ([#2190](https://github.com/danything/denpa/issues/2190) [#2191](https://github.com/danything/denpa/issues/2191) [#2192](https://github.com/danything/denpa/issues/2192) [#2193](https://github.com/danything/denpa/issues/2193) [#2230](https://github.com/danything/denpa/issues/2230) [#2231](https://github.com/danything/denpa/issues/2231) [#2286](https://github.com/danything/denpa/issues/2286) [#2315](https://github.com/danything/denpa/issues/2315))
 
 **報告や提案をくれた人** (ありがとうございます):
 
@@ -188,7 +188,8 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [@ogatomo21](https://github.com/ogatomo21) ([#1708](https://github.com/danything/denpa/issues/1708))
 - [@yuki-untitled](https://github.com/yuki-untitled) ([#1806](https://github.com/danything/denpa/issues/1806))
 - [@orijie](https://github.com/orijie) ([#2188](https://github.com/danything/denpa/issues/2188))
-- [@emuiak](https://github.com/emuiak) ([#2189](https://github.com/danything/denpa/issues/2189))
+- [@emuiak](https://github.com/emuiak) ([#2189](https://github.com/danything/denpa/issues/2189) [#2218](https://github.com/danything/denpa/issues/2218))
+- [@haruki0420](https://github.com/haruki0420) ([#2221](https://github.com/danything/denpa/issues/2221) [#2239](https://github.com/danything/denpa/issues/2239))
 
 <!-- thanks:end -->
 
