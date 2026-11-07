@@ -190,6 +190,16 @@ export const webhooks = sqliteTable("webhooks", {
   created_at: integer("created_at").notNull(),
 });
 
+/**
+ * テレビの局のサービス種別 (ARIB STD-B10 のデジタル TV)。録画できるのはこの種別だけ。
+ *
+ * スキャンはデータ放送 (NHKデータ1、Gガイド) もワンセグ (tvkワンセグ1) も
+ * ラジオも同じ一覧に入れる。これらを録っても映像は入っておらず、
+ * データ放送は番組表上「24 時間ぶんの 1 番組」になっていたりする。
+ * ルールが引っかけて録画が失敗するので、取り込む時点で落とす (`epg.syncServices`)
+ */
+export const DIGITAL_TV = 1;
+
 export const services = sqliteTable("services", {
   /** 局の内部 ID (tuner.ts の serviceKey) */
   id: integer("id").primaryKey(),
@@ -201,7 +211,7 @@ export const services = sqliteTable("services", {
    * ARIB のサービス種別 (STD-B10)。1 = デジタル TV、2 = デジタル音声、
    * 192 = データ/ワンセグ、164 = エンジニアリング。録るのは 1 だけ
    */
-  service_type: integer("service_type").notNull().default(1),
+  service_type: integer("service_type").notNull().default(DIGITAL_TV),
   /** 物理チャンネル。同一チャンネルの同時録画はチューナーを共有できる */
   channel: text("channel").notNull(),
   remote_control_key: integer("remote_control_key"),
@@ -209,6 +219,12 @@ export const services = sqliteTable("services", {
     .notNull()
     .default(sql`0`),
   updated_at: integer("updated_at").notNull(),
+  /**
+   * 番組表の取得 (`epg-collect.ts`) がこの局の番組を最後に書いた時刻。まだなら null。
+   * 次に集めに行くかをこれで決める。ライブや録画が p/f (現在と次の番組) だけを書いても変えない
+   * (`programs.updated_at` で数えると、p/f を書いただけで集めたことになっていた)
+   */
+  epg_at: integer("epg_at"),
 });
 
 /**

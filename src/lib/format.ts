@@ -424,6 +424,30 @@ export function playableRecordingId(program: {
     : program.recording_id;
 }
 
+/** 予約を取り消せる状態。録り終えたもの・録り逃したものを取り消しにしても何も止まらず、記録だけが書き換わる */
+const CANCELABLE_STATES: readonly string[] = [
+  "scheduled",
+  "conflict",
+  "skipped",
+  "recording",
+];
+
+/**
+ * **予約を取り消せるか** (これから録るものと、いま録っているものだけ)。「録画しない」(`skipped`) は
+ * 放送が終わるまで。番組表の「予約取消」と、`DELETE /api/programs/<id>/record` (`reservations.cancelProgram`) が同じ判定を使う
+ */
+export function cancelable(
+  state: string | null,
+  endAt: number,
+  at: number,
+): boolean {
+  if (state === null || !CANCELABLE_STATES.includes(state)) return false;
+  return !(state === "skipped" && endAt <= at);
+}
+
+/** 取り消せない予約 ({@link cancelable}) を取り消そうとしたときの理由 */
+export const NOT_CANCELABLE_REASON = "放送か録画が終わった予約は取り消せません";
+
 /**
  * ロゴでの判定が使えなかったときに、CM 検出の覚え書き (`recordings.cm_note`) へ
  * 入れる目印。無音検出に落ちた理由はこの後ろに続く。

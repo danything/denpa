@@ -1,7 +1,11 @@
 import { and, desc, eq, gt, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
-import { COPY_NEVER_REASON } from "../format";
+import {
+  cancelable,
+  COPY_NEVER_REASON,
+  NOT_CANCELABLE_REASON,
+} from "../format";
 import type { Reservation, ReservationState } from "../types";
 import { now, orm } from "./db";
 import { stopRecording } from "./recorder";
@@ -97,7 +101,7 @@ export async function reserve(programId: number): Promise<Reservation> {
 /** 画面の「予約」のアクション (番組表・検索)。フォームの `programId` を予約し、断ったときはその理由を返す */
 export async function reserveFromForm(form: FormData): Promise<string | null> {
   const programId = Number(form.get("programId"));
-  if (!Number.isFinite(programId)) return "番組 ID が不正です";
+  if (!Number.isSafeInteger(programId)) return "番組 ID が不正です";
   try {
     await reserve(programId);
     return null;
@@ -181,13 +185,19 @@ export async function cancel(reservationId: number): Promise<boolean> {
 
 /**
  * **番組の予約を取り消す** (番組表の「予約取消」と、アプリの `DELETE /api/programs/<id>/record`)。
- * 取り消していない予約が無ければ null。録画中なら止めて、そこまでの録画は残す ({@link cancel})
+ * 予約は番組ごとに 1 本 (`reservations.program_id` が一意)。取り消していない予約が無ければ 404、
+ * 録り終えた・録り逃したものは 409 ({@link cancelable}。取り消しにすると記録だけが書き換わるため)。
+ * 録画中なら止めて、そこまでの録画は残す ({@link cancel})
  */
 export async function cancelProgram(
   programId: number,
-): Promise<{ stopped: boolean } | null> {
+  at = now(),
+): Promise<
+  | { ok: true; stopped: boolean }
+  | { ok: false; status: 404 | 409; message: string }
+> {
   const reservation = orm()
-    .select({ id: reservations.id })
+    .select({ id: reservations.id, end_at: reservations.end_at })
     .from(reservations)
     .where(
       and(
@@ -196,8 +206,12 @@ export async function cancelProgram(
       ),
     )
     .get();
-  if (reservation === undefined) return null;
-  return { stopped: await cancel(reservation.id) };
+  if (reservation === undefined)
+    return { ok: false, status: 404, message: "予約が見つかりません" };
+  const state = reservationStates([programId]).get(programId) ?? null;
+  if (!cancelable(state, reservation.end_at, at))
+    return { ok: false, status: 409, message: NOT_CANCELABLE_REASON };
+  return { ok: true, stopped: await cancel(reservation.id) };
 }
 
 /** {@link recordAiring}・{@link recordProgram} の答え。断ったときは HTTP の状態と、そのまま出せる文言を持つ */

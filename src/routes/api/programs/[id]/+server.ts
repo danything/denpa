@@ -12,11 +12,11 @@ import type { ProgramDetail } from "#lib/types.js";
  * 開いた 1 件だけ取得してもらう。
  *
  * EPG は古い番組を消していくので、録画からは引けないことがある。
- * その場合は 404 を返し、画面は録画が持っている分だけを出す。
+ * その場合は 404 を返し、画面は録画が持っている分だけを出す。番組 ID が整数でなければ 400 (`/record` と同じ)。
  */
 export function GET({ params }) {
   const id = Number(params.id);
-  if (!Number.isFinite(id)) error(400, "番組 ID が不正です");
+  if (!Number.isSafeInteger(id)) error(400, "番組 ID が不正です");
 
   const program: ProgramDetail | undefined = orm()
     .select({

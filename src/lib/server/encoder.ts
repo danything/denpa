@@ -716,13 +716,18 @@ export async function cancel(jobId: number): Promise<void> {
     emit("recordings");
     return;
   }
+  // 待ってもいない・動いてもいない (終わったあとに押された)。印を残すと `isCanceling` が true のままになる
+  if (!runningJobs.has(jobId)) {
+    canceled.delete(jobId);
+    return;
+  }
 
   /*
    * 動いている分。**段階の名前を先に書き換えてから待つ**。上限に間に合わな
    * かったときでも、押した直後の読み直しが「中止しています」を読める
    * (割合を出している段階では出ないが、CM 検出のように数分かかる段階で効く)
    */
-  if (runningJobs.has(jobId)) writeStep(jobId, "中止しています");
+  writeStep(jobId, "中止しています");
   await settled(jobId);
 }
 
@@ -2463,7 +2468,12 @@ export function pump(): void {
     // 待機中が動き出したことも伝える。押した直後に何も変わらないと止まって見える
     emit("recordings");
     void (next.kind === "cm" ? runCmJob(jobId) : runJob(jobId))
-      .catch((error) => markFailed(jobId, String(error)))
+      // 中止したあとに投げたものは失敗にしない (中止として畳む)
+      .catch((error) =>
+        canceled.has(jobId)
+          ? finishCanceled(jobId, null)
+          : markFailed(jobId, String(error)),
+      )
       .finally(() => {
         runningJobs.delete(jobId);
         procs.delete(jobId);

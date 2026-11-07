@@ -20,7 +20,7 @@ import { PNG_SIGNATURE, pngChunk } from "../ts/png";
 import { config } from "./config";
 import { orm } from "./db";
 import { currentServices } from "./epg";
-import { services } from "./schema";
+import { DIGITAL_TV, services } from "./schema";
 
 /**
  * CM 検出のために覚えた局ロゴ (`own-logo-<幅>x<高さ>.bin`。`logo-own.ts`) の置き場と、その中身。
@@ -278,7 +278,7 @@ export function stats(): { have: number; total: number } {
         name: services.name,
       })
       .from(services)
-      .where(and(currentServices(), eq(services.service_type, 1)))
+      .where(and(currentServices(), eq(services.service_type, DIGITAL_TV)))
       .all(),
   );
   return {

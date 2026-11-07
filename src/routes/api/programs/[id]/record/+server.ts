@@ -19,11 +19,11 @@ export async function POST({ params }) {
   return json(recordedBody(result));
 }
 
-/** 録画中なら止めて、そこまでの録画は残す。取り消していない予約が無ければ 404 */
+/** 録画中なら止めて、そこまでの録画は残す。取り消していない予約が無ければ 404、録り終えたものは 409 */
 export async function DELETE({ params }) {
   const result = await cancelProgram(programId(params.id));
-  if (result === null) error(404, "予約が見つかりません");
-  return json(result);
+  if (!result.ok) error(result.status, result.message);
+  return json({ stopped: result.stopped });
 }
 
 function programId(raw: string): number {

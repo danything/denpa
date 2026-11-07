@@ -43,17 +43,18 @@ import {
 
 /**
  * 集めに行った時刻 (`type:channel` ごと)。番組が 0 件だった回も「行った」と覚えるため。
- * 再起動をまたぐぶんは番組の行から数える (`lastCollected`)
+ * 再起動をまたぐぶんは局の行から数える (`lastCollected`)
  */
 const collected = new Map<string, number>();
 
 /**
- * その物理チャンネルを最後に集めた時刻。**番組の行から数える。**
+ * その物理チャンネルを最後に集めた時刻。**局の行の `epg_at` から数える。**
  *
  * **DB から起こす。** 覚えているだけだと Pod が入れ替わるたびに「1 度も行って
  * いない」に戻り、番組表が 7 日先まで埋まっているのに全チャンネルを回し直して
- * いた (実機で、入れ替えのたびに 46 チャンネルぶん)。番組の行の `updated_at` が
- * そのまま「最後に取り込んだ時刻」になる。
+ * いた (実機で、入れ替えのたびに 46 チャンネルぶん)。`epg_at` は番組表 (EIT の schedule) を
+ * 書いたときだけ進む (`epg.savePrograms`。録画とスキャンが読んだぶんも入る)。番組の行の `updated_at` で
+ * 数えると、ライブが p/f を写しただけで「集めたばかり」になり、2 時間は行き直さなかった。
  *
  * **数えるキーは局**で、`services.channel` は見ない。あの列に入るのは
  * 「最後に取り込んだときの枠の名前」1 つだけなので、**同じ TS を指す枠が
@@ -63,7 +64,13 @@ const collected = new Map<string, number>();
  * 局で引けば、どの枠から開いても同じ時刻が出る。
  */
 function lastCollected(channels: AgentChannel[]): Map<string, number> {
-  const perService = latestPerService(programs.updated_at);
+  const perService = new Map<number, number>();
+  for (const row of orm()
+    .select({ id: services.id, at: services.epg_at })
+    .from(services)
+    .all()) {
+    if (row.at !== null) perService.set(row.id, row.at);
+  }
 
   const map = new Map<string, number>();
   for (const channel of channels) {
@@ -101,21 +108,6 @@ function perChannel(
       perService.get(serviceKey(channel.networkId, service.serviceId)),
     )
     .filter((value) => value !== undefined);
-}
-
-/** 局ごとの、番組の列のいちばん大きい値 */
-function latestPerService(
-  column: typeof programs.updated_at | typeof programs.end_at,
-): Map<number, number> {
-  const rows = orm()
-    .select({
-      service_id: programs.service_id,
-      value: max(column).mapWith(Number),
-    })
-    .from(programs)
-    .groupBy(programs.service_id)
-    .all();
-  return new Map(rows.map((row) => [row.service_id, row.value]));
 }
 
 const key = (channel: AgentChannel) => `${channel.type}:${channel.channel}`;
@@ -166,7 +158,15 @@ function update(patch: Partial<CollectState>): void {
  * 記憶だけで持っていると、Pod が入れ替わるたびに全チャンネルを回し直すことになる。
  */
 function coverage(): Map<number, number> {
-  return latestPerService(programs.end_at);
+  const rows = orm()
+    .select({
+      service_id: programs.service_id,
+      value: max(programs.end_at).mapWith(Number),
+    })
+    .from(programs)
+    .groupBy(programs.service_id)
+    .all();
+  return new Map(rows.map((row) => [row.service_id, row.value]));
 }
 
 interface Work {

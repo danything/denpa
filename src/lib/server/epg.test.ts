@@ -757,6 +757,21 @@ describe("savePrograms", () => {
       expect(rows).toEqual([{ name: "臨時ニュース" }]);
     });
 
+    test("p/f を写しても、番組表を集めた時刻 (epg_at) は進めない", async () => {
+      const base = await fresh();
+      orm().update(services).set({ epg_at: null }).run();
+      const epgAt = () =>
+        orm().select({ at: services.epg_at }).from(services).get()?.at;
+      follow([
+        event({ eventId: 9, name: "臨時", startAt: base, duration: 60_000 }),
+      ]);
+      expect(epgAt()).toBeNull();
+      savePrograms([
+        event({ eventId: 1, name: "番組", startAt: base, duration: 60_000 }),
+      ]);
+      expect(epgAt()).toBeNumber();
+    });
+
     test("時刻が未定の番組と、知らない局の番組は写さない", async () => {
       await fresh();
       const undecided = event({ eventId: 3, duration: null });

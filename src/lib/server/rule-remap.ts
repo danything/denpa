@@ -16,7 +16,7 @@ import { currentServices } from "./epg";
 import { unreceivableChannels } from "./reception";
 import { applyRules } from "./rules";
 import { resolveConflicts } from "./scheduler";
-import { rules as ruleTable, services } from "./schema";
+import { DIGITAL_TV, rules as ruleTable, services } from "./schema";
 
 /** 候補として並べる数の上限 */
 const CANDIDATES = 5;
@@ -54,7 +54,7 @@ export function orphanedRules(): Orphan[] {
       .map((row) => row.id),
   );
   const live = all.filter(
-    (service) => current.has(service.id) && service.service_type === 1,
+    (service) => current.has(service.id) && service.service_type === DIGITAL_TV,
   );
 
   /*
