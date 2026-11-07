@@ -83,8 +83,6 @@ export function getContractProvider(
 }
 
 export interface ContractSettings {
-  /** スカパー！の代表局 (スカチャン1 等) の契約・期限を他のスカパー局と一括同期するか */
-  skyperfectSync: boolean;
   /** 契約期限・予告の案内表示モード */
   modalMode: "modal" | "banner" | "none";
   /** 契約意志のある局 (内部サービスID の配列)。null なら全有料局を対象とする */
@@ -98,7 +96,6 @@ export interface ContractSettings {
 }
 
 export function getContractSettings(): ContractSettings {
-  const syncRaw = stored("contract_skyperfect_sync");
   const modalRaw = stored("contract_modal_mode");
   const intendedRaw = stored("contract_intended_services");
   const periodicRaw = stored("contract_periodic_scan_enabled");
@@ -118,7 +115,6 @@ export function getContractSettings(): ContractSettings {
   }
 
   return {
-    skyperfectSync: syncRaw === "1" || syncRaw === "true",
     modalMode:
       modalRaw === "banner" || modalRaw === "none" ? modalRaw : "modal",
     intendedServiceIds,
@@ -131,9 +127,6 @@ export function getContractSettings(): ContractSettings {
 export function saveContractSettings(
   patch: Partial<ContractSettings>,
 ): ContractSettings {
-  if (patch.skyperfectSync !== undefined) {
-    store("contract_skyperfect_sync", patch.skyperfectSync ? "1" : "0");
-  }
   if (patch.modalMode !== undefined) {
     store("contract_modal_mode", patch.modalMode);
   }
@@ -1202,10 +1195,7 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
   }
 
   // WOWOW 連動 または スカパー！一括同期
-  if (
-    wowowSubscribed ||
-    (contractSettings.skyperfectSync && skyperfectSubscribed)
-  ) {
+  if (wowowSubscribed || skyperfectSubscribed) {
     const candidateServices = orm()
       .select({
         id: services.id,
@@ -1234,7 +1224,7 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
       }
     }
 
-    if (contractSettings.skyperfectSync && skyperfectSubscribed) {
+    if (skyperfectSubscribed) {
       for (const s of candidateServices) {
         if (manualUnsubscribed.has(s.id)) continue;
         if (getContractProvider(s.id, s.type, s.name).id === "skyperfect") {

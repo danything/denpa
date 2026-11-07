@@ -444,17 +444,6 @@
     <div class="contract-settings">
       <div class="setting-row">
         <label class="setting-item">
-          <input
-            type="checkbox"
-            checked={settings.skyperfectSync}
-            disabled={isBusy}
-            onchange={(e) =>
-              handleSaveSettings({ skyperfectSync: e.currentTarget.checked })}
-            data-testid="checkbox-skyperfect-sync"
-          />
-          <span>スカパー！の期限・契約情報を全局で同期する</span>
-        </label>
-        <label class="setting-item">
           <span class="setting-label">契約期限・更新案内:</span>
           <select
             class="small"
