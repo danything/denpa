@@ -223,7 +223,8 @@ type Keyframes = "scene" | number[];
 
 /**
  * キーフレームを置かせる引数。どのエンコーダも、印の付いたコマ (`pict_type = I`) を
- * キーフレームにする。**NVENC は指定しないと IDR にならない** (`-forced-idr`)。
+ * キーフレームにする。**NVENC は指定しないと IDR にならない** (`-forced-idr`。QSV・AMF は `-forced_idr`。
+ * 3 つとも H.264・H.265・AV1 の全部が持つオプション)。
  * IDR でないと入れ物にキーフレームとして書かれず、そこで切れない。VA-API は印だけで IDR になる。
  *
  * **Rockchip MPP (h264_rkmpp・hevc_rkmpp) は印を見ない** (本家 FFmpeg の rkmppenc.c はコマの `pict_type` を
@@ -248,6 +249,9 @@ function keyframeArgs(
     "-force_key_frames:v",
     at,
     ...(hardware?.kind === "nvenc" ? ["-forced-idr", "1"] : []),
+    ...(hardware?.kind === "qsv" || hardware?.kind === "amf"
+      ? ["-forced_idr", "1"]
+      : []),
   ];
 }
 
@@ -272,9 +276,9 @@ function videoArgs(
   const keys = keyframeArgs(keyframes, hardware);
   if (hardware !== null) {
     /*
-     * **GPU (VA-API・NVIDIA NVENC・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
+     * **GPU (VA-API・NVENC・QSV・AMF・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
      * 済ませ、エンコードするところだけ GPU に渡す。引数と画質の決め方は hwenc.hwArgs
-     * (Rockchip MPP と NVENC は出す高さとコマ数でビットレートを決める)。
+     * (Rockchip MPP・NVENC・AMF は出す高さとコマ数でビットレートを決める)。
      * 使うかどうかは `hwChain` (起動時の試しのエンコードと設定)。**落ちたら次の方式か
      * ソフトウェアで再エンコードする** (runJob) ので、ここで保険はかけない
      */
@@ -396,7 +400,7 @@ interface EncodeOptions {
   /** 入れ物 (mkv) の title に埋め込む番組名 (`title.displayTitle`) */
   mediaTitle?: string;
   /**
-   * GPU でエンコードする経路 (どのデバイスを `vaapi` / `rkmpp` / `nvenc` のどれで)。使えるかどうかは
+   * GPU でエンコードする経路 (どのデバイスを `vaapi` / `rkmpp` / `nvenc` / `qsv` / `amf` のどれで)。使えるかどうかは
    * `hwenc.hwChain` が決めていて、runJob がその順に渡す。落ちたら次、
    * 最後はソフトウェア (undefined)
    */

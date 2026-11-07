@@ -77,6 +77,9 @@ jobs:
             mingw-w64-ucrt-x86_64-x264
             mingw-w64-ucrt-x86_64-dav1d
             mingw-w64-ucrt-x86_64-zlib
+            mingw-w64-ucrt-x86_64-libvpl
+            mingw-w64-ucrt-x86_64-ffnvcodec-headers
+            mingw-w64-ucrt-x86_64-amf-headers
 
       - name: Build ffmpeg
         if: steps.cache.outputs.cache-hit != 'true'

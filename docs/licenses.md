@@ -119,18 +119,19 @@ asicen-userland は入れません (Windows 用が無い)。カードリーダ�
 中身は上のコンテナイメージ `denpa` と同じものを Windows 用にしたものです。アプリ (`app/`)・Denpa Font (`font/`)・ブラウザへ配るデコーダ (`mpeg2/`) は
 イメージと同じ段 (Dockerfile の `app-files`・`denpa-font`・`mpeg2wasm`) から写します。ライセンスの文書は zip の `licenses/` と `ffmpeg/licenses/` に置きます。
 
-| 名前                                                              | 何に                                    | 出どころ                         | ライセンス                                                                          |
-| ----------------------------------------------------------------- | --------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
-| Bun (`bun.exe`。公式のリリースの `bun-windows-x64-baseline.zip`)  | denpa 本体を動かす                      | <https://github.com/oven-sh/bun> | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md`                    |
-| FFmpeg (`ffmpeg/`。MSYS2 の UCRT64 で組み、libav* は静的リンク)   | 上のイメージの ffmpeg と同じ            | <https://ffmpeg.org>             | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+                       |
-| SVT-AV1・Opus (ソースから組み、libavcodec に静的リンク)           | イメージと同じ                          | 上の表のとおり                   | 上の表のとおり                                                                      |
-| x264・dav1d・zlib (MSYS2 のパッケージの DLL)                      | H.264 のエンコード・AV1 のデコード・PNG | <https://packages.msys2.org>     | GPL-2.0+・BSD-2-Clause・zlib                                                        |
-| MinGW-w64 のランタイム (winpthreads など。ffmpeg が読む DLL だけ) | スレッドなど                            | <https://packages.msys2.org>     | パッケージのライセンスのとおり (MIT 系。GCC のものは GCC Runtime Library Exception) |
+| 名前                                                                                                        | 何に                                                                                                            | 出どころ                         | ライセンス                                                                          |
+| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------- |
+| Bun (`bun.exe`。公式のリリースの `bun-windows-x64-baseline.zip`)                                            | denpa 本体を動かす                                                                                              | <https://github.com/oven-sh/bun> | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md`                    |
+| FFmpeg (`ffmpeg/`。MSYS2 の UCRT64 で組み、libav* は静的リンク)                                             | 上のイメージの ffmpeg と同じ                                                                                    | <https://ffmpeg.org>             | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+                       |
+| SVT-AV1・Opus (ソースから組み、libavcodec に静的リンク)                                                     | イメージと同じ                                                                                                  | 上の表のとおり                   | 上の表のとおり                                                                      |
+| x264・dav1d・zlib (MSYS2 のパッケージの DLL)                                                                | H.264 のエンコード・AV1 のデコード・PNG                                                                         | <https://packages.msys2.org>     | GPL-2.0+・BSD-2-Clause・zlib                                                        |
+| libvpl (静的リンク)・nv-codec-headers・AMF のヘッダ (MSYS2 のパッケージ。あとの 2 つは組むときのヘッダだけ) | GPU でエンコードする (Intel の QSV・NVIDIA の NVENC・AMD の AMF)。ドライバのライブラリは GPU のドライバが入れる | <https://packages.msys2.org>     | MIT。`ffmpeg/licenses/` に文書                                                      |
+| MinGW-w64 のランタイム (winpthreads など。ffmpeg が読む DLL だけ)                                           | スレッドなど                                                                                                    | <https://packages.msys2.org>     | パッケージのライセンスのとおり (MIT 系。GCC のものは GCC Runtime Library Exception) |
 
 zip に入れる DLL は、組むときに ffmpeg.exe・ffprobe.exe の取り込み表から辿って決めます (.github/ffmpeg-windows.sh)。MSYS2 から写した DLL は、
 そのパッケージのライセンスの文書を `ffmpeg/licenses/<パッケージ>/` に、パッケージとバージョンを `ffmpeg/licenses/msys2-packages.txt` に書きます。
 ソースは、自分で組むもの (FFmpeg・SVT-AV1・Opus) は Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball、MSYS2 のパッケージは
-[msys2/MINGW-packages](https://github.com/msys2/MINGW-packages) の同じバージョンのものです。GPU のエンコーダ (NVENC・QSV・AMF) はまだ組み込みません。
+[msys2/MINGW-packages](https://github.com/msys2/MINGW-packages) の同じバージョンのものです。GPU のエンコーダ (NVENC・QSV・AMF) のヘッダとライブラリも MSYS2 のパッケージです。
 
 ### `denpa-aio`
 

@@ -6,8 +6,9 @@
 #
 # **バージョンと組む部品は Dockerfile の `ffmpeg` 段から読む** (Renovate が上げるのはそちらだけ。
 # 部品の一覧を 2 か所に書くと、片方に足し忘れる)。読むのは FFMPEG_VERSION・SVT_AV1_VERSION・OPUS_VERSION と、
-# `--enable-<種類>=<名前の並び>` の行。Windows に無いもの (VA-API・NVENC・Rockchip MPP のエンコーダとフィルタ) は
-# configure が黙って外す。patches/ の直しも Linux と同じく当てる。
+# `--enable-<種類>=<名前の並び>` の行。Windows に無いもの (VA-API・Rockchip MPP のエンコーダとフィルタ) は
+# configure が黙って外す。NVENC (h264_nvenc など) は Dockerfile の一覧にあるので、Windows でも組まれる。
+# patches/ の直しも Linux と同じく当てる。
 #
 # Linux と同じく、SVT-AV1 と Opus はソースから組んで libavcodec に静的に繋ぎ、x264 と dav1d は配布物
 # (MSYS2 のパッケージ。Linux は Debian のもの) を使う。**libav* は Linux と違って静的に繋ぐ** (ffmpeg.exe と ffprobe.exe が
@@ -17,7 +18,12 @@
 # **自動で見つけるもの (`--disable-autodetect`) は全部切ってから、要るものだけ足す。** 切らないと、MSYS2 に
 # 入っているものや Windows の API (Media Foundation・D3D11 など) を configure が勝手に繋ぎ、ランナーの中身しだいで
 # 出来上がりが変わる。スレッド (`w32threads`) と zlib (PNG のデコーダが使う) は自動で見つけるものに入っているので、明示する。
-# GPU のエンコーダ (NVENC・QSV・AMF) はまだ組まない (足すときは、ここに `--enable-…` を足す)
+#
+# **GPU のエンコーダは NVENC・QSV・AMF を組む** (`gpu`。docs/encode.md「Windows でエンコードする」)。どれもドライバのライブラリは
+# 実行時に読むので、配布物には足さない。ヘッダとライブラリは MSYS2 のパッケージで、ライセンスは GPL-3.0-or-later のままにできるもの
+# (nonfree にしない): nv-codec-headers (MIT。ffnvcodec-headers)、AMF のヘッダ (MIT。amf-headers)、libvpl (MIT。静的ライブラリ)。
+# QSV は Direct3D 11 のデバイスを子にして開くので `--enable-d3d11va` も要る。QSV と AMF のエンコーダは Dockerfile の
+# 一覧に無い (Linux は組まない) ので、ここで足す
 #
 # 出力先には ffmpeg.exe・ffprobe.exe・それらが読む DLL と、licenses/ (同梱したもののライセンスの文書と、
 # MSYS2 のパッケージのバージョンの一覧) を置く。DLL は実行ファイルの取り込み表 (objdump) から辿り、
@@ -34,6 +40,14 @@ FFMPEG_VERSION=$(value FFMPEG_VERSION)
 SVT_AV1_VERSION=$(value SVT_AV1_VERSION)
 OPUS_VERSION=$(value OPUS_VERSION)
 mapfile -t components < <(grep -oE -- '--enable-(decoder|encoder|hwaccel|demuxer|muxer|parser|bsf|filter|indev|protocol)=[^ ]+' <<< "$stage")
+gpu=(
+  --enable-ffnvcodec
+  --enable-nvenc
+  --enable-libvpl
+  --enable-d3d11va
+  --enable-amf
+  --enable-encoder=h264_qsv,hevc_qsv,av1_qsv,h264_amf,hevc_amf,av1_amf
+)
 for name in FFMPEG_VERSION SVT_AV1_VERSION OPUS_VERSION; do
   if [ -z "${!name}" ]; then echo "Dockerfile の ffmpeg 段に $name がありません" >&2; exit 1; fi
 done
@@ -84,12 +98,18 @@ for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 -
   --enable-libsvtav1 \
   --enable-libx264 \
   --enable-libdav1d \
+  "${gpu[@]}" \
   --disable-everything \
   --disable-network \
   --disable-doc \
   "${components[@]}"
 make -j"$jobs"
 make install
+# GPU のエンコーダが組み込まれているか (GPU が無いランナーでも `-encoders` には載る)。無ければ configure が黙って外している
+encoders=$("$prefix/bin/ffmpeg.exe" -hide_banner -encoders)
+for e in h264_nvenc hevc_nvenc av1_nvenc h264_qsv hevc_qsv av1_qsv h264_amf hevc_amf av1_amf; do
+  grep -qw "$e" <<< "$encoders" || { echo "ffmpeg に $e が組み込まれていません" >&2; exit 1; }
+done
 mkdir -p "$out/licenses/ffmpeg" && cp COPYING.GPLv3 LICENSE.md "$out/licenses/ffmpeg/"
 
 # 実行ファイルと、それが読む DLL。DLL は取り込み表から辿る (Windows の API の集まり api-ms-win-* と、
@@ -122,8 +142,8 @@ while [ "${#queue[@]}" -gt 0 ]; do
 done
 
 # MSYS2 から写した DLL と、静的に繋いだ MSYS2 のライブラリのパッケージの、ライセンスの文書とバージョン
-for lib in libx264.a libdav1d.a libz.a libwinpthread.a; do
-  if [ -e "/ucrt64/lib/$lib" ]; then from_msys+=("/ucrt64/lib/$lib"); fi
+for lib in lib/libx264.a lib/libdav1d.a lib/libz.a lib/libwinpthread.a lib/libvpl.a include/ffnvcodec/nvEncodeAPI.h include/AMF/core/Version.h; do
+  if [ -e "/ucrt64/$lib" ]; then from_msys+=("/ucrt64/$lib"); fi
 done
 : > "$out/licenses/msys2-packages.txt"
 for file in "${from_msys[@]}"; do

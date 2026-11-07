@@ -130,8 +130,8 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
   `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーと CECH-ZD1 J の差し込み口も
   並びます (USB のリーダーが先)
-- **エンコードはソフトウェアで** (SVT-AV1・x264)。Windows の GPU (NVENC・QSV・AMF) でのエンコードにはまだ対応していません
-  (設定の「録画」の「エンコード」にそう出る)
+- **エンコードは GPU (NVIDIA の NVENC・Intel の QSV・AMD の AMF) があれば使い、無ければソフトウェアで** (SVT-AV1・x264)。起動時の試しのエンコードで決める ([encode.md](encode.md#windows-でエンコードする))
+  (使える GPU は設定の「録画」の「エンコード」に出る)。GPU のエンコーダは Windows の実機では確かめていない
 
 **px4-userland の機材で Windows だけ違うところ。**
 
