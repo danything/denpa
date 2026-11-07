@@ -306,7 +306,7 @@ public sealed class Dt295NativeCardHandle(string name, Dt295NativeDevice device)
         {
             return device.Card.Reset();
         }
-        catch (Exception error) when (error is IOException)
+        catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
         {
             device.Fail(error);
             throw;
@@ -319,7 +319,7 @@ public sealed class Dt295NativeCardHandle(string name, Dt295NativeDevice device)
         {
             return device.Card.Transmit(apdu);
         }
-        catch (Exception error) when (error is IOException)
+        catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
         {
             device.Fail(error);
             throw;
