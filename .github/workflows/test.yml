@@ -109,6 +109,11 @@ jobs:
         # 通ったテストの出力も出す (Px4StreamBenchTests の数字を残すため)
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed
 
+      # Windows の通知領域のアプリのうち、Win32 に触らないところ (/api/health の読み方・更新の前に確かめる文・install.ps1 の流し方)。
+      # Win32 の側は agent-windows-install でビルドして起こす
+      - name: Unit tests (.NET tray)
+        run: dotnet test --project tray/Denpa.Tray.Tests/Denpa.Tray.Tests.csproj
+
       # エージェントの API に直接当てるテスト。**本物をビルドして起こして**、偽の選局
       # コマンドで流す (bun で書いたものがあった頃は、同じものを 2 つの実装に通していた)。
       # ビルドするところまで含めて 1 つの script にしてある。手元で走らせるときに
@@ -418,6 +423,35 @@ jobs:
           path: ${{ runner.temp }}/denpa-agent.tar.gz
           retention-days: 3
 
+  # Mac のメニューバーのアプリ (tray/mac)。/api/health の読み方と文言をテストし、組んで起こし、落ちずに動き続けることを見る
+  # (denpa はいないので、斜線の入ったアイコンのまま)。メニューは人が開くものなので見ない。
+  # **必須チェックにはしない** (agent-macos と同じ理由)
+  tray-macos:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Unit tests
+        run: swift test --package-path tray/mac
+
+      - name: Build
+        run: swift build -c release --package-path tray/mac
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          bin="$(swift build -c release --package-path tray/mac --show-bin-path)/denpa-tray"
+          # 配るときと同じく ad-hoc で署名して起こす (release.yml)
+          codesign --force --sign - "$bin"
+          "$bin" > tray.log 2>&1 &
+          pid=$!
+          sleep 5
+          if ! kill -0 "$pid" 2>/dev/null; then cat tray.log; echo "denpa-tray が終わってしまいました" >&2; exit 1; fi
+          kill "$pid"
+          cat tray.log
+
   # Windows (x64) で動かすエージェント (docs/install-windows.md)。
   #
   # agent-macos と同じく、Native AOT は Linux から Windows 向けにビルドできないので Windows のランナーでビルドして起こす。
@@ -492,7 +526,7 @@ jobs:
           path: |
             ${{ runner.temp }}\dotnet
             ${{ runner.temp }}\nuget
-          key: agent-windows-publish-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj') }}
+          key: agent-windows-publish-${{ steps.dirs.outputs.sdk }}-${{ hashFiles('agent/**/*.csproj', 'tray/**/*.csproj') }}
 
       - name: Set up .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -501,6 +535,24 @@ jobs:
 
       - name: Publish (Native AOT, win-x64)
         run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -o out
+
+      # 通知領域のアイコン (tray/Denpa.Tray)。エージェントと同じ zip に入れる
+      - name: Publish the tray (Native AOT, win-x64)
+        run: dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
+
+      # 起こして、落ちずに動き続けることを見る (denpa はいないので、注意のアイコンのまま)。メニューは人が開くものなので見ない。
+      # 2 つ目は二重に起こしたときで、すぐ終わる
+      - name: Smoke test (tray)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tray = Start-Process .\out\denpa-tray.exe -PassThru
+          Start-Sleep 3
+          if ($tray.HasExited) { throw "denpa-tray exited with $($tray.ExitCode)" }
+          $second = Start-Process .\out\denpa-tray.exe -PassThru
+          if (-not $second.WaitForExit(10000)) { throw 'second denpa-tray did not exit' }
+          if ($second.ExitCode -ne 0) { throw "second denpa-tray exited with $($second.ExitCode)" }
+          Stop-Process -Id $tray.Id
 
       # **このジョブの PowerShell の段には日本語を書かない** (5.1 が ANSI で読んで、引用符が崩れうる)
       # 何も設定せずに起こす。チューナーは自動検出で空、カードはリーダーが無いので ok:false が返るはず。
@@ -572,7 +624,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          Compress-Archive -Path out\denpa-agent.exe -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
+          Compress-Archive -Path out\denpa-agent.exe, out\denpa-tray.exe -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
           $env:DENPA_AGENT_ZIP = "$env:RUNNER_TEMP\denpa-agent.zip"
           $script = [scriptblock]::Create((Get-Content install.ps1 -Raw -Encoding UTF8))
           & $script -AgentOnly -NoOpen
@@ -598,6 +650,8 @@ jobs:
           # -AgentOnly installs no server
           if (Get-ScheduledTask -TaskName denpa -ErrorAction SilentlyContinue) { throw 'denpa task with -AgentOnly' }
           if (Test-Path "$prefix\server") { throw 'server installed with -AgentOnly' }
+          # No tray at sign-in either (it shows the server)
+          if (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name denpa -ErrorAction SilentlyContinue) { throw 'tray registered with -AgentOnly' }
 
           # px4-userland: only px4d.exe / px4ctl.exe / license files, no px4-ts.exe or WinSCard.dll, no firmware (bundled in the agent).
           # No tuner on the runner, so check that the real binaries run and take our arguments.
@@ -772,8 +826,25 @@ jobs:
           for ($i = 0; $i -lt 60 -and -not ((Test-Path $clients) -and (Get-Content $clients)); $i++) { Start-Sleep 1 }
           if (-not ((Test-Path $clients) -and (Get-Content $clients))) { throw 'the server did not pair with the agent' }
           if (-not (Get-NetFirewallRule -Name denpa -ErrorAction SilentlyContinue)) { throw 'no firewall rule' }
+          # The tray starts at sign-in for everyone (HKLM Run), from the agent's bin
+          $run = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+          $entry = (Get-ItemProperty $run -Name denpa).denpa
+          "tray at sign-in: $entry"
+          if ($entry -ne "`"$prefix\bin\denpa-tray.exe`"") { throw "unexpected Run entry: $entry" }
+          if (-not (Test-Path "$prefix\bin\denpa-tray.exe")) { throw 'no denpa-tray.exe' }
+          # The tray reads /api/health: the recording and encoding counts it asks about before updating
+          if ($null -eq $health.recording -or $null -eq $health.encoding) { throw 'no recording/encoding in /api/health' }
 
+          # Upgrading replaces bin\ while the tray runs (the tray started it), so install.ps1 must stop it first.
+          # install.ps1 may have started one already (when explorer runs in this session)
+          $trays = @(Get-Process denpa-tray -ErrorAction SilentlyContinue)
+          if ($trays.Count -eq 0) {
+            $trays = @(Start-Process "$prefix\bin\denpa-tray.exe" -PassThru)
+            Start-Sleep 2
+          }
+          if (@($trays | Where-Object { -not $_.HasExited }).Count -eq 0) { throw 'denpa-tray is not running' }
           & $script -NoOpen
+          if (@($trays | Where-Object { -not $_.HasExited }).Count -ne 0) { throw 'install.ps1 left the old denpa-tray running' }
           (Invoke-RestMethod http://127.0.0.1:3000/api/health) | ConvertTo-Json -Compress
 
           & $script -Uninstall
@@ -781,8 +852,9 @@ jobs:
             if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) { throw "task $name left" }
           }
           if (Test-Path $prefix) { throw "$prefix left" }
-          if (Get-Process bun, denpa-agent -ErrorAction SilentlyContinue) { throw 'still running' }
+          if (Get-Process bun, denpa-agent, denpa-tray -ErrorAction SilentlyContinue) { throw 'still running' }
           if (Get-NetFirewallRule -Name denpa -ErrorAction SilentlyContinue) { throw 'firewall rule left' }
+          if (Get-ItemProperty $run -Name denpa -ErrorAction SilentlyContinue) { throw 'tray left in Run' }
           # keeps the DB
           if (-not (Test-Path "$data\denpa.db")) { throw 'DB removed' }
           Get-Content "$env:USERPROFILE\denpa\denpa.log" -Tail 80

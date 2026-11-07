@@ -23,7 +23,7 @@ import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import { holdAwake, type MacPower, macPower } from "./awake";
 import { config } from "./config";
 import { orm } from "./db";
-import { hasRunningEncodes } from "./encoder";
+import { runningEncodes } from "./encoder";
 import { hasLiveViewers } from "./live";
 import { activeRecordingIds } from "./recorder";
 import { reservations } from "./schema";
@@ -257,7 +257,7 @@ export async function checkPower(now = Date.now()): Promise<void> {
   await holdAwake(
     shouldHold({
       recording: activeRecordingIds().length > 0,
-      encoding: hasRunningEncodes(),
+      encoding: runningEncodes() > 0,
       watching: hasLiveViewers(),
       next,
       now,

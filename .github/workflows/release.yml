@@ -257,7 +257,7 @@ jobs:
           dotnet-version: "10.0.403"
 
       # 名前はタグから `v` を落としたバージョンで (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
-      # 中身は実行ファイル 1 個。.sha256 は install.sh が確かめる
+      # 中身はエージェントとメニューバーのアプリ (tray/mac。ad-hoc で署名する) の実行ファイル 2 個。.sha256 は install.sh が確かめる
       - name: Build
         id: build
         run: |
@@ -265,10 +265,12 @@ jobs:
           tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
           # バージョンは実行ファイルに入れる (`GET /denpa/about`。agent/Denpa.Agent/About.cs)
           dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -p:InformationalVersion="$tag" -o out
+          swift build -c release --package-path tray/mac
+          cp "$(swift build -c release --package-path tray/mac --show-bin-path)/denpa-tray" out/denpa-tray
           # ad-hoc 署名 (curl で取ったものには隔離の印が付かないので、Developer ID の署名と公証は要らない。docs/install-mac.md)
-          codesign --force -s - out/denpa-agent
+          codesign --force --sign - out/denpa-agent out/denpa-tray
           asset="denpa-agent-${tag#v}-darwin-arm64.tar.gz"
-          tar -czf "$asset" -C out denpa-agent
+          tar -czf "$asset" -C out denpa-agent denpa-tray
           shasum -a 256 "$asset" > "$asset.sha256"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
@@ -305,7 +307,8 @@ jobs:
         with:
           dotnet-version: "10.0.403"
 
-      # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe 1 個) と .sha256 (shasum と同じ形式)
+      # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe と、通知領域のアイコンの denpa-tray.exe。tray/Denpa.Tray) と
+      # .sha256 (shasum と同じ形式)
       - name: Build
         id: build
         shell: bash
@@ -313,8 +316,9 @@ jobs:
           set -eu
           tag="${{ github.event.release.tag_name || github.event.inputs.ref }}"
           dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -p:InformationalVersion="$tag" -o out
+          dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
           asset="denpa-agent-${tag#v}-windows-x64.zip"
-          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe -DestinationPath '$asset'"
+          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe -DestinationPath '$asset'"
           sha256sum "$asset" > "$asset.sha256"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"

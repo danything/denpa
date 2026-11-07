@@ -99,7 +99,8 @@ IT930x と mAgicVISION (PIX-DT295 用) のファームウェアは、エージ�
 
 ### Mac に入れるもの (`install.sh`)
 
-リリースに添えた `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリ 1 個) と、
+リリースに添えた `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (上と同じ .NET の Native AOT のバイナリと、メニューバーのアプリ `denpa-tray`。
+`denpa-tray` は denpa 本体と同じ AGPL-3.0 で、Swift で書き、OS の AppKit だけを使う) と、
 上と同じ px4-userland / siano-userland の **Mac 用** (`darwin-arm64`)・同じファームウェア (IT930x のものはエージェントに埋め込んである。asicen-userland は Mac 用が出ていないので入れません)。
 libusb (LGPL-2.1+) が実行ファイルに静的リンクなのも上と同じで、
 配布物の `DEPENDENCY-NOTICE.txt` / `THIRD_PARTY_NOTICES.md` もそのまま置きます。
@@ -121,7 +122,8 @@ VideoToolbox (GPU でのエンコード)・zlib・スレッドは macOS の一�
 
 ### Windows に入れるもの (`install.ps1`)
 
-リリースに添えた `denpa-agent-<バージョン>-windows-x64.zip` (`denpa-agent.exe` 1 個) と、px4-userland / siano-userland の
+リリースに添えた `denpa-agent-<バージョン>-windows-x64.zip` (`denpa-agent.exe` と、通知領域のアイコンの `denpa-tray.exe`。
+`denpa-tray.exe` は denpa 本体と同じ AGPL-3.0 の .NET の Native AOT のバイナリで、依存は足していない) と、px4-userland / siano-userland の
 **Windows 用** (`windows-x86_64` / `windows-x64`)・同じファームウェア (IT930x のものは Mac と同じくエージェントに埋め込んである)。
 px4-userland の配布 zip から置くのは `px4d.exe`・`px4ctl.exe` と、ライセンスの文書 (`LICENSE`・`DEPENDENCY-NOTICE.txt`・
 `THIRD_PARTY_NOTICES.md`・`libusb/COPYING`・`toolchain/` の下の MinGW-w64 などのもの) だけで、`px4-ts.exe` と
