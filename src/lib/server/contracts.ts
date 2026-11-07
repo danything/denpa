@@ -50,11 +50,98 @@ export interface ContractRow {
   type: string;
   state: ContractState;
   source: ContractSource | null;
+  manualState: "subscribed" | "unsubscribed" | "unknown" | null;
   code: number | null;
   validUntil: number | null;
   decodeOk: boolean | null;
   checkedAt: number;
+  /** この局で利用可能な契約確認方式 */
+  availableMethods?: ContractSource[];
 }
+
+export interface EvaluationInput {
+  manualState?: "subscribed" | "unsubscribed" | "unknown" | null | undefined;
+  code?: number | null | undefined;
+  validUntil?: number | null | undefined;
+  decodeOk?: boolean | null | undefined;
+  decodedAt?: number | null | undefined;
+  hasEitCa?: boolean | undefined;
+}
+
+export interface EvaluationResult {
+  state: ContractState;
+  source: ContractSource | null;
+}
+
+/**
+ * 契約確認方式の抽象化と優先順位判定を行うチェッカー。
+ *
+ * 優先順位:
+ * 1. 手動設定 (manual): ユーザーが明示的に契約中/未契約/未確認に設定したもの
+ * 2. カード確認 (eit_ca): EIT の 0xCB 記述子と B-CAS カード (0x90 0x3C)
+ * 3. 実ストリーム復号テスト (decode): TS パケットのスクランブルビット検査
+ * 4. 未確認 (unknown): いずれも確かめられていない
+ */
+export const ContractChecker = {
+  /**
+   * 優先順位ルールに従って局の契約状態と判定元を決定する。
+   */
+  evaluate(input: EvaluationInput, nowMs = Date.now()): EvaluationResult {
+    // 1. 手動設定
+    if (input.manualState != null) {
+      return {
+        state: input.manualState,
+        source: "manual",
+      };
+    }
+
+    // 2. カード確認 (0x3C コード)
+    if (input.code !== null && input.code !== undefined) {
+      if (isCodeSubscribed(input.code)) {
+        return { state: "subscribed", source: "eit_ca" };
+      }
+      if (
+        input.validUntil !== null &&
+        input.validUntil !== undefined &&
+        input.validUntil < nowMs
+      ) {
+        return { state: "expired", source: "eit_ca" };
+      }
+      return { state: "unsubscribed", source: "eit_ca" };
+    }
+
+    // 3. 復号テスト (decode)
+    if (input.decodeOk === true) {
+      if (freshDecode(input.decodedAt, nowMs)) {
+        return { state: "subscribed", source: "decode" };
+      }
+      // 31 日を経過した場合は契約中とみなさず未確認
+      return { state: "unknown", source: "decode" };
+    }
+    if (input.decodeOk === false) {
+      return { state: "unsubscribed", source: "decode" };
+    }
+
+    // 4. 未確認
+    return {
+      state: "unknown",
+      source: input.hasEitCa ? "eit_ca" : null,
+    };
+  },
+
+  /**
+   * 局ごとに利用可能な契約確認方式を返す。
+   */
+  getAvailableMethods(hasEitCa: boolean): ContractSource[] {
+    const methods: ContractSource[] = [];
+    if (hasEitCa) {
+      methods.push("eit_ca");
+    }
+    methods.push("decode");
+    methods.push("manual");
+    return methods;
+  },
+};
 
 /** 現在アクティブな B-CAS カードの番号 (16桁) を取得 */
 export function getActiveCardId(card: CardStatus): string | null {
@@ -157,11 +244,14 @@ export async function checkContracts(): Promise<ContractRow[]> {
   if (serviceVerifications.size === 0) return [];
   const serviceIds = [...serviceVerifications.keys()];
 
-  // 既存の契約レコード（前回の復号結果等）を取得して保持する
+  // 既存の契約レコード（前回の復号結果や手動設定等）を取得して保持する
   const existingContracts = orm()
     .select({
       serviceId: cardContracts.service_id,
       state: cardContracts.state,
+      manualState: cardContracts.manual_state,
+      code: cardContracts.code,
+      validUntil: cardContracts.valid_until,
       decodeOk: cardContracts.decode_ok,
       decodedAt: cardContracts.decoded_at,
     })
@@ -182,13 +272,10 @@ export async function checkContracts(): Promise<ContractRow[]> {
   for (const [serviceId, verification] of serviceVerifications) {
     const existing = existingMap.get(serviceId);
 
-    let state: ContractState = "unsubscribed";
-    let source: ContractSource | null = null;
     let code: number | null = null;
     let validUntil: number | null = null;
 
     if (verification) {
-      source = "eit_ca";
       /** その日 (今日からの日数) に観られるか。カードに聞けなければ投げる (今の行を上書きしない) */
       const valid = async (days: number): Promise<boolean> => {
         const res = await confirmCardContract(verification, todayMjd + days);
@@ -210,55 +297,47 @@ export async function checkContracts(): Promise<ContractRow[]> {
         return from;
       };
       if (await valid(0)) {
-        // 今日は観られる。**1 週間以内に切れても契約中のまま**にし、期限の日だけ覚える
-        // (期限切れにすると、まだ観られる局が録られなくなる)
-        state = "subscribed";
+        // 今日は観られる。1 週間以内に切れても契約中のままにし、期限の日だけ覚える
         if (!(await valid(7)))
           // 期限日の翌日 0 時 (JST) が満了
           validUntil = fromMjd(todayMjd + (await lastValid(0, 7)) + 1);
       } else if (await valid(-30)) {
         // 30 日のうちに切れた
-        state = "expired";
         validUntil = fromMjd(todayMjd + (await lastValid(-30, 0)) + 1);
-      } else {
-        state = "unsubscribed";
-      }
-    } else {
-      // 放送波 (EIT) に CA契約情報記述子 (0xCB) が載っていない局 (多くの CS 月額局など)。
-      // 復号テストで 31 日以内に復号できていれば契約中とみなす (`DECODE_VALID_MS`)。
-      // 復号テストが失敗した局は未契約。まだ一度も復号テストしていない、または期限が切れた局は「未確認」
-      if (
-        existing?.decodeOk === true &&
-        freshDecode(existing.decodedAt, nowMs)
-      ) {
-        state = "subscribed";
-        source = "decode";
-      } else if (existing?.decodeOk === false) {
-        state = "unsubscribed";
-        source = "decode";
-      } else {
-        state = "unknown";
-        source = existing?.decodeOk !== undefined ? "decode" : null;
       }
     }
+
+    const evaluated = ContractChecker.evaluate(
+      {
+        manualState: existing?.manualState,
+        code,
+        validUntil,
+        decodeOk: existing?.decodeOk,
+        decodedAt: existing?.decodedAt,
+        hasEitCa: Boolean(verification),
+      },
+      nowMs,
+    );
 
     orm()
       .insert(cardContracts)
       .values({
         card_id: cardId,
         service_id: serviceId,
-        state,
-        source,
+        state: evaluated.state,
+        source: evaluated.source,
+        manual_state: existing?.manualState ?? null,
         code,
         valid_until: validUntil,
         decode_ok: existing?.decodeOk ?? null,
+        decoded_at: existing?.decodedAt ?? null,
         checked_at: nowMs,
       })
       .onConflictDoUpdate({
         target: [cardContracts.card_id, cardContracts.service_id],
         set: {
-          state,
-          source,
+          state: evaluated.state,
+          source: evaluated.source,
           code,
           valid_until: validUntil,
           checked_at: nowMs,
@@ -274,6 +353,21 @@ export async function checkContracts(): Promise<ContractRow[]> {
  * DB に記録されている契約情報を取得する。
  */
 export function getContractRows(cardId: string): ContractRow[] {
+  // 0xCB (CA 契約情報) を持つ有料局の一覧を取得
+  const servicesWithEitCa = new Set(
+    orm()
+      .select({ serviceId: programs.service_id })
+      .from(programs)
+      .where(
+        and(
+          eq(programs.is_free, false),
+          sql`${programs.contract_verification} IS NOT NULL`,
+        ),
+      )
+      .all()
+      .map((p) => p.serviceId),
+  );
+
   return orm()
     .select({
       cardId: cardContracts.card_id,
@@ -283,6 +377,7 @@ export function getContractRows(cardId: string): ContractRow[] {
       type: services.type,
       state: cardContracts.state,
       source: cardContracts.source,
+      manualState: cardContracts.manual_state,
       code: cardContracts.code,
       validUntil: cardContracts.valid_until,
       decodeOk: cardContracts.decode_ok,
@@ -292,14 +387,20 @@ export function getContractRows(cardId: string): ContractRow[] {
     .innerJoin(services, eq(services.id, cardContracts.service_id))
     .where(eq(cardContracts.card_id, cardId))
     .orderBy(asc(services.type), asc(services.service_id))
-    .all();
+    .all()
+    .map((row) => ({
+      ...row,
+      availableMethods: ContractChecker.getAvailableMethods(
+        servicesWithEitCa.has(row.serviceId),
+      ),
+    }));
 }
 
 /**
  * 復号テストの結果を `card_contracts` に書く。
  *
- * **カードが答えた行 (`code` あり) は状態を変えない。** カードが期限切れと答えた局を、
- * 復号できたことで契約中に戻すと、定期の確認まで録ってしまう (カードの答えを信じる)
+ * 優先順位ルールに従い、手動設定がある行やカード確認コードがある行は
+ * その状態を維持し、復号テスト結果 (decode_ok, decoded_at) のみを更新する。
  */
 function recordDecode(
   cardId: string,
@@ -307,15 +408,69 @@ function recordDecode(
   decodeOk: boolean,
 ): void {
   const now = Date.now();
+  const existing = orm()
+    .select({
+      state: cardContracts.state,
+      source: cardContracts.source,
+      manualState: cardContracts.manual_state,
+      code: cardContracts.code,
+      validUntil: cardContracts.valid_until,
+    })
+    .from(cardContracts)
+    .where(
+      and(
+        eq(cardContracts.card_id, cardId),
+        eq(cardContracts.service_id, serviceId),
+      ),
+    )
+    .get();
+
+  const countRes = orm()
+    .select({ count: sql<number>`count(*)` })
+    .from(programs)
+    .where(
+      and(
+        eq(programs.service_id, serviceId),
+        eq(programs.is_free, false),
+        sql`${programs.contract_verification} IS NOT NULL`,
+      ),
+    )
+    .get();
+  const hasEitCa = (countRes?.count ?? 0) > 0;
+
+  let state: ContractState;
+  let source: ContractSource | null;
+
+  if (existing?.manualState != null) {
+    state = existing.manualState;
+    source = "manual";
+  } else if (existing?.code !== null && existing?.code !== undefined) {
+    // カードが答えた行 (code あり) は状態を変えない (カードの答えを信じる)
+    state = existing.state;
+    source = existing.source ?? "eit_ca";
+  } else {
+    const evaluated = ContractChecker.evaluate(
+      {
+        decodeOk,
+        decodedAt: decodeOk ? now : null,
+        hasEitCa,
+      },
+      now,
+    );
+    state = evaluated.state;
+    source = evaluated.source;
+  }
+
   orm()
     .insert(cardContracts)
     .values({
       card_id: cardId,
       service_id: serviceId,
-      state: decodeOk ? "subscribed" : "unsubscribed",
-      source: "decode",
-      code: null,
-      valid_until: null,
+      state,
+      source,
+      manual_state: existing?.manualState ?? null,
+      code: existing?.code ?? null,
+      valid_until: existing?.validUntil ?? null,
       decode_ok: decodeOk,
       decoded_at: decodeOk ? now : null,
       checked_at: now,
@@ -323,14 +478,10 @@ function recordDecode(
     .onConflictDoUpdate({
       target: [cardContracts.card_id, cardContracts.service_id],
       set: {
+        state,
+        source,
         decode_ok: decodeOk,
         decoded_at: decodeOk ? now : null,
-        source: "decode",
-        ...(decodeOk
-          ? {
-              state: sql`CASE WHEN ${cardContracts.code} IS NULL THEN 'subscribed' ELSE ${cardContracts.state} END`,
-            }
-          : {}),
         checked_at: now,
       },
     })
@@ -696,6 +847,7 @@ export async function testDecodeUnconfirmed(): Promise<{
  * 復号も試していない) は録らない。録ってもスクランブルのままで観られないため。
  * 設定の「無料放送だけ録る」はこれに置き換えた。カードを持たない人は、今までの既定 (無料だけ) と同じになる。
  * カードに聞けない局 (番組表に 0xCB が無い) は、復号テストから 31 日のあいだだけ (`DECODE_VALID_MS`)。
+ * 手動設定で契約中 (`manualState === 'subscribed'`) にされた局も契約中として許可する。
  * 1 回の当てはめで 1 回だけ読む (呼ぶ側が関数を使い回す)
  */
 export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
@@ -703,13 +855,19 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
     orm()
       .select({
         serviceId: cardContracts.service_id,
+        manualState: cardContracts.manual_state,
         code: cardContracts.code,
         decodedAt: cardContracts.decoded_at,
       })
       .from(cardContracts)
       .where(eq(cardContracts.state, "subscribed"))
       .all()
-      .filter((row) => row.code !== null || freshDecode(row.decodedAt, now))
+      .filter(
+        (row) =>
+          row.manualState === "subscribed" ||
+          row.code !== null ||
+          freshDecode(row.decodedAt, now),
+      )
       .map((row) => row.serviceId),
   );
   return (serviceId) => subscribed.has(serviceId);
@@ -719,8 +877,8 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
  * **有料の番組の録画が、復号し直しても掛かったまま終わった。** 復号テストで契約中としていた局を未契約に下げる
  * (`encoder.ts`)。契約が切れたあとも 31 日待たずに、次の回から録らなくなる。
  *
- * 下げるのは、カードに聞けない局 (`code` が無い行) だけ。カードが契約中と答えた局は、掛かったままの理由が
- * ほかにある (ECM が流れていない など) ので、カードの答えを信じる (次の定期の確認で確かめ直す)
+ * 下げるのは、カードに聞けない局 (`code` が無い行) かつ手動設定されていない行だけ。
+ * 手動設定された行やカードが契約中と答えた局は勝手に下げない。
  */
 export function noteStillScrambled(serviceId: number): void {
   orm()
@@ -737,7 +895,115 @@ export function noteStillScrambled(serviceId: number): void {
         eq(cardContracts.service_id, serviceId),
         eq(cardContracts.state, "subscribed"),
         isNull(cardContracts.code),
+        isNull(cardContracts.manual_state),
       ),
     )
     .run();
+}
+
+/**
+ * 対象局の契約状態を手動設定 (manual override) または解除する。
+ *
+ * manualState に null を指定すると手動設定が解除され、自動判定 (カード確認または復号テスト) の結果に戻る。
+ */
+export async function setManualContract(
+  serviceId: number,
+  manualState: "subscribed" | "unsubscribed" | "unknown" | null,
+): Promise<{
+  ok: boolean;
+  row?: ContractRow | undefined;
+  error?: string | undefined;
+}> {
+  const card = await cardStatus();
+  const cardId = getActiveCardId(card);
+  if (!card.ok || !cardId) {
+    return {
+      ok: false,
+      error: "B-CAS カードが認識されていません",
+    };
+  }
+
+  const targetService = orm()
+    .select({ id: services.id })
+    .from(services)
+    .where(eq(services.id, serviceId))
+    .get();
+
+  if (!targetService) {
+    return {
+      ok: false,
+      error: `局が見つかりません (serviceId: ${serviceId})`,
+    };
+  }
+
+  const existing = orm()
+    .select({
+      code: cardContracts.code,
+      validUntil: cardContracts.valid_until,
+      decodeOk: cardContracts.decode_ok,
+      decodedAt: cardContracts.decoded_at,
+    })
+    .from(cardContracts)
+    .where(
+      and(
+        eq(cardContracts.card_id, cardId),
+        eq(cardContracts.service_id, serviceId),
+      ),
+    )
+    .get();
+
+  const countRes = orm()
+    .select({ count: sql<number>`count(*)` })
+    .from(programs)
+    .where(
+      and(
+        eq(programs.service_id, serviceId),
+        eq(programs.is_free, false),
+        sql`${programs.contract_verification} IS NOT NULL`,
+      ),
+    )
+    .get();
+  const hasEitCa = (countRes?.count ?? 0) > 0;
+
+  const now = Date.now();
+  const evaluated = ContractChecker.evaluate(
+    {
+      manualState,
+      code: existing?.code,
+      validUntil: existing?.validUntil,
+      decodeOk: existing?.decodeOk,
+      decodedAt: existing?.decodedAt,
+      hasEitCa,
+    },
+    now,
+  );
+
+  orm()
+    .insert(cardContracts)
+    .values({
+      card_id: cardId,
+      service_id: serviceId,
+      state: evaluated.state,
+      source: evaluated.source,
+      manual_state: manualState,
+      code: existing?.code ?? null,
+      valid_until: existing?.validUntil ?? null,
+      decode_ok: existing?.decodeOk ?? null,
+      decoded_at: existing?.decodedAt ?? null,
+      checked_at: now,
+    })
+    .onConflictDoUpdate({
+      target: [cardContracts.card_id, cardContracts.service_id],
+      set: {
+        state: evaluated.state,
+        source: evaluated.source,
+        manual_state: manualState,
+        checked_at: now,
+      },
+    })
+    .run();
+
+  const rows = getContractRows(cardId);
+  const row = rows.find((r) => r.serviceId === serviceId);
+  return { ok: true, row };
 }

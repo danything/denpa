@@ -6,6 +6,7 @@ import {
   checkContracts as verifyContracts,
   getActiveCardId,
   getContractRows,
+  setManualContract,
   testDecode as testDecodeStream,
   testDecodeUnconfirmed,
 } from "#lib/server/contracts.js";
@@ -266,6 +267,32 @@ export const actions = {
         results,
         contracts: getContractRows(cardId),
       };
+    } catch (error) {
+      return fail(500, { message: String(error) });
+    }
+  },
+
+  /** 有料局の契約状態を手動設定 (または解除) する */
+  setManualContract: async ({ request }) => {
+    const form = await request.formData();
+    const serviceId = Number(form.get("serviceId"));
+    if (!Number.isInteger(serviceId) || serviceId < 1) {
+      return fail(400, { message: "serviceId が不正です" });
+    }
+    const rawState = form.get("manualState");
+    const manualState =
+      rawState === "subscribed" ||
+      rawState === "unsubscribed" ||
+      rawState === "unknown"
+        ? rawState
+        : null;
+
+    try {
+      const result = await setManualContract(serviceId, manualState);
+      if (!result.ok) {
+        return fail(500, { message: result.error ?? "手動設定に失敗しました" });
+      }
+      return { success: true, contract: result.row };
     } catch (error) {
       return fail(500, { message: String(error) });
     }

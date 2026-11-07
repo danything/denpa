@@ -272,6 +272,10 @@ export const cardContracts = sqliteTable(
       .notNull(),
     /** 判定の根拠: eit_ca(EIT 0xCB + 0x3C) / decode(復号テスト) / manual(手動設定) */
     source: text("source").$type<"eit_ca" | "decode" | "manual">(),
+    /** 手動設定された契約状態 (手動設定時のみ値を持つ。null の場合は自動判定) */
+    manual_state: text("manual_state").$type<
+      "subscribed" | "unsubscribed" | "unknown"
+    >(),
     /** B-CAS 契約確認コマンド (0x90 0x3C) の返り値コード (0x0800 等) */
     code: integer("code"),
     /** 契約の有効期限（epoch ms）。判定できた場合 */

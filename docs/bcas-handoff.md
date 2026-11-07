@@ -207,20 +207,19 @@
 - 深夜 (JST 03:00) を跨いだタイミングでの定期スキャン実行を追加。
 - 0xCB が無い局は 7 日後判定の対象外（復号テスト有効期限に基づく）。
 
-### PR C: 契約確認方式の抽象化と拡張 (次)
+### PR C: 契約確認方式の抽象化と拡張 (実装完了)
 
-- `ContractChecker` のような形で、EIT 0xCB、復号テスト、ECM 確認、
-  手動設定を同じ結果にまとめる。
-- EIT の 0xCB 収集範囲を広げ、局ごとに「使える方式」を記録する。
-- エージェントの ECM 応答コードを API に出し、復号テストの短縮版を作る。
-- 判定の優先順位を決める。例: カードの 0x3C > ECM/復号 > 手動 > 未確認。
-- 7 日後を聞けない局は、この PR では「未確認」のままにする。
+- `ContractChecker` オブジェクトを新設し、局の利用可能方式 (`getAvailableMethods`: `eit_ca` / `decode` / `manual`) を特定。
+- 優先順位ルール (`manual` > `eit_ca` > `decode` > `unknown`) を一元化。
+- `ContractDialog.svelte` に対応方式（カード・復号 / 復号テストのみ）を表示。
 
-### PR D: 手動設定と除外
+### PR D: 手動設定と除外 (実装完了)
 
-- 自動判定できない局に「契約中」「対象外」「未確認」を設定できるようにする。
-- 設定した局は自動判定で上書きしない。
-- 録画ルールとの関係 (契約中とみなすか) を明確にする。
+- `card_contracts.manual_state` カラムを追加し、手動での「契約中」「未契約・除外」「未確認」設定を保持。
+- `setManualContract` サーバーアクションおよび API を実装。
+- 手動設定された局は `checkContracts` や `recordDecode`、`noteStillScrambled` で勝手に上書きされないよう保護。
+- `paidAllowed` が手動契約中 (`manualState === 'subscribed'`) を自動録画対象として認識。
+- `ContractDialog.svelte` の行ごとに手動設定ドロップダウンを追加。
 
 ### 別 PR: EMM 自動更新
 

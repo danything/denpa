@@ -29,12 +29,17 @@
   let receivingEmm = $state(false);
   let testingAll = $state(false);
   let testingServiceId = $state<number | null>(null);
+  let settingServiceId = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
   let infoMessage = $state<string | null>(null);
 
-  /** 契約確認・復号テスト・EMM受信の実行中フラグ (多重実行・同時実行の防止) */
+  /** 契約確認・復号テスト・EMM受信・手動設定の実行中フラグ (多重実行・同時実行の防止) */
   const isBusy = $derived(
-    checking || receivingEmm || testingAll || testingServiceId !== null,
+    checking ||
+      receivingEmm ||
+      testingAll ||
+      testingServiceId !== null ||
+      settingServiceId !== null,
   );
 
   $effect(() => {
@@ -222,6 +227,43 @@
       testingAll = false;
     }
   }
+
+  async function handleSetManualContract(serviceId: number, value: string) {
+    if (isBusy) return;
+    settingServiceId = serviceId;
+    errorMessage = null;
+    try {
+      const form = new FormData();
+      form.append("serviceId", String(serviceId));
+      if (value) {
+        form.append("manualState", value);
+      }
+      const res = await fetch("?/setManualContract", {
+        method: "POST",
+        body: form,
+      });
+      const data = deserialize(await res.text());
+      const payload =
+        data.type === "success" || data.type === "failure"
+          ? (data.data as Record<string, unknown> | undefined)
+          : undefined;
+      const updatedContract = payload?.["contract"] as ContractRow | undefined;
+      const message = payload?.["message"];
+      if (data.type === "success" && updatedContract) {
+        contracts = contracts.map((c) =>
+          c.serviceId === serviceId ? updatedContract : c,
+        );
+      } else if (message) {
+        errorMessage = String(message);
+      } else {
+        errorMessage = "手動設定の保存に失敗しました";
+      }
+    } catch (err) {
+      errorMessage = String(err);
+    } finally {
+      settingServiceId = null;
+    }
+  }
 </script>
 
 <dialog
@@ -318,8 +360,10 @@
             <tr>
               <th>局名</th>
               <th>種別</th>
+              <th>対応方式</th>
               <th>契約状態</th>
               <th>有効期限</th>
+              <th>手動設定</th>
               <th>復号テスト</th>
             </tr>
           </thead>
@@ -333,6 +377,21 @@
                   <span class="mono">{row.type} / {row.channel}</span>
                 </td>
                 <td>
+                  {#if row.availableMethods?.includes("eit_ca")}
+                    <span
+                      class="small"
+                      title="番組表 (EIT 0xCB) からカードで確認可能"
+                      >カード・復号</span
+                    >
+                  {:else}
+                    <span
+                      class="small muted"
+                      title="番組表に契約情報が無いため復号テストで確認"
+                      >復号テストのみ</span
+                    >
+                  {/if}
+                </td>
+                <td>
                   {#if row.state === "subscribed"}
                     <span class="tag success">契約中</span>
                   {:else if row.state === "expired"}
@@ -342,7 +401,11 @@
                   {:else}
                     <span class="tag muted">未契約</span>
                   {/if}
-                  {#if row.source === "eit_ca"}
+                  {#if row.source === "manual"}
+                    <span class="tag source-tag" title="手動で設定された状態"
+                      >手動</span
+                    >
+                  {:else if row.source === "eit_ca"}
                     <span
                       class="tiny muted source-tag"
                       title="番組表 (EIT 0xCB) と B-CAS カードで確認"
@@ -358,6 +421,24 @@
                 </td>
                 <td>
                   <span class="mono">{formatDate(row.validUntil)}</span>
+                </td>
+                <td>
+                  <select
+                    class="small manual-select"
+                    value={row.manualState ?? ""}
+                    disabled={isBusy}
+                    onchange={(e) =>
+                      handleSetManualContract(
+                        row.serviceId,
+                        e.currentTarget.value,
+                      )}
+                    data-testid="select-manual-{row.serviceId}"
+                  >
+                    <option value="">自動判定</option>
+                    <option value="subscribed">契約中 (手動)</option>
+                    <option value="unsubscribed">未契約・除外 (手動)</option>
+                    <option value="unknown">未確認 (手動)</option>
+                  </select>
                 </td>
                 <td class="decode-cell">
                   {#if row.decodeOk === true}
@@ -391,7 +472,7 @@
 
 <style>
   .modal-box-wide {
-    max-width: 48rem;
+    max-width: 56rem;
     width: 100%;
   }
 
@@ -459,6 +540,14 @@
     display: inline-block;
     margin-left: 0.35rem;
     font-size: 0.75rem;
+  }
+
+  .manual-select {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
+    width: auto;
+    max-width: 9.5rem;
+    margin: 0;
   }
 
   .alert.error {

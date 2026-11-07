@@ -25,6 +25,7 @@ const { cardContracts, programs, services } = await import("./schema");
 const {
   checkContracts,
   confirmCardContract,
+  ContractChecker,
   fromMjd,
   getContractRows,
   getContractWarning,
@@ -32,6 +33,7 @@ const {
   isCodeSubscribed,
   noteStillScrambled,
   paidAllowed,
+  setManualContract,
   testDecode,
   testDecodeUnconfirmed,
   toMjd,
@@ -1006,5 +1008,343 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
     expect(rows.get(2)?.state).toBe("unsubscribed");
     expect(rows.get(2)?.decodeOk).toBe(false);
     expect(paidAllowed()(2)).toBe(false);
+  });
+});
+
+describe("ContractChecker と手動設定 (Phase C/D)", () => {
+  const card = "0000111122223333";
+
+  test("ContractChecker.evaluate: 手動設定が最優先される", () => {
+    const now = Date.now();
+    // カードは未契約、復号も失敗しているが、手動で subscribed に設定した場合
+    const res1 = ContractChecker.evaluate(
+      {
+        manualState: "subscribed",
+        code: 0,
+        decodeOk: false,
+      },
+      now,
+    );
+    expect(res1.state).toBe("subscribed");
+    expect(res1.source).toBe("manual");
+
+    // カードは契約中 (0x0800) だが、手動で unsubscribed (除外) に設定した場合
+    const res2 = ContractChecker.evaluate(
+      {
+        manualState: "unsubscribed",
+        code: 0x0800,
+        decodeOk: true,
+      },
+      now,
+    );
+    expect(res2.state).toBe("unsubscribed");
+    expect(res2.source).toBe("manual");
+
+    // 手動で unknown (未確認) に設定した場合
+    const res3 = ContractChecker.evaluate(
+      {
+        manualState: "unknown",
+        code: 0x0800,
+      },
+      now,
+    );
+    expect(res3.state).toBe("unknown");
+    expect(res3.source).toBe("manual");
+  });
+
+  test("ContractChecker.evaluate: カード確認 (eit_ca) と復号テスト (decode) の優先順位", () => {
+    const now = Date.now();
+    // カードコードが契約中 (0x0800)
+    const res1 = ContractChecker.evaluate({ code: 0x0800 }, now);
+    expect(res1.state).toBe("subscribed");
+    expect(res1.source).toBe("eit_ca");
+
+    // カードコードは 0 だが過去に切れた (validUntil < now)
+    const res2 = ContractChecker.evaluate(
+      { code: 0, validUntil: now - 86400000 },
+      now,
+    );
+    expect(res2.state).toBe("expired");
+    expect(res2.source).toBe("eit_ca");
+
+    // カードコード無しで復号テスト成功 (31日以内)
+    const res3 = ContractChecker.evaluate(
+      { decodeOk: true, decodedAt: now - 1000 },
+      now,
+    );
+    expect(res3.state).toBe("subscribed");
+    expect(res3.source).toBe("decode");
+
+    // 復号テスト成功から 31 日超過 -> unknown
+    const res4 = ContractChecker.evaluate(
+      { decodeOk: true, decodedAt: now - 32 * 86400000 },
+      now,
+    );
+    expect(res4.state).toBe("unknown");
+    expect(res4.source).toBe("decode");
+
+    // 復号テスト失敗 -> unsubscribed
+    const res5 = ContractChecker.evaluate({ decodeOk: false }, now);
+    expect(res5.state).toBe("unsubscribed");
+    expect(res5.source).toBe("decode");
+
+    // 何も情報が無い場合
+    const res6 = ContractChecker.evaluate({ hasEitCa: true }, now);
+    expect(res6.state).toBe("unknown");
+    expect(res6.source).toBe("eit_ca");
+
+    const res7 = ContractChecker.evaluate({ hasEitCa: false }, now);
+    expect(res7.state).toBe("unknown");
+    expect(res7.source).toBeNull();
+  });
+
+  test("ContractChecker.getAvailableMethods: 局ごとの利用可能方式", () => {
+    expect(ContractChecker.getAvailableMethods(true)).toEqual([
+      "eit_ca",
+      "decode",
+      "manual",
+    ]);
+    expect(ContractChecker.getAvailableMethods(false)).toEqual([
+      "decode",
+      "manual",
+    ]);
+  });
+
+  test("setManualContract: 手動設定と解除、自動判定への復元", async () => {
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") {
+        return Response.json(ONE_CARD);
+      }
+      return new Response("Not Found", { status: 404 });
+    });
+
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+
+      orm()
+        .insert(services)
+        .values({
+          id: 201,
+          service_id: 201,
+          network_id: 4,
+          name: "BS10 プレミアム",
+          type: "BS",
+          channel: "BS15",
+          updated_at: Date.now(),
+        })
+        .run();
+
+      // 1. 最初はレコードなし -> 手動で subscribed に設定
+      const setRes1 = await setManualContract(201, "subscribed");
+      expect(setRes1.ok).toBe(true);
+      expect(setRes1.row?.state).toBe("subscribed");
+      expect(setRes1.row?.source).toBe("manual");
+      expect(setRes1.row?.manualState).toBe("subscribed");
+
+      let row = getContractRows(card).find((r) => r.serviceId === 201);
+      expect(row?.state).toBe("subscribed");
+      expect(row?.source).toBe("manual");
+      expect(row?.manualState).toBe("subscribed");
+      expect(paidAllowed()(201)).toBe(true);
+
+      // 2. 手動で unsubscribed (除外) に変更
+      const setRes2 = await setManualContract(201, "unsubscribed");
+      expect(setRes2.ok).toBe(true);
+      expect(setRes2.row?.state).toBe("unsubscribed");
+      expect(setRes2.row?.source).toBe("manual");
+      expect(setRes2.row?.manualState).toBe("unsubscribed");
+      expect(paidAllowed()(201)).toBe(false);
+
+      // 3. 手動解除 (null) -> 復号テストや0xCBが無いため unknown に戻る
+      const setRes3 = await setManualContract(201, null);
+      expect(setRes3.ok).toBe(true);
+      expect(setRes3.row?.state).toBe("unknown");
+      expect(setRes3.row?.source).toBeNull();
+      expect(setRes3.row?.manualState).toBeNull();
+      expect(paidAllowed()(201)).toBe(false);
+
+      // 4. 不正な serviceId はエラー
+      const errRes = await setManualContract(9999, "subscribed");
+      expect(errRes.ok).toBe(false);
+      expect(errRes.error).toContain("局が見つかりません");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("自動確認 (checkContracts) でも手動設定が保護される", async () => {
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") {
+        return Response.json(ONE_CARD);
+      }
+      if (url.pathname === "/denpa/card/confirm") {
+        // カードは契約中 (0x0800) と答える
+        return Response.json({ ok: true, code: 0x0800 });
+      }
+      return new Response("Not Found", { status: 404 });
+    });
+
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+
+      orm()
+        .insert(services)
+        .values({
+          id: 301,
+          service_id: 301,
+          network_id: 4,
+          name: "WOWOW プライム",
+          type: "BS",
+          channel: "BS03",
+          updated_at: Date.now(),
+        })
+        .run();
+
+      orm()
+        .insert(programs)
+        .values({
+          id: 30101,
+          service_id: 301,
+          network_id: 4,
+          event_id: 1,
+          name: "映画",
+          is_free: false,
+          contract_verification: "fake-ca-data",
+          start_at: Date.now() + 3600000,
+          end_at: Date.now() + 7200000,
+          updated_at: Date.now(),
+        })
+        .run();
+
+      // ユーザーが明示的に unsubscribed (録画除外) を設定
+      await setManualContract(301, "unsubscribed");
+      let row = getContractRows(card).find((r) => r.serviceId === 301);
+      expect(row?.state).toBe("unsubscribed");
+      expect(row?.source).toBe("manual");
+      expect(row?.manualState).toBe("unsubscribed");
+
+      // 定期確認 checkContracts を実行
+      const rows = await checkContracts();
+      const updatedRow = rows.find((r) => r.serviceId === 301);
+
+      // 手動設定の state / source は上書きされずに保持され、カードの code は記録される
+      expect(updatedRow?.state).toBe("unsubscribed");
+      expect(updatedRow?.source).toBe("manual");
+      expect(updatedRow?.manualState).toBe("unsubscribed");
+      expect(updatedRow?.code).toBe(0x0800);
+      expect(paidAllowed()(301)).toBe(false);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("手動設定された局は noteStillScrambled でも未契約に下がらない", async () => {
+    orm()
+      .insert(services)
+      .values({
+        id: 401,
+        service_id: 401,
+        network_id: 7,
+        name: "CS 手動契約局",
+        type: "CS",
+        channel: "CS02",
+        updated_at: Date.now(),
+      })
+      .run();
+
+    // 手動で subscribed に設定
+    orm()
+      .insert(cardContracts)
+      .values({
+        card_id: card,
+        service_id: 401,
+        state: "subscribed",
+        source: "manual",
+        manual_state: "subscribed",
+        code: null,
+        decode_ok: null,
+        checked_at: Date.now(),
+      })
+      .run();
+
+    expect(paidAllowed()(401)).toBe(true);
+
+    // 録画でスクランブルが残っていた
+    noteStillScrambled(401);
+
+    const row = getContractRows(card).find((r) => r.serviceId === 401);
+    expect(row?.state).toBe("subscribed");
+    expect(row?.source).toBe("manual");
+    expect(paidAllowed()(401)).toBe(true);
+  });
+
+  test("tuners.server.ts actions.setManualContract: バリデーションと実行", async () => {
+    const { actions } =
+      await import("../../routes/settings/reception/tuners.server");
+
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") {
+        return Response.json(ONE_CARD);
+      }
+      return new Response("Not Found", { status: 404 });
+    });
+
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+
+      // 1. 不正な serviceId
+      const badForm = new FormData();
+      badForm.append("serviceId", "0");
+      type ActionEvent = Parameters<typeof actions.setManualContract>[0];
+      type ActionResult = {
+        status?: number;
+        success?: boolean;
+        contract?: {
+          state?: string;
+          source?: string;
+          manualState?: string | null;
+        };
+      };
+      const badRes = (await actions.setManualContract({
+        request: new Request("http://localhost", {
+          method: "POST",
+          body: badForm,
+        }),
+      } as unknown as ActionEvent)) as ActionResult;
+      expect(badRes?.status).toBe(400);
+
+      // 2. 正常な局の手動設定
+      orm()
+        .insert(services)
+        .values({
+          id: 501,
+          service_id: 501,
+          network_id: 4,
+          name: "手動設定テスト局",
+          type: "BS",
+          channel: "BS21",
+          updated_at: Date.now(),
+        })
+        .run();
+
+      const okForm = new FormData();
+      okForm.append("serviceId", "501");
+      okForm.append("manualState", "subscribed");
+      const okRes = (await actions.setManualContract({
+        request: new Request("http://localhost", {
+          method: "POST",
+          body: okForm,
+        }),
+      } as unknown as ActionEvent)) as ActionResult;
+      expect(okRes?.success).toBe(true);
+      expect(okRes?.contract?.state).toBe("subscribed");
+      expect(okRes?.contract?.source).toBe("manual");
+      expect(okRes?.contract?.manualState).toBe("subscribed");
+    } finally {
+      server.stop();
+    }
   });
 });
