@@ -10,7 +10,8 @@ import {
  * **番組表の番組を予約する・取り消す** (テレビのアプリの番組表。docs/api.md)。
  *
  * 予約は `POST /api/services/<id>/record` と同じ処理 (`reserve`)、取り消しは画面の番組表の
- * 「予約取消」と同じ処理 (`cancelProgram`)。入口ごとに断り方がずれると、片方でだけ録れない番組が出る
+ * 「予約取消」と同じ処理 (`cancelProgram`)。エンドポイントごとに断り方がずれると、片方でだけ録れない番組が出る。
+ * 番組 ID が整数でなければ 400
  */
 export async function POST({ params }) {
   const result = await recordProgram(programId(params.id));

@@ -130,7 +130,14 @@ test.describe("外から使う番組表", () => {
       headers: JSON_HEADERS,
     });
     expect(none.status()).toBe(404);
-    expect(await none.json()).toEqual({ message: "予約が見つかりません" });
+    expect((await none.json()).message).toBe("予約が見つかりません");
+    expect(
+      (
+        await request.delete("/api/programs/x/record", {
+          headers: JSON_HEADERS,
+        })
+      ).status(),
+    ).toBe(400);
 
     // 放送が終わった番組は 400 と理由
     const guide = (await (
