@@ -37,7 +37,7 @@ interface SdttContent {
   componentTags: number[];
 }
 
-export interface Sdtt {
+interface Sdtt {
   makerId: number;
   modelId: number;
   /** ダウンロードを運ぶサービス。いまは 929 だけ (TR-B15 5.1.2) */

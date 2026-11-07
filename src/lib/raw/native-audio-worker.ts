@@ -62,7 +62,7 @@ function segment(d: WasmAudio, message: Segment): void {
     const frame = audioFrame(track, sample.data);
     if (frame === null) throw new Error("対応していない AAC の形式です");
     const pcm = d.decode(frame);
-    // 壊れたコマは飛ばす (放送の取りこぼし)。続けて転ぶなら諦める (canvas に描く worker と同じ)
+    // 壊れたコマは飛ばす (放送の取りこぼし)。続けて失敗するなら打ち切る (canvas に描く worker と同じ)
     if (pcm === "broken") {
       if (++broken > BROKEN_MOST)
         throw new Error("音声をデコードできませんでした");

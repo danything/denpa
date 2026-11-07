@@ -41,7 +41,7 @@ interface Options {
   captions?: () => boolean;
 }
 
-/** どこで断られたか。**押しても何も起きない、で終わらせない**。端末ごとに転ぶ所が違う */
+/** どこで断られたか。**押しても何も起きない、で終わらせない**。端末ごとに失敗する所が違う */
 class Refused extends Error {}
 
 function reason(error: unknown): string {

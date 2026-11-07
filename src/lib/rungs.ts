@@ -15,7 +15,7 @@
 export type Rung = 0 | 1 | 2 | 3;
 
 /** 下げた段 (変換するもの) の中身 */
-export interface RungSpec {
+interface RungSpec {
   /** 映像の高さ。幅は縦横比を保って偶数にそろえる */
   height: number;
   /** コマ数の上限。元がこれ以下のエンコード済みは、そのままのコマ数 */

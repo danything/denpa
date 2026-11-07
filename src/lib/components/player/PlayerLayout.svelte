@@ -15,7 +15,7 @@
 
   /**
    * 3 画面の外枠。映像が左、読むものが右 (1000px から二段組。狭い画面は映像を端から端まで出し、読むものをその下に積む)。
-   * 周りの余白と横幅の頭打ちは外の `<main>` が持つ。横にしたスマホ (`PHONE_LANDSCAPE`) は高さが足りないので、
+   * 周りの余白と横幅の先頭打ちは外の `<main>` が持つ。横にしたスマホ (`PHONE_LANDSCAPE`) は高さが足りないので、
    * 見出しを隠して映像を画面の高さいっぱいにし、右の列は映像の下で巻き取る (マウスの PC は窓を低くしてもそのまま)。
    * テーブルトップ (`TABLETOP`) では映像を上の段、右の列を下の段に置く (下の style)
    */
@@ -118,7 +118,7 @@
     :global(html:has([data-player-layout])) {
       --dp-tabbar: 0px;
     }
-    /* ヘッダーを隠すので、ヘッダーのぶんの頭の空き (`+layout.svelte` の `.shell.fill`) も外す */
+    /* ヘッダーを隠すので、ヘッダーのぶんの先頭の空き (`+layout.svelte` の `.shell.fill`) も外す */
     :global(body:has([data-player-layout]) .shell.fill) {
       padding-top: 0;
     }

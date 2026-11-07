@@ -45,7 +45,7 @@ const LIMIT = 4 * 1024 * 1024;
 const TIMEOUT = 10_000;
 /**
  * 同時に中継する上限。データ放送や Hybridcast のアプリは文書を開くと画像や script をまとめて
- * 取りに来る (HTTP/2 の前段ならブラウザは一度に何十本もリクエストする) ので、ゆとりを持たせて 32。
+ * リクエストする (HTTP/2 の前段ならブラウザは一度に何十本もリクエストする) ので、ゆとりを持たせて 32。
  * 待たせると溜まるだけなので、あふれたら断る
  */
 const CONCURRENCY = 32;
@@ -76,11 +76,20 @@ export function refusalMessage(failure: unknown, fallback: string): string {
 }
 
 /**
+ * 中継して返す本文。204・205・304 は本文を持てない (`new Response` に渡すと TypeError になり、中継が 502 になる)
+ */
+export function relayBody(status: number, body: Uint8Array): BodyInit | null {
+  return status === 204 || status === 205 || status === 304
+    ? null
+    : (body as BodyInit);
+}
+
+/**
  * 中継した答えを返す (`/api/bml/proxy` と `/api/bml/post`)。
  *
  * - **相手の返した符号をそのまま返す。** 放送のアプリは 404 や 503 を見て出し分けることがあるので、
  *   こちらで 200 に均すと判断を奪う
- * - **溜めさせない。** 放送の通信は「いまの値」を取りに来るもの
+ * - **溜めさせない。** 放送の通信は「いまの値」を取得するもの
  * - `x-bml-relayed` は相手まで行けた印。相手の 502 をそのまま返すので、符号だけではこちらで断った
  *   502 と見分けが付かない。画面側はこれを見て成否を決める
  * - **返したものを denpa の権限で動かさない。** 中身も形式も相手の言うままなので、`text/html` や SVG が
@@ -89,7 +98,7 @@ export function refusalMessage(failure: unknown, fallback: string): string {
  *   を見て文字コードや BML の文書かどうかを決める。CSP は fetch で読む分には効かない
  */
 export function relayed(got: Fetched): Response {
-  return new Response(got.body as BodyInit, {
+  return new Response(relayBody(got.status, got.body), {
     status: got.status,
     headers: {
       "content-type": got.contentType,

@@ -172,7 +172,7 @@ test("止めたら予約した音を取り消し、再開は映像の新しい�
   expect(context.sources).toHaveLength(2);
   expect(context.sources[1]!.starts[0]![1]).toBeCloseTo(0.005, 8);
 });
-test("デコード待ちが上限を超えたら諦めて片付ける", () => {
+test("デコード待ちが上限を超えたら打ち切って片付ける", () => {
   const { audio, errors, worker, context } = setup();
   audio.feed(new Uint8Array(8 * 1024 * 1024), false);
   expect(errors).toHaveLength(1);

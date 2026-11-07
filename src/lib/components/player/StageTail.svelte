@@ -33,11 +33,11 @@
 
   /**
    * 操作バーの右端 (3 画面で同じ)。再生の設定 (⚙ `SettingsMenu`。並びと中身は docs/player.md)・小窓 (出せる端末だけ)・
-   * 全画面。畳むとき (`stage.fold`。狭い枠か、一段に収まらないとき) は毎回は使わないものを ⚙ の頭に入れる (`fold`。小窓もここで足す)。
+   * 全画面。畳むとき (`stage.fold`。狭い枠か、一段に収まらないとき) は毎回は使わないものを ⚙ の先頭に入れる (`fold`。小窓もここで足す)。
    * 互換モードは切り替えたらページを読み直す。`<video>` か canvas かはプレイヤーを組むときに決まる
    */
   interface Props {
-    /** testid の頭 (`watch` / `chase` / `live`) */
+    /** testid の接頭辞 (`watch` / `chase` / `live`) */
     prefix: string;
     background: Background;
     /** 音量 (`volume.svelte.ts`)。音のボタンがつまみを出せないときだけ、⚙ の上の並びにつまみを置く */
@@ -96,7 +96,7 @@
     fold = [],
   }: Props = $props();
 
-  /** 畳むときに ⚙ の頭に入れるもの。小窓は出せる端末だけ */
+  /** 畳むときに ⚙ の先頭に入れるもの。小窓は出せる端末だけ */
   const head = $derived<SettingRow[]>(
     stage.fold
       ? [

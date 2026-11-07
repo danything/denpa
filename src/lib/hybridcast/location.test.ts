@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { rewriteLocation, rewriteLocationBytes, scriptable } from "./location";
 
 describe("rewriteLocation", () => {
-  test("location の名前・頭・オリジンの読み出しを、差し込みの __hcLocation から読ませる", () => {
-    // NHK のアプリはこの形で次に開く住所を組み立てる
+  test("location の名前・ルート・オリジンの読み出しを、差し込みの __hcLocation から読ませる", () => {
+    // NHK のアプリはこの形で次に開く URL を組み立てる
     const code =
       'url:"https://".concat(window.location.hostname.split(".")[0],".nhk.jp/hc-ssl/1.txt")';
     expect(rewriteLocation(code)).toBe(

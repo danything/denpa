@@ -167,6 +167,8 @@ const PACE_EVERY = 250;
  * のとは別ものなので、混ぜると遅延が伸びたまま戻らない
  */
 const GRACE = 3_000;
+/** 画面を離れて止めた試しのデータの印 (`AbortController.abort` の理由)。上限の時間で止めたものとは違い、測った値に使わない */
+const LEFT = "left";
 /**
  * 前のフレームを貼っておく上限 (ms)。**次が出なくても、いつかは剥がす。**
  *
@@ -392,8 +394,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let noteTimer: ReturnType<typeof setTimeout> | null = null;
   /** 次の選局で繋ぎ直すか (足りなくて下げるとき。`tune`) */
   let freshSocket = false;
-  /** 試しのデータを取っている最中か (`probeLink`) */
-  let probing = false;
+  /** 取っている最中の試しのデータを止める (`probeLink`)。取っていなければ null */
+  let probing: AbortController | null = null;
   /** この時刻 (ms) までは試しのデータを取らない (サーバに回数の制限で断られたとき。`probeLink`) */
   let probeAfter = 0;
   /** 上げた段をリクエストした時刻と、上げる前の段。映り始めるまで (`adapt` の `PROBE_START`) */
@@ -552,13 +554,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let compat = $state(false);
   /** この端末で描ける形式 (`raw/support.ts` の `canvasSupport`)。調べるまで null */
   let compatSupport = $state<CanvasSupport | null>(null);
-  /** 互換モードで描くのを諦めたか。**選び直すまでリクエストし直さない** (MPEG-2 の `rawGaveUp` と同じ) */
+  /** 互換モードで描くのをやめたか。**選び直すまでリクエストし直さない** (MPEG-2 の `rawGaveUp` と同じ) */
   let compatGaveUp = false;
   /** MPEG-2 を選んでいるか。**リクエストするかどうかの元**。実際に MPEG-2 になったかは `raw` */
   let rawChosen = false;
   /**
-   * MPEG-2 を諦めたか (デコードするのが間に合わない・音がデコードできない・デコーダが無い)。**この画面を開いている
-   * 間はリクエストし直さない**。戻しては諦めるを繰り返すと、そのたびに映像が止まる
+   * MPEG-2 をやめたか (デコードするのが間に合わない・音がデコードできない・デコーダが無い)。**この画面を開いている
+   * 間はリクエストし直さない**。MPEG-2 に戻すたびに同じ理由でまたやめることになり、そのたびに映像が止まる
    */
   let rawGaveUp = false;
   /** この端末でデコードできない理由 (`raw/support.ts`)。調べるまでは undefined */
@@ -919,7 +921,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (starting) return;
     upAsk = null;
     /*
-     * 互換モードで H.264 を描けない (諦めて MPEG-2 に移った・VideoDecoder が H.264 を持たない)。段を下げた先は、
+     * 互換モードで H.264 を描けない (打ち切って MPEG-2 に移った・VideoDecoder が H.264 を持たない)。段を下げた先は、
      * GPU でエンコードできるものが無ければソフトウェアの H.264 になる (`server/live.ts` の `rungCodec`) ので描けない
      */
     if (compat && !playable().includes("h264")) return;
@@ -1009,10 +1011,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 再生中の段の受け取りの速さと足して `capacity` にする。`PROBE_GIVE_UP` でやめる (細い回線で取り続けると映像が細る)
    */
   async function probeLink(need: number, stream: number): Promise<void> {
-    if (probing || Date.now() < probeAfter) return;
-    probing = true;
-    const bytes = probeBytes(need, stream);
+    if (probing !== null || Date.now() < probeAfter) return;
     const control = new AbortController();
+    probing = control;
+    const bytes = probeBytes(need, stream);
     const giveUp = setTimeout(() => control.abort(), PROBE_GIVE_UP);
     const startAt = performance.now();
     let firstAt: number | null = null;
@@ -1045,9 +1047,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       lastAt = performance.now();
     } finally {
       clearTimeout(giveUp);
-      probing = false;
+      if (probing === control) probing = null;
     }
-    if (left) return;
+    if (left || control.signal.reason === LEFT) return;
     const rate = probeRate({
       startAt,
       firstAt,
@@ -1113,7 +1115,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 段を下げるとき、端末が再生できるコーデック (`TuneCommand.playable`)。受け取れないもの・諦めたものは外す。
+   * 段を下げるとき、端末が再生できるコーデック (`TuneCommand.playable`)。受け取れないもの・打ち切ったものは外す。
    * 互換モードは canvas に描けるもの (`canvasCan`。H.265 は描かない)
    */
   function playable(): LiveCodec[] {
@@ -1422,7 +1424,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 鳴らす。断られたら音を諦めて映像だけ出す (前回の局で勝手に始めるので、開いた直後は自動再生として断られる)
+   * 鳴らす。断られたら音をやめて映像だけ出す (前回の局で勝手に始めるので、開いた直後は自動再生として断られる)
    */
   async function play(video: HTMLVideoElement): Promise<void> {
     nativeAudio?.setMuted(silenced);
@@ -1781,6 +1783,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (adaptTimer !== null) clearInterval(adaptTimer);
     adaptTimer = null;
     stopResuming();
+    // 離れたら試しのデータは取り続けず、段の断り書きも書き換えない
+    probing?.abort(LEFT);
+    probing = null;
+    if (noteTimer !== null) clearTimeout(noteTimer);
+    noteTimer = null;
     reset();
     stopRaw();
     thaw();
@@ -1799,7 +1806,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * 待ってから繋ぎ直す (いちばん多いのはサーバの入れ替え)。待ちは倍々で 10 秒まで (`retryWait`)。回数の上限は
-   * 置かない。点けっぱなしで戻ってきたときに映っていてほしい。切れた時点で諦めていた頃は、
+   * 置かない。点けっぱなしで戻ってきたときに映っていてほしい。切れた時点で打ち切っていた頃は、
    * 観ている最中に「選んでください」に戻って自分で選び直すことになっていた
    */
   function reconnect(): void {
@@ -1855,7 +1862,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * コーデックのメニューで選ぶ (自動・AV1・H.265・H.264・MPEG-2)。音声と同じ扱い (`setAudio`) で、選んだものは
-   * **この端末に覚える** (`LAST_COOKIE`。ライブだけ)。選び直したなら前の断り書きは用済みで、諦めていた形式も試し直す。
+   * **この端末に覚える** (`LAST_COOKIE`。ライブだけ)。選び直したなら前の断り書きは用済みで、打ち切っていた形式も試し直す。
    * 決まる形式が今と同じならリクエストし直さない (自動で AV1 になっていて AV1 を選んだ、など)
    */
   function setChoice(next: LiveChoice): void {
@@ -1899,7 +1906,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /**
    * **選んでいるものから、リクエストする形式を決める。** 自動なら `autoCodec`。選んだものは使えればそのまま、
    * 使えなければ外と同じ順 (AV1 → H.265 → H.264、互換モードは AV1 → H.264 → MPEG-2) で代わりを探す。何も使えなければ null。
-   * 使えるかは、MPEG-2 はデコードできて諦めていないか、AV1・H.265・H.264 は受け取れて (互換モードなら描けて) 諦めていないか。
+   * 使えるかは、MPEG-2 はデコードできて打ち切っていないか、AV1・H.265・H.264 は受け取れて (互換モードなら描けて) 打ち切っていないか。
    * H.265 はそのうえで、ライブのエンコーダが GPU のときだけ (`options.hevc`)。互換モードと追っかけでは使わない。
    * ライブと追っかけで決め方は同じ (使えない形式を外すだけ)
    */
@@ -2171,7 +2178,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * MPEG-2 でリクエストするか。**MPEG-2 を選んでいて、デコードできて、まだ諦めていない**とき
+   * MPEG-2 でリクエストするか。**MPEG-2 を選んでいて、デコードできて、まだ打ち切っていない**とき
    */
   function wantsRaw(): boolean {
     return rawChosen && rawProblem === null && !rawGaveUp;
@@ -2370,7 +2377,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           ) {
             /*
              * H.265 でリクエストして降りた (サーバが GPU でエンコードできなかった。ソフトウェアには降りられない)。
-             * この画面を開いている間は H.265 を諦めて、次の形式でリクエストし直す (`decideFormat`)
+             * この画面を開いている間は H.265 をやめて、次の形式でリクエストし直す (`decideFormat`)
              */
             hevcGaveUp = true;
             warning = `${notice.message}。ほかの形式に切り替えました`;
@@ -2518,7 +2525,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           try {
             buffer.abort();
           } catch {
-            // 追加中でなければ投げる。気にしない
+            // 追加中でなければ例外になる。無視してよい
           }
         }
       }
@@ -2588,7 +2595,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     codecs: string,
     baked: LiveCodec,
   ): void {
-    // canvas で描いていたものからエンコードしたものへ戻るとき (諦めた・選び直した)。canvas を畳んで <video> を出す
+    // canvas で描いていたものからエンコードしたものへ戻るとき (打ち切った・選び直した)。canvas を畳んで <video> を出す
     stopRaw();
     // iPhone の Safari には MediaSource が無く、ManagedMediaSource だけがある (`ts/media-source.ts`)
     const picked = pickMediaSource();
@@ -2613,7 +2620,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     receivedFrom = 0;
     /*
      * **音を別に鳴らせなくなっても再生は止めない。** `<video>` の音に戻す (音量のつまみは効かないが、
-     * 前と同じに観られる)。自動で選んだ経路なので、それが転んで観られなくなるのでは困る
+     * 前と同じに観られる)。自動で選んだ経路なので、それが失敗して観られなくなるのでは困る
      */
     const giveUpAudio = (reason: string): void => {
       nativeAudio?.destroy();
@@ -2797,12 +2804,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * canvas で描くのを諦める。**理由は断り書きに残す** (`warning`)。黙って戻すと、設定を入れたのに効いて
+   * canvas で描くのをやめる。**理由は断り書きに残す** (`warning`)。黙って戻すと、設定を入れたのに効いて
    * いない理由が分からない。
    *
-   * - MPEG-2 を諦めた … エンコードしたものに戻す。互換モードならエンコードしたものも canvas に描く
+   * - MPEG-2 をやめた … エンコードしたものに戻す。互換モードならエンコードしたものも canvas に描く
    *   (`prepareCompat`)。互換モードでエンコードしたものも描けなければ、理由を出して止まる
-   * - 互換モードのエンコードしたものを諦めた … MPEG-2 で描けるならそちらへ、無理なら理由を出して止まる。
+   * - 互換モードのエンコードしたものをやめた … MPEG-2 で描けるならそちらへ、無理なら理由を出して止まる。
    *   **`<video>` には戻らない** (テスラでは止まってしまう)
    */
   function fallBack(reason: string, input: RawInput): void {
@@ -2827,7 +2834,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 形式を決め直してリクエストし直す (諦めた形式は `decideFormat` が外す)。ライブは同じ局を、追っかけは
+   * 形式を決め直してリクエストし直す (打ち切った形式は `decideFormat` が外す)。ライブは同じ局を、追っかけは
    * 再生していた位置から
    */
   function requestAgain(): void {

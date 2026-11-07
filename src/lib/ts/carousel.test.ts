@@ -4,12 +4,18 @@ import { Carousel, KEEP_MODULES } from "./carousel";
 
 type Message = Parameters<Carousel["take"]>[0];
 
-function moduleOf(componentId: number, moduleId: number, version = 0): Message {
+function moduleOf(
+  componentId: number,
+  moduleId: number,
+  version = 0,
+  dataEventId = 1,
+): Message {
   return {
     type: "moduleDownloaded",
     componentId,
     moduleId,
     version,
+    dataEventId,
     files: [
       { contentLocation: `/${moduleId}.bml`, contentType: {}, dataBase64: "" },
     ],
@@ -93,6 +99,28 @@ describe("データ放送の覚え書き", () => {
     expect(held.take(listOf(80, [0]))).toBe(true);
     expect(held.take(listOf(96, [1]))).toBe(true);
     expect(held.replay()).toEqual([listOf(80, [0]), listOf(96, [1])]);
+  });
+
+  test("いまの DII に載っていないモジュールは渡さない", () => {
+    const held = new Carousel();
+    held.take(moduleOf(80, 0));
+    held.take(moduleOf(80, 1));
+    held.take(moduleOf(80, 2, 0, 2));
+    // データイベントが 2 に変わった。前のデータイベントで揃った 0・1 は渡さない
+    held.take(listOf(80, [0, 2], 2));
+    expect(held.replay()).toEqual([
+      listOf(80, [0, 2], 2),
+      moduleOf(80, 2, 0, 2),
+    ]);
+    // バージョンが上がったモジュールは、新しいものが揃うまで渡さない
+    held.take(moduleOf(80, 0, 0, 2));
+    held.take({
+      ...(listOf(80, [], 2) as object),
+      modules: [{ id: 0, version: 1, size: 1 }],
+    } as unknown as Message);
+    expect(held.replay().map((message) => message.type)).toEqual([
+      "moduleListUpdated",
+    ]);
   });
 
   test("コンポーネントが違えば別のものとして持つ", () => {

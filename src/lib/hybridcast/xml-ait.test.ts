@@ -63,7 +63,7 @@ describe("parseXmlAit", () => {
     ]);
   });
 
-  test("URL の頭が http(s) でないもの・壊れたものは出さない", () => {
+  test("URL の先頭が http(s) でないもの・壊れたものは出さない", () => {
     expect(
       parseXmlAit(
         AIT.replace("https://hc.example.jp/app/", "javascript:alert(1)//"),

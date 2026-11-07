@@ -174,7 +174,7 @@ describe("ロゴの在り処", () => {
     expect(covers(found as Rect, truth)).toBe(true);
   });
 
-  /** ロゴを出さない局・出していない時間帯では、黙って諦める */
+  /** ロゴを出さない局・出していない時間帯では、黙って打ち切る */
   test("ロゴが無ければ null", () => {
     expect(find(make(40, null, 0))).toBeNull();
   });

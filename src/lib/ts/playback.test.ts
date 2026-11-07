@@ -350,7 +350,7 @@ describe("互換モード (canvasChoices / pickCanvas)", () => {
     ).toBeNull();
   });
 
-  test("選んだものが描ければそれ。描けなければ自動と同じ。諦めた形式は避ける", () => {
+  test("選んだものが描ければそれ。描けなければ自動と同じ。打ち切った形式は避ける", () => {
     expect(pickCanvas(withTs, all, "mpeg2")).toBe("mpeg2");
     expect(pickCanvas(withTs, all, "h264")).toBe("h264");
     expect(pickCanvas(withTs, { ...all, h264: false }, "h264")).toBe("av1");

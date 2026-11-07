@@ -75,7 +75,7 @@ export interface PlaybackInfo {
  * **サーバが選んだ観方** (`GET /api/recordings/<id>/playback?playable=` の `auto`。テレビのアプリ向け)。
  * `file` は `file?source=`、`stream` は `stream?codec=`、`raw` は `stream?codec=mpeg2` で開く
  */
-export type AutoPick =
+type AutoPick =
   | { way: "file"; codec: PlayCodec; source: EncodedSource }
   | { way: "stream"; codec: LiveCodec }
   | { way: "raw"; codec: "mpeg2" };
@@ -138,7 +138,7 @@ export async function busyAnswer(response: Response): Promise<boolean> {
  * ---------------------------------------------------------------------------
  */
 
-/** 流しているものの様子。流れている・繋ぎ直している・諦めた・混んでいて断られた */
+/** 流しているものの様子。流れている・繋ぎ直している・打ち切った・混んでいて断られた */
 export type StreamState = "flowing" | "retrying" | "failed" | "busy";
 
 /** 続けてリクエストし直す上限 */
@@ -444,7 +444,7 @@ export function canvasChoices(
  * 2. 変換する fMP4 (H.264 → AV1)
  * 3. 元の TS (MPEG-2)
  *
- * `avoid` は諦めた形式 (描いている途中で間に合わなくなった)。何も描けなければ null
+ * `avoid` は打ち切った形式 (描いている途中で間に合わなくなった)。何も描けなければ null
  */
 export function pickCanvas(
   info: PlaybackInfo,

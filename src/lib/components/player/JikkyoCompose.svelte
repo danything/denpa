@@ -31,10 +31,10 @@
    * 公式のニコニコ実況へ (denpa のサーバ経由。`official.ts`)、ほかは NX-Jikkyo へ (`nx.ts`) 送る。書き先を選ぶ設定は無い
    *
    * - 「ニコニコ実況に書きます」か「NX-Jikkyo に書きます」・入力欄・色などを選ぶボタン・「送る」・✕ を 1 つのカプセルに並べる。書けないときと失敗したときは、
-   *   頭の字をその理由 1 行に替える (トーストは出さない)
+   *   先頭の字をその理由 1 行に替える (トーストは出さない)
    * - Enter で送る (変換中は送らない)。Esc か ✕ で閉じる (一覧の下では一覧ごとしまう)。送れたら欄を空にし、失敗したら残す。自動で送り直さない
    * - 色・位置・大きさは、パレットのボタンで開く選択の行で選ぶ。端末ごとに覚える (`JIKKYO_STYLE_KEY`)
-   * - 置き場は画面が決める。ふだんはコメントの一覧の下 (`panel`。一覧の中なので面も影も付けず、頭の字は入力欄の上の行に。
+   * - 置き場は画面が決める。ふだんはコメントの一覧の下 (`panel`。一覧の中なので面も影も付けず、先頭の字は入力欄の上の行に。
    *   ✕ は置かない。しまうのは一覧のボタン)。一覧を出せない形 (横にしたスマホ・全画面) では映像の上、操作バーのすぐ上
    */
   interface Props {
@@ -66,7 +66,7 @@
     onclose,
   }: Props = $props();
 
-  /** 色・位置・大きさを覚えておくキー (端末ごと。頭の `player-` は画面をまたいで効くもの) */
+  /** 色・位置・大きさを覚えておくキー (端末ごと。接頭辞の `player-` は画面をまたいで効くもの) */
   const JIKKYO_STYLE_KEY = "player-jikkyo-style";
 
   const COLOR_NAMES: Record<PostColor, string> = {
@@ -81,7 +81,7 @@
   };
   const POSITION_NAMES = { ue: "上", naka: "流れる", shita: "下" } as const;
   const SIZE_NAMES = { big: "大", medium: "中", small: "小" } as const;
-  /** 頭の 1 行のいつもの表示と、書けない理由 (何か所かで出す) */
+  /** 先頭の 1 行のいつもの表示と、書けない理由 (何か所かで出す) */
   const IDLE = $derived(
     official ? "ニコニコ実況に書きます" : "NX-Jikkyo に書きます",
   );
@@ -138,7 +138,7 @@
   const caught = $derived(caughtUp(lag, paused));
   const why = $derived(refusal(text));
   const left = $derived(MAX_LENGTH - graphemes(text.trim()));
-  /** 頭の 1 行。結果 → 書けない理由 → 中身の断り → いつもの表示 の順 */
+  /** 先頭の 1 行。結果 → 書けない理由 → 中身の断り → いつもの表示 の順 */
   const line = $derived(
     note !== ""
       ? note
@@ -367,7 +367,7 @@
     --c-face: transparent;
     --c-field: var(--dp-field);
     --c-shadow: none;
-    /* 選ぶ行と頭の字の間も、選ぶ行のまとまりの間と同じくらい空ける (詰めると選ぶ行の続きに見えた) */
+    /* 選ぶ行と先頭の字の間も、選ぶ行のまとまりの間と同じくらい空ける (詰めると選ぶ行の続きに見えた) */
     gap: var(--dp-space-3);
     margin: var(--dp-space-2) 0 0;
   }
@@ -434,7 +434,7 @@
     color: var(--c-fg);
     font-weight: var(--dp-weight-bold);
   }
-  /* 一覧の下は列の幅しか無いので、頭の字を 1 行目に、入力欄と押すものを 2 行目に置く */
+  /* 一覧の下は列の幅しか無いので、先頭の字を 1 行目に、入力欄と押すものを 2 行目に置く */
   .in-list .row {
     flex-wrap: wrap;
     padding: 0;
