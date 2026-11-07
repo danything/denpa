@@ -6,9 +6,9 @@ namespace Denpa.Agent;
 /// チューナーが受信している状態と C/N。<c>GET /denpa/tuners</c> が <c>signal</c> に入れて返す (<see cref="ITuneDevice.Signal"/>)。
 ///
 /// <para>
-/// **dB に直せる根拠があるものだけ dB にする。** ドライバや機材の仕様書が dB で返すもの (DVB の <c>DTV_STAT_CNR</c>・px4d の <c>cnr_mdb</c>・
-/// DiB8000 の仕様書の式) は <see cref="Unit"/> が <c>dB</c>。式の根拠が無いもの (PIX-DT295 の復調のレジスタ) と、DVB のドライバが相対値 (0〜65535) で返すものは、来た値のまま <c>raw</c> にする。
-/// raw は同じ機材でチャンネルや配線を比べる目安で、値の向き (大きいほど良いか) も機材ごとに違ってよい (docs/tuners.md「信号レベル」)
+/// **dB に直せる根拠があるものだけ dB にする。** dB で返すドライバやデーモン (DVB の <c>DTV_STAT_CNR</c>・px4d の <c>cnr_mdb</c>) と、
+/// dB の式がある仕様書 (DiB8000) の値は <see cref="Unit"/> が <c>dB</c>。式の根拠が無いもの (PIX-DT295 の復調のレジスタ) と、DVB のドライバが相対値 (0〜65535) で返すものは、来た値のまま <c>raw</c> にする。
+/// raw は同じ機材でチャンネルや配線を比べる目安。大きいほど良いかどうかも、機材ごとに違ってよい (docs/tuners.md「信号レベル」)
 /// </para>
 /// </summary>
 /// <param name="Locked">復調がロックしているか</param>

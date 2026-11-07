@@ -1353,6 +1353,8 @@ public sealed class Px4Tuner : ITuneDevice
             _started = false;
         }
 
+        // 選局し直しが失敗したら、前のチャンネルの C/N を残さない
+        _tuned = null;
         var tune = TuneRequest(_lease, tuning, streamId, lnb);
         var busyUntil = DateTime.UtcNow + BusyRetry;
         byte[] answer;
