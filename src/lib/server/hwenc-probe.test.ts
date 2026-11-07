@@ -401,6 +401,7 @@ test("AMF は高画質の指定で落ちたら古い世代向けの指定で試�
     "Conversion failed!",
   ].join("\n");
   const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const log = spyOn(console, "log").mockImplementation(() => {});
   calls.length = 0;
   try {
     const { devices } = await onWindows(() => probe());
@@ -446,8 +447,13 @@ test("AMF は高画質の指定で落ちたら古い世代向けの指定で試�
     expect(logged).toContain(
       "[hwenc] h264_amf (amf0) の試しのエンコードが落ちました (終了コード 1): [vost#0:0/h264_amf @ 0000021] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height. / Error while filtering: Generic error in an external library / Conversion failed!",
     );
+    // 警告のあとに、古い世代向けの指定で使えることも出す
+    expect(log.mock.calls.map((args) => String(args[0]))).toContain(
+      "[hwenc] h264_amf (amf0) は古い世代向けの指定でエンコードできました。この指定で使います",
+    );
   } finally {
     warn.mockRestore();
+    log.mockRestore();
     failText = "";
   }
 });

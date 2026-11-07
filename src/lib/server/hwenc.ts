@@ -1077,6 +1077,7 @@ async function probeWindows(): Promise<HwDevice[]> {
           ok.add(codec);
       }
       device[kind] = HW_CODECS.filter((codec) => ok.has(codec));
+      // 試した順 (H.264 が先) ではなく、`device[kind]` と同じ HW_CODECS の順にそろえる
       device.amfTranscoding = HW_CODECS.filter((codec) =>
         device.amfTranscoding.includes(codec),
       );
@@ -1099,6 +1100,10 @@ async function tryOn(
   if (await tryWay(way, codec)) return true;
   if (kind !== "amf") return false;
   if (!(await tryWay({ ...way, amfTranscoding: true }, codec))) return false;
+  // 直前の警告 (高画質の指定で落ちた) のあとに、古い世代向けの指定で使えることを出す
+  console.log(
+    `[hwenc] ${codec}_amf (${device.path}) は古い世代向けの指定でエンコードできました。この指定で使います`,
+  );
   device.amfTranscoding.push(codec);
   return true;
 }
