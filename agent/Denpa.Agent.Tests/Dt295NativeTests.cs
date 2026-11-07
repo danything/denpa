@@ -413,6 +413,24 @@ public class Dt295NativeTests
     }
 
     [Test]
+    public async Task 復調の初期値は番号が続くレジスタを_1_転送にまとめ_値と順は表のとおり()
+    {
+        var fake = Rig();
+        Run(fake, "T25");
+        var i2c = fake.I2cLog;
+        // T 復調 (7.1.1): 0x1C〜0x1F、0x25〜0x26、0x3B〜0x3C、0x73〜0x77 は続く番号
+        await Assert.That(i2c).Contains("10 W 1C20566A9A");
+        await Assert.That(i2c).Contains("10 W 250000");
+        await Assert.That(i2c).Contains("10 W 3B213F");
+        await Assert.That(i2c).Contains("10 W 734511020001");
+        await Assert.That(i2c).DoesNotContain("10 W 7445");
+        // S 復調 (7.1.3): 0x03〜0x04、0x07〜0x08、0x10〜0x11、0x1C〜0x1F
+        await Assert.That(i2c).Contains("11 W 030002");
+        await Assert.That(i2c).Contains("11 W 073311");
+        await Assert.That(i2c).Contains("11 W 10B000");
+        await Assert.That(i2c).Contains("11 W 1C59AA2019");    }
+
+    [Test]
     public async Task 時間の内訳は設定_各待ち_選局_ロック待ち_取り込み_最初の_TS_を制御転送と_I2C_の数つきで出す()
     {
         var fake = Rig();
