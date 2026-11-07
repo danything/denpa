@@ -997,10 +997,10 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
         .values({
           id,
           service_id: id,
-          network_id: 7,
-          name: `CS${id}`,
-          type: "CS",
-          channel: `CS${id * 2}`,
+          network_id: 1,
+          name: `GR${id}`,
+          type: "GR",
+          channel: `GR${id * 2}`,
           updated_at: Date.now(),
         })
         .run();
@@ -1393,23 +1393,25 @@ describe("ContractChecker と手動設定 (Phase C/D)", () => {
     test("getContractSettings / saveContractSettings: 設定の永続化と部分更新", () => {
       // 初期値または更新
       const initial = getContractSettings();
-      expect(typeof initial.skyperfectSync).toBe("boolean");
       expect(["modal", "banner", "none"]).toContain(initial.modalMode);
 
-      saveContractSettings({ skyperfectSync: true, modalMode: "banner" });
+      saveContractSettings({
+        periodicScanEnabled: true,
+        modalMode: "banner",
+      });
       const updated = getContractSettings();
-      expect(updated.skyperfectSync).toBe(true);
+      expect(updated.periodicScanEnabled).toBe(true);
       expect(updated.modalMode).toBe("banner");
 
       // 部分更新で他方の設定が消えないこと
-      saveContractSettings({ skyperfectSync: false });
+      saveContractSettings({ periodicScanEnabled: false });
       const partial = getContractSettings();
-      expect(partial.skyperfectSync).toBe(false);
+      expect(partial.periodicScanEnabled).toBe(false);
       expect(partial.modalMode).toBe("banner");
 
       saveContractSettings({ modalMode: "none" });
       const partial2 = getContractSettings();
-      expect(partial2.skyperfectSync).toBe(false);
+      expect(partial2.periodicScanEnabled).toBe(false);
       expect(partial2.modalMode).toBe("none");
     });
 
@@ -1497,7 +1499,7 @@ describe("ContractChecker と手動設定 (Phase C/D)", () => {
       expect(allowed(193)).toBe(false);
     });
 
-    test("スカパー！同期: skyperfectSync オフ時は個別、オン時は代表局と同期する", () => {
+    test("スカパー！同期: 代表局と自動同期され手動除外は維持される", () => {
       const now = Date.now();
       // スカチャン1 (800) と J SPORTS 1 (601)
       for (const [id, name, type, ch] of [
@@ -1560,16 +1562,7 @@ describe("ContractChecker と手動設定 (Phase C/D)", () => {
         })
         .run();
 
-      // 1. 同期オフのとき
-      saveContractSettings({ skyperfectSync: false });
-      let rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));
-      expect(rows.get(800)?.state).toBe("subscribed");
-      expect(rows.get(601)?.state).toBe("unknown"); // 同期されない
-      expect(paidAllowed(now)(601)).toBe(false);
-
-      // 2. 同期オンのとき
-      saveContractSettings({ skyperfectSync: true });
-      rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));
+      const rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));
       expect(rows.get(800)?.state).toBe("subscribed");
       expect(rows.get(601)?.state).toBe("subscribed"); // 800 と同期される
       expect(rows.get(601)?.validUntil).toBe(40500);
@@ -1594,13 +1587,13 @@ describe("ContractChecker と手動設定 (Phase C/D)", () => {
 
       try {
         const form = new FormData();
-        form.append("skyperfectSync", "true");
+        form.append("periodicScanEnabled", "true");
         form.append("modalMode", "banner");
 
         type ActionEvent = Parameters<typeof actions.saveContractSettings>[0];
         type ActionResult = {
           success?: boolean;
-          settings?: { skyperfectSync: boolean; modalMode: string };
+          settings?: { periodicScanEnabled: boolean; modalMode: string };
           contracts?: unknown[];
         };
 
@@ -1612,7 +1605,7 @@ describe("ContractChecker と手動設定 (Phase C/D)", () => {
         } as unknown as ActionEvent)) as ActionResult;
 
         expect(res?.success).toBe(true);
-        expect(res?.settings?.skyperfectSync).toBe(true);
+        expect(res?.settings?.periodicScanEnabled).toBe(true);
         expect(res?.settings?.modalMode).toBe("banner");
         expect(Array.isArray(res?.contracts)).toBe(true);
       } finally {
@@ -1726,9 +1719,6 @@ describe("ContractChecker と手動設定 (Phase C/D)", () => {
           checked_at: now,
         })
         .run();
-
-      // スカパー同期オン
-      saveContractSettings({ skyperfectSync: true });
 
       // getContractRows での同期確認
       const rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));

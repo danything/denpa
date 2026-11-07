@@ -566,33 +566,31 @@ export function getContractRows(cardId: string): ContractRow[] {
     });
   }
 
-  // 2. スカパー！の一括同期 (contractSettings.skyperfectSync が true の場合)
+  // 2. スカパー！の一括同期
   // スカパー！の代表局 (スカチャン1 等) でカード契約が確認できている場合、
   // 手動設定されていない他のスカパー局も同一の契約状態・期限とみなす
-  if (contractSettings.skyperfectSync) {
-    const skyRep = rows.find(
-      (r) =>
+  const skyRep = rows.find(
+    (r) =>
+      r.providerId === "skyperfect" &&
+      r.source === "eit_ca" &&
+      (r.code !== null || r.validUntil !== null),
+  );
+  if (skyRep) {
+    rows = rows.map((r) => {
+      if (
         r.providerId === "skyperfect" &&
-        r.source === "eit_ca" &&
-        (r.code !== null || r.validUntil !== null),
-    );
-    if (skyRep) {
-      rows = rows.map((r) => {
-        if (
-          r.providerId === "skyperfect" &&
-          r.manualState == null &&
-          r.code == null
-        ) {
-          return {
-            ...r,
-            state: skyRep.state,
-            source: "eit_ca",
-            validUntil: skyRep.validUntil,
-          };
-        }
-        return r;
-      });
-    }
+        r.manualState == null &&
+        r.code == null
+      ) {
+        return {
+          ...r,
+          state: skyRep.state,
+          source: "eit_ca",
+          validUntil: skyRep.validUntil,
+        };
+      }
+      return r;
+    });
   }
 
   return rows;

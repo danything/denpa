@@ -32,7 +32,6 @@
 
   let contracts = $state<ContractRow[]>([]);
   let settings = $state<ContractSettings>({
-    skyperfectSync: false,
     modalMode: "modal",
     intendedServiceIds: null,
     periodicScanEnabled: false,
@@ -426,6 +425,7 @@
       B-CAS
       カード内の契約情報（CA契約情報）を確認し、各局の契約状態と有効期限を表示します。
       選局せずにカードのみで判定するため、チューナーを塞ぎません。
+      契約している局の「契約対象」にチェックを入れることで、自動録画や期限通知の対象として管理できます。
       また、「復号を確かめる」で実際の放送ストリームを受信し、正常に復号できるかを検証できます。
       「未確認をまとめて復号テスト」は、同じ中継器の局をまとめて1回の選局で確かめます。
     </p>
@@ -462,7 +462,7 @@
         </label>
       </div>
 
-      <div class="setting-row">
+      <div class="setting-row periodic-scan-row">
         <label class="setting-item">
           <input
             type="checkbox"
@@ -502,7 +502,20 @@
             />
           </div>
         {/if}
+        <p class="small muted setting-help">
+          チューナーが空いている時に、契約対象局の復号状態をバックグラウンドで巡回確認します。録画や視聴が始まると即座に中断してチューナーを譲ります。
+        </p>
       </div>
+    </div>
+
+    <div class="intended-guide">
+      <p class="small muted">
+        <strong>契約チャンネルの選択:</strong>
+        ご契約中の局にチェックを入れてください。チェックを入れた局のみを<strong
+          >自動録画の許可</strong
+        >、<strong>期限切れ通知</strong>、<strong>深夜定期スキャン</strong
+        >の対象とします。未契約の局を外しておくことで、スクランブル解除失敗による録画エラーや不要な通知を防げます。
+      </p>
     </div>
 
     <div class="toolbar">
@@ -582,7 +595,11 @@
         <table>
           <thead>
             <tr>
-              <th class="intended-col">対象</th>
+              <th
+                class="intended-col"
+                title="契約している局にチェックを入れます。自動録画・通知・定期スキャンの対象になります"
+                >契約対象</th
+              >
               <th>局名</th>
               <th>種別</th>
               <th>対応方式</th>
@@ -609,7 +626,8 @@
                           row.serviceId,
                           e.currentTarget.checked,
                         )}
-                      title="この局を監視・自動録画の対象にする"
+                      title="「{row.serviceName}」を契約対象（自動録画・通知・定期スキャン）にする"
+                      aria-label="「{row.serviceName}」を契約対象にする"
                       data-testid="checkbox-intended-{row.serviceId}"
                     />
                   </td>
@@ -865,6 +883,25 @@
     font-family: inherit;
   }
 
+  .intended-guide {
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--dp-pop, rgba(255, 255, 255, 0.03));
+    border-radius: 6px;
+    border-left: 3px solid var(--dp-accent, #3b82f6);
+  }
+
+  .intended-guide p {
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .setting-help {
+    margin: 0.25rem 0 0;
+    line-height: 1.4;
+    width: 100%;
+  }
+
   .toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -882,8 +919,9 @@
   }
 
   .intended-col {
-    width: 3.5rem;
+    width: 5.5rem;
     text-align: center;
+    white-space: nowrap;
   }
 
   .intended-cell {

@@ -280,9 +280,6 @@ export const actions = {
   saveContractSettings: async ({ request }) => {
     const form = await request.formData();
     const patch: Partial<ContractSettings> = {};
-    if (form.has("skyperfectSync")) {
-      patch.skyperfectSync = form.get("skyperfectSync") === "true";
-    }
     if (form.has("modalMode")) {
       const mode = form.get("modalMode");
       if (mode === "modal" || mode === "banner" || mode === "none") {
