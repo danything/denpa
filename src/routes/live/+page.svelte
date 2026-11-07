@@ -5,9 +5,6 @@
   import { submitting } from "#lib/actions.js";
   import type { Service } from "#lib/bml/engine.js";
   import DriveNotice from "#lib/components/DriveNotice.svelte";
-  import { ambientMode } from "#lib/components/player/ambient.svelte.js";
-  import { screenAwake } from "#lib/components/player/awake.svelte.js";
-  import { backgroundPlayback } from "#lib/components/player/background.svelte.js";
   import { centerTap } from "#lib/components/player/center-tap.js";
   import ControlBar from "#lib/components/player/ControlBar.svelte";
   import ControlButton from "#lib/components/player/ControlButton.svelte";
@@ -43,8 +40,8 @@
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
   import { playerKeys } from "#lib/components/player/keys.js";
+  import { liveWiring } from "#lib/components/player/live-wiring.svelte.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
-  import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import PlayerLayout, {
     PHONE_LANDSCAPE,
   } from "#lib/components/player/PlayerLayout.svelte";
@@ -69,7 +66,6 @@
   import SpeedMenu from "#lib/components/player/SpeedMenu.svelte";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
-  import { playerVolume } from "#lib/components/player/volume.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, {
@@ -410,19 +406,16 @@
   /** 書きかけ (一覧の下と映像の上で同じもの。番組の中身との行き来で一覧を描き直しても残す) */
   let draft = $state("");
 
-  /** 画面を落とさせない。止めている間も掛けたまま (追っかけの始まりで、画面を見ていることが多い) */
-  const awake = screenAwake();
-  $effect(() => {
-    awake.on = player.state !== "idle" && player.state !== "error";
-  });
-
-  /** バックグラウンド再生。戻ったら、張り付いていたなら放送の今へ (止めた所からではなく) */
+  /**
+   * 画面を暗くさせない処理・バックグラウンド再生・アンビエントモード・小窓・音量 (追っかけと共通。`live-wiring.svelte.ts`)。
+   * 裏から戻ったら、張り付いていたなら放送の今へ (止めた所からではなく)
+   */
   let wasLive = false;
-  const background = backgroundPlayback({
-    nativeVideo: () => (player.canvas ? null : video),
-    pip: () => pip.active,
-    paused: () => player.paused,
-    muted: () => player.silenced,
+  const { background, ambient, pip, volume } = liveWiring({
+    player,
+    video: () => video,
+    overlay: () => overlay,
+    separateAudio: separateLiveAudio,
     pause: () => {
       wasLive = player.live;
       player.toggle();
@@ -432,43 +425,6 @@
       // 戻る先がまだ無い (貯まりが空) と goLive は何もしないので、そのときは再開だけ
       if (player.paused) player.toggle();
     },
-  });
-
-  /** アンビエントモード。canvas に描いているときは worker から縮めた 1 枚をもらう */
-  const ambient = ambientMode({
-    playing: () => !player.paused && !pip.active,
-    canvas: () => (player.canvas ? player : null),
-    video: () => video,
-  });
-
-  /** 小窓 (PiP)。MPEG-2 は worker の canvas からストリームを取って出す。小窓で押された止める・再開は player に合わせる */
-  const pip = pictureInPicture({
-    video: () => video,
-    raw: () => player.canvas,
-    capture: () => player.capture(),
-    flow: (on) => player.captureFlow(on),
-    paused: () => player.paused,
-    toggle: () => player.toggle(),
-    auto: () => background.on,
-    overlay: () => overlay,
-    captions: () => player.captions && player.hasCaptions,
-  });
-  // MPEG-2 をデコードした音を「再生する音」と言うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
-  $effect(() => {
-    player.playback = background.on || pip.active;
-  });
-
-  /** 音量 (`volume.svelte.ts`)。canvas はエンジンの中で、`<video>` は Web Audio に通して掛ける */
-  const volume = playerVolume({
-    separateAudio: separateLiveAudio,
-    video: () => (player.canvas ? null : video),
-    through: () => background.on || pip.active,
-    remote: (paused) => {
-      if (paused !== player.paused) player.toggle();
-    },
-  });
-  $effect(() => {
-    player.volume = volume.level;
   });
 
   /** 真ん中あたりを素早く 2 回で再生/一時停止 (`center-tap.ts`)。1 回目は操作バーの出し入れ */

@@ -5,7 +5,7 @@
   /** 録画の速さを覚えるキー。観る画面と追っかけで共通 (エンコードする前と後で同じ録画を観る) */
   export const SPEED_KEY = "watch-speed";
 
-  /** 前に選んだ速さ。読めない・知らない値なら等速 */
+  /** 前に選んだ速さ。読めない値と `SPEEDS` に無い値は等速 */
   export function storedSpeed(): number {
     const saved = Number(read(SPEED_KEY));
     return SPEEDS.includes(saved as (typeof SPEEDS)[number]) ? saved : 1;

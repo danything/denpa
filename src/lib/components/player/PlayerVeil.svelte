@@ -24,7 +24,7 @@
     /** 失敗の文言。あれば busy より先にこちらを出す */
     error?: string;
     /** エラーの下の押しもの (「やり直す」)。押せるようにするのは幕の側 */
-    actions?: Snippet;
+    actions?: Snippet | undefined;
     /** busy でも error でもないときの文言 (「選んでください」)。空なら何も出さない */
     idle?: string;
     testid: string;

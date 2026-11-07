@@ -823,7 +823,7 @@ progress[value]::-webkit-progress-value {
  * 広い形では右のサイドバーに入る。docs/design.md の「浮かせ方」)。上端では平らで、巻いて中身が裏に入ると
  * 面と近い影 (`--dp-shadow-tight`) が出る。時間の軸は表の箱の `--guide` (`guide/+page.svelte` も同じ動きを使う)。
  * 使う側は `@supports (animation-timeline: scroll())` の中で面と影を消してから動かす (ヘッダーと同じ)。
- * 巻けないうちは軸が止まり、平らなまま。知らないブラウザと動きを減らす設定の端末
+ * 巻けないうちは軸が止まり、平らなまま。対応していないブラウザと動きを減らす設定の端末
  * (Pico がアニメーションをすぐ終わらせる) は、いつも面が出ている
  */
 @keyframes dp-bar-float {
@@ -1242,7 +1242,7 @@ input[type="checkbox"]:not([role="switch"]) {
     background-color var(--dp-duration) var(--dp-ease),
     box-shadow var(--dp-duration) var(--dp-ease);
 }
-/* 貼り付いたかは `scroll-state(stuck: top)` で見る。知らないブラウザは、いつもカプセル */
+/* 貼り付いたかは `scroll-state(stuck: top)` で見る。対応していないブラウザは、いつもカプセル */
 @supports (container-type: scroll-state) {
   .day-head-chip {
     background: transparent;
@@ -1563,7 +1563,7 @@ a.button {
 /*
  * 下線。押す場所の内側に引くので高さは変わらない。
  * **選び直すと、下線が前の場所から横へ滑る** (CSS だけ。下の「滑る印」)。
- * アンカーを知らないブラウザは、選んでいるタブの中に線を引く (滑らない)
+ * アンカーに対応していないブラウザは、選んでいるタブの中に線を引く (滑らない)
  */
 [role="group"].segmented
   > :is(button, a.button):is(
@@ -1790,7 +1790,7 @@ button.text-button:hover {
   inset: auto;
   margin: 0;
   min-width: 10rem;
-  /* anchor-size を知らないブラウザは上の 10rem を使う */
+  /* anchor-size に対応していないブラウザは上の 10rem を使う */
   min-width: max(10rem, anchor-size(width));
   max-height: 100%;
   overflow-y: auto;
@@ -1815,7 +1815,7 @@ button.text-button:hover {
    * 開いているときだけ flex にする (閉じているときはブラウザの `display: none`)。
    * **引き金の側から、少し縮んだ透明な姿で開き、閉じるときは引っ込む。**
    * 閉じる間も描いておくため、`display` と最前面 (`overlay`) も一緒に移す (`allow-discrete`。
-   * 知らないブラウザはすぐ消える)。動かすのは transform と透明度だけ。`Menu` が JS で置くときに測る大きさは変わらない。
+   * 対応していないブラウザはすぐ消える)。動かすのは transform と透明度だけ。`Menu` が JS で置くときに測る大きさは変わらない。
    * 並べる向きは閉じている間も持たせる。開いているときだけにすると、閉じる動きの間に一瞬横向きのメニューが見えた
    */
   flex-direction: column;
@@ -1971,7 +1971,7 @@ button.text-button:hover {
  * **マウスで使う画面では、開いた一覧をメニュー (上の `.menu`) と同じ姿にする** (`appearance: base-select`。CSS だけ)。
  * ブラウザの一覧はテーマや字の大きさが合わず、暗いテーマで読みにくかった。
  * **指で使う端末 (スマホ・タブレット) はブラウザ・OS の選び方のまま** (画面の下から大きく出て、指で選びやすい)。
- * 知らないブラウザもそのまま (`color-scheme` でテーマの明るさだけ合う)。
+ * 対応していないブラウザもそのまま (`color-scheme` でテーマの明るさだけ合う)。
  * 閉じた欄の見た目は今までどおり (Pico の矢印を使い、ブラウザの矢印 `::picker-icon` は出さない)
  */
 @supports (appearance: base-select) {
@@ -2604,7 +2604,7 @@ dialog[open] > article {
  * **選び直すと、左の縦線が前の場所から縦に滑る** (タブの下線と同じ「滑る印」。上の `.segmented` の説明)。
  * 並び (`.side-list`) の疑似要素 1 本を、選んでいる行に CSS のアンカーで付ける。行ごとに線を描くと、選び直したときに
  * 前の線が消えて次の線が出るだけで、滑らなかった (ライブの局を替えたとき)。並びをまたぐ (設定の別の節の束) ときはその場に出る。
- * 並びの外の行 (並びに入れずに使う `.side-item`) とアンカーを知らないブラウザは、上の行ごとの線のまま
+ * 並びの外の行 (並びに入れずに使う `.side-item`) とアンカーに対応していないブラウザは、上の行ごとの線のまま
  */
 @supports (anchor-name: --a) {
   .side-list {
@@ -2722,7 +2722,7 @@ dialog[open] > article {
     animation: flash var(--flash-for, 2.5s) linear both;
   }
   /* 伸びたところを明るさで脈打たせる (透明度だけ。背景の位置は動かさない。docs/design.md 7 章) */
-  /* 片方の擬似要素を知らない画面が規則ごと捨てないよう、2 つに分ける */
+  /* 片方の擬似要素に対応していないブラウザが規則ごと無視しないよう、2 つに分ける */
   :root:not([data-lite]) progress.running[value]::-webkit-progress-value {
     animation: progress-shine var(--dp-shine) ease-in-out infinite;
   }

@@ -169,7 +169,7 @@
       await new Promise((r) => setTimeout(r, 1000));
       const up = await alive();
       if (!up) wentDown = true;
-      // 再起動が速くて落ちたところを見逃しても、10 秒たてば開き直す
+      // 再起動が速くて落ちたことを確かめられなくても、10 秒たてば開き直す
       else if (wentDown || Date.now() > until - RESTART_WAIT + 10_000) {
         const url = new URL(location.href);
         url.searchParams.delete("transfer_error");

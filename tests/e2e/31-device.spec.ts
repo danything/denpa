@@ -140,9 +140,21 @@ test.describe("テレビのペアリング", () => {
 
     // 設定画面に並ぶ
     await goto(page, "/settings/integrations");
-    await expect(
-      page.getByTestId("device-row").filter({ hasText: "E2E のテレビ" }),
-    ).toBeVisible();
+    const row = page
+      .getByTestId("device-row")
+      .filter({ hasText: "E2E のテレビ" });
+    await expect(row).toBeVisible();
+
+    // 取消は 2 回押し。1 回目は聞き返すだけで、ほかを触れば取り下げる (取り消すのは下でアプリが自分で外す)
+    await row.getByTestId("device-revoke").click();
+    await expect(row.getByTestId("device-revoke-confirm")).toHaveText(
+      "取消を確定",
+    );
+    await page
+      .getByRole("heading", { name: "テレビのアプリ", exact: true })
+      .click();
+    await expect(row.getByTestId("device-revoke-confirm")).toHaveCount(0);
+    await expect(row.getByTestId("device-revoke")).toBeVisible();
 
     // アプリが自分で外す。無効にしたアクセストークンは信頼するネットワークからでも 401 (ペアリングし直しと分かるように)
     expect(

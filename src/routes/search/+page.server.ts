@@ -62,6 +62,8 @@ function focusOf(url: URL) {
         end_at: programs.end_at,
         copy_never: programs.copy_never,
         reservation_id: reservations.id,
+        // 詳細のボタンを決める (`ProgramActions`)。ここで引く状態はどれも取り消せるもの
+        reservation_state: reservations.state,
       })
       .from(programs)
       .innerJoin(serviceTable, eq(serviceTable.id, programs.service_id))
