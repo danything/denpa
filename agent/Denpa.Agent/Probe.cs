@@ -327,7 +327,7 @@ public static class Probe
     /// 読めたバイト数と、それが TS の形式になっているか。復号させたなら復号できたか。<paramref name="lockedAt"/> (Stopwatch の時刻) を渡せば、
     /// そこから最初の復号できたパケット (掛かっていた PID の、掛かっていないペイロード) までの ms を出して返す (最初の ECM を待つ時間)
     /// </summary>
-    private static double? Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration, long lockedAt = 0)
+    internal static double? Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration, long lockedAt = 0)
     {
         var scrambledPids = new HashSet<int>();
         long decodedAt = 0;
