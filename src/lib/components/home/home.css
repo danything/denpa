@@ -296,7 +296,7 @@
  *
  * **どの幅でもページごとスクロールする** (`+layout.svelte` の `FILLED` に入れない)。広い形では行が浮いたヘッダーの裏を流れ、
  * スクロールバーは窓の右端に出る。日付の見出しは上に、操作の 1 行 (絞り込みのチップ・「⋯」) は下のタブのすぐ上に貼り付く。
- * 広い画面 (768px 以上) では左右と下を main の余白の外まで広げ、右のサイドバーを窓の右端と下端に付ける
+ * 768px からは左右と下を main の余白の外まで広げる。右のサイドバーは広い形 (`html:not([data-phone])`) だけで、窓の右端と下端に付ける
  */
 .board {
   display: flex;
@@ -442,7 +442,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--dp-on-video);
   opacity: 0;
   background: rgb(0 0 0 / 0.45);
   transition: opacity var(--dp-duration) var(--dp-ease);

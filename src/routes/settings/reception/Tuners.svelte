@@ -474,7 +474,7 @@
             <button
               type="button"
               class="small ghost"
-              onclick={() => (adding = false)}>取消</button
+              onclick={() => (adding = false)}>閉じる</button
             >
           {:else}
             <button
@@ -531,7 +531,7 @@
             有料契約を確認
           </button>
           {#if card.source === "remote"}
-            <!-- CARD_URL。手元のリーダーは使わず、鍵だけ貰っている -->
+            <!-- CARD_URL。手元のリーダーは使わず、鍵だけ受け取る -->
             <span class="small">
               別の拠点 <span class="mono break">{card.remote ?? "?"}</span>
               から鍵を受け取っています

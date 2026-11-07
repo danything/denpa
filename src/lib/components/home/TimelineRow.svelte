@@ -570,6 +570,7 @@
         class:running={known}
         value={known ? barPercent : undefined}
         max="1"
+        aria-label="エンコードの進み"
       ></progress>
     {:else if held?.state === "downloading"}
       <progress
@@ -577,6 +578,7 @@
         class:running={held.progress !== null}
         value={held.progress ?? undefined}
         max="1"
+        aria-label="端末への保存の進み"
       ></progress>
     {/if}
   </div>

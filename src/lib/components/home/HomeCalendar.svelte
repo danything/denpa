@@ -204,7 +204,6 @@
   .cal-step:disabled {
     background: transparent;
     color: var(--dp-muted);
-    opacity: 0.4;
   }
   .cal-grid {
     width: calc(100% - 0.75rem);

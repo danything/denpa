@@ -60,7 +60,7 @@
     cm?: { on: boolean; toggle: () => void } | undefined;
     /**
      * データ放送 (観る画面で、取り出してある録画だけ)。**映像の上の列には置かない**。右端の列は
-     * 全画面のタブレットで使う閉じる・切り抜き・削除のために空けておく (`ControlBar`)
+     * 全画面のタブレットで閉じる・切り抜き・コメントの一覧・削除に使う (`ControlBar`)
      */
     data?: { on: boolean; toggle: () => void } | undefined;
     /**

@@ -66,3 +66,13 @@ export function playerKeys(
     run();
   };
 }
+
+/**
+ * **データ放送を出している間に、あちらのリモコンへ譲るキー** (空白・十字キー・f。`bml/engine.ts` の `aribKey`)。
+ * ライブと観る画面で同じ。譲らないと、空白で再生/一時停止と文書の決定が同時に起きる
+ */
+export function dataRemoteKey(event: KeyboardEvent): boolean {
+  return (
+    event.key === " " || event.key === "f" || event.key.startsWith("Arrow")
+  );
+}

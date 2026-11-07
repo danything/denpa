@@ -732,7 +732,6 @@
               title="番組表がまだありません"
               data-testid="guide-day"
               data-start={day.start}
-              aria-disabled="true"
               >{day.label}<span class="visually-hidden">
                 (番組表なし)</span
               ></span
@@ -1327,9 +1326,9 @@
   .day-chip.selected.sun {
     color: var(--dp-rec-text);
   }
-  /* 番組表がまだ届いていない日。並びに置くだけで押せない */
+  /* 番組表がまだ届いていない日。並びに置くだけで押せない。控えた字 (カレンダーの押せない日と同じ。透かすと 4.5:1 を割る) */
   .day-chip.disabled {
-    opacity: 0.45;
+    color: var(--dp-muted);
     cursor: not-allowed;
   }
   /*
