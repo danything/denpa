@@ -96,7 +96,6 @@ internal sealed class Dt295NativeStream
     private readonly Dt295NativeDevice _device;
     private readonly IUsbInStream _in;
     private readonly Action _stalled;
-    private readonly Func<bool>? _demodSettled;
     private readonly string _name;
     private readonly Thread _reader;
     private readonly Thread _kicker;
@@ -117,13 +116,12 @@ internal sealed class Dt295NativeStream
     /// <summary>最初の TS を詰めた時刻 (Stopwatch)。まだなら 0</summary>
     public long FirstAt { get; private set; }
 
-    private Dt295NativeStream(Dt295NativeDevice device, IUsbInStream input, string name, Action stalled, Func<bool>? demodSettled)
+    private Dt295NativeStream(Dt295NativeDevice device, IUsbInStream input, string name, Action stalled)
     {
         _device = device;
         _in = input;
         _name = name;
         _stalled = stalled;
-        _demodSettled = demodSettled;
         Output = new DeviceStream(_pipe.Reader, () => _reason);
         // Linux のスレッド名は 15 文字まで。CPU 時間をスレッドごとに見分けるため、機材の名前は付けない (--dt295-probe)
         _reader = new Thread(Read) { IsBackground = true, Name = "dt295-ts" };
@@ -134,9 +132,9 @@ internal sealed class Dt295NativeStream
     /// 取り込みの設定と端点の開始までを済ませ、読み出し側を開く。**取り込みはまだ始めない** (TS は出ない)。選局のあとの受信の確認の間に呼んで、
     /// 受信を確認できたらすぐ <see cref="Begin"/> できるようにする。受信が確認できなければ <see cref="Abort"/>
     /// </summary>
-    public static Dt295NativeStream Prepare(Dt295NativeDevice device, string name, Action stalled, bool satellite)
+    public static Dt295NativeStream Prepare(Dt295NativeDevice device, string name, Action stalled)
     {
-        var stream = new Dt295NativeStream(device, device.Usb.OpenInStream(Endpoint, TransferSize, Depth), name, stalled, satellite ? null : device.Frontend.TmccSettled);
+        var stream = new Dt295NativeStream(device, device.Usb.OpenInStream(Endpoint, TransferSize, Depth), name, stalled);
         try
         {
             stream.ArmCapture();
@@ -209,7 +207,6 @@ internal sealed class Dt295NativeStream
     {
         var raw = new byte[TransferSize * Depth];
         var framer = new NativeTsFramer();
-        var settle = new Settled(_demodSettled);
         var writer = _pipe.Writer;
         try
         {
@@ -218,27 +215,13 @@ internal sealed class Dt295NativeStream
                 var got = _in.Read(raw, ReadTimeoutMs);
                 if (got == 0) continue;
                 var wrote = false;
-                settle.Poll();
-                if (settle.IsOpen)
+                // 同期が続く範囲ごとにまとめて詰める (パケットごとのコピーと呼び出しを省く)
+                framer.PushRuns(raw.AsSpan(0, got), run =>
                 {
-                    // 通すだけの間は、同期が続く範囲ごとにまとめて詰める (パケットごとのコピーと呼び出しを省く)
-                    framer.PushRuns(raw.AsSpan(0, got), run =>
-                    {
-                        run.CopyTo(writer.GetSpan(run.Length));
-                        writer.Advance(run.Length);
-                        wrote = true;
-                    });
-                }
-                else
-                {
-                    framer.Push(raw.AsSpan(0, got), packet =>
-                    {
-                        if (!settle.Accept(packet)) return;
-                        packet.CopyTo(writer.GetSpan(packet.Length));
-                        writer.Advance(packet.Length);
-                        wrote = true;
-                    });
-                }
+                    run.CopyTo(writer.GetSpan(run.Length));
+                    writer.Advance(run.Length);
+                    wrote = true;
+                });
                 if (!wrote) continue;
                 if (FirstAt == 0)
                 {
@@ -257,66 +240,6 @@ internal sealed class Dt295NativeStream
         {
             _ended = true;
             writer.Complete();
-        }
-    }
-
-    /// <summary>
-    /// 地上波は復調のロックの印が立った時点で取り込みを始めるため、TMCC が確定するまで (ロックの約 400 ms 後まで) 復調が TEI 付きのパケットを出す。
-    /// 復調が TMCC の確定を報告する (0x80 の bit5 が落ちる。<paramref name="demodSettled"/>) までは、TEI の有無にかかわらず全部捨てる
-    /// (確定前は、TEI の付かないパケットが偶然続くことがある)。確定の報告のあとは、前の残りの TEI を避けるため、TEI の付かないパケットが
-    /// <see cref="CleanRun"/> 個続くまで捨て、続いたら以降は TEI の有無にかかわらず通す。衛星は <paramref name="demodSettled"/> が null で、最後の条件だけ見る。
-    /// 確定の報告が <see cref="Give"/> を過ぎても来ないときは、受信が悪いだけなので捨てるのをやめて全部通す
-    /// </summary>
-    internal sealed class Settled(Func<bool>? demodSettled = null)
-    {
-        public const int CleanRun = 8;
-        public static readonly long Give = Stopwatch.Frequency * 2;
-
-        /// <summary>確定の報告を読む間隔 (復調のレジスタ 1 回の読み。読み出しの周期より短い)</summary>
-        private static readonly long PollEvery = Stopwatch.Frequency / 50;
-
-        private readonly long _since = Stopwatch.GetTimestamp();
-        private long _polledAt;
-        private int _clean;
-        private bool _reported = demodSettled is null;
-        private bool _open;
-
-        public bool IsOpen => _open;
-
-        /// <summary>確定の報告をまだ受けていなければ、20 ms おきに復調へ読みに行く</summary>
-        public void Poll()
-        {
-            if (_reported || _open) return;
-            var now = Stopwatch.GetTimestamp();
-            if (_polledAt != 0 && now - _polledAt < PollEvery) return;
-            _polledAt = now;
-            try
-            {
-                _reported = demodSettled!();
-            }
-            catch (Exception error) when (error is IOException or InvalidOperationException or TimeoutException)
-            {
-                // 読めないときは次の周期で読み直す。Give を過ぎれば通す
-            }
-        }
-
-        public bool Accept(ReadOnlySpan<byte> packet)
-        {
-            if (_open) return true;
-            if (!_reported)
-            {
-                // 確定の報告の前は数えない
-            }
-            else if ((packet[1] & 0x80) == 0)
-            {
-                if (++_clean >= CleanRun) _open = true;
-            }
-            else
-            {
-                _clean = 0;
-            }
-            if (!_open && Stopwatch.GetTimestamp() - _since > Give) _open = true;
-            return _open;
         }
     }
 
@@ -488,12 +411,12 @@ public sealed class Dt295NativeTuner : ITuneDevice
                     {
                         reuse = tuning.Satellite
                             ? frontend.WaitSatelliteLock(StillLockedWait, tsid)
-                            : frontend.WaitTerrestrialLock(StillLockedWait, layers: 0);
+                            : frontend.WaitTerrestrialLock(StillLockedWait);
                     }
                 }
                 if (reuse)
                 {
-                    prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall), tuning.Satellite);
+                    prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall));
                 }
                 else
                 {
@@ -506,9 +429,9 @@ public sealed class Dt295NativeTuner : ITuneDevice
                         using (timeline.Step("選局 (地上波の周波数の設定)", "仕様書 7.2.2")) frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
                     }
                     // 取り込みの設定は、受信の確認を待つ間に済ませておく (取り込みを始めるのは受信を確認してから。TS は出ない)
-                    prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall), tuning.Satellite);
-                    // 地上波は復調のロックの印だけで取り込みを始める。TMCC が確定するまでの TEI 付きのパケットは、読み取り側が捨てる (Dt295NativeStream.Settled)
-                    var locked = tuning.Satellite ? frontend.WaitSatelliteLock(LockWait, tsid) : frontend.WaitTerrestrialLock(LockWait, layers: 0);
+                    prepared = Dt295NativeStream.Prepare(device, _name, () => Task.Run(Stall));
+                    // 取り込みを始めるのは、7.2.4 の確認が済んでから (TMCC が確定する前の TS には transport_error_indicator が付く)
+                    var locked = tuning.Satellite ? frontend.WaitSatelliteLock(LockWait, tsid) : frontend.WaitTerrestrialLock(LockWait);
                     if (!locked) throw new IOException(ITuneDevice.SyncFailed);
                 }
                 prepared.Begin();

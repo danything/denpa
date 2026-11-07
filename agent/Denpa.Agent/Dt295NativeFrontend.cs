@@ -551,16 +551,6 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     }
 
     /// <summary>
-    /// 地上波の TMCC が確定したか (0x80 の bit5 が落ち、ロックの印 0x80 の bit4 が立っている)。1 回の読みで、書かない。
-    /// ロックの印が立ってから約 400 ms は bit5 が立ったままで、その間は TS に transport_error_indicator が付く (--demod-trace と実機の観測)
-    /// </summary>
-    public bool TmccSettled()
-    {
-        var status = DemodRead(Terrestrial, 0x80, 2);
-        return (status[0] & 0x20) == 0 && (status[1] & 0x10) != 0;
-    }
-
-    /// <summary>
     /// 受信の状態と、復調の C/N の生の値。**dB には直していない。**
     /// 仕様書に C/N のレジスタは無い。復調は TC90522 系と推定されている (仕様書 11.1) ので、その系統で C/N を持つレジスタを読む
     /// (地上波は 0x8B から 3 バイト、衛星は 0xBC から 2 バイト。実機で確かめるまで、候補)。値の向き (大きいほど良いか悪いか) も未確認で、
