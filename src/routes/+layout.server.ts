@@ -1,3 +1,4 @@
+import { getExpiringContractNotices } from "#lib/server/contracts.js";
 import { updateAvailable } from "#lib/server/update.js";
 
 /**
@@ -12,5 +13,9 @@ import { updateAvailable } from "#lib/server/update.js";
  * `update` は新しいバージョンが出ているか (`server/update.ts`)。ヘッダーに出す
  */
 export function load({ locals }) {
-  return { user: locals.user ?? null, update: updateAvailable() };
+  return {
+    user: locals.user ?? null,
+    update: updateAvailable(),
+    contractNotices: getExpiringContractNotices(),
+  };
 }

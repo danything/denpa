@@ -17,6 +17,7 @@
 
   import type { ChannelNotice as NoticeKind } from "#lib/channel-notice.js";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
+  import ContractWarningModal from "#lib/components/ContractWarningModal.svelte";
   import GuidePending, {
     guideNavigation,
   } from "#lib/components/GuidePending.svelte";
@@ -554,6 +555,10 @@
     <div class="search-bar">
       <SearchField value={query} testid="search" live />
     </div>
+  {/if}
+
+  {#if data.contractNotices && data.contractNotices.length > 0}
+    <ContractWarningModal notices={data.contractNotices} />
   {/if}
 
   <!--

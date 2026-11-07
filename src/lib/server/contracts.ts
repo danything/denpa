@@ -46,13 +46,21 @@ export const CONTRACT_PROVIDERS: Record<
 };
 
 /**
+ * サービス ID (内部ID: networkId * 100000 + serviceId) から ARIB サービス番号を抽出する
+ */
+function getAribServiceId(internalId: number): number {
+  return internalId % 100000;
+}
+
+/**
  * サービス ID や種別から契約管理事業者 (WOWOW / ジャパネット / スカパー！ 等) を判別する。
  */
 export function getContractProvider(
-  serviceId: number,
+  internalId: number,
   type?: string,
   name?: string,
 ): ContractProviderInfo {
+  const serviceId = getAribServiceId(internalId);
   if (
     serviceId === 191 ||
     serviceId === 192 ||
@@ -67,6 +75,7 @@ export function getContractProvider(
   ) {
     return CONTRACT_PROVIDERS.japanet;
   }
+  // BSの有料局は 234 以降。CSはすべてスカパー。
   if (type === "CS" || (type === "BS" && serviceId >= 234)) {
     return CONTRACT_PROVIDERS.skyperfect;
   }
@@ -78,15 +87,44 @@ export interface ContractSettings {
   skyperfectSync: boolean;
   /** 契約期限・予告の案内表示モード */
   modalMode: "modal" | "banner" | "none";
+  /** 契約意志のある局 (内部サービスID の配列)。null なら全有料局を対象とする */
+  intendedServiceIds: number[] | null;
+  /** 深夜などの定期復号スキャンを有効にするか */
+  periodicScanEnabled: boolean;
+  /** 定期スキャン開始時刻 (HH:MM、例: "03:00") */
+  periodicScanStart: string;
+  /** 定期スキャン終了時刻 (HH:MM、例: "06:00") */
+  periodicScanEnd: string;
 }
 
 export function getContractSettings(): ContractSettings {
   const syncRaw = stored("contract_skyperfect_sync");
   const modalRaw = stored("contract_modal_mode");
+  const intendedRaw = stored("contract_intended_services");
+  const periodicRaw = stored("contract_periodic_scan_enabled");
+  const scanStart = stored("contract_periodic_scan_start") || "03:00";
+  const scanEnd = stored("contract_periodic_scan_end") || "06:00";
+
+  let intendedServiceIds: number[] | null = null;
+  if (intendedRaw) {
+    try {
+      const parsed = JSON.parse(intendedRaw);
+      if (Array.isArray(parsed)) {
+        intendedServiceIds = parsed.map(Number);
+      }
+    } catch {
+      intendedServiceIds = null;
+    }
+  }
+
   return {
     skyperfectSync: syncRaw === "1" || syncRaw === "true",
     modalMode:
       modalRaw === "banner" || modalRaw === "none" ? modalRaw : "modal",
+    intendedServiceIds,
+    periodicScanEnabled: periodicRaw === "1" || periodicRaw === "true",
+    periodicScanStart: scanStart,
+    periodicScanEnd: scanEnd,
   };
 }
 
@@ -98,6 +136,26 @@ export function saveContractSettings(
   }
   if (patch.modalMode !== undefined) {
     store("contract_modal_mode", patch.modalMode);
+  }
+  if (patch.intendedServiceIds !== undefined) {
+    store(
+      "contract_intended_services",
+      patch.intendedServiceIds === null
+        ? ""
+        : JSON.stringify(patch.intendedServiceIds),
+    );
+  }
+  if (patch.periodicScanEnabled !== undefined) {
+    store(
+      "contract_periodic_scan_enabled",
+      patch.periodicScanEnabled ? "1" : "0",
+    );
+  }
+  if (patch.periodicScanStart !== undefined) {
+    store("contract_periodic_scan_start", patch.periodicScanStart);
+  }
+  if (patch.periodicScanEnd !== undefined) {
+    store("contract_periodic_scan_end", patch.periodicScanEnd);
   }
   return getContractSettings();
 }
@@ -135,6 +193,8 @@ export interface ContractRow {
   /** 契約管理事業者 */
   providerId: ContractProviderId;
   providerName: string;
+  /** 契約意志の対象局か (ユーザーが監視・録画対象に選択しているか) */
+  isIntended: boolean;
 }
 
 export interface EvaluationInput {
@@ -475,6 +535,10 @@ export function getContractRows(cardId: string): ContractRow[] {
       row.type,
       row.serviceName,
     );
+    const isIntended =
+      contractSettings.intendedServiceIds === null
+        ? true
+        : contractSettings.intendedServiceIds.includes(row.serviceId);
     return {
       ...row,
       availableMethods: ContractChecker.getAvailableMethods(
@@ -482,6 +546,7 @@ export function getContractRows(cardId: string): ContractRow[] {
       ),
       providerId: provider.id,
       providerName: provider.name,
+      isIntended,
     };
   });
 
@@ -782,6 +847,14 @@ export function getContractWarning(
   isFree = false,
 ): ContractWarning {
   if (isFree) return null;
+  const settings = getContractSettings();
+  // 契約意志リストが設定されており、対象外となっている有料局は警告を出さない
+  if (
+    settings.intendedServiceIds !== null &&
+    !settings.intendedServiceIds.includes(serviceId)
+  ) {
+    return null;
+  }
   if (paidAllowed()(serviceId)) return null;
   const states = orm()
     .select({ state: cardContracts.state })
@@ -791,6 +864,92 @@ export function getContractWarning(
     .map((row) => row.state);
   if (states.length === 0 || states.includes("subscribed")) return null;
   return states.includes("expired") ? "expired" : "unsubscribed";
+}
+
+export interface ContractNotice {
+  providerId: ContractProviderId;
+  providerName: string;
+  mode: "modal" | "banner";
+  channels: {
+    serviceId: number;
+    name: string;
+    validUntil: number;
+  }[];
+}
+
+/**
+ * 1 週間以内に契約期限が切れる局を事業者ごとにまとめた案内情報を取得する。
+ * contract_modal_mode が "none" の場合は空配列を返す。
+ */
+export function getExpiringContractNotices(now = Date.now()): ContractNotice[] {
+  const settings = getContractSettings();
+  if (settings.modalMode === "none") return [];
+
+  const oneWeekLater = now + 7 * 86_400_000;
+  const rows = orm()
+    .select({
+      serviceId: cardContracts.service_id,
+      name: services.name,
+      type: services.type,
+      validUntil: cardContracts.valid_until,
+      state: cardContracts.state,
+    })
+    .from(cardContracts)
+    .innerJoin(services, eq(services.id, cardContracts.service_id))
+    .where(
+      and(
+        sql`${cardContracts.valid_until} IS NOT NULL`,
+        gt(cardContracts.valid_until, now),
+        lte(cardContracts.valid_until, oneWeekLater),
+      ),
+    )
+    .all();
+
+  // 契約意志リストがある場合、対象外の局は除外
+  const intendedSet =
+    settings.intendedServiceIds !== null
+      ? new Set(settings.intendedServiceIds)
+      : null;
+
+  const providerMap = new Map<
+    ContractProviderId,
+    {
+      providerName: string;
+      channels: { serviceId: number; name: string; validUntil: number }[];
+    }
+  >();
+
+  for (const row of rows) {
+    if (intendedSet && !intendedSet.has(row.serviceId)) continue;
+    if (row.validUntil === null) continue;
+
+    const provider = getContractProvider(row.serviceId, row.type, row.name);
+    let entry = providerMap.get(provider.id);
+    if (!entry) {
+      entry = { providerName: provider.name, channels: [] };
+      providerMap.set(provider.id, entry);
+    }
+    if (!entry.channels.some((c) => c.serviceId === row.serviceId)) {
+      entry.channels.push({
+        serviceId: row.serviceId,
+        name: row.name,
+        validUntil: row.validUntil,
+      });
+    }
+  }
+
+  const notices: ContractNotice[] = [];
+  for (const [providerId, data] of providerMap.entries()) {
+    if (data.channels.length > 0) {
+      notices.push({
+        providerId,
+        providerName: data.providerName,
+        mode: settings.modalMode,
+        channels: data.channels,
+      });
+    }
+  }
+  return notices;
 }
 
 /** まとめて復号テストした 1 局ぶんの結果 */
@@ -1042,34 +1201,19 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
     }
   }
 
-  // WOWOW 3 局の連動 (同一直契約)
-  if (wowowSubscribed) {
-    for (const wid of [191, 192, 193]) {
-      const isManualUnsub = orm()
-        .select({ id: cardContracts.service_id })
-        .from(cardContracts)
-        .where(
-          and(
-            eq(cardContracts.service_id, wid),
-            eq(cardContracts.manual_state, "unsubscribed"),
-          ),
-        )
-        .get();
-      if (!isManualUnsub) {
-        subscribed.add(wid);
-      }
-    }
-  }
-
-  // スカパー！の一括同期がオンの場合
-  if (contractSettings.skyperfectSync && skyperfectSubscribed) {
-    const allServices = orm()
+  // WOWOW 連動 または スカパー！一括同期
+  if (
+    wowowSubscribed ||
+    (contractSettings.skyperfectSync && skyperfectSubscribed)
+  ) {
+    const candidateServices = orm()
       .select({
-        serviceId: services.service_id,
+        id: services.id,
         type: services.type,
         name: services.name,
       })
       .from(services)
+      .where(inArray(services.type, ["BS", "CS"]))
       .all();
 
     const manualUnsubscribed = new Set(
@@ -1081,12 +1225,32 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
         .map((r) => r.serviceId),
     );
 
-    for (const s of allServices) {
-      if (manualUnsubscribed.has(s.serviceId)) continue;
-      if (
-        getContractProvider(s.serviceId, s.type, s.name).id === "skyperfect"
-      ) {
-        subscribed.add(s.serviceId);
+    if (wowowSubscribed) {
+      for (const s of candidateServices) {
+        if (manualUnsubscribed.has(s.id)) continue;
+        if (getContractProvider(s.id, s.type, s.name).id === "wowow") {
+          subscribed.add(s.id);
+        }
+      }
+    }
+
+    if (contractSettings.skyperfectSync && skyperfectSubscribed) {
+      for (const s of candidateServices) {
+        if (manualUnsubscribed.has(s.id)) continue;
+        if (getContractProvider(s.id, s.type, s.name).id === "skyperfect") {
+          subscribed.add(s.id);
+        }
+      }
+    }
+  }
+
+  // 契約意志リスト (intendedServiceIds) が明示されている場合、
+  // 契約意志のない局は録画許可の対象外にする
+  if (contractSettings.intendedServiceIds !== null) {
+    const intendedSet = new Set(contractSettings.intendedServiceIds);
+    for (const sid of Array.from(subscribed)) {
+      if (!intendedSet.has(sid)) {
+        subscribed.delete(sid);
       }
     }
   }

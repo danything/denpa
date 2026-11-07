@@ -34,20 +34,26 @@
   let settings = $state<ContractSettings>({
     skyperfectSync: false,
     modalMode: "modal",
+    intendedServiceIds: null,
+    periodicScanEnabled: false,
+    periodicScanStart: "03:00",
+    periodicScanEnd: "06:00",
   });
   let checking = $state(false);
   let receivingEmm = $state(false);
   let testingAll = $state(false);
+  let savingSettings = $state(false);
   let testingServiceId = $state<number | null>(null);
   let settingServiceId = $state<number | null>(null);
   let errorMessage = $state<string | null>(null);
   let infoMessage = $state<string | null>(null);
 
-  /** 契約確認・復号テスト・EMM受信・手動設定の実行中フラグ (多重実行・同時実行の防止) */
+  /** 契約確認・復号テスト・EMM受信・手動設定・設定保存の実行中フラグ (多重実行・同時実行の防止) */
   const isBusy = $derived(
     checking ||
       receivingEmm ||
       testingAll ||
+      savingSettings ||
       testingServiceId !== null ||
       settingServiceId !== null,
   );
@@ -269,11 +275,17 @@
 
   async function handleSaveSettings(patch: Partial<ContractSettings>) {
     if (isBusy) return;
+    savingSettings = true;
     errorMessage = null;
+    infoMessage = null;
     try {
       const form = new FormData();
       Object.entries(patch).forEach(([key, value]) => {
-        form.append(key, String(value));
+        if (key === "intendedServiceIds") {
+          form.append(key, value === null ? "all" : JSON.stringify(value));
+        } else {
+          form.append(key, String(value));
+        }
       });
       const res = await fetch("?/saveContractSettings", {
         method: "POST",
@@ -306,7 +318,41 @@
       }
     } catch (err) {
       errorMessage = String(err);
+    } finally {
+      savingSettings = false;
     }
+  }
+
+  /** 契約意志 (対象チェックボックス) の切り替え */
+  async function handleToggleIntended(serviceId: number, checked: boolean) {
+    // 現在の intendedServiceIds が null の場合、全有料局が対象となっている
+    const current =
+      settings.intendedServiceIds !== null
+        ? settings.intendedServiceIds
+        : contracts.map((c) => c.serviceId);
+
+    const next = checked
+      ? Array.from(new Set([...current, serviceId]))
+      : current.filter((id) => id !== serviceId);
+
+    await handleSaveSettings({ intendedServiceIds: next });
+  }
+
+  /** 契約中と判定されている局をすべて契約対象に一括選択 */
+  async function handleSelectSubscribed() {
+    const subscribed = contracts
+      .filter((c) => c.state === "subscribed")
+      .map((c) => c.serviceId);
+    await handleSaveSettings({ intendedServiceIds: subscribed });
+    infoMessage = `契約中と判定された ${subscribed.length} 局を契約対象に選択しました。`;
+  }
+
+  /** 全有料局を対象にするか全解除するか */
+  async function handleSelectAllIntended(all: boolean) {
+    await handleSaveSettings({ intendedServiceIds: all ? null : [] });
+    infoMessage = all
+      ? "すべての有料局を契約対象に選択しました。"
+      : "すべての局の契約対象チェックを解除しました。";
   }
 
   async function handleSetManualContract(serviceId: number, value: string) {
@@ -396,69 +442,146 @@
     {/if}
 
     <div class="contract-settings">
-      <label class="setting-item">
-        <input
-          type="checkbox"
-          checked={settings.skyperfectSync}
-          disabled={isBusy}
-          onchange={(e) =>
-            handleSaveSettings({ skyperfectSync: e.currentTarget.checked })}
-          data-testid="checkbox-skyperfect-sync"
-        />
-        <span>スカパー！の期限・契約情報を全局で同期する</span>
-      </label>
-      <label class="setting-item">
-        <span class="setting-label">契約期限・更新案内:</span>
-        <select
-          class="small"
-          value={settings.modalMode}
-          disabled={isBusy}
-          onchange={(e) =>
-            handleSaveSettings({
-              modalMode: e.currentTarget.value as "modal" | "banner" | "none",
-            })}
-          data-testid="select-modal-mode"
-        >
-          <option value="modal">モーダルで通知</option>
-          <option value="banner">控えめに通知 (バナーのみ)</option>
-          <option value="none">通知しない</option>
-        </select>
-      </label>
+      <div class="setting-row">
+        <label class="setting-item">
+          <input
+            type="checkbox"
+            checked={settings.skyperfectSync}
+            disabled={isBusy}
+            onchange={(e) =>
+              handleSaveSettings({ skyperfectSync: e.currentTarget.checked })}
+            data-testid="checkbox-skyperfect-sync"
+          />
+          <span>スカパー！の期限・契約情報を全局で同期する</span>
+        </label>
+        <label class="setting-item">
+          <span class="setting-label">契約期限・更新案内:</span>
+          <select
+            class="small"
+            value={settings.modalMode}
+            disabled={isBusy}
+            onchange={(e) =>
+              handleSaveSettings({
+                modalMode: e.currentTarget.value as "modal" | "banner" | "none",
+              })}
+            data-testid="select-modal-mode"
+          >
+            <option value="modal">モーダルで通知</option>
+            <option value="banner">控えめに通知 (バナーのみ)</option>
+            <option value="none">通知しない</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <label class="setting-item">
+          <input
+            type="checkbox"
+            checked={settings.periodicScanEnabled}
+            disabled={isBusy}
+            onchange={(e) =>
+              handleSaveSettings({
+                periodicScanEnabled: e.currentTarget.checked,
+              })}
+            data-testid="checkbox-periodic-scan"
+          />
+          <span>深夜の空き時間に自動復号確認 (定期スキャン)</span>
+        </label>
+        {#if settings.periodicScanEnabled}
+          <div class="time-range-picker">
+            <span class="setting-label">時間帯:</span>
+            <input
+              type="time"
+              class="small time-input"
+              value={settings.periodicScanStart}
+              disabled={isBusy}
+              onchange={(e) =>
+                handleSaveSettings({
+                  periodicScanStart: e.currentTarget.value,
+                })}
+              data-testid="input-scan-start"
+            />
+            <span>〜</span>
+            <input
+              type="time"
+              class="small time-input"
+              value={settings.periodicScanEnd}
+              disabled={isBusy}
+              onchange={(e) =>
+                handleSaveSettings({ periodicScanEnd: e.currentTarget.value })}
+              data-testid="input-scan-end"
+            />
+          </div>
+        {/if}
+      </div>
     </div>
 
     <div class="toolbar">
-      <button
-        type="button"
-        class="secondary small"
-        disabled={isBusy}
-        onclick={handleCheckContracts}
-        data-testid="btn-check-contracts"
-      >
-        <RefreshCw class={checking ? "spin" : ""} aria-hidden="true" />
-        {checking ? "確認中…" : "契約情報を再確認"}
-      </button>
+      <div class="toolbar-group">
+        <button
+          type="button"
+          class="secondary small"
+          disabled={isBusy}
+          onclick={handleSelectSubscribed}
+          data-testid="btn-select-subscribed"
+          title="いま契約中と判定されている局をすべて契約対象にチェックします"
+        >
+          契約中の局を一括選択
+        </button>
+        <button
+          type="button"
+          class="ghost small"
+          disabled={isBusy}
+          onclick={() => handleSelectAllIntended(true)}
+          title="すべての有料局を契約対象にします"
+        >
+          全選択
+        </button>
+        <button
+          type="button"
+          class="ghost small"
+          disabled={isBusy}
+          onclick={() => handleSelectAllIntended(false)}
+          title="すべての局の契約対象チェックを外します"
+        >
+          全解除
+        </button>
+      </div>
 
-      <button
-        type="button"
-        class="secondary small"
-        disabled={isBusy}
-        onclick={handleReceiveEmm}
-        data-testid="btn-receive-emm"
-      >
-        <ShieldCheck class={receivingEmm ? "spin" : ""} aria-hidden="true" />
-        {receivingEmm ? "EMM受信中 (約20秒)…" : "カード更新 (EMM受信)"}
-      </button>
+      <div class="toolbar-group">
+        <button
+          type="button"
+          class="secondary small"
+          disabled={isBusy}
+          onclick={handleCheckContracts}
+          data-testid="btn-check-contracts"
+        >
+          <RefreshCw class={checking ? "spin" : ""} aria-hidden="true" />
+          {checking ? "確認中…" : "契約情報を再確認"}
+        </button>
 
-      <button
-        type="button"
-        class="secondary small"
-        disabled={isBusy}
-        onclick={handleTestDecodeAll}
-        data-testid="btn-test-decode-all"
-      >
-        <ShieldCheck class={testingAll ? "spin" : ""} aria-hidden="true" />
-        {testingAll ? "まとめて検証中…" : "未確認をまとめて復号テスト"}
-      </button>
+        <button
+          type="button"
+          class="secondary small"
+          disabled={isBusy}
+          onclick={handleReceiveEmm}
+          data-testid="btn-receive-emm"
+        >
+          <ShieldCheck class={receivingEmm ? "spin" : ""} aria-hidden="true" />
+          {receivingEmm ? "EMM受信中 (約20秒)…" : "カード更新 (EMM受信)"}
+        </button>
+
+        <button
+          type="button"
+          class="secondary small"
+          disabled={isBusy}
+          onclick={handleTestDecodeAll}
+          data-testid="btn-test-decode-all"
+        >
+          <ShieldCheck class={testingAll ? "spin" : ""} aria-hidden="true" />
+          {testingAll ? "まとめて検証中…" : "未確認をまとめて復号テスト"}
+        </button>
+      </div>
     </div>
 
     {#if contracts.length === 0}
@@ -467,23 +590,40 @@
       </p>
     {:else}
       <div class="table-wrap">
-        {#each groupedContracts as group (group.providerId)}
-          <h3 class="provider-header">{group.providerName}</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>局名</th>
-                <th>種別</th>
-                <th>対応方式</th>
-                <th>契約状態</th>
-                <th>有効期限</th>
-                <th>手動設定</th>
-                <th>復号テスト</th>
+        <table>
+          <thead>
+            <tr>
+              <th class="intended-col">対象</th>
+              <th>局名</th>
+              <th>種別</th>
+              <th>対応方式</th>
+              <th>契約状態</th>
+              <th>有効期限</th>
+              <th>手動設定</th>
+              <th>復号テスト</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each groupedContracts as group (group.providerId)}
+              <tr class="provider-header-row">
+                <th colspan="8">{group.providerName}</th>
               </tr>
-            </thead>
-            <tbody>
               {#each group.rows as row (row.serviceId)}
-                <tr>
+                <tr class:not-intended={!row.isIntended}>
+                  <td class="intended-cell">
+                    <input
+                      type="checkbox"
+                      checked={row.isIntended}
+                      disabled={isBusy}
+                      onchange={(e) =>
+                        handleToggleIntended(
+                          row.serviceId,
+                          e.currentTarget.checked,
+                        )}
+                      title="この局を監視・自動録画の対象にする"
+                      data-testid="checkbox-intended-{row.serviceId}"
+                    />
+                  </td>
                   <td class="name-cell">
                     <strong>{row.serviceName}</strong>
                   </td>
@@ -577,9 +717,9 @@
                   </td>
                 </tr>
               {/each}
-            </tbody>
-          </table>
-        {/each}
+            {/each}
+          </tbody>
+        </table>
       </div>
     {/if}
   </article>
@@ -698,15 +838,21 @@
 
   .contract-settings {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem 1.25rem;
+    flex-direction: column;
+    gap: 0.65rem;
     padding: 0.75rem 1rem;
     margin-bottom: 0.75rem;
     background: var(--dp-pop, rgba(255, 255, 255, 0.05));
     border-radius: 6px;
     font-size: 0.85rem;
+  }
+
+  .setting-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.25rem;
   }
 
   .setting-item {
@@ -717,19 +863,64 @@
     user-select: none;
   }
 
+  .time-range-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .time-input {
+    width: auto;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.8rem;
+    font-family: inherit;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .toolbar-group {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .intended-col {
+    width: 3.5rem;
+    text-align: center;
+  }
+
+  .intended-cell {
+    text-align: center;
+  }
+
+  tr.not-intended td {
+    opacity: 0.55;
+  }
+
+  tr.not-intended .intended-cell {
+    opacity: 1;
+  }
+
   .setting-label {
     color: var(--dp-muted, #888);
   }
 
-  .provider-header {
-    margin-top: 1.25rem;
-    margin-bottom: 0.5rem;
-    font-size: 0.95rem;
+  .provider-header-row th {
+    padding: 0.6rem 0.75rem;
+    background: var(--dp-pop, rgba(255, 255, 255, 0.05));
+    font-size: 0.85rem;
     font-weight: 600;
-  }
-
-  .provider-header:first-of-type {
-    margin-top: 0.25rem;
+    color: var(--dp-text, #eee);
+    text-align: left;
+    border-bottom: 1px solid var(--dp-border, #333);
   }
 
   .empty {

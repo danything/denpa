@@ -31,6 +31,7 @@ const {
   getContractRows,
   getContractSettings,
   getContractWarning,
+  getExpiringContractNotices,
   saveContractSettings,
   CONTRACT_PROVIDERS,
   DECODE_VALID_MS,
@@ -1617,6 +1618,251 @@ describe("ContractChecker と手動設定 (Phase C/D)", () => {
       } finally {
         server.stop();
       }
+    });
+
+    test("実環境内部ID (networkId * 100000 + serviceId) での事業者判定・同期・paidAllowed", () => {
+      // 1. NHK BS (400101) がスカパーと誤判定されないこと
+      expect(getContractProvider(400101, "BS", "NHK BS").id).toBe("other");
+      expect(getContractProvider(400141, "BS", "BS日テレ").id).toBe("other");
+      // BS有料スカパー局 (J SPORTS 1: 400242)
+      expect(getContractProvider(400242, "BS", "J SPORTS 1").id).toBe(
+        "skyperfect",
+      );
+      // WOWOW (400191)
+      expect(getContractProvider(400191, "BS", "WOWOWプライム").id).toBe(
+        "wowow",
+      );
+
+      // 2. 実環境内部IDでの WOWOW / スカパー同期
+      const now = Date.now();
+      // WOWOW 局
+      orm()
+        .insert(services)
+        .values({
+          id: 400191,
+          service_id: 191,
+          network_id: 4,
+          name: "WOWOWプライム",
+          type: "BS",
+          channel: "BS03",
+          updated_at: now,
+        })
+        .run();
+      orm()
+        .insert(services)
+        .values({
+          id: 400192,
+          service_id: 192,
+          network_id: 4,
+          name: "WOWOWライブ",
+          type: "BS",
+          channel: "BS03",
+          updated_at: now,
+        })
+        .run();
+
+      // スカパー CS 局
+      orm()
+        .insert(services)
+        .values({
+          id: 700800,
+          service_id: 800,
+          network_id: 7,
+          name: "スカチャン1",
+          type: "CS",
+          channel: "CS02",
+          updated_at: now,
+        })
+        .run();
+      orm()
+        .insert(services)
+        .values({
+          id: 700601,
+          service_id: 601,
+          network_id: 7,
+          name: "J SPORTS 1",
+          type: "CS",
+          channel: "CS04",
+          updated_at: now,
+        })
+        .run();
+
+      // NHK BS (無料局)
+      orm()
+        .insert(services)
+        .values({
+          id: 400101,
+          service_id: 101,
+          network_id: 4,
+          name: "NHK BS",
+          type: "BS",
+          channel: "BS01",
+          updated_at: now,
+        })
+        .run();
+
+      // 400191 と 700800 は契約中
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 400191,
+          state: "subscribed",
+          source: "eit_ca",
+          code: 0x0800,
+          valid_until: 40000,
+          checked_at: now,
+        })
+        .run();
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 700800,
+          state: "subscribed",
+          source: "eit_ca",
+          code: 0x0800,
+          valid_until: 40000,
+          checked_at: now,
+        })
+        .run();
+
+      // スカパー同期オン
+      saveContractSettings({ skyperfectSync: true });
+
+      // getContractRows での同期確認
+      const rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));
+      expect(rows.get(400191)?.providerId).toBe("wowow");
+      expect(rows.get(700800)?.providerId).toBe("skyperfect");
+
+      // paidAllowed の動作確認
+      const allowed = paidAllowed(now);
+      // WOWOWプライム・ライブ両方許可
+      expect(allowed(400191)).toBe(true);
+      expect(allowed(400192)).toBe(true);
+      // スカパー スカチャン1・J SPORTS 1 両方許可
+      expect(allowed(700800)).toBe(true);
+      expect(allowed(700601)).toBe(true);
+      // NHK BS はそもそも無料局なので paidAllowed は false (契約判定の対象外)
+      expect(allowed(400101)).toBe(false);
+    });
+
+    test("契約意志チャンネル (intendedServiceIds) の保存・paidAllowed・getContractWarning への反映", () => {
+      const now = Date.now();
+      // 局を登録
+      orm()
+        .insert(services)
+        .values({
+          id: 400191,
+          service_id: 191,
+          network_id: 4,
+          name: "WOWOWプライム",
+          type: "BS",
+          channel: "BS03",
+          updated_at: now,
+        })
+        .run();
+      orm()
+        .insert(services)
+        .values({
+          id: 400192,
+          service_id: 192,
+          network_id: 4,
+          name: "WOWOWライブ",
+          type: "BS",
+          channel: "BS03",
+          updated_at: now,
+        })
+        .run();
+
+      // 400191 は契約中
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 400191,
+          state: "subscribed",
+          source: "eit_ca",
+          code: 0x0800,
+          valid_until: 40000,
+          checked_at: now,
+        })
+        .run();
+      // 400192 は未確認
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 400192,
+          state: "unknown",
+          checked_at: now,
+        })
+        .run();
+
+      // 400191 (WOWOWプライム) のみ契約意志ありに設定
+      saveContractSettings({ intendedServiceIds: [400191] });
+      const settings = getContractSettings();
+      expect(settings.intendedServiceIds).toEqual([400191]);
+
+      const allowed = paidAllowed(now);
+      // 契約意志のある 400191 は許可
+      expect(allowed(400191)).toBe(true);
+      // 同一グループでも契約意志のない 400192 は除外される
+      expect(allowed(400192)).toBe(false);
+
+      // getContractWarning: 契約意志のない局は警告対象外 (null)
+      expect(getContractWarning(400192, false)).toBe(null);
+
+      // 全有料局対象 (null) に復元
+      saveContractSettings({ intendedServiceIds: null });
+      expect(getContractSettings().intendedServiceIds).toBe(null);
+    });
+
+    test("getExpiringContractNotices: 1週間以内期限の事業者別通知生成", () => {
+      const now = Date.now();
+      const fiveDaysLater = now + 5 * 86_400_000;
+
+      // 局を登録
+      orm()
+        .insert(services)
+        .values({
+          id: 400191,
+          service_id: 191,
+          network_id: 4,
+          name: "WOWOWプライム",
+          type: "BS",
+          channel: "BS03",
+          updated_at: now,
+        })
+        .run();
+
+      // 400191 の有効期限を5日後に設定
+      orm()
+        .insert(cardContracts)
+        .values({
+          card_id: card,
+          service_id: 400191,
+          state: "subscribed",
+          source: "eit_ca",
+          code: 0x0800,
+          valid_until: fiveDaysLater,
+          checked_at: now,
+        })
+        .run();
+
+      saveContractSettings({ modalMode: "modal", intendedServiceIds: null });
+      const notices = getExpiringContractNotices(now);
+      expect(notices.length).toBeGreaterThan(0);
+      const wowowNotice = notices.find((n) => n.providerId === "wowow");
+      expect(wowowNotice).toBeDefined();
+      expect(wowowNotice?.providerName).toBe("WOWOW");
+      expect(wowowNotice?.channels.some((c) => c.serviceId === 400191)).toBe(
+        true,
+      );
+
+      // modalMode が none のときは空配列
+      saveContractSettings({ modalMode: "none" });
+      expect(getExpiringContractNotices(now)).toEqual([]);
     });
   });
 });

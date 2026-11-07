@@ -289,15 +289,52 @@ export const actions = {
         patch.modalMode = mode;
       }
     }
+    if (form.has("intendedServiceIds")) {
+      const val = form.get("intendedServiceIds");
+      if (typeof val === "string") {
+        if (val === "" || val === "all") {
+          patch.intendedServiceIds = null;
+        } else {
+          try {
+            patch.intendedServiceIds = JSON.parse(val);
+          } catch {
+            patch.intendedServiceIds = val
+              .split(",")
+              .map((s) => Number(s.trim()))
+              .filter((n) => !Number.isNaN(n));
+          }
+        }
+      }
+    }
+    if (form.has("periodicScanEnabled")) {
+      patch.periodicScanEnabled = form.get("periodicScanEnabled") === "true";
+    }
+    if (form.has("periodicScanStart")) {
+      const start = form.get("periodicScanStart");
+      if (typeof start === "string" && start) patch.periodicScanStart = start;
+    }
+    if (form.has("periodicScanEnd")) {
+      const end = form.get("periodicScanEnd");
+      if (typeof end === "string" && end) patch.periodicScanEnd = end;
+    }
     try {
       const updated = saveContractSettings(patch);
-      const card = await cardStatus();
-      const id = getActiveCardId(card);
-      return {
-        success: true,
-        settings: updated,
-        contracts: id ? getContractRows(id) : [],
-      };
+      try {
+        const card = await cardStatus();
+        const id = getActiveCardId(card);
+        return {
+          success: true,
+          settings: updated,
+          contracts: id ? getContractRows(id) : [],
+        };
+      } catch {
+        // カード確認に失敗しても設定保存は成功とみなす
+        return {
+          success: true,
+          settings: updated,
+          contracts: null, // UI側で無視させる
+        };
+      }
     } catch (error) {
       return fail(500, { message: String(error) });
     }

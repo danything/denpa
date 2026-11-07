@@ -5,6 +5,7 @@ import { SOCKET_PATH } from "#lib/live.js";
 import { listen } from "./agent-events";
 import { warnIfClosed, warnIfProxyHidden } from "./auth";
 import { config } from "./config";
+import { tickPeriodicContractScan } from "./contract-scan";
 import { pruneCodes } from "./device-auth";
 import { checkDisk } from "./disk";
 import { pump, requeueOrphanedJobs } from "./encoder";
@@ -229,6 +230,12 @@ export function start(): void {
    */
   void guard("logo", logoReconcile);
   every(config.logoSweepInterval, "logo", sweep);
+
+  /*
+   * 有料放送の深夜定期スキャン。指定時間帯 (例: 03:00 - 06:00) の空き時間を見計らって
+   * 復号状態を順次巡回確認する (contract-scan.ts)
+   */
+  every(60_000, "contract-scan", tickPeriodicContractScan);
 }
 
 /**
