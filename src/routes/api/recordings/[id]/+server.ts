@@ -3,7 +3,7 @@ import { error, json } from "@sveltejs/kit";
 import { emit } from "#lib/server/events.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
-import { encodedFile } from "#lib/server/playback.js";
+import { encodedFile } from "#lib/server/library.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 
 /**
