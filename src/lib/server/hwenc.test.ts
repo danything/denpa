@@ -629,7 +629,7 @@ describe("Windows の QSV・AMF", () => {
       bps: 2_000_000,
     });
     expect(capped.encoder.join(" ")).toBe(
-      "h264_qsv -preset:v veryfast -b:v 2000000 -maxrate 2000000 -bf 0 -async_depth 1",
+      "h264_qsv -preset:v veryfast -b:v 2000000 -maxrate 4000000 -bf 0 -async_depth 1",
     );
     const amf = liveHwArgs({ way: M, full: false }, "av1");
     expect(amf.encoder.slice(0, 7)).toEqual([

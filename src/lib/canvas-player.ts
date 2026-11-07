@@ -72,7 +72,10 @@ interface CanvasOptions {
    * 端末に保存した録画は Blob を切り出したもの (`mkv-source.ts`)。どちらも Response で返す
    */
   request(from: number, audio: string, signal: AbortSignal): Promise<Response>;
-  /** 尺 (秒)。**ここまで飛んだらリクエストせずに終わりにする** (`<video>` が末尾へ飛ぶと `ended` になるのと同じ) */
+  /**
+   * 尺 (秒)。**ここまで飛んだらリクエストせずに終わりにする** (`<video>` が末尾へ飛ぶと `ended` になるのと同じ)。
+   * 0 は尺が分からないとき。終わりは届いたストリームの終わりで決める
+   */
   duration: number;
   /**
    * 読み込み元の平均の速さ (バイト/秒)。読むのが速すぎる元 (端末に保存した録画の Blob) だけ渡す。
@@ -295,7 +298,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
      * **末尾 (の手前 `END_EDGE`) へ飛んだらリクエストせずに終わり**。最後が CM の録画で CM を飛ばした・シークバーを
      * 右端まで動かした。サーバは末尾の先からは流せない (`<video>` も末尾へ飛ぶと `ended` になる)
      */
-    if (from >= options.duration - END_EDGE) {
+    if (options.duration > 0 && from >= options.duration - END_EDGE) {
       time = options.duration;
       finished();
       return;

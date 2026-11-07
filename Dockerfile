@@ -31,7 +31,7 @@ RUN bun install
 #   https の Chrome・Edge・Firefox だけで、重くて困るはずの iPhone・iPad には効かない
 #   (docs/stream.md「スライスのスレッドを見送った理由」)
 # - **SIMD は付けておく** (`-msimd128`。コンパイラが自動でベクトルにする)。MPEG-2 では測っても差が揺れの中だった
-#   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream.md「組み方を変えて測ったこと」)。今のブラウザはどれも対応している
+#   (FFmpeg の WASM の SIMD は HEVC にしか無い。docs/stream-history.md「WASM のデコーダの組み方を決めたときの測定」)。今のブラウザはどれも対応している
 # - **LTO を掛ける** (`-flto`)。デコードが 2〜8% 速くなり、brotli 後はかえって 2 KB ほど縮む (同じ節)
 # - **ローダーは ES の module にして、ワーカーの中からだけ読む** (`ENVIRONMENT=worker`)。
 #   ファイルの読み書き (`FILESYSTEM`) は使わないので外す — それだけで 40KB ほど縮む

@@ -42,10 +42,12 @@ export function sideOutput(): SideOutput {
   let socket: Socket | null = null;
   let connected = false;
   let done = false;
+  // 読む側がやめた (cancel) ときもソケットを閉じる。開いたままだと、ffmpeg が終わるまで書いたものを受けては捨て続ける
   const finish = () => {
     if (done) return;
     done = true;
     server.close();
+    socket?.destroy();
     try {
       controller?.close();
     } catch {
