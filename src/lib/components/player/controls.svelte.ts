@@ -16,7 +16,7 @@ const LINGER = 2500;
 /** 消す時刻を跨ぐためだけの目覚まし。出ている間しか回さない */
 const TICK = 250;
 
-/** 舞台 (`PlayerStage`) が context に置き、その中のメニュー (`stageMenu`) が読む鍵 */
+/** 舞台 (`PlayerStage`) が context に置き、その中のメニュー (`stageMenu`) が読むキー */
 export const PLAYER_CONTROLS = Symbol("player-controls");
 
 /** 舞台の枠そのもの。**メニューを枠の中に収める**のに使う (`stageMenu`) */

@@ -85,7 +85,7 @@
   {@const href =
     recSource?.kind === "rec"
       ? ctx.ruleFrom("recording", recSource.rec.id)
-      : next.kind === "res" && next.res.program_id !== null
+      : next.kind === "res"
         ? ctx.ruleFrom("program", next.res.program_id)
         : null}
   {#if href !== null}

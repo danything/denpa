@@ -251,7 +251,7 @@ test.describe("検索からルールを作る", () => {
     await page.getByTestId("rule-keyword").fill("");
     await expect(page.getByTestId("rule-submit")).toBeDisabled();
     await expect(page.getByTestId("rule-draft-status")).toContainText(
-      "キーワードか局を入れると",
+      "キーワード・局・ジャンルのどれかを入れると",
     );
   });
 

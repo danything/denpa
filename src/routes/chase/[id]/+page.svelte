@@ -230,6 +230,8 @@
   let want = $state(1);
 
   function setSpeed(value: number): void {
+    // canvas に描く間 (互換モード・MPEG-2) は等速だけ。キーの `<` `>` で覚えた速さを書き換えない (観る画面と同じ)
+    if (player.canvas) return;
     want = value;
     player.setSpeed(value);
     remind(SPEED_KEY, String(value));

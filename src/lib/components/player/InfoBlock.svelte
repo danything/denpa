@@ -24,7 +24,7 @@
     /** 番組名 */
     title?: string | null;
     titleTestid?: string;
-    /** 時間帯の目印 (試験が終わりの時刻を読む) */
+    /** 時間帯の目印 (テストが終わりの時刻を読む) */
     rangeTestid?: string;
     /** 上の段の頭に置く一言 (観る画面の「端末」など。控えた字で、後ろの「・」も渡す側が置く) */
     prefix?: Snippet;

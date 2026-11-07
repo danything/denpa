@@ -629,7 +629,7 @@
   background-image: linear-gradient(var(--pico-primary), var(--pico-primary));
   background-repeat: no-repeat;
   background-position: center bottom 0.2rem;
-  background-size: 1rem 2px;
+  background-size: 1rem var(--dp-mark);
 }
 /* 「⋯」の中。切り替えは右にスイッチ、空きは押せない 1 行 */
 .board .view-menu {
@@ -667,7 +667,6 @@
  * ここは幅と、出すかどうかだけ。この形では操作の 1 行は出さず、一覧はいちばん上から始まる。
  * テーブルトップは 1000px 以上でもスマホの形なので、幅ではなく `<html data-phone>` で分ける (下のタブの上に操作の 1 行を出す)
  */
-/* 右の列の頭 (カレンダーの見出し) は、貼り付いた日付のカプセルの字と高さをそろえる */
 :where(html:not([data-phone])) .board .t-toolbar {
   display: none;
 }

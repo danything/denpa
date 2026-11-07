@@ -273,7 +273,7 @@
                 data-testid="rule-switch"
               />
             </form>
-            <!-- 削除は行の操作 (`app.css` の `.row-actions`。押す的は 40px。docs/design.md) -->
+            <!-- 削除は行の操作 (`app.css` の `.row-actions`。押せる範囲は 40px。docs/design.md) -->
             <div class="row-actions">
               <ArmedDelete
                 {deleting}
