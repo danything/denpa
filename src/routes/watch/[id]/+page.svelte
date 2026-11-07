@@ -770,9 +770,9 @@
     return from;
   }
 
-  /** **黙って途中から始めない。** 続きから始めたと言って、しばらくで引っ込める */
   /** 「続きから」を消す時計。続けて出したら前の時計は止める (先に消さない)。画面を離れたら畳む */
   let continuedTimer: ReturnType<typeof setTimeout> | null = null;
+  /** **黙って途中から始めない。** 続きから始めたと言って、しばらくで引っ込める */
   function showContinued(): void {
     continued = true;
     if (continuedTimer !== null) clearTimeout(continuedTimer);
