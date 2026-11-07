@@ -324,7 +324,79 @@ public sealed class Dt295NativeLink
         uint Word(int at) => BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(at));
         return new NativeReply(Word(4), Word(8), Word(12), Word(16), Word(20), Word(24), Word(28));
     }
+
+    /// <summary>
+    /// 機材の中で I2C の転送を順に行わせる (Dt295NativePrograms の操作 2)。<paramref name="ops"/> は <see cref="Dt295I2cBatch.Encode"/> の形。
+    /// 短ければ (操作列 32 バイト・結果 16 バイトまで) 要求の中に入れて、制御転送は要求と応答の 2 回で済む。
+    /// 長ければ操作列を SDRAM (0x380000) に書き、結果もそこから読む。機材のプログラムが触るのは I2C のブロック (0xFD8FE0〜0xFD8FF0) だけ
+    /// </summary>
+    public I2cReply RunI2c(ReadOnlySpan<byte> ops, int transfers, int readBytes)
+    {
+        var inline = ops.Length <= Dt295NativePrograms.InlineOpBytes && readBytes <= Dt295NativePrograms.InlineResultBytes;
+        if (!inline)
+        {
+            if (ops.Length > Dt295NativePrograms.BatchLimit || readBytes > Dt295NativePrograms.BatchLimit) throw new ArgumentOutOfRangeException(nameof(ops));
+            var padded = new byte[(ops.Length + 3) & ~3];
+            ops.CopyTo(padded);
+            WriteBytes(Dt295NativePrograms.BatchPhysical, padded);
+        }
+        var request = new byte[64];
+        BinaryPrimitives.WriteUInt32BigEndian(request, Dt295NativePrograms.Magic);
+        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(4), 2);
+        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(8), inline ? Dt295NativePrograms.InlineOps : Dt295NativePrograms.BatchCpu);
+        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(12), inline ? Dt295NativePrograms.InlineResults : Dt295NativePrograms.BatchCpu + Dt295NativePrograms.BatchResultOffset);
+        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(16), (uint)transfers);
+        if (inline) ops.CopyTo(request.AsSpan((int)(Dt295NativePrograms.InlineOps - Dt295NativePrograms.Staging)));
+        Controls++;
+        _trace?.Invoke($"I2C の順次実行 転送 {transfers}、操作列 {ops.Length} バイト");
+        try
+        {
+            _usb.ControlOut(RequestOut, Request, Dt295NativePrograms.RequestValue, Dt295NativePrograms.RequestIndex, request, ControlTimeoutMs);
+        }
+        catch (IOException)
+        {
+            Dead = true;
+            throw;
+        }
+        var reply = new byte[64];
+        DirectRead(Dt295NativePrograms.Staging, reply);
+        var code = BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(4));
+        var index = BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(8));
+        var count = (int)BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(12));
+        if (count < 0 || count > Math.Max(readBytes, 0)) throw new Dt295NativeException($"I2C の順次実行が返した読みの数 {count} が想定 ({readBytes}) を超えています");
+        byte[] read = [];
+        if (count > 0)
+        {
+            read = inline
+                ? reply.AsSpan((int)(Dt295NativePrograms.InlineResults - Dt295NativePrograms.Staging), count).ToArray()
+                : ReadBytes(Dt295NativePrograms.BatchPhysical + Dt295NativePrograms.BatchResultOffset, count);
+        }
+        return new I2cReply(code, index, read);
+    }
+
+    /// <summary>
+    /// 機材の中の I2C の順次実行が使えるか。転送 0 個の要求が結果 0 で戻ることと、操作列の置き場 (SDRAM の 0x380000) に書いたものが読めることを確かめる。
+    /// 使えなければ false で、ホストが 1 つずつ行う。書くのは置き場だけ (I2C のレジスタには触れない)
+    /// </summary>
+    public bool ProbeI2cSequencer()
+    {
+        try
+        {
+            var empty = RunI2c([], 0, 0);
+            if (empty.Code != Dt295NativePrograms.I2cOk || empty.Index != 0) return false;
+            byte[] pattern = [0xA5, 0x5A, 0x3C, 0xC3, 0x01, 0x23, 0x45, 0x67];
+            WriteBytes(Dt295NativePrograms.BatchPhysical, pattern);
+            return ReadBytes(Dt295NativePrograms.BatchPhysical, pattern.Length).AsSpan().SequenceEqual(pattern);
+        }
+        catch (Dt295NativeException)
+        {
+            return false;
+        }
+    }
 }
+
+/// <summary>機材の中の I2C の順次実行 (Dt295NativePrograms の操作 2) の応答: 結果・止まった転送の番号・読んだバイト</summary>
+public sealed record I2cReply(uint Code, uint Index, byte[] Read);
 
 /// <summary>自前の body の応答 (Dt295NativePrograms の「応答」)</summary>
 public sealed record NativeReply(uint Result, uint Sent, uint ReadPosition, uint Alignment, uint PacketPosition, uint WritePosition, uint Aligned);

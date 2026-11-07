@@ -153,13 +153,18 @@ internal sealed class Dt295Fake : IUsbDevice
 
     // --- メモリ ---
 
+    /// <summary>CPU から見た SDRAM の 0x80380000 台は、ホストの 0xBC では 0x380000 台 (I2C の順次実行の操作列の置き場)。同じ場所にする</summary>
+    private static uint Alias(uint address) => address is >= 0x80380000 and < 0x80390000 ? address - 0x80000000 : address;
+
     public void Put(uint address, int size, uint value)
     {
+        address = Alias(address);
         for (var i = 0; i < size; i++) Bytes[address + (uint)i] = (byte)(value >> (8 * (size - 1 - i)));
     }
 
     public uint Get(uint address, int size)
     {
+        address = Alias(address);
         uint value = 0;
         for (var i = 0; i < size; i++) value = (value << 8) | Bytes.GetValueOrDefault(address + (uint)i);
         return value;

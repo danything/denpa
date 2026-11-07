@@ -154,6 +154,11 @@ public sealed class Dt295NativeDevice
             using (timeline.Step("I2C の準備", "仕様書 6.4。書いて読み戻す")) i2cSaved = i2c.Prepare();
             undo.Push(("I2C の設定を戻す", () => i2c.Restore(i2cSaved)));
             if (!i2c.Alive) throw new Dt295NativeException("I2C のレジスタが書いた値で読めません");
+            // 機材の中の I2C の順次実行が使えれば使う。使えなければ、ホストが 1 つずつ行う
+            using (timeline.Step("I2C の順次実行の確認", "転送 0 個の要求と、操作列の置き場の読み書き"))
+            {
+                i2c.UseSequencer = link.ProbeI2cSequencer();
+            }
             using (timeline.Step("復調とチューナーの初期化 (INITIALIZE の I2C)", "仕様書 7.1")) frontend.Initialize();
             undo.Push(("地上波側を休ませる", frontend.RestTerrestrial));
             return new Dt295NativeDevice(port, usb, link, board, frontend, undo, (clock.Elapsed, link.Controls), idlePolls, timeline);
