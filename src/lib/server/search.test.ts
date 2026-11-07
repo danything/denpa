@@ -241,7 +241,6 @@ describe("これからの放送", () => {
         name: "テストアニメ",
         start_at: start,
         end_at: start + HOUR,
-        state: "recording",
         ts_path: "/media/raw/1.ts",
         created_at: now(),
         updated_at: now(),
