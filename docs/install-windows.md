@@ -134,7 +134,7 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
   device の名前 (`zd1j:2-3.2` など) は、挿したポートから Linux と同じ形に作ります (1 台だけなら挿し替えても付いていく。[tuners.md](tuners.md#sony-cech-zd1-j))。
   Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#sony-cech-zd1-j))
 - **PIXELA PIX-DT295** (試験的。地上波・BS・CS)。エージェントが WinUSB で USB を直に持ちます。Zadig で `06b8:103b` に WinUSB を当てます。
-  ファームウェアはエージェントに同梱しています。今の方式 (mAgicVISION のファームウェア) は Windows の実機では確かめていません。公式のファームウェアで動いたあとは、機材を挿し直してください
+  機材のレジスタをエージェントが直に書く方式 (ファームウェアは入れません) は、Windows の実機では確かめていません。エージェントが途中で止まったあとなどは、機材を挿し直してください
   ([tuners.md](tuners.md#pixela-pix-dt295-試験的))
 - WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
   **PX-Q3U4 / PX-W3U4 は USB の機材が 2 つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
@@ -199,7 +199,7 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
   画面・字・デコーダが返ることを見る。install.ps1 で本体ごと入れて SYSTEM のタスクで動き、本体がエージェントと組むところまで。
   wslc からの移行は偽の wslc で流す (`tests/install-windows-migrate.ps1`)。通知領域のアイコンは、組んで起こして落ちないこと・二重に起こすとすぐ終わること・
   Run に載ること・上げ直すと動いているものを止めること・外すと消えることまで
-- **Windows の実機で確かめたのは、以前の方式の PIX-DT295 で TS を受けるところまでです。** ほかのチューナーとカードは、CI で
+- **Windows の実機で確かめたことのあるチューナーは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 だけで、いまの方式では確かめていません。** ほかのチューナーとカードは、CI で
   ビルドして起こし、偽の px4d を相手に IPC と TS の受け渡しを流すところまでです
 - **まだ確かめていないこと**: SYSTEM で動くエージェントから WinUSB の機材とカードリーダー (PC/SC) を使えるか、スリープから起こすタスクで
   録画が始まるか、wslc の本体からの移行 (実機の wslc で)、通知領域のアイコンの見た目とメニュー・通知と、そこから UAC を通して更新する流れ。実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`

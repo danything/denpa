@@ -119,8 +119,14 @@ internal sealed class Fr30Machine
             case 0x00:
                 R[ri] = Load(R[13] + R[rj], 4);
                 return next;
+            case 0x02:
+                R[ri] = Load(R[13] + R[rj], 1);
+                return next;
             case 0x10:
                 Store(R[13] + R[rj], 4, R[ri]);
+                return next;
+            case 0x12:
+                Store(R[13] + R[rj], 1, R[ri] & 0xFF);
                 return next;
             case 0x04:
                 R[ri] = Load(R[rj], 4);
@@ -177,6 +183,22 @@ internal sealed class Fr30Machine
                 R[ri] |= R[rj];
                 Flags(R[ri]);
                 return next;
+            case 0xB6:
+            {
+                var count = (int)(R[rj] & 31);
+                C = count != 0 && ((R[ri] >> (32 - count)) & 1) != 0;
+                R[ri] <<= count;
+                Flags(R[ri]);
+                return next;
+            }
+            case 0xB2:
+            {
+                var count = (int)(R[rj] & 31);
+                C = count != 0 && ((R[ri] >> (count - 1)) & 1) != 0;
+                R[ri] >>= count;
+                Flags(R[ri]);
+                return next;
+            }
             case 0xB4 or 0xB5:
             {
                 var count = rj + (top == 0xB5 ? 16 : 0);

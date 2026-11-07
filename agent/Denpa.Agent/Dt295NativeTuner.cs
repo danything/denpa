@@ -1,0 +1,405 @@
+using System.Diagnostics;
+using System.IO.Pipelines;
+
+namespace Denpa.Agent;
+
+/// <summary>
+/// bulk IN から来たバイト列を 188 バイトのパケットにする。機材のプログラムは 188 バイトずつを隙間なく送るので、先頭の 0x47 から切るだけ。
+/// 先頭が 0x47 でなければ 1 バイト捨てる (捨てた数は <see cref="Discarded"/>)
+/// </summary>
+internal sealed class NativeTsFramer
+{
+    private byte[] _store = new byte[8192 * 8];
+    private int _used;
+
+    public long Discarded { get; private set; }
+
+    public void Push(ReadOnlySpan<byte> data, Action<ReadOnlySpan<byte>> sink)
+    {
+        if (_used + data.Length > _store.Length) Array.Resize(ref _store, Math.Max(_store.Length * 2, _used + data.Length));
+        data.CopyTo(_store.AsSpan(_used));
+        _used += data.Length;
+        var at = 0;
+        while (_used - at >= 188)
+        {
+            if (_store[at] != 0x47)
+            {
+                at++;
+                Discarded++;
+                continue;
+            }
+            sink(_store.AsSpan(at, 188));
+            at += 188;
+        }
+        _store.AsSpan(at, _used - at).CopyTo(_store);
+        _used -= at;
+    }
+}
+
+/// <summary>
+/// TS を 1 回流すぶん。取り込みを設定して始め (<see cref="Dt295NativeBoard"/>)、EP 0x81 の読みを出しっぱなしにして 188 バイトのパケットを取り出し、
+/// <see cref="Pipe"/> に詰める。流している間は、別のスレッドで機材のプログラムに要求を送り続ける (1 回の要求で <see cref="KickPackets"/> 個のパケットを bulk IN へ送らせる)。
+/// 要求を送っている間は制御転送が機材の中の処理の終わりまで返らないので、同じ機材のカードの読み書き (UART の FIFO は 32 バイト) を待たせすぎないよう、
+/// 1 回の要求は 32 個 (16 KiB。30 Mbps で約 4 ms、15 Mbps で約 9 ms) にした (仕様書に無い。実機の試験では 512 個で 30 Mbps を欠けなく送れた)
+/// </summary>
+internal sealed class Dt295NativeStream
+{
+    private const byte Endpoint = 0x81;
+
+    /// <summary>1 本の読みの大きさと数 (8 KiB を 64 本)。常駐方式のときに実機で測って決めた値</summary>
+    private const int TransferSize = 8192;
+
+    private const int Depth = 64;
+
+    private const int ReadTimeoutMs = 100;
+
+    /// <summary>1 回の要求で送らせるパケット数 (512 バイトずつ)</summary>
+    internal const uint KickPackets = 32;
+
+    private const int PumpTimeoutMs = 10_000;
+
+    private readonly Pipe _pipe = Px4Stream.NewBuffer();
+    private readonly Dt295NativeDevice _device;
+    private readonly IUsbInStream _in;
+    private readonly Action _stalled;
+    private readonly string _name;
+    private readonly Thread _reader;
+    private readonly Thread _kicker;
+    private readonly ManualResetEventSlim _first = new();
+    private Dt295NativeBoard.CaptureSaved? _capture;
+    private Dt295NativeBoard.EndpointSaved? _endpoint;
+    private bool _capturing;
+    private volatile bool _stopped;
+    private volatile bool _ended;
+    private volatile string? _reason;
+
+    public DeviceStream Output { get; }
+
+    public bool Ended => _ended;
+
+    public string? Reason => _reason;
+
+    /// <summary>最初の TS を詰めた時刻 (Stopwatch)。まだなら 0</summary>
+    public long FirstAt { get; private set; }
+
+    private Dt295NativeStream(Dt295NativeDevice device, IUsbInStream input, string name, Action stalled)
+    {
+        _device = device;
+        _in = input;
+        _name = name;
+        _stalled = stalled;
+        Output = new DeviceStream(_pipe.Reader, () => _reason);
+        _reader = new Thread(Read) { IsBackground = true, Name = $"{name} TS" };
+        _kicker = new Thread(Kick) { IsBackground = true, Name = $"{name} 要求" };
+    }
+
+    /// <summary>取り込みを始めて、読みと要求を動かす。選局とロックの確認が済んでから呼ぶ</summary>
+    public static Dt295NativeStream Start(Dt295NativeDevice device, string name, Action stalled)
+    {
+        var stream = new Dt295NativeStream(device, device.Usb.OpenInStream(Endpoint, TransferSize, Depth), name, stalled);
+        try
+        {
+            stream.BeginCapture();
+        }
+        catch
+        {
+            stream.EndCapture();
+            stream._in.Dispose();
+            stream.Output.Dispose();
+            throw;
+        }
+        stream._reader.Start();
+        stream._kicker.Start();
+        return stream;
+    }
+
+    private void BeginCapture()
+    {
+        var board = _device.Board;
+        _capture = board.ConfigureCapture();
+        _endpoint = board.StartEndpoint();
+        board.StartCapture();
+        _capturing = true;
+    }
+
+    /// <summary>取り込みを止めて、端点と取り込みの設定を戻す。USB の制御が止まっていれば省く</summary>
+    private void EndCapture()
+    {
+        var board = _device.Board;
+        if (_device.Link.Dead) return;
+        try
+        {
+            if (_capturing) board.StopCapture();
+            if (_endpoint is not null) board.StopEndpoint(_endpoint);
+            if (_capture is not null) board.RestoreCapture(_capture);
+        }
+        catch (Exception error) when (error is IOException or TimeoutException)
+        {
+            Log.Write($"[{_name}] 取り込みを止められませんでした ({error.Message})");
+        }
+        _capturing = false;
+        _endpoint = null;
+        _capture = null;
+    }
+
+    /// <summary>最初の TS を待つ。来なければ false</summary>
+    public bool WaitFirst(TimeSpan timeout) => _first.Wait(timeout) || FirstAt != 0;
+
+    private void Read()
+    {
+        var raw = new byte[TransferSize * Depth];
+        var framer = new NativeTsFramer();
+        var writer = _pipe.Writer;
+        try
+        {
+            while (!_stopped)
+            {
+                var got = _in.Read(raw, ReadTimeoutMs);
+                if (got == 0) continue;
+                var wrote = false;
+                framer.Push(raw.AsSpan(0, got), packet =>
+                {
+                    packet.CopyTo(writer.GetSpan(packet.Length));
+                    writer.Advance(packet.Length);
+                    wrote = true;
+                });
+                if (!wrote) continue;
+                if (FirstAt == 0)
+                {
+                    FirstAt = Stopwatch.GetTimestamp();
+                    _first.Set();
+                }
+                if (!Flush(writer)) return;
+            }
+        }
+        catch (Exception error) when (error is IOException or ObjectDisposedException)
+        {
+            if (error is UsbGoneException) _device.Fail(error);
+            End(error is UsbGoneException ? $"{error.Message}。挿し直してください" : $"TS を読めません ({error.Message})");
+        }
+        finally
+        {
+            _ended = true;
+            writer.Complete();
+        }
+    }
+
+    private void Kick()
+    {
+        try
+        {
+            while (!_stopped && !_ended)
+            {
+                var reply = _device.Link.Pump(KickPackets, _device.IdlePolls, PumpTimeoutMs);
+                if (reply.Result == Dt295NativePrograms.ResultBadWrite)
+                {
+                    End($"リングの書き込み位置 0x{reply.WritePosition:X} が長さ以上です (取り込みの異常)");
+                    _ended = true;
+                    Output.Stop();
+                    return;
+                }
+                if (reply.Result == Dt295NativePrograms.ResultIdle) Thread.Sleep(1);
+            }
+        }
+        catch (Exception error) when (error is IOException or TimeoutException or InvalidOperationException)
+        {
+            if (error is UsbGoneException) _device.Fail(error);
+            End($"受信を続けられません ({error.Message})");
+            _ended = true;
+            Output.Stop();
+        }
+    }
+
+    /// <summary>書いたぶんを渡す。溜めが空かないまま <see cref="Zd1jTuner.StallLimit"/> 経ったら、読む側がいないとみて終わる</summary>
+    private bool Flush(PipeWriter writer)
+    {
+        var flushing = writer.FlushAsync();
+        if (!flushing.IsCompleted)
+        {
+            var waiting = flushing.AsTask();
+            var stalled = Stopwatch.StartNew();
+            while (!waiting.Wait(50))
+            {
+                if (_stopped)
+                {
+                    writer.CancelPendingFlush();
+                    return false;
+                }
+                if (stalled.Elapsed >= Zd1jTuner.StallLimit)
+                {
+                    writer.CancelPendingFlush();
+                    _ended = true;
+                    _stalled();
+                    return false;
+                }
+            }
+            return !waiting.Result.IsCompleted;
+        }
+        return !flushing.Result.IsCompleted;
+    }
+
+    private void End(string reason)
+    {
+        if (_stopped) return;
+        _reason ??= reason;
+        Log.Write($"[{_name}] {reason}");
+    }
+
+    /// <summary>止める。要求と読みを止め、取り込みを止めて設定を戻し、読みかけの読む側が戻ってから溜めを閉じる</summary>
+    public void Stop()
+    {
+        _stopped = true;
+        var stopped = Stopwatch.StartNew();
+        Output.Stop();
+        if (_kicker.IsAlive) _kicker.Join(TimeSpan.FromSeconds(3));
+        _reader.Join(TimeSpan.FromSeconds(2));
+        EndCapture();
+        _in.Dispose();
+        Output.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
+        Output.Dispose();
+        _ended = true;
+    }
+}
+
+/// <summary>
+/// PIX-DT295 のチューナー (地上波・BS・CS。復調は地上波と衛星の 2 つだが、TS を出すのは 1 つずつ)。
+/// 機材は復号しないので、TS はスクランブルのまま出す (B25 はエージェントが復号する)。機材は選局している間だけ取る
+/// </summary>
+public sealed class Dt295NativeTuner : ITuneDevice
+{
+    /// <summary>受信の確認を待つ上限。地上波は約 0.4 秒、衛星は約 0.1 秒でロックした (実機)</summary>
+    internal static readonly TimeSpan LockWait = TimeSpan.FromSeconds(10);
+
+    /// <summary>ロックから最初の TS を待つ上限。取り込みを始めて約 3 ms で出た (実機)</summary>
+    internal static readonly TimeSpan FirstTs = TimeSpan.FromSeconds(5);
+
+    private readonly string _name;
+    private readonly Func<Dt295NativeDevice> _acquire;
+    private readonly Action? _closeIdle;
+    private readonly Lock _gate = new();
+    private Dt295NativeDevice? _device;
+    private Dt295NativeStream? _stream;
+    private bool _satellite;
+
+    /// <summary>設定の device (画面に出す理由の持ち主のキー)</summary>
+    private readonly string _key;
+
+    public Dt295NativeTuner(string port)
+        : this($"{Dt295.Model} {port}", () => Dt295NativeDevice.Acquire(port), () => Dt295NativeDevice.CloseIfIdle(port), Dt295.Device(port))
+    {
+    }
+
+    internal Dt295NativeTuner(string name, Func<Dt295NativeDevice> acquire, Action? closeIdle = null, string? key = null)
+    {
+        _name = name;
+        _acquire = acquire;
+        _closeIdle = closeIdle;
+        _key = key ?? name;
+    }
+
+    public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
+
+    public bool Tuned
+    {
+        get
+        {
+            lock (_gate) return _stream is { Ended: false };
+        }
+    }
+
+    internal Dt295NativeDevice? Device => _device;
+
+    public void Tune(ChannelTable.Tuning tuning, uint streamId)
+    {
+        lock (_gate)
+        {
+            Stop(release: false);
+            try
+            {
+                _device ??= _acquire();
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or TimeoutException)
+            {
+                // 開けない、設定を書けない。空いているときも画面に出す
+                Px4Userland.SetNotice(_key, this, error.Message);
+                throw new IOException(error.Message, error);
+            }
+            Px4Userland.ClearNotice(_key, this);
+            var device = _device;
+            try
+            {
+                var frontend = device.Frontend;
+                _satellite = tuning.Satellite;
+                bool locked;
+                if (tuning.Satellite)
+                {
+                    frontend.TuneSatellite(tuning.Frequency);
+                    locked = frontend.WaitSatelliteLock(LockWait, streamId == ChannelTable.NoStreamId ? null : (int)streamId);
+                }
+                else
+                {
+                    frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
+                    locked = frontend.WaitTerrestrialLock(LockWait);
+                }
+                if (!locked) throw new IOException(ITuneDevice.SyncFailed);
+                _stream = Dt295NativeStream.Start(device, _name, () => Task.Run(Stall));
+            }
+            catch (Exception error) when (error is IOException or InvalidOperationException or TimeoutException)
+            {
+                if (error is UsbGoneException) device.Fail(error);
+                Stop(release: device.Faulted);
+                if (error is IOException) throw;
+                throw new IOException(error.Message, error);
+            }
+
+            if (!_stream.WaitFirst(FirstTs))
+            {
+                var reason = _stream.Reason ?? $"選局から {FirstTs.TotalSeconds:0} 秒、TS が来ません";
+                Stop(release: false);
+                throw new IOException(reason);
+            }
+        }
+    }
+
+    /// <summary>
+    /// いま受けているチャンネルの受信の状態と C/N の生の値 (<see cref="Dt295NativeFrontend.Signal"/>。dB には直していない)。
+    /// 受けていなければ null。I2C を読むだけで、受信中の TS には影響しない
+    /// </summary>
+    public Dt295Signal? Signal()
+    {
+        lock (_gate) return _stream is { Ended: false } && _device is { } device ? device.Frontend.Signal(_satellite) : null;
+    }
+
+    /// <summary>いま受けている側の復調のレジスタ 0x00〜0xFF の読み値 (診断用)。受けていなければ null</summary>
+    public byte[]? DumpDemod()
+    {
+        lock (_gate) return _stream is { Ended: false } && _device is { } device ? device.Frontend.DumpDemod(_satellite) : null;
+    }
+
+    private void Stall()
+    {
+        lock (_gate)
+        {
+            if (_stream is { Ended: true }) Stop(release: true);
+        }
+    }
+
+    /// <summary>流すのをやめる (取り込みを止める)。<paramref name="release"/> なら機材も返す</summary>
+    private void Stop(bool release)
+    {
+        var stream = _stream;
+        _stream = null;
+        stream?.Stop();
+        var device = _device;
+        if (!release || device is null) return;
+        _device = null;
+        device.Release();
+    }
+
+    /// <summary>捨てる (定義が変わった・止める)。機材はカードが使っていなければ閉じる</summary>
+    public void Dispose()
+    {
+        lock (_gate) Stop(release: true);
+        _closeIdle?.Invoke();
+    }
+}

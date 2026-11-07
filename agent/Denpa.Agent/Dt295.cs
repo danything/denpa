@@ -5,9 +5,9 @@ namespace Denpa.Agent;
 /*
  * PIXELA PIX-DT295 (USB 06b8:103b。MB86 系の ASSP に地上波・衛星の復調器と B-CAS の差し込み口)。
  *
- * **試験的。** 設定の device は dt295:<USB のポート>。mAgicVISION のファームウェアを機材に入れて動かす (常駐方式)。
+ * 設定の device は dt295:<USB のポート>。ホストが機材のレジスタを直に書いて動かす (自前方式。ファームウェアは入れない)。
  * 機材の中では復号せず、スクランブルのままの TS を受けて、エージェントの B25 で復号する。差し込み口のカードも、ほかのチューナーの復号に使う。
- * ここは機材の識別と探す・開くだけ。常駐イメージとのやり取りは Dt295Resident*.cs、チューナーとカードは Dt295ResidentTuner.cs。
+ * ここは機材の識別と探す・開くだけ。機材の設定は Dt295NativeDevice.cs・Dt295NativeBoard.cs、チューナーは Dt295NativeTuner.cs、カードは Dt295NativeCard.cs。
  * 同じ公式ドライバーの機材 (PIX-DT295 W・DT420・DT410 など。<see cref="Dt295.Family"/>) は見つけるが、未確認なので開かずに断る。
  */
 
@@ -60,7 +60,7 @@ public static class Dt295
     public static string? Parse(string device) => UsbSysfs.PortOf(device, Scheme);
 
     /// <summary>
-    /// 設定に書いたのと同じ形式で。**開かない** (開くと常駐イメージを機材に入れてしまう)。
+    /// 設定に書いたのと同じ形式で。**開かない** (開くと機材に設定を書く)。
     /// 受けられる種別は地上波・BS・CS (TS を出すのは 1 つずつ)
     /// </summary>
     public static List<TunerSpec> Detect()
@@ -135,7 +135,7 @@ public static class Dt295
         return open(model);
     }
 
-    /// <summary>差し込み口 (カードリーダー)。**開くまでは何も開かない** (開くと常駐イメージを機材に入れる)</summary>
+    /// <summary>差し込み口 (カードリーダー)。**開くまでは何も開かない** (開くと機材に設定を書く)</summary>
     public static IReadOnlyList<CardLinkCandidate> Cards()
     {
         try
@@ -153,7 +153,15 @@ public static class Dt295
     public static CardLinkCandidate Card(string port)
     {
         var name = $"{Model} {port} Card Reader";
-        return new CardLinkCandidate(name, () => new Dt295ResidentCard(name, () => Dt295ResidentBoard.Acquire(port)), Device(port));
+        return new CardLinkCandidate(name, () =>
+        {
+            Dt295NativeDevice? device = null;
+            return new Dt295NativeCard(name, () => (device ??= Dt295NativeDevice.Acquire(port)).Link, () =>
+            {
+                device?.Release();
+                device = null;
+            }, error => device?.Fail(error));
+        }, Device(port));
     }
 
     /// <summary><c>--card</c> の差し込み口の行 (<see cref="UsbDevices.DescribeCards"/>)</summary>
