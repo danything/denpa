@@ -16,7 +16,8 @@ name: Windows server bundle
 #
 # OS に依らないもの (アプリ・字・デコーダ) は Linux のイメージと同じ段を buildx で組んで取り出す (組み方を 2 か所に書かない)。
 # ffmpeg は Windows のランナーの MSYS2 で組む。**組んだものは actions/cache に置き、Dockerfile の ffmpeg 段と組む
-# スクリプトが変わるまで使い回す** (組み直すと 20 分を超える)。
+# スクリプトが変わるまで使い回す** (組み直すと 20 分を超える)。Opus と SVT-AV1 の組み上がりは ffmpeg とは別のキャッシュに置き、
+# バージョンと組み方が変わるまで使い回す (ffmpeg の configure の引数だけを変えたときに、この 2 つを組み直さないため)。
 #
 # 組むのは呼んだ workflow のコミット (リリースならタグ)。コミットを入力で受けて取り出すことはしない
 # (入力のコミットを取り出したジョブがキャッシュに書けると、main のキャッシュを汚せる。CodeQL の cache poisoning)
@@ -52,6 +53,20 @@ jobs:
           set -euo pipefail
           hash=$( { awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile; cat .github/ffmpeg-windows.sh patches/*; } | sha256sum | cut -c1-16)
           echo "key=ffmpeg-windows-x64-$hash" >> "$GITHUB_OUTPUT"
+          # Opus と SVT-AV1 の組み上がりは、ffmpeg とは別のキャッシュ。鍵はバージョンと、スクリプトの
+          # `# recipe:<名前>:begin` から `:end` までの組み方 (ffmpeg の configure の引数を変えても組み直さない)
+          stage=$(awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile)
+          version() { sed -nE "s/^(ARG|ENV) $1=(.+)$/\2/p" <<< "$stage" | head -1; }
+          recipe() { sed -n "/^# recipe:$1:begin/,/^# recipe:$1:end/p" .github/ffmpeg-windows.sh | sha256sum | cut -c1-16; }
+          # 読めなかったら止める (空のままだと、バージョンや組み方を変えても鍵が変わらない)
+          for v in OPUS_VERSION SVT_AV1_VERSION; do
+            test -n "$(version $v)" || { echo "Dockerfile の ffmpeg 段に $v がありません" >&2; exit 1; }
+          done
+          for r in opus svt-av1; do
+            grep -q "^# recipe:$r:end" .github/ffmpeg-windows.sh || { echo "ffmpeg-windows.sh に recipe:$r がありません" >&2; exit 1; }
+          done
+          echo "opus=ffmpeg-windows-x64-opus-$(version OPUS_VERSION)-$(recipe opus)" >> "$GITHUB_OUTPUT"
+          echo "svtav1=ffmpeg-windows-x64-svt-av1-$(version SVT_AV1_VERSION)-$(recipe svt-av1)" >> "$GITHUB_OUTPUT"
 
       - name: Restore ffmpeg
         id: cache
@@ -80,6 +95,48 @@ jobs:
             mingw-w64-ucrt-x86_64-libvpl
             mingw-w64-ucrt-x86_64-ffnvcodec-headers
             mingw-w64-ucrt-x86_64-amf-headers
+
+      # 組み上がり (入れ先は .github/ffmpeg-windows.sh の `deps`)。ffmpeg が当たらなかったときだけ使う
+      - name: Restore Opus
+        id: opus
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\ffmpeg-deps\opus
+          key: ${{ steps.key.outputs.opus }}
+
+      - name: Restore SVT-AV1
+        id: svtav1
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\ffmpeg-deps\svt-av1
+          key: ${{ steps.key.outputs.svtav1 }}
+
+      # 依存は組み終えた直後に保存する (ffmpeg のビルドが落ちても残る)。ffmpeg 本体は成功したときだけ保存する
+      - name: Build Opus
+        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash .github/ffmpeg-windows.sh ffmpeg-out opus
+
+      - name: Save Opus
+        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\ffmpeg-deps\opus
+          key: ${{ steps.key.outputs.opus }}
+
+      - name: Build SVT-AV1
+        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash .github/ffmpeg-windows.sh ffmpeg-out svt-av1
+
+      - name: Save SVT-AV1
+        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\ffmpeg-deps\svt-av1
+          key: ${{ steps.key.outputs.svtav1 }}
 
       - name: Build ffmpeg
         if: steps.cache.outputs.cache-hit != 'true'
