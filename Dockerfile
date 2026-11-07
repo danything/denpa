@@ -518,7 +518,7 @@ RUN --mount=type=bind,from=distroless,target=/distroless \
 # (Bun.spawn に引数の配列を渡す)。時刻 (TZ) と証明書は土台の tzdata と ca-certificates を使う。
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** 今までどおり root で動かす
 # (/data や録画の置き場の持ち主と、/dev/dri を開く権限を変えないため)。
-# 中を見たいときはシェルのあるコンテナを横に付ける (docs/development.md)
+# 中を見たいときはシェルのあるコンテナを横に付ける (docs/install.md「うまくいかないとき」)
 # ---------------------------------------------------------------------------
 FROM distroless AS runtime
 WORKDIR /app

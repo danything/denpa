@@ -1794,6 +1794,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 字幕を描く係も畳む (canvas の大きさを読む `ResizeObserver` を外す)
     painter?.close();
     painter = null;
+    // コマごとの貼り直し (`follow`) も畳む
+    following = null;
   }
 
   /** 出せなかったことにする。**貼ったフレームは剥がす**。動いて見えるほうが悪い */
@@ -2652,11 +2654,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * ブラウザが捨てる) は手当てしない。ライブは待てず、`trim`・`pace` は毎回 `buffered` を読み直す
      */
     if (picked.managed) video.disableRemotePlayback = true;
-    video.src = URL.createObjectURL(media);
+    const objectUrl = URL.createObjectURL(media);
+    video.src = objectUrl;
     media.addEventListener(
       "sourceopen",
       () => {
-        URL.revokeObjectURL(video.src);
+        URL.revokeObjectURL(objectUrl);
+        // 開く前に作り直した (選局し直した) あとに届いた古いほう。新しい MediaSource には触らない
+        if (source !== media) return;
         // 終わりが無いと言っておく。言わないと尺が届くたびに伸び、備え付けの再生位置が行き来する
         media.duration = Number.POSITIVE_INFINITY;
         buffer = media.addSourceBuffer(codecs);

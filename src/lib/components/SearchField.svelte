@@ -228,8 +228,8 @@
       aria-activedescendant={!live && open && active >= 0
         ? optionId(active)
         : undefined}
-      placeholder="番組・録画・予約・ルールを検索"
-      aria-label="番組・録画・予約・ルールを検索"
+      placeholder="番組・録画・切り抜き・予約・ルールを検索"
+      aria-label="番組・録画・切り抜き・予約・ルールを検索"
       autocomplete="off"
       enterkeyhint="search"
       data-search-field

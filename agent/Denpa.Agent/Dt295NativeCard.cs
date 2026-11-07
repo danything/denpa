@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// PIX-DT295 の内蔵のカードの差し込み口 (B-CAS)。ホストがカードの UART (0xFEA000〜。MB86H47 と同じレジスタ) を
-/// <see cref="Dt295NativeLink"/> の 0xBC のメモリ要求で直に動かす (常駐のファームウェアの CARD 0x2C は使わない)。
+/// <see cref="Dt295NativeLink"/> の 0xBC のメモリ要求で直に動かす (仕様書の常駐イメージの CARD 0x2C は使わない)。
 ///
 /// <para>
 /// 電源投入・切断の手順は仕様書 §10 の表 (投入 17 段・切断 5 段)。各段のあとに 20 ms 待つ (投入の 15 段目の 0xFEA014 = 0x0D は 50 ms)。
@@ -23,28 +23,24 @@ public sealed class Dt295NativeCard : ICardLink
     private static readonly TimeSpan AtrTimeout = TimeSpan.FromSeconds(1);
 
     private readonly Func<Dt295NativeLink> _acquire;
-    private readonly Action? _release;
-    private readonly Action<Exception>? _fail;
     private readonly Action<int> _delay;
-    private readonly Action<string>? _log;
     private Dt295NativeLink? _link;
     private T1Protocol? _t1;
     private int _blockWaitMs = 500;
     private bool _powered;
+    private byte[]? _atr;
+
+    /// <summary>電源の入れ方から T=1 までの流れ (<see cref="Reset"/>)、送受信 (<see cref="Transmit"/>)、電源を切る (<see cref="Dispose"/>) を 1 つずつ通す (準備を別のスレッドで進めるため)</summary>
+    private readonly Lock _session = new();
 
     public string Name { get; }
 
-    /// <param name="acquire">機材のリンクを取る (最初に使うとき。<see cref="Dt295NativeDevice.Acquire"/>)</param>
-    /// <param name="release">リンクを返す (<see cref="Dispose"/> で 1 回)</param>
-    /// <param name="fail">やり取りが失敗したときに渡す (機材に使えない印を付ける)</param>
-    public Dt295NativeCard(string name, Func<Dt295NativeLink> acquire, Action? release = null, Action<Exception>? fail = null, Action<int>? delay = null, Action<string>? log = null)
+    /// <param name="acquire">機材のリンクを取る (最初に使うとき)。機材に使えない印を付けるのは、持ち主の <see cref="Dt295NativeCardHandle"/></param>
+    public Dt295NativeCard(string name, Func<Dt295NativeLink> acquire, Action<int>? delay = null)
     {
         Name = name;
         _acquire = acquire;
-        _release = release;
-        _fail = fail;
         _delay = delay ?? Thread.Sleep;
-        _log = log;
     }
 
     private Dt295NativeLink Link
@@ -101,7 +97,7 @@ public sealed class Dt295NativeCard : ICardLink
     {
         var (polarity, insert, other) = Pins();
         if (polarity > 1 || insert > 1 || other > 1) throw new Dt295NativeException($"カードの端子の読み値が仕様書の範囲外です (0xF00223 = {polarity}、0xF00224 = {insert}、0xF0022E = {other})");
-        if (polarity == 1 && insert == 1 && other == 0) throw new Dt295NativeException("この端子の組み合わせ (0xF00223 = 1、0xF00224 = 1、0xF0022E = 0) は常駐のファームウェアも使えない扱いです");
+        if (polarity == 1 && insert == 1 && other == 0) throw new Dt295NativeException("この端子の組み合わせ (0xF00223 = 1、0xF00224 = 1、0xF0022E = 0) は仕様書で使えない扱いです");
         var first = Link.Read32(Lines) & ~4u;
         var third = polarity == 0 ? 8u : 0u;
         (uint Address, uint Value, int Wait)[] table =
@@ -119,22 +115,23 @@ public sealed class Dt295NativeCard : ICardLink
         }
     }
 
+    /// <summary>
+    /// 電源を入れて ATR を返す。**電源が入って T=1 の話し方が決まっていて、カードが挿さっていれば、入れ直さずにその ATR を返す**
+    /// (機材を開いたあと、選局と並べて準備しておくため。<see cref="Dt295NativeDevice.WarmCard"/>)。送受信が失敗したあとは入れ直す
+    /// </summary>
     public byte[] Reset()
     {
-        try
+        lock (_session)
         {
-            return ResetCore();
-        }
-        catch (Exception error) when (error is IOException or TimeoutException)
-        {
-            _fail?.Invoke(error);
-            throw;
+            if (_t1 is not null && _atr is { } ready && Present()) return ready;
+            return _atr = ResetCore();
         }
     }
 
     private byte[] ResetCore()
     {
         _t1 = null;
+        _atr = null;
         if (_powered) PowerOff();
         // 電源を入れてから ATR を受け切るまで、TS の要求を小さくさせる (受信 FIFO が溢れないように)
         byte[] raw;
@@ -148,7 +145,6 @@ public sealed class Dt295NativeCard : ICardLink
         {
             Link.LeaveCard();
         }
-        _log?.Invoke($"ATR: {Convert.ToHexString(raw)}");
         var atr = Atr.Parse(raw);
         if (!atr.T1) throw new IOException($"T=1 に対応していないカードです (ATR {Convert.ToHexString(raw)})");
         var (baud, control, cwt, bwt, rate) = Zd1jCard.Speed(atr);
@@ -164,20 +160,26 @@ public sealed class Dt295NativeCard : ICardLink
 
     public byte[] Transmit(ReadOnlySpan<byte> apdu)
     {
-        if (_t1 is null) throw new IOException($"{Name} のカードに繋いでいません (Reset を先に)");
-        try
+        lock (_session)
         {
-            if (!Present())
+            if (_t1 is null) throw new IOException($"{Name} のカードに繋いでいません (Reset を先に)");
+            try
             {
-                _t1 = null;
-                throw new CardAbsentException($"{Name} のカードが抜かれました");
+                if (!Present())
+                {
+                    _t1 = null;
+                    _atr = null;
+                    throw new CardAbsentException($"{Name} のカードが抜かれました");
+                }
+                return _t1.Transmit(apdu);
             }
-            return _t1.Transmit(apdu);
-        }
-        catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
-        {
-            _fail?.Invoke(error);
-            throw;
+            catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
+            {
+                // 話し方が崩れたかもしれない。次の Reset は電源から入れ直す
+                _t1 = null;
+                _atr = null;
+                throw;
+            }
         }
     }
 
@@ -245,23 +247,68 @@ public sealed class Dt295NativeCard : ICardLink
 
     public void Dispose()
     {
-        _t1 = null;
-        if (_link is null) return;
+        lock (_session)
+        {
+            _t1 = null;
+            _atr = null;
+            if (_link is null) return;
+            try
+            {
+                if (_powered && !_link.Dead) PowerOff();
+            }
+            catch (Exception error) when (error is IOException or TimeoutException or ObjectDisposedException)
+            {
+                // 機材が先に閉じられていたとき (エージェントを止めるとき) も、ここから例外を出さない
+                Log.Write($"[{Name}] カードの電源を切れませんでした ({error.Message})");
+            }
+            finally
+            {
+                // カードを閉じたあとは、カードの UART に書けないようにする (許可はカードが使っている間だけ)
+                _link.AllowCardUart = false;
+                _link = null;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// 機材 1 台のカード (<see cref="Dt295NativeDevice.Card"/>) を、カードリーダーの並び (CardLinks) に出す入れ物。
+/// カードは機材を開いている間は電源が入ったままで (選局と並べて準備するため)、これを閉じても電源は切らない。機材を閉じるときに切る
+/// </summary>
+public sealed class Dt295NativeCardHandle(string name, Dt295NativeDevice device) : ICardLink
+{
+    private int _disposed;
+
+    public string Name { get; } = name;
+
+    public byte[] Reset()
+    {
         try
         {
-            if (_powered && !_link.Dead) PowerOff();
+            return device.Card.Reset();
         }
-        catch (Exception error) when (error is IOException or TimeoutException or ObjectDisposedException)
+        catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
         {
-            // 機材が先に閉じられていたとき (エージェントを止めるとき) も、ここから例外を出さない
-            _log?.Invoke($"カードの電源を切れませんでした: {error.Message}");
+            device.Fail(error);
+            throw;
         }
-        finally
+    }
+
+    public byte[] Transmit(ReadOnlySpan<byte> apdu)
+    {
+        try
         {
-            // カードを閉じたあとは、カードの UART に書けないようにする (許可はカードが使っている間だけ)
-            _link.AllowCardUart = false;
-            _link = null;
-            _release?.Invoke();
+            return device.Card.Transmit(apdu);
         }
+        catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
+        {
+            device.Fail(error);
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0) device.Release();
     }
 }

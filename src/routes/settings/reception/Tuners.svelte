@@ -849,15 +849,9 @@
       min-width: 2.75rem;
       min-height: 2.75rem;
     }
-    .tuners .chip,
-    .add .chip,
     .delete-slot button,
     .actions button {
       min-height: 2.75rem;
-    }
-    .tuners .chip,
-    .add .chip {
-      padding-inline: 0.75rem;
     }
   }
   /*

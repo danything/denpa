@@ -51,7 +51,7 @@ export async function offlineSource(
   throw new Error(
     files.length === 0
       ? "エンコード済みのファイルがありません"
-      : `この端末では再生できません (${files.map((file) => CODEC_LABEL[file.codec]).join("・")} をデコードできません)`,
+      : `再生できない形式です (${files.map((file) => CODEC_LABEL[file.codec]).join("・")} をデコードできません)`,
   );
 }
 

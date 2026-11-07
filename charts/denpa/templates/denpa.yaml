@@ -113,8 +113,7 @@ spec:
             initialDelaySeconds: {{ .Values.denpa.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.denpa.livenessProbe.periodSeconds }}
           volumeMounts:
-            # 置き場は既定のまま (DB は /data、元の TS は /media/raw、エンコードしたものは /media/encoded)。
-            # PVC は前と同じものを、繋ぐ先だけ変えて使う
+            # 置き場は既定のまま (DB は /data、元の TS は /media/raw、エンコードしたものは /media/encoded)
             - name: denpa-data
               mountPath: /data
             - name: raw

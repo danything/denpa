@@ -513,7 +513,7 @@ test.describe("操作したときの反応", () => {
     // ライブの種別のタブ (並びの印) と、ホームの頭の 1 行のチップ (自分の `::after`)
     for (const [url, selector] of [
       ["/live", '[data-testid^="live-type-"][aria-pressed="true"]'],
-      ["/", '.t-chip[aria-pressed="true"]'],
+      ["/", '[data-testid="filter-chip"][aria-pressed="true"]'],
     ] as const) {
       await goto(page, url);
       const pressed = page.locator(selector).first();

@@ -98,6 +98,18 @@ describe("fMP4 を割る", () => {
     expect(splitter.feed(box("moof")).map((s) => s.kind)).toEqual(["init"]);
     expect(splitter.feed(box("mdat")).map((s) => s.kind)).toEqual(["media"]);
   });
+
+  /** 大きさ 0 (最後まで)・1 (64 ビットの大きさ) は読めない。持ったままだと届くたびに溜まり続ける */
+  test("読めない箱が来たら、そこまでを出して以降は捨てる", () => {
+    const splitter = new Fmp4Splitter();
+    const unreadable = box("mdat");
+    new DataView(unreadable.buffer).setUint32(0, 0);
+    const out = splitter.feed(
+      join(box("ftyp"), box("moov"), box("moof"), box("mdat"), unreadable),
+    );
+    expect(out.map((s) => s.kind)).toEqual(["init", "media"]);
+    expect(splitter.feed(join(box("moof"), box("mdat")))).toEqual([]);
+  });
 });
 
 /*

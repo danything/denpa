@@ -47,7 +47,7 @@ internal sealed class Dt295NativeStream
 {
     private const byte Endpoint = 0x81;
 
-    /// <summary>1 本の読みの大きさと数 (8 KiB を 64 本)。常駐方式のときに実機で測って決めた値</summary>
+    /// <summary>1 本の読みの大きさと数 (8 KiB を 64 本)。以前の方式 (mAgicVISION のファームウェアを入れる方式) のときに実機で測って決めた値</summary>
     private const int TransferSize = 8192;
 
     private const int Depth = 64;
@@ -123,6 +123,7 @@ internal sealed class Dt295NativeStream
         var timeline = _device.Timeline;
         using (timeline.Step("取り込みの設定", "仕様書 8.1.3。28 項目を書いて読み戻す")) _capture = board.ConfigureCapture();
         using (timeline.Step("端点の開始", "仕様書 8.3.1")) _endpoint = board.StartEndpoint();
+        board.ResetPumpState();
         using (timeline.Step("取り込みの開始", "0x1902010 = 0x02000000")) board.StartCapture();
         _capturing = true;
     }
@@ -332,6 +333,8 @@ public sealed class Dt295NativeTuner : ITuneDevice
             Px4Userland.ClearNotice(_key, this);
             var device = _device;
             var timeline = device.Timeline;
+            // 同じ機材のカードの準備を、選局と並べて始める (復号は TS が届いてからすぐ始められる)
+            device.WarmCard();
             using var whole = timeline.Step("選局から最初の TS まで");
             try
             {

@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 自前方式 (dt295:) の基板の設定: チップのクロック・端子、USB の端点、TS の取り込みブロック。節の番号は仕様書 (dt295-resident/spec.md) のもの。
-/// 常駐方式では常駐イメージと補助 CPU がやる設定を、ホストが 0xBC のメモリ要求 (<see cref="Dt295NativeLink"/>) で順に書く。
+/// 仕様書では常駐イメージと補助 CPU がやる設定を、ホストが 0xBC のメモリ要求 (<see cref="Dt295NativeLink"/>) で順に書く。
 ///
 /// 補助 CPU の起動 (仕様書 6 章の「補助 CPU の起動」) は再現しない。補助 CPU がやる仕事のうち、USB のレジスタの設定 (仕様書 8.4) と
 /// I2C の準備 (仕様書 6.4) はホストが書く。補助 CPU の RAM と 0x1700000 のブロックには触らない。
@@ -202,8 +202,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
 
     /// <summary>
     /// 0xF10080〜0xF10098 の 7 語に 0x00010000 を書く (32 ビットの書き込み。上半分が 0x0001、下半分が 0)。
-    /// 仕様書に無い。実機の常駐イメージが、イメージを書き込む間 (BLOCK。INITIALIZE の前) に同じ値にしたのを観測した
-    /// (--dt295-probe --watch-regs と --snap)。INITIALIZE の前に呼ぶ。
+    /// 仕様書に無い。実機の常駐イメージが、イメージを書き込む間 (BLOCK。INITIALIZE の前) に同じ値にしたのを観測した。INITIALIZE の前に呼ぶ。
     /// **この語は読まない。** 実機で 0xF10080〜0xF100FF を読むと、常駐イメージが時間切れ (-2603) になった (主 CPU と補助 CPU の
     /// 受け渡しの旗のように、読むと状態が動くらしい)。書く前の値も、書いたあとの読み戻しもしない。元の値は 0 とみなして戻す。
     /// 書き込み自体が操作かもしれないので、この書き込みが正しいかは決まっていない (観測の値に合わせただけ)
@@ -282,7 +281,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     }
 
     // ---------------------------------------------------------------------
-    // USB のレジスタ (仕様書 8.4。常駐方式では補助 CPU の起動の中でやる設定)
+    // USB のレジスタ (仕様書 8.4。仕様書では補助 CPU の起動の中でやる設定)
     // ---------------------------------------------------------------------
 
     /// <summary>
@@ -410,6 +409,13 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
 
     /// <summary>0x1902010 に書く開始・停止の値 (実機の観測。仕様書 8.1.4 の 0x200・0x400 は書いても 0 と読めて TS が出ない)</summary>
     private const uint CaptureStartCommand = 0x02000000, CaptureStopCommand = 0x04000000;
+
+    /// <summary>
+    /// 機材のプログラムが要求をまたいで持つ状態 (読み出し位置・パケット内位置・揃え位置・揃えたか。Dt295NativePrograms の作業域) を 0 に戻す。
+    /// 取り込みを設定し直すと書き込み位置・読み出し位置が 0 に戻るので、前の選局の状態を持ち越すと、リングの古い中身を先に送ってしまう。
+    /// 取り込みを始める前 (要求を出す前) に呼ぶ
+    /// </summary>
+    public void ResetPumpState() => link.WriteBytes(Dt295NativePrograms.Frame + Dt295NativePrograms.StateRp, new byte[16]);
 
     /// <summary>取り込みの元の値</summary>
     public sealed record CaptureSaved(uint[] Table, uint R1900404, uint R1900020 = 0);

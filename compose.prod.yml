@@ -89,8 +89,7 @@ services:
       # ドットの無い名前・.local や .lan などは書かなくても通る。自分のドメインや Tailscale の名前で開くなら書く
       # ALLOWED_HOSTS: denpa.example.com,.tail1234.ts.net
     volumes:
-      # 置き場は既定のまま (DB は /data、元の TS は /media/raw、エンコードしたものは /media/encoded)。
-      # ボリュームの名前は前のまま (中身はそのまま使える)
+      # 置き場は既定のまま (DB は /data、元の TS は /media/raw、エンコードしたものは /media/encoded)
       - denpa-data:/data
       - denpa-recorded:/media/raw
       - denpa-library:/media/encoded

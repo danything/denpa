@@ -112,4 +112,59 @@ public class Dt295NativeCardTests
             (0xFEA004, 2), (0xFEA014, 0), (0xFEA000, 3), (0xFEA004, 0), (0xFEA004, 8),
         }, CollectionOrdering.Matching);
     }
+
+    [Test]
+    public async Task 電源が入って話し方が決まっていれば_Reset_は入れ直さずに同じ_ATR_を返し_カードが抜かれたら入れ直す()
+    {
+        var (fake, link) = Rig();
+        using var card = new Dt295NativeCard("DT295 カード", () => link, delay: _ => { });
+
+        var first = card.Reset();
+        var writes = fake.Stores.Count(s => s.Address is >= 0xFEA000 and <= 0xFEA03F);
+        var second = card.Reset();
+
+        await Assert.That(second).IsEquivalentTo(first);
+        // 2 回目は UART に書かない (電源の入れ直しも、話し方の取り決めもしない)
+        await Assert.That(fake.Stores.Count(s => s.Address is >= 0xFEA000 and <= 0xFEA03F)).IsEqualTo(writes);
+        await Assert.That(card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00])).IsEquivalentTo(new byte[] { 0x90, 0x00 });
+
+        // 抜かれたら、次の Reset は電源から入れ直そうとして、カードが無い (挿入の印が無い) のを ATR が来ないことで知る
+        fake.CardInserted = false;
+        Assert.Throws<CardAbsentException>(() => card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00]));
+        fake.CardInserted = true;
+        await Assert.That(card.Reset()).IsEquivalentTo(first);
+        await Assert.That(fake.Stores.Count(s => s.Address is >= 0xFEA000 and <= 0xFEA03F)).IsGreaterThan(writes);
+    }
+
+    [Test]
+    public async Task 機材を開いて選局すると_カードの準備が並んで進み_選局と同じ機材の制御転送を使っても両方済む()
+    {
+        var fake = new Dt295Fake { CardAtr = BcasAtr, CardResponder = Respond };
+        var ring = new List<byte>();
+        for (var i = 0; i < 40; i++)
+        {
+            var record = new byte[192];
+            record[0] = 0x47;
+            record[1] = 0x01;
+            record[3] = (byte)(0x10 | (i & 0xF));
+            ring.AddRange(record);
+        }
+        fake.PutRing(0, ring.ToArray());
+        fake.WpOnStart = (uint)ring.Count;
+        var port = $"test-{Guid.NewGuid():N}";
+        var tuner = new Dt295NativeTuner("test", () => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000), () => Dt295NativeDevice.CloseIfIdle(port));
+        var tuning = ChannelTable.Parse("T25")!;
+
+        tuner.Tune(tuning, tuning.StreamId);
+        var device = tuner.Device!;
+        await (device.CardWarmTask ?? throw new InvalidOperationException("カードの準備が始まっていません"));
+
+        // カードは準備済みで、開いてからの時間が残る。ID の読み出しの Reset は電源を入れ直さない
+        await Assert.That(device.CardReadyMs).IsGreaterThanOrEqualTo(0);
+        var before = fake.Stores.Count(s => s.Address is >= 0xFEA000 and <= 0xFEA03F);
+        using var handle = new Dt295NativeCardHandle("DT295", device);
+        await Assert.That(handle.Reset()).IsEquivalentTo(BcasAtr);
+        await Assert.That(fake.Stores.Count(s => s.Address is >= 0xFEA000 and <= 0xFEA03F)).IsEqualTo(before);
+        tuner.Dispose();
+    }
 }

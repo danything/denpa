@@ -48,7 +48,7 @@
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-# px4-userland / siano-userland のバージョン (Mac)。**agent/Dockerfile と揃える** (Renovate が両方いっしょに上げる)。
+# px4-userland / siano-userland のバージョン (Mac)。**agent/Dockerfile・install.ps1 と揃える** (Renovate がいっしょに上げる)。
 # 中身は配布元の SHA256SUMS で確かめるので、バージョンを上げてもここのハッシュは要らない
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 PX4_USERLAND_VERSION=0.2.1
@@ -443,7 +443,7 @@ mac_stop_tray() {
 # 出すのは本体の様子と新しいバージョンで、更新はメニューから人が選んだときにこの install.sh を Terminal で流す (docs/install-mac.md)。
 # KeepAlive は付けない (メニューの「終了」で終えたら、次のログインまで出さない)。
 # sudo を流した人がログインしていれば (gui のドメインがあれば) ここで起こす。無ければ次のログインを待つ。
-# tar.gz に入っていなければ (DENPA_VERSION でメニューバーのアプリより前のバージョンを入れたとき) 載せず、前に載せたものも消す
+# tar.gz に入っていなければ (手元で組んだ DENPA_AGENT_TARBALL など) 載せず、前に載せたものも消す
 # (残すと、ログインのたびに launchd が無い実行ファイルを起こそうとする)
 mac_register_tray() {
   if [ ! -x "$PREFIX/bin/denpa-tray" ]; then

@@ -9,6 +9,11 @@ namespace Denpa.Agent;
  * 機材の中では復号せず、スクランブルのままの TS を受けて、エージェントの B25 で復号する。差し込み口のカードも、ほかのチューナーの復号に使う。
  * ここは機材の識別と探す・開くだけ。機材の設定は Dt295NativeDevice.cs・Dt295NativeBoard.cs、チューナーは Dt295NativeTuner.cs、カードは Dt295NativeCard.cs。
  * 同じ公式ドライバーの機材 (PIX-DT295 W・DT420・DT410 など。<see cref="Dt295.Family"/>) は見つけるが、未確認なので開かずに断る。
+ *
+ * Dt295Native*.cs は、仕様書 (denpa-spec の dt295-resident/spec.md。mAgicVISION のファームウェアを入れた機材の動作を書いたもの) と
+ * 実機の観測から書いた。mAgicVISION のコードは移していない。コメントの節の番号は仕様書のもの。
+ * コメントの「常駐イメージ」は仕様書が書くそのファームウェアで、「実機の常駐イメージが…にした」は、以前の方式 (そのファームウェアを入れる方式) で
+ * 実機のレジスタを読んだ観測。仕様書に無くて決めた所は「仕様書に無い」と書いてある
  */
 
 /// <summary>
@@ -153,15 +158,7 @@ public static class Dt295
     public static CardLinkCandidate Card(string port)
     {
         var name = $"{Model} {port} Card Reader";
-        return new CardLinkCandidate(name, () =>
-        {
-            Dt295NativeDevice? device = null;
-            return new Dt295NativeCard(name, () => (device ??= Dt295NativeDevice.Acquire(port)).Link, () =>
-            {
-                device?.Release();
-                device = null;
-            }, error => device?.Fail(error));
-        }, Device(port));
+        return new CardLinkCandidate(name, () => new Dt295NativeCardHandle(name, Dt295NativeDevice.Acquire(port)), Device(port));
     }
 
     /// <summary><c>--card</c> の差し込み口の行 (<see cref="UsbDevices.DescribeCards"/>)</summary>

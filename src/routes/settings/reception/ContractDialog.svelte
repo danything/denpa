@@ -197,24 +197,26 @@
                 <td class="nowrap num">
                   {row.validUntil ? fullDate(row.validUntil) : "—"}
                 </td>
-                <td class="decode-cell">
-                  {#if row.decodeOk === true}
-                    <span class="tag success">復号できました</span>
-                  {:else if row.decodeOk === false}
-                    <span class="tag error">復号できませんでした</span>
-                  {/if}
-                  <button
-                    type="button"
-                    class="ghost small"
-                    disabled={isBusy}
-                    onclick={() => handleTestDecode(row.serviceId)}
-                    data-testid="btn-test-decode-{row.serviceId}"
-                  >
-                    <ShieldCheck aria-hidden="true" />
-                    {testingServiceId === row.serviceId
-                      ? "確かめています…"
-                      : "復号を確かめる"}
-                  </button>
+                <td
+                  ><div class="decode-cell">
+                    {#if row.decodeOk === true}
+                      <span class="tag success">復号できました</span>
+                    {:else if row.decodeOk === false}
+                      <span class="tag error">復号できませんでした</span>
+                    {/if}
+                    <button
+                      type="button"
+                      class="ghost small"
+                      disabled={isBusy}
+                      onclick={() => handleTestDecode(row.serviceId)}
+                      data-testid="btn-test-decode-{row.serviceId}"
+                    >
+                      <ShieldCheck aria-hidden="true" />
+                      {testingServiceId === row.serviceId
+                        ? "確かめています…"
+                        : "復号を確かめる"}
+                    </button>
+                  </div>
                 </td>
               </tr>
             {/each}
@@ -246,9 +248,6 @@
   }
   .intro {
     margin: var(--dp-space-1) 0 var(--dp-space-4);
-  }
-  .table-wrap {
-    overflow-x: auto;
   }
   table {
     width: 100%;

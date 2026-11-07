@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Buffers.Binary;
 
 namespace Denpa.Agent;
@@ -77,9 +78,29 @@ public sealed class Dt295NativeLink
     /// </summary>
     private readonly Lock _gate = new();
 
+    /// <summary>
+    /// ロックを待っている呼び出しの数。**<see cref="Pump"/> は、待っている呼び出しがいる間は次の要求を出さずに譲る。**
+    /// .NET のロックは公平ではなく、TS の要求を続けて出すスレッドが、放してすぐ取り直して、カードや I2C の読み書きを長く待たせた
+    /// (衛星は選局が短く、カードの準備と TS の送り出しが重なる)
+    /// </summary>
+    private int _waiters;
+
+    private Lock.Scope Enter()
+    {
+        Interlocked.Increment(ref _waiters);
+        try
+        {
+            return _gate.EnterScope();
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _waiters);
+        }
+    }
+
     private void DirectRead(uint address, Span<byte> data)
     {
-        lock (_gate)
+        using (Enter())
         {
             var (value, index) = Setup(address);
             Controls++;
@@ -99,7 +120,7 @@ public sealed class Dt295NativeLink
 
     private void DirectWrite(uint address, ReadOnlySpan<byte> data, ushort valueLow = 0)
     {
-        lock (_gate)
+        using (Enter())
         {
             var (value, index) = Setup(address);
             Controls++;
@@ -140,6 +161,8 @@ public sealed class Dt295NativeLink
         {
             throw new ArgumentOutOfRangeException(nameof(address));
         }
+        // 書いてよいかは 32 ビットの書き込みと同じく語ごとに確かめる (書けない語が 1 つでもあれば、何も書かない)
+        for (var at = 0u; at < data.Length; at += 4) Guard(address + at);
         _trace?.Invoke($"書く 0x{address:X8} [{data.Length}]");
         for (var at = 0; at < data.Length;)
         {
@@ -205,7 +228,7 @@ public sealed class Dt295NativeLink
 
     private void Guard(uint address)
     {
-        // カードの端子の向き・極性 (0xF00222〜0xF0022E。仕様書 §10 の設定確認) は、常駐イメージも読んで確かめるだけ。書かない
+        // カードの端子の向き・極性 (0xF00222〜0xF0022E。仕様書 §10 の設定確認) は、仕様書の常駐イメージも読んで確かめるだけ。書かない
         if (address is >= 0xF00200 and <= 0xF002FF)
         {
             throw new Dt295NativeException($"0x{address:X} はカードの端子の向きのレジスタで、読むだけです。書きません");
@@ -318,7 +341,11 @@ public sealed class Dt295NativeLink
     /// </summary>
     public NativeReply Pump(uint packets, uint idleLimit, int timeoutMs)
     {
-        lock (_gate) return PumpLocked(packets, idleLimit, timeoutMs);
+        // 待っている呼び出しに先に譲る (最大 20 ms。カードの 1 回の読み書きや I2C の 1 回の要求は、それより短く済む)
+        var spin = new SpinWait();
+        var until = Stopwatch.GetTimestamp() + Stopwatch.Frequency / 50;
+        while (Volatile.Read(ref _waiters) > 0 && Stopwatch.GetTimestamp() < until) spin.SpinOnce();
+        using (Enter()) return PumpLocked(packets, idleLimit, timeoutMs);
     }
 
     private NativeReply PumpLocked(uint packets, uint idleLimit, int timeoutMs)
@@ -352,7 +379,7 @@ public sealed class Dt295NativeLink
     /// </summary>
     public I2cReply RunI2c(ReadOnlySpan<byte> ops, int transfers, int readBytes)
     {
-        lock (_gate) return RunI2cLocked(ops, transfers, readBytes);
+        using (Enter()) return RunI2cLocked(ops, transfers, readBytes);
     }
 
     private I2cReply RunI2cLocked(ReadOnlySpan<byte> ops, int transfers, int readBytes)

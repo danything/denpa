@@ -518,7 +518,7 @@
   {:else if column}
     <span class="muted small" title="ロゴは放送に載っていません">—</span>
   {:else}
-    <!-- 局名の頭がずれないよう、場所だけ空けておく -->
+    <!-- 局名の先頭がずれないよう、場所だけ空けておく -->
     <span class="logo-space"></span>
   {/if}
 {/snippet}

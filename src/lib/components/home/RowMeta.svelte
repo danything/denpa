@@ -23,7 +23,7 @@
     row: { service_id: number; has_logo: boolean | null };
     rule:
       { rule_id: number | null; rule_name: string | null } | "manual" | null;
-    /** 残りの幅を埋める番組の説明の頭 (1 行で「…」まで。狭い画面では出さない) */
+    /** 残りの幅を埋める番組の説明の冒頭 (1 行で「…」まで。狭い画面では出さない) */
     excerpt?: string;
   } = $props();
   const rest = $derived(parts.filter(Boolean).join("・"));

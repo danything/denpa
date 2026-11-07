@@ -28,7 +28,7 @@ public class Dt295NativeTests
     private static (int Code, string Output, string Log) Run(Dt295Fake fake, string channel, Action? powerCycle = null)
     {
         var port = $"test-{Guid.NewGuid():N}";
-        var options = new Dt295NativeProbe.Options(port, channel, ChannelTable.Parse(channel)!, TimeSpan.FromMilliseconds(30), false, IdlePolls: 2000);
+        var options = new Dt295NativeProbe.Options(port, channel, ChannelTable.Parse(channel)!, TimeSpan.FromMilliseconds(30), false);
         var output = new StringWriter();
         var log = new StringWriter();
         var code = Dt295NativeProbe.Execute(() => Dt295NativeDevice.Acquire(port, () => fake, powerCycle, _ => { }, 2000),
@@ -235,6 +235,9 @@ public class Dt295NativeTests
         var link = new Dt295NativeLink(fake);
         Assert.Throws<Dt295NativeException>(() => link.Write32(0xFD8010, 0x08080000));
         Assert.Throws<Dt295NativeException>(() => link.MaskWrite(0xFD8300, 1, 1));
+        // 範囲の書き込みも同じ。書けない語が途中にあれば、前の語も書かない
+        Assert.Throws<Dt295NativeException>(() => link.WriteBytes(0xFD7FFC, new byte[8]));
+        Assert.Throws<Dt295NativeException>(() => link.WriteBytes(0xFEA000, new byte[4]));
         await Assert.That(fake.Stores.Count).IsEqualTo(0);
         link.AllowedCoreWrites.Add(0xFD8010);
         link.Write32(0xFD8010, 0x10);
@@ -452,7 +455,7 @@ public class Dt295NativeTests
         var fake = Rig();
         var port = $"test-{Guid.NewGuid():N}";
         var timeline = new Dt295Timeline();
-        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromMilliseconds(30), false, IdlePolls: 2000);
+        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromMilliseconds(30), false);
         var output = new StringWriter();
         var code = Dt295NativeProbe.Execute(() => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000, timeline),
             () => Dt295NativeDevice.CloseIfIdle(port), options, output, new StringWriter(), timeline);
@@ -468,6 +471,8 @@ public class Dt295NativeTests
         {
             await Assert.That(text).Contains(expected);
         }
+        // カードは選局と並べて準備し、開き始めてからの時間を出す (偽の機材にカードは無いので、済んでいない)
+        await Assert.That(text).Contains("カード: 準備完了まで");
         // 受信の確認は周回と待ちの合計を補足に出す
         await Assert.That(text).Contains("周、周の間の待ち");
         // 待ちの合計は、7.1 の 130 ms と 7.2.2 の 140 ms を含む
@@ -551,5 +556,68 @@ public class Dt295NativeTests
         await Assert.That(again).IsNotSameReferenceAs(device);
         again.Release();
         Dt295NativeDevice.CloseIfIdle(port);
+    }
+
+    [Test]
+    public async Task 同じ種別の選局し直しは頭の手順を省き_種別が替わるときは前の側を休ませる()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var device = Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000);
+        List<string> Tune(Action action)
+        {
+            var from = fake.I2cLog.Count;
+            action();
+            return fake.I2cLog.Skip(from).ToList();
+        }
+        var terrestrial = (Action)(() => device.Frontend.TuneTerrestrial(545143));
+        var satellite = (Action)(() => device.Frontend.TuneSatellite(1318000));
+
+        // 開いたあとの最初の地上波: 0B=01 (チューナーを動かす) が先頭に入る
+        var first = Tune(terrestrial);
+        await Assert.That(first).Contains("10 W FEC00B01");
+        // 続けて地上波: 0B=01 は前に地上波を選んでいるので入らない。12=01 と 20 ms の待ちは入る
+        var again = Tune(terrestrial);
+        await Assert.That(again).DoesNotContain("10 W FEC00B01");
+        await Assert.That(again).Contains("10 W FEC01201");
+        await Assert.That(again.Count).IsLessThan(first.Count);
+
+        // 衛星へ: 先に T 側を休ませ (復調 25=00・23=4D・03=90)、TS の出し元を衛星にする (T 復調 0E=77・0F=77)
+        var toSatellite = Tune(satellite);
+        await Assert.That(toSatellite).Contains("10 W 2500");
+        await Assert.That(toSatellite).Contains("10 W 0E77");
+        // 続けて衛星: T 側はもう休んでいるので休ませる表は入らない
+        var satelliteAgain = Tune(satellite);
+        await Assert.That(satelliteAgain).DoesNotContain("10 W 2500");
+        await Assert.That(satelliteAgain).Contains("10 W 0E77");
+
+        // 地上波へ戻る: 先に S 側を休ませる表 (S 復調 1C=AA ほか。仕様書 7.2.2。推定) が入り、0B=01 も入る
+        var back = Tune(terrestrial);
+        await Assert.That(back).Contains("11 W 1CAA");
+        await Assert.That(back).Contains("11 W 1728".Replace("1728", "1701"));
+        await Assert.That(back).Contains("10 W FEC00B01");
+
+        device.Release();
+        Dt295NativeDevice.CloseIfIdle(port);
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ロックの試験は_くり返した回数と成功の割合と時間を出し_全部成功なら_0_を返す(bool reopen)
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromSeconds(1), false, LockTest: 3, Reopen: reopen);
+        var output = new StringWriter();
+
+        var code = Dt295NativeProbe.LockTest(options, timeline => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000, timeline),
+            () => Dt295NativeDevice.CloseIfIdle(port), () => Dt295NativeDevice.CloseIfIdle(port), output);
+
+        var text = output.ToString();
+        await Assert.That(code).IsEqualTo(0);
+        await Assert.That(text).Contains($"機材を開き直す: {(reopen ? "はい" : "いいえ")}");
+        await Assert.That(text).Contains("結果: 成功 3/3 (100.0%)");
+        await Assert.That(text).Contains("受信の確認 最小");
     }
 }

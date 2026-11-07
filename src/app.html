@@ -30,7 +30,13 @@
           document.documentElement.toggleAttribute("data-phone", phone.matches);
         markPhone();
         phone.addEventListener("change", markPhone);
-        const saved = localStorage.getItem("theme");
+        // 端末の控えを読めない (サイトのデータを止めた Safari などで投げる) ときは既定の暗いテーマ
+        let saved = null;
+        try {
+          saved = localStorage.getItem("theme");
+        } catch {
+          // 既定のまま
+        }
         const mode = saved === "light" || saved === "system" ? saved : "dark";
         const dark =
           mode === "dark" ||

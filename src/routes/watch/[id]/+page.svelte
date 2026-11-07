@@ -153,7 +153,9 @@
     canvasTranscodes,
     type CodecChoice,
     codecChoices,
+    ENCODED_ORDER,
     type MediaAbility,
+    MENU_ORDER,
     pickCanvas,
     type Picked,
     pickOffer,
@@ -820,7 +822,7 @@
   function playable(): LiveCodec[] {
     const source = pickMediaSource();
     if (source === null) return [];
-    return (["av1", "hevc", "h264"] as const).filter((codec) =>
+    return ENCODED_ORDER.filter((codec) =>
       source.Source.isTypeSupported(codecsFor(codec)),
     );
   }
@@ -1158,6 +1160,11 @@
               .filter(
                 (item) => !data.hidden.some((codec) => codec === item.codec),
               )
+              // 並びはほかのメニューと同じ (`MENU_ORDER`)。`canvasChoices` の並びは選ぶ順 (`pickCanvas`) のまま
+              .sort(
+                (a, b) =>
+                  MENU_ORDER.indexOf(a.codec) - MENU_ORDER.indexOf(b.codec),
+              )
               .map((item) => ({
                 key: item.codec,
                 label: codecLabel(item.codec),
@@ -1423,9 +1430,8 @@
    * 録画の頭より前は「開始前」、切った CM の中は「CM」で、飛べない
    */
   function placeAir(at: number): number | "before" | "cut" {
-    const target = data.jikkyo;
-    if (target === null || info === null) return "before";
-    return playbackAt((at - target.head) / 1000, ruler(info));
+    if (info === null) return "before";
+    return playbackAt((at - data.head) / 1000, ruler(info));
   }
 
   /** 観ているものの物差し (`Ruler`)。元の TS なら null */
@@ -1436,13 +1442,12 @@
   }
 
   /**
-   * いま観ている場面の放送時刻。再生位置を元の TS の秒に直して (CM を切ったものは切った区間を戻して) 頭の放送時刻に足す。
-   * **切った CM の区間は飛び越すので、そこに書かれたコメントは流れない**
+   * いま観ている場面の放送時刻。再生位置を元の TS の秒に直して (CM を切ったものは切った区間を戻して) 先頭の放送時刻に足す。
+   * 実況のコメントとデータ放送の時計 (`clock`) が使う。**切った CM の区間は飛び越すので、そこに書かれたコメントは流れない**
    */
   function airTime(): number | null {
-    const target = data.jikkyo;
-    if (target === null || info === null) return null;
-    return target.head + toTsTime(mediaTime(), ruler(info)) * 1000;
+    if (info === null) return null;
+    return data.head + toTsTime(mediaTime(), ruler(info)) * 1000;
   }
   /** 貼り直しを追わせている映像。二重に回さないための目印 (`follow`) */
   let following: HTMLVideoElement | null = null;
@@ -2453,7 +2458,7 @@
           postal={data.broadcast.postalCode}
           prefecture={data.broadcast.prefecture}
           network={false}
-          clock={() => rec.start_at + nowMs()}
+          clock={airTime}
           tune={refuseTune}
         />
 
@@ -2519,7 +2524,7 @@
             testid="watch-shot"
             onclick={() => void snapshot()}
           />
-          <!-- 右の列の頭に「コメントの一覧」を出す・しまう (`canList`) -->
+          <!-- 右の列の先頭に「コメントの一覧」を出す・しまう (`canList`) -->
           {#if canList}
             <ControlButton
               icon={JIKKYO}
@@ -2584,7 +2589,7 @@
               testid="watch-play"
               onclick={togglePlay}
             />
-            <!-- 畳むときは音と速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
+            <!-- 畳むときは音と速さを ⚙ の先頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
             <Extras>
               <SoundButton
                 silenced={muted}
@@ -2607,7 +2612,7 @@
 
             <!--
                             チャプター送りは入っているときだけ (CM を切ってエンコードしたものには無い)。
-                            畳むときも残す。CM や本編の頭へ毎回のように使う
+                            畳むときも残す。CM や本編の始まりへ毎回のように使う
                         -->
             {#if chapters.length > 1}
               <ControlButton
@@ -2773,11 +2778,11 @@
   {#snippet aside()}
     <FactsAside testid="watch-facts">
       {#snippet top()}
-        <!-- データ放送のリモコンは、出している間だけ右の列の頭に出す (ライブと同じ) -->
+        <!-- データ放送のリモコンは、出している間だけ右の列の先頭に出す (ライブと同じ) -->
         {#if dataPress !== null}
           <Remote press={dataPress} />
         {/if}
-        <!-- 実況のコメントの一覧も、出している間は列の頭 (リモコンの下) -->
+        <!-- 実況のコメントの一覧も、出している間は列の先頭 (リモコンの下) -->
         {#if canList && jikkyoList.on}
           <JikkyoList
             feed={jikkyo}

@@ -83,8 +83,8 @@
      * オフなら `isIPConnected` に 0 を返し、放送のアプリに正しく案内させる (1 と答えて取れないと無言で失敗する)
      */
     network: boolean;
-    /** 放送の時刻 (UNIX ミリ秒)。録画は再生位置から出す。渡さなければ放送の TOT から */
-    clock?: (() => number) | null;
+    /** 放送の時刻 (UNIX ミリ秒)。録画は再生位置から出す。渡さないか null を返せば放送の TOT から */
+    clock?: (() => number | null) | null;
     /** 文書が別の局へ選局したい (epgTune)。選局は画面がやり、切り替えたら true。渡さなければいつも失敗 */
     tune?: ((service: Service) => boolean) | null;
     /**

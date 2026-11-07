@@ -243,27 +243,27 @@ describe("音声を選ぶために流すほうへ移る (streamForAudio)", () =>
 
 describe("コーデックのメニュー (codecChoices)", () => {
   test("この端末で観られる方法があるものだけ", () => {
-    expect(codecChoices(av1Only, chrome)).toEqual(["h264", "av1"]);
-    expect(codecChoices(av1Only, iphone)).toEqual(["h264", "av1"]);
+    expect(codecChoices(av1Only, chrome)).toEqual(["av1", "h264"]);
+    expect(codecChoices(av1Only, iphone)).toEqual(["av1", "h264"]);
     expect(codecChoices(tsOnly, browser([], [AV1_MP4]))).toEqual(["av1"]);
   });
 
   test("MPEG-2 は元の TS が残っていて、この端末でデコードできるときだけ末尾に", () => {
     expect(codecChoices(tsOnly, { ...chrome, mpeg2: true })).toEqual([
-      "h264",
       "av1",
+      "h264",
       "mpeg2",
     ]);
-    expect(codecChoices(tsOnly, chrome)).toEqual(["h264", "av1"]);
+    expect(codecChoices(tsOnly, chrome)).toEqual(["av1", "h264"]);
     expect(codecChoices(av1Only, { ...chrome, mpeg2: true })).toEqual([
-      "h264",
       "av1",
+      "h264",
     ]);
   });
 
   test("世帯の設定で外したもの (H.264・H.265) は並べない", () => {
     expect(codecChoices(av1Only, chrome, ["h264", "hevc"])).toEqual(["av1"]);
-    expect(codecChoices(av1Only, chrome, [])).toEqual(["h264", "av1"]);
+    expect(codecChoices(av1Only, chrome, [])).toEqual(["av1", "h264"]);
   });
 });
 
@@ -427,8 +427,8 @@ describe("H.265 もある録画 (AV1 → H.265 → H.264)", () => {
 
   test("H.265 は選べるコーデックに並ぶが、エンコード済みが無ければ並ばない", () => {
     const can = browser([], [H264_MP4, H264_LIVE, HEVC_MP4, AV1_MP4]);
-    expect(codecChoices(three, can)).toEqual(["h264", "hevc", "av1"]);
-    expect(codecChoices(av1Only, can)).toEqual(["h264", "av1"]);
+    expect(codecChoices(three, can)).toEqual(["av1", "hevc", "h264"]);
+    expect(codecChoices(av1Only, can)).toEqual(["av1", "h264"]);
     expect(pickOffer(three, can, "hevc")).toEqual({
       way: "stream",
       codec: "hevc",

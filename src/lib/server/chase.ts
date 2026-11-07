@@ -163,7 +163,7 @@ export function followFile(
   let cancelled = false;
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      const started = Date.now();
+      let started = Date.now();
       let sent = 0;
       let position = offset;
       const handle = await open(path, "r");
@@ -171,7 +171,10 @@ export function followFile(
         const buffer = new Uint8Array(READ_SIZE);
         while (!cancelled) {
           if ((controller.desiredSize ?? 1) <= 0 || hold()) {
+            // 止めていた間は倍速の持ち分に数えない。数えると、止めたあとにそのぶんを縛り無しで読む
+            const waited = Date.now();
             await Bun.sleep(WAIT_READER);
+            started += Date.now() - waited;
             continue;
           }
           const { bytesRead } = await handle.read(

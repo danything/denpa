@@ -6,8 +6,8 @@
 
 ### どのチューナーが使えますか
 
-PT3 (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、Sony CECH-ZD1 J です。
-ほかに、PX-S1UD・PT1 / PT2・PX-BCUD・Friio (白) など、実機では確かめていないものの Linux DVB で動くはずの機材があります
+PT3 (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、PX-S1UD (siano-userland)、Sony CECH-ZD1 J、PIXELA PIX-DT295 (試験的) です。
+ほかに、PT1 / PT2・PX-BCUD・Friio (白) など、実機では確かめていないものの Linux DVB で動くはずの機材があります
 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))。使ってみたら、動いたかどうかを [Issue](https://github.com/danything/denpa/issues) で教えてください。
 挿してあれば自動で見つけ、地上波か衛星かも見分けます。
 一覧は [tuners.md](tuners.md#要るもの)。
@@ -15,7 +15,7 @@ PT3 (Linux DVB)、PX-Q3U4・PX-W3U4・PX-MLT 系など (px4-userland)、Sony CEC
 ### Mac や Windows でも動きますか
 
 Apple Silicon の Mac と x64 の Windows で動きます。どちらも denpa 本体とエージェントが OS の上で直接動きます (コンテナは使わない)。
-使えるチューナーは px4-userland と siano-userland の機材と Sony CECH-ZD1 J です (DVB は Linux だけ)。
+使えるチューナーは px4-userland と siano-userland の機材と Sony CECH-ZD1 J・PIXELA PIX-DT295 (試験的) です (DVB は Linux だけ)。
 [install-mac.md](install-mac.md)・[install-windows.md](install-windows.md)。
 
 ### arm64 でも動きますか

@@ -91,7 +91,7 @@ public static class DeviceProbe
 
     private static unsafe string[] Ask(string device)
     {
-        var fd = Sys.Open(device, Sys.ReadOnly | Sys.NonBlocking);
+        var fd = Sys.Open(device, Sys.ReadOnly | Sys.NonBlocking | Sys.CloseOnExec);
         if (fd < 0) return [];
         try
         {

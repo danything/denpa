@@ -4,14 +4,14 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 自前方式 (dt295:) のフロントエンド (復調とチューナー) の設定と選局。節の番号は仕様書 (dt295-resident/spec.md) のもの。
-/// 常駐方式では常駐イメージが SERVICE のたびに 1 本ずつ進める I2C を、ホストが I2C の転送で順に出す (Dt295NativeI2c)。
+/// 仕様書では常駐イメージが SERVICE のたびに 1 本ずつ進める I2C を、ホストが I2C の転送の並びにして順に出す (Dt295NativeI2c)。
 ///
 /// I2C の機器は 2 つ。0x10 = 地上波の復調 (T 復調)、0x11 = 衛星の復調 (S 復調)。チューナーは復調のレジスタ 0xFE を通した中継の先 (仕様書 7.0)。
 /// チップの型番とレジスタの意味は仕様書にも無い (11.1)。表の値は仕様書のとおり。
 ///
 /// 仕様書に無くて決めた所:
 /// - 仕様書の手順は、常駐イメージの時刻 (ms) で書かれている。ホストの I2C は 1 転送が数 ms かかるので、時刻には合わせず、
-///   仕様書が「待つ」と書いた所 (100 ms・20 ms・4 ms・6 ms・10 ms・約 40 ms) だけ待ち、あとは順に出す
+///   仕様書が「待つ」と書いた所 (100 ms・20 ms・4 ms・6 ms・10 ms・約 40 ms) だけ待ち、あとは順に出す。衛星の約 40 ms だけは、実機の試験で 20 ms に短くした
 /// - 受信の確認は 1 周ごとに 10 ms 空ける (常駐イメージは 1500 回 × 10 ms で 15 秒回しても失敗にしなかった。仕様書 7.2.4)
 /// </summary>
 public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, Dt295Timeline? timeline = null)
@@ -30,9 +30,6 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     /// 1 周の読みは 1 回 約 2 ms (I2C の転送 2 回) かかるので、周期は 6 ms ほどになる
     /// </summary>
     public const int TerrestrialPollMs = 4, SatellitePollMs = 3;
-
-    /// <summary>衛星の LNB の局発 (kHz)。TUNE の受信周波数 = IF + これ (仕様書 7.3.1)。選局には IF を使う</summary>
-    public const uint SatelliteLocalKhz = 10678000;
 
     // 書き込みと、読んだ値を使わない読み・変更・書きは、ためておいて Flush で I2C の順次実行にまとめて渡す (Dt295I2cBatch)。
     // 読んだ値をこちらで使う読み (DemodRead) は、ためた分と一緒に実行してその値を返す。待ち (Wait) と段の切れ目の前にも実行する
@@ -120,8 +117,8 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     public void Initialize()
     {
         using var phases = new Dt295Timeline.Phases(timeline);
-        // 7.1.1 T 復調の初期値 (表の順に 1 レジスタ 1 転送)
-        Next(phases, "T 復調の初期値", "7.1.1。1 レジスタ 1 転送");
+        // 7.1.1 T 復調の初期値 (表の順。番号が続くものは 1 転送にまとめる)
+        Next(phases, "T 復調の初期値", "7.1.1");
         DemodPairs(Terrestrial,
             0x01, 0x00, 0x03, 0x90, 0x06, 0x80, 0x1C, 0x20, 0x1D, 0x56, 0x1E, 0x6A, 0x1F, 0x9A, 0x23, 0x4D,
             0x25, 0x00, 0x26, 0x00, 0x32, 0x21, 0x3B, 0x21, 0x3C, 0x3F, 0x70, 0x18, 0x73, 0x45, 0x74, 0x11,
@@ -222,6 +219,37 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         scope?.Note($"仕事 {clock.ElapsedMilliseconds} ms、残りの待ち {Math.Max(0, rest)} ms");
         if (rest > 0) sleep(rest);
     }
+    private enum Last
+    {
+        None,
+        Terrestrial,
+        Satellite,
+    }
+
+    /// <summary>
+    /// 最後に選局した側。選局の頭の手順が、前の選局で決まる (仕様書 7.2.2: 0B=01 は前に地上波を選んでいないときだけ。衛星を選んでいたあとは先に S 側を休ませる。
+    /// 7.3.2: 衛星の頭の T 側を休ませる表は、T が動いているときだけ要る)。選局が途中で失敗したら <see cref="Last.None"/> に戻して、次は全部入れる
+    /// </summary>
+    private Last _last = Last.None;
+
+    /// <summary>S 側を休ませる (仕様書 7.2.2 の「衛星を選んでいたあとは、先に S 側を休ませる表 0x803ADB98」。推定)</summary>
+    private void RestSatellite()
+    {
+        Demod(Satellite, 0x1C, 0xAA);
+        Demod(Satellite, 0x1F, 0x2A);
+        Demod(Satellite, 0x1E, 0x28);
+        Demod(Satellite, 0x0A, 0x00);
+        Demod(Satellite, 0x03, 0x01);
+        Demod(Satellite, 0x17, 0x01);
+        Tuner(Satellite, 0x2A, 0xB9);
+        Tuner(Satellite, 0x29, 0x70);
+        Tuner(Satellite, 0x28, 0x3E);
+        Tuner(Satellite, 0x2A, 0x19);
+        Tuner(Satellite, 0x1C, 0x00);
+        Tuner(Satellite, 0x11, 0xC0, 0xA7);
+        Flush();
+    }
+
     /// <summary>T 側を休ませる (仕様書 7.3.2 の t=1、9 章の SHUTDOWN)</summary>
     public void RestTerrestrial()
     {
@@ -254,9 +282,17 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         var high = kHz > 699999;               // 帯の切り替えは 1 か所だけ (仕様書 7.2.3)
         void T(int reg, params int[] data) => Tuner(Terrestrial, reg, data);
         using var phases = new Dt295Timeline.Phases(timeline);
-        // t=1〜2: 前に地上波を選んでいないときだけ先頭に入る 0B=01 (仕様書 7.2.2)。この試作は選局の前に必ず入れる
+        var before = _last;
+        _last = Last.None;
+        // 衛星を選んでいたあとは、先に S 側を休ませる (仕様書 7.2.2。推定)
+        if (before == Last.Satellite)
+        {
+            Next(phases, "S 側を休ませる", "7.2.2。衛星を選んでいたあと");
+            RestSatellite();
+        }
+        // t=1〜2: 0B=01 は前に地上波を選んでいないときだけ先頭に入る (仕様書 7.2.2)
         Next(phases, "t=1〜2 チューナーを動かす", "7.2.2");
-        T(0x0B, 0x01);
+        if (before != Last.Terrestrial) T(0x0B, 0x01);
         T(0x12, 0x01);
         Wait(20, "仕様書 7.2.2。t=2 から t=22");
         // t=22
@@ -302,6 +338,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         Demod(Terrestrial, 0x1E, 0x2A);
         Demod(Terrestrial, 0x1F, 0x8A);
         Flush();
+        _last = Last.Terrestrial;
     }
 
     /// <summary>
@@ -405,9 +442,11 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         var (registers, band) = SatelliteDivider(ifKhz);
         void S(int reg, params int[] data) => Tuner(Satellite, reg, data);
         using var phases = new Dt295Timeline.Phases(timeline);
-        // t=1: T 側を休ませる
+        var before = _last;
+        _last = Last.None;
+        // t=1: T 側を休ませる (衛星を選んでいたあとは、T はもう休んでいる)
         Next(phases, "t=1 T 側を休ませる", "7.3.2");
-        RestTerrestrial();
+        if (before != Last.Satellite) RestTerrestrial();
         DemodRmw(Satellite, 0x1E, 0xCF, 0x20);
         S(0x11, 0x00, 0xA7);
         S(0x2A, 0xB9);
@@ -455,7 +494,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         _batch.Write(Satellite, 0xFE, 0xC1);
         _batch.Read(Satellite, 2);
         _batch.WriteModified(Satellite, [0xFE, 0xC0, 0x50], 0x01, 0xF0);
-        Wait(40, "仕様書 7.3.2。t=16 から t=56");
+        Wait(20, "仕様書 7.3.2 は約 40 ms。実機で 20 ms でも BS15・CS22 が 30 回ずつ全部ロックし、ロックまでが 20 ms ほど短くなることを確かめて 20 ms にした。t=16 から t=56");
         // t=56
         Next(phases, "t=56", "7.3.2");
         Demod(Satellite, 0x1E, 0x20);
@@ -470,6 +509,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         DemodRmw(Satellite, 0xA5, 0xFF, 0x40);
         DemodRmw(Satellite, 0xA3, 0x88, 0x11);
         Flush();
+        _last = Last.Satellite;
     }
 
     /// <summary>

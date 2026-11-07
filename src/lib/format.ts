@@ -489,7 +489,7 @@ export function signalText(signal: TunerSignal): string {
 
 /** 生の値の C/N に添える注記。何と比べるものかを言う */
 export const SIGNAL_RAW_NOTE =
-  "C/N (生の値) は機材やドライバが返した値のままで、dB ではありません。同じチューナーで、ほかのチャンネルや配線と比べる目安です";
+  "C/N (生の値) は機材やドライバが返した値のままで、dB ではありません。同じチューナー・同じチャンネルで、配線を変える前とあとを比べる目安です";
 
 /** ロゴまで見て判定できたときの覚え書き (`cm.openCm`) */
 export const LOGO_OK = "ロゴ";

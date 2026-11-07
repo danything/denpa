@@ -149,6 +149,7 @@
   }
   function close(): void {
     opened = null;
+    failedFor = null;
     detail.close();
     // 候補から来た番組 (`?program=`) を閉じたら URL からも外す。読み直しても開き直さない
     if (page.url.searchParams.has("program")) {
@@ -157,13 +158,20 @@
       void goto(url, { replace: true, shallow: true, state: page.state });
     }
   }
+  /**
+   * 詳細の中の予約・取消に失敗した番組。理由はこの番組の詳細の中にだけ出す
+   * (`form` は次に送るまで残るので、閉じて別の番組を開くと前の理由や行のボタンの理由が出ていた)
+   */
+  let failedFor = $state<number | null>(null);
   /** 詳細の中の予約・取消。失敗したときは開いたままにして、中に理由を出す */
-  const closeOnSuccess: SubmitFunction =
-    () =>
-    async ({ result, update }) => {
+  const closeOnSuccess: SubmitFunction = () => {
+    const sentFor = opened?.program_id ?? null;
+    return async ({ result, update }) => {
       await update();
+      failedFor = result.type === "success" ? null : sentFor;
       if (result.type === "success") close();
     };
+  };
 
   /**
    * **候補から選んだ番組は、開いたら詳細を出す** (`?program=`。ヘッダーの候補の番組・予約)。
@@ -752,7 +760,7 @@
 {#if detail.current}
   <ProgramDetail program={detail.current} onclose={close}>
     {#snippet actions()}
-      {#if form?.message}
+      {#if form?.message && opened !== null && failedFor === opened.program_id}
         <div class="notice error">{form.message}</div>
       {/if}
       <!--

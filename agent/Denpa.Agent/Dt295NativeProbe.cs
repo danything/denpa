@@ -19,9 +19,10 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Dt295NativeProbe
 {
-    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--trace]";
+    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--switch <チャンネル,…>] [--lock-test N [--reopen] [--alt <チャンネル>]] [--trace]";
 
-    internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, uint IdlePolls = Dt295NativeDevice.IdlePollsDefault, bool DemodDump = false);
+    internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, bool DemodDump = false, string[]? Switch = null,
+        int LockTest = 0, bool Reopen = false, string? Alt = null);
 
     internal static Options? Parse(string[] args)
     {
@@ -33,7 +34,86 @@ public static class Dt295NativeProbe
         if (Value("--channel") is not { } channel || ChannelTable.Parse(channel) is not { } tuning) return null;
         var seconds = 5;
         if (args.Contains("--seconds") && !int.TryParse(Value("--seconds"), NumberStyles.None, CultureInfo.InvariantCulture, out seconds)) return null;
-        return seconds <= 0 ? null : new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), args.Contains("--trace"), args.Contains("--replug"), Value("--output"), DemodDump: args.Contains("--demod-dump"));
+        return seconds <= 0 ? null : new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), args.Contains("--trace"), args.Contains("--replug"), Value("--output"), DemodDump: args.Contains("--demod-dump"), Switch: Value("--switch")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            LockTest: int.TryParse(Value("--lock-test"), NumberStyles.None, CultureInfo.InvariantCulture, out var lockTest) ? lockTest : 0,
+            Reopen: args.Contains("--reopen"), Alt: Value("--alt"));
+    }
+
+    /// <summary>次の選局に使う、前の選局から離れるための同じ種別のチャンネル (チャンネル番号 + 2)。指定が無いときの既定</summary>
+    private static string DefaultAlt(string channel)
+    {
+        var digits = new string(channel.SkipWhile(c => !char.IsDigit(c)).TakeWhile(char.IsDigit).ToArray());
+        var prefix = channel[..(channel.Length - channel.SkipWhile(c => !char.IsDigit(c)).Count())];
+        return int.TryParse(digits, out var number) ? $"{prefix}{number + 2}" : channel;
+    }
+
+    /// <summary>
+    /// 選局を <paramref name="options"/>.LockTest 回くり返して、成功した割合と時間を出す (選局の手順や待ちを変えたときの確認用)。
+    /// 毎回、同じ種別の別のチャンネル (--alt) に周波数だけ合わせて前の選局から離してから、測るチャンネルを選局する。
+    /// --reopen を付けると毎回機材を閉じて開き直す (INITIALIZE の待ちを試すとき)。成功は、選局が受信を確認して最初の TS が届くこと
+    /// </summary>
+    internal static int LockTest(Options options, Func<Dt295Timeline, Dt295NativeDevice> acquire, Action closeIdle, Action closeAll, TextWriter output)
+    {
+        var timeline = new Dt295Timeline();
+        Dt295NativeTuner Make() => new($"{Dt295.Model} {options.Port}", () => acquire(timeline), closeIdle);
+        var alt = options.Alt ?? DefaultAlt(options.Channel);
+        var altTuning = ChannelTable.Parse(alt);
+        var results = new List<(bool Ok, double TotalMs, double LockMs, string? Error)>();
+        output.WriteLine($"ロックの試験: {options.Channel} を {options.LockTest} 回 (機材を開き直す: {(options.Reopen ? "はい" : "いいえ")}、離れるチャンネル {alt})");
+        Dt295NativeTuner? tuner = null;
+        try
+        {
+            for (var i = 1; i <= options.LockTest; i++)
+            {
+                if (options.Reopen)
+                {
+                    tuner?.Dispose();
+                    tuner = null;
+                }
+                tuner ??= Make();
+                if (!options.Reopen && altTuning is not null && tuner.Device is { } open)
+                {
+                    try
+                    {
+                        // 前の選局から離す。ロックは待たない
+                        if (altTuning.Satellite) open.Frontend.TuneSatellite(altTuning.Frequency);
+                        else open.Frontend.TuneTerrestrial((uint)((altTuning.Frequency + 500UL) / 1000));
+                    }
+                    catch (Exception error) when (error is IOException or InvalidOperationException)
+                    {
+                        output.WriteLine($"  離れる選局に失敗: {error.Message}");
+                    }
+                }
+                var before = timeline.Rows.Count;
+                var clock = Stopwatch.StartNew();
+                try
+                {
+                    tuner.Tune(options.Tuning, options.Tuning.StreamId);
+                    var total = clock.Elapsed.TotalMilliseconds;
+                    var lockMs = timeline.Rows.Skip(before).Where(row => row.Name.StartsWith("受信の確認", StringComparison.Ordinal)).Select(row => row.Ms).DefaultIfEmpty(-1).Last();
+                    results.Add((true, total, lockMs, null));
+                    output.WriteLine($"{i,4}: 成功 {total:F0} ms (受信の確認 {lockMs:F0} ms)");
+                }
+                catch (Exception error) when (error is IOException or InvalidOperationException or TimeoutException)
+                {
+                    results.Add((false, clock.Elapsed.TotalMilliseconds, -1, error.Message));
+                    output.WriteLine($"{i,4}: 失敗 {clock.Elapsed.TotalMilliseconds:F0} ms ({error.Message})");
+                }
+            }
+        }
+        finally
+        {
+            tuner?.Dispose();
+            closeAll();
+        }
+        static double At(List<double> sorted, double q) => sorted.Count == 0 ? double.NaN : sorted[Math.Clamp((int)Math.Ceiling(q * sorted.Count) - 1, 0, sorted.Count - 1)];
+        var ok = results.Where(result => result.Ok).ToList();
+        var totals = ok.Select(result => result.TotalMs).Order().ToList();
+        var locks = ok.Where(result => result.LockMs >= 0).Select(result => result.LockMs).Order().ToList();
+        output.WriteLine($"結果: 成功 {ok.Count}/{results.Count} ({(results.Count == 0 ? 0 : 100.0 * ok.Count / results.Count):F1}%)、"
+            + $"最初の TS まで 最小 {At(totals, 0):F0} 中央 {At(totals, 0.5):F0} 90% {At(totals, 0.9):F0} 最大 {At(totals, 1):F0} ms、"
+            + $"受信の確認 最小 {At(locks, 0):F0} 中央 {At(locks, 0.5):F0} 90% {At(locks, 0.9):F0} 最大 {At(locks, 1):F0} ms");
+        return ok.Count == results.Count && results.Count > 0 ? 0 : 1;
     }
 
     public static int Run(string[] args)
@@ -66,10 +146,14 @@ public static class Dt295NativeProbe
             }
             Console.Error.WriteLine($"USB のポート {port} の電源を入れ直しました");
         }
+        // --trace: 機材への読み書きと設定の読み戻しを 1 行ずつ、標準エラー出力に出す
+        Action<string>? trace = options.Trace ? message => Console.Error.WriteLine($"  {message}") : null;
+        if (options.LockTest > 0) return LockTest(options with { Port = port }, timeline => Dt295NativeDevice.Acquire(port, timeline, trace), () => Dt295NativeDevice.CloseIfIdle(port), Dt295NativeDevice.CloseAll, Console.Out);
         try
         {
             var timeline = new Dt295Timeline();
-            return Execute(() => Dt295NativeDevice.Acquire(port, timeline), () => Dt295NativeDevice.CloseIfIdle(port), options, Console.Out, Console.Error, timeline);
+            return Execute(() => Dt295NativeDevice.Acquire(port, timeline, trace), () => Dt295NativeDevice.CloseIfIdle(port), options, Console.Out, Console.Error, timeline,
+                () => Dt295.Card(port).Open());
         }
         finally
         {
@@ -78,7 +162,7 @@ public static class Dt295NativeProbe
     }
 
     /// <summary>機材を取って選局し、<see cref="Options.Duration"/> だけ受けて統計を出す。テストは偽の機材を取る関数と閉じる関数を渡す</summary>
-    internal static int Execute(Func<Dt295NativeDevice> acquire, Action? closeIdle, Options options, TextWriter output, TextWriter log, Dt295Timeline? timeline = null)
+    internal static int Execute(Func<Dt295NativeDevice> acquire, Action? closeIdle, Options options, TextWriter output, TextWriter log, Dt295Timeline? timeline = null, Func<ICardLink>? openCard = null)
     {
         var total = Stopwatch.StartNew();
         var process = Process.GetCurrentProcess();
@@ -102,6 +186,9 @@ public static class Dt295NativeProbe
         var firstRead = TimeSpan.MinValue;
         var lastRead = TimeSpan.Zero;
         long firstChunk = 0;
+        long mainControls = 0;
+        var mainCpu = TimeSpan.Zero;
+        long mainElapsed = 0;
         Dt295NativeDevice? device = null;
         Thread? reader = null;
         var stopReading = false;
@@ -183,6 +270,12 @@ public static class Dt295NativeProbe
                 for (var at = 0; at < dump.Length; at += 16) output.WriteLine($"  {at:X2}: {Convert.ToHexString(dump.AsSpan(at, 16))}");
             }
             Volatile.Write(ref stopReading, true);
+            mainControls = device?.Link.Controls ?? 0;
+            mainCpu = Cpu();
+            mainElapsed = total.ElapsedMilliseconds;
+            reader.Join(TimeSpan.FromSeconds(2));
+            if (device is not null) MeasureCard(device, firstTsMs, openCard, output);
+            if (options.Switch is { Length: > 0 } list) MeasureSwitches(tuner, device, options.Channel, options.Tuning, list, output);
         }
         catch (Exception error) when (error is IOException or TimeoutException or InvalidOperationException or ArgumentException
             or UnauthorizedAccessException or InvalidDataException)
@@ -191,10 +284,15 @@ public static class Dt295NativeProbe
             failed = true;
         }
         Volatile.Write(ref stopReading, true);
-        var controls = device?.Link.Controls ?? 0;
         tuner.Dispose();
         reader?.Join(TimeSpan.FromSeconds(2));
-        output.WriteLine($"制御転送: 合計 {controls} 回、ホストの CPU 時間 {(Cpu() - cpuStart).TotalMilliseconds:F0} ms、経過 {total.ElapsedMilliseconds} ms");
+        if (mainElapsed == 0)
+        {
+            mainControls = device?.Link.Controls ?? 0;
+            mainCpu = Cpu();
+            mainElapsed = total.ElapsedMilliseconds;
+        }
+        output.WriteLine($"制御転送: 合計 {mainControls} 回、ホストの CPU 時間 {(mainCpu - cpuStart).TotalMilliseconds:F0} ms、経過 {mainElapsed} ms");
         var receiving = firstRead == TimeSpan.MinValue ? TimeSpan.Zero : lastRead - firstRead;
         if (firstRead != TimeSpan.MinValue && receiving > TimeSpan.Zero)
         {
@@ -223,6 +321,63 @@ public static class Dt295NativeProbe
             timeline.Print(output);
         }
         return failed || stats.Bytes == 0 || problem is not null ? 1 : 0;
+    }
+
+    /// <summary>
+    /// カードの準備が選局と並んで済んだ時間と、ID を読むまでの時間を出す。時間は機材を開き始めてからで、最初の TS と同じ物差し。
+    /// ID は、準備済みのカードに Reset と BCas の読みをして得る (TS が届いたときに復号を始める場合にかかる時間)
+    /// </summary>
+    private static void MeasureCard(Dt295NativeDevice device, long firstTsMs, Func<ICardLink>? openCard, TextWriter output)
+    {
+        device.CardWarmTask?.Wait(TimeSpan.FromSeconds(5));
+        output.WriteLine($"カード: 準備完了まで {(device.CardReadyMs < 0 ? "済んでいない (カードが無いか失敗)" : $"{device.CardReadyMs} ms")} (機材を開き始めてから)、最初の TS まで {firstTsMs} ms (同じく)");
+        if (openCard is null) return;
+        try
+        {
+            var clock = Stopwatch.StartNew();
+            using var link = openCard();
+            link.Reset();
+            var reset = clock.ElapsedMilliseconds;
+            var init = BCas.Read(link);
+            var read = clock.ElapsedMilliseconds;
+            var ready = Math.Max(Math.Max(device.CardReadyMs, 0), firstTsMs);
+            output.WriteLine($"カードの ID: Reset {reset} ms、ID の読みまで {read} ms。TS が届いたときに復号を始めるなら、開き始めてから約 {ready + read} ms で ID が読める "
+                + $"(カード {string.Join(" / ", init.Ids.Select(id => id.ToString("D16")))}、CA_system_id 0x{init.CaSystemId:X4})");
+        }
+        catch (Exception error) when (error is IOException or TimeoutException or InvalidOperationException)
+        {
+            output.WriteLine($"カードの ID を読めませんでした: {error.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 同じ機材で続けて選局し直す時間を測る (機材を開いたままの選局し直しで、全部の初期化はしない)。種別が同じ (地上波どうし・衛星どうし) か替わるかも出す。
+    /// 時間は選局の呼び出しから最初の TS まで
+    /// </summary>
+    private static void MeasureSwitches(Dt295NativeTuner tuner, Dt295NativeDevice? device, string firstChannel, ChannelTable.Tuning firstTuning, string[] list, TextWriter output)
+    {
+        var previous = (Name: firstChannel, firstTuning.Satellite);
+        output.WriteLine("選局の切り替え (機材は開いたまま):");
+        foreach (var name in list)
+        {
+            if (ChannelTable.Parse(name) is not { } tuning)
+            {
+                output.WriteLine($"  {name}: 選局表にありません");
+                continue;
+            }
+            var controls = device?.Link.Controls ?? 0;
+            var clock = Stopwatch.StartNew();
+            try
+            {
+                tuner.Tune(tuning, tuning.StreamId);
+                output.WriteLine($"  {previous.Name} → {name} ({(previous.Satellite == tuning.Satellite ? "同じ種別" : "種別が替わる")}): {clock.ElapsedMilliseconds} ms、制御転送 {(device?.Link.Controls ?? 0) - controls} 回");
+            }
+            catch (Exception error) when (error is IOException or InvalidOperationException or TimeoutException)
+            {
+                output.WriteLine($"  {previous.Name} → {name}: 失敗 ({error.Message}。{clock.ElapsedMilliseconds} ms)");
+            }
+            previous = (name, tuning.Satellite);
+        }
     }
 }
 
