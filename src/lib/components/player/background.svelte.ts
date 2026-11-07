@@ -101,8 +101,11 @@ export function backgroundPlayback(options: Options): Background {
      * - `leavepictureinpicture` もバブルしないと言う実装 (MDN の記述) に備えて、そちらでも同じ
      *   受け方で拾う。二重に `check()` が走るが、`step()` は `held` で守るので止め直しはしない
      */
+    // 片付けたあとに、後ろへ回した check() が破棄したプレイヤーを呼ばないよう、時計を覚えて止める
+    let later: ReturnType<typeof setTimeout> | undefined;
     const onLeavePip = (): void => {
-      setTimeout(check, 0);
+      clearTimeout(later);
+      later = setTimeout(check, 0);
     };
     document.addEventListener("leavepictureinpicture", check);
     document.addEventListener("leavepictureinpicture", onLeavePip, true);
@@ -114,6 +117,7 @@ export function backgroundPlayback(options: Options): Background {
     window.addEventListener("pagehide", hide);
     window.addEventListener("pageshow", show);
     return () => {
+      clearTimeout(later);
       document.removeEventListener("visibilitychange", check);
       document.removeEventListener("leavepictureinpicture", check);
       document.removeEventListener("leavepictureinpicture", onLeavePip, true);
