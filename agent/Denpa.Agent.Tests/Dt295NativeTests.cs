@@ -724,4 +724,48 @@ public class Dt295NativeTests
         // 以降は TEI も通す
         await Assert.That(settled.Accept(Packet(true))).IsTrue();
     }
+
+    [Test]
+    public async Task 復調が_TMCC_の確定を報告するまでは_TEI_が付かないパケットも捨てる()
+    {
+        var reported = false;
+        var settled = new Dt295NativeStream.Settled(() => reported);
+        byte[] Packet(bool tei) => [0x47, (byte)(tei ? 0x80 : 0x00), 0x00, 0x10];
+        // 確定の前は、TEI の付かないパケットが偶然 CleanRun 個を超えて続いても通さない
+        settled.Poll();
+        for (var i = 0; i < Dt295NativeStream.Settled.CleanRun * 4; i++) await Assert.That(settled.Accept(Packet(false))).IsFalse();
+        await Assert.That(settled.IsOpen).IsFalse();
+        // 報告のあとは、読み出しの残りの TEI を避けるため、付かないパケットが続くまで捨てる
+        reported = true;
+        await Task.Delay(40);
+        settled.Poll();
+        await Assert.That(settled.Accept(Packet(true))).IsFalse();
+        for (var i = 0; i < Dt295NativeStream.Settled.CleanRun - 1; i++) await Assert.That(settled.Accept(Packet(false))).IsFalse();
+        await Assert.That(settled.Accept(Packet(false))).IsTrue();
+        await Assert.That(settled.IsOpen).IsTrue();
+    }
+
+    [Test]
+    public async Task TMCC_が確定したかは_ロックの印が立ち_0x80_の_bit5_が落ちたときだけ真になる()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var device = Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000);
+        try
+        {
+            var terrestrial = fake.Terrestrial.Regs;
+            terrestrial[0x80] = 0x2F;
+            terrestrial[0x81] = 0x10;
+            await Assert.That(device.Frontend.TmccSettled()).IsFalse();
+            terrestrial[0x80] = 0x04;
+            await Assert.That(device.Frontend.TmccSettled()).IsTrue();
+            terrestrial[0x81] = 0x00;
+            await Assert.That(device.Frontend.TmccSettled()).IsFalse();
+        }
+        finally
+        {
+            device.Release();
+            Dt295NativeDevice.CloseIfIdle(port);
+        }
+    }
 }
