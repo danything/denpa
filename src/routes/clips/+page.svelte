@@ -1075,7 +1075,7 @@
     --dp-btn-lift: none;
     position: sticky;
     top: var(--dp-header-space, 0px);
-    z-index: 4;
+    z-index: var(--dp-z-pagebar);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -1099,7 +1099,7 @@
   :global(html[data-phone]) .c-bar {
     position: sticky;
     order: 2;
-    z-index: 5;
+    z-index: var(--dp-z-pagebar);
     display: flex;
     align-items: center;
     gap: 0.25rem;

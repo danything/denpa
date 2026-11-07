@@ -686,7 +686,7 @@
   .nav-progress {
     position: fixed;
     inset: 0 0 auto 0;
-    z-index: 60;
+    z-index: var(--dp-z-modal);
     height: 3px;
     overflow: hidden;
     background: var(--pico-primary-background);
@@ -741,7 +741,7 @@
   .navbar {
     position: sticky;
     top: 0;
-    z-index: 40;
+    z-index: var(--dp-z-header);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -880,7 +880,7 @@
   .search-bar {
     position: sticky;
     top: 0;
-    z-index: 40;
+    z-index: var(--dp-z-header);
     padding: calc(var(--dp-space-2) + env(safe-area-inset-top)) var(--dp-gutter)
       var(--dp-space-2);
     background: var(--dp-bg);
@@ -895,7 +895,7 @@
   .tabbar {
     position: fixed;
     inset: auto 0.75rem calc(0.5rem + env(safe-area-inset-bottom)) 0.75rem;
-    z-index: 40;
+    z-index: var(--dp-z-header);
     display: grid;
     grid-auto-columns: minmax(0, 1fr);
     grid-auto-flow: column;
@@ -1111,7 +1111,7 @@
     position: fixed;
     top: calc(env(safe-area-inset-top) + var(--dp-space-2));
     left: calc(env(safe-area-inset-left) + var(--dp-space-3));
-    z-index: 70;
+    z-index: var(--dp-z-skip);
     padding: var(--dp-space-2) var(--dp-space-4);
     border-radius: var(--dp-radius-full);
     background: var(--dp-float);

@@ -555,7 +555,7 @@
     gap: var(--dp-space-2);
     position: fixed;
     inset-inline: var(--dp-dock-inset);
-    z-index: 30;
+    z-index: var(--dp-z-dock);
     padding: var(--dp-space-1) var(--dp-space-1) var(--dp-space-1)
       var(--dp-space-3);
   }

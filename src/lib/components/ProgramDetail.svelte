@@ -141,7 +141,7 @@
   .detail-modal {
     position: fixed;
     inset: 0;
-    z-index: 60;
+    z-index: var(--dp-z-modal);
     /* grid だと箱の max-height: 100% が行の高さ (auto) に対して解決されて効かず、低い画面ではみ出した。flex なら外枠の高さに効く */
     display: flex;
     align-items: center;

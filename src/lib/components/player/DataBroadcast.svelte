@@ -798,7 +798,7 @@
 />
 
 <!--
-    映像と同じ枠に重ねる。操作バーより下に敷く (`z-index: 5` / `ControlBar` は 10)。上に載せると
+    映像と同じ枠に重ねる。操作バーより下に敷く (`--dp-z-stage-data`。`ControlBar` のボタンは `--dp-z-stage-controls`)。上に載せると
     d ボタンごと隠れて、出したら消せなくなる
 -->
 <div
@@ -844,7 +844,7 @@
     pointer-events: none;
     position: absolute;
     inset: 0;
-    z-index: 5;
+    z-index: var(--dp-z-stage-data);
     overflow: hidden;
   }
   /* 「取得中」は右上の隅。テレビと同じ場所 (舞台の通知の列には積まない) */
@@ -852,7 +852,7 @@
     position: absolute;
     top: 0.75rem;
     right: 0.75rem;
-    z-index: 10;
+    z-index: var(--dp-z-stage-controls);
     display: flex;
   }
 </style>

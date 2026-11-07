@@ -2,6 +2,7 @@
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
 
+  import { arming } from "#lib/arming.svelte.js";
   import JobProgress from "#lib/components/JobProgress.svelte";
   import Lead from "#lib/components/Lead.svelte";
   import { byteScale, dateTime } from "#lib/format.js";
@@ -211,7 +212,40 @@
       phase === "restarting",
   );
   const bytes = $derived(byteScale(total));
+
+  /**
+   * 取消は戻せない (送ったもの・確かめたもの・取り込む用意を捨てる) ので 2 回押させる (`arming`。削除と同じ)。
+   * 2 回目は「取消を確定」(docs/writing.md)
+   */
+  const canceling = arming(
+    '[data-testid="transfer-cancel"], [data-testid="transfer-cancel-confirm"]',
+  );
 </script>
+
+<svelte:window onclick={canceling.stand} />
+
+{#snippet cancelButton(disabled: boolean)}
+  {#if canceling.armed === 0}
+    <button
+      type="button"
+      class="small danger"
+      {disabled}
+      onclick={() => {
+        canceling.fire();
+        void cancel();
+      }}
+      data-testid="transfer-cancel-confirm">取消を確定</button
+    >
+  {:else}
+    <button
+      type="button"
+      class="small outline danger"
+      {disabled}
+      onclick={() => canceling.arm(0)}
+      data-testid="transfer-cancel">取消</button
+    >
+  {/if}
+{/snippet}
 
 <!-- **たまにしか触らないもの。** 機械を替えるときだけ使う (docs/migrate.md「別の機械へ移す」) -->
 <div class="sections readable">
@@ -288,12 +322,7 @@
       </div>
       {#if phase !== "restarting"}
         <div class="cluster">
-          <button
-            type="button"
-            class="small outline danger"
-            onclick={cancel}
-            data-testid="transfer-cancel">取消</button
-          >
+          {@render cancelButton(false)}
         </div>
       {/if}
     {:else}
@@ -342,13 +371,7 @@
             </span>
           {/if}
           {#if status.upload !== null || result !== null || phase === "sending"}
-            <button
-              type="button"
-              class="small outline danger"
-              disabled={phase === "applying"}
-              onclick={cancel}
-              data-testid="transfer-cancel">取消</button
-            >
+            {@render cancelButton(phase === "applying")}
           {/if}
         </div>
         {#if resumable && status.prepared}

@@ -239,8 +239,8 @@
   .seek {
     --seek-track: color-mix(in srgb, var(--dp-on-video) 22%, transparent);
     --seek-played: var(--dp-video-fill);
-    --seek-cm: rgb(255 200 95 / 0.55);
-    --seek-cm-played: rgb(255 179 0);
+    --seek-cm: var(--dp-video-cm);
+    --seek-cm-played: var(--dp-video-cm-played);
     position: relative;
     height: 1.5rem;
     border-radius: var(--dp-radius-sm);

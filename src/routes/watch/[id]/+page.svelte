@@ -9,7 +9,6 @@
     type CaptionPages,
   } from "@danything/arib/caption-text";
   import { onMount, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
 
   import { submitting } from "#lib/actions.js";
   import {
@@ -71,9 +70,7 @@
   import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
   import { fitRect } from "#lib/components/player/paint.js";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
-  import PlayerLayout, {
-    PHONE_LANDSCAPE,
-  } from "#lib/components/player/PlayerLayout.svelte";
+  import PlayerLayout from "#lib/components/player/PlayerLayout.svelte";
   import PlayerStage from "#lib/components/player/PlayerStage.svelte";
   import PlayerVeil from "#lib/components/player/PlayerVeil.svelte";
   import Remote from "#lib/components/player/Remote.svelte";
@@ -101,6 +98,7 @@
   import StageTail from "#lib/components/player/StageTail.svelte";
   import { unslipper } from "#lib/components/player/unslip.js";
   import { playerVolume } from "#lib/components/player/volume.svelte.js";
+  import VolumeNote from "#lib/components/player/VolumeNote.svelte";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, {
     errorNotice,
@@ -116,7 +114,7 @@
   } from "#lib/format.js";
   import { CODEC_LABEL } from "#lib/hw.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
-  import { JIKKYO_LIST_KEY, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
+  import { jikkyoListSwitch, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { read as stored, write as remind } from "#lib/keep.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { codecsFor, type LiveCodec } from "#lib/live.js";
@@ -1424,13 +1422,9 @@
    * 右の列の「コメントの一覧」(`JikkyoList`)。流しているときと同じ条件で、映像の右端の列のボタンで出す (端末ごとに覚える)。
    * 右の列の無い形 (横にしたスマホ・全画面) では出さず、ボタンも置かない。時刻は録画の中の再生位置で出し、押すとそこへ飛ぶ
    */
-  const jikkyoList = jikkyoSwitch(JIKKYO_LIST_KEY);
-  const phoneLandscape = new MediaQuery(PHONE_LANDSCAPE);
-  const canList = $derived(
-    jikkyoActive &&
-      data.jikkyo !== null &&
-      !phoneLandscape.current &&
-      !fullscreen.active,
+  const jikkyoList = jikkyoListSwitch(
+    () => jikkyoActive && data.jikkyo !== null,
+    () => fullscreen.active,
   );
   /**
    * 放送時刻 `at` が、観ているもの (エンコードしたもの・元の TS) のどこか (`airTime` の逆)。
@@ -2373,7 +2367,7 @@
         <!-- svelte-ignore a11y_media_has_caption -->
         <!--
                     **映像の箱。データ放送はこれを小窓へ寄せる** (`DataBroadcast` の `placeVideo`)。ライブと同じ。
-                    押すのは映像そのもので、ボタンはその上に重ねる (z-index 10)
+                    押すのは映像そのもので、ボタンはその上に重ねる (`--dp-z-stage-controls`)
                 -->
         <div
           bind:this={mediaBox}
@@ -2443,18 +2437,18 @@
                 -->
           <canvas
             bind:this={overlay}
-            style="position:absolute; z-index:9; pointer-events:none;"
+            style="position:absolute; z-index:var(--dp-z-stage-captions); pointer-events:none;"
             data-testid="watch-captions-canvas"
             data-on={captions && hasCaptions}
             aria-hidden="true"
           ></canvas>
           <!--
-                    CM を跨ぐ間の覆い。字幕の上、操作バーや通知 (z-index 10) の下。出し入れは `hidden` で。
+                    CM を跨ぐ間の覆い。字幕の上、操作バーや通知 (`--dp-z-stage-controls`) の下。出し入れは `hidden` で。
                     style に式を書くと `hopping` が変わるたびに書き直され、`place` が書いた位置と大きさが消える
                 -->
           <canvas
             bind:this={cover}
-            style="position:absolute; z-index:9; pointer-events:none;"
+            style="position:absolute; z-index:var(--dp-z-stage-captions); pointer-events:none;"
             hidden={!hopping}
             aria-hidden="true"
           ></canvas>
@@ -2487,7 +2481,7 @@
           <PlayerVeil
             holding={problem === ""}
             busy
-            note={resuming ? "繋ぎ直しています" : "読み込み中"}
+            {resuming}
             error={problem}
             actions={busy && lighter.length > 0 ? lighterChoices : undefined}
             testid="watch-status"
@@ -2506,8 +2500,8 @@
             testid="watch-shot"
             onclick={() => void snapshot()}
           />
-          <!-- 右の列の先頭に「コメントの一覧」を出す・しまう (`canList`) -->
-          {#if canList}
+          <!-- 右の列の先頭に「コメントの一覧」を出す・しまう (`jikkyoList`) -->
+          {#if jikkyoList.can}
             <ControlButton
               icon={JIKKYO}
               label="コメントの一覧"
@@ -2760,9 +2754,7 @@
           <!-- 回線に合わせて段を替えた理由 (`watch-adapt.ts`) -->
           <StageNote testid="watch-adapt">{adaptText}</StageNote>
         {/if}
-        {#if volume.noted}
-          <StageNote testid="watch-volume-note">音量 {volume.level}%</StageNote>
-        {/if}
+        <VolumeNote {volume} testid="watch-volume-note" />
       {/snippet}
     </PlayerStage>
   {/if}
@@ -2779,7 +2771,7 @@
           <Remote press={dataPress} />
         {/if}
         <!-- 実況のコメントの一覧も、出している間は列の先頭 (リモコンの下) -->
-        {#if canList && jikkyoList.on}
+        {#if jikkyoList.shown}
           <JikkyoList
             feed={jikkyo}
             air={airTime}

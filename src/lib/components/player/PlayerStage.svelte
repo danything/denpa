@@ -505,7 +505,7 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: 10;
+    z-index: var(--dp-z-stage-controls);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -550,7 +550,7 @@
     right: env(safe-area-inset-right, 0px);
     bottom: env(safe-area-inset-bottom, 0px);
     left: env(safe-area-inset-left, 0px);
-    z-index: 90;
+    z-index: var(--dp-z-stage-full);
     width: auto;
     margin: 0;
     aspect-ratio: auto;

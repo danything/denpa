@@ -391,7 +391,7 @@
                     {/if}
                     <span class="truncate broadcast">{program.name}</span>
                   </span>
-                  <span class="hit-meta tiny muted">
+                  <span class="hit-meta small muted">
                     {@render service(program)}<span class="num"
                       >{dateTime(program.start_at)}〜{time(
                         program.end_at,
@@ -476,7 +476,7 @@
                       )}{/if}
                     <span class="truncate broadcast">{rec.name}</span>
                   </span>
-                  <span class="hit-meta tiny muted">
+                  <span class="hit-meta small muted">
                     {@render service(rec)}<span class="num"
                       >{dateTime(rec.start_at)}・{recordedDuration(rec)}</span
                     >
@@ -575,7 +575,7 @@
                       )}{/if}
                     <span class="truncate broadcast">{res.name}</span>
                   </span>
-                  <span class="hit-meta tiny muted">
+                  <span class="hit-meta small muted">
                     {@render service(res)}<span class="num"
                       >{dateTime(res.start_at)}〜{time(res.end_at)}</span
                     >・{res.manual
@@ -632,7 +632,7 @@
                     {#if !rule.enabled}<span class="tag">無効</span>{/if}
                     <span class="truncate">{rule.name}</span>
                   </span>
-                  <span class="hit-meta tiny muted">
+                  <span class="hit-meta small muted">
                     {#if rule.keyword !== ""}キーワード: {rule.keyword}・{/if}優先度
                     {rule.priority}・予約 {rule.reservations} 件
                   </span>
@@ -711,7 +711,7 @@
                 <span class="truncate broadcast">{row.name}</span>
               </span>
               <!-- 録るかどうかは事実なので補足の字で (docs/design.md の「印の意味」)。録らない行は薄くもなる (`.dim`) -->
-              <span class="hit-meta tiny muted">
+              <span class="hit-meta small muted">
                 <span class="broadcast">{row.service_name}</span>・<span
                   class="num">{dateTime(row.start_at)}〜{time(row.end_at)}</span
                 >{#if !row.matched}・録らない (条件から外れました){:else if row.skip !== null}・録らない
@@ -858,7 +858,7 @@
     position: fixed;
     inset-inline: 0.75rem;
     bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
-    z-index: 30;
+    z-index: var(--dp-z-dock);
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   :global(:where(html[data-phone])) .sheet-bar button {

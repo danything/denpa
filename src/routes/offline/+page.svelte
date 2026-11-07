@@ -337,8 +337,8 @@
             <div class="thumb blank"></div>
           {/if}
           <div class="info">
-            <div class="name truncate small broadcast">{item.name}</div>
-            <div class="tiny muted">
+            <div class="name truncate broadcast">{item.name}</div>
+            <div class="small muted">
               <span class="broadcast">{item.serviceName}</span>・{dateTime(
                 item.startAt,
               )}{#if item.durationMs !== null}・{durationMs(
