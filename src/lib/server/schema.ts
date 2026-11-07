@@ -266,10 +266,12 @@ export const cardContracts = sqliteTable(
     card_id: text("card_id").notNull(),
     /** 局の内部 ID (services.id) */
     service_id: integer("service_id").notNull(),
-    /** 契約状態: subscribed(契約中) / unsubscribed(未契約) / expired(期限切れ) */
+    /** 契約状態: subscribed(契約中) / unsubscribed(未契約) / expired(期限切れ) / unknown(未確認) */
     state: text("state")
-      .$type<"subscribed" | "unsubscribed" | "expired">()
+      .$type<"subscribed" | "unsubscribed" | "expired" | "unknown">()
       .notNull(),
+    /** 判定の根拠: eit_ca(EIT 0xCB + 0x3C) / decode(復号テスト) / manual(手動設定) */
+    source: text("source").$type<"eit_ca" | "decode" | "manual">(),
     /** B-CAS 契約確認コマンド (0x90 0x3C) の返り値コード (0x0800 等) */
     code: integer("code"),
     /** 契約の有効期限（epoch ms）。判定できた場合 */

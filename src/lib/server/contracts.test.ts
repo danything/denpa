@@ -921,7 +921,8 @@ describe("checkContracts エッジケース・異常系", () => {
       const rows = await checkContracts();
       const atx = rows.find((r) => r.serviceId === 108);
       expect(atx).toBeDefined();
-      expect(atx?.state).toBe("unsubscribed");
+      expect(atx?.state).toBe("unknown");
+      expect(atx?.source).toBeNull();
       expect(atx?.code).toBeNull();
       expect(atx?.validUntil).toBeNull();
       expect(atx?.decodeOk).toBeNull();
@@ -933,11 +934,13 @@ describe("checkContracts エッジケース・異常系", () => {
       const updatedRows = getContractRows("0000111122223333");
       const updatedAtx = updatedRows.find((r) => r.serviceId === 108);
       expect(updatedAtx?.state).toBe("subscribed");
+      expect(updatedAtx?.source).toBe("decode");
       expect(updatedAtx?.decodeOk).toBe(true);
 
       const recheckRows = await checkContracts();
       const recheckAtx = recheckRows.find((r) => r.serviceId === 108);
       expect(recheckAtx?.state).toBe("subscribed");
+      expect(recheckAtx?.source).toBe("decode");
       expect(recheckAtx?.decodeOk).toBe(true);
     } finally {
       server.stop();

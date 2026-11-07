@@ -232,6 +232,13 @@
       "when": 1793993086930,
       "tag": "0032_contract-notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1794023978429,
+      "tag": "0033_contract-source",
+      "breakpoints": true
     }
   ]
 }

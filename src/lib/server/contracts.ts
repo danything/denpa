@@ -22,7 +22,10 @@ export interface ConfirmResult {
   error?: string | undefined;
 }
 
-export type ContractState = "subscribed" | "unsubscribed" | "expired";
+export type ContractState =
+  "subscribed" | "unsubscribed" | "expired" | "unknown";
+
+export type ContractSource = "eit_ca" | "decode" | "manual";
 
 /**
  * **復号テストで確かめた契約を信じる長さ (31 日)。** 番組表に契約の情報 (0xCB) が無い局はカードに聞けないので、
@@ -46,6 +49,7 @@ export interface ContractRow {
   channel: string;
   type: string;
   state: ContractState;
+  source: ContractSource | null;
   code: number | null;
   validUntil: number | null;
   decodeOk: boolean | null;
@@ -179,10 +183,12 @@ export async function checkContracts(): Promise<ContractRow[]> {
     const existing = existingMap.get(serviceId);
 
     let state: ContractState = "unsubscribed";
+    let source: ContractSource | null = null;
     let code: number | null = null;
     let validUntil: number | null = null;
 
     if (verification) {
+      source = "eit_ca";
       /** その日 (今日からの日数) に観られるか。カードに聞けなければ投げる (今の行を上書きしない) */
       const valid = async (days: number): Promise<boolean> => {
         const res = await confirmCardContract(verification, todayMjd + days);
@@ -219,11 +225,21 @@ export async function checkContracts(): Promise<ContractRow[]> {
       }
     } else {
       // 放送波 (EIT) に CA契約情報記述子 (0xCB) が載っていない局 (多くの CS 月額局など)。
-      // 復号テストで 31 日以内に復号できていれば契約中とみなす (`DECODE_VALID_MS`)
-      state =
-        existing?.decodeOk === true && freshDecode(existing.decodedAt, nowMs)
-          ? "subscribed"
-          : "unsubscribed";
+      // 復号テストで 31 日以内に復号できていれば契約中とみなす (`DECODE_VALID_MS`)。
+      // 復号テストが失敗した局は未契約。まだ一度も復号テストしていない、または期限が切れた局は「未確認」
+      if (
+        existing?.decodeOk === true &&
+        freshDecode(existing.decodedAt, nowMs)
+      ) {
+        state = "subscribed";
+        source = "decode";
+      } else if (existing?.decodeOk === false) {
+        state = "unsubscribed";
+        source = "decode";
+      } else {
+        state = "unknown";
+        source = existing?.decodeOk !== undefined ? "decode" : null;
+      }
     }
 
     orm()
@@ -232,6 +248,7 @@ export async function checkContracts(): Promise<ContractRow[]> {
         card_id: cardId,
         service_id: serviceId,
         state,
+        source,
         code,
         valid_until: validUntil,
         decode_ok: existing?.decodeOk ?? null,
@@ -241,6 +258,7 @@ export async function checkContracts(): Promise<ContractRow[]> {
         target: [cardContracts.card_id, cardContracts.service_id],
         set: {
           state,
+          source,
           code,
           valid_until: validUntil,
           checked_at: nowMs,
@@ -264,6 +282,7 @@ export function getContractRows(cardId: string): ContractRow[] {
       channel: services.channel,
       type: services.type,
       state: cardContracts.state,
+      source: cardContracts.source,
       code: cardContracts.code,
       validUntil: cardContracts.valid_until,
       decodeOk: cardContracts.decode_ok,
@@ -294,6 +313,7 @@ function recordDecode(
       card_id: cardId,
       service_id: serviceId,
       state: decodeOk ? "subscribed" : "unsubscribed",
+      source: "decode",
       code: null,
       valid_until: null,
       decode_ok: decodeOk,
@@ -305,6 +325,7 @@ function recordDecode(
       set: {
         decode_ok: decodeOk,
         decoded_at: decodeOk ? now : null,
+        source: "decode",
         ...(decodeOk
           ? {
               state: sql`CASE WHEN ${cardContracts.code} IS NULL THEN 'subscribed' ELSE ${cardContracts.state} END`,
@@ -706,6 +727,7 @@ export function noteStillScrambled(serviceId: number): void {
     .update(cardContracts)
     .set({
       state: "unsubscribed",
+      source: "decode",
       decode_ok: false,
       decoded_at: null,
       checked_at: Date.now(),

@@ -337,8 +337,23 @@
                     <span class="tag success">契約中</span>
                   {:else if row.state === "expired"}
                     <span class="tag">期限切れ</span>
+                  {:else if row.state === "unknown"}
+                    <span class="tag muted">未確認</span>
                   {:else}
                     <span class="tag muted">未契約</span>
+                  {/if}
+                  {#if row.source === "eit_ca"}
+                    <span
+                      class="tiny muted source-tag"
+                      title="番組表 (EIT 0xCB) と B-CAS カードで確認"
+                      >カード判定</span
+                    >
+                  {:else if row.source === "decode"}
+                    <span
+                      class="tiny muted source-tag"
+                      title="実際の放送波ストリームの復号テストで確認"
+                      >復号テスト</span
+                    >
                   {/if}
                 </td>
                 <td>
@@ -437,6 +452,12 @@
     align-items: center;
     gap: 0.25rem;
     padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .source-tag {
+    display: inline-block;
+    margin-left: 0.35rem;
     font-size: 0.75rem;
   }
 
