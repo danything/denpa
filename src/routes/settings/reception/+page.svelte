@@ -37,5 +37,5 @@
 
 <!-- 節の並びと名前は `#lib/settings-sections.ts`。`id` は左の一覧から飛ぶ先 -->
 <div id="tuners" data-part><Tuners {data} /></div>
-<div id="channels" data-part><Channels {data} /></div>
+<div id="channels" data-part><Channels {data} {form} /></div>
 <div id="broadcast" data-part><Broadcast {data} /></div>

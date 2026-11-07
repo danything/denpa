@@ -10,11 +10,17 @@
   import Lead from "#lib/components/Lead.svelte";
   import LogoZoom from "#lib/components/LogoZoom.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
-  import { SERVICE_TYPE_LABEL, stateLabel } from "#lib/format.js";
+  import {
+    SERVICE_TYPE_LABEL,
+    SIGNAL_RAW_NOTE,
+    signalText,
+    stateLabel,
+  } from "#lib/format.js";
+  import type { SignalQuality } from "#lib/server/signal-quality.js";
 
-  import type { PageData } from "./$types";
+  import type { ActionData, PageData } from "./$types";
 
-  let { data }: { data: PageData } = $props();
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 
   /*
    * **チャンネルを書き換えたお知らせは、この画面を開いたら消す** (書き換えたチャンネルはここに並んでいる)。
@@ -81,6 +87,25 @@
   const coverage = $derived(data.channels);
   /** 入っている局をすべて並べたもの */
   const services = $derived(coverage.flatMap((channel) => channel.services));
+
+  /** 最後に測った受信品質 (`channels.server.ts` の `measureSignal`)。そのチャンネルの行の下に出す */
+  const measured = $derived(form?.measured ?? null);
+
+  /** 「誤り 0.00%・ドロップ 0.01%・16.9 Mbps・同期しています・C/N: 25.3 dB」。C/N は設定の「チューナー」と同じ出し方 */
+  function qualityText(quality: SignalQuality): string {
+    const rate = (count: number, total: number) =>
+      `${((count / total) * 100).toFixed(2)}%`;
+    const parts =
+      quality.packets === 0
+        ? ["パケットが届きませんでした"]
+        : [
+            `誤り ${rate(quality.errors, quality.packets)}`,
+            `ドロップ ${rate(quality.drops, quality.packets + quality.drops)}`,
+            `${quality.mbps.toFixed(1)} Mbps`,
+          ];
+    if (quality.signal !== null) parts.push(signalText(quality.signal));
+    return parts.join("・");
+  }
 
   /** 番組表がどこまで埋まっているか。「8/9 まで」の形で出す */
   function until(at: number): string {
@@ -327,6 +352,14 @@
             (動いているスキャンと、ロゴを集める処理は止めます)。
           </p>
           <p>
+            チャンネルの<strong>「測定」</strong
+            >は、空いているチューナーでそのチャンネルを 5 秒ほど受信し、 誤り
+            (誤りの印が立っていたパケットの割合)・ドロップ
+            (欠けたパケットの割合)・受信した速さと、受信の状態と C/N
+            を行の下に出します。
+            録画・ライブ視聴・スキャン・「番組表をいますぐ集める」に使っているチューナーは取り上げません。
+          </p>
+          <p>
             <strong>局ロゴ</strong
             >は番組表と一覧に出すもので、番組表を集めるときにあわせて集めます。
             放送波に流れるのは数十秒〜数分に一度、<strong
@@ -400,6 +433,16 @@
                       {:else if channel.reception === "checking"}
                         <span class="reception tiny faint">確認中</span>
                       {/if}
+                      <!-- 空いているチューナーで 5 秒ほど受信する。結果はこのチャンネルの行の下 -->
+                      <ActionButton
+                        action="?/measureSignal"
+                        fields={{
+                          type: channel.type,
+                          channel: channel.channel,
+                        }}
+                        class="xs secondary outline"
+                        testid="signal-measure">測定</ActionButton
+                      >
                     </td>
                   {/if}
                   <td class="small">
@@ -431,6 +474,17 @@
                   </td>
                 </tr>
               {/each}
+              {#if measured?.type === channel.type && measured.channel === channel.channel}
+                <tr data-testid="signal-result" data-channel={channel.channel}>
+                  <td colspan="6" class="small">
+                    <span class="muted">受信品質</span>
+                    {qualityText(measured)}
+                    {#if measured.signal?.unit === "raw"}
+                      <div class="tiny muted">{SIGNAL_RAW_NOTE}</div>
+                    {/if}
+                  </td>
+                </tr>
+              {/if}
             {/each}
           </tbody>
         </table>

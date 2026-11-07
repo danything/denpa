@@ -1,4 +1,5 @@
 import type { CardReaderState } from "./server/scramble";
+import type { TunerSignal } from "./server/tuner";
 
 export const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -470,6 +471,25 @@ export const READER_STATE_LABEL: Record<CardReaderState, string> = {
   error: "エラー",
   disabled: "無効",
 };
+
+/**
+ * 受信の状態と C/N の出し方 (設定の「チューナー」と、チャンネルの受信品質の測定)。
+ * **生の値は dB と読まれないように「(生の値)」を付け、単位を付けない** (機材やドライバが返した値のまま。docs/tuners.md「信号レベル」)。
+ * 選局したときに測った値 (px4d) はそう言う
+ */
+export function signalText(signal: TunerSignal): string {
+  const state = signal.locked ? "同期しています" : "同期していません";
+  if (signal.cn === null) return state;
+  const cn =
+    signal.unit === "dB"
+      ? `C/N: ${signal.cn.toFixed(1)} dB${signal.atTune ? " (選局したとき)" : ""}`
+      : `C/N (生の値): ${signal.cn.toLocaleString("ja-JP")}`;
+  return `${state}・${cn}`;
+}
+
+/** 生の値の C/N に添える注記。何と比べるものかを言う */
+export const SIGNAL_RAW_NOTE =
+  "C/N (生の値) は機材やドライバが返した値のままで、dB ではありません。同じチューナー・同じチャンネルで、配線を変える前とあとを比べる目安です";
 
 /** ロゴまで見て判定できたときの覚え書き (`cm.openCm`) */
 export const LOGO_OK = "ロゴ";

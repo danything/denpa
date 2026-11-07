@@ -288,6 +288,28 @@ test.describe("設定のチューナーとチャンネル", () => {
     );
     await request.post(`${stack.agentUrl}/__control/signal?value=raw`);
   });
+
+  /*
+   * **受信品質はチャンネルの行ごとに測り、その行の下に出す** (#2286)。
+   * 偽の放送は PSI の連続性カウンタを周回ごとに振り直すので、ドロップの値そのものは見ない
+   */
+  test("チャンネルの受信品質を測ると、行の下に誤り・ドロップ・速さが出る", async ({
+    page,
+    request,
+  }) => {
+    await syncEpg(request);
+    await goto(page, "/settings/reception");
+    const first = page.getByTestId("channel-row").first();
+    const channel = await first.getAttribute("data-channel");
+    await first.getByTestId("signal-measure").click();
+    const result = page.getByTestId("signal-result");
+    await expect(result).toHaveAttribute("data-channel", channel!, {
+      timeout: 20_000,
+    });
+    await expect(result).toContainText(
+      /誤り [\d.]+%・ドロップ [\d.]+%・[\d.]+ Mbps/,
+    );
+  });
 });
 
 /**

@@ -61,6 +61,7 @@ const USE_WORDS: [RegExp, string][] = [
   [/^logo \S+\/(\S+)$/, "局ロゴ収集"],
   [/^epg (\S+)$/, "番組表"],
   [/^scan (\S+)$/, "チャンネルスキャン"],
+  [/^scan quality (\S+)$/, "受信品質の測定"],
   [/^live \S+\/(\S+)$/, "ライブ視聴"],
 ];
 
