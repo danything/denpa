@@ -26,7 +26,7 @@ internal static unsafe partial class Program
     static nint hwnd, appIcon, warnIcon;
     static uint taskbarCreated;
 
-    /// <summary>最後に取ってきた様子。答えなければ null。バックグラウンドのスレッドが書き、WmHealth で画面のスレッドに知らせる</summary>
+    /// <summary>最後に取得した様子。答えなければ null。バックグラウンドのスレッドが書き、WmHealth で画面のスレッドに知らせる</summary>
     static volatile Health? health;
     static volatile bool fetching;
     /// <summary>通知を出したバージョン。同じバージョンでは 1 回だけ出す</summary>
@@ -174,7 +174,7 @@ internal static unsafe partial class Program
     static void Open() => ShellExecuteW(0, "open", Url, null, null, 1 /* SW_SHOWNORMAL */);
 
     /// <summary>
-    /// 更新する。**確かめる前に様子を取得し直す** (メニューを開いている間に録画やエンコードが始まることがある。
+    /// 更新する。確かめる前に様子を取得し直す (メニューを開いている間に録画やエンコードが始まることがある。
     /// 答えなければ、メニューを開いたときの様子で確かめる)。録画中・エンコード中なら先に確かめ、選ばれたら install.ps1 を管理者の PowerShell で流す。
     /// UAC で断られたら何もしない (ShellExecute がエラーを返すだけ)
     /// </summary>
