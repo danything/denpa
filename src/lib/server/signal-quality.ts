@@ -91,6 +91,7 @@ export async function measureSignal(
   const check = new PacketCheck();
   let started = 0;
   let ms = 0;
+  let tuned: Promise<TunerSignal | null> = Promise.resolve(null);
   try {
     const stream = await openChannelStream(
       type,
@@ -100,7 +101,7 @@ export async function measureSignal(
       config.priority.scan,
     );
     // C/N はチューナーを持っている間に読む (エージェントは使用中のチューナーの値だけを返す)。届かなくても読む
-    const tuned = Bun.sleep(MEASURE)
+    tuned = Bun.sleep(MEASURE)
       .then(getTuners)
       .then(
         (tuners) =>
@@ -108,24 +109,25 @@ export async function measureSignal(
             ?.signal ?? null,
         () => null,
       );
-    try {
-      for await (const chunk of chunks(stream)) {
-        started ||= Date.now();
-        check.feed(chunk);
-        ms = Date.now() - started;
-        if (ms >= MEASURE) break;
-      }
-    } catch (error) {
-      // 時間切れと、画面を閉じたとき。読めたぶんで返す
-      if (!stop.aborted) throw error;
+    for await (const chunk of chunks(stream)) {
+      started ||= Date.now();
+      check.feed(chunk);
+      ms = Date.now() - started;
+      if (ms >= MEASURE) break;
     }
+  } catch (error) {
+    // 時間切れと、画面を閉じたとき。読めたぶんで返す
+    if (!stop.aborted) throw error;
+  }
+  try {
     const { packets, errors, drops } = check;
     return {
       packets,
       errors,
       drops,
       mbps: ms > 0 ? (packets * PACKET * 8) / ms / 1000 : 0,
-      signal: await tuned,
+      // 画面を閉じたなら、読み終わるのを待たない
+      signal: signal.aborted ? null : await tuned,
     };
   } finally {
     done.abort();

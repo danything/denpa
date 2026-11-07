@@ -19,7 +19,7 @@ import {
 } from "#lib/server/scan.js";
 import { programs, services } from "#lib/server/schema.js";
 import { measureSignal } from "#lib/server/signal-quality.js";
-import { CHANNEL_TYPES, type ChannelType } from "#lib/types.js";
+import type { ChannelType } from "#lib/types.js";
 
 /** 物理チャンネル 1 本と、そこに入っている局 */
 interface Coverage {
@@ -165,14 +165,19 @@ export const actions = {
 
   /**
    * 1 つのチャンネルの受信品質を測る (`signal-quality.ts`)。**測り終えるまで待つ** (5 秒ほど)。
-   * 結果はそのチャンネルの行の下に出す。選局できなければ、その理由を通知に出す
+   * 結果はそのチャンネルの行の下に出す。選局できなければ、その理由を通知に出す。
+   * 測れるのは一覧に並んでいるチャンネルだけ (チャンネル名はエージェントへのリクエストと名乗りにそのまま入る)
    */
   measureSignal: async ({ request }) => {
     const form = await request.formData();
-    const type = String(form.get("type")) as ChannelType;
-    const channel = String(form.get("channel"));
-    if (!CHANNEL_TYPES.includes(type))
+    const found = coverage().find(
+      (entry) =>
+        entry.type === form.get("type") &&
+        entry.channel === form.get("channel"),
+    );
+    if (found === undefined)
       return fail(400, { message: "チャンネルを選んでください" });
+    const { type, channel } = found;
     try {
       const quality = await measureSignal(type, channel, request.signal);
       return { success: true, measured: { type, channel, ...quality } };
