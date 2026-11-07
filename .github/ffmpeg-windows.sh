@@ -46,6 +46,9 @@ gpu=(
   --enable-libvpl
   --enable-d3d11va
   --enable-amf
+)
+# エンコーダは `--disable-everything` より後ろに置く (前に置くと、その場で全部外れる)
+gpu_encoders=(
   --enable-encoder=h264_qsv,hevc_qsv,av1_qsv,h264_amf,hevc_amf,av1_amf
 )
 for name in FFMPEG_VERSION SVT_AV1_VERSION OPUS_VERSION; do
@@ -109,7 +112,8 @@ for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 -
   --disable-everything \
   --disable-network \
   --disable-doc \
-  "${components[@]}"
+  "${components[@]}" \
+  "${gpu_encoders[@]}"
 make -j"$jobs"
 make install
 # GPU のエンコーダが組み込まれているか (GPU が無いランナーでも `-encoders` には載る)。無ければ configure が黙って外している
