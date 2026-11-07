@@ -87,8 +87,15 @@ final class Tray: NSObject, NSApplicationDelegate {
     }
 }
 
-let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
-let tray = Tray()
-app.delegate = tray
-app.run()
+// main.swift の上の段に書くと main actor の外として扱われ、@MainActor の Tray を作れない。@main の main() から起こす
+@main
+enum App {
+    @MainActor
+    static func main() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)
+        let tray = Tray()
+        app.delegate = tray
+        app.run()
+    }
+}
