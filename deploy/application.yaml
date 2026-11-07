@@ -47,7 +47,7 @@ spec:
         # **入れ替えの合図。** CI が「そのイメージの中身を最後に変えたコミット」を書く。
         # 手で触らない
         imageMarks:
-          denpa: sha-978f328cc38a
+          denpa: sha-c96258de0527
           agent: sha-4e0157f553d7
 
         denpa:
