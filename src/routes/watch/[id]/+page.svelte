@@ -68,7 +68,7 @@
   import InfoBlock from "#lib/components/player/InfoBlock.svelte";
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
-  import { playerKeys } from "#lib/components/player/keys.js";
+  import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
   import { fitRect } from "#lib/components/player/paint.js";
   import { pictureInPicture } from "#lib/components/player/pip.svelte.js";
   import PlayerLayout, {
@@ -122,7 +122,7 @@
   import { codecsFor, type LiveCodec } from "#lib/live.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
-  import { loadOffline } from "#lib/offline.svelte.js";
+  import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
   import { canvasSupport, rawUnsupported } from "#lib/raw/support.js";
   import {
     heardOf,
@@ -702,11 +702,14 @@
               localCopy?.video !== undefined
             ? { way: "file", codec: "av1", source: "encoded" }
             : null;
-      // 端末のコピーはエンコード済みの主。そのまま読むときだけ使う (選んだコーデックがあれば選んだほう)
+      /*
+       * 端末のコピーはエンコード済みの主。そのまま読むときだけ使う (選んだコーデックがあれば選んだほう)。
+       * 観方をサーバから受け取れなかった (オフライン) ときは、コーデックを選んでいても端末のコピーしか読めない
+       */
       if (
         localCopy?.video !== undefined &&
         picked?.way === "file" &&
-        choice === "auto"
+        (choice === "auto" || got === null)
       ) {
         localSrc = URL.createObjectURL(localCopy.video);
       }
@@ -768,9 +771,12 @@
   }
 
   /** **黙って途中から始めない。** 続きから始めたと言って、しばらくで引っ込める */
+  /** 「続きから」を消す時計。続けて出したら前の時計は止める (先に消さない)。画面を離れたら畳む */
+  let continuedTimer: ReturnType<typeof setTimeout> | null = null;
   function showContinued(): void {
     continued = true;
-    setTimeout(() => (continued = false), 4000);
+    if (continuedTimer !== null) clearTimeout(continuedTimer);
+    continuedTimer = setTimeout(() => (continued = false), 4000);
   }
 
   /** その場で流すときにリクエストする音声 (`playback` の `audios` の `id`) */
@@ -1660,6 +1666,7 @@
       remember(true);
       deleting.fire();
       if (skipNotice !== null) clearTimeout(skipNotice);
+      if (continuedTimer !== null) clearTimeout(continuedTimer);
       if (hopGiveUp !== null) clearTimeout(hopGiveUp);
       if (retryTimer !== null) clearTimeout(retryTimer);
       if (captionWait !== null) clearTimeout(captionWait);
@@ -2262,7 +2269,7 @@
   /**
    * キーでも動かせるようにする。全画面のときはこれがいちばん早い。
    * **割り当てはライブ・追っかけと共通** (`player/keys.ts`。修飾キーの扱いもあちら)。
-   * データ放送を出している間の十字キーはあちらのカーソル (`DataBroadcast`) なので、送りには使わない
+   * データ放送を出している間の空白・十字キー・f はあちらのリモコン (`dataRemoteKey`。ライブと同じ)
    */
   const playerKey = playerKeys({
     togglePlay,
@@ -2275,7 +2282,7 @@
     stepVolume: volume.step,
   });
   function keys(event: KeyboardEvent): void {
-    if (showData && event.key.startsWith("Arrow")) return;
+    if (showData && dataRemoteKey(event)) return;
     playerKey(event);
   }
 
@@ -2509,8 +2516,22 @@
               onclick={jikkyoList.toggle}
             />
           {/if}
-          <!-- 観終わったその場で消せるように。2 回目も同じ大きさの丸 (`icons.ts` の `OVERLAY_DANGER`) -->
-          <form method="POST" action="?/delete" use:submitting>
+          <!--
+            観終わったその場で消せるように。2 回目も同じ大きさの丸 (`icons.ts` の `OVERLAY_DANGER`)。
+            消せたら端末のコピーも片付け (一覧の行の削除と同じ)、断られたら 2 回押しを戻す (`ArmedDelete` と同じ)
+          -->
+          <form
+            method="POST"
+            action="?/delete"
+            use:submitting={() =>
+              async ({ result, update }) => {
+                if (result.type === "redirect") {
+                  if (offline.entries[rec.id] !== undefined)
+                    void removeLocal(rec.id);
+                } else deleting.fire();
+                await update();
+              }}
+          >
             <input type="hidden" name="id" value={rec.id} />
             {#if deleting.armed !== null}
               <ControlButton

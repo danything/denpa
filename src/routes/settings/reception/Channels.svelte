@@ -82,7 +82,7 @@
   ];
   /*
    * 物理チャンネルと、そこに入っている局。**denpa 自身の DB から来る。**
-   * エージェントにも控えはあるが、聞きに行かない (`channels.server.ts`)
+   * エージェントにも控えはあるが、問い合わせない (`channels.server.ts`)
    */
   const coverage = $derived(data.channels);
   /** 入っている局をすべて並べたもの */
@@ -221,7 +221,7 @@
         <!--
                     取れないものを「まだ取れていない」と出し続けると、こちらの不具合と見分けが付かない。
                     **中継にロゴが無いことでは数えない。** CS の中継にはロゴが流れていないが、
-                    CS のロゴは BS の中継から降ってくる
+                    CS のロゴは BS の中継で送られてくる
                 -->
         <div class="tiny muted" data-testid="logo-unavailable">
           <span class="num">{data.logos.unavailable}</span> 局はロゴが放送に載っていないため取れません

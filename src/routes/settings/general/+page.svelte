@@ -181,13 +181,26 @@
       <div class="section-head">
         <h2>ロゴを集めた結果を記録する (開発者向け)</h2>
       </div>
-      <!-- 送ったあとにフォームを戻すと、再描画までスイッチが一瞬もとに戻って見える -->
+      <!--
+        送ったあとにフォームを戻すと、再描画までスイッチが一瞬もとに戻って見える。
+        断られたら見た目をサーバの値に戻す (load が同じ値を返すと DOM は書き換わらない。ルールの行のスイッチと同じ)
+      -->
       <form
         method="POST"
         action="?/recordLogo"
-        use:enhance={() =>
-          ({ update }) =>
-            update({ reset: false })}
+        use:enhance={({ formElement }) =>
+          async ({ result, update }) => {
+            await update({ reset: false });
+            const box = formElement.querySelector<HTMLInputElement>(
+              'input[role="switch"]',
+            );
+            if (
+              box !== null &&
+              result.type !== "success" &&
+              result.type !== "redirect"
+            )
+              box.checked = data.recordLogo;
+          }}
       >
         <label class="check">
           <input

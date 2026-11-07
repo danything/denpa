@@ -39,7 +39,7 @@
   import JikkyoCompose from "#lib/components/player/JikkyoCompose.svelte";
   import JikkyoLayer from "#lib/components/player/JikkyoLayer.svelte";
   import JikkyoList from "#lib/components/player/JikkyoList.svelte";
-  import { playerKeys } from "#lib/components/player/keys.js";
+  import { dataRemoteKey, playerKeys } from "#lib/components/player/keys.js";
   import { liveWiring } from "#lib/components/player/live-wiring.svelte.js";
   import MediaStack from "#lib/components/player/MediaStack.svelte";
   import PlayerLayout, {
@@ -482,11 +482,7 @@
   });
   /** データ放送を出している間は、空白・十字キー・f はあちらのリモコン (`bml/engine.ts` の `aribKey`) */
   function keys(event: KeyboardEvent): void {
-    if (
-      player.showData &&
-      (event.key === " " || event.key === "f" || event.key.startsWith("Arrow"))
-    )
-      return;
+    if (player.showData && dataRemoteKey(event)) return;
     playerKey(event);
   }
 

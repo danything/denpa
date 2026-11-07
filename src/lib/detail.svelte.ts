@@ -88,7 +88,10 @@ export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {
  */
 export function programDetail() {
   let current = $state<ProgramDetail | null>(null);
-  /** 続けて別の行を押したとき、遅れて届いた前の結果で上書きされないようにする */
+  /**
+   * 続けて別の行を押したとき、遅れて届いた前の結果で上書きされないようにする。
+   * 閉じたときも進める (閉じたあとに届いた結果で、詳細が開き直さないように)
+   */
   let opened = 0;
 
   return {
@@ -96,6 +99,7 @@ export function programDetail() {
       return current;
     },
     close(): void {
+      opened++;
       current = null;
     },
     /**
@@ -114,7 +118,9 @@ export function programDetail() {
       if (programId === null) return;
 
       const res = await fetch(resolve(`api/programs/${programId}`));
-      if (res.ok && token === opened) current = await res.json();
+      if (!res.ok || token !== opened) return;
+      const body = (await res.json()) as ProgramDetail;
+      if (token === opened) current = body;
     },
   };
 }

@@ -780,7 +780,7 @@
   >
 {/snippet}
 
-<!-- 「もっと見る」。受け取ったぶんを出し切っても残りがあれば、言葉を足してもらう -->
+<!-- 「もっと見る」。数は開くと増えるぶん (受け取った 100 件まで)。出し切っても残りがあれば、言葉を足してもらう -->
 {#snippet more(key: Key, received: number, all: number)}
   {#if !expanded[key] && received > FIRST}
     <button
@@ -789,7 +789,7 @@
       onclick={() => (expanded = { ...expanded, [key]: true })}
       data-testid="search-more-{key}"
     >
-      もっと見る ({all - FIRST} 件)
+      もっと見る ({received - FIRST} 件)
     </button>
   {:else if expanded[key] && all > received}
     <p class="none tiny muted">

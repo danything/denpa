@@ -931,11 +931,12 @@
                 途中で折り返していた。めったに押さないもの (視聴済みの付け外し・
                 再エンコード) は「その他…」に畳む。
             -->
-      {#if offline.usable && rec.library_path !== null}
+      {#if offline.usable && rec.library_path?.endsWith(".mkv") === true}
         <!--
                     **端末に保存 (オフライン視聴)。** 落とすのはエンコードしたもの
-                    (docs/offline.md)。元の TS しか無い録画はブラウザで再生できない
-                    ので出さない。保存済みなら「端末から消す」に変わる。
+                    (docs/offline.md)。元の TS しか無い録画 (エンコードしない予約で
+                    保存先に置いた .m2ts も) はブラウザで再生できないので出さない。
+                    保存済みなら「端末から削除」に変わる。
                     こちらはサーバの録画に触らない (行の削除ボタンとは別)
                 -->
         {@const held = offline.entries[rec.id]}
@@ -958,10 +959,10 @@
             }}
           >
             {held.state === "downloading"
-              ? "保存を取り消す"
+              ? "保存を中断"
               : held.state === "failed"
-                ? "失敗した保存データを消す"
-                : "端末から消す"}
+                ? "失敗した保存データを削除"
+                : "端末から削除"}
           </button>
         {/if}
       {/if}
