@@ -236,7 +236,11 @@
       list.push({
         key: "rule-toggled",
         kind: "success",
-        text: "ルールを切り替えました",
+        // 送ったあとの読み直しで `draft.editing` は切り替えたあとの状態になっている
+        text:
+          data.draft.editing?.enabled === false
+            ? "ルールを無効にしました"
+            : "ルールを有効にしました",
       });
     return list;
   });
@@ -271,7 +275,7 @@
             <h2 id="recent-head">最近の検索</h2>
             <button
               type="button"
-              class="link-button small ghost"
+              class="small ghost"
               onclick={clearRecent}
               data-testid="recent-clear">履歴を消す</button
             >
@@ -453,7 +457,7 @@
         {/if}
       </section>
 
-      <!-- 切り抜き (番組名・局名・字幕)。頭の数枚だけ並べ、続きは切り抜きの画面で同じ言葉のまま -->
+      <!-- 切り抜き (番組名・局名・字幕)。先頭の数枚だけ並べ、続きは切り抜きの画面で同じ言葉のまま -->
       <section
         class="hits-section"
         aria-labelledby="clips-head"
@@ -708,7 +712,7 @@
   </section>
 {/snippet}
 
-<!-- 行の 2 段目の頭 (局のロゴと名前) と、状態のバッジ -->
+<!-- 行の 2 段目の先頭 (局のロゴと名前) と、状態のバッジ -->
 {#snippet service(row: {
   service_id: number;
   has_logo: boolean | null;
@@ -732,7 +736,7 @@
   {#if !expanded[key] && received > FIRST}
     <button
       type="button"
-      class="link-button small ghost more"
+      class="small ghost more"
       onclick={() => (expanded = { ...expanded, [key]: true })}
       data-testid="search-more-{key}"
     >
@@ -751,18 +755,20 @@
       {#if form?.message}
         <div class="notice error">{form.message}</div>
       {/if}
-      <!-- 並びは控えから主へ (主の「予約」がいちばん右)。閉じるは左下 (`ProgramDetail`) -->
+      <!--
+        並びは番組表の詳細と同じく、控えから主へ (ルールを作る → 予約取消 → 視聴 → 予約)。閉じるは左下 (`ProgramDetail`)。
+        **主は 1 つだけ。** 予約できるなら予約、できなければ視聴
+      -->
+      {@const canReserve =
+        opened !== null &&
+        opened.reservation_id === null &&
+        opened.end_at > clock &&
+        !opened.copy_never}
       {#if opened !== null}
         <a
           class="button secondary"
           href={resolve(`search?from=program:${opened.program_id}`)}
           >ルールを作る</a
-        >
-      {/if}
-      {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
-        <a
-          class="button outline"
-          href={resolve(`live?service=${opened.service_id}`)}>視聴</a
         >
       {/if}
       {#if opened !== null && opened.reservation_id !== null}
@@ -778,7 +784,15 @@
             data-testid="search-detail-cancel">予約取消</button
           >
         </form>
-      {:else if opened !== null && opened.end_at > clock && !opened.copy_never}
+      {/if}
+      {#if opened !== null && opened.start_at <= clock && opened.end_at > clock && watchable.has(opened.service_id)}
+        <a
+          class="button"
+          class:secondary={canReserve}
+          href={resolve(`live?service=${opened.service_id}`)}>視聴</a
+        >
+      {/if}
+      {#if opened !== null && canReserve}
         <form method="POST" action="?/reserve" use:submitting={closeOnSuccess}>
           <input type="hidden" name="programId" value={opened.program_id} />
           <button type="submit" data-testid="search-detail-reserve">予約</button
@@ -952,21 +966,8 @@
     margin: 0;
     padding: var(--dp-space-2);
   }
-  .link-button {
-    width: auto;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--pico-primary);
-    cursor: pointer;
-  }
-  .link-button:hover {
-    text-decoration: underline;
-  }
   .more {
     align-self: flex-start;
-    padding: var(--dp-space-2);
   }
   /* 狭い画面では操作を名前の下に回す (名前を潰さない) */
   @media (max-width: 639.98px) {

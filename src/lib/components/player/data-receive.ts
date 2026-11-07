@@ -8,7 +8,7 @@
  * 録画では、変化ログ (`server/recorded-bml.ts`) を開く前から取得して、再生位置に合わせて流す
  */
 
-/** 覚える鍵。`1` / `0`。頭の `player-` は、バックグラウンド再生 (`player-background`) と同じく画面をまたいで効くもの */
+/** 覚えるキー。`1` / `0`。頭の `player-` は、バックグラウンド再生 (`player-background`) と同じく画面をまたいで効くもの */
 export const DATA_RECEIVE_KEY = "player-data-always";
 
 /** 覚えていた値。**既定はオフ**。オンにしたことのある端末だけオンで始まる */

@@ -242,7 +242,7 @@
   <title>端末に保存した録画 - denpa</title>
 </svelte:head>
 
-<!-- 聞き返しは他所を触ったら取り下げる (`stand`) -->
+<!-- 削除の確認はほかの所を押したら取り下げる (`stand`) -->
 <svelte:window onclick={deleting.stand} />
 
 <div class="page">

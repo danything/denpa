@@ -45,7 +45,7 @@ interface Options {
 const BEFORE_HIDE = 300;
 const AFTER_HIDE = 1500;
 
-/** 見張りを始める。返す関数で止める */
+/** 監視を始める。返す関数で止める */
 export function nativeBackgroundRecovery(options: Options): () => void {
   const { video, page, visibility, media } = options;
   let hidden = visibility.visibilityState === "hidden";

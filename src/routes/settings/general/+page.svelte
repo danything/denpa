@@ -174,7 +174,7 @@
       </Lead>
     </section>
     <!--
-            **ロゴを取りに行った結果を記録する** (開発者向け。`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)。
+            **ロゴを取得した結果を記録する** (開発者向け。`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)。
             衛星のロゴが流れてくる期間を測るためのもの。世帯の設定で、既定はオフ
         -->
     <section class="section" data-testid="logo-record">
@@ -199,7 +199,7 @@
             onchange={(event) => event.currentTarget.form?.requestSubmit()}
             data-testid="logo-record-toggle"
           />
-          <span>ロゴを取りに行った結果を記録する</span>
+          <span>ロゴを集めた結果を記録する</span>
         </label>
       </form>
       <Lead class="indent">
@@ -225,7 +225,7 @@
             <li data-testid="logo-record-row">
               <span>{dateTime(record.started_at)}</span>
               {record.channel}・{Math.round(record.opened_ms / 60_000)} 分・{record.outcome}・ロゴのデータ
-              {record.es_packets} パケット・ダウンロードの知らせ {record.sdtt} 回・{record.found}
+              {record.es_packets} パケット・ダウンロードの通知 {record.sdtt} 回・{record.found}
               局
             </li>
           {/each}

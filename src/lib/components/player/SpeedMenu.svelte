@@ -2,7 +2,7 @@
   import { read } from "#lib/keep.js";
   import { SPEEDS } from "#lib/ts/pacing.js";
 
-  /** 録画の速さを覚える鍵。観る画面と追っかけで共通 (エンコードする前と後で同じ録画を観る) */
+  /** 録画の速さを覚えるキー。観る画面と追っかけで共通 (エンコードする前と後で同じ録画を観る) */
   export const SPEED_KEY = "watch-speed";
 
   /** 前に選んだ速さ。読めない・知らない値なら等速 */
@@ -80,13 +80,13 @@
   {#each SPEEDS as value (value)}
     <button
       type="button"
-      role="menuitem"
+      role="menuitemradio"
       class="menu-item option"
+      aria-checked={value === speed}
       onclick={() => onselect(value)}
       data-testid={testid && `${testid}-option`}
       data-speed={value}
       data-active={value === speed ? "" : undefined}
-      aria-current={value === speed ? "true" : undefined}
     >
       ×{value}
     </button>
