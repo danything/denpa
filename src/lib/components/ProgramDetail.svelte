@@ -180,6 +180,8 @@
     min-height: 0;
     flex: 1 1 0%;
     overflow-y: auto;
+    /* 端まで巻いても後ろのページへ続けて巻かない (スマホで指でなぞったとき) */
+    overscroll-behavior: contain;
     padding: var(--dp-space-5);
     /* 最後の行がボタンの並びの上まで上がりきるよう、並びの高さと上下の余白ぶん空ける */
     padding-bottom: var(--detail-bottom);
