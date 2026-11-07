@@ -394,7 +394,7 @@
           testid="chase-shot"
           onclick={() => void snapshot()}
         />
-        <!-- 右の列の頭に「コメントの一覧」を出す・しまう (`canList`) -->
+        <!-- 右の列の先頭に「コメントの一覧」を出す・しまう (`canList`) -->
         {#if canList}
           <ControlButton
             icon={JIKKYO}
@@ -424,7 +424,7 @@
             testid="chase-play"
             onclick={() => player.toggle()}
           />
-          <!-- 畳むときは音と速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
+          <!-- 畳むときは音と速さを ⚙ の先頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
           <Extras>
             <SoundButton
               silenced={player.silenced}
@@ -590,7 +590,7 @@
   {#snippet aside()}
     <FactsAside testid="chase-facts">
       {#snippet top()}
-        <!-- 実況のコメントの一覧は、出している間だけ列の頭に (観る画面と同じ) -->
+        <!-- 実況のコメントの一覧は、出している間だけ列の先頭に (観る画面と同じ) -->
         {#if canList && jikkyoList.on}
           <JikkyoList
             feed={jikkyo}

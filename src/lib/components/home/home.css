@@ -43,7 +43,6 @@
   color: inherit;
   /* 字の形は `.broadcast` に任せる (`font` でまとめて戻すと放送の字が外れる) */
   font-size: inherit;
-  font-weight: var(--dp-weight);
   line-height: inherit;
   text-align: inherit;
   text-decoration: none;
@@ -331,45 +330,6 @@
   gap: 0.25rem;
   height: 2.75rem;
 }
-.board .t-chips {
-  display: flex;
-  flex: 1;
-  gap: 0.375rem;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-  /* 右端は切れているのが分かるように淡く消す (横に流せる印) */
-  mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
-}
-.board .t-chips::-webkit-scrollbar {
-  display: none;
-}
-/* つないだボタンの角を落とす規則 (`app.css` の `[role="group"] > button`) に負けないよう、頭の段から書く */
-.board .t-toolbar .t-chips > .t-chip {
-  border-radius: var(--dp-radius-full);
-  --pico-background-color: var(--dp-btn-tonal);
-  --pico-color: var(--dp-btn-text);
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0.35rem;
-  width: auto;
-  height: 2.125rem;
-  margin: 0;
-  padding: 0 0.75rem;
-  font-size: var(--dp-text-sm);
-  white-space: nowrap;
-}
-.board .t-chip .num {
-  color: var(--dp-muted);
-}
-.board .t-toolbar .t-chips > .t-chip:hover {
-  --pico-background-color: var(--dp-btn-tonal-hover);
-}
-/* 選んでいるチップは塗らず囲まず、主の色の太字と字の幅いっぱいの下線 (`app.css` の `.pick-line`)。線はチップの高さに合わせて少し上に */
-.board .t-toolbar .t-chips > .t-chip {
-  --pick-bottom: 0.3rem;
-}
 @media (min-width: 768px) {
   .board .t-list {
     padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
@@ -378,7 +338,7 @@
     gap: 0.75rem;
   }
 }
-/* 日付の見出しは `app.css` の `.day-head`。いちばん上の見出しは一覧の頭に付ける */
+/* 日付の見出しは `app.css` の `.day-head`。いちばん上の見出しは一覧の先頭に付ける */
 .board .t-rows > .t-block:first-child > .t-day {
   margin-top: 0;
 }
@@ -423,7 +383,7 @@
  * **行。** 幅いっぱいの 2 段の件。件の面 (`app.css` の `.item`) に乗せ、件の間の余白で 1 本ずつに見せる。
  *
  * - 1 段目: 時刻 · 番組名、右に押すもの
- * - 2 段目 (沈めた字): 局のロゴと名前 · 尺 · ルール · 説明の頭 (残りの幅を埋め、「…」で切る)
+ * - 2 段目 (沈めた字): 局のロゴと名前 · 尺 · ルール · 説明の冒頭 (残りの幅を埋め、「…」で切る)
  * - 言うことがあるときだけ 3 段目 (`.row-activity`)
  *
  * 録れたものは左に大きめのポスター (96×54) を 2 段ぶん置き、途中まで観たものはその下端に細いバー。
@@ -519,7 +479,7 @@
   z-index: 2;
 }
 /*
- * **狭い画面 (768px 未満)。** 同じ 2 段の形のまま、ポスターを 80px に、説明の頭とルールは外す
+ * **狭い画面 (768px 未満)。** 同じ 2 段の形のまま、ポスターを 80px に、説明の冒頭とルールは外す
  * (番組名に幅を回す)。押すものは「⋯」1 つ (下の `.row-more`)
  */
 @media (max-width: 767.98px) {
@@ -692,11 +652,11 @@
   gap: 0.5rem;
 }
 /* スマホの形の、手を止めてほしいもののチップ。注意の色の字 (塗らない。選んでいても注意の色のまま) */
-.board .t-toolbar .t-chips > .t-chip.warn {
+.board .chip.warn {
   --pico-color: var(--dp-warn-text);
   color: var(--dp-warn-text);
 }
-.board .t-chip.warn .num {
+.board .chip.warn .num {
   color: inherit;
 }
 /* 「⋯」の頭の状態。押せない (余白で切り替えと分ける) */
@@ -710,8 +670,4 @@
   min-height: 2rem;
   padding: 0 0.75rem;
   font-size: var(--dp-text-sm);
-}
-/* サイドバーの月のカレンダー (`HomeCalendar`。形は部品の中)。いちばん上に来たとき (日ごとに並べているときはいつも) は上を空けない */
-.board .t-side > .cal:first-child > .cal-head {
-  margin-top: 0;
 }

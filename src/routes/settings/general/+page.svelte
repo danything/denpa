@@ -179,7 +179,7 @@
         -->
     <section class="section" data-testid="logo-record">
       <div class="section-head">
-        <h2>ロゴの取得を記録する (開発者向け)</h2>
+        <h2>ロゴを集めた結果を記録する (開発者向け)</h2>
       </div>
       <!-- 送ったあとにフォームを戻すと、再描画までスイッチが一瞬もとに戻って見える -->
       <form
@@ -276,7 +276,7 @@
             {:else}
               <button
                 type="button"
-                class="small secondary outline"
+                class="small outline danger"
                 onclick={() => confirming.arm(0)}
                 data-testid="logout-others"
               >

@@ -241,7 +241,7 @@
           {#each group.sections as section (section.slug)}
             <a
               href="{resolve(`settings/${group.slug}`)}#{section.slug}"
-              class="pick-line"
+              class="chip pick-line"
               class:selected={active === section.slug}
               onclick={() => jump(section.slug)}
               data-testid="settings-jump-{section.slug}"
@@ -399,19 +399,7 @@
     scrollbar-width: none;
     white-space: nowrap;
   }
-  .jump a {
-    flex-shrink: 0;
-    padding: 0.3rem 0.65rem;
-    --pick-inset: 0.65rem;
-    --pick-bottom: 0.15rem;
-    border-radius: var(--dp-radius-full);
-    text-decoration: none;
-  }
-  /* いまの節は、ほかの選んでいるものと同じく塗らずに主の色の太字と、字の幅いっぱいの下線 (`app.css` の `.pick-line`) */
-  .jump a:not(.selected) {
-    color: inherit;
-  }
-  /* 戻るは字だけのアイコンのボタン */
+  /* 戻るは字だけのアイコンのボタン。節の名前はチップ (`app.css` の `.chip`) */
   .jump .back {
     display: inline-flex;
     align-items: center;
@@ -420,6 +408,7 @@
     width: var(--dp-btn-h-sm);
     height: var(--dp-btn-h-sm);
     padding: 0;
+    border-radius: var(--dp-radius-full);
     color: inherit;
   }
   .jump .back:hover {

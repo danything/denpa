@@ -128,7 +128,7 @@
       return;
     }
     if (!support[source.codec]) {
-      problem = `この端末では再生できません (${source.codec === "av1" ? "AV1" : "H.264"} をデコードできません)`;
+      problem = `再生できない形式です (${source.codec === "av1" ? "AV1" : "H.264"} をデコードできません)`;
       return;
     }
     await tick();

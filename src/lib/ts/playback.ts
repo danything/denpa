@@ -381,7 +381,14 @@ export function streamForAudio(
 }
 
 /**
- * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデック (H.264 → H.265 → AV1 → MPEG-2)。
+ * **コーデックのメニューの並び。** `ENCODED_ORDER` (AV1 → H.265 → H.264) の後ろに MPEG-2。
+ * ライブ・追っかけのメニュー (`components/player/settings.ts` の `liveCodecs`) と同じ並びにする。
+ * 選ぶ順 (`pickOffer`・`pickCanvas`) とは別で、並べるだけに使う
+ */
+export const MENU_ORDER: readonly PlayCodec[] = [...ENCODED_ORDER, "mpeg2"];
+
+/**
+ * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデックを `MENU_ORDER` の順に。
  * H.265 はエンコード済みがある録画にだけある (その場の変換では作らない)。MPEG-2 は元の TS が残っていて、この端末で
  * デコードできるときだけ。`hidden` (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) は並べない。外すのはメニューだけで、
  * 自動 (`pickOffer`) は今までどおり選ぶ
@@ -391,7 +398,7 @@ export function codecChoices(
   can: MediaAbility,
   hidden: readonly PlayCodec[] = [],
 ): PlayCodec[] {
-  const encoded = (["h264", "hevc", "av1"] as const).filter(
+  const encoded = ENCODED_ORDER.filter(
     (codec) =>
       !hidden.includes(codec) &&
       info.offers.some(

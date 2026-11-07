@@ -153,7 +153,9 @@
     canvasTranscodes,
     type CodecChoice,
     codecChoices,
+    ENCODED_ORDER,
     type MediaAbility,
+    MENU_ORDER,
     pickCanvas,
     type Picked,
     pickOffer,
@@ -820,7 +822,7 @@
   function playable(): LiveCodec[] {
     const source = pickMediaSource();
     if (source === null) return [];
-    return (["av1", "hevc", "h264"] as const).filter((codec) =>
+    return ENCODED_ORDER.filter((codec) =>
       source.Source.isTypeSupported(codecsFor(codec)),
     );
   }
@@ -1157,6 +1159,11 @@
           ? canvasChoices(info, canvasAbility)
               .filter(
                 (item) => !data.hidden.some((codec) => codec === item.codec),
+              )
+              // 並びはほかのメニューと同じ (`MENU_ORDER`)。`canvasChoices` の並びは選ぶ順 (`pickCanvas`) のまま
+              .sort(
+                (a, b) =>
+                  MENU_ORDER.indexOf(a.codec) - MENU_ORDER.indexOf(b.codec),
               )
               .map((item) => ({
                 key: item.codec,
@@ -2519,7 +2526,7 @@
             testid="watch-shot"
             onclick={() => void snapshot()}
           />
-          <!-- 右の列の頭に「コメントの一覧」を出す・しまう (`canList`) -->
+          <!-- 右の列の先頭に「コメントの一覧」を出す・しまう (`canList`) -->
           {#if canList}
             <ControlButton
               icon={JIKKYO}
@@ -2584,7 +2591,7 @@
               testid="watch-play"
               onclick={togglePlay}
             />
-            <!-- 畳むときは音と速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
+            <!-- 畳むときは音と速さを ⚙ の先頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
             <Extras>
               <SoundButton
                 silenced={muted}
@@ -2607,7 +2614,7 @@
 
             <!--
                             チャプター送りは入っているときだけ (CM を切ってエンコードしたものには無い)。
-                            畳むときも残す。CM や本編の頭へ毎回のように使う
+                            畳むときも残す。CM や本編の始まりへ毎回のように使う
                         -->
             {#if chapters.length > 1}
               <ControlButton
@@ -2773,11 +2780,11 @@
   {#snippet aside()}
     <FactsAside testid="watch-facts">
       {#snippet top()}
-        <!-- データ放送のリモコンは、出している間だけ右の列の頭に出す (ライブと同じ) -->
+        <!-- データ放送のリモコンは、出している間だけ右の列の先頭に出す (ライブと同じ) -->
         {#if dataPress !== null}
           <Remote press={dataPress} />
         {/if}
-        <!-- 実況のコメントの一覧も、出している間は列の頭 (リモコンの下) -->
+        <!-- 実況のコメントの一覧も、出している間は列の先頭 (リモコンの下) -->
         {#if canList && jikkyoList.on}
           <JikkyoList
             feed={jikkyo}

@@ -519,7 +519,7 @@
                 局がまだありません。<a
                   href={`${resolve("settings/reception")}#channels`}
                   >チャンネルスキャン</a
-                >をしてください。
+                >をしてください
               </p>
             {/each}
           </div>
@@ -627,7 +627,7 @@
                 timeTo = "";
                 weekdays = [];
               }}
-              data-testid="rule-slot-clear">いつでもに戻す</button
+              data-testid="rule-slot-clear">時間帯と曜日の指定を外す</button
             >
           {/if}
         </div>
@@ -672,11 +672,10 @@
     </p>
     {#if saved !== null}
       <p class="notice success small" data-testid="rule-saved">
-        {saved.created ? "保存しました" : "更新しました"}:
-        <a
+        ルール「<a
           href={resolve(`search?rule=${saved.id}`)}
           data-testid="rule-saved-link">{saved.name}</a
-        >
+        >」を{saved.created ? "保存しました" : "更新しました"}
       </p>
     {/if}
     {#if draft.editing !== null}
@@ -835,9 +834,6 @@
     flex-shrink: 0;
     float: none;
     margin-inline-start: 0;
-  }
-  .chips .chip {
-    width: auto;
   }
   .value {
     margin-inline-start: auto;
