@@ -156,7 +156,7 @@
         // ページで受け取るブラウザ (Safari など) は、閉じると止まる
         text:
           how === "page"
-            ? `端末への保存を始めました (終わるまでこのページを開いたままにしてください): ${rec.name}`
+            ? `端末への保存を始めました: ${rec.name}。終わるまでこのページを開いたままにしてください`
             : `端末への保存を始めました: ${rec.name}`,
       };
     } catch (error) {
@@ -300,7 +300,7 @@
   function openMissed(res: Missed): void {
     const text =
       res.conflict_reason ??
-      "アプリが止まっていたなどの理由で、録画を始められないまま放送が終わりました";
+      "denpa が止まっていたなどの理由で、録画を始められないまま放送が終わりました";
     openDetail(res.program_id, res, [{ title: "録り逃しました", text }]);
   }
 

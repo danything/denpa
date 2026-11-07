@@ -56,7 +56,7 @@
     {/if}
   </span>
   <span class="row-body">
-    <span class="cluster title-line">
+    <span class="title-line">
       <span class="tiny muted num nowrap" data-testid="recording-group-count"
         >{group.items.length} 本</span
       >

@@ -314,15 +314,23 @@
     opening++;
     selected = null;
     facts = null;
+    failedFor = null;
   }
 
+  /**
+   * 予約・取消に失敗した番組。理由はこの番組の詳細の中にだけ出す
+   * (`form` は次に送るまで残るので、閉じて別のマスを開くと前の番組の理由が出ていた)
+   */
+  let failedFor = $state<number | null>(null);
   /** 予約・取消を送ったあと。失敗したときは開いたままにして、中に理由を出す */
-  const closeOnSuccess: SubmitFunction =
-    () =>
-    async ({ result, update }) => {
+  const closeOnSuccess: SubmitFunction = () => {
+    const sentFor = selected?.id ?? null;
+    return async ({ result, update }) => {
       await update();
+      failedFor = result.type === "success" ? null : sentFor;
       if (result.type === "success") close();
     };
+  };
 
   const serviceName = (id: number) =>
     services.find((s) => s.id === id)?.name ?? "";
@@ -654,7 +662,7 @@
     };
   });
 
-  /** 予約を取り消せるのはこれから録るものだけ。録り終わったものに出しても何も起きない */
+  /** 予約を取り消せるのは、これから録るものと録画中のもの (録画中は止めて、そこまでを残す)。録り終わったものには出さない */
   const CANCELABLE = ["scheduled", "conflict", "skipped", "recording"];
 </script>
 
@@ -1250,7 +1258,7 @@
                 いるが、押したのはこのモーダルの中のボタンで、モーダルは浮かせた表示より
                 上に出る。下に隠れるものを出しても読めないので、押したボタンの隣に置く
             -->
-      {#if form?.message}
+      {#if form?.message && failedFor === selected?.id}
         <div class="notice error">{form.message}</div>
       {/if}
 

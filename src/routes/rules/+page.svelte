@@ -362,11 +362,11 @@
         画面の下 (タブの上) に貼り付ける
     -->
   <div class="rules-bar dock" data-testid="rule-bar">
-    <div class="bar-chips" role="group" aria-label="絞り込み">
+    <div class="chips scroll" role="group" aria-label="絞り込み">
       {#each FILTERS as f (f.key)}
         <button
           type="button"
-          class="chip-button pick-line"
+          class="chip pick-line"
           aria-pressed={filter === f.key}
           onclick={() => (filter = f.key)}
           data-testid="rule-bar-filter-{f.key}"
@@ -533,32 +533,6 @@
   }
 
   /* ---- スマホの形の細い 1 行 (`#lib/phone-form.ts`。`<html data-phone>`) ---- */
-  .bar-chips {
-    display: flex;
-    flex: 1 1 0%;
-    gap: var(--dp-space-1);
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .chip-button {
-    flex: none;
-    width: auto;
-    margin: 0;
-    padding: 0.3rem 0.75rem;
-    border: 0;
-    border-radius: var(--dp-radius-full);
-    background: transparent;
-    /* 選んでいないものも本文並みの字 (押せると分かるように。ホームのチップと同じ) */
-    color: var(--dp-btn-text);
-    font-size: var(--dp-text-sm);
-  }
-  .chip-button:hover {
-    background: var(--dp-hover-soft);
-  }
-  .chip-button .num {
-    color: var(--dp-muted);
-  }
   .rules-bar select {
     flex: none;
     width: auto;

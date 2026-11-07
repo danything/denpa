@@ -18,7 +18,9 @@ test.describe("検索", () => {
     await goto(page, "/guide");
     const field = page.getByTestId("header-search-input");
     await expect(page.getByRole("search", { name: "サイト内" })).toBeVisible();
-    await expect(field).toHaveAccessibleName("番組・録画・予約・ルールを検索");
+    await expect(field).toHaveAccessibleName(
+      "番組・録画・切り抜き・予約・ルールを検索",
+    );
 
     await page.keyboard.press("/");
     await expect(field).toBeFocused();

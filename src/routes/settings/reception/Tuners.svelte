@@ -444,7 +444,7 @@
           {#if tuners.some((tuner) => tuner.channel !== null && signalOf(tuner)?.unit === "raw")}
             <p class="tiny muted" data-testid="tuner-signal-raw-note">
               C/N (生の値) は機材やドライバが返した値のままで、dB
-              ではありません。同じチューナーで、ほかのチャンネルや配線と比べる目安です
+              ではありません。同じチューナー・同じチャンネルで、配線を変える前とあとを比べる目安です
             </p>
           {/if}
         {/if}
@@ -862,15 +862,9 @@
       min-width: 2.75rem;
       min-height: 2.75rem;
     }
-    .tuners .chip,
-    .add .chip,
     .delete-slot button,
     .actions button {
       min-height: 2.75rem;
-    }
-    .tuners .chip,
-    .add .chip {
-      padding-inline: 0.75rem;
     }
   }
   /*

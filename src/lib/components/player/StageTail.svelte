@@ -238,7 +238,7 @@
   {choices}
   volume={showVolume ? volume : undefined}
 />
-<!-- 出すときだけ置く。ライブは再生の前に出す注意を自分でも持っているので、いつも置くと 2 つになる -->
+<!-- 出すときだけ置く。3 画面とも再生の前に出す注意を自分でも持っているので、いつも置くと 2 つになる -->
 {#if confirming}
   <DriveNotice
     open

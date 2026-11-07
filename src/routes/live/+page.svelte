@@ -650,7 +650,7 @@
             onclick={() => void snapshot()}
           />
           <!--
-            右の列の頭に「コメントの一覧」(書ける間は下に書き込む 1 行) を出す・しまう (`canList`)。
+            右の列の先頭に「コメントの一覧」(書ける間は下に書き込む 1 行) を出す・しまう (`canList`)。
             一覧を出せない形では、映像の上に書き込む 1 行を開く (`canWrite`。追い付いていないときも出し、1 行のほうで理由を言う)
           -->
           {#if canList || canWrite}
@@ -705,7 +705,7 @@
               testid="live-play"
               onclick={() => player.toggle()}
             />
-            <!-- 畳むときは音・Hybridcast・速さを ⚙ の頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
+            <!-- 畳むときは音・Hybridcast・速さを ⚙ の先頭に入れる (`Extras`・`StageTail` の `fold`。字幕は ⚙ の「字幕」) -->
             <Extras>
               <SoundButton
                 silenced={player.silenced}
@@ -982,7 +982,7 @@
         右の列。幅は固定で、映像側だけ伸ばす。番組表と同じ並びで、高さは残りぜんぶ
     -->
   {#snippet aside()}
-    <!-- 右の列の頭のコメントの一覧。書ける間は下に書き込む 1 行を付ける (局の一覧・番組の中身のどちらでも同じ) -->
+    <!-- 右の列の先頭のコメントの一覧。書ける間は下に書き込む 1 行を付ける (局の一覧・番組の中身のどちらでも同じ) -->
     {#snippet commentList()}
       <JikkyoList feed={jikkyo} air={() => player.airTime()}>
         {#if canWrite}
@@ -1013,7 +1013,10 @@
         }}
       >
         {#snippet top()}
-          <!-- 番組の中身を開いていても、コメントの一覧は列の頭に残す (局の一覧のときと同じ) -->
+          <!-- 番組の中身を開いていても、リモコンとコメントの一覧は列の先頭に残す (局の一覧のときと同じ) -->
+          {#if dataPress !== null}
+            <Remote press={dataPress} />
+          {/if}
           {#if canList && jikkyoList.on}
             {@render commentList()}
           {/if}
@@ -1055,7 +1058,7 @@
             </button>
           {/each}
         </div>
-        <!-- 勢いを読めないときは一覧の頭に 1 行だけ (通知は出さない。並びは番号順) -->
+        <!-- 勢いを読めないときは一覧の先頭に 1 行だけ (通知は出さない。並びは番号順) -->
         {#if shown === JIKKYO_TAB && ranking.failed}
           <p class="ranking-note" data-testid="live-ranking-note">
             いまは勢いを読めません
@@ -1088,7 +1091,7 @@
           {#each listed as channel (channel.id)}
             <!-- いま映しているものかどうかは、この行の中で何度も使う -->
             {@const tuned = current?.id === channel.id}
-            <!-- 「実況」タブでは 2 段目の頭に勢い (1 分あたりのコメント数)。ほかのタブには付けない -->
+            <!-- 「実況」タブでは 2 段目の先頭に勢い (1 分あたりのコメント数)。ほかのタブには付けない -->
             {@const force =
               shown === JIKKYO_TAB
                 ? ranking.forces?.get(channel.id)
@@ -1108,7 +1111,7 @@
                 data-channel="{channel.type}/{channel.channel}"
                 data-service={channel.id}
               >
-                <!-- ロゴのまだ無い局は局名の頭の 1 字 (種別のラベルだとどの局も同じ箱になる) -->
+                <!-- ロゴのまだ無い局は局名の先頭の 1 字 (種別のラベルだとどの局も同じ箱になる) -->
                 <ServiceLogo
                   id={channel.id}
                   has={channel.hasLogo}
@@ -1121,8 +1124,8 @@
                             -->
                 <span class="channel-text">
                   <!--
-                                    テレビの番号を局名の頭に添える (地上波はリモコン番号、BS/CS は 3 桁)。
-                                    番号の無い局も幅は取る。局名の頭がそろう
+                                    テレビの番号を局名の先頭に添える (地上波はリモコン番号、BS/CS は 3 桁)。
+                                    番号の無い局も幅は取る。局名の先頭がそろう
                                 -->
                   <span class="channel-name broadcast">
                     {#if tuned}<span
@@ -1307,7 +1310,7 @@
     cursor: pointer;
   }
   /*
-     * 番号は局名の頭に小さく淡く。2 桁ぶん取って右に寄せ、局名の頭をそろえる
+     * 番号は局名の先頭に小さく淡く。2 桁ぶん取って右に寄せ、局名の先頭をそろえる
      * (E2E 20 の「種別のタブと下の一覧の端がそろう」)
      */
   .channel-number {
