@@ -1,6 +1,6 @@
 <script lang="ts">
   import "@anyblades/blades/components/modal";
-  import type { Snippet } from "svelte";
+  import { onMount, type Snippet } from "svelte";
 
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import type { ProgramDetail } from "#lib/types.js";
@@ -50,7 +50,7 @@
    * **開いたら箱へ焦点を移し、閉じたら開く前の場所へ戻す。** 開いた画面は `{#if}` で外すので、外れるときに戻す。
    * 戻す先が消えていれば (行が読み直しで作り直されたなど) 戻さない
    */
-  $effect(() => {
+  onMount(() => {
     const before =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
