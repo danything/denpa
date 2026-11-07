@@ -24,7 +24,7 @@ test.describe("GPU で H.265 をエンコードする", () => {
     request,
     stack,
   }) => {
-    // 録画を 2 本録ってエンコードする。CI で 1.2〜1.3 分 (2026-11)。その倍あまりを見る
+    // 録画を 2 本録ってエンコードする。どちらもすぐ次の番組 (BS は 5 秒ずつ) を録る。CI で 1.2 分かかっていた (縮める前)。その倍あまりを見る
     test.setTimeout(180_000);
     clearGpus(stack.hwDir);
     await goto(page, "/settings/recording");
@@ -50,7 +50,7 @@ test.describe("GPU で H.265 をエンコードする", () => {
     await syncEpg(request);
     rmSync(stack.encodeArgsFile, { force: true });
     await setRecording(request, { codecs: ["av1", "hevc", "h264"] });
-    let programId = await reserveSoon(page, request, "BS", 4);
+    let programId = await reserveSoon(page, request, "BS");
     let row = page.locator(
       `[data-testid="recording-row"][data-program-id="${programId}"]`,
     );
@@ -77,7 +77,7 @@ test.describe("GPU で H.265 をエンコードする", () => {
     await request.post("/settings/recording?/probeHw", { form: {} });
     rmSync(stack.encodeArgsFile, { force: true });
     await setRecording(request, { codecs: ["hevc", "h264"] });
-    programId = await reserveSoon(page, request, "BS", 5);
+    programId = await reserveSoon(page, request, "BS");
     row = page.locator(
       `[data-testid="recording-row"][data-program-id="${programId}"]`,
     );

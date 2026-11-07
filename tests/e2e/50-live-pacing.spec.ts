@@ -8,7 +8,7 @@ import { result, watch } from "./live-pacing";
 
 /**
  * **ライブの貯め方** (`src/lib/ts/pacing.ts`。docs/stream.md#たまに長く空く経路で止まり続ける)。見方は `live-pacing.ts`。
- * たまに長く空く経路は `51-live-gaps` (実時間で 2 分かかるので、CI の別の組で流す)。数字は test-results に残す
+ * たまに長く空く経路は `51-live-gaps` (実時間で 1 分かかるので、CI の別の組で流す)。数字は test-results に残す
  */
 
 test.describe("ライブの貯め方", () => {
@@ -27,14 +27,18 @@ test.describe("ライブの貯め方", () => {
    * **遅延の上限は、詰め始める貯まり** (`pacing.ts` の `steer`。下限 0.2 秒の `SMOOTH.catchUpRatio` 倍 = 0.3 秒)。
    * その手前は作りのうえで詰めないので、組の中が混んで始めに多めに貯まると 0.26 秒あたりで落ち着く。
    * 膨らみ続ける・詰めなくなる、はこれを超えるので落ちる
+   *
+   * **見るのは 20 秒。** 偽 ffmpeg は 2 秒の作り置きを繰り返すので、届き方は 10 周ぶん同じことの繰り返しになる。
+   * 貯める量を決め直すのは 5 秒ごとで、20 秒あれば 4 回決め直す。長く見て変わるのは、縮める (`SETTLED` の 15 秒) ことだけで、
+   * 上がった貯める量が下りてきて、中央値を小さく見せるほうに効く
    */
   test("滑らかに届けば、貯める量も遅延も下限のまま", async ({
     page,
     stack,
   }) => {
-    test.setTimeout(150_000);
+    test.setTimeout(90_000);
     await watch(page, "", stack);
-    await page.waitForTimeout(60_000);
+    await page.waitForTimeout(20_000);
     const watched = await result(page, "smooth");
     expect(watched.stalls).toBe(0);
     expect(watched.target).toBeLessThanOrEqual(0.25);

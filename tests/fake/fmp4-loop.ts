@@ -37,6 +37,8 @@ void (async () => {
  *
  * - `gapEvery` [最短, 最長] (秒) と `gapMs` [最短, 最長] (ms) … ときどき長く空ける (空いた間のぶんは後でまとめて出す)。
  *   回線や中継がたまに詰まる経路のまね (#1210)
+ * - `gapFirst` (秒) … 最初に空ける時刻 (流し始めてから)。省けば `gapEvery` の間から選ぶ。
+ *   空きを何回か通すのに、最初の空きまで待たずに済ませる (`51-live-gaps`)
  * - `burstMs` [最短, 最長] (ms) … いつも束にして出す。届き方が荒い経路のまね
  * - `audioFirst` … 音声が映像より先に始まる作り置き (`live-h264-audio-first.mp4`。H.264 だけ) を流す。本物の ffmpeg が
  *   途中から読んだ放送で作るときのように、最初の塊が音声だけで、映像のキーフレームは次の塊に入る (`ts/key-gate.ts`)。
@@ -46,6 +48,7 @@ void (async () => {
  */
 interface Rough {
   gapEvery?: [number, number];
+  gapFirst?: number;
   gapMs?: [number, number];
   burstMs?: [number, number];
   audioFirst?: boolean;
@@ -68,7 +71,7 @@ const between = ([low, high]: [number, number]) =>
 let nextGap =
   rough.gapEvery === undefined
     ? Number.POSITIVE_INFINITY
-    : between(rough.gapEvery) * 1000;
+    : (rough.gapFirst ?? between(rough.gapEvery)) * 1000;
 /** この時刻 (ms) までは出さずに溜める */
 let holdUntil = 0;
 const held: Uint8Array[] = [];
