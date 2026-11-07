@@ -11,25 +11,16 @@ namespace Denpa.Agent;
 ///
 /// 仕様書に無くて決めた所:
 /// - 仕様書の手順は、常駐イメージの時刻 (ms) で書かれている。ホストの I2C は 1 転送が数 ms かかるので、時刻には合わせず、
-///   仕様書が「待つ」と書いた所 (100 ms・20 ms・4 ms・6 ms・10 ms・約 40 ms) だけ待ち、あとは順に出す
+///   仕様書が「待つ」と書いた所 (100 ms・20 ms・4 ms・6 ms・10 ms・約 40 ms) だけ待ち、あとは順に出す。衛星の約 40 ms だけは、実機の試験で 20 ms に短くした
 /// - 受信の確認は 1 周ごとに 10 ms 空ける (常駐イメージは 1500 回 × 10 ms で 15 秒回しても失敗にしなかった。仕様書 7.2.4)
 /// </summary>
 public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, Dt295Timeline? timeline = null)
 {
     /// <summary>決めた時間だけ待つ。待ちは <see cref="Dt295Timeline"/> の表に出る</summary>
-    /// <summary>
-    /// 実験用。名前 (init-t100 など) を指した待ちの時間を差し替える (--dt295-probe の --wait 名前=ms)。試験で短くできると確かめた待ちだけ、
-    /// 本体の値を直して、この仕組みは外す。差し替えが無ければ仕様書の値
-    /// </summary>
-    internal static readonly Dictionary<string, int> WaitOverrides = [];
-
-    private static int Overridden(string key, int ms) => WaitOverrides.TryGetValue(key, out var value) ? value : ms;
-
-    private void Wait(string key, int ms, string reason)
+    private void Wait(int ms, string reason)
     {
         Flush();
-        var actual = Overridden(key, ms);
-        timeline.Wait(sleep, actual, actual == ms ? reason : $"{reason}。実験で {ms} ms を {actual} ms に替えた");
+        timeline.Wait(sleep, ms, reason);
     }
 
     public const int Terrestrial = 0x10, Satellite = 0x11;
@@ -167,7 +158,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         T(0x03, 0x01);
         // 03=01 のあとの 100 ms は、T チューナーだけの待ち。別の I2C アドレス (0x11) の S 側の初期化 (7.1.3〜7.1.4) はこの間に行う。
         // 仕様書の時刻順とは違うが、S 側は T 側のレジスタに触らない (仕様書に無い判断)
-        WaitDoing("init-t100", 100, "仕様書 7.1.2。03=01 のあと。この間に S 側 7.1.3〜7.1.4 を行う", InitializeSatellite);
+        WaitDoing(100, "仕様書 7.1.2。03=01 のあと。この間に S 側 7.1.3〜7.1.4 を行う", InitializeSatellite);
         TunerRmw(Terrestrial, 0x0D, 0xFE, 0x00);
         T(0x0F, 0x20);
         T(0x10, 0x49);
@@ -178,7 +169,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         T(0x7C, 0x1F);
         T(0x0B, 0x01);
         T(0x12, 0x01);
-        Wait("init-t20", 20, "仕様書 7.1.2。12=01 のあと");
+        Wait(20, "仕様書 7.1.2。12=01 のあと");
         T(0x12, 0x00);
         T(0x0B, 0x00);
 
@@ -199,7 +190,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         DemodPairs(Satellite,
             0x01, 0x90, 0x03, 0x00, 0x04, 0x02, 0x07, 0x33, 0x08, 0x11, 0x10, 0xB0, 0x11, 0x00, 0x13, 0x80, 0x15, 0x00, 0x17, 0x01,
             0x1C, 0x59, 0x1D, 0xAA, 0x1E, 0x20, 0x1F, 0x19, 0x85, 0x7A, 0x87, 0x04, 0x8E, 0x26, 0xA3, 0x91, 0xA5, 0x40);
-        Wait("init-s4", 4, "仕様書 7.1.3 の終わり");
+        Wait(4, "仕様書 7.1.3 の終わり");
 
         // 7.1.4 S チューナーの初期化
         Next(phases, "S チューナーの初期化", "7.1.4");
@@ -214,16 +205,15 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         S(0x2A, 0x19);
         S(0x1C, 0x00);
         S(0x11, 0xC0, 0xA7);
-        Wait("init-s6", 6, "仕様書 7.1.4 の終わり");
+        Wait(6, "仕様書 7.1.4 の終わり");
     }
 
     /// <summary>
     /// <paramref name="ms"/> の待ちの間に <paramref name="work"/> を行い、残りの時間だけ待つ (仕事が長引いて足りていれば待たない)。
     /// 待ちの間にバスを使う相手が、待っている機器と別のアドレスのときだけ使う
     /// </summary>
-    private void WaitDoing(string key, int ms, string reason, Action work)
+    private void WaitDoing(int ms, string reason, Action work)
     {
-        ms = Overridden(key, ms);
         using var scope = timeline?.Begin($"待ち {ms} ms (この間に別の仕事)", reason, wait: true);
         var clock = Stopwatch.StartNew();
         work();
@@ -307,7 +297,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         Next(phases, "t=1〜2 チューナーを動かす", "7.2.2");
         if (before != Last.Terrestrial) T(0x0B, 0x01);
         T(0x12, 0x01);
-        Wait("tune-t20a", 20, "仕様書 7.2.2。t=2 から t=22");
+        Wait(20, "仕様書 7.2.2。t=2 から t=22");
         // t=22
         Next(phases, "t=22 復調の準備", "7.2.2");
         Demod(Terrestrial, 0x03, 0x00);
@@ -333,7 +323,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         TunerRmw(Terrestrial, 0x14, 0xDF, 0x00);
         // t=25
         T(0x12, 0x01);
-        Wait("tune-t20b", 20, "仕様書 7.2.2。t=25 から t=45");
+        Wait(20, "仕様書 7.2.2。t=25 から t=45");
         // t=45。TS の出し元は T 復調 (仕様書 8.1.5)
         Next(phases, "t=45 TS の出し元を T 復調に", "7.2.2。8.1.5");
         TunerRmw(Terrestrial, 0x6E, 0x7F, 0x00);
@@ -344,7 +334,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         // t=46
         Next(phases, "t=46", "7.2.2");
         Demod(Terrestrial, 0x23, 0x4C);
-        Wait("tune-t100", 100, "仕様書 7.2.2。t=46 から t=146");
+        Wait(100, "仕様書 7.2.2。t=46 から t=146");
         // t=146
         Next(phases, "t=146 復調の仕上げ", "7.2.2");
         Demod(Terrestrial, 0x1D, 0x02);
@@ -491,7 +481,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         S(0x05, 0x80);
         // t=5
         S(0x2A, 0xBB);
-        Wait("tune-s10", 10, "仕様書 7.3.2。t=5 から t=15");
+        Wait(10, "仕様書 7.3.2。t=5 から t=15");
         // t=15。T 復調の 0E/0F = 77 は TS の出し元を衛星にする (仕様書 8.1.5)
         Next(phases, "t=15〜16 TS の出し元を衛星に", "7.3.2。8.1.5");
         Demod(Satellite, 0x1E, 0x20);
@@ -507,14 +497,14 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         _batch.Write(Satellite, 0xFE, 0xC1);
         _batch.Read(Satellite, 2);
         _batch.WriteModified(Satellite, [0xFE, 0xC0, 0x50], 0x01, 0xF0);
-        Wait("tune-s40", 40, "仕様書 7.3.2。t=16 から t=56");
+        Wait(20, "仕様書 7.3.2 は約 40 ms。実機で 20 ms でも BS15・CS22 が 30 回ずつ全部ロックし、ロックまでが 20 ms ほど短くなることを確かめて 20 ms にした。t=16 から t=56");
         // t=56
         Next(phases, "t=56", "7.3.2");
         Demod(Satellite, 0x1E, 0x20);
         Demod(Satellite, 0x0A, 0xFF);
         Demod(Satellite, 0x03, 0x01);
         Demod(Satellite, 0x03, 0x01);
-        Wait("tune-s100", 100, "仕様書 7.3.2。t=56 から t=157");
+        Wait(100, "仕様書 7.3.2。t=56 から t=157");
         // t=157
         Next(phases, "t=157 復調の仕上げ", "7.3.2");
         Demod(Satellite, 0x1C, 0x08);

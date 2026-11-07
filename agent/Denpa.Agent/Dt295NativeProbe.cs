@@ -19,10 +19,10 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Dt295NativeProbe
 {
-    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--switch <チャンネル,…>] [--lock-test N [--reopen] [--alt <チャンネル>]] [--wait <名前=ms,…>] [--trace]";
+    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--switch <チャンネル,…>] [--lock-test N [--reopen] [--alt <チャンネル>]] [--trace]";
 
     internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, uint IdlePolls = Dt295NativeDevice.IdlePollsDefault, bool DemodDump = false, string[]? Switch = null,
-        int LockTest = 0, bool Reopen = false, string? Alt = null, Dictionary<string, int>? Waits = null);
+        int LockTest = 0, bool Reopen = false, string? Alt = null);
 
     internal static Options? Parse(string[] args)
     {
@@ -36,20 +36,7 @@ public static class Dt295NativeProbe
         if (args.Contains("--seconds") && !int.TryParse(Value("--seconds"), NumberStyles.None, CultureInfo.InvariantCulture, out seconds)) return null;
         return seconds <= 0 ? null : new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), args.Contains("--trace"), args.Contains("--replug"), Value("--output"), DemodDump: args.Contains("--demod-dump"), Switch: Value("--switch")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             LockTest: int.TryParse(Value("--lock-test"), NumberStyles.None, CultureInfo.InvariantCulture, out var lockTest) ? lockTest : 0,
-            Reopen: args.Contains("--reopen"), Alt: Value("--alt"), Waits: ParseWaits(Value("--wait")));
-    }
-
-    /// <summary>--wait 名前=ms,名前=ms (Dt295NativeFrontend.WaitOverrides の名前)。読めなければ空</summary>
-    private static Dictionary<string, int>? ParseWaits(string? text)
-    {
-        if (text is null) return null;
-        var waits = new Dictionary<string, int>();
-        foreach (var part in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var at = part.IndexOf('=');
-            if (at > 0 && int.TryParse(part[(at + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var ms)) waits[part[..at]] = ms;
-        }
-        return waits;
+            Reopen: args.Contains("--reopen"), Alt: Value("--alt"));
     }
 
     /// <summary>次の選局に使う、前の選局から離れるための同じ種別のチャンネル (チャンネル番号 + 2)。指定が無いときの既定</summary>
@@ -72,8 +59,7 @@ public static class Dt295NativeProbe
         var alt = options.Alt ?? DefaultAlt(options.Channel);
         var altTuning = ChannelTable.Parse(alt);
         var results = new List<(bool Ok, double TotalMs, double LockMs, string? Error)>();
-        var waits = options.Waits is { Count: > 0 } w ? string.Join(",", w.Select(pair => $"{pair.Key}={pair.Value}")) : "なし";
-        output.WriteLine($"ロックの試験: {options.Channel} を {options.LockTest} 回 (機材を開き直す: {(options.Reopen ? "はい" : "いいえ")}、離れるチャンネル {alt}、待ちの上書き: {waits})");
+        output.WriteLine($"ロックの試験: {options.Channel} を {options.LockTest} 回 (機材を開き直す: {(options.Reopen ? "はい" : "いいえ")}、離れるチャンネル {alt})");
         Dt295NativeTuner? tuner = null;
         try
         {
@@ -159,10 +145,6 @@ public static class Dt295NativeProbe
                 return 1;
             }
             Console.Error.WriteLine($"USB のポート {port} の電源を入れ直しました");
-        }
-        if (options.Waits is { } waits)
-        {
-            foreach (var (name, ms) in waits) Dt295NativeFrontend.WaitOverrides[name] = ms;
         }
         if (options.LockTest > 0) return LockTest(options with { Port = port }, timeline => Dt295NativeDevice.Acquire(port, timeline), () => Dt295NativeDevice.CloseIfIdle(port), Dt295NativeDevice.CloseAll, Console.Out);
         try
