@@ -403,14 +403,14 @@ GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.prob
   VA-API は無いためです。H.265・AV1 の QSV が Arc で落ちたのは Linux で、Windows のドライバでは確かめていません。
   通らなければ、その GPU のそのコーデックは試しのエンコードで外れます
 - **CM を切る境目のキーフレームは `-forced_idr 1` を足します** (QSV・AMF。NVENC は `-forced-idr 1`)。3 つとも H.264・H.265・AV1 の全部が持つオプションで、
-  CI の `tests/windows-smoke.ts` が組み込んだ ffmpeg の `-h encoder=…` で確かめています
+  CI の `tests/native-smoke.ts` が組み込んだ ffmpeg の `-h encoder=…` で確かめています
 - **ライブは低遅延の速い段にします** (`hwenc.liveHwArgs`)。QSV は `-preset veryfast -bf 0 -async_depth 1` (ICQ は録画と同じ値。回線に合わせて
   段を下げたときは VBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。デコードとインタレ解除は CPU のままです
   (GPU に寄せるのは VA-API だけ)。映像が出る前に降りれば、Linux と同じくソフトウェアでエンコードし直し、その方式を 15 分外します
 - **QSV は GPU を `-init_hw_device qsv=…,child_device=<番号>,child_device_type=d3d11va` で選び**、CPU で作ったフレームを `hwupload` で渡します。
   **AMF は `-init_hw_device d3d11va=…:<番号>` で開いたデバイスを使います**
 
-**CI** (test.yml の `server-windows`) は GPU の無いランナーで、`tests/windows-smoke.ts` が次の 3 つを確かめます。
+**CI** (test.yml の `server-windows`) は GPU の無いランナーで、`tests/native-smoke.ts` が次の 3 つを確かめます。
 `ffmpeg -encoders` に h264・hevc・av1 の `_nvenc`・`_qsv`・`_amf` の 9 つが出ること、denpa が渡すオプションを各エンコーダが持つこと、
 試しのエンコードが全部落ちて GPU の方式が 0 になること (録画もライブもソフトウェアに戻る)。単体テストは `hwenc-probe.test.ts` が
 Windows の探し方 (GPU 無し・NVIDIA と Intel の 2 枚) を偽の ffmpeg の返事で流します。
@@ -420,10 +420,47 @@ H.264 と揃うか・どれだけ小さくなるか、libvpl を静的に繋い�
 ノート PC でアダプタの番号が使いたい GPU に当たるか (libvpl が渡したアダプタ以外の Intel のランタイムを選ぶと、同じ GPU が `qsv0` と `qsv1` の 2 行に出ます)、
 AMF が開いてある Direct3D 11 のデバイスを使うか (FFmpeg の amfenc.c の読みで、実機では見ていない)、CM の境目のキーフレームが IDR になるか、ライブの低遅延の指定。
 
+## Mac でエンコードする
+
+**Mac の denpa は、Apple の VideoToolbox で H.264・H.265 をエンコードできます** ([install-mac.md](install-mac.md))。
+同梱の ffmpeg は CI の Mac のランナーで組み、`h264_videotoolbox`・`hevc_videotoolbox` を入れてあります (`.github/ffmpeg-macos.sh`)。
+VideoToolbox は macOS の一部なので、配布物には何も足さず、ffmpeg は Linux と同じ GPL-3.0-or-later のままです。
+**AV1 は VideoToolbox でエンコードできない**ので、SVT-AV1 (ソフトウェア) だけです。
+
+**使えれば起動時に自分で見つけて使い、使えなければソフトウェアでエンコードします。** Apple Silicon のメディアエンジンは
+VideoToolbox が選ぶので、番号もデバイスファイルもありません。`hwenc.probeMac` が H.265 と H.264 を 1 コマずつ試し、
+通ったものを `videotoolbox (Apple)` の 1 行にします。
+
+- **ハードウェアでだけエンコードします。** `-allow_sw` を渡さないので、FFmpeg の videotoolboxenc.c はハードウェアのエンコーダを求め
+  (`RequireHardwareAcceleratedVideoEncoder`)、無ければ開けずに落ちます。Apple のソフトウェアのエンコーダには倒れず、試しのエンコードが落ちて
+  x264 に戻ります (設定の「エンコード」にそう出ます)
+- 使えたら、Linux と同じく設定の「録画」の「エンコード」で録画とライブを別々に選べます ([上](#ライブは別に選んだエンコーダで-gpu-に載る))。
+  自動で選ぶ順は OS に依らず同じ関数です
+
+**画質は速さより優先します (録画)。** 画質と大きさは測っていません (CI の Mac のランナーで、試しのエンコードが通って放送に似せた素材をエンコードできるところまでは見ている)。
+
+| 場面   | 指定                                                                                                        | 理由                                                                                                                                                                                                       |
+| ------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 録画   | `-prio_speed 0 -bf 2`、H.264 は `-profile:v high`。Rockchip MPP・NVENC と同じ表のビットレート (上限は 2 倍) | `-prio_speed 0` は速さより画質を取る (macOS 13 から)。`-bf` は B フレームを使わせる (FFmpeg は枚数を渡さず、使うかだけを渡す。既定の 0 では使わない)。画質での指定 (`-q:v`) は値と画質の対応を測れていない |
+| ライブ | `-realtime 1 -prio_speed 1 -bf 0`。同じ表の、いちばん重い映像の値                                           | 実時間でエンコードさせ、B フレームの待ちを作らない。段を下げたときは平均も上限も段の値                                                                                                                     |
+
+- **CM を切る境目のキーフレームは、印だけで IDR になる見込みです。** FFmpeg の videotoolboxenc.c は印の付いたコマ (`pict_type = I`) に
+  `ForceKeyFrame` を付けて VideoToolbox に渡します (実機では見ていない)
+- デコードとインタレ解除は CPU のままです (GPU に寄せるのは VA-API だけ)。映像が出る前に降りれば、Linux と同じくソフトウェアでエンコードし直し、
+  その方式を 15 分外します
+
+**CI** (test.yml の `server-macos`) は `tests/native-smoke.ts` で、`ffmpeg -encoders` に `h264_videotoolbox`・`hevc_videotoolbox` が出ること、
+denpa が渡すオプション (`profile`・`prio_speed`・`realtime`) を持つこと、録画とライブの引数で名前の違いで落ちないこと、
+試しのエンコードが通れば、その方式で放送に似せた素材をエンコードできること、試しのエンコードが全部落ちる ffmpeg で探し直すと方式が 0 になってソフトウェアに戻ることを確かめます (ランナーでは VideoToolbox が通る)。
+単体テストは `hwenc-probe.test.ts` が Mac の探し方を偽の ffmpeg の返事で流します。
+
+**実機で確かめていないこと**: 実機の Mac で試しのエンコードが通るか、上の値で見た目が今の H.264 とそろうか・どれだけ小さくなるか、CM の境目のキーフレームが IDR になるか、
+ライブの遅れ。
+
 ## H.265 は GPU でだけ
 
 **H.265 は、GPU で H.265 をエンコードできる機材でだけ選べます** (VA-API `hevc_vaapi`
-(Intel・AMD)・NVENC `hevc_nvenc`・QSV `hevc_qsv` と AMF `hevc_amf` (Windows)・Rockchip MPP `hevc_rkmpp`)。使えるかは AV1・H.264 と同じく起動時の試しのエンコードで
+(Intel・AMD)・NVENC `hevc_nvenc`・QSV `hevc_qsv` と AMF `hevc_amf` (Windows)・VideoToolbox `hevc_videotoolbox` (Mac)・Rockchip MPP `hevc_rkmpp`)。使えるかは AV1・H.264 と同じく起動時の試しのエンコードで
 決まり、どれも通らなければ設定画面に H.265 の行が出ません。AV1 をデコードできず H.265 ならデコードできる端末
 (数年前のテレビ・スマホ) 向けに、H.264 より小さく持つためのものです。
 

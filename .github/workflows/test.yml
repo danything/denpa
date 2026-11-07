@@ -190,13 +190,6 @@ jobs:
         shell: pwsh
         run: ./tests/install-windows-migrate.ps1
 
-      # Mac で denpa 本体を起こす compose。Mac のランナーには Docker が無いので、書き方だけここで見る
-      # 合言葉は install.sh が ~/denpa/.env に作る。ここでは仮の値を渡し、無いときに止まることも見る
-      - name: Mac compose file is valid
-        run: |
-          AGENT_PAIR_TOKEN=x docker compose -f compose.mac.yml config -q
-          if docker compose -f compose.mac.yml config -q 2>/dev/null; then exit 1; fi
-
       - name: install.sh end to end
         env:
           DENPA_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -312,8 +305,12 @@ jobs:
         timeout-minutes: 8
         run: dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --timeout 5m
 
+      # 署名は ad-hoc (`codesign -s -`。リリースと同じ。curl で取ったものには隔離の印が付かないので、Developer ID は要らない)
       - name: Publish (Native AOT, osx-arm64)
-        run: dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -o out
+        run: |
+          dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r osx-arm64 -o out
+          codesign --force -s - out/denpa-agent
+          codesign -v out/denpa-agent
 
       - name: Lint install.sh
         run: |
@@ -365,45 +362,66 @@ jobs:
           if kill -0 "$pid" 2>/dev/null; then echo "SIGTERM で終わりません" >&2; exit 1; fi
           cat agent.log
 
-      # 入れ方を通しで。エージェントはリリースから取らずにいまビルドしたものを入れ、
+      # 入れ方を通しで (エージェントだけ。denpa 本体ごとは下の server-macos)。エージェントはリリースから取らずにいまビルドしたものを入れ、
       # px4-userland / siano-userland / ファームウェアは本物を取ってきてハッシュを確かめ、
-      # launchd に載せて API が答えるまで。最後に消す。
-      # denpa 本体 (docker compose) は Mac のランナーに Docker が無いので --no-docker で外す
+      # root の LaunchDaemon に載せて API が答えるまで。最後に消す。
+      # sudo は環境変数を落とすので -E で渡す (PATH も。ランナーの sudo は PATH を決め直しうる)
       - name: install.sh end to end
         run: |
           set -euo pipefail
           tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent
-          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" bash install.sh --no-docker
+          export DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz"
+          prefix="/Library/Application Support/denpa"
+          plist=/Library/LaunchDaemons/io.github.danything.denpa-agent.plist
+          log=/Library/Logs/denpa/denpa-agent.log
+          sudo -E env PATH="$PATH" bash install.sh --agent-only
+          # root で、起動したら動く (誰もログインしていなくても)
+          sudo launchctl print system/io.github.danything.denpa-agent | grep -E 'state|program'
           # install.sh は denpa-agent --status で応答を確かめている (API は組んだ denpa にしか答えない)。
-          # 合言葉 (~/denpa/.env) がエージェント自身の置き場 (config/tls/pair-token) に同じ値で書かれ、エージェントがそれを読んで
+          # 合言葉がエージェント自身の置き場 (config/tls/pair-token) にあり、plist には無く、エージェントがそれを読んで
           # 組むための URL をログに出していること (まだ誰とも組んでいないので出す。docs/agent.md)
-          token=$(sed -n 's/^AGENT_PAIR_TOKEN=//p' "$HOME/denpa/.env")
+          token=$(cat "$HOME/denpa/config/tls/pair-token")
           test "${#token}" = 43
-          test "$(cat "$HOME/denpa/config/tls/pair-token")" = "$token"
-          if grep -q AGENT_PAIR_TOKEN "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"; then exit 1; fi
-          for _ in $(seq 15); do grep -qF "#pair=$token" "$HOME/Library/Logs/denpa-agent.log" && break; sleep 1; done
-          grep -qF "#pair=$token" "$HOME/Library/Logs/denpa-agent.log"
+          if grep -q AGENT_PAIR_TOKEN "$plist"; then exit 1; fi
+          # --agent-only は別の機械の denpa から繋ぐので、ループバックに絞らない
+          if grep -q AGENT_HOST "$plist"; then exit 1; fi
+          for _ in $(seq 15); do grep -qF "#pair=$token" "$log" && break; sleep 1; done
+          grep -qF "#pair=$token" "$log"
           # 平文の HTTP には答えない
           if curl -fsS --max-time 5 http://127.0.0.1:25252/denpa/card; then exit 1; fi
+          # --agent-only は本体を入れない
+          test ! -e "$prefix/server"
+          test ! -e /Library/LaunchDaemons/io.github.danything.denpa.plist
           # 上げ直しても合言葉は変えない
-          DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz" bash install.sh --no-docker
-          test "$(sed -n 's/^AGENT_PAIR_TOKEN=//p' "$HOME/denpa/.env")" = "$token"
-          ls -l "$HOME/Library/Application Support/denpa-agent/px4-userland" "$HOME/Library/Application Support/denpa-agent/siano-userland"
+          sudo -E env PATH="$PATH" bash install.sh --agent-only
+          test "$(cat "$HOME/denpa/config/tls/pair-token")" = "$token"
+          ls -l "$prefix/px4-userland" "$prefix/siano-userland"
+          # px4d のソケットの置き場は root のもので、ほかの人は入れない (px4d がそう求める)
+          test "$(stat -f '%Su %Lp' "$prefix/run")" = "root 700"
           # libusb は中に抱えている (Homebrew のものに繋がない)。ランナーには Homebrew の libusb が
           # 入りうるので、動いたことでは確かめられない。繋ぎ先を直に見る
           for bin in px4-userland/px4d siano-userland/siano-ts; do
-            otool -L "$HOME/Library/Application Support/denpa-agent/$bin"
-            if otool -L "$HOME/Library/Application Support/denpa-agent/$bin" | grep -q libusb; then
+            otool -L "$prefix/$bin"
+            if otool -L "$prefix/$bin" | grep -q libusb; then
               echo "$bin が外の libusb に繋いでいます" >&2; exit 1
             fi
           done
-          "$HOME/Library/Application Support/denpa-agent/px4-userland/px4d" --list || true
-          bash install.sh --uninstall
-          test ! -e "$HOME/Library/LaunchAgents/io.github.danything.denpa-agent.plist"
-          test ! -e "$HOME/Library/Application Support/denpa-agent"
+          "$prefix/px4-userland/px4d" --list || true
+          sudo -E env PATH="$PATH" bash install.sh --uninstall
+          test ! -e "$plist"
+          test ! -e "$prefix/bin"
+          if sudo launchctl print system/io.github.danything.denpa-agent >/dev/null 2>&1; then exit 1; fi
           # 設定の置き場 (~/denpa/config) は外しても残す
           test -d "$HOME/denpa/config"
-          cat "$HOME/Library/Logs/denpa-agent.log"
+          cat "$log"
+
+      # 本体ごと入れるジョブ (server-macos) が同じエージェントを使う
+      - name: Upload the agent tarball
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: denpa-agent-macos
+          path: ${{ runner.temp }}/denpa-agent.tar.gz
+          retention-days: 3
 
   # Mac のメニューバーのアプリ (tray/mac)。/api/health の読み方と文言をテストし、組んで起こし、落ちずに動き続けることを見る
   # (denpa はいないので、斜線の入ったアイコンのまま)。メニューは人が開くものなので見ない。
@@ -700,7 +718,7 @@ jobs:
     uses: ./.github/workflows/windows-server.yml
 
   # 配布物を Windows のランナーで確かめる。**必須チェックにはしない** (agent-windows と同じ理由)。
-  # 1. 同梱の ffmpeg で denpa の経路を流し、fd 3 の進み具合と、スリープを止める呼び出しを見る (tests/windows-smoke.ts)
+  # 1. 同梱の ffmpeg で denpa の経路を流し、fd 3 の進み具合と、スリープを止める呼び出しを見る (tests/native-smoke.ts)
   # 2. 本体をそのまま `bun server.js` で起こし、/api/health・画面・字・デコーダが返るか
   # 3. install.ps1 で本体ごと入れて (タスクは SYSTEM)、本体がエージェントと組めるか。上げ直して、外す
   server-windows:
@@ -732,8 +750,8 @@ jobs:
           Expand-Archive -LiteralPath $zip.FullName -DestinationPath $dir
           $work = "$env:RUNNER_TEMP\smoke"
           New-Item -ItemType Directory -Force $work | Out-Null
-          & "$dir\bun.exe" tests\windows-smoke.ts $dir $work
-          if ($LASTEXITCODE -ne 0) { throw 'tests/windows-smoke.ts failed' }
+          & "$dir\bun.exe" tests\native-smoke.ts $dir $work
+          if ($LASTEXITCODE -ne 0) { throw 'tests/native-smoke.ts failed' }
 
       - name: bun server.js answers
         # 前の段が落ちても流す (どこまで動くかを 1 回で見る)
@@ -841,6 +859,119 @@ jobs:
           if (-not (Test-Path "$data\denpa.db")) { throw 'DB removed' }
           Get-Content "$env:USERPROFILE\denpa\denpa.log" -Tail 80
           exit 0
+
+  # **Mac でそのまま動かす denpa 本体の配布物** (macos-server.yml が組む。リリースと同じ組み方)
+  server-macos-bundle:
+    uses: ./.github/workflows/macos-server.yml
+
+  # 配布物を Mac のランナーで確かめる。**必須チェックにはしない** (agent-macos と同じ理由)。
+  # Mac のランナーは混むので、確かめることは 1 つのジョブにまとめる (server-windows と同じ並び)。
+  # 1. 同梱の ffmpeg で denpa の経路を流し、VideoToolbox が組み込まれていること、GPU で試せなければソフトウェアに戻ること、
+  #    fd 3 の進み具合、スリープを止める呼び出しと、録画の前に起こす予約を見る (tests/native-smoke.ts。予約は root が要るので sudo で)
+  # 2. 本体をそのまま `bun server.js` で起こし、/api/health・画面・字・デコーダが返るか
+  # 3. 前のバージョン (本体が Docker) から移る形で install.sh を流し (偽の docker。tests/install-mac-migrate.sh)、本体ごと入れて
+  #    (LaunchDaemon は root)、本体がエージェントと組めるか。上げ直して、外す
+  server-macos:
+    needs: [server-macos-bundle, agent-macos]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download the server tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-darwin-arm64
+          path: ${{ runner.temp }}/server
+
+      - name: Download the agent tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: denpa-agent-macos
+          path: ${{ runner.temp }}/agent
+
+      - name: Bundled ffmpeg, VideoToolbox, progress on fd 3, keep awake and wake
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/denpa"
+          mkdir -p "$dir" "$RUNNER_TEMP/smoke"
+          tar -xzf "$RUNNER_TEMP"/server/denpa-*-darwin-arm64.tar.gz -C "$dir"
+          codesign -v "$dir/ffmpeg/ffmpeg" "$dir/ffmpeg/ffprobe" "$dir/bun"
+          sudo "$dir/bun" tests/native-smoke.ts "$dir" "$RUNNER_TEMP/smoke"
+
+      - name: bun server.js answers
+        # 前の段が落ちても流す (どこまで動くかを 1 回で見る)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/denpa"
+          data="$RUNNER_TEMP/data"
+          mkdir -p "$data"
+          # エージェントはいない (本体は動き続けて繋ぎ直す)
+          (cd "$dir/app" && NODE_ENV=production DENPA_DB="$data/denpa.db" MEDIA_DIR="$data/media" \
+            FFMPEG="$dir/ffmpeg/ffmpeg" FFPROBE="$dir/ffmpeg/ffprobe" MPEG2_DIR="$dir/mpeg2" FONT_DIR="$dir/font" \
+            TUNER_AGENT_URL='https://127.0.0.1:25999#pair=smoke' TRUSTED_NETWORKS=127.0.0.0/8 PORT=3100 \
+            "$dir/bun" server.js > "$data/server.log" 2>&1) &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; cat "$data/server.log"' EXIT
+          for _ in $(seq 60); do curl -fsS -o /dev/null http://127.0.0.1:3100/api/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:3100/api/health; echo
+          for path in / /api/font/denpa-font.css /api/font/denpa-font.woff2 /api/live/mpeg2/decoder.wasm; do
+            curl -fsS -o /dev/null -w "$path -> %{http_code} %{size_download} bytes\n" "http://127.0.0.1:3100$path"
+          done
+          test -f "$data/denpa.db"
+          kill "$pid"
+          wait "$pid" || true
+
+      # 1 回目は前のバージョン (本体が Docker) から移る形で。2 回目は上げ直し、最後に外す
+      - name: install.sh with the server
+        # 前の段が落ちても流す (どこまで動くかを 1 回で見る)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          export DENPA_AGENT_TARBALL="$RUNNER_TEMP/agent/denpa-agent.tar.gz"
+          DENPA_SERVER_TARBALL=$(ls "$RUNNER_TEMP"/server/denpa-*-darwin-arm64.tar.gz)
+          export DENPA_SERVER_TARBALL
+          prefix="/Library/Application Support/denpa"
+          # 前の段の本体が作った DB を、Docker のボリュームにあったことにして写させる
+          bash tests/install-mac-migrate.sh "$RUNNER_TEMP/data"
+          for label in denpa denpa-agent; do
+            sudo launchctl print "system/io.github.danything.$label" | grep -E 'state|program'
+          done
+          curl -fsS http://127.0.0.1:3000/api/health; echo
+          # 画面はこの Mac のブラウザ (127.0.0.1) からログインなしで開ける (denpa.env の TRUSTED_NETWORKS)
+          curl -fsS -o /dev/null http://127.0.0.1:3000/
+          # 置き場の DB・denpa.env・denpa.sh は root だけのもの。合言葉は denpa.sh にあり、だれでも読める plist には無い
+          test "$(sudo stat -f '%Su %Lp' "$prefix/data")" = "root 700"
+          sudo test -f "$prefix/data/denpa.env"
+          token=$(cat "$HOME/denpa/config/tls/pair-token")
+          sudo grep -qF "#pair=$token" "$prefix/data/denpa.sh"
+          if grep -qF "$token" /Library/LaunchDaemons/io.github.danything.denpa.plist; then exit 1; fi
+          # 本体がエージェントと組む (エージェントの tls/clients に本体の証明書が載る)
+          clients="$HOME/denpa/config/tls/clients"
+          for _ in $(seq 60); do sudo test -s "$clients" && break; sleep 1; done
+          sudo test -s "$clients"
+          # 録画の置き場はその人のもの (root の本体が書いたものも、グループ staff で触れる)
+          test "$(stat -f %Su "$HOME/Movies/denpa/recorded")" = "$(id -un)"
+
+          sudo -E env PATH="$PATH" bash install.sh --no-open
+          curl -fsS http://127.0.0.1:3000/api/health; echo
+
+          sudo -E env PATH="$PATH" bash install.sh --uninstall
+          for label in denpa denpa-agent; do
+            if sudo launchctl print "system/io.github.danything.$label" >/dev/null 2>&1; then echo "$label が残っています" >&2; exit 1; fi
+            test ! -e "/Library/LaunchDaemons/io.github.danything.$label.plist"
+          done
+          test ! -e "$prefix/server"
+          test ! -e "$prefix/bin"
+          if pgrep -f "$prefix/" >/dev/null; then echo "まだ動いています" >&2; exit 1; fi
+          # DB は残す
+          sudo test -f "$prefix/data/denpa.db"
+          sudo tail -n 80 /Library/Logs/denpa/denpa.log
 
   # 予約から録画・エンコード・保存先への配置まで、偽の放送で通しで流す
   e2e:

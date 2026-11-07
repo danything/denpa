@@ -42,6 +42,7 @@ const A: HwDevice = {
   nvenc: [],
   qsv: [],
   amf: [],
+  videotoolbox: [],
   cqp: [],
   full: [],
 };
@@ -52,6 +53,7 @@ const only = (codecs: ("av1" | "hevc" | "h264")[]) => ({
   nvenc: [],
   qsv: [],
   amf: [],
+  videotoolbox: [],
 });
 
 test("ライブは録画と別の GPU を使える。録画の印は見ない", () => {

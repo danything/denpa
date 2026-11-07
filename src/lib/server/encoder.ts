@@ -226,6 +226,7 @@ type Keyframes = "scene" | number[];
  * キーフレームにする。**NVENC は指定しないと IDR にならない** (`-forced-idr`。QSV・AMF は `-forced_idr`。
  * 3 つとも H.264・H.265・AV1 の全部が持つオプション)。
  * IDR でないと入れ物にキーフレームとして書かれず、そこで切れない。VA-API は印だけで IDR になる。
+ * VideoToolbox (Mac) も印だけで、FFmpeg の videotoolboxenc.c がそのコマをキーフレームにするよう求める (`ForceKeyFrame`。実機では見ていない)。
  *
  * **Rockchip MPP (h264_rkmpp・hevc_rkmpp) は印を見ない** (本家 FFmpeg の rkmppenc.c はコマの `pict_type` を
  * MPP に渡さない)。渡しても害は無く、境目にキーフレームが無ければ CM を切るところで
@@ -276,9 +277,9 @@ function videoArgs(
   const keys = keyframeArgs(keyframes, hardware);
   if (hardware !== null) {
     /*
-     * **GPU (VA-API・NVENC・QSV・AMF・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
+     * **GPU (VA-API・NVENC・QSV・AMF・VideoToolbox・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
      * 済ませ、エンコードするところだけ GPU に渡す。引数と画質の決め方は hwenc.hwArgs
-     * (Rockchip MPP・NVENC・AMF は出す高さとコマ数でビットレートを決める)。
+     * (Rockchip MPP・NVENC・AMF・VideoToolbox は出す高さとコマ数でビットレートを決める)。
      * 使うかどうかは `hwChain` (起動時の試しのエンコードと設定)。**落ちたら次の方式か
      * ソフトウェアで再エンコードする** (runJob) ので、ここで保険はかけない
      */
@@ -400,7 +401,7 @@ interface EncodeOptions {
   /** 入れ物 (mkv) の title に埋め込む番組名 (`title.displayTitle`) */
   mediaTitle?: string;
   /**
-   * GPU でエンコードする経路 (どのデバイスを `vaapi` / `rkmpp` / `nvenc` / `qsv` / `amf` のどれで)。使えるかどうかは
+   * GPU でエンコードする経路 (どのデバイスを `vaapi` / `rkmpp` / `nvenc` / `qsv` / `amf` / `videotoolbox` のどれで)。使えるかどうかは
    * `hwenc.hwChain` が決めていて、runJob がその順に渡す。落ちたら次、
    * 最後はソフトウェア (undefined)
    */
@@ -608,7 +609,7 @@ export function buildArgs(
 }
 
 /**
- * いま走っているエンコード (CM 検出のやり直しも) の本数。Windows をスリープさせないか (`power.ts`) と、
+ * いま走っているエンコード (CM 検出のやり直しも) の本数。Windows と Mac をスリープさせないか (`power.ts`) と、
  * 通知領域・メニューバーのアプリが更新の前に確かめるとき (`/api/health`) に使う
  */
 export function runningEncodes(): number {

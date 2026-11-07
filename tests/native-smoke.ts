@@ -1,28 +1,32 @@
 /**
- * Windows の配布物 (`denpa-<バージョン>-windows-x64.zip`) を確かめる。CI (test.yml の server-windows) が、
- * 配布物の bun で流す。
+ * Windows と Mac の配布物 (`denpa-<バージョン>-windows-x64.zip`・`denpa-<バージョン>-darwin-arm64.tar.gz`) を確かめる。
+ * CI (test.yml の server-windows・server-macos) が、配布物の bun で流す。
  *
- *   bun tests/windows-smoke.ts <配布物を開いた場所> <作業場所>
+ *   bun tests/native-smoke.ts <配布物を開いた場所> <作業場所>
  *
  * - 同梱の ffmpeg で、denpa が使う経路の主なもの (.github/image-smoke.sh と同じ素材と引数) を流す。
  *   部品を Dockerfile から読んで組んでいるので、足りなければここで落ちる
- * - GPU のエンコーダ (NVENC・QSV・AMF) が組み込まれ、denpa が渡すオプションを持つか。GPU の無いランナーでは
- *   試しのエンコードが全部落ちて、ソフトウェアでエンコードするか
- * - ffmpeg の 4 本目の出口 (stream.sideOutput。Windows では名前付きパイプ) で、進み具合と matroska を受けられるか
- * - スリープを止められるか (awake.ts)。`powercfg /requests` に bun が出るかを見る (管理者で動くランナーだけで読める)
+ * - GPU のエンコーダ (Windows は NVENC・QSV・AMF、Mac は VideoToolbox) が組み込まれ、denpa が渡すオプションを持つか。
+ *   GPU で試せないランナーでは、試しのエンコードが全部落ちて、ソフトウェアでエンコードするか
+ * - ffmpeg の 4 本目の出口 (stream.sideOutput。Windows では名前付きパイプ、Mac は `pipe:3`) で、進み具合と matroska を受けられるか
+ * - スリープを止められるか (awake.ts)。Windows は `powercfg /requests` に bun が出るか (管理者で動くランナーだけで読める)、
+ *   Mac は `pmset -g assertions` にこのプロセスの `PreventUserIdleSystemSleep` が出るか
+ * - Mac は、録画の前に起こす予約を置いて取り消せるか (awake.macPower。`pmset -g sched` で見る。root が要るので sudo で流す)
  */
 
 import { join } from "node:path";
 
-import { holdAwake } from "../src/lib/server/awake.ts";
+import { holdAwake, macPower } from "../src/lib/server/awake.ts";
 import { sideOutput } from "../src/lib/server/stream.ts";
 
 const [root, work] = process.argv.slice(2);
 if (root === undefined || work === undefined) {
-  throw new Error("bun tests/windows-smoke.ts <dir> <work>");
+  throw new Error("bun tests/native-smoke.ts <dir> <work>");
 }
-const ffmpeg = join(root, "ffmpeg", "ffmpeg.exe");
-const ffprobe = join(root, "ffmpeg", "ffprobe.exe");
+const windows = process.platform === "win32";
+const exe = windows ? ".exe" : "";
+const ffmpeg = join(root, "ffmpeg", `ffmpeg${exe}`);
+const ffprobe = join(root, "ffmpeg", `ffprobe${exe}`);
 const at = (name: string) => join(work, name);
 
 async function ff(...args: string[]): Promise<void> {
@@ -48,9 +52,16 @@ const encoders = Bun.spawnSync([
   "-hide_banner",
   "-encoders",
 ]).stdout.toString();
-// GPU のエンコーダ (NVENC・QSV・AMF) は、ランナーに GPU が無くても組み込んである
-const gpuEncoders = ["nvenc", "qsv", "amf"].flatMap((kind) =>
-  ["h264", "hevc", "av1"].map((codec) => `${codec}_${kind}`),
+// GPU のエンコーダ (Windows は NVENC・QSV・AMF、Mac は VideoToolbox) は、ランナーで GPU を使えなくても組み込んである。
+// VideoToolbox に AV1 のエンコーダは無い
+const gpuKinds = windows
+  ? (["nvenc", "qsv", "amf"] as const)
+  : (["videotoolbox"] as const);
+const gpuCodecs = windows
+  ? (["h264", "hevc", "av1"] as const)
+  : (["h264", "hevc"] as const);
+const gpuEncoders = gpuKinds.flatMap((kind) =>
+  gpuCodecs.map((codec) => `${codec}_${kind}`),
 );
 for (const name of [
   "libx264",
@@ -215,15 +226,18 @@ await ff(
 console.log("ffmpeg: ok");
 
 /*
- * GPU のエンコーダ。ランナーに GPU は無いので、エンコードは通らない。ここで見るのは次の 3 つ。
- * 1. denpa が渡すエンコーダのオプション (hwenc.hwArgs・encoder.keyframeArgs) を、組み込んだエンコーダが持っている
- * 2. hwArgs の引数で起動すると、GPU が無いために落ちる (エンコーダやオプションの名前が違って落ちるのではない)
- * 3. 試しのエンコードが全部落ちると、GPU の方式は 0 になり、録画もライブもソフトウェアでエンコードする
+ * GPU のエンコーダ。Windows のランナーに GPU は無いのでエンコードは通らない。Mac のランナーでは VideoToolbox が通る。
+ * ここで見るのは次の 3 つ。
+ * 1. denpa が渡すエンコーダのオプション (hwenc.hwArgs・hwenc.liveHwArgs・encoder.keyframeArgs) を、組み込んだエンコーダが持っている
+ * 2. hwArgs の引数で起動すると、通るか GPU が無いために落ちる (エンコーダやオプションの名前が違って落ちるのではない)
+ * 3. 試しのエンコードが全部落ちると、GPU の方式は 0 になり、録画もライブもソフトウェアでエンコードする。
+ *    通ったものがあれば、その方式で放送に似せた素材をエンコードでき、試しのエンコードが落ちる ffmpeg で探し直すとソフトウェアに戻る
  */
 const options: Record<string, string[]> = {
   nvenc: ["gpu", "preset", "rc", "forced-idr", "delay", "zerolatency"],
   qsv: ["preset", "forced_idr", "async_depth"],
   amf: ["usage", "quality", "rc", "forced_idr", "async_depth"],
+  videotoolbox: ["profile", "prio_speed", "realtime"],
 };
 for (const name of gpuEncoders) {
   const help = Bun.spawnSync([
@@ -240,34 +254,56 @@ for (const name of gpuEncoders) {
 const { config } = await import("../src/lib/server/config.ts");
 config.ffmpeg = ffmpeg;
 const { HW_CODECS } = await import("../src/lib/hw.ts");
-const { hwArgs, hwChain, liveHw, probe } =
+const { hwArgs, hwChain, liveHw, liveHwArgs, probe } =
   await import("../src/lib/server/hwenc.ts");
-for (const kind of ["nvenc", "qsv", "amf"] as const) {
-  for (const codec of HW_CODECS) {
-    const hw = hwArgs({ device: `${kind}0`, kind, gpu: 0 }, codec);
-    const run = Bun.spawnSync([
-      ffmpeg,
-      "-hide_banner",
-      "-nostdin",
-      "-v",
-      "error",
+type Way = Parameters<typeof hwArgs>[0];
+/** 録画とライブの引数で 1 回ずつ起動する。名前が違って落ちたのなら止める */
+function tryArgs(label: string, args: string[]): number {
+  const run = Bun.spawnSync([
+    ffmpeg,
+    "-hide_banner",
+    "-nostdin",
+    "-v",
+    "error",
+    ...args,
+    "-f",
+    "null",
+    "-",
+  ]);
+  const err = run.stderr.toString();
+  console.log(`${label}: exit ${run.exitCode}`);
+  if (
+    /Unknown encoder|Unrecognized option|No such filter|Option not found/.test(
+      err,
+    )
+  )
+    throw new Error(`${label} を起動できません:\n${err}`);
+  return run.exitCode;
+}
+for (const kind of gpuKinds) {
+  for (const codec of gpuCodecs) {
+    const way: Way = windows
+      ? { device: `${kind}0`, kind, gpu: 0 }
+      : { device: kind, kind };
+    const source = ["-f", "lavfi", "-i", "nullsrc=s=256x256:r=30:d=0.2"];
+    const hw = hwArgs(way, codec);
+    tryArgs(`${codec}_${kind}`, [
       ...hw.device,
-      "-f",
-      "lavfi",
-      "-i",
-      "nullsrc=s=256x256:r=30:d=0.2",
+      ...source,
       "-vf",
       hw.filter.join(","),
       "-c:v",
       ...hw.encoder,
-      "-f",
-      "null",
-      "-",
     ]);
-    const err = run.stderr.toString();
-    console.log(`${codec}_${kind}: exit ${run.exitCode}`);
-    if (/Unknown encoder|Unrecognized option|No such filter/.test(err))
-      throw new Error(`${codec}_${kind} を起動できません:\n${err}`);
+    const live = liveHwArgs({ way, full: false }, codec);
+    tryArgs(`${codec}_${kind} (live)`, [
+      ...live.input,
+      ...source,
+      "-vf",
+      live.filter.join(","),
+      "-c:v",
+      ...live.encoder,
+    ]);
   }
 }
 const found = await probe();
@@ -278,16 +314,101 @@ if (found.devices.length === 0) {
       throw new Error(`GPU が無いのに ${codec} の方式が残っています`);
   }
   console.log("no GPU: software encoding: ok");
+} else {
+  // 試しのエンコードが通った方式は、放送に似せた素材でも録画の引数で通る
+  for (const codec of HW_CODECS) {
+    const way = hwChain(codec, {})[0];
+    if (way === undefined) continue;
+    const hw = hwArgs(way, codec);
+    await ff(
+      ...hw.device,
+      "-i",
+      at("in.ts"),
+      "-vf",
+      ["bwdif", ...hw.filter].join(","),
+      "-c:v",
+      ...hw.encoder,
+      "-an",
+      "-f",
+      "matroska",
+      at(`gpu-${codec}.mkv`),
+    );
+    console.log(`${codec} on ${way.kind}: ok`);
+  }
+  // 試しのエンコードが全部落ちる ffmpeg (いつも 1 で終わる `false`。Mac) で探し直すと、方式は 0 になってソフトウェアに戻る
+  if (!windows) {
+    config.ffmpeg = "/usr/bin/false";
+    const none = await probe();
+    console.log(none.message);
+    if (none.devices.length !== 0)
+      throw new Error("試しのエンコードが落ちたのに方式が残っています");
+    for (const codec of HW_CODECS) {
+      if (hwChain(codec, {}).length > 0 || liveHw(codec, {}) !== null)
+        throw new Error(
+          `試しのエンコードが落ちたのに ${codec} の方式が残っています`,
+        );
+    }
+    console.log("GPU fails: software encoding: ok");
+    config.ffmpeg = ffmpeg;
+  }
 }
 
-if (!(await holdAwake(true)))
-  throw new Error("SetThreadExecutionState が失敗しました");
-const requests = Bun.spawnSync(["powercfg.exe", "/requests"]).stdout.toString();
-console.log(requests);
-if (!/bun\.exe/i.test(requests))
-  throw new Error("powercfg /requests に bun が出ません");
+if (!(await holdAwake(true))) throw new Error("スリープを止められません");
+if (windows) {
+  const requests = Bun.spawnSync([
+    "powercfg.exe",
+    "/requests",
+  ]).stdout.toString();
+  console.log(requests);
+  if (!/bun\.exe/i.test(requests))
+    throw new Error("powercfg /requests に bun が出ません");
+} else {
+  const assertions = Bun.spawnSync([
+    "pmset",
+    "-g",
+    "assertions",
+  ]).stdout.toString();
+  console.log(assertions);
+  const mine = assertions
+    .split("\n")
+    .filter((line) => line.includes(`pid ${process.pid}(`));
+  if (
+    !mine.some(
+      (line) =>
+        line.includes("PreventUserIdleSystemSleep") && line.includes("denpa"),
+    )
+  )
+    throw new Error("pmset -g assertions に denpa の抑止が出ません");
+}
 await holdAwake(false);
 console.log("keep awake: ok");
+
+/*
+ * Mac: 録画の前に起こす予約 (power.ts と同じ呼び出し)。1 日先に置いて `pmset -g sched` に出ることを見て、取り消す。
+ * root でないと置けないので、CI は sudo で流す
+ */
+if (!windows) {
+  const power = await macPower();
+  if (power === null) throw new Error("IOKit を読めません");
+  const when = Math.floor((Date.now() + 86_400_000) / 1000) * 1000;
+  const by = `denpa-smoke-${process.pid}`;
+  const sched = () => Bun.spawnSync(["pmset", "-g", "sched"]).stdout.toString();
+  const code = power.schedule(when, by);
+  if (code !== 0)
+    throw new Error(
+      `IOPMSchedulePowerEvent が 0x${(code >>> 0).toString(16)} を返しました`,
+    );
+  const listed = sched();
+  console.log(listed);
+  if (!listed.includes(by))
+    throw new Error("pmset -g sched に起こす予約が出ません");
+  const cancelled = power.cancel(when, by);
+  if (cancelled !== 0 || sched().includes(by))
+    throw new Error(
+      `起こす予約を取り消せません (0x${(cancelled >>> 0).toString(16)})`,
+    );
+  console.log("wake schedule: ok");
+}
 
 // 4 本目の出口 (stream.sideOutput)。Windows では名前付きパイプ。録画のエンコードの進み具合と同じ渡し方
 const timeout = (ms: number) =>

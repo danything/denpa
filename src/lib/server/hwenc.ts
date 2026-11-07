@@ -46,6 +46,10 @@ import { run } from "./stream";
  * Intel は QSV (libvpl)、AMD は AMF。**Linux の Intel で QSV を使わない理由は、Windows には当てはまらない**
  * (Windows の Intel の GPU で使えるエンコーダは QSV だけ。docs/encode.md「Windows でエンコードする」)。
  *
+ * **Mac は VideoToolbox だけ** (`probeMac`)。Apple Silicon のメディアエンジンは 1 つの方式 (`videotoolbox`) で、
+ * 番号もデバイスファイルも無い。H.264 と H.265 を 1 コマずつ試す (VideoToolbox に AV1 のエンコーダは無い。
+ * docs/encode.md「Mac でエンコードする」)。
+ *
  * **H.265 (`hevc`) は GPU でだけエンコードする。** 試しのエンコードは AV1・H.264 と同じく方式ごとに 1 コマ試す。
  * ソフトウェアのエンコーダは無いので、ライブはライブのエンコーダが GPU のときだけ H.265 を出す (`live.liveHevc`)。
  * 追っかけ・その場の変換は H.265 を出さない (回線に合わせて段を下げるときは、GPU があれば出す。`live.rungCodec`)。
@@ -71,6 +75,8 @@ export interface HwDevice {
   qsv: HwCodec[];
   /** AMF でエンコードできたコーデック (Windows の `amf0` などのときだけ) */
   amf: HwCodec[];
+  /** VideoToolbox でエンコードできたコーデック (Mac の `videotoolbox` のときだけ。H.264 と H.265 だけ試す) */
+  videotoolbox: HwCodec[];
   /**
    * GPU の番号。NVENC は ffmpeg の `-gpu` (Linux は `findNvidia` の並び、Windows は番号を順に試したもの)、
    * QSV・AMF は Direct3D 11 のアダプタの番号 (Windows。`probeWindows`)。それぞれのデバイスにだけある
@@ -259,6 +265,19 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * **`-rc vbr_peak`** (ピークを抑えた VBR。目標は平均、上限は目標の 2 倍)。GPU の世代で落ちうる指定 (`hqvbr`・先読み) は渡さない。
  * GPU は Direct3D 11 のアダプタの番号 (`-init_hw_device d3d11va=…:<番号>`。AMF のエンコーダが、その場にあるデバイスを使う)。
  * CPU で作ったフレームは nv12 で渡す。`-g 250` は同じ。**実機では測っていない** (手元に AMD の GPU が無い)
+ *
+ * ## Mac (VideoToolbox) もビットレートで指定する
+ *
+ * VideoToolbox にも画質での指定 (`-q:v`。Apple Silicon の constant quality) はあるが、値と画質の対応を測れていないので、
+ * AMF と同じく NVENC と同じ表のビットレートを渡す (`vtRate`。平均を表の値に、上限を 2 倍に)。
+ * **`-prio_speed 0`** (速さより画質を取る。macOS 13 から) を付ける。H.264 は **`-profile:v high`**
+ * (B フレームと CABAC を使える段。渡さないと何を選ぶかはエンコーダ任せ)。**`-bf 2`** で B フレームを使わせる
+ * (同じビットレートで画質が上がる。FFmpeg は枚数を渡さず、使うかどうかだけを VideoToolbox に渡す。既定の 0 では使わない)。
+ * **ハードウェアでだけエンコードする。** FFmpeg の videotoolboxenc.c は `-allow_sw` を渡さなければ
+ * ハードウェアのエンコーダを求め (`RequireHardwareAcceleratedVideoEncoder`)、無ければ開けずに落ちる。
+ * Apple のソフトウェアのエンコーダに黙って倒れず、試しのエンコードが落ちて x264 に戻る。
+ * デバイスは開かない (VideoToolbox が自分でメディアエンジンを選ぶ)。CPU で作ったフレームを nv12 で渡す。
+ * `-g 250` は同じ。**画質と大きさは測っていない** (CI の Mac のランナーで試しのエンコードが通り、放送に似せた素材をエンコードできるところまで見ている)
  */
 export function hwArgs(
   way: HwWay,
@@ -318,6 +337,23 @@ export function hwArgs(
         "-quality",
         "high_quality",
         ...amfRate(hwBitrate(codec, picture)),
+        "-g",
+        "250",
+      ],
+    };
+  }
+  if (way.kind === "videotoolbox") {
+    return {
+      device: [],
+      filter: ["format=nv12"],
+      encoder: [
+        `${codec}_videotoolbox`,
+        ...vtProfile(codec),
+        "-prio_speed",
+        "0",
+        "-bf",
+        "2",
+        ...vtRate(hwBitrate(codec, picture)),
         "-g",
         "250",
       ],
@@ -570,6 +606,20 @@ function amfRate(bps: number): string[] {
   ];
 }
 
+/** VideoToolbox の H.264 は High にする (`hwArgs` の説明)。H.265 はエンコーダの既定の Main のまま */
+function vtProfile(codec: HwCodec): string[] {
+  return codec === "h264" ? ["-profile:v", "high"] : [];
+}
+
+/**
+ * VideoToolbox のレート制御の引数。**平均を表の値に寄せ、上限を 2 倍に** (NVENC と同じ幅で、測っていない)。
+ * `-maxrate` は FFmpeg が VideoToolbox の `DataRateLimits` (1 秒あたりのバイト数) に渡す。
+ * FFmpeg の videotoolboxenc.c は `-bufsize` を読まないので渡さない
+ */
+function vtRate(bps: number): string[] {
+  return ["-b:v", String(bps), "-maxrate", String(bps * 2)];
+}
+
 /**
  * **NVENC が同時に開けるエンコードの数を超えて降りたか** (ffmpeg の標準エラーの全文か 1 行)。
  *
@@ -647,6 +697,10 @@ export function liveHw(
  * 段を下げたときは VBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。**どちらも実機では見ていない。**
  * 落ちればソフトウェアでエンコードし直し、その方式を 15 分外す (`live.ts` の `blameLiveHw`)
  *
+ * **VideoToolbox (Mac) も低遅延の指定で、CPU のデコードのまま。** `-realtime 1` (実時間でエンコードする)・
+ * `-prio_speed 1` (画質より速さ)・`-bf 0`。ビットレートは録画と同じ表の、いちばん重い映像の値。段を下げたときは平均も上限も段の値にする。
+ * **実機では見ていない**
+ *
  * ## `full`: デコードとインタレ解除も GPU (VA-API だけ)
  *
  * `-hwaccel vaapi -hwaccel_output_format vaapi` で放送の MPEG-2 を GPU でデコードし、フレームを GPU に
@@ -723,6 +777,26 @@ export function liveHwArgs(
         String(bps * 2),
         "-async_depth",
         "1",
+      ],
+    };
+  }
+  if (way.kind === "videotoolbox") {
+    return {
+      input: base.device,
+      filter: base.filter,
+      encoder: [
+        `${codec}_videotoolbox`,
+        ...vtProfile(codec),
+        "-realtime",
+        "1",
+        "-prio_speed",
+        "1",
+        // 段を下げたときは回線に収まるよう、上限も段の値にする (VA-API・QSV と同じ)
+        ...(cap === null
+          ? vtRate(bps)
+          : ["-b:v", String(bps), "-maxrate", String(bps)]),
+        "-bf",
+        "0",
       ],
     };
   }
@@ -903,6 +977,7 @@ function emptyDevice(path: string, label: string): HwDevice {
     nvenc: [],
     qsv: [],
     amf: [],
+    videotoolbox: [],
     cqp: [],
     full: [],
   };
@@ -911,14 +986,36 @@ function emptyDevice(path: string, label: string): HwDevice {
 /** Rockchip MPP で試すコーデック。RK3588 は AV1 をエンコードできない (並びは HW_CODECS と同じ) */
 const RKMPP_CODECS = ["hevc", "h264"] as const;
 
+/** VideoToolbox で試すコーデック。VideoToolbox に AV1 のエンコーダは無い (並びは HW_CODECS と同じ) */
+const VIDEOTOOLBOX_CODECS = ["hevc", "h264"] as const;
+
 async function probeOnce(): Promise<HwEncode> {
   const devices =
-    process.platform === "win32" ? await probeWindows() : await probeLinux();
+    process.platform === "win32"
+      ? await probeWindows()
+      : process.platform === "darwin"
+        ? await probeMac()
+        : await probeLinux();
   await probeFull(devices);
   const next: HwEncode = { probed: true, devices, message: describe(devices) };
   state = next;
   console.log(`[hwenc] ${next.message}`);
   return next;
+}
+
+/**
+ * **Mac は VideoToolbox で H.264 と H.265 を 1 コマずつ試す。** 行は `videotoolbox` の 1 つだけ
+ * (Apple Silicon のメディアエンジンは VideoToolbox が選ぶので、番号もデバイスファイルも無い)。
+ * どちらも落ちれば (ハードウェアのエンコーダが見えない) 行は 0 になり、ソフトウェアでエンコードする (Windows と同じ)
+ */
+async function probeMac(): Promise<HwDevice[]> {
+  const path = "videotoolbox";
+  const device = emptyDevice(path, `${path} (Apple)`);
+  for (const codec of VIDEOTOOLBOX_CODECS) {
+    if (await tryWay({ device: path, kind: "videotoolbox" }, codec))
+      device.videotoolbox.push(codec);
+  }
+  return device.videotoolbox.length > 0 ? [device] : [];
 }
 
 /** Windows で試す GPU の番号の数。NVENC は ffmpeg の `-gpu`、QSV・AMF は Direct3D 11 のアダプタの番号 */
@@ -1121,6 +1218,8 @@ function describe(devices: HwDevice[]): string {
   if (devices.length === 0) {
     if (process.platform === "win32")
       return "GPU (NVENC・QSV・AMF) でエンコードできるものが見つかりません (ドライバが入っていないか、GPU がありません)。ソフトウェアでエンコードします";
+    if (process.platform === "darwin")
+      return "VideoToolbox のハードウェアのエンコーダでエンコードできません。ソフトウェアでエンコードします";
     return `GPU が見つかりません (${config.hwDevices} に該当するデバイスも、NVIDIA の GPU (${config.nvidiaDir}/nvidia0 など) も、${config.rkmppDevice} もありません)。ソフトウェアでエンコードします`;
   }
   const usable = devices.filter((d) =>

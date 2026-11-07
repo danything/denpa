@@ -27,7 +27,7 @@ export const overrides: Record<string, PageOverride> = {
   "install-mac": {
     title: "Mac でテレビ録画サーバを立てる",
     description:
-      "Apple Silicon の Mac に、テレビ録画サーバ denpa を1行で入れる方法。チューナーのエージェントは Mac の上で、denpa 本体は Docker で動かします。",
+      "Apple Silicon の Mac に、テレビ録画サーバ denpa を1行で入れる方法。Docker は要らず、denpa 本体もエージェントも Mac の上でそのまま動かします。",
   },
   "install-windows": {
     title: "Windows でテレビ録画サーバを立てる",

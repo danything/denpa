@@ -164,9 +164,9 @@ export function parseCodecs(value: string | undefined): HwCodec[] {
 }
 
 /**
- * `hwAllow`・`liveHwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ vaapi: [...], rkmpp: [...], nvenc: [...], qsv: [...], amf: [...] }`。
+ * `hwAllow`・`liveHwAllow` を読む。壊れていれば空 (= 全部よい)。デバイスごとに `{ vaapi: [...], rkmpp: [...], nvenc: [...], qsv: [...], amf: [...], videotoolbox: [...] }`。
  * 書かれていない方式は空。方式はデバイスごとに決まっていて (`/dev/dri/*` は VA-API、
- * `/dev/mpp_service` は Rockchip MPP、`/dev/nvidia0` などは NVENC、Windows の `qsv0` は QSV、`amf0` は AMF)、そのデバイスで使えない方式の印は何にも効かない
+ * `/dev/mpp_service` は Rockchip MPP、`/dev/nvidia0` などは NVENC、Windows の `qsv0` は QSV、`amf0` は AMF、Mac の `videotoolbox` は VideoToolbox)、そのデバイスで使えない方式の印は何にも効かない
  */
 function parseHwAllow(value: string | undefined): HwAllow {
   if (value === undefined || value === "") return {};
@@ -186,6 +186,7 @@ function parseHwAllow(value: string | undefined): HwAllow {
         nvenc: pick(entry.nvenc),
         qsv: pick(entry.qsv),
         amf: pick(entry.amf),
+        videotoolbox: pick(entry.videotoolbox),
       };
     }
     return out;

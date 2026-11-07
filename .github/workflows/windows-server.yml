@@ -157,7 +157,7 @@ jobs:
           path: ffmpeg-out
           retention-days: 3
 
-  # アプリ・字・デコーダ (Dockerfile の `windows-files` 段)。main のビルドが置いたキャッシュ (amd64、mode=max) から組む
+  # アプリ・字・デコーダ (Dockerfile の `native-files` 段)。main のビルドが置いたキャッシュ (amd64、mode=max) から組む
   files:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -170,7 +170,7 @@ jobs:
 
       - name: Build
         run: |
-          docker buildx build --target windows-files --platform linux/amd64 \
+          docker buildx build --target native-files --platform linux/amd64 \
             --cache-from "type=registry,ref=ghcr.io/${{ github.repository_owner }}/denpa:buildcache-amd64" \
             --output type=local,dest=files .
           find files -maxdepth 2 | sort

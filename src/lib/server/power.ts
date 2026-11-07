@@ -1,22 +1,26 @@
 /**
- * **Windows のスリープ。** 録画・ライブ視聴・エンコードの間はスリープさせず (`awake.ts`)、
- * 次の録画の少し前にスリープから起こす (タスク スケジューラの「スリープを解除して実行」)。
- * Windows 以外では何もしない (Linux はサーバとして動かす前提。Mac は別にする)。
+ * **Windows と Mac のスリープ。** 録画・ライブ視聴・エンコードの間はスリープさせず (`awake.ts`)、
+ * 次の録画の少し前にスリープから起こす。ほかの OS では何もしない (Linux はサーバとして動かす前提)。
  *
- * 起こすのは、denpa 本体 (SYSTEM のタスク) がタスク `denpa-wake` を書き直して行う。中身は何もしない
- * コマンドで、起こすためだけにある。次の録画が変わるたびに時刻を書き直し、録画が無ければ消す。
- * 効くのは、電源オプションの「スリープ解除タイマーの許可」が有効なときだけ (docs/install-windows.md)。
+ * - Windows は、denpa 本体 (SYSTEM のタスク) がタスク `denpa-wake` (タスク スケジューラの「スリープを解除して実行」) を
+ *   書き直して起こす。中身は何もしないコマンドで、起こすためだけにある。効くのは、電源オプションの
+ *   「スリープ解除タイマーの許可」が有効なときだけ (docs/install-windows.md)
+ * - Mac は、denpa 本体 (root の LaunchDaemon) が IOKit の `IOPMSchedulePowerEvent` で起こす予約を置く (root が要る)。
+ *   予約は OS が覚えていて、本体が起き直しても残るので、置いた時刻をデータの置き場の `wake-at` に書き、
+ *   次に置き直すときと起動したときに取り消す (docs/install-mac.md)
+ *
+ * どちらも、次の録画が変わるたびに時刻を書き直し、録画が無ければ消す。
  *
  * 外からの視聴の要求ではスリープから起こせない (寝ている機械は要求を受けられない)。外からいつも観るなら、
- * スリープしない設定にする (docs/install-windows.md)
+ * スリープしない設定にする (docs/install-windows.md・docs/install-mac.md)
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
 
-import { holdAwake } from "./awake";
+import { holdAwake, type MacPower, macPower } from "./awake";
 import { config } from "./config";
 import { orm } from "./db";
 import { runningEncodes } from "./encoder";
@@ -112,7 +116,7 @@ export function wakeTaskXml(at: number): string {
 `;
 }
 
-/** タスクを書いた時刻 (起こす時刻)。null は消したあと、undefined はまだ何もしていない */
+/** タスク (Mac は予約) を書いた時刻 (起こす時刻)。null は消したあと、undefined はまだ何もしていない */
 let written: number | null | undefined;
 /** 書けなかったことは 1 度だけ知らせる */
 let failed = false;
@@ -137,8 +141,8 @@ async function schtasks(args: string[]): Promise<boolean> {
   return false;
 }
 
-/** 起こすタスクを `at` に書き直す (null なら消す)。同じなら何もしない */
-async function scheduleWake(at: number | null, now: number): Promise<void> {
+/** Windows: 起こすタスクを `at` に書き直す (null なら消す)。同じなら何もしない */
+async function scheduleWakeTask(at: number | null, now: number): Promise<void> {
   if (at === written) return;
   if (at === null) {
     // 無いものは消さない (初めての起動など)。あるのに消せなければ、次に見たときにもう一度消す
@@ -165,9 +169,90 @@ async function scheduleWake(at: number | null, now: number): Promise<void> {
   }
 }
 
-/** 定期に呼ぶ (`runtime.ts`)。Windows 以外では何もしない */
+/** Mac で起こす予約に付ける名前 (`pmset -g sched` に出る)。install.sh が外すときに、この名前の予約を取り消す */
+export const WAKE_BY = "denpa";
+
+/** Mac で置いた予約の時刻 (ms) を書くファイル。起き直したあとに、前の起動が置いた予約を取り消すため */
+function wakeFile(): string {
+  return join(config.dataDir, "wake-at");
+}
+
+/** 前の起動が置いた予約の時刻。無ければ null */
+function lastWake(): number | null {
+  try {
+    const at = Number(readFileSync(wakeFile(), "utf8").trim());
+    return Number.isFinite(at) && at > 0 ? at : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * **秒で丸めた時刻。** 予約は置いたときと同じ時刻を渡さないと取り消せない。OS が覚える時刻の細かさに頼らないよう、
+ * 置くときも取り消すときも秒にそろえる
+ */
+export function wakeSecond(at: number): number {
+  return Math.floor(at / 1000) * 1000;
+}
+
+/** Mac の電源の呼び出し。予約を置いたときに読んだもの (`forgetWake` が止まる間際に同期で使う) */
+let mac: MacPower | null = null;
+
+/**
+ * **Mac: 止まるときに、置いた予約を取り消す** (`runtime.ts` の後始末)。動いている本体がいなければ、起こしても録画は始まらない。
+ * 起き直せば次の定期チェックで置き直す。外したとき (install.sh の `--uninstall`) に予約を残さないためでもある。
+ * Windows は何もしない (起こすタスクは install.ps1 が外す)
+ */
+export function forgetWake(): void {
+  if (mac === null || typeof written !== "number") return;
+  mac.cancel(written, WAKE_BY);
+  rmSync(wakeFile(), { force: true });
+  written = null;
+}
+
+/**
+ * Mac: 起こす予約を `at` に置き直す (null なら取り消す)。同じなら何もしない。
+ * 前の予約 (この起動で置いたものか、`wake-at` に書いてあるもの) は先に取り消す。過ぎた予約はもう無いので、
+ * 取り消せなくてよい
+ */
+async function scheduleWakeMac(at: number | null, now: number): Promise<void> {
+  const target = at === null ? null : wakeSecond(at);
+  if (target === written) return;
+  // 起こす時刻を過ぎていれば置かない (Windows と同じ)
+  if (target !== null && target <= now) return;
+  const power = await macPower();
+  if (power === null) return;
+  mac = power;
+  const previous = written === undefined ? lastWake() : written;
+  if (previous !== null) power.cancel(previous, WAKE_BY);
+  written = null;
+  if (target === null) {
+    rmSync(wakeFile(), { force: true });
+    return;
+  }
+  const code = power.schedule(target, WAKE_BY);
+  if (code !== 0) {
+    rmSync(wakeFile(), { force: true });
+    if (!failed) {
+      failed = true;
+      console.warn(
+        `[power] 録画の前にスリープから起こす予約を置けません (IOPMSchedulePowerEvent が 0x${(code >>> 0).toString(16)} を返しました。root で動いていないと置けません)。スリープしている間は録画が始まりません`,
+      );
+    }
+    return;
+  }
+  mkdirSync(config.dataDir, { recursive: true });
+  writeFileSync(wakeFile(), String(target));
+  written = target;
+  failed = false;
+  console.log(
+    `[power] ${new Date(target).toLocaleString("ja-JP")} にスリープから起こします (次の録画の ${WAKE_LEAD / MIN} 分前)`,
+  );
+}
+
+/** 定期に呼ぶ (`runtime.ts`)。Windows と Mac 以外では何もしない */
 export async function checkPower(now = Date.now()): Promise<void> {
-  if (process.platform !== "win32") return;
+  if (process.platform !== "win32" && process.platform !== "darwin") return;
   const next = nextRecording(now);
   await holdAwake(
     shouldHold({
@@ -178,5 +263,8 @@ export async function checkPower(now = Date.now()): Promise<void> {
       now,
     }),
   );
-  await scheduleWake(next === null ? null : next - WAKE_LEAD, now);
+  const at = next === null ? null : next - WAKE_LEAD;
+  await (process.platform === "win32"
+    ? scheduleWakeTask(at, now)
+    : scheduleWakeMac(at, now));
 }

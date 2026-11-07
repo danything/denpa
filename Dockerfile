@@ -367,8 +367,8 @@ COPY . .
 RUN bun run build && find build -name "*.map" -delete
 
 # ---------------------------------------------------------------------------
-# 本番で動かすアプリのファイル。本番イメージ (`runtime` 段) と、Windows の配布物 (`windows-files` 段。
-# .github/workflows/windows-server.yml) の両方がここから写す (置くものを 1 か所で決める)
+# 本番で動かすアプリのファイル。本番イメージ (`runtime` 段) と、Windows・Mac の配布物 (`native-files` 段。
+# .github/workflows/windows-server.yml・macos-server.yml) の両方がここから写す (置くものを 1 か所で決める)
 #
 # **node_modules は載せない。**
 #
@@ -378,7 +378,7 @@ RUN bun run build && find build -name "*.map" -delete
 # 置くのは下のものだけ: build/ (アプリ)、server.js (入口) とそれが読む
 # src/lib/server/address.ts・compress.ts・fresh-worker.ts・hold-signals.ts、package.json (`"type": "module"` の宣言)、drizzle/
 # (マイグレーション)。これで起動して /api/health が答えるかは CI で毎回見ている
-# (.github/image-smoke.sh。PR の docker-build-check と、push の前の build-and-deploy。Windows は test.yml の server-windows)
+# (.github/image-smoke.sh。PR の docker-build-check と、push の前の build-and-deploy。Windows・Mac は test.yml の server-windows・server-macos)
 #
 # 引き換えに、**外から引くものを増やすなら畳み込ませること** — package.json の
 # `dependencies` に足すと adapter-bun がそれを外に出すので、ここで転ぶ。
@@ -402,11 +402,11 @@ COPY --from=build /app/src/lib/server/fresh-worker.ts /app/src/lib/server/fresh-
 COPY --from=build /app/src/lib/server/hold-signals.ts /app/src/lib/server/hold-signals.ts
 
 # ---------------------------------------------------------------------------
-# Windows の配布物 (`denpa-<バージョン>-windows-x64.zip`) に入れる、OS に依らないもの。
+# Windows・Mac の配布物 (`denpa-<バージョン>-windows-x64.zip`・`denpa-<バージョン>-darwin-arm64.tar.gz`) に入れる、OS に依らないもの。
 # アプリ (`app-files`)・字 (`denpa-font`)・ブラウザへ配るデコーダ (`mpeg2wasm`) を、本番イメージと同じ段から写す。
-# bun と ffmpeg の Windows 用は、.github/workflows/windows-server.yml が別に用意して足す
+# bun と ffmpeg は OS ごとに、.github/workflows/windows-server.yml と macos-server.yml が別に用意して足す
 # ---------------------------------------------------------------------------
-FROM scratch AS windows-files
+FROM scratch AS native-files
 COPY --from=app-files /app/ /app/
 COPY --from=denpa-font /usr/share/denpa-font /font
 COPY --from=mpeg2wasm /opt/denpa/mpeg2 /mpeg2
