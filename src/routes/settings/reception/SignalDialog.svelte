@@ -196,7 +196,7 @@
             <span class="metric-label">電波レベル (C/N)</span>
             <span
               class="metric-value num mono"
-              class:error-text={result.cnDb === null || result.cnDb < 18}
+              class:error-text={result.cnDb === null || (result.type === 'GR' ? result.cnDb < 19 : result.cnDb < 11)}
             >
               {#if result.cnDb !== null}
                 {result.cnDb.toFixed(1)} <span class="unit">dB</span>
