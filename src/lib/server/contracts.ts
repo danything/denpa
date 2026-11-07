@@ -8,7 +8,18 @@ import { ServiceFilter } from "@danything/arib/service-filter";
  * また、実際にチューナーを開いて TS パケットのスクランブル制御ビットを検査し、
  * 復号できるかを確認する。
  */
-import { and, asc, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { agentFetch } from "./agent-client";
 import { orm } from "./db";
@@ -1204,18 +1215,23 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
       .where(inArray(services.type, ["BS", "CS"]))
       .all();
 
-    const manualUnsubscribed = new Set(
+    const excludedServices = new Set(
       orm()
         .select({ serviceId: cardContracts.service_id })
         .from(cardContracts)
-        .where(eq(cardContracts.manual_state, "unsubscribed"))
+        .where(
+          or(
+            eq(cardContracts.manual_state, "unsubscribed"),
+            eq(cardContracts.state, "expired"),
+          ),
+        )
         .all()
         .map((r) => r.serviceId),
     );
 
     if (wowowSubscribed) {
       for (const s of candidateServices) {
-        if (manualUnsubscribed.has(s.id)) continue;
+        if (excludedServices.has(s.id)) continue;
         if (getContractProvider(s.id, s.type, s.name).id === "wowow") {
           subscribed.add(s.id);
         }
@@ -1224,7 +1240,7 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
 
     if (skyperfectSubscribed) {
       for (const s of candidateServices) {
-        if (manualUnsubscribed.has(s.id)) continue;
+        if (excludedServices.has(s.id)) continue;
         if (getContractProvider(s.id, s.type, s.name).id === "skyperfect") {
           subscribed.add(s.id);
         }
