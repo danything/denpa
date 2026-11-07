@@ -127,6 +127,7 @@ describe("いま流れている番組を録る", () => {
       programId: 2,
       name: "ニュース",
       state: "scheduled",
+      reason: null,
     });
     const rows = orm().select().from(reservations).all();
     expect(rows.map((row) => row.program_id)).toEqual([2]);

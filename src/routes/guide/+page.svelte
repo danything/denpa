@@ -21,6 +21,7 @@
     badgeClass,
     channelNumber,
     date,
+    playableRecordingId,
     SERVICE_TYPE_LABEL,
     stateLabel,
     time,
@@ -1201,10 +1202,7 @@
 {#if selected && facts}
   {@const program = selected}
   <!-- 録れているなら、録画一覧へ戻らずここからそのまま観られるようにする (一覧の `hasFile` と同じ判定) -->
-  {@const canPlay =
-    program.recording_id !== null &&
-    program.recording_state !== "failed" &&
-    (program.library_path ?? program.ts_path) !== null}
+  {@const canPlay = playableRecordingId(program) !== null}
   {@const canWatch =
     program.start_at <= clock &&
     program.end_at > clock &&

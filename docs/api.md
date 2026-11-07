@@ -132,15 +132,106 @@
 `Content-Type: application/json` は付けます ([上記](#外から使う-api))。
 
 ```json
-{ "recorded": "ニュース", "programId": 32736103210001, "reserved": true }
+{
+  "recorded": "ニュース",
+  "programId": 32736103210001,
+  "reserved": true,
+  "state": "scheduled",
+  "reason": null
+}
 ```
 
 - 既に始まっている番組は、数秒後 (次のスケジューラの周期) に録りはじめます
 - **何度押しても二重には録りません** (予約は番組ごとに 1 本)。予約済み・録画中でも同じ答えが返ります
 - `reserved` が `false` なら予約はあるものの録らない状態です。たいていはチューナーが足りない**競合**
   (どれを録るかは予約どうしの優先度で決まります。手動の予約は 2、ルールの予約はルールの優先度)
+- `state` と `reason` は [番組表](#番組表-get-apiprogramstypegrbscsfromunix-mstounix-ms) の `reservation` と同じ物差しです
 - 番組表にいまの番組が無ければ `404`、予約できなければ (放送が終わったところなど) `400`。
   どちらも `message` に画面に出せる理由が入ります
+
+## 番組表 `GET /api/programs?type=<GR|BS|CS>&from=<UNIX ms>&to=<UNIX ms>`
+
+画面の番組表と同じ局・同じ並び・同じ予約の状態を返します (テレビのアプリの番組表)。
+
+```json
+{
+  "type": "GR",
+  "from": 1790013600000,
+  "to": 1790100000000,
+  "until": 1790600000000,
+  "services": [
+    {
+      "id": 3227310008,
+      "name": "TOKYO MX",
+      "remoteControlKey": 9,
+      "logo": "api/services/3227310008/logo",
+      "programs": [
+        {
+          "id": 32736103210001,
+          "name": "[新]番組 第1話[字]",
+          "startAt": 1790013600000,
+          "endAt": 1790015400000,
+          "description": "番組の概要",
+          "genre": 7,
+          "copyNever": false,
+          "reservation": { "state": "conflict", "reason": "…", "ruleId": 2 },
+          "recordingId": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `type` は省けません。無い・読めないときは `400`
+- `from`・`to` は UNIX ミリ秒で、その間に掛かる番組 (`startAt < to` かつ `endAt > from`) を返します。
+  省くと今日の放送日 (4:00 から翌 4:00)、`to` だけ省くと `from` から 24 時間です。
+  **1 回で返すのは 24 時間まで**で、超えたぶんは `from` から 24 時間で切ります。返した範囲は応答の `from`・`to` にあります。
+  読めない値と、`to` が `from` 以前のときは `400`
+- `until` はその種別でいちばん遅い番組の終わり (番組表がどこまで届いているか)。番組表が空なら `null`
+- `services` は画面の番組表に出る局で、並びも同じです (リモコン番号順。BS・CS は 3 桁の番号の順。放送していない局は出ない)。
+  本チャンネルだけで、サブチャンネルは入りません。`logo` は局ロゴをまだ取得できていなければ `null`
+- `programs` は始まる順。`name` は放送のままの名前、`genre` はジャンルの大分類 (ARIB の `lv1`。画面のマスの色と同じく先頭の 1 つ)。無ければ `null`
+- `copyNever` はコピー禁止の番組か。禁止の番組は録りません ([data.md](data.md#コピー禁止の番組は録らない))
+- `reservation` は予約が立っていればその状態。取り消した予約と、予約の無い番組は `null`。
+  `state` は画面の番組表のマスと同じ物差しで、`scheduled` (録る予定)・`conflict` (チューナーが足りず録らない)・
+  `skipped` (録画しない。コピー禁止・同じ回を録画済み)・`recording` (録画中)・`done` (録り終えた)・`failed` (録画に失敗した)・
+  `missed` (録り逃し) のどれかです。`reason` は録らない理由 (画面に出せる文。無ければ `null`)、
+  `ruleId` はルールが立てた予約ならそのルールの ID (手で予約し直しても残る)、手で入れた予約なら `null`
+- `recordingId` はその番組のそのまま観られる録画 (画面の番組表の詳細で再生できるもの)。無ければ `null`。
+  観るときは [録画の観方](#録画の観方-get-apirecordingsidplayback) に渡します
+- 予約が変わると [変化の通知](#変化の通知-get-apievents) の `reservations` が、録画が始まる・終わると `recordings` が来ます。開いている範囲を読み直してください
+
+## 番組を録る `POST /api/programs/<id>/record`
+
+番組表の番組を予約します。`<id>` は番組 ID (番組表の `programs[].id`)。
+[いまの番組を録る](#いまの番組を録る-post-apiservicesidrecord) と同じ処理で、答えの形式も同じです。
+
+```json
+{
+  "recorded": "ニュース",
+  "programId": 32736103210001,
+  "reserved": true,
+  "state": "scheduled",
+  "reason": null
+}
+```
+
+- **何度呼んでも二重には録りません** (予約は番組ごとに 1 本)。ルールが立てた予約は手動の予約に上がります (優先度 2)
+- 取り消した予約も、呼び直せば戻ります
+- 番組表に無ければ `404`、予約できなければ (放送が終わっている、コピー禁止) `400`。どちらも `message` に画面に出せる理由が入ります
+
+## 予約を取り消す `DELETE /api/programs/<id>/record`
+
+画面の番組表の「予約取消」と同じです。録画中なら止めて、そこまでの録画は残します。
+
+```json
+{ "stopped": false }
+```
+
+- `stopped` は録画中の録画を止めたか
+- ルールが立てた予約を取り消すと、ルールはその放送をもう予約しません
+- 取り消していない予約が無ければ `404 {"message":"予約が見つかりません"}`
 
 ## 録画の一覧 `GET /api/recordings`
 
@@ -804,7 +895,9 @@ event: encode
 data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 ```
 
-- 名前: `recordings` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
+- 名前: `recordings` `reservations` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
+- `reservations` は予約が変わったとき (予約した・取り消した・チューナーの割り振りを数え直した)、`recordings` は録画が始まった・終わったときに来ます。
+  どちらも [番組表](#番組表-get-apiprogramstypegrbscsfromunix-mstounix-ms) を読み直すと `reservation`・`recordingId` が追いつきます
 - `programs` は番組表を集めたときのほか、**ライブで開いている局の番組が放送で替わった・延びた**ときにも来ます
   (EIT[p/f] が番組表と違ったとき)。局の一覧 (`GET /api/services`) の `now` を読み直せば、いまの番組に追いつきます
 - `clips` は切り抜きが増えた・消えた・字幕やコメントを切り替えたことの通知 ([切り抜き](#切り抜き-post-apiclips))

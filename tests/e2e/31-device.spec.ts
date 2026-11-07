@@ -1,5 +1,5 @@
 import { bootClosed } from "../stack";
-import { expect, goto, test } from "./helpers";
+import { expect, goto, syncEpg, test } from "./helpers";
 
 /**
  * **テレビのアプリのペアリング** (docs/auth.md「アプリのペアリング」、device-auth.ts)。
@@ -75,6 +75,46 @@ test.describe("テレビのペアリング", () => {
     expect(
       (await request.get("/api/recordings", { headers: auth })).status(),
     ).toBe(200);
+
+    // 番組表を見て、予約して、取り消す (テレビのアプリの番組表。docs/api.md)
+    await syncEpg(request);
+    const guide = await request.get("/api/programs?type=GR", {
+      headers: auth,
+    });
+    expect(guide.status()).toBe(200);
+    const upcoming = (
+      (await guide.json()) as {
+        services: {
+          programs: {
+            id: number;
+            startAt: number;
+            copyNever: boolean;
+            reservation: unknown;
+          }[];
+        }[];
+      }
+    ).services
+      .flatMap((service) => service.programs)
+      .find(
+        (p) =>
+          p.startAt > Date.now() + 5 * 60_000 &&
+          !p.copyNever &&
+          p.reservation === null,
+      )!;
+    const write = { ...auth, "content-type": "application/json" };
+    expect(
+      (
+        await request.post(`/api/programs/${upcoming.id}/record`, {
+          headers: write,
+        })
+      ).status(),
+    ).toBe(200);
+    const canceled = await request.delete(
+      `/api/programs/${upcoming.id}/record`,
+      { headers: write },
+    );
+    expect(canceled.status()).toBe(200);
+    expect(await canceled.json()).toEqual({ stopped: false });
 
     // アクセストークンでは、別のペアリングコードを済ませられない (盗まれたもので増やせないように)
     const other = await (

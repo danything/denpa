@@ -64,6 +64,13 @@
     "43-raw-cadence",
     "55-tabletop"
   ],
-  "5": ["01-dashboard", "03-recording", "22-watch", "57-jikkyo", "58-volume"],
+  "5": [
+    "01-dashboard",
+    "03-recording",
+    "22-watch",
+    "57-jikkyo",
+    "58-volume",
+    "63-programs-api"
+  ],
   "6": ["50-live-pacing"]
 }

@@ -1,9 +1,7 @@
 import { fail } from "@sveltejs/kit";
-import { and, eq, ne } from "drizzle-orm";
 
 import { channelNotice } from "#lib/channel-notice.js";
 import { channelAlert } from "#lib/server/channel-alert.js";
-import { orm } from "#lib/server/db.js";
 import { serviceCounts, watchableServices } from "#lib/server/epg.js";
 import {
   broadcastDayStart,
@@ -13,8 +11,7 @@ import {
   stationsOf,
   WINDOW_HOURS,
 } from "#lib/server/guide.js";
-import { cancel, reserveFromForm } from "#lib/server/reservations.js";
-import { reservations } from "#lib/server/schema.js";
+import { cancelProgram, reserveFromForm } from "#lib/server/reservations.js";
 import { storedSubchannels, SUBCHANNELS_COOKIE } from "#lib/subchannels.js";
 import { CHANNEL_TYPES } from "#lib/types.js";
 
@@ -75,19 +72,9 @@ export const actions = {
     const programId = Number(form.get("programId"));
     if (!Number.isFinite(programId))
       return fail(400, { message: "番組 ID が不正です" });
-    const reservation = orm()
-      .select({ id: reservations.id })
-      .from(reservations)
-      .where(
-        and(
-          eq(reservations.program_id, programId),
-          ne(reservations.state, "canceled"),
-        ),
-      )
-      .get();
-    if (reservation === undefined)
+    // アプリの `DELETE /api/programs/<id>/record` と同じ処理
+    if ((await cancelProgram(programId)) === null)
       return fail(404, { message: "予約が見つかりません" });
-    await cancel(reservation.id);
     return { success: true };
   },
 
