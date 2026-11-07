@@ -374,7 +374,7 @@ test.describe("PWA", () => {
       { width: 999, height: 700, touch: false },
       // 縦のタブレット (指の端末)
       { width: 820, height: 1180, touch: true },
-      // 横にしたスマホ。一覧の画面では下のタブが出る (映像の画面では隠す。20-live)
+      // 横にしたスマホ。一覧の画面では下のタブが出る (映像の画面では隠す。20-live-player)
       { width: 844, height: 390, touch: true },
     ];
     for (const size of sizes) {
