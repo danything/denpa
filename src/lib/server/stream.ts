@@ -17,7 +17,8 @@ export interface SideOutput {
 let sides = 0;
 
 /**
- * **ffmpeg の 4 本目の出口** (録画のエンコードの進み具合・ライブの字幕)。ffmpeg を起こす直前に作る。
+ * **ffmpeg の 4 本目の出口** (録画のエンコードの進み具合・ライブの字幕)。ffmpeg を起こす直前に作り、
+ * 起こしたら間に `await` を挟まずに `read` を呼ぶ (Windows では、呼ばれないまま次の周回に入ると、起こせなかったとみなして閉じる)。
  *
  * Linux・Mac は stdio の 4 本目のパイプを開けて `pipe:3` に書かせる。**Windows の bun は 4 本目のパイプを
  * 開けても読めない** (`Bun.file(fd)` は EMFILE、`fs.read` は EBADF。tests/native-smoke.ts で確かめた)。
@@ -79,10 +80,20 @@ export function sideOutput(): SideOutput {
   });
   server.on("error", finish);
   server.listen(url);
+  /*
+   * **ffmpeg を起こせなかったら閉じる。** 起こしたら同じ流れのまま `read` を呼ぶ決まり (上) なので、
+   * 次の周回までに呼ばれていなければ、起こすところで投げている (`Bun.spawn` が ffmpeg を見つけられないなど)。
+   * 閉じないと、名前付きパイプが待ち受けたまま残る
+   */
+  let reading = false;
+  setImmediate(() => {
+    if (!reading) finish();
+  });
   return {
     url,
     stdio: [],
     read: (proc) => {
+      reading = true;
       // 出口を開かないまま終わった (起こせなかった・入力が読めなかった) ときも終える
       void proc.exited.then(() => {
         if (!connected) finish();
@@ -98,18 +109,35 @@ export function sideOutput(): SideOutput {
  * Bun の ReadableStream は実際には for-await できるが、TypeScript の DOM 型定義には
  * Symbol.asyncIterator が無く型エラーになる。reader を明示的に回すことで型を通しつつ、
  * abort 時に read() が reject する挙動もそのまま使える。
+ *
+ * **途中で抜けたら (`break`・`return`・投げた) 読み元を cancel する。** 手放すだけだと、読み元は
+ * 誰も読まないまま動き続ける。追っかけの `chase.followFile` は、録画が終わるまでファイルを読み足し続けていた。
+ * 抜けたあとも同じストリームを読み続ける所は無い。ライブの TS を起こし直しても使い回す `live.ts` の流し込みは、
+ * `for await` にせず `next()` で読むので抜けない。cancel は待たない (読み元の後始末で、抜けるのを遅らせない)
  */
 export async function* chunks(
   stream: ReadableStream<Uint8Array>,
 ): AsyncGenerator<Uint8Array> {
   const reader = stream.getReader();
+  let ended = false;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) return;
-      if (value !== undefined) yield value;
+      let next: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        next = await reader.read();
+      } catch (error) {
+        // 読み元が失敗で終わった。cancel するものは無い
+        ended = true;
+        throw error;
+      }
+      if (next.done) {
+        ended = true;
+        return;
+      }
+      if (next.value !== undefined) yield next.value;
     }
   } finally {
+    if (!ended) reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }

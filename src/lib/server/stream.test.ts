@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { lowerPriority, run } from "./stream";
+import { chunks, lowerPriority, run } from "./stream";
 
 /**
  * 外の道具を起こして読み切るところ (`run`)。
@@ -141,5 +141,74 @@ describe("優先度を下げる", () => {
     });
     expect(code).toBe(0);
     expect(new TextDecoder().decode(stdout).trim()).toBe("19");
+  });
+});
+
+/**
+ * **途中で抜けたら読み元を cancel する** (`chunks`)。手放すだけだと、追っかけの `followFile` が
+ * 誰も読まないファイルを録画が終わるまで読み足し続けていた
+ */
+describe("chunks", () => {
+  /** 読まれるたびに 1 塊出し続ける読み元と、cancel されたか */
+  const endless = () => {
+    const seen = { canceled: false };
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array([1]));
+      },
+      cancel() {
+        seen.canceled = true;
+      },
+    });
+    return { stream, seen };
+  };
+
+  test("break で抜けたら読み元を cancel する", async () => {
+    const { stream, seen } = endless();
+    for await (const _ of chunks(stream)) break;
+    await Bun.sleep(0);
+    expect(seen.canceled).toBe(true);
+  });
+
+  test("中で投げて抜けても cancel する", async () => {
+    const { stream, seen } = endless();
+    const read = async () => {
+      for await (const _ of chunks(stream)) throw new Error("受け手の失敗");
+    };
+    await expect(read()).rejects.toThrow("受け手の失敗");
+    await Bun.sleep(0);
+    expect(seen.canceled).toBe(true);
+  });
+
+  test("読み切ったら cancel しない", async () => {
+    let canceled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+        controller.enqueue(new Uint8Array([2]));
+        controller.close();
+      },
+      cancel() {
+        canceled = true;
+      },
+    });
+    const got: number[] = [];
+    for await (const chunk of chunks(stream)) got.push(...chunk);
+    expect(got).toEqual([1, 2]);
+    expect(canceled).toBe(false);
+  });
+
+  test("読み元の失敗はそのまま投げる", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error("切れた"));
+      },
+    });
+    const read = async () => {
+      for await (const _ of chunks(stream)) {
+        // 届かない
+      }
+    };
+    await expect(read()).rejects.toThrow("切れた");
   });
 });

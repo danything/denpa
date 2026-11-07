@@ -1552,6 +1552,7 @@ class Session {
          */
         if (wanted !== null && !peeked && this.program > 0) {
           peeked = true;
+          const read = stream;
           const head = await peekCaptions(
             stream,
             this.program,
@@ -1571,7 +1572,12 @@ class Session {
            */
           if (head.count !== null && head.count <= wanted) wanted = null;
           if (this.stopped) {
-            if (feed === null) await stream.return(undefined);
+            /*
+             * 追っかけは読み元を閉じる (`stream.chunks` が cancel する)。返ってきた `head.stream` はまだ読み始めて
+             * いないので、閉じても中の finally が走らない。元の `read` を閉じる。読みかけがあると
+             * それが届くまで閉じられないので、待たない
+             */
+            if (feed === null) void read.return(undefined);
             return;
           }
         }
@@ -1583,6 +1589,13 @@ class Session {
         this.meter = new SpeedMeter();
         // 選べる字幕も ffmpeg ごとに数え直す。新しい ffmpeg も同じ見出しを出すので、続けて数えると同じ字幕が 2 本並ぶ
         this.list = new TrackList(this.program);
+        /*
+         * **0 に寄せた量 (`start:`) も ffmpeg ごとに読み直す。** 新しい ffmpeg は mp4 の時刻を 0 から数え直し
+         * (受け側は init で作り直す)、そのとき寄せる量は起こし直した時点の PTS になる。前の値のまま
+         * 時計 (`clockNotice`) を配ると、起こし直すまでに流れた秒数だけ放送時刻がずれる
+         * (放送からの遅れの表示・実況のコメント)。読めるまでは時計を配らない
+         */
+        this.startPts = Number.NaN;
         const side = wanted === null ? null : sideOutput();
         const proc = Bun.spawn(
           [
@@ -2277,6 +2290,8 @@ class Session {
       // 入口の見出しに出ている「0 に寄せたぶん」。時計を配るのに要る
       if (!Number.isFinite(this.startPts) && line.includes("start:")) {
         this.startPts = parseStart(line);
+        // 起こし直したあとの新しい対応は、次の塊で配る (`CLOCK_EVERY` を待たない)
+        this.toldClockAt = 0;
       }
       // 字幕が無い放送。**映像ごと落ちる**ので、字幕なしで再エンコードする (`run`)
       if (NO_SUBTITLE.test(line)) this.noSubtitle = true;

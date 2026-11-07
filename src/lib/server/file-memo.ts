@@ -1,6 +1,28 @@
 import { statSync } from "node:fs";
 
 /**
+ * **作っている最中に同じものを求められたら、同じ結果を待たせる。** 終われば忘れる (覚えておくのは `fileMemo`)。
+ * 失敗も同じものを返す
+ */
+export function sharing<T>(): (
+  key: string,
+  make: () => Promise<T>,
+) => Promise<T> {
+  const making = new Map<string, Promise<T>>();
+  return async (key, make) => {
+    const pending = making.get(key);
+    if (pending !== undefined) return pending;
+    const run = make();
+    making.set(key, run);
+    try {
+      return await run;
+    } finally {
+      making.delete(key);
+    }
+  };
+}
+
+/**
  * **ファイルから作ったものを覚えておく。** 同じファイル (パス・大きさ・更新時刻) なら作り直さない。
  * 作っている最中に同じファイルを求められたら、同じ結果を待たせる (2 本目の ffmpeg を起動しない)。
  *
@@ -15,7 +37,7 @@ interface FileMemo<T> {
 /** @param limit 覚えておく数。超えたら古いものから捨てる */
 export function fileMemo<T>(limit: number): FileMemo<T> {
   const held = new Map<string, { key: string; value: T }>();
-  const making = new Map<string, Promise<T>>();
+  const share = sharing<T>();
   return {
     async get(path, make) {
       let key: string;
@@ -32,21 +54,15 @@ export function fileMemo<T>(limit: number): FileMemo<T> {
         held.set(path, kept);
         return kept.value;
       }
-      const id = `${path}\n${key}`;
-      const pending = making.get(id);
-      if (pending !== undefined) return pending;
-      const run = make().then((value) => {
-        held.delete(path);
-        held.set(path, { key, value });
-        if (held.size > limit) held.delete(held.keys().next().value as string);
-        return value;
-      });
-      making.set(id, run);
-      try {
-        return await run;
-      } finally {
-        making.delete(id);
-      }
+      return share(`${path}\n${key}`, () =>
+        make().then((value) => {
+          held.delete(path);
+          held.set(path, { key, value });
+          if (held.size > limit)
+            held.delete(held.keys().next().value as string);
+          return value;
+        }),
+      );
     },
   };
 }

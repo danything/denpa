@@ -158,21 +158,36 @@ test.describe("外から使う番組表", () => {
   });
 
   test("録画中に取り消すと止め、そこまでの録画は残す", async ({ request }) => {
+    // 枠の終わり際なら次の枠まで待つ (下)。そのぶん長く取る
+    test.setTimeout(180_000);
     await syncEpg(request);
-    const at = Date.now();
-    const guide = (await (
-      await request.get(`/api/programs?type=GR&from=${at}&to=${at + 1}`)
-    ).json()) as ApiGuide;
-    // いま流れていて、終わるまで余裕のある番組 (地上波の偽番組は 30 分)
-    const airing = guide.services
-      .flatMap((service) => service.programs)
-      .find(
-        (p) =>
-          p.startAt <= at &&
-          p.endAt > at + 5 * 60_000 &&
-          !p.copyNever &&
-          p.reservation === null,
-      )!;
+    /*
+     * いま流れていて、終わるまで `LEFT` 以上ある番組。地上波の偽番組は時計にそろえた 30 分の枠なので、
+     * 枠の終わり際 (10:29 など) にはそういう番組が無い。そのときは次の枠が始まるまで待って選び直す。
+     * 録り始めるのはスケジューラの次の周期 (E2E では 0.5 秒ごと) なので、1 分あれば取り消すまで流れている
+     */
+    const LEFT = 60_000;
+    let found: ApiProgram | undefined;
+    for (let tries = 0; found === undefined && tries < 2; tries++) {
+      const at = Date.now();
+      const guide = (await (
+        await request.get(
+          `/api/programs?type=GR&from=${at}&to=${at + LEFT + 1}`,
+        )
+      ).json()) as ApiGuide;
+      const open = guide.services
+        .flatMap((service) => service.programs)
+        .filter((p) => !p.copyNever && p.reservation === null);
+      found = open.find((p) => p.startAt <= at && p.endAt > at + LEFT);
+      const next = Math.min(
+        ...open.filter((p) => p.startAt > at).map((p) => p.startAt),
+      );
+      if (found === undefined && Number.isFinite(next))
+        await new Promise((resolve) => setTimeout(resolve, next - at + 500));
+    }
+    if (found === undefined)
+      throw new Error("流れている地上波の番組がありません");
+    const airing = found;
     const reserved = await request.post(`/api/programs/${airing.id}/record`, {
       headers: JSON_HEADERS,
     });
