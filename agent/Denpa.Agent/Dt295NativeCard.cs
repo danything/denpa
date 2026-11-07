@@ -136,8 +136,18 @@ public sealed class Dt295NativeCard : ICardLink
     {
         _t1 = null;
         if (_powered) PowerOff();
-        PowerOn();
-        var raw = ReadAtr();
+        // 電源を入れてから ATR を受け切るまで、TS の要求を小さくさせる (受信 FIFO が溢れないように)
+        byte[] raw;
+        Link.EnterCard();
+        try
+        {
+            PowerOn();
+            raw = ReadAtr();
+        }
+        finally
+        {
+            Link.LeaveCard();
+        }
         _log?.Invoke($"ATR: {Convert.ToHexString(raw)}");
         var atr = Atr.Parse(raw);
         if (!atr.T1) throw new IOException($"T=1 に対応していないカードです (ATR {Convert.ToHexString(raw)})");

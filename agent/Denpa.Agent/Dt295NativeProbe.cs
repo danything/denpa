@@ -100,6 +100,7 @@ public static class Dt295NativeProbe
         Dt295NativeDevice? device = null;
         Thread? reader = null;
         var stopReading = false;
+        long seenBytes = 0;
         using var tuner = new Dt295NativeTuner($"{Dt295.Model} {options.Port}", () => device = acquire(), closeIdle);
         try
         {
@@ -134,6 +135,7 @@ public static class Dt295NativeProbe
                         framer.Push(buffer.AsSpan(0, got), packet =>
                         {
                             stats.Push(packet);
+                            Interlocked.Add(ref seenBytes, packet.Length);
                             continuity.Push(packet, reading.Elapsed);
                         });
                     }
@@ -156,7 +158,7 @@ public static class Dt295NativeProbe
                 lastSignal = reading.Elapsed;
             }
             // 決めた秒数のあいだ受ける。1 バイトも読めていなければ、読み手が動くまで 5 秒まで待つ (遅い環境で読み手より先に時間が来ない)
-            while ((reading.Elapsed < options.Duration || (stats.Bytes == 0 && reading.Elapsed < TimeSpan.FromSeconds(5))) && problem is null)
+            while ((reading.Elapsed < options.Duration || (Interlocked.Read(ref seenBytes) == 0 && reading.Elapsed < TimeSpan.FromSeconds(5))) && problem is null)
             {
                 Thread.Sleep(10);
                 if (reading.Elapsed - lastSignal >= TimeSpan.FromSeconds(1)) ShowSignal();
