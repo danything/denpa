@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 自前方式 (dt295:) のフロントエンド (復調とチューナー) の設定と選局。節の番号は仕様書 (dt295-resident/spec.md) のもの。
-/// 常駐方式では常駐イメージが SERVICE のたびに 1 本ずつ進める I2C を、ホストが I2C の転送で順に出す (Dt295NativeI2c)。
+/// 仕様書では常駐イメージが SERVICE のたびに 1 本ずつ進める I2C を、ホストが I2C の転送の並びにして順に出す (Dt295NativeI2c)。
 ///
 /// I2C の機器は 2 つ。0x10 = 地上波の復調 (T 復調)、0x11 = 衛星の復調 (S 復調)。チューナーは復調のレジスタ 0xFE を通した中継の先 (仕様書 7.0)。
 /// チップの型番とレジスタの意味は仕様書にも無い (11.1)。表の値は仕様書のとおり。
@@ -30,9 +30,6 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     /// 1 周の読みは 1 回 約 2 ms (I2C の転送 2 回) かかるので、周期は 6 ms ほどになる
     /// </summary>
     public const int TerrestrialPollMs = 4, SatellitePollMs = 3;
-
-    /// <summary>衛星の LNB の局発 (kHz)。TUNE の受信周波数 = IF + これ (仕様書 7.3.1)。選局には IF を使う</summary>
-    public const uint SatelliteLocalKhz = 10678000;
 
     // 書き込みと、読んだ値を使わない読み・変更・書きは、ためておいて Flush で I2C の順次実行にまとめて渡す (Dt295I2cBatch)。
     // 読んだ値をこちらで使う読み (DemodRead) は、ためた分と一緒に実行してその値を返す。待ち (Wait) と段の切れ目の前にも実行する
@@ -120,8 +117,8 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     public void Initialize()
     {
         using var phases = new Dt295Timeline.Phases(timeline);
-        // 7.1.1 T 復調の初期値 (表の順に 1 レジスタ 1 転送)
-        Next(phases, "T 復調の初期値", "7.1.1。1 レジスタ 1 転送");
+        // 7.1.1 T 復調の初期値 (表の順。番号が続くものは 1 転送にまとめる)
+        Next(phases, "T 復調の初期値", "7.1.1");
         DemodPairs(Terrestrial,
             0x01, 0x00, 0x03, 0x90, 0x06, 0x80, 0x1C, 0x20, 0x1D, 0x56, 0x1E, 0x6A, 0x1F, 0x9A, 0x23, 0x4D,
             0x25, 0x00, 0x26, 0x00, 0x32, 0x21, 0x3B, 0x21, 0x3C, 0x3F, 0x70, 0x18, 0x73, 0x45, 0x74, 0x11,

@@ -4,7 +4,8 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 自前方式 (dt295:) の I2C。ホストが I2C コントローラのレジスタ (0xFD8FE0〜) を 0xBC のメモリ要求で直に動かす。
-/// 節の番号は仕様書 (dt295-resident/spec.md) のもの。常駐方式では補助 CPU がやる仕事 (仕様書 6.4)。
+/// 節の番号は仕様書 (dt295-resident/spec.md) のもの。仕様書では補助 CPU がやる仕事 (仕様書 6.4)。
+/// ふだんは機材の中の順次実行 (<see cref="Run"/> と <see cref="UseSequencer"/>) で同じ手順を行い、ここの <see cref="Transfer"/> は使えないときに使う。
 ///
 /// コントローラは富士通の I2C (状態・制御・データ) と同じ形 (仕様書 6.4):
 /// 状態 0xFD8FE0 の bit7 = バス使用中・bit4 = 最後の ACK が来なかった。制御 0xFD8FE4 の bit7 = バスエラー・bit5 = 再スタート・

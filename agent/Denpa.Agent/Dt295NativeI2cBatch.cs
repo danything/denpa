@@ -15,7 +15,7 @@ public sealed class Dt295I2cBatch
     public sealed record Op(int Address, byte[] Write, int Read, bool Modified, byte Keep, byte Set)
     {
         /// <summary>機材に渡す形での大きさ: 4 バイトの頭、書くバイト、種類 1 なら keep と set</summary>
-        public int EncodedLength => 4 + Write.Length + (Modified ? 3 : 0);
+        public int EncodedLength => 4 + Write.Length + (Modified ? 2 : 0);
     }
 
     private readonly List<Op> _ops = [];
@@ -23,9 +23,6 @@ public sealed class Dt295I2cBatch
     public IReadOnlyList<Op> Ops => _ops;
 
     public bool IsEmpty => _ops.Count == 0;
-
-    /// <summary>読むバイトの合計</summary>
-    public int ReadBytes => _ops.Sum(op => op.Read);
 
     private static void CheckAddress(int address)
     {
@@ -84,7 +81,7 @@ public sealed class Dt295I2cBatch
 
     /// <summary>
     /// 機材に 1 回で渡せる大きさ (<paramref name="opLimit"/> バイト・<paramref name="resultLimit"/> バイトの結果) ごとに分ける。
-    /// 読みの結果を使う書き (種類 1) は、その読みと同じ塊に入れる。種類 1 が続くと、1 つの塊が上限を 1 転送ぶん (最大 43 バイト) 超えることがある
+    /// 読みの結果を使う書き (種類 1) は、その読みと同じ塊に入れる。種類 1 が続くと、1 つの塊が上限を 1 転送ぶん (最大 45 バイト) 超えることがある
     /// (機材に渡せる大きさ <c>BatchLimit</c> は上限よりずっと大きい)。いまの並びでは起きない
     /// </summary>
     public IEnumerable<IReadOnlyList<Op>> Split(int opLimit, int resultLimit)
