@@ -244,9 +244,9 @@ Android TV / Fire TV でライブと録画を観られます (続きから・CM 
 **「再生リンクをコピー」と、それが作っていた期限付きの URL (`/api/recordings/<id>/file?token=…`) をやめました。**
 
 - 出したリンクは、上げた時点で開けなくなる (期限内でも)。テーブル (`share_links`) はマイグレーションで消える
-  (`drizzle/0011_drop-share-links.sql`)。リンクを作る API (`POST /api/recordings/<id>/share`) も無くなった
-- ファイルのエンドポイントを資格なしで呼んだときの答えは、403 (text/plain) から、ほかの API と同じ 401 の JSON に
-  なった (ログイン方法を何も設定していない denpa は、これまでどおり 403)
+  (`drizzle/0011_drop-share-links.sql`)。リンクを作る API (`POST /api/recordings/<id>/share`) も無くした
+- ファイルのエンドポイントを資格なしで呼んだときの答えを、403 (text/plain) から、ほかの API と同じ 401 の JSON に
+  した (ログイン方法を何も設定していない denpa は、これまでどおり 403)
 - テレビのアプリ (denpa-tv) はアクセストークンで開くので、何もしなくてよい
 
 ## 字幕はどこから出るか
