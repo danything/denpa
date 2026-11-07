@@ -1,0 +1,32 @@
+name: ffmpeg cross trial
+
+# 試し (マージしない)。Linux で mingw-w64 を使って Windows 用の ffmpeg を組み、時間と組み込まれたエンコーダを測る
+on:
+  pull_request:
+    paths:
+      - .github/ffmpeg-windows-cross.sh
+      - .github/workflows/ffmpeg-cross-trial.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cross:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mingw-w64 cmake ninja-build nasm meson pkgconf make patch bzip2 curl yasm
+          ls /usr/bin | grep -E "mingw32.*(gcc|g\+\+)" | head
+
+      - name: Cross build
+        run: |
+          s=$(date +%s)
+          bash .github/ffmpeg-windows-cross.sh out 2>&1 | tee cross.log | grep -E "^\[time\]|encoder |DLL Name|ffmpeg.exe|error" || true
+          echo "wall: $(( $(date +%s) - s ))s"
+          tail -5 cross.log
