@@ -34,7 +34,7 @@ const rerecord = sql`CASE
   ELSE ${reservations.started_at}
 END`;
 
-/** 手動予約。ルール由来の予約が既にあれば手動扱いに昇格させて優先度を上げる */
+/** 手動予約。ルール由来の予約が既にあれば手動扱いにし、優先度は 2 とルールの優先度の高いほうにする */
 export async function reserve(programId: number): Promise<Reservation> {
   const program = orm()
     .select()
@@ -79,7 +79,8 @@ export async function reserve(programId: number): Promise<Reservation> {
       target: reservations.program_id,
       set: {
         manual: true,
-        priority: sql`excluded.priority`,
+        // ルールの優先度のほうが高ければそのまま (押して下がると、それまで勝っていた競合に黙って負ける)
+        priority: sql`MAX(${reservations.priority}, excluded.priority)`,
         encode: sql`excluded.encode`,
         state: sql`CASE WHEN ${reservations.state} = 'canceled' THEN 'scheduled' ELSE ${reservations.state} END`,
         started_at: rerecord,

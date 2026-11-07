@@ -11,6 +11,7 @@ import { ServiceFilter } from "@danything/arib/service-filter";
 import { and, asc, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { agentFetch } from "./agent-client";
+import { config } from "./config";
 import { orm } from "./db";
 import { cardContracts, programs, services } from "./schema";
 import { type CardStatus, cardStatus } from "./scramble";
@@ -341,13 +342,13 @@ export async function testDecode(
 
   let stream: ReadableStream<Uint8Array> | null = null;
   try {
-    // 優先度 5 (スキャン等と同等) でストリームを開く (WantsKeys が有効な live プレフィックス)
+    // スキャンと同じ優先度でストリームを開く (WantsKeys が有効な live プレフィックス)
     stream = await openChannelStream(
       targetService.type,
       targetService.channel,
       abortController.signal,
       "live test-decode",
-      5,
+      config.priority.scan,
     );
 
     const reader = stream.getReader();
@@ -397,7 +398,7 @@ export async function testDecode(
     }
 
     const ratio = scrambledPackets / totalPackets;
-    // 0.5 以下なら復号成功とみなす (正常な復号 TS はスクランブル比率 0)
+    // 0.5 未満なら復号成功とみなす (正常な復号 TS はスクランブル比率 0)
     const decodeOk = ratio < 0.5;
 
     // card_contracts を更新。復号成功 (decodeOk = true) なら契約中 (subscribed) に更新

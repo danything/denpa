@@ -2,10 +2,11 @@ import { error } from "@sveltejs/kit";
 
 import { config } from "#lib/server/config.js";
 import { activeEncodeJob } from "#lib/server/encoder.js";
+import { encodedFile } from "#lib/server/library.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { serveFile } from "#lib/server/serve.js";
 import { ffmpegBody } from "#lib/server/stream.js";
-import { type FileSource, parseFileSource } from "#lib/source.js";
+import { type FileSource, parseFileSource, tsPathOf } from "#lib/source.js";
 
 /**
  * **音声だけ** (`?audio=only`)。音声だけで鳴らすもの (スマートスピーカーへの Cast など) 向け。
@@ -85,7 +86,8 @@ function respond(
             ? recording.library_path
             : encoding && recording.ts_path !== null
               ? recording.ts_path
-              : (recording.library_path ?? recording.ts_path);
+              : // 置き場から消えたエンコード済みは選ばない (`encodedFiles`。観る画面と同じ判定)
+                (encodedFile(recording) ?? tsPathOf(recording));
   if (path === null) error(404, "ファイルがありません");
   if (audio) return audioOnly(path, request);
 

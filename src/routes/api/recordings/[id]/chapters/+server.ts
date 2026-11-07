@@ -1,11 +1,8 @@
 import { statSync } from "node:fs";
 
 import { config } from "#lib/server/config.js";
-import {
-  encodedFile,
-  PROBE_TIMEOUT,
-  tsChapters,
-} from "#lib/server/playback.js";
+import { encodedFile } from "#lib/server/library.js";
+import { PROBE_TIMEOUT, tsChapters } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { etagMatches, fileEtag } from "#lib/server/serve.js";
 import { run } from "#lib/server/stream.js";
