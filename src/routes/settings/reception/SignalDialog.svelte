@@ -144,10 +144,14 @@
     <div class="toolbar">
       <label class="select-label">
         <span class="small muted">チャンネル:</span>
-        <select bind:value={selectedKey} disabled={measuring} class="small">
+        <select
+          bind:value={selectedKey}
+          disabled={measuring}
+          class="small channel-select"
+        >
           {#each channels as ch (`${ch.type}:${ch.channel}`)}
             <option value="{ch.type}:{ch.channel}">
-              [{ch.type}] {ch.channel} ({ch.name})
+              [{ch.type}] {ch.channel} : {ch.name}
             </option>
           {/each}
         </select>
@@ -280,14 +284,12 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    flex-wrap: wrap;
   }
 
-  select {
-    padding: 0.35rem 0.6rem;
-    border-radius: 4px;
-    border: 1px solid var(--dp-border, #ccc);
-    background: var(--dp-bg, #fff);
-    color: inherit;
+  .channel-select {
+    max-width: 20rem;
+    width: auto;
   }
 
   .alert.error {

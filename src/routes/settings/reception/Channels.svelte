@@ -93,7 +93,7 @@
     coverage.map((ch) => ({
       type: ch.type,
       channel: ch.channel,
-      name: ch.services.map((s) => s.name).join(", "),
+      name: ch.services[0]?.name ?? ch.channel,
     })),
   );
 
@@ -423,19 +423,7 @@
                       data-testid="channel-reception"
                       data-reception={channel.reception}
                     >
-                      <span class="channel-label-wrap">
-                        {channel.channel}
-                        <button
-                          type="button"
-                          class="ghost circle tiny measure-btn"
-                          title="このチャンネルの電波レベルを測定"
-                          aria-label="{channel.channel} の電波レベルを測定"
-                          onclick={() =>
-                            openSignal(channel.type, channel.channel)}
-                        >
-                          <Activity aria-hidden="true" />
-                        </button>
-                      </span>
+                      {channel.channel}
                       <!-- 受信できるかは番組表集めのついでに確かめる (reception.ts)。受信できるものには何も付けない -->
                       {#if channel.reception === "unreceivable"}
                         <span class="reception tiny muted">受信できません</span>
@@ -643,22 +631,6 @@
   /* 受信の様子はチャンネルの名前の下に 1 行で (塗らない。字の色だけ) */
   .reception {
     display: block;
-  }
-
-  .channel-label-wrap {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .measure-btn {
-    opacity: 0.6;
-    transition: opacity 0.15s ease;
-    padding: 2px;
-  }
-
-  .measure-btn:hover {
-    opacity: 1;
   }
 
   /* **狭い幅ではロゴの列をたたみ、局名の前に出す** (表が横にはみ出さないように) */
