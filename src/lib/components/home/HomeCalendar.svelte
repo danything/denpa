@@ -7,7 +7,7 @@
    * - いま一覧の先頭に貼り付いている日は主の色の下線と太字。送ると付いて動き、月もその日の月に替わる
    * - ‹ › は行のある月だけを行き来する (間の空の月は飛ばす)
    *
-   * 日の数え方と升目は `#lib/calendar.ts`。どの日を頭に送るか (まだ描いていない古い日を描かせるのも) はホームが持つ。
+   * 日の数え方と升目は `#lib/calendar.ts`。どの日を一覧の先頭に送るか (まだ描いていない古い日を描かせるのも) はホームが持つ。
    * 切り抜きの画面 (`/clips`) も同じものを使う (撮った日を押すとその日で絞る。選んでいる日が `pinned`)
    */
   import "@anyblades/blades/content/table";
@@ -50,7 +50,7 @@
 
   // svelte-ignore state_referenced_locally
   let month = $state(monthOf(pinned ?? today));
-  // 頭の日が替わったら、その日の月を出す (‹ › で離れても、送ればまた付いてくる)
+  // 一覧の先頭の日が替わったら、その日の月を出す (‹ › で離れても、送ればまた付いてくる)
   $effect(() => {
     if (pinned !== null) month = monthOf(pinned);
   });
@@ -65,7 +65,7 @@
 
   const enabled = (day: number) => marks.has(day) || day === today;
 
-  /** 矢印キーで動かしている日。Tab で入る升はこれ、無ければ頭の日・今日・その月の最初の押せる日 */
+  /** 矢印キーで動かしている日。Tab で入る升はこれ、無ければ一覧の先頭の日・今日・その月の最初の押せる日 */
   let focused = $state<number | null>(null);
   const entry = $derived.by(() => {
     const days = weeks.flat().filter((day) => day !== null);

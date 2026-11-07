@@ -149,6 +149,7 @@
   }
   function close(): void {
     opened = null;
+    failedFor = null;
     detail.close();
     // 候補から来た番組 (`?program=`) を閉じたら URL からも外す。読み直しても開き直さない
     if (page.url.searchParams.has("program")) {

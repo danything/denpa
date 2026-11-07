@@ -314,6 +314,7 @@
     opening++;
     selected = null;
     facts = null;
+    failedFor = null;
   }
 
   /**

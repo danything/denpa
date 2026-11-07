@@ -142,7 +142,7 @@
 .board .group-chevron.open {
   transform: rotate(90deg);
 }
-/* 開いた番組の頭の押すもの。中身の行と同じだけ下げる */
+/* 開いた番組の先頭の押すもの。中身の行と同じだけ下げる */
 .board .t-block > .group-tools {
   padding: 0 0.5rem 0.5rem 2.25rem;
 }
@@ -152,7 +152,7 @@
   object-fit: cover;
 }
 /*
- * **行の 3 段目: 動いていること・止まっている問題** (`RowActivity`)。頭に点か印、ラベル (状態の色)、
+ * **行の 3 段目: 動いていること・止まっている問題** (`RowActivity`)。先頭に点か印、ラベル (状態の色)、
  * 中身 (地の字)。1 段で切り、狭いときは中身から「…」で縮める (ラベルは最後まで残す)
  */
 .board .row-activity {
@@ -543,7 +543,7 @@
 }
 /*
  * 番組の中の行。中身を一段下げて、どの見出しの中かを見せる (線は引かない。左の縦線は「選んでいる」の印なので)。
- * 開いた番組の頭の押すもの (`.group-tools`) と同じ深さ
+ * 開いた番組の先頭の押すもの (`.group-tools`) と同じ深さ
  */
 .board .row.nested {
   padding-left: 2.25rem;
@@ -659,7 +659,7 @@
 .board .chip.warn .num {
   color: inherit;
 }
-/* 「⋯」の頭の状態。押せない (余白で切り替えと分ける) */
+/* 「⋯」の先頭の状態。押せない (余白で切り替えと分ける) */
 .board .view-menu .menu-head {
   margin: 0 0 0.5rem;
 }
