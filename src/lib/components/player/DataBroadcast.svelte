@@ -34,6 +34,7 @@
 
   import type { Bml, BmlIp, Rect, Service } from "#lib/bml/engine.js";
   import { type Plane, planeArea } from "#lib/bml/plane.js";
+  import { fetchRelayed } from "#lib/bml/relay.js";
   import {
     type FrameMessage,
     type HcState,
@@ -166,9 +167,7 @@
     const mine = generation;
     void (async () => {
       try {
-        const response = await fetch(
-          resolve(`api/bml/proxy?url=${encodeURIComponent(uri)}`),
-        );
+        const { response } = await fetchRelayed(uri);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const app = pickApp(hint, parseXmlAit(await response.text()));
         if (app === null) throw new Error("開けるアプリがありません");
@@ -338,16 +337,11 @@
      * ときだけ NaN。相手の 404 は「送れた」ので、放送のアプリに判断させる
      */
     transmit: async (uri, body) => {
-      const response = await fetch(
-        resolve(`api/bml/post?url=${encodeURIComponent(uri)}`),
-        {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: body as Uint8Array<ArrayBuffer>,
-        },
-      );
+      const { relayed, response } = await fetchRelayed(uri, {
+        contentType: "application/x-www-form-urlencoded",
+        body: body as Uint8Array<ArrayBuffer>,
+      });
       const got = new Uint8Array(await response.arrayBuffer());
-      const relayed = response.headers.get("x-bml-relayed") === "1";
       return {
         resultCode: relayed ? 1 : Number.NaN,
         status: String(response.status),
@@ -374,10 +368,8 @@
      * 相手の符号と中身をそのまま返し、中継が断った (403/502) ときだけ null
      */
     get: async (uri) => {
-      const response = await fetch(
-        resolve(`api/bml/proxy?url=${encodeURIComponent(uri)}`),
-      );
-      if (response.headers.get("x-bml-relayed") !== "1") return null;
+      const { relayed, response } = await fetchRelayed(uri);
+      if (!relayed) return null;
       return {
         status: response.status,
         contentType:

@@ -66,9 +66,9 @@ import {
 import {
   lastVideoPts,
   type ReadAt,
+  readHead,
   seekTs,
   sinceHead,
-  tsHead,
 } from "#lib/ts/seek.js";
 import { fromTsTime, type Ruler } from "#lib/ts/watch.js";
 import type { Recording } from "#lib/types.js";
@@ -323,8 +323,8 @@ function reader(path: string): ReadAt {
     );
 }
 
-/** 先頭と末尾を読む量。先頭は映像と音声の最初の PES が必ず入る長さ、末尾は最後の映像の PES が入る長さ */
-const PROBE_BYTES = 4 * 1024 * 1024;
+/** 尺を出すのに末尾から読む量。最後の映像の PES が入る長さ */
+const TAIL_BYTES = 4 * 1024 * 1024;
 
 /** 読んだ TS の控え。開くたびに聞くので、同じファイル (パス・大きさ・更新時刻) なら読み直さない */
 const tsProbed = new Map<string, { key: string; ts: TsFile | null }>();
@@ -345,11 +345,11 @@ async function probeTs(path: string): Promise<TsFile | null> {
   const held = tsProbed.get(path);
   if (held?.key === key) return held.ts;
   const read = reader(path);
-  const head = tsHead(await read(0, PROBE_BYTES));
+  const head = await readHead(read);
   let ts: TsFile | null = null;
   if (head !== null) {
     const last = lastVideoPts(
-      await read(Math.max(0, size - PROBE_BYTES), PROBE_BYTES),
+      await read(Math.max(0, size - TAIL_BYTES), TAIL_BYTES),
     );
     const duration = last === null ? null : sinceHead(last, head);
     ts = {

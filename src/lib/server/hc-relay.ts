@@ -23,7 +23,7 @@ import {
   type Fetched,
   fetchForBml,
   refusalMessage,
-  relayBody,
+  relayed,
 } from "./bml-network";
 
 /** トークンの寿命 (ms)。番組 1 本を見終えるくらい */
@@ -89,23 +89,20 @@ export async function relayAsset(
   const target = `${origin}/${path}${search}`;
   try {
     const got = await fetcher(target);
-    return new Response(
-      relayBody(
-        got.status,
-        scriptable(got.contentType) ? rewriteLocationBytes(got.body) : got.body,
-      ),
+    return relayed(
       {
-        status: got.status,
-        headers: {
-          "content-type": got.contentType,
-          "content-security-policy": "sandbox",
-          "x-content-type-options": "nosniff",
-          // アプリの部品は番組の間に変わらない。読み直しのたびに取得し直さない。**失敗の返りは溜めない** (一時的な 404・503)
-          "cache-control":
-            got.status >= 200 && got.status < 300
-              ? "private, max-age=300"
-              : "no-store",
-        },
+        ...got,
+        body: scriptable(got.contentType)
+          ? rewriteLocationBytes(got.body)
+          : got.body,
+      },
+      {
+        csp: "sandbox",
+        // アプリの部品は番組の間に変わらない。読み直しのたびに取得し直さない。**失敗の返りは溜めない** (一時的な 404・503)
+        cache:
+          got.status >= 200 && got.status < 300
+            ? "private, max-age=300"
+            : "no-store",
       },
     );
   } catch (failure) {

@@ -718,6 +718,8 @@ export function liveHw(
  * 回線に合わせて下げた段 (`#lib/rungs.ts`) では、`cap` に段の高さとビットレートの上限を渡す。
  *
  * - Rockchip MPP・NVENC は、表の値 (`hwBitrate`) の代わりに段の上限を同じレート制御 (`rkmppRate`・`nvencRate`) に渡す
+ * - QSV は ICQ をやめて **VBR** にする (`-b:v` に段の上限、`-maxrate` にその 2 倍。NVENC・AMF と同じ幅)。FFmpeg の qsvenc.c は
+ *   `-maxrate` が `-b:v` と同じだと CBR を、上回ると VBR を選ぶ
  * - VA-API は CQP をやめて **VBR で上限を決める** (`-b:v` と `-maxrate:v` に同じ値)。CQP は量を場面に任せるので、回線に収まる保証が無い
  * - `full` なら GPU の上でインタレ解除して 30 コマにし (`rate=frame`)、そのまま `scale_vaapi` で縮める。フレームを CPU に降ろさない。
  *   `full` でなければ、縮めるのは呼ぶ側の CPU の `scale` (`live.ts` の `rungVideo`)
@@ -751,7 +753,7 @@ export function liveHwArgs(
         "veryfast",
         ...(cap === null
           ? ["-global_quality:v", String(QSV_ICQ[codec])]
-          : ["-b:v", String(bps), "-maxrate", String(bps)]),
+          : ["-b:v", String(bps), "-maxrate", String(bps * 2)]),
         "-bf",
         "0",
         "-async_depth",
@@ -791,7 +793,7 @@ export function liveHwArgs(
         "1",
         "-prio_speed",
         "1",
-        // 段を下げたときは回線に収まるよう、上限も段の値にする (VA-API・QSV と同じ)
+        // 段を下げたときは回線に収まるよう、上限も段の値にする (VA-API と同じ)
         ...(cap === null
           ? vtRate(bps)
           : ["-b:v", String(bps), "-maxrate", String(bps)]),

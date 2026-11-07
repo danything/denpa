@@ -16,6 +16,7 @@
   import { onDestroy } from "svelte";
 
   import type { Service } from "#lib/bml/engine.js";
+  import { fetchRelayed } from "#lib/bml/relay.js";
   import {
     decodeHtml,
     type FrameMessage,
@@ -126,11 +127,8 @@
     // 読み込んでいる間に別のページへ移ったら、古いほうは捨てる (後から届いて新しいページを上書きしない)
     const target = url;
     try {
-      const response = await fetch(
-        resolve(`api/bml/proxy?url=${encodeURIComponent(target)}`),
-      );
-      if (response.headers.get("x-bml-relayed") !== "1" || !response.ok)
-        throw new Error(String(response.status));
+      const { relayed, response } = await fetchRelayed(target);
+      if (!relayed || !response.ok) throw new Error(String(response.status));
       const body = new Uint8Array(await response.arrayBuffer());
       const text = decodeHtml(body, response.headers.get("content-type") ?? "");
       const relay = await relayFor(target);
@@ -204,24 +202,22 @@
       const target = new URL(message.url);
       if (target.protocol !== "http:" && target.protocol !== "https:")
         throw new Error(target.protocol);
-      const query = `url=${encodeURIComponent(target.href)}`;
-      let response: Response;
-      if (message.method === "GET" || message.method === "HEAD") {
-        response = await fetch(resolve(`api/bml/proxy?${query}`));
-      } else if (message.method === "POST") {
-        response = await fetch(resolve(`api/bml/post?${query}`), {
-          method: "POST",
-          headers:
-            message.contentType === null
-              ? {}
-              : { "content-type": message.contentType },
-          body: message.body ?? new ArrayBuffer(0),
-        });
-      } else {
+      if (
+        message.method !== "GET" &&
+        message.method !== "HEAD" &&
+        message.method !== "POST"
+      )
         throw new Error(message.method);
-      }
-      if (response.headers.get("x-bml-relayed") !== "1")
-        throw new Error(String(response.status));
+      const { relayed, response } = await fetchRelayed(
+        target.href,
+        message.method === "POST"
+          ? {
+              contentType: message.contentType,
+              body: message.body ?? new ArrayBuffer(0),
+            }
+          : undefined,
+      );
+      if (!relayed) throw new Error(String(response.status));
       const contentType =
         response.headers.get("content-type") ?? "application/octet-stream";
       // 通信で取って実行する script (jQuery の `getScript` など) も、中の `location.*` をアプリの元の場所に (`location.ts`)

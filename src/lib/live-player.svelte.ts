@@ -43,11 +43,7 @@ import {
   wantsData,
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
-import {
-  SLIP_MOST,
-  UNSLIP_EVERY,
-  UNSLIP_STEP,
-} from "#lib/components/player/unslip.js";
+import { slipOf, unslipper } from "#lib/components/player/unslip.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
   LagMeter,
@@ -653,8 +649,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 飛び直す前にどこまで開いたかを残す。0 のままずれるなら、ずれているのは中身 (エンコードした時点) のほう
    */
   let slipMost = $state(0);
-  /** 次に飛び直してよい時刻 */
-  let unslipAfter = 0;
+  /** 映像だけ遅れたときの飛び直し (`unslip.ts`) */
+  const unslipping = unslipper();
   /*
    * 映像の遅れは JS から見えないことがある (Windows の Chrome / Edge は映像を DOM と別の面に出す)。
    * なので起きる条件の途切れ (`stalled`) で飛び直す (`settle`)。コマ落ちを合図にしない理由は `unslip.ts` の `UNSLIP_EVERY` の下
@@ -783,10 +779,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       // 映した 1 枚の時刻と再生位置の差 (`slip`)。`requestVideoFrameCallback` を持つブラウザでだけ測れる
       if (frame !== undefined) {
         lastFrameAt = performance.now();
-        const late = video.currentTime - frame.mediaTime;
-        slip = Math.max(late, 0);
+        slip = slipOf(video.currentTime, frame.mediaTime);
         if (slip > slipMost) slipMost = slip;
-        if (slip > SLIP_MOST) unslip(video);
+        unslip(video, frame.mediaTime);
       }
       paint(video.currentTime);
       // 塊が届かない間も貯まりを見て、ときどき `pace` を回す (`PACE_EVERY`)
@@ -1031,6 +1026,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         probeAfter = Date.now() + retryAfterMs(res.headers.get("Retry-After"));
         return;
       }
+      /*
+       * 5xx などで試しのデータが取れなかったときは、余裕が無かったと測ったことにする (`capacity` は再生中の段のぶんだけ)。
+       * 測っていないことにすると、`wantProbe` が次の刻みでまた測らせ、困っているサーバへ刻み (`ADAPT_EVERY`) ごとに取りに行く。
+       * 余裕が無いことにすれば上げずに待ち直し、待ちが明けてから測り直す。サーバが困っている間に段を上げることもない
+       */
       const reader = res.ok ? res.body?.getReader() : undefined;
       while (reader !== undefined) {
         const { done, value } = await reader.read();
@@ -1129,19 +1129,19 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 映像だけ遅れているのを、その場へ飛び直して直す (デコードが間に合わないと映像だけ取り残され、戻らない)。
-   * 飛び直すとデコーダは積み残しを捨てて出し直す。連発はさせない (`UNSLIP_EVERY`)
+   * 映像だけ遅れているのを、その場へ飛び直して直す (`unslip.ts`)。`mediaTime` (映した 1 枚の時刻) があれば
+   * 遅れが `SLIP_MOST` を超えたときだけ、無ければ遅れを見ずに飛ぶ (途切れたとき。`settle`)
    */
-  function unslip(video: HTMLVideoElement): void {
-    const now = Date.now();
-    if (now < unslipAfter || video.paused || video.seeking) return;
-    unslipAfter = now + UNSLIP_EVERY;
+  function unslip(video: HTMLVideoElement, mediaTime?: number): void {
+    const jumped =
+      mediaTime === undefined
+        ? unslipping.jump(video)
+        : unslipping.check(video, mediaTime);
+    if (!jumped) return;
     slips++;
     slip = 0;
     // これで上がる `waiting` は数えない (`quiet`)
-    quiet = now + GRACE;
-    // **1 コマぶんだけ前へ。** 同じ値を入れ直すのは飛んだことにならない
-    video.currentTime += UNSLIP_STEP;
+    quiet = Date.now() + GRACE;
   }
 
   /** 再生位置に合う 1 枚だけ字幕を描く ([ts/captions.ts](./ts/captions.ts) の `currentCue` / `showing`) */
@@ -1397,7 +1397,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 捨てられたコマも同じ間隔で読む (canvas で描くとき。`<video>` のぶんは `pace` が足し上げる)。**選局からの通し**
     if (engine !== null) dropped = engine.dropped;
     /*
-     * **途切れたら飛び直す** (`unslipAfter` の下の説明)。測れた遅れ (`slip`) を
+     * **途切れたら飛び直す** (`unslipping` の下の説明)。測れた遅れ (`slip`) を
      * 待たない。あれは見えないことがある。canvas で描く経路には要らない (映像は音の時計を追うだけ)
      */
     if (stalled && element !== null && !canvas) unslip(element);

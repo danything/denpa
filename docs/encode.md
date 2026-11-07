@@ -200,6 +200,7 @@ Helm は既定で `/dev/dri` を hostPath で渡してあります (`denpa.gpu.h
 | Rockchip MPP | 今の AVBR (`hwenc.rkmppRate`) に段の上限を渡す                       | CPU                                                                                       |
 | NVENC        | 今の VBR (`hwenc.nvencRate`) に段の上限を渡す                        | CPU                                                                                       |
 | VA-API       | CQP をやめて VBR (`-b:v` と `-maxrate:v` に上限)                     | デコードから GPU なら GPU (`deinterlace_vaapi=rate=frame,scale_vaapi`)、ほかは CPU        |
+| QSV          | ICQ をやめて VBR (`-b:v` に上限、`-maxrate` にその 2 倍)             | CPU                                                                                       |
 
 - x264 は `ultrafast` にしません。CABAC とデブロックを切るので、低いビットレートでは粗さが目立ちます。静かな場面は crf のぶんだけ小さく、動きの多い場面は上限で抑えます
 - 段 1〜3 の音声は 96k です (256k は 2.4 Mbit/s の回線の 1 割を使う)
