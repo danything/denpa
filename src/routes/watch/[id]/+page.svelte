@@ -1423,9 +1423,8 @@
    * 録画の頭より前は「開始前」、切った CM の中は「CM」で、飛べない
    */
   function placeAir(at: number): number | "before" | "cut" {
-    const target = data.jikkyo;
-    if (target === null || info === null) return "before";
-    return playbackAt((at - target.head) / 1000, ruler(info));
+    if (info === null) return "before";
+    return playbackAt((at - data.head) / 1000, ruler(info));
   }
 
   /** 観ているものの物差し (`Ruler`)。元の TS なら null */
@@ -1436,13 +1435,12 @@
   }
 
   /**
-   * いま観ている場面の放送時刻。再生位置を元の TS の秒に直して (CM を切ったものは切った区間を戻して) 頭の放送時刻に足す。
-   * **切った CM の区間は飛び越すので、そこに書かれたコメントは流れない**
+   * いま観ている場面の放送時刻。再生位置を元の TS の秒に直して (CM を切ったものは切った区間を戻して) 先頭の放送時刻に足す。
+   * 実況のコメントとデータ放送の時計 (`clock`) が使う。**切った CM の区間は飛び越すので、そこに書かれたコメントは流れない**
    */
   function airTime(): number | null {
-    const target = data.jikkyo;
-    if (target === null || info === null) return null;
-    return target.head + toTsTime(mediaTime(), ruler(info)) * 1000;
+    if (info === null) return null;
+    return data.head + toTsTime(mediaTime(), ruler(info)) * 1000;
   }
   /** 貼り直しを追わせている映像。二重に回さないための目印 (`follow`) */
   let following: HTMLVideoElement | null = null;
@@ -2453,7 +2451,7 @@
           postal={data.broadcast.postalCode}
           prefecture={data.broadcast.prefecture}
           network={false}
-          clock={() => rec.start_at + nowMs()}
+          clock={airTime}
           tune={refuseTune}
         />
 

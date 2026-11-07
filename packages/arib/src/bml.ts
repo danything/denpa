@@ -258,7 +258,7 @@ interface Component {
   dii: Dii | null;
   /** 今の DII のモジュールの大きさの合計 (カルーセルの一周の下限) */
   size: number;
-  /** 今の DII で、来ないと諦めたモジュール */
+  /** 今の DII で、来ないか読めないと諦めたモジュール */
   abandoned: Set<number>;
 }
 
@@ -502,16 +502,24 @@ export class BmlDecoder {
     const version = held.builder.moduleVersion;
     const mark = doneMark(component, version);
     if (component.done.get(moduleId) === mark) return;
-    component.done.set(moduleId, mark);
 
     // 大きさ 0 は伸ばしようが無い。ファイルの無いモジュールとして配り、待っている受け側を終わらせる
     const empty = held.module.moduleSize === 0;
     const data = empty
       ? held.builder.data
       : inflate(held.builder.data, held.module.compression);
-    if (data === null) return;
-    const files = moduleFiles(data, held.module.contentType);
-    if (files.length === 0 && !empty) return;
+    const files =
+      data === null ? [] : moduleFiles(data, held.module.contentType);
+    /*
+     * **伸ばせない・分けられないモジュールは諦める。** 配らずに黙ると、受け側は DII に
+     * 載っている限り待ち続ける。ブロックは CRC を通っているので、組み直しても同じ結果になる
+     */
+    if (files.length === 0 && !empty) {
+      component.abandoned.add(moduleId);
+      this.sendList(component);
+      return;
+    }
+    component.done.set(moduleId, mark);
 
     this.send({
       type: "moduleDownloaded",

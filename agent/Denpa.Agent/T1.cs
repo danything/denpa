@@ -117,7 +117,7 @@ public sealed record Atr(
 }
 
 /// <summary>
-/// ISO/IEC 7816-3 の T=1 (ブロックの送り合い)。**TPDU 単位の読み取り機 (Ccid.cs) と CECH-ZD1 J の差し込み口 (Zd1j.cs) だけ**が使う。
+/// ISO/IEC 7816-3 の T=1 (ブロックの送り合い)。**TPDU 単位の読み取り機 (Ccid.cs) と CECH-ZD1 J・PIX-DT295 の差し込み口 (Zd1j.cs・Dt295NativeCard.cs) だけ**が使う。
 ///
 /// <para>
 /// 読み取り機はブロックを 1 つ送って 1 つ受けるだけで、順番の番号・連結・再送はこちらが持つ。

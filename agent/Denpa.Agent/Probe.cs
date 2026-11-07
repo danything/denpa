@@ -35,7 +35,7 @@ namespace Denpa.Agent;
 public static class Probe
 {
     // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
-    public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N]";
+    public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)]";
     public const string DecodeUsage = "denpa-agent --decode-file <in.ts> <out.ts>";
     public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート>]";
 
@@ -346,7 +346,8 @@ public static class Probe
 
         while (DateTime.UtcNow < deadline)
         {
-            var read = stream.Read(buffer);
+            // DeviceStream は TS が来ない間は戻らないので、決めた時間で降りる合図を渡す
+            var read = stream is DeviceStream device ? device.Read(buffer, 0, buffer.Length, () => DateTime.UtcNow >= deadline) : stream.Read(buffer);
             if (read <= 0) break;
             if (total == 0) first = DateTime.UtcNow - started;
             total += read;

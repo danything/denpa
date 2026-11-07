@@ -870,7 +870,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// <summary>C/N を読めなかったことを記録に残した (1 回の選局で 1 回だけ)</summary>
     public bool SignalFailed { get; set; }
 
-    public int? Pid => _child?.HasExited == false ? _child.Id : null;
+    public int? Pid => _child is { HasExited: false } child ? child.Id : null;
 
     private volatile bool _stopped;
     private Task? _pump;

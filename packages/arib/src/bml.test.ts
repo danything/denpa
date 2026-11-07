@@ -147,7 +147,7 @@ describe("inflate", () => {
     expect(inflate(new Uint8Array(4), { type: 9 })).toBeNull();
   });
 
-  test("伸ばせなければ null。転んでも投げない", () => {
+  test("伸ばせなければ null を返し、例外を投げない", () => {
     expect(inflate(Uint8Array.from([1, 2, 3, 4]), { type: 0 })).toBeNull();
   });
 
@@ -333,6 +333,20 @@ describe("BmlDecoder", () => {
     ).toHaveLength(1);
   });
 
+  /** 配らずに黙ると、受け側は DII に載っている限り待ち続ける */
+  test("伸ばせないモジュールは、外した一覧を配り直す", () => {
+    const out = decode(
+      ...head,
+      ...carousel(Uint8Array.from([1, 2, 3, 4]), {
+        compression: { type: 0, originalSize: 100 },
+      }),
+    );
+    expect(lists(out)).toEqual([[1], []]);
+    expect(out.some((message) => message.type === "moduleDownloaded")).toBe(
+      false,
+    );
+  });
+
   /** DII の繰り返しはカルーセルの一周より短いことがある。DII が繰り返しただけでは諦めない */
   test("カルーセルが流れていなければ、DII が繰り返しても諦めない", () => {
     const here = multipart([
@@ -410,7 +424,7 @@ describe("BmlDecoder", () => {
     );
   });
 
-  /** 壊れたセクションで転ばない。**映像の付け足しが映像を止めてはいけない** */
+  /** 壊れたセクションで例外を投げない。**映像の付け足しが映像を止めてはいけない** */
   test("でたらめを食べても投げない", () => {
     const junk = packetize(
       BML_PID,
