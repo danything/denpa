@@ -28,6 +28,7 @@
     time,
   } from "#lib/format.js";
   import { skeletonMask } from "#lib/guide-skeleton.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { PHONE_FORM } from "#lib/phone-form.js";
   import { reload } from "#lib/reload.svelte.js";
   import {
@@ -362,11 +363,8 @@
   }
 
   /** いま何時か。時の列の「いま」の時刻と、過ぎた所を暗くする位置に使う。1 分ごとに進める */
-  let clock = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => (clock = Date.now()), 60_000);
-    return () => clearInterval(timer);
-  });
+  const minute = minuteClock();
+  const clock = $derived(minute.now);
 
   /**
    * 表示中の日にいまが含まれていれば、表の先頭 (4:00) から何マスぶん下か (端数つき)。

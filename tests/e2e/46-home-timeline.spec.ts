@@ -373,6 +373,53 @@ test.describe("ホームの1本の一覧", () => {
   });
 
   /*
+   * **録画中の行のあと何分か・進み具合のバー・バーの先の時刻は、読み直さなくても分ごとに進む** (番組表の「いま」と同じ時計)。
+   * ブラウザの時計を分の変わり目の 8 秒前にして開き、変わり目を越えるのを待つ。終わりは変わり目のちょうど 20 分後
+   */
+  test("録画中の行のあと何分かといまの時刻は、分ごとに進む", async ({
+    page,
+    stack,
+  }) => {
+    const MIN = 60_000;
+    const edge = Math.ceil((Date.now() + 15_000) / MIN) * MIN;
+    sqlite(
+      `${stack.root}/denpa.db`,
+      `const res = db.prepare("INSERT INTO reservations (program_id, service_id, name, start_at, end_at, manual, state, started_at, created_at, updated_at) VALUES (980201, (SELECT id FROM services ORDER BY id LIMIT 1), '時計試験', ${edge - 10 * MIN}, ${edge + 20 * MIN}, 1, 'scheduled', ${edge - 10 * MIN}, ${Date.now()}, ${Date.now()})").run().lastInsertRowid;
+            db.prepare("INSERT INTO recordings (reservation_id, service_id, service_name, name, series, start_at, end_at, created_at, updated_at) VALUES (?, 211, 'BS11', '時計試験', '時計試験', ${edge - 10 * MIN}, ${edge + 20 * MIN}, ${Date.now()}, ${Date.now()})").run(res);`,
+    );
+    try {
+      await page.clock.install({ time: edge - 8_000 });
+      await page.goto("/");
+      await page.locator('[data-hydrated="true"]').waitFor();
+      const row = page
+        .getByTestId("reservation-row")
+        .filter({ hasText: "時計試験" });
+      const status = row.getByTestId("row-activity");
+      const bar = row.getByTestId("recording-progress");
+      const value = () =>
+        bar.evaluate((node) => (node as HTMLProgressElement).value);
+      const clock = (at: number) => {
+        const d = new Date(at);
+        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      };
+      await expect(status).toContainText("あと 21 分");
+      await expect(page.getByTestId("recording-now")).toHaveText(
+        clock(edge - MIN),
+      );
+      const before = await value();
+      // 変わり目を越えたら、読み直しを待たずに進む
+      await expect(status).toContainText("あと 20 分", { timeout: 20_000 });
+      await expect(page.getByTestId("recording-now")).toHaveText(clock(edge));
+      expect(await value()).toBeGreaterThan(before);
+    } finally {
+      sqlite(
+        `${stack.root}/denpa.db`,
+        `db.run("DELETE FROM recordings WHERE name = '時計試験'"); db.run("DELETE FROM reservations WHERE program_id = 980201");`,
+      );
+    }
+  });
+
+  /*
    * **止まっている問題も 3 段目に、理由と 1 段で。** 番組名の行は時刻と番組名だけ。
    * 競合は「競合・チューナーが足りません」(前は番組名の横のバッジと、理由の段が別だった)
    */

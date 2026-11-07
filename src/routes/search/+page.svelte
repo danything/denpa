@@ -23,6 +23,7 @@
     stateLabel,
     time,
   } from "#lib/format.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { loadRecent, pushRecent, saveRecent } from "#lib/recent-searches.js";
 
   import type { Preview, PreviewRow } from "./+page.server";
@@ -101,11 +102,8 @@
   );
 
   /** いま放送中かの判定に使う時計。分で刻む (番組表と同じ) */
-  let clock = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => (clock = Date.now()), 60_000);
-    return () => clearInterval(timer);
-  });
+  const minute = minuteClock();
+  const clock = $derived(minute.now);
   const watchable = $derived(new Set(data.watchable));
   /** 切り抜きの節の行き先。同じ言葉のまま切り抜きの画面へ */
   const clipsHref = $derived(resolve(`clips?${new URLSearchParams({ q })}`));

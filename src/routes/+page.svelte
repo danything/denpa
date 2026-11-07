@@ -54,6 +54,7 @@
   } from "#lib/format.js";
   import { GROUPED_COOKIE } from "#lib/grouping.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
+  import { minuteClock } from "#lib/minute-clock.svelte.js";
   import {
     clearFailed,
     offline,
@@ -319,11 +320,13 @@
     return res.end_at > now ? "future" : "past";
   }
 
-  /** 描いた時刻 (`HomeContext.clock`)。読み直すたびに取り直す */
+  /** 描いた時刻 (`HomeContext.clock`)。読み直すたびに取り直す。並べ方はこれで決め、分ごとには並べ直さない */
   const clock = $derived.by(() => {
     void data;
     return Date.now();
   });
+  /** 分ごとに進むいまの時刻 (`HomeContext.now`)。「いま」の時刻・あと何分か・進み具合のバーだけが使う */
+  const minute = minuteClock();
 
   /** 終わった予約と、それで録れた録画を 1 本に (`mergeRecorded`)。録画の行が代わりに立つ */
   const merged = $derived(
@@ -562,7 +565,7 @@
     return next;
   });
   /** 「いま」の線に添える一言。次の録画まで (絞り込みに関係なく。録画中のあと何分かは行の 3 段目) */
-  const lineStatus = $derived(nowStatus(clock, nextRes));
+  const lineStatus = $derived(nowStatus(minute.now, nextRes));
   function dayLabel(at: number): string {
     return dayName(at, clock) ?? fullDate(at);
   }
@@ -724,6 +727,9 @@
   setHome({
     get clock() {
       return clock;
+    },
+    get now() {
+      return minute.now;
     },
     get nowStatus() {
       return lineStatus;

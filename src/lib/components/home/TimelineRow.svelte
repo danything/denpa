@@ -89,7 +89,7 @@
       : [{ kind: "clip", tone: "warning", label: note }];
   }
 
-  /** 「● 録画中・あと 21 分」(あと何分かは `ctx.clock` で進む) */
+  /** 「● 録画中・あと 21 分」(あと何分かは `ctx.now` で分ごとに進む) */
   function recordingLine(
     label: string,
     end: number,
@@ -100,7 +100,7 @@
       tone: "rec",
       running: true,
       label,
-      detail: recordingLeft(ctx.clock, end),
+      detail: recordingLeft(ctx.now, end),
       testid,
     };
   }
@@ -273,7 +273,7 @@
     {#if item.zone === "now" && res.end_at > res.start_at}
       {@const done = Math.min(
         1,
-        Math.max(0, (ctx.clock - res.start_at) / (res.end_at - res.start_at)),
+        Math.max(0, (ctx.now - res.start_at) / (res.end_at - res.start_at)),
       )}
       <progress
         class="row-bar rec"
@@ -287,7 +287,7 @@
           class="row-bar-now num"
           style:--done={done}
           aria-hidden="true"
-          data-testid="recording-now">{time(ctx.clock)}</span
+          data-testid="recording-now">{time(ctx.now)}</span
         >
       {/if}
     {/if}
