@@ -18,7 +18,8 @@ import {
   stop,
 } from "#lib/server/scan.js";
 import { programs, services } from "#lib/server/schema.js";
-import type { ChannelType } from "#lib/types.js";
+import { measureChannelSignal } from "#lib/server/signal-quality.js";
+import { CHANNEL_TYPES, type ChannelType } from "#lib/types.js";
 
 /** 物理チャンネル 1 本と、そこに入っている局 */
 interface Coverage {
@@ -160,5 +161,28 @@ export const actions = {
     const result = await stop();
     if (!result.stopped) return fail(409, { message: result.message });
     return { success: true, scan: result.message };
+  },
+
+  /**
+   * 指定したチャンネルの電波受信品質を測定する。
+   * 約 2〜3 秒間ストリームを受信してパケット誤り率・ドロップ率・ビットレートを算出する。
+   */
+  measureSignal: async ({ request }) => {
+    const form = await request.formData();
+    const type = String(form.get("type") ?? "");
+    const channel = String(form.get("channel") ?? "");
+    if (!type || !channel) {
+      return fail(400, { message: "チャンネルを指定してください" });
+    }
+    if (!CHANNEL_TYPES.includes(type as ChannelType)) {
+      return fail(400, { message: `未対応の種別です: ${type}` });
+    }
+    const result = await measureChannelSignal(
+      type,
+      channel,
+      2500,
+      request.signal,
+    );
+    return { success: true, signal: result };
   },
 } satisfies Actions;

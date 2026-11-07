@@ -3,6 +3,7 @@
   import "@anyblades/blades/components/accordion";
   import "@anyblades/blades/components/progress";
   import { resolve } from "$app/paths";
+  import Activity from "~icons/lucide/activity";
 
   import { submitting } from "#lib/actions.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
@@ -13,6 +14,7 @@
   import { SERVICE_TYPE_LABEL, stateLabel } from "#lib/format.js";
 
   import type { PageData } from "./$types";
+  import SignalDialog from "./SignalDialog.svelte";
 
   let { data }: { data: PageData } = $props();
 
@@ -81,6 +83,25 @@
   const coverage = $derived(data.channels);
   /** 入っている局をすべて並べたもの */
   const services = $derived(coverage.flatMap((channel) => channel.services));
+
+  /** 電波レベル測定ダイアログ */
+  let showSignalDialog = $state(false);
+  let signalTargetType = $state("");
+  let signalTargetChannel = $state("");
+
+  const channelOptions = $derived(
+    coverage.map((ch) => ({
+      type: ch.type,
+      channel: ch.channel,
+      name: ch.services[0]?.name ?? ch.channel,
+    })),
+  );
+
+  function openSignal(type = "", channel = "") {
+    signalTargetType = type;
+    signalTargetChannel = channel;
+    showSignalDialog = true;
+  }
 
   /** 番組表がどこまで埋まっているか。「8/9 まで」の形で出す */
   function until(at: number): string {
@@ -153,6 +174,15 @@
                 : "ロゴをいますぐ集める"}
             </ActionButton>
           {/if}
+          <button
+            type="button"
+            class="secondary small outline"
+            onclick={() => openSignal()}
+            data-testid="btn-open-signal-dialog"
+          >
+            <Activity aria-hidden="true" />
+            受信品質測定
+          </button>
         </div>
       {/if}
     </div>
@@ -440,6 +470,14 @@
 </div>
 
 <LogoZoom target={zoomTarget} onclose={() => (zoom = null)} />
+
+<SignalDialog
+  open={showSignalDialog}
+  channels={channelOptions}
+  initialType={signalTargetType}
+  initialChannel={signalTargetChannel}
+  onclose={() => (showSignalDialog = false)}
+/>
 
 <!--
     局ロゴ。押すと大きく見る (`LogoZoom`)。まだのものは点線の枠、放送に載っていないものは列では「—」。
