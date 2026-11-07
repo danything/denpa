@@ -18,7 +18,7 @@ import {
   stop,
 } from "#lib/server/scan.js";
 import { programs, services } from "#lib/server/schema.js";
-import { measureChannelSignal } from "#lib/server/signal-quality.js";
+import { measureSignal } from "#lib/server/signal-quality.js";
 import { CHANNEL_TYPES, type ChannelType } from "#lib/types.js";
 
 /** 物理チャンネル 1 本と、そこに入っている局 */
@@ -164,25 +164,22 @@ export const actions = {
   },
 
   /**
-   * 指定したチャンネルの電波受信品質を測定する。
-   * 約 2〜3 秒間ストリームを受信してパケット誤り率・ドロップ率・ビットレートを算出する。
+   * 1 つのチャンネルの受信品質を測る (`signal-quality.ts`)。**測り終えるまで待つ** (5 秒ほど)。
+   * 結果はそのチャンネルの行の下に出す。選局できなければ、その理由を通知に出す
    */
   measureSignal: async ({ request }) => {
     const form = await request.formData();
-    const type = String(form.get("type") ?? "");
-    const channel = String(form.get("channel") ?? "");
-    if (!type || !channel) {
-      return fail(400, { message: "チャンネルを指定してください" });
+    const type = String(form.get("type")) as ChannelType;
+    const channel = String(form.get("channel"));
+    if (!CHANNEL_TYPES.includes(type))
+      return fail(400, { message: "チャンネルを選んでください" });
+    try {
+      const quality = await measureSignal(type, channel, request.signal);
+      return { success: true, measured: { type, channel, ...quality } };
+    } catch (error) {
+      return fail(502, {
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
-    if (!CHANNEL_TYPES.includes(type as ChannelType)) {
-      return fail(400, { message: `未対応の種別です: ${type}` });
-    }
-    const result = await measureChannelSignal(
-      type,
-      channel,
-      2500,
-      request.signal,
-    );
-    return { success: true, signal: result };
   },
 } satisfies Actions;
