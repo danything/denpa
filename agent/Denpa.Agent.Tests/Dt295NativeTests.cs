@@ -454,7 +454,8 @@ public class Dt295NativeTests
         await Assert.That(link.CardBusy).IsTrue();
         link.LeaveCard();
         await Assert.That(link.CardBusy).IsFalse();
-        await Assert.That(Dt295NativeStream.CardKickPackets).IsLessThan(Dt295NativeStream.KickPackets);
+        var (small, large) = (Dt295NativeStream.CardKickPackets, Dt295NativeStream.KickPackets);
+        await Assert.That(small < large).IsTrue();
 
         // カードの送受信の間だけ立ち、終わったら戻る
         var atr = Convert.FromHexString("3BF01200FF9181B17C451F0399");
