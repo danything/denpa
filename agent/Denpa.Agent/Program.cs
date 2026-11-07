@@ -815,13 +815,18 @@ internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetim
          * 手で動かしているときの Ctrl+C も SIGTERM も効かず、SHUTDOWN_WAIT (既定 6 時間) まで止まらなかった。
          * 録画のストリームは切れる (denpa はエージェントがまた動いてから終了時刻まで録り続ける)
          */
-        if (_waiting.TrySetResult()) Log.Write("止まれの合図をもう一度受けたので、録画を待たずに畳みます");
+        // 録画を待っていたときだけ記録に出す (待たずに畳んでいる途中の合図では出さない)
+        if (_waiting.TrySetResult() && _holding) Log.Write("止まれの合図をもう一度受けたので、録画を待たずに畳みます");
     }
+
+    /// <summary>録画が終わるのを待っている間だけ true</summary>
+    private volatile bool _holding;
 
     private async Task WaitThenStop()
     {
         if (waitMs > 0 && pool.Recording)
         {
+            _holding = true;
             Log.Write($"止まれの合図。録画が終わるまで待ちます (上限 {waitMs / 1000} 秒。もう一度合図を送ると待たずに畳みます)");
             var until = DateTime.UtcNow.AddMilliseconds(waitMs);
             while (pool.Recording && DateTime.UtcNow < until && !_waiting.Task.IsCompleted)
