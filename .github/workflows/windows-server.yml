@@ -113,10 +113,11 @@ jobs:
           path: ${{ runner.temp }}\ffmpeg-deps\svt-av1
           key: ${{ steps.key.outputs.svtav1 }}
 
-      - name: Build ffmpeg
-        if: steps.cache.outputs.cache-hit != 'true'
+      # 依存は組み終えた直後に保存する (ffmpeg のビルドが落ちても残る)。ffmpeg 本体は成功したときだけ保存する
+      - name: Build Opus
+        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
         shell: msys2 {0}
-        run: bash .github/ffmpeg-windows.sh ffmpeg-out
+        run: bash .github/ffmpeg-windows.sh ffmpeg-out opus
 
       - name: Save Opus
         if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
@@ -125,12 +126,22 @@ jobs:
           path: ${{ runner.temp }}\ffmpeg-deps\opus
           key: ${{ steps.key.outputs.opus }}
 
+      - name: Build SVT-AV1
+        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash .github/ffmpeg-windows.sh ffmpeg-out svt-av1
+
       - name: Save SVT-AV1
         if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}\ffmpeg-deps\svt-av1
           key: ${{ steps.key.outputs.svtav1 }}
+
+      - name: Build ffmpeg
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash .github/ffmpeg-windows.sh ffmpeg-out
 
       - name: Save ffmpeg
         if: steps.cache.outputs.cache-hit != 'true'

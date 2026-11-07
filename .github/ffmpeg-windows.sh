@@ -32,6 +32,9 @@
 set -euo pipefail
 
 out=$(realpath -m "$1")
+# 2 つ目の引数 (opus か svt-av1) を渡すと、その依存だけ組んで終わる。workflow が組み終えた直後にキャッシュへ保存するため
+# (ffmpeg のビルドが落ちても、組み終えた依存は残る)。渡さなければ全部組む
+only=${2:-}
 root=$(pwd)
 # Dockerfile の ffmpeg 段だけを読む (mpeg2wasm 段にも --enable-decoder= の行があるので)
 stage=$(awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile)
@@ -82,7 +85,7 @@ fetch_tar() {
 
 # recipe:opus:begin
 # Opus (Dockerfile と同じく、パケットの欠けを補う機能は既定のまま切って組む)
-if [ ! -e "$deps/opus/.done" ]; then
+if { [ -z "$only" ] || [ "$only" = opus ]; } && [ ! -e "$deps/opus/.done" ]; then
   rm -rf "$deps/opus"
   mkdir "$work/opus" && cd "$work/opus"
   fetch_tar "https://downloads.xiph.org/releases/opus/opus-${OPUS_VERSION}.tar.gz" z
@@ -94,10 +97,11 @@ if [ ! -e "$deps/opus/.done" ]; then
   touch "$deps/opus/.done"
 fi
 # recipe:opus:end
+if [ "$only" = opus ]; then exit 0; fi
 
 # recipe:svt-av1:begin
 # SVT-AV1
-if [ ! -e "$deps/svt-av1/.done" ]; then
+if { [ -z "$only" ] || [ "$only" = svt-av1 ]; } && [ ! -e "$deps/svt-av1/.done" ]; then
   rm -rf "$deps/svt-av1"
   mkdir "$work/svtav1" && cd "$work/svtav1"
   fetch_tar "https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz" z
@@ -108,6 +112,7 @@ if [ ! -e "$deps/svt-av1/.done" ]; then
   touch "$deps/svt-av1/.done"
 fi
 # recipe:svt-av1:end
+if [ "$only" = svt-av1 ]; then exit 0; fi
 cp -r "$deps/opus/licenses/." "$deps/svt-av1/licenses/." "$out/licenses/"
 
 # FFmpeg (キャッシュの鍵はこのスクリプト全体。ここから下を変えても、上の Opus と SVT-AV1 は組み直さない)
