@@ -172,7 +172,7 @@ public static class SianoUserland
         3 => "。そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
         // macOS にはカーネルのドライバ (smsusb) が無い
         4 when OperatingSystem.IsMacOS() => "。別のプロセスが使っています",
-        4 =>"。カーネルのドライバ (smsusb) か別のプロセスが使っています。/dev/dvb に出ていればそちらで使えます。"
+        4 => "。カーネルのドライバ (smsusb) か別のプロセスが使っています。/dev/dvb に出ていればそちらで使えます。"
             + "siano-userland で使うなら smsusb / smsdvb / smsmdtv を blacklist して再起動してください",
         10 => "。ファームウェアが無いか壊れています",
         _ => "",
