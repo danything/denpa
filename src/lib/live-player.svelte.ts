@@ -43,6 +43,11 @@ import {
   wantsData,
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
+import {
+  SLIP_MOST,
+  UNSLIP_EVERY,
+  UNSLIP_STEP,
+} from "#lib/components/player/unslip.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
   LagMeter,
@@ -178,11 +183,6 @@ const RESUME_EVERY = 250;
 /** 手元が残ったまま位置がこれ (ms) だけ進まなければ、観終えるのを待たずにリクエストし直す (`resumeChase`) */
 const RESUME_STUCK = 3_000;
 /**
- * 映像だけがこれだけ遅れたら飛び直す (秒)。声と口のずれが分かりはじめるのが 0.1 秒あたり。
- * 実機で無事なときの遅れは最大 0.058 秒だったので、飛んでばかりにはならない (0.15 では分かるのに直らなかった)
- */
-const SLIP_MOST = 0.1;
-/**
  * canvas で、描いたコマ数がこれだけ増えなければ映像だけ止まっていると見る (ms。`stuckNow`)。RawEngine は描いたコマ数を
  * 1 秒ごとにしか知らせないので、`<video>` の `STUCK_LEAST` (0.5 秒) より長くとる
  */
@@ -192,14 +192,6 @@ const CANVAS_FROZEN = 1_500;
  * 読み直し (ffmpeg の立ち上がりとキーフレーム待ち) は 1 秒ほどなので、尽きる前に間に合う
  */
 const REFILL = 5;
-/** 飛び直す間隔の下限 (ms)。**デコードが追いつかない状態は飛んでも直らない** */
-const UNSLIP_EVERY = 3_000;
-/*
- * コマ落ちでは飛び直さない。実機の Windows Edge は落ち着いたあとでも絶えず 5.6% 落ちていて、合図にすると
- * 3 秒ごとに飛び続けた (飛ぶたびに音が 0.02 秒飛ぶ)。飛んでもコマ落ちは減らなかった
- */
-/** 飛び直すときに進める幅 (秒)。**1 コマぶん**。音が飛んだと分かる長さではない */
-const FRAME = 0.02;
 /**
  * 映像が出せるようになるのを待ってよい上限 (ms)。
  *
@@ -663,7 +655,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let unslipAfter = 0;
   /*
    * 映像の遅れは JS から見えないことがある (Windows の Chrome / Edge は映像を DOM と別の面に出す)。
-   * なので起きる条件の途切れ (`stalled`) で飛び直す (`settle`)。コマ落ちを合図にしない理由は `UNSLIP_EVERY` の下
+   * なので起きる条件の途切れ (`stalled`) で飛び直す (`settle`)。コマ落ちを合図にしない理由は `unslip.ts` の `UNSLIP_EVERY` の下
    */
   /** 貯まりが足りた最初の時刻。**映像を待ちきりにしないため** (`canStart`) */
   let enoughAt = 0;
@@ -1147,7 +1139,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // これで上がる `waiting` は数えない (`quiet`)
     quiet = now + GRACE;
     // **1 コマぶんだけ前へ。** 同じ値を入れ直すのは飛んだことにならない
-    video.currentTime += FRAME;
+    video.currentTime += UNSLIP_STEP;
   }
 
   /** 再生位置に合う 1 枚だけ字幕を描く ([ts/captions.ts](./ts/captions.ts) の `currentCue` / `showing`) */
