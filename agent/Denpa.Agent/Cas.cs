@@ -9,7 +9,7 @@ namespace Denpa.Agent;
  * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (LocalCard → BCas.cs) か、別の拠点 (RemoteCard)。どちらも CardShare.cs
  * - ICardLink   … カードと APDU をやり取りする接続。USB の CCID リーダーを直接扱う (Ccid.cs。
  *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、px4d・asicend の内蔵リーダー (Px4Card.cs) か、
- *                 CECH-ZD1 J の内蔵の差し込み口 (Zd1j.cs の Zd1jCard)
+ *                 CECH-ZD1 J と PIX-DT295 の差し込み口 (Zd1j.cs の Zd1jCard・Dt295ResidentTuner.cs の Dt295ResidentCard)
  */
 
 /// <summary>カードの素。**鍵を作るのに要る定数**で、初めに 1 回だけ貰う</summary>

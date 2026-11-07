@@ -25,10 +25,8 @@ Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=
   一覧から組み立てるので (`Px4Userland.Detect`)、普通は書きません。
   `status=ready` 以外の筐体と、まとめられなかった USB デバイス (`--list-json` の
   `ungrouped_usb_devices`) は、理由と USB の場所を記録して使いません
-  (`open_failed` なら `/dev/bus/usb` を開く権限を疑う)。番号の桁数や受信機の上限は
-  見ず、合わなければ `px4d` が理由を付けて断ります。
-  古い `q3u4:<14桁>:<受信機>` は「知らないデバイス」として断るので、書いてあれば
-  `px4:` に書き直してください (番号と受信機はそのまま)
+  (`open_failed` なら、Linux は `/dev/bus/usb` を開く権限、Windows はドライバが WinUSB かを疑う)。番号の桁数や受信機の上限は
+  見ず、合わなければ `px4d` が理由を付けて断ります
 - **番号が重なる筐体 (`serial_unique=false`) は、USB ポートで見分けます。** PX-M1UR と PX-S1UR は
   どれも USB の serial が `000000000000001` で、同時に挿すと別々の ready な
   筐体として並びます。番号のままだと同じ

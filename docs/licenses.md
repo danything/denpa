@@ -155,7 +155,7 @@ zip に入れる DLL は、組むときに ffmpeg.exe・ffprobe.exe の取り込
 
 ## リポジトリに写してあるもの・借りた表
 
-PIX-DT295 の常駐方式のコード (`agent/Denpa.Agent/Dt295Resident*.cs`) は、mAgicVISION (<https://github.com/makeding/mAgicVISION>、commit `4dc8854`) の
+PIX-DT295 の常駐方式のコード (`agent/Denpa.Agent/Dt295Resident*.cs`) は、mAgicVISION (<https://github.com/makeding/mAgicVISION>。commit は [magicvision.json](../agent/Denpa.Agent/firmware/magicvision.json) の `commit`) の
 MIT のコード (`core/`・`usb/window.c`・`userland/cli/usbboot.c` のうち DT295 の部分) を C# に移したものです。ファイルの先頭に移した元と著作権
 (Copyright (c) 2026 huggy) を書き、MIT の全文を [agent/Denpa.Agent/licenses/mAgicVISION.txt](../agent/Denpa.Agent/licenses/mAgicVISION.txt) に置いて、
 エージェントの実行ファイルにも埋め込んでいます。上流の GPL-2.0-only の部分 (`linux/`・`usb/linux/`) は読んでいません。

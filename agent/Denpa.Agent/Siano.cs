@@ -29,9 +29,9 @@ public static class SianoUserland
     /// </summary>
     public sealed record Stick(string Port, string Model, string[] Types, string? Driver);
 
-    /// <summary>配布アーカイブを展開した場所 (Dockerfile)</summary>
+    /// <summary>配布アーカイブを展開した場所 (Linux は Dockerfile の <c>/opt</c>。Mac と Windows は実行ファイルの隣。<see cref="Px4Userland.Beside"/>)</summary>
     public static string Dir =>
-        Environment.GetEnvironmentVariable("SIANO_USERLAND_DIR") ?? "/opt/siano-userland";
+        Environment.GetEnvironmentVariable("SIANO_USERLAND_DIR") ?? Px4Userland.Beside("siano-userland", "/opt/siano-userland");
 
     /// <summary>siano-ts の実行ファイル。Windows だけ <c>.exe</c> が付く (配布 zip の中身のまま)</summary>
     public static string Executable(string dir) => Px4Userland.Executable(dir, "siano-ts");
@@ -170,7 +170,9 @@ public static class SianoUserland
         1 or 4 when OperatingSystem.IsWindows() =>
             "。チューナーのドライバが WinUSB になっていないか、別のプロセスが使っています (Zadig で WinUSB に。docs/install-windows.md)",
         3 => "。そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
-        4 => "。カーネルのドライバ (smsusb) か別のプロセスが使っています。/dev/dvb に出ていればそちらで使えます。"
+        // macOS にはカーネルのドライバ (smsusb) が無い
+        4 when OperatingSystem.IsMacOS() => "。別のプロセスが使っています",
+        4 =>"。カーネルのドライバ (smsusb) か別のプロセスが使っています。/dev/dvb に出ていればそちらで使えます。"
             + "siano-userland で使うなら smsusb / smsdvb / smsmdtv を blacklist して再起動してください",
         10 => "。ファームウェアが無いか壊れています",
         _ => "",

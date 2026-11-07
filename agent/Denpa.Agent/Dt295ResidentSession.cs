@@ -57,11 +57,6 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
     /// <summary>STOP を受理されて、止まり切るのを待っている</summary>
     public bool StopPending { get; private set; }
 
-    public Dt295ResidentRequest? Request { get; private set; }
-
-    /// <summary>選局が落ち着くのを待つ上限 (0 なら <see cref="SettleTimeoutMs"/>)</summary>
-    public int TuneTimeoutMs { get; set; }
-
     /// <summary>選局を待つ間の SERVICE の間隔 (0 なら 1 ms)</summary>
     public int TunePollMs { get; set; }
 
@@ -196,7 +191,6 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
     public void Settle(int source, uint generation, bool ready, bool streaming)
     {
         if (source is < 0 or >= SourceCount) throw new ArgumentOutOfRangeException(nameof(source));
-        var timeout = TuneTimeoutMs != 0 && generation != 0 ? TuneTimeoutMs : SettleTimeoutMs;
         var start = _now();
         while (true)
         {
@@ -219,7 +213,7 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
                 throw failure ?? new Dt295ResidentException($"受信部 {source} が失敗しました (理由 {rc})", rc);
             }
             if (Complete(state!, source, generation, ready, streaming)) return;
-            if (_now() - start > timeout) throw new TimeoutException($"受信部 {source} が {timeout} ms のうちに落ち着きませんでした ({state})");
+            if (_now() - start > SettleTimeoutMs) throw new TimeoutException($"受信部 {source} が {SettleTimeoutMs} ms のうちに落ち着きませんでした ({state})");
             // 選局の間は 1 ms ごと (TunePollMs で変えられる)、初期化は 10 ms ごと (session.c の session_settle)
             _delay(generation != 0 ? (TunePollMs != 0 ? TunePollMs : 1) : 10);
         }
@@ -303,7 +297,6 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
 
     private void Begin(Dt295ResidentRequest request, uint generation)
     {
-        Request = request;
         Source = request.Source;
         Generation = generation;
         RequestValid = generation != 0;

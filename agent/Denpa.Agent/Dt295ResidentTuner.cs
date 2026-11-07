@@ -224,7 +224,7 @@ internal sealed class Dt295ResidentStream
 {
     private const byte Endpoint = 0x81;
 
-    /// <summary>1 本の読みの大きさと数。今の方式の実機の測定で決めた値 (8 KiB を 64 本。docs/tuners.md)</summary>
+    /// <summary>1 本の読みの大きさと数 (8 KiB を 64 本)。実機で測って決めた値</summary>
     private const int TransferSize = 8192;
 
     private const int Depth = 64;
@@ -434,7 +434,7 @@ internal sealed class Dt295ResidentStream
 /// </summary>
 public sealed class Dt295ResidentTuner : ITuneDevice
 {
-    /// <summary>選局から最初の TS を待つ上限。地上波は受かるまで 1 秒ほど、TS はそのあと 0.3 秒ほどで来る (docs/tuners.md)</summary>
+    /// <summary>選局から最初の TS を待つ上限。地上波は落ち着くまで 1.1〜1.4 秒、CS は 1.6〜2.0 秒 (docs/tuners.md の実機の値)</summary>
     internal static readonly TimeSpan FirstTs = TimeSpan.FromSeconds(10);
 
     private readonly string _name;

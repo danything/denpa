@@ -14,8 +14,8 @@
   | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
   | PT3 ([tuner-pt3.md](tuner-pt3.md))                                                                                                                                                   | Linux DVB                                                        | ドライバ                                                                  |
   | **実機で確かめていない**: PT1 / PT2、PX-BCUD、PX-S1UD、Friio (白)、南米の地デジ (ISDB-Tb) の機材、DiB8096 のリファレンス基板 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材)) | Linux DVB                                                        | ドライバ (機材によってはファームウェアも)                                 |
-  | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Windows も。[tuner-px4.md](tuner-px4.md))                                                                                | px4-userland (同梱)                                              | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
-  | PX-S1UD (smsusb を blacklist したとき。Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md))                                                                                             | siano-userland (同梱)                                            | なし (Windows はドライバを WinUSB に)                                     |
+  | PX-Q3U4 / PX-W3U4 / PX-MLT 系など (px4-userland の対応機種。Mac・Windows も。[tuner-px4.md](tuner-px4.md))                                                                           | px4-userland (同梱)                                              | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
+  | PX-S1UD (smsusb を blacklist したとき。Mac・Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md))                                                                                        | siano-userland (同梱)                                            | なし (Windows はドライバを WinUSB に)                                     |
   | PX-W3U3 ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))                                                                                                            | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし                                                                      |
   | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                            | エージェントが USB を直に                                        | なし                                                                      |
   | PIXELA PIX-DT295 (**試験的**。Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS での復号を確かめた。[下記](#pixela-pix-dt295-試験的))                                          | エージェントが USB を直に                                        | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
@@ -172,12 +172,12 @@ INF ではどれも DT295 と設定が違い (DT295 W・DT420・DT410 は DT295 
 `denpa-agent --tune dt295:4-12.1 T27 --decode` (`BS15:16625`・`CS22:29024` も。そのボードのカードだけで復号する)、または
 `denpa-agent --dt295-probe --channel T27` (`BS15`・`BS15:16625`・`CS2` も)。`--dt295-probe` は常駐イメージを入れるか引き継ぐかしてから、
 決めた秒数 (`--seconds N`。既定 5) だけ受けて統計を出します。`--output <ファイル>` を付けると TS を書きます。
-`--replug` は、先にポートの電源を入れ直します (Linux)。`--trace` は機材への書き込みを 1 行ずつ出します。
+2 台以上挿してあるときは `--port <USB のポート>` で指します。`--replug` は、先にポートの電源を入れ直します (Linux)。`--trace` は機材への書き込みを 1 行ずつ出します。
 
 ## カードリーダー
 
-**USB のリーダーは usbfs を直接扱います** (Linux。Mac と Windows は OS の PC/SC 越し。[install-mac.md](install-mac.md#カードが読めないとき))。`/dev/bus/usb` が見えていれば動きます。
-ホストや別のコンテナで pcscd が動いていると使えません (「別のプロセスがカードリーダーを
+**USB のリーダーは、Linux なら usbfs を直接扱います** (`/dev/bus/usb` が見えていれば動く)。Mac と Windows は OS の PC/SC 越しです
+([install-mac.md](install-mac.md#カードが読めないとき))。Linux では、ホストや別のコンテナで pcscd が動いていると使えません (「別のプロセスがカードリーダーを
 使用中です」と出る)。TPDU 単位のリーダー (Gemalto PC Twin など) には T=1 の枠組みを
 こちらで組み、APDU 単位のリーダーにはそのまま送ります。カードの無いリーダーや INT に
 答えないカードは飛ばし、USB のリーダーを内蔵リーダーより先に試します (`CardLinks.cs`)。
@@ -185,8 +185,8 @@ INF ではどれも DT295 と設定が違い (DT295 W・DT420・DT410 は DT295 
 Amazon で見る (広告): [Gemalto PC Twin](https://www.amazon.co.jp/dp/B001NEIRH0?tag=doa08-22)、[IDBridge CT30](https://www.amazon.co.jp/dp/B003XF2JJY?tag=doa08-22) (Mac で読めないときは [install-mac.md](install-mac.md#カードが読めないとき))
 
 動いているエージェントがカードと話せているかは、設定の「受信」の「チューナー」にある「カードリーダー」の表で分かります
-(denpa がエージェントの `/denpa/card` を呼び、INT を 1 回通す)。止めた状態なら `denpa-agent --card` でも確かめられます (リーダーを並べ、
-ATR とカードの番号を出す。動いているエージェントがリーダーを使っている間は断られます)。
+(denpa がエージェントの `/denpa/card` を呼び、INT を 1 回通す)。エージェントを止めた状態なら `denpa-agent --card` でも確かめられます (リーダーを並べ、
+ATR とカードの番号を出す)。
 チューナーを使わずに B25 だけ確かめるなら `denpa-agent --decode-file <in.ts> <out.ts>` (`/denpa/decode`
 と同じことをする。掛かったまま録れてしまったものを救うのにも使える)。
 
@@ -200,8 +200,8 @@ ATR とカードの番号を出す。動いているエージェントがリー�
 - **録画は止めません。** 電波は二度と来ないので、スクランブルされたままでも
   録ります。denpa がエンコードの前に見て、掛かったままならエージェントに
   復号させます (`src/lib/server/scramble.ts` → `/denpa/decode`)
-- やり取りするのはパスだけです。元の TS の置き場 (`/media/raw`) を両方のコンテナに
-  見せてあるので、読み書きはエージェントが直接やり、数十 GB を HTTP で往復させません
+- やり取りするのはパスだけです。denpa とエージェントは元の TS の同じ置き場 (`RAW_DIR`。コンテナでは `/media/raw`) を
+  見ているので、読み書きはエージェントが直接やり、数十 GB を HTTP で往復させません
   (`charts/denpa` が一緒に出すときは、置き場が RWO なので**両方の Pod が同じノードにあることが前提**です)
 - 元の TS を残す設定のときは、残るのは復号した TS だけです。掛かったままのものは、
   あとから復号できる保証がありません
@@ -222,9 +222,7 @@ ATR とカードの番号を出す。動いているエージェントがリー�
 ### 直らないとき
 
 まず設定の「受信」の「チューナー」にある「カードリーダー」の表で、見えているリーダーと、カードに INT が通るかを見ます
-(中身はエージェントの `/denpa/card`)。使っているリーダーは鍵の出どころに
-INT を通させ、他のリーダーは開いて覗いて閉じます (USB のリーダーは使うと他から
-開けないので、使っているリーダーは開き直しません)。
+(中身はエージェントの `/denpa/card`)。使っているリーダーは開き直さずに INT を通し、ほかのリーダーは開いて覗いて閉じます。
 
 ```json
 {
@@ -256,7 +254,7 @@ INT を通させ、他のリーダーは開いて覗いて閉じます (USB の�
 鍵を配る範囲と、断られたときの文は [鍵を配るのは LAN の中だけ](agent.md#鍵を配るのは-lan-の中だけ) にあります。
 
 エージェントは組んだ denpa (クライアント証明書) にしか答えないので、curl などで `/denpa/card` を直に呼ぶことはできません
-([agent.md](agent.md))。手元で確かめるならエージェントを止めて `denpa-agent --card` を使います。
+([agent.md](agent.md#denpa-とは-tls-で組む))。
 
 - `readers` が空なら、`/dev/bus/usb` がコンテナに見えていません
 - `card: false` で `error` が無ければ、そのリーダーにカードが挿さっていません
@@ -277,7 +275,8 @@ echo 4-11 | sudo tee /sys/bus/usb/drivers/usb/bind
 実際に復号できているかは `--tune ... --decode` で見ます (復号したあとが 0% 近くなら正常)。
 衛星で LNB に電源を送るなら `--lnb 15v` を足します。動いているエージェントは一度使ったチューナーと、起動したときに開いた
 カードリーダーを開いたままにしていて、横から開くと断られるので、録画の無いときに止めてから同じイメージで流します
-(compose の例。Kubernetes なら `tuner-agent` を 0 台にしてから、同じイメージを同じデバイスで 1 回だけ起こす)。
+(compose の例。Kubernetes なら `tuner-agent` を 0 台にしてから、同じイメージを同じデバイスで 1 回だけ起こす。
+Mac の止め方は [install-mac.md](install-mac.md#cech-zd1-j-の差し込み口が読めないとき))。
 
 ```sh
 docker compose stop tuner-agent

@@ -649,14 +649,8 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private const ushort AllPids = 0x2000;
 
     /// <summary>
-    /// demux のフィルタの溜め。**いまの流し方 (全 PID を <c>DMX_OUT_TS_TAP</c>) では使われない。**
-    /// 出し方を変えたときに既定 (2KB) まで落ちないよう残してあるだけ
-    /// </summary>
-    private const int DemuxBuffer = 8 * 1024 * 1024;
-
-    /// <summary>
-    /// **dvr のリングバッファの大きさ。溢れるのはこちら。** 既定 (≒1.8MB) は地上波で 0.9 秒ぶんしかなく、
-    /// 8MB で 3.5 秒ぶん (docs/agent.md「リングバッファが溢れても畳まない」)
+    /// **dvr のリングバッファの大きさ。** 全 PID を <c>DMX_OUT_TS_TAP</c> で流すので、溜まるのは demux のフィルタではなく dvr。
+    /// 既定 (≒1.8MB) は地上波で 0.9 秒ぶんしかなく、8MB で 3.5 秒ぶん (docs/agent.md「リングバッファが溢れても畳まない」)
     /// </summary>
     private const int DvrBuffer = 8 * 1024 * 1024;
 
@@ -828,9 +822,8 @@ public sealed unsafe class DvbTuner : ITuneDevice
 
     private void StartFilter()
     {
-        Sys.Call(_demux, DmxSetBufferSize, DemuxBuffer, "demux の溜めの指定");
         /*
-         * 本当に溜まるのは dvr のほう。**断られても続ける。** 大きくできなくても選局は通るので、
+         * **断られても続ける。** 大きくできなくても選局は通るので、
          * 投げると「溢れにくくする」ために選局を落とすことになる (古いカーネルや別のドライバが断る目もある)
          */
         if (Sys.Ioctl((int)_dvr.Handle.DangerousGetHandle(), DmxSetBufferSize, DvrBuffer) < 0)

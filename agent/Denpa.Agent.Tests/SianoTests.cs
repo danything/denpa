@@ -91,7 +91,7 @@ public class SianoTests
         }
         else
         {
-            await Assert.That(SianoUserland.Hint(4)).Contains("smsusb");
+            await Assert.That(SianoUserland.Hint(4)).Contains(OperatingSystem.IsMacOS() ? "別のプロセス" : "smsusb");
             await Assert.That(SianoUserland.Hint(1)).IsEqualTo("");
         }
     }
