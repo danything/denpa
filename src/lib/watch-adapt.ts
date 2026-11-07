@@ -51,7 +51,7 @@ export type WatchSample = Omit<AdaptSample, "now" | "route" | "pace"> & {
   paceId: string | null;
 };
 
-export interface WatchAdaptHost {
+interface WatchAdaptHost {
   /** いまの様子。段を動かさない間 (止めている・切り替えの最中・端末に保存したもの) は null */
   sample(): WatchSample | null;
   /** 送り出しの具合を読む (`GET /api/playback/pace?id=`)。読めなければ null */
@@ -62,7 +62,7 @@ export interface WatchAdaptHost {
   now?(): number;
 }
 
-export interface WatchAdapt {
+interface WatchAdapt {
   /** `adapt.ts` を呼ぶ (`ADAPT_TICK` ごと) */
   tick(): void;
   /** シーク・CM スキップのあと。段は持ち越し、測った値だけ捨てる */

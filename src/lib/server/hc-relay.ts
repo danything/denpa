@@ -19,7 +19,12 @@ import { randomBytes } from "node:crypto";
 import { error } from "@sveltejs/kit";
 
 import { rewriteLocationBytes, scriptable } from "../hybridcast/location";
-import { type Fetched, fetchForBml, refusalMessage } from "./bml-network";
+import {
+  type Fetched,
+  fetchForBml,
+  refusalMessage,
+  relayBody,
+} from "./bml-network";
 
 /** トークンの寿命 (ms)。番組 1 本を見終えるくらい */
 const TTL = 6 * 60 * 60 * 1000;
@@ -85,9 +90,10 @@ export async function relayAsset(
   try {
     const got = await fetcher(target);
     return new Response(
-      (scriptable(got.contentType)
-        ? rewriteLocationBytes(got.body)
-        : got.body) as BodyInit,
+      relayBody(
+        got.status,
+        scriptable(got.contentType) ? rewriteLocationBytes(got.body) : got.body,
+      ),
       {
         status: got.status,
         headers: {

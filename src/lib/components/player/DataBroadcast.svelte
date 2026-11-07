@@ -250,7 +250,7 @@
   const DATA_BUTTON = 20;
 
   /**
-   * NVRAM の置き場の頭。web-bml を使っていた頃の鍵 (`denpa_bml_denpa_nvram_…`・
+   * NVRAM の置き場の先頭。web-bml を使っていた頃の鍵 (`denpa_bml_denpa_nvram_…`・
    * `denpa_bml_engine`) とは重ならないので、古い端末に残っていても読まれない
    */
   const NVRAM_PREFIX = "denpa_bml_own_";
@@ -306,7 +306,7 @@
   let taps = 0;
   /** 次に押すタイマー */
   let knocking: ReturnType<typeof setTimeout> | null = null;
-  /** 枠の大きさを見張る。全画面にすると変わる */
+  /** 枠の大きさが変わったら知らせる。全画面にすると変わる */
   let watcher: ResizeObserver | null = null;
   /** 渡した通知の数 (`data-handed`。届いていないのか描かれないのかの切り分け用) */
   let handed = $state(0);
@@ -329,7 +329,7 @@
   /**
    * 双方向 (通信系コンテンツ)。中継はサーバがやる (放送局のサーバは CORS を返さない。
    * [docs/stream.md](../../../../docs/stream.md#双方向通信系コンテンツプロキシ))。送るほうも要る。
-   * NHK は `isIPConnected` を信じず、送る API へ一度投げて繋がっているかを決める
+   * NHK のアプリは `isIPConnected` を使わず、送る API を一度呼んだ結果で繋がっているかを決める
    */
   const ip: BmlIp = {
     connected: () => network,
@@ -549,7 +549,7 @@
   }
 
   /**
-   * 描く入れ物を毎回まっさらに作る (エンジンが張る影 `attachShadow` は外せず、同じ要素に 2 度目を張ると転ぶ)。
+   * 描く入れ物を毎回まっさらに作る (エンジンが張る影 `attachShadow` は外せず、同じ要素に 2 度目を張ると失敗する)。
    * 出せと言われるまでは透明に。`visibility` では子の visible が親の hidden を打ち消す
    */
   function makeMount(into: HTMLElement): HTMLDivElement {

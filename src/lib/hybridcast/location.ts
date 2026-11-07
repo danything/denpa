@@ -2,8 +2,8 @@
  * **アプリに、自分の本来の置き場所を見せる** (`shim.ts` の `__hcLocation`)。
  *
  * アプリは使い捨てのオリジンの iframe (denpa の `/api/bml/hybridcast`) で動くので、`location.hostname` は denpa の名前になる。
- * NHK のアプリはこの頭 (`hc.nhk.or.jp` の `hc`) から次に開く住所を組み立てる (`https://hc.nhk.jp/hc-home/…`) ので、
- * denpa の中では `https://dp.nhk.jp/…` のような無い住所へ移ろうとして止められていた。
+ * NHK のアプリはこの先頭 (`hc.nhk.or.jp` の `hc`) から次に開く URL を組み立てる (`https://hc.nhk.jp/hc-home/…`) ので、
+ * denpa の中では `https://dp.nhk.jp/…` のような無い URL へ移ろうとして止められていた。
  *
  * ブラウザの `location` は書き換えられないので、**配る script と HTML の中の読み書きを置き換える**。
  * `location.hostname` などを、差し込みが置く `self.__hcLocation` から読ませる — 読むとアプリの元の場所を返し、

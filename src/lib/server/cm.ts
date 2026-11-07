@@ -37,11 +37,16 @@ export function isCmMode(value: unknown): value is CmMode {
   return value === "off" || value === "chapter" || value === "cut";
 }
 
-/** CM 判定が占める割合 (%) */
-export function cmRatio(cm: Range[], duration: number): number {
+/** CM 判定が占める割合 (0〜1) */
+function cmShare(cm: Range[], duration: number): number {
   if (!Number.isFinite(duration) || duration <= 0) return 0;
   const total = cm.reduce((sum, range) => sum + (range.end - range.start), 0);
-  return Math.round((total / duration) * 100);
+  return total / duration;
+}
+
+/** CM 判定が占める割合 (%。整数に丸める) */
+export function cmRatio(cm: Range[], duration: number): number {
+  return Math.round(cmShare(cm, duration) * 100);
 }
 
 /**
@@ -50,7 +55,7 @@ export function cmRatio(cm: Range[], duration: number): number {
  * ロゴを覚えたてのときなど、「先頭の 2 秒だけ本編」のような結果になることがある。
  */
 export function tooMuchCm(cm: Range[], duration: number): boolean {
-  return cmRatio(cm, duration) > MAX_CM_RATIO * 100;
+  return cmShare(cm, duration) >= MAX_CM_RATIO;
 }
 
 /** これより短い区間は作らない (切っても意味が無く、チャプターだけが増える) */

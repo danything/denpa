@@ -212,6 +212,18 @@ describe("中継した答えの返し方", () => {
       "text/X-arib-bml; charset=EUC-JP",
     );
   });
+
+  test("本文を持てない 204・205・304 もそのまま返す", () => {
+    for (const status of [204, 205, 304]) {
+      const response = relayed({
+        status,
+        contentType: "text/plain",
+        body: new Uint8Array(),
+      });
+      expect(response.status).toBe(status);
+      expect(response.headers.get("x-bml-relayed")).toBe("1");
+    }
+  });
 });
 
 describe("画面の通信からだけ受ける", () => {

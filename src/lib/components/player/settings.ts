@@ -257,7 +257,7 @@ export interface SettingAction {
 }
 
 /**
- * **狭い枠で操作バーから畳んだもの** (`StageTail` の `fold`)。⚙ の上の並びの頭に、押すもの・切り替え・選ぶものを
+ * **狭い枠で操作バーから畳んだもの** (`StageTail` の `fold`)。⚙ の上の並びの先頭に、押すもの・切り替え・選ぶものを
  * 操作バーと同じ順に並べる (`kind` で見分ける)。広い枠では操作バーに出ているので並べない
  */
 export type SettingRow =

@@ -48,7 +48,7 @@ export class Fmp4Splitter {
       const size = u32(this.buffer, at);
       /*
        * 大きさ 0 は「ここから最後まで」、1 は「次の 8 バイトに本当の大きさ」。
-       * ffmpeg の fMP4 では出てこないが、来たら読めないので諦める
+       * ffmpeg の fMP4 では出てこないが、来たら読めないので打ち切る
        * (黙って詰めると、以降ずっとずれたまま流れ続ける)
        */
       if (size < HEADER || this.buffer.length - at < size) break;

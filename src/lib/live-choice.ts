@@ -40,7 +40,7 @@ export function readChoice(value: unknown, hidden: boolean): LiveChoice {
 }
 
 /** エンコード済みのコーデック (録画の観る画面で選ぶもの) */
-export type EncodedCodec = "av1" | "hevc" | "h264";
+type EncodedCodec = "av1" | "hevc" | "h264";
 
 /**
  * **「自動」の順。ライブ・追っかけ・録画の観る画面で、この 1 つで決める。** その画面で出せない形式
@@ -75,9 +75,9 @@ export function autoOrder(
  * **ライブと追っかけの「自動」の形式。** `autoOrder` の順で、使えるもの (`rawOk`・`av1`・`hevc`・`h264`) の先頭。どれも
  * 使えなければ null。
  *
- * `rawOk` は「この端末で MPEG-2 をデコードできて、まだ諦めていない」、`av1`・`hevc`・`h264` は「受け取れて (互換モードなら
- * 描けて)、まだ諦めていない」。`hevc` はそのうえでライブのエンコーダが GPU のとき (`server/viewing.ts` の
- * `ViewingOptions.hevc`)。追っかけと互換モードでは呼ぶ側が false にする。どれが諦められたかは呼ぶ側が持つ
+ * `rawOk` は「この端末で MPEG-2 をデコードできて、まだ打ち切っていない」、`av1`・`hevc`・`h264` は「受け取れて (互換モードなら
+ * 描けて)、まだ打ち切っていない」。`hevc` はそのうえでライブのエンコーダが GPU のとき (`server/viewing.ts` の
+ * `ViewingOptions.hevc`)。追っかけと互換モードでは呼ぶ側が false にする。どれをやめたかは呼ぶ側が持つ
  */
 export function autoCodec(o: {
   indoor: boolean;

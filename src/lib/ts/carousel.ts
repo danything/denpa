@@ -119,7 +119,25 @@ export class Carousel {
     if (this.pmt !== null) out.push(this.pmt);
     if (this.programInfo !== null) out.push(this.programInfo);
     for (const held of this.lists.values()) out.push(held);
-    for (const held of this.modules.values()) out.push(held);
+    for (const held of this.modules.values())
+      if (this.current(held)) out.push(held);
     return out;
+  }
+
+  /**
+   * いまの DII に載っている版のモジュールか。**DII から消えたものと、前のバージョンのものは配り直さない。**
+   * 受け側はモジュールのデータイベント番号しか突き合わせないので、渡すと古い中身を使う。DII がまだ来ていない
+   * コンポーネントのものは判断できないので渡す
+   */
+  private current(held: ResponseMessage): boolean {
+    if (held.type !== "moduleDownloaded") return true;
+    const list = this.lists.get(held.componentId);
+    if (list === undefined || list.type !== "moduleListUpdated") return true;
+    return (
+      list.dataEventId === held.dataEventId &&
+      list.modules.some(
+        (entry) => entry.id === held.moduleId && entry.version === held.version,
+      )
+    );
   }
 }

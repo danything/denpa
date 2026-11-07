@@ -86,9 +86,9 @@ interface CanvasOptions {
   background: boolean;
   /** 止めて始めるか */
   paused: boolean;
-  /** 繋ぎ直している・諦めた・戻った・混んでいて断られた */
+  /** 繋ぎ直している・打ち切った・戻った・混んでいて断られた */
   state(state: StreamState): void;
-  /** 描けなくなった (間に合わない・デコーダが転び続ける・音が来ない)。**画面がほかの方式へ移す** */
+  /** 描けなくなった (間に合わない・デコーダが失敗し続ける・音が来ない)。**画面がほかの方式へ移す** */
   gaveUp(reason: string): void;
   /** 外 (ロック画面・車の操作) から止められた・再開された */
   remote(paused: boolean): void;

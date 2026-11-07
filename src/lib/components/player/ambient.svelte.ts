@@ -35,7 +35,7 @@ export interface Ambient {
   glance: (size: GrabSize) => Promise<ImageBitmap | null> | null;
 }
 
-/** 縮めてもらう worker の返事を待つ長さ。詰まっていたら諦めて次の回に */
+/** 縮めてもらう worker の返事を待つ長さ。詰まっていたら打ち切って次の回に */
 const GLANCE_WAIT = 1_000;
 
 export function ambientMode(options: Options): Ambient {

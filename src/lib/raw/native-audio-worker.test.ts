@@ -81,7 +81,7 @@ test("前の局 (古い epoch) の断片は捨てる", () => {
   );
 });
 
-test("壊れたコマは飛ばし (放送の取りこぼし)、続けて 20 より多く壊れたら諦める", () => {
+test("壊れたコマは飛ばし (放送の取りこぼし)、続けて 20 より多く壊れたら打ち切る", () => {
   expect(audioSamples.length).toBeGreaterThan(21);
   // 先頭の 20 コマだけ壊れている → 飛ばして続ける
   posted.length = 0;
@@ -92,7 +92,7 @@ test("壊れたコマは飛ばし (放送の取りこぼし)、続けて 20 よ�
     audioSamples.length - 20,
   );
   expect(posted.some((m) => m.type === "error")).toBe(false);
-  // ずっと壊れている → 1 回だけ諦めを返し、あとは何も返さない
+  // ずっと壊れている → 1 回だけ打ち切りを返し、あとは何も返さない
   posted.length = 0;
   decoder.samples = () => -1;
   send(segment(false, 2));

@@ -98,7 +98,7 @@ export function snapshotter(controls: PlayerControls) {
      *   描いているときは worker から 1 枚もらう (`raw/engine.ts` の `grab`) ので、先に呼ぶと
      *   弾いた押しのぶんのフレーム (1080 で 8MB) が誰にも閉じられずに残る
      * @param caption 出している字幕の canvas。出していなければ null
-     * @param title 番組名 (端末に保存するときのファイル名の頭)
+     * @param title 番組名 (端末に保存するときのファイル名の先頭)
      * @param where どこで撮ったか (サーバが番組を引く)。押した瞬間の位置を読むので関数で
      * @param captions 出している字幕の文字 (探すため)。出していなければ空
      */

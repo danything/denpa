@@ -11,7 +11,7 @@
  *   `currentTime` で引いているので、そのまま合う
  * - 溜めるのは先 `AHEAD` 秒まで、後ろは `BEHIND` 秒まで。iPhone は溜められる量が小さい
  * - `ManagedMediaSource` (iPhone) は**送り込む頃合いをブラウザが言う**。言われていない間は読まない
- * - 切れたら観ていた位置からリクエストし直す (1 秒→2 秒→…10 秒で頭打ち、続けて 8 回で諦める)。
+ * - 切れたら観ていた位置からリクエストし直す (1 秒→2 秒→…10 秒で頭打ち、続けて 8 回で打ち切る)。
  *   観る画面の繋ぎ直し (`recover`) と同じ数
  * - **サーバが混んでいて断られたら (503) リクエストし直さない** (`busy`)。その場の変換の枠が埋まっている
  *   (`server/transcode.ts`)。待っても空くとは限らないので、画面がほかの形式を勧める
@@ -66,7 +66,7 @@ export interface StreamHeard {
  * - `busy`: サーバが混んでいて断られた。前のストリームのまま続けている
  * - `failed`: 繋がらなかった・待つ間に飛ばれた。前のストリームのまま続けている
  */
-export type SwitchResult = "switched" | "busy" | "failed";
+type SwitchResult = "switched" | "busy" | "failed";
 
 interface RemuxOptions {
   url: StreamUrl;
@@ -78,7 +78,7 @@ interface RemuxOptions {
   start: number;
   /** どの音声で始めるか */
   audio: string;
-  /** 繋ぎ直している・諦めた・戻った・混んでいて断られた */
+  /** 繋ぎ直している・打ち切った・戻った・混んでいて断られた */
   state(state: StreamState): void;
   /** 応答を受けるたびに呼ぶ */
   heard?(stream: StreamHeard): void;
