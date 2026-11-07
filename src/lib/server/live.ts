@@ -271,6 +271,8 @@ export function encodeArgs(
   const from = programSpec(program);
   return [
     "-hide_banner",
+    // 字幕の出口が名前付きパイプ (Windows) でも、あるかを確かめさせない (`stream.sideOutput`)
+    "-y",
     // 数字の進み具合だけ止める。`-loglevel` は下げられない (上の説明)
     "-nostats",
     // `-fflags nobuffer` は付けない。解析の間に読んだ I フレームを捨てて次の GOP を待つ (上の説明)

@@ -24,6 +24,10 @@ let sides = 0;
  * 読まずにいると、パイプが詰まったところで ffmpeg が止まる。そこで Windows では名前付きパイプを開けて待ち、
  * ffmpeg にはその名前を出口として渡す (ffmpeg は名前付きパイプをファイルと同じく開いて書く)。
  * 待ち受けはこの呼び出しの中で始まり、ffmpeg が出口を開くのは入力を読み始めたあとなので、起こすより先に開いている
+ *
+ * **ffmpeg には `-y` を付ける。** 付けないと ffmpeg は出口が既にあるかを `access` で確かめ、Windows ではそれが
+ * 名前付きパイプへの 1 本目の接続になる。受けるのは 1 本だけなので、本物の書き込みが開けずに
+ * 「Error opening output file」で降りる (ライブの字幕で起きた)
  */
 export function sideOutput(): SideOutput {
   if (process.platform !== "win32") {
