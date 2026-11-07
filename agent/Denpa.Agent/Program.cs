@@ -664,10 +664,6 @@ app.MapPost("/denpa/card/emm", async (HttpContext http) =>
         await Respond.Error(http, error.Message, 500);
     }
 });
-    {
-        await Respond.Error(http, error.Message, 500);
-    }
-});
 
 app.MapPost("/denpa/decode", async (HttpContext http) =>
 {

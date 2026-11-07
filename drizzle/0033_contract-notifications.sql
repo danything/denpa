@@ -7,4 +7,6 @@ CREATE TABLE `contract_notifications` (
 	`notified_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `contract_notifications_event_idx` ON `contract_notifications` (`card_id`,`service_id`,`event`,`valid_until`);
+CREATE UNIQUE INDEX `contract_notifications_event_idx` ON `contract_notifications` (`card_id`,`service_id`,`event`,`valid_until`);--> statement-breakpoint
+ALTER TABLE `card_contracts` ADD `source` text;--> statement-breakpoint
+ALTER TABLE `card_contracts` ADD `manual_state` text;

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bff50ab8-7817-4dd5-988e-0f2d4c8e454e",
-  "prevId": "3f656cf1-81ab-4984-89ce-d6284fed39ff",
+  "id": "3741635d-5588-4bcd-9f74-8b0e8c6d36e3",
+  "prevId": "b9ddda5d-53d0-4058-a9ab-9045ef6079ca",
   "tables": {
     "api_tokens": {
       "name": "api_tokens",
@@ -97,6 +97,13 @@
         },
         "source": {
           "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "manual_state": {
+          "name": "manual_state",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1946,6 +1953,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "epg_at": {
+          "name": "epg_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         }
       },

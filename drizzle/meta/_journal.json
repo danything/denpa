@@ -236,22 +236,8 @@
     {
       "idx": 33,
       "version": "6",
-      "when": 1793993086930,
+      "when": 1794070458726,
       "tag": "0033_contract-notifications",
-      "breakpoints": true
-    },
-    {
-      "idx": 34,
-      "version": "6",
-      "when": 1794023978429,
-      "tag": "0034_contract-source",
-      "breakpoints": true
-    },
-    {
-      "idx": 35,
-      "version": "6",
-      "when": 1794042880209,
-      "tag": "0035_contract-manual-state",
       "breakpoints": true
     }
   ]

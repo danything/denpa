@@ -1885,7 +1885,6 @@
           "notNull": false,
           "autoincrement": false
         }
-        }
       },
       "indexes": {},
       "foreignKeys": {},
