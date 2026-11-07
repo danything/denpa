@@ -144,11 +144,11 @@ export async function measureSignal(
         /*
          * 測り終えたら、ループを抜けてチューナーを放す前に読む。抜けるとストリームが閉じ、
          * エージェントはそのチューナーの C/N を返さなくなる。最初のパケットから MEASURE 経っているので、
-         * 選局からは読む間隔より長い
+         * 選局からは読む間隔より長い。ここで読んだ値を使い、パケットが届かないときの読みは待たない
+         * (まだ走っていなければ、チューナーを放したあとに走って null になるだけ)
          */
-        const early = tuned;
-        const last = await readSignal(use, stop);
-        tuned = last === null ? early : Promise.resolve(last);
+        tuned = readSignal(use, stop);
+        await tuned;
         break;
       }
     }
