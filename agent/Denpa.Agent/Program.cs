@@ -123,7 +123,7 @@ var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT
  */
 if (tls.Token.Length < 32)
 {
-    Log.Write($"AGENT_PAIR_TOKEN が短すぎます ({tls.Token.Length} 字)。推測されないよう 32 字以上の乱数にしてください (docs/agent.md)");
+    Log.Write($"合言葉 (AGENT_PAIR_TOKEN か {tls.Dir} の pair-token) が短すぎます ({tls.Token.Length} 字)。推測されないよう 32 字以上の乱数にしてください (docs/agent.md)");
 }
 // CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。Zd1j.cs)
 Zd1jBoard.Locks = new Zd1jLocks(config.Zd1jLocksFile);
@@ -594,7 +594,7 @@ app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
         var code = await Task.Run(() => Keys.Source.Confirm(verification, (ushort)date));
         await Respond.Write(http, new JsonObject { ["ok"] = true, ["code"] = code });
     }
-    catch (Exception error) when (error is IOException or InvalidOperationException)
+    catch (Exception error) when (error is IOException or InvalidOperationException or CardRefusedException)
     {
         await Respond.Error(http, error.Message, 500);
     }

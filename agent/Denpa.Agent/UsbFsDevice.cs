@@ -214,19 +214,6 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
         }
     }
 
-    /// <summary>IN を 1 回。時間切れは 0</summary>
-    private int Transfer(byte endpoint, Span<byte> buffer, int timeoutMs)
-    {
-        fixed (byte* start = buffer)
-        {
-            var transfer = new UsbFsPipe.BulkTransfer { Endpoint = endpoint, Length = (uint)buffer.Length, TimeoutMs = (uint)timeoutMs, Data = start };
-            var got = Sys.Ioctl(Fd, UsbFsPipe.Bulk, (nint)(&transfer));
-            if (got >= 0) return got;
-            if (Marshal.GetLastPInvokeError() == Etimedout) return 0;
-            throw Failure($"EP 0x{endpoint:X2} から読めません");
-        }
-    }
-
     private IOException Failure(string what) => Failure(Name, what, Marshal.GetLastPInvokeError());
 
     internal static IOException Failure(string name, string what, int errno) => errno switch

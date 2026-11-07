@@ -70,9 +70,18 @@ public static class Px4Userland
     /// </summary>
     public static string AliasOf(string serial, IEnumerable<string> places) => $"{serial}_{string.Join('_', places)}";
 
-    /// <summary>配布アーカイブを展開した場所 (Dockerfile)</summary>
+    /// <summary>配布アーカイブを展開した場所 (Linux は Dockerfile の <c>/opt</c>。Mac と Windows は <see cref="Beside"/>)</summary>
     public static string Dir =>
-        Environment.GetEnvironmentVariable("PX4_USERLAND_DIR") ?? "/opt/px4-userland";
+        Environment.GetEnvironmentVariable("PX4_USERLAND_DIR") ?? Beside("px4-userland", "/opt/px4-userland");
+
+    /// <summary>
+    /// 同梱物の既定の置き場。Linux (コンテナ) は <paramref name="linux"/>、Mac と Windows はインストーラと同じ
+    /// 実行ファイルの隣 (<c>bin/</c> の 1 つ上の <paramref name="name"/>)。常駐を止めて手で <c>--tune</c> を流したときに、
+    /// 環境変数を渡さなくても常駐と同じものを使う (Config の置き場と同じ考え)
+    /// </summary>
+    public static string Beside(string name, string linux) => OperatingSystem.IsLinux()
+        ? linux
+        : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", name));
 
     /// <summary>px4d / px4ctl の実行ファイル。Windows だけ <c>.exe</c> が付く (配布 zip の中身のまま)</summary>
     public static string Executable(string dir, string name) =>
@@ -85,12 +94,13 @@ public static class Px4Userland
     /// **Windows は <c>C:\denpa-run</c>** (install.ps1 が作る)。px4d はここを、持ち主が本人で、本人・SYSTEM・
     /// Administrators のほかに書ける人がいないときだけ使う。ユーザーのフォルダ (<c>%LOCALAPPDATA%</c>) の下に
     /// しないのは、ソケットのパスが UTF-8 で 108 バイトまでで、日本語のユーザー名だとすぐ溢れるのと、
-    /// 非 ASCII のパスだと px4d の ready の行が途切れる (px4-userland #52) から (<see cref="RuntimeProblem"/>)
+    /// 非 ASCII のパスだと px4d の ready の行が途切れる (px4-userland #52) から (<see cref="RuntimeProblem"/>)。
+    /// Mac は実行ファイルの隣の <c>run</c> (install.sh が作る)
     /// </para>
     /// </summary>
     public static string RuntimeDir =>
         Environment.GetEnvironmentVariable("PX4_RUNTIME_DIR")
-        ?? (OperatingSystem.IsWindows() ? @"C:\denpa-run" : "/run/px4-userland");
+        ?? (OperatingSystem.IsWindows() ? @"C:\denpa-run" : Beside("run", "/run/px4-userland"));
 
     /// <summary>
     /// ソケットのパスの上限 (UTF-8、末尾の NUL を入れて)。<c>sockaddr_un.sun_path</c> の大きさで、
@@ -488,7 +498,8 @@ public static class Px4Userland
             + (status != "open_failed" ? ""
                 // Windows の libusb は WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ
                 : OperatingSystem.IsWindows() ? $" ({WinUsbHint})"
-                : " (/dev/bus/usb を開く権限が無いかもしれません)"));
+                : OperatingSystem.IsLinux() ? " (/dev/bus/usb を開く権限が無いかもしれません)"
+                : " (別のプロセスが使っているかもしれません)"));
 
     /// <summary>Windows で筐体を開けないときの手当て</summary>
     private const string WinUsbHint =

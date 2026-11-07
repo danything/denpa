@@ -306,7 +306,7 @@ public static class Probe
         }
         catch (Exception error)
         {
-            Console.Error.WriteLine($"{found.Name}: {Zd1j.Reason(error)} ({started.ElapsedMilliseconds} ms)");
+            Console.Error.WriteLine($"{found.Name}: {UsbDevices.Reason(error)} ({started.ElapsedMilliseconds} ms)");
             return 1;
         }
         finally

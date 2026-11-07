@@ -52,7 +52,7 @@ public static class UsbDevices
 {
     /// <summary>
     /// 挿さっている機材を並べる (Windows・macOS)。**開かない。** Windows は WinUSB でないものも並ぶ (開けるかは開くまで分からない)。
-    /// Linux は呼ぶ側が sysfs で探すので空 (<see cref="Zd1j.Detect"/>)
+    /// Linux は呼ぶ側が sysfs で探すので空 (<see cref="Scan"/>)
     /// </summary>
     public static IReadOnlyList<UsbLocation> List(int vendor, int product)
     {
@@ -115,6 +115,60 @@ public static class UsbDevices
         if (OperatingSystem.IsMacOS()) return IoKitDevice.Open(found, vendor, product);
         throw new PlatformNotSupportedException();
     }
+
+    /// <summary>
+    /// Linux の sysfs から、<paramref name="identify"/> が見分けた機材のポートと機材。**開かない。**
+    /// カーネルのドライバが使っているものは <paramref name="warn"/> に出して並べない (usbfs はこちらが開いている印なので並べる)
+    /// </summary>
+    /// <param name="identify">ポートのディレクトリから機材を見分ける。違う機材なら null</param>
+    /// <param name="name">記録に出す機材の名前</param>
+    internal static List<(string Port, T Model)> Scan<T>(string sysfs, Func<string, T?> identify, Func<T, string> name, Action<string>? warn)
+        where T : class
+    {
+        var found = new List<(string, T)>();
+        if (!Directory.Exists(sysfs)) return found;
+        foreach (var dir in Directory.EnumerateFileSystemEntries(sysfs).Order(StringComparer.Ordinal))
+        {
+            var port = Path.GetFileName(dir);
+            if (!UsbSysfs.IsPort(port) || identify(dir) is not { } model) continue;
+            var driver = UsbSysfs.Driver(sysfs, port);
+            if (driver is not (null or "usbfs"))
+            {
+                warn?.Invoke($"{name(model)} {port} はカーネルのドライバ ({driver}) が使っているので使いません");
+                continue;
+            }
+            found.Add((port, model));
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// <c>--card</c> の差し込み口の行: ATR と、開いてから ATR までの時間。**見つからなくても 1 行出す**
+    /// (macOS・Windows で OS に見えていないのか、開けないのかを分けるため)。どんな例外でも行にして次へ進む
+    /// </summary>
+    /// <param name="model">見つからないときに出す機材の名前</param>
+    /// <param name="timed">ATR の行の時間が何を測ったか</param>
+    public static void DescribeCards(string model, string timed, IReadOnlyList<CardLinkCandidate> cards, TextWriter output)
+    {
+        if (cards.Count == 0) output.WriteLine($"{model}: 見つかりません");
+        foreach (var found in cards)
+        {
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                using var link = found.Open();
+                var atr = link.Reset();
+                output.WriteLine($"内蔵 {found.Name}: ATR {Convert.ToHexString(atr)} ({started.ElapsedMilliseconds} ms。{timed})");
+            }
+            catch (Exception error)
+            {
+                output.WriteLine($"内蔵 {found.Name}: {Reason(error)} ({started.ElapsedMilliseconds} ms)");
+            }
+        }
+    }
+
+    /// <summary>失敗の理由。IOException 以外 (読み込めないライブラリなど) は型の名前も付ける</summary>
+    public static string Reason(Exception error) => error is IOException ? error.Message : $"{error.GetType().Name}: {error.Message}";
 
     /// <summary>
     /// 端点の一覧を 1 行に (<c>EP 0x81 bulk 512 バイト、EP 0x83 interrupt 64 バイト</c>)。種類は USB の決まりの番号
