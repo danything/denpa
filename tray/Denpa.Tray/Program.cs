@@ -21,6 +21,7 @@ internal static unsafe partial class Program
     const string Url = "http://localhost:3000";
     const uint WmTrayIcon = 0x8000 + 1; // WM_APP + 1。アイコンの上のマウス
     const uint WmHealth = 0x8000 + 2; // WM_APP + 2。バックグラウンドで取得した様子を出す
+    const uint WmUpdate = 0x8000 + 3; // WM_APP + 3。更新の前に取得し直した様子で確かめる
     const int MenuOpen = 1, MenuUpdate = 2, MenuExit = 9;
 
     static nint hwnd, appIcon, warnIcon;
@@ -31,6 +32,9 @@ internal static unsafe partial class Program
     static volatile bool fetching;
     /// <summary>通知を出したバージョン。同じバージョンでは 1 回だけ出す</summary>
     static string? noticed;
+    /// <summary>更新の前に取得し直した様子。バックグラウンドのスレッドが書き、WmUpdate で画面のスレッドに渡す。取得している間は updating</summary>
+    static volatile Health? asked;
+    static bool updating;
 
     [STAThread]
     static int Main()
@@ -94,6 +98,10 @@ internal static unsafe partial class Program
                     return 0;
                 case WmHealth:
                     Apply();
+                    return 0;
+                case WmUpdate:
+                    updating = false;
+                    ConfirmAndUpdate(asked!);
                     return 0;
                 case 0x0113: // WM_TIMER
                     Fetch();
@@ -175,12 +183,27 @@ internal static unsafe partial class Program
 
     /// <summary>
     /// 更新する。確かめる前に様子を取得し直す (メニューを開いている間に録画やエンコードが始まることがある。
-    /// 答えなければ、メニューを開いたときの様子で確かめる)。録画中・エンコード中なら先に確かめ、選ばれたら install.ps1 を管理者の PowerShell で流す。
-    /// UAC で断られたら何もしない (ShellExecute がエラーを返すだけ)
+    /// 答えなければ、メニューを開いたときの様子で確かめる)。取得はバックグラウンドで、その間も画面のスレッドは止めない。
+    /// 取得し終えたら WmUpdate で ConfirmAndUpdate に渡す
     /// </summary>
     static void Update(Health opened)
     {
-        var now = Net.Get().GetAwaiter().GetResult() ?? opened;
+        if (updating) return;
+        updating = true;
+        // Net.Get は例外を出さない
+        _ = Net.Get().ContinueWith(t =>
+        {
+            asked = t.Result ?? opened;
+            PostMessageW(hwnd, WmUpdate, 0, 0);
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// 録画中・エンコード中なら先に確かめ、選ばれたら install.ps1 を管理者の PowerShell で流す。
+    /// UAC で断られたら何もしない (ShellExecute がエラーを返すだけ)
+    /// </summary>
+    static void ConfirmAndUpdate(Health now)
+    {
         if (Words.AskBeforeUpdate(now) is { } question &&
             MessageBoxW(hwnd, question, "denpa の更新", 0x1 /* MB_OKCANCEL */ | 0x20 /* MB_ICONQUESTION */ | 0x10000 /* MB_SETFOREGROUND */) != 1 /* IDOK */)
         {

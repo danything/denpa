@@ -335,14 +335,14 @@ SQLite が拒むので、事実と状態が食い違いません (文字列で�
 ## 通知領域・メニューバーのアプリ (`tray/`)
 
 同じ PC の denpa の `/api/health` を読み、動いているか・録画とエンコードの本数・新しいバージョンを出す小さなアプリ。
-エージェントと同じ zip・tar.gz に入れて配る。使い方は [install-windows.md](install-windows.md#通知領域のアイコン)。
+エージェントと同じ zip・tar.gz に入れて配る。使い方は [install-windows.md](install-windows.md#通知領域のアイコン) と [install-mac.md](install-mac.md#メニューバーのアプリ)。
 
-| ファイル                          | 役割                                                                                                                 |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `tray/Denpa.Tray/Program.cs`      | Windows の通知領域のアイコン (Native AOT。`Shell_NotifyIcon` を直に呼ぶ)。メニューと、install.ps1 を流す更新         |
-| `tray/Denpa.Tray/Health.cs`       | `/api/health` の読み方と、メニュー・通知・更新の前に確かめる文 (Win32 に触らないので `tray/Denpa.Tray.Tests` で試す) |
-| `tray/mac/Sources/denpa-tray/`    | Mac のメニューバーのアイコン (`NSStatusItem`)                                                                        |
-| `tray/mac/Sources/DenpaTrayCore/` | Mac の側の `/api/health` の読み方と文言 (Windows とそろえる。`swift test` で試す)                                    |
+| ファイル                          | 役割                                                                                                                                |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `tray/Denpa.Tray/Program.cs`      | Windows の通知領域のアイコン (Native AOT。`Shell_NotifyIcon` を直に呼ぶ)。メニューと、install.ps1 を流す更新                        |
+| `tray/Denpa.Tray/Health.cs`       | `/api/health` の読み方と、メニュー・通知・更新の前に確かめる文 (Win32 に触らないので `tray/Denpa.Tray.Tests` で試す)                |
+| `tray/mac/Sources/denpa-tray/`    | Mac のメニューバーのアイコン (`NSStatusItem`)。メニューと、install.sh をターミナルで流す更新                                        |
+| `tray/mac/Sources/DenpaTrayCore/` | Mac の側の `/api/health` の読み方と、メニュー・更新の前に確かめる文と更新に流すスクリプト (Windows とそろえる。`swift test` で試す) |
 
 ## テスト
 
