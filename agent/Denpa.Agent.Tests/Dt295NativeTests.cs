@@ -468,6 +468,8 @@ public class Dt295NativeTests
         {
             await Assert.That(text).Contains(expected);
         }
+        // カードは選局と並べて準備し、開き始めてからの時間を出す (偽の機材にカードは無いので、済んでいない)
+        await Assert.That(text).Contains("カード: 準備完了まで");
         // 受信の確認は周回と待ちの合計を補足に出す
         await Assert.That(text).Contains("周、周の間の待ち");
         // 待ちの合計は、7.1 の 130 ms と 7.2.2 の 140 ms を含む
@@ -550,6 +552,49 @@ public class Dt295NativeTests
         var again = Dt295NativeDevice.Acquire(port, () => Rig(), null, _ => { }, 2000);
         await Assert.That(again).IsNotSameReferenceAs(device);
         again.Release();
+        Dt295NativeDevice.CloseIfIdle(port);
+    }
+
+    [Test]
+    public async Task 同じ種別の選局し直しは頭の手順を省き_種別が替わるときは前の側を休ませる()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var device = Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000);
+        List<string> Tune(Action action)
+        {
+            var from = fake.I2cLog.Count;
+            action();
+            return fake.I2cLog.Skip(from).ToList();
+        }
+        var terrestrial = (Action)(() => device.Frontend.TuneTerrestrial(545143));
+        var satellite = (Action)(() => device.Frontend.TuneSatellite(1318000));
+
+        // 開いたあとの最初の地上波: 0B=01 (チューナーを動かす) が先頭に入る
+        var first = Tune(terrestrial);
+        await Assert.That(first).Contains("10 W FEC00B01");
+        // 続けて地上波: 0B=01 は前に地上波を選んでいるので入らない。12=01 と 20 ms の待ちは入る
+        var again = Tune(terrestrial);
+        await Assert.That(again).DoesNotContain("10 W FEC00B01");
+        await Assert.That(again).Contains("10 W FEC01201");
+        await Assert.That(again.Count).IsLessThan(first.Count);
+
+        // 衛星へ: 先に T 側を休ませ (復調 25=00・23=4D・03=90)、TS の出し元を衛星にする (T 復調 0E=77・0F=77)
+        var toSatellite = Tune(satellite);
+        await Assert.That(toSatellite).Contains("10 W 2500");
+        await Assert.That(toSatellite).Contains("10 W 0E77");
+        // 続けて衛星: T 側はもう休んでいるので休ませる表は入らない
+        var satelliteAgain = Tune(satellite);
+        await Assert.That(satelliteAgain).DoesNotContain("10 W 2500");
+        await Assert.That(satelliteAgain).Contains("10 W 0E77");
+
+        // 地上波へ戻る: 先に S 側を休ませる表 (S 復調 1C=AA ほか。仕様書 7.2.2。推定) が入り、0B=01 も入る
+        var back = Tune(terrestrial);
+        await Assert.That(back).Contains("11 W 1CAA");
+        await Assert.That(back).Contains("11 W 1728".Replace("1728", "1701"));
+        await Assert.That(back).Contains("10 W FEC00B01");
+
+        device.Release();
         Dt295NativeDevice.CloseIfIdle(port);
     }
 }

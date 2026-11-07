@@ -153,15 +153,7 @@ public static class Dt295
     public static CardLinkCandidate Card(string port)
     {
         var name = $"{Model} {port} Card Reader";
-        return new CardLinkCandidate(name, () =>
-        {
-            Dt295NativeDevice? device = null;
-            return new Dt295NativeCard(name, () => (device ??= Dt295NativeDevice.Acquire(port)).Link, () =>
-            {
-                device?.Release();
-                device = null;
-            }, error => device?.Fail(error));
-        }, Device(port));
+        return new CardLinkCandidate(name, () => new Dt295NativeCardHandle(name, Dt295NativeDevice.Acquire(port)), Device(port));
     }
 
     /// <summary><c>--card</c> の差し込み口の行 (<see cref="UsbDevices.DescribeCards"/>)</summary>

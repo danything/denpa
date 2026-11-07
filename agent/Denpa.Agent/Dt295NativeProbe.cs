@@ -19,9 +19,9 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Dt295NativeProbe
 {
-    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--trace]";
+    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--switch <チャンネル,…>] [--trace]";
 
-    internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, uint IdlePolls = Dt295NativeDevice.IdlePollsDefault, bool DemodDump = false);
+    internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, uint IdlePolls = Dt295NativeDevice.IdlePollsDefault, bool DemodDump = false, string[]? Switch = null);
 
     internal static Options? Parse(string[] args)
     {
@@ -33,7 +33,7 @@ public static class Dt295NativeProbe
         if (Value("--channel") is not { } channel || ChannelTable.Parse(channel) is not { } tuning) return null;
         var seconds = 5;
         if (args.Contains("--seconds") && !int.TryParse(Value("--seconds"), NumberStyles.None, CultureInfo.InvariantCulture, out seconds)) return null;
-        return seconds <= 0 ? null : new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), args.Contains("--trace"), args.Contains("--replug"), Value("--output"), DemodDump: args.Contains("--demod-dump"));
+        return seconds <= 0 ? null : new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), args.Contains("--trace"), args.Contains("--replug"), Value("--output"), DemodDump: args.Contains("--demod-dump"), Switch: Value("--switch")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     public static int Run(string[] args)
@@ -69,7 +69,8 @@ public static class Dt295NativeProbe
         try
         {
             var timeline = new Dt295Timeline();
-            return Execute(() => Dt295NativeDevice.Acquire(port, timeline), () => Dt295NativeDevice.CloseIfIdle(port), options, Console.Out, Console.Error, timeline);
+            return Execute(() => Dt295NativeDevice.Acquire(port, timeline), () => Dt295NativeDevice.CloseIfIdle(port), options, Console.Out, Console.Error, timeline,
+                () => Dt295.Card(port).Open());
         }
         finally
         {
@@ -78,7 +79,7 @@ public static class Dt295NativeProbe
     }
 
     /// <summary>機材を取って選局し、<see cref="Options.Duration"/> だけ受けて統計を出す。テストは偽の機材を取る関数と閉じる関数を渡す</summary>
-    internal static int Execute(Func<Dt295NativeDevice> acquire, Action? closeIdle, Options options, TextWriter output, TextWriter log, Dt295Timeline? timeline = null)
+    internal static int Execute(Func<Dt295NativeDevice> acquire, Action? closeIdle, Options options, TextWriter output, TextWriter log, Dt295Timeline? timeline = null, Func<ICardLink>? openCard = null)
     {
         var total = Stopwatch.StartNew();
         var process = Process.GetCurrentProcess();
@@ -102,6 +103,9 @@ public static class Dt295NativeProbe
         var firstRead = TimeSpan.MinValue;
         var lastRead = TimeSpan.Zero;
         long firstChunk = 0;
+        long mainControls = 0;
+        var mainCpu = TimeSpan.Zero;
+        long mainElapsed = 0;
         Dt295NativeDevice? device = null;
         Thread? reader = null;
         var stopReading = false;
@@ -183,6 +187,12 @@ public static class Dt295NativeProbe
                 for (var at = 0; at < dump.Length; at += 16) output.WriteLine($"  {at:X2}: {Convert.ToHexString(dump.AsSpan(at, 16))}");
             }
             Volatile.Write(ref stopReading, true);
+            mainControls = device?.Link.Controls ?? 0;
+            mainCpu = Cpu();
+            mainElapsed = total.ElapsedMilliseconds;
+            reader.Join(TimeSpan.FromSeconds(2));
+            if (device is not null) MeasureCard(device, firstTsMs, openCard, output);
+            if (options.Switch is { Length: > 0 } list) MeasureSwitches(tuner, device, options.Channel, options.Tuning, list, output);
         }
         catch (Exception error) when (error is IOException or TimeoutException or InvalidOperationException or ArgumentException
             or UnauthorizedAccessException or InvalidDataException)
@@ -191,10 +201,15 @@ public static class Dt295NativeProbe
             failed = true;
         }
         Volatile.Write(ref stopReading, true);
-        var controls = device?.Link.Controls ?? 0;
         tuner.Dispose();
         reader?.Join(TimeSpan.FromSeconds(2));
-        output.WriteLine($"制御転送: 合計 {controls} 回、ホストの CPU 時間 {(Cpu() - cpuStart).TotalMilliseconds:F0} ms、経過 {total.ElapsedMilliseconds} ms");
+        if (mainElapsed == 0)
+        {
+            mainControls = device?.Link.Controls ?? 0;
+            mainCpu = Cpu();
+            mainElapsed = total.ElapsedMilliseconds;
+        }
+        output.WriteLine($"制御転送: 合計 {mainControls} 回、ホストの CPU 時間 {(mainCpu - cpuStart).TotalMilliseconds:F0} ms、経過 {mainElapsed} ms");
         var receiving = firstRead == TimeSpan.MinValue ? TimeSpan.Zero : lastRead - firstRead;
         if (firstRead != TimeSpan.MinValue && receiving > TimeSpan.Zero)
         {
@@ -223,6 +238,63 @@ public static class Dt295NativeProbe
             timeline.Print(output);
         }
         return failed || stats.Bytes == 0 || problem is not null ? 1 : 0;
+    }
+
+    /// <summary>
+    /// カードの準備が選局と並んで済んだ時間と、ID を読むまでの時間を出す。時間は機材を開き始めてからで、最初の TS と同じ物差し。
+    /// ID は、準備済みのカードに Reset と BCas の読みをして得る (TS が届いたときに復号を始める場合にかかる時間)
+    /// </summary>
+    private static void MeasureCard(Dt295NativeDevice device, long firstTsMs, Func<ICardLink>? openCard, TextWriter output)
+    {
+        device.CardWarmTask?.Wait(TimeSpan.FromSeconds(5));
+        output.WriteLine($"カード: 準備完了まで {(device.CardReadyMs < 0 ? "済んでいない (カードが無いか失敗)" : $"{device.CardReadyMs} ms")} (機材を開き始めてから)、最初の TS まで {firstTsMs} ms (同じく)");
+        if (openCard is null) return;
+        try
+        {
+            var clock = Stopwatch.StartNew();
+            using var link = openCard();
+            link.Reset();
+            var reset = clock.ElapsedMilliseconds;
+            var init = BCas.Read(link);
+            var read = clock.ElapsedMilliseconds;
+            var ready = Math.Max(Math.Max(device.CardReadyMs, 0), firstTsMs);
+            output.WriteLine($"カードの ID: Reset {reset} ms、ID の読みまで {read} ms。TS が届いたときに復号を始めるなら、開き始めてから約 {ready + read} ms で ID が読める "
+                + $"(カード {string.Join(" / ", init.Ids.Select(id => id.ToString("D16")))}、CA_system_id 0x{init.CaSystemId:X4})");
+        }
+        catch (Exception error) when (error is IOException or TimeoutException or InvalidOperationException)
+        {
+            output.WriteLine($"カードの ID を読めませんでした: {error.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 同じ機材で続けて選局し直す時間を測る (機材を開いたままの選局し直しで、全部の初期化はしない)。種別が同じ (地上波どうし・衛星どうし) か替わるかも出す。
+    /// 時間は選局の呼び出しから最初の TS まで
+    /// </summary>
+    private static void MeasureSwitches(Dt295NativeTuner tuner, Dt295NativeDevice? device, string firstChannel, ChannelTable.Tuning firstTuning, string[] list, TextWriter output)
+    {
+        var previous = (Name: firstChannel, firstTuning.Satellite);
+        output.WriteLine("選局の切り替え (機材は開いたまま):");
+        foreach (var name in list)
+        {
+            if (ChannelTable.Parse(name) is not { } tuning)
+            {
+                output.WriteLine($"  {name}: 選局表にありません");
+                continue;
+            }
+            var controls = device?.Link.Controls ?? 0;
+            var clock = Stopwatch.StartNew();
+            try
+            {
+                tuner.Tune(tuning, tuning.StreamId);
+                output.WriteLine($"  {previous.Name} → {name} ({(previous.Satellite == tuning.Satellite ? "同じ種別" : "種別が替わる")}): {clock.ElapsedMilliseconds} ms、制御転送 {(device?.Link.Controls ?? 0) - controls} 回");
+            }
+            catch (Exception error) when (error is IOException or InvalidOperationException or TimeoutException)
+            {
+                output.WriteLine($"  {previous.Name} → {name}: 失敗 ({error.Message}。{clock.ElapsedMilliseconds} ms)");
+            }
+            previous = (name, tuning.Satellite);
+        }
     }
 }
 

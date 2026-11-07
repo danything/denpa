@@ -38,12 +38,54 @@ public sealed class Dt295NativeDevice
     /// <summary>時間の内訳を取るとき (--dt295-probe)。取らなければ null</summary>
     internal Dt295Timeline? Timeline { get; }
 
+    /// <summary>
+    /// この機材の差し込み口のカード。**機材を開いている間は電源が入ったまま**で、機材を閉じるときに切る。
+    /// 電源投入から ATR・T=1 までは選局と並べて準備する (<see cref="WarmCard"/>)
+    /// </summary>
+    public Dt295NativeCard Card { get; }
+
+    private readonly Stopwatch _opened;
+    private Task? _cardWarm;
+
+    /// <summary>カードの準備が済むまでの時間 (ms。機材を開き始めてから)。済んでいなければ -1</summary>
+    public long CardReadyMs { get; private set; } = -1;
+
+    /// <summary>カードの準備を進めている仕事 (まだ始めていなければ null)</summary>
+    public Task? CardWarmTask => _cardWarm;
+
+    /// <summary>
+    /// カードの電源投入から ATR・T=1 の話し方の取り決めまでを、別のスレッドで始める (1 台に 1 回)。選局の待ち (仕様書の固定の待ち) と
+    /// 受信の確認の周回の間に進むので、TS が届くころにはカードが使える。制御転送と機材のプログラムへの要求は 1 つずつ通る (<c>Dt295NativeLink</c>) ので、
+    /// 選局の I2C の手順と交互に入る。カードが無ければ記録に残して終わる (使うときの <see cref="Dt295NativeCard.Reset"/> がもう一度試す)
+    /// </summary>
+    public void WarmCard()
+    {
+        lock (_gate)
+        {
+            if (_cardWarm is not null) return;
+            _cardWarm = Task.Run(() =>
+            {
+                try
+                {
+                    Card.Reset();
+                    CardReadyMs = _opened.ElapsedMilliseconds;
+                }
+                catch (Exception error) when (error is IOException or TimeoutException or ObjectDisposedException)
+                {
+                    Log.Write($"[{Dt295.Model} {Port}] カードの準備ができませんでした ({error.Message})");
+                }
+            });
+        }
+    }
+
     /// <summary>設定の書き込みにかかった時間と、そのときの制御転送の数 (記録と比較用)</summary>
     public (TimeSpan Time, long Controls) SetUp { get; }
 
     private Dt295NativeDevice(string port, IUsbDevice usb, Dt295NativeLink link, Dt295NativeBoard board, Dt295NativeFrontend frontend,
-        Stack<(string, Action)> undo, (TimeSpan, long) setUp, uint idlePolls, Dt295Timeline? timeline)
+        Stack<(string, Action)> undo, (TimeSpan, long) setUp, uint idlePolls, Dt295Timeline? timeline, Stopwatch opened, Action<int>? sleep)
     {
+        _opened = opened;
+        Card = new Dt295NativeCard($"{Dt295.Model} {port} Card Reader", () => link, delay: sleep);
         Port = port;
         Usb = usb;
         Link = link;
@@ -118,6 +160,7 @@ public sealed class Dt295NativeDevice
     private static Dt295NativeDevice Open(string port, Func<IUsbDevice> open, Action<int>? sleep, uint idlePolls, Dt295Timeline? timeline)
     {
         using var opening = timeline.Step("機材を開いて設定する");
+        var opened = Stopwatch.StartNew();
         IUsbDevice usb;
         using (timeline.Step("USB を開く")) usb = open();
         var link = new Dt295NativeLink(usb);
@@ -161,7 +204,7 @@ public sealed class Dt295NativeDevice
             }
             using (timeline.Step("復調とチューナーの初期化 (INITIALIZE の I2C)", "仕様書 7.1")) frontend.Initialize();
             undo.Push(("地上波側を休ませる", frontend.RestTerrestrial));
-            return new Dt295NativeDevice(port, usb, link, board, frontend, undo, (clock.Elapsed, link.Controls), idlePolls, timeline);
+            return new Dt295NativeDevice(port, usb, link, board, frontend, undo, (clock.Elapsed, link.Controls), idlePolls, timeline, opened, sleep);
         }
         catch
         {
@@ -253,6 +296,15 @@ public sealed class Dt295NativeDevice
         {
             if (_closed) return;
             _closed = true;
+            // カードの電源を切る (準備の仕事が進んでいれば、終わるのを少し待つ)
+            try
+            {
+                _cardWarm?.Wait(TimeSpan.FromSeconds(3));
+            }
+            catch (AggregateException)
+            {
+            }
+            Card.Dispose();
             Undo(_undo, Link, Port);
             Usb.Dispose();
             Log.Write($"[{Dt295.Model} {Port}] 閉じました");
