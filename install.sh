@@ -443,9 +443,13 @@ mac_stop_tray() {
 # 出すのは本体の様子と新しいバージョンで、更新はメニューから人が選んだときにこの install.sh を Terminal で流す (docs/install-mac.md)。
 # KeepAlive は付けない (メニューの「終了」で終えたら、次のログインまで出さない)。
 # sudo を流した人がログインしていれば (gui のドメインがあれば) ここで起こす。無ければ次のログインを待つ。
-# tar.gz に入っていなければ (DENPA_VERSION でメニューバーのアプリより前のバージョンを入れたとき) 載せない
+# tar.gz に入っていなければ (DENPA_VERSION でメニューバーのアプリより前のバージョンを入れたとき) 載せず、前に載せたものも消す
+# (残すと、ログインのたびに launchd が無い実行ファイルを起こそうとする)
 mac_register_tray() {
-  [ -x "$PREFIX/bin/denpa-tray" ] || return 0
+  if [ ! -x "$PREFIX/bin/denpa-tray" ]; then
+    rm -f "$TRAY_PLIST"
+    return 0
+  fi
   mkdir -p /Library/LaunchAgents
   cat > "$TRAY_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

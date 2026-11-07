@@ -76,6 +76,8 @@ public class HealthTests
     [Test]
     public async Task エンコード中はやり直しになると言って確かめる()
     {
+        await Assert.That(Words.AskBeforeUpdate(new Health("v2.30.0", "v2.31.0", 0, 1))).IsEqualTo(
+            "エンコード中です (1 本)。更新するとエンコードを中断し、更新のあとで最初からやり直します。\n\n更新しますか");
         var question = Words.AskBeforeUpdate(new Health("v2.30.0", "v2.31.0", 1, 2));
         await Assert.That(question).IsEqualTo(
             "録画中です (1 本)。録画が終わるまで待ってから入れ替えます。\n" +

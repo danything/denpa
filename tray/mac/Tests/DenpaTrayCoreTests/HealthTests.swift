@@ -58,6 +58,10 @@ final class HealthTests: XCTestCase {
             "録画中です (1 本)。録画が終わるまで待ってから入れ替えます。\n\n更新しますか"
         )
         XCTAssertEqual(
+            Words.askBeforeUpdate(Health(version: "v2.30.0", latest: "v2.31.0", recording: 0, encoding: 1)),
+            "エンコード中です (1 本)。更新するとエンコードを中断し、更新のあとで最初からやり直します。\n\n更新しますか"
+        )
+        XCTAssertEqual(
             Words.askBeforeUpdate(Health(version: "v2.30.0", latest: "v2.31.0", recording: 1, encoding: 2)),
             "録画中です (1 本)。録画が終わるまで待ってから入れ替えます。\n"
                 + "エンコード中です (2 本)。更新するとエンコードを中断し、更新のあとで最初からやり直します。\n\n更新しますか"
