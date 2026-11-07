@@ -141,7 +141,7 @@
       : tuner.signal;
 
   /**
-   * C/N の出し方。**生の値は dB と読まれないように「(生の値)」を付け、単位を付けない** (機材のレジスタの値。docs/tuners.md「信号レベル」)。
+   * C/N の出し方。**生の値は dB と読まれないように「(生の値)」を付け、単位を付けない** (機材やドライバが返した値のまま。docs/tuners.md「信号レベル」)。
    * 選局したときに測った値 (px4d) はそう言う
    */
   function signalText(signal: TunerSignal): string {
