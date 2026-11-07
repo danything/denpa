@@ -24,6 +24,7 @@ const A: HwDevice = {
   nvenc: [],
   qsv: [],
   amf: [],
+  videotoolbox: [],
   cqp: [],
   full: [],
 };
@@ -35,6 +36,7 @@ const B: HwDevice = {
   nvenc: [],
   qsv: [],
   amf: [],
+  videotoolbox: [],
   cqp: [],
   full: [],
 };
@@ -61,6 +63,7 @@ describe("GPU の方式の選び方", () => {
         nvenc: [],
         qsv: [],
         amf: [],
+        videotoolbox: [],
       },
       [B.path]: {
         vaapi: ["h264" as const],
@@ -68,6 +71,7 @@ describe("GPU の方式の選び方", () => {
         nvenc: [],
         qsv: [],
         amf: [],
+        videotoolbox: [],
       },
     };
     expect(hwChain("h264", allow, 0, [A, B])).toEqual([
@@ -81,7 +85,14 @@ describe("GPU の方式の選び方", () => {
       hwChain(
         "av1",
         {
-          [B.path]: { vaapi: ["av1"], rkmpp: [], nvenc: [], qsv: [], amf: [] },
+          [B.path]: {
+            vaapi: ["av1"],
+            rkmpp: [],
+            nvenc: [],
+            qsv: [],
+            amf: [],
+            videotoolbox: [],
+          },
         },
         0,
         [B],
@@ -198,7 +209,16 @@ describe("ライブを GPU でエンコードする経路", () => {
     expect(
       liveHw(
         "h264",
-        { [A.path]: { vaapi: [], rkmpp: [], nvenc: [], qsv: [], amf: [] } },
+        {
+          [A.path]: {
+            vaapi: [],
+            rkmpp: [],
+            nvenc: [],
+            qsv: [],
+            amf: [],
+            videotoolbox: [],
+          },
+        },
         0,
         [A],
       ),
@@ -279,6 +299,7 @@ describe("Rockchip MPP", () => {
     nvenc: [],
     qsv: [],
     amf: [],
+    videotoolbox: [],
     cqp: [],
     full: [],
   };
@@ -297,7 +318,16 @@ describe("Rockchip MPP", () => {
     expect(
       hwChain(
         "h264",
-        { [R.path]: { vaapi: [], rkmpp: [], nvenc: [], qsv: [], amf: [] } },
+        {
+          [R.path]: {
+            vaapi: [],
+            rkmpp: [],
+            nvenc: [],
+            qsv: [],
+            amf: [],
+            videotoolbox: [],
+          },
+        },
         0,
         [R],
       ),
@@ -377,6 +407,7 @@ describe("NVIDIA NVENC", () => {
     nvenc: ["av1", "h264"],
     qsv: [],
     amf: [],
+    videotoolbox: [],
     gpu: 0,
     cqp: [],
     full: [],
@@ -387,6 +418,7 @@ describe("NVIDIA NVENC", () => {
     nvenc: ["h264"],
     qsv: [],
     amf: [],
+    videotoolbox: [],
     gpu: 1,
   };
 
@@ -422,7 +454,14 @@ describe("NVIDIA NVENC", () => {
       hwChain(
         "h264",
         {
-          [N0.path]: { vaapi: [], rkmpp: [], nvenc: ["av1"], qsv: [], amf: [] },
+          [N0.path]: {
+            vaapi: [],
+            rkmpp: [],
+            nvenc: ["av1"],
+            qsv: [],
+            amf: [],
+            videotoolbox: [],
+          },
         },
         0,
         [N0],
@@ -611,11 +650,60 @@ describe("Windows の QSV・AMF", () => {
       nvenc: [],
       qsv: ["h264"],
       amf: [],
+      videotoolbox: [],
       gpu: 1,
       cqp: [],
       full: [],
     };
     expect(liveHw("h264", {}, 0, [gpu])).toEqual({ way: Q, full: false });
+  });
+});
+
+describe("Mac の VideoToolbox", () => {
+  const V: HwWay = { device: "videotoolbox", kind: "videotoolbox" };
+  const picture = { height: 1080, smooth: true };
+
+  test("録画は画質を取る指定で、表のビットレートを渡す。H.264 は High", () => {
+    const bps = hwBitrate("h264", picture);
+    const args = hwArgs(V, "h264", picture);
+    expect(args.device).toEqual([]);
+    expect(args.filter).toEqual(["format=nv12"]);
+    expect(args.encoder).toEqual([
+      "h264_videotoolbox",
+      "-profile:v",
+      "high",
+      "-prio_speed",
+      "0",
+      "-bf",
+      "2",
+      "-b:v",
+      String(bps),
+      "-maxrate",
+      String(bps * 2),
+      "-g",
+      "250",
+    ]);
+    // H.265 は既定の Main のまま。ソフトウェアのエンコーダに倒れる指定 (-allow_sw) は渡さない
+    const hevc = hwArgs(V, "hevc", picture).encoder;
+    expect(hevc[0]).toBe("hevc_videotoolbox");
+    expect(hevc).not.toContain("-profile:v");
+    expect(hevc).not.toContain("-allow_sw");
+  });
+
+  test("ライブは実時間の速い指定で B フレームを作らず、段を下げたときは上限も段の値", () => {
+    const live = liveHwArgs({ way: V, full: false }, "hevc");
+    const bps = hwBitrate("hevc", { height: 1080, smooth: true });
+    expect(live.input).toEqual([]);
+    expect(live.encoder.join(" ")).toBe(
+      `hevc_videotoolbox -realtime 1 -prio_speed 1 -b:v ${bps} -maxrate ${bps * 2} -bf 0`,
+    );
+    const capped = liveHwArgs({ way: V, full: false }, "h264", {
+      height: 540,
+      bps: 2_000_000,
+    });
+    expect(capped.encoder.join(" ")).toBe(
+      "h264_videotoolbox -profile:v high -realtime 1 -prio_speed 1 -b:v 2000000 -maxrate 2000000 -bf 0",
+    );
   });
 });
 
@@ -632,6 +720,7 @@ describe("H.265 (GPU でだけ)", () => {
     nvenc: [],
     qsv: [],
     amf: [],
+    videotoolbox: [],
     cqp: [],
     full: [],
   };
@@ -643,6 +732,7 @@ describe("H.265 (GPU でだけ)", () => {
     nvenc: ["hevc", "h264"],
     qsv: [],
     amf: [],
+    videotoolbox: [],
     gpu: 0,
   };
 

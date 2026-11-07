@@ -21,6 +21,7 @@ const A: HwUsable = {
   nvenc: [],
   qsv: [],
   amf: [],
+  videotoolbox: [],
 };
 /** AV1 をエンコードできない (Arc より前) */
 const B: HwUsable = {
@@ -30,6 +31,7 @@ const B: HwUsable = {
   nvenc: [],
   qsv: [],
   amf: [],
+  videotoolbox: [],
 };
 /** Rockchip MPP (`/dev/mpp_service`)。H.264 だけ */
 const R: HwUsable = {
@@ -39,6 +41,7 @@ const R: HwUsable = {
   nvenc: [],
   qsv: [],
   amf: [],
+  videotoolbox: [],
 };
 
 describe("エンコーダの選択", () => {
@@ -60,6 +63,7 @@ describe("エンコーダの選択", () => {
       nvenc: ["av1", "hevc", "h264"],
       qsv: ["av1", "hevc", "h264"],
       amf: ["av1", "hevc", "h264"],
+      videotoolbox: ["av1", "hevc", "h264"],
     });
   });
 
@@ -79,13 +83,21 @@ describe("エンコーダの選択", () => {
       nvenc: ["av1", "hevc", "h264"],
       qsv: ["av1", "hevc", "h264"],
       amf: ["av1", "hevc", "h264"],
+      videotoolbox: ["av1", "hevc", "h264"],
     });
   });
 
   test("H.265 のエンコーダを選んでも、ほかのコーデックの印は崩さない。並びは AV1 → H.265 → H.264", () => {
     // A は H.264 だけ GPU、AV1 はソフトウェアにしてある。H.265 を B だけに寄せる
     const allow: HwAllow = {
-      [A.path]: { vaapi: ["h264"], rkmpp: [], nvenc: [], qsv: [], amf: [] },
+      [A.path]: {
+        vaapi: ["h264"],
+        rkmpp: [],
+        nvenc: [],
+        qsv: [],
+        amf: [],
+        videotoolbox: [],
+      },
     };
     const C: HwUsable = {
       ...A,
@@ -106,12 +118,20 @@ describe("エンコーダの選択", () => {
       nvenc: [],
       qsv: [],
       amf: [],
+      videotoolbox: [],
     });
   });
 
   test("すでに選んであるデバイスは、印をそのままにする", () => {
     const allow: HwAllow = {
-      [A.path]: { vaapi: ["av1"], rkmpp: [], nvenc: [], qsv: [], amf: [] },
+      [A.path]: {
+        vaapi: ["av1"],
+        rkmpp: [],
+        nvenc: [],
+        qsv: [],
+        amf: [],
+        videotoolbox: [],
+      },
     };
     expect(hwChoice(allow, [A], "av1")).toBe(A.path);
     expect(chooseHw(allow, [A], "av1", A.path)).toEqual(allow);
@@ -125,6 +145,7 @@ describe("エンコーダの選択", () => {
         nvenc: [],
         qsv: [],
         amf: [],
+        videotoolbox: [],
       },
     };
     expect(
@@ -135,6 +156,7 @@ describe("エンコーダの選択", () => {
       nvenc: [],
       qsv: [],
       amf: [],
+      videotoolbox: [],
     });
   });
 });

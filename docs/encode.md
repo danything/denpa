@@ -403,14 +403,14 @@ GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.prob
   VA-API は無いためです。H.265・AV1 の QSV が Arc で落ちたのは Linux で、Windows のドライバでは確かめていません。
   通らなければ、その GPU のそのコーデックは試しのエンコードで外れます
 - **CM を切る境目のキーフレームは `-forced_idr 1` を足します** (QSV・AMF。NVENC は `-forced-idr 1`)。3 つとも H.264・H.265・AV1 の全部が持つオプションで、
-  CI の `tests/windows-smoke.ts` が組み込んだ ffmpeg の `-h encoder=…` で確かめています
+  CI の `tests/native-smoke.ts` が組み込んだ ffmpeg の `-h encoder=…` で確かめています
 - **ライブは低遅延の速い段にします** (`hwenc.liveHwArgs`)。QSV は `-preset veryfast -bf 0 -async_depth 1` (ICQ は録画と同じ値。回線に合わせて
   段を下げたときは VBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。デコードとインタレ解除は CPU のままです
   (GPU に寄せるのは VA-API だけ)。映像が出る前に降りれば、Linux と同じくソフトウェアでエンコードし直し、その方式を 15 分外します
 - **QSV は GPU を `-init_hw_device qsv=…,child_device=<番号>,child_device_type=d3d11va` で選び**、CPU で作ったフレームを `hwupload` で渡します。
   **AMF は `-init_hw_device d3d11va=…:<番号>` で開いたデバイスを使います**
 
-**CI** (test.yml の `server-windows`) は GPU の無いランナーで、`tests/windows-smoke.ts` が次の 3 つを確かめます。
+**CI** (test.yml の `server-windows`) は GPU の無いランナーで、`tests/native-smoke.ts` が次の 3 つを確かめます。
 `ffmpeg -encoders` に h264・hevc・av1 の `_nvenc`・`_qsv`・`_amf` の 9 つが出ること、denpa が渡すオプションを各エンコーダが持つこと、
 試しのエンコードが全部落ちて GPU の方式が 0 になること (録画もライブもソフトウェアに戻る)。単体テストは `hwenc-probe.test.ts` が
 Windows の探し方 (GPU 無し・NVIDIA と Intel の 2 枚) を偽の ffmpeg の返事で流します。

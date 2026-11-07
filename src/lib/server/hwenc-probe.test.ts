@@ -225,6 +225,7 @@ test("/dev/mpp_service があれば、別の行で H.264 と H.265 だけ MPP �
       nvenc: [],
       qsv: [],
       amf: [],
+      videotoolbox: [],
       full: [],
     });
     const tried = calls.filter((argv) =>
@@ -275,6 +276,7 @@ test("NVIDIA の GPU は 1 枚ずつ別の行で NVENC を試し、GPU の番号
       nvenc: ["hevc", "h264"],
       qsv: [],
       amf: [],
+      videotoolbox: [],
       full: [],
     });
     expect(n1).toMatchObject({
@@ -282,6 +284,7 @@ test("NVIDIA の GPU は 1 枚ずつ別の行で NVENC を試し、GPU の番号
       nvenc: ["av1", "hevc", "h264"],
       qsv: [],
       amf: [],
+      videotoolbox: [],
     });
     // GPU の番号はデバイスファイルの並びの位置。デバイスファイルは ffmpeg に渡さない
     const tried = calls.filter((argv) =>
@@ -352,6 +355,7 @@ test("Windows は NVENC・QSV・AMF を番号ごとに試し、通った番号�
     nvenc: ["hevc", "h264"],
     qsv: [],
     amf: [],
+    videotoolbox: [],
   });
   expect(devices[1]).toMatchObject({
     label: "qsv1 (Intel)",
@@ -372,4 +376,48 @@ test("Windows は NVENC・QSV・AMF を番号ごとに試し、通った番号�
   const lines = calls.map((argv) => argv.join(" "));
   expect(lines.filter((l) => l.includes("_amf"))).toHaveLength(4);
   expect(lines.some((l) => l.includes("hevc_amf"))).toBe(false);
+});
+
+/** Mac の探し方 (`probeMac`)。Windows と同じく OS の名前だけ差し替える */
+async function onMac<T>(body: () => Promise<T>): Promise<T> {
+  const before = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", { value: "darwin" });
+  try {
+    return await body();
+  } finally {
+    Object.defineProperty(process, "platform", before);
+  }
+}
+
+test("Mac でハードウェアのエンコーダが見えなければ、行は 0 でソフトウェアにする", async () => {
+  answer = () => 1;
+  calls.length = 0;
+  const { devices, message } = await onMac(() => probe());
+  expect(devices).toEqual([]);
+  expect(liveHw("hevc", {}, 0, devices)).toBeNull();
+  expect(message).toContain("ソフトウェアでエンコードします");
+  // VideoToolbox の H.265 と H.264 だけを試す (AV1 のエンコーダは無い)。/dev の探し方は使わない
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(lines).toHaveLength(2);
+  expect(lines.every((l) => /(hevc|h264)_videotoolbox/.test(l))).toBe(true);
+});
+
+test("Mac は VideoToolbox の 1 行で、通ったコーデックだけ使う", async () => {
+  answer = (argv) => (argv.join(" ").includes("hevc_videotoolbox") ? 1 : 0);
+  const { devices, message } = await onMac(() => probe());
+  expect(devices).toHaveLength(1);
+  expect(devices[0]).toMatchObject({
+    path: "videotoolbox",
+    label: "videotoolbox (Apple)",
+    videotoolbox: ["h264"],
+    vaapi: [],
+  });
+  expect(describeDevice(devices[0]!)).toBe("VideoToolbox: H.264");
+  expect(message).toBe(
+    "デバイスが 1 個見つかり、1 個で GPU エンコードできます",
+  );
+  expect(hwChain("h264", {}, 0, devices)).toEqual([
+    { device: "videotoolbox", kind: "videotoolbox" },
+  ]);
+  expect(hwChain("hevc", {}, 0, devices)).toEqual([]);
 });

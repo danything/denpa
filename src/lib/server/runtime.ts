@@ -15,7 +15,7 @@ import { pruneHistory, reconcile } from "./files";
 import { probe } from "./hwenc";
 import { attend } from "./live";
 import { reconcile as logoReconcile, ride, sweep } from "./logo";
-import { checkPower } from "./power";
+import { checkPower, forgetWake } from "./power";
 import { activeRecordingIds, recoverOrphanedRecordings } from "./recorder";
 import { restoreWidths } from "./restore-width";
 import { fillSatellites } from "./satellite-lineup";
@@ -178,8 +178,8 @@ export function start(): void {
   });
 
   /*
-   * **Windows では、録画・視聴・エンコードの間スリープさせず、次の録画の前にスリープから起こす** (power.ts)。
-   * Windows 以外では何もしない
+   * **Windows と Mac では、録画・視聴・エンコードの間スリープさせず、次の録画の前にスリープから起こす** (power.ts)。
+   * ほかの OS では何もしない
    */
   nowAndEvery(POWER_CHECK, "power", checkPower);
 
@@ -316,6 +316,8 @@ function stop(): void {
   timers.length = 0;
   unlisten?.();
   unlisten = null;
+  // Mac: 録画の前に起こす予約を取り消す (止まった本体のために起こさない。power.ts)
+  forgetWake();
   started = false;
 }
 

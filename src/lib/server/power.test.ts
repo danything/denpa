@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { HOLD_BEFORE, shouldHold, wakeTaskXml } from "./power.js";
+import { cfAbsoluteTime } from "./awake.js";
+import { HOLD_BEFORE, shouldHold, wakeSecond, wakeTaskXml } from "./power.js";
 
 const idle = {
   recording: false,
@@ -35,5 +36,18 @@ describe("wakeTaskXml", () => {
     expect(xml).toContain("<WakeToRun>true</WakeToRun>");
     // SYSTEM で動かす (denpa 本体と同じ)
     expect(xml).toContain("<UserId>S-1-5-18</UserId>");
+  });
+});
+
+describe("Mac の起こす予約", () => {
+  test("時刻は秒にそろえる (取り消すときに置いたときと同じ時刻を渡すため)", () => {
+    expect(wakeSecond(Date.UTC(2026, 10, 7, 11, 58, 30, 999))).toBe(
+      Date.UTC(2026, 10, 7, 11, 58, 30),
+    );
+  });
+
+  test("CoreFoundation の時刻は 2001-01-01 (UTC) からの秒", () => {
+    expect(cfAbsoluteTime(Date.UTC(2001, 0, 1))).toBe(0);
+    expect(cfAbsoluteTime(Date.UTC(2001, 0, 1, 0, 1, 0, 500))).toBe(60.5);
   });
 });

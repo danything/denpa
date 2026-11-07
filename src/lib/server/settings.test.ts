@@ -101,12 +101,26 @@ describe("録画とライブのエンコーダ", () => {
   test("別々に保存して読み返す", () => {
     saveSettings({
       hwAllow: {
-        [device]: { vaapi: ["av1"], rkmpp: [], nvenc: [], qsv: [], amf: [] },
+        [device]: {
+          vaapi: ["av1"],
+          rkmpp: [],
+          nvenc: [],
+          qsv: [],
+          amf: [],
+          videotoolbox: [],
+        },
       },
     });
     saveSettings({
       liveHwAllow: {
-        [device]: { vaapi: ["h264"], rkmpp: [], nvenc: [], qsv: [], amf: [] },
+        [device]: {
+          vaapi: ["h264"],
+          rkmpp: [],
+          nvenc: [],
+          qsv: [],
+          amf: [],
+          videotoolbox: [],
+        },
       },
     });
     expect(settings().hwAllow[device]?.vaapi).toEqual(["av1"]);
