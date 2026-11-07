@@ -68,7 +68,8 @@ public static class Dt295NativeProbe
         }
         try
         {
-            return Execute(() => Dt295NativeDevice.Acquire(port), () => Dt295NativeDevice.CloseIfIdle(port), options, Console.Out, Console.Error);
+            var timeline = new Dt295Timeline();
+            return Execute(() => Dt295NativeDevice.Acquire(port, timeline), () => Dt295NativeDevice.CloseIfIdle(port), options, Console.Out, Console.Error, timeline);
         }
         finally
         {
@@ -77,7 +78,7 @@ public static class Dt295NativeProbe
     }
 
     /// <summary>機材を取って選局し、<see cref="Options.Duration"/> だけ受けて統計を出す。テストは偽の機材を取る関数と閉じる関数を渡す</summary>
-    internal static int Execute(Func<Dt295NativeDevice> acquire, Action? closeIdle, Options options, TextWriter output, TextWriter log)
+    internal static int Execute(Func<Dt295NativeDevice> acquire, Action? closeIdle, Options options, TextWriter output, TextWriter log, Dt295Timeline? timeline = null)
     {
         var total = Stopwatch.StartNew();
         var process = Process.GetCurrentProcess();
@@ -97,6 +98,10 @@ public static class Dt295NativeProbe
         var problem = (string?)null;
         long firstTsMs = -1;
         var streaming = TimeSpan.Zero;
+        // 平均の Mbps は、最初に読めた時刻から最後に読めた時刻までで割る (最初の読みのぶんは除く)。窓の秒数や止めるまでの読みには左右されない
+        var firstRead = TimeSpan.MinValue;
+        var lastRead = TimeSpan.Zero;
+        long firstChunk = 0;
         Dt295NativeDevice? device = null;
         Thread? reader = null;
         var stopReading = false;
@@ -132,6 +137,13 @@ public static class Dt295NativeProbe
                             return;
                         }
                         file?.Write(buffer, 0, got);
+                        var now = reading.Elapsed;
+                        if (firstRead == TimeSpan.MinValue)
+                        {
+                            firstRead = now;
+                            firstChunk = got;
+                        }
+                        lastRead = now;
                         framer.Push(buffer.AsSpan(0, got), packet =>
                         {
                             stats.Push(packet);
@@ -183,7 +195,15 @@ public static class Dt295NativeProbe
         tuner.Dispose();
         reader?.Join(TimeSpan.FromSeconds(2));
         output.WriteLine($"制御転送: 合計 {controls} 回、ホストの CPU 時間 {(Cpu() - cpuStart).TotalMilliseconds:F0} ms、経過 {total.ElapsedMilliseconds} ms");
-        if (streaming > TimeSpan.Zero && stats.Bytes > 0) output.WriteLine($"受信の平均: {stats.Bytes * 8 / streaming.TotalSeconds / 1e6:F2} Mbps ({streaming.TotalSeconds:F1} 秒)");
+        var receiving = firstRead == TimeSpan.MinValue ? TimeSpan.Zero : lastRead - firstRead;
+        if (firstRead != TimeSpan.MinValue && receiving > TimeSpan.Zero)
+        {
+            output.WriteLine($"受信の平均: {(stats.Bytes - firstChunk) * 8 / receiving.TotalSeconds / 1e6:F2} Mbps (最初の読みから最後の読みまで {receiving.TotalSeconds:F1} 秒。決めた秒数は {streaming.TotalSeconds:F1} 秒)");
+        }
+        else if (stats.Bytes > 0)
+        {
+            output.WriteLine("受信の平均: 求められません (読みが 1 回だけで、最初の読みから最後の読みまでの時間がありません)");
+        }
         if (stats.Bytes > 0)
         {
             stats.Print(output);
@@ -196,6 +216,12 @@ public static class Dt295NativeProbe
         }
         if (firstTsMs >= 0 && stats.Bytes > 0) output.WriteLine($"最初の TS: 選局から {firstTsMs} ms");
         if (problem is not null) output.WriteLine($"TS の読みで止まった: {problem}");
+        if (timeline is not null)
+        {
+            output.WriteLine();
+            output.WriteLine("時間の内訳 (開始は --dt295-probe の機材を開く前から。子の行は親の行に含まれる):");
+            timeline.Print(output);
+        }
         return failed || stats.Bytes == 0 || problem is not null ? 1 : 0;
     }
 }

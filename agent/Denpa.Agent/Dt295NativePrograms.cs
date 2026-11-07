@@ -42,6 +42,20 @@ public static class Dt295NativePrograms
 
     private const int Target = 40, IdleLimit = 44;
 
+    /// <summary>I2C の順次実行 (操作 2) が作業域に持つもの。+48 直前の読みの先頭バイト、+52 結果の置き場の先頭、+56 転送の種類、+60 いまの転送の読みの置き場</summary>
+    private const int LastRead = 48, ResultStart = 52, Kind = 56, ReadStart = 60;
+
+    /// <summary>操作 2 の操作列と結果の置き場 (SDRAM。常駐イメージを入れていた 0x80380000 台。ホストからは 0x380000 台)。長い操作列だけここに置き、短いものは要求の中に入れる</summary>
+    public const uint BatchCpu = 0x80380000, BatchPhysical = 0x380000, BatchResultOffset = 0x2000, BatchLimit = 0x2000;
+
+    /// <summary>操作 2 の要求の中に操作列と結果を置くとき: 結果は +16〜+31、操作列は +32〜+63</summary>
+    public const uint InlineResults = Staging + 16, InlineOps = Staging + 32;
+
+    public const int InlineResultBytes = 16, InlineOpBytes = 32;
+
+    /// <summary>操作 2 の結果 (応答の +4)</summary>
+    public const uint I2cOk = 0, I2cNack = 1, I2cBusError = 2, I2cTimeout = 3;
+
     /// <summary>hook (仕様書 3.2)。元の 8 バイトを、飛び先を body の入口にした 8 バイトに置き換える</summary>
     public const uint Hook = 0xEA6FC;
 
@@ -119,6 +133,11 @@ public static class Dt295NativePrograms
         asm.StFp(R10, SavedR10);
         asm.StFp(R11, SavedR11);
         asm.StFp(R13, SavedR13);
+        // 操作 2 (I2C の順次実行) は別の経路へ。操作 1 (TS を送る) はそのまま下へ
+        asm.Ldi20(Staging + 4, R12);
+        asm.Ld(R12, R0);
+        asm.CmpI(2, R0);
+        asm.Far(Fr30Cond.Eq, "i2c", R12);
         asm.Ldi32(RingCpu, R4);
         asm.Ldi32(RingLength, R5);
         asm.Ldi20(Staging + 8, R12);
@@ -310,6 +329,7 @@ public static class Dt295NativePrograms
         asm.St(R1, R12);
         asm.AddI(4, R12);
         asm.St(R11, R12);
+        asm.Label("leave");
         asm.LdFp(SavedR8, R8);
         asm.LdFp(SavedR9, R9);
         asm.LdFp(SavedR10, R10);
@@ -319,6 +339,8 @@ public static class Dt295NativePrograms
         asm.PopRp();
         asm.Ldi20(StatusStage, R12);
         asm.Jmp(R12);
+
+        EmitI2c(asm);
 
         var words = asm.Words32();
         var bytes = words.Length * 4;
@@ -330,6 +352,233 @@ public static class Dt295NativePrograms
         hook.Nop();
         var hookBytes = hook.Words().SelectMany(word => new[] { (byte)(word >> 8), (byte)word }).ToArray();
         return new Image(words, bytes, hookBytes, asm.Listing);
+    }
+
+    /// <summary>
+    /// 操作 2: I2C の転送を、ホストが渡した操作列のとおりに順に行い、読んだバイトを結果の置き場に並べる。ホストが 1 バイトずつ制御転送で動かす
+    /// (Dt295NativeI2c の Transfer) のと同じ手順を、機材の中で行う (制御転送 1 回が約 60 µs で、1 バイトに 3 回要る)。
+    /// 要求: +4 操作 2、+8 操作列の番地 (CPU)、+12 結果の置き場の番地 (CPU)、+16 転送の数。
+    /// 操作列は転送ごとに [アドレス 7 ビット][書く数][読む数][種類] と書くバイト。種類 1 は、書く数のうち最後の 1 バイトを
+    /// 「直前の読みの先頭バイト &amp; keep | set」にして、書くバイトのあとに keep・set の 2 バイトが付く。
+    /// 応答: +4 結果 (I2cOk・I2cNack・I2cBusError・I2cTimeout)、+8 止まった転送の番号 (全部済めば転送の数)、+12 読んだバイト数。
+    /// 失敗したら STOP を出して戻る。待つ回数の限度は 1 バイトにつき 0x20000 回の読み
+    /// </summary>
+    private static void EmitI2c(Fr30Assembler asm)
+    {
+        asm.Label("i2c");
+        asm.Ldi20(Staging + 8, R12);
+        asm.Ld(R12, R13);                    // R13 = 操作列 (これを基底に、バイトの位置 R4 で読む)
+        asm.AddI(4, R12);
+        asm.Ld(R12, R6);
+        asm.Sub(R13, R6);                    // R6 = 結果の置き場 − 操作列。R13 + R6 が次に書く結果の番地
+        asm.StFp(R6, ResultStart);
+        asm.AddI(4, R12);
+        asm.Ld(R12, R5);                     // R5 = 残りの転送の数
+        asm.StFp(R5, IdleLimit);             // 最初の数 (止まった番号 = 最初の数 − 残り)
+        asm.Ldi8(0, R4);
+        asm.Ldi8(0, R0);
+        asm.StFp(R0, LastRead);
+        asm.Ldi32(0xFD8FE0, R7);             // 状態
+        asm.Ldi32(0xFD8FE4, R8);             // 制御
+        asm.Ldi32(0xFD8FF0, R9);             // データ
+
+        asm.Label("t_loop");
+        asm.CmpI(0, R5);
+        asm.Far(Fr30Cond.Eq, "i2c_done", R12);
+        // バスが空くまで待つ (状態の bit7)。直前の STOP のすぐあとに次の START を出さない。ホストは制御転送の間隔 (約 60 µs) でこの間が空いている
+        asm.Ldi32(0x20000, R12);
+        asm.Label("idle_wait");
+        asm.Ld(R7, R0);
+        asm.Ldi8(0x80, R11);
+        asm.And(R11, R0);
+        asm.B(Fr30Cond.Eq, "idle_ok");
+        asm.Add2(-1, R12);
+        asm.B(Fr30Cond.Ne, "idle_wait");
+        asm.Ldi8((uint)I2cTimeout, R0);
+        asm.Far(Fr30Cond.Ra, "i2c_fail", R12);
+        asm.Label("idle_ok");
+        asm.LdubAc(R4, R1);
+        asm.AddI(1, R4);
+        asm.LdubAc(R4, R2);
+        asm.AddI(1, R4);
+        asm.LdubAc(R4, R3);
+        asm.AddI(1, R4);
+        asm.LdubAc(R4, R0);
+        asm.AddI(1, R4);
+        asm.StFp(R0, Kind);
+        asm.Lsl(1, R1);                      // R1 = アドレス << 1
+        asm.StFp(R2, Target);                // 書く数 (再スタートを入れるかの判定)
+        // 開始: データ = (アドレス << 1) | (書かないなら 1)、制御 = 0x42 | 0x10
+        asm.Mov(R1, R0);
+        asm.CmpI(0, R2);
+        asm.B(Fr30Cond.Ne, "a1");
+        asm.AddI(1, R0);
+        asm.Label("a1");
+        asm.St(R0, R9);
+        asm.Ldi8(0x52, R0);
+        asm.St(R0, R8);
+        asm.Call("wait_byte");
+        asm.CmpI(0, R0);
+        asm.Far(Fr30Cond.Ne, "i2c_fail", R12);
+        asm.Ld(R7, R0);                      // アドレスの直後に ACK が来なかったら失敗 (状態の bit4)
+        asm.Ldi8(0x10, R11);
+        asm.And(R11, R0);
+        asm.Far(Fr30Cond.Ne, "i2c_nack", R12);
+
+        // 書き
+        asm.Label("w_loop");
+        asm.CmpI(0, R2);
+        asm.Far(Fr30Cond.Eq, "w_done", R12);
+        asm.CmpI(1, R2);
+        asm.B(Fr30Cond.Ne, "w_lit");
+        asm.LdFp(Kind, R0);
+        asm.CmpI(1, R0);
+        asm.B(Fr30Cond.Ne, "w_lit");
+        // 種類 1 の最後の 1 バイト: (直前の読み & keep) | set
+        asm.LdubAc(R4, R0);
+        asm.AddI(1, R4);
+        asm.LdubAc(R4, R11);
+        asm.AddI(1, R4);
+        asm.LdFp(LastRead, R12);
+        asm.And(R12, R0);
+        asm.Or(R11, R0);
+        asm.Bra("w_put");
+        asm.Label("w_lit");
+        asm.LdubAc(R4, R0);
+        asm.AddI(1, R4);
+        asm.Label("w_put");
+        asm.St(R0, R9);
+        asm.Lsr(1, R10);
+        asm.Lsl(1, R10);                     // 制御の bit0 を落とす
+        asm.St(R10, R8);
+        asm.Call("wait_byte");
+        asm.CmpI(0, R0);
+        asm.Far(Fr30Cond.Ne, "i2c_fail", R12);
+        asm.Add2(-1, R2);
+        asm.Far(Fr30Cond.Ra, "w_loop", R12);
+
+        asm.Label("w_done");
+        // 続けて読むなら再スタート: データ = (アドレス << 1) | 1、制御 = (制御 & ~1) | 0x20
+        asm.LdFp(Target, R0);
+        asm.CmpI(0, R0);
+        asm.B(Fr30Cond.Eq, "r_start");
+        asm.CmpI(0, R3);
+        asm.B(Fr30Cond.Eq, "r_start");
+        asm.Mov(R1, R0);
+        asm.AddI(1, R0);
+        asm.St(R0, R9);
+        asm.Lsr(1, R10);
+        asm.Lsl(1, R10);
+        asm.Ldi8(0x20, R11);
+        asm.Or(R11, R10);
+        asm.St(R10, R8);
+        asm.Call("wait_byte");
+        asm.CmpI(0, R0);
+        asm.Far(Fr30Cond.Ne, "i2c_fail", R12);
+        asm.Ld(R7, R0);
+        asm.Ldi8(0x10, R11);
+        asm.And(R11, R0);
+        asm.Far(Fr30Cond.Ne, "i2c_nack", R12);
+
+        // 読み。残りが 1 なら ACK を返さない (制御の bit3 を落とす)
+        asm.Label("r_start");
+        asm.StFp(R6, ReadStart);
+        asm.CmpI(0, R3);
+        asm.Far(Fr30Cond.Eq, "t_stop", R12);
+        asm.Label("r_loop");
+        asm.Lsr(1, R10);
+        asm.Lsl(1, R10);
+        asm.Ldi8(8, R11);
+        asm.Or(R11, R10);
+        asm.CmpI(1, R3);
+        asm.B(Fr30Cond.Ne, "r_ack");
+        asm.Sub(R11, R10);
+        asm.Label("r_ack");
+        asm.St(R10, R8);
+        asm.Call("wait_byte");
+        asm.CmpI(0, R0);
+        asm.Far(Fr30Cond.Ne, "i2c_fail", R12);
+        asm.Ld(R9, R0);
+        asm.StbAc(R0, R6);
+        asm.AddI(1, R6);
+        asm.Add2(-1, R3);
+        asm.Far(Fr30Cond.Ne, "r_loop", R12);
+        asm.LdFp(ReadStart, R0);             // この転送で読んだ先頭のバイトを、次の種類 1 の書きに使う
+        asm.LdubAc(R0, R0);
+        asm.StFp(R0, LastRead);
+
+        // STOP: 制御の bit0・3・4・5 を落とす
+        asm.Label("t_stop");
+        asm.Ldi8(0x39, R11);
+        asm.Or(R11, R10);
+        asm.Sub(R11, R10);
+        asm.St(R10, R8);
+        asm.Add2(-1, R5);
+        asm.Far(Fr30Cond.Ra, "t_loop", R12);
+
+        // 失敗: R0 = 結果 (2・3)。STOP を出して戻る
+        asm.Label("i2c_nack");
+        asm.Ldi8((uint)I2cNack, R0);
+        asm.Label("i2c_fail");
+        asm.Ldi8(0x39, R11);
+        asm.Or(R11, R10);
+        asm.Sub(R11, R10);
+        asm.St(R10, R8);
+        asm.Bra("i2c_end");
+        asm.Label("i2c_done");
+        asm.Ldi8((uint)I2cOk, R0);
+
+        // 応答: +4 結果、+8 止まった番号、+12 読んだバイト数
+        asm.Label("i2c_end");
+        asm.Ldi20(Staging + 4, R12);
+        asm.St(R0, R12);
+        asm.LdFp(IdleLimit, R1);
+        asm.Sub(R5, R1);
+        asm.AddI(4, R12);
+        asm.St(R1, R12);
+        asm.LdFp(ResultStart, R1);
+        asm.Mov(R6, R2);
+        asm.Sub(R1, R2);
+        asm.AddI(4, R12);
+        asm.St(R2, R12);
+        asm.Far(Fr30Cond.Ra, "leave", R12);
+
+        // 制御の bit0 (1 バイト終わった) が立つまで読む。R0 = 0 (済んだ)・2 (バスエラー、bit7)・3 (時間切れ)。済んだときの制御の値は R10
+        asm.Label("wait_byte");
+        // 先に、制御の bit0 が 0 になっているのを少しの間 (64 回の読みまで) 見る。書いた値が効いて、前の転送の「終わった」の印が消えたことの確認で、
+        // 見ずに bit0 が立つのを待つと、書いた直後の古い bit0 を「終わった」と読み違えるおそれがある。0 が見えなくても (書いた直後にもう終わった)
+        // 先へ進む。0 の間に「終わった」の印が立つのを待つのは、次の wb_loop
+        asm.Ldi8(64, R12);
+        asm.Label("wb_clear");
+        asm.Ld(R8, R10);
+        asm.Mov(R10, R0);
+        asm.Ldi8(1, R11);
+        asm.And(R11, R0);
+        asm.B(Fr30Cond.Eq, "wb_start");
+        asm.Add2(-1, R12);
+        asm.B(Fr30Cond.Ne, "wb_clear");
+        asm.Label("wb_start");
+        asm.Ldi32(0x20000, R12);
+        asm.Label("wb_loop");
+        asm.Ld(R8, R10);
+        asm.Mov(R10, R0);
+        asm.Ldi8(0x80, R11);
+        asm.And(R11, R0);
+        asm.B(Fr30Cond.Ne, "wb_bus");
+        asm.Mov(R10, R0);
+        asm.Ldi8(1, R11);
+        asm.And(R11, R0);
+        asm.B(Fr30Cond.Ne, "wb_ok");
+        asm.Add2(-1, R12);
+        asm.B(Fr30Cond.Ne, "wb_loop");
+        asm.Ldi8((uint)I2cTimeout, R0);
+        asm.Ret();
+        asm.Label("wb_bus");
+        asm.Ldi8((uint)I2cBusError, R0);
+        asm.Ret();
+        asm.Label("wb_ok");
+        asm.Ldi8(0, R0);
+        asm.Ret();
     }
 
     /// <summary>[address] を size バイトで読み、expected と違えば "orig" へ。R0 と R12 だけを使う</summary>

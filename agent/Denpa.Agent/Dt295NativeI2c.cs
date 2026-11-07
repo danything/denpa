@@ -25,6 +25,7 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private uint _control = 0x42;
+    private bool _checkIdle = true;
 
     /// <summary>1 バイトを待つ上限</summary>
     public TimeSpan ByteTimeout { get; init; } = TimeSpan.FromMilliseconds(200);
@@ -90,6 +91,8 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         Save(address);
         var before = _saved.First(item => item.Address == address).Value;
         link.Write32(address, value);
+        // 読み戻しは、確かめるとき (verify) か記録を出すときだけ。使わない読みは制御転送の無駄
+        if (!verify && trace is null) return;
         var back = link.Read32(address);
         if (!verify)
         {
@@ -117,6 +120,7 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         link.Write32(0xFD8FE8, 0x3C);
         link.Write32(Control, 0x42);
         _control = 0x42;
+        _checkIdle = true;
     }
 
     /// <summary>書く n バイト、続けて読む m バイトを 1 転送で (仕様書 6.4 の 1 転送)。復調は書く側と読む側を別の転送にする (仕様書 7.0)</summary>
@@ -125,8 +129,10 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         if (write.Length + read > MaxBytes) throw new ArgumentOutOfRangeException(nameof(write), "1 転送の上限を超えています");
         Transfers++;
         trace?.Invoke($"I2C {address:X2} W {Convert.ToHexString(write)}{(read > 0 ? $" R {read}" : "")}");
-        // 1. 使用中なら少し待つ (仕様書は失敗にするとだけ書く。直前の STOP が済むまでの間を見込む)
-        WaitIdle();
+        // 1. 使用中なら少し待つ (仕様書は失敗にするとだけ書く)。直前の転送を自分で STOP で終えていれば、次の制御転送が出るまでに
+        //    STOP は済んでいる (制御転送 1 回は約 60 µs で、I2C の STOP は数 µs) ので読まない。最初と、失敗・バスエラーのあとだけ読む
+        if (_checkIdle) WaitIdle();
+        _checkIdle = false;
         // 2. アドレスと開始
         link.Write32(Data, (uint)((address << 1) | (write.IsEmpty ? 1 : 0)));
         _control |= 0x10;
@@ -164,11 +170,69 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         catch (Dt295NativeException)
         {
             Stop(control);
+            _checkIdle = true;
             throw;
         }
         // 8. STOP
         Stop(control);
         return result;
+    }
+
+    /// <summary>
+    /// true なら <see cref="Run"/> は機材の中で転送を順に行わせる (<see cref="Dt295NativeLink.RunI2c"/>)。機材を開くとき、使えると確かめたら立てる。
+    /// false ならホストが 1 つずつ <see cref="Transfer"/> で行う
+    /// </summary>
+    public bool UseSequencer { get; set; }
+
+    /// <summary>機材に 1 回で渡す操作列の大きさの上限 (バイト)。150 転送ほど (約 0.1 秒) で、制御転送の時間切れ (1 秒) に余裕がある</summary>
+    private const int ChunkBytes = 0x800;
+
+    /// <summary>
+    /// 転送の並びを順に行い、読んだバイトを転送の順につなげて返す。<see cref="UseSequencer"/> なら機材の中で行わせ、
+    /// そうでなければホストが 1 つずつ行う。失敗の例外はどちらも同じ (ACK が来ない・バスエラー・1 バイトが終わらない)
+    /// </summary>
+    public byte[] Run(Dt295I2cBatch batch)
+    {
+        if (batch.IsEmpty) return [];
+        var results = new List<byte>();
+        if (!UseSequencer)
+        {
+            // 種類 1 (読み・変更・書き) の書く値は、直前に読んだ転送の先頭バイトから作る
+            byte lastRead = 0;
+            foreach (var op in batch.Ops)
+            {
+                var write = op.Modified ? [.. op.Write, (byte)((lastRead & op.Keep) | op.Set)] : op.Write;
+                var data = Transfer(op.Address, write, op.Read);
+                if (op.Read == 0) continue;
+                results.AddRange(data);
+                lastRead = data[0];
+            }
+            return [.. results];
+        }
+        foreach (var chunk in batch.Split(ChunkBytes, ChunkBytes))
+        {
+            var reply = link.RunI2c(Dt295I2cBatch.Encode(chunk), chunk.Count, chunk.Sum(op => op.Read));
+            Transfers += reply.Code == Dt295NativePrograms.I2cOk ? chunk.Count : reply.Index;
+            results.AddRange(reply.Read);
+            if (reply.Code == Dt295NativePrograms.I2cOk) continue;
+            // 機材のプログラムは失敗したら STOP を出して戻る。ホストの状態は STOP のあとにそろえる
+            _control = 0x42;
+            _checkIdle = true;
+            var failed = reply.Index < chunk.Count ? chunk[(int)reply.Index] : chunk[^1];
+            switch (reply.Code)
+            {
+                case Dt295NativePrograms.I2cNack:
+                    throw new Dt295NativeException($"I2C のアドレス 0x{failed.Address:X2} から ACK が来ません");
+                case Dt295NativePrograms.I2cBusError:
+                    Reset();
+                    throw new Dt295NativeException("I2C のバスエラーです");
+                default:
+                    throw new Dt295NativeException("I2C の 1 バイトが時間内に終わりません");
+            }
+        }
+        _control = 0x42;
+        _checkIdle = true;
+        return [.. results];
     }
 
     public void Write(int address, params byte[] bytes) => Transfer(address, bytes, 0);
@@ -185,6 +249,7 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
     {
         if ((link.Read32(Status) & 0x10) == 0) return;
         Stop(_control);
+        _checkIdle = true;
         throw new Dt295NativeException($"I2C のアドレス 0x{address:X2} から ACK が来ません");
     }
 

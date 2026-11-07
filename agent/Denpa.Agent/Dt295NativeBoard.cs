@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 /// 16 ビットのレジスタ (仕様書が「16 ビット」と書いたもの) の読み書きは <see cref="Dt295NativeLink.Read16"/> と <see cref="Dt295NativeLink.Write16"/>。
 /// 仕様書が 16 ビットと明記していない 0xF10014・0xF10018・0xF10118・0xF1011C は、値が 16 ビットに収まる (0xFFFF・0xD082 など) ことから 16 ビットとした。仕様書に無い
 /// </summary>
-public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log = null)
+public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log = null, Dt295Timeline? timeline = null)
 {
     private readonly Stopwatch _clock = Stopwatch.StartNew();
 
@@ -57,10 +57,13 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
         var value = link.Read16(Register);
         link.Write16(Register, (ushort)(value | 0x0002));
         var until = _clock.Elapsed + TimeSpan.FromSeconds(2);
+        var polls = 1;
         while ((link.Read16(Register) & 0x0010) != 0)
         {
+            polls++;
             if (_clock.Elapsed > until) throw new Dt295NativeException("0xFD0090 の bit4 が 2 秒たっても落ちません");
         }
+        timeline?.Begin($"0xFD0090 の bit4 が落ちるまでの読み {polls} 回", "仕様書 3.3").Dispose();
         link.Write16(Register, (ushort)(link.Read16(Register) & ~0x0002));
         link.Write16(Register, (ushort)(link.Read16(Register) | 0x0001));
     }
@@ -99,14 +102,17 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     public Saved Initialize()
     {
         var saved = new Saved();
+        using var phases = new Dt295Timeline.Phases(timeline);
         try
         {
             // 1〜3
+            phases.Next("手順 1〜3 (0xF10118・0xF1011C)", "仕様書 6 章。書いて読み戻す");
             saved.R10118 = link.Read16(0xF10118);
             saved.R1011C = link.Read16(0xF1011C);
             Check16(0xF10118, 0xFFFF);
             Check16(0xF1011C, (ushort)((saved.R1011C.Value & 0xFA1F) | 0x0580));
             // 4: 0x1600000・0x1600004 の値が想定どおりでなければ断る (仕様書は -2600)
+            phases.Next("手順 4〜5 (0x1600000 のブロックを読む・0x1600404)", "仕様書 6 章");
             saved.R1600000 = link.Read32(0x1600000);
             saved.R1600004 = link.Read32(0x1600004);
             saved.R1600404 = link.Read32(0x1600404);
@@ -117,6 +123,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
             // 5
             Check32(0x1600404, saved.R1600404.Value | 0x00040000);
             // 6: 副ブロックを止めておく
+            phases.Next("手順 6 (副ブロックを止める)", "仕様書 6 章");
             link.Write32(0x1600004, 0xFFFFFFFF);
             link.Write32(0x1600000, 0xFFFFFFFF);
             link.Write32(0x1600004, 0x00800000);
@@ -125,6 +132,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
                 throw new Dt295NativeException("0x1600000 のブロックを止められません (0x1600004 が 0x00800000 でないか、0x1600000 の bit17 が 0)");
             }
             // 7
+            phases.Next("手順 7〜9 (0xF001F0 の 4 回の書き)", "仕様書 6 章。書くたびに読み戻す");
             saved.R00F001F0 = link.Read32(0xF001F0);
             saved.R00F10004 = link.Read16(0xF10004);
             saved.R00F10018 = link.Read16(0xF10018);
@@ -151,6 +159,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
             value = SetBit(value, 25, true);
             Check32(0xF001F0, value);
             // 10〜12
+            phases.Next("手順 10〜12 (0xF10014・0xF10018)", "仕様書 6 章。書くたびに読み戻す");
             var r14 = saved.R00F10014.Value;
             var r18 = saved.R00F10018.Value;
             if (a)
@@ -173,6 +182,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
             link.Write16(0xF10018, r18);
             if (link.Read16(0xF10014) != r14 || link.Read16(0xF10018) != r18) throw new Dt295NativeException("0xF10014・0xF10018 の最後の書き込みが読み戻しと違います");
             log?.Invoke($"チップの設定: 0xF001F0 = 0x{value:X8}、0xF10014 = 0x{r14:X4}、0xF10018 = 0x{r18:X4}");
+            phases.Next("0xF1001C", "仕様書に無い。実機の観測");
             // 0xF1001C (16 ビット。上半分): 仕様書に記述が無い。実機の常駐イメージは INITIALIZE で 0x7FFD0000 から 0x2F7D0000 にした
             // (0x50800000 を落とした)。I2C のブロックを動かすクロックかリセットのゲートと見立てた試し (推定)。読み戻しは記録に出すだけ
             saved.RF1001C = link.Read16(0xF1001C);

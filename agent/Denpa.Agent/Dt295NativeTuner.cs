@@ -120,9 +120,10 @@ internal sealed class Dt295NativeStream
     private void BeginCapture()
     {
         var board = _device.Board;
-        _capture = board.ConfigureCapture();
-        _endpoint = board.StartEndpoint();
-        board.StartCapture();
+        var timeline = _device.Timeline;
+        using (timeline.Step("取り込みの設定", "仕様書 8.1.3。28 項目を書いて読み戻す")) _capture = board.ConfigureCapture();
+        using (timeline.Step("端点の開始", "仕様書 8.3.1")) _endpoint = board.StartEndpoint();
+        using (timeline.Step("取り込みの開始", "0x1902010 = 0x02000000")) board.StartCapture();
         _capturing = true;
     }
 
@@ -330,6 +331,8 @@ public sealed class Dt295NativeTuner : ITuneDevice
             }
             Px4Userland.ClearNotice(_key, this);
             var device = _device;
+            var timeline = device.Timeline;
+            using var whole = timeline.Step("選局から最初の TS まで");
             try
             {
                 var frontend = device.Frontend;
@@ -337,12 +340,12 @@ public sealed class Dt295NativeTuner : ITuneDevice
                 bool locked;
                 if (tuning.Satellite)
                 {
-                    frontend.TuneSatellite(tuning.Frequency);
+                    using (timeline.Step("選局 (衛星の周波数の設定)", "仕様書 7.3.2")) frontend.TuneSatellite(tuning.Frequency);
                     locked = frontend.WaitSatelliteLock(LockWait, streamId == ChannelTable.NoStreamId ? null : (int)streamId);
                 }
                 else
                 {
-                    frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
+                    using (timeline.Step("選局 (地上波の周波数の設定)", "仕様書 7.2.2")) frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
                     locked = frontend.WaitTerrestrialLock(LockWait);
                 }
                 if (!locked) throw new IOException(ITuneDevice.SyncFailed);
@@ -356,7 +359,9 @@ public sealed class Dt295NativeTuner : ITuneDevice
                 throw new IOException(error.Message, error);
             }
 
-            if (!_stream.WaitFirst(FirstTs))
+            bool arrived;
+            using (timeline.Step("最初の TS を待つ", "取り込みを始めてから、読み手が最初のパケットを詰めるまで")) arrived = _stream.WaitFirst(FirstTs);
+            if (!arrived)
             {
                 var reason = _stream.Reason ?? $"選局から {FirstTs.TotalSeconds:0} 秒、TS が来ません";
                 Stop(release: false);
