@@ -14,6 +14,7 @@ import { agentFetch } from "./agent-client";
 import { orm } from "./db";
 import { cardContracts, programs, services } from "./schema";
 import { type CardStatus, cardStatus } from "./scramble";
+import { store, stored } from "./settings";
 import { openChannelStream } from "./tuner";
 
 export interface ConfirmResult {
@@ -26,6 +27,77 @@ export type ContractState =
   "subscribed" | "unsubscribed" | "expired" | "unknown";
 
 export type ContractSource = "eit_ca" | "decode" | "manual";
+
+export type ContractProviderId = "wowow" | "japanet" | "skyperfect" | "other";
+
+export interface ContractProviderInfo {
+  id: ContractProviderId;
+  name: string;
+}
+
+export const CONTRACT_PROVIDERS: Record<ContractProviderId, ContractProviderInfo> = {
+  wowow: { id: "wowow", name: "WOWOW" },
+  japanet: { id: "japanet", name: "BS10 (ジャパネット)" },
+  skyperfect: { id: "skyperfect", name: "スカパー！" },
+  other: { id: "other", name: "その他" },
+};
+
+/**
+ * サービス ID や種別から契約管理事業者 (WOWOW / ジャパネット / スカパー！ 等) を判別する。
+ */
+export function getContractProvider(
+  serviceId: number,
+  type?: string,
+  name?: string,
+): ContractProviderInfo {
+  if (
+    serviceId === 191 ||
+    serviceId === 192 ||
+    serviceId === 193 ||
+    (name && name.includes("WOWOW") && !name.includes("プラス"))
+  ) {
+    return CONTRACT_PROVIDERS.wowow;
+  }
+  if (
+    serviceId === 201 ||
+    (name && (name.includes("BS10") || name.includes("スターチャンネル")))
+  ) {
+    return CONTRACT_PROVIDERS.japanet;
+  }
+  if (type === "CS" || (type === "BS" && serviceId >= 234)) {
+    return CONTRACT_PROVIDERS.skyperfect;
+  }
+  return CONTRACT_PROVIDERS.other;
+}
+
+export interface ContractSettings {
+  /** スカパー！の代表局 (スカチャン1 等) の契約・期限を他のスカパー局と一括同期するか */
+  skyperfectSync: boolean;
+  /** 契約期限・予告の案内表示モード */
+  modalMode: "modal" | "banner" | "none";
+}
+
+export function getContractSettings(): ContractSettings {
+  const syncRaw = stored("contract_skyperfect_sync");
+  const modalRaw = stored("contract_modal_mode");
+  return {
+    skyperfectSync: syncRaw === "1" || syncRaw === "true",
+    modalMode:
+      modalRaw === "banner" || modalRaw === "none" ? modalRaw : "modal",
+  };
+}
+
+export function saveContractSettings(
+  patch: Partial<ContractSettings>,
+): ContractSettings {
+  if (patch.skyperfectSync !== undefined) {
+    store("contract_skyperfect_sync", patch.skyperfectSync ? "1" : "0");
+  }
+  if (patch.modalMode !== undefined) {
+    store("contract_modal_mode", patch.modalMode);
+  }
+  return getContractSettings();
+}
 
 /**
  * **復号テストで確かめた契約を信じる長さ (31 日)。** 番組表に契約の情報 (0xCB) が無い局はカードに聞けないので、
@@ -57,6 +129,9 @@ export interface ContractRow {
   checkedAt: number;
   /** この局で利用可能な契約確認方式 */
   availableMethods?: ContractSource[];
+  /** 契約管理事業者 */
+  providerId: ContractProviderId;
+  providerName: string;
 }
 
 export interface EvaluationInput {
@@ -353,6 +428,8 @@ export async function checkContracts(): Promise<ContractRow[]> {
  * DB に記録されている契約情報を取得する。
  */
 export function getContractRows(cardId: string): ContractRow[] {
+  const contractSettings = getContractSettings();
+
   // 0xCB (CA 契約情報) を持つ有料局の一覧を取得
   const servicesWithEitCa = new Set(
     orm()
@@ -368,7 +445,7 @@ export function getContractRows(cardId: string): ContractRow[] {
       .map((p) => p.serviceId),
   );
 
-  return orm()
+  const rawRows = orm()
     .select({
       cardId: cardContracts.card_id,
       serviceId: cardContracts.service_id,
@@ -387,13 +464,77 @@ export function getContractRows(cardId: string): ContractRow[] {
     .innerJoin(services, eq(services.id, cardContracts.service_id))
     .where(eq(cardContracts.card_id, cardId))
     .orderBy(asc(services.type), asc(services.service_id))
-    .all()
-    .map((row) => ({
+    .all();
+
+  let rows: ContractRow[] = rawRows.map((row) => {
+    const provider = getContractProvider(
+      row.serviceId,
+      row.type,
+      row.serviceName,
+    );
+    return {
       ...row,
       availableMethods: ContractChecker.getAvailableMethods(
         servicesWithEitCa.has(row.serviceId),
       ),
-    }));
+      providerId: provider.id,
+      providerName: provider.name,
+    };
+  });
+
+  // 1. WOWOW の 3 局連動同期 (同一の直契約)
+  // WOWOW の代表局 (プライム/ライブ/シネマ) でカード確認 (eit_ca) ができている場合、
+  // 手動設定や独自のコードが無い他の WOWOW 局も同一契約として同期する
+  const wowowRep = rows.find(
+    (r) =>
+      r.providerId === "wowow" &&
+      r.source === "eit_ca" &&
+      (r.code !== null || r.validUntil !== null),
+  );
+  if (wowowRep) {
+    rows = rows.map((r) => {
+      if (r.providerId === "wowow" && r.manualState == null && r.code == null) {
+        return {
+          ...r,
+          state: wowowRep.state,
+          source: "eit_ca",
+          validUntil: wowowRep.validUntil,
+        };
+      }
+      return r;
+    });
+  }
+
+  // 2. スカパー！の一括同期 (contractSettings.skyperfectSync が true の場合)
+  // スカパー！の代表局 (スカチャン1 等) でカード契約が確認できている場合、
+  // 手動設定されていない他のスカパー局も同一の契約状態・期限とみなす
+  if (contractSettings.skyperfectSync) {
+    const skyRep = rows.find(
+      (r) =>
+        r.providerId === "skyperfect" &&
+        r.source === "eit_ca" &&
+        (r.code !== null || r.validUntil !== null),
+    );
+    if (skyRep) {
+      rows = rows.map((r) => {
+        if (
+          r.providerId === "skyperfect" &&
+          r.manualState == null &&
+          r.code == null
+        ) {
+          return {
+            ...r,
+            state: skyRep.state,
+            source: "eit_ca",
+            validUntil: skyRep.validUntil,
+          };
+        }
+        return r;
+      });
+    }
+  }
+
+  return rows;
 }
 
 /**
@@ -638,6 +779,7 @@ export function getContractWarning(
   isFree = false,
 ): ContractWarning {
   if (isFree) return null;
+  if (paidAllowed()(serviceId)) return null;
   const states = orm()
     .select({ state: cardContracts.state })
     .from(cardContracts)
@@ -851,25 +993,94 @@ export async function testDecodeUnconfirmed(): Promise<{
  * 1 回の当てはめで 1 回だけ読む (呼ぶ側が関数を使い回す)
  */
 export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
-  const subscribed = new Set(
-    orm()
+  const contractSettings = getContractSettings();
+  const rows = orm()
+    .select({
+      serviceId: cardContracts.service_id,
+      manualState: cardContracts.manual_state,
+      state: cardContracts.state,
+      code: cardContracts.code,
+      decodedAt: cardContracts.decoded_at,
+    })
+    .from(cardContracts)
+    .where(eq(cardContracts.state, "subscribed"))
+    .all();
+
+  const subscribed = new Set<number>();
+  let wowowSubscribed = false;
+  let skyperfectSubscribed = false;
+
+  for (const row of rows) {
+    if (row.manualState === "unsubscribed") continue;
+    const isDirectlyAllowed =
+      row.manualState === "subscribed" ||
+      row.code !== null ||
+      freshDecode(row.decodedAt, now);
+
+    if (isDirectlyAllowed) {
+      subscribed.add(row.serviceId);
+      const provider = getContractProvider(row.serviceId);
+      if (provider.id === "wowow") {
+        wowowSubscribed = true;
+      }
+      if (
+        provider.id === "skyperfect" &&
+        (row.code !== null || freshDecode(row.decodedAt, now))
+      ) {
+        skyperfectSubscribed = true;
+      }
+    }
+  }
+
+  // WOWOW 3 局の連動 (同一直契約)
+  if (wowowSubscribed) {
+    for (const wid of [191, 192, 193]) {
+      const isManualUnsub = orm()
+        .select({ id: cardContracts.service_id })
+        .from(cardContracts)
+        .where(
+          and(
+            eq(cardContracts.service_id, wid),
+            eq(cardContracts.manual_state, "unsubscribed"),
+          ),
+        )
+        .get();
+      if (!isManualUnsub) {
+        subscribed.add(wid);
+      }
+    }
+  }
+
+  // スカパー！の一括同期がオンの場合
+  if (contractSettings.skyperfectSync && skyperfectSubscribed) {
+    const allServices = orm()
       .select({
-        serviceId: cardContracts.service_id,
-        manualState: cardContracts.manual_state,
-        code: cardContracts.code,
-        decodedAt: cardContracts.decoded_at,
+        serviceId: services.service_id,
+        type: services.type,
+        name: services.name,
       })
-      .from(cardContracts)
-      .where(eq(cardContracts.state, "subscribed"))
-      .all()
-      .filter(
-        (row) =>
-          row.manualState === "subscribed" ||
-          row.code !== null ||
-          freshDecode(row.decodedAt, now),
-      )
-      .map((row) => row.serviceId),
-  );
+      .from(services)
+      .all();
+
+    const manualUnsubscribed = new Set(
+      orm()
+        .select({ serviceId: cardContracts.service_id })
+        .from(cardContracts)
+        .where(eq(cardContracts.manual_state, "unsubscribed"))
+        .all()
+        .map((r) => r.serviceId),
+    );
+
+    for (const s of allServices) {
+      if (manualUnsubscribed.has(s.serviceId)) continue;
+      if (
+        getContractProvider(s.serviceId, s.type, s.name).id === "skyperfect"
+      ) {
+        subscribed.add(s.serviceId);
+      }
+    }
+  }
+
   return (serviceId) => subscribed.has(serviceId);
 }
 

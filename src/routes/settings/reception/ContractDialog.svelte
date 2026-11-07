@@ -7,17 +7,23 @@
   import ShieldCheck from "~icons/lucide/shield-check";
   import X from "~icons/lucide/x";
 
-  import type { ContractRow, DecodeTestResult } from "#lib/server/contracts.js";
+  import type {
+    ContractRow,
+    ContractSettings,
+    DecodeTestResult,
+  } from "#lib/server/contracts.js";
 
   let {
     open,
     cardId,
     initialContracts = [],
+    initialSettings,
     onclose,
   }: {
     open: boolean;
     cardId: string | null;
     initialContracts: ContractRow[];
+    initialSettings: ContractSettings;
     onclose: () => void;
   } = $props();
 
@@ -25,6 +31,10 @@
   let box = $state<HTMLElement | null>(null);
 
   let contracts = $state<ContractRow[]>([]);
+  let settings = $state<ContractSettings>({
+    skyperfectSync: false,
+    modalMode: "modal",
+  });
   let checking = $state(false);
   let receivingEmm = $state(false);
   let testingAll = $state(false);
@@ -42,8 +52,17 @@
       settingServiceId !== null,
   );
 
-  $effect(() => {
-    contracts = initialContracts;
+  let groupedContracts = $derived.by(() => {
+    const groups: Record<string, ContractRow[]> = {};
+    for (const row of contracts) {
+      if (!groups[row.providerId]) groups[row.providerId] = [];
+      groups[row.providerId].push(row);
+    }
+    return Object.entries(groups).map(([providerId, rows]) => ({
+      providerId,
+      providerName: rows[0].providerName,
+      rows,
+    }));
   });
 
   $effect(() => {
@@ -228,6 +247,25 @@
     }
   }
 
+  async function handleSaveSettings(patch: Partial<ContractSettings>) {
+    try {
+        const form = new FormData();
+        Object.entries(patch).forEach(([key, value]) => {
+            form.append(key, String(value));
+        });
+        const res = await fetch("?/saveContractSettings", {
+            method: "POST",
+            body: form,
+        });
+        const data = deserialize(await res.text());
+        if (data.type === "success") {
+            // 設定保存成功
+        }
+    } catch (err) {
+        errorMessage = String(err);
+    }
+  }
+
   async function handleSetManualContract(serviceId: number, value: string) {
     if (isBusy) return;
     settingServiceId = serviceId;
@@ -314,6 +352,13 @@
       </div>
     {/if}
 
+    <div class="contract-settings">
+        <label>
+            <input type="checkbox" checked={settings.skyperfectSync} onchange={(e) => handleSaveSettings({ skyperfectSync: e.currentTarget.checked })} />
+            スカパー！の期限・契約情報を全局で同期する
+        </label>
+    </div>
+    
     <div class="toolbar">
       <button
         type="button"
@@ -355,6 +400,8 @@
       </p>
     {:else}
       <div class="table-wrap">
+    {#each groupedContracts as group (group.providerId)}
+        <h3 class="provider-header">{group.providerName}</h3>
         <table>
           <thead>
             <tr>
@@ -368,7 +415,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each contracts as row (row.serviceId)}
+            {#each group.rows as row (row.serviceId)}
               <tr>
                 <td class="name-cell">
                   <strong>{row.serviceName}</strong>
@@ -465,6 +512,7 @@
             {/each}
           </tbody>
         </table>
+    {/each}
       </div>
     {/if}
   </article>

@@ -639,6 +639,7 @@
     open={showContractDialog}
     cardId={activeCardId}
     initialContracts={shownContracts.value ?? []}
+    initialSettings={data.contractSettings}
     onclose={() => (showContractDialog = false)}
   />
 </div>

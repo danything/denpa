@@ -6,9 +6,12 @@ import {
   checkContracts as verifyContracts,
   getActiveCardId,
   getContractRows,
+  getContractSettings,
+  saveContractSettings,
   setManualContract,
   testDecode as testDecodeStream,
   testDecodeUnconfirmed,
+  type ContractSettings,
 } from "#lib/server/contracts.js";
 import { orm } from "#lib/server/db.js";
 import { receiveEmm } from "#lib/server/emm.js";
@@ -131,6 +134,7 @@ export async function load() {
         return id ? getContractRows(id) : [];
       })
       .catch(() => []),
+    contractSettings: getContractSettings(),
   };
 }
 
@@ -267,6 +271,19 @@ export const actions = {
         results,
         contracts: getContractRows(cardId),
       };
+    } catch (error) {
+      return fail(500, { message: String(error) });
+    }
+  },
+
+  /** 契約設定を保存する */
+  saveContractSettings: async ({ request }) => {
+    const form = await request.formData();
+    const skyperfectSync = form.get("skyperfectSync") === "true";
+    const modalMode = form.get("modalMode") as "modal" | "banner" | "none";
+    try {
+      saveContractSettings({ skyperfectSync, modalMode });
+      return { success: true };
     } catch (error) {
       return fail(500, { message: String(error) });
     }
