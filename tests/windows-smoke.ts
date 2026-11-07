@@ -6,6 +6,8 @@
  *
  * - 同梱の ffmpeg で、denpa が使う経路の主なもの (.github/image-smoke.sh と同じ素材と引数) を流す。
  *   部品を Dockerfile から読んで組んでいるので、足りなければここで落ちる
+ * - GPU のエンコーダ (NVENC・QSV・AMF) が組み込まれ、denpa が渡すオプションを持つか。GPU の無いランナーでは
+ *   試しのエンコードが全部落ちて、ソフトウェアでエンコードするか
  * - ffmpeg の 4 本目の出口 (stream.sideOutput。Windows では名前付きパイプ) で、進み具合と matroska を受けられるか
  * - スリープを止められるか (awake.ts)。`powercfg /requests` に bun が出るかを見る (管理者で動くランナーだけで読める)
  */
@@ -46,7 +48,18 @@ const encoders = Bun.spawnSync([
   "-hide_banner",
   "-encoders",
 ]).stdout.toString();
-for (const name of ["libx264", "libsvtav1", "libopus", "aac", "mjpeg"]) {
+// GPU のエンコーダ (NVENC・QSV・AMF) は、ランナーに GPU が無くても組み込んである
+const gpuEncoders = ["nvenc", "qsv", "amf"].flatMap((kind) =>
+  ["h264", "hevc", "av1"].map((codec) => `${codec}_${kind}`),
+);
+for (const name of [
+  "libx264",
+  "libsvtav1",
+  "libopus",
+  "aac",
+  "mjpeg",
+  ...gpuEncoders,
+]) {
   if (!new RegExp(`\\b${name}\\b`).test(encoders))
     throw new Error(`エンコーダがありません: ${name}`);
 }
@@ -200,6 +213,72 @@ await ff(
   at("cut.mkv"),
 );
 console.log("ffmpeg: ok");
+
+/*
+ * GPU のエンコーダ。ランナーに GPU は無いので、エンコードは通らない。ここで見るのは次の 3 つ。
+ * 1. denpa が渡すエンコーダのオプション (hwenc.hwArgs・encoder.keyframeArgs) を、組み込んだエンコーダが持っている
+ * 2. hwArgs の引数で起動すると、GPU が無いために落ちる (エンコーダやオプションの名前が違って落ちるのではない)
+ * 3. 試しのエンコードが全部落ちると、GPU の方式は 0 になり、録画もライブもソフトウェアでエンコードする
+ */
+const options: Record<string, string[]> = {
+  nvenc: ["gpu", "preset", "rc", "forced-idr", "delay", "zerolatency"],
+  qsv: ["preset", "forced_idr", "async_depth"],
+  amf: ["usage", "quality", "rc", "forced_idr", "async_depth"],
+};
+for (const name of gpuEncoders) {
+  const help = Bun.spawnSync([
+    ffmpeg,
+    "-hide_banner",
+    "-h",
+    `encoder=${name}`,
+  ]).stdout.toString();
+  for (const option of options[name.split("_")[1]!]!) {
+    if (!new RegExp(`^\\s+-${option}\\s`, "m").test(help))
+      throw new Error(`${name} にオプション -${option} がありません`);
+  }
+}
+const { config } = await import("../src/lib/server/config.ts");
+config.ffmpeg = ffmpeg;
+const { HW_CODECS } = await import("../src/lib/hw.ts");
+const { hwArgs, hwChain, liveHw, probe } =
+  await import("../src/lib/server/hwenc.ts");
+for (const kind of ["nvenc", "qsv", "amf"] as const) {
+  for (const codec of HW_CODECS) {
+    const hw = hwArgs({ device: `${kind}0`, kind, gpu: 0 }, codec);
+    const run = Bun.spawnSync([
+      ffmpeg,
+      "-hide_banner",
+      "-nostdin",
+      "-v",
+      "error",
+      ...hw.device,
+      "-f",
+      "lavfi",
+      "-i",
+      "nullsrc=s=256x256:r=30:d=0.2",
+      "-vf",
+      hw.filter.join(","),
+      "-c:v",
+      ...hw.encoder,
+      "-f",
+      "null",
+      "-",
+    ]);
+    const err = run.stderr.toString();
+    console.log(`${codec}_${kind}: exit ${run.exitCode}`);
+    if (/Unknown encoder|Unrecognized option|No such filter/.test(err))
+      throw new Error(`${codec}_${kind} を起動できません:\n${err}`);
+  }
+}
+const found = await probe();
+console.log(found.message);
+if (found.devices.length === 0) {
+  for (const codec of HW_CODECS) {
+    if (hwChain(codec, {}).length > 0 || liveHw(codec, {}) !== null)
+      throw new Error(`GPU が無いのに ${codec} の方式が残っています`);
+  }
+  console.log("no GPU: software encoding: ok");
+}
 
 if (!(await holdAwake(true)))
   throw new Error("SetThreadExecutionState が失敗しました");

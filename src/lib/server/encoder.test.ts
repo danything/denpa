@@ -657,6 +657,18 @@ describe("CM を切るときのキーフレーム", () => {
     expect(argValue(args, "-forced-idr")).toBe("1");
   });
 
+  test("QSV・AMF は -forced_idr で IDR にする (Windows)", () => {
+    for (const kind of ["qsv", "amf"] as const) {
+      const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
+        keyframes: [120.5],
+        hardware: { kind, device: `${kind}0`, gpu: 0 },
+      });
+      expect(args).toContain(`av1_${kind}`);
+      expect(argValue(args, "-forced_idr")).toBe("1");
+      expect(args).not.toContain("-forced-idr");
+    }
+  });
+
   test("H.265 も同じ指定で境目にキーフレームを置く (NVENC は IDR の指定、VA-API は印だけ)", () => {
     const nvenc = buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {
       keyframes: "scene",

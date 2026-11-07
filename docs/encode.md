@@ -121,7 +121,7 @@ AMD の別の仕組み (AMF) は、Linux では AMD が別に配るランタイ�
 
 ### QSV を使わない理由
 
-Intel の GPU も VA-API だけで使い、QSV (libvpl) はイメージに入れていません (前は QSV を先に試し、VA-API を予備にしていました)。
+**Linux では** Intel の GPU も VA-API だけで使い、QSV (libvpl) はイメージに入れていません (前は QSV を先に試し、VA-API を予備にしていました)。
 
 - **速さは同じです。** Linux の QSV は VA-API の上にかぶさる層で、下では同じドライバ (iHD) が動きます。
 - **QSV にしかできないことを使っていません。** denpa が渡すのは CQP・ICQ・キーフレームの指定だけで、どれも VA-API でできます。
@@ -347,7 +347,8 @@ NVENC を 1 コマ試し、通れば設定の「エンコード」でエンコ�
 
 - **画質はビットレートで決めます。** NVENC は ICQ (`-global_quality`) を受けないので、Rockchip MPP と同じ表
   ([上](#画質はビットレートで決める)) の値を VBR (`-rc vbr`) で渡します。上限とバッファは目標の 2 倍 (測っていません)、
-  `-preset p4` (7 段の真ん中)、キーフレームの間隔は 250 コマです。**AV1 の表はいまは H.264 と同じ値で、何も測っていません。**
+  `-preset p4` (7 段の真ん中)、キーフレームの間隔は 250 コマです。p7 など遅い段は録画の時間が延びるので、実機で測ってから変えます。
+  時間方向の AQ・先読み・B フレームを参照にする指定は、持たない GPU で開けずに落ちる (FFmpeg の nvenc.c が `ENOSYS` で断る) ので渡しません。**AV1 の表はいまは H.264 と同じ値で、何も測っていません。**
   CPU での比べ ([下](#h264-は-crf-23-av1-と同じ画質)) では、同じ画質で忙しい実写は AV1 のほうが大きく、表はいちばん重い素材で
   決めているので、下げる根拠が無いためです。VBR は平均を表の値に寄せるので、AV1 を選んでもファイルは H.264 とほぼ同じ大きさで、
   浮くぶんは画質に回ります。小さくしたければ、実機で測ってから `hwenc.hwBitrate` の AV1 の表を下げてください。
@@ -369,10 +370,60 @@ NVENC を 1 コマ試し、通れば設定の「エンコード」でエンコ�
 Container Toolkit がライブラリを差し込めるか (Toolkit は差し込んだあと ldconfig を走らせようとするが、イメージには無い。
 差し込み先の `/usr/lib/x86_64-linux-gnu` は既定の検索先なので、dlopen は通るはず)。
 
+## Windows でエンコードする
+
+**Windows の denpa は、NVIDIA の NVENC・Intel の QSV・AMD の AMF で H.264・H.265・AV1 をエンコードできます**
+([install-windows.md](install-windows.md))。Windows に VA-API は無いので、GPU の作り手ごとのエンコーダを使います。
+同梱の ffmpeg は MSYS2 で組み、3 つとも入れてあります (`.github/ffmpeg-windows.sh`)。ヘッダとライブラリは MIT のもの
+(nv-codec-headers・AMF のヘッダ・libvpl) で、nonfree にならず、ffmpeg は Linux と同じ GPL-3.0-or-later のままです。
+ドライバのライブラリ (`nvEncodeAPI64.dll`・Intel のメディアランタイム・`amfrt64.dll`) は GPU のドライバが入れるもので、zip には入れません。
+
+**GPU があれば起動時に自分で見つけて使い、無ければソフトウェアでエンコードします。** Windows には `/dev` のデバイスファイルが無く、
+GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.probeWindows` が番号を順に試します。
+
+- NVENC は `-gpu 0` から順に、H.264 を 1 コマエンコードして確かめます。落ちた番号で止め、通った番号は AV1・H.265 も試して `nvidia0 (NVIDIA)` のような行にします
+- QSV は Direct3D 11 のアダプタの番号 0〜3 を順に (`qsv0 (Intel)`)、AMF も同じく (`amf0 (AMD)`)。Intel でも AMD でもない
+  アダプタ (NVIDIA・ソフトウェア) が先頭にあるので、落ちても 3 番まで試します
+- **どの番号も落ちれば行は出ず、録画もライブもソフトウェアでエンコードします** (設定の「エンコード」にそう出ます)。
+  落ちる理由は、ドライバが無い・GPU が無い・その世代がコーデックを持たないのどれかで、見分けずに使えないものとして外します
+
+使えた GPU は、Linux と同じく設定の「録画」の「エンコード」で録画とライブを別々に選べます ([上](#ライブは別に選んだエンコーダで-gpu-に載る))。
+自動で選ぶ順 (MPEG-2 → H.264 → AV1 → H.265、事前にエンコードしたものは AV1 が先) は OS に依らず同じ関数です。
+
+**画質は速さより優先します (録画)。** 3 つとも実機では測っていません (手元に GPU が無い)。下の値は、各エンコーダが持つ画質寄りの指定の
+うち、持たない GPU でも開けずに落ちないものだけを選んだものです。
+
+| エンコーダ | 指定                                                                                         | 理由                                                                                                                                       |
+| ---------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| NVENC      | `-preset p4`、VBR (Rockchip MPP と同じビットレートの表) (Linux と同じ)                       | ICQ は受けない (FFmpeg が断る)。p7 は録画の時間が延びるので測ってから。時間方向の AQ・先読みは、持たない GPU で開けずに落ちるので渡さない  |
+| QSV        | `-preset veryslow -global_quality:v 23` (ICQ)。AV1 は 26                                     | veryslow は target usage の最良品質。H.264・H.265 の 23 はソフトウェアの H.264 の crf と同じ数、AV1 の 26 は VA-API の AV1 の ICQ と同じ数 |
+| AMF        | `-usage high_quality -quality high_quality -rc vbr_peak` (同じ表のビットレート。上限は 2 倍) | 高画質の変換向けの指定。`hqvbr`・先読みは世代で開けないことがあるので渡さない。CQP・QVBR は値と画質の対応を測れていない                    |
+
+- **Linux で QSV を使わない理由 ([上](#qsv-を使わない理由)) は Windows に当てはまりません。** Windows の Intel の GPU で使えるのは QSV で、
+  VA-API は無いためです。H.265・AV1 の QSV が Arc で落ちたのは Linux で、Windows のドライバでは確かめていません。
+  通らなければ、その GPU のそのコーデックは試しのエンコードで外れます
+- **CM を切る境目のキーフレームは `-forced_idr 1` を足します** (QSV・AMF。NVENC は `-forced-idr 1`)。3 つとも H.264・H.265・AV1 の全部が持つオプションで、
+  CI の `tests/windows-smoke.ts` が組み込んだ ffmpeg の `-h encoder=…` で確かめています
+- **ライブは低遅延の速い段にします** (`hwenc.liveHwArgs`)。QSV は `-preset veryfast -bf 0 -async_depth 1` (ICQ は録画と同じ値。回線に合わせて
+  段を下げたときは VBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。デコードとインタレ解除は CPU のままです
+  (GPU に寄せるのは VA-API だけ)。映像が出る前に降りれば、Linux と同じくソフトウェアでエンコードし直し、その方式を 15 分外します
+- **QSV は GPU を `-init_hw_device qsv=…,child_device=<番号>,child_device_type=d3d11va` で選び**、CPU で作ったフレームを `hwupload` で渡します。
+  **AMF は `-init_hw_device d3d11va=…:<番号>` で開いたデバイスを使います**
+
+**CI** (test.yml の `server-windows`) は GPU の無いランナーで、`tests/windows-smoke.ts` が次の 3 つを確かめます。
+`ffmpeg -encoders` に h264・hevc・av1 の `_nvenc`・`_qsv`・`_amf` の 9 つが出ること、denpa が渡すオプションを各エンコーダが持つこと、
+試しのエンコードが全部落ちて GPU の方式が 0 になること (録画もライブもソフトウェアに戻る)。単体テストは `hwenc-probe.test.ts` が
+Windows の探し方 (GPU 無し・NVIDIA と Intel の 2 枚) を偽の ffmpeg の返事で流します。
+
+**実機で確かめていないこと** (手元の Windows に NVIDIA・Intel・AMD の GPU がありません): どの GPU でも試しのエンコードが通るか、上の値で見た目が今の
+H.264 と揃うか・どれだけ小さくなるか、libvpl を静的に繋いだ ffmpeg が Intel のランタイムを見つけるか、2 枚挿しや Intel + NVIDIA の
+ノート PC でアダプタの番号が使いたい GPU に当たるか (libvpl が渡したアダプタ以外の Intel のランタイムを選ぶと、同じ GPU が `qsv0` と `qsv1` の 2 行に出ます)、
+AMF が開いてある Direct3D 11 のデバイスを使うか (FFmpeg の amfenc.c の読みで、実機では見ていない)、CM の境目のキーフレームが IDR になるか、ライブの低遅延の指定。
+
 ## H.265 は GPU でだけ
 
 **H.265 は、GPU で H.265 をエンコードできる機材でだけ選べます** (VA-API `hevc_vaapi`
-(Intel・AMD)・NVENC `hevc_nvenc`・Rockchip MPP `hevc_rkmpp`)。使えるかは AV1・H.264 と同じく起動時の試しのエンコードで
+(Intel・AMD)・NVENC `hevc_nvenc`・QSV `hevc_qsv` と AMF `hevc_amf` (Windows)・Rockchip MPP `hevc_rkmpp`)。使えるかは AV1・H.264 と同じく起動時の試しのエンコードで
 決まり、どれも通らなければ設定画面に H.265 の行が出ません。AV1 をデコードできず H.265 ならデコードできる端末
 (数年前のテレビ・スマホ) 向けに、H.264 より小さく持つためのものです。
 

@@ -52,7 +52,7 @@ afterAll(() => {
   config.nvidiaDir = nvidiaDirBefore;
 });
 
-const { probe, describeDevice, liveHw, hwReady, hwEncode } =
+const { probe, describeDevice, liveHw, hwChain, hwReady, hwEncode } =
   await import("./hwenc");
 
 /** i965 らしい返事 */
@@ -223,6 +223,8 @@ test("/dev/mpp_service があれば、別の行で H.264 と H.265 だけ MPP �
       vaapi: [],
       rkmpp: ["hevc", "h264"],
       nvenc: [],
+      qsv: [],
+      amf: [],
       full: [],
     });
     const tried = calls.filter((argv) =>
@@ -271,9 +273,16 @@ test("NVIDIA の GPU は 1 枚ずつ別の行で NVENC を試し、GPU の番号
       gpu: 0,
       vaapi: [],
       nvenc: ["hevc", "h264"],
+      qsv: [],
+      amf: [],
       full: [],
     });
-    expect(n1).toMatchObject({ gpu: 1, nvenc: ["av1", "hevc", "h264"] });
+    expect(n1).toMatchObject({
+      gpu: 1,
+      nvenc: ["av1", "hevc", "h264"],
+      qsv: [],
+      amf: [],
+    });
     // GPU の番号はデバイスファイルの並びの位置。デバイスファイルは ffmpeg に渡さない
     const tried = calls.filter((argv) =>
       argv.some((a) => a.endsWith("_nvenc")),
@@ -296,4 +305,71 @@ test("NVIDIA の GPU は 1 枚ずつ別の行で NVENC を試し、GPU の番号
     rmSync(nvidiaDir, { recursive: true, force: true });
     mkdirSync(nvidiaDir);
   }
+});
+
+/** Windows の探し方 (`probeWindows`)。OS の名前だけ差し替えて、ffmpeg の返事を作る */
+async function onWindows<T>(body: () => Promise<T>): Promise<T> {
+  const before = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", { value: "win32" });
+  try {
+    return await body();
+  } finally {
+    Object.defineProperty(process, "platform", before);
+  }
+}
+
+test("Windows で GPU が無ければ、行は 0 でソフトウェアにする", async () => {
+  answer = () => 1;
+  calls.length = 0;
+  const { devices, message } = await onWindows(() => probe());
+  expect(devices).toEqual([]);
+  expect(liveHw("h264", {}, 0, devices)).toBeNull();
+  expect(hwChain("h264", {}, 0, devices)).toEqual([]);
+  expect(message).toContain("ソフトウェアでエンコードします");
+  // /dev の探し方は使わない。NVENC は 0 番が落ちたら止め、QSV・AMF は 4 番まで H.264 だけ試す
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(lines.filter((l) => l.includes("_nvenc"))).toHaveLength(1);
+  expect(lines.filter((l) => l.includes("_qsv"))).toHaveLength(4);
+  expect(lines.filter((l) => l.includes("_amf"))).toHaveLength(4);
+  expect(lines.some((l) => l.includes("_vaapi"))).toBe(false);
+});
+
+test("Windows は NVENC・QSV・AMF を番号ごとに試し、通った番号だけを行にする", async () => {
+  // NVIDIA 1 枚 (AV1 は RTX 40 より前で無い)、Intel (アダプタ 1。0 は NVIDIA で QSV が落ちる)、AMD 無し
+  answer = (argv) => {
+    const line = argv.join(" ");
+    if (line.includes("av1_")) return 1;
+    if (line.includes("_nvenc -gpu 0")) return 0;
+    if (line.includes("child_device=1")) return 0;
+    return 1;
+  };
+  calls.length = 0;
+  const { devices, message } = await onWindows(() => probe());
+  expect(devices.map((d) => d.path)).toEqual(["nvidia0", "qsv1"]);
+  expect(devices[0]).toMatchObject({
+    label: "nvidia0 (NVIDIA)",
+    gpu: 0,
+    nvenc: ["hevc", "h264"],
+    qsv: [],
+    amf: [],
+  });
+  expect(devices[1]).toMatchObject({
+    label: "qsv1 (Intel)",
+    gpu: 1,
+    qsv: ["hevc", "h264"],
+    nvenc: [],
+  });
+  expect(describeDevice(devices[1]!)).toBe("QSV: H.265 / H.264");
+  expect(message).toBe(
+    "デバイスが 2 個見つかり、2 個で GPU エンコードできます",
+  );
+  // 同じコーデックを両方で使える。QSV はアダプタの番号を添える
+  expect(hwChain("h264", {}, 1, devices)).toEqual([
+    { device: "qsv1", kind: "qsv", gpu: 1 },
+    { device: "nvidia0", kind: "nvenc", gpu: 0 },
+  ]);
+  // 通らなかった H.264 の番号 (AMF) では、AV1・H.265 を試さない
+  const lines = calls.map((argv) => argv.join(" "));
+  expect(lines.filter((l) => l.includes("_amf"))).toHaveLength(4);
+  expect(lines.some((l) => l.includes("hevc_amf"))).toBe(false);
 });
