@@ -175,7 +175,7 @@ async function measureSmoothMotion(
  * **1440x1080 のままにはしない。** 実測は docs/encode.md「地上波の HD は 1920x1080 に引き伸ばす」。
  *
  * - AV1 は映像の中に画素の縦横比を書く場所が無く、SAR は Matroska の DisplayWidth・DisplayHeight にしか残らない。
- *   ffmpeg はここに縦横比 (16 と 9) を書き、Firefox は AV1 のときそれを画素の数として読んで `videoWidth` を 16x9 と返す
+ *   ffmpeg はここに縦横比 (16 と 9) を書き、Firefox は AV1 のときそれを画素の数として読んで `videoWidth` を 16x9 と返す。
  *   映すのは 16:9 のまま。`videoWidth` で大きさを決める切り抜きの 1 コマが 16x9 の画素になる
  * - 画質 (XPSNR) を揃えて比べると、AV1 は大きさが変わらない (97〜103%)。H.264 は crf を 23 から 22.5 に下げて 88〜91% になる
  *

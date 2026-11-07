@@ -111,8 +111,9 @@
   --dp-z-skip: 70; /* 本文へ移動のリンク (どれよりも上) */
   --dp-z-stage-full: 90; /* 広げた全画面の舞台 (iPhone) */
   --dp-z-measure: 100; /* 開発用の測り (`Measure`) */
-  /* 映像の舞台の中。映像 → データ放送 → 操作バーの影 → 実況のコメント → 字幕・幕 → ボタン (docs/design.md の「映像の上の操作」) */
+  /* 映像の舞台の中。映像 → データ放送 → データ放送が小窓に寄せた映像 → 操作バーの影 → 実況のコメント → 字幕・幕 → ボタン (docs/design.md の「映像の上の操作」) */
   --dp-z-stage-data: 5;
+  --dp-z-stage-window: 6;
   --dp-z-stage-shade: 7;
   --dp-z-stage-comments: 8;
   --dp-z-stage-captions: 9;
