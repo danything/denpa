@@ -173,8 +173,8 @@ let held = false;
 /** Mac で取っている `PreventUserIdleSystemSleep` の番号 */
 let assertion: number | null = null;
 
-/** `pmset -g assertions` に出る名前 (Mac) */
-const AWAKE_NAME = "denpa (録画・視聴・エンコード中)";
+/** `pmset -g assertions` に出る名前 (Mac)。**ASCII だけで書く** (pmset は ASCII でない名前を空で出す。CI で見た) */
+const AWAKE_NAME = "denpa: recording, live viewing or encoding";
 
 /**
  * `busy` のあいだスリープさせない。変わったときだけ OS に伝える。

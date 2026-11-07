@@ -226,12 +226,12 @@ await ff(
 console.log("ffmpeg: ok");
 
 /*
- * GPU のエンコーダ。Windows のランナーに GPU は無く、Mac のランナーは仮想マシンでメディアエンジンが見えない
- * (見えればエンコードが通る)。ここで見るのは次の 3 つ。
+ * GPU のエンコーダ。Windows のランナーに GPU は無いのでエンコードは通らない。Mac のランナーでは VideoToolbox が通る。
+ * ここで見るのは次の 3 つ。
  * 1. denpa が渡すエンコーダのオプション (hwenc.hwArgs・hwenc.liveHwArgs・encoder.keyframeArgs) を、組み込んだエンコーダが持っている
  * 2. hwArgs の引数で起動すると、通るか GPU が無いために落ちる (エンコーダやオプションの名前が違って落ちるのではない)
  * 3. 試しのエンコードが全部落ちると、GPU の方式は 0 になり、録画もライブもソフトウェアでエンコードする。
- *    通ったものがあれば、その方式で実際にエンコードできる
+ *    通ったものがあれば、その方式で放送に似せた素材をエンコードでき、試しのエンコードが落ちる ffmpeg で探し直すとソフトウェアに戻る
  */
 const options: Record<string, string[]> = {
   nvenc: ["gpu", "preset", "rc", "forced-idr", "delay", "zerolatency"],
@@ -334,6 +334,22 @@ if (found.devices.length === 0) {
       at(`gpu-${codec}.mkv`),
     );
     console.log(`${codec} on ${way.kind}: ok`);
+  }
+  // 試しのエンコードが全部落ちる ffmpeg (いつも 1 で終わる `false`。Mac) で探し直すと、方式は 0 になってソフトウェアに戻る
+  if (!windows) {
+    config.ffmpeg = "/usr/bin/false";
+    const none = await probe();
+    console.log(none.message);
+    if (none.devices.length !== 0)
+      throw new Error("試しのエンコードが落ちたのに方式が残っています");
+    for (const codec of HW_CODECS) {
+      if (hwChain(codec, {}).length > 0 || liveHw(codec, {}) !== null)
+        throw new Error(
+          `試しのエンコードが落ちたのに ${codec} の方式が残っています`,
+        );
+    }
+    console.log("GPU fails: software encoding: ok");
+    config.ffmpeg = ffmpeg;
   }
 }
 

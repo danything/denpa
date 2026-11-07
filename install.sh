@@ -677,7 +677,9 @@ mac_main() {
 
   [ "$(uname -m)" = arm64 ] || die "対応しているのは Apple Silicon (arm64) の Mac だけです (px4-userland / siano-userland に Intel Mac 用がありません)"
 
-  work=$(mktemp -d)
+  # 作業場所は /tmp の下に、その人も入れるように作る (sudo -u で docker を呼ぶとき、今いる場所を読めないと sh が警告を出す)
+  work=$(mktemp -d /tmp/denpa-install.XXXXXX)
+  chmod 755 "$work"
   trap 'rm -rf "$work"' EXIT
   cd "$work"
 

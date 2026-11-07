@@ -81,7 +81,7 @@ root でないと書けないので、`sudo nano "/Library/Application Support/d
 
 **録画・ライブ視聴・エンコードの間は、本体が Mac をスリープさせません** (IOKit の `PreventUserIdleSystemSleep`。src/lib/server/awake.ts)。
 止めるのは操作が無いことで眠るのだけで、画面は消えてかまいません。蓋を閉じる・メニューの「スリープ」は止めません。
-録画を始める 5 分前からもスリープさせません。`pmset -g assertions` に `denpa (録画・視聴・エンコード中)` として出ます。
+録画を始める 5 分前からもスリープさせません。`pmset -g assertions` に `denpa: recording, live viewing or encoding` として出ます (pmset が ASCII でない名前を出さないので英語)。
 
 **次の録画の 3 分前に、スリープから起こします。** 本体が IOKit の `IOPMSchedulePowerEvent` で起こす予約を 1 つ置き、
 次の録画が変わるたびに置き直します (録画が無ければ取り消す)。予約は `pmset -g sched` に `denpa` の名前で出ます。
@@ -144,7 +144,7 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
 ## 確かめたこと
 
 - **CI** (test.yml の `server-macos`・`agent-macos`): 配布物の ffmpeg で denpa が使う経路を流し、VideoToolbox のエンコーダが組み込まれて
-  denpa が渡すオプションを持つこと、GPU で試せなければソフトウェアに戻ることを見る (Mac のランナーは仮想マシンでメディアエンジンが見えない)。
+  denpa が渡すオプションを持つこと、通れば放送に似せた素材をエンコードできること (ランナーでは通る)、試しのエンコードが落ちればソフトウェアに戻ることを見る。
   進み具合を fd 3 で受け、スリープを止める呼び出しが `pmset -g assertions` に、起こす予約が `pmset -g sched` に出て取り消せることを見る。
   本体を `bun server.js` で起こして画面・字・デコーダが返ることを見る。install.sh で本体ごと入れて root の LaunchDaemon で動き、
   本体がエージェントと組むところまで。Docker の本体からの移行は偽の docker で流す (`tests/install-mac-migrate.sh`)

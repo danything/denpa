@@ -277,7 +277,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * ハードウェアのエンコーダを求め (`RequireHardwareAcceleratedVideoEncoder`)、無ければ開けずに落ちる。
  * Apple のソフトウェアのエンコーダに黙って倒れず、試しのエンコードが落ちて x264 に戻る。
  * デバイスは開かない (VideoToolbox が自分でメディアエンジンを選ぶ)。CPU で作ったフレームを nv12 で渡す。
- * `-g 250` は同じ。**実機では測っていない** (CI の Mac のランナーは仮想マシンで、メディアエンジンが見えない)
+ * `-g 250` は同じ。**画質と大きさは測っていない** (CI の Mac のランナーで試しのエンコードが通り、放送に似せた素材をエンコードできるところまで見ている)
  */
 export function hwArgs(
   way: HwWay,
