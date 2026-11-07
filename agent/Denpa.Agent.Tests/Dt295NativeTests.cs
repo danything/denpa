@@ -377,7 +377,7 @@ public class Dt295NativeTests
     }
 
     [Test]
-    public async Task 自前の_hook_が残った機材は_Linux_ではポートの電源を入れ直してから開き_ほかの_OS_では挿し直しを頼んで断る()
+    public async Task 自前の_hook_が残った機材は_Linux_ではポートの電源を入れ直してから開き_ほかの_OS_では挿し直しを求めて断る()
     {
         var fake = Rig();
         // 前の実行が途中で止まった状態: 自前の body と hook が残っている

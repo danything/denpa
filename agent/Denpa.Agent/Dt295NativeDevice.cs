@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 開くときは起動直後の機材に設定を書く。起動直後でなければ (途中で止まった自前の hook が残っている、ほかのファームウェアが動いたあと)、
-/// Linux はポートの電源を 1 回入れ直してからやり直し、ほかの OS は挿し直しを頼んで断る。
+/// Linux はポートの電源を 1 回入れ直してからやり直し、ほかの OS は挿し直しを求めて断る。
 /// 閉じるときは書いたものを逆順に戻すので、続けて開き直せる (実機で確かめた)。エージェントが動いている間は開いたまま (Zd1jBoard と同じ)
 /// </para>
 /// </summary>
@@ -59,22 +59,26 @@ public sealed class Dt295NativeDevice
         Acquire(port, () => Dt295.OpenUsb(port), OperatingSystem.IsLinux() ? () => UsbSysfs.PowerCycle(UsbSysfs.Devices, port, TimeSpan.FromSeconds(10)) : null);
 
     /// <param name="open">USB を開く</param>
-    /// <param name="powerCycle">ポートの電源を入れ直す (Linux)。null なら挿し直しを頼んで断る</param>
+    /// <param name="powerCycle">ポートの電源を入れ直す (Linux)。null なら挿し直しを求めて断る</param>
     internal static Dt295NativeDevice Acquire(string port, Func<IUsbDevice> open, Action? powerCycle, Action<int>? sleep = null, uint idlePolls = IdlePollsDefault)
     {
-        lock (Registry)
+        // 開く間 (電源の入れ直しは最大 10 秒) は同じポートだけを待たせる。別のポートの DT295 は待たない
+        lock (PortGate(port))
         {
-            if (Devices.TryGetValue(port, out var device) && !device.Faulted)
+            Dt295NativeDevice? stale;
+            lock (Registry)
             {
-                lock (device._gate) device._users++;
-                return device;
-            }
-            if (device is not null)
-            {
+                Devices.TryGetValue(port, out var current);
+                if (current is not null && !current.Faulted)
+                {
+                    lock (current._gate) current._users++;
+                    return current;
+                }
+                stale = current;
                 Devices.Remove(port);
-                device.Close();
             }
-            var started = Stopwatch.StartNew();
+            stale?.Close();
+            Dt295NativeDevice device;
             try
             {
                 device = Open(port, open, sleep, idlePolls);
@@ -91,12 +95,22 @@ public sealed class Dt295NativeDevice
                 device = Open(port, open, sleep, idlePolls);
             }
             device._users = 1;
-            Devices[port] = device;
+            lock (Registry) Devices[port] = device;
             Log.Write($"[{Dt295.Model} {port}] 開きました (設定 {device.SetUp.Time.TotalMilliseconds:F0}ms、制御転送 {device.SetUp.Controls} 回)");
             return device;
         }
     }
 
+    private static readonly Dictionary<string, object> PortGates = [];
+
+    private static object PortGate(string port)
+    {
+        lock (PortGates)
+        {
+            if (!PortGates.TryGetValue(port, out var gate)) PortGates[port] = gate = new object();
+            return gate;
+        }
+    }
     private static Dt295NativeDevice Open(string port, Func<IUsbDevice> open, Action<int>? sleep, uint idlePolls)
     {
         var usb = open();

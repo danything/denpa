@@ -226,12 +226,15 @@ public sealed class Dt295NativeCard : ICardLink
         {
             if (_powered && !_link.Dead) PowerOff();
         }
-        catch (Exception error) when (error is IOException or TimeoutException)
+        catch (Exception error) when (error is IOException or TimeoutException or ObjectDisposedException)
         {
+            // 機材が先に閉じられていたとき (エージェントを止めるとき) も、ここから例外を出さない
             _log?.Invoke($"カードの電源を切れませんでした: {error.Message}");
         }
         finally
         {
+            // カードを閉じたあとは、カードの UART に書けないようにする (許可はカードが使っている間だけ)
+            _link.AllowCardUart = false;
             _link = null;
             _release?.Invoke();
         }

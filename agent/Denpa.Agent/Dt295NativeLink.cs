@@ -5,7 +5,7 @@ namespace Denpa.Agent;
 /// <summary>自前方式の PIX-DT295 が、機材に断られた・想定と違う値を返した・時間切れになった</summary>
 public class Dt295NativeException(string message) : IOException(message);
 
-/// <summary>機材が起動直後の状態ではない。ポートの電源を入れ直すと戻る (Linux)。ほかの OS では挿し直しを頼む</summary>
+/// <summary>機材が起動直後の状態ではない。ポートの電源を入れ直すと戻る (Linux)。ほかの OS では挿し直しを求める</summary>
 public sealed class Dt295NativeWarmException(string message) : Dt295NativeException(message);
 
 /// <summary>
@@ -297,7 +297,15 @@ public sealed class Dt295NativeLink
         BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(12), idleLimit);
         Controls++;
         _trace?.Invoke($"要求 パケット {packets}、待つ回数 {idleLimit}");
-        _usb.ControlOut(RequestOut, Request, Dt295NativePrograms.RequestValue, Dt295NativePrograms.RequestIndex, request, timeoutMs);
+        try
+        {
+            _usb.ControlOut(RequestOut, Request, Dt295NativePrograms.RequestValue, Dt295NativePrograms.RequestIndex, request, timeoutMs);
+        }
+        catch (IOException)
+        {
+            Dead = true;
+            throw;
+        }
         var reply = new byte[64];
         DirectRead(Dt295NativePrograms.Staging, reply);
         uint Word(int at) => BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(at));
