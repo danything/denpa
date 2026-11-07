@@ -1,7 +1,13 @@
 import { eq, sql } from "drizzle-orm";
 
 import { readIndoorHosts } from "../host";
-import { HW_CODECS, type HwAllow, type HwCodec, type HwKind } from "../hw";
+import {
+  HW_CODECS,
+  HW_KINDS,
+  type HwAllow,
+  type HwCodec,
+  type HwKind,
+} from "../hw";
 import { readNg } from "../jikkyo/ng";
 import { normalizePrefecture } from "../prefecture";
 import type { CmMode, VideoCodec } from "../types";
@@ -180,14 +186,9 @@ function parseHwAllow(value: string | undefined): HwAllow {
       if (entry === null || typeof entry !== "object") continue;
       const pick = (raw: unknown): HwCodec[] =>
         HW_CODECS.filter((codec) => Array.isArray(raw) && raw.includes(codec));
-      out[device] = {
-        vaapi: pick(entry.vaapi),
-        rkmpp: pick(entry.rkmpp),
-        nvenc: pick(entry.nvenc),
-        qsv: pick(entry.qsv),
-        amf: pick(entry.amf),
-        videotoolbox: pick(entry.videotoolbox),
-      };
+      out[device] = Object.fromEntries(
+        HW_KINDS.map((kind) => [kind, pick(entry[kind])]),
+      ) as Record<HwKind, HwCodec[]>;
     }
     return out;
   } catch {

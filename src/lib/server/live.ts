@@ -162,7 +162,7 @@ type StreamCodec = LiveCodec | "audio";
  * 合成の TS (1080i の MPEG-2・GOP 0.5 秒) を実時間で流し込み、最初の moof が出るまでを
  * 8 回ずつ測ったもの:
  *
- *     I フレームが頭から 40ms     付けると 781〜803ms   外すと 270〜291ms
+ *     I フレームが先頭から 40ms     付けると 781〜803ms   外すと 270〜291ms
  *     I フレームの位置がばらばら  どちらも約 300〜710ms (I フレームまでの距離 + 約 240ms)
  *
  * **外しても遅れは増えない。** 1 秒ぶんの映像が出そろう時刻はどちらも 1031〜1131ms で、
@@ -986,7 +986,7 @@ export function liveHevc(devices: HwDevice[] = hwEncode().devices): boolean {
  * **GPU でエンコードできるかだけを見る** (段を下げるときのコーデック選び。`rungCodec`)。`pickLiveHw` と同じ決め方だが、
  * 順番 (`liveTurn`) は進めない。選ぶたびに進めると、実際に起こすエンコードの GPU の振り分けがずれる
  */
-export function liveHwAvailable(
+function liveHwAvailable(
   codec: LiveCodec,
   interlaced = true,
   devices: HwDevice[] = hwEncode().devices,
@@ -1257,11 +1257,11 @@ class Session {
     /**
      * 入力の差し替え。無ければチューナーから (ライブ)。
      * 追っかけ再生はこれで録画中のファイルを渡す (`openChase`)。
-     * 呼ぶたびに読み直したストリームを返すこと。起こし直す (字幕なし・ソフトウェア) たびに頭から読む
+     * 呼ぶたびに読み直したストリームを返すこと。起こし直す (字幕なし・ソフトウェア) たびに先頭から読む
      */
     private readonly source?: () => ReadableStream<Uint8Array>,
     /**
-     * 追っかけで、番組が替わって作り直した (`restart`)。`consumed` は `source` の頭から読んだ量 (バイト)。
+     * 追っかけで、番組が替わって作り直した (`restart`)。`consumed` は `source` の先頭から読んだ量 (バイト)。
      * 作り直したところを覚えるのに使う (`chase.ts` の `resumeFrom`)
      */
     private readonly restarted?: (consumed: number) => void,
@@ -1342,7 +1342,7 @@ class Session {
 
   add(viewer: Viewer): void {
     this.viewers.add(viewer);
-    // そのままの TS に init は無い。**どこから受け取っても頭から読める** (PAT/PMT は繰り返し来る)
+    // そのままの TS に init は無い。**どこから受け取っても先頭から読める** (PAT/PMT は繰り返し来る)
     if (this.raw) viewer.ready = true;
     if (this.init !== null) this.hand(viewer, CHANNEL.videoInit, this.init);
     // 選べる字幕と、いま出ている 1 枚。**どちらも待たせない**
@@ -1561,7 +1561,7 @@ class Session {
                 },
           );
           stream = head.stream;
-          // 読んだぶんは返ってきたストリームの頭にある。ライブは起こし直してもこちらを使う
+          // 読んだぶんは返ってきたストリームの先頭にある。ライブは起こし直してもこちらを使う
           if (feed !== null) feed = head.stream;
           /*
            * 指定した本数目が無ければ指定しない。`captionless` には覚えない。毎回 PMT を読むので、
@@ -1806,7 +1806,7 @@ class Session {
    * リクエストし直すこと (観ていない先を飛ばさない)。その近くをリクエストされたら変わったところのバイトから
    * 読むので (`restarted`・`chase.ts` の `resumePlan`)、前の番組の並びを読み直して作り直しを繰り返すことはない
    *
-   * @param consumed 追っかけで、`source` の頭から読んだ量 (バイト)
+   * @param consumed 追っかけで、`source` の先頭から読んだ量 (バイト)
    */
   private restart(consumed: number): void {
     if (this.stopped) return;
@@ -1913,7 +1913,7 @@ class Session {
     const filter = this.program > 0 ? new ServiceFilter(this.program) : null;
     /** この ffmpeg を起こしてから、映像・音声・字幕の並びが変わったか */
     const streams = new StreamsWatch();
-    /** 頭から読んだ量 (バイト)。追っかけで作り直したところを覚えるのに使う (`restart`) */
+    /** 先頭から読んだ量 (バイト)。追っかけで作り直したところを覚えるのに使う (`restart`) */
     let consumed = 0;
     try {
       for (;;) {
@@ -2814,7 +2814,7 @@ export function liveCaptions(
 /** 録画の字幕を、求められた位置のどれだけ手前から読むか (秒)。**いま出ている字幕も出すため** (字幕は次が来るまで出しっぱなし) */
 const CAPTION_LEAD = 10;
 
-/** 観ている位置より先に読んでおく量 (秒)。頭のここまでは倍速の縛りを掛けずに読む (`followFile` の `burst`) */
+/** 観ている位置より先に読んでおく量 (秒)。先頭のここまでは倍速の縛りを掛けずに読む (`followFile` の `burst`) */
 const CAPTION_AHEAD = 10;
 
 /**
@@ -2839,7 +2839,7 @@ const recordingCaptioners = new Map<number, (() => void)[]>();
  *
  * **録り終えた録画でも、まるごと返さずに流す。** 1 時間の BS は 7GB あり、字幕を全部抜くには
  * それを読み切る必要がある (観はじめが待たされる)。流すなら観る位置から読むだけで済み、
- * 追っかけと同じ仕組みで両方に答えられる。送り込みは追っかけと同じ倍速まで (頭の
+ * 追っかけと同じ仕組みで両方に答えられる。送り込みは追っかけと同じ倍速まで (先頭の
  * `CAPTION_LEAD + CAPTION_AHEAD` 秒ぶんは縛らず読んで、観ている位置を追い越しておく)。受け側が
  * 読まなくなったら (アプリは先読みする枚数に上限がある) 録画を読むのも止める。
  * シークしたら `from` を変えてリクエストし直す

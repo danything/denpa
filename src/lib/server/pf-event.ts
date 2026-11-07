@@ -7,7 +7,7 @@ import { PacketStream } from "@danything/arib/psi";
  * p/f は数秒おきに繰り返し流れる (ARIB TR-B14 では自 TS の p/f は 2 秒に 1 回以上)。届かない局で
  * 待ち続けないよう、最初の塊が届いてからこの長さで打ち切る。打ち切っても録画は続ける
  */
-export const PF_WAIT = 15_000;
+const PF_WAIT = 15_000;
 
 /**
  * **録っている番組の EIT[p/f] を 1 回だけ読む** (`recorder.ts`)。

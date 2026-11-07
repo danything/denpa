@@ -388,7 +388,7 @@ interface EncodeOptions {
   displaySize?: { width: number; height: number };
   /**
    * 映像の高さ (`probeVideo`。引き伸ばすのは横だけなので、出すものも同じ高さ)。
-   * Rockchip MPP と NVENC のビットレートを決めるのに使う (`hwenc.hwBitrate`)。測れなければ 1080 の値
+   * Rockchip MPP・NVENC・AMF・VideoToolbox のビットレートを決めるのに使う (`hwenc.hwBitrate`)。測れなければ 1080 の値
    */
   height?: number;
   /** 音声トラックの名前。**番組表と同じ言い方** (`arib.audioTitles`) */
@@ -880,7 +880,7 @@ export function encodeProgress(totalFrames: number, inputBytes: number) {
  *
  * 子プロセスとは同じ名前空間にいるので、/proc/<pid>/fd から入力ファイルを
  * 指している fd を探せば、/proc/<pid>/fdinfo/<fd> の pos がそのまま読み位置。
- * Linux 専用で、Windows では読めない。読めない環境では、分母 (尺) を測れなかったときに
+ * Linux 専用で、Windows・Mac では読めない。読めない環境では、分母 (尺) を測れなかったときに
  * 割合が動かなくなるだけで、エンコードしたものには影響しない。
  */
 export function findInputFd(pid: number, path: string): number | null {
@@ -1331,6 +1331,34 @@ async function runJob(jobId: number): Promise<void> {
   emit("recordings");
 
   /*
+   * **エンコードするコーデックを先に決める。** H.265 は GPU でだけエンコードする (`SOFTWARE_CODECS`) ので、
+   * いま H.265 をエンコードできる GPU が無ければ (抜いた・設定で外した) H.265 は飛ばし、
+   * H.265 しか選んでいなければここで失敗にする。復号や前のものを消すより前に決めるのは、
+   * 作れないと分かっている再エンコードで、いま観られる mkv を消さないため (元の TS は残るので、GPU を戻せば作り直せる)。
+   *
+   * **GPU を確かめ終わるのを待ってから決める** (`hwReady`)。起動した直後のジョブが、確かめる前の
+   * 「GPU 無し」で H.265 を飛ばし、H.264 を CPU でエンコードしないように
+   */
+  await hwReady();
+  const chosen: readonly HwCodec[] =
+    settings().codecs.length > 0 ? settings().codecs : ["av1"];
+  const hevcReady = hwChain("hevc", settings().hwAllow).length > 0;
+  if (chosen.includes("hevc") && !hevcReady && chosen.length > 1) {
+    console.warn(
+      `[encode] H.265 をエンコードできる GPU が無いため、H.265 は飛ばします (録画 ${recording.id})`,
+    );
+  }
+  const codecs = encodeOrder(chosen, hevcReady);
+  if (codecs.length === 0) {
+    fail(
+      jobId,
+      recording,
+      "H.265 をエンコードできる GPU がありません (H.265 はソフトウェアではエンコードしません)",
+    );
+    return;
+  }
+
+  /*
    * **置き場所は出来上がってから決める** (下の `renameSync` の直前)。
    * ここで決めた名前を最後まで使うと、**同じ番組を 2 本同時にエンコードしたときに
    * 両方が同じ名前を選ぶ**。どちらもまだ書き終えていないので、
@@ -1520,29 +1548,13 @@ async function runJob(jobId: number): Promise<void> {
    * 「切る」ではどのコーデックも場面の切れ目ごとにキーフレームを置いてエンコードし、境目にキーフレームが無ければ
    * そのコーデックだけ境目を指して再エンコードしてから切る。
    *
-   * **H.265 は GPU でだけエンコードする** (ソフトウェアのエンコーダを組んでいない。`SOFTWARE_CODECS`)。
-   * いま H.265 をエンコードできる GPU が無ければ (抜いた・設定で外した) H.265 は飛ばしてほかのコーデックだけ作り、
-   * H.265 しか選んでいなければ失敗にする (元の TS は残るので、GPU を戻して再エンコードすればよい)。
-   *
    * **H.265 を選んでいれば 1 本目にする** (`encodeOrder`)。主 (`library_path`) にするのは、エンコードした順ではなく
    * AV1 → H.265 → H.264 の先頭 (下の `primary`)
    *
    * **どれかが失敗しても、出来たものは置く** (観られるものを捨てない)。ジョブは失敗にして理由を残し、元の TS は消さない
    * (再エンコードすれば全部作り直せる)。全部失敗したら、置きかけを消して失敗にする。
-   *
-   * **GPU を確かめ終わるのを待ってから決める** (`hwReady`)。起動した直後のジョブが、確かめる前の
-   * 「GPU 無し」で H.265 を飛ばし、H.264 を CPU でエンコードしないように
+   * エンコードするコーデック (`codecs`) は、ジョブの最初に決めてある
    */
-  await hwReady();
-  const chosen: readonly HwCodec[] =
-    settings().codecs.length > 0 ? settings().codecs : ["av1"];
-  const hevcReady = hwChain("hevc", settings().hwAllow).length > 0;
-  if (chosen.includes("hevc") && !hevcReady && chosen.length > 1) {
-    console.warn(
-      `[encode] H.265 をエンコードできる GPU が無いため、H.265 は飛ばします (録画 ${recording.id})`,
-    );
-  }
-  const codecs = encodeOrder(chosen, hevcReady);
   /** CM 検出の結果 (入れ物の先頭からの秒)。1 本目をエンコードし終えたら決まる */
   let detection = null as CmDetection | null;
   /** 1 本目で読んだ最初のコマの時刻 (入れ物の先頭から)。切るとき、エンコードしたものの時刻と突き合わせる */
@@ -1858,17 +1870,6 @@ async function runJob(jobId: number): Promise<void> {
   const canPoint = (codec: HwCodec): boolean =>
     SOFTWARE_CODECS.includes(codec) ||
     hwChain(codec, settings().hwAllow).some((way) => way.kind !== "rkmpp");
-
-  // H.265 だけを選んでいて、H.265 をエンコードできる GPU がいま無い (上の `codecs`)
-  if (codecs.length === 0) {
-    cleanup();
-    fail(
-      jobId,
-      recording,
-      "H.265 をエンコードできる GPU がありません (H.265 はソフトウェアではエンコードしません)",
-    );
-    return;
-  }
 
   /** エンコードし終えた 1 本。`skip` はこの 1 本で先頭から捨てた長さ (境目を指して再エンコードしたら変わる) */
   interface Made {

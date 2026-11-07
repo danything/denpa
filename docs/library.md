@@ -71,7 +71,7 @@ Docker Compose なら、録画もエンコードもしていないときに次�
 1. **denpa を止める** (`docker compose stop denpa`)。動かしたまま付け替えると、突き合わせ (`files.reconcile`) が
    「保存先から消えた」と読んで、録画を削除済みにします
 2. 今のボリュームの中身を新しいディスクへ写す。ボリュームの名前は `docker volume ls` で確かめる
-   (`install.sh` で入れたなら `denpa_denpa-library`。Mac はボリュームではなく `~/Movies/denpa/library` なので、そのフォルダを写す)
+   (`install.sh` で入れたなら `denpa_denpa-library`)
 
    ```sh
    docker run --rm -v denpa_denpa-library:/from -v /mnt/disk2/denpa:/to alpine cp -a /from/. /to/
@@ -93,6 +93,9 @@ Docker Compose なら、録画もエンコードもしていないときに次�
 元の TS (`/media/raw`) も同じ手順で移せます。**エージェントも同じ場所を見る**ので、denpa と `tuner-agent` の
 両方を書き換えます。Kubernetes なら、新しいストレージに PVC を作り、chart の `persistence.encoded.existingClaim`
 (元の TS は `persistence.raw.existingClaim`) に名前を入れます。こちらもコンテナの中の場所は変わりません。
+
+Mac と Windows の置き場は、インストーラが決めるフォルダ (`~/Movies/denpa/library`・`~/Videos/denpa/library`) です。
+`denpa.env` に `ENCODED_DIR` を書いても効きません ([install-mac.md](install-mac.md#環境変数を足す-denpaenv)・[install-windows.md](install-windows.md#環境変数を足す-denpaenv))。
 
 ## 観るのはブラウザで
 

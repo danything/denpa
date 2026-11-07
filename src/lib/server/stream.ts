@@ -148,7 +148,7 @@ let lowerFailed = false;
  * 他に何も動いていなければ空いた CPU をそのまま使うので、速さは変わらない。GPU でエンコードするときも
  * 同じ処理を通るが、下がるのは CPU の順番だけなので困らない。
  *
- * - Linux では `setpriority`。起こした直後に下げるので、ffmpeg が後から作るスレッドも引き継ぐ
+ * - Linux と Mac では `setpriority`。起こした直後に下げるので、ffmpeg が後から作るスレッドも引き継ぐ
  * - Windows では libuv が 19 を IDLE_PRIORITY_CLASS に当てる
  *
  * 下げられなくても止めない (いつもの優先度で走るだけ)

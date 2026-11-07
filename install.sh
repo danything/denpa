@@ -92,14 +92,14 @@ version() {
 }
 image_tag() { printf '%s' "${1#v}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' && echo "${1#v}" || echo latest; }
 
-# Docker が使えるか。駄目なら理由と入れ方を言って 1 を返す (止めるかは呼ぶ側)
+# Docker が使えるか (Linux)。駄目なら理由と入れ方を言って 1 を返す (止めるかは呼ぶ側)
 docker_ready() {
   if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
     say "Docker (compose) が見当たりません。$1"
     return 1
   fi
   if docker info >/dev/null 2>&1; then return 0; fi
-  if [ "$(uname -s)" = Linux ] && [ "$(id -u)" != 0 ] && ! id -nG | grep -qw docker; then
+  if [ "$(id -u)" != 0 ] && ! id -nG | grep -qw docker; then
     say "Docker に触る権限がありません。sudo usermod -aG docker $(id -un) のあとログインし直して、もう一度流してください"
   else
     say "Docker が動いていません。$2"

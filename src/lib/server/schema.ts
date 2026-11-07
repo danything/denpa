@@ -74,7 +74,7 @@ function json<T>(name: string, read: (value: unknown) => T) {
  * 相対なら、置き場のマウント先をどこへ移しても DB は触らずに済む。読み替えはここだけで済ませ、使う側は今までどおり
  * 絶対パスで扱う (`eq()` や `set()` に渡した値もここを通る)。
  *
- * 置き場の外のもの (Windows で書かれた古い行など) は絶対のまま持ち、そのまま返す。
+ * 置き場の外のものは絶対のまま持ち、そのまま返す。
  * 置き場は呼ばれるたびに config から引く (テストが差し替える)
  */
 function mediaPath(name: string, root: () => string) {

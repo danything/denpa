@@ -205,7 +205,7 @@
             見分けが付かない。理由をそのまま出す
         -->
       <div class="notice error small">
-        チューナーエージェントに繋がりません: {shownTuners.value.error}
+        エージェントに繋がりません: {shownTuners.value.error}
       </div>
     {:else}
       {@const tuners = shownTuners.value.list}

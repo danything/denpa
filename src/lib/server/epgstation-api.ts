@@ -65,7 +65,7 @@ export function parseSource(input: string): EpgstationSource {
     url = new URL(input.trim());
   } catch {
     throw new Error(
-      "EPGStation の URL を読めません (例: http://epgstation:8888)",
+      "EPGStation の URL を読めません (例: http://192.168.1.10:8888)",
     );
   }
   if (url.protocol !== "http:" && url.protocol !== "https:")

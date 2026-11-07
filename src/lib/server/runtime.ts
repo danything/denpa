@@ -304,7 +304,7 @@ function listenToAgent(): void {
         console.error("[agent] チューナーに繋がりません");
         notify({
           event: "agent.down",
-          text: "チューナーエージェントに繋がりません。いまは録画できません",
+          text: "エージェントに繋がりません。いまは録画できません",
         });
       }
     },

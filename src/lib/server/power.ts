@@ -40,7 +40,7 @@ export const WAKE_LEAD = 3 * MIN;
 export const HOLD_BEFORE = 5 * MIN;
 
 /** 起こすタスクの名前。install.ps1 が外すときに消す */
-export const WAKE_TASK = "denpa-wake";
+const WAKE_TASK = "denpa-wake";
 
 /** 次に録画を始める時刻 (前のマージン込み)。無ければ null */
 function nextRecording(at: number): number | null {
@@ -169,8 +169,8 @@ async function scheduleWakeTask(at: number | null, now: number): Promise<void> {
   }
 }
 
-/** Mac で起こす予約に付ける名前 (`pmset -g sched` に出る)。install.sh が外すときに、この名前の予約を取り消す */
-export const WAKE_BY = "denpa";
+/** Mac で起こす予約に付ける名前 (`pmset -g sched` に出る)。止まるときに本体が取り消す (`forgetWake`) */
+const WAKE_BY = "denpa";
 
 /** Mac で置いた予約の時刻 (ms) を書くファイル。起き直したあとに、前の起動が置いた予約を取り消すため */
 function wakeFile(): string {

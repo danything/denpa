@@ -32,7 +32,7 @@ export type ContractState = "subscribed" | "unsubscribed" | "expired";
 export const DECODE_VALID_MS = 31 * 86_400_000;
 
 /** 復号テストで確かめた契約が、まだ信じられる新しさか */
-export function freshDecode(
+function freshDecode(
   decodedAt: number | null | undefined,
   now = Date.now(),
 ): boolean {

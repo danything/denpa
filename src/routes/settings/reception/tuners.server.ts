@@ -20,6 +20,10 @@ import {
 } from "#lib/server/tuner.js";
 import { CHANNEL_TYPES } from "#lib/types.js";
 
+/** 画面に出す理由 (`Error:` の前置きを付けない) */
+const reason = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 interface TunerUser {
   use: string;
   priority: number;
@@ -118,7 +122,7 @@ export async function load() {
         list: withLabels(got.tuners),
         error: null as string | null,
       }))
-      .catch((error: unknown) => ({ list: [], error: String(error) })),
+      .catch((error: unknown) => ({ list: [], error: reason(error) })),
     // チューナーを譲り合う順。チューナーの節の「詳しく」に出す
     yieldOrder: yieldOrder(),
     card: cardStatus(),
@@ -220,7 +224,9 @@ export const actions = {
     try {
       await putCardReaders(disabled);
     } catch (error) {
-      return fail(502, { message: String(error) });
+      return fail(502, {
+        message: `カードリーダーの設定をエージェントへ送れませんでした: ${reason(error)}`,
+      });
     }
     return { success: true };
   },
@@ -231,11 +237,13 @@ export const actions = {
       const rows = await verifyContracts();
       return { success: true, contracts: rows };
     } catch (error) {
-      return fail(500, { message: String(error) });
+      return fail(500, {
+        message: `カードの契約を確かめられませんでした: ${reason(error)}`,
+      });
     }
   },
 
-  /** 対象サービスのストリームを数秒開いてスクランブル解除をテストする */
+  /** 対象の局のストリームを数秒開いて、復号できるかを試す */
   testDecode: async ({ request }) => {
     const form = await request.formData();
     const serviceId = Number(form.get("serviceId"));
@@ -246,12 +254,17 @@ export const actions = {
       const result = await testDecodeStream(serviceId);
       if (!result.ok) {
         return fail(500, {
-          message: result.error ?? "復号テストに失敗しました",
+          message:
+            result.error === undefined
+              ? "この局で復号を試せませんでした"
+              : `この局で復号を試せませんでした: ${result.error}`,
         });
       }
       return { success: true, decodeOk: result.decodeOk };
     } catch (error) {
-      return fail(500, { message: String(error) });
+      return fail(500, {
+        message: `この局で復号を試せませんでした: ${reason(error)}`,
+      });
     }
   },
 } satisfies Actions;
@@ -261,7 +274,9 @@ async function save(tuners: TunerConfig[]) {
   try {
     await putTuners(tuners);
   } catch (error) {
-    return fail(502, { message: String(error) });
+    return fail(502, {
+      message: `チューナーの設定をエージェントへ送れませんでした: ${reason(error)}`,
+    });
   }
   return { success: true };
 }

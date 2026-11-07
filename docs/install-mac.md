@@ -21,7 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 **LaunchDaemon は root で動くので、誰もログインしていなくても録画でき、外から観られます。** そのために sudo で流します
 (sudo を付けなければ、install.sh がそう言って止まる)。
 
-- **要るのは macOS だけです。** Docker も Homebrew も要りません。px4-userland / siano-userland の Mac 用は libusb を中に抱え、
+- **要るのは macOS だけです。** Homebrew も要りません。px4-userland / siano-userland の Mac 用は libusb を中に抱え、
   同梱の ffmpeg も macOS に最初からあるものにしか繋ぎません
 - **Developer ID の署名と公証はしていません。** curl で取ったファイルには「インターネットから来た」印 (隔離) が付かないので、
   Gatekeeper に止められません。ブラウザで落とした tar.gz を手で渡したとき (`DENPA_AGENT_TARBALL` など) は、install.sh が印を外します。

@@ -191,7 +191,7 @@ denpa と同じネットワークに置くと、前段越しの人が全員そ�
 docker-proxy が IPv6 の接続を Docker のゲートウェイのアドレスから繋ぎ直すときも同じです。
 そのため、denpa を動かしているマシンのブラウザから `localhost` で入ると (送信元が Docker のゲートウェイに見える)、
 既定では通りません。`http://<そのマシンの IP>:3000` で開くか、断られた画面に出る接続元を足します。
-Windows は denpa を Windows の上でそのまま動かすので、この PC のブラウザはループバック (`127.0.0.0/8`・`::1`) から来ます。install.ps1 がそこを信頼します ([install-windows.md](install-windows.md#環境変数を足す-denpaenv))。
+Mac と Windows は denpa を OS の上でそのまま動かすので、その機械のブラウザはループバック (`127.0.0.0/8`・`::1`) から来ます。install.sh と install.ps1 がそこを信頼します ([install-mac.md](install-mac.md#環境変数を足す-denpaenv)・[install-windows.md](install-windows.md#環境変数を足す-denpaenv))。
 
 ### ログインなしで開ける名前 (`ALLOWED_HOSTS`)
 
@@ -228,7 +228,8 @@ ALLOWED_HOSTS=denpa.example.com,.tail1234.ts.net
 書かないと接続元が前段のアドレスになり、`TRUSTED_NETWORKS` が誰にも当たりません (=全員が認証を
 求められます)。**ただし、前段のアドレスが `TRUSTED_NETWORKS` に入っていると、前段越しの全員が当たって
 開いてしまいます。** `TRUSTED_PROXIES` が空で、`TRUSTED_NETWORKS` が denpa 自身のネットワークと重なっていると、
-起動ログに警告を出します。前段が無い (ブラウザが直に denpa へ来る) なら何も要りません。
+起動ログに警告を出します (Mac と Windows では出しません。自分のネットワークが LAN そのものなので)。
+前段が無い (ブラウザが直に denpa へ来る) なら何も要りません。
 
 ```text
 [boot] TRUSTED_NETWORKS が、このコンテナのネットワーク (172.18.0.3/16) と重なっていて、TRUSTED_PROXIES が空です。

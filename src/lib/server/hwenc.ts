@@ -245,7 +245,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  *
  * NVENC は `-global_quality` (ICQ) を受けない (FFmpeg の nvenc.c が断る)。Rockchip MPP と同じ表のビットレートを
  * **VBR** で渡す (`nvencRate`)。GPU は番号 (`-gpu`) で選び、デバイスは開かない。CPU で作ったフレームを nv12 で
- * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は 7 段 (p1〜p7) の真ん中。Linux の本番では録画の時間が延びるので、
+ * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は 7 段 (p1〜p7) の真ん中。遅い段は録画の時間が延びるので、
  * p7 などへ変えるなら実機で測ってから別の変更で行う。**実機では測っていない** (手元に NVIDIA の GPU が無い)
  *
  * ## Windows の Intel (QSV) は ICQ で指定する
@@ -448,8 +448,8 @@ function vaapiQuality(
 }
 
 /**
- * 出す映像の大きさとコマ数。Rockchip MPP と NVENC のビットレートを決める (`hwBitrate`)。
- * ほかの方式は画質で指定するので見ない
+ * 出す映像の大きさとコマ数。Rockchip MPP・NVENC・AMF・VideoToolbox のビットレートを決める (`hwBitrate`)。
+ * VA-API・QSV は画質で指定するので見ない
  */
 interface Picture {
   /** 出す映像の高さ (画素を正方形に直したあと) */
@@ -466,7 +466,7 @@ interface Picture {
 const LARGEST: Picture = { height: 1080, smooth: true };
 
 /**
- * **Rockchip MPP と NVENC に渡すビットレート (bit/s)。** H.264 は、今の CPU の H.264 (libx264 medium crf 23) と
+ * **Rockchip MPP・NVENC・AMF・VideoToolbox に渡すビットレート (bit/s)。** H.264 は、今の CPU の H.264 (libx264 medium crf 23) と
  * 同じくらいの画質になる値を、放送を使わずに測って決めた (docs/encode.md「画質はビットレートで決める」)。
  *
  * Blender の公開映像 (Big Buck Bunny・Tears of Steel、CC BY 3.0) 4 か所を放送に似せた MPEG-2 にして、

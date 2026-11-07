@@ -155,18 +155,6 @@ export function globPatterns(compiled: CompiledRule): string[] | null {
 }
 
 /**
- * **ルールに当たらない理由** ({@link missOf})。下見の行に「なぜ録らないか」を書くのに使う。
- *
- * - `paid` 契約を確かめていない有料放送 (`PaidAllowed`)
- * - `service` 局の条件から外れる
- * - `genre` ジャンルの条件から外れる
- * - `time` 始まる時刻が時間帯の外
- * - `weekday` 始まる時刻の曜日が条件の外
- * - `empty` 条件が何も無い (全番組に当たってしまうので当てない)
- * - `keyword` キーワードを含まない
- * - `ignore` 除外する言葉を含む
- */
-/**
  * **その局の有料放送を自動予約してよいか。** カードで契約中と確かめた局だけ true (`contracts.paidAllowed`)。
  * 未契約・期限切れ・まだ確かめていない局は当てない。録ってもスクランブルのままで観られないため
  */
@@ -178,6 +166,18 @@ export const NO_PAID: PaidAllowed = () => false;
 /** 有料放送も当てる。由来の推定や検索の「これからの放送」のように、録るかどうかを決めない所で使う */
 export const ANY_PAID: PaidAllowed = () => true;
 
+/**
+ * **ルールに当たらない理由** ({@link missOf})。下見の行に「なぜ録らないか」を書くのに使う。
+ *
+ * - `paid` 契約を確かめていない有料放送 (`PaidAllowed`)
+ * - `service` 局の条件から外れる
+ * - `genre` ジャンルの条件から外れる
+ * - `time` 始まる時刻が時間帯の外
+ * - `weekday` 始まる時刻の曜日が条件の外
+ * - `empty` 条件が何も無い (全番組に当たってしまうので当てない)
+ * - `keyword` キーワードを含まない
+ * - `ignore` 除外する言葉を含む
+ */
 export type Miss =
   | "paid"
   | "service"
