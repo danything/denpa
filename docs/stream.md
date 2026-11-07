@@ -548,7 +548,7 @@ HW エンコーダの無い実機（44 スレッド）で、1080i をデコー�
 ### GPU でエンコードする
 
 設定の「録画」の「エンコード」（`/settings/recording#encoding`）のライブの列でそのコーデックのエンコーダに GPU を選んであれば、
-**GPU でエンコードする**（録画とは別に選ぶ。Intel・AMD の VA-API、NVIDIA の NVENC、Windows の Intel の QSV・AMD の AMF、Rockchip MPP。引数と決め方は
+**GPU でエンコードする**（録画とは別に選ぶ。Intel・AMD の VA-API、NVIDIA の NVENC、Windows の Intel の QSV・AMD の AMF、Mac の VideoToolbox、Rockchip MPP。引数と決め方は
 [encode.md「ライブは別に選んだエンコーダで GPU に載る」](encode.md#ライブは別に選んだエンコーダで-gpu-に載る)）。
 MPEG-2 を GPU でデコードできる環境ではデコードとインタレ解除も GPU に寄せる。`-fpsmax`・字幕の出口（`pipe:3`）・音声はそのまま通る。
 

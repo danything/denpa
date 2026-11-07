@@ -104,7 +104,20 @@ IT930x と mAgicVISION (PIX-DT295 用) のファームウェアは、エージ�
 libusb (LGPL-2.1+) が実行ファイルに静的リンクなのも上と同じで、
 配布物の `DEPENDENCY-NOTICE.txt` / `THIRD_PARTY_NOTICES.md` もそのまま置きます。
 USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼びます。
-denpa 本体は上と同じコンテナイメージ `denpa` を、Mac の Docker で動かします (Windows は下のとおり、Windows 用の配布物を入れる)。
+
+**denpa 本体は、リリースに添えた `denpa-<バージョン>-darwin-arm64.tar.gz` を入れます** ([.github/workflows/macos-server.yml](../.github/workflows/macos-server.yml))。
+Windows (下) と同じく、上のコンテナイメージ `denpa` と同じものを Mac 用にしたものです。アプリ・Denpa Font・ブラウザへ配るデコーダは
+イメージと同じ段から写します。ライセンスの文書は tar.gz の `licenses/` と `ffmpeg/licenses/` に置きます。
+
+| 名前                                                                     | 何に                               | 出どころ                                                                              | ライセンス                                                       |
+| ------------------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Bun (`bun`。公式のリリースの `bun-darwin-aarch64.zip`)                   | denpa 本体を動かす                 | <https://github.com/oven-sh/bun>                                                      | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md` |
+| FFmpeg (`ffmpeg/`。CI の Mac のランナーで組み、libav* は静的リンク)      | 上のイメージの ffmpeg と同じ       | <https://ffmpeg.org>                                                                  | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+    |
+| SVT-AV1・Opus (ソースから組み、静的リンク)                               | イメージと同じ                     | 上の表のとおり                                                                        | 上の表のとおり                                                   |
+| x264・dav1d (ソースから組み、静的リンク。Debian trixie と同じバージョン) | H.264 のエンコード・AV1 のデコード | <https://code.videolan.org/videolan/x264>・<https://code.videolan.org/videolan/dav1d> | GPL-2.0+・BSD-2-Clause。`ffmpeg/licenses/` に文書                |
+
+VideoToolbox (GPU でのエンコード)・zlib・スレッドは macOS の一部を呼ぶので、tar.gz には入れません。
+ソースは Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball と、.github/ffmpeg-macos.sh に書いた x264 のコミット・dav1d のバージョンです。
 
 ### Windows に入れるもの (`install.ps1`)
 
