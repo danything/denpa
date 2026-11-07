@@ -88,6 +88,12 @@ export interface HwDevice {
    */
   cqp: HwCodec[];
   /**
+   * AMF の高画質の指定 (`-usage high_quality -quality high_quality`) が通らず、**古い世代向けの指定
+   * (`-usage transcoding -quality quality`) でだけエンコードできた**コーデック (`probeWindows`)。
+   * VCN 1.0 (Raven Ridge) のような古い世代と古いドライバ向け (`hwArgs`)
+   */
+  amfTranscoding: HwCodec[];
+  /**
    * VA-API のうち、**放送の MPEG-2 を GPU でデコードして、GPU でインタレ解除してエンコードできる**と
    * 確かめられたコーデック (`probeFull`)。ライブはこれなら CPU にフレームを降ろさない (`liveHwArgs`)
    */
@@ -109,6 +115,8 @@ export interface HwWay {
   kind: HwKind;
   /** VA-API の AV1 を ICQ ではなく CQP で指定する (`HwDevice.cqp`)。試しのエンコードの結果から `hwChain` が付ける */
   cqp?: true;
+  /** AMF を古い世代向けの指定でエンコードする (`HwDevice.amfTranscoding`)。試しのエンコードの結果から `hwChain` が付ける */
+  amfTranscoding?: true;
   /** GPU の番号 (`HwDevice.gpu`)。NVENC・QSV・AMF のときだけ */
   gpu?: number;
 }
@@ -151,9 +159,17 @@ export function hwChain(
 
 /**
  * そのデバイスでの方式。AV1 の ICQ が通らなかった VA-API には CQP の印を付ける (`HwDevice.cqp`)。
- * NVENC・QSV・AMF には GPU の番号を添える
+ * NVENC・QSV・AMF には GPU の番号を添え、高画質の指定が通らなかった AMF には古い世代向けの印を付ける
+ * (`HwDevice.amfTranscoding`)
  */
 function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
+  if (kind === "amf" && device.amfTranscoding.includes(codec))
+    return {
+      device: device.path,
+      kind,
+      gpu: device.gpu ?? 0,
+      amfTranscoding: true,
+    };
   if (
     (kind === "nvenc" || kind === "qsv" || kind === "amf") &&
     device.gpu !== undefined
@@ -253,6 +269,14 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * h264_amf・hevc_amf・av1_amf にも CQP と QVBR (画質で指定) はあるが、値と画質の対応を実機で測れていないので、
  * NVENC と同じ表のビットレートを渡す。**`-usage high_quality`** (高画質の変換向け)・**`-quality high_quality`** (画質のプリセット)・
  * **`-rc vbr_peak`** (ピークを抑えた VBR。目標は平均、上限は目標の 2 倍)。GPU の世代で落ちうる指定 (`hqvbr`・先読み) は渡さない。
+ *
+ * **高画質の指定が通らない世代には、古い世代向けの指定 `-usage transcoding -quality quality` を渡す** (`HwWay.amfTranscoding`)。
+ * `high_quality` は usage も quality も AMF の SDK にあとから足された値で (FFmpeg の選択肢でも後ろにある)、VCN 1.0 (Ryzen 5 2500U などの
+ * Raven Ridge) では GPU があるのに「GPU がありません」と出たと報告があった (同じ PC で VCEEnc は使えていた)。`transcoding` は usage の最初の値 (録画のような変換向け)、
+ * `quality` は `high_quality` の無い頃からある画質寄りの段で、FFmpeg 9.0.2 の h264_amf・hevc_amf・av1_amf のどれも持つ。
+ * レート制御 (`vbr_peak`) とビットレートは同じ。**画質を取るため、古い世代向けの指定は高画質の指定で試しのエンコードが
+ * 落ちたときだけ使う** (`probeWindows`)
+ *
  * GPU は Direct3D 11 のアダプタの番号 (`-init_hw_device d3d11va=…:<番号>`。AMF のエンコーダが、その場にあるデバイスを使う)。
  * CPU で作ったフレームは nv12 で渡す。`-g 250` は同じ。**実機では測っていない** (手元に AMD の GPU が無い)
  *
@@ -322,10 +346,7 @@ export function hwArgs(
       filter: ["format=nv12"],
       encoder: [
         `${codec}_amf`,
-        "-usage",
-        "high_quality",
-        "-quality",
-        "high_quality",
+        ...amfPreset(way),
         ...amfRate(hwBitrate(codec, picture)),
         "-g",
         "250",
@@ -557,6 +578,13 @@ function amfDevice(way: HwWay): string[] {
   return ["-init_hw_device", `d3d11va=d3d:${way.gpu ?? 0}`];
 }
 
+/** AMF の usage と画質の段。高画質の指定を持たない世代には古い世代向けの指定 (`hwArgs` の説明) */
+function amfPreset(way: HwWay): string[] {
+  return way.amfTranscoding === true
+    ? ["-usage", "transcoding", "-quality", "quality"]
+    : ["-usage", "high_quality", "-quality", "high_quality"];
+}
+
 /**
  * AMF のレート制御の引数。**ピークを抑えた VBR (`vbr_peak`) で、平均を表の値に寄せる。**
  * 上限は NVENC と同じく目標の 2 倍で、測っていない。バッファは上限と同じ
@@ -663,6 +691,7 @@ export function liveHw(
  *
  * **QSV・AMF (Windows) は低遅延の速い段で、CPU のデコードのまま。** QSV は `-preset veryfast -bf 0 -async_depth 1` (ICQ は録画と同じ値、
  * 段を下げたときは VBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。**どちらも実機では見ていない。**
+ * AMF のライブの指定は `high_quality` の無い頃からある値なので、録画が古い世代向けの指定になった GPU (`HwWay.amfTranscoding`) にも同じものを渡す。
  * 落ちればソフトウェアでエンコードし直し、その方式を 15 分外す (`live.ts` の `blameLiveHw`)
  *
  * **VideoToolbox (Mac) も低遅延の指定で、CPU のデコードのまま。** `-realtime 1` (実時間でエンコードする)・
@@ -830,16 +859,35 @@ interface RungCap {
 
 /**
  * 1 本だけ試しにエンコードする。**時間で切る。** ドライバが固まって返ってこないとき
- * (実機で見たことはないが) に起動が止まらないように
+ * (実機で見たことはないが) に起動が止まらないように。
+ *
+ * **落ちたら ffmpeg のエラーの最後の数行をログに出す** (`label` はエンコーダとデバイス)。何が原因で
+ * 落ちたか (ドライバが無い・オプションを受け付けない・時間切れ) を、報告のログから読めるように
  */
-async function tryEncode(args: string[]): Promise<boolean> {
+async function tryEncode(args: string[], label: string): Promise<boolean> {
   const result = await run(
     [config.ffmpeg, "-v", "error", "-nostdin", ...args, "-f", "null", "-"],
-    {
-      timeoutMs: config.hwProbeTimeout,
-    },
+    { timeoutMs: config.hwProbeTimeout, stderr: true },
   );
-  return result.code === 0;
+  if (result.code === 0) return true;
+  console.warn(
+    `[hwenc] ${label} の試しのエンコードが落ちました (終了コード ${result.code}): ${errorTail(result.stderr)}`,
+  );
+  return false;
+}
+
+/** ログに出す ffmpeg のエラーの行数 */
+const ERROR_LINES = 3;
+
+/** ffmpeg のエラーの最後の数行を 1 行にまとめる。何も出していなければそう書く */
+function errorTail(stderr: string): string {
+  const lines = stderr
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  return lines.length === 0
+    ? "(エラーの出力はありません)"
+    : lines.slice(-ERROR_LINES).join(" / ");
 }
 
 /** 試しのエンコードの素材。小さく短くする (何が使えるかを見るだけで、速さは測らない) */
@@ -949,6 +997,7 @@ function emptyDevice(path: string, label: string): HwDevice {
     amf: [],
     videotoolbox: [],
     cqp: [],
+    amfTranscoding: [],
     full: [],
   };
 }
@@ -1001,6 +1050,10 @@ const WINDOWS_GPUS = 4;
  * - NVENC は番号がつながっている (0 のあとは 1) ので、落ちた番号で止める。
  *   QSV・AMF は Direct3D 11 のアダプタの番号で、Intel でも AMD でもないアダプタ (NVIDIA・ソフトウェア) が先頭にあることがあるので、
  *   落ちても `WINDOWS_GPUS` 番まで試す
+ * - **AMF は高画質の指定で落ちたら、古い世代向けの指定でもう一度試す** (`hwArgs` の説明)。通ったらそのコーデックに
+ *   印を付け (`HwDevice.amfTranscoding`)、録画もその指定でエンコードする。NVENC と QSV は同じ仕組みに乗せない。
+ *   NVENC はドライバが FFmpeg の求める API のバージョンを持たなければどの指定でも開けず、指定を替えても通らない。
+ *   QSV の `-preset` (target usage) はランタイムへの希望で、持たない段は近い段に寄せて受ける
  * - どの番号も落ちた (ドライバが無い・GPU が無い・ffmpeg にエンコーダが無い) ときは行が 0 になり、ソフトウェアでエンコードする
  */
 async function probeWindows(): Promise<HwDevice[]> {
@@ -1013,21 +1066,46 @@ async function probeWindows(): Promise<HwDevice[]> {
   for (const { kind, prefix, label } of makers) {
     for (let gpu = 0; gpu < WINDOWS_GPUS; gpu++) {
       const path = `${prefix}${gpu}`;
-      const way: HwWay = { device: path, kind, gpu };
-      if (!(await tryWay(way, "h264"))) {
+      const device = { ...emptyDevice(path, `${path} (${label})`), gpu };
+      if (!(await tryOn(device, kind, "h264"))) {
         if (kind === "nvenc") break;
         continue;
       }
       const ok = new Set<HwCodec>(["h264"]);
       for (const codec of HW_CODECS) {
-        if (codec !== "h264" && (await tryWay(way, codec))) ok.add(codec);
+        if (codec !== "h264" && (await tryOn(device, kind, codec)))
+          ok.add(codec);
       }
-      const device = { ...emptyDevice(path, `${path} (${label})`), gpu };
       device[kind] = HW_CODECS.filter((codec) => ok.has(codec));
+      // 試した順 (H.264 が先) ではなく、`device[kind]` と同じ HW_CODECS の順にそろえる
+      device.amfTranscoding = HW_CODECS.filter((codec) =>
+        device.amfTranscoding.includes(codec),
+      );
       devices.push(device);
     }
   }
   return devices;
+}
+
+/**
+ * Windows のデバイスで 1 コマ試す。AMF は高画質の指定が落ちたら古い世代向けの指定でも試し、
+ * そちらで通ったコーデックに印を付ける (`HwDevice.amfTranscoding`)
+ */
+async function tryOn(
+  device: HwDevice,
+  kind: "nvenc" | "qsv" | "amf",
+  codec: HwCodec,
+): Promise<boolean> {
+  const way: HwWay = { device: device.path, kind, gpu: device.gpu ?? 0 };
+  if (await tryWay(way, codec)) return true;
+  if (kind !== "amf") return false;
+  if (!(await tryWay({ ...way, amfTranscoding: true }, codec))) return false;
+  // 直前の警告 (高画質の指定で落ちた) のあとに、古い世代向けの指定で使えることを出す
+  console.log(
+    `[hwenc] ${codec}_amf (${device.path}) は古い世代向けの指定でエンコードできました。この指定で使います`,
+  );
+  device.amfTranscoding.push(codec);
+  return true;
 }
 
 async function probeLinux(): Promise<HwDevice[]> {
@@ -1085,14 +1163,24 @@ async function probeLinux(): Promise<HwDevice[]> {
 /** 録画と同じ引数で 1 コマエンコードしてみる */
 function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
   const hw = hwArgs(way, codec);
-  return tryEncode([
-    ...hw.device,
-    ...SOURCE,
-    "-vf",
-    hw.filter.join(","),
-    "-c:v",
-    ...hw.encoder,
-  ]);
+  return tryEncode(
+    [
+      ...hw.device,
+      ...SOURCE,
+      "-vf",
+      hw.filter.join(","),
+      "-c:v",
+      ...hw.encoder,
+    ],
+    `${hw.encoder[0]} (${way.device}${wayNote(way)})`,
+  );
+}
+
+/** ログに添える、試した指定の違い */
+function wayNote(way: HwWay): string {
+  if (way.cqp === true) return "、CQP";
+  if (way.amfTranscoding === true) return "、古い世代向けの指定";
+  return "";
 }
 
 /**
@@ -1141,15 +1229,18 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
       for (const codec of device.vaapi) {
         const way = wayOf(device, "vaapi", codec);
         const hw = liveHwArgs({ way, full: true }, codec);
-        const ok = await tryEncode([
-          ...hw.input,
-          "-i",
-          sample,
-          "-vf",
-          hw.filter.join(","),
-          "-c:v",
-          ...hw.encoder,
-        ]);
+        const ok = await tryEncode(
+          [
+            ...hw.input,
+            "-i",
+            sample,
+            "-vf",
+            hw.filter.join(","),
+            "-c:v",
+            ...hw.encoder,
+          ],
+          `${hw.encoder[0]} (${device.path}、デコードから GPU)`,
+        );
         if (ok) device.full.push(codec);
       }
     }
@@ -1160,7 +1251,8 @@ async function probeFull(devices: HwDevice[]): Promise<void> {
 
 /**
  * デバイスごとの一言。「VA-API: AV1 (CQP) / H.264」か「GPU でエンコードできません」。
- * ICQ を持たないドライバで AV1 を CQP に落としたときだけ (CQP) を添え (H.264・H.265 はいつも CQP)、デコードから GPU で
+ * ICQ を持たないドライバで AV1 を CQP に落としたときだけ (CQP) を、AMF を古い世代向けの指定にしたときは
+ * (古い世代向けの指定) を添え (H.264・H.265 はいつも CQP)、デコードから GPU で
  * 通せるもの (ライブで使う) は最後に分けて書く
  */
 export function describeDevice(device: HwDevice): string {
@@ -1170,7 +1262,9 @@ export function describeDevice(device: HwDevice): string {
         .map((c) =>
           kind === "vaapi" && device.cqp.includes(c)
             ? `${CODEC_LABEL[c]} (CQP)`
-            : CODEC_LABEL[c],
+            : kind === "amf" && device.amfTranscoding.includes(c)
+              ? `${CODEC_LABEL[c]} (古い世代向けの指定)`
+              : CODEC_LABEL[c],
         )
         .join(" / ")}`,
   );
