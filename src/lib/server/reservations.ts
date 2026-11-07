@@ -102,8 +102,13 @@ export async function reserveFromForm(form: FormData): Promise<string | null> {
     await reserve(programId);
     return null;
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return reason(error);
   }
+}
+
+/** `reserve` が断った理由の文 */
+function reason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -245,11 +250,7 @@ async function reserveProgram(program: {
   try {
     reservation = await reserve(program.id);
   } catch (error) {
-    return {
-      ok: false,
-      status: 400,
-      message: error instanceof Error ? error.message : String(error),
-    };
+    return { ok: false, status: 400, message: reason(error) };
   }
   /*
    * 競合で弾かれたかは予約のあとでしか分からない。番組表と同じ物差しで読む (録画中かは録画の行を見ないと

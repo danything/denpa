@@ -207,16 +207,6 @@
 番組表の番組を予約します。`<id>` は番組 ID (番組表の `programs[].id`)。
 [いまの番組を録る](#いまの番組を録る-post-apiservicesidrecord) と同じ処理で、答えの形式も同じです。
 
-```json
-{
-  "recorded": "ニュース",
-  "programId": 32736103210001,
-  "reserved": true,
-  "state": "scheduled",
-  "reason": null
-}
-```
-
 - **何度呼んでも二重には録りません** (予約は番組ごとに 1 本)。ルールが立てた予約は手動の予約に上がります (優先度 2)
 - 取り消した予約も、呼び直せば戻ります
 - 番組表に無ければ `404`、予約できなければ (放送が終わっている、コピー禁止) `400`。どちらも `message` に画面に出せる理由が入ります
@@ -692,11 +682,16 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
   読めるようにしておいてください (前に保存した字幕には白黒の `bits` 1 が入っています)。
   `md5` は放送の元の画像の MD5 (外字の置き換え表に足すときのキー。描くのには使わない)。
   置き換え表で字にできたもの (〓 にならないもの) はここに来ません
-- 色は `#rrggbbaa`。字はデータ放送と同じ丸ゴシック (Denpa Font) で描きます。字は 2 つの woff2 に分かれています: 基本の字の `GET /api/font/denpa-font.woff2` と、JIS X 0213 で足された漢字の `GET /api/font/denpa-font-jisx0213.woff2`。ブラウザは `GET /api/font/denpa-font.css` (2 つを同じファミリ名で名乗らせ、後のほうに `unicode-range` を付けたもの) を読めば、要るときだけ後のほうを取ります。Android など 1 つのファイルが欲しいときは、danything/denpa-font のリリースの `denpa-font.ttf` (全部の字) を使ってください。2 つを合わせると字幕に出る字 (JIS X 0213 の 1 面・2 面も) を全部持っていますが、念のため無い字は端末の角ゴシックへ落としてください。バージョンの付かない URL は毎回確かめる (`no-cache` + ETag) ので、そのまま取っても古い字は残りません
+- 色は `#rrggbbaa`。字はデータ放送と同じ丸ゴシック (Denpa Font) で描き、無い字は端末の角ゴシックへ落としてください
+  - 基本の字は `GET /api/font/denpa-font.woff2`、JIS X 0213 で足された漢字は `GET /api/font/denpa-font-jisx0213.woff2` です。
+    2 つで字幕に出る字 (JIS X 0213 の 1 面・2 面も) が揃います
+  - ブラウザは `GET /api/font/denpa-font.css` を読めば、2 つ目を要るときだけ取ります (同じファミリ名で、2 つ目に `unicode-range` を付けてある)
+  - 1 つのファイルが欲しいとき (Android など) は、danything/denpa-font のリリースの `denpa-font.ttf` (全部の字) を使います
+  - バージョンの付かない URL は毎回確かめる (`no-cache` + ETag) ので、古い字は残りません
 
 ## 番組表の番組の中身 `GET /api/programs/<id>`
 
-`<id>` は番組 ID (局の `now.id`)。画面の番組の詳細と同じものを返します (テレビのアプリのライブの詳細で使う)。
+`<id>` は番組 ID (局の `now.id`、番組表の `programs[].id`)。画面の番組の詳細と同じものを返します (テレビのアプリのライブの詳細で使う)。
 **キーは snake_case** (画面と同じ形式をそのまま返している。[検索の候補](#検索の候補-get-apisearchq言葉limit数)も同じ)。
 
 ```json
@@ -729,7 +724,7 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 - `video_type` (`mpeg2` / `h.264` など)・`video_resolution` (`1080i` / `480i` など) も、無ければ `null`
 - `is_free` は無料放送か
 - `copy_never` はコピー禁止の番組か。禁止の番組は録らない ([data.md](data.md#コピー禁止の番組は録らない))。
-  `POST /api/services/<id>/record` は `400` と「コピー禁止の番組なので録画しません」を返す
+  `POST /api/services/<id>/record`・`POST /api/programs/<id>/record` は `400` と「コピー禁止の番組なので録画しません」を返す
 - `series_episode` (何話目か)・`series_last_episode` (全何話か)・`series_repeat` (再放送の印) は放送のシリーズ記述子から
   ([data.md](data.md#シリーズ記述子の話数と再放送の印))。載せない局の番組と、放送が言っていない数は `null`。
   `series_episode` と `series_last_episode` が同じなら最終回。`series_repeat` は 0 でなければ再放送 (0 でも初回とは限らない)
@@ -794,6 +789,7 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 ```
 
 - `programs` はまだ終わっていない番組 (始まる順)。`reservation_state` は予約が立っていればその状態
+  ([番組表](#番組表-get-apiprogramstypegrbscsfromunix-mstounix-ms) の `reservation.state` と同じ物差し)
 - `recordings` は消していない録画 (新しい順)。`watch` は観る画面 (録っている最中は追っかけ再生 `chase/<id>`)。観られなければ `null`
 - `reservations` はこれから録るものと録っている最中のもの。`chase` は録っている最中なら追っかけ再生
 - `q` が空なら、どの節も空で返します。100 字を超えた分は切って探します (結果の画面 `/search?q=` も同じ)

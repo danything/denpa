@@ -94,7 +94,8 @@ export const actions = {
      * 持ち方はデバイス × 方式 × コーデックのまま (`chooseHw`)。欄が無いコーデック (GPU を
      * 確かめ終わる前に保存した・そのコーデックを使えるデバイスが無い) と、いま見えていないデバイスを
      * 選んできたもの (画面を開いたあとに確かめ直して GPU が変わった) は前のまま。
-     * **ライブの列** (`liveHw.av1` / `liveHw.h264`) も同じ読み方で `liveHwAllow` に書く。ライブが出さない H.265 の欄は無い
+     * **ライブの列** (`liveHw.av1` / `liveHw.hevc` / `liveHw.h264`) も同じ読み方で `liveHwAllow` に書く。ライブの H.265 は
+     * ソフトウェアの代わりに「使わない」を選べる
      */
     const devices = hwEncode().devices;
     const choose = (

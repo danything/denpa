@@ -213,6 +213,44 @@ describe("これからの放送", () => {
     expect(row?.reservation_id).not.toBeNull();
   });
 
+  test("録っている最中の番組は、番組表と同じく録画中と出す", () => {
+    program(1, "テストアニメ", -HOUR / 2);
+    const start = now() - HOUR / 2;
+    const [reservation] = orm()
+      .insert(reservations)
+      .values({
+        program_id: 1,
+        service_id: SERVICE,
+        name: "テストアニメ",
+        start_at: start,
+        end_at: start + HOUR,
+        manual: true,
+        started_at: start,
+        created_at: now(),
+        updated_at: now(),
+      })
+      .returning()
+      .all();
+    orm()
+      .insert(recordings)
+      .values({
+        program_id: 1,
+        reservation_id: reservation!.id,
+        service_id: SERVICE,
+        service_name: "ＴＯＫＹＯ　ＭＸ１",
+        name: "テストアニメ",
+        start_at: start,
+        end_at: start + HOUR,
+        state: "recording",
+        ts_path: "/media/raw/1.ts",
+        created_at: now(),
+        updated_at: now(),
+      })
+      .run();
+    const [row] = searchPrograms("テストアニメ", { limit: 10 }).rows;
+    expect(row?.reservation_state).toBe("recording");
+  });
+
   test("空の言葉では何も探さない", () => {
     program(1, "テストアニメ", HOUR);
     expect(searchPrograms("  ", { limit: 10, count: true })).toEqual({

@@ -131,6 +131,7 @@ export async function remapRule(
     .set({ service_ids: [...new Set(ids)] })
     .where(eq(ruleTable.id, ruleId))
     .run();
+  // 外した局はもう選局できないので、引っ込める予約は気にしなくてよい。足すだけなので、そのルールだけ当てれば足りる
   applyRules({ rule: ruleId });
   await resolveConflicts();
   return null;
