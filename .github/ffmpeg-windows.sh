@@ -63,7 +63,10 @@ prefix="$temp/ffmpeg-prefix"
 work="$temp/ffmpeg-work"
 rm -rf "$prefix" "$work" "$out"
 mkdir -p "$prefix" "$work" "$out/licenses"
-export PKG_CONFIG_PATH="$prefix/lib/pkgconfig"
+# Opus と SVT-AV1 は ffmpeg とは別の入れ先 (`deps/<名前>`) に組む (下)
+deps="$temp/ffmpeg-deps"
+mkdir -p "$deps"
+export PKG_CONFIG_PATH="$deps/opus/lib/pkgconfig:$deps/svt-av1/lib/pkgconfig"
 jobs=$(nproc)
 
 # ファイルに落としてから開く。パイプで渡すと、ダウンロードが途中で切れたとき、curl の再試行が最初からやり直しても tar は壊れた入力で落ちる
@@ -73,22 +76,39 @@ fetch_tar() {
   rm -f "$work/src.tar"
 }
 
-# Opus (Dockerfile と同じく、パケットの欠けを補う機能は既定のまま切って組む)
-mkdir "$work/opus" && cd "$work/opus"
-fetch_tar "https://downloads.xiph.org/releases/opus/opus-${OPUS_VERSION}.tar.gz" z
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=OFF \
-  -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF
-cmake --build build -j"$jobs"
-cmake --install build
-mkdir -p "$out/licenses/opus" && cp COPYING "$out/licenses/opus/"
+# **Opus と SVT-AV1 は、それぞれ actions/cache に別々に置く** (.github/workflows/windows-server.yml)。キャッシュの鍵は
+# バージョンと、`# recipe:<名前>:begin` から `:end` までの組み方。ffmpeg の configure の引数だけを変えたときは、この 2 つを組み直さない。
+# 入れ先に `.done` があれば組まない (キャッシュが当たった)。ライセンスの文書も入れ先に置き、最後に出力先へ写す
 
+# recipe:opus:begin
+# Opus (Dockerfile と同じく、パケットの欠けを補う機能は既定のまま切って組む)
+if [ ! -e "$deps/opus/.done" ]; then
+  rm -rf "$deps/opus"
+  mkdir "$work/opus" && cd "$work/opus"
+  fetch_tar "https://downloads.xiph.org/releases/opus/opus-${OPUS_VERSION}.tar.gz" z
+  cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$deps/opus" -DBUILD_SHARED_LIBS=OFF \
+    -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF
+  cmake --build build -j"$jobs"
+  cmake --install build
+  mkdir -p "$deps/opus/licenses/opus" && cp COPYING "$deps/opus/licenses/opus/"
+  touch "$deps/opus/.done"
+fi
+# recipe:opus:end
+
+# recipe:svt-av1:begin
 # SVT-AV1
-mkdir "$work/svtav1" && cd "$work/svtav1"
-fetch_tar "https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz" z
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF
-cmake --build build -j"$jobs"
-cmake --install build
-mkdir -p "$out/licenses/svt-av1" && cp LICENSE.md PATENTS.md "$out/licenses/svt-av1/"
+if [ ! -e "$deps/svt-av1/.done" ]; then
+  rm -rf "$deps/svt-av1"
+  mkdir "$work/svtav1" && cd "$work/svtav1"
+  fetch_tar "https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/${SVT_AV1_VERSION}/SVT-AV1-${SVT_AV1_VERSION}.tar.gz" z
+  cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$deps/svt-av1" -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=OFF
+  cmake --build build -j"$jobs"
+  cmake --install build
+  mkdir -p "$deps/svt-av1/licenses/svt-av1" && cp LICENSE.md PATENTS.md "$deps/svt-av1/licenses/svt-av1/"
+  touch "$deps/svt-av1/.done"
+fi
+# recipe:svt-av1:end
+cp -r "$deps/opus/licenses/." "$deps/svt-av1/licenses/." "$out/licenses/"
 
 # FFmpeg
 mkdir "$work/ffmpeg" && cd "$work/ffmpeg"
