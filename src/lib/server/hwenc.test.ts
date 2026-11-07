@@ -447,11 +447,7 @@ describe("NVIDIA NVENC", () => {
         "-gpu",
         "1",
         "-preset",
-        "p7",
-        "-tune",
-        "hq",
-        "-multipass",
-        "fullres",
+        "p4",
         "-rc",
         "vbr",
         "-b:v",
@@ -716,7 +712,7 @@ describe("H.265 (GPU でだけ)", () => {
       "-gpu",
       "0",
       "-preset",
-      "p7",
+      "p4",
     ]);
     expect(nvenc.encoder).toContain(String(bps));
     const mpp = hwArgs({ device: R.path, kind: "rkmpp" }, "hevc", picture);

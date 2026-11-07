@@ -221,16 +221,7 @@ console.log("ffmpeg: ok");
  * 3. 試しのエンコードが全部落ちると、GPU の方式は 0 になり、録画もライブもソフトウェアでエンコードする
  */
 const options: Record<string, string[]> = {
-  nvenc: [
-    "gpu",
-    "preset",
-    "tune",
-    "multipass",
-    "rc",
-    "forced-idr",
-    "delay",
-    "zerolatency",
-  ],
+  nvenc: ["gpu", "preset", "rc", "forced-idr", "delay", "zerolatency"],
   qsv: ["preset", "forced_idr", "async_depth"],
   amf: ["usage", "quality", "rc", "forced_idr", "async_depth"],
 };

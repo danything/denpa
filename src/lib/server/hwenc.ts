@@ -239,10 +239,8 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  *
  * NVENC は `-global_quality` (ICQ) を受けない (FFmpeg の nvenc.c が断る)。Rockchip MPP と同じ表のビットレートを
  * **VBR** で渡す (`nvencRate`)。GPU は番号 (`-gpu`) で選び、デバイスは開かない。CPU で作ったフレームを nv12 で
- * 渡すのも、`-g 250` も MPP と同じ。録画は急がないので、速さより画質を取る指定にする。**`-preset p7`** (7 段 (p1〜p7) のいちばん遅く
- * 画質が良い段)・**`-tune hq`** (高画質向けの調整)・**`-multipass fullres`** (フレームを 2 回通して、1 回目でビットの割り振りを決める)。
- * どれも NVENC を持つ GPU なら通る指定で、持たない GPU では落ちるもの (時間方向の AQ・先読み・B フレームを参照にする指定) は渡さない。
- * **実機では測っていない** (手元に NVIDIA の GPU が無い)
+ * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は 7 段 (p1〜p7) の真ん中。Linux の本番では録画の時間が延びるので、
+ * p7 などへ変えるなら実機で測ってから別の変更で行う。**実機では測っていない** (手元に NVIDIA の GPU が無い)
  *
  * ## Windows の Intel (QSV) は ICQ で指定する
  *
@@ -287,11 +285,7 @@ export function hwArgs(
         `${codec}_nvenc`,
         ...nvencGpu(way),
         "-preset",
-        "p7",
-        "-tune",
-        "hq",
-        "-multipass",
-        "fullres",
+        "p4",
         ...nvencRate(hwBitrate(codec, picture)),
         "-g",
         "250",
