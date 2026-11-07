@@ -58,7 +58,7 @@ Kubernetes の `terminationGracePeriodSeconds`・docker compose の
 ### 待っている間も、始まる録画は始めます
 
 始めないでいた頃は、デプロイの最中に始まった番組の冒頭が **9 分 42 秒ぶん欠けて**いました
-(`server/scheduler.ts` に実測)。始めればそのぶん待ちが伸びますが、`SHUTDOWN_WAIT` が歯止めになります。
+(`scheduler.ts` に実測)。始めればそのぶん待ちが伸びますが、`SHUTDOWN_WAIT` が歯止めになります。
 
 ### エージェントも録画が終わるまで待ちます
 
@@ -165,7 +165,7 @@ NVIDIA の NVENC は amd64 に、Rockchip の MPP は arm64 にだけ入れて�
 - StorageClass は `persistence.storageClassName` (空ならクラスタの既定)。PVC を消させない設定は
   `persistence.protectFromPruning` (values.yaml に理由つき)
 - Gateway API の Gateway か Ingress。chart の `httpRoute.parentRefs` / `ingress` が指す先です。証明書は
-  Gateway 側のリスナーが持ちます
+  Gateway 側のリスナーが持ちます。前段を置かずにノードの IP で開くなら `service.type=NodePort` ([install-talos.md](install-talos.md))
 - DNS で、denpa の名前が Gateway のアドレスを指すこと
 - チューナードライバ。エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
   hostPath でマウントするので、DVB の機材はノード側にドライバが読み込まれていること。

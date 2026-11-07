@@ -590,7 +590,7 @@ function Register-Server([string]$Ref, [string]$Token) {
 # 出すのは本体の様子と新しいバージョンで、更新はメニューから人が選んだときにこの install.ps1 を流す (docs/install-windows.md)。
 # いまサインインしている人にはここで起こす。管理者の窓から起こすと管理者で動いてしまうので、エクスプローラーに起こさせる
 # (ブラウザを開くのと同じ)。この窓のセッションにエクスプローラーがいなければ (CI など) 起こさず、次のサインインを待つ。
-# zip に入っていなければ (DENPA_VERSION で通知領域のアイコンより前のバージョンを入れたとき) 載せない
+# zip に入っていなければ (手元で組んだ DENPA_AGENT_ZIP など) 載せない
 function Register-Tray {
     if (-not (Test-Path -LiteralPath $TrayExe)) { return }
     New-ItemProperty -Path $RunKey -Name $RunName -Value "`"$TrayExe`"" -PropertyType String -Force | Out-Null

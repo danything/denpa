@@ -43,7 +43,6 @@ denpa:
   # 10.42.0.0/16) を入れればよい。空のまま前段の後ろに置くと接続元が前段のアドレスになり、
   # trustedNetworks が誰にも当たらない。ただし前段のアドレスが trustedNetworks に入っていると、前段越しの
   # 全員が当たって開いてしまう (起動時に警告を出す)。
-  # (以前の addressHeader は廃止。設定していても読まない)
   trustedProxies: ""
   # trustedNetworks からログインなしで開いてよい名前 (カンマ区切り。DNS リバインディングを防ぐ。docs/auth.md)。
   # httpRoute.hostnames・ingress.hosts・pwaNames の名前と、IP の直書き・ドットの無い名前・.local や .lan などは

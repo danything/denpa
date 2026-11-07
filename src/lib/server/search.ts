@@ -13,10 +13,11 @@ import {
 import { alias, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import { globTerms, likePieces } from "../fold";
-import type { Rule } from "../types";
+import type { ReservationState, Rule } from "../types";
 import { now, orm } from "./db";
 import { ANY_PAID, compile, haystack, matchesCompiled } from "./rules";
 import {
+  latestRecordingId,
   programs,
   recordings,
   reservations,
@@ -187,6 +188,7 @@ export function searchPrograms(q: string, options: SearchOptions) {
   };
   const compiled = compile(rule);
   const r = alias(reservations, "r");
+  const rec = alias(recordings, "rec");
   const {
     audios: _a,
     video_type: _v,
@@ -208,7 +210,8 @@ export function searchPrograms(q: string, options: SearchOptions) {
             service_type: services.type,
             has_logo: services.has_logo,
             reservation_id: r.id,
-            reservation_state: r.state,
+            // 番組表のマスと同じ物差し (`reservationState`)。r.state のままでは録画中も「予約済み」に見える
+            reservation_state: sql<ReservationState | null>`CASE WHEN ${r.id} IS NULL THEN NULL ELSE ${reservationState(r, rec)} END`,
           })
           .from(programs)
           .innerJoin(services, eq(services.id, programs.service_id))
@@ -219,6 +222,7 @@ export function searchPrograms(q: string, options: SearchOptions) {
               inArray(r.state, ["scheduled", "conflict", "skipped"]),
             ),
           )
+          .leftJoin(rec, eq(rec.id, latestRecordingId(programs.id)))
           .where(where)
           .orderBy(programs.start_at, programs.id)
           .limit(size)

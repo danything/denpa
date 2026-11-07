@@ -2,7 +2,7 @@
 
 **x64 の Windows なら、管理者の PowerShell の 1 行で denpa ごと立ち上がってブラウザが開きます**
 (`install.ps1`)。スタートボタンを右クリックして「ターミナル (管理者)」を開き、次を流します。
-Windows 用は v1.23.1 からで、それより前のバージョンは入れられません (install.ps1 がそう言って止まる)。
+本体ごと入れられるのは v2.32.0 から (`-AgentOnly` なら v1.23.1 から) で、それより前のバージョンは install.ps1 がそう言って止まります。
 
 ```powershell
 irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
