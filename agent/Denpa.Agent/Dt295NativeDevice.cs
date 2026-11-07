@@ -191,7 +191,7 @@ public sealed class Dt295NativeDevice
         Thread.Sleep(5);
         if (!i2c.UseSequencer) return;
         var device = link.TraceI2c(Dt295NativeFrontend.Terrestrial);
-        timeline.TraceLines.Add($"機材の中から (待たずに続けて読む)。始めの 状態 0x{device[0]:X8} 制御 0x{device[1]:X8} データ 0x{device[2]:X8}");
+        timeline.TraceLines.Add($"機材の中から (標本の間に短い空きを置いて読む)。始めの 状態 0x{device[0]:X8} 制御 0x{device[1]:X8} データ 0x{device[2]:X8}");
         for (var i = 0; i < 32; i++) timeline.TraceLines.Add("  " + Row(device, i));
         timeline.TraceLines.Add($"  STOP のあと 状態 0x{device[3 + 64]:X8} 制御 0x{device[4 + 64]:X8}");
         i2c.Reset();

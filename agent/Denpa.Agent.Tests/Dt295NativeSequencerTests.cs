@@ -159,4 +159,125 @@ public class Dt295NativeSequencerTests
         i2c.Reset();
         await Assert.That(i2c.Run(batch)[0]).IsEqualTo((byte)0x23);
     }
+
+    [Test]
+    public async Task TS_の要求と_I2C_の順次実行を別のスレッドから交互に出しても_応答が混ざらない()
+    {
+        // 機材のプログラムの要求と応答は同じ 64 バイトの場所を通る。要求と応答の読みの間に別の要求が入ると、応答が壊れる
+        var (fake, link, i2c) = Rig(true);
+        fake.Terrestrial.Regs[0x20] = 0x5A;
+        var ring = new List<byte>();
+        for (var i = 0; i < 40; i++)
+        {
+            var record = new byte[192];
+            record[0] = 0x47;
+            ring.AddRange(record);
+        }
+        fake.PutRing(0, ring.ToArray());
+        fake.WpOnStart = (uint)ring.Count;
+        fake.Put(0x190202C, 4, 0);
+
+        var failures = new List<string>();
+        var stop = false;
+        var pump = Task.Run(() =>
+        {
+            try
+            {
+                while (!Volatile.Read(ref stop))
+                {
+                    var reply = link.Pump(2, 50, 1000);
+                    if (reply.Sent > 2) lock (failures) failures.Add($"送ったパケット {reply.Sent}");
+                }
+            }
+            catch (Exception error)
+            {
+                lock (failures) failures.Add($"要求: {error.Message}");
+            }
+        });
+        for (var i = 0; i < 100; i++)
+        {
+            var batch = new Dt295I2cBatch();
+            batch.Write(0x10, 0x20);
+            batch.Read(0x10, 1);
+            try
+            {
+                var read = i2c.Run(batch);
+                if (read.Length != 1 || read[0] != 0x5A) lock (failures) failures.Add($"読み {Convert.ToHexString(read)}");
+            }
+            catch (Exception error)
+            {
+                lock (failures) failures.Add($"I2C: {error.Message}");
+            }
+        }
+        Volatile.Write(ref stop, true);
+        await pump;
+
+        await Assert.That(failures).IsEmpty();
+    }
+
+    [Test]
+    public async Task 受信中に_C_N_の読みを繰り返しても_TS_は止まらず_読みも壊れない()
+    {
+        var fake = new Dt295Fake();
+        var ring = new List<byte>();
+        for (var i = 0; i < 400; i++)
+        {
+            var record = new byte[192];
+            record[0] = 0x47;
+            record[1] = 0x01;
+            record[3] = (byte)(0x10 | (i & 0xF));
+            ring.AddRange(record);
+        }
+        fake.PutRing(0, ring.ToArray());
+        fake.WpOnStart = (uint)ring.Count;
+        var port = $"test-{Guid.NewGuid():N}";
+        var tuner = new Dt295NativeTuner("test", () => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000), () => Dt295NativeDevice.CloseIfIdle(port));
+        var tuning = ChannelTable.Parse("T25")!;
+        tuner.Tune(tuning, tuning.StreamId);
+
+        for (var i = 0; i < 30; i++)
+        {
+            var signal = tuner.Signal();
+            await Assert.That(signal).IsNotNull();
+            await Assert.That(signal!.Locked).IsTrue();
+        }
+
+        tuner.Dispose();
+    }
+
+    [Test]
+    public async Task 要求と応答の読みの間に別のスレッドの要求が入ろうとしても_応答は壊れない()
+    {
+        var (fake, link, i2c) = Rig(true);
+        fake.Terrestrial.Regs[0x20] = 0x5A;
+        var ring = new List<byte>();
+        for (var i = 0; i < 40; i++)
+        {
+            var record = new byte[192];
+            record[0] = 0x47;
+            ring.AddRange(record);
+        }
+        fake.PutRing(0, ring.ToArray());
+        fake.WpOnStart = (uint)ring.Count;
+        fake.Put(0x190202C, 4, 0);
+        // TS の要求を処理した直後 (応答を読む前) に、別のスレッドが 3 転送の I2C の順次実行を出そうとする。
+        // 要求と応答の組を 1 つずつ通していれば、そのスレッドは組が終わるまで待たされる (待つのは 300 ms まで)
+        Task<byte[]>? other = null;
+        fake.AfterRequest = () =>
+        {
+            var batch = new Dt295I2cBatch();
+            batch.Write(0x10, 0x20);
+            batch.Read(0x10, 1);
+            batch.Write(0x10, 0x20);
+            other = Task.Run(() => i2c.Run(batch));
+            other.Wait(TimeSpan.FromMilliseconds(300));
+        };
+
+        var reply = link.Pump(2, 50, 1000);
+
+        // 送ったパケット数は要求の 2 個以下 (I2C の応答の「止まった番号」3 が混ざっていない)
+        await Assert.That(reply.Sent).IsLessThanOrEqualTo(2u);
+        var done = other ?? throw new InvalidOperationException("別のスレッドの要求が出ていません");
+        await Assert.That((await done).Single()).IsEqualTo((byte)0x5A);
+    }
 }

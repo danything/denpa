@@ -385,9 +385,13 @@ internal sealed class Dt295Fake : IUsbDevice
         lock (_controlGate) return ControlInCore(requestType, request, value, index, data, timeoutMs);
     }
 
+    /// <summary>機材のプログラムへの要求 (wValue 0x0C7D) を処理したあと、応答を読む前に呼ぶ (別のスレッドの要求が間に入る場合の再現)</summary>
+    public Action? AfterRequest;
+
     public void ControlOut(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs)
     {
         lock (_controlGate) ControlOutCore(requestType, request, value, index, data, timeoutMs);
+        if (value == 0x0C7D && Interlocked.Exchange(ref AfterRequest, null) is { } hook) hook();
     }
 
     private int ControlInCore(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)

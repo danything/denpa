@@ -23,8 +23,8 @@ public sealed class Dt295NativeWarmException(string message) : Dt295NativeExcept
 /// 16 ビットのレジスタ (仕様書が「16 ビット」と書いたもの) は 4 の倍数のアドレスの 32 ビットのうち上半分か下半分にあるものとして、
 /// 読むときは 32 ビットで読んで切り出し、書くときはマスク付きの書き込みを使う。**仕様書に無い。** 32 ビット単位でしか書けない
 /// 制御転送で、隣の 16 ビットを壊さずに 16 ビットだけ書くために決めた (隣は読んだ値のまま書き戻される)。
-/// 窓を通す読み書き (0x1000000 以上) は 1 つのスレッドから使う。0x1000000 未満の読み書きと <see cref="Pump"/> は、
-/// ほかのスレッドが同時に使ってよい (制御転送は USB で 1 つずつ通り、アドレスは要求ごとに渡すので、状態を持たない)
+/// 窓を通す読み書き (0x1000000 以上) は 1 つのスレッドから使う。0x1000000 未満の読み書きと <see cref="Pump"/>・<see cref="RunI2c"/> は、
+/// ほかのスレッドが同時に使ってよい (制御転送と、機材のプログラムへの要求と応答の組は、<c>_gate</c> で 1 つずつ通す)
 /// </summary>
 public sealed class Dt295NativeLink
 {
@@ -68,35 +68,48 @@ public sealed class Dt295NativeLink
 
     // --- 24 ビットの範囲 ---
 
+    /// <summary>
+    /// 制御転送 1 回ごとと、機材のプログラムへの要求と応答の組 (<see cref="Pump"/>・<see cref="RunI2c"/>・<see cref="TraceI2c"/>) を、1 つのスレッドずつ通す。
+    /// 書き込みのデータも、機材のプログラムの要求と応答も、同じ 64 バイトの場所 (0xC4620。仕様書 3.1) を通るので、要求と応答の読みの間に
+    /// 別のスレッドが書き込むと、応答が壊れる (受信中にカードや信号の読みが入るとき)
+    /// </summary>
+    private readonly Lock _gate = new();
+
     private void DirectRead(uint address, Span<byte> data)
     {
-        var (value, index) = Setup(address);
-        Controls++;
-        int got;
-        try
+        lock (_gate)
         {
-            got = _usb.ControlIn(RequestIn, Request, value, index, data, ControlTimeoutMs);
+            var (value, index) = Setup(address);
+            Controls++;
+            int got;
+            try
+            {
+                got = _usb.ControlIn(RequestIn, Request, value, index, data, ControlTimeoutMs);
+            }
+            catch (IOException)
+            {
+                Dead = true;
+                throw;
+            }
+            if (got != data.Length) throw new Dt295NativeException($"0x{address:X} を読めません ({got}/{data.Length} バイト)");
         }
-        catch (IOException)
-        {
-            Dead = true;
-            throw;
-        }
-        if (got != data.Length) throw new Dt295NativeException($"0x{address:X} を読めません ({got}/{data.Length} バイト)");
     }
 
     private void DirectWrite(uint address, ReadOnlySpan<byte> data, ushort valueLow = 0)
     {
-        var (value, index) = Setup(address);
-        Controls++;
-        try
+        lock (_gate)
         {
-            _usb.ControlOut(RequestOut, Request, (ushort)(value | valueLow), index, data, ControlTimeoutMs);
-        }
-        catch (IOException)
-        {
-            Dead = true;
-            throw;
+            var (value, index) = Setup(address);
+            Controls++;
+            try
+            {
+                _usb.ControlOut(RequestOut, Request, (ushort)(value | valueLow), index, data, ControlTimeoutMs);
+            }
+            catch (IOException)
+            {
+                Dead = true;
+                throw;
+            }
         }
     }
 
@@ -303,6 +316,11 @@ public sealed class Dt295NativeLink
     /// </summary>
     public NativeReply Pump(uint packets, uint idleLimit, int timeoutMs)
     {
+        lock (_gate) return PumpLocked(packets, idleLimit, timeoutMs);
+    }
+
+    private NativeReply PumpLocked(uint packets, uint idleLimit, int timeoutMs)
+    {
         var request = new byte[64];
         BinaryPrimitives.WriteUInt32BigEndian(request, Dt295NativePrograms.Magic);
         BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(4), 1);
@@ -331,6 +349,11 @@ public sealed class Dt295NativeLink
     /// 長ければ操作列を SDRAM (0x380000) に書き、結果もそこから読む。機材のプログラムが触るのは I2C のブロック (0xFD8FE0〜0xFD8FF0) だけ
     /// </summary>
     public I2cReply RunI2c(ReadOnlySpan<byte> ops, int transfers, int readBytes)
+    {
+        lock (_gate) return RunI2cLocked(ops, transfers, readBytes);
+    }
+
+    private I2cReply RunI2cLocked(ReadOnlySpan<byte> ops, int transfers, int readBytes)
     {
         var inline = ops.Length <= Dt295NativePrograms.InlineOpBytes && readBytes <= Dt295NativePrograms.InlineResultBytes;
         if (!inline)
@@ -379,6 +402,11 @@ public sealed class Dt295NativeLink
     /// 返す語: 始めの状態・制御・データ、START のあとの (状態, 制御) × 32、STOP のあとの (状態, 制御)
     /// </summary>
     public uint[] TraceI2c(int address)
+    {
+        lock (_gate) return TraceI2cLocked(address);
+    }
+
+    private uint[] TraceI2cLocked(int address)
     {
         var request = new byte[64];
         BinaryPrimitives.WriteUInt32BigEndian(request, Dt295NativePrograms.Magic);
