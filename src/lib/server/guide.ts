@@ -2,7 +2,7 @@ import { and, eq, gt, gte, lt, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 
 import { playableRecordingId } from "../format";
-import { mainOf, splitOf } from "../subchannels";
+import { columnsOf, mainOf, splitOf } from "../subchannels";
 import type {
   ChannelType,
   GridProgram,
@@ -238,6 +238,8 @@ export interface ApiGuide {
   services: {
     id: number;
     name: string;
+    /** サブチャンネルの列なら、その本チャンネルの id。本チャンネルは null */
+    mainId: number | null;
     remoteControlKey: number | null;
     logo: string | null;
     programs: ApiProgram[];
@@ -282,23 +284,45 @@ function lastEndOf(type: ChannelType): number | null {
  *
  * 局と並びは Web の番組表と同じ `stationsOf`、番組と予約の状態はマスと同じ `programsOf` から組む。
  * 引き方を別に書くと、マスとアプリで予約の状態が食い違う。
- * 局は本チャンネルだけ (サブチャンネルの分割放送はまだ返さない)
+ *
+ * `subchannels` なら、サブチャンネルの列も Web の番組表と同じ決め方 (`splitOf`・`columnsOf`) で足す。
+ * 列を立てるのは範囲の中に分割放送のあるサブだけで、置くのは本チャンネルのすぐ右。
+ * サブの列の番組は分割放送のものだけにする (ほかの時間は本チャンネルと同じ番組を流している)
  */
-export function guideOf(type: ChannelType, from: number, to: number): ApiGuide {
+export function guideOf(
+  type: ChannelType,
+  from: number,
+  to: number,
+  subchannels = false,
+): ApiGuide {
   const { services } = stationsOf(type, from, to);
   const main = mainOf(services);
-  const columns = services
-    .filter((service) => main.get(service.id) === service.id)
-    .map((service) => ({
+  const programs = programsOf(type, from, to);
+  const split = subchannels ? splitOf(programs, main) : null;
+  const splitIds = new Set(
+    [...(split?.values() ?? [])].flat().map((program) => program.id),
+  );
+  const columns = columnsOf(services, main, split).map((service) => {
+    const of = main.get(service.id) ?? service.id;
+    return {
       id: service.id,
       name: service.name,
+      mainId: of === service.id ? null : of,
       remoteControlKey: service.remote_control_key,
       logo: service.has_logo ? `api/services/${service.id}/logo` : null,
       programs: [] as ApiProgram[],
-    }));
+    };
+  });
   const byService = new Map(columns.map((column) => [column.id, column]));
-  for (const program of programsOf(type, from, to)) {
-    byService.get(program.service_id)?.programs.push({
+  for (const program of programs) {
+    const column = byService.get(program.service_id);
+    // サブの列には、本チャンネルと違う番組だけを置く
+    if (
+      column === undefined ||
+      (column.mainId !== null && !splitIds.has(program.id))
+    )
+      continue;
+    column.programs.push({
       id: program.id,
       name: program.name,
       startAt: program.start_at,

@@ -107,7 +107,7 @@ function program(
   serviceId: number,
   startAt: number,
   endAt: number,
-  extra: { genres?: number[]; copy_never?: boolean } = {},
+  extra: { genres?: number[]; copy_never?: boolean; name?: string } = {},
 ): void {
   orm()
     .insert(programs)
@@ -221,10 +221,10 @@ describe("範囲 (from・to)", () => {
 });
 
 describe("番組表", () => {
-  test("本チャンネルの局だけを、画面と同じ並びで返す", () => {
+  test("既定は本チャンネルの局だけを、画面と同じ並びで返す", () => {
     reset();
     program(1, MAIN, NOW - 30 * MINUTE, NOW + 30 * MINUTE);
-    // 分割放送をしているサブチャンネル (画面には列が立つが、API には入れない)
+    // 分割放送をしているサブチャンネル (subchannels を付けなければ入れない)
     program(2, SUB, NOW - 30 * MINUTE, NOW + 30 * MINUTE);
     program(3, OTHER, NOW - 30 * MINUTE, NOW + 30 * MINUTE);
 
@@ -236,6 +236,37 @@ describe("番組表", () => {
       logo: `api/services/${MAIN}/logo`,
     });
     expect(guide.services[1]?.logo).toBeNull();
+    expect(guide.services.map((s) => s.mainId)).toEqual([null, null]);
+  });
+
+  test("subchannels なら、分割放送のあるサブの列を本チャンネルのすぐ右に足す。番組は分割放送のものだけ", () => {
+    reset();
+    program(1, MAIN, NOW - HOUR, NOW);
+    program(2, MAIN, NOW, NOW + HOUR);
+    // 本チャンネルと同じ名前 (同じ番組を流している) と、別の番組 (分割放送)
+    program(11, SUB, NOW - HOUR, NOW, { name: "番組1" });
+    program(12, SUB, NOW, NOW + HOUR, { name: "サブの番組" });
+    program(3, OTHER, NOW - HOUR, NOW + HOUR);
+
+    const guide = guideOf("GR", FROM, TO, true);
+    expect(guide.services.map((s) => [s.id, s.mainId])).toEqual([
+      [MAIN, null],
+      [SUB, MAIN],
+      [OTHER, null],
+    ]);
+    expect(guide.services[0]?.programs.map((p) => p.id)).toEqual([1, 2]);
+    expect(guide.services[1]?.programs.map((p) => p.id)).toEqual([12]);
+  });
+
+  test("subchannels でも、範囲の中に分割放送が無いサブは列を立てない", () => {
+    reset();
+    program(1, MAIN, NOW - HOUR, NOW + HOUR);
+    // 名前の無い枠は本チャンネルと同じ番組
+    program(11, SUB, NOW - HOUR, NOW + HOUR, { name: "" });
+
+    expect(guideOf("GR", FROM, TO, true).services.map((s) => s.id)).toEqual([
+      MAIN,
+    ]);
   });
 
   test("範囲に掛かる番組だけ。境目に接するだけのものは入らない。until はいちばん遅い終わり", () => {
