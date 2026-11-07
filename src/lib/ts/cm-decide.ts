@@ -338,14 +338,26 @@ const EDGE_CAP = 30;
  * 最大 2.2 秒後で、それより少し長く取る。番組表の頭のあとに始まる CM (TBS の 125 秒など) は、ふつうの CM として見つかる
  */
 const HEAD_GRACE = 3;
+/**
+ * 番組表どおりの頭の近くで、無音が無くても録画の頭の CM の終わりにしてよい切れ目の強さ (ふつうの CM の継ぎ目と同じ)。
+ *
+ * **局が番組表より遅れて番組を始めると、番組表どおりの頭は CM の途中に来る。** 局の切り替わりは無音を挟まないことがあり、
+ * 頭の近くに無音が無いと、録画の頭の CM を番組表どおりの頭までで終えられず、その先の CM まで番組になっていた
+ * (本番の TBS のアニメで、番組が約 1 分遅れて始まった回。番組表どおりの頭の 0.5 秒前に無音の無い切れ目 (18) があり、
+ * そこから 15.5 秒、15 秒 × 3 本の CM が続いてロゴが出た。録画の頭から 24.4 秒が番組になっていた)
+ */
+const START_CUT = CUT_MIN;
 
 /**
  * 無音 1 つから採る切れ目の数 (強いほうから)。動いている場面の無音には弱い切れ目がいくつも並ぶので、比べる数を抑える
  */
 const PER_SILENCE = 4;
 
-/** 候補の種類。`mark` は無音の中、`end` は録画の頭と尻、`bare` は無音の外の強い切れ目、`logo` はロゴの出入りそのもの */
-type Kind = "mark" | "end" | "bare" | "logo";
+/**
+ * 候補の種類。`mark` は無音の中、`end` は録画の頭と尻、`bare` は無音の外の強い切れ目、`logo` はロゴの出入りそのもの、
+ * `start` は番組表どおりの頭の近くの、無音の外の強い切れ目
+ */
+type Kind = "mark" | "end" | "bare" | "logo" | "start";
 
 interface Candidate {
   at: number;
@@ -363,6 +375,8 @@ interface Candidate {
  * - 録画の頭と尻
  * - 無音の候補からちょうど 5・10 秒の、無音の外の強い切れ目 (`bare`)。CM に挟まれた短い所の頭の告知の終わりにだけ使う
  * - 最初のロゴの出始めと最後の消え際 (`logo`)。録画の頭と尻の CM の端にだけ使う (前後の番組との境目は無音を挟まないことがある)
+ * - 番組表どおりの頭から前後 `HEAD_GRACE` 秒の、無音の外の強い切れ目 (`start`)。録画の頭からそこまでに無音の候補が
+ *   1 つも無いときだけ。録画の頭の CM の終わりと、そこから続く 15 秒の倍数の CM の頭にだけ使う (`START_CUT`)
  */
 function candidates(
   input: CmInput,
@@ -409,6 +423,22 @@ function candidates(
       }
     }
   }
+  const { programStart } = input;
+  if (
+    times !== undefined &&
+    cuts !== undefined &&
+    programStart !== undefined &&
+    programStart > 0 &&
+    !out.some((c) => c.kind === "mark" && c.at <= programStart + HEAD_GRACE)
+  ) {
+    for (
+      let i = lowerBound(times, programStart - HEAD_GRACE);
+      i < times.length && times[i]! <= programStart + HEAD_GRACE;
+      i++
+    )
+      if (cuts[i]! >= START_CUT && times[i]! < duration)
+        out.push({ at: times[i]!, cut: cuts[i]!, silence: 0, kind: "start" });
+  }
   const first = logo[0];
   const last = logo.at(-1);
   if (first !== undefined && first.start > EDGE)
@@ -418,7 +448,7 @@ function candidates(
   out.sort((a, b) => a.at - b.at);
   // 同じ時刻は 1 つに (無音が重なっていた・ロゴの出入りが切れ目と同じ)。強いほうを残す
   const merged: Candidate[] = [{ at: 0, cut: 0, silence: 0, kind: "end" }];
-  const rank = { end: 3, mark: 2, bare: 1, logo: 0 };
+  const rank = { end: 4, mark: 3, bare: 2, start: 1, logo: 0 };
   for (const c of out) {
     const prev = merged.at(-1)!;
     if (c.at - prev.at < 1e-3) {
@@ -769,6 +799,8 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
 
       // CM へ。無音の外の切れ目とロゴの出入りからは始めない。告知が無音の外で終わったら次は番組
       if (s === State.Bare || a.kind === "bare") continue;
+      // 番組表どおりの頭の近くの切れ目からは、録画の頭の CM の続き (15 秒の倍数) だけ
+      if (a.kind === "start" && s !== State.Head) continue;
       const entering = s === State.Program || isCredit(s);
       let base = here;
       // 提供の点は、続く CM が 15 秒の倍数か告知 (か録画の尻まで) のときだけ足す。尺の合わない短い CM を提供の点で CM にさせない
@@ -801,6 +833,8 @@ function byLogo(input: CmInput, logo: Range[]): Range[] {
         // ロゴの出入りそのものは、録画の頭と尻の CM の端にだけ
         if ((a.kind === "logo" && !tail) || (b.kind === "logo" && !head))
           continue;
+        // 番組表どおりの頭の近くの切れ目は、録画の頭の CM の終わりにだけ
+        if (b.kind === "start" && !head) continue;
         if (head || tail) {
           if (b.kind === "bare") continue;
           relax(
