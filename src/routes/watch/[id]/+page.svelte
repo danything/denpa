@@ -98,6 +98,7 @@
   import { stageTap } from "#lib/components/player/stage-tap.js";
   import StageNote from "#lib/components/player/StageNote.svelte";
   import StageTail from "#lib/components/player/StageTail.svelte";
+  import { unslipper } from "#lib/components/player/unslip.js";
   import { playerVolume } from "#lib/components/player/volume.svelte.js";
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
   import Toasts, {
@@ -1445,6 +1446,8 @@
   }
   /** 貼り直しを追わせている映像。二重に回さないための目印 (`follow`) */
   let following: HTMLVideoElement | null = null;
+  /** 映像だけ遅れたら飛び直す (`unslip.ts`)。段を替えてデコーダが作り直されると、Android の Chrome で映像だけ取り残される */
+  const unslip = unslipper();
   /** 読めなかったとき。黙って黒いままにしない */
   let broken = $state(false);
   /** 読み込み待ちで止まっているか (「読み込み中」を出す) */
@@ -2122,6 +2125,9 @@
         if (!there) settled = 0;
         else if (++settled >= SETTLED) open();
       }
+      // 映像だけ遅れていたら飛び直す。CM の先へ飛んでいる最中と、canvas に描いている間 (`<video>` は空) は見ない
+      if (meta !== undefined && !waiting && !hopping && !drawing)
+        unslip.check(target, meta.mediaTime);
       // 最初のコマが出た (開いた直後に CM の先へ飛ぶなら、飛んだ先が出てから)
       if (!hopping && target.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA)
         askCaptions();
