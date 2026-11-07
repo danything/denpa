@@ -19,10 +19,10 @@ namespace Denpa.Agent;
 /// </summary>
 public static class Dt295NativeProbe
 {
-    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--switch <チャンネル,…>] [--lock-test N [--reopen] [--alt <チャンネル>]] [--trace]";
+    public const string Usage = "denpa-agent --dt295-probe [--port <USB のポート>] --channel <T13-T62 | BS1-BS23[:TSID] | CS2-CS24> [--seconds N] [--replug] [--output <TS のファイル>] [--demod-dump] [--switch <チャンネル,…>] [--lock-test N [--reopen] [--alt <チャンネル>]] [--demod-trace] [--trace]";
 
     internal sealed record Options(string? Port, string Channel, ChannelTable.Tuning Tuning, TimeSpan Duration, bool Trace, bool Replug = false, string? Output = null, bool DemodDump = false, string[]? Switch = null,
-        int LockTest = 0, bool Reopen = false, string? Alt = null);
+        int LockTest = 0, bool Reopen = false, string? Alt = null, bool DemodTrace = false);
 
     internal static Options? Parse(string[] args)
     {
@@ -36,7 +36,69 @@ public static class Dt295NativeProbe
         if (args.Contains("--seconds") && !int.TryParse(Value("--seconds"), NumberStyles.None, CultureInfo.InvariantCulture, out seconds)) return null;
         return seconds <= 0 ? null : new Options(Value("--port"), channel, tuning, TimeSpan.FromSeconds(seconds), args.Contains("--trace"), args.Contains("--replug"), Value("--output"), DemodDump: args.Contains("--demod-dump"), Switch: Value("--switch")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             LockTest: int.TryParse(Value("--lock-test"), NumberStyles.None, CultureInfo.InvariantCulture, out var lockTest) ? lockTest : 0,
-            Reopen: args.Contains("--reopen"), Alt: Value("--alt"));
+            Reopen: args.Contains("--reopen"), Alt: Value("--alt"), DemodTrace: args.Contains("--demod-trace"));
+    }
+
+    /// <summary>
+    /// 地上波を選局してから受信を確認するまでの間、T 復調のレジスタ 0x00〜0xFF を約 10 ms ごとに読んで、途中で値が変わったものを時刻つきで出す。
+    /// ロックの前後で動くレジスタから、復調が検出した結果 (モード・ガード・階層など) を返すものを探すため。読むだけで、復調にも USB にも書かない。
+    /// ロックの印 (0x81 の bit4) が立ってからも 15 回読む。選局が終わったところ (選局の呼び出しが戻ったとき) を 0 ms とする
+    /// </summary>
+    internal static int DemodTrace(Options options, Func<Dt295Timeline, Dt295NativeDevice> acquire, Action closeAll, TextWriter output)
+    {
+        if (options.Tuning.Satellite)
+        {
+            output.WriteLine("--demod-trace は地上波だけです");
+            return 2;
+        }
+        var timeline = new Dt295Timeline();
+        try
+        {
+            var device = acquire(timeline);
+            var frontend = device.Frontend;
+            frontend.TuneTerrestrial((uint)((options.Tuning.Frequency + 500UL) / 1000));
+            var samples = new List<(double Ms, byte[] Regs)>();
+            var clock = Stopwatch.StartNew();
+            double? lockedAt = null;
+            var after = 0;
+            while (clock.Elapsed < TimeSpan.FromSeconds(2) && after < 15)
+            {
+                var regs = frontend.DumpDemod(false);
+                samples.Add((clock.Elapsed.TotalMilliseconds, regs));
+                if ((regs[0x81] & 0x10) != 0)
+                {
+                    lockedAt ??= clock.Elapsed.TotalMilliseconds;
+                    after++;
+                }
+                Thread.Sleep(10);
+            }
+            output.WriteLine($"T 復調のレジスタの経過: {options.Channel}、標本 {samples.Count} 回 (1 回 {(samples.Count > 1 ? (samples[^1].Ms - samples[0].Ms) / (samples.Count - 1) : 0):F1} ms 間隔)、"
+                + $"ロックの印 (0x81 の bit4) {(lockedAt is { } lockMs ? $"{lockMs:F0} ms" : "立たず")}。選局が終わったところが 0 ms");
+            var changed = 0;
+            for (var register = 0; register < 256; register++)
+            {
+                var transitions = new List<string>();
+                var previous = -1;
+                foreach (var (ms, regs) in samples)
+                {
+                    if (regs[register] == previous) continue;
+                    transitions.Add($"{ms:F0}:{regs[register]:X2}");
+                    previous = regs[register];
+                }
+                if (transitions.Count < 2) continue;
+                changed++;
+                output.WriteLine($"  0x{register:X2}: {string.Join(" ", transitions.Take(40))}{(transitions.Count > 40 ? $" …(変わった回数 {transitions.Count})" : "")}");
+            }
+            if (changed == 0) output.WriteLine("  途中で値が変わったレジスタはありません");
+            output.WriteLine("ロック後の値 (変わらなかったものも含めて、0x80〜0xBF):");
+            var last = samples[^1].Regs;
+            for (var at = 0x80; at < 0xC0; at += 16) output.WriteLine($"  {at:X2}: {Convert.ToHexString(last.AsSpan(at, 16))}");
+            return lockedAt is null ? 1 : 0;
+        }
+        finally
+        {
+            closeAll();
+        }
     }
 
     /// <summary>次の選局に使う、前の選局から離れるための同じ種別のチャンネル (チャンネル番号 + 2)。指定が無いときの既定</summary>
@@ -148,6 +210,7 @@ public static class Dt295NativeProbe
         }
         // --trace: 機材への読み書きと設定の読み戻しを 1 行ずつ、標準エラー出力に出す
         Action<string>? trace = options.Trace ? message => Console.Error.WriteLine($"  {message}") : null;
+        if (options.DemodTrace) return DemodTrace(options with { Port = port }, timeline => Dt295NativeDevice.Acquire(port, timeline, trace), Dt295NativeDevice.CloseAll, Console.Out);
         if (options.LockTest > 0) return LockTest(options with { Port = port }, timeline => Dt295NativeDevice.Acquire(port, timeline, trace), () => Dt295NativeDevice.CloseIfIdle(port), Dt295NativeDevice.CloseAll, Console.Out);
         try
         {
@@ -158,6 +221,33 @@ public static class Dt295NativeProbe
         finally
         {
             Dt295NativeDevice.CloseAll();
+        }
+    }
+
+    /// <summary>
+    /// このプロセスのスレッドごとの CPU 時間 (Linux の /proc/self/task。10 ms 単位)。「名前 ms」を、使った順に並べる。Linux 以外は空
+    /// </summary>
+    internal static string ThreadCpu()
+    {
+        try
+        {
+            var times = new List<(string Name, int Ms)>();
+            foreach (var dir in Directory.GetDirectories("/proc/self/task"))
+            {
+                var stat = File.ReadAllText(Path.Combine(dir, "stat"));
+                var open = stat.IndexOf('(');
+                var close = stat.LastIndexOf(')');
+                var fields = stat[(close + 2)..].Split(' ');
+                // close の後ろは状態 (3 番目) から始まる。utime は 14 番目、stime は 15 番目
+                var ticks = long.Parse(fields[11], CultureInfo.InvariantCulture) + long.Parse(fields[12], CultureInfo.InvariantCulture);
+                times.Add((stat[(open + 1)..close], (int)(ticks * 10)));
+            }
+            return string.Join("、", times.GroupBy(t => t.Name).Select(g => (Name: g.Key, Ms: g.Sum(t => t.Ms))).Where(t => t.Ms > 0)
+                .OrderByDescending(t => t.Ms).Select(t => $"{t.Name} {t.Ms} ms"));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or IndexOutOfRangeException or ArgumentOutOfRangeException)
+        {
+            return "";
         }
     }
 
@@ -188,6 +278,7 @@ public static class Dt295NativeProbe
         long firstChunk = 0;
         long mainControls = 0;
         var mainCpu = TimeSpan.Zero;
+        var threadCpu = "";
         long mainElapsed = 0;
         Dt295NativeDevice? device = null;
         Thread? reader = null;
@@ -272,6 +363,7 @@ public static class Dt295NativeProbe
             Volatile.Write(ref stopReading, true);
             mainControls = device?.Link.Controls ?? 0;
             mainCpu = Cpu();
+            threadCpu = ThreadCpu();
             mainElapsed = total.ElapsedMilliseconds;
             reader.Join(TimeSpan.FromSeconds(2));
             if (device is not null) MeasureCard(device, firstTsMs, openCard, output);
@@ -290,9 +382,11 @@ public static class Dt295NativeProbe
         {
             mainControls = device?.Link.Controls ?? 0;
             mainCpu = Cpu();
+            threadCpu = ThreadCpu();
             mainElapsed = total.ElapsedMilliseconds;
         }
         output.WriteLine($"制御転送: 合計 {mainControls} 回、ホストの CPU 時間 {(mainCpu - cpuStart).TotalMilliseconds:F0} ms、経過 {mainElapsed} ms");
+        if (threadCpu.Length > 0) output.WriteLine($"スレッドごとの CPU 時間: {threadCpu}");
         var receiving = firstRead == TimeSpan.MinValue ? TimeSpan.Zero : lastRead - firstRead;
         if (firstRead != TimeSpan.MinValue && receiving > TimeSpan.Zero)
         {
@@ -391,6 +485,8 @@ public sealed class Dt295TsStats
     public long Packets { get; private set; }
     public long Synced { get; private set; }
     public long Errors { get; private set; }
+    public long FirstError { get; private set; }
+    public long LastError { get; private set; }
     public long[] Scrambling { get; } = new long[4];
     public SortedDictionary<int, long> Pids { get; } = [];
 
@@ -404,6 +500,8 @@ public sealed class Dt295TsStats
         if ((packet[1] & 0x80) != 0)
         {
             Errors++;
+            if (FirstError == 0) FirstError = Packets;
+            LastError = Packets;
             return;
         }
         Scrambling[packet[3] >> 6]++;
@@ -415,6 +513,7 @@ public sealed class Dt295TsStats
     {
         output.WriteLine($"bytes: {Bytes}");
         output.WriteLine($"packets: {Packets}  sync 0x47: {Synced} ({(Packets == 0 ? 0 : 100.0 * Synced / Packets):F2}%)  transport_error_indicator: {Errors}");
+        if (Errors > 0) output.WriteLine($"transport_error_indicator の位置: 最初 {FirstError} 番目、最後 {LastError} 番目 (全 {Packets} パケット)");
         output.WriteLine($"transport_scrambling_control: 00={Scrambling[0]} 01={Scrambling[1]} 10={Scrambling[2]} 11={Scrambling[3]}");
         output.WriteLine($"PID: {Pids.Count} 種類  PAT: {(Pids.ContainsKey(0) ? "来た" : "来ない")}");
     }

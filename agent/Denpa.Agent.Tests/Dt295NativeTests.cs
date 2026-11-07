@@ -620,4 +620,102 @@ public class Dt295NativeTests
         await Assert.That(text).Contains("結果: 成功 3/3 (100.0%)");
         await Assert.That(text).Contains("受信の確認 最小");
     }
+
+    [Test]
+    public async Task 復調のレジスタの経過は_ロックの印が立つまでと立ってからの標本を読み_書き込みをしない()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var options = new Dt295NativeProbe.Options(port, "T25", ChannelTable.Parse("T25")!, TimeSpan.FromSeconds(1), false, DemodTrace: true);
+        var output = new StringWriter();
+        var storesBefore = 0;
+
+        var code = Dt295NativeProbe.DemodTrace(options, timeline =>
+        {
+            var device = Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000, timeline);
+            storesBefore = fake.Stores.Count;
+            return device;
+        }, () => Dt295NativeDevice.CloseIfIdle(port), output);
+
+        var text = output.ToString();
+        await Assert.That(code).IsEqualTo(0);
+        await Assert.That(text).Contains("T 復調のレジスタの経過: T25");
+        await Assert.That(text).Contains("ロックの印 (0x81 の bit4)");
+        // 選局のあと標本を読むだけで、USB のレジスタには書かない
+        await Assert.That(fake.Stores.Skip(storesBefore).Any(s => s.Address is >= 0xFD8000 and <= 0xFD80FF)).IsFalse();
+    }
+
+    [Test]
+    public async Task 同じチャンネルをもう一度選局すると_受信が続いていれば周波数を書き直さず_取り込みは始め直して_TS_が届く()
+    {
+        var fake = Rig();
+        var port = $"test-{Guid.NewGuid():N}";
+        var tuner = new Dt295NativeTuner("test", () => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000), () => Dt295NativeDevice.CloseIfIdle(port));
+        var t25 = ChannelTable.Parse("T25")!;
+        var t26 = ChannelTable.Parse("T26")!;
+        int Writes() => fake.I2cLog.Count(line => line.StartsWith("10 W FEC011"));
+        try
+        {
+            tuner.Tune(t25, t25.StreamId);
+            var first = Writes();
+            await Assert.That(first).IsGreaterThan(0);
+            var starts = fake.Stores.Count(s => s.Address == 0x1902010 && s.Value == 0x02000000);
+
+            tuner.Tune(t25, t25.StreamId);
+            await Assert.That(Writes()).IsEqualTo(first);
+            await Assert.That(fake.Stores.Count(s => s.Address == 0x1902010 && s.Value == 0x02000000)).IsEqualTo(starts + 1);
+            var ring = (DeviceStream)tuner.Output;
+            var buffer = new byte[188 * 8];
+            var got = 0;
+            var giveUp = System.Diagnostics.Stopwatch.StartNew();
+            while (got < buffer.Length)
+            {
+                var n = ring.Read(buffer, got, buffer.Length - got, () => giveUp.Elapsed > TimeSpan.FromSeconds(10));
+                if (n <= 0) break;
+                got += n;
+            }
+            await Assert.That(got).IsEqualTo(buffer.Length);
+            await Assert.That(buffer[0]).IsEqualTo((byte)0x47);
+
+            // 別のチャンネルでは周波数を書く
+            tuner.Tune(t26, t26.StreamId);
+            await Assert.That(Writes()).IsGreaterThan(first);
+
+            // 別の手段で復調の周波数が替わっていたら (診断の離れる選局など)、同じチャンネルでも選局し直す
+            tuner.Tune(t25, t25.StreamId);
+            var settled = Writes();
+            tuner.Device!.Frontend.TuneTerrestrial((uint)((t26.Frequency + 500UL) / 1000));
+            var away = Writes();
+            await Assert.That(away).IsGreaterThan(settled);
+            tuner.Tune(t25, t25.StreamId);
+            await Assert.That(Writes()).IsGreaterThan(away);
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task 同期が続く範囲をまとめて渡し_端数は次に持ち越し_同期のずれは捨てる()
+    {
+        byte[] Packets(int count, byte tag) => Enumerable.Range(0, count).SelectMany(i => new byte[188].Select((_, at) => at == 0 ? (byte)0x47 : tag)).ToArray();
+        var framer = new NativeTsFramer();
+        var runs = new List<byte[]>();
+        // 3 パケットと 100 バイトの端数。まとめて 1 つ
+        var data = Packets(3, 1).Concat(new byte[100].Select((_, at) => at == 0 ? (byte)0x47 : (byte)2)).ToArray();
+        framer.PushRuns(data, run => runs.Add(run.ToArray()));
+        await Assert.That(runs.Count).IsEqualTo(1);
+        await Assert.That(runs[0].Length).IsEqualTo(188 * 3);
+        // 続きで端数が 1 パケットになる (持ち越しがあるときは 1 パケットずつ)
+        framer.PushRuns(new byte[88].Select(_ => (byte)2).Concat(Packets(1, 3)).ToArray(), run => runs.Add(run.ToArray()));
+        await Assert.That(runs.Sum(r => r.Length)).IsEqualTo(188 * 5);
+        await Assert.That(runs[1][0]).IsEqualTo((byte)0x47);
+        // 同期のずれは 1 バイトずつ捨て、そのあとの範囲を 1 つで渡す
+        runs.Clear();
+        framer.PushRuns(new byte[] { 0, 0, 0 }.Concat(Packets(2, 4)).ToArray(), run => runs.Add(run.ToArray()));
+        await Assert.That(runs.Count).IsEqualTo(1);
+        await Assert.That(runs[0].Length).IsEqualTo(188 * 2);
+        await Assert.That(framer.Discarded).IsEqualTo(3L);
+    }
 }
