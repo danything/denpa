@@ -17,7 +17,7 @@ export const actions = {
   addWebhook: async ({ request }) => {
     const form = await request.formData();
     const url = String(form.get("url") ?? "").trim();
-    // 頭の綴りだけでなく URL として読めるかまで見る (`http://` だけ、のようなものを残さない)
+    // 先頭の綴りだけでなく URL として読めるかまで見る (`http://` だけ、のようなものを残さない)
     if (!webhookUrl(url)) {
       return fail(400, { message: "http(s) で始まる URL を入れてください" });
     }

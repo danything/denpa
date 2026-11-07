@@ -164,8 +164,6 @@ export function globPatterns(compiled: CompiledRule): string[] | null {
  * - `weekday` 始まる時刻の曜日が条件の外
  * - `empty` 条件が何も無い (全番組に当たってしまうので当てない)
  * - `keyword` キーワードを含まない
- * - `ignore` 除外する言葉を含む
- */
 /**
  * **その局の有料放送を自動予約してよいか。** カードで契約中と確かめた局だけ true (`contracts.paidAllowed`)。
  * 未契約・期限切れ・まだ確かめていない局は当てない。録ってもスクランブルのままで観られないため

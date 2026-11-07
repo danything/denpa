@@ -14,7 +14,7 @@ import { updateAvailable } from "#lib/server/update.js";
  * 録画とエンコードの本数も返す。入れ替えていいかどうかを外から見たいことがあるため
  * (待つこと自体はアプリ側でやっている。runtime.ts の drain)。Windows の通知領域と Mac のメニューバーのアプリ (`tray/`) は、
  * これを見て更新の前に確かめる。
- * バージョンも返す (`DENPA_VERSION`。リリースのイメージだけが持つ。手元と develop は `dev`)。何が動いているかを外から確かめるため
+ * バージョンも返す (`DENPA_VERSION`。リリースのイメージと、Mac・Windows のインストーラが書く起動スクリプトが渡す。手元と develop は `dev`)。何が動いているかを外から確かめるため
  */
 export function GET() {
   const row = orm().select({ n: count() }).from(services).get();

@@ -4,7 +4,7 @@
  * **入口の `server.js` とアプリ (`auth.ts`) の両方が使う。** server.js は SvelteKit の
  * ビルドの外にある素の JS なので、ここは**何も import しない** (`$lib` も config も
  * 引かない)。bun は `.ts` をそのまま読めるので、server.js はこのファイルを直に
- * import する。本番のイメージにもこの 1 枚だけ置いてある (Dockerfile)。
+ * import する。本番のイメージにも、入口が読むほかのファイルと並べて置いてある (Dockerfile)。
  * 同じ判定を 2 か所に書くと、片方だけ直して食い違うほうが危ない。
  */
 

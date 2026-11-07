@@ -195,7 +195,7 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 ## 確かめたこと
 
 - **CI** (test.yml の `server-windows`・`agent-windows`・`agent-windows-install`): 配布物の ffmpeg で denpa が使う経路を流し、
-  進み具合を fd 3 で受け、`SetThreadExecutionState` が `powercfg /requests` に出ることを見る。本体を `bun server.js` で起こして
+  進み具合を名前付きパイプ (`stream.sideOutput`) で受け、`SetThreadExecutionState` が `powercfg /requests` に出ることを見る。本体を `bun server.js` で起こして
   画面・字・デコーダが返ることを見る。install.ps1 で本体ごと入れて SYSTEM のタスクで動き、本体がエージェントと組むところまで。
   wslc からの移行は偽の wslc で流す (`tests/install-windows-migrate.ps1`)。通知領域のアイコンは、組んで起こして落ちないこと・二重に起こすとすぐ終わること・
   Run に載ること・上げ直すと動いているものを止めること・外すと消えることまで

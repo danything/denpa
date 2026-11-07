@@ -727,7 +727,7 @@ jobs:
     uses: ./.github/workflows/windows-server.yml
 
   # 配布物を Windows のランナーで確かめる。**必須チェックにはしない** (agent-windows と同じ理由)。
-  # 1. 同梱の ffmpeg で denpa の経路を流し、fd 3 の進み具合と、スリープを止める呼び出しを見る (tests/native-smoke.ts)
+  # 1. 同梱の ffmpeg で denpa の経路を流し、名前付きパイプで受ける進み具合と、スリープを止める呼び出しを見る (tests/native-smoke.ts)
   # 2. 本体をそのまま `bun server.js` で起こし、/api/health・画面・字・デコーダが返るか
   # 3. install.ps1 で本体ごと入れて (タスクは SYSTEM)、本体がエージェントと組めるか。上げ直して、外す
   server-windows:
@@ -750,7 +750,7 @@ jobs:
           name: denpa-agent-windows
           path: ${{ runner.temp }}\agent
 
-      - name: Bundled ffmpeg, progress on fd 3, keep awake
+      - name: Bundled ffmpeg, progress on a named pipe, keep awake
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'

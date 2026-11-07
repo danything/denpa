@@ -27,7 +27,7 @@ denpa だけで録って観るなら、次のものは要りません。
 - **B25 のデコーダ**。復号はエージェントがします。Linux では pcscd も要りません (USB のカードリーダーを直接扱う。[tuners.md](tuners.md#カードリーダー))
 - **チャンネルの設定ファイル**。設定の「受信」の「チャンネル」でスキャンします。衛星は最初から局が入っています
 - **データベースのサーバ** (MariaDB など)。denpa は SQLite を自分で持ちます ([config.md](config.md))
-- **PX-Q3U4・PX-S1UD などのホストのドライバ**。px4-userland・siano-userland をイメージに同梱しています
+- **PX-Q3U4・PX-S1UD などのホストのドライバ**。px4-userland・siano-userland を同梱しています (Linux はイメージに、Mac と Windows はインストーラが入れる)
   ([tuner-px4.md](tuner-px4.md)・[tuner-px-s1ud.md](tuner-px-s1ud.md))。PT3 などの DVB のドライバは要ります ([tuner-pt3.md](tuner-pt3.md))
 
 ## 移せるもの・移せないもの

@@ -149,7 +149,7 @@ export function load({ url }) {
     recordings: searchRecordings(q, options),
     reservations: searchReservations(q, options),
     rules: searchRules(q, options),
-    /** 切り抜き。並べるのは頭の数枚だけで、続きは切り抜きの画面で */
+    /** 切り抜き。並べるのは先頭の数枚だけで、続きは切り抜きの画面で */
     clips:
       q === ""
         ? { total: 0, rows: [] }

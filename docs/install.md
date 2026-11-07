@@ -157,7 +157,7 @@ services:
       OIDC_CLIENT_SECRET: <クライアントシークレット>
 ```
 
-Windows は同じ名前を `KEY=値` で `%ProgramData%\denpa\denpa.env` に、Helm は `denpa.trustedNetworks` と
+Mac と Windows は同じ名前を `KEY=値` で `denpa.env` ([install-mac.md](install-mac.md#環境変数を足す-denpaenv)・[install-windows.md](install-windows.md#環境変数を足す-denpaenv)) に、Helm は `denpa.trustedNetworks` と
 `denpa.oidcSecretName` に書きます。
 **`TRUSTED_NETWORKS=0.0.0.0/0` はインターネットに向けて開くのと同じです。** 家の外に出すなら OIDC を使います。
 ログインの細かいことは [auth.md](auth.md)、変数の一覧は [config.md](config.md)。

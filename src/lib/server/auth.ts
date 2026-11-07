@@ -254,8 +254,13 @@ export function sharedNetworks(
   return shared;
 }
 
-/** 前段と同じネットワークを信頼していそうなら (`sharedNetworks`)、起動ログに出す */
+/**
+ * 前段と同じネットワークを信頼していそうなら (`sharedNetworks`)、起動ログに出す。
+ * **Mac と Windows では見ない。** OS の上でそのまま動くので自分のインターフェースは LAN そのもので、
+ * インストーラの既定の `TRUSTED_NETWORKS` と必ず重なる (前段を同じネットワークに置く構成ではない)
+ */
 export function warnIfProxyHidden(): void {
+  if (process.platform === "win32" || process.platform === "darwin") return;
   const shared = sharedNetworks(
     config.trustedNetworks,
     config.trustedProxies,

@@ -34,9 +34,9 @@ TS は追記で開き、次の起動で `recoverOrphanedRecordings` が続きか
 どうやっても落ちるからです。ArgoCD の同期は待てますが、放送は待ちません。
 
 すぐ入れ替えたいときは `SHUTDOWN_WAIT=0` にすると「落ちて、続きから録り直す」になります。
-Kubernetes の `terminationGracePeriodSeconds` と docker compose の
-`stop_grace_period` は `SHUTDOWN_WAIT` より長くしておくこと。短いと待っている
-途中で SIGKILL されます。
+Kubernetes の `terminationGracePeriodSeconds`・docker compose の
+`stop_grace_period`・Mac の plist の `ExitTimeOut` (install.sh) は `SHUTDOWN_WAIT` より長くしておくこと。短いと待っている
+途中で SIGKILL されます。Windows には止まれの合図が無いので、install.ps1 が録画の終わりを待ってから止めます。
 
 **待っている間も画面は開けます。** ここは 2 箇所で落ちていました
 (実機では、録画中に同期が来て 34 分間ずっと画面だけ開けなかった)。

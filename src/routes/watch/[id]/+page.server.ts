@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { error, fail, redirect } from "@sveltejs/kit";
 import { eq, getTableColumns } from "drizzle-orm";
 
-import { HIDDEN_CODECS } from "#lib/live-choice.js";
 import { countClips, sceneTime } from "#lib/server/clips.js";
 import { orm } from "#lib/server/db.js";
 import { deleteRecordingFiles } from "#lib/server/files.js";
@@ -76,7 +75,8 @@ export function load({ params, url }) {
       : null;
 
   // 郵便番号と都道府県は、ライブと同じく受信機の設定としてエンジンに渡す (`DataBroadcast`)
-  const { postalCode, prefecture, jikkyo, jikkyoNg, hideH264Hevc } = settings();
+  const { postalCode, prefecture, jikkyo, jikkyoNg } = settings();
+  const viewing = viewingOptions(url);
   return {
     recording,
     /** 観るものがあるか。エンコード済みか、録り終えた元の TS */
@@ -87,16 +87,16 @@ export function load({ params, url }) {
     jikkyoAllowed: jikkyo,
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
     jikkyoNg,
-    /** 実況のチャンネルと頭・終わりの放送時刻。実況の無い局・世帯の設定がオフなら null */
+    /** 実況のチャンネルと先頭・終わりの放送時刻。実況の無い局・世帯の設定がオフなら null */
     jikkyo: recordingJikkyo(recording),
     /** 「この場面から観る」で始める位置 (秒。観る画面の物差し)。無ければ null */
     scene,
     /** この録画の切り抜きの数 (右の列の「この録画の切り抜き」) */
     clips: countClips({ recording: id }),
     /** コーデックのメニューから外すもの (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) */
-    hidden: hideH264Hevc ? [...HIDDEN_CODECS] : [],
+    hidden: viewing.hidden,
     /** 開いた名前が家の中か (`#lib/host.ts` の `indoorHost`)。録画しか無いときの「自動」の順に効く (`ts/playback.ts` の `pickOffer`) */
-    indoor: viewingOptions(url).indoor,
+    indoor: viewing.indoor,
   };
 }
 

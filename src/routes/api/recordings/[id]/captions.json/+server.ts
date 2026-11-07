@@ -1,3 +1,5 @@
+import { statSync } from "node:fs";
+
 import { joinBytes } from "@danything/arib/bytes";
 import { error } from "@sveltejs/kit";
 
@@ -6,6 +8,7 @@ import { config } from "#lib/server/config.js";
 import { fileMemo } from "#lib/server/file-memo.js";
 import { captionArgs } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
+import { etagMatches, fileEtag } from "#lib/server/serve.js";
 import { run } from "#lib/server/stream.js";
 
 /**
@@ -67,12 +70,30 @@ async function build(argv: string[], ts: boolean): Promise<Made> {
     : { json: JSON.stringify(pages) };
 }
 
-export async function GET({ params }) {
+export async function GET({ params, request }) {
   const recording = recordingOr404(params.id);
   const args = await captionArgs(recording);
   if (args === null) error(404, MISSING);
   const { argv, path } = args;
   const ts = path === null;
+
+  /*
+   * **持たせてよいが、毎回確かめさせる** (チャプターと同じ)。再エンコードしても置き場所は同じ名前のことがあり、
+   * CM を切れば字幕の時刻も変わる。`no-cache` + ETag (ファイルの大きさと更新時刻) にして、変わっていなければ 304。
+   * 元の TS はエンコードが終わると物差しが変わるので控えさせない
+   */
+  const stat =
+    path === null ? undefined : statSync(path, { throwIfNoEntry: false });
+  const tag = stat === undefined ? null : fileEtag(stat);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Cache-Control": ts ? "no-store" : "private, no-cache",
+  };
+  if (tag !== null) {
+    headers["ETag"] = tag;
+    if (etagMatches(request, tag))
+      return new Response(null, { status: 304, headers });
+  }
 
   const result =
     path === null
@@ -80,11 +101,5 @@ export async function GET({ params }) {
       : await made.get(path, () => build(argv, ts));
   if ("missing" in result) error(404, result.missing);
 
-  return new Response(result.json, {
-    headers: {
-      "Content-Type": "application/json",
-      // 同じファイルなら中身は変わらない。再エンコードすればパスごと変わる。元の TS はエンコードが終わると物差しが変わる
-      "Cache-Control": ts ? "no-store" : "private, max-age=3600",
-    },
-  });
+  return new Response(result.json, { headers });
 }
