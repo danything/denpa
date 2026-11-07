@@ -1269,7 +1269,7 @@ export async function sweepNow(): Promise<{
   if (state.running) {
     inflight?.abort();
     if (!(await settled()))
-      return { started: false, message: "まだ前の取得が終わっていません" };
+      return { started: false, message: "まだ前の分を集めています" };
   }
   reconcile();
   /*
@@ -1285,7 +1285,7 @@ export async function sweepNow(): Promise<{
     save({ ...known, absent: {}, noCarousel: {} });
   const targets = missing();
   if (targets.length === 0) {
-    return { started: false, message: "ロゴはすべて取得済みです" };
+    return { started: false, message: "ロゴはすべて集め終えています" };
   }
   /*
    * 空いているチューナーで待っている当たりの中継 (`awaitCarousel`) は畳んで、ここから開き直す。
@@ -1319,7 +1319,7 @@ export async function sweepNow(): Promise<{
   return {
     started: true,
     message:
-      `${targets.length} チャンネルをチューナー ${parallel} 台で取得します。` +
+      `${targets.length} チャンネルをチューナー ${parallel} 台で集めます。` +
       "ロゴが流れてくるまで数分かかります",
   };
 }
@@ -1414,7 +1414,7 @@ async function run(
       message:
         state.message !== ""
           ? state.message
-          : `${found} 局のロゴを取得しました${left > 0 ? ` (まだの局は残り ${left})` : ""}`,
+          : `${found} 局のロゴを集めました${left > 0 ? ` (まだの局は残り ${left})` : ""}`,
     });
     if (state.found > 0) console.log(`[logo] ${state.message}`);
     emit("services");

@@ -64,6 +64,7 @@ import {
   RUNG_HEADER,
 } from "#lib/ts/playback.js";
 import {
+  inWrap,
   lastVideoPts,
   type ReadAt,
   readHead,
@@ -1236,8 +1237,7 @@ async function rawResponse(
   if (ts === null) error(404, "この形式では再生できません");
   const mark = await seekFrom(ts, plan.skip, from);
   if (mark === null) error(404, "この形式では再生できません");
-  const origin =
-    (((ts.head + Math.round(plan.skip * CLOCK)) % WRAP) + WRAP) % WRAP;
+  const origin = inWrap(ts.head + Math.round(plan.skip * CLOCK));
   return new Response(Bun.file(ts.path).slice(mark.at).stream(), {
     headers: {
       "Content-Type": "video/mp2t",
@@ -1264,7 +1264,7 @@ type EncodedColumns = Pick<
  * 在るとすると、`playbackPlan` は元の TS で流すのに、続きの位置・字幕・チャプターはエンコードしたものの物差しで出して食い違う。
  * 見るのは列ごとに stat 1 回で、控えは持たない。一覧で呼ぶのは続きの位置がある行だけで、一覧はもともと行ごとに大きさを stat している
  */
-export function encodedFiles(
+function encodedFiles(
   recording: EncodedColumns,
 ): { source: EncodedSource; path: string }[] {
   return (

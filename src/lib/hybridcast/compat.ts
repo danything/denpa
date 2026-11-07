@@ -2,7 +2,7 @@
  * **Hybridcast のアプリから、データ放送の受信機の機能を使わせる** (`navigator.bmlCompat`・`navigator.applicationManager`。
  * IPTV フォーラム「Hybridcast 技術仕様」)。アプリの文書の中で動く。
  *
- * NHK のアプリはこれを当てにして動く — Hybridcast のトップは、データ放送に戻ったとき何を出すかを Greg に書き、
+ * NHK のアプリはこれを当てにして動く。Hybridcast のトップは、データ放送に戻ったとき何を出すかを Greg に書き、
  * 設定を局の NVRAM (`nvram://00;group/14` など) に読み書きする。
  *
  * - **Greg** … データ放送のエンジンと同じもの。開くときに写して渡し、書かれたら親へ知らせて戻す

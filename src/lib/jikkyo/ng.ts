@@ -2,8 +2,10 @@
  * **NG ワード** (世帯で 1 つの一覧。設定の「連携」の「実況」)。含むコメントは流さない。
  *
  * - 部分一致だけ (正規表現は使わない)。全角・半角、半角カナ、英字の大小、ひらがな・カタカナの違いは同じとみなす
- * - 1 行に 1 語。空の行は無視する。`NG_MAX` 語まで、1 語 `NG_LENGTH` 文字まで (絵文字も 1 文字)
+ * - 1 行に 1 語。空の行は無視する。`NG_MAX` 語まで、1 語 `NG_LENGTH` 文字まで (書き込みと同じく書記素で数える。絵文字も 1 文字)
  */
+
+import { graphemes } from "./post";
 
 /** 語の数の上限 */
 export const NG_MAX = 100;
@@ -29,7 +31,7 @@ export function parseNg(text: string): { words: string[] } | { error: string } {
   for (const line of text.split(/\r?\n/)) {
     const word = line.trim();
     if (word === "" || words.includes(word)) continue;
-    if ([...word].length > NG_LENGTH)
+    if (graphemes(word) > NG_LENGTH)
       return { error: `1 語は ${NG_LENGTH} 文字までです` };
     words.push(word);
   }
@@ -47,7 +49,7 @@ export function readNg(value: string | undefined): string[] {
     return raw
       .filter((word): word is string => typeof word === "string")
       .map((word) => word.trim())
-      .filter((word) => word !== "" && [...word].length <= NG_LENGTH)
+      .filter((word) => word !== "" && graphemes(word) <= NG_LENGTH)
       .slice(0, NG_MAX);
   } catch {
     return [];

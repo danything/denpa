@@ -3,7 +3,7 @@
  *
  * ライブは今のカルーセルをそのまま流せばよいが、録画は巻き戻し・番組またぎが
  * あるので、**いつ何が変わったか**を再生位置つきで持っておく必要がある
- * (デコード方法と写し方は [ts/data-timeline.ts](../ts/data-timeline.ts))。
+ * (取り出し方は [ts/data-capture.ts](../ts/data-capture.ts)、写し方は [ts/data-timeline.ts](../ts/data-timeline.ts))。
  *
  * ここは**ファイルの出し入れだけ**。エンコードのついでに元の TS をもう一度デコードして
  * (`saveRecordedBml`)、再生時に読む (`loadRecordedBml`)。中身は 1 行 1 メッセージの

@@ -44,7 +44,7 @@ import {
   STREAM_RETRIES,
   type StreamState,
 } from "#lib/ts/playback.js";
-import { sinceHead } from "#lib/ts/seek.js";
+import { inWrap, sinceHead } from "#lib/ts/seek.js";
 
 /** 鳴らし始めるまでに貯める長さ (秒) */
 const TARGET = 1;
@@ -324,7 +324,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
         if (!Number.isFinite(head))
           throw new Error(`${ORIGIN_HEADER} がありません`);
         origin = head;
-        start = (((origin + start) % WRAP) + WRAP) % WRAP;
+        start = inWrap(origin + start);
       }
       engine.reset(start);
       const splitter = input === "fmp4" ? new Fmp4Splitter() : null;

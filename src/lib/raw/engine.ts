@@ -547,9 +547,7 @@ export class RawEngine {
       const pts = this.playout.position(contextTime + ahead);
       return pts === null ? null : { pts, at: stamp.performanceTime };
     }
-    const latency = this.outlet.through
-      ? STREAM_OUT
-      : this.context.outputLatency || this.context.baseLatency || 0;
+    const latency = this.outlet.through ? STREAM_OUT : page;
     const pts = this.playout.position(this.context.currentTime - latency);
     return pts === null ? null : { pts, at: performance.now() };
   }
