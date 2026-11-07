@@ -189,6 +189,17 @@
   async function relay(
     message: Extract<FrameMessage, { type: "fetch" }>,
   ): Promise<void> {
+    /*
+     * **移る前のページの返りは捨てる。** 入れ物を読み直しても `contentWindow` は同じで、
+     * 新しいページは id を 1 から数え直すので、届けると別の通信の返りとして受け取られる
+     */
+    const mine = round;
+    const reply = (
+      message: Record<string, unknown>,
+      transfer: Transferable[] = [],
+    ) => {
+      if (mine === round) post(message, transfer);
+    };
     try {
       const target = new URL(message.url);
       if (target.protocol !== "http:" && target.protocol !== "https:")
@@ -218,7 +229,7 @@
       const body = scriptable(contentType)
         ? rewriteLocationBytes(new Uint8Array(got)).slice().buffer
         : got;
-      post(
+      reply(
         {
           type: "response",
           id: message.id,
@@ -232,7 +243,7 @@
       console.warn(
         `[hybridcast] 通信を中継できません: ${message.method} ${message.url} (${String(failure)})`,
       );
-      post({ type: "response", id: message.id, error: true });
+      reply({ type: "response", id: message.id, error: true });
     }
   }
 

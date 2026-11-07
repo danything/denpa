@@ -329,7 +329,7 @@ MSE を作り直した直後はデコーダが立ち上がっておらず、重�
 
 **映像の入らない塊は待っている間も渡す。** 選局したての ffmpeg は、放送の音声が映像のキーフレームより先に来ると、最初の
 塊が音声だけになる。これを捨てていた頃は音声の先頭が欠けて映像より後から始まり、Chromium は始めた直後に速さを変える
-（`pacing`。選局の直後は必ず狙いより貯まっている）と**再生の時計が止まった** — 1 枚目のまま 0.3〜0.6 秒、ときに 7.9 秒動かない。
+（`pacing`。選局の直後は必ず狙いより貯まっている）と**再生の時計が止まった**。1 枚目のまま 0.3〜0.6 秒、ときに 7.9 秒動かなかった。
 映像より前の音声は MSE の範囲（`buffered`）に入らないので、渡しても始める位置は変わらない。
 
 ### 落ち着いた高さは覚えておく
@@ -1565,12 +1565,12 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
        ─ fetch・XMLHttpRequest・受信機の記憶・受信機 API は postMessage で画面へ
 ```
 
-- **開けるのは**双方向がオンで、AIT にアプリがあるときだけ。オフなら AIT の問い合わせ
+- **開けるのは**双方向がオンで、AIT にアプリがあり、データ放送を開いているときだけ。それ以外 (常に受信しているだけのときも) は AIT の問い合わせ
   (`AITControlledAppEngineFunction`・`AITTransferMethod`・`AITTransportMethod`・APIGroup の
   `AITControlledApp.Start`) に 0 と答え、`startAITControlledApp` は失敗を返す (行き先のボタンだけが残る)。
   **開けないのに 1 と答えてはいけません。** BML が起動を求めてきて、そのまま返らなくなります
 - **電波に AIT を載せない局もある** (NHK)。PMT に印が無く、データ放送が `AITTransportMethod` の XML・HTTP を訊いてくる。
-  双方向がオンならこれと `AITControlledAppEngineFunction`・`AITControlledApp.Start` に 1 と答え
+  双方向がオンでデータ放送を開いていれば、これと `AITControlledAppEngineFunction`・`AITControlledApp.Start` に 1 と答え
   (電波の表で運ぶ `AITTransferMethod` は 0)、`startAITControlledApp` に渡された http(s) の URL を XML の AIT として
   中継で取り、そこにあるアプリを開く (`hybridcast/xml-ait.ts`。ETSI TS 102 809 の形式)。文書には取得し始めた時点で 1 を返す (開く手立てがあるので、上の決まりには反しない。 URL を渡されなければ失敗を返す)。
   取れなかったときは `[bml] XML の AIT を読めませんでした` をコンソールに出して、データ放送のまま。
@@ -1616,7 +1616,7 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
 | データ放送の Greg と NVRAM               | ○     | `navigator.bmlCompat.browserPseudo` (`Greg`・`readPersistentArray`・`writePersistentArray`)。データ放送と同じもの。NVRAM は放送の文書と同じ領域で、起動した局から見える分だけ |
 | データ放送へ戻る                         | ○     | `navigator.applicationManager.launchDataBroadcastingBrowser`。アプリを閉じる (戻る先の部品は選べない)                                                                         |
 | 番組の変わり目                           | △     | `receiverDevice.streamEvent` の番組が変わったことだけ知らせる。放送のイベントメッセージは届けない                                                                             |
-| アプリの通信 (`fetch`・`XMLHttpRequest`) | ○     | 中継を通す。GET と POST だけ。POST の形式はフォーム・JSON・文字だけ                                                                                                           |
+| アプリの通信 (`fetch`・`XMLHttpRequest`) | ○     | 中継を通す。GET (HEAD も GET で取る) と POST だけ。POST の形式はフォーム・JSON・文字だけ                                                                                      |
 | 受信機 ID・証明書・機種                  | ×     | 持たない。`getReceiverId` などは null                                                                                                                                         |
 | WebSocket・EventSource・sendBeacon       | ×     | 差し込みで中継へ渡せないので使えない                                                                                                                                          |
 | 同期の XMLHttpRequest                    | △     | 非同期で返す                                                                                                                                                                  |
