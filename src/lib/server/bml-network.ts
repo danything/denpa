@@ -487,10 +487,11 @@ export async function confirmReachable(
   ipAddress: string | null;
   responseTimeMillis: number | null;
 }> {
-  // `example.jp` でも `https://example.jp/x` でも受ける
+  // `example.jp` でも `example.jp:443` でも `https://example.jp/x` でも受ける (繋ぐのはどれも 443 番)
+  const bare = destination.replace(/^\/+/, "").split("/")[0] ?? "";
   const host = destination.includes("://")
     ? new URL(destination).hostname
-    : (destination.replace(/^\/+/, "").split("/")[0] ?? "");
+    : bare.replace(/^([^:[\]]+):\d+$/, "$1");
   if (host === "") throw new Refused("宛先がありません");
 
   return limited(async () => {

@@ -825,6 +825,36 @@ describe("開く前の入口", () => {
     await watch(() => false, 50);
     expect(second.path).toBeNull();
   });
+
+  /** 画面は開く前の起動を断る。1 と答えると、文書は起動を求めたまま返らなくなる */
+  test("開く前は、Hybridcast のアプリを開けないと答える", () => {
+    let shown = false;
+    const { bml } = open({
+      opened: () => shown,
+      ip: {
+        connected: () => true,
+        transmit: async () => ({
+          resultCode: 0,
+          status: "",
+          body: new Uint8Array(),
+        }),
+        confirm: async () => null,
+        get: async () => null,
+      },
+      hybridcast: {
+        ready: () => true,
+        start: () => true,
+        startFrom: () => true,
+      },
+    });
+    const host = bml as unknown as {
+      canStartApp(): boolean;
+      canFetchAit(): boolean;
+    };
+    expect([host.canStartApp(), host.canFetchAit()]).toEqual([false, false]);
+    shown = true;
+    expect([host.canStartApp(), host.canFetchAit()]).toEqual([true, true]);
+  });
 });
 
 describe("epgTune", () => {

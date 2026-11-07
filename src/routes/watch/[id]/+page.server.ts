@@ -10,7 +10,7 @@ import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { sidecarPaths } from "#lib/server/metadata.js";
 import { relative } from "#lib/server/paths.js";
 import { encodedFile, rulerOf } from "#lib/server/playback.js";
-import { recordingFromForm } from "#lib/server/recording.js";
+import { recordingFromForm, tsHeadOf } from "#lib/server/recording.js";
 import { lastEncodeError, recordings } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
 import { viewingOptions } from "#lib/server/viewing.js";
@@ -83,6 +83,8 @@ export function load({ params, url }) {
     playable: encoded !== null || ts !== null,
     broadcast: { postalCode, prefecture },
     hasData,
+    /** 元の TS の先頭の放送時刻 (unix ms)。データ放送の時計 (`clock`) を再生位置から出すのに使う */
+    head: tsHeadOf(recording),
     /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */
     jikkyoAllowed: jikkyo,
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */
