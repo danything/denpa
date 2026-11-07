@@ -1028,7 +1028,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       }
       /*
        * 5xx などで試しのデータが取れなかったときは、余裕が無かったと測ったことにする (`capacity` は再生中の段のぶんだけ)。
-       * 測っていないことにすると、`wantProbe` が次の刻みでまた測らせ、困っているサーバへ刻み (`ADAPT_EVERY`) ごとに取りに行く。
+       * 測っていないことにすると、`wantProbe` が次の刻みでまた測らせ、困っているサーバから刻み (`ADAPT_EVERY`) ごとに取得する。
        * 余裕が無いことにすれば上げずに待ち直し、待ちが明けてから測り直す。サーバが困っている間に段を上げることもない
        */
       const reader = res.ok ? res.body?.getReader() : undefined;
