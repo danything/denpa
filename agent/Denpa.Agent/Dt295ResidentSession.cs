@@ -1,5 +1,5 @@
 /*
- * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 4dc8854) の core/session.c・core/device_query.c・
+ * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 889a435) の core/session.c・core/device_query.c・
  * core/resident_image.c (書き込みと照合) を移したもの。Copyright (c) 2026 huggy、MIT License (全文は licenses/mAgicVISION.txt)。
  */
 
@@ -112,11 +112,10 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
     {
         if (source is < 0 or >= SourceCount) throw new ArgumentOutOfRangeException(nameof(source));
         var data = new byte[DataSize];
-        data[0] = QueryVersion;
+        data[0] = (byte)page;
         data[1] = (byte)source;
         var response = Command(CommandDeviceQuery, page, data);
-        if (Word(response, 12) != CommandDeviceQuery || Word(response, 16) != page || response[24] != QueryVersion || response[25] != page
-            || response[26] != source)
+        if (Word(response, 12) != CommandDeviceQuery || Word(response, 16) != page || response[24] != page || response[25] != source)
         {
             throw new Dt295ResidentException($"状態の問い合わせ (ページ {page}) に返った応答の形が違います");
         }
@@ -130,13 +129,12 @@ public sealed class Dt295ResidentSession(IDt295ResidentTransport transport, Func
     {
         var response = Query(PageOverview, 0);
         if (response[27] != 0) throw new Dt295ResidentException("常駐イメージの様子を問い合わせた応答の形が違います");
-        for (var word = 4; word < 9; word++)
+        for (var word = 2; word < 9; word++)
         {
             if (QueryWord(response, word) != 0) throw new Dt295ResidentException("常駐イメージの様子を問い合わせた応答の形が違います");
         }
-        var overview = new Dt295ResidentOverview(QueryWord(response, 0), QueryWord(response, 1), QueryWord(response, 2), QueryWord(response, 3));
-        if ((overview.RfMask & ~((1u << SourceCount) - 1)) != 0 || (overview.StreamMask & ~overview.RfMask) != 0 || overview.ResidentAbi != AbiVersion
-            || (overview.WindowVersion != 0 && overview.WindowVersion != StreamWindowVersion))
+        var overview = new Dt295ResidentOverview(QueryWord(response, 0), QueryWord(response, 1));
+        if ((overview.RfMask & ~((1u << SourceCount) - 1)) != 0 || (overview.StreamMask & ~overview.RfMask) != 0)
         {
             throw new Dt295ResidentException($"常駐イメージの様子が想定と違います ({overview})");
         }

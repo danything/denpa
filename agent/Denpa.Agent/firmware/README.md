@@ -21,10 +21,10 @@
 `magicvision-firmware.bin` は、PIX-DT295 を常駐方式で動かすときに機材へ入れるファームウェアです (SBC2 形式。DT295 の分は
 boot0 の body・hook と、256 KiB の常駐イメージ)。エージェントの実行ファイルに埋め込んで配ります (`../Dt295ResidentImage.cs`)。
 
-- 大きさ: 289,424 バイト
-- SHA-256: `0b2147e190afc7626165594fdedbedc6461c0e1f044b17742123b77fc5026fcc`
-- 出どころ: mAgicVISION (<https://github.com/makeding/mAgicVISION>、作者 huggy) のリリース v2 の
-  `magicvision-firmware_0.1.1_all.deb` にある `usr/lib/firmware/magicvision/firmware.bin`。手を加えていません
+- 大きさ: 289,432 バイト
+- SHA-256: `828b7847d49b2ae6d5847088318876178aadb3dfd0ac23eaccf855776fb5d50b`
+- 出どころ: mAgicVISION (<https://github.com/makeding/mAgicVISION>、作者 huggy) のリリース v2-0.2.0 の
+  `magicvision-firmware_0.2.0_all.deb` にある `usr/lib/firmware/magicvision/firmware.bin`。手を加えていません
 - 許諾: 上流の README の「`firmware.bin` などのファームウェア成果物は再配布できます」
 
 このファイルも手で変えないでください。エージェントは使う前に SHA-256 を確かめ、違えば使いません。

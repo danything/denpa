@@ -1,6 +1,6 @@
 {
-  "release": "v2",
-  "asset": "magicvision-firmware_0.1.1_all.deb",
-  "sha256": "0b2147e190afc7626165594fdedbedc6461c0e1f044b17742123b77fc5026fcc",
-  "commit": "4dc88548b71b4ff7ace5e796ab61e45624f564ee"
+  "release": "v2-0.2.0",
+  "asset": "magicvision-firmware_0.2.0_all.deb",
+  "sha256": "828b7847d49b2ae6d5847088318876178aadb3dfd0ac23eaccf855776fb5d50b",
+  "commit": "889a4354f068832fb5758cae259e39141c5e34ce"
 }

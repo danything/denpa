@@ -1,5 +1,5 @@
 /*
- * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 4dc8854) の usb/window.c (PIX-DT295 の部分) と
+ * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 889a435) の usb/window.c (PIX-DT295 の部分) と
  * usb/userland/libusb_boot.c・libusb.c・libusb_control.c の DT295 の経路を移したもの。Copyright (c) 2026 huggy、MIT License
  * (全文は licenses/mAgicVISION.txt)。行番号は元のファイルのもの。
  */

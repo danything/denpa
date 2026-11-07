@@ -1,5 +1,5 @@
 /*
- * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 4dc8854) の core/loader.c (mb86H_loader_install・
+ * mAgicVISION (https://github.com/makeding/mAgicVISION、commit 889a435) の core/loader.c (mb86H_loader_install・
  * native_install_hook・mb86H_loader_start・mb86H_loader_close) と core/recovery.c (mb86H_loader_adopt) のうち、
  * PIX-DT295 の部分を移したもの。Copyright (c) 2026 huggy、MIT License (全文は licenses/mAgicVISION.txt)。
  *
@@ -57,7 +57,7 @@ public static class Dt295ResidentLoader
         }
         Exact(transport, image, Dt295ResidentImage.Body, Dt295ResidentImage.BodyBytes, "body");
         transport.BlockWrites = true;
-        Ping(session);
+        Ping(session, adopting: true);
         Anchor(session, image, Dt295ResidentImage.Commit, 4);
         Anchor(session, image, Dt295ResidentImage.Meta, 24);
         Anchor(session, image, Dt295ResidentImage.BuildId, 8);
@@ -129,10 +129,14 @@ public static class Dt295ResidentLoader
 
     private static bool Identified(byte[] reply) => System.Text.Encoding.ASCII.GetString(reply, DataOffset, Identity.Length) == Identity;
 
-    private static void Ping(Dt295ResidentSession session)
+    private static void Ping(Dt295ResidentSession session, bool adopting = false)
     {
         var reply = session.Exchange(Dt295ResidentProtocol.Ping, 0, 0, 0, new byte[DataSize]);
         if (Result(reply) != Ok || Word(reply, 12) != 1) throw new Dt295ResidentException($"boot0 の PING の応答が想定と違います (結果 {Result(reply)})");
+        if (Word(reply, 20) == AbiVersion) return;
+        // 残っているのが前のバージョンの常駐イメージなら、USB のつなぎ直しで起動直後の状態に戻して入れ直す
+        var message = $"boot0 の PING の ABI が想定と違います ({Word(reply, 20)}。必要なのは {AbiVersion})";
+        throw adopting ? new Dt295ResidentColdException(message) : new Dt295ResidentException(message);
     }
 
     /// <summary>機材のメモリーを 64 バイトずつ読んで比べる (loader.c の read_region・verify_region)</summary>
