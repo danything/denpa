@@ -251,7 +251,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         accepted?.Invoke();
     }
 
-    /// <summary><see cref="_gate"/> を握ったまま呼ぶ</summary>
+    /// <summary><see cref="_gate"/> のロックを取った状態で呼ぶ</summary>
     private void Remember(string hash)
     {
         if (!_answered.Add(hash)) return;
