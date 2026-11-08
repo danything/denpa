@@ -479,7 +479,7 @@
     toggleMute: player.toggleMute,
     stepVolume: volume.step,
   });
-  /** データ放送を出している間は、空白・十字キー・f はあちらのリモコン (`bml/engine.ts` の `aribKey`) */
+  /** データ放送を出している間は、空白・十字キーはあちらのリモコン (`bml/engine.ts` の `aribKey`) */
   function keys(event: KeyboardEvent): void {
     if (player.showData && dataRemoteKey(event)) return;
     playerKey(event);

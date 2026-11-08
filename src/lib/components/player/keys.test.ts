@@ -127,20 +127,13 @@ describe("再生画面のキー", () => {
 describe("データ放送を出している間に譲るキー", () => {
   const yields = (key: string) => dataRemoteKey({ key } as KeyboardEvent);
 
-  test("空白・十字キー・f はデータ放送のリモコンへ譲る (ライブと観る画面で同じ)", () => {
-    for (const key of [
-      " ",
-      "f",
-      "ArrowUp",
-      "ArrowDown",
-      "ArrowLeft",
-      "ArrowRight",
-    ])
+  test("空白・十字キーはデータ放送のリモコンへ譲る (ライブと観る画面で同じ)", () => {
+    for (const key of [" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"])
       expect(yields(key)).toBe(true);
   });
 
-  test("ほかのキー (k・c・s・m・速さ) は再生の操作のまま", () => {
-    for (const key of ["k", "c", "s", "m", "<", ">"])
+  test("ほかのキー (f・k・c・s・m・速さ) は再生の操作のまま", () => {
+    for (const key of ["f", "k", "c", "s", "m", "<", ">"])
       expect(yields(key)).toBe(false);
   });
 });
