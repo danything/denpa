@@ -357,7 +357,7 @@ test.describe("テーブルトップ", () => {
     await expectSideBySide(page, "watch-stage");
     await fold(cdp, "tabletop");
     await expect(page.getByTestId("watch-stage-reflection")).toBeAttached();
-    await expectTabletop(page, "watch-stage", { tabbar: false });
+    await expectTabletop(page, "watch-stage", { tabbar: true });
     await expectReflection(page, "watch-stage");
     // 番組の中身は列の中で巻く
     const body = await page.getByTestId("watch-facts").evaluate((el) => ({

@@ -348,14 +348,24 @@
    * 「その他」とその中の「設定」、広い形はヘッダーの「設定」
    */
   const fresh = $derived(data.update !== null);
-  /** タブを出すのはナビの画面と検索 (設定はその下の節も) だけ (観る画面・追っかけ・ログイン・ペアリングには出さない) */
-  const showTabbar = $derived(here !== null);
   /**
-   * テーブルトップ (`#lib/phone-form.ts`) のライブでは、下のタブは下の段 (舞台の中。黒い地) の下端に浮く。
+   * タブを出すのはナビの画面と検索 (設定はその下の節も) と、観る画面・追っかけ。ログインとペアリングには出さない。
+   * **観る画面・追っかけにも出す。** スマホの形ではタブがある画面だけヘッダーを隠すので、出さなかった頃は
+   * この 2 つだけ上にヘッダーが出ていた。どのタブにも印は付けない (ナビの画面ではない)
+   */
+  const PLAYER_ROUTES = ["/watch/[id]", "/chase/[id]"];
+  const showTabbar = $derived(
+    here !== null || PLAYER_ROUTES.includes(page.route.id ?? ""),
+  );
+  /**
+   * テーブルトップ (`#lib/phone-form.ts`) の映像の画面 (ライブ・観る画面・追っかけ) では、下のタブは下の段 (舞台の中。黒い地) の下端に浮く。
    * 右の列と同じく、テーマにかかわらず暗いテーマの色で描く (`PlayerLayout` の `data-theme`)
    */
   const tabletop = new MediaQuery(TABLETOP);
-  const stageTabbar = $derived(tabletop.current && here === "/live");
+  const stageTabbar = $derived(
+    tabletop.current &&
+      (here === "/live" || PLAYER_ROUTES.includes(page.route.id ?? "")),
+  );
   /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
   const notice = $derived(
     (page.data["channelNotice"] ?? null) as NoticeKind | null,
@@ -580,7 +590,7 @@
     </div>
   </main>
 
-  <!-- スマホの形の下のタブ (上の `tabs`・`showTabbar`)。ライブの全画面のときは隠す (下の style) -->
+  <!-- スマホの形の下のタブ (上の `tabs`・`showTabbar`)。映像の全画面のときは隠す (下の style) -->
   {#if showTabbar}
     <nav
       class="tabbar"
@@ -735,7 +745,7 @@
     }
   }
   /*
-     * ヘッダー。スマホの形で下のタブの無い画面 (観る画面・追っかけ) では地の上の 1 行 (高さちょうど 3.5rem)。
+     * ヘッダー。スマホの形で下のタブの無い画面 (ログイン・ペアリング) では地の上の 1 行 (高さちょうど 3.5rem)。
      * 広い形では操作の層として中身の上に浮かせる (下の「広い形」)
      */
   .navbar {
@@ -907,7 +917,7 @@
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   /*
-   * テーマを切り替えた下のタブ (テーブルトップのライブ。上の `stageTabbar`) は、字の色もそのテーマから取り直す。
+   * テーマを切り替えた下のタブ (テーブルトップの映像の画面。上の `stageTabbar`) は、字の色もそのテーマから取り直す。
    * `--dp-fg` は `<html>` で決まった値を受け継ぐので、箱のテーマで書き換わる Pico の `--pico-color` を使う
    */
   .tabbar[data-theme] {
@@ -1099,7 +1109,7 @@
       font-size: var(--dp-text-xs);
     }
   }
-  /* ライブの全画面のあいだは隠す (映像だけにする) */
+  /* 映像の全画面のあいだは隠す (映像だけにする) */
   :global(html[data-stage-fullscreen]) :is(.tabbar, .notice-slot) {
     display: none;
   }
