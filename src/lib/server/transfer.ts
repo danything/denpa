@@ -16,13 +16,19 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
 
-import { and, asc, count, eq, gt } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, or } from "drizzle-orm";
 
 import { pad, size as formatSize } from "../format";
 import { config } from "./config";
 import { bootstrap, closeDatabase, MIGRATIONS, orm } from "./db";
 import { freeBytes } from "./disk";
-import { recordedHistory, recordings, reservations, rules } from "./schema";
+import {
+  encodeJobs,
+  recordedHistory,
+  recordings,
+  reservations,
+  rules,
+} from "./schema";
 import { readTar, type TarSource, writeTar } from "./tar";
 
 /**
@@ -121,6 +127,8 @@ interface TransferStatus {
   ready: boolean;
   /** いちばん近い予約の始まり。書き出したあと古い denpa を止めてもらうために出す */
   nextReservation: number | null;
+  /** 録画中か、エンコードを待っている・している録画の数 (`busyRecordings`)。0 でなければ書き出す前に断る */
+  working: number;
 }
 
 const root = () => join(config.dataDir, "transfer");
@@ -206,10 +214,32 @@ export function status(): TransferStatus {
     prepared: existsSync(prepared()),
     ready: existsSync(join(ready(), DB_ENTRY)),
     nextReservation: next?.start_at ?? null,
+    working: busyRecordings(),
   };
 }
 
 // ---- 書き出す ----
+
+/**
+ * **録画中か、エンコードを待っている・している録画の数。** エンコードには CM 検出・CM カット・スクランブル復号も入る
+ * (どれも `encode_jobs` の待ち・実行中)。書き出したあとも、この録画のファイルは作り直されることがある。
+ * 再エンコードは置いてあるファイルを消してから書き直す (`encoder.ts` の `stalePaths`) ので、その間に録画の
+ * フォルダを写すと、移した先で「置き場に無い」になる。画面で断るだけで、書き出しは止めない
+ */
+function busyRecordings(): number {
+  const queued = orm()
+    .select({ id: encodeJobs.recording_id })
+    .from(encodeJobs)
+    .where(inArray(encodeJobs.state, ["queued", "running"]));
+  const row = orm()
+    .select({ n: count() })
+    .from(recordings)
+    .where(
+      or(eq(recordings.state, "recording"), inArray(recordings.id, queued)),
+    )
+    .get();
+  return row?.n ?? 0;
+}
 
 /**
  * **DB の写しを取る。** 動いているまま `VACUUM INTO` で、読み取りのトランザクション 1 つぶんの
