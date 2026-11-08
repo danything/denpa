@@ -761,10 +761,11 @@ describe("まとめて確かめるときの選局の失敗", () => {
       if (url.pathname === "/denpa/card") return Response.json(ONE_CARD);
       return new Response("busy", { status: 503 });
     });
-    for (const [id, arib] of [
+    const aribOf = new Map([
       [1, 103],
       [2, 9999],
-    ] as const) {
+    ]);
+    for (const [id, arib] of aribOf) {
       orm()
         .insert(services)
         .values({
