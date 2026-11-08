@@ -1,7 +1,7 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * 自前方式 (dt295:) の設定・選局の順序を、偽の機材 (Dt295Fake) で確かめる。順序と値は仕様書 (dt295-resident/spec.md) の節のもの。
+ * PIX-DT295 (dt295:) の設定・選局の順序を、偽の機材 (Dt295Fake) で確かめる。順序と値は仕様書 (dt295-resident/spec.md) の節のもの。
  * 実機のレジスタの読み値は偽物が作ったものなので、受信の確認などの分岐の結果は「偽物がそう返した」というだけ。
  */
 public class Dt295NativeTests
@@ -82,7 +82,7 @@ public class Dt295NativeTests
         await Assert.That(start).IsGreaterThan(capture);
         await Assert.That(stop).IsGreaterThan(start);
         await Assert.That(unhook).IsGreaterThan(stop);
-        // hook は自前のものを書いてから、最後に元に戻す
+        // hook は Dt295NativePrograms のものを書いてから、最後に元に戻す
         var hookWrites = stores.Where(s => s.Address == Dt295NativePrograms.Hook).ToList();
         await Assert.That(hookWrites[^1].Value).IsEqualTo(0xC46D02B0u);
         await Assert.That(fake.Get(Dt295NativePrograms.Hook, 4)).IsEqualTo(0xC46D02B0u);
@@ -153,10 +153,10 @@ public class Dt295NativeTests
     }
 
     [Test]
-    public async Task 常駐方式の_hook_が入った機材には何も書かずに断る()
+    public async Task 常駐イメージの_hook_が入った機材には何も書かずに断る()
     {
         var fake = Rig();
-        // 仕様書 3.2 の常駐方式の hook
+        // 仕様書 3.2 の常駐イメージの hook
         byte[] resident = [0x9B, 0xEC, 0x14, 0xF4, 0x97, 0x0C, 0x9F, 0xA0];
         for (var i = 0; i < 8; i++) fake.Bytes[Dt295NativePrograms.Hook + (uint)i] = resident[i];
         var (code, _, log) = Run(fake, "T25");
@@ -380,10 +380,10 @@ public class Dt295NativeTests
     }
 
     [Test]
-    public async Task 自前の_hook_が残った機材は_Linux_ではポートの電源を入れ直してから開き_ほかの_OS_では挿し直しを求めて断る()
+    public async Task 前の実行の_hook_が残った機材は_Linux_ではポートの電源を入れ直してから開き_ほかの_OS_では挿し直しを求めて断る()
     {
         var fake = Rig();
-        // 前の実行が途中で止まった状態: 自前の body と hook が残っている
+        // 前の実行が途中で止まった状態: 機材に置いた body と hook が残っている
         fake.PlaceBody(hook: true);
 
         var refused = Run(fake, "T25");

@@ -4,10 +4,10 @@ using System.Collections.Concurrent;
 namespace Denpa.Agent.Tests;
 
 /*
- * 自前方式 (dt295:) の PIX-DT295 の偽物。機材の振る舞いは仕様書 (dt295-resident/spec.md) から決めた。
+ * PIX-DT295 (dt295:) の偽物。機材の振る舞いは仕様書 (dt295-resident/spec.md) から決めた。
  *
  * - メモリをバイトの辞書で持ち、ベンダー要求 0xBC (仕様書 3.1) を受ける。0x80000〜0x9FFFF の窓 (書く側 0xEA3D8・読む側 0xE9EBC の基底)、
- *   wValue 下位 = 1 のマスク付きの書き込み、hook (0xEA6FC) が自前のものに書き換わっていれば、その body を Fr30Machine で動かす
+ *   wValue 下位 = 1 のマスク付きの書き込み、hook (0xEA6FC) が Dt295NativePrograms のものに書き換わっていれば、その body を Fr30Machine で動かす
  * - レジスタの振る舞い: I2C コントローラ (仕様書 6.4)、TS の FIFO と確定 (仕様書 8.3.2)、取り込みの開始・停止 (仕様書 8.1.4)、
  *   書くと 0 に戻るレジスタ (0xFDBD10・0xFDBD38)
  * - I2C の先は 2 つの復調 (0x10・0x11) と、レジスタ 0xFE を通した中継の先のチューナー (仕様書 7.0)
@@ -191,7 +191,7 @@ internal sealed class Dt295Fake : IUsbDevice
     /// <summary>true なら制御転送がすべて時間切れになる (実機の USB が止まった様子)</summary>
     public bool Wedged;
 
-    /// <summary>0xF10080〜0xF100FF を読んだ回数。実機では読むと常駐イメージが壊れる語なので、自前方式は読まない</summary>
+    /// <summary>0xF10080〜0xF100FF を読んだ回数。実機では読むと常駐イメージが壊れる語なので、エージェントは読まない</summary>
     public int ReadsF10080;
 
     /// <summary>カードの UART のモデル。ATR・受信 FIFO・挿入・送ったブロックへの応答 (仕様書 §10)</summary>
@@ -426,7 +426,7 @@ internal sealed class Dt295Fake : IUsbDevice
         Put(0xC4664, 2, (uint)data.Length);
         // データ段は W+4 = 0xC4620 に置かれる
         for (var i = 0; i < Math.Min(data.Length, 64); i++) Bytes[0xC4620 + (uint)i] = data[i];
-        // 自前の hook のときだけ body を動かす。ほかの hook (常駐方式のもの) は、要求の条件が合わなければ元どおりに通すものとして扱う
+        // Dt295NativePrograms の hook のときだけ body を動かす。ほかの hook は、要求の条件が合わなければ元どおりに通すものとして扱う
         var ours = Dt295NativePrograms.Build().HookBytes;
         var hooked = Enumerable.Range(0, 8).All(i => Bytes.GetValueOrDefault(Dt295NativePrograms.Hook + (uint)i) == ours[i]);
         if (hooked && RunHook()) return;

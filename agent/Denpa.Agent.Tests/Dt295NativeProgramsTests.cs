@@ -3,7 +3,7 @@ using static Denpa.Agent.Fr30Reg;
 namespace Denpa.Agent.Tests;
 
 /*
- * 自前方式 (dt295:) の FR30 のプログラム (Dt295NativePrograms.cs) を、Fr30Machine で hook から動かして仕様書 (dt295-resident/spec.md) と照らす。
+ * PIX-DT295 (dt295:) の FR30 のプログラム (Dt295NativePrograms.cs) を、Fr30Machine で hook から動かして仕様書 (dt295-resident/spec.md) と照らす。
  * 機材の振る舞い (リング・FIFO・確定) は Dt295Fake が仕様書の 8.2・8.3 から決めたもの。
  */
 public class Dt295NativeProgramsTests

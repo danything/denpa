@@ -68,23 +68,6 @@ public sealed class Mb86h47 : II2c
     private const byte CommandIn = 0x83;
     private const int CommandWords = Mb86h47Programs.BulkChunk / 4 - 3;
 
-    // カードの UART (13.1。PIX-DT295 の MB86M01 も同じアドレス)
-    internal const uint CardEnable = 0xFEA000;
-    internal const uint CardLines = 0xFEA004;
-    internal const uint CardBaud = 0xFEA008;
-    internal const uint CardSend = 0xFEA00C;
-    internal const uint CardControl = 0xFEA010;
-    internal const uint CardCount = 0xFEA014;
-    internal const uint CardMask = 0xFEA018;
-    internal const uint CardStatus = 0xFEA01C;
-    internal const uint CardCwt = 0xFEA020;
-    internal const uint CardBwt = 0xFEA024;
-    internal const uint CardTx = 0xFEA028;
-    internal const uint CardRx = 0xFEA02C;
-    internal const uint CardPower = 0xFEA034;
-    internal const uint CardTxLrc = 0xFEA038;
-    internal const uint CardRxLrc = 0xFEA03C;
-
     /// <summary>主 CPU の処理の書き換える 5 語と、電源投入時の値 (4.2)</summary>
     private static readonly uint[] PatchAt = [0xE9AC0, 0xE9AC4, 0xE9E0C, 0xE9E10, 0xE9D94];
 
@@ -102,6 +85,7 @@ public sealed class Mb86h47 : II2c
     private readonly IUsbDevice _usb;
     private readonly Action<string>? _trace;
     private readonly Lock _gate = new();
+    private readonly CardUart _card;
     private readonly byte[] _buffer = new byte[MaxWords * 4];
     private bool _widened;
 
@@ -125,6 +109,7 @@ public sealed class Mb86h47 : II2c
     {
         _usb = usb;
         _trace = trace;
+        _card = new CardUart(Read32, Write32);
     }
 
     // ---------------------------------------------------------------------
@@ -683,18 +668,18 @@ public sealed class Mb86h47 : II2c
     /// <summary>13.3 カードが挿さっているか (割り込みの状態のビット 10 が 0)</summary>
     public bool CardPresent()
     {
-        lock (_gate) return (Read32(CardStatus) & (1u << 10)) == 0;
+        lock (_gate) return (Read32(CardUart.Status) & (1u << 10)) == 0;
     }
 
     /// <summary>13.4 カードの電源を切る</summary>
     private void CardOff()
     {
-        Modify(CardLines, 0x4, 0);
-        Write32(CardCount, 0);
-        Modify(CardEnable, 0x4, 0);
-        Modify(CardLines, 0xA, 0);
-        Write32(CardMask, 1);
-        Write32(CardPower, 0);
+        Modify(CardUart.Lines, 0x4, 0);
+        Write32(CardUart.Count, 0);
+        Modify(CardUart.Enable, 0x4, 0);
+        Modify(CardUart.Lines, 0xA, 0);
+        Write32(CardUart.Mask, 1);
+        Write32(CardUart.Power, 0);
     }
 
     /// <summary>13.5 リセット。戻ったらカードが ATR を送ってくる (速さは 9600)</summary>
@@ -704,65 +689,44 @@ public sealed class Mb86h47 : II2c
         Thread.Sleep(10);
         lock (_gate)
         {
-            Write32(CardStatus, 0x3FF);
-            Write32(CardPower, 1);
-            Modify(CardLines, 0x4, 0);
-            Write32(CardCount, 0);
-            Write32(CardEnable, 0);
-            Write32(CardEnable, 7);
-            Modify(CardLines, 0, 0x8);
-            Write32(CardBaud, 0xBA7F);
+            Write32(CardUart.Status, 0x3FF);
+            Write32(CardUart.Power, 1);
+            Modify(CardUart.Lines, 0x4, 0);
+            Write32(CardUart.Count, 0);
+            Write32(CardUart.Enable, 0);
+            Write32(CardUart.Enable, 7);
+            Modify(CardUart.Lines, 0, 0x8);
+            Write32(CardUart.Baud, 0xBA7F);
         }
         Thread.Sleep(2);
         lock (_gate)
         {
-            Modify(CardLines, 0, 0x2);
-            Write32(CardRxLrc, 0x3B);
-            Write32(CardCwt, 9600);
-            Write32(CardBwt, 0);
-            Write32(CardMask, 0x1FF);
+            Modify(CardUart.Lines, 0, 0x2);
+            Write32(CardUart.RxLrc, 0x3B);
+            Write32(CardUart.Cwt, 9600);
+            Write32(CardUart.Bwt, 0);
+            Write32(CardUart.Mask, 0x1FF);
         }
         Thread.Sleep(1);
-        lock (_gate) Modify(CardLines, 0, 0x4);
+        lock (_gate) Modify(CardUart.Lines, 0, 0x4);
     }
 
-    /// <summary>13.2 速さを変える (速さ・制御・CWT・BWT の順に)</summary>
+    /// <summary>13.2 速さを変える (<see cref="CardUart.SetSpeed"/>)</summary>
     public void CardSpeed(uint baud, uint control, uint cwt, uint bwt)
     {
-        lock (_gate)
-        {
-            Write32(CardBaud, baud);
-            Write32(CardControl, control);
-            Write32(CardCwt, cwt);
-            Write32(CardBwt, bwt);
-        }
+        lock (_gate) _card.SetSpeed(baud, control, cwt, bwt);
     }
 
-    /// <summary>13.6 受けて読まれていないバイトを、<paramref name="max"/> まで読む。無ければ空</summary>
+    /// <summary>13.6 受けて読まれていないバイトを、<paramref name="max"/> まで読む。無ければ空 (<see cref="CardUart.Read"/>)</summary>
     public byte[] CardRead(int max)
     {
-        lock (_gate)
-        {
-            var waiting = (int)(Read32(CardCount) >> 16);
-            var count = Math.Min(waiting, Math.Max(0, max));
-            var received = new byte[count];
-            for (var i = 0; i < count; i++) received[i] = (byte)Read32(CardRx);
-            return received;
-        }
+        lock (_gate) return _card.Read(max);
     }
 
-    /// <summary>13.6 T=1 のブロックを LRC まで含めて丸ごと送る</summary>
+    /// <summary>13.6 T=1 のブロックを LRC まで含めて丸ごと送る (<see cref="CardUart.Send"/>)</summary>
     public void CardWrite(ReadOnlySpan<byte> block)
     {
-        lock (_gate)
-        {
-            Write32(CardRxLrc, 0);
-            Write32(CardTxLrc, 0);
-            foreach (var b in block) Write32(CardTx, b);
-            Write32(CardStatus, 0x3FF);
-            Write32(CardControl, block.Length >= 256 ? 0x280u : 0x200u);
-            Write32(CardSend, 1);
-        }
+        lock (_gate) _card.Send(block);
     }
 }
 

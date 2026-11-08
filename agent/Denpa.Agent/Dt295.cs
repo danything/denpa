@@ -5,7 +5,7 @@ namespace Denpa.Agent;
 /*
  * PIXELA PIX-DT295 (USB 06b8:103b。MB86 系の ASSP に地上波・衛星の復調器と B-CAS の差し込み口)。
  *
- * 設定の device は dt295:<USB のポート>。ホストが機材のレジスタを直に書いて動かす (自前方式。ファームウェアは入れない)。
+ * 設定の device は dt295:<USB のポート>。ホストが機材のレジスタを直に書いて動かす。ファームウェアは入れず、要求ごとに動く小さなプログラム (Dt295NativePrograms.cs) だけを機材に置く。
  * 機材の中では復号せず、スクランブルのままの TS を受けて、エージェントの B25 で復号する。差し込み口のカードも、ほかのチューナーの復号に使う。
  * ここは機材の識別と探す・開くだけ。機材の設定は Dt295NativeDevice.cs・Dt295NativeBoard.cs、チューナーは Dt295NativeTuner.cs、カードは Dt295NativeCard.cs。
  * 同じ公式ドライバーの機材 (PIX-DT295 W・DT420・DT410 など。<see cref="Dt295.Family"/>) は見つけるが、未確認なので開かずに断る。

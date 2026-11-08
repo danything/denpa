@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Denpa.Agent;
 
 /// <summary>
@@ -9,21 +7,20 @@ namespace Denpa.Agent;
 /// <para>
 /// 電源投入・切断の手順は仕様書 §10 の表 (投入 17 段・切断 5 段)。各段のあとに 20 ms 待つ (投入の 15 段目の 0xFEA014 = 0x0D は 50 ms)。
 /// 0xFEA004 に書く値の 4 つは、カードの端子の極性 (0xF00223) と、いまの 0xFEA004 から決める (§10 の設定確認)。
-/// ATR のあとの速さ・T=1 は CECH-ZD1 J の差し込み口と同じ (<see cref="Zd1jCard"/>。UART のレジスタが同じ)。
+/// ATR を受ける・速さを変える・T=1 のブロックを送受信する手順は、CECH-ZD1 J の差し込み口と共通にしている (<see cref="CardUart"/>。UART のレジスタが同じ)。
 /// 書いてよいレジスタは <see cref="Dt295NativeLink.AllowCardUart"/> が許した 0xFEA000〜0xFEA03F だけ。0xF00222〜0xF0022E は読むだけ
 /// </para>
 /// </summary>
 public sealed class Dt295NativeCard : ICardLink
 {
-    private const uint Enable = Mb86h47.CardEnable, Lines = Mb86h47.CardLines, Count = Mb86h47.CardCount, Status = Mb86h47.CardStatus;
+    private const uint Enable = CardUart.Enable, Lines = CardUart.Lines, Count = CardUart.Count, Status = CardUart.Status;
 
     /// <summary>カードの端子の極性の読み出し (仕様書 §10 の 0xF00223・0xF00224・0xF0022E)。4 の倍数のアドレスの語から取る</summary>
     private const uint PinWordA = 0xF00220, PinWordB = 0xF00224, PinWordC = 0xF0022C;
 
-    private static readonly TimeSpan AtrTimeout = TimeSpan.FromSeconds(1);
-
     private readonly Func<Dt295NativeLink> _acquire;
     private readonly Action<int> _delay;
+    private readonly CardUart _uart;
     private Dt295NativeLink? _link;
     private T1Protocol? _t1;
     private int _blockWaitMs = 500;
@@ -41,6 +38,7 @@ public sealed class Dt295NativeCard : ICardLink
         Name = name;
         _acquire = acquire;
         _delay = delay ?? Thread.Sleep;
+        _uart = new CardUart(address => Link.Read32(address), Write);
     }
 
     private Dt295NativeLink Link
@@ -103,9 +101,9 @@ public sealed class Dt295NativeCard : ICardLink
         (uint Address, uint Value, int Wait)[] table =
         [
             (Status, 0x3FF, 20), (Lines, first, 20), (Count, 0, 20), (Enable, 0, 20), (Enable, 7, 20),
-            (Lines, third, 20), (Mb86h47.CardBaud, 0xBA7F, 20), (Lines, third | 2, 20), (Enable, 0, 20), (Enable, 7, 20),
-            (Mb86h47.CardRxLrc, 0x3B, 20), (Mb86h47.CardCwt, 0x2580, 20), (Mb86h47.CardBwt, 0, 20), (Mb86h47.CardMask, 0, 20),
-            (Count, 0x0D, 50), (Mb86h47.CardPower, 1, 20), (Lines, third | 6, 20),
+            (Lines, third, 20), (CardUart.Baud, 0xBA7F, 20), (Lines, third | 2, 20), (Enable, 0, 20), (Enable, 7, 20),
+            (CardUart.RxLrc, 0x3B, 20), (CardUart.Cwt, 0x2580, 20), (CardUart.Bwt, 0, 20), (CardUart.Mask, 0, 20),
+            (Count, 0x0D, 50), (CardUart.Power, 1, 20), (Lines, third | 6, 20),
         ];
         _powered = true;
         foreach (var (address, value, wait) in table)
@@ -147,12 +145,9 @@ public sealed class Dt295NativeCard : ICardLink
         }
         var atr = Atr.Parse(raw);
         if (!atr.T1) throw new IOException($"T=1 に対応していないカードです (ATR {Convert.ToHexString(raw)})");
-        var (baud, control, cwt, bwt, rate) = Zd1jCard.Speed(atr);
-        Write(Mb86h47.CardBaud, baud);
-        Write(Mb86h47.CardControl, control);
-        Write(Mb86h47.CardCwt, cwt);
-        Write(Mb86h47.CardBwt, bwt);
-        _blockWaitMs = Math.Min(3000, 500 << Math.Max(0, atr.Bwi - 4));
+        var (baud, control, cwt, bwt, rate) = CardUart.Speed(atr);
+        _uart.SetSpeed(baud, control, cwt, bwt);
+        _blockWaitMs = CardUart.BlockWaitMs(atr);
         _t1 = new T1Protocol(atr, Exchange);
         _t1.NegotiateIfsd(rate >= 38400 ? 254 : 251);
         return raw;
@@ -183,31 +178,9 @@ public sealed class Dt295NativeCard : ICardLink
         }
     }
 
-    private byte[] Read(int max)
-    {
-        var waiting = (int)(Link.Read32(Count) >> 16);
-        var count = Math.Min(waiting, Math.Max(0, max));
-        var received = new byte[count];
-        for (var i = 0; i < count; i++) received[i] = (byte)Link.Read32(Mb86h47.CardRx);
-        return received;
-    }
+    private byte[] ReadAtr() => CardUart.ReceiveAtr(_uart.Read, _delay, Name);
 
-    private byte[] ReadAtr()
-    {
-        var received = new List<byte>();
-        var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < AtrTimeout)
-        {
-            var got = Read(33 - received.Count);
-            received.AddRange(got);
-            if (Zd1jCard.AtrLength(received) is { } length && received.Count >= length) return [.. received.Take(length)];
-            if (got.Length == 0) _delay(2);
-        }
-        if (received.Count == 0) throw new IOException($"{Name} のカードが ATR を返しません");
-        return [.. received];
-    }
-
-    /// <summary>T=1 のブロックを 1 つ送って 1 つ受ける (Zd1jCard と同じ。時間切れは null)</summary>
+    /// <summary>T=1 のブロックを 1 つ送って 1 つ受ける。時間切れは null (<see cref="CardUart.ReceiveBlock"/>)</summary>
     private byte[]? Exchange(byte[] block, byte wtx)
     {
         // 送ってから受け切るまで、TS の要求を小さくさせる (受信 FIFO が溢れないように)
@@ -215,34 +188,13 @@ public sealed class Dt295NativeCard : ICardLink
         link.EnterCard();
         try
         {
-            return ExchangeCore(block, wtx);
+            _uart.Send(block);
+            return CardUart.ReceiveBlock(_uart.Read, _delay, _blockWaitMs * Math.Max(1, (int)wtx));
         }
         finally
         {
             link.LeaveCard();
         }
-    }
-
-    private byte[]? ExchangeCore(byte[] block, byte wtx)
-    {
-        Write(Mb86h47.CardRxLrc, 0);
-        Write(Mb86h47.CardTxLrc, 0);
-        foreach (var b in block) Write(Mb86h47.CardTx, b);
-        Write(Status, 0x3FF);
-        Write(Mb86h47.CardControl, block.Length >= 256 ? 0x280u : 0x200u);
-        Write(Mb86h47.CardSend, 1);
-        var limit = TimeSpan.FromMilliseconds(_blockWaitMs * Math.Max(1, (int)wtx));
-        var received = new List<byte>();
-        var since = Stopwatch.StartNew();
-        while (since.Elapsed < limit)
-        {
-            var want = received.Count < 3 ? 3 - received.Count : received[2] + 4 - received.Count;
-            if (want <= 0) return [.. received];
-            var got = Read(want);
-            received.AddRange(got);
-            if (got.Length == 0) _delay(1);
-        }
-        return null;
     }
 
     public void Dispose()

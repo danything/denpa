@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace Denpa.Agent.Tests;
 
 /*
@@ -30,6 +32,24 @@ public class Zd1jLocksTests
         await Assert.That(again.LastPath).IsEqualTo("覚えた値で合わせた");
         // ポートが違えば別のもの
         await Assert.That(new Zd1jLocks(path).For("4-12.2").Channels.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task 前のバージョンが書いた_inversion_は読むときに無視し_書くときは出さない()
+    {
+        var path = Temp();
+        var (dib, _) = Tuner(new Zd1jLocks(path).For("4-12.1"));
+        dib.Tune(557_142_857);
+        await Assert.That(File.ReadAllText(path)).DoesNotContain("inversion");
+
+        // 前のバージョンのファイル: 周波数ごとに inversion が入っている
+        var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        json["boards"]!["4-12.1"]!["557142"]!["inversion"] = 0;
+        File.WriteAllText(path, json.ToJsonString());
+
+        var (again, _) = Tuner(new Zd1jLocks(path).For("4-12.1"));
+        again.Tune(557_142_857);
+        await Assert.That(again.LastPath).IsEqualTo("覚えた値で合わせた");
     }
 
     [Test]

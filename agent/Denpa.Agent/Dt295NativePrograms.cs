@@ -3,7 +3,7 @@ using static Denpa.Agent.Fr30Reg;
 namespace Denpa.Agent;
 
 /*
- * PIX-DT295 の機材の中で動かす FR30 のプログラム (自前方式)。節の番号は
+ * PIX-DT295 の機材の中で動かす FR30 のプログラム。節の番号は
  * 仕様書 (dt295-resident/spec.md) のもの。常駐イメージは入れず、要求ごとに動く小さなプログラムだけを機材に置く。
  * 操作 1 は TS を取り込みのリングから USB の bulk IN へ送り、操作 2 は I2C の転送の並びを順に行う (<see cref="EmitI2c"/>)。
  * 機材の設定は、ホストが 0xBC のメモリ要求で行う (Dt295NativeBoard.cs・Dt295NativeFrontend.cs)。
@@ -345,7 +345,7 @@ public static class Dt295NativePrograms
 
         var words = asm.Words32();
         var bytes = words.Length * 4;
-        if (bytes > Frame - BodyOrigin) throw new InvalidOperationException($"自前のプログラム ({bytes} バイト) が作業域の前に収まりません");
+        if (bytes > Frame - BodyOrigin) throw new InvalidOperationException($"機材に置くプログラム ({bytes} バイト) が作業域の前に収まりません");
 
         var hook = new Fr30Assembler(Hook);
         hook.Ldi20(BodyOrigin, R12);

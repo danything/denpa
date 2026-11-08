@@ -49,6 +49,7 @@
         <Compile Include="../Denpa.Agent/B25.cs" />
         <Compile Include="../Denpa.Agent/Emm.cs" />
         <Compile Include="../Denpa.Agent/UsbDevice.cs" />
+        <Compile Include="../Denpa.Agent/CardUart.cs" />
         <Compile Include="../Denpa.Agent/Mb86h47.cs" />
         <Compile Include="../Denpa.Agent/Mb86h47Programs.cs" />
         <Compile Include="../Denpa.Agent/Fr30.cs" />

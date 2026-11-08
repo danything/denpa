@@ -125,7 +125,7 @@ public sealed class Fr30Assembler(uint origin)
     /// <summary>LD @(R13, Rj), Ri (R13 + Rj のアドレス)</summary>
     public void LdAc(Fr30Reg rj, Fr30Reg ri) => Emit((ushort)(0x0000 | (R(rj) << 4) | R(ri)), $"ld @(r13, {N(rj)}), {N(ri)}");
 
-    /// <summary>LDUB @(R13, Rj), Ri (R13 + Rj のアドレスから 1 バイト。DT295 の自前プログラムが、置き換えた元の命令列を写すのに使う)</summary>
+    /// <summary>LDUB @(R13, Rj), Ri (R13 + Rj のアドレスから 1 バイト。DT295 の機材に置くプログラムが、置き換えた元の命令列を写すのに使う)</summary>
     public void LdubAc(Fr30Reg rj, Fr30Reg ri) => Emit((ushort)(0x0200 | (R(rj) << 4) | R(ri)), $"ldub @(r13, {N(rj)}), {N(ri)}");
 
     /// <summary>STB Ri, @(R13, Rj) (R13 + Rj のアドレスへ 1 バイト)</summary>

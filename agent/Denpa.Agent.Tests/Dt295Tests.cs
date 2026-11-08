@@ -104,7 +104,7 @@ public class Dt295Tests
     }
 
     [Test]
-    public async Task dt295_の_device_は開かずに自前方式のチューナーにする()
+    public async Task dt295_の_device_は開かずに_Dt295NativeTuner_にする()
     {
         using var tuner = TunerPool.OpenDevice("dt295:1-2", null);
         await Assert.That(tuner).IsTypeOf<Dt295NativeTuner>();

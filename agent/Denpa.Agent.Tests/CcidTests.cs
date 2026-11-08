@@ -92,9 +92,9 @@ public class CcidTests
     [Test]
     public async Task ioctl_の番号は_64bit_の構造体の大きさで組む()
     {
-        await Assert.That(UsbFsPipe.Bulk).IsEqualTo(0xC0185502u);
-        await Assert.That(UsbFsPipe.ClaimInterface).IsEqualTo(0x8004550Fu);
-        await Assert.That(UsbFsPipe.ReleaseInterface).IsEqualTo(0x80045510u);
+        await Assert.That(UsbFs.Bulk).IsEqualTo(0xC0185502u);
+        await Assert.That(UsbFs.ClaimInterface).IsEqualTo(0x8004550Fu);
+        await Assert.That(UsbFs.ReleaseInterface).IsEqualTo(0x80045510u);
     }
 
     [Test]

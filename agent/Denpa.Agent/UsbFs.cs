@@ -132,14 +132,16 @@ public interface IBulkPipe : IDisposable
 }
 
 /// <summary>
-/// Linux の usbfs (<c>/dev/bus/usb/BBB/DDD</c>) を ioctl で直接扱う。**libusb を使わない。**
+/// Linux の usbfs (<c>/dev/bus/usb/BBB/DDD</c>) を ioctl で直に扱うための共通の部品。<see cref="UsbFsPipe"/> (カードリーダー) と
+/// <see cref="UsbFsDevice"/> (チューナー) が使う。**libusb を使わない。**
 ///
 /// <para>
-/// ioctl の番号と構造体は x64 と arm64 で同じ (どちらも LP64 で、arm64 も asm-generic の
-/// <c>_IOC</c> の並びを使う)。構造体の大きさは番号に埋まるので、<c>sizeof</c> から組み立てる。
+/// ioctl の番号と構造体の形はカーネルの uapi (<c>linux/usbdevice_fs.h</c>) のもの。x64 と arm64 で同じ (どちらも LP64 で、
+/// arm64 も asm-generic の <c>_IOC</c> の並びを使う)。構造体の大きさは番号に埋まるので、<c>sizeof</c> から組み立てる。
+/// libc は Sys (Tuning.cs) のものを使う。
 /// </para>
 /// </summary>
-public sealed unsafe class UsbFsPipe : IBulkPipe
+internal static unsafe class UsbFs
 {
     /// <summary>struct usbdevfs_bulktransfer。64bit ではポインタの前に 4 バイトの詰めが入って 24 バイト</summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -151,7 +153,8 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
         public void* Data;
     }
 
-    private static uint Ioc(uint direction, uint number, int size) =>
+    /// <summary>asm-generic の <c>_IOC</c>。direction は _IOC_WRITE = 1 と _IOC_READ = 2 の和</summary>
+    internal static uint Ioc(uint direction, uint number, int size) =>
         (direction << 30) | ((uint)size << 16) | ('U' << 8) | number;
 
     internal static readonly uint Bulk = Ioc(3, 2, sizeof(BulkTransfer));
@@ -159,14 +162,38 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     internal static readonly uint ReleaseInterface = Ioc(2, 16, sizeof(uint));
     internal static readonly uint Reset = Ioc(0, 20, 0);
 
-    private const int Eperm = 1;
-    private const int Enoent = 2;
-    private const int Eacces = 13;
-    private const int Ebusy = 16;
-    private const int Enodev = 19;
-    private const int Etimedout = 110;
+    internal const int Eperm = 1;
+    internal const int Enoent = 2;
+    internal const int Eintr = 4;
+    internal const int Eagain = 11;
+    internal const int Eacces = 13;
+    internal const int Ebusy = 16;
+    internal const int Enodev = 19;
+    internal const int Epipe = 32;
+    internal const int Eproto = 71;
+    internal const int Eshutdown = 108;
+    internal const int Etimedout = 110;
 
-    // libc は Sys (Tuning.cs) のものを使う
+    /// <summary>usbfs のノードを読み書きで開く。開けなければ、理由を書いた <see cref="IOException"/> を投げる</summary>
+    internal static int Open(string path)
+    {
+        var fd = Sys.Open(path, Sys.ReadWrite | Sys.CloseOnExec);
+        if (fd < 0) throw new IOException(OpenError(path, Marshal.GetLastPInvokeError()));
+        return fd;
+    }
+
+    /// <summary>開けなかったときの文言</summary>
+    internal static string OpenError(string path, int errno) => errno switch
+    {
+        Enoent or Enodev => $"{path} がありません (抜かれたか、コンテナに /dev/bus/usb が見えていません)",
+        Eacces or Eperm => $"{path} を開く権限がありません (コンテナに USB 機材の読み書きを許してください)",
+        _ => $"{path} を開けません ({Marshal.GetPInvokeErrorMessage(errno)})",
+    };
+}
+
+/// <summary>CCID のカードリーダーへのバルク転送の経路。usbfs を ioctl で直に扱う (<see cref="UsbFs"/>)</summary>
+public sealed unsafe class UsbFsPipe : IBulkPipe
+{
     private readonly string _path;
     private int _fd;
 
@@ -189,17 +216,7 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     /// </summary>
     public static UsbFsPipe Open(string path, int vendor, int product, int configValue, int interfaceNumber)
     {
-        var fd = Sys.Open(path, Sys.ReadWrite | Sys.CloseOnExec);
-        if (fd < 0)
-        {
-            var errno = Marshal.GetLastPInvokeError();
-            throw new IOException(errno switch
-            {
-                Enoent or Enodev => $"{path} がありません (リーダーが抜かれたか、コンテナに /dev/bus/usb が見えていません)",
-                Eacces or Eperm => $"{path} を開く権限がありません (コンテナに USB 機材の読み書きを許してください)",
-                _ => $"{path} を開けません ({Marshal.GetPInvokeErrorMessage(errno)})",
-            });
-        }
+        var fd = UsbFs.Open(path);
 
         try
         {
@@ -224,10 +241,10 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
                 ?? throw new IOException($"{path} に CCID のインターフェース {interfaceNumber} が見当たりません");
 
             var number = (uint)interfaceNumber;
-            if (Sys.Ioctl(fd, ClaimInterface, (nint)(&number)) < 0)
+            if (Sys.Ioctl(fd, UsbFs.ClaimInterface, (nint)(&number)) < 0)
             {
                 var errno = Marshal.GetLastPInvokeError();
-                throw new IOException(errno == Ebusy
+                throw new IOException(errno == UsbFs.Ebusy
                     ? "別のプロセスがカードリーダーを使用中です (動いているエージェント自身か、ホストの pcscd など)"
                     : $"カードリーダーのインターフェースを確保できません ({Marshal.GetPInvokeErrorMessage(errno)})");
             }
@@ -244,8 +261,8 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     {
         fixed (byte* start = data)
         {
-            var transfer = new BulkTransfer { Endpoint = Interface.BulkOut, Length = (uint)data.Length, TimeoutMs = 5000, Data = start };
-            var sent = Sys.Ioctl(Fd, Bulk, (nint)(&transfer));
+            var transfer = new UsbFs.BulkTransfer { Endpoint = Interface.BulkOut, Length = (uint)data.Length, TimeoutMs = 5000, Data = start };
+            var sent = Sys.Ioctl(Fd, UsbFs.Bulk, (nint)(&transfer));
             if (sent < 0) throw Failure("リーダーに送れません");
             if (sent != data.Length) throw new IOException($"リーダーに送りきれません ({sent}/{data.Length} バイト)");
         }
@@ -255,8 +272,8 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     {
         fixed (byte* start = buffer)
         {
-            var transfer = new BulkTransfer { Endpoint = Interface.BulkIn, Length = (uint)buffer.Length, TimeoutMs = (uint)timeoutMs, Data = start };
-            var got = Sys.Ioctl(Fd, Bulk, (nint)(&transfer));
+            var transfer = new UsbFs.BulkTransfer { Endpoint = Interface.BulkIn, Length = (uint)buffer.Length, TimeoutMs = (uint)timeoutMs, Data = start };
+            var got = Sys.Ioctl(Fd, UsbFs.Bulk, (nint)(&transfer));
             if (got < 0) throw Failure("リーダーから読めません");
             return got;
         }
@@ -270,9 +287,9 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     /// </summary>
     public void ResetPort()
     {
-        if (Sys.Ioctl(Fd, Reset, 0) < 0) throw Failure("リーダーをリセットできません");
+        if (Sys.Ioctl(Fd, UsbFs.Reset, 0) < 0) throw Failure("リーダーをリセットできません");
         var number = (uint)Interface.Number;
-        if (Sys.Ioctl(Fd, ClaimInterface, (nint)(&number)) < 0) throw Failure("リセットしたリーダーを確保し直せません");
+        if (Sys.Ioctl(Fd, UsbFs.ClaimInterface, (nint)(&number)) < 0) throw Failure("リセットしたリーダーを確保し直せません");
     }
 
     private int Fd => _fd >= 0 ? _fd : throw new ObjectDisposedException(_path);
@@ -282,8 +299,8 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
         var errno = Marshal.GetLastPInvokeError();
         return new IOException(errno switch
         {
-            Enodev => "リーダーが抜かれました",
-            Etimedout => "リーダーが応答しません",
+            UsbFs.Enodev => "リーダーが抜かれました",
+            UsbFs.Etimedout => "リーダーが応答しません",
             _ => $"{what} ({Marshal.GetPInvokeErrorMessage(errno)})",
         });
     }
@@ -292,7 +309,7 @@ public sealed unsafe class UsbFsPipe : IBulkPipe
     {
         if (_fd < 0) return;
         var number = (uint)Interface.Number;
-        Sys.Ioctl(_fd, ReleaseInterface, (nint)(&number));
+        Sys.Ioctl(_fd, UsbFs.ReleaseInterface, (nint)(&number));
         Sys.Close(_fd);
         _fd = -1;
     }
