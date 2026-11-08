@@ -28,6 +28,7 @@
     stateLabel,
     time,
   } from "#lib/format.js";
+  import { cellRows } from "#lib/guide-cell.js";
   import { skeletonMask } from "#lib/guide-skeleton.js";
   import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { PHONE_FORM } from "#lib/phone-form.js";
@@ -243,17 +244,13 @@
     for (const cell of visibleCells) {
       const group = groups[groupOf[cell.column] ?? -1];
       if (group === undefined) continue;
-      const from = Math.max(0, Math.floor((cell.start_at - data.start) / SLOT));
-      const to = Math.min(
-        slots,
-        Math.ceil((Math.min(cell.end_at, end) - data.start) / SLOT),
-      );
-      const span = Math.max(1, to - from);
+      const row = cellRows(cell.start_at, cell.end_at, data.start, slots, SLOT);
+      const span = row.to - row.from;
       group.cells.push({
         key: cell.key,
         program: cell.program,
-        // `--s` / `--e` は番組の始まりと終わりのマスの位置 (端数つき)。過ぎた所を暗くするのに使う (`.program` の背景の覆い)
-        style: `grid-column: ${cell.column - group.first + 1} / span ${cell.span}; grid-row: ${from + 1} / span ${span}; --lines: ${lines(span)}; --s: ${(cell.start_at - data.start) / SLOT}; --e: ${(cell.end_at - data.start) / SLOT};`,
+        // `--s` / `--e` はマスの上端と下端、`--end` は番組の実際の終わり (端数つき)。過ぎた所を暗くするのに使う (`.program` の背景の覆い)
+        style: `grid-column: ${cell.column - group.first + 1} / span ${cell.span}; grid-row: ${row.from + 1} / span ${span}; --lines: ${lines(span)}; --s: ${row.from}; --e: ${row.to}; --end: ${row.end};`,
       });
     }
     return groups;
@@ -380,7 +377,7 @@
       : null,
   );
   /**
-   * **過ぎた所を暗くする位置** (表の先頭から何マスぶん。マスの `--s` / `--e` と比べる。`.program` の背景の覆い)。
+   * **過ぎた所を暗くする位置** (表の先頭から何マスぶん。マスの `--s` / `--e` / `--end` と比べる。`.program` の背景の覆い)。
    * 前の日は全部、先の日は何も暗くしないよう、表の外は端の外へ寄せる。2,000 を超えるマスを毎分書き直さないよう、表に 1 つだけ持つ
    */
   const elapsedSlots = $derived(
@@ -438,8 +435,6 @@
     };
     requestAnimationFrame(settle);
   });
-
-  const end = $derived(data.start + data.hours * HOUR);
 
   const hourMarks = $derived(
     Array.from({ length: data.hours }, (_, i) => ({
@@ -1717,7 +1712,8 @@
   }
   /*
      * **放送が過ぎた所は、マスの上から暗くしていく** (赤い線を表に引く代わり)。終わった番組はマス全体、放送中の番組は始まりからいまの位置まで。
-     * 割合は表の `--now` とマスの `--s` / `--e` から CSS だけで出す (毎分書き直すのは表の 1 つだけ)。
+     * 割合は表の `--now` とマスの上端・下端 (`--s` / `--e`) から CSS だけで出す (毎分書き直すのは表の 1 つだけ)。
+     * 番組の実際の始まりと終わりで割合を出すと、5 分に合わせて置いたマスの高さとずれ、境目がいまの位置から外れる (`#lib/guide-cell.ts`)。
      * 覆いは地の色の上に重ねる背景の 1 枚目 (`background-image`)。字は読めたまま、面だけが沈む。
      *
      * **マスに描く層を作らない** (`position`・`isolation`・`opacity` を持たせない。覆いを `::before` にしない)。
@@ -1728,12 +1724,8 @@
      * 色・ボタンの transition は `app.css` の `:where(button, a.button)` と同じものに、覆いの伸びを足す
      */
   .program {
-    /* 長さ 0 の番組で 0 で割らないよう、分母に下限を置く */
-    --past: clamp(
-      0,
-      (var(--now) - var(--s)) / max(var(--e) - var(--s), 0.001),
-      1
-    );
+    /* マスは 1 マス以上の高さに置くので、分母は 0 にならない */
+    --past: clamp(0, (var(--now) - var(--s)) / (var(--e) - var(--s)), 1);
     --shade: color-mix(in srgb, var(--dp-bg) 78%, transparent);
     /* ジャンルを 1 つ目立たせているときに、ほかのマスに重ねる地 (`--veil`)。字・印は `--dot`・`--state-ink` で透かす。下の `data-highlight` */
     --veil: color-mix(in srgb, var(--dp-bg) 70%, transparent);
@@ -1747,13 +1739,15 @@
   }
   /*
    * **放送中の番組は、過ぎた所を浅く沈める** (終わった番組と同じ濃さだと、いま見られる番組まで終わって見えた)。
-   * `--past` が 1 に届いていないマスだけ 45% にする。`round()` に対応していないブラウザはどちらも 78%
+   * 実際の終わり (`--end`) に届いていないマスだけ 45% にする。マスの下端で決めると、20:54 に終わった番組が 20:55 まで放送中の濃さのままになる。
+   * `--done` は終わっていれば 1、放送中と先の番組は 0。`round()` に対応していないブラウザはどちらも 78%
    */
   @supports (width: round(down, 1px, 1px)) {
     .program {
+      --done: clamp(0, round(down, var(--now) - var(--end) + 1, 1), 1);
       --shade: color-mix(
         in srgb,
-        var(--dp-bg) calc(45% + 33% * round(down, var(--past), 1)),
+        var(--dp-bg) calc(45% + 33% * var(--done)),
         transparent
       );
     }
