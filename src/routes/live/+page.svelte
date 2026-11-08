@@ -273,7 +273,7 @@
   const rows: Record<number, HTMLElement | undefined> = $state({});
   /** 一覧そのもの。送るのはこの中だけ (下の説明) */
   let list = $state<HTMLElement | null>(null);
-  /** 一度送った一覧は、あとは触らない。見ている途中で勝手に動くと邪魔になる (詳細を閉じるなどで作り直した一覧は頭からなので、また送る) */
+  /** 一度送った一覧は、あとは触らない。見ている途中で勝手に動くと邪魔になる (詳細を閉じるなどで作り直した一覧は先頭からなので、また送る) */
   let scrolledList: HTMLElement | null = null;
   $effect(() => {
     const row = current === undefined ? undefined : rows[current.id];

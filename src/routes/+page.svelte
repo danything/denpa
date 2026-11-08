@@ -514,7 +514,7 @@
    * 上に足すぶん読んでいる所は動かさない (`holdPlace`)
    */
   let filling = 0;
-  // 画面を離れたら取り消す (下の頭の日を読み直す `pinFrame` も)。onDestroy はサーバで描くときにも呼ばれる (そこに cancelAnimationFrame は無い) ので、effect の後片付けで
+  // 画面を離れたら取り消す (下の、先頭に貼り付いている日を読み直す `pinFrame` も)。onDestroy はサーバで描くときにも呼ばれる (そこに cancelAnimationFrame は無い) ので、effect の後片付けで
   $effect(() => () => {
     cancelAnimationFrame(filling);
     cancelAnimationFrame(pinFrame);
