@@ -30,7 +30,7 @@ test.describe("ニコニコとの連携", () => {
     await expect(page.getByTestId("niconico-state")).toContainText("連携中");
     await page.getByTestId("niconico-unlink-confirm").click();
     await expect(
-      page.getByText("連携を外しました。ニコニコの側の許可は"),
+      page.getByText("連携を解除しました。ニコニコの側の許可は"),
     ).toBeVisible();
     await expect(page.getByTestId("niconico-link")).toBeVisible();
     await expect(page.getByTestId("niconico-state")).toHaveCount(0);

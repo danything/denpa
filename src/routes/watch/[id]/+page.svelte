@@ -2836,9 +2836,6 @@
 <DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>
-  .not-ready h2 {
-    font-size: var(--dp-text-base);
-  }
   /* 幕の押しものは文言の下の真ん中に (`PlayerVeil`) */
   .choices {
     justify-content: center;

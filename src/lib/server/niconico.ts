@@ -433,5 +433,5 @@ async function refresh(): Promise<string | null> {
 /** 連携を外す。手元のトークンを消すだけ (ニコニコの側の許可は、ニコニコのアカウント設定から取り消す) */
 export function unlink(): void {
   orm().delete(niconicoLink).run();
-  console.log("[niconico] ニコニコのアカウントとの連携を外しました");
+  console.log("[niconico] ニコニコのアカウントとの連携を解除しました");
 }

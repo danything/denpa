@@ -30,7 +30,7 @@
     named = !homeHost(location.hostname);
   });
   /**
-   * 連携を外すのは 2 回押させる (削除と同じ `arming`)。外すと手元のトークンを消すので、戻すにはニコニコでもう一度許可する。
+   * 連携の解除は 2 回押させる (削除と同じ `arming`)。解除すると手元のトークンを消すので、戻すにはニコニコでもう一度許可する。
    * 押す場所は 1 つなので、`armKey` は 0 で足りる
    */
   const unlinking = arming('[data-testid^="niconico-unlink"]');
@@ -146,7 +146,7 @@
             action="?/unlinkNiconico"
             class="small"
             testid="niconico-unlink"
-            label="連携を外す"
+            label="連携を解除"
             confirmLabel="連携の解除を確定"
           />
         </div>

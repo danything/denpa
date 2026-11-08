@@ -705,7 +705,7 @@
 <style>
   /*
      * **チューナーの表は線で区切らない行**。触れると淡い地、
-     * 「⋯」で開いた中身は行のすぐ下に淡い地で。表 (`<table>`) のままにして、見出しと欄の縦を揃える。
+     * 「⋯」で開いた中身は行のすぐ下に、行と一緒に左の縦線で。表 (`<table>`) のままにして、見出しと欄の縦を揃える。
      * 広い画面では横に巻かせない。状態の列 (`.wide`) が余った幅を取り、ほかは中身の幅
      */
   .tuners-wrap {
@@ -738,13 +738,40 @@
   }
   .detail td {
     padding-top: 0;
-    background: var(--dp-hover-soft);
-    border-end-start-radius: var(--dp-radius);
-    border-end-end-radius: var(--dp-radius);
   }
-  .tuners .main:hover td,
-  .tuners .main:has(+ .detail.open) td {
+  .tuners .main:hover td {
     background: var(--dp-hover-soft);
+  }
+  /*
+     * **「⋯」で開いている行は、左の縦線と主の色の太字の名前で示し、地は塗らない** (docs/design.md の選んでいる印)。
+     * 縦線は行の上から中身の下まで 1 本に続ける (行の先頭の欄と中身の欄に半分ずつ引く)
+     */
+  .tuners .main:has(+ .detail.open) .name-cell > .truncate:first-child {
+    color: var(--dp-primary-text);
+    font-weight: var(--dp-weight-bold);
+  }
+  .tuners .main:has(+ .detail.open) td:first-child,
+  .tuners .detail.open td {
+    position: relative;
+  }
+  .tuners .main:has(+ .detail.open) td:first-child::before,
+  .tuners .detail.open td::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: var(--dp-mark);
+    background: var(--pico-primary);
+  }
+  .tuners .main:has(+ .detail.open) td:first-child::before {
+    top: 0.5rem;
+    border-start-start-radius: var(--dp-mark);
+    border-start-end-radius: var(--dp-mark);
+  }
+  .tuners .detail.open td::before {
+    bottom: 0.5rem;
+    border-end-start-radius: var(--dp-mark);
+    border-end-end-radius: var(--dp-mark);
   }
   .tuners .main td:first-child {
     border-start-start-radius: var(--dp-radius);
@@ -753,10 +780,6 @@
   .tuners .main td:last-child {
     border-start-end-radius: var(--dp-radius);
     border-end-end-radius: var(--dp-radius);
-  }
-  .tuners .main:has(+ .detail.open) td {
-    border-end-start-radius: 0;
-    border-end-end-radius: 0;
   }
   /* 使わないチューナーは名前と状態を控えた字にする (印の「無効」と合わせて、色だけに頼らない。透かすと 4.5:1 を割る) */
   .tuners .main.off :is(.name-cell, .state-cell),
@@ -879,10 +902,12 @@
       padding: var(--dp-space-2) var(--dp-space-2);
       border-radius: var(--dp-radius);
     }
+    /* 開いている行の縦線は、名前の欄ではなく行 (2〜3 段) の左に引く */
     .tuners .main:has(+ .detail.open) {
-      border-end-start-radius: 0;
-      border-end-end-radius: 0;
-      background: var(--dp-hover-soft);
+      position: relative;
+    }
+    .tuners .main:has(+ .detail.open) td:first-child {
+      position: static;
     }
     /* 開いた行の中身。行 (`.main`) と同じ左右の余白 */
     .detail td {

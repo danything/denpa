@@ -33,8 +33,11 @@
   >("idle");
   let result = $state<CheckResult | null>(null);
   let error = $state<string | null>(null);
-  /** 置き場に無い録画があるときの「承知で取り込む」の 1 回目を押したか */
-  let armed = $state(false);
+  /**
+   * 置き場に無い録画があるときの「このまま取り込む」も 2 回押させる (`arming`。取消・削除と同じ)。
+   * 5 秒たつか、ほかの所を押したら 1 回目に戻る。押す場所は 1 つなので、`armKey` は 0 で足りる
+   */
+  const forcing = arming('[data-testid^="transfer-force"]');
   /** 再起動を待ちきれなかった (自動で再起動しない環境) */
   let restartLate = $state(false);
 
@@ -61,7 +64,7 @@
     if (file === null) return;
     error = null;
     result = null;
-    armed = false;
+    forcing.fire();
     phase = "sending";
     total = file.size;
     try {
@@ -116,7 +119,7 @@
   /** 確かめる (送り終えたあとと「もう一度確かめる」) */
   async function recheck(): Promise<void> {
     error = null;
-    armed = false;
+    forcing.fire();
     phase = "checking";
     try {
       result = await call<CheckResult>("check");
@@ -141,7 +144,7 @@
     } catch (failure) {
       error = (failure as Error).message;
       phase = "checked";
-      armed = false;
+      forcing.fire();
       return;
     }
     phase = "restarting";
@@ -195,7 +198,7 @@
     sent = 0;
     total = 0;
     result = null;
-    armed = false;
+    forcing.fire();
     phase = "idle";
     // 送りかけの表示 (load の `upload`) を消す
     location.reload();
@@ -222,7 +225,12 @@
   );
 </script>
 
-<svelte:window onclick={canceling.stand} />
+<svelte:window
+  onclick={(event) => {
+    canceling.stand(event);
+    forcing.stand(event);
+  }}
+/>
 
 {#snippet cancelButton(disabled: boolean)}
   {#if canceling.armed === 0}
@@ -469,12 +477,15 @@
                 onclick={recheck}
                 data-testid="transfer-recheck">もう一度確かめる</button
               >
-              {#if armed}
+              {#if forcing.armed === 0}
                 <button
                   type="button"
                   class="small danger"
                   disabled={busy}
-                  onclick={() => apply(true)}
+                  onclick={() => {
+                    forcing.fire();
+                    void apply(true);
+                  }}
                   data-testid="transfer-force-confirm"
                   >無いものは削除済みになるのを承知で取り込む</button
                 >
@@ -483,7 +494,7 @@
                   type="button"
                   class="small outline danger"
                   disabled={busy}
-                  onclick={() => (armed = true)}
+                  onclick={() => forcing.arm(0)}
                   data-testid="transfer-force">このまま取り込む</button
                 >
               {/if}

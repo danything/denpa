@@ -596,18 +596,17 @@ html[data-stage-fullscreen] body {
   background: var(--dp-video);
 }
 /*
- * **ダイアログ (`showModal()` で開いた `<dialog>` と、`aria-modal="true"` の箱。番組の詳細 `ProgramDetail` は `<div>`) を
- * 開いている間は、後ろのページを巻かない。**
+ * **ダイアログ (`showModal()` で開いた `<dialog>`。番組の詳細 `ProgramDetail` も同じ) を開いている間は、後ろのページを巻かない。**
  * Esc・背景のクリック・`closedby` で閉じても `:modal` が外れるので、ひとりでに戻る (JS は要らない)。
  * 舞台を広げている間の指定 (上) とは、どちらも止めるだけなので重なっても食い違わない。
- * `<dialog>` のときは、スクロールバーが消えて中身が横にずれないよう、その幅を空けたままにする (`scrollbar-gutter`)。
- * `aria-modal` の箱には付けない。箱は `position: fixed` で画面いっぱいに置くので、空けた幅の分だけ箱が狭くなり、
+ * スクロールバーが消えて中身が横にずれないよう、その幅を空けたままにする (`scrollbar-gutter`)。
+ * 番組の詳細 (`.detail-modal`) には付けない。中の箱を画面いっぱいに置くので、空けた幅の分だけ箱が狭くなり、
  * 狭い画面で下から出す一枚の右端が画面の端に届かない
  */
-html:has(dialog:modal, [aria-modal="true"]) {
+html:has(dialog:modal) {
   overflow: hidden;
 }
-html:has(dialog:modal) {
+html:has(dialog:modal:not(.detail-modal)) {
   scrollbar-gutter: stable;
 }
 /*
