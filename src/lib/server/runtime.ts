@@ -19,7 +19,7 @@ import { checkPower, forgetWake } from "./power";
 import { activeRecordingIds, recoverOrphanedRecordings } from "./recorder";
 import { restoreWidths } from "./restore-width";
 import { fillSatellites } from "./satellite-lineup";
-import { tick } from "./scheduler";
+import { recheckContracts, tick } from "./scheduler";
 import { prune as pruneSessions } from "./session";
 import { beginDraining } from "./shutdown";
 import { redeem } from "./tickets";
@@ -253,6 +253,29 @@ async function syncChannels(): Promise<void> {
   });
 }
 
+/** 呼ばれてから `ms` 置いて `run` を 1 回呼ぶ。待っている間に呼ばれた分はまとめる */
+export function settleThen(ms: number, run: () => void): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return () => {
+    if (timer !== null) return;
+    timer = setTimeout(() => {
+      timer = null;
+      run();
+    }, ms);
+    timer.unref?.();
+  };
+}
+
+/**
+ * カードが契約の更新 (EMM) を受け入れたという通知 (`card`) から、契約を確かめ直すまでの間 (ms)。
+ * 1 回の受信で個別とグループの EMM を続けて受け入れることがあり (エージェントは 1 秒に 1 件ずつ渡す)、それを 1 回にまとめる
+ */
+const CARD_SETTLE_MS = 10_000;
+const recheckAfterCard = settleThen(
+  CARD_SETTLE_MS,
+  () => void recheckContracts(),
+);
+
 /**
  * エージェントからの通知を受け取る。
  *
@@ -286,6 +309,16 @@ function listenToAgent(): void {
             await sync();
             await collectOnce();
           });
+          break;
+        case "card":
+          /*
+           * カードが契約の更新を受け入れた。番組表に契約の情報がある局は、カードに聞き直すと
+           * 更新後の状態と期限が入る (12 時間ごとの確かめ直しを待たない)
+           */
+          console.log(
+            "[contracts] カードが契約の更新を受け入れました。10 秒後に契約を確かめ直します",
+          );
+          recheckAfterCard();
           break;
         default:
           break;

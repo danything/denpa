@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { takeOverSignals } from "./runtime";
+import { settleThen, takeOverSignals } from "./runtime";
+import { oneAtATime } from "./scheduler";
 
 /**
  * 停止のシグナルを誰が受けるか。
@@ -163,5 +164,62 @@ describe("停止のシグナルの受け取り", () => {
       process.removeListener = remove;
     }
     expect(counts).toEqual([1, 1]);
+  });
+});
+
+/**
+ * カードが契約の更新 (EMM) を受け入れたという通知 (`card`) から、契約を確かめ直すまで。
+ * 本物は 10 秒置くが、ここでは短くして同じ組み立て (`settleThen` と `oneAtATime`) を通す
+ */
+describe("card の通知で契約を確かめ直す", () => {
+  const wait = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  test("置いた間のあとに 1 回だけ確かめ直し、続けて来た通知は 1 回にまとめる", async () => {
+    let runs = 0;
+    const recheck = oneAtATime(async () => {
+      runs += 1;
+    });
+    const onCard = settleThen(40, () => void recheck());
+
+    onCard();
+    onCard();
+    await wait(10);
+    onCard();
+    expect(runs).toBe(0);
+
+    await wait(80);
+    expect(runs).toBe(1);
+
+    // 間のあとに来た通知は、また 1 回
+    onCard();
+    await wait(80);
+    expect(runs).toBe(2);
+  });
+
+  test("確かめ直している間に来たら、終わったあとに 1 回だけ走らせ直す", async () => {
+    let runs = 0;
+    let finish: () => void = () => {};
+    const recheck = oneAtATime(async () => {
+      runs += 1;
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    });
+
+    const first = recheck();
+    expect(recheck.running).toBe(true);
+    // 走っている間に何度呼ばれても、走らせ直すのは 1 回
+    void recheck();
+    void recheck();
+    expect(runs).toBe(1);
+
+    finish();
+    await wait(0);
+    expect(runs).toBe(2);
+    finish();
+    await first;
+    expect(runs).toBe(2);
+    expect(recheck.running).toBe(false);
   });
 });

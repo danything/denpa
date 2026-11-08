@@ -16,7 +16,7 @@ namespace Denpa.Agent;
 /// **普通の API (<c>AGENT_PORT</c>) とは別のポートで受ける** (<see cref="CardLanPolicy.Port"/>)。
 /// 鍵を配るために普通の API まで開かずに済むように (普通の API も /denpa/stream が復号済みの TS を返すので、
 /// 組んだ denpa しか通さない。docs/agent.md「denpa とは TLS で組む」)。**このポートは平文の HTTP のまま**で、答えるのは
-/// <c>/denpa/card/init</c>・<c>/denpa/card/ecm</c>・<c>/denpa/card/confirm</c> だけ。どれも相手のアドレスと
+/// <c>/denpa/card/init</c>・<c>/denpa/card/ecm</c>・<c>/denpa/card/confirm</c>・<c>/denpa/card/emm</c> だけ。どれも相手のアドレスと
 /// (決めてあれば) 往復時間を確かめてから答える。接続には TTL を付ける (<see cref="CardLan"/>)。
 /// </para>
 ///
@@ -107,6 +107,7 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
             "/denpa/card/init" when HttpMethods.IsGet(method) => Init(http),
             "/denpa/card/ecm" when HttpMethods.IsPost(method) => Ecm(http),
             "/denpa/card/confirm" when HttpMethods.IsPost(method) => Confirm(http),
+            "/denpa/card/emm" when HttpMethods.IsPost(method) => Emm(http),
             _ => Respond.Error(http, "not found", 404),
         });
     }
@@ -158,6 +159,21 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
         var dateMjd = BinaryPrimitives.ReadUInt16BigEndian(body);
         var verification = body[2..];
         await Reply(http, () => CardWire.Pack(Keys.Local.Confirm(verification, dateMjd)));
+    }
+
+    /// <summary>
+    /// 契約の更新 (EMM) を手元のカードに渡す。本文はペイロード 1 つで、返すのはカードの返り値 (BE16) だけ。
+    /// 受け入れたら自分の denpa にも知らせる (<see cref="Denpa.Agent.Emm.Forwarded"/>)
+    /// </summary>
+    private static async Task Emm(HttpContext http)
+    {
+        var payload = await CardWire.ReadUpTo(http.Request.Body, Denpa.Agent.Emm.MaxPayload);
+        if (Denpa.Agent.Emm.Problem(payload) is { } problem)
+        {
+            await Respond.Error(http, problem, 400);
+            return;
+        }
+        await Reply(http, () => CardWire.Pack(Denpa.Agent.Emm.Forwarded(Keys.Local, payload!, () => CardNotice.Shared?.Accepted())));
     }
 
     /// <summary>カードに聞いて (別のスレッドで) バイト列で返す。カードが駄目なら 503</summary>

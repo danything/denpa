@@ -5,7 +5,8 @@ namespace Denpa.Agent;
  *
  * 上から順に 3 段に分けてある。
  *
- * - Descrambler … TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する (B25.cs / Multi2.cs)
+ * - Descrambler … TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する (B25.cs / Multi2.cs)。
+ *                 選局のときは CAT から EMM も取り出し、自分宛てだけを受け口に渡す (Emm.cs)
  * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (LocalCard → BCas.cs) か、別の拠点 (RemoteCard)。どちらも CardShare.cs
  * - ICardLink   … カードと APDU をやり取りする接続。USB の CCID リーダーを直接扱う (Ccid.cs。
  *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、px4d・asicend の内蔵リーダー (Px4Card.cs) か、
@@ -41,6 +42,12 @@ public interface IKeySource
     CardInit Init();
     EcmAnswer Ecm(ReadOnlySpan<byte> ecm);
     int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd);
+
+    /// <summary>
+    /// 契約の更新 (EMM 受信、<c>90 36</c>)。渡すのは EMM セクションの中のペイロード 1 つ (カード ID から MAC まで)。
+    /// 返すのはカードの返り値 (<c>0x2100</c> が正常終了)。カードと話せなければ投げる (<see cref="Emm"/>)
+    /// </summary>
+    int Emm(ReadOnlySpan<byte> payload);
 }
 
 /// <summary>

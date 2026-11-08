@@ -135,6 +135,8 @@ Zd1jBoard.Locks = new Zd1jLocks(config.Zd1jLocksFile);
 // 使わないカードリーダー (tuners.json の隣。CardChoice.cs)。カードを開く前に読む
 CardChoice.Load(config.CardsFile);
 var events = new Events();
+// カードが契約の更新 (EMM) を受け入れたら、denpa に契約を確かめ直させる (Emm.cs)
+CardNotice.Shared = new CardNotice(() => events.Emit("card"));
 var (tuners, detected) = config.ResolveTuners();
 
 /*

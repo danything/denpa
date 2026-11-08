@@ -90,6 +90,7 @@ public class BCasTests
         public Func<byte[]> Int { get; set; } = () => IntResponse();
         public Func<byte[]> Idi { get; set; } = () => IdiResponse(CardNumber);
         public Func<byte[], byte[]>? Confirm { get; set; }
+        public Func<byte[], byte[]>? Emm { get; set; }
 
         public byte[] Reset()
         {
@@ -113,6 +114,7 @@ public class BCasTests
                     0x32 => Idi(),
                     0x34 => (ecm ?? (_ => EcmResponse()))(sent),
                     0x3c => (Confirm ?? (_ => ConfirmResponse()))(sent),
+                    0x36 => (Emm ?? (_ => ConfirmResponse(0x2100)))(sent),
                     _ => [0x6d, 0x00],
                 };
             }
@@ -473,5 +475,83 @@ public class BCasTests
         ready = true;
         await Assert.That(local.Init().CaSystemId).IsEqualTo(5);
         await Assert.That(opened).IsEqualTo(2);
+    }
+
+    /*
+     * EMM 受信 (90 36)。契約の更新を渡す
+     */
+    private static readonly byte[] SamplePayload = [0x00, 0x01, 0x23, 0x45, 0x67, 0x89, 0x12, .. Enumerable.Range(0, 0x12).Select(b => (byte)b)];
+
+    [Test]
+    public async Task EMMは90_36で送り_返り値は5から6バイト目で読む()
+    {
+        var link = new FakeLink("reader") { Emm = _ => ConfirmResponse(0xA107) };
+        using var card = BCas.Open(() => [Candidate(link)]);
+
+        var code = card.Emm(SamplePayload);
+
+        await Assert.That(code).IsEqualTo(0xA107);
+        var apdu = link.Sent.Last();
+        await Assert.That(apdu[..5]).IsEquivalentTo(new byte[] { 0x90, 0x36, 0x00, 0x00, (byte)SamplePayload.Length });
+        await Assert.That(apdu[5..^1]).IsEquivalentTo(SamplePayload);
+        await Assert.That(apdu[^1]).IsEqualTo((byte)0x00);
+        await Assert.That(apdu.Length).IsEqualTo(SamplePayload.Length + 6);
+    }
+
+    [Test]
+    public async Task EMMの短い応答は2回まで送り直す()
+    {
+        var link = new FakeLink("reader");
+        var attempts = 0;
+        link.Emm = _ => ++attempts < 3 ? [0x90, 0x00] : ConfirmResponse(0x2100);
+        using var card = BCas.Open(() => [Candidate(link)]);
+
+        await Assert.That(card.Emm(SamplePayload)).IsEqualTo(0x2100);
+        await Assert.That(attempts).IsEqualTo(3);
+
+        // 3 回とも短ければ、繋ぎ直さずに断る
+        attempts = 0;
+        link.Emm = _ =>
+        {
+            attempts++;
+            return [0x90, 0x00];
+        };
+        Assert.Throws<CardRefusedException>(() => card.Emm(SamplePayload));
+        await Assert.That(attempts).IsEqualTo(3);
+        await Assert.That(link.Resets).IsEqualTo(1);
+    }
+
+    [Test]
+    [Arguments(12)]
+    [Arguments(256)]
+    public async Task 長さのおかしいEMMは送らない(int length)
+    {
+        var link = new FakeLink("reader");
+        using var card = BCas.Open(() => [Candidate(link)]);
+
+        Assert.Throws<IOException>(() => card.Emm(new byte[length]));
+        await Assert.That(link.Sent.Count(apdu => apdu[1] == 0x36)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task EMMを受け入れたら覚えていたECMの答えを捨てる()
+    {
+        var link = new FakeLink("reader");
+        using var card = BCas.Open(() => [Candidate(link)]);
+
+        card.Ecm(SampleEcm);
+        card.Ecm(SampleEcm);
+        await Assert.That(EcmsSent(link)).IsEqualTo(1);
+
+        // 受け入れなかったときは覚えたまま
+        link.Emm = _ => ConfirmResponse(0xA102);
+        card.Emm(SamplePayload);
+        card.Ecm(SampleEcm);
+        await Assert.That(EcmsSent(link)).IsEqualTo(1);
+
+        link.Emm = _ => ConfirmResponse(0x2100);
+        card.Emm(SamplePayload);
+        card.Ecm(SampleEcm);
+        await Assert.That(EcmsSent(link)).IsEqualTo(2);
     }
 }

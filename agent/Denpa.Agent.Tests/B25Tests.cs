@@ -1,4 +1,5 @@
 using System.Buffers;
+using TUnit.Assertions.Enums;
 
 namespace Denpa.Agent.Tests;
 
@@ -29,7 +30,21 @@ public class B25Tests
         public bool Cached { get; set; }
         public long WaitedMs { get; set; }
 
-        public CardInit Init() => new(SystemKey, InitCbc, 0x0005, [1234567890123456]);
+        /// <summary>カードの番号 (EMM の宛先と比べる 48 ビット)</summary>
+        public long[] Ids { get; set; } = [1234567890123456];
+        /// <summary>カードに渡した EMM のペイロード (作業スレッドから足すので、読むときはロックを取る)</summary>
+        public List<byte[]> Emms { get; } = [];
+        /// <summary>EMM を渡されたときに呼ぶ (遅いカードを真似る)</summary>
+        public Action? OnEmm { get; set; }
+
+        public CardInit Init() => new(SystemKey, InitCbc, 0x0005, Ids);
+
+        public int Emm(ReadOnlySpan<byte> payload)
+        {
+            lock (Emms) Emms.Add(payload.ToArray());
+            OnEmm?.Invoke();
+            return 0x2100;
+        }
 
         public EcmAnswer Ecm(ReadOnlySpan<byte> ecm)
         {
@@ -927,5 +942,197 @@ public class B25Tests
 
         await Assert.That(descrambler.HeldAt()).IsEqualTo("PAT - / PMT - / ECM -");
         await Assert.That(descrambler.CardUse()).IsEqualTo("カード 0回 計 0ms (待ち 0ms・覚えた答え 0回・未契約 0回・準備 -)");
+    }
+
+    /*
+     * 契約の更新 (EMM。Emm.cs)。CAT の CA 記述子で EMM の PID を挙げ、EMM セクション (0x84) にペイロードを並べて流す。
+     * 受け口 (Emm) の作業スレッドは起こさず、Step を呼んで 1 件ずつ送らせる (遅いカードの試しだけ作業スレッドを起こす)
+     */
+    private const int CatPid = 0x0001;
+    private const int EmmPid = 0x0021;
+    private const long Mine = 0x0000_1111_2222, MyGroup = 0x2000_3333_4444, Other = 0x0000_9999_8888;
+
+    private static byte[] Cat(int pid, int version = 0) => Psi(0x01, 0xFFFF, Ca(pid), version);
+
+    private static byte[] EmmSection(params byte[][] payloads) => Psi(0x84, 0, [.. payloads.SelectMany(p => p)]);
+
+    /// <summary>番号を取り終えた受け口 (番号を取るのは作業スレッドの仕事なので、ここで 1 回 Step を呼ぶ)</summary>
+    private static (Emm Emm, StepClock Clock) Receiver(Cards cards)
+    {
+        var clock = new StepClock();
+        var emm = new Emm(() => cards, clock);
+        emm.Section(EmmSection());
+        emm.Step();
+        return (emm, clock);
+    }
+
+    /// <summary>順番待ちを全部送らせる (1 秒に 1 件なので、時計を進めながら)</summary>
+    private static void Drain(Emm emm, StepClock clock)
+    {
+        for (var i = 0; i < 40; i++)
+        {
+            clock.Now += TimeSpan.FromSeconds(1);
+            emm.Step();
+        }
+    }
+
+    private static string[] Sent(Cards cards) => [.. cards.Emms.Select(Convert.ToHexString)];
+
+    [Test]
+    public async Task EMMはCATが挙げたPIDから読み_自分宛てのペイロードだけをカードに渡す()
+    {
+        var cards = new Cards { Ids = [Mine, MyGroup] };
+        var (emm, clock) = Receiver(cards);
+        var mine = EmmTests.Payload(Mine, 1);
+        var group = EmmTests.Payload(MyGroup, 2, variable: 20);
+        var ts = Channel().Section(CatPid, Cat(EmmPid))
+            .Section(EmmPid, EmmSection(EmmTests.Payload(Other, 3), mine, EmmTests.Payload(Other, 4)))
+            .Section(EmmPid, EmmSection(group))
+            .Ecm(EcmPid, 1).Videos(3, 1);
+
+        var output = Run(new Descrambler(cards, emm: emm), ts.Wire.ToArray());
+        Drain(emm, clock);
+
+        await Assert.That(Sent(cards)).IsEquivalentTo(new[] { Convert.ToHexString(mine), Convert.ToHexString(group) }, CollectionOrdering.Matching);
+        // EMM を読んでも、復号はいつもどおり
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+    }
+
+    [Test]
+    public async Task 壊れたEMMと_はみ出したペイロードと_長すぎるペイロードと_EMMメッセージは渡さない()
+    {
+        var cards = new Cards { Ids = [Mine] };
+        var (emm, clock) = Receiver(cards);
+        var badCrc = EmmSection(EmmTests.Payload(Mine, 1));
+        badCrc[^1] ^= 0xFF;
+        // 関連情報バイト長がセクションをはみ出す。そのセクションの残り (後ろの自分宛て) も捨てる
+        var overrun = EmmTests.Payload(Mine, 2);
+        overrun[6] = 0xF0;
+        // 255 バイトを超えるペイロード (Lc に入らない)
+        var huge = EmmTests.Payload(Mine, 3, variable: 245);
+        var ts = Channel().Section(CatPid, Cat(EmmPid))
+            .Section(EmmPid, badCrc)
+            .Section(EmmPid, EmmSection(overrun, EmmTests.Payload(Mine, 5)))
+            .Section(EmmPid, EmmSection(huge))
+            .Section(EmmPid, Psi(0x85, 0, EmmTests.Payload(Mine, 4)))
+            .Ecm(EcmPid, 1).Videos(3, 1);
+
+        Run(new Descrambler(cards, emm: emm), ts.Wire.ToArray());
+        Drain(emm, clock);
+
+        await Assert.That(huge.Length).IsGreaterThan(255);
+        await Assert.That(cards.Emms.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task 鍵の要らない利用者だけでもEMMは渡す()
+    {
+        var cards = new Cards { Ids = [Mine] };
+        var (emm, clock) = Receiver(cards);
+        var ts = Channel().Section(CatPid, Cat(EmmPid)).Section(EmmPid, EmmSection(EmmTests.Payload(Mine, 1))).Ecm(EcmPid, 1).Videos(3, 1);
+
+        Run(new Descrambler(cards, keysWanted: () => false, emm: emm), ts.Wire.ToArray());
+        Drain(emm, clock);
+
+        await Assert.That(cards.Emms.Count).IsEqualTo(1);
+        await Assert.That(cards.Asked.Count).IsEqualTo(0);
+    }
+
+    /// <summary>録れたファイルの復号と実機の試しは渡し先を渡さない。古い録画の EMM をカードに渡さない</summary>
+    [Test]
+    public async Task 渡し先の無いデスクランブラはEMMを読まない()
+    {
+        var cards = new Cards { Ids = [Mine] };
+        var (emm, clock) = Receiver(cards);
+        var ts = Channel().Section(CatPid, Cat(EmmPid)).Section(EmmPid, EmmSection(EmmTests.Payload(Mine, 1))).Ecm(EcmPid, 1).Videos(3, 1);
+
+        var output = Run(new Descrambler(cards), ts.Wire.ToArray());
+        Drain(emm, clock);
+
+        await Assert.That(cards.Emms.Count).IsEqualTo(0);
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+    }
+
+    [Test]
+    public async Task 同じペイロードのくり返しは1回だけ渡し_CATが替わったら新しいPIDを読む()
+    {
+        var cards = new Cards { Ids = [Mine] };
+        var (emm, clock) = Receiver(cards);
+        const int moved = 0x0022;
+        var first = EmmTests.Payload(Mine, 1);
+        var second = EmmTests.Payload(Mine, 2);
+        var ts = Channel().Section(CatPid, Cat(EmmPid))
+            .Section(EmmPid, EmmSection(first)).Section(EmmPid, EmmSection(first));
+        var descrambler = new Descrambler(cards, emm: emm);
+
+        var output = new ArrayBufferWriter<byte>();
+        descrambler.Decode(ts.Wire.ToArray(), output);
+        Drain(emm, clock);
+        // 送り終えたあとにまた流れてきても送らない
+        var again = new Ts().Section(EmmPid, EmmSection(first))
+            .Section(CatPid, Cat(moved, version: 1))
+            // 替わったあとの古い PID は読まない
+            .Section(EmmPid, EmmSection(EmmTests.Payload(Mine, 9)))
+            .Section(moved, EmmSection(second));
+        descrambler.Decode(again.Wire.ToArray(), output);
+        Drain(emm, clock);
+
+        await Assert.That(Sent(cards)).IsEquivalentTo(new[] { Convert.ToHexString(first), Convert.ToHexString(second) }, CollectionOrdering.Matching);
+    }
+
+    /// <summary>
+    /// **カードが EMM に答えるのが遅くても、復号のスレッドは待たない。** ECM の鍵の位置は変わらない
+    /// (カードに送るのは受け口の作業スレッドだけ)
+    /// </summary>
+    [Test]
+    public async Task カードがEMMに遅くても復号は待たない()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var cards = new Cards
+        {
+            Ids = [Mine],
+            OnEmm = () =>
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(30));
+            },
+        };
+        var emm = new Emm(() => cards);
+        using var stop = new CancellationTokenSource();
+        emm.Start(stop.Token);
+        try
+        {
+            var ts = Channel().Section(CatPid, Cat(EmmPid)).Section(EmmPid, EmmSection(EmmTests.Payload(Mine, 1)));
+            var primed = ts.Wire.Count;
+            ts.Section(EmmPid, EmmSection(EmmTests.Payload(Mine, 2))).Ecm(EcmPid, 1).Videos(5, 1);
+            var blocked = ts.Wire.Count;
+            ts.Section(EmmPid, EmmSection(EmmTests.Payload(Mine, 3))).Ecm(EcmPid, 2).Videos(5, 2, even: false);
+            var wire = ts.Wire.ToArray();
+            var descrambler = new Descrambler(cards, emm: emm);
+            var output = new ArrayBufferWriter<byte>();
+
+            // 1 つ目のセクションで番号を取らせる (取るまでの EMM は捨てる)
+            descrambler.Decode(wire.AsSpan(0, primed), output);
+            for (var i = 0; i < 100 && emm.Ids is null; i++) await Task.Delay(50);
+            descrambler.Decode(wire.AsSpan(primed, blocked - primed), output);
+            await Assert.That(entered.Wait(TimeSpan.FromSeconds(10))).IsTrue();
+
+            // カードが EMM を抱えたままの間に、続きを復号する
+            var rest = Task.Run(() =>
+            {
+                descrambler.Decode(wire.AsSpan(blocked), output);
+                descrambler.Flush(output);
+            });
+            await Assert.That(rest.Wait(TimeSpan.FromSeconds(10))).IsTrue();
+
+            await Assert.That(Diff(output.WrittenSpan.ToArray(), Expected(ts))).IsEqualTo(-1);
+            await Assert.That(Generations(cards)).IsEqualTo("1,2");
+        }
+        finally
+        {
+            release.Set();
+            stop.Cancel();
+        }
     }
 }
