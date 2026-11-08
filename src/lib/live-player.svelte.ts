@@ -43,10 +43,7 @@ import {
   wantsData,
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
-import {
-  slipHidden,
-  unslipper,
-} from "#lib/components/player/unslip.js";
+import { slipHidden, unslipper } from "#lib/components/player/unslip.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
   LagMeter,
@@ -415,7 +412,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** `encode`・`pinned` の断り書きと、最後に出した時刻。その状態が `ADAPT_HOLD` のあいだ来なければ消す */
   let standing: { text: string; at: number } | null = null;
   /** 段を決める刻み (`ADAPT_EVERY`)。最初の選局で入れ、画面を離れたら止める */
-  let adaptTimer: ReturnType<typeof setInterval> |  /** 前のフレームを貼っているか。**次のフレームが出るまでの黒を埋める** */
+  let adaptTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** 前のフレームを貼っているか。**次のフレームが出るまでの黒を埋める** */
   let holding = $state(false);
   /**
    * データ放送を出すか (テレビの d ボタン)。サーバは押されてからデコードする (`server/live.ts` の `wantData`)。
@@ -2641,9 +2640,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     stopRaw();
     // iPhone の Safari には MediaSource が無く、ManagedMediaSource だけがある (`ts/media-source.ts`)
     const picked = pickMediaSource();
-    if (picked !== null)
-      codecs = mseType(codecs, (type) => picked.Source.isTypeSupported(type));
-    if (picked === null || !picked.Source.isTypeSupported(codecs)) {
+    // MP4 の `Opus` は、小文字を受け取れる端末には小文字で渡す (`live.ts` の `mseType`)
+    const type =
+      picked === null
+        ? codecs
+        : mseType(codecs, (t) => picked.Source.isTypeSupported(t));
+    if (picked === null || !picked.Source.isTypeSupported(type)) {
       if (baked !== "h264") {
         giveUpCodec(baked);
         return;
@@ -2703,7 +2705,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         if (source !== media) return;
         // 終わりが無いと言っておく。言わないと尺が届くたびに伸び、備え付けの再生位置が行き来する
         media.duration = Number.POSITIVE_INFINITY;
-        buffer = media.addSourceBuffer(codecs);
+        buffer = media.addSourceBuffer(type);
         // 並べ直させない (`sequence` だと 1 つ取りこぼすと以降ずっと映像と音声がずれる)
         buffer.mode = "segments";
         buffer.addEventListener("updateend", () => {
