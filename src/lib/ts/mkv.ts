@@ -105,6 +105,11 @@ export function uint(body: Uint8Array): number {
   return value;
 }
 
+/** 文字列 (UTF-8)。**末尾の NUL は落とす** (EBML の文字列は NUL で埋めてよい) */
+export function text(body: Uint8Array): string {
+  return new TextDecoder().decode(body).replace(/\0+$/, "");
+}
+
 /** `[ID][大きさ]` の見出しを読む。足りなければ null */
 export function ebmlHead(buffer: Uint8Array, at: number): EbmlHead | null {
   const id = vint(buffer, at, true);
@@ -169,7 +174,7 @@ export class MkvSplitter {
       if (head.id === TIMESTAMP_SCALE) this.scale = uint(body) || DEFAULT_SCALE;
       else if (head.id === TIMESTAMP) this.base = uint(body);
       else if (head.id === CODEC_ID)
-        this.codecs.push(new TextDecoder().decode(body));
+        this.codecs.push(text(body));
       else if (head.id === SIMPLE_BLOCK || head.id === BLOCK) {
         const block = readBlock(body);
         if (block !== null)

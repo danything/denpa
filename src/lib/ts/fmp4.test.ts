@@ -247,7 +247,6 @@ describe("fMP4 の中身を読む", () => {
     expect([tracks[0]!.width, tracks[0]!.height]).toEqual([1920, 1080]);
     expect(tracks[0]!.config).toEqual(AVCC);
     expect(tracks[1]!.config).toEqual(ASC);
-    expect([tracks[1]!.channels, tracks[1]!.sampleRate]).toEqual([2, 48000]);
     // trex の既定
     expect(tracks[0]!.defaults).toEqual({
       duration: 1500,

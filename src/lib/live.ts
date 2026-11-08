@@ -14,13 +14,14 @@
 import type { CaptionLanguage } from "@danything/arib/caption-text";
 
 import type { AudioTrack } from "./arib";
+import { CODEC_LABEL } from "./hw";
 import type { Pace, Rung } from "./rungs";
 
 /**
  * エンコード方式 ([stream.md](../../docs/stream.md#エンコード))。`av1` は量を採るが、SVT-AV1 が溜め込むぶん放送の今から
  * 1 秒ほど離れる (`server/live.ts` の `videoArgs`)。`h264` は速さを採り、どの端末でも出る。
  * `hevc` (H.265) は**ライブのエンコーダが GPU のときだけ**出す (ソフトウェアのエンコーダを組んでいない。`#lib/hw.ts` の
- * `SOFTWARE_CODECS`)。出せるかはサーバが決めて画面に渡す (`server/viewing.ts` の `ViewingOptions.hevc`)。追っかけでは出さない。
+ * `SOFTWARE_CODECS`)。出せるかはサーバが決めて画面に渡す (`server/viewing.ts` の `ViewingOptions.hevc`)。段 0 の追っかけでは出さない (段を下げると `rungCodec` が選ぶことがある)。
  * **画面の既定は「自動」** (`#lib/live-choice.ts` の `autoCodec`)。指示で省かれたときの既定は `h264` のまま (テレビのアプリ)。
  * MPEG-2 (放送のまま) は「エンコードしない」なのでここに並べない (`TuneCommand.raw`)
  */
@@ -28,9 +29,9 @@ export type LiveCodec = "h264" | "hevc" | "av1";
 
 /** 選べるエンコード方式。コーデックのメニューに並べる順そのまま (「自動」のあと。選ぶのは端末の相性だけなので、説明は付けない) */
 export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
-  { id: "av1", label: "AV1" },
-  { id: "hevc", label: "H.265" },
-  { id: "h264", label: "H.264" },
+  { id: "av1", label: CODEC_LABEL.av1 },
+  { id: "hevc", label: CODEC_LABEL.hevc },
+  { id: "h264", label: CODEC_LABEL.h264 },
 ];
 
 /**
@@ -406,7 +407,7 @@ export interface Tuned {
   audio?: string;
   /** どのコーデックでエンコードするか。省くと `h264` */
   codec?: LiveCodec;
-  /** MPEG-2 のままリクエストするか (`TuneCommand.raw`)。**覚えておくのは、次に開くときに先回りするため** (`server/live.ts` の `warm`) */
+  /** MPEG-2 のままリクエストするか (`TuneCommand.raw`)。cookie には残さない (先回りの形式はメニューの選択 (`choice`) から決める。`server/viewing.ts` の `warmFormat`) */
   raw?: boolean;
 }
 

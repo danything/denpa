@@ -77,6 +77,11 @@ describe("parseXmlAit", () => {
       parseXmlAit(AIT.replace("番組 &amp; 連動", "番組&#x110000;")).map(
         (app) => app.name,
       ),
-    ).toEqual(["番組"]);
+    ).toEqual(["番組&#x110000;"]);
+  });
+
+  test("文字参照は 1 回だけ開き、CDATA の中は開かない", () => {
+    const ait = AIT.replace("番組 &amp; 連動", "&#38;lt;<![CDATA[&amp;]]>");
+    expect(parseXmlAit(ait).map((app) => app.name)).toEqual(["&lt;&amp;"]);
   });
 });

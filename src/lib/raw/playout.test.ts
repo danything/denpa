@@ -116,12 +116,13 @@ describe("Playout (追っかけ: 放送の今を追わない)", () => {
 });
 
 describe("Playout (録画: 飛ぶ先と終わり)", () => {
-  test("飛ぶ先 (from) から鳴らす。手前のぶんは貯めた量に数えない", () => {
+  test("飛ぶ先 (`aim`) から鳴らす。手前のぶんは貯めた量に数えない", () => {
     const playout = new Playout<ReturnType<typeof chunk>>(0.1);
     playout.follow = true;
     // サーバは飛び先の少し手前から流してくる。飛び先は 50 コマ目
     const from = chunk(50).pts;
-    playout.reset(from);
+    playout.reset();
+    playout.aim(from);
     for (let n = 0; n < 52; n++) playout.push(chunk(n), 0);
     // 飛び先から先は 2 コマ (0.04 秒) しかない。手前の 50 コマを数えて鳴らし始めない
     expect(playout.lead(0)).toBeCloseTo((2 * D) / 90_000, 5);
@@ -132,16 +133,6 @@ describe("Playout (録画: 飛ぶ先と終わり)", () => {
     if (started.kind !== "start") return;
     expect(playout.position(LEAD)).toBeCloseTo(from, 5);
     expect(started.schedule.every((s) => s.chunk.n >= 50)).toBe(true);
-  });
-
-  test("届いてから飛ぶ先を決めても同じ (aim)", () => {
-    const playout = new Playout<ReturnType<typeof chunk>>(0.1);
-    playout.follow = true;
-    playout.reset();
-    playout.aim(chunk(20).pts);
-    for (let n = 0; n < 40; n++) playout.push(chunk(n), 0);
-    expect(playout.tick(0).kind).toBe("start");
-    expect(playout.position(LEAD)).toBeCloseTo(chunk(20).pts, 5);
   });
 
   test("終わりまで届いたら、貯めが足りなくても残りを鳴らし、鳴らしきったら end", () => {
@@ -162,7 +153,8 @@ describe("Playout (録画: 飛ぶ先と終わり)", () => {
     const playout = new Playout<ReturnType<typeof chunk>>(1);
     playout.follow = true;
     playout.finish();
-    playout.reset(chunk(0).pts);
+    playout.reset();
+    playout.aim(chunk(0).pts);
     for (let n = 0; n < 3; n++) playout.push(chunk(n), 0);
     expect(playout.tick(0).kind).toBe("none");
   });
@@ -172,7 +164,8 @@ describe("Playout (録画: 何も来ないまま終わった)", () => {
   test("飛んだ先が末尾の先で何も届かなければ、少し待ってから end", () => {
     const playout = new Playout<ReturnType<typeof chunk>>(1);
     playout.follow = true;
-    playout.reset(chunk(0).pts);
+    playout.reset();
+    playout.aim(chunk(0).pts);
     playout.finish();
     // 渡したぶんの音がまだ戻ってきていないかもしれないので、すぐには終わりにしない
     expect(playout.tick(10).kind).toBe("none");

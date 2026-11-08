@@ -19,6 +19,7 @@
  *   `PROBE_EVERY` 測れていなければ、測れるまで先の上限を外して読む (`aheadLimit`)
  */
 
+import { UP_WAIT_WATCH } from "#lib/adapt.js";
 import { mseType } from "#lib/live.js";
 import { parseRung, type Rung } from "#lib/rungs.js";
 import type { PickedMediaSource } from "#lib/ts/media-source.js";
@@ -45,8 +46,8 @@ const AHEAD = 60;
 const BEHIND = 30;
 /** 読んでいるストリームの末尾からこれだけ先までは、リクエストし直さずに届くのを待つ (秒。`covers`) */
 const SLACK = 15;
-/** 受け取りの速さをこれだけ測れていなければ、先を多めに溜めて測る (ms)。`adapt.ts` の上げるまでの待ち (20 秒) と同じ */
-const PROBE_EVERY = 20_000;
+/** 受け取りの速さをこれだけ測れていなければ、先を多めに溜めて測る (ms)。`adapt.ts` の上げるまでの待ちと同じ */
+const PROBE_EVERY = UP_WAIT_WATCH;
 
 /** リクエストする先。`from` 秒から、`audio` (`playback` の `audios` の `id`) の音声で */
 export type StreamUrl = (from: number, audio: string) => string;

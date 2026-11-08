@@ -275,7 +275,7 @@ B25 の溜め。チャンネルと時刻で 2 行を突き合わせれば、上�
 - **飛んだ直後の 1 コマは測らない。** 飛ぶ前のコマの時刻を持っていることがあり、飛んだ幅ぶん（8〜10 秒）遅れて見えた
   （「映像の遅れ 最大」が 8016ms。`unslipper`）。自分で飛んだときと、`seeking` のあと
 - **コマ落ちは合図にしない。** Windows Edge では落ち着いたあとも絶えず 5.6% 落ち、合図にすると飛び続ける
-- **飛び直しても遅れが戻るなら、「自動」の画質を 1 段下げる**（`unslip.ts` の `DecodeLag`、`adapt.ts` の `decode`）。
+- **ライブと追っかけは、飛び直しても遅れが戻るなら「自動」の画質を 1 段下げる**（`unslip.ts` の `DecodeLag`、`adapt.ts` の `decode`。録画を観る画面は飛び直すだけ）。
   測った遅れで 15 秒に 3 回飛んだか、10 秒の間にコマを 2 割より多く捨てたら、その端末にはその段が重いと見る
   （Windows Edge の 5.6% の 3 倍より上。エミュレータの AV1 1080p は 3 秒ごとに 82 回飛び、コマを約半分捨てていた）。
   下げた段から上へは、その再生の間はもう上げない。形式を手で選んでいるときは段を動かさない
@@ -1218,7 +1218,7 @@ WebKit の MSE / ManagedMediaSource は、`<video>` の音を Web Audio に通�
   VideoFrame の見せる大きさは使いません。Safari は画素の数のまま返し (H.264 の SAR も `displayAspectWidth` も見ない)、
   AV1 は映像の中に縦横比を持たないので、4:3 に縮んで出ます。pasp が無ければフレームに合わせる
 - **音は MPEG-2 と同じ WASM。** AAC は esds の AudioSpecificConfig から ADTS ヘッダを組んで付ける (`adtsHeader`)。
-  Opus は dOps を OpusHead に書き換えて Opus のデコーダ (`opus_open`) へ渡す。H.264 の WASM のデコーダと dav1d の WASM は作りません
+  Opus は dOps を OpusHead に書き換えて Opus のデコーダ (`opus_open`) へ渡す (端末に保存した Matroska はもともと OpusHead)。H.264 の WASM のデコーダと dav1d の WASM は作りません
 - **時計は放送のままのときと同じ** (鳴っている音。`playout.ts`)。時刻は MP4 の物差し (0 から数え、一周しない) で、
   字幕・時計の通知も同じ物差しで届く
 - **間に合っているか** (`budget.ts`) は、1 コマの時間では判じない。GPU の経路は詰まっていなくても
@@ -1596,7 +1596,7 @@ denpa の中で開くのは、データ放送が `startAITControlledApp` で起�
 | いまの局と番組                           | ○     | 放送の programInfo と局の一覧から。`navigator.receiverDevice.getCurrentChannel()`・`getCurrentProgram()`                                                                      |
 | 選局                                     | △     | データ放送の `epgTune` と同じ範囲 (局の一覧にある局だけ)。局が変わるとアプリは閉じる                                                                                          |
 | 字幕の表示の切り替え                     | ○     | `getCCStatus`・`setCCStatus`                                                                                                                                                  |
-| 受信機の記憶 (`localStorage`)            | ○     | 配信元のオリジンごとに覚える (`denpa_hybridcast_<オリジン>`。256KB まで。テレビと同じ)。denpa のほかの記憶とは混ぜない                                                        |
+| 受信機の記憶 (`localStorage`)            | ○     | 配信元のオリジンごとに覚える (`denpa_hybridcast_<オリジン>`。JSON で 256K 字まで。テレビの 256KB に合わせた)。denpa のほかの記憶とは混ぜない                                  |
 | データ放送の Greg と NVRAM               | ○     | `navigator.bmlCompat.browserPseudo` (`Greg`・`readPersistentArray`・`writePersistentArray`)。データ放送と同じもの。NVRAM は放送の文書と同じ領域で、起動した局から見える分だけ |
 | データ放送へ戻る                         | ○     | `navigator.applicationManager.launchDataBroadcastingBrowser`。アプリを閉じる (戻る先の部品は選べない)                                                                         |
 | 番組の変わり目                           | △     | `receiverDevice.streamEvent` の番組が変わったことだけ知らせる。放送のイベントメッセージは届けない                                                                             |

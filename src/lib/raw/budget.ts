@@ -104,16 +104,21 @@ export class DecodeBudget {
     this.from = now;
     const lost = dropped - this.droppedFrom;
     this.droppedFrom = dropped;
-    if (samples.length < LEAST) return false;
+    /*
+     * 少なければ数えない。ただしデコーダが詰まったまま 1 枚も出さない (WebCodecs) と、出たコマで数える数は 0 のままなので、
+     * 渡したものが窓の間ずっと残っていれば数える
+     */
+    const stuck = least >= QUEUE_STUCK;
+    if (samples.length < LEAST && !stuck) return false;
     samples.sort((a, b) => a - b);
-    this.p95 =
-      samples[Math.min(samples.length - 1, Math.floor(samples.length * 0.95))]!;
+    const top = Math.min(samples.length - 1, Math.floor(samples.length * 0.95));
+    if (top >= 0) this.p95 = samples[top]!;
     const choppy =
       lost >= DROP_LEAST && lost >= (WINDOW / frameMs) * DROP_SHARE;
     const bad =
       (this.timed && this.p95 > frameMs * SHARE * stretch) ||
       worst > LATE ||
-      least >= QUEUE_STUCK ||
+      stuck ||
       choppy;
     this.strikes = bad ? this.strikes + 1 : 0;
     return this.strikes >= STRIKES;

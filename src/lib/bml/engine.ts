@@ -13,7 +13,7 @@
  * - **ページを占めるのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
  *   スクリプト・描き直し・約束の続きは全部その下で動かし、休みなく回り続ける文書は止める
  *
- * 時計は `clock` (録画は再生位置から放送の時刻を出す)。無ければ TOT + 経過時間。
+ * 時計は `clock` (録画は再生位置から放送の時刻を出す)。無ければ TOT + 経過時間 (TOT が来なくなったら、30 秒たった所で止める)。
  */
 
 import type {
@@ -1759,13 +1759,10 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   /** used-key-list で受けるキーか */
   private accepts(code: number): boolean {
+    // 既定のスタイル (`style.ts` の `DEFAULTS`) が「basic data-button」を入れるので、文書があれば空にならない
     const list = this.doc?.body?.style().usedKeyList ?? [];
-    if (list[0] === "none") return false;
     const group = keyGroup(code);
-    if (group === null) return false;
-    return list.length === 0
-      ? group === "basic" || group === "data-button"
-      : list.includes(group);
+    return group !== null && list.includes(group);
   }
 
   private keyDown(code: number): void {

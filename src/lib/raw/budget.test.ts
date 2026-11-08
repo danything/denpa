@@ -177,4 +177,13 @@ describe("DecodeBudget (WebCodecs の経路)", () => {
     );
     expect(results).toEqual([false, false, true]);
   });
+
+  test("デコーダが 1 枚も出さずに詰まったままでも、3 秒続いたら打ち切る", () => {
+    const budget = new DecodeBudget(false);
+    budget.tick(0, 16.7, 0, QUEUE_STUCK);
+    const results = [1, 2, 3].map((s) =>
+      budget.tick(s * WINDOW, 16.7, 0, QUEUE_STUCK),
+    );
+    expect(results).toEqual([false, false, true]);
+  });
 });

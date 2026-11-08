@@ -140,6 +140,14 @@ describe("NVRAM", () => {
     ).toEqual([255]);
   });
 
+  test("受信機の設定は持っている 3 つだけ「読むだけ」と答える (読めないものは使えない)", () => {
+    const nvram = make(store());
+    expect(nvram.check(" nvram://receiverinfo/zipcode ")).toBe(1);
+    expect(nvram.check("nvram://receiverinfo/regioncode")).toBe(1);
+    expect(nvram.read("nvram://receiverinfo/unknown", "U:1B")).toBeNull();
+    expect(nvram.check("nvram://receiverinfo/unknown")).toBeNaN();
+  });
+
   test("NHK のように U:1B を 16 個、配列で書く", () => {
     const kept = store();
     const structure = Array(16).fill("U:1B").join(",");

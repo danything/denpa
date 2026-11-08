@@ -46,7 +46,13 @@ import {
 import { DecodeBudget } from "./budget";
 import { fieldAt, type Shown, SmoothClock, Vsync, VsyncClock } from "./cadence";
 import { downscale } from "./downscale";
-import { Fmp4Video, FOLLOW_BYTES_MOST } from "./fmp4";
+import {
+  AHEAD,
+  BEHIND_MOST,
+  Fmp4Video,
+  FOLLOW_BYTES_MOST,
+  PENDING_MOST,
+} from "./fmp4";
 import type { FromWorker, GrabSize, RawInput, ToWorker } from "./messages";
 import { MkvInput } from "./mkv";
 import { YuvRenderer } from "./render";
@@ -60,8 +66,6 @@ import {
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
-/** 番のこれだけ前からデコードする (90kHz)。デコードするのは重いコマでも 10ms 近く */
-const AHEAD = 0.3 * CLOCK;
 /**
  * デコードできたフレームを待たせる上限。**これ以上は先にデコードしない** (1 枚 3MB)。
  * 実測 (`tests/bench`。docs/stream.md#デコードしたフレームを持つ数) では、1 回に 1 枚ずつデコードするので
@@ -70,10 +74,6 @@ const AHEAD = 0.3 * CLOCK;
  * fMP4 の `DECODED_MOST` (fmp4.ts) と同じ数だが、数えているもの (あちらは GPU の VideoFrame) も決め手も違う
  */
 const DECODED_MOST = 8;
-/** 圧縮のまま持っておく上限 (90kHz)。止めている間に溜め込まない */
-const PENDING_MOST = 8 * CLOCK;
-/** これだけ遅れたら、デコードしながら追いつくのをやめて I フレームまで飛ぶ (90kHz) */
-const BEHIND_MOST = 0.5 * CLOCK;
 /** 1 コマの長さの目安 (90kHz)。29.97 コマ。実際の間隔が分かればそれを使う */
 const FRAME = 3003;
 /**
@@ -371,6 +371,8 @@ function decodeAudio(audio: WasmAudio, data: Uint8Array, pts: number): void {
 function decode(item: Pending): void {
   if (decoder === null) return;
   input = ensure(decoder, input, item.data.length);
+  // 取れなければ捨てる (アドレス 0 へ書かせない。`ensure`)
+  if (input.pointer === 0) return;
   decoder.HEAPU8.set(item.data, input.pointer);
   decoder._dec_push(input.pointer, item.data.length, item.pts);
   budget.record(decoder._dec_last_ms());
@@ -905,8 +907,8 @@ function feed(bytes: Uint8Array): void {
   }
   // 録画で抱えきれなくなった。リクエストし直し (`reset`) まで受け取らない
   if (overflowed) return;
-  const { pes, changed } = demuxer.feed(bytes);
-  if (changed) demuxer.selectAudio(audioIndex);
+  // PMT が変わったときの音声の選び直しは `PesDemuxer` が持つ (`audioIndex` を写してある)
+  const { pes } = demuxer.feed(bytes);
   for (const item of pes) {
     if (item.kind === "video") onVideo(item);
     else onAudio(item);

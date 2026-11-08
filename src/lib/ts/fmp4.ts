@@ -122,7 +122,7 @@ export interface Fmp4Track {
   codec: string;
   /**
    * デコーダに渡すもの。映像は avcC / hvcC / av1C の中身 (VideoDecoder の `description`)、
-   * AAC は AudioSpecificConfig、Opus は dOps の中身
+   * AAC は AudioSpecificConfig、Opus は dOps の中身 (Matroska から組んだものは OpusHead。`ts/mkv-media.ts` の `asFmp4Track`)
    */
   config: Uint8Array<ArrayBuffer>;
   width: number;
@@ -132,9 +132,6 @@ export interface Fmp4Track {
    * pasp が無い・壊れているなら付けない (デコーダが出す大きさのまま描く)
    */
   displayWidth?: number;
-  /** 音声のチャンネル数と標本化周波数 (sample entry に書いてある値) */
-  channels: number;
-  sampleRate: number;
   /** trex に書いてある既定 (trun・tfhd に無いとき) */
   defaults: { duration: number; size: number; flags: number };
 }
@@ -328,16 +325,13 @@ function readVideoEntry(
     width,
     height: v.getUint16(26),
     ...(displayWidth === null ? {} : { displayWidth }),
-    channels: 0,
-    sampleRate: 0,
   };
 }
 
 function readAudioEntry(entry: Box, base: EntryBase): Fmp4Track | null {
   const body = entry.body;
-  // AudioSampleEntry: チャンネル数は 16、標本化周波数は 24 (16.16 の上半分)、中身の箱は 28 から
+  // AudioSampleEntry: 中身の箱は 28 から (チャンネル数と標本化周波数はデコーダが中身から読む)
   if (body.length < 28) return null;
-  const v = view(body);
   const inner = body.subarray(28);
   const config =
     entry.type === "Opus" ? child(inner, "dOps")?.slice() : aacConfig(inner);
@@ -349,8 +343,6 @@ function readAudioEntry(entry: Box, base: EntryBase): Fmp4Track | null {
     config,
     width: 0,
     height: 0,
-    channels: v.getUint16(16),
-    sampleRate: v.getUint32(24) >>> 16,
   };
 }
 
@@ -583,9 +575,11 @@ export function adtsHeader(
 /**
  * dOps (MP4 の Opus の設定) を、FFmpeg の Opus デコーダが受け取る OpusHead (Ogg の形式) に
  * 書き換える。並びは同じで、**数の並べ方だけが違う** (dOps は大きい桁が先、OpusHead は
- * 小さい桁が先)。先頭に `OpusHead`、バージョンは 1。並べ方が読めなければ null
+ * 小さい桁が先)。先頭に `OpusHead`、バージョンは 1。並べ方が読めなければ null。
+ * **もう OpusHead ならそのまま返す** (Matroska の CodecPrivate。`ts/mkv-media.ts` の `asFmp4Track`)
  */
 export function opusHead(dOps: Uint8Array): Uint8Array | null {
+  if (dOps.length >= 19 && isOpusHead(dOps)) return dOps;
   if (dOps.length < 11) return null;
   const v = view(dOps);
   const family = dOps[10]!;
@@ -601,4 +595,9 @@ export function opusHead(dOps: Uint8Array): Uint8Array | null {
   out[18] = family;
   out.set(table, 19);
   return out;
+}
+
+/** 先頭が `OpusHead` か */
+function isOpusHead(bytes: Uint8Array): boolean {
+  return new TextDecoder().decode(bytes.subarray(0, 8)) === "OpusHead";
 }
