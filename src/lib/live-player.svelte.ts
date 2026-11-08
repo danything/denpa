@@ -1159,7 +1159,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     return true;
   }
 
-  /** 待たせているぶんを片付ける。**いま出している 1 枚は残す** (出しっぱなしのため) */
+  /** `at` より前に出し終えたぶんを片付ける。**`at` で出す 1 枚は残す** (出しっぱなしのため) */
   function sweep(at: number): void {
     const kept = trimCues(cues, at);
     if (kept.length !== cues.length) cues = kept;
@@ -1235,7 +1235,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      * 止めて見ている間は映した 1 枚が来ない (`follow`) のでここでする
      */
     paint(video.currentTime);
-    sweep(video.currentTime);
+    // 字幕は戻れるいちばん前から残す。シークバーで溜めの中を戻ったときに、その間の字幕を出すため
+    sweep(Math.min(video.currentTime, buffer.buffered.start(0)));
 
     trim(end);
     settle();

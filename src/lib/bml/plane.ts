@@ -21,7 +21,7 @@ export interface Plane {
  */
 export function planeArea(
   box: { width: number; height: number },
-  plane: { aspect?: Plane["aspect"] },
+  plane: Pick<Plane, "aspect">,
 ): Rect {
   const ratio = plane.aspect === "4:3" ? 4 / 3 : 16 / 9;
   const width = Math.min(box.width, box.height * ratio);

@@ -366,7 +366,7 @@ export class Renderer {
     css.push(`line-height:${s.lineHeight ?? s.fontSize}px`);
     css.push(`text-align:${s.textAlign}`);
     css.push(`letter-spacing:${s.letterSpacing}px`);
-    if (element.tag === "p" || element.tag === "input") {
+    if (element.tag === "p") {
       css.push(
         "white-space:pre-wrap;word-break:break-all;line-break:anywhere;overflow-wrap:anywhere",
       );

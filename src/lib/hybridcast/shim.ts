@@ -730,7 +730,7 @@ export function shim(init: ShimInit): void {
     };
   };
   /*
-   * 放送の中のイベント (`streamEvent`)。**イベントメッセージは届けない** (denpa は Hybridcast へ流さない) —
+   * 放送の中のイベント (`streamEvent`)。**イベントメッセージは届けない** (denpa は Hybridcast へ流さない)。
    * 聞くのは受け付けるだけ。番組が変わったことは知らせる。登録されたら一度すぐ呼ぶ (いまの番組はもう分かっている)
    */
   const streamEvent: Record<string, unknown> = {

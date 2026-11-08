@@ -17,6 +17,7 @@
     caughtUp,
     graphemes,
     MAX_LENGTH,
+    POST_GAP,
     refusal,
     SHOW_LEFT,
     spacing,
@@ -82,10 +83,11 @@
   const POSITION_NAMES = { ue: "上", naka: "流れる", shita: "下" } as const;
   const SIZE_NAMES = { big: "大", medium: "中", small: "小" } as const;
   /** 先頭の 1 行のいつもの表示と、書けない理由 (何か所かで出す) */
-  const IDLE = $derived(
+  const idle = $derived(
     official ? "ニコニコ実況に書きます" : "NX-Jikkyo に書きます",
   );
   const BEHIND = "ライブに戻ると書けます";
+  const WAIT = `${POST_GAP / 1000} 秒待ってください`;
   const CLOSED = "(いまは書けません)";
   const UNLINKED =
     "ニコニコとの連携が切れました。設定の「連携」で連携し直してください";
@@ -150,9 +152,9 @@
             : CLOSED
           : why !== null && why !== ""
             ? why
-            : IDLE,
+            : idle,
   );
-  const warn = $derived(line !== IDLE);
+  const warn = $derived(line !== idle);
 
   function choose(next: Partial<PostStyle>): void {
     style = { ...style, ...next };
@@ -174,7 +176,7 @@
     }
     if (!caught) return tell(BEHIND);
     const now = Date.now();
-    if (spacing.left(now) > 0) return tell("3 秒待ってください");
+    if (spacing.left(now) > 0) return tell(WAIT);
     if (!writable()) return tell(unlinked ? UNLINKED : CLOSED);
     spacing.mark(now);
     busy = true;
@@ -209,7 +211,7 @@
         tell(UNLINKED);
         break;
       case "wait":
-        tell("3 秒待ってください");
+        tell(WAIT);
         break;
     }
   }
