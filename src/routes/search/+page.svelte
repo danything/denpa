@@ -12,7 +12,10 @@
   import ProgramActions from "#lib/components/ProgramActions.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
-  import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
+  import Toasts, {
+    errorNotice,
+    warningNotice,
+  } from "#lib/components/Toasts.svelte";
   import { type DetailSeed, programDetail } from "#lib/detail.svelte.js";
   import {
     badgeClass,
@@ -261,6 +264,8 @@
   const notices = $derived.by(() => {
     // 詳細から送って断られた理由は、詳細の中にだけ出す (`fromDetail`)
     const list = errorNotice(fromDetail ? null : form, "search-error");
+    // 予約できたが、有料の番組がスクランブルのまま録れるかもしれない。詳細は閉じているので画面の通知に出す
+    list.push(...warningNotice(form, "reserve-warning"));
     if (form?.deletedRule !== undefined) {
       const { canceled } = form.deletedRule;
       list.push({
