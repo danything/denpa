@@ -88,7 +88,8 @@ export function visibleFrom(key: string, who: Who): boolean {
 }
 
 /** 受信機の設定で読めるもの (`Nvram` の `bytes`) */
-const RECEIVER_INFO = /^nvram:\/\/receiverinfo\/(zipcode|prefecture|regioncode)$/;
+const RECEIVER_INFO =
+  /^nvram:\/\/receiverinfo\/(zipcode|prefecture|regioncode)$/;
 
 export class Nvram {
   constructor(

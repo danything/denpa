@@ -173,8 +173,7 @@ export class MkvSplitter {
       const body = this.buffer.subarray(head.body, end);
       if (head.id === TIMESTAMP_SCALE) this.scale = uint(body) || DEFAULT_SCALE;
       else if (head.id === TIMESTAMP) this.base = uint(body);
-      else if (head.id === CODEC_ID)
-        this.codecs.push(text(body));
+      else if (head.id === CODEC_ID) this.codecs.push(text(body));
       else if (head.id === SIMPLE_BLOCK || head.id === BLOCK) {
         const block = readBlock(body);
         if (block !== null)
