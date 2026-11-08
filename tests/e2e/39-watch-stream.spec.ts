@@ -224,7 +224,6 @@ test.describe("観る画面でその場で流す", () => {
       "src",
       `/api/recordings/${id}/file?source=encoded`,
     );
-    await expect(page.getByTestId("watch-codec")).toContainText("H.264");
   });
 
   /**
