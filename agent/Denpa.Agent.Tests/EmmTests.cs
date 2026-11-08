@@ -1,10 +1,48 @@
 namespace Denpa.Agent.Tests;
 
-/// <summary>止めた時計。テストが進める</summary>
+/// <summary>止めた時計。テストが進める。タイマーは <see cref="Advance"/> で時刻が来たものだけ呼ぶ</summary>
 internal sealed class StepClock : TimeProvider
 {
+    private readonly List<StepTimer> _timers = [];
+
     public DateTimeOffset Now { get; set; } = new(2026, 11, 8, 0, 0, 0, TimeSpan.Zero);
     public override DateTimeOffset GetUtcNow() => Now;
+
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        var timer = new StepTimer(callback, state, Now + dueTime);
+        _timers.Add(timer);
+        return timer;
+    }
+
+    /// <summary>時計を進め、時刻が来たタイマーを 1 回ずつ呼ぶ</summary>
+    public void Advance(TimeSpan by)
+    {
+        Now += by;
+        foreach (var timer in _timers.Where(timer => !timer.Disposed && timer.At <= Now).ToList())
+        {
+            timer.Disposed = true;
+            timer.Callback(timer.State);
+        }
+    }
+
+    private sealed class StepTimer(TimerCallback callback, object? state, DateTimeOffset at) : ITimer
+    {
+        public TimerCallback Callback { get; } = callback;
+        public object? State { get; } = state;
+        public DateTimeOffset At { get; } = at;
+        public bool Disposed { get; set; }
+
+        public bool Change(TimeSpan dueTime, TimeSpan period) => throw new NotSupportedException();
+
+        public void Dispose() => Disposed = true;
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 }
 
 /*
@@ -237,19 +275,48 @@ public class EmmTests
     }
 
     [Test]
-    public async Task 知らせるのは1分に1回まで()
+    public async Task 受け入れ以外の返り値が続いても記録には1行だけ出す()
+    {
+        // ほかのテストと混ざらない返り値
+        const int code = 0xA1F5;
+        static int Lines() => Log.Recent.Snapshot().Count(line => line.Text.Contains($"0x{code:X4}"));
+        var card = new Card { Code = _ => code };
+        var (emm, clock) = Ready(card);
+        var before = Lines();
+
+        for (var i = 0; i < 3; i++)
+        {
+            emm.Section(Section(Payload(Mine, 1)));
+            Tick(emm, clock, 2);
+        }
+
+        await Assert.That(card.Sent.Count).IsEqualTo(3);
+        await Assert.That(Lines() - before).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task 知らせるのは1分に1回まで_その間にまた受け入れたら間が明けたときに1回知らせる()
     {
         var clock = new StepClock();
         var emitted = 0;
         var notice = new CardNotice(() => emitted++, clock);
 
         notice.Accepted();
-        clock.Now += TimeSpan.FromSeconds(59);
+        clock.Advance(TimeSpan.FromSeconds(20));
+        notice.Accepted();
+        clock.Advance(TimeSpan.FromSeconds(20));
         notice.Accepted();
         await Assert.That(emitted).IsEqualTo(1);
 
-        clock.Now += TimeSpan.FromSeconds(1);
-        notice.Accepted();
+        // 1 回目から 1 分で、まとめて 1 回
+        clock.Advance(TimeSpan.FromSeconds(20));
         await Assert.That(emitted).IsEqualTo(2);
+
+        // 間が明けてから 1 分たてば、すぐ知らせる
+        clock.Advance(TimeSpan.FromSeconds(60));
+        notice.Accepted();
+        await Assert.That(emitted).IsEqualTo(3);
+        clock.Advance(TimeSpan.FromSeconds(120));
+        await Assert.That(emitted).IsEqualTo(3);
     }
 }

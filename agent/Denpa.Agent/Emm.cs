@@ -8,8 +8,8 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **自分宛てかどうかは、復号のスレッドの中で決める** (<see cref="Section"/>)。EMM はカード ID ごとに並んでいて、
-/// CS では 1 秒に 1,200 件ほど流れる。ペイロードの先頭 6 バイトをカードの番号 (<see cref="CardInit.Ids"/>。個別とグループ) と
-/// 比べるだけにして、確保もハッシュもしない。合ったものだけを順番待ちに入れる。
+/// CS では 1 秒に 1,200 件ほど流れる。比べる段階では、ペイロードの先頭 6 バイトをカードの番号 (<see cref="CardInit.Ids"/>。
+/// 個別とグループ) と比べるだけにして、確保もハッシュもしない。ハッシュを計算するのは、合ったものを順番待ちに入れるときだけ。
 /// </para>
 ///
 /// <para>
@@ -74,7 +74,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
     internal long[]? Ids => Volatile.Read(ref _ids);
 
     /// <summary>
-    /// CRC の合った EMM セクション (table_id <c>0x84</c>) を 1 つ受ける。**復号のスレッドから呼ぶ。カードには触らない。**
+    /// CRC の合った EMM セクション (table_id <c>0x84</c>) を 1 つ受ける。**復号のスレッドから呼ぶ。カードには送らない。**
     ///
     /// <para>
     /// ペイロードは「カード ID 6・関連情報バイト長 1・…」の並びで、1 つの長さは関連情報バイト長 + 7 (ARIB STD-B25 表 3-2)。
@@ -240,12 +240,13 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         {
             lock (_gate) Remember(hash);
         }
-        _logged = null;
         if (code != Accepted)
         {
-            Log.Write($"カードが契約の更新 (EMM) を受け入れませんでした (返り値 0x{code:X4})");
+            // 覚えない返り値の EMM は流れてくるたびに送り直すので、同じ返り値が続く間は記録に 1 行だけ出す
+            Note($"カードが契約の更新 (EMM) を受け入れませんでした (返り値 0x{code:X4})");
             return;
         }
+        _logged = null;
         Log.Write("カードが契約の更新 (EMM) を受け入れました");
         accepted?.Invoke();
     }
@@ -293,7 +294,8 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
 
 /// <summary>
 /// カードが契約の更新 (EMM) を受け入れたことを denpa に知らせる (<c>/denpa/events</c> の <c>card</c>)。
-/// denpa はこれを受けて契約を確かめ直す。**1 分に 1 回まで** (続けて受け入れても denpa は 10 秒置いてから 1 回だけ確かめ直す)
+/// denpa はこれを受けて契約を確かめ直す。**1 分に 1 回まで。** その 1 分の間にまた受け入れたら、間が明けたときに 1 回だけ知らせる
+/// (denpa が 1 回目のあとに確かめ直した後の更新も、12 時間ごとの確かめ直しを待たずに入る)
 /// </summary>
 public sealed class CardNotice(Action emit, TimeProvider? clock = null)
 {
@@ -305,14 +307,32 @@ public sealed class CardNotice(Action emit, TimeProvider? clock = null)
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly Lock _gate = new();
     private DateTimeOffset _last = DateTimeOffset.MinValue;
+    /// <summary>間が明けたら知らせる。待っている間だけある</summary>
+    private ITimer? _later;
 
     public void Accepted()
     {
         lock (_gate)
         {
             var now = _clock.GetUtcNow();
-            if (now - _last < Every) return;
+            var wait = _last + Every - now;
+            if (wait > TimeSpan.Zero)
+            {
+                _later ??= _clock.CreateTimer(_ => Later(), null, wait, Timeout.InfiniteTimeSpan);
+                return;
+            }
             _last = now;
+        }
+        emit();
+    }
+
+    private void Later()
+    {
+        lock (_gate)
+        {
+            _later?.Dispose();
+            _later = null;
+            _last = _clock.GetUtcNow();
         }
         emit();
     }
