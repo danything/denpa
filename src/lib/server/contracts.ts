@@ -340,7 +340,10 @@ export function getContractRows(
     if (a.type !== b.type) return a.type < b.type ? -1 : 1;
     return a.arib - b.arib;
   });
-  return rows.map(({ arib: _, ...row }) => row);
+  return rows.map((entry) => {
+    const { arib: _, ...row } = entry;
+    return row;
+  });
 }
 
 /** 復号を確かめた 1 局の結果。`ok` が false なら確かめられなかった (`error` に理由) */
@@ -444,12 +447,30 @@ export async function testDecode(serviceId: number): Promise<DecodeResult> {
   );
 }
 
+/** `testDecodeUnverified` が動いている間 */
+let decodingUnverified = false;
+
 /**
  * **確かめていない有料の局を、物理チャンネルごとに 1 回の選局でまとめて確かめる** (設定のダイアログ)。
  * 対象は `getContractRows` で「確かめていない」(`unverified`) の局のうち、いま有料の番組を流している局。
  * ほかの局は確かめずに、理由を付けて返す。チャンネルは 1 つずつ順に選局する (チューナーを 1 台しか使わない)
  */
 export async function testDecodeUnverified(): Promise<
+  | { ok: true; results: Map<number, DecodeResult> }
+  | { ok: false; error: string }
+> {
+  // 別のタブから重ねて押されたら断る (同じチャンネルを 2 回選局してチューナーを取り合う)
+  if (decodingUnverified)
+    return { ok: false, error: "ほかの画面でまとめて確かめています" };
+  decodingUnverified = true;
+  try {
+    return await decodeUnverified();
+  } finally {
+    decodingUnverified = false;
+  }
+}
+
+async function decodeUnverified(): Promise<
   | { ok: true; results: Map<number, DecodeResult> }
   | { ok: false; error: string }
 > {
@@ -499,6 +520,16 @@ async function decodeOnChannel(
   const first = targets[0];
   if (first === undefined) return results;
 
+  /*
+   * **局ごとに、その局のパケットだけを数える** (`ServiceFilter`)。物理チャンネルには同じ中継器のほかの局も入っていて、
+   * スクランブルの無い局のパケットまで数えると、復号できなくても割合が下がる
+   */
+  const counts = targets.map((target) => ({
+    target,
+    filter: new ServiceFilter(target.arib),
+    total: 0,
+    scrambled: 0,
+  }));
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), 15_000);
 
@@ -513,17 +544,6 @@ async function decodeOnChannel(
     );
 
     const reader = stream.getReader();
-    /*
-     * **局ごとに、その局のパケットだけを数える** (`ServiceFilter`)。物理チャンネルには同じ中継器のほかの局も入っていて、
-     * スクランブルの無い局のパケットまで数えると、復号できなくても割合が下がる
-     */
-    const counts = targets.map((target) => ({
-      target,
-      filter: new ServiceFilter(target.arib),
-      total: 0,
-      scrambled: 0,
-    }));
-
     while (counts.some((count) => count.total < DECODE_PACKETS)) {
       // 15 秒で打ち切ったら、それまでに数えたぶんで判定する
       const next = await reader.read().catch((error: unknown) => {
@@ -552,22 +572,6 @@ async function decodeOnChannel(
     } catch {
       // 無視
     }
-
-    for (const { target, total, scrambled } of counts) {
-      if (total < 50) {
-        results.set(target.id, {
-          ok: false,
-          decodeOk: false,
-          error: "ストリームから十分なパケットを受信できませんでした",
-        });
-        continue;
-      }
-      // 0.5 未満なら復号成功とみなす (正常な復号 TS はスクランブル比率 0)
-      const decodeOk = scrambled / total < 0.5;
-      saveDecode(cardId, target.id, decodeOk);
-      results.set(target.id, { ok: true, decodeOk });
-    }
-    return results;
   } catch (err) {
     for (const target of targets)
       results.set(target.id, {
@@ -580,6 +584,23 @@ async function decodeOnChannel(
     clearTimeout(timeout);
     abortController.abort();
   }
+
+  // 書くのは受け終えてから (書けなかったときに、選局の失敗と取り違えない)
+  for (const { target, total, scrambled } of counts) {
+    if (total < 50) {
+      results.set(target.id, {
+        ok: false,
+        decodeOk: false,
+        error: "ストリームから十分なパケットを受信できませんでした",
+      });
+      continue;
+    }
+    // 0.5 未満なら復号成功とみなす (正常な復号 TS はスクランブル比率 0)
+    const decodeOk = scrambled / total < 0.5;
+    saveDecode(cardId, target.id, decodeOk);
+    results.set(target.id, { ok: true, decodeOk });
+  }
+  return results;
 }
 
 /**

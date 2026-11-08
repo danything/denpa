@@ -754,6 +754,48 @@ describe("確かめていない局の復号をまとめて確かめる (testDeco
   });
 });
 
+describe("まとめて確かめるときの選局の失敗", () => {
+  test("選局に失敗したチャンネルの局は、どれも確かめられなかったことにして書かない", async () => {
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") return Response.json(ONE_CARD);
+      return new Response("busy", { status: 503 });
+    });
+    for (const [id, arib] of [
+      [1, 103],
+      [2, 9999],
+    ] as const) {
+      orm()
+        .insert(services)
+        .values({
+          id,
+          service_id: arib,
+          network_id: 4,
+          name: `局${id}`,
+          type: "BS",
+          channel: "BS05",
+          updated_at: Date.now(),
+        })
+        .run();
+      airing(id);
+    }
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      const res = await testDecodeUnverified();
+      if (!res.ok) throw new Error(res.error);
+      for (const id of [1, 2]) {
+        expect(res.results.get(id)?.ok).toBe(false);
+        expect(res.results.get(id)?.error).toContain("選局");
+      }
+      expect(
+        getContractRows("0000111122223333").map((row) => row.checkedAt),
+      ).toEqual([null, null]);
+    } finally {
+      server.stop();
+    }
+  });
+});
+
 describe("checkContracts エッジケース・異常系", () => {
   test("有料番組が0件のときは空配列を返す", async () => {
     const server = serveFakeAgent(async (req) => {
