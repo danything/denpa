@@ -6,6 +6,7 @@ import { type Scan, scan, type ScanWant } from "./cm-scan";
 import { config } from "./config";
 import { logoRepo, share } from "./logo-data";
 import { openLogo } from "./logo-own";
+import { recordingProbeInput } from "./recording-io";
 import { run } from "./stream";
 import { tsProbe } from "./ts-probe";
 
@@ -161,9 +162,12 @@ export function parseFrameRate(value: string | undefined): number {
 
 /** ffprobe を 1 回動かして、標準出力を返す */
 async function probe(input: string, args: string[]): Promise<string> {
-  const result = await run([config.ffprobe, "-v", "error", ...args, input], {
-    stdout: true,
-  });
+  const result = await run(
+    [config.ffprobe, "-v", "error", ...args, ...recordingProbeInput(input)],
+    {
+      stdout: true,
+    },
+  );
   return new TextDecoder().decode(result.stdout).trim();
 }
 

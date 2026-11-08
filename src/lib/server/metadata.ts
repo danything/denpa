@@ -3,6 +3,7 @@ import { extname } from "node:path";
 import type { Range } from "../ts/cm-decide";
 import { config } from "./config";
 import { removeIfExists } from "./fsx";
+import { recordingInput } from "./recording-io";
 import { run } from "./stream";
 import { TS_PROBE } from "./ts-probe";
 
@@ -85,8 +86,7 @@ export function buildThumbnailArgs(
     String(Math.max(0, place.at)),
     ...limit,
     ...before,
-    "-i",
-    videoPath,
+    ...recordingInput(videoPath),
     "-frames:v",
     "1",
     "-vf",

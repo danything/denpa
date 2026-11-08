@@ -1,5 +1,6 @@
 import type { Range } from "../ts/cm-decide";
 import { config } from "./config";
+import { recordingInput, recordingProbeInput } from "./recording-io";
 import { run } from "./stream";
 
 /**
@@ -74,7 +75,7 @@ export async function listKeyframes(
       "packet=pts_time,dts_time,flags",
       "-of",
       "csv=p=0",
-      file,
+      ...recordingProbeInput(file),
     ],
     { stdout: true },
   );
@@ -237,8 +238,7 @@ export function chapterArgs(
     "-y",
     "-v",
     "error",
-    "-i",
-    input,
+    ...recordingInput(input),
     ...(chapters === null
       ? ["-map", "0", "-map_chapters", "-1"]
       : ["-i", chapters, "-map", "0", "-map_chapters", "1"]),

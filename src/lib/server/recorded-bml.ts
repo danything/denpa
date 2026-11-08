@@ -15,7 +15,6 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { open } from "node:fs/promises";
 
 import type { ResponseMessage } from "@danything/arib/bml-protocol";
 import { eq } from "drizzle-orm";
@@ -31,6 +30,7 @@ import type { Ruler } from "#lib/ts/watch.js";
 import type { Recording } from "../types";
 import { orm } from "./db";
 import { fillTsHead } from "./recording";
+import { openRecording } from "./recording-io";
 import { programs, services } from "./schema";
 
 /**
@@ -113,7 +113,7 @@ async function capture(
   path: string,
 ): Promise<{ timeline: TimedMessage[]; head: number | null }> {
   const found = new DataBroadcastCapture();
-  const file = await open(path, "r");
+  const file = await openRecording(path);
   try {
     const buffer = Buffer.alloc(CHUNK);
     for (;;) {

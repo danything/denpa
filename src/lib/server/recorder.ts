@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { createWriteStream, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { type EitEvent, EpgReader } from "@danything/arib/eit";
@@ -21,6 +21,7 @@ import { refreshLineup } from "./lineup-follow";
 import { writeThumbnail } from "./metadata";
 import { PfEvent } from "./pf-event";
 import { fillTsHead, recordingSummary } from "./recording";
+import { appendRecording } from "./recording-io";
 import { duplicateAtStart } from "./rules";
 import { programs, recordings, reservations, rules, services } from "./schema";
 import { chunks } from "./stream";
@@ -487,9 +488,8 @@ async function pump(
   const use = recordingUse(recording.id);
 
   try {
-    // 追記で開く。再起動をまたいで録画を再開したときに、それまでの分を消さないため
-    // (MPEG-TS は 188 バイトのパケットの並びなので、そのまま繋げても読める)
-    const sink = createWriteStream(path, { flags: "a" });
+    // 追記で開く (再起動をまたいで再開したときに、それまでの分を消さない。`appendRecording`)
+    const sink = appendRecording(path);
     // 実際に受け取っていた時間を測る。番組表の尺は予定でしかなく、
     // 途中で止めたときやチューナーを取るのに手間取ったときは実物と合わない。
     // 再開したときは足していく (ファイルも追記なので合計が実物になる)
