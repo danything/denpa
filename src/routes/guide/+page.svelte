@@ -1024,9 +1024,8 @@
               : "guide-service"}
           >
             {#if headSkeleton}
-              <!-- 別の種別へ移る途中。局の並びが届くまで名前は出さない (上の `switching`) -->
-              <span class="skeleton-head head-skeleton" aria-hidden="true"
-              ></span>
+              <!-- 別の種別へ移る途中。局の並びが届くまで名前は出さない (上の `switching`。形は `app.css` の `.guide-frame .skeleton-head`) -->
+              <span class="skeleton-head" aria-hidden="true"></span>
             {:else}
               <!--
                         ロゴを持たない局もあるので、有るものだけ出す。場所は
@@ -1652,12 +1651,6 @@
   .cells-skeleton-column {
     margin-inline: 0.125rem;
     background: var(--dp-subtle);
-  }
-  /* 別の種別へ移る途中の局名 (高さは局名の字の行と同じ) */
-  .head-skeleton {
-    display: block;
-    width: 70%;
-    height: 1.25rem;
   }
   /*
      * 局ごとの箱 (上の `stations`)。横に外れた局は箱ごと飛ばす。

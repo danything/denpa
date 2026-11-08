@@ -806,7 +806,8 @@
   /*
      * **いまの画面は主の色の太字と下線で示す** (選んでいるものはどこも線と字。塗らない)。ほかの画面へのリンクは本文の字のまま (薄くしない)。
      * 薄い灰色の地を敷くだけだった頃は、ヘッダーの地とほとんど見分けが付かず「どの画面にいるのか」が読めなかった。
-     * 下線は押す場所の内側に引くので、ヘッダーの高さは変わらない
+     * 下線は押す場所の内側に引くので、ヘッダーの高さは変わらない。線と、画面を移ると前の画面の下線から横に滑る動きは
+     * タブと同じもの (`app.css` の「滑る印」)
      */
   ul.links a.button {
     position: relative;
@@ -815,47 +816,6 @@
   ul.links a.button.ghost[aria-current="page"] {
     --pico-color: var(--dp-primary-text);
     font-weight: var(--dp-weight-bold);
-  }
-  /*
-     * 下線。画面を移ると前の画面の下線から横に滑る (`app.css` の「滑る印」と同じ作り。並びの疑似要素 1 本をアンカーで付ける)。
-     * アンカーに対応していないブラウザは、いまの画面のリンクの中に線を引く (滑らない)
-     */
-  ul.links a.button[aria-current="page"]::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0.65rem;
-    bottom: 0.2rem;
-    height: var(--dp-mark);
-    border-radius: var(--dp-mark);
-    background: var(--pico-primary);
-    pointer-events: none;
-  }
-  @supports (anchor-name: --a) {
-    ul.links {
-      position: relative;
-      anchor-scope: --nav;
-    }
-    ul.links a.button[aria-current="page"] {
-      anchor-name: --nav;
-    }
-    ul.links a.button[aria-current="page"]::after {
-      content: none;
-    }
-    ul.links:has(a.button[aria-current="page"])::after {
-      content: "";
-      position: absolute;
-      position-anchor: --nav;
-      left: calc(anchor(left) + 0.65rem);
-      right: calc(anchor(right) + 0.65rem);
-      bottom: calc(anchor(bottom) + 0.2rem);
-      height: var(--dp-mark);
-      border-radius: var(--dp-mark);
-      background: var(--pico-primary);
-      pointer-events: none;
-      transition:
-        left var(--dp-duration-move) var(--dp-ease-spring),
-        right var(--dp-duration-move) var(--dp-ease-spring);
-    }
   }
   /*
      * ヘッダーの検索の欄 (中身は `SearchField`)。広い形では「印と名前 ｜ 欄 ｜ ナビ」の 3 列にして、

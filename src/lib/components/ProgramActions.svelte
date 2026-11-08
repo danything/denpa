@@ -2,7 +2,7 @@
   import type { SubmitFunction } from "$app/forms";
   import { resolve } from "$app/paths";
 
-  import { submitting } from "#lib/actions.js";
+  import ActionButton from "#lib/components/ActionButton.svelte";
   import { cancelable } from "#lib/format.js";
 
   /**
@@ -91,14 +91,13 @@
 
 {#if canCancel}
   <!-- 予約したあと詳細から止められないと、わざわざ予約一覧まで行くことになる -->
-  <form method="POST" action="?/cancel" use:submitting={onsubmit}>
-    {#each Object.entries(cancel) as [name, value] (name)}
-      <input type="hidden" {name} {value} />
-    {/each}
-    <button type="submit" class="danger outline" data-testid="detail-cancel"
-      >予約取消</button
-    >
-  </form>
+  <ActionButton
+    action="?/cancel"
+    fields={cancel}
+    submit={onsubmit}
+    class="danger outline"
+    testid="detail-cancel">予約取消</ActionButton
+  >
 {/if}
 
 {#if canWatch}
@@ -125,8 +124,10 @@
 {/if}
 
 {#if canReserve}
-  <form method="POST" action="?/reserve" use:submitting={onsubmit}>
-    <input type="hidden" name="programId" value={program.id} />
-    <button type="submit" data-testid="detail-reserve">予約</button>
-  </form>
+  <ActionButton
+    action="?/reserve"
+    fields={{ programId: program.id }}
+    submit={onsubmit}
+    testid="detail-reserve">予約</ActionButton
+  >
 {/if}
