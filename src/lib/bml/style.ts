@@ -79,7 +79,7 @@ const INHERITED = new Set([
 /**
  * 既定のスタイル (web-bml の default_css.ts に合わせ、放送が頼るものだけ)。
  * 文字の色は規格では受信機しだい。web-bml (TVTest のデータ放送) と同じく黒 (0) にする。
- * NHK の文書は白にしたい所だけ `color-index: 7` を書き、指定の無い所 (地震お知らせ表示設定の「利用する」など) は黒のつもりで、
+ * NHK の文書は白にしたい所だけ `color-index: 7` を書き、指定の無い所 (地震お知らせ表示設定の「利用する」など) は TVTest で黒になる。
  * 白にしていた頃は地の薄い灰色に紛れて読めなかった
  */
 const DEFAULTS: Record<string, [string, string][]> = {
