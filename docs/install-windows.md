@@ -2,8 +2,6 @@
 
 **x64 の Windows なら、管理者の PowerShell の 1 行で denpa ごと立ち上がってブラウザが開きます**
 (`install.ps1`)。スタートボタンを右クリックして「ターミナル (管理者)」を開き、次を流します。
-**Windows 10 1809・Windows Server 2019 (ビルド 17763) 以降の x64 で動きます。** 本体の bun と、install.ps1 が使う `curl.exe`・`tar.exe` が
-それより前の Windows には無いためで、Windows Server 2016 では install.ps1 が止まります。
 本体ごと入れられるのは v2.32.0 から (`-AgentOnly` なら v1.23.1 から) で、それより前のバージョンは install.ps1 がそう言って止まります。
 
 ```powershell
@@ -12,6 +10,9 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 
 引数を渡すときは `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall`
 のようにします (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-AgentOnly` エージェントだけ)。
+
+**Windows 10 1809・Windows Server 2019 (ビルド 17763) 以降で動きます。** 本体の bun が 1809 より前の Windows を受けず、
+install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の Windows には無いためです。Windows Server 2016 では install.ps1 が止まります。
 
 **denpa 本体もエージェントも、Windows の上でそのまま動かします。** WSL・Docker Desktop・コンテナは使いません。
 本体はリリースに添えた `denpa-<バージョン>-windows-x64.zip` (bun・アプリ・ffmpeg・字・ブラウザへ配るデコーダ) で、
