@@ -1090,6 +1090,6 @@
      * 理由はメニューの幅 (16rem) より長いので折り返す (1 行に詰めると、メニューの中に横のスクロールバーが出る)
      */
   .menu-note {
-    padding: 0.25rem 0.75rem 0.5rem;
+    padding: var(--dp-space-1) var(--dp-space-3) var(--dp-space-2);
   }
 </style>

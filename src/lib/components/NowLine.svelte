@@ -74,8 +74,8 @@
   .now-time {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    padding: 0.125rem 0.75rem;
+    gap: var(--dp-space-1);
+    padding: 0.125rem var(--dp-space-3);
     color: var(--dp-rec-text);
     font-weight: var(--dp-weight-bold);
     white-space: nowrap;
@@ -95,7 +95,7 @@
     container-type: inline-size;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
   }
   /* 左の余白は日付の字にそろえるため。右は空けず、一言をすぐ続ける */
   .inline .now-time {
@@ -146,7 +146,7 @@
     display: flex;
     justify-content: center;
     width: fit-content;
-    padding: 0 0.25rem;
+    padding: 0 var(--dp-space-1);
     border-radius: var(--dp-radius-full);
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);

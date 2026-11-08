@@ -835,7 +835,7 @@
     min-width: 2rem;
     min-height: 2rem;
     margin: 0;
-    padding: 0.25rem;
+    padding: var(--dp-space-1);
     color: var(--dp-muted);
   }
   .more-button[aria-expanded="true"] {
@@ -996,8 +996,8 @@
     .row-cards tr {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.5rem 0.75rem;
-      padding-block: 0.75rem;
+      gap: var(--dp-space-2) var(--dp-space-3);
+      padding-block: var(--dp-space-3);
     }
     .table-wrap .row-cards td {
       padding: 0;
@@ -1007,7 +1007,7 @@
     .row-cards td::before {
       content: attr(data-label);
       display: block;
-      margin-bottom: 0.25rem;
+      margin-bottom: var(--dp-space-1);
       font-size: var(--dp-text-xs);
       font-weight: var(--dp-weight);
       color: var(--dp-muted);
@@ -1020,7 +1020,7 @@
     .types-cell[data-label]::before {
       content: attr(data-label);
       display: block;
-      margin-bottom: 0.25rem;
+      margin-bottom: var(--dp-space-1);
       font-size: var(--dp-text-xs);
       color: var(--dp-muted);
     }
@@ -1028,8 +1028,8 @@
   .reader {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
+    gap: var(--dp-space-2);
+    margin-top: var(--dp-space-2);
   }
   /* リーダーの表もチューナーの表と同じく、線で区切らない行 */
   .reader td {
@@ -1050,7 +1050,7 @@
   .skeleton {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: var(--dp-space-2);
   }
   .skeleton-head {
     height: 1.8rem;

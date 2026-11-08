@@ -403,13 +403,13 @@
     margin: 0 auto;
   }
   h1 {
-    margin-bottom: 0.25rem;
+    margin-bottom: var(--dp-space-1);
   }
   .lead {
-    margin-bottom: 1rem;
+    margin-bottom: var(--dp-space-4);
   }
   .player {
-    margin-bottom: 1rem;
+    margin-bottom: var(--dp-space-4);
   }
   .player video {
     display: block;
@@ -437,8 +437,8 @@
   .controls {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.25rem;
+    gap: var(--dp-space-2);
+    margin-top: var(--dp-space-1);
   }
   .controls input[type="range"] {
     min-width: 0;
@@ -450,13 +450,13 @@
     font-variant-numeric: tabular-nums;
   }
   .problem {
-    margin: 0.25rem 0 0;
+    margin: var(--dp-space-1) 0 0;
   }
   .player-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 0.25rem;
+    margin-top: var(--dp-space-1);
   }
   .name {
     font-weight: var(--dp-weight);
@@ -465,9 +465,9 @@
   .row {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: var(--dp-space-3);
     min-height: var(--dp-item-h);
-    padding: 0.5rem 0.75rem;
+    padding: var(--dp-space-2) var(--dp-space-3);
   }
   .thumb {
     width: 5rem;
@@ -486,6 +486,6 @@
     flex-shrink: 0;
   }
   .pending {
-    margin-top: 0.75rem;
+    margin-top: var(--dp-space-3);
   }
 </style>

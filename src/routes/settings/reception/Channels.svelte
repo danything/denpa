@@ -562,7 +562,8 @@
     width: auto;
     height: auto;
     margin: 0;
-    padding: 0.3rem 2rem 0.3rem 0.6rem;
+    padding: var(--dp-space-1) var(--dp-space-6) var(--dp-space-1)
+      var(--dp-space-2);
     font-size: var(--dp-text-sm);
   }
   .scan-control button {
@@ -578,7 +579,7 @@
   @container (max-width: 32rem) {
     .channels-wrap th,
     .channels-wrap td {
-      padding-inline: 0.3rem;
+      padding-inline: var(--dp-space-1);
     }
   }
   /* ロゴの数は、チャンネル → 局 → 番組表の数のあとに少し離して並べる */
@@ -586,7 +587,7 @@
     display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--dp-space-1);
     margin-left: var(--dp-space-3);
   }
   /*
@@ -594,7 +595,7 @@
      * 同じチャンネルの局は、種別と ch を縦につないでまとめて見せる
      */
   .channels-wrap td {
-    padding-block: 0.3rem;
+    padding-block: var(--dp-space-1);
     vertical-align: middle;
   }
   .channels-wrap td[rowspan] {
@@ -603,7 +604,7 @@
   .station {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: var(--dp-space-2);
   }
   /* 局名は欄の幅で折り返す (全角の英数が続く局名でも) */
   .station .broadcast {
@@ -613,7 +614,7 @@
   .inline-logos {
     display: none;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--dp-space-1);
   }
   /* ロゴそのものを押して大きく見る (`LogoZoom`)。ボタンの地や余白は付けない */
   .zoom {

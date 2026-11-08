@@ -35,8 +35,8 @@
 
 <style>
   .edge {
-    gap: 0.25rem;
-    padding: 0 0.75rem;
+    gap: var(--dp-space-1);
+    padding: 0 var(--dp-space-3);
   }
   .dot {
     display: inline-block;
@@ -50,7 +50,7 @@
   }
   /* 狭い枠では余白を詰める (押す的の高さは 40px のまま) */
   :global(.stage[data-compact]) .edge {
-    padding: 0 0.5rem;
+    padding: 0 var(--dp-space-2);
   }
   .label {
     font-size: var(--dp-text-xs);

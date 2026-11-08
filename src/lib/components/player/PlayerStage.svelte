@@ -538,9 +538,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--dp-space-1);
     /* 右端の縦の列 (`ControlBar`。右の余白 8px・48px の丸・間の 8px で 4rem) に掛けない。真ん中に置くので左も同じだけ空ける */
-    padding: 0.5rem 4rem;
+    padding: var(--dp-space-2) 4rem;
   }
   .notes:empty {
     display: none;

@@ -820,7 +820,7 @@
      * 行の塗りは左右に字の余白ぶんはみ出し、字の左端は上の欄の左端にそろえる
      */
   .rows {
-    margin-inline: -0.75rem;
+    margin-inline: calc(-1 * var(--dp-space-3));
     padding: 0;
   }
   .row {
@@ -846,7 +846,7 @@
   label.row select {
     width: auto;
     margin: 0;
-    padding-block: 0.25rem;
+    padding-block: var(--dp-space-1);
     border: 0;
     background-color: transparent;
     color: var(--dp-muted);
@@ -856,7 +856,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--dp-space-2);
-    padding: var(--dp-space-1) 0.75rem var(--dp-space-3);
+    padding: var(--dp-space-1) var(--dp-space-3) var(--dp-space-3);
   }
   .group-title {
     font-size: var(--dp-text-xs);
@@ -872,7 +872,7 @@
     margin: 0.125rem 0;
   }
   .children {
-    margin-inline-start: 1.5rem;
+    margin-inline-start: var(--dp-space-5);
   }
   /* 時刻の欄は「19:00 から 20:00 まで」と 1 行に。狭い幅では「から」の後ろで折り返す */
   .times {

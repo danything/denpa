@@ -63,7 +63,8 @@
     justify-content: center;
     width: 1.5rem;
     height: 1.5rem;
-    margin: -0.25rem 0 -0.25rem 0.125rem;
+    margin: calc(-1 * var(--dp-space-1)) 0;
+    margin-left: 0.125rem;
     padding: 0;
     border: 0;
     border-radius: var(--dp-radius-full);
@@ -98,8 +99,8 @@
   .more-body {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
-    margin-top: 0.35rem;
+    gap: var(--dp-space-1);
+    margin-top: var(--dp-space-1);
     color: var(--dp-muted);
     font-size: var(--dp-text-sm);
   }

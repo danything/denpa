@@ -1272,14 +1272,14 @@
      * **選んでいる日は主の色の下線と字・太字** (`app.css` の `.pick-line`。塗らない)。土日は土日の字の色のまま
      */
   .day-chip {
-    --pick-inset: 0.55rem;
+    --pick-inset: var(--dp-space-2);
     position: relative;
     display: inline-flex;
     flex: none;
     align-items: center;
     justify-content: center;
     min-height: var(--dp-btn-h-sm);
-    padding-inline: 0.55rem;
+    padding-inline: var(--dp-space-2);
     border-radius: var(--dp-btn-radius);
     color: var(--pico-secondary);
     font-size: var(--dp-text-sm);
@@ -1296,7 +1296,7 @@
      * 前の日を見ているときも今日がどれか分かる
      */
   .today-mark {
-    margin-inline-end: 0.3rem;
+    margin-inline-end: var(--dp-space-1);
     color: var(--dp-primary-text);
     font-size: var(--dp-text-xs);
     font-weight: var(--dp-weight-bold);
@@ -1342,7 +1342,7 @@
     width: auto;
   }
   .jumps > button {
-    padding-inline: 0.6rem;
+    padding-inline: var(--dp-space-2);
   }
   .more {
     flex: none;
@@ -1363,7 +1363,7 @@
     white-space: nowrap;
   }
   .genre-button {
-    gap: 0.4rem;
+    gap: var(--dp-space-2);
   }
   /* 時刻のボタンが入る幅。サブ ch が出ていても 1180px で 1 行に収まる (実測は PR に) */
   @media (min-width: 1180px) {
@@ -1387,6 +1387,7 @@
     }
     .days > a.button,
     .date-label {
+      /* `--dp-space-*` の間の値。`--dp-space-2` にすると 390px で 1 行に収まらなくなるおそれがあり、`--dp-space-1` では詰まりすぎる */
       padding-inline: 0.4rem;
     }
     /* サブ ch はジャンルのメニューに入れる (2 つ並べると、今日以外を見ているときに 390px で入りきらない) */
@@ -1605,7 +1606,7 @@
     gap: 0.375rem;
     overflow: hidden;
     white-space: nowrap;
-    padding: 0.5rem;
+    padding: var(--dp-space-2);
     font-size: var(--dp-text-sm);
     /* 行の高さ (= 時刻の数字が止まる位置 headHeight) は 36px */
     line-height: 1.25rem;
@@ -1623,7 +1624,7 @@
     left: 0;
     z-index: 10;
     clip-path: inset(0 -1.5rem 0 0);
-    padding-inline: 0.25rem;
+    padding-inline: var(--dp-space-1);
     font-size: var(--dp-text-xs);
     /* 数字の行の高さは 1rem に揃える。高いと、前の時間の数字が枠の下に残って次の時間の数字と並んで見える */
     line-height: 1rem;
@@ -1694,7 +1695,7 @@
     width: 100%;
     overflow: hidden;
     margin: 0;
-    padding: 0.125rem 0.25rem;
+    padding: 0.125rem var(--dp-space-1);
     border: 0;
     border-radius: var(--dp-radius-sm);
     background-color: var(--dp-subtle);
@@ -1859,7 +1860,7 @@
     display: inline-block;
     width: 0.4375rem;
     height: 0.4375rem;
-    margin-inline-end: 0.25rem;
+    margin-inline-end: var(--dp-space-1);
     border-radius: 50%;
     background: var(--dot, var(--tint));
     vertical-align: 0.0625rem;
@@ -1899,7 +1900,7 @@
     color: var(--state-ink, var(--state));
   }
   .program .num::after {
-    margin-inline-start: 0.25rem;
+    margin-inline-start: var(--dp-space-1);
   }
   .program[data-state="scheduled"] .num::after {
     content: "✓";

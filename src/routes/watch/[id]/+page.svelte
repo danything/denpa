@@ -3268,14 +3268,14 @@
     color: var(--dp-on-video-muted);
   }
   .meta {
-    margin-top: 0.75rem;
+    margin-top: var(--dp-space-3);
   }
   /* この録画の切り抜きへ。押せる高さは一覧の行の操作と同じ 40px */
   .clips-link {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--dp-space-1);
     min-height: 2.5rem;
-    margin-top: 0.25rem;
+    margin-top: var(--dp-space-1);
   }
 </style>

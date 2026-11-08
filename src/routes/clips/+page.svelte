@@ -914,15 +914,15 @@
       margin: 0 calc(-1 * var(--dp-gutter)) calc(-1 * var(--dp-gutter));
     }
     .c-list {
-      padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
+      padding: 0 calc(var(--dp-gutter) - var(--dp-space-2)) var(--dp-space-4);
     }
   }
   .c-list {
     min-width: 0;
-    padding-bottom: 1rem;
+    padding-bottom: var(--dp-space-4);
   }
   .c-usage {
-    margin: 0.25rem 0 0.25rem 0.75rem;
+    margin: var(--dp-space-1) 0 var(--dp-space-1) var(--dp-space-3);
   }
 
   /* 日付の見出しは録画の一覧と同じ (`app.css` の `.day-head`)。下のグリッドとは少し離す */
@@ -940,8 +940,8 @@
   .c-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
-    gap: 1rem 0.75rem;
-    margin: 0 0 1rem;
+    gap: var(--dp-space-4) var(--dp-space-3);
+    margin: 0 0 var(--dp-space-4);
     padding: 0;
     list-style: none;
   }
@@ -977,7 +977,7 @@
     width: 100%;
     height: auto;
     aspect-ratio: 16 / 9;
-    margin-bottom: 0.25rem;
+    margin-bottom: var(--dp-space-1);
     border-radius: var(--dp-radius);
     background: var(--dp-video);
     object-fit: cover;
@@ -1055,14 +1055,14 @@
     box-shadow: inset 0 0 0 2px var(--pico-primary);
   }
   .c-more {
-    padding: 1rem 0;
+    padding: var(--dp-space-4) 0;
     text-align: center;
   }
   .c-scope {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin: 0 0 0.5rem;
+    gap: var(--dp-space-2);
+    margin: 0 0 var(--dp-space-2);
   }
   .c-scope > button,
   .c-select-wide > :global(button) {
@@ -1079,10 +1079,11 @@
     z-index: var(--dp-z-pagebar);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
     width: fit-content;
-    margin-bottom: 0.5rem;
-    padding: 0.25rem 0.5rem 0.25rem 1rem;
+    margin-bottom: var(--dp-space-2);
+    padding: var(--dp-space-1) var(--dp-space-2) var(--dp-space-1)
+      var(--dp-space-4);
     border-radius: var(--dp-radius-full);
     background: var(--dp-float);
     box-shadow: var(--dp-shadow-pop);
@@ -1103,10 +1104,10 @@
     z-index: var(--dp-z-pagebar);
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--dp-space-1);
     height: 2.75rem;
     margin-inline: calc(var(--dp-dock-inset) - var(--dp-gutter, 1rem));
-    padding-inline: 0.5rem;
+    padding-inline: var(--dp-space-2);
   }
   /* ラベルのあるボタンは中身の幅。アイコンのボタン (絞り込み) は決まりの大きさのまま (auto にすると横に潰れる) */
   :global(html[data-phone]) .c-bar > :global(button) {
@@ -1138,7 +1139,7 @@
     margin-bottom: calc(-1 * var(--dp-gutter, 1rem));
   }
   .c-menu-head {
-    padding: 0.5rem 0.75rem 0.25rem;
+    padding: var(--dp-space-2) var(--dp-space-3) var(--dp-space-1);
   }
   :global(.c-filter-menu) {
     width: 16rem;
@@ -1155,7 +1156,7 @@
    * 開き方もダイアログの箱と同じ (少し縮んだ姿からばねで。app.css の `dialog > article`)
    */
   .viewer {
-    padding: 1rem;
+    padding: var(--dp-space-4);
     color: var(--dp-on-video);
   }
   .v-stage {
@@ -1215,7 +1216,7 @@
   .v-info {
     position: absolute;
     inset: auto 5rem 0 0;
-    padding: 2.5rem 1rem 1rem;
+    padding: 2.5rem var(--dp-space-4) var(--dp-space-4);
     background: linear-gradient(
       to top,
       color-mix(in srgb, var(--dp-video) 82%, transparent),
@@ -1234,6 +1235,6 @@
     color: var(--dp-on-video-muted);
   }
   .v-captions {
-    margin-top: 0.25rem;
+    margin-top: var(--dp-space-1);
   }
 </style>

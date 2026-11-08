@@ -104,7 +104,7 @@
   }
   .speed :global(.ov-btn:not(.ov-round)) {
     min-width: 3rem;
-    padding-inline: 0.75rem;
+    padding-inline: var(--dp-space-3);
   }
   /* 狭い枠 (舞台の `data-compact`) では丸が 40px になる (`ControlButton`)。数字も同じ幅から */
   :global(.stage[data-compact]) .speed :global(.ov-btn:not(.ov-round)) {

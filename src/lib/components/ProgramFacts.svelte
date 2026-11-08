@@ -176,22 +176,22 @@
     overflow-wrap: break-word;
   }
   .meta {
-    margin-top: 0.25rem;
+    margin-top: var(--dp-space-1);
   }
   /* バッジは時刻の続きに置き、入りきらなければ次の行へ回る (字の途中では折らない) */
   .meta-status {
     display: inline-flex;
     flex-wrap: wrap;
-    gap: 0.25rem;
-    margin-inline-start: 0.5rem;
+    gap: var(--dp-space-1);
+    margin-inline-start: var(--dp-space-2);
     vertical-align: middle;
   }
   .badges {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.25rem 0;
-    margin-top: 0.5rem;
+    gap: var(--dp-space-1) 0;
+    margin-top: var(--dp-space-2);
   }
   /* 区切りの「・」は前の事実の後ろに付け、折り返しても行の頭に来ないように */
   .fact {
@@ -201,13 +201,13 @@
     content: "・";
   }
   .badges .tag {
-    margin-left: 0.5rem;
+    margin-left: var(--dp-space-2);
   }
   .badges > .tag:first-child {
     margin-left: 0;
   }
   .block {
-    margin-top: 0.75rem;
+    margin-top: var(--dp-space-3);
   }
   .head {
     font-weight: var(--dp-weight);
@@ -220,10 +220,10 @@
     word-break: break-all;
   }
   .note {
-    margin: 0.25rem 0 0;
+    margin: var(--dp-space-1) 0 0;
     max-height: 12rem;
     overflow: auto;
-    padding: 0.5rem;
+    padding: var(--dp-space-2);
     border-radius: var(--dp-radius-sm);
     background: var(--dp-subtle);
     font-family: var(--dp-font-mono);

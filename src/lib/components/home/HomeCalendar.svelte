@@ -207,7 +207,7 @@
   }
   .cal-grid {
     width: calc(100% - 0.75rem);
-    margin: 0.25rem 0 0 0.75rem;
+    margin: var(--dp-space-1) 0 0 var(--dp-space-3);
     border-collapse: collapse;
     table-layout: fixed;
   }
@@ -237,7 +237,7 @@
     width: 100%;
     height: 2rem;
     margin: 0;
-    padding: 0 0 0.25rem;
+    padding: 0 0 var(--dp-space-1);
     border: 0;
     border-radius: var(--dp-radius);
     background: transparent;

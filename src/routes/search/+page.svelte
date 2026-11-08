@@ -898,7 +898,7 @@
   .clip-strip {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
     margin: 0;
     padding: 0;
     list-style: none;

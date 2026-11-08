@@ -187,10 +187,10 @@
     position: relative;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
     width: 100%;
     height: 100%;
-    padding: 0 0.75rem;
+    padding: 0 var(--dp-space-3);
     overflow: hidden;
     border-radius: var(--dp-radius-full);
     box-shadow: var(--volume-shadow, none);
@@ -200,7 +200,7 @@
     flex-direction: column-reverse;
     justify-content: space-between;
     width: 2.5rem;
-    padding: 0.75rem 0;
+    padding: var(--dp-space-3) 0;
   }
   /*
      * 塗りと空の所は、どちらも全体の大きさのまま `scale` で受け持つぶんだけ見せる (描き直さずに動かせる)。
