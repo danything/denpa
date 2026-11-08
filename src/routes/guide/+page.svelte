@@ -1640,7 +1640,7 @@
   }
   /* 「いま」の時刻 (`NowLine`)。時の列 (`.hour`) より上に。1 分ごとの移りを飛ばさずに (上の `nowSlots`)。場所が動くので `--dp-duration-move` (docs/design.md) */
   .rows :global(.now) {
-    z-index: 10;
+    z-index: 11;
     transition: translate var(--dp-duration-move) var(--dp-ease);
   }
   /*

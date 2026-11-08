@@ -216,23 +216,32 @@
     };
   });
 
-  /*
+  /**
+   * **スマホの形 (1000px 未満とテーブルトップ。`#lib/phone-form.ts`) では、ナビを画面の下のタブにする** (下の `.tabbar`)。
+   *
+   * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
+   * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
+   * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに 2 回押していた。
+   * 640px 未満はよく開く 3 画面と検索をタブに、残り (切り抜き・ルール・設定) は「その他」の `Menu` (popover) に。
+   * 640px からは切り抜き・ルール・設定もタブに出し (`wide`。7 つ並ぶ。並びはヘッダーと同じ)、「その他」は出さない (中身が無くなる)。
+   * テーマは設定の「この端末」、新しいバージョンは設定の「バージョンと環境」にあり、設定の入口に点で知らせる (下の `fresh`)。
+   * ヘッダー (検索の欄) を隠すので、検索はタブから入る。
+   *
    * `/offline` (端末に保存した録画) はここに並べない。ふだんの操作は一覧で
    * 全部できて、あの画面が要るのは**電波が無いとき**だけ。そのときは
-   * サービスワーカーが勝手にあそこへ落とす (service-worker/index.ts)
+   * サービスワーカーがあそこへ移す (service-worker/index.ts)
    */
-  const links = [
-    { href: "/", label: "録画" },
-    { href: "/guide", label: "番組表" },
-    { href: "/live", label: "ライブ" },
-    { href: "/clips", label: "切り抜き" },
-    { href: "/rules", label: "ルール" },
-    { href: "/settings", label: "設定" },
+  const tabs = [
+    { href: "/", label: "録画", icon: ListVideo, wide: false },
+    { href: "/guide", label: "番組表", icon: CalendarDays, wide: false },
+    { href: "/live", label: "ライブ", icon: Tv, wide: false },
+    { href: "/clips", label: "切り抜き", icon: Camera, wide: true },
+    { href: "/rules", label: "ルール", icon: ListChecks, wide: true },
+    { href: "/search", label: "検索", icon: Search, wide: false },
+    { href: "/settings", label: "設定", icon: Settings, wide: true },
   ] as const;
-
-  /** 検索 (`/search`)。ヘッダーでは欄にして、スマホの形では下のタブに置く (上の `links` には並べない) */
-  const SEARCH = { href: "/search", label: "検索" } as const;
-  const pages = [...links, SEARCH];
+  /** ヘッダーのリンク。検索はヘッダーでは欄にするので並べない */
+  const links = tabs.filter((tab) => tab.href !== "/search");
   /** テストの目印 (`nav-*`・`tab-*`) に使う画面の名前 */
   const slug = (href: string) => (href === "/" ? "home" : href.slice(1));
 
@@ -253,7 +262,7 @@
   const here = $derived.by(() => {
     const route = page.route.id ?? "";
     return (
-      pages.find(
+      tabs.find(
         (l) =>
           route === l.href ||
           (l.href !== "/" && route.startsWith(`${l.href}/`)),
@@ -271,7 +280,7 @@
    * 検索は言葉を前に付ける (履歴に並んだときに、どの検索だったか分かる)
    */
   const title = $derived.by(() => {
-    const label = pages.find((l) => l.href === here)?.label ?? "denpa";
+    const label = tabs.find((l) => l.href === here)?.label ?? "denpa";
     const section =
       here === "/settings"
         ? groupLabel(page.route.id?.split("/")[2] ?? "")
@@ -315,26 +324,6 @@
    */
   const guide = $derived(pending !== null || page.route.id === "/guide");
 
-  /**
-   * **スマホの形 (1000px 未満とテーブルトップ。`#lib/phone-form.ts`) では、ナビを画面の下のタブにする** (下の `.tabbar`)。
-   *
-   * 項目を横に並べると、スマートフォンの幅ではヘッダーそのものが画面より
-   * 広くなり、ページ全体が横スクロールしていた (実測で 390px の端末に対して
-   * 420px)。上のハンバーガーに畳んでいた頃は、画面を移るたびに 2 回押していた。
-   * 640px 未満はよく開く 3 画面と検索をタブに、残り (切り抜き・ルール・設定) は「その他」の `Menu` (popover) に。
-   * 640px からは切り抜き・ルール・設定もタブに出し (`wide`。7 つ並ぶ。並びはヘッダーと同じ)、「その他」は出さない (中身が無くなる)。
-   * テーマは設定の「この端末」、新しいバージョンは設定の「バージョンと環境」にあり、設定の入口に点で知らせる (下の `fresh`)。
-   * ヘッダー (検索の欄) を隠すので、検索はタブから入る
-   */
-  const tabs = [
-    { href: "/", label: "録画", icon: ListVideo, wide: false },
-    { href: "/guide", label: "番組表", icon: CalendarDays, wide: false },
-    { href: "/live", label: "ライブ", icon: Tv, wide: false },
-    { href: "/clips", label: "切り抜き", icon: Camera, wide: true },
-    { href: "/rules", label: "ルール", icon: ListChecks, wide: true },
-    { href: SEARCH.href, label: SEARCH.label, icon: Search, wide: false },
-    { href: "/settings", label: "設定", icon: Settings, wide: true },
-  ] as const;
   /**
    * 切り抜き・ルール・設定もタブに出している幅か。**下の style の `@media (min-width: 640px)` と同じ線**。
    * その幅では「その他」を隠すので、印も付けない (隠れたタブに印が付くと、下線がそこへ滑っていく)

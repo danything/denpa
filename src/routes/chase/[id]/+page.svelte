@@ -132,7 +132,7 @@
       clearInterval(ticker);
       clearInterval(keeper);
       window.removeEventListener("pagehide", onLeave);
-      sendResume();
+      sendResume(true);
       player.stop();
     };
   });

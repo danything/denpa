@@ -273,12 +273,12 @@
   const rows: Record<number, HTMLElement | undefined> = $state({});
   /** 一覧そのもの。送るのはこの中だけ (下の説明) */
   let list = $state<HTMLElement | null>(null);
-  /** 一度送ったら、あとは触らない。見ている途中で勝手に動くと邪魔になる */
-  let scrolled = false;
+  /** 一度送った一覧は、あとは触らない。見ている途中で勝手に動くと邪魔になる (詳細を閉じるなどで作り直した一覧は頭からなので、また送る) */
+  let scrolledList: HTMLElement | null = null;
   $effect(() => {
     const row = current === undefined ? undefined : rows[current.id];
-    if (scrolled || row === undefined || list === null) return;
-    scrolled = true;
+    if (list === scrolledList || row === undefined || list === null) return;
+    scrolledList = list;
     /*
      * `scrollIntoView` は使わない。動かせるものは何でも動かすので、縦に積む幅では窓ごと動いて、
      * 読み込み直したときに映像が画面から出ていた。動かすのは一覧の中身だけ (中で動けない幅では何もしない)

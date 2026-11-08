@@ -84,6 +84,7 @@
     drawnWaiting = false;
     scrub = null;
     problem = null;
+    lastKept = 0;
     if (src !== null) URL.revokeObjectURL(src);
     if (poster !== null) URL.revokeObjectURL(poster);
     src = null;

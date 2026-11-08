@@ -198,7 +198,7 @@
     return statusLines(activities, problems);
   }
 
-  /** 「45.0%・あと 3 分 04 秒」。SSE で届く進み (`encode-live`) があればそちら。読み直しを待たずに動く */
+  /** 「45.0%・あと 3 分 04 秒」。SSE で届く進み具合 (`encode-live`) があればそちら。読み直しを待たずに動く */
   function encodeLine(rec: Rec): string {
     return encodeDetail(encodeLive.entries[rec.id], rec);
   }
@@ -267,7 +267,7 @@
       {/if}
     </div>
     <!--
-      録画中は、録り終わるまでの進みを行の下端に敷く (あと何分かは 3 段目に出る)。
+      録画中は、録り終わるまでの進み具合を行の下端に敷く (あと何分かは 3 段目に出る)。
       いちばん上の録画中の行は、バーの先に「いま」の時刻を出す (線の代わり。`TimelineHeading`)
     -->
     {#if item.zone === "now" && res.end_at > res.start_at}
@@ -279,7 +279,7 @@
         class="row-bar rec"
         value={done}
         max="1"
-        aria-label="録画の進み"
+        aria-label="録画の進み具合"
         data-testid="recording-progress"
       ></progress>
       {#if ctx.firstLiveKey === item.key}
@@ -523,7 +523,7 @@
       {#if rec.deleted_at === null}
         {#if rec.job_id !== null}
           <!-- 動いている間は中断だけ。裏で ffmpeg が元の TS を読んでいるので、削除すると、その ffmpeg も失敗する。
-                        狭い画面はアイコンだけ (3 段目のエンコードの進みに幅を回す。字は読み上げに残す) -->
+                        狭い画面はアイコンだけ (3 段目のエンコードの進み具合に幅を回す。字は読み上げに残す) -->
           {#if rec.job_canceling}
             <button
               type="button"
@@ -570,7 +570,7 @@
         class:running={known}
         value={known ? barPercent : undefined}
         max="1"
-        aria-label="エンコードの進み"
+        aria-label="エンコードの進み具合"
       ></progress>
     {:else if held?.state === "downloading"}
       <progress
@@ -578,7 +578,7 @@
         class:running={held.progress !== null}
         value={held.progress ?? undefined}
         max="1"
-        aria-label="端末への保存の進み"
+        aria-label="端末への保存の進み具合"
       ></progress>
     {/if}
   </div>

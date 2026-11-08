@@ -329,7 +329,7 @@
         notice = {
           key: `clip-layer-${Date.now()}`,
           kind: "error",
-          text: "切り替えられませんでした",
+          text: `${layer === "captions" ? "字幕" : "コメント"}の表示を切り替えられませんでした`,
         };
       });
     sending.set(clip.id, task);

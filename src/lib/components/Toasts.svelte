@@ -8,27 +8,30 @@
   }
 
   /**
-   * 予約の返事に付いた注意の文 (`warning`。有料の番組がスクランブルのまま録れるかもしれない) を `Notice` に変換する。無ければ空
-   */
-  export function warningNotice(form: unknown, key: string): Notice[] {
-    if (form === null || typeof form !== "object" || !("warning" in form))
-      return [];
-    const { warning } = form as { warning: unknown };
-    if (typeof warning !== "string" || warning === "") return [];
-    return [{ key, kind: "warning", text: warning }];
-  }
-
-  /**
-   * `form?.message` (fail の言葉) をトーストの形に。無ければ空。
-   * どの画面も同じ 1 行を書いていたので、ここにまとめた。
+   * `form` の 1 つの欄の文をトーストの形に。空か文でなければ空。
    * スプレッドでも `push(...)` でもそのまま混ぜられるよう、配列で返す
    */
+  function formNotice(
+    form: unknown,
+    field: string,
+    kind: Notice["kind"],
+    key: string,
+  ): Notice[] {
+    if (form === null || typeof form !== "object") return [];
+    const text: unknown = (form as Record<string, unknown>)[field];
+    return typeof text === "string" && text !== ""
+      ? [{ key, kind, text }]
+      : [];
+  }
+
+  /** `form?.message` (fail の言葉)。どの画面も同じ 1 行を書いていたので、ここにまとめた */
   export function errorNotice(form: unknown, key: string): Notice[] {
-    if (form === null || typeof form !== "object" || !("message" in form))
-      return [];
-    const { message } = form as { message: unknown };
-    if (typeof message !== "string" || message === "") return [];
-    return [{ key, kind: "error", text: message }];
+    return formNotice(form, "message", "error", key);
+  }
+
+  /** 予約の返事に付いた注意の文 (`warning`。有料の番組がスクランブルのまま録れるかもしれない) */
+  export function warningNotice(form: unknown, key: string): Notice[] {
+    return formNotice(form, "warning", "warning", key);
   }
 </script>
 
@@ -125,7 +128,7 @@
   <!-- 右下に浮かせる。段はダイアログの下・本文の上 (`--dp-z-toast`) -->
   <div class="toasts">
     {#each shown as notice (notice.key)}
-      <!-- 見た目は app.css の notice (error / info / success。kind と同じ名前) -->
+      <!-- 見た目は app.css の notice (error / warning / info / success。kind と同じ名前) -->
       <div class="notice {notice.kind} toast" data-testid={notice.key}>
         <span class="text">{notice.text}</span>
         <button

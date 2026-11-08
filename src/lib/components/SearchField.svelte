@@ -126,6 +126,7 @@
     }
     if (q === "") {
       groups = [];
+      answered = "";
       close();
       return;
     }
