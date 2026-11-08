@@ -655,12 +655,6 @@ internal sealed class Zd1jStream
 /// </summary>
 public sealed class Zd1jCard : ICardLink
 {
-    /// <summary>ATR を待つ上限 (仕様書 13.7 の「1 秒まで」)</summary>
-    private static readonly TimeSpan AtrTimeout = TimeSpan.FromSeconds(1);
-
-    /// <summary>カードのクロック (Hz)。ATR を受ける 9600 ボー (F 372 / D 1) から 9600 × 372</summary>
-    private const double CardClock = 9600.0 * 372;
-
     private readonly Func<Zd1jBoard> _acquire;
     private Zd1jBoard? _board;
     private T1Protocol? _t1;
@@ -700,9 +694,9 @@ public sealed class Zd1jCard : ICardLink
             }
             if (!atr!.T1) throw new IOException($"T=1 に対応していないカードです (ATR {Convert.ToHexString(raw!)})");
 
-            var (baud, control, cwt, bwt, rate) = Speed(atr);
+            var (baud, control, cwt, bwt, rate) = CardUart.Speed(atr);
             Bridge.CardSpeed(baud, control, cwt, bwt);
-            _blockWaitMs = Math.Min(3000, 500 << Math.Max(0, atr.Bwi - 4));
+            _blockWaitMs = CardUart.BlockWaitMs(atr);
             _t1 = new T1Protocol(atr, Exchange);
             _t1.NegotiateIfsd(rate >= 38400 ? 254 : 251);
             return raw!;
@@ -734,83 +728,14 @@ public sealed class Zd1jCard : ICardLink
         }
     }
 
-    private static readonly int[] FiTable = [372, 372, 558, 744, 1116, 1488, 1860, 0, 0, 512, 768, 1024, 1536, 2048, 0, 0];
-    private static readonly int[] DiTable = [0, 1, 2, 4, 8, 16, 32, 64, 12, 20, 0, 0, 0, 0, 0, 0];
+    /// <summary>ATR を 1 秒まで受ける (<see cref="CardUart.ReceiveAtr"/>)</summary>
+    private byte[] ReadAtr() => CardUart.ReceiveAtr(Bridge.CardRead, Thread.Sleep, Name);
 
-    /// <summary>
-    /// TA1 から UART の 4 つのレジスタ (仕様書 13.2)。B-CAS は TA1 = 0x12 (F 372 / D 2) で 19200 ボー。
-    /// <c>N = F / D</c>、速さ = <c>(N &lt;&lt; 7) | min(N &gt;&gt; 1, 0x7F)</c>、CWT = <c>3 × 2^CWI + 11</c>、
-    /// BWT = <c>6,800,000 × D / F</c> (16 ビットまで)、制御 = <c>TC1 &lt;&lt; 16</c> (TC1 が 0xFF なら 1)
-    /// </summary>
-    internal static (uint Baud, uint Control, uint Cwt, uint Bwt, int Rate) Speed(Atr atr)
-    {
-        var f = FiTable[atr.FiDi >> 4];
-        var d = DiTable[atr.FiDi & 0xF];
-        if (f == 0 || d == 0 || f % d != 0) throw new IOException($"ATR の速さ (TA1 0x{atr.FiDi:X2}) に対応していません");
-        var n = (uint)(f / d);
-        var baud = (n << 7) | Math.Min(n >> 1, 0x7F);
-        var cwt = (uint)(3 * (1 << atr.Cwi) + 11);
-        var bwt = (uint)Math.Min(0xFFFF, 6_800_000L * d / f);
-        var control = (uint)(atr.GuardN == 0xFF ? 1 : atr.GuardN) << 16;
-        return (baud, control, cwt, bwt, (int)(CardClock / n));
-    }
-
-    /// <summary>ATR を 1 秒まで受ける。長さは T0 と TDi から決まる</summary>
-    private byte[] ReadAtr()
-    {
-        var received = new List<byte>();
-        var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < AtrTimeout)
-        {
-            var got = Bridge.CardRead(33 - received.Count);
-            received.AddRange(got);
-            if (AtrLength(received) is { } length && received.Count >= length) return [.. received.Take(length)];
-            if (got.Length == 0) Thread.Sleep(2);
-        }
-        if (received.Count == 0) throw new IOException($"{Name} のカードが ATR を返しません");
-        return [.. received];
-    }
-
-    /// <summary>ATR の長さ。まだ決まらなければ null</summary>
-    internal static int? AtrLength(IReadOnlyList<byte> atr)
-    {
-        if (atr.Count < 2) return null;
-        var y = atr[1] >> 4;
-        var historical = atr[1] & 0x0F;
-        var at = 2;
-        var tck = false;
-        for (; ; )
-        {
-            var td = (y & 8) != 0;
-            at += int.PopCount(y & 7) + (td ? 1 : 0);
-            if (!td) break;
-            if (at > atr.Count) return null;
-            var d = atr[at - 1];
-            if ((d & 0x0F) != 0) tck = true;
-            y = d >> 4;
-        }
-        return at + historical + (tck ? 1 : 0);
-    }
-
-    /// <summary>
-    /// T=1 のブロックを 1 つ送って 1 つ受ける。受けは「受けた数が 0 でなくなる」だけを合図に先頭の 3 バイトを読み、
-    /// 長さぶんと LRC を読む。時間切れは null (T1Protocol が送り直す)
-    /// </summary>
+    /// <summary>T=1 のブロックを 1 つ送って 1 つ受ける。時間切れは null (<see cref="CardUart.ReceiveBlock"/>)</summary>
     private byte[]? Exchange(byte[] block, byte wtx)
     {
         Bridge.CardWrite(block);
-        var limit = TimeSpan.FromMilliseconds(_blockWaitMs * Math.Max(1, (int)wtx));
-        var received = new List<byte>();
-        var since = Stopwatch.StartNew();
-        while (since.Elapsed < limit)
-        {
-            var want = received.Count < 3 ? 3 - received.Count : received[2] + 4 - received.Count;
-            if (want <= 0) return [.. received];
-            var got = Bridge.CardRead(want);
-            received.AddRange(got);
-            if (got.Length == 0) Thread.Sleep(1);
-        }
-        return null;
+        return CardUart.ReceiveBlock(Bridge.CardRead, Thread.Sleep, _blockWaitMs * Math.Max(1, (int)wtx));
     }
 
     public void Dispose()

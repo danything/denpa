@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 自前方式 (dt295:) のフロントエンド (復調とチューナー) の設定と選局。節の番号は仕様書 (dt295-resident/spec.md) のもの。
+/// PIX-DT295 (dt295:) のフロントエンド (復調とチューナー) の設定と選局。節の番号は仕様書 (dt295-resident/spec.md) のもの。
 /// 仕様書では常駐イメージが SERVICE のたびに 1 本ずつ進める I2C を、ホストが I2C の転送の並びにして順に出す (Dt295NativeI2c)。
 ///
 /// I2C の機器は 2 つ。0x10 = 地上波の復調 (T 復調)、0x11 = 衛星の復調 (S 復調)。チューナーは復調のレジスタ 0xFE を通した中継の先 (仕様書 7.0)。

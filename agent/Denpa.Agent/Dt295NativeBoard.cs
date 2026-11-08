@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 自前方式 (dt295:) の基板の設定: チップのクロック・端子、USB の端点、TS の取り込みブロック。節の番号は仕様書 (dt295-resident/spec.md) のもの。
+/// PIX-DT295 (dt295:) の基板の設定: チップのクロック・端子、USB の端点、TS の取り込みブロック。節の番号は仕様書 (dt295-resident/spec.md) のもの。
 /// 仕様書では常駐イメージと補助 CPU がやる設定を、ホストが 0xBC のメモリ要求 (<see cref="Dt295NativeLink"/>) で順に書く。
 ///
 /// 補助 CPU の起動 (仕様書 6 章の「補助 CPU の起動」) は再現しない。補助 CPU がやる仕事のうち、USB のレジスタの設定 (仕様書 8.4) と
@@ -28,8 +28,8 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
 
     /// <summary>
     /// 機材が起動直後の状態か (仕様書 3.1: 0x82008 の 2 バイトが 0、hook が元のまま)。
-    /// 違えば <see cref="Dt295NativeWarmException"/> (途中で止まった自前の hook が残っている、ほかのファームウェアが動いたなど)。
-    /// 正常に閉じた自前方式は hook を戻すので、続けて開き直せる (実機で確かめた)
+    /// 違えば <see cref="Dt295NativeWarmException"/> (途中で止まった前の実行が書いた hook が残っている、ほかのファームウェアが動いたなど)。
+    /// 正常に閉じたときは hook を元に戻すので、続けて開き直せる (実機で確かめた)
     /// </summary>
     public void Preflight()
     {
@@ -39,7 +39,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
         {
             var ours = hook.AsSpan().SequenceEqual(Dt295NativePrograms.Build().HookBytes);
             throw new Dt295NativeWarmException(ours
-                ? "前の実行の自前の hook が残っています"
+                ? "前の実行が書いた hook が残っています"
                 : $"boot0 の hook が元の値ではありません ({Convert.ToHexString(hook)})");
         }
         if (state != 0) throw new Dt295NativeWarmException($"機材が起動直後の状態ではありません (状態 0x{state:X4})");
@@ -69,7 +69,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     }
 
     // ---------------------------------------------------------------------
-    // 自前の body の導入 (仕様書 3.2)
+    // 機材に置くプログラム (body) の導入 (仕様書 3.2)
     // ---------------------------------------------------------------------
 
     /// <summary>
@@ -323,7 +323,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
 
         try
         {
-            // 主 CPU の自前方式に要るものだけを書く。bulk IN の端点 (0xFDBD08・0C・84) の設定と有効化 (0xFDBC04・0xFDBC14)。
+            // 主 CPU で動かすプログラムに要るものだけを書く。bulk IN の端点 (0xFDBD08・0C・84) の設定と有効化 (0xFDBC04・0xFDBC14)。
             // 仕様書 8.4 の 2 と 6・7 の 0xFDBC14 がそれ (0xFDBC14 の 0x84 は、8.3.1 の開始が bit1 と bit17 を落とす元の値)。
             Put(1, 0xFDBC04, 0x85000000);                              // 8.4 の 2
             Put(8, 0xFDBC14, 0x04);                                    // 8.4 の 6
@@ -333,7 +333,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
             // 書かないもの (仕様書に無い判断。実機で 0xFD8010 = 0x08080000 を書いたあと、制御転送がすべて時間切れになった):
             // - 割り込み・クロックの設定: 0xFD808C (8.4 の 1)、0xFD8300・0xFD8320・0xFD8010・0xFD8014 (8.4 の 5)。
             //   仕様書は補助 CPU が起動のときに USB と I2C の割り込みを受け持つための設定として書いている。
-            //   自前方式は、TS を主 CPU の hook の中で送り (割り込みを使わない)、I2C を制御の bit0 を読んで待つので要らない
+            //   ここでは TS を主 CPU の hook の中で送り (割り込みを使わない)、I2C を制御の bit0 を読んで待つので要らない
             // - 補助 CPU の端点 0xFDBD10・14・18・1C・38 (8.4 の 3・6・7) と 0xFDBC0C (8.4 の 4。読んで同じ値を書くだけ)。
             //   TS の端点は主 CPU が 0xFDBD08 の組を 8.3.1 で自分で設定する。
             //   これで EP 0x81 から TS が出なければ、最初に疑うのはここ (0xFDBD10・0xFDBD38 のバッファアドレス 0x00FF6000 など)
@@ -442,7 +442,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
             link.Write32(0x1900000, 0x3002FFFF);
             link.Write32(0x1900000, 0x00020000);
             link.Write32(0x1900004, 0x00001100);
-            // 0x1900020: 仕様書の表に無い。実機の常駐イメージは、取り込みを始めるときに 0 から 0x22000200 にした (自前方式は 0x02000200 のままで bit29 が無かった)
+            // 0x1900020: 仕様書の表に無い。実機の常駐イメージは、取り込みを始めるときに 0 から 0x22000200 にした (このレジスタを書かなかったときは 0x02000200 のままで bit29 が無かった)
             link.Write32(0x1900020, 0x22000200);
             log?.Invoke($"0x1900020 = 0x22000200 を書いて 0x{link.Read32(0x1900020):X8} が読めました");
             for (var i = 2; i < CaptureTable.Length; i++)

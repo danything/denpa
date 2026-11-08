@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 namespace Denpa.Agent.Tests;
 
 /*
- * USB の層 (UsbDevice.cs・UsbFsDevice.cs)。機材なしで確かめられる所: usbfs の ioctl の番号と構造体の大きさ
+ * USB の層 (UsbDevice.cs・UsbFs.cs・UsbFsDevice.cs)。機材なしで確かめられる所: usbfs の ioctl の番号と構造体の大きさ
  * (カーネルの uapi の linux/usbdevice_fs.h の形)、Windows と macOS のポートの名前の作り方、
  * interrupt の読みを出し続ける UsbReadPump (UsbDevice.cs)。
  */
@@ -24,6 +24,19 @@ public class UsbDeviceTests
         await Assert.That(UsbFsDevice.DiscardUrb).IsEqualTo(0x0000550Bu);
         await Assert.That(UsbFsDevice.ReapUrbNoDelay).IsEqualTo(0x4008550Du);
         await Assert.That(UsbFsDevice.ClearHalt).IsEqualTo(0x80045515u);
+    }
+
+    [Test]
+    public async Task usbfs_のノードを開けなかったときは_無いのか権限が無いのかを分けて書く()
+    {
+        await Assert.That(UsbFs.OpenError("/dev/bus/usb/001/002", UsbFs.Enoent))
+            .IsEqualTo("/dev/bus/usb/001/002 がありません (抜かれたか、コンテナに /dev/bus/usb が見えていません)");
+        await Assert.That(UsbFs.OpenError("/dev/bus/usb/001/002", UsbFs.Enodev))
+            .IsEqualTo(UsbFs.OpenError("/dev/bus/usb/001/002", UsbFs.Enoent));
+        await Assert.That(UsbFs.OpenError("/dev/bus/usb/001/002", UsbFs.Eacces))
+            .IsEqualTo("/dev/bus/usb/001/002 を開く権限がありません (コンテナに USB 機材の読み書きを許してください)");
+        await Assert.That(UsbFs.OpenError("/dev/bus/usb/001/002", UsbFs.Eperm))
+            .IsEqualTo(UsbFs.OpenError("/dev/bus/usb/001/002", UsbFs.Eacces));
     }
 
     [Test]

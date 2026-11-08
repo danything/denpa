@@ -3,14 +3,14 @@ using System.Buffers.Binary;
 
 namespace Denpa.Agent;
 
-/// <summary>自前方式の PIX-DT295 が、機材に断られた・想定と違う値を返した・時間切れになった</summary>
+/// <summary>PIX-DT295 (dt295:) が、機材に断られた・想定と違う値を返した・時間切れになった</summary>
 public class Dt295NativeException(string message) : IOException(message);
 
 /// <summary>機材が起動直後の状態ではない。ポートの電源を入れ直すと戻る (Linux)。ほかの OS では挿し直しを求める</summary>
 public sealed class Dt295NativeWarmException(string message) : Dt295NativeException(message);
 
 /// <summary>
-/// 自前方式 (dt295:) の PIX-DT295 との制御転送。節の番号は仕様書 (dt295-resident/spec.md) のもの。
+/// PIX-DT295 (dt295:) との制御転送。節の番号は仕様書 (dt295-resident/spec.md) のもの。
 /// ベンダー要求 0xBC で 24 ビットのアドレスを読み書きする (仕様書 3.1)。
 ///
 /// <list type="bullet">
@@ -333,10 +333,10 @@ public sealed class Dt295NativeLink
         }
     }
 
-    // --- 自前のプログラムへの要求 ---
+    // --- 機材に置いたプログラムへの要求 ---
 
     /// <summary>
-    /// 自前の body に要求を渡す (Dt295NativePrograms の「要求」)。制御 OUT で 64 バイトを渡し、戻ってから 0xC4620 の応答を読む。
+    /// 機材に置いた body に要求を渡す (Dt295NativePrograms の「要求」)。制御 OUT で 64 バイトを渡し、戻ってから 0xC4620 の応答を読む。
     /// body がパケットを送り終えるまで制御 OUT が終わらないので、時間切れは長くとる
     /// </summary>
     public NativeReply Pump(uint packets, uint idleLimit, int timeoutMs)
@@ -450,5 +450,5 @@ public sealed class Dt295NativeLink
 /// <summary>機材の中の I2C の順次実行 (Dt295NativePrograms の操作 2) の応答: 結果・止まった転送の番号・読んだバイト</summary>
 public sealed record I2cReply(uint Code, uint Index, byte[] Read);
 
-/// <summary>自前の body の応答 (Dt295NativePrograms の「応答」)</summary>
+/// <summary>機材に置いた body の応答 (Dt295NativePrograms の「応答」)</summary>
 public sealed record NativeReply(uint Result, uint Sent, uint ReadPosition, uint Alignment, uint PacketPosition, uint WritePosition, uint Aligned);

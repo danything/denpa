@@ -3,7 +3,7 @@ using TUnit.Assertions.Enums;
 namespace Denpa.Agent.Tests;
 
 /*
- * 自前方式の内蔵カードリーダー (Dt295NativeCard) を、偽の機材 (Dt295Fake の UART のモデル) で確かめる。
+ * PIX-DT295 の内蔵カードリーダー (Dt295NativeCard) を、偽の機材 (Dt295Fake の UART のモデル) で確かめる。
  * 電源投入・切断の表と端子の扱いは仕様書 (dt295-resident/spec.md) §10。UART のモデルは偽物が作ったもので、実機の読み値ではない。
  */
 public class Dt295NativeCardTests

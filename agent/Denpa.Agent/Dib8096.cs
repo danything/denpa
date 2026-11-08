@@ -1579,7 +1579,6 @@ public sealed class Dib8096
     /// <summary>ガードの番号 (1/32 = 0、1/16 = 1、1/8 = 2、1/4 = 3)。自動は -1</summary>
     private int _guard;
 
-    private int _inversion;
     private int _partial;
     private readonly Layer[] _layers = new Layer[3];
 
@@ -1608,17 +1607,16 @@ public sealed class Dib8096
     private Snapshot? _programmed;
 
     /// <summary>ロックしたときのチャンネルの値</summary>
-    internal sealed record Snapshot(int Fft, int Guard, int Inversion, int Partial, int Diff, (int Modulation, int Fec, int Interleave, int Segments)[] Layers);
+    internal sealed record Snapshot(int Fft, int Guard, int Partial, int Diff, (int Modulation, int Fec, int Interleave, int Segments)[] Layers);
 
     private Snapshot Capture() => new(
-        (int)_fft, _guard, _inversion, _partial, _diff,
+        (int)_fft, _guard, _partial, _diff,
         [.. _layers.Select(layer => ((int)layer.Modulation, layer.Fec, layer.Interleave, layer.Segments))]);
 
     private void Restore(Snapshot snapshot)
     {
         _fft = (Fft)snapshot.Fft;
         _guard = snapshot.Guard;
-        _inversion = snapshot.Inversion;
         _partial = snapshot.Partial;
         _diff = snapshot.Diff;
         for (var i = 0; i < 3; i++)
@@ -1680,7 +1678,6 @@ public sealed class Dib8096
     {
         _fft = Fft.Auto;
         _guard = -1;
-        _inversion = 0;
         _partial = 0;
         for (var i = 0; i < 3; i++) _layers[i] = new Layer { Modulation = Modulation.Auto, Fec = 0, Interleave = 0, Segments = 0 };
         _demodState = DemodState.Tuning;
@@ -2002,7 +1999,6 @@ public sealed class Dib8096
         {
             _fft = _foundFft;
             _guard = 2;
-            _inversion = 0;
             _layers[0] = new Layer { Modulation = Modulation.Qam64, Fec = 2, Interleave = 0, Segments = 13 };
             ChannelSetup(16, searching: true);
             D(6, 0x0004);
@@ -2015,7 +2011,6 @@ public sealed class Dib8096
         }
         else
         {
-            _inversion = 0;
             _layers[0] = new Layer { Modulation = Modulation.Qam64, Fec = 2, Interleave = 0, Segments = 13 };
             int seq;
             if (_guard < 0 && _fft == Fft.Auto)
@@ -2243,7 +2238,6 @@ public sealed class Dib8096
         if ((D(568) & 0x001E) != 0x001E) return;
         D(508);
         var v = D(570);
-        _inversion = (v >> 6) & 1;
         _fft = ((v >> 4) & 3) switch
         {
             1 => Fft.K2,
@@ -2405,10 +2399,10 @@ public sealed class DibMemory
     }
 
     private static bool Same(Dib8096.Snapshot a, Dib8096.Snapshot b) =>
-        a.Fft == b.Fft && a.Guard == b.Guard && a.Inversion == b.Inversion && a.Partial == b.Partial && a.Diff == b.Diff
+        a.Fft == b.Fft && a.Guard == b.Guard && a.Partial == b.Partial && a.Diff == b.Diff
         && a.Layers.SequenceEqual(b.Layers);
 
-    /// <summary>ファイルに書く形: <c>{ "&lt;kHz&gt;": { fft, guard, inversion, partial, diff, layers: [[変調, 符号化率, インターリーブ, セグメント数] × 3] } }</c></summary>
+    /// <summary>ファイルに書く形: <c>{ "&lt;kHz&gt;": { fft, guard, partial, diff, layers: [[変調, 符号化率, インターリーブ, セグメント数] × 3] } }</c></summary>
     public JsonObject ToJson()
     {
         var json = new JsonObject();
@@ -2423,14 +2417,17 @@ public sealed class DibMemory
                 }
                 json[khz.ToString(CultureInfo.InvariantCulture)] = new JsonObject
                 {
-                    ["fft"] = s.Fft, ["guard"] = s.Guard, ["inversion"] = s.Inversion, ["partial"] = s.Partial, ["diff"] = s.Diff, ["layers"] = layers,
+                    ["fft"] = s.Fft, ["guard"] = s.Guard, ["partial"] = s.Partial, ["diff"] = s.Diff, ["layers"] = layers,
                 };
             }
         }
         return json;
     }
 
-    /// <summary>ファイルの中身から。**どれか 1 つでも形が違えば投げる** (呼ぶ側が全部捨てて探索から)</summary>
+    /// <summary>
+    /// ファイルの中身から。**どれか 1 つでも形が違えば投げる** (呼ぶ側が全部捨てて探索から)。
+    /// 使う項目を名前で読むだけなので、ほかの項目は無視する (前のバージョンが書いた inversion も)
+    /// </summary>
     public static DibMemory FromJson(JsonObject json)
     {
         var memory = new DibMemory();
@@ -2454,7 +2451,7 @@ public sealed class DibMemory
                 throw new FormatException($"{key} の階層の値が範囲の外です");
             }
             memory.Channels[khz] = new Dib8096.Snapshot(
-                Int("fft", 0, 3), Int("guard", -1, 3), Int("inversion", 0, 1), Int("partial", 0, 1), Int("diff", 0, 0x1FFF), parsed);
+                Int("fft", 0, 3), Int("guard", -1, 3), Int("partial", 0, 1), Int("diff", 0, 0x1FFF), parsed);
         }
         return memory;
     }

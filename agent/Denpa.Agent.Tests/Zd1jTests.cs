@@ -234,14 +234,14 @@ public class Zd1jTests
     public async Task B_CAS_の速さは_19200()
     {
         var atr = Atr.Parse(Convert.FromHexString("3BF01200FF9181B17C451F0399"));
-        var (baud, control, cwt, bwt, rate) = Zd1jCard.Speed(atr);
+        var (baud, control, cwt, bwt, rate) = CardUart.Speed(atr);
         await Assert.That(baud).IsEqualTo(0x5D5Du);
         await Assert.That(control).IsEqualTo(0x00010000u);
         await Assert.That(cwt).IsEqualTo(107u);
         await Assert.That(bwt).IsEqualTo(36559u);
         await Assert.That(rate).IsEqualTo(19200);
-        await Assert.That(Zd1jCard.AtrLength([.. Convert.FromHexString("3BF01200FF9181B17C451F0399")])).IsEqualTo(13);
-        await Assert.That(Zd1jCard.AtrLength([0x3B, 0xF0, 0x12])).IsNull();
+        await Assert.That(CardUart.AtrLength([.. Convert.FromHexString("3BF01200FF9181B17C451F0399")])).IsEqualTo(13);
+        await Assert.That(CardUart.AtrLength([0x3B, 0xF0, 0x12])).IsNull();
     }
 
     [Test]
