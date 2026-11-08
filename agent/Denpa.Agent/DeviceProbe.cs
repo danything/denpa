@@ -172,8 +172,30 @@ public static class DeviceProbe
          */
         found.AddRange(Dt295.Detect());
 
+        Remember(found);
         return found;
     }
+
+    /// <summary>最後に見つけた機材 (デバイス → 受けられる種別)。<see cref="Receivable"/> が読む</summary>
+    private static volatile IReadOnlyDictionary<string, string[]> _found = new Dictionary<string, string[]>(StringComparer.Ordinal);
+
+    /// <summary>見つけた機材を控える。同じデバイスが 2 度出たら最初のもの</summary>
+    internal static void Remember(IEnumerable<TunerSpec> found) => _found = found
+        .Where(spec => spec.Device is not null)
+        .GroupBy(spec => spec.Device!, StringComparer.Ordinal)
+        .ToDictionary(group => group.Key, group => group.First().Types, StringComparer.Ordinal);
+
+    /// <summary>
+    /// 機材が受けられる種別。**最後に <see cref="Detect"/> したときに見つけた機材だけ**で、ほかは null (分からない)。
+    ///
+    /// <para>
+    /// <c>GET /denpa/tuners</c> の <c>receivable</c> に入れ、denpa はこれに無い種別を設定で選ばせず、保存でも断る。
+    /// 定義の <c>types</c> は画面から書き換えられるので、BS/CS 専用の受信機に GR を入れて保存でき、
+    /// その台に割り振られた地上波の選局が受信機の確認 (<see cref="Px4Tuner.Check"/>) で全部断られていた (#2386)
+    /// </para>
+    /// </summary>
+    public static string[]? Receivable(string? device) =>
+        device is not null && _found.TryGetValue(device, out var types) ? types : null;
 
     private static IEnumerable<string> Directories(string root, string pattern)
     {

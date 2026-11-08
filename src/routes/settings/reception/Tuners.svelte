@@ -19,7 +19,8 @@
   import { held } from "#lib/live-updates.svelte.js";
   import type { CardReaderState } from "#lib/server/scramble.js";
   import type { TunerSignal } from "#lib/server/tuner.js";
-  import { CHANNEL_TYPES } from "#lib/types.js";
+  import { receives } from "#lib/tuner-types.js";
+  import { CHANNEL_TYPES, type ChannelType } from "#lib/types.js";
 
   import type { PageData } from "./$types";
   import ContractDialog from "./ContractDialog.svelte";
@@ -173,7 +174,15 @@
   </label>
 {/snippet}
 
-{#snippet typeChips(prefix: string, types: readonly string[])}
+<!--
+  **機材が受けられない種別は選ばせない** (`receivable`。エージェントが見つけた機材の種別)。BS/CS 専用の受信機に GR を入れて
+  保存でき、その台に割り振られた地上波の選局が全部断られていた (#2386)。もう入っているものは外せるように押せるままにする
+-->
+{#snippet typeChips(
+  prefix: string,
+  types: readonly ChannelType[],
+  receivable: readonly ChannelType[] | null | undefined,
+)}
   <div class="chips types">
     {#each CHANNEL_TYPES as type (type)}
       <label class="chip">
@@ -181,6 +190,7 @@
           type="checkbox"
           name={`type.${prefix}.${type}`}
           checked={types.includes(type)}
+          disabled={!types.includes(type) && !receives(receivable, type)}
         />
         {SERVICE_TYPE_LABEL[type]}
       </label>
@@ -294,7 +304,11 @@
                       {/if}
                     </td>
                     <td class="types-cell" data-label="受信できる種別">
-                      {@render typeChips(String(index), tuner.types)}
+                      {@render typeChips(
+                        String(index),
+                        tuner.types,
+                        tuner.receivable,
+                      )}
                     </td>
                     <td class="state-cell small">
                       <!--
@@ -457,7 +471,7 @@
             </label>
             <div class="field">
               <span>受信できる種別</span>
-              {@render typeChips("add", [])}
+              {@render typeChips("add", [], null)}
             </div>
             {@render lnbField("lnb.add", "")}
           </div>

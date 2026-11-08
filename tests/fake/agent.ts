@@ -253,7 +253,7 @@ interface FakeTuner {
   lnb: string | null;
 }
 
-/** 刺さっている機材 (本物の自動検出 `DeviceProbe.Detect` に当たるもの)。偶数が衛星、奇数が地上波 */
+/** 挿してある機材 (本物の自動検出 `DeviceProbe.Detect` に当たるもの)。偶数が衛星、奇数が地上波 */
 const plugged = (): FakeTuner[] =>
   [0, 1, 2, 3].map((index) => ({
     index,
@@ -264,7 +264,7 @@ const plugged = (): FakeTuner[] =>
     lnb: null,
   }));
 
-/** 始めは定義を書いてある状態にしておく (中身は刺さっているものと同じ) */
+/** 始めは定義を書いてある状態にしておく (中身は挿してあるものと同じ) */
 let TUNERS: FakeTuner[] = plugged();
 /** 定義が無いので自分で見つけた機材を使っているか (`GET /denpa/tuners` の `detected`) */
 let detected = false;
@@ -301,6 +301,9 @@ function tunerStatus() {
       ...plain,
       rank: plain.disabled ? null : plain.index,
       pin: plain.device ?? plain.name,
+      // 機材が受けられる種別は、挿してある機材の種別。挿していないデバイスは分からない (本物の `DeviceProbe.Receivable`)
+      receivable:
+        plugged().find((one) => one.device === plain.device)?.types ?? null,
     };
     /*
      * 塞がっているのは**衛星のチューナー**にしてある。地上波を塞ぐと、
