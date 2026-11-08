@@ -570,20 +570,21 @@ test.describe("操作したときの反応", () => {
   }) => {
     await goto(page, "/guide?type=GR");
     /*
-     * 番組表のデータに左右されないよう、1 つのマスに放送の時刻 (`--s` / `--e`) を置き直して比べる
+     * 番組表のデータに左右されないよう、1 つのマスにマスの上端・下端 (`--s` / `--e`) と実際の終わり (`--end`) を置き直して比べる
      * (表のいま `--now` の前後に掛かれば放送中、前で終われば終わった番組)。ほかのスペックが番組表を
      * 入れ替えると、いま放送中の番組が無いことがある
      */
-    const shade = (offset: { s: number; e: number }) =>
+    const shade = (offset: { s: number; e: number; end?: number }) =>
       page
         .getByTestId("program-button")
         .first()
-        .evaluate((el, { s, e }) => {
+        .evaluate((el, { s, e, end = e }) => {
           const now = parseFloat(
             getComputedStyle(el).getPropertyValue("--now"),
           );
           el.style.setProperty("--s", String(now + s));
           el.style.setProperty("--e", String(now + e));
+          el.style.setProperty("--end", String(now + end));
           // 覆いはマスの背景の 1 枚目 (`linear-gradient` の色)
           return getComputedStyle(el).backgroundImage;
         }, offset);
@@ -592,6 +593,9 @@ test.describe("操作したときの反応", () => {
     const airing = await shade({ s: -1, e: 1 });
     const done = await shade({ s: -2, e: -1 });
     expect(alpha(airing)).toBeLessThan(alpha(done));
+    // 終わったかどうかは実際の終わりで決める。マスの下端がまだ先でも、終わっていれば終わった番組の濃さ (#2387)
+    const ended = await shade({ s: -2, e: 1, end: -0.2 });
+    expect(alpha(ended)).toBe(alpha(done));
   });
 
   test("ジャンルの見本はマスと同じ色で、押すとそのジャンルだけ目立つ", async ({
