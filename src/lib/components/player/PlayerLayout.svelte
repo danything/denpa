@@ -105,11 +105,8 @@
      * そのぶん外へはみ出して、映像を画面の端まで出す。条件は上の `PHONE_LANDSCAPE` と同じ
      */
   @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-    :global(body:has([data-player-layout]) .navbar) {
-      display: none;
-    }
     /*
-     * 横にしたスマホはスマホの形 (`#lib/phone-form.ts`) なので、ライブには下のタブが出る。映像の下端に重なるので隠し、
+     * 横にしたスマホはスマホの形 (`#lib/phone-form.ts`) なので、ヘッダーは出ず下のタブが出る。映像の下端に重なるので隠し、
      * 下の余白 (`--dp-tabbar`) も外す。ほかの画面へは縦に戻して移る (ヘッダーを隠していた頃と同じ)
      */
     :global(body:has([data-player-layout]) .tabbar) {
@@ -145,17 +142,13 @@
   /*
      * **テーブルトップ** (`#lib/phone-form.ts` の `TABLETOP`。条件は同じ)。上の段は映像だけ、下の段は右の列。折り目 (と蝶番の隙間) には何も置かない。
      * 段の境目は `env(viewport-segment-*)` (対応していないブラウザは当たらないので逃げ道は形だけ)。
-     * 上下の段はどちらも低いので、操作はスマホの形 (`<html data-phone>`) で下に寄せる: 上のヘッダーは出さず、ライブは下のタブを下の段の下端に浮かべる
-     * (`+layout.svelte`)。観る画面と追っかけは下のタブも出さない (戻るのは映像の上の閉じるボタン)。
+     * 上下の段はどちらも低いので、操作はスマホの形 (`<html data-phone>`) で下に寄せる: 上のヘッダーは出さず、下のタブを下の段の下端に浮かべる
+     * (`+layout.svelte`)。
      * `<main>` を窓いっぱいに固定し、上の段は黒い地 (映像の形の枠 `PlayerStage` は段の幅と高さに収める。左右か上下の黒はこの地)、
      * 下の段は黒い地 (舞台の中。テーマで変えない) に映像の色の反射 (`FoldReflection`) を敷き、その上に右の列を重ねる。
      * 窓は巻かない。右の列は中で巻く。E2E 55 で見る
      */
   @media (device-posture: folded) and (vertical-viewport-segments: 2) {
-    /* 下のタブの無い画面 (観る画面・追っかけ) では、スマホの形でもヘッダーが出る。上の段は映像だけにするので隠す */
-    :global(body:has([data-player-layout]) .navbar) {
-      display: none;
-    }
     /* スマホの形の本文の余白 (`+layout.svelte`。下のタブのぶん) より強く当てる (`#main`)。下のタブのぶんは下の `.layout` が空ける */
     :global(main#main:has([data-player-layout])) {
       position: fixed;
