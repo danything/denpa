@@ -378,11 +378,11 @@
   );
   /**
    * **過ぎた所を暗くする位置** (表の先頭から何マスぶん。マスの `--s` / `--e` / `--end` と比べる。`.program` の背景の覆い)。
-   * 前の日は全部、先の日は何も暗くしないよう、表の外は端の外へ寄せる。2,000 を超えるマスを毎分書き直さないよう、表に 1 つだけ持つ
+   * 先の日は何も暗くしないよう、表より前は先頭の外へ寄せる。表より後は切らない。
+   * 表の末尾より後に終わる番組 (`--end` が表の外) も、実際に終わっていれば終わった番組の濃さにするため。
+   * 2,000 を超えるマスを毎分書き直さないよう、表に 1 つだけ持つ
    */
-  const elapsedSlots = $derived(
-    Math.min(Math.max((clock - data.start) / SLOT, -1), slots + 1),
-  );
+  const elapsedSlots = $derived(Math.max((clock - data.start) / SLOT, -1));
 
   let grid = $state<HTMLElement | null>(null);
   let nowMark = $state<HTMLElement | null>(null);
