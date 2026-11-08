@@ -337,10 +337,10 @@ test("Windows で GPU が無ければ、行は 0 でソフトウェアにする"
   expect(hwChain("h264", {}, 0, devices)).toEqual([]);
   expect(message).toContain("ソフトウェアでエンコードします");
   // /dev の探し方は使わない。NVENC は 0 番が落ちたら止め、QSV・AMF は 4 番まで H.264 だけ試す
-  // (AMF は番号ごとに高画質の指定と古い世代向けの指定の 2 回)
+  // (QSV は番号ごとに GPU のメモリへ移す形と CPU のメモリのまま渡す形、AMF は高画質の指定と古い世代向けの指定の 2 回ずつ)
   const lines = calls.map((argv) => argv.join(" "));
   expect(lines.filter((l) => l.includes("_nvenc"))).toHaveLength(1);
-  expect(lines.filter((l) => l.includes("_qsv"))).toHaveLength(4);
+  expect(lines.filter((l) => l.includes("_qsv"))).toHaveLength(8);
   expect(lines.filter((l) => l.includes("_amf"))).toHaveLength(8);
   expect(lines.some((l) => l.includes("_vaapi"))).toBe(false);
 });
