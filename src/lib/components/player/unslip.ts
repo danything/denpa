@@ -49,3 +49,20 @@ export function unslipper(now: () => number = Date.now) {
     jump,
   };
 }
+
+/**
+ * **映像の遅れが JS から見えない端末か。** Windows のブラウザは映像を DOM と別の面に出すので、`mediaTime` は
+ * 再生位置どおりのまま、画面の映像だけ遅れる (`slip` が 0 のままずれる)。こういう端末だけ、詰まったら測らずに飛び直す
+ * (ライブの `settle`)。**測れる端末で詰まるたびに飛ぶと、遅れていなくても音が 0.02 秒ずつ飛ぶ** (回線を絞った
+ * 手元の再現で、遅れは最大 0.022 秒なのに 20 秒で 5 回飛んだ)。測れる端末の遅れは、映した 1 枚ごとの `check` が直す
+ */
+export function slipHidden(
+  nav:
+    | { userAgent: string; userAgentData?: { platform?: string } }
+    | undefined = typeof navigator === "undefined" ? undefined : navigator,
+): boolean {
+  if (nav === undefined) return false;
+  const platform = nav.userAgentData?.platform;
+  if (platform !== undefined && platform !== "") return platform === "Windows";
+  return /Windows/.test(nav.userAgent);
+}
