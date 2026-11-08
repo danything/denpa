@@ -334,8 +334,11 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         var pid = ((packet[1] & 0x1F) << 8) | packet[2];
         var control = packet[3] >> 6;
         var payload = packet[start..];
-        if (!_pes[pid] || (packet[1] & 0x40) == 0 || payload.Length < 3)
+        var unitStart = _pes[pid] && (packet[1] & 0x40) != 0;
+        if (!unitStart || payload.Length < 3)
         {
+            // 先頭が短くて確かめられない PES は、前の PES が合わなかったことを引き継がない (新しい PES まで流さずに済むように)
+            if (unitStart) _garbled[pid] = false;
             if (_garbled[pid])
             {
                 _undecodable++;

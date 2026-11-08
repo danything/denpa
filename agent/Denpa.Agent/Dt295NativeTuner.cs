@@ -16,15 +16,19 @@ internal sealed class NativeTsFramer
 
     /// <summary>
     /// <see cref="Push"/> と同じく 188 バイトのパケットを取り出すが、同期バイトが続く範囲を 1 回でまとめて渡す (パケットごとの呼び出しとコピーを省く)。
-    /// 前の呼び出しの残りが無ければ、<paramref name="data"/> を直接見て、足りない端数だけ持ち越す
+    /// 前の呼び出しの残り (188 バイト未満) があれば、それを 1 パケットに埋めるぶんだけ <see cref="Push"/> で読み、続きは <paramref name="data"/> を直接見る。
+    /// 足りない端数だけ持ち越す
     /// </summary>
     public void PushRuns(ReadOnlySpan<byte> data, Action<ReadOnlySpan<byte>> sink)
     {
-        if (_used > 0)
+        // 埋めるたびに 1 パケット渡すか、同期のずれを捨てて data を 1 バイト以上読む
+        while (_used > 0 && data.Length > 0)
         {
-            Push(data, packet => sink(packet));
-            return;
+            var take = Math.Min(188 - _used, data.Length);
+            Push(data[..take], sink);
+            data = data[take..];
         }
+        if (_used > 0) return;
         var at = 0;
         while (data.Length - at >= 188)
         {
@@ -271,32 +275,11 @@ internal sealed class Dt295NativeStream
     }
 
     /// <summary>書いたぶんを渡す。溜めが空かないまま <see cref="Zd1jTuner.StallLimit"/> 経ったら、読む側がいないとみて終わる</summary>
-    private bool Flush(PipeWriter writer)
+    private bool Flush(PipeWriter writer) => Zd1jTuner.Flush(writer, () => _stopped, () =>
     {
-        var flushing = writer.FlushAsync();
-        if (!flushing.IsCompleted)
-        {
-            var waiting = flushing.AsTask();
-            var stalled = Stopwatch.StartNew();
-            while (!waiting.Wait(50))
-            {
-                if (_stopped)
-                {
-                    writer.CancelPendingFlush();
-                    return false;
-                }
-                if (stalled.Elapsed >= Zd1jTuner.StallLimit)
-                {
-                    writer.CancelPendingFlush();
-                    _ended = true;
-                    _stalled();
-                    return false;
-                }
-            }
-            return !waiting.Result.IsCompleted;
-        }
-        return !flushing.Result.IsCompleted;
-    }
+        _ended = true;
+        _stalled();
+    });
 
     private void End(string reason)
     {

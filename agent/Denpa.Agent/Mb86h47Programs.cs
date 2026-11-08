@@ -130,7 +130,7 @@ public static class Mb86h47Programs
         Store32(asm, 0x1018, 0x00AE4000);
         Store32(asm, 0x1028, 0x00600000);
         asm.Ldi(0xD02038, R1);
-        asm.Ld(R1, R2);                    // TS エンジンの書き手の位置
+        asm.Ld(R1, R2);                    // TS エンジンの書き込み側の位置
         asm.Ldi(0x1048, R1);
         asm.St(R2, R1);
         asm.Ldi(0x1038, R1);
@@ -145,7 +145,7 @@ public static class Mb86h47Programs
         ];
         foreach (var (address, value) in fifo) Store16(asm, address, value);
 
-        // パケット化と出口
+        // パケット化と EP 0x81
         (uint, uint)[] packer =
         [
             (0x2020, 0), (0x2024, 0), (0x202C, 0x03000400), (0x2030, 0x05010101), (0x3008, 0),
@@ -169,7 +169,7 @@ public static class Mb86h47Programs
         asm.St(R2, R1);
         asm.Ldi8(0, R8);
         asm.Label("no_fill_done");
-        // 2. DMA 2 が読んでよい所 = 書き手の位置まで
+        // 2. DMA 2 が読んでよい所 = 書き込み側の位置まで
         asm.Ldi(0xD02038, R1);
         asm.Ld(R1, R0);
         asm.Ldi(0x1038, R1);
@@ -212,7 +212,7 @@ public static class Mb86h47Programs
         Store32(asm, 0x200C, 0x01000000);
         Store32(asm, 0x2004, 0xBF);
         Store32(asm, 0x2000, 0x0D000041);
-        // 6. 10 単位ごとに、TS エンジンの書き手に読んだ位置 (8 バイト手前) を返す
+        // 6. 10 単位ごとに、TS エンジンの書き込み側に読んだ位置 (8 バイト手前) を返す
         asm.AddI(1, R9);
         asm.CmpI(10, R9);
         asm.Far(Fr30Cond.Ne, "loop", R12);

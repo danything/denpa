@@ -224,7 +224,7 @@ public static class Px4Userland
     }
 
     /// <summary>番号の末尾 4 桁。桁数は見ていない (<see cref="Parse(string)"/>) ので、4 桁に満たなければ全部</summary>
-    internal static string Tail(string id) => id.Length > 4 ? id[^4..] : id;
+    private static string Tail(string id) => id.Length > 4 ? id[^4..] : id;
 
     /// <summary>画面に出す名前</summary>
     public static string Name(string model, string id, int receiver) => $"{model}-{Label(id)} #{receiver}";

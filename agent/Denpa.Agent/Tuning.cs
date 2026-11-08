@@ -627,7 +627,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
 {
     // linux/dvb/frontend.h
     private const uint FeSetProperty = 0x40106f52;   // _IOW('o', 82, struct dtv_properties)
-    private const uint FeGetProperty = 0x80106f53;   // _IOR('o', 83, struct dtv_properties)
+    internal const uint FeGetProperty = 0x80106f53;  // _IOR('o', 83, struct dtv_properties)
     private const uint FeReadStatus = 0x80046f45;    // _IOR('o', 69, fe_status_t)
     private const uint FeSetVoltage = 0x6f43;        // _IO('o', 67)。電圧は引数にそのまま渡す
     private const uint FeHasLock = 0x10;

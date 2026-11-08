@@ -357,6 +357,33 @@ public sealed class Zd1jTuner : ITuneDevice
     /// </summary>
     internal static TimeSpan StallLimit => TunerPool.Linger;
 
+    /// <summary>
+    /// 書いたぶんを渡す。続けて読めるなら true。<paramref name="stopped"/> になったら、または溜めが空かないまま <see cref="StallLimit"/> 経ったら
+    /// 渡すのをやめて false (後者は読む側がいないとみて <paramref name="stalled"/> を呼ぶ)。CECH-ZD1 J と PIX-DT295 の TS の流しが使う
+    /// </summary>
+    internal static bool Flush(PipeWriter writer, Func<bool> stopped, Action stalled)
+    {
+        var flushing = writer.FlushAsync();
+        if (flushing.IsCompleted) return !flushing.Result.IsCompleted;
+        var waiting = flushing.AsTask();
+        var elapsed = Stopwatch.StartNew();
+        while (!waiting.Wait(50))
+        {
+            if (stopped())
+            {
+                writer.CancelPendingFlush();
+                return false;
+            }
+            if (elapsed.Elapsed >= StallLimit)
+            {
+                writer.CancelPendingFlush();
+                stalled();
+                return false;
+            }
+        }
+        return !waiting.Result.IsCompleted;
+    }
+
     private readonly string _name;
     private readonly Func<Zd1jBoard> _acquire;
     private readonly Lock _gate = new();
@@ -420,7 +447,7 @@ public sealed class Zd1jTuner : ITuneDevice
         }
     }
 
-    /// <summary>電波の強さと C/N (<c>--tune</c> が出す。API には受信の状態と C/N だけを出す)</summary>
+    /// <summary>電波の強度と C/N (<c>--tune</c> が出す。API には受信の状態と C/N だけを出す)</summary>
     public DibSignal? Signal()
     {
         lock (_gate) return _board?.Demod.Signal();
@@ -601,32 +628,11 @@ internal sealed class Zd1jStream
     }
 
     /// <summary>書いたぶんを渡す。溜めが空かないまま <see cref="Zd1jTuner.StallLimit"/> 経ったら、読む側がいないとみて終わる</summary>
-    private bool Flush(PipeWriter writer)
+    private bool Flush(PipeWriter writer) => Zd1jTuner.Flush(writer, () => _stopped, () =>
     {
-        var flushing = writer.FlushAsync();
-        if (!flushing.IsCompleted)
-        {
-            var waiting = flushing.AsTask();
-            var stalled = Stopwatch.StartNew();
-            while (!waiting.Wait(50))
-            {
-                if (_stopped)
-                {
-                    writer.CancelPendingFlush();
-                    return false;
-                }
-                if (stalled.Elapsed >= Zd1jTuner.StallLimit)
-                {
-                    writer.CancelPendingFlush();
-                    _ended = true;
-                    _stalled();
-                    return false;
-                }
-            }
-            return !waiting.Result.IsCompleted;
-        }
-        return !flushing.Result.IsCompleted;
-    }
+        _ended = true;
+        _stalled();
+    });
 
     private void End(string reason)
     {

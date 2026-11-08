@@ -707,15 +707,27 @@ public class Dt295NativeTests
         framer.PushRuns(data, run => runs.Add(run.ToArray()));
         await Assert.That(runs.Count).IsEqualTo(1);
         await Assert.That(runs[0].Length).IsEqualTo(188 * 3);
-        // 続きで端数が 1 パケットになる (持ち越しがあるときは 1 パケットずつ)
-        framer.PushRuns(new byte[88].Select(_ => (byte)2).Concat(Packets(1, 3)).ToArray(), run => runs.Add(run.ToArray()));
-        await Assert.That(runs.Sum(r => r.Length)).IsEqualTo(188 * 5);
+        // 続きで端数が 1 パケットになり、そのあとの 3 パケットはまとめて 1 つ
+        framer.PushRuns(new byte[88].Select(_ => (byte)2).Concat(Packets(3, 3)).ToArray(), run => runs.Add(run.ToArray()));
+        await Assert.That(runs.Count).IsEqualTo(3);
+        await Assert.That(runs[1].Length).IsEqualTo(188);
         await Assert.That(runs[1][0]).IsEqualTo((byte)0x47);
+        await Assert.That(runs[1][187]).IsEqualTo((byte)2);
+        await Assert.That(runs[2].Length).IsEqualTo(188 * 3);
         // 同期のずれは 1 バイトずつ捨て、そのあとの範囲を 1 つで渡す
         runs.Clear();
         framer.PushRuns(new byte[] { 0, 0, 0 }.Concat(Packets(2, 4)).ToArray(), run => runs.Add(run.ToArray()));
         await Assert.That(runs.Count).IsEqualTo(1);
         await Assert.That(runs[0].Length).IsEqualTo(188 * 2);
         await Assert.That(framer.Discarded).IsEqualTo(3L);
+        // 端数に足しても 1 パケットにならなければ、足したぶんも持ち越す
+        runs.Clear();
+        var split = Packets(1, 5);
+        framer.PushRuns(split[..100], run => runs.Add(run.ToArray()));
+        framer.PushRuns(split[100..150], run => runs.Add(run.ToArray()));
+        await Assert.That(runs.Count).IsEqualTo(0);
+        framer.PushRuns(split[150..].Concat(Packets(1, 6)).ToArray(), run => runs.Add(run.ToArray()));
+        await Assert.That(runs.Select(run => run.Length)).IsEquivalentTo(new[] { 188, 188 });
+        await Assert.That(runs[0][187]).IsEqualTo((byte)5);
     }
 }

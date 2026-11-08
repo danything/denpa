@@ -57,8 +57,7 @@ public sealed record TunerSignal(bool Locked, double? Cn, string Unit, bool AtTu
     /// </list>
     ///
     /// PIX-DT295 の復調が TC90522 系なのは推定で、レジスタもその系統の位置 (地上波 0x8B・衛星 0xBC)。
-    /// 本番の PIX-DT295 では T22・T25 が生の値 2,800〜3,060 (約 35 dB)、BS13 が 9,880〜9,970 (約 17 dB)、CS22 が 14,446〜15,183 (約 13 dB) で、
-    /// 衛星は CS が BS より低く出る (どちらも 1 台の機材で読んだ値で、ほかの機材の dB と同じ物差しかは確かめていない)
+    /// 実機で読んだ値と dB は docs/tuners.md「信号レベル」にある (1 台の機材で読んだ値で、ほかの機材の dB と同じ物差しかは確かめていない)
     /// </summary>
     public static double? Tc90522Db(bool satellite, uint raw)
     {

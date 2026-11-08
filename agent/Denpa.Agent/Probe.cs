@@ -214,7 +214,7 @@ public static class Probe
 
     /// <summary>
     /// CECH-ZD1 J の速さを測る。**冷えた状態から開く・選局からロック・ロックから最初の TS・2 回目の選局 (温かい状態)**
-    /// の時間と、I2C の回数、C/N と電波の強さを出す。チャンネルは <c>T27</c> でも <c>27</c> (地上波) でもよい。
+    /// の時間と、I2C の回数、C/N と電波の強度を出す。チャンネルは <c>T27</c> でも <c>27</c> (地上波) でもよい。
     /// 選局のたびに、ロックまでの内訳 (段ごとの時間と待ち) も出す (常駐のときは出さない)。<c>--repeat N</c> はチャンネルの並びを N 回回し、
     /// 最後にロックの成否と時間の最小・中央・最大を出す (選局を縮める工夫で確かさが落ちていないかを見るため)
     /// </summary>
@@ -270,7 +270,7 @@ public static class Probe
                 Console.WriteLine($"    I2C のやり取り {board.Bridge.I2cTransfers - i2c} 回 / メモリ要求 {board.Bridge.Requests - requests} 回 ({(index == 0 ? "開くところからこの選局まで" : "この選局で")})");
                 if (tuner.Signal() is { } signal)
                 {
-                    Console.WriteLine($"    C/N {(signal.CnDb is { } cn ? $"{cn:F1} dB" : "-")}  電波の強さ {signal.StrengthDbm:F1} dBm (目安)  D[568] 0x{signal.Status:X4}");
+                    Console.WriteLine($"    C/N {(signal.CnDb is { } cn ? $"{cn:F1} dB" : "-")}  電波の強度 {signal.StrengthDbm:F1} dBm (目安)  D[568] 0x{signal.Status:X4}");
                 }
             }
             if (repeat > 1)

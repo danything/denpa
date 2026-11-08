@@ -517,7 +517,7 @@ public static class Dt295NativePrograms
         asm.Add2(-1, R5);
         asm.Far(Fr30Cond.Ra, "t_loop", R12);
 
-        // 失敗: R0 = 結果 (2・3)。STOP を出して戻る
+        // 失敗: R0 = 結果 (1〜3)。STOP を出して戻る
         asm.Label("i2c_nack");
         asm.Ldi8((uint)I2cNack, R0);
         asm.Label("i2c_fail");

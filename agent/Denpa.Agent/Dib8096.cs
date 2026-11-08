@@ -38,7 +38,7 @@ public enum DibLock
 
 /// <summary>受信の様子 (仕様書 8)</summary>
 /// <param name="Locked">ロック (データが出る)</param>
-/// <param name="StrengthDbm">信号の強さ。別の DiB8000 の機材で測った表なので目安</param>
+/// <param name="StrengthDbm">信号の強度。別の DiB8000 の機材で測った表なので目安</param>
 /// <param name="CnDb">C/N。ロックしていないか測れなければ null</param>
 public sealed record DibSignal(bool Locked, double StrengthDbm, double? CnDb, ushort Status);
 
@@ -2304,7 +2304,7 @@ public sealed class Dib8096
     }
 
     // ---------------------------------------------------------------------
-    // ロック・強さ・C/N (仕様書 8)
+    // ロック・強度・C/N (仕様書 8)
     // ---------------------------------------------------------------------
 
     /// <summary>8.1 のロック (ビット 12 と、ビット 5〜7 のどれか)</summary>
@@ -2331,7 +2331,7 @@ public sealed class Dib8096
         (46698, 85000), (45617, 84000), (44773, 83000), (43845, 82000), (43020, 81000), (42010, 80000), (0, 0),
     ];
 
-    /// <summary>8.2 信号の強さ (dBm。目安)</summary>
+    /// <summary>8.2 信号の強度 (dBm。目安)</summary>
     internal static double Strength(int s)
     {
         ulong y;
