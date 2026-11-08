@@ -45,6 +45,7 @@ const A: HwDevice = {
   videotoolbox: [],
   cqp: [],
   amfTranscoding: [],
+  qsvSystem: [],
   full: [],
 };
 const B: HwDevice = { ...A, path: "/dev/dri/renderD129", label: "B" };
