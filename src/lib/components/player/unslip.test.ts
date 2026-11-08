@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { SLIP_MOST, UNSLIP_EVERY, UNSLIP_STEP, unslipper } from "./unslip";
+import {
+  SLIP_MOST,
+  slipHidden,
+  UNSLIP_EVERY,
+  UNSLIP_STEP,
+  unslipper,
+} from "./unslip";
 
 /** 再生位置と止まっているかだけ持つ `<video>` */
 function fakeVideo(currentTime: number, paused = false, seeking = false) {
@@ -49,5 +55,49 @@ describe("映像だけ遅れたら飛び直す", () => {
     now = UNSLIP_EVERY - 1;
     expect(fix.check(video, 9)).toBe(false);
     expect(fix.jump(video)).toBe(false);
+  });
+});
+
+describe("映像の遅れが見えない端末 (詰まったら測らずに飛ぶ)", () => {
+  test("Windows は見えない", () => {
+    expect(
+      slipHidden({
+        userAgent:
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0",
+        userAgentData: { platform: "Windows" },
+      }),
+    ).toBe(true);
+    expect(
+      slipHidden({
+        userAgent:
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      }),
+    ).toBe(true);
+  });
+
+  test("Android・Mac・iPhone は見える (映した 1 枚ごとの `check` が直す)", () => {
+    expect(
+      slipHidden({
+        userAgent:
+          "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36",
+        userAgentData: { platform: "Android" },
+      }),
+    ).toBe(false);
+    expect(
+      slipHidden({
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+      }),
+    ).toBe(false);
+    expect(
+      slipHidden({
+        userAgent:
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1",
+      }),
+    ).toBe(false);
+  });
+
+  test("navigator が無い (サーバで描くとき) は見えるとして扱う", () => {
+    expect(slipHidden(undefined)).toBe(false);
   });
 });

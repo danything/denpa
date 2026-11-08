@@ -43,7 +43,11 @@ import {
   wantsData,
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
-import { slipOf, unslipper } from "#lib/components/player/unslip.js";
+import {
+  slipHidden,
+  slipOf,
+  unslipper,
+} from "#lib/components/player/unslip.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
   LagMeter,
@@ -652,9 +656,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** 映像だけ遅れたときの飛び直し (`unslip.ts`) */
   const unslipping = unslipper();
   /*
-   * 映像の遅れは JS から見えないことがある (Windows の Chrome / Edge は映像を DOM と別の面に出す)。
-   * なので起きる条件の途切れ (`stalled`) で飛び直す (`settle`)。コマ落ちを合図にしない理由は `unslip.ts` の `UNSLIP_EVERY` の下
+   * 映像の遅れは JS から見えないことがある (Windows のブラウザは映像を DOM と別の面に出す)。
+   * そういう端末 (`slipHidden`) では、起きる条件の途切れ (`stalled`) で飛び直す (`settle`)。コマ落ちを合図にしない理由は `unslip.ts` の `UNSLIP_EVERY` の下
    */
+  const hidesSlip = slipHidden();
   /** 貯まりが足りた最初の時刻。**映像を待ちきりにしないため** (`canStart`) */
   let enoughAt = 0;
   /** 繋ぎ直しの目覚まし。**待っている間だけ入っている** */
@@ -1397,10 +1402,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     // 捨てられたコマも同じ間隔で読む (canvas で描くとき。`<video>` のぶんは `pace` が足し上げる)。**選局からの通し**
     if (engine !== null) dropped = engine.dropped;
     /*
-     * **途切れたら飛び直す** (`unslipping` の下の説明)。測れた遅れ (`slip`) を
-     * 待たない。あれは見えないことがある。canvas で描く経路には要らない (映像は音の時計を追うだけ)
+     * **遅れが見えない端末は、途切れたら飛び直す** (`unslipping` の下の説明)。測れた遅れ (`slip`) を待たない。
+     * 見える端末では飛ばない (遅れていなくても音が 0.02 秒飛ぶ。`slipHidden`)。canvas で描く経路には要らない (映像は音の時計を追うだけ)
      */
-    if (stalled && element !== null && !canvas) unslip(element);
+    if (stalled && hidesSlip && element !== null && !canvas) unslip(element);
     const gap = gapNow();
     const most = Math.round(gap * 100) / 100;
     if (most !== gapMost) gapMost = most;
