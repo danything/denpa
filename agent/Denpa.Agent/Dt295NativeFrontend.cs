@@ -558,10 +558,9 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     }
 
     /// <summary>
-    /// 受信の状態と、復調の C/N の生の値。**dB には直していない。**
+    /// 受信の状態と、復調の C/N の生の値。dB にするのは <see cref="TunerSignal.Tc90522Db"/>。
     /// 仕様書に C/N のレジスタは無い。復調は TC90522 系と推定されている (仕様書 11.1) ので、その系統で C/N を持つレジスタを読む
-    /// (地上波は 0x8B から 3 バイト、衛星は 0xBC から 2 バイト。実機で確かめるまで、候補)。値の向き (大きいほど良いか悪いか) も未確認で、
-    /// dB への換算式は仕様書に無いので付けない。受信の状態は <see cref="WaitTerrestrialLock"/>・<see cref="WaitSatelliteLock"/> の段と同じレジスタ
+    /// (地上波は 0x8B から 3 バイト、衛星は 0xBC から 2 バイト)。値が大きいほど雑音が多い (本番で CS が BS より大きい)。受信の状態は <see cref="WaitTerrestrialLock"/>・<see cref="WaitSatelliteLock"/> の段と同じレジスタ
     /// (地上波は 0x81 の bit4、衛星は 0xC3 の上位 4 ビットが 0)。読むだけで、書かない
     /// </summary>
     public Dt295Signal Signal(bool satellite)
@@ -606,5 +605,5 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     }
 }
 
-/// <summary>復調の受信の状態と C/N の生の値 (<see cref="Dt295NativeFrontend.Signal"/>)。<paramref name="CnRaw"/> は dB に直していない</summary>
+/// <summary>復調の受信の状態と C/N の生の値 (<see cref="Dt295NativeFrontend.Signal"/>)。<paramref name="CnRaw"/> はレジスタの値のまま (dB にするのは <see cref="TunerSignal.Tc90522Db"/>)</summary>
 public sealed record Dt295Signal(bool Satellite, bool Locked, uint CnRaw, int CnBytes);

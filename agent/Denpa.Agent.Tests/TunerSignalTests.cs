@@ -39,9 +39,26 @@ public class TunerSignalTests
     }
 
     [Test]
-    public async Task DT295はレジスタの値のまま()
+    public async Task DT295はTC90522系の式でdBにする()
     {
-        await Assert.That(TunerSignal.From(new Dt295Signal(false, true, 2748, 3))).IsEqualTo(new TunerSignal(true, 2748, TunerSignal.Raw));
+        // 本番の PIX-DT295 で読んだ値。地上波は約 35 dB、BS は約 17 dB、CS は約 13 dB
+        var terrestrial = TunerSignal.From(new Dt295Signal(false, true, 2935, 3));
+        await Assert.That(terrestrial.Unit).IsEqualTo(TunerSignal.Db);
+        await Assert.That(terrestrial.Locked).IsTrue();
+        await Assert.That(terrestrial.Cn!.Value).IsBetween(34.5, 35.5);
+        await Assert.That(TunerSignal.From(new Dt295Signal(true, true, 9930, 2)).Cn!.Value).IsBetween(16.7, 17.7);
+        await Assert.That(TunerSignal.From(new Dt295Signal(true, true, 14800, 2)).Cn!.Value).IsBetween(12.9, 13.9);
+    }
+
+    [Test]
+    public async Task DT295の値は大きいほど低いdBになり_式の外は上限かnull()
+    {
+        await Assert.That(TunerSignal.Tc90522Db(false, 4000)!.Value).IsLessThan(TunerSignal.Tc90522Db(false, 2000)!.Value);
+        await Assert.That(TunerSignal.Tc90522Db(true, 15000)!.Value).IsLessThan(TunerSignal.Tc90522Db(true, 10000)!.Value);
+        // 衛星の 3000 以下は式の外。上限 (P = 0) にする
+        await Assert.That(TunerSignal.Tc90522Db(true, 2500)).IsEqualTo(58.857);
+        // 地上波の 0 は割れない
+        await Assert.That(TunerSignal.Tc90522Db(false, 0)).IsNull();
     }
 
     [Test]
