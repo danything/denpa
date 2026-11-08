@@ -214,7 +214,10 @@ test.describe("観る画面でその場で流す", () => {
     await goto(page, `/watch/${id}`);
     const note = page.getByTestId("watch-status");
     await expect(note).toContainText("サーバが混んでいます");
-    await note.getByTestId("watch-busy-switch").click();
+    await note
+      .getByTestId("watch-busy-switch")
+      .filter({ hasText: "H.264" })
+      .click();
     // 同じ幕は、移った先の読み込み中にも出る。混んでいるという文言だけが消える
     await expect(page.getByText("サーバが混んでいます")).toHaveCount(0);
     await expect(video).toHaveAttribute(

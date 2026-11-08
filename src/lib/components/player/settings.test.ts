@@ -98,11 +98,7 @@ describe("⚙ のコーデックの行 (ライブ・追っかけ)", () => {
 
   test("自動・AV1・MPEG-2 と並べ、自動の値にいまの形式を添える", () => {
     const { made } = codecs();
-    expect(made.options.map((o) => o.label)).toEqual([
-      "自動",
-      "AV1",
-      "MPEG-2",
-    ]);
+    expect(made.options.map((o) => o.label)).toEqual(["自動", "AV1", "MPEG-2"]);
     expect(made.value).toBe("自動 (MPEG-2)");
     expect(made.options.find((o) => o.active)?.key).toBe("auto");
   });

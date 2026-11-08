@@ -95,6 +95,12 @@ async function stopRecording(
 }
 
 test.describe("ライブが録画にチューナーを取り上げられたとき", () => {
+  /*
+   * MPEG-2 をデコードできる端末として開く (`stack.ts` の `liveWithoutMpeg2`)。家の中の自動は MPEG-2 になり、
+   * 開いたときにサーバが先回りする形式 (`live.warm`) と画面がリクエストする形式がそろう
+   */
+  test.use({ liveMpeg2: true });
+
   test.beforeEach(async ({ request, stack }) => {
     await syncEpg(request);
     await setTuners(stack, 3);

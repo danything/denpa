@@ -444,12 +444,10 @@ test.describe("CM検出のやり直し", () => {
     );
     expect(await row.getAttribute("data-cm-ranges")).toContain("300");
     /** 置いてあるもの (`libraryPath`) そのものに、チャプターを `-c copy` で書き直した回数 */
-    const rewrites = () =>
-      encodeRuns(stack.encodeArgsFile).filter(
-        (run) =>
-          run.includes("-map_chapters") &&
-          run.some((a, i) => run[i - 1] === "-i" && a === libraryPath),
-      ).length;
+    const rewrote = (run: string[]) =>
+      run.includes("-map_chapters") &&
+      run.some((a, i) => run[i - 1] === "-i" && a === libraryPath);
+    const rewrites = () => encodeRuns(stack.encodeArgsFile).filter(rewrote).length;
     expect(rewrites()).toBe(0);
 
     await goto(page, "/");
@@ -459,9 +457,7 @@ test.describe("CM検出のやり直し", () => {
     await detail.getByTestId("cm-redo-button").click();
 
     // エンコードするジョブと同じ待ち行列に並ぶ。終わればチャプターを書き直し、置き場所は変わらない (再エンコードしていない)
-    await expect
-      .poll(rewrites, { timeout: 60_000, intervals: [500] })
-      .toBe(1);
+    await expect.poll(rewrites, { timeout: 60_000, intervals: [500] }).toBe(1);
     await waitWatchable(page, row);
     expect(await row.getAttribute("data-cm-ranges")).toContain("300");
     expect(await row.getAttribute("data-library-path")).toBe(libraryPath);

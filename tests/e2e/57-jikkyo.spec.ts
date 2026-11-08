@@ -884,6 +884,9 @@ test.describe("ライブで実況に書き込む", () => {
       await deviceOn(page);
       await page.setViewportSize({ width: 390, height: 844 });
       await goto(page, `/live?service=${MX.id}`);
+      // シークバーはエンコードしたもの (AV1) にだけある
+      await wakeControls(page, "live-frame");
+      await pickCodec(page, "live", "av1");
       await wakeControls(page, "live-frame");
       const write = page.getByTestId("live-jikkyo-list");
       await expect(write).toBeVisible();

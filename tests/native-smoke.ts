@@ -207,21 +207,25 @@ await ff(
   "avif",
   at("thumb.avif"),
 );
-await Bun.write(at("list.txt"), "file h264.mkv\nfile h264.mkv\n");
+// CM のチャプターを書き足す (`cm.chapterArgs`)。H.264 の mkv にそのまま写して付ける
+await Bun.write(
+  at("chapters.txt"),
+  ";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1000\ntitle=A\n",
+);
 await ff(
-  "-f",
-  "concat",
-  "-safe",
-  "0",
   "-i",
-  at("list.txt"),
+  at("h264.mkv"),
+  "-i",
+  at("chapters.txt"),
   "-map",
   "0",
+  "-map_chapters",
+  "1",
   "-c",
   "copy",
   "-f",
   "matroska",
-  at("cut.mkv"),
+  at("chapters.mkv"),
 );
 console.log("ffmpeg: ok");
 

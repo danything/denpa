@@ -25,9 +25,9 @@ function flat(page: Page) {
   );
 }
 
-/** 設定の画面で巻いて、ヘッダーを浮かせる */
+/** 設定の画面 (長く巻ける「連携」) で巻いて、ヘッダーを浮かせる */
 async function floatOnSettings(page: Page) {
-  await goto(page, "/settings");
+  await goto(page, "/settings/integrations");
   const scrollable = await page.evaluate(
     () =>
       document.scrollingElement!.scrollHeight -

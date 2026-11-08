@@ -610,13 +610,14 @@ describe("CM を探しながらエンコードする", () => {
 
 describe("キーフレーム", () => {
   test("置く所を指さない (CM はチャプターにするだけで、切らない)", () => {
-    for (const hardware of [
+    const ways: (HwWay | undefined)[] = [
       undefined,
       { kind: "vaapi", device: "/dev/dri/renderD128" },
       { kind: "nvenc", device: "/dev/nvidia0", gpu: 0 },
-    ] as const) {
+    ];
+    for (const hardware of ways) {
       const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
-        ...(hardware === undefined ? {} : { hardware }),
+        hardware,
       });
       expect(args).not.toContain("-force_key_frames:v");
       expect(args).not.toContain("-forced-idr");
@@ -751,9 +752,7 @@ describe("encodeAttempts (1 回の実行の中で ffmpeg を起こす順)", () =
   });
 
   test("H.265 はソフトウェアに倒さない。GPU が無ければ 1 回も起こさない", () => {
-    expect([...perWay(encodeAttempts("hevc", [A])).keys()]).toEqual([
-      A.device,
-    ]);
+    expect([...perWay(encodeAttempts("hevc", [A])).keys()]).toEqual([A.device]);
     expect(encodeAttempts("hevc", [])).toEqual([]);
     expect(encodeAttempts("h264", [])).toHaveLength(2);
   });

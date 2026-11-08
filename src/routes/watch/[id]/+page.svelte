@@ -1460,8 +1460,7 @@
         compat && canvasAbility !== null
           ? canvasChoices(info, canvasAbility)
               .filter(
-                (item) =>
-                  !HIDDEN_CODECS.some((codec) => codec === item.codec),
+                (item) => !HIDDEN_CODECS.some((codec) => codec === item.codec),
               )
               // 並びはほかのメニューと同じ (`MENU_ORDER`)。`canvasChoices` の並びは選ぶ順 (`pickCanvas`) のまま
               .sort(

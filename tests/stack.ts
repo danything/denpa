@@ -549,9 +549,7 @@ export async function bootSpare(
  * WebGL2 が無いことにして (`raw/support.ts` の `rawUnsupported`)、自動に H.264 を選ばせる。録画の観る画面と追っかけはそのまま。
  * MPEG-2 で観る試験は `test.use({ liveMpeg2: true })` で外す。自分で作る文脈 (`browser.newContext`) にも呼ぶ
  */
-export async function liveWithoutMpeg2(
-  context: BrowserContext,
-): Promise<void> {
+export async function liveWithoutMpeg2(context: BrowserContext): Promise<void> {
   await context.addInitScript(() => {
     const get = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (
