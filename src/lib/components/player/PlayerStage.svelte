@@ -41,11 +41,7 @@
      * 光が見えている間は、実況のコメントも枠の外を流れる (下の `outside`)
      */
     ambient?: Ambient;
-    /**
-     * 小窓 (PiP) を出しているか (`pip.svelte.ts` の `active`)。**出している間は舞台の映像を隠す。**
-     * 同じ映像を小窓と舞台の両方で描くと、小窓の裏で描画が続いて重くなる (とくに非力な端末)。
-     * 隠しても小窓は止まらない (映像は同じ `<video>` のまま)
-     */
+    /** 小窓を出しているか (`pip.svelte.ts` の `active`)。出している間は舞台の映像を隠す (下の `data-pip`) */
     pip?: boolean;
   }
   interface StageApi {
@@ -433,19 +429,12 @@
     min-height: 14rem;
   }
   /*
-   * 小窓 (PiP) を出している間は、舞台の映像を隠す。**同じ映像を 2 か所で描かない**
-   * (小窓の裏でも描き続けると、とくに非力な端末で重くなる)。`<video>` は止めない
-   * (小窓がその映像を出している)。生の canvas (MPEG-2・互換モード) も、worker は
-   * 小窓へ書くために描き続けるが、画面へは出さない
+   * **小窓を出している間は、舞台の映像と字幕を隠す。** 同じ映像を 2 か所で描くと、非力な端末で重くなる。
+   * 隠すだけで止めない (小窓は同じ `<video>` や worker が描くフレームを出している)
    */
-  .stage[data-pip] :global(video),
-  .stage[data-pip] :global(canvas[data-input]),
-  .stage[data-pip] :global(canvas[data-testid$="-still"]),
-  .stage[data-pip] :global(canvas[data-testid$="-captions"]),
-  .stage[data-pip] :global(canvas[data-testid="watch-captions-canvas"]) {
+  .stage[data-pip] :global(:is(video, canvas)) {
     visibility: hidden;
   }
-  /* 小窓の間、映像の代わりに出す案内 */
   .pip-note {
     position: absolute;
     inset: 0;

@@ -135,9 +135,7 @@ export function pictureInPicture(options: Options): Pip {
   let entering = false;
   /**
    * 変換した映像に字幕を重ねたもの (`composeBaked`)。**小窓に出している間だけ** ある。
-   * **`$state` ではなく `$state.raw`。** `$state` はオブジェクトを proxy に包むので、
-   * `composeBaked` の `baked === composed` が外れ、字幕を重ねた小窓を使わず元の
-   * `<video>` に落ちる (proxy と元のオブジェクトは `===` で一致しない)
+   * `$state.raw` にする (`$state` は proxy に包むので `composeBaked` の `===` が外れ、字幕の無い元の `<video>` に落ちる)
    */
   let baked = $state.raw<Composed | null>(null);
   /**
