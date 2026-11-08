@@ -16,6 +16,7 @@ import {
   nullable,
   number,
   object,
+  optional,
   type Shape,
   string,
   tolerate,
@@ -53,6 +54,8 @@ const SIGNAL = object({
   cn: nullable(number),
   unit: literal("dB", "raw"),
   atTune: boolean,
+  /** 電波の強度 (dBm)。dBm で測れる機材だけ。古いエージェントは返さない (無ければ出さない) */
+  strengthDbm: optional(number),
 });
 export type TunerSignal = Infer<typeof SIGNAL>;
 
@@ -78,7 +81,7 @@ const AGENT_TUNER = object({
   pid: nullable(number),
   error: nullable(string),
   /**
-   * 受信の状態と C/N。使用中で、機材が測れるときだけ (エージェントが 5 秒ごとに読む)。
+   * 受信の状態と C/N と強度。使用中で、機材が測れるときだけ (エージェントが 5 秒ごとに読む)。
    * `unit` が `raw` なら dB ではなく、機材やドライバが返した値のまま (同じチューナーで比べる目安)。
    * `atTune` は選局したときの値 (px4d は選局の答えでしか返さない)。docs/tuners.md「信号レベル」
    */

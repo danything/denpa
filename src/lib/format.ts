@@ -497,18 +497,23 @@ export const READER_STATE_LABEL: Record<CardReaderState, string> = {
 };
 
 /**
- * 受信の状態と C/N の出し方 (設定の「チューナー」と、チャンネルの受信品質の測定)。
+ * 受信の状態と C/N と強度の出し方 (設定の「チューナー」と、チャンネルの受信品質の測定)。
  * **生の値は dB と読まれないように「(生の値)」を付け、単位を付けない** (機材やドライバが返した値のまま。docs/tuners.md「信号レベル」)。
- * 選局したときに測った値 (px4d) はそう言う
+ * 選局したときに測った値 (px4d) はそう言う。強度は dBm で測れた機材だけ出し、測れない機材では何も添えない
  */
 export function signalText(signal: TunerSignal): string {
-  const state = signal.locked ? "同期しています" : "同期していません";
-  if (signal.cn === null) return state;
-  const cn =
-    signal.unit === "dB"
-      ? `C/N: ${signal.cn.toFixed(1)} dB${signal.atTune ? " (選局したとき)" : ""}`
-      : `C/N (生の値): ${signal.cn.toLocaleString("ja-JP")}`;
-  return `${state}・${cn}`;
+  const parts = [signal.locked ? "同期しています" : "同期していません"];
+  if (signal.strengthDbm !== undefined) {
+    parts.push(`強度: ${signal.strengthDbm.toFixed(1)} dBm`);
+  }
+  if (signal.cn !== null) {
+    parts.push(
+      signal.unit === "dB"
+        ? `C/N: ${signal.cn.toFixed(1)} dB${signal.atTune ? " (選局したとき)" : ""}`
+        : `C/N (生の値): ${signal.cn.toLocaleString("ja-JP")}`,
+    );
+  }
+  return parts.join("・");
 }
 
 /** 生の値の C/N に添える注記。何と比べるものかを言う */
