@@ -43,7 +43,12 @@ import {
   wantsData,
 } from "#lib/components/player/data-receive.js";
 import { eachFrame } from "#lib/components/player/frames.js";
-import { slipHidden, unslipper } from "#lib/components/player/unslip.js";
+import {
+  DecodeLag,
+  SLIP_MOST,
+  slipHidden,
+  unslipper,
+} from "#lib/components/player/unslip.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
   LagMeter,
@@ -654,6 +659,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let slipMost = $state(0);
   /** 映像だけ遅れたときの飛び直し (`unslip.ts`) */
   const unslipping = unslipper();
+  /** デコードが追いついていないか (`unslip.ts` の `DecodeLag`)。「自動」の段を下げる合図と、再生を速めないかを決める */
+  const decodeLag = new DecodeLag();
   /*
    * 映像の遅れは JS から見えないことがある (Windows のブラウザは映像を DOM と別の面に出す)。
    * そういう端末 (`slipHidden`) では、起きる条件の途切れ (`stalled`) で飛び直す (`settle`)。コマ落ちを合図にしない理由は `unslip.ts` の `UNSLIP_EVERY` の下
@@ -790,6 +797,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         if (measured !== null) {
           slip = measured;
           if (slip > slipMost) slipMost = slip;
+          if (slip > SLIP_MOST) decodeLag.late(Date.now());
           unslip(video, slip);
         }
       }
@@ -949,6 +957,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       baseKbps: null,
       lag: chase === null ? lagMeter.growth(now) : null,
       capacity,
+      // canvas に描く経路は自分で変換した映像へ戻る (`raw/budget.ts`)。`<video>` だけ渡す
+      behind: !canvas && decodeLag.behind(now),
     });
     // canvas の詰まりには終わりの合図が無い。1 回の刻みで数える
     if (canvas) stuck = false;
@@ -1148,6 +1158,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         ? unslipping.jump(video)
         : unslipping.fix(video, measured);
     if (!jumped) return;
+    // 測った遅れで飛んだときだけ数える。測れない端末が詰まって飛ぶぶんはデコードの重さではない
+    if (measured !== undefined) decodeLag.jumped(Date.now());
     slips++;
     slip = 0;
     // これで上がる `waiting` は数えない (`quiet`)
@@ -1325,7 +1337,15 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       lows.clear();
       jumped();
     }
-    if (next.rate !== null) steerTo(video, next.rate);
+    /*
+     * **映像が遅れているあいだは速めない** (`DecodeLag.slipping`)。遅れを詰めようと速く回すと、デコードがさらに重くなる
+     * (エミュレータで AV1 1080p を 1.05 倍で回し続けていた)。遅くするのはそのまま
+     */
+    if (next.rate !== null)
+      steerTo(
+        video,
+        decodeLag.slipping(Date.now()) ? Math.min(next.rate, 1) : next.rate,
+      );
     // 読み直すと 1 に戻るので、入れた値ではなく今の値を出す
     rate = video.playbackRate;
     if (next.play && !running && canStart(video)) startPlaying(video);
@@ -1394,8 +1414,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * ぶんを、Safari が 0 に戻す前に数える
    */
   function countDropped(video: HTMLVideoElement): void {
-    const now = video.getVideoPlaybackQuality?.().droppedVideoFrames;
-    if (now === undefined) return;
+    const quality = video.getVideoPlaybackQuality?.();
+    if (quality === undefined) return;
+    const now = quality.droppedVideoFrames;
+    decodeLag.frames(Date.now(), quality.totalVideoFrames, now);
     const more = now >= droppedSeen ? now - droppedSeen : now;
     droppedSeen = now;
     if (more > 0) dropped += more;
@@ -1689,6 +1711,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     position = 0;
     slip = 0;
     slipMost = 0;
+    decodeLag.reset();
     rateChanges = 0;
     enoughAt = 0;
     // 作り直すと元の数も 0 から数え直す。いまの値を起点にして、前の局のぶんを持ち越さない

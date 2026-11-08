@@ -75,8 +75,9 @@ type AdaptRoute = "watch" | "live";
  * - `restored`: 回線が戻ったので上げた
  * - `encode`: サーバのエンコードが間に合わない。段はそのまま
  * - `pinned`: 回線が細いが、形式を手で選んでいるので段を動かさない
+ * - `decode`: 端末のデコードが追いつかないので下げた (`AdaptSample.behind`)
  */
-type AdaptReason = "slow" | "restored" | "encode" | "pinned";
+type AdaptReason = "slow" | "restored" | "encode" | "pinned" | "decode";
 
 export interface AdaptDecision {
   /** 次の段。`encode` と `pinned` ではいまの段のまま */
@@ -120,6 +121,11 @@ export interface AdaptSample {
    * (`GET /api/playback/probe`) の速さを足したもの。無ければ null・省略。ライブで上げてよいかを決めるのにだけ使う
    */
   capacity?: { bps: number; at: number } | null;
+  /**
+   * 端末のデコードが追いついていないか (`unslip.ts` の `DecodeLag`)。省略は false。「自動」なら 1 段下げ、
+   * その段から上へはもう上げない (`ceiling`)。手で選んだ段は動かさない
+   */
+  behind?: boolean;
 }
 
 /**
@@ -231,6 +237,8 @@ export function adaptNote(decision: AdaptDecision, from: Step): string {
   if (step === "audio") return "回線が細いため、音声だけにしました";
   const height = rungLabel(step);
   if (reason === "slow") return `回線が細いため、${height ?? ""} に下げました`;
+  if (reason === "decode")
+    return `再生が追いつかないため、${height ?? ""} に下げました`;
   if (height === null) return "回線が戻ったため、元の画質に戻しました";
   if (from === "audio") return `回線が戻ったため、${height} の映像に戻しました`;
   return `回線が戻ったため、${height} に上げました`;
@@ -282,6 +290,11 @@ export class RungAdapter {
   private readonly rates = new Map<Step, number>();
   /** ライブで、上げる前に測りたい回線の速さ (bit/s。`wantProbe`)。要らなければ null */
   private wanted: number | null = null;
+  /**
+   * デコードが追いつかなかった段 (`behind`)。**ここから上 (重い段) へは上げない。** 端末の重さは選局し直しても
+   * 変わらないので、`reset` でも捨てない
+   */
+  private ceiling: Step | null = null;
 
   /**
    * 刻むたびに呼ぶ。**段を動かすか、断り書きが要るときだけ返す。** null なら段はそのままで、断り書きも要らない。
@@ -338,6 +351,14 @@ export class RungAdapter {
       return short ? { step: s.current, reason: "pinned" } : null;
     }
 
+    if (s.behind === true && s.current !== "audio") {
+      this.ceiling = s.current;
+      this.upSince = null;
+      this.probe = null;
+      if (now >= this.holdUntil && s.current !== LOWEST_RUNG)
+        return { step: (s.current + 1) as Rung, reason: "decode" };
+    }
+
     if (s.current === LOWEST_RUNG) this.markLow(now, tickMs, short);
     else this.clearLow();
 
@@ -359,6 +380,8 @@ export class RungAdapter {
 
     const up = upper(s.current);
     if (up === null) return null;
+    if (this.ceiling !== null && stepOrder(up) <= stepOrder(this.ceiling))
+      return null;
     const ok =
       s.route === "watch" && s.throughput !== null
         ? s.throughput >= UP_MARGIN * stepBps(up, s.baseKbps)

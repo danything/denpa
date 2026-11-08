@@ -813,3 +813,49 @@ describe("画面に出す文", () => {
     );
   });
 });
+
+describe("端末のデコードが追いつかない (`behind`)", () => {
+  test("「自動」なら 1 段下げ、その段から上へはもう上げない", () => {
+    const adapter = new RungAdapter();
+    expect(
+      first(adapter, 0, 2 * GRACE, {
+        route: "live",
+        current: 1,
+        behind: true,
+      }),
+    ).toEqual({ at: GRACE, decision: { step: 2, reason: "decode" } });
+    // 下げたあとは回線が十分でも、追いつかなかった段 (1) へは戻さない
+    expect(
+      first(adapter, 2 * GRACE, 2 * GRACE + UP_WAIT_MOST + HOLD, {
+        route: "live",
+        current: 2,
+        capacity: ROOMY,
+      }),
+    ).toBeNull();
+  });
+
+  test("形式を手で選んでいるときは段を動かさない", () => {
+    const adapter = new RungAdapter();
+    expect(
+      first(adapter, 0, 60_000, {
+        route: "live",
+        current: 1,
+        manual: true,
+        behind: true,
+      }),
+    ).toBeNull();
+  });
+
+  test("いちばん軽い段からは下げない (音声だけにはしない)", () => {
+    const adapter = new RungAdapter();
+    expect(
+      first(adapter, 0, 60_000, { route: "live", current: 3, behind: true }),
+    ).toBeNull();
+  });
+
+  test("断り書きは追いつかない理由と下げた先", () => {
+    expect(adaptNote({ step: 2, reason: "decode" }, 1)).toBe(
+      "再生が追いつかないため、540p に下げました",
+    );
+  });
+});
