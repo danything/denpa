@@ -19,9 +19,7 @@
   ): Notice[] {
     if (form === null || typeof form !== "object") return [];
     const text: unknown = (form as Record<string, unknown>)[field];
-    return typeof text === "string" && text !== ""
-      ? [{ key, kind, text }]
-      : [];
+    return typeof text === "string" && text !== "" ? [{ key, kind, text }] : [];
   }
 
   /** `form?.message` (fail の言葉)。どの画面も同じ 1 行を書いていたので、ここにまとめた */
