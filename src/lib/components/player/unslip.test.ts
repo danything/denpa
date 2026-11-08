@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  BEHIND_SPAN,
+  DecodeLag,
+  DROP_SPAN,
   SLIP_MOST,
   slipHidden,
+  SLIPPING_SPAN,
   UNSLIP_EVERY,
   UNSLIP_STEP,
   unslipper,
@@ -129,5 +133,52 @@ describe("飛んだ直後の 1 コマは測らない", () => {
     state.seeking = false;
     expect(fix.measure(video, 50)).toBeNull();
     expect(fix.measure(video, 99.99)).toBeCloseTo(0.01, 6);
+  });
+});
+
+describe("デコードが追いついていないか (`DecodeLag`)", () => {
+  test("測った遅れで 15 秒に 3 回飛んだら追いついていない。2 回までと、古いものは数えない", () => {
+    const lag = new DecodeLag();
+    lag.jumped(0);
+    lag.jumped(3_000);
+    expect(lag.behind(3_000)).toBe(false);
+    lag.jumped(6_000);
+    expect(lag.behind(6_000)).toBe(true);
+    // 最初の 1 回が 15 秒より古くなれば、また 2 回
+    expect(lag.behind(BEHIND_SPAN + 1)).toBe(false);
+  });
+
+  test("捨てたコマが 10 秒で 2 割を超えたら追いついていない。Windows Edge の 5.6% では数えない", () => {
+    const lag = new DecodeLag();
+    lag.frames(0, 0, 0);
+    // 30 コマ/秒で 10 秒、5.6% 捨てた
+    lag.frames(DROP_SPAN, 300, 17);
+    expect(lag.behind(DROP_SPAN)).toBe(false);
+    // 次の 10 秒で半分捨てた (エミュレータの AV1 1080p)
+    lag.frames(2 * DROP_SPAN, 600, 167);
+    expect(lag.behind(2 * DROP_SPAN)).toBe(true);
+  });
+
+  test("コマが少ない間 (止めていた・裏) は、捨てた割合を数えない", () => {
+    const lag = new DecodeLag();
+    lag.frames(0, 0, 0);
+    lag.frames(DROP_SPAN, 20, 10);
+    expect(lag.behind(DROP_SPAN)).toBe(false);
+  });
+
+  test("遅れたあと 5 秒は再生を速めない", () => {
+    const lag = new DecodeLag();
+    expect(lag.slipping(0)).toBe(false);
+    lag.late(1_000);
+    expect(lag.slipping(1_000 + SLIPPING_SPAN - 1)).toBe(true);
+    expect(lag.slipping(1_000 + SLIPPING_SPAN)).toBe(false);
+  });
+
+  test("作り直したら前の段のぶんを持ち越さない", () => {
+    const lag = new DecodeLag();
+    for (const at of [0, 3_000, 6_000]) lag.jumped(at);
+    lag.reset();
+    expect(lag.behind(6_000)).toBe(false);
+    expect(lag.slipping(6_000)).toBe(false);
   });
 });
