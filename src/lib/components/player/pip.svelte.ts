@@ -133,8 +133,11 @@ export function pictureInPicture(options: Options): Pip {
   let rawComposed: Composed | null = null;
   /** 小窓をリクエストしている最中か (`toggle`) */
   let entering = false;
-  /** 変換した映像に字幕を重ねたもの (`composeBaked`)。**小窓に出している間だけ** ある */
-  let baked = $state<Composed | null>(null);
+  /**
+   * 変換した映像に字幕を重ねたもの (`composeBaked`)。**小窓に出している間だけ** ある。
+   * `$state.raw` にする (`$state` は proxy に包むので `composeBaked` の `===` が外れ、字幕の無い元の `<video>` に落ちる)
+   */
+  let baked = $state.raw<Composed | null>(null);
   /**
    * 用意できなかった理由 (`prepare`)。**立っている間はボタンを出さない**。Firefox は MPEG-2 の
    * 映像ストリームを取れず、押せても必ず断られる

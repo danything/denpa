@@ -2360,6 +2360,7 @@
       {controls}
       {fullscreen}
       {ambient}
+      pip={pip.active}
       testid="watch-stage"
       bind:element={stage}
     >

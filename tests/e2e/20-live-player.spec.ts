@@ -206,6 +206,9 @@ test.describe("ライブ視聴", () => {
     await pip.click();
     await expect(pip).toHaveAttribute("aria-pressed", "true");
     await expect(pip).toHaveAttribute("aria-label", "小窓をやめる");
+    // 小窓の間は舞台の映像と字幕を隠し、同じ映像を 2 か所で描かない
+    await expect(page.getByTestId("live-video")).toBeHidden();
+    await expect(page.getByTestId("live-frame-pip-note")).toBeVisible();
     expect(
       await page
         .getByTestId("live-video")
@@ -231,6 +234,8 @@ test.describe("ライブ視聴", () => {
     await wakeControls(page, "live-frame");
     await pip.click();
     await expect(pip).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("live-video")).toBeVisible();
+    await expect(page.getByTestId("live-frame-pip-note")).toHaveCount(0);
     expect(
       await page.evaluate(() => document.pictureInPictureElement),
     ).toBeNull();

@@ -507,6 +507,7 @@
     {controls}
     {fullscreen}
     {ambient}
+    pip={pip.active}
     testid="live-frame"
     bind:element={stageEl}
   >
