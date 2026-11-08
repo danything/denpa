@@ -192,7 +192,7 @@ export function draftRule(fields: Fields): Rule | null {
     id: 0,
     name: "",
     ...columns(conditions),
-    // 無料放送の扱いは**全体設定** (ルールには持たない)
+    // 有料放送を録るかはルールに持たない。局の契約で決める (`contracts.paidAllowed`)
     enabled: true,
     /*
      * **打ち込んだ値をそのまま持ち回る。** 1 で埋めていた頃は、下見を見るたびに優先度が 1 に
@@ -243,7 +243,7 @@ function ruleName(conditions: Conditions): string {
 
 /** 条件が空だと全番組にマッチしてディスクを埋めるので作らせない */
 export const EMPTY_RULE =
-  "キーワード・局・ジャンルのいずれかを指定してください";
+  "キーワード・局・種別・ジャンルのいずれかを指定してください";
 
 /**
  * create と update で同じもの。**エンコード方式は書かない。** エンコードも CM も全体設定で、

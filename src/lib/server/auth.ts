@@ -123,6 +123,18 @@ export function needsPairing(): Response {
 }
 
 /**
+ * **同じサイトからの呼び出しか。** `Sec-Fetch-Site` を見て、付けない古いブラウザなら `Origin` を比べる。
+ * フォームの形でない送信 (JSON・`application/octet-stream`) には SvelteKit の Origin の確かめが掛からないので、
+ * そういうエンドポイントが自分で呼ぶ
+ */
+export function sameOrigin(request: Request, url: URL): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  return site !== null
+    ? site === "same-origin"
+    : request.headers.get("origin") === url.origin;
+}
+
+/**
  * **何も聞かずに通す相手か。** 見るのはアドレス (`TRUSTED_NETWORKS`、CIDR の
  * カンマ区切り)。名前は `foreignHost` で別に確かめる (hooks が両方を見る)。
  *

@@ -14,6 +14,7 @@
 import { SdtReader, type TransportInfo } from "@danything/arib/psi";
 
 import { failingGround } from "./reception";
+import { DIGITAL_TV } from "./schema";
 import type { AgentChannel } from "./tuner";
 import { notify } from "./webhook";
 
@@ -47,12 +48,12 @@ export function compareGround(
   if (ts.services.length === 0) return;
   const broadcast = shapeOf(
     ts.services
-      .filter((service) => service.serviceType === 0x01)
+      .filter((service) => service.serviceType === DIGITAL_TV)
       .map((service) => service.serviceId),
   );
   const kept = shapeOf(
     channel.services
-      .filter((service) => service.serviceType === 0x01)
+      .filter((service) => service.serviceType === DIGITAL_TV)
       .map((service) => service.serviceId),
   );
   if (broadcast === kept) mismatched.delete(channel.channel);

@@ -1,7 +1,6 @@
 import { error, json } from "@sveltejs/kit";
 
-import { emit } from "#lib/server/events.js";
-import { deleteRecordingFiles } from "#lib/server/files.js";
+import { removeRecording } from "#lib/server/files.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { encodedFile } from "#lib/server/library.js";
 import { recordingOr404 } from "#lib/server/recording.js";
@@ -46,10 +45,7 @@ export async function DELETE({ params }) {
   const recording = recordingOr404(params.id, true);
   if (recording.deleted_at !== null) return new Response(null, { status: 204 });
 
-  // 録画中のものは消させない。使っているチューナーと書きかけのファイルが残る
-  if (recording.finished_at === null) error(409, "録画中は消せません");
-
-  deleteRecordingFiles(recording, "端末から削除");
-  emit("recordings");
+  if (!removeRecording(recording, "端末から削除"))
+    error(409, "録画中は消せません");
   return new Response(null, { status: 204 });
 }

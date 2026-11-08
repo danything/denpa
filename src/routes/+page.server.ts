@@ -32,7 +32,7 @@ import {
 } from "#lib/server/encoder.js";
 import { serviceCounts } from "#lib/server/epg.js";
 import { emit } from "#lib/server/events.js";
-import { deleteRecordingFiles, reconcile } from "#lib/server/files.js";
+import { reconcile, removeRecording } from "#lib/server/files.js";
 import { seriesFolder } from "#lib/server/library.js";
 import { watchProgress } from "#lib/server/playback.js";
 import { recordingFromForm } from "#lib/server/recording.js";
@@ -357,7 +357,8 @@ export const actions = {
     const recording = recordingFromForm(await request.formData());
     if (recording === undefined)
       return fail(400, { message: "録画が見つかりません" });
-    deleteRecordingFiles(recording, "手動削除");
+    if (!removeRecording(recording, "手動削除"))
+      return fail(409, { message: "録画中は消せません" });
     return { success: true };
   },
 

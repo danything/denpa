@@ -5,7 +5,7 @@ import { countClips, findClips } from "#lib/server/clips.js";
 import { reserveWarning } from "#lib/server/contracts.js";
 import { now, orm } from "#lib/server/db.js";
 import { currentServices, watchableServices } from "#lib/server/epg.js";
-import { deleteRecordingFiles } from "#lib/server/files.js";
+import { removeRecording } from "#lib/server/files.js";
 import { relative } from "#lib/server/paths.js";
 import { recordingFromForm } from "#lib/server/recording.js";
 import { cancel, reserveFromForm } from "#lib/server/reservations.js";
@@ -220,7 +220,8 @@ export const actions = {
     const recording = recordingFromForm(await request.formData());
     if (recording === undefined)
       return fail(400, { message: "録画が見つかりません" });
-    deleteRecordingFiles(recording, "手動削除");
+    if (!removeRecording(recording, "手動削除"))
+      return fail(409, { message: "録画中は消せません" });
     return { success: true };
   },
 

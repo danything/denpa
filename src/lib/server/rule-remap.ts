@@ -14,8 +14,7 @@ import { toHalfWidth } from "../fold";
 import { orm } from "./db";
 import { currentServices } from "./epg";
 import { unreceivableChannels } from "./reception";
-import { applyRules } from "./rules";
-import { resolveConflicts } from "./scheduler";
+import { reapply } from "./rule-actions";
 import { DIGITAL_TV, rules as ruleTable, services } from "./schema";
 
 /** 候補として並べる数の上限 */
@@ -132,7 +131,6 @@ export async function remapRule(
     .where(eq(ruleTable.id, ruleId))
     .run();
   // 外した局はもう選局できないので、引っ込める予約は気にしなくてよい。足すだけなので、そのルールだけ当てれば足りる
-  applyRules({ rule: ruleId });
-  await resolveConflicts();
+  await reapply(ruleId);
   return null;
 }

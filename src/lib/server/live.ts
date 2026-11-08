@@ -2551,7 +2551,10 @@ export const key = (
   `${type}:${channel}:${serviceId}:${form === "raw" ? "*" : audio.id}:${form}:${track}${pin === null ? "" : `@${pin}`}${rung === 0 ? "" : `~${rung}`}`;
 const sessions = new Map<string, Session>();
 
-/** いまライブを観ている人がいるか (セッションが 1 つでもあるか)。Windows と Mac をスリープさせないかを決める (`power.ts`) */
+/**
+ * ライブのセッションが 1 つでもあるか (観る人を待って先に開いておくものも数える。追っかけは数えない)。
+ * Windows と Mac をスリープさせないかを決める (`power.ts`)
+ */
 export function hasLiveViewers(): boolean {
   return sessions.size > 0;
 }
@@ -2730,7 +2733,7 @@ export function liveStream(
  *
  * - `raw` … 録画中の元の TS を、`at` 秒に当たるところから**そのまま**流し、伸びるのを追い読みする
  *   (位置の当て方は `chasePlan` のバイト比例)。録り終えて尻まで読んだら閉じる
- * - `h264` / `av1` … 画面の追っかけ (`openChase`) と同じ再エンコードを、WebSocket ではなく
+ * - `h264` / `av1` (段を下げたときは `hevc` も) … 画面の追っかけ (`openChase`) と同じ再エンコードを、WebSocket ではなく
  *   HTTP の fMP4 で流す。読み切ったら (`ended`) 閉じる
  *
  * シークは `at` を変えてリクエストし直す (画面の追っかけと同じく、位置ごとに立て直す)。
@@ -2891,13 +2894,14 @@ export function recordingCaptions(
     ).getReader();
     let stopped = false;
     /** いま写させている ffmpeg。番組が替わって並びが変わったら起こし直す (下の流し込み) */
-    let proc = spawnRecordingCaptioner(
-      program,
-      label,
-      language,
-      out,
-      () => proc,
-    );
+    let proc: ReturnType<typeof Bun.spawn>;
+    try {
+      proc = spawnRecordingCaptioner(program, label, language, out, () => proc);
+    } catch (error) {
+      // ffmpeg を起こせなかった。読み始めた録画を閉じる (残すと、ずっと読み続ける)
+      reader.cancel().catch(() => undefined);
+      throw error;
+    }
     const stop = () => {
       if (stopped) return;
       stopped = true;

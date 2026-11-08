@@ -6,10 +6,33 @@ import {
   foreignHost,
   isOpenPath,
   knownHost,
+  sameOrigin,
   sharedNetworks,
   trusted,
 } from "./auth";
 import { config } from "./config";
+
+describe("同じサイトからの呼び出しか", () => {
+  const url = new URL("http://192.168.1.20:3000/settings/integrations");
+  const from = (headers: Record<string, string>) =>
+    sameOrigin(new Request(url, { method: "POST", headers }), url);
+
+  test("Sec-Fetch-Site があればそれだけを見る", () => {
+    expect(from({ "sec-fetch-site": "same-origin" })).toBe(true);
+    expect(
+      from({
+        "sec-fetch-site": "cross-site",
+        origin: "http://192.168.1.20:3000",
+      }),
+    ).toBe(false);
+  });
+
+  test("Sec-Fetch-Site を付けないブラウザは Origin を比べる", () => {
+    expect(from({ origin: "http://192.168.1.20:3000" })).toBe(true);
+    expect(from({ origin: "https://example.com" })).toBe(false);
+    expect(from({})).toBe(false);
+  });
+});
 
 /**
  * ログインの入口。**ここを守ると入れなくなる** (ログイン画面へ行くのに

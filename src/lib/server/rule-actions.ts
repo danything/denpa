@@ -29,7 +29,7 @@ import { reservations, rules as ruleTable } from "./schema";
  *   新しいルールは他の予約を外せないので、範囲を絞れる (`rules.applyRules`)
  * @returns どのルールにも当たらなくなって消した予約の数
  */
-async function reapply(rule?: number): Promise<number> {
+export async function reapply(rule?: number): Promise<number> {
   const { dropped } = applyRules(rule === undefined ? {} : { rule });
   await resolveConflicts();
   return dropped;

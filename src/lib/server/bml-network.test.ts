@@ -2,12 +2,27 @@ import { describe, expect, test } from "bun:test";
 
 import {
   allowed,
+  beforeDeadline,
   isPublicAddress,
   limited,
   Refused,
   relayed,
   requireFetch,
 } from "./bml-network";
+
+/** 名前を引くのも、中継の締め切り (`TIMEOUT`) に含める */
+describe("締め切り", () => {
+  test("間に合えば、そのまま返す", async () => {
+    const got = await beforeDeadline(Date.now() + 1000, Promise.resolve(1));
+    expect(got).toBe(1);
+  });
+
+  test("答えないままなら、締め切りで断る", async () => {
+    const never = new Promise<number>(() => undefined);
+    const late = beforeDeadline(Date.now() + 20, never);
+    await expect(late).rejects.toBeInstanceOf(Refused);
+  });
+});
 
 /*
  * **危ないのは繋ぎ先ではなく、繋ぐ範囲。**

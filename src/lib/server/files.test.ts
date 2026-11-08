@@ -25,7 +25,8 @@ config.historyRetention = 14 * 24 * 60 * 60 * 1000;
 const { orm } = await import("./db");
 const { cmMaterials, encodeJobs, recordings, reservations } =
   await import("./schema");
-const { pruneHistory, reconcile } = await import("./files");
+const { pruneHistory, reconcile, removeRecording } = await import("./files");
+const { subscribe } = await import("./events");
 
 const DAY = 24 * 60 * 60 * 1000;
 const now = Date.now();
@@ -461,5 +462,50 @@ describe("実体との照合", () => {
     rmSync(av1);
     reconcile();
     expect(row10()).toEqual({ lib: h264, hevc: null, alt: null });
+  });
+});
+
+describe("人が消す", () => {
+  const insert = (id: number, finished_at: number | null) => {
+    orm().delete(recordings).where(eq(recordings.id, id)).run();
+    orm()
+      .insert(recordings)
+      .values({
+        id,
+        service_id: 1,
+        name: "消す録画",
+        start_at: now,
+        end_at: now + DAY,
+        finished_at,
+        created_at: now,
+        updated_at: now,
+      })
+      .run();
+    return orm().select().from(recordings).where(eq(recordings.id, id)).get()!;
+  };
+  const deletedAt = (id: number) =>
+    orm()
+      .select({ at: recordings.deleted_at })
+      .from(recordings)
+      .where(eq(recordings.id, id))
+      .get()!.at;
+  /** 消してみて、消したかと、飛んだ通知を返す */
+  const remove = (id: number, finishedAt: number | null) => {
+    const recording = insert(id, finishedAt);
+    const events: string[] = [];
+    const stop = subscribe((event) => events.push(event));
+    const removed = removeRecording(recording, "手動削除");
+    stop();
+    return { removed, events };
+  };
+
+  test("録画中は消さず、通知もしない", () => {
+    expect(remove(20, null)).toEqual({ removed: false, events: [] });
+    expect(deletedAt(20)).toBeNull();
+  });
+
+  test("録り終えたものは消して、一覧の取り直しを通知する", () => {
+    expect(remove(21, now)).toEqual({ removed: true, events: ["recordings"] });
+    expect(deletedAt(21)).not.toBeNull();
   });
 });
