@@ -8,7 +8,7 @@ import { ServiceFilter } from "@danything/arib/service-filter";
  * また、実際にチューナーを開いて TS パケットのスクランブル制御ビットを検査し、
  * 復号できるかを確認する。
  */
-import { and, asc, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { agentFetch } from "./agent-client";
 import { config } from "./config";
@@ -40,6 +40,13 @@ function freshDecode(
   return decodedAt != null && now - decodedAt < DECODE_VALID_MS;
 }
 
+/**
+ * **ダイアログに出す契約の状態。** `ContractState` に、まだ確かめていない (`unverified`) を足したもの。
+ * 行が無い局と、カードが答えておらず (`code` が無い)、新しい復号の結果も無い局が `unverified`。
+ * `subscribed` は、`paidAllowed` が録ってよいとする局と同じ
+ */
+export type ContractStatus = ContractState | "unverified";
+
 export interface ContractRow {
   cardId: string;
   serviceId: number;
@@ -47,10 +54,30 @@ export interface ContractRow {
   channel: string;
   type: string;
   state: ContractState;
+  status: ContractStatus;
   code: number | null;
   validUntil: number | null;
   decodeOk: boolean | null;
-  checkedAt: number;
+  /** 確かめた時刻。行が無い局は null */
+  checkedAt: number | null;
+}
+
+/** 行から、ダイアログに出す状態を決める (`ContractStatus`) */
+export function contractStatus(
+  row: {
+    state: ContractState;
+    code: number | null;
+    decodeOk: boolean | null;
+    decodedAt: number | null;
+  },
+  now = Date.now(),
+): ContractStatus {
+  // カードが答えた局は、その答えのまま
+  if (row.code !== null) return row.state;
+  if (row.state === "subscribed" && freshDecode(row.decodedAt, now))
+    return "subscribed";
+  // 復号を試して掛かったままだった局は未契約。31 日を過ぎた結果しか無い局と、試していない局は確かめていない
+  return row.decodeOk === false ? "unsubscribed" : "unverified";
 }
 
 /** 現在アクティブな B-CAS カードの番号 (16桁) を取得 */
@@ -254,36 +281,134 @@ export async function checkContracts(): Promise<ContractRow[]> {
 }
 
 /**
- * DB に記録されている契約情報を取得する。
+ * カードの契約の一覧 (設定のダイアログ)。card_contracts の行に、番組表に有料の番組があって行がまだ無い局を
+ * 「確かめていない」として足す。並びは種別、局の番号の順
  */
-export function getContractRows(cardId: string): ContractRow[] {
-  return orm()
+export function getContractRows(
+  cardId: string,
+  now = Date.now(),
+): ContractRow[] {
+  const rows: (ContractRow & { arib: number })[] = orm()
     .select({
       cardId: cardContracts.card_id,
       serviceId: cardContracts.service_id,
       serviceName: services.name,
       channel: services.channel,
       type: services.type,
+      arib: services.service_id,
       state: cardContracts.state,
       code: cardContracts.code,
       validUntil: cardContracts.valid_until,
       decodeOk: cardContracts.decode_ok,
+      decodedAt: cardContracts.decoded_at,
       checkedAt: cardContracts.checked_at,
     })
     .from(cardContracts)
     .innerJoin(services, eq(services.id, cardContracts.service_id))
     .where(eq(cardContracts.card_id, cardId))
-    .orderBy(asc(services.type), asc(services.service_id))
-    .all();
+    .all()
+    .map(({ decodedAt, ...row }) => ({
+      ...row,
+      status: contractStatus({ ...row, decodedAt }, now),
+    }));
+  const known = new Set(rows.map((row) => row.serviceId));
+  const missing = orm()
+    .selectDistinct({
+      serviceId: services.id,
+      serviceName: services.name,
+      channel: services.channel,
+      type: services.type,
+      arib: services.service_id,
+    })
+    .from(programs)
+    .innerJoin(services, eq(services.id, programs.service_id))
+    .where(eq(programs.is_free, false))
+    .all()
+    .filter((service) => !known.has(service.serviceId));
+  for (const service of missing)
+    rows.push({
+      cardId,
+      ...service,
+      state: "unsubscribed",
+      status: "unverified",
+      code: null,
+      validUntil: null,
+      decodeOk: null,
+      checkedAt: null,
+    });
+  rows.sort((a, b) => {
+    if (a.type !== b.type) return a.type < b.type ? -1 : 1;
+    return a.arib - b.arib;
+  });
+  return rows.map((entry) => {
+    const { arib: _, ...row } = entry;
+    return row;
+  });
+}
+
+/** 復号を確かめた 1 局の結果。`ok` が false なら確かめられなかった (`error` に理由) */
+export interface DecodeResult {
+  ok: boolean;
+  decodeOk: boolean;
+  error?: string;
+}
+
+/** 復号を確かめる局 (`services` の行) */
+interface DecodeTarget {
+  id: number;
+  arib: number;
+  type: string;
+  channel: string;
+}
+
+/** 局ごとにパケットを数える長さ。これだけ数えたら、15 秒を待たずに判定する */
+const DECODE_PACKETS = 2000;
+
+/**
+ * **同じ物理チャンネルの局を 1 つの組にまとめる** (`testDecodeUnverified`)。1 つの組は 1 回の選局で確かめる。
+ * 組と組の中の並びは、渡した順
+ */
+export function groupByChannel<T extends { type: string; channel: string }>(
+  targets: T[],
+): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const target of targets) {
+    const key = `${target.type} ${target.channel}`;
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [target]);
+    else group.push(target);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * **いまその局で流れている番組が有料のときだけ確かめる。** 無料の時間帯は契約が無くても
+ * スクランブルが掛かっていないので、復号できたように見えて契約中と取り違える。確かめられないときはその理由
+ */
+function notPaidNow(serviceId: number, now: number): string | null {
+  const airing = orm()
+    .select({ isFree: programs.is_free })
+    .from(programs)
+    .where(
+      and(
+        eq(programs.service_id, serviceId),
+        lte(programs.start_at, now),
+        gt(programs.end_at, now),
+      ),
+    )
+    .get();
+  if (airing === undefined)
+    return "いま流れている番組が番組表に無いため、復号を確かめられません";
+  if (airing.isFree)
+    return "いまは無料の番組を流しているため、復号を確かめられません。有料の番組の間にもう一度試してください";
+  return null;
 }
 
 /**
  * 対象局のストリームを数秒間開いて TS パケットのスクランブルビットを検証し、
  * 復号可否 (decode_ok) を更新する。
  */
-export async function testDecode(
-  serviceId: number,
-): Promise<{ ok: boolean; decodeOk: boolean; error?: string }> {
+export async function testDecode(serviceId: number): Promise<DecodeResult> {
   const card = await cardStatus();
   const cardId = getActiveCardId(card);
   if (!card.ok || !cardId) {
@@ -298,7 +423,6 @@ export async function testDecode(
     .select({
       id: services.id,
       arib: services.service_id,
-      name: services.name,
       channel: services.channel,
       type: services.type,
     })
@@ -310,59 +434,117 @@ export async function testDecode(
     return { ok: false, decodeOk: false, error: "サービスが見つかりません" };
   }
 
-  /*
-   * **いまその局で流れている番組が有料のときだけ確かめる。** 無料の時間帯は契約が無くても
-   * スクランブルが掛かっていないので、復号できたように見えて契約中と取り違える
-   */
-  const nowMs = Date.now();
-  const airing = orm()
-    .select({ isFree: programs.is_free })
-    .from(programs)
-    .where(
-      and(
-        eq(programs.service_id, serviceId),
-        lte(programs.start_at, nowMs),
-        gt(programs.end_at, nowMs),
-      ),
-    )
-    .get();
-  if (airing === undefined || airing.isFree) {
-    return {
+  const notPaid = notPaidNow(serviceId, Date.now());
+  if (notPaid !== null) return { ok: false, decodeOk: false, error: notPaid };
+
+  const results = await decodeOnChannel(cardId, [targetService]);
+  return (
+    results.get(serviceId) ?? {
       ok: false,
       decodeOk: false,
-      error:
-        airing === undefined
-          ? "いま流れている番組が番組表に無いため、復号を確かめられません"
-          : "いまは無料の番組を流しているため、復号を確かめられません。有料の番組の間にもう一度試してください",
-    };
-  }
+      error: "復号を確かめられませんでした",
+    }
+  );
+}
 
+/** `testDecodeUnverified` が動いている間 */
+let decodingUnverified = false;
+
+/**
+ * **確かめていない有料の局を、物理チャンネルごとに 1 回の選局でまとめて確かめる** (設定のダイアログ)。
+ * 対象は `getContractRows` で「確かめていない」(`unverified`) の局のうち、いま有料の番組を流している局。
+ * ほかの局は確かめずに、理由を付けて返す。チャンネルは 1 つずつ順に選局する (チューナーを 1 台しか使わない)
+ */
+export async function testDecodeUnverified(): Promise<
+  | { ok: true; results: Map<number, DecodeResult> }
+  | { ok: false; error: string }
+> {
+  // 別のタブから重ねて押されたら断る (同じチャンネルを 2 回選局してチューナーを取り合う)
+  if (decodingUnverified)
+    return { ok: false, error: "ほかの画面でまとめて確かめています" };
+  decodingUnverified = true;
+  try {
+    return await decodeUnverified();
+  } finally {
+    decodingUnverified = false;
+  }
+}
+
+async function decodeUnverified(): Promise<
+  | { ok: true; results: Map<number, DecodeResult> }
+  | { ok: false; error: string }
+> {
+  const card = await cardStatus();
+  const cardId = getActiveCardId(card);
+  if (!card.ok || !cardId)
+    return { ok: false, error: "B-CAS カードが認識されていません" };
+
+  const now = Date.now();
+  const unverified = new Set(
+    getContractRows(cardId, now)
+      .filter((row) => row.status === "unverified")
+      .map((row) => row.serviceId),
+  );
+  const results = new Map<number, DecodeResult>();
+  if (unverified.size === 0) return { ok: true, results };
+  const targets: DecodeTarget[] = [];
+  for (const target of orm()
+    .select({
+      id: services.id,
+      arib: services.service_id,
+      channel: services.channel,
+      type: services.type,
+    })
+    .from(services)
+    .where(inArray(services.id, [...unverified]))
+    .all()) {
+    const notPaid = notPaidNow(target.id, now);
+    if (notPaid === null) targets.push(target);
+    else results.set(target.id, { ok: false, decodeOk: false, error: notPaid });
+  }
+  for (const group of groupByChannel(targets))
+    for (const [id, result] of await decodeOnChannel(cardId, group))
+      results.set(id, result);
+  return { ok: true, results };
+}
+
+/**
+ * **1 つの物理チャンネルを 1 回だけ選局し、その中の局ごとに復号できるかを確かめて card_contracts に書く。**
+ * `targets` は同じチャンネルの局 (`groupByChannel`)。選局に失敗したら、どの局も確かめられなかったことにする
+ */
+async function decodeOnChannel(
+  cardId: string,
+  targets: DecodeTarget[],
+): Promise<Map<number, DecodeResult>> {
+  const results = new Map<number, DecodeResult>();
+  const first = targets[0];
+  if (first === undefined) return results;
+
+  /*
+   * **局ごとに、その局のパケットだけを数える** (`ServiceFilter`)。物理チャンネルには同じ中継器のほかの局も入っていて、
+   * スクランブルの無い局のパケットまで数えると、復号できなくても割合が下がる
+   */
+  const counts = targets.map((target) => ({
+    target,
+    filter: new ServiceFilter(target.arib),
+    total: 0,
+    scrambled: 0,
+  }));
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), 15_000);
 
-  let stream: ReadableStream<Uint8Array> | null = null;
   try {
     // スキャンと同じ優先度でストリームを開く (WantsKeys が有効な live プレフィックス)
-    stream = await openChannelStream(
-      targetService.type,
-      targetService.channel,
+    const stream = await openChannelStream(
+      first.type,
+      first.channel,
       abortController.signal,
       "live test-decode",
       config.priority.scan,
     );
 
     const reader = stream.getReader();
-    /*
-     * **その局のパケットだけを数える** (`ServiceFilter`)。物理チャンネルには同じ中継器のほかの局も入っていて、
-     * スクランブルの無い局のパケットまで数えると、復号できなくても割合が下がる
-     */
-    const filter = new ServiceFilter(targetService.arib);
-    let totalPackets = 0;
-    let scrambledPackets = 0;
-
-    const targetPackets = 2000;
-
-    while (totalPackets < targetPackets) {
+    while (counts.some((count) => count.total < DECODE_PACKETS)) {
       // 15 秒で打ち切ったら、それまでに数えたぶんで判定する
       const next = await reader.read().catch((error: unknown) => {
         if (abortController.signal.aborted)
@@ -372,14 +554,16 @@ export async function testDecode(
       const { done, value } = next;
       if (done || !value) break;
 
-      const own = filter.filter(value);
-      for (let offset = 0; offset + PACKET <= own.length; offset += PACKET) {
-        if (own[offset] !== SYNC) continue;
-        // ペイロードの無いパケットはスクランブルの対象にならない
-        if ((own[offset + 3]! & 0x10) === 0) continue;
-        totalPackets++;
-        // 4 バイト目の上位 2 ビットが transport_scrambling_control
-        if ((own[offset + 3]! & 0xc0) !== 0) scrambledPackets++;
+      for (const count of counts) {
+        const own = count.filter.filter(value);
+        for (let offset = 0; offset + PACKET <= own.length; offset += PACKET) {
+          if (own[offset] !== SYNC) continue;
+          // ペイロードの無いパケットはスクランブルの対象にならない
+          if ((own[offset + 3]! & 0x10) === 0) continue;
+          count.total++;
+          // 4 バイト目の上位 2 ビットが transport_scrambling_control
+          if ((own[offset + 3]! & 0xc0) !== 0) count.scrambled++;
+        }
       }
     }
 
@@ -388,35 +572,39 @@ export async function testDecode(
     } catch {
       // 無視
     }
-
-    if (totalPackets < 50) {
-      return {
+  } catch (err) {
+    for (const target of targets)
+      results.set(target.id, {
         ok: false,
         decodeOk: false,
-        error: "ストリームから十分なパケットを受信できませんでした",
-      };
-    }
-
-    const ratio = scrambledPackets / totalPackets;
-    // 0.5 未満なら復号成功とみなす (正常な復号 TS はスクランブル比率 0)
-    const decodeOk = ratio < 0.5;
-
-    saveDecode(cardId, serviceId, decodeOk);
-    return { ok: true, decodeOk };
-  } catch (err) {
-    return {
-      ok: false,
-      decodeOk: false,
-      error: `選局またはストリーム受信に失敗しました: ${err}`,
-    };
+        error: `選局またはストリーム受信に失敗しました: ${err}`,
+      });
+    return results;
   } finally {
     clearTimeout(timeout);
     abortController.abort();
   }
+
+  // 書くのは受け終えてから (書けなかったときに、選局の失敗と取り違えない)
+  for (const { target, total, scrambled } of counts) {
+    if (total < 50) {
+      results.set(target.id, {
+        ok: false,
+        decodeOk: false,
+        error: "ストリームから十分なパケットを受信できませんでした",
+      });
+      continue;
+    }
+    // 0.5 未満なら復号成功とみなす (正常な復号 TS はスクランブル比率 0)
+    const decodeOk = scrambled / total < 0.5;
+    saveDecode(cardId, target.id, decodeOk);
+    results.set(target.id, { ok: true, decodeOk });
+  }
+  return results;
 }
 
 /**
- * 復号を確かめた結果を card_contracts に書く (`testDecode`、`noteDecoded`)。復号できたら契約中にする
+ * 復号を確かめた結果を card_contracts に書く (`decodeOnChannel`、`noteDecoded`)。復号できたら契約中にする
  */
 function saveDecode(
   cardId: string,
