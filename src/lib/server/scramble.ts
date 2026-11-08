@@ -43,11 +43,39 @@ const THRESHOLD = 0.5;
  * 正常なら 0 に近い。カードが読めていないと 98〜99% になる。
  */
 export function scrambledRatio(path: string): number {
+  const counted = countPackets(path);
+  return counted === null || counted.total === 0
+    ? 0
+    : counted.scrambled / counted.total;
+}
+
+export function isScrambled(path: string): boolean {
+  return scrambledRatio(path) > THRESHOLD;
+}
+
+/**
+ * **復号できていると言える TS か** (有料の録画を契約の手がかりにする。`contracts.noteDecoded`)。
+ * `isScrambled` の否定より厳しく、読めない・同期が取れていない・パケットが `SAMPLE` 個に届かないファイルは false にする。
+ * 中身がほとんど無い録画を、復号できたことの証拠にしないため
+ */
+export function isDecoded(path: string): boolean {
+  const counted = countPackets(path);
+  return (
+    counted !== null &&
+    counted.total >= SAMPLE &&
+    counted.scrambled / counted.total <= THRESHOLD
+  );
+}
+
+/** 先頭から `SAMPLE` 個までのパケットの数と、そのうちスクランブルされている数。読めない・同期が取れていないファイルは null */
+function countPackets(
+  path: string,
+): { total: number; scrambled: number } | null {
   let fd: number;
   try {
     fd = openSync(path, "r");
   } catch {
-    return 0;
+    return null;
   }
 
   try {
@@ -63,19 +91,15 @@ export function scrambledRatio(path: string): number {
 
       for (let i = 0; i + PACKET <= read; i += PACKET) {
         // 同期が取れていないファイルは判定しない。誤って復号に回すより素通しがまし
-        if (buffer[i] !== SYNC) return 0;
+        if (buffer[i] !== SYNC) return null;
         total++;
         if ((buffer[i + 3]! & 0xc0) !== 0) scrambled++;
       }
     }
-    return total === 0 ? 0 : scrambled / total;
+    return { total, scrambled };
   } finally {
     closeSync(fd);
   }
-}
-
-export function isScrambled(path: string): boolean {
-  return scrambledRatio(path) > THRESHOLD;
 }
 
 /** `/denpa/card` の 1 行。リーダー 1 つ */

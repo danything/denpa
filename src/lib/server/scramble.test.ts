@@ -3,7 +3,12 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { isScrambled, readCardStatus, scrambledRatio } from "./scramble";
+import {
+  isDecoded,
+  isScrambled,
+  readCardStatus,
+  scrambledRatio,
+} from "./scramble";
 
 // カードの番号は必ず架空のものにする (本物のカードの番号を載せない)
 const PACKET = 188;
@@ -55,6 +60,14 @@ describe("スクランブルの検出", () => {
 
   test("無いファイルは 0", () => {
     expect(scrambledRatio("/tmp/denpa-does-not-exist.ts")).toBe(0);
+  });
+
+  test("復号できていると言えるのは、掛かっていないパケットが 20000 個以上あるときだけ", () => {
+    expect(isDecoded(makeTs(20_000, 0))).toBe(true);
+    // 中身がほとんど無い録画は、契約の手がかりにしない
+    expect(isDecoded(makeTs(2000, 0))).toBe(false);
+    expect(isDecoded(makeTs(20_000, 0.99))).toBe(false);
+    expect(isDecoded("/tmp/denpa-does-not-exist.ts")).toBe(false);
   });
 });
 

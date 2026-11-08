@@ -52,7 +52,7 @@ import {
 import { loadMaterial, saveMaterial } from "./cm-material-store";
 import { type Scan, scan, type ScanReader, scanReader } from "./cm-scan";
 import { config } from "./config";
-import { noteStillScrambled } from "./contracts";
+import { noteDecoded, noteStillScrambled } from "./contracts";
 import { affected, now, orm } from "./db";
 import { slotPool } from "./encode-slots";
 import { type ChaptersChanged, emit, type EncodeProgress } from "./events";
@@ -85,7 +85,7 @@ import {
 import { saveRecordedBml } from "./recorded-bml";
 import { recordingSummary } from "./recording";
 import { encodeJobs, programs, recordings } from "./schema";
-import { descramble, isScrambled } from "./scramble";
+import { descramble, isDecoded, isScrambled } from "./scramble";
 import { settings } from "./settings";
 import { chunks, lines, lowerPriority, run, sideOutput } from "./stream";
 import { displayTitle } from "./title";
@@ -1430,6 +1430,12 @@ async function runJob(jobId: number): Promise<void> {
       sourceTs = target;
     }
   }
+  /*
+   * 有料の番組を復号できて録れた。その局を契約中にする (`contracts.noteDecoded`。上の `noteStillScrambled` の反対)。
+   * 番組表の行は 24 時間で消えるので (`paidRecording`)、古い録画を再エンコードしても契約の手がかりにはしない
+   */
+  if (paidRecording(recording) && isDecoded(sourceTs))
+    await noteDecoded(recording.service_id);
 
   const encodeOptions: EncodeOptions = {
     // コマ数の既定は 60。設定が入っていれば、エンコードする前に本編映像から実測して決め直す (measureSmoothMotion)
