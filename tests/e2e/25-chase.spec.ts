@@ -250,4 +250,19 @@ async function checkChase(
   );
   await expect(badges.getByTestId("detail-audio").first()).toBeVisible();
   await page.unroute("/api/programs/*");
+
+  /*
+   * **スマホの形 (1000px 未満) では、ほかの画面と同じく下のタブを出してヘッダーを隠す。**
+   * タブを出さなかった頃は、観る画面と追っかけだけ上にヘッダーが出ていた。ナビの画面ではないので、どのタブにも印は付けない
+   */
+  const size = page.viewportSize()!;
+  await page.setViewportSize({ width: 390, height: 844 });
+  try {
+    const tabbar = page.getByTestId("tabbar");
+    await expect(tabbar).toBeVisible();
+    await expect(page.locator(".navbar")).toBeHidden();
+    await expect(tabbar.locator('[aria-current="page"]')).toHaveCount(0);
+  } finally {
+    await page.setViewportSize(size);
+  }
 }

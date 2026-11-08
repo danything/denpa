@@ -299,11 +299,14 @@
    * ライブは 1 段・観る画面は 2 段。映像の大きさが 772px と 436px)。ここと、
    * 各画面の 1000px の `@media` がその 1 本の線で、**片方だけ動かさない**。横にしたスマホは 768px から画面ぴったりにする (下の style)
    */
-  const FILLED = ["/live", "/watch/[id]", "/chase/[id]", "/guide"];
+  /** 映像の画面 (ライブ・観る画面・追っかけ)。画面ぴったりにする・下のタブを出す・テーブルトップで下の段に浮かべる、のどれもこの一覧で決める */
+  const VIDEO_ROUTES = ["/live", "/watch/[id]", "/chase/[id]"];
+  const FILLED = [...VIDEO_ROUTES, "/guide"];
   // 比べるのは経路 (route.id)。URL は前段の接頭辞の下だと頭が付く (server/paths.ts)
   const fill = $derived(
     pending !== null || FILLED.includes(page.route.id ?? ""),
   );
+  const video = $derived(VIDEO_ROUTES.includes(page.route.id ?? ""));
   /**
    * 番組表 (と、番組表へ移る途中の骨組み) を出しているか。ヘッダーの影を番組表に合わせるのに使う (下の `.shell.guide`)。
    * **`:has(.guide-frame)` で CSS に探させない。** 土台に `:has()` があると、中に `<button>` を足すたびに
@@ -353,19 +356,13 @@
    * **観る画面・追っかけにも出す。** スマホの形ではタブがある画面だけヘッダーを隠すので、出さなかった頃は
    * この 2 つだけ上にヘッダーが出ていた。どのタブにも印は付けない (ナビの画面ではない)
    */
-  const PLAYER_ROUTES = ["/watch/[id]", "/chase/[id]"];
-  const showTabbar = $derived(
-    here !== null || PLAYER_ROUTES.includes(page.route.id ?? ""),
-  );
+  const showTabbar = $derived(here !== null || video);
   /**
    * テーブルトップ (`#lib/phone-form.ts`) の映像の画面 (ライブ・観る画面・追っかけ) では、下のタブは下の段 (舞台の中。黒い地) の下端に浮く。
    * 右の列と同じく、テーマにかかわらず暗いテーマの色で描く (`PlayerLayout` の `data-theme`)
    */
   const tabletop = new MediaQuery(TABLETOP);
-  const stageTabbar = $derived(
-    tabletop.current &&
-      (here === "/live" || PLAYER_ROUTES.includes(page.route.id ?? "")),
-  );
+  const stageTabbar = $derived(tabletop.current && video);
   /** 局が無いときの案内。録画・番組表・ライブの load が渡す (`#lib/channel-notice.ts`) */
   const notice = $derived(
     (page.data["channelNotice"] ?? null) as NoticeKind | null,
