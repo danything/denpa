@@ -209,7 +209,9 @@ export const actions = {
         return fail(400, {
           message: `${name}: デバイスのパスを入れてください`,
         });
-      const refused = unreceivable(types, receivable.get(device));
+      // 「使う」をオフにした台は選局に使わないので突き合わせない (受けられない種別が入ったままでもオフにして保存できる)
+      const refused =
+        get("use") === null ? [] : unreceivable(types, receivable.get(device));
       if (refused.length > 0) {
         return fail(400, {
           message: `${name}: ${refused.map((type) => `「${SERVICE_TYPE_LABEL[type]}」`).join("")}を受信できません`,
