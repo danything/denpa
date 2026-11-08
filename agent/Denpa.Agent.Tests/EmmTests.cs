@@ -165,6 +165,34 @@ public class EmmTests
     }
 
     [Test]
+    public async Task 配り役が古くEMMを受け付けなければ_その置き場のあいだはもう送らない()
+    {
+        var card = new Card { Code = _ => throw new NotSupportedException("配り役のエージェントが古い") };
+        var (emm, clock) = Ready(card);
+
+        for (var i = 0; i < 3; i++)
+        {
+            emm.Section(Section(Payload(Mine, i)));
+            Tick(emm, clock, 2);
+        }
+        await Assert.That(card.Sent.Count).IsEqualTo(1);
+
+        // 置き場が替われば (配り役を新しくした・手元のカードに替えた) また送る
+        var next = new Card();
+        var current = card;
+        var swapped = new Emm(() => current, clock);
+        swapped.Section(Section());
+        swapped.Step();
+        swapped.Section(Section(Payload(Mine, 9)));
+        Tick(swapped, clock, 2);
+        await Assert.That(card.Sent.Count).IsEqualTo(2);
+        current = next;
+        swapped.Section(Section(Payload(Mine, 10)));
+        Tick(swapped, clock, 2);
+        await Assert.That(next.Sent.Count).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task 覚えるのは256件までで_古いものから忘れる()
     {
         var card = new Card();
