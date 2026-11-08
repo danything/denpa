@@ -1,18 +1,4 @@
-// 映像が時計からどれだけ遅れているか。**デコードできたフレームが無いまま番を過ぎている**ぶん
-const behind =
-  current === null || decoder._dec_count() > 0
-    ? 0
-    : Math.max(0, (at - current.pts - frameTicks) / CLOCK);
-/*
- * **遅れていてもデコードするデータが届いていないなら、回線の詰まり** (`starved`)。デコードが間に合わないのとは
- * 分けて、B を飛ばしはじめる (`thin`) のにも、エンコードしたものに戻る (`budget.ts`) のにも数えない。
- * 届いたあとは番を過ぎたコマをまとめて捨てて追いつくので、そのあいだ (`BACK_GRACE`) も数えない。
- * 家の中の Wi-Fi で放送のまま (約 17 Mbit/s) 受けると一瞬の詰まりは起きやすく、数えると変換した映像へ早めに戻っていた
- */
-const starved = behind > 0 && (pending.length === 0 || pending[0]!.dts > at);
-if (starved) starve();
-const late = starved ? 0 : behind;
-thin(decoder, late); /// <reference lib="webworker" />
+/// <reference lib="webworker" />
 /**
  * **変換せずに送られてきた TS をデコードして描く** worker (docs/stream.md#放送そのままmpeg-2を送る)。
  *
@@ -574,10 +560,19 @@ function tick(): void {
   }
 
   // 映像が時計からどれだけ遅れているか。**デコードできたフレームが無いまま番を過ぎている**ぶん
-  const late =
+  const behind =
     current === null || decoder._dec_count() > 0
       ? 0
       : Math.max(0, (at - current.pts - frameTicks) / CLOCK);
+  /*
+   * **遅れていてもデコードするデータが届いていないなら、回線の詰まり** (`starved`)。デコードが間に合わないのとは
+   * 分けて、B を飛ばしはじめる (`thin`) のにも、エンコードしたものに戻る (`budget.ts`) のにも数えない。
+   * 届いたあとは番を過ぎたコマをまとめて捨てて追いつくので、そのあいだ (`BACK_GRACE`) も数えない。
+   * 家の中の Wi-Fi で放送のまま (約 17 Mbit/s) 受けると一瞬の詰まりは起きやすく、数えると変換した映像へ早めに戻っていた
+   */
+  const starved = behind > 0 && (pending.length === 0 || pending[0]!.dts > at);
+  if (starved) starve();
+  const late = starved ? 0 : behind;
   thin(decoder, late);
   watch(
     late,
