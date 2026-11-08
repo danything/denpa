@@ -254,6 +254,8 @@ describe("混んでいて断られたとき", () => {
 
 describe("段の切り替え (switchTo)", () => {
   const AV1 = codecsFor("av1");
+  // 小文字の opus を受け取れる端末 (偽の MediaSource はどれも受け取る) には小文字で渡す (`live.ts` の `mseType`)
+  const AV1_MSE = AV1.replace(",Opus", ",opus");
   const rung = (at: number, audio: string) => `rung?from=${at}&audio=${audio}`;
 
   test("いまの位置を含む区間の末尾から新しい段をリクエストし、そこまでは残して続ける。型が違えば changeType で替える", async () => {
@@ -263,7 +265,7 @@ describe("段の切り替え (switchTo)", () => {
     expect(await player.switchTo(AV1, rung)).toBe("switched");
     await settle();
     expect(requests.at(-1)).toBe("rung?from=106&audio=0");
-    expect(media().buffer?.types).toEqual([AV1]);
+    expect(media().buffer?.types).toEqual([AV1_MSE]);
     // 残した 100〜106 に、106 から先が続く
     expect(media().buffer?.ranges).toEqual([[100, 112]]);
   });
@@ -336,7 +338,7 @@ describe("段の切り替え (switchTo)", () => {
     };
     const { media, heard } = start(100, null);
     await settle();
-    expect(media().created).toBe(AV1);
+    expect(media().created).toBe(AV1_MSE);
     expect(heard).toEqual([{ codec: "av1", rung: 2, pace: "p1" }]);
     expect(media().buffer?.ranges).toEqual([[100, 106]]);
   });
