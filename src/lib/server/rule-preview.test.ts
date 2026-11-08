@@ -468,4 +468,48 @@ describe("枝番の局で同じ放送", () => {
       4: { kind: "record" },
     });
   });
+
+  // 取り消しは物理チャンネルとタイトルと時刻で当てるので、片方を取り消すと両方とも録らない (`applyRules` と同じ)
+  test("本チャンネルのほうを取り消したら、枝番のほうも「取り消し済み」", async () => {
+    orm()
+      .insert(services)
+      .values({
+        id: MX_SUB,
+        service_id: 23609,
+        network_id: 32391,
+        name: "TOKYO MX1",
+        type: "GR",
+        service_type: 1,
+        channel: "T16",
+        updated_at: now(),
+      })
+      .run();
+    program(1, "テスト魔法 #1", 5 * HOUR);
+    program(2, "テスト魔法 #1", 5 * HOUR, MX_SUB);
+    orm()
+      .insert(reservations)
+      .values({
+        program_id: 1,
+        rule_id: null,
+        service_id: MX,
+        name: "テスト魔法 #1",
+        description: "",
+        start_at: base + 5 * HOUR,
+        end_at: base + 6 * HOUR,
+        priority: 2,
+        manual: true,
+        state: "canceled",
+        created_at: now(),
+        updated_at: now(),
+      })
+      .run();
+    const preview = await previewFor(
+      draftRule(form({ keyword: "テスト魔法", dedupe: "0" }))!,
+      { ids: [1, 2] },
+    );
+    expect(preview.verdicts).toEqual({
+      1: { kind: "skip", reason: "declined" },
+      2: { kind: "skip", reason: "declined" },
+    });
+  });
 });

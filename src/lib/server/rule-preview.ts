@@ -290,11 +290,19 @@ async function countPreview(
       haystack(program, fields),
     );
   const hits = all.filter((program) => missFor(program) === null);
+  /**
+   * **人が取り消した放送は録らない** (`applyRules` も立て直さない)。下見で「録る」と出して、
+   * 保存しても予約が立たない、ということが無いように
+   */
+  const declined = canceledBroadcasts(at);
+  const isDeclined = (p: (typeof hits)[number]) =>
+    declined.has({ ...p, channel: p.service_channel });
   /*
    * **同じ放送が枝番の局 (MX1 の 23608 / 23609) に載っていたら、小さいほうだけ録る** (`rules.oneBroadcast`。
-   * 予約を立てるときと同じ)。もう片方は「録らない」の行に出し、同じ回をまとめる相手にもしない
+   * 予約を立てるときと同じく、取り消した放送を除いてから)。もう片方は「録らない」の行に出し、同じ回をまとめる相手にもしない
    */
-  const kept = new Set(oneBroadcast(hits, (p) => p.service_channel));
+  const open = hits.filter((p) => !isDeclined(p));
+  const kept = new Set(oneBroadcast(open, (p) => p.service_channel));
 
   /*
    * **同じ回は最初の放送だけ・前の回は録らない。** 録らないものも行には出す (黙って消すと、
@@ -303,16 +311,10 @@ async function countPreview(
    */
   const once = hits.filter((p) => kept.has(p));
   const skips = previewSkips(once, at, conditions);
-  /**
-   * **人が取り消した放送は録らない** (`applyRules` も立て直さない)。下見で「録る」と出して、
-   * 保存しても予約が立たない、ということが無いように
-   */
-  const declined = canceledBroadcasts(at);
   const skipOf = (p: (typeof hits)[number]): Skip => {
     // コピー禁止の番組は録らない (`format.COPY_NEVER_REASON`)。手動でも同じ
     if (p.copy_never) return { kind: "copy-never" };
-    if (declined.has({ ...p, channel: p.service_channel }))
-      return { kind: "declined" };
+    if (isDeclined(p)) return { kind: "declined" };
     if (!kept.has(p)) return { kind: "simulcast" };
     const skip = skips.get(p.id);
     if (skip === undefined) return null;
