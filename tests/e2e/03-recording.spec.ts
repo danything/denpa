@@ -447,7 +447,8 @@ test.describe("CM検出のやり直し", () => {
     const rewrote = (run: string[]) =>
       run.includes("-map_chapters") &&
       run.some((a, i) => run[i - 1] === "-i" && a === libraryPath);
-    const rewrites = () => encodeRuns(stack.encodeArgsFile).filter(rewrote).length;
+    const rewrites = () =>
+      encodeRuns(stack.encodeArgsFile).filter(rewrote).length;
     expect(rewrites()).toBe(0);
 
     await goto(page, "/");
