@@ -47,7 +47,7 @@ public sealed class BCas : IKeySource, IDisposable
     private const int InitOk = 0x2100;
 
     /// <summary>
-    /// ECM の応答が短かったときに**同じ接続で**送り直す回数。libaribb25 と同じ 2 回。
+    /// ECM・契約確認・EMM の応答が短かったときに**同じ接続で**送り直す回数。libaribb25 と同じ 2 回。
     /// カードがたまに短く返すことがあり、繋ぎ直すまでもなく次は通る
     /// </summary>
     private const int ShortRetries = 2;
@@ -201,18 +201,8 @@ public sealed class BCas : IKeySource, IDisposable
 
             var answer = Run(link =>
             {
-                var response = link.Transmit(apdu);
-                for (var retry = 0; retry < ShortRetries && response.Length < EcmLength; retry++)
-                {
-                    response = link.Transmit(apdu);
-                }
-                if (response.Length < EcmLength)
-                {
-                    // **接続は生きている。** 繋ぎ直しても同じ ECM には同じ答えなので、繋ぎ直さない
-                    throw new CardRefusedException($"カードが ECM に応答しません (応答 {response.Length} バイト)");
-                }
-                return new EcmAnswer(
-                    response[6..14], response[14..22], BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4)));
+                var response = Transmit(link, apdu, EcmLength, " ECM ");
+                return new EcmAnswer(response[6..14], response[14..22], Code(response));
             });
 
             if (_cache.Count > 256) _cache.Clear();  // 溜め込まない。ECM は数秒で入れ替わる
@@ -245,22 +235,7 @@ public sealed class BCas : IKeySource, IDisposable
         verificationData.CopyTo(apdu.AsSpan(7));
         apdu[^1] = 0x00;
 
-        lock (_gate)
-        {
-            return Run(link =>
-            {
-                var response = link.Transmit(apdu);
-                for (var retry = 0; retry < ShortRetries && response.Length < ConfirmLength; retry++)
-                {
-                    response = link.Transmit(apdu);
-                }
-                if (response.Length < ConfirmLength)
-                {
-                    throw new CardRefusedException($"カードが契約確認に応答しません (応答 {response.Length} バイト)");
-                }
-                return BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
-            });
-        }
+        lock (_gate) return Run(link => Code(Transmit(link, apdu, ConfirmLength, "契約確認")));
     }
 
     /// <summary>
@@ -290,23 +265,27 @@ public sealed class BCas : IKeySource, IDisposable
 
         lock (_gate)
         {
-            var code = Run(link =>
-            {
-                var response = link.Transmit(apdu);
-                for (var retry = 0; retry < ShortRetries && response.Length < EmmLength; retry++)
-                {
-                    response = link.Transmit(apdu);
-                }
-                if (response.Length < EmmLength)
-                {
-                    throw new CardRefusedException($"カードが EMM に応答しません (応答 {response.Length} バイト)");
-                }
-                return BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
-            });
+            var code = Run(link => Code(Transmit(link, apdu, EmmLength, " EMM ")));
             if (code == Denpa.Agent.Emm.Accepted) _cache.Clear();
             return code;
         }
     }
+
+    /// <summary>
+    /// 送って応答を受ける。応答が <paramref name="least"/> バイトより短ければ、**同じ接続で**送り直す (<see cref="ShortRetries"/>)。
+    /// それでも短ければ断る。**接続は生きている**ので繋ぎ直さない (繋ぎ直しても同じ要求には同じ答え)
+    /// </summary>
+    /// <param name="what">「カードが…に応答しません」に入れる要求の名前</param>
+    private static byte[] Transmit(ICardLink link, byte[] apdu, int least, string what)
+    {
+        var response = link.Transmit(apdu);
+        for (var retry = 0; retry < ShortRetries && response.Length < least; retry++) response = link.Transmit(apdu);
+        if (response.Length < least) throw new CardRefusedException($"カードが{what}に応答しません (応答 {response.Length} バイト)");
+        return response;
+    }
+
+    /// <summary>ECM・契約確認・EMM の応答の返り値。どれも 5〜6 バイト目にある</summary>
+    private static int Code(byte[] response) => BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
 
     private EcmAnswer? Cached(string name) =>
         _cache.TryGetValue(name, out var cached) && _clock.GetUtcNow() - cached.At < CacheFor ? cached.Answer : null;

@@ -353,7 +353,7 @@ function watch(networkId: number, carousel?: Carousel): Feed {
       broken = true;
     }
   };
-  /** 外れの中継を早く見切るため・読み切ったかを見るために覗く。地上波では使わない */
+  /** 外れの中継を早く見切るためと、読み切ったかを確かめるために読む。地上波では使わない */
   Object.defineProperties(feed, {
     hasSatelliteLogo: { get: () => collector.hasSatelliteLogo },
     carouselRead: { get: () => collector.satelliteCarouselRead },
@@ -362,7 +362,7 @@ function watch(networkId: number, carousel?: Carousel): Feed {
   return feed as Feed;
 }
 
-/** データを渡す入口。ついでに「この中継にロゴがあるか」を覗ける */
+/** データを渡す入口。ついでに「この中継にロゴがあるか」も読める */
 interface Feed {
   (chunk: Uint8Array): void;
   readonly hasSatelliteLogo: boolean | null;

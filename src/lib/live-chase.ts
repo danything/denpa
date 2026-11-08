@@ -5,7 +5,7 @@
  * - 届いた PTS から通しの再生位置を出す (`rawChasePosition`)
  */
 
-import { CLOCK, WRAP } from "@danything/arib/pes";
+import { CLOCK } from "@danything/arib/pes";
 
 import { sinceHead } from "./ts/seek";
 
@@ -45,7 +45,7 @@ export function rawChasePosition(
   base: number,
   origin: number,
 ): number {
-  return sinceHead(Math.round(at * CLOCK) % WRAP, origin) - base;
+  return sinceHead(Math.round(at * CLOCK), origin) - base;
 }
 
 /**

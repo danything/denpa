@@ -311,7 +311,7 @@ export async function run(
               ))
                 onStdout(chunk);
             } catch (error) {
-              // 受け手が投げたら誰も読まなくなる。詰まって居座らないよう止めてから投げ直す
+              // 受け手が投げたら誰も読まなくなる。子プロセスが詰まって残らないよう止めてから投げ直す
               kill();
               throw error;
             }

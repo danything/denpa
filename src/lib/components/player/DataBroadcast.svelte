@@ -206,10 +206,9 @@
       originalNetworkId: program?.originalNetworkId ?? null,
       serviceId: program?.serviceId ?? null,
     };
-    const visible = nvramVisible;
     const nvram = Object.fromEntries(
       Object.entries(readAll(NVRAM_PREFIX)).filter(
-        ([key]) => visible?.(key, who) === true,
+        ([key]) => nvramVisible?.(key, who) === true,
       ),
     );
     return {
@@ -249,7 +248,7 @@
   const DATA_BUTTON = 20;
 
   /**
-   * NVRAM の置き場の先頭。web-bml を使っていた頃の鍵 (`denpa_bml_denpa_nvram_…`・
+   * NVRAM の置き場の先頭。web-bml を使っていた頃のキー (`denpa_bml_denpa_nvram_…`・
    * `denpa_bml_engine`) とは重ならないので、古い端末に残っていても読まれない
    */
   const NVRAM_PREFIX = "denpa_bml_own_";
@@ -288,8 +287,7 @@
   /** その回ぶんの入れ物。**毎回作り直す** (`makeMount` の説明) */
   let mount: HTMLDivElement | null = null;
   /** BML の画面の大きさ。`onLoad` で分かる (960x540 / 720x480 など) */
-  let plane: (Omit<Plane, "aspect"> & { aspect?: Plane["aspect"] }) | null =
-    null;
+  let plane: Plane | null = null;
   /** まだ電波から取っている最中か。**エンジンが教えてくれる** (`onReceiving`)。テレビの「データ取得中…」と同じ表示 */
   let receiving = $state(false);
   /**
@@ -321,7 +319,7 @@
   let roundFont: FontFace | null = null;
   /** キーを AribKeyCode に (エンジンを読み込んだら入る。キーの処理で待たずに preventDefault するため) */
   let toAribKey: ((key: string) => number) | null = null;
-  /** NVRAM の鍵が、その局から見えるものか (エンジンと一緒に読む。Hybridcast のアプリへ写す分を選ぶ) */
+  /** NVRAM のキーが、その局から見えるものか (エンジンと一緒に読む。Hybridcast のアプリへ写す分を選ぶ) */
   let nvramVisible: typeof import("#lib/bml/nvram.js").visibleFrom | null =
     null;
 
@@ -557,7 +555,7 @@
   }
 
   /** 文書が替わった (`onLoad`)。画面の大きさに合わせ、d を届けに行く */
-  function loaded(resolution: { width: number; height: number }): void {
+  function loaded(resolution: Plane): void {
     plane = resolution;
     fit();
     // 押したあとに文書が変わったら、それが返事。これ以上押すと開いたメニューを閉じる

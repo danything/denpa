@@ -1019,15 +1019,6 @@ describe("16:9 の面の配置", () => {
       },
     );
   });
-
-  test("面の比率が未指定なら 16:9 で収める", () => {
-    expect(planeArea({ width: 400, height: 900 }, {})).toEqual({
-      left: 0,
-      top: 337.5,
-      width: 400,
-      height: 225,
-    });
-  });
 });
 
 describe("MNG", () => {

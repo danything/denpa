@@ -59,6 +59,8 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
 
     private long[]? _ids;
     private int _wantIds;
+    /// <summary>EMM を受け付けないと分かったカードの置き場 (古い配り役。<see cref="RemoteCard.Emm"/>)。置き場が替わるまで順番待ちに入れない</summary>
+    private IKeySource? _unsupported;
     private DateTimeOffset _idsFailedAt = DateTimeOffset.MinValue;
 
     private readonly Queue<(byte[] Payload, string Hash)> _queue = new();
@@ -117,6 +119,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
     internal void Offer(ReadOnlySpan<byte> payload)
     {
         if (payload.Length > MaxPayload) return;
+        if (Volatile.Read(ref _unsupported) is { } gone && ReferenceEquals(gone, source())) return;
         var hash = Convert.ToHexString(SHA256.HashData(payload));
         lock (_gate)
         {
@@ -227,7 +230,13 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         }
         catch (NotSupportedException)
         {
-            // 配り役が古い。記録には RemoteCard が 1 回だけ出している
+            // 配り役が古い。記録には RemoteCard が 1 回だけ出している。この置き場のあいだは順番待ちに入れない (1 秒ごとに送っては断られるのを繰り返さない)
+            Volatile.Write(ref _unsupported, card);
+            lock (_gate)
+            {
+                _queue.Clear();
+                _queued.Clear();
+            }
             return;
         }
         catch (Exception error)

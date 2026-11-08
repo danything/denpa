@@ -43,8 +43,9 @@ export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
  * - `av01.0.08M.08` … Main profile / Level 4.0 / 8bit。同じく 1080p60 まで
  * - `hvc1.1.6.L123.B0` … Main profile / Level 4.1。同じく 1080p60 まで。入れ物の中の名前も `hvc1` にする
  *   (`server/live.ts` の `videoArgs`。ffmpeg の既定の `hev1` は Safari が受け取らない)
- * - `Opus` … MP4 での Opus の名前 (中の箱の名前と同じく大文字の O)。Safari は小文字の `opus` を断る
- *   (Chromium は両方受け取る)。入れ物が WebM なら小文字が正しいので、エンコード済みのファイルは `opus` のまま
+ * - `Opus` … MP4 での Opus の名前 (中の箱の名前と同じく大文字の O)。Safari は小文字の `opus` を断る。
+ *   **Chromium は `Opus` を受け取ると答えても、流すと断ることがある** (Android の Chrome 133。`mseType` で小文字に替える)。
+ *   入れ物が WebM なら小文字が正しいので、エンコード済みのファイルは `opus` のまま
  * - `audio` … 音声だけ (AAC)。回線に合わせて下げる最後の手 (`TuneCommand.codec`)
  *
  * **音声も組で決まる** (`server/live.ts` の `audioArgs`)。AV1 は Opus、H.264・H.265 は AAC
@@ -55,6 +56,21 @@ export function codecsFor(codec: LiveCodec | "audio"): string {
   if (codec === "av1") return 'video/mp4; codecs="av01.0.08M.08,Opus"';
   if (codec === "hevc") return 'video/mp4; codecs="hvc1.1.6.L123.B0,mp4a.40.2"';
   return 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
+}
+
+/**
+ * **MSE に渡す型。MP4 の `Opus` は、小文字の `opus` を受け取れる端末では小文字にする。**
+ * Android の Chrome 133 は `Opus` を `isTypeSupported` で受け取ると答えるのに、流すと
+ * `CHUNK_DEMUXER_ERROR_APPEND_FAILED: Audio stream codec opus doesn't match SourceBuffer codecs` で断り、
+ * 小文字なら 1280x720 の AV1 を再生できた (エミュレータで確かめた)。Safari は小文字を断るので、大文字のまま渡す (`codecsFor`)
+ */
+export function mseType(
+  type: string,
+  supported: (type: string) => boolean,
+): string {
+  if (!type.startsWith("video/mp4") || !type.includes(",Opus")) return type;
+  const lower = type.replace(",Opus", ",opus");
+  return supported(lower) ? lower : type;
 }
 
 /**

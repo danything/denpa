@@ -179,7 +179,7 @@ function downloadKey(downloadId: number, moduleId: number): string {
  * 揃ったロゴの見分け。
  *
  * `logo_id` は 9 ビットで、**BS と CS で番号が別々に振られている**。
- * logo_id だけを鍵にしていると、同じ番号の BS と CS のロゴが上書きし合う。
+ * logo_id だけをキーにしていると、同じ番号の BS と CS のロゴが上書きし合う。
  */
 function logoKey(logo: ModuleLogo): string {
   return `${logo.logoType}:${logo.logoId}:${logo.services[0]?.networkId ?? 0}`;

@@ -20,7 +20,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *   asicen-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs / Asicen.cs)。CECH-ZD1 J と PIX-DT295 は USB を直に持つ (Zd1j.cs / Dt295.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
- * 復号に要る PAT・PMT・ECM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
+ * 復号に要る PAT・PMT・ECM と、契約の更新に要る CAT・EMM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
  * チャンネルスキャンで見つかった局を判断するのもあちらの仕事 (docs/agent.md)。
  */
 

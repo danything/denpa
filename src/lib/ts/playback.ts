@@ -230,23 +230,19 @@ function asPicked(offer: PlayOffer): Picked | null {
  */
 export const ENCODED_ORDER = autoOrder("encoded");
 
-/** その場でエンコードする順 (`autoOrder`。家の中か外か) に並べ替える。並びに無いもの (H.265 の詰め替え) は後ろ */
-function byOnTheFlyOrder(offers: PlayOffer[], indoor: boolean): PlayOffer[] {
-  const order: readonly PlayCodec[] = autoOrder({ indoor, compat: false }).map(
-    (format) => (format === "raw" ? "mpeg2" : format),
-  );
+/** `autoOrder` の形式をコーデックの名前に (放送のままは MPEG-2) */
+function asCodecs(order: readonly LiveFormat[]): PlayCodec[] {
+  return order.map((format) => (format === "raw" ? "mpeg2" : format));
+}
+
+/** `order` の順に並べ替える。並びに無いものは後ろ、同じコーデックの中では元の並びのまま */
+function byOrder(
+  offers: PlayOffer[],
+  order: readonly PlayCodec[],
+): PlayOffer[] {
   const rank = (codec: PlayCodec) => {
     const at = order.indexOf(codec);
     return at === -1 ? order.length : at;
-  };
-  return [...offers].sort((a, b) => rank(a.codec) - rank(b.codec));
-}
-
-/** `ENCODED_ORDER` の順に並べ替える (同じコーデックの中では元の並びのまま) */
-function byEncodedOrder(offers: PlayOffer[]): PlayOffer[] {
-  const rank = (codec: PlayCodec) => {
-    const at = (ENCODED_ORDER as readonly PlayCodec[]).indexOf(codec);
-    return at === -1 ? ENCODED_ORDER.length : at;
   };
   return [...offers].sort((a, b) => rank(a.codec) - rank(b.codec));
 }
@@ -256,12 +252,12 @@ function byEncodedOrder(offers: PlayOffer[]): PlayOffer[] {
  * 観られなければ、または `auto` なら端末に合わせる。
  *
  * **録画しか無い (エンコード済みが無い) ときは、ライブ・追っかけと同じ「その場でエンコード」の順** (`autoOrder`。家の中なら
- * MPEG-2 → H.264 → AV1、外なら AV1 → H.264。H.265 には変換しないので並びから外れる)。エンコード済みがあるときは次の順。
+ * MPEG-2 → H.264 → AV1、外なら AV1 → H.264。サーバは H.265 に変換しないので、H.265 は出てこない)。エンコード済みがあるときは次の順。
  *
  * 1. **そのまま読めるファイル** (AV1 → H.265 → H.264。小さいほうが先。同じ画質なら回線もディスクも使わない)
  * 2. MSE が受け取れる**詰め替え** (エンコード済みと同じコーデック。サーバは軽い。並びは 1 と同じ)
  * 3. MSE が受け取れる**変換** (ライブ・追っかけと同じ「その場でエンコード」の順。家の中なら H.264 → AV1、外なら AV1 → H.264。
- *    サーバはその場でエンコードする。H.265 には変換しない)
+ *    サーバはその場でエンコードする。H.265 のストリームは詰め替えだけなので 2 に入る)
  * 4. 中身が分からないファイル (ffprobe が読めなかった) をそのまま渡す。読めなければ観る画面が観られる先を案内する
  *
  * エンコード済みがあるときの自動は MPEG-2 を選ばない (元の TS が残っていれば、選べば観られる)。何も無ければ null
@@ -274,8 +270,9 @@ export function pickOffer(
   choice: CodecChoice | "mpeg2" = "auto",
   indoor = false,
 ): Picked | null {
-  const files = byEncodedOrder(
+  const files = byOrder(
     info.offers.filter((offer) => offer.way === "file"),
+    ENCODED_ORDER,
   );
   const streams = info.offers.filter((offer) => offer.way === "stream");
   const raw = playsRaw(info, can);
@@ -306,14 +303,15 @@ export function pickOffer(
   }
   const order = [
     ...files.filter((offer) => playsFile(offer, can)),
-    ...byEncodedOrder(
+    ...byOrder(
       streams.filter(
         (offer) => playsStream(offer, can) && hasFile(info, offer.codec),
       ),
+      ENCODED_ORDER,
     ),
-    ...byOnTheFlyOrder(
+    ...byOrder(
       streams.filter((offer) => playsStream(offer, can)),
-      indoor,
+      asCodecs(autoOrder({ indoor, compat: false })),
     ),
     ...files,
   ];
@@ -465,9 +463,7 @@ export function pickCanvas(
     return choice;
   const light = usable.filter((c) => c !== "mpeg2" && hasFile(info, c));
   // 互換モードの順は家の中か外かで変わらない
-  const order = autoOrder({ indoor: false, compat: true }).map((format) =>
-    format === "raw" ? "mpeg2" : format,
-  );
+  const order = asCodecs(autoOrder({ indoor: false, compat: true }));
   const rest = order.filter((c): c is CanvasCodec =>
     usable.includes(c as CanvasCodec),
   );

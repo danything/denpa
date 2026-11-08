@@ -187,7 +187,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
             Content = new ByteArrayContent(payload),
         };
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        return CardWire.ReadConfirm(Send(request, "契約確認"));
+        return CardWire.ReadCode(Send(request, "契約確認"), "契約確認");
     }
 
     /// <summary>配り役が <c>/denpa/card/emm</c> を持っていない (古いエージェント)。分かったら、もう送らない</summary>
@@ -208,7 +208,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         try
         {
-            return CardWire.ReadEmm(Send(request, "EMM の返り値"));
+            return CardWire.ReadCode(Send(request, "EMM の返り値"), "EMM ");
         }
         catch (ShareRefusedException error) when (error.Status == 404)
         {
@@ -352,7 +352,7 @@ public static class CardWire
         return new EcmAnswer(body[..8], body[8..16], BinaryPrimitives.ReadUInt16BigEndian(body.AsSpan(16)));
     }
 
-    /// <summary>返り値コード (BE16)</summary>
+    /// <summary>返り値コード (BE16)。契約確認と EMM の答えはこれだけ</summary>
     public static byte[] Pack(int code)
     {
         var body = new byte[2];
@@ -360,16 +360,11 @@ public static class CardWire
         return body;
     }
 
-    public static int ReadConfirm(byte[] body)
+    /// <summary>契約確認と EMM の答え (返り値の BE16)</summary>
+    /// <param name="what">短すぎたときの「…の答えが短すぎます」に入れる要求の名前</param>
+    public static int ReadCode(byte[] body, string what)
     {
-        if (body.Length < 2) throw new IOException("契約確認の答えが短すぎます");
-        return BinaryPrimitives.ReadUInt16BigEndian(body);
-    }
-
-    /// <summary>EMM の返り値 (BE16。契約確認と同じ形)</summary>
-    public static int ReadEmm(byte[] body)
-    {
-        if (body.Length < 2) throw new IOException("EMM の返り値が短すぎます");
+        if (body.Length < 2) throw new IOException($"{what}の答えが短すぎます");
         return BinaryPrimitives.ReadUInt16BigEndian(body);
     }
 }

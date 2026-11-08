@@ -339,6 +339,7 @@ describe("音声も組で決まる", () => {
   test("AV1 は Opus 256k", () => {
     expect(args("av1")).toContain("libopus");
     expect(rate(args("av1"))).toBe("256k");
+    // MP4 の Opus の名前は大文字。小文字を受け取れる端末では画面が小文字に替える (`mseType`)
     expect(codecsFor("av1")).toBe('video/mp4; codecs="av01.0.08M.08,Opus"');
   });
 

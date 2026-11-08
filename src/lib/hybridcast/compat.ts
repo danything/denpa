@@ -6,7 +6,7 @@
  * 設定を局の NVRAM (`nvram://00;group/14` など) に読み書きする。
  *
  * - **Greg** … データ放送のエンジンと同じもの。開くときに写して渡し、書かれたら親へ知らせて戻す
- * - **NVRAM** … データ放送と同じ置き場・同じ決まり (`bml/nvram.ts`)。**放送の文書と同じ領域を使える** —
+ * - **NVRAM** … データ放送と同じ置き場・同じ決まり (`bml/nvram.ts`)。**放送の文書と同じ領域を使える**。
  *   アプリは AIT で局が起動させたもの。渡すのは起動した局から見える分だけ (`visibleFrom`)、書いたら親へ知らせる
  * - **データ放送へ戻る** (`launchDataBroadcastingBrowser`) … アプリを閉じる
  *
@@ -22,7 +22,7 @@ import { Nvram, type ReceiverInfo, type Who } from "../bml/nvram";
 export interface CompatInit {
   /** データ放送の Greg (64 本) */
   greg: string[];
-  /** NVRAM の置き場の中身 (起動した局から見える分。鍵は `Nvram` のもの) */
+  /** NVRAM の置き場の中身 (起動した局から見える分。キーは `Nvram` のもの) */
   nvram: Record<string, string>;
   receiver: ReceiverInfo;
   /** 起動した局 */

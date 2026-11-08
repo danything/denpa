@@ -521,7 +521,7 @@ describe("testDecode", () => {
       config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecode(99999);
       expect(res.ok).toBe(false);
-      expect(res.error).toContain("サービスが見つかりません");
+      expect(res.error).toContain("局が見つかりません");
     } finally {
       server.stop();
     }
@@ -561,6 +561,42 @@ describe("testDecode", () => {
     try {
       config.agentUrl = fakeAgentUrl(server.port ?? 0);
       const res = await testDecode(105);
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain("十分なパケットを受信できませんでした");
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("映像・音声が無く、PAT・PMT だけが届く局は数えない (掛からないセクションで復号できたように見せない)", async () => {
+    const parts: Uint8Array[] = [];
+    for (let i = 0; i < 100; i++) {
+      parts.push(packetize(0x0000, patSection([[108, 0x0101]])));
+      parts.push(packetize(0x0101, programMap(108, 0x0111, [[0x02, 0x0111]])));
+    }
+    const buf = new Uint8Array(stream(...parts));
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") return Response.json(ONE_CARD);
+      if (url.pathname === "/denpa/stream") return new Response(buf);
+      return new Response("Not Found", { status: 404 });
+    });
+    orm()
+      .insert(services)
+      .values({
+        id: 108,
+        service_id: 108,
+        network_id: 4,
+        name: "映像の無い局",
+        type: "BS",
+        channel: "BS11",
+        updated_at: Date.now(),
+      })
+      .run();
+    airing(108);
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      const res = await testDecode(108);
       expect(res.ok).toBe(false);
       expect(res.error).toContain("十分なパケットを受信できませんでした");
     } finally {
