@@ -19,6 +19,7 @@
  *   `PROBE_EVERY` 測れていなければ、測れるまで先の上限を外して読む (`aheadLimit`)
  */
 
+import { mseType } from "#lib/live.js";
 import { parseRung, type Rung } from "#lib/rungs.js";
 import type { PickedMediaSource } from "#lib/ts/media-source.js";
 import { Meter } from "#lib/ts/meter.js";
@@ -155,9 +156,13 @@ export function remuxPlayer(
   const buffered = (): Ranges =>
     buffer === null ? [] : rangesOf(buffer.buffered);
 
+  /** MSE に渡す型 (MP4 の `Opus` を受け取れるなら小文字に。`live.ts` の `mseType`)。`bufferType` は元の型のまま比べる */
+  const forMse = (type: string): string =>
+    mseType(type, (t) => picked.Source.isTypeSupported(t));
+
   /** SourceBuffer を作る。ストリームの時刻をそのまま使う (ページの物差し。`server/playback.ts`) */
   function createBuffer(type: string): void {
-    buffer = media.addSourceBuffer(type);
+    buffer = media.addSourceBuffer(forMse(type));
     buffer.mode = "segments";
     bufferType = type;
   }
@@ -317,7 +322,7 @@ export function remuxPlayer(
       throw new Error(`型を替えられません: ${type}`);
     await idle();
     if (mine !== run) return;
-    buffer.changeType(type);
+    buffer.changeType(forMse(type));
     bufferType = type;
   }
 

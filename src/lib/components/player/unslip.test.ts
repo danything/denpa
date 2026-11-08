@@ -101,3 +101,33 @@ describe("映像の遅れが見えない端末 (詰まったら測らずに飛�
     expect(slipHidden(undefined)).toBe(false);
   });
 });
+
+describe("飛んだ直後の 1 コマは測らない", () => {
+  test("自分で飛んだあと、次の 1 コマは測らず、その次から測る", () => {
+    const video = fakeVideo(10);
+    const fix = unslipper(() => 0);
+    expect(fix.check(video, 9)).toBe(true);
+    // 飛ぶ前のコマの時刻が残っている。遅れに数えない
+    expect(fix.measure(video, 1)).toBeNull();
+    expect(fix.measure(video, video.currentTime - 0.05)).toBeCloseTo(0.05, 6);
+  });
+
+  test("シークを知らされたら (`seeked`)、次の 1 コマは測らない", () => {
+    const video = fakeVideo(100);
+    const fix = unslipper(() => 0);
+    fix.seeked();
+    // 8 秒前のコマの時刻 (Android のエミュレータで「映像の遅れ 最大」が 8016ms になった)
+    expect(fix.measure(video, 92)).toBeNull();
+    expect(fix.check(video, 92)).toBe(true);
+  });
+
+  test("シークの最中は測らず、終わった次の 1 コマも測らない", () => {
+    const state = { currentTime: 100, paused: false, seeking: true };
+    const video = state as unknown as HTMLVideoElement;
+    const fix = unslipper(() => 0);
+    expect(fix.measure(video, 50)).toBeNull();
+    state.seeking = false;
+    expect(fix.measure(video, 50)).toBeNull();
+    expect(fix.measure(video, 99.99)).toBeCloseTo(0.01, 6);
+  });
+});

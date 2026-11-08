@@ -45,7 +45,6 @@ import {
 import { eachFrame } from "#lib/components/player/frames.js";
 import {
   slipHidden,
-  slipOf,
   unslipper,
 } from "#lib/components/player/unslip.js";
 import { forget, read, write } from "#lib/keep.js";
@@ -81,6 +80,7 @@ import {
   LAST_COOKIE,
   LIVE_CODECS,
   type LiveCodec,
+  mseType,
   type Notice,
   SOCKET_PATH,
   type Tuned,
@@ -388,6 +388,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   const lagMeter = new LagMeter();
   /** 測った回線の速さ (`AdaptSample.capacity`。`probeLink`)。まだ測っていなければ null */
   let capacity: { bps: number; at: number } | null = null;
+  /** いまの MediaSource に流しているエンコード方式。`<video>` がエラーになったら、これをやめる (`onMediaError`) */
+  let mseCodec: LiveCodec | null = null;
   /** 最後にコマが映った時刻 (`performance.now`。`stuckNow`)。測れない・選局し直したあとまだ映っていなければ 0 */
   let lastFrameAt = 0;
   /** 段を動かした断り書きを引っ込める時計 (`act`) */
@@ -413,9 +415,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** `encode`・`pinned` の断り書きと、最後に出した時刻。その状態が `ADAPT_HOLD` のあいだ来なければ消す */
   let standing: { text: string; at: number } | null = null;
   /** 段を決める刻み (`ADAPT_EVERY`)。最初の選局で入れ、画面を離れたら止める */
-  let adaptTimer: ReturnType<typeof setInterval> | null = null;
-
-  /** 前のフレームを貼っているか。**次のフレームが出るまでの黒を埋める** */
+  let adaptTimer: ReturnType<typeof setInterval> |  /** 前のフレームを貼っているか。**次のフレームが出るまでの黒を埋める** */
   let holding = $state(false);
   /**
    * データ放送を出すか (テレビの d ボタン)。サーバは押されてからデコードする (`server/live.ts` の `wantData`)。
@@ -778,15 +778,21 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   function follow(video: HTMLVideoElement): void {
     if (following === video) return;
     following = video;
+    // 飛んだ直後の 1 コマは測らない (`unslipper`)。選局し直しの追いつき (`pacing` の `seek`) も含む
+    video.addEventListener("seeking", () => unslipping.seeked());
     eachFrame(video, (frame) => {
       // 別の映像に移ったら、こちらは畳む
       if (following !== video) return false;
       // 映した 1 枚の時刻と再生位置の差 (`slip`)。`requestVideoFrameCallback` を持つブラウザでだけ測れる
       if (frame !== undefined) {
         lastFrameAt = performance.now();
-        slip = slipOf(video.currentTime, frame.mediaTime);
-        if (slip > slipMost) slipMost = slip;
-        unslip(video, frame.mediaTime);
+        // 飛んだ直後の 1 コマは飛ぶ前の時刻を持っていることがあるので測らない (`unslipper`)
+        const measured = unslipping.measure(video, frame.mediaTime);
+        if (measured !== null) {
+          slip = measured;
+          if (slip > slipMost) slipMost = slip;
+          unslip(video, slip);
+        }
       }
       paint(video.currentTime);
       // 塊が届かない間も貯まりを見て、ときどき `pace` を回す (`PACE_EVERY`)
@@ -1134,14 +1140,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 映像だけ遅れているのを、その場へ飛び直して直す (`unslip.ts`)。`mediaTime` (映した 1 枚の時刻) があれば
-   * 遅れが `SLIP_MOST` を超えたときだけ、無ければ遅れを見ずに飛ぶ (途切れたとき。`settle`)
+   * 映像だけ遅れているのを、その場へ飛び直して直す (`unslip.ts`)。測った遅れ (`measured`) があれば
+   * `SLIP_MOST` を超えたときだけ、無ければ遅れを見ずに飛ぶ (途切れたとき。`settle`)
    */
-  function unslip(video: HTMLVideoElement, mediaTime?: number): void {
+  function unslip(video: HTMLVideoElement, measured?: number): void {
     const jumped =
-      mediaTime === undefined
+      measured === undefined
         ? unslipping.jump(video)
-        : unslipping.check(video, mediaTime);
+        : unslipping.fix(video, measured);
     if (!jumped) return;
     slips++;
     slip = 0;
@@ -1668,6 +1674,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     nativeAudio = null;
     buffer = null;
     source = null;
+    mseCodec = null;
     running = false;
     delay = null;
     paused = false;
@@ -2594,6 +2601,34 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
+   * その形式をやめて次の形式へ切り替え、そう言う。この画面を開いている間は、自動でもその形式を選ばない (`decideFormat`)
+   */
+  function giveUpCodec(baked: Exclude<LiveCodec, "h264">): void {
+    if (baked === "av1") av1GaveUp = true;
+    else hevcGaveUp = true;
+    const next = decideFormat();
+    const to = next === null || next === "raw" ? "h264" : next;
+    warning = `${formatLabel(baked)} を再生できないため、${formatLabel(to)} に切り替えました`;
+    swapCodec(to);
+  }
+
+  /**
+   * **`<video>` がエラーになった。送り込みを止めて、次の形式へ切り替える。** `isTypeSupported` が受け取れると
+   * 答えても、流すと断る形式がある (Android の Chrome 133 は MP4 の `Opus` を受け取ると答え、流すと
+   * `CHUNK_DEMUXER_ERROR_APPEND_FAILED` で断った。`live.ts` の `mseType`)。Chrome は断ったあと SourceBuffer を外すので、
+   * `buffer` を捨てる。外れたものの `buffered` を読むと `InvalidStateError` になり、そのまま「読み込み中」で止まっていた
+   */
+  function onMediaError(): void {
+    const failed = mseCodec;
+    if (failed === null || source === null) return;
+    mseCodec = null;
+    buffer = null;
+    pending.length = 0;
+    if (failed !== "h264") giveUpCodec(failed);
+    else fail("映像を再生できませんでした。選び直すと繋ぎ直します");
+  }
+
+  /**
    * MediaSource を用意する (`codecs` はサーバが決めて送ってくる)。受け取れない形式なら、黒いままにせず
    * H.264 へ戻してそう言う
    */
@@ -2606,15 +2641,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     stopRaw();
     // iPhone の Safari には MediaSource が無く、ManagedMediaSource だけがある (`ts/media-source.ts`)
     const picked = pickMediaSource();
+    if (picked !== null)
+      codecs = mseType(codecs, (type) => picked.Source.isTypeSupported(type));
     if (picked === null || !picked.Source.isTypeSupported(codecs)) {
       if (baked !== "h264") {
-        // この画面を開いている間は、自動でもその形式を選ばない (`decideFormat`)。次の形式へ
-        if (baked === "av1") av1GaveUp = true;
-        else hevcGaveUp = true;
-        const next = decideFormat();
-        const to = next === null || next === "raw" ? "h264" : next;
-        warning = `${formatLabel(baked)} を再生できないため、${formatLabel(to)} に切り替えました`;
-        swapCodec(to);
+        giveUpCodec(baked);
         return;
       }
       fail("再生できない形式です");
@@ -2622,6 +2653,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
     // 前の MediaSource の名残を落とす (音声の選び直しは繋ぎ直さないので `reset` を挟まない)
     clear();
+    mseCodec = baked;
+    // 受け取れると答えたのに、流すと断る形式がある (`onMediaError`)。同じ関数なので何度足しても 1 つ
+    video.addEventListener("error", onMediaError);
     // エンコード方式が変われば太さも変わる。数え直す
     received = 0;
     receivedFrom = 0;
