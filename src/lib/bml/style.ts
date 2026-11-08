@@ -78,7 +78,9 @@ const INHERITED = new Set([
 
 /**
  * 既定のスタイル (web-bml の default_css.ts に合わせ、放送が頼るものだけ)。
- * 文字の色は規格では受信機しだい。テレビの画面に合わせて白 (7) にする
+ * 文字の色は規格では受信機しだい。web-bml (TVTest のデータ放送) と同じく黒 (0) にする。
+ * NHK の文書は白にしたい所だけ `color-index: 7` を書き、指定の無い所 (地震お知らせ表示設定の「利用する」など) は黒のつもりで、
+ * 白にしていた頃は地の薄い灰色に紛れて読めなかった
  */
 const DEFAULTS: Record<string, [string, string][]> = {
   "*": [["used-key-list", "basic data-button"]],
@@ -86,7 +88,7 @@ const DEFAULTS: Record<string, [string, string][]> = {
     ["background-color-index", "0"],
     ["resolution", "960x540"],
     ["visibility", "visible"],
-    ["color-index", "7"],
+    ["color-index", "0"],
     ["font-family", "丸ゴシック"],
     ["font-size", "24px"],
     ["line-height", "normal"],
@@ -293,7 +295,7 @@ export function compute(
       : (get("visibility") ?? "visible").toLowerCase() !== "hidden",
     colorIndex: inherits("color-index")
       ? parent!.colorIndex
-      : parseIndex(get("color-index"), 7),
+      : parseIndex(get("color-index"), 0),
     backgroundColorIndex: parseIndex(get("background-color-index"), 8),
     grayscale: inherits("grayscale-color-index")
       ? parent!.grayscale
