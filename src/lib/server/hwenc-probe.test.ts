@@ -502,9 +502,7 @@ test("QSV は GPU のメモリへ移す形で落ちたら CPU のメモリのま
     // GPU のメモリへ移す形を先に試し、落ちたときだけ CPU のメモリのまま渡す形で試す
     const qsv0 = calls
       .map((argv) => argv.join(" "))
-      .filter(
-        (l) => l.includes("h264_qsv") && l.includes("child_device=0,"),
-      );
+      .filter((l) => l.includes("h264_qsv") && l.includes("child_device=0,"));
     expect(qsv0).toHaveLength(2);
     expect(qsv0[0]).toContain("hwupload");
     expect(qsv0[1]).not.toContain("hwupload");
