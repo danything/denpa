@@ -28,7 +28,7 @@
  * 速さは等速だけ (音を自前で鳴らしている)。DOM はエンジン (`RawEngine`) が触る canvas と `<audio>` だけ
  */
 
-import { CLOCK, WRAP } from "@danything/arib/pes";
+import { CLOCK } from "@danything/arib/pes";
 
 import type { AudioSide } from "#lib/arib.js";
 import { RawEngine } from "#lib/raw/engine.js";
@@ -249,7 +249,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
     // 元の TS の先頭の少し前 (音と映像の先頭のずれ) は負になる。物差しの先頭に揃える
     time = Math.max(
       0,
-      input === "ts-mpeg2" ? sinceHead(pts % WRAP, origin) : pts / CLOCK,
+      input === "ts-mpeg2" ? sinceHead(pts, origin) : pts / CLOCK,
     );
     return time;
   }

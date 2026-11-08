@@ -57,6 +57,12 @@ describe("trimCues", () => {
     expect(kept.map((c) => c.at)).toEqual([20, 30]);
   });
 
+  test("溜めの中で戻れるいちばん前を渡せば、戻った先で出す字幕も残る", () => {
+    // 再生位置は 35 秒、溜めは 15 秒から (`live-player` は小さいほうを渡す)。15 秒へ戻ると 10 秒の字幕を出す
+    const kept = trimCues([cue(10), cue(20), cue(30)], 15);
+    expect(currentCue(kept, 15)?.at).toBe(10);
+  });
+
   test("まだどれも過ぎていなければ何も捨てない", () => {
     const cues = [cue(10), cue(20)];
     expect(trimCues(cues, 5)).toHaveLength(2);

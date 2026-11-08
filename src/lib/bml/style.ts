@@ -279,7 +279,7 @@ export function compute(
     return parts.length === 2 &&
       parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)
       ? [parts[0]!, parts[1]!]
-      : [30, 15];
+      : (parent?.grayscale ?? [30, 15]);
   };
   const align = (get("text-align") ?? "").toLowerCase();
   const weight = (get("font-weight") ?? "").toLowerCase();
@@ -293,20 +293,17 @@ export function compute(
     visible: inherits("visibility")
       ? parent!.visible
       : (get("visibility") ?? "visible").toLowerCase() !== "hidden",
-    colorIndex: inherits("color-index")
-      ? parent!.colorIndex
-      : parseIndex(get("color-index"), 0),
+    // 継ぐ特性は、値が無い・inherit・読めないときに親の値を使う (読めない宣言は無かったことにする)
+    colorIndex: parseIndex(get("color-index"), parent?.colorIndex ?? 0),
     backgroundColorIndex: parseIndex(get("background-color-index"), 8),
-    grayscale: inherits("grayscale-color-index")
-      ? parent!.grayscale
-      : grayscale(),
+    grayscale: grayscale(),
     borderWidth: px("border-width", 0),
     borderStyle: borderStyle(get("border-style")),
     borderColorIndex: SIDES.map((side) =>
       parseIndex(get(`border-${side}-color-index`), 0),
     ) as Sides,
     padding: SIDES.map((side) => px(`padding-${side}`, 0)) as Sides,
-    fontSize: inherits("font-size") ? parent!.fontSize : px("font-size", 24),
+    fontSize: px("font-size", parent?.fontSize ?? 24),
     fontFamily: inherits("font-family")
       ? parent!.fontFamily
       : unquote(get("font-family") ?? "丸ゴシック"),
@@ -323,9 +320,7 @@ export function compute(
       : align === "center" || align === "right" || align === "justify"
         ? align
         : "left",
-    letterSpacing: inherits("letter-spacing")
-      ? parent!.letterSpacing
-      : px("letter-spacing", 0),
+    letterSpacing: px("letter-spacing", parent?.letterSpacing ?? 0),
     backgroundImage:
       background === null || background.toLowerCase() === "none"
         ? null
