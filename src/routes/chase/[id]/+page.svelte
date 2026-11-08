@@ -306,6 +306,7 @@
     {controls}
     {fullscreen}
     {ambient}
+    pip={pip.active}
     testid="chase"
     bind:element={stageEl}
   >

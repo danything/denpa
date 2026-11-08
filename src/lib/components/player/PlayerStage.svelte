@@ -41,6 +41,12 @@
      * 光が見えている間は、実況のコメントも枠の外を流れる (下の `outside`)
      */
     ambient?: Ambient;
+    /**
+     * 小窓 (PiP) を出しているか (`pip.svelte.ts` の `active`)。**出している間は舞台の映像を隠す。**
+     * 同じ映像を小窓と舞台の両方で描くと、小窓の裏で描画が続いて重くなる (とくに非力な端末)。
+     * 隠しても小窓は止まらない (映像は同じ `<video>` のまま)
+     */
+    pip?: boolean;
   }
   interface StageApi {
     /** 毎回は使わないものを再生の設定 (⚙) に畳むか。狭い枠か、押すものが一段に収まらないとき */
@@ -54,6 +60,7 @@
     children,
     notes,
     ambient,
+    pip = false,
   }: Props = $props();
 
   // 中のメニュー (`stageMenu`) が「開いている間は操作バーを残せ」と言う先。取り手で渡す (props は差し替わりうる)
@@ -391,6 +398,7 @@
     data-fold={fold ? "" : undefined}
     data-narrow={slim ? "" : undefined}
     data-pseudo={fullscreen.pseudo ? "" : undefined}
+    data-pip={pip ? "" : undefined}
     onpointermove={controls.wake}
     onpointerdown={controls.wake}
     onpointerleave={controls.away}
@@ -404,6 +412,11 @@
     data-testid={testid}
   >
     {@render children({ fold })}
+    {#if pip}
+      <div class="pip-note" role="status" data-testid="{testid}-pip-note">
+        小窓で再生中
+      </div>
+    {/if}
     {#if notes}
       <div class="notes" data-testid="{testid}-notes">{@render notes()}</div>
     {/if}
@@ -418,6 +431,30 @@
     aspect-ratio: 16 / 9;
     max-height: 100%;
     min-height: 14rem;
+  }
+  /*
+   * 小窓 (PiP) を出している間は、舞台の映像を隠す。**同じ映像を 2 か所で描かない**
+   * (小窓の裏でも描き続けると、とくに非力な端末で重くなる)。`<video>` は止めない
+   * (小窓がその映像を出している)。生の canvas (MPEG-2・互換モード) も、worker は
+   * 小窓へ書くために描き続けるが、画面へは出さない
+   */
+  .stage[data-pip] :global(video),
+  .stage[data-pip] :global(canvas[data-input]),
+  .stage[data-pip] :global(canvas[data-testid$="-still"]),
+  .stage[data-pip] :global(canvas[data-testid$="-captions"]),
+  .stage[data-pip] :global(canvas[data-testid="watch-captions-canvas"]) {
+    visibility: hidden;
+  }
+  /* 小窓の間、映像の代わりに出す案内 */
+  .pip-note {
+    position: absolute;
+    inset: 0;
+    z-index: var(--dp-z-stage-comments);
+    display: grid;
+    place-items: center;
+    color: var(--dp-on-video-muted);
+    font-size: var(--dp-text-sm);
+    pointer-events: none;
   }
   /* 置き場は箱を持たない (狭い画面・横にしたスマホ・広げた全画面。下で二段組だけ箱にする) */
   .room {
