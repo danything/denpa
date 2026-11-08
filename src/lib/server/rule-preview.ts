@@ -301,7 +301,8 @@ async function countPreview(
    * 条件が当たっていないのか、当たったうえで外したのか読めない)。
    * 選び方は予約を立てるときと同じもの (`rules.previewSkips`)
    */
-  const skips = previewSkips(hits.filter((p) => kept.has(p)), at, conditions);
+  const once = hits.filter((p) => kept.has(p));
+  const skips = previewSkips(once, at, conditions);
   /**
    * **人が取り消した放送は録らない** (`applyRules` も立て直さない)。下見で「録る」と出して、
    * 保存しても予約が立たない、ということが無いように
