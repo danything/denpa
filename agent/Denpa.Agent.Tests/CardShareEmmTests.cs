@@ -56,7 +56,7 @@ public class CardShareEmmTests
     {
         var notified = 0;
         var accepting = new Card(() => 0x2100);
-        await Assert.That(CardWire.ReadEmm(CardWire.Pack(Emm.Forwarded(accepting, Payload, () => notified++)))).IsEqualTo(0x2100);
+        await Assert.That(CardWire.ReadCode(CardWire.Pack(Emm.Forwarded(accepting, Payload, () => notified++)), "EMM ")).IsEqualTo(0x2100);
         await Assert.That(accepting.Sent.Single().SequenceEqual(Payload)).IsTrue();
         await Assert.That(notified).IsEqualTo(1);
 

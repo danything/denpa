@@ -16,7 +16,7 @@ namespace Denpa.Agent;
 /// <summary>カードの素。**鍵を作るのに要る定数**で、初めに 1 回だけ貰う</summary>
 /// <param name="SystemKey">32 バイト</param>
 /// <param name="InitCbc">8 バイト</param>
-/// <param name="Ids">カードの番号 (表示用。10 進 16 桁で見せる)</param>
+/// <param name="Ids">カードの番号 (個別とグループ)。画面には 10 進 16 桁で見せ、EMM が自分宛てかもこれと比べる (<see cref="Emm"/>)</param>
 public sealed record CardInit(byte[] SystemKey, byte[] InitCbc, int CaSystemId, long[] Ids);
 
 /// <summary>ECM の答え。鍵は奇数・偶数の順に 8 バイトずつ</summary>
