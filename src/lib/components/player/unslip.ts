@@ -29,24 +29,55 @@ export function slipOf(currentTime: number, mediaTime: number): number {
 }
 
 /**
- * 飛び直しの係 (ライブと観る画面で 1 つずつ)。映した 1 枚ごとに `check` を呼ぶ。遅れが測れなくても飛び直すときは `jump`。
- * どちらも飛び直したら true。止めている間・飛んでいる最中は飛ばない。連発はさせない (`UNSLIP_EVERY`)
+ * 飛び直しの係 (ライブと観る画面で 1 つずつ)。映した 1 枚ごとに `check` を呼ぶ (測るだけなら `measure`、測った遅れで
+ * 飛ぶなら `fix`)。遅れが測れなくても飛び直すときは `jump`。どれも飛び直したら true。止めている間・飛んでいる最中は
+ * 飛ばない。連発はさせない (`UNSLIP_EVERY`)
+ *
+ * **飛んだ直後の 1 コマは測らない。** 飛んだあと最初に届くコマは、飛ぶ前のコマの時刻を持っていることがある。
+ * 再生位置だけ先へ進んでいるので、遅れが飛んだ幅ぶん (8〜10 秒) に見え、「映像の遅れ 最大」が 8016ms になった
+ * (Android のエミュレータ)。自分で飛んだとき (`jump`) と、`seeking` を知らされたとき (`seeked`) に立てる
  */
 export function unslipper(now: () => number = Date.now) {
   let after = 0;
+  /** 次の 1 コマは飛ぶ前の時刻かもしれない */
+  let stale = false;
   function jump(video: HTMLVideoElement): boolean {
     const at = now();
     if (at < after || video.paused || video.seeking) return false;
     after = at + UNSLIP_EVERY;
     video.currentTime += UNSLIP_STEP;
+    stale = true;
     return true;
+  }
+  /** 映した 1 枚の遅れ (秒)。飛んでいる最中と、飛んだ直後の 1 コマは null */
+  function measure(video: HTMLVideoElement, mediaTime: number): number | null {
+    if (video.seeking) {
+      stale = true;
+      return null;
+    }
+    if (stale) {
+      stale = false;
+      return null;
+    }
+    return slipOf(video.currentTime, mediaTime);
+  }
+  /** 測った遅れが `SLIP_MOST` を超えていたら飛ぶ */
+  function fix(video: HTMLVideoElement, slip: number): boolean {
+    if (slip <= SLIP_MOST) return false;
+    return jump(video);
   }
   return {
     check(video: HTMLVideoElement, mediaTime: number): boolean {
-      if (slipOf(video.currentTime, mediaTime) <= SLIP_MOST) return false;
-      return jump(video);
+      const slip = measure(video, mediaTime);
+      return slip !== null && fix(video, slip);
     },
+    measure,
+    fix,
     jump,
+    /** 再生位置が飛んだ (`seeking`)。次の 1 コマは測らない */
+    seeked(): void {
+      stale = true;
+    },
   };
 }
 

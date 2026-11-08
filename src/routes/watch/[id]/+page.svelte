@@ -2399,6 +2399,8 @@
               stall();
               // シーク・CM スキップのあとは測り直す。段は持ち越す
               adapt.reset();
+              // 飛んだ直後の 1 コマは飛ぶ前の時刻を持っていることがあるので、映像の遅れに数えない (`unslipper`)
+              unslip.seeked();
             }}
             onplaying={flowing}
             oncanplay={flowing}
