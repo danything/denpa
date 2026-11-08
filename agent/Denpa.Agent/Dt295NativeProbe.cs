@@ -343,7 +343,7 @@ public static class Dt295NativeProbe
                 if (tuner.Signal() is { } signal)
                 {
                     output.WriteLine($"信号 ({reading.Elapsed.TotalSeconds:F1} 秒): {(signal.Locked ? "受信中" : "受信していない")}、"
-                        + $"C/N の生の値 0x{signal.CnRaw.ToString($"X{signal.CnBytes * 2}")} ({signal.CnRaw}。{(signal.Satellite ? "衛星 0xBC" : "地上波 0x8B")} から {signal.CnBytes} バイト。TC90522 系の式で {TunerSignal.Tc90522Db(signal.Satellite, signal.CnRaw):F1} dB)");
+                        + $"C/N の生の値 0x{signal.CnRaw.ToString($"X{signal.CnBytes * 2}")} ({signal.CnRaw}。{(signal.Satellite ? "衛星 0xBC" : "地上波 0x8B")} から {signal.CnBytes} バイト。TC90522 系の式で {(TunerSignal.Tc90522Db(signal.Satellite, signal.CnRaw) is { } db ? $"{db:F1} dB" : "式の外")})");
                 }
                 lastSignal = reading.Elapsed;
             }

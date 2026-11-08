@@ -41,10 +41,10 @@ public sealed record TunerSignal(bool Locked, double? Cn, string Unit, bool AtTu
     public static TunerSignal From(DibSignal signal) => new(signal.Locked, signal.CnDb, Db, StrengthDbm: signal.StrengthDbm);
 
     /// <summary>
-    /// PIX-DT295。復調のレジスタの値 (<see cref="Dt295NativeFrontend.Signal"/>) を、TC90522 系の換算式で dB にする (<see cref="Tc90522Db"/>)。
-    /// 値が 0 (地上波) のように式に入らないときは null
+    /// ロックしていないとき (レジスタに C/N が無い) と、値が式に入らないとき (地上波の 0・衛星の 3000 未満) は null
     /// </summary>
-    public static TunerSignal From(Dt295Signal signal) => new(signal.Locked, Tc90522Db(signal.Satellite, signal.CnRaw), Db);
+    public static TunerSignal From(Dt295Signal signal) =>
+        new(signal.Locked, signal.Locked ? Tc90522Db(signal.Satellite, signal.CnRaw) : null, Db);
 
     /// <summary>
     /// **TC90522 系の復調の C/N のレジスタの値を dB にする。** PT1・PT2・PT3 (同じ系統の復調) の C/N の表示で使われてきた近似式
@@ -53,7 +53,7 @@ public sealed record TunerSignal(bool Locked, double? Cn, string Unit, bool AtTu
     /// <list type="bullet">
     /// <item>地上波 (24 ビット): P = 10·log10(5505024 / 値)、C/N = 0.000024P⁴ − 0.0016P³ + 0.0398P² + 0.5491P + 3.0965</item>
     /// <item>衛星 (16 ビット): P = √(値 − 3000) / 64、C/N = −1.6346P⁵ + 14.341P⁴ − 50.259P³ + 88.977P² − 89.565P + 58.857。
-    /// 3000 以下は式の外 (極めて強い) なので P = 0 として上限の 58.857 dB にする</item>
+    /// 3000 未満は式の外 (ロックしていないと 0 が読める) なので null</item>
     /// </list>
     ///
     /// PIX-DT295 の復調が TC90522 系なのは推定で、レジスタもその系統の位置 (地上波 0x8B・衛星 0xBC)。
@@ -64,7 +64,8 @@ public sealed record TunerSignal(bool Locked, double? Cn, string Unit, bool AtTu
     {
         if (satellite)
         {
-            var p = raw <= 3000 ? 0 : Math.Sqrt(raw - 3000.0) / 64;
+            if (raw < 3000) return null;
+            var p = Math.Sqrt(raw - 3000.0) / 64;
             return ((((-1.6346 * p + 14.341) * p - 50.259) * p + 88.977) * p - 89.565) * p + 58.857;
         }
         if (raw == 0) return null;

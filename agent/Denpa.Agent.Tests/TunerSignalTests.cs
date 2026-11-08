@@ -84,14 +84,17 @@ public class TunerSignalTests
     }
 
     [Test]
-    public async Task DT295の値は大きいほど低いdBになり_式の外は上限かnull()
+    public async Task DT295の値は大きいほど低いdBになり_式の外とロックしていないときはnull()
     {
         await Assert.That(TunerSignal.Tc90522Db(false, 4000)!.Value).IsLessThan(TunerSignal.Tc90522Db(false, 2000)!.Value);
         await Assert.That(TunerSignal.Tc90522Db(true, 15000)!.Value).IsLessThan(TunerSignal.Tc90522Db(true, 10000)!.Value);
-        // 衛星の 3000 以下は式の外。上限 (P = 0) にする
-        await Assert.That(TunerSignal.Tc90522Db(true, 2500)).IsEqualTo(58.857);
+        // 衛星の 3000 未満は式の外 (ロックしていないと 0 が読める)。良い値に見せない
+        await Assert.That(TunerSignal.Tc90522Db(true, 2500)).IsNull();
+        await Assert.That(TunerSignal.Tc90522Db(true, 0)).IsNull();
         // 地上波の 0 は割れない
         await Assert.That(TunerSignal.Tc90522Db(false, 0)).IsNull();
+        // ロックしていなければ、値があっても出さない
+        await Assert.That(TunerSignal.From(new Dt295Signal(true, false, 9930, 2))).IsEqualTo(new TunerSignal(false, null, TunerSignal.Db));
     }
 
     [Test]
