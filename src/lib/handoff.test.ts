@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  handoff,
   HANDOFF_LEAD,
   HANDOFF_STUCK,
-  handoff,
   type HandoffState,
   handoffTarget,
 } from "./handoff";
