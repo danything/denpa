@@ -484,7 +484,12 @@ test("QSV は GPU のメモリへ移す形で落ちたら CPU のメモリのま
     );
     // 録画もライブも、`hwupload` を挟まずに渡す。デバイスは同じ引数で開ける
     const way = hwChain("h264", {}, 0, devices)[0]!;
-    expect(way).toEqual({ device: "qsv0", kind: "qsv", gpu: 0, qsvSystem: true });
+    expect(way).toEqual({
+      device: "qsv0",
+      kind: "qsv",
+      gpu: 0,
+      qsvSystem: true,
+    });
     const args = hwArgs(way, "h264");
     expect(args.filter).toEqual(["format=nv12"]);
     expect(args.device).toContain(
@@ -497,7 +502,9 @@ test("QSV は GPU のメモリへ移す形で落ちたら CPU のメモリのま
     // GPU のメモリへ移す形を先に試し、落ちたときだけ CPU のメモリのまま渡す形で試す
     const qsv0 = calls
       .map((argv) => argv.join(" "))
-      .filter((l) => l.includes("h264_qsv") && l.includes("child_device=0,"));
+      .filter(
+        (l) => l.includes("h264_qsv") && l.includes("child_device=0,"),
+      );
     expect(qsv0).toHaveLength(2);
     expect(qsv0[0]).toContain("hwupload");
     expect(qsv0[1]).not.toContain("hwupload");
@@ -523,13 +530,16 @@ test("QSV は GPU のメモリへ移す形が通れば、CPU のメモリのま�
       qsv: ["av1", "hevc", "h264"],
       qsvSystem: [],
     });
-    expect(hwArgs(hwChain("h264", {}, 0, devices)[0]!, "h264").filter).toContain(
-      "hwupload=extra_hw_frames=64",
-    );
+    expect(
+      hwArgs(hwChain("h264", {}, 0, devices)[0]!, "h264").filter,
+    ).toContain("hwupload=extra_hw_frames=64");
     const lines = calls.map((argv) => argv.join(" "));
     expect(
       lines.some(
-        (l) => l.includes("child_device=0,") && l.includes("_qsv") && !l.includes("hwupload"),
+        (l) =>
+          l.includes("child_device=0,") &&
+          l.includes("_qsv") &&
+          !l.includes("hwupload"),
       ),
     ).toBe(false);
   } finally {
