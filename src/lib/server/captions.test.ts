@@ -523,7 +523,7 @@ describe("アプリ向けの字幕 API", () => {
       failure = String(error);
     }
     const timers = started.mock.results.map((result) => result.value);
-    const stopped = cleared.mock.calls.map(([timer]) => timer);
+    const stopped: unknown[] = cleared.mock.calls.map(([timer]) => timer);
     started.mockRestore();
     cleared.mockRestore();
     expect(failure).toContain("ffmpeg を起こせません");
