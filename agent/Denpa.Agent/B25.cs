@@ -337,7 +337,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         var unitStart = _pes[pid] && (packet[1] & 0x40) != 0;
         if (!unitStart || payload.Length < 3)
         {
-            // 先頭が短くて確かめられない PES は、前の PES が合わなかったことを引き継がない (新しい PES を次の PES の先頭まで掛かったまま流さないように)
+            // 先頭が短くて確かめられない PES は、前の PES が合わなかったことを引き継がない (前の PES の「合わない」を引き継いで、この PES を掛かったまま流さないように)
             if (unitStart) _garbled[pid] = false;
             if (_garbled[pid])
             {
