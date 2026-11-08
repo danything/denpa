@@ -2,6 +2,8 @@
 
 **x64 の Windows なら、管理者の PowerShell の 1 行で denpa ごと立ち上がってブラウザが開きます**
 (`install.ps1`)。スタートボタンを右クリックして「ターミナル (管理者)」を開き、次を流します。
+**Windows 10 1809・Windows Server 2019 (ビルド 17763) 以降の x64 で動きます。** 本体の bun と、install.ps1 が使う `curl.exe`・`tar.exe` が
+それより前の Windows には無いためで、Windows Server 2016 では install.ps1 が止まります。
 本体ごと入れられるのは v2.32.0 から (`-AgentOnly` なら v1.23.1 から) で、それより前のバージョンは install.ps1 がそう言って止まります。
 
 ```powershell
