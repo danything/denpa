@@ -226,9 +226,9 @@ public class BCasTests
     {
         var packed = CardWire.Pack(0x0800);
         await Assert.That(packed.Length).IsEqualTo(2);
-        await Assert.That(CardWire.ReadConfirm(packed)).IsEqualTo(0x0800);
+        await Assert.That(CardWire.ReadCode(packed, "契約確認")).IsEqualTo(0x0800);
 
-        var err = Assert.Throws<IOException>(() => CardWire.ReadConfirm([0x08]));
+        var err = Assert.Throws<IOException>(() => CardWire.ReadCode([0x08], "契約確認"));
         await Assert.That(err?.Message).Contains("契約確認の答えが短すぎます");
     }
 
