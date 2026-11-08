@@ -14,6 +14,10 @@ import {
   test,
 } from "./helpers";
 
+/** 録画とエンコードが動いている行の状態 (`format.ts` の `encodeLabel`、録画中) */
+const BUSY =
+  /^(録画中|エンコード待ち|エンコード中|スクランブル復号中|CM 検出中|CM カット中)/;
+
 /**
  * **denpa を別の機械へ移す** (設定の「連携」。docs/migrate.md「別の機械へ移す」、transfer.ts)。
  *
@@ -23,6 +27,11 @@ import {
  * アクセストークンで断られることも見る。tar の読み方や入れ替えの細かいところは単体テスト (`transfer.test.ts`・`tar.test.ts`)
  */
 test.describe("denpa を別の機械へ移す", () => {
+  /*
+   * **続きものなので、まとめて流す。** 書き出したファイル (`archive`) を後のテストが使う。1 つだけやり直すと
+   * `archive` が空のまま始まり、ファイルを選ぶところで `stat ''` に落ちていた
+   */
+  test.describe.configure({ mode: "serial" });
   let spare: Spare;
   /** 古い機械で書き出したファイル */
   let archive = "";
@@ -35,6 +44,21 @@ test.describe("denpa を別の機械へ移す", () => {
   test.afterAll(async () => {
     await spare?.shutdown();
   });
+
+  /**
+   * **書き出す前に、録画とエンコードが落ち着くのを待つ。** 同じワーカーの前のファイルが残した録画のエンコードが
+   * 書き出したあとに動くと、書き出した DB が指すファイルを消して作り直すことがある (エンコードの前に古いファイルを消す。
+   * `encoder.ts` の `stalePaths`)。そうなると録画のフォルダを写したあとも 1 件「置き場に無い録画」が残り、
+   * 確かめ直しても止まったままだった
+   */
+  async function settle(page: Page) {
+    await expect(async () => {
+      await goto(page, "/");
+      await expect(
+        page.getByTestId("recording-state").filter({ hasText: BUSY }),
+      ).toHaveCount(0, { timeout: 1_000 });
+    }).toPass({ timeout: 120_000, intervals: [1_000] });
+  }
 
   /** 新しい機械の画面で、ファイルを選んで送る */
   async function send(
@@ -107,9 +131,12 @@ test.describe("denpa を別の機械へ移す", () => {
   });
 
   test("書き出せる", async ({ page, request, stack }) => {
+    // 録って視聴可能になるまでと、落ち着くのを待つ (`settle`) ぶん
+    test.slow();
     ({ id: recordingId } = await recordOne(page, request));
     await makeRule(page, "移すルール");
     await setRecording(request, { cmCut: "cut" });
+    await settle(page);
 
     await goto(page, "/settings/integrations#transfer");
     const downloading = page.waitForEvent("download");
