@@ -58,7 +58,7 @@
     --bar-pad: 1rem;
     justify-content: space-between;
     padding: 0.375rem var(--bar-pad) 0.375rem
-      calc(var(--bar-pad) + 0.5rem + 1.125em);
+      calc(var(--bar-pad) + var(--dp-space-2) + 1.125em);
     border-radius: 0;
     font-size: var(--dp-text-sm);
   }
@@ -75,7 +75,7 @@
   .bar .button {
     flex-shrink: 0;
     margin: 0;
-    padding-block: 0.15rem;
+    padding-block: var(--dp-space-1);
   }
   .center {
     flex-direction: column;

@@ -99,7 +99,7 @@
   :global(.stage[data-compact] .ov-btn) {
     height: 2.5rem;
     min-height: 2.5rem;
-    padding: 0 0.5rem;
+    padding: 0 var(--dp-space-2);
     font-size: var(--dp-text-base);
   }
   :global(.stage[data-compact] .ov-btn.ov-round) {

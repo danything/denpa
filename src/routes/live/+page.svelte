@@ -1178,14 +1178,15 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+    gap: var(--dp-space-2);
+    padding: var(--dp-space-1) var(--dp-space-1) var(--dp-space-1)
+      var(--dp-space-3);
     pointer-events: auto;
   }
   .back-live {
     width: auto;
     margin: 0;
-    padding: 0.125rem 0.75rem;
+    padding: 0.125rem var(--dp-space-3);
     border: 0;
     background: transparent;
     color: var(--dp-on-video);
@@ -1206,7 +1207,7 @@
   /* 列の幅いっぱいに伸びるので、タブを均等に広げる。左に寄せると右に溝だけが余った */
   .type-tabs {
     display: flex;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--dp-space-2);
   }
   .type-tabs > button {
     flex: 1;
@@ -1247,9 +1248,9 @@
     min-width: 0;
     flex: 1;
     align-items: center;
-    gap: 0.75rem;
+    gap: var(--dp-space-3);
     margin: 0;
-    padding: 0.5rem 0.75rem;
+    padding: var(--dp-space-2) var(--dp-space-3);
     border: 0;
     border-radius: var(--dp-radius);
     background: transparent;

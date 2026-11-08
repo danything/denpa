@@ -138,19 +138,19 @@
   .events {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1rem;
-    margin-top: 0.25rem;
+    gap: var(--dp-space-2) var(--dp-space-4);
+    margin-top: var(--dp-space-1);
   }
   .webhook {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.75rem;
+    gap: var(--dp-space-2);
+    padding: var(--dp-space-3);
   }
   .url-line {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
   }
   .url-line .tag {
     flex-shrink: 0;

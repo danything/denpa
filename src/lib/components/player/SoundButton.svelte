@@ -148,7 +148,7 @@
     display: flex;
     width: 2.75rem;
     margin-left: -1.375rem;
-    padding-bottom: 0.25rem;
+    padding-bottom: var(--dp-space-1);
     /* 閉じる: 短く引っ込み、消えてから押せなくする (メニューと同じ動き。app.css の `.menu`) */
     visibility: hidden;
     opacity: 0;

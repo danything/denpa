@@ -89,8 +89,8 @@
     padding-top: 0;
   }
   .back {
-    margin: 0 0 0 -0.5rem;
-    padding-inline: 0.5rem 0.75rem;
+    margin: 0 0 0 calc(-1 * var(--dp-space-2));
+    padding-inline: var(--dp-space-2) var(--dp-space-3);
   }
   .back :global(svg) {
     width: 1.125rem;
@@ -111,11 +111,11 @@
     flex: 1;
     overflow-y: auto;
     padding: var(--dp-side-top, var(--dp-side-pad, 0.25rem))
-      var(--dp-side-pad, 0.5rem) 1rem;
+      var(--dp-side-pad, 0.5rem) var(--dp-space-4);
   }
   /* 上に戻るがあるときは、その下は列の中の余白。リモコン・コメントの一覧の下の間は、それぞれが持つ (上の `.back-row`) */
   .back-row + .box .body {
-    padding-top: 0.5rem;
+    padding-top: var(--dp-space-2);
   }
   .top:has(:global(*)) + .box .body {
     padding-top: 0;

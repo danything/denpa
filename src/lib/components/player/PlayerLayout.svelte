@@ -54,7 +54,7 @@
   .layout {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: var(--dp-space-4);
   }
   .main {
     display: flex;
@@ -121,7 +121,7 @@
     }
     .layout {
       flex-direction: column;
-      gap: 1rem;
+      gap: var(--dp-space-4);
       height: calc(100% + var(--dp-page-top, 1rem) + var(--dp-gutter, 1rem));
       margin: calc(-1 * var(--dp-page-top, 1rem))
         calc(-1 * var(--dp-gutter, 1rem)) calc(-1 * var(--dp-gutter, 1rem));

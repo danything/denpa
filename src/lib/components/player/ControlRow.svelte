@@ -23,8 +23,8 @@
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 0.25rem;
-    margin-top: 0.25rem;
+    gap: var(--dp-space-1);
+    margin-top: var(--dp-space-1);
     overflow-x: clip;
     color: var(--dp-on-video);
   }

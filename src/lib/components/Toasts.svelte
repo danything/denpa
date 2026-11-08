@@ -152,13 +152,13 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
     max-width: min(28rem, calc(100vw - 2rem));
   }
   .toast {
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: var(--dp-space-3);
     /* 操作の層に浮かぶので、面はメニューと同じ (`--dp-pop`)。縁は付けず影だけ。種類は頭のアイコン (app.css の .notice) */
     background: var(--dp-pop);
     box-shadow: var(--dp-shadow-pop);
@@ -170,7 +170,7 @@
   .close {
     flex: none;
     margin-block: calc(
-      (var(--pico-line-height) * 1rem - var(--dp-btn-h-xs)) / 2
+      (var(--pico-line-height) * var(--dp-space-4) - var(--dp-btn-h-xs)) / 2
     );
   }
 </style>

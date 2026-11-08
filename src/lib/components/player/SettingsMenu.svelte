@@ -285,7 +285,7 @@
   .label {
     flex: 1 1 auto;
     white-space: nowrap;
-    padding-inline-end: 0.75rem;
+    padding-inline-end: var(--dp-space-3);
   }
   /*
      * 値は名前と同じ大きさの字で、色だけ控える。長い値は 2 行まで右にそろえて折り、
@@ -316,7 +316,7 @@
      * 高さ 44px (車のタブレットで指でつまめる)。上下は項目の間より少し空ける
      */
   .volume {
-    margin: 0.125rem 0 0.25rem;
+    margin: 0.125rem 0 var(--dp-space-1);
   }
   /* オン/オフのスイッチ。状態は行の `aria-checked` で読ませ、これは見た目だけ */
   .switch {

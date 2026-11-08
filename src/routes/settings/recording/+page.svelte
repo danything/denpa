@@ -465,7 +465,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.25rem;
+    gap: var(--dp-space-1);
   }
   .codec-row > :not(.check) {
     margin-inline-start: 1.75rem;
@@ -510,10 +510,10 @@
   .encoder {
     width: auto;
     max-width: 100%;
-    padding-block: 0.3rem;
+    padding-block: var(--dp-space-1);
     font-size: var(--dp-text-sm);
   }
   .hw-line {
-    margin-top: 0.25rem;
+    margin-top: var(--dp-space-1);
   }
 </style>

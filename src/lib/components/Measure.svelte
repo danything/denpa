@@ -300,7 +300,7 @@
     bottom: 0.25rem;
     z-index: var(--dp-z-measure);
     max-width: 95vw;
-    padding: 0.25rem 0.5rem;
+    padding: var(--dp-space-1) var(--dp-space-2);
     border-radius: var(--dp-radius-sm);
     background: var(--dp-video-veil-strong);
     color: var(--dp-on-video);

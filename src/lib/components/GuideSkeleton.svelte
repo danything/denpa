@@ -48,7 +48,7 @@
   /* 局名の行 (表の `.service` と同じ高さ: 上下 0.5rem + 1.25rem) */
   .head {
     flex: none;
-    padding: 0.5rem;
+    padding: var(--dp-space-2);
   }
   /* マスのところ (表の `.cell` と同じく左右に 0.125rem 空ける) */
   .body {

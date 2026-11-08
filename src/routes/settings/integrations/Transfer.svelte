@@ -531,6 +531,6 @@
 
 <style>
   h3 {
-    margin: 1rem 0 0.25rem;
+    margin: var(--dp-space-4) 0 var(--dp-space-1);
   }
 </style>

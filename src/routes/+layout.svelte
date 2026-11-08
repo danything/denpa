@@ -740,23 +740,23 @@
     z-index: var(--dp-z-header);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
     min-height: 3.5rem;
-    padding: 0.5rem var(--dp-space-3);
+    padding: var(--dp-space-2) var(--dp-space-3);
     background: var(--dp-bg);
   }
   .brand {
     display: flex;
     flex: 1 1 0%;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
   }
   /* 印と名前。名前は 1.25rem の字と同じ大きさで描く (d の頂から p の下まで) */
   .logo {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding-block: 0.25rem;
+    gap: var(--dp-space-2);
+    padding-block: var(--dp-space-1);
   }
   .logo-mark {
     width: 1.5rem;
@@ -772,7 +772,7 @@
   .update {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--dp-space-1);
     color: var(--dp-muted);
     font-size: var(--dp-text-xs);
     text-decoration: none;
@@ -785,7 +785,7 @@
     display: flex;
     flex: none;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--dp-space-1);
   }
   /* 印と余白を消す。Pico のナビの部品は読まないので、文章の決まり (`ul li` の印・下の余白) がそのまま当たる */
   ul.links li,
@@ -797,7 +797,7 @@
     display: none;
     align-items: center;
     gap: 0.125rem;
-    padding: 0 0.25rem;
+    padding: 0 var(--dp-space-1);
   }
   /* ヘッダーのリンクは高さ 40px。小さい字のままでも指で外さない */
   .actions :global(a.button) {
@@ -855,7 +855,7 @@
     display: grid;
     grid-auto-columns: minmax(0, 1fr);
     grid-auto-flow: column;
-    padding: 0.25rem;
+    padding: var(--dp-space-1);
     border: 0;
     border-radius: 2rem;
     background: var(--dp-float);
@@ -884,7 +884,7 @@
     width: 100%;
     min-height: 3.5rem;
     margin: 0;
-    padding: 0.25rem 0;
+    padding: var(--dp-space-1) 0;
     border: 0;
     border-radius: 1.75rem;
     background: transparent;
@@ -973,7 +973,7 @@
      * (anchor positioning の無いブラウザは `Menu` が JS で置き、端から 4px 空ける)
      */
   :global(.menu.tab-more-menu) {
-    margin-inline-end: 0.75rem;
+    margin-inline-end: var(--dp-space-3);
   }
   /* 縦に積む。いまの画面の項目は `app.css` の `.menu-item` (左の縦線と主の色の太字) */
   .more-list {
@@ -1128,7 +1128,7 @@
     top: 0.5rem;
     inset-inline: var(--dp-bar-inset);
     min-height: 3.25rem;
-    padding: 0.375rem 0.375rem 0.375rem 0.75rem;
+    padding: 0.375rem 0.375rem 0.375rem var(--dp-space-3);
     border-radius: var(--dp-bar-radius);
     background: var(--dp-float);
     box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));

@@ -72,6 +72,6 @@
     align-items: center;
     gap: var(--dp-space-3);
     min-height: var(--dp-item-h);
-    padding: 0.5rem 0.75rem;
+    padding: var(--dp-space-2) var(--dp-space-3);
   }
 </style>

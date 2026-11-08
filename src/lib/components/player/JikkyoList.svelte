@@ -376,8 +376,8 @@
   .jump {
     width: auto;
     height: auto;
-    margin: 0 -0.25rem;
-    padding: 0 0.25rem;
+    margin: 0 calc(-1 * var(--dp-space-1));
+    padding: 0 var(--dp-space-1);
     border: 0;
     border-radius: var(--dp-radius);
     background: none;

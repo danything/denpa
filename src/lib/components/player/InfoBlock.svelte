@@ -62,7 +62,7 @@
   .info {
     min-width: 0;
     flex: 1 1 0;
-    padding: 0 0.5rem;
+    padding: 0 var(--dp-space-2);
     line-height: 1.25;
     color: var(--dp-on-video-soft);
   }
@@ -85,7 +85,7 @@
     margin-inline-start: 0;
   }
   :global(.stage[data-compact]) .info {
-    padding: 0 0.25rem;
+    padding: 0 var(--dp-space-1);
   }
   /* 狭い枠では時間帯・局も縮める (押すものの間の幅しか無い。全画面の縦など、上の段を出すとき) */
   :global(.stage[data-compact]) .keep {

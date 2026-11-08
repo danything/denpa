@@ -87,9 +87,9 @@
     align-content: flex-start;
     align-items: center;
     /* 丸どうしは 8px 空ける (指で隣を押さない) */
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
     /* 角に寄せる (上と右の空きは 8px)。丸が角から離れて浮いて見えないように */
-    padding: 0.5rem;
+    padding: var(--dp-space-2);
   }
   .side .items > :global(*) {
     pointer-events: auto;
@@ -116,7 +116,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    padding: 2.5rem 0.75rem 0.75rem;
+    padding: 2.5rem var(--dp-space-3) var(--dp-space-3);
   }
   /* 下の影は箱 (上の余白ごと) いっぱい */
   .bottom::before {
@@ -151,6 +151,6 @@
     }
   }
   :global(.stage[data-compact]) .bottom {
-    padding: 1rem 0.375rem 0.375rem;
+    padding: var(--dp-space-4) 0.375rem 0.375rem;
   }
 </style>

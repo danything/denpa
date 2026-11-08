@@ -83,23 +83,23 @@
   }
   .error {
     pointer-events: auto;
-    padding: 1rem;
+    padding: var(--dp-space-4);
     text-align: center;
   }
   .message {
     font-weight: var(--dp-weight);
   }
   .actions {
-    margin-top: 0.75rem;
+    margin-top: var(--dp-space-3);
   }
   .busy {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
   }
   .boxed {
-    padding: 0.75rem;
+    padding: var(--dp-space-3);
     border-radius: var(--dp-radius-lg);
     background: var(--dp-video-veil);
     opacity: 0;

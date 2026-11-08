@@ -468,7 +468,7 @@
     position: sticky;
     bottom: calc(-1 * var(--dp-side-pad-end));
     margin-bottom: calc(-1 * var(--dp-side-pad-end));
-    padding: 1rem 0.75rem var(--dp-side-pad-end);
+    padding: var(--dp-space-4) var(--dp-space-3) var(--dp-side-pad-end);
     background: var(--dp-bg);
   }
   .side-foot .button {
@@ -482,9 +482,9 @@
   .row {
     display: flex;
     align-items: center;
-    gap: 0.25rem 0.75rem;
+    gap: var(--dp-space-1) var(--dp-space-3);
     min-height: var(--dp-item-h);
-    padding: 0.5rem 0.75rem;
+    padding: var(--dp-space-2) var(--dp-space-3);
   }
   .row-body {
     display: flex;
@@ -498,7 +498,7 @@
   .name {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
     min-width: 0;
   }
   .meta {
@@ -507,7 +507,7 @@
     white-space: nowrap;
   }
   .sep {
-    margin-inline: 0.25rem;
+    margin-inline: var(--dp-space-1);
   }
   /* 無効のルールは中身を控えた字にする (印の「無効」と合わせて、色だけに頼らない)。透かすと 4.5:1 を割る */
   .row.off .row-body {
@@ -535,7 +535,7 @@
     flex: none;
     width: auto;
     margin: 0;
-    padding-block: 0.25rem;
+    padding-block: var(--dp-space-1);
     border: 0;
     background-color: transparent;
     color: var(--dp-muted);

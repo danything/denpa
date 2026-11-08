@@ -320,7 +320,7 @@
       display: none;
     }
     .groups {
-      margin-inline: -0.75rem;
+      margin-inline: calc(-1 * var(--dp-space-3));
     }
     /* 行どうしは線で区切らない。見出しの太字も外し、ふつうの行にする (下に中身の 1 行) */
     .group-link {
@@ -433,7 +433,7 @@
     box-sizing: border-box;
     height: var(--jump-h);
     margin: 0;
-    padding: 0.25rem 0.5rem;
+    padding: var(--dp-space-1) var(--dp-space-2);
   }
   :global(:where(html[data-phone])) .main-inner {
     padding-bottom: 3.5rem;
@@ -460,7 +460,7 @@
     align-items: center;
     gap: var(--dp-space-2);
     margin: 0;
-    padding: 0.25rem 0.5rem;
+    padding: var(--dp-space-1) var(--dp-space-2);
     overflow-x: auto;
     scrollbar-width: none;
     white-space: nowrap;
