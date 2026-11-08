@@ -339,11 +339,11 @@ public static class Dt295NativeProbe
             var lastSignal = TimeSpan.Zero;
             void ShowSignal()
             {
-                // C/N の生の値 (dB には直していない。仕様書に換算式もレジスタも無く、レジスタは TC90522 系の推定)
+                // C/N の生の値 (レジスタは TC90522 系の推定。dB は TunerSignal.Tc90522Db の式で併記する)
                 if (tuner.Signal() is { } signal)
                 {
                     output.WriteLine($"信号 ({reading.Elapsed.TotalSeconds:F1} 秒): {(signal.Locked ? "受信中" : "受信していない")}、"
-                        + $"C/N の生の値 0x{signal.CnRaw.ToString($"X{signal.CnBytes * 2}")} ({signal.CnRaw}。{(signal.Satellite ? "衛星 0xBC" : "地上波 0x8B")} から {signal.CnBytes} バイト。dB には直していません)");
+                        + $"C/N の生の値 0x{signal.CnRaw.ToString($"X{signal.CnBytes * 2}")} ({signal.CnRaw}。{(signal.Satellite ? "衛星 0xBC" : "地上波 0x8B")} から {signal.CnBytes} バイト。TC90522 系の式で {(TunerSignal.Tc90522Db(signal.Satellite, signal.CnRaw) is { } db ? $"{db:F1} dB" : "式の外")})");
                 }
                 lastSignal = reading.Elapsed;
             }

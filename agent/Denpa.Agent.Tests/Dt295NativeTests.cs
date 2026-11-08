@@ -107,7 +107,7 @@ public class Dt295NativeTests
         await Assert.That(output).Contains("continuity_counter の飛び: 0 回");
         await Assert.That(output).Contains("(100.00%)");
         await Assert.That(output).Contains("最初の TS:");
-        // 受信中の C/N の生の値 (地上波は 0x8B から 3 バイト。dB には直さない)
+        // 受信中の C/N の生の値 (地上波は 0x8B から 3 バイト) と、TC90522 系の式で直した dB
         await Assert.That(output).Contains("信号 (");
         await Assert.That(output).Contains("地上波 0x8B");
         await Assert.That(output).DoesNotContain("来なかった");
@@ -121,9 +121,9 @@ public class Dt295NativeTests
         await Assert.That(log).DoesNotContain("止めました");
         await Assert.That(code).IsEqualTo(0);
         await Assert.That(output).Contains("受信の確認: 受かった");
-        // 受信中の C/N の生の値 (衛星は 0xBC から 2 バイト。dB には直さない)
+        // 受信中の C/N の生の値 (衛星は 0xBC から 2 バイト) と、TC90522 系の式で直した dB
         await Assert.That(output).Contains("衛星 0xBC");
-        await Assert.That(output).Contains("dB には直していません");
+        await Assert.That(output).Contains("TC90522 系の式で");
         var i2c = fake.I2cLog;
         // BS15 の IF = 1318000 kHz → M = 1318 → N = M。reg 00〜04 = 0A 4C 00 00 00、reg 09 = 8C (仕様書 7.3.3)
         var frequency = Index(i2c, "11 W FEC0000A4C000000");

@@ -459,7 +459,7 @@ public sealed class Dt295NativeTuner : ITuneDevice
     }
 
     /// <summary>
-    /// いま受けているチャンネルの受信の状態と C/N の生の値 (<see cref="Dt295NativeFrontend.Signal"/>。dB には直していない)。
+    /// いま受けているチャンネルの受信の状態と C/N の生の値 (<see cref="Dt295NativeFrontend.Signal"/>。dB にするのは <see cref="TunerSignal.Tc90522Db"/>)。
     /// 受けていなければ null。I2C を読むだけで、受信中の TS には影響しない
     /// </summary>
     public Dt295Signal? Signal()
