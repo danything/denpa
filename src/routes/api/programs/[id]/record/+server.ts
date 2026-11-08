@@ -1,5 +1,6 @@
 import { error, json } from "@sveltejs/kit";
 
+import { parseId } from "#lib/id.js";
 import {
   cancelProgram,
   recordedBody,
@@ -27,7 +28,7 @@ export async function DELETE({ params }) {
 }
 
 function programId(raw: string): number {
-  const id = Number(raw);
-  if (!Number.isSafeInteger(id)) error(400, "番組 ID が不正です");
+  const id = parseId(raw);
+  if (id === null) error(400, "番組 ID が不正です");
   return id;
 }

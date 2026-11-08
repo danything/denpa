@@ -11,6 +11,7 @@ import type { AgentChannel } from "./tuner";
  */
 const { config } = await import("./config");
 const {
+  firstSweepDone,
   firstSweeps,
   lastOf,
   networkSweeps,
@@ -277,5 +278,37 @@ describe("初回は BS をネットワークごとに 1 中継で埋める", () 
         order,
       ),
     ).toBeUndefined();
+  });
+});
+
+/*
+ * 初回の全局読みが揃わずに切れると、同じ中継を自分の中継ぶんだけ読み直す (`whole: null` で列へ戻す)。
+ * その読み直しも数えていた頃は、ほかの全局読みが終わる前に「詳細はあとで足す」が消えていた
+ */
+describe("初回の全局読みを数える (firstSweepDone)", () => {
+  const bs = (name: string) =>
+    ({ ...channel(name, [101]), type: "BS", networkId: 4 }) as AgentChannel;
+  const first = [bs("BS01_0"), bs("BS03_0")];
+
+  test("初回の全局読みを終えたら数え、列へ戻した読み直しは数えない", () => {
+    const jobs = [
+      { channel: first[0]!, whole: [101] },
+      // 揃わずに切れたので、同じ中継を読み直す
+      { channel: first[0]!, whole: null },
+      { channel: first[1]!, whole: [151] },
+    ];
+    expect(jobs.map((job) => firstSweepDone(job, first))).toEqual([
+      true,
+      false,
+      true,
+    ]);
+  });
+
+  test("初回でない全局読み (CS など) と、続きの中継ぶんは数えない", () => {
+    const cs = { ...bs("CS02"), type: "CS", networkId: 6 } as AgentChannel;
+    expect(firstSweepDone({ channel: cs, whole: [296] }, first)).toBe(false);
+    expect(firstSweepDone({ channel: bs("BS05_0"), whole: [] }, first)).toBe(
+      false,
+    );
   });
 });

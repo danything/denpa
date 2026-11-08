@@ -72,6 +72,7 @@ const { readPace } = await import("./pace");
 const {
   audioOnlyArgs,
   copyArgs,
+  fileAudioBody,
   fileTranscodeArgs,
   mediaInfo,
   playbackPlan,
@@ -676,6 +677,31 @@ describe("ffmpeg の出口を本文にする (transcodeBody)", () => {
         for (;;) if ((await reader.read()).done) return;
       })(),
     ).rejects.toThrow("idle");
+  });
+});
+
+/**
+ * 録画ファイルの音声だけ (`file?audio=only`)。前は ffmpeg の出口をそのまま本文にしていて、何も出さずに固まった ffmpeg は
+ * 相手が切るまで残っていた。観る画面の変換と同じ `transcodeBody` で畳む
+ */
+describe("録画ファイルの音声だけ (fileAudioBody)", () => {
+  test("主音声を AAC の ADTS にする ffmpeg を起こし、出したものを本文にする", async () => {
+    const echo = join(dir, "echo-ffmpeg");
+    writeFileSync(echo, '#!/bin/sh\nprintf "%s " "$@"\n');
+    chmodSync(echo, 0o755);
+    config.ffmpeg = echo;
+    const argv = (await new Response(fileAudioBody(ts)).text()).trim();
+    expect(argv).toContain(`-i ${ts} -map 0:a:0 -vn -c:a aac`);
+    expect(argv.endsWith("-f adts pipe:1")).toBe(true);
+  });
+
+  test("ffmpeg が何も出さないまま上限を超えたら畳む", async () => {
+    const stuck = join(dir, "stuck-ffmpeg");
+    writeFileSync(stuck, "#!/bin/sh\nexec sleep 30\n");
+    chmodSync(stuck, 0o755);
+    config.ffmpeg = stuck;
+    const body = fileAudioBody(ts, { limit: 200, every: 10 });
+    await expect(body.getReader().read()).rejects.toThrow("stalled");
   });
 });
 

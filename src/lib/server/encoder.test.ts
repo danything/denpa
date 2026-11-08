@@ -22,9 +22,12 @@ import {
   findInputFd,
   headSkip,
   inputSkip,
+  programSpan,
   readInputPos,
+  rereadArgs,
 } from "./encoder";
 import { hwBitrate, type HwWay } from "./hwenc";
+import { tsProbe } from "./ts-probe";
 
 function argValue(args: string[], key: string): string | undefined {
   const i = args.indexOf(key);
@@ -829,5 +832,37 @@ describe("encodeAttempts (1 回の実行の中で ffmpeg を起こす順)", () =
       A.device,
       "software",
     ]);
+  });
+});
+
+/*
+ * 番組の始まり (`programSpan`) は CM 検出が前後の番組を見分けるのに使い、探る長さ (`tsProbe`) にもなる。
+ * 録画の先頭は測った放送時刻 (`ts_head`) で、測れていなければ録り始める予定の時刻
+ */
+describe("番組の始まりと、CM 検出をやり直すときの探り", () => {
+  const START = 1_800_000_000_000;
+  const row = {
+    start_at: START,
+    end_at: START + 1_800_000,
+    ts_head: null,
+    record_from: null,
+  };
+
+  test("録画の先頭は測った時刻。無ければ録り始める予定の時刻 (譲ったぶんがあればそこ)", () => {
+    expect(programSpan({ ...row, ts_head: START - 7_000 })).toEqual({
+      programLength: 1800,
+      programStart: 7,
+    });
+    expect(programSpan(row).programStart).toBe(config.startMargin / 1000);
+    expect(
+      programSpan({ ...row, record_from: START + 60_000 }).programStart,
+    ).toBe(-60);
+  });
+
+  test("元の TS から読み直すときは、エンコードしたときと同じ長さまで探り、先頭は捨てない", () => {
+    const measured = { ...row, ts_head: START - 90_000 };
+    expect(rereadArgs(measured, true)).toEqual([...tsProbe(90)]);
+    expect(rereadArgs(measured, true)).not.toContain("-ss");
+    expect(rereadArgs(measured, false)).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
 import { error, json } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 
+import { parseId } from "#lib/id.js";
 import { orm } from "#lib/server/db.js";
 import { programs, services } from "#lib/server/schema.js";
 import type { ProgramDetail } from "#lib/types.js";
@@ -15,8 +16,8 @@ import type { ProgramDetail } from "#lib/types.js";
  * その場合は 404 を返し、画面は録画が持っている分だけを出す。番組 ID が整数でなければ 400 (`/record` と同じ)。
  */
 export function GET({ params }) {
-  const id = Number(params.id);
-  if (!Number.isSafeInteger(id)) error(400, "番組 ID が不正です");
+  const id = parseId(params.id);
+  if (id === null) error(400, "番組 ID が不正です");
 
   const program: ProgramDetail | undefined = orm()
     .select({

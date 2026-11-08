@@ -14,12 +14,14 @@
  * シークのたびに ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。
  */
 
-import { statSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { open } from "node:fs/promises";
 
 import { PACKET } from "@danything/arib/psi";
 
-import { readHead } from "#lib/ts/seek.js";
+import { lastVideoPts, readHead, sinceHead, tsHead } from "#lib/ts/seek.js";
+
+import type { Recording } from "../types";
 
 /** 1 回に読む量。小さすぎると read の回数だけ損する */
 const READ_SIZE = 256 * 1024;
@@ -228,6 +230,89 @@ const HEADS_MOST = 32;
 const unreadable = new Map<string, number>();
 /** 読めなかったあと、読み直すまで控える長さ (ms) */
 const HEAD_RETRY = 5_000;
+
+/** 尺を測るのに先頭と末尾から読む量。映像と音声の最初の PES、最後の映像の PES が入る長さ (`playback.ts` の `probeTs` と同じ) */
+const SPAN_BYTES = 4 * 1024 * 1024;
+
+/** 測った尺の控え。同じファイル (大きさ・更新時刻) なら読み直さない */
+const spans = new Map<string, { key: string; seconds: number | null }>();
+
+/** ファイルの `offset` から `length` バイトを同期で読む */
+function readRange(fd: number, offset: number, length: number): Uint8Array {
+  const buffer = new Uint8Array(length);
+  return buffer.subarray(0, readSync(fd, buffer, 0, length, offset));
+}
+
+/**
+ * **録り終えた元の TS の尺 (秒)。** 先頭の PTS (`tsHead`) から最後の映像の PES まで。観る画面の物差し
+ * (`playback.ts` の `probeTs`) と同じ測り方。読めない・PES が見つからなければ null。
+ *
+ * 追っかけと録画の字幕は、呼ばれたその場で読み始める位置を決めるので同期で読む (先頭と末尾の 4MB ずつ)。
+ * 測ったものは控える (シークのたびに読み直さない)
+ */
+export function finishedTsSec(path: string): number | null {
+  let size = 0;
+  let key = "";
+  try {
+    const stat = statSync(path);
+    size = stat.size;
+    key = `${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return null;
+  }
+  const held = spans.get(path);
+  if (held?.key === key) return held.seconds;
+  let seconds: number | null = null;
+  try {
+    const fd = openSync(path, "r");
+    try {
+      const head = tsHead(readRange(fd, 0, SPAN_BYTES));
+      const last =
+        head === null
+          ? null
+          : lastVideoPts(
+              readRange(fd, Math.max(0, size - SPAN_BYTES), SPAN_BYTES),
+            );
+      const span = head === null || last === null ? 0 : sinceHead(last, head);
+      seconds = span > 0 ? span : null;
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    seconds = null;
+  }
+  if (spans.size >= HEADS_MOST) spans.delete(spans.keys().next().value!);
+  spans.set(path, { key, seconds });
+  return seconds;
+}
+
+/**
+ * **元の TS に録れている長さ (秒)。** 追っかけと録画の字幕が、秒をバイトに比例で当てる物差し (`chasePlan`)。
+ *
+ * - 録っている最中は、録り始めてからの経過
+ * - 録り終えたものは、元の TS を測った尺 (`finishedTsSec`)。**`duration_ms` は使わない。** エンコードし終えると
+ *   出来上がりの長さ (先頭を捨て、CM を切ったあと) に書き換わる (`encoder.ts`) ので TS より短く、位置が先へずれていた
+ * - 測れなければ、エンコードしていない録画 (`encode_skip` が NULL) は `duration_ms` (録れた長さ)、それも無ければ番組表の尺
+ */
+export function recordedSec(
+  rec: Pick<
+    Recording,
+    | "finished_at"
+    | "created_at"
+    | "duration_ms"
+    | "encode_skip"
+    | "start_at"
+    | "end_at"
+  >,
+  path: string,
+  now = Date.now(),
+): number {
+  if (rec.finished_at === null) return (now - rec.created_at) / 1000;
+  const measured = finishedTsSec(path);
+  if (measured !== null) return measured;
+  const recorded = rec.encode_skip === null ? rec.duration_ms : null;
+  return (recorded ?? rec.end_at - rec.start_at) / 1000;
+}
 
 /**
  * **元の TS の先頭の PTS** (90kHz。`ts/seek.ts` の `readHead`)。追っかけを元の TS で送るとき、画面が再生位置を

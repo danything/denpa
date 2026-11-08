@@ -83,7 +83,7 @@ import {
   writeThumbnail,
 } from "./metadata";
 import { saveRecordedBml } from "./recorded-bml";
-import { recordingSummary } from "./recording";
+import { recordingSummary, tsHeadOf } from "./recording";
 import { encodeJobs, programs, recordings } from "./schema";
 import { descramble, isDecoded, isScrambled } from "./scramble";
 import { settings } from "./settings";
@@ -1212,8 +1212,8 @@ function paidRecording(recording: Recording): boolean {
  *
  * 動かし直せば作り直すものなので、ジョブを実行・再実行する直前と、failed にするときに
  * 消しておく。自分の入力に紐づくものだけ触るので、ほかの動いているエンコードには当たらない。
- * エンコードしたものの隣に作る作業ファイル (`.encoding` とその切り貼り) は動画の拡張子ではないので、
- * 取り残されても片付けで消える
+ * エンコードしたものの隣に作る作業ファイル (`.encoding` とその切り貼り) は動画の拡張子ではなく、名前にジョブの番号を持つので、
+ * 取り残されても、ジョブが走っていなければ片付けで消える (同じ名前の動画があっても。`files.orphan`)
  */
 function clearScratch(input: string): void {
   removeIfExists(`${input}.decoded.m2ts`);
@@ -1285,18 +1285,33 @@ function startJob(jobId: number) {
   return { signal: controller.signal, job, recording };
 }
 
-/** 番組の長さと、録画の先頭から番組が始まるまで (秒)。録画の先頭と末尾に入った前後の番組を見分ける (cm-decide.withinProgram) */
-function programSpan(recording: Recording): {
+/** 番組の長さと始まりを出すのに読む列 (`programSpan`) */
+type SpanColumns = Pick<
+  Recording,
+  "start_at" | "end_at" | "ts_head" | "record_from"
+>;
+
+/**
+ * 番組の長さと、録画の先頭から番組が始まるまで (秒)。録画の先頭と末尾に入った前後の番組を見分ける (cm-decide.withinProgram)。
+ * 録画の先頭は測った放送時刻 (`ts_head`)、測れていなければ録り始める予定の時刻 (`recording.tsHeadOf`)
+ */
+export function programSpan(recording: SpanColumns): {
   programLength: number;
   programStart: number;
 } {
   return {
     programLength: (recording.end_at - recording.start_at) / 1000,
-    programStart:
-      (recording.start_at -
-        (recording.record_from ?? recording.start_at - config.startMargin)) /
-      1000,
+    programStart: (recording.start_at - tsHeadOf(recording)) / 1000,
   };
+}
+
+/**
+ * CM 検出をやり直すときの入力の前の引数。**元の TS から読むなら、エンコードしたときと同じ長さまで探る**
+ * (`inputArgs` の `lead`。見える音声の並びを揃える。`ts-probe.ts`)。先頭は捨てない (`skip` 0。物差しは入れ物の先頭)。
+ * エンコード済みの動画から読むなら何も足さない
+ */
+export function rereadArgs(recording: SpanColumns, fromTs: boolean): string[] {
+  return fromTs ? inputArgs(0, programSpan(recording).programStart) : [];
 }
 
 /** ジョブを終わったことにする */
@@ -2338,8 +2353,8 @@ async function runCmJob(jobId: number): Promise<void> {
         `${ts === null ? "エンコード済みの動画から" : "元の TS から"}無音・場面の切れ目・ロゴを読み取っています`,
       );
       const report = progressReporter(jobId, recording.id, reading.duration);
-      // 元の TS はエンコードしたときと同じ長さまで探る (見える音声の並びを揃える。`ts-probe.ts`)
-      const before = ts === null ? [] : inputArgs(0, span.programStart);
+      // 元の TS はエンコードしたときと同じ長さまで探る (`rereadArgs`)
+      const before = rereadArgs(recording, ts !== null);
       const found = await scan(input, {
         ...reading.want(),
         before,
@@ -2406,7 +2421,7 @@ async function runCmJob(jobId: number): Promise<void> {
     }
     for (const [i, file] of files.entries()) renameSync(outputs[i]!, file);
   } finally {
-    // 投げたときも書きかけ (`.post`) を残さない。動画が残っているので、片付け (`files.orphan`) は拾わない
+    // 投げたときも書きかけ (`.post`) を残さない。片付け (`files.orphan`) も拾うが、拾うのは書いてから 1 時間経ったあと (`files.SETTLE`)
     discard();
     removeIfExists(chapters);
   }

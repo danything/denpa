@@ -1,45 +1,18 @@
 import { error } from "@sveltejs/kit";
 
-import { config } from "#lib/server/config.js";
 import { activeEncodeJob } from "#lib/server/encoder.js";
 import { encodedFile } from "#lib/server/library.js";
+import { fileAudioBody } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { serveFile } from "#lib/server/serve.js";
-import { ffmpegBody } from "#lib/server/stream.js";
 import { type FileSource, parseFileSource, tsPathOf } from "#lib/source.js";
 
-/**
- * **音声だけ** (`?audio=only`)。音声だけで鳴らすもの (スマートスピーカーへの Cast など) 向け。
- * 元がどれ (元の TS・AV1・H.265・H.264) でも同じ形式で出せるよう、主音声を AAC に再エンコードして ADTS で流す。
- * 音声だけなので軽い。閉じられたら ffmpeg も止める
- */
+/** **音声だけ** (`?audio=only`。中身は `playback.fileAudioBody`) */
 function audioOnly(path: string, request: Request): Response {
   const headers = { "Content-Type": "audio/aac", "Cache-Control": "no-store" };
   // HEAD はヘッダーだけ答える。再エンコードを起こさない
   if (request.method === "HEAD") return new Response(null, { headers });
-  const body = ffmpegBody(
-    [
-      config.ffmpeg,
-      "-hide_banner",
-      "-nostats",
-      "-loglevel",
-      "error",
-      "-i",
-      path,
-      "-map",
-      "0:a:0",
-      "-vn",
-      "-c:a",
-      "aac",
-      "-b:a",
-      "192k",
-      "-f",
-      "adts",
-      "pipe:1",
-    ],
-    `[audio] 音声だけの取り出し ${path}`,
-  );
-  return new Response(body, { headers });
+  return new Response(fileAudioBody(path), { headers });
 }
 
 /**

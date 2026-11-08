@@ -85,6 +85,7 @@ import {
   type ChaseResume,
   fileSize,
   followFile,
+  recordedSec,
   resumeFrom,
   resumePlan,
   tsFileHead,
@@ -2755,7 +2756,7 @@ export function chaseStream(
   if (source === undefined || source.size === 0) return null;
   if (codec === "raw") {
     const { rec, path, size } = source;
-    const plan = chasePlan(size, recordedSec(rec), at);
+    const plan = chasePlan(size, recordedSec(rec, path), at);
     return followFile(path, plan.offset, plan.paceBytesPerSec, () =>
       recordingDone(rec.id),
     );
@@ -2874,7 +2875,7 @@ export function recordingCaptions(
   const source = chaseSource(recordingId);
   if (source === undefined || source.size === 0) return null;
   const { rec, path, size } = source;
-  const recorded = recordedSec(rec);
+  const recorded = recordedSec(rec, path);
   const plan = chasePlan(size, recorded, Math.max(0, at - CAPTION_LEAD));
   const burst = Math.round(
     (size / Math.max(1, recorded)) * (CAPTION_LEAD + CAPTION_AHEAD),
@@ -3620,7 +3621,7 @@ function openChase(
   const finished = rec.finished_at !== null;
   // 番組が替わって作り直したところの近くなら、そのバイトから (`chase.ts` の `resumePlan`)
   const plan = resumePlan(
-    chasePlan(size, recordedSec(rec), at),
+    chasePlan(size, recordedSec(rec, path), at),
     chaseResumes.get(rec.id),
   );
 
@@ -3719,13 +3720,6 @@ function chaseSource(
   if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null)
     return undefined;
   return { rec, path: rec.ts_path, size: fileSize(rec.ts_path) ?? 0 };
-}
-
-/** 録れている長さ (秒)。録り終えていれば実測、まだなら**録り始めてからの経過** */
-function recordedSec(rec: typeof recordings.$inferSelect): number {
-  return rec.finished_at !== null
-    ? (rec.duration_ms ?? rec.end_at - rec.start_at) / 1000
-    : (Date.now() - rec.created_at) / 1000;
 }
 
 /** もう書き足されないか。録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり */

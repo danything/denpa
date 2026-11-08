@@ -24,6 +24,7 @@ import {
   startRecording,
   stopRecording,
 } from "./recorder";
+import { plannedStartSql } from "./recording";
 import {
   HELD_STATES,
   programs,
@@ -329,10 +330,7 @@ export async function tick(): Promise<void> {
       and(
         eq(reservations.state, "scheduled"),
         isNull(reservations.started_at),
-        lte(
-          sql`COALESCE(${reservations.record_from}, ${reservations.start_at} - ${config.startMargin})`,
-          at,
-        ),
+        lte(plannedStartSql(), at),
         gt(
           sql`COALESCE(${reservations.record_to}, ${reservations.end_at})`,
           at,

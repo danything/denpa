@@ -1,6 +1,7 @@
 import { error } from "@sveltejs/kit";
 
 import { askedTrack } from "#lib/arib.js";
+import { parseId } from "#lib/id.js";
 import { chaseStream } from "#lib/server/live.js";
 import { askedFormat } from "#lib/server/viewing.js";
 import {
@@ -24,8 +25,8 @@ import {
  * 埋まっていれば 503
  */
 export function GET({ params, url }) {
-  const id = Number(params.id);
-  if (!Number.isInteger(id)) error(400, "録画 ID が不正です");
+  const id = parseId(params.id);
+  if (id === null) error(400, "録画 ID が不正です");
   const asked = askedFormat(url, "chase");
   if (asked === null) error(406, NO_FORMAT);
   const { codec, rung } = asked;

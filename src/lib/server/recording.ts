@@ -1,10 +1,11 @@
 import { error } from "@sveltejs/kit";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, type SQL, sql } from "drizzle-orm";
 
+import { parseId } from "../id";
 import type { Recording } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
-import { recordings } from "./schema";
+import { recordings, reservations } from "./schema";
 import type { Payload } from "./webhook";
 
 /**
@@ -25,8 +26,8 @@ export function recordingSummary(
 
 /** フォームの `id` から録画を引く (画面のアクション用)。無ければ undefined。消した行も引く */
 export function recordingFromForm(form: FormData): Recording | undefined {
-  const id = Number(form.get("id"));
-  if (!Number.isFinite(id)) return undefined;
+  const id = parseId(form.get("id"));
+  if (id === null) return undefined;
   return orm().select().from(recordings).where(eq(recordings.id, id)).get();
 }
 
@@ -40,8 +41,8 @@ export function recordingFromForm(form: FormData): Recording | undefined {
  *   見分けたいので true で呼ぶ
  */
 export function recordingOr404(idLike: string, deleted = false): Recording {
-  const id = Number(idLike);
-  if (!Number.isFinite(id)) error(400, "録画 ID が不正です");
+  const id = parseId(idLike);
+  if (id === null) error(400, "録画 ID が不正です");
   const recording = orm()
     .select()
     .from(recordings)
@@ -68,16 +69,29 @@ export function fillTsHead(recordingId: number, head: number): void {
 }
 
 /**
+ * **録り始める予定の時刻** (unix ms)。チューナーを譲って冒頭を削ったなら `record_from`、
+ * そうでなければ番組の始まりの `START_MARGIN` 前。予約と録画の行のどちらにも使う
+ * (録画の行は予約から `record_from` を写している。`recorder.ts`)
+ */
+export function plannedStart(
+  row: Pick<Recording, "record_from" | "start_at">,
+): number {
+  return row.record_from ?? row.start_at - config.startMargin;
+}
+
+/** 予約の行の {@link plannedStart} を SQL で (始める予約を引くとき。`scheduler.ts`) */
+export function plannedStartSql(): SQL<number> {
+  return sql<number>`COALESCE(${reservations.record_from}, ${reservations.start_at} - ${config.startMargin})`;
+}
+
+/**
  * **元の TS の先頭 (再生位置 0 の手前) の放送時刻** (unix ms)。測った値 (`ts_head`) があればそれ、
- * 測れていない録画 (TDT を読めない・取り込んだ録画) は予定の時刻 (`record_from ?? start_at − START_MARGIN`) で
- * 代わりにする。数秒ずれることがある。実況のコメント (`jikkyo.ts`) と切り抜きの位置 (`clips.ts`) が使う
+ * 測れていない録画 (TDT を読めない・取り込んだ録画) は録り始める予定の時刻 (`plannedStart`) で
+ * 代わりにする。数秒ずれることがある。実況のコメント (`jikkyo.ts`)、切り抜きの位置 (`clips.ts`)、
+ * CM 検出で番組の始まりを見分けるところ (`encoder.programSpan`) が使う
  */
 export function tsHeadOf(
   recording: Pick<Recording, "ts_head" | "record_from" | "start_at">,
 ): number {
-  return (
-    recording.ts_head ??
-    recording.record_from ??
-    recording.start_at - config.startMargin
-  );
+  return recording.ts_head ?? plannedStart(recording);
 }

@@ -3,6 +3,7 @@ import { and, gt, lte, sql } from "drizzle-orm";
 
 import { channelNotice } from "#lib/channel-notice.js";
 import { channelNumber } from "#lib/format.js";
+import { parseId } from "#lib/id.js";
 import { jikkyoChannel } from "#lib/jikkyo/channels.js";
 import { LAST_COOKIE } from "#lib/live.js";
 import { channelAlert } from "#lib/server/channel-alert.js";
@@ -189,9 +190,8 @@ export const actions = {
    */
   record: async ({ request }) => {
     const form = await request.formData();
-    const serviceId = Number(form.get("service"));
-    if (!Number.isInteger(serviceId))
-      return fail(400, { message: "局の指定が不正です" });
+    const serviceId = parseId(form.get("service"));
+    if (serviceId === null) return fail(400, { message: "局の指定が不正です" });
 
     // アプリの `POST /api/services/<id>/record` と同じ経路 (`recordAiring`)
     const result = await recordAiring(serviceId);

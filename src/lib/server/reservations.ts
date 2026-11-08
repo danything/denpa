@@ -6,6 +6,7 @@ import {
   COPY_NEVER_REASON,
   NOT_CANCELABLE_REASON,
 } from "../format";
+import { parseId } from "../id";
 import type { Reservation, ReservationState } from "../types";
 import { now, orm } from "./db";
 import { stopRecording } from "./recorder";
@@ -99,15 +100,20 @@ export async function reserve(programId: number): Promise<Reservation> {
     .get()!;
 }
 
-/** 画面の「予約」のアクション (番組表・検索)。フォームの `programId` を予約し、断ったときはその理由を返す */
-export async function reserveFromForm(form: FormData): Promise<string | null> {
-  const programId = Number(form.get("programId"));
-  if (!Number.isSafeInteger(programId)) return "番組 ID が不正です";
+/**
+ * 画面の「予約」のアクション (番組表・検索)。フォームの `programId` を予約し、予約した番組の ID を返す。
+ * 断ったときはその理由 (`refused`) を返す
+ */
+export async function reserveFromForm(
+  form: FormData,
+): Promise<{ programId: number } | { refused: string }> {
+  const programId = parseId(form.get("programId"));
+  if (programId === null) return { refused: "番組 ID が不正です" };
   try {
     await reserve(programId);
-    return null;
+    return { programId };
   } catch (error) {
-    return reason(error);
+    return { refused: reason(error) };
   }
 }
 

@@ -1,5 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
 
+import { parseId } from "#lib/id.js";
 import { orm } from "#lib/server/db.js";
 import { relative } from "#lib/server/paths.js";
 import { deleteRule, idOf, toggleRule } from "#lib/server/rule-actions.js";
@@ -91,9 +92,9 @@ export const actions = {
   remap: async ({ request }) => {
     const form = await request.formData();
     const id = idOf(form);
-    const from = Number(form.get("from"));
-    const to = Number(form.get("to"));
-    if (id === null || !Number.isInteger(from) || !Number.isInteger(to))
+    const from = parseId(form.get("from"));
+    const to = parseId(form.get("to"));
+    if (id === null || from === null || to === null)
       return fail(400, { message: "付け替える局の指定が不正です" });
     const error = await remapRule(id, from, to);
     if (error !== null) return fail(400, { message: error });

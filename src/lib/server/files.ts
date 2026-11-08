@@ -207,6 +207,16 @@ const TRAILING = new RegExp(
   `^(.+\\.(?:${VIDEO_EXTENSIONS.join("|")}))\\.[^/]+$`,
   "i",
 );
+/**
+ * **エンコードの作業ファイル。** 動画の名前のあとにジョブの番号を持つ (`encoder.ts`)。
+ * 書いている間の `<動画>.<ジョブ>.<コーデック>.encoding` とその隣の `.post`・`.ffconcat`・`.chapters.txt`、
+ * チャプターの書き直しの `<動画>.<ジョブ>.post` と `<元の TS>.<ジョブ>.chapters.txt`。
+ * 1 つめの括弧がジョブの番号
+ */
+const WORKING = new RegExp(
+  `^.+\\.(?:${VIDEO_EXTENSIONS.join("|")})\\.(\\d+)\\.(?:[a-z0-9]+\\.encoding(?:\\.post|\\.ffconcat|\\.chapters\\.txt)?|post|chapters\\.txt)$`,
+  "i",
+);
 
 /**
  * 触らずに置いておく、書きたてのもの。
@@ -258,6 +268,16 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
       ]),
   );
 
+  /** 走っているエンコードのジョブ。その作業ファイルには触らない (`orphan`) */
+  const running = new Set(
+    orm()
+      .select({ id: encodeJobs.id })
+      .from(encodeJobs)
+      .where(eq(encodeJobs.state, "running"))
+      .all()
+      .map((row) => row.id),
+  );
+
   const at = now();
   let swept = 0;
   let strays = 0;
@@ -271,7 +291,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     }
     for (const path of files) {
       if (videos.has(path)) continue;
-      if (!orphan(path, videos)) continue;
+      if (!orphan(path, videos, running)) continue;
       if (settling(path, at)) continue;
       removeIfExists(path);
       pruneEmptyDirs(path);
@@ -312,8 +332,21 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
   return { swept, strays, pruned };
 }
 
-/** サイドカーで、かつ元の動画が 1 つも無いか */
-function orphan(path: string, videos: Set<string>): boolean {
+/**
+ * サイドカーで、かつ元の動画が 1 つも無いか。
+ *
+ * **エンコードの作業ファイルは、動画があっても、そのジョブが走っていなければ片付ける** (`WORKING`)。
+ * 再エンコードやチャプターの書き直しで落ちたものは、置き換える前の動画が同じ名前で残っているので、
+ * 動画の有る無しだけで見ると片付けから外れていた。走っているジョブのものは、書き終えて別のコーデックを
+ * エンコードしている間 (更新時刻が古くなる) も残す
+ */
+function orphan(
+  path: string,
+  videos: Set<string>,
+  running: Set<number>,
+): boolean {
+  const working = WORKING.exec(path);
+  if (working?.[1] !== undefined) return !running.has(Number(working[1]));
   const trailing = TRAILING.exec(path);
   if (trailing?.[1] !== undefined) return !videos.has(trailing[1]);
   // ポスター・データ放送。動画の拡張子を取り替えた名前 (metadata.ts の SIDECAR_SUFFIXES)

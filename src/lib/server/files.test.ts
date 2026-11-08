@@ -331,6 +331,56 @@ describe("実体との照合", () => {
     expect(existsSync(left)).toBe(false);
   });
 
+  /*
+   * 再エンコードやチャプターの書き直しで落ちると、置き換える前の動画が同じ名前で残る。
+   * 動画の有る無しだけで見ていた頃は、作業ファイルがずっと片付かなかった
+   */
+  test("落ちたエンコードの作業ファイルは、同じ名前の動画があっても片付ける。走っているジョブのものは残す", () => {
+    fresh();
+    orm().delete(encodeJobs).run();
+    orm()
+      .insert(recordings)
+      .values({
+        id: 50,
+        service_id: 1,
+        name: "番組",
+        start_at: now,
+        end_at: now,
+        created_at: now,
+        updated_at: now,
+      })
+      .run();
+    orm()
+      .insert(encodeJobs)
+      .values([
+        { id: 7, recording_id: 50, state: "running", created_at: now },
+        {
+          id: 8,
+          recording_id: 50,
+          state: "failed",
+          created_at: now,
+          finished_at: now,
+        },
+      ])
+      .run();
+    const video = put(config.encodedDir, "番組/番組 - 1.mkv");
+    const ts = put(config.rawDir, "番組.m2ts");
+    const left = [
+      put(config.encodedDir, "番組/番組 - 1.mkv.8.av1.encoding"),
+      put(config.encodedDir, "番組/番組 - 1.mkv.8.av1.encoding.post"),
+      put(config.encodedDir, "番組/番組 - 1.mkv.8.post"),
+      put(config.rawDir, "番組.m2ts.8.chapters.txt"),
+    ];
+    // 書き終えて、同じジョブがほかのコーデックをエンコードしている間 (更新時刻は古い)
+    const running = put(config.encodedDir, "番組/番組 - 1.mkv.7.av1.encoding");
+
+    expect(reconcile().swept).toBe(4);
+    for (const path of left) expect(existsSync(path)).toBe(false);
+    for (const path of [video, ts, running])
+      expect(existsSync(path)).toBe(true);
+    orm().delete(encodeJobs).run();
+  });
+
   test("復号したばかりの TS は「実体だけ」に数えない", () => {
     fresh();
     put(config.rawDir, "番組.m2ts");

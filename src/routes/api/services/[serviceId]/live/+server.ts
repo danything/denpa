@@ -1,6 +1,7 @@
 import { error } from "@sveltejs/kit";
 
 import { askedTrack } from "#lib/arib.js";
+import { parseId } from "#lib/id.js";
 import { liveStream } from "#lib/server/live.js";
 import { askedFormat, liveAudioOnly } from "#lib/server/viewing.js";
 import {
@@ -26,8 +27,8 @@ import {
  * 画面の視聴者と同じチューナーの取り合いに加わり、閉じれば抜ける (live.ts の liveStream)
  */
 export function GET({ params, url }) {
-  const serviceId = Number(params.serviceId);
-  if (!Number.isInteger(serviceId)) error(400, "局 ID が不正です");
+  const serviceId = parseId(params.serviceId);
+  if (serviceId === null) error(400, "局 ID が不正です");
   const asked = liveAudioOnly(url) ?? askedFormat(url, "live");
   if (asked === null) error(406, NO_FORMAT);
   const { codec, rung } = asked;

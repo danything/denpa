@@ -173,12 +173,16 @@ describe("いま流れている番組を録る", () => {
       out.set("programId", programId);
       return out;
     };
-    expect(await reserveFromForm(form("5"))).toBeNull();
+    expect(await reserveFromForm(form("5"))).toEqual({ programId: 5 });
     // `Error: ` を付けずに画面へ出せる文
-    expect(await reserveFromForm(form("6"))).toBe(
-      "この番組は放送が終わっています",
-    );
-    expect(await reserveFromForm(form("x"))).toBe("番組 ID が不正です");
+    expect(await reserveFromForm(form("6"))).toEqual({
+      refused: "この番組は放送が終わっています",
+    });
+    // ID の読み方は API と同じ (`parseId`)。空や指数は数にしない
+    for (const id of ["x", "", "5e0"])
+      expect(await reserveFromForm(form(id))).toEqual({
+        refused: "番組 ID が不正です",
+      });
   });
 
   test("ルールが立てた予約を押すと手動になる。優先度は 2 とルールの優先度の高いほう", async () => {
@@ -204,7 +208,7 @@ describe("いま流れている番組を録る", () => {
         .run();
       const out = new FormData();
       out.set("programId", String(id));
-      expect(await reserveFromForm(out)).toBeNull();
+      expect(await reserveFromForm(out)).toEqual({ programId: id });
     }
     const rows = orm()
       .select({

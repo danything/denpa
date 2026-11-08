@@ -1,6 +1,7 @@
 import { parseCaptionLanguage } from "@danything/arib/caption-text";
 import { error } from "@sveltejs/kit";
 
+import { parseId } from "#lib/id.js";
 import { recordingCaptions } from "#lib/server/live.js";
 
 /**
@@ -10,8 +11,8 @@ import { recordingCaptions } from "#lib/server/live.js";
  * (省けば第 1 言語)。読み方は `live.ts` の `recordingCaptions`
  */
 export function GET({ params, url }) {
-  const id = Number(params.id);
-  if (!Number.isInteger(id)) error(400, "録画 ID が不正です");
+  const id = parseId(params.id);
+  if (id === null) error(400, "録画 ID が不正です");
   const from = Number(url.searchParams.get("from") ?? 0);
   const language = parseCaptionLanguage(url.searchParams.get("language"));
   const stream = recordingCaptions(

@@ -16,7 +16,9 @@ import {
   chasePlan,
   chaseReadHeld,
   fileSize,
+  finishedTsSec,
   followFile,
+  recordedSec,
   resumeFrom,
   resumePlan,
   tsFileHead,
@@ -337,5 +339,74 @@ describe("元の TS の追っかけで読むのを止めるか (chaseReadHeld)",
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+/**
+ * 追っかけと録画の字幕が、秒をバイトに当てる物差し (`recordedSec`)。録り終えたものは元の TS を測る。
+ * `duration_ms` はエンコードし終えると出来上がりの長さ (CM を切ったあと) になり、TS より短い
+ */
+describe("元の TS に録れている長さ (recordedSec)", () => {
+  let dir: string | null = null;
+  afterEach(() => {
+    if (dir !== null) rmSync(dir, { recursive: true, force: true });
+    dir = null;
+  });
+
+  /** 先頭に音声の PES、そのあと 1 秒ごとに映像の PES を `seconds` 秒まで */
+  function span(start: number, seconds: number): Uint8Array {
+    const parts = [
+      packetizePes(0x110, pes(0xc0, start, new Uint8Array(7)), 0).packets,
+    ];
+    for (let s = 0; s <= seconds; s++)
+      parts.push(
+        packetizePes(
+          0x100,
+          pes(0xe0, start + s * 90_000, new Uint8Array(300)),
+          s,
+        ).packets,
+      );
+    const out = new Uint8Array(parts.reduce((sum, p) => sum + p.length, 0));
+    let at = 0;
+    for (const part of parts) {
+      out.set(part, at);
+      at += part.length;
+    }
+    return out;
+  }
+
+  const NOW = 1_800_000_000_000;
+  const row = {
+    finished_at: NOW,
+    created_at: NOW - 3_600_000,
+    duration_ms: 1_200_000,
+    encode_skip: null as number | null,
+    start_at: NOW - 1_800_000,
+    end_at: NOW,
+  };
+
+  test("CM を切ってエンコードした録画でも、出来上がりの長さではなく元の TS の尺", () => {
+    dir = mkdtempSync(join(tmpdir(), "chase-"));
+    const path = join(dir, "rec.ts");
+    writeFileSync(path, span(900_000, 1500));
+    expect(finishedTsSec(path)).toBe(1500);
+    expect(recordedSec({ ...row, encode_skip: 3 }, path, NOW)).toBe(1500);
+  });
+
+  test("測れなければ、エンコードしていない録画は録れた長さ、エンコードしたものは番組表の尺", () => {
+    dir = mkdtempSync(join(tmpdir(), "chase-"));
+    const path = join(dir, "rec.ts");
+    // PES の無い TS (読めない)
+    writeFileSync(path, new Uint8Array(188 * 10).fill(0x47));
+    expect(finishedTsSec(path)).toBeNull();
+    expect(recordedSec(row, path, NOW)).toBe(1200);
+    expect(recordedSec({ ...row, encode_skip: 3 }, path, NOW)).toBe(1800);
+  });
+
+  test("録っている最中は、録り始めてからの経過", () => {
+    dir = mkdtempSync(join(tmpdir(), "chase-"));
+    const path = join(dir, "rec.ts");
+    writeFileSync(path, span(900_000, 1500));
+    expect(recordedSec({ ...row, finished_at: null }, path, NOW)).toBe(3600);
   });
 });

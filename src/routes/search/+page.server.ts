@@ -1,6 +1,7 @@
 import { fail, redirect } from "@sveltejs/kit";
 import { and, eq, inArray } from "drizzle-orm";
 
+import { parseId } from "#lib/id.js";
 import { countClips, findClips } from "#lib/server/clips.js";
 import { reserveWarning } from "#lib/server/contracts.js";
 import { now, orm } from "#lib/server/db.js";
@@ -50,8 +51,8 @@ const CLIP_PREVIEW = 6;
  * 結果の画面を開いてその番組の詳細を出す (番組表には番組を名指しで開く URL が無いため)
  */
 function focusOf(url: URL) {
-  const id = Number(url.searchParams.get("program"));
-  if (!url.searchParams.has("program") || !Number.isInteger(id)) return null;
+  const id = parseId(url.searchParams.get("program"));
+  if (id === null) return null;
   return (
     orm()
       .select({
@@ -83,8 +84,8 @@ function focusOf(url: URL) {
 
 /** 編集するルール (`?rule=<ID>`)。無ければ undefined */
 function ruleById(raw: unknown) {
-  const id = Number(raw);
-  if (!Number.isInteger(id)) return undefined;
+  const id = parseId(raw);
+  if (id === null) return undefined;
   return orm().select().from(ruleTable).where(eq(ruleTable.id, id)).get();
 }
 
@@ -196,21 +197,17 @@ export const actions = {
   /** 番組を予約する。録画のしかたは設定画面の 1 箇所で決める (番組表の予約と同じ) */
   reserve: async ({ request }) => {
     const form = await request.formData();
-    const refused = await reserveFromForm(form);
-    if (refused !== null) return fail(400, { message: refused });
+    const reserved = await reserveFromForm(form);
+    if ("refused" in reserved) return fail(400, { message: reserved.refused });
     // 有料の番組で、録ってよい局と確かめていなければ知らせる (予約はそのまま。`contracts.reserveWarning`)
-    return {
-      success: true,
-      warning: reserveWarning(Number(form.get("programId"))),
-    };
+    return { success: true, warning: reserveWarning(reserved.programId) };
   },
 
   /** 予約を取り消す。ルールが立てた予約でも作り直されない (戻すのはホームの「戻す」) */
   cancel: async ({ request }) => {
     const form = await request.formData();
-    const id = Number(form.get("reservationId"));
-    if (!Number.isFinite(id))
-      return fail(400, { message: "予約 ID が不正です" });
+    const id = parseId(form.get("reservationId"));
+    if (id === null) return fail(400, { message: "予約 ID が不正です" });
     await cancel(id);
     return { success: true };
   },

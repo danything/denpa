@@ -2,6 +2,7 @@ import { parseCaptionLanguage } from "@danything/arib/caption-text";
 import { error } from "@sveltejs/kit";
 
 import { askedTrack } from "#lib/arib.js";
+import { parseId } from "#lib/id.js";
 import { parseRung } from "#lib/rungs.js";
 import { liveCaptions } from "#lib/server/live.js";
 
@@ -18,8 +19,8 @@ import { liveCaptions } from "#lib/server/live.js";
  * 共有する相手が無ければ 404。映像を開いてからリクエストする
  */
 export function GET({ params, url }) {
-  const serviceId = Number(params.serviceId);
-  if (!Number.isInteger(serviceId)) error(400, "局 ID が不正です");
+  const serviceId = parseId(params.serviceId);
+  if (serviceId === null) error(400, "局 ID が不正です");
   const form = url.searchParams.get("codec") ?? "raw";
   if (form !== "raw" && form !== "h264" && form !== "av1" && form !== "hevc")
     error(400, "codec は raw・h264・av1・hevc のどれかです");
