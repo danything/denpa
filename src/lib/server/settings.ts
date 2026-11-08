@@ -120,7 +120,7 @@ interface Settings {
    */
   hideH264Hevc: boolean;
   /**
-   * **ロゴを取りに行った結果を DB に残すか。既定はオフ。** デバッグ用。衛星のロゴが流れてくる期間を測るときだけオンにする
+   * **ロゴを取得した結果を DB に残すか。既定はオフ。** デバッグ用。衛星のロゴが流れてくる期間を測るときだけオンにする
    * (`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)
    */
   recordLogo: boolean;

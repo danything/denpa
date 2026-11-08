@@ -886,7 +886,7 @@ export function encodeProgress(totalFrames: number, inputBytes: number) {
 }
 
 /**
- * ffmpeg が入力ファイルをどこまで読んだかを /proc から覗く。
+ * ffmpeg が入力ファイルをどこまで読んだかを /proc から読む。
  *
  * 子プロセスとは同じ名前空間にいるので、/proc/<pid>/fd から入力ファイルを
  * 指している fd を探せば、/proc/<pid>/fdinfo/<fd> の pos がそのまま読み位置。
@@ -900,7 +900,7 @@ export function findInputFd(pid: number, path: string): number | null {
         if (readlinkSync(`/proc/${pid}/fd/${name}`) === path)
           return Number(name);
       } catch {
-        // 覗いている間に閉じられた fd。次を見る
+        // 読んでいる間に閉じられた fd。次を見る
       }
     }
   } catch {
