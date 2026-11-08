@@ -125,14 +125,15 @@ public class B25Tests
 
         /// <summary>
         /// 中身のパケット。<paramref name="adaptation"/> バイトのアダプテーションを前に置き、
-        /// 残りを <paramref name="even"/> の鍵で掛ける (null なら掛けない)
+        /// 残りを <paramref name="even"/> の鍵で掛ける (null なら掛けない)。<paramref name="pes"/> なら PES の先頭
+        /// (payload_unit_start と <c>00 00 01</c>) にする。<paramref name="keyEven"/> を渡すと、印と違う偶奇の鍵で掛ける
         /// </summary>
-        public Ts Payload(int pid, byte? generation, bool even = true, int adaptation = -1, int seed = 0)
+        public Ts Payload(int pid, byte? generation, bool even = true, int adaptation = -1, int seed = 0, bool pes = false, bool? keyEven = null)
         {
             var packet = new byte[188];
             new Random(seed + Wire.Count).NextBytes(packet);
             packet[0] = 0x47;
-            packet[1] = (byte)(pid >> 8);
+            packet[1] = (byte)((pes ? 0x40 : 0) | (pid >> 8));
             packet[2] = (byte)pid;
             var start = 4;
             if (adaptation >= 0)
@@ -141,13 +142,14 @@ public class B25Tests
                 start = 5 + adaptation;
             }
             packet[3] = (byte)((adaptation >= 0 ? 0x20 : 0) | (start < 188 ? 0x10 : 0) | Counter(pid));
+            if (pes) new byte[] { 0x00, 0x00, 0x01, 0xE0 }.CopyTo(packet, start);
             Plain.AddRange(packet);
 
             if (generation is { } g)
             {
                 var cipher = new Multi2(SystemKey, InitCbc);
                 cipher.SetKeys(Key(g, even: false), Key(g, even: true));
-                if (start < 188) cipher.Encrypt(even, packet.AsSpan(start));
+                if (start < 188) cipher.Encrypt(keyEven ?? even, packet.AsSpan(start));
                 packet[3] |= (byte)(even ? 0x80 : 0xC0);
             }
             Wire.AddRange(packet);
@@ -525,6 +527,104 @@ public class B25Tests
 
         await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
         await Assert.That(cards.Asked.Count).IsEqualTo(2);
+    }
+
+    /// <summary>
+    /// **PES の先頭がどの鍵でも <c>00 00 01</c> にならなければ、掛かったまま流す。** その PES の残りも次の PES の先頭まで
+    /// 掛かったまま流し、掛かったままに数える (化けた中身を「復号できた」として流さない。契約の復号テストもこれで落ちる)
+    /// </summary>
+    [Test]
+    public async Task 鍵が合わないPESは掛かったまま流し_次のPESの先頭から復号する()
+    {
+        // カードが返すのは世代 1 の鍵。最初の PES だけ、カードが返さない世代 9 の鍵で掛かっている
+        var ts = Channel().Ecm(EcmPid, 1).Payload(VideoPid, 9, pes: true).Videos(3, 9);
+        var garbled = ts.Wire.Count;
+        ts.Payload(VideoPid, 1, pes: true).Videos(3, 1);
+        var descrambler = new Descrambler(new Cards());
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        byte[] expected = [.. ts.Wire.Take(garbled), .. Expected(ts).Skip(garbled)];
+        await Assert.That(Diff(output, expected)).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(4);
+        await Assert.That(descrambler.Decoded).IsEqualTo(4);
+        await Assert.That(descrambler.LastError).IsNotNull();
+    }
+
+    /// <summary>
+    /// **PES の先頭で、偶奇を逆にした鍵のほうが合えば、その ECM はこの先も逆にして使う。** 先頭でない
+    /// パケットは確かめられないので、先頭で分かった対応で復号する
+    /// </summary>
+    [Test]
+    public async Task 偶奇を逆にした鍵で合えば_その先もそれで復号する()
+    {
+        var ts = Channel().Ecm(EcmPid, 1)
+            .Payload(VideoPid, 1, even: true, pes: true, keyEven: false)
+            .Payload(VideoPid, 1, even: true, keyEven: false)
+            .Payload(VideoPid, 1, even: false, keyEven: true)
+            .Payload(VideoPid, 1, even: false, pes: true, keyEven: true);
+        var descrambler = new Descrambler(new Cards());
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+    }
+
+    /// <summary>
+    /// **PMT が挙げた ECM の鍵で合わず、ほかの ECM の鍵で PES の先頭が合えば、その PID はそちらで復号する。**
+    /// PMT を読み直すまで続ける
+    /// </summary>
+    [Test]
+    public async Task ほかのECMの鍵で合えば_そのPIDはそのECMで復号する()
+    {
+        const int other = 0x0902;
+        var ts = new Ts()
+            .Pat((0x0400, PmtPid))
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []), (AudioPid, Ca(other)))
+            .Ecm(EcmPid, 1).Ecm(other, 7)
+            .Payload(AudioPid, 7)
+            // PMT では映像も ECM 0x0901 だが、世代 7 (ECM 0x0902) の鍵で掛かっている
+            .Payload(VideoPid, 7, pes: true).Videos(3, 7);
+        var descrambler = new Descrambler(new Cards());
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+    }
+
+    /// <summary>
+    /// **stream_type 0x06 (字幕と、セクションのデータの両方に使う) は先頭を確かめない。** セクションを PES の先頭と
+    /// 比べると、合っている鍵でも掛かったままにしてしまう
+    /// </summary>
+    [Test]
+    public async Task 字幕とデータのESは先頭を確かめない()
+    {
+        var ts = new Ts().Pat((0x0400, PmtPid));
+        var body = new List<byte> { 0xE0 | (VideoPid >> 8), VideoPid & 0xFF, 0xF0, 6 };
+        body.AddRange(Ca(EcmPid));
+        body.AddRange([0x06, 0xE0 | (AudioPid >> 8), AudioPid & 0xFF, 0xF0, 0]);
+        ts.Section(PmtPid, Psi(0x02, 0x0400, [.. body]))
+            .Ecm(EcmPid, 1)
+            // データのセクション。payload_unit_start が立っていて、先頭は 00 00 01 ではない
+            .Payload(AudioPid, 1, pes: true);
+        var plain = ts.Plain.Count - 188;
+        ts.Plain[plain + 6] = 0x02;
+        // 掛ける前の中身を変えたので、掛けたものも作り直す
+        var cipher = new Multi2(SystemKey, InitCbc);
+        cipher.SetKeys(Key(1, even: false), Key(1, even: true));
+        var packet = ts.Plain.Skip(plain).ToArray();
+        cipher.Encrypt(true, packet.AsSpan(4));
+        packet[3] |= 0x80;
+        ts.Wire.RemoveRange(ts.Wire.Count - 188, 188);
+        ts.Wire.AddRange(packet);
+        var descrambler = new Descrambler(new Cards());
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
     }
 
     [Test]
