@@ -11,6 +11,9 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 引数を渡すときは `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall`
 のようにします (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-AgentOnly` エージェントだけ)。
 
+**Windows 10 1809・Windows Server 2019 (ビルド 17763) 以降で動きます。** 本体の bun が 1809 より前の Windows を受けず、
+install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の Windows には無いためです。Windows Server 2016 では install.ps1 が止まります。
+
 **denpa 本体もエージェントも、Windows の上でそのまま動かします。** WSL・Docker Desktop・コンテナは使いません。
 本体はリリースに添えた `denpa-<バージョン>-windows-x64.zip` (bun・アプリ・ffmpeg・字・ブラウザへ配るデコーダ) で、
 エージェントは `denpa-agent-<バージョン>-windows-x64.zip` (.NET の実行ファイル。[通知領域のアイコン](#通知領域のアイコン)も入っている) です。どちらも同じバージョンを入れます。

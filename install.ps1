@@ -77,6 +77,8 @@ $Volume = 'denpa-data'
 $Tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 $System = 'S-1-5-18'
 $Administrators = 'S-1-5-32-544'
+# 動く Windows の下限のビルド (Windows 10 1809 / Windows Server 2019。Invoke-Main)
+$MinBuild = 17763
 
 function Say([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 
@@ -651,6 +653,14 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly) {
 
     if (-not (Test-Admin)) {
         throw '管理者の PowerShell で流してください (スタートボタンを右クリックして「ターミナル (管理者)」)。denpa とエージェントを、ログインしなくても動くタスク (SYSTEM) に載せるためです'
+    }
+
+    # **Windows 10 1809 / Windows Server 2019 (ビルド 17763) より前では動かない。** 本体の bun がそれより前の Windows を受けず、
+    # ダウンロードと展開に使う curl.exe と tar.exe も 1803 / Server 2019 から。Server 2016 (14393) では curl.exe が無く、
+    # 「最新のリリースが分かりません」で止まっていた。外すだけ (-Uninstall) なら使わないので止めない
+    $build = [int](Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber
+    if (-not $Uninstall -and $build -lt $MinBuild) {
+        throw "この Windows (ビルド $build) では動きません。Windows 10 1809 / Windows Server 2019 (ビルド $MinBuild) 以降が必要です"
     }
 
     if ($Uninstall) {
