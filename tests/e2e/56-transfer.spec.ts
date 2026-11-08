@@ -173,6 +173,13 @@ test.describe("denpa を別の機械へ移す", () => {
     await expect(page.getByTestId("transfer-missing")).toBeVisible();
     await expect(page.getByTestId("transfer-apply")).toHaveCount(0);
 
+    // 「このまま取り込む」は 2 回押し。ほかの所を押すと 1 回目に戻る (削除と同じ `arming`)
+    await page.getByTestId("transfer-force").click();
+    await expect(page.getByTestId("transfer-force-confirm")).toBeVisible();
+    await page.getByTestId("transfer-counts").click();
+    await expect(page.getByTestId("transfer-force-confirm")).toHaveCount(0);
+    await expect(page.getByTestId("transfer-force")).toBeVisible();
+
     // 写して確かめ直す (送り直さない)
     cpSync(stack.encodedDir, spare.encodedDir, { recursive: true });
     cpSync(stack.rawDir, spare.rawDir, { recursive: true });

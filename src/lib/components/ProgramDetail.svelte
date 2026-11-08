@@ -46,8 +46,12 @@
   /** 番組名の見出しの id。箱の名前にする (読み上げは開いたときに番組名を言う) */
   const titleId = $props.id();
 
+  let dialog: HTMLDialogElement | undefined = $state();
+
   /**
-   * **開いたら箱へ焦点を移し、閉じたら開く前の場所へ戻す。** 開いた画面は `{#if}` で外すので、外れるときに戻す。
+   * **開いたら `showModal()` でダイアログにし、箱へ焦点を移す。閉じたら開く前の場所へ戻す。**
+   * ほかのダイアログ (`LogoZoom`・`DriveNotice`) と同じく、後ろのページは押せず、Tab も外へ出ない。
+   * 開閉は渡す側が持っている (出すときだけ `{#if}` で描く) ので、外れるときに戻す。
    * 戻す先が消えていれば (行が読み直しで作り直されたなど) 戻さない
    */
   onMount(() => {
@@ -55,6 +59,7 @@
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
+    if (dialog !== undefined && !dialog.open) dialog.showModal();
     box?.focus({ preventScroll: true });
     return () => {
       if (before?.isConnected) before.focus({ preventScroll: true });
@@ -62,33 +67,24 @@
   });
 </script>
 
-<svelte:window
-  onkeydown={(e) => {
-    // 箱の中で開いたメニュー (「その他…」) があれば、Esc はそれを閉じるだけにする (よそのポップオーバーは見ない)
-    if (
-      e.key === "Escape" &&
-      !e.defaultPrevented &&
-      box?.querySelector(":popover-open") == null
-    )
-      onclose();
-  }}
-/>
-
 <!--
     **高さは `%` で採る** (`app.css` で `html` に高さを与えてある)。
     `vh` はアドレスバーが引っ込んだときの高さ、`dvh` も端末 (PWA) によって合わない。
     外枠は `position: fixed` なので、その `100%` は**そのページが縦に動かずに
     出せる高さ**そのものになる。上下に少し余白を置いて、中身はその中で巻き取らせる。
 
-    `<dialog>` にはしていない。開閉は渡す側が持っている (出すときだけ描く) ので、
-    ここは箱と背景だけで足りる
+    Esc はブラウザが `cancel` で知らせる。ダイアログは自分では閉じず、渡す側に外させる。
+    箱の中で開いたメニュー (「その他…」) があれば、Esc はブラウザがそのメニューだけを閉じ、`cancel` は来ない
 -->
-<div
+<dialog
+  bind:this={dialog}
   class="detail-modal"
-  role="dialog"
-  aria-modal="true"
   aria-labelledby={titleId}
   data-testid="program-detail"
+  oncancel={(e) => {
+    e.preventDefault();
+    onclose();
+  }}
 >
   <button
     type="button"
@@ -135,9 +131,13 @@
       {/if}
     </div>
   </div>
-</div>
+</dialog>
 
 <style>
+  /*
+     * 幕は下の `.detail-backdrop` が塗るので、`<dialog>` の地 (`app.css`・Pico) と `::backdrop` は塗らない。
+     * 開く動きも幕と箱が持つので、`<dialog>` の動き (`app.css`) は止める
+     */
   .detail-modal {
     position: fixed;
     inset: 0;
@@ -146,7 +146,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 100%;
+    max-width: none;
     height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    background: none;
+    transition: none;
+  }
+  .detail-modal::backdrop {
+    background: none;
   }
   .detail-backdrop {
     position: absolute;

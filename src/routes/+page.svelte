@@ -671,7 +671,7 @@
   const dayMarks = $derived(markDays(shownItems, today));
   let pinned = $state<number | null>(null);
   let pinFrame = 0;
-  /** 頭の日を読み直す。送っている間は 1 コマに 1 回だけ */
+  /** 先頭に貼り付いている日を読み直す。送っている間は 1 コマに 1 回だけ */
   function trackPinned(): void {
     if (pinFrame !== 0) return;
     pinFrame = requestAnimationFrame(() => {
@@ -759,7 +759,7 @@
   });
 </script>
 
-<!-- 聞き返しは他所を触ったら取り下げる (`stand`)。巻いたらカレンダーの頭の日を読み直す (`trackPinned`) -->
+<!-- 聞き返しは他所を触ったら取り下げる (`stand`)。巻いたら、先頭に貼り付いている日 (カレンダーの印) を読み直す (`trackPinned`) -->
 <svelte:window onclick={deleting.stand} onscroll={trackPinned} />
 
 <!--

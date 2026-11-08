@@ -26,7 +26,7 @@ test.describe("操作したときの反応", () => {
   });
 
   /**
-   * **番組の詳細は番組名を名前にし、開いたら焦点が中へ移り、閉じたら押したマスへ戻る** (読み上げとキーボードで迷わない)
+   * **番組の詳細は番組名を名前にし、開いたら焦点が中へ移り、Tab でも外へ出ず、閉じたら押したマスへ戻る** (読み上げとキーボードで迷わない)
    */
   test("番組の詳細は番組名で読まれ、焦点が中へ移って閉じると戻る", async ({
     page,
@@ -44,6 +44,19 @@ test.describe("操作したときの反応", () => {
     expect(
       await detail.evaluate((node) => node.contains(document.activeElement)),
     ).toBe(true);
+
+    // Tab を押し続けても、焦点は後ろのページ (番組表のマス) へ出ない。末尾から先はブラウザの外 (body) を挟んで中へ戻る
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press("Tab");
+      expect(
+        await detail.evaluate(
+          (node) =>
+            document.activeElement === null ||
+            document.activeElement === document.body ||
+            node.contains(document.activeElement),
+        ),
+      ).toBe(true);
+    }
 
     await page.keyboard.press("Escape");
     await expect(detail).toBeHidden();

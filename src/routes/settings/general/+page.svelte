@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { enhance, type SubmitFunction } from "$app/forms";
+  import { enhance } from "$app/forms";
   import { resolve } from "$app/paths";
 
-  import { submitting } from "#lib/actions.js";
   import { arming } from "#lib/arming.svelte.js";
+  import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import Lead from "#lib/components/Lead.svelte";
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
   import { dateTime } from "#lib/format.js";
@@ -45,14 +45,10 @@
   });
 
   /**
-   * **2 回押させる** (削除と同じ `arming`)。押し間違えると、家族の端末まで入り直しになる。
-   * 押す場所は 1 つなので、`arm` に渡す値は 0 で足りる
+   * **2 回押させる** (削除と同じ `arming` と `ArmedDelete`)。押し間違えると、家族の端末まで入り直しになる。
+   * 押す場所は 1 つなので、`armKey` は 0 で足りる
    */
   const confirming = arming('[data-testid^="logout-others"]');
-  const sent: SubmitFunction = () => async (options) => {
-    await options.update();
-    confirming.fire();
-  };
 </script>
 
 <svelte:window onclick={confirming.stand} />
@@ -279,24 +275,15 @@
         </form>
 
         <div class="others">
-          <form method="POST" action="?/logoutOthers" use:submitting={sent}>
-            {#if confirming.armed === 0}
-              <button
-                type="submit"
-                class="small danger"
-                data-testid="logout-others-confirm">ログアウトを確定</button
-              >
-            {:else}
-              <button
-                type="button"
-                class="small outline danger"
-                onclick={() => confirming.arm(0)}
-                data-testid="logout-others"
-              >
-                ほかの端末からもログアウト
-              </button>
-            {/if}
-          </form>
+          <ArmedDelete
+            deleting={confirming}
+            armKey={0}
+            action="?/logoutOthers"
+            class="small"
+            testid="logout-others"
+            label="ほかの端末からもログアウト"
+            confirmLabel="ログアウトを確定"
+          />
           <Lead>
             <span>
               {data.others === 0

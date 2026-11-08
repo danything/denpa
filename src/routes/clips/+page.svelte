@@ -612,7 +612,7 @@
                 <span class="c-name truncate broadcast" data-testid="clip-name"
                   >{title(clip)}</span
                 >
-                <span class="c-meta tiny muted num"
+                <span class="c-meta small muted num"
                   >{time(clip.takenAt)}{#if clip.programName !== ""}・<span
                       class="broadcast">{clip.serviceName}</span
                     >{/if}</span
@@ -982,8 +982,9 @@
     background: var(--dp-video);
     object-fit: cover;
   }
+  /* 1 段目は本文、2 段目 (`.c-meta`) は控えた字 (`.small`)。どの一覧も同じ (docs/design.md) */
   .c-name {
-    font-size: var(--dp-text-sm);
+    font-size: var(--dp-text-base);
     font-weight: var(--dp-weight-bold);
   }
   .c-meta {
@@ -1045,13 +1046,13 @@
   .c-check:hover .c-check-mark {
     color: var(--dp-on-video);
   }
-  /* 選んだものも塗らない。輪とレ点を主の色にする (画像の上でも読めるよう、地の暗い円はそのまま) */
+  /*
+   * 選んだものも塗らない。輪とレ点を主の色にする (画像の上でも読めるよう、地の暗い円はそのまま)。
+   * 印はこの輪 1 つだけで、名前の字の色は変えない (同じものに印を 2 つ付けない。docs/design.md)
+   */
   .c-check[aria-pressed="true"] .c-check-mark {
     color: var(--pico-primary);
     box-shadow: inset 0 0 0 2px var(--pico-primary);
-  }
-  .c-card[aria-pressed="true"] .c-name {
-    color: var(--dp-primary-text);
   }
   .c-more {
     padding: 1rem 0;
