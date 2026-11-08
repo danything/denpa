@@ -1432,7 +1432,12 @@ async function runJob(jobId: number): Promise<void> {
   }
   /*
    * 有料の番組を復号できて録れた。その局を契約中にする (`contracts.noteDecoded`。上の `noteStillScrambled` の反対)。
-   * 番組表の行は 24 時間で消えるので (`paidRecording`)、古い録画を再エンコードしても契約の手がかりにはしない
+   * 番組表の行は 24 時間で消えるので (`paidRecording`)、古い録画を再エンコードしても契約の手がかりにはしない。
+   *
+   * 録画は、ふつうエージェントが受けながら復号した TS なので、録る前に掛かっていたかはここでは分からない。
+   * 有料 (`is_free` が false) は番組表の free_CA_mode で、放送では掛かっている番組を指す。その番組が復号できていれば、
+   * カードが鍵を貰えた (`testDecode` が、いま有料の番組を流している間だけ確かめるのと同じ考え)。
+   * `cardStatus` は失敗を答えで返すので、カードが読めなくてもエンコードは止まらない (`noteDecoded` が何も書かないだけ)
    */
   if (paidRecording(recording) && isDecoded(sourceTs))
     await noteDecoded(recording.service_id);
