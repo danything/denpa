@@ -1515,6 +1515,76 @@ test.describe("録画を観る", () => {
   });
 
   /*
+   * **字幕を出したまま小窓にすると、字幕を重ねた映像を小窓に出す** (`pip.svelte.ts` の `composeBaked`。Chrome・Edge)。
+   * 重ねたものを `$state` に入れると proxy に包まれて `===` が外れ、字幕の無い元の `<video>` に落ちていた (#2367)。
+   *
+   * 偽 ffmpeg の録画は映像が出ない (上) ので、元の `<video>` の映像 (`captureStream`) は動く canvas から取ったものに
+   * 差し替え、再生中に見せる。小窓の API も差し替えて、どの `<video>` を出したかだけを見る
+   */
+  test("字幕を出したまま小窓にすると、字幕を重ねた映像を出す", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const id = await watchable(page, request);
+    await page.addInitScript(() => {
+      let shown: Element | null = null;
+      Object.defineProperty(Document.prototype, "pictureInPictureEnabled", {
+        get: () => true,
+      });
+      Object.defineProperty(Document.prototype, "pictureInPictureElement", {
+        get: () => shown,
+      });
+      HTMLVideoElement.prototype.requestPictureInPicture = async function () {
+        shown = this;
+        this.dispatchEvent(new Event("enterpictureinpicture"));
+        return {} as PictureInPictureWindow;
+      };
+      Document.prototype.exitPictureInPicture = async () => {
+        const was = shown;
+        shown = null;
+        was?.dispatchEvent(new Event("leavepictureinpicture"));
+      };
+      (
+        HTMLVideoElement.prototype as HTMLVideoElement & {
+          captureStream: () => MediaStream;
+        }
+      ).captureStream = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 64;
+        canvas.height = 36;
+        const ctx = canvas.getContext("2d")!;
+        let n = 0;
+        setInterval(() => {
+          ctx.fillStyle = n++ % 2 === 0 ? "#3a6" : "#36a";
+          ctx.fillRect(0, 0, 64, 36);
+        }, 30);
+        return canvas.captureStream(30);
+      };
+    });
+    await goto(page, `/watch/${id}`);
+    await expect(page.getByTestId("watch-captions")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.getByTestId("watch-video").evaluate((video) => {
+      Object.defineProperty(video, "paused", { get: () => false });
+    });
+    await wakeControls(page, "watch-stage");
+    await page.getByTestId("watch-pip").click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (document.pictureInPictureElement as HTMLElement | null)?.dataset[
+              "testid"
+            ] ?? null,
+        ),
+      )
+      .toBe("pip-raw");
+  });
+
+  /*
    * **バックグラウンド再生は既定で切。** 裏に回すと止め、戻ると止めた所から再開する。
    * OS が勝手に小窓にしないよう `disablePictureInPicture` も立てる (`background.svelte.ts`)。
    *
