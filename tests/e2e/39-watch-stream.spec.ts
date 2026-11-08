@@ -224,10 +224,10 @@ test.describe("観る画面でその場で流す", () => {
 
   /**
    * **回線が細ければ、「自動」は画質の段を下げて流す** (`watch-adapt.ts`)。エンコード済みのファイルが届かない
-   * (回線を絞った) まま詰まって 3 秒たつと、ファイルの直再生から段 1 (720p) の変換へ 1 回だけ作り直して移る。
+   * (回線を絞った) まま詰まって 3 秒たつと、ファイルの直再生から段 1 (720p) の変換へ移る (裏の `<video>` で用意して入れ替える)。
    * 段を下げた変換のコーデックはサーバが端末の再生できるもの (`playable`) から選び、応答のヘッダで返す。
    *
-   * 偽 ffmpeg は映像を作らないので、ファイルは届かないままにし、ストリームは中身の無い応答で返す
+   * ファイルは届かないままにし、ストリームは作り置きの fMP4 (`fmp4-clip.ts`) をリクエストされた位置から返す
    */
   test("回線が細いと、自動はファイルの直再生から画質を下げた変換に移る", async ({
     page,
@@ -262,14 +262,22 @@ test.describe("観る画面でその場で流す", () => {
     );
     // 回線を絞る。ファイルは 1 バイトも届かない
     await page.route(`**/api/recordings/${id}/file?**`, () => undefined);
-    await page.route(`**/api/recordings/${id}/stream?**`, (route) =>
-      route.fulfill({
+    const clip = readClip(
+      new Uint8Array(
+        readFileSync(new URL("../fake/live-av1.mp4", import.meta.url)),
+      ),
+    );
+    await page.route(`**/api/recordings/${id}/stream?**`, (route) => {
+      const from = Number(
+        new URL(route.request().url()).searchParams.get("from") ?? 0,
+      );
+      return route.fulfill({
         status: 200,
         contentType: "video/mp4",
         headers: { "X-Denpa-Codec": "av1", "X-Denpa-Rung": "1" },
-        body: "",
-      }),
-    );
+        body: Buffer.from(clipFrom(clip, from, 60)),
+      });
+    });
     const asked = streamRequests(page);
 
     await goto(page, `/watch/${id}`);
