@@ -702,7 +702,12 @@ async function run(): Promise<number> {
           queue.push(next);
           update({ pending: state.pending + 1, total: state.total + 1 });
         }
-        if (first.includes(job.channel) && --sweepsLeft === 0)
+        // 列へ戻した読み直し (`whole: null`) は数えない。数えると、ほかの全局読みが終わる前に 0 になる
+        if (
+          job.whole !== null &&
+          first.includes(job.channel) &&
+          --sweepsLeft === 0
+        )
           update({ sweeping: false });
       }
     };

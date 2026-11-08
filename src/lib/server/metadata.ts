@@ -10,6 +10,9 @@ import { TS_PROBE } from "./ts-probe";
  * 動画の隣に置くサイドカー。番組情報そのものは DB が持ち、denpa の画面が出す。
  */
 
+/** サイドカーの接尾辞 (サムネ・データ放送の順)。名前を作る `sidecarPaths` も、片付けと孤児探し (files.ts) もこの一覧で見る */
+export const SIDECAR_SUFFIXES = ["-poster.jpg", ".bml.jsonl"] as const;
+
 /**
  * サイドカーの置き場。`foo.mkv` に対して `foo-poster.jpg`。
  *
@@ -24,9 +27,9 @@ export function sidecarPaths(videoPath: string): {
 } {
   const base = sidecarBase(videoPath);
   return {
-    thumbnail: `${base}-poster.jpg`,
+    thumbnail: `${base}${SIDECAR_SUFFIXES[0]}`,
     // 録画のデータ放送 (再生位置つきの変化ログ)。d ボタンで出す (server/recorded-bml.ts)
-    dataBroadcast: `${base}.bml.jsonl`,
+    dataBroadcast: `${base}${SIDECAR_SUFFIXES[1]}`,
   };
 }
 
@@ -34,9 +37,6 @@ export function sidecarPaths(videoPath: string): {
 function sidecarBase(videoPath: string): string {
   return videoPath.slice(0, videoPath.length - extname(videoPath).length);
 }
-
-/** サイドカーの接尾辞。片付けと孤児探し (files.ts) はこの一覧で見る。増やすときは `sidecarPaths` と一緒に */
-export const SIDECAR_SUFFIXES = ["-poster.jpg", ".bml.jsonl"] as const;
 
 /**
  * 位置から数えて何コマの中から代表を選ぶか。元の TS (29.97 コマ/秒) で約 15 秒ぶん。

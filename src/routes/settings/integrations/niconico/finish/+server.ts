@@ -1,5 +1,6 @@
 import { json } from "@sveltejs/kit";
 
+import { sameOrigin } from "#lib/server/auth.js";
 import { finishLink } from "#lib/server/niconico.js";
 
 import { refusal, takeFlow, who } from "../flow.server";
@@ -14,12 +15,7 @@ export async function POST(event) {
   const { request, cookies, url } = event;
   const refused = refusal(event);
   if (refused !== null) return json({ message: refused }, { status: 403 });
-  const site = request.headers.get("sec-fetch-site");
-  const same =
-    site !== null
-      ? site === "same-origin"
-      : request.headers.get("origin") === url.origin;
-  if (!same)
+  if (!sameOrigin(request, url))
     return json({ message: "ほかのサイトからは使えません" }, { status: 403 });
   const body = (await request.json().catch(() => null)) as {
     result?: unknown;

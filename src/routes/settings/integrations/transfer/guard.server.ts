@@ -1,5 +1,6 @@
 import { json, type RequestEvent } from "@sveltejs/kit";
 
+import { sameOrigin } from "#lib/server/auth.js";
 import { running } from "#lib/server/migrate.js";
 import { OffsetMismatch, TransferError } from "#lib/server/transfer.js";
 
@@ -19,12 +20,7 @@ export function refuse(event: RequestEvent): Response | null {
       },
       { status: 403 },
     );
-  const site = event.request.headers.get("sec-fetch-site");
-  const same =
-    site !== null
-      ? site === "same-origin"
-      : event.request.headers.get("origin") === event.url.origin;
-  if (!same)
+  if (!sameOrigin(event.request, event.url))
     return json({ message: "ほかのサイトからは使えません" }, { status: 403 });
   return null;
 }

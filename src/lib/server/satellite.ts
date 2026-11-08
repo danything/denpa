@@ -26,6 +26,7 @@ import {
   type ServiceTable,
 } from "@danything/arib/psi";
 
+import { DIGITAL_TV } from "./schema";
 import type { AgentChannel } from "./tuner";
 
 export type SatelliteType = "BS" | "CS";
@@ -281,7 +282,7 @@ function settled(
   }
   return network.transportStreams.every((ts) =>
     ts.services
-      .filter((service) => service.serviceType === 0x01)
+      .filter((service) => service.serviceType === DIGITAL_TV)
       .every((service) =>
         named.has(
           nameKey(

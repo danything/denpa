@@ -24,6 +24,7 @@ import {
 import type { Recording } from "../types";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
+import { emit } from "./events";
 import { pruneEmptyDirs, removeIfExists } from "./fsx";
 import { encodedPaths } from "./library";
 import { removeSidecars, SIDECAR_SUFFIXES } from "./metadata";
@@ -80,6 +81,19 @@ export function deleteRecordingFiles(
     .set({ recording_id: null })
     .where(eq(clips.recording_id, recording.id))
     .run();
+}
+
+/**
+ * 人が消す (画面の削除と `DELETE /api/recordings/<id>`)。**録画中は消さない** (使っているチューナーと
+ * 書きかけのファイルが残る)。消したら `recordings` を通知し、開いているほかの画面の一覧も取り直させる
+ *
+ * @returns 録画中で消さなかったら false
+ */
+export function removeRecording(recording: Recording, reason: string): boolean {
+  if (recording.finished_at === null) return false;
+  deleteRecordingFiles(recording, reason);
+  emit("recordings");
+  return true;
 }
 
 /**

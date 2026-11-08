@@ -2338,8 +2338,11 @@ async function runCmJob(jobId: number): Promise<void> {
         `${ts === null ? "エンコード済みの動画から" : "元の TS から"}無音・場面の切れ目・ロゴを読み取っています`,
       );
       const report = progressReporter(jobId, recording.id, reading.duration);
+      // 元の TS はエンコードしたときと同じ長さまで探る (見える音声の並びを揃える。`ts-probe.ts`)
+      const before = ts === null ? [] : inputArgs(0, span.programStart);
       const found = await scan(input, {
         ...reading.want(),
+        before,
         signal,
         timeoutMs: config.cmDetectTimeout,
         onTime: report,
@@ -2355,7 +2358,7 @@ async function runCmJob(jobId: number): Promise<void> {
         return;
       }
       detection = shiftDetection(
-        await reading.decide(found, { skip: 0, before: [] }),
+        await reading.decide(found, { skip: 0, before }),
         shift,
       );
       if (detection.material !== undefined)

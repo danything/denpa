@@ -557,7 +557,14 @@ export function captionFeed(
         timer = setInterval(() => {
           if (!closed) push(CHANNEL.control, 0n, PING);
         }, CAPTION_PING_MS);
-        const leave = open(out);
+        let leave: () => void;
+        try {
+          leave = open(out);
+        } catch (error) {
+          // 起こせなかった (ffmpeg が無いなど)。間を埋める送信を止めてから伝える
+          finish();
+          throw error;
+        }
         // 作っている最中に閉じた (セッションがもう畳まれていた) ら、すぐ後始末する
         if (closed) leave();
         else detach = leave;

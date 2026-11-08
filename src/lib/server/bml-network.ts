@@ -443,6 +443,24 @@ export async function limited<T>(task: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * 締め切り (`Date.now()` の値) までに終わらなければ「時間切れ」で断る。**名前を引くのに使う。**
+ * DNS の問い合わせは自分で再試行するので、答えない DNS だと `TIMEOUT` を超えて待たされる
+ */
+export function beforeDeadline<T>(
+  deadline: number,
+  task: Promise<T>,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Refused("時間切れです")),
+      Math.max(0, deadline - Date.now()),
+    );
+  });
+  return Promise.race([task, late]).finally(() => clearTimeout(timer));
+}
+
 /** 飛ばされるのを 1 つずつ確かめながら追いかける (`fetchForBml` / `postForBml` の本体) */
 function follow(
   raw: string,
@@ -461,7 +479,7 @@ async function hops(
 ): Promise<Fetched> {
   // 名前を引くのも含めて、全体で `TIMEOUT` まで
   const deadline = Date.now() + TIMEOUT;
-  let { url, address } = await allowed(raw);
+  let { url, address } = await beforeDeadline(deadline, allowed(raw));
   let method = first;
   for (let hop = 0; ; hop++) {
     const got = await doRequest(
@@ -476,7 +494,10 @@ async function hops(
     if (got.status >= 300 && got.status < 400 && got.location !== null) {
       if (hop >= HOPS) throw new Refused("リダイレクトが多すぎます");
       if (got.status !== 307 && got.status !== 308) method = "GET";
-      ({ url, address } = await allowed(new URL(got.location, url).toString()));
+      ({ url, address } = await beforeDeadline(
+        deadline,
+        allowed(new URL(got.location, url).toString()),
+      ));
       continue;
     }
     return { status: got.status, contentType: got.contentType, body: got.body };
@@ -513,14 +534,11 @@ export async function confirmReachable(
 
   return limited(async () => {
     const started = Date.now();
+    const wait = Math.max(1000, Math.min(timeoutMs, TIMEOUT));
     // 確かめたアドレスへ直に繋ぐ (名前で繋ぎ直すと、フィルタされた DNS が別のアドレスを返しうる)
-    const address = await resolvable(host);
+    const address = await beforeDeadline(started + wait, resolvable(host));
     return await new Promise((resolve) => {
-      const socket = connect({
-        host: address,
-        port: 443,
-        timeout: Math.max(1000, Math.min(timeoutMs, TIMEOUT)),
-      });
+      const socket = connect({ host: address, port: 443, timeout: wait });
       const done = (success: boolean) => {
         socket.destroy();
         resolve({

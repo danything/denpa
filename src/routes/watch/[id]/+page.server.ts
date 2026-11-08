@@ -5,7 +5,7 @@ import { eq, getTableColumns } from "drizzle-orm";
 
 import { countClips, sceneTime } from "#lib/server/clips.js";
 import { orm } from "#lib/server/db.js";
-import { deleteRecordingFiles } from "#lib/server/files.js";
+import { removeRecording } from "#lib/server/files.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { encodedFile } from "#lib/server/library.js";
 import { sidecarPaths } from "#lib/server/metadata.js";
@@ -110,7 +110,8 @@ export const actions = {
     const recording = recordingFromForm(form);
     if (recording === undefined)
       return fail(400, { message: "録画が見つかりません" });
-    deleteRecordingFiles(recording, "手動削除");
+    if (!removeRecording(recording, "手動削除"))
+      return fail(409, { message: "録画中は消せません" });
     /*
      * 消したら一覧へ戻す。ここで返すと SvelteKit が `load` を回し直し、消えた録画に 410 を返して
      * 観ていた画面がエラー画面に変わる
