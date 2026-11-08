@@ -226,6 +226,48 @@ describe("書き出す", () => {
     ).toEqual([]);
   });
 
+  /*
+   * **録画中・エンコードを待っている・している録画を数える** (画面が書き出す前に断る)。再エンコードは置いてある
+   * ファイルを消してから書き直すので、その間に写すと移した先で「置き場に無い」になる (E2E の 56-transfer で起きた)
+   */
+  test("録画中と、エンコードを待っている・している録画を数える。終わったものと失敗したものは数えない", () => {
+    const where = machine(`working-${counter}`);
+    use(where);
+    expect(transfer.status().working).toBe(0);
+    const add = (finished: boolean) =>
+      orm()
+        .insert(schema.recordings)
+        .values({
+          service_id: 1,
+          name: "録画",
+          start_at: now - 3_600_000,
+          end_at: now,
+          finished_at: finished ? now : null,
+          created_at: now,
+          updated_at: now,
+        })
+        .returning({ id: schema.recordings.id })
+        .get().id;
+    const job = (
+      recording_id: number,
+      state: "queued" | "running" | "done" | "failed",
+    ) =>
+      orm()
+        .insert(schema.encodeJobs)
+        .values({ recording_id, state, created_at: now })
+        .run();
+    // 録画中
+    add(false);
+    // エンコード待ち・エンコード中 (CM 検出も同じジョブ)。1 つの録画に 2 つあっても 1 件
+    const queued = add(true);
+    job(queued, "queued");
+    job(queued, "running");
+    // 終わった・失敗した
+    job(add(true), "done");
+    job(add(true), "failed");
+    expect(transfer.status().working).toBe(2);
+  });
+
   test("書き出しの途中はもう 1 つ書き出せない", async () => {
     use(old);
     const first = await transfer.exportArchive();

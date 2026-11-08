@@ -277,6 +277,13 @@
     </Lead>
 
     <h3>書き出す</h3>
+    {#if status.working > 0}
+      <!-- 再エンコードは置いてあるファイルを消してから書き直す。その間に写すと、移した先で「置き場に無い」になる -->
+      <div class="notice warning" data-testid="transfer-working">
+        録画中か、エンコード・CM 検出・CM
+        カット・スクランブル復号を待っている・している録画が {status.working} 件あります。この録画のファイルは書き出したあとも作り直されることがあるので、終わってから書き出し、録画のフォルダを写してください
+      </div>
+    {/if}
     <!-- ダウンロードとして返すので、素のフォームで送る (`use:enhance` を付けない) -->
     <form method="POST" action={endpoint("export")} class="fields">
       <div class="cluster">
