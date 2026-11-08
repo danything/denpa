@@ -1,13 +1,13 @@
+/**
+ * B-CAS カードの有料放送の契約を確かめる。
+ *
+ * EIT の CA 契約情報記述子 (0xCB) にある verificationData を B-CAS カードに渡し (0x90 0x3C)、
+ * 今日と 1 週間後に観られるかと、契約の期限を調べる。記述子の無い局は、チューナーで受けて
+ * TS パケットのスクランブル制御ビットを数え、復号できるかを確かめる。
+ */
+
 import { PACKET, SYNC } from "@danything/arib/psi";
 import { ServiceFilter } from "@danything/arib/service-filter";
-/**
- * B-CAS カードの有料放送契約確認と実ストリーム復号テスト。
- *
- * EIT の CA契約情報記述子 (0xCB) に含まれる verificationData を B-CAS カード
- * (0x90 0x3C) に渡し、今日および 1 週間後の有効性、および契約有効期限を判別する。
- * また、実際にチューナーを開いて TS パケットのスクランブル制御ビットを検査し、
- * 復号できるかを確認する。
- */
 import { and, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { agentFetch } from "./agent-client";
@@ -80,17 +80,22 @@ export function contractStatus(
   return row.decodeOk === false ? "unsubscribed" : "unverified";
 }
 
-/** 現在アクティブな B-CAS カードの番号 (16桁) を取得 */
+/** いま使っている B-CAS カードの番号 (16 桁)。鍵を配る相手のカード、使用中のリーダー、カードのあるリーダーの順に探す */
 export function getActiveCardId(card: CardStatus): string | null {
-  if (card.source === "remote" && card.ids.length > 0) {
+  if (card.source === "remote" && card.ids.length > 0)
     return card.ids[0] ?? null;
-  }
-  const activeReader = card.readers.find((r) => r.state === "active");
-  if (activeReader && activeReader.ids.length > 0) {
-    return activeReader.ids[0] ?? null;
-  }
-  const anyCard = card.readers.find((r) => r.ids.length > 0);
-  return anyCard?.ids[0] ?? null;
+  const reader =
+    card.readers.find((r) => r.state === "active" && r.ids.length > 0) ??
+    card.readers.find((r) => r.ids.length > 0);
+  return reader?.ids[0] ?? null;
+}
+
+const NO_CARD = "B-CAS カードが認識されていません";
+
+/** いま使っているカードの番号。カードが読めなければ null */
+async function usableCardId(): Promise<string | null> {
+  const card = await cardStatus();
+  return (card.ok && getActiveCardId(card)) || null;
 }
 
 /** Date オブジェクト（または現在）を JST 基準の MJD (修正ユリウス日) に変換 */
@@ -181,11 +186,10 @@ export async function checkContracts(): Promise<ContractRow[]> {
   if (serviceVerifications.size === 0) return [];
   const serviceIds = [...serviceVerifications.keys()];
 
-  // 既存の契約レコード（前回の復号結果等）を取得して保持する
+  // 前に復号を確かめた結果 (番組表に契約の情報が無い局は、これで決める)
   const existingContracts = orm()
     .select({
       serviceId: cardContracts.service_id,
-      state: cardContracts.state,
       decodeOk: cardContracts.decode_ok,
       decodedAt: cardContracts.decoded_at,
     })
@@ -199,9 +203,8 @@ export async function checkContracts(): Promise<ContractRow[]> {
     .all();
   const existingMap = new Map(existingContracts.map((c) => [c.serviceId, c]));
 
-  const now = new Date();
-  const todayMjd = toMjd(now);
   const nowMs = Date.now();
+  const todayMjd = toMjd(new Date(nowMs));
 
   for (const [serviceId, verification] of serviceVerifications) {
     const existing = existingMap.get(serviceId);
@@ -262,7 +265,6 @@ export async function checkContracts(): Promise<ContractRow[]> {
         state,
         code,
         valid_until: validUntil,
-        decode_ok: existing?.decodeOk ?? null,
         checked_at: nowMs,
       })
       .onConflictDoUpdate({
@@ -353,7 +355,15 @@ export interface DecodeResult {
   error?: string;
 }
 
-/** 復号を確かめる局 (`services` の行) */
+/** 復号を確かめる局を読む `services` の列 */
+const DECODE_TARGET = {
+  id: services.id,
+  arib: services.service_id,
+  type: services.type,
+  channel: services.channel,
+};
+
+/** 復号を確かめる局 (`DECODE_TARGET` で読んだ行) */
 interface DecodeTarget {
   id: number;
   arib: number;
@@ -363,6 +373,16 @@ interface DecodeTarget {
 
 /** 局ごとにパケットを数える長さ。これだけ数えたら、15 秒を待たずに判定する */
 const DECODE_PACKETS = 2000;
+
+/** `ServiceFilter.streams` (`種別:PID` の並び) から、映像・音声・字幕の PID。PMT を読む前は空 */
+function mediaPids(streams: string | null): Set<number> {
+  const pids = new Set<number>();
+  for (const one of streams?.split(",") ?? []) {
+    const pid = Number(one.split(":")[1]);
+    if (Number.isInteger(pid)) pids.add(pid);
+  }
+  return pids;
+}
 
 /**
  * **同じ物理チャンネルの局を 1 つの組にまとめる** (`testDecodeUnverified`)。1 つの組は 1 回の選局で確かめる。
@@ -409,30 +429,16 @@ function notPaidNow(serviceId: number, now: number): string | null {
  * 復号可否 (decode_ok) を更新する。
  */
 export async function testDecode(serviceId: number): Promise<DecodeResult> {
-  const card = await cardStatus();
-  const cardId = getActiveCardId(card);
-  if (!card.ok || !cardId) {
-    return {
-      ok: false,
-      decodeOk: false,
-      error: "B-CAS カードが認識されていません",
-    };
-  }
+  const cardId = await usableCardId();
+  if (cardId === null) return { ok: false, decodeOk: false, error: NO_CARD };
 
   const targetService = orm()
-    .select({
-      id: services.id,
-      arib: services.service_id,
-      channel: services.channel,
-      type: services.type,
-    })
+    .select(DECODE_TARGET)
     .from(services)
     .where(eq(services.id, serviceId))
     .get();
-
-  if (!targetService) {
-    return { ok: false, decodeOk: false, error: "サービスが見つかりません" };
-  }
+  if (!targetService)
+    return { ok: false, decodeOk: false, error: "局が見つかりません" };
 
   const notPaid = notPaidNow(serviceId, Date.now());
   if (notPaid !== null) return { ok: false, decodeOk: false, error: notPaid };
@@ -447,6 +453,11 @@ export async function testDecode(serviceId: number): Promise<DecodeResult> {
   );
 }
 
+/** まとめて確かめた結果。局ごとの結果か、まとめて確かめられなかった理由 */
+type DecodeAll =
+  | { ok: true; results: Map<number, DecodeResult> }
+  | { ok: false; error: string };
+
 /** `testDecodeUnverified` が動いている間 */
 let decodingUnverified = false;
 
@@ -455,10 +466,7 @@ let decodingUnverified = false;
  * 対象は `getContractRows` で「確かめていない」(`unverified`) の局のうち、いま有料の番組を流している局。
  * ほかの局は確かめずに、理由を付けて返す。チャンネルは 1 つずつ順に選局する (チューナーを 1 台しか使わない)
  */
-export async function testDecodeUnverified(): Promise<
-  | { ok: true; results: Map<number, DecodeResult> }
-  | { ok: false; error: string }
-> {
+export async function testDecodeUnverified(): Promise<DecodeAll> {
   // 別のタブから重ねて押されたら断る (同じチャンネルを 2 回選局してチューナーを取り合う)
   if (decodingUnverified)
     return { ok: false, error: "ほかの画面でまとめて確かめています" };
@@ -470,14 +478,9 @@ export async function testDecodeUnverified(): Promise<
   }
 }
 
-async function decodeUnverified(): Promise<
-  | { ok: true; results: Map<number, DecodeResult> }
-  | { ok: false; error: string }
-> {
-  const card = await cardStatus();
-  const cardId = getActiveCardId(card);
-  if (!card.ok || !cardId)
-    return { ok: false, error: "B-CAS カードが認識されていません" };
+async function decodeUnverified(): Promise<DecodeAll> {
+  const cardId = await usableCardId();
+  if (cardId === null) return { ok: false, error: NO_CARD };
 
   const now = Date.now();
   const unverified = new Set(
@@ -489,12 +492,7 @@ async function decodeUnverified(): Promise<
   if (unverified.size === 0) return { ok: true, results };
   const targets: DecodeTarget[] = [];
   for (const target of orm()
-    .select({
-      id: services.id,
-      arib: services.service_id,
-      channel: services.channel,
-      type: services.type,
-    })
+    .select(DECODE_TARGET)
     .from(services)
     .where(inArray(services.id, [...unverified]))
     .all()) {
@@ -556,8 +554,12 @@ async function decodeOnChannel(
 
       for (const count of counts) {
         const own = count.filter.filter(value);
+        const media = mediaPids(count.filter.streams);
         for (let offset = 0; offset + PACKET <= own.length; offset += PACKET) {
           if (own[offset] !== SYNC) continue;
+          // PAT・PMT・ECM・EIT のようなセクションは掛からないので数えない (割合が下がって、復号できたように見える)
+          if (!media.has(((own[offset + 1]! & 0x1f) << 8) | own[offset + 2]!))
+            continue;
           // ペイロードの無いパケットはスクランブルの対象にならない
           if ((own[offset + 3]! & 0x10) === 0) continue;
           count.total++;
@@ -650,10 +652,8 @@ function saveDecode(
  * カードが答えた行 (`code` がある) の状態は変えない (`saveDecode`)
  */
 export async function noteDecoded(serviceId: number): Promise<void> {
-  const card = await cardStatus();
-  const cardId = getActiveCardId(card);
-  if (!card.ok || !cardId) return;
-  saveDecode(cardId, serviceId, true);
+  const cardId = await usableCardId();
+  if (cardId !== null) saveDecode(cardId, serviceId, true);
 }
 
 /**

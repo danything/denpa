@@ -901,7 +901,7 @@ export const niconicoLink = sqliteTable("niconico_link", {
 });
 
 /**
- * **ロゴを取りに行った記録** (`logo-record.ts`)。設定の「その他」の「ロゴの取得を記録する」(`recordLogo`) がオンの間だけ、
+ * **ロゴを取得した記録** (`logo-record.ts`)。設定の「その他」の「ロゴの取得を記録する」(`recordLogo`) がオンの間だけ、
  * 当たりの中継で待つたびに 1 行足す。衛星のロゴはダウンロードの期間にしか流れず、期間がいつ来るかは分からないので、
  * その来方 (間隔・長さ) を実測で知るためのもの (docs/logo.md「ロゴの取得を記録する」)。
  * 新しい順で `LOGO_RECORD_KEEP` 行・`LOGO_RECORD_DAYS` 日ぶんまで残し、古いものから消す
@@ -914,7 +914,7 @@ export const logoRecords = sqliteTable(
     started_at: integer("started_at").notNull(),
     /** 開いた中継 (`BS15:16625` など) */
     channel: text("channel").notNull(),
-    /** 取りに行った経緯。`wait` = 空いたときに自分で開いた、`now` = 「ロゴをいますぐ集める」 */
+    /** 取得した経緯。`wait` = 空いたときに自分で開いた、`now` = 「ロゴをいますぐ集める」 */
     origin: text("origin").$type<"wait" | "now">().notNull(),
     /** 開いていた長さ (ms) */
     opened_ms: integer("opened_ms").notNull(),

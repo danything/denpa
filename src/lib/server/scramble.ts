@@ -113,7 +113,7 @@ const CARD_READER = object({
   active: boolean,
   /** このカードで復号しているチューナー */
   tuners: array(string),
-  /** 覗けなかった理由。挿さっていないだけなら無い */
+  /** カードを読めなかった理由。挿さっていないだけなら無い */
   error: optional(string),
   /** 使わない設定のリーダー。開いていないので、カードの有無も分からない */
   disabled: optional(boolean),
