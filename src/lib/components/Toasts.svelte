@@ -8,7 +8,7 @@
   }
 
   /**
-   * 予約の返事に付いた知らせ (`warning`。有料の番組がスクランブルのまま録れるかもしれない) をトーストの形に。無ければ空
+   * 予約の返事に付いた注意の文 (`warning`。有料の番組がスクランブルのまま録れるかもしれない) を `Notice` に変換する。無ければ空
    */
   export function warningNotice(form: unknown, key: string): Notice[] {
     if (form === null || typeof form !== "object" || !("warning" in form))
