@@ -35,6 +35,7 @@ const {
   noteDecoded,
   noteStillScrambled,
   paidAllowed,
+  reserveWarning,
   testDecode,
   toMjd,
 } = await import("./contracts");
@@ -1004,6 +1005,33 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
     expect(rows.get(2)?.state).toBe("unsubscribed");
     expect(rows.get(2)?.decodeOk).toBe(false);
     expect(paidAllowed()(2)).toBe(false);
+  });
+
+  test("手で予約した有料の番組が録ってよい局でなければ、理由を付けて知らせる", () => {
+    // 局 n の番組は n * 1000 + 1 (`airing`)。7 だけ無料の番組
+    for (const id of [1, 2, 3, 4, 5, 6, 7]) airing(id, id === 7);
+    row(1, { code: 0x0800 });
+    row(2, { state: "expired", code: 0 });
+    row(3, { state: "unsubscribed", code: 0 });
+    row(4, { state: "unsubscribed", code: null, decode_ok: false });
+    row(5, {
+      code: null,
+      decode_ok: true,
+      decoded_at: Date.now() - DECODE_VALID_MS - 60_000,
+    });
+    // 6 は行が無い
+    const warning = (id: number) => reserveWarning(id * 1000 + 1);
+    expect(warning(1)).toBeNull();
+    expect(warning(2)).toContain("契約の期限が切れている");
+    expect(warning(3)).toContain("未契約");
+    expect(warning(4)).toContain("未契約");
+    expect(warning(5)).toContain("契約を確かめていない");
+    expect(warning(6)).toContain("契約を確かめていない");
+    expect(warning(7)).toBeNull();
+    // 番組表に無い番組は知らせない
+    expect(reserveWarning(99_999)).toBeNull();
+    for (const id of [2, 3, 4, 5, 6])
+      expect(warning(id)).toContain("スクランブルのまま残ることがあります");
   });
 
   test("有料の番組を復号できて録れたら、復号テストと同じく契約中にする。カードが答えた行の状態は変えない", async () => {

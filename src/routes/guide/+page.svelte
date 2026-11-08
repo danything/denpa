@@ -18,6 +18,7 @@
   import ProgramActions from "#lib/components/ProgramActions.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
+  import Toasts, { warningNotice } from "#lib/components/Toasts.svelte";
   import {
     badgeClass,
     channelNumber,
@@ -661,6 +662,9 @@
     };
   });
 </script>
+
+<!-- 予約できたが、有料の番組がスクランブルのまま録れるかもしれない。詳細は閉じているので画面の通知に出す -->
+<Toasts notices={warningNotice(form, "reserve-warning")} source={form} />
 
 <!--
     **表は画面の残りをぜんぶ使う。** 枠 (カード) で囲まず、本文の余白も打ち消して

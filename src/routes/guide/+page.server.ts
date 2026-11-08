@@ -2,6 +2,7 @@ import { fail } from "@sveltejs/kit";
 
 import { channelNotice } from "#lib/channel-notice.js";
 import { channelAlert } from "#lib/server/channel-alert.js";
+import { reserveWarning } from "#lib/server/contracts.js";
 import { serviceCounts, watchableServices } from "#lib/server/epg.js";
 import {
   broadcastDayStart,
@@ -87,8 +88,13 @@ export const actions = {
    * 「どれで決まったのか」が分からなくなる
    */
   reserve: async ({ request }) => {
-    const refused = await reserveFromForm(await request.formData());
+    const form = await request.formData();
+    const refused = await reserveFromForm(form);
     if (refused !== null) return fail(400, { message: refused });
-    return { success: true };
+    // 有料の番組で、録ってよい局と確かめていなければ知らせる (予約はそのまま。`contracts.reserveWarning`)
+    return {
+      success: true,
+      warning: reserveWarning(Number(form.get("programId"))),
+    };
   },
 };
