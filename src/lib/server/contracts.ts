@@ -471,6 +471,42 @@ export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {
 }
 
 /**
+ * **手で予約した有料の番組が、スクランブルのまま録れるかもしれないときの知らせ** (番組表・検索の「予約」)。
+ * 予約は断らない (手で録ると決めたのは人なので)。録ってよい局 (`paidAllowed`) でなければ、理由を付けた文を返す。
+ * 無料の番組と、番組表に無い番組は null
+ */
+export function reserveWarning(
+  programId: number,
+  now = Date.now(),
+): string | null {
+  const program = orm()
+    .select({ serviceId: programs.service_id, isFree: programs.is_free })
+    .from(programs)
+    .where(eq(programs.id, programId))
+    .get();
+  if (program === undefined || program.isFree) return null;
+  if (paidAllowed(now)(program.serviceId)) return null;
+  const rows = orm()
+    .select({
+      state: cardContracts.state,
+      code: cardContracts.code,
+      decodeOk: cardContracts.decode_ok,
+    })
+    .from(cardContracts)
+    .where(eq(cardContracts.service_id, program.serviceId))
+    .all();
+  const tail = "録画がスクランブルのまま残ることがあります";
+  // カードが期限切れと答えた
+  if (rows.some((row) => row.code !== null && row.state === "expired"))
+    return `予約しました。この局は契約の期限が切れているため、${tail}`;
+  // カードが契約は無いと答えたか、復号を試して掛かったままだった
+  if (rows.some((row) => row.code !== null || row.decodeOk === false))
+    return `予約しました。この局は未契約のため、${tail}`;
+  // 行が無い、カードに聞けず復号の結果も無いか古い
+  return `予約しました。この局の契約を確かめていないため、${tail}。設定の「受信」にある「有料契約を確認」で確かめられます`;
+}
+
+/**
  * **有料の番組の録画が、復号し直しても掛かったまま終わった。** 復号テストで契約中としていた局を未契約に下げる
  * (`encoder.ts`)。契約が切れたあとも 31 日待たずに、次の回から録らなくなる。
  *

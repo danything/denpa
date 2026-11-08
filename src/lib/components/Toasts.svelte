@@ -2,9 +2,20 @@
   export interface Notice {
     /** どの通知か。テストの目印も兼ねる (`data-testid`) */
     key: string;
-    /** 見た目。error だけは自分では消えない */
-    kind: "error" | "info" | "success";
+    /** 見た目。error と warning は自分では消えない */
+    kind: "error" | "warning" | "info" | "success";
     text: string;
+  }
+
+  /**
+   * 予約の返事に付いた知らせ (`warning`。有料の番組がスクランブルのまま録れるかもしれない) をトーストの形に。無ければ空
+   */
+  export function warningNotice(form: unknown, key: string): Notice[] {
+    if (form === null || typeof form !== "object" || !("warning" in form))
+      return [];
+    const { warning } = form as { warning: unknown };
+    if (typeof warning !== "string" || warning === "") return [];
+    return [{ key, kind: "warning", text: warning }];
   }
 
   /**
@@ -83,8 +94,8 @@
   $effect(() => {
     void ids;
     const timers = untrack(() => notices)
-      // 失敗は自分では消さない。読み終わる前に消えると、何が起きたのか分からなくなる
-      .filter((notice) => notice.kind !== "error")
+      // 失敗と注意は自分では消さない。読み終わる前に消えると、何が起きたのか分からなくなる
+      .filter((notice) => notice.kind !== "error" && notice.kind !== "warning")
       .map((notice) => setTimeout(() => dismiss(notice.key), AUTO_HIDE));
     return () => {
       for (const timer of timers) clearTimeout(timer);
