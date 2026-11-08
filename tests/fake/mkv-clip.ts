@@ -128,11 +128,8 @@ export function mkvFromClip(
       ),
       str(0x536e, audioName),
       str(0x22b59c, "jpn"),
-      el(
-        0xe1,
-        f64(0xb5, audio.sampleRate || 48000),
-        u(0x9f, audio.channels || 2),
-      ),
+      // 作り置きの音は 48kHz・2ch (読む側は中身から読むので、ここは形だけ)
+      el(0xe1, f64(0xb5, 48000), u(0x9f, 2)),
     ),
   );
   const info = el(
