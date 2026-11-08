@@ -243,19 +243,19 @@ export class Playout<T extends Chunk> {
 
   /**
    * 選局し直したとき・録画で飛んだとき。**前の音は 1 つも残さない。**
-   * `from` (90kHz。届く音と同じ物差し) を渡すと、追っかけ (`follow`) はそこから鳴らし始める
+   * 追っかけ (`follow`) で鳴らし始める所は `aim` で決める
    */
-  reset(from: number | null = null): void {
+  reset(): void {
     this.running = false;
     this.chunks = [];
     this.overSince = Number.NaN;
-    this.resumeAt = from;
+    this.resumeAt = null;
     this.finished = false;
     this.finishedAt = Number.NaN;
   }
 
   /**
-   * 鳴らし始める所を決め直す (`reset` の `from` と同じ)。**物差しを届いた音に合わせてから渡すとき**。
+   * 追っかけで鳴らし始める所を決める (90kHz。届く音と同じ物差し)。
    * 放送の PTS は一周するので、届いた最初のコマの近くに伸ばしてから決める (`engine.ts`)
    */
   aim(from: number): void {

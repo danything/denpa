@@ -123,8 +123,6 @@ describe("Fmp4Video (描く大きさ)", () => {
     width: 1440,
     height: 1080,
     ...(displayWidth === undefined ? {} : { displayWidth }),
-    channels: 0,
-    sampleRate: 0,
     defaults: { duration: 1500, size: 0, flags: 0 },
   });
 

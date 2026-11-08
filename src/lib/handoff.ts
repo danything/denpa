@@ -15,7 +15,7 @@ export const HANDOFF_LEAD = 3;
 /** 裏がこれだけ (ms) たっても入れ替えられなければ、裏をやめる (呼ぶ側は作り直しに戻す) */
 export const HANDOFF_GIVE_UP = 15_000;
 /** 位置のずれを同じとみなす幅 (秒。30 コマ/秒の 1 コマ強) */
-export const HANDOFF_SLACK = 0.05;
+const HANDOFF_SLACK = 0.05;
 /** 表が詰まってこれだけ (ms) 進まなければ、先で待たせるのをやめて、表の位置で入れ替える */
 export const HANDOFF_STUCK = 2_000;
 

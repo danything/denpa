@@ -12,6 +12,7 @@
 import { cssColor, type Rgba } from "./clut";
 import { parseUrl } from "./css";
 import type { BmlDocument, BmlElement, BmlText } from "./document";
+import { fontIdOf } from "./drcs";
 import { isDrcs, toDisplay } from "./euc";
 import { visibleFrames } from "./mng";
 import type { Computed } from "./style";
@@ -294,9 +295,9 @@ export class Renderer {
 
   private family(name: string): string {
     const fonts = this.host.fonts;
-    if (name.includes("角ゴシック")) return fonts.square;
-    if (name.includes("太丸ゴシック")) return fonts.boldRound;
-    return fonts.round;
+    // 字体の見分けは DRCS と同じ (`drcs.ts` の `fontIdOf`。1 丸ゴシック・2 角ゴシック・3 太丸ゴシック)
+    const id = fontIdOf(name);
+    return id === 2 ? fonts.square : id === 3 ? fonts.boldRound : fonts.round;
   }
 
   private apply(

@@ -88,6 +88,7 @@ import {
   type Tuned,
   type YieldedRecording,
 } from "#lib/live.js";
+import { separateLiveAudio } from "#lib/native-audio-choice.js";
 import { RawEngine } from "#lib/raw/engine.js";
 import type { GrabSize, RawInput } from "#lib/raw/messages.js";
 import { NativeAudio } from "#lib/raw/native-audio.js";
@@ -276,12 +277,11 @@ function inPictureInPicture(): boolean {
 
 /**
  * 速さの寄せ方 (`ts/pacing.ts` の `Steering`)。**Safari (Apple の WebKit) だけ、速さを触る回数を減らす** (`STEADY`)。
- * iPad と iPhone はどのブラウザも中身が WebKit なので、ここに入る。
+ * iPad と iPhone はどのブラウザも中身が WebKit なので、ここに入る。見分け方は音を別に鳴らすかと同じ (`native-audio-choice.ts`)。
  * ほかのブラウザも、画面が隠れている間は `STEADY` にする (`steeringWhen`)
  */
 function chooseSteering(): Steering {
-  if (typeof navigator === "undefined") return SMOOTH;
-  return navigator.vendor === "Apple Computer, Inc." ? STEADY : SMOOTH;
+  return separateLiveAudio() ? STEADY : SMOOTH;
 }
 
 interface LivePlayerOptions {
@@ -304,7 +304,7 @@ interface LivePlayerOptions {
   indoor?: boolean;
   /**
    * ライブで H.265 を出せるか (ライブのエンコーダが GPU のときだけ。サーバが決める。`server/viewing.ts`)。
-   * 追っかけは渡しても使わない (追っかけは H.265 を出さない)
+   * 追っかけは渡しても使わない (段 0 の追っかけは H.265 を出さない。段を下げた変換はサーバが `playable` から選ぶ)
    */
   hevc?: boolean;
 }
@@ -2888,6 +2888,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       compatGaveUp = true;
       if (rawProblem === null && !rawGaveUp) {
         warning = `${reason}。MPEG-2 に切り替えました`;
+        /*
+         * 段を下げていたら段 0 に戻す。下げた段のままだと `stepFields` が `raw` を外し、描けるものの無い
+         * `playable` でまた変換をリクエストする。MPEG-2 に移ったあとは段を動かさない (`adapt`)
+         */
+        asked = 0;
         requestAgain();
         return;
       }

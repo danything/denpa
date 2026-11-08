@@ -5,6 +5,7 @@
  * ここに置く (docs/stream.md「どの形式で流すか」)。
  */
 
+import { HW_CODECS, type HwCodec } from "./hw";
 import { LIVE_CODECS, type LiveCodec } from "./live";
 
 /**
@@ -39,8 +40,8 @@ export function readChoice(value: unknown, hidden: boolean): LiveChoice {
   return "auto";
 }
 
-/** エンコード済みのコーデック (録画の観る画面で選ぶもの) */
-type EncodedCodec = "av1" | "hevc" | "h264";
+/** エンコード済みのコーデック (録画の観る画面で選ぶもの)。並びは GPU でエンコードする順 (`HW_CODECS`) と同じ */
+type EncodedCodec = HwCodec;
 
 /**
  * **「自動」の順。ライブ・追っかけ・録画の観る画面で、この 1 つで決める。** その画面で出せない形式
@@ -64,7 +65,7 @@ export function autoOrder(scene: {
 export function autoOrder(
   scene: "encoded" | { indoor: boolean; compat: boolean },
 ): readonly LiveFormat[] {
-  if (scene === "encoded") return ["av1", "hevc", "h264"];
+  if (scene === "encoded") return HW_CODECS;
   if (scene.compat) return ["av1", "h264", "raw"];
   return scene.indoor
     ? ["raw", "h264", "av1", "hevc"]

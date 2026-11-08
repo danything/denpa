@@ -8,7 +8,6 @@ import {
   cueBefore,
   elementSize,
   MkvDemuxer,
-  opusDops,
   readCues,
   readMkvHead,
 } from "./mkv-media";
@@ -122,13 +121,16 @@ describe("MkvDemuxer", () => {
 });
 
 describe("デコードする側へ渡す形式", () => {
-  test("OpusHead を dOps に直す (opusHead の逆)", () => {
+  test("Opus は OpusHead のまま渡し、デコーダへもそのまま渡る (opusHead)", () => {
     const head = readMkvHead(av1)!;
     const opus = head.tracks[1]!;
-    const dOps = opusDops(opus.config)!;
-    expect(Array.from(opusHead(dOps)!)).toEqual(Array.from(opus.config));
     const track = asFmp4Track(opus, head.scale);
     expect(track?.timescale).toBe(1000);
     expect(track?.codec).toBe("opus");
+    expect(Array.from(opusHead(track!.config)!)).toEqual(
+      Array.from(opus.config),
+    );
+    const short = { ...opus, config: opus.config.slice(0, 18) };
+    expect(asFmp4Track(short, 1)).toBeNull();
   });
 });

@@ -111,7 +111,7 @@ export interface BrowserHost {
 /**
  * getBrowserSupport の APIGroup で「ある」と答えるもの。組の中身は STD-B24 第二編 付属 1 表 11-2 で、
  * **ここで動く関数の組だけ**を挙げる。無いと答えるもの: Com.IP.Connect・Com.IP.Params (PPP)・
- * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.startExtraBrowser・EPG.Basic2 (epgTuneToComponent)。
+ * Ctrl.AppVersion (getResidentAppVersion は null)・Ctrl.NPT (NPT は無く、getNPT は NaN)・Ctrl.startExtraBrowser・EPG.Basic2 (epgTuneToComponent)。
  * EPG.Basic は epgTune が動くので「ある」(予約は失敗を返す。録画の再生中は epgTune も失敗)。
  * AITControlledApp.Start は Hybridcast を開けるときだけ「ある」(`browserSupport`)
  */
@@ -125,7 +125,6 @@ const API_GROUPS = new Set([
   "Com.IP.confirmIP",
   "Ctrl.Basic",
   "Ctrl.Basic2",
-  "Ctrl.NPT",
   "Ctrl.Time",
   "Ctrl.Cache",
   "Ctrl.Cache2",

@@ -7,7 +7,7 @@
  * GPU でエンコードできるコーデック。**並びは小さくなる順 (AV1 → H.265 → H.264)**。主 (`library_path`) を
  * 選ぶ順、端末で観るものを選ぶ順と同じ。**H.265 (`hevc`) は GPU でだけエンコードする** (ソフトウェアの
  * エンコーダを組んでいない。`SOFTWARE_CODECS`)。ライブはライブのエンコーダが GPU のときだけ H.265 を出し、
- * 追っかけは出さない (`#lib/live.ts` の `LiveCodec`)
+ * 段 0 の追っかけは出さない (`#lib/live.ts` の `LiveCodec`)
  */
 export const HW_CODECS = ["av1", "hevc", "h264"] as const;
 export type HwCodec = (typeof HW_CODECS)[number];

@@ -240,7 +240,7 @@ export function frameMessage(data: unknown): FrameMessage | null {
 
 /**
  * リモコン (AribKeyCode) を受信機のキー (KeyboardEvent の key と keyCode) に。
- * 戻る (19) と d (20) は null (アプリを閉じる)
+ * 対応の無いキーは null (アプリに渡さない)。戻る (19) と d (20) は、呼ぶ側 (`HybridcastFrame.svelte`) が先に受けてアプリを閉じる
  */
 export function receiverKey(
   code: number,

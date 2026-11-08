@@ -32,6 +32,7 @@ import {
   readBlock,
   SEGMENT,
   SIMPLE_BLOCK,
+  text,
   TIMESTAMP,
   TIMESTAMP_SCALE,
   TRACK_ENTRY,
@@ -55,9 +56,6 @@ const LANGUAGE = 0x22b59c;
 const VIDEO = 0xe0;
 const PIXEL_WIDTH = 0xb0;
 const PIXEL_HEIGHT = 0xba;
-const AUDIO = 0xe1;
-const SAMPLING_FREQUENCY = 0xb5;
-const CHANNELS = 0x9f;
 const REFERENCE_BLOCK = 0xfb;
 const CUES = 0x1c53bb6b;
 const CUE_POINT = 0xbb;
@@ -102,12 +100,7 @@ export interface MkvTrack {
   language: string;
   width: number;
   height: number;
-  channels: number;
-  sampleRate: number;
 }
-
-const text = (bytes: Uint8Array) =>
-  new TextDecoder().decode(bytes).replace(/\0+$/, "");
 
 function readTrack(body: Uint8Array): MkvTrack {
   const track: MkvTrack = {
@@ -121,8 +114,6 @@ function readTrack(body: Uint8Array): MkvTrack {
     language: "",
     width: 0,
     height: 0,
-    channels: 0,
-    sampleRate: 0,
   };
   for (const child of children(body)) {
     if (child.id === TRACK_NUMBER) track.number = uint(child.body);
@@ -139,12 +130,6 @@ function readTrack(body: Uint8Array): MkvTrack {
       for (const v of children(child.body)) {
         if (v.id === PIXEL_WIDTH) track.width = uint(v.body);
         else if (v.id === PIXEL_HEIGHT) track.height = uint(v.body);
-      }
-    } else if (child.id === AUDIO) {
-      for (const a of children(child.body)) {
-        if (a.id === CHANNELS) track.channels = uint(a.body);
-        else if (a.id === SAMPLING_FREQUENCY)
-          track.sampleRate = Math.round(float(a.body));
       }
     }
   }
@@ -173,40 +158,21 @@ function readTracks(body: Uint8Array): MkvTrack[] {
 }
 
 /**
- * OpusHead (Matroska の CodecPrivate) を dOps (MP4 の形式) に書き換える。`ts/fmp4.ts` の `opusHead` の逆。
- * デコードする側 (`raw/fmp4.ts`) は dOps を受け取って OpusHead に直すので、形式を揃えて渡す
+ * デコードする側 (`raw/fmp4.ts`) が受け取る形式にする。コマの時刻は TimestampScale の刻みで渡す。読めない形式なら null。
+ * Opus の CodecPrivate はデコーダが受け取る OpusHead のまま渡す (`ts/fmp4.ts` の `opusHead` がそのまま返す)
  */
-export function opusDops(opus: Uint8Array): Uint8Array<ArrayBuffer> | null {
-  if (opus.length < 19) return null;
-  const v = new DataView(opus.buffer, opus.byteOffset, opus.byteLength);
-  const family = opus[18]!;
-  const table = family === 0 ? new Uint8Array(0) : opus.subarray(19);
-  const out = new Uint8Array(11 + table.length);
-  const o = new DataView(out.buffer);
-  out[1] = opus[9]!; // 出すチャンネル数
-  o.setUint16(2, v.getUint16(10, true)); // 先頭で捨てる標本数
-  o.setUint32(4, v.getUint32(12, true)); // 元の標本化周波数
-  o.setInt16(8, v.getInt16(16, true)); // 音量の補正
-  out[10] = family;
-  out.set(table, 11);
-  return out;
-}
-
-/** デコードする側 (`raw/fmp4.ts`) が受け取る形式にする。コマの時刻は TimestampScale の刻みで渡す。読めない形式なら null */
 export function asFmp4Track(track: MkvTrack, scale: number): Fmp4Track | null {
   if (track.codec === null || track.kind === "other") return null;
-  const config = track.codec === "opus" ? opusDops(track.config) : track.config;
-  if (config === null) return null;
+  // OpusHead は 19 バイトから
+  if (track.codec === "opus" && track.config.length < 19) return null;
   return {
     id: track.number,
     kind: track.kind,
     timescale: 1e9 / scale,
     codec: track.codec,
-    config,
+    config: track.config,
     width: track.width,
     height: track.height,
-    channels: track.channels,
-    sampleRate: track.sampleRate,
     defaults: { duration: 0, size: 0, flags: 0 },
   };
 }
