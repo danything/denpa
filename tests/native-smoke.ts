@@ -329,6 +329,18 @@ for (const kind of gpuKinds) {
       "-c:v",
       ...hw.encoder,
     ]);
+    // QSV の CPU のメモリのまま渡す形 (GPU のメモリへ移せない Kaby Lake などで使う。#2342)
+    if (kind === "qsv") {
+      const sys = hwArgs({ ...way, qsvSystem: true }, codec);
+      tryArgs(`${codec}_${kind} (system memory)`, [
+        ...sys.device,
+        ...source,
+        "-vf",
+        sys.filter.join(","),
+        "-c:v",
+        ...sys.encoder,
+      ]);
+    }
     // AMF の古い世代向けの指定 (高画質の指定が通らない GPU で録画に使う)
     if (kind === "amf") {
       const old = hwArgs({ ...way, amfTranscoding: true }, codec);
