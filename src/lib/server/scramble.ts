@@ -1,4 +1,3 @@
-import { closeSync, openSync, readSync } from "node:fs";
 import { isAbsolute, relative, sep } from "node:path";
 
 import { PACKET, SYNC } from "@danything/arib/psi";
@@ -15,6 +14,7 @@ import {
 } from "../shape";
 import { agentFetch } from "./agent-client";
 import { config } from "./config";
+import { openRecordingSync, type RecordingSyncHandle } from "./recording-io";
 
 /**
  * スクランブルの検出と復号。
@@ -71,9 +71,9 @@ export function isDecoded(path: string): boolean {
 function countPackets(
   path: string,
 ): { total: number; scrambled: number } | null {
-  let fd: number;
+  let file: RecordingSyncHandle;
   try {
-    fd = openSync(path, "r");
+    file = openRecordingSync(path);
   } catch {
     return null;
   }
@@ -85,7 +85,7 @@ function countPackets(
     let offset = 0;
 
     while (total < SAMPLE) {
-      const read = readSync(fd, buffer, 0, buffer.length, offset);
+      const read = file.read(buffer, 0, buffer.length, offset);
       if (read < PACKET) break;
       offset += read;
 
@@ -98,7 +98,7 @@ function countPackets(
     }
     return { total, scrambled };
   } finally {
-    closeSync(fd);
+    file.close();
   }
 }
 

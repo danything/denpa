@@ -19,7 +19,6 @@
  *   二度は読まない。番組表が取り込み直されるまでの間 (チャンネルごとに最大 6 時間) に録り始めたものも
  *   寄せた字を写すので、起動時だけでなく定期的に動かして取りこぼさない。もう全角が入っている録画は読まずに済ませる
  */
-import { open } from "node:fs/promises";
 
 import { type EitEvent, EpgReader } from "@danything/arib/eit";
 import { asc, eq, gt } from "drizzle-orm";
@@ -27,6 +26,7 @@ import { asc, eq, gt } from "drizzle-orm";
 import { foldForSearch, toHalfWidth } from "../fold";
 import { now, orm } from "./db";
 import { emit } from "./events";
+import { openRecording, type RecordingHandle } from "./recording-io";
 import { recordings, services } from "./schema";
 import { store, stored } from "./settings";
 
@@ -149,9 +149,9 @@ export async function readBroadcastText(
   eventId: number,
   wantExtended: boolean,
 ): Promise<BroadcastText | null> {
-  let file: Awaited<ReturnType<typeof open>>;
+  let file: RecordingHandle;
   try {
-    file = await open(path, "r");
+    file = await openRecording(path);
   } catch {
     return null;
   }

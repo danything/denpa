@@ -91,6 +91,12 @@ import {
   videoArgs,
 } from "./live";
 import { openPace, StreamPace } from "./pace";
+import {
+  readRecording,
+  recordingInput,
+  recordingProbeInput,
+  recordingStream,
+} from "./recording-io";
 import { endInput, run } from "./stream";
 import { holdTranscode } from "./transcode";
 
@@ -247,7 +253,7 @@ async function probeMedia(
       "-show_format",
       "-print_format",
       "json",
-      path,
+      ...recordingProbeInput(path),
     ],
     { timeoutMs: PROBE_TIMEOUT, stdout: true },
   );
@@ -316,12 +322,7 @@ function transcodedCodecs(codec: LiveCodec): string {
 
 /** ファイルを少しずつ読むリーダー (`ts/seek.ts`) */
 function reader(path: string): ReadAt {
-  return async (offset, length) =>
-    new Uint8Array(
-      await Bun.file(path)
-        .slice(offset, offset + length)
-        .arrayBuffer(),
-    );
+  return (offset, length) => readRecording(path, offset, length);
 }
 
 /** 尺を出すのに末尾から読む量。最後の映像の PES が入る長さ */
@@ -546,8 +547,7 @@ export function copyArgs(
     ...QUIET,
     ...(from > 0 ? ["-ss", from.toFixed(3)] : []),
     "-copyts",
-    "-i",
-    path,
+    ...recordingInput(path),
     "-map",
     "0:v:0",
     "-map",
@@ -584,8 +584,7 @@ export function fileTranscodeArgs(
     ...video.input,
     ...(from > 0 ? ["-ss", from.toFixed(3)] : []),
     "-copyts",
-    "-i",
-    path,
+    ...recordingInput(path),
     "-map",
     "0:v:0",
     "-map",
@@ -703,8 +702,7 @@ export function audioOnlyArgs(
       ? [
           ...(source.from > 0 ? ["-ss", source.from.toFixed(3)] : []),
           "-copyts",
-          "-i",
-          source.path,
+          ...recordingInput(source.path),
           "-map",
           `0:a:${source.audio}?`,
         ]
@@ -748,8 +746,7 @@ export function fileAudioBody(
         argv: [
           config.ffmpeg,
           ...QUIET,
-          "-i",
-          path,
+          ...recordingInput(path),
           "-map",
           "0:a:0",
           "-vn",
@@ -1167,7 +1164,7 @@ async function audioResponse(
             ),
           }),
         ],
-        input: () => Bun.file(ts.path).slice(mark.at).stream(),
+        input: () => recordingStream(ts.path, mark.at),
       };
     }
   }
@@ -1248,7 +1245,7 @@ async function tsAttempts(
   const mark = await seekFrom(ts, plan.skip, from);
   if (mark === null) return null;
   const offset = tsOffset(mark.pts, sinceHead(mark.pts, ts.head) - plan.skip);
-  const input = () => Bun.file(ts.path).slice(mark.at).stream();
+  const input = () => recordingStream(ts.path, mark.at);
   return withFallback(
     codec,
     true,
@@ -1276,7 +1273,7 @@ async function rawResponse(
   const mark = await seekFrom(ts, plan.skip, from);
   if (mark === null) error(404, "この形式では再生できません");
   const origin = inWrap(ts.head + Math.round(plan.skip * CLOCK));
-  return new Response(Bun.file(ts.path).slice(mark.at).stream(), {
+  return new Response(recordingStream(ts.path, mark.at), {
     headers: {
       "Content-Type": "video/mp2t",
       "Cache-Control": "no-store",
@@ -1376,7 +1373,14 @@ export async function captionArgs(recording: Recording): Promise<{
   const out = ["-c:s", "copy", "-f", "matroska", "pipe:1"];
   if (encoded !== null) {
     return {
-      argv: ["-v", "error", "-i", encoded, "-map", "0:s:0", ...out],
+      argv: [
+        "-v",
+        "error",
+        ...recordingInput(encoded),
+        "-map",
+        "0:s:0",
+        ...out,
+      ],
       path: encoded,
     };
   }
@@ -1388,8 +1392,7 @@ export async function captionArgs(recording: Recording): Promise<{
       "-v",
       "error",
       "-copyts",
-      "-i",
-      ts.path,
+      ...recordingInput(ts.path),
       "-map",
       `${programSpec(aribServiceId(recording.service_id))}:s:0`,
       "-output_ts_offset",

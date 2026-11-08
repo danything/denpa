@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Range } from "../ts/cm-decide";
 import { framer } from "../ts/logo-detect";
 import { config } from "./config";
+import { recordingInput } from "./recording-io";
 import { run } from "./stream";
 
 /**
@@ -266,8 +267,7 @@ function scanArgs(
     "-progress",
     "pipe:2",
     ...before,
-    "-i",
-    input,
+    ...recordingInput(input),
     ...outputs,
   ];
 }

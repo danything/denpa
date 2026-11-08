@@ -75,6 +75,7 @@ import {
 } from "./metadata";
 import { saveRecordedBml } from "./recorded-bml";
 import { recordingSummary, tsHeadOf } from "./recording";
+import { recordingInput } from "./recording-io";
 import { encodeJobs, programs, recordings } from "./schema";
 import { descramble, isDecoded, isScrambled } from "./scramble";
 import { settings } from "./settings";
@@ -455,7 +456,7 @@ export function buildArgs(
   args.push(
     ...inputArgs(inputSkip(seek, options.videoStart), options.probeLead ?? 0),
   );
-  args.push("-i", input);
+  args.push(...recordingInput(input));
   /*
    * チャプター (CM の位置) はここでは入れない。境目はエンコードし終えてから決まるので、どのコーデックも
    * エンコードしたあとに `-c copy` で書き足す (`cm.chapterArgs`)
