@@ -47,6 +47,9 @@ public class TunerSignalTests
     {
         await Assert.That(DvbTuner.Stats(true, Stats(Cnr(1, 1, 25_300), Cnr(1, 1, -35_250))))
             .IsEqualTo(new TunerSignal(true, 25.3, TunerSignal.Db, StrengthDbm: -35.25));
+        // C/N が相対値でも、強度が dBm なら出す
+        await Assert.That(DvbTuner.Stats(true, Stats(Cnr(1, 2, 40_000), Cnr(1, 1, -35_250))))
+            .IsEqualTo(new TunerSignal(true, 40_000, TunerSignal.Raw, StrengthDbm: -35.25));
     }
 
     [Test]

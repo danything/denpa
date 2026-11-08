@@ -380,7 +380,7 @@ ioctl は通り、同期しないだけなので気付きにくい。
 - 読めなかったら `signal` を null にし、その選局では 1 回だけ記録に残す。選局は止めない
 
 形は `{ "locked": true, "cn": 25.3, "unit": "dB", "atTune": false, "strengthDbm": -35.3 }`。`unit` が `raw` なら `cn` は機材のレジスタの値か、DVB のドライバが返した相対値 (0〜65535) のままで、dB ではありません。
-`strengthDbm` は電波の強度 (dBm) で、dBm で返す機材 (DVB のドライバが `FE_SCALE_DECIBEL` で返すもの・CECH-ZD1 J) だけ入り、ほかは null。古いエージェントはこの鍵を返さないので、サーバは無いものも null と同じに読む (古いサーバは読まずに捨てる)。
+`strengthDbm` は電波の強度 (dBm) で、dBm で返す機材 (DVB のドライバが `FE_SCALE_DECIBEL` で返すもの・CECH-ZD1 J) だけ入り、ほかは null。古いエージェントは `strengthDbm` を返さないので、サーバは無いものも null と同じに読む (古いサーバは読まずに捨てる)。
 `atTune` は選局したときに測った値 (px4d)。測れない機材と空いているチューナーは `signal: null` です。どの機材で何が出るかは [tuners.md](tuners.md#信号レベル)。
 
 ### px4-userland の作り
