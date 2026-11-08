@@ -59,7 +59,7 @@ var config = Config.FromEnvironment();
  */
 if (args is ["--pair"])
 {
-    // 標準出力には URL だけを出す (スクリプトで読めるように)。鍵を作ったなどの知らせは標準エラーへ
+    // 標準出力には URL だけを出す (スクリプトで読めるように)。鍵を作ったなどのメッセージは標準エラーへ
     var stdout = Console.Out;
     Console.SetOut(Console.Error);
     stdout.WriteLine(AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN")).PairUrl(port));
@@ -587,7 +587,7 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
     {
         Keys.Local.Release(disabled);
         // チューナーとして使っている機材は開いたまま (チューナーが閉じるときに閉じる)
-        // CECH-ZD1 J が設定に 1 台だけなら、チューナーは挿し替えた先のポートを開いている (TunerPool.Acquire と同じく Zd1j.Follow で解く)
+        // CECH-ZD1 J が設定に 1 台だけなら、チューナーは挿し替えた先のポートを開いている (TunerPool.Acquire と同じく Zd1j.Follow で求める)
         var follow = pool.Tuners.Count(spec => Zd1j.Is(spec.Device)) == 1;
         var used = pool.Tuners.Where(spec => !spec.Disabled && spec.Device is not null)
             .Select(spec => follow && Zd1j.Parse(spec.Device!) is { } configured ? $"{Zd1j.Scheme}{Zd1j.Follow(configured)}" : spec.Device!)

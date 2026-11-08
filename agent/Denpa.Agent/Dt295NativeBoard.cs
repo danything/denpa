@@ -221,7 +221,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
 
     /// <summary>
     /// 0xF10114 のビット 21 (0x00200000) を足す (読み・足す・書き)。仕様書に 0xF10114 の記述は無い。実機の常駐イメージが I2C のブロックを動かす
-    /// SERVICE で 0x80000000 から 0x80200000 にした (回す写し)。I2C の準備の直前に呼ぶ。読み戻しは記録に出し、失敗にはしない。
+    /// SERVICE で 0x80000000 から 0x80200000 にした。I2C の準備の直前に呼ぶ。読み戻しは記録に出し、失敗にはしない。
     /// 元の値を返すので、終わりに <see cref="RestoreF10114"/> で戻す
     /// </summary>
     public uint SetUpF10114()
@@ -418,7 +418,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     public void ResetPumpState() => link.WriteBytes(Dt295NativePrograms.Frame + Dt295NativePrograms.StateRp, new byte[16]);
 
     /// <summary>取り込みの元の値</summary>
-    public sealed record CaptureSaved(uint[] Table, uint R1900404, uint R1900020 = 0);
+    public sealed record CaptureSaved(uint[] Table, uint R1900404, uint R1900020);
 
     private uint ReadWidth(uint address, int width) => width == 2 ? link.Read16(address) : link.Read32(address);
 

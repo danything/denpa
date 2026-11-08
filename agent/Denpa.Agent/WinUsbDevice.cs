@@ -373,9 +373,10 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                 for (var i = 0; i < depth; i++)
                 {
                     var overlapped = (NativeOverlapped*)NativeMemory.AllocZeroed((nuint)sizeof(NativeOverlapped));
+                    // 先に入れておく (イベントを作れずに投げても、片付けで解放されるように)
+                    _overlapped[i] = overlapped;
                     overlapped->EventHandle = CreateEventW(0, 1, 0, null);
                     if (overlapped->EventHandle == 0) throw owner.Failure("TS の読みの用意ができません");
-                    _overlapped[i] = overlapped;
                     _buffers[i] = (byte*)NativeMemory.Alloc((nuint)transferSize);
                 }
                 for (var i = 0; i < depth; i++) Submit(i);

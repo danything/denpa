@@ -645,7 +645,7 @@ public sealed class Mb86h47 : II2c
         }
     }
 
-    /// <summary>9.3 流し始め。準備の残りを済ませ、受信側と書き手を動かす。復調器はもう出力していること</summary>
+    /// <summary>9.3 流し始め。準備の残りを済ませ、受信側と書き込み側を動かす。復調器はもう出力していること</summary>
     public void StartStream()
     {
         lock (_gate)
@@ -662,7 +662,7 @@ public sealed class Mb86h47 : II2c
         }
     }
 
-    /// <summary>9.5 流し終わりの 1〜3 (コア 0・受信側・書き手を止める)。出力のハイインピーダンスと読みの取り消しは呼ぶ側</summary>
+    /// <summary>9.5 流し終わりの 1〜3 (コア 0・受信側・書き込み側を止める)。出力のハイインピーダンスと読みの取り消しは呼ぶ側</summary>
     public void StopStream()
     {
         lock (_gate)

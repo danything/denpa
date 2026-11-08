@@ -39,7 +39,7 @@ public static class Dt295
     /// <summary>
     /// 公式 INF (<c>pxmb86m0x_usb.inf</c>) に並ぶ機材。INF はどれにも同じ idle・TRC イメージ 7 つを入れ、どのイメージを使うかは
     /// 書いていない。DT295 W・DT420・DT410 には DT295 に無い基板の設定 (CapacitanceOfSystem1・2) が付き、その扱いは仕様書に無い。
-    /// PIX-DTxxx は SPI モードの構成で、TS の出口の登録も 1 つだけ。どれも中身を推し量らずに未確認として断る
+    /// PIX-DTxxx は SPI モードの構成で、TS のエンドポイントの登録も 1 つだけ。どれも中身を推し量らずに未確認として断る
     /// </summary>
     public static readonly IReadOnlyList<Dt295Model> Family =
     [

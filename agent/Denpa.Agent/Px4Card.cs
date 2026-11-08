@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 namespace Denpa.Agent;
 
 /// <summary>
-/// px4d の内蔵カードリーダー。**px4d の制御ソケットに直に APDU を投げる。**
+/// px4d の内蔵カードリーダー。**px4d の制御ソケットに直に APDU を送る。**
 ///
 /// <para>
 /// px4-userland のカードは px4d が持っていて (T=1 の枠組みも向こう)、同梱の IFD ハンドラと

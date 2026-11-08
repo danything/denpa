@@ -142,7 +142,8 @@ public class B25Tests
                 start = 5 + adaptation;
             }
             packet[3] = (byte)((adaptation >= 0 ? 0x20 : 0) | (start < 188 ? 0x10 : 0) | Counter(pid));
-            if (pes) new byte[] { 0x00, 0x00, 0x01, 0xE0 }.CopyTo(packet, start);
+            // 中身が 4 バイトに満たなければ、入るぶんだけ書く
+            if (pes) new byte[] { 0x00, 0x00, 0x01, 0xE0 }.AsSpan(0, Math.Min(4, 188 - start)).CopyTo(packet.AsSpan(start));
             Plain.AddRange(packet);
 
             if (generation is { } g)
@@ -549,6 +550,27 @@ public class B25Tests
         await Assert.That(descrambler.Undecodable).IsEqualTo(4);
         await Assert.That(descrambler.Decoded).IsEqualTo(4);
         await Assert.That(descrambler.LastError).IsNotNull();
+    }
+
+    /// <summary>
+    /// **中身が 3 バイトに満たず確かめられない PES の先頭は、前の PES が合わなかったことを引き継がない。** その PES は
+    /// 今の鍵で復号する (前の PES の残りと同じに扱うと、次の PES の先頭まで掛かったまま流してしまう)
+    /// </summary>
+    [Test]
+    public async Task 確かめられない短いPESの先頭からは_前のPESの不一致を引き継がない()
+    {
+        var ts = Channel().Ecm(EcmPid, 1).Payload(VideoPid, 9, pes: true).Videos(1, 9);
+        var garbled = ts.Wire.Count;
+        // アダプテーションが 182 バイトで、中身は 1 バイトだけ
+        ts.Payload(VideoPid, 1, pes: true, adaptation: 182).Videos(2, 1);
+        var descrambler = new Descrambler(new Cards());
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        byte[] expected = [.. ts.Wire.Take(garbled), .. Expected(ts).Skip(garbled)];
+        await Assert.That(Diff(output, expected)).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(2);
+        await Assert.That(descrambler.Decoded).IsEqualTo(3);
     }
 
     /// <summary>

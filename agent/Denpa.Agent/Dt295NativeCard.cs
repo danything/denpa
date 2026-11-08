@@ -57,7 +57,7 @@ public sealed class Dt295NativeCard : ICardLink
     }
 
     /// <summary>端子の読み値。F00223 (極性)・F00224・F0022E は 1 バイトずつ (仕様書 §10)</summary>
-    public (byte Polarity, byte Insert, byte Other) Pins()
+    private (byte Polarity, byte Insert, byte Other) Pins()
     {
         var a = Link.Read32(PinWordA);
         var b = Link.Read32(PinWordB);

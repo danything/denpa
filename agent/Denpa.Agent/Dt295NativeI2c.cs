@@ -29,7 +29,7 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
     private bool _checkIdle = true;
 
     /// <summary>1 バイトを待つ上限</summary>
-    public TimeSpan ByteTimeout { get; init; } = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan ByteTimeout = TimeSpan.FromMilliseconds(200);
 
     /// <summary>準備 (<see cref="Prepare"/>) で書く USB コアのレジスタ。常駐イメージが I2C を動かし始めるとき、これらが変わるのを実機で観測した。呼ぶ側が <see cref="Dt295NativeLink.AllowedCoreWrites"/> に入れておく</summary>
     public static readonly uint[] ClockRegisters = [0xFD8010, 0xFD8014, 0xFD80B0, 0xFD80C0];

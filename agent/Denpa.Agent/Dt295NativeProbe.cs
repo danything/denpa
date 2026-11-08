@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Denpa.Agent;
 
 /// <summary>
-/// PIX-DT295 を確かめる入口。**サーバを立てず、機材を 1 回だけ動かして統計を出す。**
+/// PIX-DT295 を確かめるコマンド。**サーバを立てず、機材を 1 回だけ動かして統計を出す。**
 ///
 /// <code>
 /// denpa-agent --dt295-probe --channel T25 --seconds 5

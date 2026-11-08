@@ -30,7 +30,6 @@ public static class DeviceProbe
 {
     // linux/dvb/frontend.h。実機で測った値をそのまま置く
     private const uint FeGetInfo = 0x80a86f3d;
-    private const uint FeGetProperty = 0x80106f53;
     private const uint DtvEnumDelsys = 44;
 
     private const int FrontendInfoSize = 168;
@@ -104,7 +103,7 @@ public static class DeviceProbe
             fixed (byte* headerAt = header)
             {
                 BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
-                if (Sys.Ioctl(fd, FeGetProperty, (nint)headerAt) >= 0 && TypesFor(ParseDelivery(property)) is { Length: > 0 } types)
+                if (Sys.Ioctl(fd, DvbTuner.FeGetProperty, (nint)headerAt) >= 0 && TypesFor(ParseDelivery(property)) is { Length: > 0 } types)
                 {
                     return types;
                 }
