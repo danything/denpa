@@ -682,6 +682,8 @@ public sealed class TunerPool(
                     ["rank"] = ranks[index],
                     ["name"] = spec.Name,
                     ["types"] = Json.Strings(spec.Types),
+                    // 機材が受けられる種別 (見つけていない機材は null)。denpa はこれに無い種別を設定で選ばせない (DeviceProbe.Receivable)
+                    ["receivable"] = DeviceProbe.Receivable(spec.Device) is { } receivable ? Json.Strings(receivable) : null,
                     ["disabled"] = spec.Disabled,
                     // 画面がそのまま編集できるように、定義もいっしょに返す
                     ["device"] = spec.Device,

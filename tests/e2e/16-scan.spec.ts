@@ -426,9 +426,37 @@ test.describe("チューナーの設定", () => {
     await expect(card.getByTestId("settings-error")).toContainText(
       "種別を 1 つ以上",
     );
+    // 衛星を使わないときは種別を外すのではなく「使う」をオフにする、と案内する (#2386)
+    await expect(card.getByTestId("settings-error")).toContainText(
+      "「使う」をオフに",
+    );
     await expect(
       card.locator('input[name^="type.0."]:checked').first(),
     ).toBeChecked();
+  });
+
+  /*
+   * **機材が受けられない種別は選ばせない。** BS/CS 専用の受信機に GR を入れて保存でき、その台に割り振られた
+   * 地上波のライブ視聴がエージェントの選局で断られ続けた (#2386)。画面を通さずに送っても保存で断る
+   */
+  test("機材が受けられない種別は選べず、送っても断る", async ({ page }) => {
+    await goto(page, "/settings/reception");
+
+    const card = page.getByTestId("tuner-section");
+    // 偽エージェントの adapter0 は BS/CS、adapter1 は GR だけを受けられる
+    await expect(card.locator('input[name="type.0.GR"]')).toBeDisabled();
+    await expect(card.locator('input[name="type.0.BS"]')).toBeEnabled();
+    await expect(card.locator('input[name="type.1.BS"]')).toBeDisabled();
+    await expect(card.locator('input[name="type.1.GR"]')).toBeEnabled();
+
+    // 押せないようにしたのを外して入れても、保存で断って元に戻す
+    const gr = card.locator('input[name="type.0.GR"]');
+    await gr.evaluate((el) => el.removeAttribute("disabled"));
+    await gr.check({ force: true });
+    await expect(card.getByTestId("settings-error")).toContainText(
+      "「地上波」を受信できません",
+    );
+    await expect(gr).not.toBeChecked();
   });
 
   /*

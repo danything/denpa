@@ -1,6 +1,7 @@
 import { type Actions, fail } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 
+import { SERVICE_TYPE_LABEL } from "#lib/format.js";
 import { config } from "#lib/server/config.js";
 import {
   checkContracts as verifyContracts,
@@ -14,11 +15,13 @@ import { recordings } from "#lib/server/schema.js";
 import { cardStatus, putCardReaders } from "#lib/server/scramble.js";
 import {
   type AgentTuner,
+  getTuners,
   putTuners,
   recordingOf,
   type TunerConfig,
   tunerList,
 } from "#lib/server/tuner.js";
+import { unreceivable } from "#lib/tuner-types.js";
 import { CHANNEL_TYPES } from "#lib/types.js";
 
 /** 画面に出す理由 (`Error:` の前置きを付けない) */
@@ -177,6 +180,17 @@ export const actions = {
       .map((index) => slot(index));
     if (form.get("add") !== null) sources.push(slot("add"));
 
+    /*
+     * 機材が受けられる種別 (デバイスごと)。画面は受けられない種別を選ばせないが、ここでも同じものと突き合わせて断る。
+     * エージェントに聞けなければ突き合わせない (送るところで同じく繋がらずに断られる)
+     */
+    const receivable = new Map(
+      (await getTuners().catch((): AgentTuner[] => [])).flatMap(
+        (tuner): [string, AgentTuner["receivable"]][] =>
+          tuner.device === null ? [] : [[tuner.device, tuner.receivable]],
+      ),
+    );
+
     const tuners: TunerConfig[] = [];
     for (const get of sources) {
       const name = String(get("name") ?? "").trim();
@@ -187,7 +201,7 @@ export const actions = {
       );
       if (types.length === 0) {
         return fail(400, {
-          message: `${name}: 受信できる種別を 1 つ以上選んでください`,
+          message: `${name}: 受信できる種別を 1 つ以上選んでください。使わないなら「使う」をオフにしてください`,
         });
       }
       const device = String(get("device") ?? "").trim();
@@ -195,6 +209,12 @@ export const actions = {
         return fail(400, {
           message: `${name}: デバイスのパスを入れてください`,
         });
+      const refused = unreceivable(types, receivable.get(device));
+      if (refused.length > 0) {
+        return fail(400, {
+          message: `${name}: ${refused.map((type) => `「${SERVICE_TYPE_LABEL[type]}」`).join("")}を受信できません`,
+        });
+      }
 
       tuners.push({
         name,

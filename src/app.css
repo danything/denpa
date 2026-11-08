@@ -2463,6 +2463,15 @@ dialog[open] > article {
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
 }
+/* 選べない切り替え (チューナーの機材が受けられない種別) は、押せない日と同じ控えた字にして、乗せても地を付けない */
+.chip:has(input:disabled) {
+  --pico-background-color: transparent;
+  color: var(--dp-muted);
+  cursor: default;
+}
+.chip input[type="checkbox"]:disabled {
+  cursor: default;
+}
 /* 入っているものは塗らず、主の色の太字と字の幅いっぱいの下線。下線は `.pick-line` と同じ疑似要素 1 本 */
 .chip:has(input:checked) {
   color: var(--dp-primary-text);

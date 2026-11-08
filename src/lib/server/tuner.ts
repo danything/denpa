@@ -63,6 +63,11 @@ const AGENT_TUNER = object({
   index: number,
   name: string,
   types: array(CHANNEL_TYPE),
+  /**
+   * 機材が受けられる種別 (エージェントが自動検出で見つけたもの)。見つけていない機材 (null) と古いエージェント (返さない) は無い。
+   * 設定の「受信できる種別」はこれに無いものを選ばせず、保存でも断る (`unreceivable`)
+   */
+  receivable: optional(array(CHANNEL_TYPE)),
   disabled: boolean,
   /**
    * エージェントが選ぶ順。小さいほど先に使う。無効なチューナーは null。予約の割り振りはこの順どおりに

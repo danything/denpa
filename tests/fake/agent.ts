@@ -301,6 +301,9 @@ function tunerStatus() {
       ...plain,
       rank: plain.disabled ? null : plain.index,
       pin: plain.device ?? plain.name,
+      // 機材が受けられる種別は、刺さっている機材の種別。刺さっていないデバイスは分からない (本物の `DeviceProbe.Receivable`)
+      receivable:
+        plugged().find((one) => one.device === plain.device)?.types ?? null,
     };
     /*
      * 塞がっているのは**衛星のチューナー**にしてある。地上波を塞ぐと、
