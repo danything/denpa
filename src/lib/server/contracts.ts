@@ -698,21 +698,24 @@ export function reserveWarning(
     .get();
   if (program === undefined || program.isFree) return null;
   if (paidAllowed(now)(program.serviceId)) return null;
-  const rows = orm()
-    .select({
-      state: cardContracts.state,
-      code: cardContracts.code,
-      decodeOk: cardContracts.decode_ok,
-    })
-    .from(cardContracts)
-    .where(eq(cardContracts.service_id, program.serviceId))
-    .all();
+  // 状態の決め方はダイアログと同じ (`contractStatus`)。カードが複数あれば、期限切れ → 未契約 → 確かめていない の順に強いほうを出す
+  const statuses = new Set(
+    orm()
+      .select({
+        state: cardContracts.state,
+        code: cardContracts.code,
+        decodeOk: cardContracts.decode_ok,
+        decodedAt: cardContracts.decoded_at,
+      })
+      .from(cardContracts)
+      .where(eq(cardContracts.service_id, program.serviceId))
+      .all()
+      .map((row) => contractStatus(row, now)),
+  );
   const tail = "録画がスクランブルのまま残ることがあります";
-  // カードが期限切れと答えた
-  if (rows.some((row) => row.code !== null && row.state === "expired"))
+  if (statuses.has("expired"))
     return `予約しました。この局は契約の期限が切れているため、${tail}`;
-  // カードが契約は無いと答えたか、復号を試して掛かったままだった
-  if (rows.some((row) => row.code !== null || row.decodeOk === false))
+  if (statuses.has("unsubscribed"))
     return `予約しました。この局は未契約のため、${tail}`;
   // 行が無い、カードに聞けず復号の結果も無いか古い
   return `予約しました。この局の契約を確かめていないため、${tail}。設定の「受信」にある「有料契約を確認」で確かめられます`;
