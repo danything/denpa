@@ -20,7 +20,7 @@ DVB で動いている S1UD を奪うのは論外です。siano-ts 自身も、
 カーネルのドライバが使っているデバイスを断ります (終了コード 4。Khronos31/siano-userland#9)。
 
 **カーネル 6.6 以降の DVB では、受信している間ずっとカーネルの警告がログに出続けます** (`smsdvb` の統計を書くたびに `sysfs_emit_at` の WARN)。
-ログが 1 日に数十 GB 増え、ディスクを埋めた報告があります (Ubuntu の Launchpad #2162139)。統計のファイル (`CONFIG_SMS_SIANO_DEBUGFS`) を
+ログが数百 GB まで増えてディスクを埋めた報告があります (Ubuntu の Launchpad #2162139)。統計のファイル (`CONFIG_SMS_SIANO_DEBUGFS`) を
 有効にして組んだカーネル (Ubuntu など) で起きます。直すパッチは linux-media に送ってあり、取り込まれるまでは
 下の手順で siano-userland に切り替えると避けられます。
 
