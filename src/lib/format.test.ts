@@ -14,6 +14,7 @@ import {
   percent,
   recordedDuration,
   recordingLeft,
+  signalText,
   splitReaderName,
 } from "./format";
 
@@ -308,5 +309,37 @@ describe("西暦つきの日付", () => {
     expect(fullDate(new Date(2027, 0, 5, 12, 0).getTime())).toBe(
       "2027/1/5(火)",
     );
+  });
+});
+
+describe("受信の状態と C/N と強度", () => {
+  test("強度は dBm で測れたときだけ、C/N の前に出す", () => {
+    expect(
+      signalText({
+        locked: true,
+        cn: 25.3,
+        unit: "dB",
+        atTune: false,
+        strengthDbm: -35,
+      }),
+    ).toBe("同期しています・強度: -35.0 dBm・C/N: 25.3 dB");
+  });
+
+  test("強度の無い古いエージェントの答えは、C/N だけ出す", () => {
+    expect(
+      signalText({ locked: true, cn: 25.3, unit: "dB", atTune: false }),
+    ).toBe("同期しています・C/N: 25.3 dB");
+  });
+
+  test("C/N が測れなくても、強度は出す", () => {
+    expect(
+      signalText({
+        locked: false,
+        cn: null,
+        unit: "dB",
+        atTune: false,
+        strengthDbm: -80.4,
+      }),
+    ).toBe("同期していません・強度: -80.4 dBm");
   });
 });
