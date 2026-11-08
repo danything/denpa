@@ -118,8 +118,9 @@ test.describe("観る画面でその場で流す", () => {
    * サーバに変換させて流す。選んだものは端末ごとに覚え、続きの位置からリクエストする。
    * サーバが混んでいると言えば、変換させずに観られるものを勧める。
    *
-   * 何で観られるかはここで決めて渡す (H.264 のエンコード済みと、AV1 への変換)。Playwright の
-   * Chromium は H.264 を持たないので、H.264 のファイルは読めることにする
+   * 何で観られるかはここで決めて渡す (H.264 のエンコード済みと、AV1 への変換と、元の TS)。Playwright の
+   * Chromium は H.264 を持たないので、H.264 のファイルは読めることにする。H.264 はメニューに並ばない
+   * (`#lib/live-choice.ts` の `HIDDEN_CODECS`) ので、メニューは自動・AV1・MPEG-2 になる
    */
   test("エンコード済みと違うコーデックを選ぶと、続きの位置から変換させて流す", async ({
     page,
@@ -151,6 +152,7 @@ test.describe("観る画面でその場で流す", () => {
             },
             { codec: "h264", way: "stream", codecs: "avc1.640028,mp4a.40.2" },
             { codec: "av1", way: "stream", codecs: "av01.0.08M.08,opus" },
+            { codec: "mpeg2", way: "raw" },
           ],
         },
       }),
@@ -247,6 +249,7 @@ test.describe("観る画面でその場で流す", () => {
           duration: 1800,
           axis: "encoded",
           audios: [{ id: "0", label: "" }],
+          // 元の TS も置く。H.264 はメニューに並ばないので、無いとメニューが AV1 だけになって出ない
           offers: [
             {
               codec: "h264",
@@ -256,6 +259,7 @@ test.describe("観る画面でその場で流す", () => {
             },
             { codec: "h264", way: "stream", codecs: "avc1.640028,mp4a.40.2" },
             { codec: "av1", way: "stream", codecs: "av01.0.08M.08,opus" },
+            { codec: "mpeg2", way: "raw" },
           ],
         },
       }),

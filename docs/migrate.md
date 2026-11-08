@@ -87,7 +87,7 @@ denpa 側で中身を確かめてから、EPGStation 側で消してください
 - 取り込み済みは `source` の `epgstation:<ルールID>` で見分けて飛ばします (データベースから読んでいた頃に入れたものとも重なりません)
 
 > [!IMPORTANT]
-> **エンコードの設定は移しません。** コーデックも CM の扱いも denpa では全体設定です ([library.md](library.md))。
+> **エンコードの設定は移しません。** コーデックは denpa では全体設定です ([library.md](library.md))。
 > 引き継いだあとに設定の「録画」 (`/settings/recording`) で決め直してください。
 
 ### 手動予約 (`/api/reserves`)

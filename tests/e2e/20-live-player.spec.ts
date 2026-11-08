@@ -13,7 +13,7 @@ import {
   flipSetting,
   goto,
   holdCaptions,
-  keepH264,
+  liveWithoutMpeg2,
   leaveFullscreen,
   oneRowTroubles,
   openSettings,
@@ -117,11 +117,10 @@ test.describe("ライブ視聴", () => {
    */
   test("指で触ったら出て、しばらくで消える (マウスと同じ長さ)", async ({
     browser,
-    stack,
   }) => {
     // 指のある端末として開く。既定の枠にはタッチが無く、tap そのものが使えない
     const context = await browser.newContext({ hasTouch: true });
-    await keepH264(context, stack.appUrl);
+    await liveWithoutMpeg2(context);
     const page = await context.newPage();
     await goto(page, "/live");
     const controls = page.getByTestId("live-controls");
@@ -278,7 +277,6 @@ test.describe("ライブ視聴", () => {
    */
   test("小窓を出せない端末では、小窓のボタンを出さない", async ({
     browser,
-    stack,
   }) => {
     for (const script of [
       // iPhone のホーム画面から開いた
@@ -293,7 +291,7 @@ test.describe("ライブ視聴", () => {
         }),
     ]) {
       const context = await browser.newContext();
-      await keepH264(context, stack.appUrl);
+      await liveWithoutMpeg2(context);
       const page = await context.newPage();
       await page.addInitScript(script);
       await goto(page, "/live");
@@ -310,7 +308,6 @@ test.describe("ライブ視聴", () => {
    */
   test("全画面の API が無い端末では、枠を画面いっぱいに広げる", async ({
     browser,
-    stack,
   }) => {
     const context = await browser.newContext({
       viewport: { width: 844, height: 390 },
@@ -318,7 +315,7 @@ test.describe("ライブ視聴", () => {
       hasTouch: true,
       isMobile: true,
     });
-    await keepH264(context, stack.appUrl);
+    await liveWithoutMpeg2(context);
     const page = await context.newPage();
     await page.addInitScript(() => {
       for (const proto of [Element.prototype, HTMLElement.prototype]) {
@@ -598,7 +595,7 @@ test.describe("ライブ視聴", () => {
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
     await expect(page.getByTestId("live-title")).toBeVisible();
-    // H.264 を選んだ端末として開く (`keepH264`。自動は `61-live-auto`)
+    // MPEG-2 をデコードできない端末として開くので、自動で H.264 を観る (`liveWithoutMpeg2`。MPEG-2 から始まる自動は `61-live-auto`)
     expect(await ffmpegArgs(stack.liveArgsFile, expect)).toContain("libx264");
 
     await wakeControls(page, "live-frame");
@@ -677,14 +674,14 @@ test.describe("ライブ視聴", () => {
 
     // コーデックは行にいまの値を出し、→ で選択肢の並びに入る (選んでいるものにフォーカス)
     const codec = page.getByTestId("live-codec");
-    await expect(codec).toContainText("H.264");
+    await expect(codec).toContainText("自動 (H.264)");
     await codec.focus();
     await page.keyboard.press("ArrowRight");
-    const h264 = page.locator(
-      '[data-testid="live-codec-option"][data-codec="h264"]',
+    const auto = page.locator(
+      '[data-testid="live-codec-option"][data-codec="auto"]',
     );
-    await expect(h264).toBeFocused();
-    await expect(h264).toHaveAttribute("aria-checked", "true");
+    await expect(auto).toBeFocused();
+    await expect(auto).toHaveAttribute("aria-checked", "true");
     await expect(page.getByTestId("live-settings-back")).toBeVisible();
 
     // Esc は上の並びへ (閉じない)。戻るとコーデックの行に居る
@@ -701,7 +698,7 @@ test.describe("ライブ視聴", () => {
     await page.keyboard.press("Enter");
     await codec.focus();
     await page.keyboard.press("ArrowRight");
-    await expect(h264).toBeFocused();
+    await expect(auto).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(menu).toBeHidden();
     await expect(page.getByTestId("live-settings-back")).toHaveCount(0);
@@ -763,11 +760,10 @@ test.describe("ライブ視聴", () => {
    */
   test("字幕の画素は、PC (DPR 1・2) でもスマホでも見えている大きさ × DPR と合う", async ({
     browser,
-    stack,
   }) => {
     for (const [what, options] of CAPTION_SCREENS) {
       const context = await browser.newContext(options);
-      await keepH264(context, stack.appUrl);
+      await liveWithoutMpeg2(context);
       const page = await context.newPage();
       await captureSockets(page);
       await goto(page, "/live");

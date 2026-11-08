@@ -30,37 +30,33 @@ const {
 } = await import("./viewing");
 
 describe("観るときの決まり (画面の load と GET /api/playback/options)", () => {
-  test("設定が無ければ、外の名前は外・家の中のアドレスは家の中。外すコーデックは無い", () => {
+  test("設定が無ければ、外の名前は外・家の中のアドレスは家の中。外すコーデックはいつも H.264 と H.265", () => {
     expect(
       viewingOptions(new URL("https://dp.example.com/live"), false),
     ).toEqual({
       indoor: false,
-      hidden: [],
+      hidden: ["h264", "hevc"],
       hevc: false,
     });
     expect(viewingOptions(new URL("http://192.168.1.20:3000/"), false)).toEqual(
       {
         indoor: true,
-        hidden: [],
+        hidden: ["h264", "hevc"],
         hevc: false,
       },
     );
   });
 
-  test("家の中の名前に載せた名前は家の中。H.264 と H.265 を出さない設定なら両方を返す", () => {
-    saveSettings({ indoorHosts: ["dp.l.example.com"], hideH264Hevc: true });
+  test("家の中の名前に載せた名前は家の中", () => {
+    saveSettings({ indoorHosts: ["dp.l.example.com"] });
     expect(
-      viewingOptions(new URL("https://dp.l.example.com/live"), false),
-    ).toEqual({
-      indoor: true,
-      hidden: ["h264", "hevc"],
-      hevc: false,
-    });
+      viewingOptions(new URL("https://dp.l.example.com/live"), false).indoor,
+    ).toBe(true);
     // 同じ家でも、外の名前で開けば外
     expect(viewingOptions(new URL("https://dp.example.com/live")).indoor).toBe(
       false,
     );
-    saveSettings({ indoorHosts: [], hideH264Hevc: false });
+    saveSettings({ indoorHosts: [] });
   });
 
   test("ライブで H.265 を出せるか (ライブのエンコーダが GPU か) をそのまま返す", () => {
@@ -83,7 +79,6 @@ describe("前回の局と選択の控え (cookie)", () => {
           audio: "1:main",
           choice: "raw",
         }),
-        false,
       ),
     ).toEqual({
       channelType: "GR",
@@ -97,16 +92,14 @@ describe("前回の局と選択の控え (cookie)", () => {
     expect(
       readKept(
         cookie({ channelType: "GR", channel: "27", codec: "av1", raw: true }),
-        false,
       ),
     ).toEqual({ channelType: "GR", channel: "27", choice: "auto" });
-    expect(readKept("{", false)).toEqual({ choice: "auto" });
-    expect(readKept(undefined, false)).toEqual({ choice: "auto" });
+    expect(readKept("{")).toEqual({ choice: "auto" });
+    expect(readKept(undefined)).toEqual({ choice: "auto" });
   });
 
-  test("H.264 を出さない設定では、H.264 の選択は自動", () => {
-    expect(readKept(cookie({ choice: "h264" }), true).choice).toBe("auto");
-    expect(readKept(cookie({ choice: "h264" }), false).choice).toBe("h264");
+  test("H.264 の選択は自動 (メニューに並べないので)", () => {
+    expect(readKept(cookie({ choice: "h264" })).choice).toBe("auto");
   });
 });
 

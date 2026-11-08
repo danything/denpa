@@ -388,8 +388,8 @@ export const MENU_ORDER: readonly PlayCodec[] = [...ENCODED_ORDER, "mpeg2"];
 /**
  * **コーデックのメニューに並べるもの。** この端末で観られる方法があるコーデックを `MENU_ORDER` の順に。
  * H.265 はエンコード済みがある録画にだけある (その場の変換では作らない)。MPEG-2 は元の TS が残っていて、この端末で
- * デコードできるときだけ。`hidden` (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) は並べない。外すのはメニューだけで、
- * 自動 (`pickOffer`) は今までどおり選ぶ
+ * デコードできるときだけ。`hidden` は並べない (メニューは `#lib/live-choice.ts` の `HIDDEN_CODECS` を渡す。
+ * 混んでいるときに勧めるものは全部から選ぶので渡さない)。外すのはメニューだけで、自動 (`pickOffer`) は今までどおり選ぶ
  */
 export function codecChoices(
   info: PlaybackInfo,

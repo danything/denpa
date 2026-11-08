@@ -26,6 +26,9 @@ import { deviceOn, ranked, setJikkyo } from "./jikkyo";
  * まとめ、終わったら既定 (オフ) に戻す
  */
 
+// ライブは MPEG-2 のまま観る (`pickCodec`)。MPEG-2 をデコードできる端末として開く (`stack.ts` の `liveWithoutMpeg2`)
+test.use({ liveMpeg2: true });
+
 /** 局の一覧の API で、局の名前 → 実況のチャンネル */
 async function channels(
   request: APIRequestContext,

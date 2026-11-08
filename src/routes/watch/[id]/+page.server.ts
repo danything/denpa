@@ -97,8 +97,6 @@ export function load({ params, url }) {
     scene,
     /** この録画の切り抜きの数 (右の列の「この録画の切り抜き」) */
     clips: countClips({ recording: id }),
-    /** コーデックのメニューから外すもの (世帯の設定。`#lib/live-choice.ts` の `HIDDEN_CODECS`) */
-    hidden: viewing.hidden,
     /** 開いた名前が家の中か (`#lib/host.ts` の `indoorHost`)。録画しか無いときの「自動」の順に効く (`ts/playback.ts` の `pickOffer`) */
     indoor: viewing.indoor,
   };

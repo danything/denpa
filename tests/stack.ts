@@ -543,31 +543,39 @@ export async function bootSpare(
 }
 
 /**
- * **ライブを H.264 を選んだ端末として開く** (`LAST_COOKIE` の `choice`)。E2E は 127.0.0.1 で開くので家の中で、
- * 「自動」なら MPEG-2 (放送のまま) になる (`#lib/live-choice.ts`)。ライブの試験の多くは `<video>` (MSE) で
- * 観ることを前提にしているので、既定のページはこれを置いてから始める。自動を見る試験は cookie を消す
- * (`61-live-auto`)。自分で作る文脈 (`browser.newContext`) にも呼ぶ
+ * **ライブを MPEG-2 をデコードできない端末として開く。** E2E は 127.0.0.1 で開くので家の中で、「自動」は
+ * MPEG-2 → H.264 → AV1 の順 (`#lib/live-choice.ts` の `autoOrder`)。ライブの試験の多くは `<video>` (MSE) の H.264 で
+ * 観ることを前提にしていて、H.264 はメニューに並ばない (`HIDDEN_CODECS`) ので選べない。そこでライブの画面 (`/live`) だけ
+ * WebGL2 が無いことにして (`raw/support.ts` の `rawUnsupported`)、自動に H.264 を選ばせる。録画の観る画面と追っかけはそのまま。
+ * MPEG-2 で観る試験は `test.use({ liveMpeg2: true })` で外す。自分で作る文脈 (`browser.newContext`) にも呼ぶ
  */
-export async function keepH264(
+export async function liveWithoutMpeg2(
   context: BrowserContext,
-  appUrl: string,
 ): Promise<void> {
-  const { hostname } = new URL(appUrl);
-  await context.addCookies([
-    {
-      name: "denpa_live_last",
-      value: encodeURIComponent(JSON.stringify({ choice: "h264" })),
-      domain: hostname,
-      path: "/live",
-    },
-  ]);
+  await context.addInitScript(() => {
+    const get = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
+      type: string,
+      ...rest: unknown[]
+    ) {
+      if (type === "webgl2" && /\/live\/?$/.test(location.pathname))
+        return null;
+      return (get as (...args: unknown[]) => unknown).call(this, type, ...rest);
+    } as typeof get;
+  });
 }
 
 /**
  * `stack` はワーカーに 1 つ。`auto` にしてあるので、明示的に受け取らないテストでも
  * 立ち上がった状態で始まる (`baseURL` がこれに乗っているため)。
  */
-export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
+export const test = base.extend<
+  { anonymous: Anonymous; liveMpeg2: boolean },
+  { stack: Stack }
+>({
+  /** ライブで MPEG-2 をデコードできる端末として開くか (`liveWithoutMpeg2`)。既定はできない */
+  liveMpeg2: [false, { option: true }],
   stack: [
     // oxlint-disable-next-line no-empty-pattern -- Playwright は分割代入でないと受け付けない
     async ({}, use, workerInfo) => {
@@ -577,9 +585,9 @@ export const test = base.extend<{ anonymous: Anonymous }, { stack: Stack }>({
     },
     { scope: "worker", auto: true },
   ],
-  // ライブは H.264 を選んだ端末として開く (`keepH264`)
-  context: async ({ context, stack }, use) => {
-    await keepH264(context, stack.appUrl);
+  // ライブは MPEG-2 をデコードできない端末として開き、自動で H.264 を観る (`liveWithoutMpeg2`)
+  context: async ({ context, liveMpeg2 }, use) => {
+    if (!liveMpeg2) await liveWithoutMpeg2(context);
     await use(context);
   },
   // page.goto('/') や request.post('/api/sync') の宛先。ワーカーごとに違う

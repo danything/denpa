@@ -186,7 +186,7 @@ test.describe("GPU でエンコードする", () => {
     await expect(page.getByTestId("hw-av1")).toHaveValue(nvidia);
     await expect(page.getByTestId("hw-h264")).toHaveValue(nvidia);
 
-    // H.264 を NVENC で。キーフレームの指定は NVENC の綴り (-forced-idr) で IDR にさせる
+    // H.264 を NVENC で
     await syncEpg(request);
     rmSync(stack.encodeArgsFile, { force: true });
     await setRecording(request, { codecs: ["h264"] });

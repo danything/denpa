@@ -462,7 +462,6 @@
               choice: player.choice,
               format: player.format,
               step: player.step,
-              hidden: data.hidden.length > 0,
               unavailable: player.unavailable,
               onselect: (next) => player.setChoice(next),
             })}

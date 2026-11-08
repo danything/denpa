@@ -229,10 +229,6 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * 落ちうるのは段の問い合わせ (`vaGetConfigAttributes`) そのものが失敗したときだけで、同じ問い合わせは
  * レート制御を決めるときにも行うので、それが通るドライバなら通る。
  *
- * **CM を切るときのキーフレーム (`encoder.ts` の `keyframeArgs`) もピラミッドのまま IDR になる。** FFmpeg は
- * 印の付いたコマ (`pict_type = I`) を IDR にすると決め、その 1 つ前のコマを P にして B の並びをそこで閉じる
- * (hw_base_encode.c)。ピラミッドは閉じた並びの中を分けるだけなので、IDR の位置は変わらない
- *
  * ## ICQ を持たないドライバの AV1 は CQP で指定する
  *
  * **i965 (Gemini Lake などの古い Intel)・Mesa (AMD) は ICQ を持たない。** ICQ で試すと落ちて

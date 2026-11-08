@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { logoUnusable } from "../format";
 import {
+  chapterArgs,
   chapterMetadata,
   cmRatio,
   fields,
@@ -146,6 +147,17 @@ describe("chapterMetadata", () => {
     expect(meta).toContain("title=本編");
     // 本編 → CM → 本編 の 3 チャプター
     expect(meta.match(/\[CHAPTER\]/g)).toHaveLength(3);
+  });
+});
+
+describe("チャプターを書き直す", () => {
+  test("再エンコードせず、渡したチャプターに差し替える。null なら外す", () => {
+    expect(chapterArgs("/a.mkv", "/c.txt", "/o.mkv").join(" ")).toContain(
+      "-i /c.txt -map 0 -map_chapters 1 -c copy",
+    );
+    expect(chapterArgs("/a.mkv", null, "/o.mkv").join(" ")).toContain(
+      "-map 0 -map_chapters -1 -c copy",
+    );
   });
 });
 

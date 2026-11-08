@@ -91,7 +91,6 @@ import {
   videoArgs,
 } from "./live";
 import { openPace, StreamPace } from "./pace";
-import { settings } from "./settings";
 import { endInput, run } from "./stream";
 import { holdTranscode } from "./transcode";
 
@@ -1343,8 +1342,7 @@ export function watchProgress(
 
 /**
  * **エンコード済みが無い録画の、CM 飛ばしのチャプター。** 検出した CM の区間 (`cm_ranges`) は
- * 元の TS の先頭からの秒で持っている (`encoder.ts` の `runCmJob`) ので、物差し (`ts`) にそのまま乗る。
- * CM の扱いが「何もしない」なら、エンコード済みにチャプターを書かないのと揃えて出さない
+ * 元の TS の先頭からの秒で持っている (`encoder.ts` の `runCmJob`) ので、物差し (`ts`) にそのまま乗る
  */
 export async function tsChapters(
   recording: Recording,
@@ -1356,7 +1354,6 @@ export async function tsChapters(
     recording.cm_ranges.length === 0
   )
     return [];
-  if (settings().cmCut === "off") return [];
   const ts = await probeTs(path);
   return chapterList(
     recording.cm_ranges,

@@ -224,7 +224,7 @@ describe("実体との照合", () => {
     fresh();
     put(config.rawDir, "のこる.m2ts");
     put(config.rawDir, "のこる.m2ts.chapters.txt");
-    put(config.rawDir, "きえた.m2ts.ffconcat");
+    put(config.rawDir, "きえた.m2ts.post");
     put(config.rawDir, "きえた.m2ts.chapters.txt");
 
     expect(reconcile().swept).toBe(2);

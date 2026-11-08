@@ -8,7 +8,7 @@
 
 import { dirname, join } from "node:path";
 
-import type { CmMode, VideoCodec } from "../types";
+import type { VideoCodec } from "../types";
 
 function str(key: string, fallback: string): string {
   const v = process.env[key];
@@ -145,8 +145,6 @@ export const config = {
 
   /** 録画エンコードの初期コーデック。設定画面で変えられる */
   encodeCodec: "av1" as VideoCodec,
-  /** CM の扱いの初期値。実カットは検出を誤ると本編が消えるのでチャプターのみ */
-  cmCutDefault: "chapter" as CmMode,
 
   /** CM 検出のために覚えた局ロゴ (`own-logo-*.bin`) の置き場。放送波から取得した局ロゴ (PNG) の隣 */
   cmLogoDir: `${dataDir}/logos/cm`,
@@ -154,11 +152,6 @@ export const config = {
   cmFallbackFps: 30000 / 1001,
   /** CM 検出のために別に回す ffmpeg (ロゴを覚える・読み直す・CM 検出だけやり直す) 1 回の上限時間(ms)。エンコードする ffmpeg で一緒に行う読み込みには掛けない */
   cmDetectTimeout: 30 * MIN,
-  /**
-   * CM を実際に切るとき、境目にキーフレームが無ければ CM 側へ寄せてよい長さ(秒) (`cm-cut.planCut`)。
-   * 寄せたぶん CM の端が残るが、本編を削るよりはいい。これでも届かなければ境目を指して再エンコードする
-   */
-  cmCutMargin: num("CM_CUT_MARGIN", 0.8),
 
   /**
    * サムネイルを切り出す位置(秒)。冒頭は提供表示や CM のことが多いので少し進める。

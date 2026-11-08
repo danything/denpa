@@ -10,8 +10,7 @@ import {
 } from "../hw";
 import { readNg } from "../jikkyo/ng";
 import { normalizePrefecture } from "../prefecture";
-import type { CmMode, VideoCodec } from "../types";
-import { isCmMode } from "./cm";
+import type { VideoCodec } from "../types";
 import { config } from "./config";
 import { now, orm } from "./db";
 import { settings as settingsTable } from "./schema";
@@ -19,7 +18,7 @@ import { settings as settingsTable } from "./schema";
 /**
  * 画面から変えられる設定。
  *
- * コーデックと CM の扱いは、番組ごとに変えたくなることが実際にはほとんど無い。
+ * コーデックは、番組ごとに変えたくなることが実際にはほとんど無い。
  * ルールにも予約にも同じ選択肢を並べると、どこで決まったのか分からなくなるので
  * 全体で 1 つに寄せてある。初期値は config.ts が持ち、DB に値があればそちらが勝つ。
  */
@@ -51,20 +50,10 @@ interface Settings {
    * H.265 は GPU でだけエンコードするので、どの GPU でも H.265 を外すと、ライブで H.265 を出さない (`live.liveHevc`)
    */
   liveHwAllow: HwAllow;
-  /** CM の扱い。off / chapter / cut */
-  cmCut: CmMode;
   /** エンコードするか。**コーデックの選択から決まる** (`none` 以外なら する) */
   encode: boolean;
   /** エンコードしたあとも元の TS を残すか */
   keepOriginal: boolean;
-  /**
-   * コマ数 (30/60) を本編映像から実測して決めるか。
-   *
-   * オン: フィールドを比べて素材を見分け、24p 系 (アニメ・フィルム) と 30p の
-   *       素材は 30 コマで出す (`encoder.measureSmoothMotion`)。
-   * オフ: 測らず**全部 60 コマ**で出す。時間とサイズはかさむが、動きは絶対に落ちない
-   */
-  fpsDetect: boolean;
   /**
    * データ放送に渡す郵便番号 (数字 7 桁。空なら渡さない)。
    *
@@ -114,11 +103,6 @@ interface Settings {
    * 載せなくても家の中。設定の 1 キーに JSON の配列で持つ
    */
   indoorHosts: string[];
-  /**
-   * **コーデックのメニューに H.264 と H.265 を出さないか。既定はオフ。** 外すのはメニューだけで、AV1 を再生できない端末には
-   * 自動で H.265 か H.264 を流す (`#lib/live-choice.ts` の `HIDDEN_CODECS`)
-   */
-  hideH264Hevc: boolean;
   /**
    * **ロゴを取得した結果を DB に残すか。既定はオフ。** デバッグ用。衛星のロゴが流れてくる期間を測るときだけオンにする
    * (`logo-record.ts`。docs/logo.md「ロゴの取得を記録する」)
@@ -197,7 +181,6 @@ function parseHwAllow(value: string | undefined): HwAllow {
 }
 
 export function settings(): Settings {
-  const cmCut = stored("cmCut");
   const flag = (key: string, fallback: boolean) => {
     const value = stored(key);
     return value === undefined ? fallback : value === "true";
@@ -210,10 +193,8 @@ export function settings(): Settings {
     codecs,
     hwAllow: parseHwAllow(stored("hwAllow")),
     liveHwAllow: parseHwAllow(stored("liveHwAllow")),
-    cmCut: isCmMode(cmCut) ? cmCut : config.cmCutDefault,
     encode: codecs.length > 0,
     keepOriginal: flag("keepOriginal", false),
-    fpsDetect: flag("fpsDetect", true),
     postalCode: normalizePostalCode(stored("postalCode") ?? ""),
     prefecture: normalizePrefecture(stored("prefecture")),
     // テレビと同じく通信できるのが既定。設定画面の説明の 1 行目で、視聴の記録が送られうることを出す
@@ -222,7 +203,6 @@ export function settings(): Settings {
     jikkyo: flag("jikkyo", false),
     jikkyoNg: readNg(stored("jikkyoNg")),
     indoorHosts: readIndoorHosts(stored("indoorHosts")),
-    hideH264Hevc: flag("hideH264Hevc", false),
     recordLogo: flag("recordLogo", false),
   };
 }

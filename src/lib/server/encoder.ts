@@ -27,6 +27,7 @@ import { encodeSource, tsPathOf } from "../source";
 import type { EncodeKind, EncodePhase, Recording } from "../types";
 import { fileSize } from "./chase";
 import {
+  chapterArgs,
   chapterMetadata,
   type CmDetection,
   type CmReading,
@@ -36,19 +37,9 @@ import {
   probeLeadIn,
   probeLiveAudio,
   probeVideo,
-  type Range,
   shiftDetection,
   shiftRanges,
 } from "./cm";
-import {
-  chapterArgs,
-  cutArgs,
-  cutList,
-  cutPoints,
-  KEY_SCDET,
-  listKeyframes,
-  planCut,
-} from "./cm-cut";
 import { loadMaterial, saveMaterial } from "./cm-material-store";
 import { type Scan, scan, type ScanReader, scanReader } from "./cm-scan";
 import { config } from "./config";
@@ -218,68 +209,14 @@ export function encodeOrder(
 /** GPU のデバイスを回す番。1 本エンコードするごとに先頭のデバイスを入れ替える (hwenc.hwChain) */
 let hwTurn = 0;
 
-/**
- * キーフレームの置き方。CM を切るときだけ使う (`cm-cut.ts`)。
- *
- * - `scene` … 場面の切れ目ごと。まだ境目が分からないうちにエンコードするもの (どのコーデックも。1 本目は CM を探しながら)
- * - 時刻の並び … 境目が決まってから再エンコードするもの (境目にキーフレームが無かったとき)。エンコードするものの時刻 (秒)
- */
-type Keyframes = "scene" | number[];
-
-/**
- * キーフレームを置かせる引数。どのエンコーダも、印の付いたコマ (`pict_type = I`) を
- * キーフレームにする。**NVENC は指定しないと IDR にならない** (`-forced-idr`。QSV・AMF は `-forced_idr`。
- * 3 つとも H.264・H.265・AV1 の全部が持つオプション)。
- * IDR でないと入れ物にキーフレームとして書かれず、そこで切れない。VA-API は印だけで IDR になる。
- * VideoToolbox (Mac) も印だけで、FFmpeg の videotoolboxenc.c がそのコマをキーフレームにするよう求める (`ForceKeyFrame`。実機では見ていない)。
- *
- * **Rockchip MPP (h264_rkmpp・hevc_rkmpp) は印を見ない** (本家 FFmpeg の rkmppenc.c はコマの `pict_type` を
- * MPP に渡さない)。渡しても害は無く、境目にキーフレームが無ければ CM を切るところで
- * そのコーデックだけソフトウェアで再エンコードする (`runJob`)
- */
-function keyframeArgs(
-  keyframes: Keyframes | undefined,
-  hardware: HwWay | null,
-): string[] {
-  if (
-    keyframes === undefined ||
-    (Array.isArray(keyframes) && keyframes.length === 0)
-  )
-    return [];
-  // 指す時刻は 1ms 手前に。その時刻ちょうどのコマが丸めで次のコマに流れないように
-  const at =
-    keyframes === "scene"
-      ? "scd_metadata"
-      : keyframes.map((t) => Math.max(0, t - 0.001).toFixed(3)).join(",");
-  return [
-    "-force_key_frames:v",
-    at,
-    ...(hardware?.kind === "nvenc" ? ["-forced-idr", "1"] : []),
-    ...(hardware?.kind === "qsv" || hardware?.kind === "amf"
-      ? ["-forced_idr", "1"]
-      : []),
-  ];
-}
-
 function videoArgs(
   codec: HwCodec,
   smooth: boolean,
   scale: string | null,
   hardware: HwWay | null,
-  keyframes?: Keyframes,
   height = Number.NaN,
 ): { filter: string; encoder: string[]; device: string[] } {
-  const steps = [
-    /*
-     * 場面の切れ目に印を付ける。**CM 検出と同じコマ (インタレ解除の前) で測る**。同じ点になるので、
-     * 検出が境目に選んだコマにそのままキーフレームが置かれる。60 コマで出すときは印が両方のフィールドのコマに
-     * 写るので、キーフレームが 2 枚続く
-     */
-    ...(keyframes === "scene" ? [KEY_SCDET] : []),
-    deinterlace(smooth),
-    ...(scale === null ? [] : [scale]),
-  ];
-  const keys = keyframeArgs(keyframes, hardware);
+  const steps = [deinterlace(smooth), ...(scale === null ? [] : [scale])];
   if (hardware !== null) {
     /*
      * **GPU (VA-API・NVENC・QSV・AMF・VideoToolbox・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
@@ -291,7 +228,7 @@ function videoArgs(
     const hw = hwArgs(hardware, codec, { height, smooth });
     return {
       filter: [...steps, ...hw.filter].join(","),
-      encoder: [...hw.encoder, ...keys],
+      encoder: hw.encoder,
       device: hw.device,
     };
   }
@@ -321,12 +258,10 @@ function videoArgs(
   return {
     filter: [...steps, "format=yuv420p"].join(","),
     device: [],
-    encoder: [
-      ...(codec === "h264"
+    encoder:
+      codec === "h264"
         ? ["libx264", "-preset", "medium", "-crf", "23"]
-        : ["libsvtav1", "-preset", "8", "-crf", "37"]),
-      ...keys,
-    ],
+        : ["libsvtav1", "-preset", "8", "-crf", "37"],
   };
 }
 
@@ -357,8 +292,6 @@ const aborts = new Map<number, AbortController>();
 const canceled = new Set<number>();
 
 interface EncodeOptions {
-  /** キーフレームを置く所 (CM を切るとき。`Keyframes`) */
-  keyframes?: Keyframes;
   /**
    * CM 検出の材料を取る出口 (`cm-scan.scanReader` の `outputs`)。エンコードする出口のあとに足して、**同じデコードから**
    * 読ませる。ロゴの枠は標準出力に来るので、進み具合は fd 3 で受ける (`-progress pipe:3`)
@@ -456,7 +389,7 @@ export function inputSkip(
  * **字幕のストリームを名指しする** (`0:s:0`)。名指ししない既定の選び方では ARIB の字幕が落ちる。? は字幕の無い番組でも止めないため。
  * 局 (`0:p:<局>`) では名指ししない。録画の TS は 1 局に絞ってあり、前の番組から録ると、番組が変わってから現れた字幕を
  * ffmpeg が局の外に並べ、局の名指しに当たらず落ちる (#2189)。
- * 時刻は映像と同じだけ詰まる (先頭を捨てる `-ss` も、CM を切る concat もストリームごとに同じ)
+ * 時刻は映像と同じだけ詰まる (先頭を捨てる `-ss` はストリームごとに同じ)
  */
 function captionArgs(): string[] {
   return [
@@ -481,8 +414,7 @@ function captionArgs(): string[] {
 /**
  * ffmpeg の引数。字幕は埋め込まず、放送の ARIB 字幕をそのまま写す (`captionArgs`)。
  *
- * CM を切るときは場面の切れ目にキーフレームを置いてエンコードし (`keyframes`)、エンコードしたものを
- * キーフレームの所で切る (`cm-cut.ts`)。CM 検出の材料は同じ ffmpeg に取らせる (`analysis`)。
+ * CM 検出の材料は同じ ffmpeg に取らせる (`analysis`)。
  */
 export function buildArgs(
   input: string,
@@ -498,7 +430,6 @@ export function buildArgs(
     options.smoothMotion === true,
     squarePixels(options.displaySize),
     hardware,
-    options.keyframes,
     options.height,
   );
 
@@ -527,7 +458,7 @@ export function buildArgs(
   args.push("-i", input);
   /*
    * チャプター (CM の位置) はここでは入れない。境目はエンコードし終えてから決まるので、どのコーデックも
-   * エンコードしたあとに `-c copy` で書き足す (`cm-cut.chapterArgs`)
+   * エンコードしたあとに `-c copy` で書き足す (`cm.chapterArgs`)
    */
   // map で解決できない (型が不明な) ストリームは黙ってスキップする。エンコード自体を止めないため
   args.push("-ignore_unknown");
@@ -1076,7 +1007,7 @@ async function runFfmpeg(
   let inputFd: number | null = null;
   let inputPos = NaN;
 
-  // 出力し終えた時点の位置。CM を切ると入力より短くなるので、出来上がりの長さはこちら
+  // 出力し終えた時点の位置。測れなかったときの出来上がりの長さ
   let outTimeUs = NaN;
   let percent = 0;
   let log = "";
@@ -1117,8 +1048,7 @@ async function runFfmpeg(
   const readStderr = (async () => {
     for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
       if (reader?.line(line) === true) continue;
-      // キーフレームを置くための切れ目 (`scdet@key`) も来る
-      if (line === "" || line.includes("lavfi.scd.")) continue;
+      if (line === "") continue;
       tail.push(line);
       if (tail.length > 40) tail.shift();
     }
@@ -1339,16 +1269,14 @@ function saveCm(recordingId: number, detection: CmDetection): void {
 /**
  * **1 本エンコードするときに ffmpeg を起こす順** (`runJob` の `encodeWays`)。GPU の方式 (`hwChain` の順) のあとにソフトウェア
  * (H.265 を除く。`SOFTWARE_CODECS`) で、**どの方式も「素のまま → 先頭を少し捨てて」の 2 回だけ**。
- * 1 回の実行の中の起こし直しはこの並びで尽きる (`encode_jobs.attempts` に数えない理由)。
- * `pointed` は境目を指して再エンコードするとき。指定を聞かない Rockchip MPP を外す
+ * 1 回の実行の中の起こし直しはこの並びで尽きる (`encode_jobs.attempts` に数えない理由)
  */
 export function encodeAttempts(
   codec: HwCodec,
   hardware: HwWay[],
-  pointed: boolean,
 ): { seek: number | null; hardware: HwWay | undefined }[] {
   const ways: (HwWay | undefined)[] = [
-    ...hardware.filter((way) => !(pointed && way.kind === "rkmpp")),
+    ...hardware,
     ...(SOFTWARE_CODECS.includes(codec) ? [undefined] : []),
   ];
   return ways.flatMap((way) => [
@@ -1484,37 +1412,32 @@ async function runJob(jobId: number): Promise<void> {
    * TS を 1 回だけデコードする (`cm-scan.scanReader`)。ここでは支度だけをする。尺を測り、局ロゴを開く
    * (覚えていなければキーフレームだけ読んで覚える)
    */
-  const mode = settings().cmCut;
   let reading: CmReading | null = null;
-  if (mode !== "off") {
-    setPhase(jobId, "cm", "局ロゴを確かめています");
-    try {
-      reading = await openCm(sourceTs, {
-        signal,
-        serviceId: recording.service_id,
-        ...programSpan(recording),
-        onStep: (label) => setStep(jobId, label),
-      });
-    } catch (error) {
-      console.error(
-        `[cm] 検出の支度に失敗したため CM 処理をスキップします: ${error}`,
-      );
-    }
+  setPhase(jobId, "cm", "局ロゴを確かめています");
+  try {
+    reading = await openCm(sourceTs, {
+      signal,
+      serviceId: recording.service_id,
+      ...programSpan(recording),
+      onStep: (label) => setStep(jobId, label),
+    });
+  } catch (error) {
+    console.error(
+      `[cm] 検出の支度に失敗したため CM 処理をスキップします: ${error}`,
+    );
   }
   if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
   /*
-   * コマ数を本編映像から実測する (measureSmoothMotion)。設定で切ってあれば測らず、全部 60 コマで出す。
+   * コマ数を本編映像から実測する (measureSmoothMotion)。
    * CM はまだ分からないので、録画全体に窓を散らす
    */
-  if (settings().fpsDetect) {
-    setStep(jobId, "フレームレートを確かめています");
-    encodeOptions.smoothMotion = await measureSmoothMotion(
-      sourceTs,
-      (recording.end_at - recording.start_at) / 1000,
-      signal,
-    );
-  }
+  setStep(jobId, "フレームレートを確かめています");
+  encodeOptions.smoothMotion = await measureSmoothMotion(
+    sourceTs,
+    (recording.end_at - recording.start_at) / 1000,
+    signal,
+  );
   // ここから先の下調べ (ffprobe) は合図を受け取らない。測っている間に押されていたら、その前でやめる
   if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
@@ -1601,9 +1524,7 @@ async function runJob(jobId: number): Promise<void> {
    * (1 本が落ちても、ほかは止めない)。同時に動く本数は枠で決まり (`encode-slots.ts`)、枠が足りなければ残りは空いてから動く。
    *
    * CM は 1 本目をエンコードする ffmpeg で一緒に探し、1 本目をエンコードし終えたら境目を決める。どのコーデックも
-   * 境目が決まってから、CM の扱いどおりに仕上げる (チャプターを `-c copy` で書き足す・キーフレームの所で切る)。
-   * 「切る」ではどのコーデックも場面の切れ目ごとにキーフレームを置いてエンコードし、境目にキーフレームが無ければ
-   * そのコーデックだけ境目を指して再エンコードしてから切る。
+   * 境目が決まってから、チャプターを `-c copy` で書き足す。
    *
    * **H.265 を選んでいれば 1 本目にする** (`encodeOrder`)。主 (`library_path`) にするのは、エンコードした順ではなく
    * AV1 → H.265 → H.264 の先頭 (下の `primary`)
@@ -1614,15 +1535,6 @@ async function runJob(jobId: number): Promise<void> {
    */
   /** CM 検出の結果 (入れ物の先頭からの秒)。1 本目をエンコードし終えたら決まる */
   let detection = null as CmDetection | null;
-  /** 1 本目で読んだ最初のコマの時刻 (入れ物の先頭から)。切るとき、エンコードしたものの時刻と突き合わせる */
-  let firstFrame = Number.NaN;
-  /** CM を切ってよいか。音だけで決めたとき・1 本目を切れなかったときは切らずにチャプターにする */
-  let cuttable = true;
-  /** 場面の切れ目ごとにキーフレームを置いてエンコードするか (CM を切るとき。どのコーデックも) */
-  const sceneKeys = mode === "cut" && reading !== null;
-  const frameRate = Number.isFinite(measured.fps)
-    ? measured.fps
-    : config.cmFallbackFps;
   const meter = progressMeter(jobId, recording.id, codecs.length);
   /** いまエンコードしている ffmpeg の数。0 でない間は段階を「エンコード中」のままにする */
   let encoding = 0;
@@ -1631,7 +1543,7 @@ async function runJob(jobId: number): Promise<void> {
 
   /**
    * 段階を進める。**ほかのコーデックをエンコードしている間は「エンコード中」と進み具合のまま**。
-   * 1 本目の CM の境目を決めている (cm)・切っている (cut) 間も、ほかのコーデックはエンコードしている
+   * 1 本目の CM の境目を決めている (cm) 間も、ほかのコーデックはエンコードしている
    */
   const stage = (phase: EncodePhase, log: string): void => {
     if (encoding > 0) return;
@@ -1647,11 +1559,6 @@ async function runJob(jobId: number): Promise<void> {
     const duration = found.duration - skip;
     const cm = shiftRanges(found.cm, skip);
     return { cm, duration, keep: invertRanges(cm, duration) };
-  };
-  /** 境目そのものにキーフレームを置く時刻 (CM を切るとき) */
-  const cutKeys = (skip: number) => {
-    const { keep, duration } = own(skip);
-    return cutPoints(keep, duration);
   };
 
   /**
@@ -1669,10 +1576,10 @@ async function runJob(jobId: number): Promise<void> {
     }
     return name;
   };
-  /** 作業ファイルと、その隣に作る書き直し・切り貼り・チャプターの一時ファイル */
+  /** 作業ファイルと、その隣に作る書き直し・チャプターの一時ファイル */
   const removeWorking = (codec: HwCodec): void => {
     const working = workingOf(codec);
-    for (const suffix of ["", ".post", ".ffconcat", ".chapters.txt"])
+    for (const suffix of ["", ".post", ".chapters.txt"])
       removeIfExists(`${working}${suffix}`);
   };
   /** 途中でやめる/全部失敗するときに、置きかけを全部片付ける */
@@ -1699,21 +1606,12 @@ async function runJob(jobId: number): Promise<void> {
     working: string,
     extra: {
       analysis: boolean;
-      keyframes?: (skip: number) => Keyframes | undefined;
-      /**
-       * GPU を使わない (境目を指して再エンコードするとき。GPU は指定を聞かないことがある)。
-       * **H.265 はソフトウェアが無いので、指定を聞く GPU (Rockchip MPP 以外) で** (`canPoint`)
-       */
-      software?: boolean;
     },
   ) => {
     const software = SOFTWARE_CODECS.includes(codec);
     const attempts = encodeAttempts(
       codec,
-      extra.software === true && software
-        ? []
-        : hwChain(codec, settings().hwAllow, hwTurn++),
-      extra.software === true,
+      hwChain(codec, settings().hwAllow, hwTurn++),
     );
     const report = meter.part(codec);
     let result = { code: -1, stderrTail: "", outTimeUs: 0 };
@@ -1740,7 +1638,6 @@ async function runJob(jobId: number): Promise<void> {
       // ロゴの点は読むたびに一から数える (落ちた回の途中までを持ち越さない)
       const want = extra.analysis ? reading?.want() : undefined;
       const reader = want === undefined ? undefined : scanReader(want);
-      const keyframes = extra.keyframes?.(skip);
       // 起動できずに投げたときも、書き出しの一時フォルダは片付ける
       const pending = runFfmpeg(
         jobId,
@@ -1753,7 +1650,6 @@ async function runJob(jobId: number): Promise<void> {
         {
           ...encodeOptions,
           hardware: attempt.hardware,
-          ...(keyframes === undefined ? {} : { keyframes }),
           ...(want === undefined ? {} : { analysis: reader?.outputs ?? [] }),
         },
         reader,
@@ -1818,7 +1714,6 @@ async function runJob(jobId: number): Promise<void> {
   const encodeInSlot = async (
     codec: HwCodec,
     extra: Parameters<typeof encodeWays>[2],
-    log = `${codec} でエンコードしています`,
   ) => {
     const release = await slots.acquire(jobId, signal);
     if (release === null) return null;
@@ -1827,10 +1722,11 @@ async function runJob(jobId: number): Promise<void> {
       return null;
     }
     /*
-     * **段階をエンコードに戻す。** 枠を待っている間に 1 本目が「CM の境目を決めています」(cm)・「CM を切っています」(cut) に
+     * **段階をエンコードに戻す。** 枠を待っている間に 1 本目が「CM の境目を決めています」(cm) に
      * 進んでいると、エンコードしている間ずっと「CM 検出中」と出る
      */
-    if (encoding === 0) setPhase(jobId, "encode", log);
+    if (encoding === 0)
+      setPhase(jobId, "encode", `${codec} でエンコードしています`);
     encoding++;
     try {
       return await encodeWays(codec, workingOf(codec), extra);
@@ -1840,100 +1736,41 @@ async function runJob(jobId: number): Promise<void> {
     }
   };
 
-  /** 再エンコードせずに書き直す (チャプターを足す・CM を切る)。出来たら作業ファイルと差し替える */
-  const rewrite = async (
-    working: string,
-    args: (output: string) => string[],
-  ): Promise<boolean> => {
-    const output = `${working}.post`;
-    const code = (await run(args(output), { signal })).code;
-    if (code !== 0 || !existsSync(output)) {
-      removeIfExists(output);
-      return false;
-    }
-    renameSync(output, working);
-    return true;
-  };
-
-  /**
-   * エンコードしたものから CM を切る (`cm-cut.ts`)。残した区間を入れ物の先頭からの秒で返す。境目にキーフレームが無ければ
-   * `keys` (境目を指して再エンコードすれば切れる)、繋ぎ直しに失敗したら `failed` (再エンコードしても変わらない。ディスクなど)
-   */
-  const cutWorking = async (
-    working: string,
-    skip: number,
-  ): Promise<Range[] | "keys" | "failed"> => {
-    const found = await listKeyframes(working);
-    if (found === null) return "keys";
-    const { keep, duration } = own(skip);
-    // エンコードしたものの時刻と、検出の時刻 (どちらも同じ 1 コマ目から) のずれ。muxer が数ミリ秒ずらす
-    const offset =
-      Number.isFinite(firstFrame) && Number.isFinite(found.first)
-        ? found.first - (firstFrame - skip)
-        : 0;
-    const plan = planCut(keep, found.keys, {
-      offset,
-      tolerance: 1.5 / frameRate,
-      margin: config.cmCutMargin,
-      duration,
-    });
-    if (plan === null) return "keys";
-    console.log(
-      `[cm] 切った所のずれ (コマ): ${plan.errors.map((e) => (e * frameRate).toFixed(1)).join(" / ") || "なし"}`,
-    );
-    const list = `${working}.ffconcat`;
-    writeFileSync(list, cutList(working, plan.pieces));
-    const ok = await rewrite(working, (output) => cutArgs(list, output));
-    removeIfExists(list);
-    if (!ok) return "failed";
-    return plan.pieces.map((piece) => ({
-      start: piece.start - offset + skip,
-      end: (piece.end === null ? duration : piece.end - offset) + skip,
-    }));
-  };
-
   /**
    * エンコードしたものにチャプターを書き足す (再エンコードしない。中身はそのまま写すだけ)。チャプターは
-   * エンコードしたものの 0 秒に合わせて書く。ファイルはコーデックごと (同時に書き足すので、1 つを取り合わない)
+   * エンコードしたものの 0 秒に合わせて書く。ファイルはコーデックごと (同時に書き足すので、1 つを取り合わない)。
+   * 書き足せたら作業ファイルと差し替える
    */
   const addChapters = async (working: string, skip: number): Promise<void> => {
     const file = `${working}.chapters.txt`;
+    const output = `${working}.post`;
     const { cm, duration } = own(skip);
     writeFileSync(file, chapterMetadata(cm, duration));
-    const ok = await rewrite(working, (output) =>
-      chapterArgs(working, file, output),
-    );
+    const code = (await run(chapterArgs(working, file, output), { signal }))
+      .code;
     removeIfExists(file);
-    if (!ok)
-      console.error(
-        "[cm] チャプターを書き足せませんでした。チャプター無しで置きます",
-      );
+    if (code === 0 && existsSync(output)) {
+      renameSync(output, working);
+      return;
+    }
+    removeIfExists(output);
+    console.error(
+      "[cm] チャプターを書き足せませんでした。チャプター無しで置きます",
+    );
   };
 
-  /**
-   * 境目を指してキーフレームを置き直せるか (CM を切るところで境目にキーフレームが無かったとき)。ソフトウェアなら
-   * いつでも。**H.265 は指定を聞く GPU (Rockchip MPP 以外) があるときだけ**。無ければ切らずに CM を残して置く
-   */
-  const canPoint = (codec: HwCodec): boolean =>
-    SOFTWARE_CODECS.includes(codec) ||
-    hwChain(codec, settings().hwAllow).some((way) => way.kind !== "rkmpp");
-
-  /** エンコードし終えた 1 本。`skip` はこの 1 本で先頭から捨てた長さ (境目を指して再エンコードしたら変わる) */
+  /** エンコードし終えた 1 本。`skip` はこの 1 本で先頭から捨てた長さ */
   interface Made {
     codec: HwCodec;
     working: string;
     skip: number;
     outTimeUs: number;
-    /** 実際に切って残した区間 (入れ物の先頭からの秒)。切っていなければ null */
-    kept: Range[] | null;
   }
 
   /** エンコードする。落ちたら理由を控えて null (ほかのコーデックは止めない) */
   const encodeCodec = async (codec: HwCodec, first: boolean) => {
     const done = await encodeInSlot(codec, {
       analysis: first && reading !== null,
-      // 境目はまだ分からないので、どのコーデックも場面の切れ目ごとに置く
-      ...(sceneKeys ? { keyframes: () => "scene" as const } : {}),
     });
     if (done === null || canceled.has(jobId)) return null;
     if (done.result.code !== 0) {
@@ -1943,59 +1780,16 @@ async function runJob(jobId: number): Promise<void> {
     return done;
   };
 
-  /**
-   * CM の扱いどおりに仕上げる。CM があれば「チャプター」はチャプターを書き足し、「切る」はキーフレームの所で切る。
-   * 境目にキーフレームが無ければ、そのコーデックだけ境目を指して再エンコードしてから切る。切れなければ CM ごと置き、
-   * チャプターを書き足す (録れているものを捨てない)。**1 本目を切れなかったらほかも切らない**。
-   * 長さが食い違うと、データ放送の時刻 (`kept`) やチャプターがどれかに合わなくなる
-   */
-  const finish = async (made: Made, first: boolean): Promise<Made | null> => {
+  /** 仕上げる。CM があればチャプターを書き足す */
+  const finish = async (made: Made): Promise<Made | null> => {
     if (detection === null || detection.cm.length === 0) return made;
-    const { codec, working } = made;
-    if (!(sceneKeys && cuttable)) {
-      await addChapters(working, made.skip);
-      return canceled.has(jobId) ? null : made;
-    }
-    stage("cut", "CM を切っています");
-    let skip = made.skip;
-    let outTimeUs = made.outTimeUs;
-    let cut = await cutWorking(working, skip);
-    if (cut === "keys" && !canceled.has(jobId) && canPoint(codec)) {
-      // 境目にキーフレームが無かった (無音の真ん中に置いた境目・GPU が指定を聞かなかった)
-      const again = await encodeInSlot(
-        codec,
-        { analysis: false, keyframes: cutKeys, software: true },
-        `CM の境目にキーフレームを置いてエンコードし直します (${codec})`,
-      );
-      if (again === null || canceled.has(jobId)) return null;
-      if (again.result.code !== 0) {
-        failures.push({ codec, reason: again.result.stderrTail });
-        return null;
-      }
-      outTimeUs = again.result.outTimeUs;
-      skip = again.skip;
-      stage("cut", "CM を切っています");
-      cut = await cutWorking(working, skip);
-    }
-    if (typeof cut === "string") {
-      console.error(
-        `[cm] CM を切れませんでした (${cut === "keys" ? "境目にキーフレームがありません" : "繋ぎ直しに失敗しました"})。CM を残したまま置きます (${codec})`,
-      );
-      if (first) cuttable = false;
-      await addChapters(working, skip);
-    }
-    if (canceled.has(jobId)) return null;
-    return {
-      ...made,
-      skip,
-      outTimeUs,
-      kept: typeof cut === "string" ? null : cut,
-    };
+    await addChapters(made.working, made.skip);
+    return canceled.has(jobId) ? null : made;
   };
 
   /**
    * 1 本目。CM を一緒に探し、エンコードし終えたら境目を決め、仕上げる。ほかのコーデックはこれが終わるのを待ってから
-   * 仕上げる (境目と、1 本目を切れたかが要る)。1 本目が落ちたら CM は分からないまま (ほかは CM 無しで置く。
+   * 仕上げる (境目が要る)。1 本目が落ちたら CM は分からないまま (ほかは CM 無しで置く。
    * あとから「CM 検出をやり直す」でチャプターを入れられる)
    */
   const [lead, ...rest] = codecs as [HwCodec, ...HwCodec[]];
@@ -2013,41 +1807,27 @@ async function runJob(jobId: number): Promise<void> {
       );
       if (detection.material !== undefined)
         saveMaterial(recording.id, detection.material);
-      /*
-       * 音だけで決めた (映像の読み込みが落ちて探さずに再エンコードした) なら切らない。尺だけの判定で本編を削るより
-       * CM を残す
-       */
-      cuttable = done.video;
-      firstFrame = (done.found?.times[0] ?? Number.NaN) + done.skip;
       saveCm(recording.id, detection);
       setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
     }
     if (canceled.has(jobId)) return null;
-    return finish(
-      {
-        codec: lead,
-        working: workingOf(lead),
-        skip: done.skip,
-        outTimeUs: done.result.outTimeUs,
-        kept: null,
-      },
-      true,
-    );
+    return finish({
+      codec: lead,
+      working: workingOf(lead),
+      skip: done.skip,
+      outTimeUs: done.result.outTimeUs,
+    });
   })();
   const otherTasks = rest.map(async (codec): Promise<Made | null> => {
     const done = await encodeCodec(codec, false);
     await firstTask;
     if (done === null || canceled.has(jobId)) return null;
-    return finish(
-      {
-        codec,
-        working: workingOf(codec),
-        skip: done.skip,
-        outTimeUs: done.result.outTimeUs,
-        kept: null,
-      },
-      false,
-    );
+    return finish({
+      codec,
+      working: workingOf(codec),
+      skip: done.skip,
+      outTimeUs: done.result.outTimeUs,
+    });
   });
   // 1 本が投げても、ほかが終わるまで待ってから畳む (動いている ffmpeg と作業ファイルを残さない)
   const settledTasks = await Promise.allSettled([firstTask, ...otherTasks]);
@@ -2112,8 +1892,6 @@ async function runJob(jobId: number): Promise<void> {
   const hevc = secondary("hevc");
   const alt = secondary("h264");
   const output = primary.path;
-  /** 主で実際に切って残した区間。データ放送・サムネイル・録画の行 (`cm_kept`) は主に合わせる */
-  const kept = primary.kept;
 
   /*
    * **decoded を消す前に、元の TS からデータ放送を取り出してサイドカーに置く。**
@@ -2125,11 +1903,8 @@ async function runJob(jobId: number): Promise<void> {
       sourceTs,
       sidecarPaths(output).dataBroadcast,
       recording,
-      /*
-       * 録画の行に書くもの (`cm_kept`・`encode_skip`) と同じ直し方。詰めるのは CM を実際に切れたときだけで、
-       * 切れずに CM ごとエンコードしたなら先頭から捨てたぶんを引くだけ
-       */
-      { kept, skip: primary.skip },
+      // 録画の行に書くもの (`encode_skip`) と同じ直し方。先頭から捨てたぶんを引く
+      { kept: null, skip: primary.skip },
     );
     if (changes > 0) {
       console.log(
@@ -2145,19 +1920,17 @@ async function runJob(jobId: number): Promise<void> {
   /*
    * **サムネイルは元の TS から取る** (復号した TS を消す前に)。エンコードした AV1 をデコードし直すと
    * ソフトウェアデコードで数百コマぶん重い。元の TS の MPEG-2/H.264 なら軽い。
-   * 位置は元の TS の時刻で決める (`thumbnailPlace`)。CM を切ったなら残した区間をつないで数え、
-   * CM を残したなら本編の最初の区間から取る (CM の映像を避ける)
+   * 位置は元の TS の時刻で決める (`thumbnailPlace`)。CM があれば本編の最初の区間から取る (CM の映像を避ける)
    */
   const duration = (recording.end_at - recording.start_at) / 1000;
   const content =
-    kept === null && detection !== null && detection.cm.length > 0
+    detection !== null && detection.cm.length > 0
       ? own(primary.skip).keep[0]
       : undefined;
   await writeThumbnail(output, duration, {
     source: sourceTs,
     place: thumbnailPlace(duration, {
       skip: primary.skip,
-      kept,
       content:
         content === undefined
           ? null
@@ -2185,7 +1958,7 @@ async function runJob(jobId: number): Promise<void> {
   const size = fileSize(output) ?? 0;
 
   /*
-   * 出来上がりの長さで上書きする。CM を切っていれば元の TS より短い。
+   * 出来上がりの長さで上書きする。先頭を捨てたぶん元の TS より短い。
    * **出来上がったものを測る** (`out_time` は当てにならない。`encodeProgress`)。測れなかったときだけ ffmpeg の値
    */
   const probed = (await probeVideo(output)).duration;
@@ -2234,11 +2007,11 @@ async function runJob(jobId: number): Promise<void> {
 
   // 保存先が入った時点で「視聴可能」になる (recordings.state は生成列)。
   // 主は `output` (AV1 → H.265 → H.264 の先頭)、もう一方は `hevc`・`alt` (主でないときだけ)。
-  // コマ数 (実測か既定の 60) も一緒に書く。番組詳細のラベルはここからしか出せない
+  // 実測したコマ数も一緒に書く。番組詳細のラベルはここからしか出せない
   const fps = encodeOptions.smoothMotion === true ? 60 : 30;
   /*
-   * 切って残した区間と、先頭から捨てた長さも書く。CM 検出をやり直すとき (`runCmJob`) に、
-   * 切ったものかどうか・元の TS の時刻をエンコードしたものの時刻へどう直すかを、これで決める
+   * 先頭から捨てた長さも書く。CM 検出をやり直すとき (`runCmJob`) に、元の TS の時刻をエンコードしたものの時刻へ
+   * どう直すかを、これで決める。`cm_kept` は空にする (前のバージョンで CM を切ってエンコードした録画を、切らずに再エンコードしたとき)
    */
   const finished = {
     library_path: output,
@@ -2246,7 +2019,7 @@ async function runJob(jobId: number): Promise<void> {
     alt_path: alt,
     ts_size: size,
     fps,
-    cm_kept: kept,
+    cm_kept: null,
     encode_skip: primary.skip,
     updated_at: now(),
   };
@@ -2267,9 +2040,8 @@ async function runJob(jobId: number): Promise<void> {
  *   (エンコードしたものは映像の大きさが違うので、ロゴは大きさごとに覚えたものを使う。`logo-own.modelFile`)
  * - 境目は入れ物の先頭からの秒で覚える (`cm_ranges`。エンコードするときと同じ物差し)。エンコードしたものから読んだなら
  *   エンコードしたときに捨てた先頭の長さ (`encode_skip`) を足して直す
- * - エンコードしたものには CM の扱いの設定どおりにチャプターを書き直す。「チャプターを打つだけ」「切り取る」なら差し替え、
- *   「何もしない」なら外す。`-c copy` で写すだけ
- * - **CM を切ってエンコードしたもの (`cm_kept`) は戻せない**ので受けない (ボタンの側で断っている。ここは念のため)
+ * - エンコードしたもののチャプターを差し替える (CM が見つからなければ外す)。`-c copy` で写すだけ
+ * - **前のバージョンで CM を切ってエンコードしたもの (`cm_kept`) は戻せない**ので受けない (ボタンの側で断っている。ここは念のため)
  *
  * 待ち行列・中止・進み具合・失敗の通知はエンコードするジョブと同じ (`pump`)
  */
@@ -2387,11 +2159,11 @@ async function runCmJob(jobId: number): Promise<void> {
   setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
 
   /*
-   * エンコードしたものにチャプターを書き直す。「何もしない」なら外す。
+   * エンコードしたものにチャプターを書き直す。CM が見つからなければ外す。
    * **全部書き終えてから差し替える**。何本か (AV1・H.265・H.264) のうち一部だけ新しくなる状態を残さない。
    * 覚え書き (`cm_ranges`) も差し替えたあとに書く
    */
-  const cm = settings().cmCut === "off" ? [] : shiftRanges(detection.cm, skip);
+  const cm = shiftRanges(detection.cm, skip);
   const chapters = cm.length > 0 ? `${input}.${jobId}.chapters.txt` : null;
   if (chapters !== null)
     writeFileSync(chapters, chapterMetadata(cm, detection.duration - skip));

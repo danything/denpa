@@ -101,9 +101,7 @@ export function buildThumbnailArgs(
  * エンコードしたもの (AV1) をデコードし直さず、元の TS (MPEG-2/H.264) から取る。AV1 のソフトウェアデコードは
  * 数百コマでも重い。選ぶコマはエンコードしたものから取っていた頃と同じ。
  *
- * - **CM を切った** (`kept`) … エンコードしたものの先頭から `thumbnailPosition` 秒 (短ければ尺の 1/3) の所。
- *   残した区間をつないで数え、元の TS の時刻に戻す
- * - **CM を残した** (`content` = 本編の最初の区間) … 区間の先頭から測る。区間が短ければその真ん中
+ * - **CM がある** (`content` = 本編の最初の区間) … 区間の先頭から測る。区間が短ければその真ん中
  * - **CM 無し** … エンコードしたものの先頭 (`skip` 秒捨てた所) から `thumbnailPosition` 秒 (短ければ尺の 1/3)
  *
  * 区間が分かるときは、その終わりまでしか読まない (候補に CM を混ぜない)。
@@ -111,30 +109,12 @@ export function buildThumbnailArgs(
  */
 export function thumbnailPlace(
   durationSec: number,
-  cm: { skip: number; kept: Range[] | null; content: Range | null } = {
-    skip: 0,
-    kept: null,
-    content: null,
-  },
+  cm: { skip: number; content: Range | null } = { skip: 0, content: null },
 ): ThumbnailPlace {
   const head =
     Number.isFinite(durationSec) && durationSec > 0
       ? Math.min(config.thumbnailPosition, durationSec / 3)
       : config.thumbnailPosition;
-  const kept = cm.kept?.filter((r) => r.end > r.start) ?? [];
-  if (kept.length > 0) {
-    let rest = head;
-    for (const range of kept) {
-      const length = range.end - range.start;
-      if (rest < length)
-        return { at: range.start + rest, limit: length - rest };
-      rest -= length;
-    }
-    // 残した区間を全部足しても届かない (ほとんど切った)。最後の区間の真ん中から
-    const last = kept.at(-1)!;
-    const length = last.end - last.start;
-    return { at: last.start + length / 2, limit: length / 2 };
-  }
   const content = cm.content;
   if (
     content !== null &&

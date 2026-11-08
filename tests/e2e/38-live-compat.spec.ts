@@ -24,8 +24,7 @@ import {
  * (`tests/fake/fmp4-loop.ts`)。映像は VideoDecoder が、音は WASM (`wasm/decoder.c`、28-live-raw と同じ
  * デコーダ。AAC は ADTS の頭を付けて、Opus は OpusHead で) がデコードする。
  *
- * H.264 は、走らせている Chromium の VideoDecoder がデコードできるときだけ描いて確かめる (デコードできなければ
- * 切り替えで選べないことを見る)。箱の読み方 (avcC・esds) は単体試験 (`ts/fmp4.test.ts`) が見る
+ * 描くのは AV1 (H.264 はメニューに並ばず、自動は AV1 を先に選ぶ)。箱の読み方 (avcC・esds) は単体試験 (`ts/fmp4.test.ts`) が見る
  */
 
 const TESLA =
@@ -127,28 +126,10 @@ test.describe("互換モード", () => {
     // 注意は入れたときに見せたので、ライブでは出さない
     await expect(page.getByTestId("drive-notice")).toBeHidden();
 
-    const h264 = await page.evaluate(
-      async () =>
-        (await VideoDecoder.isConfigSupported({ codec: "avc1.640029" }))
-          .supported === true,
-    );
-    if (h264) {
-      // 既定の H.264 をそのまま描く (AAC は ADTS の頭を付けて WASM へ)
-      await expect(page.getByTestId("live-codec")).toContainText("H.264");
-      await expectDrawn(page);
-    } else {
-      // 描けない形式は切り替えで選ばせない
-      await wakeControls(page, "live-frame");
-      await openSettings(page, "live");
-      await page.getByTestId("live-codec").click();
-      const option = page.locator(
-        '[data-testid="live-codec-option"][data-codec="h264"]',
-      );
-      await expect(option).toHaveAttribute("data-disabled");
-      await expect(option).toContainText("再生できません");
-      await page.keyboard.press("Escape");
-    }
-    // AV1 (Opus は WASM)
+    // 自動は描ける形式の先頭 (互換モードは AV1 → H.264 → MPEG-2)。H.264 と H.265 はメニューに並ばない
+    await expect(page.getByTestId("live-codec")).toContainText("自動 (AV1)");
+    await expectDrawn(page);
+    // 選んでも同じ AV1 (Opus は WASM)
     await watchAv1(page);
     await expectDrawn(page);
 
@@ -223,7 +204,7 @@ test.describe("互換モード", () => {
           send.call(this, data);
         };
       });
-      // 自動で開く (ほかのスペックは H.264 を選んだ端末として開く)
+      // 自動で開く (前のテストで選んだものを消す)
       await page.context().clearCookies();
       await goto(page, "/live");
       await page.getByTestId("drive-notice-accept").click();

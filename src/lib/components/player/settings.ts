@@ -3,6 +3,7 @@ import type { CaptionLanguage } from "@danything/arib/caption-text";
 import { type Step, stepLabel } from "#lib/adapt.js";
 import {
   formatLabel,
+  HIDDEN_CODECS,
   type LiveChoice,
   type LiveFormat,
 } from "#lib/live-choice.js";
@@ -66,14 +67,13 @@ const MPEG2 = "mpeg2";
 const AUTO = "auto";
 
 /**
- * ライブと追っかけのコーデック。並びは **自動 → AV1 → H.265 → H.264 → MPEG-2** (`#lib/live.ts` の `LIVE_CODECS`。観る画面の `ts/playback.ts` の `MENU_ORDER` と同じ)。押すと再エンコードに
+ * ライブと追っかけのコーデック。並びは **自動 → AV1 → MPEG-2** (観る画面の `ts/playback.ts` の `MENU_ORDER` と同じ順)。押すと再エンコードに
  * なるので映像が一瞬止まるが、前の映像を貼ったまま差し替わる。自動の行の値には、いま決まっている形式を添える (「自動 (MPEG-2)」)。
  * 回線に合わせて段を下げていれば高さも添える (「自動 (H.264 540p)」「自動 (音声だけ)」)。
  *
  * 末尾に **MPEG-2** が並ぶ (ライブも追っかけも)。エンコードせずに放送そのままを
  * この端末でデコードする経路 (docs/stream.md#放送そのままmpeg-2を送る)。
- * H.265 は `hevc` を渡したときだけ並ぶ (ライブで、ライブのエンコーダが GPU のとき。`server/viewing.ts`)。
- * `hidden` (世帯の設定。H.264 と H.265 を出さない) なら H.264 と H.265 は並べない。自動でそれになっているのは値に出す。
+ * **H.264 と H.265 は並べない** (`#lib/live-choice.ts` の `HIDDEN_CODECS`)。AV1 を再生できない端末では自動がそれを選び、値に出す。
  * `unavailable` に挙げた形式は、並べるが押せない (`live-player.svelte.ts` の `unavailable`)
  */
 export function liveCodecs(opts: {
@@ -84,16 +84,11 @@ export function liveCodecs(opts: {
   format: LiveFormat;
   /** 回線に合わせて下げた段 (`live-player.svelte.ts` の `step`)。自動の行の値に高さを添える (「自動 (H.264 540p)」)。省くと 0 */
   step?: Step;
-  /** H.265 を並べるか (ライブで、ライブのエンコーダが GPU のときだけ。追っかけは出さない) */
-  hevc?: boolean;
-  hidden?: boolean;
   unavailable: LiveCodec[];
   onselect: (choice: LiveChoice) => void;
 }): SettingChoice {
-  const codecs = LIVE_CODECS.filter((c) =>
-    c.id === "hevc"
-      ? opts.hevc === true && opts.hidden !== true
-      : !(opts.hidden === true && c.id === "h264"),
+  const codecs = LIVE_CODECS.filter(
+    (c) => !(HIDDEN_CODECS as readonly LiveCodec[]).includes(c.id),
   );
   return {
     id: "codec",

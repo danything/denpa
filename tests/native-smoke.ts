@@ -228,15 +228,15 @@ console.log("ffmpeg: ok");
 /*
  * GPU のエンコーダ。Windows のランナーに GPU は無いのでエンコードは通らない。Mac のランナーでは VideoToolbox が通る。
  * ここで見るのは次の 3 つ。
- * 1. denpa が渡すエンコーダのオプション (hwenc.hwArgs・hwenc.liveHwArgs・encoder.keyframeArgs) を、組み込んだエンコーダが持っている
+ * 1. denpa が渡すエンコーダのオプション (hwenc.hwArgs・hwenc.liveHwArgs) を、組み込んだエンコーダが持っている
  * 2. hwArgs の引数で起動すると、通るか GPU が無いために落ちる (エンコーダやオプションの名前が違って落ちるのではない)
  * 3. 試しのエンコードが全部落ちると、GPU の方式は 0 になり、録画もライブもソフトウェアでエンコードする。
  *    通ったものがあれば、その方式で放送に似せた素材をエンコードでき、試しのエンコードが落ちる ffmpeg で探し直すとソフトウェアに戻る
  */
 const options: Record<string, string[]> = {
-  nvenc: ["gpu", "preset", "rc", "forced-idr", "delay", "zerolatency"],
-  qsv: ["preset", "forced_idr", "async_depth"],
-  amf: ["usage", "quality", "rc", "forced_idr", "async_depth"],
+  nvenc: ["gpu", "preset", "rc", "delay", "zerolatency"],
+  qsv: ["preset", "async_depth"],
+  amf: ["usage", "quality", "rc", "async_depth"],
   videotoolbox: ["profile", "prio_speed", "realtime"],
 };
 /**
