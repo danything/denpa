@@ -50,11 +50,6 @@
     flex: none;
     padding: 0.5rem;
   }
-  .head .skeleton-head {
-    display: block;
-    width: 70%;
-    height: 1.25rem;
-  }
   /* マスのところ (表の `.cell` と同じく左右に 0.125rem 空ける) */
   .body {
     flex: 1;

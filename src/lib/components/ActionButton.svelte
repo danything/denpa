@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { SubmitFunction } from "$app/forms";
   import type { Snippet } from "svelte";
 
   import { submitting } from "#lib/actions.js";
@@ -10,6 +11,7 @@
   let {
     action,
     fields = {},
+    submit,
     class: kind = "",
     testid,
     disabled = false,
@@ -18,6 +20,8 @@
     action: string;
     /** 一緒に送る隠し欄 (名前 → 値) */
     fields?: Record<string, string | number>;
+    /** 送ったあとの始末 (`submitting` にそのまま渡す) */
+    submit?: SubmitFunction;
     /** ボタンの見た目 (app.css の `xs` / `outline` / `danger` など) */
     class?: string;
     testid?: string;
@@ -26,7 +30,7 @@
   } = $props();
 </script>
 
-<form method="POST" {action} use:submitting>
+<form method="POST" {action} use:submitting={submit}>
   {#each Object.entries(fields) as [name, value] (name)}
     <input type="hidden" {name} {value} />
   {/each}

@@ -683,13 +683,13 @@ thead th {
 .stack {
   display: flex;
   flex-direction: column;
-  gap: var(--gap, 0.75rem);
+  gap: var(--dp-space-3);
 }
 .cluster {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap, 0.5rem);
+  gap: var(--dp-space-2);
 }
 .spread {
   justify-content: space-between;
@@ -1588,13 +1588,14 @@ a.button {
 /*
  * 下線。押す場所の内側に引くので高さは変わらない。
  * **選び直すと、下線が前の場所から横へ滑る** (CSS だけ。下の「滑る印」)。
- * アンカーに対応していないブラウザは、選んでいるタブの中に線を引く (滑らない)
+ * アンカーに対応していないブラウザは、選んでいるタブの中に線を引く (滑らない)。ヘッダーのナビ (`ul.links`) も同じ線
  */
 [role="group"].segmented
   > :is(button, a.button):is(
     [aria-current="page"],
     [aria-pressed="true"]
-  )::after {
+  )::after,
+ul.links a.button[aria-current="page"]::after {
   content: "";
   position: absolute;
   inset-inline: 0.65rem;
@@ -1612,24 +1613,28 @@ a.button {
  * 並びごとに `anchor-scope` で閉じ、別の並びの印と混ざらないようにする
  */
 @supports (anchor-name: --a) {
-  [role="group"].segmented {
+  [role="group"].segmented,
+  ul.links {
     position: relative;
     anchor-scope: --slide;
   }
   [role="group"].segmented
-    > :is(button, a.button):is([aria-current="page"], [aria-pressed="true"]) {
+    > :is(button, a.button):is([aria-current="page"], [aria-pressed="true"]),
+  ul.links a.button[aria-current="page"] {
     anchor-name: --slide;
   }
   [role="group"].segmented
     > :is(button, a.button):is(
       [aria-current="page"],
       [aria-pressed="true"]
-    )::after {
+    )::after,
+  ul.links a.button[aria-current="page"]::after {
     content: none;
   }
   [role="group"].segmented:has(
       > :is(button, a.button):is([aria-current="page"], [aria-pressed="true"])
-    )::after {
+    )::after,
+  ul.links:has(a.button[aria-current="page"])::after {
     content: "";
     position: absolute;
     position-anchor: --slide;
@@ -2723,6 +2728,12 @@ dialog[open] > article {
 /* 見出しの行。本物と同じで、ここだけ濃い */
 .skeleton-head {
   background: var(--dp-line);
+}
+/* 番組表の局名 (局名の字の行と同じ高さ)。局の並びを待つ骨組み (`GuideSkeleton`) と、別の種別へ移る途中の番組表で同じ */
+.guide-frame .skeleton-head {
+  display: block;
+  width: 70%;
+  height: 1.25rem;
 }
 .skeleton::after {
   content: "";

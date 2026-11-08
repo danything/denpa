@@ -444,7 +444,7 @@
   justify-content: center;
   color: var(--dp-on-video);
   opacity: 0;
-  background: rgb(0 0 0 / 0.45);
+  background: var(--dp-video-veil);
   transition: opacity var(--dp-duration) var(--dp-ease);
 }
 .board .t-play .poster-icon {
@@ -465,7 +465,7 @@
   bottom: 0;
   z-index: 1;
   height: 0.25rem;
-  background: rgb(0 0 0 / 0.55);
+  background: var(--dp-video-veil);
 }
 /* 中身の無い `<span>` なので、ブロックにしないと幅も高さも付かない */
 .board .t-resume .resume-fill {
