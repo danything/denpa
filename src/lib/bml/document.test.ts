@@ -236,10 +236,11 @@ describe("CSS", () => {
 
   test("継ぐ特性の読めない値は、既定でなく親の値になる", () => {
     const doc = load(
-      '<bml><body><p style="color-index: 7; font-size: 30px; letter-spacing: 2px">x<span id="s" style="color-index: abc; font-size: 1em; letter-spacing: x">y</span></p></body></bml>',
+      '<bml><body><p style="color-index: 7; font-size: 30px; letter-spacing: 2px; grayscale-color-index: 1 2">x<span id="s" style="color-index: abc; font-size: 1em; letter-spacing: x; grayscale-color-index: 1">y</span></p></body></bml>',
     );
     const s = doc.getElementById("s")!.style();
     expect([s.colorIndex, s.fontSize, s.letterSpacing]).toEqual([7, 30, 2]);
+    expect(s.grayscale).toEqual([1, 2]);
   });
 
   test("文字の色の既定は黒 (0)。指定の無い段落は body から黒を継ぐ (地震お知らせ表示設定の「利用する」)", () => {

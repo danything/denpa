@@ -293,7 +293,7 @@ export function compute(
     visible: inherits("visibility")
       ? parent!.visible
       : (get("visibility") ?? "visible").toLowerCase() !== "hidden",
-    // 継ぐ特性の数は、値が無い・inherit・読めないときに親の値を使う (読めない宣言は無かったことにする)
+    // 継ぐ特性は、値が無い・inherit・読めないときに親の値を使う (読めない宣言は無かったことにする)
     colorIndex: parseIndex(get("color-index"), parent?.colorIndex ?? 0),
     backgroundColorIndex: parseIndex(get("background-color-index"), 8),
     grayscale: grayscale(),
