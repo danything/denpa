@@ -911,14 +911,22 @@
     target.load();
   }
 
-  /** いまのプレイヤーが詰まって進んでいないか (止めている間は詰まりではない) */
+  /**
+   * いまのプレイヤーが詰まって進んでいないか (止めている間は詰まりではない)。届いたぶんの末尾まで観終えた
+   * (`ended`) のも詰まりに数える。人が止めたのではないので、入れ替えたら続ける
+   */
   function mediaStuck(): boolean {
     if (canvas !== null) return !canvas.paused && !canvas.flowing;
+    if (video === null) return false;
+    if (video.ended) return true;
     return (
-      video !== null &&
-      !video.paused &&
-      video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
+      !video.paused && video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
     );
+  }
+
+  /** 人が止めているか (末尾まで観終えて止まったのは数えない。`mediaStuck`) */
+  function heldByUser(): boolean {
+    return mediaPaused() && !(canvas === null && video?.ended === true);
   }
 
   /**
@@ -954,7 +962,7 @@
     const down = stepOrder(next) > stepOrder(step);
     const last = Math.max(0, plan.duration - 1);
     let target = Math.min(
-      handoffTarget(mediaTime(), !mediaPaused() && !mediaStuck()),
+      handoffTarget(mediaTime(), !heldByUser() && !mediaStuck()),
       last,
     );
     let made: RemuxPlayer | null = null;
@@ -1044,7 +1052,7 @@
           spareAt: spare.currentTime,
           target,
           at: mediaTime(),
-          paused: mediaPaused(),
+          paused: heldByUser(),
           stuckFor:
             stuckSince === null ? 0 : Math.max(1, Date.now() - stuckSince),
         });

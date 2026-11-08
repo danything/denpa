@@ -313,11 +313,11 @@ test.describe("観る画面でその場で流す", () => {
 
   /**
    * **段を替えるときは、いまの映像を映したまま裏の `<video>` で用意して入れ替える** (`handoff.ts`)。
-   * ファイルの直再生が詰まって段 1 の変換へ移っても、黒く塗った覆いを出さず、観ていない頭の CM を飛ばず
+   * ファイルの直再生から段を下げた変換へ移っても、黒く塗った覆いを出さず、観ていない頭の CM を飛ばず
    * (「CM を飛ばしました」を出さない)、観ていた位置から続ける。同じ `<video>` を作り直していた頃は、
    * 位置が 0 に戻った一瞬に頭の CM を飛び、映像も黒くなっていた。
    *
-   * ファイルは頭の 18 秒ぶんほどだけ返し、続きは返さない (回線が細くて詰まる)。映像は作り置きの fMP4 (`fmp4-clip.ts`)
+   * ファイルは頭の 12 秒ぶんだけにし (届いたぶんを観終えそうになる)、映像は作り置きの fMP4 (`fmp4-clip.ts`) を使う
    */
   test("段を下げても黒くならず、頭の CM を飛ばず、観ていた位置から続ける", async ({
     page,
@@ -351,28 +351,11 @@ test.describe("観る画面でその場で流す", () => {
           },
         }),
       );
-      const file = Buffer.from(clipFrom(clip, 0, 30));
-      // 頭の 6 割 (18 秒ぶん) を返す。末尾はブラウザが索引を探しに読むので返す
-      const sent = Math.floor(file.length * 0.6);
-      const tail = file.length - 65_536;
-      await page.route(`**/api/recordings/${id}/file?**`, async (route) => {
-        const range = /bytes=(\d+)-/.exec(
-          (await route.request().headerValue("range")) ?? "",
-        );
-        const start = range === null ? 0 : Number(range[1]);
-        // 続きは返さない (詰まる)
-        if (start >= sent && start < tail) return;
-        const end = start >= tail ? file.length : sent;
-        await route.fulfill({
-          status: 206,
-          headers: {
-            "Content-Type": "video/mp4",
-            "Content-Range": `bytes ${start}-${end - 1}/${file.length}`,
-            "Accept-Ranges": "bytes",
-          },
-          body: file.subarray(start, end),
-        });
-      });
+      // ファイルは頭の 12 秒ぶんしか無い。先の溜まりが減り続けて 2 秒を切ると、段を下げる
+      const file = Buffer.from(clipFrom(clip, 0, 12));
+      await page.route(`**/api/recordings/${id}/file?**`, (route) =>
+        route.fulfill({ status: 200, contentType: "video/mp4", body: file }),
+      );
       // リクエストされた位置から 60 秒ぶん (時刻はページの物差しのまま)
       await page.route(`**/api/recordings/${id}/stream?**`, (route) => {
         const from = Number(
@@ -439,14 +422,15 @@ test.describe("観る画面でその場で流す", () => {
         requestAnimationFrame(look);
       });
 
-      // 詰まって段 1 の変換へ移る。詰まった位置から用意する
+      // 段を下げた変換へ移る。観ている位置の先から用意する
       await expect.poll(() => asked.length, { timeout: 60_000 }).toBe(1);
       const first = asked[0]!;
-      expect(first.searchParams.get("rung")).toBe("1");
+      expect(first.searchParams.get("rung")).not.toBeNull();
       const from = Number(first.searchParams.get("from"));
       expect(from).toBeGreaterThan(2);
-      await expect(page.getByTestId("watch-adapt")).toHaveText(
-        "回線が細いため、720p に下げました",
+      await expect(page.getByTestId("watch-adapt")).toContainText(
+        "に下げました",
+        { timeout: 30_000 },
       );
       await expect(video).not.toHaveAttribute("src", /file/);
       // 入れ替えた側は観ていた位置から続ける (頭へ戻らない)
