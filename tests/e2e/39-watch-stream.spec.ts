@@ -317,7 +317,7 @@ test.describe("観る画面でその場で流す", () => {
    * (「CM を飛ばしました」を出さない)、観ていた位置から続ける。同じ `<video>` を作り直していた頃は、
    * 位置が 0 に戻った一瞬に頭の CM を飛び、映像も黒くなっていた。
    *
-   * ファイルは頭の 6 秒ぶんほどだけ返し、続きは返さない (回線が細くて詰まる)。映像は作り置きの fMP4 (`fmp4-clip.ts`)
+   * ファイルは頭の 18 秒ぶんほどだけ返し、続きは返さない (回線が細くて詰まる)。映像は作り置きの fMP4 (`fmp4-clip.ts`)
    */
   test("段を下げても黒くならず、頭の CM を飛ばず、観ていた位置から続ける", async ({
     page,
@@ -352,22 +352,25 @@ test.describe("観る画面でその場で流す", () => {
         }),
       );
       const file = Buffer.from(clipFrom(clip, 0, 30));
-      const sent = Math.floor(file.length / 5);
+      // 頭の 6 割 (18 秒ぶん) を返す。末尾はブラウザが索引を探しに読むので返す
+      const sent = Math.floor(file.length * 0.6);
+      const tail = file.length - 65_536;
       await page.route(`**/api/recordings/${id}/file?**`, async (route) => {
         const range = /bytes=(\d+)-/.exec(
-          route.request().headers()["range"] ?? "",
+          (await route.request().headerValue("range")) ?? "",
         );
         const start = range === null ? 0 : Number(range[1]);
         // 続きは返さない (詰まる)
-        if (start >= sent) return;
+        if (start >= sent && start < tail) return;
+        const end = start >= tail ? file.length : sent;
         await route.fulfill({
           status: 206,
           headers: {
             "Content-Type": "video/mp4",
-            "Content-Range": `bytes ${start}-${sent - 1}/${file.length}`,
+            "Content-Range": `bytes ${start}-${end - 1}/${file.length}`,
             "Accept-Ranges": "bytes",
           },
-          body: file.subarray(start, sent),
+          body: file.subarray(start, end),
         });
       });
       // リクエストされた位置から 60 秒ぶん (時刻はページの物差しのまま)
@@ -425,7 +428,11 @@ test.describe("観る画面でその場で流す", () => {
           const cover = document.querySelector<HTMLCanvasElement>(
             '[data-testid="watch-cover"]',
           );
-          if (cover !== null && !cover.hidden && cover.dataset.blank === "true")
+          if (
+            cover !== null &&
+            !cover.hidden &&
+            cover.dataset["blank"] === "true"
+          )
             seen.blank++;
           requestAnimationFrame(look);
         };
@@ -433,7 +440,7 @@ test.describe("観る画面でその場で流す", () => {
       });
 
       // 詰まって段 1 の変換へ移る。詰まった位置から用意する
-      await expect.poll(() => asked.length, { timeout: 30_000 }).toBe(1);
+      await expect.poll(() => asked.length, { timeout: 60_000 }).toBe(1);
       const first = asked[0]!;
       expect(first.searchParams.get("rung")).toBe("1");
       const from = Number(first.searchParams.get("from"));

@@ -5,6 +5,7 @@ import {
   HANDOFF_LEAD,
   HANDOFF_STUCK,
   type HandoffState,
+  type HandoffStep,
   handoffTarget,
 } from "./handoff";
 
@@ -21,8 +22,8 @@ function state(patch: Partial<HandoffState> = {}): HandoffState {
   };
 }
 
-const WAIT = { kind: "wait" };
-const PLAY = { kind: "switch", play: true };
+const WAIT: HandoffStep = { kind: "wait" };
+const PLAY: HandoffStep = { kind: "switch", play: true };
 
 describe("段を替えるときの受け渡し", () => {
   test("表が進んでいれば先読みのぶん先で待たせ、止まっていれば表の位置で待たせる", () => {
