@@ -117,6 +117,28 @@ describe("DecodeBudget", () => {
     const results = [7, 8, 9].map((s) => second(budget, s * WINDOW, 5, 0.5));
     expect(results).toEqual([false, false, true]);
   });
+
+  /*
+   * **回線が詰まってデータが届いていない間 (`pause`) は数えない。** 家の中の Wi-Fi で放送のまま受けると一瞬の詰まりは
+   * 起きやすく、その遅れを数えて変換した映像へ早めに戻っていた。デコードが本当に遅いぶんの打ち切りの回数は残す
+   */
+  test("届いていない間 (`pause`) の遅れは数えず、それまでの打ち切りの回数は残す", () => {
+    const budget = new DecodeBudget();
+    budget.tick(0, 33.4, 0);
+    // 詰まりが 1 秒ごとに来ても、そのたびに止めて数えないので打ち切らない
+    for (let s = 1; s <= 10; s++) {
+      budget.pause(s * WINDOW + 500);
+      expect(second(budget, s * WINDOW, 5, 1)).toBe(false);
+    }
+    // デコードが重いのを 2 回数えたところで詰まっても、届いたあと 1 回数えれば打ち切る
+    // (止めたあとの最初の刻みは窓の始まりで、数えない)
+    expect(second(budget, 12 * WINDOW, 30)).toBe(false);
+    expect(second(budget, 13 * WINDOW, 30)).toBe(false);
+    expect(second(budget, 14 * WINDOW, 30)).toBe(false);
+    budget.pause(15 * WINDOW);
+    expect(second(budget, 15 * WINDOW, 30)).toBe(false);
+    expect(second(budget, 16 * WINDOW, 30)).toBe(true);
+  });
 });
 
 describe("DecodeBudget (WebCodecs の経路)", () => {

@@ -135,4 +135,19 @@ export class DecodeBudget {
     this.strikes = 0;
     this.droppedFrom = Number.NaN;
   }
+
+  /**
+   * **届いていない間は数えない。** 回線が詰まってデコードするデータが無いとき (変換せずに送る経路の `starved`)。
+   * 映像が時計から遅れても、届いたあとに番を過ぎたコマを捨てても、デコードが間に合っていないのではない。
+   * `until` (ms) までは数えず、窓はそのあとから始める。`reset` と違って、それまでに数えた打ち切りの回数は残す
+   * (デコードが本当に遅い端末は、届いている間に続けて数える)
+   */
+  pause(until: number): void {
+    this.quietUntil = Math.max(this.quietUntil, until);
+    this.samples = [];
+    this.from = Number.NaN;
+    this.worstLate = 0;
+    this.leastQueued = Number.POSITIVE_INFINITY;
+    this.droppedFrom = Number.NaN;
+  }
 }
