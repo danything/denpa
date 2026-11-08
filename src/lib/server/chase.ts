@@ -14,14 +14,18 @@
  * シークのたびに ffmpeg ごと立て直す (ライブの選局し直しと同じ流儀)。
  */
 
-import { closeSync, openSync, readSync, statSync } from "node:fs";
-import { open } from "node:fs/promises";
+import { statSync } from "node:fs";
 
 import { PACKET } from "@danything/arib/psi";
 
 import { lastVideoPts, readHead, sinceHead, tsHead } from "#lib/ts/seek.js";
 
 import type { Recording } from "../types";
+import {
+  openRecording,
+  openRecordingSync,
+  type RecordingSyncHandle,
+} from "./recording-io";
 
 /** 1 回に読む量。小さすぎると read の回数だけ損する */
 const READ_SIZE = 256 * 1024;
@@ -168,7 +172,7 @@ export function followFile(
       let started = Date.now();
       let sent = 0;
       let position = offset;
-      const handle = await open(path, "r");
+      const handle = await openRecording(path);
       try {
         const buffer = new Uint8Array(READ_SIZE);
         while (!cancelled) {
@@ -238,9 +242,13 @@ const SPAN_BYTES = 4 * 1024 * 1024;
 const spans = new Map<string, { key: string; seconds: number | null }>();
 
 /** ファイルの `offset` から `length` バイトを同期で読む */
-function readRange(fd: number, offset: number, length: number): Uint8Array {
+function readRange(
+  file: RecordingSyncHandle,
+  offset: number,
+  length: number,
+): Uint8Array {
   const buffer = new Uint8Array(length);
-  return buffer.subarray(0, readSync(fd, buffer, 0, length, offset));
+  return buffer.subarray(0, file.read(buffer, 0, length, offset));
 }
 
 /**
@@ -264,19 +272,19 @@ export function finishedTsSec(path: string): number | null {
   if (held?.key === key) return held.seconds;
   let seconds: number | null = null;
   try {
-    const fd = openSync(path, "r");
+    const file = openRecordingSync(path);
     try {
-      const head = tsHead(readRange(fd, 0, SPAN_BYTES));
+      const head = tsHead(readRange(file, 0, SPAN_BYTES));
       const last =
         head === null
           ? null
           : lastVideoPts(
-              readRange(fd, Math.max(0, size - SPAN_BYTES), SPAN_BYTES),
+              readRange(file, Math.max(0, size - SPAN_BYTES), SPAN_BYTES),
             );
       const span = head === null || last === null ? 0 : sinceHead(last, head);
       seconds = span > 0 ? span : null;
     } finally {
-      closeSync(fd);
+      file.close();
     }
   } catch {
     seconds = null;
@@ -328,7 +336,7 @@ export async function tsFileHead(
   if ((unreadable.get(path) ?? 0) > now) return null;
   let head: number | null = null;
   try {
-    const handle = await open(path, "r");
+    const handle = await openRecording(path);
     try {
       head = await readHead(async (offset, length) => {
         const buffer = new Uint8Array(length);

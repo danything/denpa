@@ -83,7 +83,6 @@ import {
   chasePlan,
   chaseReadHeld,
   type ChaseResume,
-  fileSize,
   followFile,
   recordedSec,
   resumeFrom,
@@ -106,6 +105,7 @@ import {
 } from "./hwenc";
 import { tunerOf, yieldedTo } from "./live-yield";
 import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
+import { recordingSize } from "./recording-io";
 import { programs, recordings, services } from "./schema";
 import { settings } from "./settings";
 import { chunks, endInput, lines, sideOutput } from "./stream";
@@ -3719,7 +3719,7 @@ function chaseSource(
     .get();
   if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null)
     return undefined;
-  return { rec, path: rec.ts_path, size: fileSize(rec.ts_path) ?? 0 };
+  return { rec, path: rec.ts_path, size: recordingSize(rec.ts_path) ?? 0 };
 }
 
 /** もう書き足されないか。録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり */

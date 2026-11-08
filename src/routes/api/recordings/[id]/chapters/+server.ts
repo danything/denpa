@@ -3,6 +3,7 @@ import { statSync } from "node:fs";
 import { config } from "#lib/server/config.js";
 import { encodedFile } from "#lib/server/library.js";
 import { PROBE_TIMEOUT, tsChapters } from "#lib/server/playback.js";
+import { recordingProbeInput } from "#lib/server/recording-io.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { etagMatches, fileEtag } from "#lib/server/serve.js";
 import { run } from "#lib/server/stream.js";
@@ -79,7 +80,7 @@ export async function GET({ params, request }) {
       "-show_chapters",
       "-print_format",
       "json",
-      path,
+      ...recordingProbeInput(path),
     ],
     { timeoutMs: PROBE_TIMEOUT, stdout: true },
   );

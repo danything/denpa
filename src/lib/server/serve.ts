@@ -1,10 +1,7 @@
-import { createReadStream } from "node:fs";
-import { Readable } from "node:stream";
-
-import { fileSize } from "./chase";
+import { recordingSize, recordingStream } from "./recording-io";
 
 /**
- * ファイルをそのまま返す。Range に対応する。
+ * 録画のファイルをそのまま返す。Range に対応する。
  *
  * プレイヤーは Range でシークする。対応していないと、
  * プレイヤーによっては全部落とし終わるまで早送りできない。
@@ -14,7 +11,7 @@ export function serveFile(
   contentType: string,
   request: Request,
 ): Response {
-  const size = fileSize(path);
+  const size = recordingSize(path);
   if (size === null) return new Response("not found", { status: 404 });
 
   const base: Record<string, string> = {
@@ -27,12 +24,11 @@ export function serveFile(
     });
   }
 
+  // `to` は Range と同じく末尾を含む
   const stream = (from?: number, to?: number) =>
-    Readable.toWeb(
-      from === undefined
-        ? createReadStream(path)
-        : createReadStream(path, { start: from, end: to }),
-    ) as unknown as ReadableStream;
+    from === undefined || to === undefined
+      ? recordingStream(path)
+      : recordingStream(path, from, to + 1);
 
   const unsatisfiable = () =>
     new Response(null, {
