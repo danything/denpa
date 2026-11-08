@@ -63,8 +63,8 @@
     justify-content: center;
     width: 1.5rem;
     height: 1.5rem;
-    margin: calc(-1 * var(--dp-space-1)) 0 calc(-1 * var(--dp-space-1))
-      0.125rem;
+    margin: calc(-1 * var(--dp-space-1)) 0;
+    margin-left: 0.125rem;
     padding: 0;
     border: 0;
     border-radius: var(--dp-radius-full);
