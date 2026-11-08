@@ -261,7 +261,7 @@ describe("コーデックのメニュー (codecChoices)", () => {
     ]);
   });
 
-  test("世帯の設定で外したもの (H.264・H.265) は並べない", () => {
+  test("外すと決めたもの (メニューでは H.264・H.265) は並べない", () => {
     expect(codecChoices(av1Only, chrome, ["h264", "hevc"])).toEqual(["av1"]);
     expect(codecChoices(av1Only, chrome, [])).toEqual(["av1", "h264"]);
   });

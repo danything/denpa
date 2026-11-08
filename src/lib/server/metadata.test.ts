@@ -57,57 +57,21 @@ describe("thumbnailPlace (元の TS の時刻で決める)", () => {
   const position = config.thumbnailPosition;
 
   test("CM 無し: 先頭を捨てた所から数える", () => {
-    expect(
-      thumbnailPlace(1800, { skip: 0.93, kept: null, content: null }),
-    ).toEqual({
+    expect(thumbnailPlace(1800, { skip: 0.93, content: null })).toEqual({
       at: 0.93 + position,
     });
     // 短い番組は尺の 1/3
-    expect(
-      thumbnailPlace(60, { skip: 0.5, kept: null, content: null }),
-    ).toEqual({ at: 20.5 });
+    expect(thumbnailPlace(60, { skip: 0.5, content: null })).toEqual({
+      at: 20.5,
+    });
     // 元の TS を渡さない (エンコードしない録画) なら動画の先頭から
     expect(thumbnailPlace(1800)).toEqual({ at: position });
   });
 
-  test("CM を切った: 残した区間をつないで数え、その区間の終わりまで読む", () => {
-    // エンコードしたものの先頭は 30 秒 (前の CM と捨てた先頭は入らない)
-    const kept = [
-      { start: 30, end: 30 + position / 2 },
-      { start: 400, end: 1700 },
-    ];
-    const place = thumbnailPlace(1800, { skip: 0.93, kept, content: null });
-    // 1 つ目の区間で position/2 秒使い、残りを 2 つ目の先頭から
-    expect(place.at).toBeCloseTo(400 + position / 2);
-    expect(place.limit).toBeCloseTo(1700 - (400 + position / 2));
-  });
-
-  test("CM を切った: 1 つ目の区間で届くならそこから", () => {
-    const place = thumbnailPlace(1800, {
-      skip: 0,
-      kept: [{ start: 12, end: 900 }],
-      content: null,
-    });
-    expect(place).toEqual({ at: 12 + position, limit: 900 - 12 - position });
-  });
-
-  test("CM を切った: 全部足しても届かなければ最後の区間の真ん中", () => {
-    const place = thumbnailPlace(1800, {
-      skip: 0,
-      kept: [
-        { start: 10, end: 20 },
-        { start: 50, end: 70 },
-      ],
-      content: null,
-    });
-    expect(place).toEqual({ at: 60, limit: 10 });
-  });
-
-  test("CM を残した: 本編の最初の区間の先頭から測り、区間の終わりまで読む", () => {
+  test("CM がある: 本編の最初の区間の先頭から測り、区間の終わりまで読む", () => {
     expect(
       thumbnailPlace(1800, {
         skip: 0.93,
-        kept: null,
         content: { start: 95.5, end: 700 },
       }),
     ).toEqual({
@@ -118,21 +82,11 @@ describe("thumbnailPlace (元の TS の時刻で決める)", () => {
     expect(
       thumbnailPlace(1800, {
         skip: 0.93,
-        kept: null,
         content: { start: 100, end: 140 },
       }),
     ).toEqual({
       at: 120,
       limit: 20,
     });
-  });
-
-  test("切った区間があればそちらを使う (本編の区間より優先)", () => {
-    const place = thumbnailPlace(1800, {
-      skip: 0,
-      kept: [{ start: 30, end: 900 }],
-      content: { start: 500, end: 600 },
-    });
-    expect(place.at).toBe(30 + position);
   });
 });

@@ -51,7 +51,6 @@
 
   /** 保存の結果 (`autosave`)。節ごとに見出しの横に出す */
   const encodingSave = new SaveState();
-  const cmSave = new SaveState();
   const viewingSave = new SaveState();
 
   /**
@@ -323,21 +322,6 @@
             hint="エンコードしたあとも元の TS を消しません。容量を多く使います"
           />
         </div>
-        <!--
-                    コマ数 (30/60) は本編映像のフィールドを比べて決める (`server/fps.ts`)。
-                    放送は素材が何でも 1080i/60 で来るので、ジャンルにも TS のヘッダにも
-                    本当のコマ数は入っていない
-                -->
-        <div class="field">
-          <span class="field-label">コマ数</span>
-          <CheckRow
-            name="fpsDetect"
-            checked={recording.fpsDetect}
-            title="コマ数を映像から決める"
-            hint="アニメなどは 30 コマにして、時間とサイズを半分にします"
-            detail="同じコマが続く映像 (アニメなど) を見分けて 30 コマでエンコードします。外すとすべて 60 コマになります。"
-          />
-        </div>
       </form>
       <!-- 「確かめ直す」が送るフォーム。ボタンは映像コーデックの下にあり、`form="probe-hw"` で指す -->
       <form
@@ -352,8 +336,8 @@
 </div>
 
 <!--
-    視聴 (世帯の設定)。ライブの「自動」が家の中とみる名前 (`#lib/host.ts` の `indoorHost`) と、コーデックのメニューから
-    H.264 と H.265 を外すか (`#lib/live-choice.ts` の `HIDDEN_CODECS`)。名前の欄は離れたときに保存する (打っている途中では送らない)
+    視聴 (世帯の設定)。ライブの「自動」が家の中とみる名前 (`#lib/host.ts` の `indoorHost`)。
+    名前の欄は離れたときに保存する (打っている途中では送らない)
 -->
 <div id="viewing" data-part>
   <div class="sections readable">
@@ -399,52 +383,6 @@
             {/snippet}
           </Lead>
         </div>
-        <div class="field">
-          <span class="field-label">コーデック</span>
-          <CheckRow
-            name="hideH264Hevc"
-            checked={recording.hideH264Hevc}
-            title="コーデックの選択肢に H.264 と H.265 を出さない"
-            hint="AV1 を再生できない端末では、自動で H.265 か H.264 に切り替えます"
-            testid="hide-h264-hevc"
-          />
-        </div>
-      </form>
-    </section>
-  </div>
-</div>
-
-<div id="cm" data-part>
-  <div class="sections readable">
-    <section class="section">
-      <div class="section-head">
-        <h2>CM</h2>
-        <SaveNote status={cmSave} />
-      </div>
-      <form
-        method="POST"
-        action="?/saveCm"
-        use:autosave={cmSave}
-        class="fields setting-rows"
-      >
-        <label class="field">
-          <span class="field-label">CM の扱い</span>
-          <select name="cmCut" class="narrow" data-testid="global-cmcut">
-            <option value="chapter" selected={recording.cmCut === "chapter"}>
-              チャプターを打つだけ (安全)
-            </option>
-            <option value="cut" selected={recording.cmCut === "cut"}
-              >切り取る</option
-            >
-            <option value="off" selected={recording.cmCut === "off"}
-              >何もしない</option
-            >
-          </select>
-          <span class="hint"
-            >局ロゴの消えている所を CM
-            とみます。ロゴが使えなければ無音と長さで決めます</span
-          >
-        </label>
       </form>
     </section>
   </div>

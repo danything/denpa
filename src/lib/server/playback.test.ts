@@ -308,7 +308,6 @@ describe("何を出せるか (playbackPlan)", () => {
 
 describe("エンコード済みが無い録画のチャプター (tsChapters)", () => {
   test("検出した CM の区間 (元の TS の先頭からの秒) から、本編と CM を交互に並べる", async () => {
-    saveSettings({ cmCut: "chapter" });
     const rec = seed({ ts_path: ts, cm_ranges: [{ start: 10, end: 25 }] });
     const chapters = await tsChapters(rec);
     expect(chapters.map((chapter) => [chapter.start, chapter.title])).toEqual([
@@ -319,15 +318,9 @@ describe("エンコード済みが無い録画のチャプター (tsChapters)", 
     expect(chapters.at(-1)?.end).toBeCloseTo(60, 0);
   });
 
-  test("CM の扱いが「何もしない」なら出さない。検出していなければ空", async () => {
+  test("検出していなければ空", async () => {
     expect(await tsChapters(seed({ ts_path: ts }))).toEqual([]);
-    saveSettings({ cmCut: "off" });
-    expect(
-      await tsChapters(
-        seed({ ts_path: ts, cm_ranges: [{ start: 10, end: 25 }] }),
-      ),
-    ).toEqual([]);
-    saveSettings({ cmCut: "chapter" });
+    expect(await tsChapters(seed({ ts_path: ts, cm_ranges: [] }))).toEqual([]);
   });
 });
 

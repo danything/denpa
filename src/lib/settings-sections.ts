@@ -18,7 +18,6 @@ export const SETTINGS_GROUPS = [
     sections: [
       { slug: "encoding", label: "エンコード" },
       { slug: "viewing", label: "視聴" },
-      { slug: "cm", label: "CM" },
     ],
   },
   {

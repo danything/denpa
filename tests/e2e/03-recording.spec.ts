@@ -199,15 +199,14 @@ test.describe("録画とエンコード", () => {
   });
 });
 
-test.describe("CMの実カット", () => {
-  test("CMを切っても字幕は残る", async ({ page, request, stack }) => {
+test.describe("CMのチャプター", () => {
+  test("CMはチャプターにするだけで切らない。字幕も残る", async ({
+    page,
+    request,
+    stack,
+  }) => {
     test.setTimeout(180_000);
     await syncEpg(request);
-
-    // CM の扱いは全体設定。実際に切る側にしてから録る
-    await goto(page, "/settings/recording");
-    await page.getByTestId("global-cmcut").selectOption("cut");
-    await expect(page.getByTestId("saved-result")).toBeVisible();
 
     await goto(page, "/guide?type=BS");
     const cells = await upcoming(page);
@@ -224,22 +223,18 @@ test.describe("CMの実カット", () => {
     const recording = page.locator(recordingRow);
     expect(await recording.getAttribute("data-cm-ranges")).toContain("300");
 
-    // 字幕も CM ごとエンコードして、エンコードしたものと一緒に切る (cm-cut.ts)。
-    // フィルタで切っていた頃は -sn で落とすしかなかった
     const videoPath = (await recording.getAttribute("data-library-path")) ?? "";
     expect(videoPath).toContain(".mkv");
-    // 切るための作業ファイル (エンコードしたものの隣) は片付いていること。偽の ffmpeg では切れずに CM ごと置かれる
-    // (ffprobe が無くキーフレームが読めない) が、片付けは同じ
+    // チャプターを書き足すための作業ファイル (エンコードしたものの隣) は片付いていること
     expect(
       readdirSync(dirname(videoPath)).filter((name) =>
-        /\.(post|ffconcat)$/.test(name),
+        /\.(post|chapters\.txt)$/.test(name),
       ),
     ).toEqual([]);
 
     /*
-     * **1 本目は場面の切れ目ごとにキーフレームを置いてエンコードし、境目にキーフレームが無ければ境目を指して
-     * ソフトウェアで再エンコードする** (cm-cut.ts)。偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、
-     * 再エンコードまで進み、それでも切れずにチャプターに落ちる。境目 (300 秒・360 秒) を 1ms 手前で指していること
+     * **1 回だけエンコードし、キーフレームは指さない** (CM で切らないので境目に置かなくてよい)。
+     * 字幕はそのまま写す。チャプターはエンコードしたあとに `-c copy` で書き足す
      */
     const id = (await recording.getAttribute("data-recording-id")) ?? "";
     const mine = new RegExp(`-${id}\\.m2ts$`);
@@ -252,11 +247,10 @@ test.describe("CMの実カット", () => {
             run.some((a, i) => run[i - 1] === "-i" && mine.test(a)),
           )
       : [];
-    const keyframes = runs.map(
-      (run) => run[run.indexOf("-force_key_frames:v") + 1],
-    );
-    expect(keyframes).toEqual(["scd_metadata", "299.999,359.999"]);
-    expect(runs[1]).toContain("libsvtav1");
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).not.toContain("-force_key_frames:v");
+    expect(runs[0]).toContain("-c:s");
+    expect(chapterRewrites(stack.encodeArgsFile, [videoPath])).toEqual([true]);
   });
 });
 
@@ -338,7 +332,7 @@ test.describe("コーデックを両方エンコードする", () => {
     );
 
     /*
-     * **CM のチャプターは、どちらにもエンコードしたあとに書き足す** (既定の「チャプター」。`-c copy`)。
+     * **CM のチャプターは、どちらにもエンコードしたあとに書き足す** (`-c copy`)。
      * 境目は 1 本目をエンコードし終えてから決まるので、エンコードするときには入れない
      */
     expect(await row.getAttribute("data-cm-ranges")).toContain("300");
@@ -346,59 +340,6 @@ test.describe("コーデックを両方エンコードする", () => {
       true,
       true,
     ]);
-  });
-
-  test("CMを切るときは、どちらも場面の切れ目にキーフレームを置いてエンコードし、1本目を切れなければどちらも切らない", async ({
-    page,
-    request,
-    stack,
-  }) => {
-    test.setTimeout(180_000);
-    await syncEpg(request);
-    await setRecording(request, { codecs: ["av1", "h264"], cmCut: "cut" });
-
-    const programId = await reserveSoon(page, request, "BS");
-    const row = page.locator(
-      `[data-testid="recording-row"][data-program-id="${programId}"]`,
-    );
-    await waitWatchable(page, row);
-    const id = (await row.getAttribute("data-recording-id")) ?? "";
-    const av1 = (await row.getAttribute("data-library-path")) ?? "";
-    const alt = (await row.getAttribute("data-alt-path")) ?? "";
-
-    /*
-     * 境目はまだ分からないので、どちらも場面の切れ目ごとにキーフレームを置いて同時にエンコードする。
-     * 偽の ffmpeg ではキーフレームが読めない (ffprobe が無い) ので、1 本目 (AV1) は境目を指して再エンコードまで進み、
-     * それでも切れずに CM を残す。**1 本目を切れなかったので H.264 は再エンコードせず、切らずにチャプターを入れる**
-     * (2 本で長さを揃える)
-     */
-    const mine = new RegExp(`-${id}\\.m2ts$`);
-    const runs = encodeRuns(stack.encodeArgsFile)
-      .filter((run) => run.some((a) => a.endsWith(".encoding")))
-      .filter((run) => run.some((a, i) => run[i - 1] === "-i" && mine.test(a)));
-    const keyframes = (codec: string) =>
-      runs
-        .filter((run) => run.some((a) => a.endsWith(`.${codec}.encoding`)))
-        .map((run) => run[run.indexOf("-force_key_frames:v") + 1]);
-    expect(keyframes("av1")).toEqual(["scd_metadata", "299.999,359.999"]);
-    expect(keyframes("h264")).toEqual(["scd_metadata"]);
-
-    const spans = encodeSpans(stack.encodeSpansFile, id);
-    const [a, b] = spans as [EncodeSpan, EncodeSpan];
-    expect(Math.max(a.start, b.start)).toBeLessThan(
-      Math.min(a.end ?? 0, b.end ?? 0),
-    );
-
-    expect(chapterRewrites(stack.encodeArgsFile, [av1, alt])).toEqual([
-      true,
-      true,
-    ]);
-    // 切るための作業ファイルは片付いていること
-    expect(
-      readdirSync(dirname(av1)).filter((name) =>
-        /\.(post|ffconcat|chapters\.txt|encoding)$/.test(name),
-      ),
-    ).toEqual([]);
   });
 });
 
@@ -488,39 +429,38 @@ test.describe("CM検出のやり直し", () => {
 
   /*
    * **CM 検出だけやり直す** (詳細の「その他…」)。再エンコードせずに CM を探し直して、エンコードしたもののチャプターを
-   * 書き直す (`encoder.runCmJob`)。CM を探さずにエンコードした録画で押せば、探した結果が入る。
+   * 書き直す (`encoder.runCmJob`)。
    * 元の TS はエンコードし終えると消える設定 (既定) なので、エンコードしたものから読む
    */
   test("CM検出だけやり直せる (再エンコードしない)", async ({
     page,
     request,
+    stack,
   }) => {
     test.setTimeout(180_000);
-    await setRecording(request, { cmCut: "off" });
     const { id, libraryPath } = await recordOne(page, request);
     const row = page.locator(
       `[data-testid="recording-row"][data-recording-id="${id}"]`,
     );
-    expect(await row.getAttribute("data-cm-ranges")).toBeNull();
+    expect(await row.getAttribute("data-cm-ranges")).toContain("300");
+    /** 置いてあるもの (`libraryPath`) そのものに、チャプターを `-c copy` で書き直した回数 */
+    const rewrote = (run: string[]) =>
+      run.includes("-map_chapters") &&
+      run.some((a, i) => run[i - 1] === "-i" && a === libraryPath);
+    const rewrites = () =>
+      encodeRuns(stack.encodeArgsFile).filter(rewrote).length;
+    expect(rewrites()).toBe(0);
 
-    await setRecording(request, { cmCut: "chapter" });
     await goto(page, "/");
     await row.getByTestId("detail-button").click();
     const detail = page.getByTestId("program-detail");
     await detail.getByTestId("detail-more").click();
     await detail.getByTestId("cm-redo-button").click();
 
-    // エンコードするジョブと同じ待ち行列に並ぶ。終われば CM が入り、置き場所は変わらない (再エンコードしていない)
-    await expect
-      .poll(
-        async () => {
-          await goto(page, "/");
-          return row.getAttribute("data-cm-ranges");
-        },
-        { timeout: 60_000, intervals: [500] },
-      )
-      .toContain("300");
+    // エンコードするジョブと同じ待ち行列に並ぶ。終わればチャプターを書き直し、置き場所は変わらない (再エンコードしていない)
+    await expect.poll(rewrites, { timeout: 60_000, intervals: [500] }).toBe(1);
     await waitWatchable(page, row);
+    expect(await row.getAttribute("data-cm-ranges")).toContain("300");
     expect(await row.getAttribute("data-library-path")).toBe(libraryPath);
   });
 });

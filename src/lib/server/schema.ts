@@ -610,7 +610,7 @@ export const recordings = sqliteTable(
     series_repeat: integer("series_repeat"),
     /** 実際に録れた長さ。番組表の尺 (end_at - start_at) は予定でしかない。取れていなければ NULL (古い行) */
     duration_ms: integer("duration_ms"),
-    /** エンコードしたもののコマ数 (30/60)。実測 (fpsDetect) か既定の 60。未エンコード・fps 記録前の古い行は NULL */
+    /** エンコードしたもののコマ数 (30/60。本編の映像から測ったもの)。未エンコード・fps 記録前の古い行は NULL */
     fps: integer("fps"),
     /** 消した時刻 (denpa から、または外から)。行は履歴として残す */
     deleted_at: integer("deleted_at"),
@@ -705,7 +705,7 @@ const ENCODE_STATES = [
  * エンコードの段階。`encode` 以外は ffmpeg が回る前の下ごしらえで、長いものだと
  * 数十分かかる。進み具合が出せない代わりにこれを状態として出す
  */
-export const ENCODE_PHASES = ["descramble", "cm", "cut", "encode"] as const;
+export const ENCODE_PHASES = ["descramble", "cm", "encode"] as const;
 
 /**
  * ジョブの種類。`encode` はエンコードする (CM 検出も一緒に行う)、`cm` は**CM 検出だけやり直す**

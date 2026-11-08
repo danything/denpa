@@ -82,6 +82,9 @@ async function press(page: Page, testid: string): Promise<void> {
 }
 
 test.describe("アンビエントモード", () => {
+  // MPEG-2 をデコードできる端末として開く (`stack.ts` の `liveWithoutMpeg2`)
+  test.use({ liveMpeg2: true });
+
   test.beforeEach(async ({ request }) => {
     await syncEpg(request);
   });

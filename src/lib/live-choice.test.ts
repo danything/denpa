@@ -91,21 +91,19 @@ describe("自動の形式", () => {
 });
 
 describe("覚えていた選択の読み方", () => {
-  test("自動・AV1・H.265・H.264・MPEG-2 はそのまま", () => {
-    for (const choice of ["auto", "av1", "hevc", "h264", "raw"] as const)
-      expect(readChoice(choice, false)).toBe(choice);
+  test("自動・AV1・MPEG-2 はそのまま", () => {
+    for (const choice of ["auto", "av1", "raw"] as const)
+      expect(readChoice(choice)).toBe(choice);
   });
 
   test("知らない値・前の形式 (選択が無い) は自動", () => {
-    expect(readChoice(undefined, false)).toBe("auto");
-    expect(readChoice("vp9", false)).toBe("auto");
-    expect(readChoice(3, false)).toBe("auto");
+    expect(readChoice(undefined)).toBe("auto");
+    expect(readChoice("vp9")).toBe("auto");
+    expect(readChoice(3)).toBe("auto");
   });
 
-  test("H.264 と H.265 を出さない設定では、それを選んでいた端末も自動", () => {
-    expect(readChoice("h264", true)).toBe("auto");
-    expect(readChoice("hevc", true)).toBe("auto");
-    expect(readChoice("av1", true)).toBe("av1");
-    expect(readChoice("raw", true)).toBe("raw");
+  test("メニューに並べない H.264 と H.265 を選んでいた端末も自動", () => {
+    expect(readChoice("h264")).toBe("auto");
+    expect(readChoice("hevc")).toBe("auto");
   });
 });

@@ -96,17 +96,18 @@ describe("⚙ のコーデックの行 (ライブ・追っかけ)", () => {
     return { made, picked };
   }
 
-  test("自動を先頭に、AV1・H.264・MPEG-2 と並べ、自動の値にいまの形式を添える", () => {
+  test("自動・AV1・MPEG-2 と並べ、自動の値にいまの形式を添える", () => {
     const { made } = codecs();
-    expect(made.options.map((o) => o.label)).toEqual([
-      "自動",
-      "AV1",
-      "H.264",
-      "MPEG-2",
-    ]);
+    expect(made.options.map((o) => o.label)).toEqual(["自動", "AV1", "MPEG-2"]);
     expect(made.value).toBe("自動 (MPEG-2)");
     expect(made.options.find((o) => o.active)?.key).toBe("auto");
-    expect(codecs({ format: "h264" }).made.value).toBe("自動 (H.264)");
+  });
+
+  test("H.264 と H.265 は並べない。自動でそれになっていれば値には出す", () => {
+    const { made } = codecs({ format: "h264" });
+    expect(made.options.map((o) => o.key)).toEqual(["auto", "av1", "mpeg2"]);
+    expect(made.value).toBe("自動 (H.264)");
+    expect(codecs({ format: "hevc" }).made.value).toBe("自動 (H.265)");
   });
 
   test("選んだものはその名前だけを値に出す", () => {
@@ -120,43 +121,8 @@ describe("⚙ のコーデックの行 (ライブ・追っかけ)", () => {
     const { made, picked } = codecs();
     made.pick("mpeg2");
     made.pick("auto");
-    made.pick("h264");
-    expect(picked).toEqual(["raw", "auto", "h264"]);
-  });
-
-  test("ライブでも追っかけでも MPEG-2 を並べる", () => {
-    const { made } = codecs({ format: "av1" });
-    expect(made.options.map((o) => o.key)).toEqual([
-      "auto",
-      "av1",
-      "h264",
-      "mpeg2",
-    ]);
-  });
-
-  test("H.264 と H.265 を出さない設定では並べない。自動でそれになっていれば値には出す", () => {
-    const { made } = codecs({ hidden: true, hevc: true, format: "h264" });
-    expect(made.options.map((o) => o.key)).toEqual(["auto", "av1", "mpeg2"]);
-    expect(made.value).toBe("自動 (H.264)");
-    expect(
-      codecs({ hidden: true, hevc: true, format: "hevc" }).made.value,
-    ).toBe("自動 (H.265)");
-  });
-
-  test("H.265 はライブのエンコーダが GPU のとき (`hevc`) だけ、AV1 と H.264 の間に並べる", () => {
-    const { made, picked } = codecs({ hevc: true });
-    expect(made.options.map((o) => o.label)).toEqual([
-      "自動",
-      "AV1",
-      "H.265",
-      "H.264",
-      "MPEG-2",
-    ]);
-    made.pick("hevc");
-    expect(picked).toEqual(["hevc"]);
-    expect(
-      codecs({ choice: "hevc", format: "hevc", hevc: true }).made.value,
-    ).toBe("H.265");
+    made.pick("av1");
+    expect(picked).toEqual(["raw", "auto", "av1"]);
   });
 
   test("互換モードで描けない形式は、並べるが押せない", () => {

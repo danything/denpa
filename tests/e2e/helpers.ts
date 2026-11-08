@@ -7,11 +7,11 @@ import type {
   Page,
 } from "@playwright/test";
 
-import { expect, keepH264, test } from "../stack";
+import { expect, liveWithoutMpeg2, test } from "../stack";
 
 // テストは必ずここから test / expect を取る。素の @playwright/test から取ると
 // ワーカーごとのアプリ (tests/stack.ts) が立たず、宛先も決まらない
-export { expect, keepH264, test };
+export { expect, liveWithoutMpeg2, test };
 
 /**
  * ページを開いてハイドレーション完了まで待つ。
@@ -364,7 +364,6 @@ export async function setRecording(
   patch: {
     /** エンコードするコーデック。いくつもエンコードするなら `["av1", "hevc", "h264"]`、エンコードしないなら `[]`。省けば av1 */
     codecs?: string[];
-    cmCut?: string;
     keepOriginal?: boolean;
     /** その場で変換する本数の上限 (空は自動)。省けば前のまま */
     transcodeLimit?: string;
@@ -384,13 +383,7 @@ export async function setRecording(
   if (patch.keepOriginal === true) encoding.append("keepOriginal", "on");
   if (patch.transcodeLimit !== undefined)
     encoding.append("transcodeLimit", patch.transcodeLimit);
-  // 画面では節ごとにフォームが分かれている (エンコード・CM)。同じ 2 つを投げる
   await saveRecordingPart(request, "saveEncoding", encoding);
-  await saveRecordingPart(
-    request,
-    "saveCm",
-    new URLSearchParams({ cmCut: patch.cmCut ?? "chapter" }),
-  );
 }
 
 /** 偽 ffmpeg がエンコードしていた 1 回 (`stack.encodeSpansFile`)。`end` が null なら終わらなかった (止められた) */

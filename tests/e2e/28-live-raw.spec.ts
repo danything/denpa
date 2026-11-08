@@ -42,6 +42,9 @@ function ffmpegRuns(file: string): string[][] {
 }
 
 test.describe("ライブを MPEG-2 のまま見る", () => {
+  // MPEG-2 をデコードできる端末として開く (`stack.ts` の `liveWithoutMpeg2`)
+  test.use({ liveMpeg2: true });
+
   test.beforeEach(async ({ request }) => {
     await syncEpg(request);
   });
@@ -100,7 +103,7 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
      * **エンコードする ffmpeg は起こさない。** 起きるのは字幕だけを描く 1 本で、放送の時刻のまま
      * 出させる (`-copyts`。`server/captions.ts` の `rawCaptionArgs`)。
      *
-     * MPEG-2 を選ぶまではエンコードしている。見るのは**MPEG-2 のままでリクエストしたあと**にエンコードし始めていないこと
+     * 見るのは**MPEG-2 のままでリクエストしたあと**にエンコードし始めていないこと
      */
     const runs = ffmpegRuns(stack.liveArgsFile).slice(before);
     const captions = runs.findIndex((run) => run.includes("-copyts"));
@@ -439,8 +442,10 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
     await expect(page.getByTestId("live-title")).toBeVisible();
+    // エンコードしたもの (AV1) では出る
     await wakeControls(page, "live-frame");
-    // エンコードしたものでは出る
+    await pickCodec(page, "live", "av1");
+    await wakeControls(page, "live-frame");
     await expect(page.getByTestId("live-pip")).toBeVisible();
     await chooseRaw(page);
     await expect
@@ -635,16 +640,6 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     await expect.poll(heard, { timeout: 10_000 }).toBeGreaterThan(before + 20);
   });
 
-  test("選んでいなければ、いつもどおりエンコードしたものを見る", async ({
-    page,
-  }) => {
-    await goto(page, "/live");
-    await page.getByTestId("live-channel").first().click();
-    await expect(page.getByTestId("live-title")).toBeVisible();
-    await expect(page.getByTestId("live-codec")).toContainText("H.264");
-    await expect(page.getByTestId("live-raw")).toHaveCount(0);
-  });
-
   test("デコードできない端末ではエンコードしたものに戻り、理由を出す", async ({
     page,
   }) => {
@@ -674,20 +669,21 @@ test.describe("ライブを MPEG-2 のまま見る", () => {
     await chooseRaw(page);
     await expect(page.getByTestId("live-raw")).toBeVisible({ timeout: 30_000 });
 
-    // 開き直しても MPEG-2 のまま
+    // 開き直しても MPEG-2 のまま (自動ではなく、選んだもの)
     await goto(page, "/live");
     await expect(page.getByTestId("live-raw")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("live-codec")).toContainText("MPEG-2");
+    await expect(page.getByTestId("live-codec")).not.toContainText("自動");
 
-    // H.264 に戻すとエンコードしたものになり、それも覚える
+    // AV1 に替えるとエンコードしたものになり、それも覚える
     await wakeControls(page, "live-frame");
-    await pickCodec(page, "live", "h264");
+    await pickCodec(page, "live", "av1");
     await expect(page.getByTestId("live-raw")).toHaveCount(0, {
       timeout: 30_000,
     });
     await goto(page, "/live");
     await expect(page.getByTestId("live-title")).toBeVisible();
-    await expect(page.getByTestId("live-codec")).toContainText("H.264");
+    await expect(page.getByTestId("live-codec")).toContainText("AV1");
     await expect(page.getByTestId("live-raw")).toHaveCount(0);
   });
 });

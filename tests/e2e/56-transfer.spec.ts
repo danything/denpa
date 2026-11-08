@@ -16,7 +16,7 @@ import {
 
 /** 録画とエンコードが動いている行の状態 (`format.ts` の `encodeLabel`、録画中) */
 const BUSY =
-  /^(録画中|エンコード待ち|エンコード中|スクランブル復号中|CM 検出中|CM カット中)/;
+  /^(録画中|エンコード待ち|エンコード中|スクランブル復号中|CM 検出中)/;
 
 /**
  * **denpa を別の機械へ移す** (設定の「連携」。docs/migrate.md「別の機械へ移す」、transfer.ts)。
@@ -135,7 +135,7 @@ test.describe("denpa を別の機械へ移す", () => {
     test.slow();
     ({ id: recordingId } = await recordOne(page, request));
     await makeRule(page, "移すルール");
-    await setRecording(request, { cmCut: "cut" });
+    await setRecording(request, { keepOriginal: true });
     await settle(page);
 
     await goto(page, "/settings/integrations#transfer");
@@ -235,7 +235,7 @@ test.describe("denpa を別の機械へ移す", () => {
     await goto(page, `${spare.appUrl}/rules`);
     await expect(page.getByTestId("rule-row")).toContainText(["移すルール"]);
     await goto(page, `${spare.appUrl}/settings/recording`);
-    await expect(page.getByTestId("global-cmcut")).toHaveValue("cut");
+    await expect(page.locator('input[name="keepOriginal"]')).toBeChecked();
 
     // 古い機械を後のファイルのために戻す
     await setRecording(request);

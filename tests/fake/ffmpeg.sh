@@ -141,7 +141,7 @@ if [ "$output" = "pipe:1" ] && printf '%s\n' "$@" | grep -qx -- '-c:s' && printf
     exit 0
 fi
 
-# 再エンコードせずに書き直すパス (-c copy。チャプターを足す / CM を切って concat で繋ぐ)。
+# 再エンコードせずに書き直すパス (-c copy。チャプターを足す)。
 # 進捗も Duration も出さず、出力ファイルだけ作って終わる本物と同じ振る舞いにする
 if printf '%s\n' "$@" | grep -qx -- '-c' && printf '%s\n' "$@" | grep -qx -- 'copy'; then
     mkdir -p "$(dirname "$output")"

@@ -111,16 +111,10 @@ test.describe("互換モードの観る画面", () => {
     // MPEG-2 を選ぶと、元の TS をそのまま描く
     await openSettings(page, "watch");
     await page.getByTestId("watch-codec").click();
-    const h264 = page.locator(
-      '[data-testid="watch-codec-option"][data-codec="h264"]',
-    );
-    const decodable = await page.evaluate(
-      async () =>
-        (await VideoDecoder.isConfigSupported({ codec: "avc1.640029" }))
-          .supported === true,
-    );
-    // 描けない形は選べない
-    if (!decodable) await expect(h264).toHaveAttribute("data-disabled");
+    // H.264 と H.265 はメニューに並ばない (`#lib/live-choice.ts` の `HIDDEN_CODECS`)
+    await expect(
+      page.locator('[data-testid="watch-codec-option"][data-codec="h264"]'),
+    ).toHaveCount(0);
     await page
       .locator('[data-testid="watch-codec-option"][data-codec="mpeg2"]')
       .click();
@@ -311,6 +305,7 @@ test.describe("互換モードの観る画面", () => {
           duration: 1800,
           axis: "encoded",
           audios: [{ id: "0", label: "" }],
+          // 元の TS も置く。H.264 はメニューに並ばないので、無いとメニューが AV1 だけになって出ない
           offers: [
             {
               codec: "av1",
@@ -320,6 +315,7 @@ test.describe("互換モードの観る画面", () => {
             },
             { codec: "h264", way: "stream", codecs: "avc1.640028,mp4a.40.2" },
             { codec: "av1", way: "stream", codecs: "av01.0.08M.08,opus" },
+            { codec: "mpeg2", way: "raw" },
           ],
         },
       }),

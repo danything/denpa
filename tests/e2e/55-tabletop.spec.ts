@@ -230,6 +230,9 @@ async function watchRaw(page: Page): Promise<void> {
 }
 
 test.describe("テーブルトップ", () => {
+  // ライブは MPEG-2 をデコードできる端末として開く (`stack.ts` の `liveWithoutMpeg2`)
+  test.use({ liveMpeg2: true });
+
   test.beforeEach(async ({ request }) => {
     await syncEpg(request);
   });

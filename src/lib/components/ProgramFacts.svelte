@@ -122,7 +122,7 @@
     <span class="fact" data-testid="detail-video">{video}</span>
   {/if}
   {#if fps !== null}
-    <!-- 実測 (fpsDetect) がどちらに転んだか。ログにしか出ていなかった -->
+    <!-- 映像から測ったコマ数 (`encoder.measureSmoothMotion`) がどちらに転んだか。ログにしか出ていなかった -->
     <span class="fact" data-testid="detail-fps">{fps} コマ/秒</span>
   {/if}
   {#each audios as label, i (i)}

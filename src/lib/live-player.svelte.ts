@@ -1898,7 +1898,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * コーデックのメニューで選ぶ (自動・AV1・H.265・H.264・MPEG-2)。音声と同じ扱い (`setAudio`) で、選んだものは
+   * コーデックのメニューで選ぶ (自動・AV1・MPEG-2)。音声と同じ扱い (`setAudio`) で、選んだものは
    * **この端末に覚える** (`LAST_COOKIE`。ライブだけ)。選び直したなら前の断り書きは用済みで、打ち切っていた形式も試し直す。
    * 決まる形式が今と同じならリクエストし直さない (自動で AV1 になっていて AV1 を選んだ、など)
    */
@@ -3167,7 +3167,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     get warning() {
       return warning;
     },
-    /** コーデックのメニューで選んでいるもの (自動・AV1・H.265・H.264・MPEG-2) */
+    /** コーデックのメニューで選んでいるもの (自動・AV1・MPEG-2) */
     get choice() {
       return choice;
     },

@@ -272,7 +272,6 @@ export function encodeDetail(
 const PHASE_LABEL: Record<string, string> = {
   descramble: "スクランブル復号中",
   cm: "CM 検出中",
-  cut: "CM カット中",
   encode: "エンコード中",
 };
 

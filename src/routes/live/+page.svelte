@@ -838,8 +838,6 @@
                 choice: player.choice,
                 format: player.format,
                 step: player.step,
-                hevc: data.hevc,
-                hidden: data.hidden.length > 0,
                 unavailable: player.unavailable,
                 onselect: (next) => player.setChoice(next),
               })}

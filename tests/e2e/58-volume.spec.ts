@@ -368,8 +368,11 @@ test.describe("音量", () => {
    * (`Outlet.route`) 同じ所で効く
    */
   test("canvas の経路: バックグラウンド再生で <audio> を通しても、100% は +6 dB、消音で無音", async ({
-    page,
+    browser,
   }) => {
+    // MPEG-2 をデコードできる端末として開く (既定の枠は `stack.ts` の `liveWithoutMpeg2`)
+    const context = await browser.newContext();
+    const page = await context.newPage();
     await hookAudio(page);
     await goto(page, "/live");
     await page.getByTestId("live-channel").first().click();
@@ -417,6 +420,7 @@ test.describe("音量", () => {
     const muted = await measure(page, "buffer");
     expect(muted.post.peak).toBeLessThan(-90);
     await inject(page, "buffer", null);
+    await context.close();
   });
 
   test("3画面で同じ音量を使い、どの画面でも ↑↓ で変えられる", async ({

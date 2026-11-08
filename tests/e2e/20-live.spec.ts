@@ -176,8 +176,15 @@ test.describe("ライブ視聴", () => {
    * 測るのは絵の出ている所 (エンコードしたものは video、MPEG-2 のままは canvas)
    */
   test("映像の上端と右の列の最初のもの (種別のタブ) の上端がそろう", async ({
-    page,
+    browser,
   }) => {
+    // MPEG-2 もデコードできる端末として開く (既定の枠は `stack.ts` の `liveWithoutMpeg2`)。エンコードしたものは AV1 で観る
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await wakeControls(page, "live-frame");
+    await pickCodec(page, "live", "av1");
     for (const size of [
       { width: 1366, height: 768 },
       { width: 1920, height: 1080 },
@@ -261,6 +268,7 @@ test.describe("ライブ視聴", () => {
     const shot = (await page.getByTestId("live-shot").boundingBox())!;
     expect(shot.x + shot.width).toBeLessThanOrEqual(frame.x + frame.width);
     expect(shot.width).toBe(48);
+    await context.close();
   });
 
   /*

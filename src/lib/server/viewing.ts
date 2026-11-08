@@ -23,11 +23,10 @@ import { settings } from "./settings";
 interface ViewingOptions {
   /** 開いた名前が家の中か */
   indoor: boolean;
-  /** コーデックのメニューから外すもの (世帯の設定。外さないなら空) */
+  /** コーデックのメニューから外すもの (いつも H.264 と H.265。テレビのアプリがこれを読んでメニューから外す) */
   hidden: (typeof HIDDEN_CODECS)[number][];
   /**
-   * ライブで H.265 を出せるか。**ライブのエンコーダが GPU のときだけ** (`live.liveHevc`)。出せなければメニューに並べず、
-   * 「自動」でも選ばない
+   * ライブで H.265 を出せるか。**ライブのエンコーダが GPU のときだけ** (`live.liveHevc`)。出せなければ「自動」で選ばない
    */
   hevc: boolean;
 }
@@ -36,12 +35,7 @@ interface ViewingOptions {
  * リクエストの URL (`event.url`。名前は `Host` か `HOST_HEADER` から) で決める。`hevc` はテストで差し替えるときだけ渡す
  */
 export function viewingOptions(url: URL, hevc = liveHevc()): ViewingOptions {
-  const current = settings();
-  return {
-    indoor: indoorOf(url),
-    hidden: current.hideH264Hevc ? [...HIDDEN_CODECS] : [],
-    hevc,
-  };
+  return { indoor: indoorOf(url), hidden: [...HIDDEN_CODECS], hevc };
 }
 
 /** リクエストの URL の名前が家の中か (`#lib/host.ts` の `indoorHost`。世帯の設定の「家の中の名前」も見る) */
@@ -182,11 +176,11 @@ interface Kept {
  * cookie を読む。**壊れていても無視するだけ**で、覚えていないときと同じく、自動と一覧の先頭になる。
  * 選択 (`choice`) は局と別に読む (局が一覧から消えても、その端末で出るかの話は残る)
  */
-export function readKept(raw: string | undefined, hidden: boolean): Kept {
+export function readKept(raw: string | undefined): Kept {
   if (raw === undefined) return { choice: "auto" };
   try {
     const saved = JSON.parse(raw) as Record<string, unknown>;
-    const kept: Kept = { choice: readChoice(saved["choice"], hidden) };
+    const kept: Kept = { choice: readChoice(saved["choice"]) };
     for (const key of ["channelType", "channel", "audio"] as const) {
       const value = saved[key];
       if (typeof value === "string") kept[key] = value;

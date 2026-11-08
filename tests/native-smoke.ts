@@ -207,36 +207,40 @@ await ff(
   "avif",
   at("thumb.avif"),
 );
-await Bun.write(at("list.txt"), "file h264.mkv\nfile h264.mkv\n");
+// CM のチャプターを書き足す (`cm.chapterArgs`)。H.264 の mkv にそのまま写して付ける
+await Bun.write(
+  at("chapters.txt"),
+  ";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=1000\ntitle=A\n",
+);
 await ff(
-  "-f",
-  "concat",
-  "-safe",
-  "0",
   "-i",
-  at("list.txt"),
+  at("h264.mkv"),
+  "-i",
+  at("chapters.txt"),
   "-map",
   "0",
+  "-map_chapters",
+  "1",
   "-c",
   "copy",
   "-f",
   "matroska",
-  at("cut.mkv"),
+  at("chapters.mkv"),
 );
 console.log("ffmpeg: ok");
 
 /*
  * GPU のエンコーダ。Windows のランナーに GPU は無いのでエンコードは通らない。Mac のランナーでは VideoToolbox が通る。
  * ここで見るのは次の 3 つ。
- * 1. denpa が渡すエンコーダのオプション (hwenc.hwArgs・hwenc.liveHwArgs・encoder.keyframeArgs) を、組み込んだエンコーダが持っている
+ * 1. denpa が渡すエンコーダのオプション (hwenc.hwArgs・hwenc.liveHwArgs) を、組み込んだエンコーダが持っている
  * 2. hwArgs の引数で起動すると、通るか GPU が無いために落ちる (エンコーダやオプションの名前が違って落ちるのではない)
  * 3. 試しのエンコードが全部落ちると、GPU の方式は 0 になり、録画もライブもソフトウェアでエンコードする。
  *    通ったものがあれば、その方式で放送に似せた素材をエンコードでき、試しのエンコードが落ちる ffmpeg で探し直すとソフトウェアに戻る
  */
 const options: Record<string, string[]> = {
-  nvenc: ["gpu", "preset", "rc", "forced-idr", "delay", "zerolatency"],
-  qsv: ["preset", "forced_idr", "async_depth"],
-  amf: ["usage", "quality", "rc", "forced_idr", "async_depth"],
+  nvenc: ["gpu", "preset", "rc", "delay", "zerolatency"],
+  qsv: ["preset", "async_depth"],
+  amf: ["usage", "quality", "rc", "async_depth"],
   videotoolbox: ["profile", "prio_speed", "realtime"],
 };
 /**

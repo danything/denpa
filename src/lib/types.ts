@@ -82,14 +82,6 @@ export interface ProgramDetail {
 }
 
 /**
- * CM の扱い。
- * off     : 何もしない
- * chapter : CM 区間をチャプターとして書き込むだけ(ファイルは切らない)
- * cut     : CM 区間を実際に落とす。検出を誤ると本編が消えるので明示指定のときだけ
- */
-export type CmMode = "off" | "chapter" | "cut";
-
-/**
  * 録画をどう出すか。
  *
  * av1  : 既定。同じ画質でファイルが小さいが、エンコードに時間がかかる

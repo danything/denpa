@@ -290,19 +290,14 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
     );
   });
 
-  test("CM を切っても字幕は落とさない", () => {
-    // 字幕も CM ごと写して、エンコードしたものと一緒に切る (cm-cut.ts)
-    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
-      keyframes: "scene",
-    });
+  test("字幕は落とさずに写す", () => {
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1");
     expect(args).not.toContain("-sn");
     expect(argValue(args, "-c:s")).toBe("copy");
   });
 
   test("チャプターはエンコードするときには入れない (エンコードしたあとに書き足す)", () => {
-    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
-      keyframes: "scene",
-    });
+    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1");
     expect(args).not.toContain("-map_chapters");
     // 入力は録画の TS だけ
     expect(args.filter((a) => a === "-i")).toHaveLength(1);
@@ -613,91 +608,27 @@ describe("CM を探しながらエンコードする", () => {
   });
 });
 
-describe("CM を切るときのキーフレーム", () => {
-  test("境目が決まる前は場面の切れ目ごと。CM 検出と同じコマで測って印を付ける", () => {
-    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
-      keyframes: "scene",
-      displaySize: { width: 1920, height: 1080 },
-    });
-    const filter = argValue(args, "-vf") ?? "";
-    // CM 検出と同じコマ (インタレ解除の前) で測る
-    expect(filter.indexOf("scdet@key")).toBeLessThan(filter.indexOf("bwdif"));
-    expect(argValue(args, "-force_key_frames:v")).toBe("scd_metadata");
-  });
-
-  test("境目が決まっていれば、その時刻を 1ms 手前で指す", () => {
-    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
-      keyframes: [120.5, 300],
-    });
-    expect(argValue(args, "-force_key_frames:v")).toBe("120.499,299.999");
-    expect(argValue(args, "-vf")).not.toContain("scdet");
-  });
-
-  test("VA-API は印だけで IDR になるので、IDR の指定を足さない", () => {
-    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
-      keyframes: "scene",
-      hardware: { kind: "vaapi", device: "/dev/dri/renderD128" },
-    });
-    expect(args).not.toContain("-forced_idr");
-    expect(args).not.toContain("-forced-idr");
-    /*
-     * B フレームのピラミッド (`-b_depth 2`) と一緒でも印は渡す。FFmpeg は印の付いたコマを IDR にし、
-     * その前で B の並びを閉じる (hwenc.hwArgs の説明)
-     */
-    expect(argValue(args, "-b_depth")).toBe("2");
-    expect(argValue(args, "-force_key_frames:v")).toBe("scd_metadata");
-    // 印は GPU へ上げる前に付ける
-    const filter = argValue(args, "-vf") ?? "";
-    expect(filter.indexOf("scdet@key")).toBeLessThan(
-      filter.indexOf("format=nv12"),
-    );
-  });
-
-  test("NVENC は指定しないと IDR にならない", () => {
-    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
-      keyframes: [120.5],
-      hardware: { kind: "nvenc", device: "/dev/nvidia0", gpu: 0 },
-    });
-    expect(argValue(args, "-forced-idr")).toBe("1");
-  });
-
-  test("QSV・AMF は -forced_idr で IDR にする (Windows)", () => {
-    for (const kind of ["qsv", "amf"] as const) {
-      const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
-        keyframes: [120.5],
-        hardware: { kind, device: `${kind}0`, gpu: 0 },
+describe("キーフレーム", () => {
+  test("置く所を指さない (CM はチャプターにするだけで、切らない)", () => {
+    const ways: (HwWay | undefined)[] = [
+      undefined,
+      { kind: "vaapi", device: "/dev/dri/renderD128" },
+      { kind: "nvenc", device: "/dev/nvidia0", gpu: 0 },
+    ];
+    for (const hardware of ways) {
+      const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "h264", {
+        hardware,
       });
-      expect(args).toContain(`av1_${kind}`);
-      expect(argValue(args, "-forced_idr")).toBe("1");
+      expect(args).not.toContain("-force_key_frames:v");
       expect(args).not.toContain("-forced-idr");
+      expect(argValue(args, "-vf")).not.toContain("scdet");
     }
-  });
-
-  test("H.265 も同じ指定で境目にキーフレームを置く (NVENC は IDR の指定、VA-API は印だけ)", () => {
-    const nvenc = buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {
-      keyframes: "scene",
-      hardware: { kind: "nvenc", device: "/dev/nvidia0", gpu: 0 },
-    });
-    expect(nvenc).toContain("hevc_nvenc");
-    expect(argValue(nvenc, "-forced-idr")).toBe("1");
-    const vaapi = buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {
-      keyframes: [120.5],
-      hardware: { kind: "vaapi", device: "/dev/dri/renderD128" },
-    });
-    expect(vaapi).toContain("hevc_vaapi");
-    expect(argValue(vaapi, "-force_key_frames:v")).toBe("120.499");
   });
 
   test("H.265 はソフトウェアでエンコードしない (呼ぶ側の誤りなので投げる)", () => {
     expect(() =>
       buildArgs("/in.m2ts", "/out.mkv", 1, null, "hevc", {}),
     ).toThrow();
-  });
-
-  test("切らないなら何も足さない", () => {
-    const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
-    expect(args).not.toContain("-force_key_frames:v");
-    expect(argValue(args, "-vf")).not.toContain("scdet");
   });
 });
 
@@ -807,31 +738,23 @@ describe("encodeAttempts (1 回の実行の中で ffmpeg を起こす順)", () =
   };
 
   test("どの方式も「素のまま → 先頭を少し捨てて」の 2 回だけ。最後にソフトウェア", () => {
-    for (const pointed of [false, true]) {
-      for (const codec of ["av1", "h264", "hevc"] as const) {
-        const attempts = encodeAttempts(codec, [A, B, R], pointed);
-        for (const seeks of perWay(attempts).values())
-          expect(seeks).toEqual([null, config.encodeRetrySeek]);
-      }
+    for (const codec of ["av1", "h264", "hevc"] as const) {
+      const attempts = encodeAttempts(codec, [A, B, R]);
+      for (const seeks of perWay(attempts).values())
+        expect(seeks).toEqual([null, config.encodeRetrySeek]);
     }
-    expect([...perWay(encodeAttempts("av1", [A, B, R], false)).keys()]).toEqual(
-      [A.device, B.device, R.device, "software"],
-    );
+    expect([...perWay(encodeAttempts("av1", [A, B, R])).keys()]).toEqual([
+      A.device,
+      B.device,
+      R.device,
+      "software",
+    ]);
   });
 
   test("H.265 はソフトウェアに倒さない。GPU が無ければ 1 回も起こさない", () => {
-    expect([...perWay(encodeAttempts("hevc", [A], false)).keys()]).toEqual([
-      A.device,
-    ]);
-    expect(encodeAttempts("hevc", [], false)).toEqual([]);
-    expect(encodeAttempts("h264", [], false)).toHaveLength(2);
-  });
-
-  test("境目を指すときは、指定を聞かない Rockchip MPP を外す", () => {
-    expect([...perWay(encodeAttempts("h264", [R, A], true)).keys()]).toEqual([
-      A.device,
-      "software",
-    ]);
+    expect([...perWay(encodeAttempts("hevc", [A])).keys()]).toEqual([A.device]);
+    expect(encodeAttempts("hevc", [])).toEqual([]);
+    expect(encodeAttempts("h264", [])).toHaveLength(2);
   });
 });
 

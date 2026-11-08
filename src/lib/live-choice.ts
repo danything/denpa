@@ -18,8 +18,8 @@ export type LiveChoice = "auto" | LiveCodec | "raw";
 export type LiveFormat = LiveCodec | "raw";
 
 /**
- * **世帯の設定でメニューから外すコーデック** (設定 `hideH264Hevc`)。外すのはメニューだけで、
- * AV1 を再生できない端末には自動で H.265 や H.264 を流す (サーバは今までどおり出す)
+ * **メニューに並べないコーデック** (ライブ・追っかけ・録画の観る画面。テレビのアプリには `GET /api/playback/options` の `hidden` で渡す)。
+ * 外すのはメニューだけで、AV1 を再生できない端末には自動で H.265 や H.264 を流す (サーバは今までどおり出す)
  */
 export const HIDDEN_CODECS = ["h264", "hevc"] as const;
 
@@ -31,13 +31,10 @@ export function formatLabel(format: LiveFormat): string {
 
 /**
  * 覚えていた選択を読む。**知らない値・前の形式の cookie (`codec`・`raw` だけで `choice` が無い) は自動。**
- * H.264・H.265 を外す設定 (`hidden`) なら、それを選んでいた端末も自動として扱う。H.265 を選んでいても、ライブの
- * エンコーダが GPU でなくなっていれば、画面が代わりを選んで断り書きを出す (`live-player.svelte.ts` の `pickFormat`)
+ * メニューに並べない H.264・H.265 (`HIDDEN_CODECS`) を前に選んでいた端末も自動として扱う
  */
-export function readChoice(value: unknown, hidden: boolean): LiveChoice {
-  if (value === "av1" || value === "raw") return value;
-  if ((value === "h264" || value === "hevc") && !hidden) return value;
-  return "auto";
+export function readChoice(value: unknown): LiveChoice {
+  return value === "av1" || value === "raw" ? value : "auto";
 }
 
 /** エンコード済みのコーデック (録画の観る画面で選ぶもの)。並びは GPU でエンコードする順 (`HW_CODECS`) と同じ */

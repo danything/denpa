@@ -1,12 +1,11 @@
 import { LOGO_OK, LOGO_UNUSABLE } from "../format";
 import { decideCm, type Range } from "../ts/cm-decide";
-import type { CmMode } from "../types";
 import type { CmMaterial } from "./cm-material";
 import { type Scan, scan, type ScanWant } from "./cm-scan";
 import { config } from "./config";
 import { logoRepo, share } from "./logo-data";
 import { openLogo } from "./logo-own";
-import { recordingProbeInput } from "./recording-io";
+import { recordingInput, recordingProbeInput } from "./recording-io";
 import { run } from "./stream";
 import { tsProbe } from "./ts-probe";
 
@@ -20,8 +19,7 @@ import { tsProbe } from "./ts-probe";
  * - ロゴが使えない (覚えられない・当たらない・結果がおかしい) ときは、同じ材料から
  *   **CM の尺 (15 秒の倍数) だけで**決め直す。もう一度デコードはしない
  *
- * 誤検出したときの被害が大きい (本編が消える) ので、既定は実カットではなく
- * チャプター付与にしてある (`config.cmCutDefault`)。設定の CM の扱いを `cut` にしたときだけ実際に切る。
+ * 見つけた CM はチャプターにするだけで、エンコードしたものは切らない (誤検出しても本編が消えない)。
  */
 
 export type { Range };
@@ -33,10 +31,6 @@ export type { Range };
  * 検出が効いていない兆候で、本編を削るより CM が残るほうが被害が小さい。
  */
 const MAX_CM_RATIO = 0.5;
-
-export function isCmMode(value: unknown): value is CmMode {
-  return value === "off" || value === "chapter" || value === "cut";
-}
 
 /** CM 判定が占める割合 (0〜1) */
 function cmShare(cm: Range[], duration: number): number {
@@ -59,11 +53,11 @@ export function tooMuchCm(cm: Range[], duration: number): boolean {
   return cmShare(cm, duration) >= MAX_CM_RATIO;
 }
 
-/** これより短い区間は作らない (切っても意味が無く、チャプターだけが増える) */
+/** これより短い区間は作らない (チャプターが増えるだけで飛ばす役に立たない) */
 const MIN_RANGE = 0.5;
 
 /**
- * 区間の裏返し。CM を渡して残す区間をもらう (チャプター・実カット)。
+ * 区間の裏返し。CM を渡して本編の区間をもらう (チャプター)。
  *
  * 渡された区間は並べ替えてから使う。
  *
@@ -131,6 +125,29 @@ export function chapterMetadata(cm: Range[], duration: number): string {
     );
   }
   return `${lines.join("\n")}\n`;
+}
+
+/** チャプターを差し替えて書き直す。再エンコードしない。`chapters` が null ならチャプターを外す */
+export function chapterArgs(
+  input: string,
+  chapters: string | null,
+  output: string,
+): string[] {
+  return [
+    config.ffmpeg,
+    "-y",
+    "-v",
+    "error",
+    ...recordingInput(input),
+    ...(chapters === null
+      ? ["-map", "0", "-map_chapters", "-1"]
+      : ["-i", chapters, "-map", "0", "-map_chapters", "1"]),
+    "-c",
+    "copy",
+    "-f",
+    "matroska",
+    output,
+  ];
 }
 
 /**

@@ -52,7 +52,7 @@ function seedOld(where: ReturnType<typeof machine>): void {
   use(where);
   orm()
     .insert(schema.settings)
-    .values({ key: "cmCut", value: '"cut"', updated_at: now })
+    .values({ key: "keepOriginal", value: "true", updated_at: now })
     .run();
   orm()
     .insert(schema.rules)

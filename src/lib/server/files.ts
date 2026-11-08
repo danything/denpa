@@ -209,12 +209,12 @@ const TRAILING = new RegExp(
 );
 /**
  * **エンコードの作業ファイル。** 動画の名前のあとにジョブの番号を持つ (`encoder.ts`)。
- * 書いている間の `<動画>.<ジョブ>.<コーデック>.encoding` とその隣の `.post`・`.ffconcat`・`.chapters.txt`、
+ * 書いている間の `<動画>.<ジョブ>.<コーデック>.encoding` とその隣の `.post`・`.chapters.txt`、
  * チャプターの書き直しの `<動画>.<ジョブ>.post` と `<元の TS>.<ジョブ>.chapters.txt`。
  * 1 つめの括弧がジョブの番号
  */
 const WORKING = new RegExp(
-  `^.+\\.(?:${VIDEO_EXTENSIONS.join("|")})\\.(\\d+)\\.(?:[a-z0-9]+\\.encoding(?:\\.post|\\.ffconcat|\\.chapters\\.txt)?|post|chapters\\.txt)$`,
+  `^.+\\.(?:${VIDEO_EXTENSIONS.join("|")})\\.(\\d+)\\.(?:[a-z0-9]+\\.encoding(?:\\.post|\\.chapters\\.txt)?|post|chapters\\.txt)$`,
   "i",
 );
 
