@@ -7,6 +7,7 @@ import {
   getActiveCardId,
   getContractRows,
   testDecode as testDecodeStream,
+  testDecodeUnverified,
 } from "#lib/server/contracts.js";
 import { orm } from "#lib/server/db.js";
 import { recordings } from "#lib/server/schema.js";
@@ -127,13 +128,14 @@ export async function load() {
     // チューナーを譲り合う順。チューナーの節の「詳しく」に出す
     yieldOrder: yieldOrder(),
     card: cardStatus(),
-    contracts: cardStatus()
-      .then((card) => {
-        const id = getActiveCardId(card);
-        return id ? getContractRows(id) : [];
-      })
-      .catch(() => []),
+    contracts: contractRows().catch(() => []),
   };
+}
+
+/** いま使っているカードの契約の一覧 (ダイアログ)。カードが無ければ空 */
+async function contractRows() {
+  const id = getActiveCardId(await cardStatus());
+  return id ? getContractRows(id) : [];
 }
 
 export const actions = {
@@ -261,10 +263,37 @@ export const actions = {
               : `この局で復号を試せませんでした: ${result.error}`,
         });
       }
-      return { success: true, decodeOk: result.decodeOk };
+      return {
+        success: true,
+        decodeOk: result.decodeOk,
+        contracts: await contractRows(),
+      };
     } catch (error) {
       return fail(500, {
         message: `この局で復号を試せませんでした: ${reason(error)}`,
+      });
+    }
+  },
+
+  /** 確かめていない有料の局を、物理チャンネルごとに 1 回の選局でまとめて確かめる */
+  testDecodeUnverified: async () => {
+    try {
+      const result = await testDecodeUnverified();
+      if (!result.ok) {
+        return fail(500, {
+          message: `復号を確かめられませんでした: ${result.error}`,
+        });
+      }
+      const all = [...result.results.values()];
+      return {
+        success: true,
+        tested: all.filter((one) => one.ok).length,
+        skipped: all.filter((one) => !one.ok).length,
+        contracts: await contractRows(),
+      };
+    } catch (error) {
+      return fail(500, {
+        message: `復号を確かめられませんでした: ${reason(error)}`,
       });
     }
   },

@@ -28,10 +28,59 @@
   let contracts = $state<ContractRow[]>([]);
   let checking = $state(false);
   let testingServiceId = $state<number | null>(null);
+  let testingAll = $state(false);
   let errorMessage = $state<string | null>(null);
+  /** まとめて確かめた結果 */
+  let resultMessage = $state<string | null>(null);
 
   /** 契約の確認か復号を確かめている最中 (同時に動かさない) */
-  const isBusy = $derived(checking || testingServiceId !== null);
+  const isBusy = $derived(checking || testingAll || testingServiceId !== null);
+  /** まだ確かめていない局があるか (まとめて確かめるボタン) */
+  const hasUnverified = $derived(
+    contracts.some((row) => row.status === "unverified"),
+  );
+
+  /** action の答えから中身を取り出す */
+  async function post(action: string, form = new FormData()) {
+    const res = await fetch(`?/${action}`, { method: "POST", body: form });
+    const data = deserialize(await res.text());
+    const payload =
+      data.type === "success" || data.type === "failure"
+        ? (data.data as Record<string, unknown> | undefined)
+        : undefined;
+    return { ok: data.type === "success", payload };
+  }
+
+  async function handleTestUnverified() {
+    if (isBusy) return;
+    testingAll = true;
+    errorMessage = null;
+    resultMessage = null;
+    try {
+      const { ok, payload } = await post("testDecodeUnverified");
+      const contractsList = payload?.["contracts"];
+      const tested = Number(payload?.["tested"] ?? 0);
+      const skipped = Number(payload?.["skipped"] ?? 0);
+      if (ok && Array.isArray(contractsList)) {
+        contracts = contractsList as ContractRow[];
+        const parts: string[] = [];
+        if (tested > 0) parts.push(`${tested} 局の復号を確かめました`);
+        if (skipped > 0)
+          parts.push(
+            `${skipped} 局は、いま有料の番組を流していないなどの理由で確かめられませんでした`,
+          );
+        resultMessage = parts.join("。") || null;
+      } else {
+        errorMessage = String(
+          payload?.["message"] ?? "復号を確かめられませんでした",
+        );
+      }
+    } catch (err) {
+      errorMessage = String(err);
+    } finally {
+      testingAll = false;
+    }
+  }
 
   $effect(() => {
     contracts = initialContracts;
@@ -57,19 +106,12 @@
     if (isBusy) return;
     checking = true;
     errorMessage = null;
+    resultMessage = null;
     try {
-      const res = await fetch("?/checkContracts", {
-        method: "POST",
-        body: new FormData(),
-      });
-      const data = deserialize(await res.text());
-      const payload =
-        data.type === "success" || data.type === "failure"
-          ? (data.data as Record<string, unknown> | undefined)
-          : undefined;
+      const { ok, payload } = await post("checkContracts");
       const contractsList = payload?.["contracts"];
       const message = payload?.["message"];
-      if (data.type === "success" && Array.isArray(contractsList)) {
+      if (ok && Array.isArray(contractsList)) {
         contracts = contractsList as ContractRow[];
       } else if (message) {
         errorMessage = String(message);
@@ -87,26 +129,15 @@
     if (isBusy) return;
     testingServiceId = serviceId;
     errorMessage = null;
+    resultMessage = null;
     try {
       const form = new FormData();
       form.append("serviceId", String(serviceId));
-      const res = await fetch("?/testDecode", {
-        method: "POST",
-        body: form,
-      });
-      const data = deserialize(await res.text());
-      const payload =
-        data.type === "success" || data.type === "failure"
-          ? (data.data as Record<string, unknown> | undefined)
-          : undefined;
-      const decodeOk = payload?.["decodeOk"];
+      const { ok, payload } = await post("testDecode", form);
+      const contractsList = payload?.["contracts"];
       const message = payload?.["message"];
-      if (data.type === "success" && typeof decodeOk === "boolean") {
-        contracts = contracts.map((c) =>
-          c.serviceId === serviceId
-            ? { ...c, decodeOk, checkedAt: Date.now() }
-            : c,
-        );
+      if (ok && Array.isArray(contractsList)) {
+        contracts = contractsList as ContractRow[];
       } else if (message) {
         errorMessage = String(message);
       } else {
@@ -151,11 +182,18 @@
       {/if}
       カードにある契約の情報 (CA 契約情報) から、局ごとの契約と有効期限を出します。
       選局しないので、チューナーは使いません。「復号を確かめる」は、その局を受信して復号できるかを確かめます。
+      カードに聞けない局は、復号を確かめるか、有料の番組を録るまで「確かめていない」のままです。
+      「確かめていない局の復号を確かめる」は、そうした局をチャンネルごとに 1 回の選局でまとめて確かめます。
     </p>
 
     {#if errorMessage}
       <div class="notice error small" role="alert">
         {errorMessage}
+      </div>
+    {/if}
+    {#if resultMessage}
+      <div class="notice info small" role="status">
+        {resultMessage}
       </div>
     {/if}
 
@@ -186,12 +224,14 @@
                   <span class="mono">{row.channel}</span>
                 </td>
                 <td>
-                  {#if row.state === "subscribed"}
+                  {#if row.status === "subscribed"}
                     <span class="tag success">契約中</span>
-                  {:else if row.state === "expired"}
+                  {:else if row.status === "expired"}
                     <span class="tag">期限切れ</span>
-                  {:else}
+                  {:else if row.status === "unsubscribed"}
                     <span class="tag muted">未契約</span>
+                  {:else}
+                    <span class="tag warning">確かめていない</span>
                   {/if}
                 </td>
                 <td class="nowrap num">
@@ -227,6 +267,18 @@
 
     <!-- 押すものは右下 (docs/design.md の「メニュー・ダイアログ・検索の候補」) -->
     <footer class="modal-actions">
+      <button
+        type="button"
+        class="secondary"
+        disabled={isBusy || !hasUnverified}
+        onclick={handleTestUnverified}
+        data-testid="btn-test-decode-unverified"
+      >
+        <ShieldCheck aria-hidden="true" />
+        {testingAll
+          ? "確かめています…"
+          : "確かめていない局の復号を確かめる"}
+      </button>
       <button
         type="button"
         class="secondary"

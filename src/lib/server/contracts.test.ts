@@ -25,6 +25,9 @@ const { cardContracts, programs, services } = await import("./schema");
 const {
   checkContracts,
   confirmCardContract,
+  contractStatus,
+  groupByChannel,
+  testDecodeUnverified,
   fromMjd,
   getContractRows,
   DECODE_VALID_MS,
@@ -594,6 +597,163 @@ describe("testDecode", () => {
   });
 });
 
+describe("ダイアログに出す契約の状態", () => {
+  const now = Date.now();
+  const fresh = now - 60_000;
+  const stale = now - DECODE_VALID_MS - 60_000;
+  test("カードが答えた局はその答え、答えの無い局は新しい復号の結果で決める", () => {
+    const rows: Parameters<typeof contractStatus>[0][] = [
+        { state: "subscribed", code: 0x0800, decodeOk: null, decodedAt: null },
+        { state: "expired", code: 0, decodeOk: true, decodedAt: fresh },
+        { state: "unsubscribed", code: 0, decodeOk: null, decodedAt: null },
+        { state: "subscribed", code: null, decodeOk: true, decodedAt: fresh },
+        // 31 日を過ぎた復号の結果は、確かめていないのと同じ
+        { state: "subscribed", code: null, decodeOk: true, decodedAt: stale },
+        // 番組表に 0xCB が無く、復号も試していない (`checkContracts` が未契約で書く)
+        { state: "unsubscribed", code: null, decodeOk: null, decodedAt: null },
+        // 復号を試して掛かったままだった
+        { state: "unsubscribed", code: null, decodeOk: false, decodedAt: null },
+    ];
+    expect(rows.map((row) => contractStatus(row, now))).toEqual([
+      "subscribed",
+      "expired",
+      "unsubscribed",
+      "subscribed",
+      "unverified",
+      "unverified",
+      "unsubscribed",
+    ]);
+  });
+
+  test("行がまだ無い有料の局も、確かめていない局として一覧に出す", () => {
+    for (const id of [1, 2])
+      orm()
+        .insert(services)
+        .values({
+          id,
+          service_id: id,
+          network_id: 7,
+          name: `CS${id}`,
+          type: "CS",
+          channel: `CS${id * 2}`,
+          updated_at: Date.now(),
+        })
+        .run();
+    airing(1);
+    airing(2, true);
+    const rows = getContractRows("0000111122223333");
+    expect(rows.map((row) => [row.serviceId, row.status])).toEqual([
+      [1, "unverified"],
+    ]);
+  });
+});
+
+describe("確かめていない局の復号をまとめて確かめる (testDecodeUnverified)", () => {
+  test("同じ物理チャンネルの局は 1 つの組にまとめる。組と局の並びは渡した順", () => {
+    expect(
+      groupByChannel([
+        { id: 1, type: "CS", channel: "CS2" },
+        { id: 2, type: "BS", channel: "BS01_0" },
+        { id: 3, type: "CS", channel: "CS2" },
+        { id: 4, type: "CS", channel: "CS4" },
+        { id: 5, type: "BS", channel: "BS01_0" },
+      ]).map((group) => group.map((target) => target.id)),
+    ).toEqual([[1, 3], [2, 5], [4]]);
+    expect(groupByChannel([])).toEqual([]);
+  });
+
+  test("チャンネルごとに 1 回だけ選局し、その中の確かめていない局をまとめて確かめる", async () => {
+    // BS05 には局 103 (復号できる) と局 9999 (掛かったまま)、BS07 には局 104 (掛かったまま)
+    const streams: string[] = [];
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") return Response.json(ONE_CARD);
+      if (url.pathname === "/denpa/stream") {
+        const channel = url.searchParams.get("channel") ?? "";
+        streams.push(channel);
+        return new Response(
+          channel === "BS05"
+            ? channelStream(103, 100, "clear", "scrambled")
+            : channelStream(104, 100, "scrambled"),
+        );
+      }
+      return new Response("Not Found", { status: 404 });
+    });
+    const service = (id: number, arib: number, channel: string) =>
+      orm()
+        .insert(services)
+        .values({
+          id,
+          service_id: arib,
+          network_id: 4,
+          name: `局${id}`,
+          type: "BS",
+          channel,
+          updated_at: Date.now(),
+        })
+        .run();
+    service(1, 103, "BS05");
+    service(2, 9999, "BS05");
+    service(3, 104, "BS07");
+    service(4, 105, "BS09");
+    service(5, 106, "BS11");
+    for (const id of [1, 2, 3, 5]) airing(id);
+    // 4 はいま無料の番組を流している。5 はカードが答えた (確かめていない局ではない)
+    airing(4, true);
+    orm()
+      .insert(programs)
+      .values({
+        id: 4002,
+        service_id: 4,
+        network_id: 4,
+        event_id: 2,
+        start_at: Date.now() + 3600_000,
+        end_at: Date.now() + 7200_000,
+        name: "あとの有料の番組",
+        is_free: false,
+        updated_at: Date.now(),
+      })
+      .run();
+    orm()
+      .insert(cardContracts)
+      .values({
+        card_id: "0000111122223333",
+        service_id: 5,
+        state: "subscribed",
+        code: 0x0800,
+        checked_at: Date.now(),
+      })
+      .run();
+
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      const res = await testDecodeUnverified();
+      if (!res.ok) throw new Error(res.error);
+      expect([...streams].sort()).toEqual(["BS05", "BS07"]);
+      expect(res.results.get(1)).toEqual({ ok: true, decodeOk: true });
+      expect(res.results.get(2)).toEqual({ ok: true, decodeOk: false });
+      expect(res.results.get(3)).toEqual({ ok: true, decodeOk: false });
+      expect(res.results.get(4)?.ok).toBe(false);
+      expect(res.results.has(5)).toBe(false);
+      const status = new Map(
+        getContractRows("0000111122223333").map((row) => [
+          row.serviceId,
+          row.status,
+        ]),
+      );
+      expect([1, 2, 3, 4, 5].map((id) => status.get(id))).toEqual([
+        "subscribed",
+        "unsubscribed",
+        "unsubscribed",
+        "unverified",
+        "subscribed",
+      ]);
+    } finally {
+      server.stop();
+    }
+  });
+});
+
 describe("checkContracts エッジケース・異常系", () => {
   test("有料番組が0件のときは空配列を返す", async () => {
     const server = serveFakeAgent(async (req) => {
@@ -716,9 +876,11 @@ describe("checkContracts エッジケース・異常系", () => {
       await expect(checkContracts()).rejects.toThrow(
         "問い合わせに失敗しました",
       );
-      // DB に誤って unsubsribed が保存されていないことを検証
+      // DB に誤って未契約が保存されていない (行が無いので、確かめていない局として出る)
       const rows = getContractRows("0000111122223333");
-      expect(rows).toHaveLength(0);
+      expect(rows.map((row) => [row.status, row.checkedAt])).toEqual([
+        ["unverified", null],
+      ]);
     } finally {
       server.stop();
     }
