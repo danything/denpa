@@ -94,6 +94,12 @@ export interface HwDevice {
    */
   amfTranscoding: HwCodec[];
   /**
+   * QSV で、**フレームを GPU のメモリへ移す形 (`hwupload`) が落ち、CPU のメモリのまま渡す形でだけエンコードできた**コーデック
+   * (`probeWindows`)。Kaby Lake (HD Graphics 620) と古いドライバでは、Direct3D 11 の入れ物を作れずに `hwupload` が落ちる
+   * (`Could not create the texture (80070057)`。#2342)。そのときはランタイムが自分で GPU へ移す (`hwArgs`)
+   */
+  qsvSystem: HwCodec[];
+  /**
    * VA-API のうち、**放送の MPEG-2 を GPU でデコードして、GPU でインタレ解除してエンコードできる**と
    * 確かめられたコーデック (`probeFull`)。ライブはこれなら CPU にフレームを降ろさない (`liveHwArgs`)
    */
@@ -117,6 +123,8 @@ export interface HwWay {
   cqp?: true;
   /** AMF を古い世代向けの指定でエンコードする (`HwDevice.amfTranscoding`)。試しのエンコードの結果から `hwChain` が付ける */
   amfTranscoding?: true;
+  /** QSV に CPU のメモリのままフレームを渡す (`HwDevice.qsvSystem`)。試しのエンコードの結果から `hwChain` が付ける */
+  qsvSystem?: true;
   /** GPU の番号 (`HwDevice.gpu`)。NVENC・QSV・AMF のときだけ */
   gpu?: number;
 }
@@ -160,9 +168,11 @@ export function hwChain(
 /**
  * そのデバイスでの方式。AV1 の ICQ が通らなかった VA-API には CQP の印を付ける (`HwDevice.cqp`)。
  * NVENC・QSV・AMF には GPU の番号を添え、高画質の指定が通らなかった AMF には古い世代向けの印を付ける
- * (`HwDevice.amfTranscoding`)
+ * (`HwDevice.amfTranscoding`)。GPU のメモリへ移せなかった QSV には CPU のメモリのまま渡す印を付ける (`HwDevice.qsvSystem`)
  */
 function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
+  if (kind === "qsv" && device.qsvSystem.includes(codec))
+    return { device: device.path, kind, gpu: device.gpu ?? 0, qsvSystem: true };
   if (kind === "amf" && device.amfTranscoding.includes(codec))
     return {
       device: device.path,
@@ -328,7 +338,7 @@ export function hwArgs(
   if (way.kind === "qsv") {
     return {
       device: qsvDevice(way),
-      filter: QSV_FILTER,
+      filter: way.qsvSystem === true ? QSV_SYSTEM_FILTER : QSV_FILTER,
       encoder: [
         `${codec}_qsv`,
         "-preset:v",
@@ -556,6 +566,12 @@ const QSV_ICQ: Record<HwCodec, number> = { h264: 23, hevc: 23, av1: 26 };
  * `extra_hw_frames` は QSV のエンコーダが先に抱えておくフレームの数 (FFmpeg の QSV の例が 64 を置く値)
  */
 const QSV_FILTER = ["format=nv12", "hwupload=extra_hw_frames=64", "format=qsv"];
+
+/**
+ * QSV に CPU のメモリのままフレームを渡す映像フィルタ (`HwWay.qsvSystem`)。GPU のメモリへ移すのはランタイムがする。
+ * デバイスは同じ引数で開ける (`qsvDevice`。エンコーダは `-filter_hw_device` のデバイスを使う)
+ */
+const QSV_SYSTEM_FILTER = ["format=nv12"];
 
 /**
  * QSV のデバイスを開ける引数。GPU は Direct3D 11 のアダプタの番号 (`HwWay.gpu`。無ければ 0) で選ぶ。
@@ -998,6 +1014,7 @@ function emptyDevice(path: string, label: string): HwDevice {
     videotoolbox: [],
     cqp: [],
     amfTranscoding: [],
+    qsvSystem: [],
     full: [],
   };
 }
@@ -1051,9 +1068,10 @@ const WINDOWS_GPUS = 4;
  *   QSV・AMF は Direct3D 11 のアダプタの番号で、Intel でも AMD でもないアダプタ (NVIDIA・ソフトウェア) が先頭にあることがあるので、
  *   落ちても `WINDOWS_GPUS` 番まで試す
  * - **AMF は高画質の指定で落ちたら、古い世代向けの指定でもう一度試す** (`hwArgs` の説明)。通ったらそのコーデックに
- *   印を付け (`HwDevice.amfTranscoding`)、録画もその指定でエンコードする。NVENC と QSV は同じ仕組みに乗せない。
- *   NVENC はドライバが FFmpeg の求める API のバージョンを持たなければどの指定でも開けず、指定を替えても通らない。
- *   QSV の `-preset` (target usage) はランタイムへの希望で、持たない段は近い段に寄せて受ける
+ *   印を付け (`HwDevice.amfTranscoding`)、録画もその指定でエンコードする。NVENC は同じ仕組みに乗せない。
+ *   NVENC はドライバが FFmpeg の求める API のバージョンを持たなければどの指定でも開けず、指定を替えても通らない
+ * - **QSV は GPU のメモリへ移す形 (`hwupload`) で落ちたら、CPU のメモリのまま渡す形でもう一度試す** (`HwDevice.qsvSystem`)。
+ *   指定 (`-preset`・ICQ) は替えない。`-preset` (target usage) はランタイムへの希望で、持たない段は近い段に寄せて受ける
  * - どの番号も落ちた (ドライバが無い・GPU が無い・ffmpeg にエンコーダが無い) ときは行が 0 になり、ソフトウェアでエンコードする
  */
 async function probeWindows(): Promise<HwDevice[]> {
@@ -1081,6 +1099,9 @@ async function probeWindows(): Promise<HwDevice[]> {
       device.amfTranscoding = HW_CODECS.filter((codec) =>
         device.amfTranscoding.includes(codec),
       );
+      device.qsvSystem = HW_CODECS.filter((codec) =>
+        device.qsvSystem.includes(codec),
+      );
       devices.push(device);
     }
   }
@@ -1088,7 +1109,8 @@ async function probeWindows(): Promise<HwDevice[]> {
 }
 
 /**
- * Windows のデバイスで 1 コマ試す。AMF は高画質の指定が落ちたら古い世代向けの指定でも試し、
+ * Windows のデバイスで 1 コマ試す。QSV は GPU のメモリへ移す形が落ちたら CPU のメモリのまま渡す形でも試し (`HwDevice.qsvSystem`)、
+ * AMF は高画質の指定が落ちたら古い世代向けの指定でも試し、
  * そちらで通ったコーデックに印を付ける (`HwDevice.amfTranscoding`)
  */
 async function tryOn(
@@ -1098,6 +1120,14 @@ async function tryOn(
 ): Promise<boolean> {
   const way: HwWay = { device: device.path, kind, gpu: device.gpu ?? 0 };
   if (await tryWay(way, codec)) return true;
+  if (kind === "qsv") {
+    if (!(await tryWay({ ...way, qsvSystem: true }, codec))) return false;
+    console.log(
+      `[hwenc] ${codec}_qsv (${device.path}) は GPU のメモリへ移せなかったため、CPU のメモリのまま渡してエンコードします`,
+    );
+    device.qsvSystem.push(codec);
+    return true;
+  }
   if (kind !== "amf") return false;
   if (!(await tryWay({ ...way, amfTranscoding: true }, codec))) return false;
   // 直前の警告 (高画質の指定で落ちた) のあとに、古い世代向けの指定で使えることを出す
@@ -1264,7 +1294,9 @@ export function describeDevice(device: HwDevice): string {
             ? `${CODEC_LABEL[c]} (CQP)`
             : kind === "amf" && device.amfTranscoding.includes(c)
               ? `${CODEC_LABEL[c]} (古い世代向けの指定)`
-              : CODEC_LABEL[c],
+              : kind === "qsv" && device.qsvSystem.includes(c)
+                ? `${CODEC_LABEL[c]} (CPU のメモリから渡す)`
+                : CODEC_LABEL[c],
         )
         .join(" / ")}`,
   );

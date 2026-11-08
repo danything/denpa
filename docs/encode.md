@@ -407,7 +407,12 @@ GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.prob
   `transcoding` は usage の最初の値 (変換向け)、`quality` は `high_quality` より前からある画質寄りの段で、FFmpeg 9.0.2 の
   h264_amf・hevc_amf・av1_amf のどれも持ちます。レート制御とビットレートは同じです。画質を取るため、古い世代向けの指定は
   高画質の指定が落ちたときだけ使います。ライブの指定 (下) は初めから古い世代も持つ値なので替えません
-- NVENC と QSV は世代で指定を替えません。NVENC はドライバが FFmpeg の求める API のバージョンを持たなければ、どの指定でも開けません。
+- **QSV は、GPU のメモリへ移す形 (`hwupload`) で落ちたら、CPU のメモリのまま渡す形でもう一度試します** (`HwDevice.qsvSystem`。
+  設定の「エンコード」に「(CPU のメモリから渡す)」と出ます)。HD Graphics 620 (Kaby Lake、ドライバ 31.0.101.2140) では、QSV のランタイムは開けるのに
+  `hwupload` が Direct3D 11 の入れ物を作れずに落ち (`Could not create the texture (80070057)`)、GPU が見つからないと報告がありました (#2342)。
+  同じ PC で、フレームを CPU のメモリのまま h264_qsv に渡すとエンコードできました。GPU のメモリへ移すのはランタイムがします。
+  インタレ解除と縮小は元から CPU でするので、移す所が変わるだけです。指定 (`-preset`・ICQ) は替えません
+- NVENC は世代で指定を替えません。ドライバが FFmpeg の求める API のバージョンを持たなければ、どの指定でも開けません。
   QSV の `-preset` (target usage) はランタイムへの希望で、持たない段は近い段に寄せて受けます
 - **試しのエンコードが落ちたら、ffmpeg のエラーの最後の 3 行をログに出します** (`[hwenc] h264_amf (amf0) の試しのエンコードが落ちました …`)。
   GPU があるのに使えないときは、ここで落ちた理由 (ドライバが無い・オプションを受け付けない・時間切れ) を読めます
@@ -419,7 +424,7 @@ GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.prob
 - **ライブは低遅延の速い段にします** (`hwenc.liveHwArgs`)。QSV は `-preset veryfast -bf 0 -async_depth 1` (ICQ は録画と同じ値。回線に合わせて
   段を下げたときは VBR)、AMF は `-usage ultralowlatency -quality speed -rc vbr_latency -async_depth 1`。デコードとインタレ解除は CPU のままです
   (GPU に寄せるのは VA-API だけ)。映像が出る前に降りれば、Linux と同じくソフトウェアでエンコードし直し、その方式を 15 分外します
-- **QSV は GPU を `-init_hw_device qsv=…,child_device=<番号>,child_device_type=d3d11va` で選び**、CPU で作ったフレームを `hwupload` で渡します。
+- **QSV は GPU を `-init_hw_device qsv=…,child_device=<番号>,child_device_type=d3d11va` で選び**、CPU で作ったフレームを `hwupload` で渡します (通らない GPU は CPU のメモリのまま。上)。
   **AMF は `-init_hw_device d3d11va=…:<番号>` で開いたデバイスを使います**
 
 **CI** (test.yml の `server-windows`) は GPU の無いランナーで、`tests/native-smoke.ts` が次の 3 つを確かめます。

@@ -27,6 +27,7 @@ const A: HwDevice = {
   videotoolbox: [],
   cqp: [],
   amfTranscoding: [],
+  qsvSystem: [],
   full: [],
 };
 const B: HwDevice = {
@@ -40,6 +41,7 @@ const B: HwDevice = {
   videotoolbox: [],
   cqp: [],
   amfTranscoding: [],
+  qsvSystem: [],
   full: [],
 };
 
@@ -171,6 +173,7 @@ describe("ICQ を持たないドライバの AV1 (i965・Mesa)", () => {
     path: "/dev/dri/renderD130",
     cqp: ["av1"],
     amfTranscoding: [],
+    qsvSystem: [],
   };
 
   test("AV1 が CQP でだけエンコードできた VA-API には印を付けて渡す", () => {
@@ -305,6 +308,7 @@ describe("Rockchip MPP", () => {
     videotoolbox: [],
     cqp: [],
     amfTranscoding: [],
+    qsvSystem: [],
     full: [],
   };
 
@@ -415,6 +419,7 @@ describe("NVIDIA NVENC", () => {
     gpu: 0,
     cqp: [],
     amfTranscoding: [],
+    qsvSystem: [],
     full: [],
   };
   const N1: HwDevice = {
@@ -659,6 +664,7 @@ describe("Windows の QSV・AMF", () => {
       gpu: 1,
       cqp: [],
       amfTranscoding: [],
+      qsvSystem: [],
       full: [],
     };
     expect(liveHw("h264", {}, 0, [gpu])).toEqual({ way: Q, full: false });
@@ -729,6 +735,7 @@ describe("H.265 (GPU でだけ)", () => {
     videotoolbox: [],
     cqp: [],
     amfTranscoding: [],
+    qsvSystem: [],
     full: [],
   };
   const N: HwDevice = {

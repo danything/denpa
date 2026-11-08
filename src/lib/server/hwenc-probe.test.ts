@@ -337,10 +337,10 @@ test("Windows で GPU が無ければ、行は 0 でソフトウェアにする"
   expect(hwChain("h264", {}, 0, devices)).toEqual([]);
   expect(message).toContain("ソフトウェアでエンコードします");
   // /dev の探し方は使わない。NVENC は 0 番が落ちたら止め、QSV・AMF は 4 番まで H.264 だけ試す
-  // (AMF は番号ごとに高画質の指定と古い世代向けの指定の 2 回)
+  // (QSV は番号ごとに GPU のメモリへ移す形と CPU のメモリのまま渡す形、AMF は高画質の指定と古い世代向けの指定の 2 回ずつ)
   const lines = calls.map((argv) => argv.join(" "));
   expect(lines.filter((l) => l.includes("_nvenc"))).toHaveLength(1);
-  expect(lines.filter((l) => l.includes("_qsv"))).toHaveLength(4);
+  expect(lines.filter((l) => l.includes("_qsv"))).toHaveLength(8);
   expect(lines.filter((l) => l.includes("_amf"))).toHaveLength(8);
   expect(lines.some((l) => l.includes("_vaapi"))).toBe(false);
 });
@@ -458,6 +458,93 @@ test("AMF は高画質の指定で落ちたら古い世代向けの指定で試�
   }
 });
 
+test("QSV は GPU のメモリへ移す形で落ちたら CPU のメモリのまま渡す形で試し、通ったほうで録画する", async () => {
+  // HD Graphics 620 (Kaby Lake) の返事 (#2342)。アダプタ 0 の Intel で、`hwupload` が Direct3D 11 の入れ物を作れずに落ち、AV1 は持たない
+  answer = (argv) => {
+    const line = argv.join(" ");
+    if (!line.includes("child_device=0,") || !line.includes("_qsv")) return 1;
+    if (line.includes("av1_qsv")) return 1;
+    return line.includes("hwupload") ? 1 : 0;
+  };
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  calls.length = 0;
+  try {
+    const { devices } = await onWindows(() => probe());
+    expect(devices.map((d) => d.path)).toEqual(["qsv0"]);
+    const device = devices[0]!;
+    expect(device).toMatchObject({
+      label: "qsv0 (Intel)",
+      gpu: 0,
+      qsv: ["hevc", "h264"],
+      qsvSystem: ["hevc", "h264"],
+    });
+    expect(describeDevice(device)).toBe(
+      "QSV: H.265 (CPU のメモリから渡す) / H.264 (CPU のメモリから渡す)",
+    );
+    // 録画もライブも、`hwupload` を挟まずに渡す。デバイスは同じ引数で開ける
+    const way = hwChain("h264", {}, 0, devices)[0]!;
+    expect(way).toEqual({
+      device: "qsv0",
+      kind: "qsv",
+      gpu: 0,
+      qsvSystem: true,
+    });
+    const args = hwArgs(way, "h264");
+    expect(args.filter).toEqual(["format=nv12"]);
+    expect(args.device).toContain(
+      "qsv=qs,child_device=0,child_device_type=d3d11va",
+    );
+    expect(liveHw("hevc", {}, 0, devices)?.way).toMatchObject({
+      kind: "qsv",
+      qsvSystem: true,
+    });
+    // GPU のメモリへ移す形を先に試し、落ちたときだけ CPU のメモリのまま渡す形で試す
+    const qsv0 = calls
+      .map((argv) => argv.join(" "))
+      .filter((l) => l.includes("h264_qsv") && l.includes("child_device=0,"));
+    expect(qsv0).toHaveLength(2);
+    expect(qsv0[0]).toContain("hwupload");
+    expect(qsv0[1]).not.toContain("hwupload");
+    expect(log.mock.calls.map((args) => String(args[0]))).toContain(
+      "[hwenc] h264_qsv (qsv0) は GPU のメモリへ移せなかったため、CPU のメモリのまま渡してエンコードします",
+    );
+  } finally {
+    warn.mockRestore();
+    log.mockRestore();
+  }
+});
+
+test("QSV は GPU のメモリへ移す形が通れば、CPU のメモリのまま渡す形を試さない", async () => {
+  answer = (argv) => {
+    const line = argv.join(" ");
+    return line.includes("child_device=0,") && line.includes("_qsv") ? 0 : 1;
+  };
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  calls.length = 0;
+  try {
+    const { devices } = await onWindows(() => probe());
+    expect(devices[0]).toMatchObject({
+      qsv: ["av1", "hevc", "h264"],
+      qsvSystem: [],
+    });
+    expect(
+      hwArgs(hwChain("h264", {}, 0, devices)[0]!, "h264").filter,
+    ).toContain("hwupload=extra_hw_frames=64");
+    const lines = calls.map((argv) => argv.join(" "));
+    expect(
+      lines.some(
+        (l) =>
+          l.includes("child_device=0,") &&
+          l.includes("_qsv") &&
+          !l.includes("hwupload"),
+      ),
+    ).toBe(false);
+  } finally {
+    warn.mockRestore();
+  }
+});
+
 test("AMF は高画質の指定が通れば、古い世代向けの指定を試さない", async () => {
   answer = (argv) => {
     const line = argv.join(" ");
@@ -469,6 +556,7 @@ test("AMF は高画質の指定が通れば、古い世代向けの指定を試�
   expect(devices[0]).toMatchObject({
     amf: ["av1", "hevc", "h264"],
     amfTranscoding: [],
+    qsvSystem: [],
   });
   expect(hwChain("av1", {}, 0, devices)).toEqual([
     { device: "amf0", kind: "amf", gpu: 0 },

@@ -32,6 +32,7 @@ const {
   getContractRows,
   DECODE_VALID_MS,
   isCodeSubscribed,
+  noteDecoded,
   noteStillScrambled,
   paidAllowed,
   testDecode,
@@ -1003,5 +1004,70 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
     expect(rows.get(2)?.state).toBe("unsubscribed");
     expect(rows.get(2)?.decodeOk).toBe(false);
     expect(paidAllowed()(2)).toBe(false);
+  });
+
+  test("有料の番組を復号できて録れたら、復号テストと同じく契約中にする。カードが答えた行の状態は変えない", async () => {
+    for (const id of [1, 2, 3])
+      orm()
+        .insert(services)
+        .values({
+          id,
+          service_id: id,
+          network_id: 7,
+          name: `CS${id}`,
+          type: "CS",
+          channel: `CS${id * 2}`,
+          updated_at: Date.now(),
+        })
+        .run();
+    // 1: まだ確かめていない (行が無い)、2: 31 日を過ぎた、3: カードが期限切れと答えた
+    row(2, {
+      code: null,
+      decode_ok: true,
+      decoded_at: Date.now() - DECODE_VALID_MS - 60_000,
+    });
+    row(3, { state: "expired", code: 0 });
+    const server = serveFakeAgent(async (req) =>
+      new URL(req.url).pathname === "/denpa/card"
+        ? Response.json(ONE_CARD)
+        : new Response("Not Found", { status: 404 }),
+    );
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      for (const id of [1, 2, 3]) await noteDecoded(id);
+    } finally {
+      server.stop();
+    }
+    const rows = new Map(getContractRows(card).map((r) => [r.serviceId, r]));
+    expect(rows.get(1)?.state).toBe("subscribed");
+    expect(rows.get(1)?.decodeOk).toBe(true);
+    expect(rows.get(2)?.state).toBe("subscribed");
+    expect(rows.get(3)?.state).toBe("expired");
+    expect([1, 2, 3].map(paidAllowed())).toEqual([true, true, false]);
+  });
+
+  test("カードが読めないときは、復号できた録画があっても書かない", async () => {
+    orm()
+      .insert(services)
+      .values({
+        id: 1,
+        service_id: 1,
+        network_id: 7,
+        name: "CS1",
+        type: "CS",
+        channel: "CS2",
+        updated_at: Date.now(),
+      })
+      .run();
+    const server = serveFakeAgent(
+      async () => new Response("Not Found", { status: 404 }),
+    );
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      await noteDecoded(1);
+    } finally {
+      server.stop();
+    }
+    expect(getContractRows(card)).toHaveLength(0);
   });
 });

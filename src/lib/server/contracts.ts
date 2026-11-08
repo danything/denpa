@@ -28,7 +28,7 @@ export type ContractState = "subscribed" | "unsubscribed" | "expired";
 /**
  * **復号テストで確かめた契約を信じる長さ (31 日)。** 番組表に契約の情報 (0xCB) が無い局はカードに聞けないので、
  * 復号できたことだけが手がかりになる。CS の月額は月ごとに切れるので、確かめてから 1 か月を過ぎたら確かめ直すまで録らない。
- * 録画が復号できずに終わったときは、それを待たずに下げる (`noteStillScrambled`)
+ * 有料の番組を復号できて録れたら、確かめた日を新しくする (`noteDecoded`)。録画が復号できずに終わったときは、31 日を待たずに下げる (`noteStillScrambled`)
  */
 export const DECODE_VALID_MS = 31 * 86_400_000;
 
@@ -604,7 +604,7 @@ async function decodeOnChannel(
 }
 
 /**
- * 復号を確かめた結果を card_contracts に書く (`decodeOnChannel`)。復号できたら契約中にする
+ * 復号を確かめた結果を card_contracts に書く (`decodeOnChannel`、`noteDecoded`)。復号できたら契約中にする
  */
 function saveDecode(
   cardId: string,
@@ -643,12 +643,26 @@ function saveDecode(
 }
 
 /**
+ * **有料の番組を復号できて録れた。** その局を、復号テストで確かめたときと同じく契約中にする (`encoder.ts`。`noteStillScrambled` の反対)。
+ * 番組表に契約の情報 (0xCB) が無い局は、手で予約した録画でも契約中になり、録り続けている間は 31 日 (`DECODE_VALID_MS`) を過ぎても録られなくならない。
+ *
+ * 書くのは、いま使っているカードの行。カードが読めないときは書かない (どのカードで観られたか分からない)。
+ * カードが答えた行 (`code` がある) の状態は変えない (`saveDecode`)
+ */
+export async function noteDecoded(serviceId: number): Promise<void> {
+  const card = await cardStatus();
+  const cardId = getActiveCardId(card);
+  if (!card.ok || !cardId) return;
+  saveDecode(cardId, serviceId, true);
+}
+
+/**
  * **有料放送を自動予約してよい局** (`rules.PaidAllowed`)。どれかのカードで契約中と確かめた局だけ。
  *
  * 未契約・期限切れの局と、まだ確かめていない局 (確かめる前・カードが無い・番組表に 0xCB が無く
  * 復号も試していない) は録らない。録ってもスクランブルのままで観られないため。
  * 設定の「無料放送だけ録る」はこれに置き換えた。カードを持たない人は、今までの既定 (無料だけ) と同じになる。
- * カードに聞けない局 (番組表に 0xCB が無い) は、復号テストから 31 日のあいだだけ (`DECODE_VALID_MS`)。
+ * カードに聞けない局 (番組表に 0xCB が無い) は、復号テストか有料の番組を復号できた録画から 31 日のあいだだけ (`DECODE_VALID_MS`)。
  * 1 回の当てはめで 1 回だけ読む (呼ぶ側が関数を使い回す)
  */
 export function paidAllowed(now = Date.now()): (serviceId: number) => boolean {

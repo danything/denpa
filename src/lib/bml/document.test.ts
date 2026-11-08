@@ -230,8 +230,16 @@ describe("CSS", () => {
     );
     const d = doc.getElementById("d")!.style();
     expect(d.left).toBe(0);
-    expect(d.colorIndex).toBe(7);
+    expect(d.colorIndex).toBe(0);
     expect(d.navIndex).toBe(506);
+  });
+
+  test("文字の色の既定は黒 (0)。指定の無い段落は body から黒を継ぐ (地震お知らせ表示設定の「利用する」)", () => {
+    const doc = load(
+      '<bml><body><div id="w" style="background-color-index: 168"><p id="none">利用する</p><p id="white" style="color-index: 7">地震</p></div></body></bml>',
+    );
+    expect(doc.getElementById("none")!.style().colorIndex).toBe(0);
+    expect(doc.getElementById("white")!.style().colorIndex).toBe(7);
   });
 });
 
