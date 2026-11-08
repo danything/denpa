@@ -369,17 +369,18 @@ ioctl は通り、同期しないだけなので気付きにくい。
 別の番号に移ると、閉じる前に開いて `Device or resource busy` になるためです。ロックの外で待っている間に
 畳まれた選局は、デバイスを開きません (ロックの中で写した古い定義のデバイスが、新しい定義の番号に残らないように)。
 
-#### 受信の状態と C/N は 5 秒ごとに、選局の合間に読む
+#### 受信の状態と C/N と強度は 5 秒ごとに、選局の合間に読む
 
 **`GET /denpa/tuners` の各チューナーの `signal` は、使用中のチューナーを 5 秒ごとに読んだ最後の値です** (`TunerPool.ReadSignals`)。
 一覧を求められたときには機材に触らず、覚えている値を返します。最初の選局でタイマーを作り、エージェントを止めるときに止めます。
 
 - 読むのは選局しているチューナーだけ。チューナーごとのロックが空いていなければ待たず、選局し直している最中なら飛ばして次の周期に読む
-- 読み方は機材ごと (`ITuneDevice.Signal`)。DVB は `FE_READ_STATUS` と `FE_GET_PROPERTY` (`DTV_STAT_CNR`)、CECH-ZD1 J と PIX-DT295 は復調のレジスタを I2C で数バイト読む。
+- 読み方は機材ごと (`ITuneDevice.Signal`)。DVB は `FE_READ_STATUS` と、1 回の `FE_GET_PROPERTY` で `DTV_STAT_CNR` と `DTV_STAT_SIGNAL_STRENGTH`、CECH-ZD1 J と PIX-DT295 は復調のレジスタを I2C で数バイト読む。
   PIX-DT295 は制御転送を 1 つのスレッドずつ通す (`_gate`) ので、TS の送り出しの要求と応答の組の間には入らない。px4d は C/N を選局の答えでしか返さないので、その値を覚えておく
 - 読めなかったら `signal` を null にし、その選局では 1 回だけ記録に残す。選局は止めない
 
-形は `{ "locked": true, "cn": 25.3, "unit": "dB", "atTune": false }`。`unit` が `raw` なら `cn` は機材のレジスタの値か、DVB のドライバが返した相対値 (0〜65535) のままで、dB ではありません。
+形は `{ "locked": true, "cn": 25.3, "unit": "dB", "atTune": false, "strengthDbm": -35.3 }`。`unit` が `raw` なら `cn` は機材のレジスタの値か、DVB のドライバが返した相対値 (0〜65535) のままで、dB ではありません。
+`strengthDbm` は電波の強度 (dBm) で、dBm で返す機材 (DVB のドライバが `FE_SCALE_DECIBEL` で返すもの・CECH-ZD1 J) だけ入り、ほかは null。古いエージェントは `strengthDbm` を返さないので、サーバは無いものも null と同じに読む (古いサーバは読まずに捨てる)。
 `atTune` は選局したときに測った値 (px4d)。測れない機材と空いているチューナーは `signal: null` です。どの機材で何が出るかは [tuners.md](tuners.md#信号レベル)。
 
 ### px4-userland の作り

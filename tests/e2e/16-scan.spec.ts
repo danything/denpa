@@ -275,6 +275,13 @@ test.describe("設定のチューナーとチャンネル", () => {
     );
     await expect(page.getByTestId("tuner-signal-raw-note")).toHaveCount(0);
 
+    // 強度は dBm で測れる機材 (DVB の一部・CECH-ZD1 J) だけ、C/N の前に出す
+    await request.post(`${stack.agentUrl}/__control/signal?value=strength`);
+    await expect(using.getByTestId("tuner-signal")).toHaveText(
+      "同期しています・強度: -35.0 dBm・C/N: 25.3 dB",
+      { timeout: 15_000 },
+    );
+
     await request.post(`${stack.agentUrl}/__control/signal?value=tune`);
     await expect(using.getByTestId("tuner-signal")).toHaveText(
       "同期しています・C/N: 18.2 dB (選局したとき)",

@@ -286,12 +286,13 @@ interface TunerStatus {
   lnb: string | null;
   channel: { type: string; channel: string } | null;
   users: { use: string; priority: number }[];
-  /** 受信の状態と C/N。使用中で、機材が測れるときだけ (TunerSignal.cs) */
+  /** 受信の状態と C/N と強度。使用中で、機材が測れるときだけ (TunerSignal.cs) */
   signal: {
     locked: boolean;
     cn: number | null;
     unit: "dB" | "raw";
     atTune: boolean;
+    strengthDbm: number | null;
   } | null;
 }
 

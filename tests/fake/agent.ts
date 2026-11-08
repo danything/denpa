@@ -38,7 +38,7 @@ const knobs: Knobs = {
 /** チューナーが塞がっている状態。取り合いの見え方を確かめる */
 let busyTuners = false;
 /**
- * 塞がっているチューナーの受信の状態と C/N (`GET /denpa/tuners` の `signal`。`POST /__control/signal` で変える)。
+ * 塞がっているチューナーの受信の状態と C/N と強度 (`GET /denpa/tuners` の `signal`。`POST /__control/signal` で変える)。
  * 本物は C/N が変わっても通知 (`tuners`) を出さないので、変えても出さない。画面は 5 秒ごとに読み直して追う
  */
 type FakeSignal = {
@@ -46,13 +46,45 @@ type FakeSignal = {
   cn: number | null;
   unit: "dB" | "raw";
   atTune: boolean;
+  strengthDbm: number | null;
 } | null;
 const SIGNALS: Record<string, FakeSignal> = {
   // PIX-DT295 の地上波で実機に出た値のあたり
-  raw: { locked: true, cn: 2748, unit: "raw", atTune: false },
-  db: { locked: true, cn: 25.3, unit: "dB", atTune: false },
-  tune: { locked: true, cn: 18.2, unit: "dB", atTune: true },
-  unlocked: { locked: false, cn: null, unit: "dB", atTune: false },
+  raw: {
+    locked: true,
+    cn: 2748,
+    unit: "raw",
+    atTune: false,
+    strengthDbm: null,
+  },
+  db: {
+    locked: true,
+    cn: 25.3,
+    unit: "dB",
+    atTune: false,
+    strengthDbm: null,
+  },
+  strength: {
+    locked: true,
+    cn: 25.3,
+    unit: "dB",
+    atTune: false,
+    strengthDbm: -35,
+  },
+  tune: {
+    locked: true,
+    cn: 18.2,
+    unit: "dB",
+    atTune: true,
+    strengthDbm: null,
+  },
+  unlocked: {
+    locked: false,
+    cn: null,
+    unit: "dB",
+    atTune: false,
+    strengthDbm: null,
+  },
 };
 let busySignal: FakeSignal = SIGNALS["raw"] ?? null;
 /** 挿さっているカードリーダー。どちらにもカードが入っている */

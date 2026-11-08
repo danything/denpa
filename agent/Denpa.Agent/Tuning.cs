@@ -645,7 +645,8 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private const uint DtvIsdbtSoundBroadcasting = 19;
     private const uint DtvIsdbtLayerEnabled = 41;
     private const uint DtvStreamId = 42;
-    private const uint DtvStatCnr = 62;
+    private const uint DtvStatSignalStrength = 62;
+    private const uint DtvStatCnr = 63;
 
     // struct dtv_stats の scale (linux/dvb/frontend.h の enum fecap_scale_params)
     private const byte FeScaleDecibel = 1;
@@ -794,8 +795,8 @@ public sealed unsafe class DvbTuner : ITuneDevice
         Sys.Ioctl((int)_frontend.DangerousGetHandle(), FeSetVoltage, voltage) < 0 ? Marshal.GetLastPInvokeError() : 0;
 
     /// <summary>
-    /// 受信の状態 (<c>FE_READ_STATUS</c>) と C/N (<c>FE_GET_PROPERTY</c> の <c>DTV_STAT_CNR</c>)。**dB に直すのはドライバ。**
-    /// カーネルの DVB の API (uAPI) は C/N を 0.001 dB 刻み (<c>FE_SCALE_DECIBEL</c>) か、ドライバが決めた 0〜65535 の相対値
+    /// 受信の状態 (<c>FE_READ_STATUS</c>) と、C/N と強度 (1 回の <c>FE_GET_PROPERTY</c> で <c>DTV_STAT_CNR</c> と <c>DTV_STAT_SIGNAL_STRENGTH</c>)。
+    /// **dB や dBm に直すのはドライバ。** カーネルの DVB の API (uAPI) は C/N を 0.001 dB 刻み (<c>FE_SCALE_DECIBEL</c>) か、ドライバが決めた 0〜65535 の相対値
     /// (<c>FE_SCALE_RELATIVE</c>) で返す。どちらでもないドライバ (測れない) は C/N を null にする。ioctl を 2 つ呼ぶだけで、dvr の読み出しには触らない
     /// </summary>
     public TunerSignal? Signal()
@@ -819,30 +820,36 @@ public sealed unsafe class DvbTuner : ITuneDevice
         uint status = 0;
         if (Sys.Ioctl(fd, FeReadStatus, (nint)(&status)) < 0) return null;
         var locked = (status & FeHasLock) != 0;
-        var property = new byte[PropertySize];
-        BitConverter.TryWriteBytes(property.AsSpan(0), DtvStatCnr);
+        var properties = new byte[PropertySize * 2];
+        BitConverter.TryWriteBytes(properties.AsSpan(0), DtvStatCnr);
+        BitConverter.TryWriteBytes(properties.AsSpan(PropertySize), DtvStatSignalStrength);
         // struct dtv_properties { u32 num; struct dtv_property *props; } (SetProperties と同じ)
         var header = new byte[16];
-        BitConverter.TryWriteBytes(header.AsSpan(0), 1u);
-        fixed (byte* props = property)
+        BitConverter.TryWriteBytes(header.AsSpan(0), 2u);
+        fixed (byte* props = properties)
         fixed (byte* headerAt = header)
         {
             BitConverter.TryWriteBytes(header.AsSpan(8), (long)props);
             if (Sys.Ioctl(fd, FeGetProperty, (nint)headerAt) < 0) return new TunerSignal(locked, null, TunerSignal.Db);
         }
-        return Cnr(locked, property);
+        return Stats(locked, properties);
     }
 
     /// <summary>
-    /// <c>DTV_STAT_CNR</c> の答え (struct dtv_property。packed) を読む。<c>u.st</c> は <see cref="PropertyDataAt"/> から
-    /// <c>u8 len</c> と <c>struct dtv_stats { u8 scale; s64 svalue; }</c> の並び。使うのは先頭 (全体の値) だけ
+    /// <c>DTV_STAT_CNR</c> と <c>DTV_STAT_SIGNAL_STRENGTH</c> の答え (struct dtv_property。packed) を、この順に 2 つ並べたものを読む。
+    /// **強度は dBm (<c>FE_SCALE_DECIBEL</c>。0.001 dBm 刻み) で返すドライバのものだけ使う。** 相対値はドライバごとの尺度で dBm に直せないので出さない
     /// </summary>
+    internal static TunerSignal Stats(bool locked, ReadOnlySpan<byte> properties)
+    {
+        var cnr = Cnr(locked, properties[..PropertySize]);
+        var (scale, value) = Stat(properties[PropertySize..]);
+        return scale == FeScaleDecibel ? cnr with { StrengthDbm = value / 1000.0 } : cnr;
+    }
+
+    /// <summary><c>DTV_STAT_CNR</c> の答え (struct dtv_property。packed) を読む</summary>
     internal static TunerSignal Cnr(bool locked, ReadOnlySpan<byte> property)
     {
-        var length = property[PropertyDataAt];
-        var scale = property[PropertyDataAt + 1];
-        var value = BitConverter.ToInt64(property[(PropertyDataAt + 2)..]);
-        if (length == 0) return new TunerSignal(locked, null, TunerSignal.Db);
+        var (scale, value) = Stat(property);
         return scale switch
         {
             FeScaleDecibel => new TunerSignal(locked, value / 1000.0, TunerSignal.Db),
@@ -850,6 +857,16 @@ public sealed unsafe class DvbTuner : ITuneDevice
             _ => new TunerSignal(locked, null, TunerSignal.Db),
         };
     }
+
+    /// <summary>
+    /// struct dtv_property の <c>u.st</c> を読む。<see cref="PropertyDataAt"/> から <c>u8 len</c> と
+    /// <c>struct dtv_stats { u8 scale; s64 svalue; }</c> の並び。使うのは先頭 (全体の値) だけ。
+    /// 値が 1 つも無ければ scale を 0 (<c>FE_SCALE_NOT_AVAILABLE</c>) にする
+    /// </summary>
+    private static (byte Scale, long Value) Stat(ReadOnlySpan<byte> property) =>
+        property[PropertyDataAt] == 0
+            ? ((byte)0, 0L)
+            : (property[PropertyDataAt + 1], BitConverter.ToInt64(property[(PropertyDataAt + 2)..]));
 
     private void SetProperties(List<(uint Command, uint Value)> properties)
     {
