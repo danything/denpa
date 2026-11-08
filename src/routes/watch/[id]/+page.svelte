@@ -970,7 +970,9 @@
     let stuckSince: number | null = null;
     let frame = 0;
     let done = false;
-    const started = Date.now();
+    /** 待ち始めた時刻。裏に回っていた間 (刻みが止まる) はそのぶん後ろへずらし、待った長さに数えない */
+    let started = Date.now();
+    let ticked = started;
     const seat = (): void => {
       spare.currentTime = target;
     };
@@ -1036,8 +1038,12 @@
       const tick = (): void => {
         if (done) return;
         frame = requestAnimationFrame(tick);
+        const now = Date.now();
+        // 裏に回っていた (`requestAnimationFrame` が止まる)。いまのプレイヤーは鳴り続けているので、待ちは戻ってから数え直す
+        if (now - ticked > 1_000) started += now - ticked;
+        ticked = now;
         // 間に合わなかった。いまのプレイヤーを作り直す (これまでの切り替え)
-        if (Date.now() - started > HANDOFF_GIVE_UP) {
+        if (now - started > HANDOFF_GIVE_UP) {
           clear();
           finish(true);
           rebuild();
