@@ -733,6 +733,43 @@ export function audioOnlyArgs(
   ];
 }
 
+/**
+ * **録画ファイルの音声だけ** (`GET /api/recordings/<id>/file?audio=only`。スマートスピーカーへの Cast など)。
+ * 元がどれ (元の TS・AV1・H.265・H.264) でも同じ形式で出せるよう、主音声を AAC 192k に再エンコードして ADTS で流す。
+ * 本文は `transcodeBody` で作る。止まった ffmpeg・読まれなくなった応答は、観る画面の変換と同じく畳む。
+ * 音声だけなので、その場で変換する本数の枠は使わない (`audioResponse` と同じ理由)
+ */
+export function fileAudioBody(
+  path: string,
+  idle?: { limit: number; every: number },
+): ReadableStream<Uint8Array> {
+  return transcodeBody(
+    [
+      {
+        argv: [
+          config.ffmpeg,
+          ...QUIET,
+          "-i",
+          path,
+          "-map",
+          "0:a:0",
+          "-vn",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          "-f",
+          "adts",
+          "pipe:1",
+        ],
+      },
+    ],
+    `[audio] 音声だけの取り出し ${path}`,
+    () => undefined,
+    idle,
+  );
+}
+
 /** 読まれずに詰まった ffmpeg を畳むまで (ms) */
 const IDLE_LIMIT = 5 * 60_000;
 /** 詰まりを見る間隔 (ms) */
@@ -756,7 +793,8 @@ interface Attempt {
 }
 
 /**
- * **ffmpeg の出口を応答の本文にする** (`stream.ffmpegBody` に、降りたときの次の手と詰まりの検出を足したもの)。
+ * **ffmpeg の出口を応答の本文にする。** 録画をその場で変換・詰め替えして HTTP で流すものは全部これを通す
+ * (録画ファイルの音声だけ `fileAudioBody` も)。
  *
  * - 読まれたぶんしか読み出さない。相手が読まなければ出口が詰まり、ffmpeg も止まる
  * - 1 バイトも出さずに降りたら、次の手 (GPU → ソフトウェア) で起こし直す。次で出せたら、降りた手の標準エラーを添えて `blame` を呼ぶ

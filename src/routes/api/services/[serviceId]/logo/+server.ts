@@ -1,5 +1,6 @@
 import { error } from "@sveltejs/kit";
 
+import { parseId } from "#lib/id.js";
 import { readLogo } from "#lib/server/logo.js";
 
 /**
@@ -7,8 +8,8 @@ import { readLogo } from "#lib/server/logo.js";
  * 滅多に変わらないので長めにキャッシュさせる。
  */
 export function GET({ params, setHeaders }) {
-  const serviceId = Number(params.serviceId);
-  if (!Number.isInteger(serviceId)) error(400, "局 ID が不正です");
+  const serviceId = parseId(params.serviceId);
+  if (serviceId === null) error(400, "局 ID が不正です");
 
   const logo = readLogo(serviceId);
   if (logo === null) error(404, "ロゴがありません");

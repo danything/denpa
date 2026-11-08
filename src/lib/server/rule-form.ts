@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { genreName } from "../arib";
 import { SERVICE_TYPE_LABEL } from "../format";
+import { parseId } from "../id";
 import { minutesOf, slotSummary } from "../rule-time";
 import { parseSearchFields } from "../search";
 import type { Rule } from "../types";
@@ -282,15 +283,12 @@ interface Origin {
  * 同じ番組のルールが 2 つあっても予約は 1 本だが、どちらを直せばいいか分からなくなる
  */
 export function originOf(from: string | null): Origin | null {
-  const match = (from ?? "").match(/^(recording|program):(-?\d+)$/);
+  const match = (from ?? "").match(/^(recording|program):(.*)$/);
   if (match === null) return null;
   const kind = match[1] as Origin["kind"];
-  const id = Number(match[2]);
-  const source = Number.isInteger(id)
-    ? kind === "recording"
-      ? recordingSource(id)
-      : programSource(id)
-    : undefined;
+  const id = parseId(match[2]);
+  if (id === null) return null;
+  const source = kind === "recording" ? recordingSource(id) : programSource(id);
   if (source === undefined)
     return { kind, id, name: "", found: false, prefill: null, rule: null };
   const rules = orm().select().from(ruleTable).all();

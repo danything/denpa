@@ -1,6 +1,7 @@
 import { error, redirect } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 
+import { parseId } from "#lib/id.js";
 import { orm } from "#lib/server/db.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { relative } from "#lib/server/paths.js";
@@ -18,8 +19,8 @@ import type { PageServerLoad } from "./$types";
  * (`server/live.ts` の `openChase`)。どちらにするかの決め方もライブと同じ (`#lib/live-choice.ts`)。
  */
 export const load: PageServerLoad = ({ params, url }) => {
-  const id = Number(params.id);
-  if (!Number.isInteger(id)) error(404, "録画が見つかりません");
+  const id = parseId(params.id);
+  if (id === null) error(404, "録画が見つかりません");
 
   const rec = orm()
     .select()

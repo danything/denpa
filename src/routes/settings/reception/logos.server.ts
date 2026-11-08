@@ -1,5 +1,6 @@
 import { type Actions, fail } from "@sveltejs/kit";
 
+import { parseId } from "#lib/id.js";
 import { forgetMaterials } from "#lib/server/cm-material-store.js";
 import { orm } from "#lib/server/db.js";
 import { currentServices, typeRank } from "#lib/server/epg.js";
@@ -95,9 +96,8 @@ export const actions = {
    */
   logoForget: async ({ request }) => {
     const form = await request.formData();
-    const serviceId = Number(form.get("serviceId"));
-    if (!Number.isFinite(serviceId))
-      return fail(400, { message: "局 ID が不正です" });
+    const serviceId = parseId(form.get("serviceId"));
+    if (serviceId === null) return fail(400, { message: "局 ID が不正です" });
     // 同じ映像を映しているサブチャンネルの枠にも配ってある (`logo-data.share`)
     const ids = [serviceId, ...siblings(serviceId)];
     for (const id of ids) forgetLogoData(id);

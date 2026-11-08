@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { error, fail, redirect } from "@sveltejs/kit";
 import { eq, getTableColumns } from "drizzle-orm";
 
+import { parseId } from "#lib/id.js";
 import { countClips, sceneTime } from "#lib/server/clips.js";
 import { orm } from "#lib/server/db.js";
 import { removeRecording } from "#lib/server/files.js";
@@ -31,8 +32,8 @@ interface WatchRow extends Recording {
 }
 
 export function load({ params, url }) {
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) error(404, "録画が見つかりません");
+  const id = parseId(params.id);
+  if (id === null) error(404, "録画が見つかりません");
 
   const recording: WatchRow | undefined = orm()
     .select({

@@ -18,6 +18,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { channelNotice } from "#lib/channel-notice.js";
 import { capacityLabel } from "#lib/format.js";
 import { GROUPED_COOKIE, storedGrouped } from "#lib/grouping.js";
+import { parseId } from "#lib/id.js";
 import { channelAlert } from "#lib/server/channel-alert.js";
 import { fileSize } from "#lib/server/chase.js";
 import { clipCountsByRecording } from "#lib/server/clips.js";
@@ -346,10 +347,9 @@ export function load({ url, cookies }) {
   };
 }
 
-/** フォームの `id`。数でなければ null */
+/** フォームの `id`。ID として読めなければ null (`parseId`) */
 async function formId(request: Request): Promise<number | null> {
-  const id = Number((await request.formData()).get("id"));
-  return Number.isFinite(id) ? id : null;
+  return parseId((await request.formData()).get("id"));
 }
 
 export const actions = {

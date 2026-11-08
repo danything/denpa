@@ -36,6 +36,7 @@ import {
   clipVersion,
 } from "../clips";
 import { pad } from "../format";
+import { parseId } from "../id";
 import type { FileSource } from "../source";
 import { fromTsTime, toTsTime } from "../ts/watch";
 import type { Recording } from "../types";
@@ -736,9 +737,8 @@ export async function setClipLayers(
  * `/api/clips/<id>` 系の前置き。id を確かめて 1 枚引く。数字でなければ 400、無ければ 404
  */
 export function clipOr404(idLike: string): Clip & { file: string } {
-  const id = Number(idLike);
-  if (!Number.isSafeInteger(id) || id <= 0)
-    error(400, "切り抜き ID が不正です");
+  const id = parseId(idLike);
+  if (id === null || id <= 0) error(400, "切り抜き ID が不正です");
   const clip = clipById(id);
   if (clip === undefined) error(404, "切り抜きが見つかりません");
   return clip;

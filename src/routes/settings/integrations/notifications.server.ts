@@ -1,6 +1,7 @@
 import { type Actions, fail } from "@sveltejs/kit";
 import { eq, not } from "drizzle-orm";
 
+import { parseId } from "#lib/id.js";
 import { now, orm } from "#lib/server/db.js";
 import { webhooks } from "#lib/server/schema.js";
 import { send, webhookUrl } from "#lib/server/webhook.js";
@@ -33,8 +34,8 @@ export const actions = {
 
   toggleWebhook: async ({ request }) => {
     const form = await request.formData();
-    const id = Number(form.get("id"));
-    if (!Number.isFinite(id)) return fail(400, { message: "ID が不正です" });
+    const id = parseId(form.get("id"));
+    if (id === null) return fail(400, { message: "ID が不正です" });
     orm()
       .update(webhooks)
       .set({ enabled: not(webhooks.enabled) })
@@ -45,15 +46,16 @@ export const actions = {
 
   deleteWebhook: async ({ request }) => {
     const form = await request.formData();
-    const id = Number(form.get("id"));
-    if (!Number.isFinite(id)) return fail(400, { message: "ID が不正です" });
+    const id = parseId(form.get("id"));
+    if (id === null) return fail(400, { message: "ID が不正です" });
     orm().delete(webhooks).where(eq(webhooks.id, id)).run();
     return { success: true };
   },
 
   testWebhook: async ({ request }) => {
     const form = await request.formData();
-    const id = Number(form.get("id"));
+    const id = parseId(form.get("id"));
+    if (id === null) return fail(400, { message: "ID が不正です" });
     const webhook = orm()
       .select()
       .from(webhooks)

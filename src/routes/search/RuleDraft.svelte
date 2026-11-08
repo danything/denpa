@@ -11,6 +11,7 @@
     earlier: "前の回",
     "copy-never": "コピー禁止",
     declined: "取り消し済み",
+    simulcast: "本チャンネルと同じ番組",
     airing: "放送中",
     ignore: "除外",
     service: "局",

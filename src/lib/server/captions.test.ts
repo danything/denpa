@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import {
   captionDescriptors,
@@ -502,6 +502,33 @@ describe("アプリ向けの字幕 API", () => {
       return () => left++;
     });
     expect(left).toBe(1);
+  });
+
+  /*
+   * 中身を作る側が投げた (ffmpeg を起こせない) とき、間を埋める送信 (`CAPTION_PING_MS` ごと) のタイマーが
+   * 残っていた。止めてから伝える
+   */
+  test("中身を作れなかったら、間を埋める送信を止めてから伝える", async () => {
+    // 呼び出しを覚えるだけで、本物のタイマーを動かす
+    const started = spyOn(globalThis, "setInterval");
+    const cleared = spyOn(globalThis, "clearInterval");
+    let failure = "";
+    try {
+      // 投げたものは、作るところ (start) か読むところのどちらかで受け取る
+      const stream = captionFeed(() => {
+        throw new Error("ffmpeg を起こせません");
+      });
+      await stream.getReader().read();
+    } catch (error) {
+      failure = String(error);
+    }
+    const timers = started.mock.results.map((result) => result.value);
+    const stopped: unknown[] = cleared.mock.calls.map(([timer]) => timer);
+    started.mockRestore();
+    cleared.mockRestore();
+    expect(failure).toContain("ffmpeg を起こせません");
+    expect(timers).toHaveLength(1);
+    expect(stopped).toContain(timers[0]);
   });
 
   test("待ってもらう量は閉じる量より小さい", () => {

@@ -1,5 +1,6 @@
 import { and, eq, isNotNull, isNull, not } from "drizzle-orm";
 
+import { parseId } from "../id";
 import { now, orm } from "./db";
 import {
   conditionsOf,
@@ -35,10 +36,9 @@ export async function reapply(rule?: number): Promise<number> {
   return dropped;
 }
 
-/** フォームの `id` (直す・消すルール)。整数でなければ null */
+/** フォームの `id` (直す・消すルール)。ID として読めなければ null (`parseId`) */
 export function idOf(form: FormData): number | null {
-  const id = Number(form.get("id"));
-  return Number.isInteger(id) ? id : null;
+  return parseId(form.get("id"));
 }
 
 /** 足したルール・直したルール */

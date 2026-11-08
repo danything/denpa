@@ -1,6 +1,7 @@
 import { fail } from "@sveltejs/kit";
 
 import { channelNotice } from "#lib/channel-notice.js";
+import { parseId } from "#lib/id.js";
 import { channelAlert } from "#lib/server/channel-alert.js";
 import { reserveWarning } from "#lib/server/contracts.js";
 import { serviceCounts, watchableServices } from "#lib/server/epg.js";
@@ -70,9 +71,8 @@ export const actions = {
   /** 番組表から予約を止める。予約一覧まで行かずに済むように */
   cancel: async ({ request }) => {
     const form = await request.formData();
-    const programId = Number(form.get("programId"));
-    if (!Number.isSafeInteger(programId))
-      return fail(400, { message: "番組 ID が不正です" });
+    const programId = parseId(form.get("programId"));
+    if (programId === null) return fail(400, { message: "番組 ID が不正です" });
     // アプリの `DELETE /api/programs/<id>/record` と同じ処理
     const result = await cancelProgram(programId);
     if (!result.ok) return fail(result.status, { message: result.message });
@@ -89,12 +89,9 @@ export const actions = {
    */
   reserve: async ({ request }) => {
     const form = await request.formData();
-    const refused = await reserveFromForm(form);
-    if (refused !== null) return fail(400, { message: refused });
+    const reserved = await reserveFromForm(form);
+    if ("refused" in reserved) return fail(400, { message: reserved.refused });
     // 有料の番組で、録ってよい局と確かめていなければ知らせる (予約はそのまま。`contracts.reserveWarning`)
-    return {
-      success: true,
-      warning: reserveWarning(Number(form.get("programId"))),
-    };
+    return { success: true, warning: reserveWarning(reserved.programId) };
   },
 };

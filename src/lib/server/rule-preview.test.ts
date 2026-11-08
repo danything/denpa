@@ -430,3 +430,86 @@ describe("人が取り消した放送", () => {
     });
   });
 });
+
+/*
+ * 分割していない間は、同じ回が枝番の局 (23608 / 23609) の両方に載る。予約を立てるとき (`applyRules`) は
+ * 小さいほうだけ立てるので、下見も同じ (`rules.oneBroadcast`)。前は両方を「録る」と出していた
+ */
+describe("枝番の局で同じ放送", () => {
+  const MX_SUB = 3239123609;
+
+  test("本チャンネルを録り、枝番のほうは「録らない」(本チャンネルと同じ番組)。中身が違えば両方録る", async () => {
+    orm()
+      .insert(services)
+      .values({
+        id: MX_SUB,
+        service_id: 23609,
+        network_id: 32391,
+        name: "TOKYO MX1",
+        type: "GR",
+        service_type: 1,
+        channel: "T16",
+        updated_at: now(),
+      })
+      .run();
+    // 枝番のほうを先に入れる (並び順に左右されない)
+    program(2, "テスト魔法 #1", 5 * HOUR, MX_SUB);
+    program(1, "テスト魔法 #1", 5 * HOUR);
+    program(3, "テスト魔法 #2", 8 * HOUR);
+    program(4, "別の番組テスト魔法", 8 * HOUR, MX_SUB);
+    const preview = await previewFor(
+      draftRule(form({ keyword: "テスト魔法", dedupe: "0" }))!,
+      { ids: [1, 2, 3, 4] },
+    );
+    expect(preview.verdicts).toEqual({
+      1: { kind: "record" },
+      2: { kind: "skip", reason: "simulcast" },
+      3: { kind: "record" },
+      4: { kind: "record" },
+    });
+  });
+
+  // 取り消しは物理チャンネルとタイトルと時刻で当てるので、片方を取り消すと両方とも録らない (`applyRules` と同じ)
+  test("本チャンネルのほうを取り消したら、枝番のほうも「取り消し済み」", async () => {
+    orm()
+      .insert(services)
+      .values({
+        id: MX_SUB,
+        service_id: 23609,
+        network_id: 32391,
+        name: "TOKYO MX1",
+        type: "GR",
+        service_type: 1,
+        channel: "T16",
+        updated_at: now(),
+      })
+      .run();
+    program(1, "テスト魔法 #1", 5 * HOUR);
+    program(2, "テスト魔法 #1", 5 * HOUR, MX_SUB);
+    orm()
+      .insert(reservations)
+      .values({
+        program_id: 1,
+        rule_id: null,
+        service_id: MX,
+        name: "テスト魔法 #1",
+        description: "",
+        start_at: base + 5 * HOUR,
+        end_at: base + 6 * HOUR,
+        priority: 2,
+        manual: true,
+        state: "canceled",
+        created_at: now(),
+        updated_at: now(),
+      })
+      .run();
+    const preview = await previewFor(
+      draftRule(form({ keyword: "テスト魔法", dedupe: "0" }))!,
+      { ids: [1, 2] },
+    );
+    expect(preview.verdicts).toEqual({
+      1: { kind: "skip", reason: "declined" },
+      2: { kind: "skip", reason: "declined" },
+    });
+  });
+});

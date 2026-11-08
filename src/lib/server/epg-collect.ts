@@ -563,6 +563,18 @@ export function replacement(
   return next === undefined ? undefined : { channel: next, whole };
 }
 
+/**
+ * 読み終えた 1 本が、初回の全局読み (`first`) の 1 つを終えたか。画面の「詳細はあとで足す」は、これが
+ * `first` の数だけ来たら消す。**列へ戻した読み直し (`whole: null`) は数えない。** 同じ中継の全局読みを
+ * 数え終えたあとなので、数えるとほかの全局読みが終わる前に 0 になり、二重に減らしていた
+ */
+export function firstSweepDone(
+  job: { channel: AgentChannel; whole: number[] | null },
+  first: readonly AgentChannel[],
+): boolean {
+  return job.whole !== null && first.includes(job.channel);
+}
+
 async function run(): Promise<number> {
   const channels = await getChannels().catch(() => [] as AgentChannel[]);
   if (channels.length === 0) return 0;
@@ -702,12 +714,7 @@ async function run(): Promise<number> {
           queue.push(next);
           update({ pending: state.pending + 1, total: state.total + 1 });
         }
-        // 列へ戻した読み直し (`whole: null`) は数えない。数えると、ほかの全局読みが終わる前に 0 になる
-        if (
-          job.whole !== null &&
-          first.includes(job.channel) &&
-          --sweepsLeft === 0
-        )
+        if (firstSweepDone(job, first) && --sweepsLeft === 0)
           update({ sweeping: false });
       }
     };

@@ -2,6 +2,7 @@ import { type Actions, fail } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 
 import { SERVICE_TYPE_LABEL } from "#lib/format.js";
+import { parseId } from "#lib/id.js";
 import { config } from "#lib/server/config.js";
 import {
   checkContracts as verifyContracts,
@@ -271,8 +272,8 @@ export const actions = {
   /** 対象の局のストリームを数秒開いて、復号できるかを試す */
   testDecode: async ({ request }) => {
     const form = await request.formData();
-    const serviceId = Number(form.get("serviceId"));
-    if (!Number.isInteger(serviceId) || serviceId < 1) {
+    const serviceId = parseId(form.get("serviceId"));
+    if (serviceId === null || serviceId < 1) {
       return fail(400, { message: "serviceId が不正です" });
     }
     try {

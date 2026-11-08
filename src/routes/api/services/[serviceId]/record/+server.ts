@@ -1,5 +1,6 @@
 import { error, json } from "@sveltejs/kit";
 
+import { parseId } from "#lib/id.js";
 import { recordAiring, recordedBody } from "#lib/server/reservations.js";
 
 /**
@@ -10,8 +11,8 @@ import { recordAiring, recordedBody } from "#lib/server/reservations.js";
  * 番組表にいまの番組が無ければ 404、予約できなければ 400 (どちらも `message` に理由)
  */
 export async function POST({ params }) {
-  const serviceId = Number(params.serviceId);
-  if (!Number.isInteger(serviceId)) error(400, "局 ID が不正です");
+  const serviceId = parseId(params.serviceId);
+  if (serviceId === null) error(400, "局 ID が不正です");
 
   const result = await recordAiring(serviceId);
   if (!result.ok) error(result.status, result.message);

@@ -1,3 +1,5 @@
+import { parseId } from "./id";
+
 /**
  * **切り抜き** の取り決め (画面とサーバで同じもの)。撮って送るのはプレイヤー (`components/player/snapshot.ts`)、
  * 受けて AVIF にして置くのはサーバ (`server/clips.ts`)、並べるのは `/clips`
@@ -106,8 +108,8 @@ export function parseClipQuery(params: URLSearchParams): ClipQuery {
   const q = params.get("q")?.trim();
   if (q) query.q = q;
   const id = (name: string): number | undefined => {
-    const n = Number(params.get(name));
-    return params.has(name) && Number.isSafeInteger(n) && n > 0 ? n : undefined;
+    const n = parseId(params.get(name));
+    return n !== null && n > 0 ? n : undefined;
   };
   const service = id("service");
   if (service !== undefined) query.service = service;

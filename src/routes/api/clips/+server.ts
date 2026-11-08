@@ -1,6 +1,7 @@
 import { error, json } from "@sveltejs/kit";
 
 import { CLIP_BYTES_MOST, parseClipQuery } from "#lib/clips.js";
+import { parseId } from "#lib/id.js";
 import {
   ClipError,
   DELETE_MOST,
@@ -103,8 +104,8 @@ export async function POST({ url, request }) {
 export function DELETE({ url }) {
   const ids = (url.searchParams.get("ids") ?? "")
     .split(",")
-    .map(Number)
-    .filter((id) => Number.isSafeInteger(id) && id > 0);
+    .map(parseId)
+    .filter((id): id is number => id !== null && id > 0);
   if (ids.length === 0) error(400, "消す切り抜きを指定してください");
   if (ids.length > DELETE_MOST)
     error(400, `一度に消せるのは ${DELETE_MOST} 枚までです`);
