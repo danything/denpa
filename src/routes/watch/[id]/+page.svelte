@@ -112,6 +112,7 @@
     recordedDuration,
     size,
   } from "#lib/format.js";
+  import { handoff, HANDOFF_GIVE_UP, handoffTarget } from "#lib/handoff.js";
   import { CODEC_LABEL } from "#lib/hw.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { jikkyoListSwitch, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
@@ -127,6 +128,7 @@
     rangesOf,
     type RemuxPlayer,
     remuxPlayer,
+    type StreamHeard,
     type StreamUrl,
   } from "#lib/remux-player.js";
   import { keepResume } from "#lib/resume.js";
@@ -163,6 +165,7 @@
     retryWait,
     STREAM_RETRIES,
     streamForAudio,
+    type StreamState,
     transcodes,
   } from "#lib/ts/playback.js";
   import {
@@ -223,8 +226,8 @@
   /*
    * ---- 回線に合わせた画質の段 (`watch-adapt.ts`。docs/stream.md「回線に合わせて画質を下げる」) ----
    *
-   * 「自動」のときだけ段を動かす。ファイルの直再生・MPEG-2 (段 0) から下げるときは 1 回だけプレイヤーを作り直して変換へ移し、
-   * そのあとは同じ MSE のまま替える (`remux-player.ts` の `switchTo`)。音声だけとの行き来は作り直す。
+   * 「自動」のときだけ段を動かす。ファイルの直再生・MPEG-2 (段 0) から下げる、段 0 へ戻す、音声だけとの行き来は、
+   * 裏の `<video>` で用意してから入れ替える (`prepareStep`)。段 1〜3 の間は同じ MSE のまま替える (`remux-player.ts` の `switchTo`)。
    * 互換モード (canvas に描く) は継ぎ目なく替える経路が無いので、段を替えるたびに canvas のプレイヤーを作り直す (`canvasStep`)
    */
   /** いまの段。0 は下げていない (ファイルの直再生・詰め替え・ふだんの変換) */
@@ -580,6 +583,8 @@
       if (++settled >= SETTLED) open();
     }
     if (canvas.flowing && !hopping) askCaptions();
+    // 作り直したプレイヤーが流れ出した (描き始めた)
+    if (canvas.flowing) release(now);
     paint();
     hopCm();
     feedData();
@@ -597,6 +602,8 @@
 
   /** 飛ぶ。canvas は持っているものを捨ててリクエストし直す */
   function seekMedia(to: number): void {
+    // 作り直している最中に後ろへ飛んだ。覆いは飛んだ先が映ったら外す
+    if (holding) holdAt = Math.min(holdAt, to);
     if (canvas !== null) {
       canvas.seek(to);
       at = to;
@@ -806,22 +813,28 @@
       duration: total,
       start: from ?? 0,
       audio: streamAudio(audioIndex),
-      state: (state) => {
-        // 段を下げようとして作り直したが、混んでいて断られた。ファイルの直再生に戻して続ける
-        if (state === "busy" && step !== 0 && fileZero !== null) {
-          backToFile(busyNote(true));
-          return;
-        }
-        resuming = state === "retrying";
-        busy = state === "busy";
-        if (state === "failed") broken = true;
-      },
-      heard: (stream) => {
-        stepCodec = stream.codec;
-        paceId = stream.pace;
-      },
+      state: streamState,
+      heard: streamHeard,
     });
   });
+
+  /** その場で流しているプレイヤーの様子を受ける (`remux-player.ts` の `state`) */
+  function streamState(state: StreamState): void {
+    // 段を下げようとして作り直したが、混んでいて断られた。ファイルの直再生に戻して続ける
+    if (state === "busy" && step !== 0 && fileZero !== null) {
+      backToFile(busyNote(true));
+      return;
+    }
+    resuming = state === "retrying";
+    busy = state === "busy";
+    if (state === "failed") broken = true;
+  }
+
+  /** その場で流しているストリームのヘッダを受ける (サーバが選んだコーデックと、送り出しの具合を読む id) */
+  function streamHeard(stream: StreamHeard): void {
+    stepCodec = stream.codec;
+    paceId = stream.pace;
+  }
 
   /** 端末が MSE で受け取れるコーデック (`?playable=`。段を下げたときはこの中からサーバが選ぶ) */
   function playable(): LiveCodec[] {
@@ -867,7 +880,229 @@
    */
   function swap(fresh: Picked): void {
     keepPlaying = keepPlaying || (video !== null && !video.paused);
+    // 作り直したプレイヤーが映すまで、最後のコマで覆っておく (黒い一瞬を出さない)
+    hold();
     replay(fresh);
+  }
+
+  /*
+   * ---- 段を替えるときの受け渡し (`handoff.ts`) ----
+   *
+   * プレイヤーを作り直す段の切り替えは、いまのプレイヤーを映したまま、映していない側の `<video>` で次の観かたを
+   * 用意してから入れ替える。用意している間はサーバの読み出しとデコードが 2 本ぶんになる
+   */
+  /** 用意している最中の受け渡し。やめるときに呼ぶ。用意していなければ null */
+  let staged: (() => void) | null = null;
+  /** 映していない側の src (ファイルの直再生へ移るとき)。その場で流すなら `remux-player.ts` が入れる */
+  let spareSrc = $state<string | undefined>(undefined);
+
+  /** 用意している最中の受け渡しをやめる。いまのプレイヤーはそのまま */
+  function dropStep(): void {
+    const cancel = staged;
+    staged = null;
+    cancel?.();
+  }
+
+  /** 映していないほうの `<video>` を空にする */
+  function empty(target: HTMLVideoElement): void {
+    target.pause();
+    target.muted = true;
+    target.removeAttribute("src");
+    target.load();
+  }
+
+  /** いまのプレイヤーが詰まって進んでいないか (止めている間は詰まりではない) */
+  function mediaStuck(): boolean {
+    if (canvas !== null) return !canvas.paused && !canvas.flowing;
+    return (
+      video !== null &&
+      !video.paused &&
+      video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
+    );
+  }
+
+  /**
+   * **段を `next` に替えて `fresh` で観る。** いまのプレイヤーを映したまま、映していない側の `<video>` (透明・消音) で
+   * `fresh` を少し先の位置に用意し、いまの再生がそこまで来たら入れ替える (`handoff.ts`)。黒いコマも、止まった間も出さない。
+   * `zero` は入れ替えたあとの `fileZero`。
+   *
+   * 用意できないとき (描く先が canvas・小窓を出している・裏に回っている) と、待つ上限 (`HANDOFF_GIVE_UP`) までに
+   * 入れ替えられなかったときは `rebuild` (いまのプレイヤーを作り直す) に任せる。替えたら true。
+   * 混んでいて断られた・読めなかったら、いまのプレイヤーのまま false
+   */
+  function prepareStep(
+    fresh: Picked,
+    next: Step,
+    zero: Picked | null,
+    rebuild: () => void,
+  ): Promise<boolean> {
+    dropStep();
+    const spare = spareVideo();
+    const plan = info;
+    const source = fresh.way === "stream" ? pickMediaSource() : null;
+    if (
+      spare === null ||
+      plan === null ||
+      fresh.way === "raw" ||
+      (fresh.way === "stream" && source === null) ||
+      pip.active ||
+      document.hidden
+    ) {
+      rebuild();
+      return Promise.resolve(true);
+    }
+    const down = stepOrder(next) > stepOrder(step);
+    const last = Math.max(0, plan.duration - 1);
+    let target = Math.min(
+      handoffTarget(mediaTime(), !mediaPaused() && !mediaStuck()),
+      last,
+    );
+    let made: RemuxPlayer | null = null;
+    let heard: StreamHeard | null = null;
+    let stuckSince: number | null = null;
+    let frame = 0;
+    let done = false;
+    const started = Date.now();
+    const seat = (): void => {
+      spare.currentTime = target;
+    };
+    spare.muted = true;
+    spare.defaultPlaybackRate = speed;
+    spare.playbackRate = speed;
+    return new Promise<boolean>((settle) => {
+      const finish = (moved: boolean): void => {
+        if (done) return;
+        done = true;
+        cancelAnimationFrame(frame);
+        spare.removeEventListener("loadedmetadata", seat);
+        spare.removeEventListener("error", broke);
+        if (staged === drop) staged = null;
+        settle(moved);
+      };
+      // 用意していたものを捨てる
+      const clear = (): void => {
+        made?.destroy();
+        made = null;
+        spareSrc = undefined;
+        empty(spare);
+      };
+      const drop = (): void => {
+        if (done) return;
+        clear();
+        finish(false);
+      };
+      // 混んでいて断られた・読めなかった。いまのプレイヤーのまま、しばらく段を動かさない
+      const refuse = (crowded: boolean): void => {
+        if (done) return;
+        drop();
+        adaptQuietUntil = Date.now() + HOLD;
+        if (crowded) noteAdapt(busyNote(down));
+      };
+      const broke = (): void => refuse(false);
+      staged = drop;
+      spare.addEventListener("error", broke);
+      if (fresh.way === "stream" && source !== null) {
+        made = remuxPlayer(spare, source, {
+          url: stepUrl(next, fresh),
+          codecs: stepType(next, fresh),
+          duration: plan.duration,
+          start: target,
+          audio: streamAudio(audioIndex),
+          // 入れ替えたあとは、いつものプレイヤーと同じに受ける
+          state: (state) => {
+            if (done) streamState(state);
+            else if (state === "busy") refuse(true);
+            else if (state === "failed") refuse(false);
+          },
+          heard: (stream) => {
+            if (done) streamHeard(stream);
+            else heard = stream;
+          },
+        });
+      } else if (fresh.way === "file") {
+        spare.addEventListener("loadedmetadata", seat);
+        spareSrc = resolve(
+          `api/recordings/${rec.id}/file?source=${fresh.source}`,
+        );
+      }
+      const tick = (): void => {
+        if (done) return;
+        frame = requestAnimationFrame(tick);
+        // 間に合わなかった。いまのプレイヤーを作り直す (これまでの切り替え)
+        if (Date.now() - started > HANDOFF_GIVE_UP) {
+          clear();
+          finish(true);
+          rebuild();
+          return;
+        }
+        if (!mediaStuck()) stuckSince = null;
+        else stuckSince ??= Date.now();
+        const verdict = handoff({
+          ready:
+            spare.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+            !spare.seeking,
+          spareAt: spare.currentTime,
+          target,
+          at: mediaTime(),
+          paused: mediaPaused(),
+          stuckFor:
+            stuckSince === null ? 0 : Math.max(1, Date.now() - stuckSince),
+        });
+        if (verdict.kind === "retarget") {
+          target = Math.min(verdict.to, last);
+          spare.currentTime = target;
+          return;
+        }
+        if (verdict.kind === "wait") return;
+        const player = made;
+        made = null;
+        finish(true);
+        handOver(spare, fresh, next, zero, player, heard, verdict.play);
+      };
+      frame = requestAnimationFrame(tick);
+    });
+  }
+
+  /**
+   * **用意できた側に入れ替える** (`prepareStep`)。同じコマの間に、映す側と音を出す側を替え、いままでのプレイヤーを畳む。
+   * 位置は用意した側のまま (いまの再生と同じ所)。いままでの `<video>` を空にして出るイベントは、映していない側のものなので受けない
+   */
+  function handOver(
+    spare: HTMLVideoElement,
+    fresh: Picked,
+    next: Step,
+    zero: Picked | null,
+    player: RemuxPlayer | null,
+    heard: StreamHeard | null,
+    play: boolean,
+  ): void {
+    const old = video;
+    if (canvas !== null || canvasCodec !== null) stopCanvas();
+    remux?.destroy();
+    remux = player;
+    busy = false;
+    broken = false;
+    retryAt = 0;
+    switchAt = null;
+    keepPlaying = false;
+    fileZero = zero;
+    step = next;
+    stepCodec = heard?.codec ?? null;
+    paceId = heard?.pace ?? null;
+    // 映す側を替える。新しい側の src は用意したときと同じ値なので、読み直さない
+    front = 1 - front;
+    picked = fresh;
+    spareSrc = undefined;
+    spare.muted = muted;
+    length = Number.isFinite(spare.duration) ? spare.duration : length;
+    at = spare.currentTime;
+    if (play) void spare.play().catch(() => undefined);
+    else playing = false;
+    unslip.seeked();
+    follow(spare);
+    if (old !== null) empty(old);
+    syncAudio();
+    place();
   }
 
   /** 段を下げた変換をやめて、ファイルの直再生か MPEG-2 に戻す (作り直す) */
@@ -918,54 +1153,86 @@
     });
   }
 
-  /** 段を `next` に替える。替えたら true */
+  /**
+   * 段を `next` に替える。替えたら true。
+   *
+   * プレイヤーを作り直す切り替え (ファイルの直再生・MPEG-2 から下げる、段 0 へ戻す、音声だけとの行き来) は、
+   * いまのプレイヤーを映したまま裏で用意して入れ替える (`prepareStep`)。段 1〜3 の間は同じ MSE のまま替える (`switchTo`)
+   */
   async function moveStep(next: Step): Promise<boolean> {
-    // 互換モードは canvas のプレイヤーを作り直す
-    if (compat) return canvasStep(next);
+    if (compat) return compatStep(next);
     const plan = picked;
     if (info === null || plan === null) return false;
-    // MPEG-2 (canvas に描いている) から下げる。ファイルの直再生と同じく、1 回だけ `<video>` の変換に作り直す
-    if (plan.way === "raw") {
-      if (next === 0) return false;
-      const fresh = streamForAudio(info, ability(), "h264");
-      if (fresh === null) return false;
-      fileZero = plan;
-      step = next;
-      keepPlaying = canvas !== null && !canvas.paused;
-      swap(fresh);
-      return true;
+    switching = true;
+    try {
+      return await shiftStep(info, plan, next);
+    } finally {
+      switching = false;
     }
-    // ファイルの直再生から下げる。1 回だけプレイヤーを作り直して変換へ (同じコーデックの詰め替えを先に)
-    if (plan.way === "file") {
+  }
+
+  /** `moveStep` の中身 (互換モードでないとき) */
+  async function shiftStep(
+    plan: PlaybackInfo,
+    now: Picked,
+    next: Step,
+  ): Promise<boolean> {
+    // MPEG-2 (canvas に描いている) から下げる。ファイルの直再生と同じく、1 回だけ `<video>` の変換に移る
+    if (now.way === "raw") {
       if (next === 0) return false;
-      const fresh = streamForAudio(info, ability(), plan.codec);
+      const fresh = streamForAudio(plan, ability(), "h264");
       if (fresh === null) return false;
-      fileZero = plan;
-      if (baseKbps === null && plan.source !== undefined)
-        void readBaseKbps(plan.source, info.duration);
-      step = next;
-      swap(fresh);
-      return true;
+      return prepareStep(fresh, next, now, () => {
+        fileZero = now;
+        step = next;
+        keepPlaying = canvas !== null && !canvas.paused;
+        swap(fresh);
+      });
     }
-    if (plan.way !== "stream") return false;
-    // 段 0 へ戻す。写すだけのストリームが無ければ (ファイルを変換していた) ファイルに戻す
-    if (next === 0 && fileZero !== null && transcodes(info, plan)) {
-      backToFile(null);
-      return true;
+    // ファイルの直再生から下げる。1 回だけ変換へ移る (同じコーデックの詰め替えを先に)
+    if (now.way === "file") {
+      if (next === 0) return false;
+      const fresh = streamForAudio(plan, ability(), now.codec);
+      if (fresh === null) return false;
+      if (baseKbps === null) void readBaseKbps(now.source, plan.duration);
+      return prepareStep(fresh, next, now, () => {
+        fileZero = now;
+        step = next;
+        swap(fresh);
+      });
+    }
+    /*
+     * 段 0 へ戻す。ファイルの直再生・MPEG-2 から下げていたなら、そこへ戻す。
+     * 同じ MSE のまま段 0 の詰め替えへ替えると、詰め替えは要求した位置の手前のキーフレームから始まるので、
+     * 溜めてあった下げた段のコマを途中から上書きし、デコーダも再生の途中で替わる。新しいプレイヤーで始め直せば、どちらも起きない
+     */
+    if (next === 0) {
+      const back = fileZero;
+      const fresh = back ?? { ...now };
+      const moved = await prepareStep(fresh, 0, null, () => {
+        if (back !== null) {
+          backToFile(null);
+          return;
+        }
+        step = 0;
+        swap(fresh);
+      });
+      if (moved) adaptQuietUntil = Date.now() + HOLD;
+      return moved;
     }
     // 音声だけとの行き来は作り直す (MSE は SourceBuffer の中のトラックの数を替えられない)
     if (next === "audio" || step === "audio" || remux === null) {
-      step = next;
       // 同じ中身でも新しいオブジェクトにする (同じものを入れ直しても、プレイヤーを作り直す `$effect` が動かない)
-      swap({ ...plan });
-      return true;
+      const fresh = { ...now };
+      return prepareStep(fresh, next, fileZero, () => {
+        step = next;
+        swap(fresh);
+      });
     }
-    switching = true;
     const result = await remux.switchTo(
-      stepType(next, plan),
-      stepUrl(next, plan),
+      stepType(next, now),
+      stepUrl(next, now),
     );
-    switching = false;
     if (result === "switched") {
       step = next;
       return true;
@@ -974,6 +1241,25 @@
     if (result === "busy")
       noteAdapt(busyNote(stepOrder(next) > stepOrder(step)));
     return false;
+  }
+
+  /**
+   * 互換モードで段を替える。canvas のプレイヤーは裏で用意しない (デコーダを 2 つ並べると、非力な端末では
+   * どちらも間に合わない。`raw/budget.ts`) ので作り直し、作り直したプレイヤーが描き始めるまで最後のコマで覆う
+   */
+  async function compatStep(next: Step): Promise<boolean> {
+    const player = canvas;
+    if (player === null) return false;
+    const frame = await player.grab();
+    if (canvas !== player) {
+      frame?.close();
+      return false;
+    }
+    hold(frame);
+    frame?.close();
+    const moved = canvasStep(next);
+    if (!moved) unhold();
+    return moved;
   }
 
   /**
@@ -1025,6 +1311,7 @@
       info === null ||
       localMkv !== null ||
       stepFrom !== null ||
+      switching ||
       busy ||
       player.paused ||
       (!player.flowing && !canvasStuck) ||
@@ -1094,6 +1381,8 @@
    * 元の TS (`raw`) は canvas に描き、それ以外は `<video>` で観る。描いていた canvas は畳む
    */
   function replay(fresh: Picked | null, position = mediaTime()): void {
+    // 段を替えるために裏で用意していたものは捨てる (選び直したほうを観る)
+    dropStep();
     if (canvas !== null || canvasCodec !== null) stopCanvas();
     remux?.destroy();
     remux = null;
@@ -1205,7 +1494,18 @@
     });
   });
 
-  let video = $state<HTMLVideoElement | null>(null);
+  /**
+   * `<video>` は 2 つ置く。段を替えるときは、映していない側 (透明・消音) で次の観かたを用意してから入れ替える
+   * (`prepareStep`)。`video` はいま映している側で、もう 1 つは用意している間だけ読み込む
+   */
+  let videos = $state<(HTMLVideoElement | null)[]>([null, null]);
+  /** いま映している側 (`videos` の何番目か) */
+  let front = $state(0);
+  const video = $derived(videos[front] ?? null);
+  /** 映していない側の `<video>` */
+  function spareVideo(): HTMLVideoElement | null {
+    return videos[1 - front] ?? null;
+  }
   /** 映像とその上の操作をまとめた箱。全画面にするのはこちら */
   let stage = $state<HTMLElement | null>(null);
   /** 全画面の出入り (3 画面共通。[fullscreen.svelte.ts](../../../lib/components/player/fullscreen.svelte.ts)) */
@@ -1588,7 +1888,7 @@
    */
   let waiting = false;
   /** 覆いが黒塗りか (写したコマではないか。`shut`) */
-  let blanked = false;
+  let blanked = $state(false);
   /** 飛んだ先 (秒)。ここまで来たら覆いを外す */
   let hopTo = 0;
   /** 飛んだ先に着いたと数えたコマ数。`SETTLED` まで数えてから覆いを外す */
@@ -1599,6 +1899,19 @@
    * (実機)。4 コマ (0.13 秒) なら飛んだ間合いに紛れる。`mediaTime` の無いブラウザは `currentTime` で数える
    */
   const SETTLED = 4;
+  /**
+   * 段を替えるためにプレイヤーを作り直している間、最後のコマで覆っているか (`hold`)。CM の跨ぎ (`hopping`) とは別で、
+   * 覆っている間は CM を飛ばない。作り直した直後のプレイヤーは位置 0 などを返すことがあり、そこが CM だと
+   * 観ていない CM を飛んで「CM を飛ばしました」と出ていた
+   */
+  let holding = $state(false);
+  /** 作り直したプレイヤーがこの位置 (秒) のコマを出したら、覆いを外す */
+  let holdAt = 0;
+  let holdGiveUp: ReturnType<typeof setTimeout> | null = null;
+  /** 作り直す間、覆っておく上限 (ms)。変換の立ち上がりを待つので、CM の跨ぎより長い */
+  const HOLD_GIVE_UP = 10_000;
+  /** 作り直したプレイヤーが覆いを外す位置に着いたとみなす幅 (秒)。始まりはキーフレームに寄ることがある */
+  const HOLD_SLACK = 0.5;
   /** 覆いの外し忘れ止め。飛んだ先が来ないまま止まっても、いつかは外す */
   let hopGiveUp: ReturnType<typeof setTimeout> | null = null;
   /** 覆っておく上限 (ms) */
@@ -1662,6 +1975,8 @@
       if (skipNotice !== null) clearTimeout(skipNotice);
       if (continuedTimer !== null) clearTimeout(continuedTimer);
       if (hopGiveUp !== null) clearTimeout(hopGiveUp);
+      if (holdGiveUp !== null) clearTimeout(holdGiveUp);
+      dropStep();
       if (retryTimer !== null) clearTimeout(retryTimer);
       if (captionWait !== null) clearTimeout(captionWait);
     };
@@ -1932,7 +2247,8 @@
   function hopCm(): void {
     // 飛んだ先を待っている最中と、シークバーをつまんでいる最中 (離したら着いた先で決める) は飛ばない
     if (waiting || !skipCm || (video === null && canvas === null)) return;
-    if (scrub !== null) return;
+    // 段を替えるために作り直している最中も飛ばない。位置はまだ観ていた所に戻っていない (`hold`)
+    if (scrub !== null || holding) return;
     const to = skipTarget(chapters, mediaTime(), CM_LEAD);
     if (to === null) return;
     /*
@@ -1986,6 +2302,49 @@
     place();
     if (hopGiveUp !== null) clearTimeout(hopGiveUp);
     hopGiveUp = setTimeout(open, HOP_GIVE_UP);
+  }
+
+  /**
+   * **作り直す前に、いま映っているコマで覆う** (段を替えるときの作り直し。`swap`・`compatStep`)。作り直したプレイヤーが
+   * 元の位置のコマを出すまで覆い (`release`)、その間は CM を飛ばない。canvas のコマは `frame` で受け取る (`grab`)。
+   * 写せないときは覆わない (これまでどおり)
+   */
+  function hold(frame: ImageBitmap | null = null): void {
+    const source =
+      frame ??
+      (!drawing && video !== null && video.videoWidth > 0 ? video : null);
+    const ctx = cover?.getContext("2d") ?? null;
+    if (source === null || cover === null || ctx === null) return;
+    const width = frame?.width ?? video?.videoWidth ?? 16;
+    const height = frame?.height ?? video?.videoHeight ?? 9;
+    cover.width = width;
+    cover.height = height;
+    try {
+      ctx.drawImage(source, 0, 0, width, height);
+    } catch {
+      return;
+    }
+    blanked = false;
+    holding = true;
+    holdAt = mediaTime();
+    clearCaptions();
+    place();
+    if (holdGiveUp !== null) clearTimeout(holdGiveUp);
+    holdGiveUp = setTimeout(unhold, HOLD_GIVE_UP);
+  }
+
+  /** 作り直したプレイヤーが `at` 秒のコマを出した。元の位置に着いていれば覆いを外す */
+  function release(at: number): void {
+    if (holding && at >= holdAt - HOLD_SLACK) unhold();
+  }
+
+  /** 作り直す間の覆いを外す */
+  function unhold(): void {
+    holding = false;
+    if (holdGiveUp !== null) {
+      clearTimeout(holdGiveUp);
+      holdGiveUp = null;
+    }
   }
 
   /** 覆いを外す。飛んだ先が映ったとき (`follow`) と、待つ上限の時間を過ぎたとき */
@@ -2140,6 +2499,13 @@
         if (!there) settled = 0;
         else if (++settled >= SETTLED) open();
       }
+      // 作り直したプレイヤーが元の位置のコマを出した
+      if (
+        holding &&
+        !target.seeking &&
+        target.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      )
+        release(meta?.mediaTime ?? target.currentTime);
       // 映像だけ遅れていたら飛び直す。CM の先へ飛んでいる最中と、canvas に描いている間 (`<video>` は空) は見ない
       if (meta !== undefined && !waiting && !hopping && !drawing)
         unslip.check(target, meta.mediaTime);
@@ -2156,9 +2522,12 @@
   function place(): void {
     if (video === null) return;
     // canvas に描いているときは `<video>` は空なので、放送の 16:9 とみなす
+    // 作り直している最中は `<video>` の大きさが 0 に戻る。覆いに写したコマの大きさで合わせる
     const [width, height] = drawing
       ? [16, 9]
-      : [video.videoWidth, video.videoHeight];
+      : holding && cover !== null && video.videoWidth === 0
+        ? [cover.width, cover.height]
+        : [video.videoWidth, video.videoHeight];
     const rect = fitRect(video.clientWidth, video.clientHeight, width, height);
     // 画面の画素の境目に揃える (端数だと字の縁が滲む)。端は外へ丸め、覆いが映像の縁を残さず覆うように
     const dpr = window.devicePixelRatio || 1;
@@ -2374,53 +2743,89 @@
           bind:this={mediaBox}
           style="position:absolute; inset:0; width:100%; height:100%;"
         >
-          <video
-            bind:this={video}
-            {src}
-            style="width:100%; height:100%; background:var(--dp-video);"
-            playsinline
-            onclick={press}
-            onplay={() => {
-              playing = true;
-              if (video !== null) follow(video);
-              // 出たので、繋ぎ直しは済み。次に切れたらまた 1 秒から待つ
-              retries = 0;
-              resuming = false;
-              controls.stir();
-            }}
-            onpause={() => {
-              playing = false;
-              // 止めたのは詰まりではない。「読み込み中」は引っ込める
-              flowing();
-            }}
-            onended={finished}
-            onwaiting={stall}
-            onstalled={stall}
-            onseeking={() => {
-              stall();
-              // シーク・CM スキップのあとは測り直す。段は持ち越す
-              adapt.reset();
-              // 飛んだ直後の 1 コマは飛ぶ前の時刻を持っていることがあるので、映像の遅れに数えない (`unslipper`)
-              unslip.seeked();
-            }}
-            onplaying={flowing}
-            oncanplay={flowing}
-            ontimeupdate={() => {
-              at = video?.currentTime ?? 0;
-              hopCm();
-              paint();
-              feedData();
-            }}
-            onseeked={feedData}
-            onloadedmetadata={() => {
-              resume();
-              syncAudio();
-            }}
-            onvolumechange={() => (muted = video?.muted ?? false)}
-            onerror={recover}
-            data-testid="watch-video"
-          >
-          </video>
+          <!--
+                    `<video>` は 2 つ。映していない側 (透明・消音) は、段を替えるときに次の観かたを用意する間だけ読み込む (`prepareStep`)。
+                    イベントは映している側のものだけ受ける (空にした側の位置 0 で CM を飛んだりしない)
+                -->
+          {#each [0, 1] as slot (slot)}
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video
+              bind:this={videos[slot]}
+              src={slot === front ? src : spareSrc}
+              style="position:absolute; inset:0; width:100%; height:100%; background:var(--dp-video);"
+              style:opacity={slot === front ? null : "0"}
+              style:pointer-events={slot === front ? null : "none"}
+              playsinline
+              aria-hidden={slot === front ? undefined : "true"}
+              data-spare={slot === front ? undefined : ""}
+              onclick={(event) => {
+                if (event.currentTarget === video) press(event);
+              }}
+              onplay={(event) => {
+                if (event.currentTarget !== video) return;
+                playing = true;
+                follow(event.currentTarget);
+                // 出たので、繋ぎ直しは済み。次に切れたらまた 1 秒から待つ
+                retries = 0;
+                resuming = false;
+                controls.stir();
+              }}
+              onpause={(event) => {
+                if (event.currentTarget !== video) return;
+                playing = false;
+                // 止めたのは詰まりではない。「読み込み中」は引っ込める
+                flowing();
+              }}
+              onended={(event) => {
+                if (event.currentTarget === video) finished();
+              }}
+              onwaiting={(event) => {
+                if (event.currentTarget === video) stall();
+              }}
+              onstalled={(event) => {
+                if (event.currentTarget === video) stall();
+              }}
+              onseeking={(event) => {
+                if (event.currentTarget !== video) return;
+                stall();
+                // シーク・CM スキップのあとは測り直す。段は持ち越す
+                adapt.reset();
+                // 飛んだ直後の 1 コマは飛ぶ前の時刻を持っていることがあるので、映像の遅れに数えない (`unslipper`)
+                unslip.seeked();
+              }}
+              onplaying={(event) => {
+                if (event.currentTarget === video) flowing();
+              }}
+              oncanplay={(event) => {
+                if (event.currentTarget === video) flowing();
+              }}
+              ontimeupdate={(event) => {
+                if (event.currentTarget !== video) return;
+                // 作り直している最中の位置 (0 に戻る) は時計に出さない (`hold`)
+                if (!holding) at = event.currentTarget.currentTime;
+                hopCm();
+                paint();
+                feedData();
+              }}
+              onseeked={(event) => {
+                if (event.currentTarget === video) feedData();
+              }}
+              onloadedmetadata={(event) => {
+                if (event.currentTarget !== video) return;
+                resume();
+                syncAudio();
+              }}
+              onvolumechange={(event) => {
+                if (event.currentTarget === video)
+                  muted = event.currentTarget.muted;
+              }}
+              onerror={(event) => {
+                if (event.currentTarget === video) recover();
+              }}
+              data-testid={slot === front ? "watch-video" : "watch-video-spare"}
+            >
+            </video>
+          {/each}
           <div bind:this={jikkyoSlot} style="display:contents">
             {#if data.jikkyoAllowed}
               <JikkyoLayer
@@ -2446,14 +2851,16 @@
             aria-hidden="true"
           ></canvas>
           <!--
-                    CM を跨ぐ間の覆い。字幕と同じ段で、字幕のあとに置くので上に重なる。操作バーや通知 (`--dp-z-stage-controls`) の下。出し入れは `hidden` で。
+                    CM を跨ぐ間と、段を替えるためにプレイヤーを作り直す間 (`hold`) の覆い。字幕と同じ段で、字幕のあとに置くので上に重なる。操作バーや通知 (`--dp-z-stage-controls`) の下。出し入れは `hidden` で。
                     style に式を書くと `hopping` が変わるたびに書き直され、`place` が書いた位置と大きさが消える
                 -->
           <canvas
             bind:this={cover}
             style="position:absolute; z-index:var(--dp-z-stage-captions); pointer-events:none;"
-            hidden={!hopping}
+            hidden={!hopping && !holding}
             aria-hidden="true"
+            data-testid="watch-cover"
+            data-blank={blanked}
           ></canvas>
         </div>
         <!--

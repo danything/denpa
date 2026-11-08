@@ -150,7 +150,10 @@
         if (told !== undefined) aspect = told;
         return;
       }
-      const video = target.querySelector("video");
+      // 観る画面が段を替えるために用意している側 (`data-spare`) は映していない
+      const video = target.querySelector<HTMLVideoElement>(
+        "video:not([data-spare])",
+      );
       if (video !== null && video.videoWidth > 0 && video.videoHeight > 0)
         aspect = `${video.videoWidth} / ${video.videoHeight}`;
     };
@@ -164,7 +167,7 @@
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["data-aspect"],
+      attributeFilter: ["data-aspect", "data-spare"],
     });
     return () => {
       target.removeEventListener("resize", read, true);
