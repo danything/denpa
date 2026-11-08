@@ -33,12 +33,22 @@ namespace Denpa.Agent;
 /// 読むのは掛かっていない SI だけなので、復号もせず溜めもせずに流す。ライブ視聴や録画とカードのロック
 /// (<see cref="BCas"/>) を取り合わない。途中で鍵の要る利用者が来たら、溜め直して最初の鍵から復号する (<see cref="Rehold"/>)。
 /// </para>
+///
+/// <para>
+/// **選局では契約の更新 (EMM) も取り出す** (<paramref name="emm"/>)。CAT (PID 0x0001) の CA 記述子で EMM の PID を知り、
+/// EMM セクション (0x84) を組み立てて受け口に渡す。自分宛てかを比べるのは受け口で、ここではカードに触らず答えも待たない。
+/// 鍵の要らない利用者だけのときも読むので、番組表・ロゴ・スキャンの選局でも EMM はカードに届く。
+/// </para>
 /// </summary>
 /// <param name="keysWanted">
 /// いま鍵が要るか。塊を受けるたびに聞く。null は「どちらとも言えない」(利用者がいない) で、今のままにする。
 /// 渡さなければいつも要る (録れたものの復号・実機の試し)
 /// </param>
-public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null)
+/// <param name="emm">
+/// 契約の更新 (EMM) の渡し先 (<see cref="Emm"/>)。渡したときだけ CAT と EMM を読む。チューナーの選局 (TunerPool.cs) だけが渡し、
+/// 録れたものの復号と実機の試しは渡さない (古い録画の EMM は期限切れや古い更新番号で、渡す意味が無い)
+/// </param>
+public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null, Emm? emm = null)
 {
     /// <summary>いま鍵を聞いて復号しているか (<c>keysWanted</c>)</summary>
     private bool _keys = true;
@@ -104,6 +114,15 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>先回りして覗く PID の数の上限。壊れた TS で表が膨らまないように</summary>
     private const int EarlyLimit = 32;
+
+    /// <summary>CAT の PID</summary>
+    private const int CatPid = 0x0001;
+
+    /// <summary>CAT と EMM を組み立てる場所。<c>emm</c> を渡したときだけ作る</summary>
+    private readonly Section? _cat = emm is null ? null : new(null), _emmSection = emm is null ? null : new(null);
+    private byte[]? _catLast;
+    /// <summary>CAT が挙げた、このカードの方式の EMM の PID。CAT が来ていない・挙げていなければ -1</summary>
+    private int _emmPid = -1;
 
     private CardInit? _init;
     private int _caSystemId = BcasSystemId;
@@ -414,6 +433,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         var section = pid == 0 ? _pat
             : _pmtSections.TryGetValue(pid, out var pmt) ? pmt
             : _ecms.TryGetValue(pid, out var ecm) ? ecm.Section
+            : pid == CatPid && _cat is not null ? _cat
+            : pid == _emmPid ? _emmSection
             : Early(pid, packet[start..], unitStart);
         if (section is not null) Feed(section, pid, packet[start..], unitStart);
     }
@@ -496,10 +517,12 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     {
         var bytes = section.Bytes;
         section.Drop();
-        // PAT・PMT・ECM はどれも CRC を持つ形式。**化けたセクションで鍵を聞き直さない**
+        // PAT・PMT・ECM・CAT・EMM はどれも CRC を持つ形式。**化けたセクションで鍵を聞き直さない・カードに渡さない**
         if ((bytes[1] & 0x80) == 0 || bytes.Length < 12 || Crc32(bytes) != 0) return;
         if (pid == 0) OnPat(bytes);
         else if (section.Owner is { } ecm) OnEcm(ecm, bytes);
+        else if (section == _cat) OnCat(bytes);
+        else if (section == _emmSection) OnEmm(bytes);
         else OnPmt(pid, bytes);
     }
 
@@ -602,7 +625,36 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         }
     }
 
-    /// <summary>CA 記述子 (0x09) から、このカードの方式の ECM の PID。無ければ -1</summary>
+    /// <summary>
+    /// CAT。CA 記述子 (0x09) のうち、このカードの方式の CA_PID が EMM の PID (libaribb25 の <c>proc_cat</c>)。
+    /// CA 記述子の形は PMT の ECM と同じ
+    /// </summary>
+    private void OnCat(ReadOnlySpan<byte> section)
+    {
+        if (section[0] != 0x01 || (_catLast is not null && section.SequenceEqual(_catLast))) return;
+        _catLast = section.ToArray();
+        FindEmm();
+    }
+
+    /// <summary>覚えている CAT から EMM の PID を決め直す。**PID が替わったら、組み立てかけのセクションを捨てる**</summary>
+    private void FindEmm()
+    {
+        if (_catLast is null) return;
+        var pid = CaPid(_catLast.AsSpan(8, _catLast.Length - 12), _caSystemId);
+        if (pid != _emmPid) _emmSection?.Drop();
+        _emmPid = pid;
+    }
+
+    /// <summary>
+    /// EMM の PID に来たセクション。EMM (0x84) だけを受け口に渡し、自分宛てかはそこで比べる (<see cref="Emm.Section"/>)。
+    /// EMM メッセージ (0x85) は契約を変えないので読み飛ばす。**鍵の要らない利用者だけのときも渡す**
+    /// </summary>
+    private void OnEmm(ReadOnlySpan<byte> section)
+    {
+        if (section[0] == 0x84) emm!.Section(section);
+    }
+
+    /// <summary>CA 記述子 (0x09) から、このカードの方式の ECM (CAT なら EMM) の PID。無ければ -1</summary>
     private static int CaPid(ReadOnlySpan<byte> descriptors, int caSystemId)
     {
         for (var at = 0; at + 2 <= descriptors.Length; at += 2 + descriptors[at + 1])
@@ -664,6 +716,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
                 {
                     _caSystemId = _init.CaSystemId;
                     ecm.Last = null;
+                    FindEmm();
                     Rebuild();
                     return;
                 }

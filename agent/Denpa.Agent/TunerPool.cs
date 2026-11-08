@@ -1053,7 +1053,8 @@ internal sealed class Lease(int tuner, string type, string channel)
     private void Descramble(ChannelReader<(byte[] Rented, int Length)> queue, Action onExit)
     {
         // 選局の時計を渡す。溜めの内訳 (PAT・PMT・ECM) が選局の内訳と同じ物差しで並ぶ
-        var b25 = new Descrambler(Keys.Source, Clock, WantsKeys);
+        // 契約の更新 (EMM) は、どの用途の選局でもカードに渡す (Emm.cs)
+        var b25 = new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared);
         _descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         var pushed = false;

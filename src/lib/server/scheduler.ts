@@ -208,7 +208,49 @@ export async function resolveConflicts(): Promise<{
 /** 有料放送の契約を確かめ直す間隔。契約の切り替わりは日の単位なので、1 日 2 回で足りる */
 const CONTRACT_SCAN_MS = 12 * 3_600_000;
 let lastContractScan = 0;
-let scanningContracts = false;
+
+/**
+ * 走らせる処理を 1 本ずつにする。走っている間に呼ばれたら、終わったあとに 1 回だけ走らせ直す
+ * (何回呼ばれても 1 回にまとめる)。返す Promise は、走らせ直した分まで終わったら済む。`run` は投げないこと
+ */
+export function oneAtATime(
+  run: () => Promise<void>,
+): (() => Promise<void>) & { readonly running: boolean } {
+  let current: Promise<void> | null = null;
+  let again = false;
+  const call = (): Promise<void> => {
+    if (current !== null) {
+      again = true;
+      return current;
+    }
+    current = (async () => {
+      do {
+        again = false;
+        await run();
+      } while (again);
+    })().finally(() => {
+      current = null;
+    });
+    return current;
+  };
+  return Object.defineProperty(call, "running", {
+    get: () => current !== null,
+  }) as (() => Promise<void>) & { readonly running: boolean };
+}
+
+/**
+ * 有料放送の契約を確かめ直す。12 時間ごとの `tick` と、カードが契約の更新 (EMM) を受け入れたという
+ * エージェントの通知 (`card`。runtime.ts) から呼ぶ。走っている間に呼ばれたら、終わったあとに 1 回だけ確かめ直す。
+ * カードが無ければ断られて、記録に 1 行出る
+ */
+export const recheckContracts = oneAtATime(async () => {
+  lastContractScan = now();
+  try {
+    await checkContracts();
+  } catch (error) {
+    console.warn(`[contracts] 契約を確かめ直せませんでした: ${error}`);
+  }
+});
 
 /**
  * `schedulerTick` (既定 5 秒) ごとに呼ばれる本体。開始時刻に達した予約を録画に移し、終了時刻を過ぎた録画を止める。
@@ -218,15 +260,9 @@ export async function tick(): Promise<void> {
   const at = now();
 
   // 有料放送の契約を確かめ直す (12 時間ごと)。自動予約は契約中と確かめた局しか録らないので、確かめ直さないと
-  // 契約を足しても切れても予約に効かない。カードが無ければ断られて、記録に 1 行出る
-  if (!scanningContracts && at - lastContractScan >= CONTRACT_SCAN_MS) {
-    lastContractScan = at;
-    scanningContracts = true;
-    void checkContracts()
-      .catch((error: unknown) =>
-        console.warn(`[contracts] 契約を確かめ直せませんでした: ${error}`),
-      )
-      .finally(() => (scanningContracts = false));
+  // 契約を足しても切れても予約に効かない
+  if (!recheckContracts.running && at - lastContractScan >= CONTRACT_SCAN_MS) {
+    void recheckContracts();
   }
 
   // 止めるほうを先にやる。次の番組が始まるときに前の録画がまだチューナーを

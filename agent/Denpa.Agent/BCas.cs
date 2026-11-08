@@ -8,9 +8,10 @@ namespace Denpa.Agent;
 /// 手元の B-CAS カード。**カードに送る APDU はここで組み立てる。**
 ///
 /// <para>
-/// 使うコマンドは 4 つ。初期設定条件 (INT, <c>90 30</c>) で鍵を作るための定数を、
+/// 使うコマンドは 5 つ。初期設定条件 (INT, <c>90 30</c>) で鍵を作るための定数を、
 /// カード ID 情報 (IDI, <c>90 32</c>) でカードの番号を、ECM 受信 (<c>90 34</c>) で
-/// スクランブル鍵を、契約確認 (<c>90 3C</c>) で有料放送の契約の有無を貰う。**応答の読み方は libaribb25 と同じにしてある。**
+/// スクランブル鍵を、契約確認 (<c>90 3C</c>) で有料放送の契約の有無を貰い、EMM 受信 (<c>90 36</c>) で
+/// 契約の更新を渡す。**応答の読み方は libaribb25 と同じにしてある。**
 /// 番号の出し方も鍵の順も、前と同じ値が出ないと画面の番号が変わって見える。
 /// </para>
 ///
@@ -38,6 +39,9 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>契約確認の応答の最短 (SW1 SW2 込み)</summary>
     private const int ConfirmLength = 8;
+
+    /// <summary>EMM 受信の応答の最短 (SW1 SW2 込み)</summary>
+    private const int EmmLength = 8;
 
     /// <summary>INT が「正常」のときの返り値</summary>
     private const int InitOk = 0x2100;
@@ -256,6 +260,51 @@ public sealed class BCas : IKeySource, IDisposable
                 }
                 return BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
             });
+        }
+    }
+
+    /// <summary>
+    /// EMM 受信 (<c>90 36</c>)。契約の更新を 1 つカードに渡し、返り値 (<c>0x2100</c> が正常終了) を返す。
+    ///
+    /// <para>
+    /// 渡すのは EMM セクションの中のペイロード 1 つ (カード ID から MAC まで丸ごと。libaribb25 の
+    /// <c>setup_emm_receive_command</c> と同じ)。応答の返り値は ECM・契約確認と同じ 5〜6 バイト目にある。
+    /// </para>
+    ///
+    /// <para>
+    /// **受け入れたら、覚えている ECM の答えを捨てる。** 契約が変わると、同じ ECM でも答えが変わる
+    /// (libaribb25 も EMM のあとに全部の ECM を聞き直す)。
+    /// </para>
+    /// </summary>
+    public int Emm(ReadOnlySpan<byte> payload)
+    {
+        // Lc は 1 バイト。切り詰めて送ると別の EMM になるので、送らずに断る
+        if (payload.Length is < Denpa.Agent.Emm.MinPayload or > Denpa.Agent.Emm.MaxPayload)
+            throw new IOException($"EMM の長さがおかしいです ({payload.Length} バイト)");
+
+        var apdu = new byte[payload.Length + 6];
+        apdu[0] = 0x90;
+        apdu[1] = 0x36;
+        apdu[4] = (byte)payload.Length;
+        payload.CopyTo(apdu.AsSpan(5));
+
+        lock (_gate)
+        {
+            var code = Run(link =>
+            {
+                var response = link.Transmit(apdu);
+                for (var retry = 0; retry < ShortRetries && response.Length < EmmLength; retry++)
+                {
+                    response = link.Transmit(apdu);
+                }
+                if (response.Length < EmmLength)
+                {
+                    throw new CardRefusedException($"カードが EMM に応答しません (応答 {response.Length} バイト)");
+                }
+                return BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
+            });
+            if (code == Denpa.Agent.Emm.Accepted) _cache.Clear();
+            return code;
         }
     }
 

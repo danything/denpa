@@ -307,6 +307,74 @@ describe("checkContracts", () => {
   });
 });
 
+describe("契約の更新 (EMM) のあとの確かめ直し", () => {
+  test("カードの答えが替わったら、確かめ直したあとに状態と期限が替わる", async () => {
+    const { recheckContracts } = await import("./scheduler");
+    const nowMjd = toMjd();
+    // 初めは 5 日前に切れている。カードが更新を受け入れたあとは、2 日後まで観られる
+    let lastDay = nowMjd - 5;
+    const server = serveFakeAgent(async (req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/denpa/card") {
+        return Response.json(ONE_CARD);
+      }
+      if (url.pathname === "/denpa/card/confirm") {
+        const body = (await req.json()) as { date: number };
+        return Response.json({
+          ok: true,
+          code: body.date <= lastDay ? 0x0800 : 0,
+        });
+      }
+      return new Response("Not Found", { status: 404 });
+    });
+
+    orm()
+      .insert(services)
+      .values({
+        id: 107,
+        service_id: 107,
+        network_id: 4,
+        name: "更新した局",
+        type: "BS",
+        channel: "BS13",
+        updated_at: Date.now(),
+      })
+      .run();
+    orm()
+      .insert(programs)
+      .values({
+        id: 207,
+        service_id: 107,
+        network_id: 4,
+        event_id: 7,
+        start_at: Date.now(),
+        end_at: Date.now() + 3600_000,
+        name: "更新後の番組",
+        is_free: false,
+        contract_verification: "BwgJ",
+        updated_at: Date.now(),
+      })
+      .run();
+
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      await recheckContracts();
+      const before = getContractRows("0000111122223333");
+      expect(before[0]?.state).toBe("expired");
+      expect(before[0]?.validUntil).toBe(fromMjd(nowMjd - 4));
+
+      lastDay = nowMjd + 2;
+      await recheckContracts();
+      const after = getContractRows("0000111122223333");
+      expect(after).toHaveLength(1);
+      expect(after[0]?.state).toBe("subscribed");
+      expect(after[0]?.validUntil).toBe(fromMjd(nowMjd + 3));
+    } finally {
+      server.stop();
+    }
+  });
+});
+
 describe("testDecode", () => {
   test("スクランブルが解除されているストリームで decodeOk: true", async () => {
     // その局のパケットは復号できている。同じ中継器の別の局は掛かったまま (数えない)

@@ -113,6 +113,8 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
     public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd) =>
         Card().Confirm(verificationData, dateMjd);
 
+    public int Emm(ReadOnlySpan<byte> payload) => Card().Emm(payload);
+
     /// <summary>いまカードと話せるか。INT を 1 回通す (<see cref="BCas.Check"/>)</summary>
     public CardInit Check() => Card().Check();
 
@@ -188,6 +190,35 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         return CardWire.ReadConfirm(Send(request, "契約確認"));
     }
 
+    /// <summary>配り役が <c>/denpa/card/emm</c> を持っていない (古いエージェント)。分かったら、もう送らない</summary>
+    private int _emmMissing;
+
+    /// <summary>
+    /// 契約の更新 (EMM) を配り役に渡し、配り役のカードの返り値を返す (<c>POST /denpa/card/emm</c>)。
+    /// **配り役が古くて 404 なら、記録に 1 回だけ出し、それからは送らずに <see cref="NotSupportedException"/> を投げる。**
+    /// 鍵と契約確認はそのまま使う
+    /// </summary>
+    public int Emm(ReadOnlySpan<byte> payload)
+    {
+        if (Volatile.Read(ref _emmMissing) == 1) throw new NotSupportedException(EmmMissing);
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{Url}/denpa/card/emm")
+        {
+            Content = new ByteArrayContent(payload.ToArray()),
+        };
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        try
+        {
+            return CardWire.ReadEmm(Send(request, "EMM の返り値"));
+        }
+        catch (ShareRefusedException error) when (error.Status == 404)
+        {
+            if (Interlocked.Exchange(ref _emmMissing, 1) == 0) Log.Write($"{EmmMissing} ({Url})");
+            throw new NotSupportedException(EmmMissing, error);
+        }
+    }
+
+    private const string EmmMissing = "配り役のエージェントが古く、契約の更新 (EMM) を受け取れません。鍵と契約確認はそのまま使います";
+
     /// <summary>送って中身を受け取る。**受け取れなければ、何が起きたかの分かる文で投げる**</summary>
     private byte[] Send(HttpRequestMessage request, string what)
     {
@@ -196,7 +227,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
             using var response = _http.Send(request);
             var body = response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
             if (response.IsSuccessStatusCode) return body;
-            throw new IOException(Refused(Url, (int)response.StatusCode, body, what));
+            throw new ShareRefusedException((int)response.StatusCode, Refused(Url, (int)response.StatusCode, body, what));
         }
         catch (HttpRequestException error)
         {
@@ -246,6 +277,12 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
             _ => $"鍵を配る拠点に繋がりません: {error.Message}",
         };
     }
+}
+
+/// <summary>配り役が答えたが、渡してくれなかった。HTTP の状態を持つ</summary>
+public sealed class ShareRefusedException(int status, string message) : IOException(message)
+{
+    public int Status { get; } = status;
 }
 
 /// <summary>
@@ -326,6 +363,13 @@ public static class CardWire
     public static int ReadConfirm(byte[] body)
     {
         if (body.Length < 2) throw new IOException("契約確認の答えが短すぎます");
+        return BinaryPrimitives.ReadUInt16BigEndian(body);
+    }
+
+    /// <summary>EMM の返り値 (BE16。契約確認と同じ形)</summary>
+    public static int ReadEmm(byte[] body)
+    {
+        if (body.Length < 2) throw new IOException("EMM の返り値が短すぎます");
         return BinaryPrimitives.ReadUInt16BigEndian(body);
     }
 }
