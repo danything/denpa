@@ -25,66 +25,91 @@
   let dialog = $state<HTMLDialogElement | null>(null);
   let box = $state<HTMLElement | null>(null);
 
-  let contracts = $state<ContractRow[]>([]);
-  let checking = $state(false);
-  let testingServiceId = $state<number | null>(null);
-  let testingAll = $state(false);
+  /** 表の行。持ち主の値から始め、確かめ直したらその答えで置き換える */
+  let contracts = $derived(initialContracts);
+  /** 動いている操作 (同時に動かさない)。局ごとの復号は `decode:<局の ID>` */
+  let busy = $state<string | null>(null);
   let errorMessage = $state<string | null>(null);
   /** まとめて確かめた結果 */
   let resultMessage = $state<string | null>(null);
 
-  /** 契約の確認か復号を確かめている最中 (同時に動かさない) */
-  const isBusy = $derived(checking || testingAll || testingServiceId !== null);
   /** まだ確かめていない局があるか (まとめて確かめるボタン) */
   const hasUnverified = $derived(
     contracts.some((row) => row.status === "unverified"),
   );
 
-  /** action の答えから中身を取り出す */
-  async function post(action: string, form = new FormData()) {
-    const res = await fetch(`?/${action}`, { method: "POST", body: form });
-    const data = deserialize(await res.text());
-    const payload =
-      data.type === "success" || data.type === "failure"
-        ? (data.data as Record<string, unknown> | undefined)
-        : undefined;
-    return { ok: data.type === "success", payload };
-  }
-
-  async function handleTestUnverified() {
-    if (isBusy) return;
-    testingAll = true;
+  /**
+   * action を呼び、答えの `contracts` で表を置き換える。失敗したらサーバの言葉 (無ければ `failed`) を出す。
+   * `done` は成功した答えから結果の 1 行を作る
+   */
+  async function run(
+    key: string,
+    action: string,
+    failed: string,
+    form = new FormData(),
+    done?: (payload: Record<string, unknown>) => string | null,
+  ): Promise<void> {
+    if (busy !== null) return;
+    busy = key;
     errorMessage = null;
     resultMessage = null;
     try {
-      const { ok, payload } = await post("testDecodeUnverified");
-      const contractsList = payload?.["contracts"];
-      const tested = Number(payload?.["tested"] ?? 0);
-      const skipped = Number(payload?.["skipped"] ?? 0);
-      if (ok && Array.isArray(contractsList)) {
-        contracts = contractsList as ContractRow[];
+      const res = await fetch(`?/${action}`, { method: "POST", body: form });
+      const data = deserialize(await res.text());
+      const answer =
+        data.type === "success" || data.type === "failure"
+          ? data.data
+          : undefined;
+      const payload: Record<string, unknown> = answer ?? {};
+      const rows = payload["contracts"];
+      if (data.type === "success" && Array.isArray(rows)) {
+        contracts = rows as ContractRow[];
+        resultMessage = done?.(payload) ?? null;
+      } else {
+        const message = payload["message"];
+        errorMessage = message ? String(message) : failed;
+      }
+    } catch (err) {
+      errorMessage = String(err);
+    } finally {
+      busy = null;
+    }
+  }
+
+  function checkContracts(): Promise<void> {
+    return run("check", "checkContracts", "契約を確認できませんでした");
+  }
+
+  function testUnverified(): Promise<void> {
+    return run(
+      "unverified",
+      "testDecodeUnverified",
+      "復号を確かめられませんでした",
+      undefined,
+      (payload) => {
+        const tested = Number(payload["tested"] ?? 0);
+        const skipped = Number(payload["skipped"] ?? 0);
         const parts: string[] = [];
         if (tested > 0) parts.push(`${tested} 局の復号を確かめました`);
         if (skipped > 0)
           parts.push(
             `${skipped} 局は、いま有料の番組を流していないなどの理由で確かめられませんでした`,
           );
-        resultMessage = parts.join("。") || null;
-      } else {
-        errorMessage = String(
-          payload?.["message"] ?? "復号を確かめられませんでした",
-        );
-      }
-    } catch (err) {
-      errorMessage = String(err);
-    } finally {
-      testingAll = false;
-    }
+        return parts.join("。") || null;
+      },
+    );
   }
 
-  $effect(() => {
-    contracts = initialContracts;
-  });
+  function testDecode(serviceId: number): Promise<void> {
+    const form = new FormData();
+    form.append("serviceId", String(serviceId));
+    return run(
+      `decode:${serviceId}`,
+      "testDecode",
+      "復号を確かめられませんでした",
+      form,
+    );
+  }
 
   $effect(() => {
     const shouldOpen = open;
@@ -101,54 +126,6 @@
       }
     });
   });
-
-  async function handleCheckContracts() {
-    if (isBusy) return;
-    checking = true;
-    errorMessage = null;
-    resultMessage = null;
-    try {
-      const { ok, payload } = await post("checkContracts");
-      const contractsList = payload?.["contracts"];
-      const message = payload?.["message"];
-      if (ok && Array.isArray(contractsList)) {
-        contracts = contractsList as ContractRow[];
-      } else if (message) {
-        errorMessage = String(message);
-      } else {
-        errorMessage = "契約を確認できませんでした";
-      }
-    } catch (err) {
-      errorMessage = String(err);
-    } finally {
-      checking = false;
-    }
-  }
-
-  async function handleTestDecode(serviceId: number) {
-    if (isBusy) return;
-    testingServiceId = serviceId;
-    errorMessage = null;
-    resultMessage = null;
-    try {
-      const form = new FormData();
-      form.append("serviceId", String(serviceId));
-      const { ok, payload } = await post("testDecode", form);
-      const contractsList = payload?.["contracts"];
-      const message = payload?.["message"];
-      if (ok && Array.isArray(contractsList)) {
-        contracts = contractsList as ContractRow[];
-      } else if (message) {
-        errorMessage = String(message);
-      } else {
-        errorMessage = "復号を確かめられませんでした";
-      }
-    } catch (err) {
-      errorMessage = String(err);
-    } finally {
-      testingServiceId = null;
-    }
-  }
 </script>
 
 <dialog
@@ -247,12 +224,12 @@
                     <button
                       type="button"
                       class="ghost small"
-                      disabled={isBusy}
-                      onclick={() => handleTestDecode(row.serviceId)}
+                      disabled={busy !== null}
+                      onclick={() => testDecode(row.serviceId)}
                       data-testid="btn-test-decode-{row.serviceId}"
                     >
                       <ShieldCheck aria-hidden="true" />
-                      {testingServiceId === row.serviceId
+                      {busy === `decode:${row.serviceId}`
                         ? "確かめています…"
                         : "復号を確かめる"}
                     </button>
@@ -270,22 +247,24 @@
       <button
         type="button"
         class="secondary"
-        disabled={isBusy || !hasUnverified}
-        onclick={handleTestUnverified}
+        disabled={busy !== null || !hasUnverified}
+        onclick={testUnverified}
         data-testid="btn-test-decode-unverified"
       >
         <ShieldCheck aria-hidden="true" />
-        {testingAll ? "確かめています…" : "確かめていない局の復号を確かめる"}
+        {busy === "unverified"
+          ? "確かめています…"
+          : "確かめていない局の復号を確かめる"}
       </button>
       <button
         type="button"
         class="secondary"
-        disabled={isBusy}
-        onclick={handleCheckContracts}
+        disabled={busy !== null}
+        onclick={checkContracts}
         data-testid="btn-check-contracts"
       >
         <RefreshCw aria-hidden="true" />
-        {checking ? "確認しています…" : "契約を確認し直す"}
+        {busy === "check" ? "確認しています…" : "契約を確認し直す"}
       </button>
     </footer>
   </article>

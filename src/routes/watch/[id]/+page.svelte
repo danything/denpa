@@ -2427,7 +2427,7 @@
                 air={airTime}
                 show={jikkyoActive && data.jikkyo !== null && !showData}
                 paused={!playing}
-                rate={speed}
+                rate={drawing ? 1 : speed}
                 ahead
               />
             {/if}
@@ -2435,7 +2435,7 @@
           <!--
                     字幕は `<track>` ではなく canvas に放送の置き場所のまま描く (左右の位置・背景の箱・外字が落ちるため)。
                     映像と同じ箱に入れて、データ放送の小窓へ一緒に縮ませる (ライブの `MediaStack` と同じ)。
-                    位置と大きさは `place` が書く。段は実況 (8) より上、操作バーのボタン (10) より下 (`ControlBar`)
+                    位置と大きさは `place` が書く。段は実況のコメント (`--dp-z-stage-comments`) より上、操作バーのボタン (`--dp-z-stage-controls`) より下
                 -->
           <canvas
             bind:this={overlay}
@@ -2445,7 +2445,7 @@
             aria-hidden="true"
           ></canvas>
           <!--
-                    CM を跨ぐ間の覆い。字幕の上、操作バーや通知 (`--dp-z-stage-controls`) の下。出し入れは `hidden` で。
+                    CM を跨ぐ間の覆い。字幕と同じ段で、字幕のあとに置くので上に重なる。操作バーや通知 (`--dp-z-stage-controls`) の下。出し入れは `hidden` で。
                     style に式を書くと `hopping` が変わるたびに書き直され、`place` が書いた位置と大きさが消える
                 -->
           <canvas

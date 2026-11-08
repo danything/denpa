@@ -55,7 +55,11 @@
   </div>
 
   {#if recordings && migrate.total > 0}
-    <JobProgress {done} total={migrate.total}>
+    <JobProgress
+      {done}
+      total={migrate.total}
+      running={migrate.state === "running"}
+    >
       {#if migrate.current}・{migrate.current}{/if}
     </JobProgress>
   {/if}
@@ -63,6 +67,7 @@
     <JobProgress
       done={bytes.scaled(migrate.bytesDone)}
       total={bytes.scaled(migrate.bytesTotal)}
+      running={migrate.state === "running"}
       unit={bytes.unit}
       testid="migrate-bytes"
     >

@@ -428,7 +428,7 @@
               </tbody>
             </table>
           </div>
-          <!-- 生の値は dB ではない。何と比べるものかを言う (docs/tuners.md「信号レベル」) -->
+          <!-- 生の値 (機材やドライバが返したままの値) は dB ではない。何と比べるものかを言う (docs/tuners.md「信号レベル」) -->
           {#if tuners.some((tuner) => tuner.channel !== null && signalOf(tuner)?.unit === "raw")}
             <p class="tiny muted" data-testid="tuner-signal-raw-note">
               {SIGNAL_RAW_NOTE}

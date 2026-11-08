@@ -861,8 +861,8 @@
   }
   :global(:where(html[data-phone])) .sheet-bar {
     position: fixed;
-    inset-inline: 0.75rem;
-    bottom: calc(var(--dp-tabbar, 0px) + 0.375rem);
+    inset-inline: var(--dp-dock-inset);
+    bottom: calc(var(--dp-tabbar, 0px) + var(--dp-dock-gap));
     z-index: var(--dp-z-dock);
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
@@ -874,7 +874,9 @@
   :global(:where(html[data-phone]))
     :global([data-retract])
     .sheet-bar:not(:has(:focus-visible)) {
-    transform: translateY(calc(var(--dp-tabbar, 0px) + 0.375rem + 100%));
+    transform: translateY(
+      calc(var(--dp-tabbar, 0px) + var(--dp-dock-gap) + 100%)
+    );
   }
   /* 書く欄の条件では録らない行。消さずに出すが、控えた字にして録るものより沈める (透かすと 4.5:1 を割る) */
   .hit.dim {

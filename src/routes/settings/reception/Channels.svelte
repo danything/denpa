@@ -251,6 +251,7 @@
         <JobProgress
           done={data.logoSweep.done}
           total={data.logoSweep.total}
+          running={data.logoSweep.running}
           unit="チャンネル"
         >
           ・ロゴ <strong>{data.logoSweep.found} 局</strong
@@ -283,6 +284,7 @@
         <JobProgress
           done={scan.scanned}
           total={scan.total}
+          running={scan.state === "running"}
           unit="チャンネル"
           testid="scan-count"
         />
@@ -353,7 +355,7 @@
           </p>
           <p>
             チャンネルの<strong>「測定」</strong
-            >は、空いているチューナーでそのチャンネルを 5 秒ほど受信し、 誤り
+            >は、空いているチューナーでそのチャンネルを 5 秒ほど受信し、誤り
             (誤りの印が立っていたパケットの割合)・ドロップ
             (欠けたパケットの割合)・受信した速さと、受信の状態と C/N
             を行の下に出します。強度 (dBm) は測れるチューナーだけ出します。
