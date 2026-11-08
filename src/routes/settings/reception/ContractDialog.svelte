@@ -275,9 +275,7 @@
         data-testid="btn-test-decode-unverified"
       >
         <ShieldCheck aria-hidden="true" />
-        {testingAll
-          ? "確かめています…"
-          : "確かめていない局の復号を確かめる"}
+        {testingAll ? "確かめています…" : "確かめていない局の復号を確かめる"}
       </button>
       <button
         type="button"

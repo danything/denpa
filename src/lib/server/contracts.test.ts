@@ -603,16 +603,16 @@ describe("ダイアログに出す契約の状態", () => {
   const stale = now - DECODE_VALID_MS - 60_000;
   test("カードが答えた局はその答え、答えの無い局は新しい復号の結果で決める", () => {
     const rows: Parameters<typeof contractStatus>[0][] = [
-        { state: "subscribed", code: 0x0800, decodeOk: null, decodedAt: null },
-        { state: "expired", code: 0, decodeOk: true, decodedAt: fresh },
-        { state: "unsubscribed", code: 0, decodeOk: null, decodedAt: null },
-        { state: "subscribed", code: null, decodeOk: true, decodedAt: fresh },
-        // 31 日を過ぎた復号の結果は、確かめていないのと同じ
-        { state: "subscribed", code: null, decodeOk: true, decodedAt: stale },
-        // 番組表に 0xCB が無く、復号も試していない (`checkContracts` が未契約で書く)
-        { state: "unsubscribed", code: null, decodeOk: null, decodedAt: null },
-        // 復号を試して掛かったままだった
-        { state: "unsubscribed", code: null, decodeOk: false, decodedAt: null },
+      { state: "subscribed", code: 0x0800, decodeOk: null, decodedAt: null },
+      { state: "expired", code: 0, decodeOk: true, decodedAt: fresh },
+      { state: "unsubscribed", code: 0, decodeOk: null, decodedAt: null },
+      { state: "subscribed", code: null, decodeOk: true, decodedAt: fresh },
+      // 31 日を過ぎた復号の結果は、確かめていないのと同じ
+      { state: "subscribed", code: null, decodeOk: true, decodedAt: stale },
+      // 番組表に 0xCB が無く、復号も試していない (`checkContracts` が未契約で書く)
+      { state: "unsubscribed", code: null, decodeOk: null, decodedAt: null },
+      // 復号を試して掛かったままだった
+      { state: "unsubscribed", code: null, decodeOk: false, decodedAt: null },
     ];
     expect(rows.map((row) => contractStatus(row, now))).toEqual([
       "subscribed",
@@ -754,7 +754,22 @@ describe("確かめていない局の復号をまとめて確かめる (testDeco
   });
 });
 
-describe("まとめて確かめるときの選局の失敗", () => {
+describe("まとめて確かめるときの失敗と重なり", () => {
+  test("動いている間にもう一度呼ばれたら断る", async () => {
+    const server = serveFakeAgent(async () => Response.json(ONE_CARD));
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      const first = testDecodeUnverified();
+      expect(await testDecodeUnverified()).toEqual({
+        ok: false,
+        error: "ほかの画面でまとめて確かめています",
+      });
+      expect((await first).ok).toBe(true);
+    } finally {
+      server.stop();
+    }
+  });
+
   test("選局に失敗したチャンネルの局は、どれも確かめられなかったことにして書かない", async () => {
     const server = serveFakeAgent(async (req) => {
       const url = new URL(req.url);
