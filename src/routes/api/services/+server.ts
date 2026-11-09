@@ -8,6 +8,7 @@ import {
   currentServices,
   SERVICE_ORDER,
   SERVICE_TYPE_ORDER,
+  watchableServices,
 } from "#lib/server/epg.js";
 import { reservationStates } from "#lib/server/reservations.js";
 import { programs, services } from "#lib/server/schema.js";
@@ -21,7 +22,9 @@ import { settings } from "#lib/server/settings.js";
  * `now.reserved` / `now.recording` はその番組を録る予定か・録っている最中か (アプリの録画ボタンの印。
  * 押すのは `POST api/services/<id>/record`)。
  * `jikkyo` は実況のチャンネル (`jk1` など。`#lib/jikkyo/channels.ts`)。実況の無い局と、世帯の設定 (連携の「実況」) が
- * オフのときは null
+ * オフのときは null。
+ * `airing` はブラウザのライブの一覧に出る局か (`watchableServices`)。本チャンネルと同じ番組を流している
+ * サブチャンネルと、番組が来ない局は false。アプリの局の一覧も、これを見て同じ局を外す
  */
 export function GET() {
   const rows = orm()
@@ -80,6 +83,7 @@ export function GET() {
     }),
   );
   const jikkyo = settings().jikkyo;
+  const watchable = new Set(watchableServices(at));
   return json(
     rows.map((row) => ({
       id: row.id,
@@ -89,6 +93,7 @@ export function GET() {
       logo: row.hasLogo ? `api/services/${row.id}/logo` : null,
       live: `api/services/${row.id}/live`,
       now: nowOf.get(row.id) ?? null,
+      airing: watchable.has(row.id),
       jikkyo: jikkyo
         ? jikkyoChannel({
             type: row.type,
