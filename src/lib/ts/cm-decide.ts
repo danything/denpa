@@ -1033,7 +1033,7 @@ function byLength(input: CmInput, candidates: Boundary[]): Range[] {
 
 /**
  * **CM の端にかかった映像の欠けた所は、CM から外す** (チャプターも付けない)。欠けた所は CM か番組か決められないので、
- * CM とは言わない。CM の内側の欠け (前後とも CM) は CM のまま残す。外すと、映像が途切れ途切れの所で CM のチャプターが細切れになる
+ * CM とは言わない。CM の内側の欠けた所 (前後とも CM) は CM のまま残す。外すと、映像が途切れ途切れの所で CM のチャプターが細切れになる
  */
 function trimMissing(cm: Range[], missing: Range[]): Range[] {
   const out: Range[] = [];

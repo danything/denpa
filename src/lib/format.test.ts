@@ -345,7 +345,7 @@ describe("受信の状態と C/N と強度", () => {
   });
 });
 
-describe("映像の欠けの表示", () => {
+describe("映像が欠けた録画の表示", () => {
   test("映像が無いまま録画が終わったら、途中で切れたと言い、残っている長さを添える", () => {
     expect(videoLossNote({ span: 1800, lost: 670, tail: true })).toEqual({
       label: "録画が途中で切れています",
@@ -360,7 +360,7 @@ describe("映像の欠けの表示", () => {
     });
   });
 
-  test("1 分に満たない欠けと、測っていない録画は出さない", () => {
+  test("欠けた長さが 1 分に満たない録画と、測っていない録画は出さない", () => {
     expect(videoLossNote({ span: 1800, lost: 59, tail: true })).toBeNull();
     expect(videoLossNote(null)).toBeNull();
   });

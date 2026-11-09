@@ -23,14 +23,14 @@ describe("番組のうち映像が無かった長さ", () => {
       ).filter((t) => !holes.some(([a, b]) => t > a && t < b)),
     );
 
-  test("映像が最後まであれば欠けは 0", () => {
+  test("映像が最後まであれば、欠けた長さは 0", () => {
     expect(
       measureVideoLoss({ times: frames(0, 1825), offset: 0 }, recording),
     ).toEqual({ span: 1800, lost: 0, tail: false });
   });
 
-  test("途中で映像が止まったら、番組の終わりまでを欠けと数え、途中で切れたとする", () => {
-    // 入れ物の先頭から 1140 秒で止まった。途中にも 3 秒の欠け
+  test("途中で映像が止まったら、番組の終わりまでを欠けた長さに数え、途中で切れたとする", () => {
+    // 入れ物の先頭から 1140 秒で止まった。途中にも 3 秒欠けた所がある
     const loss = measureVideoLoss(
       { times: frames(0, 1140, [[500, 503]]), offset: 0 },
       recording,
@@ -40,7 +40,7 @@ describe("番組のうち映像が無かった長さ", () => {
     expect(loss?.lost).toBeCloseTo(1810 - 1140 + 3, 0);
   });
 
-  test("マージンの所の欠けは数えない", () => {
+  test("マージンの所で欠けた長さは数えない", () => {
     // 先頭の 10 秒 (前のマージン) と、番組の終わりより後ろに映像が無い
     expect(
       measureVideoLoss({ times: frames(10, 1810.1), offset: 0 }, recording),

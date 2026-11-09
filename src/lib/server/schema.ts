@@ -102,13 +102,13 @@ const objects =
   <T extends object>() =>
   (value: unknown): T[] =>
     Array.isArray(value) ? (value as T[]) : [];
-/** 映像の欠けの測り。形式が違えば無し */
+/** 映像が欠けた長さを測った値。形式が違ったり、数でなかったり負だったりすれば無し */
 const videoLoss = (value: unknown): VideoLoss | null => {
   if (typeof value !== "object" || value === null) return null;
   const { span, lost, tail } = value as Record<string, unknown>;
-  return typeof span === "number" && typeof lost === "number"
-    ? { span, lost, tail: tail === true }
-    : null;
+  const fine = (n: unknown): n is number =>
+    typeof n === "number" && Number.isFinite(n) && n >= 0;
+  return fine(span) && fine(lost) ? { span, lost, tail: tail === true } : null;
 };
 /** {見出し: 本文}。それ以外の形式なら無し */
 const record = (value: unknown): Record<string, string> | null =>

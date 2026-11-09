@@ -292,7 +292,8 @@
       notes.push({ title: "エンコードに失敗しました", text: rec.encode_error });
     }
     const loss = videoLossNote(rec.video_loss);
-    if (loss !== null) {
+    // 一覧と同じく、消した録画には出さない
+    if (loss !== null && rec.deleted_at === null) {
       notes.push({
         title: loss.label,
         text: `${loss.detail}の映像が残っています。元の TS に映像が無かった所は、エンコードしたものにもありません`,

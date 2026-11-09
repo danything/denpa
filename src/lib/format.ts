@@ -140,7 +140,7 @@ export function clipNote(
 }
 
 /**
- * 一覧に出す、映像の欠け (`recordings.video_loss`) の最短 (秒)。長さは分で出すので、1 分に満たない欠けは
+ * 一覧に出す、映像が欠けた長さ (`recordings.video_loss`) の最短 (秒)。長さは分で出すので、1 分に満たないと
  * 「30 分のうち 30 分」になって伝わらない
  */
 const VIDEO_LOSS_MIN = 60;
