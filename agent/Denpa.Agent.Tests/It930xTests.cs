@@ -139,6 +139,28 @@ public class It930xTests
         await Assert.That(bridge.ReadRegister(0x1222)).IsEqualTo((byte)0x5A);
     }
 
+    [Test]
+    public async Task 壊れた応答のあとも遅れて届いた応答を捨てる()
+    {
+        // 1 つ目の応答を壊し、その応答が遅れてもう 1 つ届いた形にする
+        var usb = new FakeIt930x { CorruptNext = true };
+        var (bridge, _) = Bridge(usb);
+        Assert.Throws<It930xException>(() => bridge.ReadRegister(0x1222));
+        usb.Late(new byte[] { 0x05, 0x00, 0x00, 0xAA, 0x00, 0x00 });
+        usb.Registers[0x1222] = 0x5A;
+        await Assert.That(bridge.ReadRegister(0x1222)).IsEqualTo((byte)0x5A);
+    }
+
+    [Test]
+    public async Task probe_の_port_に値が無ければ使い方を出す()
+    {
+        await Assert.That(It930xProbe.Parse(["--it930x-probe", "--port"])).IsNull();
+        await Assert.That(It930xProbe.Parse(["--it930x-probe", "--port", "--trace"])).IsNull();
+        await Assert.That(It930xProbe.Parse(["--it930x-probe", "--port", "1-2", "--trace"]))
+            .IsEqualTo(new It930xProbe.Options("1-2", true));
+        await Assert.That(It930xProbe.Parse(["--it930x-probe"])).IsEqualTo(new It930xProbe.Options(null, false));
+    }
+
     // ---------------------------------------------------------------------
     // ファームウェア (_IT9300_loadFirmware・IT9300_initialize・IT9300_reboot)
     // ---------------------------------------------------------------------

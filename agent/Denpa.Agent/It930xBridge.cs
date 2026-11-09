@@ -115,7 +115,16 @@ public sealed class It930xBridge
             var reply = buffer[..got];
             // 位置 1 は送ったシーケンス番号が返ると推定している (SDK は読まない)。実機で確かめるまでは記録に出すだけにする
             _trace?.Invoke($"応答 #{(got > 1 ? reply[1] : 0):X2} {Convert.ToHexString(reply)} ({Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1} ms)");
-            return It930xFrame.Parse(reply, replyLength, command);
+            try
+            {
+                return It930xFrame.Parse(reply, replyLength, command);
+            }
+            catch (It930xException)
+            {
+                // 壊れた応答のあとも、同じコマンドの応答が遅れて届くことがあるので、次のコマンドの前に捨てる
+                _stale = true;
+                throw;
+            }
         }
     }
 
@@ -193,7 +202,7 @@ public sealed class It930xBridge
     /// <summary>
     /// ファームウェアを起動する。前のファームウェアが動いていれば REBOOT してから読み込む
     /// (SDK の <c>IT9300_initialize</c> の前半と <c>_IT9300_loadFirmware</c>)。
-    /// 起動しなければ <see cref="It930xException"/>。REBOOT で USB がつなぎ直されたときは <see cref="UsbGoneException"/> のまま投げる (呼ぶ側が開き直す)
+    /// 起動しなければ <see cref="It930xException"/>。REBOOT で USB がつなぎ直されたときは <see cref="UsbGoneException"/> のまま呼ぶ側に返す (呼ぶ側が開き直す)
     /// </summary>
     /// <param name="code">ファームウェア (<see cref="It930xFirmware.Code"/>)</param>
     public It930xBoot Start(byte[] code)

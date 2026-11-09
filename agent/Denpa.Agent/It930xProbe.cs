@@ -38,15 +38,22 @@ public static class It930xProbe
 
     internal sealed record Options(string? Port, bool Trace);
 
-    internal static Options Parse(string[] args)
+    /// <summary>引数を読む。<c>--port</c> に値が無ければ null (使い方を出して終わる)</summary>
+    internal static Options? Parse(string[] args)
     {
         var at = Array.IndexOf(args, "--port");
-        return new Options(at >= 0 ? args.ElementAtOrDefault(at + 1) : null, args.Contains("--trace"));
+        if (at < 0) return new Options(null, args.Contains("--trace"));
+        var port = args.ElementAtOrDefault(at + 1);
+        return port is null || port.StartsWith("--", StringComparison.Ordinal) ? null : new Options(port, args.Contains("--trace"));
     }
 
     public static int Run(string[] args)
     {
-        var options = Parse(args);
+        if (Parse(args) is not { } options)
+        {
+            Console.Error.WriteLine($"usage: {Usage}");
+            return 2;
+        }
         var found = It930x.Found(message => Console.Error.WriteLine(message));
         var candidates = options.Port is { } wanted ? found.Where(item => item.Port == wanted).ToList() : found;
         if (candidates.Count != 1)

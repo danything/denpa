@@ -55,6 +55,9 @@ internal sealed class FakeIt930x : IUsbDevice
 
     private bool _gone;
 
+    /// <summary>遅れて届く応答を置く (次の読みで返る)</summary>
+    public void Late(byte[] reply) => _late.Enqueue(reply);
+
     public int ControlIn(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs) =>
         throw new NotSupportedException();
 

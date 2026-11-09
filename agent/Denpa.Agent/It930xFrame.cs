@@ -57,7 +57,7 @@ public static class It930xFrame
         return (ushort)~sum;
     }
 
-    /// <summary>送るフレームを組み立てる。<see cref="Max"/> を超えるなら投げる (分けるのは呼ぶ側)</summary>
+    /// <summary>送るフレームを組み立てる。<see cref="Max"/> を超えるなら <see cref="ArgumentOutOfRangeException"/> (分けるのは呼ぶ側)</summary>
     public static byte[] Build(ushort command, byte sequence, ReadOnlySpan<byte> payload)
     {
         var length = Overhead + payload.Length;
