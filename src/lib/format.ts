@@ -182,7 +182,7 @@ export function clock(seconds: number): string {
  * 録画の長さ。実際に録れた長さがあればそちらを出す。
  *
  * 番組表の尺 (end_at - start_at) は予定でしかなく、途中で止めたときや
- * CM を切ったときは出来上がりと合わない。取れていない古い行は予定で代用する。
+ * 前のバージョンで CM を切ってエンコードしたときは出来上がりと合わない。取れていない古い行は予定で代用する。
  */
 export function recordedDuration(recording: {
   duration_ms: number | null;
