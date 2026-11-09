@@ -151,7 +151,7 @@
     return () => player.stop();
   });
 
-  /** いま映している局。局で引く (物理チャンネルで引くと、1 本に複数の局が入っていると先頭が塗られた) */
+  /** いま映している局。局で引く (チャンネルで引くと、1 つのチャンネルに複数の局が入っているとき先頭の局に印が付いた) */
   const current = $derived(
     channels.find((c) => c.id === player.tuned?.serviceId),
   );
@@ -385,7 +385,7 @@
     if (canList) {
       jikkyoList.toggle();
       opened = jikkyoList.on;
-      // 出た 1 行が読んだら下ろす (列を入れ替えて一覧を描き直したときに、また取らない)
+      // 書き込む 1 行が受け取ったら下ろす (列を入れ替えて一覧を描き直したときに、またフォーカスを取らない)
       void tick().then(() => (opened = false));
     } else writing = !writing;
   }
@@ -421,7 +421,7 @@
     },
     resume: () => {
       if (wasLive) player.goLive();
-      // 戻る先がまだ無い (貯まりが空) と goLive は何もしないので、そのときは再開だけ
+      // 戻る先がまだ無い (バッファが空) と goLive は何もしないので、そのときは再開だけ
       if (player.paused) player.toggle();
     },
   });
@@ -721,8 +721,8 @@
               {#snippet status()}
                 <!--
                     項目は「・」で区切り、あいだに空白を入れない (docs/writing.md)。空白が入らないよう {#if} どうしを詰めて書く。
-                    放送からの遅れ (`live-player` の `fromAir`。隣のテレビとの差)。出るまでは貯まりだけ。
-                    手元の貯まり (`buffered.end - currentTime`)。上流は入っていない。
+                    放送からの遅れ (`live-player` の `fromAir`。隣のテレビとの差)。出るまではバッファだけを「遅延」として出す。
+                    手元のバッファ (`buffered.end - currentTime`)。上流は入っていない。
                     測り直す (`relearn`)。覚えているものがあるときだけ、遅延のすぐ隣に置く。
                     読みものの行なので丸いボタンにはしない (操作バーが厚くなる)。
                     途切れは止まったときだけ (`live-player` の `stalls`)。下限は、いま効いている下限と届く間隔のいちばん長いもの。
@@ -1198,8 +1198,8 @@
   .unmute {
     --pico-background-color: var(--dp-video-veil);
     position: absolute;
-    top: 0.75rem;
-    left: 0.75rem;
+    top: var(--dp-space-3);
+    left: var(--dp-space-3);
     z-index: var(--dp-z-stage-controls);
   }
   /* 列の幅いっぱいに伸びるので、タブを均等に広げる。左に寄せると右に溝だけが余った */

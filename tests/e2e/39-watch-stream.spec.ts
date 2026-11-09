@@ -357,7 +357,7 @@ test.describe("観る画面でその場で流す", () => {
           },
         }),
       );
-      // ファイルは頭の 12 秒ぶんしか無い。先の溜まりが減り続けて 2 秒を切ると、段を下げる
+      // ファイルは頭の 12 秒ぶんしか無い。先のバッファが減り続けて 2 秒を切ると、段を下げる
       const file = Buffer.from(clipFrom(clip, 0, 12));
       await page.route(`**/api/recordings/${id}/file?**`, (route) =>
         route.fulfill({ status: 200, contentType: "video/mp4", body: file }),

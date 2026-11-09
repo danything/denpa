@@ -10,7 +10,7 @@
 
   import Menu from "#lib/components/Menu.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
-  import { ATTENTION_FILTERS, FILTERS } from "#lib/timeline.js";
+  import { FILTERS, shownAttention } from "#lib/timeline.js";
 
   import type { HomeControls } from "./context";
   import HomeState from "./HomeState.svelte";
@@ -20,10 +20,8 @@
     $props();
 
   let viewOpen = $state(false);
-  /** 見てほしいことのチップ。件数のあるものだけ (選んでいるものは 0 件でも残す。外せるように) */
-  const attention = $derived(
-    ATTENTION_FILTERS.filter((f) => counts[f.id] > 0 || filter === f.id),
-  );
+  /** 見てほしいことのチップ (`shownAttention`) */
+  const attention = $derived(shownAttention(counts, filter));
 </script>
 
 <div class="t-toolbar dock" data-testid="timeline-toolbar">

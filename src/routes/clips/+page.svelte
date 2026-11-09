@@ -189,11 +189,15 @@
     { id: "live", label: "ライブ" },
     { id: "recorded", label: "録画" },
   ];
-  const filtered = $derived(
-    data.query.q !== undefined ||
+  /** 絞り込みのメニューで選べる条件 (種類・局・日) のどれかで絞っている。メニューのボタンに印を付ける */
+  const narrowed = $derived(
+    data.query.kind !== undefined ||
       data.query.service !== undefined ||
-      data.query.day !== undefined ||
-      data.query.kind !== undefined ||
+      data.query.day !== undefined,
+  );
+  const filtered = $derived(
+    narrowed ||
+      data.query.q !== undefined ||
       data.query.recording !== undefined,
   );
 
@@ -718,11 +722,7 @@
             type="button"
             class="ghost icon"
             title="絞り込み"
-            data-on={data.query.kind !== undefined ||
-            data.query.service !== undefined ||
-            data.query.day !== undefined
-              ? ""
-              : undefined}
+            data-on={narrowed ? "" : undefined}
             data-testid="clip-filter"
           >
             <Icon icon={ListFilter} size="size-5" /><span
@@ -902,7 +902,7 @@
 
 <style>
   /*
-   * 並べ方は録画の一覧 (`home.css` の `.board`) と同じ: ページごと巻き、広い形は右のサイドバーをヘッダーの下に貼り付ける。
+   * 並べ方は録画の一覧 (`home.css` の `.board`) と同じ。ページごと巻き、広い形は右のサイドバーをヘッダーの下に貼り付ける。
    * スマホの形は絞り込みの 1 行を下のタブのすぐ上に浮かせる (docs/design.md の「浮かせ方」)
    */
   .clips {
@@ -934,9 +934,9 @@
   }
 
   /*
-     * 平らなグリッド。件の面には乗せず、画像と字だけ (docs/design.md の「ふだんは平らに」)。
-     * 1 枚の幅は 16rem から (11rem では何が写っているか読めなかった)。スマホの幅では 1 列に並ぶ
-     */
+   * 平らなグリッド。件の面には乗せず、画像と字だけ (docs/design.md の「ふだんは平らに」)。
+   * 1 枚の幅は 16rem から (11rem では何が写っているか読めなかった)。スマホの幅では 1 列に並ぶ
+   */
   .c-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
@@ -1101,7 +1101,7 @@
   :global(html[data-phone]) .c-bar {
     position: sticky;
     order: 2;
-    z-index: var(--dp-z-pagebar);
+    z-index: var(--dp-z-dock);
     display: flex;
     align-items: center;
     gap: var(--dp-space-1);

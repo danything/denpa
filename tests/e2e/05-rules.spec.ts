@@ -20,7 +20,7 @@ test.describe("ルールの一覧", () => {
     await clearRules(page);
   });
 
-  test("1件も無いときは、検索から作れると案内する", async ({ page }) => {
+  test("1 件も無いときは、検索から作れると案内する", async ({ page }) => {
     await goto(page, "/rules");
     await expect(page.getByTestId("rule-empty")).toContainText(
       "ルールとして保存",
@@ -29,7 +29,7 @@ test.describe("ルールの一覧", () => {
     await page.waitForURL(/\/search$/);
   });
 
-  test("行に条件・次の放送・予約の数を出し、スイッチで止め、2回押しで消す", async ({
+  test("行に条件・次の放送・予約の数を出し、スイッチで止め、2 回押しで消す", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -106,7 +106,7 @@ test.describe("ルールの一覧", () => {
   /**
    * **狭い画面では 2 段の行。** 1 段目に名前とスイッチ・削除、2 段目に次の放送と予約・録画の数。横にはみ出さない
    */
-  test("狭い画面では2段の行にする", async ({ page }) => {
+  test("狭い画面では 2 段の行にする", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await makeRule(page, "どこにも無い番組");
     await goto(page, "/rules");

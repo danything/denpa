@@ -8,12 +8,12 @@ import { expect, goto, pickCodec, wakeControls } from "./helpers";
  * **ライブの貯め方を実時間で見る部品** (`50-live-pacing`・`51-live-gaps`)。
  *
  * 偽 ffmpeg に本物の AV1 の fMP4 を流させ (`stack.liveFmp4File`)、目印に書いた JSON で届き方を荒らす
- * (`tests/fake/fmp4-loop.ts`)。MSE に入れて実際に再生し、`<video>` の貯まりと途切れ (`waiting`) を数える。
+ * (`tests/fake/fmp4-loop.ts`)。MSE に入れて実際に再生し、`<video>` のバッファと途切れ (`waiting`) を数える。
  *
  * 実時間で流すので 1 本が 30 秒〜1 分かかる。**1 つのスペックに並べない** — CI の組 (`shards.json`) を 1 つだけ長くする
  */
 
-/** 貯まり (`buffered.end - currentTime`) と貯めようとしている量を、再生が落ち着いてから記録し始める */
+/** バッファ (`buffered.end - currentTime`) と貯めようとしている量を、再生が落ち着いてから記録し始める */
 export async function watch(
   page: Page,
   rough: string,
@@ -36,7 +36,7 @@ export async function watch(
       },
     )
     .toBeGreaterThan(0.5);
-  // 始めた直後は貯まりが狙いより多い。落ち着いてから記録する
+  // 始めた直後はバッファが狙いより多い。落ち着いてから記録する
   await page.waitForTimeout(3_000);
   await page.evaluate(() => {
     const video = document.querySelector(

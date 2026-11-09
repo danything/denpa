@@ -429,7 +429,7 @@ test.describe("ライブ視聴", () => {
    * **一覧は種別で切り替える。** 全部縦に並べると、CS の局が 100 を超える環境で
    * 地上波が上のほうへ流れて見えなくなる。**開いたときは、いま映している局の種別**
    */
-  test("チャンネル一覧を地上波/BS/CSで切り替えられる", async ({ page }) => {
+  test("チャンネル一覧を地上波/BS/CS で切り替えられる", async ({ page }) => {
     await goto(page, "/live");
     await expect(page.getByTestId("live-type-GR")).toHaveAttribute(
       "aria-pressed",
@@ -1278,7 +1278,7 @@ test.describe("ライブ視聴", () => {
 
     /*
      * **放送の今にいる間は右端に張り付く。** 実際には貯めているぶん後ろに
-     * いるが、そこを描くと溜まりが増えるたびに摘みが左へ動く — 見ている人には
+     * いるが、そこを描くとバッファが増えるたびに摘みが左へ動く — 見ている人には
      * 「勝手に戻っている」としか映らない
      */
     const bar = page.getByTestId("live-seek");

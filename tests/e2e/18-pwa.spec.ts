@@ -216,7 +216,7 @@ test.describe("PWA", () => {
     await expect(page.getByTestId("measure")).toHaveCount(0);
   });
 
-  test("サービスワーカーが登録され、APIは横取りしない", async ({ page }) => {
+  test("サービスワーカーが登録され、API は横取りしない", async ({ page }) => {
     await goto(page, "/");
     const registered = await page.evaluate(async () => {
       const registration = await navigator.serviceWorker.getRegistration();

@@ -326,7 +326,7 @@
     .group-link {
       display: block;
       margin: 0;
-      padding-block: 0.625rem;
+      padding-block: var(--dp-space-2);
       color: inherit;
       font-size: var(--dp-text-base);
       font-weight: var(--dp-weight);

@@ -199,8 +199,8 @@ test.describe("録画とエンコード", () => {
   });
 });
 
-test.describe("CMのチャプター", () => {
-  test("CMはチャプターにするだけで切らない。字幕も残る", async ({
+test.describe("CM のチャプター", () => {
+  test("CM はチャプターにするだけで切らない。字幕も残る", async ({
     page,
     request,
     stack,
@@ -265,7 +265,7 @@ test.describe("コーデックを両方エンコードする", () => {
    * (`library_path`)、もう一方は H.264 (`alt_path`)。どちらも同じフォルダに
    * 並ぶので、H.264 のほうは名前に印を付けて分ける ([H264])。
    */
-  test("AV1 と H.264 の2本ができて、どちらも観られる", async ({
+  test("AV1 と H.264 の 2 本ができて、どちらも観られる", async ({
     page,
     request,
     stack,
@@ -370,7 +370,7 @@ test.describe("エンコードしない", () => {
    * 別に「エンコードする」のチェックを持たないので、外れていることが
    * そのまま「エンコードしない」になる
    */
-  test("コーデックをどちらも外すと、元のTSのまま保存先に置く", async ({
+  test("コーデックをどちらも外すと、元の TS のまま保存先に置く", async ({
     page,
     request,
   }) => {
@@ -422,7 +422,7 @@ test.describe("エンコードしない", () => {
   });
 });
 
-test.describe("CM検出のやり直し", () => {
+test.describe("CM 検出のやり直し", () => {
   test.afterEach(async ({ request }) => {
     await setRecording(request);
   });
@@ -432,7 +432,7 @@ test.describe("CM検出のやり直し", () => {
    * 書き直す (`encoder.runCmJob`)。
    * 元の TS はエンコードし終えると消える設定 (既定) なので、エンコードしたものから読む
    */
-  test("CM検出だけやり直せる (再エンコードしない)", async ({
+  test("CM 検出だけやり直せる (再エンコードしない)", async ({
     page,
     request,
     stack,

@@ -84,7 +84,7 @@ export function recordingFacts(rec: Required<DetailSeed>): ProgramDetail {
  *
  * 予約・録画の一覧とルールのプレビューで同じものが要る。**開く手順を写していると
  * 片方だけ直したときに見え方がずれる** (実際、先に出す・あとで差し替えるという
- * 段取りそのものが 2 箇所にあった)。
+ * 段取りそのものが 2 か所にあった)。
  */
 export function programDetail() {
   let current = $state<ProgramDetail | null>(null);
