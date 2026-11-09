@@ -157,8 +157,8 @@ public class It930xTests
         await Assert.That(It930xProbe.Parse(["--it930x-probe", "--port"])).IsNull();
         await Assert.That(It930xProbe.Parse(["--it930x-probe", "--port", "--trace"])).IsNull();
         await Assert.That(It930xProbe.Parse(["--it930x-probe", "--port", "1-2", "--trace"]))
-            .IsEqualTo(new It930xProbe.Options("1-2", true));
-        await Assert.That(It930xProbe.Parse(["--it930x-probe"])).IsEqualTo(new It930xProbe.Options(null, false));
+            .IsEqualTo(new It930xProbe.Options("1-2", true, null));
+        await Assert.That(It930xProbe.Parse(["--it930x-probe"])).IsEqualTo(new It930xProbe.Options(null, false, null));
     }
 
     // ---------------------------------------------------------------------

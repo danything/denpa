@@ -64,7 +64,32 @@ internal sealed class FakeIt930x : IUsbDevice
     public void ControlOut(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs) =>
         throw new NotSupportedException();
 
-    public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth) => throw new NotSupportedException();
+    /// <summary>EP 0x84 の読みが返すバイト列 (1 つが 1 回の読み)。尽きたら時間切れ (0) を返す</summary>
+    public Queue<byte[]> Ts { get; } = new();
+
+    public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
+    {
+        if (endpoint != 0x84) throw new InvalidOperationException($"EP 0x{endpoint:X2} の読みを出した");
+        Log.Add($"TS {transferSize} {depth}");
+        return new FakeTsIn(this);
+    }
+
+    /// <summary>EP 0x84 の出しっぱなしの読み。閉じたら <see cref="Log"/> に控える</summary>
+    private sealed class FakeTsIn(FakeIt930x owner) : IUsbInStream
+    {
+        public int Read(Span<byte> buffer, int timeoutMs)
+        {
+            if (!owner.Ts.TryDequeue(out var chunk))
+            {
+                Thread.Sleep(1);
+                return 0;
+            }
+            chunk.CopyTo(buffer);
+            return chunk.Length;
+        }
+
+        public void Dispose() => owner.Log.Add("TS 閉じる");
+    }
 
     public void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs)
     {
