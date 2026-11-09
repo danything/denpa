@@ -52,6 +52,7 @@
     fullDate,
     logoUnusable,
     nowStatus,
+    videoLossNote,
   } from "#lib/format.js";
   import { GROUPED_COOKIE } from "#lib/grouping.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
@@ -289,6 +290,13 @@
     }
     if (rec.encode_error) {
       notes.push({ title: "エンコードに失敗しました", text: rec.encode_error });
+    }
+    const loss = videoLossNote(rec.video_loss);
+    if (loss !== null) {
+      notes.push({
+        title: loss.label,
+        text: `${loss.detail}の映像が残っています。元の TS に映像が無かった所は、エンコードしたものにもありません`,
+      });
     }
     openDetail(rec.program_id, rec, notes, rec.cm_note);
     detailRec = rec;

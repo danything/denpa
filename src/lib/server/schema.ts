@@ -15,7 +15,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import type { Audio } from "../arib";
-import type { ChannelType, ReservationState } from "../types";
+import type { ChannelType, ReservationState, VideoLoss } from "../types";
 import type { Range } from "./cm";
 import { config } from "./config";
 
@@ -102,6 +102,14 @@ const objects =
   <T extends object>() =>
   (value: unknown): T[] =>
     Array.isArray(value) ? (value as T[]) : [];
+/** 映像の欠けの測り。形式が違えば無し */
+const videoLoss = (value: unknown): VideoLoss | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const { span, lost, tail } = value as Record<string, unknown>;
+  return typeof span === "number" && typeof lost === "number"
+    ? { span, lost, tail: tail === true }
+    : null;
+};
 /** {見出し: 本文}。それ以外の形式なら無し */
 const record = (value: unknown): Record<string, string> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -631,6 +639,12 @@ export const recordings = sqliteTable(
      * **ロゴを使えたかどうかもここから読む** (`format.logoUnusable`)
      */
     cm_note: text("cm_note"),
+    /**
+     * **番組のうち、元の TS に映像が無かった長さ** (`types.VideoLoss`)。CM 検出でコマの時刻を読んだときに測る (`video-loss.ts`)。
+     * NULL は測っていない (映像の無い録画・CM 検出の前の録画・映像を読めなかった録画)。一覧で「録画が途中で切れています」と出すかは
+     * 画面が決める (`format.videoLossNote`)。測った値をそのまま持つので、出す条件を変えても録ってある分に効く
+     */
+    video_loss: json("video_loss", videoLoss),
     /**
      * CM を切ってエンコードしたときに**残した区間** (入れ物の先頭からの秒)。NULL は切っていない。
      * 切ったものからは CM を戻せないので、CM 検出のやり直しはこれを見て断る (再エンコードを促す)

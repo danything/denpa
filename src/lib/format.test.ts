@@ -16,6 +16,7 @@ import {
   recordingLeft,
   signalText,
   splitReaderName,
+  videoLossNote,
 } from "./format";
 
 const MIN = 60_000;
@@ -341,5 +342,26 @@ describe("受信の状態と C/N と強度", () => {
         strengthDbm: -80.4,
       }),
     ).toBe("同期していません・強度: -80.4 dBm");
+  });
+});
+
+describe("映像の欠けの表示", () => {
+  test("映像が無いまま録画が終わったら、途中で切れたと言い、残っている長さを添える", () => {
+    expect(videoLossNote({ span: 1800, lost: 670, tail: true })).toEqual({
+      label: "録画が途中で切れています",
+      detail: "30 分のうち 19 分",
+    });
+  });
+
+  test("途中だけ欠けたなら、欠けたと言う", () => {
+    expect(videoLossNote({ span: 1800, lost: 180, tail: false })).toEqual({
+      label: "映像が途中で欠けています",
+      detail: "30 分のうち 27 分",
+    });
+  });
+
+  test("1 分に満たない欠けと、測っていない録画は出さない", () => {
+    expect(videoLossNote({ span: 1800, lost: 59, tail: true })).toBeNull();
+    expect(videoLossNote(null)).toBeNull();
   });
 });

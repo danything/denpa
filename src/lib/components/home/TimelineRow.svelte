@@ -3,7 +3,7 @@
    * 時間軸の 1 行 (予約・録画・録り逃し)。どれも同じ形にする: (録れたものは) ポスター、
    * 時刻と番組名、局と尺、右に押すもの。状態を言うときだけ下に段を足す (`RowActivity`。2 段まで):
    * いま動いているもの (録画中・エンコード中・端末に保存中) と、黙っていると「録れたつもり」になるもの
-   * (競合・失敗・欠ける・ロゴで CM を判定できなかった)
+   * (競合・失敗・欠ける・録画が途中で切れた・ロゴで CM を判定できなかった)
    */
   import "@anyblades/blades/components/progress";
   import type { SubmitFunction } from "$app/forms";
@@ -36,6 +36,7 @@
     size,
     stateLabel,
     time,
+    videoLossNote,
   } from "#lib/format.js";
   import { offline, removeLocal } from "#lib/offline.svelte.js";
   import { type RowStatus, statusLines, toneOf } from "#lib/row-status.js";
@@ -134,7 +135,7 @@
 
   /**
    * 録画の行の段。動いているもの (エンコード・待ち・録画中・端末に保存中) が先、
-   * 問題 (失敗・欠けた・ロゴで CM を判定できなかった・端末に保存できなかった) が後
+   * 問題 (失敗・欠けた・録画が途中で切れた・ロゴで CM を判定できなかった・端末に保存できなかった) が後
    */
   function recLines(rec: Rec): RowStatus[] {
     const shown = rowState(rec);
@@ -186,6 +187,16 @@
       });
     }
     problems.push(...clipLine(rec, true));
+    const loss = videoLossNote(rec.video_loss);
+    if (loss !== null && rec.deleted_at === null) {
+      problems.push({
+        kind: "video-loss",
+        tone: "warning",
+        label: loss.label,
+        detail: loss.detail,
+        testid: "video-loss",
+      });
+    }
     if (logoUnusable(rec.cm_note) && rec.deleted_at === null) {
       problems.push({
         kind: "logo",

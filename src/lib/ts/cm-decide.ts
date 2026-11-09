@@ -72,6 +72,67 @@ function lowerBound(values: ArrayLike<number>, at: number): number {
 }
 
 /**
+ * **コマの時刻がこれ以上空いた所は、映像が欠けた所** (秒)。ロゴの判定の窓 (`logo-detect` の前後 1 秒) に 1 コマも入らない長さ。
+ * 放送の映像は止まった場面でもコマが続くので、これだけ空くのは元の TS の映像をデコードできなかった所
+ */
+export const MISSING_MIN = 2;
+
+/**
+ * **映像の欠けた所** (秒)。`from` から 1 コマ目まで、コマとコマの間、最後のコマから `to` までのうち、`MISSING_MIN` 秒以上空いた所。
+ * コマが 1 つも無ければ空 (映像の無い録画を欠けたとは言わない)
+ */
+export function missingVideo(
+  times: ArrayLike<number> | undefined,
+  to: number,
+  from = 0,
+): Range[] {
+  if (times === undefined || times.length === 0) return [];
+  const out: Range[] = [];
+  const add = (start: number, end: number) => {
+    if (end - start >= MISSING_MIN) out.push({ start, end });
+  };
+  add(from, times[0]!);
+  for (let i = 1; i < times.length; i++) add(times[i - 1]!, times[i]!);
+  add(times[times.length - 1]!, to);
+  return out;
+}
+
+/** 並んで重ならない区間どうしの重なり */
+export function intersect(a: Range[], b: Range[]): Range[] {
+  const out: Range[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    const start = Math.max(a[i]!.start, b[j]!.start);
+    const end = Math.min(a[i]!.end, b[j]!.end);
+    if (end > start) out.push({ start, end });
+    if (a[i]!.end < b[j]!.end) i++;
+    else j++;
+  }
+  return out;
+}
+
+/** 区間の秒の合計 */
+export function totalLength(ranges: Range[]): number {
+  return ranges.reduce((sum, r) => sum + (r.end - r.start), 0);
+}
+
+/** 並んで重ならない `ranges` から、並んで重ならない `holes` を除く */
+function subtract(ranges: Range[], holes: Range[]): Range[] {
+  const out: Range[] = [];
+  for (const r of ranges) {
+    let start = r.start;
+    for (const h of holes) {
+      if (h.end <= start || h.start >= r.end) continue;
+      if (h.start > start) out.push({ start, end: h.start });
+      start = Math.max(start, h.end);
+    }
+    if (r.end > start) out.push({ start, end: r.end });
+  }
+  return out;
+}
+
+/**
  * 無音ごとに、その中 (と少し外) の切れ目を探す。CM の継ぎ目は必ず無音と切れ目が重なる。
  * 切れ目が無ければ (黒から黒など) 無音の真ん中
  */
@@ -551,7 +612,11 @@ function measure(ranges: Range[]): (t: number) => number {
  * ロゴの出ている区間から作る、出ている秒の数え方とロゴの出入り。
  *
  * ロゴの区間の末尾の、ロゴが見えないまま持ち越された所 (`unseenTails`) は、見えた秒 (`lit`) にもロゴの無い秒 (`bare`) にも
- * 入れず、別に数える (`unseen`)。その先頭もロゴの消え際に足す
+ * 入れず、別に数える (`unseen`)。その先頭もロゴの消え際に足す。
+ *
+ * **映像の欠けた所 (`missingVideo`) は、見えた秒にもロゴの無い秒にも入れない。** コマが無いのでロゴがあったか分からない。
+ * ロゴの無い秒に数えていた頃は、録画の途中から最後まで映像が欠けた録画 (本番の TBS の 30 分で、18 分 50 秒から後ろ) で、
+ * 欠けた 11 分が CM になり、半分以上が CM だとしてロゴの結果を捨てていた
  */
 function logoIndex(input: CmInput, spans: Range[]) {
   const { duration } = input;
@@ -565,10 +630,19 @@ function logoIndex(input: CmInput, spans: Range[]) {
   }
   // 重なりをまとめた区間から見る (`measure` は重ならない区間を数える)
   const tails = unseenTails(input, merged);
-  /** 0 から `t` までのロゴの区間の秒 / そのうち見えないまま持ち越された秒 */
+  const missing = missingVideo(input.times, duration);
+  /** ロゴの区間のうち、映像の欠けた所 */
+  const hidden = intersect(merged, missing);
+  /**
+   * 0 から `t` までのロゴの区間の秒 / そのうち見えないまま持ち越された秒 (欠けた所は除く) /
+   * 映像の欠けた秒 / そのうちロゴの区間の中の秒
+   */
   const coveredTo = measure(merged);
-  const unseenTo = measure(tails);
+  const unseenTo = measure(subtract(tails, missing));
+  const missingTo = measure(missing);
+  const hiddenTo = measure(hidden);
   const unseen = (a: number, b: number) => unseenTo(b) - unseenTo(a);
+  const hiddenIn = (a: number, b: number) => hiddenTo(b) - hiddenTo(a);
   // 録画の端で切れているロゴは、そこで出入りしたのではない
   const rises = merged.map((s) => s.start).filter((t) => t > EDGE);
   const falls = [...merged.map((s) => s.end), ...tails.map((s) => s.start)]
@@ -577,10 +651,15 @@ function logoIndex(input: CmInput, spans: Range[]) {
   return {
     merged,
     /** ロゴが見えていた秒 */
-    lit: (a: number, b: number) => coveredTo(b) - coveredTo(a) - unseen(a, b),
+    lit: (a: number, b: number) =>
+      coveredTo(b) - coveredTo(a) - unseen(a, b) - hiddenIn(a, b),
     unseen,
-    /** ロゴの無い秒 */
-    bare: (a: number, b: number) => b - a - (coveredTo(b) - coveredTo(a)),
+    /** ロゴの無い秒 (映像の欠けた所は除く) */
+    bare: (a: number, b: number) =>
+      b -
+      a -
+      (coveredTo(b) - coveredTo(a)) -
+      (missingTo(b) - missingTo(a) - hiddenIn(a, b)),
     rises,
     falls,
   };
@@ -952,10 +1031,34 @@ function byLength(input: CmInput, candidates: Boundary[]): Range[] {
   return blocks.filter((b) => b.end - b.start >= BLOCK_MIN);
 }
 
-/** CM の区間を決める。ロゴがあればロゴで、無ければ CM の尺だけで */
+/**
+ * **CM の端にかかった映像の欠けた所は、CM から外す** (チャプターも付けない)。欠けた所は CM か番組か決められないので、
+ * CM とは言わない。CM の内側の欠け (前後とも CM) は CM のまま残す。外すと、映像が途切れ途切れの所で CM のチャプターが細切れになる
+ */
+function trimMissing(cm: Range[], missing: Range[]): Range[] {
+  const out: Range[] = [];
+  for (const range of cm) {
+    let { start, end } = range;
+    for (const m of missing)
+      if (m.start <= start && start < m.end) start = m.end;
+    for (let k = missing.length - 1; k >= 0; k--) {
+      const m = missing[k]!;
+      if (m.start < end && end <= m.end) end = m.start;
+    }
+    if (end - start > 0.5) out.push({ start, end });
+  }
+  return out;
+}
+
+/**
+ * CM の区間を決める。ロゴがあればロゴで、無ければ CM の尺だけで。
+ * 映像の欠けた所は、ロゴがあったとも無かったとも数えず (`logoIndex`)、CM の端にかかったら CM から外す (`trimMissing`)
+ */
 export function decideCm(input: CmInput): Range[] {
   const { logo } = input;
-  return logo !== undefined && logo !== null && logo.length > 0
-    ? byLogo(input, logo)
-    : byLength(input, boundaries(input, SILENCE_MIN_ALONE));
+  const cm =
+    logo !== undefined && logo !== null && logo.length > 0
+      ? byLogo(input, logo)
+      : byLength(input, boundaries(input, SILENCE_MIN_ALONE));
+  return trimMissing(cm, missingVideo(input.times, input.duration));
 }

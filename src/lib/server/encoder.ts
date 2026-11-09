@@ -82,6 +82,7 @@ import { settings } from "./settings";
 import { chunks, lines, lowerPriority, run, sideOutput } from "./stream";
 import { displayTitle } from "./title";
 import { tsProbe } from "./ts-probe";
+import { saveVideoLoss } from "./video-loss";
 import { notify } from "./webhook";
 
 /**
@@ -1808,6 +1809,7 @@ async function runJob(jobId: number): Promise<void> {
       );
       if (detection.material !== undefined)
         saveMaterial(recording.id, detection.material);
+      saveVideoLoss(recording.id, detection.material);
       saveCm(recording.id, detection);
       setStep(jobId, `CM ${detection.cm.length} 箇所 (${detection.note})`);
     }
@@ -2110,6 +2112,7 @@ async function runCmJob(jobId: number): Promise<void> {
     if (stored !== null && stored.logo !== null) {
       setPhase(jobId, "cm", "控えておいた材料から決め直しています");
       detection = shiftDetection(decideFromMaterial(stored), stored.offset);
+      saveVideoLoss(recording.id, stored);
     } else {
       setPhase(jobId, "cm", "局ロゴを確かめています");
       const span = programSpan(recording);
@@ -2151,6 +2154,7 @@ async function runCmJob(jobId: number): Promise<void> {
       );
       if (detection.material !== undefined)
         saveMaterial(recording.id, detection.material);
+      saveVideoLoss(recording.id, detection.material);
     }
   } catch (error) {
     if (canceled.has(jobId)) return finishCanceled(jobId, null);

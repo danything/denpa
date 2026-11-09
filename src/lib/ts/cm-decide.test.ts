@@ -5,6 +5,7 @@ import {
   type CmInput,
   decideCm,
   isCmLength,
+  missingVideo,
   type Range,
 } from "./cm-decide";
 
@@ -928,6 +929,94 @@ describe("ロゴの区間の末尾の、見えないまま持ち越された所"
     expect(round(decideCm(input))).toEqual([
       { start: 0, end: 10 },
       { start: 183.4, end: 243.4 },
+    ]);
+  });
+});
+
+describe("映像の欠けた所", () => {
+  // 番組 10〜600 と 660〜1790、間に 60 秒の CM。録画は 1800 秒
+  const joints = [10, ...every15(600, 660), 1790, 1805];
+
+  /** `from` 秒から `to` 秒の間のコマを抜く (元の TS の映像をデコードできなかった所) */
+  function without(input: CmInput, from: number, to: number): CmInput {
+    const times = Array.from(input.times!);
+    const cuts = Array.from(input.cuts!);
+    const keep = times.map((t) => t <= from || t >= to);
+    return {
+      ...input,
+      times: times.filter((_, i) => keep[i]),
+      cuts: cuts.filter((_, i) => keep[i]),
+    };
+  }
+
+  test("コマの時刻が 2 秒以上空いた所を、先頭・途中・末尾から探す", () => {
+    expect(missingVideo([3, 3.1, 3.2, 4, 9, 9.5], 20)).toEqual([
+      { start: 0, end: 3 },
+      { start: 4, end: 9 },
+      { start: 9.5, end: 20 },
+    ]);
+    // 2 秒に満たない空きは欠けではない
+    expect(missingVideo([0, 1.9, 3.8], 5)).toEqual([]);
+    // コマが無い (映像の無い録画) なら欠けとは言わない
+    expect(missingVideo([], 20)).toEqual([]);
+    expect(missingVideo(undefined, 20)).toEqual([]);
+  });
+
+  test("途中から最後までコマが無ければ、その後ろは CM にしない", () => {
+    // 1100 秒から後ろのコマが無い。ロゴは映像の止まった所まで出ている。無音も 1100 秒まで
+    const input = without(
+      recording(
+        1800,
+        [10, ...every15(600, 660)],
+        [
+          { start: 10.2, end: 599.8 },
+          { start: 660.3, end: 1100 },
+        ],
+      ),
+      1100,
+      1801,
+    );
+    expect(round(decideCm(input))).toEqual([
+      { start: 0, end: 10 },
+      { start: 600, end: 660 },
+    ]);
+  });
+
+  test("途中に長い欠けがあれば、欠けた所は CM にしない", () => {
+    // 900〜990 秒のコマが無い。欠けの前後には無音と切れ目があり、尺は 15 秒の倍数 (90 秒)
+    const input = without(
+      recording(
+        1800,
+        [...joints, 900, 990],
+        [
+          { start: 10.2, end: 599.8 },
+          { start: 660.3, end: 899.8 },
+          { start: 990.3, end: 1789.7 },
+        ],
+      ),
+      900,
+      990,
+    );
+    expect(round(decideCm(input))).toEqual([
+      { start: 0, end: 10 },
+      { start: 600, end: 660 },
+      { start: 1790, end: 1800 },
+    ]);
+  });
+
+  test("CM の内側の欠けは CM のまま (チャプターを細切れにしない)", () => {
+    const input = without(
+      recording(1800, joints, [
+        { start: 10.2, end: 599.8 },
+        { start: 660.3, end: 1789.7 },
+      ]),
+      620,
+      625,
+    );
+    expect(round(decideCm(input))).toEqual([
+      { start: 0, end: 10 },
+      { start: 600, end: 660 },
+      { start: 1790, end: 1800 },
     ]);
   });
 });

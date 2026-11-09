@@ -11,6 +11,18 @@ import type {
 
 export type ChannelType = "GR" | "BS" | "CS" | "SKY";
 
+/**
+ * 録画の番組のうち、元の TS に映像が無かった長さ (`recordings.video_loss`。秒)。測るのは CM 検出のとき (`server/video-loss.ts`)
+ */
+export interface VideoLoss {
+  /** 映像があるはずだった長さ。番組の時刻のうち、録り始めてから録り終えるまで */
+  span: number;
+  /** そのうち映像が無かった長さ */
+  lost: number;
+  /** 映像が無いまま録画が終わった (途中で切れた) */
+  tail: boolean;
+}
+
 /** 受信の設定・番組表・ライブで並べる種別とその順 (地上波・BS・CS)。SKY を選べるのはルールの条件だけ */
 export const CHANNEL_TYPES: readonly ChannelType[] = ["GR", "BS", "CS"];
 
