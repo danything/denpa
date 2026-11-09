@@ -25,7 +25,6 @@ const agent = Bun.serve({
           lnb: null,
           channel: null,
           users: [],
-          pid: null,
         },
       ],
     }),

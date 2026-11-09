@@ -83,7 +83,6 @@ const AGENT_TUNER = object({
   /** いま使っているチャンネル。空いていれば null */
   channel: nullable(object({ type: CHANNEL_TYPE, channel: string })),
   users: array(object({ use: string, priority: number })),
-  pid: nullable(number),
   error: nullable(string),
   /**
    * 受信の状態と C/N と強度。使用中で、機材が測れるときだけ (エージェントが 5 秒ごとに読む)。
