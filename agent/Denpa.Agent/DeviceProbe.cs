@@ -181,7 +181,8 @@ public static class DeviceProbe
         .ToDictionary(group => group.Key, group => group.First().Types, StringComparer.Ordinal);
 
     /// <summary>
-    /// 機材が受けられる種別。**最後に <see cref="Detect"/> したときに見つけた機材だけ**で、ほかは null (分からない)。
+    /// 機材が受けられる種別。**最後に <see cref="Detect"/> したときに見つけた機材と、設定の <c>it930x:</c> の受信機だけ**で、ほかは null (分からない)。
+    /// <c>it930x:</c> の受信機は自動検出に出ないが、どの受信機も地上波・衛星・J.83B を受けられる (<see cref="It930x.Types"/>)。
     ///
     /// <para>
     /// <c>GET /denpa/tuners</c> の <c>receivable</c> に入れ、denpa はこれに無い種別を設定で選ばせず、保存でも断る。
@@ -190,7 +191,8 @@ public static class DeviceProbe
     /// </para>
     /// </summary>
     public static string[]? Receivable(string? device) =>
-        device is not null && _found.TryGetValue(device, out var types) ? types : null;
+        It930x.Parse(device) is not null ? [.. It930x.Types]
+        : device is not null && _found.TryGetValue(device, out var types) ? types : null;
 
     private static IEnumerable<string> Directories(string root, string pattern)
     {

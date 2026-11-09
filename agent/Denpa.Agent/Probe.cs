@@ -20,7 +20,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
 /// denpa-agent --tune asicen:1-2:1 T27                       # asicen-userland の機材 (PX-W3U3。試験的。受信機 1 は地上波)
 /// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N] [--repeat N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS (と復号できたパケット)・2 回目の選局の時間と C/N を出す
-/// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。ロックまでの時間と C/N と強度も出す (衛星は BS15:16625 --lnb 15v のように)
+/// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。ロックまでの時間と C/N と強度も出す (衛星は BS15:16625 --lnb 15v、J.83B は H40 のように)
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)
 /// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
@@ -211,7 +211,11 @@ public static class Probe
             var streamId = tuning.StreamId;
             var unit = tuning.Satellite ? "kHz" : "Hz";
             var filter = streamId == ChannelTable.NoStreamId ? "" : $" TSID={streamId}";
-            Console.WriteLine($"--- {name}  {tuning.Frequency} {unit}{filter}");
+            var shifted = tuning.ShiftedFrequency is { } other ? $" (ずらした周波数 {other} Hz も試す)" : "";
+            Console.WriteLine($"--- {name}  {tuning.Frequency} {unit}{filter}{shifted}");
+            // スカパー！プレミアムのカードはまだ扱わないので、--decode でも B-CAS のカードに渡さない (TunerPool の Lease と同じ)
+            var descramble = decode && !tuning.Cable;
+            if (decode && tuning.Cable) Console.WriteLine("    J.83B はスクランブルされたまま受けます (スカパー！プレミアムのカードはまだ扱いません)");
 
             var started = DateTime.UtcNow;
             try
@@ -233,8 +237,9 @@ public static class Probe
                 {
                     Console.WriteLine($"    TMCC の TSID  {string.Join(" ", streams.Select((tsid, relative) => $"{relative}:{tsid}"))}");
                 }
+                if (it930x.CableFrequency is { } locked) Console.WriteLine($"    受けた周波数 {locked} Hz");
             }
-            Measure(tuner.Output, name, decode ? new Descrambler(source) : null, seconds);
+            Measure(tuner.Output, name, descramble ? new Descrambler(source) : null, seconds);
             // IT930x の機材は C/N と強度も出す (受け終えたあとの値)
             if (tuner is It930xTuner receiver && tuner.Signal() is { } signal)
             {
@@ -242,6 +247,11 @@ public static class Probe
                 var strength = signal.StrengthDbm is { } dbm ? $"{dbm:F1} dBm (目安)"
                     : receiver.SatelliteLevelDb is { } db ? $"{db:F1} dB (仕様書の式。dBm かは未確認)" : "-";
                 Console.WriteLine($"    {(signal.Locked ? "ロック中" : "ロックしていない")}  C/N {(signal.Cn is { } cn ? $"{cn:F1} dB" : "-")}  強度 {strength}");
+                // J.83B は変調と PER も出す (PER は J.83B で値が正しいかを確かめていない)
+                if (tuning.Cable)
+                {
+                    Console.WriteLine($"    変調 {receiver.CableModulation ?? "-"}  PER {(receiver.CablePer is { } per ? $"{per:G3} (未確認の値)" : "-")}");
+                }
             }
         }
 

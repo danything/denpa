@@ -7,7 +7,7 @@ namespace Denpa.Agent;
  *
  * ブリッジ (It930xBridge.cs)、受信機ごとに TS を分ける層 (It930xTs.cs)、復調器とチューナー (Cxd2856.cs・Cxd2858.cs)、
  * 機材とチューナー (It930xDevice.cs)、実機で試す入口 (It930xProbe.cs の --it930x-probe と、Probe.cs の --tune it930x:… と --card it930x:…) がある。
- * いまは地上波と衛星と内蔵カードリーダー (It930xCard.cs)。設定の device に it930x:<USB のポート>:<受信機> と書いたときだけエージェントが持ち、自動検出は px4d のまま (持ち主の決まりは下の Claim)。
+ * いまは地上波と衛星と J.83B (スカパー！プレミアムサービス光。種別は SKY) と内蔵カードリーダー (It930xCard.cs)。設定の device に it930x:<USB のポート>:<受信機> と書いたときだけエージェントが持ち、自動検出は px4d のまま (持ち主の決まりは下の Claim)。
  * 受信機ごとの割り当ては仕様書 (denpa-spec の mlt5/spec.md) の 1.2 から。
  */
 
@@ -59,6 +59,12 @@ public static class It930x
         new(0x0511, 0x024E, "PLEX PX-MLT5PE", Mlt5pe),
         new(0x0511, 0x924E, "e-Better DTV02A-5TS-P", Mlt5pe),
     ];
+
+    /// <summary>
+    /// 受信機が受けられる種別 (<c>GET /denpa/tuners</c> の <c>receivable</c>)。どの受信機も ISDB-T・ISDB-S・J.83B を受けられる (仕様書 1.2)。
+    /// <c>SKY</c> (スカパー！プレミアムサービス光) を受けられるのは、いまはこの機材だけ
+    /// </summary>
+    public static readonly IReadOnlyList<string> Types = ["GR", "BS", "CS", ChannelTable.Sky];
 
     /// <summary>機材をまとめて呼ぶ名前 (見つからないときの文言)</summary>
     public const string Model = "IT930x の機材 (PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P)";

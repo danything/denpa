@@ -364,6 +364,106 @@ public class It930xDeviceTests
     }
 
     [Test]
+    public async Task J83B_は_SKY_の名前で選局し_初めてのときに全受信機を整合を保つ設定にする()
+    {
+        var (usb, bus1, bus3) = Fake();
+        var clock = new FakeClock();
+        var ground = new It930xTuner("test 1", 1, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12"));
+        var cable = new It930xTuner("test 0", 0, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12"), "15v");
+        try
+        {
+            // 受信機 1 は地上波で動作中
+            ground.Tune(ChannelTable.Parse("T27")!);
+            cable.Tune(ChannelTable.Parse("H40")!);
+            await Assert.That(cable.Tuned).IsTrue();
+            await Assert.That(cable.CableFrequency).IsEqualTo(346_750_000u);
+            await Assert.That(bus3.Log).Contains("65 X 17=08");
+            await Assert.That(cable.Signal()!.Locked).IsTrue();
+            // J.83B は衛星ではないので、LNB の給電は要求しない
+            await Assert.That(LnbWrites(usb)).IsEmpty();
+
+            // まだ使っていない受信機 2・3・4 は、整合を保つ設定で初期化して待機させる (仕様書 4.7。初期化の手順 2 が 02)
+            await Assert.That(bus1.Log).Contains("64 U 67=02");
+            await Assert.That(bus3.Log).Contains("6C U 67=02");
+            await Assert.That(bus3.Log).Contains("64 U 67=02");
+            // 選局する受信機 0 と、動作中の受信機 1 は初期化し直さない
+            await Assert.That(bus3.Log.Count(line => line == "65 X 10=01")).IsEqualTo(1);
+            await Assert.That(bus1.Log.Count(line => line == "6C X 10=01")).IsEqualTo(1);
+            // 動作中の受信機 1 は、止めるときに 67 の bit1 を立てる (仕様書 4.6)
+            ground.Dispose();
+            var stop = bus1.Log.LastIndexOf("6C U 74=02");
+            await Assert.That(bus1.Log.Skip(stop).Take(3)).IsEquivalentTo(new[] { "6C U 74=02", "6C U 67?", "6C U 67=02" });
+
+            // 2 回目からは、ほかの受信機に触らない
+            var bus1Lines = bus1.Log.Count;
+            cable.Tune(ChannelTable.Parse("H41")!);
+            await Assert.That(bus1.Log.Count).IsEqualTo(bus1Lines);
+            await Assert.That(bus3.Log.Count(line => line.EndsWith(" X 10=01", StringComparison.Ordinal))).IsEqualTo(3);
+        }
+        finally
+        {
+            ground.Dispose();
+            cable.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task ずらして送られることがあるチャンネルは両方の周波数を試し_次はロックしたほうを先にする()
+    {
+        var (usb, _, bus3) = Fake();
+        var demod = bus3[0x65];
+        // H44 は 372750 kHz。ずらした 374950 kHz (+2.2 MHz) でだけロックする (仕様書 7.1)
+        demod.CableStatus = _ =>
+        {
+            var khz = demod.Tuner.GetValueOrDefault((byte)0x70) | (demod.Tuner.GetValueOrDefault((byte)0x71) << 8) | ((demod.Tuner.GetValueOrDefault((byte)0x72) & 0x0F) << 16);
+            return khz == 374950 ? (byte)0x01 : (byte)0x00;
+        };
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-13", new FakeClock()), () => It930xDevice.CloseIfIdle("9-13"));
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("H44")!);
+            await Assert.That(tuner.CableFrequency).IsEqualTo(374_950_000u);
+            await Assert.That(bus3.Log.Count(line => line.StartsWith("65 U 68=", StringComparison.Ordinal))).IsEqualTo(2);
+            // 次は、前にロックしたずらした周波数から試す
+            bus3.Log.Clear();
+            tuner.Tune(ChannelTable.Parse("H44")!);
+            await Assert.That(bus3.Log.Count(line => line.StartsWith("65 U 68=", StringComparison.Ordinal))).IsEqualTo(1);
+            await Assert.That(tuner.CableFrequency).IsEqualTo(374_950_000u);
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task J83B_がどちらの周波数でもロックしなければ同期しなかった文で失敗にする()
+    {
+        var (usb, _, bus3) = Fake();
+        bus3[0x65].CableStatus = _ => 0x00;
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-14", new FakeClock()), () => It930xDevice.CloseIfIdle("9-14"));
+        try
+        {
+            var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("H11")!));
+            await Assert.That(error.Message).IsEqualTo(ITuneDevice.SyncFailed);
+            await Assert.That(tuner.CableFrequency).IsNull();
+            await Assert.That(bus3.Log.Count(line => line.StartsWith("65 U 68=", StringComparison.Ordinal))).IsEqualTo(2);
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task 設定の_it930x_の受信機は地上波と衛星と_SKY_を受けられる()
+    {
+        await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:0")).IsEquivalentTo(new[] { "GR", "BS", "CS", "SKY" });
+        // 形式が違えば it930x: の受信機として扱わない
+        await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:9")).IsNull();
+    }
+
+    [Test]
     public async Task 周波数は_kHz_に丸めて渡す()
     {
         // T13 は 473,142,857 Hz → 473,143 kHz (仕様書 5.1 の 473143 + (N - 13) × 6000)

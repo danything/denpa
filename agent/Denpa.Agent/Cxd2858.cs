@@ -5,7 +5,7 @@ namespace Denpa.Agent;
  *
  * クリーンルームで、仕様書 (denpa-spec の mlt5/spec.md。PLEX MLT5 系の CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
  * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は仕様書の節の番号で、表の値と順はその節の表のまま持つ。
- * 仕様書に無くて決めた所は「仕様書に無い」と書いてある。いまは地上波 (ISDB-T) と衛星 (ISDB-S) の分で、J.83B はまだ無い。
+ * 仕様書に無くて決めた所は「仕様書に無い」と書いてある。地上波 (ISDB-T)・衛星 (ISDB-S)・J.83B (スカパー！プレミアムサービス光) の分がある。
  */
 
 /// <summary>チューナーの状態 (仕様書 4.1)。J.83B は地上波側を使う</summary>
@@ -44,11 +44,19 @@ internal sealed class Cxd2858(CxdLink link)
     /// <summary>いまの状態 (仕様書 4.1)</summary>
     public Cxd2858Side Side { get; private set; }
 
-    /// <summary>仕様書 4.2 の手順 1〜8 (手順 9 の読みの前まで)</summary>
-    internal static readonly CxdRow[] InitHead =
+    /// <summary>
+    /// 待機中の地上波の RF 入力の整合を保つ設定 (仕様書 4.7)。地上波・ケーブルの RF 入力を全チューナーに分配している機材で、
+    /// あるチューナーが待機と動作を切り替えると、隣の受信機の 256QAM に誤りが出たため。J.83B を初めて選局したときに機材の全受信機で立てる (<see cref="It930xDevice.KeepMatching"/>)。
+    /// 立てると、待機にする書き込み (初期化の手順 2・地上波側の停止の手順 2・衛星側の停止のあと) で <c>67</c> の bit1 を立てる。
+    /// 選局の書き込み (仕様書 4.3・4.5 の手順 7) は、どちらでも bit1 を 0 にする
+    /// </summary>
+    public bool KeepMatching { get; set; }
+
+    /// <summary>仕様書 4.2 の手順 1〜8 (手順 9 の読みの前まで)。手順 2 は整合を保つ設定 (仕様書 4.7) なら <c>02</c></summary>
+    internal static CxdRow[] InitHead(bool keepMatching) =>
     [
         CxdRow.W(U, 0x01, 0x00),
-        CxdRow.W(U, 0x67, 0x00),
+        CxdRow.W(U, 0x67, (byte)(keepMatching ? 0x02 : 0x00)),
         CxdRow.W(U, 0x43, 0x07),
         CxdRow.B(U, 0x5E, 0x15, 0x00, 0x00),
         CxdRow.W(U, 0x0C, 0x14),
@@ -74,7 +82,7 @@ internal sealed class Cxd2858(CxdLink link)
     public void Init()
     {
         Side = Cxd2858Side.Stopped;
-        link.Run(InitHead);
+        link.Run(InitHead(KeepMatching));
         var cpu = link.Read(U, 0x1A, 1)[0];
         if (cpu != 0) throw new IOException($"チューナー (CXD2858ER) の初期化に失敗しました (CPU の状態 0x{cpu:X2})");
         link.Run([CxdRow.B(U, 0x17, 0x90, 0x06) with { WaitMs = 1 }]);
@@ -94,6 +102,19 @@ internal sealed class Cxd2858(CxdLink link)
         // 書き始めたら動作中とみなす (途中で失敗しても、使い終えたときに止める書き込みを送れるように。仕様書に無い)
         Side = Cxd2858Side.Terrestrial;
         link.Run(TerrestrialRows(khz));
+    }
+
+    /// <summary>
+    /// J.83B の周波数を設定する (仕様書 4.5)。<paramref name="khz"/> は中心周波数の kHz (仕様書 7.1)。並びは地上波 (仕様書 4.3) と同じで、手順 4・6・8 の値だけが違う。
+    /// 手順 8 のあと 50 ms 待つ。J.83B も地上波側を使うので、地上波側のままなら止めずに書き、衛星側で動作中なら先に衛星側を止める (仕様書 10.2)
+    /// </summary>
+    public void TuneCable(uint khz)
+    {
+        if (khz > MaxTerrestrialKhz) throw new IOException($"J.83B の周波数は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");
+        if (Side == Cxd2858Side.Satellite) StopSatellite();
+        // 書き始めたら動作中とみなす (地上波と同じ。仕様書に無い)
+        Side = Cxd2858Side.Terrestrial;
+        link.Run(CableRows(khz));
     }
 
     /// <summary>
@@ -146,17 +167,36 @@ internal sealed class Cxd2858(CxdLink link)
         CxdRow.W(U, 0x87, 0xC0),
     ];
 
-    /// <summary>地上波側の停止 (仕様書 4.6)。整合を保つ設定 (仕様書 4.7) は使わないので、<c>67</c> は 0</summary>
-    internal static readonly CxdRow[] StopTerrestrialRows =
+    /// <summary>
+    /// 仕様書 4.5 の手順 1〜10 (周波数を埋めたもの)。4.3 と違うのは、手順 4 (ケーブル用の <c>16 26</c>)、
+    /// 手順 6 (基準の分周 <c>10</c> とループフィルタの値 <c>1C 78 08 1C</c>)、手順 8 (IF の帯域通過フィルタの利得 4 など) だけ
+    /// </summary>
+    internal static CxdRow[] CableRows(uint khz) =>
+    [
+        CxdRow.W(U, 0x01, 0x00),
+        CxdRow.W(U, 0x74, 0x02),
+        CxdRow.B(U, 0x87, 0xC4, 0x40),
+        CxdRow.B(U, 0x91, 0x16, 0x26),
+        CxdRow.B(U, 0x9C, 0x00, 0x00),
+        CxdRow.B(U, 0x5E, 0xEE, 0x02, 0x1E, 0x67, 0x10, 0x1C, 0x78, 0x08, 0x1C),
+        CxdRow.W(U, 0x67, 0x00, mask: 0x02),
+        CxdRow.B(U, 0x68, 0x00, 0x84, 0x00, 0x02, 0x21, 0x00, 0x1B, 0x02,
+            (byte)khz, (byte)(khz >> 8), (byte)((khz >> 16) & 0x0F), 0xFF, 0x01, 0xD9, 0x0F, 0x24, 0x87) with { WaitMs = 50 },
+        CxdRow.W(U, 0x88, 0x00),
+        CxdRow.W(U, 0x87, 0xC0),
+    ];
+
+    /// <summary>地上波側の停止 (仕様書 4.6)。手順 2 の <c>67</c> は、整合を保つ設定 (仕様書 4.7) なら <c>02</c>、そうでなければ <c>00</c> (bit0 は残す)</summary>
+    internal static CxdRow[] StopTerrestrialRows(bool keepMatching) =>
     [
         CxdRow.W(U, 0x74, 0x02),
-        CxdRow.W(U, 0x67, 0x00, mask: 0xFE),
+        CxdRow.W(U, 0x67, (byte)(keepMatching ? 0x02 : 0x00), mask: 0xFE),
         CxdRow.B(U, 0x5E, 0x15, 0x00, 0x00),
         CxdRow.W(U, 0x88, 0x00),
         CxdRow.W(U, 0x87, 0xC0),
     ];
 
-    /// <summary>衛星側の停止 (仕様書 4.6)。整合を保つ設定 (仕様書 4.7) は使わないので、そのあとの <c>67</c> は書かない</summary>
+    /// <summary>衛星側の停止 (仕様書 4.6)。整合を保つ設定 (仕様書 4.7) のときは、このあとに <see cref="KeepMatchingRow"/> を書く</summary>
     internal static readonly CxdRow[] StopSatelliteRows =
     [
         CxdRow.W(U, 0x15, 0x02),
@@ -166,6 +206,9 @@ internal sealed class Cxd2858(CxdLink link)
         CxdRow.W(U, 0x05, 0x00),
         CxdRow.W(U, 0x04, 0xC0),
     ];
+
+    /// <summary>整合を保つ設定 (仕様書 4.7) のときに、衛星側の停止のあとに書く行 (<c>67</c> を <c>02</c>・マスク <c>02</c>。仕様書 4.6)</summary>
+    internal static readonly CxdRow KeepMatchingRow = CxdRow.W(U, 0x67, 0x02, mask: 0x02);
 
     /// <summary>止める (動作中の側だけを書く。止まっていれば何もしない。仕様書 4.6)</summary>
     public void Stop()
@@ -183,13 +226,14 @@ internal sealed class Cxd2858(CxdLink link)
 
     private void StopTerrestrial()
     {
-        link.Run(StopTerrestrialRows);
+        link.Run(StopTerrestrialRows(KeepMatching));
         Side = Cxd2858Side.Stopped;
     }
 
     private void StopSatellite()
     {
         link.Run(StopSatelliteRows);
+        if (KeepMatching) link.Run([KeepMatchingRow]);
         Side = Cxd2858Side.Stopped;
     }
 
@@ -214,7 +258,7 @@ internal sealed class Cxd2858(CxdLink link)
     private static readonly int[] GainTable = [0, 0, 0, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 20, 20];
 
     /// <summary>
-    /// 入力のレベル (dBm × 100。仕様書 8.6 の計算)。<paramref name="correction"/> は方式の補正 (dB × 100。ISDB-T は -450)。
+    /// 入力のレベル (dBm × 100。仕様書 8.6 の計算)。<paramref name="correction"/> は方式の補正 (dB × 100。ISDB-T は -450、J.83B は -150)。
     /// 整数の割り算は仕様書の式のまま (式の中の足し算で四捨五入になっている)
     /// </summary>
     public static int InputLevel(byte ifAgc, byte rfAgc, int gain, uint khz, int correction)

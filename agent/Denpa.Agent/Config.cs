@@ -247,6 +247,7 @@ public sealed class Config(string tunersFile, string channelsFile)
         "GR" => 0,
         "BS" => 1,
         "CS" => 2,
+        ChannelTable.Sky => 3,
         _ => 9,
     };
 

@@ -289,6 +289,9 @@ public sealed class TunerPool(
                     {
                         var tuning = ChannelTable.Parse(channel)
                             ?? throw new IOException($"{channel} は選局表にありません");
+                        // J.83B を選局できるのは IT930x の機材だけ (ほかの機材は ISDB の選局として扱ってしまう)
+                        if (tuning.Cable && held.Device is not It930xTuner)
+                            throw new IOException($"{channel} (J.83B) を選局できるのは {It930x.Scheme} の受信機だけです");
                         // 途中で落ちたら「どこにも合っていない」。次は必ず選局し直す
                         held.Channel = null;
                         held.Device.Tune(tuning);
@@ -374,7 +377,7 @@ public sealed class TunerPool(
     /// <item><c>asicen:&lt;USB ポート&gt;:&lt;受信機&gt;</c> … asicen-userland の機材 (Asicen.cs。試験的)</item>
     /// <item><c>zd1j:&lt;USB のポート&gt;</c> … Sony CECH-ZD1 J (Zd1j.cs)。エージェントが USB を直に持つ (Linux・Windows・macOS)</item>
     /// <item><c>dt295:&lt;USB のポート&gt;</c> … PIXELA PIX-DT295 (Dt295NativeTuner.cs)。エージェントが USB を直に持ち、機材のレジスタを直に書いて動かす</item>
-    /// <item><c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c> … IT930x の機材 (PX-MLT5U など。It930xDevice.cs)。エージェントが USB を直に持つ。地上波と衛星 (LNB の給電は 15V だけ)</item>
+    /// <item><c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c> … IT930x の機材 (PX-MLT5U など。It930xDevice.cs)。エージェントが USB を直に持つ。地上波と衛星 (LNB の給電は 15V だけ) と J.83B (SKY)</item>
     /// </list>
     ///
     /// <para>それ以外は投げる。<c>px4_drv</c> の chardev はもう受け取らない</para>
@@ -683,7 +686,7 @@ public sealed class TunerPool(
                     ["rank"] = ranks[index],
                     ["name"] = spec.Name,
                     ["types"] = Json.Strings(spec.Types),
-                    // 機材が受けられる種別 (見つけていない機材は null)。denpa はこれに無い種別を設定で選ばせない (DeviceProbe.Receivable)
+                    // 機材が受けられる種別 (見つけていない機材は null。設定の it930x: は GR・BS・CS・SKY)。denpa はこれに無い種別を設定で選ばせない (DeviceProbe.Receivable)
                     ["receivable"] = DeviceProbe.Receivable(spec.Device) is { } receivable ? Json.Strings(receivable) : null,
                     ["disabled"] = spec.Disabled,
                     // 画面がそのまま編集できるように、定義もいっしょに返す
@@ -1054,7 +1057,11 @@ internal sealed class Lease(int tuner, string type, string channel)
     {
         // 選局の時計を渡す。バッファの内訳 (PAT・PMT・ECM) が選局の内訳と同じ物差しで並ぶ
         // 契約の更新 (EMM) は、どの用途の選局でもカードに渡す (Emm.cs)
-        var b25 = new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared);
+        /*
+         * **スカパー！プレミアム (SKY) はスクランブルされたまま流す。** B-CAS ではない専用のカードで、まだ扱っていない。
+         * Descrambler に通すと B-CAS のカードに ECM と EMM を渡してしまうので、通さない
+         */
+        var b25 = Type == ChannelTable.Sky ? null : new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared);
         _descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         var pushed = false;
@@ -1065,9 +1072,12 @@ internal sealed class Lease(int tuner, string type, string channel)
             {
                 pushed = true;
                 string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
-                Log.Write($"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
-                    + $"最初の TS {At(_firstReadMs)} / {b25.HeldAt()} / 送り出し {Clock.ElapsedMilliseconds}ms / {b25.CardUse()}"
-                    + (b25.Undecodable > 0 ? $" (スクランブルされたまま {b25.Undecodable} パケット)" : ""));
+                Log.Write(b25 is null
+                    ? $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
+                        + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms / 復号しない (スカパー！プレミアム)"
+                    : $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
+                        + $"最初の TS {At(_firstReadMs)} / {b25.HeldAt()} / 送り出し {Clock.ElapsedMilliseconds}ms / {b25.CardUse()}"
+                        + (b25.Undecodable > 0 ? $" (スクランブルされたまま {b25.Undecodable} パケット)" : ""));
             }
             Broadcast(decoded.WrittenSpan.ToArray());
             decoded.ResetWrittenCount();
@@ -1082,7 +1092,8 @@ internal sealed class Lease(int tuner, string type, string channel)
                     Interlocked.Add(ref _queued, -chunk.Length);
                     try
                     {
-                        b25.Decode(chunk.Rented.AsSpan(0, chunk.Length), decoded);
+                        if (b25 is null) decoded.Write(chunk.Rented.AsSpan(0, chunk.Length));
+                        else b25.Decode(chunk.Rented.AsSpan(0, chunk.Length), decoded);
                     }
                     finally
                     {
@@ -1093,7 +1104,7 @@ internal sealed class Lease(int tuner, string type, string channel)
             }
             if (!_stopped)
             {
-                b25.Flush(decoded);
+                b25?.Flush(decoded);
                 Push();
             }
         }
@@ -1107,7 +1118,7 @@ internal sealed class Lease(int tuner, string type, string channel)
          * **復号できなかったぶんを残す。** スクランブルされたまま流したものは、録画が
          * 成功したように見えて中身が見られない。理由も添える
          */
-        if (b25.Undecodable > 0)
+        if (b25 is { Undecodable: > 0 })
         {
             Log.Write($"[{Tuner}] {Channel}: {b25.Undecodable} パケットをスクランブルされたまま流しました"
                 + (b25.LastError is { } why ? $" ({why})" : ""));

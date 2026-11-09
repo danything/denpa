@@ -274,4 +274,22 @@ public class TunerPoolTests
             await Assert.That(tuner.UsedAfterClose).IsEqualTo(0).Because(tuner.Path);
         }
     }
+
+    [Test]
+    public async Task J83B_は_IT930x_の機材のほかでは選局せずに断る()
+    {
+        await Task.Yield();
+        // 種別に SKY を入れても、IT930x の機材でなければ ISDB の選局として渡さない
+        var rig = new Rig([new TunerSpec("A", ["SKY"], false, "fake:a")], TimeSpan.Zero, TimeSpan.FromMilliseconds(10));
+        try
+        {
+            var error = Assert.Throws<IOException>(() => rig.Pool.Open(ChannelTable.Sky, "H40", 3, "scan H40"));
+            await Assert.That(error.Message).Contains("it930x: の受信機だけ");
+            await Assert.That(rig.Opened("fake:a").Single().Tunes).IsEqualTo(0);
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
 }

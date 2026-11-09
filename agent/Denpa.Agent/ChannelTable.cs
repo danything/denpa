@@ -4,8 +4,8 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 選局表。**チャンネル名を周波数に直す。** 値は <a href="https://github.com/kazuki0824/recisdb-rs">recisdb-rs</a> の
-/// <c>channels.rs</c> と <c>dvbv5_channels_isdbs.conf</c> から取った。**地上波は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、
-/// 同期しないだけ)。docs/agent.md「選局表」
+/// <c>channels.rs</c> と <c>dvbv5_channels_isdbs.conf</c> から取った (J.83B の <c>H01</c>〜<c>H105</c> だけは MLT5 系の仕様書 7.1 から)。
+/// **地上波と J.83B は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、同期しないだけ)。docs/agent.md「選局表」
 ///
 /// <para>
 /// **衛星は名前だけで選局できる。** 名前に中継器と TSID が入っている (<c>BS15:16625</c>)。中継器の周波数は規格で
@@ -21,15 +21,21 @@ public static class ChannelTable
     /// <summary>`linux/dvb/frontend.h` の <c>SYS_ISDBS</c></summary>
     public const int SysIsdbs = 9;
 
+    /// <summary>`linux/dvb/frontend.h` の <c>SYS_DVBC_ANNEX_B</c> (J.83 Annex B。スカパー！プレミアムサービス光)</summary>
+    public const int SysDvbcAnnexB = 3;
+
+    /// <summary>スカパー！プレミアムサービス光 (J.83B) の種別。サーバの <c>ChannelType</c> の <c>SKY</c></summary>
+    public const string Sky = "SKY";
+
     /// <summary>TS を選り分けない (<c>NO_STREAM_ID_FILTER</c>)</summary>
     public const uint NoStreamId = ~0U;
 
     /// <summary>
     /// 1 つの物理チャンネルを選局するのに要るもの、全部。
     /// </summary>
-    /// <param name="Type">denpa の種別 (GR / BS / CS)</param>
-    /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/>)</param>
-    /// <param name="Frequency">**地上波は Hz、衛星は kHz**</param>
+    /// <param name="Type">denpa の種別 (GR / BS / CS / SKY)</param>
+    /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/> / <see cref="SysDvbcAnnexB"/>)</param>
+    /// <param name="Frequency">**地上波と J.83B は Hz、衛星は kHz**</param>
     /// <param name="StreamId">
     /// 復調器に渡す TSID。BS で名前に TSID があるときだけ入る。無ければ <see cref="NoStreamId"/> (選り分けない) で、
     /// その中継器の先頭の TS が来る (NIT を読む入口の <c>BS15</c> はこれ)
@@ -38,16 +44,24 @@ public static class ChannelTable
     /// 受ける番組の番組番号 (service_id)。名前に <c>/152</c> のように付いているときだけ入る。無ければ null。
     /// いまはどの機材も番組を選り分けず、TS をまるごと流す
     /// </param>
-    public sealed record Tuning(string Type, int Delivery, uint Frequency, uint StreamId, int? ServiceId = null)
+    /// <param name="ShiftedFrequency">
+    /// J.83B で、地域によってずらして送られることがあるチャンネルの、ずらした周波数 (Hz)。ほかは null。
+    /// どちらで送られているかは選局するまで分からないので、受ける側が両方を試す (<see cref="It930xTuner"/>)
+    /// </param>
+    public sealed record Tuning(string Type, int Delivery, uint Frequency, uint StreamId, int? ServiceId = null, uint? ShiftedFrequency = null)
     {
         public bool Satellite => Delivery == SysIsdbs;
+
+        /// <summary>J.83B (スカパー！プレミアムサービス光)</summary>
+        public bool Cable => Delivery == SysDvbcAnnexB;
     }
 
     /// <summary>
     /// チャンネル名を読む。**読めなければ null。**
     ///
     /// <para>
-    /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (CATV) / <c>BS01</c>–<c>BS23</c> / <c>CS02</c>–<c>CS24</c>。
+    /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (CATV) / <c>BS01</c>–<c>BS23</c> / <c>CS02</c>–<c>CS24</c> /
+    /// <c>H01</c>–<c>H105</c> (スカパー！プレミアムサービス光。J.83B)。
     /// 衛星は <c>:TSID</c> を付けて TS を指す (<c>BS15:16625</c>)。付けなければ中継器の先頭の TS。
     /// 衛星は BS が奇数、CS が偶数で、**BS-7 と BS-17 だけは受け取らない。**
     /// あそこは 4K/8K (ISDB-S3) で、この構成のチューナーでは復調できない。
@@ -72,6 +86,25 @@ public static class ChannelTable
             if (!Number(name[1..], out var channel) || channel is < 13 or > 63) return null;
             var center = channel <= 22 ? 111000000 + (channel - 13) * 6000000 : 225000000 + (channel - 23) * 6000000;
             return new Tuning("GR", SysIsdbt, (uint)(center + 142857), NoStreamId);
+        }
+
+        if (name.StartsWith("H", StringComparison.Ordinal))
+        {
+            /*
+             * スカパー！プレミアムサービス光 (J.83B)。93.25 MHz から 6.5 MHz おきに H01〜H105 (769.25 MHz まで) の中心周波数で、
+             * CATV と違って 1/7 MHz はずらさない (仕様書 7.1。Digital Devices のドライバーの表と同じとされる並び)。
+             * 地域によってずらして送られるもの (H11〜H12 は +1 MHz、H26〜H28 は +4 MHz、H44 は +2.2 MHz) は、ずらした周波数も持つ
+             */
+            if (!Number(name[1..], out var channel) || channel is < 1 or > 105) return null;
+            var shift = channel switch
+            {
+                11 or 12 => 1_000_000u,
+                >= 26 and <= 28 => 4_000_000u,
+                44 => 2_200_000u,
+                _ => 0u,
+            };
+            var center = (uint)(93_250_000 + (channel - 1) * 6_500_000);
+            return new Tuning(Sky, SysDvbcAnnexB, center, NoStreamId, ShiftedFrequency: shift == 0 ? null : center + shift);
         }
 
         if (name.StartsWith("BS", StringComparison.Ordinal))
