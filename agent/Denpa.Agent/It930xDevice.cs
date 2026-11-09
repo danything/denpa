@@ -48,6 +48,9 @@ public sealed class It930xDevice
     private bool _closed;
     private volatile bool _faulted;
 
+    /// <summary>待機中の地上波の RF 入力の整合を保つ設定にしたか (仕様書 4.7。<see cref="KeepMatching"/>)。電源を切るまで (この機材を閉じるまで) 立てたまま</summary>
+    private volatile bool _matching;
+
     public string Port { get; }
     public It930xModel Model { get; }
     public It930xBridge Bridge { get; }
@@ -218,6 +221,8 @@ public sealed class It930xDevice
             var frontend = new Cxd2856Frontend(new It930xI2cBus(Bridge, wiring.I2cBus), _buses[wiring.I2cBus], wiring.DemodAddress, _sleep, _nowMs);
             try
             {
+                // 整合を保つ設定にしたあとに初めて使う受信機は、その設定で初期化する (仕様書 4.7)
+                if (_matching) frontend.KeepMatching(standby: false);
                 frontend.Init();
             }
             catch (IOException error)
@@ -227,6 +232,40 @@ public sealed class It930xDevice
             }
             Log.Write($"[{Label}] 受信機 {receiver} を初期化しました (復調器 0x{frontend.ChipId:X2})");
             return _frontends[receiver] = frontend;
+        }
+    }
+
+    /// <summary>
+    /// 待機中の地上波の RF 入力の整合を保つ設定を、機材の全受信機で立てる (仕様書 4.7)。電源を入れてから最初に J.83B を選局するときに、
+    /// その受信機 (<paramref name="receiver"/>) のチューナーが呼ぶ。2 回目からは何もしない。
+    /// 地上波・ケーブルの RF 入力は全チューナーに分配しているので、あるチューナーが待機と動作を切り替えると隣の受信機の 256QAM に誤りが出たため。
+    /// 閉じている受信機 (スリープか、まだ使っていない) は初期化し直して待機させ、動作中の受信機は設定だけを立てて止めるときに書く。
+    /// 選局する受信機は、このあと動作させるので初期化し直さない。ほかの受信機の失敗は記録に出して続ける (その受信機は次の選局でもう一度初期化する)
+    /// </summary>
+    public void KeepMatching(int receiver)
+    {
+        lock (_gate)
+        {
+            if (_matching) return;
+            _matching = true;
+        }
+        Log.Write($"[{Label}] J.83B を選局するので、全受信機を待機中の RF 入力の整合を保つ設定にします");
+        foreach (var other in Model.Receivers.Select(item => item.Index))
+        {
+            try
+            {
+                lock (_receiverGates[other])
+                {
+                    // まだ使っていない受信機は、整合を保つ設定で初期化して待機させる (Frontend の中で設定を立てる)
+                    if (_frontends[other] is { } frontend) frontend.KeepMatching(standby: other != receiver);
+                    else Frontend(other);
+                }
+            }
+            catch (IOException error)
+            {
+                Fail(error);
+                Log.Write($"[{Label}] 受信機 {other} を整合を保つ設定にできませんでした ({error.Message})");
+            }
         }
     }
 
@@ -393,7 +432,8 @@ public sealed class It930xDevice
 }
 
 /// <summary>
-/// IT930x の機材の受信機 1 つ (設定の <c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c>)。地上波 (ISDB-T) と衛星 (ISDB-S) を同じ受信機で切り替えて選局する。
+/// IT930x の機材の受信機 1 つ (設定の <c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c>)。地上波 (ISDB-T)・衛星 (ISDB-S)・J.83B (スカパー！プレミアムサービス光) を同じ受信機で切り替えて選局する。
+/// J.83B の TS はスクランブルされたまま流す (スカパー！プレミアムのカードはまだ扱わない。<see cref="Lease"/> は B-CAS のカードに問い合わせない)。
 /// 機材 (<see cref="It930xDevice"/>) は最初の選局で取り、捨てるときに返す。
 /// 選局のたびに新しい出口 (<see cref="It930xTsOutput"/>。Pipe と DeviceStream) を作り、前の選局のパケットと混ぜない
 /// </summary>
@@ -510,6 +550,12 @@ public sealed class It930xTuner : ITuneDevice
                     // 衛星は選局表の周波数が IF の kHz (仕様書 6.1)
                     locked = _frontend.TuneIsdbs(tuning.Frequency, CxdStream.From(tuning.StreamId));
                 }
+                else if (tuning.Cable)
+                {
+                    _device.Lnb(_receiver, false);
+                    _device.KeepMatching(_receiver);
+                    locked = TuneCable(_frontend, tuning);
+                }
                 else
                 {
                     _device.Lnb(_receiver, false);
@@ -541,6 +587,41 @@ public sealed class It930xTuner : ITuneDevice
             }
         }
     }
+
+    /// <summary>
+    /// J.83B で、地域によってずらして送られることがあるチャンネル (<see cref="ChannelTable.Tuning.ShiftedFrequency"/>) の、最後にロックした周波数 (Hz)。
+    /// 選局表の周波数をキーにする。次の選局はこちらを先に試す (毎回 1 秒の時間切れを待たないため。仕様書に無い)
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, uint> CableLocked = new();
+
+    /// <summary>最後の J.83B の選局で受けた周波数 (Hz。<c>--tune</c> が出す)。J.83B でなければ null</summary>
+    public uint? CableFrequency { get; private set; }
+
+    /// <summary>
+    /// J.83B を選局する (仕様書 7.4)。ずらして送られることがあるチャンネル (仕様書 7.1) は、選局表の周波数とずらした周波数の両方を試し、
+    /// 前にロックしたほうを先にする。どちらもロックしなければ false
+    /// </summary>
+    private bool TuneCable(Cxd2856Frontend frontend, ChannelTable.Tuning tuning)
+    {
+        CableFrequency = null;
+        uint[] tries = tuning.ShiftedFrequency is { } shifted
+            ? CableLocked.TryGetValue(tuning.Frequency, out var last) && last == shifted ? [shifted, tuning.Frequency] : [tuning.Frequency, shifted]
+            : [tuning.Frequency];
+        foreach (var hertz in tries)
+        {
+            if (!frontend.TuneJ83b(Khz(hertz))) continue;
+            if (tuning.ShiftedFrequency is not null) CableLocked[tuning.Frequency] = hertz;
+            CableFrequency = hertz;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>最後の J.83B の選局で読んだ変調 (<c>256QAM</c> など。<see cref="Signal"/> を読んだあと)。<c>--tune</c> だけが出す</summary>
+    public string? CableModulation => _frontend?.CableModulation;
+
+    /// <summary>最後の J.83B の選局で読んだ PER (<see cref="Signal"/> を読んだあと。J.83B で値が正しいかは未確認)。<c>--tune</c> だけが出す</summary>
+    public double? CablePer => _frontend?.CablePer;
 
     /// <summary>流している TS を止める</summary>
     private void StopOutput()

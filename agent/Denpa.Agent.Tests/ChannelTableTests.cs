@@ -137,9 +137,49 @@ public class ChannelTableTests
     [Arguments("")]
     [Arguments("T")]
     [Arguments("SKY1")]
+    [Arguments("H00")]      // J.83B は H01 から
+    [Arguments("H106")]     // H105 まで
+    [Arguments("H")]
+    [Arguments("H40:1")]
     public async Task 受け取らない名前(string name)
     {
         await Assert.That(ChannelTable.Parse(name)).IsNull();
+    }
+
+    [Test]
+    public async Task J83B_は_H01_から_H105_の名前で_SKY_の選局になる()
+    {
+        // 93.25 MHz から 6.5 MHz おきの中心周波数 (仕様書 7.1)。地上波と同じく Hz で、1/7 MHz はずらさない
+        var h01 = ChannelTable.Parse("H01")!;
+        await Assert.That(h01.Type).IsEqualTo("SKY");
+        await Assert.That(h01.Delivery).IsEqualTo(ChannelTable.SysDvbcAnnexB);
+        await Assert.That(h01.Cable).IsTrue();
+        await Assert.That(h01.Satellite).IsFalse();
+        await Assert.That(h01.StreamId).IsEqualTo(ChannelTable.NoStreamId);
+        await Assert.That(h01.Frequency).IsEqualTo(93_250_000u);
+        await Assert.That(ChannelTable.Parse("H40")!.Frequency).IsEqualTo(346_750_000u);
+        await Assert.That(ChannelTable.Parse("H105")!.Frequency).IsEqualTo(769_250_000u);
+        // 0 詰めは無くてもよい
+        await Assert.That(ChannelTable.Parse("H1")).IsEqualTo(h01);
+        // ずらした周波数を持たないもの
+        await Assert.That(h01.ShiftedFrequency).IsNull();
+        foreach (var name in new[] { "H10", "H13", "H25", "H29", "H43", "H45" })
+            await Assert.That(ChannelTable.Parse(name)!.ShiftedFrequency).IsNull();
+    }
+
+    [Test]
+    [Arguments("H11", 158_250_000u, 159_250_000u)]  // +1 MHz
+    [Arguments("H12", 164_750_000u, 165_750_000u)]
+    [Arguments("H26", 255_750_000u, 259_750_000u)]  // +4 MHz
+    [Arguments("H27", 262_250_000u, 266_250_000u)]
+    [Arguments("H28", 268_750_000u, 272_750_000u)]
+    [Arguments("H44", 372_750_000u, 374_950_000u)]  // +2.2 MHz
+    public async Task 地域によってずらして送られるチャンネルはずらした周波数も持つ(string name, uint frequency, uint shifted)
+    {
+        // 仕様書 7.1。どちらで送られているかは選局してみるまで分からない
+        var tuning = ChannelTable.Parse(name)!;
+        await Assert.That(tuning.Frequency).IsEqualTo(frequency);
+        await Assert.That(tuning.ShiftedFrequency).IsEqualTo(shifted);
     }
 
     [Test]

@@ -34,6 +34,16 @@ internal sealed class FakeCxdReceiver(byte address)
 
     public int SatelliteStatusReads { get; private set; }
 
+    /// <summary>
+    /// J.83B の自動の探索の状態 (T のバンク 40 の 88。bit0 がロック。仕様書 7.5)。読むたびに呼ぶ (引数は読んだ回数)。既定はロックしている
+    /// </summary>
+    public Func<int, byte> CableStatus { get; set; } = _ => 0x01;
+
+    public int CableStatusReads { get; private set; }
+
+    /// <summary>J.83B の TS の状態 (T のバンク 40 の 10。bit5 が TS のロック。仕様書 7.5)。既定はロックしている</summary>
+    public byte CableTs { get; set; } = 0x20;
+
     /// <summary>T のレジスタ (バンク、番地)</summary>
     public Dictionary<(byte Bank, byte Register), byte> T { get; } = [];
 
@@ -50,6 +60,8 @@ internal sealed class FakeCxdReceiver(byte address)
         if (register == 0xFD) return ChipId;
         if (Bank == 0x60 && register == 0x10) return Status(++StatusReads);
         if (Bank == 0xA0 && register == 0x12) return SatelliteStatus(++SatelliteStatusReads);
+        if (Bank == 0x40 && register == 0x88) return CableStatus(++CableStatusReads);
+        if (Bank == 0x40 && register == 0x10) return CableTs;
         return T.GetValueOrDefault((Bank, register));
     }
 
