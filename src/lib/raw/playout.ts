@@ -24,7 +24,7 @@
  * ## 追っかけは放送の今を追わない (`follow`)
  *
  * 追っかけ (`RawEngine` の `chase`。互換モードと MPEG-2) は録画を観ているので、**溜まっても飛ばない**。
- * サーバは倍速で送り込んでくる (`server/chase.ts`) ので、溜まりは伸び続けるのが普通。
+ * サーバは倍速で送り込んでくる (`server/chase.ts`) ので、バッファは伸び続けるのが普通。
  * **止めて再開は止めた所から** (止めている間も届いたぶんは捨てない。溢れないようにするのは worker の側)。
  *
  * ## 録画も同じ決め方に、飛ぶ先と終わりを足す
@@ -46,9 +46,9 @@ import { CLOCK } from "@danything/arib/pes";
 export const LEAD = 0.05;
 /** 残りがこれを切ったら「使い切った」(秒) */
 export const DRY = 0.03;
-/** 溜まりがこれだけ `target` を超えたら飛ぶ (秒) */
+/** バッファがこれだけ `target` を超えたら飛ぶ (秒) */
 export const SLACK = 1;
-/** 飛ぶまでに溜まりすぎが続く時間 (秒)。**一瞬の塊では飛ばない** */
+/** 飛ぶまでにバッファが多すぎる状態が続く時間 (秒)。**一瞬の塊では飛ばない** */
 export const SLACK_FOR = 3;
 /** 終わりと言われてから、鳴らすものが 1 つも来ないまま終わりにするまで (秒。`finish`) */
 export const LAST_WAIT = 2;
@@ -90,7 +90,7 @@ export class Playout<T extends Chunk> {
   /** 鳴らしている間の対応: 時計の `base` 秒に PTS `origin` が鳴る */
   private base = 0;
   private origin = 0;
-  /** 溜まりすぎが始まった時刻 (時計の秒)。溜まりすぎでなければ NaN */
+  /** バッファが多すぎる状態が始まった時刻 (時計の秒)。多すぎなければ NaN */
   private overSince = Number.NaN;
 
   /** どれだけ貯めるか (秒)。呼ぶ側が決める (`pacing.nextTarget`) */

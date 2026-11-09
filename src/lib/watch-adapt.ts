@@ -107,7 +107,7 @@ export function watchAdapt(host: WatchAdaptHost): WatchAdapt {
         return;
       }
       const at = now();
-      // 止めていた間の溜まりの伸びを、回線のぶんとして読まない
+      // 止めていた間のバッファの伸びを、回線のぶんとして読まない
       if (idle) adapter.reset(at);
       idle = false;
       poll(s.paceId, at);

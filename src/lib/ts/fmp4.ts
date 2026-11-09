@@ -568,7 +568,7 @@ export function adtsHeader(
     ((channels & 0x03) << 6) | (length >> 11),
     (length >> 3) & 0xff,
     ((length & 0x07) << 5) | 0x1f,
-    0xfc, // 溜まり具合は「可変」(0x7ff)、1 つの ADTS に 1 コマ
+    0xfc, // バッファの具合は「可変」(0x7ff)、1 つの ADTS に 1 コマ
   );
 }
 

@@ -222,7 +222,7 @@ export type Notice =
     }
   | ({
       /**
-       * **送り出しの具合** (`#lib/rungs.ts` の `Pace`。`server/pace.ts`)。2 秒ごとか、塊を捨てた・溜まりが動いたときに来る。
+       * **送り出しの具合** (`#lib/rungs.ts` の `Pace`。`server/pace.ts`)。2 秒ごとか、塊を捨てた・バッファが動いたときに来る。
        * 回線が細いのか、サーバのエンコードが遅いのかを読み分けて段を決める (`adapt.ts`)
        */
       type: "pace";
