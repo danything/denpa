@@ -90,6 +90,9 @@ public sealed class It930xBridge
     /// <summary>送ったコマンドの数 (<c>--it930x-probe</c> が出す)</summary>
     public int Commands { get; private set; }
 
+    /// <summary>REBOOT を送ったことがある (そのあとの <see cref="UsbGoneException"/> は、USB がつなぎ直されたものとみなせる)</summary>
+    public bool RebootSent { get; private set; }
+
     /// <summary>
     /// コマンドを 1 つ送り、応答のデータ (<paramref name="replyLength"/> バイト) を返す。
     /// 時間切れ・壊れた応答・ブリッジのエラーは <see cref="It930xException"/>、抜けたら <see cref="UsbGoneException"/>
@@ -227,6 +230,7 @@ public sealed class It930xBridge
     public void Reboot()
     {
         lock (_gate) Send(It930xFrame.Boot, []);
+        RebootSent = true;
         _sleep(10);
         uint? version = null;
         It930xException? last = null;

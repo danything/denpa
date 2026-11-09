@@ -95,7 +95,7 @@ public static class It930xProbe
             {
                 boot = bridge.Start(code);
             }
-            catch (UsbGoneException)
+            catch (UsbGoneException) when (bridge.RebootSent)
             {
                 commands += bridge.Commands;
                 usb.Dispose();
