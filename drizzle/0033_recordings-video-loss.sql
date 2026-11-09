@@ -1,0 +1,1 @@
+ALTER TABLE `recordings` ADD `video_loss` text;

@@ -1,5 +1,11 @@
 import { clock, LOGO_OK, LOGO_UNUSABLE } from "../format";
-import { decideCm, type Range } from "../ts/cm-decide";
+import {
+  decideCm,
+  intersect,
+  missingVideo,
+  type Range,
+  totalLength,
+} from "../ts/cm-decide";
 import { OFF, ON } from "../ts/logo-detect";
 import type { CmMaterial } from "./cm-material";
 import { type Scan, scan, type ScanWant } from "./cm-scan";
@@ -33,16 +39,23 @@ export type { Range };
  */
 const MAX_CM_RATIO = 0.5;
 
-/** CM 判定が占める割合 (0〜1) */
-function cmShare(cm: Range[], duration: number): number {
-  if (!Number.isFinite(duration) || duration <= 0) return 0;
-  const total = cm.reduce((sum, range) => sum + (range.end - range.start), 0);
-  return total / duration;
+/**
+ * CM 判定が占める割合 (0〜1)。**映像の欠けた所 (`missing`) は分母にも分子にも入れない。** 欠けた所は CM か番組か決められない。
+ * 尺で割っていた頃は、途中から最後まで映像が欠けた録画で、欠けた所のぶん割合が上がっていた (`ts/cm-decide.missingVideo`)
+ */
+function cmShare(cm: Range[], duration: number, missing: Range[]): number {
+  const known = duration - totalLength(missing);
+  if (!Number.isFinite(known) || known <= 0) return 0;
+  return (totalLength(cm) - totalLength(intersect(cm, missing))) / known;
 }
 
 /** CM 判定が占める割合 (%。整数に丸める) */
-export function cmRatio(cm: Range[], duration: number): number {
-  return Math.round(cmShare(cm, duration) * 100);
+export function cmRatio(
+  cm: Range[],
+  duration: number,
+  missing: Range[] = [],
+): number {
+  return Math.round(cmShare(cm, duration, missing) * 100);
 }
 
 /**
@@ -50,8 +63,12 @@ export function cmRatio(cm: Range[], duration: number): number {
  *
  * ロゴを覚えたてのときなど、「先頭の 2 秒だけ本編」のような結果になることがある。
  */
-export function tooMuchCm(cm: Range[], duration: number): boolean {
-  return cmShare(cm, duration) >= MAX_CM_RATIO;
+export function tooMuchCm(
+  cm: Range[],
+  duration: number,
+  missing: Range[] = [],
+): boolean {
+  return cmShare(cm, duration, missing) >= MAX_CM_RATIO;
 }
 
 /** これより短い区間は作らない (チャプターが増えるだけで飛ばす役に立たない) */
@@ -658,6 +675,8 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
       : {}),
   };
   let why = material.why;
+  /** 映像の欠けた所。CM の割合に入れない (`cmShare`) */
+  const missing = missingVideo(times, duration);
   /** ロゴで決めた結果を捨てたときに、覚え書きの後ろへ足すもの (`logoDetail`) */
   let detail = "";
   if (material.logo !== null) {
@@ -671,8 +690,8 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
     });
     if (cm.length === 0) why = "ロゴの消えている所がありませんでした";
     // 番組の半分以上が CM になったら、その結果は捨てて尺だけで決め直す (tooMuchCm)
-    else if (tooMuchCm(cm, duration))
-      why = `番組の ${cmRatio(cm, duration)}% が CM と判定されたため、この結果は使いません`;
+    else if (tooMuchCm(cm, duration, missing))
+      why = `番組の ${cmRatio(cm, duration, missing)}% が CM と判定されたため、この結果は使いません`;
     else return { cm, duration, note: LOGO_OK };
     detail = logoDetail(material, cm);
   }
@@ -681,7 +700,7 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
   const cm = decideCm(input);
   // 落ちた理由まで書く。**この文言から「ロゴで判定できなかった」と画面に出すかを決める** (format.logoUnusable)
   return {
-    cm: tooMuchCm(cm, duration) ? [] : cm,
+    cm: tooMuchCm(cm, duration, missing) ? [] : cm,
     duration,
     note: `無音 ${material.silences.length} 箇所 (${LOGO_UNUSABLE}: ${why})${detail}`,
   };

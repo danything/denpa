@@ -1,5 +1,6 @@
 import type { CardReaderState } from "./server/scramble";
 import type { TunerSignal } from "./server/tuner";
+import type { VideoLoss } from "./types";
 
 export const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -136,6 +137,28 @@ export function clipNote(
   if (tail > 0) parts.push(`末尾 ${durationMs(tail)}`);
   if (parts.length === 0) return null;
   return `${parts.join("と")}が${done ? "欠けています" : "欠けます"} (チューナー不足)`;
+}
+
+/**
+ * 一覧に出す、映像が欠けた長さ (`recordings.video_loss`) の最短 (秒)。長さは分で出すので、1 分に満たないと
+ * 「30 分のうち 30 分」になって伝わらない
+ */
+const VIDEO_LOSS_MIN = 60;
+
+/**
+ * **元の TS に映像が無かった所の言い方。** 出すほどでなければ null。
+ * 映像が無いまま録画が終わったら「録画が途中で切れています」、途中だけなら「映像が途中で欠けています」。
+ * どちらも、映像があるはずだった長さのうち、映像が残っている長さを添える (「30 分のうち 19 分」)。
+ * 欠けた理由は書かない (サーバには分からない)
+ */
+export function videoLossNote(
+  loss: VideoLoss | null,
+): { label: string; detail: string } | null {
+  if (loss === null || loss.lost < VIDEO_LOSS_MIN) return null;
+  return {
+    label: loss.tail ? "録画が途中で切れています" : "映像が途中で欠けています",
+    detail: `${durationMs(loss.span * 1000)}のうち ${durationMs((loss.span - loss.lost) * 1000)}`,
+  };
 }
 
 /**

@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { logoUnusable } from "../format";
+import { LOGO_OK, logoUnusable } from "../format";
 import {
   chapterArgs,
   chapterMetadata,
   cmRatio,
+  decideFromMaterial,
   fields,
   firstFrameTime,
   invertRanges,
@@ -313,5 +314,98 @@ describe("中身のある音声だけを選ぶ", () => {
     expect(liveAudioIndexes('{"streams":[]}')).toEqual([]);
     expect(liveAudioIndexes("{}")).toEqual([]);
     expect(liveAudioIndexes('{"streams":[{}]}')).toEqual([]);
+  });
+});
+
+/**
+ * 本番の録画 562 (TBS の 30 分、1080i 29.97 コマ/秒) の形を合成したもの。尺は 1791.8 秒なのに、コマは 1130 秒 (18 分 50 秒) で止まり、
+ * その前にも 2〜3 秒ずつ欠けた所が散らばる。ロゴは本編で十分に当たっていて、区間は 40-129 151-490 539-775 783-949 1019-1043 秒
+ */
+describe("途中から映像が欠けた録画", () => {
+  const FPS = 29.97;
+  const DURATION = 1791.8;
+  const END = 1130;
+  const HOLES = [
+    [440, 442.5],
+    [800, 803],
+    [960, 962.5],
+    [1000, 1002],
+    [1120, 1123],
+  ] as const;
+  const SPANS = [
+    [40, 129],
+    [151, 490],
+    [539, 775],
+    [783, 949],
+    [1019, 1043],
+  ] as const;
+  /** CM の継ぎ目 (無音と強い切れ目)。無音は 1116 秒まで */
+  const JOINTS = [
+    10, 25, 40, 129, 144, 490, 505, 520, 535, 949, 964, 979, 994, 1009, 1043,
+    1058, 1073, 1088, 1103,
+  ];
+
+  function material(): CmMaterial {
+    const times: number[] = [];
+    for (let i = 0; i / FPS < END; i++) {
+      const t = i / FPS;
+      if (HOLES.some(([from, to]) => t > from && t < to)) continue;
+      times.push(t);
+    }
+    const cuts = new Float32Array(times.length);
+    const frameAt = (t: number) => {
+      const i = times.findIndex((x) => x >= t);
+      return i < 0 ? times.length - 1 : i;
+    };
+    for (const t of JOINTS) cuts[frameAt(t)] = 30;
+    const lit = (t: number) => SPANS.some(([from, to]) => t >= from && t < to);
+    return {
+      offset: 0,
+      duration: DURATION,
+      fps: FPS,
+      programLength: 1800,
+      programStart: 10,
+      silences: JOINTS.map((t) => ({ start: t - 0.5, end: t + 0.5 })),
+      times: Float64Array.from(times),
+      cuts,
+      logo: {
+        spans: SPANS.map(([from, to]) => ({
+          start: frameAt(from),
+          end: frameAt(to) - 1,
+        })),
+        scores: Float32Array.from(times, (t) => (lit(t) ? 0.75 : 0.02)),
+      },
+      why: "",
+    };
+  }
+
+  test("映像の無い 11 分を CM と数えず、ロゴの結果を使う", () => {
+    const found = decideFromMaterial(material());
+    expect(found.note).toBe(LOGO_OK);
+    expect(found.cm.length).toBeGreaterThan(0);
+    // 映像が止まった後ろは CM にしない
+    for (const range of found.cm) expect(range.end).toBeLessThanOrEqual(END);
+    // 本編 (ロゴの区間) は CM にしない
+    for (const range of found.cm)
+      for (const [from, to] of SPANS)
+        expect(
+          Math.min(range.end, to - 8) - Math.max(range.start, from + 8),
+        ).toBeLessThanOrEqual(0);
+  });
+
+  test("CM の割合は、映像の欠けた所を分母からも分子からも外して数える", () => {
+    const missing = [{ start: 1130, end: 1791.8 }];
+    const cm = [{ start: 1043, end: 1791.8 }];
+    // 欠けた所を入れると 42%、外すと 1043〜1130 の 87 秒 / 1130 秒で 8%
+    expect(cmRatio(cm, 1791.8)).toBe(42);
+    expect(cmRatio(cm, 1791.8, missing)).toBe(8);
+    expect(tooMuchCm([{ start: 0, end: 1000 }], 1791.8)).toBe(true);
+    expect(tooMuchCm([{ start: 0, end: 1000 }], 1791.8, missing)).toBe(true);
+    expect(tooMuchCm([{ start: 500, end: 1791.8 }], 1791.8, missing)).toBe(
+      true,
+    );
+    expect(tooMuchCm([{ start: 700, end: 1791.8 }], 1791.8, missing)).toBe(
+      false,
+    );
   });
 });
