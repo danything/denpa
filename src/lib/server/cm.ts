@@ -1,5 +1,6 @@
-import { LOGO_OK, LOGO_UNUSABLE } from "../format";
+import { clock, LOGO_OK, LOGO_UNUSABLE } from "../format";
 import { decideCm, type Range } from "../ts/cm-decide";
+import { OFF, ON } from "../ts/logo-detect";
 import type { CmMaterial } from "./cm-material";
 import { type Scan, scan, type ScanWant } from "./cm-scan";
 import { config } from "./config";
@@ -521,6 +522,7 @@ export async function openCm(
 
       // ロゴの区間を出す (覚えていたものが当たらなければ、覚え直して枠だけ読み直す)
       let lit: CmMaterial["logo"] = null;
+      let logoModel: string | undefined;
       if (current) {
         step("本編と CM に分けています");
         const result = await current.finish(
@@ -546,6 +548,7 @@ export async function openCm(
           if (result.learned !== null)
             share(serviceId, result.learned.file, result.learned.again);
           lit = { spans: result.spans, scores: result.scores };
+          logoModel = result.model;
         } else {
           why = `ロゴ判定に失敗: ${result.note}`;
         }
@@ -564,6 +567,7 @@ export async function openCm(
         times: Float64Array.from(found.times),
         cuts: Float32Array.from(found.cuts),
         logo: lit,
+        logoModel,
         why,
       };
       /*
@@ -575,6 +579,62 @@ export async function openCm(
       return { ...decideFromMaterial(material), ...(keep ? { material } : {}) };
     },
   };
+}
+
+/** 並びの中央値。空なら NaN */
+function median(values: number[]): number {
+  if (values.length === 0) return Number.NaN;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[sorted.length >> 1]!;
+}
+
+/**
+ * **ロゴで決めた結果を捨てたときに、ロゴがどう判定されていたかを覚え書きの後ろに足す。**
+ * サーバのログは pod を入れ替えると消え、元の TS も残らないことがあるので、ロゴを見落としたのか
+ * (本編なのに点が低い)、決め方がずれたのかを、覚え書きと録画の映像を突き合わせて分けられるようにする。
+ *
+ * - 当てた型の在り処と大きさ、ロゴが写っていたと判定したコマの割合
+ * - 点の分布 (出たとみなす `ON` 以上、消えたとみなす `OFF` 未満、その間)
+ * - ロゴで CM とした区間と、区間の中の点の中央値。本編なのに CM とした区間で点が `OFF` の近くまであれば、
+ *   ロゴは写っていたが届かなかった。0 近くなら、型がその番組のロゴと合っていない
+ *
+ * 時刻は材料の物差し (エンコードした動画の時刻との差は 1 秒未満)
+ */
+export function logoDetail(material: CmMaterial, cm: Range[]): string {
+  const { logo, times } = material;
+  if (logo === null) return "";
+  const { scores, spans } = logo;
+  const frames = scores.length;
+  const percent = (count: number) =>
+    `${Math.round((count / Math.max(1, frames)) * 100)}%`;
+  const lit = spans.reduce((sum, span) => sum + span.end - span.start + 1, 0);
+  let high = 0;
+  let low = 0;
+  for (const value of scores) {
+    if (value >= ON) high++;
+    else if (value < OFF) low++;
+  }
+  const model =
+    material.logoModel !== undefined && material.logoModel !== ""
+      ? `${material.logoModel}、`
+      : "";
+  const ranges = cm.map((range) => {
+    const inside: number[] = [];
+    for (let i = 0; i < Math.min(frames, times.length); i++)
+      if (times[i]! >= range.start && times[i]! < range.end)
+        inside.push(scores[i]!);
+    const middle = median(inside);
+    const point = Number.isNaN(middle) ? "" : ` (点 ${middle.toFixed(2)})`;
+    return `${clock(range.start)}〜${clock(range.end)}${point}`;
+  });
+  const between = frames - high - low;
+  const parts = [
+    `ロゴ: ${model}写っていたコマ ${percent(lit)}`,
+    `ロゴの点: ${ON} 以上 ${percent(high)}、${OFF}〜${ON} ${percent(between)}、${OFF} 未満 ${percent(low)}`,
+  ];
+  if (ranges.length > 0)
+    parts.push(`ロゴで CM とした区間: ${ranges.join("、")}`);
+  return `。${parts.join("。")}`;
 }
 
 /**
@@ -598,6 +658,8 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
       : {}),
   };
   let why = material.why;
+  /** ロゴで決めた結果を捨てたときに、覚え書きの後ろへ足すもの (`logoDetail`) */
+  let detail = "";
   if (material.logo !== null) {
     const cm = decideCm({
       ...input,
@@ -612,6 +674,7 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
     else if (tooMuchCm(cm, duration))
       why = `番組の ${cmRatio(cm, duration)}% が CM と判定されたため、この結果は使いません`;
     else return { cm, duration, note: LOGO_OK };
+    detail = logoDetail(material, cm);
   }
 
   // ロゴを使わずに、CM の尺 (15 秒の倍数) だけで決める
@@ -620,6 +683,6 @@ export function decideFromMaterial(material: CmMaterial): CmDetection {
   return {
     cm: tooMuchCm(cm, duration) ? [] : cm,
     duration,
-    note: `無音 ${material.silences.length} 箇所 (${LOGO_UNUSABLE}: ${why})`,
+    note: `無音 ${material.silences.length} 箇所 (${LOGO_UNUSABLE}: ${why})${detail}`,
   };
 }

@@ -38,6 +38,11 @@ export interface CmMaterial {
   cuts: Float32Array;
   /** ロゴ。使えなかったときは null で、理由が `why` */
   logo: { spans: Span[]; scores: Float32Array } | null;
+  /**
+   * 当てた型の在り処と大きさ (`logo-own` の `model`)。ロゴの結果を捨てたときの覚え書きに出す。
+   * 型は録画のたびに育つので、あとから置き場を見てもこの回に当てた型は分からない
+   */
+  logoModel?: string | undefined;
   why: string;
 }
 
