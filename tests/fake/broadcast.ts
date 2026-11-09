@@ -250,6 +250,12 @@ export function tsidOf(service: FakeService): number {
   return at < 0 ? service.networkId : Number(service.channel.slice(at + 1));
 }
 
+/**
+ * 衛星 (BS・CS) か。衛星は同じネットワークの全部の TS を NIT に載せる。
+ * スカパー！プレミアム (SKY) は地上波と同じく、自分の TS だけを載せる (実機の TS がまだ無いので、地上波に合わせた作り物)
+ */
+const isSatellite = (type: string) => type === "BS" || type === "CS";
+
 /** 衛星の中継器の周波数 (kHz)。BS は奇数で 38.36 MHz、CS は偶数で 40 MHz 刻み */
 function frequencyOf(type: string, channel: string): number {
   const transponder = Number(/^(?:BS|CS)(\d+)/.exec(channel)?.[1] ?? 0);
@@ -599,11 +605,10 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
    * **衛星は、同じネットワークの全部の TS を NIT に載せ、ほかの TS の局名を SDT[other] で流す。**
    * 本物の BS と同じ。denpa は中継器を 1 つ開いて、これで一覧を作る (`satellite.ts`)
    */
-  const network =
-    first.type === "GR"
-      ? [services]
-      : transportsOf(first.type, first.networkId);
-  if (first.type !== "GR") {
+  const network = !isSatellite(first.type)
+    ? [services]
+    : transportsOf(first.type, first.networkId);
+  if (isSatellite(first.type)) {
     let counter = 1;
     for (const members of network) {
       if (members[0]!.channel === first.channel) continue;
@@ -620,7 +625,7 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
           tsidOf(members[0]!),
           members[0]!.networkId,
           members.map((s) => [s.serviceId, s.serviceType]),
-          members[0]!.type === "GR"
+          !isSatellite(members[0]!.type)
             ? []
             : satelliteDeliveryDescriptor(
                 frequencyOf(members[0]!.type, members[0]!.channel),
@@ -648,7 +653,7 @@ function schedule(services: FakeService[], knobs: Knobs): Uint8Array {
     }
   };
   for (const service of services) push(service, 0x50);
-  const here = services.filter((s) => s.type !== "GR");
+  const here = services.filter((s) => isSatellite(s.type));
   for (const service of SERVICES) {
     const sameNetwork = here.some(
       (s) => s.type === service.type && s.networkId === service.networkId,

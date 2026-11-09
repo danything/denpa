@@ -18,7 +18,7 @@ import {
 } from "../ts/logo";
 import { type CarouselCounts, CarouselProgress } from "../ts/logo-dsmcc";
 import { withPalette } from "../ts/logo-palette";
-import type { ChannelType } from "../types";
+import { type ChannelType, decodable } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
 import { currentServices } from "./epg";
@@ -498,7 +498,10 @@ function markGaveUp(channel: string): void {
   if (changed) save({ ...known, gaveUp });
 }
 
-/** いま選局できる局。取り残しは見に行かない */
+/**
+ * いま選局できる局。取り残しは見に行かない。
+ * 復号できない種別 (SKY) の局も見に行かない (`decodable`。番組表とライブに出さないので、ロゴは要らない)
+ */
 function tunableServices(): {
   id: number;
   type: string;
@@ -515,7 +518,8 @@ function tunableServices(): {
     .from(services)
     .where(currentServices())
     .orderBy(services.type, services.channel)
-    .all();
+    .all()
+    .filter((service) => decodable(service.type));
 }
 
 /**

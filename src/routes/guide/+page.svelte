@@ -121,7 +121,7 @@
   );
 
   const services = $derived(data.services);
-  /** 文に入れる種別。英字 (BS・CS・SKY) のあとには半角の空白を入れる (docs/writing.md) */
+  /** 文に入れる種別。英字 (BS・CS) のあとには半角の空白を入れる (docs/writing.md) */
   const typeWord = $derived(
     /^[A-Z]/.test(SERVICE_TYPE_LABEL[data.type] ?? "")
       ? `${SERVICE_TYPE_LABEL[data.type]} `

@@ -19,8 +19,8 @@
   import { held } from "#lib/live-updates.svelte.js";
   import type { CardReaderState } from "#lib/server/scramble.js";
   import type { TunerSignal } from "#lib/server/tuner.js";
-  import { receives } from "#lib/tuner-types.js";
-  import { CHANNEL_TYPES, type ChannelType } from "#lib/types.js";
+  import { receives, showsSky } from "#lib/tuner-types.js";
+  import { CHANNEL_TYPES, type ChannelType, shownTypes } from "#lib/types.js";
 
   import type { PageData } from "./$types";
   import ContractDialog from "./ContractDialog.svelte";
@@ -79,6 +79,11 @@
   const shownTuners = held(() => data.tuners);
   const shownCard = held(() => data.card);
   const shownContracts = held(() => data.contracts);
+
+  /** 行に並べる種別。SKY は受けられる機材か選んだチューナーがあるときだけ (`showsSky`) */
+  const rowTypes = $derived(
+    shownTypes(showsSky(shownTuners.value?.list ?? [])),
+  );
 
   const activeCardId = $derived.by(() => {
     const card = shownCard.value;
@@ -176,15 +181,17 @@
 
 <!--
   **機材が受けられない種別は選ばせない** (`receivable`。エージェントが見つけた機材の種別)。BS/CS 専用の受信機に GR を入れて
-  保存でき、その台に割り振られた地上波の選局が全部断られていた (#2386)。もう入っているものは外せるように押せるままにする
+  保存でき、その台に割り振られた地上波の選局が全部断られていた (#2386)。もう入っているものは外せるように押せるままにする。
+  足す欄は機材が分からない (`receivable` が無い) ので SKY を受けられず、並べない
 -->
 {#snippet typeChips(
   prefix: string,
   types: readonly ChannelType[],
   receivable: readonly ChannelType[] | null | undefined,
+  choices: readonly ChannelType[],
 )}
   <div class="chips types">
-    {#each CHANNEL_TYPES as type (type)}
+    {#each choices as type (type)}
       <label class="chip">
         <input
           type="checkbox"
@@ -308,6 +315,7 @@
                         String(index),
                         tuner.types,
                         tuner.receivable,
+                        rowTypes,
                       )}
                     </td>
                     <td class="state-cell small">
@@ -471,7 +479,7 @@
             </label>
             <div class="field">
               <span>受信できる種別</span>
-              {@render typeChips("add", [], null)}
+              {@render typeChips("add", [], null, CHANNEL_TYPES)}
             </div>
             {@render lnbField("lnb.add", "")}
           </div>

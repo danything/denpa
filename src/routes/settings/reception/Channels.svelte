@@ -16,7 +16,9 @@
     signalText,
     stateLabel,
   } from "#lib/format.js";
+  import { held } from "#lib/live-updates.svelte.js";
   import type { SignalQuality } from "#lib/server/signal-quality.js";
+  import { decodable } from "#lib/types.js";
 
   import type { ActionData, PageData } from "./$types";
 
@@ -69,17 +71,35 @@
   const scan = $derived(data.scan);
 
   /**
-   * スキャンする種別の選び方。値はそのまま `types` で送る (「すべて」はカンマで 3 つ)。
-   * 先頭の「すべて」が初めの選び方。衛星は放送の NIT からすぐ作れるので、全部まとめて回しても時間はほぼ地上波のぶんだけ
+   * SKY (スカパー！プレミアム) を受信できる種別に選んだチューナーがあるか。あるときだけ、スキャンの選び方に SKY を足す
+   * (受けられる機材が無い人の選び方は変えない)。チューナーの一覧はエージェントの答え待ちなので、届くまでは無いものとする
    */
-  const SCAN_CHOICES = [
-    { value: "GR,BS,CS", label: "すべて" },
+  const tunerList = held(() => data.tuners);
+  const skyScan = $derived(
+    tunerList.value?.list.some(
+      (tuner) => !tuner.disabled && tuner.types.includes("SKY"),
+    ) ?? false,
+  );
+
+  /**
+   * スキャンする種別の選び方。値はそのまま `types` で送る (「すべて」はカンマで並べる)。
+   * 先頭の「すべて」が初めの選び方。衛星は放送の NIT からすぐ作れるので、全部まとめて回しても時間はほぼ地上波のぶんだけ。
+   * SKY は H01〜H105 の総当たりなので、「すべて」に入れると地上波と同じくらい延びる
+   */
+  const SCAN_CHOICES = $derived([
+    { value: skyScan ? "GR,BS,CS,SKY" : "GR,BS,CS", label: "すべて" },
     { value: "GR", label: SERVICE_TYPE_LABEL["GR"] },
     // CATV の周波数変換パススルー。UHF に加えて C13〜C63 も回す (`scan.ts` の `SCAN_KINDS`)
     { value: "CATV", label: `${SERVICE_TYPE_LABEL["GR"]} (CATV)` },
     { value: "BS", label: SERVICE_TYPE_LABEL["BS"] },
     { value: "CS", label: SERVICE_TYPE_LABEL["CS"] },
-  ];
+    ...(skyScan ? [{ value: "SKY", label: SERVICE_TYPE_LABEL["SKY"] }] : []),
+  ]);
+
+  /** 受信できるチャンネルに SKY の局があるか。あれば、番組表とライブに出ないわけを添える */
+  const hasSky = $derived(
+    data.channels.some((channel) => !decodable(channel.type)),
+  );
   /*
    * 物理チャンネルと、そこに入っている局。**denpa 自身の DB から来る。**
    * エージェントにも控えはあるが、問い合わせない (`channels.server.ts`)
@@ -393,6 +413,12 @@
         <div class="actions">{@render scanControl()}</div>
       </div>
     {:else}
+      {#if hasSky}
+        <!-- SKY の局は表にだけ並ぶ。番組表とライブに出ないわけを、表のすぐ上で言う (`types.ts` の `decodable`) -->
+        <p class="small muted" data-testid="sky-note">
+          スカパー！プレミアムの局は、スクランブルを復号できないため、番組表とライブに出しません。スカパー！プレミアムのカードにはまだ対応していません
+        </p>
+      {/if}
       <div class="table-wrap channels-wrap">
         <table>
           <thead>
@@ -518,6 +544,11 @@
     <span class="logo-slot" title="ロゴはまだ取れていません">
       <span class="visually-hidden">ロゴはまだ取れていません</span>
     </span>
+  {:else if state === "skipped" && column}
+    <!-- 復号できない種別 (SKY) の局。番組表とライブに出さないので、ロゴは集めない (`logos.server.ts`) -->
+    <span class="muted small" title="スカパー！プレミアムの局のロゴは集めません"
+      >—</span
+    >
   {:else if column}
     <span class="muted small" title="ロゴは放送に載っていません">—</span>
   {:else}

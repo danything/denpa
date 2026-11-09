@@ -23,8 +23,39 @@ export interface VideoLoss {
   tail: boolean;
 }
 
-/** 受信の設定・番組表・ライブで並べる種別とその順 (地上波・BS・CS)。SKY を選べるのはルールの条件だけ */
+/**
+ * 番組表・ライブで並べる種別とその順 (地上波・BS・CS)。
+ * SKY (スカパー！プレミアム) は復号できないので番組表とライブには出さない (`decodable`)。
+ * 受信の設定では受けられる機材があるときだけ並べ (`shownTypes`)、ルールの条件ではいつも選べる
+ */
 export const CHANNEL_TYPES: readonly ChannelType[] = ["GR", "BS", "CS"];
+
+/** 種別の全部とその順。SKY は最後 */
+export const ALL_CHANNEL_TYPES: readonly ChannelType[] = [
+  ...CHANNEL_TYPES,
+  "SKY",
+];
+
+/**
+ * 受信の設定で並べる種別。**SKY は、受けられる機材か SKY を選んだチューナーがあるときだけ足す** (`sky`)。
+ * 受けられる機材が無ければ、地上波・BS・CS のまま
+ */
+export function shownTypes(sky: boolean): readonly ChannelType[] {
+  return sky ? ALL_CHANNEL_TYPES : CHANNEL_TYPES;
+}
+
+/**
+ * スクランブルを復号できる種別か。**SKY (スカパー！プレミアム) は復号できない。** B-CAS ではない専用のカードが要り、
+ * そのカードにまだ対応していない (エージェントもスクランブルされたまま流す。#1578)。
+ * 復号できない局は受信の設定の「受信できるチャンネル」にだけ出し、番組表・ライブ・ロゴは取得しない
+ */
+export function decodable(type: string): boolean {
+  return type !== "SKY";
+}
+
+/** 復号できない局 (`decodable`) をライブで開こうとしたときの理由 */
+export const UNDECODABLE =
+  "スカパー！プレミアムの局は、スクランブルを復号できないため観られません。スカパー！プレミアムのカードにはまだ対応していません";
 
 /**
  * 番組表の 1 マスぶん。**番組の全列は持たない。**

@@ -6,7 +6,7 @@ export interface FakeService {
   serviceId: number;
   networkId: number;
   name: string;
-  type: "GR" | "BS" | "CS";
+  type: "GR" | "BS" | "CS" | "SKY";
   channel: string;
   /**
    * 1 番組の長さ。
@@ -124,6 +124,22 @@ const TEST_SERVICES: FakeService[] = [
     serviceType: 1,
     noPrograms: true,
   },
+  /*
+   * スカパー！プレミアムサービス光 (J.83B) の局。**既定のチャンネルには入れない** (偽エージェントの `saved`)。
+   * 受けられる機材 (`it930x:`) を足して SKY をスキャンしたときだけ入る (`64-sky.spec.ts`)。
+   * ネットワーク ID は実機のスカパー！プレミアムの 10。番組表は載せない (denpa は SKY の番組表を取得しない)
+   */
+  {
+    id: 1000600,
+    serviceId: 600,
+    networkId: 10,
+    name: "プレミアムテスト",
+    type: "SKY",
+    channel: "H40",
+    slotMs: 30 * 60_000,
+    serviceType: 1,
+    noPrograms: true,
+  },
 ];
 
 /**
@@ -137,3 +153,4 @@ export const MX = TEST_SERVICES[0]!;
 export const FUJI = TEST_SERVICES[1]!;
 export const BS11 = TEST_SERVICES[3]!;
 export const BS_NO_LOGO = TEST_SERVICES[4]!;
+export const SKY_TEST = TEST_SERVICES.at(-1)!;

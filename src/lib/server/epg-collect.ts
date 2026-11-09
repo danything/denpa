@@ -16,6 +16,7 @@ import { EpgReader } from "@danything/arib/eit";
 import { ServiceReader } from "@danything/arib/psi";
 import { max } from "drizzle-orm";
 
+import { decodable } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
 import {
@@ -576,11 +577,14 @@ export function firstSweepDone(
 }
 
 async function run(): Promise<number> {
-  const channels = await getChannels().catch(() => [] as AgentChannel[]);
-  if (channels.length === 0) return 0;
+  const all = await getChannels().catch(() => [] as AgentChannel[]);
+  if (all.length === 0) return 0;
   // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
-  syncServices(channels);
-  forgetGround(channels);
+  syncServices(all);
+  forgetGround(all);
+  // 復号できない種別 (SKY) は番組表を取得しない (`decodable`。番組表とライブに出さないので要らない)
+  const channels = all.filter((channel) => decodable(channel.type));
+  if (channels.length === 0) return 0;
 
   const reach = coverage();
   const at = Date.now();
