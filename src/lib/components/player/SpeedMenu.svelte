@@ -95,26 +95,24 @@
 
 <style>
   /*
-     * **数字のときも、丸いボタンと同じ幅から。** 文字を添えるボタンの余白 (1.25rem) では
-     * 「1.25」で 80px と、隣の丸 (48px) に比べて横に間延びする。「2」は丸と同じ幅まで広げる。
-     * 等速の丸 (`ov-round`) には当てない。幅も余白も丸の決まりのまま
-     */
+   * **数字のときも、丸いボタンと同じ幅から。** 「2」は丸と同じ幅まで広げる (余白は文字のボタンの決まり。`ControlButton`)。
+   * 等速の丸 (`ov-round`) には当てない。幅も余白も丸の決まりのまま
+   */
   .speed {
     display: contents;
   }
   .speed :global(.ov-btn:not(.ov-round)) {
     min-width: 3rem;
-    padding-inline: var(--dp-space-3);
   }
   /* 狭い枠 (舞台の `data-compact`) では丸が 40px になる (`ControlButton`)。数字も同じ幅から */
   :global(.stage[data-compact]) .speed :global(.ov-btn:not(.ov-round)) {
     min-width: 2.5rem;
   }
   /*
-     * 箱と選択肢の地・項目の間は `SettingsMenu` と同じなので app.css (`.menu`・`.overlay-menu`) に置く。
-     * ここは数字を大きく真ん中にそろえるだけ。畳むときは速さのボタンごと ⚙ の先頭に入れるので (`Extras`)、
-     * このメニューは畳まないときだけ出る
-     */
+   * 箱と選択肢の地・項目の間は `SettingsMenu` と同じなので app.css (`.menu`・`.overlay-menu`) に置く。
+   * ここは数字を大きく真ん中にそろえるだけ。畳むときは速さのボタンごと ⚙ の先頭に入れるので (`Extras`)、
+   * このメニューは畳まないときだけ出る
+   */
   :global(.overlay-menu.speed-menu) {
     font-size: var(--dp-text-lg);
   }

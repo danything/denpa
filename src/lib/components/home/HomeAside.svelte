@@ -17,7 +17,7 @@
    * 中身はホームが読んだものから作る (問い合わせは足さない)。指を乗せたときだけ出るものは置かない
    */
   import Icon from "#lib/components/player/Icon.svelte";
-  import { ATTENTION_FILTERS, FILTERS } from "#lib/timeline.js";
+  import { FILTERS, shownAttention } from "#lib/timeline.js";
 
   import type { HomeControls } from "./context";
   import HomeCalendar from "./HomeCalendar.svelte";
@@ -42,9 +42,7 @@
     };
   } = $props();
 
-  const attention = $derived(
-    ATTENTION_FILTERS.filter((f) => counts[f.id] > 0 || filter === f.id),
-  );
+  const attention = $derived(shownAttention(counts, filter));
 </script>
 
 <aside

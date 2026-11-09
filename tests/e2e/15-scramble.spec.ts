@@ -60,7 +60,7 @@ test.describe("スクランブルされたまま録れたとき", () => {
     await page.getByTestId("detail-close").click();
   });
 
-  test("元のTSを残す設定なら、残るのは復号済みのTSだけ", async ({
+  test("元の TS を残す設定なら、残るのは復号済みの TS だけ", async ({
     page,
     request,
     stack,

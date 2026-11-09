@@ -206,7 +206,7 @@
     color: var(--dp-muted);
   }
   .cal-grid {
-    width: calc(100% - 0.75rem);
+    width: calc(100% - var(--dp-space-3));
     margin: var(--dp-space-1) 0 0 var(--dp-space-3);
     border-collapse: collapse;
     table-layout: fixed;

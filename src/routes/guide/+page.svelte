@@ -403,7 +403,7 @@
 
   /*
    * 開いたときに「いま」が見えている状態にする。24 時間ぶん出るので、
-   * 先頭(4:00)のままだと毎回スクロールさせることになる。
+   * 先頭 (4:00) のままだと毎回スクロールさせることになる。
    *
    * 位置は offsetTop では測れない (親が body になり、ナビや見出しの高さまで足し込まれる)。見えている位置の差から出す (`nowTop`)。
    *
@@ -430,7 +430,7 @@
     let frames = 0;
     const settle = () => {
       place();
-      // 画像(局ロゴ)やバッジが入って高さが変わることがあるので数回追う
+      // 画像 (局ロゴ) やバッジが入って高さが変わることがあるので数回追う
       if (++frames < 5) requestAnimationFrame(settle);
     };
     requestAnimationFrame(settle);
@@ -615,7 +615,7 @@
    * 同じ画面のまま中身だけ入れ替わるので、DOM は使い回され、横スクロールの
    * 位置がそのまま残る。地上波で右のほうを見ていたあと BS を開くと、
    * 局の並びは別物なのに同じ位置から始まり、左端の局が隠れていた。
-   * 縦(時刻)はどの種別でも同じ意味なので、そのままにする
+   * 縦 (時刻) はどの種別でも同じ意味なので、そのままにする
    */
   $effect(() => {
     data.type;
@@ -940,7 +940,7 @@
   </div>
 
   {#if services.length === 0}
-    <div class="panel empty-state" data-testid="empty-grid">
+    <div class="empty-state" data-testid="empty-grid">
       {#if data.typeEmpty}
         <!-- 局がまだ無い。上の案内と同じ文とボタンを、表の場所の真ん中に (上の案内はこのとき出さない) -->
         <ChannelNotice
@@ -960,8 +960,8 @@
             組めなかった。**骨組みのまま放っておかない**。読み込み中と区別が
             付かず、いつまでも待たせることになる。本当の理由はサーバのログに出る
         -->
-    <div class="panel empty-state">
-      <p><strong>番組表を読み込めませんでした</strong></p>
+    <div class="empty-state">
+      <p class="bold">番組表を読み込めませんでした</p>
       <p class="small muted">{sheet.failed}</p>
       <div class="actions">
         <button type="button" class="small secondary outline" onclick={reload}
@@ -1675,7 +1675,7 @@
     contain-intrinsic-size: auto 11rem auto 0.75rem;
   }
   /*
-     * 色はジャンル(大分類)ごと。**色は時刻の前の小さな点で見せ、下地はごく淡く敷くだけ。**
+     * 色はジャンル (大分類) ごと。**色は時刻の前の小さな点で見せ、下地はごく淡く敷くだけ。**
      * 左の太い線は使わない (左の縦線は「選んでいる」の印。docs/design.md の「印の意味」)。
      * 下地を 15% 塗っていた頃は、明るいテーマでマスが桃色や水色のブロックになり、
      * 上に乗る小さい字が地に溶けて読みにくかった。下地は面の色 (--dp-surface) に

@@ -277,7 +277,7 @@ test.describe("動きを減らす設定", () => {
  * **スマホでは、番組表の操作の 1 行もほかの画面と同じく下のタブのすぐ上に浮く** (docs/design.md の「浮かせ方」)。
  * 平らなまま表の下に置かれていたので、面 (`--dp-float`) とカプセルの角 (`--dp-radius-full`) を見る
  */
-test("スマホの番組表の操作の1行は、カプセルの面で浮く", async ({ page }) => {
+test("スマホの番組表の操作の 1 行は、カプセルの面で浮く", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await goto(page, "/guide?type=GR");
   const bar = page.getByTestId("guide-toolbar");

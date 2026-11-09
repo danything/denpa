@@ -19,7 +19,7 @@ import { clearGpus, encodeRuns, forgetGpusAfterAll, wayOf } from "./hwenc";
 test.describe("GPU で H.265 をエンコードする", () => {
   forgetGpusAfterAll();
 
-  test("H.265 は GPU があるときだけ選べ、1本目に GPU でエンコードして [H265] の名前で置く", async ({
+  test("H.265 は GPU があるときだけ選べ、1 本目に GPU でエンコードして [H265] の名前で置く", async ({
     page,
     request,
     stack,

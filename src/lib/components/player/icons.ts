@@ -16,7 +16,7 @@ export { default as AUDIO } from "~icons/lucide/audio-lines";
 /** 切り抜き (いまの 1 コマをサーバに保存する) */
 export { default as CAMERA } from "~icons/lucide/camera";
 export { default as CAPTION } from "~icons/lucide/captions";
-/** レ点。聞き返しの 2 回目 (文字を出さずに「これでいいか」を言う)・切り抜きを送れた直後・コピーできた直後 */
+/** レ点。戻せない操作の 2 回目 (文字を出さずに「これでいいか」を言う)・切り抜きを送れた直後・コピーできた直後 */
 export { default as CHECK } from "~icons/lucide/check";
 /** 再生の設定 (`SettingsMenu`) の選択肢の並びから戻る / 選択肢の並びに入る */
 export { default as BACK } from "~icons/lucide/chevron-left";
@@ -76,7 +76,8 @@ export const OVERLAY_BTN = "ov-btn";
 export const OVERLAY_ROUND = "ov-round";
 
 /**
- * 聞き返しの 2 回目の見た目 (削除)。大きさは変えず色とアイコンだけ変える。「確定」の文字にすると幅が変わって
+ * 赤い字と赤い短い線。戻せない操作の 2 回目 (削除) と、「今」へ張り付いている `EdgeButton` に使う。
+ * 2 回目は大きさを変えず色とアイコンだけ変える。「確定」の文字にすると幅が変わって
  * 隣のボタンが動き、同じ場所を押し直せなかった
  */
 export const OVERLAY_DANGER = "ov-danger";

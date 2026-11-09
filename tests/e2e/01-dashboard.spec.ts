@@ -11,7 +11,7 @@ test.describe("ホームと画面遷移", () => {
     );
   });
 
-  test("EPG取得後に局・番組が反映され、全ページを開ける", async ({
+  test("EPG 取得後に局・番組が反映され、全ページを開ける", async ({
     page,
     request,
   }) => {
@@ -469,7 +469,7 @@ test.describe("ホームと画面遷移", () => {
     await expect(page.getByTestId("reconcile-result")).toHaveCount(0);
   });
 
-  test("一覧の頭は細い1行。照合と空きは「⋯」の中、狭い幅でも同じ", async ({
+  test("一覧の頭は細い 1 行。照合と空きは「⋯」の中、狭い幅でも同じ", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
