@@ -21,10 +21,10 @@ public sealed record CcidInterface(
     public const uint ExtendedApduLevel = 0x0004_0000;
     private const uint LevelMask = 0x0007_0000;
 
-    /// <summary>T=1 の枠組みをこちらで組む読み取り機か (TPDU 単位)</summary>
+    /// <summary>T=1 の枠組みをこちらで組むリーダーか (TPDU 単位)</summary>
     public bool Tpdu => (Features & LevelMask) == TpduLevel;
 
-    /// <summary>APDU をそのまま渡せる読み取り機か (short / extended APDU 単位)</summary>
+    /// <summary>APDU をそのまま渡せるリーダーか (short / extended APDU 単位)</summary>
     public bool Apdu => (Features & (ShortApduLevel | ExtendedApduLevel)) != 0;
 
     public string Level => (Features & LevelMask) switch

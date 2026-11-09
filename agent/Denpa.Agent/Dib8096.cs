@@ -189,7 +189,7 @@ public sealed class Dib8096
 
     /// <summary>
     /// DiB8000 と DiB0090 を初期化して起こす。ブリッジの GPIO で電源とリセットを済ませたあと (仕様書 4.6) に呼ぶ。
-    /// 知らないバージョンの部品なら投げる
+    /// 対応していないバージョンの部品なら投げる
     /// </summary>
     public void Initialize()
     {
@@ -230,7 +230,7 @@ public sealed class Dib8096
         var version = D(897);
         if (version is not (0x8000 or 0x8001 or 0x8002))
         {
-            throw new IOException($"知らないバージョンの DiB8000 です (D[897] = 0x{version:X4})");
+            throw new IOException($"対応していないバージョンの DiB8000 です (D[897] = 0x{version:X4})");
         }
         Version = version;
     }
@@ -428,9 +428,9 @@ public sealed class Dib8096
         T(0x21, T(0x21) | 0x8000);
 
         var id = T(0x1A) & ~0x0800;
-        if (((id >> 8) & 0xF) != 2) throw new IOException($"知らない DiB0090 です (T[0x1A] = 0x{id:X4})");
+        if (((id >> 8) & 0xF) != 2) throw new IOException($"対応していない DiB0090 です (T[0x1A] = 0x{id:X4})");
         if ((id & 3) == 2) throw new IOException($"SoC 向けの DiB0090 は扱いません (T[0x1A] = 0x{id:X4})");
-        if (((id >> 5) & 7) is not (1 or 4 or 6 or 7)) throw new IOException($"知らないパッケージの DiB0090 です (T[0x1A] = 0x{id:X4})");
+        if (((id >> 5) & 7) is not (1 or 4 or 6 or 7)) throw new IOException($"対応していないパッケージの DiB0090 です (T[0x1A] = 0x{id:X4})");
         P1g = (id & 0x1F) switch
         {
             0x0F or 0x07 => true,
@@ -596,7 +596,7 @@ public sealed class Dib8096
 
     /// <summary>
     /// 最後の選局の要約の 1 行。常駐のときも記録に出し (Zd1jTuner)、3 つの数字 (60 秒・3ms・許容値 50) を本番の記録で見直すのに使う。
-    /// 形: <c>選局 &lt;Hz&gt; Hz: &lt;経路&gt;、ロックまで &lt;ms&gt;ms、キャパシタ: &lt;…&gt;、温度: &lt;…&gt;、&lt;同期した / ロックしたがデータはまだ / 同期しなかった&gt;</c>
+    /// 形式: <c>選局 &lt;Hz&gt; Hz: &lt;経路&gt;、ロックまで &lt;ms&gt;ms、キャパシタ: &lt;…&gt;、温度: &lt;…&gt;、&lt;同期した / ロックしたがデータはまだ / 同期しなかった&gt;</c>
     /// </summary>
     public string LastSummary { get; private set; } = "";
 

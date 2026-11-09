@@ -960,7 +960,7 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     /// <summary>
     /// 読み出しとデスクランブラの間に溜められる量。**64MB** は地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほどで、
-    /// カードや配り役を待つ上限 (CCID 5 秒・配り役 10 秒・繋ぎ直しの見送り 10 秒) を丸ごと呑める。
+    /// カードや配る側を待つ上限 (CCID 5 秒・配る側 10 秒・繋ぎ直しの見送り 10 秒) を丸ごと呑める。
     /// **数ではなくバイトで測る。** 読み出し側は溜まっているぶんだけ返すので、1 回の読みは小さいこともある
     /// </summary>
     private const long QueueLimit = 64 * 1024 * 1024;
@@ -1146,7 +1146,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// 偽の選局を起こす。**適合テストだけ** (TuneOptions.FakeTune)。
     ///
     /// <para>
-    /// **`setsid` を噛ませる。** `sh -c` 越しなので、止めるときはグループごと
+    /// **`setsid` を挟んで起こす。** `sh -c` 越しなので、止めるときはグループごと
     /// 落とす (<see cref="Interop.KillGroup"/>)。
     /// </para>
     /// </summary>

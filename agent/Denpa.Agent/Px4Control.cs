@@ -33,7 +33,7 @@ internal sealed class Px4Control : IDisposable
     public const ushort TsData = 0x8040;
     public const ushort StreamEnd = 0x80ff;
 
-    /// <summary>HELLO で言う機能: STATS を使う (SPEC 6.4 の capability bit 2)</summary>
+    /// <summary>HELLO で要求する機能: STATS を使う (SPEC 6.4 の capability bit 2)</summary>
     public const uint StreamStatsCapability = 1 << 2;
 
     public const ushort ResponseFlag = 1 << 0;
@@ -50,7 +50,7 @@ internal sealed class Px4Control : IDisposable
     private readonly Px4Wire _wire;
     private uint _requestId;
 
-    /// <summary>いまソケットに言ってある受ける上限 (ms)</summary>
+    /// <summary>いまソケットに設定してある受信の上限 (ms)</summary>
     private int _receiveTimeout;
 
     /// <summary>HELLO で要求して、px4d が認めた機能 (要求したものと向こうが持つものの積)</summary>
@@ -136,7 +136,7 @@ internal sealed class Px4Control : IDisposable
         try
         {
             /*
-             * **変わるときだけ言う。** macOS は相手が閉じたソケットの setsockopt を EINVAL で断り、
+             * **変わるときだけ設定する。** macOS は相手が閉じたソケットの setsockopt を EINVAL で断り、
              * 本当の理由 (相手が閉じた) が「InvalidArgument」に化ける
              */
             var wait = (int)(timeout ?? _timeout).TotalMilliseconds;

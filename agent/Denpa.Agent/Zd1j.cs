@@ -15,7 +15,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。Windows と macOS でも同じ形の
+/// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。Windows と macOS でも同じ形式の
 /// 名前を作る (<see cref="UsbDevices.WindowsPort"/>・<see cref="UsbDevices.MacPort"/>)。
 /// 挿さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。設定に 1 台だけなら、挿すポートを変えても付いていく
 /// (<see cref="Follow(string)"/>)。2 台以上はポートで見分けるので、挿すポートを変えると別のチューナーになる。
@@ -37,7 +37,7 @@ public static class Zd1j
 
     /// <summary>
     /// 挿さっている CECH-ZD1 J のポート。**開かない** (開くと他から使えなくなり、ブリッジの起動もしてしまう)。
-    /// カーネルのドライバが使っているものは並べない (usbfs はこちらが開いている印なので並べる)
+    /// カーネルのドライバが使っているものは並べない (usbfs はこちらが開いているしるしなので並べる)
     /// </summary>
     internal static List<string> Ports(string sysfs, Action<string>? warn = null)
     {
@@ -207,7 +207,7 @@ public sealed class Zd1jBoard : IDibTime
         }
     }
 
-    /// <summary>開く段の名前 (USB を開くところ)。そのあとの段は <see cref="Mb86h47.Start"/> が知らせる</summary>
+    /// <summary>開く段の名前 (USB を開くところ)。そのあとの段は <see cref="Mb86h47.Start"/> が渡す</summary>
     private const string OpeningUsb = "USB を開く";
 
     /// <summary>ポートごとの、最後に記録した開けなかった理由。同じ理由は繰り返し記録しない (<see cref="Registry"/> の中で触る)</summary>
@@ -344,7 +344,7 @@ public sealed class Zd1jBoard : IDibTime
 public sealed record Zd1jTimings(long OpenMs, long LockMs, long FirstTsMs);
 
 /// <summary>
-/// CECH-ZD1 J のチューナー (地上波だけ)。**選局しなおしは周波数まわりだけ。** ボードは流している間だけ取る。
+/// CECH-ZD1 J のチューナー (地上波だけ)。**選局し直しは周波数まわりだけ。** ボードは流している間だけ取る。
 ///
 /// <para>
 /// 前面の LED は流している間ずっと赤、止めたら緑 (点滅なし)。読む側がいないまま <see cref="StallLimit"/> 経ったら
@@ -482,7 +482,7 @@ public sealed class Zd1jTuner : ITuneDevice
         }
     }
 
-    /// <summary>流し終わり (仕様書 9.5) と、ボードを返す。<paramref name="keepLed"/> なら LED は赤のまま (選局しなおし)</summary>
+    /// <summary>流し終わり (仕様書 9.5) と、ボードを返す。<paramref name="keepLed"/> なら LED は赤のまま (選局し直し)</summary>
     private void Stop(bool keepLed)
     {
         var stream = _stream;
@@ -495,7 +495,7 @@ public sealed class Zd1jTuner : ITuneDevice
             {
                 stream.Stop();
                 board.Bridge.StopStream();
-                // 選局しなおしなら、選局が自分でハイインピーダンスにする
+                // 選局し直しなら、選局が自分でハイインピーダンスにする
                 if (!keepLed) board.Demod.Output(false);
             }
             if (!keepLed && _red)
@@ -736,7 +736,7 @@ public sealed class Zd1jCard : ICardLink
 /// 中身は選局で段 3 に渡した値だけで、**消してよい** (次の選局で探索からやり直して、また覚える)。
 ///
 /// <para>
-/// 形は <c>{ "version": 1, "boards": { "&lt;USB のポート&gt;": { "&lt;kHz&gt;": { … } } } }</c> (<see cref="DibMemory.ToJson"/>)。
+/// 形式は <c>{ "version": 1, "boards": { "&lt;USB のポート&gt;": { "&lt;kHz&gt;": { … } } } }</c> (<see cref="DibMemory.ToJson"/>)。
 /// 読めない・壊れている・バージョンが違うときは、警告を 1 行残して全部捨てる。書くのは値が変わったときだけ
 /// (ロックして新しい値になった・合わなかった値を捨てた)。
 /// </para>

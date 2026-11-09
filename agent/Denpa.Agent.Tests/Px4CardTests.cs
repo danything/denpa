@@ -33,7 +33,7 @@ public class Px4CardTests
             _listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             _listener.Bind(new UnixDomainSocketEndPoint(SocketPath));
             _listener.Listen();
-            // **専用のスレッドで。** 共用の池は他のテスト (鍵を待って止まる偽のカード) が
+            // **専用のスレッドで。** 共用のスレッドプールは他のテスト (鍵を待って止まる偽のカード) が
             // 塞ぐことがあり、スレッドプールから借りると CI の 2 コアで答えが 5 秒に間に合わなかった
             _serving = Task.Factory.StartNew(() =>
             {
@@ -161,7 +161,7 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task 起きているpx4dの筐体を挙げる()
+    public async Task 起きている_px4d_の筐体を挙げる()
     {
         using var px4d = new FakePx4d(Healthy);
         Directory.CreateDirectory(Path.Combine(px4d.Runtime.FullName, "px4-userland", "000000000012345"));  // ソケットが無い
@@ -174,7 +174,7 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task HELLOからAPDUまで仕様の通りに送る()
+    public async Task HELLO_から_APDU_まで仕様の通りに送る()
     {
         using var px4d = new FakePx4d(Healthy);
         var link = Px4Card.Find(px4d.Runtime.FullName)[0].Open();
@@ -219,7 +219,7 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task カードを扱わないpx4dには繋がない()
+    public async Task カードを扱わない_px4d_には繋がない()
     {
         using var px4d = new FakePx4d(frame => frame.Type == 0x0001 ? (1, HelloOk(0)) : null);
         var candidate = Px4Card.Find(px4d.Runtime.FullName)[0];
@@ -229,7 +229,7 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task 途中で切れたらIOException()
+    public async Task 途中で切れたら_IOException()
     {
         using var px4d = new FakePx4d(frame => frame.Type == 0x0035 ? null : Healthy(frame));
         using var link = Px4Card.Find(px4d.Runtime.FullName)[0].Open();
@@ -240,7 +240,7 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task 起きていないpx4dはIOException()
+    public async Task 起きていない_px4d_は_IOException()
     {
         var error = Assert.Throws<IOException>(() => Px4Card.Open("none", "/nonexistent/control.sock"));
         await Assert.That(error.Message).Contains("px4d に繋がりません");

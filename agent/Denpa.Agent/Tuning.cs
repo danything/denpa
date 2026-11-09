@@ -714,7 +714,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private const byte FeScaleDecibel = 1;
     private const byte FeScaleRelative = 2;
 
-    internal const int PropertySize = 76;            // packed。DeviceProbe の頭のコメントに実測値
+    internal const int PropertySize = 76;            // packed。DeviceProbe の冒頭のコメントに実測値
     internal const int PropertyDataAt = 16;
 
     // linux/dvb/dmx.h
@@ -788,7 +788,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
              * **止めたうえで、dvr に残っている前のチャンネルのぶんを捨てる。** dvr のリングバッファは
              * DMX_START でも空にならず (カーネルが空にするのは開いたときと溢れを読んだときだけ)、
              * 前の利用者が抜けてから溢れるまでの数秒の間に次の選局が来ると、前のチャンネルの PAT が
-             * 新しい選局の頭に乗る。衛星の局ロゴはそれを見て、当たりの中継 (BS15:16625) を「外れ」と
+             * 新しい選局の先頭に入る。衛星の局ロゴはそれを見て、当たりの中継 (BS15:16625) を「外れ」と
              * 1 週間控えていた (docs/logo.md)
              */
             _dvr.Discard();

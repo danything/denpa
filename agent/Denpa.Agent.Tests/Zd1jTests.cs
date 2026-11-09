@@ -103,12 +103,12 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task 知らない中身の処理なら開かない()
+    public async Task 想定外の中身の処理なら開かない()
     {
         var usb = new FakeBridgeUsb();
         usb.Memory[0xE9AC0] = 0x12345678;
         var error = Assert.Throws<IOException>(() => Started(usb));
-        await Assert.That(error.Message).Contains("知らない中身");
+        await Assert.That(error.Message).Contains("想定外の中身");
     }
 
     [Test]
@@ -134,7 +134,7 @@ public class Zd1jTests
     {
         var usb = new FakeBridgeUsb();
         var bridge = Started(usb);
-        // コア 1 を置いて走らせ、生きている印を 2 回読んだ。bulk の経路は空の塊で確かめた
+        // コア 1 を置いて走らせ、生存カウンタを 2 回読んだ。bulk の経路は空の塊で確かめた
         await Assert.That(usb.Log).Contains("W 01700000=FFFCFFFF");
         await Assert.That(usb.Log.Count(line => line == "R 017A3C7C")).IsEqualTo(2);
         await Assert.That(usb.Log).Contains($"W 017A3C78={Mb86h47Programs.BulkEnable:X8}");
@@ -245,14 +245,14 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task 単位から取り出すときは_0x47_を2つ見て揃える()
+    public async Task 単位から取り出すときは_0x47_を_2_つ見て揃える()
     {
         static byte[] Unit(byte marker)
         {
             var unit = new byte[192];
             unit[4] = 0x47;
             unit[5] = marker;
-            // 中身にも 0x47 を混ぜる (1 つだけでは単位の頭と信じない)
+            // 中身にも 0x47 を混ぜる (1 つだけでは単位の先頭と信じない)
             if (marker == 0) unit[100] = 0x47;
             if (marker == 2) unit[150] = 0x47;
             return unit;
@@ -344,7 +344,7 @@ public class Zd1jTests
             await Assert.That(tuner.Timings.FirstTsMs).IsGreaterThanOrEqualTo(0);
 
             tuner.Dispose();
-            // 流し終わり (仕様書 9.5): コア 0 を止め、受信側と書き手を止め、出力をハイインピーダンスに
+            // 流し終わり (仕様書 9.5): コア 0 を止め、受信側と書き込み側を止め、出力をハイインピーダンスに
             await Assert.That(usb.Log).Contains("S stop");
             await Assert.That(usb.Log).Contains("W 00D02010=04000000");
             await Assert.That(usb.Dib.Demod[1286]).IsEqualTo((ushort)0);
@@ -413,7 +413,7 @@ public class Zd1jTests
     private static int Logged(string line) => Log.Recent.Snapshot().Count(entry => entry.Text == line);
 
     [Test]
-    public async Task 開けなければ_どこで止まったかを1行記録する()
+    public async Task 開けなければ_どこで止まったかを_1_行記録する()
     {
         // ポートはテストごとに変える (記録はプロセスで 1 つ。テストは並んで走る)
         var usbError = new IOException("usb 9-11 を開けません (見当たらないか、IOKit が開かせません)");
@@ -440,7 +440,7 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task card_は_CECH_ZD1_J_が無くても1行出し_どんな失敗も行にする()
+    public async Task card_は_CECH_ZD1_J_が無くても_1_行出し_どんな失敗も行にする()
     {
         var none = new StringWriter();
         Zd1j.DescribeCards([], none);

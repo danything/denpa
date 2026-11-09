@@ -348,7 +348,7 @@ public class Px4TunerTests
             lock (_gate)
             {
                 _controlClient?.Shutdown(SocketShutdown.Both);
-                // Windows は閉じる向きを言っただけでは、受けかけの Receive (受け手のスレッド) が起きない。閉じて起こす
+                // Windows はShutdown を呼んだだけでは、受けかけの Receive (受け手のスレッド) が起きない。閉じて起こす
                 if (OperatingSystem.IsWindows()) _controlClient?.Dispose();
             }
         }
@@ -365,7 +365,7 @@ public class Px4TunerTests
             _control.Dispose();
             _stream.Dispose();
             /*
-             * 繋がったものは、閉じる向きを言ってから閉じる。受けかけ・送りかけのスレッドはこれで起きる
+             * 繋がったものは、Shutdown を呼んでから閉じる。受けかけ・送りかけのスレッドはこれで起きる
              * (Dispose だけだと、読みかけの Receive が戻るのを待つことがある)
              */
             lock (_open)
@@ -411,7 +411,7 @@ public class Px4TunerTests
     private static readonly ChannelTable.Tuning T28 = ChannelTable.Parse("T28")!;
 
     [Test]
-    public async Task 取ったまま2回選局できて_2回目は取り直さない(CancellationToken cancel)
+    public async Task 取ったまま_2_回選局できて_2_回目は取り直さない(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d();
@@ -441,7 +441,7 @@ public class Px4TunerTests
     /// 記録から見分けるため。STATS を持たない px4d (HELLO で認めない) には聞かない
     /// </summary>
     [Test]
-    public async Task 流している間はSTATSを聞き_持たないpx4dには聞かない(CancellationToken cancel)
+    public async Task 流している間は_STATS_を聞き_持たない_px4d_には聞かない(CancellationToken cancel)
     {
         await Task.Yield();
         using (var px4d = new FakePx4d { Stats = calls => (ulong)calls })
@@ -484,7 +484,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task px4dとの接続が切れたら次の選局で取り直す(CancellationToken cancel)
+    public async Task px4d_との接続が切れたら次の選局で取り直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d();
@@ -503,7 +503,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task px4dがストリームを止めたら理由を添えて終わり_次は取ったまま選局し直す(CancellationToken cancel)
+    public async Task px4d_がストリームを止めたら理由を添えて終わり_次は取ったまま選局し直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { EndFirstStream = (5, 15) };
@@ -526,7 +526,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task 選局の答えのCNを_選局したときの値として返す(CancellationToken cancel)
+    public async Task 選局の答えの_CN_を_選局したときの値として返す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { CnrMdb = 25_340 };
@@ -538,14 +538,14 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task 選局の答えにCNが無ければ_CNはnull()
+    public async Task 選局の答えに_CN_が無ければ_CN_は_null()
     {
         await Assert.That(Px4Tuner.TuneSignal([1, 0, 0, 0, 0x80])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
         await Assert.That(Px4Tuner.TuneSignal([1])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
     }
 
     [Test]
-    public async Task ATTACHを断られたら黙って取り直さず_次の選局で取り直す(CancellationToken cancel)
+    public async Task ATTACH_を断られたら黙って取り直さず_次の選局で取り直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { RejectAttach = 2 };
@@ -596,7 +596,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task px4dが起きていなければ理由を言う(CancellationToken cancel)
+    public async Task px4d_が起きていなければ理由を言う(CancellationToken cancel)
     {
         await Task.Yield();
         using var tuner = new Px4Tuner(Id, 0, null, "/nonexistent", () => null);
@@ -607,7 +607,7 @@ public class Px4TunerTests
     /// <summary>選局し直すたびに stream.sock を作る。閉じ忘れれば fd が 1 本ずつ増える</summary>
     [Test]
     [NotInParallel]
-    public async Task 何度選局し直してもfdが残らない(CancellationToken cancel)
+    public async Task 何度選局し直しても_fd_が残らない(CancellationToken cancel)
     {
         await Task.Yield();
         if (!OperatingSystem.IsLinux()) return;

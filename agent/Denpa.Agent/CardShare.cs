@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 手元にカードがあれば自分で読み (<see cref="LocalCard"/>)、無い拠点は別の拠点に
-/// ECM を投げて鍵だけ貰う (<see cref="RemoteCard"/>。<c>CARD_URL</c>)。
+/// ECM を送って鍵だけ貰う (<see cref="RemoteCard"/>。<c>CARD_URL</c>)。
 /// </para>
 /// </summary>
 public static class Keys
@@ -132,7 +132,7 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
 }
 
 /// <summary>
-/// **カードを持っていない拠点。** ECM を投げて鍵だけ貰いに行く (docs/agent.md「カードは 1 枚でいい」)。
+/// **カードを持っていない拠点。** ECM を送って鍵だけ貰う (docs/agent.md「カードは 1 枚でいい」)。
 /// 拠点にカードがあるならそちらが速いし落ちないので、既定にはしない。
 ///
 /// <para>
@@ -144,7 +144,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
 {
     private readonly HttpClient _http = new(new SocketsHttpHandler
     {
-        // ルーターの先に置いた配り役には TTL で届かず、答えが無いまま待たされる。待ち続けずに理由を出す
+        // ルーターの先に置いた配る側には TTL で届かず、答えが無いまま待たされる。待ち続けずに理由を出す
         ConnectTimeout = TimeSpan.FromSeconds(5),
         ConnectCallback = (context, cancel) => CardLan.Connect(context.DnsEndPoint, hops, cancel),
     })
@@ -154,13 +154,13 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
 
     private CardInit? _init;
 
-    /// <summary>配り役の URL (画面に出す)</summary>
+    /// <summary>配る側の URL (画面に出す)</summary>
     public string Url { get; } = url.TrimEnd('/');
 
-    /// <summary>素は 1 回貰えば変わらない。**貰えなかったら次に要ったときにまた聞く**</summary>
+    /// <summary>カードの定数は 1 回貰えば変わらない。**貰えなかったら次に要ったときにまた聞く**</summary>
     public CardInit Init() => _init ?? Check();
 
-    /// <summary>いま配り役と話せるか。**覚えている素を使わずに聞き直す** (画面の「カードリーダー」行)</summary>
+    /// <summary>いま配る側と話せるか。**覚えている定数を使わずに聞き直す** (画面の「カードリーダー」行)</summary>
     public CardInit Check() =>
         _init = CardWire.ReadInit(Send(new HttpRequestMessage(HttpMethod.Get, $"{Url}/denpa/card/init"), "カードの情報"));
 
@@ -175,12 +175,12 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         return CardWire.ReadCode(Post("confirm", payload, "契約確認"), "契約確認");
     }
 
-    /// <summary>配り役が <c>/denpa/card/emm</c> を持っていない (古いエージェント)。分かったら、もう送らない</summary>
+    /// <summary>配る側が <c>/denpa/card/emm</c> を持っていない (古いエージェント)。分かったら、もう送らない</summary>
     private int _emmMissing;
 
     /// <summary>
-    /// 契約の更新 (EMM) を配り役に渡し、配り役のカードの返り値を返す (<c>POST /denpa/card/emm</c>)。
-    /// **配り役が古くて 404 なら、記録に 1 回だけ出し、それからは送らずに <see cref="NotSupportedException"/> を投げる。**
+    /// 契約の更新 (EMM) を配る側に渡し、配る側のカードの返り値を返す (<c>POST /denpa/card/emm</c>)。
+    /// **配る側が古くて 404 なら、記録に 1 回だけ出し、それからは送らずに <see cref="NotSupportedException"/> を投げる。**
     /// 鍵と契約確認はそのまま使う
     /// </summary>
     public int Emm(ReadOnlySpan<byte> payload)
@@ -197,7 +197,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         }
     }
 
-    private const string EmmMissing = "配り役のエージェントが古く、契約の更新 (EMM) を受け取れません。鍵と契約確認はそのまま使います";
+    private const string EmmMissing = "鍵を配る拠点のエージェントが古く、契約の更新 (EMM) を受け取れません。鍵と契約確認はそのまま使います";
 
     /// <summary><c>/denpa/card/&lt;path&gt;</c> にバイト列を POST して中身を受け取る (<see cref="Send"/>)</summary>
     private byte[] Post(string path, byte[] body, string what)
@@ -228,7 +228,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         }
     }
 
-    /// <summary>配り役が答えたが、渡してくれなかった</summary>
+    /// <summary>配る側が答えたが、渡してくれなかった</summary>
     internal static string Refused(string url, int status, byte[] body, string what)
     {
         var reason = Reason(body);
@@ -241,7 +241,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         };
     }
 
-    /// <summary>配り役が返した <c>{"error": "…"}</c></summary>
+    /// <summary>配る側が返した <c>{"error": "…"}</c></summary>
     private static string? Reason(byte[] body)
     {
         try
@@ -268,7 +268,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
     }
 }
 
-/// <summary>配り役が答えたが、渡してくれなかった。HTTP の状態を持つ</summary>
+/// <summary>配る側が答えたが、渡してくれなかった。HTTP の状態を持つ</summary>
 public sealed class ShareRefusedException(int status, string message) : IOException(message)
 {
     public int Status { get; } = status;

@@ -9,7 +9,7 @@ namespace Denpa.Agent.Tests;
  *   D[897] = 0x8002、T[0x1A] = 0x0223) と、探索の割り込み (D[1284])・ロックのビット (D[568]) を返す
  * - FakeI2c … DibModel の前に置く II2c。やり取りを 1 行ずつ控える (D1287=0003、D896? など)
  * - FakeBridgeUsb … MB86H47A のメモリを辞書で持ち、メモリ要求を控える。bulk の塊は、コア 1 のプログラムの代わりに
- *   Mb86h47Programs.cs に書いた形どおりに読んで DibModel に届ける (コア 1 の I2C の手順そのものは Mb86h47ProgramsTests.cs が
+ *   Mb86h47Programs.cs に書いた形式どおりに読んで DibModel に届ける (コア 1 の I2C の手順そのものは Mb86h47ProgramsTests.cs が
  *   FR30 の真似で確かめる)。TS の EP 0x81 は与えた 192 バイトの単位を返す
  */
 
@@ -119,7 +119,7 @@ internal sealed class FakeTime : IDibTime
 
 /// <summary>
 /// MB86H47A の偽物 (メモリ・コア 1・TS の端点)。コア 1 のプログラムの代わりに、bulk の塊を
-/// Mb86h47Programs.cs に書いた形どおりに読んで DibModel に届け、EP 0x83 で答える
+/// Mb86h47Programs.cs に書いた形式どおりに読んで DibModel に届け、EP 0x83 で答える
 /// </summary>
 internal sealed class FakeBridgeUsb : IUsbDevice
 {
@@ -131,7 +131,7 @@ internal sealed class FakeBridgeUsb : IUsbDevice
     public Queue<byte[]> Ts { get; } = new();
     public bool Disposed { get; private set; }
 
-    /// <summary>コア 1 が動いているふりをする (生きている印が進む)</summary>
+    /// <summary>コア 1 が動いているふりをする (生存カウンタが進む)</summary>
     public bool Core1 { get; set; } = true;
 
     /// <summary>コア 1 が bulk の塊に答えるふりをする</summary>

@@ -15,7 +15,7 @@ public class ChildTsTests
     [Test]
     // Windows は fd を使わず、.NET の Stream のまま読む (ChildTs.Stdout)
     [ExcludeOn(OS.Windows)]
-    public async Task Unixの標準出力でもfdを使える()
+    public async Task Unix_の標準出力でも_fd_を使える()
     {
         using var process = Process.Start(new ProcessStartInfo("/bin/sleep")
         {

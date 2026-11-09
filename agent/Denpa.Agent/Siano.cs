@@ -211,7 +211,7 @@ public sealed class SianoTuner : ITuneDevice
 
     /// <summary>
     /// siano-ts 1 つぶん。stderr の行は <see cref="Lines"/> にも流す (選局の答えを待つため)。
-    /// **印は子ごとに持つ。** 止めたかどうかを 1 つのフラグで持つと、前の子の後始末が次の子のフラグを読む
+    /// **フラグは子ごとに持つ。** 止めたかどうかを 1 つのフラグで持つと、前の子の後始末が次の子のフラグを読む
     /// (起こし直した直後に前の子の終了が回ってくる)
     /// </summary>
     private sealed class Child(Process process)
@@ -408,7 +408,7 @@ public sealed class SianoTuner : ITuneDevice
             Volatile.Write(ref answered, 1);
             /*
              * **読み捨てが降りきるまで返さない。** 降りないまま返すと、次の読む側と
-             * 同じ fd を取り合う。Read は 200ms ごとに起きて印を見るので普通は
+             * 同じ fd を取り合う。Read は 200ms ごとに起きてフラグを見るので普通は
              * すぐ降りるが、降りなければ子ごと捨てる (Drop が読み出し側を止めて閉じる)
              */
             if (!drain.Wait(TimeSpan.FromSeconds(2)))

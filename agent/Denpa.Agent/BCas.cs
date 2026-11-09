@@ -154,7 +154,7 @@ public sealed class BCas : IKeySource, IDisposable
         }
     }
 
-    /// <summary>最後に繋いだときに読んだカードの素。**カードに触らない**</summary>
+    /// <summary>最後に繋いだときに読んだカードの定数。**カードに触らない**</summary>
     public CardInit Init()
     {
         lock (_gate)
@@ -319,7 +319,7 @@ public sealed class BCas : IKeySource, IDisposable
         }
     }
 
-    /// <summary>探し直す。**しくじったら <see cref="RetryAfter"/> のあいだは探さずに同じ理由で断る**</summary>
+    /// <summary>探し直す。**失敗したら <see cref="RetryAfter"/> のあいだは探さずに同じ理由で断る**</summary>
     private void Reconnect()
     {
         if (_failed is { } failed && _clock.GetUtcNow() - failed.At < RetryAfter) throw failed.Error;

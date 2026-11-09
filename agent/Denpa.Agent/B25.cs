@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 経路は PAT → PMT → CA 記述子。CA 記述子 (番組全体、または ES ごと) が「この ES の鍵は
-/// この PID の ECM から」を教えてくれるので、ES の PID から ECM を引く表を作る。
+/// この PID の ECM から」を示すので、ES の PID から ECM を引く表を作る。
 /// **libaribb25 と同じく、ストリームの順に 1 パケットずつ読み、ECM の中身が変わったらその場で鍵を貰う**
 /// (<see cref="IKeySource.Ecm"/>)。後ろのパケットはその鍵で復号する。答えを待つあいだ次のパケットへ
 /// 進まないので、鍵とストリームの位置が食い違いようがない。カードが固まっても読み出しを止めないのは
@@ -18,14 +18,14 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **復号できないものは落とさずに素通しする。** 録れないよりまし、で、復号できなかったことは
-/// <see cref="Undecodable"/> と <see cref="LastError"/> で分かる。鍵の相手が失敗しても投げずに、
+/// <see cref="Undecodable"/> と <see cref="LastError"/> で分かる。鍵の出どころが失敗しても投げずに、
 /// 鍵を捨てて素通しし (古い鍵で化けたものを「復号できた」として流さない)、少し置いて同じ ECM を聞き直す。
 /// </para>
 ///
 /// <para>
 /// 1 つの実体は**1 本のストリームからだけ**呼ぶ。実体どうしで共有するものは無いので、チューナーが
 /// 何台あっても壊し合わない (libaribb25 の頃は 1 つの実体に 2 本入ってプロセスごと落ちた)。
-/// 数え (<see cref="Decoded"/> など) だけは他のスレッドから覗いてよい。
+/// 数 (<see cref="Decoded"/> など) だけは他のスレッドから覗いてよい。
 /// </para>
 ///
 /// <para>
@@ -36,17 +36,17 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **選局では契約の更新 (EMM) も取り出す** (<paramref name="emm"/>)。CAT (PID 0x0001) の CA 記述子から EMM の PID を読み取り、
-/// EMM セクション (0x84) を組み立てて受け口に渡す。自分宛てかを比べるのは受け口で、ここではカードに送らず答えも待たない。
+/// EMM セクション (0x84) を組み立てて渡し先に渡す。自分宛てかを比べるのは渡し先で、ここではカードに送らず答えも待たない。
 /// 鍵の要らない利用者だけのときも読むので、番組表・ロゴ・スキャンの選局でも EMM はカードに届く。
 /// </para>
 /// </summary>
 /// <param name="keysWanted">
 /// いま鍵が要るか。塊を受けるたびに聞く。null は「どちらとも言えない」(利用者がいない) で、今のままにする。
-/// 渡さなければいつも要る (録れたものの復号・実機の試し)
+/// 渡さなければいつも要る (録れたものの復号・実機での試験)
 /// </param>
 /// <param name="emm">
 /// 契約の更新 (EMM) の渡し先 (<see cref="Emm"/>)。渡したときだけ CAT と EMM を読む。チューナーの選局 (TunerPool.cs) だけが渡し、
-/// 録れたものの復号と実機の試しは渡さない (古い録画の EMM は期限切れや古い更新番号で、渡す意味が無い)
+/// 録れたものの復号と実機での試験は渡さない (古い録画の EMM は期限切れや古い更新番号で、渡す意味が無い)
 /// </param>
 public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null, Emm? emm = null)
 {
@@ -118,7 +118,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private static readonly HashSet<int> PesTypes = [0x01, 0x02, 0x03, 0x04, 0x0F, 0x11, 0x1B, 0x24];
 
     /// <summary>
-    /// **PAT・PMT より先に来た ECM** (PID → ECM)。溜めている間だけ、まだ知らない PID のセクションも先頭の
+    /// **PAT・PMT より先に来た ECM** (PID → ECM)。溜めている間だけ、PAT・PMT にまだ無い PID のセクションも先頭の
     /// table_id を覗き、ECM なら中身を取っておく。**カードに聞くのは PMT がその PID を挙げてから** (<see cref="Rebuild"/>)。
     /// 挙げなければ聞かずに捨てる
     /// </summary>
@@ -165,8 +165,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>最後に答えが来た ECM の PID</summary>
     private int _lastEcm = -1;
     /// <summary>
-    /// 溜めている間に鍵の相手へ聞いた回数・覚えた答えを使った回数・未契約の回数と、往復とロックの待ちの合計・
-    /// カードの素を貰うのにかかった時間
+    /// 溜めている間に鍵の出どころへ聞いた回数・覚えた答えを使った回数・未契約の回数と、往復とロックの待ちの合計・
+    /// カードの定数を貰うのにかかった時間
     /// </summary>
     private int _asks, _cached, _unentitledAnswers;
     private long _askMs, _waitedMs, _initMs = -1;
@@ -181,10 +181,10 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         return $"PAT {At(_patMs)} / PMT {At(_pmtMs)} / ECM {At(_ecmMs)}{last}";
     }
 
-    /// <summary>溜めている間に鍵の相手へ聞いた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ 1 行に足す</summary>
+    /// <summary>溜めている間に鍵の出どころへ聞いた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ 1 行に足す</summary>
     public string CardUse() => !_keys
         ? "カード 使わない"
-        : $"カード {_asks}回 計 {_askMs}ms (待ち {_waitedMs}ms・覚えた答え {_cached}回・未契約 {_unentitledAnswers}回・準備 {At(_initMs)})";
+        : $"カード {_asks} 回 計 {_askMs}ms (待ち {_waitedMs}ms・覚えた答え {_cached} 回・未契約 {_unentitledAnswers} 回・準備 {At(_initMs)})";
 
     private static string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
 
@@ -272,7 +272,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// 1 パケット。セクションを読み (ECM ならここで鍵を貰う)、溜めている間は溜めの後ろへ、
-    /// そうでなければ出口へ写してその場で復号する (**写すのは 1 回だけ**)
+    /// そうでなければ出力へ写してその場で復号する (**写すのは 1 回だけ**)
     /// </summary>
     private void Take(ReadOnlySpan<byte> packet, IBufferWriter<byte> output)
     {
@@ -554,12 +554,12 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// **まだ知らない PID を覗く。** 溜めている間だけ、セクションの先頭 (payload_unit_start が立ったもの) の
+    /// **PAT・PMT にまだ無い PID を覗く。** 溜めている間だけ、セクションの先頭 (payload_unit_start が立ったもの) の
     /// table_id が ECM (0x82) か、PAT より前なら PMT (0x02) のときに組み立て始める。
     ///
     /// <para>
     /// PAT → PMT → ECM → カードと順に待つと、それぞれの間隔 (どれも 0.1 秒ほど) が積み上がる。先に来たものを
-    /// 取っておけば、PMT が来たその場でカードに聞ける (次の ECM を待たない)。**経路と溜めの条件、カードに聞くかは
+    /// 取っておけば、PMT が来たその場でカードに聞ける (次の ECM を待たない)。**経路と、溜めるのをやめる条件、カードに聞くかは
     /// 確かめた PMT だけで決める** (<see cref="Rebuild"/> / <see cref="Ready"/>)。
     /// </para>
     ///
@@ -767,7 +767,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// EMM の PID に来たセクション。EMM (0x84) だけを受け口に渡し、自分宛てかはそこで比べる (<see cref="Emm.Section"/>)。
+    /// EMM の PID に来たセクション。EMM (0x84) だけを渡し先に渡し、自分宛てかはそこで比べる (<see cref="Emm.Section"/>)。
     /// EMM メッセージ (0x85) は契約を変えないので読み飛ばす。**鍵の要らない利用者だけのときも渡す**
     /// </summary>
     private void OnEmm(ReadOnlySpan<byte> section)
@@ -794,14 +794,14 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>
     /// ECM を受けた。**中身が変わっていたら、その場で鍵を貰う。** 同じ中身なら、貰えなかったものだけ
     /// 少し置いて聞き直す。溜めている間に同じ PID の ECM がもう一度来たら、そこで溜めるのをやめる。
-    /// 1 周しても来ない ECM は来ないし、中身が変わる前に溜めを最初の鍵で復号しておく (<see cref="Settle"/>)
+    /// 1 周しても来ない ECM は来ないし、中身が変わる前に溜めたぶんを最初の鍵で復号しておく (<see cref="Settle"/>)
     /// </summary>
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
     {
         // 鍵の要らない利用者だけならカードに聞かない (Rehold で聞き直す)
         if (section[0] != 0x82 || !_keys) return;
         var listed = _ecms.GetValueOrDefault(ecm.Pid) == ecm;
-        // 溜めをやめる合図にするのは PMT が挙げた ECM だけ。先回りして取っておいただけのもの (Early) は PAT・PMT を待たせない
+        // 溜めるのをやめる合図にするのは PMT が挙げた ECM だけ。先回りして取っておいただけのもの (Early) は PAT・PMT を待たせない
         if (_holding && ecm.Last is not null && listed) Settle();
         if (ecm.Last is { } last && section.SequenceEqual(last))
         {

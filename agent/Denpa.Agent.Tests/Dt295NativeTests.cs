@@ -559,7 +559,7 @@ public class Dt295NativeTests
     }
 
     [Test]
-    public async Task 同じ種別の選局し直しは頭の手順を省き_種別が替わるときは前の側を休ませる()
+    public async Task 同じ種別の選局し直しは先頭の手順を省き_種別が替わるときは前の側を休ませる()
     {
         var fake = Rig();
         var port = $"test-{Guid.NewGuid():N}";

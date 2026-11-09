@@ -123,7 +123,7 @@ var recorded = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
 // 自分の鍵と証明書、合言葉、組んだ denpa (tuners.json の隣の tls/。AgentTls.cs)
 var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN"));
 /*
- * 合言葉が短いと、組むやり取りを覗いた人が証し (HMAC) から手元で総当たりできる。インストーラや chart が
+ * 合言葉が短いと、組むやり取りを覗いた人がproof (HMAC) から手元で総当たりできる。インストーラや chart が
  * 作るもの (43 字) なら当たらない。手で短いものを渡されたときだけ言う
  */
 if (tls.Token.Length < 32)
@@ -322,7 +322,7 @@ app.Use(async (HttpContext http, RequestDelegate next) =>
     }
 });
 
-// --- 選局。**エージェントの表看板** ---------------------------------------
+// --- 選局。**エージェントの中心の API** ---------------------------------------
 app.MapGet("/denpa/stream", async (HttpContext http) =>
 {
     var query = http.Request.Query;
@@ -448,7 +448,7 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
         /*
          * **止まるときはこちらから閉じる。** Kestrel は開いている応答が終わるのを 30 秒 (既定の ShutdownTimeout)
          * 待ってから止まり、その間は待ち受けだけ閉じている。denpa は通知を開きっぱなしにするので、録画が無いときの
-         * 入れ替えでも古い Pod が 30 秒残り、その間に始まった録画の頭が欠けていた (実機で約 35 秒。下の Drain)
+         * 入れ替えでも古い Pod が 30 秒残り、その間に始まった録画の先頭が欠けていた (実機で約 35 秒。下の Drain)
          */
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted, app.Lifetime.ApplicationStopping);
         var ct = stopping.Token;
@@ -792,7 +792,7 @@ internal static class Respond
 ///
 /// <para>
 /// **待っている間も、新しい選局は断らない** (denpa の scheduler.ts の「止められている最中でも始める」と同じ考え)。
-/// <c>Recreate</c> なので新しい Pod はこちらが終わるまで立たず、断ってもその間に始まる録画の頭が欠けるだけ。
+/// <c>Recreate</c> なので新しい Pod はこちらが終わるまで立たず、断ってもその間に始まる録画の先頭が欠けるだけ。
 /// 来た録画は録り終えるまで待つ (待ちは伸びるが <c>SHUTDOWN_WAIT</c> が歯止め)。ライブや番組表は受けるが
 /// 待たず、録画が終われば一緒に切れる。**録画が無ければすぐ畳む。** 待っても入れ替えの隙間が伸びるだけ。
 /// </para>
@@ -847,7 +847,7 @@ internal sealed class Drain(TunerPool pool, long waitMs, IHostApplicationLifetim
             {
                 await Task.WhenAny(_waiting.Task, Task.Delay(1000));
             }
-            if (!_waiting.Task.IsCompleted) Log.Write(pool.Recording ? "待ちきれないので畳みます" : "録画が終わったので畳みます");
+            if (!_waiting.Task.IsCompleted) Log.Write(pool.Recording ? "待つ上限を過ぎたので畳みます" : "録画が終わったので畳みます");
         }
         _waiting.TrySetResult();
         lifetime.StopApplication();

@@ -6,7 +6,7 @@ namespace Denpa.Agent;
 /// <para>
 /// B-CAS は <c>3B F0 12 00 FF 91 81 B1 7C 45 1F 03 99</c>。TA2 (<c>81</c>) があるので
 /// **specific mode** で、カードは ATR の直後から TA1 (<c>12</c> = Fi 372 / Di 2) の速さで話す。
-/// PPS は要らないが、読み取り機にその速さを教えないと話が通じない (<see cref="CcidLink"/>)。
+/// PPS は要らないが、リーダーにその速さを教えないと話が通じない (<see cref="CcidLink"/>)。
 /// T=1 用の値は TD2 が T=1 を示したあとの TA3 (IFSC = 0x7C) と TB3 (BWI 4 / CWI 5)。
 /// </para>
 /// </summary>
@@ -117,13 +117,13 @@ public sealed record Atr(
 }
 
 /// <summary>
-/// ISO/IEC 7816-3 の T=1 (ブロックの送り合い)。**TPDU 単位の読み取り機 (Ccid.cs) と CECH-ZD1 J・PIX-DT295 の差し込み口 (Zd1j.cs・Dt295NativeCard.cs) だけ**が使う。
+/// ISO/IEC 7816-3 の T=1 (ブロックの送り合い)。**TPDU 単位のリーダー (Ccid.cs) と CECH-ZD1 J・PIX-DT295 の差し込み口 (Zd1j.cs・Dt295NativeCard.cs) だけ**が使う。
 ///
 /// <para>
-/// 読み取り機はブロックを 1 つ送って 1 つ受けるだけで、順番の番号・連結・再送はこちらが持つ。
+/// リーダーはブロックを 1 つ送って 1 つ受けるだけで、順番の番号・連結・再送はこちらが持つ。
 /// 下の層 (<c>exchange</c>) は「送ったブロックと、返ってきたブロック」だけを扱い、
 /// **返ってこなかった・化けた (カードの応答が無い、パリティ誤り) は null** で知らせる。
-/// 投げるのは読み取り機そのものが駄目なとき (抜かれた、カードが無い) だけ。
+/// 投げるのはリーダーそのものが駄目なとき (抜かれた、カードが無い) だけ。
 /// 2 つめの引数は WTX で延ばす倍率 (0 なら延ばさない)。
 /// </para>
 ///
@@ -285,7 +285,7 @@ public sealed class T1Protocol
                     toSend = current = NextChunk(command, ref offset);
                     continue;
                 }
-                // 送り直しの求め (こちらが最後に送ったものが届いていない)
+                // 送り直しの要求 (こちらが最後に送ったものが届いていない)
                 if (++errors > MaxRetries) throw new IOException("カードが再送を求め続けます (T=1)");
                 toSend = sending ? current : Ready();
             }

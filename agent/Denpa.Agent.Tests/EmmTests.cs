@@ -46,7 +46,7 @@ internal sealed class StepClock : TimeProvider
 }
 
 /*
- * 契約の更新 (EMM) の受け口 (Emm.cs)。
+ * 契約の更新 (EMM) の渡し先 (Emm.cs)。
  *
  * 作業スレッドは起こさず、Step を呼んで 1 回ずつ進める。カードは返り値を決めて返す偽物 (Card)。
  * セクションの組み立てと CAT は B25Tests で見る。
@@ -67,7 +67,7 @@ public class EmmTests
         return [.. payload];
     }
 
-    /// <summary>ペイロードを並べた EMM セクション。CRC は受け口では見ないので 0 を置く</summary>
+    /// <summary>ペイロードを並べた EMM セクション。CRC は渡し先では見ないので 0 を置く</summary>
     private static byte[] Section(params byte[][] payloads) =>
         [0x84, 0, 0, 0, 0, 0, 0, 0, .. payloads.SelectMany(p => p), 0, 0, 0, 0];
 
@@ -98,7 +98,7 @@ public class EmmTests
         }
     }
 
-    /// <summary>番号を取り終えた受け口</summary>
+    /// <summary>番号を取り終えた渡し先</summary>
     private static (Emm Emm, StepClock Clock) Ready(Card card, Action? accepted = null)
     {
         var clock = new StepClock();
@@ -165,9 +165,9 @@ public class EmmTests
     }
 
     [Test]
-    public async Task 配り役が古くEMMを受け付けなければ_その置き場のあいだはもう送らない()
+    public async Task 配る側が古く_EMM_を受け付けなければ_その出どころのあいだはもう送らない()
     {
-        var card = new Card { Code = _ => throw new NotSupportedException("配り役のエージェントが古い") };
+        var card = new Card { Code = _ => throw new NotSupportedException("配る側のエージェントが古い") };
         var (emm, clock) = Ready(card);
 
         for (var i = 0; i < 3; i++)
@@ -177,7 +177,7 @@ public class EmmTests
         }
         await Assert.That(card.Sent.Count).IsEqualTo(1);
 
-        // 置き場が替われば (配り役を新しくした・手元のカードに替えた) また送る
+        // 鍵の出どころが替われば (配る側を新しくした・手元のカードに替えた) また送る
         var next = new Card();
         var current = card;
         var swapped = new Emm(() => current, clock);
@@ -193,7 +193,7 @@ public class EmmTests
     }
 
     [Test]
-    public async Task 覚えるのは256件までで_古いものから忘れる()
+    public async Task 覚えるのは_256_件までで_古いものから忘れる()
     {
         var card = new Card();
         var (emm, clock) = Ready(card);
@@ -212,7 +212,7 @@ public class EmmTests
     }
 
     [Test]
-    public async Task 順番待ちは16件で_溢れたら新しいほうを捨てる()
+    public async Task 順番待ちは_16_件で_溢れたら新しいほうを捨てる()
     {
         var card = new Card();
         var (emm, clock) = Ready(card);
@@ -225,7 +225,7 @@ public class EmmTests
     }
 
     [Test]
-    public async Task カードに送るのは1秒に1件まで()
+    public async Task カードに送るのは_1_秒に_1_件まで()
     {
         var card = new Card();
         var (emm, clock) = Ready(card);
@@ -244,7 +244,7 @@ public class EmmTests
     }
 
     [Test]
-    public async Task 番号が取れない間はEMMを捨て_10秒は取り直さない()
+    public async Task 番号が取れない間は_EMM_を捨て_10_秒は取り直さない()
     {
         var card = new Card { InitFails = new IOException("カードリーダーが見つかりません") };
         var clock = new StepClock();
@@ -303,7 +303,7 @@ public class EmmTests
     }
 
     [Test]
-    public async Task 受け入れ以外の返り値が続いても記録には1行だけ出す()
+    public async Task 受け入れ以外の返り値が続いても記録には_1_行だけ出す()
     {
         // ほかのテストと混ざらない返り値
         const int code = 0xA1F5;
@@ -323,7 +323,7 @@ public class EmmTests
     }
 
     [Test]
-    public async Task 知らせるのは1分に1回まで_その間にまた受け入れたら間が明けたときに1回知らせる()
+    public async Task 知らせるのは_1_分に_1_回まで_その間にまた受け入れたら間が明けたときに_1_回知らせる()
     {
         var clock = new StepClock();
         var emitted = 0;

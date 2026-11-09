@@ -31,7 +31,7 @@ namespace Denpa.Agent;
 /// <para>
 /// **排他で開く** (<c>SCARD_SHARE_EXCLUSIVE</c>)。Linux の usbfs でもインターフェースを
 /// 独り占めしている。共有にすると、macOS がカードを覗きに来る (CryptoTokenKit が
-/// 挿したカードに APDU を投げる) ときに INT と ECM の間へ割り込まれうる。開けなければ
+/// 挿したカードに APDU を送る) ときに INT と ECM の間へ割り込まれうる。開けなければ
 /// 理由 (共有違反) を返し、BCas が少し置いて探し直す。
 /// </para>
 /// </summary>

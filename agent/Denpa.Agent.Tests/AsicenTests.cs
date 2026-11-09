@@ -50,7 +50,7 @@ public class AsicenTests
     }
 
     [Test]
-    public async Task 同じ内蔵ハブの_1_と_2_を1つの筐体にまとめる_受信機は_0S_1T_2S_3T()
+    public async Task 同じ内蔵ハブの_1_と_2_を_1_つの筐体にまとめる_受信機は_0S_1T_2S_3T()
     {
         var warnings = new List<string>();
         var enclosures = AsicenUserland.Group(

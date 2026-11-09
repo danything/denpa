@@ -23,7 +23,7 @@ public class Px4StreamBenchTests
     private static readonly TimeSpan Span = TimeSpan.FromSeconds(5);
 
     [Test]
-    public async Task 合計40MB毎秒を流したときのCPUと確保量(CancellationToken cancel)
+    public async Task 合計_40MB_毎秒を流したときの_CPU_と確保量(CancellationToken cancel)
     {
         await Task.Yield();
         var fakes = new List<Px4TunerTests.FakePx4d>();
