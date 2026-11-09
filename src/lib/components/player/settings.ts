@@ -114,7 +114,7 @@ export function liveCodecs(opts: {
     pick: (key) => {
       if (key === MPEG2) opts.onselect("raw");
       else if (key === AUTO) opts.onselect("auto");
-      else opts.onselect(key as LiveCodec);
+      else opts.onselect(key as LiveChoice);
     },
   };
 }

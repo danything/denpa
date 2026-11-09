@@ -25,7 +25,7 @@ function payload(pid: number, counter = 0): Uint8Array {
   return out;
 }
 
-/** 実機の TSID。PAT の頭に書いてある */
+/** 実機の TSID。PAT の先頭に書いてある */
 const TSID = 0x7fe1;
 
 const pat = () =>
@@ -126,7 +126,7 @@ describe("局の選り分け", () => {
    * **ここが目的。** 丸ごと通すと ffmpeg には 2 つのプログラムが見えて、
    * 1 つ目のつもりで読んだ値が 2 つ目のものだったりする
    */
-  test("PAT はその局1つだけに書き直す", () => {
+  test("PAT はその局 1 つだけに書き直す", () => {
     const filter = new ServiceFilter(MX1);
     const out = filter.filter(Uint8Array.from([...pat(), ...pmt1()]));
     // PAT は 1 パケットに収まる。先頭に出てくるはず
@@ -166,7 +166,7 @@ describe("局の選り分け", () => {
   });
 
   /*
-   * **選局したての頭を捨てない。** 捨てると PMT より前に始まった I フレームを失い、次の GOP (0.5 秒) まで
+   * **選局したての先頭を捨てない。** 捨てると PMT より前に始まった I フレームを失い、次の GOP (0.5 秒) まで
    * 映像が出ない。音も PMT のあとから貯め始めることになる (MPEG-2 のまま観る経路の、押してから映るまで)
    */
   test("PMT を読む前に届いた自局の ES は取っておき、PMT の後ろに届いた順で出す", () => {
@@ -238,7 +238,7 @@ describe("コピー禁止", () => {
     expect(filter.copyNever).toBe(false);
   });
 
-  test("番組ぜんたいの記述子で禁止なら禁止。1世代のみは禁止ではない", () => {
+  test("番組ぜんたいの記述子で禁止なら禁止。1 世代のみは禁止ではない", () => {
     const filter = new ServiceFilter(MX1);
     filter.filter(
       Uint8Array.from([...pat(), ...pmt(copyControlDescriptor(0b11))]),
@@ -337,7 +337,7 @@ describe("並びが変わったか", () => {
   const map = (streams: [number, number][]) =>
     packetize(PMT1, programMap(MX1, 0x100, streams));
 
-  test("最初の PMT では変わったことにしない。変わったら1回だけ true、データ放送の増減では false", () => {
+  test("最初の PMT では変わったことにしない。変わったら 1 回だけ true、データ放送の増減では false", () => {
     const filter = new ServiceFilter(MX1);
     const watch = new StreamsWatch();
     filter.filter(pat());

@@ -7,8 +7,8 @@ import { ADDITIONAL } from "./b24-tables.js";
 /** 読みやすさのために、バイト列を組み立てる小道具 */
 const bytes = (...values: number[]) => Uint8Array.from(values);
 
-describe("ARIB 8単位符号", () => {
-  test("初期状態の GL は漢字。区点をそのまま2バイトで読む", () => {
+describe("ARIB 8 単位符号", () => {
+  test("初期状態の GL は漢字。区点をそのまま 2 バイトで読む", () => {
     // 日 = 38 区 72 点 → 0x46,0x7C / 本 = 43 区 60 点 → 0x4B,0x5C
     expect(decodeAribText(bytes(0x46, 0x7c, 0x4b, 0x5c))).toBe("日本");
   });
@@ -24,13 +24,13 @@ describe("ARIB 8単位符号", () => {
     );
   });
 
-  test("ESC 0x24 は G0 への2バイト集合の指示", () => {
+  test("ESC 0x24 は G0 への 2 バイト集合の指示", () => {
     // いったん英数にしてから漢字へ戻す
     const data = bytes(0x1b, 0x28, 0x4a, 0x41, 0x1b, 0x24, 0x42, 0x46, 0x7c);
     expect(decodeAribText(data)).toBe("Ａ日");
   });
 
-  test("SS2 は1文字だけ G2 を使い、すぐ戻る", () => {
+  test("SS2 は 1 文字だけ G2 を使い、すぐ戻る", () => {
     // 漢字 → (SS2)あ → 漢字
     expect(decodeAribText(bytes(0x46, 0x7c, 0x19, 0x22, 0x4b, 0x5c))).toBe(
       "日あ本",
@@ -58,7 +58,7 @@ describe("ARIB 8単位符号", () => {
    * **番組表でいちばん効くところ。** 「🈟」「🈑」が読めないと、
    * 番組名から印だけが黙って消える
    */
-  test("外字。90区の記号は規格の字 (囲み文字) にする", () => {
+  test("外字。90 区の記号は規格の字 (囲み文字) にする", () => {
     expect(decodeAribText(bytes(0x7a, 0x56))).toBe("🈑");
     expect(decodeAribText(bytes(0x7a, 0x6b, 0x7a, 0x6a))).toBe("🈟🈞");
   });
@@ -83,7 +83,7 @@ describe("ARIB 8単位符号", () => {
     expect(decodeAribText(bytes(0x7d, 0x50, 0x7e, 0x41))).toBe("½🄐");
   });
 
-  test("私用領域にしかない字 (92区56点〜) だけは文字列に開く", () => {
+  test("私用領域にしかない字 (92 区 56 点〜) だけは文字列に開く", () => {
     expect(decodeAribText(bytes(0x7c, 0x58))).toBe("(vn)");
   });
 
@@ -116,7 +116,7 @@ describe("ARIB 8単位符号", () => {
     expect(uhd).toEqual([]);
   });
 
-  test("改行。CR に続く LF は1回にまとめる", () => {
+  test("改行。CR に続く LF は 1 回にまとめる", () => {
     expect(decodeAribText(bytes(0x46, 0x7c, 0x0d, 0x0a, 0x4b, 0x5c))).toBe(
       "日\n本",
     );
@@ -205,7 +205,7 @@ describe("ARIB 8単位符号", () => {
     expect(decodeAribText(bytes(0x1b, 0x24))).toBe("");
   });
 
-  test("90・91区の記号は規格の字にする。EUC-JP の IBM 拡張漢字に化けない", () => {
+  test("90・91 区の記号は規格の字にする。EUC-JP の IBM 拡張漢字に化けない", () => {
     // 90 区 1 点 (事故)・91 区 17 点 (温泉)・91 区 43 点 (電話)
     expect(decodeAribText(bytes(0x7a, 0x21, 0x7b, 0x31, 0x7b, 0x4b))).toBe(
       "⛌♨☎",
@@ -221,7 +221,7 @@ describe("ARIB 8単位符号", () => {
     ).toBe("鿄鿅🄪ℓ");
   });
 
-  test("EUC-JP に無い点は JIS X 0213 の1面の字", () => {
+  test("EUC-JP に無い点は JIS X 0213 の 1 面の字", () => {
     // 3 区 1 点・9 区 1 点・13 区 31 点 (13 区のほかの点は EUC-JP の字のまま)
     expect(decodeAribText(bytes(0x23, 0x21, 0x29, 0x21, 0x2d, 0x3f))).toBe(
       "▷€Ⅺ",
@@ -235,12 +235,12 @@ describe("ARIB 8単位符号", () => {
     );
   });
 
-  test("2つのコードポイントで表す字は並べて出す", () => {
+  test("2 つのコードポイントで表す字は並べて出す", () => {
     // 4 区 87 点 (か + 半濁点)・11 区 69 点 (声調の組)
     expect(decodeAribText(bytes(0x24, 0x77, 0x2b, 0x65))).toBe("か゚˩˥");
   });
 
-  test("85区から先は、JIS互換漢字1面なら JIS X 0213 の漢字、漢字集合なら外字", () => {
+  test("85 区から先は、JIS 互換漢字 1 面なら JIS X 0213 の漢字、漢字集合なら外字", () => {
     expect(decodeAribText(bytes(0x75, 0x21))).toBe("㐂");
     expect(decodeAribText(bytes(0x1b, 0x24, 0x39, 0x75, 0x21))).toBe("擄");
     expect(decodeAribText(bytes(0x1b, 0x24, 0x39, 0x7e, 0x76))).toBe("龐");
@@ -248,7 +248,7 @@ describe("ARIB 8単位符号", () => {
     expect(decodeAribText(bytes(0x1b, 0x24, 0x3b, 0x75, 0x21))).toBe("㐂");
   });
 
-  test("JIS互換漢字2面は2面の表を引く。1面と混ぜない", () => {
+  test("JIS 互換漢字 2 面は 2 面の表を引く。1 面と混ぜない", () => {
     // 2 面の 1 区 1 点・3 区 1 点。1 面なら「　」と「▷」
     expect(
       decodeAribText(bytes(0x1b, 0x24, 0x3a, 0x21, 0x21, 0x23, 0x21)),

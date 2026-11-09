@@ -49,7 +49,7 @@ export interface TimedMessage {
  *    (`DataBroadcastCapture.head`)。番組の始まり (`start_at`) ではない。録画は
  *    前のマージンのぶん早く始まるので、そちらを基準にすると番組連動がマージン (既定 10 秒) ぶん早く出る
  * 2. **エンコードしたものの物差しへ** (`ruler`。観る画面の `Ruler` と同じもの)。
- *    先頭から捨てた長さ (`encode_skip`) を引き、CM を切ったものは残した区間 (`cm_kept`) だけを積む。
+ *    先頭から捨てた長さ (`encode_skip`) を引き、前のバージョンで CM を切ってエンコードしたものは、残した区間 (`cm_kept`) だけを積む。
  *    CM の穴に落ちた時刻は、その後の本編の先頭に寄せる (`fromTsTime`)
  */
 export function playbackMsAt(

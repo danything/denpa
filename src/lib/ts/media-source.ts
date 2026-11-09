@@ -6,7 +6,7 @@
  *
  * - **`disableRemotePlayback = true` にしないと開かない** (`sourceopen` が来ない)。
  *   AirPlay へ渡せる別の経路 (HLS の `<source>`) を添えない限り要る
- * - **送り込む頃合いをブラウザが言う** (`startstreaming` / `endstreaming`)
+ * - **送り込んでよい間をブラウザが知らせる** (`startstreaming` / `endstreaming`)
  * - **溜めたものをブラウザが勝手に捨てる** (`bufferedchange`)
  *
  * TS の lib.dom にはまだ無いので、使うぶんだけ書いておく

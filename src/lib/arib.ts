@@ -146,10 +146,10 @@ const GENRE_LV2: Record<number, Record<number, string>> = {
 };
 
 /**
- * ルールの条件に出すジャンルの一覧。予備(0xC/0xD)は放送に出てこないので載せない。
+ * ルールの条件に出すジャンルの一覧。予備 (0xC・0xD) は放送に出てこないので載せない。
  *
- * 条件は文字列で持つ。`"7"` なら大分類だけ(アニメ／特撮すべて)、
- * `"7-0"` なら中分類まで(国内アニメだけ)。
+ * 条件は文字列で持つ。`"7"` なら大分類だけ (アニメ／特撮すべて)、
+ * `"7-0"` なら中分類まで (国内アニメだけ)。
  */
 export const GENRE_TREE: {
   value: string;
@@ -199,7 +199,7 @@ export function genreLabel(genre: Genre): string {
 /**
  * 音声の構成。component_type。
  * 2 のデュアルモノは主音声/副音声の切り替えがある放送で、
- * エンコードのときも扱いを変えている(encoder.ts)。
+ * エンコードのときも扱いを変えている (`encoder.ts`)。
  */
 const AUDIO_TYPE: Record<number, string> = {
   1: "モノラル",
@@ -255,7 +255,7 @@ export function audioLabel(audio: Audio): string {
 }
 
 /**
- * 番組表の `audio_type` が言う「二カ国語」。**左右に別の言語が乗っている**
+ * 番組表の `audio_type` が言う「二カ国語」。**左右に別の言語が入っている**
  * (ARIB STD-B32)。録画もライブも、見分け方はここ 1 つ
  */
 export const DUAL_MONO = 2;
@@ -349,14 +349,11 @@ export function audioTracks(audios: Audio[]): AudioTrack[] {
  * ほかの構成とデュアルモノは undefined (ffmpeg に任せる。デュアルモノは左右に割る)
  */
 export function audioChannels(componentType: number): number | undefined {
-  return componentType === 1
-    ? 1
-    : componentType === 3
-      ? 2
-      : componentType === 9
-        ? 6
-        : undefined;
+  return AUDIO_CHANNELS[componentType];
 }
+
+/** `audioChannels` の表。component_type → チャンネル数 */
+const AUDIO_CHANNELS: Record<number, number> = { 1: 1, 3: 2, 9: 6 };
 
 /**
  * エンコードしたものに入れる音声の名前 (番組表と同じ言い方。入れないとプレイヤーに「Audio 1」としか出ない)。
@@ -380,7 +377,7 @@ export function audioTitles(audios: Audio[], dualMono: boolean): string[] {
  *
  * `audios` は放送から読み取ったものをそのまま持っているだけなので、無い・壊れている
  * (壊れた行は列の読み取り関数が空にする。`schema.ts`) ことはありうる。そのときは
- * `audio_type` に落とし、それも無ければ何も無いことにする。どの道 `audioTracks` が
+ * `audio_type` に落とし、それも無ければ何も無いことにする。どちらにしても `audioTracks` が
  * 「そのまま出す」1 つを返す
  */
 export function parseAudios(

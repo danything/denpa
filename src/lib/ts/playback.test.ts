@@ -267,7 +267,7 @@ describe("コーデックのメニュー (codecChoices)", () => {
   });
 });
 
-describe("溜まり方 (aheadOf / covers)", () => {
+describe("バッファの増え方 (aheadOf / covers)", () => {
   const ranges = [[100, 160]] as const;
 
   test("区間の中なら先に溜まっている長さ、外なら 0", () => {

@@ -177,7 +177,7 @@ describe("文", () => {
     ).toBe(3);
   });
 
-  test("関数の巻き上げ・閉包・arguments・再帰", async () => {
+  test("関数の巻き上げ・クロージャ・arguments・再帰", async () => {
     expect(
       await evaluate(`
                 var result = [early(), counter(), sum(1, 2, 3), fact(5)];
@@ -333,7 +333,7 @@ describe("止まる・打ち切る・区切る", () => {
     expect(vm.busy).toBe(false);
   });
 
-  test("締め切りで手を放し、次の run で続く", async () => {
+  test("締め切りで yield を返し、次の run で続く", async () => {
     const vm = setup();
     vm.startProgram(
       compileScript(
@@ -367,7 +367,7 @@ describe("止まる・打ち切る・区切る", () => {
     expect(await evaluate("created = 3; var result = created;")).toBe(3);
   });
 
-  test("イベントの受け手を呼ぶ", async () => {
+  test("イベントのハンドラを呼ぶ", async () => {
     const vm = setup();
     vm.startProgram(
       compileScript(

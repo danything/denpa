@@ -18,7 +18,7 @@ describe("pickMediaSource", () => {
     });
   });
 
-  test("ManagedMediaSource しか無ければ (iPhone の Safari) そちらで、managed と言う", () => {
+  test("ManagedMediaSource しか無ければ (iPhone の Safari) そちらで、managed を立てる", () => {
     const ManagedMediaSource = fake();
     expect(pickMediaSource({ ManagedMediaSource })).toEqual({
       Source: ManagedMediaSource,

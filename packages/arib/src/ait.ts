@@ -1,13 +1,13 @@
 /**
  * AIT (Application Information Table) を読む。**Hybridcast の在り処。**
  *
- * データ放送 (BML) と違って、**Hybridcast のアプリは電波に乗っていません**。
- * 乗っているのはこの表だけで、中身は「どこにアプリがあるか」のアドレス (URL) です。
+ * データ放送 (BML) と違って、**Hybridcast のアプリは放送では送られていません**。
+ * 送られているのはこの表だけで、中身は「どこにアプリがあるか」のアドレス (URL) です。
  * アプリそのものは放送局のサーバから HTTPS で取ってきます。
  *
  * ```
  * PMT ─ ES に application_signalling_descriptor (0x6F) ─→ その PID に AIT
- * AIT ─ transport_protocol_descriptor (URL の頭)
+ * AIT ─ transport_protocol_descriptor (URL の先頭部分)
  *     └ simple_application_location_descriptor (その先のパス)  →  アプリの URL
  * ```
  *
@@ -107,7 +107,7 @@ export function aitPidsFromPmt(section: Uint8Array): number[] {
 }
 
 /**
- * URL の頭を取り出す (transport_protocol_descriptor)。
+ * URL の先頭部分を取り出す (transport_protocol_descriptor)。
  *
  * **通信路で運ぶものだけ見ます。** `protocol_id` が 1 のものは放送のカルーセルで
  * 運ぶアプリ (データ放送と同じ経路) で、Hybridcast の話ではありません
@@ -208,7 +208,7 @@ export class AitReader {
   /**
    * TS を読んで、見つかったものを返す。**見つからない間は空**。
    *
-   * 同じものが何度も返るのは呼ぶ側で畳んでください。放送は同じ表を
+   * 同じものが何度も返るのは呼ぶ側でまとめてください。放送は同じ表を
    * 繰り返し流すので、ここで覚えると「局を変えても消えない」になります
    */
   public feed(chunk: Uint8Array): Ait[] {

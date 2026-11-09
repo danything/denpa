@@ -1,7 +1,7 @@
 /**
  * 覚えておく場所 (NVRAM。`browser.readPersistentArray("nvram://local_web/0", "S:16B")`)。
  *
- * 放送が使う領域 (地上波は TR-B14 第二分冊 5.2、BS は TR-B15):
+ * 放送が使う領域は次のとおり (地上波は TR-B14 第二分冊 5.2、BS は TR-B15)。
  *
  * | URI | 誰のものか | ブロック |
  * | --- | --- | --- |

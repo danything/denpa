@@ -31,7 +31,7 @@ const h264 = mkvFromClip(
 );
 
 describe("readMkvHead", () => {
-  test("先頭からトラックの形式・尺・Cues の在りか・最初の Cluster を読む", () => {
+  test("先頭からトラックの形式・尺・Cues の位置・最初の Cluster を読む", () => {
     const head = readMkvHead(av1);
     expect(head).not.toBeNull();
     if (head === null) return;

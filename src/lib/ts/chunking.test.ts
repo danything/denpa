@@ -29,9 +29,9 @@ import { BroadcastClock } from "./clock";
 import { DataBroadcastCapture } from "./data-capture";
 
 /**
- * **塊の切れ目と入れ物の使い回しで、読めるものが変わらないこと。**
+ * **チャンクの切れ目と入れ物の使い回しで、読めるものが変わらないこと。**
  *
- * パケットは届いた塊の上の窓として配っている (写さない。`psi.ts` の `PacketStream`)。
+ * パケットは届いたチャンクの上の窓として配っている (写さない。`psi.ts` の `PacketStream`)。
  * 録画のデータ放送は 1 つの入れ物に読み込み直しながら渡す (`server/recorded-bml.ts`)
  * ので、窓を持ち続けるパーサがいると、次の読み込みで中身が化ける。
  * 局を 2 つ入れた TS を、丸ごと 1 回で渡したときと、半端な大きさに切って
@@ -207,7 +207,7 @@ function joined(parts: Uint8Array[]): number[] {
   return parts.flatMap((part) => [...part]);
 }
 
-describe("塊の切れ目と入れ物の使い回し", () => {
+describe("チャンクの切れ目と入れ物の使い回し", () => {
   test("局を絞った TS はバイト単位で同じ", () => {
     const whole = new ServiceFilter(SERVICES[0]!).filter(ts);
     expect(whole.length).toBeGreaterThan(0);

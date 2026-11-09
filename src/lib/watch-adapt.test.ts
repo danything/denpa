@@ -93,7 +93,7 @@ describe("刻み (watchAdapt)", () => {
     expect(h.decided).toEqual([{ step: 1, reason: "slow" }]);
   });
 
-  test("止めている間は刻まず、動き出したら測り直す (止めていた間の溜まりを回線のぶんと読まない)", async () => {
+  test("止めている間は刻まず、動き出したら測り直す (止めていた間のバッファを回線のぶんと読まない)", async () => {
     const h = harness();
     await h.run(5000);
     h.hide();

@@ -88,7 +88,7 @@ if (wrong.length > 0)
   throw new Error(`字幕の表と JIS X 0213 が違う:\n${wrong.join("\n")}`);
 
 function kuten(cell: number): string {
-  return `${Math.floor(cell / 94) + 1}区${(cell % 94) + 1}点`;
+  return `${Math.floor(cell / 94) + 1} 区 ${(cell % 94) + 1} 点`;
 }
 
 /** 区の 94 字 (空きは U+FFFD) */
@@ -97,7 +97,7 @@ function row(plane: Map<number, string>, ku: number): string {
   for (let ten = 0; ten < 94; ten++) {
     const char = plane.get((ku - 1) * 94 + ten) ?? "�";
     if ([...char].length > 1)
-      throw new Error(`${kuten((ku - 1) * 94 + ten)} が2字`);
+      throw new Error(`${kuten((ku - 1) * 94 + ten)} が 2 字`);
     out += char;
   }
   return out;
@@ -106,26 +106,26 @@ function row(plane: Map<number, string>, ku: number): string {
 const lines = [
   BEGIN + " (packages/arib/scripts/jisx0213.ts が書く。手で直さない)",
   "/**",
-  " * JIS X 0213:2004 の1面で、2つのコードポイントで表す字 (半濁点の付いたかな・発音記号と、声調の組)。",
-  " * [区×94+点 (0 から), 字]。字幕は1区画、番組表は2つのコードポイントのまま出す",
+  " * JIS X 0213:2004 の 1 面で、2 つのコードポイントで表す字 (半濁点の付いたかな・発音記号と、声調の組)。",
+  " * [区×94+点 (0 から), 字]。字幕は 1 区画、番組表は 2 つのコードポイントのまま出す",
   " */",
   "export const KANJI_SEQUENCES: [number, string][] = [",
   ...sequences.map(([cell, s]) => `    [${cell}, "${s}"], // ${kuten(cell)}`),
   "];",
   "/**",
-  " * JIS X 0213:2004 の1面の 85〜94区 (第3水準の漢字)。JIS互換漢字1面 (終端 0x39) だけが引く。",
-  " * 漢字集合 (0x42) と追加記号 (0x3B) の 85区から先は `ADDITIONAL`",
+  " * JIS X 0213:2004 の 1 面の 85〜94 区 (第 3 水準の漢字)。JIS 互換漢字 1 面 (終端 0x39) だけが引く。",
+  " * 漢字集合 (0x42) と追加記号 (0x3B) の 85 区から先は `ADDITIONAL`",
   " */",
   "const PLANE1_HIGH_ROWS: string[] = [",
   ...Array.from(
     { length: 10 },
-    (_, k) => `    "${row(plane1, 85 + k)}", // ${85 + k}区`,
+    (_, k) => `    "${row(plane1, 85 + k)}", // ${85 + k} 区`,
   ),
   "];",
-  "/** `PLANE1_HIGH_ROWS` を1つの文字列にしたもの。(区 − 85) × 94 + (点 − 1) 番目のコードポイント */",
+  "/** `PLANE1_HIGH_ROWS` を 1 つの文字列にしたもの。(区 − 85) × 94 + (点 − 1) 番目のコードポイント */",
   "export const PLANE1_HIGH = PLANE1_HIGH_ROWS.join('');",
   "/**",
-  " * JIS X 0213:2004 の2面 (JIS互換漢字2面。終端 0x3A)。[区, 94 字 (点の順)]。字のある区だけ",
+  " * JIS X 0213:2004 の 2 面 (JIS 互換漢字 2 面。終端 0x3A)。[区, 94 字 (点の順)]。字のある区だけ",
   " */",
   "export const PLANE2: [number, string][] = [",
   ...[...new Set([...plane2.keys()].map((cell) => Math.floor(cell / 94) + 1))]
@@ -145,5 +145,5 @@ writeFileSync(
   text.slice(0, from) + lines.join("\n") + text.slice(to + END.length),
 );
 console.log(
-  `書いた: 2つのコードポイントの字 ${sequences.length}、1面 85〜94区、2面 ${plane2.size} 字`,
+  `書いた: 2 つのコードポイントの字 ${sequences.length}、1 面 85〜94 区、2 面 ${plane2.size} 字`,
 );

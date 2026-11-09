@@ -64,8 +64,8 @@ describe("PCR と受け取った時刻を組にする", () => {
     expect(clock.anchor).toEqual({ pcr: 1002, unixMs: at + 1950 });
   });
 
-  /** 1 つの塊はどれも同じ時刻で受け取る。**塊の最後の PCR** が選ばれる */
-  test("塊の中では最後の PCR が選ばれる", () => {
+  /** 1 つのチャンクはどれも同じ時刻で受け取る。**チャンクの最後の PCR** が選ばれる */
+  test("チャンクの中では最後の PCR が選ばれる", () => {
     const clock = new BroadcastClock();
     tune(clock, 1000, at);
     clock.feed(
@@ -98,7 +98,7 @@ describe("PCR と受け取った時刻を組にする", () => {
     expect(clock.anchor).toEqual({ pcr: 10, unixMs: at + 100 });
   });
 
-  /** PMT が言う PCR の ES だけを見る。ほかの ES の PCR は使わない */
+  /** PMT に書いてある PCR の ES だけを見る。ほかの ES の PCR は使わない */
   test("PCR を運ぶ ES だけを見る", () => {
     const clock = new BroadcastClock();
     tune(clock, 1000, at);
@@ -108,7 +108,7 @@ describe("PCR と受け取った時刻を組にする", () => {
 });
 
 describe("ffmpeg の start: を読む", () => {
-  test("入口の見出しから読み取る", () => {
+  test("入力の情報の行から読み取る", () => {
     expect(
       parseStart("  Duration: N/A, start: 72575.147089, bitrate: N/A"),
     ).toBeCloseTo(72575.147089, 6);

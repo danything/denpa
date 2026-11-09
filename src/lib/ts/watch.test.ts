@@ -65,7 +65,7 @@ describe("押したときに何をするか", () => {
     expect(action).toEqual({ kind: "seek", by: -SKIP, undo: false });
   });
 
-  test("右端を素早く 2 回で 10 秒 送る", () => {
+  test("右端を素早く 2 回で 10 秒送る", () => {
     const first = tap(null, 1000, "right", true);
     const { action } = tap(first.next, 1100, "right", true);
     expect(action).toEqual({ kind: "seek", by: SKIP, undo: false });
@@ -256,7 +256,7 @@ describe("ffprobe のチャプターを読む", () => {
     ]);
   });
 
-  /** CM を切ってエンコードしたものにはチャプターが無い */
+  /** CM 検出が当たらなかったもの・前のバージョンで CM を切ってエンコードしたものにはチャプターが無い */
   test("1 つも無ければ空", () => {
     expect(parseChapters(JSON.stringify({ chapters: [] }))).toEqual([]);
   });
@@ -290,7 +290,7 @@ describe("ffprobe のチャプターを読む", () => {
 });
 
 describe("続きの位置の物差し", () => {
-  // 元の TS の 10〜100 秒と 160〜300 秒を残し、100〜160 秒の CM を切った
+  // 前のバージョンで、元の TS の 10〜100 秒と 160〜300 秒を残し、100〜160 秒の CM を切った
   const cut = {
     kept: [
       { start: 10, end: 100 },
@@ -400,10 +400,10 @@ describe("観終えたか", () => {
 });
 
 /**
- * 観はじめるときに CM 飛ばしを入れるか (`skipCmAtStart`)。
+ * 観はじめるときに CM 飛ばしをオンにするか (`skipCmAtStart`)。
  *
- * **既定は入れる。** 切らずにエンコードした録画で毎回ボタンを押さずに済むように。
- * **ロゴでの判定に失敗した 1 本だけは切って始める。** 無音だけで当てていて
+ * **既定はオン。** CM はチャプターとして入っているだけなので、毎回ボタンを押さずに済むように。
+ * **ロゴでの判定に失敗した 1 本だけはオフで始める。** 無音だけで当てていて
  * 外れやすく、外れると本編のほうを飛ばすため。
  */
 describe("観はじめの CM 飛ばし", () => {
@@ -413,21 +413,21 @@ describe("観はじめの CM 飛ばし", () => {
   const fell =
     "無音 8 箇所 (ロゴは使えず: ロゴの写っているコマがありませんでした)";
 
-  test("覚えていなければ入れて始める", () => {
+  test("覚えていなければオンで始める", () => {
     expect(skipCmAtStart(ok, null)).toBe(true);
     expect(skipCmAtStart(null, null)).toBe(true);
   });
 
-  test("前に切った端末では切ったままにする", () => {
+  test("前にオフにした端末ではオフのまま", () => {
     expect(skipCmAtStart(ok, "0")).toBe(false);
   });
 
-  test("前に入れた端末では入れる", () => {
+  test("前にオンにした端末ではオン", () => {
     expect(skipCmAtStart(ok, "1")).toBe(true);
   });
 
   /** ここが今回の肝。外れやすい 1 本で黙って本編を飛ばさない */
-  test("ロゴでの判定に失敗した録画は、覚えていても切って始める", () => {
+  test("ロゴでの判定に失敗した録画は、覚えていてもオフで始める", () => {
     expect(skipCmAtStart(fell, "1")).toBe(false);
     expect(skipCmAtStart(fell, null)).toBe(false);
     expect(skipCmAtStart(fell, "0")).toBe(false);
@@ -455,7 +455,7 @@ describe("シークバーの CM の塗り", () => {
     expect(cmSpans([])).toEqual([]);
   });
 
-  test("目盛りは CM の端には打たない (塗りの縁が言う)", () => {
+  test("目盛りは CM の端には打たない (塗りの縁で分かる)", () => {
     expect(plainMarks(chapters)).toEqual([]);
     const named = [
       { start: 0, end: 10, title: "アバン" },

@@ -188,8 +188,8 @@
     message: Extract<FrameMessage, { type: "fetch" }>,
   ): Promise<void> {
     /*
-     * **移る前のページの返りは捨てる。** 入れ物を読み直しても `contentWindow` は同じで、
-     * 新しいページは id を 1 から数え直すので、届けると別の通信の返りとして受け取られる
+     * **移る前のページのレスポンスは捨てる。** 入れ物を読み直しても `contentWindow` は同じで、
+     * 新しいページは id を 1 から数え直すので、届けると別の通信のレスポンスとして受け取られる
      */
     const mine = round;
     const reply = (

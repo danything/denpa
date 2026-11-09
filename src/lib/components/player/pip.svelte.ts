@@ -139,7 +139,7 @@ export function pictureInPicture(options: Options): Pip {
    */
   let baked = $state.raw<Composed | null>(null);
   /**
-   * 用意できなかった理由 (`prepare`)。**立っている間はボタンを出さない**。Firefox は MPEG-2 の
+   * 用意できなかった理由 (`prepare`)。**立っている間はボタンを出さない**。Firefox は canvas の
    * 映像ストリームを取れず、押せても必ず断られる
    */
   let unprepared = $state<Refused | null>(null);
@@ -293,11 +293,13 @@ export function pictureInPicture(options: Options): Pip {
     unprepared = null;
     const stream = options.capture?.() ?? null;
     if (stream === null) {
-      unprepared = new Refused("MPEG-2 の映像を取り出せません (captureStream)");
+      unprepared = new Refused(
+        "描いている映像を取り出せません (captureStream)",
+      );
       return;
     }
     if (stream.getVideoTracks().length === 0) {
-      unprepared = new Refused("MPEG-2 の映像が空です");
+      unprepared = new Refused("描いている映像が空です");
       return;
     }
     const video = makeProxy();
@@ -423,10 +425,10 @@ export function pictureInPicture(options: Options): Pip {
     if (raw()) {
       if (unprepared !== null) throw unprepared;
       if (proxy === null || proxy.srcObject === null)
-        throw new Refused("MPEG-2 の映像の準備ができていません");
+        throw new Refused("小窓に出す映像の準備ができていません");
       if (proxy.readyState < HTMLMediaElement.HAVE_METADATA)
         throw new Refused(
-          "MPEG-2 の映像がまだ届いていません。少し待ってからもう一度押してください",
+          "小窓に出す映像がまだ届いていません。少し待ってからもう一度押してください",
         );
       video = proxy;
       flowing(true);

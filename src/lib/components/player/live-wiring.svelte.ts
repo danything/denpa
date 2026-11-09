@@ -59,7 +59,10 @@ export function liveWiring(options: Options): LiveWiring {
     video: options.video,
   });
 
-  /** 小窓 (PiP)。MPEG-2 は worker の canvas からストリームを取って出す。小窓で押された止める・再開は player に合わせる */
+  /**
+   * 小窓 (PiP)。canvas に描いているとき (MPEG-2・互換モード) は worker の canvas からストリームを取って出す。
+   * 小窓で押された止める・再開は player に合わせる
+   */
   const pip = pictureInPicture({
     video: options.video,
     raw: () => player.canvas,
@@ -71,7 +74,7 @@ export function liveWiring(options: Options): LiveWiring {
     overlay: options.overlay,
     captions: () => player.captions && player.hasCaptions,
   });
-  // MPEG-2 をデコードした音を「再生する音」として扱うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
+  // canvas に描くときの音 (RawEngine が鳴らす) を「再生する音」として扱うのは、バックグラウンド再生がオンのときと小窓を開いている間だけ (`raw/engine.ts`)
   $effect(() => {
     player.playback = background.on || pip.active;
   });

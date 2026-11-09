@@ -12,7 +12,7 @@
  * - 音声 … 48kHz ステレオの AAC-LC の**無音**を ADTS で。1 コマ 7 バイト
  *
  * 規格は ISO/IEC 13818-2 (映像) と 13818-7 / 14496-3 (AAC)。表の出どころは
- * 各関数の頭に書いてある。
+ * 各関数の冒頭に書いてある。
  */
 
 import { concatBytes } from "./bytes.js";
@@ -111,7 +111,7 @@ function colorAt(
 }
 
 /**
- * I フレームを 1 枚。**毎枚、系列ヘッダから書く。** どこから受け取っても頭からデコードできる
+ * I フレームを 1 枚。**毎枚、系列ヘッダから書く。** どこから受け取っても先頭からデコードできる
  * (放送は GOP ごとに書く。試験ではその手間を省く)。
  *
  * @param n 何枚目か。色と time_code に使う
@@ -191,7 +191,7 @@ export function mpeg2Frame(
   bits.put(0, 1); // composite_display_flag
 
   for (let row = 0; row < mbHeight; row++) {
-    // 1 行を 1 スライスに。予測は行の頭で 128 に戻る (7.2.1)
+    // 1 行を 1 スライスに。予測は行の先頭で 128 に戻る (7.2.1)
     bits.startCode(row + 1);
     bits.put(8, 5); // quantiser_scale_code (DC だけなので効かない)
     bits.put(0, 1); // extra_bit_slice
@@ -217,7 +217,7 @@ export function mpeg2Frame(
 }
 
 /**
- * AAC-LC の無音を 1 コマ、ADTS の頭付きで。48kHz・ステレオ (channel_configuration 2)。
+ * AAC-LC の無音を 1 コマ、ADTS のヘッダ付きで。48kHz・ステレオ (channel_configuration 2)。
  *
  * 中身は CPE が 1 つ: 両耳とも `max_sfb = 0` (係数を 1 つも持たない) で、あとは END。
  * 55 ビットなので 7 バイトに収まる (14496-3 の raw_data_block)
@@ -256,7 +256,7 @@ export function silentAac(): Uint8Array {
   return Uint8Array.from([...head.bytes(), ...payload]);
 }
 
-/** PTS/DTS の 5 バイト (2.4.3.7)。頭の 4 ビットは '0010' (PTS だけ) */
+/** PTS/DTS の 5 バイト (2.4.3.7)。先頭の 4 ビットは '0010' (PTS だけ) */
 function stamp(pts: number): number[] {
   const value = pts % 2 ** 33;
   const high = Math.floor(value / 2 ** 30) & 0x07;
@@ -272,7 +272,7 @@ function stamp(pts: number): number[] {
 }
 
 /**
- * PES にする。映像は長さ 0 (「次の頭まで」。放送もそう書く)、音声は長さを書く
+ * PES にする。映像は長さ 0 (「次の PES の先頭まで」。放送もそう書く)、音声は長さを書く
  *
  * @param streamId 0xE0 (映像) / 0xC0 (音声) / 0xBD (字幕。`synth-caption.ts`)
  */
@@ -297,7 +297,7 @@ export function pes(
 
 /**
  * PES を TS パケットに割る。**最後のパケットは適応フィールドで詰める** (中身を 0xFF で
- * 埋めると PES の続きに見える)。頭のパケットに PCR を載せることもできる
+ * 埋めると PES の続きに見える)。最初のパケットに PCR を載せることもできる
  *
  * @param counter 連続性カウンタの続き。返り値の `counter` を次に渡す
  */
@@ -314,7 +314,7 @@ export function packetizePes(
     const withPcr = at === 0 && pcr !== null;
     const rest = data.length - at;
     /*
-     * 適応フィールドの長さ。PCR を載せるなら旗 1 バイト + 6 バイト。**中身が
+     * 適応フィールドの長さ。PCR を載せるならフラグ 1 バイト + 6 バイト。**中身が
      * 足りないときもここを伸ばして詰める** (中身を 0xFF で埋めると PES の続きに見える)
      */
     const least = withPcr ? 7 : 0;

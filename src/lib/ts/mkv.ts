@@ -6,50 +6,11 @@
  * 運ばせるため。** 時刻を別の経路 (`showinfo`) で出させると、行とコマの数が合わずにずれて戻らない。
  *
  * Matroska を選んだのは、**必要なところだけなら小さいから**。NUT はコマの
- * 見出しを組み立てるのに表を復元する必要があり、mp4 は ARIB の字幕を入れられない。
- * ここが読むのは次の 5 つだけ。
- *
- *     Segment > Info > TimestampScale       時刻の刻み (既定 1ms)
- *     Segment > Cluster > Timestamp         その塊の先頭の時刻
- *     Segment > Cluster > SimpleBlock       コマ本体 (先頭からの差 + 中身)
- *     Segment > Cluster > BlockGroup > Block  同上 (書き手によってはこちら)
- *     Segment > Tracks > TrackEntry > CodecID  中身の種類 (録画の字幕が S_ARIBSUB かを見る)
- *
- * EBML は `[ID][大きさ][中身]` の入れ子。**中身に入るものと飛ばすものを
- * 決めておけば、知らない要素は大きさぶん飛ばせる**ので、全部を知らなくてよい。
+ * ヘッダを組み立てるのに表を復元する必要があり、mp4 は ARIB の字幕を入れられない。
+ * 読み方は `mkv-media.ts` の `MkvDemuxer` (端末に保存した録画を読むものと同じ)。ここは時刻をミリ秒に直すだけ
  */
 
-import { concatBytes, u16 } from "@danything/arib/bytes";
-
-/** 中に入る (入れ子の親として扱う) もの */
-export const SEGMENT = 0x18538067;
-export const INFO = 0x1549a966;
-export const CLUSTER = 0x1f43b675;
-export const BLOCK_GROUP = 0xa0;
-export const TRACKS = 0x1654ae6b;
-export const TRACK_ENTRY = 0xae;
-const DESCEND = new Set([
-  SEGMENT,
-  INFO,
-  CLUSTER,
-  BLOCK_GROUP,
-  TRACKS,
-  TRACK_ENTRY,
-]);
-
-/** 中身を読むもの */
-export const TIMESTAMP_SCALE = 0x2ad7b1;
-export const TIMESTAMP = 0xe7;
-export const SIMPLE_BLOCK = 0xa3;
-export const BLOCK = 0xa1;
-/** トラックの中身の種類 (`S_ARIBSUB` など)。入っているものを確かめるのに使う */
-export const CODEC_ID = 0x86;
-
-/** 大きさが「不明」の印 (全部 1)。ヘッダだけ書いて流し始めるときに出てくる */
-export const UNKNOWN = -1;
-
-/** 時刻の刻みの既定 (ナノ秒)。1ms */
-export const DEFAULT_SCALE = 1_000_000;
+import { MkvDemuxer } from "./mkv-media";
 
 /** 取り出した 1 コマ */
 export interface MkvFrame {
@@ -59,132 +20,21 @@ export interface MkvFrame {
   data: Uint8Array;
 }
 
-/** 読めた見出し。`body` は中身の先頭位置 */
-interface EbmlHead {
-  id: number;
-  size: number;
-  body: number;
-}
-
 /**
- * EBML の可変長整数。
- *
- * 先頭バイトの**最初に立っているビットの位置**が長さ (1〜8 バイト)。
- * ID はその印も含めた並びをそのまま値とし (慣例)、大きさは印を落とした値を採る。
- *
- * @returns 読めなければ null (まだ足りない)
- */
-function vint(
-  buffer: Uint8Array,
-  at: number,
-  keepMarker: boolean,
-): { value: number; next: number } | null {
-  if (at >= buffer.length) return null;
-  const first = buffer[at]!;
-  if (first === 0) return null;
-  let length = 1;
-  while (length <= 8 && (first & (0x80 >> (length - 1))) === 0) length++;
-  if (length > 8 || at + length > buffer.length) return null;
-
-  const mask = length >= 8 ? 0 : 0xff >> length;
-  let value = keepMarker ? first : first & mask;
-  // 印を落とした桁が全部 1 なら「大きさは不明」。ヘッダだけ書いて流すときに出てくる
-  let allOnes = (first & mask) === mask;
-  for (let i = 1; i < length; i++) {
-    value = value * 256 + buffer[at + i]!;
-    if (buffer[at + i] !== 0xff) allOnes = false;
-  }
-  if (!keepMarker && allOnes) return { value: UNKNOWN, next: at + length };
-  return { value, next: at + length };
-}
-
-/** 符号なし整数 (ビッグエンディアン、長さは中身のぶんだけ) */
-export function uint(body: Uint8Array): number {
-  let value = 0;
-  for (const byte of body) value = value * 256 + byte;
-  return value;
-}
-
-/** 文字列 (UTF-8)。**末尾の NUL は落とす** (EBML の文字列は NUL で埋めてよい) */
-export function text(body: Uint8Array): string {
-  return new TextDecoder().decode(body).replace(/\0+$/, "");
-}
-
-/** `[ID][大きさ]` の見出しを読む。足りなければ null */
-export function ebmlHead(buffer: Uint8Array, at: number): EbmlHead | null {
-  const id = vint(buffer, at, true);
-  if (id === null) return null;
-  const size = vint(buffer, id.next, false);
-  if (size === null) return null;
-  return { id: id.value, size: size.value, body: size.next };
-}
-
-/**
- * コマ 1 つ。`[トラック番号(可変長)][先頭からの差(2バイト、符号あり)][旗][中身…]`
- *
- * **束ね (lacing) は来ない。** 1 つの塊に複数のコマを詰める書き方だが、
- * ffmpeg は映像・音声では使わない。万一来たら、その塊は捨てる。変に読むより
- * 1 枚落とすほうが安い (字幕は次が来る)
- */
-export function readBlock(
-  body: Uint8Array,
-): { track: number; offset: number; flags: number; data: Uint8Array } | null {
-  const track = vint(body, 0, false);
-  if (track === null || track.next + 3 > body.length) return null;
-  const flags = body[track.next + 2]!;
-  if ((flags & 0x06) !== 0) return null;
-  return {
-    track: track.value,
-    offset: (u16(body, track.next) << 16) >> 16,
-    flags,
-    data: body.slice(track.next + 3),
-  };
-}
-
-/**
- * 繋がったバイト列から、コマを 1 つずつ取り出す。
- *
- * **足りないところで止めて、続きを待つ。** 流れてくるものなので、要素の
- * 途中で切れているのが普通
+ * 繋がったバイト列から、コマを 1 つずつ取り出す。**足りないところで止めて、続きを待つ**
  */
 export class MkvSplitter {
-  private buffer = new Uint8Array(0);
-  /** 時刻の刻み (ナノ秒)。Info に書いてあれば差し替える */
-  private scale = DEFAULT_SCALE;
-  /** いまいる塊の先頭の時刻 (刻みの単位) */
-  private base = 0;
-  /** 見出しに書いてあったトラックの種類 (書いてある順) */
+  private readonly demuxer = new MkvDemuxer();
+  /** トラックの中身の種類 (書いてある順。録画の字幕が `S_ARIBSUB` かを見る) */
   readonly codecs: string[] = [];
 
   feed(chunk: Uint8Array): MkvFrame[] {
-    this.buffer = concatBytes([this.buffer, chunk]);
-    const out: MkvFrame[] = [];
-    let at = 0;
-    for (;;) {
-      const head = ebmlHead(this.buffer, at);
-      if (head === null) break;
-      // 中に入るものは、見出しだけ読んで先へ進む
-      if (DESCEND.has(head.id) || head.size === UNKNOWN) {
-        at = head.body;
-        continue;
-      }
-      const end = head.body + head.size;
-      if (end > this.buffer.length) break;
-      const body = this.buffer.subarray(head.body, end);
-      if (head.id === TIMESTAMP_SCALE) this.scale = uint(body) || DEFAULT_SCALE;
-      else if (head.id === TIMESTAMP) this.base = uint(body);
-      else if (head.id === CODEC_ID) this.codecs.push(text(body));
-      else if (head.id === SIMPLE_BLOCK || head.id === BLOCK) {
-        const block = readBlock(body);
-        if (block !== null)
-          out.push({
-            at: ((this.base + block.offset) * this.scale) / 1_000_000,
-            data: block.data,
-          });
-      }
-      at = end;
-    }
-    this.buffer = this.buffer.slice(at);
-    return out;
+    const { tracks, blocks } = this.demuxer.feed(chunk);
+    if (tracks !== null) this.codecs.push(...tracks.map((t) => t.codecId));
+    const scale = this.demuxer.scale;
+    return blocks.map((block) => ({
+      at: (block.at * scale) / 1_000_000,
+      data: block.data,
+    }));
   }
 }

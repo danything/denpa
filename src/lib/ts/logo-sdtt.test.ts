@@ -77,8 +77,7 @@ describe("SDTT", () => {
     expect(parsed).toEqual({
       makerId: 0xff,
       modelId: 0xfe,
-      serviceId: 929,
-      contents: [{ newVersion: 0x123, schedules: 0, componentTags: [0x79] }],
+      contents: [{ schedules: 0, componentTags: [0x79] }],
     });
     expect(announcesCommonData(parsed!, LOGO_TAGS)).toBe(true);
   });
@@ -99,8 +98,8 @@ describe("SDTT", () => {
       ]),
     );
     expect(parsed?.contents).toEqual([
-      { newVersion: 5, schedules: 2, componentTags: [0x71] },
-      { newVersion: 6, schedules: 1, componentTags: [0x72] },
+      { schedules: 2, componentTags: [0x71] },
+      { schedules: 1, componentTags: [0x72] },
     ]);
     expect(announcesCommonData(parsed!, LOGO_TAGS)).toBe(false);
   });

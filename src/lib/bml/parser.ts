@@ -73,7 +73,7 @@ const ASSIGN_OPS = new Set([
   "^=",
 ]);
 
-/** 二項演算の強さ (大きいほど先に結ぶ) */
+/** 二項演算子の優先順位 (大きいほど先に結ぶ) */
 const BINARY: Record<string, number> = {
   "|": 1,
   "^": 2,

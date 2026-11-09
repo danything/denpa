@@ -1,16 +1,17 @@
 /**
- * **Matroska の映像・音声を中身まで読む** (互換モードで、端末に保存した録画を canvas に描く。`raw/mkv.ts`)。
+ * **Matroska を読む。** 字幕を運ぶストリーム (ライブと録画の字幕。`mkv.ts` の `MkvSplitter`) と、
+ * 互換モードで canvas に描く端末に保存した録画 (`raw/mkv.ts`・`mkv-source.ts`) の両方がこれを使う。
+ * 読むのは denpa の ffmpeg が書く形式に要るものだけ。
  *
- * 字幕を運ぶための最小の読み (`mkv.ts` の `MkvSplitter`) とは別に置く (EBML の読み方は `mkv.ts` のものを使う)。こちらはトラックごとの形式
- * (CodecPrivate: avcC / av1C / AudioSpecificConfig / OpusHead) と、コマのトラック番号・キーフレームの印、
- * 飛ぶ位置の表 (Cues) まで読む。読むのは denpa のエンコードが書く形式 (ffmpeg の Matroska) に要るものだけ。
- *
- *     Segment > SeekHead > Seek (SeekID・SeekPosition)   Cues の在りか
+ *     Segment > SeekHead > Seek (SeekID・SeekPosition)   Cues の位置
  *     Segment > Info > TimestampScale・Duration
  *     Segment > Tracks > TrackEntry                       番号・種類・CodecID・CodecPrivate・
- *                                                          DefaultDuration・Name・Language・Video・Audio
+ *                                                          DefaultDuration・Name・Language・Video
  *     Segment > Cluster > Timestamp・SimpleBlock・BlockGroup (Block・ReferenceBlock)
  *     Segment > Cues > CuePoint > CueTime・CueTrackPositions (CueTrack・CueClusterPosition)
+ *
+ * EBML は `[ID][大きさ][中身]` の入れ子。**中に入るものと飛ばすものを決めておけば、ほかの要素は
+ * 大きさぶん飛ばせる**ので、全部を読めなくてよい。
  *
  * **飛ぶときは、先頭 (最初の Cluster の手前まで) に飛び先の Cluster からを繋いで読ませる** (`mkv-source.ts`)。
  * 読む側は位置を確かめないので、繋いだものを 1 本のストリームとして読める。
@@ -18,37 +19,24 @@
  * DOM も worker も触らない (`mkv-media.test.ts`)
  */
 
-import { concatBytes } from "@danything/arib/bytes";
+import { concatBytes, u16 } from "@danything/arib/bytes";
 
 import { aacCodec, av1Codec, avcCodec, type Fmp4Track } from "./fmp4";
-import {
-  BLOCK,
-  BLOCK_GROUP,
-  CLUSTER,
-  CODEC_ID,
-  DEFAULT_SCALE,
-  ebmlHead,
-  INFO,
-  readBlock,
-  SEGMENT,
-  SIMPLE_BLOCK,
-  text,
-  TIMESTAMP,
-  TIMESTAMP_SCALE,
-  TRACK_ENTRY,
-  TRACKS,
-  uint,
-  UNKNOWN,
-} from "./mkv";
 
 const EBML = 0x1a45dfa3;
+const SEGMENT = 0x18538067;
 const SEEK_HEAD = 0x114d9b74;
 const SEEK = 0x4dbb;
 const SEEK_ID = 0x53ab;
 const SEEK_POSITION = 0x53ac;
+const INFO = 0x1549a966;
+const TIMESTAMP_SCALE = 0x2ad7b1;
 const DURATION = 0x4489;
+const TRACKS = 0x1654ae6b;
+const TRACK_ENTRY = 0xae;
 const TRACK_NUMBER = 0xd7;
 const TRACK_TYPE = 0x83;
+const CODEC_ID = 0x86;
 const CODEC_PRIVATE = 0x63a2;
 const DEFAULT_DURATION = 0x23e383;
 const NAME = 0x536e;
@@ -56,6 +44,11 @@ const LANGUAGE = 0x22b59c;
 const VIDEO = 0xe0;
 const PIXEL_WIDTH = 0xb0;
 const PIXEL_HEIGHT = 0xba;
+const CLUSTER = 0x1f43b675;
+const TIMESTAMP = 0xe7;
+const SIMPLE_BLOCK = 0xa3;
+const BLOCK_GROUP = 0xa0;
+const BLOCK = 0xa1;
 const REFERENCE_BLOCK = 0xfb;
 const CUES = 0x1c53bb6b;
 const CUE_POINT = 0xbb;
@@ -64,11 +57,77 @@ const CUE_TRACK_POSITIONS = 0xb7;
 const CUE_TRACK = 0xf7;
 const CUE_CLUSTER_POSITION = 0xf1;
 
+/** 大きさが「不明」の印 (全部 1)。ヘッダだけ書いて流し始めるときに出てくる */
+const UNKNOWN = -1;
+
+/** 時刻の刻みの既定 (ナノ秒)。1ms */
+const DEFAULT_SCALE = 1_000_000;
+
+/** 読めた要素のヘッダ。`body` は中身の先頭位置 */
+interface EbmlHead {
+  id: number;
+  size: number;
+  body: number;
+}
+
+/**
+ * EBML の可変長整数。
+ *
+ * 先頭バイトの**最初に立っているビットの位置**が長さ (1〜8 バイト)。
+ * ID はその印も含めた並びをそのまま値とし (慣例)、大きさは印を落とした値を採る。
+ *
+ * @returns 読めなければ null (まだ足りない)
+ */
+function vint(
+  buffer: Uint8Array,
+  at: number,
+  keepMarker: boolean,
+): { value: number; next: number } | null {
+  if (at >= buffer.length) return null;
+  const first = buffer[at]!;
+  if (first === 0) return null;
+  let length = 1;
+  while (length <= 8 && (first & (0x80 >> (length - 1))) === 0) length++;
+  if (length > 8 || at + length > buffer.length) return null;
+
+  const mask = length >= 8 ? 0 : 0xff >> length;
+  let value = keepMarker ? first : first & mask;
+  // 印を落とした桁が全部 1 なら「大きさは不明」。ヘッダだけ書いて流すときに出てくる
+  let allOnes = (first & mask) === mask;
+  for (let i = 1; i < length; i++) {
+    value = value * 256 + buffer[at + i]!;
+    if (buffer[at + i] !== 0xff) allOnes = false;
+  }
+  if (!keepMarker && allOnes) return { value: UNKNOWN, next: at + length };
+  return { value, next: at + length };
+}
+
+/** 符号なし整数 (ビッグエンディアン、長さは中身のぶんだけ) */
+function uint(body: Uint8Array): number {
+  let value = 0;
+  for (const byte of body) value = value * 256 + byte;
+  return value;
+}
+
+/** 文字列 (UTF-8)。**末尾の NUL は落とす** (EBML の文字列は NUL で埋めてよい) */
+function text(body: Uint8Array): string {
+  return new TextDecoder().decode(body).replace(/\0+$/, "");
+}
+
 function float(body: Uint8Array): number {
   const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
   if (body.length === 4) return view.getFloat32(0);
   if (body.length === 8) return view.getFloat64(0);
   return 0;
+}
+
+/** `[ID][大きさ]` のヘッダを読む。足りなければ null */
+function ebmlHead(buffer: Uint8Array, at: number): EbmlHead | null {
+  const id = vint(buffer, at, true);
+  if (id === null) return null;
+  const size = vint(buffer, id.next, false);
+  if (size === null) return null;
+  return { id: id.value, size: size.value, body: size.next };
 }
 
 /** 大きさの分かっている入れ物の中身を、子ごとに回す */
@@ -89,6 +148,7 @@ function* children(
 export interface MkvTrack {
   number: number;
   kind: "video" | "audio" | "other";
+  /** 中身の種類 (`V_AV1`・`A_OPUS`・`S_ARIBSUB` など) */
   codecId: string;
   /** WebCodecs の書き方 (`avc1.640028` / `av01.0.08M.08` / `mp4a.40.2` / `opus`)。読めない形式は null */
   codec: string | null;
@@ -186,14 +246,38 @@ export interface MkvBlock {
 }
 
 /**
- * **流れてくる Matroska から、トラックの形式とコマを取り出す。** 足りないところで止めて続きを待つ。
- * Tracks は丸ごと届いてから読む。Segment・Cluster・BlockGroup は中に入り、知らないもの
- * (SeekHead・Cues・Tags・Chapters) は大きさぶん飛ばす。字幕トラックのコマも出すので、捨てるのは使う側
+ * コマ 1 つ。`[トラック番号(可変長)][先頭からの差(2バイト、符号あり)][フラグ][中身…]`
+ *
+ * **レーシング (lacing) は来ない。** 1 つのブロックに複数のコマを詰める書き方だが、
+ * ffmpeg は映像・音声・字幕では使わない。万一来たら、そのブロックは捨てる。変に読むより
+ * 1 コマ落とすほうが害が小さい (字幕は次が来る)
+ */
+function readBlock(
+  body: Uint8Array,
+): { track: number; offset: number; flags: number; data: Uint8Array } | null {
+  const track = vint(body, 0, false);
+  if (track === null || track.next + 3 > body.length) return null;
+  const flags = body[track.next + 2]!;
+  if ((flags & 0x06) !== 0) return null;
+  return {
+    track: track.value,
+    offset: (u16(body, track.next) << 16) >> 16,
+    flags,
+    data: body.slice(track.next + 3),
+  };
+}
+
+/**
+ * **流れてくる Matroska から、トラックの形式とコマを取り出す。** 足りないところで止めて続きを待つ
+ * (流れてくるものなので、要素の途中で切れているのが普通)。
+ * Info と Tracks は丸ごと届いてから読む。Segment・Cluster・BlockGroup と大きさが「不明」のものは中に入り、
+ * ほかの要素 (SeekHead・Cues・Tags・Chapters・CRC-32) は大きさぶん飛ばす。字幕トラックのコマも出すので、捨てるのは使う側
  */
 export class MkvDemuxer {
   private buffer = new Uint8Array(0);
-  /** 時刻の刻み (ナノ秒) */
+  /** 時刻の刻み (ナノ秒)。Info に書いてあれば差し替える */
   scale = DEFAULT_SCALE;
+  /** いま読んでいる Cluster の先頭の時刻 (刻みの単位) */
   private base = 0;
   /** 読んでいる BlockGroup。終わりの位置 (`buffer` の中) と、ReferenceBlock があったか (= キーフレームではない) */
   private group: {
@@ -253,7 +337,7 @@ export class MkvDemuxer {
       blocks.push({ ...group.block, key: !group.referenced });
   }
 
-  /** コマ 1 つ (`mkv.ts` の `readBlock`)。キーフレームの印は SimpleBlock の旗。Block のときは `closeGroup` が決める */
+  /** コマ 1 つ (`readBlock`)。キーフレームの印は SimpleBlock のフラグ。Block のときは `closeGroup` が決める */
   private block(body: Uint8Array): MkvBlock | null {
     const block = readBlock(body);
     if (block === null) return null;

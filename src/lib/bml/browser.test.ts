@@ -381,7 +381,7 @@ describe("browser.*", () => {
     expect(s.vm.realm.global.get("a")).toBe(1);
   });
 
-  test("transmitTextDataOverIP は待って [結果, 状態, 返り] を返す (Denbun= に EUC-JP の %XX)", async () => {
+  test("transmitTextDataOverIP は待って [結果, 状態, レスポンス] を返す (Denbun= に EUC-JP の %XX)", async () => {
     const s = setup();
     const result = await s.run(
       'var r = browser.transmitTextDataOverIP("http://x/", "あa", "EUC-JP"); var result = r[2];',

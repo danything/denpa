@@ -70,7 +70,7 @@ function carousel(
   ];
 }
 
-/** 食わせて、出てきた通知を全部集める */
+/** 渡して、出てきた通知を全部集める */
 function decode(...parts: Uint8Array[]): ResponseMessage[] {
   const out: ResponseMessage[] = [];
   const decoder = new BmlDecoder((message) => out.push(message));
@@ -83,7 +83,7 @@ const head = bmlHead();
 describe("parseBxmlInfo", () => {
   test("入口の ES は起動のしかたまで持っている", () => {
     const descriptor = bxmlDescriptor();
-    // 記述子の頭 (tag/length) と data_component_id を落とした残り
+    // 記述子の先頭 (tag/length) と data_component_id を落とした残り
     const info = parseBxmlInfo(Uint8Array.from(descriptor.slice(4)));
     expect(info.entryPointFlag).toBe(true);
     expect(info.entryPointInfo?.autoStartFlag).toBe(true);
@@ -103,7 +103,7 @@ describe("parseBxmlInfo", () => {
 });
 
 describe("moduleFiles", () => {
-  test("multipart を1ファイルずつにデコードする", () => {
+  test("multipart を 1 ファイルずつにデコードする", () => {
     const files = moduleFiles(
       multipart([
         ["/startup.bml", "text/X-arib-bml", "<bml/>"],
@@ -122,7 +122,7 @@ describe("moduleFiles", () => {
   });
 
   /** 中身が 1 つのモジュールは包まれていない。置き場所は BML 側が知っている */
-  test("multipart でなければ丸ごと1ファイル", () => {
+  test("multipart でなければ丸ごと 1 ファイル", () => {
     const files = moduleFiles(new TextEncoder().encode("PNG"), "image/png");
     expect(files).toHaveLength(1);
     expect(files[0]!.contentLocation).toBeNull();
@@ -147,7 +147,7 @@ describe("inflate", () => {
     expect(inflate(new Uint8Array(4), { type: 9 })).toBeNull();
   });
 
-  test("伸ばせなければ null を返し、例外を投げない", () => {
+  test("展開できなければ null を返し、例外を投げない", () => {
     expect(inflate(Uint8Array.from([1, 2, 3, 4]), { type: 0 })).toBeNull();
   });
 
@@ -425,7 +425,7 @@ describe("BmlDecoder", () => {
   });
 
   /** 壊れたセクションで例外を投げない。**映像の付け足しが映像を止めてはいけない** */
-  test("でたらめを食べても投げない", () => {
+  test("でたらめを渡しても例外を投げない", () => {
     const junk = packetize(
       BML_PID,
       withCrc([0x3b, 0x00, 0x00, 0xff, 0xff, 0xc1, 0x00, 0x00, 1, 2, 3]),
@@ -504,10 +504,10 @@ describe("ModuleBuilder", () => {
   });
 
   /** DII の言う大きさを先に確保しない。来たブロックの終わりまでで足りる */
-  test("入れ物は届いたブロックのぶんだけ広げる", () => {
+  test("バッファは届いたブロックのぶんだけ広げる", () => {
     const builder = new ModuleBuilder(1, MAX_MODULE_SIZE, 4066);
     expect(builder.add(0, new Uint8Array(4066).fill(7))).toBe(false);
-    // 確保した大きさは外から見えないので、private の入れ物を覗いて確かめる
+    // 確保した大きさは外から見えないので、private のバッファを覗いて確かめる
     expect((builder as unknown as { buffer: Uint8Array }).buffer.length).toBe(
       4066,
     );

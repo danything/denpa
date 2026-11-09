@@ -5,8 +5,8 @@
  * ([agent.md](https://github.com/danything/denpa/blob/main/docs/agent.md))、選り分けるのは denpa の仕事。
  *
  * **これをやらないと 1 つの録画に複数の番組が入る。** 実機の TOKYO MX は
- * 1 本の TS に MX1 と MX2 を載せていて、丸ごと保存すると ffprobe が 2 つの
- * プログラムを返す (これで CM 検出の fps を読み違えたことがある)。
+ * 1 本の TS に MX1 と MX2 が入っていて、丸ごと保存すると ffprobe が 2 つの
+ * プログラムを返す。
  *
  * 残すものは次のとおり。
  *
@@ -58,7 +58,7 @@ const KEEP = new Set([
 const DESC_CA = 0x09;
 
 /**
- * PMT を読むまで取っておくパケットの数の上限。**選局したての頭を捨てない** (`ServiceFilter.filter`)。
+ * PMT を読むまで取っておくパケットの数の上限。**選局したての先頭を捨てない** (`ServiceFilter.filter`)。
  *
  * PAT と PMT はそれぞれ 100ms ごとに来るので、待つのはふつう 0.2 秒まで。地上波 (17Mbit/s) なら 2,300 個、
  * BS の中継丸ごと (52Mbit/s) でも 7,000 個ほど。来ない (局を読み違えた) ときに抱え込み続けないよう、超えたら古いほうから捨てる
@@ -133,7 +133,7 @@ export class ServiceFilter {
   private tsid: number | null = null;
   private copyNeverNow = false;
   private streamsNow: string | null = null;
-  /** PMT を読む前に届いた、局の分からないパケット (写したもの)。届いた順 */
+  /** PMT を読む前に届いた、局の分からないパケット (コピーしたもの)。届いた順 */
   private held: Uint8Array[] = [];
 
   constructor(private readonly serviceId: number) {}
@@ -169,10 +169,10 @@ export class ServiceFilter {
   /**
    * **中継の番号 (transport_stream_id)。** PAT を読むまでは null。
    *
-   * 絞るのに要るわけではありません。**データ放送が受信機に訊いてくる**ので
-   * 覚えておきます。テレ朝の TVer リンクは `browser.getProgramID(4)` で
-   * これを取り、TVer のサーバへそのまま送る。`null` のまま渡すと文字の
-   * "null" が飛んで、あちらが断り、画面には `DT-RE` とだけ出ます
+   * 絞るのに要るわけではない。**データ放送が受信機に訊いてくる**ので
+   * 覚えておく。テレ朝の TVer リンクは `browser.getProgramID(4)` で
+   * これを取り、TVer のサーバへそのまま送る。`null` のまま渡すと文字列の
+   * "null" が送られて、あちらが断り、画面には `DT-RE` とだけ出る
    * ([server/live.ts](https://github.com/danything/denpa/blob/main/src/lib/server/live.ts) の `programInfo`)
    */
   get transportStreamId(): number | null {
@@ -211,7 +211,7 @@ export class ServiceFilter {
     return concatBytes(out);
   }
 
-  /** PMT を読む前のパケットを取っておく。**写す** (パケットは届いた塊の上の窓。`PacketStream`) */
+  /** PMT を読む前のパケットを取っておく。**コピーする** (パケットは届いたチャンクの一部を指す。`PacketStream`) */
   private hold(ts: Uint8Array): void {
     this.held.push(ts.slice());
     // 溢れたら古い半分を捨てる (1 つずつ捨てると、来ないあいだずっと詰め直すことになる)
@@ -282,7 +282,7 @@ export class ServiceFilter {
 export class StreamsWatch {
   private seen: string | null = null;
 
-  /** `filter` に塊を通したあとに呼ぶ */
+  /** `filter` にチャンクを通したあとに呼ぶ */
   changed(filter: ServiceFilter): boolean {
     const now = filter.streams;
     if (now === null) return false;

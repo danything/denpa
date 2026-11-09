@@ -127,6 +127,22 @@ export function jumped(
   return Math.abs(dts - expected) > duration + 2;
 }
 
+/**
+ * 圧縮の待ち (デコードする順) のうち、dts が `target` までで、いちばん新しいキーフレーム (MPEG-2 は I フレーム) の位置。
+ * **先頭か、見つからなければ 0 以下** (飛ばなくてよい)。`worker.ts` の MPEG-2 も同じものを使う
+ */
+export function newestKey(
+  pending: readonly { dts: number; key: boolean }[],
+  target: number,
+): number {
+  let found = -1;
+  for (let i = 0; i < pending.length; i++) {
+    if (pending[i]!.dts > target) break;
+    if (pending[i]!.key) found = i;
+  }
+  return found;
+}
+
 /** 90kHz に直す */
 function ticks(value: number, timescale: number): number {
   return Math.round((value * CLOCK) / timescale);
@@ -326,11 +342,7 @@ export class Fmp4Video {
    * 飛ばしたコマを参照するフレームを出させないため
    */
   private skipTo(target: number): void {
-    let found = -1;
-    for (let i = 0; i < this.pending.length; i++) {
-      if (this.pending[i]!.dts > target) break;
-      if (this.pending[i]!.key) found = i;
-    }
+    const found = newestKey(this.pending, target);
     if (found <= 0) return;
     this.keep(this.pending.slice(found));
     this.decoder?.reset();

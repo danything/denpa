@@ -3,9 +3,9 @@
 
   import { denpaFontUrl } from "#lib/font.js";
   /**
-   * **画面の d ボタン。テレビと同じ振る舞い。** 出ている文書が d を聞いていれば
+   * **画面の d ボタン。テレビと同じ振る舞い。** 出ている文書が d を受け付けていれば
    * (`pressD` が true) 渡して終わり。局の待機ページはこれでメニューを開く。
-   * 聞いていなければ入れ物を出し入れする。ライブと録画の両方がここを通る
+   * 受け付けていなければ入れ物を出し入れする。ライブと録画の両方がここを通る
    */
   export function pressD(
     on: boolean,
@@ -23,11 +23,11 @@
    * データ放送を映像の上に重ねる。**描くのはエンジン** (`src/lib/bml/`)。
    *
    * denpa が作った `ResponseMessage` をそのまま渡すだけで、**映像は denpa のまま**。
-   * エンジンは映像の object の場所を教えるだけで、映像の入れ物をそこへ寄せるのはこちら
+   * エンジンは映像の object の場所を知らせるだけで、映像の入れ物をそこへ寄せるのはこちら
    * (`placeVideo`。[docs/stream.md](../../../../docs/stream.md#データ放送の統合))。
    *
    * エンジンは押されてから (常に受信なら開く前から) `import()` で取得する (どのみちカルーセルが一周するのを待つので紛れる)。
-   * エンジンの外でやるのは、d を聞いている文書へ届ける (`knock`)・映像の入れ物を小窓へ寄せる (`placeVideo`)・
+   * エンジンの外でやるのは、d を受け付けている文書へ届ける (`knock`)・映像の入れ物を小窓へ寄せる (`placeVideo`)・
    * 960x540 を枠に合わせて伸ばす (`fit`)・「データ取得中」を出す (`receiving`)・郵便番号を渡す (`receiver`)
    */
   import { onDestroy, untrack } from "svelte";
@@ -71,8 +71,8 @@
      */
     press?: ((code: number) => void) | null;
     /**
-     * d を BML に渡す関数 (bind で受け取る)。出ている文書が d (DataButtonPressed) を聞いていれば押して true、
-     * 聞いていなければ false (`pressD`。局の待機ページは d を押されて初めてメニューを開く)
+     * d を BML に渡す関数 (bind で受け取る)。出ている文書が d (DataButtonPressed) を受け付けていれば押して true、
+     * 受け付けていなければ false (`pressD`。局の待機ページは d を押されて初めてメニューを開く)
      */
     pressD?: (() => boolean) | null;
     /** 郵便番号 (数字 7 桁。空なら渡さない)。受信機の設定として渡す (`nvram://receiverinfo/zipcode`) */
@@ -121,7 +121,7 @@
 
   /** いま開いている Hybridcast のアプリ。開いている間は BML を隠し、キーはアプリへ渡す */
   let running = $state<HybridcastLink | null>(null);
-  /** アプリが言う映像の置き場 (`HybridcastFrame` の `onvideo`) */
+  /** アプリが指定した映像の置き場 (`HybridcastFrame` の `onvideo`) */
   let appVideo: Place = "full";
   /** アプリへキーを渡す関数 (`HybridcastFrame` の `press`) */
   let appPress = $state<((code: number, down: boolean) => void) | null>(null);
@@ -221,7 +221,7 @@
 
   /**
    * アプリが Greg・NVRAM に書いた。**NVRAM はアプリを開いた局 (`who`) から見えるものだけ**受け取る
-   * (中身はアプリの言うまま。1 ブロック 64 バイトの base64)。開いた後に選局していても、開いた局の領域に書く
+   * (中身はアプリが書いたまま。1 ブロック 64 バイトの base64)。開いた後に選局していても、開いた局の領域に書く
    */
   function written(
     change: Extract<FrameMessage, { type: "greg" | "nvram" }>,
@@ -254,14 +254,14 @@
   const NVRAM_PREFIX = "denpa_bml_own_";
 
   /**
-   * 押された d を届けようと見に行く回数と間隔。文書が組み上がった時点ではまだ `beitem` が `subscribe` に
+   * 押された d を届けられるかを確かめる回数と間隔。文書が組み上がった時点ではまだ `beitem` が `subscribe` に
    * なっておらず (立てるのはアプリの `onload`)、一度では届かない
    */
   const KNOCK_TRIES = 12;
   const KNOCK_WAIT = 400;
 
   /**
-   * 届けても捨てられることがある (TOKYO MX の入口は最初の 2 秒に受けた d を捨てる)。返事 (次の文書) が
+   * 届けても捨てられることがある (TOKYO MX の入口は最初の 2 秒に受けた d を捨てる)。反応 (次の文書) が
    * 無ければもう一度押す。`TAP_MOST` までにするのは、開いたメニューを閉じてしまう局があるため
    */
   const TAP_MOST = 3;
@@ -271,9 +271,9 @@
   let host = $state<HTMLDivElement | null>(null);
   /** いま動いているエンジン */
   let engine = $state<Bml | null>(null);
-  /** 読み込み中か。**押してすぐは何も出ないので、そう言う** */
+  /** 読み込み中か。**押してすぐは何も出ないので、「データ取得中」を出す** */
   let loading = $state(false);
-  /** BML が「いま出ている」と言っているか。BML は `invisible` で始まり、d を受けたアプリが自分で外して出てくる */
+  /** BML の文書が見える状態か (`onVisible`)。BML は `invisible` で始まり、d を受けたアプリが自分で外して出てくる */
   let showing = $state(false);
   /** いま実際に映しているか (`place` が決める)。`showing` との違いは `settled` を見よ */
   let visible = $state(false);
@@ -288,18 +288,18 @@
   let mount: HTMLDivElement | null = null;
   /** BML の画面の大きさ。`onLoad` で分かる (960x540 / 720x480 など) */
   let plane: Plane | null = null;
-  /** まだ電波から取っている最中か。**エンジンが教えてくれる** (`onReceiving`)。テレビの「データ取得中…」と同じ表示 */
+  /** まだ電波から取っている最中か。**エンジンが知らせる** (`onReceiving`)。テレビの「データ取得中…」と同じ表示 */
   let receiving = $state(false);
   /**
    * 一度でも出し切ったか。最初の 1 枚が揃うまでは映像のままにする。入口の文書はほぼ白紙のまま自分で
    * `invisible` を外すので、本体が届くまでの数秒が真っ白になる。出し切ったあとは引っ込めない (点滅する)
    */
   let settled = false;
-  /** 残りの見に行く回数 */
+  /** 残りの確かめる回数 */
   let knocks = 0;
   /** 押された d (出す操作は文書にとっての d の 1 押し) をまだ届け終えていないか (`knock`) */
   let dueD = false;
-  /** 何回押したか。**返事が無いときだけ増える** (`TAP_MOST`) */
+  /** 何回押したか。**反応が無いときだけ増える** (`TAP_MOST`) */
   let taps = 0;
   /** 次に押すタイマー */
   let knocking: ReturnType<typeof setTimeout> | null = null;
@@ -307,7 +307,7 @@
   let watcher: ResizeObserver | null = null;
   /** 渡した通知の数 (`data-handed`。届いていないのか描かれないのかの切り分け用) */
   let handed = $state(0);
-  /** 映像の object の場所 (エンジンが教える。画面の座標) */
+  /** 映像の object の場所 (エンジンが知らせる。画面の座標) */
   let videoRect: Rect | null = null;
   /** 映像の入れ物の元の style。小窓へ寄せる前に覚えて、隠れたら戻す */
   let mediaStyle: string | null = null;
@@ -363,7 +363,7 @@
     },
     /**
      * **通信の文書と、その中の画像・CSS・script を取る** (`launchDocument("https://…")`)。
-     * 相手の符号と中身をそのまま返し、中継が断った (403/502) ときだけ null
+     * 相手のステータスコードと中身をそのまま返し、中継が断った (403/502) ときだけ null
      */
     get: async (uri) => {
       const { relayed, response } = await fetchRelayed(uri);
@@ -418,7 +418,7 @@
   function placeVideo(want: boolean): void {
     if (media === null) return;
     const share = (n: number): string => `${n * 100}%`;
-    // Hybridcast のアプリを開いている間は、アプリの言う場所 (1920x1080 の座標。枠いっぱいに伸ばしてある)
+    // Hybridcast のアプリを開いている間は、アプリが指定した場所 (1920x1080 の座標。枠いっぱいに伸ばしてある)
     if (running !== null && appVideo !== "full") {
       mediaStyle ??= media.style.cssText;
       media.dataset["bmlWindow"] = "";
@@ -493,7 +493,7 @@
     knocks = 0;
   }
 
-  /** 押して離したことにする。**BML は押しっぱなしを嫌う** (離すまで次が来ない) */
+  /** 押して離したことにする。**BML は離すまで次のキーを受けない** */
   function tap(code: number): void {
     // Hybridcast のアプリを開いている間はアプリへ (戻る・d は閉じる)
     if (running !== null) {
@@ -505,7 +505,7 @@
     engine?.key(code, false);
   }
 
-  /** 画面の d (`pressD`)。出ている文書が d を聞いていれば押して true。Hybridcast を開いていれば閉じて true */
+  /** 画面の d (`pressD`)。出ている文書が d を受け付けていれば押して true。Hybridcast を開いていれば閉じて true */
   function pressData(): boolean {
     if (running !== null) {
       closeApp();
@@ -518,8 +518,8 @@
   }
 
   /**
-   * 押された d を、聞いている文書へ届ける (`dueD`)。見えているかは問わない (NHK は隠れたまま d を待ち、
-   * 民放の待機ページは自分で出てから待つ)。届けたあとは返事 (`loaded`) が来るまで押し直す (`TAP_MOST`)
+   * 押された d を、受け付けている文書へ届ける (`dueD`)。見えているかは問わない (NHK は隠れたまま d を待ち、
+   * 民放の待機ページは自分で出てから待つ)。届けたあとは反応 (`loaded`) が来るまで押し直す (`TAP_MOST`)
    */
   function knock(): void {
     knocking = null;
@@ -530,7 +530,7 @@
       return;
     }
     tap(DATA_BUTTON);
-    // 押しただけ数える。**返事があれば `loaded` が下ろす**ので、ここでは待つだけ
+    // 押しただけ数える。**反応があれば `loaded` が下ろす**ので、ここでは待つだけ
     if (++taps >= TAP_MOST) {
       dueD = false;
       return;
@@ -558,19 +558,19 @@
   function loaded(resolution: Plane): void {
     plane = resolution;
     fit();
-    // 押したあとに文書が変わったら、それが返事。これ以上押すと開いたメニューを閉じる
+    // 押したあとに文書が変わったら、それが反応。これ以上押すと開いたメニューを閉じる
     if (taps > 0) {
       dueD = false;
       stopKnocking();
       return;
     }
-    // 文書ができるたびに見に行き直す (`knock`)。届け終えていれば何もしない
+    // 文書ができるたびに確かめ直す (`knock`)。届け終えていれば何もしない
     stopKnocking();
     knocks = KNOCK_TRIES;
     knocking = setTimeout(knock, KNOCK_WAIT);
   }
 
-  /** 開く。映像は動かさず、場所を教えてもらって寄せる (`placeVideo`) */
+  /** 開く。映像は動かさず、エンジンが知らせる場所へ寄せる (`placeVideo`) */
   async function open(): Promise<void> {
     if (host === null || media === null) return;
     const mine = ++generation;
@@ -583,7 +583,7 @@
     // 待っている間に離されていたら、作らない
     if (mine !== generation || host === null || media === null) return;
     const into = makeMount(host);
-    // 出す操作は文書にとっての d の 1 押し。聞く文書が出てきたら届ける (`knock`)。受信しているだけなら届けない
+    // 出す操作は文書にとっての d の 1 押し。受け付ける文書が出てきたら届ける (`knock`)。受信しているだけなら届けない
     dueD = on;
     taps = 0;
     roundFont = new FontFace(
@@ -626,7 +626,7 @@
         // 映像の場所は画面の大きさが分かってから寄せる
         place();
       },
-      // 選局は画面に任せる (エンジンは「この局へ」と言うだけ)。開くまでは断る (勝手に局を替えない)
+      // 選局は画面に任せる (エンジンは選局先を渡すだけ)。開くまでは断る (勝手に局を替えない)
       onTune: (service) => on && (tune?.(service) ?? false),
       // 開くまでは、自動起動の指定がある入口だけ動かす (`receive`)
       opened: () => on,

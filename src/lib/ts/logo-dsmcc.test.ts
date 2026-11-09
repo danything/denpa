@@ -171,7 +171,7 @@ describe("DsmccLogoCollector", () => {
    * DII のモジュールを 1 つ見つけた時点で打ち切っていた頃は、先に並んでいる
    * BS のぶんしか組み立てず、CS が永久に揃わなかった。
    */
-  test("1つのカルーセルに並んだ BS と CS のモジュールを両方組み立てる", () => {
+  test("1 つのカルーセルに並んだ BS と CS のモジュールを両方組み立てる", () => {
     const collector = new DsmccLogoCollector();
     const bs = logoModule(0x05, [
       { logoId: 0x0011, services: [[4, 211]], data: PNG },
@@ -487,7 +487,7 @@ describe("読みかけ (CarouselProgress)", () => {
     ...half(csBlocks, false),
   );
 
-  test("読みかけを渡せば、DII の無い2回目でも続きから組み立てる", () => {
+  test("読みかけを渡せば、DII の無い 2 回目でも続きから組み立てる", () => {
     const progress = new CarouselProgress();
     const before = new DsmccLogoCollector(progress);
     for (const packet of packets(first)) before.feed(packet);
@@ -507,7 +507,7 @@ describe("読みかけ (CarouselProgress)", () => {
     expect(after.carouselRead).toBe(true);
   });
 
-  test("渡さなければ一から (2回目だけでは何も組み立てられない)", () => {
+  test("渡さなければ一から (2 回目だけでは何も組み立てられない)", () => {
     const before = new DsmccLogoCollector();
     for (const packet of packets(first)) before.feed(packet);
     const after = new DsmccLogoCollector();
