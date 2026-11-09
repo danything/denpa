@@ -79,7 +79,7 @@ public class TunerSpecTests
     }
 
     [Test]
-    public async Task ファイルの中の書き損じは1台だけ飛ばす()
+    public async Task ファイルの中の書き損じは_1_台だけ飛ばす()
     {
         var config = Fresh();
         File.WriteAllText(config.TunersFile, """
@@ -164,7 +164,7 @@ public class ChannelStoreTests
     }
 
     [Test]
-    public async Task まだ1度も預かっていなければ空()
+    public async Task まだ_1_度も預かっていなければ空()
     {
         await Assert.That(Fresh().LoadChannels()).IsEmpty();
     }
@@ -174,7 +174,7 @@ public class ChannelStoreTests
  * チューナーの自動検出。
  *
  * ioctl そのものは実機でしか試せないので、ここで見るのは**返ってきた値の
- * 読み取り**。数と並びは実機の PT3 で測ってあり (DeviceProbe の頭のコメント)、
+ * 読み取り**。数と並びは実機の PT3 で測ってあり (DeviceProbe の冒頭のコメント)、
  * ここに置いてあるのはそのとき出た値そのもの。
  */
 public class DeviceProbeTests

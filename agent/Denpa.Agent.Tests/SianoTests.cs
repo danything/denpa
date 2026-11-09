@@ -215,13 +215,13 @@ public class SianoTests
         using var tuner = Fake();
 
         // 起きた直後の 20MB を読んで捨てないと tune を読みに来ない (詰まらずに返ること)
-        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+        tuner.Tune(ChannelTable.Parse("T27")!);
         await Assert.That(tuner.Tuned).IsTrue();
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW557142857");
 
         // 同じ子のまま選局し直す。読み出し側も同じもの
         var output = tuner.Output;
-        tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
+        tuner.Tune(ChannelTable.Parse("T13")!);
         await Assert.That(tuner.Output).IsSameReferenceAs(output);
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
     }
@@ -231,14 +231,14 @@ public class SianoTests
     {
         if (!OperatingSystem.IsLinux()) return;
         using var tuner = Fake();
-        tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+        tuner.Tune(ChannelTable.Parse("T27")!);
 
         var error = Assert.Throws<IOException>(
-            () => tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 1 }, ChannelTable.NoStreamId));
+            () => tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 1 }));
         await Assert.That(error.Message).Contains("no demod lock");
         // 次の選局で使い回す
         await Assert.That(tuner.Tuned).IsTrue();
-        tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
+        tuner.Tune(ChannelTable.Parse("T13")!);
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
     }
 
@@ -262,13 +262,13 @@ public class SianoTests
         });
         try
         {
-            tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+            tuner.Tune(ChannelTable.Parse("T27")!);
             await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW557142857");
             File.WriteAllText(die, "");
             for (var i = 0; i < 50 && tuner.Tuned; i++) await Task.Delay(100);
             await Assert.That(tuner.Tuned).IsFalse();
 
-            tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
+            tuner.Tune(ChannelTable.Parse("T13")!);
             await Assert.That(starts).IsEqualTo(2);
             await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
         }
@@ -283,7 +283,7 @@ public class SianoTests
     {
         if (!OperatingSystem.IsLinux()) return;
         using var tuner = Fake();
-        tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 2 }, ChannelTable.NoStreamId);
+        tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 2 });
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW2");
     }
 
@@ -302,12 +302,12 @@ public class SianoTests
             TimeSpan.FromSeconds(1));
 
         var error = Assert.Throws<IOException>(
-            () => tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 3 }, ChannelTable.NoStreamId));
+            () => tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 3 }));
         await Assert.That(error.Message).Contains("同期しませんでした");
         // 遅れて来る答えが次の選局に紛れないよう、子はもういない
         await Assert.That(tuner.Tuned).IsFalse();
 
-        tuner.Tune(ChannelTable.Parse("T13")!, ChannelTable.NoStreamId);
+        tuner.Tune(ChannelTable.Parse("T13")!);
         await Assert.That(starts).IsEqualTo(2);
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW473142857");
     }

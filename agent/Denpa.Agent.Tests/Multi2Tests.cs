@@ -54,11 +54,11 @@ public class Multi2Tests
     }
 
     [Test]
-    public async Task 偶数の鍵で1パケットぶん復号できる() =>
+    public async Task 偶数の鍵で_1_パケットぶん復号できる() =>
         await Assert.That(Decrypt(even: true, 184)).IsEqualTo(EvenDecrypted);
 
     [Test]
-    public async Task 奇数の鍵で1パケットぶん復号できる() =>
+    public async Task 奇数の鍵で_1_パケットぶん復号できる() =>
         await Assert.That(Decrypt(even: false, 184)).IsEqualTo(OddDecrypted);
 
     /// <summary>
@@ -66,7 +66,7 @@ public class Multi2Tests
     /// 尻尾だけが違う値になる
     /// </summary>
     [Test]
-    public async Task 半端な尻尾はOFBで復号する()
+    public async Task 半端な尻尾は_OFB_で復号する()
     {
         await Assert.That(Decrypt(even: true, 183)).IsEqualTo(EvenDecrypted[..352] + "0d1edd8466823f");
         await Assert.That(Decrypt(even: false, 183)).IsEqualTo(OddDecrypted[..352] + "3f9f4389a742a6");

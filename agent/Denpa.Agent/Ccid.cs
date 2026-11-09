@@ -11,7 +11,7 @@ namespace Denpa.Agent;
  *
  * - UsbFs.cs … /dev/bus/usb をバルク転送で読み書きする部分と、ディスクリプタの読み方
  * - Ccid.cs  … CCID の命令 (電源・パラメータ・XfrBlock) と、それを ICardLink にしたもの
- * - T1.cs    … ATR の読み方と、TPDU 単位の読み取り機のための T=1 のブロックのやり取り
+ * - T1.cs    … ATR の読み方と、TPDU 単位のリーダーのための T=1 のブロックのやり取り
  *
  * 本番は Gemalto (Gemplus) PC Twin Reader (08e6:3437) に B-CAS。これは TPDU 単位で、
  * ATR から勝手にパラメータを決めてくれない (dwFeatures 0x00010230) ので、
@@ -64,7 +64,7 @@ public static class CcidMessage
         return message;
     }
 
-    /// <summary>頭の dwLength が言うメッセージ全体の長さ</summary>
+    /// <summary>ヘッダの dwLength が示すメッセージ全体の長さ</summary>
     public static int Length(ReadOnlySpan<byte> header) =>
         Header + (int)Math.Min(BinaryPrimitives.ReadUInt32LittleEndian(header[1..]), int.MaxValue - Header);
 
@@ -104,13 +104,13 @@ public static class CcidMessage
 /// CCID のリーダー 1 台 (のスロット 0) を <see cref="ICardLink"/> にしたもの。
 ///
 /// <para>
-/// **読み取り機の単位で方式が分かれる。** TPDU 単位なら T=1 のブロックをこちらで組み
+/// **リーダーの単位で方式が分かれる。** TPDU 単位なら T=1 のブロックをこちらで組み
 /// (<see cref="T1Protocol"/>)、APDU 単位なら APDU をそのまま XfrBlock に載せる。
 /// 文字単位は断る。
 /// </para>
 ///
 /// <para>
-/// 失敗はすべて <see cref="IOException"/>。抜かれた・カードが抜けたあとは使えないので、
+/// 失敗はすべて <see cref="IOException"/> (Reset の前に Transmit を呼ぶ誤りだけは <see cref="InvalidOperationException"/>)。抜かれた・カードが抜けたあとは使えないので、
 /// 呼んだ側が捨てて <see cref="Ccid.Find()"/> から開き直す (繋ぎ直しは B-CAS の側)。
 /// </para>
 /// </summary>
@@ -158,7 +158,7 @@ public sealed class CcidLink : ICardLink
     /// **SetParameters を忘れると、B-CAS とは話が通じない。** B-CAS は specific mode で、
     /// ATR の直後から TA1 の速さ (Di 2) で話すのに、PC Twin はそれを自分では読まない
     /// (dwFeatures に「ATR からパラメータを決める」0x02 が無い)。リーダーは既定の速さのまま
-    /// 聞くので、最初のブロックから黙る。
+    /// 聞くので、最初のブロックから応答が無い。
     /// </para>
     /// </summary>
     public byte[] Reset()
@@ -175,7 +175,7 @@ public sealed class CcidLink : ICardLink
         }
         catch (IOException) when (!_portReset)
         {
-            // 最初の命令から黙るなら、リーダーが固まっている。ポートをリセットして 1 回だけやり直す
+            // 最初の命令から応答が無いなら、リーダーが固まっている。ポートをリセットして 1 回だけやり直す
             _portReset = true;
             Log.Write($"{Name} が応えないので、USB のポートをリセットします");
             _pipe.ResetPort();
@@ -212,7 +212,7 @@ public sealed class CcidLink : ICardLink
         if (Interface.Tpdu)
         {
             _t1 = new T1Protocol(atr, Exchange);
-            // 1 ブロック = NAD PCB LEN + INF + LRC。CCID の頭 10 バイトと一緒に 1 メッセージに収まる長さまで
+            // 1 ブロック = NAD PCB LEN + INF + LRC。CCID のヘッダ 10 バイトと一緒に 1 メッセージに収まる長さまで
             var ifsd = Math.Min(Interface.MaxIfsd > 0 ? Interface.MaxIfsd : 254, Interface.MaxMessage - CcidMessage.Header - 4);
             _t1.NegotiateIfsd(ifsd);
         }
@@ -266,7 +266,7 @@ public sealed class CcidLink : ICardLink
 
     /// <summary>
     /// T=1 のブロックを 1 つ送って 1 つ受ける (<see cref="T1Protocol"/> の下の層)。
-    /// カードが黙った・化けたは null (T=1 の側で送り直す)
+    /// カードの応答が無い・化けたときは null (T=1 の側で送り直す)
     /// </summary>
     private byte[]? Exchange(byte[] block, byte wtx)
     {
@@ -358,7 +358,7 @@ public sealed class CcidLink : ICardLink
     /// <para>
     /// **長さぴったりで要求する。** メッセージがパケットの大きさの倍数で終わるとき、
     /// ZLP を送らないリーダーがあり、大きめのバッファで待つと時間切れまで返らない。
-    /// 先に 1 パケット読んで頭の dwLength を知り、残りをパケットの倍数に切り上げて要求する。
+    /// 先に 1 パケット読んでヘッダの dwLength を読み、残りをパケットの倍数に切り上げて要求する。
     /// 前のメッセージのあとの ZLP (0 バイト) は読み飛ばす。
     /// </para>
     /// </summary>
@@ -376,7 +376,7 @@ public sealed class CcidLink : ICardLink
                 continue;
             }
             total += got;
-            // 短いパケットはメッセージの終わり。頭も揃わないうちに終わるのは壊れている
+            // 短いパケットはメッセージの終わり。ヘッダも揃わないうちに終わるのは壊れている
             if (total < CcidMessage.Header && got % packet != 0)
             {
                 throw new IOException($"{Name} の応答が短すぎます ({total} バイト)");
@@ -473,7 +473,7 @@ public static class Ccid
 
     /// <summary>
     /// 診断用 (<c>denpa-agent --card</c>)。見つかったリーダーを並べ、最初の 1 台のカードに
-    /// 電源を入れて ATR と読み取り機の種類を書く。**実機で最初に当てるのはここ。**
+    /// 電源を入れて ATR とリーダーの種類を書く。**実機で最初に当てるのはここ。**
     /// </summary>
     public static string Describe()
     {

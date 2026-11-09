@@ -231,7 +231,7 @@ public class Dib8096Tests
     }
 
     [Test]
-    public async Task 探索の時間切れに関わる段は_10ms_空け_ダイバーシティは_30ms_を3回待つ()
+    public async Task 探索の時間切れに関わる段は_10ms_空け_ダイバーシティは_30ms_を_3_回待つ()
     {
         var (dib, _, _, time) = Make();
         dib.Initialize();

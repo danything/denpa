@@ -38,7 +38,6 @@ public sealed record TuneOptions(string? FakeTune = null);
 public sealed class TunerPool(
     IReadOnlyList<TunerSpec> specs, Action onChange, TuneOptions tune, Func<TunerSpec, ITuneDevice>? openDevice = null)
 {
-    private readonly TuneOptions _tune = tune;
 
     /// <summary>誰も読まなくなってから選局を畳むまでの間</summary>
     public static readonly TimeSpan Linger = TimeSpan.FromSeconds(5);
@@ -271,7 +270,7 @@ public sealed class TunerPool(
         try
         {
             // 自分で選局する。偽の選局を起こすのは適合テストだけ (TuneOptions.FakeTune)
-            if (_tune.FakeTune is not { } fake)
+            if (tune.FakeTune is not { } fake)
             {
                 /*
                  * **待つ間に取り上げられた・定義が変わった選局は、開きも選局もしない。** `spec` はロックの中で写したもので、
@@ -292,7 +291,7 @@ public sealed class TunerPool(
                             ?? throw new IOException($"{channel} は選局表にありません");
                         // 途中で落ちたら「どこにも合っていない」。次は必ず選局し直す
                         held.Channel = null;
-                        held.Device.Tune(tuning, tuning.StreamId);
+                        held.Device.Tune(tuning);
                         held.Channel = channel;
                         lease.TunedMs = lease.Clock.ElapsedMilliseconds;
                     }
@@ -961,7 +960,7 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     /// <summary>
     /// 読み出しとデスクランブラの間に溜められる量。**64MB** は地上波で 25 秒、衛星の中継器まるごとでも 10 秒ほどで、
-    /// カードや配り役を待つ上限 (CCID 5 秒・配り役 10 秒・繋ぎ直しの見送り 10 秒) を丸ごと呑める。
+    /// カードや配る側を待つ上限 (CCID 5 秒・配る側 10 秒・繋ぎ直しの見送り 10 秒) を丸ごと呑める。
     /// **数ではなくバイトで測る。** 読み出し側は溜まっているぶんだけ返すので、1 回の読みは小さいこともある
     /// </summary>
     private const long QueueLimit = 64 * 1024 * 1024;
@@ -1147,7 +1146,7 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// 偽の選局を起こす。**適合テストだけ** (TuneOptions.FakeTune)。
     ///
     /// <para>
-    /// **`setsid` を噛ませる。** `sh -c` 越しなので、止めるときはグループごと
+    /// **`setsid` を挟んで起こす。** `sh -c` 越しなので、止めるときはグループごと
     /// 落とす (<see cref="Interop.KillGroup"/>)。
     /// </para>
     /// </summary>

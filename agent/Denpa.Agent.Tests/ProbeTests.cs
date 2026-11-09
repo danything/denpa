@@ -51,7 +51,7 @@ public class ProbeTests
      * 開くときの読み書き (窓の切り替え・レジスタの読み書き) が届けばよい
      */
     [Test]
-    public async Task dt295_probe_の_trace_は機材を開くときの読み書きを1行ずつ渡す()
+    public async Task dt295_probe_の_trace_は機材を開くときの読み書きを_1_行ずつ渡す()
     {
         await Task.Yield();
         var fake = new Dt295Fake();

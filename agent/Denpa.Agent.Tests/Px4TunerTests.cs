@@ -77,7 +77,7 @@ public class Px4TunerTests
         /// </summary>
         public double? Rate { get; init; }
 
-        /// <summary>これだけ流したら、繋いだまま黙る (読む側が待っているところを作る)</summary>
+        /// <summary>これだけ流したら、繋いだまま何も送らない (読む側が待っているところを作る)</summary>
         public int? FramesThenSilence { get; init; }
 
         /// <summary>STATS に答える (HELLO で STREAM_STATS を認める)。呼ばれた回数を引数に、queue_drops を返す。null なら STATS を持たない</summary>
@@ -348,7 +348,7 @@ public class Px4TunerTests
             lock (_gate)
             {
                 _controlClient?.Shutdown(SocketShutdown.Both);
-                // Windows は閉じる向きを言っただけでは、受けかけの Receive (受け手のスレッド) が起きない。閉じて起こす
+                // Windows はShutdown を呼んだだけでは、受けかけの Receive (受け手のスレッド) が起きない。閉じて起こす
                 if (OperatingSystem.IsWindows()) _controlClient?.Dispose();
             }
         }
@@ -365,7 +365,7 @@ public class Px4TunerTests
             _control.Dispose();
             _stream.Dispose();
             /*
-             * 繋がったものは、閉じる向きを言ってから閉じる。受けかけ・送りかけのスレッドはこれで起きる
+             * 繋がったものは、Shutdown を呼んでから閉じる。受けかけ・送りかけのスレッドはこれで起きる
              * (Dispose だけだと、読みかけの Receive が戻るのを待つことがある)
              */
             lock (_open)
@@ -411,17 +411,17 @@ public class Px4TunerTests
     private static readonly ChannelTable.Tuning T28 = ChannelTable.Parse("T28")!;
 
     [Test]
-    public async Task 取ったまま2回選局できて_2回目は取り直さない(CancellationToken cancel)
+    public async Task 取ったまま_2_回選局できて_2_回目は取り直さない(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d();
         var tuner = Open(px4d);
 
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T27.Frequency / 1000));
         await Assert.That(tuner.Tuned).IsTrue();
 
-        tuner.Tune(T28, ChannelTable.NoStreamId);
+        tuner.Tune(T28);
         // 前の局の TS は混ざらない (選局ごとに新しい溜め)
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
 
@@ -441,13 +441,13 @@ public class Px4TunerTests
     /// 記録から見分けるため。STATS を持たない px4d (HELLO で認めない) には聞かない
     /// </summary>
     [Test]
-    public async Task 流している間はSTATSを聞き_持たないpx4dには聞かない(CancellationToken cancel)
+    public async Task 流している間は_STATS_を聞き_持たない_px4d_には聞かない(CancellationToken cancel)
     {
         await Task.Yield();
         using (var px4d = new FakePx4d { Stats = calls => (ulong)calls })
         {
             var tuner = new Px4Tuner(Id, 2, null, px4d.Runtime.FullName, () => null) { StatsEvery = TimeSpan.FromMilliseconds(50) };
-            tuner.Tune(T27, ChannelTable.NoStreamId);
+            tuner.Tune(T27);
             while (px4d.Count(Px4Control.Stats) < 2) await Task.Delay(20, cancel);
             tuner.Dispose();
             var after = px4d.Count(Px4Control.Stats);
@@ -458,7 +458,7 @@ public class Px4TunerTests
         using (var px4d = new FakePx4d())
         {
             var tuner = new Px4Tuner(Id, 2, null, px4d.Runtime.FullName, () => null) { StatsEvery = TimeSpan.FromMilliseconds(50) };
-            tuner.Tune(T27, ChannelTable.NoStreamId);
+            tuner.Tune(T27);
             await Task.Delay(300, cancel);
             tuner.Dispose();
             await Assert.That(px4d.Count(Px4Control.Stats)).IsEqualTo(0);
@@ -473,42 +473,42 @@ public class Px4TunerTests
         using var px4d = new FakePx4d { TuneError = khz => khz == silent ? 6u : 0u };
         using var tuner = Open(px4d);
 
-        var error = Assert.Throws<IOException>(() => tuner.Tune(T28, ChannelTable.NoStreamId));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(T28));
         await Assert.That(error.Message).Contains("同期しませんでした");
         await Assert.That(tuner.Tuned).IsFalse();
 
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T27.Frequency / 1000));
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
         await Assert.That(px4d.Count(Px4Control.Release)).IsEqualTo(0);
     }
 
     [Test]
-    public async Task px4dとの接続が切れたら次の選局で取り直す(CancellationToken cancel)
+    public async Task px4d_との接続が切れたら次の選局で取り直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d();
         using var tuner = Open(px4d);
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
         ReadMark(tuner.Output);
 
         px4d.DropControl();
         // 本物は取ったものを返してストリームも畳む。TS が尽きれば Tuned が落ちる
         await WaitUntil(() => !tuner.Tuned, cancel);
 
-        tuner.Tune(T28, ChannelTable.NoStreamId);
+        tuner.Tune(T28);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
         await Assert.That(px4d.Count(Px4Control.Hello)).IsEqualTo(2);
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(2);
     }
 
     [Test]
-    public async Task px4dがストリームを止めたら理由を添えて終わり_次は取ったまま選局し直す(CancellationToken cancel)
+    public async Task px4d_がストリームを止めたら理由を添えて終わり_次は取ったまま選局し直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { EndFirstStream = (5, 15) };
         using var tuner = Open(px4d);
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
 
         var output = tuner.Output;
         var error = Assert.Throws<IOException>(() =>
@@ -520,47 +520,47 @@ public class Px4TunerTests
         await Assert.That(tuner.Tuned).IsFalse();
 
         // 同じチャンネルでも選局し直す (TunerPool は Tuned を見る)。lease はそのまま
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T27.Frequency / 1000));
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
     }
 
     [Test]
-    public async Task 選局の答えのCNを_選局したときの値として返す(CancellationToken cancel)
+    public async Task 選局の答えの_CN_を_選局したときの値として返す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { CnrMdb = 25_340 };
         using var tuner = Open(px4d);
         await Assert.That(((ITuneDevice)tuner).Signal()).IsNull();
 
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
         await Assert.That(((ITuneDevice)tuner).Signal()).IsEqualTo(new TunerSignal(true, 25.34, TunerSignal.Db, AtTune: true));
     }
 
     [Test]
-    public async Task 選局の答えにCNが無ければ_CNはnull()
+    public async Task 選局の答えに_CN_が無ければ_CN_は_null()
     {
         await Assert.That(Px4Tuner.TuneSignal([1, 0, 0, 0, 0x80])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
         await Assert.That(Px4Tuner.TuneSignal([1])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
     }
 
     [Test]
-    public async Task ATTACHを断られたら黙って取り直さず_次の選局で取り直す(CancellationToken cancel)
+    public async Task ATTACH_を断られたら黙って取り直さず_次の選局で取り直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { RejectAttach = 2 };
         using var tuner = Open(px4d);
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
 
         // 2 回目の ATTACH_STREAM を断られる。接続が切れたわけではないので、その場では取り直さない (1 度で投げる)
-        var error = Assert.Throws<IOException>(() => tuner.Tune(T28, ChannelTable.NoStreamId));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(T28));
         await Assert.That(error.Message).Contains("TS を受け取れません");
         await Assert.That(px4d.Count(Px4Control.StartStream)).IsEqualTo(2);
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
         await Assert.That(tuner.Tuned).IsFalse();
 
         // px4d の lease は armed のまま残る (本物は TUNE が BUSY になる) ので、返して取り直す
-        tuner.Tune(T28, ChannelTable.NoStreamId);
+        tuner.Tune(T28);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
         await Assert.That(px4d.Count(Px4Control.Release)).IsEqualTo(1);
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(2);
@@ -572,13 +572,13 @@ public class Px4TunerTests
         await Task.Yield();
         using var px4d = new FakePx4d();
         using var tuner = Open(px4d, TimeSpan.FromMilliseconds(300));
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
 
         // 誰も読まない。溜めが埋まって空かなければ stream.sock を閉じる
         await WaitUntil(() => !tuner.Tuned, cancel, TimeSpan.FromSeconds(20));
         await WaitUntil(() => Volatile.Read(ref px4d.StreamsClosed) == 1, cancel);
 
-        tuner.Tune(T28, ChannelTable.NoStreamId);
+        tuner.Tune(T28);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
     }
@@ -590,24 +590,24 @@ public class Px4TunerTests
         using var px4d = new FakePx4d { AcquireError = 4 };
         using var tuner = Open(px4d);
 
-        var error = Assert.Throws<IOException>(() => tuner.Tune(T27, ChannelTable.NoStreamId));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(T27));
         await Assert.That(error.Message).Contains("受信機 2 を取れません");
         await Assert.That(error.Message).Contains("BUSY");
     }
 
     [Test]
-    public async Task px4dが起きていなければ理由を言う(CancellationToken cancel)
+    public async Task px4d_が起きていなければ理由を言う(CancellationToken cancel)
     {
         await Task.Yield();
         using var tuner = new Px4Tuner(Id, 0, null, "/nonexistent", () => null);
-        var error = Assert.Throws<IOException>(() => tuner.Tune(T27, ChannelTable.NoStreamId));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(T27));
         await Assert.That(error.Message).Contains("px4d に繋がりません");
     }
 
     /// <summary>選局し直すたびに stream.sock を作る。閉じ忘れれば fd が 1 本ずつ増える</summary>
     [Test]
     [NotInParallel]
-    public async Task 何度選局し直してもfdが残らない(CancellationToken cancel)
+    public async Task 何度選局し直しても_fd_が残らない(CancellationToken cancel)
     {
         await Task.Yield();
         if (!OperatingSystem.IsLinux()) return;
@@ -615,9 +615,9 @@ public class Px4TunerTests
 
         using var px4d = new FakePx4d();
         using var tuner = Open(px4d);
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
         var before = Fds();
-        for (var i = 0; i < 30; i++) tuner.Tune(i % 2 == 0 ? T28 : T27, ChannelTable.NoStreamId);
+        for (var i = 0; i < 30; i++) tuner.Tune(i % 2 == 0 ? T28 : T27);
         // 偽の px4d の後始末 (閉じた stream.sock を向こうが閉じる) が追いつくのを少し待つ
         await Task.Delay(300, cancel);
         // 漏れていれば選局 1 回につき stream.sock で 30 本以上増える。並んで走る他のテストと
@@ -646,8 +646,8 @@ public class Px4TunerTests
         var tuner = new Px4Tuner(Id, 2, "15v", px4d.Runtime.FullName, () => receivers);
         var bs = ChannelTable.Parse("BS15:16625")!;
 
-        tuner.Tune(bs, ChannelTable.NoStreamId);
-        tuner.Tune(bs, ChannelTable.NoStreamId);
+        tuner.Tune(bs);
+        tuner.Tune(bs);
         await Assert.That(px4d.Lnbs.ToArray()).IsEquivalentTo(new byte[] { 0, 0 }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
         await Assert.That(Px4Userland.Notice(Px4Userland.Device(Id, 2))).Contains("15V を出せない");
 
@@ -668,7 +668,7 @@ public class Px4TunerTests
         var limit = TimeSpan.FromSeconds(1);
         using var tuner = Open(px4d, limit);
         var since = Stopwatch.StartNew();
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
 
         await WaitUntil(() => !tuner.Tuned, cancel, TimeSpan.FromSeconds(20));
         var took = since.Elapsed;
@@ -688,7 +688,7 @@ public class Px4TunerTests
         await Task.Yield();
         using var px4d = new FakePx4d { FramesThenSilence = 1 };
         using var tuner = Open(px4d);
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
         var output = (DeviceStream)tuner.Output;
 
         var buffer = new byte[188 * 1024];
@@ -715,7 +715,7 @@ public class Px4TunerTests
         await Task.Yield();
         using var px4d = new FakePx4d { Rate = 0 };
         using var tuner = Open(px4d);
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
         var output = tuner.Output;
 
         var running = true;
@@ -733,7 +733,7 @@ public class Px4TunerTests
         await Task.Delay(500, cancel);
 
         var since = Stopwatch.StartNew();
-        tuner.Tune(T28, ChannelTable.NoStreamId);
+        tuner.Tune(T28);
         var took = since.Elapsed;
         Volatile.Write(ref running, false);
         await reading.WaitAsync(TimeSpan.FromSeconds(5), cancel);
@@ -898,7 +898,7 @@ public class Px4TunerTests
             {
                 try
                 {
-                    tuner.Tune(bs, ChannelTable.NoStreamId);
+                    tuner.Tune(bs);
                     return "";
                 }
                 catch (IOException error)

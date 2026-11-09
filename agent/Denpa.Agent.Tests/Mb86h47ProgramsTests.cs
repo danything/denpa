@@ -209,7 +209,7 @@ public class Mb86h47ProgramsTests
         private int _slot;
         private uint _sequence;
 
-        /// <summary>bulk の塊を 1 つ置いて (ホストの SendChunk と同じ形)、答えを待つ。答えの語を返す</summary>
+        /// <summary>bulk の塊を 1 つ置いて (ホストの SendChunk と同じ形式)、答えを待つ。答えの語を返す</summary>
         public uint[] Chunk(int count, params uint[] commands)
         {
             Ram.Write(Mb86h47Programs.Core1Box + Mb86h47Programs.BoxBulkEnable, 4, Mb86h47Programs.BulkEnable);
@@ -227,7 +227,7 @@ public class Mb86h47ProgramsTests
     }
 
     [Test]
-    public async Task コア_1_は生きている印を進め続ける()
+    public async Task コア_1_は生存カウンタを進め続ける()
     {
         var rig = new Core1Rig();
         var first = rig.Ram.Read(Mb86h47Programs.Core1Box + Mb86h47Programs.BoxAlive, 4);
@@ -376,7 +376,7 @@ public class Mb86h47ProgramsTests
             "2020=0", "2024=0", "202C=3000400", "2030=5010101", "3008=0", "5000=411080C0", "5008=10000000", "5004=1000000", "200C=1000000",
             "1078=460", "1068=1000000");
         await Assert.That(string.Join(" ", rig.Stores.Take(45))).IsEqualTo(expected);
-        // 回る間は DMA 2 の読んでよい所を書き手の位置まで進める。満たし中なので満たさない
+        // 回る間は DMA 2 の読んでよい所を書き込み側の位置まで進める。満たし中なので満たさない
         await Assert.That(rig.Stores.Skip(45).Take(3)).IsEquivalentTo(new[] { "1038=1230", "1038=1230", "1038=1230" });
     }
 
@@ -395,7 +395,7 @@ public class Mb86h47ProgramsTests
         await Assert.That(string.Join(" ", rig.Stores.Skip(send).Take(4))).IsEqualTo("20=8 200C=1000000 2004=BF 2000=D000041");
         rig.Event = 0x20;
         rig.Run(2000);
-        // 10 単位ごとに、DMA 2 の読んだ位置の 8 バイト手前を書き手に返す
+        // 10 単位ごとに、DMA 2 の読んだ位置の 8 バイト手前を書き込み側に返す
         await Assert.That(rig.Stores).Contains("D0202C=38");
         // 8 未満ならリングの終わりへ回す
         rig.ReaderAt = 4;

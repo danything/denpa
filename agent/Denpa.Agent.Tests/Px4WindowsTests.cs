@@ -21,7 +21,7 @@ public class Px4WindowsTests
     private const uint ReadExecute = 0x1200A9;
 
     [Test]
-    public async Task ランタイムルートは本人のもので_本人とSYSTEMとAdministratorsしか書けない()
+    public async Task ランタイムルートは本人のもので_本人と_SYSTEM_と_Administrators_しか書けない()
     {
         // install.ps1 が作る形 (保護された DACL。本人・SYSTEM・Administrators にフル)
         await Assert.That(Px4Userland.AclProblem(Me, Me,
@@ -65,7 +65,7 @@ public class Px4WindowsTests
         """;
 
     [Test]
-    public async Task px4dが使っている筐体は一覧に出なくても顔ぶれに残り_理由も残さない()
+    public async Task px4d_が使っている筐体は一覧に出なくても顔ぶれに残り_理由も残さない()
     {
         var owned = new Px4Userland.Enclosure("00001205000960", "PX-Q3U4", [new Px4Receiver(0, false, true, true)])
         {
@@ -84,7 +84,7 @@ public class Px4WindowsTests
     }
 
     [Test]
-    public async Task 同じ番号の筐体の片方のpx4dが動いていれば_もう片方もUSBポートで見分ける()
+    public async Task 同じ番号の筐体の片方の_px4d_が動いていれば_もう片方も_USB_ポートで見分ける()
     {
         // PX-M1UR (5-1.4.1) の px4d が動いていて開けない。一覧には PX-S1UR (5-1.4.2) だけが「一意」で出る
         const string list = """
@@ -107,7 +107,7 @@ public class Px4WindowsTests
     }
 
     [Test]
-    public async Task px4dの終了コードに手当てを添える()
+    public async Task px4d_の終了コードに手当てを添える()
     {
         await Assert.That(Px4Userland.Hint(10)).Contains("ファームウェア");
         await Assert.That(Px4Userland.Hint(4)).Contains("ほかに動いています");
@@ -116,7 +116,7 @@ public class Px4WindowsTests
     }
 
     [Test]
-    public async Task Windowsでもpx4の機材を開く()
+    public async Task Windows_でも_px4_の機材を開く()
     {
         // 開くだけでは何もしない (px4d に触るのは最初の選局)
         using var tuner = TunerPool.OpenDevice("px4:00001205000960:2", null);

@@ -36,14 +36,11 @@ public static class DeviceProbe
     private const int BufferLenAt = 48;
     private const int NameLength = 128;
 
-    private const int SysIsdbc = 10;
-
     /// <summary>
     /// 受けられる方式から denpa の種別に直す。
     ///
     /// <para>
-    /// ISDB-S は BS と CS の両方に使う (どちらも同じ復調)。ISDB-C はケーブルで、
-    /// この構成では出てこないが、来たら CS として扱う。
+    /// ISDB-S は BS と CS の両方に使う (どちらも同じ復調)。ほかの方式 (ケーブルの ISDB-C など) は種別にしない。
     /// </para>
     /// </summary>
     public static string[] TypesFor(IEnumerable<int> delivery) =>
@@ -52,7 +49,6 @@ public static class DeviceProbe
         {
             ChannelTable.SysIsdbt => ["GR"],
             ChannelTable.SysIsdbs => ["BS", "CS"],
-            SysIsdbc => ["CS"],
             _ => Array.Empty<string>(),
         }).Distinct(),
     ];

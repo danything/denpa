@@ -303,7 +303,7 @@ public static class CardLan
     /// <summary>
     /// TCP の往復時間を **OS から**読む (カーネルが ACK から測っている平滑化した値)。
     /// 相手が遅らせて大きく見せることはできても、小さく見せることはできない。
-    /// 測れなければ null (まだ 1 回も測っていない・OS が教えない)
+    /// 測れなければ null (まだ 1 回も測っていない・OS が返さない)
     /// </summary>
     public static TimeSpan? RoundTrip(Socket socket)
     {

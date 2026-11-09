@@ -63,7 +63,7 @@ public static class UsbDevices
 
     /// <summary>
     /// Windows の場所の文字列 (<c>PCIROOT(0)#PCI(1400)#USBROOT(0)#USB(3)#USB(2)</c>) からポートの名前 (<c>1-3.2</c>)。
-    /// 頭の数は、ホストコントローラーの場所の文字列を並べた <paramref name="controllers"/> の何番目か (1 から)。分からなければ null
+    /// 先頭の数は、ホストコントローラーの場所の文字列を並べた <paramref name="controllers"/> の何番目か (1 から)。分からなければ null
     /// </summary>
     public static string? WindowsPort(string location, IReadOnlyList<string> controllers)
     {

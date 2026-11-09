@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 契約の更新 (EMM) の受け口。**プロセスで 1 つ**で、どの選局の <see cref="Descrambler"/> もここに渡す
+/// 契約の更新 (EMM) の渡し先。**プロセスで 1 つ**で、どの選局の <see cref="Descrambler"/> もここに渡す
 /// (docs/agent.md「契約の更新 (EMM) もカードに渡す」)。
 ///
 /// <para>
@@ -34,7 +34,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         return emm;
     });
 
-    /// <summary>プロセスで 1 つの受け口。初めて使うときに作業スレッドを起こす (<see cref="TunerPool"/> の選局だけが使う)</summary>
+    /// <summary>プロセスで 1 つの渡し先。初めて使うときに作業スレッドを起こす (<see cref="TunerPool"/> の選局だけが使う)</summary>
     public static Emm Shared => _shared.Value;
 
     /// <summary>カードの返り値。正常終了</summary>
@@ -50,7 +50,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
     private const int RememberLimit = 256;
     private static readonly TimeSpan SendEvery = TimeSpan.FromSeconds(1);
 
-    /// <summary>作業スレッドが何もせずに待つ長さ。番号の取り直し (<see cref="BCas.RetryAfter"/>) と 1 秒 1 件の間隔はこの粒で見る</summary>
+    /// <summary>作業スレッドが何もせずに待つ長さ。番号の取り直し (<see cref="BCas.RetryAfter"/>) と 1 秒 1 件の間隔はこの間隔で確かめる</summary>
     private static readonly TimeSpan Idle = TimeSpan.FromMilliseconds(500);
 
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -59,7 +59,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
 
     private long[]? _ids;
     private int _wantIds;
-    /// <summary>EMM を受け付けないと分かったカードの置き場 (古い配り役。<see cref="RemoteCard.Emm"/>)。置き場が替わるまで順番待ちに入れない</summary>
+    /// <summary>EMM を受け付けないと分かった鍵の出どころ (古い配る側。<see cref="RemoteCard.Emm"/>)。出どころが替わるまで順番待ちに入れない</summary>
     private IKeySource? _unsupported;
     private DateTimeOffset _idsFailedAt = DateTimeOffset.MinValue;
 
@@ -230,7 +230,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         }
         catch (NotSupportedException)
         {
-            // 配り役が古い。記録には RemoteCard が 1 回だけ出している。この置き場のあいだは順番待ちに入れない (1 秒ごとに送っては断られるのを繰り返さない)
+            // 配る側が古い。記録には RemoteCard が 1 回だけ出している。この出どころのあいだは順番待ちに入れない (1 秒ごとに送っては断られるのを繰り返さない)
             Volatile.Write(ref _unsupported, card);
             lock (_gate)
             {
@@ -277,7 +277,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
     }
 
     /// <summary>
-    /// 配り役 (<c>CARD_SHARE_PORT</c>) が別の拠点から受けた EMM を手元のカードに渡す (CardShareServer.cs)。
+    /// 配る側 (<c>CARD_SHARE_PORT</c>) が別の拠点から受けた EMM を手元のカードに渡す (CardShareServer.cs)。
     /// 受け入れたら自分の denpa にも知らせる (その denpa もこのカードの契約を確かめ直せるように)
     /// </summary>
     internal static int Forwarded(IKeySource card, byte[] payload, Action? accepted)
@@ -291,7 +291,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         return code;
     }
 
-    /// <summary>配り役が受けた EMM の長さを確かめる。おかしければ 400 で返す理由</summary>
+    /// <summary>配る側が受けた EMM の長さを確かめる。おかしければ 400 で返す理由</summary>
     internal static string? Problem(byte[]? body) => body switch
     {
         null => $"EMM が長すぎます ({MaxPayload} バイトまで)",
@@ -316,6 +316,7 @@ public sealed class CardNotice(Action emit, TimeProvider? clock = null)
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly Lock _gate = new();
     private DateTimeOffset _last = DateTimeOffset.MinValue;
+
     /// <summary>間が明けたら知らせる。待っている間だけある</summary>
     private ITimer? _later;
 
@@ -323,6 +324,8 @@ public sealed class CardNotice(Action emit, TimeProvider? clock = null)
     {
         lock (_gate)
         {
+            // 知らせる時機を待っている (期限が来て、タイマーがロックを取る前も含む) なら、タイマーに任せる
+            if (_later is not null) return;
             var now = _clock.GetUtcNow();
             var wait = _last + Every - now;
             if (wait > TimeSpan.Zero)

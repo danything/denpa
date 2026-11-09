@@ -5,12 +5,12 @@ namespace Denpa.Agent;
 /// <summary>
 /// PIX-DT295 1 台ぶんの持ち主。**USB のハンドルと機材の設定は 1 台に 1 つだけ**で、チューナー (<see cref="Dt295NativeTuner"/>) と
 /// カード (<see cref="Dt295NativeCard"/>) が取って使う。ホストが 0xBC のメモリ要求でレジスタを書いて機材を設定し (<see cref="Dt295NativeBoard"/>)、
-/// I2C で復調・チューナーを動かし (<see cref="Dt295NativeFrontend"/>)、機材の中では TS の送り・I2C の並び・カードの送受信を行う小さなプログラムだけを動かす (<see cref="Dt295NativePrograms"/>)。
+/// I2C で復調・チューナーを動かし (<see cref="Dt295NativeFrontend"/>)、機材の中では TS の送り出し・I2C の順次実行・カードの送受信を行う小さなプログラムだけを動かす (<see cref="Dt295NativePrograms"/>)。
 ///
 /// <para>
 /// 開くときは起動直後の機材に設定を書く。起動直後でなければ (途中で止まった前の実行が書いた hook が残っている、ほかのファームウェアが動いたあと)、
 /// Linux はポートの電源を 1 回入れ直してからやり直し、ほかの OS は挿し直しを求めて断る。
-/// 閉じるときは書いたものを逆順に戻すので、続けて開き直せる (実機で確かめた)。エージェントが動いている間は開いたまま (Zd1jBoard と同じ)
+/// 閉じるときは書いたものを逆順に戻すので、続けて開き直せる (実機で確かめた)。外部メモリーの有効化 (仕様書 3.3) と USB のレジスタ (仕様書 8.4) は戻さない。エージェントが動いている間は開いたまま (Zd1jBoard と同じ)
 /// </para>
 /// </summary>
 public sealed class Dt295NativeDevice

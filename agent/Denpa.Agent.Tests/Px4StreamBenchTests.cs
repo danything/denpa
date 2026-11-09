@@ -23,7 +23,7 @@ public class Px4StreamBenchTests
     private static readonly TimeSpan Span = TimeSpan.FromSeconds(5);
 
     [Test]
-    public async Task 合計40MB毎秒を流したときのCPUと確保量(CancellationToken cancel)
+    public async Task 合計_40MB_毎秒を流したときの_CPU_と確保量(CancellationToken cancel)
     {
         await Task.Yield();
         var fakes = new List<Px4TunerTests.FakePx4d>();
@@ -39,7 +39,7 @@ public class Px4StreamBenchTests
                 fakes.Add(px4d);
                 var tuner = new Px4Tuner("00001205000960", 2, null, px4d.Runtime.FullName, () => null);
                 tuners.Add(tuner);
-                tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+                tuner.Tune(ChannelTable.Parse("T27")!);
                 var output = tuner.Output;
                 var index = i;
                 var reader = new Thread(() =>

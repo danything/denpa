@@ -154,7 +154,7 @@ public sealed class BCas : IKeySource, IDisposable
         }
     }
 
-    /// <summary>最後に繋いだときに読んだカードの素。**カードに触らない**</summary>
+    /// <summary>最後に繋いだときに読んだカードの定数。**カードに触らない**</summary>
     public CardInit Init()
     {
         lock (_gate)
@@ -222,9 +222,7 @@ public sealed class BCas : IKeySource, IDisposable
     /// </summary>
     public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd)
     {
-        if (verificationData.Length is < 1 or > 253)
-            throw new IOException($"契約確認データの長さがおかしいです ({verificationData.Length} バイト)");
-
+        CardWire.CheckConfirm(verificationData);
         var apdu = new byte[verificationData.Length + 8];
         apdu[0] = 0x90;
         apdu[1] = 0x3C;
@@ -321,7 +319,7 @@ public sealed class BCas : IKeySource, IDisposable
         }
     }
 
-    /// <summary>探し直す。**しくじったら <see cref="RetryAfter"/> のあいだは探さずに同じ理由で断る**</summary>
+    /// <summary>探し直す。**失敗したら <see cref="RetryAfter"/> のあいだは探さずに同じ理由で断る**</summary>
     private void Reconnect()
     {
         if (_failed is { } failed && _clock.GetUtcNow() - failed.At < RetryAfter) throw failed.Error;
@@ -370,7 +368,7 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>
     /// 開いた接続でカードに電源を入れ、INT と IDI を読む。**B-CAS でなければ投げる。**
-    /// 予備のリーダーを覗くのにも使う (Card.cs の Peek と、Probe.cs の CECH-ZD1 J のカード)
+    /// 予備のリーダーを覗くのにも使う (Card.cs の Peek、Probe.cs の `--card zd1j:`・`--card dt295:`、Dt295NativeProbe.cs)
     /// </summary>
     internal static CardInit Read(ICardLink link)
     {

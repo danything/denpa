@@ -101,7 +101,7 @@ public class Dib8096FastTests
     }
 
     [Test]
-    public async Task 選局ごとの要約の1行()
+    public async Task 選局ごとの要約の_1_行()
     {
         var (dib, _, model, _) = Make();
         dib.Tune(Uhf27);

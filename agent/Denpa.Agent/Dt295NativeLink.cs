@@ -209,7 +209,7 @@ public sealed class Dt295NativeLink
 
     /// <summary>
     /// true なら、カードの UART (0xFEA000〜0xFEA03F。仕様書 §10) に書ける。カードの電源投入・切断の表と ATR・T=1 の送受信だけが使う。
-    /// 空き (false) のままなら書けない (仕様書に無い。USB コアのレジスタと同じく、使う所だけ明示して許す)。
+    /// false のままなら書けない (仕様書に無い。USB コアのレジスタと同じく、使う所だけ明示して許す)。
     /// 機材のプログラムに UART へ書かせる送り (<see cref="CardSend"/>) も、これが立っていなければ例外にして要求を出さない
     /// </summary>
     public bool AllowCardUart { get; set; }
@@ -352,13 +352,8 @@ public sealed class Dt295NativeLink
 
     private NativeReply PumpLocked(uint packets, uint idleLimit, int timeoutMs)
     {
-        var request = new byte[64];
-        BinaryPrimitives.WriteUInt32BigEndian(request, Dt295NativePrograms.Magic);
-        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(4), 1);
-        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(8), packets);
-        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(12), idleLimit);
         _trace?.Invoke($"要求 パケット {packets}、待つ回数 {idleLimit}");
-        var reply = Call(request, timeoutMs);
+        var reply = Call(NewRequest(1, packets, idleLimit), timeoutMs);
         uint Word(int at) => BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(at));
         return new NativeReply(Word(4), Word(8), Word(12), Word(16), Word(20), Word(24), Word(28));
     }
@@ -383,11 +378,8 @@ public sealed class Dt295NativeLink
             ops.CopyTo(padded);
             WriteBytes(Dt295NativePrograms.BatchPhysical, padded);
         }
-        var request = new byte[64];
-        BinaryPrimitives.WriteUInt32BigEndian(request, Dt295NativePrograms.Magic);
-        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(4), 2);
-        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(8), inline ? Dt295NativePrograms.InlineOps : Dt295NativePrograms.BatchCpu);
-        BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(12), inline ? Dt295NativePrograms.InlineResults : Dt295NativePrograms.BatchCpu + Dt295NativePrograms.BatchResultOffset);
+        var request = NewRequest(2, inline ? Dt295NativePrograms.InlineOps : Dt295NativePrograms.BatchCpu,
+            inline ? Dt295NativePrograms.InlineResults : Dt295NativePrograms.BatchCpu + Dt295NativePrograms.BatchResultOffset);
         BinaryPrimitives.WriteUInt32BigEndian(request.AsSpan(16), (uint)transfers);
         if (inline) ops.CopyTo(request.AsSpan((int)(Dt295NativePrograms.InlineOps - Dt295NativePrograms.Staging)));
         _trace?.Invoke($"I2C の順次実行 転送 {transfers}、操作列 {ops.Length} バイト");
@@ -444,6 +436,7 @@ public sealed class Dt295NativeLink
         return reply;
     }
 
+    /// <summary>機材のプログラムへの要求 64 バイト: +0 'DNT1'、+4 操作の番号、+8・+12 操作ごとの値 (Dt295NativePrograms の「要求」)</summary>
     private static byte[] NewRequest(uint operation, uint first, uint second)
     {
         var request = new byte[64];
