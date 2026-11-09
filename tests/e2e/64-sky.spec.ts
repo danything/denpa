@@ -109,7 +109,8 @@ test.describe("スカパー！プレミアム", () => {
     await expect(card.getByTestId("scan-count")).toContainText("105 / 105");
     await expect(card.getByTestId("scan-found")).toContainText("1");
 
-    // 受信できるチャンネルには出し、番組表とライブに出ないわけを添える
+    // 受信できるチャンネルには出し、番組表とライブに出ないわけを添える (取り込み直した表を読み直す)
+    await goto(page, "/settings/reception");
     await expect(
       card.locator(`[data-testid="channel-row"][data-channel="H40"]`),
     ).toContainText(SKY_TEST.name);
