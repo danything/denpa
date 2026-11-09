@@ -26,6 +26,7 @@ import { orm } from "./db";
 import { runningEncodes } from "./encoder";
 import { hasLiveViewers } from "./live";
 import { activeRecordingIds } from "./recorder";
+import { plannedStartSql } from "./recording";
 import { reservations } from "./schema";
 
 const MIN = 60_000;
@@ -42,21 +43,24 @@ export const HOLD_BEFORE = 5 * MIN;
 /** 起こすタスクの名前。install.ps1 が外すときに消す */
 const WAKE_TASK = "denpa-wake";
 
-/** 次に録画を始める時刻 (前のマージン込み)。無ければ null */
+/**
+ * 次に録画を始める時刻 (前のマージン込み)。無ければ null。
+ * チューナーを譲って冒頭を削った予約は、譲ったぶんのあと (`record_from`) から録るので、そこに合わせて起こす (`recording.plannedStart`)
+ */
 function nextRecording(at: number): number | null {
   const next = orm()
-    .select({ start_at: reservations.start_at })
+    .select({ from: plannedStartSql() })
     .from(reservations)
     .where(
       and(
         eq(reservations.state, "scheduled"),
         isNull(reservations.started_at),
-        gt(reservations.start_at, at),
+        gt(plannedStartSql(), at),
       ),
     )
-    .orderBy(asc(reservations.start_at))
+    .orderBy(asc(plannedStartSql()))
     .get();
-  return next === undefined ? null : next.start_at - config.startMargin;
+  return next === undefined ? null : next.from;
 }
 
 /**

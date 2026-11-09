@@ -123,6 +123,10 @@ export async function measureSignal(
   let started = 0;
   let ms = 0;
   let tuned: Promise<TunerSignal | null> = Promise.resolve(null);
+  /** 測り終えたか。測り終える前にストリームが終わったら、読む間隔を待たずに返す */
+  let measured = false;
+  /** 読む間隔が過ぎて読めた値 (ストリームが先に終わったときに使う) */
+  let early: TunerSignal | null = null;
   try {
     const stream = await openChannelStream(
       type,
@@ -135,7 +139,9 @@ export async function measureSignal(
      * C/N はチューナーを持っている間に読む (エージェントは使用中のチューナーの値だけを返す)。
      * パケットが届かずに測り終わらないときのために、読む間隔が過ぎたら一度読んでおく
      */
-    tuned = Bun.sleep(SIGNAL_READ).then(() => readSignal(use, stop));
+    tuned = Bun.sleep(SIGNAL_READ)
+      .then(() => readSignal(use, stop))
+      .then((value) => (early = value));
     for await (const chunk of chunks(stream)) {
       started ||= Date.now();
       check.feed(chunk);
@@ -149,6 +155,7 @@ export async function measureSignal(
          */
         tuned = readSignal(use, stop);
         await tuned;
+        measured = true;
         break;
       }
     }
@@ -163,8 +170,9 @@ export async function measureSignal(
       errors,
       drops,
       mbps: ms > 0 ? (packets * PACKET * 8) / ms / 1000 : 0,
-      // 画面を閉じたなら、読み終わるのを待たない
-      signal: signal.aborted ? null : await tuned,
+      // 画面を閉じたなら、読み終わるのを待たない。測り終える前にストリームが終わったなら、チューナーはもう放しているので
+      // 読む間隔 (SIGNAL_READ) を待っても値は返らない。それまでに読めた値を使う
+      signal: signal.aborted ? null : measured ? await tuned : early,
     };
   } finally {
     done.abort();
