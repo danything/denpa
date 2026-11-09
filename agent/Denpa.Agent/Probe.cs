@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 /// デバイスを確保したままの選局は、値が 1 つ違っても「ioctl は通るが同期しない」という
 /// 出方をする。単体テストでは踏めないので、実機で当てるための入口を用意した
 /// (チューナー自動検出のときと同じやり方)。受けた TS は、量・同期バイトの割合・連続性の飛び (ContinuityCount.cs)・
-/// スクランブルされたパケットの割合を出す。
+/// スクランブルされたパケットの割合と、カード無しで分かること (CA_system_id・番組表が来ているか。TsObservation.cs) を出す。
 /// </para>
 ///
 /// <code>
@@ -22,8 +22,8 @@ namespace Denpa.Agent;
 /// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N] [--repeat N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS (と復号できたパケット)・2 回目の選局の時間と C/N を出す
 /// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。ロックまでの時間と C/N と強度も出す (衛星は BS15:16625 --lnb 15v、J.83B は H40 のように)
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
-/// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)
-/// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
+/// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)。CA_system_id と番組表が来ているかも出す
+/// denpa-agent --card                                      # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
 /// denpa-agent --card zd1j:4-12.1                            # CECH-ZD1 J の内蔵の差し込み口だけ (ほかのリーダーに触らない)
 /// denpa-agent --card dt295:4-12.1                           # PIX-DT295 の差し込み口だけ (ほかのリーダーに触らない)
 /// </code>
@@ -37,7 +37,7 @@ public static class Probe
 {
     // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
     public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)]";
-    public const string DecodeUsage = "denpa-agent --decode-file <in.ts> <out.ts>";
+    public const string DecodeUsage = "denpa-agent --decode-file <in.ts> [<out.ts>]";
     public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート> | {It930x.Scheme}<USB のポート>]";
 
     /// <summary>1 チャンネルあたり読む時間</summary>
@@ -67,15 +67,26 @@ public static class Probe
     /// スクランブルされたまま録れてしまったものを復号するのにも使える (denpa からは
     /// <c>/denpa/decode</c> が同じことをする)。
     /// </para>
+    ///
+    /// <para>
+    /// **書き出す先を省くと復号せず、カード無しで分かること (<see cref="TsObservation"/>) だけを出す。** カードを開かず、ECM もどこにも渡さない
+    /// (スカパー！プレミアムの TS を、B-CAS のカードを挿した機械で調べるときのため)
+    /// </para>
     /// </summary>
     public static int Decode(string[] args)
     {
         var source = args.ElementAtOrDefault(1);
         var destination = args.ElementAtOrDefault(2);
-        if (source is null || destination is null)
+        if (source is null)
         {
             Console.Error.WriteLine($"usage: {DecodeUsage}");
             return 2;
+        }
+        if (destination is null)
+        {
+            using var file = File.OpenRead(source);
+            Observe(file, Console.Out);
+            return 0;
         }
 
         if (CardHops() is not { } hops) return 2;
@@ -85,19 +96,67 @@ public static class Probe
         using var output = File.Create(destination);
         long scrambled = 0;
         long packets = 0;
+        // カード無しで分かること (CA_system_id・番組表が来ているか)。復号する前の TS で数える
+        var observation = new TsObservation();
         var written = b25.DecodeAll(input, output, chunk =>
         {
             for (var at = 0; at + 188 <= chunk.Length; at += 188)
             {
                 packets++;
                 if (Scrambled(chunk[at..])) scrambled++;
+                observation.Push(chunk.Slice(at, 188));
             }
         });
 
         var before = packets == 0 ? 0 : 100.0 * scrambled / packets;
         Console.WriteLine($"{input.Length} -> {written} バイト  元は {before:F1}% がスクランブルされていました");
         Console.WriteLine($"復号した {b25.Decoded} / スクランブルされたまま {b25.Undecodable} パケット{(b25.LastError is { } why ? $" ({why})" : "")}");
+        foreach (var line in observation.Describe()) Console.WriteLine(line);
         return 0;
+    }
+
+    /// <summary>
+    /// 復号せずに、スクランブルされたパケットの割合とカード無しで分かること (<see cref="TsObservation"/>) を書く
+    /// (<c>--decode-file &lt;in.ts&gt;</c>)。188 バイトの並びが崩れていたら、0x47 が 188 バイトおきに 2 つ続くところで合わせ直す
+    /// </summary>
+    internal static void Observe(Stream input, TextWriter output)
+    {
+        var observation = new TsObservation();
+        var buffer = new byte[188 * 1024];
+        var filled = 0;
+        long packets = 0;
+        long scrambled = 0;
+        int read;
+        while ((read = input.Read(buffer, filled, buffer.Length - filled)) > 0)
+        {
+            filled += read;
+            var at = 0;
+            while (filled - at >= 188 * 2)
+            {
+                if (buffer[at] != 0x47 || buffer[at + 188] != 0x47)
+                {
+                    at++;
+                    continue;
+                }
+                var packet = buffer.AsSpan(at, 188);
+                packets++;
+                if (Scrambled(packet)) scrambled++;
+                observation.Push(packet);
+                at += 188;
+            }
+            buffer.AsSpan(at, filled - at).CopyTo(buffer);
+            filled -= at;
+        }
+        // 最後の 1 パケットは次の同期バイトで確かめられないので、先頭が 0x47 なら読む
+        if (filled >= 188 && buffer[0] == 0x47)
+        {
+            packets++;
+            if (Scrambled(buffer)) scrambled++;
+            observation.Push(buffer.AsSpan(0, 188));
+        }
+        var ratio = packets == 0 ? 0 : 100.0 * scrambled / packets;
+        output.WriteLine($"{packets} パケット  {ratio:F1}% がスクランブルされています (復号していません)");
+        foreach (var line in observation.Describe()) output.WriteLine(line);
     }
 
     /// <summary>
@@ -398,6 +457,8 @@ public static class Probe
         long outPackets = 0;
         long scrambledOut = 0;
         var continuity = new ContinuityCount();
+        // カード無しで分かること (CA_system_id・番組表が来ているか)。復号する前の TS で数える
+        var observation = new TsObservation();
 
         while (DateTime.UtcNow < deadline)
         {
@@ -417,6 +478,7 @@ public static class Probe
                 packets++;
                 if (buffer[at] == 0x47) sync++;
                 continuity.Push(buffer.AsSpan(at, 188), DateTime.UtcNow - started);
+                observation.Push(buffer.AsSpan(at, 188));
                 if (!Scrambled(buffer.AsSpan(at))) continue;
                 scrambledIn++;
                 scrambledPids.Add(Pid(buffer.AsSpan(at)));
@@ -442,6 +504,8 @@ public static class Probe
             + $"{total / 1024} KiB  {mbps} Mbps  同期バイト {ratio:F1}%");
         if (total == 0) Console.Error.WriteLine($"    {name}: 1 バイトも来ていません");
         Console.WriteLine($"    連続性の飛び {continuity.Jumps} 回 ({continuity.Places.Count} か所。最初の 1 秒は数えない){(continuity.Places.Count == 0 ? "" : "  " + string.Join(" ", continuity.Places.Take(20).Select(place => $"{place.At.TotalSeconds:F1}s({place.Pids} PID)")))}");
+
+        foreach (var line in observation.Describe()) Console.WriteLine($"    {line}");
 
         var before = packets == 0 ? 0 : 100.0 * scrambledIn / packets;
         if (b25 is null)
