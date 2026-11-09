@@ -214,6 +214,8 @@ describe("同じ回の見分け", () => {
     expect(read("恋が動き出す。第3話から登場した刑事が再び現れる")).toBeNull();
     expect(read("新しい歌手が出演。#1ヒットを生んだ曲を歌う")).toBeNull();
     expect(read("【次回予告】#8 婚約者様と遠出する")).toBeNull();
+    expect(read("【前回】#6 令嬢は賭けに乗った")).toBeNull();
+    expect(read("<次回>第8話 婚約者様と遠出する")).toBeNull();
     expect(read("▼前回 #6 の続きから")).toBeNull();
     expect(
       read(
@@ -911,7 +913,7 @@ describe("話数の無い放送を、重なる話数付きの放送の回とみ�
     });
   });
 
-  test("総集編・特別編・SP・一挙・振り返りの印があれば借りない", () => {
+  test("総集編・特別編・SP・一挙・振り返りの印があれば、その回に入れない", () => {
     for (const fields of [
       { name: `${WORK} 総集編` },
       { name: `【SP】${WORK}` },
@@ -921,6 +923,11 @@ describe("話数の無い放送を、重なる話数付きの放送の回とみ�
       const { mx, bs, local } = three(fields);
       expect(kept([mx, bs, local])).toEqual([mx.id, local.id]);
     }
+    // 地の文の「特別」は印にしない
+    const { mx, bs, local } = three({
+      description: `特別ゲストが登場。${TVK}`,
+    });
+    expect(kept([mx, bs, local])).toEqual([mx.id]);
   });
 
   test("時刻が重ならなければ、今までどおり束ねない", () => {
@@ -931,12 +938,12 @@ describe("話数の無い放送を、重なる話数付きの放送の回とみ�
     expect(kept([mx, bs, local])).toEqual([mx.id, local.id]);
   });
 
-  test("作品名がぴったり同じでなければ借りない", () => {
+  test("作品名がぴったり同じでなければ、その回に入れない", () => {
     const { mx, bs, local } = three({ name: `${WORK} 2` });
     expect(kept([mx, bs, local])).toEqual([mx.id, local.id]);
   });
 
-  test("重なる相手の回が 1 つに決まらなければ借りない", () => {
+  test("重なる相手の回が 1 つに決まらなければ、どの回にも入れない", () => {
     const seventh = airing("テストアニメ #7", base);
     const eighth = airing("テストアニメ #8", base + HOUR / 2);
     const block = airing("テストアニメ", base, { end_at: base + HOUR });
