@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace Denpa.Agent;
 
@@ -8,6 +9,7 @@ namespace Denpa.Agent;
 /// <code>
 /// denpa-agent --it930x-probe
 /// denpa-agent --it930x-probe --port 1-2 --trace
+/// denpa-agent --it930x-probe --ts 10
 /// </code>
 ///
 /// <para>
@@ -15,10 +17,21 @@ namespace Denpa.Agent;
 /// 読む順は SDK と同じで、EEPROM の写しはファームウェアを読み込む前に読む。**復調器とチューナーには触らない。**
 /// 終わりに REBOOT して、挿した直後と同じ (ファームウェアが動いていない) 状態に戻す。REBOOT で USB がつなぎ直されたかも出す。終了コードは、うまくいけば 0、どこかで止まれば 1
 /// </para>
+///
+/// <para>
+/// <c>--ts &lt;秒&gt;</c> を付けると、起動したあと TS の経路 (入力 0〜4 と EP 0x84) を設定し、入力を開けて EP 0x84 をその秒数だけ読み、
+/// 入力ごとのパケットの数と捨てた数を出す。復調器を動かさないので、ふつうはどの数も 0 になる。設定がエラーにならないことと、読みが詰まらないことを確かめる
+/// </para>
 /// </summary>
 public static class It930xProbe
 {
-    public const string Usage = "denpa-agent --it930x-probe [--port <USB のポート>] [--trace]";
+    public const string Usage = "denpa-agent --it930x-probe [--port <USB のポート>] [--ts <秒>] [--trace]";
+
+    /// <summary><c>--ts</c> の上限 (秒)</summary>
+    internal const int MaxTsSeconds = 600;
+
+    /// <summary>EP 0x84 の 1 回の読みの待ち</summary>
+    private const int TsReadTimeoutMs = 200;
 
     // 読むレジスタ (SDK の brRegister.h・brVariable.h)
     /// <summary><c>chip_version_7_0</c>。続く 2 バイトはチップの種類 (下位から。<c>DRV_getFirmwareVersionFromFile</c>)</summary>
@@ -36,15 +49,31 @@ public static class It930xProbe
     internal const uint EepromCopy = 0x4994;
     internal const int EepromLength = 256;
 
-    internal sealed record Options(string? Port, bool Trace);
+    /// <param name="Ts">TS の経路を確かめるときに EP 0x84 を読む長さ (<c>--ts</c>)。null なら確かめない</param>
+    internal sealed record Options(string? Port, bool Trace, TimeSpan? Ts);
 
-    /// <summary>引数を読む。<c>--port</c> に値が無ければ null (使い方を出して終わる)</summary>
+    /// <summary>引数を読む。<c>--port</c> に値が無い・<c>--ts</c> が 1〜<see cref="MaxTsSeconds"/> の整数でなければ null (使い方を出して終わる)</summary>
     internal static Options? Parse(string[] args)
     {
+        string? port = null;
         var at = Array.IndexOf(args, "--port");
-        if (at < 0) return new Options(null, args.Contains("--trace"));
-        var port = args.ElementAtOrDefault(at + 1);
-        return port is null || port.StartsWith("--", StringComparison.Ordinal) ? null : new Options(port, args.Contains("--trace"));
+        if (at >= 0)
+        {
+            port = args.ElementAtOrDefault(at + 1);
+            if (port is null || port.StartsWith("--", StringComparison.Ordinal)) return null;
+        }
+        TimeSpan? ts = null;
+        at = Array.IndexOf(args, "--ts");
+        if (at >= 0)
+        {
+            if (!int.TryParse(args.ElementAtOrDefault(at + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var seconds)
+                || seconds is < 1 or > MaxTsSeconds)
+            {
+                return null;
+            }
+            ts = TimeSpan.FromSeconds(seconds);
+        }
+        return new Options(port, args.Contains("--trace"), ts);
     }
 
     public static int Run(string[] args)
@@ -67,7 +96,7 @@ public static class It930xProbe
         // --trace: コマンドを 1 行ずつ、標準エラー出力に出す (送ったフレーム・応答・時間)
         Action<string>? trace = options.Trace ? message => Console.Error.WriteLine($"  {message}") : null;
         Console.Out.WriteLine($"{model.Name} (USB {model.Vendor:x4}:{model.Product:x4}、ポート {port})");
-        return Execute(() => It930x.OpenUsb(port, model), () => It930xFirmware.Code, Console.Out, Thread.Sleep, trace);
+        return Execute(() => It930x.OpenUsb(port, model), () => It930xFirmware.Code, Console.Out, Thread.Sleep, trace, options.Ts);
     }
 
     /// <summary>
@@ -75,7 +104,8 @@ public static class It930xProbe
     /// </summary>
     /// <param name="open">機材を開く。テストは偽の機材を返す</param>
     /// <param name="firmware">確かめたファームウェアを返す (<see cref="It930xFirmware.Code"/>)</param>
-    internal static int Execute(Func<IUsbDevice> open, Func<byte[]> firmware, TextWriter output, Action<int> sleep, Action<string>? trace)
+    /// <param name="ts">TS の経路を確かめるときに EP 0x84 を読む長さ (<c>--ts</c>)。null なら確かめない</param>
+    internal static int Execute(Func<IUsbDevice> open, Func<byte[]> firmware, TextWriter output, Action<int> sleep, Action<string>? trace, TimeSpan? ts = null)
     {
         byte[] code;
         try
@@ -116,6 +146,7 @@ public static class It930xProbe
             var before = boot.Before == 0 ? "動いていない" : It930xBoot.Format(boot.Before);
             output.WriteLine($"ファームウェア: 開いたとき {before}{(boot.Rebooted ? " (REBOOT した)" : "")}、"
                 + $"{It930xFirmware.Segments.Count} 区切りを読み込んで起動し {It930xBoot.Format(boot.Version)} (0x{boot.Version:X8})、{clock.ElapsedMilliseconds - started} ms");
+            if (ts is { } length) CheckTs(bridge, usb, length, output);
             // 終わりに REBOOT して、挿した直後と同じ (ファームウェアが動いていない) 状態に戻す。USB がつなぎ直されるかも、ここで分かる
             started = clock.ElapsedMilliseconds;
             try
@@ -155,6 +186,60 @@ public static class It930xProbe
         {
             output.WriteLine($"  +{at:X2}: {Convert.ToHexString(copy.AsSpan(at, 16))}");
         }
+    }
+
+    /// <summary>
+    /// TS の経路を設定し、入力 0〜4 を開けて EP 0x84 を <paramref name="length"/> だけ読み、入力ごとのパケットの数と捨てた数を出す。
+    /// 終わったら入力を閉じる。入力の形は SDK の既定のシリアルにする (PLEX の基板の値は確かめていない)
+    /// </summary>
+    private static void CheckTs(It930xBridge bridge, IUsbDevice usb, TimeSpan length, TextWriter output)
+    {
+        var clock = Stopwatch.StartNew();
+        var commands = bridge.Commands;
+        var (before, after) = bridge.ConfigureTs(new bool[It930xBridge.TsInputs]);
+        output.WriteLine($"TS の経路: 設定しました ({bridge.Commands - commands} コマンド、{clock.ElapsedMilliseconds} ms)。"
+            + $"ブリッジに残っていたバッファ {before}{(before.Empty ? "" : $"、捨てたあと {after}")}");
+        var demux = new It930xTsDemux(It930xBridge.SyncBytes);
+        var buffer = new byte[It930xBridge.TsTransferSize];
+        long bytes = 0;
+        var reads = 0;
+        var started = clock.Elapsed;
+        using (var input = usb.OpenInStream(It930xBridge.TsIn, It930xBridge.TsTransferSize, It930xBridge.TsDepth))
+        {
+            try
+            {
+                for (var port = 0; port < It930xBridge.TsInputs; port++) bridge.EnableTsInput(port, true);
+                started = clock.Elapsed;
+                while (clock.Elapsed - started < length)
+                {
+                    var got = input.Read(buffer, TsReadTimeoutMs);
+                    if (got == 0) continue;
+                    reads++;
+                    bytes += got;
+                    demux.Push(buffer.AsSpan(0, got));
+                }
+            }
+            finally
+            {
+                for (var port = 0; port < It930xBridge.TsInputs; port++)
+                {
+                    try
+                    {
+                        bridge.EnableTsInput(port, false);
+                    }
+                    catch (It930xException error)
+                    {
+                        output.WriteLine($"入力 {port} を閉じられませんでした: {error.Message}");
+                    }
+                }
+            }
+        }
+        var seconds = (clock.Elapsed - started).TotalSeconds;
+        output.WriteLine($"TS: EP 0x{It930xBridge.TsIn:X2} を {seconds:F1} 秒読み、{reads} 回で {bytes} バイト ({bytes * 8 / Math.Max(seconds, 0.001) / 1e6:F2} Mbps)");
+        output.WriteLine("入力ごとのパケット: " + string.Join("、", Enumerable.Range(0, It930xBridge.TsInputs)
+            .Select(port => $"{port} (0x{It930xBridge.SyncBytes[port]:X2}) {demux.Packets[port]}")));
+        output.WriteLine($"捨てた: 揃っていない間に飛ばした {demux.Skipped} バイト、知らない同期バイトのパケット {demux.Unknown} 個、揃いが外れた {demux.Lost} 回");
+        output.WriteLine($"ブリッジに残っているバッファ: {bridge.ReadPsb()}");
     }
 
     /// <summary>機材が戻るのを、100 ms ごとに最大 5 秒待って開く (REBOOT で USB がつなぎ直されたとき)</summary>

@@ -12,6 +12,14 @@ public sealed record It930xBoot(uint Before, bool Rebooted, uint Version)
     public static string Format(uint version) => $"{version >> 24}.{(version >> 16) & 0xFF}.{(version >> 8) & 0xFF}.{version & 0xFF}";
 }
 
+/// <summary>ブリッジの中に残っている TS のバッファの数 (<c>0xDA98</c>・<c>0xDA99</c>)</summary>
+public sealed record It930xPsb(byte Da98, byte Da99)
+{
+    public bool Empty => (Da98 | Da99) == 0;
+
+    public override string ToString() => $"0xDA98 = {Da98}、0xDA99 = {Da99}";
+}
+
 /// <summary>
 /// IT930x (USB ブリッジ) 1 つ。コマンドの送受信、レジスタの読み書き、ファームウェアの読み込みと REBOOT。
 ///
@@ -23,7 +31,7 @@ public sealed record It930xBoot(uint Before, bool Rebooted, uint Version)
 ///
 /// <para>
 /// ITE の SDK (<c>api/IT9300.c</c>・<c>api/brCmd.c</c>) を元に書いた。コメントの関数名は SDK のもの。
-/// 復調器とチューナーの層 (I2C の中継・TS の入力) はまだ無い (#1578 の続きの段階で足す)
+/// TS の経路 (入力 0〜4 と EP 0x84) の設定もここに持つ。復調器とチューナーの層 (I2C の中継) はまだ無い (#1578 の続きの段階で足す)
 /// </para>
 /// </summary>
 public sealed class It930xBridge
@@ -68,6 +76,65 @@ public sealed class It930xBridge
 
     /// <summary>I2C の速さの値 (<c>IT9300User_I2C_SPEED</c>。brUser.h は約 366 kHz と書いている)</summary>
     public const byte I2cSpeed = 0x07;
+
+    /// <summary>TS を受ける端点 (bulk IN。SDK の <c>it930x-devices.c</c> の 1 つ目のアダプタ)</summary>
+    public const byte TsIn = 0x84;
+
+    /// <summary>ブリッジの TS の入力の数 (SDK の <c>TsPort</c> の 0〜4)</summary>
+    public const int TsInputs = 5;
+
+    /// <summary>
+    /// 入力 0〜4 のパケットの先頭に付ける同期バイト。**こちらで決めた値** (SDK のコメントの例の 0x17 から 0x10 ずつ)。
+    /// 0x47 は使わない (書き換えていないパケットと見分けられなくなる)
+    /// </summary>
+    public static readonly IReadOnlyList<byte> SyncBytes = [0x17, 0x27, 0x37, 0x57, 0x67];
+
+    /// <summary>EP 0x84 の 1 回の転送の大きさ (SDK の <c>URB_BUFSIZE</c>。188 × 348 = 65,424 バイト)</summary>
+    public const int TsTransferSize = 188 * 348;
+
+    /// <summary>EP 0x84 に出しっぱなしにする読みの数 (CECH-ZD1 J と同じ 16 から始める。5 受信機で足りるかは実機で測る)</summary>
+    public const int TsDepth = 16;
+
+    /// <summary>EP 0x84 の最大パケット長 (<c>IT9300User_USB20_MAX_PACKET_SIZE</c>)</summary>
+    private const int TsMaxPacket = 512;
+
+    // TS の経路のレジスタ (brRegister.h)。位置と幅は 1 ビットのものだけ添える
+    /// <summary><c>p_br_mp2if_ignore_sync_byte</c></summary>
+    public const uint IgnoreSyncByte = 0xDA1A;
+    /// <summary><c>p_br_reg_dvbt_inten</c> (bit 2)</summary>
+    public const uint DvbtInterrupt = 0xF41F;
+    /// <summary><c>p_br_reg_mpeg_full_speed</c> (bit 0)</summary>
+    public const uint MpegFullSpeed = 0xDA10;
+    /// <summary><c>p_br_reg_dvbt_en</c> (bit 0)</summary>
+    public const uint DvbtEnable = 0xF41A;
+    /// <summary><c>p_br_reg_mp2_sw_rst</c> (bit 0。EP 0x84 のリセット)</summary>
+    public const uint Mp2Reset = 0xDA1D;
+    /// <summary><c>p_br_reg_ep4_tx_en</c> (bit 5)</summary>
+    public const uint Ep4Enable = 0xDD11;
+    /// <summary><c>p_br_reg_ep4_tx_nak</c> (bit 5)</summary>
+    public const uint Ep4Nak = 0xDD13;
+    /// <summary><c>p_br_reg_ep4_tx_len_7_0</c> と続く <c>_15_8</c> (1 回の転送の大きさを 4 バイト単位で)</summary>
+    public const uint Ep4Length = 0xDD88;
+    /// <summary><c>p_br_reg_ep4_max_pkt</c> (最大パケット長を 4 バイト単位で)</summary>
+    public const uint Ep4MaxPacket = 0xDD0C;
+    /// <summary><c>p_br_mp2if_mpeg_ser_mode</c> (bit 0)</summary>
+    public const uint MpegSerial = 0xDA05;
+    /// <summary><c>p_br_mp2if_mpeg_par_mode</c> (bit 0)</summary>
+    public const uint MpegParallel = 0xDA06;
+    /// <summary><c>p_br_reg_top_host_reverse</c></summary>
+    public const uint HostReverse = 0xD920;
+    /// <summary>ブリッジの中に残っている TS のバッファの数 (SDK のコメントの「psb counter」。<c>IT9300_initialize</c> が読む 2 バイト)</summary>
+    public const uint PsbCount = 0xDA98;
+    /// <summary><c>p_br_reg_ts_in_src</c> + 入力 (入力 0・1 だけ。シリアルは 0、パラレルは 1)</summary>
+    public const uint TsInSource = 0xDA58;
+    /// <summary><c>p_br_reg_ts0_aggre_mode</c> + 入力 (1 にすると同期バイトを付け替えてまとめる)</summary>
+    public const uint TsAggregateMode = 0xDA73;
+    /// <summary><c>p_br_reg_ts0_sync_byte</c> + 入力</summary>
+    public const uint TsSyncByte = 0xDA78;
+    /// <summary><c>p_br_reg_ts0_en</c> + 入力</summary>
+    public const uint TsEnable = 0xDA4C;
+    /// <summary><c>p_br_reg_ts_fail_ignore</c> (入力ごとに 1 ビット)</summary>
+    public const uint TsFailIgnore = 0xDA5A;
 
     private readonly IUsbDevice _usb;
     private readonly Action<int> _sleep;
@@ -177,6 +244,99 @@ public sealed class It930xBridge
     }
 
     public void WriteRegister(uint address, byte value) => WriteRegisters(address, [value]);
+
+    /// <summary>
+    /// レジスタの <paramref name="position"/> から <paramref name="length"/> ビットだけを書き換える (<c>IT9300_writeRegisterBits</c>)。
+    /// 8 ビットなら書くだけ、それ以外は読んでから書く。読んでから書くまでの間に、ほかのスレッドのコマンドを入れない
+    /// </summary>
+    public void WriteRegisterBits(uint address, int position, int length, byte value)
+    {
+        if (length == 8)
+        {
+            WriteRegister(address, value);
+            return;
+        }
+        lock (_gate)
+        {
+            var mask = ((1 << length) - 1) << position;
+            var current = ReadRegister(address);
+            WriteRegister(address, (byte)((current & ~mask) | ((value << position) & mask)));
+        }
+    }
+
+    /// <summary>
+    /// ブリッジの中に残っている TS のバッファの数 (<see cref="PsbCount"/> と次の番地。SDK と同じく 0xDA99 から読む)。
+    /// 2 つの値が何を数えているかは SDK に書いていない (SDK はどちらかが 0 でなければ捨てるだけ)
+    /// </summary>
+    public It930xPsb ReadPsb()
+    {
+        var da99 = ReadRegister(PsbCount + 1);
+        return new It930xPsb(ReadRegister(PsbCount), da99);
+    }
+
+    /// <summary>
+    /// TS の経路を設定する。入力 0〜4 のパケットの先頭を <see cref="SyncBytes"/> に付け替えて 1 本にまとめ、EP 0x84 から出す。
+    /// **入力はまだ開けない** (<see cref="EnableTsInput"/>)。
+    ///
+    /// <para>
+    /// 順は SDK と同じ: <c>IT9300_initialize</c> の TS の部分 (同期バイトを無視しない → <c>IT9300_setOutTsType</c> →
+    /// <c>IT9300_configOutput</c> → 残っている TS を捨てる)、<c>DRV_IT930x_Initialize</c> の入力ごとの設定 (<c>IT9300_setInTsType</c>・
+    /// <c>IT9300_setSyncByteMode</c>)、<c>IT9300_setIgnoreFail</c>。
+    /// <c>IT9300_initialize</c> のうち端子の駆動の強さ・次の段の I2C の相手・GPIO は、復調器の層と一緒に足す (PLEX の基板での値を確かめていない)
+    /// </para>
+    /// </summary>
+    /// <param name="parallel">入力 0〜4 がパラレルか (<c>IT9300_setInTsType</c>。設定するのは入力 0・1 だけ)。SDK の既定はどれもシリアル</param>
+    /// <returns>ブリッジの中に残っていた TS のバッファの数 (捨てる前と後)</returns>
+    public (It930xPsb Before, It930xPsb After) ConfigureTs(IReadOnlyList<bool> parallel)
+    {
+        if (parallel.Count != TsInputs) throw new ArgumentException($"入力は {TsInputs} つです ({parallel.Count})", nameof(parallel));
+        WriteRegister(IgnoreSyncByte, 0);
+
+        // IT9300_setOutTsType (出力は USB。シリアル・パラレルの出力ではないので、その 2 つはここでは触らない)
+        WriteRegisterBits(DvbtInterrupt, 2, 1, 1);
+        WriteRegisterBits(MpegFullSpeed, 0, 1, 0);
+        WriteRegisterBits(DvbtEnable, 0, 1, 1);
+
+        // IT9300_configOutput: EP 0x84 をリセット → 止める → NAK を外す → 有効 → 1 回の転送の大きさ → 最大パケット長 → リセットを外す
+        WriteRegisterBits(Mp2Reset, 0, 1, 1);
+        WriteRegisterBits(Ep4Enable, 5, 1, 0);
+        WriteRegisterBits(Ep4Nak, 5, 1, 0);
+        WriteRegisterBits(Ep4Enable, 5, 1, 1);
+        const int words = TsTransferSize / 4;
+        WriteRegisters(Ep4Length, [words & 0xFF, words >> 8]);
+        WriteRegister(Ep4MaxPacket, TsMaxPacket / 4);
+        WriteRegisterBits(MpegSerial, 0, 1, 0);
+        WriteRegisterBits(MpegParallel, 0, 1, 0);
+        WriteRegisterBits(Mp2Reset, 0, 1, 0);
+        WriteRegister(HostReverse, 0);
+
+        // 前に開いたときの TS がブリッジに残っていれば捨てる (IT9300_initialize。SDK は 0xDA05 に 1 を書いてから 0 を書く)
+        var before = ReadPsb();
+        if (!before.Empty)
+        {
+            WriteRegister(MpegSerial, 1);
+            WriteRegister(MpegSerial, 0);
+        }
+        var after = ReadPsb();
+
+        for (var port = 0; port < 2; port++) WriteRegister(TsInSource + (uint)port, (byte)(parallel[port] ? 1 : 0));
+        for (var port = 0; port < TsInputs; port++)
+        {
+            WriteRegister(TsAggregateMode + (uint)port, 1);
+            WriteRegister(TsSyncByte + (uint)port, SyncBytes[port]);
+        }
+        // 誤りのあるパケットも通す (SDK も通している。TEI の付いたパケットを受信機ごとに数えるため)
+        WriteRegister(TsFailIgnore, 0x1F);
+        return (before, after);
+    }
+
+    /// <summary>入力 <paramref name="port"/> (0〜4) を開ける・閉じる (<c>IT9300_enableTsPort</c>・<c>IT9300_disableTsPort</c>)</summary>
+    public void EnableTsInput(int port, bool on)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(port);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(port, TsInputs);
+        WriteRegister(TsEnable + (uint)port, (byte)(on ? 1 : 0));
+    }
 
     /// <summary>読み書きのコマンドの中身: 長さ、番地の長さ、番地 4 バイト (上位から)、書くバイト</summary>
     private static byte[] Address(uint address, int length, ReadOnlySpan<byte> data)
