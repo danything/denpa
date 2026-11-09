@@ -109,41 +109,68 @@ public class It930xDeviceTests
     [Test]
     public async Task 閉じ終えるまで同じポートを開き直さない()
     {
-        // 同じ機材 (同じ偽物) を閉じている途中に、別のスレッドが開き直そうとする
+        /*
+         * 同じ機材 (同じ偽物) を閉じている途中に、別のスレッドが開き直そうとする。時間で待たず、合図で順を決める:
+         * 1. 閉じる側が電源を切る書き込みの 1 つ目 (GPIOH2 ← 0) を出したところで、開き直すスレッドを始める
+         * 2. 開き直す側が機材の一覧のロックを取る直前に合図 (reached) を出す
+         * 3. 閉じる側は、開き直す側がロックで止まる (WaitSleepJoin) か、USB を開いてしまう (opened) まで待ってから閉じ終える
+         * 正しく作られていれば開き直す側はロックで止まり、USB を開くのは古いほうの電源断のあとになる
+         */
         var (usb, _, _) = Fake();
         var first = Open(usb, "9-6", new FakeClock());
         first.Release();
+        using var reached = new ManualResetEventSlim();
+        using var opened = new ManualResetEventSlim();
         It930xDevice? second = null;
-        Task? reopening = null;
+        Exception? failure = null;
+        var openedAfterPowerOff = false;
+        var clock = new FakeClock();
+        var reopening = new Thread(() =>
+        {
+            try
+            {
+                second = It930xDevice.Acquire("9-6", () =>
+                {
+                    // 閉じる側の GPIOH2 ← 0 のあとに GPIOH7 ← 1 (電源断) まで届いているか
+                    lock (usb.Log) openedAfterPowerOff = usb.Log.IndexOf("W D8C3=01", usb.Log.LastIndexOf("W D8B7=00") + 1) >= 0;
+                    opened.Set();
+                    usb.ResetSequence();
+                    return (usb, Pe);
+                }, clock.Sleep, () => clock.Now, () => It930xFirmware.Code, reached.Set);
+            }
+            catch (Exception error)
+            {
+                failure = error;
+            }
+        }) { IsBackground = true, Name = "reopen" };
+        var started = 0;
         usb.OnNote = line =>
         {
-            // 電源を切る書き込みの 1 つ目 (GPIOH2 ← 0) のあとで開き直しを始め、閉じる側を少し遅らせる
-            if (line != "W D8B7=00" || reopening is not null) return;
-            var clock = new FakeClock();
-            reopening = Task.Run(() => second = It930xDevice.Acquire("9-6", () =>
+            // 開き直すスレッドの書き込みでもここを通るので、1 回だけ始める
+            if (line != "W D8B7=00" || Interlocked.Exchange(ref started, 1) != 0) return;
+            reopening.Start();
+            if (!reached.Wait(TimeSpan.FromSeconds(10))) throw new InvalidOperationException("開き直すスレッドが Acquire に入らなかった");
+            if (!SpinWait.SpinUntil(() => opened.IsSet || (reopening.ThreadState & ThreadState.WaitSleepJoin) != 0, TimeSpan.FromSeconds(10)))
             {
-                usb.ResetSequence();
-                return (usb, Pe);
-            }, clock.Sleep, () => clock.Now, () => It930xFirmware.Code));
-            Thread.Sleep(100);
+                throw new InvalidOperationException("開き直すスレッドがロックで止まらず、USB も開かなかった");
+            }
         };
-        It930xDevice.CloseIfIdle("9-6");
-        await reopening!;
-        usb.OnNote = null;
         try
         {
-            // 古いほうの電源断 (GPIOH7 ← 1) は、開き直した機材が電源を入れる (GPIOH7 ← 0、GPIOH2 ← 1) より前に届く
+            It930xDevice.CloseIfIdle("9-6");
+            await Assert.That(started).IsEqualTo(1);
+            await Assert.That(reopening.Join(TimeSpan.FromSeconds(10))).IsTrue();
+            await Assert.That(failure).IsNull();
+            // 開き直した側が USB を開いたのは、古いほうの電源断 (GPIOH7 ← 1) のあと
+            await Assert.That(openedAfterPowerOff).IsTrue();
             List<string> log;
             lock (usb.Log) log = [.. usb.Log];
-            var off = log.IndexOf("W D8C3=01", log.IndexOf("W D8B7=00"));
-            var on = log.LastIndexOf("W D8C3=00");
-            await Assert.That(off).IsGreaterThanOrEqualTo(0);
-            await Assert.That(on).IsGreaterThan(off);
             await Assert.That(log.Last(line => line.StartsWith("W D8C3=", StringComparison.Ordinal))).IsEqualTo("W D8C3=00");
             await Assert.That(log.Last(line => line.StartsWith("W D8B7=", StringComparison.Ordinal))).IsEqualTo("W D8B7=01");
         }
         finally
         {
+            usb.OnNote = null;
             second?.Release();
             It930xDevice.CloseIfIdle("9-6");
         }
@@ -212,12 +239,128 @@ public class It930xDeviceTests
         }
     }
 
-    [Test]
-    public async Task 衛星はまだ断る()
+    /// <summary>LNB の給電 (GPIOH11 の値。仕様書 1.5・9) の書き込みを、開いたときの設定のあとから拾う</summary>
+    private static List<string> LnbWrites(FakeIt930x usb)
     {
-        var tuner = new It930xTuner("test", 0, () => throw new InvalidOperationException("開かない"));
+        lock (usb.Log)
+        {
+            var setup = usb.Log.IndexOf("W D8D5=01");
+            return [.. usb.Log.Skip(setup + 2).Where(line => line.StartsWith("W D8D3=", StringComparison.Ordinal))];
+        }
+    }
+
+    [Test]
+    public async Task 衛星は_TSID_で選局し_15V_なら_LNB_の給電を入れる()
+    {
+        var (usb, _, bus3) = Fake();
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-7", new FakeClock()), () => It930xDevice.CloseIfIdle("9-7"), "15v");
+        tuner.Tune(ChannelTable.Parse("BS15:16625")!);
+        await Assert.That(tuner.Tuned).IsTrue();
+        // 給電を入れてから選局する (GPIOH11 ← 1。仕様書 9)
+        await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01" });
+        await Assert.That(bus3.Log).Contains("65 T E9=40F100");
+        await Assert.That(bus3.Log).Contains("65 X 17=0C");
+        await Assert.That(tuner.Signal()!.Locked).IsTrue();
+        await Assert.That(tuner.SatelliteStreams()).IsNotNull();
+        tuner.Dispose();
+        // 受信機を閉じるときは給電を求めない (仕様書 10.3 の手順 4)。そのあと電源を切る
+        await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01", "W D8D3=00" });
+        await Assert.That(bus3.Log).Contains("65 X 28=13");
+        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+    }
+
+    [Test]
+    public async Task LNB_の給電は求める受信機が_0_と_1_の間で変わるときだけ書く()
+    {
+        var (usb, _, _) = Fake();
+        var clock = new FakeClock();
+        var tuners = new[] { 0, 1 }.Select(receiver =>
+            new It930xTuner($"test {receiver}", receiver, () => Open(usb, "9-8", clock), () => It930xDevice.CloseIfIdle("9-8"), "15v")).ToList();
+        try
+        {
+            tuners[0].Tune(ChannelTable.Parse("BS15:16625")!);
+            tuners[1].Tune(ChannelTable.Parse("BS01:16400")!);
+            // 2 つ目の受信機が求めても書かない (給電は 5 つの受信機で 1 つ。仕様書 9)
+            await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01" });
+            await Assert.That(tuners[0].Device!.LnbUsers).IsEqualTo(2);
+            // 1 つ目が地上波に替わっても、2 つ目が求めているので切らない
+            tuners[0].Tune(ChannelTable.Parse("T27")!);
+            await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01" });
+            // 最後の 1 つが求めなくなったら切る
+            tuners[1].Dispose();
+            await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01", "W D8D3=00" });
+        }
+        finally
+        {
+            foreach (var tuner in tuners) tuner.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task LNB_を設定していなければ衛星でも給電しない()
+    {
+        var (usb, _, _) = Fake();
+        var tuner = new It930xTuner("test", 2, () => Open(usb, "9-9", new FakeClock()), () => It930xDevice.CloseIfIdle("9-9"), "");
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("CS4")!);
+            await Assert.That(tuner.Tuned).IsTrue();
+            await Assert.That(LnbWrites(usb)).IsEmpty();
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task 衛星を選局できなければ給電の要求を取り下げる()
+    {
+        var (usb, _, bus3) = Fake();
+        bus3[0x65].SatelliteStatus = _ => 0x00;
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-11", new FakeClock()), () => It930xDevice.CloseIfIdle("9-11"), "15v");
+        try
+        {
+            var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("BS15:16625")!));
+            await Assert.That(error.Message).IsEqualTo(ITuneDevice.SyncFailed);
+            await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01", "W D8D3=00" });
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task LNB_の_11V_は機材を開かずに断る()
+    {
+        var tuner = new It930xTuner("test", 0, () => throw new InvalidOperationException("開かない"), lnb: "11v");
         var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("BS15")!));
-        await Assert.That(error.Message).Contains("地上波だけ");
+        await Assert.That(error.Message).Contains("15V だけ");
+    }
+
+    [Test]
+    public async Task 同じ受信機で地上波と衛星を切り替える()
+    {
+        var (usb, _, bus3) = Fake();
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-10", new FakeClock()), () => It930xDevice.CloseIfIdle("9-10"), "15v");
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("T27")!);
+            tuner.Tune(ChannelTable.Parse("BS15:16625")!);
+            tuner.Tune(ChannelTable.Parse("T27")!);
+            await Assert.That(tuner.Tuned).IsTrue();
+            // ISDB-T → ISDB-S → ISDB-T の起動 (仕様書 10.1)。間にそれぞれのスリープ
+            var log = bus3.Log;
+            var modes = log.Where(line => line.StartsWith("65 X 17=", StringComparison.Ordinal)).ToList();
+            await Assert.That(modes).IsEquivalentTo(new[] { "65 X 17=01", "65 X 17=06", "65 X 17=01", "65 X 17=0C", "65 X 17=01", "65 X 17=06" });
+            // 地上波に戻ったら給電を切る
+            await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01", "W D8D3=00" });
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
     }
 
     [Test]

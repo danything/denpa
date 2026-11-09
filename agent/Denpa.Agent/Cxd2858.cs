@@ -5,12 +5,20 @@ namespace Denpa.Agent;
  *
  * クリーンルームで、仕様書 (denpa-spec の mlt5/spec.md。PLEX MLT5 系の CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
  * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は仕様書の節の番号で、表の値と順はその節の表のまま持つ。
- * 仕様書に無くて決めた所は「仕様書に無い」と書いてある。いまは地上波 (ISDB-T) の分だけ。
+ * 仕様書に無くて決めた所は「仕様書に無い」と書いてある。いまは地上波 (ISDB-T) と衛星 (ISDB-S) の分で、J.83B はまだ無い。
  */
+
+/// <summary>チューナーの状態 (仕様書 4.1)。J.83B は地上波側を使う</summary>
+internal enum Cxd2858Side
+{
+    Stopped,
+    Terrestrial,
+    Satellite,
+}
 
 /// <summary>
 /// CXD2858ER の書き込みの並び。**読み書きは、復調器の中継を開けている間だけ呼ぶ** (仕様書 4.1)。開け閉めとバスのロックは <see cref="Cxd2856Frontend"/> が持つ。
-/// チューナーの状態 (止まっている・地上波側で動作中) はこちらで覚える (仕様書 4.1)
+/// チューナーの状態 (止まっている・地上波側で動作中・衛星側で動作中) はこちらで覚える (仕様書 4.1)
 /// </summary>
 internal sealed class Cxd2858(CxdLink link)
 {
@@ -25,10 +33,16 @@ internal sealed class Cxd2858(CxdLink link)
     /// <summary>地上波側の周波数の上限 (kHz。20 ビット。仕様書 4.1)</summary>
     public const uint MaxTerrestrialKhz = 0xFFFFF;
 
+    /// <summary>
+    /// 衛星の周波数の上限 (kHz)。4 kHz 単位にした値 q を 20 ビットで書く (仕様書 4.4 の手順 8。q2 が上位 4 ビット) ので、
+    /// <c>(f + 2) / 4</c> が <c>0xFFFFF</c> に収まる f まで (仕様書に上限は無く、書ける桁から決めた)
+    /// </summary>
+    public const uint MaxSatelliteKhz = 0xFFFFF * 4 + 1;
+
     private const CxdTarget U = CxdTarget.Tuner;
 
-    /// <summary>地上波側で動作中か (止まっていれば false)</summary>
-    public bool Terrestrial { get; private set; }
+    /// <summary>いまの状態 (仕様書 4.1)</summary>
+    public Cxd2858Side Side { get; private set; }
 
     /// <summary>仕様書 4.2 の手順 1〜8 (手順 9 の読みの前まで)</summary>
     internal static readonly CxdRow[] InitHead =
@@ -59,7 +73,7 @@ internal sealed class Cxd2858(CxdLink link)
     /// </summary>
     public void Init()
     {
-        Terrestrial = false;
+        Side = Cxd2858Side.Stopped;
         link.Run(InitHead);
         var cpu = link.Read(U, 0x1A, 1)[0];
         if (cpu != 0) throw new IOException($"チューナー (CXD2858ER) の初期化に失敗しました (CPU の状態 0x{cpu:X2})");
@@ -71,14 +85,49 @@ internal sealed class Cxd2858(CxdLink link)
 
     /// <summary>
     /// 地上波 (ISDB-T 6 MHz) の周波数を設定する (仕様書 4.3)。<paramref name="khz"/> は中心周波数の kHz。手順 8 のあと 50 ms 待つ。
-    /// 衛星側の停止 (手順 0) は、衛星を足すまで要らない (いまは地上波側か止まっているかのどちらか)
+    /// 衛星側で動作中なら、先に衛星側を止める (手順 0。仕様書 10.2)。地上波側のままなら止めずに書く
     /// </summary>
     public void TuneTerrestrial(uint khz)
     {
         if (khz > MaxTerrestrialKhz) throw new IOException($"地上波の周波数は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");
+        if (Side == Cxd2858Side.Satellite) StopSatellite();
         // 書き始めたら動作中とみなす (途中で失敗しても、使い終えたときに止める書き込みを送れるように。仕様書に無い)
-        Terrestrial = true;
+        Side = Cxd2858Side.Terrestrial;
         link.Run(TerrestrialRows(khz));
+    }
+
+    /// <summary>
+    /// 衛星 (ISDB-S) の周波数を設定する (仕様書 4.4)。<paramref name="khz"/> は衛星の IF (LNB の出力) の kHz (仕様書 6.1)。
+    /// 手順 8 のあと 10 ms、手順 10 のあと 50 ms 待つ (仕様書 4.4 の表。50 ms は資料で分かれていて、仕様書 12.3 はどちらでもよいとしている。表のとおり待つ)。
+    /// 地上波側で動作中なら、先に地上波側を止める (手順 0。仕様書 10.2)
+    /// </summary>
+    public void TuneSatellite(uint khz)
+    {
+        if (khz > MaxSatelliteKhz) throw new IOException($"衛星の周波数は {MaxSatelliteKhz} kHz までです ({khz} kHz)");
+        if (Side == Cxd2858Side.Terrestrial) StopTerrestrial();
+        // 書き始めたら動作中とみなす (地上波と同じ。仕様書に無い)
+        Side = Cxd2858Side.Satellite;
+        link.Run(SatelliteRows(khz));
+    }
+
+    /// <summary>仕様書 4.4 の手順 1〜10 (周波数を埋めたもの)。q は 4 kHz 単位に丸めた値 (<c>(f + 2) / 4</c>。整数の割り算)</summary>
+    internal static CxdRow[] SatelliteRows(uint khz)
+    {
+        var q = (khz + 2) / 4;
+        return
+        [
+            CxdRow.W(U, 0x15, 0x02),
+            CxdRow.W(U, 0x43, 0x06),
+            CxdRow.B(U, 0x6A, 0x00, 0x00),
+            CxdRow.W(U, 0x75, 0x99),
+            CxdRow.W(U, 0x9D, 0x00),
+            CxdRow.W(U, 0x61, 0x07),
+            CxdRow.W(U, 0x01, 0x01),
+            CxdRow.B(U, 0x04, 0xC4, 0x40, 0x02, 0x00, 0xB4, 0x78, 0x08, 0x30, 0xFF, 0x02, 0x1E, 0x16,
+                (byte)q, (byte)(q >> 8), (byte)((q >> 16) & 0x0F), 0xFF, 0x00, 0x01) with { WaitMs = 10 },
+            CxdRow.W(U, 0x05, 0x00),
+            CxdRow.W(U, 0x04, 0xC0, wait: 50),
+        ];
     }
 
     /// <summary>仕様書 4.3 の手順 1〜10 (周波数を埋めたもの)</summary>
@@ -107,12 +156,41 @@ internal sealed class Cxd2858(CxdLink link)
         CxdRow.W(U, 0x87, 0xC0),
     ];
 
-    /// <summary>止める (地上波側で動作中のときだけ書く。仕様書 4.6)</summary>
+    /// <summary>衛星側の停止 (仕様書 4.6)。整合を保つ設定 (仕様書 4.7) は使わないので、そのあとの <c>67</c> は書かない</summary>
+    internal static readonly CxdRow[] StopSatelliteRows =
+    [
+        CxdRow.W(U, 0x15, 0x02),
+        CxdRow.W(U, 0x43, 0x07),
+        CxdRow.B(U, 0x0C, 0x14, 0x00, 0x00),
+        CxdRow.W(U, 0x01, 0x00),
+        CxdRow.W(U, 0x05, 0x00),
+        CxdRow.W(U, 0x04, 0xC0),
+    ];
+
+    /// <summary>止める (動作中の側だけを書く。止まっていれば何もしない。仕様書 4.6)</summary>
     public void Stop()
     {
-        if (!Terrestrial) return;
+        switch (Side)
+        {
+            case Cxd2858Side.Terrestrial:
+                StopTerrestrial();
+                break;
+            case Cxd2858Side.Satellite:
+                StopSatellite();
+                break;
+        }
+    }
+
+    private void StopTerrestrial()
+    {
         link.Run(StopTerrestrialRows);
-        Terrestrial = false;
+        Side = Cxd2858Side.Stopped;
+    }
+
+    private void StopSatellite()
+    {
+        link.Run(StopSatelliteRows);
+        Side = Cxd2858Side.Stopped;
     }
 
     /// <summary>

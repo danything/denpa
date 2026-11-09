@@ -20,7 +20,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
 /// denpa-agent --tune asicen:1-2:1 T27                       # asicen-userland の機材 (PX-W3U3。試験的。受信機 1 は地上波)
 /// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N] [--repeat N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS (と復号できたパケット)・2 回目の選局の時間と C/N を出す
-/// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。いまは地上波だけ。ロックまでの時間と C/N と強度も出す
+/// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。ロックまでの時間と C/N と強度も出す (衛星は BS15:16625 --lnb 15v のように)
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)
 /// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
@@ -212,6 +212,11 @@ public static class Probe
             if (tuner is It930xTuner it930x)
             {
                 Console.WriteLine($"    ロックまで {it930x.LockMs} ms (ロックを確かめ始めてから){(it930x.Device is { } opened ? $"  機材を開くのに {opened.OpenMs} ms" : "")}");
+                // 衛星は TMCC にある TSID も出す (相対 TS 0〜7 の順。TSID で選んだ TS がこの中継器にあるかを確かめるため)
+                if (tuning.Satellite && it930x.SatelliteStreams() is { } streams)
+                {
+                    Console.WriteLine($"    TMCC の TSID  {string.Join(" ", streams.Select((tsid, relative) => $"{relative}:{tsid}"))}");
+                }
             }
             Measure(tuner.Output, name, decode ? new Descrambler(source) : null, seconds);
             // IT930x の機材は C/N と強度も出す (受け終えたあとの値)

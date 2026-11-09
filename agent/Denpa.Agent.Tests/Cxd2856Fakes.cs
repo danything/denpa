@@ -26,6 +26,14 @@ internal sealed class FakeCxdReceiver(byte address)
 
     public int StatusReads { get; private set; }
 
+    /// <summary>
+    /// ISDB-S のロックの状態 (T のバンク A0 の 12。bit6 が TS、bit5 が TMCC のロック。仕様書 6.3)。読むたびに呼ぶ (引数は読んだ回数)。
+    /// 既定はどちらもロックしている
+    /// </summary>
+    public Func<int, byte> SatelliteStatus { get; set; } = _ => 0x60;
+
+    public int SatelliteStatusReads { get; private set; }
+
     /// <summary>T のレジスタ (バンク、番地)</summary>
     public Dictionary<(byte Bank, byte Register), byte> T { get; } = [];
 
@@ -41,6 +49,7 @@ internal sealed class FakeCxdReceiver(byte address)
     {
         if (register == 0xFD) return ChipId;
         if (Bank == 0x60 && register == 0x10) return Status(++StatusReads);
+        if (Bank == 0xA0 && register == 0x12) return SatelliteStatus(++SatelliteStatusReads);
         return T.GetValueOrDefault((Bank, register));
     }
 

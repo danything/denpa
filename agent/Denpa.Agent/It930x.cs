@@ -7,7 +7,7 @@ namespace Denpa.Agent;
  *
  * ブリッジ (It930xBridge.cs)、受信機ごとに TS を分ける層 (It930xTs.cs)、復調器とチューナー (Cxd2856.cs・Cxd2858.cs)、
  * 機材とチューナー (It930xDevice.cs)、実機で試す入口 (It930xProbe.cs の --it930x-probe と、Probe.cs の --tune it930x:…) がある。
- * いまは地上波だけ。設定の device に it930x:<USB のポート>:<受信機> と書いたときだけエージェントが持ち、自動検出は px4d のまま (持ち主の決まりは下の Claim)。
+ * いまは地上波と衛星 (内蔵カードリーダーはまだ)。設定の device に it930x:<USB のポート>:<受信機> と書いたときだけエージェントが持ち、自動検出は px4d のまま (持ち主の決まりは下の Claim)。
  * 受信機ごとの割り当ては仕様書 (denpa-spec の mlt5/spec.md) の 1.2 から。
  */
 
@@ -22,7 +22,7 @@ public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte De
 
 /// <summary>
 /// IT930x を積んだ機材 1 機種。受信機ごとの割り当ては仕様書 1.2 の表。
-/// LNB の給電とカードの GPIO は、衛星とカードを足すときに足す (#1578)
+/// LNB の給電は 3 機種とも同じブリッジの GPIOH11 (仕様書 1.5・9) なので、表には持たない。カードの GPIO はカードを足すときに足す (#1578)
 /// </summary>
 public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnlyList<It930xReceiver> Receivers);
 
