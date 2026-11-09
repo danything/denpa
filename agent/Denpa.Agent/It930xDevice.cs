@@ -16,7 +16,7 @@ internal sealed class It930xI2cBus(It930xBridge bridge, byte bus) : ICxdBus
 /// <para>
 /// **初めて要るときに開き、使っている側がいる間は開いたまま。** チューナー (<see cref="It930xTuner"/>) は最初の選局で取り、捨てるときに返す。
 /// 誰も使わなくなったら閉じて電源を切る (<see cref="CloseIfIdle"/>)。内蔵カードリーダーは受信機と同じ電源なので (仕様書 1.5)、
-/// カードを足すときはカードも使う側として数え、カードを使っている間は受信機を全部閉じても電源を切らない。
+/// カード (<see cref="It930xCard"/>) も使う側として数え、カードを使っている間は受信機を全部閉じても電源を切らない。
 /// </para>
 ///
 /// <para>
@@ -439,6 +439,9 @@ public sealed class It930xTuner : ITuneDevice
 
     /// <summary>最後の選局で、ロックを確かめ始めてからロックするまで (ms)。<c>--tune</c> が出す</summary>
     public long LockMs => _frontend?.LockMs ?? -1;
+
+    /// <summary>衛星で最後に <see cref="Signal"/> を読んだときの強度 (dB。dBm として扱えるかは未確認)。<c>--tune</c> だけが出す</summary>
+    public double? SatelliteLevelDb => _frontend?.SatelliteLevelDb;
 
     /// <summary>いまの機材 (<c>--tune</c> が開くのにかかった時間を出す)。選局していなければ null</summary>
     public It930xDevice? Device => _device;

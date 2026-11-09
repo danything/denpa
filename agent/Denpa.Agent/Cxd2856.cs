@@ -682,6 +682,12 @@ public sealed class Cxd2856Frontend
     public long LockMs { get; private set; } = -1;
 
     /// <summary>
+    /// 衛星で最後に <see cref="Signal"/> を読んだときの強度 (仕様書 8.6 の衛星の式。dB)。dBm として扱えるかは未確認なので、
+    /// 画面に出す強度 (<see cref="TunerSignal.StrengthDbm"/>) には入れず、<c>--tune</c> の出力にだけ出す。読んでいなければ null
+    /// </summary>
+    public double? SatelliteLevelDb { get; private set; }
+
+    /// <summary>
     /// 初期化 (電源を入れたあと 1 回。仕様書 2.2)。復調器の初期化 → チューナーの初期化 (中継の中で) → TS の形の設定。
     /// 識別が合わない・チューナーの CPU の状態が 0 でないときは <see cref="IOException"/> (その受信機だけを使えなくする。仕様書 2.2)
     /// </summary>
@@ -707,6 +713,7 @@ public sealed class Cxd2856Frontend
     {
         // 何も書かずに断る (チューナーに渡せるのは 20 ビットまで。仕様書 4.1)
         if (khz > Cxd2858.MaxTerrestrialKhz) throw new IOException($"地上波の周波数は {Cxd2858.MaxTerrestrialKhz} kHz までです ({khz} kHz)");
+        SatelliteLevelDb = null;
         Tune(State.Isdbt, () => { }, () => _tuner.TuneTerrestrial(khz));
         _khz = khz;
         return WaitIsdbt();
@@ -724,8 +731,11 @@ public sealed class Cxd2856Frontend
         if (khz > Cxd2858.MaxSatelliteKhz) throw new IOException($"衛星の周波数は {Cxd2858.MaxSatelliteKhz} kHz までです ({khz} kHz)");
         // 相対 TS 番号は 0〜7 だけ (仕様書 6.3)
         if (stream.Tsid is null && stream.Relative > 7) throw new IOException($"相対 TS 番号は 0〜7 です ({stream.Relative})");
+        SatelliteLevelDb = null;
         Tune(State.Isdbs, () => _demod.SelectTs(stream), () => _tuner.TuneSatellite(khz));
         _khz = khz;
+        // ロックしなかったときも、復調器は ISDB-S で動作中のまま残す (仕様書に無い)。次の選局が方式に合わせて選局し直すか起動し直し、
+        // 受信機を閉じるときは Sleep がスリープにするので、ここでスリープにしなくても次の手順は変わらない
         return WaitIsdbs();
     }
 
@@ -822,8 +832,8 @@ public sealed class Cxd2856Frontend
     /// <summary>
     /// 受信の状態と C/N と強度。動作中のときだけ読む (仕様書 8)。動作中でなければ null。
     /// ISDB-T は C/N を <c>10 × log10(r / 8)</c> dB (仕様書 8.1。復調がロックしていないか r が 0 なら null)、強度をチューナーの AGC から求めた dBm (仕様書 8.6)。
-    /// ISDB-S は C/N を付録 A の表で (仕様書 8.2。計算が終わっていなければ null)、強度を復調器の AGC から求めた値 (仕様書 8.6 の衛星)。
-    /// 衛星の強度は仕様書では dB と書かれていて、dBm として比べられるかは実機で確かめていない
+    /// ISDB-S は C/N を付録 A の表で (仕様書 8.2。計算が終わっていなければ null)。強度は復調器の AGC から求めた値 (仕様書 8.6 の衛星) を
+    /// <see cref="SatelliteLevelDb"/> にだけ入れ、<see cref="TunerSignal.StrengthDbm"/> には入れない (仕様書は dB とだけ書いていて、dBm として扱えるかは未確認。仕様書 13)
     /// </summary>
     public TunerSignal? Signal()
     {
@@ -855,7 +865,8 @@ public sealed class Cxd2856Frontend
                     agc = _demod.ReadIsdbsAgc();
                 }
                 double? cn = raw is { } r ? Cxd2856.IsdbsCnDb(r) : null;
-                return new TunerSignal(Cxd2856.IsdbsLocked(status), cn, TunerSignal.Db, StrengthDbm: Cxd2856.IsdbsLevelDb(agc));
+                SatelliteLevelDb = Cxd2856.IsdbsLevelDb(agc);
+                return new TunerSignal(Cxd2856.IsdbsLocked(status), cn, TunerSignal.Db);
             }
             default:
                 return null;

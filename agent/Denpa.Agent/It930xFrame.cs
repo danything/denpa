@@ -47,6 +47,14 @@ public static class It930xFrame
     public const ushort GenericRead = 0x002A;
     /// <summary>次の段の I2C に書く (<c>Command_GENERIC_WRITE</c>。中身は長さ・バス・8 ビットのアドレス・書くバイト)</summary>
     public const ushort GenericWrite = 0x002B;
+    /// <summary>カードの UART で受けたバイトを読む (<c>Command_UART_READ</c>。中身は読む長さ)</summary>
+    public const ushort UartRead = 0x0033;
+    /// <summary>カードの UART に送るバイトを渡す (<c>Command_UART_WRITE</c>。中身は長さと送るバイト)</summary>
+    public const ushort UartWrite = 0x0034;
+    /// <summary>カードの UART の速さ (<c>Command_UART_SET_BAUDRATE</c>。中身は速さの番号)</summary>
+    public const ushort UartSetBaudrate = 0x0035;
+    /// <summary>UART の使い方 (<c>Command_UART_SET_MODE</c>。1 でカードとのやり取りに使う。<c>IT9300_bcasInit</c>)</summary>
+    public const ushort UartSetMode = 0x0037;
 
     /// <summary>
     /// チェックサム。<paramref name="body"/> (フレームの位置 1 からチェックサムの手前まで) を 2 バイトずつ上位から 16 ビットの数として足し、

@@ -6,8 +6,8 @@ namespace Denpa.Agent;
  * IT930x の USB ブリッジを積んだ機材を、px4d を使わずにエージェントが直に持つための層 (#1578 の段階 1)。
  *
  * ブリッジ (It930xBridge.cs)、受信機ごとに TS を分ける層 (It930xTs.cs)、復調器とチューナー (Cxd2856.cs・Cxd2858.cs)、
- * 機材とチューナー (It930xDevice.cs)、実機で試す入口 (It930xProbe.cs の --it930x-probe と、Probe.cs の --tune it930x:…) がある。
- * いまは地上波と衛星 (内蔵カードリーダーはまだ)。設定の device に it930x:<USB のポート>:<受信機> と書いたときだけエージェントが持ち、自動検出は px4d のまま (持ち主の決まりは下の Claim)。
+ * 機材とチューナー (It930xDevice.cs)、実機で試す入口 (It930xProbe.cs の --it930x-probe と、Probe.cs の --tune it930x:… と --card it930x:…) がある。
+ * いまは地上波と衛星と内蔵カードリーダー (It930xCard.cs)。設定の device に it930x:<USB のポート>:<受信機> と書いたときだけエージェントが持ち、自動検出は px4d のまま (持ち主の決まりは下の Claim)。
  * 受信機ごとの割り当ては仕様書 (denpa-spec の mlt5/spec.md) の 1.2 から。
  */
 
@@ -22,7 +22,7 @@ public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte De
 
 /// <summary>
 /// IT930x を積んだ機材 1 機種。受信機ごとの割り当ては仕様書 1.2 の表。
-/// LNB の給電は 3 機種とも同じブリッジの GPIOH11 (仕様書 1.5・9) なので、表には持たない。カードの GPIO はカードを足すときに足す (#1578)
+/// LNB の給電は 3 機種とも同じブリッジの GPIOH11 (仕様書 1.5・9)、カードは SDK の GPIOH6・GPIOH14 (It930xCard.cs。実機で確かめていない) なので、表には持たない
 /// </summary>
 public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnlyList<It930xReceiver> Receivers);
 
@@ -110,6 +110,39 @@ public static class It930x
         var before = _claimed;
         _claimed = next;
         foreach (var port in next.Except(before)) Log.Write($"[{Model}] USB のポート {port} の機材はエージェントが持ちます (設定の {Scheme})");
+    }
+
+    /// <summary><c>--card it930x:4-12.1</c> (内蔵のカードリーダー。受信機の番号は付けない) からポートを取る。形式が違えば null</summary>
+    public static string? CardPort(string? device) =>
+        Is(device) && device![Scheme.Length..] is var port && UsbSysfs.IsPort(port) ? port : null;
+
+    /// <summary>
+    /// 内蔵のカードリーダー。**エージェントが持つポート (<see cref="Ports"/>) の、挿さっている機材のぶんだけ。** 開くまでは何も開かない。
+    /// px4d が持つ機材のカードは px4d が出す (<see cref="Px4Card"/>)。px4d がまだそのポートの筐体を使っていれば、ここには並べない
+    /// </summary>
+    public static IReadOnlyList<CardLinkCandidate> Cards()
+    {
+        var claimed = Ports;
+        if (claimed.Count == 0) return [];
+        return Cards(claimed, Found(), Px4Daemon.Owned().SelectMany(enclosure => enclosure.Places));
+    }
+
+    /// <summary>エージェントが持つポート・挿さっている機材・px4d が使っている USB の位置から (渡せるのはテストのため)</summary>
+    internal static IReadOnlyList<CardLinkCandidate> Cards(
+        IReadOnlySet<string> claimed, IEnumerable<(string Port, It930xModel Model)> found, IEnumerable<string> px4dPlaces)
+    {
+        var px4d = px4dPlaces.ToHashSet(StringComparer.Ordinal);
+        return [.. found.Where(item => claimed.Contains(item.Port) && !px4d.Contains(item.Port)).Select(item => Card(item.Port, item.Model))];
+    }
+
+    /// <summary>カードリーダーの名前 (<c>PLEX PX-MLT5PE 4-12.1 Card Reader</c>。画面の「使う」の設定もこの名前で持つ)</summary>
+    public static string CardName(string port, It930xModel model) => $"{model.Name} {port} Card Reader";
+
+    /// <summary>そのポートの内蔵のカードリーダー。**開くまでは何も開かない**</summary>
+    public static CardLinkCandidate Card(string port, It930xModel model)
+    {
+        var name = CardName(port, model);
+        return new CardLinkCandidate(name, () => new It930xCard(name, port));
     }
 
     /// <summary>筐体の USB の位置 (<see cref="Px4Userland.Enclosure.Places"/>) のどれかをエージェントが持つか</summary>

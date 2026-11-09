@@ -43,6 +43,26 @@ internal sealed class FakeIt930x : IUsbDevice
     /// </summary>
     public Dictionary<byte, ICxdBus> I2c { get; } = [];
 
+    // カードの番地 (SDK の brRegister.h・brVariable.h)
+    public const uint UartRxLength = 0x496B;
+    public const uint UartRealSend = 0x4965;
+    public const uint CardResetOutput = 0xD8E3;
+    public const uint CardDetectInput = 0xD8C6;
+
+    /// <summary>GPIOH14 のリセットを解いたときに偽のカードが返す ATR。null ならカードは応答しない</summary>
+    public byte[]? CardAtr { get; set; }
+
+    /// <summary>まとめて送られたブロックに、偽のカードが返すバイト (null なら何も返さない)</summary>
+    public Func<byte[], byte[]?>? CardResponder { get; set; }
+
+    /// <summary>カードから受けて、まだ UART_READ で読まれていないバイト</summary>
+    public Queue<byte> UartRx { get; } = new();
+
+    /// <summary>カードに渡したブロック (OVA_UART_REALSEND のあとの UART_WRITE までをまとめたもの)</summary>
+    public List<byte[]> UartBlocks { get; } = [];
+
+    private readonly List<byte> _uartPending = [];
+
     /// <summary>SCATTER_WRITE で受けたファームウェアのバイト</summary>
     public List<byte> Loaded { get; } = [];
 
@@ -131,6 +151,8 @@ internal sealed class FakeIt930x : IUsbDevice
                 Note($"R {address:X4} {length}");
                 var values = new byte[length];
                 for (var i = 0; i < length; i++) values[i] = Registers.GetValueOrDefault(address + (uint)i);
+                // 受けたバイトの数 (OVA_UART_RX_LENGTH) は、偽のカードの受けの列から
+                if (address == UartRxLength && length == 1) values[0] = (byte)Math.Min(255, UartRx.Count);
                 Reply(sequence, values);
                 break;
             }
@@ -140,8 +162,56 @@ internal sealed class FakeIt930x : IUsbDevice
                 var values = payload[6..];
                 if (values.Length != length) throw new InvalidOperationException($"書く長さが違う ({length}、中身 {values.Length} バイト)");
                 Note($"W {address:X4}={Convert.ToHexString(values)}");
+                var resetBefore = Registers.GetValueOrDefault(CardResetOutput);
                 for (var i = 0; i < values.Length; i++) Registers[address + (uint)i] = values[i];
+                // GPIOH14 を 0 から 1 に戻すとリセットが解け、カードがあれば ATR を返す (IT9300_bcasResetCard)
+                if (address == CardResetOutput && resetBefore == 0 && values[0] == 1 && CardAtr is { } atr && Registers.GetValueOrDefault(CardDetectInput) == 0)
+                {
+                    UartRx.Clear();
+                    foreach (var b in atr) UartRx.Enqueue(b);
+                }
                 Reply(sequence, []);
+                break;
+            }
+            case 0x0037:
+                Note($"UART MODE {payload[0]}");
+                Reply(sequence, []);
+                break;
+            case 0x0035:
+                Note($"UART BAUD {payload[0]}");
+                Reply(sequence, []);
+                break;
+            case 0x0034:
+            {
+                if (payload[0] != payload.Length - 1) throw new InvalidOperationException($"UART_WRITE の長さが違う ({payload[0]}、中身 {payload.Length - 1} バイト)");
+                if (payload[0] is 0 or > 48) throw new InvalidOperationException($"UART_WRITE が 1〜48 バイトでない ({payload[0]})");
+                Note($"UART W {payload[0]}");
+                _uartPending.AddRange(payload[1..].ToArray());
+                // 最後の区切りの前に OVA_UART_REALSEND に 1 が書いてあれば、溜めたぶんをまとめてカードに渡す (偽物で決めた振る舞い)
+                if (Registers.GetValueOrDefault(UartRealSend) == 1)
+                {
+                    Registers[UartRealSend] = 0;
+                    var block = _uartPending.ToArray();
+                    _uartPending.Clear();
+                    UartBlocks.Add(block);
+                    if (CardResponder?.Invoke(block) is { } answer)
+                    {
+                        foreach (var b in answer) UartRx.Enqueue(b);
+                    }
+                }
+                Reply(sequence, []);
+                break;
+            }
+            case 0x0033:
+            {
+                if (payload.Length != 1) throw new InvalidOperationException($"UART_READ の中身が 1 バイトでない ({payload.Length})");
+                var length = payload[0];
+                if (length is 0 or > 32) throw new InvalidOperationException($"UART_READ が 1〜32 バイトでない ({length})");
+                if (length > UartRx.Count) throw new InvalidOperationException($"受けた数 ({UartRx.Count}) より多く読んだ ({length})");
+                Note($"UART R {length}");
+                var bytes = new byte[length];
+                for (var i = 0; i < length; i++) bytes[i] = UartRx.Dequeue();
+                Reply(sequence, bytes);
                 break;
             }
             case 0x0022:

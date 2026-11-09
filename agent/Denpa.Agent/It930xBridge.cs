@@ -411,15 +411,20 @@ public sealed class It930xBridge
 
     /// <summary>
     /// GPIOH の値のレジスタ (<c>p_br_reg_top_gpiohN_o</c>)。出力にする (<c>_en</c>) は + 1、機能を有効にする (<c>_on</c>) は + 2 (brRegister.h。仕様書 1.5 の番地と同じ)。
-    /// いま使う 3 つだけ
+    /// 入力の値 (<c>r_br_reg_top_gpiohN_i</c>) は - 1。いま使う 5 つだけ (GPIOH6・GPIOH14 はカード。<c>IT9300_bcasDetectCard</c>・<c>IT9300_bcasResetCard</c>)
     /// </summary>
     public static uint GpioOutput(int pin) => pin switch
     {
         2 => 0xD8B7,
+        6 => 0xD8C7,
         7 => 0xD8C3,
         11 => 0xD8D3,
+        14 => 0xD8E3,
         _ => throw new ArgumentOutOfRangeException(nameof(pin), $"GPIOH{pin} は扱っていません"),
     };
+
+    /// <summary>GPIOH の入力の値のレジスタ (<c>r_br_reg_top_gpiohN_i</c>)</summary>
+    public static uint GpioInput(int pin) => GpioOutput(pin) - 1;
 
     /// <summary>GPIOH を出力にして有効にし、値を書く (仕様書 1.5 の「出力・有効にして」。SDK の IT9300_initialize と同じ順)</summary>
     public void GpioSetup(int pin, bool value)
@@ -439,6 +444,58 @@ public sealed class It930xBridge
         ArgumentOutOfRangeException.ThrowIfNegative(port);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(port, TsInputs);
         WriteRegister(TsEnable + (uint)port, (byte)(on ? 1 : 0));
+    }
+
+    /// <summary>
+    /// GPIOH を入力にして値を読む (<c>IT9300_bcasDetectCard</c> と同じ順: 機能を有効にし、出力をやめ、入力の値を読む)
+    /// </summary>
+    public bool GpioRead(int pin)
+    {
+        var output = GpioOutput(pin);
+        WriteRegister(output + 2, 1);
+        WriteRegister(output + 1, 0);
+        return ReadRegister(GpioInput(pin)) != 0;
+    }
+
+    /// <summary>出力にしてある GPIOH の出力をやめる (<c>p_br_reg_top_gpiohN_en</c> に 0)</summary>
+    public void GpioRelease(int pin) => WriteRegister(GpioOutput(pin) + 1, 0);
+
+    /// <summary>UART_WRITE で 1 回に渡せるバイト数 (<c>IT9300_bcasSendData</c> が 48 バイトずつに分ける)</summary>
+    public const int MaxUartWrite = 48;
+
+    /// <summary>UART_READ で 1 回に読むバイト数の上限 (<c>IT9300_bcasGetData</c> が 32 バイトずつ読む)</summary>
+    public const int MaxUartRead = 32;
+
+    /// <summary>UART をカードとのやり取りに使う (<c>IT9300_bcasInit</c>。<c>UART_SET_MODE</c> に 1)</summary>
+    public void UartCardMode() => Command(It930xFrame.UartSetMode, [1], 0);
+
+    /// <summary>UART の速さ (<c>IT9300_bcasSetBaudrate</c>)。カードで使えるのは 9600 (番号 0) と 19200 (番号 1) だけ</summary>
+    public void UartBaudrate(int baud)
+    {
+        byte code = baud switch
+        {
+            9600 => 0,
+            19200 => 1,
+            _ => throw new ArgumentOutOfRangeException(nameof(baud), $"カードの UART の速さは 9600 と 19200 だけです ({baud})"),
+        };
+        Command(It930xFrame.UartSetBaudrate, [code], 0);
+    }
+
+    /// <summary>UART に送るバイトを渡す (<c>Command_UART_WRITE</c>)。1 回に <see cref="MaxUartWrite"/> バイトまで</summary>
+    public void UartWrite(ReadOnlySpan<byte> data)
+    {
+        if (data.Length is 0 or > MaxUartWrite) throw new ArgumentOutOfRangeException(nameof(data), $"UART に渡すのは 1〜{MaxUartWrite} バイトです ({data.Length})");
+        var payload = new byte[1 + data.Length];
+        payload[0] = (byte)data.Length;
+        data.CopyTo(payload.AsSpan(1));
+        Command(It930xFrame.UartWrite, payload, 0);
+    }
+
+    /// <summary>UART で受けたバイトを読む (<c>Command_UART_READ</c>)。1 回に <see cref="MaxUartRead"/> バイトまで</summary>
+    public byte[] UartRead(int length)
+    {
+        if (length is <= 0 or > MaxUartRead) throw new ArgumentOutOfRangeException(nameof(length), $"UART から読むのは 1〜{MaxUartRead} バイトです ({length})");
+        return Command(It930xFrame.UartRead, [(byte)length], length);
     }
 
     /// <summary>読み書きのコマンドの中身: 長さ、番地の長さ、番地 4 バイト (上位から)、書くバイト</summary>
