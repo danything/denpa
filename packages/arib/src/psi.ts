@@ -25,15 +25,15 @@ export function packetPid(packet: Uint8Array): number {
 
 /** PAT。どの PID に PMT があるかを持つ。**入口はいつもここ** */
 export const PID_PAT = 0x0000;
-export const PID_NIT = 0x0010;
+const PID_NIT = 0x0010;
 export const PID_SDT = 0x0011;
 
 export const TABLE_PAT = 0x00;
 export const TABLE_PMT = 0x02;
-export const TABLE_NIT_ACTUAL = 0x40;
-export const TABLE_NIT_OTHER = 0x41;
+const TABLE_NIT_ACTUAL = 0x40;
+const TABLE_NIT_OTHER = 0x41;
 export const TABLE_SDT_ACTUAL = 0x42;
-export const TABLE_SDT_OTHER = 0x46;
+const TABLE_SDT_OTHER = 0x46;
 
 const DESC_SERVICE_LIST = 0x41;
 const DESC_SATELLITE_DELIVERY = 0x43;
@@ -416,7 +416,7 @@ export function parsePat(section: Uint8Array): Map<number, number> {
 /**
  * SDT のサービスの並びを (service_id, 記述子の並び) に切り分ける。
  *
- * **読む側が 2 つある。** 局名 (`parseSdt`) とロゴの対応 (denpa の `ts/logo.ts`) で、
+ * **読む側が 2 つある。** 局名 (`sdtTransport`) とロゴの対応 (denpa の `ts/logo.ts`) で、
  * 欲しい記述子が違うだけで歩き方は同じ。並びの読み方をここ 1 箇所に置く。
  */
 export function* sdtServices(
@@ -466,18 +466,8 @@ function sdtTransport(section: Uint8Array): TransportInfo {
 }
 
 /** SDT からサービスの一覧を読む。自分の TS のものだけ */
-export function parseSdt(section: Uint8Array): TransportInfo | null {
+function parseSdt(section: Uint8Array): TransportInfo | null {
   return section[0] === TABLE_SDT_ACTUAL ? sdtTransport(section) : null;
-}
-
-/**
- * SDT[other] からサービスの一覧を読む。**ほかの TS のもの。**
- *
- * 衛星は、どの TS にもネットワークのほかの TS の局名を流している (番組表の EIT[other] と同じ考え)。
- * 開いていない TS の局名をこれで知る。TS ごとに別のセクションで来るので、集めるのは `SdtReader`
- */
-export function parseSdtOther(section: Uint8Array): TransportInfo | null {
-  return section[0] === TABLE_SDT_OTHER ? sdtTransport(section) : null;
 }
 
 /** 衛星の分配の記述子 (0x43)。どの周波数で流れているか */
@@ -568,7 +558,7 @@ function terrestrialDelivery(
 }
 
 /** NIT のセクション 1 つ。表は何本かのセクションに分かれて来るので、そろえるのは `NitReader` */
-export interface NitSection {
+interface NitSection {
   /** NIT[other] (ほかのネットワークのもの) なら true */
   other: boolean;
   networkId: number;
@@ -582,7 +572,7 @@ export interface NitSection {
 }
 
 /** NIT のセクションを 1 つ読む。actual (0x40) と other (0x41) のどちらも */
-export function parseNitSection(section: Uint8Array): NitSection | null {
+function parseNitSection(section: Uint8Array): NitSection | null {
   const tableId = section[0];
   if (tableId !== TABLE_NIT_ACTUAL && tableId !== TABLE_NIT_OTHER) return null;
   if (section.length < 16) return null;
@@ -649,7 +639,7 @@ export function parseNitSection(section: Uint8Array): NitSection | null {
  * NIT からネットワーク ID とリモコン番号、他の TS の顔ぶれを読む。**セクション 1 つぶん。**
  * スキャンで「どのネットワークか」を知るにはこれで足りる。ネットワークの全部の TS が要るなら `NitReader`
  */
-export function parseNit(section: Uint8Array): NetworkInfo | null {
+function parseNit(section: Uint8Array): NetworkInfo | null {
   if (section[0] !== TABLE_NIT_ACTUAL) return null;
   const parsed = parseNitSection(section);
   if (parsed === null) return null;
