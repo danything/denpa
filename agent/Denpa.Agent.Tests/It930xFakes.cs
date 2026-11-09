@@ -28,7 +28,14 @@ internal sealed class FakeIt930x : IUsbDevice
     public void Note(string line)
     {
         lock (Log) Log.Add(line);
+        OnNote?.Invoke(line);
     }
+
+    /// <summary>控えに 1 行足すたびに呼ぶ (テストが割り込みの機会を作る)</summary>
+    public Action<string>? OnNote { get; set; }
+
+    /// <summary>挿し直した機材として、シーケンス番号の期待を 0 に戻す (同じ偽物を開き直すテスト)</summary>
+    public void ResetSequence() => _expected = 0;
 
     /// <summary>
     /// GENERIC_WRITE・GENERIC_READ を渡す先 (バスごと。アドレスは 7 ビットに戻して渡す)。無いバスに来たらテストを失敗にする。

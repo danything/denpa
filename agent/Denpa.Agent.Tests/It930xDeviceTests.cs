@@ -107,6 +107,49 @@ public class It930xDeviceTests
     }
 
     [Test]
+    public async Task 閉じ終えるまで同じポートを開き直さない()
+    {
+        // 同じ機材 (同じ偽物) を閉じている途中に、別のスレッドが開き直そうとする
+        var (usb, _, _) = Fake();
+        var first = Open(usb, "9-6", new FakeClock());
+        first.Release();
+        It930xDevice? second = null;
+        Task? reopening = null;
+        usb.OnNote = line =>
+        {
+            // 電源を切る書き込みの 1 つ目 (GPIOH2 ← 0) のあとで開き直しを始め、閉じる側を少し遅らせる
+            if (line != "W D8B7=00" || reopening is not null) return;
+            var clock = new FakeClock();
+            reopening = Task.Run(() => second = It930xDevice.Acquire("9-6", () =>
+            {
+                usb.ResetSequence();
+                return (usb, Pe);
+            }, clock.Sleep, () => clock.Now, () => It930xFirmware.Code));
+            Thread.Sleep(100);
+        };
+        It930xDevice.CloseIfIdle("9-6");
+        await reopening!;
+        usb.OnNote = null;
+        try
+        {
+            // 古いほうの電源断 (GPIOH7 ← 1) は、開き直した機材が電源を入れる (GPIOH7 ← 0、GPIOH2 ← 1) より前に届く
+            List<string> log;
+            lock (usb.Log) log = [.. usb.Log];
+            var off = log.IndexOf("W D8C3=01", log.IndexOf("W D8B7=00"));
+            var on = log.LastIndexOf("W D8C3=00");
+            await Assert.That(off).IsGreaterThanOrEqualTo(0);
+            await Assert.That(on).IsGreaterThan(off);
+            await Assert.That(log.Last(line => line.StartsWith("W D8C3=", StringComparison.Ordinal))).IsEqualTo("W D8C3=00");
+            await Assert.That(log.Last(line => line.StartsWith("W D8B7=", StringComparison.Ordinal))).IsEqualTo("W D8B7=01");
+        }
+        finally
+        {
+            second?.Release();
+            It930xDevice.CloseIfIdle("9-6");
+        }
+    }
+
+    [Test]
     public async Task 受信機の一部が初期化できなくてもほかの受信機は使える()
     {
         var (usb, bus1, _) = Fake();

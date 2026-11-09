@@ -553,6 +553,7 @@ public sealed class Cxd2856Frontend
     /// </summary>
     public void Sleep()
     {
+        // 状態が分からなくても起動を書き始めていれば、動いたまま残さないようスリープを送る (仕様書に無い)
         if (_state != State.Isdbt && !(_state == State.Unknown && _started)) return;
         try
         {
