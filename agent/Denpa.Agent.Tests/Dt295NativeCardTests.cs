@@ -104,7 +104,7 @@ public class Dt295NativeCardTests
     }
 
     [Test]
-    public async Task 機材のプログラムに送らせるのも_カードの_UART_を許可するまで断る()
+    public async Task 機材のプログラムに送らせるのも_カードの_UART_を許可するまで例外にして書かない()
     {
         var (fake, link) = ProgramRig(program: true);
 

@@ -210,7 +210,7 @@ public sealed class Dt295NativeLink
     /// <summary>
     /// true なら、カードの UART (0xFEA000〜0xFEA03F。仕様書 §10) に書ける。カードの電源投入・切断の表と ATR・T=1 の送受信だけが使う。
     /// 空き (false) のままなら書けない (仕様書に無い。USB コアのレジスタと同じく、使う所だけ明示して許す)。
-    /// 機材のプログラムに UART へ書かせる送り (<see cref="CardSend"/>) も、これが立っていなければ断る
+    /// 機材のプログラムに UART へ書かせる送り (<see cref="CardSend"/>) も、これが立っていなければ例外にして要求を出さない
     /// </summary>
     public bool AllowCardUart { get; set; }
 
@@ -463,7 +463,7 @@ public sealed class Dt295NativeLink
     /// <summary>
     /// T=1 のブロックを LRC まで含めて、機材のプログラムに UART へ書かせて送らせる (Dt295NativePrograms の操作 3。<see cref="CardUart.Send"/> と同じ順に書く)。
     /// 48 バイトまでは要求の中に入れ (制御転送は要求と応答の 2 回)、長ければ SDRAM (0x380000) に書いてから渡す。
-    /// カードの UART に書くので、<see cref="AllowCardUart"/> が立っていなければ断る
+    /// カードの UART に書くので、<see cref="AllowCardUart"/> が立っていなければ例外にして要求を出さない
     /// </summary>
     public void CardSend(ReadOnlySpan<byte> block)
     {
