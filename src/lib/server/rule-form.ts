@@ -247,7 +247,7 @@ export const EMPTY_RULE =
   "キーワード・局・種別・ジャンルのいずれかを指定してください";
 
 /**
- * create と update で同じもの。**エンコード方式は書かない。** エンコードも CM も全体設定で、
+ * create と update で同じもの。**エンコードのしかたは書かない。** 全体の設定で、
  * エンコードするときに読む
  */
 export function ruleValues(conditions: Conditions, form: Fields) {

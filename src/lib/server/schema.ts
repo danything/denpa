@@ -504,7 +504,7 @@ export const reservations = sqliteTable(
       .default(sql`0`),
     /**
      * 「エンコードするか否か」だけは予約した時点で固定する (recorder が読む)。エンコード方法の細目
-     * (元の TS を残すか・CM の扱い・コーデック) は持たず、エンコードするときに settings を見る
+     * (元の TS を残すか・コーデック) は持たず、エンコードするときに settings を見る
      */
     encode: flag("encode")
       .notNull()
@@ -646,7 +646,8 @@ export const recordings = sqliteTable(
      */
     video_loss: json("video_loss", videoLoss),
     /**
-     * CM を切ってエンコードしたときに**残した区間** (入れ物の先頭からの秒)。NULL は切っていない。
+     * v2.36 までに CM を切ってエンコードした録画の**残した区間** (入れ物の先頭からの秒)。NULL は切っていない。
+     * いまは CM を切らないので新しくは書かない (切らずに再エンコードしたら NULL に戻す)。
      * 切ったものからは CM を戻せないので、CM 検出のやり直しはこれを見て断る (再エンコードを促す)
      */
     cm_kept: json("cm_kept", objects<Range>()),

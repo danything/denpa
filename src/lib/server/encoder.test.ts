@@ -601,7 +601,7 @@ describe("CM を探しながらエンコードする", () => {
     expect(args.slice(-outputs.length)).toEqual(outputs);
   });
 
-  test("進み具合は fd 3 へ (標準出力はロゴの枠、標準エラーは検出の行が使う)", () => {
+  test("進み具合は fd 3 へ (標準出力はロゴの枠が使い、標準エラーはログで混み合う)", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null);
     expect(argValue(args, "-progress")).toBe("pipe:3");
     expect(args).toContain("-nostats");
@@ -650,10 +650,10 @@ describe("先頭から捨てる長さ", () => {
 });
 
 describe("encodeOrder", () => {
-  test("H.265 を選んでいれば 1 本目 (CM を探し、切れるかを決める)", () => {
+  test("並びは変えない", () => {
     expect(encodeOrder(["av1", "hevc", "h264"], true)).toEqual([
-      "hevc",
       "av1",
+      "hevc",
       "h264",
     ]);
   });
@@ -661,10 +661,6 @@ describe("encodeOrder", () => {
   test("H.265 をエンコードできる GPU が無ければ外す", () => {
     expect(encodeOrder(["av1", "hevc"], false)).toEqual(["av1"]);
     expect(encodeOrder(["hevc"], false)).toEqual([]);
-  });
-
-  test("H.265 が無ければ選んだ順", () => {
-    expect(encodeOrder(["av1", "h264"], true)).toEqual(["av1", "h264"]);
   });
 });
 

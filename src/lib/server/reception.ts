@@ -75,9 +75,11 @@ export function recordFailed(
       ),
     )
     .get();
+  // 受信できたあと (`failing_since` が空) の最初の失敗は、前の失敗から間が無くても数える
   const recount =
-    row?.failed_at === null ||
-    row?.failed_at === undefined ||
+    row?.failing_since === null ||
+    row?.failing_since === undefined ||
+    row.failed_at === null ||
     at - row.failed_at >= RECOUNT_AFTER;
   const failures = (row?.failures ?? 0) + (recount ? 1 : 0);
   const since = row?.failing_since ?? at;

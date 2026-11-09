@@ -14,7 +14,7 @@
  * | 元の TS だけ | H.264 / AV1 | TS からその場で変換 (`stream`) |
  * | 元の TS | MPEG-2 | TS を飛び先から流す (`raw`。画面が自分で再生する) |
  * | エンコード済みだけ | MPEG-2 | 出さない |
- * | CM を切ってエンコードした録画 | MPEG-2 | 出さない (時刻が合わない) |
+ * | v2.36 までに CM を切ってエンコードした録画 | MPEG-2 | 出さない (時刻が合わない) |
  * | エンコード済みか元の TS | 段を下げる (`?rung=`) | 同じコーデックでも変換 (`stream`)。コーデックはサーバが選び、H.265 も GPU があれば作る |
  * | エンコード済みか元の TS | 音声だけ (`?codec=audio`) | 音声だけを AAC にして流す (`stream`) |
  *
@@ -444,7 +444,7 @@ export async function playbackPlan(
     }
   }
   /*
-   * MPEG-2 は元の TS の時刻をそのまま運ぶので、物差しに乗せられるときだけ。CM を切ったものは
+   * MPEG-2 は元の TS の時刻をそのまま運ぶので、物差しに乗せられるときだけ。v2.36 までに CM を切ったものは
    * 途中が詰まっていて合わない。捨てた先頭を覚えていない古い録画も合わせようがない
    */
   if (
@@ -465,7 +465,7 @@ export async function playbackPlan(
       : tracks.map((track) => ({ id: track.id, label: track.label }));
   const duration =
     axis === "encoded"
-      ? // エンコードし終えた行の `duration_ms` は出来上がりの長さ (頭を捨て、CM を切ったあと) なので、skip は引かない
+      ? // エンコードし終えた行の `duration_ms` は出来上がりの長さ (先頭を捨てたあと) なので、skip は引かない
         (encoded[0]?.media.duration ?? recordedSec(recording))
       : (ts?.duration ?? recordedSec(recording));
 
@@ -483,7 +483,7 @@ export async function playbackPlan(
     encoded,
     /*
      * エンコードしたものの物差しで TS から変換するのは、TS の時刻を物差しに乗せられるときだけ (MPEG-2 と同じ条件)。
-     * CM を切ったものと、捨てた先頭を覚えていない古い録画は、字幕・チャプター・続きの位置とずれる
+     * v2.36 までに CM を切ったものと、捨てた先頭を覚えていない古い録画は、字幕・チャプター・続きの位置とずれる
      */
     ts:
       axis === "ts" ||
@@ -1308,7 +1308,7 @@ export function rulerOf(
  * - 尺 (`duration_ms`) はエンコードし終えると出来上がりの長さに書き換わる (`encoder.ts`) ので、
  *   エンコードしたものがあれば、もうその物差し。無い (古い行) ときは番組表の尺を直して代わりにする
  *
- * 元の TS の位置のまま出来上がりの尺から引くと、CM を切ったものでは切った CM のぶん食い違う。
+ * 元の TS の位置のまま出来上がりの尺から引くと、捨てた先頭 (v2.36 までに CM を切ったものは切った CM も) のぶん食い違う。
  * 続きが無い・直すと先頭になる (捨てた先頭の中で止めた) ものは null
  */
 export function watchProgress(

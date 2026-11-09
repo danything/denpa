@@ -171,7 +171,7 @@ function coverage(): Map<number, number> {
 
 interface Work {
   channel: AgentChannel;
-  /** この物理チャンネルに入っている局のうち、いちばん薄いものの残り時間 */
+  /** この物理チャンネルに入っている局のうち、いちばん薄いものが埋まっている先の時刻 (`reachOf`) */
   reach: number;
   last: number;
 }

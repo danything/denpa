@@ -27,6 +27,7 @@ import {
 } from "@danything/arib/psi";
 
 import { DIGITAL_TV } from "./schema";
+import { readUntil } from "./stream";
 import type { AgentChannel } from "./tuner";
 
 export type SatelliteType = "BS" | "CS";
@@ -220,37 +221,20 @@ export async function readTables(
 ): Promise<TableRead> {
   const nit = new NitReader();
   const sdt = new SdtReader();
-  const source = stream.getReader();
   let signal = false;
-  let error = "";
-
-  let stop = (): void => {};
-  const deadline = new Promise<void>((resolve) => {
-    stop = resolve;
-  });
-  const timer = setTimeout(stop, timeout);
-  timer.unref?.();
-  abort?.addEventListener("abort", stop, { once: true });
-
-  const read = (async () => {
-    for (;;) {
-      const { done, value } = await source.read();
-      if (done || value === undefined) return;
-      signal ||= value.byteLength > 0;
-      epg?.feed(value);
+  const error = await readUntil(
+    stream,
+    (chunk) => {
+      signal ||= chunk.byteLength > 0;
+      epg?.feed(chunk);
       // 両方に渡す (`||` でつなぐと、NIT が変わった回に SDT を読み落とす)
-      const network = nit.feed(value);
-      const names = sdt.feed(value);
-      if ((network || names) && settled(nit, sdt, other)) return;
-    }
-  })().catch((reason: unknown) => {
-    error = String(reason).trim().split("\n").at(-1)?.trim() ?? "";
-  });
-
-  await Promise.race([read, deadline]);
-  clearTimeout(timer);
-  abort?.removeEventListener("abort", stop);
-  await source.cancel().catch(() => undefined);
+      const network = nit.feed(chunk);
+      const names = sdt.feed(chunk);
+      return (network || names) && settled(nit, sdt, other);
+    },
+    timeout,
+    abort,
+  );
   return { nit, sdt, signal, error };
 }
 

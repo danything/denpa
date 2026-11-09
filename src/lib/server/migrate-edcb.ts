@@ -33,6 +33,7 @@ import {
   recordCounts,
   recordPlan,
   ruleImported,
+  type RuleValues,
   running,
   serviceById,
   SlotWindows,
@@ -155,23 +156,7 @@ function wordsOf(text: string): string[] {
 /** 語ごとに探す範囲を変える印 (`:title:` など) と、語ごとの正規表現 (`::`) */
 const PER_WORD = /^(::|:(title|event|genre|video|audio):)/;
 
-/** ルールに入れる値 ({@link convertRule}) */
-interface EdcbRuleValues {
-  name: string;
-  keyword: string;
-  ignore_keyword: string;
-  search_fields: string;
-  service_ids: number[];
-  genres: string[] | null;
-  time_from: number | null;
-  time_to: number | null;
-  weekdays: number[] | null;
-  enabled: boolean;
-  dedupe: boolean;
-}
-
-type ConvertedRule =
-  { values: EdcbRuleValues; notes: string[] } | { skip: string };
+type ConvertedRule = { values: RuleValues; notes: string[] } | { skip: string };
 
 /**
  * EDCB のルール 1 件を denpa のルールに。写せないものは `skip` に理由を、写したが意味が少し変わる

@@ -19,10 +19,10 @@ export const LOGO_RECORD_KEEP = 2_000;
 /** 残す日数。これより古い行を消す */
 export const LOGO_RECORD_DAYS = 60;
 
-export type LogoRecord = typeof logoRecords.$inferSelect;
+type LogoRecord = typeof logoRecords.$inferSelect;
 
 /** 1 回ぶん。開けなかった回 (`counts` が null) は読んだ数を 0 で残す */
-export interface LogoAttempt {
+interface LogoAttempt {
   startedAt: number;
   channel: string;
   origin: "wait" | "now";

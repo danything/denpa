@@ -10,11 +10,11 @@ import {
   denied,
   foreignHost,
   isOpenPath,
-  needsLogin,
   needsPairing,
   trusted,
 } from "#lib/server/auth.js";
 import { bearerToken, verifyToken } from "#lib/server/device-auth.js";
+import { enabled as oidcEnabled } from "#lib/server/oidc.js";
 import { relative } from "#lib/server/paths.js";
 import { start } from "#lib/server/runtime.js";
 import { COOKIE, find } from "#lib/server/session.js";
@@ -73,9 +73,9 @@ export async function handle({ event, resolve }) {
   const open = inside && foreign === null;
 
   if (!open && !isOpenPath(pathname)) {
-    if (needsLogin()) {
+    if (oidcEnabled()) {
       /*
-       * **OIDC でのログイン。** 設定してあるときだけ効く (`auth.needsLogin`)。
+       * **OIDC でのログイン。** 設定してあるときだけ効く (`oidc.enabled`)。
        *
        * ここで見るのは Cookie の控えだけ。OIDC の発行元とのやり取りは `/login` と
        * `/login/callback` に閉じてあり、普段のリクエストで外へ出ることはない。

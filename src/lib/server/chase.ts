@@ -46,7 +46,7 @@ const WAIT_READER = 50;
  */
 const PACE = 2;
 
-export interface ChasePlan {
+interface ChasePlan {
   /** 読み始めるバイト位置 (188 に揃えてある) */
   offset: number;
   /** 実際に始まる再生位置 (秒)。リクエストされた位置を録れている範囲に収めた後 */
@@ -228,7 +228,7 @@ export function fileSize(path: string): number | null {
 
 /** 読んだ先頭の控え。録画中も先頭は変わらないので、読めたものはパスごとに覚える (追っかけはシークのたびに聞く) */
 const heads = new Map<string, number>();
-/** 覚えておく数。録画中の録画は同時にいくつもない */
+/** 控えごとに覚えておく数 (`heads`・`unreadable`・`spans`)。追っかけと字幕で同時に読む録画はいくつもない */
 const HEADS_MOST = 32;
 /** 読めなかったパスと、次に読み直してよい時刻 (ms)。録り始めの数秒は先頭が揃わないので、シークのたびに 4MB 読み直さない */
 const unreadable = new Map<string, number>();
@@ -299,7 +299,7 @@ export function finishedTsSec(path: string): number | null {
  *
  * - 録っている最中は、録り始めてからの経過
  * - 録り終えたものは、元の TS を測った尺 (`finishedTsSec`)。**`duration_ms` は使わない。** エンコードし終えると
- *   出来上がりの長さ (先頭を捨て、CM を切ったあと) に書き換わる (`encoder.ts`) ので TS より短く、位置が先へずれていた
+ *   出来上がりの長さ (先頭を捨てたあと) に書き換わる (`encoder.ts`) ので TS より短く、位置が先へずれていた
  * - 測れなければ、エンコードしていない録画 (`encode_skip` が NULL) は `duration_ms` (録れた長さ)、それも無ければ番組表の尺
  */
 export function recordedSec(

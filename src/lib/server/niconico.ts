@@ -328,10 +328,11 @@ function markLost(linkedAt: number, reason: string): void {
   console.warn(`[niconico] 連携が切れました: ${reason}`);
 }
 
-let warnedShape = false;
+/** 出した形式の警告。同じ警告は 1 度だけ出す (違う警告はそれぞれ 1 度ずつ) */
+const warned = new Set<string>();
 function warn(message: string): void {
-  if (warnedShape) return;
-  warnedShape = true;
+  if (warned.has(message)) return;
+  warned.add(message);
   console.warn(`[niconico] ${message}`);
 }
 

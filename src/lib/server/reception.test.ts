@@ -94,6 +94,15 @@ describe("受信できないと決める", () => {
     // また 1 回だけ失敗しても、すぐには決めない
     expect(recordFailed("BS", "BS03:16432", T0 + 6 * HOUR)).toBe(false);
   });
+
+  test("受信できたあとの失敗は、前の失敗から 1 時間たっていなくても 1 回と数える", () => {
+    recordReceived("BS", "BS01:16400", T0);
+    recordFailed("BS", "BS03:16432", T0 + HOUR);
+    recordReceived("BS", "BS03:16432", T0 + HOUR + 10 * 60_000);
+    recordFailed("BS", "BS03:16432", T0 + HOUR + 20 * 60_000);
+    recordReceived("BS", "BS01:16400", T0 + 2 * HOUR);
+    expect(recordFailed("BS", "BS03:16432", T0 + 3 * HOUR)).toBe(true);
+  });
 });
 
 describe("設定に出す受信の様子", () => {

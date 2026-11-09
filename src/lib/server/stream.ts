@@ -2,7 +2,7 @@ import { createServer, type Socket } from "node:net";
 import { constants, setPriority } from "node:os";
 
 /** ffmpeg の 4 本目の出口 (`sideOutput`) */
-export interface SideOutput {
+interface SideOutput {
   /** ffmpeg に書かせる先 (`pipe:3` か名前付きパイプの名前) */
   readonly url: string;
   /** Bun.spawn の stdio の 4 本目 (Windows では無し) */
@@ -140,6 +140,44 @@ export async function* chunks(
     if (!ended) reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+}
+
+/**
+ * **`feed` が true を返すまで読み、読み元を cancel する** (スキャンが局の一覧を読む。`scan.readServices`・`satellite.readTables`)。
+ * `timeout` を過ぎるか `abort` が立てば、そこで打ち切る。`abort` は走査全体で 1 つなので、足したリスナーは読み終えたら外す
+ * (局ごとに残すと、総当たりで 100 を超えて積もる)。
+ * 読み元が失敗で終わったら、その理由の最後の行を返す (選局が落ちた理由。デバイスが無い・使用中など)。ほかは空
+ */
+export async function readUntil(
+  stream: ReadableStream<Uint8Array>,
+  feed: (chunk: Uint8Array) => boolean,
+  timeout: number,
+  abort?: AbortSignal,
+): Promise<string> {
+  const source = stream.getReader();
+  let error = "";
+  let stop = (): void => {};
+  const deadline = new Promise<void>((resolve) => {
+    stop = resolve;
+  });
+  const timer = setTimeout(stop, timeout);
+  timer.unref?.();
+  abort?.addEventListener("abort", stop, { once: true });
+
+  const read = (async () => {
+    for (;;) {
+      const { done, value } = await source.read();
+      if (done || value === undefined || feed(value)) return;
+    }
+  })().catch((reason: unknown) => {
+    error = String(reason).trim().split("\n").at(-1)?.trim() ?? "";
+  });
+
+  await Promise.race([read, deadline]);
+  clearTimeout(timer);
+  abort?.removeEventListener("abort", stop);
+  await source.cancel().catch(() => undefined);
+  return error;
 }
 
 /** ストリームを最後まで読んで文字列にする */

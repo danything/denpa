@@ -147,10 +147,7 @@ describe("saveRecordedBml / loadRecordedBml", () => {
     const sidecar = join(dir, "rec.bml.jsonl");
     writeFileSync(ts, recorded());
 
-    const changes = await saveRecordedBml(ts, sidecar, recording(T), {
-      kept: null,
-      skip: 0,
-    });
+    const changes = await saveRecordedBml(ts, sidecar, recording(T), 0);
     expect(changes).toBeGreaterThan(0);
 
     const loaded = loadRecordedBml(sidecar);
@@ -176,35 +173,18 @@ describe("saveRecordedBml / loadRecordedBml", () => {
    * **時刻の基準は録画の頭で、番組の始まりではない。** 番組の始まり (`start_at`) を基準にしていた頃は、
    * 前のマージン (10 秒) のぶん切り替わりが映像より早く出ていた
    */
-  test("切っていない録画は、録画の頭から数えて、頭から捨てたぶんを引いた位置で切り替わる", async () => {
+  test("録画の頭から数えて、頭から捨てたぶんを引いた位置で切り替わる", async () => {
     const ts = join(dir, "plain-cut.ts");
     const sidecar = join(dir, "plain-cut.bml.jsonl");
     writeFileSync(ts, recorded());
 
-    await saveRecordedBml(ts, sidecar, recording(T), { kept: null, skip: 1 });
+    await saveRecordedBml(ts, sidecar, recording(T), 1);
     // 元の TS の 10 秒・70 秒 → エンコードしたものの 9 秒・69 秒
     expect(switchesAt(sidecar)).toEqual([9_000, 69_000]);
     expect(shownAt(sidecar, 8_999)).toBeNull();
     expect(shownAt(sidecar, 9_000)).toContain("ver1");
     expect(shownAt(sidecar, 68_999)).toContain("ver1");
     expect(shownAt(sidecar, 69_000)).toContain("ver2");
-  });
-
-  test("CM を切った録画は、残した区間をつないだ位置で切り替わる", async () => {
-    const ts = join(dir, "kept.ts");
-    const sidecar = join(dir, "kept.bml.jsonl");
-    writeFileSync(ts, recorded());
-
-    // 元の TS の 1〜30 秒 と 50〜200 秒 を残した (30〜50 秒の CM を切った)
-    const kept = [
-      { start: 1, end: 30 },
-      { start: 50, end: 200 },
-    ];
-    await saveRecordedBml(ts, sidecar, recording(T), { kept, skip: 1 });
-    // ver1 は 10 − 1 = 9 秒、ver2 は 29 + (70 − 50) = 49 秒
-    expect(switchesAt(sidecar)).toEqual([9_000, 49_000]);
-    expect(shownAt(sidecar, 48_999)).toContain("ver1");
-    expect(shownAt(sidecar, 49_000)).toContain("ver2");
   });
 
   test("名乗りを書いていなかった頃のサイドカーには、読むときに足す", () => {
@@ -232,12 +212,7 @@ describe("saveRecordedBml / loadRecordedBml", () => {
       ),
     );
 
-    expect(
-      await saveRecordedBml(ts, sidecar, recording(T), {
-        kept: null,
-        skip: 0,
-      }),
-    ).toBe(0);
+    expect(await saveRecordedBml(ts, sidecar, recording(T), 0)).toBe(0);
     expect(loadRecordedBml(sidecar)).toEqual([]);
   });
 });
@@ -271,10 +246,7 @@ describe("saveRecordedBml と録画の頭の放送時刻", () => {
     const ts = join(dir, "head.ts");
     writeFileSync(ts, recorded());
     row(null);
-    await saveRecordedBml(ts, join(dir, "head.bml.jsonl"), recording(T), {
-      kept: null,
-      skip: 0,
-    });
+    await saveRecordedBml(ts, join(dir, "head.bml.jsonl"), recording(T), 0);
     // 最初の TDT は録画の頭 (番組の始まりの 10 秒前) と同じ PCR に来ている
     expect(tsHeadOf()).toBe(T - 10_000);
   });
@@ -283,10 +255,7 @@ describe("saveRecordedBml と録画の頭の放送時刻", () => {
     const ts = join(dir, "head2.ts");
     writeFileSync(ts, recorded());
     row(T - 9_500);
-    await saveRecordedBml(ts, join(dir, "head2.bml.jsonl"), recording(T), {
-      kept: null,
-      skip: 0,
-    });
+    await saveRecordedBml(ts, join(dir, "head2.bml.jsonl"), recording(T), 0);
     expect(tsHeadOf()).toBe(T - 9_500);
   });
 });

@@ -307,8 +307,3 @@ export function clientAddress(event: { getClientAddress(): string }): string {
     return "";
   }
 }
-
-/** OIDC でログインを求めるか (素通しのエンドポイントは呼ぶ側 (hooks) が先に振り分ける) */
-export function needsLogin(): boolean {
-  return oidcEnabled();
-}

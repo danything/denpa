@@ -769,7 +769,7 @@ function resting(serviceId: number): number | null {
 export function whyNotTuned(why: string, until: number | null): string {
   if (until === null || !why.includes("同期しませんでした"))
     return "選局できませんでした";
-  // コンテナの時計は Asia/Tokyo (`server/library.ts`)
+  // プロセスの TZ は Asia/Tokyo (`server/library.ts`)
   const clock = new Date(until).toLocaleTimeString("ja-JP", {
     hour: "2-digit",
     minute: "2-digit",
@@ -966,7 +966,7 @@ function hwKey(codec: StreamCodec, hw: LiveHw): string {
  * このセッションを GPU でエンコードするか。ライブの印 (`liveHwAllow`。録画の `hwAllow` は見ない) と
  * 試しのエンコード (`hwenc.liveHw`)、最近落ちたか。
  * 追っかけと録画のその場の変換 (`server/playback.ts`) も使う。元がエンコード済みなら `interlaced` を false
- * (復号からは GPU に載せない。`videoArgs`)。`devices` は試験で差し替えるときだけ渡す
+ * (復号からは GPU に載せない。`videoArgs`)。`devices` はテストで差し替えるときだけ渡す
  */
 export function pickLiveHw(
   codec: LiveCodec,
@@ -1461,7 +1461,7 @@ class Session {
    * **そのままの TS も捨ててよい。** 欠けた PES は受け側のデコーダが次の I フレームで立ち直る。
    * 1 局 15Mbit/s を積み続けると、詰まった客 1 人でサーバの手元が数秒で数十 MB 太る。
    * **ただし追っかけの TS は捨てない。** 欠けたら観ていない先が飛ぶ。詰まったら録画のファイルを読むほうを止める
-   * (`openChase` の `held`)
+   * (`openChase` の `stopReading`)
    */
   private hand(viewer: Viewer, kind: number, data: Uint8Array): void {
     if (kind === CHANNEL.videoInit) {
@@ -2362,7 +2362,7 @@ class Session {
     }
   }
 
-  tell(notice: Notice): void {
+  private tell(notice: Notice): void {
     for (const viewer of this.viewers) this.tellOne(viewer, notice);
   }
 
@@ -2580,31 +2580,36 @@ export function hasLiveViewers(): boolean {
   return sessions.size > 0;
 }
 
+/** ライブで観るもの (`begin`・`sharedSession`・`watch`)。目印 (`key`) が同じなら同じセッションを共有する */
+interface Want {
+  channelType: string;
+  channel: string;
+  serviceId: number;
+  now: NowPlaying;
+  codec: StreamCodec;
+  /** その局の中で何本目の字幕を出すか */
+  track: number;
+  raw: boolean;
+  /** デバッグ用に名指ししたチューナー (`Session.pin`)。無ければ null */
+  pin: string | null;
+  rung: Rung;
+}
+
 /** エンコードし始めて一覧に載せる。畳むのは見ている人がいなくなったとき。ここでは待たない */
-function begin(
-  channelType: string,
-  channel: string,
-  serviceId: number,
-  now: NowPlaying,
-  codec: StreamCodec,
-  track: number,
-  raw: boolean,
-  pin: string | null = null,
-  rung: Rung = 0,
-): Session {
+function begin(want: Want): Session {
   const session = new Session(
-    channelType,
-    channel,
-    serviceId,
-    now.program,
-    now.audio,
-    codec,
-    track,
-    raw,
+    want.channelType,
+    want.channel,
+    want.serviceId,
+    want.now.program,
+    want.now.audio,
+    want.codec,
+    want.track,
+    want.raw,
     undefined,
     undefined,
-    pin,
-    rung,
+    want.pin,
+    want.rung,
   );
   sessions.set(session.id, session);
   void session.run();
@@ -2612,27 +2617,17 @@ function begin(
 }
 
 /** いま同じもの (段まで同じ) をエンコードしているセッション。段を下げるときに枠が要るかを決める (`rungSlot`) */
-function sharedSession(
-  channelType: string,
-  channel: string,
-  serviceId: number,
-  now: NowPlaying,
-  codec: StreamCodec,
-  track: number,
-  raw: boolean,
-  pin: string | null,
-  rung: Rung,
-): Session | undefined {
+function sharedSession(want: Want): Session | undefined {
   return sessions.get(
     key(
-      channelType,
-      channel,
-      serviceId,
-      now.audio,
-      raw ? "raw" : codec,
-      track,
-      pin,
-      rung,
+      want.channelType,
+      want.channel,
+      want.serviceId,
+      want.now.audio,
+      want.raw ? "raw" : want.codec,
+      want.track,
+      want.pin,
+      want.rung,
     ),
   );
 }
@@ -2644,32 +2639,12 @@ function sharedSession(
  * 畳んだときに返し、共有したならその場で返す
  */
 function watch(
-  channelType: string,
-  channel: string,
-  serviceId: number,
-  now: NowPlaying,
-  codec: StreamCodec,
-  track: number,
-  raw: boolean,
+  want: Want,
   viewer: Viewer,
-  pin: string | null = null,
-  rung: Rung = 0,
   release: () => void = () => undefined,
 ): Session {
-  const shared = sharedSession(
-    channelType,
-    channel,
-    serviceId,
-    now,
-    codec,
-    track,
-    raw,
-    pin,
-    rung,
-  );
-  const session =
-    shared ??
-    begin(channelType, channel, serviceId, now, codec, track, raw, pin, rung);
+  const shared = sharedSession(want);
+  const session = shared ?? begin(want);
   if (shared === undefined) session.whenStopped(release);
   else release();
   session.add(viewer);
@@ -2713,40 +2688,40 @@ export function liveStream(
   audio?: string,
   rung: Rung = 0,
 ): ReadableStream<Uint8Array> | null | "busy" {
+  const want = httpWant(serviceId, codec, audio, rung);
+  if (want === null) return null;
+  const release = rungSlot(
+    want.codec === "audio" ? 0 : want.rung,
+    sharedSession(want) !== undefined,
+  );
+  if (release === null) return "busy";
+  return sessionStream((viewer) => watch(want, viewer, release));
+}
+
+/**
+ * HTTP のライブ (`liveStream`・`liveCaptions`) が観るもの。字幕は 1 本目で、チューナーは名指ししない。
+ * 放送そのままでは段を下げない。局が無ければ null
+ */
+function httpWant(
+  serviceId: number,
+  form: StreamCodec | "raw",
+  audio: string | undefined,
+  rung: Rung,
+): Want | null {
   const row = serviceOf(serviceId);
   if (row === undefined) return null;
-  const raw = codec === "raw";
-  const form = raw ? "h264" : codec;
-  const level = raw ? 0 : rung;
-  const now = nowPlaying(serviceId, audio);
-  const shared = sharedSession(
-    row.type,
-    row.channel,
+  const raw = form === "raw";
+  return {
+    channelType: row.type,
+    channel: row.channel,
     serviceId,
-    now,
-    form,
-    0,
+    now: nowPlaying(serviceId, audio),
+    codec: raw ? "h264" : form,
+    track: 0,
     raw,
-    null,
-    level,
-  );
-  const release = rungSlot(codec === "audio" ? 0 : level, shared !== undefined);
-  if (release === null) return "busy";
-  return sessionStream((viewer) =>
-    watch(
-      row.type,
-      row.channel,
-      serviceId,
-      now,
-      form,
-      0,
-      raw,
-      viewer,
-      null,
-      level,
-      release,
-    ),
-  );
+    pin: null,
+    rung: raw ? 0 : rung,
+  };
 }
 
 /**
@@ -2824,21 +2799,9 @@ export function liveCaptions(
   audio?: string,
   rung: Rung = 0,
 ): ReadableStream<Uint8Array> | null {
-  const row = serviceOf(serviceId);
-  if (row === undefined) return null;
-  // 放送そのままの目印は音声で分けない (`key`)。変換したものは映像と同じ決め方で音声を選ぶ (`liveStream`)
-  const session = sessions.get(
-    key(
-      row.type,
-      row.channel,
-      serviceId,
-      nowPlaying(serviceId, form === "raw" ? undefined : audio).audio,
-      form,
-      0,
-      null,
-      form === "raw" ? 0 : rung,
-    ),
-  );
+  // 映像 (`liveStream`) と同じ決め方で目印を作る。放送そのままの目印は音声で分けない (`key`)
+  const want = httpWant(serviceId, form, audio, rung);
+  const session = want === null ? undefined : sharedSession(want);
   if (session === undefined || !session.alive) return null;
   return captionFeed((out) => {
     const viewer: Viewer = {
@@ -3198,16 +3161,21 @@ export function warm(
     if (session.serviceId === serviceId && !session.empty) return;
   }
 
-  const now = nowPlaying(serviceId, audio);
-  // 字幕は 1 本目で温める。**選び直す人は稀**で、そのときは再エンコードになる。
+  // 字幕は 1 本目で温める。**選び直す人は稀**で、そのときは再エンコードになる
+  const want: Want = {
+    channelType,
+    channel,
+    serviceId,
+    now: nowPlaying(serviceId, audio),
+    codec,
+    track: 0,
+    raw,
+    pin: null,
+    rung: 0,
+  };
   // 既にエンコードしていれば何もしない。開き直すたびに増やさない
-  if (
-    sessions.has(
-      key(channelType, channel, serviceId, now.audio, raw ? "raw" : codec, 0),
-    )
-  )
-    return;
-  const session = begin(channelType, channel, serviceId, now, codec, 0, raw);
+  if (sharedSession(want) !== undefined) return;
+  const session = begin(want);
   warmed.add(session);
   session.whenStopped(() => warmed.delete(session));
 
@@ -3379,7 +3347,7 @@ export function attend(connection: Connection): void {
       else current.setLanguage(viewer, asked.language);
       return;
     }
-    // 追っかけの元の TS を送るのを止める・続ける。読む側 (`openChase` の `held`) が見る
+    // 追っかけの元の TS を送るのを止める・続ける。読む側 (`openChase` の `stopReading`) が見る
     if (asked.type === "hold") {
       viewer.held = asked.on;
       return;
@@ -3452,21 +3420,21 @@ export function attend(connection: Connection): void {
      * 抜けるかは枠を取る前に決める (`rungPlan`)。抜けたあとで取れないと、映像が切れたうえに今の段にも戻れない。
      * **空かなければ段を下げない。** いま同じ局を観ていればその段のまま、そうでなければ段 0 で開き、理由を断り書きで言う
      */
+    const want = (): Want => ({
+      channelType,
+      channel,
+      serviceId,
+      now,
+      codec,
+      track: caption,
+      raw,
+      pin: tuner,
+      rung,
+    });
     let release: (() => void) | null = () => undefined;
     let refused = false;
     if (rung !== 0 && !same && codec !== "audio") {
-      const shared = () =>
-        sharedSession(
-          channelType,
-          channel,
-          serviceId,
-          now,
-          codec,
-          caption,
-          raw,
-          tuner,
-          rung,
-        ) !== undefined;
+      const shared = () => sharedSession(want()) !== undefined;
       const plan = rungPlan({
         shared: shared(),
         room: transcodeRoom(),
@@ -3550,19 +3518,7 @@ export function attend(connection: Connection): void {
     }
 
     leave();
-    current = watch(
-      channelType,
-      channel,
-      serviceId,
-      now,
-      codec,
-      caption,
-      raw,
-      viewer,
-      tuner,
-      rung,
-      release,
-    );
+    current = watch(want(), viewer, release);
     dropWarm(serviceId, current);
   };
 

@@ -191,21 +191,14 @@ function wayName(way: HwWay | undefined): string {
 }
 
 /**
- * エンコードするコーデックの並び。**先頭 (1 本目) が CM を一緒に探し、切れるかどうかを決める。**
- *
- * H.265 を選んでいれば先頭にする。境目を指してもキーフレームを置けない方式 (Rockchip MPP) しか無ければ H.265 は
- * 切れず、先頭なら「どれも切らずにチャプターにする」に揃う (2 本目以降が切れないと長さが食い違う)。
- * H.265 をエンコードできる GPU が無ければ H.265 は外す (ソフトウェアのエンコーダを組んでいない)。
- * 残りは選んだ順
+ * エンコードするコーデックの並び。**先頭 (1 本目) が CM を一緒に探す。** 選んだもの (AV1 → H.265 → H.264 の順。
+ * `settings.parseCodecs`) のまま、H.265 をエンコードできる GPU が無ければ H.265 は外す (ソフトウェアのエンコーダを組んでいない)
  */
 export function encodeOrder(
   chosen: readonly HwCodec[],
   hevcReady: boolean,
 ): HwCodec[] {
-  return [
-    ...(chosen.includes("hevc") && hevcReady ? (["hevc"] as const) : []),
-    ...chosen.filter((codec) => codec !== "hevc"),
-  ];
+  return chosen.filter((codec) => codec !== "hevc" || hevcReady);
 }
 
 /** GPU のデバイスを回す番。1 本エンコードするごとに先頭のデバイスを入れ替える (hwenc.hwChain) */
@@ -1013,7 +1006,7 @@ async function runFfmpeg(
   let outTimeUs = NaN;
   let percent = 0;
   let log = "";
-  /** 落ちた理由を読むための末尾。CM 検出が読む行 (`Duration:`) とキーフレームの切れ目の行は入れない */
+  /** 落ちた理由を読むための末尾。CM 検出が読む行 (`Duration:`) は入れない */
   const tail: string[] = [];
 
   const onProgress = (block: Record<string, string>) => {
@@ -1144,7 +1137,7 @@ function paidRecording(recording: Recording): boolean {
  *
  * 動かし直せば作り直すものなので、ジョブを実行・再実行する直前と、failed にするときに
  * 消しておく。自分の入力に紐づくものだけ触るので、ほかの動いているエンコードには当たらない。
- * エンコードしたものの隣に作る作業ファイル (`.encoding` とその切り貼り) は動画の拡張子ではなく、名前にジョブの番号を持つので、
+ * エンコードしたものの隣に作る作業ファイル (`.encoding` と、チャプターを書き足すときの `.post`・`.chapters.txt`) は動画の拡張子ではなく、名前にジョブの番号を持つので、
  * 取り残されても、ジョブが走っていなければ片付けで消える (同じ名前の動画があっても。`files.orphan`)
  */
 function clearScratch(input: string): void {
@@ -1387,9 +1380,8 @@ async function runJob(jobId: number): Promise<void> {
   if (paidRecording(recording) && isDecoded(sourceTs))
     await noteDecoded(recording.service_id);
 
+  // コマ数 (`smoothMotion`) は、局ロゴを開いたあとに本編映像から実測して入れる (measureSmoothMotion)
   const encodeOptions: EncodeOptions = {
-    // コマ数の既定は 60。設定が入っていれば、エンコードする前に本編映像から実測して決め直す (measureSmoothMotion)
-    smoothMotion: true,
     /*
      * **音声トラックに番組表と同じ名前を入れる。**
      *
@@ -1528,8 +1520,7 @@ async function runJob(jobId: number): Promise<void> {
    * CM は 1 本目をエンコードする ffmpeg で一緒に探し、1 本目をエンコードし終えたら境目を決める。どのコーデックも
    * 境目が決まってから、チャプターを `-c copy` で書き足す。
    *
-   * **H.265 を選んでいれば 1 本目にする** (`encodeOrder`)。主 (`library_path`) にするのは、エンコードした順ではなく
-   * AV1 → H.265 → H.264 の先頭 (下の `primary`)
+   * 1 本目は主 (`library_path`) と同じ AV1 → H.265 → H.264 の先頭 (`settings.parseCodecs` がこの順に並べる。下の `primary`)
    *
    * **どれかが失敗しても、出来たものは置く** (観られるものを捨てない)。ジョブは失敗にして理由を残し、元の TS は消さない
    * (再エンコードすれば全部作り直せる)。全部失敗したら、置きかけを消して失敗にする。
@@ -1906,8 +1897,8 @@ async function runJob(jobId: number): Promise<void> {
       sourceTs,
       sidecarPaths(output).dataBroadcast,
       recording,
-      // 録画の行に書くもの (`encode_skip`) と同じ直し方。先頭から捨てたぶんを引く
-      { kept: null, skip: primary.skip },
+      // 録画の行に書くもの (`encode_skip`) と同じ。先頭から捨てたぶんを引く
+      primary.skip,
     );
     if (changes > 0) {
       console.log(

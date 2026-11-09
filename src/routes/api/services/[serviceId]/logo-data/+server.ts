@@ -24,7 +24,6 @@ export function GET({ params }) {
       "Content-Type": "image/png",
       // エンコードするたびに書き直す。画面は書いた時刻を URL に付けて取り直す
       "Cache-Control": "no-cache",
-      "X-Logo-Learned-At": String(logo.learnedAt),
     },
   });
 }

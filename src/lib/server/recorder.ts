@@ -308,7 +308,7 @@ function skipDuplicate(recording: Recording, reason: string): void {
       .run();
   }
   console.log(
-    `[rec] 録画をやめました: ${recording.name} (${recording.service_name})。${reason}`,
+    `[recorder] 録画をやめました: ${recording.name} (${recording.service_name})。${reason}`,
   );
   emit("recordings");
   emit("reservations");
@@ -375,7 +375,9 @@ function extendIfLonger(recording: Recording, endAt: number): void {
       .run();
   }
   const minutes = Math.round((endAt - current.end_at) / 60000);
-  console.log(`[rec] 放送が延びました: ${recording.name} (+${minutes} 分)`);
+  console.log(
+    `[recorder] 放送が延びました: ${recording.name} (+${minutes} 分)`,
+  );
   emit("recordings");
   emit("reservations");
 }
