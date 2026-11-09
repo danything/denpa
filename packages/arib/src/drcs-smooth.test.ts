@@ -69,7 +69,7 @@ function sent(
 const at = (g: Grey, x: number, y: number) => g.pixels[y * g.width + x]!;
 
 describe("decodeGrey", () => {
-  test("1画素 bits ビットを上の桁から読み、v / (depth - 1) の濃さにする", () => {
+  test("1 画素 bits ビットを上の桁から読み、v / (depth - 1) の濃さにする", () => {
     expect([
       ...decodeGrey(4, 1, 2, 1, Uint8Array.from([0b1010_0000])).pixels,
     ]).toEqual([255, 0, 255, 0]);
@@ -239,7 +239,7 @@ describe("smoothDrcs", () => {
 });
 
 describe("pack4", () => {
-  test("16 階調にして1画素4ビットで詰める (左の画素が上の桁。奇数なら最後の下の桁は 0)", () => {
+  test("16 階調にして 1 画素 4 ビットで詰める (左の画素が上の桁。奇数なら最後の下の桁は 0)", () => {
     const g = { width: 3, height: 1, pixels: Uint8Array.from([255, 0, 128]) };
     expect([...pack4(g)]).toEqual([0xf0, 0x80]);
   });

@@ -38,7 +38,7 @@ export function scriptable(contentType: string): boolean {
 
 /**
  * バイトのまま置き換える (中継で配る script・HTML と、アプリが通信で取って実行する script。jQuery の `getScript` など)。
- * 置き換えるのは ASCII だけなので、1 バイトを 1 字として読めば文字の符号に関係なく壊さない
+ * 置き換えるのは ASCII だけなので、1 バイトを 1 字として読めば文字コードに関係なく壊さない
  */
 export function rewriteLocationBytes(body: Uint8Array): Uint8Array {
   let text = "";

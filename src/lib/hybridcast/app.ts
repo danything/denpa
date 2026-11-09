@@ -10,7 +10,7 @@
  *        ─ fetch・XHR・受信機の記憶・受信機 API は postMessage で画面へ
  * ```
  *
- * iframe の中身は denpa のオリジンを持たないので、denpa の cookie・localStorage・API の返りには
+ * iframe の中身は denpa のオリジンを持たないので、denpa の cookie・localStorage・API のレスポンスには
  * 触れない。srcdoc や blob: にしないのは、それだと denpa の画面の CSP を受け継ぎ、放送局の
  * script が動かないため (緩めると denpa の画面の CSP の意味がなくなる)。
  */
@@ -44,7 +44,7 @@ export function storageKey(url: string): string {
 /** 受信機の記憶の上限 (配信元 1 つ。JSON の文字数)。超える書き込みは覚えない */
 export const STORAGE_LIMIT = 256 * 1024;
 
-/** 中継の返りを文字にする。charset は content-type、無ければ先頭の meta、それも無ければ UTF-8 */
+/** 中継のレスポンスを文字にする。charset は content-type、無ければ先頭の meta、それも無ければ UTF-8 */
 export function decodeHtml(body: Uint8Array, contentType: string): string {
   const head = new TextDecoder("latin1").decode(body.subarray(0, 1024));
   const charset =

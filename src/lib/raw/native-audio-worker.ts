@@ -4,7 +4,8 @@
  * デコードは canvas に描く worker と同じ関数 (`wasm-audio.ts`)。デコーダを読み終えるまでに届いたものは溜めておき、
  * 読み終えたら順に流す
  */
-import { type Fmp4Track, readFragment, readInit } from "../ts/fmp4";
+import { type Fmp4Track, readFragment, readInit } from "#lib/ts/fmp4.js";
+
 import { audioCodec, audioFrame } from "./fmp4";
 import {
   type AudioInput,

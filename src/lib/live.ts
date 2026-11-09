@@ -27,7 +27,10 @@ import type { Pace, Rung } from "./rungs";
  */
 export type LiveCodec = "h264" | "hevc" | "av1";
 
-/** 選べるエンコード方式。コーデックのメニューに並べる順そのまま (「自動」のあと。選ぶのは端末の相性だけなので、説明は付けない) */
+/**
+ * エンコード方式と名前。並びは小さい順で、コーデックのメニューもこの順 (「自動」のあと。選ぶのは端末の相性だけなので、説明は付けない)。
+ * メニューに並べるのは `#lib/live-choice.ts` の `HIDDEN_CODECS` を除いたもの
+ */
 export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
   { id: "av1", label: CODEC_LABEL.av1 },
   { id: "hevc", label: CODEC_LABEL.hevc },
@@ -219,7 +222,7 @@ export type Notice =
     }
   | ({
       /**
-       * **送り出しの具合** (`#lib/rungs.ts` の `Pace`。`server/pace.ts`)。2 秒ごとか、塊を捨てた・溜まりが動いたときに来る。
+       * **送り出しの具合** (`#lib/rungs.ts` の `Pace`。`server/pace.ts`)。2 秒ごとか、塊を捨てた・バッファが動いたときに来る。
        * 回線が細いのか、サーバのエンコードが遅いのかを読み分けて段を決める (`adapt.ts`)
        */
       type: "pace";
@@ -405,9 +408,12 @@ export interface Tuned {
   serviceId: number;
   /** どの音声を出すか (`AudioTrack.id`)。省くと主音声 */
   audio?: string;
-  /** どのコーデックでエンコードするか。省くと `h264` */
+  /**
+   * サーバが先回りしてエンコードしている形式 (`server/viewing.ts` の `liveStart`・`warmFormat`)。画面の `tune` は読まず、
+   * 形式はメニューの選択 (`choice`) から決め直す (`pickFormat`)。cookie には残さない
+   */
   codec?: LiveCodec;
-  /** MPEG-2 のままリクエストするか (`TuneCommand.raw`)。cookie には残さない (先回りの形式はメニューの選択 (`choice`) から決める。`server/viewing.ts` の `warmFormat`) */
+  /** 先回りしている形式が MPEG-2 のままか。`codec` と同じく画面の `tune` は読まない */
   raw?: boolean;
 }
 

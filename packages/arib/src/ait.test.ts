@@ -18,7 +18,7 @@ import {
 /*
  * **Hybridcast の在り処だけを読む。**
  *
- * データ放送と違って、アプリの中身は電波に乗っていない。乗っているのは
+ * データ放送と違って、アプリの中身は放送では送られていない。送られているのは
  * 「どこにあるか」だけなので、ここで確かめるのは**アドレス (URL) を正しく組み立てられるか**。
  * 開くのはデータ放送が求めたときで、ここでは読むだけ ([docs/stream.md](https://github.com/danything/denpa/blob/main/docs/stream.md#hybridcast))。
  */
@@ -44,7 +44,7 @@ describe("AIT の在り処", () => {
 });
 
 describe("AIT の中身", () => {
-  test("URL は頭とパスを繋いだもの", () => {
+  test("URL は先頭部分とパスを繋いだもの", () => {
     const ait = parseAit(
       aitSection([
         {
@@ -68,7 +68,7 @@ describe("AIT の中身", () => {
     ]);
   });
 
-  test("パスが無ければ頭だけ", () => {
+  test("パスが無ければ先頭部分だけ", () => {
     const ait = parseAit(
       aitSection([
         { organisationId: 1, applicationId: 2, base: "https://example.jp/app" },

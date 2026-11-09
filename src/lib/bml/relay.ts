@@ -2,7 +2,7 @@
  * **データ放送と Hybridcast の通信を、denpa の中継で送る** (`/api/bml/proxy` と `/api/bml/post`。
  * [docs/stream.md](../../../docs/stream.md#双方向通信系コンテンツプロキシ))。
  *
- * 中継は相手の返した符号をそのまま返すので、符号だけではこちらで断った 502 と相手の 502 を見分けられない。
+ * 中継は相手の返したステータスコードをそのまま返すので、ステータスコードだけではこちらで断った 502 と相手の 502 を見分けられない。
  * 相手まで行けたかは `x-bml-relayed` で決める (`server/bml-network.ts` の `relayed`)
  */
 
@@ -14,7 +14,7 @@ export interface RelayPost {
   body: BodyInit;
 }
 
-/** 中継の返り。`relayed` が false なら中継が断った (403/502) */
+/** 中継のレスポンス。`relayed` が false なら中継が断った (403/502) */
 export interface Relayed {
   relayed: boolean;
   response: Response;

@@ -106,7 +106,7 @@ export function isSpace(code: number): boolean {
   );
 }
 
-/** 録画 1 本ぶんの字幕 (`GET /api/recordings/<id>/captions.json`)。`at` は動画の頭からの秒 */
+/** 録画 1 本ぶんの字幕 (`GET /api/recordings/<id>/captions.json`)。`at` は動画の先頭からの秒 */
 export interface CaptionPages {
   v: typeof CAPTION_TEXT_VERSION;
   /** 第 1 言語 */

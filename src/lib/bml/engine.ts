@@ -11,7 +11,7 @@
  * - 文書は自前の XML パーサ → 中身の木 → Shadow DOM の中の絶対配置の div ([render.ts](render.ts))
  * - スクリプトは自前の VM ([vm.ts](vm.ts))。イベントは 1 つずつ順に動かす
  * - **ページを占めるのは 1 つの仕事 (タスクとそれに続くマイクロタスク) で 5ms まで** ([budget.ts](budget.ts))。
- *   スクリプト・描き直し・約束の続きは全部その下で動かし、休みなく回り続ける文書は止める
+ *   スクリプト・描き直し・Promise の続きは全部その下で動かし、休みなく回り続ける文書は止める
  *
  * 時計は `clock` (録画は再生位置から放送の時刻を出す)。無ければ TOT + 経過時間 (TOT が来なくなったら、30 秒たった所で止める)。
  */
@@ -200,7 +200,7 @@ const ACCESS_KEYS: Record<number, string> = {
  * 止まらずに来る (NHK は 10 分で DII の更新 48 回・イベントメッセージ 4234 件)。文書が
  * 後始末をしなくても、エンジンが持つものは一定に収める
  */
-/** 待っているイベントの上限 (溢れた受け手は捨てる) */
+/** 待っているイベントの上限 (溢れたハンドラは捨てる) */
 export const MAX_QUEUE = 512;
 /** 同時に動かすタイマー (setInterval) の上限。超えたら NaN (本番の局は 2 つほど) */
 export const MAX_TIMERS = 64;
@@ -237,7 +237,7 @@ interface Timer {
   interval: number;
   remaining: number;
   handle: ReturnType<typeof setInterval> | null;
-  /** 積んだ受け手がまだ動いていない (重ねて積まない) */
+  /** 積んだハンドラがまだ動いていない (重ねて積まない) */
   queued: boolean;
 }
 
@@ -278,7 +278,7 @@ function blobUrl(data: Uint8Array, type: string): string {
 }
 
 /**
- * 受け手の `f();` の形 (関数を呼ぶだけのもの) なら、その名前。無ければ null。
+ * ハンドラの `f();` の形 (関数を呼ぶだけのもの) なら、その名前。無ければ null。
  * 前後の空白は先に落として、量指定子が隣り合わない形で見る (`\s*;?\s*$` は空白が並ぶと 2 乗かかり、
  * ネイティブの正規表現なので VM の上限でも止まらない)。長いものは呼ぶだけの形ではないので見ない
  */
@@ -332,7 +332,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private tot: { at: number; received: number } | null = null;
   /** Ureg を消す目安 (前のサービス) */
   private service: number | null = null;
-  /** 文書を読み込んでいる間。外から来るイベントは捨てる (onload より前に受け手を動かさない) */
+  /** 文書を読み込んでいる間。外から来るイベントは捨てる (onload より前にハンドラを動かさない) */
   private preparing = false;
   private readonly budget: Budget;
   /** 文書が休みなく動き続けたので止めた (epgTune で選局を任せたときも)。このエンジンではもう文書を出さない */
@@ -375,7 +375,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   feed(message: ResponseMessage): void {
     if (this.destroyed) return;
     // 届いたものを捌くのもエンジンの仕事に数える (ライブは止まらずに流れ込み続ける。
-    // モジュールをデコードする・受け手を探すのを数えないと、「10 秒のうち 4 割を超えて動いたら止める」
+    // モジュールをデコードする・ハンドラを探すのを数えないと、「10 秒のうち 4 割を超えて動いたら止める」
     // 決まり (budget.ts) の勘定から漏れる)
     this.work(() => {
       for (const event of this.resources.feed(message)) this.react(event);
@@ -502,7 +502,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         });
       }
     }
-    // 受け手が文書を替えなければ、入口から出直す (TR-B14 第二分冊 表 5-11)
+    // ハンドラが文書を替えなければ、入口から出直す (TR-B14 第二分冊 表 5-11)
     this.enqueue({
       kind: "native",
       token: this.token,
@@ -560,7 +560,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   /** 今の実行を打ち切って入口から出直す */
   private restart(): void {
     this.abandon();
-    // 入口が届くまでのあいだ、古い文書の受け手を動かさない
+    // 入口が届くまでのあいだ、古い文書のハンドラを動かさない
     this.preparing = true;
     void this.startup();
   }
@@ -883,7 +883,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
         ? { width: 720, height: 480, aspect }
         : { width: 960, height: 540, aspect: "16:9" };
 
-    // スクリプトの世界は文書ごとに作り直す
+    // スクリプトの Realm (グローバルと組み込み) は文書ごとに作り直す
     const realm = createRealm({ now: () => this.now() });
     this.doc = doc;
     this.focusedElement = null;
@@ -932,8 +932,8 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   private enqueue(job: Job): void {
     if (job.token !== this.token) return;
-    // 待ちの上限。受け手が待ち (sleep・届かないモジュール) で止まっている間もライブの通知は
-    // 来続けるので、溢れた分の受け手は捨てる (テレビも動いている間の通知は取りこぼす)。
+    // 待ちの上限。ハンドラが待ち (sleep・届かないモジュール) で止まっている間もライブの通知は
+    // 来続けるので、溢れた分のハンドラは捨てる (テレビも動いている間の通知は取りこぼす)。
     // エンジンの中の続き (native) は捨てない
     if (job.kind !== "native" && this.queue.length >= MAX_QUEUE) {
       // 捨てたタイマーの刻みは、次の刻みで積み直せるように
@@ -1015,7 +1015,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
           } else {
             const name = callee(job.handler);
             if (name === null)
-              throw new ScriptError(`受け手の形が読めません: ${job.handler}`);
+              throw new ScriptError(`ハンドラの形が読めません: ${job.handler}`);
             this.currentEvent = dom.event({
               ...job.event,
               target: dom.wrap(job.target),
@@ -1035,7 +1035,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   }
 
   /**
-   * スクリプトを続ける。約束の続き (すぐ返る待ちのくり返し) で来ても、今の仕事の区切りを
+   * スクリプトを続ける。Promise の続き (すぐ返る待ちのくり返し) で来ても、今の仕事の区切りを
    * 使い切っていれば次のタスクへ回す
    */
   private step(token: number, vm: Vm): void {
@@ -1431,7 +1431,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
 
   setTimer(code: string, interval: number, count: number): number {
     if (!(interval > 0)) return Number.NaN;
-    // 消し忘れて積み上がるタイマーを止める (受け手のたびに回数 0 で作り直す文書など)
+    // 消し忘れて積み上がるタイマーを止める (ハンドラのたびに回数 0 で作り直す文書など)
     if (this.timers.size >= MAX_TIMERS) {
       this.report(
         "#timers",
@@ -1471,7 +1471,7 @@ class Engine implements DomHost, BrowserHost, RenderHost {
   private startTimer(id: number, timer: Timer): void {
     const token = this.token;
     timer.handle = setInterval(() => {
-      // 前に積んだものがまだ動いていなければ積まない (受け手が間隔より重いと、待ちが際限なく伸びる)
+      // 前に積んだものがまだ動いていなければ積まない (ハンドラが間隔より重いと、待ちが際限なく伸びる)
       if (token !== this.token || timer.queued) return;
       timer.remaining--;
       if (timer.remaining <= 0) this.timer(id, "clear");

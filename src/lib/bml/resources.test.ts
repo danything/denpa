@@ -311,7 +311,7 @@ describe("押さえ直し", () => {
   });
 });
 
-describe("PNG・DRCS・深い入れ子 (レビューで足したもの)", () => {
+describe("PNG・DRCS・深い入れ子", () => {
   /** PNG の塊の名前の並び */
   const chunks = (png: Uint8Array): string[] => {
     const names: string[] = [];
@@ -416,7 +416,7 @@ describe("名前の書き方", () => {
     });
   });
 
-  test("規格に無いスキーム (bml:// など) だけを「扱えない」と言う", () => {
+  test("規格に無いスキーム (bml:// など) だけを「扱えない」と知らせる", () => {
     expect(unknownScheme("bml://startup.bml")).toBe("bml");
     expect(unknownScheme("BML://x")).toBe("bml");
     for (const known of [

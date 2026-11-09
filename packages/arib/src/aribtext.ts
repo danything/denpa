@@ -62,7 +62,7 @@ const MOSAIC: Charset = { bytes: 1, kind: "blank" };
 /**
  * 終端バイト → 符号表。ESC の指示で使う。
  *
- * モザイク (0x32〜0x35) は図形なので読めるものが無い。**捨てずに空へ倒す**のは、
+ * モザイク (0x32〜0x35) は図形なので読めるものが無い。**捨てずに字の無い集合として扱う**のは、
  * 1 バイト表として字数を数え続けないと以降がずれるため。
  *
  * **オブジェクトではなく Map。** 数値のキーは書式が 10 進に直されてしまい、
@@ -142,7 +142,7 @@ function twoByte(code: number, kind: Charset["kind"]): string {
   const cell = (ku - 1) * 94 + low - 0x21;
   let decoded: string;
   if (low > 0x7e) {
-    decoded = ""; // 0x7F は字ではない (次の区の頭を引かないように)
+    decoded = ""; // 0x7F は字ではない (次の区の先頭を引かないように)
   } else if (kind === "plane2") {
     decoded = PLANE2_ROWS.get(ku)?.[low - 0x21] ?? "";
   } else if (ku >= 85) {
@@ -358,7 +358,7 @@ function afterEscape(
     const next = data[at + 1];
     if (next === undefined) return at + 2;
     if (next >= 0x28 && next <= 0x2b) {
-      // ESC 0x24 0x2x 0x20 F は 2 バイト DRCS。読めないので空へ倒す
+      // ESC 0x24 0x2x 0x20 F は 2 バイト DRCS。読めないので字の無い集合として扱う
       if (data[at + 2] === 0x20) {
         designate(next - 0x28, { bytes: 2, kind: "blank" });
         return at + 4;

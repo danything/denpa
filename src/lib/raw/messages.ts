@@ -52,8 +52,9 @@ export type ToWorker =
       follow: boolean;
     }
   /**
-   * 届いたもの (TS、fMP4 の init・媒体 1 つ、Matroska)。**先頭の 9 バイト (多重化のヘッダ) を飛ばした位置から**。
-   * fMP4 は箱の切れ目で届く (サーバが割ってから送る。`ts/fmp4.ts` の `Fmp4Splitter`)
+   * 届いたもの (TS、fMP4 の init・媒体 1 つ、Matroska)。**`offset` から読む** (WebSocket で届いたものは先頭の
+   * 9 バイトが多重化のヘッダなので 9。録画を fetch で読んだもの (`canvas-player.ts`) は 0)。
+   * fMP4 は箱の切れ目で届く (ライブはサーバが、録画は `canvas-player.ts` が割る。`ts/fmp4.ts` の `Fmp4Splitter`)
    */
   | { type: "data"; buffer: ArrayBuffer; offset: number }
   /**

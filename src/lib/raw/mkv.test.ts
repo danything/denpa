@@ -24,7 +24,7 @@ const videoAt = new MkvDemuxer()
   .blocks.filter((b) => b.track === 1)
   .map((b) => b.at);
 
-/** 渡されたコマを控えるだけの受け手 (`Fmp4Video` のメソッドのうち、MkvInput が使うものだけ) */
+/** 渡されたコマを控えるだけのテスト用の実装 (`Fmp4Video` のメソッドのうち、MkvInput が使うものだけ) */
 function receiver() {
   const video: Fmp4Sample[] = [];
   const target = {

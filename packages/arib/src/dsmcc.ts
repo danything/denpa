@@ -52,7 +52,7 @@ export interface DiiModule {
   name: string | null;
   /** Type 記述子。`multipart/mixed` など。データ放送だけが使う */
   contentType: string | null;
-  /** Compression Type 記述子。**0 が zlib**。伸ばしたあとの大きさ付き */
+  /** Compression Type 記述子。**0 が zlib**。展開したあとの大きさ付き */
   compression: { type: number; originalSize: number } | null;
 }
 
@@ -88,7 +88,7 @@ function messageOf(section: Uint8Array): Uint8Array | null {
 /**
  * DII (Download Info Indication)。
  *
- * 頭は共通で protocolDiscriminator/dsmccType/messageId/transaction_id と続き、
+ * 先頭は共通で protocolDiscriminator/dsmccType/messageId/transaction_id と続き、
  * adaptationLength ぶん飛ばした先に本体が入っている。
  */
 export function parseDii(section: Uint8Array): Dii | null {
@@ -197,14 +197,14 @@ export function parseDdb(section: Uint8Array): Ddb | null {
  *
  * `moduleSize` は 32 ビットで、そのまま信じると DII 1 つで 4GB を確保させられる。
  * 実際のデータ放送のモジュールは数 KB〜数百 KB、衛星のロゴも全局ぶんで数百 KB なので、
- * 十分に余裕を見た値。zlib で伸ばしたあとの大きさにも同じ上限を使う ([bml.ts](bml.ts) の `inflate`)
+ * 十分に余裕を見た値。zlib で展開したあとの大きさにも同じ上限を使う ([bml.ts](bml.ts) の `inflate`)
  */
 export const MAX_MODULE_SIZE = 16 * 1024 * 1024;
 
 /**
  * 組み立て中のモジュール。DDB が来るたびに然るべき位置へ置く。
  *
- * **入れ物は届いたところまでしか確保しない。** DII の言う大きさを先に確保すると、
+ * **バッファは届いたところまでしか確保しない。** DII の言う大きさを先に確保すると、
  * 大きいと言うだけの DII でメモリを使い切らせられる。`MAX_MODULE_SIZE` を超える
  * モジュールはブロックを受け取らない (いつまでも揃わない)。
  *
@@ -266,7 +266,7 @@ export class ModuleBuilder {
     return this.complete;
   }
 
-  /** 入れ物を広げる。何度も写し直さないよう倍々で、モジュールの大きさまで */
+  /** バッファを広げる。何度もコピーし直さないよう倍々で、モジュールの大きさまで */
   private grow(length: number): void {
     const next = new Uint8Array(
       Math.min(this.moduleSize, Math.max(length, this.buffer.length * 2)),

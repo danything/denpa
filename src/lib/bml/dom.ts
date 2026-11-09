@@ -92,7 +92,7 @@ function numberAttr(
   return Number.isNaN(n) ? fallback : n;
 }
 
-/** CSS の特性名と、`normalStyle` の名前の対応 (書けるものは true) */
+/** CSS のプロパティ名と、`normalStyle` の名前の対応 (書けるものは true) */
 const STYLE_PROPERTIES: Record<string, [string, boolean]> = {
   left: ["left", true],
   top: ["top", true],
@@ -131,7 +131,7 @@ const STYLE_PROPERTIES: Record<string, [string, boolean]> = {
 
 type Side = (typeof SIDES)[number];
 
-/** 特性の今の値を、スクリプトに返す形式で */
+/** プロパティの今の値を、スクリプトに返す形式で */
 function styleValue(
   element: BmlElement,
   property: string,

@@ -23,7 +23,7 @@ const csi = (params: string, final: number) => [
 /** APS (行, 桁) */
 const aps = (row: number, col: number) => [0x1c, 0x40 | row, 0x40 | col];
 
-/** 放送でよく見る頭。960x540・表示区画 620x480 を (170,30) に・36 ドット・字間 4・行間 24 */
+/** 放送でよく見る字幕文の冒頭。960x540・表示区画 620x480 を (170,30) に・36 ドット・字間 4・行間 24 */
 const HEAD = [
   ...csi("7", 0x53), // SWF
   ...csi("620;480", 0x56), // SDF
@@ -118,7 +118,7 @@ describe("B24CaptionDecoder", () => {
     });
   });
 
-  test("CS だけなら「消す」1枚、待ち (TIME) だけなら何も出さない", () => {
+  test("CS だけなら「消す」1 枚、待ち (TIME) だけなら何も出さない", () => {
     const d = decoder();
     expect(d.decode(text([0x0c]))).toEqual({
       v: 1,
@@ -143,7 +143,7 @@ describe("B24CaptionDecoder", () => {
     expect(page?.duration).toBe(2500);
   });
 
-  test("APR で次の行の頭へ。束ねるのは同じ行で続いているものだけ", () => {
+  test("APR で次の行の先頭へ。束ねるのは同じ行で続いているものだけ", () => {
     const page = decoder().decode(
       text([
         ...HEAD,
@@ -172,7 +172,7 @@ describe("B24CaptionDecoder", () => {
     expect(page?.runs.map((r) => r.text)).toEqual(["〓〓字"]);
   });
 
-  test("JIS X 0213 の1面・2面を読む", () => {
+  test("JIS X 0213 の 1 面・2 面を読む", () => {
     const page = decoder().decode(
       text([
         ...HEAD,
@@ -188,7 +188,7 @@ describe("B24CaptionDecoder", () => {
     expect(page?.runs.map((r) => r.text)).toEqual(["▷㐂擄𠂉〓"]);
   });
 
-  test("2つのコードポイントの字は1区画の run にする (joined)", () => {
+  test("2 つのコードポイントの字は 1 区画の run にする (joined)", () => {
     const page = decoder().decode(
       text([
         ...HEAD,
@@ -262,7 +262,7 @@ describe("B24CaptionDecoder", () => {
     expect(DRCS_REPLACE.get("22db8ff6ac75b60b76a15a6e9c42a5db")).toBe(0x1f4fa);
   });
 
-  test("追加記号 (90区〜) は Unicode の字にする", () => {
+  test("追加記号 (90 区〜) は Unicode の字にする", () => {
     // 90 区 48 点 は「[字]」の囲み文字 (U+1F228 ではなく libaribcaption の表のとおり)
     const page = decoder().decode(
       text([...HEAD, ...aps(0, 0), 0x1b, 0x24, 0x3b, 0x7a, 0x50]),
@@ -327,14 +327,14 @@ describe("字幕の言語", () => {
     ]);
   });
 
-  test("既定は第1言語だけを読み、第2言語の字幕文は捨てる", () => {
+  test("既定は第 1 言語だけを読み、第 2 言語の字幕文は捨てる", () => {
     const decoder = new B24CaptionDecoder();
     decoder.decode(both);
     expect(words(decoder.decode(text(encodeAribText("字幕"), 1)))).toBe("字幕");
     expect(decoder.decode(text(encodeAribText("えいご"), 2))).toBeNull();
   });
 
-  test("第2言語を選べば第2言語だけを読む", () => {
+  test("第 2 言語を選べば第 2 言語だけを読む", () => {
     const decoder = new B24CaptionDecoder(2);
     decoder.decode(both);
     expect(decoder.decode(text(encodeAribText("字幕"), 1))).toBeNull();
@@ -343,7 +343,7 @@ describe("字幕の言語", () => {
     );
   });
 
-  test("8言語まで読む", () => {
+  test("8 言語まで読む", () => {
     const decoder = new B24CaptionDecoder(8);
     decoder.decode(
       management({

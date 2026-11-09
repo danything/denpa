@@ -6,7 +6,7 @@ import type { MediaSourceClass } from "./ts/media-source";
 import { AUDIO_TYPE } from "./ts/playback";
 
 /*
- * MSE を真似た最小の入れ物。中身の代わりに「この塊は何秒から何秒か」を Float64 2 つで運ぶ。
+ * MSE を真似た最小の入れ物。中身の代わりに「このチャンクは何秒から何秒か」を Float64 2 つで運ぶ。
  * 足す・捨てるは次の刻みで終わる (本物と同じく、その間は `updating`)
  */
 type Range = [number, number];
@@ -101,7 +101,7 @@ class FakeVideo extends EventTarget {
   }
 }
 
-/** リクエストされた位置から、2 秒ずつの塊を `count` 個流す。`gate` がデコードできるまで 2 つ目から先を止められる */
+/** リクエストされた位置から、2 秒ずつのチャンクを `count` 個流す。`gate` がデコードできるまで 2 つ目から先を止められる */
 let requests: string[] = [];
 let gate: Promise<void> = Promise.resolve();
 const realFetch = globalThis.fetch;
@@ -170,7 +170,7 @@ function start(from = 100, codecs: string | null = H264) {
 }
 
 describe("その場で流すものの受け方 (remuxPlayer)", () => {
-  test("尺を先に言い、続きの位置からリクエストして、尻まで読んだら終わりを言う", async () => {
+  test("尺を先に渡し、続きの位置からリクエストして、末尾まで読んだら endOfStream を呼ぶ", async () => {
     const { video, media } = start(100);
     await settle();
     expect(media().duration).toBe(600);
@@ -202,7 +202,7 @@ describe("その場で流すものの受け方 (remuxPlayer)", () => {
     });
     const { video, media } = start(100);
     await settle();
-    // 1 つ目の塊だけ届いて、残りは止まっている
+    // 1 つ目のチャンクだけ届いて、残りは止まっている
     expect(media().buffer?.ranges).toEqual([[100, 102]]);
     video.currentTime = 300;
     open();
@@ -296,7 +296,7 @@ describe("段の切り替え (switchTo)", () => {
     }) as typeof fetch;
     const { player, media, states } = start(100);
     await settle();
-    // 1 つ目の塊だけ届いて、残りは止まっている
+    // 1 つ目のチャンクだけ届いて、残りは止まっている
     expect(media().buffer?.ranges).toEqual([[100, 102]]);
     expect(await player.switchTo(AV1, rung)).toBe("busy");
     open();
@@ -330,7 +330,7 @@ describe("段の切り替え (switchTo)", () => {
     expect(media().buffer?.ranges).toEqual([[300, 306]]);
   });
 
-  test("型を言わずに始めたら、応答の X-Denpa-Codec から SourceBuffer の型を決める。段と送り出しの具合の id も受け取る", async () => {
+  test("型を渡さずに始めたら、応答の X-Denpa-Codec から SourceBuffer の型を決める。段と送り出しの具合の id も受け取る", async () => {
     headers = {
       "X-Denpa-Codec": "av1",
       "X-Denpa-Rung": "2",

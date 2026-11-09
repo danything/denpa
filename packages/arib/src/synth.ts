@@ -2,7 +2,7 @@
  * TS のセクションを組み立てる。
  *
  * 実チューナーが無いので、解析のテストにも偽エージェントにも「それらしい TS」が要る。
- * 読む側 (psi.ts・eit.ts・dsmcc.ts・ait.ts、denpa の logo.ts など) と対になる書く側で、ここだけが仕様の写し。
+ * 読む側 (psi.ts・eit.ts・dsmcc.ts・ait.ts、denpa の logo.ts など) と対になる書く側で、仕様を書き写しているのはここだけ。
  */
 
 import { joinBytes } from "./bytes.js";
@@ -14,14 +14,14 @@ export { withCrc };
 const be = (value: number) => [(value >> 8) & 0xff, value & 0xff];
 const be32 = (value: number) => [...be(value >>> 16), ...be(value & 0xffff)];
 
-/** 表のバージョンと、何本に分けたうちのどれか。指定しなければバージョン 0・節 0/0 */
+/** 表のバージョンと、何本に分けたうちのどれか。指定しなければバージョン 0・セクション 0/0 */
 export interface SectionPart {
   version?: number;
   sectionNumber?: number;
   lastSectionNumber?: number;
 }
 
-/** セクションの頭 8 バイト (長さは `withCrc` が埋める) */
+/** セクションの先頭 8 バイト (長さは `withCrc` が埋める) */
 function head(
   tableId: number,
   extension: number,
@@ -38,7 +38,7 @@ function head(
   ];
 }
 
-/** PCR の基準部 (90kHz) を適応フィールドに書く (旗は呼ぶ側)。拡張部 (27MHz の端数) は読む側が見ていないので 0 */
+/** PCR の基準部 (90kHz) を適応フィールドに書く (フラグは呼ぶ側が立てる)。拡張部 (27MHz の端数) は読む側が見ていないので 0 */
 export function putPcr(packet: Uint8Array, pcr: number): void {
   const base = Math.round(pcr) % 2 ** 33;
   packet[6] = Math.floor(base / 2 ** 25) & 0xff;
@@ -113,7 +113,7 @@ function encodeSiText(text: string): number[] {
 /** 言語の符号 "jpn" (ISO 639-2) */
 const JPN = [0x6a, 0x70, 0x6e];
 
-/** 長さ 1 バイトを頭に付けた文字列。SI の記述子はどこもこの形式 */
+/** 長さ 1 バイトを先頭に付けた文字列。SI の記述子はどこもこの形式 */
 const sized = (text: string) => {
   const body = encodeSiText(text);
   return [body.length, ...body];
@@ -451,7 +451,7 @@ export function terrestrialDeliveryDescriptor(
   return [0xfa, body.length, ...body];
 }
 
-/** セクションを TS パケットに詰める。頭のパケットには pointer_field が付く */
+/** セクションを TS パケットに詰める。最初のパケットには pointer_field が付く */
 export function packetize(
   pid: number,
   section: Uint8Array,
@@ -476,7 +476,7 @@ export function packetize(
   return Uint8Array.from(packets);
 }
 
-/** 部品を 1 本のバイト列に繋ぐ。組んだパケットを流し込むときの糊 */
+/** 部品を 1 本のバイト列に繋ぐ。組んだパケットを流し込むときに使う */
 export function stream(...parts: Uint8Array[]): Uint8Array {
   return joinBytes(parts);
 }
@@ -520,7 +520,7 @@ export function patSection(
 }
 
 /**
- * PMT。ロゴのカルーセルが乗る ES を 1 つだけ持たせる。
+ * PMT。ロゴのカルーセルを運ぶ ES を 1 つだけ持たせる。
  * 目印は stream_identifier_descriptor (0x52) の component_tag
  */
 export function pmtSection(
@@ -759,7 +759,7 @@ export function bmlPmt(): Uint8Array {
   ]);
 }
 
-/** PAT と PMT。データ放送のストリームの頭 */
+/** PAT と PMT。データ放送のストリームの先頭 */
 export function bmlHead(): Uint8Array[] {
   return [
     packetize(0x0000, patSection([[BML_TS.service, BML_TS.pmtPid]])),
@@ -769,7 +769,7 @@ export function bmlHead(): Uint8Array[] {
 
 /**
  * モジュール 1 つぶんの中身。**放送は multipart/mixed で複数のファイルを詰める。**
- * 本物と同じく、頭に Content-Type、境界で区切って各ファイルに Content-Location
+ * 本物と同じく、先頭に Content-Type、境界で区切って各ファイルに Content-Location
  */
 export function multipartModule(
   files: [location: string, type: string, body: string][],
@@ -797,7 +797,7 @@ export interface SynthHybridcastApp {
   /** `CONTROL` の値。既定は autostart */
   controlCode?: number;
   name?: string;
-  /** URL の頭。**通信路で運ぶもの** (protocol_id = 3) として入れる */
+  /** URL の先頭部分。**通信路で運ぶもの** (protocol_id = 3) として入れる */
   base?: string;
   /** その先のパス */
   path?: string;
@@ -806,7 +806,7 @@ export interface SynthHybridcastApp {
 /**
  * AIT (table_id 0x74)。**Hybridcast のアプリのアドレス (URL) が載っている表。**
  *
- * 中身そのものは電波に乗っていないので、ここに入るのは URL と名前だけ
+ * アプリそのものは放送では送られていないので、ここに入るのは URL と名前だけ
  */
 export function aitSection(
   applications: SynthHybridcastApp[],
@@ -822,7 +822,7 @@ export function aitSection(
     }
     if (app.base !== undefined) {
       const base = [...new TextEncoder().encode(app.base)];
-      // transport_protocol_descriptor: protocol_id=3 (通信路)、label、URL の頭
+      // transport_protocol_descriptor: protocol_id=3 (通信路)、label、URL の先頭部分
       info.push(
         0x02,
         5 + base.length,

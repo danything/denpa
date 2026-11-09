@@ -51,6 +51,7 @@ import {
   BEHIND_MOST,
   Fmp4Video,
   FOLLOW_BYTES_MOST,
+  newestKey,
   PENDING_MOST,
 } from "./fmp4";
 import type { FromWorker, GrabSize, RawInput, ToWorker } from "./messages";
@@ -102,7 +103,8 @@ interface Pending {
   pts: number;
   dts: number;
   data: Uint8Array;
-  intra: boolean;
+  /** I フレームか */
+  key: boolean;
 }
 
 let decoder: Decoder | null = null;
@@ -254,7 +256,7 @@ function onVideo(pes: Pes): void {
   const pts =
     pes.pts === null ? (last?.pts ?? 0) + frameTicks : extend(pes.pts);
   const dts = pes.dts === null ? pts : extend(pes.dts);
-  pending.push({ pts, dts, data: pes.data, intra });
+  pending.push({ pts, dts, data: pes.data, key: intra });
   pendingBytes += pes.data.length;
   if (follow) {
     /*
@@ -308,11 +310,7 @@ function dropUnder(): void {
  * 飛ばしたコマを参照するフレームを出させないため
  */
 function skipTo(target: number): void {
-  let found = -1;
-  for (let i = 0; i < pending.length; i++) {
-    if (pending[i]!.dts > target) break;
-    if (pending[i]!.intra) found = i;
-  }
+  const found = newestKey(pending, target);
   if (found <= 0) return;
   pending = pending.slice(found);
   pendingBytes = pending.reduce((sum, item) => sum + item.data.length, 0);

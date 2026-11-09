@@ -7,19 +7,19 @@
  *
  *     ftyp moov | moof mdat | moof mdat | ...
  *     ~~~~~~~~~   ~~~~~~~~~
- *     init        媒体 (0.05 秒ぶん。`server/live.ts` の `-frag_duration`)
+ *     init        メディアセグメント (0.05 秒ぶん。`server/live.ts` の `-frag_duration`)
  *
  * **途中から入ってきた人のために init は取っておく** ([stream.md](../../../docs/stream.md#websocket-プロトコル))。
  * ライブは誰がいつ繋いでくるか分からないので、最初の 1 回だけ流して終わりにはできない。
  *
- * MP4 の箱は `[4バイト: 大きさ][4バイト: 種別][中身]` の繰り返し。
- * 大きさは箱ぜんぶ (ヘッダの 8 バイトを含む) を数えた値。
+ * MP4 のボックスは `[4バイト: 大きさ][4バイト: 種別][中身]` の繰り返し。
+ * 大きさはボックスぜんぶ (ヘッダの 8 バイトを含む) を数えた値。
  */
 
 import { ascii, concatBytes, joinBytes, u32 } from "@danything/arib/bytes";
 import { ADTS_RATES } from "@danything/arib/pes";
 
-/** 箱のヘッダ。大きさと種別で 8 バイト */
+/** ボックスのヘッダ。大きさと種別で 8 バイト */
 const HEADER = 8;
 
 interface Segment {
@@ -30,16 +30,16 @@ interface Segment {
 /**
  * バイト列を渡すと、組み上がったセグメントを返す。
  *
- * **足りないぶんは持ち越す。** ffmpeg の出力はパイプなので、箱の切れ目で
+ * **足りないぶんは持ち越す。** ffmpeg の出力はパイプなので、ボックスの切れ目で
  * 届くとは限らない。半端なところで切って渡すと MSE がその場で例外を出す。
  */
 export class Fmp4Splitter {
   private buffer = new Uint8Array(0);
-  /** `moof` に入るまでが init。入ったら以降は媒体 */
+  /** `moof` に入るまでが init。入ったら以降はメディアセグメント */
   private started = false;
-  /** 組み立て中の媒体セグメント (moof から次の moof の手前まで) */
+  /** 組み立て中のメディアセグメント (moof から次の moof の手前まで) */
   private pending: Uint8Array[] = [];
-  /** 読めない箱が来た。以降は持ち越さずに捨てる (持ったままだと、届くたびに溜まり続ける) */
+  /** 読めないボックスが来た。以降は持ち越さずに捨てる (持ったままだと、届くたびに溜まり続ける) */
   private broken = false;
 
   feed(chunk: Uint8Array): Segment[] {
@@ -102,11 +102,11 @@ export class Fmp4Splitter {
  * サーバが送り出した映像の長さを数える `server/pace.ts`)。
  *
  * MSE に渡すときは割るだけで済んだが、**自分でデコードするときやコマを数えるときは中身が要る。** moov から
- * 何の映像・音声か (avcC / hvcC / av1C / esds / dOps) を、moof から 1 コマずつの時刻と在りかを
+ * 何の映像・音声か (avcC / hvcC / av1C / esds / dOps) を、moof から 1 コマずつの時刻と位置を
  * (tfdt / trun) 読む。読むのは denpa の ffmpeg が出す形式 (`server/live.ts` の
  * `+empty_moov+default_base_moof`) に要るものだけ。
  *
- * - 中身の在りかは moof の先頭から数える (`default-base-is-moof`)。tfhd の
+ * - 中身の位置は moof の先頭から数える (`default-base-is-moof`)。tfhd の
  *   `base-data-offset` (ストリームの先頭から数える) は、途中から繋いだ受け側には読めないので扱わない
  * - 1 コマの長さ・大きさ・印は trun → tfhd → trex (moov の mvex) の順に探す
  * ---------------------------------------------------------------------------
@@ -153,11 +153,11 @@ interface Box {
   type: string;
   /** 中身 (ヘッダの 8 バイトを除く) */
   body: Uint8Array;
-  /** 渡された範囲の先頭から見た、箱の先頭の位置 */
+  /** 渡された範囲の先頭から見た、ボックスの先頭の位置 */
   start: number;
 }
 
-/** `data` に並んでいる箱を読む。**壊れていたらそこで止める** (読めたぶんだけ返す) */
+/** `data` に並んでいるボックスを読む。**壊れていたらそこで止める** (読めたぶんだけ返す) */
 function boxes(data: Uint8Array): Box[] {
   const out: Box[] = [];
   let at = 0;
@@ -172,8 +172,8 @@ function boxes(data: Uint8Array): Box[] {
 }
 
 /**
- * 先頭に並んだ箱の中に `type` があるか (中までは読まない)。canvas に描く経路が、届いたものが init かを見分けるのに使う
- * (`raw/fmp4.ts`)。**箱が尻で切れていても、見出しが読めれば数える**
+ * 先頭に並んだボックスの中に `type` があるか (中までは読まない)。canvas に描く経路が、届いたものが init かを見分けるのに使う
+ * (`raw/fmp4.ts`)。**ボックスが末尾で切れていても、ヘッダが読めれば数える**
  */
 export function hasBox(data: Uint8Array, type: string): boolean {
   for (let at = 0; at + HEADER <= data.length;) {
@@ -189,7 +189,7 @@ function child(body: Uint8Array, type: string): Uint8Array | null {
   return boxes(body).find((b) => b.type === type)?.body ?? null;
 }
 
-/** 箱を辿る (`mdia` → `minf` → ...)。**最初に見つかったもの** */
+/** ボックスを辿る (`mdia` → `minf` → ...)。**最初に見つかったもの** */
 function path(body: Uint8Array, ...types: string[]): Uint8Array | null {
   let at: Uint8Array | null = body;
   for (const type of types) {
@@ -271,7 +271,7 @@ function paspWidth(pasp: Uint8Array | null, width: number): number | null {
 /** sample entry から読む、映像・音声に共通のもの */
 type EntryBase = Pick<Fmp4Track, "id" | "timescale" | "defaults">;
 
-/** 映像の sample entry の種類ごとの、設定の箱 (`min` はその箱に要る長さ) と codec の起こし方 */
+/** 映像の sample entry の種類ごとの、設定のボックス (`min` はそのボックスに要る長さ) と codec の起こし方 */
 interface VideoEntry {
   box: string;
   min: number;
@@ -330,7 +330,7 @@ function readVideoEntry(
 
 function readAudioEntry(entry: Box, base: EntryBase): Fmp4Track | null {
   const body = entry.body;
-  // AudioSampleEntry: 中身の箱は 28 から (チャンネル数と標本化周波数はデコーダが中身から読む)
+  // AudioSampleEntry: 中身のボックスは 28 から (チャンネル数と標本化周波数はデコーダが中身から読む)
   if (body.length < 28) return null;
   const inner = body.subarray(28);
   const config =
@@ -346,7 +346,7 @@ function readAudioEntry(entry: Box, base: EntryBase): Fmp4Track | null {
   };
 }
 
-/** mp4a の中身の箱から AudioSpecificConfig を読む。無い・短すぎるなら undefined */
+/** mp4a の中身のボックスから AudioSpecificConfig を読む。無い・短すぎるなら undefined */
 function aacConfig(inner: Uint8Array): Uint8Array<ArrayBuffer> | undefined {
   const esds = child(inner, "esds");
   const asc = esds === null ? null : audioSpecificConfig(esds);
@@ -437,7 +437,7 @@ function audioSpecificConfig(esds: Uint8Array): Uint8Array<ArrayBuffer> | null {
 const NON_SYNC = 0x10000;
 
 /**
- * 媒体 (`moof` + `mdat`。間に別の箱が挟まってもよい) を読む。**知らないトラックのコマは捨てる。**
+ * メディアセグメント (`moof` + `mdat`。間に別のボックスが挟まってもよい) を読む。**知らないトラックのコマは捨てる。**
  * 壊れていたら、そこまでに読めたぶんを返す
  */
 export function readFragment(
@@ -568,7 +568,7 @@ export function adtsHeader(
     ((channels & 0x03) << 6) | (length >> 11),
     (length >> 3) & 0xff,
     ((length & 0x07) << 5) | 0x1f,
-    0xfc, // 溜まり具合は「可変」(0x7ff)、1 つの ADTS に 1 コマ
+    0xfc, // バッファの具合は「可変」(0x7ff)、1 つの ADTS に 1 コマ
   );
 }
 

@@ -234,7 +234,7 @@ describe("CSS", () => {
     expect(d.navIndex).toBe(506);
   });
 
-  test("継ぐ特性の読めない値は、既定でなく親の値になる", () => {
+  test("継ぐプロパティの読めない値は、既定でなく親の値になる", () => {
     const doc = load(
       '<bml><body><p style="color-index: 7; font-size: 30px; letter-spacing: 2px; grayscale-color-index: 1 2">x<span id="s" style="color-index: abc; font-size: 1em; letter-spacing: x; grayscale-color-index: 1">y</span></p></body></bml>',
     );
@@ -293,7 +293,7 @@ describe("CLUT", () => {
   });
 });
 
-describe("見直しで足したもの", () => {
+describe("崩れた書き方と重ね合わせの細部", () => {
   test("閉じない br は後ろを飲み込まない。script の CDATA は幾つあってもつなぐ", () => {
     const doc = load(
       '<bml><head><script><![CDATA[a();]]><!-- x --><![CDATA[b();]]></script></head><body><p id="p">A<br>B</p></body></bml>',
@@ -316,7 +316,7 @@ describe("見直しで足したもの", () => {
     expect([p.style().colorIndex, p.style().fontSize]).toEqual([2, 30]);
   });
 
-  test("div と object の padding は 0、継がない特性の inherit は親の値、枠の線は列挙だけ", () => {
+  test("div と object の padding は 0、継がないプロパティの inherit は親の値、枠の線は列挙だけ", () => {
     const doc = load(
       '<bml><body><div id="d" style="padding:9px;background-color-index:4"><div id="c" style="background-color-index:inherit;border-style:solid;color:red"></div><p id="p" style="border-style:x;url(y)"></p></div></body></bml>',
     );

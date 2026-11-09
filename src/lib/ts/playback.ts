@@ -2,7 +2,7 @@
  * **録画の観方の取り決め** (`GET /api/recordings/<id>/playback` と `/stream`)。画面にもサーバにも依らない。
  *
  * 分担: **サーバは「何を出せるか・どの形式で出すか・時刻の物差し」を決める。画面は「どれを使うか」を
- * 決める** (端末で再生できるか、人が選んだコーデック、MPEG-2 をそのまま再生する設定)。決め方は `server/playback.ts`。
+ * 決める** (端末で再生できるか、人が選んだコーデック)。決め方は `server/playback.ts`。
  * テレビのアプリは再生できる形式 (`?playable=`) を送り、サーバが同じ `pickOffer` で選んで `auto` で返す (`autoPick`)
  */
 
@@ -344,7 +344,7 @@ export function playableAbility(formats: readonly LiveFormat[]): MediaAbility {
 /**
  * **サーバが選ぶ観方** (`playback?playable=` の `auto`)。ブラウザの「自動」と同じ `pickOffer` で選ぶ。
  * `pickOffer` の最後の手 (中身が分からないファイルをそのまま渡す) は、コーデックが並びにあるときだけ使う。
- * 端末が再生できないと言ったものは返さない。選べなければ null
+ * 端末が再生できる形式に無いものは返さない。選べなければ null
  */
 export function autoPick(
   info: PlaybackInfo,
@@ -396,16 +396,16 @@ export function codecChoices(
   can: MediaAbility,
   hidden: readonly PlayCodec[] = [],
 ): PlayCodec[] {
-  const encoded = ENCODED_ORDER.filter(
-    (codec) =>
-      !hidden.includes(codec) &&
-      info.offers.some(
-        (offer) =>
-          offer.codec === codec &&
-          (playsFile(offer, can) || playsStream(offer, can)),
-      ),
+  return MENU_ORDER.filter((codec) =>
+    codec === "mpeg2"
+      ? playsRaw(info, can)
+      : !hidden.includes(codec) &&
+        info.offers.some(
+          (offer) =>
+            offer.codec === codec &&
+            (playsFile(offer, can) || playsStream(offer, can)),
+        ),
   );
-  return playsRaw(info, can) ? [...encoded, "mpeg2"] : encoded;
 }
 
 /*
@@ -531,7 +531,7 @@ export function covers(
 ): boolean {
   if (aheadOf(ranges, t) > 0) return true;
   if (from === null || t < from - GAP) return false;
-  // リクエストした位置から伸びている区間の尻。まだ何も届いていなければリクエストした位置
+  // リクエストした位置から伸びている区間の末尾。まだ何も届いていなければリクエストした位置
   let end = from;
   for (const [start, stop] of ranges) {
     if (start <= from + GAP && stop >= from) end = Math.max(end, stop);

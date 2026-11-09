@@ -3,7 +3,7 @@
  * `(${shim})(init)` の形で HTML に入れる)。
  *
  * アプリは sandbox の iframe (使い捨てのオリジン) にいて、外へは直に繋げない (CSP の
- * `connect-src 'none'`)。ここが代わりに:
+ * `connect-src 'none'`)。ここが代わりに次のことをする。
  *
  * - `fetch` と `XMLHttpRequest` を親 (denpa の画面) へ渡す。親が中継 (`/api/bml/proxy`・`/api/bml/post`) で取る
  * - 受信機の記憶 (`localStorage`) をアプリの配信元ごとの置き場として用意する (親が覚える)
@@ -48,7 +48,7 @@ export interface ShimInit {
   /**
    * **アプリを denpa 越しに読ませる中継** (`server/hc-relay.ts`)。http のアプリは https の画面から読めず (Mixed Content)、
    * https のアプリも中の script の `location.*` を置き換えないと iframe ごと外へ移ろうとして止められる (`location.ts`)。
-   * `root` は中継のルート (絶対 URL 。末尾は /)、`origin` はアプリの配信元 (http(s)://host)。`<base>` と HTML の中の
+   * `root` は中継のルート (絶対 URL。末尾は /)、`origin` はアプリの配信元 (http(s)://host)。`<base>` と HTML の中の
    * 配信元の URL は `prepareApp` が中継へ書き換え、後から作られる要素の URL はここで書き換える
    */
   relay: { root: string; origin: string };
@@ -57,7 +57,7 @@ export interface ShimInit {
 }
 
 export function shim(init: ShimInit): void {
-  // oxlint-disable-next-line typescript/no-explicit-any -- アプリの文書の中で動く (型の無い世界)
+  // oxlint-disable-next-line typescript/no-explicit-any -- アプリの文書の中で動く (型の付かない JavaScript)
   const w = window as any;
   const post = (message: Record<string, unknown>): void => {
     message["hc"] = 1;
@@ -134,8 +134,8 @@ export function shim(init: ShimInit): void {
     return url;
   };
   /*
-   * 後から作る script・画像・CSS の URL 。属性でもプロパティでも入るので両方を見る。
-   * **読み込む要素だけ。** iframe・a の行き先まで中継にすると、中継の返り (sandbox の CSP) の中で script が
+   * 後から作る script・画像・CSS の URL。属性でもプロパティでも入るので両方を見る。
+   * **読み込む要素だけ。** iframe・a の行き先まで中継にすると、中継のレスポンス (sandbox の CSP) の中で script が
    * 動かなくなる。iframe は CSP の frame-src で止めてあり、a で移った先はアプリの外
    */
   const loads = [
@@ -370,7 +370,7 @@ export function shim(init: ShimInit): void {
     return this["_type"] !== "" ? `content-type: ${this["_type"]}\r\n` : "";
   };
   proto["abort"] = function (this: Record<string, unknown>) {
-    // 返りが来ても捨てる (世代を進める)
+    // レスポンスが来ても捨てる (世代を進める)
     this["_sent"] = (this["_sent"] as number) + 1;
     if (this["readyState"] !== 0 && this["readyState"] !== 4)
       finish(this, "abort");
@@ -731,7 +731,7 @@ export function shim(init: ShimInit): void {
   };
   /*
    * 放送の中のイベント (`streamEvent`)。**イベントメッセージは届けない** (denpa は Hybridcast へ流さない)。
-   * 聞くのは受け付けるだけ。番組が変わったことは知らせる。登録されたら一度すぐ呼ぶ (いまの番組はもう分かっている)
+   * リスナーの登録は受け付けるだけ。番組が変わったことは知らせる。登録されたら一度すぐ呼ぶ (いまの番組はもう分かっている)
    */
   const streamEvent: Record<string, unknown> = {
     sourceIs: (source: unknown) => source === "onair",

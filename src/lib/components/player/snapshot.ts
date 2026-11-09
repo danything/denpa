@@ -146,7 +146,7 @@ export function captionLayer(
 }
 
 /** 画面の上の箱 (CSS px) */
-export interface Box {
+interface Box {
   left: number;
   top: number;
   width: number;
@@ -154,7 +154,7 @@ export interface Box {
 }
 
 /** 画面に出ている実況のコメント 1 件 */
-export interface ShownComment {
+interface ShownComment {
   text: string;
   /** いま見えている箱 (CSS px。`getBoundingClientRect`。流れている途中の位置) */
   box: Box;
@@ -164,7 +164,7 @@ export interface ShownComment {
 }
 
 /** 重ねに描くコメント 1 件。位置は映像の枠の左上からの CSS px */
-export interface CommentSpot {
+interface CommentSpot {
   text: string;
   font: string;
   color: string;
@@ -205,7 +205,7 @@ const COMMENT_OPACITY = 0.5;
 const OUTLINE = 1;
 
 /** 押した瞬間のコメントの枠 (CSS px) と、そこに掛かっているコメント */
-export interface CommentScene {
+interface CommentScene {
   area: Box;
   spots: CommentSpot[];
 }
