@@ -553,6 +553,25 @@ public class B25Tests
     }
 
     /// <summary>
+    /// **偶奇の対応は STD-B25 のとおり固定で、逆の鍵は試さない。** 印と違う偶奇の鍵でスクランブルされた PES は、
+    /// 先頭で合わないと分かるので、その PES をスクランブルされたまま流して復号できなかったに数える
+    /// </summary>
+    [Test]
+    public async Task 印と違う偶奇の鍵でスクランブルされた_PES_は復号できなかったに数える()
+    {
+        var ts = Channel().Ecm(EcmPid, 1)
+            .Payload(VideoPid, 1, even: true, pes: true, keyEven: false)
+            .Payload(VideoPid, 1, even: true, keyEven: false);
+        var descrambler = new Descrambler(new Cards());
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, ts.Wire.ToArray())).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(2);
+        await Assert.That(descrambler.LastError).IsNotNull();
+    }
+
+    /// <summary>
     /// **中身が 3 バイトに満たず確かめられない PES の先頭は、前の PES が合わなかったことを引き継がない。** その PES は
     /// 今の鍵で復号する (前の PES の残りと同じに扱うと、次の PES の先頭までスクランブルされたまま流してしまう)
     /// </summary>
@@ -571,49 +590,6 @@ public class B25Tests
         await Assert.That(Diff(output, expected)).IsEqualTo(-1);
         await Assert.That(descrambler.Undecodable).IsEqualTo(2);
         await Assert.That(descrambler.Decoded).IsEqualTo(3);
-    }
-
-    /// <summary>
-    /// **PES の先頭で、偶奇を逆にした鍵のほうが合えば、その ECM はこの先も逆にして使う。** 先頭でない
-    /// パケットは確かめられないので、先頭で分かった対応で復号する
-    /// </summary>
-    [Test]
-    public async Task 偶奇を逆にした鍵で合えば_その先もそれで復号する()
-    {
-        var ts = Channel().Ecm(EcmPid, 1)
-            .Payload(VideoPid, 1, even: true, pes: true, keyEven: false)
-            .Payload(VideoPid, 1, even: true, keyEven: false)
-            .Payload(VideoPid, 1, even: false, keyEven: true)
-            .Payload(VideoPid, 1, even: false, pes: true, keyEven: true);
-        var descrambler = new Descrambler(new Cards());
-
-        var output = Run(descrambler, ts.Wire.ToArray());
-
-        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
-        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
-    }
-
-    /// <summary>
-    /// **PMT が挙げた ECM の鍵で合わず、ほかの ECM の鍵で PES の先頭が合えば、その PID はそちらで復号する。**
-    /// PMT を読み直すまで続ける
-    /// </summary>
-    [Test]
-    public async Task ほかの_ECM_の鍵で合えば_その_PID_はその_ECM_で復号する()
-    {
-        const int other = 0x0902;
-        var ts = new Ts()
-            .Pat((0x0400, PmtPid))
-            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []), (AudioPid, Ca(other)))
-            .Ecm(EcmPid, 1).Ecm(other, 7)
-            .Payload(AudioPid, 7)
-            // PMT では映像も ECM 0x0901 だが、世代 7 (ECM 0x0902) の鍵でスクランブルされている
-            .Payload(VideoPid, 7, pes: true).Videos(3, 7);
-        var descrambler = new Descrambler(new Cards());
-
-        var output = Run(descrambler, ts.Wire.ToArray());
-
-        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
-        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
     }
 
     /// <summary>
