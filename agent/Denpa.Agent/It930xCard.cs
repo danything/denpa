@@ -26,7 +26,7 @@ public sealed class It930xCard : ICardLink
 
     /// <summary>
     /// 最後の区切りを渡す前に 1 を書く (<c>OVA_UART_REALSEND</c>。<c>IT9300_bcasSendData</c>)。
-    /// ブリッジはそれまでに渡された区切りとまとめて送ると推定している (SDK に説明が無い)
+    /// ブリッジはそれまでに渡された区切りとまとめて送ると推定する (SDK に説明が無い)
     /// </summary>
     public const uint RealSend = 0x4965;
 
@@ -80,7 +80,7 @@ public sealed class It930xCard : ICardLink
     /// <summary>いま取っている機材 (テストのため)。取っていなければ null</summary>
     internal It930xDevice? Device => _device;
 
-    /// <summary>機材のブリッジ。取っていなければ取り、初めての機材なら UART をカードの形にする</summary>
+    /// <summary>機材のブリッジ。取っていなければ取り、初めての機材なら UART をカードとやり取りする設定にする</summary>
     private It930xBridge Bridge()
     {
         if (_device is { Faulted: true }) Drop();
@@ -249,7 +249,7 @@ public sealed class It930xCard : ICardLink
         Send(bridge, block);
         var limitMs = _blockWaitMs * Math.Max(1, (int)wtx);
         var reply = CardUart.ReceiveBlock(Read, _delay, limitMs);
-        // 応答が揃わないと T1Protocol が送り直す。送り直しの回数を記録から数えられるように残す
+        // 応答が揃わないと T1Protocol が送り直す。再送の回数を記録から数えられるように残す
         if (reply is null) Log.Write($"[{Name}] カードの応答が {limitMs} ms の間に揃いませんでした");
         return reply;
     }
