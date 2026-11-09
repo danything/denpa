@@ -1,4 +1,4 @@
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 
 import { MX, SERVICES } from "../fake/services";
 import type { Stack } from "../stack";
@@ -73,6 +73,25 @@ async function twoChannels(
   return [listed(MX), listed(other)];
 }
 
+/**
+ * ライブを開いて局を選ぶ。選んだ局がチューナーを使い、画面が「選局できませんでした」を出していないことまで見る。
+ * 開いたときの先回り (`live.warm`) は一覧の先頭の局なので、選ぶ局とはチャンネルが違うことがある
+ */
+async function watchLive(
+  page: Page,
+  stack: Stack,
+  service: Listed,
+): Promise<void> {
+  await goto(page, "/live");
+  await page
+    .locator(`[data-testid="live-channel"][data-service="${service.id}"]`)
+    .click();
+  await expect
+    .poll(() => grUsers(stack))
+    .toContain(`live GR/${service.channel}`);
+  await expect(page.getByTestId("live-retry")).toHaveCount(0);
+}
+
 /** いま放送中の番組を録る (ライブの録画ボタンと同じ API) */
 async function recordNow(
   request: APIRequestContext,
@@ -94,143 +113,136 @@ async function stopRecording(
   });
 }
 
-test.describe("ライブが録画にチューナーを取り上げられたとき", () => {
-  /*
-   * MPEG-2 をデコードできる端末として開く (`stack.ts` の `liveWithoutMpeg2`)。家の中の自動は MPEG-2 になり、
-   * 開いたときにサーバが先回りする形式 (`live.warm`) と画面がリクエストする形式がそろう
-   */
-  test.use({ liveMpeg2: true });
+/*
+ * **H.264 と MPEG-2 の両方で観る。** 家の中の自動は MPEG-2 で、開いたときにサーバが先回りする形式 (`live.warm`) も
+ * MPEG-2 になる。MPEG-2 をデコードできない端末 (`stack.ts` の `liveWithoutMpeg2`) は H.264 をリクエストするので、
+ * 先回りしたものとそろわない。そろわない先回りがチューナーを使ったままだと、地上波が 1 台では別の局を選べなかった
+ * (`live.ts` の `dropWarm`)
+ */
+for (const mpeg2 of [false, true])
+  test.describe(`ライブが録画にチューナーを取り上げられたとき (${mpeg2 ? "MPEG-2" : "H.264"})`, () => {
+    test.use({ liveMpeg2: mpeg2 });
 
-  test.beforeEach(async ({ request, stack }) => {
-    await syncEpg(request);
-    await setTuners(stack, 3);
-  });
-  test.afterEach(async ({ stack }) => {
-    await setTuners(stack, 4);
-  });
+    test.beforeEach(async ({ request, stack }) => {
+      await syncEpg(request);
+      await setTuners(stack, 3);
+    });
+    test.afterEach(async ({ stack }) => {
+      await setTuners(stack, 4);
+    });
 
-  /*
-   * **同じチャンネルの録画は選局を共有するので、取り上げられない。** チューナーは増えないので、地上波が 1 台でも
-   * ライブはそのまま。切り替えの通知も出ない
-   */
-  test("同じチャンネルの録画なら、ライブはそのまま", async ({
-    page,
-    request,
-    stack,
-  }) => {
-    const [watched] = await twoChannels(request);
-    await goto(page, "/live");
-    await page
-      .locator(`[data-testid="live-channel"][data-service="${watched.id}"]`)
-      .click();
-    await expect
-      .poll(() => grUsers(stack))
-      .toContain(`live GR/${watched.channel}`);
+    /*
+     * **同じチャンネルの録画は選局を共有するので、取り上げられない。** チューナーは増えないので、地上波が 1 台でも
+     * ライブはそのまま。切り替えの通知も出ない
+     */
+    test("同じチャンネルの録画なら、ライブはそのまま", async ({
+      page,
+      request,
+      stack,
+    }) => {
+      const [watched] = await twoChannels(request);
+      await watchLive(page, stack, watched);
 
-    await recordNow(request, watched);
-    try {
-      // 録画が同じチューナーを共有する。ライブの利用者も残っている
-      await expect
-        .poll(
-          async () =>
-            (await grUsers(stack)).some((use) => use.startsWith("rec ")),
+      await recordNow(request, watched);
+      try {
+        // 録画が同じチューナーを共有する。ライブの利用者も残っている
+        await expect
+          .poll(
+            async () =>
+              (await grUsers(stack)).some((use) => use.startsWith("rec ")),
+            {
+              timeout: 30_000,
+            },
+          )
+          .toBe(true);
+        await page.waitForTimeout(3_000);
+        expect(await grUsers(stack)).toContain(`live GR/${watched.channel}`);
+        await expect(page.getByTestId("live-yielded")).toHaveCount(0);
+      } finally {
+        await stopRecording(request, watched);
+      }
+    });
+
+    test("別のチャンネルの録画に取り上げられ、入れなければ録画の追っかけに切り替える", async ({
+      page,
+      request,
+      stack,
+      baseURL,
+    }) => {
+      const [watched, recorded] = await twoChannels(request);
+      await watchLive(page, stack, watched);
+
+      /*
+       * **テレビのアプリは通知 (`yielded`) で知る。** HTTP で観ているものにはストリームの中で伝えられない
+       * ので、画面と同じものを通知にも流す (docs/api.md)
+       */
+      const events = new AbortController();
+      const heard: string[] = [];
+      const listening = fetch(`${baseURL}/api/events`, {
+        signal: events.signal,
+      })
+        .then(async (res) => {
+          const reader = res.body!.getReader();
+          const decoder = new TextDecoder();
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            heard.push(decoder.decode(value));
+          }
+        })
+        .catch(() => undefined);
+
+      await recordNow(request, recorded);
+      try {
+        const note = page.getByTestId("live-yielded");
+        await expect(note).toContainText(
+          "録画が始まったため、局を切り替えました",
           {
             timeout: 30_000,
           },
-        )
-        .toBe(true);
-      await page.waitForTimeout(3_000);
-      expect(await grUsers(stack)).toContain(`live GR/${watched.channel}`);
-      await expect(page.getByTestId("live-yielded")).toHaveCount(0);
-    } finally {
-      await stopRecording(request, watched);
-    }
+        );
+        await expect(note).toContainText("(録画中) を再生しています");
+        // チューナーは録画のもの。ライブはリクエストし直したが入れなかった
+        const users = await grUsers(stack);
+        expect(users.some((use) => use.startsWith("rec "))).toBe(true);
+        expect(users).not.toContain(`live GR/${watched.channel}`);
+
+        // 通知には、外れた局と、譲った録画が乗る。画面に出した番組名と同じもの
+        await expect
+          .poll(() => heard.join("").includes("event: yielded"))
+          .toBe(true);
+        const block = heard
+          .join("")
+          .split("\n\n")
+          .find((b) => b.startsWith("event: yielded"))!;
+        const yielded = JSON.parse(block.split("\ndata: ")[1]!) as {
+          serviceId: number;
+          recording: { id: number; title: string; endAt: number };
+        };
+        expect(yielded.serviceId).toBe(watched.id);
+        expect(yielded.recording.endAt).toBeGreaterThan(Date.now());
+        await expect(note).toContainText(yielded.recording.title);
+        // 観ているのは録画のほう (操作バーの読みものも)
+        await expect(page.getByTestId("live-title")).toHaveText(
+          yielded.recording.title,
+        );
+
+        /*
+         * **「ライブに戻る」はリクエストし直しを試す。** 録画がまだチューナーを塞いでいるので入れず、追っかけに戻って
+         * いつまで待てばいいかを言う
+         */
+        await page.getByTestId("live-back").click();
+        await expect(page.getByTestId("live-refused")).toContainText(
+          "録画が終わるまでライブは観られません (",
+          {
+            timeout: 30_000,
+          },
+        );
+        await expect(note).toBeVisible();
+      } finally {
+        events.abort();
+        await listening;
+        await stopRecording(request, recorded);
+      }
+    });
   });
-
-  test("別のチャンネルの録画に取り上げられ、入れなければ録画の追っかけに切り替える", async ({
-    page,
-    request,
-    stack,
-    baseURL,
-  }) => {
-    const [watched, recorded] = await twoChannels(request);
-    await goto(page, "/live");
-    await page
-      .locator(`[data-testid="live-channel"][data-service="${watched.id}"]`)
-      .click();
-    await expect
-      .poll(() => grUsers(stack))
-      .toContain(`live GR/${watched.channel}`);
-
-    /*
-     * **テレビのアプリは通知 (`yielded`) で知る。** HTTP で観ているものにはストリームの中で伝えられない
-     * ので、画面と同じものを通知にも流す (docs/api.md)
-     */
-    const events = new AbortController();
-    const heard: string[] = [];
-    const listening = fetch(`${baseURL}/api/events`, { signal: events.signal })
-      .then(async (res) => {
-        const reader = res.body!.getReader();
-        const decoder = new TextDecoder();
-        for (;;) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          heard.push(decoder.decode(value));
-        }
-      })
-      .catch(() => undefined);
-
-    await recordNow(request, recorded);
-    try {
-      const note = page.getByTestId("live-yielded");
-      await expect(note).toContainText(
-        "録画が始まったため、局を切り替えました",
-        {
-          timeout: 30_000,
-        },
-      );
-      await expect(note).toContainText("(録画中) を再生しています");
-      // チューナーは録画のもの。ライブはリクエストし直したが入れなかった
-      const users = await grUsers(stack);
-      expect(users.some((use) => use.startsWith("rec "))).toBe(true);
-      expect(users).not.toContain(`live GR/${watched.channel}`);
-
-      // 通知には、外れた局と、譲った録画が乗る。画面に出した番組名と同じもの
-      await expect
-        .poll(() => heard.join("").includes("event: yielded"))
-        .toBe(true);
-      const block = heard
-        .join("")
-        .split("\n\n")
-        .find((b) => b.startsWith("event: yielded"))!;
-      const yielded = JSON.parse(block.split("\ndata: ")[1]!) as {
-        serviceId: number;
-        recording: { id: number; title: string; endAt: number };
-      };
-      expect(yielded.serviceId).toBe(watched.id);
-      expect(yielded.recording.endAt).toBeGreaterThan(Date.now());
-      await expect(note).toContainText(yielded.recording.title);
-      // 観ているのは録画のほう (操作バーの読みものも)
-      await expect(page.getByTestId("live-title")).toHaveText(
-        yielded.recording.title,
-      );
-
-      /*
-       * **「ライブに戻る」はリクエストし直しを試す。** 録画がまだチューナーを塞いでいるので入れず、追っかけに戻って
-       * いつまで待てばいいかを言う
-       */
-      await page.getByTestId("live-back").click();
-      await expect(page.getByTestId("live-refused")).toContainText(
-        "録画が終わるまでライブは観られません (",
-        {
-          timeout: 30_000,
-        },
-      );
-      await expect(note).toBeVisible();
-    } finally {
-      events.abort();
-      await listening;
-      await stopRecording(request, recorded);
-    }
-  });
-});
