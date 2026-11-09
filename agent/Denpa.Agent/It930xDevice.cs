@@ -40,6 +40,8 @@ public sealed class It930xDevice
     private readonly Cxd2856Frontend?[] _frontends;
     private readonly Lock[] _receiverGates;
     private readonly It930xTsDemux _demux = new(It930xBridge.SyncBytes);
+    private readonly Lock _lnbGate = new();
+    private readonly HashSet<int> _lnbUsers = [];
     private Thread? _reader;
     private volatile bool _stopping;
     private int _users;
@@ -87,8 +89,11 @@ public sealed class It930xDevice
 
     /// <param name="open">USB を開いて機種と一緒に返す。テストは偽の機材を返す</param>
     /// <param name="firmware">確かめたファームウェア (<see cref="It930xFirmware.Code"/>)</param>
-    internal static It930xDevice Acquire(string port, Func<(IUsbDevice Usb, It930xModel Model)> open, Action<int> sleep, Func<long> nowMs, Func<byte[]> firmware)
+    /// <param name="waiting">機材の一覧のロックを取る直前に呼ぶ (テストが、閉じている途中の開き直しを確かめるため)</param>
+    internal static It930xDevice Acquire(
+        string port, Func<(IUsbDevice Usb, It930xModel Model)> open, Action<int> sleep, Func<long> nowMs, Func<byte[]> firmware, Action? waiting = null)
     {
+        waiting?.Invoke();
         lock (Registry)
         {
             if (Devices.TryGetValue(port, out var device))
@@ -251,12 +256,59 @@ public sealed class It930xDevice
         }
     }
 
-    /// <summary>使い終えた受信機のチューナーを止め、復調器をスリープにする (仕様書 10.3)</summary>
+    /// <summary>
+    /// 使い終えた受信機のチューナーを止め、復調器をスリープにして、LNB の給電を求めない状態にする (仕様書 10.3 の手順 2〜4)。
+    /// スリープが失敗しても給電の求めは取り下げる
+    /// </summary>
     public void Rest(int receiver)
     {
         Cxd2856Frontend? frontend;
         lock (_receiverGates[receiver]) frontend = _frontends[receiver];
-        frontend?.Sleep();
+        try
+        {
+            frontend?.Sleep();
+        }
+        finally
+        {
+            Lnb(receiver, false);
+        }
+    }
+
+    /// <summary>
+    /// 受信機 <paramref name="receiver"/> が LNB の給電を求める・求めない (仕様書 9)。給電は 5 つの受信機で 1 つ (ブリッジの GPIOH11。1 で入る) なので、
+    /// 求めている受信機の数が 0 から 1 になるときに入れ、1 から 0 になるときに切る。書き込みに失敗したら、求めの数は書く前に戻す
+    /// </summary>
+    public void Lnb(int receiver, bool on)
+    {
+        lock (_lnbGate)
+        {
+            if (on == _lnbUsers.Contains(receiver)) return;
+            var before = _lnbUsers.Count;
+            if (on) _lnbUsers.Add(receiver);
+            else _lnbUsers.Remove(receiver);
+            var after = _lnbUsers.Count;
+            if ((before == 0) == (after == 0)) return;
+            try
+            {
+                Bridge.Gpio(11, after > 0);
+            }
+            catch
+            {
+                if (on) _lnbUsers.Remove(receiver);
+                else _lnbUsers.Add(receiver);
+                throw;
+            }
+            Log.Write($"[{Label}] LNB の給電を{(after > 0 ? "入れました" : "切りました")}");
+        }
+    }
+
+    /// <summary>LNB の給電を求めている受信機の数 (テストと記録のため)</summary>
+    internal int LnbUsers
+    {
+        get
+        {
+            lock (_lnbGate) return _lnbUsers.Count;
+        }
     }
 
     /// <summary>失敗が USB の抜けなら使えないものとする (次に取る側は開き直す)</summary>
@@ -341,14 +393,18 @@ public sealed class It930xDevice
 }
 
 /// <summary>
-/// IT930x の機材の受信機 1 つ (設定の <c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c>)。**いまは地上波だけ** (衛星はまだ断る)。
+/// IT930x の機材の受信機 1 つ (設定の <c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c>)。地上波 (ISDB-T) と衛星 (ISDB-S) を同じ受信機で切り替えて選局する。
 /// 機材 (<see cref="It930xDevice"/>) は最初の選局で取り、捨てるときに返す。
 /// 選局のたびに新しい出口 (<see cref="It930xTsOutput"/>。Pipe と DeviceStream) を作り、前の選局のパケットと混ぜない
 /// </summary>
 public sealed class It930xTuner : ITuneDevice
 {
+    /// <summary>LNB の給電の設定で受け付ける値。給電は 15 V だけ (仕様書 9。0 か 15 V のほかは断る)</summary>
+    public const string Lnb15v = "15v";
+
     private readonly string _name;
     private readonly int _receiver;
+    private readonly string? _lnb;
     private readonly Func<It930xDevice> _acquire;
     private readonly Action? _closeIdle;
     private readonly Lock _gate = new();
@@ -356,17 +412,19 @@ public sealed class It930xTuner : ITuneDevice
     private Cxd2856Frontend? _frontend;
     private It930xTsOutput? _output;
 
-    public It930xTuner(string port, int receiver)
-        : this($"{It930x.Model} {port} #{receiver}", receiver, () => It930xDevice.Acquire(port), () => It930xDevice.CloseIfIdle(port))
+    /// <param name="lnb">設定の LNB (<c>15v</c> なら衛星を選局するときに給電する。空か null なら給電しない。<c>11v</c> などは衛星の選局で断る)</param>
+    public It930xTuner(string port, int receiver, string? lnb = null)
+        : this($"{It930x.Model} {port} #{receiver}", receiver, () => It930xDevice.Acquire(port), () => It930xDevice.CloseIfIdle(port), lnb)
     {
     }
 
-    internal It930xTuner(string name, int receiver, Func<It930xDevice> acquire, Action? closeIdle = null)
+    internal It930xTuner(string name, int receiver, Func<It930xDevice> acquire, Action? closeIdle = null, string? lnb = null)
     {
         _name = name;
         _receiver = receiver;
         _acquire = acquire;
         _closeIdle = closeIdle;
+        _lnb = string.IsNullOrEmpty(lnb) ? null : lnb;
     }
 
     public Stream Output => _output?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
@@ -408,9 +466,30 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>周波数 (Hz) を kHz に丸める (チューナーに渡すのは中心周波数の kHz。仕様書 5.1)</summary>
     internal static uint Khz(uint hertz) => (uint)((hertz + 500L) / 1000);
 
+    /// <summary>衛星で受けているとき、TMCC から読んだ相対 TS 0〜7 の TSID (<c>--tune</c> が出す)。読めなければ null</summary>
+    public ushort[]? SatelliteStreams()
+    {
+        lock (_gate)
+        {
+            try
+            {
+                return _output is null ? null : _frontend?.SatelliteStreams();
+            }
+            catch (IOException error)
+            {
+                _device?.Fail(error);
+                return null;
+            }
+        }
+    }
+
     public void Tune(ChannelTable.Tuning tuning)
     {
-        if (tuning.Satellite) throw new IOException($"{_name} は衛星をまだ受けられません (いまは地上波だけ。#1578)");
+        // 給電は 15 V だけ (仕様書 9)。11 V は機材を開く前に断る
+        if (tuning.Satellite && _lnb is not null && _lnb != Lnb15v)
+        {
+            throw new IOException($"{_name} の LNB の給電は 15V だけです (設定は {_lnb})");
+        }
         lock (_gate)
         {
             StopOutput();
@@ -420,7 +499,20 @@ public sealed class It930xTuner : ITuneDevice
             {
                 _device ??= _acquire();
                 _frontend = _device.Frontend(_receiver);
-                if (!_frontend.TuneIsdbt(Khz(tuning.Frequency))) throw new IOException(ITuneDevice.SyncFailed);
+                bool locked;
+                if (tuning.Satellite)
+                {
+                    // 給電を入れてから選局する (順は仕様書に無い。LNB が出力を出すまでの待ちも仕様書に無く、ロックの待ち (3 秒) に含める)
+                    _device.Lnb(_receiver, _lnb == Lnb15v);
+                    // 衛星は選局表の周波数が IF の kHz (仕様書 6.1)
+                    locked = _frontend.TuneIsdbs(tuning.Frequency, CxdStream.From(tuning.StreamId));
+                }
+                else
+                {
+                    _device.Lnb(_receiver, false);
+                    locked = _frontend.TuneIsdbt(Khz(tuning.Frequency));
+                }
+                if (!locked) throw new IOException(ITuneDevice.SyncFailed);
                 var output = new It930xTsOutput();
                 _device.Attach(_receiver, output);
                 _output = output;
