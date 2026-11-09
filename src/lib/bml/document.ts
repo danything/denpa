@@ -249,41 +249,51 @@ export class BmlDocument {
   }
 }
 
-/**
- * 末尾の空白 (` \t\n\r`) を `by` に替える。無ければそのまま。`/[ \t\n\r]+$/` は空白の後ろに字が続くと
- * 2 乗かかるので、後ろから数える
- */
-function replaceTail(text: string, by: string): string {
-  let end = text.length;
-  while (end > 0 && " \t\n\r".includes(text[end - 1]!)) end--;
-  return end === text.length ? text : text.slice(0, end) + by;
+/** 制御符号 (空白・改行・タブ) か */
+function isSpace(c: string | undefined): boolean {
+  return c === " " || c === "\t" || c === "\n" || c === "\r";
 }
 
-/** 文字のあいだの空白をどう扱うか (STD-B24 第二分冊 付属 2 5.3.2) */
+/** 2 バイト文字か。U+0100 から上を 2 バイト文字とみなす */
+function isWide(c: string | undefined): boolean {
+  return c !== undefined && c.charCodeAt(0) >= 0x100;
+}
+
+/**
+ * 文字の中の制御符号を STD-B24 第二編 付属 2 5.3.2 (表 5-11・表 5-12) のとおりに詰める。
+ * - 制御符号だけの文字列は文字にしない。span と span のあいだの空白 1 つもここで消える
+ *   (同 5.3.4 も、ノードのあいだに空白と改行だけがあるとき、それを持つノードを作らないと書いている)
+ * - 開始タグの直後と終了タグの直前の並びは消す
+ * - 2 バイト文字どうしのあいだの並びは消す。それ以外の字のあいだの並びは 0x20 1 つにする
+ * - p の中では、span・a の終了タグの直後と、span・a・br の開始タグの直前の並びを 0x20 1 つにする
+ *   (br の終了タグの直後は上の「開始タグの直後」と同じく消す)
+ *
+ * 前から 1 回なめて組み立てる。正規表現で末尾の空白を探すと、空白の後ろに字が続くとき 2 乗かかる
+ */
 function collapse(text: string, parent: XmlElement, index: number): string {
+  let start = 0;
+  while (start < text.length && isSpace(text[start])) start++;
+  if (start === text.length) return "";
+  let end = text.length;
+  while (isSpace(text[end - 1])) end--;
   const name = (node: XmlNode | undefined): string =>
     node?.kind === "element" ? node.name : "";
   const prev = name(parent.children[index - 1]);
   const next = name(parent.children[index + 1]);
   const inline = (tag: string): boolean => tag === "span" || tag === "a";
-  const between = /([Ā-￿])[ \t\n\r]+(?=[Ā-￿])/g;
-  let out = text;
-  if (parent.name === "p" && inline(prev)) {
-    // span・a の後ろは空白 1 つに詰める
-    out = out.replace(/^[ \t\n\r]+/, " ");
-    if (inline(next) || next === "br")
-      out = replaceTail(out, " ").replace(between, "$1");
-  } else if (parent.name === "p" && (inline(next) || next === "br")) {
-    out = replaceTail(out, " ")
-      .replace(/^[ \t\n\r]+/, "")
-      .replace(between, "$1");
-  } else {
-    // 先頭と末尾の空白、2 バイト文字どうしのあいだの空白は消す
-    out = replaceTail(out.replace(/^[ \t\n\r]+/, ""), "").replace(
-      between,
-      "$1",
-    );
+  const inP = parent.name === "p";
+  const parts: string[] = [start > 0 && inP && inline(prev) ? " " : ""];
+  let from = start;
+  for (let i = start; i < end; i++) {
+    if (!isSpace(text[i])) continue;
+    parts.push(text.slice(from, i));
+    const before = text[i - 1];
+    while (isSpace(text[i])) i++;
+    if (!(isWide(before) && isWide(text[i]))) parts.push(" ");
+    from = i;
   }
-  // 空白だけのものは文字にしない
-  return /^[ \t\n\r]$/.test(out) ? "" : out;
+  parts.push(text.slice(from, end));
+  if (end < text.length && inP && (inline(next) || next === "br"))
+    parts.push(" ");
+  return parts.join("");
 }
