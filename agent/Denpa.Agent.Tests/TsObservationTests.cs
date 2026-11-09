@@ -191,8 +191,11 @@ public class TsObservationTests
     }
 
     [Test]
-    public async Task ECM_と_EMM_の_PID_に来たセクションの_table_id_と長さを数え_CRC_の無い形式も数える()
+    public async Task ECM_と_EMM_の_PID_に来たセクションの_table_id_と長さを数え_CRC_の無い形式と合わないものも数える()
     {
+        // section_syntax_indicator は 1 なのに、末尾が CRC でないセクション (CRC を持つ形かは分かっていない)
+        var garbled = Psi(0x86, 0, new byte[20]);
+        garbled[^1] ^= 0xFF;
         var lines = Lines(new Ts()
             .Pat(0x0004, (0x0101, PmtPid))
             .Pmt(PmtPid, 0x0101, Ca(OtherSystem, EcmPid), [])
@@ -201,10 +204,11 @@ public class TsObservationTests
             .Section(EcmPid, Psi(0x82, 0, new byte[100]))
             .Section(EmmPid, Plain(0x84, 40))
             .Section(EmmPid, Plain(0x85, 200))
+            .Section(EmmPid, garbled)
             .Scrambled(EmmPid));
 
-        await Assert.That(lines).Contains("ECM・EMM 0x0020  table_id 0x84 × 1 table_id 0x85 × 1 (43〜203 バイト)  スクランブルされたパケット 1");
-        await Assert.That(lines).Contains("ECM・EMM 0x0901  table_id 0x82 × 2 (112 バイト)  スクランブルされたパケット 0");
+        await Assert.That(lines).Contains("ECM・EMM 0x0020  table_id 0x84 × 1 table_id 0x85 × 1 table_id 0x86 × 1 (32〜203 バイト)  CRC 合う 0・合わない 1  スクランブルされたパケット 1");
+        await Assert.That(lines).Contains("ECM・EMM 0x0901  table_id 0x82 × 2 (112 バイト)  CRC 合う 2・合わない 0  スクランブルされたパケット 0");
     }
 
     [Test]

@@ -704,7 +704,7 @@ It930xProbe (--it930x-probe。ブリッジだけを試す)
 - **SKY の TS はスクランブルされたまま流します。** スカパー！プレミアムは B-CAS ではない専用のカードで、まだ扱っていません。`TunerPool` の読み出しは SKY のときデスクランブラに通さず、
   B-CAS のカードに ECM も EMM も渡しません。`--tune` も `--decode` を付けたまま復号しません。J.83B を選局できるのは `it930x:` の受信機だけで、ほかの機材に SKY が割り振られたら選局せずに断ります
 - **`--tune` と `--decode-file` は、カード無しで分かることも出します** (`TsObservation`。[tuners.md](tuners.md#スカパープレミアムでカード無しで分かること))。
-  PMT と CAT の CA 記述子の CA_system_id と ECM・EMM の PID、ECM・EMM の PID に来たセクションの table_id ごとの数と長さ、EIT と CDT のセクションの数とスクランブルされたパケットの数、
+  PMT と CAT の CA 記述子の CA_system_id と ECM・EMM の PID、ECM・EMM の PID に来たセクションの table_id ごとの数と長さと CRC が合うか (CRC で捨てずに数える)、EIT と CDT のセクションの数とスクランブルされたパケットの数、
   network_id・transport_stream_id・局の数です。スクランブルされていない PSI/SI だけを読み、カードには何も渡しません。
   `--decode-file <in.ts>` (書き出す先を省く) は `Descrambler` を作らず、カードも開かずに数えるだけです。常駐の選局 (`TunerPool`) では数えません
 - **5 つの受信機の TS は EP 0x84 の 1 本に入ります。** J.83B の TS は約 40 Mbps になりえて (256QAM と見た推定)、5 つとも J.83B なら約 200 Mbps です。

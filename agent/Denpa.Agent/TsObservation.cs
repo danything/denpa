@@ -145,14 +145,17 @@ public sealed class TsObservation
     private void Complete(int pid, byte[] section)
     {
         var syntax = (section[1] & 0x80) != 0;
-        // CRC を持つ形式は CRC で確かめる。化けたセクションで嘘の CA_system_id を出さない
-        if (syntax && (section.Length < 12 || Descrambler.Crc32(section) != 0)) return;
         if (_shapes.TryGetValue(pid, out var shape))
         {
-            // ECM・EMM は形を数えるだけ。CRC を持たない形式 (section_syntax_indicator が 0) も数える
-            shape.Add(section);
+            /*
+             * ECM・EMM は形を数えるだけ。**CRC で捨てずに全部数える。** スカパー！プレミアムの ECM・EMM が
+             * 末尾に CRC を持つ形かは分かっていないので、section_syntax_indicator が 1 のものは CRC が合ったかを別に数える
+             */
+            shape.Add(section, syntax ? Descrambler.Crc32(section) == 0 : null);
             return;
         }
+        // CRC を持つ形式は CRC で確かめる。化けたセクションで嘘の CA_system_id を出さない
+        if (syntax && (section.Length < 12 || Descrambler.Crc32(section) != 0)) return;
         // ここから先の PSI/SI はどれも CRC を持つ形式
         if (!syntax) return;
         var table = section[0];
@@ -239,25 +242,33 @@ public sealed class TsObservation
         }
     }
 
-    /// <summary>ECM・EMM の PID に来たセクションの形。table_id ごとの数と、長さの最小・最大</summary>
+    /// <summary>
+    /// ECM・EMM の PID に来たセクションの形。table_id ごとの数と、長さの最小・最大、
+    /// section_syntax_indicator が 1 のもののうち末尾の CRC が合った数と合わなかった数
+    /// </summary>
     private sealed class Shape
     {
         private readonly SortedDictionary<int, long> _tables = [];
         private int _shortest = int.MaxValue, _longest;
+        private long _crcOk, _crcBad;
         public long Scrambled;
 
-        public void Add(byte[] section)
+        /// <param name="crc">CRC が合ったか。section_syntax_indicator が 0 (CRC を持たない形) なら null</param>
+        public void Add(byte[] section, bool? crc)
         {
             _tables[section[0]] = _tables.GetValueOrDefault(section[0]) + 1;
             _shortest = Math.Min(_shortest, section.Length);
             _longest = Math.Max(_longest, section.Length);
+            if (crc == true) _crcOk++;
+            else if (crc == false) _crcBad++;
         }
 
         public override string ToString()
         {
             var tables = _tables.Count == 0 ? "セクションが来ていません"
                 : string.Join(" ", _tables.Select(pair => $"table_id 0x{pair.Key:X2} × {pair.Value}"))
-                  + (_shortest == _longest ? $" ({_shortest} バイト)" : $" ({_shortest}〜{_longest} バイト)");
+                  + (_shortest == _longest ? $" ({_shortest} バイト)" : $" ({_shortest}〜{_longest} バイト)")
+                  + $"  CRC 合う {_crcOk}・合わない {_crcBad}";
             return $"{tables}  スクランブルされたパケット {Scrambled}";
         }
     }

@@ -297,7 +297,7 @@ PX-MLT5U (USB `0511:084e`)・PX-MLT5PE (`0511:024e`)・e-Better DTV02A-5TS-P (`0
 - PMT (局ごと) と CAT の CA 記述子にある CA_system_id と、ECM・EMM の PID を出します。B-CAS (`0x0005`) 以外の値には「B-CAS 以外」と付けます
 - 番組表 (EIT) とロゴ (CDT) のセクションが来ているか、スクランブルされているかを出します。スクランブルされているかは、TS パケットの transport_scrambling_control で見ます。
   番組表は、ほかの TS の局のぶん (EIT の other) が来ているかも出します
-- エージェントの出力には、network_id・transport_stream_id・局の数と、ECM・EMM の PID に来たセクションの table_id ごとの数と長さも出します (EMM を扱えるかを決めるため)
+- エージェントの出力には、network_id・transport_stream_id・局の数と、ECM・EMM の PID に来たセクションの table_id ごとの数と長さ、末尾の CRC が合うかも出します (EMM を扱えるかを決めるため。CRC で捨てずに全部数える)
 
 出す場所は 3 つです。
 
