@@ -48,7 +48,7 @@ public sealed record TunerSignal(bool Locked, double? Cn, string Unit, bool AtTu
 
     /// <summary>
     /// **TC90522 系の復調の C/N のレジスタの値を dB にする。** PT1・PT2・PT3 (同じ系統の復調) の C/N の表示で使われてきた近似式
-    /// (recpt1 の checksignal などと同じ)。値が大きいほど雑音が多い。
+    /// (recpt1 の <c>recpt1core.c</c> などと同じ。docs/licenses.md)。値が大きいほど雑音が多い。
     ///
     /// <list type="bullet">
     /// <item>地上波 (24 ビット): P = 10·log10(5505024 / 値)、C/N = 0.000024P⁴ − 0.0016P³ + 0.0398P² + 0.5491P + 3.0965</item>

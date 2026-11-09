@@ -123,11 +123,11 @@ public class CardStatusTests
     }
 
     /// <summary>
-    /// **INT が通らないときはリーダーを開かない。** 覗きが使っている間は繋ぎ直しがリーダーを開けず、
+    /// **INT が通らないときはリーダーを開かない。** 予備のリーダーを覗いている間は繋ぎ直しがリーダーを開けず、
     /// 画面を開くたびに締め出してカードが二度と読めなくなった (実機)
     /// </summary>
     [Test]
-    public async Task INTが通らないときはリーダーを開かない()
+    public async Task INT_が通らないときはリーダーを開かない()
     {
         var opened = 0;
         CardLinkCandidate[] found = [new("Gemplus (usb 4-11)", () =>
@@ -169,7 +169,7 @@ public class CardStatusTests
     }
 
     [Test]
-    public async Task 配り役から貰っているときはその相手と番号を返す()
+    public async Task 配る側から貰っているときはその相手と番号を返す()
     {
         var report = Card.Report(Card.Remote("http://card:25253", () => Using), ["PT3-T1"]);
         await Assert.That(report["source"]!.GetValue<string>()).IsEqualTo("remote");

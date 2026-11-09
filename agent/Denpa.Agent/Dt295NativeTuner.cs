@@ -102,14 +102,14 @@ internal sealed class Dt295NativeStream
     /// CS18 (37 Mbps) の 40 秒で、32 個だと連続性の飛びが 8142 個、64 個だと 1593 個、128 個だと 0 個。BS15 (24 Mbps) の 90 秒、
     /// 地上波 (T28) のライブ 40 秒、全 108 局の 15〜20 秒ずつでも 0 個だった。
     /// いまはカードの送受信を機材のプログラムに行わせる (<see cref="Dt295NativeLink.CardProgram"/>) ので、1 ブロックの制御転送は数回になり、
-    /// TS の要求が譲る時間は短い。この形での測定はまだ無い
+    /// TS の要求が譲る時間は短い。この形では、実機の BS15 と地上波 (T22) で連続性の飛びが 0 個だった (#2413)。CS18 ではまだ測っていない
     /// </para>
     /// </summary>
     internal const uint CardKickPackets = 128;
 
     private const int PumpTimeoutMs = 10_000;
 
-    private readonly Pipe _pipe = Px4Stream.NewBuffer();
+    private readonly Pipe _pipe = TsBuffer.New();
     private readonly Dt295NativeDevice _device;
     private readonly IUsbInStream _in;
     private readonly Action _stalled;
@@ -371,8 +371,9 @@ public sealed class Dt295NativeTuner : ITuneDevice
 
     internal Dt295NativeDevice? Device => _device;
 
-    public void Tune(ChannelTable.Tuning tuning, uint streamId)
+    public void Tune(ChannelTable.Tuning tuning)
     {
+        var streamId = tuning.StreamId;
         lock (_gate)
         {
             Stop(release: false);

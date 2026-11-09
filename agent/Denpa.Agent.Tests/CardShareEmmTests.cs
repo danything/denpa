@@ -5,10 +5,10 @@ using System.Text;
 namespace Denpa.Agent.Tests;
 
 /*
- * 配り役との間で契約の更新 (EMM) を運ぶ (CardShare.cs の RemoteCard と、CardShareServer.cs の /denpa/card/emm)。
+ * 配る側との間で契約の更新 (EMM) を運ぶ (CardShare.cs の RemoteCard と、CardShareServer.cs の /denpa/card/emm)。
  *
- * 配り役の側は、本文の長さの確かめ (400) とカードへの受け渡しを、HTTP を通さずに見る。
- * 相手のアドレスと往復時間で断る (403) のは、パスを見る前の共通の確かめ (CardLanTests)。
+ * 配る側の側は、本文の長さの確認 (400) とカードへの受け渡しを、HTTP を通さずに見る。
+ * 相手のアドレスと往復時間で断る (403) のは、パスを見る前の共通の確認 (CardLanTests)。
  * カードが無い・読めないときは投げて、ほかの API と同じく 503 になる (CardShareServer.Reply)。
  * 受け取る側 (RemoteCard) は、ループバックで答える小さな HTTP の相手に繋ぐ。
  */
@@ -34,7 +34,7 @@ public class CardShareEmmTests
     }
 
     [Test]
-    public async Task 配り役は空と短すぎる本文と長すぎる本文を断る()
+    public async Task 配る側は空と短すぎる本文と長すぎる本文を断る()
     {
         await Assert.That(Emm.Problem([])).IsEqualTo("EMM が入っていません");
         await Assert.That(Emm.Problem(new byte[12])).IsEqualTo("EMM が短すぎます (13 バイト以上)");
@@ -45,14 +45,14 @@ public class CardShareEmmTests
     }
 
     [Test]
-    public async Task 配り役の本文の上限は255バイト()
+    public async Task 配る側の本文の上限は_255_バイト()
     {
         await Assert.That(await CardWire.ReadUpTo(new MemoryStream(new byte[255]), Emm.MaxPayload)).IsNotNull();
         await Assert.That(await CardWire.ReadUpTo(new MemoryStream(new byte[256]), Emm.MaxPayload)).IsNull();
     }
 
     [Test]
-    public async Task 配り役は受けたEMMを手元のカードに渡し_受け入れたら自分のdenpaにも知らせる()
+    public async Task 配る側は受けた_EMM_を手元のカードに渡し_受け入れたら自分の_denpa_にも知らせる()
     {
         var notified = 0;
         var accepting = new Card(() => 0x2100);
@@ -70,7 +70,7 @@ public class CardShareEmmTests
     }
 
     [Test]
-    public async Task 配り役に渡して返り値を受け取る()
+    public async Task 配る側に渡して返り値を受け取る()
     {
         using var share = new Share((_, _) => (200, CardWire.Pack(0x2100)));
         var remote = new RemoteCard(share.Url, 1);
@@ -81,7 +81,7 @@ public class CardShareEmmTests
     }
 
     [Test]
-    public async Task 配り役が古ければ1回だけ記録に出し_それからは送らない()
+    public async Task 配る側が古ければ_1_回だけ記録に出し_それからは送らない()
     {
         using var share = new Share((_, _) => (404, Encoding.UTF8.GetBytes("""{"error":"not found"}""")));
         var remote = new RemoteCard(share.Url, 1);
@@ -95,7 +95,7 @@ public class CardShareEmmTests
     }
 
     [Test]
-    public async Task 配り役のカードが読めなければ理由ごと投げる()
+    public async Task 配る側のカードが読めなければ理由ごと投げる()
     {
         using var share = new Share((_, _) => (503, Encoding.UTF8.GetBytes("""{"error":"カードリーダーが見つかりません"}""")));
         var remote = new RemoteCard(share.Url, 1);
@@ -104,7 +104,7 @@ public class CardShareEmmTests
         await Assert.That(error.Message).Contains("カードリーダーが見つかりません");
     }
 
-    /// <summary>ループバックで 1 回ずつ答える HTTP の相手 (配り役の代わり)</summary>
+    /// <summary>ループバックで 1 回ずつ答える HTTP の相手 (配る側の代わり)</summary>
     private sealed class Share : IDisposable
     {
         private readonly TcpListener _listener = new(IPAddress.Loopback, 0);

@@ -6,18 +6,18 @@ namespace Denpa.Agent;
 
 /*
  * 富士通 MB86H47A (CECH-ZD1 J の USB ブリッジ)。**機材の事実を書き出した仕様書だけから書いた** (参考の実装のソースは見ていない)。
- * 節の番号 (「4.2」など) はその仕様書のもの。仕様書が「こちらで決めてよい」とした所 (コア 1 への指示の形など) は
- * Mb86h47Programs.cs に書いた形で決めた。
+ * 節の番号 (「4.2」など) はその仕様書のもの。仕様書が「こちらで決めてよい」とした所 (コア 1 への指示の形式など) は
+ * Mb86h47Programs.cs に書いた形式で決めた。
  *
  * ホストはベンダー要求 0xBC (メモリ要求) でブリッジのレジスタを読み書きする。メモリ要求は全部このロックで 1 つずつ通す
  * (カードの UART もメモリ要求なので、チューナーとカードが別のスレッドから呼んでも混ざらない)。
  * TS の EP 0x81 の読みはこの外 (IUsbInStream) で並べる。
  *
- * **I2C はコア 1 に任せ、指示は EP 0x02 の bulk の塊で送る (仕様書 5.4・5.5) 形だけ。** 実機で 3 つの形を比べた結果
+ * **I2C はコア 1 に任せ、指示は EP 0x02 の bulk の塊で送る (仕様書 5.4・5.5) 方式だけ。** 実機で 3 つの方式を比べた結果
  * (開く・選局からロック・メモリ要求の回数。ホストから直 (5.3) / コア 1 のメモリ要求のリング / コア 1 の bulk の命令):
  * 開く 385 / 167 / 182ms、ロック 3439 / 2730 / 2570ms、メモリ要求 24664 / 2360 / 1083 回。bulk の命令がいちばん速く、
  * 要求もいちばん少ないので、ほかの 2 つはコードごと外した。コア 1 が起きない・bulk に答えないときは開くのを止める
- * (仕様書 14 章の「コア 1 が動かない → 開けない」。実機では毎回起きていて、代わりの形を残す理由が無い)。
+ * (仕様書 14 章の「コア 1 が動かない → 開けない」。実機では毎回起きていて、代わりの方式を残す理由が無い)。
  */
 
 /// <summary>I2C の相手と話すインターフェース。DiB8096 はこれと待ちと覚えた値だけを受け取る</summary>
@@ -93,6 +93,9 @@ public sealed class Mb86h47 : II2c
     private readonly List<uint> _commands = [];
     private uint _chunkSequence;
     private int _chunkSlot;
+
+    /// <summary>bulk の塊の答えが時間内に来なかった。置き場の数がコア 1 とずれたかもしれないので、ボードは開き直す (<see cref="Zd1jBoard.Faulted"/>)</summary>
+    public bool Dead { get; private set; }
 
     // 流し始めの準備 (9.2)。待ちの間に 1 つずつ回す
     private readonly Queue<Action> _prepare = new();
@@ -287,7 +290,7 @@ public sealed class Mb86h47 : II2c
     }
 
     private static IOException Unknown() =>
-        new($"{Zd1j.Model} のブリッジの処理が知らない中身です (仕様書 4.2 の 5 語が電源投入時の値でもこちらの書いた値でもありません)。抜いて挿し直してください");
+        new($"{Zd1j.Model} のブリッジの処理が想定外の中身です (仕様書 4.2 の 5 語が電源投入時の値でもこちらの書いた値でもありません)。抜いて挿し直してください");
 
     /// <summary>4.3 クロックと SDRAM</summary>
     private void Clocks()
@@ -371,7 +374,7 @@ public sealed class Mb86h47 : II2c
 
     private static uint Box(int offset) => Core1 + Mb86h47Programs.Core1Box + (uint)offset;
 
-    /// <summary>コア 1 を置いて走らせ、生きている印が進むのを見る。進まなければ開かない (仕様書 14 章)</summary>
+    /// <summary>コア 1 を置いて走らせ、生存カウンタが進むのを見る。進まなければ開かない (仕様書 14 章)</summary>
     private void StartCore1()
     {
         LoadCore(Core1, Core1Program.Value);
@@ -431,7 +434,7 @@ public sealed class Mb86h47 : II2c
         lock (_gate)
         {
             I2cTransfers++;
-            if (read.Length > 32) throw new ArgumentOutOfRangeException(nameof(read));
+            if (read.Length > Mb86h47Programs.BulkReplyData) throw new ArgumentOutOfRangeException(nameof(read));
             QueueTransfer(address, write, read.Length);
             SendChunk().AsSpan(0, read.Length).CopyTo(read);
         }
@@ -463,7 +466,7 @@ public sealed class Mb86h47 : II2c
         2 => "I2C のアドレスに ACK がありません",
         3 => "I2C のデータに ACK がありません",
         4 => "I2C が固まりました",
-        _ => $"I2C で知らない誤り {code} です",
+        _ => $"I2C で不明なエラー {code} です",
     });
 
     /// <summary>バイトをビッグエンディアンの語に詰める</summary>
@@ -516,10 +519,15 @@ public sealed class Mb86h47 : II2c
         while (true)
         {
             var left = (int)((deadline - Stopwatch.GetTimestamp()) * 1000 / Stopwatch.Frequency);
-            if (left <= 0) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が bulk の塊に答えません");
+            if (left <= 0)
+            {
+                // 答えが来ないと、ホストが数える置き場 (_chunkSlot) とコア 1 の置き場がずれたかもしれない。開き直すまで使わない
+                Dead = true;
+                throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が bulk の塊に答えません");
+            }
             var got = _usb.InterruptRead(CommandIn, reply, left);
             if (got < 8) continue;
-            // 答えの語の並びは、印 (0xA5) が先頭か終わりかで見分ける (FIFO のバイトの並びは仕様書に無い)
+            // 答えの語の並びは、マーカー (0xA5) が先頭か終わりかで見分ける (FIFO のバイトの並びは仕様書に無い)
             if (reply[0] != Mb86h47Programs.BulkReplyMark && reply[3] == Mb86h47Programs.BulkReplyMark)
             {
                 for (var i = 0; i + 4 <= got; i += 4) reply.AsSpan(i, 4).Reverse();
@@ -534,7 +542,7 @@ public sealed class Mb86h47 : II2c
             if (error != 0)
             {
                 throw error == 6
-                    ? new IOException($"{Zd1j.Model} のブリッジのコア 1 が知らない命令を受けました (命令 {info >> 16})")
+                    ? new IOException($"{Zd1j.Model} のブリッジのコア 1 が未対応の命令を受けました (命令 {info >> 16})")
                     : I2cError(error);
             }
             var length = (int)Math.Min(info & 0xFFFF, (uint)Mb86h47Programs.BulkReplyData);

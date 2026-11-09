@@ -506,7 +506,7 @@ describe("denpa と組む", () => {
     expect(await error(res)).toBe("証明書が名乗りと違います");
   });
 
-  test("合言葉から作った proof なら組めて、エージェントも合言葉を知っていると返す", async () => {
+  test("合言葉から作った proof なら組めて、エージェントも合言葉から作った proof を返す", async () => {
     const newcomer = identity("newcomer");
     const res = await pair(main, newcomer);
     expect(res.status).toBe(200);
@@ -637,7 +637,7 @@ describe("チューナー", () => {
     const reader = (res.body as ReadableStream<Uint8Array>).getReader();
     const { value } = await reader.read();
     const chunk = value as Uint8Array;
-    // 188 バイト区切りの頭は必ず 0x47。ここが崩れていたら誰も読めない
+    // 188 バイト区切りの先頭は必ず 0x47。ここが崩れていたら誰も読めない
     expect(chunk[0]).toBe(SYNC);
     expect(chunk.byteLength % 188).toBe(0);
     aborter.abort();
@@ -855,7 +855,7 @@ describe("チャンネル", () => {
 type LogLines = { lines: { at: number; text: string }[] };
 
 describe("診断", () => {
-  test("直近のログを古い順に返す。頭の [agent] は付けない", async () => {
+  test("直近のログを古い順に返す。先頭の [agent] は付けない", async () => {
     const res = await get("/denpa/logs");
     expect(res.status).toBe(200);
     const { lines } = (await res.json()) as LogLines;
@@ -1017,7 +1017,7 @@ describe("カードとスクランブルの復号", () => {
   test("鍵を配る相手から貰うときは、その相手を返す", async () => {
     /*
      * CARD_URL を立てたもう 1 つを起こし、こちら (カードの無いエージェント) の
-     * 鍵を配るポートを配り役にする。貰えなくても**形式は同じ**で、手元のリーダーは並べない
+     * 鍵を配るポートを配る側にする。貰えなくても**形式は同じ**で、手元のリーダーは並べない
      */
     const { card, stop } = await spawnAgent(PORT + 2, { CARD_URL: SHARE_BASE });
     try {
@@ -1036,7 +1036,7 @@ describe("カードとスクランブルの復号", () => {
 
   test("鍵を配る範囲の外には 403 で断り、受け取る側は理由を出す", async () => {
     /*
-     * ループバックを範囲から外した配り役を起こす。ここから繋ぐと範囲の外になる。
+     * ループバックを範囲から外した配る側を起こす。ここから繋ぐと範囲の外になる。
      * それを CARD_URL にした受け取り役の画面には、断られた理由が出る
      */
     const sharePort = PORT + 4;
@@ -1439,10 +1439,10 @@ describe("止まれと言われたとき", () => {
 
   /*
    * **止まる途中に来た選局も受ける** (Program.cs の Drain)。断っていた頃は、入れ替えの最中に始まる
-   * 録画の頭が欠けた。Recreate なので新しい Pod はこちらが終わるまで立たず、断っても誰も録れない。
+   * 録画の先頭が欠けた。Recreate なので新しい Pod はこちらが終わるまで立たず、断っても誰も録れない。
    * ライブは受けるが、それを理由には待たない
    */
-  test("止まる途中に来た録画の選局は受けて、録り終えるまで居座る", async () => {
+  test("止まる途中に来た録画の選局は受けて、録り終えるまで止まらない", async () => {
     const { other, stop } = await spawnOther();
     try {
       const first = await openOn(
@@ -1481,7 +1481,7 @@ describe("止まれと言われたとき", () => {
 
   /*
    * **録画が無ければすぐ落ちる。** 通知を開きっぱなしにされると、Kestrel が 30 秒 (既定の ShutdownTimeout)
-   * 待ち受けだけ閉じて待っていた。そのぶん入れ替えの隙間が伸び、実機では録画の頭が約 35 秒欠けた
+   * 待ち受けだけ閉じて待っていた。そのぶん入れ替えの隙間が伸び、実機では録画の先頭が約 35 秒欠けた
    */
   test("録画が無ければ、通知や番組表の選局が開いていてもすぐ落ちる", async () => {
     const { other, stop } = await spawnOther();

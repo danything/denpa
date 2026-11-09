@@ -50,7 +50,7 @@ public class AsicenTests
     }
 
     [Test]
-    public async Task 同じ内蔵ハブの_1_と_2_を1つの筐体にまとめる_受信機は_0S_1T_2S_3T()
+    public async Task 同じ内蔵ハブの_1_と_2_を_1_つの筐体にまとめる_受信機は_0S_1T_2S_3T()
     {
         var warnings = new List<string>();
         var enclosures = AsicenUserland.Group(
@@ -196,7 +196,7 @@ public class AsicenTunerTests
         using var asicend = new Px4TunerTests.FakePx4d(Px4Wire.Asicen, "1-2");
         using var tuner = Open(asicend, 1, null);
 
-        tuner.Tune(T27, ChannelTable.NoStreamId);
+        tuner.Tune(T27);
         await Assert.That(Px4TunerTests.ReadMark(tuner.Output)).IsEqualTo(Px4TunerTests.Mark(T27.Frequency / 1000));
         await Assert.That(asicend.Count(Px4Control.Acquire)).IsEqualTo(1);
     }
@@ -208,7 +208,7 @@ public class AsicenTunerTests
         using var asicend = new Px4TunerTests.FakePx4d(Px4Wire.Asicen, "1-2");
         using var tuner = Open(asicend, 1, null);
 
-        var error = Assert.Throws<IOException>(() => tuner.Tune(Bs15, ChannelTable.NoStreamId));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(Bs15));
         await Assert.That(error!.Message).Contains("GR 用");
         await Assert.That(asicend.Count(Px4Control.Hello)).IsEqualTo(0);
     }
@@ -220,7 +220,7 @@ public class AsicenTunerTests
         using var asicend = new Px4TunerTests.FakePx4d(Px4Wire.Asicen, "1-2");
         var tuner = Open(asicend, 0, "15v");
 
-        tuner.Tune(Bs15, ChannelTable.NoStreamId);
+        tuner.Tune(Bs15);
         await Assert.That(asicend.Lnbs.ToArray()).IsEquivalentTo(new byte[] { 0 });
         await Assert.That(Px4Userland.Notice("asicen:1-2:0")).Contains("15V");
         tuner.Dispose();
@@ -262,7 +262,7 @@ public class AsicenMockTests
             {
                 foreach (var channel in new[] { "T27", "T21" })
                 {
-                    tuner.Tune(ChannelTable.Parse(channel)!, ChannelTable.NoStreamId);
+                    tuner.Tune(ChannelTable.Parse(channel)!);
                     var packet = new byte[188];
                     var read = Task.Run(() => tuner.Output.ReadExactly(packet), cancel);
                     await read.WaitAsync(TimeSpan.FromSeconds(10), cancel);

@@ -84,7 +84,7 @@ public class Px4Tests
 
     /// <summary>同じ鍵が 2 度ある行は最初の値を採る (<see cref="Px4Receiver.Fields"/>)。投げない</summary>
     [Test]
-    public async Task 同じ鍵が2度あれば最初の値()
+    public async Task 同じ鍵が_2_度あれば最初の値()
     {
         var receivers = Px4Receiver.ParseList("receiver=3 device=1 system=ISDB-T system=ISDB-S", _ => { });
         await Assert.That(receivers.Count).IsEqualTo(1);
@@ -284,7 +284,7 @@ public class Px4Tests
         await Assert.That(found[0].Receivers.Select(r => (r.Index, r.Lnb15v))).IsEquivalentTo(
             [(0, (bool?)null), (2, (bool?)null)], CollectionOrdering.Matching);
 
-        // 止めるのは番号が読めないものだけ (受信機 "1"・番号の無い筐体)。バージョンのずれは 1 度だけまとめて言う
+        // 止めるのは番号が読めないものだけ (受信機 "1"・番号の無い筐体)。バージョンのずれは 1 度だけまとめて記録する
         await Assert.That(warned.Count(w => w.Contains("受信機が読めません"))).IsEqualTo(1);
         await Assert.That(warned.Count(w => w.Contains("PX-Q3U4 の番号"))).IsEqualTo(1);
         var skew = warned.Single(w => w.Contains("バージョンがずれている"));

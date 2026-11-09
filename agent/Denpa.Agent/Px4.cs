@@ -54,7 +54,7 @@ public static class Px4Userland
 
         /// <summary>
         /// 筐体の USB の位置 (ポート、分からなければ <c>BUS:ADDRESS</c>)。px4d が使っている間、その USB が一覧で
-        /// <c>open_failed</c> と出ても黙るため (<see cref="ParseJson"/>)
+        /// <c>open_failed</c> と出ても記録に出さないため (<see cref="ParseJson"/>)
         /// </summary>
         public IReadOnlyList<string> Places { get; init; } = [];
     }
@@ -112,9 +112,9 @@ public static class Px4Userland
     /// px4d を起こす前に、ランタイムルートが使えるか確かめる。駄目なら理由 (使えれば null)。
     ///
     /// <para>
-    /// **ソケットのパスの長さ** (どの OS でも)。超えると px4d は INVALID_ARGUMENT とだけ言って起きない。
+    /// **ソケットのパスの長さ** (どの OS でも)。超えると px4d は INVALID_ARGUMENT だけを返して起動しない。
     /// **Windows は持ち主と権限も** (px4-userland の windows_ipc.cpp と同じ決まり。<see cref="AclProblem"/>)。
-    /// 合わなければ px4d が同じく INVALID_ARGUMENT で起きないので、先に理由を言う
+    /// 合わなければ px4d が同じく INVALID_ARGUMENT で起きないので、先に理由を返す
     /// </para>
     /// </summary>
     public static string? RuntimeProblem(string runtimeDir, string id)
@@ -664,7 +664,7 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bo
             _ => null,
         };
         if (kind is { } known) return new Px4Receiver(number, known.Terrestrial, known.Satellite, lnb15v);
-        warn($"受信機 {number} の方式 {system} を知りません (px4-userland が新しい?)。この受信機は使いません");
+        warn($"受信機 {number} の方式 {system} には対応していません (px4-userland が新しい?)。この受信機は使いません");
         return null;
     }
 }
@@ -992,7 +992,7 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
     public void Lost()
     {
         if (!Running) return;
-        Write("筐体が抜けたと言われたので止めます。次の選局で起こし直します");
+        Write("px4d が筐体の抜けを返したので止めます。次の選局で起こし直します");
         Stop();
     }
 
@@ -1072,7 +1072,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// <summary>設定の <c>device</c> (注意書きの鍵。<see cref="Px4Userland.Notice"/>)</summary>
     private readonly string _device;
 
-    /// <summary>筐体が抜けたと言われたときに呼ぶ (px4d を止めて、次の選局で起こし直す。<see cref="Px4Daemon.Lost"/>)</summary>
+    /// <summary>筐体が抜けたと返されたときに呼ぶ (px4d を止めて、次の選局で起こし直す。<see cref="Px4Daemon.Lost"/>)</summary>
     private readonly Action? _lost;
     private readonly Lock _gate = new();
 
@@ -1139,7 +1139,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// </param>
     /// <param name="wire">話す相手。省けば px4d。asicen-userland の機材は <see cref="Px4Wire.Asicen"/> (Asicen.cs)</param>
     /// <param name="device">設定の <c>device</c>。省けば <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c></param>
-    /// <param name="name">記録に出す名前。省けば <c>px4-&lt;番号の末尾4桁&gt; #&lt;受信機&gt;</c></param>
+    /// <param name="name">記録に出す名前。省けば <c>px4-&lt;番号の末尾 4 桁&gt; #&lt;受信機&gt;</c></param>
     /// <param name="lost">筐体が抜けた (DISCONNECTED / USB_IO) と言われたときに呼ぶ。省けば何もしない</param>
     internal Px4Tuner(
         string id, int receiver, string? lnb, string runtimeDir, Func<IReadOnlyList<Px4Receiver>?> prepare,
@@ -1204,7 +1204,7 @@ public sealed class Px4Tuner : ITuneDevice
     /// <c>u64 lease_id, u8 system, u64 frequency_khz, u16 stream_id, u16 slot, u32 bandwidth_hz, u8 lnb_voltage, u32 timeout_ms</c>
     ///
     /// <para>
-    /// 周波数は kHz で言う。選局表は DVB の決まりで地上波が Hz・衛星が kHz
+    /// 周波数は kHz で指定する。選局表は DVB の決まりで地上波が Hz・衛星が kHz
     /// なので、地上波だけ 1000 で割る (473142857 Hz → 473142 kHz。端数は切る)。
     /// 衛星は名前に TSID があれば <c>stream_id</c> で、無ければ (NIT を読む入口と CS) <c>slot</c> 0 で
     /// 中継器の先頭の TS を取る。使わないほうは 0xffff。
@@ -1238,8 +1238,9 @@ public sealed class Px4Tuner : ITuneDevice
     /// 電源の入れ直しからやり直しになる。
     /// </para>
     /// </summary>
-    public void Tune(ChannelTable.Tuning tuning, uint streamId)
+    public void Tune(ChannelTable.Tuning tuning)
     {
+        var streamId = tuning.StreamId;
         lock (_gate)
         {
             var receivers = _prepare();
@@ -1547,7 +1548,7 @@ internal sealed class Px4StreamError(string message, bool keepsLease) : IOExcept
 /// <c>stream.sock</c> に繋いで ATTACH_STREAM (lease と nonce) を送ると、あとは px4d が
 /// TS_DATA の枠を送り続け、止めると STREAM_END が来る (SPEC 6.3 / 6.4)。枠の中身はソケットから
 /// <see cref="Pipe"/> のメモリ (<see cref="PipeWriter.GetMemory"/>) へ直に受け、その読む側を読み出し側 (<see cref="DeviceStream"/>) に載せる。
-/// OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った) ので、溜めの深さは <see cref="Depth"/> で決め打つ。
+/// OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った) ので、溜めの深さは <see cref="TsBuffer.Depth"/> で決め打つ。
 /// </para>
 ///
 /// <para>
@@ -1560,12 +1561,6 @@ internal sealed class Px4Stream
 {
     /// <summary>溜めが空かないまま待つ上限。px4d の溜めが溢れるのと同じくらい</summary>
     public static readonly TimeSpan DefaultStallLimit = TimeSpan.FromSeconds(5);
-
-    /// <summary>
-    /// 溜めの深さ。前の Linux の pipe (<c>F_SETPIPE_SZ</c> で広げた 8MB) と同じで、地上波で 3.5 秒ぶん。
-    /// これを超えたら書く側が待つ
-    /// </summary>
-    internal const int Depth = 8 * 1024 * 1024;
 
     /// <summary>
     /// TS がこれだけ来なければ終わる。px4-ts と同じ 5 秒。**溜めに書けずに待っている間は数えない**
@@ -1582,19 +1577,7 @@ internal sealed class Px4Stream
     private readonly Px4Wire _wire;
     private readonly ManualResetEventSlim _first = new();
 
-    private readonly Pipe _pipe = NewBuffer();
-
-    /// <summary>
-    /// 溜め (<see cref="Depth"/>)。待ちは Inline で起こす (スレッドプールに回さない。pump は専用のスレッドで、
-    /// 読む側も 200ms ごとに自分で起きる)。CECH-ZD1 J と PIX-DT295 の TS も同じ溜めに詰める (Zd1jStream・Dt295NativeStream)
-    /// </summary>
-    internal static Pipe NewBuffer() => new(new PipeOptions(
-        pauseWriterThreshold: Depth,
-        resumeWriterThreshold: Depth * 3 / 4,
-        minimumSegmentSize: 64 * 1024,
-        readerScheduler: PipeScheduler.Inline,
-        writerScheduler: PipeScheduler.Inline,
-        useSynchronizationContext: false));
+    private readonly Pipe _pipe = TsBuffer.New();
 
     private Thread? _pump;
     private volatile bool _stopped;
@@ -1718,7 +1701,7 @@ internal sealed class Px4Stream
                     }
                     End(type == Px4Control.StreamEnd
                         ? $"{_wire.Daemon} が TS を止めました (STREAM_END が短くて理由が読めません、{length} バイト)"
-                        : $"{_wire.Daemon} から知らない枠が来ました (型 0x{type:x4})");
+                        : $"{_wire.Daemon} から想定していない型のフレームが来ました (型 0x{type:x4})");
                     return;
                 }
                 if (flags != 0 || length < TsHeaderSize)
@@ -1771,46 +1754,11 @@ internal sealed class Px4Stream
         }
     }
 
-    /// <summary>
-    /// 書いたぶんを読む側に渡す。**溜めが空かないまま <see cref="_stallLimit"/> 経ったら諦める** (読む側がいない)。
-    /// 止めろと言われたらすぐ降りる (50ms ごとに見る)
-    /// </summary>
-    private bool Flush(PipeWriter writer)
-    {
-        var flushing = writer.FlushAsync();
-        FlushResult result;
-        if (flushing.IsCompleted)
-        {
-            result = flushing.GetAwaiter().GetResult();
-        }
-        else
-        {
-            var waiting = flushing.AsTask();
-            var stalled = Stopwatch.StartNew();
-            while (!waiting.Wait(50))
-            {
-                if (_stopped)
-                {
-                    writer.CancelPendingFlush();
-                    return false;
-                }
-                if (stalled.Elapsed >= _stallLimit)
-                {
-                    writer.CancelPendingFlush();
-                    End($"読む側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました (受信機は取ったまま)");
-                    return false;
-                }
-            }
-            result = waiting.GetAwaiter().GetResult();
-        }
-        if (result.IsCompleted)
-        {
-            // 読み出し側が閉じた (こちらで止めた。理由は End が残さない)
-            End("TS を渡せません (読み出し側が閉じました)");
-            return false;
-        }
-        return !result.IsCanceled;
-    }
+    /// <summary>書いたぶんを読む側に渡す (<see cref="TsBuffer.Flush"/>)。**溜めが空かないまま <see cref="_stallLimit"/> 経ったら諦める** (読む側がいない)</summary>
+    private bool Flush(PipeWriter writer) => TsBuffer.Flush(writer, () => _stopped, _stallLimit,
+        () => End($"読む側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました (受信機は取ったまま)"),
+        // 読み出し側が閉じた (こちらで止めた。理由は End が残さない)
+        () => End("TS を渡せません (読み出し側が閉じました)"));
 
     /// <summary>終わった理由を残す。**こちらで止めたときは残さない** (読む側には普通の終わり)</summary>
     private void End(string reason)
@@ -1835,7 +1783,7 @@ internal sealed class Px4Stream
         _stopped = true;
         var stopped = Stopwatch.StartNew();
         Output.Stop();
-        // pump を今すぐ起こす (Poll の 200ms を待たない)。閉じる向きを言えば Poll が起き、読めば 0 で降りる
+        // pump を今すぐ起こす (Poll の 200ms を待たない)。Shutdown を呼べば Poll が戻り、読めば 0 で降りる
         try
         {
             _socket.Shutdown(SocketShutdown.Both);

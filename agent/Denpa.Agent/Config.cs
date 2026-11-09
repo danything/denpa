@@ -127,7 +127,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     private static string DefaultDir() => OperatingSystem.IsLinux()
         ? "/config"
         : Path.Combine(
-            Environment.GetEnvironmentVariable("DENPA_HOME")
+            Given("DENPA_HOME")
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "denpa"),
             "config");
 
@@ -236,12 +236,12 @@ public sealed class Config(string tunersFile, string channelsFile)
         var found = DeviceProbe.Detect();
         Log.Write(found.Count == 0
             ? $"チューナーが見つかりません ({TunersFile} に書けば、そちらを使います)"
-            : $"{TunersFile} に定義が無いので、挿さっている機材を使います:");
+            : $"{TunersFile} に定義が無いので、挿さっている機材 {found.Count} 台を使います");
         foreach (var tuner in found) Log.Write($"  {tuner.Name} [{string.Join(", ", tuner.Types)}] {tuner.Device}");
         return (found, true);
     }
 
-    /// <summary>並べ替えの順。知らない種別は後ろに送る</summary>
+    /// <summary>並べ替えの順。決まっていない種別は後ろに送る</summary>
     private static int TypeOrder(JsonNode entry) => entry["type"]?.GetValue<string>() switch
     {
         "GR" => 0,

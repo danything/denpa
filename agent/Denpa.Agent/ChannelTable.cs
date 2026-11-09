@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 選局表。**チャンネル名を周波数に直す。** 値は <a href="https://github.com/kazuki0824/recisdb-rs">recisdb-rs</a> の
-/// <c>channels.rs</c> から取った。**地上波は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、
+/// <c>channels.rs</c> と <c>dvbv5_channels_isdbs.conf</c> から取った。**地上波は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、
 /// 同期しないだけ)。docs/agent.md「選局表」
 ///
 /// <para>

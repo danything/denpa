@@ -68,11 +68,18 @@ public static class Dt295
     /// 設定に書いたのと同じ形式で。**開かない** (開くと機材に設定を書く)。
     /// 受けられる種別は地上波・BS・CS (TS を出すのは 1 つずつ)
     /// </summary>
-    public static List<TunerSpec> Detect()
+    public static List<TunerSpec> Detect() =>
+        [.. Ports(Log.Write).Select(port => new TunerSpec($"{Model} {port}", ["GR", "BS", "CS"], false, Device(port)))];
+
+    /// <summary>
+    /// 使えるもの (<see cref="Dt295Model.Supported"/>) が挿さっているポート。**開かない**。未確認の機材は <paramref name="warn"/> に出して並べない。
+    /// Linux はカーネルのドライバが使っているものを並べない。探せなければ (USB の一覧を読めない・ライブラリが無い) 記録に出して空
+    /// </summary>
+    public static List<string> Ports(Action<string>? warn = null)
     {
         try
         {
-            return [.. Ports(Log.Write).Select(port => new TunerSpec($"{Model} {port}", ["GR", "BS", "CS"], false, Device(port)))];
+            return Usable(Found(warn), warn);
         }
         catch (Exception error) when (error is IOException or DllNotFoundException or EntryPointNotFoundException)
         {
@@ -80,12 +87,6 @@ public static class Dt295
             return [];
         }
     }
-
-    /// <summary>
-    /// 使えるもの (<see cref="Dt295Model.Supported"/>) が挿さっているポート。**開かない**。未確認の機材は <paramref name="warn"/> に出して並べない。
-    /// Linux はカーネルのドライバが使っているものを並べない
-    /// </summary>
-    public static List<string> Ports(Action<string>? warn = null) => Usable(Found(warn), warn);
 
     /// <summary>Linux の sysfs から (場所を渡せるのはテストのため)</summary>
     internal static List<string> Ports(string sysfs, Action<string>? warn) => Usable(Found(sysfs, warn), warn);
@@ -141,18 +142,7 @@ public static class Dt295
     }
 
     /// <summary>差し込み口 (カードリーダー)。**開くまでは何も開かない** (開くと機材に設定を書く)</summary>
-    public static IReadOnlyList<CardLinkCandidate> Cards()
-    {
-        try
-        {
-            return [.. Ports().Select(Card)];
-        }
-        catch (Exception error) when (error is IOException or DllNotFoundException or EntryPointNotFoundException)
-        {
-            Log.Write($"{Model} を探せません ({error.Message})");
-            return [];
-        }
-    }
+    public static IReadOnlyList<CardLinkCandidate> Cards() => [.. Ports().Select(Card)];
 
     /// <summary>そのポートの差し込み口。**開くまでは何も開かない**</summary>
     public static CardLinkCandidate Card(string port)

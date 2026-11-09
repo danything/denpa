@@ -113,12 +113,12 @@ public class T1Tests
     }
 
     [Test]
-    public async Task 黙った_化けたときは_R_ブロックでリクエストし直す()
+    public async Task 応答が無い_化けたときは_R_ブロックでリクエストし直す()
     {
         var garbled = I(0, false, "9000");
         garbled[^1] ^= 0xFF;
         var script = new Script(
-            // カードが黙った (ICC_MUTE) → R(0, その他の誤り)。カードは I を受けていなかったので R(0) で再送を求める
+            // カードの応答が無い (ICC_MUTE) → R(0, その他の誤り)。カードは I を受けていなかったので R(0) で再送を求める
             (I(0, false, "0102"), null),
             (R(0, 2), R(0)),
             (I(0, false, "0102"), garbled),

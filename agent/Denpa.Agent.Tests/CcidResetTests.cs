@@ -48,7 +48,7 @@ public class CcidResetTests
     }
 
     [Test]
-    public async Task 黙ったリーダーはポートをリセットしてやり直す()
+    public async Task 応答しないリーダーはポートをリセットしてやり直す()
     {
         var pipe = new Frozen();
         var link = new CcidLink("PC Twin", pipe, Plain);
@@ -58,7 +58,7 @@ public class CcidResetTests
     }
 
     [Test]
-    public async Task リセットしても黙るなら投げる()
+    public async Task リセットしても応答しないなら例外にする()
     {
         var pipe = new StillFrozen();
         var link = new CcidLink("PC Twin", pipe, Plain);

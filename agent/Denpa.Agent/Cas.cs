@@ -6,14 +6,14 @@ namespace Denpa.Agent;
  * 上から順に 3 段に分けてある。
  *
  * - Descrambler … TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する (B25.cs / Multi2.cs)。
- *                 選局のときは CAT から EMM も取り出し、自分宛てだけを受け口に渡す (Emm.cs)
+ *                 選局のときは CAT から EMM も取り出し、自分宛てだけを渡し先に渡す (Emm.cs)
  * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (LocalCard → BCas.cs) か、別の拠点 (RemoteCard)。どちらも CardShare.cs
  * - ICardLink   … カードと APDU をやり取りする接続。USB の CCID リーダーを直接扱う (Ccid.cs。
  *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、px4d・asicend の内蔵リーダー (Px4Card.cs) か、
  *                 CECH-ZD1 J と PIX-DT295 の差し込み口 (Zd1j.cs の Zd1jCard・Dt295NativeCard.cs の Dt295NativeCard)
  */
 
-/// <summary>カードの素。**鍵を作るのに要る定数**で、初めに 1 回だけ貰う</summary>
+/// <summary>カードの定数。**鍵を作るのに要る定数**で、初めに 1 回だけ貰う</summary>
 /// <param name="SystemKey">32 バイト</param>
 /// <param name="InitCbc">8 バイト</param>
 /// <param name="Ids">カードの番号 (個別とグループ)。画面には 10 進 16 桁で見せ、EMM が自分宛てかもこれと比べる (<see cref="Emm"/>)</param>

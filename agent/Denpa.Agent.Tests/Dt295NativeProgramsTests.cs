@@ -274,9 +274,8 @@ public class Dt295NativeProgramsTests
     }
 
     /// <summary>
-    /// fr30-elf-as (binutils 2.44) で Listing を組み、fr30-elf-ld で 0xE1000 に置いた出力 (道具の出力)。語が奇数個のとき末尾の 9fa0 は、32 ビットずつにそろえる nop。
-    /// 操作 3・4 (カードの送受信) を足したときの語は Fr30Assembler の出力で、fr30-elf-as にはまだ通していない
-    /// (使う命令の形は、どれも Fr30Tests で fr30-elf-as と突き合わせてある)
+    /// fr30-elf-as (binutils 2.44) で Listing を組み、fr30-elf-ld で 0xE1000 に置いた出力 (道具の出力。操作 3・4 のカードの送受信を含む)。
+    /// 語が奇数個のとき末尾の 9fa0 は、32 ビットずつにそろえる nop
     /// </summary>
     private const string BodyHex =
         "9bcc466206c0c7dcaac0e3169bcc466405c0c40caac0e3109bcc461c04c09bcc4620aac0e3099bcc462004c09f8c444e5431" +

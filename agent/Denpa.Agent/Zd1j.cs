@@ -15,7 +15,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。Windows と macOS でも同じ形の
+/// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。Windows と macOS でも同じ形式の
 /// 名前を作る (<see cref="UsbDevices.WindowsPort"/>・<see cref="UsbDevices.MacPort"/>)。
 /// 挿さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。設定に 1 台だけなら、挿すポートを変えても付いていく
 /// (<see cref="Follow(string)"/>)。2 台以上はポートで見分けるので、挿すポートを変えると別のチューナーになる。
@@ -37,7 +37,7 @@ public static class Zd1j
 
     /// <summary>
     /// 挿さっている CECH-ZD1 J のポート。**開かない** (開くと他から使えなくなり、ブリッジの起動もしてしまう)。
-    /// カーネルのドライバが使っているものは並べない (usbfs はこちらが開いている印なので並べる)
+    /// カーネルのドライバが使っているものは並べない (usbfs はこちらが開いているしるしなので並べる)
     /// </summary>
     internal static List<string> Ports(string sysfs, Action<string>? warn = null)
     {
@@ -155,8 +155,10 @@ public sealed class Zd1jBoard : IDibTime
     /// <summary>DiB8096 の初期化にかかった時間 (まだなら -1)</summary>
     public long DemodMs { get; private set; } = -1;
 
-    /// <summary>USB が抜けたなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
-    public bool Faulted { get; private set; }
+    /// <summary>USB が抜けた・ブリッジのコア 1 が答えなくなったなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
+    public bool Faulted => _faulted || Bridge.Dead;
+
+    private bool _faulted;
 
     internal Zd1jBoard(string port, IUsbDevice usb)
     {
@@ -205,7 +207,7 @@ public sealed class Zd1jBoard : IDibTime
         }
     }
 
-    /// <summary>開く段の名前 (USB を開くところ)。そのあとの段は <see cref="Mb86h47.Start"/> が知らせる</summary>
+    /// <summary>開く段の名前 (USB を開くところ)。そのあとの段は <see cref="Mb86h47.Start"/> が渡す</summary>
     private const string OpeningUsb = "USB を開く";
 
     /// <summary>ポートごとの、最後に記録した開けなかった理由。同じ理由は繰り返し記録しない (<see cref="Registry"/> の中で触る)</summary>
@@ -254,10 +256,10 @@ public sealed class Zd1jBoard : IDibTime
         board.Close();
     }
 
-    /// <summary>失敗が USB の抜けなら印を付ける (次に取る側は開き直す)</summary>
+    /// <summary>失敗が USB の抜けなら使えないものとする (次に取る側は開き直す)</summary>
     public void Fail(Exception error)
     {
-        if (error is UsbGoneException) Faulted = true;
+        if (error is UsbGoneException) _faulted = true;
     }
 
     /// <summary>DiB8096。初めてのときに電源を入れて初期化する (仕様書 4.6・4.7・6)</summary>
@@ -342,7 +344,7 @@ public sealed class Zd1jBoard : IDibTime
 public sealed record Zd1jTimings(long OpenMs, long LockMs, long FirstTsMs);
 
 /// <summary>
-/// CECH-ZD1 J のチューナー (地上波だけ)。**選局しなおしは周波数まわりだけ。** ボードは流している間だけ取る。
+/// CECH-ZD1 J のチューナー (地上波だけ)。**選局し直しは周波数まわりだけ。** ボードは流している間だけ取る。
 ///
 /// <para>
 /// 前面の LED は流している間ずっと赤、止めたら緑 (点滅なし)。読む側がいないまま <see cref="StallLimit"/> 経ったら
@@ -357,32 +359,8 @@ public sealed class Zd1jTuner : ITuneDevice
     /// </summary>
     internal static TimeSpan StallLimit => TunerPool.Linger;
 
-    /// <summary>
-    /// 書いたぶんを渡す。続けて読めるなら true。<paramref name="stopped"/> になったら、または溜めが空かないまま <see cref="StallLimit"/> 経ったら
-    /// 渡すのをやめて false (後者は読む側がいないとみて <paramref name="stalled"/> を呼ぶ)。CECH-ZD1 J と PIX-DT295 の TS の流しが使う
-    /// </summary>
-    internal static bool Flush(PipeWriter writer, Func<bool> stopped, Action stalled)
-    {
-        var flushing = writer.FlushAsync();
-        if (flushing.IsCompleted) return !flushing.Result.IsCompleted;
-        var waiting = flushing.AsTask();
-        var elapsed = Stopwatch.StartNew();
-        while (!waiting.Wait(50))
-        {
-            if (stopped())
-            {
-                writer.CancelPendingFlush();
-                return false;
-            }
-            if (elapsed.Elapsed >= StallLimit)
-            {
-                writer.CancelPendingFlush();
-                stalled();
-                return false;
-            }
-        }
-        return !waiting.Result.IsCompleted;
-    }
+    /// <summary>書いたぶんを渡す (<see cref="TsBuffer.Flush"/>)。CECH-ZD1 J と PIX-DT295 の TS のストリームが使う。読む側がいないまま <see cref="StallLimit"/> 経ったら <paramref name="stalled"/></summary>
+    internal static bool Flush(PipeWriter writer, Func<bool> stopped, Action stalled) => TsBuffer.Flush(writer, stopped, StallLimit, stalled);
 
     private readonly string _name;
     private readonly Func<Zd1jBoard> _acquire;
@@ -455,7 +433,7 @@ public sealed class Zd1jTuner : ITuneDevice
 
     TunerSignal? ITuneDevice.Signal() => Signal() is { } signal ? TunerSignal.From(signal) : null;
 
-    public void Tune(ChannelTable.Tuning tuning, uint streamId)
+    public void Tune(ChannelTable.Tuning tuning)
     {
         if (tuning.Satellite) throw new IOException($"{Zd1j.Model} は地上波だけです ({tuning.Type} は受けられません)");
         lock (_gate)
@@ -504,7 +482,7 @@ public sealed class Zd1jTuner : ITuneDevice
         }
     }
 
-    /// <summary>流し終わり (仕様書 9.5) と、ボードを返す。<paramref name="keepLed"/> なら LED は赤のまま (選局しなおし)</summary>
+    /// <summary>流し終わり (仕様書 9.5) と、ボードを返す。<paramref name="keepLed"/> なら LED は赤のまま (選局し直し)</summary>
     private void Stop(bool keepLed)
     {
         var stream = _stream;
@@ -517,7 +495,7 @@ public sealed class Zd1jTuner : ITuneDevice
             {
                 stream.Stop();
                 board.Bridge.StopStream();
-                // 選局しなおしなら、選局が自分でハイインピーダンスにする
+                // 選局し直しなら、選局が自分でハイインピーダンスにする
                 if (!keepLed) board.Demod.Output(false);
             }
             if (!keepLed && _red)
@@ -565,7 +543,7 @@ internal sealed class Zd1jStream
     /// <summary>1 回の読みの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300ms。読みは裏で出したまま)</summary>
     private const int ReadTimeoutMs = 300;
 
-    private readonly Pipe _pipe = Px4Stream.NewBuffer();
+    private readonly Pipe _pipe = TsBuffer.New();
 
     private readonly IUsbInStream _in;
     private readonly string _name;
@@ -758,7 +736,7 @@ public sealed class Zd1jCard : ICardLink
 /// 中身は選局で段 3 に渡した値だけで、**消してよい** (次の選局で探索からやり直して、また覚える)。
 ///
 /// <para>
-/// 形は <c>{ "version": 1, "boards": { "&lt;USB のポート&gt;": { "&lt;kHz&gt;": { … } } } }</c> (<see cref="DibMemory.ToJson"/>)。
+/// 形式は <c>{ "version": 1, "boards": { "&lt;USB のポート&gt;": { "&lt;kHz&gt;": { … } } } }</c> (<see cref="DibMemory.ToJson"/>)。
 /// 読めない・壊れている・バージョンが違うときは、警告を 1 行残して全部捨てる。書くのは値が変わったときだけ
 /// (ロックして新しい値になった・合わなかった値を捨てた)。
 /// </para>

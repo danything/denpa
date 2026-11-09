@@ -157,7 +157,7 @@ public class CcidTests
         public void Dispose() => Disposed = true;
     }
 
-    /// <summary>応答の形式は命令と同じ (頭 10 バイトの 8〜10 バイト目が bmStatus / bError / 3 つめ)</summary>
+    /// <summary>応答の形式は命令と同じ (ヘッダ 10 バイトの 8〜10 バイト目が bmStatus / bError / 3 つめ)</summary>
     private static byte[] Reply(byte type, byte seq, byte status, byte error, ReadOnlySpan<byte> data, byte chain = 0) =>
         CcidMessage.Command(type, seq, data, status, error, chain);
 
@@ -190,7 +190,7 @@ public class CcidTests
     [Test]
     public async Task PC_Twin_と_B_CAS()
     {
-        // 頭 10 + NAD PCB LEN + 50 + LRC = 64 バイト。パケットちょうどで終わる
+        // ヘッダ 10 + NAD PCB LEN + 50 + LRC = 64 バイト。パケットちょうどで終わる
         var answer = Enumerable.Range(0, 48).Select(i => (byte)i).Concat(new byte[] { 0x90, 0x00 }).ToArray();
         var reader = TwinWithBcas(answer);
         var link = new CcidLink("PC Twin", reader, Twin);

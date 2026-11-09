@@ -219,6 +219,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         scope?.Note($"仕事 {clock.ElapsedMilliseconds} ms、残りの待ち {Math.Max(0, rest)} ms");
         if (rest > 0) sleep(rest);
     }
+
     private enum Last
     {
         None,
@@ -227,8 +228,8 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     }
 
     /// <summary>
-    /// 最後に選局した側。選局の頭の手順が、前の選局で決まる (仕様書 7.2.2: 0B=01 は前に地上波を選んでいないときだけ。衛星を選んでいたあとは先に S 側を休ませる。
-    /// 7.3.2: 衛星の頭の T 側を休ませる表は、T が動いているときだけ要る)。選局が途中で失敗したら <see cref="Last.None"/> に戻して、次は全部入れる
+    /// 最後に選局した側。選局の先頭の手順が、前の選局で決まる (仕様書 7.2.2: 0B=01 は前に地上波を選んでいないときだけ。衛星を選んでいたあとは先に S 側を休ませる。
+    /// 7.3.2: 衛星の先頭の T 側を休ませる表は、T が動いているときだけ要る)。選局が途中で失敗したら <see cref="Last.None"/> に戻して、次は全部入れる
     /// </summary>
     private Last _last = Last.None;
 
@@ -560,7 +561,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     /// <summary>
     /// 受信の状態と、復調の C/N の生の値。dB にするのは <see cref="TunerSignal.Tc90522Db"/>。
     /// 仕様書に C/N のレジスタは無い。復調は TC90522 系と推定されている (仕様書 11.1) ので、その系統で C/N を持つレジスタを読む
-    /// (地上波は 0x8B から 3 バイト、衛星は 0xBC から 2 バイト)。値が大きいほど雑音が多い (本番で CS が BS より大きい)。受信の状態は <see cref="WaitTerrestrialLock"/>・<see cref="WaitSatelliteLock"/> の段と同じレジスタ
+    /// (地上波は 0x8B から 3 バイト、衛星は 0xBC から 2 バイト)。値が大きいほど雑音が多い (実機で CS が BS より大きい)。受信の状態は <see cref="WaitTerrestrialLock"/>・<see cref="WaitSatelliteLock"/> の段と同じレジスタ
     /// (地上波は 0x81 の bit4、衛星は 0xC3 の上位 4 ビットが 0)。読むだけで、書かない
     /// </summary>
     public Dt295Signal Signal(bool satellite)

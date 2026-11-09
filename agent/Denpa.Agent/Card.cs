@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 /// カードが読めているか。**リーダーごとに**返す (画面の「カードリーダー」の表)。
 ///
 /// <para>
-/// リーダーが見えていてもカードを読めていないことがある (挿さっていない・USB が黙る)。
+/// リーダーが見えていてもカードを読めていないことがある (挿さっていない・USB が応答しなくなる)。
 /// そうなると掛かったまま流すので、録画は成功したように見えて中身が全部
 /// スクランブルされたまま、という分かりにくい壊れ方をする。**実際に INT を通して**
 /// 確かめる。
@@ -62,7 +62,7 @@ public static class Card
         }
         catch (Exception error)
         {
-            // リーダーを探すところで転んだ (sysfs が読めないなど)。画面には理由を出す
+            // リーダーを探すところで失敗した (sysfs が読めないなど)。画面には理由を出す
             survey = new CardSurvey(false, Unwrap(error).Message, [], [], (Keys.Source as RemoteCard)?.Url);
         }
         return Report(WithDisabled(survey, CardChoice.Disabled, CardLinks.All), streaming());
@@ -120,7 +120,7 @@ public static class Card
     ///
     /// <para>
     /// **使っているリーダーは開き直さない。** USB のリーダーは開いている間は他から開けない
-    /// ので、覗こうとすると断られる (悪くすると流れている鍵の出どころを乱す)。その行は
+    /// ので、覗こうとすると断られる (悪くすると使っている鍵の出どころを乱す)。その行は
     /// 鍵の出どころ自身に INT を通させた答え (<paramref name="check"/>) で埋め、
     /// **残りだけ**を開いて覗いて閉じる。
     /// </para>
@@ -200,8 +200,8 @@ public static class Card
     private static ReaderState[] Probe(IReadOnlyList<CardLinkCandidate> candidates, TimeSpan within)
     {
         /*
-         * **1 つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用のスレッドプールから
-         * 借りるとプールが増えるまで他の覗きも待たされ、答えられるものまで「応答しません」になる
+         * **1 つずつ専用のスレッドで。** 固まったリーダーは何秒も塞ぐので、共用のスレッドプールで
+         * 動かすとプールが増えるまで他の覗きも待たされ、答えられるものまで「応答しません」になる
          */
         var peeking = candidates.Select(Peeking).ToArray();
         if (peeking.Length > 0 && within > TimeSpan.Zero) Task.WaitAll(peeking, within);

@@ -35,14 +35,14 @@ public class Zd1jLocksTests
     }
 
     [Test]
-    public async Task 前のバージョンが書いた_inversion_は読むときに無視し_書くときは出さない()
+    public async Task 使わない項目は読むときに無視し_書くときは出さない()
     {
         var path = Temp();
         var (dib, _) = Tuner(new Zd1jLocks(path).For("4-12.1"));
         dib.Tune(557_142_857);
         await Assert.That(File.ReadAllText(path)).DoesNotContain("inversion");
 
-        // 前のバージョンのファイル: 周波数ごとに inversion が入っている
+        // 使わない項目 (以前のバージョンが書いた inversion) が入ったファイル
         var json = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         json["boards"]!["4-12.1"]!["557142"]!["inversion"] = 0;
         File.WriteAllText(path, json.ToJsonString());
@@ -67,7 +67,7 @@ public class Zd1jLocksTests
     }
 
     [Test]
-    public async Task 壊れたファイルや古い形は捨てる()
+    public async Task 壊れたファイルや古い形式は捨てる()
     {
         var path = Temp();
         File.WriteAllText(path, "{ not json");
@@ -75,6 +75,9 @@ public class Zd1jLocksTests
         File.WriteAllText(path, """{ "version": 0, "boards": {} }""");
         await Assert.That(new Zd1jLocks(path).For("4-12.1").Channels.Count).IsEqualTo(0);
         File.WriteAllText(path, """{ "version": 1, "boards": { "4-12.1": { "557142": { "fft": 9 } } } }""");
+        await Assert.That(new Zd1jLocks(path).For("4-12.1").Channels.Count).IsEqualTo(0);
+        // 階層の値が null でも、起動を止めずに捨てる
+        File.WriteAllText(path, """{ "version": 1, "boards": { "4-12.1": { "557142": { "fft": 1, "guard": 0, "partial": 0, "diff": 0, "layers": [[null, 1, 0, 13], [0, 0, 0, 0], [0, 0, 0, 0]] } } } }""");
         await Assert.That(new Zd1jLocks(path).For("4-12.1").Channels.Count).IsEqualTo(0);
     }
 

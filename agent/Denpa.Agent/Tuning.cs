@@ -38,7 +38,7 @@ public interface ITuneDevice : IDisposable
     /// 選局する。**開いたまま何度でも呼べる。**
     /// 同期しなければ例外 (電波が来ていない、その周波数に放送が無い)。
     /// </summary>
-    void Tune(ChannelTable.Tuning tuning, uint streamId);
+    void Tune(ChannelTable.Tuning tuning);
 
     /// <summary>TS の読み出し側。<see cref="Tune"/> のあとで取る (選局し直したら取り直す)</summary>
     Stream Output { get; }
@@ -125,6 +125,68 @@ internal static unsafe partial class Sys
         {
             throw new IOException($"{what} に失敗しました ({Marshal.GetLastPInvokeErrorMessage()})");
         }
+    }
+}
+
+/// <summary>
+/// 機材から読んだ TS を読む側 (<see cref="TunerPool"/>) へ渡すバッファ。px4d・asicend (<see cref="Px4Stream"/>)、CECH-ZD1 J (<c>Zd1jStream</c>)、
+/// PIX-DT295 (<see cref="Dt295NativeStream"/>) の TS のストリームが使う。OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った)
+/// </summary>
+internal static class TsBuffer
+{
+    /// <summary>深さ。地上波で 3.5 秒ぶん。これを超えたら書く側が待つ</summary>
+    internal const int Depth = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// 待ちは Inline で起こす (スレッドプールに回さない。書く側は専用のスレッドで、読む側も 200ms ごとに自分で起きる)
+    /// </summary>
+    public static Pipe New() => new(new PipeOptions(
+        pauseWriterThreshold: Depth,
+        resumeWriterThreshold: Depth * 3 / 4,
+        minimumSegmentSize: 64 * 1024,
+        readerScheduler: PipeScheduler.Inline,
+        writerScheduler: PipeScheduler.Inline,
+        useSynchronizationContext: false));
+
+    /// <summary>
+    /// 書いたぶんを渡す。続けて書けるなら true。<paramref name="stopped"/> になったら (50ms ごとに見る)、
+    /// またはバッファが空かないまま <paramref name="limit"/> 経ったら渡すのをやめて false (後者は読む側がいないとみて <paramref name="stalled"/> を呼ぶ)。
+    /// 読み出し側が閉じていたら <paramref name="closed"/> を呼んで false
+    /// </summary>
+    public static bool Flush(PipeWriter writer, Func<bool> stopped, TimeSpan limit, Action stalled, Action? closed = null)
+    {
+        var flushing = writer.FlushAsync();
+        FlushResult result;
+        if (flushing.IsCompleted)
+        {
+            result = flushing.GetAwaiter().GetResult();
+        }
+        else
+        {
+            var waiting = flushing.AsTask();
+            var elapsed = Stopwatch.StartNew();
+            while (!waiting.Wait(50))
+            {
+                if (stopped())
+                {
+                    writer.CancelPendingFlush();
+                    return false;
+                }
+                if (elapsed.Elapsed >= limit)
+                {
+                    writer.CancelPendingFlush();
+                    stalled();
+                    return false;
+                }
+            }
+            result = waiting.GetAwaiter().GetResult();
+        }
+        if (result.IsCompleted)
+        {
+            closed?.Invoke();
+            return false;
+        }
+        return !result.IsCanceled;
     }
 }
 
@@ -652,7 +714,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     private const byte FeScaleDecibel = 1;
     private const byte FeScaleRelative = 2;
 
-    internal const int PropertySize = 76;            // packed。DeviceProbe の頭のコメントに実測値
+    internal const int PropertySize = 76;            // packed。DeviceProbe の冒頭のコメントに実測値
     internal const int PropertyDataAt = 16;
 
     // linux/dvb/dmx.h
@@ -714,8 +776,9 @@ public sealed unsafe class DvbTuner : ITuneDevice
     /// <summary>カーネルが持っているので、一度合わせたら合ったまま</summary>
     public bool Tuned => _streaming;
 
-    public void Tune(ChannelTable.Tuning tuning, uint streamId)
+    public void Tune(ChannelTable.Tuning tuning)
     {
+        var streamId = tuning.StreamId;
         // 選局し直す間は止める。前のチャンネルの残りが混ざったまま流れると、
         // 読む側 (denpa) には途中で中身が変わったようにしか見えない
         if (_streaming)
@@ -725,7 +788,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
              * **止めたうえで、dvr に残っている前のチャンネルのぶんを捨てる。** dvr のリングバッファは
              * DMX_START でも空にならず (カーネルが空にするのは開いたときと溢れを読んだときだけ)、
              * 前の利用者が抜けてから溢れるまでの数秒の間に次の選局が来ると、前のチャンネルの PAT が
-             * 新しい選局の頭に乗る。衛星の局ロゴはそれを見て、当たりの中継 (BS15:16625) を「外れ」と
+             * 新しい選局の先頭に入る。衛星の局ロゴはそれを見て、当たりの中継 (BS15:16625) を「外れ」と
              * 1 週間控えていた (docs/logo.md)
              */
             _dvr.Discard();
