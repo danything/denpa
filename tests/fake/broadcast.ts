@@ -289,10 +289,15 @@ const channelOf = (service: FakeService) => ({
   services: [serviceOf(service)],
 });
 
-/** 物理チャンネルの一覧。本物はスキャンの結果 (channels.json) */
+/**
+ * 物理チャンネルの一覧。本物はスキャンの結果 (channels.json)。
+ * **SKY (スカパー！プレミアム) は入れない。** 受けられる機材は既定に無く、SKY をスキャンしたときだけ入る (`64-sky.spec.ts`)。
+ * 放送には流れている (`on`) ので、スキャンすれば見つかる
+ */
 export function channels() {
   const map = new Map<string, ReturnType<typeof channelOf>>();
   for (const service of SERVICES) {
+    if (service.type === "SKY") continue;
     const key = `${service.type}:${service.channel}`;
     const found = map.get(key);
     if (found === undefined) map.set(key, channelOf(service));

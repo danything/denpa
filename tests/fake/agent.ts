@@ -240,12 +240,8 @@ function sortChannels<T extends FakeChannel>(list: T[]): T[] {
   });
 }
 
-/**
- * 預かっているチャンネル。本物では channels.json。
- * **SKY (スカパー！プレミアム) は入れない。** 受けられる機材は既定に無く、SKY をスキャンしたときだけ入る (`64-sky.spec.ts`)
- */
-const initialChannels = () =>
-  sortChannels(channels().filter((channel) => channel.type !== "SKY"));
+/** 預かっているチャンネル。本物では channels.json (SKY はスキャンしたときだけ入る。`broadcast.channels`) */
+const initialChannels = () => sortChannels(channels());
 let saved = initialChannels();
 
 /** チューナー。既定は全部空きにしておく */
