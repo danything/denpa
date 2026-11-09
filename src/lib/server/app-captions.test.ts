@@ -26,8 +26,8 @@ import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
 /**
  * アプリ向けの字幕 API (`liveCaptions` / `recordingCaptions`)。
  *
- * ffmpeg は偽物に差し替える。偽物は入口の見出しを標準エラーへ書き、標準入力を読み切ってから、
- * 字幕を写した Matroska (`S_ARIBSUB`。ffmpeg が `-c:s copy` で書くのと同じ骨組み) を字幕の出口 (fd 3) へ流す。
+ * ffmpeg は偽物に差し替える。偽物は入力の見出しを標準エラーへ書き、標準入力を読み切ってから、
+ * 字幕を写した Matroska (`S_ARIBSUB`。ffmpeg が `-c:s copy` で書くのと同じ骨組み) を字幕の出力 (fd 3) へ流す。
  * DB は一時ファイルへ (encoder-pump.test.ts と同じ理由で、設定そのものを書き換える)
  */
 const dir = mkdtempSync(join(tmpdir(), "denpa-appcap-"));

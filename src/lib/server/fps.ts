@@ -78,7 +78,7 @@ export function fpsArgs(
 }
 
 /** フィルタが出した差の列。どちらも先頭 (前が無いので 0) は捨ててある */
-export interface FieldDiffs {
+interface FieldDiffs {
   top: number[];
   fields: number[];
 }
@@ -96,7 +96,7 @@ export function parseFieldDiffs(lines: Iterable<string>): FieldDiffs {
 }
 
 /** 値と、それを出せた (動いていた) 秒の数 */
-export interface Score {
+interface Score {
   value: number;
   seconds: number;
 }
@@ -157,7 +157,7 @@ export function fpsWeave(fields: number[]): Score {
 }
 
 /** 窓の素材。`null` は測れない (静止・黒・失敗) */
-export type FpsKind = "24p" | "30p" | "60i" | null;
+type FpsKind = "24p" | "30p" | "60i" | null;
 
 /** 窓 1 つを、繰り返し (`rep`) と上下の差 (`wr`) から分ける */
 export function classifyWindow(rep: Score, wr: Score): FpsKind {

@@ -202,8 +202,8 @@ export function warmFormat(choice: LiveChoice, indoor: boolean): LiveFormat {
     autoCodec({
       indoor,
       rawOk: true,
+      // どれも受け取れるとみるので、家の中は MPEG-2、外は AV1 が先に当たる (H.265・H.264 まで下りない)
       av1: true,
-      // AV1 が先なので、自動で H.265 を温めることは無い。選んだ H.265 を出せなければ H.264 で温める (`live.warm`)
       hevc: true,
       h264: true,
       compat: false,

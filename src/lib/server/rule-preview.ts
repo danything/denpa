@@ -107,18 +107,7 @@ export interface PreviewRow {
 export type Verdict =
   | { kind: "record" }
   | { kind: "reserved"; state: string }
-  | {
-      kind: "skip";
-      reason:
-        | "repeat"
-        | "recorded"
-        | "earlier"
-        | "copy-never"
-        | "declined"
-        | "simulcast"
-        | "airing"
-        | Miss;
-    };
+  | { kind: "skip"; reason: NonNullable<Skip>["kind"] | "airing" | Miss };
 
 /**
  * 条件の下見ひとまとめ (`previewFor`)。

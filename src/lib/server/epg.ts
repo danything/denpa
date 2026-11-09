@@ -399,7 +399,7 @@ function forgetMissing(at: number, seen: Set<number>): number {
   if (programs === 0 && reservations === 0) return 0;
   console.log(
     `[epg] 選局できなくなった局を片付けました: ${names.join(", ")} ` +
-      `(番組 ${programs} 件 / 予約 ${reservations} 件を取り消し)`,
+      `(番組 ${programs} 件を削除、予約 ${reservations} 件を取消)`,
   );
   return reservations;
 }

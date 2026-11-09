@@ -8,7 +8,7 @@ import {
   sdtSection,
 } from "@danything/arib/synth";
 
-import { channelEntry, channelsFor, readServices } from "./scan";
+import { channelEntry, channelsFor, readServices, scanTargets } from "./scan";
 
 /**
  * 総当たりそのもの (`Scanner`) はここでは試さない。**エージェントに選局を
@@ -63,6 +63,17 @@ describe("選局するチャンネル", () => {
     expect(catv.slice(50)).toEqual(
       Array.from({ length: 51 }, (_, i) => `C${13 + i}`),
     );
+  });
+
+  test("同じ種別を 2 回選んでも 1 回だけ回す", () => {
+    expect(scanTargets(["BS", "BS", "CS"])).toEqual([
+      ["BS", ["BS"]],
+      ["CS", ["CS"]],
+    ]);
+  });
+
+  test("地上波と CATV を両方選ぶと、UHF を 2 回回さず CATV だけにする", () => {
+    expect(scanTargets(["GR", "CATV"])).toEqual([["GR", channelsFor("CATV")]]);
   });
 });
 

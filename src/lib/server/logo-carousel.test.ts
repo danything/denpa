@@ -138,7 +138,6 @@ const agent = Bun.serve({
         rank: index,
         device: null,
         lnb: null,
-        pid: null,
         error: null,
         ...tuner,
       })),

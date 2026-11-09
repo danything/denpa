@@ -527,14 +527,14 @@ export function serviceById(
 }
 
 /** 引き継いだルールの値。優先度・`source`・作った時刻は {@link insertRule} が足す */
-type RuleValues = Omit<
+export type RuleValues = Omit<
   typeof rules.$inferInsert,
   "priority" | "source" | "created_at"
 >;
 
 /**
  * 引き継いだルールを入れる。**優先度は 1** (引き継ぎ元の優先度は比べる相手が違う)。
- * エンコードの設定は写さない。エンコードも CM も全体設定で、エンコードするときに読む
+ * エンコードの設定は写さない。エンコードは全体設定で、エンコードするときに読む
  */
 export function insertRule(values: RuleValues, source: string): void {
   orm()

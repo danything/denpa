@@ -91,8 +91,9 @@ interface Settings {
   transcodeLimit: number | null;
   /**
    * **実況のコメントを流せるようにするか。既定はオフ。** オンのときだけ、局の一覧に実況のチャンネル (`jikkyo`) が入り、
-   * 端末の ⚙ に「実況」の行が出る。コメントは denpa のサーバを通らず、実況をオンにした端末が
-   * NX-Jikkyo と過去ログ API に直接繋ぐ (`#lib/jikkyo/endpoints.ts`)。相手には端末の IP と、どの局をいつ観ているかが見える
+   * 端末の ⚙ に「実況」の行が出る。流れるコメントは denpa のサーバを通らず、実況をオンにした端末が
+   * NX-Jikkyo と過去ログ API に直接繋ぐ (`#lib/jikkyo/endpoints.ts`)。相手には端末の IP と、どの局をいつ観ているかが見える。
+   * 公式の実況への書き込みだけは、ニコニコと連携していれば denpa のサーバが中継する (`server/niconico-live.ts`)
    */
   jikkyo: boolean;
   /** **実況の NG ワード** (世帯で 1 つ)。含むコメントは流さない (`#lib/jikkyo/ng.ts`)。設定の 1 キーに JSON の配列で持つ */

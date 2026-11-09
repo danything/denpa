@@ -2,7 +2,7 @@ import { logoRecordCsv, logoRecordList } from "#lib/server/logo-record.js";
 
 /**
  * **ロゴを取得した記録を CSV で返す** (開発者向け。docs/logo.md「ロゴの取得を記録する」)。古い順で、残っているぶん全部。
- * 記録は設定の「その他」の「ロゴの取得を記録する」がオンの間だけ貯まる (`logo-record.ts`)
+ * 記録は設定の「その他」の「ロゴを集めた結果を記録する (開発者向け)」がオンの間だけ貯まる (`logo-record.ts`)
  */
 export function GET() {
   return new Response(logoRecordCsv(logoRecordList()), {

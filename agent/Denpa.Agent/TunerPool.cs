@@ -693,7 +693,6 @@ public sealed class TunerPool(
                         ? null
                         : new JsonObject { ["type"] = lease.Type, ["channel"] = lease.Channel },
                     ["users"] = users,
-                    ["pid"] = lease?.Pid,
                     /*
                      * 選局の失敗が無ければ、受信機の注意書き (15V を出せないので 0V にした、など。
                      * Px4Userland.Notice)。画面は空いているチューナーの error を出すので、新しい欄は作らない
@@ -941,8 +940,6 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     /// <summary>C/N を読めなかったことを記録に残した (1 回の選局で 1 回だけ)</summary>
     public bool SignalFailed { get; set; }
-
-    public int? Pid => _child is { HasExited: false } child ? child.Id : null;
 
     private volatile bool _stopped;
 

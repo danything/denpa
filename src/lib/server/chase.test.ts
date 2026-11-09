@@ -344,7 +344,7 @@ describe("元の TS の追っかけで読むのを止めるか (chaseReadHeld)",
 
 /**
  * 追っかけと録画の字幕が、秒をバイトに当てる物差し (`recordedSec`)。録り終えたものは元の TS を測る。
- * `duration_ms` はエンコードし終えると出来上がりの長さ (CM を切ったあと) になり、TS より短い
+ * `duration_ms` はエンコードし終えると出来上がりの長さ (先頭を捨てたあと) になり、TS より短い
  */
 describe("元の TS に録れている長さ (recordedSec)", () => {
   let dir: string | null = null;
@@ -385,7 +385,7 @@ describe("元の TS に録れている長さ (recordedSec)", () => {
     end_at: NOW,
   };
 
-  test("CM を切ってエンコードした録画でも、出来上がりの長さではなく元の TS の尺", () => {
+  test("先頭を捨ててエンコードした録画でも、出来上がりの長さではなく元の TS の尺", () => {
     dir = mkdtempSync(join(tmpdir(), "chase-"));
     const path = join(dir, "rec.ts");
     writeFileSync(path, span(900_000, 1500));

@@ -211,7 +211,7 @@ export function daysOf(type: ChannelType, today: number) {
 }
 
 /** 外から使う番組表 (`GET /api/programs`) の 1 番組。キーは camelCase (docs/api.md) */
-export interface ApiProgram {
+interface ApiProgram {
   id: number;
   name: string;
   startAt: number;
@@ -229,7 +229,7 @@ export interface ApiProgram {
   recordingId: number | null;
 }
 
-export interface ApiGuide {
+interface ApiGuide {
   type: ChannelType;
   from: number;
   to: number;

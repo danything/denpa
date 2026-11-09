@@ -41,6 +41,7 @@ const {
   startLink,
   subjectOf,
   unlink,
+  warnShape,
 } = await import("./niconico");
 const { orm } = await import("./db");
 const { niconicoLink } = await import("./schema");
@@ -285,6 +286,20 @@ describe("応答を読む", () => {
     expect(tokens.expiresIn).toBe(1800);
     expect(tokens.refresh).toBeNull();
     expect(warned.length).toBe(1);
+  });
+
+  test("形式の警告は、同じものは 1 度だけ、違うものはそれぞれ 1 度ずつ出す", () => {
+    const original = console.warn;
+    const logged: string[] = [];
+    console.warn = (message: string) => logged.push(message);
+    try {
+      warnShape("一つ目");
+      warnShape("一つ目");
+      warnShape("二つ目");
+    } finally {
+      console.warn = original;
+    }
+    expect(logged).toEqual(["[niconico] 一つ目", "[niconico] 二つ目"]);
   });
 
   test("アクセストークンが無ければ投げる", () => {

@@ -126,7 +126,6 @@ describe("recordingHolds", () => {
     lnb: null,
     channel: { type: "GR", channel: "T21" },
     users: [],
-    pid: 1234,
     error: null,
     signal: null,
     ...over,

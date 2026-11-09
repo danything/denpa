@@ -124,7 +124,7 @@ type StreamCodec = LiveCodec | "audio";
  *
  * どのエンコード方式でも共通なのはここ。それぞれの中身は `videoArgs` / `audioArgs`。
  *
- * - `-fflags nobuffer` は**付けない** (下の「入口の解析で読んだぶんを捨てさせない」)
+ * - `-fflags nobuffer` は**付けない** (下の「入力の解析で読んだぶんを捨てさせない」)
  * - `-probesize` … **開いてから映像が出るまでの待ちの、削れる部分。**
  *   渡す前に 1 局へ絞ってあるが、**字幕まで見つけさせる**ので 100KB 採る
  *   (下の「局を名指しで選ぶ」に実測)
@@ -132,7 +132,7 @@ type StreamCodec = LiveCodec | "audio";
  *   数秒溜めてから出すので、その場でライブでなくなる
  * - `-copyts` は**付けない**。付けると放送の絶対時刻が mp4 の muxer まで届き、
  *   あれが 0 に詰め直すので受け側から見た 0 の意味が分からなくなる。
- *   付けないと ffmpeg が入口で 1 回だけ 0 に寄せ、**その寄せが字幕の出口にも
+ *   付けないと ffmpeg が入力で 1 回だけ 0 に寄せ、**その寄せが字幕の出力にも
  *   同じだけ効く**。映像と字幕が同じ物差しに乗る (`captions.ts` に実測)
  *
  * ## コマごとに切らない
@@ -153,9 +153,9 @@ type StreamCodec = LiveCodec | "audio";
  *
  * 0.05 秒を採る。0.033 秒でも保つが、音声のコマ (21ms) に近すぎる。
  *
- * ## 入口の解析で読んだぶんを捨てさせない
+ * ## 入力の解析で読んだぶんを捨てさせない
  *
- * `-fflags nobuffer` を付けると、ffmpeg は入口の解析 (`-probesize`) の間に読んだパケットを
+ * `-fflags nobuffer` を付けると、ffmpeg は入力の解析 (`-probesize`) の間に読んだパケットを
  * 取っておかずに捨てる。**その間に放送の I フレームが来ていると、それも捨てて次の GOP
  * (約 0.5 秒先) を待つ。** 解析は 100KB 読むので、開いた位置によっては (調べたときは約 1 割の回)
  * 最初の映像が 0.45〜0.5 秒遅れていた。
@@ -184,13 +184,13 @@ type StreamCodec = LiveCodec | "audio";
  * なので、デコードせずにブラウザへ渡すと動きのある場面が櫛状になる。録画と違って
  * コマ数は 60 から始める (下の `-vf` の説明)。
  *
- * ## 字幕も同じ ffmpeg から受ける。**出口を 2 つ持つ**
+ * ## 字幕も同じ ffmpeg から受ける。**出力を 2 つ持つ**
  *
  * 映像は `pipe:1` に fMP4、字幕は `pipe:3` に Matroska (デコードせずに写したもの。
  * [captions.ts](captions.ts) の `captionOutput`)。**時刻を揃えるにはこうするしか
  * なかった**。理由と実測は captions.ts の冒頭。引き換えに、字幕を選び直すと映像ごと起こし直しになる。
  *
- * **`-loglevel` は下げない。** 選べる字幕は入口の見出しから読み取っていて
+ * **`-loglevel` は下げない。** 選べる字幕は入力の見出しから読み取っていて
  * (`TrackList`)、あれは info で出る。騒がしいぶんは読む側で落とす (`watch`)。
  * 数字の進み具合だけは要らないので `-nostats` で止める。
  *
@@ -249,7 +249,7 @@ type StreamCodec = LiveCodec | "audio";
  * @param program 放送が名乗っている番号 (`NowPlaying.program`)。0 以下なら
  *   最初に見つけた映像
  * @param audio どの音声を、どちら側で出すか
- * @param caption 何本目の字幕を出すか。**null なら字幕の出口を付けない**。
+ * @param caption 何本目の字幕を出すか。**null なら字幕の出力を付けない**。
  *   字幕を持たない放送で字幕を求めると ffmpeg は組み立ての時点で降りるので、
  *   そうと分かったらこちらで再エンコードする (`Session.run`)
  * @param hw GPU でエンコードするならその経路 (`hwenc.liveHw`)。null ならソフトウェア (`videoArgs`)
@@ -272,7 +272,7 @@ export function encodeArgs(
   const from = programSpec(program);
   return [
     "-hide_banner",
-    // 字幕の出口が名前付きパイプ (Windows) でも、あるかを確かめさせない (`stream.sideOutput`)
+    // 字幕の出力が名前付きパイプ (Windows) でも、あるかを確かめさせない (`stream.sideOutput`)
     "-y",
     // 数字の進み具合だけ止める。`-loglevel` は下げられない (上の説明)
     "-nostats",
@@ -300,7 +300,7 @@ export function encodeArgs(
           /*
            * **コマ数の上限を言っておく。**
            *
-           * `-probesize` を大きくは取らないので、ffmpeg は入口でコマ数を読み切れず、
+           * `-probesize` を大きくは取らないので、ffmpeg は入力でコマ数を読み切れず、
            * 時間の刻み (90kHz) から**でたらめな値**を起こすことがある。x264 は黙って
            * 受けるが、**SVT-AV1 はエラーにする**。
            *
@@ -336,7 +336,7 @@ export function encodeArgs(
     "-flush_packets",
     "1",
     "pipe:1",
-    // **2 つ目の出口。** 字幕をそのまま、映像と同じ物差しの時刻付きで出す
+    // **2 つ目の出力。** 字幕をそのまま、映像と同じ物差しの時刻付きで出す
     ...(caption === null || picture === null
       ? []
       : captionOutput(from, caption, side)),
@@ -388,7 +388,7 @@ function broadcastFilters(smooth: boolean): string[] {
  * 音声は Opus に替える (`audioArgs`)。
  *
  * `lookahead=0` が要る。SVT-AV1 は既定で先を読むぶん貯めるので、付けないと
- * その貯めがそのまま遅れになる。preset は 12。これより速い 13 はもう
+ * そのぶんの待ちがそのまま遅れになる。preset は 12。これより速い 13 はもう
  * 目に見えて粗く、遅い 10 は間に合わなくなる。
  *
  * **付けてもまだ溜め込む。** 電波が届いてから塊が出るまで H.264 の 0.24〜0.49 秒
@@ -769,7 +769,7 @@ function resting(serviceId: number): number | null {
 export function whyNotTuned(why: string, until: number | null): string {
   if (until === null || !why.includes("同期しませんでした"))
     return "選局できませんでした";
-  // コンテナの時計は Asia/Tokyo (`server/library.ts`)
+  // プロセスの TZ は Asia/Tokyo (`server/library.ts`)
   const clock = new Date(until).toLocaleTimeString("ja-JP", {
     hour: "2-digit",
     minute: "2-digit",
@@ -966,7 +966,7 @@ function hwKey(codec: StreamCodec, hw: LiveHw): string {
  * このセッションを GPU でエンコードするか。ライブの印 (`liveHwAllow`。録画の `hwAllow` は見ない) と
  * 試しのエンコード (`hwenc.liveHw`)、最近落ちたか。
  * 追っかけと録画のその場の変換 (`server/playback.ts`) も使う。元がエンコード済みなら `interlaced` を false
- * (復号からは GPU に載せない。`videoArgs`)。`devices` は試験で差し替えるときだけ渡す
+ * (復号からは GPU に載せない。`videoArgs`)。`devices` はテストで差し替えるときだけ渡す
  */
 export function pickLiveHw(
   codec: LiveCodec,
@@ -1078,7 +1078,7 @@ function captionsNotice(
 }
 
 /**
- * 字幕だけを写す ffmpeg を起こす (`rawCaptionArgs`)。字幕は 4 本目の出口 (`stream.sideOutput`) に出て、`pipe` で受ける。
+ * 字幕だけを写す ffmpeg を起こす (`rawCaptionArgs`)。字幕は 4 本目の出力 (`stream.sideOutput`) に出て、`pipe` で受ける。
  * 標準出力には何も出さないはずだが、**汲まずに放っておくと詰まったときに止まる**ので読み捨てる
  */
 function spawnCaptioner(
@@ -1143,7 +1143,7 @@ class Session {
   private readonly clock = new BroadcastClock();
   /** 絞ったあとを 188 バイトに切るもの。データ放送・時計・Hybridcast・EIT[p/f] で分け合う (`tap`) */
   private readonly packets = new PacketStream();
-  /** ffmpeg が入口で 0 に寄せたぶん (秒)。`start:` から読み取る */
+  /** ffmpeg が入力で 0 に寄せたぶん (秒)。`start:` から読み取る */
   private startPts = Number.NaN;
   /** 最後に時計を配った時刻 (`tellClock`) */
   private toldClockAt = 0;
@@ -1163,7 +1163,7 @@ class Session {
   private blame: { hw: LiveHw; busy: boolean } | null = null;
   /** いまの ffmpeg が、NVENC の同時に開ける数を超えたと言ったか (`hwenc.nvencBusy`) */
   private busy = false;
-  /** 選べる字幕 (ffmpeg の入口の見出しから)。放送そのままの経路で字幕の ffmpeg を起こし直したら作り直す (`captions`) */
+  /** 選べる字幕 (ffmpeg の入力の見出しから)。放送そのままの経路で字幕の ffmpeg を起こし直したら作り直す (`captions`) */
   private list: TrackList;
   private readonly aborter = new AbortController();
   private proc: ReturnType<typeof Bun.spawn> | null = null;
@@ -1370,7 +1370,7 @@ class Session {
   /**
    * 受け取った時刻と、エンコードしたものの物差しの対応。**両方そろってから。**
    *
-   * `start:` は ffmpeg が入口を読み終えるまで出ないので、選局してすぐは
+   * `start:` は ffmpeg が入力を読み終えるまで出ないので、選局してすぐは
    * `null` です。画面は届いてから出す作りにしてあります
    */
   private clockNotice(): Notice | null {
@@ -1461,7 +1461,7 @@ class Session {
    * **そのままの TS も捨ててよい。** 欠けた PES は受け側のデコーダが次の I フレームで立ち直る。
    * 1 局 15Mbit/s を積み続けると、詰まった客 1 人でサーバの手元が数秒で数十 MB 太る。
    * **ただし追っかけの TS は捨てない。** 欠けたら観ていない先が飛ぶ。詰まったら録画のファイルを読むほうを止める
-   * (`openChase` の `held`)
+   * (`openChase` の `stopReading`)
    */
   private hand(viewer: Viewer, kind: number, data: Uint8Array): void {
     if (kind === CHANNEL.videoInit) {
@@ -1547,7 +1547,7 @@ class Session {
           (this.source === undefined ? undefined : chunks(this.source()));
         if (stream === undefined) return;
         /*
-         * **字幕があるかは起こす前に PMT で見る。** 無い放送に字幕の出口を指定すると、ffmpeg が入口を
+         * **字幕があるかは起こす前に PMT で見る。** 無い放送に字幕の出力を指定すると、ffmpeg が入力を
          * 探り終えてから降りて、起こし直すぶん映像が 1.5 秒ほど遅れる。読めなければ今までどおり指定して、
          * 降りたら字幕なしで起こし直す (下)
          */
@@ -1612,7 +1612,7 @@ class Session {
               side?.url,
             ),
           ],
-          // 字幕は 4 本目の出口 (stream.sideOutput) へ出させる。**stdio の配列でしか増やせない**
+          // 字幕は 4 本目の出力 (stream.sideOutput) へ出させる。**stdio の配列でしか増やせない**
           {
             stdio: ["pipe", "pipe", "pipe", ...(side?.stdio ?? [])] as never,
           },
@@ -1649,7 +1649,7 @@ class Session {
         });
         await Promise.race([running, proc.exited]);
         if (this.stopped) return;
-        // チューナーから外された。ffmpeg が降りたのは入口が尽きたからで、エンコード方式のせいではない
+        // チューナーから外された。ffmpeg が降りたのは入力が尽きたからで、エンコード方式のせいではない
         if (this.cut && this.fed) return await this.lose(label);
         /*
          * **降りた理由を読み終えてから決める。** `proc.exited` は最後の
@@ -2098,7 +2098,7 @@ class Session {
    * ffmpeg が出した字幕を割って配る。**時刻はコマに付いてくる。**
    *
    * コンテナは Matroska ([ts/mkv.ts](../ts/mkv.ts))。並べただけでは
-   * 時刻が乗らず、別の ffmpeg で出させると入口の寄せ幅が違ってずれる (`captions.ts`)
+   * 時刻が乗らず、別の ffmpeg で出させると入力の寄せ幅が違ってずれる (`captions.ts`)
    */
   private async subtitles(pipe: ReadableStream<Uint8Array>): Promise<void> {
     // 割る道具もデコードする側も ffmpeg ごと (`drain` と同じ理由。デコードする側は書式を字幕文を跨いで持つ)
@@ -2298,7 +2298,7 @@ class Session {
     for await (const line of lines(proc.stderr as ReadableStream<Uint8Array>)) {
       if (list !== this.list) return;
       /*
-       * **選べる字幕は入口の見出しに出ている。** 1 枚も来ていなくても
+       * **選べる字幕は入力の見出しに出ている。** 1 枚も来ていなくても
        * 分かるので、画面は待たずに切り替えを出せる (間隔の空く番組で
        * ボタンが出なかったのはこれを見ていなかったため)
        */
@@ -2307,7 +2307,7 @@ class Session {
           this.tellCaptions(viewer, list.tracks);
         continue;
       }
-      // 入口の見出しに出ている「0 に寄せたぶん」。時計を配るのに要る
+      // 入力の見出しに出ている「0 に寄せたぶん」。時計を配るのに要る
       if (!Number.isFinite(this.startPts) && line.includes("start:")) {
         this.startPts = parseStart(line);
         // 起こし直したあとの新しい対応は、次の塊で配る (`CLOCK_EVERY` を待たない)
@@ -2362,7 +2362,7 @@ class Session {
     }
   }
 
-  tell(notice: Notice): void {
+  private tell(notice: Notice): void {
     for (const viewer of this.viewers) this.tellOne(viewer, notice);
   }
 
@@ -2580,31 +2580,36 @@ export function hasLiveViewers(): boolean {
   return sessions.size > 0;
 }
 
+/** ライブで観るもの (`begin`・`sharedSession`・`watch`)。目印 (`key`) が同じなら同じセッションを共有する */
+interface Want {
+  channelType: string;
+  channel: string;
+  serviceId: number;
+  now: NowPlaying;
+  codec: StreamCodec;
+  /** その局の中で何本目の字幕を出すか */
+  track: number;
+  raw: boolean;
+  /** デバッグ用に名指ししたチューナー (`Session.pin`)。無ければ null */
+  pin: string | null;
+  rung: Rung;
+}
+
 /** エンコードし始めて一覧に載せる。畳むのは見ている人がいなくなったとき。ここでは待たない */
-function begin(
-  channelType: string,
-  channel: string,
-  serviceId: number,
-  now: NowPlaying,
-  codec: StreamCodec,
-  track: number,
-  raw: boolean,
-  pin: string | null = null,
-  rung: Rung = 0,
-): Session {
+function begin(want: Want): Session {
   const session = new Session(
-    channelType,
-    channel,
-    serviceId,
-    now.program,
-    now.audio,
-    codec,
-    track,
-    raw,
+    want.channelType,
+    want.channel,
+    want.serviceId,
+    want.now.program,
+    want.now.audio,
+    want.codec,
+    want.track,
+    want.raw,
     undefined,
     undefined,
-    pin,
-    rung,
+    want.pin,
+    want.rung,
   );
   sessions.set(session.id, session);
   void session.run();
@@ -2612,27 +2617,17 @@ function begin(
 }
 
 /** いま同じもの (段まで同じ) をエンコードしているセッション。段を下げるときに枠が要るかを決める (`rungSlot`) */
-function sharedSession(
-  channelType: string,
-  channel: string,
-  serviceId: number,
-  now: NowPlaying,
-  codec: StreamCodec,
-  track: number,
-  raw: boolean,
-  pin: string | null,
-  rung: Rung,
-): Session | undefined {
+function sharedSession(want: Want): Session | undefined {
   return sessions.get(
     key(
-      channelType,
-      channel,
-      serviceId,
-      now.audio,
-      raw ? "raw" : codec,
-      track,
-      pin,
-      rung,
+      want.channelType,
+      want.channel,
+      want.serviceId,
+      want.now.audio,
+      want.raw ? "raw" : want.codec,
+      want.track,
+      want.pin,
+      want.rung,
     ),
   );
 }
@@ -2644,32 +2639,12 @@ function sharedSession(
  * 畳んだときに返し、共有したならその場で返す
  */
 function watch(
-  channelType: string,
-  channel: string,
-  serviceId: number,
-  now: NowPlaying,
-  codec: StreamCodec,
-  track: number,
-  raw: boolean,
+  want: Want,
   viewer: Viewer,
-  pin: string | null = null,
-  rung: Rung = 0,
   release: () => void = () => undefined,
 ): Session {
-  const shared = sharedSession(
-    channelType,
-    channel,
-    serviceId,
-    now,
-    codec,
-    track,
-    raw,
-    pin,
-    rung,
-  );
-  const session =
-    shared ??
-    begin(channelType, channel, serviceId, now, codec, track, raw, pin, rung);
+  const shared = sharedSession(want);
+  const session = shared ?? begin(want);
   if (shared === undefined) session.whenStopped(release);
   else release();
   session.add(viewer);
@@ -2713,40 +2688,40 @@ export function liveStream(
   audio?: string,
   rung: Rung = 0,
 ): ReadableStream<Uint8Array> | null | "busy" {
+  const want = httpWant(serviceId, codec, audio, rung);
+  if (want === null) return null;
+  const release = rungSlot(
+    want.codec === "audio" ? 0 : want.rung,
+    sharedSession(want) !== undefined,
+  );
+  if (release === null) return "busy";
+  return sessionStream((viewer) => watch(want, viewer, release));
+}
+
+/**
+ * HTTP のライブ (`liveStream`・`liveCaptions`) が観るもの。字幕は 1 本目で、チューナーは名指ししない。
+ * 放送そのままでは段を下げない。局が無ければ null
+ */
+function httpWant(
+  serviceId: number,
+  form: StreamCodec | "raw",
+  audio: string | undefined,
+  rung: Rung,
+): Want | null {
   const row = serviceOf(serviceId);
   if (row === undefined) return null;
-  const raw = codec === "raw";
-  const form = raw ? "h264" : codec;
-  const level = raw ? 0 : rung;
-  const now = nowPlaying(serviceId, audio);
-  const shared = sharedSession(
-    row.type,
-    row.channel,
+  const raw = form === "raw";
+  return {
+    channelType: row.type,
+    channel: row.channel,
     serviceId,
-    now,
-    form,
-    0,
+    now: nowPlaying(serviceId, audio),
+    codec: raw ? "h264" : form,
+    track: 0,
     raw,
-    null,
-    level,
-  );
-  const release = rungSlot(codec === "audio" ? 0 : level, shared !== undefined);
-  if (release === null) return "busy";
-  return sessionStream((viewer) =>
-    watch(
-      row.type,
-      row.channel,
-      serviceId,
-      now,
-      form,
-      0,
-      raw,
-      viewer,
-      null,
-      level,
-      release,
-    ),
-  );
+    pin: null,
+    rung: raw ? 0 : rung,
+  };
 }
 
 /**
@@ -2824,21 +2799,9 @@ export function liveCaptions(
   audio?: string,
   rung: Rung = 0,
 ): ReadableStream<Uint8Array> | null {
-  const row = serviceOf(serviceId);
-  if (row === undefined) return null;
-  // 放送そのままの目印は音声で分けない (`key`)。変換したものは映像と同じ決め方で音声を選ぶ (`liveStream`)
-  const session = sessions.get(
-    key(
-      row.type,
-      row.channel,
-      serviceId,
-      nowPlaying(serviceId, form === "raw" ? undefined : audio).audio,
-      form,
-      0,
-      null,
-      form === "raw" ? 0 : rung,
-    ),
-  );
+  // 映像 (`liveStream`) と同じ決め方で目印を作る。放送そのままの目印は音声で分けない (`key`)
+  const want = httpWant(serviceId, form, audio, rung);
+  const session = want === null ? undefined : sharedSession(want);
   if (session === undefined || !session.alive) return null;
   return captionFeed((out) => {
     const viewer: Viewer = {
@@ -3000,7 +2963,7 @@ function spawnRecordingCaptioner(
   current: () => ReturnType<typeof Bun.spawn>,
 ): ReturnType<typeof Bun.spawn> {
   const { proc, pipe } = spawnCaptioner(program, 0);
-  // 選べる字幕は入口の見出しから (`TrackList`)。ffmpeg ごとに数え直す。失敗は残す
+  // 選べる字幕は入力の見出しから (`TrackList`)。ffmpeg ごとに数え直す。失敗は残す
   const list = new TrackList(program);
   const text = new CaptionText();
   const effective = () => pickLanguage(text.languages, language);
@@ -3164,7 +3127,7 @@ function dropWarm(serviceId: number, by: Session): void {
  * 覚えている前回の局か (`LAST_COOKIE`)、一覧の先頭。
  *
  * **1 枚も出ないうちに繋がるので、合流の待ちは付かない。** エンコードしたものは
- * キーフレームから始まるが、それが出るのは選局・エージェントの溜め・ffmpeg の立ち上がりの
+ * キーフレームから始まるが、それが出るのは選局・エージェントのバッファ・ffmpeg の立ち上がりの
  * あとなので、160ms で来る画面はまだ何も渡されていない状態で繋がる。
  *
  * 待たない・投げない。使えなくても画面はいつもどおり繋いでくるので、
@@ -3198,16 +3161,21 @@ export function warm(
     if (session.serviceId === serviceId && !session.empty) return;
   }
 
-  const now = nowPlaying(serviceId, audio);
-  // 字幕は 1 本目で温める。**選び直す人は稀**で、そのときは再エンコードになる。
+  // 字幕は 1 本目で温める。**選び直す人は稀**で、そのときは再エンコードになる
+  const want: Want = {
+    channelType,
+    channel,
+    serviceId,
+    now: nowPlaying(serviceId, audio),
+    codec,
+    track: 0,
+    raw,
+    pin: null,
+    rung: 0,
+  };
   // 既にエンコードしていれば何もしない。開き直すたびに増やさない
-  if (
-    sessions.has(
-      key(channelType, channel, serviceId, now.audio, raw ? "raw" : codec, 0),
-    )
-  )
-    return;
-  const session = begin(channelType, channel, serviceId, now, codec, 0, raw);
+  if (sharedSession(want) !== undefined) return;
+  const session = begin(want);
   warmed.add(session);
   session.whenStopped(() => warmed.delete(session));
 
@@ -3379,7 +3347,7 @@ export function attend(connection: Connection): void {
       else current.setLanguage(viewer, asked.language);
       return;
     }
-    // 追っかけの元の TS を送るのを止める・続ける。読む側 (`openChase` の `held`) が見る
+    // 追っかけの元の TS を送るのを止める・続ける。読む側 (`openChase` の `stopReading`) が見る
     if (asked.type === "hold") {
       viewer.held = asked.on;
       return;
@@ -3452,21 +3420,21 @@ export function attend(connection: Connection): void {
      * 抜けるかは枠を取る前に決める (`rungPlan`)。抜けたあとで取れないと、映像が切れたうえに今の段にも戻れない。
      * **空かなければ段を下げない。** いま同じ局を観ていればその段のまま、そうでなければ段 0 で開き、理由を断り書きで言う
      */
+    const want = (): Want => ({
+      channelType,
+      channel,
+      serviceId,
+      now,
+      codec,
+      track: caption,
+      raw,
+      pin: tuner,
+      rung,
+    });
     let release: (() => void) | null = () => undefined;
     let refused = false;
     if (rung !== 0 && !same && codec !== "audio") {
-      const shared = () =>
-        sharedSession(
-          channelType,
-          channel,
-          serviceId,
-          now,
-          codec,
-          caption,
-          raw,
-          tuner,
-          rung,
-        ) !== undefined;
+      const shared = () => sharedSession(want()) !== undefined;
       const plan = rungPlan({
         shared: shared(),
         room: transcodeRoom(),
@@ -3550,24 +3518,12 @@ export function attend(connection: Connection): void {
     }
 
     leave();
-    current = watch(
-      channelType,
-      channel,
-      serviceId,
-      now,
-      codec,
-      caption,
-      raw,
-      viewer,
-      tuner,
-      rung,
-      release,
-    );
+    current = watch(want(), viewer, release);
     dropWarm(serviceId, current);
   };
 
   /*
-   * **送り出しの具合を知らせる** (`pace`。`server/pace.ts`)。溜まりと捨てた塊は接続ごと、エンコードの速さはいま観ているセッションのもの。
+   * **送り出しの具合を知らせる** (`pace`。`server/pace.ts`)。バッファの量と捨てた塊は接続ごと、エンコードの速さはいま観ているセッションのもの。
    * 何も観ていない間は送らない
    */
   const meter = new PaceMeter();

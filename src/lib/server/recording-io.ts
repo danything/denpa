@@ -20,8 +20,8 @@
  * 暗号化するときは、次も一緒に考える。多くは、denpa の外 (ffmpeg・エージェント) が直にファイルを開くか、
  * 中身ではなくファイルそのもの (大きさ・更新時刻・置き場所) を扱う所。
  *
- * - ffmpeg が直に書き出す所 … エンコード (`encoder.buildArgs` の出口)、チャプターを書き直す (`cm.chapterArgs`) の出口。
- *   ffmpeg が出口のパスを開く
+ * - ffmpeg が直に書き出す所 … エンコード (`encoder.buildArgs` の出力)、チャプターを書き直す (`cm.chapterArgs`) の出力。
+ *   ffmpeg が出力のパスを開く
  * - ほかのモジュールを読まない所 … コマ数を測る引数 (`fps.fpsArgs`)。`scripts/fps-smoke.ts` がイメージの中へ
  *   このファイルだけを持ち込んで動かすので、`recordingInput` を使わずに `-i` を直に書いている
  * - エージェントが直に読み書きする所 … スクランブルの復号 (`scramble.descramble`)。パスだけ渡し、元の TS を

@@ -1206,6 +1206,7 @@ function tryWay(way: HwWay, codec: HwCodec): Promise<boolean> {
 function wayNote(way: HwWay): string {
   if (way.cqp === true) return "、CQP";
   if (way.amfTranscoding === true) return "、古い世代向けの指定";
+  if (way.qsvSystem === true) return "、CPU のメモリから渡す";
   return "";
 }
 

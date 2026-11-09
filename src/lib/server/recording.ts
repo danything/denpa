@@ -70,16 +70,16 @@ export function fillTsHead(recordingId: number, head: number): void {
 
 /**
  * **録り始める予定の時刻** (unix ms)。チューナーを譲って冒頭を削ったなら `record_from`、
- * そうでなければ番組の始まりの `START_MARGIN` 前。予約と録画の行のどちらにも使う
- * (録画の行は予約から `record_from` を写している。`recorder.ts`)
+ * そうでなければ番組の始まりの `START_MARGIN` 前 (録画の行は予約から `record_from` を写している。`recorder.ts`)。
+ * 予約の行で同じ値を SQL で出すのは `plannedStartSql`
  */
-export function plannedStart(
+function plannedStart(
   row: Pick<Recording, "record_from" | "start_at">,
 ): number {
   return row.record_from ?? row.start_at - config.startMargin;
 }
 
-/** 予約の行の {@link plannedStart} を SQL で (始める予約を引くとき。`scheduler.ts`) */
+/** 予約の行の `plannedStart` を SQL で (始める予約を引くとき。`scheduler.ts`) */
 export function plannedStartSql(): SQL<number> {
   return sql<number>`COALESCE(${reservations.record_from}, ${reservations.start_at} - ${config.startMargin})`;
 }

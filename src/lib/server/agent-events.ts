@@ -22,30 +22,22 @@ import { chunks } from "./stream";
 
 interface AgentEvent {
   name: string;
-  data: Record<string, unknown>;
 }
 
 /** つなぎ直しの待ち。すぐ繋ぎ直すと、相手が落ちている間に呼び続けることになる */
 const RETRY_MIN = 1000;
 const RETRY_MAX = 60_000;
 
-/** SSE の 1 ブロックを解釈する。`event:` と `data:` だけ見れば足りる */
+/**
+ * SSE の 1 ブロックを解釈する。読むのは `event:` だけ。エージェントの `data:` はいつも `{}` で
+ * (agent の `Events.cs`)、どのイベントも名前だけで足りる
+ */
 export function parseBlock(block: string): AgentEvent | null {
   let name = "";
-  let data = "";
   for (const line of block.split("\n")) {
     if (line.startsWith("event:")) name = line.slice(6).trim();
-    else if (line.startsWith("data:")) data += line.slice(5).trim();
   }
-  if (name === "") return null;
-  try {
-    return {
-      name,
-      data: data === "" ? {} : (JSON.parse(data) as Record<string, unknown>),
-    };
-  } catch {
-    return { name, data: {} };
-  }
+  return name === "" ? null : { name };
 }
 
 /**

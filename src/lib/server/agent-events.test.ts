@@ -3,25 +3,18 @@ import { describe, expect, test } from "bun:test";
 import { blocks, parseBlock } from "./agent-events";
 
 describe("エージェントの通知", () => {
-  test("event と data を取り出す", () => {
-    expect(parseBlock('event: tuners\ndata: {"index":0}')).toEqual({
-      name: "tuners",
-      data: { index: 0 },
-    });
+  test("event の名前を取り出す", () => {
+    expect(parseBlock("event: tuners\ndata: {}")).toEqual({ name: "tuners" });
   });
 
   test("data が無くても名前だけで通す", () => {
-    expect(parseBlock("event: channels")).toEqual({
-      name: "channels",
-      data: {},
-    });
+    expect(parseBlock("event: channels")).toEqual({ name: "channels" });
   });
 
   test("data が壊れていても名前は活かす", () => {
     // 知らない形式が来ても、聞くのをやめてしまうより名前だけでも読み取るほうがいい
     expect(parseBlock("event: scan\ndata: {壊れている")).toEqual({
       name: "scan",
-      data: {},
     });
   });
 

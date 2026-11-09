@@ -18,8 +18,8 @@ import { DIGITAL_TV } from "./schema";
 import type { AgentChannel } from "./tuner";
 import { notify } from "./webhook";
 
-/** 局の顔ぶれがスキャンの結果と違ったチャンネル (名前 → 放送の局のサービス ID の並び) */
-const mismatched = new Map<string, string>();
+/** 局の顔ぶれがスキャンの結果と違ったチャンネルの名前 */
+const mismatched = new Set<string>();
 
 /** 通知を送った文。同じ文は 2 度送らない */
 const notified = new Set<string>();
@@ -57,7 +57,7 @@ export function compareGround(
       .map((service) => service.serviceId),
   );
   if (broadcast === kept) mismatched.delete(channel.channel);
-  else mismatched.set(channel.channel, broadcast);
+  else mismatched.add(channel.channel);
 }
 
 /** スキャンの結果から無くなったチャンネルの違いを忘れる (スキャンし直した) */
@@ -65,7 +65,7 @@ export function forgetGround(channels: readonly AgentChannel[]): void {
   const listed = new Set(
     channels.filter((c) => c.type === "GR").map((c) => c.channel),
   );
-  for (const channel of mismatched.keys()) {
+  for (const channel of mismatched) {
     if (!listed.has(channel)) mismatched.delete(channel);
   }
 }
@@ -79,7 +79,7 @@ function groundTexts(): string[] {
       `${failing.join("・")} を続けて選局できません。周波数が変わった場合は、地上波をスキャンし直すと選局できます`,
     );
   if (mismatched.size > 0) {
-    const channels = [...mismatched.keys()].sort((a, b) =>
+    const channels = [...mismatched].sort((a, b) =>
       a.localeCompare(b, "en", { numeric: true }),
     );
     texts.push(

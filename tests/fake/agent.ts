@@ -318,7 +318,6 @@ function tunerStatus() {
           { use: "rec 1", priority: 10 },
           { use: "epg BS11:18000", priority: 3 },
         ],
-        pid: 1234,
         error: null,
         signal: busySignal,
       };
@@ -331,7 +330,6 @@ function tunerStatus() {
           ? null
           : { type: lease.type, channel: lease.channel },
       users: lease?.users ?? [],
-      pid: lease === undefined ? null : 1234,
       error: null,
       // 偽の選局は機材を持たないので測れない (本物の偽の選局 `FAKE_TUNE` と同じ)
       signal: null,

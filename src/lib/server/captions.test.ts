@@ -53,8 +53,8 @@ describe("字幕の取り出し方", () => {
     expect(args).not.toContain("showinfo");
   });
 
-  /** **映像とは別の出口へ出す。** 同じ ffmpeg なので、出口を分けるしかない */
-  test("映像とは別の出口へ出す", () => {
+  /** **映像とは別の出力へ出す。** 同じ ffmpeg なので、出力を分けるしかない */
+  test("映像とは別の出力へ出す", () => {
     expect(captionOutput("0:p:1024", 0)).toContain("pipe:3");
   });
 
@@ -85,15 +85,15 @@ describe("放送そのままの経路の字幕", () => {
     expect(args.indexOf("-copyts")).toBeLessThan(args.indexOf("-i"));
     expect(args).not.toContain("libx264");
     expect(args).not.toContain("-vf");
-    // 出口はエンコードの経路と同じ (Matroska を 3 番目の出口へ)
+    // 出力はエンコードの経路と同じ (Matroska を 3 番目の出力へ)
     expect(args.slice(-2)).toEqual(["matroska", "pipe:3"]);
     // 字幕はデコードせずに写す (デコードするのは denpa)。字幕を描く指定は要らない
     expect(args.join(" ")).toContain("-map 0:p:1024:s:0 -c:s copy");
     expect(args).not.toContain("-sub_type");
   });
 
-  // 出口が名前付きパイプ (Windows) のとき、あるかを確かめるだけでパイプの 1 本を使ってしまう (`stream.sideOutput`)
-  test("出口があるかを確かめさせない (-y)", () => {
+  // 出力が名前付きパイプ (Windows) のとき、あるかを確かめるだけでパイプの 1 本を使ってしまう (`stream.sideOutput`)
+  test("出力があるかを確かめさせない (-y)", () => {
     expect(rawCaptionArgs(1024, 0, String.raw`\.pipedenpa-1-1`)).toContain(
       "-y",
     );
@@ -193,8 +193,8 @@ async function readAll(
 }
 
 /**
- * **字幕があるかは ffmpeg を起動する前に PMT で分かる** (`peekCaptions`)。無い放送に字幕の出口を要求すると
- * ffmpeg は入口を探り終えてから終了し、起動し直すぶん映像が遅れる
+ * **字幕があるかは ffmpeg を起動する前に PMT で分かる** (`peekCaptions`)。無い放送に字幕の出力を要求すると
+ * ffmpeg は入力を探り終えてから終了し、起動し直すぶん映像が遅れる
  */
 describe("PMT で字幕の本数を見る", () => {
   test("字幕の部品タグを持つ ES を数える", () => {
@@ -301,7 +301,7 @@ describe("PMT で字幕の本数を見る", () => {
 /**
  * **放送が字幕を持っているかは、1 枚も来ていなくても分かる。**
  *
- * ffmpeg が入口で読んだストリーム一覧に出ている。届いてから画面に切り替えを
+ * ffmpeg が入力で読んだストリーム一覧に出ている。届いてから画面に切り替えを
  * 出していた頃は、間隔の空く番組を開くとボタンが出なかった (実機の
  * 「みんなの手話」。番組表には [字] と出ているのに)。
  */
@@ -372,7 +372,7 @@ describe("TrackList", () => {
 /**
  * **放送の欠けにいちいち言われるぶんは残さない。**
  *
- * 選べる字幕を入口の見出しから読み取るために `-loglevel` を info まで開けたので、
+ * 選べる字幕を入力の見出しから読み取るために `-loglevel` を info まで開けたので、
  * デコーダの「直した」「捨てた」がそのまま流れてくるようになった。実機の弱い局
  * では毎秒何行も出て、**本当の失敗がその中に埋もれる**。
  */
@@ -401,8 +401,8 @@ describe("worthLogging", () => {
     }
   });
 
-  /** 入口の見出しはただの説明。全部残すと選局のたびに数十行積まれる */
-  test("入口の説明は残さない", () => {
+  /** 入力の見出しはただの説明。全部残すと選局のたびに数十行積まれる */
+  test("入力の説明は残さない", () => {
     expect(worthLogging("  Stream #0:2[0x130]: Subtitle: arib_caption")).toBe(
       false,
     );

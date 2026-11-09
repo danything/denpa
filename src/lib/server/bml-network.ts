@@ -85,7 +85,7 @@ function relayBody(status: number, body: Uint8Array): BodyInit | null {
 }
 
 /** 中継の返りに付ける CSP と `cache-control` */
-export interface RelayHeaders {
+interface RelayHeaders {
   csp: string;
   cache: string;
 }
@@ -394,7 +394,7 @@ function doRequest(
  * 手で追いかけて、行き先ごとに `allowed` を通します
  */
 export function fetchForBml(raw: string): Promise<Fetched> {
-  return follow(raw, "GET", undefined);
+  return limited(() => hops(raw, "GET", undefined, FORM));
 }
 
 /**
@@ -420,7 +420,7 @@ export function postForBml(
   body: Uint8Array,
   contentType = FORM,
 ): Promise<Fetched> {
-  return follow(raw, "POST", body, contentType);
+  return limited(() => hops(raw, "POST", body, contentType));
 }
 
 /** いま中継している数 (`CONCURRENCY` まで) */
@@ -462,15 +462,6 @@ export function beforeDeadline<T>(
 }
 
 /** 飛ばされるのを 1 つずつ確かめながら追いかける (`fetchForBml` / `postForBml` の本体) */
-function follow(
-  raw: string,
-  first: "GET" | "POST",
-  body: Uint8Array | undefined,
-  contentType = FORM,
-): Promise<Fetched> {
-  return limited(() => hops(raw, first, body, contentType));
-}
-
 async function hops(
   raw: string,
   first: "GET" | "POST",

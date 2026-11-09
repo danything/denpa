@@ -934,7 +934,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   const paidOk = paidAllowed();
   for (const program of programs) {
     const textOf = textCache(program);
-    // 先勝ちの持ち主のほかに、当たったルールを全部見る (下の dedupe / skip_earlier の受け手)
+    // 先勝ちの持ち主のほかに、当たったルールを全部見る (下の dedupe / skip_earlier の対象)
     const matched = searching
       .filter((candidate) =>
         matchesCompiled(

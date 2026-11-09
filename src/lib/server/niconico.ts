@@ -224,7 +224,7 @@ export async function finishLink(
   try {
     tokens = readTokens(
       JSON.parse(new TextDecoder().decode(await open(flow, sealed))),
-      warn,
+      warnShape,
     );
   } catch {
     return { ok: false, message: FINISH_ERRORS.unreadable };
@@ -328,10 +328,11 @@ function markLost(linkedAt: number, reason: string): void {
   console.warn(`[niconico] 連携が切れました: ${reason}`);
 }
 
-let warnedShape = false;
-function warn(message: string): void {
-  if (warnedShape) return;
-  warnedShape = true;
+/** 出した形式の警告。同じ警告は 1 度だけ出す (違う警告はそれぞれ 1 度ずつ) */
+const warned = new Set<string>();
+export function warnShape(message: string): void {
+  if (warned.has(message)) return;
+  warned.add(message);
   console.warn(`[niconico] ${message}`);
 }
 
@@ -407,7 +408,7 @@ async function refresh(): Promise<string | null> {
       `トークンを更新できません (HTTP ${res.status}${typeof error === "string" ? ` ${error}` : ""})`,
     );
   }
-  const tokens = readTokens(body, warn);
+  const tokens = readTokens(body, warnShape);
   // 待っている間に外された・連携し直された。受けたものは捨てる (今の行を古いトークンで上書きしない)
   const still = row();
   if (still === undefined || still.linked_at !== link.linked_at) return null;
@@ -424,7 +425,7 @@ async function refresh(): Promise<string | null> {
     })
     .run();
   if (tokens.refresh === null)
-    warn(
+    warnShape(
       "更新の応答に新しい更新用のトークンがありません。ニコニコの応答の形式が変わったかもしれません",
     );
   return tokens.access;

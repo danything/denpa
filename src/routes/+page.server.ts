@@ -107,7 +107,7 @@ interface RecordingRow extends Recording {
   has_logo: boolean | null;
   /**
    * 一覧の「残り」の位置と尺 (ms)。観る物差しに直したもの (`playback.watchProgress`)。続きが無ければ null。
-   * `resume_ms` は元の TS の物差しなので、エンコードしたものの尺と比べると CM を切ったものでは食い違う
+   * `resume_ms` は元の TS の物差しなので、エンコードしたものの尺とそのまま比べると、捨てた先頭 (v2.36 までに CM を切ったものは切った CM も) のぶん食い違う
    */
   progress: { at: number; length: number } | null;
   /** 「まとめて表示」でまとめるキーと見出し (`seriesGroup`) */

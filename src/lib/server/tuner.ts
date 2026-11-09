@@ -83,7 +83,6 @@ const AGENT_TUNER = object({
   /** いま使っているチャンネル。空いていれば null */
   channel: nullable(object({ type: CHANNEL_TYPE, channel: string })),
   users: array(object({ use: string, priority: number })),
-  pid: nullable(number),
   error: nullable(string),
   /**
    * 受信の状態と C/N と強度。使用中で、機材が測れるときだけ (エージェントが 5 秒ごとに読む)。
@@ -292,7 +291,8 @@ export class TunerBusyError extends Error {}
 
 /**
  * **エージェントが「選局できない」と返した** (同期しない・デバイスが無いなど)。空き待ち (`TunerBusyError`) と、
- * エージェントに繋がらないのは別。受信できるかの記録 (`reception.ts`) はこれだけを失敗に数える
+ * エージェントに繋がらないのは別。受信できるかの記録 (`epg-collect.ts` → `reception.ts`) は、開けなかった回のうちこれだけを失敗に数える
+ * (ほかに数えるのは、開けたのに上限まで待っても何も来なかった回)
  */
 export class TuneError extends Error {}
 

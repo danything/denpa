@@ -56,7 +56,7 @@ export async function reserve(programId: number): Promise<Reservation> {
   // 手動で入れたものはルール由来 (既定 1) より上。**予約どうしだけの物差し**
   const priority = 2;
   // 録画のしかたは全体で 1 つ。「エンコードするか否か」だけ予約時に固定する。
-  // エンコード方法の細目 (元の TS を残すか・CM の扱い・コーデック) はエンコードするときに settings を見る
+  // エンコードの細目 (元の TS を残すか・コーデック) はエンコードするときに settings を見る
   const encode = settings().encode;
 
   orm()

@@ -574,7 +574,6 @@ export async function downloadVideo(
         await file.close();
       }
 
-      if (announced !== null && announced !== size) break;
       if (have > size) break;
       if (have < size) throw new Retriable("途中で切れました");
     } catch (error) {
@@ -599,7 +598,7 @@ export async function downloadVideo(
   }
 
   const final = await sizeOf(temporary);
-  if (final !== size || (announced !== null && announced !== size)) {
+  if (final !== size) {
     await unlink(temporary).catch(() => {});
     onBytes(-have);
     throw new LengthMismatch(

@@ -48,7 +48,7 @@ describe("エンコードの速さ", () => {
   });
 });
 
-/** **`pace` をいつ送るか** (`PaceMeter`)。2 秒ごとか、塊を捨てた・溜まりが動いたとき */
+/** **`pace` をいつ送るか** (`PaceMeter`)。2 秒ごとか、塊を捨てた・バッファの量が動いたとき */
 describe("pace を送る頃合い", () => {
   test("何も変わらなければ 2 秒ごと", () => {
     const meter = new PaceMeter();
@@ -73,7 +73,7 @@ describe("pace を送る頃合い", () => {
     expect(meter.next(1500, 0, 5, null)?.dropped).toBe(2);
   });
 
-  test("溜まりが大きく動いたら待たずに送る", () => {
+  test("バッファの量が大きく動いたら待たずに送る", () => {
     const meter = new PaceMeter();
     meter.next(0, 0, 0, 1);
     expect(meter.next(500, PACE_STEP - 1, 0, 1)).toBeNull();
@@ -83,7 +83,7 @@ describe("pace を送る頃合い", () => {
 
 /** **HTTP の変換の具合** (`StreamPace`・`openPace`)。写すだけなら速さは null、閉じたら読めない */
 describe("HTTP の具合", () => {
-  test("写すだけなら速さは null。回線の溜まりと捨てた数は HTTP では 0", () => {
+  test("写すだけなら速さは null。回線のバッファと捨てた数は HTTP では 0", () => {
     const copy = new StreamPace(false);
     copy.output(new Uint8Array([1, 2, 3]));
     expect(copy.read()).toEqual({ backlog: 0, dropped: 0, speed: null });
@@ -98,8 +98,8 @@ describe("HTTP の具合", () => {
   });
 });
 
-/** **WebSocket が捨てた塊の数** (`Connection.dropped`)。溜まりが上限を超えたら、捨ててよいものだけ捨てて数える */
-describe("WebSocket の溜まり", () => {
+/** **WebSocket が捨てた塊の数** (`Connection.dropped`)。バッファが上限を超えたら、捨ててよいものだけ捨てて数える */
+describe("WebSocket のバッファ", () => {
   test("溜まりすぎたら捨ててよいものだけ捨てて数え、ほかは送る", () => {
     let buffered = 0;
     let sent = 0;

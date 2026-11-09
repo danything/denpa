@@ -25,7 +25,6 @@ import {
   type TimedMessage,
   toPlaybackTimeline,
 } from "#lib/ts/data-timeline.js";
-import type { Ruler } from "#lib/ts/watch.js";
 
 import type { Recording } from "../types";
 import { orm } from "./db";
@@ -134,17 +133,17 @@ async function capture(
  * 基準は元の TS の頭 (`DataBroadcastCapture.head`) で、番組の始まり (`start_at`) ではない。
  * 測った頭は、録画の行の `ts_head` が空なら書く (`recording.fillTsHead`。実況のコメントを合わせるのに使う)
  *
- * @param tsPath 元の TS (**CM を切る前のほう**。放送の実時刻 (TDT) が続いている)
+ * @param tsPath 元の TS (放送の実時刻 (TDT) が続いている)
  * @param sidecarPath 書き先 (`metadata.sidecarPaths` の `dataBroadcast`)
  * @param recording 録画の行。番組情報に使う
- * @param ruler 元の TS からエンコードしたものへの直し方 (録画の行に書く `cm_kept`・`encode_skip` と同じもの)
+ * @param skip エンコードで元の TS の先頭から捨てた秒 (録画の行に書く `encode_skip` と同じもの)
  * @returns 書いた変化の数。**0 なら書かない** (データ放送を持たない録画)
  */
 export async function saveRecordedBml(
   tsPath: string,
   sidecarPath: string,
   recording: Recording,
-  ruler: Ruler,
+  skip: number,
 ): Promise<number> {
   const { timeline, head } = await capture(tsPath);
   // 頭の放送時刻は実況のコメントにも使う。録っている間に測れていなければここで書く (データ放送の有る無しに関わらず)
@@ -158,7 +157,7 @@ export async function saveRecordedBml(
     return 0;
   // TDT を一度も見ていなければ、どの変化も時刻を持たない (頭の 0 に並ぶ) ので基準は使われない
   const placed = withProgramInfo(
-    toPlaybackTimeline(timeline, head ?? 0, ruler),
+    toPlaybackTimeline(timeline, head ?? 0, { kept: null, skip }),
     recording,
   );
   writeFileSync(

@@ -114,7 +114,7 @@ describe("停止のシグナルの受け取り", () => {
 
   /*
    * **起動の途中に来た合図を捨てない** (`hold-signals.ts`)。コンテナの PID 1 では
-   * 受け手のいない SIGTERM が捨てられ、入れ替えの始まった Pod が 6 時間降りなかった
+   * 誰も受け取らない SIGTERM が捨てられ、入れ替えの始まった Pod が 6 時間降りなかった
    */
   test("入口が取っておいた合図を、引き取ったところで受け直す", () => {
     for (const signal of SIGNALS) process.removeAllListeners(signal);

@@ -212,7 +212,7 @@ describe("assign (前後マージン)", () => {
     const second = accepted.find((a) => a.reservation.id === 2);
     // 前は番組の終わりで離す (マージン +15 を諦める)
     expect(first?.to).toBe(100);
-    // 後ろは番組を丸ごと録れる (頭のマージンだけ諦める)
+    // 後ろは番組を丸ごと録れる (開始マージンだけ諦める)
     expect(second?.from).toBe(100);
     expect(whole(first!)).toBe(true);
     expect(whole(second!)).toBe(true);
@@ -280,7 +280,7 @@ describe("assign (前後マージン)", () => {
       tuners("GR", "GR+BS+CS"),
       MARGINS,
     );
-    // T21 の尻のマージンは衛星の番組に負けるので、T21 の番組が終わる 400 から
+    // T21 の終了マージンは衛星の番組に負けるので、T21 の番組が終わる 400 から
     expect(accepted.find((a) => a.reservation.id === 4)?.from).toBe(400);
   });
 
@@ -613,7 +613,7 @@ describe("兼用のチューナーがあるとき (#668)", () => {
         .map((a) => a.reservation.id)
         .sort(),
     ).toEqual([1, 2]);
-    // 衛星は T21 が兼用を離す 24:00 から (T21 の尻のマージンは番組に負ける)
+    // 衛星は T21 が兼用を離す 24:00 から (T21 の終了マージンは番組に負ける)
     const bs = accepted.find((a) => a.reservation.id === 3);
     expect(bs?.from).toBe(at(24));
     expect(bs?.to).toBe(at(24, 30) + MARGINS.end);
@@ -699,7 +699,7 @@ describe("兼用のチューナーがあるとき (#668)", () => {
         .map((a) => a.reservation.id)
         .sort(),
     ).toEqual([1, 2, 4]);
-    // T21 は専用が空く 22:00 から (T16 の尻のマージンは番組に負ける)
+    // T21 は専用が空く 22:00 から (T16 の終了マージンは番組に負ける)
     expect(accepted.find((a) => a.reservation.id === 3)?.from).toBe(at(22));
   });
 
@@ -752,10 +752,10 @@ describe("兼用のチューナーがあるとき (#668)", () => {
   });
 
   /*
-   * 割り振りは変わるところだけなぞり直して速くしてある (`Timeline`)。通したものを頭から素直に
+   * 割り振りは変わるところだけなぞり直して速くしてある (`Timeline`)。通したものを先頭から素直に
    * なぞり直して (`placements`)、全員が最後まで 1 台のチューナーを使えることを確かめる
    */
-  test("通したものは、約束どおりに頭からなぞっても全員使える", () => {
+  test("通したものは、約束どおりに先頭からなぞっても全員使える", () => {
     const next = random(3);
     const channels = {
       GR: ["T16", "T21", "T22"],
@@ -968,7 +968,7 @@ describe("チューナーの取り合い (プレビュー、兼用のチュー�
       end_at: at(22),
     });
     const busy = [{ type: "GR", channel: "T21", rank: 1, until: at(21, 30) }];
-    // 名指しする相手 (番組) はいないが、入れないことは分かる。予約の側 (`assign`) で頭が欠ける
+    // 名指しする相手 (番組) はいないが、入れないことは分かる。予約の側 (`assign`) で先頭が欠ける
     expect(contentions([bs], MIXED, NO_MARGIN, busy).get(1)).toBeUndefined();
     const other = occ({
       programId: 2,
@@ -985,7 +985,7 @@ describe("チューナーの取り合い (プレビュー、兼用のチュー�
     );
   });
 
-  test("時間帯の頭は、誰も使っていない瞬間までさかのぼる", () => {
+  test("時間帯の始まりは、誰も使っていない瞬間までさかのぼる", () => {
     const list = [
       occ({ programId: 1, channel: "T16", start_at: at(21), end_at: at(23) }),
       occ({ programId: 2, channel: "T21", start_at: at(22), end_at: at(24) }),

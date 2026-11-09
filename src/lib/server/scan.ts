@@ -28,6 +28,7 @@ import { collectOnce } from "./epg-collect";
 import { emit } from "./events";
 import { knownNames, readLineup, type SatelliteType } from "./satellite";
 import { resolveConflicts } from "./scheduler";
+import { readUntil } from "./stream";
 import {
   type AgentChannel,
   type AgentTuner,
@@ -113,43 +114,23 @@ export async function readServices(
   epg?: EpgReader,
 ): Promise<ScanResult> {
   const reader = new ServiceReader();
-  const source = stream.getReader();
   let bytes = 0;
-  let message = "";
-
-  // 打ち切りの合図は走査全体で 1 つ。局ごとに足したリスナーは、読み終えたら外す (100 局を超えると積もる)
-  let stop = (): void => {};
-  const deadline = new Promise<void>((resolve) => {
-    stop = resolve;
-  });
-  const timer = setTimeout(stop, timeout);
-  timer.unref?.();
-  abort?.addEventListener("abort", stop, { once: true });
-
-  const read = (async () => {
-    for (;;) {
-      const { done, value } = await source.read();
-      if (done || value === undefined) return;
-      bytes += value.byteLength;
-      epg?.feed(value);
-      if (reader.feed(value)) return;
-    }
-  })().catch((error: unknown) => {
-    // 選局が落ちた理由はここに来る (デバイスが無い・使用中など)
-    message = String(error);
-  });
-
-  await Promise.race([read, deadline]);
-  clearTimeout(timer);
-  abort?.removeEventListener("abort", stop);
-  await source.cancel().catch(() => undefined);
+  const tail = await readUntil(
+    stream,
+    (chunk) => {
+      bytes += chunk.byteLength;
+      epg?.feed(chunk);
+      return reader.feed(chunk);
+    },
+    timeout,
+    abort,
+  );
 
   const signal = bytes > 0;
   if (reader.complete)
     return { services: reader.services(), error: null, signal };
 
-  const tail = message.trim().split("\n").at(-1)?.trim();
-  const detail = tail === undefined || tail === "" ? "" : ` (${tail})`;
+  const detail = tail === "" ? "" : ` (${tail})`;
   const fail = (why: string) => ({
     services: null,
     error: `${why}${detail}`,
@@ -624,23 +605,33 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
   }
 }
 
+/**
+ * 選んだ種別から、回すチャンネルを決める。知らない種別と重複は除く。
+ * CATV は UHF も回すので、地上波と両方来ても UHF を 2 回回さない。
+ * 衛星は総当たりしないので、チャンネルの一覧は持たない。進み具合では 1 つと数える
+ * (放送の一覧を 1 回読む。CS はネットワークが 2 つなので 2 回選局するが、数は 1 のまま)
+ */
+export function scanTargets(
+  chosen: readonly ScanKind[],
+): [ScannableType, string[]][] {
+  const types = new Set(chosen.filter((kind) => SCAN_KINDS.includes(kind)));
+  if (types.has("CATV")) types.delete("GR");
+  return [...types].map((type) =>
+    type === "GR" || type === "CATV"
+      ? ["GR", channelsFor(type)]
+      : [type, [type]],
+  );
+}
+
 export function start(options: ScanOptions): {
   started: boolean;
   message: string;
 } {
-  const types = options.types.filter((type) => SCAN_KINDS.includes(type));
-  if (types.length === 0)
+  const targets = scanTargets(options.types);
+  if (targets.length === 0)
     return { started: false, message: "チャンネル種別の指定が不正です" };
   if (current.state === "running")
     return { started: false, message: "すでに実行中です" };
-
-  /*
-   * 衛星は総当たりしないので、チャンネルの一覧は持たない。進み具合では 1 つと数える
-   * (放送の一覧を 1 回読む。CS はネットワークが 2 つなので 2 回選局するが、数は 1 のまま)
-   */
-  const targets: [ScannableType, string[]][] = types.map((type) =>
-    type === "BS" || type === "CS" ? [type, [type]] : ["GR", channelsFor(type)],
-  );
 
   current = {
     ...IDLE,

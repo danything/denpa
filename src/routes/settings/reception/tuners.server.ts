@@ -54,6 +54,8 @@ function describe(use: string): string {
     return row === undefined ? "録画" : `録画: ${row.name}`;
   }
 
+  // 復号できるかを試す選局 (`contracts.decodeOnChannel`)。印にチャンネルが入らないので、括弧を添えない
+  if (use === "live test-decode") return "復号の確認";
   for (const [pattern, label] of USE_WORDS) {
     const found = use.match(pattern);
     if (found !== null) return `${label} (${found[1]})`;
