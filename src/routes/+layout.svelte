@@ -170,7 +170,7 @@
   });
 
   /**
-   * **その端末の高さを読む表示** (`Measure`)。入り口は `?measure` (1 回だけ) と設定画面のオン/オフ
+   * **その端末の高さを読む表示** (`Measure`)。入口は `?measure` (1 回だけ) と設定画面のオン/オフ
    * (覚える。PWA にはアドレスバーが無いので URL だけでは入れない)
    */
   $effect(() => {
@@ -850,7 +850,8 @@
    */
   .tabbar {
     position: fixed;
-    inset: auto 0.75rem calc(0.5rem + env(safe-area-inset-bottom)) 0.75rem;
+    inset: auto var(--dp-dock-inset)
+      calc(var(--dp-space-2) + env(safe-area-inset-bottom));
     z-index: var(--dp-z-header);
     display: grid;
     grid-auto-columns: minmax(0, 1fr);
@@ -969,11 +970,11 @@
     width: 12rem;
   }
   /*
-     * 「その他」はいちばん右のタブなので、右端を揃えると画面の端に貼り付く。下のタブの右端 (0.75rem) にそろえる
+     * 「その他」はいちばん右のタブなので、右端を揃えると画面の端に貼り付く。下のタブの右端 (`--dp-dock-inset`) にそろえる
      * (anchor positioning の無いブラウザは `Menu` が JS で置き、端から 4px 空ける)
      */
   :global(.menu.tab-more-menu) {
-    margin-inline-end: var(--dp-space-3);
+    margin-inline-end: var(--dp-dock-inset);
   }
   /* 縦に積む。いまの画面の項目は `app.css` の `.menu-item` (左の縦線と主の色の太字) */
   .more-list {
@@ -1108,7 +1109,7 @@
   /*
    * **ヘッダーは操作の層** (docs/design.md)。端から 0.5rem / `--dp-bar-inset` 離した角丸の面にして、巻くと中身の上に浮かせる (下の `@supports`)。
    * 面は `--dp-float` (メニューの面を 92% 残した半透明。ぼかさない)。中身はヘッダーの下から始め (`--dp-header-space`)、巻くと下を流れる。
-   * 角は入れ子でそろえる: 外 (`--dp-bar-radius` 0.875rem) = 中の欄 (`--dp-radius` 0.5rem) + 間の余白 (0.375rem)
+   * 角は入れ子でそろえる: 外 (`--dp-bar-radius` 0.875rem) = 中の欄 (`--dp-radius` 0.5rem) + 間の余白 (`--dp-bar-pad` 0.375rem)
    *
    * `--dp-header-bottom` はヘッダーの下端。巻いても上に残す操作の 1 行は、ここから `--dp-bar-gap` 離した同じ形の面に乗せて貼り付ける
    * (`app.css` の `dp-bar-float`)。その 1 行がある間はヘッダーも近い影 (`--navbar-shadow`) にそろえ、遠い影が下の 1 行に掛からないようにする
@@ -1128,7 +1129,8 @@
     top: 0.5rem;
     inset-inline: var(--dp-bar-inset);
     min-height: 3.25rem;
-    padding: 0.375rem 0.375rem 0.375rem var(--dp-space-3);
+    padding: var(--dp-bar-pad) var(--dp-bar-pad) var(--dp-bar-pad)
+      var(--dp-space-3);
     border-radius: var(--dp-bar-radius);
     background: var(--dp-float);
     box-shadow: var(--navbar-shadow, var(--dp-shadow-pop));

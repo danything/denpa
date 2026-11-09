@@ -55,7 +55,7 @@ describe("⚙ の字幕の行", () => {
     expect(calls).toEqual(["off"]);
   });
 
-  test("言語が1つなら、オフとオンだけ (名前が分かればその名前)", () => {
+  test("言語が 1 つなら、オフとオンだけ (名前が分かればその名前)", () => {
     expect(
       choice({ languages: [JPN] }).made.options.map((o) => o.label),
     ).toEqual(["オフ", "日本語"]);

@@ -33,7 +33,7 @@
      * **渡したときだけ `aria-pressed` を付ける**。押すだけのボタン (閉じる・切り抜き) には渡さない
      */
     on?: boolean | undefined;
-    /** 押すと戻せないもの。**聞き返しの 2 回目**に立てる (`icons.ts` の `OVERLAY_DANGER`) */
+    /** 押すと戻せないもの。**戻せない操作の 2 回目**に立てる (`icons.ts` の `OVERLAY_DANGER`) */
     danger?: boolean;
     /** 中の `<form>` を送るボタンにする (削除など) */
     submit?: boolean;
@@ -66,10 +66,11 @@
 
 <style>
   /*
-     * 映像の上に置くボタンの見た目はここ 1 箇所 (`icons.ts` の OVERLAY*。`:global` なので `<a>` や EdgeButton にも届く)。
-     * Pico の色の変数を差し替える。ボタンは塗らず (docs/design.md)、アイコンと字に小さな影を付ける。
-     * 指を乗せた・キーボードで触っているボタンだけ、ごく薄い地で示す
-     */
+   * 映像の上に置くボタンの見た目はここ 1 箇所 (`icons.ts` の OVERLAY*。`:global` なので `<a>` や EdgeButton にも届く)。
+   * Pico の色の変数を差し替える。ボタンは塗らず (docs/design.md)、アイコンと字に小さな影を付ける。
+   * 指を乗せた・キーボードで触っているボタンだけ、ごく薄い地で示す。
+   * 文字のボタン (速さの数字・EdgeButton) の左右の余白は 12px、狭い枠では 8px
+   */
   :global(.ov-btn) {
     position: relative;
     display: inline-flex;
@@ -79,7 +80,7 @@
     height: 3rem;
     min-height: 3rem;
     margin: 0;
-    padding: 0 1.25rem;
+    padding: 0 var(--dp-space-3);
     border: 0;
     border-radius: var(--dp-btn-radius);
     box-shadow: none;
@@ -95,7 +96,7 @@
     width: 3rem;
     padding: 0;
   }
-  /* 狭い枠 (`data-compact`) では 40px (指で押す的として割らない)。文字のボタンは左右の余白も詰める */
+  /* 狭い枠 (`data-compact`) では 40px (指で押せる大きさはこれより小さくしない)。文字のボタンは左右の余白も詰める */
   :global(.stage[data-compact] .ov-btn) {
     height: 2.5rem;
     min-height: 2.5rem;
@@ -119,9 +120,9 @@
     --pico-background-color: var(--dp-on-video-hover);
   }
   /*
-     * オン (`aria-pressed="true"`) は空色のアイコンと下の短い線。線はほかの所と同じ「入っている切り替え」の 1 本 (`app.css`) で、
-     * 色だけ字に合わせる。戻せないものの 2 回目と「今」に張り付いた「ライブ」「最新」は赤 (塗らない)
-     */
+   * オン (`aria-pressed="true"`) は空色のアイコンと下の短い線。線はほかの所と同じ「入っている切り替え」の 1 本 (`app.css`) で、
+   * 色だけ字に合わせる。戻せないものの 2 回目と「今」に張り付いた「ライブ」「最新」は赤 (塗らない)
+   */
   :global(.ov-btn[aria-pressed="true"]) {
     --pico-color: var(--dp-on-video-on);
     --dp-on-mark: currentColor;

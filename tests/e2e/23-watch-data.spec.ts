@@ -223,7 +223,7 @@ test.describe("録画のデータ放送を常に受信する端末", () => {
     await expect.poll(() => text(page)).toBe("r:NaN|d1|k21,");
   });
 
-  test("閉じてもエンジンは残す。設定はライブと同じ1つで、切ると畳む", async ({
+  test("閉じてもエンジンは残す。設定はライブと同じ 1 つで、切ると畳む", async ({
     page,
     request,
   }) => {

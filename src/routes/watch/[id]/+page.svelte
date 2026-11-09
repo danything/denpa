@@ -2725,7 +2725,7 @@
 <PlayerLayout testid="watch">
   {#if !ready}
     <!-- 録っている最中は load が追っかけへ送るので、ここに来るのはエンコード済みも元の TS も無い録画 -->
-    <div class="panel stack not-ready">
+    <div class="panel stack">
       <h2>まだ観られません</h2>
       <p class="small muted">観られるファイルがありません。</p>
       {#if rec.encode_error}
@@ -2744,17 +2744,17 @@
       {#snippet children(layout)}
         <!-- svelte-ignore a11y_media_has_caption -->
         <!--
-                    **映像の箱。データ放送はこれを小窓へ寄せる** (`DataBroadcast` の `placeVideo`)。ライブと同じ。
-                    押すのは映像そのもので、ボタンはその上に重ねる (`--dp-z-stage-controls`)
-                -->
+          **映像の箱。データ放送はこれを小窓へ寄せる** (`DataBroadcast` の `placeVideo`)。ライブと同じ。
+          押すのは映像そのもので、ボタンはその上に重ねる (`--dp-z-stage-controls`)
+        -->
         <div
           bind:this={mediaBox}
           style="position:absolute; inset:0; width:100%; height:100%;"
         >
           <!--
-                    `<video>` は 2 つ。映していない側 (透明・消音) は、段を替えるときに次の観かたを用意する間だけ読み込む (`prepareStep`)。
-                    イベントは映している側のものだけ受ける (空にした側の位置 0 で CM を飛んだりしない)
-                -->
+            `<video>` は 2 つ。映していない側 (透明・消音) は、段を替えるときに次の観かたを用意する間だけ読み込む (`prepareStep`)。
+            イベントは映している側のものだけ受ける (空にした側の位置 0 で CM を飛んだりしない)
+          -->
           {#each [0, 1] as slot (slot)}
             <!-- svelte-ignore a11y_media_has_caption -->
             <video
@@ -2847,10 +2847,10 @@
             {/if}
           </div>
           <!--
-                    字幕は `<track>` ではなく canvas に放送の置き場所のまま描く (左右の位置・背景の箱・外字が落ちるため)。
-                    映像と同じ箱に入れて、データ放送の小窓へ一緒に縮ませる (ライブの `MediaStack` と同じ)。
-                    位置と大きさは `place` が書く。段は実況のコメント (`--dp-z-stage-comments`) より上、操作バーのボタン (`--dp-z-stage-controls`) より下
-                -->
+            字幕は `<track>` ではなく canvas に放送の置き場所のまま描く (左右の位置・背景の箱・外字が落ちるため)。
+            映像と同じ箱に入れて、データ放送の小窓へ一緒に縮ませる (ライブの `MediaStack` と同じ)。
+            位置と大きさは `place` が書く。段は実況のコメント (`--dp-z-stage-comments`) より上、操作バーのボタン (`--dp-z-stage-controls`) より下
+          -->
           <canvas
             bind:this={overlay}
             style="position:absolute; z-index:var(--dp-z-stage-captions); pointer-events:none;"
@@ -2859,9 +2859,9 @@
             aria-hidden="true"
           ></canvas>
           <!--
-                    CM を跨ぐ間と、段を替えるためにプレイヤーを作り直す間 (`hold`) の覆い。字幕と同じ段で、字幕のあとに置くので上に重なる。操作バーや通知 (`--dp-z-stage-controls`) の下。出し入れは `hidden` で。
-                    style に式を書くと `hopping` が変わるたびに書き直され、`place` が書いた位置と大きさが消える
-                -->
+            CM を跨ぐ間と、段を替えるためにプレイヤーを作り直す間 (`hold`) の覆い。字幕と同じ段で、字幕のあとに置くので上に重なる。操作バーや通知 (`--dp-z-stage-controls`) の下。出し入れは `hidden` で。
+            style に式を書くと `hopping` が変わるたびに書き直され、`place` が書いた位置と大きさが消える
+          -->
           <canvas
             bind:this={cover}
             style="position:absolute; z-index:var(--dp-z-stage-captions); pointer-events:none;"
@@ -2872,9 +2872,9 @@
           ></canvas>
         </div>
         <!--
-                    録画のデータ放送。エンコードするときに取り出した変化ログ (`data.hasData`) を再生位置に合わせて流す
-                    (`feedData`/`listenData`)。双方向は使わない (送り先が生きていない)
-                -->
+          録画のデータ放送。エンコードするときに取り出した変化ログ (`data.hasData`) を再生位置に合わせて流す
+          (`feedData`/`listenData`)。双方向は使わない (送り先が生きていない)
+        -->
         <DataBroadcast
           on={showData}
           receive={receiving}
@@ -2891,10 +2891,10 @@
         />
 
         <!--
-                    観られないわけと、待っていることを言う幕 (`problem`)。見た目の決まりはライブ・追っかけと共通 (`PlayerVeil`)。
-                    観られないときは映像を暗く覆い、詰まりと繋ぎ直しの最中は映っている映像を覆わずに回るものだけを出す。
-                    黙って止まっていると壊れたように見え、待てばいいのかが決められない (サーバの入れ替えでは数十秒帰ってこない)
-                -->
+          観られないわけと、待っていることを言う幕 (`problem`)。見た目の決まりはライブ・追っかけと共通 (`PlayerVeil`)。
+          観られないときは映像を暗く覆い、詰まりと繋ぎ直しの最中は映っている映像を覆わずに回るものだけを出す。
+          黙って止まっていると壊れたように見え、待てばいいのかが決められない (サーバの入れ替えでは数十秒帰ってこない)
+        -->
         {#if problem !== "" || buffering || resuming}
           <PlayerVeil
             holding={problem === ""}
@@ -2907,9 +2907,9 @@
         {/if}
 
         <!--
-                    右端の縦の列は観る流れの外の操作 (上から閉じる・切り抜き・コメントの一覧・削除。理由は `ControlBar`)。
-                    削除はいちばん下 (当たっても聞き返しがある)。データ放送 (d) は ⚙ の中
-                -->
+          右端の縦の列は観る流れの外の操作 (上から閉じる・切り抜き・コメントの一覧・削除。理由は `ControlBar`)。
+          削除はいちばん下 (指が触れても 2 回押しで確かめる)。データ放送 (d) は ⚙ の中
+        -->
         <ControlBar side shown={controls.shown} testid="watch-side">
           <CloseLink testid="watch-close" />
           <ControlButton
@@ -2967,9 +2967,9 @@
         <!-- 下端の操作バー。並びは 3 画面で同じ (`ControlBar`・`ControlRow`) -->
         <ControlBar shown={controls.shown} testid="watch-controls">
           <!--
-                        シークバーの CM は琥珀で塗る (denpa-tv と同じ)。送りを何回押すかが分かる。
-                        色だけに頼らず、読み上げでは位置にいまのチャプターの名前を添える
-                    -->
+            シークバーの CM は琥珀で塗る (denpa-tv と同じ)。送りを何回押すかが分かる。
+            色だけに頼らず、読み上げでは位置にいまのチャプターの名前を添える
+          -->
           <SeekBar
             value={at}
             max={length || 0}
@@ -2988,9 +2988,9 @@
 
           <ControlRow testid="watch-buttons">
             <!--
-                            10 秒送り・戻しは置いていない。PC は矢印キー、指は左右の端を素早く 2 回
-                            (`ts/watch.ts` の `tap`) でできる
-                        -->
+              10 秒送り・戻しは置いていない。PC は矢印キー、指は左右の端を素早く 2 回
+              (`ts/watch.ts` の `tap`) でできる
+            -->
             <ControlButton
               icon={playing ? PAUSE : PLAY}
               label={playing ? "一時停止" : "再生"}
@@ -3019,9 +3019,9 @@
             </Extras>
 
             <!--
-                            チャプター送りは入っているときだけ (CM を切ってエンコードしたものには無い)。
-                            畳むときも残す。CM や本編の始まりへ毎回のように使う
-                        -->
+              チャプター送りは入っているときだけ (CM を切ってエンコードしたものには無い)。
+              畳むときも残す。CM や本編の始まりへ毎回のように使う
+            -->
             {#if chapters.length > 1}
               <ControlButton
                 icon={PREV}
@@ -3074,9 +3074,9 @@
             {/if}
 
             <!--
-                            ⚙ の行は使えるときだけ出す: CM スキップは CM の入った録画、コーデックは観られる方式が
-                            2 つ以上 (`codecMenu`)、音声は 2 本以上 (`syncAudio`)
-                        -->
+              ⚙ の行は使えるときだけ出す。CM スキップは CM の入った録画、コーデックは観られる方式が
+              2 つ以上 (`codecMenu`)、音声は 2 本以上 (`syncAudio`)
+            -->
             <StageTail
               prefix="watch"
               {volume}
@@ -3178,9 +3178,9 @@
   {/if}
 
   <!--
-        右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。押すものはこの録画の切り抜きへのリンクだけ
-        (閉じる・削除は映像の上の列。全画面のタブレットで映像から出ずに押す)
-    -->
+    右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。押すものはこの録画の切り抜きへのリンクだけ
+    (閉じる・削除は映像の上の列。全画面のタブレットで映像から出ずに押す)
+  -->
   {#snippet aside()}
     <FactsAside testid="watch-facts">
       {#snippet top()}
@@ -3252,7 +3252,7 @@
 <DriveNotice open={drive.open} onaccept={drive.accept} />
 
 <style>
-  /* 幕の押しものは文言の下の真ん中に (`PlayerVeil`) */
+  /* 幕のボタンは文言の下の真ん中に (`PlayerVeil`) */
   .choices {
     justify-content: center;
   }

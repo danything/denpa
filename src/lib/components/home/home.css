@@ -20,7 +20,7 @@
   flex-shrink: 0;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--dp-space-1);
 }
 .board .row-name {
   font-weight: var(--dp-weight);
@@ -68,7 +68,7 @@
  * ロゴを文の中の 1 文字として流せば、折り返すのは文の途中になる
  */
 .board .row-meta {
-  margin-top: 0.25rem;
+  margin-top: var(--dp-space-1);
   font-size: var(--dp-text-sm);
   color: var(--dp-muted);
   overflow-wrap: anywhere;
@@ -87,7 +87,7 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--dp-space-2);
   min-width: 0;
 }
 .board .title-line .row-name,
@@ -99,11 +99,11 @@
   text-overflow: ellipsis;
 }
 .board .row-empty {
-  padding: 0.75rem;
+  padding: var(--dp-space-3);
 }
 /* まだ観ていない録画の点 (`unwatched`。形は `app.css` の `.fresh-dot`)。名前の前に置く */
 .board .fresh-dot {
-  margin-right: 0.3rem;
+  margin-right: var(--dp-space-1);
   vertical-align: 0.1em;
 }
 .board .group-unwatched {
@@ -144,7 +144,7 @@
 }
 /* 開いた番組の先頭の押すもの。中身の行と同じだけ下げる */
 .board .t-block > .group-tools {
-  padding: 0 0.5rem 0.5rem 2.25rem;
+  padding: 0 var(--dp-space-2) var(--dp-space-2) var(--nest-indent);
 }
 .board .poster-img {
   height: 100%;
@@ -299,6 +299,8 @@
  * 768px からは左右と下を main の余白の外まで広げる。右のサイドバーは広い形 (`html:not([data-phone])`) だけで、窓の右端と下端に付ける
  */
 .board {
+  /* 番組の中の行と、開いた番組の頭の押すもの (`.group-tools`) を下げる深さ */
+  --nest-indent: calc(var(--dp-space-3) + var(--dp-space-5));
   display: flex;
   flex-direction: column;
 }
@@ -324,18 +326,18 @@
  */
 .board .t-toolbar {
   position: sticky;
-  z-index: var(--dp-z-pagebar);
+  z-index: var(--dp-z-dock);
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--dp-space-1);
   height: 2.75rem;
 }
 @media (min-width: 768px) {
   .board .t-list {
-    padding: 0 calc(var(--dp-gutter) - 0.5rem) 1rem;
+    padding: 0 calc(var(--dp-gutter) - var(--dp-space-2)) var(--dp-space-4);
   }
   .board .t-toolbar {
-    gap: 0.75rem;
+    gap: var(--dp-space-3);
   }
 }
 /* 日付の見出しは `app.css` の `.day-head`。いちばん上の見出しは一覧の先頭に付ける */
@@ -351,7 +353,7 @@
 :where(html[data-phone]) .board .t-toolbar {
   order: 2;
   margin-inline: calc(var(--dp-dock-inset) - var(--dp-gutter, 1rem));
-  padding-inline: 0.5rem;
+  padding-inline: var(--dp-space-2);
 }
 /* 768px からは一覧が main の余白の外まで広がっているので、窓の端から下のタブと同じだけ離す */
 @media (min-width: 768px) {
@@ -399,10 +401,10 @@
 .board .group-head {
   display: flex;
   align-items: center;
-  gap: 0.25rem 0.875rem;
+  gap: var(--dp-space-1) var(--dp-space-3);
   min-height: var(--dp-item-h);
   margin: 0;
-  padding: 0.5rem 0.75rem;
+  padding: var(--dp-space-2) var(--dp-space-3);
 }
 .board .t-row .row-body {
   display: flex;
@@ -485,8 +487,8 @@
 @media (max-width: 767.98px) {
   .board .t-row,
   .board .group-head {
-    gap: 0.25rem 0.625rem;
-    padding: 0.5rem;
+    gap: var(--dp-space-1) var(--dp-space-2);
+    padding: var(--dp-space-2);
   }
   .board .t-thumb {
     width: 5rem;
@@ -538,7 +540,7 @@
     white-space: nowrap;
   }
   .board .t-row .row-actions :is(button, a.button) {
-    padding-inline: 0.5rem;
+    padding-inline: var(--dp-space-2);
   }
 }
 /*
@@ -546,7 +548,7 @@
  * 開いた番組の先頭の押すもの (`.group-tools`) と同じ深さ
  */
 .board .row.nested {
-  padding-left: 2.25rem;
+  padding-left: var(--nest-indent);
 }
 
 /* **狭い画面では行の操作を「⋯」1 つに** (`TimelineRow`。番組名に幅を回す)。広い画面は並べ、「⋯」は出さない */
@@ -567,9 +569,9 @@
 /* 「⋯」の中の項目。行の操作のボタンの決まり (`app.css` の `.row-actions`) を、メニューの項目の形に戻す */
 .board .t-row .row-actions .row-menu .menu-item {
   justify-content: flex-start;
-  gap: 0.5rem;
+  gap: var(--dp-space-2);
   min-height: 2.75rem;
-  padding: 0.5rem 0.75rem;
+  padding: var(--dp-space-2) var(--dp-space-3);
   font-size: var(--dp-text-base);
 }
 .board .t-row .row-actions .row-menu .menu-danger {
@@ -597,7 +599,7 @@
 }
 .board .menu-item.view-item {
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--dp-space-4);
   min-height: 2.5rem;
 }
 
@@ -610,7 +612,7 @@
   .board .t-row .row-actions {
     --dp-btn-h: 2.75rem;
     --dp-btn-h-sm: 2.75rem;
-    gap: 0.5rem;
+    gap: var(--dp-space-2);
   }
   .board .t-row .row-actions :is(button, a.button) {
     min-width: 2.75rem;
@@ -649,7 +651,7 @@
 .board .a-warn-label {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--dp-space-2);
 }
 /* スマホの形の、手を止めてほしいもののチップ。注意の色の字 (塗らない。選んでいても注意の色のまま) */
 .board .chip.warn {
@@ -661,13 +663,13 @@
 }
 /* 「⋯」の先頭の状態。押せない (余白で切り替えと分ける) */
 .board .view-menu .menu-head {
-  margin: 0 0 0.5rem;
+  margin: 0 0 var(--dp-space-2);
 }
 .board .view-menu .menu-head .side-list {
   padding: 0;
 }
 .board .view-menu .menu-head .side-item {
   min-height: 2rem;
-  padding: 0 0.75rem;
+  padding: 0 var(--dp-space-3);
   font-size: var(--dp-text-sm);
 }

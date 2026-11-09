@@ -40,7 +40,7 @@
   const shown = $derived(layout === "inline" ? status : null);
 </script>
 
-<!-- 「いま」と読み点は読み上げにだけ渡す -->
+<!-- 「いま」と読点は読み上げにだけ渡す -->
 <svelte:element
   this={heading ? "h2" : "div"}
   bind:this={element}

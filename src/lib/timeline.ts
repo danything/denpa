@@ -94,6 +94,14 @@ export const ATTENTION_FILTERS = [
 export type Filter =
   (typeof FILTERS)[number]["id"] | (typeof ATTENTION_FILTERS)[number]["id"];
 
+/** 出す見てほしいこと。件数のあるものだけ (選んでいるものは 0 件でも残す。外せるように) */
+export function shownAttention(
+  counts: Record<Filter, number>,
+  filter: Filter,
+): (typeof ATTENTION_FILTERS)[number][] {
+  return ATTENTION_FILTERS.filter((f) => counts[f.id] > 0 || filter === f.id);
+}
+
 /** その絞り込みに入るか */
 export function passes(
   filter: Filter,
@@ -210,14 +218,14 @@ export function dayName(
 }
 
 /**
- * 日付の見出しを挟んで並べる。見出しの鍵は `day-<その日の 0 時>` で、1 日に 1 つ。見出しは並びの中で日が替わる所
+ * 日付の見出しを挟んで並べる。見出しのキーは `day-<その日の 0 時>` で、1 日に 1 つ。見出しは並びの中で日が替わる所
  * (その日の頭) に立てるので、逆の並び (`reversed`) も同じ作りで並ぶ。
  *
  * - 線の下の側の今日には見出しを立てない (今日の見出しは線の上に立つ)。ふだんは予約の側、逆のときは録れたものの側
  * - 放送が始まったのに録画に入っていない予約 (日付が今日より前) も今日に入れる。予約の側に前の日の見出しが立たないようにするため
- * - 録れたものの日付が今日より先 (時計のずれ) なら、その日の見出しは側を付けた鍵にする。予約の側の
- *   同じ日の見出しと鍵が重ならないように (線の上と下に 1 つずつ立つ)。逆のときは、そのあとに続く今日の録画の見出しも
- *   側を付けた鍵にする (今日の見出しは線の上にもう 1 つある)
+ * - 録れたものの日付が今日より先 (時計のずれ) なら、その日の見出しは側を付けたキーにする。予約の側の
+ *   同じ日の見出しとキーが重ならないように (線の上と下に 1 つずつ立つ)。逆のときは、そのあとに続く今日の録画の見出しも
+ *   側を付けたキーにする (今日の見出しは線の上にもう 1 つある)
  */
 function byDay<T extends TimelineItem>(
   items: T[],
@@ -247,7 +255,7 @@ function byDay<T extends TimelineItem>(
 }
 
 /**
- * 番組ごとに並べる。見出しの鍵に側を付ける (同じ番組が両側に立つため)。
+ * 番組ごとに並べる。見出しのキーに側を付ける (同じ番組が両側に立つため)。
  * `groupBySeries` は遅い順に返すので、ふだんは逆にして早い順にする (逆の並びのときはそのまま)。
  * 番組の中の回はどちらも放送順
  */

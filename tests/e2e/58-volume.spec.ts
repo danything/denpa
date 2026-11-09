@@ -423,7 +423,7 @@ test.describe("音量", () => {
     await context.close();
   });
 
-  test("3画面で同じ音量を使い、どの画面でも ↑↓ で変えられる", async ({
+  test("3 画面で同じ音量を使い、どの画面でも ↑↓ で変えられる", async ({
     page,
     request,
   }) => {

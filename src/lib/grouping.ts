@@ -2,7 +2,7 @@
  * ホームの「まとめて表示」(issue #480)。**画面に触らない所だけ**を置く (単体テストで見る)。
  * 時間軸の両側 (予約と録れたもの) に効かせるのは `#lib/timeline.ts`。
  *
- * まとめる単位は**番組 (シリーズ)**。鍵はサーバが付ける (`+page.server.ts` の
+ * まとめる単位は**番組 (シリーズ)**。キーはサーバが付ける (`+page.server.ts` の
  * `seriesGroup`)。エンコードしたものを置くシリーズのフォルダと同じ名前なので、
  * ディスクで 1 つのフォルダに並ぶものが一覧でも 1 つにまとまる。
  *
@@ -17,11 +17,11 @@
 
 /** まとめられる行。予約・録画・録り逃しの行を、この形式にして渡す */
 export interface Groupable {
-  /** 行の鍵 (`res-5` / `rec-12` / `missed-3`) */
+  /** 行のキー (`res-5` / `rec-12` / `missed-3`) */
   key: string;
   /** 放送の開始時刻。並びはこれで決める */
   at: number;
-  /** まとめる鍵 (シリーズのフォルダ名) */
+  /** まとめるキー (シリーズのフォルダ名) */
   group: string;
   /** 見出しに出す番組名 */
   groupName: string;
@@ -29,9 +29,9 @@ export interface Groupable {
 
 /** 2 本以上ある番組 */
 export interface SeriesGroup<T extends Groupable> {
-  /** 見出しの鍵。行の鍵 (`rec-` / `missed-`) と混ざらないよう接頭辞を付ける */
+  /** 見出しのキー。行のキー (`rec-` / `missed-`) と混ざらないよう接頭辞を付ける */
   key: string;
-  /** まとめる鍵そのもの。開いているかどうかはこれで覚える */
+  /** まとめるキーそのもの。開いているかどうかはこれで覚える */
   group: string;
   name: string;
   /** 放送順 (古い回が先) */
@@ -94,7 +94,7 @@ export function groupBySeries<T extends Groupable>(
 /**
  * 描く行に開く。閉じている番組は見出しだけ、開いている番組は見出しの下に中身を続ける
  *
- * @param isOpen その番組 (まとめる鍵) を開いているか
+ * @param isOpen その番組 (まとめるキー) を開いているか
  */
 export function groupLines<T extends Groupable>(
   entries: GroupEntry<T>[],

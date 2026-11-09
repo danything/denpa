@@ -64,7 +64,7 @@ test.describe("設定のバージョンと環境・ログ", () => {
   });
 
   /** スマホでは、ログの押すものと絞り込みを 1 行にまとめ、節へ飛ぶ行のすぐ上に浮かべる (docs/design.md の「浮かせ方」) */
-  test("スマホではログの操作と絞り込みが下の1行に出る", async ({ page }) => {
+  test("スマホではログの操作と絞り込みが下の 1 行に出る", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await goto(page, "/settings/general#logs");
 
