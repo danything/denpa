@@ -19,7 +19,6 @@ public sealed class Dt295Timeline
 
     public Func<long> Transfers { get; set; } = () => 0;
 
-
     public sealed class Row
     {
         public int Depth;
@@ -118,9 +117,20 @@ public sealed class Dt295Timeline
                 + (row.Note is { } note ? $" [{note}]" : "");
             output.WriteLine($"{row.StartMs,7:F0}  {(row.Ms < 0 ? "  (途中)" : $"{row.Ms,8:F1}")}  {row.Controls,8}  {row.Transfers,4}  {text}");
         }
-        // 待ちの合計 (入れ子の待ちは数えない。待ちの中に待ちは入らない)
-        var waits = rows.Where(row => row.IsWait && row.Ms >= 0).ToArray();
-        output.WriteLine($"固定の待ち: {waits.Length} 回、合計 {waits.Sum(row => row.Ms):F0} ms");
+        // 待ちの合計。待ちの中の待ち (別の仕事を挟む待ちの中で、その仕事が待つもの) は外側の待ちに含まれるので数えない
+        var count = 0;
+        var sum = 0.0;
+        int? waitDepth = null;
+        foreach (var row in rows)
+        {
+            if (waitDepth is { } depth && row.Depth > depth) continue;
+            waitDepth = null;
+            if (!row.IsWait || row.Ms < 0) continue;
+            count++;
+            sum += row.Ms;
+            waitDepth = row.Depth;
+        }
+        output.WriteLine($"固定の待ち: {count} 回、合計 {sum:F0} ms");
     }
 }
 

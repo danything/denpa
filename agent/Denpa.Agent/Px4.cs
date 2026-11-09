@@ -54,7 +54,7 @@ public static class Px4Userland
 
         /// <summary>
         /// 筐体の USB の位置 (ポート、分からなければ <c>BUS:ADDRESS</c>)。px4d が使っている間、その USB が一覧で
-        /// <c>open_failed</c> と出ても黙るため (<see cref="ParseJson"/>)
+        /// <c>open_failed</c> と出ても記録に出さないため (<see cref="ParseJson"/>)
         /// </summary>
         public IReadOnlyList<string> Places { get; init; } = [];
     }

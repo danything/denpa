@@ -77,7 +77,7 @@ public class Px4TunerTests
         /// </summary>
         public double? Rate { get; init; }
 
-        /// <summary>これだけ流したら、繋いだまま黙る (読む側が待っているところを作る)</summary>
+        /// <summary>これだけ流したら、繋いだまま何も送らない (読む側が待っているところを作る)</summary>
         public int? FramesThenSilence { get; init; }
 
         /// <summary>STATS に答える (HELLO で STREAM_STATS を認める)。呼ばれた回数を引数に、queue_drops を返す。null なら STATS を持たない</summary>

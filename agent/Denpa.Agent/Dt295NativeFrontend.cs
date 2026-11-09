@@ -219,6 +219,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         scope?.Note($"仕事 {clock.ElapsedMilliseconds} ms、残りの待ち {Math.Max(0, rest)} ms");
         if (rest > 0) sleep(rest);
     }
+
     private enum Last
     {
         None,
@@ -560,7 +561,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     /// <summary>
     /// 受信の状態と、復調の C/N の生の値。dB にするのは <see cref="TunerSignal.Tc90522Db"/>。
     /// 仕様書に C/N のレジスタは無い。復調は TC90522 系と推定されている (仕様書 11.1) ので、その系統で C/N を持つレジスタを読む
-    /// (地上波は 0x8B から 3 バイト、衛星は 0xBC から 2 バイト)。値が大きいほど雑音が多い (本番で CS が BS より大きい)。受信の状態は <see cref="WaitTerrestrialLock"/>・<see cref="WaitSatelliteLock"/> の段と同じレジスタ
+    /// (地上波は 0x8B から 3 バイト、衛星は 0xBC から 2 バイト)。値が大きいほど雑音が多い (実機で CS が BS より大きい)。受信の状態は <see cref="WaitTerrestrialLock"/>・<see cref="WaitSatelliteLock"/> の段と同じレジスタ
     /// (地上波は 0x81 の bit4、衛星は 0xC3 の上位 4 ビットが 0)。読むだけで、書かない
     /// </summary>
     public Dt295Signal Signal(bool satellite)

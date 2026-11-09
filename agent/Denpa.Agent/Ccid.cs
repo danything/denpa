@@ -158,7 +158,7 @@ public sealed class CcidLink : ICardLink
     /// **SetParameters を忘れると、B-CAS とは話が通じない。** B-CAS は specific mode で、
     /// ATR の直後から TA1 の速さ (Di 2) で話すのに、PC Twin はそれを自分では読まない
     /// (dwFeatures に「ATR からパラメータを決める」0x02 が無い)。リーダーは既定の速さのまま
-    /// 聞くので、最初のブロックから黙る。
+    /// 聞くので、最初のブロックから応答が無い。
     /// </para>
     /// </summary>
     public byte[] Reset()
@@ -175,7 +175,7 @@ public sealed class CcidLink : ICardLink
         }
         catch (IOException) when (!_portReset)
         {
-            // 最初の命令から黙るなら、リーダーが固まっている。ポートをリセットして 1 回だけやり直す
+            // 最初の命令から応答が無いなら、リーダーが固まっている。ポートをリセットして 1 回だけやり直す
             _portReset = true;
             Log.Write($"{Name} が応えないので、USB のポートをリセットします");
             _pipe.ResetPort();
@@ -266,7 +266,7 @@ public sealed class CcidLink : ICardLink
 
     /// <summary>
     /// T=1 のブロックを 1 つ送って 1 つ受ける (<see cref="T1Protocol"/> の下の層)。
-    /// カードが黙った・化けたは null (T=1 の側で送り直す)
+    /// カードの応答が無い・化けたときは null (T=1 の側で送り直す)
     /// </summary>
     private byte[]? Exchange(byte[] block, byte wtx)
     {
