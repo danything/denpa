@@ -52,7 +52,7 @@ internal sealed class It930xTsDemux
     /// <summary>入力ごとに分けたパケットの数</summary>
     public IReadOnlyList<long> Packets => _packets;
 
-    /// <summary>揃っていない間に飛ばしたバイトの数 (EP からのバイト列が 188 バイトの並びから外れた。USB の取りこぼしか、ブリッジの問題)</summary>
+    /// <summary>揃っていない間に飛ばしたバイトの数。EP からのバイト列が 188 バイトの並びから外れたときに増える。原因は USB の取りこぼしか、ブリッジの問題</summary>
     public long Skipped { get; private set; }
 
     /// <summary>揃っている間に来た、知らない同期バイトのパケットの数 (捨てた)</summary>
@@ -131,7 +131,7 @@ internal sealed class It930xTsDemux
 }
 
 /// <summary>
-/// 受信機 1 つぶんの TS の出口。<see cref="Pipe"/> (8 MB。px4d・CECH-ZD1 J と同じ <see cref="TsBuffer"/>) に詰め、読み出し側は <see cref="DeviceStream"/>。
+/// 受信機 1 つぶんの TS の出口。<see cref="Pipe"/> (8 MB) に詰め、読み出し側は <see cref="DeviceStream"/>。Pipe は px4d・CECH-ZD1 J と同じ <see cref="TsBuffer"/> で作る。
 /// 選局のたびに新しく作り、前の選局のパケットと混ぜない。
 ///
 /// <para>
@@ -196,7 +196,7 @@ internal sealed class It930xTsOutput
         }
     }
 
-    /// <summary>詰めたぶんを読む側に渡す。**待たない** (溢れていれば、読む側が追いつくまで <see cref="Write"/> が捨てる)</summary>
+    /// <summary>詰めたぶんを読む側に渡す。待たない。溢れていれば、読む側が追いつくまで <see cref="Write"/> が捨てる</summary>
     public void Commit()
     {
         lock (_gate)
