@@ -316,6 +316,7 @@ public sealed class CardNotice(Action emit, TimeProvider? clock = null)
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly Lock _gate = new();
     private DateTimeOffset _last = DateTimeOffset.MinValue;
+
     /// <summary>間が明けたら知らせる。待っている間だけある</summary>
     private ITimer? _later;
 
@@ -323,6 +324,8 @@ public sealed class CardNotice(Action emit, TimeProvider? clock = null)
     {
         lock (_gate)
         {
+            // 知らせる時機を待っている (期限が来て、タイマーがロックを取る前も含む) なら、タイマーに任せる
+            if (_later is not null) return;
             var now = _clock.GetUtcNow();
             var wait = _last + Every - now;
             if (wait > TimeSpan.Zero)

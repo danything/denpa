@@ -109,7 +109,7 @@ internal sealed class Dt295NativeStream
 
     private const int PumpTimeoutMs = 10_000;
 
-    private readonly Pipe _pipe = Px4Stream.NewBuffer();
+    private readonly Pipe _pipe = TsBuffer.New();
     private readonly Dt295NativeDevice _device;
     private readonly IUsbInStream _in;
     private readonly Action _stalled;
@@ -371,8 +371,9 @@ public sealed class Dt295NativeTuner : ITuneDevice
 
     internal Dt295NativeDevice? Device => _device;
 
-    public void Tune(ChannelTable.Tuning tuning, uint streamId)
+    public void Tune(ChannelTable.Tuning tuning)
     {
+        var streamId = tuning.StreamId;
         lock (_gate)
         {
             Stop(release: false);

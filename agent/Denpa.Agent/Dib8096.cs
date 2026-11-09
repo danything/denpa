@@ -1670,17 +1670,23 @@ public sealed class Dib8096
     /// <summary>探索の上限 (参考の実装。機材は 2 秒前後で終わる)</summary>
     private const double SearchLimitMs = 5000;
 
+    /// <summary>探す前の値に戻す (FFT・ガード・部分受信・階層はどれも自動)</summary>
+    private void ResetChannel()
+    {
+        _fft = Fft.Auto;
+        _guard = -1;
+        _partial = 0;
+        for (var i = 0; i < 3; i++) _layers[i] = default;
+        _demodState = DemodState.Tuning;
+    }
+
     /// <summary>
     /// 7.5 の状態の機械を回す。**1 歩の間は仕様書では最低 10ms** (7.5 の「参考の実装の振る舞い」。シンボル数の時間切れは
     /// この間隔を前提にした長さで、詰めると同期の判定の前に時間切れになる)。それに関わらない段だけ 3ms に詰める (<see cref="Floor"/>)
     /// </summary>
     private DibLock Search()
     {
-        _fft = Fft.Auto;
-        _guard = -1;
-        _partial = 0;
-        for (var i = 0; i < 3; i++) _layers[i] = new Layer { Modulation = Modulation.Auto, Fec = 0, Interleave = 0, Segments = 0 };
-        _demodState = DemodState.Tuning;
+        ResetChannel();
         _programmed = null;
         Snapshot? known = null;
         if (_memory is not null) _memory.Channels.TryGetValue(_khz, out known);
@@ -1732,11 +1738,7 @@ public sealed class Dib8096
                 if (_entry == Entry.Known) _memory?.Forget(_khz);
                 LastPath = _entry == Entry.Known ? "覚えた値で合わず探索した" : "既定 (8K) で合わず探索した";
                 _entry = Entry.Full;
-                _fft = Fft.Auto;
-                _guard = -1;
-                _partial = 0;
-                for (var i = 0; i < 3; i++) _layers[i] = default;
-                _demodState = DemodState.Tuning;
+                ResetChannel();
                 readBack = false;
                 started = _time.NowMs;
                 step = Step.Start;
@@ -2402,7 +2404,7 @@ public sealed class DibMemory
         a.Fft == b.Fft && a.Guard == b.Guard && a.Partial == b.Partial && a.Diff == b.Diff
         && a.Layers.SequenceEqual(b.Layers);
 
-    /// <summary>ファイルに書く形: <c>{ "&lt;kHz&gt;": { fft, guard, partial, diff, layers: [[変調, 符号化率, インターリーブ, セグメント数] × 3] } }</c></summary>
+    /// <summary>ファイルに書く形式: <c>{ "&lt;kHz&gt;": { fft, guard, partial, diff, layers: [[変調, 符号化率, インターリーブ, セグメント数] × 3] } }</c></summary>
     public JsonObject ToJson()
     {
         var json = new JsonObject();
@@ -2425,8 +2427,8 @@ public sealed class DibMemory
     }
 
     /// <summary>
-    /// ファイルの中身から。**どれか 1 つでも形が違えば投げる** (呼ぶ側が全部捨てて探索から)。
-    /// 使う項目を名前で読むだけなので、ほかの項目は無視する (前のバージョンが書いた inversion も)
+    /// ファイルの中身から。**どれか 1 つでも形式が違えば投げる** (呼ぶ側が全部捨てて探索から)。
+    /// 使う項目を名前で読むだけなので、ほかの項目は無視する
     /// </summary>
     public static DibMemory FromJson(JsonObject json)
     {
@@ -2442,9 +2444,10 @@ public sealed class DibMemory
                 var number = value[name]?.GetValue<int>() ?? throw new FormatException($"{key} の {name} がありません");
                 return number >= min && number <= max ? number : throw new FormatException($"{key} の {name} ({number}) が範囲の外です");
             }
+            int Layer(JsonNode? number) => number?.GetValue<int>() ?? throw new FormatException($"{key} の階層に null があります");
             if (value["layers"] is not JsonArray { Count: 3 } layers) throw new FormatException($"{key} の layers が 3 つではありません");
             var parsed = layers.Select(layer => layer is JsonArray { Count: 4 } item
-                ? (item[0]!.GetValue<int>(), item[1]!.GetValue<int>(), item[2]!.GetValue<int>(), item[3]!.GetValue<int>())
+                ? (Layer(item[0]), Layer(item[1]), Layer(item[2]), Layer(item[3]))
                 : throw new FormatException($"{key} の階層が 4 つの数ではありません")).ToArray();
             if (parsed.Any(layer => layer.Item1 is < 0 or > 4 || layer.Item2 is < 0 or > 7 || layer.Item3 is < 0 or > 4 || layer.Item4 is < 0 or > 13))
             {

@@ -243,7 +243,7 @@ CM 検出用のロゴはチューナーを使いません。録れたものか�
 
 ## 止められたら録画が終わるまで待つ
 
-**1 回目の止まれの合図 (SIGTERM・SIGINT・Ctrl+C) では、録画が終わってから止まります** (`Program.cs` の `Drain`)。
+**1 回目の止まれの合図 (SIGTERM・SIGINT・SIGQUIT・Ctrl+C) では、録画が終わってから止まります** (`Program.cs` の `Drain`)。
 待つ上限は `SHUTDOWN_WAIT` (既定 6 時間。[config.md](config.md#チューナーエージェント)) で、録画していなければすぐ止まります。
 待つ理由は [architecture.md](architecture.md#エージェントも録画が終わるまで待ちます) にあります。
 
@@ -252,7 +252,7 @@ CM 検出用のロゴはチューナーを使いません。録れたものか�
 止まっていた間のぶんは欠けます。
 2 回目が無かった頃は、待っている間の Ctrl+C と SIGTERM がすべて受け流され、`SHUTDOWN_WAIT` まで止まりませんでした。
 
-## 設定は 2 つのファイルに分ける
+## 設定はファイルに分ける
 
 既定は Linux (コンテナ) が `/config/tuners.json` と `/config/channels.json`、Mac と Windows が `~/denpa/config/` (`DENPA_HOME` の `config`。インストーラと同じなので、常駐を止めて手で `--tune` などを流しても同じファイルを使う)。`TUNERS_FILE` / `CHANNELS_FILE` で変えられます。どちらも無くて構いません (機材は自分で見つけ、
 チャンネルはスキャンするまで空。ただし衛星を受けられる機材があれば、BS / CS の局が
@@ -780,7 +780,7 @@ denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode --card-url http://�
 既定は安全側で、**LAN の外へは広げられません** (`CardLan.cs`・`CardShareServer.cs`)。
 
 1. **専用のポートで受けます。** 鍵を配る API (`/denpa/card/init`・`/denpa/card/ecm`・`/denpa/card/confirm`・`/denpa/card/emm`) は
-   `CARD_SHARE_PORT` を書いたときだけそのポートで開きます。普通の API (`AGENT_PORT`、25252) にあるのは denpa が使う JSON の `/denpa/card/confirm` だけです。
+   `CARD_SHARE_PORT` を書いたときだけそのポートで開きます。鍵を配る API のうち普通の API (`AGENT_PORT`、25252) にもあるのは、denpa が使う JSON の `/denpa/card/confirm` だけです。
    鍵を配るために普通の API まで開かずに済みます (普通の API も `/denpa/stream` が復号済みの TS を返すので、
    組んだ denpa しか通しません。[denpa とは TLS で組む](#denpa-とは-tls-で組む))。このポートは鍵を配る API にしか答えません
    (`/denpa/card` の状態は普通のポートのまま)。`AGENT_HOST` に関わらず全部のインターフェースで待ち受け、次の 2 つで絞ります

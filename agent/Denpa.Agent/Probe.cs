@@ -152,11 +152,11 @@ public static class Probe
         var lnbAt = Array.IndexOf(args, "--lnb");
         var lnb = lnbAt >= 0 ? args.ElementAtOrDefault(lnbAt + 1) : null;
         var decode = args.Contains("--decode");
-        // 手元にカードが無い拠点。鍵だけ貰いに行く (CardShare.cs)
+        // 手元にカードが無い拠点。鍵だけ貰う (CardShare.cs)。--card-url が無ければ、--decode-file と同じく CARD_URL を読む
         var cardAt = Array.IndexOf(args, "--card-url");
         // 貰いに行く接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
         if (CardHops() is not { } hops) return 2;
-        Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : null, hops);
+        Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : Environment.GetEnvironmentVariable("CARD_URL"), hops);
 
         var secondsAt = Array.IndexOf(args, "--seconds");
         var seconds = secondsAt >= 0 && int.TryParse(args.ElementAtOrDefault(secondsAt + 1), out var given) && given > 0
@@ -197,7 +197,7 @@ public static class Probe
             var started = DateTime.UtcNow;
             try
             {
-                tuner.Tune(tuning, streamId);
+                tuner.Tune(tuning);
             }
             catch (IOException error)
             {
@@ -247,7 +247,7 @@ public static class Probe
                 var requests = tuner.Board?.Bridge.Requests ?? 0;
                 try
                 {
-                    tuner.Tune(tuning, ChannelTable.NoStreamId);
+                    tuner.Tune(tuning);
                 }
                 catch (IOException error)
                 {

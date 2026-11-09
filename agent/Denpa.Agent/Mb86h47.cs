@@ -94,6 +94,9 @@ public sealed class Mb86h47 : II2c
     private uint _chunkSequence;
     private int _chunkSlot;
 
+    /// <summary>bulk の塊の答えが時間内に来なかった。置き場の数がコア 1 とずれたかもしれないので、ボードは開き直す (<see cref="Zd1jBoard.Faulted"/>)</summary>
+    public bool Dead { get; private set; }
+
     // 流し始めの準備 (9.2)。待ちの間に 1 つずつ回す
     private readonly Queue<Action> _prepare = new();
     private bool _prepared;
@@ -431,7 +434,7 @@ public sealed class Mb86h47 : II2c
         lock (_gate)
         {
             I2cTransfers++;
-            if (read.Length > 32) throw new ArgumentOutOfRangeException(nameof(read));
+            if (read.Length > Mb86h47Programs.BulkReplyData) throw new ArgumentOutOfRangeException(nameof(read));
             QueueTransfer(address, write, read.Length);
             SendChunk().AsSpan(0, read.Length).CopyTo(read);
         }
@@ -516,7 +519,12 @@ public sealed class Mb86h47 : II2c
         while (true)
         {
             var left = (int)((deadline - Stopwatch.GetTimestamp()) * 1000 / Stopwatch.Frequency);
-            if (left <= 0) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が bulk の塊に答えません");
+            if (left <= 0)
+            {
+                // 答えが来ないと、ホストが数える置き場 (_chunkSlot) とコア 1 の置き場がずれたかもしれない。開き直すまで使わない
+                Dead = true;
+                throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が bulk の塊に答えません");
+            }
             var got = _usb.InterruptRead(CommandIn, reply, left);
             if (got < 8) continue;
             // 答えの語の並びは、印 (0xA5) が先頭か終わりかで見分ける (FIFO のバイトの並びは仕様書に無い)

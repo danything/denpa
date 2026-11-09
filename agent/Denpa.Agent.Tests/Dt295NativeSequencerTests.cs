@@ -210,7 +210,7 @@ public class Dt295NativeSequencerTests
         var port = $"test-{Guid.NewGuid():N}";
         var tuner = new Dt295NativeTuner("test", () => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000), () => Dt295NativeDevice.CloseIfIdle(port));
         var tuning = ChannelTable.Parse("T25")!;
-        tuner.Tune(tuning, tuning.StreamId);
+        tuner.Tune(tuning);
 
         for (var i = 0; i < 30; i++)
         {

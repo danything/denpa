@@ -178,10 +178,13 @@ var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected =
  * 画面からの書き換えと抜き差しで同時に呼ばれても、あとから呼んだほうが最後の設定で揃えるよう 1 つずつ通す
  */
 var daemonsGate = new Lock();
+// 止めるときに px4d / asicend を止めたら立てる。そのあとの抜き差しや設定の書き換えで起こし直さない
+var daemonsStopped = false;
 void PrepareDaemons()
 {
     lock (daemonsGate)
     {
+        if (daemonsStopped) return;
         bool CardInUse(string name) => Keys.Local.Name == name;
         UserlandDaemon.Prepare<Px4Daemon>([.. Px4Userland.IdsIn(pool.Tuners)], Px4Daemon.For, CardInUse);
         // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
@@ -451,12 +454,16 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
         var ct = stopping.Token;
         await http.Response.Body.FlushAsync(ct);
         Task<string>? pending = null;
+        // 待つ時計は済むまで使い回す (通知のたびに作ると、済んでいない Delay が通知の数だけ残る)
+        Task? keepAlive = null;
         while (true)
         {
             pending ??= queue.Reader.ReadAsync(ct).AsTask();
-            var heard = await Task.WhenAny(pending, Task.Delay(eventsKeepAlive, ct)) == pending;
+            keepAlive ??= Task.Delay(eventsKeepAlive, ct);
+            var heard = await Task.WhenAny(pending, keepAlive) == pending;
             var block = heard ? await pending : ": keep-alive\n\n";
             if (heard) pending = null;
+            else keepAlive = null;
             await http.Response.WriteAsync(block, ct);
             await http.Response.Body.FlushAsync(ct);
         }
@@ -507,10 +514,11 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
         return;
     }
 
-    lock (tunersGate)
+    // 入れ替えは選局と読み出しが止まるのを待つ (十数秒かかることがある) ので、要求のスレッドを塞がない
+    await Task.Run(() =>
     {
-        ApplyTuners([.. next.OfType<TunerSpec>()]);
-    }
+        lock (tunersGate) ApplyTuners([.. next.OfType<TunerSpec>()]);
+    });
     // 新しく書かれた筐体があれば px4d / asicend を起こす。数秒かかるので返事は待たせない
     _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, TunerList());
@@ -531,7 +539,8 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
         return;
     }
     // 1 件も無いまま上書きすると、今まで録れていた局まで消える
-    if (found.Count == 0)
+    // null の項目は保存のときに落ちるので数えない
+    if (!found.OfType<JsonObject>().Any())
     {
         await Respond.Error(http, "チャンネルが 1 件もありません", 400);
         return;
@@ -546,7 +555,7 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
     }
     var types = scanned.Select(node => node?.GetValue<string>() ?? "").ToHashSet();
     var merged = config.SaveChannels(found, types);
-    Log.Write($"チャンネルを保存しました: {found.Count} 件 ({string.Join(", ", types)})");
+    Log.Write($"チャンネルを保存しました: {found.OfType<JsonObject>().Count()} 件 ({string.Join(", ", types)})");
     /*
      * 局が入れ替わった。denpa は**これを合図に取り込み直す。**
      * こちらは何も再起動しない (録画中のものも切れない)
@@ -687,9 +696,13 @@ if (tune.FakeTune is null)
     _ = Task.Run(() =>
     {
         lock (tunersGate) seen = [.. DeviceProbe.Detect().Select(tuner => tuner.Device)];
-        watch = new DeviceWatch(Rescan);
+        Interlocked.Exchange(ref watch, new DeviceWatch(Rescan));
+        // 受け取り始める前に止まり始めていたら、ここで手放す
+        if (app.Lifetime.ApplicationStopping.IsCancellationRequested) Interlocked.Exchange(ref watch, null)?.Dispose();
     });
 }
+// 止まり始めたら、抜き差しを受け取るのをやめる (選局を離したあとに Rescan が機材を開き直さないように)
+app.Lifetime.ApplicationStopping.Register(() => Interlocked.Exchange(ref watch, null)?.Dispose());
 
 /*
  * **選局を離すのは `ApplicationStopping` で。** これが来るのは `Drain` が録画を待ち終えてからなので、録画は切らない
@@ -710,6 +723,7 @@ app.Lifetime.ApplicationStopped.Register(() =>
     // PIX-DT295 は書いた設定を戻してから閉じる (カードのために開いていても)
     Dt295NativeDevice.CloseAll();
     // 利用者を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
+    lock (daemonsGate) daemonsStopped = true;
     UserlandDaemon.StopAll();
 });
 
@@ -728,8 +742,6 @@ if (sharing is not null)
 if (cardUrl is { Length: > 0 }) Log.Write($"鍵を {cardUrl} から受け取ります (TTL {cardLan.Hops})");
 Log.Write($"チューナー {pool.Tuners.Count} 台 / チャンネル {config.LoadChannels().Count} 件");
 await app.RunAsync();
-// 抜き差しを受け取るもの (タイマーと inotify) を、止まるまで手放さない
-watch?.Dispose();
 return 0;
 
 /// <summary>HTTP に JSON を書く / 読む。中身の作りは <see cref="Json"/></summary>

@@ -155,8 +155,10 @@ public sealed class Zd1jBoard : IDibTime
     /// <summary>DiB8096 の初期化にかかった時間 (まだなら -1)</summary>
     public long DemodMs { get; private set; } = -1;
 
-    /// <summary>USB が抜けたなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
-    public bool Faulted { get; private set; }
+    /// <summary>USB が抜けた・ブリッジのコア 1 が答えなくなったなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
+    public bool Faulted => _faulted || Bridge.Dead;
+
+    private bool _faulted;
 
     internal Zd1jBoard(string port, IUsbDevice usb)
     {
@@ -254,10 +256,10 @@ public sealed class Zd1jBoard : IDibTime
         board.Close();
     }
 
-    /// <summary>失敗が USB の抜けなら印を付ける (次に取る側は開き直す)</summary>
+    /// <summary>失敗が USB の抜けなら使えないものとする (次に取る側は開き直す)</summary>
     public void Fail(Exception error)
     {
-        if (error is UsbGoneException) Faulted = true;
+        if (error is UsbGoneException) _faulted = true;
     }
 
     /// <summary>DiB8096。初めてのときに電源を入れて初期化する (仕様書 4.6・4.7・6)</summary>
@@ -357,32 +359,8 @@ public sealed class Zd1jTuner : ITuneDevice
     /// </summary>
     internal static TimeSpan StallLimit => TunerPool.Linger;
 
-    /// <summary>
-    /// 書いたぶんを渡す。続けて読めるなら true。<paramref name="stopped"/> になったら、または溜めが空かないまま <see cref="StallLimit"/> 経ったら
-    /// 渡すのをやめて false (後者は読む側がいないとみて <paramref name="stalled"/> を呼ぶ)。CECH-ZD1 J と PIX-DT295 の TS の流しが使う
-    /// </summary>
-    internal static bool Flush(PipeWriter writer, Func<bool> stopped, Action stalled)
-    {
-        var flushing = writer.FlushAsync();
-        if (flushing.IsCompleted) return !flushing.Result.IsCompleted;
-        var waiting = flushing.AsTask();
-        var elapsed = Stopwatch.StartNew();
-        while (!waiting.Wait(50))
-        {
-            if (stopped())
-            {
-                writer.CancelPendingFlush();
-                return false;
-            }
-            if (elapsed.Elapsed >= StallLimit)
-            {
-                writer.CancelPendingFlush();
-                stalled();
-                return false;
-            }
-        }
-        return !waiting.Result.IsCompleted;
-    }
+    /// <summary>書いたぶんを渡す (<see cref="TsBuffer.Flush"/>)。CECH-ZD1 J と PIX-DT295 の TS のストリームが使う。読む側がいないまま <see cref="StallLimit"/> 経ったら <paramref name="stalled"/></summary>
+    internal static bool Flush(PipeWriter writer, Func<bool> stopped, Action stalled) => TsBuffer.Flush(writer, stopped, StallLimit, stalled);
 
     private readonly string _name;
     private readonly Func<Zd1jBoard> _acquire;
@@ -455,7 +433,7 @@ public sealed class Zd1jTuner : ITuneDevice
 
     TunerSignal? ITuneDevice.Signal() => Signal() is { } signal ? TunerSignal.From(signal) : null;
 
-    public void Tune(ChannelTable.Tuning tuning, uint streamId)
+    public void Tune(ChannelTable.Tuning tuning)
     {
         if (tuning.Satellite) throw new IOException($"{Zd1j.Model} は地上波だけです ({tuning.Type} は受けられません)");
         lock (_gate)
@@ -565,7 +543,7 @@ internal sealed class Zd1jStream
     /// <summary>1 回の読みの待ち。出力はばらばらに来るので短すぎないように (仕様書 9.4 の 300ms。読みは裏で出したまま)</summary>
     private const int ReadTimeoutMs = 300;
 
-    private readonly Pipe _pipe = Px4Stream.NewBuffer();
+    private readonly Pipe _pipe = TsBuffer.New();
 
     private readonly IUsbInStream _in;
     private readonly string _name;

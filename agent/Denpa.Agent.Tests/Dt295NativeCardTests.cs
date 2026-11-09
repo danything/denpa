@@ -290,7 +290,7 @@ public class Dt295NativeCardTests
         var tuner = new Dt295NativeTuner("test", () => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000), () => Dt295NativeDevice.CloseIfIdle(port));
         var tuning = ChannelTable.Parse("T25")!;
 
-        tuner.Tune(tuning, tuning.StreamId);
+        tuner.Tune(tuning);
         var device = tuner.Device!;
         await (device.CardWarmTask ?? throw new InvalidOperationException("カードの準備が始まっていません"));
 

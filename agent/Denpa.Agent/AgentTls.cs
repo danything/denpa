@@ -291,6 +291,8 @@ public sealed class AgentTls
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var working = $"{path}.writing";
+        // 前に途中で止まって残った書きかけは、権限 (0600) が当たらないまま開き直すことになるので先に消す
+        File.Delete(working);
         var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
         if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
         using (var stream = new FileStream(working, options))

@@ -298,7 +298,7 @@ public sealed class SianoTuner : ITuneDevice
         return $"tune {tuning.Frequency}";
     }
 
-    public void Tune(ChannelTable.Tuning tuning, uint streamId)
+    public void Tune(ChannelTable.Tuning tuning)
     {
         var command = TuneCommand(tuning);
         lock (_gate)

@@ -43,7 +43,7 @@ public class TunerPoolTests
 
         private void Exit() => Interlocked.Decrement(ref _busy);
 
-        public void Tune(ChannelTable.Tuning tuning, uint streamId)
+        public void Tune(ChannelTable.Tuning tuning)
         {
             Enter();
             try

@@ -118,7 +118,7 @@ public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = nul
     /// <summary>いまカードと話せるか。INT を 1 回通す (<see cref="BCas.Check"/>)</summary>
     public CardInit Check() => Card().Check();
 
-    /// <summary>使っているリーダーを使わない設定にしたら手放して繋ぎ直す (<see cref="BCas.Release"/>)。開いていなければ何もしない</summary>
+    /// <summary>使っているリーダーを使わない設定にしたら手放して繋ぎ直す (<see cref="BCas.Release"/>)。開いていなければ、開けなかった記録だけ消す (次に要ったときにすぐ探す)</summary>
     public void Release(IReadOnlySet<string> names)
     {
         BCas? card;
@@ -164,30 +164,15 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
     public CardInit Check() =>
         _init = CardWire.ReadInit(Send(new HttpRequestMessage(HttpMethod.Get, $"{Url}/denpa/card/init"), "カードの情報"));
 
-    public EcmAnswer Ecm(ReadOnlySpan<byte> ecm)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"{Url}/denpa/card/ecm")
-        {
-            Content = new ByteArrayContent(ecm.ToArray()),
-        };
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        return CardWire.ReadEcm(Send(request, "鍵"));
-    }
+    public EcmAnswer Ecm(ReadOnlySpan<byte> ecm) => CardWire.ReadEcm(Post("ecm", ecm.ToArray(), "鍵"));
 
     public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd)
     {
-        if (verificationData.Length is < 1 or > 253)
-            throw new IOException($"契約確認データの長さがおかしいです ({verificationData.Length} バイト)");
-
+        CardWire.CheckConfirm(verificationData);
         var payload = new byte[2 + verificationData.Length];
         BinaryPrimitives.WriteUInt16BigEndian(payload, dateMjd);
         verificationData.CopyTo(payload.AsSpan(2));
-        var request = new HttpRequestMessage(HttpMethod.Post, $"{Url}/denpa/card/confirm")
-        {
-            Content = new ByteArrayContent(payload),
-        };
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        return CardWire.ReadCode(Send(request, "契約確認"), "契約確認");
+        return CardWire.ReadCode(Post("confirm", payload, "契約確認"), "契約確認");
     }
 
     /// <summary>配り役が <c>/denpa/card/emm</c> を持っていない (古いエージェント)。分かったら、もう送らない</summary>
@@ -201,14 +186,9 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
     public int Emm(ReadOnlySpan<byte> payload)
     {
         if (Volatile.Read(ref _emmMissing) == 1) throw new NotSupportedException(EmmMissing);
-        var request = new HttpRequestMessage(HttpMethod.Post, $"{Url}/denpa/card/emm")
-        {
-            Content = new ByteArrayContent(payload.ToArray()),
-        };
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         try
         {
-            return CardWire.ReadCode(Send(request, "EMM の返り値"), "EMM ");
+            return CardWire.ReadCode(Post("emm", payload.ToArray(), "EMM の返り値"), "EMM ");
         }
         catch (ShareRefusedException error) when (error.Status == 404)
         {
@@ -219,9 +199,18 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
 
     private const string EmmMissing = "配り役のエージェントが古く、契約の更新 (EMM) を受け取れません。鍵と契約確認はそのまま使います";
 
-    /// <summary>送って中身を受け取る。**受け取れなければ、何が起きたかの分かる文で投げる**</summary>
+    /// <summary><c>/denpa/card/&lt;path&gt;</c> にバイト列を POST して中身を受け取る (<see cref="Send"/>)</summary>
+    private byte[] Post(string path, byte[] body, string what)
+    {
+        var content = new ByteArrayContent(body);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        return Send(new HttpRequestMessage(HttpMethod.Post, $"{Url}/denpa/card/{path}") { Content = content }, what);
+    }
+
+    /// <summary>送って中身を受け取る。**受け取れなければ、何が起きたかの分かる文で投げる**。<paramref name="request"/> はここで閉じる</summary>
     private byte[] Send(HttpRequestMessage request, string what)
     {
+        using var sending = request;
         try
         {
             using var response = _http.Send(request);
@@ -291,8 +280,17 @@ public sealed class ShareRefusedException(int status, string message) : IOExcept
 /// </summary>
 public static class CardWire
 {
-    /// <summary>配る側が受け取る ECM の上限 (バイト。CardShareServer.cs)</summary>
-    internal const int MaxEcm = 4096;
+    /// <summary>配る側が受け取る ECM の上限 (バイト。CardShareServer.cs)。カードに渡す APDU の Lc が 1 バイトなので 255 (<see cref="BCas.Ecm"/>)</summary>
+    internal const int MaxEcm = 255;
+
+    /// <summary>契約確認データの長さを確かめる (1〜253 バイト。<see cref="BCas.Confirm"/> と配る側に渡す前で同じ)</summary>
+    internal static void CheckConfirm(ReadOnlySpan<byte> verificationData)
+    {
+        if (verificationData.Length is < 1 or > 253)
+        {
+            throw new IOException($"契約確認データの長さがおかしいです ({verificationData.Length} バイト)");
+        }
+    }
 
     /// <summary>
     /// 本文を <paramref name="limit"/> バイトまで読む。超えたら、その時点で読むのをやめて null。

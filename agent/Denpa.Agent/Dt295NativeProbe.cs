@@ -150,7 +150,7 @@ public static class Dt295NativeProbe
                 var clock = Stopwatch.StartNew();
                 try
                 {
-                    tuner.Tune(options.Tuning, options.Tuning.StreamId);
+                    tuner.Tune(options.Tuning);
                     var total = clock.Elapsed.TotalMilliseconds;
                     var lockMs = timeline.Rows.Skip(before).Where(row => row.Name.StartsWith("受信の確認", StringComparison.Ordinal)).Select(row => row.Ms).DefaultIfEmpty(-1).Last();
                     results.Add((true, total, lockMs, null));
@@ -288,7 +288,7 @@ public static class Dt295NativeProbe
         try
         {
             var tuneClock = Stopwatch.StartNew();
-            tuner.Tune(options.Tuning, options.Tuning.StreamId);
+            tuner.Tune(options.Tuning);
             device = tuner.Device;
             Step($"{options.Channel} を選局しました (選局から最初の TS まで {tuneClock.ElapsedMilliseconds} ms)");
             if (device is not null)
@@ -463,7 +463,7 @@ public static class Dt295NativeProbe
             var clock = Stopwatch.StartNew();
             try
             {
-                tuner.Tune(tuning, tuning.StreamId);
+                tuner.Tune(tuning);
                 output.WriteLine($"  {previous.Name} → {name} ({(previous.Satellite == tuning.Satellite ? "同じ種別" : "種別が替わる")}): {clock.ElapsedMilliseconds} ms、制御転送 {(device?.Link.Controls ?? 0) - controls} 回");
             }
             catch (Exception error) when (error is IOException or InvalidOperationException or TimeoutException)

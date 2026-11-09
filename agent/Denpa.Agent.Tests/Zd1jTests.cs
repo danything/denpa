@@ -319,7 +319,7 @@ public class Zd1jTests
         {
             var usb = new FakeBridgeUsb();
             var tuner = new Zd1jTuner("test", () => Zd1jBoard.Acquire(port, () => usb), () => Zd1jBoard.CloseIfIdle(port));
-            tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId);
+            tuner.Tune(ChannelTable.Parse("T27")!);
             await Assert.That(tuner.Tuned).IsTrue();
             // 流している間は赤 (GPIO 1 = 出力・High)
             await Assert.That(usb.Dib.Demod[1029] & 2).IsEqualTo(0);
@@ -390,7 +390,7 @@ public class Zd1jTests
         var board = new Zd1jBoard("1-2", usb);
         board.Bridge.Start();
         var tuner = new Zd1jTuner("test", () => board);
-        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!, ChannelTable.NoStreamId));
+        var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!));
         await Assert.That(error.Message).IsEqualTo(ITuneDevice.SyncFailed);
         await Assert.That(tuner.Tuned).IsFalse();
         await Assert.That(tuner.Board).IsNull();

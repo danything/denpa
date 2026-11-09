@@ -489,7 +489,7 @@ public class Dt295NativeTests
         var port = $"test-{Guid.NewGuid():N}";
         var tuner = new Dt295NativeTuner("test", () => Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000), () => Dt295NativeDevice.CloseIfIdle(port));
         var tuning = ChannelTable.Parse("T25")!;
-        tuner.Tune(tuning, tuning.StreamId);
+        tuner.Tune(tuning);
         // 本番の読み出し (TunerPool.Read) と同じく、Output は 1 回だけ取って DeviceStream として読み続ける
         var ring = (DeviceStream)tuner.Output;
         var reader = Task.Run(() =>
@@ -656,12 +656,12 @@ public class Dt295NativeTests
         int Writes() => fake.I2cLog.Count(line => line.StartsWith("10 W FEC011"));
         try
         {
-            tuner.Tune(t25, t25.StreamId);
+            tuner.Tune(t25);
             var first = Writes();
             await Assert.That(first).IsGreaterThan(0);
             var starts = fake.Stores.Count(s => s.Address == 0x1902010 && s.Value == 0x02000000);
 
-            tuner.Tune(t25, t25.StreamId);
+            tuner.Tune(t25);
             await Assert.That(Writes()).IsEqualTo(first);
             await Assert.That(fake.Stores.Count(s => s.Address == 0x1902010 && s.Value == 0x02000000)).IsEqualTo(starts + 1);
             var ring = (DeviceStream)tuner.Output;
@@ -678,16 +678,16 @@ public class Dt295NativeTests
             await Assert.That(buffer[0]).IsEqualTo((byte)0x47);
 
             // 別のチャンネルでは周波数を書く
-            tuner.Tune(t26, t26.StreamId);
+            tuner.Tune(t26);
             await Assert.That(Writes()).IsGreaterThan(first);
 
             // 別の手段で復調の周波数が替わっていたら (診断の離れる選局など)、同じチャンネルでも選局し直す
-            tuner.Tune(t25, t25.StreamId);
+            tuner.Tune(t25);
             var settled = Writes();
             tuner.Device!.Frontend.TuneTerrestrial((uint)((t26.Frequency + 500UL) / 1000));
             var away = Writes();
             await Assert.That(away).IsGreaterThan(settled);
-            tuner.Tune(t25, t25.StreamId);
+            tuner.Tune(t25);
             await Assert.That(Writes()).IsGreaterThan(away);
         }
         finally
