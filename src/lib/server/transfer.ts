@@ -337,7 +337,7 @@ function stamp(at: number, seconds = false): string {
 }
 
 /**
- * 書き出す。tar を zstd で縮めながら流す。受け手が読み終える (かやめる) と、写しを消す。
+ * 書き出す。tar を zstd で縮めながら流す。受け取る側が読み終える (かやめる) と、写しを消す。
  * 1 回に 1 つだけ。取り込みの途中も断る
  */
 export async function exportArchive(): Promise<{

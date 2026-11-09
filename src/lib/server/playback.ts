@@ -26,7 +26,7 @@
  *
  * - **エンコード済みが元** … `-ss <from> -copyts`。ファイルの時刻のまま出す (詰め替えの話は `copyArgs`)
  * - **TS が元** … 時刻からバイトの位置を引いて (`ts/seek.ts` の二分探索)、そこから ffmpeg の標準入力へ
- *   流し込む。出口の時刻は `-copyts` と `-output_ts_offset` で物差しに合わせる (`tsOffset`)
+ *   流し込む。出力の時刻は `-copyts` と `-output_ts_offset` で物差しに合わせる (`tsOffset`)
  *
  * ## 枠
  *
@@ -499,7 +499,7 @@ export async function playbackPlan(
 /** 失敗の理由だけ出させる (`transcodeBody` がログへ回す) */
 const QUIET = ["-hide_banner", "-nostats", "-loglevel", "error"];
 
-/** 詰め替えと変換で共通の出口。時刻はそのまま書かせる (`copyArgs` の説明) */
+/** 詰め替えと変換で共通の出力。時刻はそのまま書かせる (`copyArgs` の説明) */
 const FMP4_OUT = [
   "-f",
   "mp4",
@@ -521,7 +521,7 @@ const FMP4_OUT = [
  * ## 位置はファイルの時刻のまま出す
  *
  * - `-ss` を `-i` の前に置く。映像は写すので、`from` の手前のキーフレームから始まる
- * - `-copyts` で入口の時刻を出口まで運ぶ
+ * - `-copyts` で入力の時刻を出力まで運ぶ
  * - mp4 の muxer は既定で先頭を 0 に詰め直す。`frag_discont` で塊の時刻 (tfdt) を
  *   そのまま書かせ、`negative_cts_offsets` で B フレームのぶんを編集リストに逃がさせない
  *   (逃がすと先頭がずれる。ブラウザの MSE は編集リストを当てにできない)
@@ -591,7 +591,7 @@ export function fileTranscodeArgs(
     `0:a:${audio}?`,
     ...(video.filter === "" ? [] : ["-vf", video.filter]),
     ...video.encoder,
-    // 時刻を入口のまま運ぶ (`-copyts`)。既定 (mp4 は cfr) にコマを揃え直させない
+    // 時刻を入力のまま運ぶ (`-copyts`)。既定 (mp4 は cfr) にコマを揃え直させない
     "-fps_mode",
     "passthrough",
     ...audioArgs(codec, rung),
@@ -614,11 +614,11 @@ export function presented(pts: number): number {
 
 /**
  * **TS から変換するときの `-output_ts_offset`。** 流し込む最初の映像の PES の PTS (`pts`) が、物差しで
- * `at` 秒になるように。ffmpeg は `-copyts` で入口の時刻 (`presented`) をそのまま運ぶので、差を足せば
- * 出口が物差しの時刻になる。一周をまたいでも ffmpeg が増え続ける数にしてくれる。
+ * `at` 秒になるように。ffmpeg は `-copyts` で入力の時刻 (`presented`) をそのまま運ぶので、差を足せば
+ * 出力が物差しの時刻になる。一周をまたいでも ffmpeg が増え続ける数にしてくれる。
  *
  * **`-fps_mode passthrough` が要る。** 既定 (mp4 は cfr) は時刻が負のコマを捨てるので、一周の手前 60 秒から
- * 流し込むと (`presented` が負) 映像がまるごと消えた。`-t` を出口に置くと `-copyts` の絶対時刻で数えるので
+ * 流し込むと (`presented` が負) 映像がまるごと消えた。`-t` を出力に置くと `-copyts` の絶対時刻で数えるので
  * 置かない。
  *
  * ffmpeg 9.0.2 で、120 秒の MPEG-2 の TS (先頭の PTS が 1000 秒・一周の 30 秒前・40 秒前の 3 本) を
@@ -789,10 +789,10 @@ interface Attempt {
 }
 
 /**
- * **ffmpeg の出口を応答の本文にする。** 録画をその場で変換・詰め替えして HTTP で流すものは全部これを通す
+ * **ffmpeg の出力を応答の本文にする。** 録画をその場で変換・詰め替えして HTTP で流すものは全部これを通す
  * (録画ファイルの音声だけ `fileAudioBody` も)。
  *
- * - 読まれたぶんしか読み出さない。相手が読まなければ出口が詰まり、ffmpeg も止まる
+ * - 読まれたぶんしか読み出さない。相手が読まなければ出力が詰まり、ffmpeg も止まる
  * - 1 バイトも出さずに降りたら、次の手 (GPU → ソフトウェア) で起こし直す。次で出せたら、降りた手の標準エラーを添えて `blame` を呼ぶ
  * - `IDLE_LIMIT` のあいだ読まれなければ畳む。閉じられた・読み切った・落ちたときも畳む
  * - **読みに来て ffmpeg が出すのを待っている間は、「読まれない」ではなく「ffmpeg が出さない」として数える。**
@@ -873,7 +873,7 @@ export function transcodeBody(
     },
   });
 
-  /** ffmpeg の出口から 1 つ渡す (1 バイトも出さずに降りていたら次の手で起こし直す) */
+  /** ffmpeg の出力から 1 つ渡す (1 バイトも出さずに降りていたら次の手で起こし直す) */
   async function fill(
     controller: ReadableStreamDefaultController<Uint8Array>,
   ): Promise<void> {

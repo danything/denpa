@@ -78,8 +78,8 @@ describe("run の標準出力を流して受ける (onStdout)", () => {
     expect(stdout.length).toBe(0);
   });
 
-  /** 受け手が投げたら道具を止める。止めないと誰も読まない管が詰まり、時間切れまで居座る */
-  test("受け手が投げたら、道具を止めて投げ直す", async () => {
+  /** 読む側が投げたら道具を止める。止めないと誰も読まない管が詰まり、時間切れまで居座る */
+  test("読む側が投げたら、道具を止めて投げ直す", async () => {
     const started = Date.now();
     const failing = run(["cat", "/dev/zero"], {
       onStdout: () => {
@@ -173,9 +173,9 @@ describe("chunks", () => {
   test("中で投げて抜けても cancel する", async () => {
     const { stream, seen } = endless();
     const read = async () => {
-      for await (const _ of chunks(stream)) throw new Error("受け手の失敗");
+      for await (const _ of chunks(stream)) throw new Error("読む側の失敗");
     };
-    await expect(read()).rejects.toThrow("受け手の失敗");
+    await expect(read()).rejects.toThrow("読む側の失敗");
     await Bun.sleep(0);
     expect(seen.canceled).toBe(true);
   });

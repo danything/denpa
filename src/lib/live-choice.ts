@@ -12,7 +12,7 @@ import { LIVE_CODECS, type LiveCodec } from "./live";
  * メニューで選んだもの。`auto` は端末と開いた場所 (家の中か) に合わせる (`autoCodec`)。
  * `raw` は MPEG-2 (放送のまま)。ライブは**端末ごとに覚える** (`LAST_COOKIE` の `choice`)
  */
-export type LiveChoice = "auto" | LiveCodec | "raw";
+export type LiveChoice = "auto" | "av1" | "raw";
 
 /** 実際にリクエストする形式。エンコードするもの (AV1・H.265・H.264) か、放送のまま (`raw`) */
 export type LiveFormat = LiveCodec | "raw";

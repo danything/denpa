@@ -451,7 +451,7 @@ export function shiftDetection(
 /** 読み方 (`openCm`) と、読んだ材料からの決め方 */
 export interface CmReading {
   /**
-   * 1 回のデコードで何を読むか。エンコードの ffmpeg に `cm-scan.scanReader` の出口を足す。
+   * 1 回のデコードで何を読むか。エンコードの ffmpeg に `cm-scan.scanReader` の出力を足す。
    * **デコードするたびに呼ぶ。** ロゴの点は読むたびに一から数える (再エンコードで途中までを持ち越さない)
    */
   want(): ScanWant;
@@ -484,7 +484,7 @@ export async function openCm(
   const { duration: measured } = probed;
   // フレームレートはロゴの区間をならす窓の幅に使う
   const fps = Number.isFinite(probed.fps) ? probed.fps : config.cmFallbackFps;
-  // 映像の無い録画 (ラジオ。尺は測れて大きさが無い) は音だけ読む。映像の出口を足すと ffmpeg ごと落ちる
+  // 映像の無い録画 (ラジオ。尺は測れて大きさが無い) は音だけ読む。映像の出力を足すと ffmpeg ごと落ちる
   const video = !(Number.isNaN(probed.width) && Number.isFinite(measured));
   /** 支度で分かった、ロゴが使えない理由 (`decide` が尺だけで決めたときの覚え書きに足す) */
   let opening = video ? "" : "映像がありません";

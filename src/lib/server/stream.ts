@@ -1,7 +1,7 @@
 import { createServer, type Socket } from "node:net";
 import { constants, setPriority } from "node:os";
 
-/** ffmpeg の 4 本目の出口 (`sideOutput`) */
+/** ffmpeg の 4 本目の出力 (`sideOutput`) */
 interface SideOutput {
   /** ffmpeg に書かせる先 (`pipe:3` か名前付きパイプの名前) */
   readonly url: string;
@@ -17,16 +17,16 @@ interface SideOutput {
 let sides = 0;
 
 /**
- * **ffmpeg の 4 本目の出口** (録画のエンコードの進み具合・ライブの字幕)。ffmpeg を起こす直前に作り、
+ * **ffmpeg の 4 本目の出力** (録画のエンコードの進み具合・ライブの字幕)。ffmpeg を起こす直前に作り、
  * 起こしたら間に `await` を挟まずに `read` を呼ぶ (Windows では、呼ばれないまま次の周回に入ると、起こせなかったとみなして閉じる)。
  *
  * Linux・Mac は stdio の 4 本目のパイプを開けて `pipe:3` に書かせる。**Windows の bun は 4 本目のパイプを
  * 開けても読めない** (`Bun.file(fd)` は EMFILE、`fs.read` は EBADF。tests/native-smoke.ts で確かめた)。
  * 読まずにいると、パイプが詰まったところで ffmpeg が止まる。そこで Windows では名前付きパイプを開けて待ち、
- * ffmpeg にはその名前を出口として渡す (ffmpeg は名前付きパイプをファイルと同じく開いて書く)。
- * 待ち受けはこの呼び出しの中で始まり、ffmpeg が出口を開くのは入力を読み始めたあとなので、起こすより先に開いている
+ * ffmpeg にはその名前を出力として渡す (ffmpeg は名前付きパイプをファイルと同じく開いて書く)。
+ * 待ち受けはこの呼び出しの中で始まり、ffmpeg が出力を開くのは入力を読み始めたあとなので、起こすより先に開いている
  *
- * **ffmpeg には `-y` を付ける。** 付けないと ffmpeg は出口が既にあるかを `access` で確かめ、Windows ではそれが
+ * **ffmpeg には `-y` を付ける。** 付けないと ffmpeg は出力が既にあるかを `access` で確かめ、Windows ではそれが
  * 名前付きパイプへの 1 本目の接続になる。受けるのは 1 本だけなので、本物の書き込みが開けずに
  * 「Error opening output file」で降りる (ライブの字幕で起きた)
  */
@@ -94,7 +94,7 @@ export function sideOutput(): SideOutput {
     stdio: [],
     read: (proc) => {
       reading = true;
-      // 出口を開かないまま終わった (起こせなかった・入力が読めなかった) ときも終える
+      // 出力を開かないまま終わった (起こせなかった・入力が読めなかった) ときも終える
       void proc.exited.then(() => {
         if (!connected) finish();
       });
@@ -349,7 +349,7 @@ export async function run(
               ))
                 onStdout(chunk);
             } catch (error) {
-              // 受け手が投げたら誰も読まなくなる。子プロセスが詰まって残らないよう止めてから投げ直す
+              // 読む側が投げたら誰も読まなくなる。子プロセスが詰まって残らないよう止めてから投げ直す
               kill();
               throw error;
             }

@@ -588,15 +588,15 @@ describe("failureReason", () => {
 });
 
 describe("CM を探しながらエンコードする", () => {
-  const outputs = ["-an", "-vf", "scdet@cm=threshold=0", "-f", "null", "-"];
+  const outputs = ["-an", "-vf", "scdet=threshold=0", "-f", "null", "-"];
 
-  test("CM 検出の出口はエンコードする出口のあとに足す", () => {
+  test("CM 検出の出力はエンコードする出力のあとに足す", () => {
     const args = buildArgs("/in.m2ts", "/out.mkv", 1, null, "av1", {
       analysis: outputs,
     });
-    // -map は出口ごとなので、エンコードする出口の指定が検出の出口に効かないよう後ろに置く
+    // -map は出力ごとなので、エンコードする出力の指定が検出の出力に効かないよう後ろに置く
     expect(args.indexOf("/out.mkv")).toBeLessThan(
-      args.indexOf("scdet@cm=threshold=0"),
+      args.indexOf("scdet=threshold=0"),
     );
     expect(args.slice(-outputs.length)).toEqual(outputs);
   });

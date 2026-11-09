@@ -112,7 +112,7 @@ describe("開いたときに先回りする形式と局", () => {
   test("自動なら家の中は MPEG-2、外は AV1。選んだものは場所によらずそれ", () => {
     expect(warmFormat("auto", true)).toBe("raw");
     expect(warmFormat("auto", false)).toBe("av1");
-    expect(warmFormat("h264", true)).toBe("h264");
+    expect(warmFormat("av1", true)).toBe("av1");
     expect(warmFormat("raw", false)).toBe("raw");
   });
 
@@ -144,13 +144,13 @@ describe("開いたときに先回りする形式と局", () => {
       channelType: "BS",
       channel: "BS01_0",
       audio: "1:sub",
-      choice: "h264" as const,
+      choice: "av1" as const,
     };
     expect(liveStart(channels, 10, kept, true)).toEqual({
       channelType: "GR",
       channel: "27",
       serviceId: 10,
-      codec: "h264",
+      codec: "av1",
     });
     expect(
       liveStart(channels, NaN, { choice: "auto", channel: "99" }, false),

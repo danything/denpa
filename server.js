@@ -23,7 +23,7 @@
  * 閉じるので、録画が終わるまで居座る間に画面が開けなくなる。アプリ (`runtime.ts` の
  * `takeOverSignals`) が引き取る。adapter が合図を登録するのは `build/index.js` のいちばん最後なので、
  * 読み終えたあとでもう一度アプリに引き取らせる (下の `takeOver`)。アプリが引き取るまでに来た合図は
- * `hold-signals.ts` が取っておき、アプリが受け直す (PID 1 では、受け手のいない合図は捨てられる)。
+ * `hold-signals.ts` が取っておき、アプリが受け直す (PID 1 では、誰も受け取らない合図は捨てられる)。
  *
  * **`Host` はそのまま扱う。** SvelteKit の CSRF 判定は自分の origin と `Origin` を比べる。
  * denpa は名前をいくつも持てるので自分の origin を 1 つに固定できない (SvelteKit の `paths.origin`。

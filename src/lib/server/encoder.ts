@@ -288,7 +288,7 @@ const canceled = new Set<number>();
 
 interface EncodeOptions {
   /**
-   * CM 検出の材料を取る出口 (`cm-scan.scanReader` の `outputs`)。エンコードする出口のあとに足して、**同じデコードから**
+   * CM 検出の材料を取る出力 (`cm-scan.scanReader` の `outputs`)。エンコードする出力のあとに足して、**同じデコードから**
    * 読ませる。ロゴの枠は標準出力に来るので、進み具合は fd 3 で受ける (`-progress pipe:3`)
    */
   analysis?: string[];
@@ -521,7 +521,7 @@ export function buildArgs(
   /*
    * 進捗を key=value 形式で出力させる。stderr の人間向けログをパースするより確実。
    *
-   * **出口は fd 3 (専用のパイプ)。** 標準出力は CM 検出のロゴの枠が使い (`analysis`)、標準エラーはログで
+   * **出力は fd 3 (専用のパイプ)。** 標準出力は CM 検出のロゴの枠が使い (`analysis`)、標準エラーはログで
    * 混み合う (ログと進み具合は別のスレッドが書くので、同じ出力先では行が千切れることがある)。
    * 人間向けの進み具合の行 (`frame= …`) も止める
    */
@@ -533,7 +533,7 @@ export function buildArgs(
    */
   args.push("-f", "matroska");
   args.push(output);
-  // CM 検出の出口はエンコードする出口のあと。`-map` は出口ごとなので、エンコードするほうの指定は効かない
+  // CM 検出の出力はエンコードする出力のあと。`-map` は出力ごとなので、エンコードするほうの指定は効かない
   if (options.analysis !== undefined) args.push(...options.analysis);
 
   return args;
@@ -950,7 +950,7 @@ async function runFfmpeg(
   /** CM 検出を一緒にするときの読み取り関数 (`options.analysis` と組で渡す) */
   reader?: ScanReader,
 ) {
-  // 4 本目の出口は進み具合 (`-progress`。`stream.sideOutput`)。標準出力は CM 検出のロゴの枠 (読まないなら捨てる)
+  // 4 本目の出力は進み具合 (`-progress`。`stream.sideOutput`)。標準出力は CM 検出のロゴの枠 (読まないなら捨てる)
   const side = sideOutput();
   const proc = Bun.spawn(
     [
@@ -1402,7 +1402,7 @@ async function runJob(jobId: number): Promise<void> {
   };
 
   /*
-   * **CM はエンコードしながら探す。** 1 本目のコーデックをエンコードする ffmpeg に CM 検出の出口を足して、
+   * **CM はエンコードしながら探す。** 1 本目のコーデックをエンコードする ffmpeg に CM 検出の出力を足して、
    * TS を 1 回だけデコードする (`cm-scan.scanReader`)。ここでは支度だけをする。尺を測り、局ロゴを開く
    * (覚えていなければキーフレームだけ読んで覚える)
    */
@@ -1592,7 +1592,7 @@ async function runJob(jobId: number): Promise<void> {
    * 失敗になるのは避けたい。GPU の失敗は初期化で落ちるので、やり直しは速い
    *
    * `analysis` なら CM 検出を一緒にする。**全部落ちたら、探さずにもう 1 度だけエンコードする**。
-   * 検出の出口がエンコードするほうまで落としたのかもしれない。エンコードできたら音だけ読み直して、CM の尺だけで決める
+   * 検出の出力がエンコードするほうまで落としたのかもしれない。エンコードできたら音だけ読み直して、CM の尺だけで決める
    */
   const encodeWays = async (
     codec: HwCodec,

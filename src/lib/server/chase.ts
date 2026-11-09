@@ -368,7 +368,7 @@ export async function tsFileHead(
 export function chaseReadHeld(o: {
   /** 画面が止めてほしいと送ってきた (`{ type: 'hold', on: true }`) */
   asked: boolean;
-  /** 送り先の溜まりが捨て始める量を超えている (`ws.ts` の `Connection.congested`。回線が倍速に追いつかない) */
+  /** 送り先のバッファが捨て始める量を超えている (`ws.ts` の `Connection.congested`。回線が倍速に追いつかない) */
   congested: boolean;
   /** 呼ぶ側のほかの理由 (HTTP の追っかけで読まれていない、など) */
   outside: boolean;

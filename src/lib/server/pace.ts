@@ -22,7 +22,7 @@ import {
 
 /** エンコードの速さを測る窓 (ms)。これより古い点は捨てる */
 const SPEED_WINDOW = 5_000;
-/** 測った幅がこれより短いうちは測れていない (null)。出だしの 1 秒は ffmpeg が入口の解析で読んだぶんを一度に出す */
+/** 測った幅がこれより短いうちは測れていない (null)。出だしの 1 秒は ffmpeg が入力の解析で読んだぶんを一度に出す */
 const SPEED_LEAST = 1_000;
 /**
  * 出す速さの上限。HTTP の変換は、ffmpeg を待たずに済んでいる (回線のほうが遅い) と待った時間が 0 に近づき、割った値が
@@ -80,12 +80,12 @@ export class VideoLength {
 export const PACE_CHECK = 500;
 /** 何も変わらなくても送る間隔 (ms) */
 export const PACE_EVERY = 2_000;
-/** 溜まりがこれだけ動いたら、`PACE_EVERY` を待たずに送る (バイト) */
+/** バッファの量がこれだけ動いたら、`PACE_EVERY` を待たずに送る (バイト) */
 export const PACE_STEP = 512 * 1024;
 
 /**
  * **WebSocket の `pace` をいつ送るか。** `PACE_CHECK` ごとに呼び、送るものがあれば返す。
- * 送るのは `PACE_EVERY` ごとか、前に送ってから塊を捨てた・溜まりが `PACE_STEP` 以上動いたとき。
+ * 送るのは `PACE_EVERY` ごとか、前に送ってから塊を捨てた・バッファの量が `PACE_STEP` 以上動いたとき。
  * `dropped` は前に送ってからの数にして返す
  */
 export class PaceMeter {

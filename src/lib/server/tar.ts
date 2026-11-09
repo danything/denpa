@@ -83,7 +83,7 @@ async function* chunks(
   yield new Uint8Array(BLOCK * 2);
 }
 
-/** ファイルを順に並べた tar を流す。受け手がやめたら (`cancel`) 読みかけのファイルも閉じる */
+/** ファイルを順に並べた tar を流す。受け取る側がやめたら (`cancel`) 読みかけのファイルも閉じる */
 export function writeTar(
   entries: TarSource[],
   mtime = Date.now(),

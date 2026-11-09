@@ -353,7 +353,7 @@ describe("ffmpeg の引数", () => {
     expect(args.join(" ")).toContain("-c:v libx264");
   });
 
-  test("TS の変換: 標準入力から、局を名指しして、出口の時刻をずらす", () => {
+  test("TS の変換: 標準入力から、局を名指しして、出力の時刻をずらす", () => {
     const track = {
       id: "0:sub",
       stream: 0,
@@ -573,7 +573,7 @@ describe("流す (streamResponse)", () => {
   });
 });
 
-describe("ffmpeg の出口を本文にする (transcodeBody)", () => {
+describe("ffmpeg の出力を本文にする (transcodeBody)", () => {
   test("1 バイトも出さずに降りたら次の手で起こし直し、次で出せたら前のせいだったと覚える", async () => {
     const blamed: string[] = [];
     let done = 0;
@@ -674,7 +674,7 @@ describe("ffmpeg の出口を本文にする (transcodeBody)", () => {
 });
 
 /**
- * 録画ファイルの音声だけ (`file?audio=only`)。前は ffmpeg の出口をそのまま本文にしていて、何も出さずに固まった ffmpeg は
+ * 録画ファイルの音声だけ (`file?audio=only`)。前は ffmpeg の出力をそのまま本文にしていて、何も出さずに固まった ffmpeg は
  * 相手が切るまで残っていた。観る画面の変換と同じ `transcodeBody` で畳む
  */
 describe("録画ファイルの音声だけ (fileAudioBody)", () => {
