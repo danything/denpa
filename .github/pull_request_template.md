@@ -8,4 +8,4 @@
 
 - [ ] リント・型・単体・E2E が通る (docs/development.md のコンテナで)
 - [ ] 実機・実データで確かめた (該当するなら: どのチューナー・どの放送で)
-- [ ] 直す不具合は実際に起きたもの (理屈の上で起きうるだけの話ではない。[貢献の手引き](../blob/main/.github/CONTRIBUTING.md#実際に起きたことを元に))
+- [ ] 不具合を直す PR は、実機・実データで起きたことを確かめた不具合を直している (該当するなら。[貢献の手引き](https://github.com/danything/denpa/blob/main/.github/CONTRIBUTING.md#実際に起きたことを元に))
