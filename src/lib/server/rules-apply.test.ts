@@ -868,6 +868,69 @@ describe("同じ回は最初の放送だけ録る", () => {
       keepsReservation({ manual: false, start_at: at + 10 * 60 * 1000 }, at),
     ).toBe(true);
   });
+
+  describe("話数の無い局 (実機の tvk)", () => {
+    const TVK = 3273901048;
+    const BS_ASAHI = 400151;
+    const WORK = "弱気MAX令嬢なのに、辣腕婚約者様の賭けに乗ってしまった";
+    const BLURB =
+      "モブ悪役令嬢なのに、溺愛が止まらない…！？シリーズ累計120万部、「小説家になろう」発の大人気悪役令嬢系溺愛ラブコメディが、待望のTVアニメ化決定！";
+
+    function setup(): void {
+      reset();
+      sub(TVK, "tvk1", "T18");
+      sub(BS_ASAHI, "BS朝日1", "BS01_0", "BS");
+      rule(1, "弱気MAX令嬢", true, 1, true);
+    }
+
+    function setDescription(id: number, description: string): void {
+      orm()
+        .update(programs)
+        .set({ description })
+        .where(eq(programs.id, id))
+        .run();
+    }
+
+    /** 下見 (`rule-preview.ts`) が使う「録らない」。MX と tvk (と、あれば BS朝日) を渡す */
+    const preview = (withBs = false) =>
+      previewSkips(
+        [
+          hit(10, SERVICE, "GR", "T16"),
+          ...(withBs ? [hit(11, BS_ASAHI, "BS", "BS01_0")] : []),
+          hit(12, TVK, "GR", "T18"),
+        ],
+        now(),
+        { dedupe: true, skip_earlier: false },
+      );
+
+    test("BS朝日と同じ時刻に話数の無いまま流れる tvk は、MX の回とみて予約しない。下見も同じ", () => {
+      setup();
+      program(10, `${WORK}　＃7`);
+      on(BS_ASAHI, 11, `アニメA・${WORK}　＃7`, 4 * HOUR);
+      on(TVK, 12, WORK, 4 * HOUR);
+      setDescription(12, BLURB);
+
+      applyRules();
+      expect(reservations().map((r) => r.program_id)).toEqual([10]);
+      expect(preview(true).get(12)?.kind).toBe("repeat");
+    });
+
+    test("番組表が更新されて tvk の概要に話数が入れば、当て直しで予約を引っ込める", () => {
+      setup();
+      program(10, `${WORK}　＃7`);
+      on(TVK, 12, WORK, DAY);
+      setDescription(12, BLURB);
+      applyRules();
+      expect(reservations().map((r) => r.program_id)).toEqual([10, 12]);
+      expect(preview().has(12)).toBe(false);
+
+      // 番組表を取り込み直したあとの当て直し (`epg.settle`) と同じ
+      setDescription(12, `＃７\n${BLURB}`);
+      expect(applyRules()).toMatchObject({ dropped: 1 });
+      expect(reservations().map((r) => r.program_id)).toEqual([10]);
+      expect(preview().get(12)?.kind).toBe("repeat");
+    });
+  });
 });
 
 /**

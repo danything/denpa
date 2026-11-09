@@ -172,6 +172,58 @@ describe("同じ回の見分け", () => {
     });
   });
 
+  test("副題の無い話数は、文の終わり・見出し・印の後ろのものも読む。全角の＃と数字も", () => {
+    const read = (description: string) =>
+      episodeOf({ name: "テストアニメ", description, extended: null });
+    expect(read("溺愛ラブコメディ。＃７\n令嬢は…")?.number).toBe(7);
+    expect(read("待望のTVアニメ化決定！第7話 婚約者様の賭け")).toMatchObject({
+      number: 7,
+      subtitle: "婚約者様の賭け",
+    });
+    expect(
+      read("【第7話】モブ悪役令嬢なのに、溺愛が止まらない…"),
+    ).toMatchObject({ number: 7, subtitle: "" });
+    expect(read("＜あらすじ＞＃７ 令嬢は婚約者様と…")?.number).toBe(7);
+    expect(read("▼第７話▼令嬢は婚約者様と…")?.number).toBe(7);
+    expect(read("第7話　婚約者様の賭け")).toMatchObject({
+      number: 7,
+      subtitle: "婚約者様の賭け",
+    });
+  });
+
+  test("本番の番組表で見えた「第６話「…」」の書き方を、タイトルからも概要からも読む", () => {
+    expect(
+      episodeOf({
+        name: "青と碧　第６話「どこまでも青碧い朝」",
+        description: "",
+        extended: null,
+      }),
+    ).toMatchObject({ number: 6, subtitle: "どこまでも青碧い朝" });
+    expect(
+      episodeOf({
+        name: "青と碧",
+        description: "第６話「もうひとつの10年越しの想い」▼母校での…",
+        extended: null,
+      }),
+    ).toMatchObject({ number: 6, subtitle: "もうひとつの10年越しの想い" });
+  });
+
+  test("文の終わりや見出しの後ろでも、地の文と前回・次回の話数は読まない", () => {
+    const read = (description: string) =>
+      episodeOf({ name: "テストアニメ", description, extended: null });
+    expect(read("恋が動き出す。第3話から登場した刑事が再び現れる")).toBeNull();
+    expect(read("新しい歌手が出演。#1ヒットを生んだ曲を歌う")).toBeNull();
+    expect(read("【次回予告】#8 婚約者様と遠出する")).toBeNull();
+    expect(read("【前回】#6 令嬢は賭けに乗った")).toBeNull();
+    expect(read("<次回>第8話 婚約者様と遠出する")).toBeNull();
+    expect(read("▼前回 #6 の続きから")).toBeNull();
+    expect(
+      read(
+        "モブ悪役令嬢なのに、溺愛が止まらない…！？シリーズ累計120万部、「小説家になろう」発の大人気悪役令嬢系溺愛ラブコメディが、待望のTVアニメ化決定！",
+      ),
+    ).toBeNull();
+  });
+
   test("概要に無ければ詳細から読む", () => {
     const episode = episodeOf({
       name: "薬屋のひとりごと",
@@ -817,6 +869,103 @@ describe("firstAirings", () => {
       { episode: recorded, start_at: base - 7 * DAY, service_name: "MONDO TV" },
     ];
     expect(firstAirings([one, sp], new Set(), taken).size).toBe(0);
+  });
+});
+
+/**
+ * **話数の無い放送が、同じ時刻に同じ作品名の話数付きの放送と並ぶときは、その回とみる。**
+ * 実機で、MX と BS朝日が「＃7」を付けた回を、tvk は BS朝日と同じ時刻にタイトルにも概要にも話数の無いまま載せ、
+ * tvk だけ別の回として予約していた
+ */
+describe("話数の無い放送を、重なる話数付きの放送の回とみる", () => {
+  const base = Date.UTC(2026, 10, 15, 15, 30);
+  const WORK = "弱気MAX令嬢なのに、辣腕婚約者様の賭けに乗ってしまった";
+  const TVK =
+    "モブ悪役令嬢なのに、溺愛が止まらない…！？シリーズ累計120万部、「小説家になろう」発の大人気悪役令嬢系溺愛ラブコメディが、待望のTVアニメ化決定！";
+
+  function three(tvk: Partial<Airing> = {}) {
+    const mx = airing(`${WORK}　＃7`, base, {
+      description:
+        "モブ悪役令嬢なのに、溺愛が止まらない…⁉シリーズ累計120万部、「小説家になろう」発の大人気悪役令嬢系溺愛ラブコメディ",
+    });
+    const bs = airing(`アニメA・${WORK}　＃7`, base + HOUR, { type: "BS" });
+    const local = airing(WORK, base + HOUR, { description: TVK, ...tvk });
+    return { mx, bs, local };
+  }
+
+  test("MX・BS朝日・tvk の 3 局が同じ回になり、MX だけ録る", () => {
+    const { mx, bs, local } = three();
+    const skips = firstAirings([local, bs, mx]);
+    expect(skips.has(mx.id)).toBe(false);
+    expect(skips.get(bs.id)).toEqual({ kind: "repeat", first: mx });
+    expect(skips.get(local.id)).toEqual({ kind: "repeat", first: mx });
+  });
+
+  test("相手の回をもう録ってあれば、話数の無い放送も録らない", () => {
+    const { mx, bs, local } = three();
+    const taken = [
+      { episode: episodeOf(mx)!, start_at: mx.start_at, service_name: "MX" },
+    ];
+    expect(firstAirings([bs, local], new Set(), taken).get(local.id)).toEqual({
+      kind: "recorded",
+      start_at: mx.start_at,
+      service_name: "MX",
+    });
+  });
+
+  test("総集編・特別編・SP・一挙・振り返りの印があれば、その回に入れない", () => {
+    for (const fields of [
+      { name: `${WORK} 総集編` },
+      { name: `【SP】${WORK}` },
+      { description: "これまでの物語を振り返る特別編" },
+      { description: "第1話から第6話まで一挙放送" },
+    ]) {
+      const { mx, bs, local } = three(fields);
+      expect(kept([mx, bs, local])).toEqual([mx.id, local.id]);
+    }
+    // 地の文の「特別」は印にしない
+    const { mx, bs, local } = three({
+      description: `特別ゲストが登場。${TVK}`,
+    });
+    expect(kept([mx, bs, local])).toEqual([mx.id]);
+  });
+
+  test("時刻が重ならなければ、今までどおり束ねない", () => {
+    const { mx, bs, local } = three({
+      start_at: base + DAY,
+      end_at: base + DAY + HOUR / 2,
+    });
+    expect(kept([mx, bs, local])).toEqual([mx.id, local.id]);
+  });
+
+  test("作品名がぴったり同じでなければ、その回に入れない", () => {
+    const { mx, bs, local } = three({ name: `${WORK} 2` });
+    expect(kept([mx, bs, local])).toEqual([mx.id, local.id]);
+  });
+
+  test("重なる相手の回が 1 つに決まらなければ、どの回にも入れない", () => {
+    const seventh = airing("テストアニメ #7", base);
+    const eighth = airing("テストアニメ #8", base + HOUR / 2);
+    const block = airing("テストアニメ", base, { end_at: base + HOUR });
+    expect(kept([seventh, eighth, block])).toEqual([
+      seventh.id,
+      eighth.id,
+      block.id,
+    ]);
+  });
+
+  test("あとから概要に話数が入れば、時刻が重ならなくても同じ回として外す", () => {
+    const later = { start_at: base + DAY, end_at: base + DAY + HOUR / 2 };
+    const before = three(later);
+    expect(kept([before.mx, before.local])).toEqual([
+      before.mx.id,
+      before.local.id,
+    ]);
+    const after = three({ ...later, description: `＃７\n${TVK}` });
+    expect(firstAirings([after.mx, after.local]).get(after.local.id)).toEqual({
+      kind: "repeat",
+      first: after.mx,
+    });
   });
 });
 
