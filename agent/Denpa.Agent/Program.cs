@@ -80,6 +80,8 @@ if (args is ["--status"])
 }
 // PIX-DT295 を確かめる。機材を設定して選局し (--card ならカードを読み)、受信の統計を出す (Dt295NativeProbe.cs)
 if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295NativeProbe.Run(args);
+// IT930x の機材 (PX-MLT5U など) のブリッジを確かめる。ファームウェアを起動してバージョンと EEPROM の写しを出す (It930xProbe.cs)
+if (args.ElementAtOrDefault(0) == "--it930x-probe") return It930xProbe.Run(args);
 /*
  * **対応していない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
@@ -95,6 +97,7 @@ if (args.Length > 0)
     Console.Error.WriteLine($"       {Probe.DecodeUsage}");
     Console.Error.WriteLine($"       {Probe.CardUsage}");
     Console.Error.WriteLine($"       {Dt295NativeProbe.Usage}");
+    Console.Error.WriteLine($"       {It930xProbe.Usage}");
     return 2;
 }
 

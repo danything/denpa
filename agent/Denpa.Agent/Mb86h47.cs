@@ -402,7 +402,7 @@ public sealed class Mb86h47 : II2c
         Write32(Box(Mb86h47Programs.BoxBulkEnable), Mb86h47Programs.BulkEnable);
         // 前のやり取りの応答が残っていれば捨てる (EP 0x83 は 64 バイトずつ。残りは多くても置き場の数まで)
         Span<byte> stale = stackalloc byte[64];
-        for (var i = 0; i < Mb86h47Programs.BulkSlots && _usb.InterruptRead(CommandIn, stale, 10) > 0; i++)
+        for (var i = 0; i < Mb86h47Programs.BulkSlots && _usb.Read(CommandIn, stale, 10) > 0; i++)
         {
         }
         _commands.Clear();
@@ -525,7 +525,7 @@ public sealed class Mb86h47 : II2c
                 Dead = true;
                 throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が bulk の塊に応答しません");
             }
-            var got = _usb.InterruptRead(CommandIn, reply, left);
+            var got = _usb.Read(CommandIn, reply, left);
             if (got < 8) continue;
             // 応答の語の並びは、マーカー (0xA5) が先頭か終わりかで見分ける (FIFO のバイトの並びは仕様書に無い)
             if (reply[0] != Mb86h47Programs.BulkReplyMark && reply[3] == Mb86h47Programs.BulkReplyMark)

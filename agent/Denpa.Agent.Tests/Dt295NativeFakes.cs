@@ -474,7 +474,7 @@ internal sealed class Dt295Fake : IUsbDevice
 
     public void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs) => throw new NotSupportedException();
 
-    public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs) => throw new NotSupportedException();
+    public int Read(byte endpoint, Span<byte> buffer, int timeoutMs) => throw new NotSupportedException();
 
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
     {

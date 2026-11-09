@@ -1,0 +1,248 @@
+using System.Diagnostics;
+
+namespace Denpa.Agent;
+
+/// <summary>ファームウェアを起動した結果</summary>
+/// <param name="Before">開いたときに動いていたファームウェアのバージョン (0 なら動いていなかった)</param>
+/// <param name="Rebooted">前のファームウェアが動いていたので REBOOT した</param>
+/// <param name="Version">起動したファームウェアのバージョン (QUERYINFO の 4 バイト、上位から)</param>
+public sealed record It930xBoot(uint Before, bool Rebooted, uint Version)
+{
+    /// <summary>バージョンを <c>1.4.0.0</c> の形に</summary>
+    public static string Format(uint version) => $"{version >> 24}.{(version >> 16) & 0xFF}.{(version >> 8) & 0xFF}.{version & 0xFF}";
+}
+
+/// <summary>
+/// IT930x (USB ブリッジ) 1 つ。コマンドの送受信、レジスタの読み書き、ファームウェアの読み込みと REBOOT。
+///
+/// <para>
+/// コマンドは EP 0x02 (bulk OUT) に送り、応答は EP 0x81 (bulk IN) から読む (SDK の <c>usb2impl.c</c>)。
+/// **コマンドは 1 つずつ通す。** 送ってから応答を読むまでを 1 つの区切りにし、ロックはその間だけ持つ。
+/// 長いレジスタの読み書きは区切りごとにロックを取り直すので、ほかのスレッドのコマンドが間に入ってよい。
+/// </para>
+///
+/// <para>
+/// ITE の SDK (<c>api/IT9300.c</c>・<c>api/brCmd.c</c>) を元に書いた。コメントの関数名は SDK のもの。
+/// 復調器とチューナーの層 (I2C の中継・TS の入力) はまだ無い (#1578 の続きの段階で足す)
+/// </para>
+/// </summary>
+public sealed class It930xBridge
+{
+    public const byte CommandOut = 0x02;
+    public const byte ReplyIn = 0x81;
+
+    /// <summary>
+    /// 応答を受ける入れ物の大きさ。応答は長くて 63 バイトだが、端点の最大パケット長 (USB 2.0 の bulk で 512) より短い読みに
+    /// 長い応答が来ると OS がエラーにするので、最大パケット長にそろえる (SDK は 125 バイトで読む)
+    /// </summary>
+    private const int ReplyBuffer = 512;
+
+    /// <summary>レジスタの書き込み 1 回の上限 (フレームの 63 バイトから、長さ・コマンド・シーケンス番号・読み書きの長さ・番地 6 バイト・チェックサムを引いた残り)</summary>
+    public const int MaxWrite = It930xFrame.Max - 12;
+
+    /// <summary>レジスタの読み出し 1 回の上限 (応答が 63 バイトに収まる長さ)</summary>
+    public const int MaxRead = It930xFrame.Max - It930xFrame.ReplyOverhead;
+
+    /// <summary>
+    /// 応答を待つ時間。SDK は 10 秒 (<c>usbbus_timeout</c>)。1 回の応答は数 ms と推定し、1 秒から始める
+    /// (実機の記録で決め直す)
+    /// </summary>
+    internal const int TimeoutMs = 1000;
+
+    /// <summary>
+    /// REBOOT のあと、応答が戻るのを待つ間の 1 回の QUERYINFO の時間切れ。SDK は 10 ms ごとに最大 30 回送る (<c>IT9300_reboot</c>)。
+    /// ここで 1 回 1 秒待つと最大 30 秒かかるので短くする (値は仕様書に無い。実機の記録で決め直す)
+    /// </summary>
+    internal const int RebootPollTimeoutMs = 100;
+
+    // ファームウェアに I2C の相手を教える変数 (brVariable.h)。開くときに 0 に戻す (IT9300_initialize)
+    public const uint SecondI2cBus = 0x4976;
+    public const uint SecondI2cAddress = 0x4BFB;
+    public const uint ThirdI2cAddress = 0x4978;
+    public const uint FourthI2cAddress = 0x4977;
+
+    /// <summary>
+    /// I2C の速さ (<c>p_br_reg_one_cycle_counter_tuner</c>)。ファームウェアを読み込む前に <see cref="I2cSpeed"/> を書く (<c>_IT9300_loadFirmware</c>)
+    /// </summary>
+    public const uint OneCycleCounterTuner = 0xF103;
+
+    /// <summary>I2C の速さの値 (<c>IT9300User_I2C_SPEED</c>。brUser.h は約 366 kHz と書いている)</summary>
+    public const byte I2cSpeed = 0x07;
+
+    private readonly IUsbDevice _usb;
+    private readonly Action<int> _sleep;
+    private readonly Action<string>? _trace;
+    private readonly Lock _gate = new();
+    private byte _sequence;
+    private bool _stale;
+
+    /// <param name="sleep">待つ (ms)。テストは時計を進めるだけにする</param>
+    /// <param name="trace">コマンドを 1 行ずつ出す先 (<c>--trace</c>)</param>
+    public It930xBridge(IUsbDevice usb, Action<int>? sleep = null, Action<string>? trace = null)
+    {
+        _usb = usb;
+        _sleep = sleep ?? Thread.Sleep;
+        _trace = trace;
+    }
+
+    public string Name => _usb.Name;
+
+    /// <summary>送ったコマンドの数 (<c>--it930x-probe</c> が出す)</summary>
+    public int Commands { get; private set; }
+
+    /// <summary>
+    /// コマンドを 1 つ送り、応答のデータ (<paramref name="replyLength"/> バイト) を返す。
+    /// 時間切れ・壊れた応答・ブリッジのエラーは <see cref="It930xException"/>、抜けたら <see cref="UsbGoneException"/>
+    /// </summary>
+    public byte[] Command(ushort command, ReadOnlySpan<byte> payload, int replyLength, int timeoutMs = TimeoutMs)
+    {
+        lock (_gate)
+        {
+            var sequence = Send(command, payload);
+            var started = Stopwatch.GetTimestamp();
+            Span<byte> buffer = stackalloc byte[ReplyBuffer];
+            var got = _usb.Read(ReplyIn, buffer, timeoutMs);
+            if (got <= 0)
+            {
+                // 遅れて届いた応答を、次のコマンドの応答と取り違えないように捨てる (Drain)
+                _stale = true;
+                _trace?.Invoke($"応答なし 0x{command:X4} #{sequence:X2} ({timeoutMs} ms)");
+                throw new It930xException($"IT930x の応答がありません (コマンド 0x{command:X4}、{timeoutMs} ms)");
+            }
+            var reply = buffer[..got];
+            // 位置 1 は送ったシーケンス番号が返ると推定している (SDK は読まない)。実機で確かめるまでは記録に出すだけにする
+            _trace?.Invoke($"応答 #{(got > 1 ? reply[1] : 0):X2} {Convert.ToHexString(reply)} ({Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1} ms)");
+            return It930xFrame.Parse(reply, replyLength, command);
+        }
+    }
+
+    /// <summary>フレームを送るだけ (応答を読まない)。シーケンス番号を返す。ロックの中で呼ぶ</summary>
+    private byte Send(ushort command, ReadOnlySpan<byte> payload)
+    {
+        if (_stale) Drain();
+        var sequence = _sequence++;
+        var frame = It930xFrame.Build(command, sequence, payload);
+        _trace?.Invoke($"送信 0x{command:X4} #{sequence:X2} {Convert.ToHexString(frame)}");
+        Commands++;
+        _usb.BulkWrite(CommandOut, frame, TimeoutMs);
+        return sequence;
+    }
+
+    /// <summary>時間切れのあとに遅れて届いた応答を捨てる (最大 8 個)</summary>
+    private void Drain()
+    {
+        Span<byte> buffer = stackalloc byte[ReplyBuffer];
+        for (var i = 0; i < 8 && _usb.Read(ReplyIn, buffer, 10) > 0; i++) _trace?.Invoke("遅れて届いた応答を捨てました");
+        _stale = false;
+    }
+
+    /// <summary>
+    /// レジスタを読む (<c>BrCmd_readRegisters</c>)。<see cref="MaxRead"/> バイトずつに分けて読む。
+    /// 番地の長さは 0xFF までなら 1、それより上は 2 (<c>IT9300_readRegisters</c>)
+    /// </summary>
+    public byte[] ReadRegisters(uint address, int length)
+    {
+        var result = new byte[length];
+        for (var at = 0; at < length; at += MaxRead)
+        {
+            var count = Math.Min(MaxRead, length - at);
+            var from = address + (uint)at;
+            Command(It930xFrame.RegisterRead, Address(from, count, []), count).CopyTo(result, at);
+        }
+        return result;
+    }
+
+    public byte ReadRegister(uint address) => ReadRegisters(address, 1)[0];
+
+    /// <summary>レジスタに書く (<c>BrCmd_writeRegisters</c>)。<see cref="MaxWrite"/> バイトずつに分けて書く</summary>
+    public void WriteRegisters(uint address, ReadOnlySpan<byte> data)
+    {
+        for (var at = 0; at < data.Length; at += MaxWrite)
+        {
+            var part = data.Slice(at, Math.Min(MaxWrite, data.Length - at));
+            Command(It930xFrame.RegisterWrite, Address(address + (uint)at, part.Length, part), 0);
+        }
+    }
+
+    public void WriteRegister(uint address, byte value) => WriteRegisters(address, [value]);
+
+    /// <summary>読み書きのコマンドの中身: 長さ、番地の長さ、番地 4 バイト (上位から)、書くバイト</summary>
+    private static byte[] Address(uint address, int length, ReadOnlySpan<byte> data)
+    {
+        var payload = new byte[6 + data.Length];
+        payload[0] = (byte)length;
+        payload[1] = (byte)(address > 0xFF ? 2 : 1);
+        payload[2] = (byte)(address >> 24);
+        payload[3] = (byte)(address >> 16);
+        payload[4] = (byte)(address >> 8);
+        payload[5] = (byte)address;
+        data.CopyTo(payload.AsSpan(6));
+        return payload;
+    }
+
+    /// <summary>動いているファームウェアのバージョン (<c>QUERYINFO</c>)。0 なら動いていない</summary>
+    public uint Version(int timeoutMs = TimeoutMs)
+    {
+        var reply = Command(It930xFrame.QueryInfo, [1], 4, timeoutMs);
+        return (uint)((reply[0] << 24) | (reply[1] << 16) | (reply[2] << 8) | reply[3]);
+    }
+
+    /// <summary>
+    /// ファームウェアを起動する。前のファームウェアが動いていれば REBOOT してから読み込む
+    /// (SDK の <c>IT9300_initialize</c> の前半と <c>_IT9300_loadFirmware</c>)。
+    /// 起動しなければ <see cref="It930xException"/>。REBOOT で USB がつなぎ直されたときは <see cref="UsbGoneException"/> のまま投げる (呼ぶ側が開き直す)
+    /// </summary>
+    /// <param name="code">ファームウェア (<see cref="It930xFirmware.Code"/>)</param>
+    public It930xBoot Start(byte[] code)
+    {
+        var before = Version();
+        var rebooted = false;
+        if (before != 0)
+        {
+            Reboot();
+            rebooted = true;
+        }
+        // ファームウェアに残っている I2C の相手を消す (IT9300_initialize)
+        WriteRegister(SecondI2cBus, 0);
+        WriteRegister(SecondI2cAddress, 0);
+        WriteRegister(ThirdI2cAddress, 0);
+        WriteRegister(FourthI2cAddress, 0);
+        WriteRegister(OneCycleCounterTuner, I2cSpeed);
+        foreach (var segment in It930xFirmware.Split(code)) Command(It930xFrame.ScatterWrite, segment.Span, 0);
+        Command(It930xFrame.Boot, [], 0);
+        _sleep(20);
+        var version = Version();
+        if (version == 0) throw new It930xException("IT930x のファームウェアが起動しませんでした (BOOT のあとのバージョンが 0)");
+        return new It930xBoot(before, rebooted, version);
+    }
+
+    /// <summary>
+    /// 動いているファームウェアを止める (<c>IT9300_reboot</c>)。REBOOT を送り、10 ms 待ってから、応答が戻るまで QUERYINFO を
+    /// 10 ms ごとに最大 30 回送る。戻ったあとのバージョンが 0 でなければ <see cref="It930xException"/>
+    /// </summary>
+    /// <remarks>
+    /// SDK のこの関数は、待ったあとに必ず失敗を返す形になっている (比べる変数に 1 を入れたまま比べている)。
+    /// 意図は「REBOOT のあとはバージョンが 0 に戻る」と推定し、それを確かめる。REBOOT で USB がつなぎ直されるかは実機で確かめていない
+    /// </remarks>
+    public void Reboot()
+    {
+        lock (_gate) Send(It930xFrame.Boot, []);
+        _sleep(10);
+        uint? version = null;
+        It930xException? last = null;
+        for (var i = 0; i < 30 && version is null; i++)
+        {
+            try
+            {
+                version = Version(RebootPollTimeoutMs);
+            }
+            catch (It930xException error)
+            {
+                last = error;
+                _sleep(10);
+            }
+        }
+        if (version is null) throw new It930xException($"IT930x が REBOOT のあと応答しません ({last?.Message})");
+        if (version != 0) throw new It930xException($"IT930x の REBOOT のあとも、ファームウェアが動いています (バージョン {It930xBoot.Format(version.Value)})");
+    }
+}

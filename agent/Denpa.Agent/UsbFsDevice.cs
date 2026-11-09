@@ -163,7 +163,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     }
 
     /// <summary>IN を 1 回。時間切れは 0</summary>
-    public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs)
+    public int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
         fixed (byte* start = buffer)
         {

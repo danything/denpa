@@ -195,7 +195,7 @@ internal sealed class FakeBridgeUsb : IUsbDevice
     }
 
     /// <summary>EP 0x83: 応答していない塊があれば、命令を DibModel に届けて応答を作る</summary>
-    public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs)
+    public int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
         if (!Core1Bulk || _answered >= Packets.Count) return 0;
         var chunk = Packets[_answered++];

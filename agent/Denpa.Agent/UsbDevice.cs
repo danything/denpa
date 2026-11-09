@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace Denpa.Agent;
 
 /*
- * エージェントが USB を直に持つ機材 (いまは CECH-ZD1 J と PIX-DT295) のための小さな抽象。OS ごとの実装は
+ * エージェントが USB を直に持つ機材 (CECH-ZD1 J・PIX-DT295・IT930x の機材) のための小さな抽象。OS ごとの実装は
  * UsbFsDevice (Linux の usbfs)・WinUsbDevice (Windows の WinUSB)・IoKitDevice (macOS の IOKit)。どれも P/Invoke だけで、
  * 外のライブラリ (libusb など) は使わない。iso の転送は持たない (要る機材が無い)。
  */
@@ -23,8 +23,8 @@ public interface IUsbDevice : IDisposable
     /// <summary>bulk の OUT を 1 回 (全部送れなければ投げる)</summary>
     void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs);
 
-    /// <summary>interrupt の IN を 1 回。時間切れなら 0</summary>
-    int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs);
+    /// <summary>interrupt か bulk の IN を 1 回。時間切れなら 0。CECH-ZD1 J の応答 (interrupt) と IT930x の応答 (bulk) を読む</summary>
+    int Read(byte endpoint, Span<byte> buffer, int timeoutMs);
 
     /// <summary>
     /// IN の読みを <paramref name="depth"/> 本出しっぱなしにする。読みが出ていない間に来たものは抜ける機材 (TS) 向け。
