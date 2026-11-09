@@ -257,8 +257,8 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 使い終えた受信機のチューナーを止め、復調器をスリープにして、LNB の給電を求めない状態にする (仕様書 10.3 の手順 2〜4)。
-    /// スリープが失敗しても給電の求めは取り下げる
+    /// 使い終えた受信機のチューナーを止め、復調器をスリープにして、LNB の給電の要求を取り下げる (仕様書 10.3 の手順 2〜4)。
+    /// スリープが失敗しても給電の要求は取り下げる
     /// </summary>
     public void Rest(int receiver)
     {
@@ -275,8 +275,8 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 受信機 <paramref name="receiver"/> が LNB の給電を求める・求めない (仕様書 9)。給電は 5 つの受信機で 1 つ (ブリッジの GPIOH11。1 で入る) なので、
-    /// 求めている受信機の数が 0 から 1 になるときに入れ、1 から 0 になるときに切る。書き込みに失敗したら、求めの数は書く前に戻す
+    /// 受信機 <paramref name="receiver"/> が LNB の給電を要求する・要求を取り下げる (仕様書 9)。給電は 5 つの受信機で 1 つ (ブリッジの GPIOH11。1 で入る) なので、
+    /// 給電を要求している受信機の数が 0 から 1 になるときに入れ、1 から 0 になるときに切る。書き込みに失敗したら、要求している受信機の数は書く前に戻す
     /// </summary>
     public void Lnb(int receiver, bool on)
     {
@@ -302,7 +302,7 @@ public sealed class It930xDevice
         }
     }
 
-    /// <summary>LNB の給電を求めている受信機の数 (テストと記録のため)</summary>
+    /// <summary>LNB の給電を要求している受信機の数 (テストのため)</summary>
     internal int LnbUsers
     {
         get
@@ -521,6 +521,15 @@ public sealed class It930xTuner : ITuneDevice
             {
                 if (_device is { } device)
                 {
+                    // 選局できなかった受信機は給電の要求を取り下げる (受けていない受信機のために LNB を入れたままにしない。仕様書に無い)
+                    try
+                    {
+                        device.Lnb(_receiver, false);
+                    }
+                    catch (IOException)
+                    {
+                        // 元の失敗を返す
+                    }
                     device.Fail(error);
                     if (device.Faulted) Drop();
                 }

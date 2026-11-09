@@ -314,6 +314,24 @@ public class It930xDeviceTests
     }
 
     [Test]
+    public async Task 衛星を選局できなければ給電の要求を取り下げる()
+    {
+        var (usb, _, bus3) = Fake();
+        bus3[0x65].SatelliteStatus = _ => 0x00;
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-11", new FakeClock()), () => It930xDevice.CloseIfIdle("9-11"), "15v");
+        try
+        {
+            var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("BS15:16625")!));
+            await Assert.That(error.Message).IsEqualTo(ITuneDevice.SyncFailed);
+            await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01", "W D8D3=00" });
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
     public async Task LNB_の_11V_は機材を開かずに断る()
     {
         var tuner = new It930xTuner("test", 0, () => throw new InvalidOperationException("開かない"), lnb: "11v");
