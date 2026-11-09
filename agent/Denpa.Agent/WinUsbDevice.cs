@@ -301,9 +301,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         }
     }
 
-    public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs) => Read(endpoint, buffer, timeoutMs);
-
-    private int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
+    public int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
         Timeout(endpoint, timeoutMs);
         fixed (byte* start = buffer)

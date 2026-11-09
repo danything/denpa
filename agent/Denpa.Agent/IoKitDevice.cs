@@ -405,10 +405,10 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
     /// interrupt のパイプには <c>ReadPipeTO</c> の時間切れが効かない (IOUSBLib.h)。時間切れの無い <c>ReadPipe</c> を
     /// 出し続ける読み (<see cref="UsbReadPump"/>) を端点ごとに初めて読むときに作り、届いた応答を自前の時間切れで待つ
     /// </summary>
-    public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs)
+    public int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
         var pipe = Pipe(endpoint);
-        if (pipe.Type != TransferInterrupt) return Read(endpoint, buffer, timeoutMs);
+        if (pipe.Type != TransferInterrupt) return ReadTimed(endpoint, buffer, timeoutMs);
         UsbReadPump pump;
         lock (_gate)
         {
@@ -446,7 +446,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         if (_interface is not null) ((delegate* unmanaged[Cdecl]<void*, byte, int>)Slot(_interface, AbortPipe))(_interface, pipe);
     }
 
-    private int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
+    private int ReadTimed(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
         var pipe = Pipe(endpoint).Ref;
         fixed (byte* start = buffer)
