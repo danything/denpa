@@ -233,6 +233,26 @@ public class It930xTsTests
     }
 
     [Test]
+    [Arguments(1)]
+    [Arguments(100)]
+    [Arguments(188)]
+    [Arguments(189)]
+    [Arguments(500)]
+    public async Task 知らない同期バイトと揃え直しは境目で切れても同じに数える(int size)
+    {
+        var (demux, pipes) = Demux();
+        var packets = Enumerable.Range(0, 10).Select(number => Packet(0, number)).ToList();
+        packets[2] = Packet(1, 0, 0x47);
+        packets[6] = [.. packets[6].Take(10), .. packets[6].Skip(60)];
+        var data = packets.SelectMany(packet => packet).ToArray();
+        for (var at = 0; at < data.Length; at += size) demux.Push(data.AsSpan(at, Math.Min(size, data.Length - at)));
+        await Assert.That(Received(pipes[0]).Select(item => item.Number)).IsEquivalentTo(new[] { 0, 1, 3, 4, 5, 6, 8, 9 });
+        await Assert.That(demux.Unknown).IsEqualTo(1L);
+        await Assert.That(demux.Lost).IsEqualTo(1L);
+        await Assert.That(demux.Skipped).IsEqualTo(138L);
+    }
+
+    [Test]
     public async Task 出口を付け替えたら前の選局のパケットは新しい出口に入らない()
     {
         var demux = new It930xTsDemux(It930xBridge.SyncBytes);

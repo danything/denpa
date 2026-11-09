@@ -279,7 +279,7 @@ public sealed class It930xBridge
     /// **入力はまだ開けない** (<see cref="EnableTsInput"/>)。
     ///
     /// <para>
-    /// 順は SDK と同じ: <c>IT9300_initialize</c> の TS の部分 (同期バイトを無視しない → <c>IT9300_setOutTsType</c> →
+    /// 順は SDK と同じで、<c>IT9300_initialize</c> の TS の部分 (同期バイトを無視しない → <c>IT9300_setOutTsType</c> →
     /// <c>IT9300_configOutput</c> → 残っている TS を捨てる)、<c>DRV_IT930x_Initialize</c> の入力ごとの設定 (<c>IT9300_setInTsType</c>・
     /// <c>IT9300_setSyncByteMode</c>)、<c>IT9300_setIgnoreFail</c>。
     /// <c>IT9300_initialize</c> のうち端子の駆動の強さ・次の段の I2C の相手・GPIO は、復調器の層と一緒に足す (PLEX の基板での値を確かめていない)

@@ -11,14 +11,14 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// **揃え方**: 揃っていないときは、位置 i と i + 188 の両方が決めた同期バイトなら i をパケットの先頭とみなし、そうでなければ 1 バイト進める
+/// 揃っていないときは、位置 i と i + 188 の両方が決めた同期バイトなら i をパケットの先頭とみなし、そうでなければ 1 バイト進める
 /// (飛ばしたバイトは <see cref="Skipped"/>)。揃ったあとも 188 バイトごとに確かめる。先頭が決めた値でなくても、188 バイト先が決めた値なら
 /// 知らない同期バイトのパケットとして 1 つ捨て (<see cref="Unknown"/>)、188 バイト先も違えば揃いが外れたとみなして揃え直す (<see cref="Lost"/>)。
 /// TS の中身にたまたま同じ値が並ぶと 1 パケットぶん誤って揃うことがあるが、次の確かめで外れて揃え直す。
 /// </para>
 ///
 /// <para>
-/// <see cref="Push"/> は 1 つのスレッドから呼ぶ。<see cref="Attach"/>・<see cref="Detach"/> はほかのスレッドから呼んでよい
+/// <see cref="Push"/> は 1 つのスレッドから呼ぶ。<see cref="Attach"/>・<see cref="Detach"/> はほかのスレッドから呼んでよい。
 /// </para>
 /// </summary>
 internal sealed class It930xTsDemux
@@ -135,9 +135,9 @@ internal sealed class It930xTsDemux
 /// 選局のたびに新しく作り、前の選局のパケットと混ぜない。
 ///
 /// <para>
-/// **読む側が詰まって Pipe が溢れたら、この受信機のパケットだけを捨てて数える** (<see cref="Dropped"/>)。
+/// 読む側が詰まって Pipe が溢れたら、この受信機のパケットだけを捨てて数える (<see cref="Dropped"/>)。
 /// EP 0x84 の読みは 5 つの入力で 1 本なので、待つとほかの受信機のパケットも欠けるため。読む側が追いついたら、また詰める。
-/// 書くのは <see cref="It930xTsDemux"/> の 1 つのスレッドで、止める (<see cref="Complete"/>) のはほかのスレッドから呼んでよい
+/// 書くのは <see cref="It930xTsDemux"/> の 1 つのスレッドで、止める (<see cref="Complete"/>) のはほかのスレッドから呼んでよい。
 /// </para>
 /// </summary>
 internal sealed class It930xTsOutput
