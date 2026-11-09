@@ -231,7 +231,7 @@
   });
 
   /**
-   * 局を選ぶ。エンコード方式は引き継ぐ (その端末で出るかの話)。音声は引き継がない (番組ごとに構成が変わる。
+   * 局を選ぶ。形式はメニューの選択から決め直す (`pickFormat`)。音声は引き継がない (番組ごとに構成が変わる。
    * サーバが主音声に落とす)
    */
   function select(channel: LiveChannel): boolean {
@@ -240,7 +240,6 @@
       channelType: channel.type,
       channel: channel.channel,
       serviceId: channel.id,
-      codec: player.codec,
     });
     return true;
   }

@@ -408,9 +408,12 @@ export interface Tuned {
   serviceId: number;
   /** どの音声を出すか (`AudioTrack.id`)。省くと主音声 */
   audio?: string;
-  /** どのコーデックでエンコードするか。省くと `h264` */
+  /**
+   * サーバが先回りしてエンコードしている形式 (`server/viewing.ts` の `liveStart`・`warmFormat`)。画面の `tune` は読まず、
+   * 形式はメニューの選択 (`choice`) から決め直す (`pickFormat`)。cookie には残さない
+   */
   codec?: LiveCodec;
-  /** MPEG-2 のままリクエストするか (`TuneCommand.raw`)。cookie には残さない (先回りの形式はメニューの選択 (`choice`) から決める。`server/viewing.ts` の `warmFormat`) */
+  /** 先回りしている形式が MPEG-2 のままか。`codec` と同じく画面の `tune` は読まない */
   raw?: boolean;
 }
 
