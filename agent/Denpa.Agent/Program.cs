@@ -123,7 +123,7 @@ var recorded = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
 // 自分の鍵と証明書、合言葉、組んだ denpa (tuners.json の隣の tls/。AgentTls.cs)
 var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN"));
 /*
- * 合言葉が短いと、組むやり取りを覗いた人がproof (HMAC) から手元で総当たりできる。インストーラや chart が
+ * 合言葉が短いと、組むやり取りを覗いた人が HMAC の値から手元で総当たりできる。インストーラや chart が
  * 作るもの (43 字) なら当たらない。手で短いものを渡されたときだけ言う
  */
 if (tls.Token.Length < 32)
