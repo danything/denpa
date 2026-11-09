@@ -2,12 +2,15 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// PIX-DT295 の内蔵のカードの差し込み口 (B-CAS)。ホストがカードの UART (0xFEA000〜。MB86H47 と同じレジスタ) を
-/// <see cref="Dt295NativeLink"/> の 0xBC のメモリ要求で直に動かす (仕様書の常駐イメージの CARD 0x2C は使わない)。
+/// <see cref="Dt295NativeLink"/> の 0xBC のメモリ要求で動かす (仕様書の常駐イメージの CARD 0x2C は使わない)。
 ///
 /// <para>
 /// 電源投入・切断の手順は仕様書 §10 の表 (投入 17 段・切断 5 段)。各段のあとに 20 ms 待つ (投入の 15 段目の 0xFEA014 = 0x0D は 50 ms)。
 /// 0xFEA004 に書く値の 4 つは、カードの端子の極性 (0xF00223) と、いまの 0xFEA004 から決める (§10 の設定確認)。
 /// ATR を受ける・速さを変える・T=1 のブロックを送受信する手順は、CECH-ZD1 J の差し込み口と共通にしている (<see cref="CardUart"/>。UART のレジスタが同じ)。
+/// ATR と T=1 のブロックの送受信は、機材のプログラムが使えれば (<see cref="Dt295NativeLink.CardProgram"/>) 機材の中で行わせる
+/// (<see cref="Dt295NativeLink.CardSend"/>・<see cref="Dt295NativeLink.CardReceive"/>。1 バイトごとの制御転送を、1 ブロック数回にする)。
+/// 使えなければホストが 1 バイトずつ読み書きする (<see cref="CardUart.Send"/>・<see cref="CardUart.Read"/>)。
 /// 書いてよいレジスタは <see cref="Dt295NativeLink.AllowCardUart"/> が許した 0xFEA000〜0xFEA03F だけ。0xF00222〜0xF0022E は読むだけ
 /// </para>
 /// </summary>
@@ -131,7 +134,7 @@ public sealed class Dt295NativeCard : ICardLink
         _t1 = null;
         _atr = null;
         if (_powered) PowerOff();
-        // 電源を入れてから ATR を受け切るまで、TS の要求を小さくさせる (受信 FIFO が溢れないように)
+        // 電源を入れてから ATR を受け切るまで、TS の要求を小さくさせる (受けたバイトを早く読み、受信 FIFO が溢れないように)
         byte[] raw;
         Link.EnterCard();
         try
@@ -178,18 +181,32 @@ public sealed class Dt295NativeCard : ICardLink
         }
     }
 
-    private byte[] ReadAtr() => CardUart.ReceiveAtr(_uart.Read, _delay, Name);
+    private byte[] ReadAtr() => CardUart.ReceiveAtr(Read, _delay, Name);
+
+    /// <summary>受けて読まれていないバイトを <paramref name="max"/> まで読む。機材のプログラムが使えればそれで、使えなければホストが 1 バイトずつ</summary>
+    private byte[] Read(int max) => Link.CardProgram ? Link.CardReceive(max) : _uart.Read(max);
+
+    /// <summary>T=1 のブロックを LRC まで含めて送る。機材のプログラムが使えればそれで、使えなければホストが 1 バイトずつ</summary>
+    private void Send(byte[] block)
+    {
+        if (Link.CardProgram) Link.CardSend(block);
+        else _uart.Send(block);
+    }
 
     /// <summary>T=1 のブロックを 1 つ送って 1 つ受ける。時間切れは null (<see cref="CardUart.ReceiveBlock"/>)</summary>
     private byte[]? Exchange(byte[] block, byte wtx)
     {
-        // 送ってから受け切るまで、TS の要求を小さくさせる (受信 FIFO が溢れないように)
+        // 送ってから受け切るまで、TS の要求を小さくさせる (受けたバイトを早く読み、受信 FIFO が溢れないように)
         var link = Link;
         link.EnterCard();
         try
         {
-            _uart.Send(block);
-            return CardUart.ReceiveBlock(_uart.Read, _delay, _blockWaitMs * Math.Max(1, (int)wtx));
+            Send(block);
+            var limitMs = _blockWaitMs * Math.Max(1, (int)wtx);
+            var reply = CardUart.ReceiveBlock(Read, _delay, limitMs);
+            // 応答が揃わないと T=1 が送り直しを求める。送り直しの回数を記録から数えられるように残す
+            if (reply is null) Log.Write($"[{Name}] カードの応答が {limitMs} ms の間に揃いませんでした");
+            return reply;
         }
         finally
         {

@@ -6,6 +6,7 @@ namespace Denpa.Agent;
  * PIX-DT295 の機材の中で動かす FR30 のプログラム。節の番号は
  * 仕様書 (dt295-resident/spec.md) のもの。常駐イメージは入れず、要求ごとに動く小さなプログラムだけを機材に置く。
  * 操作 1 は TS を取り込みのリングから USB の bulk IN へ送り、操作 2 は I2C の転送の並びを順に行う (<see cref="EmitI2c"/>)。
+ * 操作 3・4 はカードの UART に T=1 のブロックを書いて送らせ、受けたバイトを読む (<see cref="EmitCard"/>)。
  * 機材の設定は、ホストが 0xBC のメモリ要求で行う (Dt295NativeBoard.cs・Dt295NativeFrontend.cs)。
  *
  * **ループは主 CPU の boot0 の hook に置く。補助 CPU には置かない。** 理由は 3 つ。
@@ -56,6 +57,14 @@ public static class Dt295NativePrograms
 
     /// <summary>操作 2 の結果 (応答の +4)</summary>
     public const uint I2cOk = 0, I2cNack = 1, I2cBusError = 2, I2cTimeout = 3;
+
+    /// <summary>操作 3・4 の結果 (応答の +4)。プログラムは要求の +4 (操作の番号) をこれで書き換える</summary>
+    public const uint CardOk = 0;
+
+    /// <summary>操作 3 の要求の中に置くブロックと、操作 4 の応答の中に置く受けたバイトの場所: +16〜+63</summary>
+    public const uint InlineCard = Staging + 16;
+
+    public const int InlineCardBytes = 48;
 
     /// <summary>hook (仕様書 3.2)。元の 8 バイトを、飛び先を body の入口にした 8 バイトに置き換える</summary>
     public const uint Hook = 0xEA6FC;
@@ -134,11 +143,15 @@ public static class Dt295NativePrograms
         asm.StFp(R10, SavedR10);
         asm.StFp(R11, SavedR11);
         asm.StFp(R13, SavedR13);
-        // 操作 2 (I2C の順次実行) は別の経路へ。操作 1 (TS を送る) はそのまま下へ
+        // 操作 2 (I2C の順次実行)・3 (カードへ送る)・4 (カードから受ける) は別の経路へ。操作 1 (TS を送る) はそのまま下へ
         asm.Ldi20(Staging + 4, R12);
         asm.Ld(R12, R0);
         asm.CmpI(2, R0);
         asm.Far(Fr30Cond.Eq, "i2c", R12);
+        asm.CmpI(3, R0);
+        asm.Far(Fr30Cond.Eq, "card_send", R12);
+        asm.CmpI(4, R0);
+        asm.Far(Fr30Cond.Eq, "card_receive", R12);
         asm.Ldi32(RingCpu, R4);
         asm.Ldi32(RingLength, R5);
         asm.Ldi20(Staging + 8, R12);
@@ -342,6 +355,7 @@ public static class Dt295NativePrograms
         asm.Jmp(R12);
 
         EmitI2c(asm);
+        EmitCard(asm);
 
         var words = asm.Words32();
         var bytes = words.Length * 4;
@@ -580,6 +594,94 @@ public static class Dt295NativePrograms
         asm.Label("wb_ok");
         asm.Ldi8(0, R0);
         asm.Ret();
+    }
+
+    /// <summary>
+    /// 操作 3・4: カードの UART (0xFEA000〜。<see cref="CardUart"/> と同じレジスタ) で T=1 のブロックを送り、受けたバイトを読む。
+    /// ホストが 1 バイトごとに制御転送で書き読みする (<see cref="CardUart.Send"/>・<see cref="CardUart.Read"/>) のと同じ手順を機材の中で行い、
+    /// ECM 1 回で百数十回あった制御転送を数回にする。
+    /// **カードの応答は機材の中で待たない。** 待つ間は TS の要求 (操作 1) が通らず、取り込みのリング (192 KiB) が溢れるため。
+    /// 応答を待つのはホストで、受けたバイトがあるかを操作 4 で繰り返し聞く。
+    /// <list type="bullet">
+    /// <item>操作 3 の要求: +8 ブロックのアドレス (CPU)、+12 長さ。<see cref="CardUart.Send"/> と同じ順に、受けの LRC = 0、送りの LRC = 0、
+    ///   各バイトを送りのレジスタへ、状態 = 0x3FF、制御 = 0x200 (256 バイト以上は 0x280)、開始 = 1 と書いて戻る。
+    ///   長さ 0 なら UART に触れずに戻る (開くときの確認に使う)。応答: +4 結果 (<see cref="CardOk"/>)、+8 送りのレジスタに書いたバイト数</item>
+    /// <item>操作 4 の要求: +8 読む数の上限。受けた数 (0xFEA014 の上位 16 ビット)・上限・<see cref="InlineCardBytes"/> のいちばん小さい数だけ
+    ///   受けのレジスタを読み、応答の +16 から並べる。上限 0 なら受けのレジスタを読まない。応答: +4 結果 (<see cref="CardOk"/>)、+8 読んだバイト数</item>
+    /// </list>
+    /// </summary>
+    private static void EmitCard(Fr30Assembler asm)
+    {
+        asm.Label("card_send");
+        asm.Ldi20(Staging + 8, R12);
+        asm.Ld(R12, R13);                    // R13 = ブロック (これを基底に、バイトの位置 R4 で読む)
+        asm.AddI(4, R12);
+        asm.Ld(R12, R5);                     // R5 = 長さ
+        asm.Ldi8(0, R4);                     // R4 = 書いたバイト数
+        asm.CmpI(0, R5);
+        asm.B(Fr30Cond.Eq, "card_reply");
+        asm.Ldi8(0, R0);
+        asm.Ldi32(CardUart.RxLrc, R12);
+        asm.St(R0, R12);
+        asm.Ldi32(CardUart.TxLrc, R12);
+        asm.St(R0, R12);
+        asm.Ldi32(CardUart.Tx, R7);
+        asm.Label("cs_byte");
+        asm.LdubAc(R4, R0);
+        asm.St(R0, R7);
+        asm.AddI(1, R4);
+        asm.Cmp(R5, R4);
+        asm.B(Fr30Cond.Ne, "cs_byte");
+        asm.Ldi32(CardUart.Status, R12);
+        asm.Ldi(0x3FF, R0);
+        asm.St(R0, R12);
+        asm.Ldi(0x200, R0);
+        asm.Ldi(0x100, R1);
+        asm.Cmp(R1, R5);
+        asm.B(Fr30Cond.C, "cs_control");     // 256 バイト未満は 0x200
+        asm.Ldi(0x280, R0);
+        asm.Label("cs_control");
+        asm.Ldi32(CardUart.Control, R12);
+        asm.St(R0, R12);
+        asm.Ldi8(1, R0);
+        asm.Ldi32(CardUart.Start, R12);
+        asm.St(R0, R12);
+        asm.Bra("card_reply");
+
+        asm.Label("card_receive");
+        asm.Ldi20(Staging + 8, R12);
+        asm.Ld(R12, R5);                     // R5 = 読む数の上限
+        asm.Ldi8((uint)InlineCardBytes, R1);
+        asm.Cmp(R1, R5);
+        asm.B(Fr30Cond.C, "cr_limit");
+        asm.Mov(R1, R5);                     // 応答に入る数まで
+        asm.Label("cr_limit");
+        asm.Ldi32(CardUart.Count, R12);
+        asm.Ld(R12, R0);
+        asm.Lsr(16, R0);                     // R0 = 受けて読まれていないバイトの数
+        asm.Cmp(R5, R0);
+        asm.B(Fr30Cond.Nc, "cr_count");
+        asm.Mov(R0, R5);
+        asm.Label("cr_count");
+        asm.Ldi20(InlineCard, R13);          // R13 = 応答の +16 (これを基底に、バイトの位置 R4 で書く)
+        asm.Ldi32(CardUart.Rx, R7);
+        asm.Ldi8(0, R4);                     // R4 = 読んだバイト数
+        asm.Label("cr_byte");
+        asm.Cmp(R5, R4);
+        asm.B(Fr30Cond.Eq, "card_reply");
+        asm.Ld(R7, R0);
+        asm.StbAc(R0, R4);
+        asm.AddI(1, R4);
+        asm.Bra("cr_byte");
+
+        // 応答: +4 結果、+8 書いた・読んだバイト数
+        asm.Label("card_reply");
+        asm.Ldi8(CardOk, R0);
+        asm.Ldi20(Staging + 4, R12);
+        asm.St(R0, R12);
+        asm.AddI(4, R12);
+        asm.St(R4, R12);
+        asm.Far(Fr30Cond.Ra, "leave", R12);
     }
 
     /// <summary>[address] を size バイトで読み、expected と違えば "orig" へ。R0 と R12 だけを使う</summary>

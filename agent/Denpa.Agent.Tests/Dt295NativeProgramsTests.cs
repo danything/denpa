@@ -165,6 +165,33 @@ public class Dt295NativeProgramsTests
     }
 
     [Test]
+    public async Task カードの送受信の操作のあとも_レジスタ_スタック_RP_は呼ぶ前と同じで_TS_の状態を変えない()
+    {
+        var fake = Rig();
+        fake.CardResponder = _ => [0x00, 0x00, 0x02, 0x90, 0x00, 0x92];
+        State(fake, 0x1234, 8, 2, aligned: true);
+        var link = new Dt295NativeLink(fake) { AllowCardUart = true };
+
+        foreach (var run in new Action[] { () => link.CardSend([0x00, 0x00, 0x00, 0x00]), () => link.CardReceive(6) })
+        {
+            run();
+            var cpu = fake.Cpu!;
+            await Assert.That(cpu.Pc).IsEqualTo(Dt295NativePrograms.StatusStage);
+            foreach (var i in new[] { 8, 9, 10, 11, 13, 14 })
+            {
+                await Assert.That(cpu.R[i]).IsEqualTo(i == 11 ? Dt295NativePrograms.Work : 0x11110000u * (uint)i);
+            }
+            await Assert.That(cpu.R[15]).IsEqualTo(0xC8000u);
+            await Assert.That(cpu.Rp).IsEqualTo(0xE9999u);
+        }
+        await Assert.That(fake.Get(Frame + Dt295NativePrograms.StateRp, 4)).IsEqualTo(0x1234u);
+        await Assert.That(fake.Get(Frame + Dt295NativePrograms.StatePos, 4)).IsEqualTo(8u);
+        await Assert.That(fake.Get(Frame + Dt295NativePrograms.StateK, 4)).IsEqualTo(2u);
+        await Assert.That(fake.Get(Frame + Dt295NativePrograms.StateAligned, 4)).IsEqualTo(1u);
+        await Assert.That(fake.CardRx).IsEmpty();
+    }
+
+    [Test]
     [Arguments(100u)]
     [Arguments(101u)]
     [Arguments(103u)]
@@ -246,29 +273,37 @@ public class Dt295NativeProgramsTests
         await Assert.That(reply.WritePosition).IsEqualTo(Length);
     }
 
-    /// <summary>fr30-elf-as (binutils 2.44) で Listing を組み、fr30-elf-ld で 0xE1000 に置いた出力 (道具の出力)。語が奇数個のとき末尾の 9fa0 は、32 ビットずつにそろえる nop</summary>
+    /// <summary>
+    /// fr30-elf-as (binutils 2.44) で Listing を組み、fr30-elf-ld で 0xE1000 に置いた出力 (道具の出力)。語が奇数個のとき末尾の 9fa0 は、32 ビットずつにそろえる nop。
+    /// 操作 3・4 (カードの送受信) を足したときの語は Fr30Assembler の出力で、fr30-elf-as にはまだ通していない
+    /// (使う命令の形は、どれも Fr30Tests で fr30-elf-as と突き合わせてある)
+    /// </summary>
     private const string BodyHex =
         "9bcc466206c0c7dcaac0e3169bcc466405c0c40caac0e3109bcc461c04c09bcc4620aac0e3099bcc462004c09f8c444e5431" +
         "aac0e301e00ac46d02b0a810e2039beca75a970c9beca704970c17819bec17c014ce8bce30183029303a304b305d9bcc4624" +
-        "04c0a820e3039bec1248970c9f848138ec009f85000300009bcc462804c6a44c04c730a630b720682079208a209ba806e303" +
-        "9bec11fc970c9f8c0190202804cdaa5de4039bec1200970c8bd3ac83e501a653a80be3039bec1172970c9b0002fca6a0aa03" +
-        "e5039bec11ee970c9f8c00fdbd0c04c0c04c82c0e3039bec11ee970c9f8d00fdbd848ba7c03c82c7b4378babb02bb42bc803" +
-        "8b81a6b1a691aa51e401ac51a6410410a807e20ca4418b4ca65caac1e401ac510412b670c20cac7cb2c2922014d0a449cbcc" +
-        "aac9e306c009cc0ca6c8aa58e401ac58a5f3e3dd9f8c00fd814cc08014c09f8c00fdbd0cc04014c09f8c00fd814cc0f014c0" +
-        "9f8c0190202c14c8c01b20b7a5f69bec1092970c9b0002fcaa03e5039bec11ee970cc000c4738b81a601aa51e401ac51a641" +
-        "0612aa32e31d8b81a601cc02a621aa51e401ac51a6410612aa32e3128b81a6019b020180a621aa51e401ac51a6410612aa32" +
-        "e3068b0ac01bc0099bec1092970ca410cc01aa10e4d6a618aa58e401ac589f8c0190202c14c89bec1092970ca5f7e2039bec" +
-        "1092970cc010e003c000e001c02030683079308a309b9bcc462414c0a44c20a1ac6114c1a44c14c8a44c14caa44c14c9a44c" +
-        "9f8201902028042114c1a44c14cb20182029203a204b205d04ee07819beca8c8970c9bcc462804cda44c04c6acd630d6a44c" +
-        "04c530b5c004c00030c09f8700fd8fe09f8800fd8fe49f8900fd8ff0a805e3039bec13a8970c9f8c000200000470c80b82b0" +
-        "e206a5fce3fac0309bec139e970c0241a4140242a4140243a4140240a41430e0b41130a28b10a802e301a4101490c5201480" +
-        "d085a800e2039bec139e970c0470c10b82b0e2039bec139c970ca802e3039bec131a970ca812e30b20e0a810e3080240a414" +
-        "024ba41420cc82c092b0e0020240a4141490b01ab41a148ad060a800e2039bec139e970ca5f29bec12d6970c20a0a800e217" +
-        "a803e2158b10a4101490b01ab41ac20b92ba148ad049a800e2039bec139e970c0470c10b82b0e2039bec139c970c30f6a803" +
-        "e3039bec138c970cb01ab41ac08b92baa813e301acba148ad02ea800e2039bec139e970c04901260a416a5f3e2039bec135a" +
-        "970c20f0020030c0c39b92baacba148aa5f59bec1274970cc010c39b92baacba148ae001c0009bcc462414c020b1ac51a44c" +
-        "14c120d18b62ac12a44c14c29bec1234970cc40c048a8ba0c01b82b0e202a5fce3f99f8c00020000048a8ba0c80b82b0e308" +
-        "8ba0c01b82b0e306a5fce3f5c0309720c0209720c0009720";
+        "04c0a820e3039bec125c970ca830e3039bec1414970ca840e3039bec1476970c9f848138ec009f85000300009bcc462804c6" +
+        "a44c04c730a630b720682079208a209ba806e3039bec1210970c9f8c0190202804cdaa5de4039bec1214970c8bd3ac83e501" +
+        "a653a80be3039bec1186970c9b0002fca6a0aa03e5039bec1202970c9f8c00fdbd0c04c0c04c82c0e3039bec1202970c9f8d" +
+        "00fdbd848ba7c03c82c7b4378babb02bb42bc8038b81a6b1a691aa51e401ac51a6410410a807e20ca4418b4ca65caac1e401" +
+        "ac510412b670c20cac7cb2c2922014d0a449cbccaac9e306c009cc0ca6c8aa58e401ac58a5f3e3dd9f8c00fd814cc08014c0" +
+        "9f8c00fdbd0cc04014c09f8c00fd814cc0f014c09f8c0190202c14c8c01b20b7a5f69bec10a6970c9b0002fcaa03e5039bec" +
+        "1202970cc000c4738b81a601aa51e401ac51a6410612aa32e31d8b81a601cc02a621aa51e401ac51a6410612aa32e3128b81" +
+        "a6019b020180a621aa51e401ac51a6410612aa32e3068b0ac01bc0099bec10a6970ca410cc01aa10e4d6a618aa58e401ac58" +
+        "9f8c0190202c14c89bec10a6970ca5f7e2039bec10a6970cc010e003c000e001c02030683079308a309b9bcc462414c0a44c" +
+        "20a1ac6114c1a44c14c8a44c14caa44c14c9a44c9f8201902028042114c1a44c14cb20182029203a204b205d04ee07819bec" +
+        "a8c8970c9bcc462804cda44c04c6acd630d6a44c04c530b5c004c00030c09f8700fd8fe09f8800fd8fe49f8900fd8ff0a805" +
+        "e3039bec13bc970c9f8c000200000470c80b82b0e206a5fce3fac0309bec13b2970c0241a4140242a4140243a4140240a414" +
+        "30e0b41130a28b10a802e301a4101490c5201480d085a800e2039bec13b2970c0470c10b82b0e2039bec13b0970ca802e303" +
+        "9bec132e970ca812e30b20e0a810e3080240a414024ba41420cc82c092b0e0020240a4141490b01ab41a148ad060a800e203" +
+        "9bec13b2970ca5f29bec12ea970c20a0a800e217a803e2158b10a4101490b01ab41ac20b92ba148ad049a800e2039bec13b2" +
+        "970c0470c10b82b0e2039bec13b0970c30f6a803e3039bec13a0970cb01ab41ac08b92baa813e301acba148ad02ea800e203" +
+        "9bec13b2970c04901260a416a5f3e2039bec136e970c20f0020030c0c39b92baacba148aa5f59bec1288970cc010c39b92ba" +
+        "acba148ae001c0009bcc462414c020b1ac51a44c14c120d18b62ac12a44c14c29bec1248970cc40c048a8ba0c01b82b0e202" +
+        "a5fce3f99f8c00020000048a8ba0c80b82b0e3088ba0c01b82b0e306a5fce3f5c0309720c0209720c00097209bcc462804cd" +
+        "a44c04c5c004a805e244c0009f8c00fea03c14c09f8c00fea03814c09f8700fea02802401470a414aa54e3fb9f8c00fea01c" +
+        "9b0003ff14c09b0002009b010100aa15e4029b0002809f8c00fea01014c0c0109f8c00fea00c14c0e01b9bcc462804c5c301" +
+        "aa15e4018b159f8c00fea01404c0b100aa50e5018b059bcd46309f8700fea02cc004aa54e20404701240a414e0fac0009bcc" +
+        "462414c0a44c14c49bec1248970c9fa0";
 
     [Test]
     public async Task body_は_fr30_elf_as_の出力と同じ語になる()
