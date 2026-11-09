@@ -8,6 +8,7 @@ import {
   sdtSection,
 } from "@danything/arib/synth";
 
+import { CaObserver } from "./ca-observe";
 import {
   channelEntry,
   channelsFor,
@@ -231,5 +232,46 @@ describe("1 チャンネルの読み取り", () => {
     for (let i = 0; i < 3; i++)
       await readServices(fromBytes(stream([[1024, 0x01]])), 5000, signal);
     expect(listening.size).toBe(0);
+  });
+});
+
+describe("SKY の局で、カード無しで分かること", () => {
+  test("局が揃ったあとに来た番組表も数え、番組表の具合が分かった時点で打ち切る", async () => {
+    const observer = new CaObserver();
+    const eit = eitSection({
+      tableId: 0x4e,
+      serviceId: 1024,
+      transportStreamId: 0x0408,
+      originalNetworkId: 0x7fe0,
+      events: [],
+    });
+    const started = Bun.nanoseconds();
+    const { error } = await readServices(
+      fromBytes(
+        Uint8Array.from([...stream([[1024, 0x01]]), ...packetize(0x0012, eit)]),
+        true,
+      ),
+      30_000,
+      undefined,
+      undefined,
+      observer,
+    );
+    expect(error).toBeNull();
+    expect(observer.result().epg).toBe("readable");
+    expect((Bun.nanoseconds() - started) / 1e9).toBeLessThan(5);
+  });
+
+  test("番組表が来ないまま流れが終われば、局はそのまま入れて番組表は来ていないとする", async () => {
+    const observer = new CaObserver();
+    const { services, error } = await readServices(
+      fromBytes(stream([[1024, 0x01]])),
+      5000,
+      undefined,
+      undefined,
+      observer,
+    );
+    expect(error).toBeNull();
+    expect(services?.map((s) => s.serviceId)).toEqual([1024]);
+    expect(observer.result().epg).toBe("absent");
   });
 });

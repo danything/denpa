@@ -524,6 +524,12 @@ function logoPackets(service: FakeService): Uint8Array {
  * スキャンの結果を作り物で返していたので要らなかったが、本物のエージェントに
  * 渡すならこれが無いとどのチャンネルも見つからない。
  */
+/**
+ * SKY の局の PMT に置く CA 記述子 (CA_system_id 0x000B・ECM の PID 0x0901)。**値は作り物。** スカパー！プレミアムの CA_system_id は
+ * 実機の報告で分かるまで不明なので、B-CAS (0x0005) 以外の値を置いて、スキャンで分かったことが受信の設定に出るかを確かめる (`64-sky.spec.ts`)
+ */
+const SKY_CA = [0x09, 0x04, 0x00, 0x0b, 0xe9, 0x01];
+
 function tables(services: FakeService[], knobs: Knobs): Uint8Array {
   /*
    * ロゴを積んでいる中継にはエンジニアリングサービス (929) がある。
@@ -568,7 +574,10 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
           ][])),
     ];
     // コピー禁止は番組ぜんたいの記述子に載せる (本物もここ)
-    const programInfo = knobs.pmtCopyNever ? copyControlDescriptor(0b11) : [];
+    const programInfo = [
+      ...(knobs.pmtCopyNever ? copyControlDescriptor(0b11) : []),
+      ...(service.type === "SKY" ? SKY_CA : []),
+    ];
     const pmt = programMap(
       service.serviceId,
       pids.video,

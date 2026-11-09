@@ -10,7 +10,8 @@
  * 地上波は Mirakurun の走査に合わせてある。
  *
  * - 地上波は 13〜62ch を総当たり (CATV を選ぶと C13〜C63 も)
- * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。番組表は取得しない (`decodable`)
+ * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。番組表は取得しない (`decodable`)。
+ *   代わりに、カード無しで分かること (CA_system_id・番組表とロゴが来ているか) を数えて記録と受信の設定に出す (`ca-observe.ts`)
  * - 1 チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす
  * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入り、
  *   映像の無いものは取り込みで落とす: `schema.DIGITAL_TV`)
@@ -23,6 +24,7 @@ import { type EitEvent, EpgReader } from "@danything/arib/eit";
 import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
 import { type ChannelType, decodable } from "../types";
+import { CaObserver, describe, type Observed } from "./ca-observe";
 import { config } from "./config";
 import { savePrograms, settle, sync, typeRank } from "./epg";
 import { collectOnce } from "./epg-collect";
@@ -105,6 +107,12 @@ export function channelsFor(type: "GR" | "CATV"): string[] {
   ];
 }
 
+/**
+ * カード無しで分かること (`ca-observe.ts`) を数えるとき、局が揃ってから番組表 (EIT) の具合が分かるまで読み続ける上限 (読み始めから)。
+ * p/f は数秒おきに来るので、来ているならこの間に 1 つは来る。来なければ「来ていない」と出す。全体の待ち (`TUNE_TIMEOUT`) は延ばさない
+ */
+const OBSERVE_WAIT = 10_000;
+
 interface ScanResult {
   services: FoundService[] | null;
   error: string | null;
@@ -127,15 +135,28 @@ export async function readServices(
   abort?: AbortSignal,
   /** 同じストリームから番組表も取得する。読む時間は延ばさない (揃った時点で打ち切るのは同じ) */
   epg?: EpgReader,
+  /**
+   * 同じストリームで、カード無しで分かること (CA_system_id・番組表が来ているか) も数える (SKY の局だけ)。
+   * 局が揃っても、番組表の具合が分かるまで `OBSERVE_WAIT` までは読み続ける
+   */
+  observer?: CaObserver,
 ): Promise<ScanResult> {
   const reader = new ServiceReader();
   let bytes = 0;
+  const started = Date.now();
   const tail = await readUntil(
     stream,
     (chunk) => {
       bytes += chunk.byteLength;
       epg?.feed(chunk);
-      return reader.feed(chunk);
+      observer?.feed(chunk);
+      const complete = reader.feed(chunk);
+      return (
+        complete &&
+        (observer === undefined ||
+          observer.epgKnown ||
+          Date.now() - started >= OBSERVE_WAIT)
+      );
     },
     timeout,
     abort,
@@ -210,6 +231,21 @@ const IDLE: ScanState = {
 };
 
 let current: ScanState = IDLE;
+
+/**
+ * 最後のスキャンで、復号できない種別 (SKY) のチャンネルについて分かったこと (`種別:チャンネル` → 中身)。
+ * 受信の設定の「受信できるチャンネル」に出す。**denpa の中にだけ持つ** (再起動で消える。もう一度スキャンすれば出る)。
+ * SKY の局の番組表を取り込むかは、この観測の報告を見てから決める (docs/tuners.md)
+ */
+const observations = new Map<string, Observed>();
+
+/** そのチャンネルについて最後のスキャンで分かったこと。スキャンしていなければ undefined */
+export function observedOf(
+  type: string,
+  channel: string,
+): Observed | undefined {
+  return observations.get(`${type}:${channel}`);
+}
 /** 走っているスキャン。中断のために持っておく */
 let running: Scanner | null = null;
 
@@ -261,6 +297,8 @@ class Scanner {
    * 時点で番組表が空にならない。局が DB に入ってから書く (`runScan`)
    */
   readonly events: EitEvent[] = [];
+  /** 復号できない種別 (SKY) の、局が見つかったチャンネルで分かったこと (`種別:チャンネル` → 中身)。保存できたら `observations` に移す */
+  readonly observed = new Map<string, Observed>();
 
   constructor(private readonly onProgress: (progress: Progress) => void) {}
 
@@ -499,29 +537,39 @@ class Scanner {
         continue;
       }
 
-      // 復号できない種別 (SKY) は番組表を取得しない (`decodable`。番組表とライブに出さないので要らない)
+      /*
+       * 復号できない種別 (SKY) は番組表を取得しない (`decodable`。番組表とライブに出さないので要らない)。
+       * 代わりに、カード無しで分かること (CA_system_id・番組表が来ているか) を数えて記録に出す (`ca-observe.ts`)
+       */
       const epg = decodable(type) ? new EpgReader() : undefined;
+      const observer = decodable(type) ? undefined : new CaObserver();
       const { services, error, signal } = await readServices(
         stream,
         TUNE_TIMEOUT,
         this.aborter.signal,
         epg,
+        observer,
       );
       closer.abort();
       if (this.aborted) return;
       const counts = first ? { scanned: 1 } : {};
       if (first && signal)
         this.tuned.set(type, (this.tuned.get(type) ?? 0) + 1);
+      // 電波が来たチャンネルは、局が揃わなくても分かったことを出す
+      const observed = signal ? observer?.result() : undefined;
+      const note = observed === undefined ? "" : `  ${describe(observed)}`;
 
       if (error !== null) {
         // 電波は来ているのに揃わなかったものだけ、あとでもう一度回す
         if (first && signal) this.retry.push(job);
-        this.onProgress({ line: `${channel}: ${error}`, ...counts });
+        this.onProgress({ line: `${channel}: ${error}${note}`, ...counts });
         continue;
       }
+      if (observed !== undefined)
+        this.observed.set(`${type}:${channel}`, observed);
       if (services === null || services.length === 0) {
         this.onProgress({
-          line: `${channel}: 録画できる局がありません`,
+          line: `${channel}: 録画できる局がありません${note}`,
           ...counts,
         });
         continue;
@@ -531,7 +579,7 @@ class Scanner {
       this.found.set(`${type}:${channel}`, entry);
       if (epg !== undefined) this.events.push(...epg.all());
       this.onProgress({
-        line: `${channel}: ${services.length} 局`,
+        line: `${channel}: ${services.length} 局${note}`,
         ...counts,
         channels: 1,
       });
@@ -579,6 +627,13 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
         .map(([type]) => type)
         .filter((type) => !isSatellite(type) || scanner.lineups.has(type)),
     );
+    // 回した種別のぶんだけ、分かったことを入れ替える (チャンネルと同じく、回していない種別は残す)
+    for (const [type] of targets) {
+      for (const key of [...observations.keys()])
+        if (key.startsWith(`${type}:`)) observations.delete(key);
+    }
+    for (const [key, observed] of scanner.observed)
+      observations.set(key, observed);
     push(
       "完了しました",
       {},

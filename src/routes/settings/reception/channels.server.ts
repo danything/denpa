@@ -1,6 +1,12 @@
 import { type Actions, fail } from "@sveltejs/kit";
 import { count, eq, inArray, or, sql } from "drizzle-orm";
 
+import {
+  caName,
+  caSystemIds,
+  epgText,
+  logoText,
+} from "#lib/server/ca-observe.js";
 import { orm } from "#lib/server/db.js";
 import { collectNow, collectState } from "#lib/server/epg-collect.js";
 import { currentServices, typeRank } from "#lib/server/epg.js";
@@ -11,6 +17,7 @@ import {
   unreceivableChannels,
 } from "#lib/server/reception.js";
 import {
+  observedOf,
   SCAN_KINDS,
   type ScanKind,
   scanState,
@@ -19,7 +26,7 @@ import {
 } from "#lib/server/scan.js";
 import { programs, services } from "#lib/server/schema.js";
 import { measureSignal } from "#lib/server/signal-quality.js";
-import type { ChannelType } from "#lib/types.js";
+import { type ChannelType, decodable } from "#lib/types.js";
 
 /** 物理チャンネル 1 本と、そこに入っている局 */
 interface Coverage {
@@ -28,6 +35,11 @@ interface Coverage {
   /** 受信できるか。受信できないチャンネルも、印を付けて出す (`reception.ts`) */
   reception: Reception;
   services: { id: number; name: string; programs: number; until: number }[];
+  /**
+   * 復号できない種別 (SKY) のチャンネルで、最後のスキャンで分かったこと (`ca-observe.ts`)。CA_system_id と番組表・ロゴが来ているか。
+   * スキャンしていない (denpa を再起動した) ものと、ほかの種別は null
+   */
+  observed: { caSystemIds: string[]; epg: string; logo: string } | null;
 }
 
 /**
@@ -87,6 +99,7 @@ function coverage(): Coverage[] {
       channel,
       reception: "ok" as Reception,
       services: [],
+      observed: observation(type, channel),
     };
     entry.services.push({ id, name, programs, until });
     channels.set(key, entry);
@@ -100,6 +113,17 @@ function coverage(): Coverage[] {
       typeRank(a.type) - typeRank(b.type) ||
       a.channel.localeCompare(b.channel, "en", { numeric: true }),
   );
+}
+
+/** 最後のスキャンで分かったことを、画面に出す文字にする。復号できる種別は出さない */
+function observation(type: ChannelType, channel: string): Coverage["observed"] {
+  const observed = decodable(type) ? undefined : observedOf(type, channel);
+  if (observed === undefined) return null;
+  return {
+    caSystemIds: caSystemIds(observed).map(caName),
+    epg: epgText(observed),
+    logo: logoText(observed),
+  };
 }
 
 export function load() {

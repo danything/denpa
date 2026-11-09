@@ -503,6 +503,21 @@
                   </td>
                 </tr>
               {/each}
+              <!-- SKY のチャンネルは、最後のスキャンで分かったこと (CA_system_id と番組表・ロゴが来ているか。`ca-observe.ts`) を行の下に出す -->
+              {#if channel.observed !== null}
+                <tr data-testid="sky-observed" data-channel={channel.channel}>
+                  <td colspan="6" class="small">
+                    <span class="muted">スキャンで分かったこと</span>
+                    {[
+                      channel.observed.caSystemIds.length === 0
+                        ? "CA 記述子なし"
+                        : `CA_system_id ${channel.observed.caSystemIds.join(" ")}`,
+                      channel.observed.epg,
+                      channel.observed.logo,
+                    ].join("、")}
+                  </td>
+                </tr>
+              {/if}
               {#if measured?.type === channel.type && measured.channel === channel.channel}
                 <tr data-testid="signal-result" data-channel={channel.channel}>
                   <td colspan="6" class="small">
