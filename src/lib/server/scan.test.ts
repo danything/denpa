@@ -8,7 +8,13 @@ import {
   sdtSection,
 } from "@danything/arib/synth";
 
-import { channelEntry, channelsFor, readServices, scanTargets } from "./scan";
+import {
+  channelEntry,
+  channelsFor,
+  readServices,
+  scanTargets,
+  skyChannels,
+} from "./scan";
 
 /**
  * 総当たりそのもの (`Scanner`) はここでは試さない。**エージェントに選局を
@@ -74,6 +80,17 @@ describe("選局するチャンネル", () => {
 
   test("地上波と CATV を両方選ぶと、UHF を 2 回回さず CATV だけにする", () => {
     expect(scanTargets(["GR", "CATV"])).toEqual([["GR", channelsFor("CATV")]]);
+  });
+
+  test("SKY はエージェントの選局表の H01〜H105 を総当たりする", () => {
+    const sky = skyChannels();
+    expect(sky).toHaveLength(105);
+    expect(sky.slice(0, 2)).toEqual(["H01", "H02"]);
+    expect(sky.slice(-2)).toEqual(["H104", "H105"]);
+    expect(scanTargets(["GR", "SKY"])).toEqual([
+      ["GR", channelsFor("GR")],
+      ["SKY", sky],
+    ]);
   });
 });
 

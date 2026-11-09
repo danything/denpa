@@ -10,6 +10,7 @@
  * 地上波は Mirakurun の走査に合わせてある。
  *
  * - 地上波は 13〜62ch を総当たり (CATV を選ぶと C13〜C63 も)
+ * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。番組表は取得しない (`decodable`)
  * - 1 チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす
  * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入り、
  *   映像の無いものは取り込みで落とす: `schema.DIGITAL_TV`)
@@ -21,7 +22,7 @@
 import { type EitEvent, EpgReader } from "@danything/arib/eit";
 import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
-import type { ChannelType } from "../types";
+import { type ChannelType, decodable } from "../types";
 import { config } from "./config";
 import { savePrograms, settle, sync, typeRank } from "./epg";
 import { collectOnce } from "./epg-collect";
@@ -54,8 +55,8 @@ const BUSY_RETRY = 10_000;
 /** 記録しておく行数。総当たりは何十行も流れる */
 const LOG_LIMIT = 400;
 
-/** 総当たりできる種別。`SKY` (スカパー!プレミアム) は持っていないので対象外 */
-type ScannableType = Extract<ChannelType, "GR" | "BS" | "CS">;
+/** スキャンできる種別。地上波と SKY (スカパー！プレミアム) は総当たり、BS と CS は放送の一覧から */
+type ScannableType = ChannelType;
 
 /** 地上波の UHF の範囲 */
 const UHF_RANGE = { min: 13, max: 62 };
@@ -67,9 +68,23 @@ const isSatellite = (type: ScannableType): type is SatelliteType =>
  * スキャンの種類。**`CATV` は地上波の局として、UHF に加えて CATV の周波数変換パススルー (C13〜C63) も回す。**
  * CATV は地デジをそのまま CATV のチャンネルの周波数に移して送ることがあり、局によって移すものと移さないものが混ざるので両方回す
  */
-export const SCAN_KINDS = ["GR", "BS", "CS", "CATV"] as const;
+export const SCAN_KINDS = ["GR", "BS", "CS", "CATV", "SKY"] as const;
 export type ScanKind = (typeof SCAN_KINDS)[number];
 const CATV_RANGE = { min: 13, max: 63 };
+
+/**
+ * スカパー！プレミアムサービス光 (J.83B) のチャンネル。エージェントの選局表の `H01`〜`H105` (docs/agent.md「選局表」)。
+ * **総当たりにする。** 地上波と同じく、NIT から TS の一覧を作れるかは確かめていない (実機の TS がまだ無い。#1578)
+ */
+const SKY_RANGE = { min: 1, max: 105 };
+
+/** SKY で選局する物理チャンネルの一覧 (`H01`〜`H105`) */
+export function skyChannels(): string[] {
+  return Array.from(
+    { length: SKY_RANGE.max - SKY_RANGE.min + 1 },
+    (_, i) => `H${String(SKY_RANGE.min + i).padStart(2, "0")}`,
+  );
+}
 
 /**
  * 地上波で選局する物理チャンネルの一覧。エージェントが受け付ける書き方で返す。
@@ -260,7 +275,7 @@ class Scanner {
 
   /**
    * targets は [種別, チャンネル一覧] の並び。見つかったチャンネル定義を返す。
-   * 衛星 (BS・CS) は総当たりせず、放送の一覧を読む (`satellite`)。地上波の総当たりと同時に進む
+   * 衛星 (BS・CS) は総当たりせず、放送の一覧を読む (`satellite`)。地上波と SKY の総当たりと同時に進む
    */
   async run(targets: [ScannableType, string[]][]): Promise<AgentChannel[]> {
     const tuners = (await getTuners().catch(() => [])).filter(
@@ -367,7 +382,7 @@ class Scanner {
     }
   }
 
-  /** 地上波の総当たり。チューナーの台数ぶん並べる */
+  /** 地上波と SKY の総当たり。チューナーの台数ぶん並べる */
   private async ground(
     targets: [ScannableType, string[]][],
     tuners: AgentTuner[],
@@ -484,7 +499,8 @@ class Scanner {
         continue;
       }
 
-      const epg = new EpgReader();
+      // 復号できない種別 (SKY) は番組表を取得しない (`decodable`。番組表とライブに出さないので要らない)
+      const epg = decodable(type) ? new EpgReader() : undefined;
       const { services, error, signal } = await readServices(
         stream,
         TUNE_TIMEOUT,
@@ -513,7 +529,7 @@ class Scanner {
 
       const entry = channelEntry(type, channel, services);
       this.found.set(`${type}:${channel}`, entry);
-      this.events.push(...epg.all());
+      if (epg !== undefined) this.events.push(...epg.all());
       this.onProgress({
         line: `${channel}: ${services.length} 局`,
         ...counts,
@@ -607,7 +623,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
 
 /**
  * 選んだ種別から、回すチャンネルを決める。知らない種別と重複は除く。
- * CATV は UHF も回すので、地上波と両方来ても UHF を 2 回回さない。
+ * CATV は UHF も回すので、地上波と両方来ても UHF を 2 回回さない。SKY は H01〜H105 を総当たりする。
  * 衛星は総当たりしないので、チャンネルの一覧は持たない。進み具合では 1 つと数える
  * (放送の一覧を 1 回読む。CS はネットワークが 2 つなので 2 回選局するが、数は 1 のまま)
  */
@@ -619,7 +635,9 @@ export function scanTargets(
   return [...types].map((type) =>
     type === "GR" || type === "CATV"
       ? ["GR", channelsFor(type)]
-      : [type, [type]],
+      : type === "SKY"
+        ? ["SKY", skyChannels()]
+        : [type, [type]],
   );
 }
 

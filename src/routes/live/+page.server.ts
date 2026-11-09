@@ -21,7 +21,7 @@ import { recordAiring } from "#lib/server/reservations.js";
 import { programs, services as stations } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
 import { liveStart, readKept, viewingOptions } from "#lib/server/viewing.js";
-import type { Service } from "#lib/types.js";
+import { decodable, type Service } from "#lib/types.js";
 
 import type { Actions } from "./$types";
 
@@ -76,7 +76,9 @@ export function load(event) {
     .from(stations)
     .where(currentServices())
     .orderBy(sql.raw(SERVICE_TYPE_ORDER), sql.raw(SERVICE_ORDER))
-    .all();
+    .all()
+    // 復号できない種別 (SKY) の局は出さない。選んでもスクランブルされたままで映らない (`decodable`)
+    .filter((service) => decodable(service.type));
 
   /*
    * いま流れているものだけ引く。番組表を丸ごと持ってくると、局の数 × 8 日ぶんに

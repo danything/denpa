@@ -1,8 +1,11 @@
 import { error } from "@sveltejs/kit";
+import { eq } from "drizzle-orm";
 
 import { askedTrack } from "#lib/arib.js";
 import { parseId } from "#lib/id.js";
+import { orm } from "#lib/server/db.js";
 import { liveStream } from "#lib/server/live.js";
+import { services } from "#lib/server/schema.js";
 import { askedFormat, liveAudioOnly } from "#lib/server/viewing.js";
 import {
   BUSY,
@@ -10,6 +13,7 @@ import {
   NO_FORMAT,
   RUNG_HEADER,
 } from "#lib/ts/playback.js";
+import { decodable, UNDECODABLE } from "#lib/types.js";
 
 /**
  * **ライブを HTTP で流す** (画面の外のもの向けの API。docs/api.md)。
@@ -24,11 +28,19 @@ import {
  * `?rung=1〜3` で回線に合わせて画質を下げる (`#lib/rungs.ts`)。コーデックは `?playable=` (`,` 区切り) からサーバが選ぶ
  * (`live.rungCodec`)。同じ段を誰も観ていなければその場で変換する本数の枠を使い、埋まっていれば 503。
  * `?audio=only` に段を付けると、音声のビットレートだけを下げる (`viewing.liveAudioOnly`。枠は使わない)。
- * 画面の視聴者と同じチューナーの取り合いに加わり、閉じれば抜ける (live.ts の liveStream)
+ * 画面の視聴者と同じチューナーの取り合いに加わり、閉じれば抜ける (live.ts の liveStream)。
+ * 復号できない種別 (SKY。スカパー！プレミアム) の局は 409 で断る
  */
 export function GET({ params, url }) {
   const serviceId = parseId(params.serviceId);
   if (serviceId === null) error(400, "局 ID が不正です");
+  // 復号できない種別 (SKY) の局は選局せずに断る。流してもスクランブルされたままで映らない (`decodable`)
+  const type = orm()
+    .select({ type: services.type })
+    .from(services)
+    .where(eq(services.id, serviceId))
+    .get()?.type;
+  if (type !== undefined && !decodable(type)) error(409, UNDECODABLE);
   const asked = liveAudioOnly(url) ?? askedFormat(url, "live");
   if (asked === null) error(406, NO_FORMAT);
   const { codec, rung } = asked;

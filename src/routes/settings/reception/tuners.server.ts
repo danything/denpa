@@ -23,7 +23,7 @@ import {
   tunerList,
 } from "#lib/server/tuner.js";
 import { unreceivable } from "#lib/tuner-types.js";
-import { CHANNEL_TYPES } from "#lib/types.js";
+import { ALL_CHANNEL_TYPES } from "#lib/types.js";
 
 /** 画面に出す理由 (`Error:` の前置きを付けない) */
 const reason = (error: unknown): string =>
@@ -199,7 +199,8 @@ export const actions = {
       const name = String(get("name") ?? "").trim();
       if (name === "") return fail(400, { message: "名前は空にできません" });
 
-      const types = CHANNEL_TYPES.filter(
+      // SKY の欄は受信の設定に並べたときだけ来る (`showsSky`)
+      const types = ALL_CHANNEL_TYPES.filter(
         (type) => get(`type.${type}`) !== null,
       );
       if (types.length === 0) {

@@ -16,7 +16,7 @@ import {
 
 import { toHalfWidth } from "../fold";
 import { type Airing, mainOf, splitOf, type Station } from "../subchannels";
-import { CHANNEL_TYPES } from "../types";
+import { ALL_CHANNEL_TYPES, decodable } from "../types";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
@@ -81,12 +81,12 @@ export function serviceCounts(): Record<string, number> {
  */
 export const SERVICE_ORDER =
   "remote_control_key IS NULL, remote_control_key, service_id";
-/** 種別ごとの順。地上波 → BS → CS。テレビの切り替えもこの順 */
-export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 ELSE 2 END`;
-/** 地上波 → BS → CS を JS で並べるときのキー。知らない種別は後ろ */
+/** 種別ごとの順。地上波 → BS → CS → SKY。テレビの切り替えもこの順 */
+export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 WHEN 'CS' THEN 2 ELSE 3 END`;
+/** 地上波 → BS → CS → SKY を JS で並べるときのキー。知らない種別は後ろ */
 export function typeRank(type: string): number {
-  const at = (CHANNEL_TYPES as readonly string[]).indexOf(type);
-  return at === -1 ? CHANNEL_TYPES.length : at;
+  const at = (ALL_CHANNEL_TYPES as readonly string[]).indexOf(type);
+  return at === -1 ? ALL_CHANNEL_TYPES.length : at;
 }
 
 /**
@@ -139,6 +139,7 @@ export function airing<S extends Station, P extends Omit<Airing, "id">>(
  *
  * 局は種別で絞らない。ライブ画面が地上波・BS・CS をまとめて扱っているので、
  * 絞ると `airing` の「1 局も残らなければ全部出す」の効き方がずれる。
+ * 外すのは、ライブ画面も外している復号できない種別 (SKY) だけ
  *
  * **出す画面ごとに書かない。** 番組表と検索で別々に書いていると、片方だけ
  * 直したときに同じ番組の詳細でも「視聴」が出たり出なかったりする
@@ -154,7 +155,9 @@ export function watchableServices(at: number): number[] {
       })
       .from(services)
       .where(currentServices())
-      .all(),
+      .all()
+      // 復号できない種別 (SKY) の局はライブに出さない (`decodable`)
+      .filter((service) => decodable(service.type)),
     orm()
       .select({
         service_id: programs.service_id,

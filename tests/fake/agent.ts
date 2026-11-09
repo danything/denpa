@@ -240,8 +240,9 @@ function sortChannels<T extends FakeChannel>(list: T[]): T[] {
   });
 }
 
-/** 預かっているチャンネル。本物では channels.json */
-let saved = sortChannels(channels());
+/** 預かっているチャンネル。本物では channels.json (SKY はスキャンしたときだけ入る。`broadcast.channels`) */
+const initialChannels = () => sortChannels(channels());
+let saved = initialChannels();
 
 /** チューナー。既定は全部空きにしておく */
 interface FakeTuner {
@@ -301,9 +302,13 @@ function tunerStatus() {
       ...plain,
       rank: plain.disabled ? null : plain.index,
       pin: plain.device ?? plain.name,
-      // 機材が受けられる種別は、挿してある機材の種別。挿していないデバイスは分からない (本物の `DeviceProbe.Receivable`)
-      receivable:
-        plugged().find((one) => one.device === plain.device)?.types ?? null,
+      /*
+       * 機材が受けられる種別は、挿してある機材の種別。挿していないデバイスは分からない (本物の `DeviceProbe.Receivable`)。
+       * 設定の `it930x:` の受信機は自動検出に出ないが、地上波・衛星・SKY を受けられる (本物の `It930x.Types`)
+       */
+      receivable: plain.device?.startsWith("it930x:")
+        ? ["GR", "BS", "CS", "SKY"]
+        : (plugged().find((one) => one.device === plain.device)?.types ?? null),
     };
     /*
      * 塞がっているのは**衛星のチューナー**にしてある。地上波を塞ぐと、
@@ -532,6 +537,12 @@ const options: Bun.ServeOptions = {
       busyTuners = url.searchParams.get("busy") === "1";
       emit("tuners");
       return json({ busy: busyTuners });
+    }
+    // 預かっているチャンネルを始めの顔ぶれに戻す。スキャンで足した SKY を、後のファイルに残さないため
+    if (url.pathname === "/__control/channels" && request.method === "POST") {
+      saved = initialChannels();
+      emit("channels");
+      return json(saved);
     }
     if (url.pathname === "/__control/signal" && request.method === "POST") {
       busySignal = SIGNALS[url.searchParams.get("value") ?? ""] ?? null;

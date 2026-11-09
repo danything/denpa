@@ -136,7 +136,7 @@ export const actions = {
     const form = await request.formData();
     const types = form
       .getAll("types")
-      // 画面の選ぶ欄は 1 つ。「すべて」は `GR,BS,CS`、CATV は `CATV` で来る
+      // 画面の選ぶ欄は 1 つ。「すべて」は `GR,BS,CS` (SKY を選んだチューナーがあれば `GR,BS,CS,SKY`)、CATV は `CATV` で来る
       .flatMap((value) => String(value).split(","))
       .filter((t): t is ScanKind => SCAN_KINDS.includes(t as ScanKind));
     if (types.length === 0)

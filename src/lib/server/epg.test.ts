@@ -66,6 +66,7 @@ const {
   SERVICE_TYPE_ORDER,
   settle,
   syncServicesOnly,
+  typeRank,
   widenServices,
 } = await import("./epg");
 const { subscribe } = await import("./events");
@@ -903,7 +904,7 @@ describe("SERVICE_ORDER", () => {
   function put(
     id: number,
     serviceId: number,
-    type: "GR" | "BS" | "CS",
+    type: "GR" | "BS" | "CS" | "SKY",
     channel: string,
     key: number | null,
     name: string,
@@ -965,8 +966,9 @@ describe("SERVICE_ORDER", () => {
     ]);
   });
 
-  test("地上波 → BS → CS の順。テレビの切り替えもこの順", () => {
+  test("地上波 → BS → CS → スカパー！プレミアムの順。テレビの切り替えもこの順", () => {
     orm().delete(services).run();
+    put(1000600, 600, "SKY", "H40", null, "プレミアム");
     put(400151, 151, "BS", "BS01_3", null, "BS朝日1");
     put(600292, 292, "CS", "CS04", null, "時代劇専門ch");
     put(3239123608, 23608, "GR", "T16", 9, "TOKYO MX1");
@@ -975,6 +977,11 @@ describe("SERVICE_ORDER", () => {
       "TOKYO MX1",
       "BS朝日1",
       "時代劇専門ch",
+      "プレミアム",
     ]);
+    // JS で並べるときも同じ順
+    expect(
+      ["SKY", "CS", "GR", "BS"].sort((a, b) => typeRank(a) - typeRank(b)),
+    ).toEqual(["GR", "BS", "CS", "SKY"]);
   });
 });
