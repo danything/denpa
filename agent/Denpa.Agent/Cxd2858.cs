@@ -76,8 +76,9 @@ internal sealed class Cxd2858(CxdLink link)
     public void TuneTerrestrial(uint khz)
     {
         if (khz > MaxTerrestrialKhz) throw new ArgumentOutOfRangeException(nameof(khz), $"地上波の周波数は {MaxTerrestrialKhz} kHz までです ({khz})");
-        link.Run(TerrestrialRows(khz));
+        // 書き始めたら動作中とみなす (途中で失敗しても、使い終えたときに止める書き込みを送れるように。仕様書に無い)
         Terrestrial = true;
+        link.Run(TerrestrialRows(khz));
     }
 
     /// <summary>仕様書 4.3 の手順 1〜10 (周波数を埋めたもの)</summary>

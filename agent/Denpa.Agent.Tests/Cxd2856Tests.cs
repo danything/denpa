@@ -282,6 +282,39 @@ public class Cxd2856Tests
     }
 
     [Test]
+    public async Task _20_ビットを超える周波数は何も書かずに断る()
+    {
+        var (frontend, bus, _) = Make();
+        frontend.Init();
+        bus.Log.Clear();
+        Assert.Throws<IOException>(() => frontend.TuneIsdbt(Cxd2858.MaxTerrestrialKhz + 1));
+        await Assert.That(bus.Log).IsEmpty();
+    }
+
+    [Test]
+    public async Task 選局の途中で失敗しても使い終えたらスリープにする()
+    {
+        var (frontend, bus, _) = Make();
+        frontend.Init();
+        var failing = true;
+        bus.OnWrite = () =>
+        {
+            if (failing && bus.Log[^1] == "U 87=C440") throw new IOException("I2C の失敗 (テスト)");
+        };
+        Assert.Throws<IOException>(() => frontend.TuneIsdbt(557143));
+        failing = false;
+        bus.Log.Clear();
+        frontend.Sleep();
+        // チューナーを止めて (仕様書 4.6)、復調器をスリープにする (仕様書 5.7・2.4)
+        await Assert.That(bus.Log).Contains("U 74=02");
+        await Assert.That(bus.Log[^1]).IsEqualTo("X 17=01");
+        // 次の選局は初期化から
+        bus.Log.Clear();
+        frontend.TuneIsdbt(557143);
+        await Assert.That(bus.Log[1]).IsEqualTo("X 10=01");
+    }
+
+    [Test]
     public async Task 同じバスの受信機は中継を開けてから閉じるまで交わらない()
     {
         // バス 1 の受信機 1 (0x6C) と 2 (0x64)。偽物は中継が 2 つ開いたままチューナーに届くと失敗にする

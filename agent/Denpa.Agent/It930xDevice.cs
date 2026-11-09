@@ -273,39 +273,40 @@ public sealed class It930xDevice
             if (--_users > 0) return;
         }
         if (!Faulted) return;
+        // 閉じ終わるまで Registry を持つ。同じポートを開き直す Acquire は、古いほうが電源を切り終えてから開く
         lock (Registry)
         {
             if (Devices.TryGetValue(Port, out var current) && current == this) Devices.Remove(Port);
+            Close();
         }
-        Close();
     }
 
-    /// <summary>誰も使っていなければ閉じる (チューナーが捨てられたとき。定義が変わった・止める)</summary>
+    /// <summary>
+    /// 誰も使っていなければ閉じる (チューナーが捨てられたとき。定義が変わった・止める)。
+    /// 閉じ終わるまで Registry を持つので、同じポートの Acquire は閉じ終えてから開く (古いほうの電源を切る書き込みが、新しく開いた機材に届かない)
+    /// </summary>
     public static void CloseIfIdle(string port)
     {
-        It930xDevice? device;
         lock (Registry)
         {
-            if (!Devices.TryGetValue(port, out device)) return;
+            if (!Devices.TryGetValue(port, out var device)) return;
             lock (device._gate)
             {
                 if (device._users > 0) return;
             }
             Devices.Remove(port);
+            device.Close();
         }
-        device.Close();
     }
 
     /// <summary>全部閉じる (エージェントを止めるとき。<c>--tune</c> の終わり)。使っている側がいても閉じる</summary>
     public static void CloseAll()
     {
-        List<It930xDevice> devices;
         lock (Registry)
         {
-            devices = [.. Devices.Values];
+            foreach (var device in Devices.Values) device.Close();
             Devices.Clear();
         }
-        foreach (var device in devices) device.Close();
     }
 
     /// <summary>
@@ -384,20 +385,23 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>いまの機材 (<c>--tune</c> が開くのにかかった時間を出す)。選局していなければ null</summary>
     public It930xDevice? Device => _device;
 
+    /// <summary>受信の状態と C/N と強度。選局の最中 (ロックを待っている間) は待たずに null を返す</summary>
     public TunerSignal? Signal()
     {
-        lock (_gate)
+        if (!_gate.TryEnter()) return null;
+        try
         {
             if (_frontend is not { } frontend || _output is null) return null;
-            try
-            {
-                return frontend.Signal();
-            }
-            catch (IOException error)
-            {
-                _device?.Fail(error);
-                return null;
-            }
+            return frontend.Signal();
+        }
+        catch (IOException error)
+        {
+            _device?.Fail(error);
+            return null;
+        }
+        finally
+        {
+            _gate.Exit();
         }
     }
 

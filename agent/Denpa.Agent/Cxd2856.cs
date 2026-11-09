@@ -429,6 +429,9 @@ public sealed class Cxd2856Frontend
     private State _state = State.Unknown;
     private uint _khz;
 
+    /// <summary>初期化のあと、起動か選局し直しを書き始めた (途中で失敗して状態が分からなくなっても、使い終えたときにスリープの書き込みを送る)</summary>
+    private bool _started;
+
     /// <param name="bus">この受信機のバス</param>
     /// <param name="busLock">同じバスの受信機で 1 つのロック</param>
     /// <param name="demodAddress">復調器の T のアドレス (7 ビット。仕様書 1.2)</param>
@@ -464,6 +467,7 @@ public sealed class Cxd2856Frontend
             _demod.TsForm();
         }
         _state = State.Sleep;
+        _started = false;
     }
 
     /// <summary>
@@ -472,11 +476,14 @@ public sealed class Cxd2856Frontend
     /// </summary>
     public bool TuneIsdbt(uint khz)
     {
+        // 何も書かずに断る (チューナーに渡せるのは 20 ビットまで。仕様書 4.1)
+        if (khz > Cxd2858.MaxTerrestrialKhz) throw new IOException($"地上波の周波数は {Cxd2858.MaxTerrestrialKhz} kHz までです ({khz} kHz)");
         if (_state == State.Unknown) Init();
         try
         {
             lock (_busLock)
             {
+                _started = true;
                 if (_state == State.Isdbt) _demod.RetuneIsdbt();
                 else _demod.StartIsdbt();
                 _state = State.Isdbt;
@@ -541,11 +548,12 @@ public sealed class Cxd2856Frontend
 
     /// <summary>
     /// 使い終えたときに、チューナーを止めて復調器をスリープにする (仕様書 10.3 の手順 1〜3。順は「チューナーを止める → 復調器をスリープ」。仕様書 2.4)。
-    /// 動作中でなければ何もしない
+    /// 動作中でなければ何もしない。選局の途中で失敗して状態が分からないときも、起動を書き始めていればスリープの書き込みを送る。
+    /// そのときは、次の選局を初期化からやり直す (仕様書に無い)
     /// </summary>
     public void Sleep()
     {
-        if (_state != State.Isdbt) return;
+        if (_state != State.Isdbt && !(_state == State.Unknown && _started)) return;
         try
         {
             lock (_busLock)
@@ -553,7 +561,8 @@ public sealed class Cxd2856Frontend
                 Relay(_tuner.Stop);
                 _demod.SleepIsdbt();
             }
-            _state = State.Sleep;
+            _started = false;
+            if (_state == State.Isdbt) _state = State.Sleep;
         }
         catch (IOException)
         {
