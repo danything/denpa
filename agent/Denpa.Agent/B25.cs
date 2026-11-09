@@ -307,8 +307,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <para>
     /// **映像・音声の PES の先頭 (payload_unit_start) では、復号した中身が <c>00 00 01</c> で始まるかで鍵が合っているかを確かめる。**
     /// 確かめずに印を下ろすと、合わない鍵で化けた中身を「復号できた」として流し、契約の復号テストもそれで通ってしまう
-    /// (CS の ECM が何本もある局で起きた)。合わなければ同じ ECM のもう片方 (偶奇) の鍵、ほかの ECM の鍵の順に試し、
-    /// 合ったものをその ECM・その PID でこの先も使う。どれでも合わなければスクランブルされたまま流し、その PES の残りも
+    /// (PIX-DT295 で TS が欠けていた頃、CS の局で起きた。#2414)。偶奇の対応は STD-B25 のとおり 0b10 が偶数、0b11 が奇数の鍵で固定し、
+    /// ほかの鍵は試さない。合わなければスクランブルされたまま流し、その PES の残りも
     /// 次の PES の先頭までスクランブルされたまま流して <see cref="Undecodable"/> に数える
     /// </para>
     /// </summary>
@@ -357,8 +357,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// PES の先頭を復号し、<c>00 00 01</c> で始まる鍵を探す (<see cref="Unscramble"/>)。見つかれば復号したまま true、
-    /// 見つからなければスクランブルされた中身に戻して false
+    /// PES の先頭を復号し、<c>00 00 01</c> で始まるかで鍵が合っているかを確かめる (<see cref="Unscramble"/>)。合えば復号したまま true、
+    /// 合わなければスクランブルされた中身に戻して false
     /// </summary>
     private bool Verify(Span<byte> payload, Ecm ecm, int control, int pid)
     {
@@ -367,40 +367,12 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         payload.CopyTo(original);
         _garbled[pid] = false;
 
-        if (Try(payload, original, ecm, ecm.Even(control))) return true;
-        if (TrySwapped(payload, original, ecm, control))
-        {
-            Note($"ECM 0x{ecm.Pid:X4} の鍵が偶奇を逆にして合いました (PID 0x{pid:X4})");
-            return true;
-        }
-        foreach (var other in _ecms.Values)
-        {
-            if (other == ecm || other.Unentitled || other.Cipher is not { HasKeys: true }) continue;
-            if (!Try(payload, original, other, other.Even(control)) && !TrySwapped(payload, original, other, control)) continue;
-            _route[pid] = other;
-            Note($"PID 0x{pid:X4} の鍵が PMT の ECM 0x{ecm.Pid:X4} と合わず、ECM 0x{other.Pid:X4} の鍵で合いました");
-            return true;
-        }
+        ecm.Cipher!.Decrypt(ecm.Even(control), payload);
+        if (payload[0] == 0 && payload[1] == 0 && payload[2] == 1) return true;
         original.CopyTo(payload);
         LastError = $"PID 0x{pid:X4} の鍵が合いません (ECM 0x{ecm.Pid:X4})";
         Note(LastError);
         return false;
-    }
-
-    /// <summary>スクランブルされたままの中身 (<paramref name="original"/>) をこの鍵で復号し、PES の先頭になったか</summary>
-    private static bool Try(Span<byte> payload, ReadOnlySpan<byte> original, Ecm ecm, bool even)
-    {
-        original.CopyTo(payload);
-        ecm.Cipher!.Decrypt(even, payload);
-        return payload[0] == 0 && payload[1] == 0 && payload[2] == 1;
-    }
-
-    /// <summary>偶奇を逆にして試す。合えば、その ECM はこの先も逆にして使う (<see cref="Ecm.Swapped"/>)</summary>
-    private static bool TrySwapped(Span<byte> payload, ReadOnlySpan<byte> original, Ecm ecm, int control)
-    {
-        if (!Try(payload, original, ecm, !ecm.Even(control))) return false;
-        ecm.Swapped = !ecm.Swapped;
-        return true;
     }
 
     /// <summary>鍵が合わなかったことを記録に出す。同じ文を続けて出さない</summary>
@@ -517,7 +489,6 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         ecm.After = int.MaxValue;
         ecm.Parity = 0;
         ecm.Next = ecm.Change = int.MaxValue;
-        ecm.Swapped = false;
     }
 
     private void Release(IBufferWriter<byte> output)
@@ -925,11 +896,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         public int After = int.MaxValue;
         /// <summary><see cref="Settle"/> が後ろから読む間だけ使う。すぐ後ろの偶奇と位置、その先で最初に偶奇が変わる位置</summary>
         public int Parity, Next = int.MaxValue, Change = int.MaxValue;
-        /// <summary>PES の先頭で、偶奇を逆にした鍵のほうが合った (<see cref="Verify"/>)。次に逆が合うまでそのまま使う</summary>
-        public bool Swapped;
-
         /// <summary>transport_scrambling_control に使う鍵が偶数か。0b10 が偶数、0b11 が奇数 (0b01 は使われないが、奇数の鍵で復号する)</summary>
-        public bool Even(int control) => (control == 2) ^ Swapped;
+        public bool Even(int control) => control == 2;
     }
 
     /// <summary>組み立て中のセクション。長さは先頭 3 バイトで決まる (最長 3 + 4095)。長さが -1 なら組み立てていない</summary>
