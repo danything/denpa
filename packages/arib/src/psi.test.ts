@@ -3,10 +3,6 @@ import { describe, expect, test } from "bun:test";
 import {
   NitReader,
   PacketStream,
-  parseNit,
-  parseNitSection,
-  parseSdt,
-  parseSdtOther,
   SdtReader,
   SectionAssembler,
   ServiceReader,
@@ -43,12 +39,17 @@ function stream(): Uint8Array {
 
 describe("セクションの解釈", () => {
   test("SDT からサービスを読む", () => {
-    const parsed = parseSdt(
-      sdtSection(0x0408, 0x0004, [
-        [1024, 0x01, "TOKYO MX1"],
-        [1025, 0x01],
-      ]),
+    const reader = new ServiceReader();
+    reader.feed(
+      packetize(
+        0x0011,
+        sdtSection(0x0408, 0x0004, [
+          [1024, 0x01, "TOKYO MX1"],
+          [1025, 0x01],
+        ]),
+      ),
     );
+    const parsed = reader.transport;
     expect(parsed?.transportStreamId).toBe(0x0408);
     expect(parsed?.originalNetworkId).toBe(0x0004);
     expect(parsed?.services).toEqual([
@@ -59,9 +60,14 @@ describe("セクションの解釈", () => {
   });
 
   test("NIT からネットワーク ID とリモコン番号を読む", () => {
-    const parsed = parseNit(
-      nitSection(0x7fe0, 6, [[0x0408, 0x0004, [[1024, 0x01]]]]),
+    const reader = new ServiceReader();
+    reader.feed(
+      packetize(
+        0x0010,
+        nitSection(0x7fe0, 6, [[0x0408, 0x0004, [[1024, 0x01]]]]),
+      ),
     );
+    const parsed = reader.network;
     expect(parsed?.networkId).toBe(0x7fe0);
     expect(parsed?.remoteControlKeyId).toBe(6);
     expect(parsed?.transportStreams[0]?.transportStreamId).toBe(0x0408);
@@ -329,6 +335,13 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
   const BS1 = satelliteDeliveryDescriptor(11_727_480);
   const BS15 = satelliteDeliveryDescriptor(11_996_000);
 
+  /** NIT のセクションを 1 つ NitReader に渡して、そろった自分のネットワークの表を返す */
+  function readNit(section: Uint8Array) {
+    const reader = new NitReader();
+    reader.feed(packetize(0x0010, section));
+    return reader.actual;
+  }
+
   /** current_next_indicator を 0 (これから使う表) にしたセクション */
   function next(section: Uint8Array): Uint8Array {
     const body = [...section.subarray(0, -4)];
@@ -337,7 +350,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
   }
 
   test("衛星の分配の記述子から周波数・軌道・シンボルレートを読む", () => {
-    const parsed = parseNitSection(
+    const parsed = readNit(
       nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]]),
     );
     expect(parsed?.transportStreams[0]?.delivery).toEqual({
@@ -354,7 +367,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
 
   test("地上の分配の記述子から周波数を読む (1/7 MHz 単位)", () => {
     // T27 は 557.142857 MHz。放送は 1/7 MHz の 3900 と書く
-    const parsed = parseNitSection(
+    const parsed = readNit(
       nitSection(0x7fe0, 6, [
         [
           0x7fe0,
@@ -374,42 +387,37 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
   });
 
   test("分配の記述子が無い TS は null", () => {
-    const parsed = parseNitSection(
+    const parsed = readNit(
       nitSection(0x7fe0, 6, [[0x0408, 0x0004, [[1024, 0x01]]]]),
     );
     expect(parsed?.transportStreams[0]?.delivery).toBeNull();
   });
 
-  test("セクションの先頭からバージョンとセクションの番号を読む", () => {
-    const parsed = parseNitSection(
-      nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]], {
-        version: 7,
-        sectionNumber: 1,
-        lastSectionNumber: 2,
-      }),
+  test("セクションの先頭からネットワーク ID とバージョンを読む", () => {
+    const parsed = readNit(
+      nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]], { version: 7 }),
     );
-    expect(parsed).toMatchObject({
-      other: false,
-      networkId: 4,
-      version: 7,
-      current: true,
-      sectionNumber: 1,
-      lastSectionNumber: 2,
-    });
+    expect(parsed).toMatchObject({ other: false, networkId: 4, version: 7 });
   });
 
-  test("分配の記述子が付いても parseNit は今までどおり読む", () => {
-    const parsed = parseNit(
-      nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]]),
+  test("分配の記述子が付いても、スキャンは NIT[actual] のネットワークを読む", () => {
+    const reader = new ServiceReader();
+    reader.feed(
+      packetize(0x0010, nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]])),
     );
-    expect(parsed?.networkId).toBe(4);
-    expect(parsed?.transportStreams[0]?.services[0]?.serviceId).toBe(151);
+    expect(reader.network?.networkId).toBe(4);
+    expect(reader.network?.transportStreams[0]?.services[0]?.serviceId).toBe(
+      151,
+    );
     // NIT[other] はスキャンの「どのネットワークか」に使わない
-    expect(
-      parseNit(
+    const other = new ServiceReader();
+    other.feed(
+      packetize(
+        0x0010,
         nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]], { other: true }),
       ),
-    ).toBeNull();
+    );
+    expect(other.network).toBeNull();
   });
 
   test("全部のセクションがそろうまで返さず、そろったら TS をつなぐ", () => {
@@ -586,11 +594,13 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
     const section = sdtSection(16625, 4, [[101, 0x01, "NHK BS"]], {
       other: true,
     });
-    expect(parseSdtOther(section)?.services).toEqual([
+    const tables = new SdtReader();
+    tables.feed(packetize(0x0011, section));
+    expect(tables.actual).toBeNull();
+    expect(tables.tables()[0]?.services).toEqual([
       { serviceId: 101, serviceType: 0x01, name: "NHK BS" },
     ]);
-    // 自分の TS の読み取りは SDT[other] を読まない (スキャンが別の TS の局を自分のものと取り違える)
-    expect(parseSdt(section)).toBeNull();
+    // スキャンは SDT[other] を読まない (別の TS の局を自分のものと取り違える)
     const reader = new ServiceReader();
     reader.feed(packetize(0x0011, section));
     expect(reader.transport).toBeNull();
