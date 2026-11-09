@@ -29,6 +29,7 @@ function material(frames: number, logo = true): CmMaterial {
     times,
     cuts,
     logo: logo ? { spans: [{ start: 10, end: 2500 }], scores } : null,
+    logoModel: logo ? "枠 1290,30,92,67、型 312 画素" : undefined,
     why: logo ? "" : "ロゴの位置を特定できませんでした",
   };
 }
@@ -51,6 +52,8 @@ describe("材料の控え", () => {
     expect(after.logo!.spans).toEqual([{ start: 10, end: 2500 }]);
     expect(after.logo!.scores[0]).toBeCloseTo(0.7, 2);
     expect(after.logo!.scores[2600]).toBeCloseTo(0.05, 2);
+    // 当てた型の在り処も戻る (型は録画のたびに育つので、あとからは分からない)
+    expect(after.logoModel).toBe("枠 1290,30,92,67、型 312 画素");
   });
 
   test("ロゴが使えなかったものは理由ごと戻る", () => {

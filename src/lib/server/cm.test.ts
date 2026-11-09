@@ -10,11 +10,13 @@ import {
   invertRanges,
   leadIn,
   liveAudioIndexes,
+  logoDetail,
   parseFrameRate,
   parseRatio,
   shiftRanges,
   tooMuchCm,
 } from "./cm";
+import type { CmMaterial } from "./cm-material";
 
 describe("区間の裏返し", () => {
   test("CM を渡すと残す区間になる", () => {
@@ -226,6 +228,44 @@ describe("CM 判定が多すぎないか", () => {
   test("ちょうど半分から捨てる (丸めた % では比べない)", () => {
     expect(tooMuchCm([{ start: 0, end: 900 }], 1800)).toBe(true);
     expect(tooMuchCm([{ start: 0, end: 899 }], 1800)).toBe(false);
+  });
+});
+
+describe("ロゴの結果を捨てたときの覚え書き", () => {
+  /** 100 秒 (30 コマ/秒)。前半はロゴがはっきり見え、続く 25 秒は点が出たとみなすところに届かず、最後の 25 秒は 0 近く */
+  function material(logo = true): CmMaterial {
+    const frames = 3000;
+    return {
+      offset: 0,
+      duration: 100,
+      fps: 30,
+      silences: [],
+      times: Float64Array.from({ length: frames }, (_, i) => i / 30),
+      cuts: new Float32Array(frames),
+      logo: logo
+        ? {
+            spans: [{ start: 0, end: 1499 }],
+            scores: Float32Array.from({ length: frames }, (_, i) =>
+              i < 1500 ? 0.7 : i < 2250 ? 0.18 : 0.02,
+            ),
+          }
+        : null,
+      logoModel: "枠 1290,30,92,67、型 312 画素",
+      why: "",
+    };
+  }
+
+  test("型の在り処、ロゴの写っていた割合、点の分布、CM とした区間と区間の中の点を書く", () => {
+    expect(logoDetail(material(), [{ start: 50, end: 100 }])).toBe(
+      "。ロゴ: 枠 1290,30,92,67、型 312 画素、写っていたコマ 50%。" +
+        "ロゴの点: 0.25 以上 50%、0.12〜0.25 25%、0.12 未満 25%。" +
+        "ロゴで CM とした区間: 0:50〜1:40 (点 0.18)",
+    );
+  });
+
+  test("CM が無ければ区間は書かない。ロゴが使えなければ何も足さない", () => {
+    expect(logoDetail(material(), [])).not.toContain("CM とした区間");
+    expect(logoDetail(material(false), [{ start: 50, end: 100 }])).toBe("");
   });
 });
 
