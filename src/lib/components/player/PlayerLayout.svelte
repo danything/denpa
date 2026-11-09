@@ -16,7 +16,7 @@
   /**
    * 3 画面の外枠。映像が左、読むものが右 (1000px から二段組。狭い画面は映像を端から端まで出し、読むものをその下に積む)。
    * 周りの余白と横幅の先頭打ちは外の `<main>` が持つ。横にしたスマホ (`PHONE_LANDSCAPE`) は高さが足りないので、
-   * 見出しを隠して映像を画面の高さいっぱいにし、右の列は映像の下で巻き取る (マウスの PC は窓を低くしてもそのまま)。
+   * 下のタブを隠して映像を画面の高さいっぱいにし、右の列は映像の下で巻き取る (マウスの PC は窓を低くしてもそのまま)。
    * テーブルトップ (`TABLETOP`) では映像を上の段、右の列を下の段に置く (下の style)
    */
   let {
@@ -79,11 +79,11 @@
       min-height: 0;
     }
     /*
-         * 右の列は窓の右端に付けたサイドバー (線も面の色も付けない)。`<main>` の余白の外へ上・右・下にはみ出し、
-         * スクロールバーを窓の右端に出す。中身の余白は映像の周りと同じ (`--dp-side-pad`)、上は映像の上と同じ値
-         * (`--dp-side-top`)。幅は固定で、二段組にした直後は細く (256px。映像に 476px 残す)。
-         * E2E (20・22・25 の `expectSideFrame` / `expectSideAligned`) で見る
-         */
+     * 右の列は窓の右端に付けたサイドバー (線も面の色も付けない)。`<main>` の余白の外へ上・右・下にはみ出し、
+     * スクロールバーを窓の右端に出す。中身の余白は映像の周りと同じ (`--dp-side-pad`)、上は映像の上と同じ値
+     * (`--dp-side-top`)。幅は固定で、二段組にした直後は細く (256px。映像に 476px 残す)。
+     * E2E (20・22・25 の `expectSideFrame` / `expectSideAligned`) で見る
+     */
     .side > :global(aside) {
       --dp-side-pad: var(--dp-gutter, 1rem);
       --dp-side-top: var(--dp-page-top, 0px);
@@ -101,9 +101,9 @@
     }
   }
   /*
-     * 横にしたスマホ (上の説明)。`--dp-gutter` は `<main>` の余白 (`+layout.svelte`)。
-     * そのぶん外へはみ出して、映像を画面の端まで出す。条件は上の `PHONE_LANDSCAPE` と同じ
-     */
+   * 横にしたスマホ (上の説明)。`--dp-gutter` は `<main>` の余白 (`+layout.svelte`)。
+   * そのぶん外へはみ出して、映像を画面の端まで出す。条件は上の `PHONE_LANDSCAPE` と同じ
+   */
   @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
     /*
      * 横にしたスマホはスマホの形 (`#lib/phone-form.ts`) なので、ヘッダーは出ず下のタブが出る。映像の下端に重なるので隠し、
@@ -115,7 +115,7 @@
     :global(html:has([data-player-layout])) {
       --dp-tabbar: 0px;
     }
-    /* ヘッダーを隠すので、ヘッダーのぶんの先頭の空き (`+layout.svelte` の `.shell.fill`) も外す */
+    /* ヘッダーは出ないので、ヘッダーのぶんの先頭の空き (`+layout.svelte` の `.shell.fill`) も外す */
     :global(body:has([data-player-layout]) .shell.fill) {
       padding-top: 0;
     }
@@ -140,14 +140,14 @@
     }
   }
   /*
-     * **テーブルトップ** (`#lib/phone-form.ts` の `TABLETOP`。条件は同じ)。上の段は映像だけ、下の段は右の列。折り目 (と蝶番の隙間) には何も置かない。
-     * 段の境目は `env(viewport-segment-*)` (対応していないブラウザは当たらないので逃げ道は形だけ)。
-     * 上下の段はどちらも低いので、操作はスマホの形 (`<html data-phone>`) で下に寄せる: 上のヘッダーは出さず、下のタブを下の段の下端に浮かべる
-     * (`+layout.svelte`)。
-     * `<main>` を窓いっぱいに固定し、上の段は黒い地 (映像の形の枠 `PlayerStage` は段の幅と高さに収める。左右か上下の黒はこの地)、
-     * 下の段は黒い地 (舞台の中。テーマで変えない) に映像の色の反射 (`FoldReflection`) を敷き、その上に右の列を重ねる。
-     * 窓は巻かない。右の列は中で巻く。E2E 55 で見る
-     */
+   * **テーブルトップ** (`#lib/phone-form.ts` の `TABLETOP`。条件は同じ)。上の段は映像だけ、下の段は右の列。折り目 (と蝶番の隙間) には何も置かない。
+   * 段の境目は `env(viewport-segment-*)` (対応していないブラウザは当たらないので逃げ道は形だけ)。
+   * 上下の段はどちらも低いので、操作はスマホの形 (`<html data-phone>`) で下に寄せる。上のヘッダーは出さず、下のタブを下の段の下端に浮かべる
+   * (`+layout.svelte`)。
+   * `<main>` を窓いっぱいに固定し、上の段は黒い地 (映像の形の枠 `PlayerStage` は段の幅と高さに収める。左右か上下の黒はこの地)、
+   * 下の段は黒い地 (舞台の中。テーマで変えない) に映像の色の反射 (`FoldReflection`) を敷き、その上に右の列を重ねる。
+   * 窓は巻かない。右の列は中で巻く。E2E 55 で見る
+   */
   @media (device-posture: folded) and (vertical-viewport-segments: 2) {
     /* スマホの形の本文の余白 (`+layout.svelte`。下のタブのぶん) より強く当てる (`#main`)。下のタブのぶんは下の `.layout` が空ける */
     :global(main#main:has([data-player-layout])) {

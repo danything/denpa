@@ -149,7 +149,7 @@
         付け替える局を選ばせる。自動では付け替えない (間違えると別の局を録る)
     -->
     {#if data.orphans.length > 0}
-      <div class="notice info remap" data-testid="rule-orphans">
+      <div class="notice info" data-testid="rule-orphans">
         <p class="small">
           選局できなくなった局を指しているルールがあります。このままでは録画しません。付け替える局を選ぶと、その局の番組を録画します
         </p>
@@ -524,7 +524,6 @@
     margin: 0;
     padding: var(--dp-space-3);
     text-align: center;
-    list-style: none;
   }
   .narrow-summary {
     margin: 0 0 var(--dp-space-2);

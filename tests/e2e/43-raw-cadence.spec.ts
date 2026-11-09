@@ -294,7 +294,7 @@ test.describe("元の TS を出す間合い", () => {
     await setRecording(request, {});
   });
 
-  test("観る画面で元の TS を流すと、画面の切り替わりごとにフィールドが1つずつ進む", async ({
+  test("観る画面で元の TS を流すと、画面の切り替わりごとにフィールドが 1 つずつ進む", async ({
     page,
     request,
   }, info) => {

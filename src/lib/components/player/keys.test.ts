@@ -45,7 +45,7 @@ function harness() {
 }
 
 describe("再生画面のキー", () => {
-  test("空白と k で再生/一時停止、左右で 10秒", () => {
+  test("空白と k で再生/一時停止、左右で 10 秒", () => {
     const { done, press } = harness();
     expect(press(" ")).toBe(true);
     press("k");

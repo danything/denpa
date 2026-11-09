@@ -23,7 +23,7 @@
  * - forms/input-range … `player/SeekBar`
  * - components/accordion (<details>) … `player/Remote`・`RuleDraft`・設定の `MigrateProgress`・`Channels`
  * - components/modal (<dialog>。card が要るが、card はここにある) … `ProgramDetail`・`DriveNotice`・`LogoZoom`・設定の `IssueDialog`・`ContractDialog`
- * - components/progress … `home/TimelineRow`・`JobProgress`・設定の `Channels`
+ * - components/progress … `home/TimelineRow`・`JobProgress`・設定の `Channels`・端末に保存した録画 (`offline`)
  *
  * 部品を足すとき: 当てる要素がどの画面にも出るならここに (並びを守って)、そうでなければ描くコンポーネントの
  * <script> に `import` で足す。**<style> の中で @import しない** (そのコンポーネントだけに閉じ込められ、使うたびに重なって入る)。
@@ -103,7 +103,7 @@
      * 1 つの部品の中だけで前後を決めるもの (面の上の線・裏に敷く 1 枚の 1・2・-1、番組表の箱の中の段) は部品に書く
      */
   --dp-z-heading: 3; /* 貼り付く日付の見出し */
-  --dp-z-pagebar: 5; /* ページの中で貼り付く操作の 1 行 (ホーム・切り抜き)。見出しより上 */
+  --dp-z-pagebar: 5; /* ページの中で上に貼り付く操作の 1 行 (切り抜きの選択)。見出しより上 */
   --dp-z-dock: 30; /* 下のタブのすぐ上に浮かせる操作の 1 行 (`.dock`) */
   --dp-z-header: 40; /* ヘッダー・下のタブ */
   --dp-z-toast: 50; /* トースト・検索の候補。ダイアログより下 */
@@ -659,7 +659,7 @@ h3 {
 }
 th,
 td {
-  padding: 0.45rem 0.6rem;
+  padding: var(--dp-space-2) var(--dp-space-3);
 }
 /*
  * 表の見出しは地を塗らず、小さく沈めた字だけ。行の区切りの線も引かない (`--pico-table-border-color` は透明。行の上下の余白で分ける)。
@@ -716,8 +716,8 @@ progress[value]::-webkit-progress-value {
 .progress-block {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 1rem;
+  gap: var(--dp-space-2);
+  margin-top: var(--dp-space-4);
 }
 /* その記録 (`<details class="log">`)。字だけの見出しの下に、開いたら淡い面 (枠は付けない) */
 .progress-block .log summary {
@@ -727,8 +727,8 @@ progress[value]::-webkit-progress-value {
 .progress-block .log pre {
   max-height: 16rem;
   overflow: auto;
-  margin: 0.25rem 0 0;
-  padding: 0.5rem;
+  margin: var(--dp-space-1) 0 0;
+  padding: var(--dp-space-2);
   border-radius: var(--dp-radius);
   background: var(--dp-subtle);
   font-family: var(--pico-font-family-monospace);
@@ -739,7 +739,7 @@ progress[value]::-webkit-progress-value {
 /* ---- 面 ---- */
 /* まとまりの箱。地の上に置き、枠も地も付けず余白だけで囲む */
 .panel {
-  padding: 1rem;
+  padding: var(--dp-space-4);
 }
 
 /*
@@ -797,7 +797,7 @@ progress[value]::-webkit-progress-value {
   flex-direction: column;
   align-items: center;
   gap: var(--dp-space-2);
-  padding: 3rem var(--dp-space-4);
+  padding: var(--dp-space-6) var(--dp-space-4);
   text-align: center;
 }
 .empty-state p {
@@ -917,7 +917,7 @@ progress[value]::-webkit-progress-value {
     padding-inline: var(--dp-space-2);
   }
   .guide-bar > .segmented > a.button {
-    padding-inline: 0.4rem;
+    padding-inline: 0.375rem;
   }
 }
 /*
@@ -931,8 +931,8 @@ progress[value]::-webkit-progress-value {
   --page-h: calc(100svh - env(safe-area-inset-top));
   /* 下のタブ + 1 行の下の隙間 + 1 行の上下の余白 + ボタンの高さ + 1 行の上の隙間 (下の `.guide-bar` の寸法と対) */
   --guide-float-h: calc(
-    var(--dp-tabbar, 0px) + var(--dp-dock-gap) + 0.5rem + var(--dp-btn-h-sm) +
-      var(--dp-dock-gap)
+    var(--dp-tabbar, 0px) + var(--dp-dock-gap) + var(--dp-space-1) * 2 +
+      var(--dp-btn-h-sm) + var(--dp-dock-gap)
   );
   margin-bottom: calc(-1 * (var(--dp-gutter) + var(--dp-tabbar, 0px)));
 }
@@ -940,7 +940,7 @@ progress[value]::-webkit-progress-value {
   position: fixed;
   inset-inline: var(--dp-dock-inset);
   z-index: var(--dp-z-dock);
-  padding: 0.25rem 0.5rem;
+  padding: var(--dp-space-1) var(--dp-space-2);
 }
 
 /*
@@ -1049,7 +1049,7 @@ progress[value]::-webkit-progress-value {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--dp-space-1);
   min-width: 0;
 }
 .field > span:first-child,
@@ -1069,7 +1069,7 @@ input[type="checkbox"]:not([role="switch"]) {
 .check {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--dp-space-2);
   cursor: pointer;
 }
 .check input {
@@ -1088,10 +1088,10 @@ input[type="checkbox"]:not([role="switch"]) {
   display: flex;
   cursor: pointer;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: var(--dp-space-2);
 }
 .check-row input {
-  margin: 0.15rem 0 0;
+  margin: 0.125rem 0 0;
   flex-shrink: 0;
 }
 
@@ -1241,12 +1241,12 @@ input[type="checkbox"]:not([role="switch"]) {
  * 貼り付く位置は、いちばん上の見出しの置かれた位置 (main の頭の空き) と同じにし、巻き始めても動かない (上端ではカプセルにならない)
  */
 .day-head {
-  --day-head-gap: 0.5rem;
+  --day-head-gap: var(--dp-space-2);
   position: sticky;
   top: var(--day-head-gap);
   z-index: var(--dp-z-heading);
   width: fit-content;
-  margin: 0.5rem 0 0.25rem;
+  margin: var(--dp-space-2) 0 var(--dp-space-1);
   color: var(--dp-muted);
   font-size: var(--dp-text-xs);
   font-weight: var(--dp-weight-bold);
@@ -1255,8 +1255,8 @@ input[type="checkbox"]:not([role="switch"]) {
 .day-head-chip {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.25rem 0.75rem;
+  gap: var(--dp-space-2);
+  padding: var(--dp-space-1) var(--dp-space-3);
   border-radius: var(--dp-radius-full);
   background: var(--dp-float);
   box-shadow: var(--dp-shadow-pop);
@@ -1352,7 +1352,7 @@ a.button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.375rem;
   padding: var(--pico-form-element-spacing-vertical)
     var(--pico-form-element-spacing-horizontal);
   border: var(--pico-border-width) solid var(--pico-border-color);
@@ -1429,17 +1429,17 @@ a.button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
+  gap: 0.375rem;
   padding-block: 0;
 }
 :where(button, [type="button"], [type="submit"], a.button).small {
   min-height: var(--dp-btn-h-sm);
-  padding-inline: 0.75rem;
+  padding-inline: var(--dp-space-3);
   font-size: var(--dp-text-sm);
 }
 :where(button, [type="button"], [type="submit"], a.button).xs {
   min-height: var(--dp-btn-h-xs);
-  padding-inline: 0.5rem;
+  padding-inline: var(--dp-space-2);
   font-size: var(--dp-text-xs);
 }
 /* アイコンだけのボタン。幅を高さに揃えて円にする */
@@ -1508,10 +1508,10 @@ a.button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
+  gap: 0.375rem;
   min-height: var(--dp-btn-h);
   padding-block: 0;
-  padding-inline: 0.65rem;
+  padding-inline: var(--dp-space-3);
   font-size: var(--dp-text-sm);
 }
 .row-actions .outline.danger {
@@ -1660,11 +1660,11 @@ ul.links a.button[aria-current="page"]::after {
 .tag {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.05rem 0.5rem;
+  gap: var(--dp-space-1);
+  padding: 0 var(--dp-space-2);
   border-radius: var(--dp-radius-full);
   font-size: var(--dp-text-xs);
-  line-height: 1.6;
+  line-height: 1.75;
   white-space: nowrap;
   background: var(--dp-subtle);
   color: inherit;
@@ -1701,15 +1701,16 @@ ul.links a.button[aria-current="page"]::after {
   --notice-mark-color: transparent;
   position: relative;
   border-radius: var(--dp-radius);
-  padding: 0.75rem 1rem 0.75rem calc(1.5rem + 1.125em);
+  padding: var(--dp-space-3) var(--dp-space-4) var(--dp-space-3)
+    calc(var(--dp-space-5) + 1.125em);
   background: var(--dp-subtle);
 }
 /* 1 行目の真ん中にそろえる (`1lh` は 1 行の高さ)。大きさは字に合わせる (`.small` の通知では小さく) */
 .notice::before {
   content: "";
   position: absolute;
-  top: calc(0.75rem + (1lh - 1.125em) / 2);
-  left: 1rem;
+  top: calc(var(--dp-space-3) + (1lh - 1.125em) / 2);
+  left: var(--dp-space-4);
   width: 1.125em;
   height: 1.125em;
   background: var(--notice-mark-color);
@@ -1786,7 +1787,7 @@ button.text-button {
   --pico-color: var(--dp-muted);
   display: inline;
   width: auto;
-  margin: 0 0 0 0.25rem;
+  margin: 0 0 0 var(--dp-space-1);
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -1828,7 +1829,7 @@ button.text-button:hover {
    * 項目の角は面の角から内側の余白を引いた丸み (入れ子。下の `.menu-item`)。
    * **余白と項目の間は、映像の上のメニュー・プルダウンの一覧と同じ** (どのメニューも同じ形。色だけ層で変わる)
    */
-  --menu-pad: 0.5rem;
+  --menu-pad: var(--dp-space-2);
   padding: var(--menu-pad);
   gap: 0.125rem;
   border-radius: var(--dp-radius-lg);
@@ -1861,7 +1862,7 @@ button.text-button:hover {
 }
 /* メニューの中のまとまりは線ではなく余白で分ける (docs/design.md の「メニュー・ダイアログ・検索の候補」) */
 .menu hr {
-  margin: 0.25rem 0;
+  margin: var(--dp-space-1) 0;
   border: 0;
 }
 .menu[data-align="end"] {
@@ -1870,11 +1871,11 @@ button.text-button:hover {
 /* 引き金から 4px 離し、入りきる側へ広げる */
 .menu[data-side="top"] {
   --menu-rise: 0.375rem;
-  margin-bottom: 4px;
+  margin-bottom: var(--dp-space-1);
   transform-origin: bottom left;
 }
 .menu[data-side="bottom"] {
-  margin-top: 4px;
+  margin-top: var(--dp-space-1);
 }
 .menu[data-side="top"][data-align="end"] {
   transform-origin: bottom right;
@@ -1908,12 +1909,12 @@ button.text-button:hover {
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--dp-space-2);
   width: 100%;
   margin: 0;
-  padding: 0.5rem 0.75rem;
+  padding: var(--dp-space-2) var(--dp-space-3);
   border: 0;
-  border-radius: calc(var(--dp-radius-lg) - var(--menu-pad, 0.5rem));
+  border-radius: calc(var(--dp-radius-lg) - var(--menu-pad, var(--dp-space-2)));
   box-shadow: none;
   background: transparent;
   color: inherit;
@@ -2012,7 +2013,7 @@ button.text-button:hover {
     }
     select {
       /* 選択肢は欄 (`select`) から受け継ぐので、内側の余白はここに置く (一覧の `::picker` に置くと選択肢に届かない) */
-      --menu-pad: 0.5rem;
+      --menu-pad: var(--dp-space-2);
       align-items: center;
     }
     select::picker-icon {
@@ -2020,7 +2021,7 @@ button.text-button:hover {
     }
     select::picker(select) {
       min-width: anchor-size(width);
-      margin-block: 4px;
+      margin-block: var(--dp-space-1);
       padding: var(--menu-pad);
       border: 0;
       border-radius: var(--dp-radius-lg);
@@ -2052,7 +2053,7 @@ button.text-button:hover {
     /* 選択肢は `.menu-item` と同じ。選んでいるものは、ほかの選んでいるものと同じく塗らずに左の縦線と主の色の太字 */
     select option {
       position: relative;
-      padding: 0.5rem 0.75rem;
+      padding: var(--dp-space-2) var(--dp-space-3);
       border-radius: calc(var(--dp-radius-lg) - var(--menu-pad));
       background: transparent;
       color: inherit;
@@ -2125,7 +2126,7 @@ button.text-button:hover {
 /* 映像の上に出す短い通知 (`StageNote`・追っかけの「続きは観る画面で」・ライブの「録画が始まったため、局を切り替えました」) */
 .stage-note {
   max-width: 100%;
-  padding: 0.25rem 0.75rem;
+  padding: var(--dp-space-1) var(--dp-space-3);
   border-radius: var(--dp-radius-lg);
   background: var(--dp-video-veil);
   font-size: var(--dp-text-xs);
@@ -2348,7 +2349,7 @@ dialog[open] > article {
 }
 .table-wrap th,
 .table-wrap td {
-  padding: 0.35rem 0.5rem;
+  padding: 0.375rem var(--dp-space-2);
 }
 .table-wrap .wide {
   width: 100%;
@@ -2422,17 +2423,17 @@ dialog[open] > article {
   --pico-background-color: transparent;
   --pico-color: var(--dp-btn-text);
   --pico-box-shadow: none;
-  --pick-inset: 0.75rem;
+  --pick-inset: var(--dp-space-3);
   --pick-bottom: 0.3rem;
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.375rem;
   width: auto;
   min-height: var(--dp-btn-h-sm);
   margin: 0;
-  padding: 0 0.75rem;
+  padding: 0 var(--dp-space-3);
   border: 0;
   border-radius: var(--dp-radius-full);
   background-color: var(--pico-background-color);
@@ -2501,7 +2502,7 @@ dialog[open] > article {
 }
 :where(html:not([data-phone])) .with-side > .side-column {
   display: flex;
-  padding-top: 0.25rem;
+  padding-top: var(--dp-space-1);
 }
 @media (min-width: 1600px) {
   :where(html:not([data-phone])) .with-side {
@@ -2515,7 +2516,7 @@ dialog[open] > article {
  * 幅と左右どちらに置くか (グリッドの列) は使う側で。
  *
  * - 窓の端とヘッダーに付ける。地・枠・影は付けない
- * - **線は引かない。** グループの境目は余白と見出しで分ける。見出しは本文の色の太字、上に 20px 空ける (最初のグループは 0)。
+ * - **線は引かない。** グループの境目は余白と見出しで分ける。見出しは本文の色の太字、上に 16px 空ける (最初のグループは 0)。
  *   **縦は詰める** (行は 48px のまま、見出しと余白で稼ぐ)。ホームはエンコードの行が出ると 1 行伸びるので、ふつうの窓の高さで巻かずに収まるように
  *   行は見出しより 12px 深く始め、塗りも一緒に動く
  * - **行はどの端末でも 48px** (車の中のタブレットでも押せる高さ。マウスとタブレットで詰め具合を変えない)
@@ -2527,8 +2528,8 @@ dialog[open] > article {
   min-height: 0;
   overflow-y: auto;
   /* 下の余白は名前で持つ。下端に貼り付ける行 (ルールの「ルールを作る」) が同じ値で打ち消す */
-  --dp-side-pad-end: 0.75rem;
-  padding: 0.75rem 0.625rem var(--dp-side-pad-end);
+  --dp-side-pad-end: var(--dp-space-3);
+  padding: var(--dp-space-3) var(--dp-space-3) var(--dp-side-pad-end);
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -2548,15 +2549,15 @@ dialog[open] > article {
 }
 /* スマホの形 (設定の 768〜999px、テーブルトップ) では下のタブが下端に重なるので、そのぶん下を空ける */
 :where(html[data-phone]) .side-panel {
-  --dp-side-pad-end: calc(0.75rem + var(--dp-tabbar, 0px));
+  --dp-side-pad-end: calc(var(--dp-space-3) + var(--dp-tabbar, 0px));
 }
 /* グループの見出し。リンクのときも見出しの顔のまま (設定) */
 .side-label {
   display: flex;
   align-items: center;
   min-height: 1.25rem;
-  margin: 1.25rem 0 0.125rem;
-  padding: 0 0.75rem;
+  margin: var(--dp-space-4) 0 0.125rem;
+  padding: 0 var(--dp-space-3);
   color: var(--dp-fg);
   font-size: var(--dp-text-sm);
   font-weight: var(--dp-weight-bold);
@@ -2572,7 +2573,7 @@ dialog[open] > article {
   flex-direction: column;
   gap: 1px;
   margin: 0;
-  padding: 0 0 0 0.75rem;
+  padding: 0 0 0 var(--dp-space-3);
   list-style: none;
   /*
    * 束ねるだけの `role="group"` (絞り込み・並び)。Pico は中のボタンに焦点が当たると束ごと影の枠で囲む
@@ -2589,11 +2590,11 @@ dialog[open] > article {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--dp-space-3);
   width: 100%;
   min-height: 3rem;
   margin: 0;
-  padding: 0 0.75rem;
+  padding: 0 var(--dp-space-3);
   border: 0;
   border-radius: var(--dp-radius);
   background: transparent;
@@ -2698,14 +2699,14 @@ dialog[open] > article {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--dp-space-1);
   color: var(--dp-muted);
   font-size: var(--dp-text-xs);
 }
 /* いちばん下に置くもの (状態・主のボタン)。線では分けず、余白で下に押す */
 .side-foot {
   margin-top: auto;
-  padding-top: 1rem;
+  padding-top: var(--dp-space-4);
 }
 
 /*

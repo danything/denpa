@@ -31,7 +31,7 @@
    * **実況に書き込む 1 行** (ライブだけ。決まりは docs/watch.md の「実況に書き込む」)。ニコニコと連携している世帯 (`official`) では
    * 公式のニコニコ実況へ (denpa のサーバ経由。`official.ts`)、ほかは NX-Jikkyo へ (`nx.ts`) 送る。書き先を選ぶ設定は無い
    *
-   * - 「ニコニコ実況に書きます」か「NX-Jikkyo に書きます」・入力欄・色などを選ぶボタン・「送る」・✕ を 1 つのカプセルに並べる。書けないときと失敗したときは、
+   * - 「ニコニコ実況に書きます」か「NX-Jikkyo に書きます」・入力欄・色などを選ぶボタン・「送信」・✕ を 1 つのカプセルに並べる。書けないときと失敗したときは、
    *   先頭の字をその理由 1 行に替える (トーストは出さない)
    * - Enter で送る (変換中は送らない)。Esc か ✕ で閉じる (一覧の下では一覧ごとしまう)。送れたら欄を空にし、失敗したら残す。自動で送り直さない
    * - 色・位置・大きさは、パレットのボタンで開く選択の行で選ぶ。端末ごとに覚える (`JIKKYO_STYLE_KEY`)
@@ -325,7 +325,7 @@
       class="send"
       disabled={busy || why !== null}
       onclick={() => void send()}
-      data-testid="jikkyo-compose-send">送る</button
+      data-testid="jikkyo-compose-send">送信</button
     >
     {#if !panel}
       <button

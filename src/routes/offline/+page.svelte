@@ -1,4 +1,5 @@
 <script lang="ts">
+  import "@anyblades/blades/components/progress";
   import { onMount, tick } from "svelte";
 
   import { arming } from "#lib/arming.svelte.js";
@@ -250,8 +251,9 @@
 <div class="page">
   <h1>端末に保存した録画</h1>
   <p class="lead small muted">
-    電波の無いところでも観られます。ここで削除すると、
-    <strong>次にオンラインに戻ったとき、サーバの録画も消えます</strong>。
+    電波の無いところでも観られます。ここで削除すると、<strong
+      >次にオンラインに戻ったとき、サーバの録画も消えます</strong
+    >。
   </p>
 
   {#if playing !== null}
@@ -298,7 +300,7 @@
                 scrub = null;
               }}
             />
-            <span class="clock tiny muted">
+            <span class="clock tiny muted num">
               {clock(scrub ?? drawnAt)} / {clock(drawnLength)}
             </span>
             {#if drawnMuted}
@@ -385,6 +387,17 @@
               {deleting.armed === item.id ? "端末とサーバから削除" : "削除"}
             </button>
           {/if}
+          <!-- 進み具合は件の面の下端いっぱいに敷く (ホームの行と同じ)。取れないときは動いているだけのバー -->
+          {#if item.state === "downloading"}
+            {@const progress = offline.entries[item.id]?.progress ?? null}
+            <progress
+              class="row-bar"
+              class:running={progress !== null}
+              value={progress ?? undefined}
+              max="1"
+              aria-label="端末への保存の進み具合"
+            ></progress>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -447,7 +460,6 @@
   }
   .clock {
     flex-shrink: 0;
-    font-variant-numeric: tabular-nums;
   }
   .problem {
     margin: var(--dp-space-1) 0 0;
@@ -458,16 +470,27 @@
     justify-content: space-between;
     margin-top: var(--dp-space-1);
   }
-  .name {
-    font-weight: var(--dp-weight);
-  }
   /* 1 件ずつ件の面 (`app.css` の `.item`) に乗せ、並べ方は `.item-list` (docs/design.md の「何行かある一覧」。ホームの行と同じ) */
   .row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: var(--dp-space-3);
     min-height: var(--dp-item-h);
     padding: var(--dp-space-2) var(--dp-space-3);
+    /* 下端のバーを面の角で切り落とす */
+    overflow: clip;
+  }
+  /* 進み具合のバー。高さと色はホームの行と同じ (`home.css` の `.row-bar.success`) */
+  .row-bar {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    width: 100%;
+    height: 3px;
+    margin: 0;
+    border-radius: 0;
+    --pico-progress-color: var(--dp-ok);
   }
   .thumb {
     width: 5rem;
