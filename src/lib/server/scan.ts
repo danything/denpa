@@ -605,29 +605,33 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
   }
 }
 
-export function start(options: ScanOptions): {
-  started: boolean;
-  message: string;
-} {
-  const types = new Set(
-    options.types.filter((type) => SCAN_KINDS.includes(type)),
-  );
-  if (types.size === 0)
-    return { started: false, message: "チャンネル種別の指定が不正です" };
-  if (current.state === "running")
-    return { started: false, message: "すでに実行中です" };
-  // CATV は UHF も回すので、地上波と両方来ても UHF を 2 回回さない
+/**
+ * 選んだ種別から、回すチャンネルを決める。知らない種別と重複は除く。
+ * CATV は UHF も回すので、地上波と両方来ても UHF を 2 回回さない。
+ * 衛星は総当たりしないので、チャンネルの一覧は持たない。進み具合では 1 つと数える
+ * (放送の一覧を 1 回読む。CS はネットワークが 2 つなので 2 回選局するが、数は 1 のまま)
+ */
+export function scanTargets(
+  chosen: readonly ScanKind[],
+): [ScannableType, string[]][] {
+  const types = new Set(chosen.filter((kind) => SCAN_KINDS.includes(kind)));
   if (types.has("CATV")) types.delete("GR");
-
-  /*
-   * 衛星は総当たりしないので、チャンネルの一覧は持たない。進み具合では 1 つと数える
-   * (放送の一覧を 1 回読む。CS はネットワークが 2 つなので 2 回選局するが、数は 1 のまま)
-   */
-  const targets: [ScannableType, string[]][] = [...types].map((type) =>
+  return [...types].map((type) =>
     type === "GR" || type === "CATV"
       ? ["GR", channelsFor(type)]
       : [type, [type]],
   );
+}
+
+export function start(options: ScanOptions): {
+  started: boolean;
+  message: string;
+} {
+  const targets = scanTargets(options.types);
+  if (targets.length === 0)
+    return { started: false, message: "チャンネル種別の指定が不正です" };
+  if (current.state === "running")
+    return { started: false, message: "すでに実行中です" };
 
   current = {
     ...IDLE,

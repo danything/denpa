@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { chunks, lowerPriority, run } from "./stream";
+import { chunks, lowerPriority, readUntil, run } from "./stream";
 
 /**
  * 外の道具を起こして読み切るところ (`run`)。
@@ -210,5 +210,70 @@ describe("chunks", () => {
       }
     };
     await expect(read()).rejects.toThrow("切れた");
+  });
+});
+
+/** 局や表を読み終えるまで読む所 (`readUntil`。チャンネルスキャンと衛星の一覧が使う) */
+describe("readUntil", () => {
+  /** 塊を順に流し、閉じないストリーム。読み手が止めたかは `cancelled` に残る */
+  function source(parts: Uint8Array[]) {
+    const state = { cancelled: false };
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const part of parts) controller.enqueue(part);
+      },
+      cancel() {
+        state.cancelled = true;
+      },
+    });
+    return { stream, state };
+  }
+
+  test("feed が true を返したら、そこで読むのをやめてストリームを止める", async () => {
+    const { stream, state } = source([
+      new Uint8Array(1),
+      new Uint8Array(2),
+      new Uint8Array(3),
+    ]);
+    const seen: number[] = [];
+    const error = await readUntil(
+      stream,
+      (chunk) => {
+        seen.push(chunk.length);
+        return chunk.length === 2;
+      },
+      5_000,
+    );
+    expect(error).toBe("");
+    expect(seen).toEqual([1, 2]);
+    expect(state.cancelled).toBe(true);
+  });
+
+  test("何も来なければ時間切れで返り、ストリームを止める", async () => {
+    const { stream, state } = source([]);
+    expect(await readUntil(stream, () => false, 20)).toBe("");
+    expect(state.cancelled).toBe(true);
+  });
+
+  test("中止の合図が来たら、時間切れを待たずに返る", async () => {
+    const { stream, state } = source([]);
+    const abort = new AbortController();
+    const started = Date.now();
+    const pending = readUntil(stream, () => false, 60_000, abort.signal);
+    abort.abort();
+    expect(await pending).toBe("");
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(state.cancelled).toBe(true);
+  });
+
+  test("読み元が失敗したら、理由の最後の行を返す", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error("選局できません\nデバイスが使用中です"));
+      },
+    });
+    expect(await readUntil(stream, () => false, 5_000)).toBe(
+      "デバイスが使用中です",
+    );
   });
 });

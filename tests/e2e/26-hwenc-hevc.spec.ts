@@ -19,7 +19,7 @@ import { clearGpus, encodeRuns, forgetGpusAfterAll, wayOf } from "./hwenc";
 test.describe("GPU で H.265 をエンコードする", () => {
   forgetGpusAfterAll();
 
-  test("H.265 は GPU があるときだけ選べ、1本目に GPU でエンコードして [H265] の名前で置く", async ({
+  test("H.265 は GPU があるときだけ選べ、GPU でエンコードして [H265] の名前で置く", async ({
     page,
     request,
     stack,
@@ -46,7 +46,7 @@ test.describe("GPU で H.265 をエンコードする", () => {
       page.getByTestId("hw-hevc").locator('option[value="software"]'),
     ).toHaveCount(0);
 
-    // 3 つ選ぶと、H.265 を 1 本目に GPU で。主は AV1、H.265 と H.264 はもう一方
+    // 3 つ選ぶと、H.265 は GPU で。1 本目と主は AV1 (AV1 → H.265 → H.264 の先頭)、H.265 と H.264 はもう一方
     await syncEpg(request);
     rmSync(stack.encodeArgsFile, { force: true });
     await setRecording(request, { codecs: ["av1", "hevc", "h264"] });
@@ -65,7 +65,8 @@ test.describe("GPU で H.265 をエンコードする", () => {
     const lead = runs.filter((run) =>
       run.some((a) => a.includes("denpa-scan-")),
     );
-    expect(lead.map(wayOf)).toEqual(["renderD128:hevc_vaapi"]);
+    expect(lead.map(wayOf)).toEqual(["renderD128:av1_vaapi"]);
+    expect(runs.map(wayOf)).toContain("renderD128:hevc_vaapi");
     const main = (await row.getAttribute("data-library-path")) ?? "";
     expect(main).toMatch(/\.mkv$/);
     expect(main).not.toMatch(/\[H26[45]\]/);
