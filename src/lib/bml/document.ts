@@ -268,7 +268,7 @@ function isWide(c: string | undefined): boolean {
  * - p の中では、span・a の終了タグの直後と、span・a・br の開始タグの直前の並びを 0x20 1 つにする
  *   (br の終了タグの直後は上の「開始タグの直後」と同じく消す)
  *
- * 前から 1 回なめて組み立てる。正規表現で末尾の空白を探すと、空白の後ろに字が続くとき 2 乗かかる
+ * 前から 1 回走査して組み立てる。正規表現で末尾の空白を探すと、空白の後ろに字が続くとき 2 乗かかる
  */
 function collapse(text: string, parent: XmlElement, index: number): string {
   let start = 0;
