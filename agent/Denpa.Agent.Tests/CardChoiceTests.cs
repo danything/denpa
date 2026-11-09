@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
  */
 public class CardChoiceTests
 {
-    /// <summary>INT (返り値 0x2100) と IDI に答える接続。閉じたかを数える</summary>
+    /// <summary>INT (返り値 0x2100) と IDI に応答する接続。閉じたかを数える</summary>
     private sealed class FakeLink(string name) : ICardLink
     {
         public string Name { get; } = name;
@@ -59,7 +59,7 @@ public class CardChoiceTests
     }
 
     [Test]
-    public async Task 全部オフなら見つからないと言わない()
+    public async Task 全部オフなら見つからないと返さない()
     {
         var survey = new CardSurvey(false, "カードリーダーが見つかりません", [], [], null);
         var shown = Card.WithDisabled(survey, new HashSet<string> { "Gemplus (usb 3-11)" }, () => [Never("Gemplus (usb 3-11)")]);

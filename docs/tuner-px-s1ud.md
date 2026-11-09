@@ -26,7 +26,7 @@ DVB で動いている S1UD を奪うのは論外です。siano-ts 自身も、
 
 | 機材の様子                                                                  | 使うドライバ                            |
 | --------------------------------------------------------------------------- | --------------------------------------- |
-| smsusb が使っている (`/dev/dvb` に出ている)                                 | DVB (`DvbTuner`)。siano-ts は起こさない |
+| smsusb が使っている (`/dev/dvb` に出ている)                                 | DVB (`DvbTuner`)。siano-ts は起動しない |
 | どのドライバにも繋がっていない (smsusb を blacklist した・モジュールが無い) | siano-userland (`SianoTuner`)           |
 
 siano-userland で使うなら、ホストで `smsusb` / `smsdvb` / `smsmdtv` を blacklist して
@@ -49,6 +49,6 @@ sudo reboot
   **1MB も断られて数 KB のまま**になります (読む側が少し止まると TS を落とす)。Home Assistant OS の
   アドオンは、ホスト中の root と uid 0 を分け合うのでこれに当たります。広げられなかったときは
   記録にいまの深さと理由が出ます (`ChildTs.WidenPipe`)。px4-userland の機材には要りません
-- **地上波だけ。** 衛星は siano-ts を起こす前に断ります
+- **地上波だけ。** 衛星は siano-ts を起動する前に断ります
 - **実機に当てていません。** siano-userland 側で実機確認済みなのは PX-S1UD (`3275:0080`) だけで、
   `187f:0600` / `187f:0302` はあちらでも未検証です

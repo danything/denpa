@@ -9,7 +9,7 @@ namespace Denpa.Agent.Tests;
  *
  * 本物の機材は無い。ここで確かめるのは**機材に触らない部分**だけで、次のものを見る。
  * siano-ts --list と sysfs の読み方 (とくに「カーネルが使っているものは渡さない」)、device 文字列の形式、
- * siano-ts の起こし方。実機で当てるのは `denpa-agent --tune siano:<ポート> T27` (Probe.cs)。
+ * siano-ts の起動のしかた。実機で当てるのは `denpa-agent --tune siano:<ポート> T27` (Probe.cs)。
  */
 public class SianoTests
 {
@@ -80,7 +80,7 @@ public class SianoTests
     [Test]
     public async Task siano_ts_の終了コードに手当てを添える()
     {
-        // 0.1.8 の終了コード。カーネルが使っている・抜けた、は siano-ts が答える
+        // 0.1.8 の終了コード。カーネルが使っている・抜けた、は siano-ts が返す
         await Assert.That(SianoUserland.Hint(3)).Contains("見当たりません");
         await Assert.That(SianoUserland.Hint(10)).Contains("ファームウェア");
         // Windows は開けなければ (WinUSB でなければ) 1 か 4 で落ちる
@@ -135,7 +135,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task siano_ts_はポートで指して_control_で起こす()
+    public async Task siano_ts_はポートで指して_control_で起動する()
     {
         var start = SianoTuner.StartInfo("1-2.3", "/opt/siano-userland", "/fw/isdbt_rio.inp");
         await Assert.That(start.FileName).IsEqualTo(SianoUserland.Executable("/opt/siano-userland"));
@@ -159,13 +159,13 @@ public class SianoTests
     }
 
     /// <summary>
-    /// 偽の siano-ts --control。起きたらまず前の選局の残りに見立てて **pipe より多く** 書き、
+    /// 偽の siano-ts --control。起動したらまず前の選局の残りに見立てて **pipe より多く** 書き、
     /// それから標準入力を読む (本物も「書く → 標準入力を見る」の 1 本のループ)。
-    /// <c>tune 1</c> は同期しない。<c>tune 2</c> は前の選局の答え (別の周波数の <c>tuned</c>) を
-    /// 先に出力する。<c>tune 3</c> は答えない。それ以外は少し待ってから (本物の同期待ち)
+    /// <c>tune 1</c> は同期しない。<c>tune 2</c> は前の選局の応答 (別の周波数の <c>tuned</c>) を
+    /// 先に出力する。<c>tune 3</c> は応答しない。それ以外は少し待ってから (本物の同期待ち)
     /// <c>tuned</c> を返し、次のコマンドが来るまで <c>NEW&lt;Hz&gt;</c> を書き続ける
-    /// (本物の TS も流れ続ける。<c>tuned</c> のあと読み捨てが止まるまでの分は食われるので、
-    /// 書く量に限りがあると、込み合ったときに全部食われて届かない)
+    /// (本物の TS も流れ続ける。<c>tuned</c> のあと読み捨てが止まるまでの分は読み捨てられるので、
+    /// 書く量に限りがあると、込み合ったときに全部読み捨てられて届かない)
     /// </summary>
     private const string FakeSianoTs = """
         dd if=/dev/zero bs=1048576 count=20 2>/dev/null
@@ -209,12 +209,12 @@ public class SianoTests
     }
 
     [Test]
-    public async Task 起こしたまま選局し直し_前の残りは読まない()
+    public async Task 起動したまま選局し直し_前の残りは読まない()
     {
         if (!OperatingSystem.IsLinux()) return;
         using var tuner = Fake();
 
-        // 起きた直後の 20MB を読んで捨てないと tune を読みに来ない (詰まらずに返ること)
+        // 起動した直後の 20MB を読んで捨てないと tune を読みに来ない (詰まらずに返ること)
         tuner.Tune(ChannelTable.Parse("T27")!);
         await Assert.That(tuner.Tuned).IsTrue();
         await Assert.That(ReadLine(tuner.Output)).IsEqualTo("NEW557142857");
@@ -243,7 +243,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task 子が終了していれば起こし直す()
+    public async Task 子が終了していれば起動し直す()
     {
         if (!OperatingSystem.IsLinux()) return;
         // 1 回目の子は、1 行読まれたところで (印のファイルができたら) 終わる。USB が抜けた、に見立てる。
@@ -279,7 +279,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task 別の周波数の_tuned_は答えにしない()
+    public async Task 別の周波数の_tuned_は応答とみなさない()
     {
         if (!OperatingSystem.IsLinux()) return;
         using var tuner = Fake();
@@ -288,7 +288,7 @@ public class SianoTests
     }
 
     [Test]
-    public async Task 答えが来なければ子を捨てて_次は起こし直す()
+    public async Task 応答が来なければ子を捨てて_次は起動し直す()
     {
         if (!OperatingSystem.IsLinux()) return;
         var starts = 0;
@@ -304,7 +304,7 @@ public class SianoTests
         var error = Assert.Throws<IOException>(
             () => tuner.Tune(ChannelTable.Parse("T27")! with { Frequency = 3 }));
         await Assert.That(error.Message).Contains("同期しませんでした");
-        // 遅れて来る答えが次の選局に紛れないよう、子はもういない
+        // 遅れて来る応答が次の選局に紛れないよう、子はもういない
         await Assert.That(tuner.Tuned).IsFalse();
 
         tuner.Tune(ChannelTable.Parse("T13")!);

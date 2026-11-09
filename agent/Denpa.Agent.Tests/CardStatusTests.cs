@@ -5,7 +5,7 @@ namespace Denpa.Agent.Tests;
 /*
  * 画面の「カードリーダー」の表 (Card.cs の Local / Remote / Report)。
  *
- * 本物のリーダーは無い。INT と IDI に答える接続を置き、**使っているリーダーを
+ * 本物のリーダーは無い。INT と IDI に応答する接続を置き、**使っているリーダーを
  * 開き直さない**ことと、予備・カードなし・壊れたリーダーがそれぞれの行になることを確かめる。
  */
 public class CardStatusTests
@@ -13,7 +13,7 @@ public class CardStatusTests
     // カードの番号は必ず架空のものにする (本物のカードの番号を載せない)
     private static readonly CardInit Using = new(new byte[32], new byte[8], 5, [1234567890]);
 
-    /// <summary>INT (返り値 0x2100) と IDI (番号 <paramref name="id"/>) に答える接続</summary>
+    /// <summary>INT (返り値 0x2100) と IDI (番号 <paramref name="id"/>) に応答する接続</summary>
     private sealed class FakeLink(string name, long id) : ICardLink
     {
         public string Name { get; } = name;
@@ -44,7 +44,7 @@ public class CardStatusTests
     private static CardLinkCandidate Failing(string name, Exception error) => new(name, () => throw error);
 
     [Test]
-    public async Task 使っているリーダーは開かず予備だけ覗く()
+    public async Task 使っているリーダーは開かず予備だけ確かめる()
     {
         CardLinkCandidate[] found =
         [
@@ -90,7 +90,7 @@ public class CardStatusTests
     }
 
     [Test]
-    public async Task リーダーが無ければそう言う()
+    public async Task リーダーが無ければそう返す()
     {
         var survey = Card.Local(
             () => throw new IOException("カードリーダーが見つかりません"), () => "", () => [], TimeSpan.FromSeconds(5));
@@ -101,7 +101,7 @@ public class CardStatusTests
     }
 
     [Test]
-    public async Task どこにも挿さっていなければそう言う()
+    public async Task どこにも挿さっていなければそう返す()
     {
         CardLinkCandidate[] found = [Failing("空 (usb 1-2)", new CardAbsentException("挿さっていません"))];
         var survey = Card.Local(
@@ -123,8 +123,8 @@ public class CardStatusTests
     }
 
     /// <summary>
-    /// **INT が通らないときはリーダーを開かない。** 予備のリーダーを覗いている間は繋ぎ直しがリーダーを開けず、
-    /// 画面を開くたびに締め出してカードが二度と読めなくなった (実機)
+    /// **INT が通らないときはリーダーを開かない。** 予備のリーダーを確かめている間は繋ぎ直しがリーダーを開けず、
+    /// 画面を開くたびにそれが続いて、カードが二度と読めなくなった (実機)
     /// </summary>
     [Test]
     public async Task INT_が通らないときはリーダーを開かない()
@@ -169,7 +169,7 @@ public class CardStatusTests
     }
 
     [Test]
-    public async Task 配る側から貰っているときはその相手と番号を返す()
+    public async Task 配る側から受け取っているときはその相手と番号を返す()
     {
         var report = Card.Report(Card.Remote("http://card:25253", () => Using), ["PT3-T1"]);
         await Assert.That(report["source"]!.GetValue<string>()).IsEqualTo("remote");

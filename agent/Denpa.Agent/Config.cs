@@ -80,7 +80,7 @@ public sealed record TunerSpec(
 /// </list>
 ///
 /// <para>
-/// **YAML ではなく JSON。** 画面から書き換えるので、コメントを守るより書き戻せて壊れにくいほうがいい。
+/// **YAML ではなく JSON。** 画面から書き換えるので、コメントを残すより書き戻せて壊れにくいほうがいい。
 /// </para>
 ///
 /// <para>
@@ -94,7 +94,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     public string TunersFile { get; } = tunersFile;
     public string ChannelsFile { get; } = channelsFile;
 
-    /// <summary>CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。消してよい。Zd1j.cs の <see cref="Zd1jLocks"/>)</summary>
+    /// <summary>CECH-ZD1 J がチャンネルごとに記録したロックの値 (tuners.json の隣。消してよい。Zd1j.cs の <see cref="Zd1jLocks"/>)</summary>
     public string Zd1jLocksFile => Path.Combine(Dir, "zd1j-locks.json");
 
     /// <summary>
@@ -109,7 +109,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     /// <summary>自分の鍵と証明書・合言葉・組んだ denpa の置き場 (tuners.json の隣の tls/。<see cref="AgentTls"/>)</summary>
     public string TlsDir => Path.Combine(Dir, "tls");
 
-    /// <summary>tuners.json のあるディレクトリ。機材のデータ・覚えた値・鍵はここに置く</summary>
+    /// <summary>tuners.json のあるディレクトリ。機材のデータ・記録した値・鍵はここに置く</summary>
     public string Dir => Path.GetDirectoryName(Path.GetFullPath(TunersFile))!;
 
     public static Config FromEnvironment() => new(
@@ -122,7 +122,7 @@ public sealed class Config(string tunersFile, string channelsFile)
     /// <summary>
     /// 変数が無いときの置き場。Linux はコンテナの <c>/config</c>。Mac と Windows はインストーラと同じ
     /// <c>DENPA_HOME</c> (既定 <c>~/denpa</c>) の <c>config</c>。常駐を止めて手で <c>--tune</c> などを流したときに、
-    /// 書けない <c>/config</c> を見に行かず、常駐と同じファイルを使う
+    /// 書けない <c>/config</c> は使わず、常駐と同じファイルを使う
     /// </summary>
     private static string DefaultDir() => OperatingSystem.IsLinux()
         ? "/config"
@@ -145,7 +145,7 @@ public sealed class Config(string tunersFile, string channelsFile)
         }
         catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException)
         {
-            // 起動できないよりは空として続ける。ただ黙って自動検出に戻ると気づけないので残す
+            // 起動できないよりは空として続ける。ログを残さずに自動検出に戻ると人が気づけないので、ログに書く
             Log.Write($"{path} を読めませんでした。無いものとして続けます: {error.Message}");
             return [];
         }

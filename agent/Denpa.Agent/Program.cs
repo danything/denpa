@@ -66,7 +66,7 @@ if (args is ["--pair"])
     return 0;
 }
 /*
- * 動いているエージェントの /denpa/tuners を自分の証明書で読んで出す (インストーラが様子を見る。AgentTls.Status)。
+ * 動いているエージェントの /denpa/tuners を自分の証明書で読んで出す (インストーラが結果を確かめる。AgentTls.Status)。
  * 待ち受けを AGENT_HOST で絞っていればそのアドレスへ、そうでなければループバックへ繋ぐ
  */
 if (args is ["--status"])
@@ -81,12 +81,12 @@ if (args is ["--status"])
 // PIX-DT295 を確かめる。機材を設定して選局し (--card ならカードを読み)、受信の統計を出す (Dt295NativeProbe.cs)
 if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295NativeProbe.Run(args);
 /*
- * **知らない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
+ * **対応していない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
  */
 if (args.Length > 0)
 {
-    Console.Error.WriteLine($"知らない引数です: {string.Join(" ", args)}");
+    Console.Error.WriteLine($"対応していない引数です:{string.Join(" ", args)}");
     Console.Error.WriteLine("usage: denpa-agent                     (引数なしでサーバとして立ち上がる)");
     Console.Error.WriteLine("       denpa-agent --version");
     Console.Error.WriteLine("       denpa-agent --pair                (denpa と組むときの URL を出す)");
@@ -112,7 +112,7 @@ if (Environment.GetEnvironmentVariable("AGENT_HOST") is { Length: > 0 } hostText
 }
 /*
  * 元の TS の置き場。**denpa と同じ変数で決める** (`RAW_DIR`、無ければ `MEDIA_DIR/raw`、どちらも無ければ
- * `/media/raw`)。掛かったまま録れた TS を後から復号する (/denpa/decode) ときに読むので、denpa と
+ * `/media/raw`)。スクランブルされたまま録れた TS を後から復号する (/denpa/decode) ときに読むので、denpa と
  * 同じ実体を同じ名前で見せる。ここの外のファイルは求められても触らない
  */
 // 末尾の `/` は落とす (置き場の中かを `<置き場>/` で始まるかで見るので、`/media/raw/` だとどれも外になる)
@@ -124,13 +124,13 @@ var recorded = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
 var tls = AgentTls.Load(config.TlsDir, Environment.GetEnvironmentVariable("AGENT_PAIR_TOKEN"));
 /*
  * 合言葉が短いと、組むやり取りを覗いた人が HMAC の値から手元で総当たりできる。インストーラや chart が
- * 作るもの (43 字) なら当たらない。手で短いものを渡されたときだけ言う
+ * 作るもの (43 字) なら当たらない。手で短いものを渡されたときだけログに書く
  */
 if (tls.Token.Length < 32)
 {
     Log.Write($"合言葉 (AGENT_PAIR_TOKEN か {tls.Dir} の pair-token) が短すぎます ({tls.Token.Length} 字)。推測されないよう 32 字以上の乱数にしてください (docs/agent.md)");
 }
-// CECH-ZD1 J がチャンネルごとに覚えたロックの値 (tuners.json の隣。Zd1j.cs)
+// CECH-ZD1 J がチャンネルごとに記録したロックの値 (tuners.json の隣。Zd1j.cs)
 Zd1jBoard.Locks = new Zd1jLocks(config.Zd1jLocksFile);
 // 使わないカードリーダー (tuners.json の隣。CardChoice.cs)。カードを開く前に読む
 CardChoice.Load(config.CardsFile);
@@ -140,7 +140,7 @@ CardNotice.Shared = new CardNotice(() => events.Emit("card"));
 var (tuners, detected) = config.ResolveTuners();
 
 /*
- * 鍵を配る・貰うのは LAN の中だけ (CardLan.cs)。読めない値なら、範囲を勝手に
+ * 鍵を配る・受け取るのは LAN の中だけ (CardLan.cs)。読めない値なら、範囲を勝手に
  * 決めずに止まる
  */
 CardLanPolicy cardLan;
@@ -172,13 +172,13 @@ var tune = new TuneOptions(
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
 
 /*
- * **px4-userland の筐体の px4d を起こす。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
+ * **px4-userland の筐体の px4d を起動する。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
  * 使う受信機が無くなった筐体の px4d は止める (内蔵カードリーダーを復号に使っていれば止めない。UserlandDaemon.Prepare)。
  * 筐体も受信機も px4d --list-json で分かっているので、ここで顔ぶれは変わらない (Px4.cs)。
  * 画面からの書き換えと抜き差しで同時に呼ばれても、あとから呼んだほうが最後の設定で揃えるよう 1 つずつ通す
  */
 var daemonsGate = new Lock();
-// 止めるときに px4d / asicend を止めたら立てる。そのあとの抜き差しや設定の書き換えで起こし直さない
+// 止めるときに px4d / asicend を止めたら立てる。そのあとの抜き差しや設定の書き換えで起動し直さない
 var daemonsStopped = false;
 void PrepareDaemons()
 {
@@ -200,7 +200,7 @@ void PrepareDaemons()
  * 画面からの書き換え (PUT /denpa/tuners) と同じロックで、書き足しと書き換えが混ざらないようにする
  */
 var tunersGate = new Lock();
-// 前に探したときに挿さっていた機材。起きたときに挿さっていたものは、挿されたとは数えない
+// 前に探したときに挿さっていた機材。起動したときに挿さっていたものは、挿されたとは数えない
 HashSet<string?> seen = [];
 
 // 定義を書き、読み直したものに入れ替える。tunersGate の中で呼ぶ
@@ -362,7 +362,7 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
         /*
          * 確保できたが選局できなかった (同期しない・デバイスが開けない…)。
          * **理由を必ず残す。** 空の 500 を返していたせいで、総当たりの
-         * スキャンが「選局できません (500)」としか言えず、何が起きているのか
+         * スキャンが「選局できません (500)」としか返せず、何が起きているのか
          * 分からなかった (docs/agent.md)
          */
         Log.Write($"{type} {channel} ({use}): {error.Message}");
@@ -443,7 +443,7 @@ app.MapGet("/denpa/events", async (HttpContext http) =>
          * 5 分で切るので、深夜など選局の動きが 5 分止まると、切れる → 繋ぎ直しても
          * 応答が来ない → 「チューナーに繋がりません」と出る、を繰り返していた
          * (実機の Slack で 1 時間おきに鳴った)。SSE のコメント (`:` で始まる行) は
-         * 受け手が読み飛ばすものなので、それで生きていると伝える
+         * 受け手が読み飛ばすものなので、それで接続が続いていることを伝える
          */
         /*
          * **止まるときはこちらから閉じる。** Kestrel は開いている応答が終わるのを 30 秒 (既定の ShutdownTimeout)
@@ -519,7 +519,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     {
         lock (tunersGate) ApplyTuners([.. next.OfType<TunerSpec>()]);
     });
-    // 新しく書かれた筐体があれば px4d / asicend を起こす。数秒かかるので返事は待たせない
+    // 新しく書かれた筐体があれば px4d / asicend を起動する。数秒かかるので応答は待たせない
     _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, TunerList());
 });
@@ -608,14 +608,14 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
             else if (Zd1j.Parse(device) is { } zd1j) Zd1jBoard.CloseIfIdle(zd1j);
         }
     });
-    // 内蔵カードリーダーのためだけに動かしていた px4d / asicend を止める (UserlandDaemon.Prepare)。返事は待たせない
+    // 内蔵カードリーダーのためだけに動かしていた px4d / asicend を止める (UserlandDaemon.Prepare)。応答は待たせない
     _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, new JsonObject { ["disabled"] = Json.Strings(disabled.Order(StringComparer.Ordinal)) });
 });
 
 /*
- * 有料放送の契約をカードに聞く (契約確認。0x90 0x3C)。EIT の CA 契約情報記述子 (0xCB) にある verification (Base64) と、
- * 聞きたい日 (date。MJD) を渡すと、カードの返り値 (0x0800 なら月額の契約あり など) を返す。選局は要らない (denpa の contracts.ts)
+ * 有料放送の契約をカードに問い合わせる (契約確認。0x90 0x3C)。EIT の CA 契約情報記述子 (0xCB) にある verification (Base64) と、
+ * 問い合わせる日 (date。MJD) を渡すと、カードの返り値 (0x0800 なら月額の契約あり など) を返す。選局は要らない (denpa の contracts.ts)
  */
 app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
 {
@@ -663,20 +663,20 @@ app.MapPost("/denpa/decode", async (HttpContext http) =>
 // --- 診断 -----------------------------------------------------------------
 // 直近のログ。設定の「その他」の「ログ」が読む (Json.cs の Log)
 app.MapGet("/denpa/logs", (HttpContext http) => Respond.Write(http, Log.Recent.ToJson()));
-// エージェント自身のバージョン・OS・arch と、macOS なら CCID ドライバ (About.cs)。macOS では `defaults` を起こすので背景で
+// エージェント自身のバージョン・OS・arch と、macOS なら CCID ドライバ (About.cs)。macOS では `defaults` を起動するので背景で
 app.MapGet("/denpa/about", async (HttpContext http) => await Respond.Write(http, await Task.Run(About.ToJson)));
 
 app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));
 
 /*
- * **px4d / asicend は背景で起こす。** ready までファームウェアの流し込みで
+ * **px4d / asicend は背景で起動する。** ready までファームウェアの流し込みで
  * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の API (= PT3 など他の
  * チューナーの提供) まで遅れる。筐体が無ければ何もしない。
  *
  * **手元のカードは起動したときに開いておく** (LocalCard.Warm)。最初の選局がカードを開くのを待たない。
- * px4d / asicend の内蔵リーダーは起きてからでないと見えないので、起こし終えたらもう一度試す
- * (開けていれば何もしない)。鍵を貰いに行く拠点 (CARD_URL) で配りもしないなら、手元のカードは使わない
+ * px4d / asicend の内蔵リーダーは起動してからでないと見えないので、起動し終えたらもう一度試す
+ * (開けていれば何もしない)。鍵を受け取る拠点 (CARD_URL) で配りもしないなら、手元のカードは使わない
  */
 var warmCard = cardUrl is not { Length: > 0 } || sharing is not null;
 if (warmCard) _ = Task.Run(Keys.Local.Warm);
@@ -688,7 +688,7 @@ _ = Task.Run(() =>
 
 /*
  * 機材の抜き差しを受け取ったら、定義に足す (Rescan。DeviceWatch.cs)。偽の選局で動かす適合テストでは受け取らない。
- * 先にいま挿さっている機材を控えてから受け取り始める (起きたときに挿さっていたものを、挿されたと数えない)
+ * 先にいま挿さっている機材を控えてから受け取り始める (起動したときに挿さっていたものを、挿されたと数えない)
  */
 DeviceWatch? watch = null;
 if (tune.FakeTune is null)
@@ -718,7 +718,7 @@ app.Lifetime.ApplicationStopping.Register(pool.CloseAll);
 app.Lifetime.ApplicationStopped.Register(() =>
 {
     pool.CloseAll();
-    // CECH-ZD1 J は眠らせて LED を緑に戻してから閉じる (カードのために開いていても)
+    // CECH-ZD1 J はスリープさせて LED を緑に戻してから閉じる (カードのために開いていても)
     Zd1jBoard.CloseAll();
     // PIX-DT295 は書いた設定を戻してから閉じる (カードのために開いていても)
     Dt295NativeDevice.CloseAll();
@@ -775,7 +775,7 @@ internal static class Respond
 }
 
 /// <summary>
-/// 止まれと言われてから、**録画が終わるまで待つ**もの。
+/// 止まれの合図を受けてから、**録画が終わるまで待つ**もの。
 ///
 /// <para>
 /// **合図をこちらで受け取る。** 既定の受け取り役 (ConsoleLifetime) に任せると、

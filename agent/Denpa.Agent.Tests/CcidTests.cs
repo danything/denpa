@@ -2,7 +2,7 @@ using TUnit.Core.Enums;
 
 namespace Denpa.Agent.Tests;
 
-/// <summary>リーダーが返すメッセージの種類 (CCID 1.1 の 6.2)。本体は Seq で答えを見分けるので、偽のリーダーだけが使う</summary>
+/// <summary>リーダーが返すメッセージの種類 (CCID 1.1 の 6.2)。本体は Seq で応答を見分けるので、偽のリーダーだけが使う</summary>
 internal static class CcidAnswer
 {
     public const byte DataBlock = 0x80;
@@ -15,7 +15,7 @@ internal static class CcidAnswer
  *
  * 本物のリーダーは無い。ディスクリプタは Gemalto (Gemplus) PC Twin Reader (08e6:3437) の
  * 値で組み (CCID ドライバの readers/GemPCTwin.txt)、リーダーはバルク転送の入口ごと偽物にする。
- * 偽物は USB の振る舞い (パケットの倍数で終わるメッセージは ZLP が無いと返らない) も真似る。
+ * 偽物は USB の振る舞い (パケットの倍数で終わるメッセージは ZLP が無いと返らない) も再現する。
  * 実機で当てるのは Ccid.Describe() (`denpa-agent --card`)。
  */
 public class CcidTests
@@ -120,7 +120,7 @@ public class CcidTests
 
     /// <summary>
     /// 偽のリーダー。命令を受けると <c>handler</c> が返す応答を積む。
-    /// 読み方が USB として無理なら (ZLP 無しでは返らない・パケットの途中で切る) その場で落とす
+    /// 読み方が USB として無理なら (ZLP 無しでは返らない・パケットの途中で切る) その場で例外を投げる
     /// </summary>
     private sealed class FakeReader(Func<CcidReply, IEnumerable<byte[]>> handler, int packet = 64) : IBulkPipe
     {
@@ -164,8 +164,8 @@ public class CcidTests
     private static byte[] Slot(CcidReply command, byte status = 0x01) => Reply(CcidAnswer.SlotStatus, command.Seq, status, 0, []);
 
     /// <summary>
-    /// PC Twin に B-CAS が挿さっているつもりの偽物。カードは I ブロックに <paramref name="answer"/> を返す。
-    /// 返す前に時間延長と、番号の違う (前の誰かが残した) 応答を挟む
+    /// B-CAS が挿さった PC Twin の偽物。カードは I ブロックに <paramref name="answer"/> を返す。
+    /// 返す前に時間延長と、番号の違う (前の命令が残した) 応答を挟む
     /// </summary>
     private static FakeReader TwinWithBcas(byte[] answer)
     {
@@ -183,7 +183,7 @@ public class CcidTests
                     Reply(CcidAnswer.DataBlock, command.Seq, 0x80, 1, []),
                     Reply(CcidAnswer.DataBlock, command.Seq, 0, 0, T1Protocol.Block((byte)(cardNs++ << 6), answer)),
                 ],
-            _ => throw new InvalidOperationException($"思わぬ命令 0x{command.Type:X2}"),
+            _ => throw new InvalidOperationException($"予期しない命令 0x{command.Type:X2}"),
         });
     }
 
@@ -271,7 +271,7 @@ public class CcidTests
         });
         var link = new CcidLink("APDU", reader, info);
         link.Reset();
-        // 自分で決めるリーダーには SetParameters も S(IFS) も送らない。電圧は自動 (0)
+        // 自動で決めるリーダーには SetParameters も S(IFS) も送らない。電圧は自動 (0)
         await Assert.That(reader.Commands.Any(c => c.Type == CcidMessage.SetParameters)).IsFalse();
         await Assert.That(reader.Commands.Single(c => c.Type == CcidMessage.PowerOn).Status).IsEqualTo((byte)0);
 

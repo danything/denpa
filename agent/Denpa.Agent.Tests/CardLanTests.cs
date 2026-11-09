@@ -8,8 +8,8 @@ namespace Denpa.Agent.Tests;
  * 鍵を配るのは LAN の中だけ (CardLan.cs)。
  *
  * アドレスの判定・設定の読み方・断ったときの文と、TTL と往復時間が本物のソケットに
- * 効くことを確かめる。ポートを分けたことと 403 の答えは適合テスト (agent/conformance.test.ts) が
- * 本物を起こして当てている。
+ * 効くことを確かめる。ポートを分けたことと 403 の応答は適合テスト (agent/conformance.test.ts) が
+ * 本物のエージェントを起動して確かめている。
  */
 public class CardLanTests
 {
@@ -244,7 +244,7 @@ public class CardLanTests
     [Test]
     public async Task Linux_では待ち受けの_TTL_を受けた接続が引き継ぐ()
     {
-        // 付け直すので引き継がなくても困らないが、SYN-ACK から効いていることの裏付け
+        // 付け直すので引き継がなくても問題無いが、SYN-ACK から効いていることの裏付け
         if (!OperatingSystem.IsLinux()) return;
         foreach (var address in Loopbacks())
         {
@@ -259,7 +259,7 @@ public class CardLanTests
     }
 
     [Test]
-    public async Task 貰いに行く接続にも_TTL_が効く()
+    public async Task 鍵を受け取る接続にも_TTL_が効く()
     {
         foreach (var address in Loopbacks())
         {

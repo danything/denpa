@@ -1,10 +1,10 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * MULTI2 の答え合わせ。
+ * MULTI2 の結果を、libaribb25 で取った値と比べる。
  *
- * 答えは libaribb25 に同じ鍵と中身を渡して取った値。**今まで録れていたものが
- * 同じように復号できること**が肝心なので、仕様書から起こした値ではなくこちらと比べる。
+ * 比べる値は libaribb25 に同じ鍵と中身を渡して取った。**今まで録れていたものが
+ * 同じように復号できること**が肝心なので、仕様書から作った値ではなくこちらと比べる。
  * 鍵と中身はでたらめ (固定の種の LCG) で、意味は無い。
  */
 public class Multi2Tests
@@ -20,7 +20,7 @@ public class Multi2Tests
         "32a59b1b3d107cf778d67fe26df81191297e9395cb12c557ce5af1d41618d719bc045b7e9965f1a29471c42aac6aa938" +
         "c475c7ad3238021f053b2c991afceb15decf68bae07cbcd61e971b9a0b9dbe9763d392fcafdfa28c";
 
-    /// <summary>偶数の鍵で 184 バイト (1 パケットの中身まるごと) を復号した答え</summary>
+    /// <summary>偶数の鍵で 184 バイト (1 パケットの中身まるごと) を復号した結果</summary>
     private const string EvenDecrypted =
         "3fd15add3457b22305c9060ec8e1f4074e84cf3bc847432d9c3eed2c6c615fb3232f2de1578a9ef3783d91290d8daff3" +
         "a94ece918be027661804d9a3ec3d39d6716ae39fac832025fa125aa34276b9a778d2e0e185d5e888b19c29e7bca3dc86" +
@@ -62,7 +62,7 @@ public class Multi2Tests
         await Assert.That(Decrypt(even: false, 184)).IsEqualTo(OddDecrypted);
 
     /// <summary>
-    /// 8 バイトに満たない尻尾は OFB。**尻尾の前までは CBC の答えと同じ**で、
+    /// 8 バイトに満たない尻尾は OFB。**尻尾の前までは CBC の結果と同じ**で、
     /// 尻尾だけが違う値になる
     /// </summary>
     [Test]
@@ -82,7 +82,7 @@ public class Multi2Tests
     }
 
     [Test]
-    public async Task 掛ける向きも同じ答えになる()
+    public async Task 暗号化する向きも同じ値になる()
     {
         var data = Convert.FromHexString(Data);
         Cipher().Encrypt(even: true, data);
@@ -94,9 +94,9 @@ public class Multi2Tests
             .IsEqualTo(EvenEncrypted[..352] + "5e7511322ca057");
     }
 
-    /// <summary>SIMD で並べる経路と 1 つずつの経路の境目 (長さ) を跨いでも、掛けて復号すれば戻る</summary>
+    /// <summary>SIMD で並べる経路と 1 つずつの経路の境目 (長さ) を跨いでも、暗号化して復号すれば戻る</summary>
     [Test]
-    public async Task どの長さでも掛けて復号すれば戻る()
+    public async Task どの長さでも暗号化して復号すれば戻る()
     {
         var cipher = Cipher();
         var random = new Random(7);

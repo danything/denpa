@@ -15,7 +15,7 @@ namespace Denpa.Agent;
 /// <param name="Locked">復調がロックしているか</param>
 /// <param name="Cn">C/N。測れなければ null</param>
 /// <param name="Unit"><c>dB</c> か <c>raw</c> (<see cref="Db"/>・<see cref="Raw"/>)</param>
-/// <param name="AtTune">選局したときに測った値。px4d は選局の答えでしか C/N を返さないので、受信中は変わらない</param>
+/// <param name="AtTune">選局したときに測った値。px4d は選局の応答でしか C/N を返さないので、受信中は変わらない</param>
 /// <param name="StrengthDbm">
 /// 電波の強度 (dBm)。dBm で返す機材 (DVB のドライバが <c>FE_SCALE_DECIBEL</c> で返すもの・DiB8000 の表) だけで、ほかは null。
 /// 機材ごとに校正されておらず、機種どうしでは比べられない。JSON の <c>strengthDbm</c> は後から足したもので、古いサーバは読まずに捨てる

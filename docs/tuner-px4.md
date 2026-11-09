@@ -1,7 +1,7 @@
 # PX-Q3U4・PX-W3U4・PX-MLT (px4-userland)
 
 PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーです。**同時に取れるチャンネルは受信機の数だけ**で、
-数と種別 (地上波・衛星・両方) は筐体ごとに px4-userland に聞いて決めます (Q3U4 は受信機ごとに地上波か衛星か決まっていて、MLT5 系はどれも両方)。
+数と種別 (地上波・衛星・両方) は筐体ごとに px4-userland に問い合わせて決めます (Q3U4 は受信機ごとに地上波か衛星か決まっていて、MLT5 系はどれも両方)。
 **内蔵のカードリーダーがある機種は、それも使えます。** Linux・Mac (Apple Silicon)・Windows (x64) で使えます。
 
 チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#px4-userland-の作り)。
@@ -32,9 +32,9 @@ Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=
   筐体として並びます。番号のままだと同じ
   `px4:000000000000001:0` が 2 つでき、`px4d --device` も番号だけでは 1 台に決められず断ります。
   そこで名前を番号と USB ポートにし (`px4:000000000000001_1-2.3:0`)、`px4d` を
-  `--device <番号> --usb-path <USBポート> --instance <名前>` で起こし、`px4ctl` やソケットも
+  `--device <番号> --usb-path <USBポート> --instance <名前>` で起動し、`px4ctl` やソケットも
   その名前で呼びます (SPEC 4.1)。**挿すポートを変えると別のチューナーになります**
-  (px4-userland も「抜き差し後の物理個体は保証しない」と言っています)
+  (px4-userland の docs にも「抜き差し後の物理個体は保証しない」とあります)
 
 ## 衛星の LNB 給電
 
@@ -48,8 +48,8 @@ Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=
   設定の「受信」の「チューナー」のそのチューナーの欄 (空いているときの `error`) に理由を出します。0V での衛星受信は
   これらの機種の対応範囲で、アンテナがほかの機器から給電されていれば受かります
   (給電が無ければ「同期しませんでした」)。出せるかどうかは一覧の受信機の
-  `lnb_15v_supported` で、`px4ctl list` には載らないので、px4d を起こす前に一覧で聞いて
-  写します。一覧を聞けなかったときは言われたとおりに要求します
+  `lnb_15v_supported` で、`px4ctl list` には載らないので、px4d を起動する前に一覧で問い合わせて
+  写します。一覧を取得できなかったときは設定どおりに要求します
 
 ## ファームウェア
 
@@ -59,15 +59,15 @@ Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=
 (`agent/Denpa.Agent/firmware/it930x-firmware.bin`、2,169 バイト) で、ITE Tech. から無改変での再配布の許諾を得ています
 ([licenses.md](licenses.md#チューナーエージェントに同梱するファームウェア))。インターネットに繋がっていなくても使えます。
 
-- エージェントは px4d を起こすときに、同梱のものを `tuners.json` の隣 (コンテナなら `/config/it930x-firmware.bin`) に
+- エージェントは px4d を起動するときに、同梱のものを `tuners.json` の隣 (コンテナなら `/config/it930x-firmware.bin`) に
   書き出し、そのパスを px4d の `--firmware` に渡します (`Px4Firmware.cs`)。同じものが置いてあれば書き直しません
 - 環境変数 `PX4_FIRMWARE` にパスを指定すると、同梱のものの代わりにそれを使います。どちらも SHA-256 を確かめ、
-  違えば px4d を起こさず、理由を記録とチューナー画面 (そのチューナーの `error`) に出します。そのあいだも他のチューナーは使えます
+  違えば px4d を起動せず、理由を記録とチューナー画面 (そのチューナーの `error`) に出します。そのあいだも他のチューナーは使えます
 
 ## 確かめたこと
 
 **実機には当てていません** (手元の機材は PT3)。確かめたのは、機材に触らない部分
 (`px4d --list-json` / `px4ctl list` の読み方・device 文字列・TUNE の中身・受信機と内蔵カードの IPC)
-と、配布物の CLI が期待どおりの引数を受けることです。テストは `Px4*Tests.cs` で (受信機とカードは px4d のふりをしたソケット相手)、出力の形式は px4-userland の SPEC 4.6 と自身のテストの期待値に
+と、配布物の CLI が期待どおりの引数を受けることです。テストは `Px4*Tests.cs` で (受信機とカードは偽の px4d のソケットを相手にする)、出力の形式は px4-userland の SPEC 4.6 と自身のテストの期待値に
 合わせてあります。実機で当てるのは
 `denpa-agent --tune px4:<筐体の番号>:2 T27` (`Probe.cs`)。

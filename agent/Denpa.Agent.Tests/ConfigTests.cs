@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Denpa.Agent.Tests;
 
 /*
- * 取り合いと HTTP の API は `agent/conformance.test.ts` が本物を起こして当てている。
+ * 取り合いと HTTP の API は `agent/conformance.test.ts` が本物を起動して確かめている。
  * こちらで見るのは、そこからは届きにくいところで、
  * **設定の読み書き**と、チューナー自動検出の値の読み取り。
  */
@@ -144,7 +144,7 @@ public class ChannelStoreTests
     }
 
     [Test]
-    public async Task 局名は逃がさずそのまま書く()
+    public async Task 局名はエスケープせずそのまま書く()
     {
         /*
          * `channels.json` は人が開いて確かめるもの。既定のエンコーダは非 ASCII を
@@ -190,7 +190,7 @@ public class DeviceProbeTests
     }
 
     [Test]
-    public async Task 知らない方式は種別にしない()
+    public async Task 対応していない方式は種別にしない()
     {
         // DVB-T や ATSC が出てきても、日本の放送には使わない
         await Assert.That(DeviceProbe.TypesFor([3, 11])).IsEmpty();
@@ -206,11 +206,11 @@ public class DeviceProbeTests
     }
 
     [Test]
-    public async Task 方式を答えないドライバは名前で当てる()
+    public async Task 方式を返さないドライバは名前から推定する()
     {
         await Assert.That(DeviceProbe.TypesFromName("Toshiba TC90522 ISDB-S module")).IsEquivalentTo(["BS", "CS"], CollectionOrdering.Matching);
         await Assert.That(DeviceProbe.TypesFromName("Toshiba TC90522 ISDB-T module")).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
-        // 名前に方式が入っていないものは当てにいかない (黙って間違えるより出さない)
+        // 名前に方式が入っていないものは当てにいかない (間違った種別を出すより、出さない)
         await Assert.That(DeviceProbe.TypesFromName("Some Generic Frontend")).IsEmpty();
     }
 

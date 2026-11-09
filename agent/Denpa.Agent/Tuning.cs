@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 /// デバイスを**確保したまま**選局する。
 ///
 /// <para>
-/// 選局のたびに外のコマンド (<c>recisdb</c>) を起こしていた頃は、チャンネルを
+/// 選局のたびに外のコマンド (<c>recisdb</c>) を起動していた頃は、チャンネルを
 /// 変えるたびにデバイスが宙に浮き、取り直す隙間ができた (docs/agent.md)。
 /// </para>
 ///
@@ -22,7 +22,7 @@ namespace Denpa.Agent;
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
 /// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など) と asicen-userland の機材 (PX-W3U3。同じ IPC)。<c>px4d</c> (asicen なら <c>asicend</c>) が持ち、受信機を取ったまま制御ソケットで選局し直す (Px4.cs)</item>
-/// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起こしたまま標準入力で選局し直す (Siano.cs)</item>
+/// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起動したまま標準入力で選局し直す (Siano.cs)</item>
 /// <item><see cref="Zd1jTuner"/> … Sony CECH-ZD1 J。エージェントが USB を直に持ち、ボードを開いたまま周波数まわりだけ書き換える (Zd1j.cs)</item>
 /// <item><see cref="Dt295NativeTuner"/> … PIXELA PIX-DT295。エージェントが USB を直に持ち、機材を初めての選局で開いたまま選局し直す (Dt295NativeTuner.cs)</item>
 /// </list>
@@ -44,7 +44,7 @@ public interface ITuneDevice : IDisposable
     Stream Output { get; }
 
     /// <summary>
-    /// 前の選局がまだ生きているか。
+    /// 前の選局がまだ続いているか。
     ///
     /// <para>
     /// DVB は一度合わせたら合ったまま。px4-userland は読む側がいなくなると
@@ -83,7 +83,7 @@ internal static unsafe partial class Sys
 
     /// <summary>
     /// <c>O_CLOEXEC</c>。Linux は 0x80000、macOS は 0x1000000。.NET の Process.Start は付いていない fd を閉じないので、
-    /// 付けずに開くと、あとから起こした px4d・asicend・siano-ts がデバイスを開いたまま持ち続け、閉じたあとに開き直すと Device or resource busy になる
+    /// 付けずに開くと、あとから起動した px4d・asicend・siano-ts がデバイスを開いたまま持ち続け、閉じたあとに開き直すと Device or resource busy になる
     /// </summary>
     public static readonly int CloseOnExec = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
 
@@ -138,7 +138,7 @@ internal static class TsBuffer
     internal const int Depth = 8 * 1024 * 1024;
 
     /// <summary>
-    /// 待ちは Inline で起こす (スレッドプールに回さない。書く側は専用のスレッドで、読む側も 200ms ごとに自分で起きる)
+    /// 待ちの続きは Inline で呼ぶ (スレッドプールに回さない。書く側は専用のスレッドで、読む側も 200ms ごとに自分で確かめる)
     /// </summary>
     public static Pipe New() => new(new PipeOptions(
         pauseWriterThreshold: Depth,
@@ -196,27 +196,27 @@ internal static class TsBuffer
 /// <para>
 /// 素直に開いて読むと、<c>read</c> で待っている間は誰にも止められない。
 /// TS が来なくなったチューナーを確保したまま、畳もうとしても畳めない、という
-/// 止まり方をする。<c>poll</c> で待って**時々起きる**ようにしてある。
+/// 止まり方をする。<c>poll</c> で待って**時々印を確かめる**ようにしてある。
 /// </para>
 ///
 /// <para>
 /// **Windows には poll が無い。** 子 (siano-ts) の標準出力の pipe は .NET の <see cref="Stream"/> を
-/// 裏のスレッドに読ませ、こちらは同じく 200ms ごとに起きて印を見る (<see cref="Background"/>)。
+/// 裏のスレッドに読ませ、こちらは同じく 200ms ごとに印を確かめる (<see cref="Background"/>)。
 /// px4d・CECH-ZD1 J・DT295 から受けた TS はどの OS でも fd を使わない (<see cref="Piped"/>)。
 /// </para>
 /// </summary>
 /// <param name="handle">読む fd。DVB の dvr でも、子プロセスの標準出力の pipe でも同じ</param>
 /// <param name="ended">
 /// **尽きたときの理由。** 子プロセスの pipe なら EOF は子が終わったということで、
-/// 黙って 0 を返すと読む側には「選局が終了しました」としか伝わらない。
+/// 理由を付けずに 0 を返すと読む側には「選局が終了しました」としか伝わらない。
 /// 理由があるなら (終了コード・stderr の末尾) それを投げる。null なら普通の終わり
 /// </param>
 internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? ended = null) : Stream
 {
-    /// <summary>読み出し側そのもの。**リングバッファの大きさはここに言う** (<c>DvbTuner.StartFilter</c>)</summary>
+    /// <summary>読み出し側そのもの。**リングバッファの大きさはここに設定する** (<c>DvbTuner.StartFilter</c>)</summary>
     public SafeFileHandle Handle => handle;
 
-    /// <summary>この間隔で起きて、畳めと言われていないか見る</summary>
+    /// <summary>この間隔で、畳む印が立っていないか確かめる</summary>
     private const int WakeMs = 200;
 
     /// <summary>Windows の読み出し側 (<see cref="Background"/>)。あれば fd は使わない</summary>
@@ -234,12 +234,12 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         : this(new SafeFileHandle(), ended) => _piped = new Piped(reader);
 
     /// <summary>
-    /// **<see cref="PipeReader"/> から読む。待つのは 200ms ずつ** (fd の poll と同じく、時々起きて印を見る)。
+    /// **<see cref="PipeReader"/> から読む。待つのは 200ms ずつ** (fd の poll と同じく、時々印を確かめる)。
     ///
     /// <para>
     /// 読みかけの間に読む側が抜けても、待っている読み (<c>ReadAsync</c>) は捨てずに次の読む側が引き継ぐ。
     /// PipeReader は同時に 1 つしか読めないので、読む側はロックで 1 つずつ通す (<see cref="Background"/> と同じ)。
-    /// 溜めにあるぶんは <c>TryRead</c> で待たずに取り、無いときだけ待つ (待たない読みは確保をしない)
+    /// バッファにあるぶんは <c>TryRead</c> で待たずに取り、無いときだけ待つ (待たない読みは確保をしない)
     /// </para>
     /// </summary>
     private sealed class Piped
@@ -249,7 +249,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
         /// <summary>
         /// 待っている読み。**Task にしない。** 待つたびに Task と待ち合わせの入れ物を作ると、
-        /// 8 本ぶん流したときに秒あたり数千回の確保になる。読みが済んだら <see cref="_ready"/> を立ててもらい、
+        /// 8 本ぶん流したときに秒あたり数千回の確保になる。読みが済むと PipeReader が <see cref="_ready"/> を立てるので、
         /// それを 200ms ずつ待つ (どちらも使い回す)
         /// </summary>
         private ValueTask<ReadResult> _pending;
@@ -273,7 +273,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         /// 取ると、まだ済んでいない読みの結果を取得しようとして投げる (CI でときどき落ちていた)
         /// </para>
         /// <para>
-        /// <see cref="Wake"/> で起こされたときは <paramref name="giveUp"/> を見て、降りるならすぐ戻る
+        /// <see cref="Wake"/> で待ちが解けたときは <paramref name="giveUp"/> を確かめ、抜けるならすぐ戻る
         /// </para>
         /// </summary>
         private bool WaitPending(Func<bool>? giveUp = null)
@@ -284,7 +284,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                 var left = WakeMs - (int)(Environment.TickCount64 - since);
                 if (left <= 0 || !_ready.Wait(left)) return _pending.IsCompleted;
                 if (_pending.IsCompleted) break;
-                // 前の読みの合図か、起こされただけ。下ろして待ち直す (下ろす前にこの読みが済んでいても、上の印で気づく)
+                // 前の読みの合図か、Wake で待ちが解けただけ。下ろして待ち直す (下ろす前にこの読みが済んでいても、上の印で分かる)
                 _ready.Reset();
                 if (giveUp?.Invoke() == true) return false;
             }
@@ -292,12 +292,12 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         }
 
         /// <summary>
-        /// **待っている読む側を今すぐ起こす** (止めたとき)。起きた側は降りる合図を見て戻る。
-        /// 合図を立てる前に降りる合図を立てておくこと (起きた側が見落とさないように)
+        /// **待っている読む側の待ちを今すぐ解く** (止めたとき)。待ちが解けた側は抜ける合図を確かめて戻る。
+        /// 合図を立てる前に抜ける合図を立てておくこと (待ちが解けた側が見落とさないように)
         /// </summary>
         public void Wake() => _ready.Set();
 
-        /// <summary>読めたバイト数。0 は尽きた、null は降りた</summary>
+        /// <summary>読めたバイト数。0 は尽きた、null は抜けた</summary>
         public int? Read(Span<byte> target, Func<bool> giveUp)
         {
             while (!_gate.TryEnter(WakeMs))
@@ -351,7 +351,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
         /// <summary>
         /// 読むのをやめる。書く側はもう終わっている (Px4Stream などが先に閉じる) ので、待っている読みも戻っている。
-        /// **読む側がまだ中にいれば触らない** (同時に触ると PipeReader が投げる。溜めは GC に任せる)
+        /// **読む側がまだ中にいれば触らない** (同時に触ると PipeReader が投げる。バッファは GC が回収する)
         /// </summary>
         public void Complete()
         {
@@ -361,7 +361,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
                 _reader.CancelPendingRead();
                 if (_waiting && WaitPending())
                 {
-                    // 受けた読みは返してから閉じる (返さないまま閉じると、読んでいる最中だと言われる)
+                    // 受けた読みは返してから閉じる (返さないまま閉じると、読んでいる最中として例外になる)
                     _reader.AdvanceTo(_pending.GetAwaiter().GetResult().Buffer.End);
                 }
                 _waiting = false;
@@ -381,7 +381,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>
     /// **読むのは裏のスレッド、待つのはこちら。** 読みかけの間に読む側が抜けても、読めたぶんは
     /// 捨てずに次の <see cref="DeviceStream.Read(byte[], int, int, Func{bool}?)"/> に渡す
-    /// (poll で待ってから読む Unix と同じく、抜けた側が中身を持ち去らない)
+    /// (poll で待ってから読む Unix と同じく、抜けた側が読んだぶんも失われない)
     /// </summary>
     private sealed class Background(Stream pipe)
     {
@@ -392,7 +392,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         private int _left;
 
         /// <summary>
-        /// 読めたバイト数。0 は尽きた、null は降りた。**ロックを待つ間も降りる合図を見る。**
+        /// 読めたバイト数。0 は尽きた、null は抜けた。**ロックを待つ間も抜ける合図を確かめる。**
         /// 先に読んでいる側が待っている間、後から来た側 (抜けたい側) がロックの手前で止まらないように
         /// </summary>
         public int? Read(Span<byte> target, Func<bool> giveUp)
@@ -436,20 +436,20 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     private const int EIntr = 4;
 
     /// <summary>
-    /// **読むのが追いつかず、ドライバのリングバッファが溢れた。** 選局はそのまま生きているので畳まない
+    /// **読むのが追いつかず、ドライバのリングバッファが溢れた。** 選局はそのまま続いているので畳まない
     /// (docs/agent.md「リングバッファが溢れても畳まない」)
     /// </summary>
     private static readonly int EOverflow = OperatingSystem.IsMacOS() ? 84 : 75;
 
     private volatile bool _closed;
 
-    /// <summary>畳めと言われたか (<see cref="Piped"/> に渡す。使い回す)</summary>
+    /// <summary>畳む指示が出たか (<see cref="Piped"/> に渡す。使い回す)</summary>
     private Func<bool>? _stopped;
 
     private int _overflows;
 
     /// <summary>
-    /// **最後に中身を返した時刻。** 溢れたときに「どれだけ空いたか」を言うために持つ
+    /// **最後に中身を返した時刻。** 溢れたときに「どれだけ空いたか」を記録に出すために持つ
     /// </summary>
     private long _handedAt = Stopwatch.GetTimestamp();
 
@@ -458,17 +458,17 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 
     /// <summary>
     /// この選局で一度でも中身を受け取ったか (<see cref="Begin"/> で false に戻る)。**受け取る前の溢れは、
-    /// 局を変えている間に埋まった印**で、この選局のせいではない
+    /// 局を変えている間に埋まった印**で、この選局が原因ではない
     /// </summary>
     private bool _handed;
 
-    /// <summary>選局の前に溢れていた回数。**読む側のせいではない**ので分けて数える</summary>
+    /// <summary>選局の前に溢れていた回数。**読む側が原因ではない**ので分けて数える</summary>
     private int _stale;
 
     /// <summary>
-    /// 前に聞かれてからリングバッファが溢れた回数と、**そのとき読む側がどれだけ空いていたか** (溜めが浅いのか
+    /// 前回呼ばれてからリングバッファが溢れた回数と、**そのとき読む側がどれだけ空いていたか** (バッファが浅いのか
     /// 読む側が止まっているのかを分ける。docs/agent.md「リングバッファが溢れても畳まない」)。
-    /// **聞いたら 0 に戻る** (デバイスは選局を跨いで開きっぱなしなので、どの選局のぶんか分からなくなる)
+    /// **呼んだら 0 に戻る** (デバイスは選局を跨いで開きっぱなしなので、どの選局のぶんか分からなくなる)
     /// </summary>
     public (int Count, int WorstGapMs, int Stale) TakeOverflows()
     {
@@ -526,8 +526,8 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     }
 
     /// <summary>
-    /// 畳む。Pipe に詰めた TS を待っている読む側は**すぐ起こす** (次に起きる 200ms を待たない。
-    /// 混んだ CI では 500ms を超えていた)。印を立ててから起こす (起きた側がその印を見て戻る)
+    /// 畳む。Pipe に詰めた TS を待っている読む側の待ちは**すぐ解く** (200ms ごとの確認を待たない。
+    /// 混んだ CI では 500ms を超えていた)。印を立ててから待ちを解く (待ちが解けた側がその印を確かめて戻る)
     /// </summary>
     public void Stop()
     {
@@ -544,7 +544,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>
     /// <see cref="Stop"/> のあと、**読みかけの読む側が戻るまで待つ** (長くても <paramref name="most"/>)。
     /// 止めたあとに始まった Read は fd に触らずに戻るので、見るのは中にいる数だけでよい。
-    /// 読む側が先に抜けていれば待たない (局替えのたびに固定で寝ていた 300ms がこれで消える)
+    /// 読む側が先に抜けていれば待たない (局替えのたびに固定で待っていた 300ms がこれで消える)
     /// </summary>
     public void WaitReaders(TimeSpan most)
     {
@@ -584,7 +584,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         {
             var target = buffer.AsSpan(offset, count);
             var read = _piped is not null
-                // 降りる合図を渡されなければ、畳めと言われたかだけを見る (使い回す。読むたびに作ると確保が積もる)
+                // 抜ける合図を渡されなければ、畳む指示が出たかだけを見る (使い回す。読むたびに作ると確保が積もる)
                 ? _piped.Read(target, giveUp is null ? (_stopped ??= () => _closed) : () => _closed || giveUp())
                 : _background!.Read(target, () => _closed || giveUp?.Invoke() == true);
             if (read is null) return 0;
@@ -682,7 +682,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
 ///
 /// <para>
 /// 手順は <c>recisdb</c> の DVB 側 (<c>dvbv5.rs</c>) と同じ並びにしてある。
-/// あちらが libdvbv5 越しにやっていることを、ここでは ioctl で直に言うだけ。
+/// あちらが libdvbv5 越しにやっていることを、ここでは ioctl で直に指定するだけ。
 /// </para>
 /// </summary>
 public sealed unsafe class DvbTuner : ITuneDevice
@@ -899,7 +899,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     }
 
     /// <summary>
-    /// <c>DTV_STAT_CNR</c> と <c>DTV_STAT_SIGNAL_STRENGTH</c> の答え (struct dtv_property。packed) を、この順に 2 つ並べたものを読む。
+    /// <c>DTV_STAT_CNR</c> と <c>DTV_STAT_SIGNAL_STRENGTH</c> の結果 (struct dtv_property。packed) を、この順に 2 つ並べたものを読む。
     /// **強度は dBm (<c>FE_SCALE_DECIBEL</c>。0.001 dBm 刻み) で返すドライバのものだけ使う。** 相対値はドライバごとの尺度で dBm に直せないので出さない
     /// </summary>
     internal static TunerSignal Stats(bool locked, ReadOnlySpan<byte> properties)
@@ -909,7 +909,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
         return scale == FeScaleDecibel ? cnr with { StrengthDbm = value / 1000.0 } : cnr;
     }
 
-    /// <summary><c>DTV_STAT_CNR</c> の答え (struct dtv_property。packed) を読む</summary>
+    /// <summary><c>DTV_STAT_CNR</c> の結果 (struct dtv_property。packed) を読む</summary>
     internal static TunerSignal Cnr(bool locked, ReadOnlySpan<byte> property)
     {
         var (scale, value) = Stat(property);
@@ -984,7 +984,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
          */
         if (Sys.Ioctl((int)_dvr.Handle.DangerousGetHandle(), DmxSetBufferSize, DvrBuffer) < 0)
         {
-            Log.Write($"[{_adapter}] dvr の溜めを広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");
+            Log.Write($"[{_adapter}] dvr のバッファを広げられませんでした ({Marshal.GetLastPInvokeErrorMessage()})");
         }
 
         // struct dmx_pes_filter_params { __u16 pid; enum input; enum output; enum pes_type; __u32 flags; }
@@ -1013,7 +1013,7 @@ public sealed unsafe class DvbTuner : ITuneDevice
     public void Dispose()
     {
         // 先に読み出し側を閉じる。demux を止めてから閉じると、dvr で待っている
-        // 読む側が誰にも起こされないまま残る
+        // 読む側の待ちが解けないまま残る
         _dvr.Dispose();
         _demux.Dispose();
         _frontend.Dispose();

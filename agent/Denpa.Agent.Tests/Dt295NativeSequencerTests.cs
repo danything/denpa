@@ -3,7 +3,7 @@ using TUnit.Assertions.Enums;
 namespace Denpa.Agent.Tests;
 
 /*
- * 機材の中の I2C の順次実行 (Dt295NativePrograms の操作 2) と、ホストが 1 つずつ行う場合 (Dt295NativeI2c.Run) が、
+ * 機材の中の I2C の順次実行 (Dt295NativePrograms の操作 2) と、ホストが 1 つずつ実行する場合 (Dt295NativeI2c.Run) が、
  * 同じ手順で同じ結果になることを、偽の機材 (Dt295Fake。I2C のコントローラのモデルつき) で確かめる。機材のプログラムは FR30 のエミュレータで動かす。
  */
 public class Dt295NativeSequencerTests
@@ -97,7 +97,7 @@ public class Dt295NativeSequencerTests
 
         await Assert.That(reply.Code).IsEqualTo(Dt295NativePrograms.I2cNack);
         await Assert.That(reply.Index).IsEqualTo(2u);
-        // 止まったあとの転送は行わない
+        // 止まったあとの転送は実行しない
         await Assert.That(fake.I2cLog).IsEquivalentTo(new[] { "10 W 0123", "11 W 0234" }, CollectionOrdering.Matching);
         // バスは空いていて、次の並びが通る
         var next = new Dt295I2cBatch();

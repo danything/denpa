@@ -22,14 +22,14 @@ public class Dib8096FastTests
     private static int Capacitor(FakeI2c i2c) => i2c.Log.Count(line => line.StartsWith("T18=E9", StringComparison.Ordinal));
 
     [Test]
-    public async Task キャパシタの較正は周波数ごとに覚えて使い回す()
+    public async Task キャパシタの較正は周波数ごとに保存して使い回す()
     {
         var (dib, i2c, _, _) = Make();
         dib.Tune(Uhf27);
         dib.Tune(Uhf13);
         i2c.Log.Clear();
         await Assert.That(dib.Tune(Uhf27)).IsEqualTo(DibLock.DataLocked);
-        // 二分探索 (7 回置いて最後にもう 1 回) ではなく、覚えた値を 1 回置いて ADC を 1 回見るだけ
+        // 二分探索 (7 回置いて最後にもう 1 回) ではなく、保存した値を 1 回置いて ADC を 1 回読むだけ
         await Assert.That(Capacitor(i2c)).IsEqualTo(1);
 
         // 初めての周波数は二分探索 (7 回置いて最後にもう 1 回)
@@ -39,7 +39,7 @@ public class Dib8096FastTests
     }
 
     [Test]
-    public async Task 覚えたキャパシタで合わなければ較正し直す()
+    public async Task 保存したキャパシタで合わなければ較正し直す()
     {
         var (dib, i2c, model, _) = Make();
         dib.Tune(Uhf27);
@@ -52,7 +52,7 @@ public class Dib8096FastTests
     }
 
     [Test]
-    public async Task ロックしなければ覚えたキャパシタを捨てる()
+    public async Task ロックしなければ保存したキャパシタを捨てる()
     {
         var (dib, i2c, model, _) = Make();
         dib.Tune(Uhf27);
@@ -86,9 +86,9 @@ public class Dib8096FastTests
         var lines = new List<string>();
         var (dib, _, model, time) = Make(lines.Add);
         dib.Tune(Uhf27);
-        await Assert.That(lines[^1]).Contains("キャパシタ: 較正した (覚えた値なし)");
+        await Assert.That(lines[^1]).Contains("キャパシタ: 較正した (保存した値なし)");
         await Assert.That(lines[^1]).Contains("温度: 測った");
-        await Assert.That(lines[^1]).Contains($"{Dib8096.FastPollMs}ms で見た歩数: ");
+        await Assert.That(lines[^1]).Contains($"{Dib8096.FastPollMs}ms 間隔で回した歩数: ");
         dib.Tune(Uhf13);
         dib.Tune(Uhf27);
         await Assert.That(lines[^1]).Contains("キャパシタ: 使い回し");
@@ -106,7 +106,7 @@ public class Dib8096FastTests
         var (dib, _, model, _) = Make();
         dib.Tune(Uhf27);
         await Assert.That(dib.LastSummary).StartsWith($"選局 {Uhf27} Hz: ");
-        await Assert.That(dib.LastSummary).Contains("キャパシタ: 較正した (覚えた値なし)");
+        await Assert.That(dib.LastSummary).Contains("キャパシタ: 較正した (保存した値なし)");
         await Assert.That(dib.LastSummary).Contains("温度: 測った");
         await Assert.That(dib.LastSummary).EndsWith("、同期した");
         dib.Tune(Uhf13);

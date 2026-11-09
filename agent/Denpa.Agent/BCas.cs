@@ -10,19 +10,19 @@ namespace Denpa.Agent;
 /// <para>
 /// 使うコマンドは 5 つ。初期設定条件 (INT, <c>90 30</c>) で鍵を作るための定数を、
 /// カード ID 情報 (IDI, <c>90 32</c>) でカードの番号を、ECM 受信 (<c>90 34</c>) で
-/// スクランブル鍵を、契約確認 (<c>90 3C</c>) で有料放送の契約の有無を貰い、EMM 受信 (<c>90 36</c>) で
+/// スクランブル鍵を、契約確認 (<c>90 3C</c>) で有料放送の契約の有無を受け取り、EMM 受信 (<c>90 36</c>) で
 /// 契約の更新を渡す。**応答の読み方は libaribb25 と同じにしてある。**
 /// 番号の出し方も鍵の順も、前と同じ値が出ないと画面の番号が変わって見える。
 /// </para>
 ///
 /// <para>
 /// **1 枚のカードを全部のチューナーで使い回す。** カードに触るのは順番に
-/// (<see cref="_gate"/>)。カードに聞くのは ECM の中身が変わったとき (鍵が変わるとき) だけなので、待たされても僅か。
+/// (<see cref="_gate"/>)。カードに問い合わせるのは ECM の中身が変わったとき (鍵が変わるとき) だけなので、待たされても僅か。
 /// </para>
 ///
 /// <para>
 /// **接続が切れたら繋ぎ直す。** カードを抜き差しした・リーダーを挿し直した・
-/// px4d を起こし直した、のどれでも、次の ECM で探し直して INT からやり直す。
+/// px4d を起動し直した、のどれでも、次の ECM で探し直して INT からやり直す。
 /// 1 回繋ぎ直して駄目なら理由を添えて投げる。
 /// </para>
 /// </summary>
@@ -71,11 +71,11 @@ public sealed class BCas : IKeySource, IDisposable
     private readonly Lock _gate = new();
 
     /// <summary>
-    /// 同じ ECM には同じ鍵。**同じチャンネルを見ているストリームが多いほど効く。**
+    /// 同じ ECM には同じ鍵。**同じチャンネルを受信しているストリームが多いほど効く。**
     ///
     /// <para>
     /// 録画・ライブ・番組表が同じ局にいれば、同じ ECM が同じ時刻に何本も来る。
-    /// カードに聞くのは最初の 1 本だけで、残りはロックの外で答えを持っていく。
+    /// カードに問い合わせるのは最初の 1 本だけで、残りはロックの外でキャッシュした鍵を使う。
     /// </para>
     /// </summary>
     private readonly ConcurrentDictionary<string, (EcmAnswer Answer, DateTimeOffset At)> _cache = new();
@@ -92,7 +92,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// 見つかったリーダーを順に試し、**カードが挿さっていて INT に答えた最初の 1 つ**で開く。
+    /// 見つかったリーダーを順に試し、**カードが挿さっていて INT に応答した最初の 1 つ**で開く。
     /// どれも駄目なら理由を並べて投げる。
     /// </summary>
     /// <param name="find">
@@ -142,7 +142,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// **いまカードと話せるか**、INT を 1 回通して確かめる (画面の「カードリーダー」行)。
+    /// **いまカードとやり取りできるか**、INT を 1 回通して確かめる (画面の「カードリーダー」行)。
     /// 切れていれば繋ぎ直し、駄目なら投げる
     /// </summary>
     public CardInit Check()
@@ -174,7 +174,7 @@ public sealed class BCas : IKeySource, IDisposable
     ///
     /// <para>
     /// 契約が無いなどでカードが断ったときは投げずに <see cref="EcmAnswer.Code"/> で返す。
-    /// 投げるのはカードと話せなかったときだけ。
+    /// 投げるのはカードとやり取りできなかったときだけ。
     /// </para>
     /// </summary>
     public EcmAnswer Ecm(ReadOnlySpan<byte> ecm)
@@ -194,9 +194,9 @@ public sealed class BCas : IKeySource, IDisposable
         var queued = Stopwatch.GetTimestamp();
         lock (_gate)
         {
-            // 別のストリームがカードと話し終えるのを待った時間 (選局の内訳の記録に出す)
+            // 別のストリームがカードとのやり取りを終えるのを待った時間 (選局の内訳の記録に出す)
             var waited = (long)Stopwatch.GetElapsedTime(queued).TotalMilliseconds;
-            // 待っている間に、同じ ECM を先に聞いたストリームがあるかもしれない
+            // 待っている間に、同じ ECM を先に問い合わせたストリームがあるかもしれない
             if (Cached(name) is { } again) return again with { Cached = true, WaitedMs = waited };
 
             var answer = Run(link =>
@@ -217,7 +217,7 @@ public sealed class BCas : IKeySource, IDisposable
     /// <para>
     /// EIT の CA 契約情報記述子 (0xCB) に載っている verificationData と
     /// 対象日時 (MJD) をカードに渡し、返り値コード (0x0800: ティア有効など) を返す。
-    /// 選局せずにカード単体でミリ秒で答えを返す。
+    /// 選局せずにカード単体でミリ秒で応答を返す。
     /// </para>
     /// </summary>
     public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd)
@@ -245,8 +245,8 @@ public sealed class BCas : IKeySource, IDisposable
     /// </para>
     ///
     /// <para>
-    /// **受け入れたら、覚えている ECM の答えを捨てる。** 契約が変わると、同じ ECM でも答えが変わる
-    /// (libaribb25 も EMM のあとに全部の ECM を聞き直す)。
+    /// **受け入れたら、キャッシュした ECM の応答を捨てる。** 契約が変わると、同じ ECM でも応答が変わる
+    /// (libaribb25 も EMM のあとに全部の ECM を問い合わせ直す)。
     /// </para>
     /// </summary>
     public int Emm(ReadOnlySpan<byte> payload)
@@ -271,7 +271,7 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>
     /// 送って応答を受ける。応答が <paramref name="least"/> バイトより短ければ、**同じ接続で**送り直す (<see cref="ShortRetries"/>)。
-    /// それでも短ければ断る。**接続は生きている**ので繋ぎ直さない (繋ぎ直しても同じ要求には同じ答え)
+    /// それでも短ければ断る。**接続は生きている**ので繋ぎ直さない (繋ぎ直しても同じ要求には同じ応答)
     /// </summary>
     /// <param name="what">「カードが…に応答しません」に入れる要求の名前</param>
     private static byte[] Transmit(ICardLink link, byte[] apdu, int least, string what)
@@ -336,7 +336,7 @@ public sealed class BCas : IKeySource, IDisposable
     }
 
     /// <summary>
-    /// リーダーを探して、カードが答えた最初の 1 つを使う。INT と IDI もここで読む。
+    /// リーダーを探して、カードが応答した最初の 1 つを使う。INT と IDI もここで読む。
     /// **駄目だったリーダーの理由は全部残す。** 1 つ目が空で 2 つ目が壊れている、を
     /// 「カードが読めません」の 1 行で済ませると、どこを見ればよいか分からない
     /// </summary>
@@ -368,7 +368,7 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>
     /// 開いた接続でカードに電源を入れ、INT と IDI を読む。**B-CAS でなければ投げる。**
-    /// 予備のリーダーを覗くのにも使う (Card.cs の Peek、Probe.cs の `--card zd1j:`・`--card dt295:`、Dt295NativeProbe.cs)
+    /// 予備のリーダーを確かめるのにも使う (Card.cs の Peek、Probe.cs の `--card zd1j:`・`--card dt295:`、Dt295NativeProbe.cs)
     /// </summary>
     internal static CardInit Read(ICardLink link)
     {
@@ -451,5 +451,5 @@ public sealed class BCas : IKeySource, IDisposable
     }
 }
 
-/// <summary>カードは答えたが、使える答えではなかった。**接続の故障ではない**ので繋ぎ直さない</summary>
+/// <summary>カードは応答したが、使える応答ではなかった。**接続の故障ではない**ので繋ぎ直さない</summary>
 public sealed class CardRefusedException(string message) : Exception(message);

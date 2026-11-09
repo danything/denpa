@@ -29,7 +29,7 @@ public class LeaseReadersTests
     }
 
     [Test]
-    public async Task 読んだら忘れる()
+    public async Task 読んだら記録を消す()
     {
         var lease = Make();
         lease.Saw("epg T27");

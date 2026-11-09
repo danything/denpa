@@ -9,7 +9,7 @@ namespace Denpa.Agent.Tests;
  */
 public class TunerSignalTests
 {
-    /// <summary>DTV_STAT_CNR の答え (struct dtv_property。76 バイト) を、先頭の 1 つだけ入れて組む</summary>
+    /// <summary>DTV_STAT_CNR の結果 (struct dtv_property。76 バイト) を、先頭の 1 つだけ入れて組む</summary>
     private static byte[] Cnr(byte length, byte scale, long value)
     {
         var property = new byte[DvbTuner.PropertySize];
@@ -39,7 +39,7 @@ public class TunerSignalTests
         await Assert.That(DvbTuner.Cnr(true, Cnr(1, 0, 0))).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db));
     }
 
-    /// <summary>DTV_STAT_CNR と DTV_STAT_SIGNAL_STRENGTH の答えを、この順に並べる (DvbTuner.Stats が読む形)</summary>
+    /// <summary>DTV_STAT_CNR と DTV_STAT_SIGNAL_STRENGTH の結果を、この順に並べる (DvbTuner.Stats が読む形)</summary>
     private static byte[] Stats(byte[] cnr, byte[] strength) => [.. cnr, .. strength];
 
     [Test]

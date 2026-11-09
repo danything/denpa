@@ -3,8 +3,8 @@ namespace Denpa.Agent.Tests;
 /*
  * ATR の読み方と T=1 のブロックのやり取り。
  *
- * カードは台本 (送るはずのブロックと、それへの返事) で置き換える。送ったものが台本と
- * 違えばその場で落とす。本物のカードで当てるのは Ccid.Describe() (`denpa-agent --card`)。
+ * カードは台本 (送るはずのブロックと、それへの応答) で置き換える。送ったものが台本と
+ * 違えばその場で例外を投げる。本物のカードで当てるのは Ccid.Describe() (`denpa-agent --card`)。
  */
 public class T1Tests
 {
@@ -17,7 +17,7 @@ public class T1Tests
 
     private static byte[] S(int type, string inf) => T1Protocol.Block((byte)(0xC0 | type), Convert.FromHexString(inf));
 
-    /// <summary>台本どおりに答えるカード。送ったブロックごとの WTX の倍率も控える</summary>
+    /// <summary>台本どおりに応答するカード。送ったブロックごとの WTX の倍率も記録する</summary>
     private sealed class Script(params (byte[] Expect, byte[]? Reply)[] steps)
     {
         private readonly Queue<(byte[] Expect, byte[]? Reply)> _steps = new(steps);
@@ -143,14 +143,14 @@ public class T1Tests
     }
 
     [Test]
-    public async Task WTX_に答えて次の待ちを延ばす()
+    public async Task WTX_に応答して次の待ちを延ばす()
     {
         var script = new Script(
             (I(0, false, "01"), S(0x03, "05")),
             (S(0x23, "05"), I(0, false, "9000")));
         var t1 = new T1Protocol(WithIfsc(0x7C), script.Exchange);
         await Assert.That(Convert.ToHexString(t1.Transmit([0x01]))).IsEqualTo("9000");
-        // 倍率は WTX の答えを送るときに XfrBlock の bBWI に載せる
+        // 倍率は WTX の応答を送るときに XfrBlock の bBWI に載せる
         await Assert.That(script.Wtx).IsEquivalentTo([(byte)0, (byte)5]);
     }
 
@@ -171,7 +171,7 @@ public class T1Tests
     {
         var script = new Script(
             (I(0, true, "0001"), S(0x01, "04")),
-            // 答えを返すと、カードは受け取った印に R(1) を返す。続きは新しい IFSC で切る
+            // 応答を返すと、カードは受け取ったことを示す R(1) を返す。続きは新しい IFSC で切る
             (S(0x21, "04"), R(1)),
             (I(1, false, "020304"), I(0, false, "9000")));
         var t1 = new T1Protocol(WithIfsc(2), script.Exchange);
@@ -193,7 +193,7 @@ public class T1Tests
     }
 
     [Test]
-    public async Task IFS_に答えないカードは既定のまま()
+    public async Task IFS_に応答しないカードは既定のまま()
     {
         var script = new Script(
             (S(0x01, "FE"), null),

@@ -68,7 +68,7 @@ public class UsbDeviceTests
         await Assert.That(line).IsEqualTo("EP 0x81 bulk 512 バイト、EP 0x02 bulk 512 バイト、EP 0x83 interrupt 64 バイト");
     }
 
-    /// <summary>時間切れの無い読みの偽物。答えを 1 つずつ返し、取り消されるまで待つ</summary>
+    /// <summary>時間切れの無い読みの偽物。応答を 1 つずつ返し、取り消されるまで待つ</summary>
     private sealed class FakeEndpoint
     {
         public readonly BlockingCollection<byte[]> Answers = [];
@@ -94,7 +94,7 @@ public class UsbDeviceTests
     }
 
     [Test]
-    public async Task interrupt_の読みは時間切れでも取り消さず_遅れて届いた答えを次に渡す()
+    public async Task interrupt_の読みは時間切れでも取り消さず_遅れて届いた応答を次に渡す()
     {
         var endpoint = new FakeEndpoint();
         var cancels = 0;
@@ -109,12 +109,12 @@ public class UsbDeviceTests
         await Assert.That(pump.Read(buffer, 10)).IsEqualTo(0);
         await Assert.That(cancels).IsEqualTo(0);
 
-        // 時間切れのあとに届いた答えは、次の読みで受け取れる (落とさない)
+        // 時間切れのあとに届いた応答は、次の読みで受け取れる (落とさない)
         endpoint.Answers.Add([0xA5, 1, 2, 3]);
         await Assert.That(pump.Read(buffer, 1000)).IsEqualTo(4);
         await Assert.That(buffer[0]).IsEqualTo((byte)0xA5);
 
-        // 1 回の転送が 1 つの答え。続けて届いても混ぜない
+        // 1 回の転送が 1 つの応答。続けて届いても混ぜない
         endpoint.Answers.Add([1, 1]);
         endpoint.Answers.Add([2, 2, 2]);
         await Assert.That(pump.Read(buffer, 1000)).IsEqualTo(2);
@@ -139,7 +139,7 @@ public class UsbDeviceTests
     }
 
     [Test]
-    public async Task interrupt_の読みが失敗したら_届いていた答えを渡してから投げる()
+    public async Task interrupt_の読みが失敗したら_届いていた応答を渡してから投げる()
     {
         var answers = new Queue<Func<byte[], int>>();
         answers.Enqueue(buffer =>
@@ -179,7 +179,7 @@ public class UsbDeviceTests
     }
 
     [Test]
-    public async Task interrupt_の溜めは上限を越えたら古いものから捨てる()
+    public async Task interrupt_のバッファは上限を越えたら古いものから捨てる()
     {
         var endpoint = new FakeEndpoint();
         using var pump = new UsbReadPump("test", 64, endpoint.Read, endpoint.Cancelled.Cancel);

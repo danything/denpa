@@ -209,7 +209,7 @@ public class Mb86h47ProgramsTests
         private int _slot;
         private uint _sequence;
 
-        /// <summary>bulk の塊を 1 つ置いて (ホストの SendChunk と同じ形式)、答えを待つ。答えの語を返す</summary>
+        /// <summary>bulk の塊を 1 つ置いて (ホストの SendChunk と同じ形式)、応答を待つ。応答の語を返す</summary>
         public uint[] Chunk(int count, params uint[] commands)
         {
             Ram.Write(Mb86h47Programs.Core1Box + Mb86h47Programs.BoxBulkEnable, 4, Mb86h47Programs.BulkEnable);
@@ -222,7 +222,7 @@ public class Mb86h47ProgramsTests
             _slot = (_slot + 1) % Mb86h47Programs.BulkSlots;
             var before = Sent.Count;
             for (var i = 0; i < 400 && Sent.Count == before; i++) Run(100);
-            return Sent.Count > before ? Sent[^1] : throw new InvalidOperationException("コア 1 が答えません");
+            return Sent.Count > before ? Sent[^1] : throw new InvalidOperationException("コア 1 が応答しません");
         }
     }
 
@@ -266,7 +266,7 @@ public class Mb86h47ProgramsTests
     }
 
     [Test]
-    public async Task コア_1_は_bulk_の塊の命令を済ませて_EP_0x83_に答える()
+    public async Task コア_1_は_bulk_の塊の命令を済ませて_EP_0x83_で応答する()
     {
         var rig = new Core1Rig();
         rig.Dib.Demod[285] = 0x0021;
@@ -281,7 +281,7 @@ public class Mb86h47ProgramsTests
         chunk[7] = 0x03800000;
         chunk[127] = 0x00000007;
         var slot = Mb86h47Programs.BulkBuffer;
-        // 有効の印が無いうちは見ない
+        // 有効の印が無いうちは読まない
         rig.Ram.Put(slot, chunk);
         rig.Run(5000);
         await Assert.That(rig.Sent.Count).IsEqualTo(0);
@@ -298,7 +298,7 @@ public class Mb86h47ProgramsTests
         await Assert.That(rig.Ram.Read(slot, 4)).IsEqualTo(0u);
         await Assert.That(rig.Ram.Read(slot + 508, 4)).IsEqualTo(0u);
 
-        // 次の塊は 2 番目の置き場。終わりの通し番号が届くまでは見ない
+        // 次の塊は 2 番目の置き場。終わりの通し番号が届くまでは読まない
         var next = slot + 512;
         rig.Ram.Write(next, 4, 8);
         rig.Ram.Write(next + 4, 4, 1);
@@ -429,7 +429,7 @@ public class Mb86h47ProgramsTests
         again.FifoLow = 0x500;
         again.Run(200);
         await Assert.That(again.Stores).DoesNotContain("1078=460");
-        // 0 ならリングの大きさとみて満たす
+        // 0 ならリングの大きさとみなして満たす
         var empty = Drained();
         empty.FifoHigh = 0x80;
         empty.Run(100);

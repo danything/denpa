@@ -21,7 +21,7 @@ public class Dt295NativeCardTests
         return (fake, new Dt295NativeLink(fake));
     }
 
-    /// <summary>機材のプログラムを置いた偽物。<paramref name="program"/> なら、カードの送受信を機材のプログラムに行わせる</summary>
+    /// <summary>機材のプログラムを置いた偽物。<paramref name="program"/> なら、カードの送受信を機材のプログラムに実行させる</summary>
     private static (Dt295Fake Fake, Dt295NativeLink Link) ProgramRig(bool program)
     {
         var fake = new Dt295Fake { CardAtr = BcasAtr, CardResponder = Respond };
@@ -129,7 +129,7 @@ public class Dt295NativeCardTests
     [Test]
     [Arguments(true)]
     [Arguments(false)]
-    public async Task 機材を開くと_カードの送受信が機材のプログラムで通るかを確かめ_通らなければホストが_1_バイトずつ行う(bool works)
+    public async Task 機材を開くと_カードの送受信が機材のプログラムで通るかを確かめ_通らなければホストが_1_バイトずつ読み書きする(bool works)
     {
         var fake = new Dt295Fake { CardAtr = BcasAtr, CardResponder = Respond };
         if (!works)
@@ -249,7 +249,7 @@ public class Dt295NativeCardTests
     }
 
     [Test]
-    public async Task 電源が入って話し方が決まっていれば_Reset_は入れ直さずに同じ_ATR_を返し_カードが抜かれたら入れ直す()
+    public async Task 電源が入って_T1_の取り決めが済んでいれば_Reset_は入れ直さずに同じ_ATR_を返し_カードが抜かれたら入れ直す()
     {
         var (fake, link) = Rig();
         using var card = new Dt295NativeCard("DT295 カード", () => link, delay: _ => { });
@@ -259,11 +259,11 @@ public class Dt295NativeCardTests
         var second = card.Reset();
 
         await Assert.That(second).IsEquivalentTo(first);
-        // 2 回目は UART に書かない (電源の入れ直しも、話し方の取り決めもしない)
+        // 2 回目は UART に書かない (電源の入れ直しも、IFSD の取り決めもしない)
         await Assert.That(fake.Stores.Count(s => s.Address is >= 0xFEA000 and <= 0xFEA03F)).IsEqualTo(writes);
         await Assert.That(card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00])).IsEquivalentTo(new byte[] { 0x90, 0x00 });
 
-        // 抜かれたら、次の Reset は電源から入れ直そうとして、カードが無い (挿入の印が無い) のを ATR が来ないことで知る
+        // 抜かれたら、次の Reset は電源から入れ直そうとして、カードが無い (挿入の印が無い) のを ATR が来ないことで判定する
         fake.CardInserted = false;
         Assert.Throws<CardAbsentException>(() => card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00]));
         fake.CardInserted = true;

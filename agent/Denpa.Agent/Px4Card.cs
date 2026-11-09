@@ -21,7 +21,7 @@ public sealed class Px4Card : ICardLink
 
     /// <summary>
     /// 1 回のやり取りの上限。px4d は APDU 1 つを 3 秒で打ち切る (SPEC 5.3) ので、
-    /// それより長く待ってから諦める
+    /// それより長く待ってからやめる
     /// </summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
@@ -39,13 +39,13 @@ public sealed class Px4Card : ICardLink
     }
 
     /// <summary>
-    /// px4d が起きている筐体ぶん。**挙げるだけで、繋ぐのは候補を開いたとき。**
+    /// px4d が起動している筐体ぶん。**挙げるだけで、繋ぐのは候補を開いたとき。**
     ///
     /// <para>
-    /// 筐体は制御ソケットがあるかで見る。px4d は起きると筐体ごとに
-    /// <c>control.sock</c> を作り、止まるときに消す (Px4Daemon が起こす先と同じ
-    /// ランタイムディレクトリ)。**起こしていない筐体は出てこない**ので、
-    /// px4d を起こしてから探す。
+    /// 筐体は制御ソケットがあるかで見る。px4d は起動すると筐体ごとに
+    /// <c>control.sock</c> を作り、止まるときに消す (Px4Daemon が px4d に渡すのと同じ
+    /// ランタイムディレクトリ)。**px4d を起動していない筐体は出てこない**ので、
+    /// px4d を起動してから探す。
     /// </para>
     /// </summary>
     public static IReadOnlyList<CardLinkCandidate> Find() => Find(Px4Userland.RuntimeDir);
@@ -57,7 +57,7 @@ public sealed class Px4Card : ICardLink
     public static string ReaderName(string id) => $"px4-userland {Px4Userland.Label(id)} Internal Card Reader";
 
     /// <summary>
-    /// <paramref name="wire"/> のデーモンが起きている筐体ぶん。asicen-userland の asicend も
+    /// <paramref name="wire"/> のデーモンが起動している筐体ぶん。asicen-userland の asicend も
     /// 内蔵カードを同じ IPC で出すので、置き場と名前だけ変えて使う (Asicen.cs)
     /// </summary>
     internal static IReadOnlyList<CardLinkCandidate> Find(
@@ -97,7 +97,7 @@ public sealed class Px4Card : ICardLink
     ///
     /// <para>
     /// 繋ぐのは共有 (share mode 1)。B-CAS は APDU を跨いだ状態を持たないので、
-    /// 独占しなくても割り込まれて困ることが無い。
+    /// 独占しなくても、割り込まれて問題になることが無い。
     /// </para>
     /// </summary>
     public byte[] Reset()
@@ -107,7 +107,7 @@ public sealed class Px4Card : ICardLink
             var answer = _control.Request(Px4Control.CardConnect, [1]);
             if (answer.Length < 9 || answer.Length != 9 + answer[8])
             {
-                throw new IOException($"{_daemon} の CARD_CONNECT の答えが崩れています ({answer.Length} バイト)");
+                throw new IOException($"{_daemon} の CARD_CONNECT の応答が崩れています ({answer.Length} バイト)");
             }
             _handle = BinaryPrimitives.ReadUInt64LittleEndian(answer);
             return answer[9..];
@@ -116,7 +116,7 @@ public sealed class Px4Card : ICardLink
         var atr = _control.Request(Px4Control.CardReset, Px4Control.WithId(_handle));
         if (atr.Length < 1 || atr.Length != 1 + atr[0])
         {
-            throw new IOException($"{_daemon} の CARD_RESET の答えが崩れています ({atr.Length} バイト)");
+            throw new IOException($"{_daemon} の CARD_RESET の応答が崩れています ({atr.Length} バイト)");
         }
         return atr[1..];
     }
@@ -136,12 +136,12 @@ public sealed class Px4Card : ICardLink
         var answer = _control.Request(Px4Control.CardTransmit, payload);
         if (answer.Length < 4 || answer.Length != 4 + BinaryPrimitives.ReadUInt32LittleEndian(answer))
         {
-            throw new IOException($"{_daemon} の CARD_TRANSMIT の答えが崩れています ({answer.Length} バイト)");
+            throw new IOException($"{_daemon} の CARD_TRANSMIT の応答が崩れています ({answer.Length} バイト)");
         }
         return answer[4..];
     }
 
-    /// <summary>カードを手放してから閉じる。**リセットはしない** (他の使い手がいるかもしれない)</summary>
+    /// <summary>カードを手放してから閉じる。**リセットはしない** (他にカードを使っている接続があるかもしれない)</summary>
     public void Dispose()
     {
         if (_handle != 0 && _control.Connected)
@@ -153,7 +153,7 @@ public sealed class Px4Card : ICardLink
             }
             catch (IOException)
             {
-                // 閉じれば px4d の側で手放される (SPEC 6.4)。ここで言うのは行儀の問題だけ
+                // 閉じれば px4d の側で手放される (SPEC 6.4)。ここで CARD_DISCONNECT を送るのは、手順をそろえるためだけ
             }
             _handle = 0;
         }

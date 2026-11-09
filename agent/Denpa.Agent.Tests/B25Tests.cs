@@ -7,7 +7,7 @@ namespace Denpa.Agent.Tests;
  * B25 の復号のしかた (Descrambler)。
  *
  * 本物の放送もカードも要らない。PAT・PMT・ECM を自分で組み、中身を MULTI2 で
- * 掛けたパケットを作って流す。鍵はでたらめな「カード」(Cards) が ECM の先頭の
+ * スクランブルしたパケットを作って流す。鍵はでたらめな「カード」(Cards) が ECM の先頭の
  * 1 バイトで決めて返す。
  */
 public class B25Tests
@@ -20,13 +20,13 @@ public class B25Tests
     private static readonly byte[] SystemKey = Enumerable.Range(0, 32).Select(i => (byte)(i * 7 + 3)).ToArray();
     private static readonly byte[] InitCbc = [0xfe, 0x27, 0x19, 0x99, 0x19, 0x69, 0x09, 0x11];
 
-    /// <summary>ECM の先頭の 1 バイトで鍵を決めるカード。**渡された ECM を全部覚えておく**</summary>
+    /// <summary>ECM の先頭の 1 バイトで鍵を決めるカード。**渡された ECM を全部記録しておく**</summary>
     private sealed class Cards : IKeySource
     {
         public List<byte[]> Asked { get; } = [];
         public Func<byte[], Exception?> Fail { get; set; } = _ => null;
         public int Code { get; set; } = 0x0200;
-        /// <summary>覚えていた答えを返した・ロックを待った、と言う (選局の内訳の記録)</summary>
+        /// <summary>キャッシュした応答を返した・ロックを待った、と返す (選局の内訳の記録)</summary>
         public bool Cached { get; set; }
         public long WaitedMs { get; set; }
 
@@ -60,7 +60,7 @@ public class B25Tests
     private static byte[] Key(byte generation, bool even) =>
         Enumerable.Range(0, 8).Select(i => (byte)(generation * 31 + i * 5 + (even ? 100 : 0))).ToArray();
 
-    /// <summary>TS を組み立てる。**掛ける前の姿** (Plain) と**流す姿** (Wire) を並べて持つ</summary>
+    /// <summary>TS を組み立てる。**スクランブルする前の中身** (Plain) と**流す中身** (Wire) を並べて持つ</summary>
     private sealed class Ts
     {
         private readonly Dictionary<int, int> _counters = [];
@@ -125,8 +125,8 @@ public class B25Tests
 
         /// <summary>
         /// 中身のパケット。<paramref name="adaptation"/> バイトのアダプテーションを前に置き、
-        /// 残りを <paramref name="even"/> の鍵で掛ける (null なら掛けない)。<paramref name="pes"/> なら PES の先頭
-        /// (payload_unit_start と <c>00 00 01</c>) にする。<paramref name="keyEven"/> を渡すと、印と違う偶奇の鍵で掛ける
+        /// 残りを <paramref name="even"/> の鍵でスクランブルする (null ならスクランブルしない)。<paramref name="pes"/> なら PES の先頭
+        /// (payload_unit_start と <c>00 00 01</c>) にする。<paramref name="keyEven"/> を渡すと、印と違う偶奇の鍵でスクランブルする
         /// </summary>
         public Ts Payload(int pid, byte? generation, bool even = true, int adaptation = -1, int seed = 0, bool pes = false, bool? keyEven = null)
         {
@@ -194,12 +194,12 @@ public class B25Tests
         return crc;
     }
 
-    /// <summary>1 本の番組、映像と音声に番組全体の ECM が掛かっている、よくある形式の先頭</summary>
+    /// <summary>1 本の番組、映像と音声に番組全体の ECM でスクランブルされた、よくある形式の先頭</summary>
     private static Ts Channel() => new Ts()
         .Pat((0x0400, PmtPid))
         .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []), (AudioPid, []));
 
-    /// <summary>流したあと、掛けた印を下ろした姿。**復号できたらこうなる**</summary>
+    /// <summary>流したあと、スクランブルの印を下ろした中身。**復号できたらこうなる**</summary>
     private static byte[] Expected(Ts ts)
     {
         var plain = ts.Plain.ToArray();
@@ -218,7 +218,7 @@ public class B25Tests
         return output.WrittenSpan.ToArray();
     }
 
-    /// <summary>カードに聞いた ECM の世代を、聞いた順に</summary>
+    /// <summary>カードに問い合わせた ECM の世代を、問い合わせた順に</summary>
     private static string Generations(Cards cards) => string.Join(",", cards.Asked.Select(ecm => ecm[0]));
 
     /// <summary>最初に食い違ったバイトの位置。揃っていれば -1</summary>
@@ -249,7 +249,7 @@ public class B25Tests
 
     /// <summary>
     /// **カードに渡すのはセクションの先頭 8 バイトと CRC を除いた中身。** libaribb25 と同じ切り方で、
-    /// 拠点を跨いで鍵を貰うときもこれを運ぶ。変わると古いエージェントと通じなくなる
+    /// 拠点を跨いで鍵を受け取るときもこれを運ぶ。変わると古いエージェントとやり取りできなくなる
     /// </summary>
     [Test]
     public async Task カードに渡すのはセクションの先頭と_CRC_を除いた中身()
@@ -291,7 +291,7 @@ public class B25Tests
     }
 
     [Test]
-    public async Task 同じ_ECM_はカードに聞き直さない()
+    public async Task 同じ_ECM_でカードに問い合わせ直さない()
     {
         var ts = Channel();
         for (var i = 0; i < 10; i++) ts.Ecm(EcmPid, 1).Videos(5, 1);
@@ -336,7 +336,7 @@ public class B25Tests
     {
         var head = Channel().Ecm(EcmPid, 1).Videos(10, 1);
         var tail = new Ts().Videos(10, 1);
-        // 0x47 を混ぜたゴミ。1 つだけの 0x47 に釣られないこと
+        // 0x47 を混ぜたゴミ。1 つだけの 0x47 に合わせないこと
         byte[] garbage = [0x00, 0x47, 0x12, 0x47, 0x47, 0x99, .. Enumerable.Repeat((byte)0x33, 300)];
         byte[] wire = [.. garbage.AsSpan(0, 50), .. head.Wire, .. garbage, .. tail.Wire];
 
@@ -382,8 +382,8 @@ public class B25Tests
     }
 
     /// <summary>
-    /// ECM より先に来た掛かったパケットも、**溜めておいて後から来た鍵で復号する**。
-    /// 録画の先頭が掛かったままにならない
+    /// ECM より先に来たスクランブルされたパケットも、**溜めておいて後から来た鍵で復号する**。
+    /// 録画の先頭がスクランブルされたままにならない
     /// </summary>
     [Test]
     public async Task 鍵が来るまで溜めて_来たら先頭から復号する()
@@ -406,8 +406,8 @@ public class B25Tests
 
     /// <summary>
     /// **ECM より前は、ECM を挟んで続く偶奇の並びだけ復号する。** その前の並びは
-    /// 前の鍵かもしれない。復号すると化けたものを「復号できた」として流すので、掛かったまま流す。
-    /// 並びは ECM ごとに見る。音声だけ見ると奇数が続いていても、その間に映像が偶数へ切り替わっている
+    /// 前の鍵かもしれない。復号すると化けたものを「復号できた」として流すので、スクランブルされたまま流す。
+    /// 並びは ECM ごとに確かめる。音声だけで確かめると奇数が続いていても、その間に映像が偶数へ切り替わっている
     /// </summary>
     [Test]
     public async Task 先頭は_ECM_を挟んで続く偶奇の並びだけ復号する()
@@ -460,9 +460,9 @@ public class B25Tests
         await Assert.That(descrambler.Decoded).IsEqualTo(9);
     }
 
-    /// <summary>ECM が 2 本なら、**どちらも答えを貰うまで溜める** (片方の ES の先頭が掛かったまま出ない)</summary>
+    /// <summary>ECM が 2 本なら、**どちらも応答を受け取るまで溜める** (片方の ES の先頭がスクランブルされたまま出ない)</summary>
     [Test]
-    public async Task ECM_が_2_本なら両方の答えを待ってから流す()
+    public async Task ECM_が_2_本なら両方の応答を待ってから流す()
     {
         const int other = 0x0902;
         var ts = new Ts()
@@ -499,7 +499,7 @@ public class B25Tests
     }
 
     [Test]
-    public async Task 掛かっていない番組は溜めずに流す()
+    public async Task スクランブルされていない番組は溜めずに流す()
     {
         var ts = new Ts().Pat((0x0400, PmtPid)).Pmt(PmtPid, 0x0400, [], (VideoPid, [])).Videos(10, null);
         var descrambler = new Descrambler(new Cards());
@@ -531,13 +531,13 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **PES の先頭がどの鍵でも <c>00 00 01</c> にならなければ、掛かったまま流す。** その PES の残りも次の PES の先頭まで
-    /// 掛かったまま流し、掛かったままに数える (化けた中身を「復号できた」として流さない。契約の復号テストもこれで落ちる)
+    /// **PES の先頭がどの鍵でも <c>00 00 01</c> にならなければ、スクランブルされたまま流す。** その PES の残りも次の PES の先頭まで
+    /// スクランブルされたまま流し、Undecodable に数える (化けた中身を「復号できた」として流さない。契約の復号テストもこれで落ちる)
     /// </summary>
     [Test]
-    public async Task 鍵が合わない_PES_は掛かったまま流し_次の_PES_の先頭から復号する()
+    public async Task 鍵が合わない_PES_はスクランブルされたまま流し_次の_PES_の先頭から復号する()
     {
-        // カードが返すのは世代 1 の鍵。最初の PES だけ、カードが返さない世代 9 の鍵で掛かっている
+        // カードが返すのは世代 1 の鍵。最初の PES だけ、カードが返さない世代 9 の鍵でスクランブルされている
         var ts = Channel().Ecm(EcmPid, 1).Payload(VideoPid, 9, pes: true).Videos(3, 9);
         var garbled = ts.Wire.Count;
         ts.Payload(VideoPid, 1, pes: true).Videos(3, 1);
@@ -554,7 +554,7 @@ public class B25Tests
 
     /// <summary>
     /// **中身が 3 バイトに満たず確かめられない PES の先頭は、前の PES が合わなかったことを引き継がない。** その PES は
-    /// 今の鍵で復号する (前の PES の残りと同じに扱うと、次の PES の先頭まで掛かったまま流してしまう)
+    /// 今の鍵で復号する (前の PES の残りと同じに扱うと、次の PES の先頭までスクランブルされたまま流してしまう)
     /// </summary>
     [Test]
     public async Task 確かめられない短い_PES_の先頭からは_前の_PES_の不一致を引き継がない()
@@ -606,7 +606,7 @@ public class B25Tests
             .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []), (AudioPid, Ca(other)))
             .Ecm(EcmPid, 1).Ecm(other, 7)
             .Payload(AudioPid, 7)
-            // PMT では映像も ECM 0x0901 だが、世代 7 (ECM 0x0902) の鍵で掛かっている
+            // PMT では映像も ECM 0x0901 だが、世代 7 (ECM 0x0902) の鍵でスクランブルされている
             .Payload(VideoPid, 7, pes: true).Videos(3, 7);
         var descrambler = new Descrambler(new Cards());
 
@@ -618,7 +618,7 @@ public class B25Tests
 
     /// <summary>
     /// **stream_type 0x06 (字幕と、セクションのデータの両方に使う) は先頭を確かめない。** セクションを PES の先頭と
-    /// 比べると、合っている鍵でも掛かったままにしてしまう
+    /// 比べると、合っている鍵でもスクランブルされたままにしてしまう
     /// </summary>
     [Test]
     public async Task 字幕とデータの_ES_は先頭を確かめない()
@@ -633,7 +633,7 @@ public class B25Tests
             .Payload(AudioPid, 1, pes: true);
         var plain = ts.Plain.Count - 188;
         ts.Plain[plain + 6] = 0x02;
-        // 掛ける前の中身を変えたので、掛けたものも作り直す
+        // スクランブルする前の中身を変えたので、スクランブルしたものも作り直す
         var cipher = new Multi2(SystemKey, InitCbc);
         cipher.SetKeys(Key(1, even: false), Key(1, even: true));
         var packet = ts.Plain.Skip(plain).ToArray();
@@ -675,7 +675,7 @@ public class B25Tests
         var ts = Channel().Ecm(EcmPid, 1).Videos(5, 1);
         ts.Version = 1;
         ts.Pmt(PmtPid, 0x0400, Ca(moved), (VideoPid, []), (AudioPid, []))
-            .Ecm(EcmPid, 4) // もう誰も指していない。聞かない
+            .Ecm(EcmPid, 4) // もうどの PMT も挙げていない。問い合わせない
             .Ecm(moved, 2).Videos(5, 2);
         var cards = new Cards();
         var descrambler = new Descrambler(cards);
@@ -687,10 +687,10 @@ public class B25Tests
     }
 
     /// <summary>
-    /// カードが失敗しても落ちない。掛かったまま流し、**次に ECM が変わったら聞き直す**
+    /// カードが失敗しても止まらない。スクランブルされたまま流し、**次に ECM が変わったら問い合わせ直す**
     /// </summary>
     [Test]
-    public async Task カードが失敗しても流し続け_次の_ECM_で聞き直す()
+    public async Task カードが失敗しても流し続け_次の_ECM_で問い合わせ直す()
     {
         var failed = Channel().Ecm(EcmPid, 1).Videos(5, 1);
         var recovered = new Ts().Ecm(EcmPid, 2).Videos(5, 2);
@@ -699,7 +699,7 @@ public class B25Tests
 
         var output = Run(descrambler, [.. failed.Wire, .. recovered.Wire]);
 
-        // 失敗したところは掛かったまま (流す姿そのまま)、直ったところから復号できる
+        // 失敗したところはスクランブルされたまま (流す中身そのまま)、直ったところから復号できる
         byte[] expected = [.. failed.Wire, .. Expected(recovered)];
         await Assert.That(Diff(output, expected)).IsEqualTo(-1);
         await Assert.That(descrambler.Undecodable).IsEqualTo(5);
@@ -708,11 +708,11 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **貰えなかった中身は、少し置けば同じ中身でも聞き直す。** すぐには聞き直さず、
-    /// 0.1 秒おきに来る同じ ECM のたびに、固まった相手を待たない
+    /// **鍵を受け取れなかった中身は、少し置けば同じ中身でも問い合わせ直す。** すぐには問い合わせ直さず、
+    /// 0.1 秒おきに来る同じ ECM のたびに、応答しないカードを待たない
     /// </summary>
     [Test]
-    public async Task 貰えなかった中身は少し置いてから聞き直す()
+    public async Task 鍵を受け取れなかった中身は少し置いてから問い合わせ直す()
     {
         var failures = 1;
         var cards = new Cards { Fail = _ => failures-- > 0 ? new IOException("カードが抜けています") : null };
@@ -743,7 +743,7 @@ public class B25Tests
         await Assert.That(descrambler.LastError!).Contains("0x8901");
     }
 
-    /// <summary>**PMT より前に来た掛かったパケットも、溜めておいて、揃ったところで復号する**</summary>
+    /// <summary>**PMT より前に来たスクランブルされたパケットも、溜めておいて、揃ったところで復号する**</summary>
     [Test]
     public async Task PMT_より前に来たパケットも復号する()
     {
@@ -759,8 +759,8 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **ECM が 1 本しか見えていなくても、PAT の PMT がみな来るまではそれで表に無い ES を復号しない。**
-    /// 2 本目の番組の PMT がまだなだけで、その ES は別の ECM の鍵で掛かっている
+    /// **ECM が 1 本しか来ていなくても、PAT の PMT がみな来るまではそれで表に無い ES を復号しない。**
+    /// 2 本目の番組の PMT がまだなだけで、その ES は別の ECM の鍵でスクランブルされている
     /// </summary>
     [Test]
     public async Task PMT_が揃うまでは_1_本だけの_ECM_で他の番組を復号しない()
@@ -834,7 +834,7 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **PMT が挙げない PID の ECM は、鍵を使わないうえにカードに聞きもしない。** B-CAS のカードが断る ECM を聞くと、
+    /// **PMT が挙げない PID の ECM は、鍵を使わないうえにカードに問い合わせもしない。** B-CAS のカードが断る ECM で問い合わせると、
     /// 断られるまで次のパケットへ進めない
     /// </summary>
     [Test]
@@ -858,11 +858,11 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **PMT より先に来た ECM は、PMT が挙げたその場で聞く。** 次の ECM を待たないので、PMT のすぐあとの
-    /// ES のパケットで流し始める (前は PMT のあとに来る ECM を待ってから聞いていた)
+    /// **PMT より先に来た ECM は、PMT が挙げたその場で問い合わせる。** 次の ECM を待たないので、PMT のすぐあとの
+    /// ES のパケットで流し始める (前は PMT のあとに来る ECM を待ってから問い合わせていた)
     /// </summary>
     [Test]
-    public async Task PMT_より先に来た_ECM_は_PMT_が挙げたその場で聞く()
+    public async Task PMT_より先に来た_ECM_は_PMT_が挙げたその場で問い合わせる()
     {
         var head = new Ts()
             .Pat((0x0400, PmtPid))
@@ -881,18 +881,18 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **地上波の並びで、カードが断る ECM が流れていても、聞かずに鍵の揃った時点で流し始める。** PAT・PMT・ECM が
-    /// 0.1 秒 (地上波の 1,120 パケットほど) おきに来て、番組は 3 つ (PMT が来ない臨時の番組と、掛かっていない
+    /// **地上波の並びで、カードが断る ECM が流れていても、問い合わせずに鍵の揃った時点で流し始める。** PAT・PMT・ECM が
+    /// 0.1 秒 (地上波の 1,120 パケットほど) おきに来て、番組は 3 つ (PMT が来ない臨時の番組と、スクランブルされていない
     /// ワンセグを含む)。番組の PMT は B-CAS と別の方式の CA 記述子も持ち、その方式の ECM はカードが断る。
     ///
     /// <para>
-    /// 本番 (2026-10-26) では、先回りで読んだその ECM をカードに聞き、断られるまでの 0.4 秒ほど止まっていた
-    /// (選局から送り出しまで毎回 1 秒ほど)。止まっている時間はパケットの数では見えないので、断る ECM を
-    /// 聞かないことと、流し始める位置が前の決め方 (PAT → PMT → その後の ECM を聞く) より後ろにならないことを確かめる
+    /// 本番 (2026-10-26) では、先回りで読んだその ECM でカードに問い合わせ、断られるまでの 0.4 秒ほど止まっていた
+    /// (選局から送り出しまで毎回 1 秒ほど)。止まっている時間はパケットの数では測れないので、断る ECM で
+    /// 問い合わせないことと、流し始める位置が前の決め方 (PAT → PMT → その後の ECM で問い合わせる) より後ろにならないことを確かめる
     /// </para>
     /// </summary>
     [Test]
-    public async Task 地上波の並びでカードが断る_ECM_を聞かずに流し始める()
+    public async Task 地上波の並びでカードが断る_ECM_で問い合わせずに流し始める()
     {
         const int period = 1120, onesegPmt = 0x1FC8, foreignEcm = 0x0904, refused = 0x99;
         byte[] foreignCa = [0x09, 4, 0x00, 0x06, (byte)(0xE0 | (foreignEcm >> 8)), foreignEcm & 0xFF];
@@ -929,7 +929,7 @@ public class B25Tests
 
             await Assert.That(Generations(cards)).IsEqualTo("1");
             await Assert.That(descrambler.LastError).IsNull();
-            // 前の決め方: PAT のあとの PMT、そのあとの ECM を聞き、PMT がもう一度来たか ECM がもう一度来たところで流す
+            // 前の決め方: PAT のあとの PMT、そのあとの ECM で問い合わせ、PMT がもう一度来たか ECM がもう一度来たところで流す
             var pat = Next(start, atPat);
             var pmt = Next(pat, atPmt);
             var ecm = Next(pmt, atEcm);
@@ -946,7 +946,7 @@ public class B25Tests
     /// pointer_field 0・table_id 0x00 になる。後ろに 0x82 が並んでいても ECM として読まない
     /// </summary>
     [Test]
-    public async Task 掛かっていない_PES_の先頭を_ECM_と読まない()
+    public async Task スクランブルされていない_PES_の先頭を_ECM_と読まない()
     {
         var ts = new Ts();
         byte[] pes = [0x47, 0x40 | (0x0113 >> 8), 0x0113 & 0xFF, 0x10, 0x00, 0x00, 0x01, 0xE0, .. Enumerable.Repeat((byte)0x82, 180)];
@@ -966,11 +966,11 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **鍵の要らない利用者だけなら、カードに聞かず、溜めずにそのまま流す。** 番組表・ロゴ・スキャンが
+    /// **鍵の要らない利用者だけなら、カードに問い合わせず、溜めずにそのまま流す。** 番組表・ロゴ・スキャンが
     /// ライブ視聴や録画とカードのロックを取り合わない
     /// </summary>
     [Test]
-    public async Task 鍵の要らない利用者だけならカードに聞かない()
+    public async Task 鍵の要らない利用者だけならカードに問い合わせない()
     {
         var ts = Channel().Ecm(EcmPid, 1).Videos(5, 1).Ecm(EcmPid, 2).Videos(5, 2, even: false);
         var cards = new Cards();
@@ -1024,7 +1024,7 @@ public class B25Tests
 
     /// <summary>
     /// **溜めていた間の内訳を 1 行に出せる** (選局して最初に送り出したときの記録。docs/stream.md「本番の記録で割る」)。
-    /// そろった順と、鍵の相手に聞いた回数・覚えた答え・未契約・ロックの待ち
+    /// そろった順と、鍵の出どころへ問い合わせた回数・キャッシュ・未契約・ロックの待ち
     /// </summary>
     [Test]
     public async Task 溜めていた間の内訳を数える()
@@ -1041,11 +1041,11 @@ public class B25Tests
         Run(descrambler, ts.Wire.ToArray());
 
         await Assert.That(descrambler.HeldAt()).Matches(@"^PAT \d+ms / PMT \d+ms / ECM \d+ms \(0x0902\)$");
-        await Assert.That(descrambler.CardUse()).Matches(@"^カード 2 回 計 \d+ms \(待ち 14ms・覚えた答え 2 回・未契約 0 回・準備 \d+ms\)$");
+        await Assert.That(descrambler.CardUse()).Matches(@"^カード 2 回 計 \d+ms \(待ち 14ms・キャッシュ 2 回・未契約 0 回・準備 \d+ms\)$");
     }
 
     [Test]
-    public async Task 未契約の答えも内訳に数える()
+    public async Task 未契約の応答も内訳に数える()
     {
         var cards = new Cards { Code = 0xa102 };
         var descrambler = new Descrambler(cards);
@@ -1063,12 +1063,12 @@ public class B25Tests
         Run(descrambler, new Ts().Videos(3, null).Wire.ToArray(), flush: false);
 
         await Assert.That(descrambler.HeldAt()).IsEqualTo("PAT - / PMT - / ECM -");
-        await Assert.That(descrambler.CardUse()).IsEqualTo("カード 0 回 計 0ms (待ち 0ms・覚えた答え 0 回・未契約 0 回・準備 -)");
+        await Assert.That(descrambler.CardUse()).IsEqualTo("カード 0 回 計 0ms (待ち 0ms・キャッシュ 0 回・未契約 0 回・準備 -)");
     }
 
     /*
      * 契約の更新 (EMM。Emm.cs)。CAT の CA 記述子で EMM の PID を挙げ、EMM セクション (0x84) にペイロードを並べて流す。
-     * 渡し先 (Emm) の作業スレッドは起こさず、Step を呼んで 1 件ずつ送らせる (遅いカードのテストだけ作業スレッドを起こす)
+     * 渡し先 (Emm) の作業スレッドは起動せず、Step を呼んで 1 件ずつ送らせる (遅いカードのテストだけ作業スレッドを起動する)
      */
     private const int CatPid = 0x0001;
     private const int EmmPid = 0x0021;
@@ -1203,7 +1203,7 @@ public class B25Tests
     }
 
     /// <summary>
-    /// **カードが EMM に答えるのが遅くても、復号のスレッドは待たない。** ECM の鍵の位置は変わらない
+    /// **カードが EMM に応答するのが遅くても、復号のスレッドは待たない。** ECM の鍵の位置は変わらない
     /// (カードに送るのは渡し先の作業スレッドだけ)
     /// </summary>
     [Test]

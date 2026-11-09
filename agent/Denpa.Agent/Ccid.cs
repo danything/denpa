@@ -14,7 +14,7 @@ namespace Denpa.Agent;
  * - T1.cs    … ATR の読み方と、TPDU 単位のリーダーのための T=1 のブロックのやり取り
  *
  * 本番は Gemalto (Gemplus) PC Twin Reader (08e6:3437) に B-CAS。これは TPDU 単位で、
- * ATR から勝手にパラメータを決めてくれない (dwFeatures 0x00010230) ので、
+ * ATR からパラメータを自動では決めない (dwFeatures 0x00010230) ので、
  * T=1 の枠組みも SetParameters もこちらが持つ。
  */
 
@@ -155,10 +155,10 @@ public sealed class CcidLink : ICardLink
     /// </para>
     ///
     /// <para>
-    /// **SetParameters を忘れると、B-CAS とは話が通じない。** B-CAS は specific mode で、
-    /// ATR の直後から TA1 の速さ (Di 2) で話すのに、PC Twin はそれを自分では読まない
+    /// **SetParameters を送らないと、B-CAS とはやり取りできない。** B-CAS は specific mode で、
+    /// ATR の直後から TA1 の速さ (Di 2) で通信するのに、PC Twin はそれを自動では読み取らない
     /// (dwFeatures に「ATR からパラメータを決める」0x02 が無い)。リーダーは既定の速さのまま
-    /// 聞くので、最初のブロックから応答が無い。
+    /// 受信するので、最初のブロックから応答が無い。
     /// </para>
     /// </summary>
     public byte[] Reset()
@@ -177,7 +177,7 @@ public sealed class CcidLink : ICardLink
         {
             // 最初の命令から応答が無いなら、リーダーが固まっている。ポートをリセットして 1 回だけやり直す
             _portReset = true;
-            Log.Write($"{Name} が応えないので、USB のポートをリセットします");
+            Log.Write($"{Name} が応答しないので、USB のポートをリセットします");
             _pipe.ResetPort();
             Call(CcidMessage.PowerOff, []);
         }
@@ -240,11 +240,11 @@ public sealed class CcidLink : ICardLink
     }
 
     /// <summary>
-    /// T=1 のパラメータを教える (abProtocolDataStructure の 7 バイト)。
+    /// T=1 のパラメータをリーダーに設定する (abProtocolDataStructure の 7 バイト)。
     ///
     /// <para>
     /// 速さ (Fi/Di) は **specific mode なら TA1 そのもの**。negotiable mode のカードは PPS を
-    /// しない限り既定の速さ (0x11) のままなので、リーダーが PPS を自分でする (0x80) ときだけ TA1 を渡す
+    /// しない限り既定の速さ (0x11) のままなので、リーダーが PPS を自動でする (0x80) ときだけ TA1 を渡す
     /// </para>
     /// </summary>
     private void SetT1Parameters(Atr atr)
@@ -328,7 +328,7 @@ public sealed class CcidLink : ICardLink
     }
 
     /// <summary>
-    /// 命令を 1 つ送って、**同じ番号の**答えを返す。
+    /// 命令を 1 つ送って、**同じ番号の**応答を返す。
     ///
     /// <para>
     /// 番号の違う応答は読み飛ばす (前のプロセスが途中で終わって残した応答など)。

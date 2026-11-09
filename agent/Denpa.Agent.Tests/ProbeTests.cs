@@ -13,7 +13,7 @@ public class ProbeTests
 {
     /*
      * `--tune` は TS が来なくても `--seconds` で戻る。読み出し側 (DeviceStream) は TS が来ない間は戻らないので、
-     * 決めた時間で降りる合図を渡している (Probe.Measure)
+     * 決めた時間で読み出しを抜ける合図を渡している (Probe.Measure)
      */
     [Test]
     public async Task tune_は_TS_が来なくても決めた時間で戻る()
@@ -27,9 +27,9 @@ public class ProbeTests
         clock.Stop();
 
         await Assert.That(decodedMs).IsNull();
-        // 読み出し側は 200ms ごとに起きて合図を見る
+        // 読み出し側は 200ms ごとに合図を確かめる
         await Assert.That(clock.ElapsedMilliseconds >= 1000 && clock.ElapsedMilliseconds < 2000).IsTrue()
-            .Because($"{clock.ElapsedMilliseconds}ms 掛かった");
+            .Because($"{clock.ElapsedMilliseconds}ms かかった");
     }
 
     /*

@@ -9,8 +9,8 @@ namespace Denpa.Agent;
 /// <para>
 /// ここにあるのは両方で同じ所だけ: ATR から決める速さ、速さを変える、受けたバイトを読む、T=1 のブロックを送る、ATR と応答のブロックを受け切る。
 /// 電源の入れ方と切り方、カードが挿さっているかの見方は機材ごとに違うので、それぞれのクラスに置く。
-/// レジスタの読み書きは渡された関数で行う (CECH-ZD1 J はブリッジのロックの中で、PIX-DT295 は書いてよいレジスタを確かめてから)。
-/// PIX-DT295 は、機材のプログラムが使えれば <see cref="Send"/>・<see cref="Read"/> の代わりに機材の中で同じ手順を行わせ
+/// レジスタの読み書きには渡された関数を使う (CECH-ZD1 J はブリッジのロックの中で、PIX-DT295 は書いてよいレジスタを確かめてから)。
+/// PIX-DT295 は、機材のプログラムが使えれば <see cref="Send"/>・<see cref="Read"/> の代わりに機材の中で同じ手順を実行させ
 /// (<see cref="Dt295NativeLink.CardSend"/>・<see cref="Dt295NativeLink.CardReceive"/>)、<see cref="ReceiveAtr"/>・<see cref="ReceiveBlock"/> にはその読みを渡す
 /// </para>
 /// </summary>

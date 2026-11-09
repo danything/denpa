@@ -209,7 +209,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         SetNumber(matching, "idVendor", vendor);
         SetNumber(matching, "idProduct", product);
         uint iterator = 0;
-        // IOServiceGetMatchingServices は matching を手放す (こちらで CFRelease しない)
+        // IOServiceGetMatchingServices が matching を解放する (こちらで CFRelease しない)
         if (IOServiceGetMatchingServices(0, matching, &iterator) != Success) return found;
         try
         {
@@ -243,7 +243,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         CFRelease(key);
     }
 
-    /// <summary>プラグインを作って、欲しいインターフェースを取る。取れなければ null</summary>
+    /// <summary>プラグインを作って、使うインターフェースを取る。取れなければ null</summary>
     private static void* Query(uint service, nint pluginType, nint interfaceId)
     {
         void** plugin = null;
@@ -335,7 +335,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
     private readonly record struct PipeInfo(byte Ref, byte Type, int MaxPacket);
 
     /// <summary>
-    /// IOUSBLib は端点を pipeRef (1 から) で指すので、端点のアドレスとの対応を作る。転送の種類も覚える (interrupt は読み方が違う)。
+    /// IOUSBLib は端点を pipeRef (1 から) で指すので、端点のアドレスとの対応を作る。転送の種類も控える (interrupt は読み方が違う)。
     /// 一覧はその場所で初めて開いたときだけ記録に出す (実機で確かめていない macOS で、何が見えているかを残すため)
     /// </summary>
     private void MapPipes(string location)
@@ -403,7 +403,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
 
     /// <summary>
     /// interrupt のパイプには <c>ReadPipeTO</c> の時間切れが効かない (IOUSBLib.h)。時間切れの無い <c>ReadPipe</c> を
-    /// 出し続ける読み (<see cref="UsbReadPump"/>) を端点ごとに初めて読むときに作り、届いた答えを自前の時間で待つ
+    /// 出し続ける読み (<see cref="UsbReadPump"/>) を端点ごとに初めて読むときに作り、届いた応答を自前の時間切れで待つ
     /// </summary>
     public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
@@ -415,7 +415,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
             ObjectDisposedException.ThrowIf(_interface is null, Name);
             if (!_pumps.TryGetValue(endpoint, out pump!))
             {
-                // 読みの大きさは最大パケット長ちょうど (下位 11 ビット)。大きくすると、ちょうどの長さの答えで読みが終わらない
+                // 読みの大きさは最大パケット長ちょうど (下位 11 ビット)。大きくすると、ちょうどの長さの応答で読みが終わらない
                 var size = pipe.MaxPacket & 0x7FF;
                 pump = _pumps[endpoint] = new UsbReadPump(
                     $"{Name} EP 0x{endpoint:X2}", size > 0 ? size : 64, read => ReadOnce(endpoint, pipe.Ref, read), () => Abort(pipe.Ref));

@@ -5,7 +5,7 @@ namespace Denpa.Agent;
 /// <summary>
 /// PIX-DT295 1 台ぶんの持ち主。**USB のハンドルと機材の設定は 1 台に 1 つだけ**で、チューナー (<see cref="Dt295NativeTuner"/>) と
 /// カード (<see cref="Dt295NativeCard"/>) が取って使う。ホストが 0xBC のメモリ要求でレジスタを書いて機材を設定し (<see cref="Dt295NativeBoard"/>)、
-/// I2C で復調・チューナーを動かし (<see cref="Dt295NativeFrontend"/>)、機材の中では TS の送り出し・I2C の順次実行・カードの送受信を行う小さなプログラムだけを動かす (<see cref="Dt295NativePrograms"/>)。
+/// I2C で復調・チューナーを動かし (<see cref="Dt295NativeFrontend"/>)、機材の中では TS の送り出し・I2C の順次実行・カードの送受信を実行する小さなプログラムだけを動かす (<see cref="Dt295NativePrograms"/>)。
 ///
 /// <para>
 /// 開くときは起動直後の機材に設定を書く。起動直後でなければ (途中で止まった前の実行が書いた hook が残っている、ほかのファームウェアが動いたあと)、
@@ -50,11 +50,11 @@ public sealed class Dt295NativeDevice
     /// <summary>カードの準備が済むまでの時間 (ms。機材を開き始めてから)。済んでいなければ -1</summary>
     public long CardReadyMs { get; private set; } = -1;
 
-    /// <summary>カードの準備を進めている仕事 (まだ始めていなければ null)</summary>
+    /// <summary>カードの準備を進めているタスク (まだ始めていなければ null)</summary>
     public Task? CardWarmTask => _cardWarm;
 
     /// <summary>
-    /// カードの電源投入から ATR・T=1 の話し方の取り決めまでを、別のスレッドで始める (1 台に 1 回)。選局の待ち (仕様書の固定の待ち) と
+    /// カードの電源投入から ATR・T=1 の IFSD の取り決めまでを、別のスレッドで始める (1 台に 1 回)。選局の待ち (仕様書の固定の待ち) と
     /// 受信の確認の周回の間に進むので、TS が届くころにはカードが使える。制御転送と機材のプログラムへの要求は 1 つずつ通る (<c>Dt295NativeLink</c>) ので、
     /// 選局の I2C の手順と交互に入る。カードが無ければ記録に残して終わる (使うときの <see cref="Dt295NativeCard.Reset"/> がもう一度試す)
     /// </summary>
@@ -205,7 +205,7 @@ public sealed class Dt295NativeDevice
             using (timeline.Step("I2C の準備", "仕様書 6.4。書いて読み戻す")) i2cSaved = i2c.Prepare();
             undo.Push(("I2C の設定を戻す", () => i2c.Restore(i2cSaved)));
             if (!i2c.Alive) throw new Dt295NativeException("I2C のレジスタが書いた値で読めません");
-            // 機材の中の I2C の順次実行が使えれば使う。使えなければ、ホストが 1 つずつ行う
+            // 機材の中の I2C の順次実行が使えれば使う。使えなければ、ホストが 1 つずつ実行する
             using (timeline.Step("I2C の順次実行の確認", "転送 0 個の要求と、操作列の置き場の読み書き"))
             {
                 i2c.UseSequencer = link.ProbeI2cSequencer();
@@ -217,7 +217,7 @@ public sealed class Dt295NativeDevice
                 link.CardProgram = i2c.UseSequencer && link.ProbeCardProgram();
             }
             using (timeline.Step("復調とチューナーの初期化 (INITIALIZE の I2C)", "仕様書 7.1")) frontend.Initialize();
-            undo.Push(("地上波側を休ませる", frontend.RestTerrestrial));
+            undo.Push(("地上波側を待機させる", frontend.RestTerrestrial));
             return new Dt295NativeDevice(port, usb, link, board, frontend, undo, (clock.Elapsed, link.Controls), idlePolls, timeline, opened, sleep);
         }
         catch
@@ -310,7 +310,7 @@ public sealed class Dt295NativeDevice
         {
             if (_closed) return;
             _closed = true;
-            // カードの電源を切る (準備の仕事が進んでいれば、終わるのを少し待つ)
+            // カードの電源を切る (準備のタスクが進んでいれば、終わるのを少し待つ)
             try
             {
                 _cardWarm?.Wait(TimeSpan.FromSeconds(3));

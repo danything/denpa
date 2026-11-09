@@ -54,9 +54,9 @@ public static class SianoUserland
     /// 挿さっている機材。**カーネルが使っているものも挙げる** (<c>Driver</c> で分かる)。
     ///
     /// <para>
-    /// 機材は <c>siano-ts --list</c> に聞く (siano-userland 0.1.7 から)。USB ID の表は持たず、
+    /// 機材は <c>siano-ts --list</c> に問い合わせる (siano-userland 0.1.7 から)。USB ID の表は持たず、
     /// ポートと受けられる方式も siano-ts が libusb で見たものを使う。デバイスを開かないので、
-    /// 別の siano-ts が使っていても聞ける。
+    /// 別の siano-ts が使っていても問い合わせられる。
     /// </para>
     ///
     /// <para>
@@ -180,16 +180,16 @@ public static class SianoUserland
 }
 
 /// <summary>
-/// siano-userland の機材 1 台。**<c>siano-ts --control</c> を 1 つ起こしたまま、標準入力で選局し直す。**
+/// siano-userland の機材 1 台。**<c>siano-ts --control</c> を 1 つ起動したまま、標準入力で選局し直す。**
 ///
 /// <para>
-/// 起こすのは最初の選局のときだけで、以降は <c>tune &lt;Hz&gt;</c> を 1 行書き、stderr の <c>tuned &lt;Hz&gt;</c>
+/// 起動するのは最初の選局のときだけで、以降は <c>tune &lt;Hz&gt;</c> を 1 行書き、stderr の <c>tuned &lt;Hz&gt;</c>
 /// (駄目なら <c>control: tune failed: …</c>) を待つ。TS は選局を跨いで同じ標準出力に流れ続けるので、
 /// 読み出し側 (<see cref="DeviceStream"/>) も 1 つを使い回す (DVB と同じ)。
 /// </para>
 ///
 /// <para>
-/// **選局し直す間は、標準出力を読んで捨てる。** siano-ts は 1 本のループで「TS を書く → 標準入力を見る」を
+/// **選局し直す間は、標準出力を読んで捨てる。** siano-ts は 1 本のループで「TS を書く → 標準入力を読む」を
 /// 回していて、pipe が埋まると <c>tune</c> を読みに来ない。読んで捨てれば前のチャンネルの残りも消える
 /// (docs/agent.md「siano-userland の作り」)。
 /// </para>
@@ -210,9 +210,9 @@ public sealed class SianoTuner : ITuneDevice
     private DeviceStream? _stream;
 
     /// <summary>
-    /// siano-ts 1 つぶん。stderr の行は <see cref="Lines"/> にも流す (選局の答えを待つため)。
+    /// siano-ts 1 つぶん。stderr の行は <see cref="Lines"/> にも流す (選局の応答を待つため)。
     /// **フラグは子ごとに持つ。** 止めたかどうかを 1 つのフラグで持つと、前の子の後始末が次の子のフラグを読む
-    /// (起こし直した直後に前の子の終了が回ってくる)
+    /// (起動し直した直後に前の子の終了が回ってくる)
     /// </summary>
     private sealed class Child(Process process)
     {
@@ -255,13 +255,13 @@ public sealed class SianoTuner : ITuneDevice
             {
                 throw new IOException($"ファームウェアがありません: {SianoUserland.Firmware}");
             }
-            // 抜けた・カーネルが使っている、は siano-ts が終了コードで答える (Hint)
+            // 抜けた・カーネルが使っている、は siano-ts が終了コードで返す (Hint)
             return StartInfo(port, SianoUserland.Dir, SianoUserland.Firmware);
         })
     {
     }
 
-    /// <summary>起こし方と待ちの上限を差し替える (テスト。偽の siano-ts を起こす)</summary>
+    /// <summary>起動のしかたと待ちの上限を差し替える (テスト。偽の siano-ts を起動する)</summary>
     internal SianoTuner(string name, Func<ProcessStartInfo> start, TimeSpan? tuneTimeout = null)
     {
         _name = name;
@@ -271,7 +271,7 @@ public sealed class SianoTuner : ITuneDevice
 
     public Stream Output => _stream ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
-    /// <summary>siano-ts が生きていれば、最後に合わせたチャンネルのまま流れている</summary>
+    /// <summary>siano-ts が動いていれば、最後に合わせたチャンネルのまま流れている</summary>
     public bool Tuned
     {
         get
@@ -281,10 +281,10 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>
-    /// 起こすもの。**機材は USB のポートで指す** (<c>--device 1-2.3</c>)。
+    /// 起動するもの。**機材は USB のポートで指す** (<c>--device 1-2.3</c>)。
     ///
     /// <para>
-    /// 選局は起こしたあとに標準入力で指示するので、ここでは周波数を渡さない。
+    /// 選局は起動したあとに標準入力で指示するので、ここでは周波数を渡さない。
     /// PID は絞らない (全部。B25 と記録は TS 全体を要る)。
     /// </para>
     /// </summary>
@@ -342,7 +342,7 @@ public sealed class SianoTuner : ITuneDevice
         _ = process.WaitForExitAsync().ContinueWith(_ =>
         {
             if (child.Dropped) return;
-            // USB が抜けたのもここに来る。次の選局で起こし直す (Tuned が false になる)
+            // USB が抜けたのもここに来る。次の選局で起動し直す (Tuned が false になる)
             Log.Write($"[{_name}] {Why(child, process.ExitCode)}");
         }, TaskScheduler.Default);
     }
@@ -367,12 +367,12 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>
-    /// <c>tune</c> を書いて答えを待つ。**待つ間は標準出力を読んで捨てる** (上の説明)。
+    /// <c>tune</c> を書いて応答を待つ。**待つ間は標準出力を読んで捨てる** (上の説明)。
     /// 駄目なら理由を添えて投げる。siano-ts は生かしたまま (次の選局で使い回す)
     /// </summary>
     private void Retune(Child child, DeviceStream stream, string command)
     {
-        // 前の選局の答えが残っていれば捨てる
+        // 前の選局の応答が残っていれば捨てる
         while (child.Lines.Reader.TryRead(out _))
         {
         }
@@ -395,7 +395,7 @@ public sealed class SianoTuner : ITuneDevice
         });
 
         string? failure = null;
-        // 答えを信じられなくなった。子を捨てて、次の選局で起こし直す
+        // 応答を当てにできなくなった。子を捨てて、次の選局で起動し直す
         var uncertain = false;
         try
         {
@@ -407,9 +407,9 @@ public sealed class SianoTuner : ITuneDevice
         {
             Volatile.Write(ref answered, 1);
             /*
-             * **読み捨てが降りきるまで返さない。** 降りないまま返すと、次の読む側と
-             * 同じ fd を取り合う。Read は 200ms ごとに起きてフラグを見るので普通は
-             * すぐ降りるが、降りなければ子ごと捨てる (Drop が読み出し側を止めて閉じる)
+             * ***読み捨てのループを抜けきるまで返さない。** 抜けないまま返すと、次の読む側と
+             * 同じ fd を取り合う。Read は 200ms ごとに戻ってフラグを確かめるので普通は
+             ** すぐ抜けるが、抜けなければ子ごと捨てる (Drop が読み出し側を止めて閉じる)
              */
             if (!drain.Wait(TimeSpan.FromSeconds(2)))
             {
@@ -425,13 +425,13 @@ public sealed class SianoTuner : ITuneDevice
     private static string Why(Child child, int code) => child.Exited(code) + SianoUserland.Hint(code);
 
     /// <summary>
-    /// 答えを待つ。<c>tuned &lt;指定した Hz&gt;</c> なら成功 (null)、駄目なら理由。
+    /// 応答を待つ。<c>tuned &lt;指定した Hz&gt;</c> なら成功 (null)、駄目なら理由。
     ///
     /// <para>
-    /// **待ちきれなかったら、その子の答えはもう信じない** (<c>Uncertain</c>)。siano-ts は
-    /// まだ前の選局を続けていて、その答え (<c>tuned</c> / <c>tune failed</c>) が次の選局の
-    /// 答えに紛れ込むため。<c>tuned</c> は指定した周波数と突き合わせるが、<c>tune failed</c> には
-    /// 周波数が付かないので、子ごと捨てて起こし直すしかない。答えでない行 (警告など) は飛ばす
+    /// ***時間内に来なかったら、その子の応答はもう使わない** (<c>Uncertain</c>)。siano-ts は
+    /// まだ前の選局を続けていて、その応答 (<c>tuned</c> / <c>tune failed</c>) が次の選局の
+    /// 応答に紛れ込むため。<c>tuned</c> は指定した周波数と突き合わせるが、<c>tune failed</c> には
+    /// 周波数が付かないので、子ごと捨てて起動し直すしかない。応答でない行 (警告など) は飛ばす
     /// </para>
     /// </summary>
     private static (string? Failure, bool Uncertain) Await(Child child, string command, TimeSpan limit)
@@ -465,7 +465,7 @@ public sealed class SianoTuner : ITuneDevice
     }
 
     /// <summary>
-    /// siano-ts を止める。<c>quit</c> を送り、聞かなければ SIGTERM、それでも残れば SIGKILL。
+    /// siano-ts を止める。<c>quit</c> を送り、終了しなければ SIGTERM、それでも残れば SIGKILL。
     /// 読む側が抜けきってから fd を閉じる (<see cref="ChildTs.ReaderDrain"/>)。
     ///
     /// <para>
@@ -512,7 +512,7 @@ public sealed class SianoTuner : ITuneDevice
         child.Feeding.Wait(TimeSpan.FromSeconds(2));
         stream?.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
         stream?.Dispose();
-        // 同期読みにした標準出力は Process.Dispose が閉じない。閉じないと GC まで fd が残り、起こし直すたびに増える
+        // 同期読みにした標準出力は Process.Dispose が閉じない。閉じないと GC まで fd が残り、起動し直すたびに増える
         process.StandardOutput.Dispose();
         try
         {

@@ -1,10 +1,10 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * 届いた相手に録画を潰させない守り。
+ * API を呼ぶ側に録画を上書きさせない確認。
  *
  * - 後から復号する (/denpa/decode) ときは、もうあるファイルを上書きしない。
- *   復号できなかったら自分で作った書きかけを消す (掛け直しが「もうあります」で断られないように)
+ *   復号できなかったら、その復号で作った書きかけを消す (やり直しが「もうあります」で断られないように)
  */
 public class ApiGuardTests
 {
@@ -38,7 +38,7 @@ public class ApiGuardTests
         Directory.CreateDirectory(root);
         try
         {
-            // 掛かったままの映像のパケットだけ。PMT も ECM も無いので鍵を受け取れない
+            // スクランブルされたままの映像のパケットだけ。PMT も ECM も無いので鍵を受け取れない
             var packets = new byte[188 * 10];
             for (var at = 0; at < packets.Length; at += 188)
             {

@@ -5,7 +5,7 @@ namespace Denpa.Agent.Tests;
 /*
  * CECH-ZD1 J の偽物。機材の振る舞いは仕様書から決めた (参考の実装の出力は使っていない)。
  *
- * - DibModel … DiB8000 (0x12) と DiB0090 (0xC0) のレジスタ。書いたものを覚え、確かめの値 (D[896] = 0x01B3、
+ * - DibModel … DiB8000 (0x12) と DiB0090 (0xC0) のレジスタ。書いたものを持ち、確認の値 (D[896] = 0x01B3、
  *   D[897] = 0x8002、T[0x1A] = 0x0223) と、探索の割り込み (D[1284])・ロックのビット (D[568]) を返す
  * - FakeI2c … DibModel の前に置く II2c。やり取りを 1 行ずつ控える (D1287=0003、D896? など)
  * - FakeBridgeUsb … MB86H47A のメモリを辞書で持ち、メモリ要求を控える。bulk の塊は、コア 1 のプログラムの代わりに
@@ -19,7 +19,7 @@ internal sealed class DibModel
     public readonly Dictionary<int, ushort> Demod = [];
     public readonly Dictionary<int, ushort> Tuner = [];
 
-    /// <summary>確かめの値 (D[896]・D[897]・T[0x1A])。既定は製品 2・パッケージ 1・P1G より前の DiB0090</summary>
+    /// <summary>確認の値 (D[896]・D[897]・T[0x1A])。既定は製品 2・パッケージ 1・P1G より前の DiB0090</summary>
     public ushort Id { get; set; } = 0x01B3;
     public ushort Version { get; set; } = 0x8002;
     public ushort TunerId { get; set; } = 0x0223;
@@ -103,7 +103,7 @@ internal sealed class FakeI2c(DibModel model) : II2c
     }
 }
 
-/// <summary>眠らない時計。眠った分だけ進む</summary>
+/// <summary>実際には待たない時計。待った分だけ進む</summary>
 internal sealed class FakeTime : IDibTime
 {
     public double NowMs { get; private set; }
@@ -119,7 +119,7 @@ internal sealed class FakeTime : IDibTime
 
 /// <summary>
 /// MB86H47A の偽物 (メモリ・コア 1・TS の端点)。コア 1 のプログラムの代わりに、bulk の塊を
-/// Mb86h47Programs.cs に書いた形式どおりに読んで DibModel に届け、EP 0x83 で答える
+/// Mb86h47Programs.cs に書いた形式どおりに読んで DibModel に届け、EP 0x83 で応答する
 /// </summary>
 internal sealed class FakeBridgeUsb : IUsbDevice
 {
@@ -131,10 +131,10 @@ internal sealed class FakeBridgeUsb : IUsbDevice
     public Queue<byte[]> Ts { get; } = new();
     public bool Disposed { get; private set; }
 
-    /// <summary>コア 1 が動いているふりをする (生存カウンタが進む)</summary>
+    /// <summary>コア 1 が動いている状態を再現する (生存カウンタが進む)</summary>
     public bool Core1 { get; set; } = true;
 
-    /// <summary>コア 1 が bulk の塊に答えるふりをする</summary>
+    /// <summary>コア 1 が bulk の塊に応答する状態を再現する</summary>
     public bool Core1Bulk { get; set; } = true;
 
     public List<byte[]> Packets { get; } = [];
@@ -194,7 +194,7 @@ internal sealed class FakeBridgeUsb : IUsbDevice
         Packets.Add(data.ToArray());
     }
 
-    /// <summary>EP 0x83: 答えていない塊があれば、命令を DibModel に届けて答えを作る</summary>
+    /// <summary>EP 0x83: 応答していない塊があれば、命令を DibModel に届けて応答を作る</summary>
     public int InterruptRead(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
         if (!Core1Bulk || _answered >= Packets.Count) return 0;

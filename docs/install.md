@@ -83,7 +83,7 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
 - `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可と、pipe を広げる
   `SYS_RESOURCE` だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
 - 止めるときは録画の終わりを待つので、`--stop-timeout` を長くしておきます (compose の `stop_grace_period` と同じ)。
-  どちらかのプロセスが落ちたらコンテナごと終わり、起こし直しは `--restart` に任せます
+  どちらかのプロセスが落ちたらコンテナごと終わり、起動し直すのは `--restart` の役目です
 
 ### Helm (Kubernetes)
 

@@ -14,7 +14,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// px4d にはファイルのパスで渡すので、埋め込んだものを設定の置き場 (tuners.json の隣) に書き出して渡す。
-/// <c>PX4_FIRMWARE</c> が指定されていれば、そちらを使う。どちらも SHA-256 を確かめ、違えば px4d を起こさない
+/// <c>PX4_FIRMWARE</c> が指定されていれば、そちらを使う。どちらも SHA-256 を確かめ、違えば px4d を起動しない
 /// </para>
 /// </summary>
 public static class Px4Firmware

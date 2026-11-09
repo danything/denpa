@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 /// デバイスを確保したままの選局は、値が 1 つ違っても「ioctl は通るが同期しない」という
 /// 出方をする。単体テストでは踏めないので、実機で当てるための入口を用意した
 /// (チューナー自動検出のときと同じやり方)。受けた TS は、量・同期バイトの割合・連続性の飛び (ContinuityCount.cs)・
-/// 掛かっているパケットの割合を出す。
+/// スクランブルされたパケットの割合を出す。
 /// </para>
 ///
 /// <code>
@@ -28,7 +28,7 @@ namespace Denpa.Agent;
 /// </code>
 ///
 /// <para>
-/// 見るのは 3 つ。**同期したか・TS の形式になっているか・切り替えに何秒かかるか。**
+/// 確かめるのは 3 つ。**同期したか・TS の形式になっているか・切り替えに何秒かかるか。**
 /// 最後は取り直すのと比べてどれだけ短いかで、ここでしか測れない。
 /// </para>
 /// </summary>
@@ -43,7 +43,7 @@ public static class Probe
     private static readonly TimeSpan Read = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// 鍵を貰いに行く接続の TTL (<c>CARD_TTL</c>。常駐のときと同じ)。設定が読めなければ、
+    /// 鍵を受け取る接続の TTL (<c>CARD_TTL</c>。常駐のときと同じ)。設定が読めなければ、
     /// 常駐のときと同じく理由を出して止まる (null)
     /// </summary>
     private static int? CardHops()
@@ -63,7 +63,7 @@ public static class Probe
     /// ファイルを 1 つ復号する。**チューナーを使わずに B25 だけ確かめる。**
     ///
     /// <para>
-    /// 掛かったまま録れてしまったものを救うのにも使える (denpa からは
+    /// スクランブルされたまま録れてしまったものを復号するのにも使える (denpa からは
     /// <c>/denpa/decode</c> が同じことをする)。
     /// </para>
     /// </summary>
@@ -94,14 +94,14 @@ public static class Probe
         });
 
         var before = packets == 0 ? 0 : 100.0 * scrambled / packets;
-        Console.WriteLine($"{input.Length} -> {written} バイト  元は {before:F1}% が掛かっていました");
-        Console.WriteLine($"復号した {b25.Decoded} / 掛かったまま {b25.Undecodable} パケット{(b25.LastError is { } why ? $" ({why})" : "")}");
+        Console.WriteLine($"{input.Length} -> {written} バイト  元は {before:F1}% がスクランブルされていました");
+        Console.WriteLine($"復号した {b25.Decoded} / スクランブルされたまま {b25.Undecodable} パケット{(b25.LastError is { } why ? $" ({why})" : "")}");
         return 0;
     }
 
     /// <summary>
     /// カードリーダーを並べて、カードを開いてみる。**pcscd を通さなくなったので、
-    /// 実機でリーダーと話せているかはここで確かめる。**
+    /// 実機でリーダーと通信できているかはここで確かめる。**
     /// </summary>
     public static int Card(string[] args)
     {
@@ -152,9 +152,9 @@ public static class Probe
         var lnbAt = Array.IndexOf(args, "--lnb");
         var lnb = lnbAt >= 0 ? args.ElementAtOrDefault(lnbAt + 1) : null;
         var decode = args.Contains("--decode");
-        // 手元にカードが無い拠点。鍵だけ貰う (CardShare.cs)。--card-url が無ければ、--decode-file と同じく CARD_URL を読む
+        // 手元にカードが無い拠点。鍵だけ受け取る (CardShare.cs)。--card-url が無ければ、--decode-file と同じく CARD_URL を読む
         var cardAt = Array.IndexOf(args, "--card-url");
-        // 貰いに行く接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
+        // 鍵を受け取る接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
         if (CardHops() is not { } hops) return 2;
         Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : Environment.GetEnvironmentVariable("CARD_URL"), hops);
 
@@ -164,7 +164,7 @@ public static class Probe
             : Read;
         if (Zd1j.Parse(device) is { } zd1j)
         {
-            // 覚えたロックの値は常駐のときと同じファイルを読み書きする (再起動をまたいで確かめられるように)
+            // 保存したロックの値は常駐のときと同じファイルを読み書きする (再起動をまたいで確かめられるように)
             Zd1jBoard.Locks = new Zd1jLocks(Config.FromEnvironment().Zd1jLocksFile);
             // 鍵はそのボードの内蔵の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
             IKeySource keys = cardAt >= 0 ? Keys.Source : new LocalCard(() => [Zd1j.Card(zd1j)]);
@@ -216,7 +216,7 @@ public static class Probe
     /// CECH-ZD1 J の速さを測る。**冷えた状態から開く・選局からロック・ロックから最初の TS・2 回目の選局 (温かい状態)**
     /// の時間と、I2C の回数、C/N と電波の強度を出す。チャンネルは <c>T27</c> でも <c>27</c> (地上波) でもよい。
     /// 選局のたびに、ロックまでの内訳 (段ごとの時間と待ち) も出す (常駐のときは出さない)。<c>--repeat N</c> はチャンネルの並びを N 回回し、
-    /// 最後にロックの成否と時間の最小・中央・最大を出す (選局を縮める工夫で確かさが落ちていないかを見るため)
+    /// 最後にロックの成否と時間の最小・中央・最大を出す (選局を縮める工夫で確かさが落ちていないかを確かめるため)
     /// </summary>
     private static int RunZd1j(string port, string[] channels, IKeySource? keys, TimeSpan seconds, int repeat)
     {
@@ -332,7 +332,7 @@ public static class Probe
 
     /// <summary>
     /// 読めたバイト数と、それが TS の形式になっているか。復号させたなら復号できたか。<paramref name="lockedAt"/> (Stopwatch の時刻) を渡せば、
-    /// そこから最初の復号できたパケット (掛かっていた PID の、掛かっていないペイロード) までの ms を出して返す (最初の ECM を待つ時間)
+    /// そこから最初の復号できたパケット (スクランブルされていた PID の、スクランブルされていないペイロード) までの ms を出して返す (最初の ECM を待つ時間)
     /// </summary>
     internal static double? Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration, long lockedAt = 0)
     {
@@ -355,7 +355,7 @@ public static class Probe
 
         while (DateTime.UtcNow < deadline)
         {
-            // DeviceStream は TS が来ない間は戻らないので、決めた時間で降りる合図を渡す
+            // DeviceStream は TS が来ない間は戻らないので、決めた時間で読み出しを抜ける合図を渡す
             var read = stream is DeviceStream device ? device.Read(buffer, 0, buffer.Length, () => DateTime.UtcNow >= deadline) : stream.Read(buffer);
             if (read <= 0) break;
             last = DateTime.UtcNow - started;
@@ -400,12 +400,12 @@ public static class Probe
         var before = packets == 0 ? 0 : 100.0 * scrambledIn / packets;
         if (b25 is null)
         {
-            Console.WriteLine($"    掛かっているパケット {before:F1}%");
+            Console.WriteLine($"    スクランブルされたパケット {before:F1}%");
             return null;
         }
 
         var after = outPackets == 0 ? 0 : 100.0 * scrambledOut / outPackets;
-        Console.WriteLine($"    掛かっているパケット {before:F1}% -> 復号したあと {after:F1}% ({outPackets} 個)"
+        Console.WriteLine($"    スクランブルされたパケット {before:F1}% -> 復号したあと {after:F1}% ({outPackets} 個)"
             + (b25.LastError is { } why ? $"  {why}" : ""));
         if (lockedAt == 0) return null;
         if (decodedAt == 0)
@@ -419,7 +419,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// スクランブルが掛かっているか。**4 バイト目の上 2 ビット** (transport_scrambling_control)。
+    /// スクランブルされているか。**4 バイト目の上 2 ビット** (transport_scrambling_control)。
     /// 復号できていれば 0 になる
     /// </summary>
     private static bool Scrambled(ReadOnlySpan<byte> packet) => (packet[3] & 0xC0) != 0;

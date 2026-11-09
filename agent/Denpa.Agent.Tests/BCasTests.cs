@@ -77,7 +77,7 @@ public class BCasTests
         return response;
     }
 
-    /// <summary>送られてきた APDU の先頭 (CLA INS) で答えを決める接続</summary>
+    /// <summary>送られてきた APDU の先頭 (CLA INS) で応答を決める接続</summary>
     private sealed class FakeLink(string name, Func<byte[], byte[]>? ecm = null) : ICardLink
     {
         private int _busy;
@@ -229,7 +229,7 @@ public class BCasTests
         await Assert.That(CardWire.ReadCode(packed, "契約確認")).IsEqualTo(0x0800);
 
         var err = Assert.Throws<IOException>(() => CardWire.ReadCode([0x08], "契約確認"));
-        await Assert.That(err?.Message).Contains("契約確認の答えが短すぎます");
+        await Assert.That(err?.Message).Contains("契約確認の応答が短すぎます");
     }
 
     /// <summary>
@@ -259,7 +259,7 @@ public class BCasTests
 
     /// <summary>APDU は <c>90 34 00 00 Lc ECM 00</c>。鍵は応答の 7 バイト目から奇数・偶数の順</summary>
     [Test]
-    public async Task ECM_を送って鍵を貰う()
+    public async Task ECM_を送って鍵を受け取る()
     {
         var link = new FakeLink("reader");
         using var card = BCas.Open(() => [Candidate(link)]);
@@ -298,7 +298,7 @@ public class BCasTests
     }
 
     [Test]
-    public async Task INT_に答えないリーダーは飛ばす()
+    public async Task INT_に応答しないリーダーは飛ばす()
     {
         var empty = new FakeLink("empty") { Int = () => throw new IOException("カードが挿さっていません") };
         var acas = new FakeLink("other") { Int = () => IntResponse(0xa101) };
@@ -368,7 +368,7 @@ public class BCasTests
     }
 
     [Test]
-    public async Task 同じ_ECM_は_3_秒のあいだカードに聞かない()
+    public async Task 同じ_ECM_は_3_秒のあいだカードに問い合わせない()
     {
         var clock = new FakeClock();
         var link = new FakeLink("reader");
@@ -380,11 +380,11 @@ public class BCasTests
         await Assert.That(EcmsSent(link)).IsEqualTo(1);
         await Assert.That(cached.Code).IsEqualTo(0x0200);
 
-        card.Ecm([.. SampleEcm[..^1], 0xff]);  // 違う ECM は聞く
+        card.Ecm([.. SampleEcm[..^1], 0xff]);  // 違う ECM は問い合わせる
         await Assert.That(EcmsSent(link)).IsEqualTo(2);
 
         clock.Now += TimeSpan.FromSeconds(2);
-        card.Ecm(SampleEcm);  // 古くなったら聞き直す
+        card.Ecm(SampleEcm);  // 古くなったら問い合わせ直す
         await Assert.That(EcmsSent(link)).IsEqualTo(3);
     }
 
@@ -392,20 +392,20 @@ public class BCasTests
     public async Task 同時に呼ばれてもカードには順番に触る()
     {
         var link = new FakeLink("reader");
-        // 時計は止めておく。混んだ CI で 64 本が 3 秒を跨ぐと、覚えた答えが切れて数が合わなくなる
+        // 時計は止めておく。混んだ CI で 64 本が 3 秒を跨ぐと、キャッシュした応答が切れて数が合わなくなる
         using var card = BCas.Open(() => [Candidate(link)], new FakeClock());
 
         var ecms = Enumerable.Range(0, 32).Select(n => new byte[] { 0x80, (byte)n, 0x01, 0x02 }).ToArray();
         await Task.WhenAll(Enumerable.Range(0, 64).Select(n => Task.Run(() => card.Ecm(ecms[n % ecms.Length]))));
 
         await Assert.That(link.Overlapped).IsEqualTo(0);
-        // 同じ ECM を同時に聞かれても、カードに聞くのは 1 回ずつ
+        // 同じ ECM の要求が同時に来ても、カードに問い合わせるのは 1 回ずつ
         await Assert.That(EcmsSent(link)).IsEqualTo(ecms.Length);
     }
 
-    /// <summary>覚えていた答えを返したら、そうと言う (選局の内訳の記録。鍵は同じ)</summary>
+    /// <summary>キャッシュした応答を返したら、そのことを示す (選局の内訳の記録。鍵は同じ)</summary>
     [Test]
-    public async Task 覚えていた答えはそうと言う()
+    public async Task キャッシュした応答はそのことを示す()
     {
         var link = new FakeLink("reader");
         using var card = BCas.Open(() => [Candidate(link)], new FakeClock());
@@ -430,7 +430,7 @@ public class BCasTests
         await Assert.That(EcmsSent(link)).IsEqualTo(0);
     }
 
-    /// <summary>起動したときに開いておけば、最初の選局はカードを開かずにカードの定数を貰える (LocalCard.Warm)</summary>
+    /// <summary>起動したときに開いておけば、最初の選局はカードを開かずにカードの定数を受け取れる (LocalCard.Warm)</summary>
     [Test]
     public async Task 起動したときに開いたカードを最初の選局で使う()
     {
@@ -454,8 +454,8 @@ public class BCasTests
     }
 
     /// <summary>
-    /// **起動したときに開けなくても、最初の選局は探し直す。** px4d がまだ起きていないだけかもしれないので、
-    /// 断った印を残して <see cref="BCas.RetryAfter"/> のあいだ断り続けてはいけない
+    /// **起動したときに開けなくても、最初の選局は探し直す。** px4d がまだ起動していないだけかもしれないので、
+    /// 断った記録を残して <see cref="BCas.RetryAfter"/> のあいだ断り続けてはいけない
     /// </summary>
     [Test]
     public async Task 起動したときに開けなくても最初の選局で探し直す()
@@ -534,7 +534,7 @@ public class BCasTests
     }
 
     [Test]
-    public async Task EMM_を受け入れたら覚えていた_ECM_の答えを捨てる()
+    public async Task EMM_を受け入れたらキャッシュした_ECM_の応答を捨てる()
     {
         var link = new FakeLink("reader");
         using var card = BCas.Open(() => [Candidate(link)]);
@@ -543,7 +543,7 @@ public class BCasTests
         card.Ecm(SampleEcm);
         await Assert.That(EcmsSent(link)).IsEqualTo(1);
 
-        // 受け入れなかったときは覚えたまま
+        // 受け入れなかったときはキャッシュを残す
         link.Emm = _ => ConfirmResponse(0xA102);
         card.Emm(SamplePayload);
         card.Ecm(SampleEcm);

@@ -48,8 +48,8 @@ internal sealed class StepClock : TimeProvider
 /*
  * 契約の更新 (EMM) の渡し先 (Emm.cs)。
  *
- * 作業スレッドは起こさず、Step を呼んで 1 回ずつ進める。カードは返り値を決めて返す偽物 (Card)。
- * セクションの組み立てと CAT は B25Tests で見る。
+ * 作業スレッドは起動せず、Step を呼んで 1 回ずつ進める。カードは返り値を決めて返す偽物 (Card)。
+ * セクションの組み立てと CAT は B25Tests で確かめる。
  */
 public class EmmTests
 {
@@ -67,7 +67,7 @@ public class EmmTests
         return [.. payload];
     }
 
-    /// <summary>ペイロードを並べた EMM セクション。CRC は渡し先では見ないので 0 を置く</summary>
+    /// <summary>ペイロードを並べた EMM セクション。CRC は渡し先では確かめないので 0 を置く</summary>
     private static byte[] Section(params byte[][] payloads) =>
         [0x84, 0, 0, 0, 0, 0, 0, 0, .. payloads.SelectMany(p => p), 0, 0, 0, 0];
 
@@ -134,7 +134,7 @@ public class EmmTests
     [Arguments(0x2100)]
     [Arguments(0xA102)]
     [Arguments(0xA107)]
-    public async Task カードが答えたものは覚えて_もう送らない(int code)
+    public async Task カードが応答したものは_もう送らない(int code)
     {
         var card = new Card { Code = _ => code };
         var (emm, clock) = Ready(card);
@@ -149,7 +149,7 @@ public class EmmTests
     }
 
     [Test]
-    public async Task ほかの返り値とカードと話せなかったものは覚えず_次に流れてきたら送り直す()
+    public async Task ほかの返り値とカードと通信できなかったものは_次に流れてきたら送り直す()
     {
         var calls = 0;
         var card = new Card { Code = _ => ++calls == 1 ? 0xA103 : throw new IOException("カードとやり取りできません") };
@@ -193,7 +193,7 @@ public class EmmTests
     }
 
     [Test]
-    public async Task 覚えるのは_256_件までで_古いものから忘れる()
+    public async Task 持つのは_256_件までで_古いものから捨てる()
     {
         var card = new Card();
         var (emm, clock) = Ready(card);
@@ -203,7 +203,7 @@ public class EmmTests
             emm.Section(Section(Payload(Mine, seed)));
             Tick(emm, clock);
         }
-        // 0 番は忘れ、256 番は覚えている
+        // 0 番は捨て、256 番は持っている
         emm.Section(Section(Payload(Mine, 256), Payload(Mine, 0)));
         Tick(emm, clock, 3);
 

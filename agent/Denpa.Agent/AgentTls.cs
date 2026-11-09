@@ -19,7 +19,7 @@ namespace Denpa.Agent;
 /// 置き場は tuners.json の隣の <c>tls/</c> (コンテナなら <c>/config/tls</c>)。
 /// </para>
 /// <list type="bullet">
-/// <item><c>agent.key</c> / <c>agent.crt</c>: 自分の鍵と自己署名の証明書。**一度作ったら作り直さない** (denpa が証明書そのものを覚えるので)</item>
+/// <item><c>agent.key</c> / <c>agent.crt</c>: 自分の鍵と自己署名の証明書。**一度作ったら作り直さない** (denpa が証明書そのものを保存するので)</item>
 /// <item><c>pair-token</c>: 合言葉。<c>AGENT_PAIR_TOKEN</c> を渡していれば作らない</item>
 /// <item><c>clients</c>: 組んだ denpa の証明書の指紋。1 行に 1 つ</item>
 /// </list>
@@ -125,14 +125,14 @@ public sealed class AgentTls
 
     /// <summary>
     /// <c>denpa-agent --status</c>: 動いているエージェントに自分の証明書で繋いで <c>/denpa/tuners</c> を読み、
-    /// 返った JSON をそのまま標準出力に出す (インストーラが様子を見るため)。サーバの証明書が agent.crt と同じかも確かめる。
+    /// 返った JSON をそのまま標準出力に出す (インストーラが結果を確かめるため)。サーバの証明書が agent.crt と同じかも確かめる。
     /// 繋がらなければ理由を標準エラーに出して 1
     /// </summary>
     public static async Task<int> Status(string dir, string host, int port)
     {
         if (!File.Exists(Path.Combine(dir, "agent.crt")) || !File.Exists(Path.Combine(dir, "agent.key")))
         {
-            Console.Error.WriteLine($"{dir} に agent.key / agent.crt がありません (エージェントを一度起こすと作られます)");
+            Console.Error.WriteLine($"{dir} に agent.key / agent.crt がありません (エージェントを一度起動すると作られます)");
             return 1;
         }
         using var certificate = LoadCertificate(dir);
@@ -209,7 +209,7 @@ public sealed class AgentTls
         }
     }
 
-    /// <summary><c>POST /denpa/pair</c> の答え。断ったら <c>Error</c>、組めたら返す <c>Proof</c> が入る</summary>
+    /// <summary><c>POST /denpa/pair</c> の応答。断ったら <c>Error</c>、組めたら返す <c>Proof</c> が入る</summary>
     public readonly record struct PairResult(int Status, string? Error, string? Proof);
 
     /// <summary>
@@ -240,7 +240,7 @@ public sealed class AgentTls
         var keyFile = Path.Combine(dir, "agent.key");
         var certFile = Path.Combine(dir, "agent.crt");
         /*
-         * 片方だけ残っているのは、作っている途中で落ちたとき。証明書を書く前なので、それを覚えた denpa はいない
+         * 片方だけ残っているのは、作っている途中で落ちたとき。証明書を書く前なので、それを保存した denpa は無い
          */
         if (!File.Exists(keyFile) || !File.Exists(certFile))
         {

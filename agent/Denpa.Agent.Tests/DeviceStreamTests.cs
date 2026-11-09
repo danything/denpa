@@ -36,7 +36,7 @@ public partial class DeviceStreamTests
     }
 
     [Test]
-    public async Task 降りると言えば_何も来なくても戻る()
+    public async Task 抜けるよう指示されれば_何も来なくても戻る()
     {
         var (stream, write) = Silent();
         using (stream)
@@ -44,7 +44,7 @@ public partial class DeviceStreamTests
         {
             var buffer = new byte[188];
             var clock = Stopwatch.StartNew();
-            // 0.2 秒ごとに起きて印を見る。1 周ぶんで戻れば十分
+            // 0.2 秒ごとに印を確かめる。1 周ぶんで戻れば十分
             var read = stream.Read(buffer, 0, buffer.Length, () => true);
             clock.Stop();
 
@@ -55,7 +55,7 @@ public partial class DeviceStreamTests
 
     /*
      * **止めたあとは、読みかけが戻るまでだけ待つ** (`WaitReaders`)。局替えのたびに
-     * 固定で 300ms 寝ていたのを、読む側がいなければ待たないようにした
+     * 固定で 300ms 待っていたのを、読む側がいなければ待たないようにした
      */
     [Test]
     public async Task 読んでいる処理がなければ待たず_あれば戻るまで待つ()
@@ -79,7 +79,7 @@ public partial class DeviceStreamTests
                 () => stream.Read(buffer, 0, buffer.Length, () => false),
                 CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             /*
-             * **読む側が中に入ったのを見てから止める。** 決め打ちで 100ms 寝ていた頃は、混んだ Mac の
+             * **読む側が中に入ったのを見てから止める。** 決め打ちで 100ms 待っていた頃は、混んだ Mac の
              * ランナーでまだ入っていないうちに止めてしまい、待つ相手のいない WaitReaders が
              * すぐ戻って落ちた (CI)
              */
@@ -96,13 +96,13 @@ public partial class DeviceStreamTests
     }
 
     /*
-     * **降りると言うまでは戻らない。**
+     * **抜けるよう指示されるまでは戻らない。**
      *
      * 何も来ないからといって勝手に終わると、電波が一瞬途切れただけで録画が
      * 落ちることになる。実際に来ていないだけなら待ち続けるのが正しい
      */
     [Test]
-    public async Task 降りると言わなければ_来るまで待つ()
+    public async Task 抜けるよう指示されなければ_来るまで待つ()
     {
         var (stream, write) = Silent();
         using (stream)
@@ -110,7 +110,7 @@ public partial class DeviceStreamTests
         {
             var buffer = new byte[188];
             /*
-             * **専用のスレッドで読む。** 共用のスレッドプールから借りると、他のテストがプールを塞いでいる間は
+             * **専用のスレッドで読む。** 共用のスレッドプールで読むと、他のテストがプールを塞いでいる間は
              * 読み始めることすらできず、書いてから 2 秒待っても返らない (CI で 1 度落ちた。
              * 手元では 2 コアに絞っても出ない揺れ)。Px4CardTests の偽の px4d と同じ理由
              */
@@ -183,7 +183,7 @@ public class DeviceStreamPipeTests
     }
 
     [Test]
-    public async Task 降りると言えば_何も来なくても戻り_あとから来たものは次に読む処理に渡る()
+    public async Task 抜けるよう指示されれば_何も来なくても戻り_あとから来たものは次に読む処理に渡る()
     {
         var (stream, write) = Silent();
         using var _ = write;
@@ -219,7 +219,7 @@ public class DeviceStreamPipeTests
  */
 public class DeviceStreamPipedTests
 {
-    /// <summary>合図を言われるまで溜めておく。止めると、来た合図はその場で呼ぶ</summary>
+    /// <summary>Release を呼ぶまで合図を溜めておく。止めると、来た合図はその場で呼ぶ</summary>
     private sealed class HeldScheduler : PipeScheduler
     {
         private readonly Lock _gate = new();
@@ -265,7 +265,7 @@ public class DeviceStreamPipedTests
         using var stream = new DeviceStream(pipe.Reader);
         var buffer = new byte[188];
 
-        // 1 回目: 待っている間に届く。合図は溜めたままなので、読む側は 200ms ごとに起きて印を見て読む
+        // 1 回目: 待っている間に届く。合図は溜めたままなので、読む側は 200ms ごとに印を確かめて読む
         var first = Task.Run(() => stream.Read(buffer, 0, buffer.Length), cancel);
         while (stream.Readers == 0) await Task.Delay(5, cancel);
         await Task.Delay(50, cancel);
@@ -287,12 +287,12 @@ public class DeviceStreamPipedTests
     }
 
     /*
-     * **止めたら、待っている読む側はすぐ起きる** (次に起きる 200ms を待たない)。200ms ごとに起きて
-     * 印を見るだけだと、止めてから戻るまでに最大 200ms 掛かり、混んだ CI では 500ms を超えていた
-     * (Px4TunerTests の「待っている読む側は畳めと言われたらすぐ抜ける」が落ちた)
+     * **止めたら、待っている読む側はすぐ戻る** (200ms ごとの確認を待たない)。200ms ごとに
+     * 印を確かめるだけだと、止めてから戻るまでに最大 200ms 掛かり、混んだ CI では 500ms を超えていた
+     * (Px4TunerTests の「待っている読む側は止める指示を受けたらすぐ抜ける」が落ちた)
      */
     [Test]
-    public async Task 止めたら_待っている読む側はすぐ起きる(CancellationToken cancel)
+    public async Task 止めたら_待っている読む側はすぐ戻る(CancellationToken cancel)
     {
         var pipe = new Pipe(new System.IO.Pipelines.PipeOptions(readerScheduler: PipeScheduler.Inline, writerScheduler: PipeScheduler.Inline, useSynchronizationContext: false));
         using var stream = new DeviceStream(pipe.Reader);
@@ -304,7 +304,7 @@ public class DeviceStreamPipedTests
         }, cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
         while (stream.Readers == 0) await Task.Delay(5, cancel);
-        // 待ちに入ってすぐ止める (200ms ごとに起きるだけなら、次に起きるまで 180ms ほど掛かる)
+        // 待ちに入ってすぐ止める (200ms ごとに確かめるだけなら、次の確認まで 180ms ほど掛かる)
         await Task.Delay(20, cancel);
         Volatile.Write(ref stoppedAt, Stopwatch.GetTimestamp());
         stream.Stop();
@@ -312,8 +312,8 @@ public class DeviceStreamPipedTests
 
         await Assert.That(read).IsEqualTo(0);
         /*
-         * 200ms ごとに起きるだけなら、止めてから戻るまで 180ms ほど掛かる。それより短ければ止めたことで起きている。
-         * 100ms にしていた頃は、混んだ Windows のランナーで 131ms になって落ちた (起きてから戻るまでのスレッドの待ち)
+         * 200ms ごとに確かめるだけなら、止めてから戻るまで 180ms ほど掛かる。それより短ければ、止めたことで待ちから戻っている。
+         * 100ms にしていた頃は、混んだ Windows のランナーで 131ms になって落ちた (待ちが解けてから、スレッドが動き出すまでの遅れ)
          */
         await Assert.That(left).IsLessThan(TimeSpan.FromMilliseconds(160));
     }

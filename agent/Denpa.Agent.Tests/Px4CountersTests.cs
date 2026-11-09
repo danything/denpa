@@ -47,7 +47,7 @@ public class Px4CountersTests
     }
 
     [Test]
-    public async Task 前を知らなければ_0_から数える()
+    public async Task 前の値が無ければ_0_から数える()
     {
         await Assert.That(Px4Counters.Describe(null, new Px4Counters(10, 1880, 0, 1, 0, 0, 0))).IsEqualTo("TEI +1 (計 1)");
     }

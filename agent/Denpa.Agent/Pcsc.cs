@@ -10,7 +10,7 @@ namespace Denpa.Agent;
 /// <para>
 /// Linux では usbfs を直接扱っている (Ccid.cs) が、macOS には usbfs が無く、CCID の
 /// リーダーは OS の CCID ドライバ (Apple の標準のものか、従来の ifd-ccid) が先に開く。横取りするより、OS が
-/// 出している PC/SC の API を使うほうが素直で、入れてもらうものも増えない。
+/// 出している PC/SC の API を使うほうが素直で、利用者が入れるものも増えない。
 /// T=1 の枠組みも ATR の読み方も向こうが持つので、ここは APDU を渡すだけ。
 /// </para>
 ///
@@ -30,7 +30,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **排他で開く** (<c>SCARD_SHARE_EXCLUSIVE</c>)。Linux の usbfs でもインターフェースを
-/// 独り占めしている。共有にすると、macOS がカードを覗きに来る (CryptoTokenKit が
+/// 独り占めしている。共有にすると、macOS がカードを読み取る (CryptoTokenKit が
 /// 挿したカードに APDU を送る) ときに INT と ECM の間へ割り込まれうる。開けなければ
 /// 理由 (共有違反) を返し、BCas が少し置いて探し直す。
 /// </para>
@@ -174,7 +174,7 @@ public sealed partial class PcscLink : ICardLink
         _context = context;
     }
 
-    /// <summary>OS に見えているリーダー。**開かない** (カードに触らない)。PC/SC が答えなければ空</summary>
+    /// <summary>OS に見えているリーダー。**開かない** (カードに触らない)。PC/SC が応答しなければ空</summary>
     public static IReadOnlyList<CardLinkCandidate> Find() =>
         [.. Readers().Select(name => new CardLinkCandidate(name, () => Open(name)))];
 
@@ -208,9 +208,9 @@ public sealed partial class PcscLink : ICardLink
          * 繋ぐだけで電源が入る。BCas は失敗したら閉じて開き直すので、**呼ばれるのは開いた直後の 1 回だけ。**
          *
          * macOS の標準の CCID ドライバ (Apple のもの) では B-CAS に繋がらないリーダーがある (IDBridge CT30 の報告)。
-         * 怪しいのは速さ。B-CAS は specific mode で ATR の直後から TA1 の速さで話し、PC Twin の系統のリーダーは
-         * それをドライバに設定してもらう必要がある (Ccid.cs の Reset と SetT1Parameters)。速さは PC/SC からは
-         * 変えられない (SCardControl も Apple のドライバは受けない) ので、ここでは手を打たず、失敗したら
+         * 怪しいのは速さ。B-CAS は specific mode で ATR の直後から TA1 の速さで通信し、PC Twin の系統のリーダーは
+         * その速さをドライバが設定する必要がある (Ccid.cs の Reset と SetT1Parameters)。速さは PC/SC からは
+         * 変えられない (Apple のドライバは SCardControl も受け付けない) ので、ここでは手を打たず、失敗したら
          * ドライバを切り替える案内を出す (Check。docs/install-mac.md「カードが読めないとき」)
          */
         Check(Connect(_context, Name, out _card), Name, "カードリーダーに接続できません");
@@ -239,7 +239,7 @@ public sealed partial class PcscLink : ICardLink
 
     /// <summary>
     /// 失敗なら投げる。**カードが挿さっていないだけなら <see cref="CardAbsentException"/>** (画面では「カードなし」)。
-    /// macOS でカードと話せなかったときは、ドライバを切り替える案内を足す (docs/install-mac.md「カードが読めないとき」)
+    /// macOS でカードとやり取りできなかったときは、ドライバを切り替える案内を足す (docs/install-mac.md「カードが読めないとき」)
     /// </summary>
     private static void Check(int result, string name, string what)
     {
@@ -282,7 +282,7 @@ public sealed partial class PcscLink : ICardLink
 
     /// <summary>
     /// macOS の CCID ドライバ。<c>"ifd-ccid"</c> (従来のもの) か <c>"apple"</c> (macOS の標準のもの)。macOS 以外は null。
-    /// 呼ぶたびに `defaults` を 1 回起こす (上限 5 秒)。<c>--card</c> と <c>GET /denpa/about</c> (About.cs) が使う
+    /// 呼ぶたびに `defaults` を 1 回起動する (上限 5 秒)。<c>--card</c> と <c>GET /denpa/about</c> (About.cs) が使う
     /// (docs/install-mac.md「カードが読めないとき」)
     /// </summary>
     public static string? CcidDriver()
