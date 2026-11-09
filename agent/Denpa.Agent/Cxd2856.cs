@@ -894,8 +894,8 @@ public sealed class Cxd2856Frontend
     /// </summary>
     public double? CablePer { get; private set; }
 
-    /// <summary>待機中の地上波の RF 入力の整合を保つ設定になっているか (仕様書 4.7。<see cref="KeepMatching"/>)</summary>
-    public bool KeepsMatching
+    /// <summary>待機中の地上波の RF 入力の整合を保つ設定になっているか (仕様書 4.7。<see cref="KeepMatching"/>)。テストのため。受信機の操作のロックを取るので、選局の間は待つ</summary>
+    internal bool KeepsMatching
     {
         get
         {
