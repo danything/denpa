@@ -75,7 +75,7 @@ internal sealed class NativeTsFramer
 /// <see cref="Pipe"/> に詰める。流している間は、別のスレッドで機材のプログラムに要求を送り続ける (1 回の要求で <see cref="KickPackets"/> 個のパケットを bulk IN へ送らせる)。
 /// 要求を送っている間は制御転送が機材の中の処理の終わりまで返らない。通常の要求は <see cref="KickPackets"/> 個 (256 KiB。30 Mbps で約 70 ms) で、
 /// 実機の試験では 30 Mbps を欠けなく送れ、ホストの CPU 時間も少なかった (32 個にすると CS22 の 6 秒で 313 ms から 797 ms に増えた)。
-/// 同じ機材のカードが読み書きしている間 (<see cref="Dt295NativeLink.CardBusy"/>) だけ、UART の受信 FIFO (32 バイト) が溢れないよう、要求を <see cref="CardKickPackets"/> 個 (16 KiB。30 Mbps で約 4 ms) にする (仕様書に無い)
+/// 同じ機材のカードが読み書きしている間 (<see cref="Dt295NativeLink.CardBusy"/>) だけ、要求を <see cref="CardKickPackets"/> 個 (64 KiB。30 Mbps で約 17 ms) にする (仕様書に無い。数は <see cref="CardKickPackets"/> の説明)
 /// </summary>
 internal sealed class Dt295NativeStream
 {
@@ -91,8 +91,21 @@ internal sealed class Dt295NativeStream
     /// <summary>1 回の要求で送らせるパケット数 (512 バイトずつ)。カードが使っていないとき</summary>
     internal const uint KickPackets = 512;
 
-    /// <summary>カードが読み書きしている間の 1 回の要求のパケット数</summary>
-    internal const uint CardKickPackets = 32;
+    /// <summary>
+    /// カードが読み書きしている間の 1 回の要求のパケット数。
+    ///
+    /// <para>
+    /// **小さくすると TS を取りこぼし、大きくするとカードの応答を読むのが遅れる。** カードの読み書きの制御転送が続く間は、
+    /// TS の要求がロックを譲るので進まず、機材の取り込みのリング (192 KiB。37 Mbps で約 42 ms) が溢れる。
+    /// 要求が大きいと、その間カードの受信 FIFO (32 バイト。19200 ボーで約 17 ms) を読めない。
+    /// 128 個 (64 KiB) は、ホストがカードの UART を 1 バイトずつ読み書きしていたときに実機で測った値 (#2413):
+    /// CS18 (37 Mbps) の 40 秒で、32 個だと連続性の飛びが 8142 個、64 個だと 1593 個、128 個だと 0 個。BS15 (24 Mbps) の 90 秒、
+    /// 地上波 (T28) のライブ 40 秒、全 108 局の 15〜20 秒ずつでも 0 個だった。
+    /// いまはカードの送受信を機材のプログラムに行わせる (<see cref="Dt295NativeLink.CardProgram"/>) ので、1 ブロックの制御転送は数回になり、
+    /// TS の要求が譲る時間は短い。この形での測定はまだ無い
+    /// </para>
+    /// </summary>
+    internal const uint CardKickPackets = 128;
 
     private const int PumpTimeoutMs = 10_000;
 

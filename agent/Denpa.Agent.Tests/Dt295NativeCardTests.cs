@@ -21,6 +21,141 @@ public class Dt295NativeCardTests
         return (fake, new Dt295NativeLink(fake));
     }
 
+    /// <summary>機材のプログラムを置いた偽物。<paramref name="program"/> なら、カードの送受信を機材のプログラムに行わせる</summary>
+    private static (Dt295Fake Fake, Dt295NativeLink Link) ProgramRig(bool program)
+    {
+        var fake = new Dt295Fake { CardAtr = BcasAtr, CardResponder = Respond };
+        fake.PlaceBody(hook: true);
+        return (fake, new Dt295NativeLink(fake) { CardProgram = program });
+    }
+
+    private static bool Uart(uint address) => address is >= 0xFEA000 and <= 0xFEA03F;
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task 機材のプログラムでもホストでも_同じ_ATR_と応答になり_UART_に同じ順で書く(bool program)
+    {
+        var (fake, link) = ProgramRig(program);
+        var blocks = new List<byte[]>();
+        fake.CardResponder = block =>
+        {
+            blocks.Add(block);
+            return Respond(block);
+        };
+        using var card = new Dt295NativeCard("DT295 カード", () => link, delay: _ => { });
+
+        await Assert.That(card.Reset()).IsEquivalentTo(BcasAtr);
+        var before = fake.Stores.Count;
+        var controls = fake.Controls;
+        await Assert.That(card.Transmit([0x90, 0x32, 0x00, 0x00, 0x00])).IsEquivalentTo(new byte[] { 0x90, 0x00 });
+
+        // CardUart.Send と同じ順: 受けの LRC、送りの LRC、各バイト、状態、制御、開始
+        var block = blocks.Last();
+        var expected = new List<(uint, uint)> { (CardUart.RxLrc, 0), (CardUart.TxLrc, 0) };
+        expected.AddRange(block.Select(b => (CardUart.Tx, (uint)b)));
+        expected.AddRange([(CardUart.Status, 0x3FF), (CardUart.Control, 0x200), (CardUart.Start, 1)]);
+        await Assert.That(fake.Stores.Skip(before).Where(s => Uart(s.Address)).Select(s => (s.Address, s.Value))).IsEquivalentTo(expected, CollectionOrdering.Matching);
+        // 機材のプログラムなら、送りは要求と応答の 2 回、受けも 1 回の読みで 2 回の制御転送で済む (ホストは 1 バイトに 1 回)
+        var used = fake.Controls - controls;
+        if (program) await Assert.That(used).IsLessThan(block.Length + 6L);
+        else await Assert.That(used).IsGreaterThan(block.Length + 6L);
+    }
+
+    [Test]
+    public async Task 長いブロックは_SDRAM_に置いて送らせ_256_バイト以上は制御に_0x280_を書く()
+    {
+        var (fake, link) = ProgramRig(program: true);
+        link.AllowCardUart = true;
+        foreach (var length in new[] { 49, 258 })
+        {
+            var block = Enumerable.Range(0, length).Select(i => (byte)(i * 7 + 3)).ToArray();
+            var sent = new List<byte[]>();
+            fake.CardResponder = got =>
+            {
+                sent.Add(got);
+                return [];
+            };
+            var before = fake.Stores.Count;
+
+            link.CardSend(block);
+
+            await Assert.That(sent.Single()).IsEquivalentTo(block, CollectionOrdering.Matching);
+            await Assert.That(fake.Get(Dt295NativePrograms.BatchPhysical, 1)).IsEqualTo((uint)block[0]);
+            var control = fake.Stores.Skip(before).Single(s => s.Address == CardUart.Control).Value;
+            await Assert.That(control).IsEqualTo(length >= 256 ? 0x280u : 0x200u);
+        }
+    }
+
+    [Test]
+    public async Task 受けは受けた数と上限と_48_バイトの小さいほうだけ読み_無ければ空()
+    {
+        var (fake, link) = ProgramRig(program: true);
+        await Assert.That(link.CardReceive(10)).IsEmpty();
+        for (var i = 0; i < 60; i++) fake.CardRx.Enqueue((byte)i);
+
+        await Assert.That(link.CardReceive(3)).IsEquivalentTo(new byte[] { 0, 1, 2 }, CollectionOrdering.Matching);
+        var many = link.CardReceive(100);
+        await Assert.That(many.Length).IsEqualTo(Dt295NativePrograms.InlineCardBytes);
+        await Assert.That(many[0]).IsEqualTo((byte)3);
+        await Assert.That(fake.CardRx.Count).IsEqualTo(60 - 3 - Dt295NativePrograms.InlineCardBytes);
+        await Assert.That(link.CardReceive(0)).IsEmpty();
+        await Assert.That(fake.CardRx.Count).IsEqualTo(60 - 3 - Dt295NativePrograms.InlineCardBytes);
+    }
+
+    [Test]
+    public async Task 機材のプログラムに送らせるのも_カードの_UART_を許可するまで例外にして書かない()
+    {
+        var (fake, link) = ProgramRig(program: true);
+
+        await Assert.That(() => link.CardSend([0x00, 0x00, 0x00, 0x00])).Throws<Dt295NativeException>();
+        await Assert.That(fake.Stores.Any(s => Uart(s.Address))).IsFalse();
+    }
+
+    [Test]
+    public async Task 使えるかの確認は_body_があれば真で_無ければ偽で_どちらも_UART_に書かず受けも読まない()
+    {
+        var (withBody, link) = ProgramRig(program: false);
+        withBody.CardRx.Enqueue(0x3B);
+        await Assert.That(link.ProbeCardProgram()).IsTrue();
+        await Assert.That(withBody.Stores.Any(s => Uart(s.Address))).IsFalse();
+        await Assert.That(withBody.CardRx.Count).IsEqualTo(1);
+
+        var bare = new Dt295Fake();
+        await Assert.That(new Dt295NativeLink(bare).ProbeCardProgram()).IsFalse();
+        await Assert.That(bare.Stores.Any(s => Uart(s.Address))).IsFalse();
+    }
+
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task 機材を開くと_カードの送受信が機材のプログラムで通るかを確かめ_通らなければホストが_1_バイトずつ行う(bool works)
+    {
+        var fake = new Dt295Fake { CardAtr = BcasAtr, CardResponder = Respond };
+        if (!works)
+        {
+            // カードの操作 (3・4) の要求だけ、プログラムが動かなかったときと同じく、要求をそのまま 0xC4620 に書いたことにする
+            fake.CpuSetup = cpu =>
+            {
+                var operation = fake.Get(Dt295NativePrograms.Staging + 4, 4);
+                if (operation is 3 or 4) cpu.Pc = Dt295NativePrograms.ContinueWrite;
+            };
+        }
+        var port = $"test-{Guid.NewGuid():N}";
+        var device = Dt295NativeDevice.Acquire(port, () => fake, null, _ => { }, 2000);
+        try
+        {
+            await Assert.That(device.Link.CardProgram).IsEqualTo(works);
+            using var handle = new Dt295NativeCardHandle("DT295", device);
+            await Assert.That(handle.Reset()).IsEquivalentTo(BcasAtr);
+            await Assert.That(handle.Transmit([0x90, 0x32, 0x00, 0x00, 0x00])).IsEquivalentTo(new byte[] { 0x90, 0x00 });
+        }
+        finally
+        {
+            Dt295NativeDevice.CloseIfIdle(port);
+        }
+    }
+
     [Test]
     public async Task 電源投入の表の順に書き_ATR_を読み_T1_で送受信できる()
     {
