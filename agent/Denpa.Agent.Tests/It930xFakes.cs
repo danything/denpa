@@ -24,6 +24,25 @@ internal sealed class FakeIt930x : IUsbDevice
 
     public List<string> Log { get; } = [];
 
+    /// <summary>控えに 1 行足す (EP 0x84 の読みのスレッドからも呼ばれる)</summary>
+    public void Note(string line)
+    {
+        lock (Log) Log.Add(line);
+        OnNote?.Invoke(line);
+    }
+
+    /// <summary>控えに 1 行足すたびに呼ぶ (テストが割り込みの機会を作る)</summary>
+    public Action<string>? OnNote { get; set; }
+
+    /// <summary>挿し直した機材として、シーケンス番号の期待を 0 に戻す (同じ偽物を開き直すテスト)</summary>
+    public void ResetSequence() => _expected = 0;
+
+    /// <summary>
+    /// GENERIC_WRITE・GENERIC_READ を渡す先 (バスごと。アドレスは 7 ビットに戻して渡す)。無いバスに来たらテストを失敗にする。
+    /// 控えには <c>I2C W 3 65 0010</c>・<c>I2C R 3 65 1</c> の形で残す
+    /// </summary>
+    public Dictionary<byte, ICxdBus> I2c { get; } = [];
+
     /// <summary>SCATTER_WRITE で受けたファームウェアのバイト</summary>
     public List<byte> Loaded { get; } = [];
 
@@ -70,7 +89,7 @@ internal sealed class FakeIt930x : IUsbDevice
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
     {
         if (endpoint != 0x84) throw new InvalidOperationException($"EP 0x{endpoint:X2} の読みを出した");
-        Log.Add($"TS {transferSize} {depth}");
+        Note($"TS {transferSize} {depth}");
         return new FakeTsIn(this);
     }
 
@@ -88,7 +107,7 @@ internal sealed class FakeIt930x : IUsbDevice
             return chunk.Length;
         }
 
-        public void Dispose() => owner.Log.Add("TS 閉じる");
+        public void Dispose() => owner.Note("TS 閉じる");
     }
 
     public void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs)
@@ -109,7 +128,7 @@ internal sealed class FakeIt930x : IUsbDevice
             case 0x0000:
             {
                 var (length, address) = Header(payload);
-                Log.Add($"R {address:X4} {length}");
+                Note($"R {address:X4} {length}");
                 var values = new byte[length];
                 for (var i = 0; i < length; i++) values[i] = Registers.GetValueOrDefault(address + (uint)i);
                 Reply(sequence, values);
@@ -120,34 +139,57 @@ internal sealed class FakeIt930x : IUsbDevice
                 var (length, address) = Header(payload);
                 var values = payload[6..];
                 if (values.Length != length) throw new InvalidOperationException($"書く長さが違う ({length}、中身 {values.Length} バイト)");
-                Log.Add($"W {address:X4}={Convert.ToHexString(values)}");
+                Note($"W {address:X4}={Convert.ToHexString(values)}");
                 for (var i = 0; i < values.Length; i++) Registers[address + (uint)i] = values[i];
                 Reply(sequence, []);
                 break;
             }
             case 0x0022:
                 if (payload is not [1]) throw new InvalidOperationException("QUERYINFO の中身が 1 でない");
-                Log.Add("QUERYINFO");
+                Note("QUERYINFO");
                 Reply(sequence, [(byte)(Running >> 24), (byte)(Running >> 16), (byte)(Running >> 8), (byte)Running]);
                 break;
             case 0x0023 when Running != 0:
                 // 動いている間の 0x0023 は REBOOT (SDK は応答を読まない)
-                Log.Add("REBOOT");
+                Note("REBOOT");
                 if (!RebootKeepsRunning) Running = 0;
                 Loaded.Clear();
                 if (RebootGone) _gone = true;
                 Silent += SilentAfterReboot;
                 break;
             case 0x0023:
-                Log.Add("BOOT");
+                Note("BOOT");
                 Running = BootFails ? 0 : BootVersion;
                 Reply(sequence, []);
                 break;
             case 0x0029:
-                Log.Add($"SCATTER {payload.Length}");
+                Note($"SCATTER {payload.Length}");
                 Loaded.AddRange(payload.ToArray());
                 Reply(sequence, []);
                 break;
+            case 0x002B:
+            {
+                var (length, bus, address) = (payload[0], payload[1], payload[2]);
+                var bytes = payload[3..].ToArray();
+                if (bytes.Length != length) throw new InvalidOperationException($"I2C の書く長さが違う ({length}、中身 {bytes.Length} バイト)");
+                if ((address & 1) != 0) throw new InvalidOperationException($"I2C のアドレスが 8 ビットの書き込みの形でない (0x{address:X2})");
+                Note($"I2C W {bus} {address >> 1:X2} {Convert.ToHexString(bytes)}");
+                if (!I2c.TryGetValue(bus, out var target)) throw new InvalidOperationException($"I2C のバス {bus} に何もつながっていない");
+                target.Write((byte)(address >> 1), bytes);
+                Reply(sequence, []);
+                break;
+            }
+            case 0x002A:
+            {
+                if (payload.Length != 3) throw new InvalidOperationException($"GENERIC_READ の中身が 3 バイトでない ({payload.Length})");
+                var (length, bus, address) = (payload[0], payload[1], payload[2]);
+                Note($"I2C R {bus} {address >> 1:X2} {length}");
+                if (!I2c.TryGetValue(bus, out var target)) throw new InvalidOperationException($"I2C のバス {bus} に何もつながっていない");
+                var bytes = new byte[length];
+                target.Read((byte)(address >> 1), bytes);
+                Reply(sequence, bytes);
+                break;
+            }
             default:
                 throw new InvalidOperationException($"知らないコマンド 0x{command:X4}");
         }

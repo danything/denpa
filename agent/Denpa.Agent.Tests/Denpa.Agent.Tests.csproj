@@ -76,6 +76,9 @@
         <Compile Include="../Denpa.Agent/It930xBridge.cs" />
         <Compile Include="../Denpa.Agent/It930xProbe.cs" />
         <Compile Include="../Denpa.Agent/It930xTs.cs" />
+        <Compile Include="../Denpa.Agent/It930xDevice.cs" />
+        <Compile Include="../Denpa.Agent/Cxd2856.cs" />
+        <Compile Include="../Denpa.Agent/Cxd2858.cs" />
         <Compile Include="../Denpa.Agent/ContinuityCount.cs" />
         <Compile Include="../Denpa.Agent/Probe.cs" />
         <!-- 本体と同じ名前で埋め込む (Px4Firmware.Bundled が読む) -->

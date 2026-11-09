@@ -43,6 +43,10 @@ public static class It930xFrame
     /// <summary>BOOT と REBOOT は同じ番号。BOOT は応答を読み、REBOOT は読まない (<c>BrCmd_reboot</c>)</summary>
     public const ushort Boot = 0x0023;
     public const ushort ScatterWrite = 0x0029;
+    /// <summary>次の段の I2C を読む (<c>Command_GENERIC_READ</c>。中身は長さ・バス・8 ビットのアドレス)</summary>
+    public const ushort GenericRead = 0x002A;
+    /// <summary>次の段の I2C に書く (<c>Command_GENERIC_WRITE</c>。中身は長さ・バス・8 ビットのアドレス・書くバイト)</summary>
+    public const ushort GenericWrite = 0x002B;
 
     /// <summary>
     /// チェックサム。<paramref name="body"/> (フレームの位置 1 からチェックサムの手前まで) を 2 バイトずつ上位から 16 ビットの数として足し、

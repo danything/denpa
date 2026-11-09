@@ -20,6 +20,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune siano:1-2 T27                          # siano-userland の機材 (smsusb を blacklist した PX-S1UD)
 /// denpa-agent --tune asicen:1-2:1 T27                       # asicen-userland の機材 (PX-W3U3。試験的。受信機 1 は地上波)
 /// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N] [--repeat N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS (と復号できたパケット)・2 回目の選局の時間と C/N を出す
+/// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。いまは地上波だけ。ロックまでの時間と C/N と強度も出す
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)
 /// denpa-agent --card                                        # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
@@ -175,7 +176,9 @@ public static class Probe
 
         // PIX-DT295 は、鍵もその機材の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
         IKeySource source = Dt295.Parse(device) is { } dt295 && cardAt < 0 ? new LocalCard(() => [Dt295.Card(dt295)]) : Keys.Source;
-        using var closing = Dt295.Is(device) ? new Closing(Dt295NativeDevice.CloseAll) : null;
+        using var closing = Dt295.Is(device) ? new Closing(Dt295NativeDevice.CloseAll)
+            : It930x.Is(device) ? new Closing(It930xDevice.CloseAll)
+            : null;
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
@@ -206,7 +209,16 @@ public static class Probe
             }
             Console.WriteLine($"    同期 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
 
+            if (tuner is It930xTuner it930x)
+            {
+                Console.WriteLine($"    ロックまで {it930x.LockMs} ms (ロックを確かめ始めてから){(it930x.Device is { } opened ? $"  機材を開くのに {opened.OpenMs} ms" : "")}");
+            }
             Measure(tuner.Output, name, decode ? new Descrambler(source) : null, seconds);
+            // IT930x の機材は C/N と強度も出す (受け終えたあとの値)
+            if (tuner is It930xTuner && tuner.Signal() is { } signal)
+            {
+                Console.WriteLine($"    {(signal.Locked ? "ロック中" : "ロックしていない")}  C/N {(signal.Cn is { } cn ? $"{cn:F1} dB" : "-")}  強度 {signal.StrengthDbm:F1} dBm (目安)");
+            }
         }
 
         return 0;

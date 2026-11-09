@@ -534,8 +534,26 @@ public static class Px4Userland
         _ => "",
     };
 
-    /// <summary>挿さっている筐体の受信機を、設定に書いたのと同じ形式で</summary>
-    public static List<TunerSpec> Detect() => Specs(Enclosures());
+    /// <summary>
+    /// 挿さっている筐体の受信機を、設定に書いたのと同じ形式で。設定の <c>it930x:</c> でエージェントが持つポートの筐体は挙げない (<see cref="It930x.Claim"/>)
+    /// </summary>
+    public static List<TunerSpec> Detect() => Specs(Yield(Enclosures(), It930x.Ports, Log.Write));
+
+    /// <summary>エージェントが持つポート (<paramref name="claimed"/>) の筐体を外す。外したことは 1 行ずつ <paramref name="warn"/> に出す</summary>
+    internal static List<Enclosure> Yield(IEnumerable<Enclosure> enclosures, IReadOnlySet<string> claimed, Action<string> warn)
+    {
+        var kept = new List<Enclosure>();
+        foreach (var enclosure in enclosures)
+        {
+            if (It930x.ClaimsAny(enclosure.Places, claimed))
+            {
+                warn($"{enclosure.Model} {Label(enclosure.Id)} は設定の {It930x.Scheme} でエージェントが持つので、px4d の筐体としては挙げません");
+                continue;
+            }
+            kept.Add(enclosure);
+        }
+        return kept;
+    }
 
     /// <summary>筐体の一覧から、設定の形式に組み立てる</summary>
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
@@ -931,6 +949,16 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
     public static IReadOnlyList<Px4Userland.Enclosure> Owned() =>
         [.. Live<Px4Daemon>().Select(daemon => daemon._enclosure).OfType<Px4Userland.Enclosure>()];
 
+    /// <summary>
+    /// 起動する筐体の番号から、エージェントが持つポート (<see cref="It930x.Ports"/>) の筐体を外す。
+    /// 動いている px4d の筐体が外れれば、<see cref="UserlandDaemon.Prepare{T}"/> が止めて USB を手放す (内蔵カードリーダーを使っていれば止めない)
+    /// </summary>
+    public static List<string> Yielding(IEnumerable<string> ids) =>
+        Yielding(ids, Owned(), It930x.Ports);
+
+    internal static List<string> Yielding(IEnumerable<string> ids, IReadOnlyList<Px4Userland.Enclosure> running, IReadOnlySet<string> claimed) =>
+        [.. ids.Where(id => !running.Any(enclosure => enclosure.Id == id && It930x.ClaimsAny(enclosure.Places, claimed)))];
+
     public override void Ensure()
     {
         if (Running) return;
@@ -941,6 +969,11 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
          * 使えない筐体の理由は Detect が残すので、ここでは記録しない
          */
         var enclosure = Px4Userland.Enclosures(_ => { }).FirstOrDefault(found => found.Id == Id);
+        // 設定の it930x: でエージェントが持つポートの筐体は起動しない (持ち主は 1 つ。It930x.Claim)
+        if (enclosure is not null && It930x.ClaimsAny(enclosure.Places, It930x.Ports))
+        {
+            throw new IOException($"{Px4Userland.Label(Id)} の筐体は設定の {It930x.Scheme} でエージェントが持つので、px4d は起動しません");
+        }
         var listed = enclosure?.Receivers;
         /*
          * USB ポートで見分ける筐体は、一覧に無いと起動できない (USB ポートを知る手段が一覧しか無い)。
