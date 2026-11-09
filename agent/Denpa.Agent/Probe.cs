@@ -38,7 +38,7 @@ public static class Probe
     // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
     public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)]";
     public const string DecodeUsage = "denpa-agent --decode-file <in.ts> <out.ts>";
-    public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート>]";
+    public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート> | {It930x.Scheme}<USB のポート>]";
 
     /// <summary>1 チャンネルあたり読む時間</summary>
     private static readonly TimeSpan Read = TimeSpan.FromSeconds(3);
@@ -109,6 +109,11 @@ public static class Probe
         if (args.ElementAtOrDefault(1) is { } device)
         {
             if (Dt295.Parse(device) is { } dt295) return OneCard(Dt295.Card(dt295), Dt295NativeDevice.CloseAll);
+            if (It930x.CardPort(device) is { } it930x)
+            {
+                if (It930xCardAt(it930x) is not { } card) return 1;
+                return OneCard(card, It930xDevice.CloseAll);
+            }
             if (Zd1j.Parse(device) is not { } port)
             {
                 Console.Error.WriteLine($"usage: {CardUsage}");
@@ -138,6 +143,14 @@ public static class Probe
             Zd1jBoard.CloseAll();
             Dt295NativeDevice.CloseAll();
         }
+    }
+
+    /// <summary>そのポートの IT930x の機材の内蔵カードリーダー。機材が見当たらなければ標準エラー出力に出して null</summary>
+    private static CardLinkCandidate? It930xCardAt(string port)
+    {
+        if (It930x.Identify(port) is { } model) return It930x.Card(port, model);
+        Console.Error.WriteLine($"USB のポート {port} に {It930x.Model} が見当たりません");
+        return null;
     }
 
     public static int Run(string[] args)
@@ -174,8 +187,11 @@ public static class Probe
             return RunZd1j(zd1j, channels, decode ? keys : null, seconds, repeat);
         }
 
-        // PIX-DT295 は、鍵もその機材の差し込み口だけから (試験でほかのリーダーに触らない)。--card-url があればそちら
-        IKeySource source = Dt295.Parse(device) is { } dt295 && cardAt < 0 ? new LocalCard(() => [Dt295.Card(dt295)]) : Keys.Source;
+        // PIX-DT295 と IT930x の機材は、鍵もその機材のカードリーダーだけから (試験でほかのリーダーに触らない)。--card-url があればそちら
+        IKeySource source = cardAt >= 0 ? Keys.Source
+            : Dt295.Parse(device) is { } dt295 ? new LocalCard(() => [Dt295.Card(dt295)])
+            : decode && It930x.Parse(device) is { } it930xReceiver && It930xCardAt(it930xReceiver.Port) is { } it930xCard ? new LocalCard(() => [it930xCard])
+            : Keys.Source;
         using var closing = Dt295.Is(device) ? new Closing(Dt295NativeDevice.CloseAll)
             : It930x.Is(device) ? new Closing(It930xDevice.CloseAll)
             : null;
@@ -220,9 +236,12 @@ public static class Probe
             }
             Measure(tuner.Output, name, decode ? new Descrambler(source) : null, seconds);
             // IT930x の機材は C/N と強度も出す (受け終えたあとの値)
-            if (tuner is It930xTuner && tuner.Signal() is { } signal)
+            if (tuner is It930xTuner receiver && tuner.Signal() is { } signal)
             {
-                Console.WriteLine($"    {(signal.Locked ? "ロック中" : "ロックしていない")}  C/N {(signal.Cn is { } cn ? $"{cn:F1} dB" : "-")}  強度 {signal.StrengthDbm:F1} dBm (目安)");
+                // 衛星の強度は仕様書の式の dB で、dBm として扱えるかは未確認 (画面には出さない)
+                var strength = signal.StrengthDbm is { } dbm ? $"{dbm:F1} dBm (目安)"
+                    : receiver.SatelliteLevelDb is { } db ? $"{db:F1} dB (仕様書の式。dBm かは未確認)" : "-";
+                Console.WriteLine($"    {(signal.Locked ? "ロック中" : "ロックしていない")}  C/N {(signal.Cn is { } cn ? $"{cn:F1} dB" : "-")}  強度 {strength}");
             }
         }
 

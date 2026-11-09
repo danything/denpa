@@ -256,7 +256,9 @@ public class Cxd2856SatelliteTests
         await Assert.That(signal.Locked).IsTrue();
         await Assert.That(signal.Cn).IsEqualTo(8.0);
         await Assert.That(signal.Unit).IsEqualTo(TunerSignal.Db);
-        await Assert.That(signal.StrengthDbm).IsEqualTo(-83.0);
+        // 衛星の強度は dBm として扱えるかが未確認なので、画面に出す強度には入れず、--tune の出力のための値にだけ入れる
+        await Assert.That(signal.StrengthDbm).IsNull();
+        await Assert.That(frontend.SatelliteLevelDb).IsEqualTo(-83.0);
         // 計算が終わっていなければ C/N は無い
         demod.T[(0xA1, 0x10)] = 0x00;
         await Assert.That(frontend.Signal()!.Cn).IsNull();
