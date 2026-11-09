@@ -1,8 +1,21 @@
 import { read, write } from "#lib/keep.js";
-import { type GrabSize, shrink } from "#lib/raw/messages.js";
+import type { GrabSize } from "#lib/raw/messages.js";
 
 import { AMBIENT_KEY, storedAmbient } from "./ambient";
 import type { GlanceReply, GlanceRequest } from "./glance-worker";
+
+/**
+ * `createImageBitmap` に渡す縮め方。**`VideoFrame` の無いブラウザで、画面の側で `<video>` を縮めるときだけ使う**
+ * (worker の中は `#lib/raw/downscale.ts`、`<video>` のコマは `glance-worker.ts`)。`high` で縮める。低いほど 1920 から 32 へ点で間引き、
+ * 写すたびに色が揺れる
+ */
+function shrink(size: GrabSize): ImageBitmapOptions {
+  return {
+    resizeWidth: size.width,
+    resizeHeight: size.height,
+    resizeQuality: "high",
+  };
+}
 
 /**
  * アンビエントモード。**映像の色を、枠の周りにぼかして広げる。3 画面 (ライブ・追っかけ・観る画面) で同じもの。既定はオン。**
