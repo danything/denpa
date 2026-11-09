@@ -3,7 +3,7 @@
  *
  * TS には索引が無い。位置を当てるには中を読むしかないが、先頭から読むと 1 時間の BS で 7GB になる。
  * そこで**決まった位置の PES の PTS を見て二分探索する** (1 回に読むのは数百 KB、30 回ほどで当たる)。
- * 追っかけの当て方 (`server/chase.ts` の `chasePlan`。バイト比例) より正確で、録り終えた録画なら尻まで使える。
+ * 追っかけの当て方 (`server/chase.ts` の `chasePlan`。バイト比例) より正確で、録り終えた録画なら末尾まで使える。
  *
  * ## 時刻の物差し
  *
@@ -112,14 +112,14 @@ export function sinceHead(pts: number, head: number): number {
   return (d > WRAP - BEFORE_HEAD * CLOCK ? d - WRAP : d) / CLOCK;
 }
 
-/** 映像の PES の、いちばん後ろの PTS。録画の尻のバイト列から尺を出すのに使う。無ければ null */
+/** 映像の PES の、いちばん後ろの PTS。録画の末尾のバイト列から尺を出すのに使う。無ければ null */
 export function lastVideoPts(bytes: Uint8Array): number | null {
   let last: number | null = null;
   for (const mark of pesMarks(bytes)) if (isVideo(mark.id)) last = mark.pts;
   return last;
 }
 
-/** ファイルを少しずつ読む関数。`length` より短く返ってよい (尻) */
+/** ファイルを少しずつ読む関数。`length` より短く返ってよい (末尾) */
 export type ReadAt = (offset: number, length: number) => Promise<Uint8Array>;
 
 /** 先頭の PTS を探すのに読む量。映像と音声の最初の PES が必ず入る長さ */

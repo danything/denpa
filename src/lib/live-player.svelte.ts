@@ -2049,20 +2049,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     for (const message of held) handler(message);
   }
 
-  /** 中身。**断り書きを消さない**ので、戻すときにも使える */
-  function swapCodec(next: LiveCodec): void {
-    // 出せなかった後は、同じコーデックでもリクエストし直す (選び直すのが、やり直しの手段にもなる)
-    if (element === null || (next === codec && state !== "error")) return;
-    if (chase !== null) {
-      codec = next;
-      reopenChase();
-      return;
-    }
-    if (tuned === null) return;
-    // 局は変わらないので、選べる字幕の一覧はそのまま使える (`forget`)
-    void tune(element, { ...tuned, codec: next }, true);
-  }
-
   /**
    * 重ねるものの置き場を預かる。**画面が組み上がってから 1 回だけ。**
    *
@@ -2096,11 +2082,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     tuned = target;
     audio = target.audio ?? "";
     /*
-     * 形式はメニューの選択 (`choice`) から `begin` が決め直す (`pickFormat`)。局を変えても選択は引き継ぐ (その端末で出るかの話)。
-     * 覚えておくと次に開いたときサーバが同じ決め方で先回りする (`warm`)
+     * 形式はメニューの選択 (`choice`) から `begin` が決め直す (`pickFormat`。`target` の `codec`・`raw` は使わない)。
+     * 局を変えても選択は引き継ぐ (その端末で出るかの話)。覚えておくと次に開いたときサーバが同じ決め方で先回りする (`warm`)
      */
-    if (target.codec !== undefined) codec = target.codec;
-    rawChosen = target.raw ?? rawChosen;
     remember(target, choice);
     await begin(video, keepList);
   }
@@ -2223,8 +2207,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /** 互換モードで描けない形式。**切り替えで選ばせない** (互換モードでなければ空) */
   function unavailable(): LiveCodec[] {
-    const support = compatSupport;
-    if (!compat || support === null) return [];
+    if (!compat || compatSupport === null) return [];
     return LIVE_CODECS.map((c) => c.id).filter((id) => !canvasCan(id));
   }
 
@@ -2418,7 +2401,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
              */
             hevcGaveUp = true;
             warning = `${notice.message}。ほかの形式に切り替えました`;
-            void tune(video, tuned, true);
+            requestAgain();
           } else fail(notice.message);
         } else if (notice.type === "lost") {
           /*
@@ -2624,15 +2607,16 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * その形式をやめて次の形式へ切り替え、そう言う。この画面を開いている間は、自動でもその形式を選ばない (`decideFormat`)
+   * その形式をやめて次の形式へ切り替え、そう言う。この画面を開いている間は、自動でもその形式を選ばない (`decideFormat`)。
+   * 次の形式が無ければ、リクエストし直した先 (`pickFormat`) が理由を出して止まる
    */
   function giveUpCodec(baked: Exclude<LiveCodec, "h264">): void {
     if (baked === "av1") av1GaveUp = true;
     else hevcGaveUp = true;
     const next = decideFormat();
-    const to = next === null || next === "raw" ? "h264" : next;
-    warning = `${formatLabel(baked)} を再生できないため、${formatLabel(to)} に切り替えました`;
-    swapCodec(to);
+    if (next !== null)
+      warning = `${formatLabel(baked)} を再生できないため、${formatLabel(next)} に切り替えました`;
+    requestAgain();
   }
 
   /**
@@ -2987,10 +2971,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   return {
     get state() {
       return state;
-    },
-    /** MPEG-2 で見ているか (エンコードしていない)。コーデックのメニューが MPEG-2 を指すか */
-    get raw() {
-      return raw;
     },
     /** いま観ている形式 (コーデックのメニューの「自動 (…)」に添える)。MPEG-2 なら `raw` */
     get format(): LiveFormat {

@@ -21,7 +21,7 @@ import {
 } from "./synth.js";
 
 /**
- * 実チューナーが無いので、NIT と SDT を組み立てて食わせる。
+ * 実チューナーが無いので、NIT と SDT を組み立てて渡す。
  * セクションがパケットをまたぐ場合も作って、繋ぎ直しを確かめる。
  */
 
@@ -58,7 +58,7 @@ describe("セクションの解釈", () => {
     ]);
   });
 
-  test("NIT からネットワークIDとリモコン番号を読む", () => {
+  test("NIT からネットワーク ID とリモコン番号を読む", () => {
     const parsed = parseNit(
       nitSection(0x7fe0, 6, [[0x0408, 0x0004, [[1024, 0x01]]]]),
     );
@@ -68,7 +68,7 @@ describe("セクションの解釈", () => {
     expect(parsed?.transportStreams[0]?.services[0]?.serviceId).toBe(1024);
   });
 
-  test("CRCが合わないセクションは捨てる", () => {
+  test("CRC が合わないセクションは捨てる", () => {
     const section = sdtSection(0x0408, 0x0004, [[1024, 0x01]]);
     section[section.length - 1]! ^= 0xff;
     const reader = new ServiceReader();
@@ -103,7 +103,7 @@ describe("サービスの読み取り", () => {
     expect(reader.services().map((s) => s.serviceId)).toEqual([1024]);
   });
 
-  test("ネットワークIDとリモコン番号を配る", () => {
+  test("ネットワーク ID とリモコン番号を配る", () => {
     const reader = new ServiceReader();
     reader.feed(stream());
     expect(reader.services()[0]).toMatchObject({
@@ -127,7 +127,7 @@ describe("サービスの読み取り", () => {
     expect(reader.services()).toHaveLength(40);
   });
 
-  test("188の切れ目と無関係に届いても読める", () => {
+  test("188 の切れ目と無関係に届いても読める", () => {
     const reader = new ServiceReader();
     const data = stream();
     for (let at = 0; at < data.length; at += 100)
@@ -136,7 +136,7 @@ describe("サービスの読み取り", () => {
     expect(reader.services().map((s) => s.serviceId)).toEqual([1024]);
   });
 
-  test("別のPIDは読まない", () => {
+  test("別の PID は読まない", () => {
     const reader = new ServiceReader();
     reader.feed(packetize(0x0100, sdtSection(0x0408, 0x0004, [[1024, 0x01]])));
     expect(reader.transport).toBeNull();
@@ -155,9 +155,9 @@ describe("同期の取り直し", () => {
     return Uint8Array.from(parts);
   }
 
-  test("頭がずれていても読める", () => {
+  test("先頭がずれていても読める", () => {
     const body = repeated();
-    // わざと 0x47 で埋める。頭が 1 つ合っただけでは切れ目とは言えない
+    // わざと 0x47 で埋める。0x47 が 1 つ合っただけでは切れ目とは言えない
     const data = new Uint8Array(37 + body.length);
     data.fill(0x47, 0, 37);
     data.set(body, 37);
@@ -169,7 +169,7 @@ describe("同期の取り直し", () => {
 
   test("途中で落ちても後ろを読める", () => {
     const data = repeated();
-    // 頭の NIT の直後で 3 バイト落とす。以降の切れ目が 188 の倍数から外れる
+    // 先頭の NIT の直後で 3 バイト落とす。以降の切れ目が 188 の倍数から外れる
     const broken = Uint8Array.from([
       ...data.subarray(0, 188),
       ...data.subarray(191),
@@ -187,7 +187,7 @@ describe("同期の取り直し", () => {
   });
 });
 
-/** 前の切り分け (塊を毎回丸ごと写していた頃)。今のものと同じパケットが出ることを確かめる */
+/** 前の切り分け (チャンクを毎回丸ごとコピーしていた頃)。今のものと同じパケットが出ることを確かめる */
 class CopyingPacketStream {
   private rest = new Uint8Array(0);
 
@@ -268,7 +268,7 @@ function cut(next: () => number, data: Uint8Array): Uint8Array[] {
   return out;
 }
 
-describe("パケットの切り分け (塊を写さない)", () => {
+describe("パケットの切り分け (チャンクをコピーしない)", () => {
   test("どこで切って届いても、前の切り分けと同じパケットが同じ順に出る", () => {
     for (let seed = 1; seed <= 40; seed++) {
       const next = random(seed);
@@ -286,8 +286,8 @@ describe("パケットの切り分け (塊を写さない)", () => {
     }
   });
 
-  test("入れ物を使い回されても、出したパケットは届いた中身のまま", () => {
-    // recorded-bml.ts と同じ使い方: 1 つの入れ物に読み込み直しながら食わせる
+  test("バッファを使い回されても、出したパケットは届いた中身のまま", () => {
+    // recorded-bml.ts と同じ使い方: 1 つのバッファに読み込み直しながら渡す
     const next = random(7);
     const data = damaged(next, 400);
     const before = new CopyingPacketStream();
@@ -380,7 +380,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
     expect(parsed?.transportStreams[0]?.delivery).toBeNull();
   });
 
-  test("セクションの頭からバージョンと節の番号を読む", () => {
+  test("セクションの先頭からバージョンとセクションの番号を読む", () => {
     const parsed = parseNitSection(
       nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]], {
         version: 7,
@@ -422,7 +422,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
       sectionNumber: 0,
       lastSectionNumber: 1,
     });
-    // 後ろの節から届いても並びは section_number の順
+    // 後ろのセクションから届いても並びは section_number の順
     expect(reader.feed(packetize(0x0010, second))).toBe(false);
     expect(reader.actual).toBeNull();
     expect(reader.feed(packetize(0x0010, first, 1))).toBe(true);
@@ -452,7 +452,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
     );
     expect(reader.actual?.version).toBe(0);
 
-    // 局が BS-15 へ移った表 (2 節)。1 節目だけではまだ前の表
+    // 局が BS-15 へ移った表 (2 セクション)。1 セクション目だけではまだ前の表
     const part = { version: 1, lastSectionNumber: 1 };
     expect(
       reader.feed(
@@ -487,7 +487,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
     ).toEqual([16626, 16625]);
   });
 
-  test("集めている途中でバージョンが変わったら、古い節を混ぜない", () => {
+  test("集めている途中でバージョンが変わったら、古いセクションを混ぜない", () => {
     const reader = new NitReader();
     reader.feed(
       packetize(
@@ -499,7 +499,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
         }),
       ),
     );
-    // バージョン 1 の 2 節目だけでは、バージョン 0 の 1 節目とつながない
+    // バージョン 1 の 2 セクション目だけでは、バージョン 0 の 1 セクション目とつながない
     reader.feed(
       packetize(
         0x0010,
@@ -514,7 +514,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
     expect(reader.actual).toBeNull();
   });
 
-  test("置き換えた前のバージョンの節が遅れて届いても、表を前に戻さない", () => {
+  test("置き換えた前のバージョンのセクションが遅れて届いても、表を前に戻さない", () => {
     const reader = new NitReader();
     const old = nitSection(4, null, [[16400, 4, [[151, 0x01]], BS1]]);
     reader.feed(packetize(0x0010, old));
@@ -562,7 +562,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
   });
 
   test("188 の切れ目と無関係に届いても、大きな表を読める", () => {
-    // BS は 26 の TS があり、TS ごとに記述子が付くので 1 節が何パケットにもまたがる
+    // BS は 26 の TS があり、TS ごとに記述子が付くので 1 セクションが何パケットにもまたがる
     const streams: [number, number, [number, number][], number[]][] =
       Array.from({ length: 26 }, (_, i) => [
         16400 + i,
@@ -612,7 +612,7 @@ describe("ネットワークの全部の TS (NIT・SDT[other])", () => {
         1,
       ),
     );
-    // 2 節に分かれた TS は、そろうまで返らない
+    // 2 セクションに分かれた TS は、そろうまで返らない
     expect(reader.tables().map((t) => t.transportStreamId)).toEqual([16400]);
     reader.feed(
       packetize(

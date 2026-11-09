@@ -25,7 +25,7 @@ export interface CmInput {
   logoScores?: ArrayLike<number>;
   /** 番組の尺 (番組表。秒)。録画の先頭と末尾に入った前後の番組を見分けるのに使う */
   programLength?: number;
-  /** 番組表どおりなら番組が始まる秒 (録画の前のマージン)。番組の置き場所が決めきれないときの目安 */
+  /** 番組表どおりなら番組が始まる秒 (録画の先頭の放送時刻から測る。`server/encoder.programSpan`)。番組の置き場所が決めきれないときの目安 */
   programStart?: number;
 }
 
@@ -310,8 +310,8 @@ function withinProgram(
     head = at;
   }
   /*
-   * 置き場所の手がかりが番組表だけのときは、先頭は切らない。録画が遅れて始まると番組表どおりの先頭は
-   * 実際より後ろになり、番組の先頭を削ってしまう (末尾の次の番組は削っても番組は減らない)
+   * 置き場所の手がかりが番組表だけのときは、先頭は切らない。録画の先頭を測れていないと、録画が遅れて始まったぶん
+   * 番組表どおりの先頭は実際より後ろになり、番組の先頭を削ってしまう (末尾の次の番組は削っても番組は減らない)
    */
   const start = places.length > 0 ? snap(head, candidates) : 0;
   const end = snap(head + length, candidates);
@@ -396,8 +396,8 @@ const EDGE_CAP = 30;
  * ロゴが出るまでの番組が録画の先頭の CM に入っていた (本番のテレ東のアニメで 11 秒。ロゴは先頭に 1.9 秒出ただけで、
  * ロゴの区間の最短に届かず消えていた)。
  *
- * 番組表どおりの先頭は録画の前のマージンから測るので、録画が遅れて始まると実際より後ろになり、前にはずれない
- * (TDT で先頭を測れた本番の録画 21 本で 0.7〜5.8 秒後ろ)。本番の録画 54 本では、番組の先頭でロゴが出たのは番組表どおりの先頭から
+ * 番組表どおりの先頭は TDT で測った録画の先頭の放送時刻から数える。測れていない録画は録り始める予定の時刻から測るので、
+ * 録画が遅れて始まると実際より後ろになり、前にはずれない (TDT で先頭を測れた本番の録画 21 本で、予定の時刻から測ると 0.7〜5.8 秒後ろ)。本番の録画 54 本では、番組の先頭でロゴが出たのは番組表どおりの先頭から
  * 最大 2.2 秒後で、それより少し長く取る。番組表の先頭のあとに始まる CM (TBS の 125 秒など) は、ふつうの CM として見つかる
  */
 const HEAD_GRACE = 3;
@@ -571,7 +571,7 @@ const State = {
   CreditAfterOther: 10,
 } as const;
 type State = (typeof State)[keyof typeof State];
-const STATES = 11;
+const STATES = Object.keys(State).length;
 
 const isCm = (s: State) => s >= State.Chain && s <= State.Head;
 const isCredit = (s: State) => s >= State.CreditAfterProgram;

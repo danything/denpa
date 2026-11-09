@@ -220,7 +220,7 @@ test("frameMessage は Greg の番号と NVRAM の中身を確かめる", () => 
   ).toBeNull();
 });
 
-test("receiverKey:色ボタンは 403〜406、戻ると d は閉じる", () => {
+test("receiverKey は色ボタンを 403〜406 にし、戻ると d は渡さない", () => {
   expect(receiverKey(22)).toEqual({ key: "r", code: 403 });
   expect(receiverKey(21)).toEqual({ key: "b", code: 406 });
   expect(receiverKey(18)).toEqual({ key: "Enter", code: 13 });

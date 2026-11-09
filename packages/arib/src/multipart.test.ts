@@ -35,7 +35,7 @@ describe("parseMediaType", () => {
 });
 
 describe("readEntity", () => {
-  test("ヘッダと本体を分ける。折り返しは1つの値に", () => {
+  test("ヘッダと本体を分ける。折り返しは 1 つの値に", () => {
     const entity = readEntity(
       bytes("Content-Type: image/png\r\nX-Long: a\r\n b\r\n\r\nBODY"),
     );
@@ -71,7 +71,7 @@ describe("readEntity", () => {
     ]);
   });
 
-  test("中身が空の部品も 1 つとして数える (空行の CRLF が区切りに食われる場合も)", () => {
+  test("中身が空の部品も 1 つとして数える (空行の CRLF が区切りの先頭として読まれる場合も)", () => {
     for (const empty of ["\r\n", ""]) {
       const entity = readEntity(
         bytes(

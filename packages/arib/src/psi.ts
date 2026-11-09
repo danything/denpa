@@ -111,7 +111,7 @@ export interface NetworkInfo {
   transportStreams: TransportInfo[];
 }
 
-/** 何も組み上がらなかったときの返り。使い回すので凍らせてある */
+/** 何も組み上がらなかったときの返り。使い回すので `Object.freeze` してある */
 const NONE: readonly Uint8Array[] = Object.freeze([]);
 
 /**
@@ -119,7 +119,7 @@ const NONE: readonly Uint8Array[] = Object.freeze([]);
  *
  * セクションは TS パケットをまたいで運ばれ、パケットの切れ目とは無関係な
  * 位置で終わる。payload_unit_start_indicator と pointer_field を見て
- * 頭を合わせ、section_length ぶん溜まったら 1 本として返す。
+ * 先頭を合わせ、section_length ぶん溜まったら 1 本として返す。
  */
 export class SectionAssembler {
   private buffer = new Uint8Array(0);
@@ -165,7 +165,7 @@ export class SectionAssembler {
       // pointer_field の手前は前のセクションの続き
       this.append(payload.subarray(1, 1 + pointer));
       const done = this.flush();
-      // 写す。パケットは届いた塊の上の窓で、塊は使い回される (PacketStream)
+      // コピーする。パケットは届いたチャンクの一部を指し、チャンクのバッファは使い回される (PacketStream)
       this.buffer = payload.slice(1 + pointer);
       const next = this.flush();
       if (done.length === 0) return next;
@@ -205,7 +205,7 @@ export class SectionAssembler {
 
 /**
  * 同期が取れているとみなすのに必要な連続パケット数。
- * 1 つだけでは中身のたまたまの 0x47 を頭と誤認する
+ * 1 つだけでは中身にたまたまある 0x47 をパケットの先頭と誤認する
  */
 const CONFIRM = 3;
 
@@ -230,22 +230,22 @@ export function findSync(
 /**
  * 任意の長さで届くバイト列を 188 バイトのパケットに切り分ける。
  *
- * 頭が必ずパケットの先頭とは限らず、電波が弱いと途中で数バイト落ちる。
- * ずれたままだと**以降ずっと 1 パケットも読めなくなる**ので、頭が 0x47 でなければ
+ * 渡されたバイト列の先頭がパケットの先頭とは限らず、電波が弱いと途中で数バイト落ちる。
+ * ずれたままだと**以降ずっと 1 パケットも読めなくなる**ので、先頭が 0x47 でなければ
  * 取り直す。普段は先頭が 0x47 なので、探しに行くのはずれたときだけ。
  *
- * **出すパケットは渡された塊の上の窓** (写しではない。写すと録画の処理の 1/3 を食う)。
- * 塊の入れ物を使い回す呼び出し側がある
- * (denpa の `server/recorded-bml.ts`) ので、**次の `feed` より後まで持つなら写すこと**。
- * いまのパーサ (`SectionAssembler`・`PesDemuxer`) は溜めるときに写している
+ * **出すパケットは渡されたチャンクの一部を指す** (コピーではない。コピーすると録画の処理時間の 1/3 を使う)。
+ * チャンクのバッファを使い回す呼び出し側がある
+ * (denpa の `server/recorded-bml.ts`) ので、**次の `feed` より後まで持つならコピーすること**。
+ * いまのパーサ (`SectionAssembler`・`PesDemuxer`) は溜めるときにコピーしている
  */
 export class PacketStream {
   private rest = new Uint8Array(0);
 
   *feed(chunk: Uint8Array): Generator<Uint8Array> {
     /*
-     * 前の残り (`rest`) と塊を繋いだ並びの上を歩く。位置 `at` はその並びでの位置。
-     * 繋ぐのは**残りに頭があるパケットを読むのに要るぶんだけ** (頭を探すのに
+     * 前の残り (`rest`) とチャンクを繋いだ並びを順に読む。位置 `at` はその並びでの位置。
+     * 繋ぐのは**残りに先頭があるパケットを読むのに要るぶんだけ** (先頭を探すのに
      * 3 パケットぶん先まで見る)
      */
     const split = this.rest.length;
@@ -261,7 +261,7 @@ export class PacketStream {
       while (at < split && at + PACKET <= total) {
         if (head[at] !== SYNC) {
           const found = findSync(head, at, split);
-          // 残りの中には無い。塊のほうを探す
+          // 残りの中には無い。チャンクのほうを探す
           if (found < 0) {
             lost = true;
             break;
@@ -295,12 +295,12 @@ export class PacketStream {
       at = split + offset;
     }
 
-    // 同期が取れないまま溜め込まないよう、頭を探せるぶんだけ残す
+    // 同期が取れないまま溜め込まないよう、先頭を探せるぶんだけ残す
     const from = Math.max(at, total - PACKET * CONFIRM);
     if (from >= split) {
       this.rest = chunk.slice(from - split);
     } else {
-      // 塊が短くて、前の残りにまだ食い込んでいる
+      // チャンクが短くて、前の残りの途中から残す
       const rest = new Uint8Array(total - from);
       rest.set(this.rest.subarray(from));
       rest.set(chunk, split - from);
@@ -380,10 +380,10 @@ export function pmtProgramInfo(section: Uint8Array): Uint8Array {
 /**
  * PMT の ES の並びを `[stream_type, PID, 記述子]` で返す。
  *
- * **`stream_type` では物を見分けられません。** データ放送も AIT もロゴも同じ
+ * **`stream_type` では中身を見分けられない。** データ放送も AIT もロゴも同じ
  * DSM-CC セクション (0x0D) を名乗るので、見分けるのは記述子のほう
- * (component_tag や application_signalling) です。だからここは**素通しで並べる
- * だけ**にして、選り分けは呼ぶ側に置いてあります。
+ * (component_tag や application_signalling)。だからここは**素通しで並べる
+ * だけ**にして、選り分けは呼ぶ側に置いてある。
  */
 export function* pmtStreams(
   section: Uint8Array,

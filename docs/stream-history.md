@@ -6,7 +6,7 @@
 
 **映像音声 (`ffmpeg → fMP4 → WebSocket → MSE`) → 字幕 (同じ ffmpeg の 2 つ目の出口から
 サイドチャネルへ) → データ放送 (1 局に絞った TS を自前の `BmlDecoder` でデコードする。[データ放送の統合](stream.md#データ放送の統合))
-の順に入れ、どれも入っています。** 低遅延は WebRTC / WHEP にせず ([不採用の理由](#webrtc--whep-による低遅延化--不採用))、MoQ にもせず ([不採用の理由](#media-over-quic-moq--不採用))、エンコードしない放送のままの経路で縮めました ([stream.md](stream.md#放送そのままmpeg-2を送る))。
+の順に入れ、どれも入っています。** 低遅延は WebRTC / WHEP にせず ([不採用の理由](#webrtc--whep-による低遅延化))、MoQ にもせず ([不採用の理由](#media-over-quic-moq))、エンコードしない放送のままの経路で縮めました ([stream.md](stream.md#放送そのままmpeg-2を送る))。
 
 ## 採用しなかったもの
 
@@ -33,7 +33,7 @@ B24 をそのままブラウザへ送り、クライアントでデコードし�
 
 前例が豊富 (KonomiTV / web-bml と同一構成) で、段階を踏む案として有力だった。
 **字幕の経路が録画側で先に完成した**ので、あとで捨てるコードを書く理由が無くなった。
-H.264 は段階ではなく、選べるコーデックの 1 つとして残した。
+H.264 は段階ではなく、流すコーデックの 1 つとして残した (メニューには並べず、AV1 を再生できない端末に自動で流す)。
 
 ### GStreamer
 
@@ -323,4 +323,4 @@ MPEG-2 には無く、効くのはコンパイラが自動でベクトルにす�
 | xqq/libaribcaption                 | 字幕のデコード方法と表の写し元 (`packages/arib/src/b24caption.ts`・`packages/arib/src/b24-tables.ts`。ffmpeg には組み込まない) |
 | xtne6f/tsreadex / xtne6f/psisiarc  | TS 整形・データ放送抽出 (**どちらも要らなくなった**)                                                                           |
 | monyone/aribb24.js / xqq/mpegts.js | ブラウザ側で字幕を描く・MPEG-TS を直接再生する場合 (不採用)                                                                    |
-| otya128/mpeg2toh264                | MPEG-2 を画素に戻さずに H.264 へ書き換える変換 ([試して不採用](#mpeg2toh264-で-h264-に書き換える--不採用))                     |
+| otya128/mpeg2toh264                | MPEG-2 を画素に戻さずに H.264 へ書き換える変換 ([試して不採用](#mpeg2toh264-で-h264-に書き換える))                             |

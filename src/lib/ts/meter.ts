@@ -1,5 +1,5 @@
 /**
- * **受け取りの速さを測る** (観る画面の `remux-player.ts`。段の上げ下げに渡す。`#lib/adapt.ts` の `AdaptSample.throughput`)。
+ * **受け取りの速さを測る** (観る画面の `remux-player.ts`・`canvas-player.ts`。段の上げ下げに渡す。`#lib/adapt.ts` の `AdaptSample.throughput`)。
  *
  * 数えるのは**読んでいる間だけ**。先が埋まって読むのを止めている間 (`AHEAD`) を混ぜると、回線が太くても遅く見える。
  * 窓は読んでいた時間で 5 秒ぶん。読むのを止めている間は窓が進まないので、最後に測った値をそのまま返す。

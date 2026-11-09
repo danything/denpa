@@ -2,7 +2,7 @@
  * バイト列の細かい道具。**中身の意味は持たない。** 繋ぐ・読むのはここで済ませる (別名で書き直さない)
  */
 
-/** バイト列を新しい 1 本に繋ぐ (いつも写す。`Blob` などへ渡せる `ArrayBuffer` の上に作る) */
+/** バイト列を新しい 1 本に繋ぐ (いつもコピーする。`Blob` などへ渡せる `ArrayBuffer` の上に作る) */
 export function concatBytes(
   parts: readonly Uint8Array[],
 ): Uint8Array<ArrayBuffer> {
@@ -20,7 +20,7 @@ export function concatBytes(
 /**
  * バイト列を 1 本に繋ぐ。
  *
- * **1 本しかないときは写しません。** 分割された記述子を繋ぎ直すところ
+ * **1 本しかないときはコピーしません。** 分割された記述子を繋ぎ直すところ
  * ([eit.ts](eit.ts)) では、繋ぐ必要のないほうが多数です
  */
 export function joinBytes(parts: readonly Uint8Array[]): Uint8Array {
@@ -48,7 +48,7 @@ export function u32(data: Uint8Array, at: number): number {
   );
 }
 
-/** `length` バイトをそのまま 1 字ずつの文字列に (MP4 の箱の種別・PNG の塊の名前・言語の符号) */
+/** `length` バイトをそのまま 1 字ずつの文字列に (MP4 のボックスの種別・PNG のチャンクの名前・言語の符号) */
 export function ascii(data: Uint8Array, at: number, length: number): string {
   return String.fromCharCode(...data.subarray(at, at + length));
 }

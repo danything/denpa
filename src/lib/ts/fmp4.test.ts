@@ -11,7 +11,7 @@ import {
   readInit,
 } from "./fmp4";
 
-/** 箱を 1 つ組み立てる。中身は大きさが分かればよいので詰め物 */
+/** ボックスを 1 つ組み立てる。中身は大きさが分かればよいので詰め物 */
 function box(type: string, fill = 0, size = 4): Uint8Array {
   const out = new Uint8Array(8 + size);
   new DataView(out.buffer).setUint32(0, out.length);
@@ -57,7 +57,7 @@ describe("fMP4 を割る", () => {
   });
 
   /*
-   * **パイプは箱の切れ目で届かない。** 半端なところで切って MSE に渡すと
+   * **パイプはボックスの切れ目で届かない。** 半端なところで切って MSE に渡すと
    * その場で例外を出す。1 バイトずつ渡しても同じ答えになること
    */
   test("どこで切って渡しても同じ", () => {
@@ -79,7 +79,7 @@ describe("fMP4 を割る", () => {
    * **数で区切らない。** 「2 つ溜まったら出す」にしていると `moof` + `sidx` を
    * 1 枚として出してしまい、中身の無いものを MSE に渡すことになる
    */
-  test("moof と mdat の間に別の箱が挟まっても、1 枚として出す", () => {
+  test("moof と mdat の間に別のボックスが挟まっても、1 枚として出す", () => {
     const splitter = new Fmp4Splitter();
     const out = splitter.feed(
       join(box("ftyp"), box("moov"), box("moof"), box("sidx"), box("mdat")),
@@ -92,7 +92,7 @@ describe("fMP4 を割る", () => {
    * **init は `moof` が見えた時点で出す。** そこで先頭が終わったと分かるので、
    * `mdat` まで待つ理由が無い。繋いできた人を 1 枚ぶん待たせないで済む
    */
-  test("init は moof が見えた時点で出す。媒体は mdat まで待つ", () => {
+  test("init は moof が見えた時点で出す。メディアセグメントは mdat まで待つ", () => {
     const splitter = new Fmp4Splitter();
     expect(splitter.feed(join(box("ftyp"), box("moov")))).toEqual([]);
     expect(splitter.feed(box("moof")).map((s) => s.kind)).toEqual(["init"]);
@@ -100,7 +100,7 @@ describe("fMP4 を割る", () => {
   });
 
   /** 大きさ 0 (最後まで)・1 (64 ビットの大きさ) は読めない。持ったままだと届くたびに溜まり続ける */
-  test("読めない箱が来たら、そこまでを出して以降は捨てる", () => {
+  test("読めないボックスが来たら、そこまでを出して以降は捨てる", () => {
     const splitter = new Fmp4Splitter();
     const unreadable = box("mdat");
     new DataView(unreadable.buffer).setUint32(0, 0);
@@ -115,11 +115,11 @@ describe("fMP4 を割る", () => {
 /*
  * ---- 中身を読む (画面の canvas で描く経路) ----
  *
- * 箱は手で組む。並びは ISO/IEC 14496-12 と、denpa の ffmpeg が出す形式
+ * ボックスは手で組む。並びは ISO/IEC 14496-12 と、denpa の ffmpeg が出す形式
  * (`+empty_moov+default_base_moof`) に合わせる
  */
 
-/** 中身付きの箱 */
+/** 中身付きのボックス */
 function boxOf(type: string, ...parts: Uint8Array[]): Uint8Array {
   const body = join(...parts);
   const out = new Uint8Array(8 + body.length);
@@ -164,7 +164,7 @@ function trak(id: number, timescale: number, entry: Uint8Array): Uint8Array {
   );
 }
 
-/** VisualSampleEntry (78 バイトの決まった並び + 中身の箱) */
+/** VisualSampleEntry (78 バイトの決まった並び + 中身のボックス) */
 function visual(
   type: string,
   width: number,
@@ -178,7 +178,7 @@ function visual(
   return boxOf(type, fixed, inner);
 }
 
-/** AudioSampleEntry (28 バイトの決まった並び + 中身の箱) */
+/** AudioSampleEntry (28 バイトの決まった並び + 中身のボックス) */
 function sound(
   type: string,
   channels: number,
@@ -345,7 +345,7 @@ describe("fMP4 の中身を読む", () => {
           atrun(aoff),
         ),
       );
-    // 在りかは moof の先頭から数える。moof の大きさが決まってから組み直す
+    // 位置は moof の先頭から数える。moof の大きさが決まってから組み直す
     const size = moof(0, 0).length;
     const mdat = boxOf("mdat", ...video, ...audio);
     const fragment = join(moof(size + 8, size + 8 + 5), mdat);
@@ -366,9 +366,9 @@ describe("fMP4 の中身を読む", () => {
     ]);
   });
 
-  test("壊れた媒体は、読めたところまで返して例外を出さない", () => {
+  test("壊れたメディアセグメントは、読めたところまで返して例外を出さない", () => {
     const tracks = readInit(init());
-    // 中身の在りかが mdat の外を指している
+    // 中身の位置が mdat の外を指している
     const broken = join(
       boxOf(
         "moof",
@@ -443,7 +443,7 @@ describe("dOps を OpusHead にする", () => {
 
 /*
  * **本物の ffmpeg が書いたもの** (E2E の偽 ffmpeg が流す作り置き。`tests/fake/fmp4-loop.ts` に作り方)。
- * 形式はライブと同じ (`+empty_moov+default_base_moof`)。手で組んだ箱と読み方が食い違っていないかを見る
+ * 形式はライブと同じ (`+empty_moov+default_base_moof`)。手で組んだボックスと読み方が食い違っていないかを見る
  */
 describe("ffmpeg が書いた fMP4 を読む", () => {
   const fixture = (name: string) =>
@@ -466,7 +466,7 @@ describe("ffmpeg が書いた fMP4 を読む", () => {
         expect(opusHead(tracks[1]!.config)?.length).toBe(19);
       else expect(adtsHeader(tracks[1]!.config, 100)).not.toBeNull();
 
-      // 媒体を全部読む: 2 秒ぶんのコマが時刻の順に並び、先頭はキーフレーム
+      // メディアセグメントを全部読む: 2 秒ぶんのコマが時刻の順に並び、先頭はキーフレーム
       const samples = new Fmp4Splitter()
         .feed(file)
         .filter((s) => s.kind === "media")

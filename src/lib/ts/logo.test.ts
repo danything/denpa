@@ -85,7 +85,7 @@ function sdtWithLogo(
 }
 
 describe("CDT", () => {
-  test("ロゴのPNGを取り出す", () => {
+  test("ロゴの PNG を取り出す", () => {
     const logo = parseCdt(cdtSection(3, 0x05, PNG));
     expect(logo?.logoId).toBe(3);
     expect(logo?.logoType).toBe(0x05);
@@ -107,7 +107,7 @@ describe("CDT", () => {
 });
 
 describe("SDT のロゴ対応", () => {
-  test("サービスとロゴIDを結ぶ", () => {
+  test("サービスとロゴ ID を結ぶ", () => {
     expect(
       parseLogoLinks(
         sdtWithLogo([
@@ -131,7 +131,7 @@ describe("SDT のロゴ対応", () => {
 });
 
 describe("ロゴを集める", () => {
-  test("CDTとSDTが揃って初めて局に配れる", () => {
+  test("CDT と SDT が揃って初めて局に配れる", () => {
     const collector = new LogoCollector(NETWORK);
     collector.feed(packetize(0x0029, cdtSection(3, 0x05, PNG)));
     // ロゴだけではどの局のものか分からない
@@ -177,7 +177,7 @@ describe("ロゴを集める", () => {
     expect(collector.collected()[0]!.logo.logoType).toBe(0x05);
   });
 
-  test("188の切れ目と無関係に届いても読める", () => {
+  test("188 の切れ目と無関係に届いても読める", () => {
     const collector = new LogoCollector(NETWORK);
     const data = Uint8Array.from([
       ...packetize(0x0029, cdtSection(3, 0x05, PNG)),

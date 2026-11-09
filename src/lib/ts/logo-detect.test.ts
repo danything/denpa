@@ -331,7 +331,7 @@ describe("覚えたものを持つ", () => {
   });
 });
 
-test("流れてくるバイト列を1コマずつに区切る", () => {
+test("流れてくるバイト列を 1 コマずつに区切る", () => {
   const got: number[][] = [];
   const push = framer(4, (f) => got.push(Array.from(f)));
   push(Uint8Array.from([1, 2, 3]));

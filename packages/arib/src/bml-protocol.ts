@@ -7,7 +7,7 @@
  * web-bml は MIT で、著作権表示と許諾の文は [LICENSE](../LICENSE) に置いてある。
  *
  * 載せるのは denpa が実際に作るものだけ (PMT・モジュール一覧・揃ったモジュール・
- * ストリーム記述子のイベント・番組の名乗り・放送の時刻)。web-bml が自前の
+ * ストリーム記述子のイベント・番組の情報・放送の時刻)。web-bml が自前の
  * TS 解析のために持っていた PCR・PES・BIT・映像の URL は作らないので持たない。
  */
 
@@ -140,7 +140,7 @@ export interface ESEventUpdatedMessage {
   dataEventId: number;
 }
 
-/** 番組の名乗り。TS からではなく DB から組む (denpa の `server/live.ts`・`server/recorded-bml.ts`) */
+/** 番組の情報。TS からではなく DB から組む (denpa の `server/live.ts`・`server/recorded-bml.ts`) */
 export interface ProgramInfoMessage {
   type: "programInfo";
   originalNetworkId: number | null;

@@ -261,7 +261,7 @@ export class RawEngine {
     return this.context.state !== "running";
   }
 
-  /** 届いた TS を渡す。**写さずに worker へ移す** (1 局 15Mbit/s ぶんを毎秒写さない) */
+  /** 届いたものを `offset` から渡す (`messages.ts` の `data`)。**写さずに worker へ移す** (1 局 15Mbit/s ぶんを毎秒写さない) */
   feed(buffer: ArrayBuffer, offset: number): void {
     this.send({ type: "data", buffer, offset }, [buffer]);
   }

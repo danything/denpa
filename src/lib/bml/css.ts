@@ -15,7 +15,7 @@ interface Selector {
   specificity: number;
 }
 
-/** [特性, 値, !important] */
+/** [プロパティ, 値, !important] */
 export type Declaration = [property: string, value: string, important: boolean];
 
 export interface Rule {

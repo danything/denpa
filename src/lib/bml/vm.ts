@@ -2,8 +2,8 @@
  * スクリプトを動かす。**ブラウザの JS (eval / Function) は使わない。**
  *
  * - 放送のコードをページの realm で動かさない (CSP で eval を禁じても動く)
- * - `browser.sleep` で**同期のまま止まれる**: 組み込みが `Suspend` を返すと、ここで手を
- *   放して約束を待ち、返ってきた値を積んで続きから動く
+ * - `browser.sleep` で**同期のまま止まれる**: 組み込みが `Suspend` を返すと、ここで実行を
+ *   止めて Promise を待ち、返ってきた値を積んで続きから動く
  * - `launchDocument` で今の実行を**打ち切れる** (`Abort`)
  * - 時間で区切る: `run(deadline)` は締め切りが来たら `yield` を返す。呼ぶ側が次の
  *   隙間で `run` し直す (ページを固めない)
@@ -57,7 +57,7 @@ interface Frame {
   code: Code;
   pc: number;
   env: Env | null;
-  /** この呼び出しが始まったときの積み上げの高さ */
+  /** この呼び出しが始まったときのスタックの高さ */
   base: number;
   thisValue: Value;
   /** `new` で呼ばれたときにできたオブジェクト */
@@ -71,7 +71,7 @@ export type RunResult =
   | { kind: "abort" }
   | { kind: "error"; error: Error };
 
-/** for-in の列挙。積み上げに置くためにオブジェクトの形をしている */
+/** for-in の列挙。スタックに置くためにオブジェクトの形をしている */
 class Enumeration extends JSObject {
   at = 0;
   constructor(
@@ -97,7 +97,7 @@ export class Vm {
   private steps = 0;
   /** 組み込みから呼んだ関数の枠の深さ。枠がこれより減ったら `loop` を抜ける (0 は大域まで) */
   private floor = 0;
-  /** 組み込みの返事を待っているか (`resume` を受けるのはこのときだけ) */
+  /** 組み込みの戻り値を待っているか (`resume` を受けるのはこのときだけ) */
   private waiting = false;
   private readonly limits: VmLimits;
 
@@ -115,7 +115,7 @@ export class Vm {
   }
 
   /** 途中のものを捨てる */
-  reset(): void {
+  private reset(): void {
     this.stack = [];
     this.frames = [];
     this.steps = 0;
@@ -184,7 +184,7 @@ export class Vm {
     });
   }
 
-  /** 関数を呼び始める (イベントの受け手)。呼べないものなら誤り */
+  /** 関数を呼び始める (イベントのハンドラ)。呼べないものなら誤り */
   startCall(fn: Value, args: Value[] = []): void {
     if (!(fn instanceof JSFunction) || fn.call.kind !== "script") {
       throw new ScriptError(`${toStr(fn)} はスクリプトの関数ではありません`);
@@ -197,7 +197,7 @@ export class Vm {
 
   /** `Suspend` で待っていた値を受け取る。続きは `run` */
   resume(value: Value): void {
-    if (!this.waiting) throw new Error("VM は返事を待っていません");
+    if (!this.waiting) throw new Error("VM は戻り値を待っていません");
     this.waiting = false;
     this.stack.push(value);
   }
@@ -208,7 +208,8 @@ export class Vm {
    * @param deadline `performance.now()` の値
    */
   run(deadline: number): RunResult {
-    if (this.waiting) throw new Error("VM は返事を待っています (先に resume)");
+    if (this.waiting)
+      throw new Error("VM は戻り値を待っています (先に resume)");
     try {
       return this.loop(deadline);
     } catch (error) {
@@ -240,7 +241,7 @@ export class Vm {
   }
 
   /**
-   * 呼ぶ。積み上げは [this, 関数, 引数…]。スクリプトの関数なら枠を積んで null、
+   * 呼ぶ。スタックは [this, 関数, 引数…]。スクリプトの関数なら枠を積んで null、
    * 組み込みなら結果を積んで null、待つ・打ち切るならその印を返す
    */
   private call(argc: number, construct: boolean): Suspend | Abort | null {

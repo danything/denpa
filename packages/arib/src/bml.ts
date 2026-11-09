@@ -215,7 +215,7 @@ function parseEsEvents(section: Uint8Array): ESEvent[] {
 /**
  * 組み立て中のモジュール 1 つ。
  *
- * **DII の言い分を持ち歩く。** 縮んでいるか・中身が何かは DII にしか書いておらず、
+ * **DII に書いてあったことを持っておく。** 圧縮されているか・中身が何かは DII にしか書いておらず、
  * ブロックを運ぶ DDB は何も知らない。揃ったときに読み方が分からないと困る
  */
 interface Building {
@@ -295,15 +295,15 @@ export class BmlDecoder {
    * 切り分け済みのパケットを 1 つ。ライブは同じ TS を時計や Hybridcast とも
    * 分け合うので、切り分けは 1 回で済ませて配る (denpa の `server/live.ts` の `tap`)。
    *
-   * **PID で行き先を引く。** 組み立て役を全部に回していた頃は、データ放送と
+   * **PID で渡し先を引く。** すべての組み立て処理にパケットを渡していた頃は、データ放送と
    * 関係ない映像のパケットのたびにカルーセルの数だけ呼んでいた。
    *
-   * `packet` は呼び手の塊の上の窓 (`psi.ts` の `PacketStream`)。**返ったあとまで
-   * 持つなら写すこと。** 塊の入れ物は使い回される
+   * `packet` は呼び出し側が渡したチャンクの一部を指す (`psi.ts` の `PacketStream`)。**返ったあとまで
+   * 持つならコピーすること。** チャンクのバッファは使い回される
    */
   feedPacket(packet: Uint8Array): void {
     const pid = packetPid(packet);
-    // 同じ PID を 2 役が名乗ることもあるので、else でつながない
+    // 同じ PID を 2 つの用途で使うこともあるので、else でつながない
     for (const section of this.pmt.feed(packet, pid)) this.onPmt(section);
     if (pid === PID_TIME)
       for (const section of this.time.feed(packet)) this.onTime(section);
@@ -503,7 +503,7 @@ export class BmlDecoder {
     const mark = doneMark(component, version);
     if (component.done.get(moduleId) === mark) return;
 
-    // 大きさ 0 は伸ばしようが無い。ファイルの無いモジュールとして配り、待っている受け側を終わらせる
+    // 大きさ 0 は展開しようが無い。ファイルの無いモジュールとして配り、待っている受け側を終わらせる
     const empty = held.module.moduleSize === 0;
     const data = empty
       ? held.builder.data
@@ -511,7 +511,7 @@ export class BmlDecoder {
     const files =
       data === null ? [] : moduleFiles(data, held.module.contentType);
     /*
-     * **伸ばせない・分けられないモジュールは諦める。** 配らずに黙ると、受け側は DII に
+     * **展開できない・分けられないモジュールは諦める。** 配らずに黙ると、受け側は DII に
      * 載っている限り待ち続ける。ブロックは CRC を通っているので、組み直しても同じ結果になる
      */
     if (files.length === 0 && !empty) {
@@ -581,7 +581,7 @@ function base64(data: Uint8Array): string {
   return Buffer.from(data).toString("base64");
 }
 
-/** zlib で縮めてあれば伸ばす。伸ばせなければ諦めて null */
+/** zlib で圧縮してあれば展開する。展開できなければ諦めて null */
 export function inflate(
   data: Uint8Array,
   compression: { type: number } | null,
@@ -589,7 +589,7 @@ export function inflate(
   if (compression === null) return data;
   if (compression.type !== COMPRESSION_ZLIB) return null;
   try {
-    // 伸ばした大きさにも上限を置く。小さな DDB から何 GB にも伸びるものを作れる
+    // 展開した大きさにも上限を置く。小さな DDB から何 GB にも展開されるものを作れる
     return inflateSync(data, { maxOutputLength: MAX_MODULE_SIZE });
   } catch {
     return null;

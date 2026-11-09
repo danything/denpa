@@ -124,7 +124,7 @@ function element(id: number[], body: number[]): number[] {
 }
 
 /**
- * ffmpeg が `-c:s copy -f matroska` で書くのと同じ骨組みの Matroska (トラック 1 本・コマごとに塊 1 つ)。
+ * ffmpeg が `-c:s copy -f matroska` で書くのと同じ骨組みの Matroska (トラック 1 本・コマごとに SimpleBlock 1 つ)。
  * 中身は字幕の PES の中身 (`text(...)` など) をそのまま入れる
  *
  * @param frames [時刻 (ミリ秒。65535 まで), 中身] の並び

@@ -8,7 +8,13 @@ import {
   readInit,
 } from "#lib/ts/fmp4.js";
 
-import { audioCodec, audioFrame, type Fmp4Host, Fmp4Video } from "./fmp4";
+import {
+  audioCodec,
+  audioFrame,
+  type Fmp4Host,
+  Fmp4Video,
+  newestKey,
+} from "./fmp4";
 
 /**
  * **追っかけで抱えきれなくなったとき** (`follow`)。圧縮のまま持つのが上限を超えたら、受け取るのを
@@ -220,5 +226,26 @@ describe("audioCodec・audioFrame", () => {
   test("OpusHead を組めない Opus は開かない", () => {
     const { track } = audioOf("live-av1.mp4");
     expect(audioCodec({ ...track, config: new Uint8Array(2) })).toBeNull();
+  });
+});
+
+describe("newestKey", () => {
+  const items = [
+    { dts: 0, key: true },
+    { dts: 10, key: false },
+    { dts: 20, key: true },
+    { dts: 30, key: false },
+    { dts: 40, key: true },
+  ];
+
+  test("dts が飛び先までのうち、いちばん新しいキーフレームの位置を返す", () => {
+    expect(newestKey(items, 35)).toBe(2);
+    expect(newestKey(items, Number.POSITIVE_INFINITY)).toBe(4);
+  });
+
+  test("先頭より後ろにキーフレームが無ければ 0 以下を返す (飛ばない)", () => {
+    expect(newestKey(items, 15)).toBe(0);
+    expect(newestKey([{ dts: 0, key: false }], 10)).toBe(-1);
+    expect(newestKey([], 10)).toBe(-1);
   });
 });

@@ -11,7 +11,7 @@ const INIT: CompatInit = {
 };
 
 function make(init: CompatInit = INIT): {
-  // oxlint-disable-next-line typescript/no-explicit-any -- アプリから見える形 (型の無い世界) で触る
+  // oxlint-disable-next-line typescript/no-explicit-any -- アプリから見える形 (型の付かない JavaScript) で触る
   api: any;
   posted: Record<string, unknown>[];
 } {
@@ -70,7 +70,7 @@ describe("bmlCompat", () => {
     ).toBe(1);
   });
 
-  test("データ放送へ戻ると言われたら閉じる", () => {
+  test("launchDataBroadcastingBrowser を呼ばれたら閉じる", () => {
     const { api, posted } = make();
     api.applicationManager.launchDataBroadcastingBrowser({ component_tag: 64 });
     expect(posted).toEqual([{ type: "close" }]);

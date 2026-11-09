@@ -5,8 +5,8 @@ import { Fmp4Splitter, readFragment, readInit } from "./fmp4";
 import { KeyGate } from "./key-gate";
 
 /**
- * 本物の ffmpeg が書いた 2 秒 (`tests/fake/fmp4-loop.ts` に作り方)。0.05 秒ずつの塊で、
- * キーフレームは先頭と 1.021 秒 (16 個目の塊の 2 コマ目)
+ * 本物の ffmpeg が書いた 2 秒 (`tests/fake/fmp4-loop.ts` に作り方)。0.05 秒ずつのフラグメントで、
+ * キーフレームは先頭と 1.021 秒 (16 個目のフラグメントの 2 コマ目)
  */
 const file = new Uint8Array(
   readFileSync(new URL("../../../tests/fake/live-h264.mp4", import.meta.url)),
@@ -16,14 +16,14 @@ const head = segments.find((s) => s.kind === "init")!.data;
 const fragments = segments.filter((s) => s.kind === "media").map((s) => s.data);
 const tracks = readInit(head);
 const video = tracks.find((t) => t.kind === "video")!.id;
-/** 映像のキーフレームを含む塊のうち、先頭の次のもの */
+/** 映像のキーフレームを含むフラグメントのうち、先頭の次のもの */
 const KEY = fragments.findIndex(
   (f, i) =>
     i > 0 && readFragment(f, tracks).some((s) => s.track === video && s.key),
 );
 
 describe("途中から入ったストリーム", () => {
-  test("キーフレームを含む塊まで渡さず、その時刻を覚える", () => {
+  test("キーフレームを含むフラグメントまで渡さず、その時刻を覚える", () => {
     const gate = new KeyGate();
     gate.init(head);
     const passed = fragments.slice(5).map((f) => gate.pass(f));
@@ -78,10 +78,10 @@ describe("途中から入ったストリーム", () => {
   });
 
   /*
-   * 選局したての ffmpeg は、最初の塊が音声だけのことがある (`tests/fake/live-h264-audio-first.mp4`)。
+   * 選局したての ffmpeg は、最初のフラグメントが音声だけのことがある (`tests/fake/live-h264-audio-first.mp4`)。
    * 捨てると音声が映像より後から始まり、Chromium で始めた直後に止まっていた
    */
-  test("映像の入らない塊は、待っている間も渡す", () => {
+  test("映像の入らないフラグメントは、待っている間も渡す", () => {
     const first = new Fmp4Splitter().feed(
       new Uint8Array(
         readFileSync(

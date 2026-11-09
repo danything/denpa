@@ -3,7 +3,7 @@
  *
  * サーバの `/stream` の代わりに、Blob を切り出して流す。
  *
- * - 開くときに先頭 (最初の Cluster まで: Info・Tracks) と、飛ぶ位置の表 (Cues。SeekHead が在りかを言う) を読む
+ * - 開くときに先頭 (最初の Cluster まで: Info・Tracks) と、飛ぶ位置の表 (Cues。位置は SeekHead に書いてある) を読む
  * - `from` 秒から観るときは、表で `from` より手前のいちばん近い Cluster を引き、**先頭 + その Cluster から末尾まで**
  *   を 1 本のストリームにする。読む側 (`raw/mkv.ts`) は位置を確かめないので、繋いだまま読める。手前のコマは
  *   描かない (`floor`。サーバから流すときと同じ)

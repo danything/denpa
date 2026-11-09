@@ -6,11 +6,11 @@
  * 済むようにする。ここが受け持つのは、飛んだ先が溜まっていなければ**そこからリクエストし直す**ことと、
  * 先へ溜めすぎないこと、回線に合わせて段を替えるときに**継ぎ目なく切り替える**こと (`switchTo`)。
  *
- * - **尺は先に言う** (`duration`)。バーは最初から全長で出て、続きの位置へも飛べる
+ * - **尺は先に渡す** (`MediaSource.duration`)。バーは最初から全長で出て、続きの位置へも飛べる
  * - **ストリームの時刻はページの物差しのまま** (`PlayAxis`)。字幕・チャプター・データ放送は
  *   `currentTime` で引いているので、そのまま合う
  * - 溜めるのは先 `AHEAD` 秒まで、後ろは `BEHIND` 秒まで。iPhone は溜められる量が小さい
- * - `ManagedMediaSource` (iPhone) は**送り込む頃合いをブラウザが言う**。言われていない間は読まない
+ * - `ManagedMediaSource` (iPhone) は**送り込んでよい間をブラウザが知らせる** (`startstreaming`・`endstreaming`)。止められている間は読まない
  * - 切れたら観ていた位置からリクエストし直す (1 秒→2 秒→…10 秒で頭打ち、続けて 8 回で打ち切る)。
  *   観る画面の繋ぎ直し (`recover`) と同じ数
  * - **サーバが混んでいて断られたら (503) リクエストし直さない** (`busy`)。その場の変換の枠が埋まっている
@@ -168,7 +168,7 @@ export function remuxPlayer(
     bufferType = type;
   }
 
-  /** 観て減るか、ブラウザが送り込んでよいと言うまで待つ (`nudge`)。待つ間は速さを数えない */
+  /** 観て減るか、ブラウザが送り込んでよいと知らせるまで待つ (`nudge`)。待つ間は速さを数えない */
   function sleep(): Promise<void> {
     meter.pause();
     return new Promise<void>((resolve) => {
@@ -229,7 +229,7 @@ export function remuxPlayer(
     return true;
   }
 
-  /** 先へ溜めすぎていない・ブラウザが送り込んでよいと言っている、まで待つ。待つ間は速さを数えない */
+  /** 先へ溜めすぎていない・ブラウザが送り込んでよいとしている、まで待つ。待つ間は速さを数えない */
   async function room(mine: number): Promise<void> {
     for (;;) {
       if (mine !== run) return;
@@ -356,7 +356,7 @@ export function remuxPlayer(
     }
     if (mine !== run) return;
     loadingFrom = null;
-    // 末尾まで届いた。終わりを言わないと、最後で止まったまま `ended` が来ない
+    // 末尾まで届いた。終わりを伝えない (`endOfStream`) と、最後で止まったまま `ended` が来ない
     await idle();
     if (mine === run && media.readyState === "open") media.endOfStream();
   }
@@ -507,8 +507,8 @@ export function remuxPlayer(
       // 型が分かっていれば先に作る。分からなければ (段を下げた変換) 応答を受けてから (`prepare`)
       if (wanted !== null) createBuffer(wanted);
       /*
-       * **始める位置を先に言っておく。** まだ何も無いうちに代入した位置は、尺が分かった
-       * ところで効く。言わないと 0 にいると見なされ、詰まり (`waiting`) で先頭からリクエストし直す
+       * **始める位置を先に入れておく。** まだ何も無いうちに代入した位置は、尺が分かった
+       * ところで効く。入れないと 0 にいると見なされ、詰まり (`waiting`) で先頭からリクエストし直す
        */
       const start = Math.min(
         Math.max(0, options.start),

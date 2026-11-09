@@ -122,7 +122,7 @@ describe("時刻から位置を引く (seekTs)", () => {
     }
   });
 
-  test("先頭より前なら先頭の映像、尻より後ろなら最後の映像", async () => {
+  test("先頭より前なら先頭の映像、末尾より後ろなら最後の映像", async () => {
     const first = await seekTs(read, bytes.length, head, 0);
     expect(sinceHead(first!.pts, head)).toBeCloseTo(0.5, 3);
     const last = await seekTs(read, bytes.length, head, 10_000);
@@ -145,7 +145,7 @@ describe("時刻から位置を引く (seekTs)", () => {
     expect(after!.pts).toBeLessThan(60 * CLOCK);
   });
 
-  test("尻の映像の PTS から尺を出せる", () => {
+  test("末尾の映像の PTS から尺を出せる", () => {
     expect(sinceHead(lastVideoPts(bytes)!, head)).toBeCloseTo(120, 0);
   });
 });
