@@ -153,9 +153,9 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
             0xA5, 0x09, 0xC2, 0xA9, 0xC5, 0x7C, 0xCD, 0xE8, 0xCE, 0x7F, 0xD5, 0x03, 0xD9, 0x04, 0xEA, 0x0D, 0xDC, 0x1C, 0x6D, 0x0A);
         T(0x03, 0x00);
         T(0x03, 0x01);
-        // 03=01 のあとの 100 ms は、T チューナーだけの待ち。別の I2C アドレス (0x11) の S 側の初期化 (7.1.3〜7.1.4) はこの間に行う。
+        // 03=01 のあとの 100 ms は、T チューナーだけの待ち。別の I2C アドレス (0x11) の S 側の初期化 (7.1.3〜7.1.4) はこの間に実行する。
         // 仕様書の時刻順とは違うが、S 側は T 側のレジスタに触らない (仕様書に無い判断)
-        WaitDoing(100, "仕様書 7.1.2。03=01 のあと。この間に S 側 7.1.3〜7.1.4 を行う", InitializeSatellite);
+        WaitDoing(100, "仕様書 7.1.2。03=01 のあと。この間に S 側 7.1.3〜7.1.4 を実行する", InitializeSatellite);
         TunerRmw(Terrestrial, 0x0D, 0xFE, 0x00);
         T(0x0F, 0x20);
         T(0x10, 0x49);
@@ -178,7 +178,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         Flush();
     }
 
-    /// <summary>S 側の初期化 (仕様書 7.1.3・7.1.4)。T チューナーの待ちの間に行う</summary>
+    /// <summary>S 側の初期化 (仕様書 7.1.3・7.1.4)。T チューナーの待ちの間に実行する</summary>
     private void InitializeSatellite()
     {
         using var phases = new Dt295Timeline.Phases(timeline);
@@ -206,17 +206,17 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     }
 
     /// <summary>
-    /// <paramref name="ms"/> の待ちの間に <paramref name="work"/> を行い、残りの時間だけ待つ (仕事が長引いて足りていれば待たない)。
+    /// <paramref name="ms"/> の待ちの間に <paramref name="work"/> を実行し、残りの時間だけ待つ (処理が長引いて足りていれば待たない)。
     /// 待ちの間にバスを使う相手が、待っている機器と別のアドレスのときだけ使う
     /// </summary>
     private void WaitDoing(int ms, string reason, Action work)
     {
-        using var scope = timeline?.Begin($"待ち {ms} ms (この間に別の仕事)", reason, wait: true);
+        using var scope = timeline?.Begin($"待ち {ms} ms (この間に別の処理)", reason, wait: true);
         var clock = Stopwatch.StartNew();
         work();
         Flush();
         var rest = ms - (int)clock.ElapsedMilliseconds;
-        scope?.Note($"仕事 {clock.ElapsedMilliseconds} ms、残りの待ち {Math.Max(0, rest)} ms");
+        scope?.Note($"処理 {clock.ElapsedMilliseconds} ms、残りの待ち {Math.Max(0, rest)} ms");
         if (rest > 0) sleep(rest);
     }
 
@@ -228,8 +228,8 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     }
 
     /// <summary>
-    /// 最後に選局した側。選局の先頭の手順が、前の選局で決まる (仕様書 7.2.2: 0B=01 は前に地上波を選んでいないときだけ。衛星を選んでいたあとは先に S 側を休ませる。
-    /// 7.3.2: 衛星の先頭の T 側を休ませる表は、T が動いているときだけ要る)。選局が途中で失敗したら <see cref="Last.None"/> に戻して、次は全部入れる
+    /// 最後に選局した側。選局の先頭の手順が、前の選局で決まる (仕様書 7.2.2: 0B=01 は前に地上波を選んでいないときだけ。衛星を選んでいたあとは先に S 側を待機させる。
+    /// 7.3.2: 衛星の先頭の T 側を待機させる表は、T が動いているときだけ要る)。選局が途中で失敗したら <see cref="Last.None"/> に戻して、次は全部入れる
     /// </summary>
     private Last _last = Last.None;
 
@@ -238,7 +238,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
     /// <summary>最後に選局を終えた側と周波数が、これと同じか。ほかの手段 (診断の離れる選局など) で復調の周波数が替わると false になる</summary>
     public bool IsTuned(bool satellite, uint kHz) => _last == (satellite ? Last.Satellite : Last.Terrestrial) && _tunedKHz == kHz;
 
-    /// <summary>S 側を休ませる (仕様書 7.2.2 の「衛星を選んでいたあとは、先に S 側を休ませる表 0x803ADB98」。推定)</summary>
+    /// <summary>S 側を待機させる (仕様書 7.2.2 の「衛星を選んでいたあとは、先に S 側を休ませる表 0x803ADB98」。推定)</summary>
     private void RestSatellite()
     {
         Demod(Satellite, 0x1C, 0xAA);
@@ -256,7 +256,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         Flush();
     }
 
-    /// <summary>T 側を休ませる (仕様書 7.3.2 の t=1、9 章の SHUTDOWN)</summary>
+    /// <summary>T 側を待機させる (仕様書 7.3.2 の t=1、9 章の SHUTDOWN)</summary>
     public void RestTerrestrial()
     {
         Demod(Terrestrial, 0x25, 0x00);
@@ -290,10 +290,10 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         using var phases = new Dt295Timeline.Phases(timeline);
         var before = _last;
         _last = Last.None;
-        // 衛星を選んでいたあとは、先に S 側を休ませる (仕様書 7.2.2。推定)
+        // 衛星を選んでいたあとは、先に S 側を待機させる (仕様書 7.2.2。推定)
         if (before == Last.Satellite)
         {
-            Next(phases, "S 側を休ませる", "7.2.2。衛星を選んでいたあと");
+            Next(phases, "S 側を待機させる", "7.2.2。衛星を選んでいたあと");
             RestSatellite();
         }
         // t=1〜2: 0B=01 は前に地上波を選んでいないときだけ先頭に入る (仕様書 7.2.2)
@@ -451,8 +451,8 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         using var phases = new Dt295Timeline.Phases(timeline);
         var before = _last;
         _last = Last.None;
-        // t=1: T 側を休ませる (衛星を選んでいたあとは、T はもう休んでいる)
-        Next(phases, "t=1 T 側を休ませる", "7.3.2");
+        // t=1: T 側を待機させる (衛星を選んでいたあとは、T はもう待機している)
+        Next(phases, "t=1 T 側を待機させる", "7.3.2");
         if (before != Last.Satellite) RestTerrestrial();
         DemodRmw(Satellite, 0x1E, 0xCF, 0x20);
         S(0x11, 0x00, 0xA7);

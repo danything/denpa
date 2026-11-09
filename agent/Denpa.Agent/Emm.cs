@@ -14,16 +14,16 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **カードに送るのは作業スレッド 1 本だけ** (<see cref="IKeySource.Emm"/>)。手元のカードなら ECM・契約確認と同じロック
-/// (<see cref="BCas"/>) を通るので、カードに同時に 2 つ送らない。復号のスレッドは EMM の答えを待たない。
+/// (<see cref="BCas"/>) を通るので、カードに同時に 2 つ送らない。復号のスレッドは EMM の応答を待たない。
 /// </para>
 ///
 /// <para>
-/// 同じ EMM は受信期間の間くり返し流れる。カードが答えたもの (<c>0x2100</c>・<c>0xA102</c>・<c>0xA107</c>) は
-/// バイト列のハッシュで 256 件まで覚え、もう送らない。カードと話せなかったものは覚えず、次に流れてきたら送り直す。
+/// 同じ EMM は受信期間の間くり返し流れる。カードが返り値 <c>0x2100</c>・<c>0xA102</c>・<c>0xA107</c> を返したものは
+/// バイト列のハッシュで 256 件まで持ち、もう送らない。カードと通信できなかったものは持たず、次に流れてきたら送り直す。
 /// 順番待ちは 16 件で、溢れたら新しいほうを捨てる (次のくり返しで来る)。カードに送るのは 1 秒に 1 件まで。
 /// </para>
 /// </summary>
-/// <param name="source">送る相手。送るたびに引く (<see cref="Keys.Source"/>)</param>
+/// <param name="source">送り先。送るたびに引く (<see cref="Keys.Source"/>)</param>
 /// <param name="accepted">カードが受け入れた (<c>0x2100</c>) ときに呼ぶ (<see cref="CardNotice"/>)</param>
 public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Action? accepted = null)
 {
@@ -34,7 +34,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         return emm;
     });
 
-    /// <summary>プロセスで 1 つの渡し先。初めて使うときに作業スレッドを起こす (<see cref="TunerPool"/> の選局だけが使う)</summary>
+    /// <summary>プロセスで 1 つの渡し先。初めて使うときに作業スレッドを起動する (<see cref="TunerPool"/> の選局だけが使う)</summary>
     public static Emm Shared => _shared.Value;
 
     /// <summary>カードの返り値。正常終了</summary>
@@ -59,14 +59,14 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
 
     private long[]? _ids;
     private int _wantIds;
-    /// <summary>EMM を受け付けないと分かった鍵の出どころ (古い配る側。<see cref="RemoteCard.Emm"/>)。出どころが替わるまで順番待ちに入れない</summary>
+    /// <summary>EMM を受け付けないことを検出した鍵の出どころ (古い配る側。<see cref="RemoteCard.Emm"/>)。出どころが替わるまで順番待ちに入れない</summary>
     private IKeySource? _unsupported;
     private DateTimeOffset _idsFailedAt = DateTimeOffset.MinValue;
 
     private readonly Queue<(byte[] Payload, string Hash)> _queue = new();
     /// <summary>順番待ちと、いま送っているもの。送り終えるまで同じものを入れない</summary>
     private readonly HashSet<string> _queued = [];
-    /// <summary>カードが答えたもの。古いものから捨てる</summary>
+    /// <summary>カードが応答したもの。古いものから捨てる</summary>
     private readonly HashSet<string> _answered = [];
     private readonly Queue<string> _answeredOrder = new();
     private DateTimeOffset _lastSend = DateTimeOffset.MinValue;
@@ -115,7 +115,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         return false;
     }
 
-    /// <summary>自分宛てのペイロード。まだ答えを貰っていなければ順番待ちに入れる。長すぎるものはカードに送れないので入れない</summary>
+    /// <summary>自分宛てのペイロード。まだ応答を受け取っていなければ順番待ちに入れる。長すぎるものはカードに送れないので入れない</summary>
     internal void Offer(ReadOnlySpan<byte> payload)
     {
         if (payload.Length > MaxPayload) return;
@@ -130,7 +130,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         _signal.Release();
     }
 
-    /// <summary>作業スレッドを起こす (<see cref="Shared"/> が 1 回だけ呼ぶ。テストは止める合図を渡す)</summary>
+    /// <summary>作業スレッドを起動する (<see cref="Shared"/> が 1 回だけ呼ぶ。テストは止める合図を渡す)</summary>
     public void Start(CancellationToken stop = default)
     {
         var worker = new Thread(() =>
@@ -241,7 +241,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         }
         catch (Exception error)
         {
-            // 覚えない。次に流れてきたら送り直す
+            // ハッシュを持たない。次に流れてきたら送り直す
             Note($"契約の更新 (EMM) をカードに渡せません ({error.Message})");
             return;
         }
@@ -251,7 +251,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         }
         if (code != Accepted)
         {
-            // 覚えない返り値の EMM は流れてくるたびに送り直すので、同じ返り値が続く間は記録に 1 行だけ出す
+            // ハッシュを持たない返り値の EMM は流れてくるたびに送り直すので、同じ返り値が続く間は記録に 1 行だけ出す
             Note($"カードが契約の更新 (EMM) を受け入れませんでした (返り値 0x{code:X4})");
             return;
         }

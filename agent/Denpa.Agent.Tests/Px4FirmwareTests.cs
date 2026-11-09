@@ -94,7 +94,7 @@ public class Px4FirmwareTests
             await Assert.That(missing.Message).Contains($"PX4_FIRMWARE の {configured} がありません");
             await Assert.That(store.Problem).IsEqualTo(missing.Message);
 
-            // 中身が違う。同梱のものに逃げない
+            // 中身が違う。同梱のものに切り替えない
             File.WriteAllBytes(configured, [.. Fake, 0]);
             var wrong = Assert.Throws<IOException>(() => store.Ensure());
             await Assert.That(wrong.Message).Contains($"PX4_FIRMWARE の {configured} の SHA-256 が違います");

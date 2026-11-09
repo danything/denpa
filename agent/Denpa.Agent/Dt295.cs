@@ -120,7 +120,7 @@ public static class Dt295
     private static int? Hex(string? text) =>
         int.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value) ? value : null;
 
-    /// <summary>そのポートの機材 (Linux は sysfs、Windows・macOS は OS に聞く)。**開かない**</summary>
+    /// <summary>そのポートの機材 (Linux は sysfs、Windows・macOS は OS に問い合わせる)。**開かない**</summary>
     public static Dt295Model? Identify(string port) =>
         OperatingSystem.IsLinux() ? Identify(UsbSysfs.Devices, port) : Found().FirstOrDefault(item => item.Port == port).Model;
 

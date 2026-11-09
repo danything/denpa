@@ -4,7 +4,7 @@
 # **Native AOT で実行ファイル 1 個** (外せないわけは Denpa.Agent.csproj)。
 #
 # denpa から見える API は agent/conformance.test.ts が押さえている
-# (本物を起こして HTTP で当てる)。入れ替えはイメージのタグを変えるだけ。
+# (本物を起動して HTTP で確かめる)。入れ替えはイメージのタグを変えるだけ。
 # ---------------------------------------------------------------------------
 # **arch ごとに、その arch のランナーで組む** (CI は amd64 を ubuntu-latest、arm64 を
 # ubuntu-24.04-arm で。QEMU は使わない)。Native AOT は組む機械と同じ arch の実行ファイルを
@@ -13,8 +13,8 @@
 #
 # `TARGETARCH` (BuildKit が入れる) から、RID と取ってくる配布物の名前を引く。
 # 名前の付け方は上流ごとにばらばら (amd64 / x86_64 / x64、arm64 / aarch64) なので、
-# 各段の冒頭で読み替える。それ以外の arch は配布物が無いので、黙って amd64 のものを
-# 入れずにそこで止める。sdk:10.0 の既定がそのまま trixie (`-trixie` というタグは無い)
+# 各段の冒頭で読み替える。それ以外の arch は配布物が無いので、amd64 のものを
+# 代わりに入れず、そこで止める。sdk:10.0 の既定がそのまま trixie (`-trixie` というタグは無い)
 FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e AS build
 ARG TARGETARCH
 WORKDIR /build
@@ -44,9 +44,9 @@ RUN apt-get update && apt-get -y --no-install-recommends install curl ca-certifi
     case "${TARGETARCH}" in amd64|arm64) ;; *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; esac
 
 # PLEX PX-Q3U4 などは px4-userland で動かす (Px4.cs)。**カーネルドライバを入れてもらわない。**
-# px4d / px4ctl は musl の完全静的 ELF。受信機もカードも px4d の制御ソケットで直に話すので
+# px4d / px4ctl は musl の完全静的 ELF。受信機もカードも px4d の制御ソケットで直に通信するので
 # (Px4.cs / Px4Card.cs)、配布物の px4-ts と IFD ハンドラ (ifd/*.so、pcscd 用) は使わない。
-# **0.1.9 より下げない。** 筐体は `px4d --list-json` (0.1.9 から) でしか聞かない。
+# **0.1.9 より下げない。** 筐体は `px4d --list-json` (0.1.9 から) でしか問い合わせない。
 # IT930x のファームウェアはここでは入れない。エージェントの実行ファイルに埋め込んである (Px4Firmware.cs)。
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 ARG PX4_USERLAND_VERSION=0.2.1
@@ -60,7 +60,7 @@ RUN set -eu && mkdir -p /opt/px4-userland && cd /tmp && \
     rm -rf /tmp/*
 
 # PLEX PX-S1UD などの Siano RIO 系は、**カーネルが使っていなければ** siano-userland で動かす
-# (Siano.cs)。smsusb が使っていれば今までどおり /dev/dvb で動かす。こちらからは奪わない。
+# (Siano.cs)。smsusb が使っていれば今までどおり /dev/dvb で動かす。こちらからは取り上げない。
 # siano-ts は libusb を静的にリンクした libc 非依存の ELF。**ファームウェア (isdbt_rio.inp) は
 # アーカイブに入っている** (Siano の許諾で無改変なら再配布できる。LICENCE.siano も一緒に置く)。
 # README が示す SHA-256 とも突き合わせる。
@@ -89,7 +89,7 @@ RUN set -eu && cd /tmp && \
 # 完全静的 ELF)。名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、
 # コマンドはどちらも同じ musl の静的 ELF。名前や形式が違えば、バージョンを上げる PR の CI (イメージをビルドする) で落ちて分かる
 # (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。
-# 受信機もカードも asicend の制御ソケットで直に話すので、asicen-ts と IFD ハンドラは使わない。
+# 受信機もカードも asicend の制御ソケットで直に通信するので、asicen-ts と IFD ハンドラは使わない。
 # 上流の第一弾は Linux x86_64 だけなので、arm64 では入れずに先へ進む。
 #
 # **ファームウェアは上流のアーカイブに入っているものをそのまま使う** (上流 NOTICES.md:
@@ -130,12 +130,12 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 # エージェントのポート (AGENT_PORT) は denpa と証明書で確かめ合う HTTPS なので、libssl を常に使う (AgentTls.cs)。
 # CARD_URL を https で指したときも .NET の HttpClient が libssl を読み、
 # 相手の証明書は ca-certificates で確かめる。
-# 子プロセスは px4d / px4ctl / siano-ts / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起こす。
+# 子プロセスは px4d / px4ctl / siano-ts / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起動する。
 # シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
 # 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。
 #
 # **`recisdb` も libaribb25 も pcscd も入れない。** 選局は自分でやり (ioctl)、
-# B25 も自分で復号し (B25.cs)、カードリーダーとも自分で話す (Ccid.cs / Px4Card.cs / Zd1j.cs / Dt295NativeTuner.cs・Dt295NativeCard.cs)。
+# B25 も自分で復号し (B25.cs)、カードリーダーとも自分で通信する (Ccid.cs / Px4Card.cs / Zd1j.cs / Dt295NativeTuner.cs・Dt295NativeCard.cs)。
 #
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
 # px4d のソケットを /run/px4-userland に作るので、今までどおり root で動かす

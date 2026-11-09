@@ -49,7 +49,7 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 受信機の数と種別は筐体の答えのとおり_Q3U4()
+    public async Task 受信機の数と種別は筐体の応答のとおり_Q3U4()
     {
         var receivers = Receivers(Q3u4List);
         await Assert.That(receivers.Count).IsEqualTo(8);
@@ -59,7 +59,7 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 受信機の数と種別は筐体の答えのとおり_MLT5()
+    public async Task 受信機の数と種別は筐体の応答のとおり_MLT5()
     {
         var receivers = Receivers(Mlt5List);
         await Assert.That(receivers.Count).IsEqualTo(5);
@@ -67,7 +67,7 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 知らない方式の受信機は飛ばして続ける()
+    public async Task 対応していない方式の受信機は飛ばして続ける()
     {
         var warned = new List<string>();
         var receivers = Px4Receiver.ParseList(
@@ -142,7 +142,7 @@ public class Px4Tests
             new("a", ["GR"], false, "px4:00001205000960:2"),
             new("b", ["BS", "CS"], false, "px4:00001205000960:0"),
             new("c", ["GR", "BS", "CS"], false, "px4:000000000012345:3"),
-            // 止めてあるチューナーの筐体は起こさない
+            // 止めてあるチューナーの筐体は起動しない
             new("d", ["GR"], true, "px4:00001205009999:2"),
             new("pt3", ["GR"], false, "/dev/dvb/adapter1/frontend0"),
         };
@@ -222,7 +222,7 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 受信機を聞けていなければ_px4d_に任せる()
+    public async Task 受信機を問い合わせられていなければ_px4d_に任せる()
     {
         Px4Tuner.Check(null, 7, ChannelTable.Parse("BS15:16625")!);
         await Task.CompletedTask;
@@ -258,14 +258,14 @@ public class Px4Tests
         await Assert.That(found[1].Receivers[1].Types).IsEquivalentTo(["GR"], CollectionOrdering.Matching);
         await Assert.That(found[1].Receivers[1].Lnb15v).IsFalse();
 
-        // 使えないものは、どれの話か分かるよう場所も添えて理由を残す
+        // 使えないものは、どの筐体のことか分かるよう場所も添えて理由を残す
         await Assert.That(warned.Count).IsEqualTo(2);
         await Assert.That(warned[0]).Contains("status=incomplete");
         await Assert.That(warned[0]).Contains("USB 2-1");
         await Assert.That(warned[1]).Contains("open_failed");
         // Windows では「WinUSB になっていない・別のソフトが使っている」
         await Assert.That(warned[1]).Contains(OperatingSystem.IsWindows() ? "WinUSB" : OperatingSystem.IsLinux() ? "権限" : "別のプロセス");
-        // 形式は思っていたとおりなので、バージョンのずれの話はしない
+        // 形式は想定どおりなので、バージョンのずれは記録しない
         await Assert.That(warned.Any(w => w.Contains("バージョン"))).IsFalse();
     }
 
@@ -279,7 +279,7 @@ public class Px4Tests
             """,
             warned.Add);
 
-        // 知らない鍵は見ない。serial_unique が無ければ一意とみなす。15V の可否が読めなければ null (言われたとおり指定する)
+        // 想定していないキーは読まない。serial_unique が無ければ一意とみなす。15V の可否が読めなければ null (要求どおり指定する)
         await Assert.That(found.Count).IsEqualTo(1);
         await Assert.That(found[0].Receivers.Select(r => (r.Index, r.Lnb15v))).IsEquivalentTo(
             [(0, (bool?)null), (2, (bool?)null)], CollectionOrdering.Matching);
@@ -305,7 +305,7 @@ public class Px4Tests
     [Test]
     public async Task px4d_list_json_が文書でなければ投げる()
     {
-        // 古い px4d が知らないオプションを usage で断った、など。Enclosures はこれを見て筐体を挙げない
+        // 古い px4d が対応していないオプションを usage で断った、など。Enclosures はこれを見て筐体を挙げない
         Assert.Throws<FormatException>(() => Px4Userland.ParseJson("usage: px4d --list | --device SERIAL …", _ => { }));
         Assert.Throws<FormatException>(() => Px4Userland.ParseJson("[]", _ => { }));
         Assert.Throws<System.Text.Json.JsonException>(() => Px4Userland.ParseJson("{\"enclosures\":[", _ => { }));
@@ -336,7 +336,7 @@ public class Px4Tests
         List<Px4Receiver> unknown = [new(0, true, true)];
 
         await Assert.That(Px4Tuner.Lnb(m1ur, 0, bs, "15v")).IsNull();
-        // 出せる・分からない・受信機を聞けていない、は言われたとおり
+        // 出せる・分からない・受信機を問い合わせられていない、は要求どおり
         await Assert.That(Px4Tuner.Lnb(mlt5, 0, bs, "15v")).IsEqualTo("15v");
         await Assert.That(Px4Tuner.Lnb(unknown, 0, bs, "15v")).IsEqualTo("15v");
         await Assert.That(Px4Tuner.Lnb(null, 0, bs, "15v")).IsEqualTo("15v");
@@ -361,8 +361,8 @@ public class Px4Tests
 
 /*
  * px4d・asicend は使う受信機がある間だけ動かす (UserlandDaemon.Prepare)。受信機を全部使わない設定にした筐体は止めて
- * USB を手放し、使う設定に戻したら起こし直す。内蔵カードリーダーを復号に使っている間は止めない。
- * 常駐の代わりに sleep を起こす (止めるのは SIGTERM。Windows の px4d は標準入力で止めるので Px4WindowsTests が見る)
+ * USB を手放し、使う設定に戻したら起動し直す。内蔵カードリーダーを復号に使っている間は止めない。
+ * 常駐の代わりに sleep を起動する (止めるのは SIGTERM。Windows の px4d は標準入力で止めるので Px4WindowsTests で確かめる)
  */
 [ExcludeOn(OS.Windows)]
 public class UserlandDaemonTests
@@ -381,7 +381,7 @@ public class UserlandDaemonTests
     }
 
     [Test]
-    public async Task 使う受信機が無くなった筐体は止め_戻したら起こし直す()
+    public async Task 使う受信機が無くなった筐体は止め_戻したら起動し直す()
     {
         await Task.Yield();
         var dir = Directory.CreateTempSubdirectory("daemon").FullName;

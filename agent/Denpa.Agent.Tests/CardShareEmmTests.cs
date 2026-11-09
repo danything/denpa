@@ -7,10 +7,10 @@ namespace Denpa.Agent.Tests;
 /*
  * 配る側との間で契約の更新 (EMM) を運ぶ (CardShare.cs の RemoteCard と、CardShareServer.cs の /denpa/card/emm)。
  *
- * 配る側の側は、本文の長さの確認 (400) とカードへの受け渡しを、HTTP を通さずに見る。
- * 相手のアドレスと往復時間で断る (403) のは、パスを見る前の共通の確認 (CardLanTests)。
+ * 配る側の側は、本文の長さの確認 (400) とカードへの受け渡しを、HTTP を通さずに確かめる。
+ * 相手のアドレスと往復時間で断る (403) のは、パスを読む前の共通の確認 (CardLanTests)。
  * カードが無い・読めないときは投げて、ほかの API と同じく 503 になる (CardShareServer.Reply)。
- * 受け取る側 (RemoteCard) は、ループバックで答える小さな HTTP の相手に繋ぐ。
+ * 受け取る側 (RemoteCard) は、ループバックで応答する小さな HTTP サーバに繋ぐ。
  */
 public class CardShareEmmTests
 {
@@ -104,7 +104,7 @@ public class CardShareEmmTests
         await Assert.That(error.Message).Contains("カードリーダーが見つかりません");
     }
 
-    /// <summary>ループバックで 1 回ずつ答える HTTP の相手 (配る側の代わり)</summary>
+    /// <summary>ループバックで 1 回ずつ応答する HTTP サーバ (配る側の代わり)</summary>
     private sealed class Share : IDisposable
     {
         private readonly TcpListener _listener = new(IPAddress.Loopback, 0);

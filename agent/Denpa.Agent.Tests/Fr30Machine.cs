@@ -228,7 +228,7 @@ internal sealed class Fr30Machine
             case 0x97 when op == 0x9720:
                 return Rp;
             default:
-                throw new InvalidOperationException($"知らない命令 0x{op:X4} (0x{at:X})");
+                throw new InvalidOperationException($"対応していない命令 0x{op:X4} (0x{at:X})");
         }
     }
 }

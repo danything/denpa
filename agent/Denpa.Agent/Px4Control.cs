@@ -6,8 +6,8 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// px4d の制御ソケット 1 本 (px4-userland SPEC 6 節の portable IPC)。
-/// **カード (Px4Card.cs) も受信機 (Px4Tuner) もここで話す。**
-/// asicen-userland の asicend も同じ IPC を話す (違うのは枠のヘッダとソケットの置き場だけ。<see cref="Px4Wire"/>)。
+/// **カード (Px4Card.cs) も受信機 (Px4Tuner) もここで通信する。**
+/// asicen-userland の asicend も同じ IPC を使う (違うのはフレームのヘッダとソケットの置き場だけ。<see cref="Px4Wire"/>)。
 ///
 /// <para>
 /// ソケットは <c>&lt;ランタイムディレクトリ&gt;/px4-userland/&lt;筐体の名前&gt;/control.sock</c>
@@ -70,7 +70,7 @@ internal sealed class Px4Control : IDisposable
 
     /// <summary>
     /// 繋いで HELLO まで済ませる。**繋がらなければ「px4d に繋がりません」で投げる。**
-    /// <paramref name="timeout"/> は 1 回のやり取りを待つ上限 (長く待つものは <see cref="Request"/> に言う)
+    /// <paramref name="timeout"/> は 1 回のやり取りを待つ上限 (長く待つものは <see cref="Request"/> に渡す)
     /// </summary>
     public static Px4Control Connect(string socketPath, uint capabilities, TimeSpan timeout, Px4Wire? wire = null)
     {
@@ -85,7 +85,7 @@ internal sealed class Px4Control : IDisposable
         {
             ConnectWithin(socket, socketPath, timeout, wire);
 
-            // v1.0 だけを言う。**px4d はバージョンを厳密に比べる** (SPEC 6.4) ので幅は持たせない
+            // v1.0 だけを送る。**px4d はバージョンを厳密に比べる** (SPEC 6.4) ので幅は持たせない
             var hello = new byte[12];
             BinaryPrimitives.WriteUInt16LittleEndian(hello, 1);
             BinaryPrimitives.WriteUInt16LittleEndian(hello.AsSpan(2), 0);
@@ -93,7 +93,7 @@ internal sealed class Px4Control : IDisposable
             BinaryPrimitives.WriteUInt16LittleEndian(hello.AsSpan(6), 0);
             BinaryPrimitives.WriteUInt32LittleEndian(hello.AsSpan(8), capabilities);
             var answer = control.Request(Hello, hello);
-            if (answer.Length != 8) throw new IOException($"{wire.Daemon} の HELLO の答えが {answer.Length} バイトです (8 のはず)");
+            if (answer.Length != 8) throw new IOException($"{wire.Daemon} の HELLO の応答が {answer.Length} バイトです (8 のはず)");
             control.Capabilities = BinaryPrimitives.ReadUInt32LittleEndian(answer.AsSpan(4));
             return control;
         }
@@ -124,8 +124,8 @@ internal sealed class Px4Control : IDisposable
     }
 
     /// <summary>
-    /// 1 つ送って答えを 1 つ受ける (SPEC 6.2)。**失敗は全部 <see cref="IOException"/> にする。**
-    /// px4d がエラーで答えたときは <see cref="Px4Error"/> (理由の番号つき)、接続が切れた・崩れたときは
+    /// 1 つ送って応答を 1 つ受ける (SPEC 6.2)。**失敗は全部 <see cref="IOException"/> にする。**
+    /// px4d がエラーを返したときは <see cref="Px4Error"/> (理由の番号つき)、接続が切れた・崩れたときは
     /// ただの IOException。<paramref name="timeout"/> は同期を待つ TUNE のように長く待つときだけ
     /// </summary>
     public byte[] Request(ushort type, ReadOnlySpan<byte> payload, TimeSpan? timeout = null)
@@ -144,10 +144,10 @@ internal sealed class Px4Control : IDisposable
             SendAll(_socket, Encode(type, 0, id, payload, _wire));
 
             var (answered, flags, answeredId, body) = ReadFrame(_socket, MaxPayload, _wire);
-            // イベントは要求していない (HELLO で EVENTS を立てない) ので、来るのは答えだけのはず
+            // イベントは要求していない (HELLO で EVENTS を立てない) ので、来るのは応答だけのはず
             if ((flags & ResponseFlag) == 0 || answered != type || answeredId != id)
             {
-                throw new IOException($"{_wire.Daemon} から要求していない答えが来ました (型 0x{answered:x4}、番号 {answeredId})");
+                throw new IOException($"{_wire.Daemon} から要求していない応答が来ました (型 0x{answered:x4}、番号 {answeredId})");
             }
             if ((flags & ErrorFlag) != 0) throw Failed(body, _wire);
             return body;
@@ -166,7 +166,7 @@ internal sealed class Px4Control : IDisposable
         return payload;
     }
 
-    /// <summary>1 枚ぶんのバイト列 (20 バイトのヘッダ + 中身)</summary>
+    /// <summary>フレーム 1 つぶんのバイト列 (20 バイトのヘッダ + 中身)</summary>
     public static byte[] Encode(ushort type, ushort flags, uint requestId, ReadOnlySpan<byte> payload, Px4Wire? wire = null)
     {
         var frame = new byte[HeaderSize + payload.Length];
@@ -203,8 +203,8 @@ internal sealed class Px4Control : IDisposable
     }
 
     /// <summary>
-    /// 枠のヘッダ (<see cref="HeaderSize"/> バイト) だけ読んで確かめる。中身 (<c>Length</c> バイト) はまだソケットに残っている。
-    /// TS_DATA は中身を呼んだ側の溜めに直に受ける (<see cref="Px4Stream"/>。枠ごとに byte[] を作らない)
+    /// フレームのヘッダ (<see cref="HeaderSize"/> バイト) だけ読んで確かめる。中身 (<c>Length</c> バイト) はまだソケットに残っている。
+    /// TS_DATA は中身を呼んだ側のバッファに直に受ける (<see cref="Px4Stream"/>。フレームごとに byte[] を作らない)
     /// </summary>
     public static (ushort Type, ushort Flags, uint RequestId, int Length) ReadHeader(
         Socket socket, Span<byte> header, int maxPayload, Px4Wire wire)
@@ -213,13 +213,13 @@ internal sealed class Px4Control : IDisposable
         Receive(socket, header, wire);
         if (!header[..4].SequenceEqual(wire.Magic))
         {
-            throw new IOException($"{wire.Daemon} の答えのヘッダが {Encoding.ASCII.GetString(wire.Magic)} ではありません");
+            throw new IOException($"{wire.Daemon} の応答のヘッダが {Encoding.ASCII.GetString(wire.Magic)} ではありません");
         }
         var major = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
         var minor = BinaryPrimitives.ReadUInt16LittleEndian(header[6..]);
         if (major != 1 || minor != 0) throw new IOException($"{wire.Daemon} の IPC のバージョンが {major}.{minor} です (1.0 のはず)");
         var length = BinaryPrimitives.ReadUInt32LittleEndian(header[16..]);
-        if (length > maxPayload) throw new IOException($"{wire.Daemon} の答えが長すぎます ({length} バイト)");
+        if (length > maxPayload) throw new IOException($"{wire.Daemon} の応答が長すぎます ({length} バイト)");
         return (
             BinaryPrimitives.ReadUInt16LittleEndian(header[8..]),
             BinaryPrimitives.ReadUInt16LittleEndian(header[10..]),
@@ -232,10 +232,10 @@ internal sealed class Px4Control : IDisposable
     ///
     /// <para>
     /// <see cref="ConnectWithin"/> の ConnectAsync で、.NET はソケットを内部で非ブロッキングにする。
-    /// そのあとの同期の Receive は .NET の epoll の受け手に起こしてもらう作りで、起こすのがスレッド
-    /// プールに回ると、プールが塞がっている間は**答えが届いていても起きない** (CI で、28 バイトの答えが
+    /// そのあとの同期の Receive は .NET の epoll の待ち受けから通知を受ける作りで、その通知がスレッド
+    /// プールに回ると、プールが塞がっている間は***応答が届いていても戻らない** (CI で、28 バイトの応答が
     /// 受信バッファにあるまま 4 秒の上限で TimedOut になった)。Poll は poll(2) を直に呼ぶのでプールに
-    /// 頼らない。読めると分かってから読めば Receive は待たずに返る
+    /// 依存しない。読めると分かってから読めば Receive は待たずに返る
     /// </para>
     /// </summary>
     internal static void Receive(Socket socket, Span<byte> into, Px4Wire wire)
@@ -254,7 +254,7 @@ internal sealed class Px4Control : IDisposable
     }
 
     /// <summary>
-    /// エラーの答え (SPEC 6.2 / 6.5)。<c>u32 error_code, u16 detail_length, detail</c>。
+    /// エラーの応答 (SPEC 6.2 / 6.5)。<c>u32 error_code, u16 detail_length, detail</c>。
     /// **理由は画面に出る** ので、番号の名前に日本語を添える
     /// </summary>
     public static Px4Error Failed(byte[] body, Px4Wire? wire = null)
@@ -295,13 +295,13 @@ internal sealed class Px4Control : IDisposable
 }
 
 /// <summary>
-/// どちらのデーモンと話すか。**IPC の中身は同じで、違うのは枠のヘッダ (magic) とソケットの置き場だけ。**
+/// どちらのデーモンと通信するか。**IPC の中身は同じで、違うのはフレームのヘッダ (magic) とソケットの置き場だけ。**
 ///
 /// <para>
 /// asicen-userland は px4-userland の portable IPC をそのまま取り込み、ヘッダの magic を <c>ASCN</c>、置き場を
 /// <c>&lt;ランタイム&gt;/asicen-userland/&lt;instance&gt;/</c> に変えている (上流の docs/cli-adaptation.md と
 /// userland/include/asicen/product_profile.h)。混線させないために分けてあるので、取り違えると
-/// 最初の枠のヘッダで断られる。
+/// 最初のフレームのヘッダで断られる。
 /// </para>
 /// </summary>
 public sealed record Px4Wire(byte[] Magic, string Product, string Daemon)
@@ -311,7 +311,7 @@ public sealed record Px4Wire(byte[] Magic, string Product, string Daemon)
     public static readonly Px4Wire Asicen = new("ASCN"u8.ToArray(), "asicen-userland", "asicend");
 }
 
-/// <summary>px4d がエラーで答えた (SPEC 6.5)。**分岐は番号で** (文言は診断用)</summary>
+/// <summary>px4d がエラーを返した (SPEC 6.5)。**分岐は番号で** (文言は診断用)</summary>
 internal sealed class Px4Error(uint code, string message) : IOException(message)
 {
     public const uint InvalidArgument = 1;

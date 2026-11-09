@@ -33,7 +33,7 @@ public class Px4WindowsTests
     }
 
     [Test]
-    public async Task ランタイムルートが決まりに合わなければ理由を言う()
+    public async Task ランタイムルートが決まりに合わなければ理由を返す()
     {
         // 持ち主が Administrators (管理者として作った)
         await Assert.That(Px4Userland.AclProblem(Me, "S-1-5-32-544", [(Me, true, FullControl)])).Contains("持ち主");
@@ -46,7 +46,7 @@ public class Px4WindowsTests
     }
 
     [Test]
-    public async Task ソケットのパスが長すぎれば起こす前に言う()
+    public async Task ソケットのパスが長すぎれば起動する前に理由を返す()
     {
         var shortRoot = OperatingSystem.IsWindows() ? @"C:\denpa-run" : "/run/px4-userland";
         if (!OperatingSystem.IsWindows())
@@ -169,7 +169,7 @@ public class Px4WindowsTests
     }
 
     /// <summary>
-    /// 標準入力で止める常駐 (Windows の px4d の <c>--exit-on-stdin-eof</c>) のふり。PowerShell で、起きたら印を置き、
+    /// 標準入力で止める常駐 (Windows の px4d の <c>--exit-on-stdin-eof</c>) の偽物。PowerShell で、起動したら印を置き、
     /// 標準入力が尽きたら (閉じられたら) 後片付けの印を置いて終わる
     /// </summary>
     private sealed class StdinDaemon(string dir) : UserlandDaemon("fake", "stdin")
@@ -186,7 +186,7 @@ public class Px4WindowsTests
     }
 
     [Test]
-    public async Task 標準入力を閉じると常駐は後片付けをして終わる_あとから起こした子にも邪魔されない(CancellationToken cancel)
+    public async Task 標準入力を閉じると常駐は後片付けをして終わる_あとから起動した子にも邪魔されない(CancellationToken cancel)
     {
         await Task.Yield();
         if (!OperatingSystem.IsWindows()) return;
@@ -198,7 +198,7 @@ public class Px4WindowsTests
             daemon.Ensure();
             await Assert.That(daemon.Running).IsTrue();
 
-            // 常駐を起こしたあとに別の子を起こす。標準入力の書く側がこちらに漏れていれば、閉じても EOF が届かない
+            // 常駐を起動したあとに別の子を起動する。標準入力の書く側がこちらに漏れていれば、閉じても EOF が届かない
             other = Process.Start(new ProcessStartInfo("powershell.exe", ["-NoProfile", "-Command", "Start-Sleep 30"])
             {
                 RedirectStandardInput = true,

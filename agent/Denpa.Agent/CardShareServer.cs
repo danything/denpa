@@ -15,9 +15,9 @@ namespace Denpa.Agent;
 /// <para>
 /// **普通の API (<c>AGENT_PORT</c>) とは別のポートで受ける** (<see cref="CardLanPolicy.Port"/>)。
 /// 鍵を配るために普通の API まで開かずに済むように (普通の API も /denpa/stream が復号済みの TS を返すので、
-/// 組んだ denpa しか通さない。docs/agent.md「denpa とは TLS で組む」)。**このポートは平文の HTTP のまま**で、答えるのは
+/// 組んだ denpa しか通さない。docs/agent.md「denpa とは TLS で組む」)。**このポートは平文の HTTP のまま**で、応答するのは
 /// <c>/denpa/card/init</c>・<c>/denpa/card/ecm</c>・<c>/denpa/card/confirm</c>・<c>/denpa/card/emm</c> だけ。どれも相手のアドレスと
-/// (決めてあれば) 往復時間を確かめてから答える。接続には TTL を付ける (<see cref="CardLan"/>)。
+/// (決めてあれば) 往復時間を確かめてから応答する。接続には TTL を付ける (<see cref="CardLan"/>)。
 /// </para>
 ///
 /// <para>
@@ -48,7 +48,7 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
         if (IPv6()) options.Listen(IPAddress.IPv6Any, port, listen => listen.Use(Accepted));
     }
 
-    /// <summary>IPv6 で待ち受けられるか。切ってあるホスト・コンテナでは IPv4 だけにする (起動ごと転ばない)</summary>
+    /// <summary>IPv6 で待ち受けられるか。切ってあるホスト・コンテナでは IPv4 だけにする (起動ごと失敗しないように)</summary>
     private static bool IPv6()
     {
         if (!Socket.OSSupportsIPv6) return false;
@@ -66,14 +66,14 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
 
     /// <summary>
     /// 受けた接続にも TTL を付け直して確かめる。**待ち受けから引き継ぐかは OS 任せにしない。**
-    /// 付けられなければ、何も答えずに切る
+    /// 付けられなければ、何も応答せずに切る
     /// </summary>
     private ConnectionDelegate Accepted(ConnectionDelegate next) => async connection =>
     {
         var socket = connection.Features.Get<IConnectionSocketFeature>()?.Socket;
         try
         {
-            if (socket is null) throw new IOException("ソケットが見えません");
+            if (socket is null) throw new IOException("ソケットを取得できません");
             CardLan.LimitHops(socket, policy.Hops);
         }
         catch (Exception error) when (error is IOException or SocketException)
@@ -91,7 +91,7 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
 
     private async Task Answer(HttpContext http)
     {
-        // 受けたソケットは接続の機能として HTTP からも見える (Kestrel のソケットの transport)
+        // 受けたソケットは接続の機能として HTTP からも取得できる (Kestrel のソケットの transport)
         var socket = http.Features.Get<IConnectionSocketFeature>()?.Socket;
         var roundTrip = policy.MaxRoundTrip is not null && socket is not null ? CardLan.RoundTrip(socket) : null;
         if (policy.Refuse(http.Connection.RemoteIpAddress, roundTrip) is { } refusal)
@@ -176,7 +176,7 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
         await Reply(http, () => CardWire.Pack(Denpa.Agent.Emm.Forwarded(Keys.Local, payload!, () => CardNotice.Shared?.Accepted())));
     }
 
-    /// <summary>カードに聞いて (別のスレッドで) バイト列で返す。カードが駄目なら 503</summary>
+    /// <summary>カードに問い合わせて (別のスレッドで) バイト列で返す。カードが駄目なら 503</summary>
     private static async Task Reply(HttpContext http, Func<byte[]> ask)
     {
         try

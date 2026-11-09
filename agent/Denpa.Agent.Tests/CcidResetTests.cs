@@ -3,19 +3,19 @@ namespace Denpa.Agent.Tests;
 /// <summary>
 /// **固まったリーダーは、USB のポートをリセットして 1 回だけ立て直す。**
 /// 前のエージェントがやり取りの最中に止められると、リーダーは USB からは繋がって見えるのに
-/// 何を送っても応えなくなる (実機で起きた)。人が unbind / bind していたのを自分でやる
+/// 何を送っても応答しなくなる (実機で起きた)。人が unbind / bind していたのをエージェントがする
 /// </summary>
 public class CcidResetTests
 {
     private static readonly byte[] Atr = Convert.FromHexString("3BF01200FF9181B17C451F0399");
 
-    /// <summary>APDU 単位で、電圧も速さも自分で決めるリーダー (T=1 の枠組みも SetParameters も要らない)</summary>
+    /// <summary>APDU 単位で、電圧も速さも自動で決めるリーダー (T=1 の枠組みも SetParameters も要らない)</summary>
     private static readonly CcidInterface Plain = new(
         0, 0x82, 0x02, 64,
         CcidInterface.ExtendedApduLevel | CcidInterface.AutoParameters | CcidInterface.AutoVoltage,
         271, 254, 0x07, 4000);
 
-    /// <summary>リセットされるまで黙り (読むと時間切れ)、リセットされたら普通に答える</summary>
+    /// <summary>リセットされるまで応答せず (読むと時間切れ)、リセットされたら普通に応答する</summary>
     private sealed class Frozen : IBulkPipe
     {
         private readonly Queue<byte[]> _replies = new();

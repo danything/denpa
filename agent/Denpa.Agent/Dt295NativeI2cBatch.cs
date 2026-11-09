@@ -1,7 +1,7 @@
 namespace Denpa.Agent;
 
 /// <summary>
-/// I2C の転送を順に並べたもの。機材の中の順次実行 (Dt295NativePrograms の操作 2) に 1 回の要求で渡すか、できなければホストが 1 つずつ行う
+/// I2C の転送を順に並べたもの。機材の中の順次実行 (Dt295NativePrograms の操作 2) に 1 回の要求で渡すか、できなければホストが 1 つずつ実行する
 /// (<see cref="Dt295NativeI2c.Run"/>)。どちらでも手順と結果は同じ。
 ///
 /// <para>

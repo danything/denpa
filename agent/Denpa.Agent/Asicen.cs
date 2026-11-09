@@ -91,7 +91,7 @@ public static class AsicenUserland
     /// <summary>
     /// sysfs から ASICEN の USB 機能を探す。**上流の asicend が受け付ける USB ID だけ。**
     /// PX-W3U3 (<c>0b06:0005</c>) と、ファームウェア待ち (<c>1738:5211</c> / <c>1738:5216</c>)。
-    /// 読めないデバイスは黙って飛ばす (抜けかけ・権限)
+    /// 読めないデバイスは記録を残さずに飛ばす (抜けかけ・権限)
     /// </summary>
     public static List<Function> Scan(string root = UsbSysfs.Devices)
     {
@@ -146,7 +146,7 @@ public static class AsicenUserland
 
     /// <summary>
     /// 受信機の並び。**上流の決まり (<c>0:S, 1:T, 2:S, 3:T</c>。USB 機能ごとに衛星・地上波の順)。**
-    /// asicend を起こしたあとは <c>asicenctl list</c> の答えで置き換える (<see cref="AsicenDaemon"/>)。
+    /// asicend を起動したあとは <c>asicenctl list</c> の出力で置き換える (<see cref="AsicenDaemon"/>)。
     /// LNB の給電はできない (上流が断る) ので、15V と書いてあっても 0V で選局する (<see cref="Px4Tuner.Lnb"/>)
     /// </summary>
     public static List<Px4Receiver> Receivers() =>
@@ -172,14 +172,14 @@ public static class AsicenUserland
     /// <para>
     /// 流し込むと USB のアドレスが変わり、上流の観測では同じ筐体のもう片方まで抜けて出直す
     /// (HARDWARE-VALIDATION.md「Sibling impact」)。古いアドレスに流さないよう、1 つ流すたびに並べ直す。
-    /// 同じポートに 2 度は流さない (上がらなければ諦めて理由を残す。上流もやり直しはしない)。
+    /// 同じポートに 2 度は流さない (上がらなければやめて理由を残す。上流もやり直しはしない)。
     /// **ファームウェアが無ければ流さずに「ファームウェアがありません」と残す。**
     /// 流す道具 (<c>asicen-probe</c>) が配布物に無ければ、そう残す。
     /// </para>
     ///
     /// <para>
     /// **出直しを待つ間もロックは握ったまま。** わざと。流し込みは筐体の両方の USB 機能を揺らすので、
-    /// その間に別の経路 (<see cref="Detect"/> や asicend を起こす前の並べ直し) が古いアドレスを読まないよう、
+    /// その間に別の経路 (<see cref="Detect"/> や asicend を起動する前の並べ直し) が古いアドレスを読まないよう、
     /// 流し終えて落ち着くまで待たせる。待つのはファームウェア待ちの機材があるときだけで
     /// (無ければ 1 回並べて抜ける)、上流はいま 1 台のホストで 1 筐体まで。
     /// </para>
@@ -191,7 +191,7 @@ public static class AsicenUserland
             var tried = new HashSet<string>(StringComparer.Ordinal);
             for (var round = 0; round < 8; round++)
             {
-                // .1 を先に (asicend が要るのは .1。.2 は待ちのままでも起こせる)
+                // .1 を先に (asicend が要るのは .1。.2 は待ちのままでも起動できる)
                 var loaders = Scan().Where(f => f.Loader).OrderBy(f => f.Slot).ThenBy(f => f.Port, StringComparer.Ordinal).ToList();
                 if (loaders.Count == 0) return;
                 var where = string.Join(" / ", loaders.Select(f => f.Port));
@@ -233,7 +233,7 @@ public static class AsicenUserland
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
         Px4Userland.Specs(enclosures.Select(enclosure => (enclosure.Id, enclosure.Model, enclosure.Receivers)), Name, Device);
 
-    /// <summary>設定に出てくる筐体。asicend を起こす相手</summary>
+    /// <summary>設定に出てくる筐体。asicend を起動する対象</summary>
     public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Px4Userland.IdsIn(specs, Parse);
 
     /// <summary>受信機 1 つを開く。**受信機の取得・返却と選局は px4d と同じ経路** (<see cref="Px4Tuner"/>)</summary>
@@ -243,12 +243,12 @@ public static class AsicenUserland
         {
             var daemon = AsicenDaemon.For(id);
             daemon.Ensure();
-            // 聞けなかったときも上流の決まりの並びで見る。null だと 15V をそのまま指定して断られる
+            // 受信機の並びを取得できなかったときも上流の決まりの並びで扱う。null だと 15V をそのまま指定して断られる
             return daemon.Receivers ?? Receivers();
         },
         Px4Wire.Asicen, Device(id, receiver), $"asicen-{id} #{receiver}");
 
-    /// <summary>asicend が起きている筐体の内蔵カードリーダー (px4d と同じ IPC。<see cref="Px4Card"/>)</summary>
+    /// <summary>asicend が起動している筐体の内蔵カードリーダー (px4d と同じ IPC。<see cref="Px4Card"/>)</summary>
     public static IReadOnlyList<CardLinkCandidate> Cards() => Cards(RuntimeDir);
 
     internal static IReadOnlyList<CardLinkCandidate> Cards(string runtimeDir) =>
@@ -263,8 +263,8 @@ public static class AsicenUserland
 ///
 /// <para>
 /// asicend には USB のアドレスとポートを 2 組とも渡す (<c>--hardware --primary BUS:ADDR --primary-port …
-/// --sibling … --sibling-port …</c>)。アドレスは挿し直すたびに変わるので、起こす直前に
-/// sysfs で聞き直す (<see cref="AsicenUserland.Scan"/>)。ready は <c>asicenctl list</c> が通ることで見る
+/// --sibling … --sibling-port …</c>)。アドレスは挿し直すたびに変わるので、起動する直前に
+/// sysfs から読み直す (<see cref="AsicenUserland.Scan"/>)。ready は <c>asicenctl list</c> が通ることで見る
 /// (<c>status</c> はカードの様子も要るので、カードが無いと通らない)。
 /// </para>
 ///
@@ -274,7 +274,7 @@ public static class AsicenUserland
 /// </para>
 /// </summary>
 /// <param name="select">
-/// どの機材を使うかの引数 (<c>--hardware …</c>)。起こす直前に呼ぶ。駄目なら投げる。
+/// どの機材を使うかの引数 (<c>--hardware …</c>)。起動する直前に呼ぶ。駄目なら例外を投げる。
 /// テストは <c>--mock</c> を返す (上流の模擬の asicend。機材にもファームウェアにも触らない)
 /// </param>
 public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<string[]> select)
@@ -287,7 +287,7 @@ public sealed class AsicenDaemon(string id, string dir, string runtimeDir, Func<
     public override string CardName => AsicenUserland.ReaderName(Id);
 
     /// <summary>
-    /// 本物の機材を使う引数。**ファームウェアが無ければ起こさない** (上流の配布物に入っていなかった)。
+    /// 本物の機材を使う引数。**ファームウェアが無ければ起動しない** (上流の配布物に入っていなかった)。
     /// ファームウェア待ちのものには先に流し込む (<see cref="AsicenUserland.Enclosures"/>)。
     ///
     /// <para>

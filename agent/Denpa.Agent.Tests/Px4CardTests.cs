@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
 /*
  * px4d の制御ソケット越しのカード (Px4Card.cs)。
  *
- * px4d は無い。同じ場所に Unix ソケットを開いて px4d のふりをし、
+ * px4d は無い。同じ場所に Unix ソケットを開いて偽の px4d にし、
  * **やり取りするバイト列が SPEC 6 節の通りか**を見る。
  */
 public class Px4CardTests
@@ -15,7 +15,7 @@ public class Px4CardTests
 
     private sealed record Frame(ushort Type, ushort Flags, uint RequestId, byte[] Payload);
 
-    /// <summary>px4d のふり。受け取った要求を残し、<c>answer</c> が返したものを返す (null なら切る)</summary>
+    /// <summary>偽の px4d。受け取った要求を残し、<c>answer</c> が返したものを返す (null なら切る)</summary>
     private sealed class FakePx4d : IDisposable
     {
         private readonly Socket _listener;
@@ -34,7 +34,7 @@ public class Px4CardTests
             _listener.Bind(new UnixDomainSocketEndPoint(SocketPath));
             _listener.Listen();
             // **専用のスレッドで。** 共用のスレッドプールは他のテスト (鍵を待って止まる偽のカード) が
-            // 塞ぐことがあり、スレッドプールから借りると CI の 2 コアで答えが 5 秒に間に合わなかった
+            // 塞ぐことがあり、スレッドプールのスレッドを使うと CI の 2 コアで応答が 5 秒に間に合わなかった
             _serving = Task.Factory.StartNew(() =>
             {
                 using var client = _listener.Accept();
@@ -86,11 +86,11 @@ public class Px4CardTests
         public void Dispose()
         {
             /*
-             * **誰も繋ぎに来なかったなら、自分で 1 本繋いで accept を起こしてから閉じる。**
+             * **誰も繋ぎに来なかったなら、自分で 1 本繋いで accept を返らせてから閉じる。**
              * Find だけ見るテストでは accept で待ったまま片付けに入る。Linux は待ち受けを
-             * 閉じれば accept が起きるが、macOS は起きず、閉じる側 (Dispose) まで止まった
-             * (Mac の CI で詰まった)。繋いですぐ切れば、待っていた側は 0 バイトを読んで降りる。
-             * AcceptAsync で止めるやり方にすると、答えるのが共用のスレッドプール頼みに戻って CI で間に合わなかった
+             * 閉じれば accept が返るが、macOS は返らず、閉じる側 (Dispose) まで止まった
+             * (Mac の CI で詰まった)。繋いですぐ切れば、待っていた側は 0 バイトを読んで終わる。
+             * AcceptAsync で止めるやり方にすると、応答するのが共用のスレッドプール頼みに戻って CI で間に合わなかった
              */
             try
             {
@@ -127,7 +127,7 @@ public class Px4CardTests
         return payload;
     }
 
-    /// <summary>ちゃんと答える px4d</summary>
+    /// <summary>正しく応答する px4d</summary>
     private static (ushort, byte[])? Healthy(Frame frame)
     {
         switch (frame.Type)
@@ -161,7 +161,7 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task 起きている_px4d_の筐体を挙げる()
+    public async Task 起動している_px4d_の筐体を挙げる()
     {
         using var px4d = new FakePx4d(Healthy);
         Directory.CreateDirectory(Path.Combine(px4d.Runtime.FullName, "px4-userland", "000000000012345"));  // ソケットが無い
@@ -208,7 +208,7 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task エラーの答えは理由を付けて投げる()
+    public async Task エラーの応答は理由を付けて投げる()
     {
         using var px4d = new FakePx4d(frame => frame.Type == 0x0031 ? (3, Error(12, "slot empty")) : Healthy(frame));
         using var link = Px4Card.Find(px4d.Runtime.FullName)[0].Open();
@@ -240,19 +240,19 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task 起きていない_px4d_は_IOException()
+    public async Task 起動していない_px4d_は_IOException()
     {
         var error = Assert.Throws<IOException>(() => Px4Card.Open("none", "/nonexistent/control.sock"));
         await Assert.That(error.Message).Contains("px4d に繋がりません");
     }
 
     [Test]
-    public async Task 崩れた答えは受けない()
+    public async Task 崩れた応答は受けない()
     {
         using var px4d = new FakePx4d(frame => frame.Type == 0x0001 ? ((ushort)1, HelloOk()) : ((ushort)1, new byte[] { 0 }));
         using var link = Px4Card.Find(px4d.Runtime.FullName)[0].Open();
 
-        // CARD_CONNECT の答えとして 1 バイトしか来ない
+        // CARD_CONNECT の応答として 1 バイトしか来ない
         var error = Assert.Throws<IOException>(() => link.Reset());
         await Assert.That(error.Message).Contains("崩れています");
     }

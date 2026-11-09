@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 /// 台数はデバイスの数を数えれば分かるが、**種別 (地上波か衛星か) はどこにも
 /// 書かれていない。** sysfs には出ておらず (実機で確認: `dev` `device` `power`
 /// `subsystem` `uevent` しか無く、4 つとも同じ PCI デバイスの下にぶら下がる)。
-/// ioctl で聞くしかない。
+/// ioctl で問い合わせるしかない。
 /// </para>
 ///
 /// <para>
@@ -54,7 +54,7 @@ public static class DeviceProbe
     ];
 
     /// <summary>
-    /// 名前からの当てずっぽう。**ioctl が答えなかったときだけ。**
+    /// 名前からの当てずっぽう。**ioctl が方式を返さなかったときだけ。**
     ///
     /// <para>
     /// 実機の名前は "Toshiba TC90522 ISDB-S module"。方式が名前に入っている
@@ -105,7 +105,7 @@ public static class DeviceProbe
                 }
             }
 
-            // 方式を答えないドライバもある。名前で当てにいく
+            // 方式を返さないドライバもある。名前から推定する
             var info = new byte[FrontendInfoSize];
             fixed (byte* infoAt = info)
             {
@@ -140,7 +140,7 @@ public static class DeviceProbe
         }
 
         /*
-         * px4-userland の機材は、筐体も受信機も px4d --list-json に聞く。
+         * px4-userland の機材は、筐体も受信機も px4d --list-json に問い合わせる。
          * デバイスノードは出ない (Px4.cs)
          */
         found.AddRange(Px4Userland.Detect());
@@ -158,7 +158,7 @@ public static class DeviceProbe
         found.AddRange(AsicenUserland.Detect());
 
         /*
-         * Sony CECH-ZD1 J は並べるだけで開かない (開くとブリッジの起動もしてしまう)。Linux は sysfs、Windows・macOS は OS に聞く (Zd1j.cs)
+         * Sony CECH-ZD1 J は並べるだけで開かない (開くとブリッジの起動もしてしまう)。Linux は sysfs、Windows・macOS は OS に問い合わせる (Zd1j.cs)
          */
         found.AddRange(Zd1j.Detect());
 

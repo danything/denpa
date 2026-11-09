@@ -5,13 +5,13 @@ using System.Diagnostics;
 namespace Denpa.Agent;
 
 /// <summary>
-/// ARIB STD-B25 を復号する。**TS を読んで ECM を取り出し、鍵を貰って MULTI2 で復号する** (Cas.cs)。
+/// ARIB STD-B25 を復号する。**TS を読んで ECM を取り出し、鍵を受け取って MULTI2 で復号する** (Cas.cs)。
 ///
 /// <para>
 /// 経路は PAT → PMT → CA 記述子。CA 記述子 (番組全体、または ES ごと) が「この ES の鍵は
 /// この PID の ECM から」を示すので、ES の PID から ECM を引く表を作る。
-/// **libaribb25 と同じく、ストリームの順に 1 パケットずつ読み、ECM の中身が変わったらその場で鍵を貰う**
-/// (<see cref="IKeySource.Ecm"/>)。後ろのパケットはその鍵で復号する。答えを待つあいだ次のパケットへ
+/// **libaribb25 と同じく、ストリームの順に 1 パケットずつ読み、ECM の中身が変わったらその場で鍵を受け取る**
+/// (<see cref="IKeySource.Ecm"/>)。後ろのパケットはその鍵で復号する。応答を待つあいだ次のパケットへ
 /// 進まないので、鍵とストリームの位置が食い違いようがない。カードが固まっても読み出しを止めないのは
 /// 呼ぶ側の仕事 (TunerPool.cs は読み出しと別のスレッドで復号する)。
 /// </para>
@@ -19,29 +19,29 @@ namespace Denpa.Agent;
 /// <para>
 /// **復号できないものは落とさずに素通しする。** 録れないよりまし、で、復号できなかったことは
 /// <see cref="Undecodable"/> と <see cref="LastError"/> で分かる。鍵の出どころが失敗しても投げずに、
-/// 鍵を捨てて素通しし (古い鍵で化けたものを「復号できた」として流さない)、少し置いて同じ ECM を聞き直す。
+/// 鍵を捨てて素通しし (古い鍵で化けたものを「復号できた」として流さない)、少し置いて同じ ECM で問い合わせ直す。
 /// </para>
 ///
 /// <para>
 /// 1 つの実体は**1 本のストリームからだけ**呼ぶ。実体どうしで共有するものは無いので、チューナーが
 /// 何台あっても壊し合わない (libaribb25 の頃は 1 つの実体に 2 本入ってプロセスごと落ちた)。
-/// 数 (<see cref="Decoded"/> など) だけは他のスレッドから覗いてよい。
+/// 数 (<see cref="Decoded"/> など) だけは他のスレッドから読んでよい。
 /// </para>
 ///
 /// <para>
-/// **鍵の要らない利用者しかいなければ、カードに聞かない** (<paramref name="keysWanted"/>)。番組表・ロゴ・スキャンが
-/// 読むのは掛かっていない SI だけなので、復号もせず溜めもせずに流す。ライブ視聴や録画とカードのロック
+/// **鍵の要らない利用者しかいなければ、カードに問い合わせない** (<paramref name="keysWanted"/>)。番組表・ロゴ・スキャンが
+/// 読むのはスクランブルされていない SI だけなので、復号もせず溜めもせずに流す。ライブ視聴や録画とカードのロック
 /// (<see cref="BCas"/>) を取り合わない。途中で鍵の要る利用者が来たら、溜め直して最初の鍵から復号する (<see cref="Rehold"/>)。
 /// </para>
 ///
 /// <para>
 /// **選局では契約の更新 (EMM) も取り出す** (<paramref name="emm"/>)。CAT (PID 0x0001) の CA 記述子から EMM の PID を読み取り、
-/// EMM セクション (0x84) を組み立てて渡し先に渡す。自分宛てかを比べるのは渡し先で、ここではカードに送らず答えも待たない。
+/// EMM セクション (0x84) を組み立てて渡し先に渡す。自分宛てかを比べるのは渡し先で、ここではカードに送らず応答も待たない。
 /// 鍵の要らない利用者だけのときも読むので、番組表・ロゴ・スキャンの選局でも EMM はカードに届く。
 /// </para>
 /// </summary>
 /// <param name="keysWanted">
-/// いま鍵が要るか。塊を受けるたびに聞く。null は「どちらとも言えない」(利用者がいない) で、今のままにする。
+/// いま鍵が要るか。塊を受けるたびに呼ぶ。null は「どちらとも決まらない」(利用者がいない) で、今のままにする。
 /// 渡さなければいつも要る (録れたものの復号・実機での試験)
 /// </param>
 /// <param name="emm">
@@ -50,7 +50,7 @@ namespace Denpa.Agent;
 /// </param>
 public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null, Emm? emm = null)
 {
-    /// <summary>いま鍵を聞いて復号しているか (<c>keysWanted</c>)</summary>
+    /// <summary>いま鍵を問い合わせて復号しているか (<c>keysWanted</c>)</summary>
     private bool _keys = true;
 
     private const int PacketSize = 188;
@@ -63,12 +63,12 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// </summary>
     public const int HoldLimit = 8 * 1024 * 1024;
 
-    /// <summary>B-CAS の CA_system_id。カードから聞けるまではこれで CA 記述子を選ぶ</summary>
+    /// <summary>B-CAS の CA_system_id。カードから読み取れるまではこれで CA 記述子を選ぶ</summary>
     private const int BcasSystemId = 0x0005;
 
     /// <summary>
-    /// 貰えなかった ECM を同じ中身のまま聞き直すまでのパケット数 (地上波の 2 秒ほど)。**時計ではなく
-    /// 読んだ量で数える。** ファイルは実時間より速く読むので、時計で待つと数分ぶんが掛かったまま残る
+    /// 鍵を受け取れなかった ECM を同じ中身のまま問い合わせ直すまでのパケット数 (地上波の 2 秒ほど)。**時計ではなく
+    /// 読んだ量で数える。** ファイルは実時間より速く読むので、時計で待つと数分ぶんがスクランブルされたまま残る
     /// </summary>
     private const long RetryPackets = 25_000;
 
@@ -119,8 +119,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// **PAT・PMT より先に来た ECM** (PID → ECM)。溜めている間だけ、PAT・PMT にまだ無い PID のセクションも先頭の
-    /// table_id を覗き、ECM なら中身を取っておく。**カードに聞くのは PMT がその PID を挙げてから** (<see cref="Rebuild"/>)。
-    /// 挙げなければ聞かずに捨てる
+    /// table_id を読み、ECM なら中身を取っておく。**カードに問い合わせるのは PMT がその PID を挙げてから** (<see cref="Rebuild"/>)。
+    /// 挙げなければ問い合わせずに捨てる
     /// </summary>
     private readonly Dictionary<int, Ecm> _earlyEcms = [];
     /// <summary>PAT より先に来た PMT を組み立てる場所 (PID → セクション)</summary>
@@ -128,7 +128,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>PAT より先に揃った PMT (program_number → PID と中身)。PAT が来たら、その PID でよかったかを確かめてから使う</summary>
     private readonly Dictionary<int, (int Pid, byte[] Section)> _earlyPmts = [];
 
-    /// <summary>先回りして覗く PID の数の上限。壊れた TS で表が膨らまないように</summary>
+    /// <summary>先回りして読む PID の数の上限。壊れた TS で表が膨らまないように</summary>
     private const int EarlyLimit = 32;
 
     /// <summary>CAT の PID</summary>
@@ -149,24 +149,24 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     public long Decoded => Volatile.Read(ref _decoded);
 
     /// <summary>
-    /// 掛かっていたのに鍵が無い・鍵が合わないので**そのまま流した**パケットの数 (契約の無いものは数えない)。
+    /// スクランブルされていたのに鍵が無い・鍵が合わないので**そのまま流した**パケットの数 (契約の無いものは数えない)。
     /// 鍵が合わないと分かるのは PES の先頭だけで、その PES の残りも数える (<see cref="Unscramble"/>)
     /// </summary>
     public long Undecodable => Volatile.Read(ref _undecodable);
 
-    /// <summary>最後に鍵を貰えなかった理由。**録画が掛かったままだったときに見せる**</summary>
+    /// <summary>最後に鍵を受け取れなかった理由。**録画がスクランブルされたままだったときに表示する**</summary>
     public string? LastError { get; private set; }
 
-    /// <summary>溜めの内訳を測る時計。選局の時計を渡せば、選局の内訳と同じ物差しで並ぶ (TunerPool.cs)</summary>
+    /// <summary>溜めている間の内訳を測る時計。選局の時計を渡せば、選局の内訳と同じ物差しで並ぶ (TunerPool.cs)</summary>
     private readonly Stopwatch _clock = clock ?? Stopwatch.StartNew();
 
-    /// <summary>溜めている間に、PAT が来た・PMT がそろった・最後の ECM の答えが来た時刻 (ミリ秒。まだなら -1)</summary>
+    /// <summary>溜めている間に、PAT が来た・PMT がそろった・最後の ECM の応答が来た時刻 (ミリ秒。まだなら -1)</summary>
     private long _patMs = -1, _pmtMs = -1, _ecmMs = -1;
-    /// <summary>最後に答えが来た ECM の PID</summary>
+    /// <summary>最後に応答が来た ECM の PID</summary>
     private int _lastEcm = -1;
     /// <summary>
-    /// 溜めている間に鍵の出どころへ聞いた回数・覚えた答えを使った回数・未契約の回数と、往復とロックの待ちの合計・
-    /// カードの定数を貰うのにかかった時間
+    /// 溜めている間に鍵の出どころへ問い合わせた回数・キャッシュした応答を使った回数・未契約の回数と、往復とロックの待ちの合計・
+    /// カードの定数を受け取るのにかかった時間
     /// </summary>
     private int _asks, _cached, _unentitledAnswers;
     private long _askMs, _waitedMs, _initMs = -1;
@@ -181,10 +181,10 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         return $"PAT {At(_patMs)} / PMT {At(_pmtMs)} / ECM {At(_ecmMs)}{last}";
     }
 
-    /// <summary>溜めている間に鍵の出どころへ聞いた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ 1 行に足す</summary>
+    /// <summary>溜めている間に鍵の出どころへ問い合わせた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ 1 行に足す</summary>
     public string CardUse() => !_keys
         ? "カード 使わない"
-        : $"カード {_asks} 回 計 {_askMs}ms (待ち {_waitedMs}ms・覚えた答え {_cached} 回・未契約 {_unentitledAnswers} 回・準備 {At(_initMs)})";
+        : $"カード {_asks} 回 計 {_askMs}ms (待ち {_waitedMs}ms・キャッシュ {_cached} 回・未契約 {_unentitledAnswers} 回・準備 {At(_initMs)})";
 
     private static string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
 
@@ -214,7 +214,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// 録れたものを丸ごと復号して書く (<c>/denpa/decode</c> と <c>--decode-file</c>)。書いたバイト数を返す。
-    /// <paramref name="read"/> は読んだそのままの塊を覗く (復号する前の掛かり具合を数える)
+    /// <paramref name="read"/> は読んだそのままの塊を受け取る (復号する前にスクランブルされていたパケットを数える)
     /// </summary>
     public long DecodeAll(Stream input, Stream output, Action<ReadOnlySpan<byte>>? read = null)
     {
@@ -258,12 +258,12 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
                 at += PacketSize;
                 continue;
             }
-            // 並びが崩れた。**0x47 が 188 バイトおきに 2 つ続くところ**で合わせ直す (1 つだけだと中身の 0x47 に釣られる)
+            // 並びが崩れた。**0x47 が 188 バイトおきに 2 つ続くところ**で合わせ直す (1 つだけだと中身の 0x47 に合わせてしまう)
             _synced = false;
             var found = at;
             while (found + PacketSize < data.Length && (data[found] != SyncByte || data[found + PacketSize] != SyncByte)) found++;
             at = found;
-            // 最後の 188 バイトの中の 0x47 は、次が来るまで本物か分からない
+            // 最後の 188 バイトの中の 0x47 は、次が来るまで同期バイトか決まらない
             if (found + PacketSize >= data.Length) return at;
             _synced = true;
         }
@@ -271,13 +271,13 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// 1 パケット。セクションを読み (ECM ならここで鍵を貰う)、溜めている間は溜めの後ろへ、
+    /// 1 パケット。セクションを読み (ECM ならここで鍵を受け取る)、溜めている間は溜めたパケットの後ろへ、
     /// そうでなければ出力へ写してその場で復号する (**写すのは 1 回だけ**)
     /// </summary>
     private void Take(ReadOnlySpan<byte> packet, IBufferWriter<byte> output)
     {
         _packets++;
-        // 誤りの印が立っているものは中身を信じない
+        // 誤りの印が立っているものは中身を読まない
         if ((packet[1] & 0x80) == 0 && packet[3] >> 6 == 0) Parse(packet);
 
         var held = _holding;
@@ -302,19 +302,19 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private Ecm? Route(ReadOnlySpan<byte> packet) => _route[((packet[1] & 0x1F) << 8) | packet[2]] ?? _only;
 
     /// <summary>
-    /// 掛かっていたら復号する。誤りの印が立っているものは触らない。
+    /// スクランブルされていたら復号する。誤りの印が立っているものは触らない。
     ///
     /// <para>
     /// **映像・音声の PES の先頭 (payload_unit_start) では、復号した中身が <c>00 00 01</c> で始まるかで鍵が合っているかを確かめる。**
     /// 確かめずに印を下ろすと、合わない鍵で化けた中身を「復号できた」として流し、契約の復号テストもそれで通ってしまう
     /// (CS の ECM が何本もある局で起きた)。合わなければ同じ ECM のもう片方 (偶奇) の鍵、ほかの ECM の鍵の順に試し、
-    /// 合ったものをその ECM・その PID でこの先も使う。どれでも合わなければ掛かったまま流し、その PES の残りも
-    /// 次の PES の先頭まで掛かったまま流して <see cref="Undecodable"/> に数える
+    /// 合ったものをその ECM・その PID でこの先も使う。どれでも合わなければスクランブルされたまま流し、その PES の残りも
+    /// 次の PES の先頭までスクランブルされたまま流して <see cref="Undecodable"/> に数える
     /// </para>
     /// </summary>
     private void Unscramble(Span<byte> packet, Ecm? ecm, bool usable)
     {
-        // 鍵の要らない利用者だけなら触らない (掛かったままにも数えない)
+        // 鍵の要らない利用者だけなら触らない (スクランブルされたままとしても数えない)
         if (!_keys || (packet[1] & 0x80) != 0 || packet[3] >> 6 == 0) return;
         var start = PayloadStart(packet);
         if (start == PacketSize)
@@ -337,7 +337,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         var unitStart = _pes[pid] && (packet[1] & 0x40) != 0;
         if (!unitStart || payload.Length < 3)
         {
-            // 先頭が短くて確かめられない PES は、前の PES が合わなかったことを引き継がない (前の PES の「合わない」を引き継いで、この PES を掛かったまま流さないように)
+            // 先頭が短くて確かめられない PES は、前の PES が合わなかったことを引き継がない (前の PES の「合わない」を引き継いで、この PES をスクランブルされたまま流さないように)
             if (unitStart) _garbled[pid] = false;
             if (_garbled[pid])
             {
@@ -358,7 +358,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// PES の先頭を復号し、<c>00 00 01</c> で始まる鍵を探す (<see cref="Unscramble"/>)。見つかれば復号したまま true、
-    /// 見つからなければ掛かったままに戻して false
+    /// 見つからなければスクランブルされた中身に戻して false
     /// </summary>
     private bool Verify(Span<byte> payload, Ecm ecm, int control, int pid)
     {
@@ -387,7 +387,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         return false;
     }
 
-    /// <summary>掛かったままの中身 (<paramref name="original"/>) をこの鍵で復号し、PES の先頭になったか</summary>
+    /// <summary>スクランブルされたままの中身 (<paramref name="original"/>) をこの鍵で復号し、PES の先頭になったか</summary>
     private static bool Try(Span<byte> payload, ReadOnlySpan<byte> original, Ecm ecm, bool even)
     {
         original.CopyTo(payload);
@@ -412,9 +412,9 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// 溜めるのをやめてよいか。**PAT と、その PMT がみな来て、どの ECM も 1 回は答えを貰った** (libaribb25 と同じ)
+    /// 溜めるのをやめてよいか。**PAT と、その PMT がみな来て、どの ECM も 1 回は応答を受け取った** (libaribb25 と同じ)
     /// うえで、ECM のあとにその鍵の ES のパケットが 1 つ来た (<see cref="Settle"/>)。
-    /// 来ない PMT は 1 周で見切り、同じ ECM が 2 回来たら来ない ECM も見切る (<see cref="OnEcm"/>)
+    /// 来ない PMT は 1 周で待つのをやめ、同じ ECM が 2 回来たら来ない ECM も待たない (<see cref="OnEcm"/>)
     /// </summary>
     private bool Ready()
     {
@@ -442,8 +442,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// 「復号できた」として流す (libaribb25 は溜めた先頭を丸ごと復号していた)。切り替わった直後に来た ECM はもう前の鍵を
     /// 持っていないので、ECM の手前で途切れた並びも復号しない。後ろから読み、ECM ごとに「この先で最初に
     /// 偶奇が変わる位置」を持って、それが ECM のあとの最初のパケット (<see cref="Ecm.After"/>) より後ろなら
-    /// 復号する。**並びは ES ごとでなく ECM ごとに見る。** 音声のように疎らな ES だけ見ると、偶奇が行って
-    /// 戻ったのを見逃す
+    /// 復号する。**並びは ES ごとでなく ECM ごとに確かめる。** 音声のように疎らな ES だけで確かめると、偶奇が切り替わって
+    /// 戻ったのを検出できない
     /// </para>
     /// </summary>
     private void Settle()
@@ -478,7 +478,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// **鍵の要らない利用者だけになった。** 溜めていたら掛かったまま書き出し、鍵を捨てて、ECM を聞くのをやめる。
+    /// **鍵の要らない利用者だけになった。** 溜めていたらスクランブルされたまま書き出し、鍵を捨てて、ECM で問い合わせるのをやめる。
     /// PAT・PMT は読み続ける (鍵の要る利用者が来たら、すぐ溜め直せるように)
     /// </summary>
     private void StopKeys(IBufferWriter<byte> output)
@@ -490,14 +490,14 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// **鍵の要る利用者が来た。** 先頭と同じように、どの ECM も答えを貰うまで溜め直す (<see cref="Ready"/>)。
+    /// **鍵の要る利用者が来た。** 先頭と同じように、どの ECM も応答を受け取るまで溜め直す (<see cref="Ready"/>)。
     /// 溜めたぶんは最初の鍵で復号する (<see cref="Settle"/>) ので、来た利用者には先頭から復号したものが届く
     /// </summary>
     private void Rehold()
     {
         /*
          * **内訳 (_patMs・_asks など) は戻さない。** 記録に出すのは選局して最初に送り出したときの 1 回だけ
-         * (TunerPool.Descramble) で、溜め直しのあとには読まれない。PAT・PMT は覚えたまま来直さないので、
+         * (TunerPool.Descramble) で、溜め直しのあとには読まれない。PAT・PMT は持ったままで受け直さないので、
          * 戻すとそこは「-」のまま残り、かえって分かりにくい
          */
         _keys = true;
@@ -505,7 +505,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         foreach (var ecm in _ecms.Values) Forget(ecm);
     }
 
-    /// <summary>ECM を受ける前の姿に戻す。次に来た ECM で聞き直す</summary>
+    /// <summary>ECM を受ける前の状態に戻す。次に来た ECM で問い合わせ直す</summary>
     private static void Forget(Ecm ecm)
     {
         ecm.Last = null;
@@ -554,24 +554,24 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// **PAT・PMT にまだ無い PID を覗く。** 溜めている間だけ、セクションの先頭 (payload_unit_start が立ったもの) の
+    /// **PAT・PMT にまだ無い PID を先に読む。** 溜めている間だけ、セクションの先頭 (payload_unit_start が立ったもの) の
     /// table_id が ECM (0x82) か、PAT より前なら PMT (0x02) のときに組み立て始める。
     ///
     /// <para>
     /// PAT → PMT → ECM → カードと順に待つと、それぞれの間隔 (どれも 0.1 秒ほど) が積み上がる。先に来たものを
-    /// 取っておけば、PMT が来たその場でカードに聞ける (次の ECM を待たない)。**経路と、溜めるのをやめる条件、カードに聞くかは
+    /// 取っておけば、PMT が来たその場でカードに問い合わせられる (次の ECM を待たない)。**経路と、溜めるのをやめる条件、カードに問い合わせるかは
     /// 確かめた PMT だけで決める** (<see cref="Rebuild"/> / <see cref="Ready"/>)。
     /// </para>
     ///
     /// <para>
-    /// **先に読んだだけの ECM をその場でカードに聞かない。** 地上波には B-CAS のカードが断る ECM も流れていて、断られるまでに
+    /// **先に読んだだけの ECM でその場でカードに問い合わせない。** 地上波には B-CAS のカードが断る ECM も流れていて、断られるまでに
     /// 短い応答の送り直し (<see cref="BCas"/>) ごと 0.4 秒ほどかかる。その間は次のパケットへ進まないので、PAT・PMT が
     /// そろうのも送り出しもそのぶん遅れていた (本番の地上波で、選局から送り出しまで毎回 1 秒ほど)。
     /// </para>
     ///
     /// <para>
     /// ES の PES は先頭が <c>00 00 01</c> なので、pointer_field 0・table_id 0x00 と読めて、ここでは ECM として読まない
-    /// (掛かっている PES はそもそも読まない。<see cref="Take"/>)。
+    /// (スクランブルされた PES はそもそも読まない。<see cref="Take"/>)。
     /// </para>
     /// </summary>
     private Section? Early(int pid, ReadOnlySpan<byte> payload, bool unitStart)
@@ -631,7 +631,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     {
         var bytes = section.Bytes;
         section.Drop();
-        // PAT・PMT・ECM・CAT・EMM はどれも CRC を持つ形式。**化けたセクションで鍵を聞き直さない・カードに渡さない**
+        // PAT・PMT・ECM・CAT・EMM はどれも CRC を持つ形式。**化けたセクションで鍵を問い合わせ直さない・カードに渡さない**
         if ((bytes[1] & 0x80) == 0 || bytes.Length < 12 || Crc32(bytes) != 0) return;
         if (pid == 0) OnPat(bytes);
         else if (section.Owner is { } ecm) OnEcm(ecm, bytes);
@@ -650,7 +650,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         for (var at = 0; at + 4 <= loop.Length; at += 4)
         {
             var number = BinaryPrimitives.ReadUInt16BigEndian(loop[at..]);
-            // 番組 0 は NIT の在りか。PMT ではない
+            // 番組 0 は NIT の PID。PMT ではない
             if (number != 0) _programs[number] = BinaryPrimitives.ReadUInt16BigEndian(loop[(at + 2)..]) & 0x1FFF;
         }
         foreach (var pid in _pmtSections.Keys.Except(_programs.Values).ToList()) _pmtSections.Remove(pid);
@@ -713,7 +713,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         }
         _allPmts = _patLast is not null && _programs.Keys.All(_pmts.ContainsKey);
         _only = _allPmts && _ecms.Count == 1 ? _ecms.Values.First() : null;
-        // 取っておいた中身を、PMT が挙げたいま聞く。Ask の中で作り直すこともあるので、引き取ったままのものだけ
+        // 取っておいた中身で、PMT が挙げたいま問い合わせる。Ask の中で作り直すこともあるので、引き取ったままのものだけ
         foreach (var ecm in _ecms.Values.ToList())
         {
             if (!ecm.Pending || _ecms.GetValueOrDefault(ecm.Pid) != ecm) continue;
@@ -722,7 +722,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         }
     }
 
-    /// <summary>PMT から、掛かっている ES とその ECM の PID を読み取る。**ES ごとの CA 記述子が番組全体のものより優先する**</summary>
+    /// <summary>PMT から、スクランブルされた ES とその ECM の PID を読み取る。**ES ごとの CA 記述子が番組全体のものより優先する**</summary>
     private static void Streams(ReadOnlySpan<byte> pmt, int caSystemId, List<(int Es, int Ecm, int Type)> streams, HashSet<int> ecms)
     {
         var end = pmt.Length - 4;
@@ -757,7 +757,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         FindEmm();
     }
 
-    /// <summary>覚えている CAT から EMM の PID を決め直す。**PID が替わったら、組み立てかけのセクションを捨てる**</summary>
+    /// <summary>持っている CAT から EMM の PID を決め直す。**PID が替わったら、組み立てかけのセクションを捨てる**</summary>
     private void FindEmm()
     {
         if (_catLast is null) return;
@@ -792,13 +792,13 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     }
 
     /// <summary>
-    /// ECM を受けた。**中身が変わっていたら、その場で鍵を貰う。** 同じ中身なら、貰えなかったものだけ
-    /// 少し置いて聞き直す。溜めている間に同じ PID の ECM がもう一度来たら、そこで溜めるのをやめる。
+    /// ECM を受けた。**中身が変わっていたら、その場で鍵を受け取る。** 同じ中身なら、受け取れなかったものだけ
+    /// 少し置いて問い合わせ直す。溜めている間に同じ PID の ECM がもう一度来たら、そこで溜めるのをやめる。
     /// 1 周しても来ない ECM は来ないし、中身が変わる前に溜めたぶんを最初の鍵で復号しておく (<see cref="Settle"/>)
     /// </summary>
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
     {
-        // 鍵の要らない利用者だけならカードに聞かない (Rehold で聞き直す)
+        // 鍵の要らない利用者だけならカードに問い合わせない (Rehold で問い合わせ直す)
         if (section[0] != 0x82 || !_keys) return;
         var listed = _ecms.GetValueOrDefault(ecm.Pid) == ecm;
         // 溜めるのをやめる合図にするのは PMT が挙げた ECM だけ。先回りして取っておいただけのもの (Early) は PAT・PMT を待たせない
@@ -810,15 +810,15 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         }
         ecm.Last = section.ToArray();
         if (_holding) ecm.Seen = _held;
-        // PMT がまだ挙げていないものは取っておくだけ。挙げたら Rebuild が聞く
+        // PMT がまだ挙げていないものは取っておくだけ。挙げたら Rebuild が問い合わせる
         if (listed) Ask(ecm);
         else ecm.Pending = true;
     }
 
     /// <summary>
-    /// 鍵を貰って入れる。古い鍵で復号し続けると化けたものを流すので、**失敗したら鍵を捨てる。**
+    /// 鍵を受け取って入れる。古い鍵で復号し続けると化けたものを流すので、**失敗したら鍵を捨てる。**
     /// **渡すのはセクションの先頭 8 バイトと末尾の CRC 4 バイトを除いた中身。** libaribb25 と同じ切り方で、
-    /// 拠点を跨いで鍵を貰うとき (CardShare.cs) もこれを運ぶ。変えると古いエージェントと話が通じなくなる
+    /// 拠点を跨いで鍵を受け取るとき (CardShare.cs) もこれを運ぶ。変えると古いエージェントとやり取りできなくなる
     /// </summary>
     private void Ask(Ecm ecm)
     {
@@ -856,7 +856,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
                 if (answer.Cached) _cached++;
                 if (!entitled) _unentitledAnswers++;
             }
-            // 0x0200・0x0400・0x0800 が「見てよい」。それ以外は契約が無い
+            // 0x0200・0x0400・0x0800 が「視聴できる」。それ以外は契約が無い
             if (!entitled)
             {
                 ecm.Unentitled = true;
@@ -865,7 +865,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             }
             ecm.Cipher ??= new Multi2(_init.SystemKey, _init.InitCbc);
             ecm.Cipher.SetKeys(answer.Odd, answer.Even);
-            if (_logged is not null) Log.Write("鍵を貰えるようになりました");
+            if (_logged is not null) Log.Write("鍵を受け取れるようになりました");
             _logged = null;
         }
         catch (Exception error)
@@ -878,7 +878,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private void Report(string message)
     {
         LastError = message;
-        if (_logged != message) Log.Write($"鍵を貰えません: {message}");
+        if (_logged != message) Log.Write($"鍵を受け取れません: {message}");
         _logged = message;
     }
 
@@ -909,17 +909,17 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         public int Pid { get; }
 
         public Section Section { get; }
-        /// <summary>最後に受けた中身 (その鍵を貰った・貰おうとした中身)</summary>
+        /// <summary>最後に受けた中身 (その鍵を問い合わせた中身)</summary>
         public byte[]? Last;
-        /// <summary><see cref="Last"/> をまだカードに聞いていない (PMT が挙げる前に来た。<see cref="Early"/>)</summary>
+        /// <summary><see cref="Last"/> でまだカードに問い合わせていない (PMT が挙げる前に来た。<see cref="Early"/>)</summary>
         public bool Pending;
-        /// <summary>鍵。貰えなかったら空 (<see cref="Multi2.HasKeys"/>)</summary>
+        /// <summary>鍵。受け取れなかったら空 (<see cref="Multi2.HasKeys"/>)</summary>
         public Multi2? Cipher;
-        /// <summary>カードが「契約が無い」と答えた</summary>
+        /// <summary>カードが「契約が無い」と返した</summary>
         public bool Unentitled;
-        /// <summary>貰えなかった。読んだパケットの数がここを過ぎたら、同じ中身でも聞き直す</summary>
+        /// <summary>鍵を受け取れなかった。読んだパケットの数がここを過ぎたら、同じ中身でも問い合わせ直す</summary>
         public long RetryAt = long.MaxValue;
-        /// <summary>溜めている間に最初の中身を受けた位置 (溜めの中の番号)。まだなら -1</summary>
+        /// <summary>溜めている間に最初の中身を受けた位置 (溜めたパケットの中の番号)。まだなら -1</summary>
         public int Seen = -1;
         /// <summary>そのあとで最初に来た、この鍵の ES のパケットの位置</summary>
         public int After = int.MaxValue;

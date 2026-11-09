@@ -1,19 +1,19 @@
 namespace Denpa.Agent;
 
 /// <summary>
-/// ATR から T=1 で話すのに要る値だけ読んだもの (ISO/IEC 7816-3 の 8)。
+/// ATR から T=1 で通信するのに要る値だけ読んだもの (ISO/IEC 7816-3 の 8)。
 ///
 /// <para>
 /// B-CAS は <c>3B F0 12 00 FF 91 81 B1 7C 45 1F 03 99</c>。TA2 (<c>81</c>) があるので
-/// **specific mode** で、カードは ATR の直後から TA1 (<c>12</c> = Fi 372 / Di 2) の速さで話す。
-/// PPS は要らないが、リーダーにその速さを教えないと話が通じない (<see cref="CcidLink"/>)。
+/// **specific mode** で、カードは ATR の直後から TA1 (<c>12</c> = Fi 372 / Di 2) の速さで通信する。
+/// PPS は要らないが、リーダーにその速さを設定しないとやり取りできない (<see cref="CcidLink"/>)。
 /// T=1 用の値は TD2 が T=1 を示したあとの TA3 (IFSC = 0x7C) と TB3 (BWI 4 / CWI 5)。
 /// </para>
 /// </summary>
 /// <param name="FiDi">TA1。無ければ既定の 0x11</param>
 /// <param name="GuardN">TC1 (追加の保護時間)</param>
 /// <param name="Specific">TA2 がある (specific mode)</param>
-/// <param name="Protocols">カードが話せるプロトコルの bit (bit0 = T=0、bit1 = T=1)</param>
+/// <param name="Protocols">カードが対応しているプロトコルの bit (bit0 = T=0、bit1 = T=1)</param>
 /// <param name="Crc">T=1 の誤り検出が CRC (無ければ LRC)</param>
 /// <param name="Inverse">逆方向の規約 (TS = 3F)</param>
 public sealed record Atr(
@@ -122,13 +122,13 @@ public sealed record Atr(
 /// <para>
 /// リーダーはブロックを 1 つ送って 1 つ受けるだけで、順番の番号・連結・再送はこちらが持つ。
 /// 下の層 (<c>exchange</c>) は「送ったブロックと、返ってきたブロック」だけを扱い、
-/// **返ってこなかった・化けた (カードの応答が無い、パリティ誤り) は null** で知らせる。
+/// **返ってこなかった・化けた (カードの応答が無い、パリティ誤り) は null** を返す。
 /// 投げるのはリーダーそのものが駄目なとき (抜かれた、カードが無い) だけ。
 /// 2 つめの引数は WTX で延ばす倍率 (0 なら延ばさない)。
 /// </para>
 ///
 /// <para>
-/// LRC のカードだけ。CRC のカードは断る (B-CAS は LRC。CRC は試せる相手がいない)。
+/// LRC のカードだけ。CRC のカードは断る (B-CAS は LRC。CRC のカードは手元に無く、試せない)。
 /// NAD はいつも 0。
 /// </para>
 /// </summary>
@@ -199,7 +199,7 @@ public sealed class T1Protocol
     }
 
     /// <summary>
-    /// S(IFS) でこちらの受信できる大きさを広げる。**答えなければ既定の 32 のまま続ける** (連結で
+    /// S(IFS) でこちらの受信できる大きさを広げる。**カードが応答しなければ既定の 32 のまま続ける** (連結で
     /// 受ければ済むので致命的ではない)。ATR の直後に 1 回だけ呼ぶ
     /// </summary>
     public void NegotiateIfsd(int ifsd)
@@ -314,7 +314,7 @@ public sealed class T1Protocol
         }
     }
 
-    /// <summary>R ブロック (次に欲しい番号)。<paramref name="error"/> は誤りの種類 (1 = EDC / パリティ、2 = それ以外)</summary>
+    /// <summary>R ブロック (次に受け取る番号)。<paramref name="error"/> は誤りの種類 (1 = EDC / パリティ、2 = それ以外)</summary>
     private byte[] Ready(int error = 0) => Block((byte)(RBlock | (_nr << 4) | error), []);
 
     private byte[] NextChunk(byte[] command, ref int offset)

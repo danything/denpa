@@ -117,7 +117,7 @@ public sealed class Dt295Timeline
                 + (row.Note is { } note ? $" [{note}]" : "");
             output.WriteLine($"{row.StartMs,7:F0}  {(row.Ms < 0 ? "  (途中)" : $"{row.Ms,8:F1}")}  {row.Controls,8}  {row.Transfers,4}  {text}");
         }
-        // 待ちの合計。待ちの中の待ち (別の仕事を挟む待ちの中で、その仕事が待つもの) は外側の待ちに含まれるので数えない
+        // 待ちの合計。待ちの中の待ち (別の処理を挟む待ちの中で、その処理が待つもの) は外側の待ちに含まれるので数えない
         var count = 0;
         var sum = 0.0;
         int? waitDepth = null;

@@ -144,7 +144,7 @@ talosctl ls /dev/dvb                                   # PT3 1 枚でアダプ�
 talosctl ls /var/mnt/local-path-provisioner            # PVC ごとのディレクトリ
 ```
 
-- `/dev/dvb` が無いと、tuner-agent の Pod が `hostPath` の `Directory` を待って起きません。dmesg を見ます
+- `/dev/dvb` が無いと、tuner-agent の Pod が `hostPath` の `Directory` を待ったまま起動しません。dmesg を見ます
 - denpa の画面が 403 なら、開いた端末の IP が `values.yaml` の `trustedNetworks` に入っているかを見て、
   直したら 1 行をもう一度流します
 - ほかは [tuner-pt3.md](tuner-pt3.md#うまくいかないとき) と [install.md](install.md#うまくいかないとき)

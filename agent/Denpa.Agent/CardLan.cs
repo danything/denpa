@@ -60,7 +60,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     public static CardLanPolicy FromEnvironment() => Parse(Environment.GetEnvironmentVariable);
 
     /// <summary>
-    /// 環境変数から読む。**読めない値は既定に戻さずに断る。** 書き間違えた範囲を黙って
+    /// 環境変数から読む。**読めない値は既定に戻さずに断る。** 書き間違えた範囲をそのまま
     /// 広げたり狭めたりしない (起動時に理由を出して止まる)
     /// </summary>
     /// <exception cref="ArgumentException">値が読めない</exception>
@@ -207,7 +207,7 @@ public static class CardLan
 {
     /// <summary>
     /// TTL (IPv6 は hop limit) を <paramref name="hops"/> にする。**効いたかを読み直して確かめ、
-    /// 効いていなければ投げる** (黙って遠くまで届くより、繋がらないほうがいい)。
+    /// 効いていなければ投げる** (記録を残さずに遠くまで届くより、繋がらないほうがいい)。
     /// IPv6 のソケットで IPv4 の相手と繋がっている (IPv4 射影) なら、効くのは IPv4 の TTL なのでそちらも
     /// </summary>
     /// <exception cref="IOException">設定できない・読み直すと違う</exception>

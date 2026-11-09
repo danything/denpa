@@ -23,7 +23,7 @@ public class ChildTsTests
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-        }) ?? throw new InvalidOperationException("sleep を起こせません");
+        }) ?? throw new InvalidOperationException("sleep を起動できません");
         try
         {
             var stream = process.StandardOutput.BaseStream;

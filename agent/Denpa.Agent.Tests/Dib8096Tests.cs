@@ -60,7 +60,7 @@ public class Dib8096Tests
     }
 
     [Test]
-    public async Task DiB0090_に話す前にゲートを開け_開けっぱなしにする()
+    public async Task DiB0090_とやり取りする前にゲートを開け_開けっぱなしにする()
     {
         var (dib, i2c, _, _) = Make();
         dib.Initialize();
@@ -77,7 +77,7 @@ public class Dib8096Tests
     {
         var (dib, i2c, _, time) = Make();
         dib.Initialize();
-        // GPIO 0 を Low (起こす)、GPIO 5 を Low → High (リセット)。間は 10ms ずつ (6.8)
+        // GPIO 0 を Low (起動)、GPIO 5 を Low → High (リセット)。間は 10ms ずつ (6.8)
         await InOrder(i2c.Log,
             "D1029&FFFE|0000", "D1030&FFFE|0000",
             "D1029&FFDF|0000", "D1030&FFDF|0000",
@@ -95,7 +95,7 @@ public class Dib8096Tests
     }
 
     [Test]
-    public async Task 知らない部品なら開かない()
+    public async Task 対応していない部品なら開かない()
     {
         var (dib, _, model, _) = Make();
         model.Id = 0x0000;
@@ -272,7 +272,7 @@ public class Dib8096Tests
     }
 
     [Test]
-    public async Task 前にロックした値を覚えて次は探索せずに合わせる()
+    public async Task 前にロックした値を保存して次は探索せずに合わせる()
     {
         var (dib, i2c, _, _) = Make(memory: new DibMemory());
         dib.Initialize();
@@ -289,14 +289,14 @@ public class Dib8096Tests
 
         i2c.Log.Clear();
         await Assert.That(dib.Tune(557_142_857)).IsEqualTo(DibLock.DataLocked);
-        await Assert.That(dib.LastPath).IsEqualTo("覚えた値で合わせた");
+        await Assert.That(dib.LastPath).IsEqualTo("保存した値で合わせた");
         await Assert.That(i2c.Log.Any(line => line.StartsWith("D355=", StringComparison.Ordinal))).IsFalse();
         // 段 3 の共通設定 (探索ではない): 8K = モード 3 → D[0] の上 3 ビットが 3 (下は差動のセグメントのマスク)
         await Assert.That(i2c.Log.Any(line => line.StartsWith("D0=6", StringComparison.Ordinal) || line.StartsWith("D0=7", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]
-    public async Task TMCC_の同期が揃わなくても段_3_で書いた値を覚える()
+    public async Task TMCC_の同期が揃わなくても段_3_で書いた値を保存する()
     {
         var (dib, _, model, _) = Make(memory: new DibMemory());
         model.Tmcc = false;
@@ -304,11 +304,11 @@ public class Dib8096Tests
         dib.Tune(557_142_857);
         await Assert.That(dib.LastPath).IsEqualTo("既定 (8K) でガードだけ探した");
         await Assert.That(dib.Tune(557_142_857)).IsEqualTo(DibLock.DataLocked);
-        await Assert.That(dib.LastPath).IsEqualTo("覚えた値で合わせた");
+        await Assert.That(dib.LastPath).IsEqualTo("保存した値で合わせた");
     }
 
     [Test]
-    public async Task 覚えた値で合わなければ探索に戻る()
+    public async Task 保存した値で合わなければ探索に戻る()
     {
         var memory = new DibMemory();
         var (dib, _, model, _) = Make(memory: memory);
@@ -316,7 +316,7 @@ public class Dib8096Tests
         dib.Tune(557_142_857);
         model.Signal = false;
         await Assert.That(dib.Tune(557_142_857)).IsEqualTo(DibLock.Failed);
-        await Assert.That(dib.LastPath).IsEqualTo("覚えた値で合わず探索した");
+        await Assert.That(dib.LastPath).IsEqualTo("保存した値で合わず探索した");
         await Assert.That(memory.Channels.Count).IsEqualTo(0);
     }
 

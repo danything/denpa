@@ -7,8 +7,8 @@ namespace Denpa.Agent.Tests;
 /*
  * px4d の制御ソケットで受信機を取ったまま選局し直すところ (Px4Tuner。Px4.cs)。
  *
- * px4d は無い。control.sock と stream.sock を開いて px4d のふりをする (Px4CardTests と同じ流儀)。
- * ふりは SPEC 6.3 の決まりだけ守る: 取った lease で TUNE → START_STREAM → stream.sock に
+ * px4d は無い。control.sock と stream.sock を開いて偽の px4d として動く (Px4CardTests と同じ流儀)。
+ ** 偽物が従うのは SPEC 6.3 の決まりだけ。取った lease で TUNE → START_STREAM → stream.sock に
  * ATTACH_STREAM (lease と nonce) で TS_DATA が流れ、STOP_STREAM で STREAM_END。
  * TS の中身は周波数の印 (パケットの 2 バイト目) にして、どの選局の TS かを見分ける。
  */
@@ -57,7 +57,7 @@ public class Px4TunerTests
         /// <summary>stream.sock を相手が閉じた回数</summary>
         public int StreamsClosed;
 
-        /// <summary>TUNE の答えの C/N (0.001 dB。分からなければ INT32_MIN)</summary>
+        /// <summary>TUNE の応答の C/N (0.001 dB。分からなければ INT32_MIN)</summary>
         public int CnrMdb { get; init; } = int.MinValue;
 
         /// <summary>TUNE に番号で断る (0 なら通す)。引数は kHz</summary>
@@ -73,19 +73,19 @@ public class Px4TunerTests
         public (int Frames, uint Code)? EndFirstStream { get; init; }
 
         /// <summary>
-        /// TS を流す速さ (バイト/秒)。null なら 1 枚ごとに 2ms 寝る (今までどおり)、0 なら寝ずに流せるだけ流す
+        /// TS を流す速さ (バイト/秒)。null なら 1 フレームごとに 2ms スリープする (今までどおり)、0 ならスリープせずに流せるだけ流す
         /// </summary>
         public double? Rate { get; init; }
 
         /// <summary>これだけ流したら、繋いだまま何も送らない (読む側が待っているところを作る)</summary>
         public int? FramesThenSilence { get; init; }
 
-        /// <summary>STATS に答える (HELLO で STREAM_STATS を認める)。呼ばれた回数を引数に、queue_drops を返す。null なら STATS を持たない</summary>
+        /// <summary>STATS に応答する (HELLO で STREAM_STATS を認める)。呼ばれた回数を引数に、queue_drops を返す。null なら STATS を持たない</summary>
         public Func<int, ulong>? Stats { get; init; }
 
         private int _statsCalls;
 
-        /// <summary>どちらのふりをするか (asicend は枠のヘッダとソケットの置き場だけ違う。AsicenTests)</summary>
+        /// <summary>どちらとして動くか (asicend はフレームのヘッダとソケットの置き場だけ違う。AsicenTests)</summary>
         public Px4Wire Wire { get; }
 
         public FakePx4d(Px4Wire? wire = null, string id = Id)
@@ -116,9 +116,9 @@ public class Px4TunerTests
         ///
         /// <para>
         /// **Accept で待たない。** Poll で 100ms ずつ待ち、来ているときだけ Accept する。
-        /// macOS は待ち受けを閉じても Accept が起きず、.NET の Socket.Dispose は Accept が
-        /// 戻るのを待つので、片付け (Dispose) ごと止まる。1 本繋いで起こす手 (Px4CardTests) は
-        /// 1 本しか受けない偽物なら効くが、ここは受け続けるので、起こしてもすぐ次の Accept に
+        /// macOS は待ち受けを閉じても Accept が戻らず、.NET の Socket.Dispose は Accept が
+        /// 戻るのを待つので、片付け (Dispose) ごと止まる。1 本繋いで Accept を戻す方法 (Px4CardTests) は
+        /// 1 本しか受けない偽物なら効くが、ここは受け続けるので、戻してもすぐ次の Accept に
         /// 戻って同じことになる (Mac の CI で Unit tests が 8 分で打ち切られた)
         /// </para>
         /// </summary>
@@ -288,7 +288,7 @@ public class Px4TunerTests
                     frame[20 + i * 188] = 0x47;
                     frame[20 + i * 188 + 1] = Mark(khz);
                 }
-                // 枠は 1 度だけ作り、番号だけ書き換えて送る (速さを測るテストで、偽物の確保を数に入れない)
+                // フレームは 1 度だけ作り、番号だけ書き換えて送る (速さを測るテストで、偽物の確保を数に入れない)
                 var encoded = Px4Control.Encode(Px4Control.TsData, 0, 0, frame, Wire);
                 var paced = Stopwatch.StartNew();
                 long sent = 0;
@@ -342,13 +342,13 @@ public class Px4TunerTests
             }
         }
 
-        /// <summary>px4d が落ちたふり。繋がっている制御ソケットを切る</summary>
+        /// <summary>px4d が落ちたときを再現する。繋がっている制御ソケットを切る</summary>
         public void DropControl()
         {
             lock (_gate)
             {
                 _controlClient?.Shutdown(SocketShutdown.Both);
-                // Windows はShutdown を呼んだだけでは、受けかけの Receive (受け手のスレッド) が起きない。閉じて起こす
+                // Windows はShutdown を呼んだだけでは、受けかけの Receive (受け手のスレッド) が戻らない。閉じて戻す
                 if (OperatingSystem.IsWindows()) _controlClient?.Dispose();
             }
         }
@@ -365,7 +365,7 @@ public class Px4TunerTests
             _control.Dispose();
             _stream.Dispose();
             /*
-             * 繋がったものは、Shutdown を呼んでから閉じる。受けかけ・送りかけのスレッドはこれで起きる
+             * 繋がったものは、Shutdown を呼んでから閉じる。受けかけ・送りかけのスレッドはこれで戻る
              * (Dispose だけだと、読みかけの Receive が戻るのを待つことがある)
              */
             lock (_open)
@@ -422,7 +422,7 @@ public class Px4TunerTests
         await Assert.That(tuner.Tuned).IsTrue();
 
         tuner.Tune(T28);
-        // 前の局の TS は混ざらない (選局ごとに新しい溜め)
+        // 前の局の TS は混ざらない (選局ごとに新しいバッファ)
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
 
         tuner.Dispose();
@@ -437,11 +437,11 @@ public class Px4TunerTests
     }
 
     /// <summary>
-    /// **流している間、px4d の数 (STATS) を聞く** (#1210)。途切れたときに、受信機の側で落ちていたのかを
-    /// 記録から見分けるため。STATS を持たない px4d (HELLO で認めない) には聞かない
+    /// ***流している間、px4d の数 (STATS) を問い合わせる** (#1210)。途切れたときに、受信機の側で落ちていたのかを
+    /// 記録から見分けるため。STATS を持たない px4d (HELLO で認めない) には問い合わせない
     /// </summary>
     [Test]
-    public async Task 流している間は_STATS_を聞き_持たない_px4d_には聞かない(CancellationToken cancel)
+    public async Task 流している間は_STATS_を問い合わせ_持たない_px4d_には問い合わせない(CancellationToken cancel)
     {
         await Task.Yield();
         using (var px4d = new FakePx4d { Stats = calls => (ulong)calls })
@@ -452,7 +452,7 @@ public class Px4TunerTests
             tuner.Dispose();
             var after = px4d.Count(Px4Control.Stats);
             await Task.Delay(200, cancel);
-            // 畳んだら聞かない
+            // 畳んだら問い合わせない
             await Assert.That(px4d.Count(Px4Control.Stats)).IsEqualTo(after);
         }
         using (var px4d = new FakePx4d())
@@ -466,7 +466,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task 同期しなければ理由を言い_受信機は取ったまま(CancellationToken cancel)
+    public async Task 同期しなければ理由を返し_受信機は取ったまま(CancellationToken cancel)
     {
         await Task.Yield();
         var silent = T28.Frequency / 1000;
@@ -526,7 +526,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task 選局の答えの_CN_を_選局したときの値として返す(CancellationToken cancel)
+    public async Task 選局の応答の_CN_を_選局したときの値として返す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { CnrMdb = 25_340 };
@@ -538,14 +538,14 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task 選局の答えに_CN_が無ければ_CN_は_null()
+    public async Task 選局の応答に_CN_が無ければ_CN_は_null()
     {
         await Assert.That(Px4Tuner.TuneSignal([1, 0, 0, 0, 0x80])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
         await Assert.That(Px4Tuner.TuneSignal([1])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
     }
 
     [Test]
-    public async Task ATTACH_を断られたら黙って取り直さず_次の選局で取り直す(CancellationToken cancel)
+    public async Task ATTACH_を断られたらその場で取り直さず_次の選局で取り直す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { RejectAttach = 2 };
@@ -574,7 +574,7 @@ public class Px4TunerTests
         using var tuner = Open(px4d, TimeSpan.FromMilliseconds(300));
         tuner.Tune(T27);
 
-        // 誰も読まない。溜めが埋まって空かなければ stream.sock を閉じる
+        // 誰も読まない。バッファが埋まって空かなければ stream.sock を閉じる
         await WaitUntil(() => !tuner.Tuned, cancel, TimeSpan.FromSeconds(20));
         await WaitUntil(() => Volatile.Read(ref px4d.StreamsClosed) == 1, cancel);
 
@@ -584,7 +584,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task 取れなければ理由を言う(CancellationToken cancel)
+    public async Task 取れなければ理由を返す(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { AcquireError = 4 };
@@ -596,7 +596,7 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task px4d_が起きていなければ理由を言う(CancellationToken cancel)
+    public async Task px4d_が動いていなければ理由を返す(CancellationToken cancel)
     {
         await Task.Yield();
         using var tuner = new Px4Tuner(Id, 0, null, "/nonexistent", () => null);
@@ -657,11 +657,11 @@ public class Px4TunerTests
     }
 
     /// <summary>
-    /// 読む側がいないとき、溜め (8MB) が埋まってから**決めた時間で**畳む。早すぎもしない
-    /// (溜めが埋まるまでは書けているので、畳むのは埋まってから StallLimit 経ったとき)
+    /// 読む側がいないとき、バッファ (8MB) が埋まってから**決めた時間で**畳む。早すぎもしない
+    /// (バッファが埋まるまでは書けているので、畳むのは埋まってから StallLimit 経ったとき)
     /// </summary>
     [Test]
-    public async Task 溜めが埋まったら決めた時間で畳む(CancellationToken cancel)
+    public async Task バッファが埋まったら決めた時間で畳む(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { Rate = 0 };
@@ -672,18 +672,18 @@ public class Px4TunerTests
 
         await WaitUntil(() => !tuner.Tuned, cancel, TimeSpan.FromSeconds(20));
         var took = since.Elapsed;
-        // 溜めは 8MB。流せるだけ流すので埋まるのはすぐ。そこから 1 秒 (と定期チェックの 50ms) で畳む
+        // バッファは 8MB。流せるだけ流すので埋まるのはすぐ。そこから 1 秒 (と定期チェックの 50ms) で畳む
         await Assert.That(took).IsGreaterThanOrEqualTo(limit);
         await Assert.That(took).IsLessThan(limit + TimeSpan.FromSeconds(4));
         await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
     }
 
     /// <summary>
-    /// TS が来なくて待っている読む側も、畳めと言われたら 200ms (起きる間隔) ほどで抜ける
-    /// (DeviceStream.Stop の約束。抜けないと、取り上げられたチューナーを読む側が持ったまま次の選局が始まる)
+    /// TS が来なくて待っている読む側も、止める指示を受けたら 200ms (戻る間隔) ほどで抜ける
+    /// (DeviceStream.Stop の決まり。抜けないと、取り上げられたチューナーを読む側が持ったまま次の選局が始まる)
     /// </summary>
     [Test]
-    public async Task 待っている読む側は畳めと言われたらすぐ抜ける(CancellationToken cancel)
+    public async Task 待っている読む側は止める指示を受けたらすぐ抜ける(CancellationToken cancel)
     {
         await Task.Yield();
         using var px4d = new FakePx4d { FramesThenSilence = 1 };
@@ -695,7 +695,7 @@ public class Px4TunerTests
         long stoppedAt = 0;
         var reading = Task.Factory.StartNew(() =>
         {
-            // 1 枚目を読み切ったら、次は来ない TS を待つ
+            // 1 フレーム目を読み切ったら、次は来ない TS を待つ
             while (output.Read(buffer, 0, buffer.Length) > 0) { }
             return Stopwatch.GetElapsedTime(Volatile.Read(ref stoppedAt));
         }, cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -738,15 +738,15 @@ public class Px4TunerTests
         Volatile.Write(ref running, false);
         await reading.WaitAsync(TimeSpan.FromSeconds(5), cancel);
 
-        // 畳む (pump を降ろす・読む側を待つ) と STOP_STREAM → TUNE → START_STREAM → ATTACH で、ほぼ通信の往復だけ
+        // 畳む (pump を止める・読む側を待つ) と STOP_STREAM → TUNE → START_STREAM → ATTACH で、ほぼ通信の往復だけ
         await Assert.That(took).IsLessThan(TimeSpan.FromSeconds(1));
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
     }
 
     /// <summary>
-    /// 受信機ごとに接続を持ち、**要求を全部 1 つのキューで順に片付ける** px4d のふり (#1713)。
+    /// 受信機ごとに接続を持ち、**要求を全部 1 つのキューで順に片付ける** 偽の px4d (#1713)。
     /// 本物の px4d も同じブリッジの受信機の要求は 1 つずつ処理する (MLT5 系なら受信機 0〜3)。
-    /// TUNE は <see cref="TuneTakes"/> かけて「同期しませんでした」(TIMEOUT) で答える
+    /// TUNE は <see cref="TuneTakes"/> かけて「同期しませんでした」(TIMEOUT) で応答する
     /// </summary>
     private sealed class QueuedPx4d : IDisposable
     {
@@ -878,8 +878,8 @@ public class Px4TunerTests
     ///
     /// <para>
     /// 複数のチューナーでスキャンすると、4 つの TUNE が px4d のキューに並ぶ。同期しないチャンネルは
-    /// 1 つ 5 秒かかるので、後ろのほうは答えが来るまでに待つ上限 (7 秒) を過ぎていた。
-    /// 時間切れを「接続が切れた」と取って受信機を返し、取り直しは BUSY で断られ、
+    /// 1 つ 5 秒かかるので、後ろのほうは応答が来るまでに待つ上限 (7 秒) を過ぎていた。
+    /// 時間切れを「接続が切れた」とみなして受信機を返し、取り直しは BUSY で断られ、
     /// そのチャンネルがスキャンの結果から落ちていた
     /// </para>
     /// </summary>

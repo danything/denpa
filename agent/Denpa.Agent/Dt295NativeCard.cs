@@ -9,7 +9,7 @@ namespace Denpa.Agent;
 /// 電源投入・切断の手順は仕様書 §10 の表 (投入 17 段・切断 5 段)。各段のあとに 20 ms 待つ (投入の 15 段目の 0xFEA014 = 0x0D は 50 ms)。
 /// 0xFEA004 に書く値の 4 つは、カードの端子の極性 (0xF00223) と、いまの 0xFEA004 から決める (§10 の設定確認)。
 /// ATR を受ける・速さを変える・T=1 のブロックを送受信する手順は、CECH-ZD1 J の差し込み口と共通にしている (<see cref="CardUart"/>。UART のレジスタが同じ)。
-/// ATR と T=1 のブロックの送受信は、機材のプログラムが使えれば (<see cref="Dt295NativeLink.CardProgram"/>) 機材の中で行わせる
+/// ATR と T=1 のブロックの送受信は、機材のプログラムが使えれば (<see cref="Dt295NativeLink.CardProgram"/>) 機材の中で実行させる
 /// (<see cref="Dt295NativeLink.CardSend"/>・<see cref="Dt295NativeLink.CardReceive"/>。1 バイトごとの制御転送を、1 ブロック数回にする)。
 /// 使えなければホストが 1 バイトずつ読み書きする (<see cref="CardUart.Send"/>・<see cref="CardUart.Read"/>)。
 /// 書いてよいレジスタは <see cref="Dt295NativeLink.AllowCardUart"/> が許した 0xFEA000〜0xFEA03F だけ。0xF00222〜0xF0022E は読むだけ
@@ -118,7 +118,7 @@ public sealed class Dt295NativeCard : ICardLink
     }
 
     /// <summary>
-    /// 電源を入れて ATR を返す。**電源が入って T=1 の話し方が決まっていて、カードが挿さっていれば、入れ直さずにその ATR を返す**
+    /// 電源を入れて ATR を返す。***電源が入って T=1 の取り決め (IFSD) が済んでいて、カードが挿さっていれば、入れ直さずにその ATR を返す**
     /// (機材を開いたあと、選局と並べて準備しておくため。<see cref="Dt295NativeDevice.WarmCard"/>)。送受信が失敗したあとは入れ直す
     /// </summary>
     public byte[] Reset()
@@ -174,7 +174,7 @@ public sealed class Dt295NativeCard : ICardLink
             }
             catch (Exception error) when (error is IOException and not CardAbsentException or TimeoutException)
             {
-                // 話し方が崩れたかもしれない。次の Reset は電源から入れ直す
+                // T=1 のやり取りの状態が崩れたかもしれない。次の Reset は電源から入れ直す
                 _t1 = null;
                 _atr = null;
                 throw;
@@ -205,7 +205,7 @@ public sealed class Dt295NativeCard : ICardLink
             Send(block);
             var limitMs = _blockWaitMs * Math.Max(1, (int)wtx);
             var reply = CardUart.ReceiveBlock(Read, _delay, limitMs);
-            // 応答が揃わないと T=1 が送り直しを求める。送り直しの回数を記録から数えられるように残す
+            // 応答が揃わないと T1Protocol が送り直す。送り直しの回数を記録から数えられるように残す
             if (reply is null) Log.Write($"[{Name}] カードの応答が {limitMs} ms の間に揃いませんでした");
             return reply;
         }

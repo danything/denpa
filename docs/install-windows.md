@@ -18,10 +18,10 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 本体はリリースに添えた `denpa-<バージョン>-windows-x64.zip` (bun・アプリ・ffmpeg・字・ブラウザへ配るデコーダ) で、
 エージェントは `denpa-agent-<バージョン>-windows-x64.zip` (.NET の実行ファイル。[通知領域のアイコン](#通知領域のアイコン)も入っている) です。どちらも同じバージョンを入れます。
 
-1. **エージェント**: タスク スケジューラに「起動したら起こす」タスク (`denpa-agent`) を SYSTEM で載せます。
-   起こすのは `denpa-agent.cmd` のループで、落ちたら 5 秒置いて起こし直します
+1. **エージェント**: タスク スケジューラに「起動したら実行する」タスク (`denpa-agent`) を SYSTEM で載せます。
+   タスクが実行するのは `denpa-agent.cmd` のループで、エージェントが落ちたら 5 秒置いて起動し直します
    (タスク スケジューラの「失敗したら再起動」は終了コードでは効かないため)
-2. **denpa 本体**: 同じく「起動したら起こす」タスク (`denpa`) を SYSTEM で載せ、`denpa.cmd` のループで `bun server.js` を起こします。
+2. **denpa 本体**: 同じく「起動したら実行する」タスク (`denpa`) を SYSTEM で載せ、`denpa.cmd` のループで `bun server.js` を起動します。
    Windows ファイアウォールに、プライベートとドメインのネットワークからポート 3000 を受ける規則 (`denpa`) を足します
 
 **タスクは SYSTEM で動くので、誰もログインしていなくても録画でき、外から観られます。** そのために管理者で流します
@@ -32,22 +32,22 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 上げ直しても変えません。
 `-AgentOnly` では、別の機械の denpa の `TUNER_AGENT_URL` に書く `https://<この PC の名前>:25252#pair=<合言葉>` を最後に出します。
 
-- 録画中に上げ直す・外すと、install.ps1 が録画の終わりを待ってから止めます (録画中かは `denpa-agent --status` に聞く。
-  エージェントの API は組んだ denpa にしか答えないので、エージェント自身の証明書で呼ぶもの)。エンコードの途中なら、次に起きたときにやり直します
+- 録画中に上げ直す・外すと、install.ps1 が録画の終わりを待ってから止めます (録画中かは `denpa-agent --status` で確かめる。
+  エージェントの API は組んだ denpa にしか応答しないので、エージェント自身の証明書で呼ぶもの)。エンコードの途中なら、次に起きたときにやり直します
 - ドライバは入れません (下)。挿さっている px4-userland と siano-userland のチューナーが WinUSB でなければ、そう言います
-  (px4-userland の機材は `px4d --list-json` に聞くので、機種の表は持ちません)
+  (px4-userland の機材は `px4d --list-json` で問い合わせるので、機種の表は持ちません)
 - genkan (`http://denpa.localhost`) には繋ぎません。この PC からは <http://localhost:3000>、LAN のほかの機器からは `http://<この PC の名前か IP>:3000` で開きます。
   LAN のほかの機器から開けないときは、Windows の設定でこの PC のネットワークを「プライベート」にします (パブリックのネットワークには開けない)
 - 本体とエージェントの zip は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
 
-| 置き場                    | 中身                                                                                                                                                                                                      |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・siano-userland・本体 (`server\`)・エージェントを起こす `denpa-agent.cmd`                            |
-| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起こす `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる |
-| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                             |
-| `C:\denpa-run`            | px4d のソケットの置き場 (下)                                                                                                                                                                              |
-| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                                                                       |
-| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                                                              |
+| 置き場                    | 中身                                                                                                                                                                                                        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・siano-userland・本体 (`server\`)・エージェントを起動する `denpa-agent.cmd`                            |
+| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起動する `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる |
+| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                               |
+| `C:\denpa-run`            | px4d のソケットの置き場 (下)                                                                                                                                                                                |
+| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                                                                         |
+| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                                                                |
 
 `%ProgramFiles%\denpa` と `%ProgramData%\denpa` を管理者だけのものにしてあるのは、SYSTEM で動くものと、その環境変数を
 ほかの人やほかのプログラムに書き換えさせないためです。ログはふつうのユーザーでも読めるように `~/denpa` に置きます (回さずに足していく)。
@@ -75,7 +75,7 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_NETWORKS`) を作り、あとは触りません。
 管理者でないと書けないので、メモ帳を「管理者として実行」して開きます。`#` で始まる行は読みません。
 
-- **直したら、install.ps1 を流し直すか、Windows を再起動します。** `denpa.cmd` が本体を起こすたびに読み直すので、
+- **直したら、install.ps1 を流し直すか、Windows を再起動します。** `denpa.cmd` が本体を起動するたびに読み直すので、
   タスク マネージャーで `bun.exe` を終了しても効きます (録画中は終了しないこと)
 - 置き場 (`DENPA_DB`・`RAW_DIR`・`ENCODED_DIR`)・ffmpeg・字とデコーダの置き場・エージェントの宛先 (`TUNER_AGENT_URL`)・`DENPA_VERSION` は
   install.ps1 が `denpa.cmd` で決め、`denpa.env` に書いても効きません
@@ -89,7 +89,7 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
 画面は消えてかまいません。録画を始める 5 分前からもスリープさせません。
 
 **次の録画の 3 分前に、スリープから起こします。** 本体がタスク スケジューラに「スリープを解除して実行」のタスク (`denpa-wake`) を
-1 つ書き、次の録画が変わるたびに時刻を書き直します (録画が無ければ消す)。中身は何もしないコマンドで、起こすためだけにあります。
+1 つ書き、次の録画が変わるたびに時刻を書き直します (録画が無ければ消す)。中身は何もしないコマンドで、スリープから復帰させるためだけにあります。
 
 - 効くのは、電源オプションの「スリープ解除タイマーの許可」が「有効」のときだけです (コントロール パネルの「電源オプション」→
   「プラン設定の変更」→「詳細な電源設定の変更」→「スリープ」)。ノート PC はバッテリーのときに「無効」や「重要なスリープ解除タイマーのみ」に
@@ -98,7 +98,7 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
 - 録画した番組を観ている間 (ライブでない再生) は、スリープを止めません。電源オプションのスリープまでの時間で眠ることがあります
 
 **外からいつも観るなら、この PC をスリープしない設定にします** (電源オプションの「コンピューターをスリープ状態にする」を「なし」)。
-スリープしている PC は外からの要求を受けられないので、観ようとしても繋がりません (Wake-on-LAN で起こす作りはありません)。
+スリープしている PC は外からの要求を受けられないので、観ようとしても繋がりません (Wake-on-LAN で復帰させる仕組みはありません)。
 
 ## 前のバージョン (wslc) から上げる
 
@@ -142,7 +142,7 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
 - WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
   **PX-Q3U4 / PX-W3U4 は USB の機材が 2 つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
   機材は、WinUSB にするとそちらからは見えなくなります (戻すときはデバイス マネージャーでドライバを戻す)。
-  installer はドライバを入れ替えません (ほかのソフトで使っていた機材を黙って奪わない)。
+  installer はドライバを入れ替えません (ほかのソフトで使っていた機材を、知らせずに使えなくしない)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
   (Windows の libusb は WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
 - px4・Siano・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
@@ -159,17 +159,17 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
   標準入力を開けたまま持ち、止めるときに閉じます。px4d は後片付け (LNB を 0V に戻す・ソケットを消す) をしてから
   終わります。エージェントが落ちても書く側が閉じるので、**px4d が USB を持ったまま残りません**
 - **ソケットの置き場は `C:\denpa-run`** (`PX4_RUNTIME_DIR`)。px4d は、持ち主が自分で、自分・SYSTEM・Administrators のほかに
-  書ける人がいないフォルダしか使いません。エージェント (と、それが起こす px4d) は SYSTEM で動くので、install.ps1 が持ち主を SYSTEM にし、
+  書ける人がいないフォルダしか使いません。エージェント (と、それが起動する px4d) は SYSTEM で動くので、install.ps1 が持ち主を SYSTEM にし、
   SYSTEM と Administrators だけが書ける ACL で作ります。ユーザーのフォルダの下にしないのは、
   ソケットのパスが UTF-8 で 108 バイトまでで日本語のユーザー名だとすぐ溢れ、非 ASCII のパスだと px4d の ready の行が
-  途切れるため ([px4-userland #52](https://github.com/Khronos31/px4-userland/issues/52))。エージェントは px4d を起こす前に
-  持ち主・ACL・長さを確かめ、合わなければ理由を言います
-- **px4d が使っている筐体は、一覧で開けない機材 (`open_failed`) に見えます。** エージェントは起こしたときの筐体を
-  覚えていて、動いている間は顔ぶれに残します。同じ番号の筐体を `--usb-path` で分けて起こすのは、
+  途切れるため ([px4-userland #52](https://github.com/Khronos31/px4-userland/issues/52))。エージェントは px4d を起動する前に
+  持ち主・ACL・長さを確かめ、合わなければ理由を記録に出します
+- **px4d が使っている筐体は、一覧で開けない機材 (`open_failed`) に見えます。** エージェントは起動したときの筐体を
+  控えていて、動いている間は顔ぶれに残します。同じ番号の筐体を `--usb-path` で分けて起動するのは、
   px4-userland も Windows では確かめていません
-- USB を抜くと px4d は終わり、次の選局で起こし直します (DISCONNECTED / USB_IO を返したまま動いていたら、エージェントが止める)
+- USB を抜くと px4d は終わり、次の選局で起動し直します (DISCONNECTED / USB_IO を返したまま動いていたら、エージェントが止める)
 
-機種では絞らず、px4-userland が ready と言った筐体は使います。px4-userland 側で Windows の実機で確かめてあるのは
+機種では絞らず、px4-userland が ready を返した筐体は使います。px4-userland 側で Windows の実機で確かめてあるのは
 PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
 
 ## 使えないもの
@@ -184,12 +184,12 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 ## Linux・Mac と違うところ
 
 - 子の標準出力は poll できないので、裏のスレッドが読みます (`DeviceStream`)。pipe は 4KB ほどで広げられず、
-  読む側が少し止まったぶんは siano-ts の中の溜め (16KB × 256) が吸います。px4d から受ける TS は pipe を使わないので 8MB の溜め
+  読む側が少し止まったぶんは siano-ts の中のバッファ (16KB × 256) が吸収します。px4d から受ける TS は pipe を使わないので 8MB のバッファ
 - エージェントのタスクの優先度は普通にしてあります (既定の「低い」だと、エンコードで CPU が埋まる間 siano-ts や px4d が後回しになる)。
   エンコードの ffmpeg は、本体が自分でいちばん低い優先度にします
 - エージェントは全部のインターフェースで待ち受けます (`-AgentOnly` で別の機械の denpa から繋ぐため)。同じ PC の本体は 127.0.0.1 で繋ぎます。
   LAN から届かないようにするのは Windows ファイアウォールの役目です (25252 の受信を許さないままにする)。LAN のほかの機械からエージェントに繋ぐとき
-  (`-AgentOnly`) は、ファイアウォールでポート 25252 を許します。答えるのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
+  (`-AgentOnly`) は、ファイアウォールでポート 25252 を許します。エージェントが応答するのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
 - ffmpeg の 4 本目の出口 (録画のエンコードの進み具合・ライブの字幕) は、名前付きパイプ (`\\.\pipe\denpa-…`) で受けます。ffmpeg には `-y` を付けます (付けないと出口があるかを確かめる `access` が 1 本目の接続になり、本物の書き込みが開けません)。
   Linux・Mac は fd 3 (`pipe:3`) ですが、Windows の bun は 4 本目のパイプを開けても読めないためです (`stream.sideOutput`)
 - エンコードの進み具合は、エンコードできたコマ数から出します。Linux のように ffmpeg の読み位置 (`/proc`) は読めないので、
@@ -200,10 +200,10 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 - **CI** (test.yml の `server-windows`・`agent-windows`・`agent-windows-install`): 配布物の ffmpeg で denpa が使う経路を流し、
   進み具合を名前付きパイプ (`stream.sideOutput`) で受け、`SetThreadExecutionState` が `powercfg /requests` に出ることを見る。本体を `bun server.js` で起こして
   画面・字・デコーダが返ることを見る。install.ps1 で本体ごと入れて SYSTEM のタスクで動き、本体がエージェントと組むところまで。
-  wslc からの移行は偽の wslc で流す (`tests/install-windows-migrate.ps1`)。通知領域のアイコンは、組んで起こして落ちないこと・二重に起こすとすぐ終わること・
+  wslc からの移行は偽の wslc で流す (`tests/install-windows-migrate.ps1`)。通知領域のアイコンは、組んで起動して落ちないこと・二重に起動するとすぐ終わること・
   Run に載ること・上げ直すと動いているものを止めること・外すと消えることまで
 - **Windows の実機で確かめたことのあるチューナーは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 だけで、いまの方式では確かめていません。** ほかのチューナーとカードは、CI で
-  ビルドして起こし、偽の px4d を相手に IPC と TS の受け渡しを流すところまでです
-- **まだ確かめていないこと**: SYSTEM で動くエージェントから WinUSB の機材とカードリーダー (PC/SC) を使えるか、スリープから起こすタスクで
+  ビルドして起動し、偽の px4d を相手に IPC と TS の受け渡しを流すところまでです
+- **まだ確かめていないこと**: SYSTEM で動くエージェントから WinUSB の機材とカードリーダー (PC/SC) を使えるか、スリープから復帰させるタスクで
   録画が始まるか、wslc の本体からの移行 (実機の wslc で)、通知領域のアイコンの見た目とメニュー・通知と、そこから UAC を通して更新する流れ。実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`
   (管理者の PowerShell で、エージェントのタスクを止めてから)

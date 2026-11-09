@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace Denpa.Agent.Tests;
 
 /*
- * CECH-ZD1 J の覚えたロックの値のファイル (zd1j-locks.json。Zd1j.cs の Zd1jLocks)
+ * CECH-ZD1 J の保存したロックの値のファイル (zd1j-locks.json。Zd1j.cs の Zd1jLocks)
  */
 public class Zd1jLocksTests
 {
@@ -26,10 +26,10 @@ public class Zd1jLocksTests
         await Assert.That(File.Exists(path)).IsTrue();
         await Assert.That(File.ReadAllText(path)).Contains("\"557142\"");
 
-        // 起こし直した (ファイルから読む)
+        // 再起動した (ファイルから読む)
         var (again, _) = Tuner(new Zd1jLocks(path).For("4-12.1"));
         again.Tune(557_142_857);
-        await Assert.That(again.LastPath).IsEqualTo("覚えた値で合わせた");
+        await Assert.That(again.LastPath).IsEqualTo("保存した値で合わせた");
         // ポートが違えば別のもの
         await Assert.That(new Zd1jLocks(path).For("4-12.2").Channels.Count).IsEqualTo(0);
     }
@@ -49,7 +49,7 @@ public class Zd1jLocksTests
 
         var (again, _) = Tuner(new Zd1jLocks(path).For("4-12.1"));
         again.Tune(557_142_857);
-        await Assert.That(again.LastPath).IsEqualTo("覚えた値で合わせた");
+        await Assert.That(again.LastPath).IsEqualTo("保存した値で合わせた");
     }
 
     [Test]
@@ -60,7 +60,7 @@ public class Zd1jLocksTests
         memory.Changed += () => changes++;
         var (dib, _) = Tuner(memory);
         dib.Tune(557_142_857);
-        // 覚えた値で合わせた選局では書かない
+        // 保存した値で合わせた選局では書かない
         dib.Tune(557_142_857);
         dib.Tune(557_142_857);
         await Assert.That(changes).IsEqualTo(1);
@@ -90,7 +90,7 @@ public class Zd1jLocksTests
         await Assert.That(File.ReadAllText(path)).Contains("\"557142\"");
         model.Signal = false;
         dib.Tune(557_142_857);
-        await Assert.That(dib.LastPath).IsEqualTo("覚えた値で合わず探索した");
+        await Assert.That(dib.LastPath).IsEqualTo("保存した値で合わず探索した");
         await Assert.That(File.ReadAllText(path)).DoesNotContain("\"557142\"");
     }
 }

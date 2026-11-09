@@ -5,11 +5,11 @@ using System.Runtime.CompilerServices;
 namespace Denpa.Agent;
 
 /// <summary>
-/// MULTI2 (ARIB STD-B25 のスクランブル)。**TS の中身ぜんぶに掛かる、いちばん重いところ。**
+/// MULTI2 (ARIB STD-B25 のスクランブル)。**TS の中身ぜんぶを復号する、いちばん重い処理。**
 ///
 /// <para>
 /// 64 ビットのブロック暗号で、鍵は 2 段になっている。カードの定数 (システム鍵 32 バイト) と、
-/// ECM から貰う鍵 (8 バイト) を混ぜて作業鍵 8 語を作り、それで 1 パケットの中身を復号する。
+/// ECM から受け取る鍵 (8 バイト) を混ぜて作業鍵 8 語を作り、それで 1 パケットの中身を復号する。
 /// 作業鍵は**鍵が変わったとき (数秒に 1 回) に 1 回だけ作る。** パケットごとに作り直すと、
 /// 復号する手間の倍近くがそこに消える。
 /// </para>
@@ -54,10 +54,10 @@ public sealed class Multi2
         _ivRight = BinaryPrimitives.ReadUInt32BigEndian(initCbc[4..]);
     }
 
-    /// <summary>鍵が入っているか。**入る前に復号すると、でたらめを書く**ので呼ぶ側が見る</summary>
+    /// <summary>鍵が入っているか。**入る前に復号すると、でたらめを書く**ので呼ぶ側が確かめる</summary>
     public bool HasKeys { get; private set; }
 
-    /// <summary>ECM の答えの鍵 (奇数・偶数 8 バイトずつ) から作業鍵を作る</summary>
+    /// <summary>ECM の応答の鍵 (奇数・偶数 8 バイトずつ) から作業鍵を作る</summary>
     public void SetKeys(ReadOnlySpan<byte> odd, ReadOnlySpan<byte> even)
     {
         if (odd.Length != 8 || even.Length != 8) throw new ArgumentException("鍵は 8 バイトずつです");
@@ -66,7 +66,7 @@ public sealed class Multi2
         HasKeys = true;
     }
 
-    /// <summary>鍵を捨てる。**古い鍵で復号し続けるより、掛かったまま流すほうが分かりやすい**</summary>
+    /// <summary>鍵を捨てる。**古い鍵で復号し続けるより、スクランブルされたまま流すほうが分かりやすい**</summary>
     public void Clear()
     {
         _odd = default;
@@ -184,7 +184,7 @@ public sealed class Multi2
         /*
          * **CBC は復号する向きならブロックどうしが独立している** (前の暗号文と XOR するのは
          * 復号した後)。1 パケットの 23 ブロックを SIMD の幅 (AVX2 なら 8 本) で並べて
-         * 一度に回す。掛ける向きは前の結果を待つので並べられない
+         * 一度に回す。暗号化する向きは前の結果を待つので並べられない
          */
         if (Vector.IsHardwareAccelerated && data.Length >= Vector<uint>.Count * 8)
         {
@@ -212,7 +212,7 @@ public sealed class Multi2
 
     /// <summary>
     /// 丸ごとのブロックを SIMD で復号する。左右の半分を別々の列に並べ直してから回し、
-    /// 書き戻しながら CBC の XOR を掛ける。復号し終えたところまでのバイト数を返す
+    /// 書き戻しながら CBC の XOR を取る。復号し終えたところまでのバイト数を返す
     /// </summary>
     private static int DecryptWide(Span<byte> data, in Words k, ref uint cbcLeft, ref uint cbcRight)
     {
@@ -303,7 +303,7 @@ public sealed class Multi2
         return RotateLeft(t, 2) + t + Vector<uint>.One;
     }
 
-    /// <summary>掛ける向き。**放送を作る側の処理**で、ここではテストで TS を作るのに使う</summary>
+    /// <summary>暗号化する向き。**放送を作る側の処理**で、ここではテストで TS を作るのに使う</summary>
     public void Encrypt(bool even, Span<byte> data)
     {
         ref readonly var k = ref even ? ref _even : ref _odd;
@@ -323,7 +323,7 @@ public sealed class Multi2
         Tail(data[at..], cbcLeft, cbcRight, k);
     }
 
-    /// <summary>8 バイトに満たない尻尾。**掛けるのも復号するのも同じ** (OFB は XOR するだけ)</summary>
+    /// <summary>8 バイトに満たない尻尾。**暗号化するのも復号するのも同じ** (OFB は XOR するだけ)</summary>
     private static void Tail(Span<byte> tail, uint left, uint right, in Words k)
     {
         if (tail.IsEmpty) return;

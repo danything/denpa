@@ -16,7 +16,7 @@ internal sealed class NativeTsFramer
 
     /// <summary>
     /// <see cref="Push"/> と同じく 188 バイトのパケットを取り出すが、同期バイトが続く範囲を 1 回でまとめて渡す (パケットごとの呼び出しとコピーを省く)。
-    /// 前の呼び出しの残り (188 バイト未満) があれば、それを 1 パケットに埋めるぶんだけ <see cref="Push"/> で読み、続きは <paramref name="data"/> を直接見る。
+    /// 前の呼び出しの残り (188 バイト未満) があれば、それを 1 パケットに埋めるぶんだけ <see cref="Push"/> で読み、続きは <paramref name="data"/> を直接読む。
     /// 足りない端数だけ持ち越す
     /// </summary>
     public void PushRuns(ReadOnlySpan<byte> data, Action<ReadOnlySpan<byte>> sink)
@@ -101,7 +101,7 @@ internal sealed class Dt295NativeStream
     /// 128 個 (64 KiB) は、ホストがカードの UART を 1 バイトずつ読み書きしていたときに実機で測った値 (#2413):
     /// CS18 (37 Mbps) の 40 秒で、32 個だと連続性の飛びが 8142 個、64 個だと 1593 個、128 個だと 0 個。BS15 (24 Mbps) の 90 秒、
     /// 地上波 (T28) のライブ 40 秒、全 108 局の 15〜20 秒ずつでも 0 個だった。
-    /// いまはカードの送受信を機材のプログラムに行わせる (<see cref="Dt295NativeLink.CardProgram"/>) ので、1 ブロックの制御転送は数回になり、
+    /// いまはカードの送受信を機材のプログラムに実行させる (<see cref="Dt295NativeLink.CardProgram"/>) ので、1 ブロックの制御転送は数回になり、
     /// TS の要求が譲る時間は短い。この形では、実機の BS15 と地上波 (T22) で連続性の飛びが 0 個だった (#2413)。CS18 ではまだ測っていない
     /// </para>
     /// </summary>
@@ -287,7 +287,7 @@ internal sealed class Dt295NativeStream
         }
     }
 
-    /// <summary>書いたぶんを渡す (<see cref="Zd1jTuner.Flush"/>)。読む側がいないとみたら終わる</summary>
+    /// <summary>書いたぶんを渡す (<see cref="Zd1jTuner.Flush"/>)。読む側がいないと判定したら終わる</summary>
     private bool Flush(PipeWriter writer) => Zd1jTuner.Flush(writer, () => _stopped, () =>
     {
         _ended = true;
@@ -301,7 +301,7 @@ internal sealed class Dt295NativeStream
         Log.Write($"[{_name}] {reason}");
     }
 
-    /// <summary>止める。要求と読みを止め、取り込みを止めて設定を戻し、読みかけの読む側が戻ってから溜めを閉じる</summary>
+    /// <summary>止める。要求と読みを止め、取り込みを止めて設定を戻し、読んでいる途中の呼び出しが戻ってからバッファを閉じる</summary>
     public void Stop()
     {
         _stopped = true;

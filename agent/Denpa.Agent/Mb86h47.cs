@@ -16,11 +16,11 @@ namespace Denpa.Agent;
  * **I2C はコア 1 に任せ、指示は EP 0x02 の bulk の塊で送る (仕様書 5.4・5.5) 方式だけ。** 実機で 3 つの方式を比べた結果
  * (開く・選局からロック・メモリ要求の回数。ホストから直 (5.3) / コア 1 のメモリ要求のリング / コア 1 の bulk の命令):
  * 開く 385 / 167 / 182ms、ロック 3439 / 2730 / 2570ms、メモリ要求 24664 / 2360 / 1083 回。bulk の命令がいちばん速く、
- * 要求もいちばん少ないので、ほかの 2 つはコードごと外した。コア 1 が起きない・bulk に答えないときは開くのを止める
- * (仕様書 14 章の「コア 1 が動かない → 開けない」。実機では毎回起きていて、代わりの方式を残す理由が無い)。
+ * 要求もいちばん少ないので、ほかの 2 つはコードごと外した。コア 1 が起動しない・bulk に応答しないときは開くのを止める
+ * (仕様書 14 章の「コア 1 が動かない → 開けない」。実機では毎回起動していて、代わりの方式を残す理由が無い)。
  */
 
-/// <summary>I2C の相手と話すインターフェース。DiB8096 はこれと待ちと覚えた値だけを受け取る</summary>
+/// <summary>I2C の相手とやり取りするインターフェース。DiB8096 はこれと待ちと保存した値だけを受け取る</summary>
 public interface II2c
 {
     void Write(byte address, ReadOnlySpan<byte> data);
@@ -94,7 +94,7 @@ public sealed class Mb86h47 : II2c
     private uint _chunkSequence;
     private int _chunkSlot;
 
-    /// <summary>bulk の塊の答えが時間内に来なかった。置き場の数がコア 1 とずれたかもしれないので、ボードは開き直す (<see cref="Zd1jBoard.Faulted"/>)</summary>
+    /// <summary>bulk の塊の応答が時間内に来なかった。置き場の数がコア 1 とずれたかもしれないので、ボードは開き直す (<see cref="Zd1jBoard.Faulted"/>)</summary>
     public bool Dead { get; private set; }
 
     // 流し始めの準備 (9.2)。待ちの間に 1 つずつ回す
@@ -374,11 +374,11 @@ public sealed class Mb86h47 : II2c
 
     private static uint Box(int offset) => Core1 + Mb86h47Programs.Core1Box + (uint)offset;
 
-    /// <summary>コア 1 を置いて走らせ、生存カウンタが進むのを見る。進まなければ開かない (仕様書 14 章)</summary>
+    /// <summary>コア 1 を置いて走らせ、生存カウンタが進むのを確かめる。進まなければ開かない (仕様書 14 章)</summary>
     private void StartCore1()
     {
         LoadCore(Core1, Core1Program.Value);
-        // データ RAM は電源投入時の中身が不定。コア 1 が見る所を消してから走らせる
+        // データ RAM は電源投入時の中身が不定。コア 1 が読む所を消してから走らせる
         Write32(Box(Mb86h47Programs.BoxBulkEnable), 0);
         Write32(Core1, CoreRun);
         var first = Read32(Box(Mb86h47Programs.BoxAlive));
@@ -388,7 +388,7 @@ public sealed class Mb86h47 : II2c
         if (first == second) throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が動いていません");
     }
 
-    /// <summary>5.5 の bulk の経路を用意して、空の塊を 1 つ送って答えを確かめる。答えなければ開かない</summary>
+    /// <summary>5.5 の bulk の経路を用意して、空の塊を 1 つ送って応答を確かめる。応答しなければ開かない</summary>
     private void StartCommandChannel()
     {
         Write32(0xFD8300, 1);
@@ -396,11 +396,11 @@ public sealed class Mb86h47 : II2c
         Modify(0xFDBC14, 0, 0x00040000);
         Modify(0xFD80B4, 0, 4);
         Write32(0xFD8510, Mb86h47Programs.BulkChunk);
-        // 置き場の塊の先頭を消す (電源投入時の SDRAM は不定。先頭が 0 の塊は見ない)
+        // 置き場の塊の先頭を消す (電源投入時の SDRAM は不定。先頭が 0 の塊はコア 1 が読み飛ばす)
         for (var slot = 0; slot < Mb86h47Programs.BulkSlots; slot++) Write32(Mb86h47Programs.BulkBuffer + (uint)(slot * Mb86h47Programs.BulkChunk), 0);
         ArmCommandDma();
         Write32(Box(Mb86h47Programs.BoxBulkEnable), Mb86h47Programs.BulkEnable);
-        // 前の会話の答えが残っていれば捨てる (EP 0x83 は 64 バイトずつ。残りは多くても置き場の数まで)
+        // 前のやり取りの応答が残っていれば捨てる (EP 0x83 は 64 バイトずつ。残りは多くても置き場の数まで)
         Span<byte> stale = stackalloc byte[64];
         for (var i = 0; i < Mb86h47Programs.BulkSlots && _usb.InterruptRead(CommandIn, stale, 10) > 0; i++)
         {
@@ -417,7 +417,7 @@ public sealed class Mb86h47 : II2c
     }
 
     // ---------------------------------------------------------------------
-    // I2C (5)。書き込みと読みかえ書きは 1 つずつ答えを待たずに塊に溜め、読む前と待つ前 (Flush) にまとめて送る
+    // I2C (5)。書き込みと読みかえ書きは 1 つずつ応答を待たずに塊に溜め、読む前と待つ前 (Flush) にまとめて送る
     // ---------------------------------------------------------------------
 
     public void Write(byte address, ReadOnlySpan<byte> data)
@@ -445,7 +445,7 @@ public sealed class Mb86h47 : II2c
         lock (_gate)
         {
             I2cTransfers++;
-            // 読みかえ書きはコア 1 の上で済ませる (答えを待たない)
+            // 読みかえ書きはコア 1 の上で済ませる (応答を待たない)
             if (_commands.Count + 2 > CommandWords) SendChunk();
             _commands.Add(0x02000000u | ((uint)address << 16) | register);
             _commands.Add(((uint)keep << 16) | set);
@@ -488,7 +488,7 @@ public sealed class Mb86h47 : II2c
         _commands.AddRange(words);
     }
 
-    /// <summary>溜めた命令を 1 つの塊で送り、答えを待つ。読んだバイトを返す</summary>
+    /// <summary>溜めた命令を 1 つの塊で送り、応答を待つ。読んだバイトを返す</summary>
     private byte[] SendChunk()
     {
         _chunkSequence = _chunkSequence == uint.MaxValue ? 1 : _chunkSequence + 1;
@@ -521,20 +521,20 @@ public sealed class Mb86h47 : II2c
             var left = (int)((deadline - Stopwatch.GetTimestamp()) * 1000 / Stopwatch.Frequency);
             if (left <= 0)
             {
-                // 答えが来ないと、ホストが数える置き場 (_chunkSlot) とコア 1 の置き場がずれたかもしれない。開き直すまで使わない
+                // 応答が来ないと、ホストが数える置き場 (_chunkSlot) とコア 1 の置き場がずれたかもしれない。開き直すまで使わない
                 Dead = true;
-                throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が bulk の塊に答えません");
+                throw new IOException($"{Zd1j.Model} のブリッジのコア 1 が bulk の塊に応答しません");
             }
             var got = _usb.InterruptRead(CommandIn, reply, left);
             if (got < 8) continue;
-            // 答えの語の並びは、マーカー (0xA5) が先頭か終わりかで見分ける (FIFO のバイトの並びは仕様書に無い)
+            // 応答の語の並びは、マーカー (0xA5) が先頭か終わりかで見分ける (FIFO のバイトの並びは仕様書に無い)
             if (reply[0] != Mb86h47Programs.BulkReplyMark && reply[3] == Mb86h47Programs.BulkReplyMark)
             {
                 for (var i = 0; i + 4 <= got; i += 4) reply.AsSpan(i, 4).Reverse();
             }
             if (reply[0] != Mb86h47Programs.BulkReplyMark) continue;
             var head = BinaryPrimitives.ReadUInt32BigEndian(reply);
-            if (((head >> 8) & 0xFFFF) != (sequence & 0xFFFF)) continue;    // 古い答え
+            if (((head >> 8) & 0xFFFF) != (sequence & 0xFFFF)) continue;    // 古い応答
             var info = BinaryPrimitives.ReadUInt32BigEndian(reply.AsSpan(4));
             var error = (int)(head & 0xFF);
             _chunkSlot++;
@@ -741,7 +741,7 @@ public sealed class Mb86h47 : II2c
 /// <summary>
 /// 9.4 EP 0x81 から来る「4 バイトの到着時刻 + 188 バイトの TS」の 192 バイトの単位から取り出して、188 バイトのパケットにする。
 /// 読みの区切りは単位と揃わないので、TS の先頭 (単位の 5 バイト目) の 0x47 と、192 バイト先の 0x47 の 2 つで揃える
-/// (TS の中の 0x47 は珍しくないので 1 つでは信じない)。揃えたあと先頭が 0x47 でなくなったら揃え直す
+/// (TS の中の 0x47 は珍しくないので 1 つだけでは先頭とみなさない)。揃えたあと先頭が 0x47 でなくなったら揃え直す
 /// </summary>
 public sealed class Mb86h47Framer
 {

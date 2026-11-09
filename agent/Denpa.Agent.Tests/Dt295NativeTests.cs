@@ -100,7 +100,7 @@ public class Dt295NativeTests
         // 窓は既定に戻る
         await Assert.That(fake.Get(0xEA3D8, 4)).IsEqualTo(0x00F00000u);
         await Assert.That(fake.Get(0xE9EBC, 4)).IsEqualTo(0x00F00000u);
-        // 地上波側は休ませる (仕様書 9 章)
+        // 地上波側は待機させる (仕様書 9 章)
         await Assert.That(i2c[^5..]).IsEquivalentTo(new[] { "10 W 2500", "10 W 234D", "10 W 0390", "10 W FEC01200", "10 W FEC00B00" });
 
         // TS: 連続性の飛びが無く、同期バイトが全部合っている
@@ -114,7 +114,7 @@ public class Dt295NativeTests
     }
 
     [Test]
-    public async Task 衛星は_T_側を休ませてから周波数と_VCO_帯を書き_TSID_を選んで受信を確認する()
+    public async Task 衛星は_T_側を待機させてから周波数と_VCO_帯を書き_TSID_を選んで受信を確認する()
     {
         var fake = Rig();
         var (code, output, log) = Run(fake, "BS15:16400");
@@ -129,7 +129,7 @@ public class Dt295NativeTests
         var frequency = Index(i2c, "11 W FEC0000A4C000000");
         await Assert.That(frequency).IsGreaterThan(0);
         await Assert.That(Index(i2c, "11 W FEC0098C", frequency)).IsEqualTo(frequency + 1);
-        // 選局の始め: T 側を休ませる (7.3.2 の t=1)
+        // 選局の始め: T 側を待機させる (7.3.2 の t=1)
         var rest = Index(i2c, "10 W 2500", Index(i2c, "10 W 4700"));
         await Assert.That(rest).IsGreaterThan(0);
         await Assert.That(rest).IsLessThan(frequency);
@@ -465,7 +465,7 @@ public class Dt295NativeTests
         // チップの設定の段、I2C の段、各待ち (理由つき)、選局、受信の確認の周回、取り込み、最初の TS
         foreach (var expected in new[]
         {
-            "手順 1〜3", "手順 10〜12", "T 復調の初期値", "T チューナーの初期化", "S 復調の初期値", "待ち 100 ms (この間に別の仕事) (仕様書 7.1.2", "待ち 4 ms (仕様書 7.1.3",
+            "手順 1〜3", "手順 10〜12", "T 復調の初期値", "T チューナーの初期化", "S 復調の初期値", "待ち 100 ms (この間に別の処理) (仕様書 7.1.2", "待ち 4 ms (仕様書 7.1.3",
             "t=23 周波数の設定", "待ち 100 ms (仕様書 7.2.2。t=46", "受信の確認 (地上波)", "取り込みの設定", "取り込みの開始", "最初の TS を待つ", "固定の待ち:",
         })
         {
@@ -559,7 +559,7 @@ public class Dt295NativeTests
     }
 
     [Test]
-    public async Task 同じ種別の選局し直しは先頭の手順を省き_種別が替わるときは前の側を休ませる()
+    public async Task 同じ種別の選局し直しは先頭の手順を省き_種別が替わるときは前の側を待機させる()
     {
         var fake = Rig();
         var port = $"test-{Guid.NewGuid():N}";
@@ -582,16 +582,16 @@ public class Dt295NativeTests
         await Assert.That(again).Contains("10 W FEC01201");
         await Assert.That(again.Count).IsLessThan(first.Count);
 
-        // 衛星へ: 先に T 側を休ませ (復調 25=00・23=4D・03=90)、TS の出し元を衛星にする (T 復調 0E=77・0F=77)
+        // 衛星へ: 先に T 側を待機させ (復調 25=00・23=4D・03=90)、TS の出し元を衛星にする (T 復調 0E=77・0F=77)
         var toSatellite = Tune(satellite);
         await Assert.That(toSatellite).Contains("10 W 2500");
         await Assert.That(toSatellite).Contains("10 W 0E77");
-        // 続けて衛星: T 側はもう休んでいるので休ませる表は入らない
+        // 続けて衛星: T 側はもう待機しているので待機させる表は入らない
         var satelliteAgain = Tune(satellite);
         await Assert.That(satelliteAgain).DoesNotContain("10 W 2500");
         await Assert.That(satelliteAgain).Contains("10 W 0E77");
 
-        // 地上波へ戻る: 先に S 側を休ませる表 (S 復調 1C=AA ほか。仕様書 7.2.2。推定) が入り、0B=01 も入る
+        // 地上波へ戻る: 先に S 側を待機させる表 (S 復調 1C=AA ほか。仕様書 7.2.2。推定) が入り、0B=01 も入る
         var back = Tune(terrestrial);
         await Assert.That(back).Contains("11 W 1CAA");
         await Assert.That(back).Contains("11 W 1728".Replace("1728", "1701"));

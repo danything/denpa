@@ -8,9 +8,9 @@ namespace Denpa.Agent;
  *
  * - 主 CPU の SRAM のルーチン (4.2): メモリ要求のアドレスを 32 ビットに広げる
  * - コア 0 (11.2): SDRAM のリングから EP 0x81 へ 192 バイトの単位を送り出す
- * - コア 1 (5.2・5.4・5.5): I2C のやり取りを代わりに行う。指示は bulk の塊で受ける (下の Core1 の説明)
+ * - コア 1 (5.2・5.4・5.5): I2C のやり取りを代行する。指示は bulk の塊で受ける (下の Core1 の説明)
  *
- * 指示の箱やバッファの形式は機材の決まりではなく、こちらで決めたもの (仕様書 5.4・5.5 に「こちらで決めてよい」とある)。
+ * 指示のメールボックスやバッファの形式は機材の決まりではなく、こちらで決めたもの (仕様書 5.4・5.5 に「こちらで決めてよい」とある)。
  */
 public static class Mb86h47Programs
 {
@@ -197,7 +197,7 @@ public static class Mb86h47Programs
         asm.B(Fr30Cond.Ls, "send_check"); // free ≤ 0x470 (符号無し)
         Fill(asm);
         asm.Ldi8(1, R8);
-        // 4. 送れる単位が無い (ビット 5 が無い) か、パケット化が忙しければ 1 へ
+        // 4. 送れる単位が無い (ビット 5 が無い) か、パケット化がビジーなら 1 へ
         asm.Label("send_check");
         asm.Ldi8(0x20, R0);
         asm.And(R3, R0);
@@ -233,7 +233,7 @@ public static class Mb86h47Programs
         return asm.Words32();
     }
 
-    /// <summary>FIFO を満たす: DMA 2 に次の 0x460 バイトを持ってこさせる</summary>
+    /// <summary>FIFO を満たす: DMA 2 で次の 0x460 バイトを読み込む</summary>
     private static void Fill(Fr30Assembler asm)
     {
         Store32(asm, 0x1078, 0x460);
@@ -265,15 +265,15 @@ public static class Mb86h47Programs
      *
      *   0xA0000〜        プログラム
      *   〜0xA37FC        スタック (下へ)
-     *   0xA3C00 (箱)     +0x78 bulk の塊を見るか (BulkEnable のときだけ見る)、+0x7C 生存カウンタ (仕様書 5.4)
+     *   0xA3C00          メールボックス。+0x78 bulk の塊を読むか (BulkEnable のときだけ読む)、+0x7C 生存カウンタ (仕様書 5.4)
      *   0xA3C80〜        コア 1 の作業用
-     *   0xA3D00          bulk の答えを組む所 (+0 と +4 がヘッダ、+8 から読んだバイト)
+     *   0xA3D00          bulk の応答を組む所 (+0 と +4 がヘッダ、+8 から読んだバイト)
      *
      * 指示は bulk の塊だけで受ける (仕様書 5.5。ほかの方式をやめた理由は Mb86h47.cs の冒頭)。EP 0x02 で 512 バイトの塊を送ると、
      * ブリッジの DMA が 0x82100000 から順に 16 個置く。
      * 塊 = +0 通し番号 (0 でない)、+4 命令の数、+8 から命令、+508 = 通し番号をもう一度 (最後まで届いたことの確認)。
      * 命令: 0x01 アドレス 書く数 読む数 (+ 書くバイトを語に詰めて) / 0x02 アドレス 番号の上位 番号の下位 + 残す 16・立てる 16
-     * (2 バイトの番号のレジスタの読みかえ書き)。済ませたら塊の先頭と終わりを 0 にし、答えを EP 0x83 で返す:
+     * (2 バイトの番号のレジスタの読みかえ書き)。済ませたら塊の先頭と終わりを 0 にし、応答を EP 0x83 で返す:
      * +0 = 0xA5・通し番号の下位 16・誤り、+4 = 済ませた命令の数 16・読んだバイト数 16、+8 から読んだバイト (56 バイトまで)
      *
      * 誤りの番号 (仕様書 5.4 と同じ): 0 = 成功、1 = バスエラー、2 = アドレスに ACK 無し、3 = データに ACK 無し、4 = 固まった。
@@ -284,7 +284,7 @@ public static class Mb86h47Programs
     public const int BoxBulkEnable = 0x78;
     public const int BoxAlive = 0x7C;
 
-    /// <summary>箱の +0x78 にこの値があるときだけ bulk の塊を見る (DMA を用意して塊の先頭を消してから書く)</summary>
+    /// <summary>メールボックスの +0x78 にこの値があるときだけ bulk の塊を読む (DMA を用意して塊の先頭を消してから書く)</summary>
     public const uint BulkEnable = 0xB01C0DE5;
 
     /// <summary>bulk の塊を置く所 (512 バイト × 16。仕様書 5.5)</summary>
@@ -294,7 +294,7 @@ public static class Mb86h47Programs
     public const int BulkChunk = 512;
     public const byte BulkReplyMark = 0xA5;
 
-    /// <summary>bulk の答えに載る読んだバイトの上限 (EP 0x83 は 64 バイト)</summary>
+    /// <summary>bulk の応答に載る読んだバイトの上限 (EP 0x83 は 64 バイト)</summary>
     public const int BulkReplyData = 56;
 
     /// <summary>I2C で待つ上限 (読みの回数。仕様書 5.2 の参考の値)</summary>
@@ -304,7 +304,7 @@ public static class Mb86h47Programs
     private const uint BulkReply = Core1Box + 0x100;
     private const uint Stack = 0xA3800;
 
-    // 作業用の語 (箱からの差)
+    // 作業用の語 (メールボックスからの差)
     private const int VarModify = 0xA0;
     private const int VarChunk = 0x88;
     private const int VarCommand = 0x8C;
@@ -452,14 +452,14 @@ public static class Mb86h47Programs
         asm.Far(Fr30Cond.Ra, "b_loop", R12);
 
         asm.Label("b_done");
-        // R0 = 誤り。塊の先頭と終わりを消す (次の周回で古い塊を新しいものと見ないように)
+        // R0 = 誤り。塊の先頭と終わりを消す (次の周回で古い塊を新しいものとみなさないように)
         asm.LdFp(VarChunk, R1);
         asm.Ldi8(0, R2);
         asm.St(R2, R1);
         asm.Ldi(BulkChunk - 4, R3);
         asm.Add(R3, R1);
         asm.St(R2, R1);
-        // 答えのヘッダ
+        // 応答のヘッダ
         asm.LdFp(VarSequence, R2);
         asm.Lsl(16, R2);
         asm.Lsr(8, R2);
@@ -617,7 +617,7 @@ public static class Mb86h47Programs
         asm.Ret();
     }
 
-    /// <summary>send の答えが ACK 無し (5) なら <paramref name="code"/> にして、どれかの誤りなら t_fail へ</summary>
+    /// <summary>send の結果が ACK 無し (5) なら <paramref name="code"/> にして、どれかの誤りなら t_fail へ</summary>
     private static void Nack(Fr30Assembler asm, uint code)
     {
         var ok = asm.NewLabel("ack");

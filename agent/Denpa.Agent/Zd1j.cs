@@ -17,7 +17,7 @@ namespace Denpa.Agent;
 /// <para>
 /// 設定の <c>device</c> は <c>zd1j:&lt;USB のポート&gt;</c> (<c>zd1j:4-12.1</c>。シリアルは無い)。Windows と macOS でも同じ形式の
 /// 名前を作る (<see cref="UsbDevices.WindowsPort"/>・<see cref="UsbDevices.MacPort"/>)。
-/// 挿さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。設定に 1 台だけなら、挿すポートを変えても付いていく
+/// 挿さっていれば <see cref="Detect"/> が見つけるので、普通は書かなくてよい。設定に 1 台だけなら、挿すポートを変えても追従する
 /// (<see cref="Follow(string)"/>)。2 台以上はポートで見分けるので、挿すポートを変えると別のチューナーになる。
 /// </para>
 /// </summary>
@@ -82,19 +82,19 @@ public static class Zd1j
             ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, Vendor, Product)
             : UsbDevices.Open(port, Vendor, Product);
 
-    /// <summary>付いていったことを記録したもの (設定のポート → 使ったポート)。同じ組は 1 回だけ記録する</summary>
+    /// <summary>追従したことを記録したもの (設定のポート → 使ったポート)。同じ組は 1 回だけ記録する</summary>
     private static readonly HashSet<(string From, string To)> Followed = [];
 
     /// <summary>
-    /// **1 台だけなら、挿し替えたポートに付いていく。** 設定のポートに見当たらず、ほかにちょうど 1 台挿さっていればそのポート。
+    /// ***1 台だけなら、挿し替えたポートに追従する。** 設定のポートに見当たらず、ほかにちょうど 1 台挿さっていればそのポート。
     /// それ以外 (設定のポートにある・1 台も無い・2 台以上ある) は設定のまま (2 台以上はポートでしか見分けられない)
     /// </summary>
     internal static string Follow(string port, IReadOnlyList<string> present) =>
         present.Count == 1 && present[0] != port ? present[0] : port;
 
     /// <summary>
-    /// 挿さっているものを見て <see cref="Follow(string, IReadOnlyList{string})"/>。付いていったら、組ごとに 1 回記録する。
-    /// 設定に CECH-ZD1 J が 1 台だけのときに呼ぶ (2 台書いてあれば、抜けている 1 台がもう 1 台に付いていってしまう)
+    /// 挿さっているものを調べて <see cref="Follow(string, IReadOnlyList{string})"/>。追従したら、組ごとに 1 回記録する。
+    /// 設定に CECH-ZD1 J が 1 台だけのときに呼ぶ (2 台書いてあれば、抜けている 1 台がもう 1 台に追従してしまう)
     /// </summary>
     public static string Follow(string port)
     {
@@ -133,8 +133,8 @@ public sealed class Zd1jBoard : IDibTime
     public static Action<string>? Trace { get; set; }
 
     /// <summary>
-    /// チャンネルごとに覚えたロックの値。**ボードを閉じても、エージェントを起こし直しても残す** (ファイル。ポートごと)。
-    /// 起動するときに設定の置き場で決める (Program.cs・Probe.cs)。決めていなければ覚えるのはメモリの上だけ
+    /// チャンネルごとに保存したロックの値。**ボードを閉じても、エージェントを再起動しても残す** (ファイル。ポートごと)。
+    /// 起動するときに設定の置き場で決める (Program.cs・Probe.cs)。決めていなければ保存するのはメモリの上だけ
     /// </summary>
     public static Zd1jLocks Locks { get; set; } = new(null);
 
@@ -155,7 +155,7 @@ public sealed class Zd1jBoard : IDibTime
     /// <summary>DiB8096 の初期化にかかった時間 (まだなら -1)</summary>
     public long DemodMs { get; private set; } = -1;
 
-    /// <summary>USB が抜けた・ブリッジのコア 1 が答えなくなったなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
+    /// <summary>USB が抜けた・ブリッジのコア 1 が応答しなくなったなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
     public bool Faulted => _faulted || Bridge.Dead;
 
     private bool _faulted;
@@ -214,8 +214,8 @@ public sealed class Zd1jBoard : IDibTime
     private static readonly Dictionary<string, string> LastFailure = [];
 
     /// <summary>
-    /// 開けなかったことを、どの段で止まったか付きで 1 行記録する。カードの確かめや選局のたびに開き直すので、
-    /// 前と同じ理由なら書かない (開けたら忘れる)
+    /// 開けなかったことを、どの段で止まったか付きで 1 行記録する。カードの確認や選局のたびに開き直すので、
+    /// 前と同じ理由なら書かない (開けたら理由を消す)
     /// </summary>
     private static void Failed(string port, string stage, Exception error)
     {
@@ -298,7 +298,7 @@ public sealed class Zd1jBoard : IDibTime
         if (left > 0) Thread.Sleep((int)left);
     }
 
-    /// <summary>眠らせて (DiB8096 を初期化していれば。LED は緑に)、USB を閉じる</summary>
+    /// <summary>スリープさせて (DiB8096 を初期化していれば。LED は緑に)、USB を閉じる</summary>
     private void Close()
     {
         lock (_gate)
@@ -317,7 +317,7 @@ public sealed class Zd1jBoard : IDibTime
             }
             catch (IOException error)
             {
-                Log.Write($"[{Zd1j.Model} {Port}] 眠らせられませんでした ({error.Message})");
+                Log.Write($"[{Zd1j.Model} {Port}] スリープさせられませんでした ({error.Message})");
             }
             Usb.Dispose();
             Log.Write($"[{Zd1j.Model} {Port}] 閉じました");
@@ -348,14 +348,14 @@ public sealed record Zd1jTimings(long OpenMs, long LockMs, long FirstTsMs);
 ///
 /// <para>
 /// 前面の LED は流している間ずっと赤、止めたら緑 (点滅なし)。読む側がいないまま <see cref="StallLimit"/> 経ったら
-/// 流すのをやめて LED を緑にし、ボードを返す (TunerPool はデバイスを開きっぱなしにするので、ここで見切る)。
+/// 流すのをやめて LED を緑にし、ボードを返す (TunerPool はデバイスを開きっぱなしにするので、ここで打ち切る)。
 /// </para>
 /// </summary>
 public sealed class Zd1jTuner : ITuneDevice
 {
     /// <summary>
-    /// 読む側がいないまま、溜めが空かずに待つ上限。TunerPool が誰も読まなくなってから選局を畳むまでの間
-    /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く見切ると、TunerPool が畳む前に TS が途切れる)
+    /// 読む側がいないまま、バッファが空かずに待つ上限。TunerPool が誰も読まなくなってから選局を畳むまでの間
+    /// (<see cref="TunerPool.Linger"/>) と同じ 5 秒にそろえる (それより早く打ち切ると、TunerPool が畳む前に TS が途切れる)
     /// </summary>
     internal static TimeSpan StallLimit => TunerPool.Linger;
 
@@ -381,12 +381,12 @@ public sealed class Zd1jTuner : ITuneDevice
     {
         _name = $"{Zd1j.Model} {port}";
         _port = port;
-        // 開くたびに見直す (動いている間に挿し替えても付いていく)。閉じるのは最後に開いたポート
+        // 開くたびに見直す (動いている間に挿し替えても追従する)。閉じるのは最後に開いたポート
         _acquire = () => Zd1jBoard.Acquire(_port = follow ? Zd1j.Follow(port) : port);
         _closeIdle = () => Zd1jBoard.CloseIfIdle(_port);
     }
 
-    /// <summary>最後に開いたポート (付いていったら設定と違う)</summary>
+    /// <summary>最後に開いたポート (追従したら設定と違う)</summary>
     private string _port = "";
 
     internal Zd1jTuner(string name, Func<Zd1jBoard> acquire, Action? closeIdle = null)
@@ -605,7 +605,7 @@ internal sealed class Zd1jStream
         }
     }
 
-    /// <summary>書いたぶんを渡す (<see cref="Zd1jTuner.Flush"/>)。読む側がいないとみたら終わる</summary>
+    /// <summary>書いたぶんを渡す (<see cref="Zd1jTuner.Flush"/>)。読む側がいないと判定したら終わる</summary>
     private bool Flush(PipeWriter writer) => Zd1jTuner.Flush(writer, () => _stopped, () =>
     {
         _ended = true;
@@ -619,7 +619,7 @@ internal sealed class Zd1jStream
         Log.Write($"[{_name}] {reason}");
     }
 
-    /// <summary>止める。読みを取り消し、読みかけの読む側が戻ってから溜めを閉じる</summary>
+    /// <summary>止める。読みを取り消し、読んでいる途中の呼び出しが戻ってからバッファを閉じる</summary>
     public void Stop()
     {
         _stopped = true;
@@ -663,7 +663,7 @@ public sealed class Zd1jCard : ICardLink
             if (!Bridge.CardPresent()) throw new CardAbsentException($"{Name} にカードが挿さっていません");
             byte[]? raw = null;
             Atr? atr = null;
-            // 前の会話の残りが混ざって崩れたら、もう一度だけリセットから
+            // 前のやり取りの残りが混ざって崩れたら、もう一度だけリセットから
             for (var attempt = 0; attempt < 2 && atr is null; attempt++)
             {
                 Bridge.CardReset();
@@ -697,7 +697,7 @@ public sealed class Zd1jCard : ICardLink
         if (_t1 is null) throw new IOException($"{Name} のカードに繋いでいません (Reset を先に)");
         try
         {
-            // 抜き差しの通知は無いので、APDU の前ごとに見る (仕様書 13.3)
+            // 抜き差しの通知は無いので、APDU の前ごとに確かめる (仕様書 13.3)
             if (!Bridge.CardPresent())
             {
                 _t1 = null;
@@ -732,8 +732,8 @@ public sealed class Zd1jCard : ICardLink
 }
 
 /// <summary>
-/// CECH-ZD1 J がチャンネルごとに覚えたロックの値のファイル (<c>zd1j-locks.json</c>。tuners.json の隣)。
-/// 中身は選局で段 3 に渡した値だけで、**消してよい** (次の選局で探索からやり直して、また覚える)。
+/// CECH-ZD1 J がチャンネルごとに保存したロックの値のファイル (<c>zd1j-locks.json</c>。tuners.json の隣)。
+/// 中身は選局で段 3 に渡した値だけで、**消してよい** (次の選局で探索からやり直して、また保存する)。
 ///
 /// <para>
 /// 形式は <c>{ "version": 1, "boards": { "&lt;USB のポート&gt;": { "&lt;kHz&gt;": { … } } } }</c> (<see cref="DibMemory.ToJson"/>)。
@@ -776,7 +776,7 @@ public sealed class Zd1jLocks
         }
     }
 
-    /// <summary>そのポートの覚えた値。無ければ空のものを作る</summary>
+    /// <summary>そのポートの保存した値。無ければ空のものを作る</summary>
     public DibMemory For(string port)
     {
         lock (_gate)

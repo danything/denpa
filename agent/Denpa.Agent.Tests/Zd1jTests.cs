@@ -144,7 +144,7 @@ public class Zd1jTests
         bridge.Write(Dib8096.DemodAddress, [0x05, 0x07, 0x00, 0x03]);
         bridge.Write(Dib8096.TunerAddress, [0x24, 0x00, 0x22]);
         bridge.Modify16(Dib8096.DemodAddress, 285, 0xFF9F, 0x0060);
-        // 答えを待たずに溜める (まだ送らない)
+        // 応答を待たずに溜める (まだ送らない)
         await Assert.That(usb.Packets.Count).IsEqualTo(1);
         bridge.Flush();
         await Assert.That(usb.Packets.Count).IsEqualTo(2);
@@ -163,7 +163,7 @@ public class Zd1jTests
         await Assert.That(usb.Dib.Tuner[0x24]).IsEqualTo((ushort)0x22);
         await Assert.That(usb.Dib.Demod[285]).IsEqualTo((ushort)0x0061);
 
-        // 読みは塊をすぐ送り、答えに載った値を返す
+        // 読みは塊をすぐ送り、応答に載った値を返す
         Span<byte> value = stackalloc byte[2];
         bridge.WriteRead(Dib8096.DemodAddress, [0x03, 0x80], value);
         await Assert.That(BinaryPrimitives.ReadUInt16BigEndian(value)).IsEqualTo((ushort)0x01B3);
@@ -186,18 +186,18 @@ public class Zd1jTests
         var bridge = Started(usb);
         usb.Log.Clear();
         Span<byte> value = stackalloc byte[2];
-        // 確かめの塊が 1 個目なので、あと 15 個で 16 個
+        // 確認の塊が 1 個目なので、あと 15 個で 16 個
         for (var i = 0; i < 15; i++) bridge.WriteRead(Dib8096.DemodAddress, [0x03, 0x80], value);
         await Assert.That(usb.Log).Contains("W 00FD8508=82100000");
         await Assert.That(usb.Log.IndexOf("W 00FD8504=00000001")).IsGreaterThan(usb.Log.IndexOf("W 00FD8508=82100000"));
     }
 
     [Test]
-    public async Task コア_1_が_bulk_の塊に答えなければ開かない()
+    public async Task コア_1_が_bulk_の塊に応答しなければ開かない()
     {
         var usb = new FakeBridgeUsb { Core1Bulk = false };
         var error = Assert.Throws<IOException>(() => Started(usb));
-        await Assert.That(error.Message).Contains("bulk の塊に答えません");
+        await Assert.That(error.Message).Contains("bulk の塊に応答しません");
     }
 
     [Test]
@@ -245,14 +245,14 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task 単位から取り出すときは_0x47_を_2_つ見て揃える()
+    public async Task 単位から取り出すときは_0x47_を_2_つ確かめて揃える()
     {
         static byte[] Unit(byte marker)
         {
             var unit = new byte[192];
             unit[4] = 0x47;
             unit[5] = marker;
-            // 中身にも 0x47 を混ぜる (1 つだけでは単位の先頭と信じない)
+            // 中身にも 0x47 を混ぜる (1 つだけでは単位の先頭とみなさない)
             if (marker == 0) unit[100] = 0x47;
             if (marker == 2) unit[150] = 0x47;
             return unit;
@@ -351,7 +351,7 @@ public class Zd1jTests
             await Assert.That(usb.Dib.Demod[1029] & 2).IsEqualTo(2);
             // チューナーが捨てられたので、誰も使っていないボードは閉じる
             await Assert.That(usb.Disposed).IsTrue();
-            // 閉じる前に眠らせた (DiB0090 のスリープ = GPIO 0 を High)
+            // 閉じる前にスリープさせた (DiB0090 のスリープ = GPIO 0 を High)
             await Assert.That(usb.Dib.Demod[1030] & 1).IsEqualTo(1);
         }
         finally
@@ -369,7 +369,7 @@ public class Zd1jTests
             var usb = new FakeBridgeUsb();
             var board = Zd1jBoard.Acquire(port, () => usb);
             board.Release();
-            // PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱い。次に使う人は同じボード (起動し直さない)
+            // PT3 などのデバイスを TunerPool が開きっぱなしにするのと同じ扱い。次に使う側も同じボード (起動し直さない)
             await Assert.That(usb.Disposed).IsFalse();
             var again = Zd1jBoard.Acquire(port, () => throw new InvalidOperationException());
             again.Release();
@@ -383,7 +383,7 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task ロックしなければ同期しなかったと言ってボードを返す()
+    public async Task ロックしなければ同期失敗の例外を投げてボードを返す()
     {
         var usb = new FakeBridgeUsb();
         usb.Dib.Signal = false;
@@ -397,13 +397,13 @@ public class Zd1jTests
     }
 
     [Test]
-    public async Task 一台だけなら挿し替えたポートに付いていく()
+    public async Task 一台だけなら挿し替えたポートに追従する()
     {
         // 設定のポートにあればそのまま
         await Assert.That(Zd1j.Follow("2-1", ["2-1"])).IsEqualTo("2-1");
         // 抜いてほかのポートに挿した。1 台だけなのでそちらを使う
         await Assert.That(Zd1j.Follow("2-1", ["2-2"])).IsEqualTo("2-2");
-        // 1 台も無ければ設定のまま (開くときに「見当たりません」と言う)
+        // 1 台も無ければ設定のまま (開くときに「見当たりません」の例外になる)
         await Assert.That(Zd1j.Follow("2-1", [])).IsEqualTo("2-1");
         // 2 台以上はポートでしか見分けられないので、設定のまま
         await Assert.That(Zd1j.Follow("2-1", ["2-2", "2-3"])).IsEqualTo("2-1");

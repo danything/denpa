@@ -14,7 +14,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 エージェントは `denpa-agent-<バージョン>-darwin-arm64.tar.gz` (.NET の実行ファイル。[メニューバーのアプリ](#メニューバーのアプリ)も入っている) です。どちらも同じバージョンを入れます。
 
 1. **エージェント**: LaunchDaemon (`/Library/LaunchDaemons/io.github.danything.denpa-agent.plist`) に root で載せます。
-   起動したら起き、落ちたら起き直し、止めるときは録画の終わりを待ちます (launchd に強制終了されないよう、待ちの上限を 6 時間より長くしてある)
+   Mac の起動時に起動し、落ちたら起動し直し、止めるときは録画の終わりを待ちます (launchd に強制終了されないよう、待ちの上限を 6 時間より長くしてある)
 2. **denpa 本体**: 同じく LaunchDaemon (`io.github.danything.denpa.plist`) に root で載せ、`denpa.sh` が `bun server.js` を起こします。
    答えたらブラウザで開きます
 
@@ -54,7 +54,7 @@ root が書いた録画も Finder から消したり動かしたりできます�
 - denpa 本体は別の機械で動かし、Mac にはエージェントだけ置くなら `… | sudo bash -s -- --agent-only`。
   denpa の `TUNER_AGENT_URL` には、install.sh が最後に出す `https://<Mac の名前>.local:25252#pair=<合言葉>` を書きます
   ([別の所に置く](agent.md#エージェントは別イメージ別プロセス)のと同じ構成)。このときエージェントは全部のインターフェースで待ち受けます。
-  答えるのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
+  エージェントが応答するのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
 - 手元でビルドした tar.gz を入れるとき (開発と CI) は、`DENPA_AGENT_TARBALL`・`DENPA_SERVER_TARBALL` に絶対パスを書き、`sudo -E` で環境変数を渡します
 
 LaunchDaemon の環境変数は、コンテナ既定の置き場を Mac の置き場に向け直すものです。エージェントは
@@ -147,14 +147,14 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
 - **チューナーは px4-userland と siano-userland の機材と Sony CECH-ZD1 J・PIXELA PIX-DT295 (試験的) だけ。** macOS には DVB が無いので、
   PT2/PT3 のような PCI の機材は使えません。CECH-ZD1 J と PIX-DT295 はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
   Mac の実機ではまだ確かめていません)
-- **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に聞く)。CECH-ZD1 J の差し込み口もエージェントが直に読みます。USB のリーダーは
+- **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に問い合わせる)。CECH-ZD1 J の差し込み口もエージェントが直に読みます。USB のリーダーは
   usbfs を直接扱えないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に扱います
   (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます ([読めないとき](#カードが読めないとき))。動いている間はリーダーを
   排他で使うので、他のアプリはカードを使えません
 - **エンコードは Apple の VideoToolbox (H.264・H.265) を使えれば使い、使えなければソフトウェアで** (SVT-AV1・x264)。
   起動時の試しのエンコードで決めます ([encode.md](encode.md#mac-でエンコードする))。AV1 はソフトウェアだけです
-- pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、siano-ts から受ける溜めは Linux より浅い
-  (px4d から受ける溜めは pipe を使わないので、Linux と同じ 8MB)
+- pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、siano-ts から受けるバッファは Linux より浅い
+  (px4d から受けるバッファは pipe を使わないので、Linux と同じ 8MB)
 - エンコードの進み具合は、エンコードできたコマ数から出します。Linux のように ffmpeg の読み位置 (`/proc`) は読めないので、
   尺が測れなかった録画は割合が動きません (出来上がりは変わらない)
 - **Apple Silicon だけ** (Intel Mac 用の px4-userland / siano-userland が無い)
@@ -190,7 +190,7 @@ sudo defaults write /Library/Preferences/com.apple.security.smartcard useIFDCCID
 ほかのスマートカード (仕事の IC カードなど) の動きも変わりうるので、読めなかったときだけ切り替えてください。
 今どちらのドライバかは `denpa-agent --card` のリーダーの一覧のあと (「CCID ドライバ: …」の行) と、denpa の設定の「その他」→「バージョンと環境」の「CCID ドライバ」に出ます。
 
-**なぜ読めないか (推測)。** B-CAS カードは specific mode で、ATR の直後から TA1 の速さで話します。
+**なぜ読めないか (推測)。** B-CAS カードは specific mode で、ATR の直後から TA1 の速さで通信します。
 Gemalto PC Twin の系統のリーダー (IDBridge CT30 もこの系統) はそれを自分では読まず、ドライバが速さを
 設定する必要があります (Linux のエージェントはそうしている。`Ccid.cs`)。従来のドライバはこれをしますが、
 Apple のドライバはソースが公開されておらず、ここが違うのかは確かめられていません。Sequoia で
@@ -205,7 +205,7 @@ Apple のドライバには速さの設定 (`AllowAlternativeFiDi`。`man SmartC
 ### CECH-ZD1 J の差し込み口が読めないとき
 
 **CECH-ZD1 J の差し込み口は PC/SC も CCID ドライバも通りません。** エージェントが IOKit で CECH-ZD1 J を開き、
-中の USB ブリッジを通してカードと話します ([tuners.md](tuners.md#sony-cech-zd1-j))。上のドライバの切り替えは関係ありません。
+中の USB ブリッジを通してカードと通信します ([tuners.md](tuners.md#sony-cech-zd1-j))。上のドライバの切り替えは関係ありません。
 カードを読む前にチューナーと同じく CECH-ZD1 J を開くので、**映像も映らないなら、カードより先に開くところで止まっています。**
 Mac の実機ではまだ確かめていません。
 

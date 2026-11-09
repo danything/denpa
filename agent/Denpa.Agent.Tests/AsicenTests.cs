@@ -5,13 +5,13 @@ namespace Denpa.Agent.Tests;
 /*
  * asicen-userland の機材 (Asicen.cs)。
  *
- * 機材は無い。sysfs を真似た木から USB 機能を探すところ、筐体へのまとめ方、device の文字列、
- * IPC の違い (フレームのヘッダとソケットの置き場) を、偽の px4d (Px4TunerTests.FakePx4d を asicend のふりにしたもの) で確かめる。
- * 本物の asicend の模擬 (`--mock`) が手元にあれば (ASICEN_USERLAND_DIR)、それとも話す。
+ * 機材は無い。sysfs を模したディレクトリから USB 機能を探すところ、筐体へのまとめ方、device の文字列、
+ * IPC の違い (フレームのヘッダとソケットの置き場) を、偽の px4d (Px4TunerTests.FakePx4d を asicend の代わりにしたもの) で確かめる。
+ * 本物の asicend の模擬 (`--mock`) が手元にあれば (ASICEN_USERLAND_DIR)、それともやり取りする。
  */
 public class AsicenTests
 {
-    /// <summary>sysfs の USB デバイスを 1 つ真似る</summary>
+    /// <summary>sysfs の USB デバイスを 1 つ作る</summary>
     private static void Usb(DirectoryInfo root, string port, string vid, string pid, int bus, int address)
     {
         var dir = Directory.CreateDirectory(Path.Combine(root.FullName, port)).FullName;
@@ -154,7 +154,7 @@ public class AsicenTests
     }
 
     [Test]
-    public async Task ファームウェアが配布物に無ければ_流し込み済みの機材でも起こさない()
+    public async Task ファームウェアが配布物に無ければ_流し込み済みの機材でも起動しない()
     {
         var called = false;
         var error = Assert.Throws<IOException>(() => AsicenDaemon.Hardware("1-2", "/nonexistent/asicen-loader.bin", () =>
@@ -163,7 +163,7 @@ public class AsicenTests
             return [Ready];
         }));
         await Assert.That(error!.Message).Contains("ファームウェアがありません");
-        // 機材を並べにも行かない (ファームウェアを流し込みにも行かない)
+        // 機材を並べない (ファームウェアも流し込まない)
         await Assert.That(called).IsFalse();
     }
 
@@ -177,7 +177,7 @@ public class AsicenTests
     }
 }
 
-/// <summary>偽の asicend (px4d のふりを ASCN のヘッダと asicen-userland の置き場で) と話す</summary>
+/// <summary>偽の asicend (偽の px4d を ASCN のヘッダと asicen-userland の置き場にしたもの) とやり取りする</summary>
 [ExcludeOn(OS.Windows)]
 [Timeout(60_000)]
 public class AsicenTunerTests
@@ -229,18 +229,18 @@ public class AsicenTunerTests
 }
 
 /// <summary>
-/// 本物の asicend の模擬 (<c>asicend --mock</c>) と話す。**ASICEN_USERLAND_DIR に組んだものがあるときだけ**
+/// 本物の asicend の模擬 (<c>asicend --mock</c>) とやり取りする。**ASICEN_USERLAND_DIR に組んだものがあるときだけ**
 /// (CI の asicen-userland の組み立て、または手元のコンテナ)。模擬の TS は空パケットで、カードは UNSUPPORTED を返す
 /// </summary>
 [ExcludeOn(OS.Windows)]
 [Timeout(120_000)]
 public class AsicenMockTests
 {
-    /// <summary>組んだ asicen-userland の場所。**指してあるのに asicend が無ければ失敗にする** (CI で黙って飛ばさない)</summary>
+    /// <summary>組んだ asicen-userland の場所。**指してあるのに asicend が無ければ失敗にする** (CI で気づかないまま飛ばさない)</summary>
     private static string? Built => Environment.GetEnvironmentVariable("ASICEN_USERLAND_DIR");
 
     [Test]
-    public async Task 模擬の_asicend_を起こして_受信機を聞き_選局し直し_カードは断られる(CancellationToken cancel)
+    public async Task 模擬の_asicend_を起動して_受信機を問い合わせ_選局し直し_カードは断られる(CancellationToken cancel)
     {
         await Task.Yield();
         if (Built is not { } dir)
@@ -274,7 +274,7 @@ public class AsicenMockTests
             var cards = AsicenUserland.Cards(runtime.FullName);
             await Assert.That(cards.Count).IsEqualTo(1);
             await Assert.That(cards[0].Name).IsEqualTo("asicen-userland 1-2 Internal Card Reader");
-            // 模擬にはカードが無い。UNSUPPORTED で断られ、ほかのリーダーを探しに行ける (IOException)
+            // 模擬にはカードが無い。UNSUPPORTED で断られ、ほかのリーダーを探せる (IOException)
             await Assert.That(() =>
             {
                 using var link = cards[0].Open();

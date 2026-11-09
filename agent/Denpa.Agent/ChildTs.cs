@@ -8,7 +8,7 @@ namespace Denpa.Agent;
 /// <summary>
 /// 選局した TS を **pipe で受け取る**ときの共通部分。子プロセス (siano-ts) の標準出力を
 /// 読み出し側にするところ (<see cref="Stdout"/>) と、pipe の扱い (<see cref="WidenPipe"/> /
-/// <see cref="ReaderDrain"/>)。px4d・CECH-ZD1 J・DT295 から受けた TS の溜め
+/// <see cref="ReaderDrain"/>)。px4d・CECH-ZD1 J・DT295 から受けた TS のバッファ
 /// (Px4Stream・Zd1jStream・Dt295NativeStream。pipe ではなく Pipelines) も、閉じ方 (<see cref="ReaderDrain"/>) はここに揃える。
 ///
 /// <para>
@@ -24,7 +24,7 @@ internal static class ChildTs
     ///
     /// <para>
     /// 既定 (64KB) だと地上波の 18Mbit/秒 で **30ms** しか無い。読む側が GC で
-    /// 一瞬止まるだけで書き手が詰まり、siano-ts の中の溜めも埋まれば
+    /// 一瞬止まるだけで書き手が詰まり、siano-ts の中のバッファも埋まれば
     /// 溢れたぶんが捨てられる。DVB のリングバッファ (8MB = 3.5 秒) に揃える。
     /// 上限 (<c>/proc/sys/fs/pipe-max-size</c>、既定 1MB) を超えるには CAP_SYS_RESOURCE が要る。
     /// 無ければ 1MB で妥協する
@@ -45,7 +45,7 @@ internal static class ChildTs
 
     /// <summary>
     /// 読む側が抜けきるまで待つ上限。<see cref="DeviceStream"/> は 200ms ごとに
-    /// 起きて印を見るので、fd を閉じるのは読む側が戻ってから (閉じた番号を
+    /// 印を確かめるので、fd を閉じるのは読む側が戻ってから (閉じた番号を
     /// 次の pipe が使い回すと、抜けかけの読む側が新しい pipe を読んでしまう)。
     /// 待つのは読みかけがいるときだけ (<see cref="DeviceStream.WaitReaders"/>)。
     /// siano-ts の後始末 (SianoTuner.Drop) と、px4d・CECH-ZD1 J・DT295 の TS の後始末 (Px4Stream.Stop・Zd1jStream.Stop・Dt295NativeStream.Stop) で使う
@@ -73,7 +73,7 @@ internal static class ChildTs
     ///
     /// <para>
     /// **macOS では何もしない。** <c>F_SETPIPE_SZ</c> が無く、pipe の深さは OS 任せ
-    /// (書き手が詰まると 64KB まで自分で伸びる)。溜めは siano-ts の側にもあるので、
+    /// (書き手が詰まると 64KB まで自分で伸びる)。バッファは siano-ts の側にもあるので、
     /// 読む側が一瞬止まる程度なら持つ。ただし Linux の 8MB より浅いことは変わらない
     /// </para>
     /// </summary>

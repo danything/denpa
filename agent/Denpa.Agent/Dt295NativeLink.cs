@@ -18,7 +18,7 @@ public sealed class Dt295NativeWarmException(string message) : Dt295NativeExcept
 /// <item>読む: 制御 IN で wLength バイト。書く: 制御 OUT で wLength バイト (32 ビット単位)</item>
 /// <item>マスク付きの書き込み: wValue 下位 = 1 の制御 OUT。データ [0..3] = 値、[4..7] = マスクで、*アドレス = (*アドレス &amp; ~マスク) | (値 &amp; マスク)</item>
 /// <item>0x1000000 以上: 0x80000〜0x9FFFF を窓にして、boot0 のコードの中の LDI:32 の即値 (書く側 0xEA3D8、読む側 0xE9EBC。既定 0x00F00000) を
-///   書き換えて 128 KiB ずつ見る。使い終わったら既定に戻す</item>
+///   書き換えて 128 KiB ずつ読み書きする。使い終わったら既定に戻す</item>
 /// </list>
 ///
 /// 16 ビットのレジスタ (仕様書が「16 ビット」と書いたもの) は 4 の倍数のアドレスの 32 ビットのうち上半分か下半分にあるものとして、
@@ -359,7 +359,7 @@ public sealed class Dt295NativeLink
     }
 
     /// <summary>
-    /// 機材の中で I2C の転送を順に行わせる (Dt295NativePrograms の操作 2)。<paramref name="ops"/> は <see cref="Dt295I2cBatch.Encode"/> の形式。
+    /// 機材の中で I2C の転送を順に実行させる (Dt295NativePrograms の操作 2)。<paramref name="ops"/> は <see cref="Dt295I2cBatch.Encode"/> の形式。
     /// 短ければ (操作列 32 バイト・結果 16 バイトまで) 要求の中に入れて、制御転送は要求と応答の 2 回で済む。
     /// 長ければ操作列を SDRAM (0x380000) に書き、結果もそこから読む。機材のプログラムが触るのは I2C のブロック (0xFD8FE0〜0xFD8FF0) だけ
     /// </summary>
@@ -400,7 +400,7 @@ public sealed class Dt295NativeLink
 
     /// <summary>
     /// 機材の中の I2C の順次実行が使えるか。転送 0 個の要求が結果 0 で戻ることと、操作列の置き場 (SDRAM の 0x380000) に書いたものが読めることを確かめる。
-    /// 使えなければ false で、ホストが 1 つずつ行う。書くのは置き場だけ (I2C のレジスタには触れない)
+    /// 使えなければ false で、ホストが 1 つずつ実行する。書くのは置き場だけ (I2C のレジスタには触れない)
     /// </summary>
     public bool ProbeI2cSequencer()
     {
@@ -448,7 +448,7 @@ public sealed class Dt295NativeLink
     }
 
     /// <summary>
-    /// true なら、カードの送受信を機材のプログラムに行わせる (<see cref="CardSend"/>・<see cref="CardReceive"/>)。
+    /// true なら、カードの送受信を機材のプログラムに実行させる (<see cref="CardSend"/>・<see cref="CardReceive"/>)。
     /// 機材を開くとき、<see cref="ProbeCardProgram"/> で使えると確かめたら立てる。false なら、ホストがカードの UART を 1 バイトずつ読み書きする (<see cref="CardUart"/>)
     /// </summary>
     public bool CardProgram { get; set; }
