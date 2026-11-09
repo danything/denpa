@@ -2,7 +2,7 @@
  * SDTT (ソフトウェアダウンロードトリガーテーブル) から、**衛星のロゴがいま流れているか**だけを読む。
  *
  * 衛星のロゴは全受信機共通データとして、エンジニアリングサービス (929) のカルーセルで運ばれる
- * (`logo-dsmcc.ts`)。ARIB TR-B15 (第一部 BS デジタル放送ダウンロード運用規定 5.1.2.2・5.1.3.2・5.3.2) では、
+ * (`logo-dsmcc.ts`)。ARIB TR-B15 (第一部 第一編「BS デジタル放送 ダウンロード運用規定」5.1.2.2・5.1.3.2・5.3.2) では、
  * 共通データの SDTT は**予定 (開始時刻・長さ) を持たず、カルーセルを流している間だけ**送られる。
  * 予定を持つのは受信機のソフト更新の SDTT だけで、ロゴの時刻は前もって分からない。
  * なのでここで読むのは「いま共通データのダウンロードが出ているか」だけ (`server/logo-period.ts`)。
@@ -19,7 +19,7 @@ const DESC_DOWNLOAD_CONTENT = 0xc9;
 
 /**
  * 全受信機共通データの maker_id / model_id。maker_id は 0xFF、model_id は 0xFE が本番、0xFD が送る前の試験
- * (TR-B15 5.1.2.2・7.1.8)。
+ * (TR-B15 第一部 第一編 5.1.2.2・7.1.8)。
  * 試験のものはロゴの印にしない
  */
 const COMMON_MAKER_ID = 0xff;
@@ -27,7 +27,7 @@ const COMMON_MODEL_ID = 0xfe;
 
 /** 中身 1 つ。ロゴの判断に使うものだけ */
 interface SdttContent {
-  /** 予定の数。共通データは 0 (TR-B15 5.1.2.2) */
+  /** 予定の数。共通データは 0 (TR-B15 第一部 第一編 5.1.2.2) */
   schedules: number;
   /** download_content_descriptor の component_tag。運ぶ ES の目印 */
   componentTags: number[];

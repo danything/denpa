@@ -70,6 +70,33 @@ describe("文字の空白 (付属2 5.3.2)", () => {
     expect(texts).toEqual(["A ", "[span]", " C"]);
   });
 
+  /** 表 5-11 の最初の決まり「制御符号だけの文字列にはテキストノードを作らない」が、表 5-12 より先に効く */
+  test("span と span のあいだが空白 1 つだけなら、文字を作らない", () => {
+    const doc = load(
+      '<bml><body><p id="p"><span>NHK</span> <span>ニュース</span>\n<a href="x.bml">詳しく</a></p></body></bml>',
+    );
+    expect(doc.getElementById("p")!.children.map((c) => c.kind)).toEqual([
+      "element",
+      "element",
+      "element",
+    ]);
+  });
+
+  test("1 バイト文字をはさむ空白と改行の並びは 0x20 1 つに、2 バイト文字どうしなら消す", () => {
+    const doc = load(
+      '<bml><body><p id="a">abc\n    def</p><p id="b">12月\n  3日\t\t放送</p><p id="c">x<span>y</span>天気\n  予報\n</p></body></bml>',
+    );
+    const last = (id: string) => {
+      const children = doc.getElementById(id)!.children;
+      const node = children[children.length - 1];
+      return node?.kind === "text" ? node.data : null;
+    };
+    expect(last("a")).toBe("abc def");
+    expect(last("b")).toBe("12月 3日放送");
+    // span の後ろで p が終わるときも、終了タグの直前の並びは消す
+    expect(last("c")).toBe("天気予報");
+  });
+
   test("空の p・span・a も文字を 1 つ持つ (スクリプトが firstChild.data に書く先)", () => {
     const doc = load(
       '<bml><body><p id="empty"></p><p id="blank">\n   \n</p><p id="cdata"><![CDATA[]]></p><p id="self"/><p id="wrap"><span id="s"></span></p><a id="a" href="x.bml"></a><div id="d"></div></body></bml>',
