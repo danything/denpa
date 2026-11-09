@@ -193,8 +193,8 @@ export function readKept(raw: string | undefined): Kept {
 
 /**
  * **開いたときに先回りする形式** (`live.warm`)。選んだものがあればそれ、自動なら `autoCodec` を、
- * 端末が何でも受け取れるとみて決める (家の中なら MPEG-2、外なら AV1)。外れても画面は自分で決めた形式で
- * リクエストし直すだけで、温めたものは誰も来なければ畳まれる
+ * 端末が何でも受け取れるとみて決める (家の中なら MPEG-2、外なら AV1)。外れたら画面は自分で決めた形式で
+ * リクエストし、先回りしたものはそのリクエストがチューナーを使えた時点で畳む (`live.ts` の `dropWarm`)
  */
 export function warmFormat(choice: LiveChoice, indoor: boolean): LiveFormat {
   if (choice !== "auto") return choice;

@@ -142,7 +142,7 @@ export function load(event) {
   /*
    * 繋いでくる前にエンコードし始める (`live.warm`。WebSocket が繋がるまでの 160ms を ffmpeg の立ち上がりと重ねる)。
    * 形式は選択と開いた名前から決めたもの (自動なら家の中は放送のまま、外は AV1。`viewing.warmFormat`)。
-   * 画面が別の形式に決めても、温めたものは誰も来なければ 8 秒で畳む
+   * 画面が別の形式をリクエストしたら、そのリクエストがチューナーを使えた時点で畳む (`live.dropWarm`)。誰も来なければ 8 秒で畳む
    */
   if (start !== null)
     warm(

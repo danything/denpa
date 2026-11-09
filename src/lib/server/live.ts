@@ -1765,7 +1765,26 @@ class Session {
       this.pin,
     );
     this.locating = this.locate();
+    this.settle();
     return stream;
+  }
+
+  /** チューナーを使えたか、使えずに畳んだら呼ぶもの (`whenTuned`) */
+  private readonly tuning: (() => void)[] = [];
+  private settled = false;
+
+  /**
+   * チューナーを使えたら呼ぶ。使えずに畳んだときも呼ぶ。もうどちらかになっていればその場で。
+   * 先回りしたセッションを畳むのに使う (`dropWarm`)
+   */
+  whenTuned(fn: () => void): void {
+    if (this.settled || this.stopped) fn();
+    else this.tuning.push(fn);
+  }
+
+  private settle(): void {
+    this.settled = true;
+    for (const fn of this.tuning.splice(0)) fn();
   }
 
   /** 自分の利用者がいるチューナーを覚える。訊けなければ覚えないまま (取り上げられても録画を名指しできないだけ) */
@@ -2372,6 +2391,7 @@ class Session {
     // 選び直しで同じ目印の新しいものが載っていたら、そちらは消さない
     if (sessions.get(this.id) === this) sessions.delete(this.id);
     for (const fn of this.stopping.splice(0)) fn();
+    this.settle();
   }
 
   /**
@@ -3104,6 +3124,32 @@ export function sessionStream(
  */
 const WARM_WAIT = 8_000;
 
+/** 先回りして始めたセッション (`warm`)。畳んだら外す。誰も来ていないかは `Session.empty` で見る */
+const warmed = new Set<Session>();
+
+/**
+ * **画面が先回りと違う形式をリクエストしたら、先回りしたセッションを畳む。**
+ *
+ * 先回りの形式はサーバの推定 (`viewing.warmFormat`) で、画面が決めた形式と食い違うことがある (MPEG-2 をデコードできない
+ * 端末の自動は H.264)。誰も来ないセッションも、畳むまでの 8 秒 (`WARM_WAIT`) はチューナーを使ったままで、その間に別の局を
+ * 選ぶと、空いているチューナーがほかに無ければ入れなかった。
+ *
+ * 畳むのは、リクエストされたセッションがチューナーを使えてから (使えずに畳んだときも)。先回りしたものと同じチャンネルなので
+ * 選局を共有でき、先に畳むとチューナーが選局し直しになる。間に別の局を選べば、リクエストされたセッションが畳まれた時点で畳む
+ *
+ * @param by 画面がリクエストしたセッション。先回りしたものに入ったのなら、それは誰かが観ているので畳まない
+ */
+function dropWarm(serviceId: number, by: Session): void {
+  const idle = [...warmed].filter(
+    (session) =>
+      session !== by && session.serviceId === serviceId && session.empty,
+  );
+  if (idle.length === 0) return;
+  by.whenTuned(() => {
+    for (const session of idle) if (session.empty) session.stop();
+  });
+}
+
 /**
  * **画面が繋いでくる前にエンコードし始める。**
  *
@@ -3162,6 +3208,8 @@ export function warm(
   )
     return;
   const session = begin(channelType, channel, serviceId, now, codec, 0, raw);
+  warmed.add(session);
+  session.whenStopped(() => warmed.delete(session));
 
   /*
    * **誰も来なければ自分で畳む。** 見ている人がいなくなったら畳む仕掛け
@@ -3515,6 +3563,7 @@ export function attend(connection: Connection): void {
       rung,
       release,
     );
+    dropWarm(serviceId, current);
   };
 
   /*
