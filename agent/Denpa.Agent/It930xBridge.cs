@@ -31,7 +31,7 @@ public sealed record It930xPsb(byte Da98, byte Da99)
 ///
 /// <para>
 /// ITE の SDK (<c>api/IT9300.c</c>・<c>api/brCmd.c</c>) を元に書いた。コメントの関数名は SDK のもの。
-/// TS の経路 (入力 0〜4 と EP 0x84) の設定もここに持つ。復調器とチューナーの層 (I2C の中継) はまだ無い (#1578 の続きの段階で足す)
+/// TS の経路 (入力 0〜4 と EP 0x84) の設定、次の段の I2C (復調器とチューナー) の読み書き、GPIO もここに持つ
 /// </para>
 /// </summary>
 public sealed class It930xBridge
@@ -135,6 +135,36 @@ public sealed class It930xBridge
     public const uint TsEnable = 0xDA4C;
     /// <summary><c>p_br_reg_ts_fail_ignore</c> (入力ごとに 1 ビット)</summary>
     public const uint TsFailIgnore = 0xDA5A;
+
+    /// <summary><c>p_br_reg_lnk2ofdm_data_63_56</c>。I2C のバス 2 の速さ (仕様書 1.3 は <c>0xF103</c> と一緒に 0x07 を書く)</summary>
+    public const uint Lnk2OfdmData = 0xF6A7;
+
+    // 端子の駆動の強さ (brRegister.h の p_br_reg_top_padmiscdrsr・padmiscdr2・padmiscdr4・padmiscdr8)
+    public const uint PadDriveSr = 0xD833;
+    public const uint PadDrive2 = 0xD830;
+    public const uint PadDrive4 = 0xD831;
+    public const uint PadDrive8 = 0xD832;
+
+    /// <summary>
+    /// ファームウェアに次の段の I2C の相手を教える欄 (brVariable.h の <c>next_level_*_i2c_address</c>・<c>OVA_NEXT_LEVEL_FIFTH_I2C_ADDR</c>)。
+    /// 欄 i に受信機 i の復調器の 8 ビットのアドレスを書く (仕様書 1.3)
+    /// </summary>
+    public static readonly IReadOnlyList<uint> NextLevelAddress = [0x4975, 0x4974, 0x4973, 0x4972, 0x4964];
+
+    /// <summary>同じ欄のバス (<c>next_level_*_i2c_bus</c>・<c>OVA_NEXT_LEVEL_FIFTH_I2C_BUS</c>)</summary>
+    public static readonly IReadOnlyList<uint> NextLevelBus = [0x4971, 0x4970, 0x496F, 0x496E, 0x4963];
+
+    /// <summary><c>OVA_EEPROM_CFG_VALID</c>。0 なら EEPROM の設定を読めていない (仕様書 1.3 は記録に出すだけで続ける)</summary>
+    public const uint EepromValid = 0x4979;
+
+    /// <summary>
+    /// GENERIC_WRITE で 1 回に書けるバイト数。63 バイトのフレームから、長さ・コマンド・シーケンス番号・チェックサムの 6 バイトと、
+    /// 長さ・バス・アドレスの 3 バイトを引いた残り
+    /// </summary>
+    public const int MaxI2cWrite = It930xFrame.Max - It930xFrame.Overhead - 3;
+
+    /// <summary>GENERIC_READ で 1 回に読めるバイト数 (応答が 63 バイトに収まる長さ)</summary>
+    public const int MaxI2cRead = It930xFrame.Max - It930xFrame.ReplyOverhead;
 
     private readonly IUsbDevice _usb;
     private readonly Action<int> _sleep;
@@ -282,7 +312,7 @@ public sealed class It930xBridge
     /// 順は SDK と同じで、<c>IT9300_initialize</c> の TS の部分 (同期バイトを無視しない → <c>IT9300_setOutTsType</c> →
     /// <c>IT9300_configOutput</c> → 残っている TS を捨てる)、<c>DRV_IT930x_Initialize</c> の入力ごとの設定 (<c>IT9300_setInTsType</c>・
     /// <c>IT9300_setSyncByteMode</c>)、<c>IT9300_setIgnoreFail</c>。
-    /// <c>IT9300_initialize</c> のうち端子の駆動の強さ・次の段の I2C の相手・GPIO は、復調器の層と一緒に足す (PLEX の基板での値を確かめていない)
+    /// <c>IT9300_initialize</c> のうち端子の駆動の強さと次の段の I2C の相手は <see cref="ConfigureReceivers"/>、GPIO は <see cref="GpioSetup"/>
     /// </para>
     /// </summary>
     /// <param name="parallel">入力 0〜4 がパラレルか (<c>IT9300_setInTsType</c>。設定するのは入力 0・1 だけ)。SDK の既定はどれもシリアル</param>
@@ -329,6 +359,79 @@ public sealed class It930xBridge
         WriteRegister(TsFailIgnore, 0x1F);
         return (before, after);
     }
+
+    /// <summary>
+    /// 次の段の I2C の設定 (<c>IT9300_initialize</c> の後半。仕様書 1.3)。I2C の速さ、端子の駆動の強さ、受信機ごとの I2C の相手。
+    /// 終わりに <c>OVA_EEPROM_CFG_VALID</c> を読んで返す
+    /// </summary>
+    /// <param name="receivers">受信機ごとの I2C のバスと復調器の T のアドレス (7 ビット)。ブリッジの欄は受信機の番号で並ぶ (仕様書 1.3)</param>
+    public byte ConfigureReceivers(IReadOnlyList<It930xReceiver> receivers)
+    {
+        if (receivers.Any(receiver => receiver.Index < 0 || receiver.Index >= NextLevelAddress.Count))
+        {
+            throw new ArgumentException($"受信機の番号は 0〜{NextLevelAddress.Count - 1} です", nameof(receivers));
+        }
+        // I2C の速さ (仕様書 1.3。IT9300_initialize と _IT9300_loadFirmware の値と同じ)
+        WriteRegister(Lnk2OfdmData, I2cSpeed);
+        WriteRegister(OneCycleCounterTuner, I2cSpeed);
+        // 端子の駆動の強さ (IT9300_initialize がどの基板でも書く値。仕様書に無い)
+        WriteRegister(PadDriveSr, 1);
+        WriteRegister(PadDrive2, 0);
+        WriteRegister(PadDrive4, 1);
+        WriteRegister(PadDrive8, 0);
+        foreach (var receiver in receivers.OrderBy(receiver => receiver.Index))
+        {
+            WriteRegister(NextLevelAddress[receiver.Index], (byte)(receiver.DemodAddress << 1));
+            WriteRegister(NextLevelBus[receiver.Index], receiver.I2cBus);
+        }
+        return ReadRegister(EepromValid);
+    }
+
+    /// <summary>
+    /// 次の段の I2C に書く (<c>IT9300_writeGenericRegisters</c>)。<paramref name="address"/> は 7 ビットで、ブリッジには 1 ビット左にずらして渡す (仕様書 1.3)。
+    /// 1 回の I2C の書き込みで、<see cref="MaxI2cWrite"/> バイトまで
+    /// </summary>
+    public void I2cWrite(byte bus, byte address, ReadOnlySpan<byte> data)
+    {
+        if (data.Length is 0 or > MaxI2cWrite) throw new ArgumentOutOfRangeException(nameof(data), $"I2C の書き込みは 1〜{MaxI2cWrite} バイトです ({data.Length})");
+        var payload = new byte[3 + data.Length];
+        payload[0] = (byte)data.Length;
+        payload[1] = bus;
+        payload[2] = (byte)(address << 1);
+        data.CopyTo(payload.AsSpan(3));
+        Command(It930xFrame.GenericWrite, payload, 0);
+    }
+
+    /// <summary>次の段の I2C から読む (<c>IT9300_readGenericRegisters</c>)。<see cref="MaxI2cRead"/> バイトまで</summary>
+    public byte[] I2cRead(byte bus, byte address, int length)
+    {
+        if (length is <= 0 or > MaxI2cRead) throw new ArgumentOutOfRangeException(nameof(length), $"I2C の読み出しは 1〜{MaxI2cRead} バイトです ({length})");
+        return Command(It930xFrame.GenericRead, [(byte)length, bus, (byte)(address << 1)], length);
+    }
+
+    /// <summary>
+    /// GPIOH の値のレジスタ (<c>p_br_reg_top_gpiohN_o</c>)。出力にする (<c>_en</c>) は + 1、機能を有効にする (<c>_on</c>) は + 2 (brRegister.h。仕様書 1.5 の番地と同じ)。
+    /// いま使う 3 つだけ
+    /// </summary>
+    public static uint GpioOutput(int pin) => pin switch
+    {
+        2 => 0xD8B7,
+        7 => 0xD8C3,
+        11 => 0xD8D3,
+        _ => throw new ArgumentOutOfRangeException(nameof(pin), $"GPIOH{pin} は扱っていません"),
+    };
+
+    /// <summary>GPIOH を出力にして有効にし、値を書く (仕様書 1.5 の「出力・有効にして」。SDK の IT9300_initialize と同じ順)</summary>
+    public void GpioSetup(int pin, bool value)
+    {
+        var output = GpioOutput(pin);
+        WriteRegister(output + 1, 1);
+        WriteRegister(output + 2, 1);
+        WriteRegister(output, (byte)(value ? 1 : 0));
+    }
+
+    /// <summary>出力にしてある GPIOH の値を書く</summary>
+    public void Gpio(int pin, bool value) => WriteRegister(GpioOutput(pin), (byte)(value ? 1 : 0));
 
     /// <summary>入力 <paramref name="port"/> (0〜4) を開ける・閉じる (<c>IT9300_enableTsPort</c>・<c>IT9300_disableTsPort</c>)</summary>
     public void EnableTsInput(int port, bool on)

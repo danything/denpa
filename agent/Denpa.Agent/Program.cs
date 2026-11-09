@@ -141,6 +141,8 @@ var events = new Events();
 // カードが契約の更新 (EMM) を受け入れたら、denpa に契約を確かめ直させる (Emm.cs)
 CardNotice.Shared = new CardNotice(() => events.Emit("card"));
 var (tuners, detected) = config.ResolveTuners();
+// 設定の it930x: のポートの機材はエージェントが持ち、px4d は挙げない・起動しない (It930x.Claim)
+It930x.Claim(tuners);
 
 /*
  * 鍵を配る・受け取るのは LAN の中だけ (CardLan.cs)。読めない値なら、範囲を勝手に
@@ -189,7 +191,8 @@ void PrepareDaemons()
     {
         if (daemonsStopped) return;
         bool CardInUse(string name) => Keys.Local.Name == name;
-        UserlandDaemon.Prepare<Px4Daemon>([.. Px4Userland.IdsIn(pool.Tuners)], Px4Daemon.For, CardInUse);
+        // 設定の it930x: でエージェントが持つポートの筐体は外す (動いていれば止めて USB を手放す。Px4Daemon.Yielding)
+        UserlandDaemon.Prepare<Px4Daemon>(Px4Daemon.Yielding(Px4Userland.IdsIn(pool.Tuners)), Px4Daemon.For, CardInUse);
         // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
         UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For, CardInUse);
     }
@@ -211,6 +214,7 @@ void ApplyTuners(List<TunerSpec> next)
 {
     config.SaveTuners(next);
     var (resolved, auto) = config.ResolveTuners();
+    It930x.Claim(resolved);
     pool.Detected = auto;
     pool.Replace(resolved);
 }
@@ -227,6 +231,7 @@ void Rescan()
         {
             if (found.Select(tuner => tuner.Device).SequenceEqual(pool.Tuners.Select(tuner => tuner.Device))) return;
             Log.Write($"挿さっている機材が変わりました ({found.Count} 台)");
+            It930x.Claim(found);
             pool.Replace(found);
         }
         else
@@ -725,6 +730,8 @@ app.Lifetime.ApplicationStopped.Register(() =>
     Zd1jBoard.CloseAll();
     // PIX-DT295 は書いた設定を戻してから閉じる (カードのために開いていても)
     Dt295NativeDevice.CloseAll();
+    // IT930x の機材は受信機をスリープにし、電源を切ってから閉じる
+    It930xDevice.CloseAll();
     // 利用者を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
     lock (daemonsGate) daemonsStopped = true;
     UserlandDaemon.StopAll();

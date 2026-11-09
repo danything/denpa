@@ -243,7 +243,7 @@ public static class It930xProbe
     }
 
     /// <summary>機材が戻るのを、100 ms ごとに最大 5 秒待って開く (REBOOT で USB がつなぎ直されたとき)</summary>
-    private static IUsbDevice Reopen(Func<IUsbDevice> open, Action<int> sleep)
+    internal static IUsbDevice Reopen(Func<IUsbDevice> open, Action<int> sleep)
     {
         for (var i = 0; ; i++)
         {
