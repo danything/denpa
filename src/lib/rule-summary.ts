@@ -4,11 +4,6 @@ import { type Slot, slotSummary } from "./rule-time";
 import { parseSearchFields, SEARCH_FIELD_LABEL } from "./search";
 import { dayName } from "./timeline";
 
-/**
- * **ルールの条件を 1 行で** (ルールの一覧の「条件」の列)。
- * 探す所、局、ジャンル、時間帯と曜日、同じ回は 1 度、前の回は録らない、除外の順 (どれも中を「・」で並べるので、あいだは「、」)。キーワードは名前の列に出ているので書かない
- */
-
 interface Summarized extends Slot {
   search_fields: string;
   service_ids: number[] | null;
@@ -19,7 +14,12 @@ interface Summarized extends Slot {
   ignore_keyword: string;
 }
 
-/** 局の名前を引く。無ければ ID のまま */
+/**
+ * **ルールの条件を 1 行で** (ルールの一覧の件の 2 段目の先頭)。
+ * 探す所、局、ジャンル、時間帯と曜日、同じ回は 1 度、前の回は録らない、除外の順 (どれも中を「・」で並べるので、あいだは「、」)。
+ * キーワードは書かない (名前はふつうキーワードから作り、1 段目に出ている)。
+ * 局の名前は `serviceName` で引き、無ければ ID のまま
+ */
 export function conditionSummary(
   rule: Summarized,
   serviceName: (id: number) => string | undefined,
@@ -54,7 +54,7 @@ export function conditionSummary(
 }
 
 /**
- * 次の放送の日時。今日と明日は言葉で、それより先は月/日 (ルールの一覧の「次の放送」)。
+ * 次の放送の日時。今日と明日は言葉で、それより先は月/日 (ルールの一覧の件の 2 段目の「次」)。
  * 日付の切れ目は端末の時計 (画面で使う)
  */
 export function upcomingLabel(at: number, now: number): string {

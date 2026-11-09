@@ -46,7 +46,7 @@ export function calendarDay(item: CalendarItem, today: number): number {
   return item.zone === "past" ? day : Math.max(day, today);
 }
 
-/** 日ごとの行の数。鍵はその日の 0 時 */
+/** 日ごとの行の数。キーはその日の 0 時 */
 export function markDays(
   items: CalendarItem[],
   today: number,
@@ -110,7 +110,7 @@ export function stepMonth(
   return months.find((month) => month > current) ?? null;
 }
 
-/** 矢印の鍵で動かした先の日 (←→ は 1 日、↑↓ は 1 週)。ほかの鍵なら null */
+/** 矢印キーで動かした先の日 (←→ は 1 日、↑↓ は 1 週)。ほかのキーなら null */
 export function moveDay(day: number, key: string): number | null {
   const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[key];
   if (step === undefined) return null;

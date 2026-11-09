@@ -31,7 +31,7 @@ describe("シークバーの溝の区切り", () => {
     ]);
   });
 
-  test("幅の無いバーは1本、外れた区間・切れ目は捨てる", () => {
+  test("幅の無いバーは 1 本、外れた区間・切れ目は捨てる", () => {
     const whole = [{ from: 0, to: 1, cm: false }];
     expect(trackParts([{ start: 0, end: 10 }], [5], 0, 0)).toEqual(whole);
     expect(trackParts([{ start: 200, end: 210 }], [0, 100], 0, 100)).toEqual(

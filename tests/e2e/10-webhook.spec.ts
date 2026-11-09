@@ -89,7 +89,7 @@ test.describe("通知", () => {
     await expect(row).not.toContainText("すべて");
   });
 
-  test("URLが不正なら断る", async ({ page }) => {
+  test("URL が不正なら断る", async ({ page }) => {
     await goto(page, "/settings/integrations");
     await page.getByTestId("webhook-url").fill("not-a-url");
     await page.getByTestId("webhook-add").click();

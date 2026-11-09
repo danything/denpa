@@ -525,7 +525,7 @@
           <StageNote>録画済みのところまで観ました</StageNote>
         {/if}
         {#if player.warning}
-          <!-- リクエストどおりにできなかった断り書き (GPU でエンコードできずにソフトウェアへ降りた、など) -->
+          <!-- 指定したとおりにできなかったときの断り書き (ライブと同じ。GPU でエンコードできずソフトウェアに切り替えた、など) -->
           <StageNote>{player.warning}</StageNote>
         {/if}
         <VolumeNote {volume} testid="chase-volume-note" />
@@ -569,7 +569,7 @@
     display: inline-flex;
     align-items: baseline;
     gap: 0.375rem;
-    margin-inline-start: 0.625rem;
+    margin-inline-start: var(--dp-space-3);
   }
   /* 録画中の点 (`app.css` の `.rec-dot`。ゆっくり脈打つ) を字の真ん中に */
   .rec .rec-dot {

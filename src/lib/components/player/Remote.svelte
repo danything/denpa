@@ -21,7 +21,7 @@
 
   /*
    * `AribKeyCode` (`src/lib/bml/engine.ts` の `KEY`) と同じ値。番号で書くのは、値として import すると
-   * データ放送を出す前からエンジン全体が落ちてくるため
+   * データ放送を出す前からエンジン全体を読み込むため
    */
   /** d (DataButton)。`DataBroadcast` の DATA_BUTTON と同じ */
   const DATA = 20;

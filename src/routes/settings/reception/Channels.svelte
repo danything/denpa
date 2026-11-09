@@ -191,7 +191,7 @@
                 **入れ子になった 3 つの数を、その順に並べる。** チャンネル (T19, BS15:16625) の中に
                 局 (TOKYO MX1, MX2) があり、局ごとに番組表がある。「50 / 59 ・ 124 局」とだけ
                 出していた頃は、59 と 124 が同じものの数に見えた。局はスキャンで、番組表は
-                そのあと denpa が集めるもので、埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
+                そのあと denpa が取得するもので、埋まる時期がずれる (局はあるのに番組表が空、が普通にある)
             -->
       <div class="small" data-testid="channel-coverage">
         <span class="muted">チャンネル</span>
@@ -374,7 +374,7 @@
           <p>
             「ロゴをいますぐ集める」では衛星の分も集めます。<strong
               >BS と CS のロゴは同じ 1 つの中継で流れる</strong
-            >ため、そこだけ最大 20 分かかります (他の中継は数秒で終わります)。
+            >ため、そこだけ最大 20 分かかります (ほかの中継は数秒で終わります)。
           </p>
           <p>
             <strong>CM ロゴ</strong>は、CM
@@ -388,10 +388,9 @@
     {#if coverage.length === 0}
       <!-- まだ 1 つも無い。表の場所の真ん中に、スキャンの欄と 1 行の案内 -->
       <div class="empty-state glow">
-        <p class="small muted">
-          チャンネルがまだありません。種別を選んでスキャンしてください
-        </p>
-        {@render scanControl()}
+        <p class="bold">チャンネルがまだありません</p>
+        <p class="small muted">種別を選んでスキャンしてください</p>
+        <div class="actions">{@render scanControl()}</div>
       </div>
     {:else}
       <div class="table-wrap channels-wrap">
@@ -431,11 +430,11 @@
                       data-reception={channel.reception}
                     >
                       {channel.channel}
-                      <!-- 受信できるかは番組表集めのついでに確かめる (reception.ts)。受信できるものには何も付けない -->
+                      <!-- 受信できるかは番組表の取得のついでに確かめる (reception.ts)。受信できるものには何も付けない -->
                       {#if channel.reception === "unreceivable"}
                         <span class="reception tiny muted">受信できません</span>
                       {:else if channel.reception === "checking"}
-                        <span class="reception tiny faint">確認中</span>
+                        <span class="reception tiny muted">確認中</span>
                       {/if}
                       <!-- 空いているチューナーで 5 秒ほど受信する。結果はこのチャンネルの行の下 -->
                       <ActionButton

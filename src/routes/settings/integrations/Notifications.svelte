@@ -76,9 +76,8 @@
         {#each data.webhooks as webhook (webhook.id)}
           <div class="webhook item" data-testid="webhook-row">
             <div class="url-line">
-              <span class="tag {webhook.enabled ? 'success' : ''}">
-                {webhook.enabled ? "有効" : "無効"}
-              </span>
+              <!-- 状態のバッジは止めているときだけ (オンは塗らない。docs/design.md の「印の意味」。ルールの一覧と同じ) -->
+              {#if !webhook.enabled}<span class="tag">無効</span>{/if}
               <span class="truncate mono">{webhook.url}</span>
             </div>
             <div class="small">

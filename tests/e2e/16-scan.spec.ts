@@ -108,7 +108,7 @@ test.describe("設定のチューナーとチャンネル", () => {
     );
   });
 
-  test("種別を1つも選ばなければ断る", async ({ request }) => {
+  test("種別を 1 つも選ばなければ断る", async ({ request }) => {
     // 画面の選ぶ欄は必ずどれかが入っている。画面の外から空で来たものは断る
     const res = await request.post("/settings/reception?/scan", {
       form: {},
@@ -413,7 +413,7 @@ test.describe("チューナーの設定", () => {
     await expect(rows.nth(3).getByTestId("tuner-use")).toBeChecked();
   });
 
-  test("種別を1つも選ばない行は断る", async ({ page }) => {
+  test("種別を 1 つも選ばない行は断る", async ({ page }) => {
     await goto(page, "/settings/reception");
 
     const card = page.getByTestId("tuner-section");
