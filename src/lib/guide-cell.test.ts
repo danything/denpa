@@ -156,3 +156,29 @@ describe("placeRows", () => {
     expect(range(rows, "b")).toEqual([13, 14]);
   });
 });
+
+test("表の末尾から始まる切れ端は、最後の行に引き戻さず表の外に置く", () => {
+  const rows = placeRows(
+    [
+      {
+        key: "a",
+        column: 0,
+        span: 1,
+        start_at: at(17, 0),
+        end_at: at(18 + 24),
+      },
+      {
+        key: "b",
+        column: 0,
+        span: 2,
+        start_at: at(18 + 24),
+        end_at: at(18 + 25),
+      },
+    ],
+    START,
+    SLOTS,
+    SLOT,
+  );
+  expect(rows.get("a")!.to).toBe(SLOTS);
+  expect(rows.get("b")!.from).toBeGreaterThanOrEqual(SLOTS);
+});

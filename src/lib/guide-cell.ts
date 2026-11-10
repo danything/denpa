@@ -32,11 +32,9 @@ export function cellRows(
   slot: number,
   top = 0,
 ): CellRows {
-  // 表の末尾より下には置かない (前のマスに押されても、最後の 1 マスに収める)
-  const from = Math.min(
-    slots - 1,
-    Math.max(0, top, Math.round((startAt - tableStart) / slot)),
-  );
+  // 表の末尾から始まるマス (末尾で切れた番組の切れ端) は、表の外に置いて見せない。
+  // 最後の 1 行に引き戻すと、そこにある前のマスの上に重なる
+  const from = Math.max(0, top, Math.round((startAt - tableStart) / slot));
   const to = Math.max(
     from + 1,
     Math.min(slots, Math.round((endAt - tableStart) / slot)),
