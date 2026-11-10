@@ -226,6 +226,11 @@ export function convertRule(
   if (rule.aimai) notes.push("あいまい検索は普通の検索として取り込みました");
   if (caseSensitive)
     notes.push("大文字と小文字の区別は普通の検索として取り込みました");
+  // denpa のルールに無料放送だけの条件は無い (EPGStation の `isFree` と同じ扱い。`migrate.ts`)
+  if (rule.freeCA === 1)
+    notes.push(
+      "無料放送だけの条件は外して取り込みました (有料放送にも当たります)",
+    );
   const recording = rule.recMode >= 0 && rule.recMode <= 3;
   if (!disabled && !recording)
     notes.push("録画しないルールなので無効にして取り込みました");
@@ -298,7 +303,7 @@ export function importEdcbRules(
     for (const note of notes) record(`  ${note}: ${ruleLabel(rule)}`);
     tally.imported++;
     // 優先度 (EDCB の 1〜5) と録画の設定は写さない (`insertRule`)
-    if (options.apply) insertRule({ ...values, service_types: null }, source);
+    if (options.apply) insertRule(values, source);
   }
 }
 

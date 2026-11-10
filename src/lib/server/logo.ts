@@ -185,9 +185,9 @@ function skipRelay(channel: string): boolean {
 /** 「この中継にロゴは載っていない」/「載っていた」を書き留める */
 function markRelay(channel: string, hasLogo: boolean): void {
   const known = notes();
-  // 何も変わらないなら書きに行かない
+  // 何も変わらないなら書きに行かない。外れの控えが古くなっていたら、時刻を書き直す (書き直さないと毎回開き直す)
   if (
-    hasLogo === (known.noCarousel[channel] === undefined) &&
+    hasLogo === !fresh(known.noCarousel[channel], RELAY_RETRY) &&
     hasLogo === (known.carriers[channel] !== undefined)
   )
     return;

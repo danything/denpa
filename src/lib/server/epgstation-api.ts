@@ -491,6 +491,8 @@ export async function downloadVideo(
       });
       if (res.status === 404) {
         await res.body?.cancel();
+        // 続きから取っていたファイルが消えた。数えたぶんを戻す (書きかけは呼ぶ側が消す)
+        onBytes(-have);
         return "missing";
       }
       if (res.status === 416) {
