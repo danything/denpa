@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { afterNavigate, goto } from "$app/navigation";
+  import { afterNavigate, beforeNavigate, goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { untrack } from "svelte";
@@ -187,6 +187,8 @@
     if (live) sent = typed.trim();
   }
 
+  // 画面を移り始めたら、待っている問い合わせと結果の出し直しを止める (打ってすぐほかの画面へ移ると、遅れて検索の画面へ戻していた)
+  beforeNavigate(cancel);
   // 画面を移ったら閉じる (候補から選んだあと・ブラウザの戻る)
   afterNavigate(() => close());
 </script>

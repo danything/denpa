@@ -107,25 +107,29 @@
     return true;
   }
 
+  /**
+   * 続きを取得している間は重ねて取得しない。**取得している間に読み直したら、古い世代は `loading` を戻さない**。
+   * 戻すと、読み直したあとの `refill` と下端の `loadMore` が同じページを 2 回足す
+   */
   let loading = false;
-  async function loadMore(): Promise<void> {
-    if (loading) return;
+  async function guarded(run: () => Promise<unknown>): Promise<void> {
+    const mine = generation;
     loading = true;
     try {
-      await fetchMore();
+      await run();
     } finally {
-      loading = false;
+      if (mine === generation) loading = false;
     }
+  }
+  async function loadMore(): Promise<void> {
+    if (!loading) await guarded(fetchMore);
   }
 
   /** 読み直したあと、読み進めていたぶん (`count` 枚) まで続きを取り直す */
-  async function refill(count: number): Promise<void> {
-    loading = true;
-    try {
+  function refill(count: number): Promise<void> {
+    return guarded(async () => {
       while (more.length < count && (await fetchMore()));
-    } finally {
-      loading = false;
-    }
+    });
   }
 
   /** 撮った日ごとに分ける (新しい順のまま) */
