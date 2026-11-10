@@ -10,7 +10,7 @@
  * 地上波は Mirakurun の走査に合わせてある。
  *
  * - 地上波は 13〜62ch を総当たり (パススルーも選ぶと C13〜C63 も)
- * - ケーブルテレビ (CATV。ISDB-C) は QC13〜QC63・QU13〜QU62・QV1〜QV12 を総当たり。TSMF で束ねた搬送波は、
+ * - ケーブル (CATV。ISDB-C) は QC13〜QC63・QU13〜QU62・QV1〜QV12 を総当たり。TSMF で束ねた搬送波は、
  *   束ねた TS をそれぞれ選局する (`QC30:1`…。`tsmfJobs`)。局ごとの CA_system_id も数え、復号できるかを決める (`ca-observe.ts`)
  * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。番組表は取得しない (`services.decodable`)。
  *   代わりに、カード無しで分かること (CA_system_id・番組表とロゴが来ているか) を数えて記録と受信の設定に出す (`ca-observe.ts`)
@@ -67,7 +67,7 @@ const UHF_RANGE = { min: 13, max: 62 };
 /**
  * スキャンの種類。**`PASSTHROUGH` は地上波の局として、UHF に加えてケーブルテレビの周波数変換パススルー (C13〜C63) も回す。**
  * ケーブルテレビは地デジをそのまま CATV のチャンネルの周波数に移して送ることがあり、局によって移すものと移さないものが混ざるので両方回す。
- * `CATV` はケーブルテレビ (ISDB-C) の局で、種別も `CATV` になる (`catvChannels`)
+ * `CATV` はケーブル (ISDB-C) の局で、種別も `CATV` になる (`catvChannels`)
  */
 export const SCAN_KINDS = [
   "GR",
@@ -81,7 +81,7 @@ export type ScanKind = (typeof SCAN_KINDS)[number];
 const PASSTHROUGH_RANGE = { min: 13, max: 63 };
 
 /**
- * ケーブルテレビ (ISDB-C) のチャンネル。エージェントの選局表の `QC13`〜`QC63` (C13〜C63 の周波数)・`QU13`〜`QU62` (UHF)・
+ * ケーブル (ISDB-C) のチャンネル。エージェントの選局表の `QC13`〜`QC63` (C13〜C63 の周波数)・`QU13`〜`QU62` (UHF)・
  * `QV1`〜`QV12` (VHF) (docs/agent.md「選局表」)。**総当たりにする。** 地上波と同じく、局ごとに使うチャンネルが違う
  */
 const CATV_BANDS = [
@@ -200,7 +200,7 @@ export async function readServices(
    * 局が揃っても、SKY は番組表の具合が、CATV は局ごとの CA_system_id (PMT) が分かるまで、`OBSERVE_WAIT` までは読み続ける
    */
   observer?: CaObserver,
-  /** ケーブルテレビ (ISDB-C) の TS か。SDT だけで揃ったとみなす (`ServiceReader` の `requireNit`) */
+  /** ケーブル (ISDB-C) の TS か。SDT だけで揃ったとみなす (`ServiceReader` の `requireNit`) */
   cable = false,
 ): Promise<ScanResult> {
   const reader = new ServiceReader({ requireNit: !cable });

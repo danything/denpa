@@ -144,7 +144,7 @@ public class ChannelStoreTests
     }
 
     [Test]
-    public async Task ケーブルテレビは_CS_のあと_スカパー_プレミアムの前に並べる()
+    public async Task ケーブルは_CS_のあと_スカパー_プレミアムの前に並べる()
     {
         var config = Fresh();
         var merged = config.SaveChannels(

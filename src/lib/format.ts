@@ -13,7 +13,7 @@ export const SERVICE_TYPE_LABEL: Record<string, string> = {
   GR: "地上波",
   BS: "BS",
   CS: "CS",
-  CATV: "ケーブルテレビ",
+  CATV: "ケーブル",
   SKY: "スカパー！プレミアム",
 };
 

@@ -1026,7 +1026,7 @@ describe("SERVICE_ORDER", () => {
     ]);
   });
 
-  test("地上波 → BS → CS → ケーブルテレビ → スカパー！プレミアムの順。テレビの切り替えもこの順", () => {
+  test("地上波 → BS → CS → ケーブル → スカパー！プレミアムの順。テレビの切り替えもこの順", () => {
     orm().delete(services).run();
     put(1000600, 600, "SKY", "H40", null, "プレミアム");
     put(6553900101, 101, "CATV", "QC30", null, "ケーブル1");
@@ -1062,9 +1062,9 @@ describe("SERVICE_ORDER", () => {
 });
 
 /**
- * ケーブルテレビの局。BS の再送信はアンテナの BS と同じ original_network_id と service_id を持つ (`tuner.serviceKey`)
+ * ケーブルの局。BS の再送信はアンテナの BS と同じ original_network_id と service_id を持つ (`tuner.serviceKey`)
  */
-describe("ケーブルテレビの局", () => {
+describe("ケーブルの局", () => {
   const BS_ASAHI = 400151;
   const CABLE_ASAHI = (0x10000 + 4) * 100000 + 151;
   const CABLE_PAY = (0x10000 + 4) * 100000 + 152;

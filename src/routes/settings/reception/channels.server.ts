@@ -36,7 +36,7 @@ interface Coverage {
   reception: Reception;
   /**
    * CATV のチャンネルが再送信している元の放送 (`types.origin`。original_network_id で決める)。
-   * ケーブルテレビの自主放送と、ほかの種別は null
+   * ケーブルの自主放送と、ほかの種別は null
    */
   origin: "GR" | "BS" | "CS" | null;
   /** `decodable` は番組表とライブに出す局か (`services.decodable`)。復号できない局も表には並べる */

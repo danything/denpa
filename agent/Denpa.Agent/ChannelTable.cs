@@ -30,7 +30,7 @@ public static class ChannelTable
     /// <summary>`linux/dvb/frontend.h` の <c>SYS_ISDBC</c> (J.83 Annex C。ケーブルテレビのトランスモジュレーション方式。仕様書 7A)</summary>
     public const int SysIsdbc = 10;
 
-    /// <summary>ケーブルテレビのトランスモジュレーション方式 (ISDB-C) の種別。サーバの <c>ChannelType</c> の <c>CATV</c> (画面では「ケーブルテレビ」)</summary>
+    /// <summary>ケーブルテレビのトランスモジュレーション方式 (ISDB-C) の種別。サーバの <c>ChannelType</c> の <c>CATV</c> (画面では「ケーブル」)</summary>
     public const string Catv = "CATV";
 
     /// <summary>TS を選り分けない (<c>NO_STREAM_ID_FILTER</c>)</summary>

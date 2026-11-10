@@ -91,7 +91,7 @@ describe("選局するチャンネル", () => {
     ]);
   });
 
-  test("ケーブルテレビは QC13〜QC63・QU13〜QU62・QV1〜QV12 の 113 本を、種別 CATV で総当たりする", () => {
+  test("ケーブルは QC13〜QC63・QU13〜QU62・QV1〜QV12 の 113 本を、種別 CATV で総当たりする", () => {
     const catv = catvChannels();
     expect(catv).toHaveLength(113);
     expect(catv.slice(0, 2)).toEqual(["QC13", "QC14"]);
@@ -336,7 +336,7 @@ describe("SKY の局で、カード無しで分かること", () => {
   });
 });
 
-describe("ケーブルテレビの局", () => {
+describe("ケーブルの局", () => {
   /** CA 記述子 (0x09)。CA_system_id と ECM の PID */
   const ca = (system: number, pid: number) => [
     0x09,

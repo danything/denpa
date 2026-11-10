@@ -1,7 +1,7 @@
 import type { ChannelType } from "./types";
 
 /**
- * 機材が分からなければ受けられるものとして扱わない種別。CATV (ケーブルテレビ。J.83C・TSMF) と SKY (スカパー！プレミアム。J.83B) は、
+ * 機材が分からなければ受けられるものとして扱わない種別。CATV (ケーブル。J.83C・TSMF) と SKY (スカパー！プレミアム。J.83B) は、
  * 選局できるのがエージェントが直に持つ IT930x の機材 (`it930x:`) だけで、エージェントはその機材にはいつも `receivable` を返す
  */
 const DETECTED_ONLY: readonly ChannelType[] = ["SKY", "CATV"];

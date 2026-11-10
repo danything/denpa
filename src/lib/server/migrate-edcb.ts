@@ -261,8 +261,8 @@ export function convertRule(
 
 /**
  * 局の内部 ID。denpa の局に無ければ undefined。
- * EDCB の局は ONID と SID だけで、アンテナとケーブルテレビの再送信を分けない。種別は元の放送で読む (`types.origin`)。
- * 地上波・BS・CS の再送信はアンテナの局に、ケーブルテレビの自主放送は CATV の局に当たる
+ * EDCB の局は ONID と SID だけで、アンテナとケーブルの再送信を分けない。種別は元の放送で読む (`types.origin`)。
+ * 地上波・BS・CS の再送信はアンテナの局に、ケーブルの自主放送は CATV の局に当たる
  */
 function serviceOf(networkId: number, serviceId: number): number | undefined {
   return serviceById(serviceKey(networkId, serviceId, origin(networkId)))?.id;

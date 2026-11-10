@@ -25,7 +25,7 @@ export interface VideoLoss {
 
 /**
  * 番組表のタブにいつも並べる種別とその順 (地上波・BS・CS)。CATV のタブは局があるときだけ足す (`guideTabs`)。
- * CATV (ケーブルテレビ) と SKY (スカパー！プレミアム) は、受信の設定では受けられる機材か選んだチューナーがあるときだけ並べる (`shownTypes`)。
+ * CATV (ケーブル) と SKY (スカパー！プレミアム) は、受信の設定では受けられる機材か選んだチューナーがあるときだけ並べる (`shownTypes`)。
  * SKY の局は復号できないので番組表とライブには出さない (`services.decodable`)。ルールの条件では局があれば選べる (`RuleDraft`)
  */
 export const CHANNEL_TYPES: readonly ChannelType[] = ["GR", "BS", "CS"];
@@ -42,7 +42,7 @@ export const GUIDE_TYPES: readonly ChannelType[] = ["GR", "BS", "CS", "CATV"];
 
 /**
  * 番組表のタブに並べる種別。**地上波・BS・CS はいつも、CATV は復号できる局があるときだけ** (`counts` は `server/epg.ts` の `serviceCounts`)。
- * ケーブルテレビを使わない家のタブは今までのまま。`current` (開いている種別) は局が無くてもタブに残す (選んでいるタブが消えない)
+ * ケーブルを使わない家のタブは今までのまま。`current` (開いている種別) は局が無くてもタブに残す (選んでいるタブが消えない)
  */
 export function guideTabs(
   counts: Readonly<Record<string, number>>,
@@ -77,7 +77,7 @@ export const BCAS_SYSTEM_ID = 0x0005;
  * - SKY (スカパー！プレミアム) は復号できない。B-CAS ではない専用のカードが要り、そのカードにまだ対応していない
  *   (エージェントもスクランブルされたまま流す。#1578)
  * - ほかの種別は、PMT の CA 記述子に B-CAS の CA_system_id (`0x0005`) があるか、CA 記述子が無ければ復号できる。
- *   ケーブルテレビには B-CAS 以外の方式でスクランブルする局がある。CA_system_id はスキャンで PMT を読んだ CATV の局だけが持ち
+ *   ケーブルには B-CAS 以外の方式でスクランブルする局がある。CA_system_id はスキャンで PMT を読んだ CATV の局だけが持ち
  *   (`caSystemIds`)、ほかの種別は空なので復号できる
  *
  * 復号できない局は受信の設定の「受信できるチャンネル」にだけ出し、番組表・ライブ・ロゴは取得しない
@@ -103,7 +103,7 @@ export function isSatellite(type: string): type is "BS" | "CS" {
 /**
  * 局の元の放送。**CATV の局を、再送信している元の放送で見分ける** (サブチャンネルの束ね方・同じ回のどれを録るか)。
  * original_network_id で決める。BS は 4、CS は 6・7、地上波は 0x7880〜0x7FE8 (ARIB TR-B14・TR-B15)。
- * ほかはケーブルテレビの自主放送 (`CATV`)
+ * ほかはケーブルの自主放送 (`CATV`)
  */
 export function origin(networkId: number): "GR" | "BS" | "CS" | "CATV" {
   if (networkId === 4) return "BS";

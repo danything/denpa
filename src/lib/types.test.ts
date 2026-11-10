@@ -43,7 +43,7 @@ describe("種別", () => {
     expect(origin(0x7880)).toBe("GR");
     expect(origin(32391)).toBe("GR");
     expect(origin(0x7fe8)).toBe("GR");
-    // ケーブルテレビの自主放送
+    // ケーブルの自主放送
     expect(origin(0x7fe9)).toBe("CATV");
     expect(origin(0x787f)).toBe("CATV");
     expect(origin(1)).toBe("CATV");
