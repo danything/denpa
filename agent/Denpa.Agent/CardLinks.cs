@@ -17,7 +17,7 @@ public static class CardLinks
     /// USB のリーダーは、Linux なら usbfs を直に (Ccid.cs)、macOS と Windows なら OS の PC/SC 越しに
     /// (Pcsc.cs)。**macOS と Windows には usbfs が無い。** px4d の内蔵リーダーとは Windows でも同じ IPC (AF_UNIX) で通信する。
     /// asicen-userland の asicend も内蔵カードを px4d と同じ IPC で出す (Asicen.cs。Windows 用は無い)。
-    /// PX-MLT5 系 (IT930x の機材) の内蔵カードリーダーは px4d のすぐ後ろ (It930xCard.cs。px4d が持っていた頃と同じ順で選ぶ)。
+    /// IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) の内蔵カードリーダーは px4d のすぐ後ろ (It930xCard.cs。px4d が持っていた頃と同じ順で選ぶ)。
     /// CECH-ZD1 J の内蔵の差し込み口と PIX-DT295 の差し込み口はいちばん後ろ (Zd1j.cs・Dt295.cs)。どれもほかのチューナーの復号にも使う。
     /// **使わない設定にしたリーダーは入れない** (<see cref="CardChoice"/>)
     /// </para>

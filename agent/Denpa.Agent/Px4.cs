@@ -9,7 +9,8 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// <a href="https://github.com/Khronos31/px4-userland">px4-userland</a> に任せる機材
-/// (PLEX PX-Q3U4 / PX-W3U4、e-Better / Digibest 系 …)。PX-MLT5 系 (<see cref="It930x.Family"/>) はエージェントが直に持つので、ここでは挙げない (<see cref="ParseJson"/>)。
+/// (PLEX PX-Q3U4 / PX-W3U4、e-Better / Digibest 系 …)。**いまは、px4-userland が扱う機種の全部をエージェントが直に持つ** (<see cref="It930x.Family"/>。PX-MLT5・PX-MLT8・PX-Q3・PX-W3 系と、受信機が 1 つの機種)。
+/// その機種はここでは挙げない (<see cref="ParseJson"/>) ので、挙がる筐体は無い。px4d とこの層は、次の変更で消す予定
 ///
 /// <para>
 /// **カーネルドライバを入れてもらわない。** px4-userland は libusb だけで USB を扱うユーザー空間のドライバで、
@@ -289,18 +290,18 @@ public static class Px4Userland
     /// </para>
     ///
     /// <para>
-    /// **MLT5 系 (<see cref="It930x.Family"/>) は挙げない。** エージェントが直に持つ機材で、px4d には持たせない (<see cref="It930x.Listed"/>)。
+    /// **エージェントが直に持つ機種 (<see cref="It930x.Family"/>) は挙げない。** エージェントが直に持つ機材で、px4d には持たせない (<see cref="It930x.Listed"/>)。
     /// 状態も見ずに飛ばし、まとめられなかった USB デバイスにあっても理由を残さない (エージェントが開いていると <c>open_failed</c> になる)。
     /// 飛ばした筐体は <paramref name="native"/> に控える (設定に <c>px4:</c> で残っていたら断る。<see cref="NativeProblem(string, int?)"/>)
     /// </para>
     /// </summary>
     /// <param name="running">いま px4d が使っている筐体 (<see cref="Px4Daemon.Owned"/>)</param>
-    /// <param name="native">飛ばした MLT5 系の筐体を控える先 (筐体の番号 → 機種と USB のポート)</param>
+    /// <param name="native">飛ばした筐体を控える先 (筐体の番号 → 機種と USB のポート。Q3 は 2 つ目に、もう片方の側のポート)</param>
     /// <exception cref="JsonException">JSON として読めない</exception>
     /// <exception cref="FormatException">文書が無い・object でない</exception>
     public static List<Enclosure> ParseJson(
         string output, Action<string> warn, IReadOnlyList<Enclosure>? running = null,
-        IDictionary<string, (It930xModel Model, string? Port)>? native = null)
+        IDictionary<string, (It930xModel Model, string? Port, string? Second)>? native = null)
     {
         var line = output.Split('\n').Select(raw => raw.Trim()).FirstOrDefault(raw => raw.StartsWith('{'))
             ?? throw new FormatException("JSON の文書がありません");
@@ -332,7 +333,12 @@ public static class Px4Userland
                 .ToList();
             if (It930x.Listed(shape.Text(enclosure, "usb", "enclosures[]", optional: true), model) is { } own)
             {
-                if (native is not null && id.Length > 0) native[id] = (own, devices.Select(device => device.Port).FirstOrDefault(port => port is { Length: > 0 }));
+                if (native is not null && id.Length > 0)
+                {
+                    // Q3 は USB デバイスが 2 つ。一覧の 1 つ目を側 1 (受信機 0〜3)、2 つ目を側 2 (受信機 4〜7) とみなす (px4 の仕様書 1.5 の番号の並び)
+                    var ports = devices.Select(device => device.Port).Where(port => port is { Length: > 0 }).ToList();
+                    native[id] = (own, ports.FirstOrDefault(), own.Paired ? ports.Skip(1).FirstOrDefault() : null);
+                }
                 continue;
             }
             var where = Where(
@@ -405,7 +411,7 @@ public static class Px4Userland
             var status = shape.Text(device, "status", "ungrouped_usb_devices[]") ?? "";
             var model = shape.Text(device, "model", "ungrouped_usb_devices[]");
             var usb = shape.Text(device, "usb", "ungrouped_usb_devices[]");
-            // MLT5 系はエージェントが直に持つ。エージェントが開いていて px4d から開けないだけなので、理由を残さない
+            // この表の機種はエージェントが直に持つ。エージェントが開いていて px4d から開けないだけなので、理由を残さない
             if (It930x.Listed(usb, model) is not null) continue;
             // px4d が使っているから開けないだけ (Windows)。理由として残すと見当違いになる
             if (status == "open_failed" && Place(port, bus, address) is { } place && claimed.Contains(place)) continue;
@@ -552,32 +558,40 @@ public static class Px4Userland
         _ => "",
     };
 
-    /// <summary>挿さっている筐体の受信機を、設定に書いたのと同じ形式で。MLT5 系は入らない (<see cref="ParseJson"/>)</summary>
+    /// <summary>挿さっている筐体の受信機を、設定に書いたのと同じ形式で。エージェントが直に持つ機種は入らない (<see cref="ParseJson"/>)</summary>
     public static List<TunerSpec> Detect() => Specs(Enclosures());
 
     /// <summary>
-    /// 一覧に出た MLT5 系の筐体 (筐体の番号 → 機種と USB のポート)。<see cref="Enclosures"/> が一覧を読むたびに足す。
+    /// 一覧に出た、エージェントが直に持つ機種の筐体 (筐体の番号 → 機種と USB のポート)。<see cref="Enclosures"/> が一覧を読むたびに足す。
     /// エージェントが機材を開いている間は一覧に番号が出ないことがあるので、消さない (番号は機材に固有で、機種は変わらない)
     /// </summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (It930xModel Model, string? Port)> Natives =
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (It930xModel Model, string? Port, string? Second)> Natives =
         new(StringComparer.Ordinal);
 
     /// <summary>
-    /// 設定の <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> が MLT5 系の筐体を指していれば、使えない理由と直し方。そうでなければ null。
+    /// 設定の <c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> がエージェントが直に持つ機種の筐体を指していれば、使えない理由と直し方。そうでなければ null。
     /// **設定は書き換えない。** 選局を断り (<see cref="Px4Daemon.Ensure"/>)、チューナー画面にも出す (<see cref="Notice"/>)
     /// </summary>
     public static string? NativeProblem(string id, int? receiver = null) => NativeProblem(id, receiver, Natives);
 
-    internal static string? NativeProblem(string id, int? receiver, IReadOnlyDictionary<string, (It930xModel Model, string? Port)> natives)
+    internal static string? NativeProblem(string id, int? receiver, IReadOnlyDictionary<string, (It930xModel Model, string? Port, string? Second)> natives)
     {
         // 番号が重なる筐体の名前 (番号と USB ポート) で書いてあっても、番号で突き合わせる
         var cut = id.IndexOf('_');
         if (!natives.TryGetValue(cut < 0 ? id : id[..cut], out var found)) return null;
-        var device = $"{It930x.Scheme}{found.Port ?? "<USB のポート>"}:{receiver?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "<受信機>"}";
+        // Q3 は、px4d の受信機 0〜3 が側 1 のポートの 0〜3、4〜7 が側 2 のポートの 0〜3 (It930xDevice.cs)
+        var per = found.Model.Receivers.Count;
+        var second = found.Model.Paired && receiver >= per;
+        var number = receiver is { } given ? (found.Model.Paired ? given % per : given).ToString(System.Globalization.CultureInfo.InvariantCulture) : "<受信機>";
+        var device = $"{It930x.Scheme}{(second ? found.Second : found.Port) ?? "<USB のポート>"}:{number}";
+        var hint = receiver is not null ? ""
+            : found.Model.Paired
+                ? $" (受信機 0〜{per - 1} は番号をそのまま。{per}〜{2 * per - 1} は {It930x.Scheme}{found.Second ?? "<もう片方の側の USB のポート>"}:<受信機の番号から {per} を引いた数>)"
+                : " (受信機の番号はそのまま)";
         return $"{found.Model.Name} はエージェントが直に持つ機材になったので、{Scheme} のチューナーとしては使えません。"
             + $"設定の「自動検出に戻す」を押すと、{It930x.Scheme} のチューナーとして検出し直します。"
             + $"定義を残すときは、device を {device} に書き換えてください"
-            + (receiver is null ? " (受信機の番号はそのまま)" : "");
+            + hint;
     }
 
     /// <summary>筐体の一覧から、設定の形式に組み立てる</summary>
@@ -986,7 +1000,7 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
          * 使えない筐体の理由は Detect が残すので、ここでは記録しない
          */
         var enclosure = Px4Userland.Enclosures(_ => { }).FirstOrDefault(found => found.Id == Id);
-        // MLT5 系はエージェントが直に持つので、px4d は起動しない。設定に px4: で残っていれば、直し方を添えて断る
+        // エージェントが直に持つ機種 (It930x.Family) は、px4d を起動しない。設定に px4: で残っていれば、直し方を添えて断る
         if (Px4Userland.NativeProblem(Id) is { } native) throw new IOException(native);
         var listed = enclosure?.Receivers;
         /*

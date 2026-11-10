@@ -34,13 +34,17 @@ internal sealed class It930xTsDemux
     private int _used;
     private bool _aligned;
 
-    /// <param name="syncBytes">入力 0、1、… の同期バイト (<see cref="It930xBridge.SyncBytes"/>)</param>
+    /// <param name="syncBytes">
+    /// 入力 0、1、… の同期バイト (<see cref="It930xBridge.SyncBytes"/> か、機種ごとの <see cref="It930xModel.SyncBytes"/>)。0 の入力は使わない。
+    /// CXD2856ER の機種には 0x47 を使わない (書き換えていないパケットと見分けるため)。Q3・W3 系の受信機 3 と、受信機が 1 つの機種は、
+    /// px4 の仕様書 (2.2・13.3・13.4) の値が 0x47 なので、そのまま受ける
+    /// </param>
     public It930xTsDemux(IReadOnlyList<byte> syncBytes)
     {
         Array.Fill(_input, -1);
         for (var i = 0; i < syncBytes.Count; i++)
         {
-            if (syncBytes[i] == 0x47) throw new ArgumentException("同期バイトに 0x47 は使えません (書き換えていないパケットと見分けられない)", nameof(syncBytes));
+            if (syncBytes[i] == 0) continue;
             if (_input[syncBytes[i]] >= 0) throw new ArgumentException($"同期バイト 0x{syncBytes[i]:X2} が重なっています", nameof(syncBytes));
             _input[syncBytes[i]] = i;
         }

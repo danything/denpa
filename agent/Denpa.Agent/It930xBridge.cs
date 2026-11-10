@@ -316,10 +316,16 @@ public sealed class It930xBridge
     /// </para>
     /// </summary>
     /// <param name="parallel">入力 0〜4 がパラレルか (<c>IT9300_setInTsType</c>。設定するのは入力 0・1 だけ)。SDK の既定はどれもシリアル</param>
+    /// <param name="syncBytes">
+    /// 入力 0〜4 の同期バイト (機種ごとの値。<see cref="It930xModel.SyncBytes"/>)。0 の入力は使わないので、まとめる設定も同期バイトも書かない。
+    /// 渡さなければ <see cref="SyncBytes"/>
+    /// </param>
     /// <returns>ブリッジの中に残っていた TS のバッファの数 (捨てる前と後)</returns>
-    public (It930xPsb Before, It930xPsb After) ConfigureTs(IReadOnlyList<bool> parallel)
+    public (It930xPsb Before, It930xPsb After) ConfigureTs(IReadOnlyList<bool> parallel, IReadOnlyList<byte>? syncBytes = null)
     {
         if (parallel.Count != TsInputs) throw new ArgumentException($"入力は {TsInputs} つです ({parallel.Count})", nameof(parallel));
+        syncBytes ??= SyncBytes;
+        if (syncBytes.Count != TsInputs) throw new ArgumentException($"入力は {TsInputs} つです ({syncBytes.Count})", nameof(syncBytes));
         WriteRegister(IgnoreSyncByte, 0);
 
         // IT9300_setOutTsType (出力は USB。シリアル・パラレルの出力ではないので、その 2 つはここでは触らない)
@@ -352,8 +358,9 @@ public sealed class It930xBridge
         for (var port = 0; port < 2; port++) WriteRegister(TsInSource + (uint)port, (byte)(parallel[port] ? 1 : 0));
         for (var port = 0; port < TsInputs; port++)
         {
+            if (syncBytes[port] == 0) continue;
             WriteRegister(TsAggregateMode + (uint)port, 1);
-            WriteRegister(TsSyncByte + (uint)port, SyncBytes[port]);
+            WriteRegister(TsSyncByte + (uint)port, syncBytes[port]);
         }
         // 誤りのあるパケットも通す (SDK も通している。TEI の付いたパケットを受信機ごとに数えるため)
         WriteRegister(TsFailIgnore, 0x1F);
@@ -411,11 +418,14 @@ public sealed class It930xBridge
 
     /// <summary>
     /// GPIOH の値のレジスタ (<c>p_br_reg_top_gpiohN_o</c>)。出力にする (<c>_en</c>) は + 1、機能を有効にする (<c>_on</c>) は + 2 (brRegister.h。仕様書 1.5 の番地と同じ)。
-    /// 入力の値 (<c>r_br_reg_top_gpiohN_i</c>) は - 1。いま使う 5 つだけ (GPIOH6・GPIOH14 はカード。<c>IT9300_bcasDetectCard</c>・<c>IT9300_bcasResetCard</c>)
+    /// 入力の値 (<c>r_br_reg_top_gpiohN_i</c>) は - 1。いま使う 7 つだけ (GPIOH6・GPIOH14 はカード。<c>IT9300_bcasDetectCard</c>・<c>IT9300_bcasResetCard</c>)。
+    /// GPIOH3 (受信機が 1 つの機種の電源。px4 の仕様書 13.3) と GPIOH10 (LNB の短絡の検出。px4 の仕様書 10) の番地は px4 の仕様書の値で、ほかの GPIOH と同じ並び
     /// </summary>
     public static uint GpioOutput(int pin) => pin switch
     {
         2 => 0xD8B7,
+        3 => 0xD8B3,
+        10 => 0xD8D7,
         6 => 0xD8C7,
         7 => 0xD8C3,
         11 => 0xD8D3,

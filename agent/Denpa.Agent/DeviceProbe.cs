@@ -168,7 +168,7 @@ public static class DeviceProbe
         found.AddRange(Dt295.Detect());
 
         /*
-         * PX-MLT5 系 (IT930x の機材) も並べるだけで開かない (開くとファームウェアを起動して電源を入れる)。px4d は MLT5 系を挙げない (It930x.cs)
+         * IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) も並べるだけで開かない (開くとファームウェアを起動して電源を入れる)。px4d はこれらの機種を挙げない (It930x.cs)
          */
         found.AddRange(It930x.Detect());
 
@@ -187,7 +187,7 @@ public static class DeviceProbe
 
     /// <summary>
     /// 機材が受けられる種別。**最後に <see cref="Detect"/> したときに見つけた機材と、設定の <c>it930x:</c> の受信機だけ**で、ほかは null (分からない)。
-    /// <c>it930x:</c> の受信機は、抜いてあっても地上波・衛星・J.83B を受けられると返す (<see cref="It930x.Types"/>。機種がどれでも同じ)。
+    /// <c>it930x:</c> の受信機は、機種の表から受信機ごとの種別を返す (<see cref="It930x.Receivable"/>。抜いてあって機種が分からなければ、地上波・衛星・J.83B の全部)。
     ///
     /// <para>
     /// <c>GET /denpa/tuners</c> の <c>receivable</c> に入れ、denpa はこれに無い種別を設定で選ばせず、保存でも断る。
@@ -196,7 +196,7 @@ public static class DeviceProbe
     /// </para>
     /// </summary>
     public static string[]? Receivable(string? device) =>
-        It930x.Parse(device) is not null ? [.. It930x.Types]
+        It930x.Receivable(device) is { } own ? own
         : device is not null && _found.TryGetValue(device, out var types) ? types : null;
 
     private static IEnumerable<string> Directories(string root, string pattern)

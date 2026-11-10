@@ -61,7 +61,7 @@ public class Px4WindowsTests
 
     /// <summary>Windows の一覧は、px4d が使っている筐体を open_failed で出す (px4-userland の実機記録)</summary>
     private const string ClaimedList = """
-        {"enclosures":[],"ungrouped_usb_devices":[{"model":"PX-Q3U4","usb":"0511:084a","status":"open_failed","bus":5,"address":7,"port":"5-1.2.1"},{"model":"PX-Q3U4","usb":"0511:084a","status":"open_failed","bus":5,"address":8,"port":"5-1.2.2"}]}
+        {"enclosures":[],"ungrouped_usb_devices":[{"model":"PX-Q3U4","usb":"0511:f84a","status":"open_failed","bus":5,"address":7,"port":"5-1.2.1"},{"model":"PX-Q3U4","usb":"0511:f84a","status":"open_failed","bus":5,"address":8,"port":"5-1.2.2"}]}
         """;
 
     [Test]
@@ -88,7 +88,7 @@ public class Px4WindowsTests
     {
         // PX-M1UR (5-1.4.1) の px4d が動いていて開けない。一覧には PX-S1UR (5-1.4.2) だけが「一意」で出る
         const string list = """
-            {"enclosures":[{"serial":"000000000000001","model":"PX-S1UR","usb":"0511:0855","status":"ready","serial_unique":true,"devices":[{"device":1,"bus":5,"address":11,"port":"5-1.4.2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T","lnb_15v_supported":false}]}],"ungrouped_usb_devices":[{"model":"PX-M1UR","usb":"0511:0854","status":"open_failed","bus":5,"address":10,"port":"5-1.4.1"}]}
+            {"enclosures":[{"serial":"000000000000001","model":"PX-S1UR","usb":"0511:f855","status":"ready","serial_unique":true,"devices":[{"device":1,"bus":5,"address":11,"port":"5-1.4.2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T","lnb_15v_supported":false}]}],"ungrouped_usb_devices":[{"model":"PX-M1UR","usb":"0511:f854","status":"open_failed","bus":5,"address":10,"port":"5-1.4.1"}]}
             """;
         var m1ur = new Px4Userland.Enclosure(
             "000000000000001_5-1.4.1", "PX-M1UR", [new Px4Receiver(0, true, true, false)], "000000000000001", ["5-1.4.1"])

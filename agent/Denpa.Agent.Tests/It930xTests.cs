@@ -271,8 +271,8 @@ public class It930xTests
         await Assert.That(It930x.Find(0x0511, 0x084E)?.Name).IsEqualTo("PLEX PX-MLT5U");
         await Assert.That(It930x.Find(0x0511, 0x024E)?.Name).IsEqualTo("PLEX PX-MLT5PE");
         await Assert.That(It930x.Find(0x0511, 0x924E)?.Name).IsEqualTo("e-Better DTV02A-5TS-P");
-        // PX-Q3U4 (0511:084a) は扱わない (px4d のまま)
-        await Assert.That(It930x.Find(0x0511, 0x084A)).IsNull();
+        // PX-MLT8UT (0511:0051) は扱わない (px4 の仕様書 1.1 の範囲の外)
+        await Assert.That(It930x.Find(0x0511, 0x0051)).IsNull();
     }
 
     [Test]
@@ -290,7 +290,7 @@ public class It930xTests
                 File.WriteAllText(Path.Combine(at, "idProduct"), product + "\n");
             }
             Usb("1-2", "0511", "084e");
-            Usb("1-3", "0511", "084a");
+            Usb("1-3", "0511", "0051");
             Usb("1-4", "0511", "924e");
             Usb("1-2:1.0", "0511", "084e");
             var found = It930x.Found(dir.FullName, null);

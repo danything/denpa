@@ -186,10 +186,10 @@ public class It930xDeviceTests
         {
             var error = Assert.Throws<IOException>(() => device.Frontend(2));
             await Assert.That(error.Message).Contains("受信機 2 を初期化できません");
-            await Assert.That(device.Frontend(1).ChipId).IsEqualTo((byte)0x90);
+            await Assert.That(((CxdReceiver)device.Frontend(1)).Chip.ChipId).IsEqualTo((byte)0x90);
             // 失敗した受信機は、次にもう一度試す
             bus1[0x64].ChipId = 0x91;
-            await Assert.That(device.Frontend(2).ChipId).IsEqualTo((byte)0x91);
+            await Assert.That(((CxdReceiver)device.Frontend(2)).Chip.ChipId).IsEqualTo((byte)0x91);
             await Assert.That(device.Faulted).IsFalse();
         }
         finally
@@ -522,7 +522,7 @@ public class It930xDeviceTests
                 File.WriteAllText(Path.Combine(at, "idProduct"), product + "\n");
             }
             Usb("3-1", "0511", "024e");
-            Usb("3-2", "0511", "084a");
+            Usb("3-2", "0511", "0051");
             var found = It930x.Specs(It930x.Found(dir.FullName, null));
             await Assert.That(found.Count).IsEqualTo(5);
             await Assert.That(found[4].Device).IsEqualTo("it930x:3-1:4");
@@ -542,10 +542,15 @@ public class It930xDeviceTests
     // USB の ID が読めなかったときだけ、機種の名前で見分ける
     [Arguments(null, "PX-MLT5U", "PLEX PX-MLT5U")]
     [Arguments(null, "DTV02A-5TS-P", "e-Better DTV02A-5TS-P")]
-    [Arguments("0511:084a", "PX-Q3U4", null)]
+    [Arguments("0511:084a", "PX-Q3U4", "PLEX PX-Q3U4")]
+    [Arguments("0511:0855", "px4", "PLEX PX-S1UR")]
+    // 表に無い機種 (PX-MLT8UT) は px4d の筐体のまま
+    [Arguments("0511:0051", "PX-MLT8UT", null)]
     // USB の ID が読めていれば、名前では決めない
-    [Arguments("0511:084a", "PX-MLT5PE", null)]
-    [Arguments(null, "PX-Q3U4", null)]
+    [Arguments("0511:084a", "PX-MLT5PE", "PLEX PX-Q3U4")]
+    [Arguments("0511:0051", "PX-MLT5PE", null)]
+    [Arguments(null, "PX-Q3U4", "PLEX PX-Q3U4")]
+    [Arguments(null, "PX-MLT8UT", null)]
     [Arguments(null, null, null)]
     public async Task px4d_の一覧の筐体が_MLT5_系かは_USB_の_ID_で見分ける(string? usb, string? model, string? expected)
     {

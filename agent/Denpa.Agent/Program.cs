@@ -80,7 +80,7 @@ if (args is ["--status"])
 }
 // PIX-DT295 を確かめる。機材を設定して選局し (--card ならカードを読み)、受信の統計を出す (Dt295NativeProbe.cs)
 if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295NativeProbe.Run(args);
-// IT930x の機材 (PX-MLT5U など) のブリッジを確かめる。ファームウェアを起動してバージョンと EEPROM の写しを出す (It930xProbe.cs)
+// IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) のブリッジを確かめる。ファームウェアを起動してバージョンと EEPROM の写しを出す。--chips でチップも読む (It930xProbe.cs)
 if (args.ElementAtOrDefault(0) == "--it930x-probe") return It930xProbe.Run(args);
 /*
  * **対応していない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
@@ -189,7 +189,7 @@ void PrepareDaemons()
     {
         if (daemonsStopped) return;
         bool CardInUse(string name) => Keys.Local.Name == name;
-        // 設定に px4: で残っている MLT5 系の筐体は起動せず、理由を記録する (Px4Daemon.Ensure)
+        // 設定に px4: で残っている、エージェントが直に持つ機種の筐体は起動せず、理由を記録する (Px4Daemon.Ensure)
         UserlandDaemon.Prepare<Px4Daemon>([.. Px4Userland.IdsIn(pool.Tuners)], Px4Daemon.For, CardInUse);
         // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
         UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For, CardInUse);
