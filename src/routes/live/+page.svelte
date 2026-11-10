@@ -245,7 +245,7 @@
   }
 
   /**
-   * データ放送が「この局へ」と言ってきた (epgTune)。手で選んだのと同じ経路 (`select`) で切り替える。
+   * データ放送が「この局へ」と求めた (epgTune)。手で選んだのと同じ経路 (`select`) で切り替える。
    * original_network_id と service_id で探す (局の一覧は transport_stream_id を持っていない)。
    * 一覧に無い局なら false。文書には失敗が返り、文書が自分で案内する
    */
@@ -681,7 +681,7 @@
 
               <!--
                         Hybridcast は載っている番組でだけ出す。別のタブで開くだけ (受信機の API が無いので多くは
-                        動かない。[stream.md](../../../docs/stream.md#hybridcast))。できる顔をしないよう「外へ出ていく」印にする
+                        動かない。[stream.md](../../../docs/stream.md#hybridcast))。中で動くように見せないよう「外へ出ていく」印にする
                     -->
               {#if hybridcast !== undefined}
                 <ControlButton

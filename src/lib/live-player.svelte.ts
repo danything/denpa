@@ -595,9 +595,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let element: HTMLVideoElement | null = null;
   /** 前のフレームの写し先。画面から預かる */
   let still: HTMLCanvasElement | null = null;
-  /** 字幕を描く係。重ねる先の canvas は画面から預かる (`attach`) */
+  /** 字幕を描く `CaptionPainter`。重ねる先の canvas は画面から預かる (`attach`) */
   let painter: CaptionPainter | null = null;
-  /** 貼りっぱなしを避けるための目覚まし */
+  /** 貼りっぱなしを避けるためのタイマー */
   let holdTimer: ReturnType<typeof setTimeout> | null = null;
   /**
    * 待たせている字幕。時刻の順 ([ts/captions.ts](./ts/captions.ts))。時刻は映像と同じ ffmpeg が付けた物差しで、
@@ -615,7 +615,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let dropped = $state(0);
   /** `droppedVideoFrames` を最後に読んだ値 (`countDropped`)。Safari は飛ぶたびに 0 に戻すので差を足し上げる */
   let droppedSeen = 0;
-  /** 途中から入ったストリームの、最初のキーフレームまでを渡さない係 (`ts/key-gate.ts`)。**始める位置もここで決まる** */
+  /** 途中から入ったストリームの、最初のキーフレームまでを渡さない処理 (`ts/key-gate.ts`)。**始める位置もここで決まる** */
   const keyGate = new KeyGate();
   /** 映した 1 枚が再生位置からどれだけ遅れているか (秒)。音と字幕は再生位置に乗るので、口の動きだけずれる (`unslip`) */
   let slip = $state(0);
@@ -668,7 +668,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   const hidesSlip = slipHidden();
   /** バッファが足りた最初の時刻。**映像を待ちきりにしないため** (`canStart`) */
   let enoughAt = 0;
-  /** 繋ぎ直しの目覚まし。**待っている間だけ入っている** */
+  /** 繋ぎ直しのタイマー。**待っている間だけ入っている** */
   let retry: ReturnType<typeof setTimeout> | null = null;
   /** 続けて何回繋ぎ直しに失敗したか。0 でなければ繋ぎ直しの最中で、繋げなくても失敗にしない */
   let attempts = $state(0);
@@ -1219,7 +1219,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
-   * 再生位置を面倒みる。**届いた端でそのまま出すと、絶えず止まる。**
+   * 再生位置を合わせる。**届いた端でそのまま出すと、絶えず止まる。**
    *
    * 少し貯めてから始め、離れたら速めて詰める ([pacing.ts](./ts/pacing.ts))。
    * 別のタブへ行って戻ってきたときだけ飛ぶ。飛ぶと音が切れるので、
@@ -1644,7 +1644,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 持っている範囲の中で移る。シークバーを押されたとき。
    *
    * **後ろへ戻したら追っかけに入る。** 入れないと `pacing` が「大きく離れた」と
-   * 見て放送の今へ跳ね返すので、戻した先が 1 秒も映らない
+   * 見て放送の今へ戻すので、戻した先が 1 秒も映らない
    */
   function seek(to: number): void {
     if (element === null || buffer === null || buffer.buffered.length === 0)
@@ -1826,7 +1826,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     reset();
     stopRaw();
     thaw();
-    // 字幕を描く係も畳む (canvas の大きさを読む `ResizeObserver` を外す)
+    // 字幕を描くものも畳む (canvas の大きさを読む `ResizeObserver` を外す)
     painter?.close();
     painter = null;
     // コマごとの貼り直し (`follow`) も畳む
@@ -2311,7 +2311,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (!res.ok) throw new Error(String(res.status));
       ticket = ((await res.json()) as { ticket: string }).ticket;
     } catch {
-      // 繋ぎ直しの最中なら、サーバがまだ帰っていないだけ。待ち直す
+      // 繋ぎ直しの最中なら、サーバからまだ応答が無いだけ。待ち直す
       if (attempts > 0) reconnect();
       else fail("繋がりませんでした");
       return;
@@ -2729,7 +2729,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
         });
         /*
          * 詰まったことを覚えて貯める量を決める (`nextTarget`)。同じ関数を渡す。`<video>` は同じものなので、
-         * その場で作っていた頃は MediaSource を作り直すたびに聞き手が増え、1 回の途切れを 3 回に数えていた
+         * その場で作っていた頃は MediaSource を作り直すたびにリスナーが増え、1 回の途切れを 3 回に数えていた
          */
         video.addEventListener("waiting", onWaiting);
         // 詰まりの終わり (段を決めるのに使う。`stuck`)。同じく同じ関数を渡す
@@ -3134,10 +3134,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /** いま鳴らしている音声 (`AudioTrack.id`) */
     get audio() {
       return audio;
-    },
-    /** いまエンコードしてもらっているコーデック */
-    get codec() {
-      return codec;
     },
     /** いま再生中の段 (`#lib/adapt.ts` の `Step`。回線に合わせて下げた画質)。0 は下げていない */
     get step() {
