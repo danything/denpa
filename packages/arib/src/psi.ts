@@ -107,8 +107,9 @@ export interface TransportInfo {
 
 export interface NetworkInfo {
   networkId: number;
+  /** 最初の TS のリモコン番号。地上波の NIT は自分の TS 1 つだけを載せる */
   remoteControlKeyId: number | null;
-  transportStreams: TransportInfo[];
+  transportStreams: NetworkTransport[];
 }
 
 /** 何も組み上がらなかったときの返り。使い回すので `Object.freeze` してある */
@@ -508,6 +509,8 @@ export type Delivery = SatelliteDelivery | TerrestrialDelivery;
 /** NIT の TS の 1 件。サービスの一覧に、どこで流れているかが付く */
 export interface NetworkTransport extends TransportInfo {
   delivery: Delivery | null;
+  /** その TS のリモコン番号 (TS 情報記述子)。載せていなければ null */
+  remoteControlKeyId: number | null;
 }
 
 /** BCD の桁を左から `digits` 桁ぶん読んで、10 進の整数にする */
@@ -594,13 +597,11 @@ function parseNitSection(section: Uint8Array): NitSection | null {
 
     const services: Service[] = [];
     let delivery: Delivery | null = null;
+    let remote: number | null = null;
     for (const [tag, descriptor] of descriptors(body)) {
-      if (
-        tag === DESC_TS_INFORMATION &&
-        descriptor.length > 0 &&
-        remoteControlKeyId === null
-      ) {
-        remoteControlKeyId = descriptor[0]!;
+      if (tag === DESC_TS_INFORMATION && descriptor.length > 0) {
+        remote ??= descriptor[0]!;
+        remoteControlKeyId ??= remote;
       } else if (tag === DESC_SERVICE_LIST) {
         for (let i = 0; i + 3 <= descriptor.length; i += 3) {
           services.push({
@@ -620,6 +621,7 @@ function parseNitSection(section: Uint8Array): NitSection | null {
       originalNetworkId,
       services,
       delivery,
+      remoteControlKeyId: remote,
     });
   }
 
@@ -871,17 +873,33 @@ export interface FoundService extends Service {
  * Mirakurun のスキャンと同じで、**両方**揃って初めてそのチャンネルを
  * 「受信できた」とみなす。SDT だけ取れても、どのネットワークのものか
  * 分からないと設定に書けない。
+ *
+ * **ケーブルテレビ (`requireNit: false`) は SDT[actual] だけで揃ったとみなす。** 1 つのネットワークが
+ * 地上波・BS の再送信と自主放送の TS をまとめて流していて、NIT は CATV のネットワークのもの
+ * (局の元の放送とは別)。どの放送の局かは SDT の original_network_id で分かる。
+ * NIT が先に来ていれば、その TS のリモコン番号だけを使う。
+ * PAT に局が 1 つも無い TS (データだけの TS) も揃ったとみなし、局は返さない (`empty`)
  */
 export class ServiceReader {
   private readonly nit = new SectionAssembler(PID_NIT);
   private readonly sdt = new SectionAssembler(PID_SDT);
+  private readonly pat = new SectionAssembler(PID_PAT);
   private readonly packets = new PacketStream();
+  private readonly requireNit: boolean;
 
   network: NetworkInfo | null = null;
   transport: TransportInfo | null = null;
+  /** PAT に局が 1 つも無かった (`requireNit: false` のときだけ読む) */
+  empty = false;
+
+  constructor({ requireNit = true }: { requireNit?: boolean } = {}) {
+    this.requireNit = requireNit;
+  }
 
   get complete(): boolean {
-    return this.network !== null && this.transport !== null;
+    return this.requireNit
+      ? this.network !== null && this.transport !== null
+      : this.transport !== null || this.empty;
   }
 
   /** 任意の長さのバイト列を渡す。揃ったら true */
@@ -897,22 +915,42 @@ export class ServiceReader {
           this.transport = parseSdt(section) ?? this.transport;
         }
       }
+      if (!this.requireNit && !this.empty && this.transport === null) {
+        for (const section of this.pat.feed(packet)) {
+          if (section[0] === TABLE_PAT && parsePat(section).size === 0)
+            this.empty = true;
+        }
+      }
     }
     return this.complete;
   }
 
   /** 録るに値するサービスだけ。リモコン番号は NIT のものを配る */
   services(): FoundService[] {
-    if (this.network === null || this.transport === null) return [];
-    const { networkId, remoteControlKeyId } = this.network;
-    const { transportStreamId } = this.transport;
-    return this.transport.services
-      .filter((service) => SERVICE_TYPES.has(service.serviceType))
-      .map((service) => ({
-        ...service,
-        networkId,
-        transportStreamId,
-        remoteControlKeyId,
-      }));
+    const transport = this.transport;
+    if (transport === null) return [];
+    const { transportStreamId, originalNetworkId } = transport;
+    const found = (
+      networkId: number,
+      remoteControlKeyId: number | null,
+    ): FoundService[] =>
+      transport.services
+        .filter((service) => SERVICE_TYPES.has(service.serviceType))
+        .map((service) => ({
+          ...service,
+          networkId,
+          transportStreamId,
+          remoteControlKeyId,
+        }));
+    if (this.requireNit) {
+      if (this.network === null) return [];
+      return found(this.network.networkId, this.network.remoteControlKeyId);
+    }
+    const own = this.network?.transportStreams.find(
+      (ts) =>
+        ts.transportStreamId === transportStreamId &&
+        ts.originalNetworkId === originalNetworkId,
+    );
+    return found(originalNetworkId, own?.remoteControlKeyId ?? null);
   }
 }

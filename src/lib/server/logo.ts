@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 
 import {
   LogoCollector,
@@ -18,7 +18,7 @@ import {
 } from "../ts/logo";
 import { type CarouselCounts, CarouselProgress } from "../ts/logo-dsmcc";
 import { withPalette } from "../ts/logo-palette";
-import { type ChannelType, decodable } from "../types";
+import type { ChannelType } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
 import { currentServices } from "./epg";
@@ -500,7 +500,8 @@ function markGaveUp(channel: string): void {
 
 /**
  * いま選局できる局。取り残しは見に行かない。
- * 復号できない種別 (SKY) の局も見に行かない (`decodable`。番組表とライブに出さないので、ロゴは要らない)
+ * 復号できない局も見に行かない (`services.decodable`。番組表とライブに出さないので、ロゴは要らない)。
+ * **CATV の局もまだ見に行かない。** ここから先は地上波でない局を衛星として扱う (カルーセルを当たりの中継で待つ) ので、CATV を入れると衛星に数えてしまう
  */
 function tunableServices(): {
   id: number;
@@ -516,10 +517,15 @@ function tunableServices(): {
       network_id: services.network_id,
     })
     .from(services)
-    .where(currentServices())
+    .where(
+      and(
+        currentServices(),
+        eq(services.decodable, true),
+        ne(services.type, "CATV"),
+      ),
+    )
     .orderBy(services.type, services.channel)
-    .all()
-    .filter((service) => decodable(service.type));
+    .all();
 }
 
 /**

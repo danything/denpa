@@ -67,11 +67,17 @@ export function stationsOf(
   end: number,
 ): { services: Service[]; split: number[] } {
   // テレビと同じ並びにする (SERVICE_ORDER)。
-  // 取り残しの局は出さない (currentServices)。出すと番組表に空の列が並ぶ
+  // 取り残しの局は出さない (currentServices)。出すと番組表に空の列が並ぶ。復号できない局も出さない (番組が来ない)
   const services: Service[] = orm()
     .select()
     .from(serviceTable)
-    .where(and(eq(serviceTable.type, type), currentServices()))
+    .where(
+      and(
+        eq(serviceTable.type, type),
+        currentServices(),
+        eq(serviceTable.decodable, true),
+      ),
+    )
     .orderBy(sql.raw(SERVICE_ORDER))
     .all();
   const slots = orm()

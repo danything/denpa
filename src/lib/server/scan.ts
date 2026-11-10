@@ -9,10 +9,13 @@
  *
  * 地上波は Mirakurun の走査に合わせてある。
  *
- * - 地上波は 13〜62ch を総当たり (CATV を選ぶと C13〜C63 も)
- * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。番組表は取得しない (`decodable`)。
+ * - 地上波は 13〜62ch を総当たり (パススルーも選ぶと C13〜C63 も)
+ * - ケーブルテレビ (CATV。ISDB-C) は QC13〜QC63・QU13〜QU62・QV1〜QV12 を総当たり。TSMF で束ねた搬送波は、
+ *   束ねた TS をそれぞれ選局する (`QC30:1`…。`tsmfJobs`)。局ごとの CA_system_id も数え、復号できるかを決める (`ca-observe.ts`)
+ * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。番組表は取得しない (`services.decodable`)。
  *   代わりに、カード無しで分かること (CA_system_id・番組表とロゴが来ているか) を数えて記録と受信の設定に出す (`ca-observe.ts`)
- * - 1 チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす
+ * - 1 チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす。CATV は SDT だけで揃ったとみなす
+ *   (`ServiceReader` の `requireNit`)
  * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入り、
  *   映像の無いものは取り込みで落とす: `schema.DIGITAL_TV`)
  *
@@ -23,7 +26,7 @@
 import { type EitEvent, EpgReader } from "@danything/arib/eit";
 import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
-import { type ChannelType, decodable, isSatellite } from "../types";
+import { type ChannelType, isSatellite } from "../types";
 import { CaObserver, describe, type Observed } from "./ca-observe";
 import { config } from "./config";
 import { savePrograms, settle, sync, typeRank } from "./epg";
@@ -37,6 +40,7 @@ import {
   type AgentTuner,
   getChannels,
   getTuners,
+  openChannel,
   openChannelStream,
   putChannels,
   TunerBusyError,
@@ -61,12 +65,74 @@ const LOG_LIMIT = 400;
 const UHF_RANGE = { min: 13, max: 62 };
 
 /**
- * スキャンの種類。**`CATV` は地上波の局として、UHF に加えて CATV の周波数変換パススルー (C13〜C63) も回す。**
- * CATV は地デジをそのまま CATV のチャンネルの周波数に移して送ることがあり、局によって移すものと移さないものが混ざるので両方回す
+ * スキャンの種類。**`PASSTHROUGH` は地上波の局として、UHF に加えてケーブルテレビの周波数変換パススルー (C13〜C63) も回す。**
+ * ケーブルテレビは地デジをそのまま CATV のチャンネルの周波数に移して送ることがあり、局によって移すものと移さないものが混ざるので両方回す。
+ * `CATV` はケーブルテレビ (ISDB-C) の局で、種別も `CATV` になる (`catvChannels`)
  */
-export const SCAN_KINDS = ["GR", "BS", "CS", "CATV", "SKY"] as const;
+export const SCAN_KINDS = [
+  "GR",
+  "BS",
+  "CS",
+  "PASSTHROUGH",
+  "CATV",
+  "SKY",
+] as const;
 export type ScanKind = (typeof SCAN_KINDS)[number];
-const CATV_RANGE = { min: 13, max: 63 };
+const PASSTHROUGH_RANGE = { min: 13, max: 63 };
+
+/**
+ * ケーブルテレビ (ISDB-C) のチャンネル。エージェントの選局表の `QC13`〜`QC63` (C13〜C63 の周波数)・`QU13`〜`QU62` (UHF)・
+ * `QV1`〜`QV12` (VHF) (docs/agent.md「選局表」)。**総当たりにする。** 地上波と同じく、局ごとに使うチャンネルが違う
+ */
+const CATV_BANDS = [
+  { prefix: "QC", min: 13, max: 63 },
+  { prefix: "QU", min: 13, max: 62 },
+  { prefix: "QV", min: 1, max: 12 },
+];
+
+/** CATV で選局するチャンネルの一覧 (113 本)。TSMF で束ねた 2 つ目からの TS (`QC30:1`) は入らない (`tsmfJobs`) */
+export function catvChannels(): string[] {
+  return CATV_BANDS.flatMap(({ prefix, min, max }) =>
+    Array.from({ length: max - min + 1 }, (_, i) => `${prefix}${min + i}`),
+  );
+}
+
+/**
+ * TSMF (1 つの搬送波に複数の TS を束ねる) の搬送波で、0 番目のほかに選局する TS (`QC30:1`〜)。
+ * `streams` は選局の答えの `X-Denpa-Tsmf-Streams` (`tuner.openChannel`)。0 番目は名前に番号を付けない。
+ * TSMF を使うのは C13〜C63 の周波数 (`QC`) だけで、番号の付いたもの (2 つ目から) は束ね直さない
+ */
+export function tsmfJobs(channel: string, streams: number): string[] {
+  if (!/^QC\d+$/.test(channel) || streams < 2) return [];
+  return Array.from({ length: streams - 1 }, (_, i) => `${channel}:${i + 1}`);
+}
+
+/**
+ * **同じ TS (original_network_id と TSID が同じ) が 2 つの CATV のチャンネルで見つかったら、先のほうだけを残す。**
+ * 並びはスキャンの結果の順 (チャンネル名の順)。同じ局が 2 回入ると、番組表と録画の ID がぶつかる (`tuner.serviceKey`)。
+ * 落としたものは `dropped` に、残したチャンネルと組で返す
+ */
+export function dedupeCatv(entries: AgentChannel[]): {
+  kept: AgentChannel[];
+  dropped: { entry: AgentChannel; kept: string }[];
+} {
+  const seen = new Map<string, string>();
+  const kept: AgentChannel[] = [];
+  const dropped: { entry: AgentChannel; kept: string }[] = [];
+  for (const entry of entries) {
+    if (entry.type !== "CATV") {
+      kept.push(entry);
+      continue;
+    }
+    const ts = `${entry.networkId}:${entry.transportStreamId}`;
+    const first = seen.get(ts);
+    if (first === undefined) {
+      seen.set(ts, entry.channel);
+      kept.push(entry);
+    } else dropped.push({ entry, kept: first });
+  }
+  return { kept, dropped };
+}
 
 /**
  * スカパー！プレミアムサービス光 (J.83B) のチャンネル。エージェントの選局表の `H01`〜`H105` (docs/agent.md「選局表」)。
@@ -88,13 +154,13 @@ export function skyChannels(): string[] {
  * **範囲は決め打ち。** 放送で使う物理チャンネルは決まっていて、狭めても
  * 総当たりの時間が少し減るだけ。狭めた結果 見つからない局が出るほうが困る
  */
-export function channelsFor(type: "GR" | "CATV"): string[] {
+export function channelsFor(type: "GR" | "PASSTHROUGH"): string[] {
   const uhf = Array.from(
     { length: UHF_RANGE.max - UHF_RANGE.min + 1 },
     (_, i) => `T${UHF_RANGE.min + i}`,
   );
   if (type === "GR") return uhf;
-  const { min, max } = CATV_RANGE;
+  const { min, max } = PASSTHROUGH_RANGE;
   return [
     ...uhf,
     ...Array.from({ length: max - min + 1 }, (_, i) => `C${min + i}`),
@@ -130,14 +196,18 @@ export async function readServices(
   /** 同じストリームから番組表も取得する。読む時間は延ばさない (揃った時点で打ち切るのは同じ) */
   epg?: EpgReader,
   /**
-   * 同じストリームで、カード無しで分かること (CA_system_id・番組表が来ているか) も数える (SKY の局だけ)。
-   * 局が揃っても、番組表の具合が分かるまで `OBSERVE_WAIT` までは読み続ける
+   * 同じストリームで、カード無しで分かること (CA_system_id・番組表が来ているか) も数える (SKY と CATV の局だけ)。
+   * 局が揃っても、SKY は番組表の具合が、CATV は局ごとの CA_system_id (PMT) が分かるまで、`OBSERVE_WAIT` までは読み続ける
    */
   observer?: CaObserver,
+  /** ケーブルテレビ (ISDB-C) の TS か。SDT だけで揃ったとみなす (`ServiceReader` の `requireNit`) */
+  cable = false,
 ): Promise<ScanResult> {
-  const reader = new ServiceReader();
+  const reader = new ServiceReader({ requireNit: !cable });
   let bytes = 0;
   const started = Date.now();
+  const observed = (watching: CaObserver) =>
+    cable ? watching.pmtsKnown : watching.epgKnown;
   const tail = await readUntil(
     stream,
     (chunk) => {
@@ -148,7 +218,7 @@ export async function readServices(
       return (
         complete &&
         (observer === undefined ||
-          observer.epgKnown ||
+          observed(observer) ||
           Date.now() - started >= OBSERVE_WAIT)
       );
     },
@@ -167,6 +237,7 @@ export async function readServices(
     signal,
   });
   if (!signal) return fail("受信できませんでした");
+  if (cable) return fail("SDT を受信できませんでした");
   if (reader.network === null && reader.transport === null)
     return fail("受信はできましたが、局の情報を読み取れません");
   return fail(
@@ -174,11 +245,14 @@ export async function readServices(
   );
 }
 
-/** スキャンで分かったことを 1 件にまとめる */
+/**
+ * スキャンで分かったことを 1 件にまとめる。`caSystemIdsOf` を渡すと、局ごとの CA_system_id も入れる (CATV。`CaObserver`)
+ */
 export function channelEntry(
   type: ChannelType,
   channel: string,
   services: FoundService[],
+  caSystemIdsOf?: (serviceId: number) => number[],
 ): AgentChannel {
   const first = services[0];
   return {
@@ -192,6 +266,9 @@ export function channelEntry(
         serviceId: service.serviceId,
         serviceType: service.serviceType,
         name: service.name,
+        ...(caSystemIdsOf === undefined
+          ? {}
+          : { caSystemIds: caSystemIdsOf(service.serviceId) }),
       }))
       .sort((a, b) => a.serviceId - b.serviceId),
   };
@@ -227,9 +304,10 @@ const IDLE: ScanState = {
 let current: ScanState = IDLE;
 
 /**
- * 最後のスキャンで、復号できない種別 (SKY) のチャンネルについて分かったこと (`種別:チャンネル` → 中身)。
+ * 最後のスキャンで、SKY と CATV のチャンネルについて分かったこと (`種別:チャンネル` → 中身)。
  * 受信の設定の「受信できるチャンネル」に出す。**denpa の中にだけ持つ** (再起動で消える。もう一度スキャンすれば出る)。
- * SKY の局の番組表を取り込むかは、この観測の報告を見てから決める (docs/tuners.md)
+ * SKY の局の番組表を取り込むかは、この観測の報告を見てから決める (docs/tuners.md)。
+ * CATV の局ごとの CA_system_id は、これとは別にチャンネルの控えに入れる (`channelEntry`)
  */
 const observations = new Map<string, Observed>();
 
@@ -256,6 +334,7 @@ function push(
         ? current.log
         : [...current.log, line].slice(-LOG_LIMIT),
     scanned: current.scanned + (counts.scanned ?? 0) + (counts.skipped ?? 0),
+    total: current.total + (counts.added ?? 0),
     channels: current.channels + (counts.channels ?? 0),
   };
   emit("scan");
@@ -266,6 +345,8 @@ interface Progress {
   scanned?: number;
   channels?: number;
   skipped?: number;
+  /** 回すチャンネルが増えた数 (TSMF で束ねた TS。`tsmfJobs`) */
+  added?: number;
 }
 
 /** 総当たりの 1 件。どの種別のどの物理チャンネルか */
@@ -288,10 +369,11 @@ class Scanner {
   /**
    * 局を探している間に流れてきた番組表。**ついでに取得しておく。** NIT と SDT を待つ
    * 数秒〜十数秒で「いま・次」と今日ぶんくらいは来るので、スキャンが終わった
-   * 時点で番組表が空にならない。局が DB に入ってから書く (`runScan`)
+   * 時点で番組表が空にならない。局が DB に入ってから書く (`runScan`)。
+   * **読んだチャンネルの種別ごとに持つ。** CATV で読んだ番組は CATV の局にだけ書く (`epg.savePrograms`)
    */
-  readonly events: EitEvent[] = [];
-  /** 復号できない種別 (SKY) の、局が見つかったチャンネルで分かったこと (`種別:チャンネル` → 中身)。保存できたら `observations` に移す */
+  readonly events = new Map<ChannelType, EitEvent[]>();
+  /** SKY と CATV の、局が見つかったチャンネルで分かったこと (`種別:チャンネル` → 中身)。保存できたら `observations` に移す */
   readonly observed = new Map<string, Observed>();
 
   constructor(private readonly onProgress: (progress: Progress) => void) {}
@@ -307,7 +389,8 @@ class Scanner {
 
   /**
    * targets は [種別, チャンネル一覧] の並び。見つかったチャンネル定義を返す。
-   * 衛星 (BS・CS) は総当たりせず、放送の一覧を読む (`satellite`)。地上波と SKY の総当たりと同時に進む
+   * 衛星 (BS・CS) は総当たりせず、放送の一覧を読む (`satellite`)。地上波・CATV・SKY の総当たりと同時に進む。
+   * 同じ TS が 2 つの CATV のチャンネルで見つかったら、先のほうだけを返す (`dedupeCatv`)
    */
   async run(targets: [ChannelType, string[]][]): Promise<AgentChannel[]> {
     const tuners = (await getTuners().catch(() => [])).filter(
@@ -325,7 +408,7 @@ class Scanner {
       ...satellites,
     ]);
 
-    return [...this.found.entries()]
+    const sorted = [...this.found.entries()]
       .sort(([a], [b]) => {
         const at = (key: string) => key.indexOf(":");
         const typeA = a.slice(0, at(a));
@@ -338,6 +421,19 @@ class Scanner {
         );
       })
       .map(([, entry]) => entry);
+    const { kept, dropped } = dedupeCatv(sorted);
+    for (const { entry, kept: first } of dropped)
+      this.onProgress({
+        line: `${entry.channel}: ${first} と同じ TS のため、スキャンの結果に入れませんでした`,
+      });
+    return kept;
+  }
+
+  /** 流れてきた番組表を、読んだチャンネルの種別ごとに取っておく (`events`) */
+  private keep(type: ChannelType, epg: EpgReader): void {
+    const list = this.events.get(type) ?? [];
+    list.push(...epg.all());
+    this.events.set(type, list);
   }
 
   /**
@@ -366,7 +462,7 @@ class Scanner {
         known,
         // CS で読めなかったネットワークは今のチャンネルを残す (欠けた一覧で置き換えない)
         previous: current,
-        onEvents: (epg) => this.events.push(...epg.all()),
+        onEvents: (epg) => this.keep(type, epg),
       },
     );
     for (const line of lineup.log) this.onProgress({ line });
@@ -414,7 +510,7 @@ class Scanner {
     }
   }
 
-  /** 地上波と SKY の総当たり。チューナーの台数ぶん並べる */
+  /** 地上波・CATV・SKY の総当たり。チューナーの台数ぶん並べる */
   private async ground(
     targets: [ChannelType, string[]][],
     tuners: AgentTuner[],
@@ -507,13 +603,28 @@ class Scanner {
       const closer = new AbortController();
       let stream: ReadableStream<Uint8Array>;
       try {
-        stream = await openChannelStream(
+        const opened = await openChannel(
           type,
           channel,
           closer.signal,
           `scan ${channel}`,
           config.priority.scan,
         );
+        stream = opened.stream;
+        /*
+         * TSMF で束ねた搬送波なら、2 つ目からの TS も回す (`tsmfJobs`)。束ねた数は選局してから分かるので、
+         * そのつど列の先頭に足して進み具合の分母も増やす。先頭に足すのは、列が尽きて止まったチューナーには渡らないため
+         * (ほかのチューナーがまだ動いているうちに引かせる)。回し直し (`first` が false) では足さない
+         */
+        const extra =
+          type === "CATV" && first ? tsmfJobs(channel, opened.tsmfStreams) : [];
+        if (extra.length > 0) {
+          queue.unshift(...extra.map((name) => ({ type, channel: name })));
+          this.onProgress({
+            line: `${channel}: TSMF で ${opened.tsmfStreams} つの TS を束ねています`,
+            added: extra.length,
+          });
+        }
       } catch (error) {
         /*
          * チューナーが全部塞がっている。**飛ばさずに待つ。**
@@ -532,17 +643,20 @@ class Scanner {
       }
 
       /*
-       * 復号できない種別 (SKY) は番組表を取得しない (`decodable`。番組表とライブに出さないので要らない)。
-       * 代わりに、カード無しで分かること (CA_system_id・番組表が来ているか) を数えて記録に出す (`ca-observe.ts`)
+       * SKY は番組表を取得しない (復号できない。番組表とライブに出さないので要らない)。
+       * SKY と CATV は、カード無しで分かること (CA_system_id・番組表が来ているか) を数えて記録に出す (`ca-observe.ts`)。
+       * CATV は局ごとの CA_system_id をチャンネルの控えにも入れ、復号できるかを決める (`types.decodableService`)
        */
-      const epg = decodable(type) ? new EpgReader() : undefined;
-      const observer = decodable(type) ? undefined : new CaObserver();
+      const cable = type === "CATV";
+      const epg = type === "SKY" ? undefined : new EpgReader();
+      const observer = type === "SKY" || cable ? new CaObserver() : undefined;
       const { services, error, signal } = await readServices(
         stream,
         TUNE_TIMEOUT,
         this.aborter.signal,
         epg,
         observer,
+        cable,
       );
       closer.abort();
       if (this.aborted) return;
@@ -553,6 +667,18 @@ class Scanner {
       const observed = signal ? observer?.result() : undefined;
       const note = observed === undefined ? "" : `  ${describe(observed)}`;
 
+      /*
+       * CATV は、SDT が来ない TS と PAT に局が 1 つも無い TS (データだけの TS) を「局なし」として入れない。
+       * 電波が来ていても回し直さない (SDT は 2 秒に 1 回は来るので、30 秒待って来なければ局の無い TS)
+       */
+      if (cable && (error !== null || services?.length === 0)) {
+        const why = error === null ? "" : ` (${error})`;
+        this.onProgress({
+          line: `${channel}: 局なし${why}${note}`,
+          ...counts,
+        });
+        continue;
+      }
       if (error !== null) {
         // 電波は来ているのに揃わなかったものだけ、あとでもう一度回す
         if (first && signal) this.retry.push(job);
@@ -569,9 +695,16 @@ class Scanner {
         continue;
       }
 
-      const entry = channelEntry(type, channel, services);
+      const entry = channelEntry(
+        type,
+        channel,
+        services,
+        cable && observer !== undefined
+          ? (serviceId) => observer.caSystemIdsOf(serviceId)
+          : undefined,
+      );
       this.found.set(`${type}:${channel}`, entry);
-      if (epg !== undefined) this.events.push(...epg.all());
+      if (epg !== undefined) this.keep(type, epg);
       this.onProgress({
         line: `${channel}: ${services.length} 局${note}`,
         ...counts,
@@ -643,9 +776,11 @@ async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
     await sync().catch(() => undefined);
     // 局が入ったので、スキャン中に取得した番組表を書ける
     // ついでの保存なので、失敗しても局の通知と番組表の取得は止めない
-    if (scanner.events.length > 0) {
+    if (scanner.events.size > 0) {
       try {
-        const saved = savePrograms(scanner.events);
+        let saved = 0;
+        for (const [type, events] of scanner.events)
+          saved += savePrograms(events, { type });
         if (saved > 0) {
           settle();
           // 立った予約の取り合いを裁き直す (`settle` は裁かない。ほかの呼び手と同じ)
@@ -672,7 +807,8 @@ async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
 
 /**
  * 選んだ種別から、回すチャンネルを決める。知らない種別と重複は除く。
- * CATV は UHF も回すので、地上波と両方来ても UHF を 2 回回さない。SKY は H01〜H105 を総当たりする。
+ * パススルー (`PASSTHROUGH`) は UHF も回すので、地上波と両方来ても UHF を 2 回回さない。
+ * CATV は QC・QU・QV を (`catvChannels`)、SKY は H01〜H105 を総当たりする。
  * 衛星は総当たりしないので、チャンネルの一覧は持たない。進み具合では 1 つと数える
  * (放送の一覧を 1 回読む。CS はネットワークが 2 つなので 2 回選局するが、数は 1 のまま)
  */
@@ -680,13 +816,15 @@ export function scanTargets(
   chosen: readonly ScanKind[],
 ): [ChannelType, string[]][] {
   const types = new Set(chosen.filter((kind) => SCAN_KINDS.includes(kind)));
-  if (types.has("CATV")) types.delete("GR");
+  if (types.has("PASSTHROUGH")) types.delete("GR");
   return [...types].map((type) =>
-    type === "GR" || type === "CATV"
+    type === "GR" || type === "PASSTHROUGH"
       ? ["GR", channelsFor(type)]
-      : type === "SKY"
-        ? ["SKY", skyChannels()]
-        : [type, [type]],
+      : type === "CATV"
+        ? ["CATV", catvChannels()]
+        : type === "SKY"
+          ? ["SKY", skyChannels()]
+          : [type, [type]],
   );
 }
 

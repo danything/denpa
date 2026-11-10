@@ -71,7 +71,7 @@ const { sweep } = await import("./logo");
 orm()
   .insert(services)
   .values({
-    id: serviceKey(4, 101),
+    id: serviceKey(4, 101, "BS"),
     service_id: 101,
     network_id: 4,
     name: "局101",

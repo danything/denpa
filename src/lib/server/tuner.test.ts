@@ -7,12 +7,44 @@ import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
 import {
   type AgentTuner,
   openChannelStream,
+  programKey,
   recordingHolds,
   recordingOf,
   recordingUse,
   retryWhileBusy,
+  serviceKey,
+  tsmfStreams,
   TunerBusyError,
 } from "./tuner";
+
+describe("局と番組の ID", () => {
+  test("アンテナの局の ID は今までどおり networkId * 100000 + serviceId", () => {
+    expect(serviceKey(32391, 23608, "GR")).toBe(3239123608);
+    expect(serviceKey(4, 151, "BS")).toBe(400151);
+    expect(programKey(4, 151, 1, "BS")).toBe(40015100001);
+  });
+
+  test("CATV が再送信する BS の局は、同じ original_network_id と service_id でもアンテナの BS と別の ID になる", () => {
+    const antenna = serviceKey(4, 151, "BS");
+    const cable = serviceKey(4, 151, "CATV");
+    expect(cable).not.toBe(antenna);
+    expect(cable).toBe((0x10000 + 4) * 100000 + 151);
+    expect(programKey(4, 151, 1, "CATV")).not.toBe(programKey(4, 151, 1, "BS"));
+    // いちばん大きい番組の ID も、JS の整数で正しく持てる
+    expect(
+      Number.isSafeInteger(programKey(0xffff, 0xffff, 0xffff, "CATV")),
+    ).toBe(true);
+  });
+});
+
+describe("TSMF で束ねた TS の数", () => {
+  test("ヘッダが無い・読めないときは 1 (TSMF ではない)", () => {
+    expect(tsmfStreams(new Headers())).toBe(1);
+    expect(tsmfStreams(new Headers({ "X-Denpa-Tsmf-Streams": "x" }))).toBe(1);
+    expect(tsmfStreams(new Headers({ "X-Denpa-Tsmf-Streams": "0" }))).toBe(1);
+    expect(tsmfStreams(new Headers({ "X-Denpa-Tsmf-Streams": "3" }))).toBe(3);
+  });
+});
 
 /**
  * **空きが無いだけなら、掛け直せば通る。**

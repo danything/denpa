@@ -18,7 +18,6 @@
   } from "#lib/format.js";
   import { held } from "#lib/live-updates.svelte.js";
   import type { SignalQuality } from "#lib/server/signal-quality.js";
-  import { decodable } from "#lib/types.js";
 
   import type { ActionData, PageData } from "./$types";
 
@@ -89,8 +88,11 @@
   const SCAN_CHOICES = $derived([
     { value: skyScan ? "GR,BS,CS,SKY" : "GR,BS,CS", label: "すべて" },
     { value: "GR", label: SERVICE_TYPE_LABEL["GR"] },
-    // CATV の周波数変換パススルー。UHF に加えて C13〜C63 も回す (`scan.ts` の `SCAN_KINDS`)
-    { value: "CATV", label: `${SERVICE_TYPE_LABEL["GR"]} (CATV)` },
+    // ケーブルテレビの周波数変換パススルー。UHF に加えて C13〜C63 も回す (`scan.ts` の `SCAN_KINDS`)
+    {
+      value: "PASSTHROUGH",
+      label: `${SERVICE_TYPE_LABEL["GR"]} (パススルーも)`,
+    },
     { value: "BS", label: SERVICE_TYPE_LABEL["BS"] },
     { value: "CS", label: SERVICE_TYPE_LABEL["CS"] },
     ...(skyScan ? [{ value: "SKY", label: SERVICE_TYPE_LABEL["SKY"] }] : []),
@@ -98,7 +100,7 @@
 
   /** 受信できるチャンネルに SKY の局があるか。あれば、番組表とライブに出ないわけを添える */
   const hasSky = $derived(
-    data.channels.some((channel) => !decodable(channel.type)),
+    data.channels.some((channel) => channel.type === "SKY"),
   );
   /*
    * 物理チャンネルと、そこに入っている局。**denpa 自身の DB から来る。**
@@ -414,7 +416,7 @@
       </div>
     {:else}
       {#if hasSky}
-        <!-- SKY の局は表にだけ並ぶ。番組表とライブに出ないわけを、表のすぐ上で言う (`types.ts` の `decodable`) -->
+        <!-- SKY の局は表にだけ並ぶ。番組表とライブに出ないわけを、表のすぐ上で言う (`services.decodable`) -->
         <p class="small muted" data-testid="sky-note">
           スカパー！プレミアムの局は、スクランブルを復号できないため、番組表とライブに出しません。スカパー！プレミアムのカードには、これから対応する予定です
         </p>

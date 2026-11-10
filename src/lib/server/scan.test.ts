@@ -5,17 +5,23 @@ import {
   eitSection,
   nitSection,
   packetize,
+  patSection,
+  programMap,
   sdtSection,
 } from "@danything/arib/synth";
 
 import { CaObserver } from "./ca-observe";
 import {
+  catvChannels,
   channelEntry,
   channelsFor,
+  dedupeCatv,
   readServices,
   scanTargets,
   skyChannels,
+  tsmfJobs,
 } from "./scan";
+import type { AgentChannel } from "./tuner";
 
 /**
  * 総当たりそのもの (`Scanner`) はここでは試さない。**エージェントに選局を
@@ -64,8 +70,8 @@ describe("選局するチャンネル", () => {
     expect(channels).toHaveLength(50);
   });
 
-  test("CATV は UHF に続けて C13〜C63", () => {
-    const catv = channelsFor("CATV");
+  test("パススルーも選ぶと UHF に続けて C13〜C63", () => {
+    const catv = channelsFor("PASSTHROUGH");
     expect(catv.slice(0, 50)).toEqual(channelsFor("GR"));
     expect(catv.slice(50)).toEqual(
       Array.from({ length: 51 }, (_, i) => `C${13 + i}`),
@@ -79,8 +85,62 @@ describe("選局するチャンネル", () => {
     ]);
   });
 
-  test("地上波と CATV を両方選ぶと、UHF を 2 回回さず CATV だけにする", () => {
-    expect(scanTargets(["GR", "CATV"])).toEqual([["GR", channelsFor("CATV")]]);
+  test("地上波とパススルーを両方選ぶと、UHF を 2 回回さずパススルーのほうだけにする", () => {
+    expect(scanTargets(["GR", "PASSTHROUGH"])).toEqual([
+      ["GR", channelsFor("PASSTHROUGH")],
+    ]);
+  });
+
+  test("ケーブルテレビは QC13〜QC63・QU13〜QU62・QV1〜QV12 の 113 本を、種別 CATV で総当たりする", () => {
+    const catv = catvChannels();
+    expect(catv).toHaveLength(113);
+    expect(catv.slice(0, 2)).toEqual(["QC13", "QC14"]);
+    expect(catv[50]).toBe("QC63");
+    expect(catv[51]).toBe("QU13");
+    expect(catv[100]).toBe("QU62");
+    expect(catv.slice(-2)).toEqual(["QV11", "QV12"]);
+    expect(scanTargets(["PASSTHROUGH", "CATV"])).toEqual([
+      ["GR", channelsFor("PASSTHROUGH")],
+      ["CATV", catv],
+    ]);
+  });
+
+  test("TSMF で束ねた搬送波は、2 つ目からの TS を番号を付けて回す", () => {
+    expect(tsmfJobs("QC30", 3)).toEqual(["QC30:1", "QC30:2"]);
+    // 束ねていない (ヘッダが無い)・C13〜C63 の周波数でない・もう番号の付いたものは足さない
+    expect(tsmfJobs("QC30", 1)).toEqual([]);
+    expect(tsmfJobs("QU30", 3)).toEqual([]);
+    expect(tsmfJobs("QC30:1", 3)).toEqual([]);
+  });
+
+  test("同じ TS が 2 つの CATV のチャンネルで見つかったら、先のほうだけを残す", () => {
+    const entry = (
+      type: AgentChannel["type"],
+      channel: string,
+      transportStreamId: number,
+    ): AgentChannel => ({
+      type,
+      channel,
+      networkId: 4,
+      transportStreamId,
+      remoteControlKeyId: null,
+      services: [],
+    });
+    const { kept, dropped } = dedupeCatv([
+      entry("BS", "BS01:16400", 16400),
+      entry("CATV", "QC30", 16400),
+      entry("CATV", "QC30:1", 16401),
+      entry("CATV", "QU40", 16400),
+    ]);
+    // アンテナの BS とは比べない (ID が別なのでぶつからない)
+    expect(kept.map((e) => e.channel)).toEqual([
+      "BS01:16400",
+      "QC30",
+      "QC30:1",
+    ]);
+    expect(dropped.map((d) => [d.entry.channel, d.kept])).toEqual([
+      ["QU40", "QC30"],
+    ]);
   });
 
   test("SKY はエージェントの選局表の H01〜H105 を総当たりする", () => {
@@ -273,5 +333,105 @@ describe("SKY の局で、カード無しで分かること", () => {
     expect(error).toBeNull();
     expect(services?.map((s) => s.serviceId)).toEqual([1024]);
     expect(observer.result().epg).toBe("absent");
+  });
+});
+
+describe("ケーブルテレビの局", () => {
+  /** CA 記述子 (0x09)。CA_system_id と ECM の PID */
+  const ca = (system: number, pid: number) => [
+    0x09,
+    0x04,
+    system >> 8,
+    system & 0xff,
+    0xe0 | (pid >> 8),
+    pid & 0xff,
+  ];
+
+  test("NIT が来なくても SDT で揃い、局ごとの CA_system_id を PMT から入れる", async () => {
+    const observer = new CaObserver();
+    const data = Uint8Array.from([
+      ...packetize(
+        0x0000,
+        patSection(
+          [
+            [151, 0x0101],
+            [152, 0x0102],
+          ],
+          16400,
+        ),
+      ),
+      // BS の再送信。B-CAS で掛かった局と、B-CAS 以外の方式で掛かった局
+      ...packetize(0x0101, programMap(151, 0x0111, [[0x02, 0x0111]], 0x0901)),
+      ...packetize(
+        0x0102,
+        programMap(
+          152,
+          0x0112,
+          [[0x02, 0x0112]],
+          undefined,
+          ca(0x000a, 0x0902),
+        ),
+      ),
+      ...packetize(
+        0x0011,
+        sdtSection(16400, 4, [
+          [151, 0x01, "BS朝日1"],
+          [152, 0x01, "BS朝日2"],
+        ]),
+      ),
+    ]);
+    const { services, error } = await readServices(
+      fromBytes(data, true),
+      30_000,
+      undefined,
+      undefined,
+      observer,
+      true,
+    );
+    expect(error).toBeNull();
+    // 元の放送の original_network_id (BS は 4) をそのまま使う
+    expect(services?.map((s) => [s.serviceId, s.networkId])).toEqual([
+      [151, 4],
+      [152, 4],
+    ]);
+    const entry = channelEntry("CATV", "QC30", services!, (id) =>
+      observer.caSystemIdsOf(id),
+    );
+    expect(entry.networkId).toBe(4);
+    expect(entry.services.map((s) => s.caSystemIds)).toEqual([
+      [0x0005],
+      [0x000a],
+    ]);
+  });
+
+  test("PAT に局が 1 つも無い TS は、待たずに局なしで返す", async () => {
+    const started = Bun.nanoseconds();
+    const { services, error } = await readServices(
+      fromBytes(
+        Uint8Array.from(packetize(0x0000, patSection([], 16400))),
+        true,
+      ),
+      30_000,
+      undefined,
+      undefined,
+      new CaObserver(),
+      true,
+    );
+    expect(error).toBeNull();
+    expect(services).toEqual([]);
+    expect((Bun.nanoseconds() - started) / 1e9).toBeLessThan(10);
+  });
+
+  test("SDT が来なければ SDT が無いと返す (NIT は見ない)", async () => {
+    const { services, error } = await readServices(
+      fromBytes(stream([[1024, 0x01]], true).slice(0, 188), true),
+      500,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    expect(services).toBeNull();
+    expect(error).toBe("SDT を受信できませんでした");
   });
 });

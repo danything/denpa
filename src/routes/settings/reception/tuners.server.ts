@@ -199,7 +199,7 @@ export const actions = {
       const name = String(get("name") ?? "").trim();
       if (name === "") return fail(400, { message: "名前は空にできません" });
 
-      // SKY の欄は受信の設定に並べたときだけ来る (`showsSky`)
+      // CATV と SKY の欄は受信の設定に並べたときだけ来る (`extraTypes`)
       const types = ALL_CHANNEL_TYPES.filter(
         (type) => get(`type.${type}`) !== null,
       );

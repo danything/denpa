@@ -1,6 +1,8 @@
 /**
  * スキャンで、**カードが無くても TS から分かること**を数える (スカパー！プレミアムの実機の報告のため。#1578)。
  *
+ * CATV のスキャンでも数え、局ごとの CA_system_id を控えに入れる (`caSystemIdsOf`。復号できるかを決める。`types.decodableService`)。
+ *
  * 読むのはスクランブルされていない PSI/SI (ARIB STD-B10) だけで、ECM と EMM の中身は読まない。
  *
  * - PMT (局ごと) と CAT の CA 記述子 (0x09) にある CA_system_id と、ECM・EMM の PID
@@ -23,8 +25,7 @@ import {
   SectionAssembler,
 } from "@danything/arib/psi";
 
-/** B-CAS の CA_system_id (ARIB STD-B25) */
-const BCAS_SYSTEM_ID = 0x0005;
+import { BCAS_SYSTEM_ID } from "../types";
 
 const PID_CAT = 0x0001;
 const PID_CDT = 0x0029;
@@ -119,6 +120,10 @@ export class CaObserver {
   );
   /** PMT の PID → 組み立て中のセクション */
   private readonly pmts = new Map<number, SectionAssembler>();
+  /** PAT を読んだか */
+  private patSeen = false;
+  /** 1 回でも組み上がった PMT の PID */
+  private readonly pmtsSeen = new Set<number>();
   /** service_id → PMT の CA 記述子 */
   private readonly ecm = new Map<number, CaEntry[]>();
   private emm: CaEntry[] = [];
@@ -135,6 +140,27 @@ export class CaObserver {
   /** 番組表 (EIT) が読めたかスクランブルされていると分かったか。スキャンで、分かるまで少し長く読むのに使う */
   get epgKnown(): boolean {
     return this.eitSections > 0 || this.eitScrambled > 0;
+  }
+
+  /**
+   * PAT にある局の PMT が全部 1 回は来たか。CATV のスキャンで、局ごとの CA_system_id が分かるまで少し長く読むのに使う
+   */
+  get pmtsKnown(): boolean {
+    return (
+      this.patSeen &&
+      [...this.pmts.keys()].every((pid) => this.pmtsSeen.has(pid))
+    );
+  }
+
+  /**
+   * その局の PMT の CA 記述子にあった CA_system_id (重なりなし・小さい順)。CA 記述子が無い・PMT が来なかった局は空
+   */
+  caSystemIdsOf(serviceId: number): number[] {
+    return [
+      ...new Set(
+        (this.ecm.get(serviceId) ?? []).map((entry) => entry.caSystemId),
+      ),
+    ].sort((a, b) => a - b);
   }
 
   result(): Observed {
@@ -163,6 +189,7 @@ export class CaObserver {
     }
     if (pid === PID_PAT) {
       for (const section of this.pat.feed(packet)) {
+        if (section[0] === 0x00) this.patSeen = true;
         for (const pmtPid of parsePat(section).values())
           if (!this.pmts.has(pmtPid))
             this.pmts.set(pmtPid, new SectionAssembler(pmtPid));
@@ -199,6 +226,7 @@ export class CaObserver {
     if (pmt === undefined) return;
     for (const section of pmt.feed(packet)) {
       if (section[0] !== 0x02) continue;
+      this.pmtsSeen.add(pid);
       const serviceId = u16(section, 3);
       const entries = caEntries(pmtProgramInfo(section), serviceId);
       for (const [, , info] of pmtStreams(section))

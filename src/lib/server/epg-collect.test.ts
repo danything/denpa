@@ -45,8 +45,8 @@ describe("どこまで埋まっているか", () => {
 
   test("入っている局のうち、いちばん薄いものに合わせる", () => {
     const reach = new Map([
-      [serviceKey(NETWORK, 23608), WEEK],
-      [serviceKey(NETWORK, 23610), NOW],
+      [serviceKey(NETWORK, 23608, "GR"), WEEK],
+      [serviceKey(NETWORK, 23610, "GR"), NOW],
     ]);
 
     expect(reachOf(reach, channel("T16", [23608, 23610]))).toBe(NOW);
@@ -59,7 +59,7 @@ describe("どこまで埋まっているか", () => {
    * 対象になっていた
    */
   test("番組表に出てこない局は数えない", () => {
-    const reach = new Map([[serviceKey(NETWORK, 23608), WEEK]]);
+    const reach = new Map([[serviceKey(NETWORK, 23608, "GR"), WEEK]]);
 
     // 23611 はデータ放送。denpa の services には無い
     expect(reachOf(reach, channel("T16", [23608, 23611]))).toBe(WEEK);
@@ -146,15 +146,15 @@ describe("最後に集めた時刻", () => {
 
   test("入っている局のうち、いちばん新しいものを採る", () => {
     const perService = new Map([
-      [serviceKey(NETWORK, 101), AT - 60_000],
-      [serviceKey(NETWORK, 102), AT],
+      [serviceKey(NETWORK, 101, "GR"), AT - 60_000],
+      [serviceKey(NETWORK, 102, "GR"), AT],
     ]);
 
     expect(lastOf(perService, channel("BS01_0", [101, 102]))).toBe(AT);
   });
 
   test("同じ局を指す別の枠からでも、同じ時刻が出る", () => {
-    const perService = new Map([[serviceKey(NETWORK, 101), AT]]);
+    const perService = new Map([[serviceKey(NETWORK, 101, "GR"), AT]]);
 
     expect(lastOf(perService, channel("BS01_3", [101]))).toBe(AT);
   });
@@ -192,7 +192,7 @@ describe("初回は BS をネットワークごとに 1 中継で埋める", () 
   });
 
   test("1 局でも埋まっているネットワークは選ばない (受信できない局が残っていても)", () => {
-    const reach = new Map([[serviceKey(BS, 151), Date.now()]]);
+    const reach = new Map([[serviceKey(BS, 151, "BS"), Date.now()]]);
     expect(firstSweeps(channels, reach)).toEqual([]);
   });
 

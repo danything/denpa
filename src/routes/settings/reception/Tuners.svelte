@@ -19,7 +19,7 @@
   import { held } from "#lib/live-updates.svelte.js";
   import type { CardReaderState } from "#lib/server/scramble.js";
   import type { TunerSignal } from "#lib/server/tuner.js";
-  import { receives, showsSky } from "#lib/tuner-types.js";
+  import { extraTypes, receives } from "#lib/tuner-types.js";
   import { CHANNEL_TYPES, type ChannelType, shownTypes } from "#lib/types.js";
 
   import type { PageData } from "./$types";
@@ -80,9 +80,9 @@
   const shownCard = held(() => data.card);
   const shownContracts = held(() => data.contracts);
 
-  /** 行に並べる種別。SKY は受けられる機材か選んだチューナーがあるときだけ (`showsSky`) */
+  /** 行に並べる種別。CATV と SKY は受けられる機材か選んだチューナーがあるときだけ (`extraTypes`) */
   const rowTypes = $derived(
-    shownTypes(showsSky(shownTuners.value?.list ?? [])),
+    shownTypes(extraTypes(shownTuners.value?.list ?? [])),
   );
 
   const activeCardId = $derived.by(() => {

@@ -176,7 +176,7 @@ orm()
   .insert(services)
   .values(
     STATIONS.map((s) => ({
-      id: serviceKey(s.network, s.sid),
+      id: serviceKey(s.network, s.sid, s.type),
       service_id: s.sid,
       network_id: s.network,
       name: `局${s.sid}`,
@@ -188,8 +188,9 @@ orm()
   .run();
 
 const logos = () =>
-  STATIONS.filter((s) => readLogo(serviceKey(s.network, s.sid)) !== null)
-    .length;
+  STATIONS.filter(
+    (s) => readLogo(serviceKey(s.network, s.sid, s.type)) !== null,
+  ).length;
 
 /** `sweep` の間に出た記録の行のうち、ロゴのもの */
 async function logged(run: () => Promise<unknown>): Promise<string[]> {

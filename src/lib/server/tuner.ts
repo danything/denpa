@@ -21,7 +21,7 @@ import {
   string,
   tolerate,
 } from "../shape";
-import type { ChannelType } from "../types";
+import { type ChannelType, decodableService } from "../types";
 import { agentFetch } from "./agent-client";
 import { config } from "./config";
 import type { Busy } from "./conflict";
@@ -34,7 +34,13 @@ import type { Busy } from "./conflict";
  * **違っていても止めない** (`tolerate`)。バージョンがずれただけで録画が止まるのでは
  * 困るので、警告を出して来たものをそのまま使う。直すのは人
  */
-const CHANNEL_TYPE: Shape<ChannelType> = literal("GR", "BS", "CS", "SKY");
+const CHANNEL_TYPE: Shape<ChannelType> = literal(
+  "GR",
+  "BS",
+  "CS",
+  "CATV",
+  "SKY",
+);
 
 /** エージェントが持っているチャンネル。スキャンの結果そのもの */
 const AGENT_CHANNEL = object({
@@ -44,10 +50,29 @@ const AGENT_CHANNEL = object({
   transportStreamId: number,
   remoteControlKeyId: nullable(number),
   services: array(
-    object({ serviceId: number, serviceType: number, name: string }),
+    object({
+      serviceId: number,
+      serviceType: number,
+      name: string,
+      /**
+       * PMT の CA 記述子にあった CA_system_id (`ca-observe.ts`)。スキャンで PMT を読む CATV の局だけが持つ。
+       * CA 記述子が無ければ空。復号できるかはこれで決める (`types.decodableService`)
+       */
+      caSystemIds: optional(array(number)),
+    }),
   ),
 });
 export type AgentChannel = Infer<typeof AGENT_CHANNEL>;
+
+/**
+ * 復号できる局が 1 つでも入っているチャンネルか。**チャンネルごとに決めること (スキャンで番組表も読むか・番組表の取得に行くか) はこれで見る。**
+ * 局ごとの判断は局の行の `services.decodable` (`epg.syncServices`)
+ */
+export function decodableChannel(channel: AgentChannel): boolean {
+  return channel.services.some((service) =>
+    decodableService(channel.type, service.caSystemIds ?? []),
+  );
+}
 
 const SIGNAL = object({
   locked: boolean,
@@ -108,13 +133,28 @@ export interface TunerConfig {
 }
 
 /**
- * 局の内部 ID。`networkId * 100000 + serviceId`。
+ * CATV の局の ID に足すオフセット (`serviceKey`)。アンテナで受けた局と分ける。network_id は 16 ビットなので、足すと重ならない
+ */
+const CATV_NETWORK_OFFSET = 0x10000;
+
+/**
+ * 局の内部 ID。`networkId * 100000 + serviceId`。**CATV の局は `(0x10000 + networkId) * 100000 + serviceId`。**
+ *
+ * CATV は地上波・BS を再送信していて、同じ original_network_id と service_id の局が
+ * アンテナでも受けられる。同じ ID にすると、片方の番組表やロゴがもう片方に入る。
  *
  * 録画も予約も `services.id` を参照しているので、ここを変えると
  * 過去の録画が辿れなくなる (docs/data.md)。
  */
-export function serviceKey(networkId: number, serviceId: number): number {
-  return networkId * 100000 + serviceId;
+export function serviceKey(
+  networkId: number,
+  serviceId: number,
+  type: string,
+): number {
+  return (
+    (type === "CATV" ? CATV_NETWORK_OFFSET + networkId : networkId) * 100000 +
+    serviceId
+  );
 }
 
 /** 番組の ID。局の内部 ID + event_id */
@@ -122,8 +162,9 @@ export function programKey(
   networkId: number,
   serviceId: number,
   eventId: number,
+  type: string,
 ): number {
-  return serviceKey(networkId, serviceId) * 100000 + eventId;
+  return serviceKey(networkId, serviceId, type) * 100000 + eventId;
 }
 
 async function get<T>(path: string, shape: Shape<T>): Promise<T> {
@@ -315,6 +356,28 @@ export async function openChannelStream(
   /** デバッグ用の名指し。このチューナーだけで選局し、ほかへ振り替えない (docs/agent.md「デバッグ用の名指し」) */
   pin: string | null = null,
 ): Promise<ReadableStream<Uint8Array>> {
+  return (await openChannel(type, channel, signal, use, priority, after, pin))
+    .stream;
+}
+
+/** 選局の答えのヘッダ。TSMF で束ねた TS の数 (無ければ TSMF ではない) */
+const TSMF_STREAMS = "X-Denpa-Tsmf-Streams";
+
+/**
+ * `openChannelStream` と同じく開いて、**答えのヘッダから分かることも返す。** チャンネルスキャンが使う (`scan.ts`)。
+ *
+ * `tsmfStreams` は、選局した搬送波に TSMF (ARIB STD-B32。1 つの搬送波に複数の TS を束ねる) で束ねてある TS の数。
+ * エージェントが `X-Denpa-Tsmf-Streams` で返す。返さなければ (TSMF でない・古いエージェント) 1
+ */
+export async function openChannel(
+  type: string,
+  channel: string,
+  signal: AbortSignal,
+  use: StreamUse,
+  priority = config.priority.recording,
+  after: readonly StreamUse[] = [],
+  pin: string | null = null,
+): Promise<{ stream: ReadableStream<Uint8Array>; tsmfStreams: number }> {
   const query = new URLSearchParams({
     type,
     channel,
@@ -332,7 +395,13 @@ export async function openChannelStream(
       throw new TunerBusyError(`チューナーに空きがありません ${detail}`);
     throw new TuneError(`選局できません (${res.status}) ${detail}`);
   }
-  return res.body;
+  return { stream: res.body, tsmfStreams: tsmfStreams(res.headers) };
+}
+
+/** `X-Denpa-Tsmf-Streams` を読む。無い・読めなければ 1 (TSMF ではない) */
+export function tsmfStreams(headers: Headers): number {
+  const value = Number(headers.get(TSMF_STREAMS));
+  return Number.isInteger(value) && value >= 1 ? value : 1;
 }
 
 /** 空き待ちで掛け直す回数と間隔 (ms)。待つのは前のチャンネルが離れるまで */

@@ -11,10 +11,76 @@ import {
 import {
   nitSection,
   packetize,
+  patSection,
   satelliteDeliveryDescriptor,
   sdtSection,
   terrestrialDeliveryDescriptor,
 } from "./synth.js";
+
+describe("ケーブルテレビの TS (NIT を待たない)", () => {
+  test("SDT[actual] だけで揃い、ネットワーク ID は SDT の original_network_id", () => {
+    const reader = new ServiceReader({ requireNit: false });
+    expect(
+      reader.feed(
+        packetize(0x0011, sdtSection(16400, 4, [[151, 0x01, "BS朝日1"]])),
+      ),
+    ).toBe(true);
+    expect(reader.network).toBeNull();
+    expect(reader.services()).toEqual([
+      {
+        serviceId: 151,
+        serviceType: 0x01,
+        name: "BS朝日1",
+        networkId: 4,
+        transportStreamId: 16400,
+        remoteControlKeyId: null,
+      },
+    ]);
+  });
+
+  test("NIT が先に来ていれば、自分の TS のリモコン番号だけを使う", () => {
+    const reader = new ServiceReader({ requireNit: false });
+    // CATV のネットワーク (0xFFFE) の NIT。自分の TS (地上波の再送信) 以外の TS も並ぶ
+    reader.feed(
+      packetize(
+        0x0010,
+        nitSection(0xfffe, 3, [
+          [0x7fe0, 0x7fe0, [[1024, 0x01]]],
+          [0x0408, 0x7fe1, [[1032, 0x01]]],
+        ]),
+      ),
+    );
+    reader.feed(
+      packetize(0x0011, sdtSection(0x0408, 0x7fe1, [[1032, 0x01, "地デジ"]])),
+    );
+    const [service] = reader.services();
+    expect(service?.networkId).toBe(0x7fe1);
+    expect(service?.remoteControlKeyId).toBe(3);
+
+    // 自分の TS が NIT に無ければ、リモコン番号は分からない
+    const other = new ServiceReader({ requireNit: false });
+    other.feed(
+      packetize(0x0010, nitSection(0xfffe, 3, [[0x7fe0, 0x7fe0, [[1024, 1]]]])),
+    );
+    other.feed(packetize(0x0011, sdtSection(0x0500, 4, [[151, 0x01]])));
+    expect(other.services()[0]?.remoteControlKeyId).toBeNull();
+  });
+
+  test("PAT に局が 1 つも無い TS は、SDT を待たずに揃って局を返さない", () => {
+    const reader = new ServiceReader({ requireNit: false });
+    expect(reader.feed(packetize(0x0000, patSection([], 0x0500)))).toBe(true);
+    expect(reader.empty).toBe(true);
+    expect(reader.services()).toEqual([]);
+  });
+
+  test("ふつうの読み方は、SDT だけでは揃わない", () => {
+    const reader = new ServiceReader();
+    expect(
+      reader.feed(packetize(0x0011, sdtSection(16400, 4, [[151, 0x01]]))),
+    ).toBe(false);
+    expect(reader.feed(packetize(0x0000, patSection([], 0x0500)))).toBe(false);
+  });
+});
 
 /**
  * 実チューナーが無いので、NIT と SDT を組み立てて渡す。

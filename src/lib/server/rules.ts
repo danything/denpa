@@ -763,7 +763,7 @@ export function duplicateAtStart(recordingId: number): string | null {
   if (owner === undefined || !owner.dedupe) return null;
 
   const service = orm()
-    .select({ type: services.type })
+    .select({ type: services.type, network_id: services.network_id })
     .from(services)
     .where(eq(services.id, recording.service_id))
     .get();
@@ -814,6 +814,7 @@ export function duplicateAtStart(recordingId: number): string | null {
     end_at: recording.end_at,
     service_id: recording.service_id,
     type: service?.type ?? "",
+    network_id: service?.network_id ?? 0,
   };
   const skip = firstAirings([airing], new Set(), [
     ...takenOf(rows),
