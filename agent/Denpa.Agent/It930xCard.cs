@@ -201,6 +201,9 @@ public sealed class It930xCard : ICardLink
     /// <summary>受けた数が増えなくなったとみなすまでの間隔 (ms)。19200 ボーの 1 バイトは約 0.6 ms、ATR の 9600 ボーは約 1.3 ms</summary>
     private const int SettleMs = 4;
 
+    /// <summary>受けた数が増えなくなるのを待つ回数の上限 (<see cref="SettleMs"/> × 64 = 256 ms)</summary>
+    private const int SettleLimit = 64;
+
     /// <summary>
     /// 受けて読まれていないバイトを <paramref name="max"/> まで読む。受けた数 (<see cref="RxLength"/>) を読み、<see cref="SettleMs"/> 待っても
     /// 増えなくなってから、<c>IT9300_bcasGetData</c> と同じく 32 バイトまでずつ読む。
@@ -215,7 +218,8 @@ public sealed class It930xCard : ICardLink
             var waiting = (int)bridge.ReadRegister(RxLength);
             if (waiting > 0)
             {
-                while (true)
+                // 255 バイトが 19200 ボーで届き切る時間 (約 150 ms) より長く待たない。増え続けるなら、そこまでに届いたぶんを読む
+                for (var settle = 0; settle < SettleLimit; settle++)
                 {
                     _delay(SettleMs);
                     var again = (int)bridge.ReadRegister(RxLength);
