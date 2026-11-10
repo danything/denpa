@@ -5,7 +5,7 @@ using TUnit.Core.Enums;
 namespace Denpa.Agent.Tests;
 
 /*
- * px4-userland の機材 (PX-Q3U4 / PX-MLT5PE / DTV02A-5TS-P …) を使うところ。
+ * px4-userland の機材 (PX-Q3U4 / PX-W3U4 …) を使うところ。PX-MLT5 系はエージェントが直に持つ (It930x*Tests.cs)。
  *
  * 本物の筐体は無い。ここで確かめるのは**機材に触らない部分**だけで、次のものを見る。
  * px4d --list-json / px4ctl list の読み方、device 文字列の形式、TUNE の中身。
@@ -26,8 +26,8 @@ public class Px4Tests
         receiver=7 device=2 local=3 system=ISDB-T
         """;
 
-    /// <summary>同じく MLT5 系。どの受信機も地上波と衛星の両方</summary>
-    private const string Mlt5List = """
+    /// <summary>同じく、どの受信機も地上波と衛星の両方を受けられる筐体</summary>
+    private const string BothList = """
         serial=000000000012345 ready=yes usb-present-mask=0x01
         receiver=0 device=1 local=0 system=ISDB-T/S
         receiver=1 device=1 local=1 system=ISDB-T/S
@@ -59,9 +59,9 @@ public class Px4Tests
     }
 
     [Test]
-    public async Task 受信機の数と種別は筐体の応答のとおり_MLT5()
+    public async Task 受信機の数と種別は筐体の応答のとおり_どれも両方()
     {
-        var receivers = Receivers(Mlt5List);
+        var receivers = Receivers(BothList);
         await Assert.That(receivers.Count).IsEqualTo(5);
         await Assert.That(receivers.All(r => r.Types.SequenceEqual(["GR", "BS", "CS"]))).IsTrue();
     }
@@ -96,10 +96,10 @@ public class Px4Tests
     public async Task 筐体と受信機から設定の形式に組み立てる()
     {
         var found = Px4Userland.Specs(Px4Userland.ParseJson(JsonList, _ => { }));
-        // MLT5PE 2 つ + Q3U4 2 つ + 番号の重なる M1UR / S1UR 1 つずつ
+        // ISDB6014-4TS 2 つ + Q3U4 2 つ + 番号の重なる M1UR / S1UR 1 つずつ
         await Assert.That(found.Count).IsEqualTo(6);
         await Assert.That(found[0].Device).IsEqualTo("px4:000000000012345:0");
-        await Assert.That(found[0].Name).IsEqualTo("PX-MLT5PE-2345 #0");
+        await Assert.That(found[0].Name).IsEqualTo("ISDB6014-4TS-2345 #0");
         await Assert.That(found[0].Types).IsEquivalentTo(["GR", "BS", "CS"], CollectionOrdering.Matching);
         await Assert.That(found[2].Device).IsEqualTo("px4:00001205000960:0");
         await Assert.That(found[2].Name).IsEqualTo("PX-Q3U4-0960 #0");
@@ -208,16 +208,16 @@ public class Px4Tests
         await Assert.That(error.Message).Contains("GR 用");
         Px4Tuner.Check(q3u4, 0, ChannelTable.Parse("BS15:16625")!);
 
-        // MLT5 系はどの受信機も両方受けられる
-        var mlt5 = Receivers(Mlt5List);
-        Px4Tuner.Check(mlt5, 4, ChannelTable.Parse("BS15:16625")!);
-        Px4Tuner.Check(mlt5, 4, ChannelTable.Parse("T27")!);
+        // どの受信機も両方受けられる筐体
+        var both = Receivers(BothList);
+        Px4Tuner.Check(both, 4, ChannelTable.Parse("BS15:16625")!);
+        Px4Tuner.Check(both, 4, ChannelTable.Parse("T27")!);
     }
 
     [Test]
     public async Task 無い受信機は選局しない()
     {
-        var error = Assert.Throws<IOException>(() => Px4Tuner.Check(Receivers(Mlt5List), 5, ChannelTable.Parse("T27")!));
+        var error = Assert.Throws<IOException>(() => Px4Tuner.Check(Receivers(BothList), 5, ChannelTable.Parse("T27")!));
         await Assert.That(error.Message).Contains("受信機 5 はありません");
     }
 
@@ -233,7 +233,7 @@ public class Px4Tests
     /// PX-M1UR と PX-S1UR を同時に挿すと、どちらも 000000000000001 で ready の筐体が 2 つ並ぶ
     /// </summary>
     private const string JsonList = """
-        {"enclosures":[{"serial":"000000000012345","model":"PX-MLT5PE","usb":"0511:024e","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000000000012345","bus":1,"address":5,"port":"1-2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T/S","lnb_15v_supported":true},{"receiver":1,"device":1,"local":1,"system":"ISDB-T/S","lnb_15v_supported":true}]},{"serial":"00001205000960","model":"PX-Q3U4","usb":"0511:084a","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000012050009601","bus":1,"address":8,"port":"1-3.1"},{"device":2,"serial":"000012050009602","bus":1,"address":9,"port":"1-3.2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-S","lnb_15v_supported":true},{"receiver":2,"device":1,"local":2,"system":"ISDB-T","lnb_15v_supported":false}]},{"serial":"000000000000001","model":"PX-M1UR","usb":"0511:0854","status":"ready","serial_unique":false,"devices":[{"device":1,"serial":"000000000000001","bus":1,"address":6,"port":"1-2.3"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T/S","lnb_15v_supported":false}]},{"serial":"000000000000001","model":"PX-S1UR","usb":"0511:0855","status":"ready","serial_unique":false,"devices":[{"device":1,"serial":"000000000000001","bus":1,"address":7,"port":"1-2.4"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T","lnb_15v_supported":false}]},{"serial":"00001205000123","model":"PX-Q3U4","usb":"0511:084a","status":"incomplete","serial_unique":false,"devices":[{"device":1,"serial":"000012050001231","bus":2,"address":3,"port":"2-1"}],"candidates":[],"receivers":[]}],"ungrouped_usb_devices":[{"serial":null,"model":"PX-W3U4","usb":"0511:083f","status":"open_failed","bus":null,"address":null,"port":null}]}
+        {"enclosures":[{"serial":"000000000012345","model":"ISDB6014-4TS","usb":"0511:0254","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000000000012345","bus":1,"address":5,"port":"1-2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T/S","lnb_15v_supported":true},{"receiver":1,"device":1,"local":1,"system":"ISDB-T/S","lnb_15v_supported":true}]},{"serial":"00001205000960","model":"PX-Q3U4","usb":"0511:084a","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000012050009601","bus":1,"address":8,"port":"1-3.1"},{"device":2,"serial":"000012050009602","bus":1,"address":9,"port":"1-3.2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-S","lnb_15v_supported":true},{"receiver":2,"device":1,"local":2,"system":"ISDB-T","lnb_15v_supported":false}]},{"serial":"000000000000001","model":"PX-M1UR","usb":"0511:0854","status":"ready","serial_unique":false,"devices":[{"device":1,"serial":"000000000000001","bus":1,"address":6,"port":"1-2.3"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T/S","lnb_15v_supported":false}]},{"serial":"000000000000001","model":"PX-S1UR","usb":"0511:0855","status":"ready","serial_unique":false,"devices":[{"device":1,"serial":"000000000000001","bus":1,"address":7,"port":"1-2.4"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T","lnb_15v_supported":false}]},{"serial":"00001205000123","model":"PX-Q3U4","usb":"0511:084a","status":"incomplete","serial_unique":false,"devices":[{"device":1,"serial":"000012050001231","bus":2,"address":3,"port":"2-1"}],"candidates":[],"receivers":[]}],"ungrouped_usb_devices":[{"serial":null,"model":"PX-W3U4","usb":"0511:083f","status":"open_failed","bus":null,"address":null,"port":null}]}
         """;
 
     [Test]
@@ -244,7 +244,7 @@ public class Px4Tests
 
         await Assert.That(found.Select(e => (e.Id, e.Model))).IsEquivalentTo(
             [
-                ("000000000012345", "PX-MLT5PE"),
+                ("000000000012345", "ISDB6014-4TS"),
                 ("00001205000960", "PX-Q3U4"),
                 ("000000000000001_1-2.3", "PX-M1UR"),
                 ("000000000000001_1-2.4", "PX-S1UR"),
@@ -275,7 +275,7 @@ public class Px4Tests
         var warned = new List<string>();
         var found = Px4Userland.ParseJson(
             """
-            {"schema":"next","enclosures":[{"serial":"000000000012345","model":"PX-MLT5PE","status":"ready","extra":{"a":1},"receivers":[{"receiver":0,"system":"ISDB-T/S"},{"receiver":"1","system":"ISDB-T/S","lnb_15v_supported":true},{"receiver":2,"system":"ISDB-T/S","lnb_15v_supported":"yes"}]},{"model":"PX-Q3U4","status":"ready","receivers":[]},"junk"]}
+            {"schema":"next","enclosures":[{"serial":"000000000012345","model":"ISDB6014-4TS","status":"ready","extra":{"a":1},"receivers":[{"receiver":0,"system":"ISDB-T/S"},{"receiver":"1","system":"ISDB-T/S","lnb_15v_supported":true},{"receiver":2,"system":"ISDB-T/S","lnb_15v_supported":"yes"}]},{"model":"PX-Q3U4","status":"ready","receivers":[]},"junk"]}
             """,
             warned.Add);
 
@@ -292,6 +292,50 @@ public class Px4Tests
         await Assert.That(skew).Contains("receivers[].lnb_15v_supported が真偽値ではない");
         await Assert.That(skew).Contains("ungrouped_usb_devices が無い");
         await Assert.That(skew).Contains("enclosures[] が object ではない");
+    }
+
+    /// <summary>PX-MLT5PE と PX-Q3U4 が並ぶ一覧。もう 1 台の MLT5 系 (DTV02A-5TS-P) はエージェントが開いていて、px4d からは開けない</summary>
+    private const string NativeList = """
+        {"enclosures":[{"serial":"000000000012345","model":"PX-MLT5PE","usb":"0511:024e","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000000000012345","bus":1,"address":5,"port":"1-2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-T/S","lnb_15v_supported":true}]},{"serial":"00001205000960","model":"PX-Q3U4","usb":"0511:084a","status":"ready","serial_unique":true,"devices":[{"device":1,"serial":"000012050009601","bus":1,"address":8,"port":"1-3.1"},{"device":2,"serial":"000012050009602","bus":1,"address":9,"port":"1-3.2"}],"candidates":[],"receivers":[{"receiver":0,"device":1,"local":0,"system":"ISDB-S","lnb_15v_supported":true}]},{"serial":"000000000054321","model":"PX-MLT5U","usb":"0511:084e","status":"incomplete","serial_unique":true,"devices":[{"device":1,"serial":"000000000054321","bus":2,"address":4,"port":null}],"candidates":[],"receivers":[]}],"ungrouped_usb_devices":[{"serial":null,"model":"DTV02A-5TS-P","usb":"0511:924e","status":"open_failed","bus":3,"address":2,"port":"3-1"}]}
+        """;
+
+    [Test]
+    public async Task MLT5_系の筐体は_px4d_の筐体として挙げない()
+    {
+        var warned = new List<string>();
+        var native = new Dictionary<string, (It930xModel Model, string? Port)>();
+        var found = Px4Userland.ParseJson(NativeList, warned.Add, null, native);
+
+        // 残るのは PX-Q3U4 だけ。px4d を起動する対象にも、自動検出の顔ぶれにも MLT5 系は入らない
+        await Assert.That(found.Select(enclosure => enclosure.Model)).IsEquivalentTo(["PX-Q3U4"]);
+        await Assert.That(Px4Userland.Specs(found).Select(spec => spec.Device)).IsEquivalentTo(["px4:00001205000960:0"]);
+        // 状態が ready でなくても、エージェントが開いていて px4d から開けなくても、理由を残さない
+        await Assert.That(warned).IsEmpty();
+        // 飛ばした筐体は、番号と機種と USB のポートを控える (番号の分からないものは控えない)
+        await Assert.That(native.Keys.Order()).IsEquivalentTo(new[] { "000000000012345", "000000000054321" });
+        await Assert.That(native["000000000012345"]).IsEqualTo((It930x.Find(0x0511, 0x024E)!, "1-2"));
+        await Assert.That(native["000000000054321"].Port).IsNull();
+    }
+
+    [Test]
+    public async Task 設定の_px4_が_MLT5_系の筐体を指していれば_直し方を添えて断る()
+    {
+        var native = new Dictionary<string, (It930xModel Model, string? Port)>();
+        Px4Userland.ParseJson(NativeList, _ => { }, null, native);
+
+        // 受信機の番号はそのまま、USB のポートは一覧のもの
+        var problem = Px4Userland.NativeProblem("000000000012345", 3, native);
+        await Assert.That(problem).Contains("PLEX PX-MLT5PE はエージェントが直に持つ機材になったので、px4: のチューナーとしては使えません");
+        await Assert.That(problem).Contains("device を it930x:1-2:3 に書き換えてください");
+        await Assert.That(problem).Contains("「自動検出に戻す」");
+        // px4d を起動するとき (受信機が決まっていない) と、USB のポートが分からないとき
+        await Assert.That(Px4Userland.NativeProblem("000000000012345", null, native)).Contains("it930x:1-2:<受信機> に書き換えてください (受信機の番号はそのまま)");
+        await Assert.That(Px4Userland.NativeProblem("000000000054321", 0, native)).Contains("it930x:<USB のポート>:0 に");
+        // 番号と USB ポートの名前で書いてあっても、番号で突き合わせる
+        await Assert.That(Px4Userland.NativeProblem("000000000012345_1-2", 0, native)).Contains("it930x:1-2:0");
+        // ほかの筐体は断らない
+        await Assert.That(Px4Userland.NativeProblem("00001205000960", 0, native)).IsNull();
+        await Assert.That(Px4Userland.NativeProblem("0000000000123", 0, native)).IsNull();
     }
 
     [Test]

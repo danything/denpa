@@ -131,6 +131,8 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
   IT930x のファームウェアは Mac と同じくエージェントに同梱しています ([tuner-px4.md](tuner-px4.md#ファームウェア))
 - **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 用 (`siano-ts.exe` と libusb) も、
   ドライバを WinUSB にすれば動きます
+- **PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P**。エージェントが WinUSB で USB を直に持ちます (px4d は使いません。内蔵カードリーダーも読みます)。
+  Zadig で WinUSB を当てます。Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#px-mlt5-系))
 - **Sony CECH-ZD1 J** (PS3 の torne。地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません。
   内蔵の差し込み口の B-CAS も読みます)。機材にドライバが無いので、Zadig で `054c:04b2` に WinUSB を当てます。
   当てていないか、ほかのソフトが使っていると「ほかのソフトが使っているか、WinUSB になっていません」と返します。
@@ -145,7 +147,7 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
   installer はドライバを入れ替えません (ほかのソフトで使っていた機材を、知らせずに使えなくしない)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
   (Windows の libusb は WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
-- px4・Siano・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
+- px4・Siano・PX-MLT5 系・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
   `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーと CECH-ZD1 J の差し込み口も

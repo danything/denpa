@@ -1,8 +1,11 @@
-# PX-Q3U4・PX-W3U4・PX-MLT (px4-userland)
+# PX-Q3U4・PX-W3U4 など (px4-userland)
 
-PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーです。**同時に取れるチャンネルは受信機の数だけ**で、
-数と種別 (地上波・衛星・両方) は筐体ごとに px4-userland に問い合わせて決めます (Q3U4 は受信機ごとに地上波か衛星か決まっていて、MLT5 系はどれも両方)。
+PLEX の PX-Q3U4・PX-W3U4 などの USB / PCIe チューナーです。**同時に取れるチャンネルは受信機の数だけ**で、
+数と種別 (地上波・衛星・両方) は筐体ごとに px4-userland に問い合わせて決めます (Q3U4 は受信機ごとに地上波か衛星か決まっている)。
 **内蔵のカードリーダーがある機種は、それも使えます。** Linux・Mac (Apple Silicon)・Windows (x64) で使えます。
+
+**PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P は px4-userland では扱いません。** エージェントが USB を直に持ち、px4d はこの 3 機種を挙げず、起動もしません ([tuners.md](tuners.md#px-mlt5-系))。
+設定に `px4:` で書いてある PX-MLT5 系のチューナーは選局できないので、`device` を `it930x:<USB のポート>:<受信機>` に書き換えます。
 
 チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#px4-userland-の作り)。
 
@@ -15,7 +18,7 @@ PLEX の PX-Q3U4・PX-W3U4・PX-MLT 系などの USB / PCIe チューナーで�
 
 ## 対応機種
 
-PX-Q3U4 / PX-W3U4 / PX-MLT 系、e-Better / Digibest 系など (USB・PCIe)。px4-userland の対応機種ならそのまま使います ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
+PX-Q3U4 / PX-W3U4、e-Better / Digibest 系など (USB・PCIe)。px4-userland の対応機種は、PX-MLT5 系 (PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P) のほかはそのまま使います ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
 
 Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=doa08-22)、[DTV02A-1T1S-U](https://www.amazon.co.jp/dp/B08MTGFV39?tag=doa08-22)
 

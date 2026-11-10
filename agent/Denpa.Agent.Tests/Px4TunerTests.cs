@@ -745,7 +745,7 @@ public class Px4TunerTests
 
     /// <summary>
     /// 受信機ごとに接続を持ち、**要求を全部 1 つのキューで順に片付ける** 偽の px4d (#1713)。
-    /// 本物の px4d も同じブリッジの受信機の要求は 1 つずつ処理する (MLT5 系なら受信機 0〜3)。
+    /// 本物の px4d も同じブリッジの受信機の要求は 1 つずつ処理する。
     /// TUNE は <see cref="TuneTakes"/> かけて「同期しませんでした」(TIMEOUT) で応答する
     /// </summary>
     private sealed class QueuedPx4d : IDisposable
