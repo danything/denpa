@@ -39,6 +39,16 @@ internal sealed class Rt710(ITunerPort port, Action<int> sleep)
     /// <summary>利得の表 (仕様書 付録 B.4。RT710 の 19 個)</summary>
     private static readonly int[] Gains = [0, 26, 42, 74, 103, 129, 158, 181, 188, 200, 220, 248, 280, 312, 341, 352, 366, 389, 409];
 
+    /// <summary>
+    /// <c>01</c> から作った 5 ビットの値 (0〜31) から、利得の表の番号 (仕様書 9.4 の手順 2)。
+    /// 2 以下は 0、3〜9 は 1〜7、10〜12 は 7、13〜22 は 8〜17、それより大きければ 18
+    /// </summary>
+    private static readonly byte[] GainIndex =
+    [
+        0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 8, 9, 10,
+        11, 12, 13, 14, 15, 16, 17, 18, 18, 18, 18, 18, 18, 18, 18, 18,
+    ];
+
     /// <summary>RT720 か (仕様書 8.2)。初期化するまでは false (RT710)</summary>
     public bool Rt720 { get; private set; }
 
@@ -83,9 +93,9 @@ internal sealed class Rt710(ITunerPort port, Action<int> sleep)
             Write(0x0C);
         }
         var (n, fraction, integer) = RafaelPll.Divide(vco, xtal);
-        var ni = (n - 13) / 4;
-        var si = n - 13 - 4 * ni;
-        r[0x05] = (byte)((ni & 0x3F) | (si << 6));
+        // N − 13 を 4 で割った商と余り (手順 6)
+        var (quotient, remainder) = Math.DivRem(n - 13, 4);
+        r[0x05] = (byte)((quotient & 0x3F) | (remainder << 6));
         Write(0x05);
         if (integer) Bit(0x04, 1, true);
         Write(0x04);
@@ -126,7 +136,9 @@ internal sealed class Rt710(ITunerPort port, Action<int> sleep)
     public void SetFrequency(uint khz)
     {
         Span<byte> buffer = stackalloc byte[1 + Registers];
-        foreach (var (register, values) in Plan(khz, Rt720))
+        var plan = Plan(khz, Rt720);
+        Written = [.. plan.Where(write => write.Register != Wait)];
+        foreach (var (register, values) in plan)
         {
             if (register == Wait)
             {
@@ -141,7 +153,13 @@ internal sealed class Rt710(ITunerPort port, Action<int> sleep)
     }
 
     /// <summary>PLL がロックしているか (仕様書 8.4)。<c>02</c> の bit7 (R850 は bit6)</summary>
-    public bool PllLocked() => (port.Read(3)[2] & 0x80) != 0;
+    public bool PllLocked() => (Status() & 0x80) != 0;
+
+    /// <summary><c>02</c> の値 (<c>00</c> から 3 バイト読んだ 3 つ目。bit7 が PLL のロック。仕様書 8.4)</summary>
+    public byte Status() => port.Read(3)[2];
+
+    /// <summary>最後の選局で書いた値 (レジスタと値の並び。待ちの印を除く)。<c>--tune</c> が出す</summary>
+    public IReadOnlyList<(byte Register, byte[] Values)>? Written { get; private set; }
 
     /// <summary>待機にする (仕様書 8.5)。<c>00</c>〜<c>0F</c> を 1 回で書く</summary>
     public void Standby()
@@ -167,7 +185,7 @@ internal sealed class Rt710(ITunerPort port, Action<int> sleep)
     internal static int Level(byte value, uint khz)
     {
         var g = (value >> 4) | ((value & 1) << 4);
-        var n = g <= 2 ? 0 : g <= 9 ? g - 2 : g <= 12 ? 7 : g <= 22 ? g - 5 : 18;
+        var n = GainIndex[g];
         var floor = khz < 1200000 ? 190 : khz < 1800000 ? 170 : 140;
         return -100 * (floor + Gains[n]);
     }

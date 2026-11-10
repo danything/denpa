@@ -386,13 +386,40 @@ public static class It930x
     /// <summary>
     /// 挿さっている機材から (渡せるのはテストのため)。カードリーダーの無い機種 (PX-MLT8PE の 3 受信機の側) は挙げない。
     /// Q3 は、シリアル番号の末尾が 1 の側だけを挙げる (px4 の仕様書 1.4。PX-Q3PE4・PX-Q3PE5 でも末尾 1 の側につながっているかは未確認。
-    /// 末尾 2 の側やシリアル番号を読めない側は、<c>--card it930x:&lt;ポート&gt;</c> で名指しすれば試せる)
+    /// 末尾 2 の側は、<c>--card it930x:&lt;ポート&gt;</c> で名指しすれば試せる)。
+    /// **シリアル番号から側が分からない Q3 (macOS ではいつも読めない。Windows の読み方は未確認) は、どちらの側かを決められないので両方を挙げる。**
+    /// カードの無い側は、カードが挿さっていないリーダーとして飛ばされる (<see cref="CardLinks"/>)。理由はポートごとに 1 度だけ <paramref name="warn"/> に出す
     /// </summary>
-    internal static IReadOnlyList<CardLinkCandidate> Cards(IEnumerable<(string Port, It930xModel Model)> found, Func<string, string?>? serial = null) =>
-    [
-        .. found.Where(item => item.Model.Card && (!item.Model.Paired || Side(serial?.Invoke(item.Port))?.Side == 1))
-            .Select(item => Card(item.Port, item.Model)),
-    ];
+    internal static IReadOnlyList<CardLinkCandidate> Cards(
+        IEnumerable<(string Port, It930xModel Model)> found, Func<string, string?>? serial = null, Action<string>? warn = null)
+    {
+        var cards = new List<CardLinkCandidate>();
+        foreach (var (port, model) in found)
+        {
+            if (!model.Card) continue;
+            if (model.Paired)
+            {
+                var number = serial?.Invoke(port);
+                if (Side(number) is { } side)
+                {
+                    if (side.Side != 1) continue;
+                }
+                else
+                {
+                    var reason = $"[{model.Name} {port}] USB のシリアル番号{(number is null ? "を読めない" : $" ({number}) が 15 桁の数字で末尾が 1 か 2 の形でない")}ので、"
+                        + "カードスロットのある側か分かりません。この側の内蔵カードリーダーも挙げます";
+                    // 渡された先 (テスト) にはいつも出す。記録には、ポートごとに 1 度だけ
+                    if (warn is not null) warn(reason);
+                    else if (CardSideUnknown.TryAdd(port, 0)) Log.Write(reason);
+                }
+            }
+            cards.Add(Card(port, model));
+        }
+        return cards;
+    }
+
+    /// <summary>側が分からないと記録に出した Q3 のポート (同じことを何度も出さない)</summary>
+    private static readonly ConcurrentDictionary<string, byte> CardSideUnknown = new(StringComparer.Ordinal);
 
     /// <summary>
     /// そのポートの受信機の TS を復号するときに使う、内蔵のカードリーダーのポート (<c>--tune … --decode</c>)。

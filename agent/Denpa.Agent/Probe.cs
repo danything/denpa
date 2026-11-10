@@ -291,6 +291,13 @@ public static class Probe
             catch (IOException error)
             {
                 Console.Error.WriteLine($"{name}: {error.Message}");
+                // TC90522 の機種は、失敗したあとも、チューナーに書いた値と PLL の状態、ロックの判定で読む復調器のレジスタを出す (どこで止まったかを切り分けるため)
+                if (tuner is It930xTuner diagnosed)
+                {
+                    var lines = diagnosed.Diagnose();
+                    if (lines.Count > 0) Console.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+                    foreach (var line in lines) Console.WriteLine($"    {line}");
+                }
                 // ISDB-C は、どこで失敗したか (ロック・TSMF の判定) と、ロックしていれば変調と C/N も出す
                 if (tuning.IsdbC && tuner is It930xTuner failed)
                 {

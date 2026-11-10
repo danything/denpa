@@ -174,11 +174,13 @@ public class Tc90522BoardTests
         var device = Open(usb, "6-3", new FakeClock(), W3);
         try
         {
-            // 受信機 3 の R850 が応答しない (種類の読み出しが 4 回とも誤り)
-            bus[0x12].Tuners[R850.Address].FailReads = 4;
+            // 受信機 3 の R850 が応答しない (種類の読み出しが 4 回とも誤り)。電源を入れ直した 2 回目も同じ
+            bus[0x12].Tuners[R850.Address].FailReads = 8;
             var error = Assert.Throws<IOException>(() => device.Frontend(2));
             await Assert.That(error.Message).Contains("PLEX PX-W3U4 6-3 の受信機 2 を初期化できません");
             await Assert.That(device.Faulted).IsFalse();
+            // 電源を入れ直すのは 1 回だけ (開いたときの 1 回と合わせて、GPIOH7 ← 0 は 2 回)
+            await Assert.That(Lines(usb, line => line == "W D8C3=00").Count).IsEqualTo(2);
             // スリープや起動には進んでいない
             await Assert.That(bus.Log.Any(line => line.StartsWith("10 B0=", StringComparison.Ordinal))).IsFalse();
             // 次は初期化からやり直して開ける
@@ -191,6 +193,135 @@ public class Tc90522BoardTests
         {
             device.Release();
             It930xDevice.CloseIfIdle("6-3");
+        }
+    }
+
+    [Test]
+    public async Task 最初の受信機の初期化に失敗したら_電源を入れ直して_1_回だけやり直す()
+    {
+        var (usb, bus) = Fake();
+        var clock = new FakeClock();
+        var device = Open(usb, "6-7", clock, W3);
+        try
+        {
+            // 受信機 0 の RT710 が、電源を入れた直後の 1 回だけ応答しない
+            bus[0x11].Tuners[Rt710.Address].FailReads = 1;
+            var before = clock.Sleeps.Count;
+            var frontend = device.Frontend(2);
+            await Assert.That(frontend.Chips).StartsWith("TC90522 0x10");
+            // 切る (GPIOH2 ← 0、GPIOH7 ← 1) → 20 ms → 入れる (GPIOH7 ← 0、80 ms、GPIOH2 ← 1、20 ms)。順と待ちは開くときと同じ
+            await Assert.That(Lines(usb, line => Starts(line, "W D8C3", "W D8B7")).TakeLast(4)).IsEquivalentTo(new[]
+            {
+                "W D8B7=00", "W D8C3=01", "W D8C3=00", "W D8B7=01",
+            }, CollectionOrdering.Matching);
+            await Assert.That(clock.Sleeps.Skip(before).Take(3)).IsEquivalentTo(new[] { 20, 80, 20 }, CollectionOrdering.Matching);
+            // やり直しは、チューナーの初期化の先頭から
+            await Assert.That(bus.Log.Count(line => line == "11 RT710 ?4")).IsEqualTo(2);
+            await Assert.That(bus.Log[^1]).IsEqualTo("10 0F=13");
+        }
+        finally
+        {
+            device.Release();
+            It930xDevice.CloseIfIdle("6-7");
+        }
+    }
+
+    [Test]
+    public async Task ほかに使っている側がいれば_初期化に失敗しても電源を入れ直さない()
+    {
+        var (usb, bus) = Fake();
+        var clock = new FakeClock();
+        // カードや、Q3 のもう片方の側が同じ機材を取っている (使っている側が 2 つ)
+        var device = Open(usb, "6-8", clock, W3);
+        var other = Open(usb, "6-8", clock, W3);
+        try
+        {
+            bus[0x11].Tuners[Rt710.Address].FailReads = 1;
+            Assert.Throws<IOException>(() => device.Frontend(2));
+            await Assert.That(Lines(usb, line => line == "W D8C3=00").Count).IsEqualTo(1);
+            // 次の呼び出しは、初期化からやり直して開ける (電源は入れ直さない)
+            device.Frontend(2);
+            await Assert.That(Lines(usb, line => line == "W D8C3=00").Count).IsEqualTo(1);
+        }
+        finally
+        {
+            other.Release();
+            device.Release();
+            It930xDevice.CloseIfIdle("6-8");
+        }
+    }
+
+    [Test]
+    public async Task 受信機が_1_つの機種も_初期化に失敗したら電源を入れ直してやり直す()
+    {
+        var model = It930x.Find(0x0511, 0x0854)!;
+        var (usb, bus) = Single(model);
+        bus[0x10].Tuners[R850.Address].FailReads = 4;
+        var tuner = Tuner(usb, "5-8", 0, new FakeClock(), model);
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("T27")!);
+            await Assert.That(tuner.Tuned).IsTrue();
+            // 1 回目の失敗で電源を切り (GPIOH3 ← 1)、開き直すときに入れ直す
+            await Assert.That(Lines(usb, line => Starts(line, "W D8B3")).Skip(1)).IsEquivalentTo(new[] { "W D8B3=00", "W D8B3=01", "W D8B3=00" }, CollectionOrdering.Matching);
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task 選局に失敗したあとも_チューナーに書いた値と_PLL_と復調器の状態を出す()
+    {
+        var (usb, bus) = Fake();
+        var clock = new FakeClock();
+        var ground = Tuner(usb, "6-9", 2, clock, W3);
+        var dish = Tuner(usb, "6-9", 0, clock, W3);
+        try
+        {
+            // 選局する前と、受けられない種別を断ったあとは、出すものが無い
+            await Assert.That(ground.Diagnose()).IsEmpty();
+            Assert.Throws<IOException>(() => ground.Tune(ChannelTable.Parse("BS15:16625")!));
+            await Assert.That(ground.Diagnose()).IsEmpty();
+
+            // 地上波がロックしない (80 の bit3)
+            bus[0x10].Status[0x80] = 0x08;
+            var error = Assert.Throws<IOException>(() => ground.Tune(ChannelTable.Parse("T27")!));
+            await Assert.That(error.Message).IsEqualTo(ITuneDevice.SyncFailed);
+            await Assert.That(ground.Diagnose()).IsEquivalentTo(new[]
+            {
+                $"R850  種類 0 (00 = 0x00)  水晶の駆動の強さ 3  M 8  N 92  S 2E16  08〜2F {Tc90522Tests.R850Ch27}  2F 42",
+                "R850 の PLL  ロックしている (02 = 0x7E。bit6 がロック)",
+                "復調器 0x10  80 = 0x08  B0 = 0x88  (ロックは、80 の bit5 と bit3 が 0 で、B0 の下位 4 ビットが 8 以上)",
+            }, CollectionOrdering.Matching);
+
+            // R850 の PLL がロックしない
+            bus[0x10].Tuners[R850.Address].Status[0x02] = 0x3E;
+            Assert.Throws<IOException>(() => ground.Tune(ChannelTable.Parse("T27")!));
+            await Assert.That(ground.Diagnose()[1]).IsEqualTo("R850 の PLL  ロックしていない (02 = 0x3E。bit6 がロック)");
+
+            // 衛星がロックしない (C3 の bit4)。TMCC は読めた値のまま出す
+            bus[0x11].Status[0xC3] = 0x10;
+            bus[0x11].Status[0xCE] = 0x40;
+            bus[0x11].Status[0xCF] = 0xF1;
+            Assert.Throws<IOException>(() => dish.Tune(ChannelTable.Parse("BS15:16625")!));
+            await Assert.That(dish.Diagnose()).IsEquivalentTo(new[]
+            {
+                $"RT710 (03 = 0x70)  書いた値 00={Tc90522Tests.Rt710Start} 04=41 05=4A 04=41 07=EA 06=AE 0A=39 02=20 08=07 0E=90 0F=45",
+                "RT710 の PLL  ロックしている (02 = 0x80。bit7 がロック)",
+                "復調器 0x11  C3 = 0x10  (ロックは bit4 が 0)",
+                "TMCC の TSID  0:16625 1:0 2:0 3:0 4:0 5:0 6:0 7:0  選ばれている TSID 0",
+            }, CollectionOrdering.Matching);
+
+            // チューナーが応答しないときは、読めなかった理由を出して、ほかの行は出す
+            bus[0x11].Tuners[Rt710.Address].FailReads = 1;
+            await Assert.That(dish.Diagnose()[1]).IsEqualTo("RT710 の PLL  読めません (RT710 が応答しません (偽物))");
+        }
+        finally
+        {
+            ground.Dispose();
+            dish.Dispose();
         }
     }
 
@@ -410,8 +541,18 @@ public class Tc90522BoardTests
         {
             "PLEX PX-W3U4 3-2 Card Reader", "PLEX PX-Q3PE4 3-3 Card Reader", "PLEX PX-Q3PE4 3-4 Card Reader",
         }, CollectionOrdering.Matching);
-        // シリアル番号を読めない Q3 は、カードリーダーを挙げない (名指しすれば開ける)
-        await Assert.That(It930x.Cards([("3-9", Q3)])).IsEmpty();
+        // シリアル番号から側が分からない Q3 (macOS ではいつも読めない) は、どちらの側かを決められないので両方を挙げ、理由を出す
+        var warned = new List<string>();
+        var unknown = It930x.Cards([("3-9", Q3), ("3-10", Q3), ("3-11", W3)], port => port == "3-10" ? "ABC" : null, warned.Add);
+        await Assert.That(unknown.Select(card => card.Name)).IsEquivalentTo(new[]
+        {
+            "PLEX PX-Q3PE4 3-9 Card Reader", "PLEX PX-Q3PE4 3-10 Card Reader", "PLEX PX-W3U4 3-11 Card Reader",
+        }, CollectionOrdering.Matching);
+        await Assert.That(warned).IsEquivalentTo(new[]
+        {
+            "[PLEX PX-Q3PE4 3-9] USB のシリアル番号を読めないので、カードスロットのある側か分かりません。この側の内蔵カードリーダーも挙げます",
+            "[PLEX PX-Q3PE4 3-10] USB のシリアル番号 (ABC) が 15 桁の数字で末尾が 1 か 2 の形でないので、カードスロットのある側か分かりません。この側の内蔵カードリーダーも挙げます",
+        }, CollectionOrdering.Matching);
         await Assert.That(It930x.Card("3-9", Q3).Name).IsEqualTo("PLEX PX-Q3PE4 3-9 Card Reader");
     }
 

@@ -90,7 +90,10 @@ internal sealed class Tc90522Link(ICxdBus bus, byte address)
 
 /// <summary>
 /// TC90522 の受信機に共通の手順と表 (仕様書 4〜6・9)。バスのロック・待ち・時計を持つ。
-/// I2C の並びはバスのロックの中で送り、待ちの間はロックを持たない
+/// I2C の並びはバスのロックの中で送る。ロックを確かめる 10 ms おきの待ち (PLL・復調器・TSID) の間は、ロックを持たない。
+/// チューナーの周波数を書く並びの中の短い待ち (R850 は 10〜40 ms、RT710 は 10 ms。仕様書 7.5 (5)・8.3 (2)) だけは、
+/// 復調器の書き込みからチューナーの最後の書き込みまでを 1 つの並びとして送るために、ロックを持ったまま待つ。
+/// その間、同じバスのほかの受信機の I2C は最大 40 ms 遅れるだけで、TS は I2C を通らないので受信は乱れない
 /// </summary>
 internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<long> nowMs) : IIt930xFrontend
 {
@@ -380,6 +383,56 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
         return $"{tuner.Name} (03 = 0x{tuner.Id:X2})" + (level is { } value ? $"  入力のレベル {value} (単位は 0.001 dBm と推定)" : "");
     }
 
+    public virtual IReadOnlyList<string> Diagnose() => [];
+
+    /// <summary>読めた値の 1 行。I2C の誤りなら、読めなかった理由の 1 行 (選局に失敗したあとに、分かるところまで出すため)</summary>
+    private string Line(string label, Func<string> read)
+    {
+        try
+        {
+            lock (BusLock) return $"{label}  {read()}";
+        }
+        catch (IOException error) when (error is not UsbGoneException)
+        {
+            return $"{label}  読めません ({error.Message})";
+        }
+    }
+
+    /// <summary>
+    /// 地上波の選局のあと、ロックしたかによらずに出す行 (<c>--tune</c> が失敗のあとに出す)。
+    /// R850 に書いた値・R850 の PLL の状態 (<c>02</c>)・ロックの判定で読む復調器の <c>80</c> と <c>B0</c> (仕様書 5.3・7.6)
+    /// </summary>
+    protected List<string> DiagnoseTerrestrial(Tc90522Link link, R850 tuner) =>
+    [
+        R850Note(tuner),
+        Line("R850 の PLL", () => tuner.Status() is var status && (status & 0x40) != 0
+            ? $"ロックしている (02 = 0x{status:X2}。bit6 がロック)"
+            : $"ロックしていない (02 = 0x{status:X2}。bit6 がロック)"),
+        Line($"復調器 0x{link.Address:X2}", () =>
+            $"80 = 0x{link.Read(0x80, 1)[0]:X2}  B0 = 0x{link.Read(0xB0, 1)[0]:X2}  (ロックは、80 の bit5 と bit3 が 0 で、B0 の下位 4 ビットが 8 以上)"),
+    ];
+
+    /// <summary>
+    /// 衛星の選局のあと、ロックしたかによらずに出す行。RT710 か RT720 かと書いた値・PLL の状態 (<c>02</c>)・ロックの判定で読む復調器の <c>C3</c> (仕様書 6.3・8.4)、
+    /// TMCC にある TSID の一覧と、選ばれている TSID (仕様書 6.4。ロックを確かめずに、読めた値のまま出す)
+    /// </summary>
+    protected List<string> DiagnoseSatellite(Tc90522Link link, Rt710 tuner) =>
+    [
+        $"{tuner.Name} (03 = 0x{tuner.Id:X2})  書いた値 "
+            + (tuner.Written is { } written ? string.Join(" ", written.Select(write => $"{write.Register:X2}={Convert.ToHexString(write.Values)}")) : "無し"),
+        Line($"{tuner.Name} の PLL", () => tuner.Status() is var status && (status & 0x80) != 0
+            ? $"ロックしている (02 = 0x{status:X2}。bit7 がロック)"
+            : $"ロックしていない (02 = 0x{status:X2}。bit7 がロック)"),
+        Line($"復調器 0x{link.Address:X2}", () => $"C3 = 0x{link.Read(0xC3, 1)[0]:X2}  (ロックは bit4 が 0)"),
+        Line("TMCC の TSID", () =>
+        {
+            var read = link.Read(0xCE, 16);
+            var selected = link.Read(0xE6, 2);
+            return string.Join(" ", Enumerable.Range(0, 8).Select(i => $"{i}:{(read[2 * i] << 8) | read[2 * i + 1]}"))
+                + $"  選ばれている TSID {(selected[0] << 8) | selected[1]}";
+        }),
+    ];
+
     /// <summary>受けられない方式の選局を、何も書かずに断る</summary>
     protected static IOException Refuse(ChannelTable.Tuning tuning, string takes) =>
         new($"この受信機は{takes}だけを受けられます ({tuning.Type} は選局できません)");
@@ -393,6 +446,9 @@ internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
     private readonly Tc90522Link _link;
     private readonly R850 _tuner;
     private bool _tuned;
+
+    /// <summary>開いてから、選局の書き込みを始めたことがある (<see cref="Diagnose"/> が出すものがある)</summary>
+    private bool _attempted;
 
     public Tc90522Terrestrial(ICxdBus bus, Lock busLock, It930xReceiver wiring, Action<int> sleep, Func<long> nowMs) : base(busLock, sleep, nowMs)
     {
@@ -423,7 +479,7 @@ internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
         Run(_link, SleepTerrestrialRows);
     }
 
-    public void Forget() => _tuned = false;
+    public void Forget() => _tuned = _attempted = false;
 
     /// <summary>ISDB-T を選局し、ロックを待つ (仕様書 5.2)。ロックしなければ false</summary>
     public override bool Tune(ChannelTable.Tuning tuning)
@@ -432,6 +488,7 @@ internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
         var khz = It930xTuner.Khz(tuning.Frequency);
         if (khz is < R850.MinKhz or > R850.MaxKhz) throw new IOException($"地上波の周波数は {R850.MinKhz}〜{R850.MaxKhz} kHz です ({khz} kHz)");
         _tuned = false;
+        _attempted = true;
         lock (BusLock)
         {
             _link.Run(TuneTerrestrialHeadRows);
@@ -449,6 +506,8 @@ internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
     public override TunerSignal? Signal() => _tuned ? TerrestrialSignal(_link) : null;
 
     public override IReadOnlyList<string> Notes() => _tuned ? [.. TerrestrialNotes(_link), R850Note(_tuner)] : [];
+
+    public override IReadOnlyList<string> Diagnose() => _attempted ? DiagnoseTerrestrial(_link, _tuner) : [];
 }
 
 /// <summary>
@@ -460,6 +519,9 @@ internal sealed class Tc90522Satellite : Tc90522Frontend, ITc90522Receiver
     private readonly Rt710 _tuner;
     private readonly bool _second;
     private bool _tuned;
+
+    /// <summary>開いてから、選局の書き込みを始めたことがある (<see cref="Diagnose"/> が出すものがある)</summary>
+    private bool _attempted;
     private uint _khz;
 
     public Tc90522Satellite(ICxdBus bus, Lock busLock, It930xReceiver wiring, Action<int> sleep, Func<long> nowMs) : base(busLock, sleep, nowMs)
@@ -496,7 +558,7 @@ internal sealed class Tc90522Satellite : Tc90522Frontend, ITc90522Receiver
         }
     }
 
-    public void Forget() => _tuned = false;
+    public void Forget() => _tuned = _attempted = false;
 
     /// <summary>
     /// ISDB-S を選局し、ロックを待って TS を選ぶ (仕様書 6.2)。周波数は LNB で変換したあとの kHz (仕様書 6.1)。
@@ -506,6 +568,7 @@ internal sealed class Tc90522Satellite : Tc90522Frontend, ITc90522Receiver
     {
         if (!tuning.Satellite) throw Refuse(tuning, "衛星");
         _tuned = false;
+        _attempted = true;
         lock (BusLock)
         {
             _link.Run(TuneSatelliteHeadRows(_second));
@@ -527,6 +590,8 @@ internal sealed class Tc90522Satellite : Tc90522Frontend, ITc90522Receiver
     public override ushort[]? SatelliteStreams() => _tuned ? Streams(_link) : null;
 
     public override IReadOnlyList<string> Notes() => _tuned ? [.. SatelliteNotes(_link), Rt710Note(_tuner, _khz)] : [];
+
+    public override IReadOnlyList<string> Diagnose() => _attempted ? DiagnoseSatellite(_link, _tuner) : [];
 }
 
 /// <summary>Q3・W3 系の受信機に、基板 (<see cref="Tc90522Board"/>) がさせること</summary>
@@ -683,6 +748,9 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
     private readonly Rt710? _rt710;
     private bool _open;
     private Mode _mode = Mode.None;
+
+    /// <summary>開いてから最後に選局の書き込みを始めた方式 (<see cref="Diagnose"/> が、失敗したあとにどちらの側を読むかを決める)</summary>
+    private Mode _attempt = Mode.None;
     private uint _khz;
 
     /// <param name="power">受信機の基板の電源を入れる・切る (<see cref="It930xDevice.Power"/>)</param>
@@ -709,7 +777,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
         lock (_gate)
         {
             if (_open) return this;
-            _mode = Mode.None;
+            _mode = _attempt = Mode.None;
             _power(true);
             try
             {
@@ -756,7 +824,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
         {
             if (!_open) return;
             _open = false;
-            _mode = Mode.None;
+            _mode = _attempt = Mode.None;
             _power(false);
         }
     }
@@ -768,6 +836,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
         var khz = It930xTuner.Khz(tuning.Frequency);
         if (khz is < R850.MinKhz or > R850.MaxKhz) throw new IOException($"地上波の周波数は {R850.MinKhz}〜{R850.MaxKhz} kHz です ({khz} kHz)");
         _mode = Mode.None;
+        _attempt = Mode.Terrestrial;
         lock (BusLock)
         {
             if (Isdbt2071)
@@ -800,6 +869,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
     {
         var second = _wiring.Second;
         _mode = Mode.None;
+        _attempt = Mode.Satellite;
         lock (BusLock)
         {
             _s!.Run([new(0x0A, 0x00), new(0x10, (byte)(second ? 0x30 : 0xB0)), new(0x11, 0x02), new(0x03, 0x01)]);
@@ -838,6 +908,13 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
     };
 
     public override ushort[]? SatelliteStreams() => _mode == Mode.Satellite ? Streams(_s!) : null;
+
+    public override IReadOnlyList<string> Diagnose() => _attempt switch
+    {
+        Mode.Terrestrial => DiagnoseTerrestrial(_t, _r850),
+        Mode.Satellite => DiagnoseSatellite(_s!, _rt710!),
+        _ => [],
+    };
 
     public override IReadOnlyList<string> Notes() => _mode switch
     {

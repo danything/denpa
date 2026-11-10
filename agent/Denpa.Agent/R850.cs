@@ -179,18 +179,22 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
         trial[0x22 - FirstWritable] = 0x84;
         trial[0x2F - FirstWritable] = (byte)(Kind == 0 ? 0x40 : 0x41);
         WriteAll(trial);
-        var result = 3;
-        for (var i = 0; i < 4; i++)
+        // 22 に 4 つの値を順に書き、PLL がロックして (02 の bit6)、02 の下位 6 ビットが 61 以下になった最初の回を探す。
+        // 強さは「その回の番号 + 1」で、3 を超えない。どの回も当てはまらなければ 3
+        for (var i = 0; i < XtalTrials.Length; i++)
         {
-            port.Write([0x22, (byte)((0x84 & 0xCF) | (i << 4))]);
-            var status = port.Read(3)[2];
-            // PLL がロックしていて (bit6)、下位 6 ビットが 61 以下
-            if ((status & 0x40) == 0 || (status & 0x3F) > 61) continue;
-            result = i;
-            break;
+            port.Write([0x22, XtalTrials[i]]);
+            var status = Status();
+            if ((status & 0x40) != 0 && (status & 0x3F) <= 61) return Math.Min(i + 1, 3);
         }
-        return result < 3 ? result + 1 : result;
+        return 3;
     }
+
+    /// <summary>水晶の駆動の強さを調べるときに、<c>22</c> へ順に書く値 (仕様書 7.3)</summary>
+    private static readonly byte[] XtalTrials = [0x84, 0x94, 0xA4, 0xB4];
+
+    /// <summary><c>02</c> の値 (<c>00</c> から 3 バイト読んだ 3 つ目。bit6 が PLL のロック。仕様書 7.6)</summary>
+    public byte Status() => port.Read(3)[2];
 
     private void WriteAll(ReadOnlySpan<byte> registers)
     {
@@ -215,7 +219,7 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
     }
 
     /// <summary>PLL がロックしているか (仕様書 7.6)。<c>02</c> の bit6</summary>
-    public bool PllLocked() => (port.Read(3)[2] & 0x40) != 0;
+    public bool PllLocked() => (Status() & 0x40) != 0;
 
     /// <summary><c>00</c>〜<c>2F</c> を読む (<c>--it930x-probe</c> が、書き戻せたかを確かめる)</summary>
     public byte[] ReadAll() => port.Read(Registers);
@@ -316,27 +320,12 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
         s[0x14] = (byte)((s[0x14] & 0xD0) | 0x02);
         s[0x15] = (byte)(s[0x15] & 0x10);
 
-        // (4) PLL
-        var xtal = 24000;
-        Set(s, 0x20, 1, 0, 0);
-        Set(s, 0x2E, 6, 6, 1);
-        s[0x0C] = (byte)(s[0x0C] & 0x3C);
-        Set(s, 0x09, 2, 1, 0);
-        Set(s, 0x22, 7, 6, 0);
-        s[0x0B] = (byte)((s[0x0B] & 0xC3) | 0x10);
-        s[0x25] = (byte)((s[0x25] & 0xEF) | 0x20);
+        // (4) PLL。先に値を計算し、控えにはレジスタの番号の順に入れる
         // 水晶の駆動の強さ (手順 2)。使うのは LO が 130000 kHz より低い選局だけ
         var drive = lo < 100000 ? xtalDrive >= 2 ? 3 - xtalDrive : 2
             : lo < 130000 ? xtalDrive == 3 ? 0 : 1
             : 0;
-        Set(s, 0x22, 5, 4, drive);
-        s[0x21] = (byte)((s[0x21] & 0x07) | 0xF0);
-        Set(s, 0x22, 3, 3, 1);
         var j = (int)(rf / 1000 / 12);
-        Set(s, 0x1E, 7, 5, 0);
-        Set(s, 0x25, 1, 1, j is 4 or 10 or 22 or 24 or 28 ? 1 : 0);
-        Set(s, 0x2F, 1, 1, 0);
-        if (kind == 0) Set(s, 0x2F, 0, 0, 0);
         // VCO の範囲 (手順 6)
         long minimum = kind == 0 ? 2270000 : 2200000;
         var divider = 2;
@@ -346,34 +335,38 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
             divider *= 2;
             shift++;
         }
-        var vco = (long)lo * divider;
-        // 水晶の分周 (手順 7)
-        Set(s, 0x22, 1, 0, 0);
-        if (lo < 380500 && j % 2 == 0)
-        {
-            xtal = 12000;
-            Set(s, 0x22, 1, 0, 2);
-        }
-        else if (lo >= 380500 && rf is >= 478000 and < 482000)
-        {
-            xtal = 6000;
-            Set(s, 0x22, 1, 0, 3);
-        }
-        Set(s, 0x0B, 0, 0, 0);
-        Set(s, 0x2D, 3, 2, divider == 8 ? 1 : divider == 16 ? 2 : divider >= 32 ? 3 : 0);
-        Set(s, 0x2E, 1, 0, divider is 2 or 4 ? 1 : 2);
-        s[0x20] = (byte)(s[0x20] & 0xEC);
-        if (divider >= 8) Set(s, 0x20, 0, 0, 1);
+        // 水晶の分周 (手順 7)。2 で割るか、4 で割るか、割らないか
+        var xtal = lo < 380500 && j % 2 == 0 ? 12000
+            : lo >= 380500 && rf is >= 478000 and < 482000 ? 6000
+            : 24000;
+        var (n, fraction, _) = RafaelPll.Divide((long)lo * divider, xtal);
+        // N − 13 を 4 で割った商と余り (手順 14)
+        var (quotient, remainder) = Math.DivRem(n - 13, 4);
+
+        Set(s, 0x09, 2, 1, 0);
+        s[0x0B] = (byte)((s[0x0B] & 0xC2) | 0x10);
+        s[0x0C] = (byte)(s[0x0C] & 0x3C);
         Set(s, 0x11, 7, 7, divider == 8 ? 1 : 0);
-        Set(s, 0x1E, 4, 2, shift);
-        var (n, fraction, _) = RafaelPll.Divide(vco, xtal);
-        var ni = (n - 13) / 4;
-        var si = n - 13 - 4 * ni;
-        s[0x1B] = (byte)((s[0x1B] & 0x80) | (ni & 0x7F));
-        Set(s, 0x1E, 1, 0, si);
-        Set(s, 0x20, 7, 6, 0);
+        s[0x1B] = (byte)((s[0x1B] & 0x80) | (quotient & 0x7F));
         s[0x1C] = (byte)fraction;
         s[0x1D] = (byte)(fraction >> 8);
+        Set(s, 0x1E, 7, 5, 0);
+        Set(s, 0x1E, 4, 2, shift);
+        Set(s, 0x1E, 1, 0, remainder);
+        // 20 は bit5・bit3・bit2 だけを残し、VCO を 8 以上で割るときに bit0 を 1 にする (手順 1・9・14)
+        s[0x20] = (byte)((s[0x20] & 0x2C) | (divider >= 8 ? 0x01 : 0x00));
+        s[0x21] = (byte)((s[0x21] & 0x07) | 0xF0);
+        Set(s, 0x22, 7, 6, 0);
+        Set(s, 0x22, 5, 4, drive);
+        Set(s, 0x22, 3, 3, 1);
+        Set(s, 0x22, 1, 0, xtal == 12000 ? 2 : xtal == 6000 ? 3 : 0);
+        s[0x25] = (byte)((s[0x25] & 0xEF) | 0x20);
+        Set(s, 0x25, 1, 1, j is 4 or 10 or 22 or 24 or 28 ? 1 : 0);
+        Set(s, 0x2D, 3, 2, divider == 8 ? 1 : divider == 16 ? 2 : divider >= 32 ? 3 : 0);
+        Set(s, 0x2E, 6, 6, 1);
+        Set(s, 0x2E, 1, 0, divider is 2 or 4 ? 1 : 2);
+        Set(s, 0x2F, 1, 1, 0);
+        if (kind == 0) Set(s, 0x2F, 0, 0, 0);
 
         // (5) 書く値。40 バイトのあと、水晶の分周に合わせて待ち、2F の bit1 を 1 にして書く
         var registers = s[FirstWritable..];

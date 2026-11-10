@@ -60,6 +60,12 @@ public interface IIt930xFrontend
 
     /// <summary><c>--tune</c> だけに出す、チップごとの読み値 (1 行ずつ)。機材から読むので、受け終えたあとに呼ぶ</summary>
     IReadOnlyList<string> Notes() => [];
+
+    /// <summary>
+    /// 選局のあと、ロックしたかによらずに <c>--tune</c> に出す行 (失敗の原因を切り分けるため)。チューナーに書いた値と PLL の状態、ロックの判定で読む復調器のレジスタ。
+    /// 選局の書き込みを始めていなければ空。機材から読む
+    /// </summary>
+    IReadOnlyList<string> Diagnose() => [];
 }
 
 /// <summary>
@@ -500,7 +506,27 @@ public sealed class It930xDevice
             if (_openReceivers.Count == 0) Link();
             try
             {
-                var frontend = _board.Open(receiver);
+                IIt930xFrontend frontend;
+                try
+                {
+                    frontend = _board.Open(receiver);
+                }
+                catch (IOException error) when (CanRepower(error))
+                {
+                    /*
+                     * 電源を入れた直後の初期化に失敗したら、電源を入れ直して 1 回だけやり直す (仕様書に無い)。リセットが足りずにチップが応答しないまま、
+                     * 機材を閉じるまで直らないことを避ける。切る → 20 ms → 入れる、の順と待ちは開くときと同じ (px4 の仕様書 2.5)。
+                     * 電源が GPIOH3 の機種は、開くのに失敗したときに電源を切ってあり、開き直すと入れ直す
+                     */
+                    Log.Write($"[{Label}] 受信機 {receiver} を初期化できませんでした ({error.Message})。電源を入れ直して、もう一度試します");
+                    if (Model.PowerWhileOpen)
+                    {
+                        Power(false);
+                        _sleep(20);
+                        Power(true);
+                    }
+                    frontend = _board.Open(receiver);
+                }
                 if (_openReceivers.Add(receiver)) Log.Write($"[{Label}] 受信機 {receiver} を開きました ({frontend.Chips})");
                 return frontend;
             }
@@ -513,6 +539,18 @@ public sealed class It930xDevice
         }
     }
 
+    /// <summary>
+    /// 初期化の失敗のあと、電源を入れ直してよいか。この機材で開いている受信機が無く、使っている側がいまの 1 つだけのとき
+    /// (カードや、Q3 のもう片方の側の受信機が使っていれば、その側の動作を止めてしまうので入れ直さない)。USB が抜けたときは入れ直さない。
+    /// CXD2856ER の機種は、受信機ごとに初期化して、失敗した受信機だけを次の選局でやり直すので、入れ直さない (MLT5 の仕様書 2.2)
+    /// </summary>
+    private bool CanRepower(IOException error)
+    {
+        if (Model.Demod == It930xDemod.Cxd2856 || error is UsbGoneException || error.InnerException is UsbGoneException) return false;
+        if (_openReceivers.Count > 0) return false;
+        lock (_gate) return _users == 1;
+    }
+
     /// <summary>Q3 のもう片方の側を取る。見つからない・開けないときは、記録に出して見つかった側だけを使う</summary>
     private void Link()
     {
@@ -520,7 +558,7 @@ public sealed class It930xDevice
         try
         {
             _linked = _link();
-            if (_linked is null) Log.Write($"[{Label}] 同じ筐体のもう片方の側が見つかりません。見つかった側だけを使います (電源は連動しません)");
+            if (_linked is null) Log.Write($"[{Label}] 同じ筐体のもう片方の側が見つからないか、USB のシリアル番号を読めません。この側だけを使います (電源は連動しません)");
         }
         catch (IOException error)
         {
@@ -756,6 +794,9 @@ public sealed class It930xTuner : ITuneDevice
     private IIt930xFrontend? _frontend;
     private It930xTsOutput? _output;
 
+    /// <summary>最後の選局で、受信機の選局 (チップへの書き込み) まで進んだ。<see cref="Diagnose"/> が前の選局の値を出さないようにする</summary>
+    private bool _attempted;
+
     /// <param name="lnb">設定の LNB (<c>15v</c> なら衛星を選局するときに給電する。空か null なら給電しない。<c>11v</c> などは衛星の選局で断る)</param>
     public It930xTuner(string port, int receiver, string? lnb = null)
         : this($"{It930x.Model} {port} #{receiver}", receiver, () => It930xDevice.Acquire(port), () => It930xDevice.CloseIfIdle(port), lnb, () => It930x.Identify(port))
@@ -854,6 +895,26 @@ public sealed class It930xTuner : ITuneDevice
         }
     }
 
+    /// <summary>
+    /// 選局に失敗したあとに <c>--tune</c> が出す行 (<see cref="IIt930xFrontend.Diagnose"/>)。受信機を開く前に失敗したときと、CXD2856ER の受信機は空。
+    /// 選局に失敗しても受信機は開いたままなので、チューナーと復調器を読める
+    /// </summary>
+    public IReadOnlyList<string> Diagnose()
+    {
+        lock (_gate)
+        {
+            try
+            {
+                return _attempted && _device is { Faulted: false } ? _frontend?.Diagnose() ?? [] : [];
+            }
+            catch (IOException error)
+            {
+                _device?.Fail(error);
+                return [];
+            }
+        }
+    }
+
     /// <summary>種別の、画面と同じ呼び方 (docs/writing.md)</summary>
     private static string TypeName(string type) => type switch
     {
@@ -896,6 +957,7 @@ public sealed class It930xTuner : ITuneDevice
         }
         lock (_gate)
         {
+            _attempted = false;
             // 受けられない種別は、機材に触る前に断る。機種は開かずに調べ、分からなければ開いたあとに確かめる
             _model ??= _device?.Model ?? _identify?.Invoke();
             if (_model is { } known) Check(tuning, known);
@@ -916,6 +978,7 @@ public sealed class It930xTuner : ITuneDevice
                 _frontend = _device.Frontend(_receiver);
                 // 給電を入れてから選局する (順は px4 の仕様書 10。LNB が出力を出すまでの待ちは仕様書に無く、ロックの待ち (3 秒) に含める)
                 _device.Lnb(_receiver, tuning.Satellite && _lnb == Lnb15v);
+                _attempted = true;
                 var locked = _frontend.Tune(tuning);
                 if (tuning.IsdbC) IsdbcLocked = locked;
                 if (!locked) throw new IOException(ITuneDevice.SyncFailed);
