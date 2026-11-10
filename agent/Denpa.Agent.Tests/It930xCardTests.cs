@@ -4,6 +4,7 @@ namespace Denpa.Agent.Tests;
  * IT930x の機材の内蔵カードリーダー (It930xCard.cs) を、偽のブリッジ (It930xFakes.cs の UART のモデル) で確かめる。
  * 手順と番地は ITE の SDK (api/IT9300.c の IT9300_bcas*、brRegister.h・brVariable.h) のもの。
  * 偽のカードの振る舞い (OVA_UART_REALSEND のあとの区切りでまとめて渡す、GPIOH14 を 1 に戻すと ATR を返す) は偽物で決めたもので、実機の値ではない。
+ * 受けた数が増えなくなるまで待つことと S(IFS) は、PX-MLT5PE の実機で B-CAS を読んで決めた (It930xCard.cs)。
  */
 public class It930xCardTests
 {
@@ -54,13 +55,16 @@ public class It930xCardTests
                 "W D8C9=01", "W D8C8=00", "R D8C6 1",
                 // IT9300_bcasResetCard: GPIOH14 を出力・有効にして 0、UART の状態に 2、9600 (番号 0)、5 ms、1 に戻して出力をやめる
                 "W D8E4=01", "W D8E5=01", "W D8E3=00", "W 7904=02", "UART BAUD 0", "W D8E3=01", "W D8E4=00",
-                // ATR: 受けた数を読み、その数だけ読む (IT9300_bcasGetData)
-                "R 496B 1", "UART R 13",
+                // ATR: 受けた数を読み、4 ms 後に読み直して増えていなければ、その数だけ読む (IT9300_bcasGetData)。読んだあとに残りが無いかを見る
+                "R 496B 1", "R 496B 1", "UART R 13", "R 496B 1",
                 // TA1 0x12 (specific mode) の 19200 (番号 1)
                 "UART BAUD 1",
+                // S(IFS): 前のやり取りの残りが無いか見て、5 バイトの要求を送り、5 バイトの応答を読む
+                "R 496B 1", "W 4965=01", "UART W 5", "R 496B 1", "R 496B 1", "UART R 5", "R 496B 1",
             }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
             await Assert.That(clock.Sleeps).Contains(5);
-            // こちらの受けられる長さを広げる S(IFS) は送らない (仕様書と SDK に無いので既定の 32 のまま)
+            // 速さを替えたあとに、こちらの受けられる長さを S(IFS) で 251 に広げる
+            await Assert.That(usb.UartIfs).IsEquivalentTo(new byte[] { 251 });
             await Assert.That(usb.UartBlocks).IsEmpty();
 
             // 準備が済んでいてカードがあれば、リセットし直さない
@@ -94,8 +98,8 @@ public class It930xCardTests
                 "R 496B 1",
                 // IT9300_bcasSendData
                 "UART W 48", "UART W 48", "W 4965=01", "UART W 32",
-                // 応答 (6 バイト) を受けた数だけ読む
-                "R 496B 1", "UART R 6",
+                // 応答 (6 バイト) は、受けた数が増えなくなってから読む
+                "R 496B 1", "R 496B 1", "UART R 6", "R 496B 1",
             }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
         }
         finally
@@ -117,6 +121,78 @@ public class It930xCardTests
             await Assert.That(card.Transmit([0x90, 0x30, 0x00, 0x00, 0x00])).IsEquivalentTo(inf);
             // ブロックは 36 バイト: 32 バイトと残りの 4 バイト
             await Assert.That(CardLog(usb).Where(line => line.StartsWith("UART R", StringComparison.Ordinal))).IsEquivalentTo(new[] { "UART R 32", "UART R 4" });
+        }
+        finally
+        {
+            card.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task 応答は受けた数が増えなくなるまで待ってから読む()
+    {
+        var (usb, clock, card) = Rig("8-9");
+        try
+        {
+            card.Reset();
+            // 実機でバイトが落ちた 61 バイトの応答 (ブロックは 65 バイト)。受けた数を読むたびに 20 バイトずつ届く
+            var inf = Enumerable.Range(0, 59).Select(i => (byte)(i + 1)).Concat(new byte[] { 0x90, 0x00 }).ToArray();
+            usb.CardResponder = _ => T1Protocol.Block(0x00, inf);
+            usb.UartArrival = 20;
+            lock (usb.Log) usb.Log.Clear();
+            clock.Sleeps.Clear();
+            await Assert.That(card.Transmit([0x90, 0x30, 0x00, 0x00, 0x00])).IsEquivalentTo(inf);
+            await Assert.That(CardLog(usb).SkipWhile(line => !line.StartsWith("UART W", StringComparison.Ordinal)).Skip(1)).IsEquivalentTo(new[]
+            {
+                // 受けた数は 20・40・60・65 と増える。65 のまま変わらなくなるまで UART_READ を送らない
+                "R 496B 1", "R 496B 1", "R 496B 1", "R 496B 1", "R 496B 1",
+                // 32 バイトずつ読み、読むたびに受けた数を読み直す
+                "UART R 32", "R 496B 1", "UART R 32", "R 496B 1", "UART R 1", "R 496B 1",
+            }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+            // 受けた数を読み直す前に 4 ms ずつ待つ
+            await Assert.That(clock.Sleeps.Count(ms => ms == 4)).IsEqualTo(4);
+        }
+        finally
+        {
+            card.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task S_IFS_で受けられる長さを広げ_32_バイトを超える応答を_1_つのブロックで受ける()
+    {
+        var (usb, _, card) = Rig("8-10");
+        try
+        {
+            card.Reset();
+            await Assert.That(usb.UartIfs).IsEquivalentTo(new byte[] { It930xCard.Ifsd });
+            // ブロック全体 (先頭の 3 バイト、情報欄、LRC) が、1 バイトで表す受けた数に収まる
+            await Assert.That(3 + It930xCard.Ifsd + 1).IsEqualTo(255);
+            var inf = Enumerable.Range(0, 59).Select(i => (byte)(i + 1)).Concat(new byte[] { 0x90, 0x00 }).ToArray();
+            usb.CardResponder = _ => T1Protocol.Block(0x00, inf);
+            await Assert.That(card.Transmit([0x90, 0x30, 0x00, 0x00, 0x00])).IsEquivalentTo(inf);
+            await Assert.That(usb.UartBlocks.Count).IsEqualTo(1);
+        }
+        finally
+        {
+            card.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task S_IFS_に応答しないカードは_既定の長さのまま使う()
+    {
+        var (usb, _, card) = Rig("8-11");
+        try
+        {
+            usb.CardAnswersIfs = false;
+            await Assert.That(card.Reset()).IsEquivalentTo(BcasAtr);
+            // 最初の 1 回と送り直しの 3 回 (T1Protocol.NegotiateIfsd)
+            await Assert.That(usb.UartIfs).IsEquivalentTo(new byte[] { 251, 251, 251, 251 });
+            await Assert.That(card.Transmit([0x90, 0x30, 0x00, 0x00, 0x00])).IsEquivalentTo(new byte[] { 0x90, 0x00 });
+            // 既定の 32 を超える情報欄のブロックは受け付けない
+            usb.CardResponder = _ => T1Protocol.Block(0x00, new byte[33]);
+            Assert.Throws<IOException>(() => card.Transmit([0x90, 0x30, 0x00, 0x00, 0x00]));
         }
         finally
         {

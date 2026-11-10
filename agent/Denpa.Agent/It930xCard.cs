@@ -7,7 +7,8 @@ namespace Denpa.Agent;
 /// <para>
 /// 手順は ITE の SDK (<c>api/IT9300.c</c> の <c>IT9300_bcas*</c>) を元に書いた。コメントの関数名は SDK のもの。
 /// カードがあるかは GPIOH6 (0 ならある。<c>IT9300_bcasDetectCard</c>)、リセットは GPIOH14 (<c>IT9300_bcasResetCard</c>)。
-/// SDK は ITE の評価基板の配線で、PLEX の基板でも同じ GPIO につながっているかは実機で確かめていない (#1578)。
+/// SDK は ITE の評価基板の配線で、PX-MLT5PE の実機ではこの GPIO でカードをリセットして読めた。
+/// PX-MLT5U と DTV02A-5TS-P の基板でも同じ GPIO につながっているかは実機で確かめていない (#1578)。
 /// T=1 の枠組みは <see cref="T1Protocol"/>、ATR と応答のブロックを受け切る手順は <see cref="CardUart"/> と共通にしている。
 /// </para>
 ///
@@ -38,6 +39,9 @@ public sealed class It930xCard : ICardLink
 
     /// <summary>1 つのブロックで送れる上限 (<c>IT9300_bcasSendData</c> の長さは 1 バイトで、255 を超えると断る)</summary>
     public const int MaxBlock = 255;
+
+    /// <summary>こちらが受けられる情報欄の長さ (S(IFS) でカードに伝える)。ブロック全体が 255 バイトに収まる値</summary>
+    public const int Ifsd = 251;
 
     private readonly Func<It930xDevice> _acquire;
     private readonly Action? _closeIdle;
@@ -136,12 +140,15 @@ public sealed class It930xCard : ICardLink
         var atr = Atr.Parse(raw);
         if (!atr.T1) throw new IOException($"T=1 に対応していないカードです (ATR {Convert.ToHexString(raw)})");
         var baud = Baudrate(atr);
-        // B-CAS は TA1 の 19200 で通信する (specific mode)。ブリッジの UART が 19200 でカードとやり取りできるかは実機で確かめていない
+        // B-CAS は TA1 の 19200 で通信する (specific mode)。PX-MLT5PE の実機で、19200 でやり取りできることを確かめた
         if (baud != 9600) bridge.UartBaudrate(baud);
         _blockWaitMs = CardUart.BlockWaitMs(atr);
-        // 仕様書と SDK に無い: ブリッジが受けて溜めておけるバイト数が分からないので、S(IFS) でこちらの受けられる長さを広げない
-        // (ISO/IEC 7816-3 の既定の 32 のまま。長い応答はカードが連結して送る)
-        _t1 = new T1Protocol(atr, Exchange);
+        var t1 = new T1Protocol(atr, Exchange);
+        // こちらが受けられる長さを S(IFS) で広げる。既定の 32 のままだと、実機の B-CAS は 61 バイトの応答を連結せずに、
+        // 長さのバイトだけを 32 にして 1 つのブロックで送ってきた (PX-MLT5PE の実機)。
+        // ブリッジの受けた数は 1 バイトなので、ブロック全体 (先頭 3 バイトと LRC を足す) が 255 バイトに収まる 251 にする
+        t1.NegotiateIfsd(Ifsd);
+        _t1 = t1;
         return raw;
     }
 
@@ -191,7 +198,15 @@ public sealed class It930xCard : ICardLink
         if (device.Faulted) Drop();
     }
 
-    /// <summary>受けて読まれていないバイトを <paramref name="max"/> まで読む (<c>IT9300_bcasGetData</c> と同じく、受けた数を読んでから 32 バイトまでずつ)</summary>
+    /// <summary>受けた数が増えなくなったとみなすまでの間隔 (ms)。19200 ボーの 1 バイトは約 0.6 ms、ATR の 9600 ボーは約 1.3 ms</summary>
+    private const int SettleMs = 4;
+
+    /// <summary>
+    /// 受けて読まれていないバイトを <paramref name="max"/> まで読む。受けた数 (<see cref="RxLength"/>) を読み、<see cref="SettleMs"/> 待っても
+    /// 増えなくなってから、<c>IT9300_bcasGetData</c> と同じく 32 バイトまでずつ読む。
+    /// カードが送っている途中に UART_READ で読むと、そのとき届いたバイトが落ちることがある (PX-MLT5PE の実機で、61 バイトの応答の途中と末尾が落ちた) ので、
+    /// 届き終わるのを待つ
+    /// </summary>
     private byte[] Read(int max)
     {
         if (_received.Count == 0)
@@ -200,7 +215,19 @@ public sealed class It930xCard : ICardLink
             var waiting = (int)bridge.ReadRegister(RxLength);
             if (waiting > 0)
             {
-                foreach (var b in bridge.UartRead(Math.Min(waiting, It930xBridge.MaxUartRead))) _received.Enqueue(b);
+                while (true)
+                {
+                    _delay(SettleMs);
+                    var again = (int)bridge.ReadRegister(RxLength);
+                    if (again == waiting) break;
+                    waiting = again;
+                }
+                // 受けた数は 1 バイトなので、多くても 255 バイト (32 バイトずつ 8 回)
+                for (var i = 0; i < 8 && waiting > 0; i++)
+                {
+                    foreach (var b in bridge.UartRead(Math.Min(waiting, It930xBridge.MaxUartRead))) _received.Enqueue(b);
+                    waiting = (int)bridge.ReadRegister(RxLength);
+                }
             }
         }
         var count = Math.Min(Math.Max(0, max), _received.Count);
