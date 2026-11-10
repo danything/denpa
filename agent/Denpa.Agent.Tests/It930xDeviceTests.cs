@@ -203,7 +203,7 @@ public class It930xDeviceTests
     public async Task 開くと_EP_0x84_の読みを出してから入力を全部開け_閉じるときは入力を閉じてから読みを止める()
     {
         var (usb, _, _) = Fake();
-        var device = Open(usb, "9-7", new FakeClock());
+        var device = Open(usb, "9-27", new FakeClock());
         List<string> log;
         lock (usb.Log) log = [.. usb.Log];
         // TS の経路の設定は入力を閉じたところから (ConfigureTs)。読みを出し (TS 65424 16)、そのあと入力 0〜4 を開ける (IT930x_probe の順)
@@ -215,7 +215,7 @@ public class It930xDeviceTests
         // 電源を入れたあとに開ける
         await Assert.That(reading).IsGreaterThan(log.LastIndexOf("W D8B7=01"));
         device.Release();
-        It930xDevice.CloseIfIdle("9-7", TimeSpan.Zero);
+        It930xDevice.CloseIfIdle("9-27", TimeSpan.Zero);
         lock (usb.Log) log = [.. usb.Log];
         // 閉じるときは、入力を全部閉じて EP 0x84 をリセットし (DRV_ResetRxPort)、読みを止めてから電源を切る
         var disabled = log.LastIndexOf("W DA4C=00");
@@ -229,7 +229,7 @@ public class It930xDeviceTests
     {
         var (usb, _, _) = Fake();
         usb.TsOpenFails = true;
-        var error = Assert.Throws<IOException>(() => Open(usb, "9-8", new FakeClock()));
+        var error = Assert.Throws<IOException>(() => Open(usb, "9-28", new FakeClock()));
         await Assert.That(error.Message).Contains("読みを始められませんでした");
         await Assert.That(usb.Log).DoesNotContain("W DA4C=01");
     }
