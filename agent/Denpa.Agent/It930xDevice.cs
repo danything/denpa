@@ -78,14 +78,9 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 取る。開いていなければ、そのとき開く。**返すのは <see cref="Release"/>**。
-    /// px4d がそのポートの筐体を使っていれば開かずに断る (持ち主の決まり。<see cref="It930x.Claim"/>)
     /// </summary>
     public static It930xDevice Acquire(string port) => Acquire(port, () =>
     {
-        if (Px4Daemon.Owned().Any(enclosure => enclosure.Places.Contains(port)))
-        {
-            throw new IOException($"USB のポート {port} の機材は px4d が使っています (設定から px4: の受信機を外してください)");
-        }
         var model = It930x.Identify(port) ?? throw new IOException($"USB のポート {port} に {It930x.Model} が見当たりません");
         return (It930x.OpenUsb(port, model), model);
     }, Thread.Sleep, () => Stopwatch.GetTimestamp() * 1000 / Stopwatch.Frequency, () => It930xFirmware.Code);

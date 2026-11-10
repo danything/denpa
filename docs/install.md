@@ -32,7 +32,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
 - **Linux** (amd64 / arm64): 全部 Docker Compose。`~/denpa` に compose.prod.yml を `compose.yml` として置いて起動します
 - **Mac** (Apple Silicon): denpa 本体もエージェントも Mac の上で直接 (root の LaunchDaemon)。Docker は要りません。sudo で流します ([install-mac.md](install-mac.md))
 - **Windows** (x64): denpa 本体もエージェントも Windows の上で直接 (タスク スケジューラの SYSTEM のタスク)。WSL・Docker Desktop は要りません。管理者の PowerShell で流します。
-  チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
+  チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と PX-MLT5 系と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
 - **Docker は入れません** (Linux)。無ければ入れ方 (<https://get.docker.com>) を示して止まります
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux)。
   動いていればそれを使い、無ければ 80 と 443 が空いているときだけ `~/genkan` に入れて <http://denpa.localhost> で開きます。

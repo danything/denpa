@@ -167,6 +167,11 @@ public static class DeviceProbe
          */
         found.AddRange(Dt295.Detect());
 
+        /*
+         * PX-MLT5 系 (IT930x の機材) も並べるだけで開かない (開くとファームウェアを起動して電源を入れる)。px4d は MLT5 系を挙げない (It930x.cs)
+         */
+        found.AddRange(It930x.Detect());
+
         Remember(found);
         return found;
     }
@@ -182,7 +187,7 @@ public static class DeviceProbe
 
     /// <summary>
     /// 機材が受けられる種別。**最後に <see cref="Detect"/> したときに見つけた機材と、設定の <c>it930x:</c> の受信機だけ**で、ほかは null (分からない)。
-    /// <c>it930x:</c> の受信機は自動検出に出ないが、どの受信機も地上波・衛星・J.83B を受けられる (<see cref="It930x.Types"/>)。
+    /// <c>it930x:</c> の受信機は、抜いてあっても地上波・衛星・J.83B を受けられると返す (<see cref="It930x.Types"/>。機種がどれでも同じ)。
     ///
     /// <para>
     /// <c>GET /denpa/tuners</c> の <c>receivable</c> に入れ、denpa はこれに無い種別を設定で選ばせず、保存でも断る。

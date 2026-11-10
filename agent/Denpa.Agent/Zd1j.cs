@@ -635,7 +635,7 @@ internal sealed class Zd1jStream
 
 /// <summary>
 /// CECH-ZD1 J の内蔵の差し込み口。ブリッジの UART を読み書きし、**T=1 の枠組みはこちらで組む** (<see cref="T1Protocol"/>)。
-/// リセットと IFSD の取り決めは 1 回だけで、あとはつないだまま。並ぶ順は USB のリーダー → px4d → asicend → これ → PIX-DT295 (CardLinks)
+/// リセットと IFSD の取り決めは 1 回だけで、あとはつないだまま。並ぶ順は USB のリーダー → px4d → PX-MLT5 系 → asicend → これ → PIX-DT295 (CardLinks)
 /// </summary>
 public sealed class Zd1jCard : ICardLink
 {

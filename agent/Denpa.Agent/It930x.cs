@@ -7,7 +7,8 @@ namespace Denpa.Agent;
  *
  * ブリッジ (It930xBridge.cs)、受信機ごとに TS を分ける層 (It930xTs.cs)、復調器とチューナー (Cxd2856.cs・Cxd2858.cs)、
  * 機材とチューナー (It930xDevice.cs)、実機で試す入口 (It930xProbe.cs の --it930x-probe と、Probe.cs の --tune it930x:… と --card it930x:…) がある。
- * いまは地上波と衛星と J.83B (スカパー！プレミアムサービス光。種別は SKY) と内蔵カードリーダー (It930xCard.cs)。設定の device に it930x:<USB のポート>:<受信機> と書いたときだけエージェントが持ち、自動検出は px4d のまま (持ち主の決まりは下の Claim)。
+ * 地上波と衛星と J.83B (スカパー！プレミアムサービス光。種別は SKY) と内蔵カードリーダー (It930xCard.cs) を扱う。
+ * **この表の機種 (Family) は、いつもエージェントが持つ。** 自動検出 (Detect) が it930x:<USB のポート>:<受信機> で挙げ、px4d は挙げず、起動もしない (Px4Userland.ParseJson)。
  * 受信機ごとの割り当ては仕様書 (denpa-spec の mlt5/spec.md) の 1.2 から。
  */
 
@@ -26,7 +27,7 @@ public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte De
 /// </summary>
 public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnlyList<It930xReceiver> Receivers);
 
-/// <summary>IT930x を積んだ機材の識別と、挿さっているものを探す・開く。設定の <c>device</c> の形と、px4d との持ち主の決まり</summary>
+/// <summary>IT930x を積んだ機材の識別と、挿さっているものを探す・開く。設定の <c>device</c> の形と、自動検出</summary>
 public static class It930x
 {
     /// <summary>PX-MLT5PE・DTV02A-5TS-P の割り当て (仕様書 1.2)。T のアドレスとバスは 3 機種で同じで、TS 入力は受信機の番号と同じ</summary>
@@ -95,52 +96,41 @@ public static class It930x
     }
 
     /// <summary>
-    /// **エージェントが持つポート。** 設定に <c>it930x:&lt;ポート&gt;:&lt;受信機&gt;</c> のチューナーが 1 つでも「使う」になっていれば、そのポートの機材はエージェントが持つ。
-    /// px4d はそのポートの筐体を挙げず (<see cref="Px4Userland.Detect"/>)、起動もしない (<see cref="Px4Daemon.Ensure"/>)。
-    /// 自動検出には出さないので、書いていなければ px4d が持つ
+    /// <c>px4d --list-json</c> の筐体が、この表の機種か。**この表の機種は px4d に持たせない** (<see cref="Px4Userland.ParseJson"/>)。
+    /// USB の ID (<c>0511:024e</c>) で見分ける。ID が読めなかったときだけ、機種の名前 (<c>PX-MLT5PE</c>) で見分ける
     /// </summary>
-    public static IReadOnlySet<string> Claimed(IEnumerable<TunerSpec> specs) => specs
-        .Where(spec => !spec.Disabled)
-        .Select(spec => Parse(spec.Device)?.Port)
-        .OfType<string>()
-        .ToHashSet(StringComparer.Ordinal);
-
-    private static volatile IReadOnlySet<string> _claimed = new HashSet<string>(StringComparer.Ordinal);
-
-    /// <summary>いまエージェントが持つポート (<see cref="Claim"/> で決めたもの)</summary>
-    public static IReadOnlySet<string> Ports => _claimed;
-
-    /// <summary>設定のチューナーから、エージェントが持つポートを決め直す (起動したときと、定義を書き換えたとき。Program.cs)</summary>
-    public static void Claim(IEnumerable<TunerSpec> specs)
+    public static It930xModel? Listed(string? usb, string? model)
     {
-        var next = Claimed(specs);
-        var before = _claimed;
-        _claimed = next;
-        foreach (var port in next.Except(before)) Log.Write($"[{Model}] USB のポート {port} の機材はエージェントが持ちます (設定の {Scheme})");
+        if (usb?.Split(':') is [var vendor, var product] && Hex(vendor) is { } vid && Hex(product) is { } pid) return Find(vid, pid);
+        return model is { Length: > 0 } ? Family.FirstOrDefault(known => known.Name.EndsWith(model, StringComparison.OrdinalIgnoreCase)) : null;
     }
+
+    /// <summary>画面に出す受信機の名前 (<c>PLEX PX-MLT5PE 4-12.1 #0</c>)</summary>
+    public static string Name(It930xModel model, string port, int receiver) => $"{model.Name} {port} #{receiver}";
+
+    /// <summary>
+    /// 挿さっている機材の受信機を、設定に書いたのと同じ形式で。並べるだけで開かない (開くとファームウェアを起動して電源を入れる)。
+    /// どの受信機も <see cref="Types"/> を受けられる
+    /// </summary>
+    public static List<TunerSpec> Detect() => Specs(Found(Log.Write));
+
+    /// <summary>挿さっている機材から設定の形式に組み立てる (渡せるのはテストのため)</summary>
+    internal static List<TunerSpec> Specs(IEnumerable<(string Port, It930xModel Model)> found) =>
+    [
+        .. found.SelectMany(item => item.Model.Receivers.Select(receiver =>
+            new TunerSpec(Name(item.Model, item.Port, receiver.Index), [.. Types], false, Device(item.Port, receiver.Index)))),
+    ];
 
     /// <summary><c>--card it930x:4-12.1</c> (内蔵のカードリーダー。受信機の番号は付けない) からポートを取る。形式が違えば null</summary>
     public static string? CardPort(string? device) =>
         Is(device) && device![Scheme.Length..] is var port && UsbSysfs.IsPort(port) ? port : null;
 
-    /// <summary>
-    /// 内蔵のカードリーダー。**エージェントが持つポート (<see cref="Ports"/>) の、挿さっている機材のぶんだけ。** 開くまでは何も開かない。
-    /// px4d が持つ機材のカードは px4d が出す (<see cref="Px4Card"/>)。px4d がまだそのポートの筐体を使っていれば、ここには並べない
-    /// </summary>
-    public static IReadOnlyList<CardLinkCandidate> Cards()
-    {
-        var claimed = Ports;
-        if (claimed.Count == 0) return [];
-        return Cards(claimed, Found(), Px4Daemon.Owned().SelectMany(enclosure => enclosure.Places));
-    }
+    /// <summary>内蔵のカードリーダー。挿さっている機材のぶん。**開くまでは何も開かない**</summary>
+    public static IReadOnlyList<CardLinkCandidate> Cards() => Cards(Found());
 
-    /// <summary>エージェントが持つポート・挿さっている機材・px4d が使っている USB の位置から (渡せるのはテストのため)</summary>
-    internal static IReadOnlyList<CardLinkCandidate> Cards(
-        IReadOnlySet<string> claimed, IEnumerable<(string Port, It930xModel Model)> found, IEnumerable<string> px4dPlaces)
-    {
-        var px4d = px4dPlaces.ToHashSet(StringComparer.Ordinal);
-        return [.. found.Where(item => claimed.Contains(item.Port) && !px4d.Contains(item.Port)).Select(item => Card(item.Port, item.Model))];
-    }
+    /// <summary>挿さっている機材から (渡せるのはテストのため)</summary>
+    internal static IReadOnlyList<CardLinkCandidate> Cards(IEnumerable<(string Port, It930xModel Model)> found) =>
+        [.. found.Select(item => Card(item.Port, item.Model))];
 
     /// <summary>カードリーダーの名前 (<c>PLEX PX-MLT5PE 4-12.1 Card Reader</c>。画面の「使う」の設定もこの名前で持つ)</summary>
     public static string CardName(string port, It930xModel model) => $"{model.Name} {port} Card Reader";
@@ -152,11 +142,8 @@ public static class It930x
         return new CardLinkCandidate(name, () => new It930xCard(name, port));
     }
 
-    /// <summary>筐体の USB の位置 (<see cref="Px4Userland.Enclosure.Places"/>) のどれかをエージェントが持つか</summary>
-    public static bool ClaimsAny(IEnumerable<string> places, IReadOnlySet<string> claimed) => places.Any(claimed.Contains);
-
     /// <summary>
-    /// 挿さっているポートと機種。**開かない** (開くと px4d から使えなくなる)。Linux はカーネルのドライバが使っているものを並べない。
+    /// 挿さっているポートと機種。**開かない。** Linux はカーネルのドライバが使っているものを並べない。
     /// 探せなければ (USB の一覧を読めない・ライブラリが無い) <paramref name="warn"/> に出して空
     /// </summary>
     public static List<(string Port, It930xModel Model)> Found(Action<string>? warn = null)
@@ -194,7 +181,7 @@ public static class It930x
 
     /// <summary>
     /// 開く (Linux は usbfs、Windows は WinUSB、macOS は IOKit)。インターフェース 0 を確保する。
-    /// px4d などほかのソフトが使っていれば、OS の理由のまま失敗する
+    /// ほかのソフトが使っていれば、OS の理由のまま失敗する
     /// </summary>
     public static IUsbDevice OpenUsb(string port, It930xModel model) =>
         OperatingSystem.IsLinux()
