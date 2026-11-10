@@ -16,6 +16,11 @@ export const SERVICE_TYPE_LABEL: Record<string, string> = {
   SKY: "スカパー！プレミアム",
 };
 
+/** 種別の並びを画面の名前で (「地上波・BS・CS」)。知らない種別は符号のまま */
+export function typeNames(types: readonly string[]): string {
+  return types.map((type) => SERVICE_TYPE_LABEL[type] ?? type).join("・");
+}
+
 export function pad(n: number): string {
   return String(n).padStart(2, "0");
 }

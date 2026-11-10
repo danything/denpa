@@ -452,7 +452,8 @@ test.describe("チューナーの設定", () => {
     // 押せないようにしたのを外して入れても、保存で断って元に戻す
     const gr = card.locator('input[name="type.0.GR"]');
     await gr.evaluate((el) => el.removeAttribute("disabled"));
-    await gr.check({ force: true });
+    // 入れたら保存し、断られてすぐ外れる。check() は入った姿を確かめようとして外れたあとに読むことがあるので、押すだけにする
+    await gr.click({ force: true });
     await expect(card.getByTestId("settings-error")).toContainText(
       "「地上波」を受信できません",
     );

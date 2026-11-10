@@ -160,7 +160,7 @@ export function parseFetchId(
 /**
  * 落とすものの一覧。動画 + 観るのに要る付属のデータ。
  *
- * **頭 (前段の接頭辞。server/paths.ts) は呼ぶ側 (offline.svelte.ts) が付ける。** ここは
+ * **先頭に付ける接頭辞 (前段のもの。server/paths.ts) は呼ぶ側 (offline.svelte.ts) が付ける。** ここは
  * Service Worker からも読まれ、パスの形でどのデータかを見分ける (`kindOf`) ので、ルートからのパスのまま持つ
  */
 export function downloadRequests(id: number, source: EncodedSource): string[] {

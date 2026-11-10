@@ -96,10 +96,10 @@ export function backgroundPlayback(options: Options): Background {
      * - `leavepictureinpicture` は仕様上バブルする (`bubbles: true`。W3C PiP 3.3)。document の
      *   バブル相で受ければ video のリスナーの後に呼ばれるので、on は戻っている
      * - Safari の `webkitpresentationmodechanged` はバブルしない。document まで来ないので、
-     *   キャプチャ相で拾う。ただしキャプチャ相は video のリスナーより先なので、`setTimeout(…, 0)`
+     *   キャプチャ相で受ける。ただしキャプチャ相は video のリスナーより先なので、`setTimeout(…, 0)`
      *   で配送の後ろへ回す
      * - `leavepictureinpicture` もバブルしないと言う実装 (MDN の記述) に備えて、そちらでも同じ
-     *   受け方で拾う。二重に `check()` が走るが、`step()` は `held` で守るので止め直しはしない
+     *   受け方で受ける。二重に `check()` が走るが、`step()` は `held` で守るので止め直しはしない
      */
     // 片付けたあとに、後ろへ回した check() が破棄したプレイヤーを呼ばないよう、時計を覚えて止める
     let later: ReturnType<typeof setTimeout> | undefined;

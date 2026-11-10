@@ -432,7 +432,7 @@ test.describe("録画を観る", () => {
     expect(await left()).toBeCloseTo(41, 0);
     expect((await seeks()).length).toBe(during);
 
-    // 離すと、その位置へちゃんと 1 回飛ぶ。つまみはそこに居る
+    // 離すと、その位置へちゃんと 1 回飛ぶ。つまみはそこにある
     await page.mouse.up();
     await expect
       .poll(async () => (await seeks()).slice(during)[0])

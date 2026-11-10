@@ -6,7 +6,7 @@
 
   import Lead from "#lib/components/Lead.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
-  import { READER_STATE_LABEL } from "#lib/format.js";
+  import { READER_STATE_LABEL, typeNames } from "#lib/format.js";
   import {
     agentSystem,
     CCID_DRIVER,
@@ -57,7 +57,7 @@
           : tuners.value.list
               .map(
                 (t) =>
-                  `${t.name} (${t.types.join("・")}${t.disabled ? "・無効" : ""}${t.error === null ? "" : `・${t.error}`})`,
+                  `${t.name} (${typeNames(t.types)}${t.disabled ? "・無効" : ""}${t.error === null ? "" : `・${t.error}`})`,
               )
               .join("、"),
   );
@@ -303,7 +303,7 @@
   </div>
 </div>
 
-<!-- ログの押すもの。広い画面では見出しの行の右、スマホの形では絞り込みの 1 行の頭 (上の `phone`) -->
+<!-- ログの押すもの。広い画面では見出しの行の右、スマホの形では絞り込みの 1 行の先頭 (上の `phone`) -->
 {#snippet logActions()}
   <button
     type="button"

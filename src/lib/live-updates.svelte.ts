@@ -24,14 +24,14 @@ import { reload } from "./reload.svelte";
  *
  * ## 取りこぼしは「繋ぎ直したら 1 回読み直す」で埋める
  *
- * イベントは「変わったよ」の 1 ビットで、真実は毎回取得する。だから
+ * イベントは「変わった」の 1 ビットで、中身は毎回取得する。だから
  * 切れていた間に何が起きていても、**繋がり直した瞬間に 1 回読み直せば
  * 完全に追いつく**。再送も Last-Event-ID も要らない。
  *
  * 切れたことに気付く手段は 3 つ:
- * - **番犬** … サーバは 25 秒おきに `ping` を送ってくる (`api/events`)。
- *   60 秒何も届かなければ、開いているつもりで死んだ接続 (遅い回線で TCP が
- *   黙って死ぬ) とみなして作り直す
+ * - **定期チェック** … サーバは 25 秒おきに `ping` を送ってくる (`api/events`)。
+ *   60 秒何も届かなければ、開いたまま応答しなくなった接続 (遅い回線で TCP が
+ *   何も返さずに切れる) とみなして作り直す
  * - **`error`** … EventSource が自分で諦めた (`CLOSED`)。プロキシが一瞬
  *   エラーを返したときなど。少し置いて作り直す
  * - **`online`** … 回線が戻った合図。待たずにすぐ作り直す
@@ -94,7 +94,7 @@ export function liveUpdates(
     };
     connect();
 
-    // 番犬。ping (25 秒おき) が 2 回続けて見えなければ、死んだ接続とみなす
+    // 定期チェック。ping (25 秒おき) が 2 回続けて見えなければ、応答しなくなった接続とみなす
     const watchdog = setInterval(() => {
       if (document.visibilityState !== "visible") return; // 裏のタブで空騒ぎしない
       if (Date.now() - lastSeen > 60_000) connect();
@@ -111,7 +111,7 @@ export function liveUpdates(
     // 往復では `visibilitychange` が出ないことがある (`+layout.svelte`)
     document.addEventListener("resume", revive);
     window.addEventListener("pageshow", revive);
-    // 回線が戻ったら、番犬の周期を待たずにすぐ
+    // 回線が戻ったら、定期チェックの周期を待たずにすぐ
     const online = () => connect();
     window.addEventListener("online", online);
 
@@ -138,7 +138,7 @@ interface Held<T> {
  * 読み直している間、**前に届いた中身を出したままにする**。
  *
  * 相手待ちの読み込みは promise のまま画面へ渡している (`load` の戻り値)。
- * `{#await}` に直に食わせると、読み直すたびに新しい promise に変わって
+ * `{#await}` に直に渡すと、読み直すたびに新しい promise に変わって
  * 待ち状態へ戻るので、**中身がいったん消えてから同じものが描き直される**。
  * 設定の「チューナー」は通知が来るたびに読み直すので、表が数百ミリ秒ごとに
  * 消えては現れ、目に見えてちらついていた。

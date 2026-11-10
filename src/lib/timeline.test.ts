@@ -756,6 +756,35 @@ describe("新しい順で表示 (上下を返す)", () => {
     expect(pageEnd(grouped, 5)).toBe(6);
   });
 
+  test("ふだんの並びの予約も線の側 (頭) から描き、日付の見出しと開いた番組の途中で切らない", () => {
+    const list = [
+      item("res-1", "future", NOW + H),
+      item("res-2", "future", NOW + 2 * H),
+      item("res-3", "future", NOW + 25 * H),
+      item("res-b1", "future", NOW + 49 * H, "B"),
+      item("res-b2", "future", NOW + 50 * H, "B"),
+    ];
+    const lines = (grouped: boolean) =>
+      timelineLines(sections(list, grouped), {
+        now: NOW,
+        grouped,
+        reversed: false,
+        isOpen: () => true,
+      }).future;
+    for (const grouped of [false, true]) {
+      const future = lines(grouped);
+      for (let count = 1; count <= future.length; count++) {
+        const end = pageEnd(future, count);
+        expect(end).toBeGreaterThanOrEqual(count);
+        // 末尾に日付の見出しだけを残さない
+        expect(future[end - 1]?.kind).not.toBe("day");
+        // 開いた番組の途中で切らない
+        const next = future[end];
+        expect(next?.kind === "row" && next.nested).toBe(false);
+      }
+    }
+  });
+
   test("予約は線の側 (末尾) から描き、見出しの途中から描かない", () => {
     const { future } = reversedLines([
       item("res-1", "future", NOW + H),

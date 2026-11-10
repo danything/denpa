@@ -287,7 +287,7 @@
     </div>
   {/if}
   <div class="wrap">{rules}</div>
-  {#each culprits as culprit (culprit.what + culprit.bottom)}
+  {#each culprits as culprit, index (index)}
     <div>↳ {culprit.what} → {culprit.bottom}</div>
   {/each}
 </div>

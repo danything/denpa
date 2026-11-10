@@ -26,7 +26,7 @@ export interface VideoLoss {
 /**
  * 番組表・ライブで並べる種別とその順 (地上波・BS・CS)。
  * SKY (スカパー！プレミアム) は復号できないので番組表とライブには出さない (`decodable`)。
- * 受信の設定では受けられる機材があるときだけ並べ (`shownTypes`)、ルールの条件ではいつも選べる
+ * 受信の設定では受けられる機材があるときだけ並べ (`shownTypes`)、ルールの条件では SKY の局があれば選べる (`RuleDraft`)
  */
 export const CHANNEL_TYPES: readonly ChannelType[] = ["GR", "BS", "CS"];
 
@@ -106,6 +106,16 @@ export interface GridProgram extends Pick<
 export interface GuideSheet {
   programs: GridProgram[];
   failed: string | null;
+}
+
+/**
+ * 番組の詳細に添える注記。失敗・削除の理由はサーバが返したままの字を等幅で出し、見出しは赤。
+ * `warning` は録れてはいるが欠けがある録画 (映像が途中で欠けた) で、一覧の行と同じ注意の色の見出しに、文をそのまま続ける
+ */
+export interface DetailNote {
+  title: string;
+  text: string;
+  tone?: "warning";
 }
 
 /**

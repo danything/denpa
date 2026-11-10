@@ -244,7 +244,7 @@
    * この段で作り直す (`canvasBusy`)
    */
   let stepFrom: Step | null = null;
-  /** canvas のプレイヤーが貯めを使い切って止まっているか (`waiting`)。段を決めるのに渡す */
+  /** canvas のプレイヤーがバッファを使い切って止まっているか (`waiting`)。段を決めるのに渡す */
   let canvasStuck = false;
   /** 段 0 のビットレート (kbit/s)。ファイルの大きさと尺から。分からなければ null */
   let baseKbps: number | null = null;
@@ -351,7 +351,7 @@
 
   /**
    * 尺 (秒)。**端末に保存したものを描いているなら、そのファイルに書いてある長さ** (描いているのはそのファイル。
-   * 尻の手前へ飛ぶと終わりにするので、違う長さを使うと途中で終わる)。それ以外は `playback`
+   * 末尾の手前へ飛ぶと終わりにするので、違う長さを使うと途中で終わる)。それ以外は `playback`
    */
   function canvasLength(): number {
     if (localMkv !== null)
@@ -1691,7 +1691,7 @@
       (captionText.pages.length > 0 ||
         (captionText.others ?? []).some((o) => o.pages.length > 0)),
   );
-  /** 文字の配置を描く係 (`overlay` ができたら作る) */
+  /** 文字の配置を描くもの (`overlay` ができたら作る) */
   let painter: CaptionPainter | null = null;
   /** いま描いている文字の配置。同じものを描き直さない */
   let shownPage: CaptionPage | null = null;
@@ -1875,8 +1875,8 @@
   });
 
   /**
-   * CM を自動で飛ばすか (CM を残してエンコードした録画のため)。端末ごとに覚える。
-   * 観はじめに入れるかどうかは `skipCmAtStart` (ロゴでの判定に失敗した 1 本は切って始める)
+   * CM を自動で飛ばすか (CM はチャプターとして動画に入っている)。端末ごとに覚える。
+   * 観はじめに入れるかどうかは `skipCmAtStart` (ロゴでの判定に失敗した 1 本はオフで始める)
    */
   const SKIP_CM_KEY = "watch-skip-cm";
   let skipCm = $state(false);
@@ -2499,7 +2499,7 @@
       if (following !== target) return false;
       /*
        * 映したコマの時刻 (`mediaTime`) で外す。`currentTime` は代入した時点で飛んだ先を返すのに、
-       * 画面にはまだ手前のコマが出ていて、CM の尻が 1 コマ見えていた
+       * 画面にはまだ手前のコマが出ていて、CM の最後の 1 コマが見えていた
        */
       if (waiting) {
         const there =
@@ -2676,7 +2676,7 @@
   const shooter = snapshotter(controls);
 
   /**
-   * **録画の再生中は選局できない。** データ放送が「この局へ」と言ってきたら (epgTune)、文書には失敗を
+   * **録画の再生中は選局できない。** データ放送が「この局へ」と求めたら (epgTune)、文書には失敗を
    * 返し (`DataBroadcast` の tune)、観ている人にはそう知らせる
    */
   let tuneRefused = $state<Notice | null>(null);
@@ -3019,7 +3019,7 @@
             </Extras>
 
             <!--
-              チャプター送りは入っているときだけ (CM を切ってエンコードしたものには無い)。
+              チャプター送りは入っているときだけ (前のバージョンで CM を切ってエンコードしたものには無い)。
               畳むときも残す。CM や本編の始まりへ毎回のように使う
             -->
             {#if chapters.length > 1}

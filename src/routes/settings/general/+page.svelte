@@ -6,7 +6,7 @@
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import Lead from "#lib/components/Lead.svelte";
   import Toasts, { errorNotice } from "#lib/components/Toasts.svelte";
-  import { dateTime } from "#lib/format.js";
+  import { dateTime, typeNames } from "#lib/format.js";
   import { liveTuner } from "#lib/live-tuner.svelte.js";
   import { measure } from "#lib/measure.svelte.js";
   import {
@@ -151,7 +151,7 @@
         {/if}
         {#each data.liveTuners as tuner (tuner.pin)}
           <option value={tuner.pin} selected={liveTuner.pin === tuner.pin}
-            >{tuner.name} ({tuner.types.join("・")})</option
+            >{tuner.name} ({typeNames(tuner.types)})</option
           >
         {/each}
       </select>

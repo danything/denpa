@@ -172,8 +172,8 @@
   .cal-head {
     display: flex;
     align-items: center;
-    /* ほかのグループの見出し (`app.css` の `.side-label`) と同じく上に 20px。サイドバーのいちばん上に来たときは空けない */
-    margin-top: 1.25rem;
+    /* ほかのグループの見出し (`app.css` の `.side-label`) と同じく上に 16px。サイドバーのいちばん上に来たときは空けない */
+    margin-top: var(--dp-space-4);
   }
   .cal:first-child > .cal-head {
     margin-top: 0;

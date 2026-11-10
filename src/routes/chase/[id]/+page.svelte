@@ -203,8 +203,12 @@
     if (w !== null && jikkyoActive) untrack(() => jikkyo.backfill(w));
   });
 
-  /** シーク。**録れているところより先へは行かせない** (まだ無い) */
+  /**
+   * シーク。**録れているところより先へは行かせない** (まだ無い)。
+   * 録れている長さがまだ届いていない間 (`line` が null) は飛ばない。0 として扱うと、続きから開いた録画が先頭へ戻る
+   */
   function seekTo(value: number): void {
+    if (line === null) return;
     player.chaseSeek(Math.max(0, Math.min(value, Math.max(0, recorded - 5))));
   }
 

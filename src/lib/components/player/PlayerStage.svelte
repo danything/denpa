@@ -17,7 +17,7 @@
   import { PHONE_LANDSCAPE } from "./PlayerLayout.svelte";
 
   /**
-   * 映像を出す領域。3 つの視聴画面で同じ配線を 1 本に: 操作バーの出し入れとカーソル (`controls`)・キーボードで触っている
+   * 映像を出す領域。3 画面 (ライブ・追っかけ・観る画面) で同じ配線を 1 本に: 操作バーの出し入れとカーソル (`controls`)・キーボードで触っている
    * 間は残す・全画面は枠ごと (iPhone は広げる。`data-pseudo`。テーブルトップはページごと)・枠の大きさから操作バーの詰め方を決める (`compact`)。
    * 中身は画面ごとに違うので snippet で受ける
    */
@@ -59,12 +59,12 @@
     pip = false,
   }: Props = $props();
 
-  // 中のメニュー (`stageMenu`) が「開いている間は操作バーを残せ」と言う先。取り手で渡す (props は差し替わりうる)
+  // 中のメニュー (`stageMenu`) が「開いている間は操作バーを残せ」と言う先。関数で渡す (props は差し替わりうる)
   setContext(PLAYER_CONTROLS, () => controls);
   /** テーブルトップか (`#lib/phone-form.ts` の `TABLETOP`)。並べ方は CSS、ここは光と反射のどちらを置くかだけ */
   const tabletop = new MediaQuery(TABLETOP);
 
-  // メニューを枠の中に収める先 (`SpeedMenu`・`SettingsMenu`)。bind で入るので取り手で渡す
+  // メニューを枠の中に収める先 (`SpeedMenu`・`SettingsMenu`)。bind で入るので関数で渡す
   setContext(PLAYER_STAGE, () => element);
 
   /**
@@ -158,7 +158,7 @@
         aspect = `${video.videoWidth} / ${video.videoHeight}`;
     };
     read();
-    // `<video>` の映像の大きさが変わった (`resize` は泡立たないので、捕まえる側で受ける)
+    // `<video>` の映像の大きさが変わった (`resize` はバブルしないので、キャプチャで受ける)
     target.addEventListener("resize", read, true);
     target.addEventListener("loadedmetadata", read, true);
     // エンジンの canvas が出入りした・形を書き換えた
@@ -525,7 +525,7 @@
   }
   /* 字幕の持ち上げ (上の `lift`)。操作バーの出入りと同じ `--dp-duration` で動かす (動かさない設定では一緒に止まる) */
   .stage :global(canvas[data-ink]) {
-    transition: translate var(--dp-duration);
+    transition: translate var(--dp-duration) var(--dp-ease);
   }
   /* 通知の列。押せない (下の映像を押せるように)。押せる通知は自分で戻す */
   .notes {

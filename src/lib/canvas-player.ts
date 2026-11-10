@@ -95,7 +95,7 @@ interface CanvasOptions {
   gaveUp(reason: string): void;
   /** 外 (ロック画面・車の操作) から止められた・再開された */
   remote(paused: boolean): void;
-  /** 貯めを使い切って止まった / また流れ出した (読み込み中の輪) */
+  /** バッファを使い切って止まった / また流れ出した (読み込み中の輪) */
   waiting(on: boolean): void;
   /** 終わりまで鳴らした */
   ended(): void;
@@ -189,7 +189,7 @@ export function canvasPlayer(options: CanvasOptions): CanvasPlayer {
   let fed = 0;
   /** リクエストし直した位置 (秒)。そこから観た長さぶんだけ先へ読む (`bytesPerSecond`) */
   let loadedFrom = options.start;
-  /** 貯めを使い切って止まっているか (読み込み中の輪) */
+  /** バッファを使い切って止まっているか (読み込み中の輪) */
   let starving = false;
   const meter = new Meter();
 

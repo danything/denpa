@@ -43,6 +43,7 @@
     shotName,
   } from "#lib/components/player/snapshot.js";
   import Toasts, { type Notice } from "#lib/components/Toasts.svelte";
+  import { Feed } from "#lib/feed.js";
   import { dateTime, fullDate, size, time } from "#lib/format.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
   import { sentinel } from "#lib/paging.svelte.js";
@@ -74,59 +75,36 @@
   let more = $state<Clip[]>([]);
   // svelte-ignore state_referenced_locally
   let next = $state<number | null>(data.next);
-  /** 読み直しの世代。古い世代で取った続きは足さない (取っている間に読み直したとき) */
-  let generation = 0;
+  /** 続きの取得と読み直しの決まり (`#lib/feed.ts`)。変わったら上の 2 つに写す */
+  // svelte-ignore state_referenced_locally
+  const feed = new Feed<Clip>(
+    data.next,
+    async (before) => {
+      const params = clipSearch(data.query);
+      params.set("before", String(before));
+      const res = await fetch(`${resolve("api/clips")}?${params}`);
+      if (!res.ok) return null;
+      const body = (await res.json()) as {
+        clips: Clip[];
+        next: number | null;
+      };
+      return { items: body.clips, next: body.next };
+    },
+    () => {
+      more = feed.items;
+      next = feed.next;
+    },
+  );
   let shownQuery = "";
   $effect(() => {
     void data.clips;
     const query = String(clipSearch(data.query));
     const keep = query === shownQuery ? untrack(() => more.length) : 0;
     shownQuery = query;
-    generation++;
-    more = [];
-    next = data.next;
-    if (keep > 0) untrack(() => void refill(keep));
+    const first = data.next;
+    untrack(() => void feed.reset(first, keep));
   });
   const clips = $derived([...data.clips, ...more]);
-
-  /** 続きを 1 ページ取る。世代が替わっていたら捨てる */
-  async function fetchMore(): Promise<boolean> {
-    if (next === null) return false;
-    const mine = generation;
-    const params = clipSearch(data.query);
-    params.set("before", String(next));
-    const res = await fetch(`${resolve("api/clips")}?${params}`);
-    if (!res.ok || mine !== generation) return false;
-    const body = (await res.json()) as {
-      clips: Clip[];
-      next: number | null;
-    };
-    if (mine !== generation) return false;
-    more = [...more, ...body.clips];
-    next = body.next;
-    return true;
-  }
-
-  let loading = false;
-  async function loadMore(): Promise<void> {
-    if (loading) return;
-    loading = true;
-    try {
-      await fetchMore();
-    } finally {
-      loading = false;
-    }
-  }
-
-  /** 読み直したあと、読み進めていたぶん (`count` 枚) まで続きを取り直す */
-  async function refill(count: number): Promise<void> {
-    loading = true;
-    try {
-      while (more.length < count && (await fetchMore()));
-    } finally {
-      loading = false;
-    }
-  }
 
   /** 撮った日ごとに分ける (新しい順のまま) */
   const days = $derived.by(() => {
@@ -643,7 +621,7 @@
       {#if next !== null}
         <div
           class="c-more small muted"
-          use:sentinel={() => void loadMore()}
+          use:sentinel={() => void feed.loadMore()}
           data-testid="clip-more"
         >
           読み込んでいます…

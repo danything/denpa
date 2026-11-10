@@ -684,7 +684,7 @@ test.describe("ライブ視聴", () => {
     await expect(auto).toHaveAttribute("aria-checked", "true");
     await expect(page.getByTestId("live-settings-back")).toBeVisible();
 
-    // Esc は上の並びへ (閉じない)。戻るとコーデックの行に居る
+    // Esc は上の並びへ (閉じない)。戻るとコーデックの行にいる
     await page.keyboard.press("Escape");
     await expect(menu).toBeVisible();
     await expect(codec).toBeFocused();
@@ -960,7 +960,7 @@ test.describe("ライブ視聴", () => {
     stack,
     request,
   }) => {
-    // 偽の放送の PMT に字幕の ES を載せる。無ければ字幕の出口は頼まない (下の「字幕を持たない放送」)
+    // 偽の放送の PMT に字幕の ES を載せる。無ければ字幕の出力は指定しない (下の「字幕を持たない放送」)
     await request.post(`${stack.agentUrl}/__control/captions?on=1`);
     let args: string[];
     try {
@@ -997,11 +997,11 @@ test.describe("ライブ視聴", () => {
   });
 
   /*
-   * **字幕を持たない放送では、初めから字幕の出口を頼まない。**
+   * **字幕を持たない放送では、初めから字幕の出力を指定しない。**
    *
-   * 頼むと ffmpeg は入口を探り終えてから降り、字幕なしで起こし直すまで映像が 1.5 秒ほど遅れていた
+   * 指定すると ffmpeg は入口を探り終えてから降り、字幕なしで起こし直すまで映像が 1.5 秒ほど遅れていた
    * (実機の CS で、開くたびに)。PMT には ES が全部並んでいるので、起こす前に読めば分かる
-   * (`server/captions.ts` の `peekCaptions`)。偽 ffmpeg は本物と同じく、頼まれたら降りる
+   * (`server/captions.ts` の `peekCaptions`)。偽 ffmpeg は本物と同じく、指定されたら降りる
    */
   test("字幕を持たない放送では、ffmpeg を起こし直さずに開く", async ({
     page,

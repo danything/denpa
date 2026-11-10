@@ -60,7 +60,7 @@ export function privateHost(hostname: string, cgnat: boolean): boolean {
 }
 
 /** ホスト名を比べられる形にそろえる (小文字・IPv6 の角括弧と末尾の点を落とす) */
-export function normalHost(hostname: string): string {
+function normalHost(hostname: string): string {
   return hostname
     .trim()
     .toLowerCase()
@@ -84,7 +84,7 @@ export function indoorHost(
 }
 
 /** 家の中の名前の数の上限 */
-export const INDOOR_HOSTS_MAX = 20;
+const INDOOR_HOSTS_MAX = 20;
 
 const NAME =
   /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;

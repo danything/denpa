@@ -5,7 +5,7 @@
  * 映像の上に実況に書き込む 1 行を開いている間だけ (`writing`。一覧の下の 1 行は映像の外なので残さない)
  */
 
-import { getContext } from "svelte";
+import { getContext, untrack } from "svelte";
 
 /**
  * 触らなくなってから消えるまで (ms)。指もマウスも同じ長さ (指だけ押すまで留めていた頃は、消すのに毎回
@@ -37,8 +37,11 @@ export interface PlayerControls {
   away: (event: PointerEvent) => void;
   /** キーボードで触っている間は残す */
   keyboard: boolean;
-  /** メニューが開いている間は残す。**選んでいる最中に消えては選べない** */
-  hold: boolean;
+  /**
+   * メニューが開いている間は残す。**選んでいる最中に消えては選べない**。返す関数で閉じたことを伝える。
+   * 開いているメニューを数で持つ。真偽 1 つだった頃は、音量のつまみが遅れて閉じると、あとから開いた ⚙ のぶんまで下ろしていた
+   */
+  holdOpen: () => () => void;
   /** 実況に書き込む 1 行を開いている間は残す (打っている最中に消えない) */
   writing: boolean;
   /** その場で出し直す (ボタンを押した直後など) */
@@ -60,14 +63,16 @@ export function playerControls(): PlayerControls {
   /** 押される直前に出ていたか。`toggle` が読む */
   let wasShown = false;
   let keyboard = $state(false);
-  let hold = $state(false);
+  let holds = $state(0);
   let writing = $state(false);
   /** 前にいた場所。**動いていない `pointermove` を捨てる**のに使う (`wake`) */
   let lastX = Number.NaN;
   let lastY = Number.NaN;
 
   // 見るのは「触ったか」だけ (キーボード・開いているメニュー・書き込む 1 行を除く。再生の状態は混ぜない)
-  const shown = $derived(keyboard || hold || writing || now - touched < LINGER);
+  const shown = $derived(
+    keyboard || holds > 0 || writing || now - touched < LINGER,
+  );
 
   $effect(() => {
     if (!shown) return;
@@ -95,11 +100,10 @@ export function playerControls(): PlayerControls {
     set keyboard(value: boolean) {
       keyboard = value;
     },
-    get hold(): boolean {
-      return hold;
-    },
-    set hold(value: boolean) {
-      hold = value;
+    // 呼ぶのは effect の中 (`stageMenu`)。数えた値にその effect を結び付けない (`untrack`)
+    holdOpen(): () => void {
+      untrack(() => holds++);
+      return () => holds--;
     },
     get writing(): boolean {
       return writing;
@@ -156,11 +160,8 @@ export function stageMenu(
     PLAYER_CONTROLS,
   );
   $effect(() => {
-    if (controls === undefined) return;
-    controls().hold = isOpen();
-    return () => {
-      controls().hold = false;
-    };
+    if (controls === undefined || !isOpen()) return;
+    return controls().holdOpen();
   });
   return getContext<(() => HTMLElement | null) | undefined>(PLAYER_STAGE);
 }
