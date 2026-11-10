@@ -26,6 +26,13 @@ const PCM_LIMIT = 16 * 1024 * 1024;
 const HISTORY_SECONDS = 30;
 const SCHEDULE_AHEAD = 0.3;
 const RESYNC_SECONDS = 0.08;
+/**
+ * 音を途中で止めるとき・途切れのあとに鳴らし始めるときに、音量を上げ下げする時間 (秒)。
+ * 波形が途中で 0 に飛ぶ (または 0 から飛ぶ) と「プツッ」と聞こえる (#2474)。映像が一瞬止まる・先へ飛ぶたびに起きる
+ */
+const FADE_SECONDS = 0.008;
+/** 前の音の終わりとこれだけ離れて鳴らし始めたら、途切れのあととみなして音量を上げる (秒) */
+const GAP_SECONDS = 0.001;
 
 /** AudioContext の `at` 秒に、映像は `position` 秒を `rate` 倍で進んでいた */
 interface Clock {
@@ -47,6 +54,13 @@ export class NativeAudio {
   private readonly listening = new AbortController();
   private frames: Frame[] = [];
   private nodes = new Set<AudioBufferSourceNode>();
+  /**
+   * 予約した音をまとめて通す音量。組み直す (`flush`) ときは今の音を絞りきってから止め、新しいものに替える。
+   * 止めた音が絞りきるまで鳴っている間も、新しく予約した音は新しいほうで鳴る
+   */
+  private fade: GainNode;
+  /** 最後に予約した音が鳴り終わる AudioContext の時刻。組み直すと null (次の音は音量を上げながら鳴らす) */
+  private scheduledEnd: number | null = null;
   private epoch = 0;
   /** まだ予約していない最初のコマ (`frames` の添字)。組み直す (`flush`) と 0 に戻る */
   private cursor = 0;
@@ -77,6 +91,7 @@ export class NativeAudio {
       this.muteGain = this.context.createGain();
       this.muteGain.gain.value = 0;
       this.muteGain.connect(this.outlet.input);
+      this.fade = this.newFade();
       this.worker = new Worker(
         new URL("./native-audio-worker.ts", import.meta.url),
         { type: "module" },
@@ -182,16 +197,33 @@ export class NativeAudio {
     this.pcmBytes -= first.bytes;
     this.cursor = Math.max(0, this.cursor - 1);
   }
+  private newFade(): GainNode {
+    const fade = this.context.createGain();
+    fade.connect(this.muteGain);
+    return fade;
+  }
   private flush(): void {
-    for (const node of this.nodes) {
-      try {
-        node.stop();
-      } catch {
-        /* もう終わっている */
+    if (this.nodes.size > 0) {
+      // 鳴っている途中で止めると波形が 0 に飛ぶ。絞りきってから止める
+      const now = this.context.currentTime,
+        end = now + FADE_SECONDS,
+        fade = this.fade;
+      fade.gain.cancelScheduledValues(now);
+      fade.gain.setValueAtTime(fade.gain.value, now);
+      fade.gain.linearRampToValueAtTime(0, end);
+      for (const node of this.nodes) {
+        try {
+          node.stop(end);
+        } catch {
+          /* もう終わっている */
+        }
       }
-      node.disconnect();
+      this.nodes.clear();
+      // 止めた音は onended で外れる。絞る音量は、止めた音が鳴り終わってから外す
+      setTimeout(() => fade.disconnect(), FADE_SECONDS * 1000 + 100);
+      this.fade = this.newFade();
     }
-    this.nodes.clear();
+    this.scheduledEnd = null;
     this.cursor = 0;
     this.last = null;
   }
@@ -255,7 +287,19 @@ export class NativeAudio {
       const node = this.context.createBufferSource();
       node.buffer = buffer;
       node.playbackRate.value = rate;
-      node.connect(this.muteGain);
+      node.connect(this.fade);
+      // 途切れのあと (組み直した直後・コマを捨てた・途中から鳴らす) は、波形が 0 から飛ばないよう音量を上げながら鳴らす
+      if (
+        this.scheduledEnd === null ||
+        plan.when > this.scheduledEnd + GAP_SECONDS ||
+        plan.offset > 0
+      ) {
+        const gain = this.fade.gain;
+        gain.cancelScheduledValues(plan.when);
+        gain.setValueAtTime(0, plan.when);
+        gain.linearRampToValueAtTime(1, plan.when + FADE_SECONDS);
+      }
+      this.scheduledEnd = plan.when + plan.duration / rate;
       this.nodes.add(node);
       node.onended = () => {
         this.nodes.delete(node);
