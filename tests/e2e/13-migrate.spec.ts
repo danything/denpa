@@ -1,4 +1,12 @@
-import { clearRules, expect, goto, syncEpg, test } from "./helpers";
+import {
+  clearRules,
+  expect,
+  expectTokenRefused,
+  goto,
+  pairToken,
+  syncEpg,
+  test,
+} from "./helpers";
 
 /**
  * EPGStation からの引き継ぎ。偽の EPGStation (`tests/fake/epgstation.ts`。v3、番組名は作り物) に向けて、
@@ -9,6 +17,32 @@ test.describe("EPGStation からの引き継ぎ", () => {
   test.beforeEach(async ({ request, stack }) => {
     // 偽 EPGStation の振る舞いを既定 (v3・切らない) に戻す
     await request.post(`${stack.epgstationUrl}/__control/mode`, { data: {} });
+  });
+
+  test("アクセストークンでは引き継ぎを始めることも中断することもできない", async ({
+    request,
+    stack,
+  }) => {
+    const token = await pairToken(request, "E2E の引き継ぎ");
+    /** 偽の EPGStation が受けた問い合わせの数 (ワーカーの中で前のテストのぶんも数えている) */
+    const asked = async () =>
+      (
+        (await (
+          await request.get(`${stack.epgstationUrl}/__control/state`)
+        ).json()) as { authorizations: unknown[] }
+      ).authorizations.length;
+    const before = await asked();
+    await expectTokenRefused(request, token, stack.appUrl, "migrate", {
+      url: stack.epgstationUrl,
+      apply: "on",
+    });
+    await expectTokenRefused(request, token, stack.appUrl, "migrateCancel");
+    await expectTokenRefused(request, token, stack.appUrl, "migrateEdcb", {
+      target: "127.0.0.1:4510",
+      apply: "on",
+    });
+    // 断ったので、偽の EPGStation には問い合わせていない (ブラウザからは下の「下見をして、取り込める」で通る)
+    expect(await asked()).toBe(before);
   });
 
   test("繋がらない URL では始めず、理由が出る", async ({ page }) => {

@@ -1,11 +1,10 @@
 import { type Actions, fail } from "@sveltejs/kit";
 
 import { parseNg } from "#lib/jikkyo/ng.js";
+import { tokenRefusal } from "#lib/server/auth.js";
 import { niconicoLive } from "#lib/server/niconico-live.js";
 import { linkState, unlink } from "#lib/server/niconico.js";
 import { saveSettings, settings } from "#lib/server/settings.js";
-
-import { refusal } from "./niconico/flow.server";
 
 export function load() {
   const { jikkyo, jikkyoNg } = settings();
@@ -25,7 +24,7 @@ export const actions = {
     return { success: true, saved: true };
   },
   unlinkNiconico: async (event) => {
-    const refused = refusal(event);
+    const refused = tokenRefusal(event.locals);
     if (refused !== null) return fail(403, { message: refused });
     unlink();
     // 開いている公式の実況への接続も閉じる
