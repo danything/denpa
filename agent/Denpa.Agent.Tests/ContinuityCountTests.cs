@@ -38,6 +38,21 @@ public class ContinuityCountTests
         await Assert.That(count.Places.Count).IsEqualTo(2);
         await Assert.That(count.Places[0].Pids).IsEqualTo(3);
         await Assert.That(count.Places[1].Pids).IsEqualTo(1);
+        // 1 つの PID だけが飛んだか所は、その PID も書く
+        await Assert.That(ContinuityCount.Describe(count.Places[0])).IsEqualTo("5.0s(3 PID)");
+        await Assert.That(ContinuityCount.Describe(count.Places[1])).IsEqualTo("8.0s(PID 0x0100)");
+    }
+
+    [Test]
+    public async Task 誤りのあるパケットの数も数える()
+    {
+        var tracker = new ContinuityTracker();
+        tracker.Push(Packet(0x100, 0));
+        await Assert.That(tracker.Push(Packet(0x100, 1, error: true))).IsEqualTo(-1);
+        // 誤りのあるパケットは見ないので、その次で飛ぶ
+        await Assert.That(tracker.Push(Packet(0x100, 2))).IsEqualTo(0x100);
+        await Assert.That(tracker.Errors).IsEqualTo(1);
+        await Assert.That(tracker.Jumps).IsEqualTo(1);
     }
 
     [Test]

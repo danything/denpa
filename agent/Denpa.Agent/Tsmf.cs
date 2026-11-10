@@ -109,6 +109,15 @@ public delegate void TsmfEmit(ReadOnlySpan<byte> packet);
 /// </para>
 ///
 /// <para>
+/// ヘッダーの位置 (前のヘッダーから 53 パケット目) に正しいヘッダーが来なかったときは、続くフレームを前のヘッダーのスロットの割り当てでためておき、
+/// 次の正しいヘッダーで確かめてから出力する (<see cref="MaxHeldFrames"/>)。仕様書 7A.7 の「パケットごとの処理」の 4 は、
+/// 次の正しいヘッダーまで何もためないとしている。そのとおりにすると、ヘッダーの受信の誤り 1 回ごとに選んだ TS の 1 フレーム分 (52 スロットのうち選んだ TS の分) が欠ける。
+/// 次の正しいヘッダーが 53 パケットごとの位置に来れば、間でパケットは欠けていない。そのヘッダーのスロットの割り当てが前の正しいヘッダーと同じなら、
+/// ためたフレームも同じ割り当てだったとみなして出力し、違えば捨てる (仕様書に無い。割り当てが変わって間のフレームだけで戻ることは無いと推定)。
+/// ヘッダーの位置に PID が <c>0x002F</c> でないパケットが来たときは、その前のフレームも確かめるまで出力しない (パケットが欠けて位置がずれたかもしれないため)
+/// </para>
+///
+/// <para>
 /// <see cref="Push"/> は 1 つのスレッド (<see cref="It930xTsDemux"/>) から呼ぶ。判定 (<see cref="Decision"/>・<see cref="Wait"/>) と
 /// <c>--tune</c> が出す値は、ほかのスレッドから読んでよい。
 /// 選局のたびに作り直すので、仕様書 7A.7 の「受信を止めて始め直したときに判定を保つ」場面は無い。
@@ -133,12 +142,25 @@ public sealed class TsmfSelector
     /// <summary>指定できる k の最大 (TS0〜TS14。仕様書 7A.7)</summary>
     public const int MaxIndex = TsmfHeader.Streams - 1;
 
+    /// <summary>
+    /// ヘッダーの位置に正しいヘッダーが来ないまま、前のヘッダーの割り当てでためるフレームの数の上限 (仕様書に無い)。
+    /// ヘッダーの無い搬送波と決める長さ (<see cref="NoHeaderPackets"/>) と同じ 8 フレーム。これより続けて来なければ、位置が分からなくなったものとしてためたフレームを捨て、
+    /// 次の正しいヘッダーまで何もためない
+    /// </summary>
+    public const int MaxHeldFrames = NoHeaderPackets / (TsmfHeader.SlotCount + 1);
+
     private readonly ManualResetEventSlim _decided = new();
-    private readonly byte[] _frame = new byte[TsmfHeader.SlotCount * It930xTsDemux.PacketSize];
+    private readonly byte[] _frame = new byte[MaxHeldFrames * TsmfHeader.SlotCount * It930xTsDemux.PacketSize];
+    private readonly ContinuityTracker _before = new();
+    private readonly ContinuityTracker _after = new();
     private int _discard;
     private int _frameUsed;
     private int _headerless;
     private int _position;
+    /// <summary>ためたまま、次の正しいヘッダーで確かめるのを待っている、そろったフレームの数</summary>
+    private int _pending;
+    /// <summary>ためているフレーム (今のフレームを含む) のうち、前のヘッダーの割り当てでためたものの数</summary>
+    private int _borrowed;
     private bool _inFrame;
     private bool _collect;
     private volatile int _decision = (int)TsmfDecision.Pending;
@@ -149,7 +171,14 @@ public sealed class TsmfSelector
     private long _received;
     private long _headers;
     private long _badHeaders;
+    private long _missedHeaders;
     private long _brokenFrames;
+    private long _heldFrames;
+    private long _mappingChanges;
+    private long _expected;
+    private long _emitted;
+    private volatile int _fewestSlots = -1;
+    private volatile int _mostSlots = -1;
 
     /// <param name="index">有効な TS を相対 TS 番号の小さい順に並べたときの何本目か (0〜14)</param>
     /// <param name="discard">最初に、判定に使わずに捨てるパケットの数</param>
@@ -171,7 +200,7 @@ public sealed class TsmfSelector
     /// <summary>判定に使ったヘッダー (選局してから最初に受けたもの)。受けていなければ null</summary>
     public TsmfHeader? FirstHeader => _first;
 
-    /// <summary>最後に受けたヘッダー</summary>
+    /// <summary>最後に受けた正しいヘッダー</summary>
     public TsmfHeader? LastHeader => _last;
 
     /// <summary>
@@ -189,14 +218,38 @@ public sealed class TsmfSelector
     /// <summary>受けたパケットの数 (最初に捨てたものを含む)</summary>
     public long Received => Interlocked.Read(ref _received);
 
-    /// <summary>受けたヘッダーの数</summary>
+    /// <summary>受けた正しいヘッダーの数</summary>
     public long Headers => Interlocked.Read(ref _headers);
 
     /// <summary>ヘッダーの位置に来た、CRC などが合わないヘッダー (PID が <c>0x002F</c>) の数</summary>
     public long BadHeaders => Interlocked.Read(ref _badHeaders);
 
-    /// <summary>52 パケットがそろわずに捨てたフレームの数</summary>
+    /// <summary>ヘッダーの位置に来た、PID が <c>0x002F</c> でないパケットの数 (ヘッダーの PID が崩れたか、パケットが欠けて位置がずれた)</summary>
+    public long MissedHeaders => Interlocked.Read(ref _missedHeaders);
+
+    /// <summary>出力せずに捨てたフレームの数。52 パケットがそろわなかったものと、前のヘッダーの割り当てでためたが次のヘッダーで確かめられなかったもの</summary>
     public long BrokenFrames => Interlocked.Read(ref _brokenFrames);
+
+    /// <summary>正しいヘッダーが来なかったため前のヘッダーの割り当てでため、次のヘッダーで確かめて出力したフレームの数</summary>
+    public long HeldFrames => Interlocked.Read(ref _heldFrames);
+
+    /// <summary>スロットの割り当てが前の正しいヘッダーと違ったヘッダーの数</summary>
+    public long MappingChanges => Interlocked.Read(ref _mappingChanges);
+
+    /// <summary>選んだ TS のスロットに来たパケットの数 (r が有効なフレームだけ)。捨てたフレームが無ければ <see cref="Emitted"/> と同じになる</summary>
+    public long Expected => Interlocked.Read(ref _expected);
+
+    /// <summary>出力したパケットの数</summary>
+    public long Emitted => Interlocked.Read(ref _emitted);
+
+    /// <summary>選んだ TS に割り当てたスロットの数の、ヘッダーごとの最小と最大 (1 フレームの 52 スロットのうち)。TS を選んでいなければ null</summary>
+    public (int Fewest, int Most)? SlotsPerFrame => _fewestSlots < 0 ? null : (_fewestSlots, _mostSlots);
+
+    /// <summary>選んだ TS のスロットに来たパケット (選ぶ前) の、連続性の飛びの数と transport_error_indicator が 1 のパケットの数</summary>
+    public (long Jumps, long Errors) ContinuityBefore => (_before.Jumps, _before.Errors);
+
+    /// <summary>出力したパケット (選んだあと) の、連続性の飛びの数と transport_error_indicator が 1 のパケットの数</summary>
+    public (long Jumps, long Errors) ContinuityAfter => (_after.Jumps, _after.Errors);
 
     /// <summary>
     /// 判定が決まる (<see cref="TsmfDecision.Pending"/> でなくなる) まで待つ。<paramref name="timeoutMs"/> で打ち切る。
@@ -230,32 +283,7 @@ public sealed class TsmfSelector
 
         if (TsmfHeader.IsHeader(packet))
         {
-            // 2. 直前のフレームの 52 パケットがそろっていれば、ためたパケットを出力する。そろっていなければ捨てる
-            if (_inFrame && _position == TsmfHeader.SlotCount) Flush(emit);
-            else if (_inFrame) Interlocked.Increment(ref _brokenFrames);
-            _frameUsed = 0;
-            var header = TsmfHeader.Parse(packet);
-            Interlocked.Increment(ref _headers);
-            _last = header;
-            if (_first is null)
-            {
-                // 最初のヘッダーで k 本目の相対 TS 番号 r を決める。そのまま出力している間にヘッダーが来たときも、TSMF の搬送波として選び直す
-                _first = header;
-                var valid = header.ValidStreams;
-                if (Index < valid.Count)
-                {
-                    _relative = valid[Index];
-                    Decide(TsmfDecision.Selected);
-                }
-                else
-                {
-                    Decide(TsmfDecision.Missing);
-                }
-            }
-            _position = 0;
-            _inFrame = true;
-            // r がヘッダーで無効になったら何も出さない
-            _collect = Decision == TsmfDecision.Selected && header.IsValid(_relative);
+            Header(TsmfHeader.Parse(packet), emit);
             return;
         }
 
@@ -266,7 +294,12 @@ public sealed class TsmfSelector
             {
                 Decide(Index == 0 ? TsmfDecision.Passthrough : TsmfDecision.Missing);
             }
-            if (Decision == TsmfDecision.Passthrough) Emit(packet, emit);
+            if (Decision == TsmfDecision.Passthrough)
+            {
+                Interlocked.Increment(ref _expected);
+                _before.Push(packet);
+                Emit(packet, emit);
+            }
             return;
         }
 
@@ -278,26 +311,99 @@ public sealed class TsmfSelector
             var slot = _last!.Slots[_position++];
             if (_collect && slot == _relative)
             {
+                Interlocked.Increment(ref _expected);
+                _before.Push(packet);
                 packet.CopyTo(_frame.AsSpan(_frameUsed));
                 _frameUsed += It930xTsDemux.PacketSize;
             }
             return;
         }
 
-        // 4. ヘッダーの位置に来たパケットがヘッダーでない
-        if (TsmfHeader.HasHeaderPid(packet))
+        // 4. ヘッダーの位置に来たパケットが正しいヘッダーでない。PID が 0x002F なら CRC などが合わなかったヘッダー、
+        // そうでなければヘッダーの PID が崩れたか、パケットが欠けて位置がずれた。どちらだったかは、次の正しいヘッダーが来る位置で分かる
+        var badHeader = TsmfHeader.HasHeaderPid(packet);
+        Interlocked.Increment(ref badHeader ? ref _badHeaders : ref _missedHeaders);
+        if (badHeader && _pending == 0 && _borrowed == 0)
         {
-            // 受信の誤りで CRC が合わなかったヘッダー。ためたフレームは出力し、次の正しいヘッダーまでは何もためない
-            Interlocked.Increment(ref _badHeaders);
+            // 直前のフレームは正しいヘッダーで始まり、ヘッダーの位置にヘッダーの PID が来た。52 パケットがそろったので出力する (仕様書 7A.7 の 4)
             Flush(emit);
         }
-        else
+        else if (++_pending >= MaxHeldFrames)
         {
-            // パケットが欠けて位置が分からなくなった。ためたフレームを捨て、次のヘッダーまで何もためない
-            Interlocked.Increment(ref _brokenFrames);
+            // 確かめられないフレームが続いた。位置が分からなくなったものとして、ためたフレームを捨て、次の正しいヘッダーまで何もためない
+            Drop(_pending);
+            _inFrame = false;
+            return;
         }
+        // 前のヘッダーの割り当てで、次のフレームもためる。次の正しいヘッダーで確かめてから出力する
+        _borrowed++;
+        _position = 0;
+    }
+
+    /// <summary>正しいヘッダーを受けた (仕様書 7A.7 の「パケットごとの処理」の 2)</summary>
+    private void Header(TsmfHeader header, TsmfEmit emit)
+    {
+        var previous = _last;
+        var same = previous is not null && previous.Slots.AsSpan().SequenceEqual(header.Slots);
+        if (_inFrame && _position == TsmfHeader.SlotCount)
+        {
+            // 直前のフレームの 52 パケットがそろい、ヘッダーが 53 パケットごとの位置に来た (間でパケットは欠けていない)。
+            // 前のヘッダーの割り当てでためたフレームは、割り当てが変わっていなければ出力する
+            if (_borrowed == 0 || same)
+            {
+                Interlocked.Add(ref _heldFrames, _borrowed);
+                Flush(emit);
+            }
+            else
+            {
+                Drop(_pending + 1);
+            }
+        }
+        else if (_inFrame)
+        {
+            // そろう前にヘッダーが来た (パケットが欠けた)。ためたフレームを捨てる
+            Drop(_pending + 1);
+        }
+        _pending = 0;
+        _borrowed = 0;
         _frameUsed = 0;
-        _inFrame = false;
+        Interlocked.Increment(ref _headers);
+        if (previous is not null && !same) Interlocked.Increment(ref _mappingChanges);
+        _last = header;
+        if (_first is null)
+        {
+            // 最初のヘッダーで k 本目の相対 TS 番号 r を決める。そのまま出力している間にヘッダーが来たときも、TSMF の搬送波として選び直す
+            _first = header;
+            var valid = header.ValidStreams;
+            if (Index < valid.Count)
+            {
+                _relative = valid[Index];
+                Decide(TsmfDecision.Selected);
+            }
+            else
+            {
+                Decide(TsmfDecision.Missing);
+            }
+        }
+        _position = 0;
+        _inFrame = true;
+        // r がヘッダーで無効になったら何も出さない
+        _collect = Decision == TsmfDecision.Selected && header.IsValid(_relative);
+        if (_collect)
+        {
+            var slots = header.SlotsOf(_relative);
+            if (_fewestSlots < 0 || slots < _fewestSlots) _fewestSlots = slots;
+            if (slots > _mostSlots) _mostSlots = slots;
+        }
+    }
+
+    /// <summary>ためたフレームを出力せずに捨てる</summary>
+    private void Drop(int frames)
+    {
+        Interlocked.Add(ref _brokenFrames, frames);
+        _frameUsed = 0;
+        _pending = 0;
+        _borrowed = 0;
     }
 
     private void Flush(TsmfEmit emit)
@@ -309,6 +415,8 @@ public sealed class TsmfSelector
     private void Emit(ReadOnlySpan<byte> packet, TsmfEmit emit)
     {
         if (_patTsid < 0) ReadPat(packet);
+        Interlocked.Increment(ref _emitted);
+        _after.Push(packet);
         emit(packet);
     }
 

@@ -582,10 +582,24 @@ public static class Probe
         yield return $"  ヘッダーのパケット {Convert.ToHexString(header.Raw)}";
     }
 
-    /// <summary><c>--tune</c> が ISDB-C で受け終えたあとに出す、TSMF の数と、出力した TS の PAT の TSID (ヘッダーの TSID の並びの推定を確かめるため。仕様書 7A.7)</summary>
+    /// <summary>
+    /// <c>--tune</c> が ISDB-C で受け終えたあとに出す、TSMF の数と、出力した TS の PAT の TSID (ヘッダーの TSID の並びの推定を確かめるため。仕様書 7A.7)。
+    /// 選んだ TS のパケットが欠けたときに、選ぶ前 (搬送波から受けたまま) で欠けていたのか、選ぶ処理で欠けたのかを分けられるように、
+    /// 選んだ TS のスロットに来た数と出力した数、選ぶ前とあとの連続性の飛びも出す
+    /// </summary>
     internal static IEnumerable<string> TsmfAfterLines(TsmfSelector tsmf)
     {
-        yield return $"TSMF: 受けたパケット {tsmf.Received}  ヘッダー {tsmf.Headers}  CRC が合わないヘッダー {tsmf.BadHeaders}  そろわずに捨てたフレーム {tsmf.BrokenFrames}";
+        yield return $"TSMF: 受けたパケット {tsmf.Received}  ヘッダー {tsmf.Headers}  CRC が合わないヘッダー {tsmf.BadHeaders}  "
+            + $"ヘッダーの位置に来たほかのパケット {tsmf.MissedHeaders}  そろわずに捨てたフレーム {tsmf.BrokenFrames}";
+        yield return $"TSMF: 前のヘッダーの割り当てで受けたフレーム {tsmf.HeldFrames}  スロットの割り当てが変わったヘッダー {tsmf.MappingChanges}";
+        var perFrame = tsmf.SlotsPerFrame is { } slots
+            ? $"1 フレームの選んだ TS のスロット {(slots.Fewest == slots.Most ? $"{slots.Most}" : $"{slots.Fewest}〜{slots.Most}")} / {TsmfHeader.SlotCount}  "
+            : "";
+        yield return $"TSMF: {perFrame}選んだ TS のスロットに来たパケット {tsmf.Expected}  出力したパケット {tsmf.Emitted}";
+        var (beforeJumps, beforeErrors) = tsmf.ContinuityBefore;
+        var (afterJumps, afterErrors) = tsmf.ContinuityAfter;
+        yield return $"TSMF: 連続性の飛び (最初の 1 秒も数える) 選ぶ前 {beforeJumps} 回  選んだあと {afterJumps} 回  "
+            + $"transport_error_indicator が 1 のパケット 選ぶ前 {beforeErrors}  選んだあと {afterErrors}";
         if (tsmf.Decision == TsmfDecision.Selected && tsmf.LastHeader is { } last && !last.IsValid(tsmf.Relative))
         {
             yield return $"TSMF: 選んだ相対 TS 番号 {tsmf.Relative} が、最後のヘッダーでは無効になっています (出力を止めている)";
@@ -805,7 +819,7 @@ public static class Probe
             $"    最初の 1 バイト {first.TotalMilliseconds:F0} ms  "
             + $"{total / 1024} KiB  {rated ?? "-"} Mbps  同期バイト {ratio:F1}%");
         if (total == 0) error.WriteLine($"    {name}: 1 バイトも来ていません");
-        output.WriteLine($"    連続性の飛び {continuity.Jumps} 回 ({continuity.Places.Count} か所。最初の 1 秒は数えない){(continuity.Places.Count == 0 ? "" : "  " + string.Join(" ", continuity.Places.Take(20).Select(place => $"{place.At.TotalSeconds:F1}s({place.Pids} PID)")))}");
+        output.WriteLine($"    連続性の飛び {continuity.Jumps} 回 ({continuity.Places.Count} か所。最初の 1 秒は数えない){(continuity.Places.Count == 0 ? "" : "  " + string.Join(" ", continuity.Places.Take(20).Select(ContinuityCount.Describe)))}");
 
         foreach (var line in observation.Describe()) output.WriteLine($"    {line}");
 
