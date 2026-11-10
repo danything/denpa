@@ -253,8 +253,11 @@ export class NativeAudio {
       this.waiting ||
       video.readyState < 3 ||
       this.context.state !== "running"
-    )
+    ) {
+      // 止めている・待っている間は止まっているうちに数えない。再開した直後の組み直しを、映像が止まったとみない
+      this.moved = { at: now, position };
       return;
+    }
     if (!(Math.abs(position - this.moved.position) < FROZEN_SECONDS))
       this.moved = { at: now, position };
     // 映像が進まないまま止まっている間は鳴らさない (下の組み直しで止めてから動いていない)

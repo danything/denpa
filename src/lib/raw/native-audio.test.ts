@@ -362,6 +362,22 @@ test("しばらく再生したあとで映像の時刻が止まったときも�
   worker.pcm(1, 12.15);
   expect(context.sources.length).toBeGreaterThan(count);
 });
+test("数秒待たされてから再生に戻ったら、最初の組み直しで止まったとみずに音を予約する", () => {
+  const { video, worker, context } = setup();
+  worker.pcm(1, 10.1);
+  // WebKit は waiting を出さずに readyState だけ落とすことがある。その間の刻み
+  video.readyState = 2;
+  for (let i = 1; i <= 5; i++) {
+    context.currentTime = 50 + i;
+    worker.pcm(1, 10.1 + (i * 1024) / 48000);
+  }
+  const count = context.sources.length;
+  // 再生に戻った。時計は 5 秒進んだので組み直すが、映像はこれから動く
+  video.readyState = 4;
+  context.currentTime = 55.02;
+  worker.pcm(1, 10.2);
+  expect(context.sources.length).toBeGreaterThan(count);
+});
 test("映像が進んでいて時計だけずれたときは、組み直してすぐ鳴らす", () => {
   const { video, worker, context } = setup();
   worker.pcm(1, 10.1);
