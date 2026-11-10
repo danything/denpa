@@ -355,7 +355,7 @@ public sealed class It930xDevice
         ?? throw new IOException($"{Model.Name} に受信機 {receiver} はありません (0〜{Model.Receivers.Count - 1})");
 
     /// <summary>
-    /// 受信機の TS を <paramref name="output"/> に流し始める。**ブリッジには書かない** (入力は開いたときから全部開いている。<see cref="Setup"/>)。
+    /// 受信機の TS を <paramref name="output"/> に流し始める。ブリッジには書かない (入力は開いたときから全部開いている。<see cref="Setup"/>)。
     /// 5 つの入力は 1 つの経路にまとまるので、ほかの受信機が流している間にブリッジの TS の経路を書き換えないため
     /// </summary>
     internal void Attach(int receiver, It930xTsOutput output)

@@ -123,13 +123,13 @@ public sealed class It930xBridge
     public const int TsTransferSize = 188 * 348;
 
     /// <summary>
-    /// EP 0x84 に出しっぱなしにする読みの数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>) で、その倍にしている (CECH-ZD1 J と同じ 16)。
+    /// EP 0x84 に出したままにする読みの数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>) で、その倍にしている (CECH-ZD1 J と同じ 16)。
     /// 16 × 65,424 バイトは約 1 MB で、5 つの入力の合計が 200 Mbps でも約 40 ms ぶんを受けておける。
     /// PX-MLT5PE の実機で、5 つの受信機がそれぞれ約 30 Mbps を流しても足りた (2026-11-10)
     /// </summary>
     public const int TsDepth = 16;
 
-    /// <summary>SDK が EP 0x84 に出しっぱなしにする読みの数 (<c>BR_URB_COUNT</c>)。<see cref="TsDepth"/> はこれより少なくしない</summary>
+    /// <summary>SDK が EP 0x84 に出したままにする読みの数 (<c>BR_URB_COUNT</c>)。<see cref="TsDepth"/> はこれより少なくしない</summary>
     public const int SdkTsDepth = 8;
 
     /// <summary>入力を全部閉じてから EP 0x84 をリセットするまでの待ち (ms。SDK の <c>DRV_ResetRxPort</c> の <c>mdelay(10)</c>)</summary>
@@ -367,7 +367,7 @@ public sealed class It930xBridge
 
     /// <summary>
     /// TS の経路を設定する。入力 0〜4 のパケットの先頭を <see cref="SyncBytes"/> に付け替えて 1 本にまとめ、EP 0x84 から出す。
-    /// **入力はまだ開けない** (<see cref="EnableTsInputs"/>)。
+    /// 入力はまだ開けない (<see cref="EnableTsInputs"/>)。
     ///
     /// <para>
     /// 最初に入力 0〜4 を閉じる (<c>IT9300_disableTsPort</c>)。前のプロセスが入力を開けたまま終わっていても、閉じた状態から設定する。
@@ -423,7 +423,7 @@ public sealed class It930xBridge
 
     /// <summary>
     /// 入力 0〜4 を全部開ける (SDK の <c>IT930x_probe</c> の「Enable TsPort」: <c>IT9300_enableTsPort</c> を入力ごと → <c>IT9300_setIgnoreFail</c>)。
-    /// **開けるのは機材を開いたときの 1 回で、受信機ごとには開け閉めしない。** SDK も、受信を始める・止めるときは EP 0x84 の読みだけを出し入れし、入力には触らない。
+    /// 開けるのは機材を開いたときの 1 回で、受信機ごとには開け閉めしない。SDK も、受信を始める・止めるときは EP 0x84 の読みだけを出し入れし、入力には触らない。
     /// 5 つの入力は 1 つの経路にまとまるので、ほかの入力が流している間に 1 つだけ開け閉めしない
     /// </summary>
     public void EnableTsInputs()
