@@ -916,9 +916,6 @@ progress[value]::-webkit-progress-value {
   .guide-bar {
     padding-inline: var(--dp-space-2);
   }
-  .guide-bar > .segmented > a.button {
-    padding-inline: 0.375rem;
-  }
 }
 /*
  * **スマホの形 (下のタブがある形) では、ほかの画面の操作の 1 行と同じく、下のタブのすぐ上にカプセルで浮かせる** (下の `.dock`)。
@@ -1583,6 +1580,16 @@ a.button {
   margin: 0;
   border-radius: var(--dp-btn-radius);
   box-shadow: none;
+}
+/*
+ * **768px より狭い画面ではタブの左右の余白を詰める** (番組表とライブで同じ)。ケーブルテレビの局がある家はタブが 4 つ
+ * (ライブは「実況」を足して 5 つ) になり、「ケーブルテレビ」は長いので、詰めないと 360px の幅に収まらない。
+ * それでも入りきらない並びは横に流す (番組表は操作の 1 行ごと、ライブはタブの並び。`live/+page.svelte` の `.type-tabs`)
+ */
+@media (max-width: 767.98px) {
+  [role="group"].segmented > :is(button, a.button) {
+    padding-inline: 0.375rem;
+  }
 }
 [role="group"].segmented > :is(button, a.button):hover {
   --pico-background-color: var(--dp-hover-soft);

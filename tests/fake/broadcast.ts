@@ -242,10 +242,25 @@ export function on(type: string, channel: string): FakeService[] {
 }
 
 /**
- * TS の TSID。衛星は名前に入っている (`BS11:18000`)。地上波はネットワーク ID と同じ値
+ * ケーブルテレビの搬送波に TSMF で束ねてある TS の数 (本物のエージェントの `X-Denpa-Tsmf-Streams`。docs/agent.md)。
+ * 偽の放送では、2 つ目からの TS の局を `QC30:1` のように番号を付けたチャンネルに置く。TSMF でない搬送波とほかの種別は null
+ */
+export function tsmfStreams(type: string, channel: string): number | null {
+  if (type !== "CATV" || channel.includes(":")) return null;
+  const extra = new Set(
+    SERVICES.filter(
+      (s) => s.type === type && s.channel.startsWith(`${channel}:`),
+    ).map((s) => s.channel),
+  );
+  return extra.size === 0 ? null : extra.size + 1;
+}
+
+/**
+ * TS の TSID。決めてある局 (ケーブルテレビ) はその値。衛星は名前に入っている (`BS11:18000`)。地上波はネットワーク ID と同じ値
  * (ARIB TR-B14: 地上波の transport_stream_id は network_id と同じ)
  */
 function tsidOf(service: FakeService): number {
+  if (service.tsid !== undefined) return service.tsid;
   const at = service.channel.indexOf(":");
   return at < 0 ? service.networkId : Number(service.channel.slice(at + 1));
 }
@@ -291,13 +306,13 @@ const channelOf = (service: FakeService) => ({
 
 /**
  * 物理チャンネルの一覧。本物はスキャンの結果 (channels.json)。
- * **SKY (スカパー！プレミアム) は入れない。** 受けられる機材は既定に無く、SKY をスキャンしたときだけ入る (`64-sky.spec.ts`)。
- * 放送には流れている (`on`) ので、スキャンすれば見つかる
+ * **CATV (ケーブルテレビ) と SKY (スカパー！プレミアム) は入れない。** 受けられる機材は既定に無く、スキャンしたときだけ入る
+ * (`64-sky.spec.ts`・`65-catv.spec.ts`)。放送には流れている (`on`) ので、スキャンすれば見つかる
  */
 export function channels() {
   const map = new Map<string, ReturnType<typeof channelOf>>();
   for (const service of SERVICES) {
-    if (service.type === "SKY") continue;
+    if (service.type === "SKY" || service.type === "CATV") continue;
     const key = `${service.type}:${service.channel}`;
     const found = map.get(key);
     if (found === undefined) map.set(key, channelOf(service));
@@ -525,10 +540,20 @@ function logoPackets(service: FakeService): Uint8Array {
  * 渡すならこれが無いとどのチャンネルも見つからない。
  */
 /**
- * SKY の局の PMT に置く CA 記述子 (CA_system_id 0x000B・ECM の PID 0x0901)。**値は作り物。** スカパー！プレミアムの CA_system_id は
+ * SKY の局の CA_system_id (0x000B)。**値は作り物。** スカパー！プレミアムの CA_system_id は
  * 実機の報告で分かるまで不明なので、B-CAS (0x0005) 以外の値を置いて、スキャンで分かったことが受信の設定に出るかを確かめる (`64-sky.spec.ts`)
  */
-const SKY_CA = [0x09, 0x04, 0x00, 0x0b, 0xe9, 0x01];
+const SKY_CA_SYSTEM_ID = 0x000b;
+
+/**
+ * 局の PMT に置く CA 記述子 (ECM の PID 0x0901)。SKY の局と、CA_system_id を決めてある局 (`caSystemId`。ケーブルテレビ) だけに置く
+ */
+function caDescriptor(service: FakeService): number[] {
+  const id =
+    service.caSystemId ??
+    (service.type === "SKY" ? SKY_CA_SYSTEM_ID : undefined);
+  return id === undefined ? [] : [0x09, 0x04, id >> 8, id & 0xff, 0xe9, 0x01];
+}
 
 function tables(services: FakeService[], knobs: Knobs): Uint8Array {
   /*
@@ -576,7 +601,7 @@ function tables(services: FakeService[], knobs: Knobs): Uint8Array {
     // コピー禁止は番組ぜんたいの記述子に載せる (本物もここ)
     const programInfo = [
       ...(knobs.pmtCopyNever ? copyControlDescriptor(0b11) : []),
-      ...(service.type === "SKY" ? SKY_CA : []),
+      ...caDescriptor(service),
     ];
     const pmt = programMap(
       service.serviceId,

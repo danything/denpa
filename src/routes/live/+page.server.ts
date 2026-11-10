@@ -11,6 +11,7 @@ import { orm } from "#lib/server/db.js";
 import {
   airing,
   currentServices,
+  listedServices,
   SERVICE_ORDER,
   SERVICE_TYPE_ORDER,
   serviceCounts,
@@ -160,7 +161,7 @@ export function load(event) {
   return {
     channels,
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
-    channelNotice: channelNotice(serviceCounts()),
+    channelNotice: channelNotice(serviceCounts(), listedServices()),
     channelAlert: channelAlert(),
     start,
     /** コーデックのメニューで選んでいるもの (端末ごと。`LAST_COOKIE`) */
