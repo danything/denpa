@@ -327,7 +327,7 @@ public class TsmfTests
     }
 
     [Test]
-    public async Task ヘッダーの位置のパケットが_CRC_の合わないヘッダーなら_ためたフレームは出力し_次のヘッダーまでためない()
+    public async Task ヘッダーの位置のパケットが_CRC_の合わないヘッダーなら_ためたフレームは出力し_次のフレームは前の割り当てでためて確かめてから出す()
     {
         var slots = TsmfFake.Alternate();
         var (selector, sink) = Make(index: 0);
@@ -338,31 +338,185 @@ public class TsmfTests
         sink.Push(broken);
         await Assert.That(sink.Out.Count).IsEqualTo(26);
         await Assert.That(selector.BadHeaders).IsEqualTo(1);
-        // 次の正しいヘッダーまでは何もためない
+        // 次のフレームは前のヘッダーの割り当てでため、53 パケット後に割り当ての同じ正しいヘッダーが来たら出力する
         sink.Push(TsmfFake.Frame(slots, 1));
-        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
         await Assert.That(sink.Out.Count).IsEqualTo(26);
-        sink.Push(TsmfFake.Frame(slots, 2));
         sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
         await Assert.That(sink.Out.Count).IsEqualTo(52);
-        await Assert.That(sink.Out.Skip(26).All(packet => TsmfFake.Number(packet) >= 200)).IsTrue();
+        await Assert.That(sink.Out.Skip(26).Select(packet => TsmfFake.Number(packet))).IsEquivalentTo(Enumerable.Range(0, 26).Select(i => 100 + 2 * i));
+        await Assert.That(selector.HeldFrames).IsEqualTo(1);
+        await Assert.That(selector.BrokenFrames).IsEqualTo(0);
+        sink.Push(TsmfFake.Frame(slots, 2));
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
+        await Assert.That(sink.Out.Count).IsEqualTo(78);
+        await Assert.That(selector.Expected).IsEqualTo(78);
+        await Assert.That(selector.Emitted).IsEqualTo(78);
     }
 
     [Test]
-    public async Task ヘッダーの位置のパケットがヘッダーでなければ_ためたフレームを捨て_そのまま出力には切り替えない()
+    public async Task CRC_の合わないヘッダーのあとで割り当てが変わっていたら_前の割り当てでためたフレームは捨てる()
     {
         var slots = TsmfFake.Alternate();
         var (selector, sink) = Make(index: 0);
         sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
         sink.Push(TsmfFake.Frame(slots, 0));
-        // パケットが欠けて位置がずれた
-        sink.Push(TsmfFake.Packet(0x200, 999));
-        await Assert.That(sink.Out).IsEmpty();
+        var broken = TsmfFake.Header(slots, TsmfFake.Valid2And3);
+        broken[100] ^= 0x01;
+        sink.Push(broken);
+        sink.Push(TsmfFake.Frame(slots, 1));
+        // 次の正しいヘッダーの割り当てが違う。間のフレームがどちらの割り当てだったか分からない
+        var swapped = TsmfFake.Alternate(3, 2);
+        sink.Push(TsmfFake.Header(swapped, TsmfFake.Valid2And3));
+        await Assert.That(sink.Out.Count).IsEqualTo(26);
         await Assert.That(selector.BrokenFrames).IsEqualTo(1);
-        // 一度ヘッダーを受けたあとは、ヘッダーが途切れてもそのまま出力には切り替えない
+        await Assert.That(selector.MappingChanges).IsEqualTo(1);
+        // 新しい割り当てで続ける
+        sink.Push(TsmfFake.Frame(swapped, 2));
+        sink.Push(TsmfFake.Header(swapped, TsmfFake.Valid2And3));
+        await Assert.That(sink.Out.Skip(26).Select(packet => TsmfFake.Number(packet))).IsEquivalentTo(Enumerable.Range(0, 26).Select(i => 201 + 2 * i));
+    }
+
+    [Test]
+    public async Task ヘッダーの位置にほかのパケットが来ても_次のヘッダーが_53_パケットごとの位置に来れば_その前のフレームも出力する()
+    {
+        var slots = TsmfFake.Alternate();
+        var (selector, sink) = Make(index: 0);
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
+        sink.Push(TsmfFake.Frame(slots, 0));
+        // ヘッダーの PID が崩れた (位置がずれたのかは、まだ分からない)
+        var garbled = TsmfFake.Header(slots, TsmfFake.Valid2And3);
+        garbled[2] = 0x11;
+        sink.Push(garbled);
+        await Assert.That(sink.Out).IsEmpty();
+        await Assert.That(selector.MissedHeaders).IsEqualTo(1);
+        sink.Push(TsmfFake.Frame(slots, 1));
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
+        await Assert.That(sink.Out.Select(packet => TsmfFake.Number(packet)))
+            .IsEquivalentTo(Enumerable.Range(0, 26).Select(i => 2 * i).Concat(Enumerable.Range(0, 26).Select(i => 100 + 2 * i)));
+        await Assert.That(selector.BrokenFrames).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ヘッダーの位置にほかのパケットが来て次のヘッダーの位置もずれたら_ためたフレームを捨てる()
+    {
+        var slots = TsmfFake.Alternate();
+        var (selector, sink) = Make(index: 0);
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
+        // ヘッダーの位置にほかのパケットが来て、次のヘッダーは 53 パケットより前に来た (パケットが欠けていた)
+        sink.Push(TsmfFake.Frame(slots, 0));
+        sink.Push(TsmfFake.Packet(0x200, 999));
+        sink.Push(TsmfFake.Frame(slots, 1).Skip(1));
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
+        await Assert.That(sink.Out).IsEmpty();
+        await Assert.That(selector.BrokenFrames).IsEqualTo(2);
+        // 次のフレームはそろえば出力する
+        sink.Push(TsmfFake.Frame(slots, 1));
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
+        await Assert.That(sink.Out.Count).IsEqualTo(26);
+    }
+
+    [Test]
+    public async Task 正しいヘッダーが続けて来なければ_ためたフレームを捨て_そのまま出力には切り替えない()
+    {
+        var slots = TsmfFake.Alternate();
+        var (selector, sink) = Make(index: 0);
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
+        sink.Push(TsmfFake.Frame(slots, 0));
+        // ヘッダーが来なくなった
         sink.Push(Enumerable.Range(0, 2 * TsmfSelector.NoHeaderPackets).Select(number => TsmfFake.Packet(0x200, number)));
         await Assert.That(sink.Out).IsEmpty();
+        await Assert.That(selector.BrokenFrames).IsEqualTo(TsmfSelector.MaxHeldFrames);
+        // 一度ヘッダーを受けたあとは、ヘッダーが途切れてもそのまま出力には切り替えない
         await Assert.That(selector.Decision).IsEqualTo(TsmfDecision.Selected);
+        // 正しいヘッダーが来たら、そこから選び直す
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
+        sink.Push(TsmfFake.Frame(slots, 1));
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
+        await Assert.That(sink.Out.Count).IsEqualTo(26);
+    }
+
+    /// <summary>
+    /// 実機の QU49 (J:COM。有効な TS は 1 本で、52 スロットのうち 48 を使う) に似せた搬送波のバイト列。スロットの割り当て (選んだ TS でない 4 スロットの位置) は
+    /// 50 フレームごとに変え、選んだ TS のパケットは PID ごとに continuity_counter を進める。<paramref name="badHeaders"/> のフレームはヘッダーの CRC を崩す。
+    /// ブリッジの入力 3 の同期バイトにし、入力 0 のパケットを 7 パケットごとに混ぜる
+    /// </summary>
+    private static byte[] Carrier(int frames, ISet<int> badHeaders)
+    {
+        var sync = It930xBridge.SyncBytes[3];
+        int[] pids = [0x0000, 0x0100, 0x0110, 0x0111, 0x0130, 0x01F0];
+        var counters = new int[0x2000];
+        var bytes = new List<byte>();
+        var mixed = 0;
+        void Add(byte[] packet)
+        {
+            bytes.AddRange(packet);
+            if (++mixed % 7 == 0) bytes.AddRange(TsmfFake.Packet(0x0100, mixed, It930xBridge.SyncBytes[0]));
+        }
+        for (var frame = 0; frame < frames; frame++)
+        {
+            var empty = frame / 50 % 13;
+            var slots = Enumerable.Range(0, TsmfHeader.SlotCount).Select(slot => slot / 4 == empty ? 0 : 1).ToArray();
+            var header = TsmfFake.Header(slots, 0x8000, sync: sync);
+            if (badHeaders.Contains(frame)) header[120] ^= 0x10;
+            Add(header);
+            for (var slot = 0; slot < TsmfHeader.SlotCount; slot++)
+            {
+                if (slots[slot] == 0)
+                {
+                    Add(TsmfFake.Packet(0x1FFF, 0, sync));
+                    continue;
+                }
+                var pid = pids[(frame * 7 + slot) % pids.Length];
+                var packet = TsmfFake.Packet(pid, frame, sync);
+                packet[3] = (byte)(0x10 | (counters[pid]++ & 0x0F));
+                Add(packet);
+            }
+        }
+        return [.. bytes];
+    }
+
+    [Test]
+    public async Task 多くのフレームを転送の境目で切って渡し_CRC_の合わないヘッダーが混じっても_選んだ_TS_のパケットは欠けない()
+    {
+        const int frames = 1500;
+        // 最初に捨てるパケットのあとで、割り当てを変える前後 (50 フレームごと) を避けて、CRC の合わないヘッダーを混ぜる
+        var bad = Enumerable.Range(20, frames - 22).Where(frame => frame % 37 == 5 && frame % 50 is > 1 and < 49).ToHashSet();
+        var data = Carrier(frames, bad);
+        var selector = new TsmfSelector(0);
+        var pipe = new System.IO.Pipelines.Pipe(new System.IO.Pipelines.PipeOptions(pauseWriterThreshold: 0, useSynchronizationContext: false));
+        var demux = new It930xTsDemux(It930xBridge.SyncBytes);
+        demux.Attach(3, new It930xTsOutput(pipe, selector));
+        var random = new Random(2516);
+        var output = new List<byte>();
+        for (var at = 0; at < data.Length;)
+        {
+            // USB の転送の大きさはまちまちで、パケットの途中でも切れる
+            var size = Math.Min(random.Next(1, 3 * It930xBridge.TsTransferSize), data.Length - at);
+            demux.Push(data.AsSpan(at, size));
+            at += size;
+            if (pipe.Reader.TryRead(out var result))
+            {
+                output.AddRange(System.Buffers.BuffersExtensions.ToArray(result.Buffer));
+                pipe.Reader.AdvanceTo(result.Buffer.End);
+            }
+        }
+
+        var continuity = new ContinuityTracker();
+        for (var at = 0; at + 188 <= output.Count; at += 188) continuity.Push(output.GetRange(at, 188).ToArray());
+        await Assert.That(bad.Count).IsGreaterThan(20);
+        await Assert.That(selector.BadHeaders).IsEqualTo(bad.Count);
+        await Assert.That(selector.BrokenFrames).IsEqualTo(0);
+        await Assert.That(selector.HeldFrames).IsEqualTo(bad.Count);
+        await Assert.That(continuity.Jumps).IsEqualTo(0);
+        await Assert.That(selector.ContinuityBefore.Jumps).IsEqualTo(0);
+        await Assert.That(selector.ContinuityAfter.Jumps).IsEqualTo(0);
+        await Assert.That(selector.SlotsPerFrame).IsEqualTo((48, 48));
+        // 最初の 816 パケット (15 フレームと少し) は捨て、最後のフレームは次のヘッダーが来ないので出力しない。そのあいだの選んだ TS のパケットは全部出る
+        var counted = frames - TsmfSelector.DiscardPackets / (TsmfHeader.SlotCount + 1) - 2;
+        await Assert.That(selector.Emitted).IsEqualTo(48L * counted);
+        await Assert.That(output.Count).IsEqualTo(188 * 48 * counted);
+        await Assert.That(selector.Expected - selector.Emitted).IsEqualTo(48);
+        await Assert.That(selector.MappingChanges).IsEqualTo((frames - 1) / 50);
     }
 
     [Test]
@@ -433,7 +587,10 @@ public class TsmfTests
         sink.Push(frame);
         sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3));
         var after = Probe.TsmfAfterLines(selector).ToList();
-        await Assert.That(after[0]).IsEqualTo("TSMF: 受けたパケット 54  ヘッダー 2  CRC が合わないヘッダー 0  そろわずに捨てたフレーム 0");
+        await Assert.That(after[0]).IsEqualTo("TSMF: 受けたパケット 54  ヘッダー 2  CRC が合わないヘッダー 0  ヘッダーの位置に来たほかのパケット 0  そろわずに捨てたフレーム 0");
+        await Assert.That(after[1]).IsEqualTo("TSMF: 前のヘッダーの割り当てで受けたフレーム 0  スロットの割り当てが変わったヘッダー 0");
+        await Assert.That(after[2]).IsEqualTo("TSMF: 1 フレームの選んだ TS のスロット 26 / 52  選んだ TS のスロットに来たパケット 26  出力したパケット 26");
+        await Assert.That(after[3]).IsEqualTo("TSMF: 連続性の飛び (最初の 1 秒も数える) 選ぶ前 0 回  選んだあと 0 回  transport_error_indicator が 1 のパケット 選ぶ前 0  選んだあと 0");
         await Assert.That(after[^1]).IsEqualTo("出力した TS の PAT の TSID 0x1003 (4099)  ヘッダーの TSID と同じ");
     }
 
