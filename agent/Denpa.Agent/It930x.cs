@@ -110,15 +110,21 @@ public static class It930x
 
     /// <summary>
     /// 挿さっている機材の受信機を、設定に書いたのと同じ形式で。並べるだけで開かない (開くとファームウェアを起動して電源を入れる)。
-    /// どの受信機も <see cref="Types"/> を受けられる
+    /// どの受信機も <see cref="Types"/> を受けられ、最初に選ぶのは <see cref="DetectedTypes"/>
     /// </summary>
     public static List<TunerSpec> Detect() => Specs(Found(Log.Write));
+
+    /// <summary>
+    /// 自動で見つけた受信機に付ける種別。<c>SKY</c> は受けられる種別 (<see cref="Types"/>) には入るが、最初からは選ばない
+    /// (光の回線でしか受けられず、選ぶとチャンネルスキャンに H01〜H105 が足される。J.83B は実機で確かめていない)
+    /// </summary>
+    public static readonly IReadOnlyList<string> DetectedTypes = ["GR", "BS", "CS"];
 
     /// <summary>挿さっている機材から設定の形式に組み立てる (渡せるのはテストのため)</summary>
     internal static List<TunerSpec> Specs(IEnumerable<(string Port, It930xModel Model)> found) =>
     [
         .. found.SelectMany(item => item.Model.Receivers.Select(receiver =>
-            new TunerSpec(Name(item.Model, item.Port, receiver.Index), [.. Types], false, Device(item.Port, receiver.Index)))),
+            new TunerSpec(Name(item.Model, item.Port, receiver.Index), [.. DetectedTypes], false, Device(item.Port, receiver.Index)))),
     ];
 
     /// <summary><c>--card it930x:4-12.1</c> (内蔵のカードリーダー。受信機の番号は付けない) からポートを取る。形式が違えば null</summary>

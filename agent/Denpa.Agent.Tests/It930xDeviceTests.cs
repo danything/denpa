@@ -500,8 +500,8 @@ public class It930xDeviceTests
             TUnit.Assertions.Enums.CollectionOrdering.Matching);
         await Assert.That(found[0].Name).IsEqualTo("PLEX PX-MLT5PE 1-2 #0");
         await Assert.That(found[9].Name).IsEqualTo("PLEX PX-MLT5U 4-12.1 #4");
-        // どの受信機も地上波・衛星・J.83B を受けられ、「使う」で並ぶ
-        await Assert.That(found.All(spec => spec.Types.SequenceEqual(["GR", "BS", "CS", "SKY"]) && !spec.Disabled)).IsTrue();
+        // 最初に選ぶ種別は地上波・BS・CS (SKY は受けられるが、最初からは選ばない)。「使う」で並ぶ
+        await Assert.That(found.All(spec => spec.Types.SequenceEqual(["GR", "BS", "CS"]) && !spec.Disabled)).IsTrue();
         // 名前は重ならない (チューナーを名前で見分ける)
         await Assert.That(found.Select(spec => spec.Name).Distinct().Count()).IsEqualTo(10);
         await Assert.That(It930x.Specs([])).IsEmpty();
