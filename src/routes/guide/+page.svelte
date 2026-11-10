@@ -28,7 +28,7 @@
     stateLabel,
     time,
   } from "#lib/format.js";
-  import { cellRows } from "#lib/guide-cell.js";
+  import { cellRows, placeRows } from "#lib/guide-cell.js";
   import { skeletonMask } from "#lib/guide-skeleton.js";
   import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { PHONE_FORM } from "#lib/phone-form.js";
@@ -203,6 +203,8 @@
   /** まだ描き終えていない。`data-drawing` で外から分かるようにする (表の箱。下のマークアップ) */
   const drawing = $derived(shownCells < cells.length);
   const visibleCells = $derived(drawing ? cells.slice(0, shownCells) : cells);
+  /** マスの行。同じ列のマスどうしで重ならないよう、描く前に全部のマスで出す (`placeRows`) */
+  const rowsOf = $derived.by(() => placeRows(cells, data.start, slots, SLOT));
 
   /**
    * **マスは局ごとの箱 (`.station`) に入れて置く。** 箱は本チャンネルとそのサブの列をまとめたもの
@@ -244,7 +246,9 @@
     for (const cell of visibleCells) {
       const group = groups[groupOf[cell.column] ?? -1];
       if (group === undefined) continue;
-      const row = cellRows(cell.start_at, cell.end_at, data.start, slots, SLOT);
+      const row =
+        rowsOf.get(cell.key) ??
+        cellRows(cell.start_at, cell.end_at, data.start, slots, SLOT);
       const span = row.to - row.from;
       group.cells.push({
         key: cell.key,
