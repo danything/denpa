@@ -21,6 +21,22 @@ public sealed record It930xPsb(byte Da98, byte Da99)
 }
 
 /// <summary>
+/// ブリッジの TS のバッファの溢れ (<see cref="It930xBridge.ReadOverflow"/>)。全体 (<c>p_br_reg_sys_buf_overflow</c>) と入力 0〜4 ごと
+/// (<c>p_br_reg_ts0_overflow</c>〜<c>p_br_reg_ts4_overflow</c>) の bit 0。
+/// PX-MLT5PE の実機では、立つと EP 0x84 から何も届かなくなり、電源を抜くまで下りなかった (2026-11-11。<see cref="It930xBridge.ResetTs"/>)
+/// </summary>
+public sealed record It930xOverflow(bool System, IReadOnlyList<bool> Inputs)
+{
+    public bool Any => System || Inputs.Any(input => input);
+
+    /// <summary>溢れた入力の番号</summary>
+    public IEnumerable<int> Overflowed => Enumerable.Range(0, Inputs.Count).Where(input => Inputs[input]);
+
+    public override string ToString() =>
+        $"全体の溢れ (0xDA39) {(System ? 1 : 0)}、入力ごとの溢れ (0xDA57・0xDA8B〜) {string.Join(" ", Inputs.Select(input => input ? 1 : 0))}";
+}
+
+/// <summary>
 /// ブリッジの TS の経路の状態 (<see cref="It930xBridge.ReadTsStatus"/>)。値は読んだままのバイトで、何を表すかは brRegister.h の名前からの推定。
 /// EP 0x84 の 3 つ (<c>0xDD11</c>〜<c>0xDD13</c>) と <c>0xDD1E</c> は bit 5 が EP 0x84
 /// </summary>
@@ -123,11 +139,14 @@ public sealed class It930xBridge
     public const int TsTransferSize = 188 * 348;
 
     /// <summary>
-    /// EP 0x84 に出したままにする読みの数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>) で、その倍にしている (CECH-ZD1 J と同じ 16)。
-    /// 16 × 65,424 バイトは約 1 MB で、5 つの入力の合計が 200 Mbps でも約 40 ms ぶんを受けておける。
-    /// PX-MLT5PE の実機で、5 つの受信機がそれぞれ約 30 Mbps を流しても足りた (2026-11-10)
+    /// EP 0x84 に出したままにする読みの数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>)。
+    /// 64 × 65,424 バイトは約 4 MB で、5 つの入力の合計が 200 Mbps でも約 160 ms ぶんを受けておける。
+    /// 読みのスレッドが CPU の制限や GC で止まっても、ブリッジのバッファを溢れさせないため。溢れると、電源を抜くまで TS が届かなかった
+    /// (<see cref="It930xOverflow"/>)。Linux の usbfs が全機材で使える量 (既定 16 MB) に、IT930x の機材 3 台 (約 12.6 MB) と
+    /// CECH-ZD1 J (約 1 MB)・PIX-DT295 (約 0.5 MB) を足した約 14.1 MB が収まる。
+    /// 16 のときも、PX-MLT5PE の実機で 5 つの受信機がそれぞれ約 30 Mbps を流して足りた (2026-11-10)
     /// </summary>
-    public const int TsDepth = 16;
+    public const int TsDepth = 64;
 
     /// <summary>SDK が EP 0x84 に出したままにする読みの数 (<c>BR_URB_COUNT</c>)。<see cref="TsDepth"/> はこれより少なくしない</summary>
     public const int SdkTsDepth = 8;
@@ -390,18 +409,7 @@ public sealed class It930xBridge
         WriteRegisterBits(MpegFullSpeed, 0, 1, 0);
         WriteRegisterBits(DvbtEnable, 0, 1, 1);
 
-        // IT9300_configOutput: EP 0x84 をリセット → 止める → NAK を外す → 有効 → 1 回の転送の大きさ → 最大パケット長 → リセットを外す
-        WriteRegisterBits(Mp2Reset, 0, 1, 1);
-        WriteRegisterBits(Ep4Enable, 5, 1, 0);
-        WriteRegisterBits(Ep4Nak, 5, 1, 0);
-        WriteRegisterBits(Ep4Enable, 5, 1, 1);
-        const int words = TsTransferSize / 4;
-        WriteRegisters(Ep4Length, [words & 0xFF, words >> 8]);
-        WriteRegister(Ep4MaxPacket, TsMaxPacket / 4);
-        WriteRegisterBits(MpegSerial, 0, 1, 0);
-        WriteRegisterBits(MpegParallel, 0, 1, 0);
-        WriteRegisterBits(Mp2Reset, 0, 1, 0);
-        WriteRegister(HostReverse, 0);
+        ConfigureOutput();
 
         // 前に開いたときの TS がブリッジに残っていれば捨てる (SDK の init_work_queue は 0xDA05 に 1 を書き、そのあと IT9300_configOutput が 0 に戻す)
         var before = ReadPsb();
@@ -419,6 +427,55 @@ public sealed class It930xBridge
             WriteRegister(TsSyncByte + (uint)port, SyncBytes[port]);
         }
         return (before, after);
+    }
+
+    /// <summary>
+    /// <c>IT9300_configOutput</c>: EP 0x84 をリセット → 止める → NAK を外す → 有効 → 1 回の転送の大きさ → 最大パケット長 → シリアル・パラレルの出力を止める →
+    /// リセットを外す → <c>p_br_reg_top_host_reverse</c>。EP 0x84 を止めるので、EP 0x84 の読みを出している間は呼ばない
+    /// (実機で、出している読みが続けて失敗した。2026-11-11)
+    /// </summary>
+    private void ConfigureOutput()
+    {
+        WriteRegisterBits(Mp2Reset, 0, 1, 1);
+        WriteRegisterBits(Ep4Enable, 5, 1, 0);
+        WriteRegisterBits(Ep4Nak, 5, 1, 0);
+        WriteRegisterBits(Ep4Enable, 5, 1, 1);
+        const int words = TsTransferSize / 4;
+        WriteRegisters(Ep4Length, [words & 0xFF, words >> 8]);
+        WriteRegister(Ep4MaxPacket, TsMaxPacket / 4);
+        WriteRegisterBits(MpegSerial, 0, 1, 0);
+        WriteRegisterBits(MpegParallel, 0, 1, 0);
+        WriteRegisterBits(Mp2Reset, 0, 1, 0);
+        WriteRegister(HostReverse, 0);
+    }
+
+    /// <summary>
+    /// TS のバッファの溢れを読む (<see cref="SysBufOverflow"/>・<see cref="TsOverflow0"/>・<see cref="TsOverflow1"/>〜)。読むだけで書かない。
+    /// SDK はこの 6 つを読まない
+    /// </summary>
+    public It930xOverflow ReadOverflow()
+    {
+        var system = ReadRegister(SysBufOverflow);
+        byte[] inputs = [ReadRegister(TsOverflow0), .. ReadRegisters(TsOverflow1, TsInputs - 1)];
+        return new It930xOverflow((system & 1) != 0, [.. inputs.Select(value => (value & 1) != 0)]);
+    }
+
+    /// <summary>
+    /// TS の経路をリセットし直し、そのあとの溢れを返す。SDK に溢れを下ろす手順は無いので、SDK が TS の経路をリセットする手順を開くときと同じ順で通す。
+    /// 入力を全部閉じて EP 0x84 をリセット (<c>DRV_ResetRxPort</c> の閉じる側) → 残っている TS を捨てる (<c>init_work_queue</c> の「Clean PSB buffer」で 0xDA05 に 1) →
+    /// <c>IT9300_configOutput</c> (0xDA05 を 0 に戻す)。入力は開けない (呼ぶ側が開ける)。EP 0x84 の読みを出す前に呼ぶ (<see cref="ConfigureOutput"/>)。
+    /// </summary>
+    /// <remarks>
+    /// PX-MLT5PE の実機で溢れが立ったまま (全体と入力 2) のときは、これでも、ファームウェアの REBOOT と読み込み直し、受信機の電源の入れ直し (GPIOH7)、
+    /// 溢れの 6 つに 0 や 1 を書く、EP 0x84 だけのリセット (<c>p_br_reg_ep4_tx_rst</c>)、<c>p_br_mp2if_psb_en</c> の入れ直しでも下りなかった (2026-11-11)。
+    /// <c>p_br_reg_ofsm_suspend</c> (0xD806) を立てると、機材が USB から外れて戻らなかったので使わない
+    /// </remarks>
+    public It930xOverflow ResetTs()
+    {
+        DisableTsInputs();
+        WriteRegister(MpegSerial, 1);
+        ConfigureOutput();
+        return ReadOverflow();
     }
 
     /// <summary>

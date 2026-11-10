@@ -45,6 +45,27 @@ public sealed class It930xDevice
     private static readonly Lock Registry = new();
     private static readonly Dictionary<string, It930xDevice> Devices = [];
 
+    /// <summary>
+    /// プロセスが終わるとき (SIGTERM で終わる <c>--tune</c> などの CLI も) に機材を閉じる。開けたままの入力に読む側がいなくなると、
+    /// ブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなるため (<see cref="It930xOverflow"/>)。エージェントは止まるときに閉じ終えているので何もしない。
+    /// ほかのスレッドが機材の一覧を持ったまま止まっていたら、終わるのを待たせないように 2 秒であきらめる
+    /// </summary>
+    static It930xDevice()
+    {
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            if (!Registry.TryEnter(TimeSpan.FromSeconds(2))) return;
+            try
+            {
+                CloseAll();
+            }
+            finally
+            {
+                Registry.Exit();
+            }
+        };
+    }
+
     private readonly IUsbDevice _usb;
     private readonly Action<int> _sleep;
     private readonly Func<long> _nowMs;
@@ -211,6 +232,7 @@ public sealed class It930xDevice
         _sleep(20);
         // 受信機の TS 入力はどれもシリアル (仕様書 1.2・3.4)
         Bridge.ConfigureTs(new bool[It930xBridge.TsInputs]);
+        RecoverOverflow();
         // 電源を入れる (仕様書 1.5): GPIOH7 ← 0、80 ms、GPIOH2 ← 1 (リセットを解く)、20 ms。
         // 電源を入れるたびに、整合を保つ設定 (仕様書 4.7) を「使わない」に戻す (仕様書 1.5)。この機材の受信機はまだ 1 つも初期化していない
         _matching = false;
@@ -229,6 +251,12 @@ public sealed class It930xDevice
                 throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読みを始められませんでした");
             }
             Bridge.EnableTsInputs();
+            // 開ける前後に読みが失敗していたら、読む側のいない入力を開けたままにしない (読みのスレッドが閉じるのと前後しても、最後に閉じる)
+            if (_faulted)
+            {
+                CloseInputs();
+                throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読みが、開いている間に失敗しました");
+            }
         }
         catch
         {
@@ -237,6 +265,60 @@ public sealed class It930xDevice
             _reader.Join(TimeSpan.FromSeconds(2));
             throw;
         }
+    }
+
+    /// <summary>
+    /// 開くときに TS のバッファの溢れ (<see cref="It930xOverflow"/>) が立っていたら、記録に出して TS の経路をリセットし直す (<see cref="It930xBridge.ResetTs"/>)。
+    /// EP 0x84 の読みを出す前に呼ぶ。リセットしても立ったままなら、電源を抜くように記録に出して開くのは続ける
+    /// (TS が届くかは選局してから分かる。溢れの値が何を表すかは brRegister.h の名前からの推定)
+    /// </summary>
+    private void RecoverOverflow()
+    {
+        var overflow = Bridge.ReadOverflow();
+        _overflow = overflow;
+        if (!overflow.Any) return;
+        Log.Write($"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。TS の経路をリセットし直します");
+        overflow = Bridge.ResetTs();
+        _overflow = overflow;
+        Log.Write(overflow.Any
+            ? $"[{Label}] リセットしても溢れたままです ({overflow})。TS が届かなければ、機材の電源を抜いて入れ直してください (REBOOT や受信機の電源の入れ直しでは戻りません)"
+            : $"[{Label}] 溢れが下りました");
+    }
+
+    /// <summary>最後に読んだ溢れ (変わったときだけ記録に出すため)</summary>
+    private volatile It930xOverflow? _overflow;
+
+    /// <summary>
+    /// TS のバッファの溢れを読み、前に読んだときから変わっていれば記録に出す (流し始める・止めるとき、閉じるとき)。
+    /// 読めなければ何もしない (抜けたかどうかは EP 0x84 の読みとほかの操作が決める)
+    /// </summary>
+    private void WatchOverflow(string when)
+    {
+        It930xOverflow overflow;
+        try
+        {
+            overflow = Bridge.ReadOverflow();
+        }
+        catch (IOException)
+        {
+            return;
+        }
+        var before = _overflow;
+        _overflow = overflow;
+        if (before is not null && before.System == overflow.System && before.Inputs.SequenceEqual(overflow.Inputs)) return;
+        if (!overflow.Any && before is not { Any: true }) return;
+        Log.Write(overflow.Any
+            ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。EP 0x84 の読みが追いつかなかったと推定します"
+            : $"[{Label}] {when}に TS のバッファの溢れが下りていました");
+    }
+
+    /// <summary>溢れた入力の受信機 (「、受信機 2」)</summary>
+    private string Receivers(It930xOverflow overflow)
+    {
+        var receivers = overflow.Overflowed
+            .SelectMany(input => Model.Receivers.Where(receiver => receiver.TsInput == input).Select(receiver => receiver.Index))
+            .ToList();
+        return receivers.Count == 0 ? "" : $"、受信機 {string.Join("・", receivers)}";
     }
 
     /// <summary>EP 0x84 を読み、受信機ごとの出口に分ける。閉じるか、読めなくなるまで</summary>
@@ -263,12 +345,28 @@ public sealed class It930xDevice
             // EP 0x84 の読みは 5 つの受信機で 1 本なので、読めなくなったら機材ごと使えないものとし、次の選局で開き直す
             _faulted = true;
             Log.Write($"[{Label}] TS を読めなくなりました: {UsbDevices.Reason(error)}");
+            // 読む側がいないまま入力を開けておくと、ブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなる (It930xOverflow)。
+            // 閉じるのは使っている側が返してからなので、それまで待たずにここで入力を閉じる
+            if (error is not UsbGoneException) CloseInputs();
             for (var input = 0; input < It930xBridge.TsInputs; input++) _demux.Detach(input)?.Complete(error.Message);
         }
         finally
         {
             // どの終わり方でも、開くのを待っている Setup を待たせたままにしない (読みを始められていなければ _readerRunning は false のまま)
             _readerOpened.Set();
+        }
+    }
+
+    /// <summary>入力を全部閉じて EP 0x84 をリセットする (<see cref="It930xBridge.DisableTsInputs"/>)。閉じられなければ記録に出す</summary>
+    private void CloseInputs()
+    {
+        try
+        {
+            Bridge.DisableTsInputs();
+        }
+        catch (IOException error)
+        {
+            Log.Write($"[{Label}] TS の入力を閉じられませんでした ({error.Message})");
         }
     }
 
@@ -356,19 +454,25 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 受信機の TS を <paramref name="output"/> に流し始める。ブリッジには書かない (入力は開いたときから全部開いている。<see cref="Setup"/>)。
-    /// 5 つの入力は 1 つの経路にまとまるので、ほかの受信機が流している間にブリッジの TS の経路を書き換えないため
+    /// 5 つの入力は 1 つの経路にまとまるので、ほかの受信機が流している間にブリッジの TS の経路を書き換えないため。
+    /// 流し始める前に溢れを読み、立っていれば記録に出す (<see cref="WatchOverflow"/>)
     /// </summary>
     internal void Attach(int receiver, It930xTsOutput output)
     {
         var input = Wiring(receiver).TsInput;
+        WatchOverflow($"受信機 {receiver} の TS を流し始めるとき");
         _demux.Attach(input, output)?.Complete();
     }
 
-    /// <summary>受信機の TS を止める (出口を外して止める)。ブリッジには書かず、その入力のパケットはこのあと捨てる</summary>
+    /// <summary>受信機の TS を止める (出口を外して止める)。ブリッジには書かず、その入力のパケットはこのあと捨てる。止めたあとに溢れを読む</summary>
     public void Detach(int receiver)
     {
         var input = Wiring(receiver).TsInput;
-        _demux.Detach(input)?.Complete();
+        if (_demux.Detach(input) is { } output)
+        {
+            output.Complete();
+            WatchOverflow($"受信機 {receiver} の TS を止めるとき");
+        }
     }
 
     /// <summary>
@@ -560,14 +664,8 @@ public sealed class It930xDevice
         // 入力を閉じて EP 0x84 をリセットしてから読みを止める (SDK の DRV_ResetRxPort)。読む側がいないまま、ブリッジに TS を溜めない
         if (!Faulted)
         {
-            try
-            {
-                Bridge.DisableTsInputs();
-            }
-            catch (IOException error)
-            {
-                Log.Write($"[{Label}] TS の入力を閉じられませんでした ({error.Message})");
-            }
+            CloseInputs();
+            WatchOverflow("閉じるとき");
         }
         _stopping = true;
         _reader?.Join(TimeSpan.FromSeconds(2));
