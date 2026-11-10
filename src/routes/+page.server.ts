@@ -443,8 +443,9 @@ export const actions = {
 
   reconcile: () => {
     // 「ファイルと照合」ボタン。外から消した分をすぐ一覧に反映したいとき用
-    // 行が変わったら `reconcile` が知らせるので、押した本人以外の画面も更新される
     const result = reconcile();
+    // 何も変わらなくても知らせる。押した本人以外の画面も読み直し、同じものを見ている端末が食い違わない
+    emit("recordings");
     return { success: true, reconcile: result };
   },
 
