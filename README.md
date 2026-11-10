@@ -18,7 +18,7 @@ Mirakurun や EDCB、メディアサーバは要りません。番組表から�
   <tr>
     <td align="center"><a href="docs/screens.md#録画"><img src="docs/images/dashboard.webp" alt="録画" width="380"></a><br><sub><b>録画</b> — 予約と録画を 1 本の一覧に。サムネ付きで、押せばその場で観る</sub></td>
     <td align="center"><a href="docs/screens.md#ライブ"><img src="docs/images/live.webp" alt="ライブ" width="380"></a><br><sub><b>ライブ</b> — 字幕もデータ放送も。止めれば追っかけ</sub></td>
-    <td align="center"><a href="docs/screens.md#録画を観る"><img src="docs/images/watch.webp" alt="録画を観る" width="380"></a><br><sub><b>観る</b> — 放送どおりの字幕、CMは自動で飛ばす</sub></td>
+    <td align="center"><a href="docs/screens.md#録画を観る"><img src="docs/images/watch.webp" alt="録画を観る" width="380"></a><br><sub><b>観る</b> — 放送どおりの字幕、CM は自動で飛ばす</sub></td>
   </tr>
 </table>
 
@@ -33,7 +33,7 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 - カードを書き換えない
 
 端末 (ブラウザ) が外のサービスに直接繋ぐのは、設定でオンにしたときの実況のコメントだけです。NX-Jikkyo とニコニコ実況 過去ログ API に繋ぎ、相手には端末の IP とどの局をいつ観ているかが見えます ([docs/architecture.md](docs/architecture.md#端末が外へ繋ぐもの-実況のコメント))。
-ライブでは NX-Jikkyo に書き込めます。書いたものは公開され、消せません ([docs/watch.md](docs/watch.md#実況に書き込む))。
+ライブでは実況に書き込めます (ニコニコと連携している世帯では公式のニコニコ実況へ、ほかは NX-Jikkyo へ)。書いたものは公開され、消せません ([docs/watch.md](docs/watch.md#実況に書き込む))。
 
 考え方は [Discussion #760](https://github.com/danything/denpa/discussions/760) にまとめています (法律相談ではなく、議論のための整理です)。
 
@@ -43,24 +43,24 @@ denpa は、**自分の B-CAS カードで、自分の世帯の中で、私的�
 - **録画** — CM を見つけてチャプターにし、AV1 / H.264 の mkv にエンコードする (GPU があれば H.265 も)。字幕は放送の ARIB 字幕のまま入れる。GPU (Intel・AMD・NVIDIA・Rockchip) があれば使う
 - **ライブ** — 放送から 1 秒ほどで。止めれば追っかけ、二カ国語・解説放送も選べる ([docs/watch.md](docs/watch.md#ライブ))
 - **データ放送** — テレビと同じ BML がブラウザで動く (d ボタン)。ライブでも録画でも
-- **観る** — 行を押せばその場で再生。CM は1コマも見せずに飛ばし、続きから・倍速 (×1〜×2)・切り抜き (字幕・コメントごとサーバに保存)
+- **観る** — 行を押せばその場で再生。CM は 1 コマも見せずに飛ばし、続きから・倍速 (×1〜×2)・切り抜き (字幕・コメントごとサーバに保存)
 - **字幕と放送の字** — 字幕は放送どおりの位置に描き、番組名・局名も含めて Denpa Font で外字まで崩さない
 - **端末に保存して観る** — 電波の無いところでも ([docs/offline.md](docs/offline.md))
 - **EPGStation・EDCB から引き継ぐ** — ルール・予約・録画 (EDCB は録画の履歴) ([docs/migrate.md](docs/migrate.md))
 - **別の機械へ移す** — ルール・予約・録画の一覧・設定を書き出して、新しい機械の denpa に取り込む ([docs/migrate.md](docs/migrate.md#別の機械へ移す))
 
 部品はチューナーで選局して素の TS を流す **チューナーエージェント** と、それ以外の全部 (番組表・予約・録画・
-エンコード・配信) をやる **denpa** の2つだけです ([docs/architecture.md](docs/architecture.md))。
+エンコード・配信) をやる **denpa** の 2 つだけです ([docs/architecture.md](docs/architecture.md))。
 
 ## 立てる
 
 ### 1. 要るもの
 
-チューナー・B-CASカードとカードリーダー・OS (Linux / Mac / Windows)・Docker (Linux だけ) が要ります。使えるチューナーの一覧と細かいことは [docs/tuners.md](docs/tuners.md#要るもの)。
+チューナー・B-CAS カードとカードリーダー・OS (Linux / Mac / Windows)・Docker (Linux だけ) が要ります。使えるチューナーの一覧と細かいことは [docs/tuners.md](docs/tuners.md#要るもの)。
 
 ### 2. 入れる
 
-**1行で、denpa 本体とチューナーのエージェントの両方が立ち上がり、ブラウザが開きます。** clone は要りません。
+**1 行で、denpa 本体とチューナーのエージェントの両方が立ち上がり、ブラウザが開きます。** clone は要りません。
 
 ```sh
 # Linux
@@ -83,11 +83,11 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - **誰を通すか** — 設定するまで全部断ります。compose の `TRUSTED_NETWORKS` の初期値は家の中 (私設網) で、
   ここからはログインなしで通ります。範囲の変え方と、画面をログイン (OIDC) で守るときは
   [docs/install.md](docs/install.md#誰を通すか)
-- 設定の「受信」の「チューナー」で見つかったチューナーを確かめ、「チャンネル」で**スキャン**を押します (局が1つも無いうちは、録画・番組表・ライブの上に案内が出ます)。衛星は最初から局が入っていて、
+- 設定の「受信」の「チューナー」で見つかったチューナーを確かめ、「チャンネル」で**スキャン**を押します (局が 1 つも無いうちは、録画・番組表・ライブの上に案内が出ます)。衛星は最初から局が入っていて、
   地上波は十数分。終わると番組表を集めるので (数分)、あとは番組表から予約するだけです
 - **カードリーダーが NG のまま録ると、中身はスクランブルされたままです** (設定の「受信」の「チューナー」に出ます)
 
-1コンテナ (`denpa-aio`)・Helm・リバースプロキシの後ろに置くとき・困ったときは [docs/install.md](docs/install.md)、
+1 コンテナ (`denpa-aio`)・Helm・リバースプロキシの後ろに置くとき・困ったときは [docs/install.md](docs/install.md)、
 ログインの細かいことは [docs/auth.md](docs/auth.md)。
 
 ## 観る
@@ -100,7 +100,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 **はじめる**
 
-- [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1コンテナ・Helm・前段の後ろに置く)
+- [docs/install.md](docs/install.md) — **立てる** (入れ方の選択肢・1 コンテナ・Helm・前段の後ろに置く)
 - [docs/install-mac.md](docs/install-mac.md) — Mac に入れる
 - [docs/install-windows.md](docs/install-windows.md) — Windows に入れる
 - [docs/install-talos.md](docs/install-talos.md) — Talos Linux の 1 台に、OS の設定から 1 行で入れる (PT3。実機で確かめていない)
@@ -144,7 +144,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 - [docs/player.md](docs/player.md) — 観る画面の作り
 - [docs/encode.md](docs/encode.md) — エンコード (字幕・AV1・GPU)
 - [docs/cm.md](docs/cm.md) — CM 検出
-- [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM検出用に覚えたロゴ)
+- [docs/logo.md](docs/logo.md) — 局ロゴ (番組表の PNG と CM 検出用に覚えたロゴ)
 
 **手を入れる**
 

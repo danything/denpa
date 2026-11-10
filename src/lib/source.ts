@@ -50,8 +50,8 @@ export function parseFileSource(raw: string | null): FileSource | null {
  * 「CM 検出をやり直す」が使えるか (詳細の「その他…」)。読む元は元の TS、無ければエンコードしたもの。
  *
  * - `hidden` … 読む元が無い (元の TS もエンコードしたものも無い)。項目を出さない
- * - `disabled` + 理由 … CM を切ってエンコードしたうえに元の TS も無い。エンコードしたものから CM は戻せないので押せない
- * - `prompt` … CM を切ってエンコードしたが元の TS はある。押したら再エンコードを促す (サーバが断る)
+ * - `disabled` + 理由 … 前のバージョンで CM を切ってエンコードしたうえに元の TS も無い。エンコードしたものから CM は戻せないので押せない
+ * - `prompt` … 前のバージョンで CM を切ってエンコードしたが元の TS はある。押したら再エンコードを促す (サーバが断る)
  * - `ok`
  */
 export function cmRedo(recording: {

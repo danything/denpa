@@ -292,7 +292,7 @@ interface LivePlayerOptions {
   confirm?: () => Promise<void>;
   /**
    * `<video>` で観るとき、音を別に鳴らすか (`raw/native-audio.ts`。WebKit だけ。`native-audio-choice.ts`)。
-   * ライブ画面だけが渡す。渡さない画面 (追っかけ・観る画面) は従来のまま
+   * ライブ画面だけが渡す。追っかけは渡さない (`<video>` の音のまま)
    */
   separateAudio?: () => boolean;
   /**
@@ -365,7 +365,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   let hevcGaveUp = false;
   /**
-   * 断り書き。失敗ではないが、リクエストされたとおりにできなかったとき (AV1 を出せないので H.264 に戻した・
+   * 断り書き。失敗ではないが、リクエストされたとおりにできなかったとき (AV1 を出せないので次の形式に切り替えた・
    * サーバの `notice`)。`message` と違って選局で消さない。戻した先が映っても理由が残っているように
    */
   let warning = $state("");
@@ -2637,7 +2637,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
   /**
    * MediaSource を用意する (`codecs` はサーバが決めて送ってくる)。受け取れない形式なら、黒いままにせず
-   * H.264 へ戻してそう言う
+   * 次の形式 (`decideFormat`) に切り替えて、そう通知する
    */
   function start(
     video: HTMLVideoElement,

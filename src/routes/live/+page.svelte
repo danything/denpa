@@ -785,7 +785,7 @@
             {/if}
 
             <!--
-                            AV1 を受け取れなければ H.264 に戻して理由を出す (`live-player.svelte.ts` の `start`)。
+                            AV1 を受け取れなければ次の形式に切り替えて理由を出す (`live-player.svelte.ts` の `start`)。
                             末尾の MPEG-2 はエンコードせずに放送そのままをデコードする経路
                         -->
             <StageTail
@@ -917,7 +917,7 @@
           >
         {/if}
       {/if}
-      <!-- 指定されたとおりにできなかったときの断り書き (H.264 に戻した・ソフトウェアでエンコードしている) -->
+      <!-- 指定されたとおりにできなかったときの断り書き (次の形式に切り替えた・ソフトウェアでエンコードしている) -->
       {#if player.warning}
         <StageNote testid="live-warning">{player.warning}</StageNote>
       {/if}
