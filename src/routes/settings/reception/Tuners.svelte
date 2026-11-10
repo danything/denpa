@@ -182,7 +182,7 @@
 <!--
   **機材が受けられない種別は選ばせない** (`receivable`。エージェントが見つけた機材の種別)。BS/CS 専用の受信機に GR を入れて
   保存でき、その台に割り振られた地上波の選局が全部断られていた (#2386)。もう入っているものは外せるように押せるままにする。
-  足す欄は機材が分からない (`receivable` が無い) ので SKY を受けられず、並べない
+  足す欄は機材が分からない (`receivable` が無い) ので CATV と SKY を受けられず、並べない
 -->
 {#snippet typeChips(
   prefix: string,
@@ -812,8 +812,14 @@
     max-width: 16rem;
     font-size: var(--dp-text-sm);
   }
+  /*
+   * **種別は 1 段に 3 つまで並べ、4 つ目 (ケーブルテレビ・スカパー！プレミアム) からは次の段へ送る。**
+   * 1 段に全部並べると、5 つのときに表が広い窓 (1541px) でも枠からはみ出し、横に巻くようになっていた。
+   * 列の幅は中身に合わせて、段どうしで縦をそろえる
+   */
   .types {
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: repeat(3, max-content);
   }
   .state {
     gap: var(--dp-space-2);
@@ -963,7 +969,9 @@
     .types-cell {
       grid-area: types;
     }
+    /* 狭い幅では行の幅いっぱいを使い、入りきらないものから折り返す */
     .types {
+      display: flex;
       flex-wrap: wrap;
     }
     .tuners .detail.open {

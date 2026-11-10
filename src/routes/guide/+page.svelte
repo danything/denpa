@@ -11,7 +11,10 @@
   import { dragScroll } from "#lib/actions.js";
   import { GENRE_TREE } from "#lib/arib.js";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
-  import { guideNavigation } from "#lib/components/GuidePending.svelte";
+  import {
+    guideNavigation,
+    rememberGuideTabs,
+  } from "#lib/components/GuidePending.svelte";
   import Menu from "#lib/components/Menu.svelte";
   import NowLine from "#lib/components/NowLine.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
@@ -41,7 +44,6 @@
     SUBCHANNELS_COOKIE,
   } from "#lib/subchannels.js";
   import {
-    CHANNEL_TYPES,
     type GridProgram,
     type GuideSheet,
     type ProgramDetail as Facts,
@@ -101,6 +103,8 @@
    * (同じ種別の別の日なら局の並びはほぼ同じなので、そのまま残す)
    */
   const toGuide = guideNavigation();
+  // ほかの画面から移る途中の姿も、同じタブを並べる (CATV のタブは局があるときだけ。`GuidePending`)
+  $effect(() => rememberGuideTabs(data.types));
   /** 押した先の種別。今と同じ日・同じ種別 (読み直し・同じリンク) なら null */
   const switching = $derived.by(() => {
     const to = toGuide.to;
@@ -684,7 +688,7 @@
     -->
   <div class="toolbar guide-bar dock" data-testid="guide-toolbar">
     <div role="group" class="segmented" data-testid="type-tabs">
-      {#each CHANNEL_TYPES as type (type)}
+      {#each data.types as type (type)}
         <a
           class="button small {data.type === type ? '' : 'secondary outline'}"
           aria-current={data.type === type ? "page" : undefined}

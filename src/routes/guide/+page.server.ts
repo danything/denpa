@@ -4,7 +4,11 @@ import { channelNotice } from "#lib/channel-notice.js";
 import { parseId } from "#lib/id.js";
 import { channelAlert } from "#lib/server/channel-alert.js";
 import { reserveWarning } from "#lib/server/contracts.js";
-import { serviceCounts, watchableServices } from "#lib/server/epg.js";
+import {
+  listedServices,
+  serviceCounts,
+  watchableServices,
+} from "#lib/server/epg.js";
 import {
   broadcastDayStart,
   daysOf,
@@ -15,7 +19,7 @@ import {
 } from "#lib/server/guide.js";
 import { cancelProgram, reserveFromForm } from "#lib/server/reservations.js";
 import { storedSubchannels, SUBCHANNELS_COOKIE } from "#lib/subchannels.js";
-import { CHANNEL_TYPES } from "#lib/types.js";
+import { GUIDE_TYPES, guideTabs } from "#lib/types.js";
 
 /**
  * 時間×局のグリッドの外枠。並びを眺めて選ぶとき用
@@ -27,7 +31,7 @@ import { CHANNEL_TYPES } from "#lib/types.js";
  */
 export function load({ url, cookies }) {
   const type =
-    CHANNEL_TYPES.find((t) => t === url.searchParams.get("type")) ?? "GR";
+    GUIDE_TYPES.find((t) => t === url.searchParams.get("type")) ?? "GR";
 
   // 既定は今日の放送日。めくるときだけ start が付く
   const start = requestedDay(url.searchParams.get("start"));
@@ -62,7 +66,9 @@ export function load({ url, cookies }) {
     /** サブチャンネルも出すか (`#lib/subchannels.ts`)。端末ごとに覚える */
     subchannels: storedSubchannels(cookies.get(SUBCHANNELS_COOKIE)),
     typeEmpty,
-    channelNotice: typeEmpty ? null : channelNotice(counts),
+    /** 種別のタブ (`guideTabs`)。CATV は局があるときだけ */
+    types: guideTabs(counts, type),
+    channelNotice: typeEmpty ? null : channelNotice(counts, listedServices()),
     channelAlert: channelAlert(),
   };
 }

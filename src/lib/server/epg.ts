@@ -74,6 +74,17 @@ export function serviceCounts(): Record<string, number> {
 }
 
 /**
+ * いま選局できる局の数。**復号できない局も数える** (受信の設定の「受信できるチャンネル」に並ぶ局)。
+ * 局が無いときの案内で、スキャンへ案内するか、復号できる局が無いことを言うかを分けるのに使う (`#lib/channel-notice.ts`)
+ */
+export function listedServices(): number {
+  return (
+    orm().select({ n: count() }).from(services).where(currentServices()).get()
+      ?.n ?? 0
+  );
+}
+
+/**
  * 局の並び。**テレビと同じ順にする。**
  *
  * リモコン番号を持つのは地上波だけ。**BS と CS はサービス ID がそのまま

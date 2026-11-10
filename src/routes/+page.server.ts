@@ -31,7 +31,7 @@ import {
   isCanceling,
   pump,
 } from "#lib/server/encoder.js";
-import { serviceCounts } from "#lib/server/epg.js";
+import { listedServices, serviceCounts } from "#lib/server/epg.js";
 import { emit } from "#lib/server/events.js";
 import { reconcile, removeRecording } from "#lib/server/files.js";
 import { seriesFolder } from "#lib/server/library.js";
@@ -328,7 +328,7 @@ export function load({ url, cookies }) {
 
   return {
     /** 局が無いときに上に出す案内 (`#lib/channel-notice.ts`。出すのは `+layout.svelte`) */
-    channelNotice: channelNotice(serviceCounts()),
+    channelNotice: channelNotice(serviceCounts(), listedServices()),
     /** チャンネルのお知らせの 1 行 (`server/channel-alert.ts`) */
     channelAlert: channelAlert(),
     reservations,

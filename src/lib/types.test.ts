@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { decodableService, origin, shownTypes } from "./types";
+import { decodableService, guideTabs, origin, shownTypes } from "./types";
 
 describe("種別", () => {
   test("受信の設定に並べる種別は、CATV と SKY を受けられる機材があるときだけ足す", () => {
@@ -14,6 +14,16 @@ describe("種別", () => {
       "CATV",
       "SKY",
     ]);
+  });
+
+  test("番組表のタブは地上波・BS・CS がいつも並び、CATV は局があるときだけ足す", () => {
+    expect(guideTabs({})).toEqual(["GR", "BS", "CS"]);
+    expect(guideTabs({ GR: 8, CATV: 0 })).toEqual(["GR", "BS", "CS"]);
+    expect(guideTabs({ GR: 8, CATV: 3 })).toEqual(["GR", "BS", "CS", "CATV"]);
+    // 開いている種別は、局が無くなってもタブに残す
+    expect(guideTabs({ GR: 8 }, "CATV")).toEqual(["GR", "BS", "CS", "CATV"]);
+    // SKY の局は数えない (復号できない) ので、タブにならない
+    expect(guideTabs({ SKY: 2 })).toEqual(["GR", "BS", "CS"]);
   });
 
   test("復号できないのは SKY と、B-CAS 以外の CA_system_id しか無い局", () => {

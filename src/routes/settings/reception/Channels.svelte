@@ -70,23 +70,26 @@
   const scan = $derived(data.scan);
 
   /**
-   * SKY (スカパー！プレミアム) を受信できる種別に選んだチューナーがあるか。あるときだけ、スキャンの選び方に SKY を足す
-   * (受けられる機材が無い人の選び方は変えない)。チューナーの一覧はエージェントの答え待ちなので、届くまでは無いものとする
+   * CATV (ケーブルテレビ) と SKY (スカパー！プレミアム) のうち、受信できる種別に選んだ (使う) チューナーがある種別。
+   * あるものだけ、スキャンの選び方に足す (受けられる機材が無い人の選び方は変えない)。
+   * チューナーの一覧はエージェントの答え待ちなので、届くまでは無いものとする
    */
   const tunerList = held(() => data.tuners);
-  const skyScan = $derived(
-    tunerList.value?.list.some(
-      (tuner) => !tuner.disabled && tuner.types.includes("SKY"),
-    ) ?? false,
+  const extraScans = $derived(
+    (["CATV", "SKY"] as const).filter((type) =>
+      (tunerList.value?.list ?? []).some(
+        (tuner) => !tuner.disabled && tuner.types.includes(type),
+      ),
+    ),
   );
 
   /**
    * スキャンする種別の選び方。値はそのまま `types` で送る (「すべて」はカンマで並べる)。
    * 先頭の「すべて」が初めの選び方。衛星は放送の NIT からすぐ作れるので、全部まとめて回しても時間はほぼ地上波のぶんだけ。
-   * SKY は H01〜H105 の総当たりなので、「すべて」に入れると地上波と同じくらい延びる
+   * CATV (QC13〜QV12 の 113 チャンネル) と SKY (H01〜H105) は総当たりなので、「すべて」に入れるとそれぞれ地上波と同じくらい延びる
    */
   const SCAN_CHOICES = $derived([
-    { value: skyScan ? "GR,BS,CS,SKY" : "GR,BS,CS", label: "すべて" },
+    { value: ["GR", "BS", "CS", ...extraScans].join(","), label: "すべて" },
     { value: "GR", label: SERVICE_TYPE_LABEL["GR"] },
     // ケーブルテレビの周波数変換パススルー。UHF に加えて C13〜C63 も回す (`scan.ts` の `SCAN_KINDS`)
     {
@@ -95,13 +98,49 @@
     },
     { value: "BS", label: SERVICE_TYPE_LABEL["BS"] },
     { value: "CS", label: SERVICE_TYPE_LABEL["CS"] },
-    ...(skyScan ? [{ value: "SKY", label: SERVICE_TYPE_LABEL["SKY"] }] : []),
+    ...extraScans.map((type) => ({
+      value: type,
+      label: SERVICE_TYPE_LABEL[type] ?? type,
+    })),
   ]);
 
-  /** 受信できるチャンネルに SKY の局があるか。あれば、番組表とライブに出ないわけを添える */
+  /**
+   * 受信できるチャンネルに、番組表とライブに出さない局 (復号できない局) があるか。種別ごとにわけを表のすぐ上に添える。
+   * SKY の局はどれも復号できない。CATV は B-CAS 以外の方式でスクランブルされた局だけ (`services.decodable`)
+   */
   const hasSky = $derived(
     data.channels.some((channel) => channel.type === "SKY"),
   );
+  const hasCatv = $derived(
+    data.channels.some((channel) => channel.type === "CATV"),
+  );
+  const hasUndecodableCatv = $derived(
+    data.channels.some(
+      (channel) =>
+        channel.type === "CATV" &&
+        channel.services.some((service) => !service.decodable),
+    ),
+  );
+
+  const undecodableNote = $derived(
+    [
+      hasSky
+        ? "スカパー！プレミアムの局は、スクランブルを復号できないため、番組表とライブに出しません。スカパー！プレミアムのカードには、これから対応する予定です"
+        : null,
+      hasUndecodableCatv
+        ? "ケーブルテレビの局のうち「復号できません」の局は、B-CAS 以外の方式でスクランブルされているため、番組表とライブに出しません"
+        : null,
+    ]
+      .filter((text) => text !== null)
+      .join("。"),
+  );
+
+  /** CATV のチャンネルが再送信している元の放送。チャンネルの名前の下に出す。自主放送には何も付けない */
+  const ORIGIN_TEXT = {
+    GR: "地上波の再送信",
+    BS: "BS の再送信",
+    CS: "CS の再送信",
+  } as const;
   /*
    * 物理チャンネルと、そこに入っている局。**denpa 自身の DB から来る。**
    * エージェントにも控えはあるが、問い合わせない (`channels.server.ts`)
@@ -365,6 +404,14 @@
             2
             回続けて受信できなかったチャンネルは「受信できません」と出し、その局を番組表・ライブ・ルールの対象から外します。受信できるようになれば戻ります。
           </p>
+          {#if hasCatv}
+            <p>
+              ケーブルテレビの局は、番組表とライブでは「ケーブルテレビ」にまとめて並べます。
+              地上波や BS を再送信しているチャンネルには、ch の下に「BS
+              の再送信」のように元の放送を出します。
+              アンテナで受けている同じ局とは別の局として扱い、局ロゴはまだ集めません。
+            </p>
+          {/if}
           <p>
             番組表はスキャンのあと、局ごとに埋まっていきます。BS の初回は、1
             つの中継から全局の番組名を先に入れ (数分)、
@@ -415,10 +462,13 @@
         <div class="actions">{@render scanControl()}</div>
       </div>
     {:else}
-      {#if hasSky}
-        <!-- SKY の局は表にだけ並ぶ。番組表とライブに出ないわけを、表のすぐ上で言う (`services.decodable`) -->
-        <p class="small muted" data-testid="sky-note">
-          スカパー！プレミアムの局は、スクランブルを復号できないため、番組表とライブに出しません。スカパー！プレミアムのカードには、これから対応する予定です
+      {#if hasSky || hasUndecodableCatv}
+        <!--
+                    復号できない局は表にだけ並ぶ。番組表とライブに出ないわけを、表のすぐ上で言う (`services.decodable`)。
+                    どの局かは、局名の後ろの「復号できません」で示す
+                -->
+        <p class="small muted" data-testid="undecodable-note">
+          {undecodableNote}
         </p>
       {/if}
       <div class="table-wrap channels-wrap">
@@ -464,6 +514,14 @@
                       {:else if channel.reception === "checking"}
                         <span class="reception tiny muted">確認中</span>
                       {/if}
+                      <!-- CATV で地上波・BS・CS を再送信しているチャンネル。番組表とライブではケーブルテレビの局として並ぶ -->
+                      {#if channel.origin !== null}
+                        <span
+                          class="reception tiny muted"
+                          data-testid="channel-origin"
+                          >{ORIGIN_TEXT[channel.origin]}</span
+                        >
+                      {/if}
                       <!-- 空いているチューナーで 5 秒ほど受信する。結果はこのチャンネルの行の下 -->
                       <ActionButton
                         action="?/measureSignal"
@@ -484,6 +542,13 @@
                         {@render cmLogo(service.id, service.name, false)}
                       </span>
                       <span class="broadcast">{service.name}</span>
+                      <!-- 番組表とライブに出さない局 (わけは表の上の 1 行) -->
+                      {#if !service.decodable}
+                        <span
+                          class="tiny muted nowrap"
+                          data-testid="service-undecodable">復号できません</span
+                        >
+                      {/if}
                     </span>
                   </td>
                   <td class="logo-col"
@@ -505,9 +570,9 @@
                   </td>
                 </tr>
               {/each}
-              <!-- SKY のチャンネルは、最後のスキャンで分かったこと (CA_system_id と番組表・ロゴが来ているか。`ca-observe.ts`) を行の下に出す -->
+              <!-- SKY と CATV のチャンネルは、最後のスキャンで分かったこと (CA_system_id と番組表・ロゴが来ているか。`ca-observe.ts`) を行の下に出す -->
               {#if channel.observed !== null}
-                <tr data-testid="sky-observed" data-channel={channel.channel}>
+                <tr data-testid="ca-observed" data-channel={channel.channel}>
                   <td colspan="6" class="small">
                     <span class="muted">スキャンで分かったこと</span>
                     {[
@@ -562,9 +627,15 @@
       <span class="visually-hidden">ロゴはまだ取れていません</span>
     </span>
   {:else if state === "skipped" && column}
-    <!-- 復号できない種別 (SKY) の局。番組表とライブに出さないので、ロゴは集めない (`logos.server.ts`) -->
-    <span class="muted small" title="スカパー！プレミアムの局のロゴは集めません"
-      >—</span
+    <!--
+      復号できない局 (番組表とライブに出さない) と CATV の局 (まだ取得しない) のロゴは集めない (`logos.server.ts`)。
+      復号できない局は SKY の局と CATV の局だけ
+    -->
+    <span
+      class="muted small"
+      title={logoOf.get(id)?.type === "SKY"
+        ? "スカパー！プレミアムの局のロゴは集めません"
+        : "ケーブルテレビの局のロゴは、まだ集めません"}>—</span
     >
   {:else if column}
     <span class="muted small" title="ロゴは放送に載っていません">—</span>

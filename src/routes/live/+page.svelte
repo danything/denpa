@@ -86,7 +86,7 @@
   import { separateLiveAudio } from "#lib/native-audio-choice.js";
   import { reload } from "#lib/reload.svelte.js";
   import { FLOOR, stepSpeed } from "#lib/ts/pacing.js";
-  import { CHANNEL_TYPES } from "#lib/types.js";
+  import { GUIDE_TYPES } from "#lib/types.js";
 
   import type { LiveChannel } from "./+page.server";
 
@@ -194,7 +194,7 @@
     data.jikkyo && jikkyoOn.on && channels.some((c) => c.jikkyo !== null),
   );
   const types = $derived([
-    ...CHANNEL_TYPES.filter((t) => channels.some((c) => c.type === t)),
+    ...GUIDE_TYPES.filter((t) => channels.some((c) => c.type === t)),
     ...(jikkyoTab ? [JIKKYO_TAB] : []),
   ]);
   /**
@@ -1202,9 +1202,18 @@
     z-index: var(--dp-z-stage-controls);
   }
   /* 列の幅いっぱいに伸びるので、タブを均等に広げる。左に寄せると右に溝だけが余った */
+  /*
+   * 入りきらない幅 (二段組にした直後の細い右の列で、ケーブルテレビのタブがあるとき) は横に流す (流す印は出さない)。
+   * 番組表の操作の 1 行と同じ
+   */
   .type-tabs {
     display: flex;
     margin-bottom: var(--dp-space-2);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .type-tabs::-webkit-scrollbar {
+    display: none;
   }
   .type-tabs > button {
     flex: 1;

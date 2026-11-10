@@ -18,6 +18,7 @@ import {
   DEFAULT_KNOBS,
   type Knobs,
   on,
+  tsmfStreams,
 } from "./broadcast";
 import type { FakeService } from "./services";
 
@@ -227,7 +228,13 @@ interface FakeChannel {
 }
 
 /** 種別の並び。知らない種別は後ろ (本物の `Config.TypeOrder`) */
-const TYPE_ORDER: Record<string, number> = { GR: 0, BS: 1, CS: 2, SKY: 3 };
+const TYPE_ORDER: Record<string, number> = {
+  GR: 0,
+  BS: 1,
+  CS: 2,
+  CATV: 3,
+  SKY: 4,
+};
 
 /** 本物が channels.json に書く順 (種別ごと、その中はチャンネルの文字の順。`Config.SaveChannels`) */
 function sortChannels<T extends FakeChannel>(list: T[]): T[] {
@@ -240,7 +247,7 @@ function sortChannels<T extends FakeChannel>(list: T[]): T[] {
   });
 }
 
-/** 預かっているチャンネル。本物では channels.json (SKY はスキャンしたときだけ入る。`broadcast.channels`) */
+/** 預かっているチャンネル。本物では channels.json (CATV と SKY はスキャンしたときだけ入る。`broadcast.channels`) */
 const initialChannels = () => sortChannels(channels());
 let saved = initialChannels();
 
@@ -304,10 +311,10 @@ function tunerStatus() {
       pin: plain.device ?? plain.name,
       /*
        * 機材が受けられる種別は、挿してある機材の種別。挿していないデバイスは分からない (本物の `DeviceProbe.Receivable`)。
-       * `it930x:` の受信機は、挿していなくても地上波・衛星・SKY を受けられると返す (本物の `It930x.Types`)
+       * `it930x:` の受信機は、挿していなくても地上波・衛星・ケーブルテレビ・SKY を受けられると返す (本物の `It930x.Types`)
        */
       receivable: plain.device?.startsWith("it930x:")
-        ? ["GR", "BS", "CS", "SKY"]
+        ? ["GR", "BS", "CS", "CATV", "SKY"]
         : (plugged().find((one) => one.device === plain.device)?.types ?? null),
     };
     /*
@@ -510,8 +517,13 @@ function openStream(url: URL, signal: AbortSignal): Response {
     emit("tuners");
   });
 
+  // TSMF で束ねた搬送波は、束ねた TS の数をヘッダーで返す (本物の `Sink.TsmfStreamsHeader`)
+  const streams = tsmfStreams(type, channel);
   return new Response(fakeStream(ended, services), {
-    headers: { "Content-Type": "video/MP2T" },
+    headers: {
+      "Content-Type": "video/MP2T",
+      ...(streams === null ? {} : { "X-Denpa-Tsmf-Streams": String(streams) }),
+    },
   });
 }
 

@@ -114,17 +114,17 @@ test.describe("スカパー！プレミアム", () => {
     await expect(
       card.locator(`[data-testid="channel-row"][data-channel="H40"]`),
     ).toContainText(SKY_TEST.name);
-    await expect(card.getByTestId("sky-note")).toContainText(
+    await expect(card.getByTestId("undecodable-note")).toContainText(
       "スクランブルを復号できないため",
     );
     // スキャンで分かったこと (CA_system_id。偽の放送は B-CAS 以外の作り物の値を置いている) をチャンネルの行の下に出す
     const observed = card.locator(
-      `[data-testid="sky-observed"][data-channel="H40"]`,
+      `[data-testid="ca-observed"][data-channel="H40"]`,
     );
     await expect(observed).toContainText("CA_system_id 0x000B (B-CAS 以外)");
     await expect(observed).toContainText("番組表");
     // ほかの種別のチャンネルには出さない
-    await expect(card.getByTestId("sky-observed")).toHaveCount(1);
+    await expect(card.getByTestId("ca-observed")).toHaveCount(1);
 
     // 局の一覧には入るが、ライブの一覧には出ない (`airing` が false)。ライブは選局せずに断る
     const services = (await (await request.get("/api/services")).json()) as {

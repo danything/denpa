@@ -24,7 +24,7 @@ export interface VideoLoss {
 }
 
 /**
- * 番組表・ライブで並べる種別とその順 (地上波・BS・CS)。
+ * 番組表のタブにいつも並べる種別とその順 (地上波・BS・CS)。CATV のタブは局があるときだけ足す (`guideTabs`)。
  * CATV (ケーブルテレビ) と SKY (スカパー！プレミアム) は、受信の設定では受けられる機材か選んだチューナーがあるときだけ並べる (`shownTypes`)。
  * SKY の局は復号できないので番組表とライブには出さない (`services.decodable`)。ルールの条件では局があれば選べる (`RuleDraft`)
  */
@@ -39,6 +39,22 @@ export const ALL_CHANNEL_TYPES: readonly ChannelType[] = [
 
 /** 番組表を組める種別 (`/api/programs`・`/api/guide` の `type`)。SKY の局は復号できないので番組表を持たない */
 export const GUIDE_TYPES: readonly ChannelType[] = ["GR", "BS", "CS", "CATV"];
+
+/**
+ * 番組表のタブに並べる種別。**地上波・BS・CS はいつも、CATV は復号できる局があるときだけ** (`counts` は `server/epg.ts` の `serviceCounts`)。
+ * ケーブルテレビを使わない家のタブは今までのまま。`current` (開いている種別) は局が無くてもタブに残す (選んでいるタブが消えない)
+ */
+export function guideTabs(
+  counts: Readonly<Record<string, number>>,
+  current?: ChannelType,
+): ChannelType[] {
+  return GUIDE_TYPES.filter(
+    (type) =>
+      CHANNEL_TYPES.includes(type) ||
+      (counts[type] ?? 0) > 0 ||
+      type === current,
+  );
+}
 
 /**
  * 受信の設定で並べる種別。**CATV と SKY は、受けられる機材かその種別を選んだチューナーがあるときだけ足す**
