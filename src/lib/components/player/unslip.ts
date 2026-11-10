@@ -24,7 +24,7 @@ export const UNSLIP_EVERY = 3_000;
 export const UNSLIP_STEP = 0.02;
 
 /** 映した 1 枚が再生位置からどれだけ遅れているか (秒。進んでいれば 0) */
-export function slipOf(currentTime: number, mediaTime: number): number {
+function slipOf(currentTime: number, mediaTime: number): number {
   return Math.max(currentTime - mediaTime, 0);
 }
 
@@ -99,14 +99,14 @@ export function slipHidden(
 }
 
 /** 測った遅れで飛び直したのがこの回数… */
-export const BEHIND_JUMPS = 3;
+const BEHIND_JUMPS = 3;
 /** …この長さ (ms) の中に続いたら、デコードが追いついていない */
 export const BEHIND_SPAN = 15_000;
 /**
  * 捨てたコマがこの割合を超えたら、デコードが追いついていない。Windows Edge は落ち着いていても 5.6% 捨て続けるので、
  * その 3 倍より上にする。エミュレータで AV1 1080p が追いつかなかったときは約 50% だった
  */
-export const BEHIND_DROPS = 0.2;
+const BEHIND_DROPS = 0.2;
 /** 捨てたコマの割合を見る長さ (ms)。これより短い間と、`BEHIND_FRAMES` に満たない間は数えない */
 export const DROP_SPAN = 10_000;
 const BEHIND_FRAMES = 150;

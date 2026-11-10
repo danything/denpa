@@ -83,6 +83,7 @@
     type Traits,
     type Zone,
   } from "#lib/timeline.js";
+  import type { DetailNote } from "#lib/types.js";
 
   let { data, form } = $props();
 
@@ -175,7 +176,7 @@
   /** 行から開いた番組詳細。番組表と同じ見せ方をする (detail.svelte.ts) */
   const detail = programDetail();
   /** その行が失敗・削除された理由。詳細の中で見せる */
-  let detailNotes = $state<{ title: string; text: string }[]>([]);
+  let detailNotes = $state<DetailNote[]>([]);
   /**
    * 何で検出したか。ロゴが効いているかどうかがここで分かる。
    * うまくいったときは持たない (`cmNoteWorthShowing`)
@@ -203,7 +204,7 @@
   function openDetail(
     programId: number | null,
     row: DetailSeed,
-    notes: { title: string; text: string }[] = [],
+    notes: DetailNote[] = [],
     cmNote: string | null = null,
   ): void {
     // 開いた行の操作だけ出す。録画は openRecording、予約は openReservation が入れ直す
@@ -280,7 +281,7 @@
    * 理由は 3 種類あって、それぞれ別物なので見出しを付けて分けて渡す
    */
   function openRecording(rec: Rec): void {
-    const notes: { title: string; text: string }[] = [];
+    const notes: DetailNote[] = [];
     // error 列に入るのは**録画そのものの失敗だけ**。エンコードの理由は encode_error
     if (rec.state === "failed" && rec.error) {
       notes.push({ title: "録画に失敗しました", text: rec.error });
@@ -295,6 +296,7 @@
     // 一覧と同じく、消した録画には出さない
     if (loss !== null && rec.deleted_at === null) {
       notes.push({
+        tone: "warning",
         title: loss.label,
         text: `${loss.detail}の映像が残っています。元の TS に映像が無かった所は、エンコードしたものにもありません`,
       });

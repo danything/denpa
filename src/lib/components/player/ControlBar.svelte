@@ -50,12 +50,12 @@
     position: absolute;
     z-index: var(--dp-z-stage-shade);
     pointer-events: none;
-    transition: opacity var(--dp-duration);
+    transition: opacity var(--dp-duration) var(--dp-ease);
   }
   .items {
     position: relative;
     z-index: var(--dp-z-stage-controls);
-    transition: opacity var(--dp-duration);
+    transition: opacity var(--dp-duration) var(--dp-ease);
   }
   .bar.away {
     pointer-events: none;

@@ -406,7 +406,7 @@
 
 /*
  * ---- 自分の書き込みの縦線 (`.mine-line`)。字の頭に短い縦線 ----
- * 実況の流れるコメントと一覧。「いまいる場所」の左の縦線 (`.menu-item` など) と同じ形 (幅 2px・角 1px・主の色) で、
+ * 実況の流れるコメントと一覧。「いまいる場所」の左の縦線 (`.menu-item` など) と同じ形 (幅 `--dp-mark`・両端は半円・主の色) で、
  * 「自分のもの」も同じ印で示す。映像の上では使う側が `--mine-line` で色を替える (`JikkyoLayer`)
  */
 .mine-line::before {
@@ -1309,6 +1309,17 @@ input[type="checkbox"]:not([role="switch"]) {
     var(--dp-on-mark, var(--pico-primary)),
     var(--dp-on-mark, var(--pico-primary))
   );
+  background-repeat: no-repeat;
+  background-position: center bottom 0.2rem;
+  background-size: 1rem var(--dp-mark);
+}
+/*
+ * **メニューを開くボタンは、中の設定が既定から変わっているときに同じ短い下線を引く** (`data-on`。ホームの「⋯」・切り抜きの「絞り込み」)。
+ * 開いているかは `aria-expanded` で言うので `aria-pressed` は使わず、字の色も変えない。
+ * 主の色の点は「まだ見ていないもの」の印なので使わない (1 つの見た目に 1 つの意味)
+ */
+button[data-on] {
+  background-image: linear-gradient(var(--pico-primary), var(--pico-primary));
   background-repeat: no-repeat;
   background-position: center bottom 0.2rem;
   background-size: 1rem var(--dp-mark);

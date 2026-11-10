@@ -46,6 +46,7 @@
     SEARCH_FIELD_LABEL,
     SEARCH_FIELDS,
   } from "#lib/search.js";
+  import { ALL_CHANNEL_TYPES } from "#lib/types.js";
 
   import type { PageData } from "./$types";
   import type { Preview } from "./+page.server";
@@ -313,12 +314,10 @@
   // ---- 局とジャンル ----
   /** 局は 50 以上あるので種別ごとにまとめる */
   const grouped = $derived(
-    ["GR", "BS", "CS", "SKY"]
-      .map((type) => ({
-        type,
-        services: draft.services.filter((s) => s.type === type),
-      }))
-      .filter((g) => g.services.length > 0),
+    ALL_CHANNEL_TYPES.map((type) => ({
+      type,
+      services: draft.services.filter((s) => s.type === type),
+    })).filter((g) => g.services.length > 0),
   );
   const serviceSummary = $derived.by(() => {
     if (serviceTypes.length + serviceIds.length === 0) return "全局";

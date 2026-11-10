@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
 
   /**
-   * 映像と重ねものの束 (ライブ・追っかけ)。録画視聴は video の配線が
+   * 映像と重ねものの束 (ライブ・追っかけ)。観る画面は video の配線が
    * まるで違う (src 再生・続き・CM スキップ) ので、こちらは使わない。
    *
    * - `video` … 映像。**備え付けの操作 (`controls`) は出さない**。あれの
@@ -91,7 +91,7 @@
     pointer-events: none;
   }
   .still {
-    transition: opacity var(--dp-duration);
+    transition: opacity var(--dp-duration) var(--dp-ease);
   }
   /* 字幕は実況より上、操作バーのボタンより下 (`app.css` の `--dp-z-stage-*`) */
   .captions {

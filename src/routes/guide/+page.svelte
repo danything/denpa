@@ -1885,14 +1885,21 @@
   }
   /*
      * 予約の状態。説明の代わりに太字で出す。印は時刻のすぐ後ろに添える (色だけに頼らない。説明の行が切れる短いマスでも見える)。
-     * 予約済みは主の色の ✓、録画中は録画の赤の ●、競合は赤い ⚠ (一覧の競合と同じ印)。
+     * 予約済みは主の色の ✓、録画中は録画の赤の ●、競合は赤い ⚠ (一覧の競合と同じ印)。失敗は赤、録り逃しは注意の色の字 (ホームの一覧と同じ色)。
      * **競合は予約済みと同じ青にしない**。青だと「録れる」に見え、チューナーが足りずに落ちる番組を見落とす
      */
   .program {
     --state: var(--dp-primary-text);
   }
-  .program:is([data-state="recording"], [data-state="conflict"]) {
+  .program:is(
+    [data-state="recording"],
+    [data-state="conflict"],
+    [data-state="failed"]
+  ) {
     --state: var(--dp-rec-text);
+  }
+  .program[data-state="missed"] {
+    --state: var(--dp-warn-text);
   }
   .state,
   .program .num::after {

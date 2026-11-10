@@ -539,7 +539,7 @@
   }
 
   /**
-   * 描く入れ物を毎回まっさらに作る (エンジンが張る影 `attachShadow` は外せず、同じ要素に 2 度目を張ると失敗する)。
+   * 描く入れ物を毎回まっさらに作る (エンジンが付けるシャドウ DOM (`attachShadow`) は外せず、同じ要素に 2 度目を付けると失敗する)。
    * 出せと言われるまでは透明に。`visibility` では子の visible が親の hidden を打ち消す
    */
   function makeMount(into: HTMLElement): HTMLDivElement {
@@ -734,7 +734,7 @@
     videoRect = null;
     if (roundFont !== null) document.fonts.delete(roundFont);
     roundFont = null;
-    // 影ごと捨てる (`makeMount` の説明)
+    // シャドウ DOM ごと捨てる (`makeMount` の説明)
     mount?.remove();
     mount = null;
   }
@@ -850,7 +850,8 @@
     position: absolute;
     top: 0.75rem;
     right: 0.75rem;
-    z-index: var(--dp-z-stage-controls);
+    /* データ放送の箱 (`.data`) の中だけの前後 */
+    z-index: 1;
     display: flex;
   }
 </style>

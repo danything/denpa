@@ -24,7 +24,7 @@ test.describe("設定のバージョンと環境・ログ", () => {
     await expect(page).toHaveTitle("その他 - 設定 - denpa");
 
     await expect(page.getByTestId("diag-version")).not.toBeEmpty();
-    await expect(page.getByTestId("diag-tuners")).toContainText("(GR");
+    await expect(page.getByTestId("diag-tuners")).toContainText("(地上波");
     await expect(page.getByTestId("diag-card")).toContainText(
       "Fake Card Reader (usb 1-1) (使用中)",
     );
