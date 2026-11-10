@@ -224,6 +224,16 @@ public class It930xDeviceTests
         await Assert.That(log[^1]).IsEqualTo("W D8C3=01");
     }
 
+    [Test]
+    public async Task EP_0x84_の読みを始められなければ_入力を開けずに開くのを失敗にする()
+    {
+        var (usb, _, _) = Fake();
+        usb.TsOpenFails = true;
+        var error = Assert.Throws<IOException>(() => Open(usb, "9-8", new FakeClock()));
+        await Assert.That(error.Message).Contains("読みを始められませんでした");
+        await Assert.That(usb.Log).DoesNotContain("W DA4C=01");
+    }
+
     /// <summary>TS の経路のレジスタ (5 つの入力で共有するもの) への書き込み</summary>
     internal static bool TsRouteWrite(string line)
     {

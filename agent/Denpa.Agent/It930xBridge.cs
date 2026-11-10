@@ -124,7 +124,8 @@ public sealed class It930xBridge
 
     /// <summary>
     /// EP 0x84 に出しっぱなしにする読みの数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>) で、その倍にしている (CECH-ZD1 J と同じ 16)。
-    /// 16 × 65,424 バイトは約 1 MB で、5 つの入力の合計が 200 Mbps でも約 40 ms ぶんを受けておける。5 受信機で足りるかは実機で測る
+    /// 16 × 65,424 バイトは約 1 MB で、5 つの入力の合計が 200 Mbps でも約 40 ms ぶんを受けておける。
+    /// PX-MLT5PE の実機で、5 つの受信機がそれぞれ約 30 Mbps を流しても足りた (2026-11-10)
     /// </summary>
     public const int TsDepth = 16;
 

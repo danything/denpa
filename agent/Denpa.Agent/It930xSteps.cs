@@ -40,8 +40,10 @@ internal static class It930xSteps
         public It930xTuner Tuner => tuner;
         public long Bytes => Interlocked.Read(ref _bytes);
 
-        /// <summary>出口が尽きるか読めなくなった理由 (流れている間は null)</summary>
-        public string? Ended { get; private set; }
+        private volatile string? _ended;
+
+        /// <summary>出口が尽きるか読めなくなった理由 (流れている間は null。読みのスレッドが書き、ほかのスレッドが読む)</summary>
+        public string? Ended => _ended;
 
         public void Start()
         {
@@ -53,11 +55,11 @@ internal static class It930xSteps
                 {
                     int got;
                     while ((got = stream.Read(buffer, 0, buffer.Length)) > 0) Interlocked.Add(ref _bytes, got);
-                    Ended = "出口が閉じました";
+                    _ended = "出口が閉じました";
                 }
                 catch (Exception error) when (error is IOException or ObjectDisposedException or InvalidOperationException)
                 {
-                    Ended = error.Message;
+                    _ended = error.Message;
                 }
             })
             { IsBackground = true, Name = $"steps-{name}" };
@@ -112,21 +114,27 @@ internal static class It930xSteps
                     var channel = channels[added % channels.Length];
                     var tuner = (It930xTuner)TunerPool.OpenDevice(name, lnb);
                     var started = DateTime.UtcNow;
+                    // 流している受信機の並び (receivers) に入るまでは、どの失敗でもここで捨てる (入ったあとは finally の Stop が捨てる)
+                    var handed = false;
                     try
                     {
                         tuner.Tune(tunings[added % tunings.Count]!);
+                        var receiver = new Receiver(name, channel, tuner);
+                        receiver.Start();
+                        receivers.Add(receiver);
+                        handed = true;
                     }
                     catch (IOException error)
                     {
                         output.WriteLine($"{name} {channel}: 選局できませんでした ({error.Message})");
-                        tuner.Dispose();
                         Probe.ShowBridge(device, output);
                         failed = true;
                         break;
                     }
-                    var receiver = new Receiver(name, channel, tuner);
-                    receiver.Start();
-                    receivers.Add(receiver);
+                    finally
+                    {
+                        if (!handed) tuner.Dispose();
+                    }
                     output.WriteLine($"{name} {channel}: 選局しました ({(DateTime.UtcNow - started).TotalMilliseconds:F0} ms、ロックまで {tuner.LockMs} ms)");
                     // 足した直後に、流している受信機のどれかの TS が止まったかを見る (どの受信機を足したときに止まったかを分ける)
                     if (Window(receivers, Quick, output, "    足したあと 1 秒") is { } stopped)

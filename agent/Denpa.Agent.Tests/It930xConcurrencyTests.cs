@@ -370,6 +370,67 @@ public partial class It930xConcurrencyTests
     }
 
     [Test]
+    public async Task TS_のバッファを捨てるときに入力を閉じられなければ_開け直さずにその失敗を返す()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        var device = It930xDevice.Acquire("11-13", () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
+        try
+        {
+            int from;
+            lock (usb.Log) from = usb.Log.Count;
+            // 入力を閉じる最初の書き込みに応答しない
+            usb.Silent = 1;
+            Assert.Throws<It930xException>(device.FlushTs);
+            await Assert.That(RouteWrites(usb, from).Where(line => line.EndsWith("=01", StringComparison.Ordinal))).IsEmpty();
+        }
+        finally
+        {
+            device.Release();
+            It930xDevice.CloseIfIdle("11-13", TimeSpan.Zero);
+        }
+    }
+
+    [Test]
+    public async Task 閉じた機材では_TS_のバッファを捨てず_閉じた入力を開け直さない()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        var device = It930xDevice.Acquire("11-14", () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
+        device.Release();
+        It930xDevice.CloseIfIdle("11-14", TimeSpan.Zero);
+        int from;
+        lock (usb.Log) from = usb.Log.Count;
+        device.FlushTs();
+        await Assert.That(RouteWrites(usb, from)).IsEmpty();
+        await Assert.That(usb.Registers.GetValueOrDefault(It930xBridge.TsEnable)).IsEqualTo((byte)0);
+    }
+
+    [Test]
+    public async Task TS_のバッファを捨てるのと閉じるのが重なっても_閉じたあとに入力は開いていない()
+    {
+        await Task.Yield();
+        for (var round = 0; round < 20; round++)
+        {
+            var (usb, _, _) = Fake();
+            var port = $"11-15-{round}";
+            var device = It930xDevice.Acquire(port, () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
+            device.Release();
+            var errors = Together(2, index =>
+            {
+                if (index == 0) device.FlushTs();
+                else It930xDevice.CloseIfIdle(port, TimeSpan.Zero);
+            });
+            await Assert.That(errors.Select(error => error.ToString())).IsEmpty();
+            // 最後に書いたのは閉じる処理で、入力はどれも閉じている
+            foreach (var receiver in Pe.Receivers)
+            {
+                await Assert.That(usb.Registers.GetValueOrDefault(It930xBridge.TsEnable + (uint)receiver.TsInput)).IsEqualTo((byte)0);
+            }
+        }
+    }
+
+    [Test]
     public async Task 電源を切ったあと_100_ms_待ってから_USB_を閉じる()
     {
         await Task.Yield();

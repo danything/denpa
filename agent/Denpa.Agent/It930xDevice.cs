@@ -29,7 +29,7 @@ internal sealed class It930xI2cBus(It930xBridge bridge, byte bus) : ICxdBus
 /// **ロックの順。** 受信機は並べて選局されるので (常駐のスキャン)、ロックは次の順でだけ取り、逆には取らない。
 /// <c>Registry</c> → この機材の <c>_gate</c> (使っている側の数)。
 /// <see cref="It930xTuner"/> の <c>_gate</c> → 受信機ごとの <c>_receiverGates</c> (<see cref="Frontend"/>・<see cref="KeepMatching"/>) → <see cref="Cxd2856Frontend"/> の受信機の操作 →
-/// 同じバスの受信機で 1 つのバスのロック (<c>_buses</c>) → <see cref="It930xBridge"/> のコマンドのロック。LNB の給電の <c>_lnbGate</c> → ブリッジのコマンドのロック。
+/// 同じバスの受信機で 1 つのバスのロック (<c>_buses</c>) → <see cref="It930xBridge"/> のコマンドのロック。<see cref="FlushTs"/> は <c>_gate</c> を持ったままブリッジのコマンドを送る (<c>_gate</c> → ブリッジのコマンドのロック)。LNB の給電の <c>_lnbGate</c> → ブリッジのコマンドのロック。
 /// <see cref="KeepMatching"/> はほかの受信機の <c>_receiverGates</c> と受信機の操作を取るが、その受信機の <see cref="It930xTuner"/> の <c>_gate</c> は取らない
 /// (選局の途中なら、受信機の操作のロックで選局が終わるのを待つ)。I2C の並びが同じバスで交わらないことは It930xConcurrencyTests.cs で確かめる
 /// </para>
@@ -57,6 +57,10 @@ public sealed class It930xDevice
     private readonly HashSet<int> _lnbUsers = [];
     private Thread? _reader;
     private readonly ManualResetEventSlim _readerOpened = new();
+    private volatile bool _readerRunning;
+
+    /// <summary>開くときに EP 0x84 の読みを出し終えるのを待つ長さ</summary>
+    internal static readonly TimeSpan ReaderStartTimeout = TimeSpan.FromSeconds(2);
     private volatile bool _stopping;
     private int _users;
     private bool _closed;
@@ -219,8 +223,11 @@ public sealed class It930xDevice
         _reader.Start();
         try
         {
-            // 読みを出し終える (読みのスレッドが OpenInStream から戻る) まで待つ。出せなかったときは読みのスレッドが機材を使えないものにする
-            _readerOpened.Wait(TimeSpan.FromSeconds(2));
+            // 読みを出し終える (読みのスレッドが OpenInStream から戻る) まで待つ。出せなかったら、入力を開けずに開くのを失敗にする
+            if (!_readerOpened.Wait(ReaderStartTimeout) || !_readerRunning)
+            {
+                throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読みを始められませんでした");
+            }
             Bridge.EnableTsInputs();
         }
         catch
@@ -238,6 +245,7 @@ public sealed class It930xDevice
         try
         {
             using var input = _usb.OpenInStream(It930xBridge.TsIn, It930xBridge.TsTransferSize, It930xBridge.TsDepth);
+            _readerRunning = true;
             _readerOpened.Set();
             var buffer = new byte[It930xBridge.TsTransferSize];
             while (!_stopping)
@@ -251,12 +259,16 @@ public sealed class It930xDevice
         }
         catch (IOException error)
         {
-            _readerOpened.Set();
             if (_stopping) return;
             // EP 0x84 の読みは 5 つの受信機で 1 本なので、読めなくなったら機材ごと使えないものとし、次の選局で開き直す
             _faulted = true;
             Log.Write($"[{Label}] TS を読めなくなりました: {UsbDevices.Reason(error)}");
             for (var input = 0; input < It930xBridge.TsInputs; input++) _demux.Detach(input)?.Complete(error.Message);
+        }
+        finally
+        {
+            // どの終わり方でも、開くのを待っている Setup を待たせたままにしない (読みを始められていなければ _readerRunning は false のまま)
+            _readerOpened.Set();
         }
     }
 
@@ -290,16 +302,16 @@ public sealed class It930xDevice
 
     /// <summary>
     /// ブリッジの TS のバッファを捨てる (仕様書 3.6)。SDK の <c>DRV_ResetRxPort</c> と同じく、入力を全部閉じ、10 ms 待ってから <c>0xDA1D</c> に 1 と 0 を書き、
-    /// 入力を全部開け直す。流しているほかの受信機の TS も、その間は欠ける。ロックしているのに TS が届かないときに <c>--tune</c> が試す
+    /// 入力を全部開け直す。流しているほかの受信機の TS も、その間は欠ける。ロックしているのに TS が届かないときに <c>--tune</c> が試す。
+    /// 閉じた機材では何もしない (閉じる処理が閉じた入力を開け直さない)。閉じる処理とは <c>_gate</c> で交わらないようにする
     /// </summary>
     public void FlushTs()
     {
-        try
+        lock (_gate)
         {
+            if (_closed) return;
+            // 閉じるのに失敗したら、そのまま投げる。閉じきったか分からない入力を開け直さず、元の失敗を隠さない
             Bridge.DisableTsInputs();
-        }
-        finally
-        {
             Bridge.EnableTsInputs();
         }
     }
