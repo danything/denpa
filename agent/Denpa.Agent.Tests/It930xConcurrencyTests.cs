@@ -342,6 +342,40 @@ public partial class It930xConcurrencyTests
     }
 
     [Test]
+    public async Task 受信機の_TS_を読む側が止まっても_EP_0x84_の読みは止まらずその受信機のパケットだけを捨てる()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        // 受信機 1 (PX-MLT5PE の入力 1) のパケットを、1 回の読みで 348 個 (65,424 バイト) ずつ流し続ける
+        var packet = new byte[188];
+        packet[0] = It930xBridge.SyncBytes[1];
+        var chunk = Enumerable.Repeat(packet, 348).SelectMany(bytes => bytes).ToArray();
+        usb.TsSource = () => chunk;
+        var tuner = Tuner(usb, "11-30", new SharedClock(), 1);
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("T27")!);
+            var device = tuner.Device!;
+            // 出口 (8 MB) を読まずに溢れさせる
+            var deadline = DateTime.UtcNow + Stuck;
+            while (tuner.Dropped == 0 && DateTime.UtcNow < deadline) Thread.Sleep(10);
+            await Assert.That(tuner.Dropped).IsGreaterThan(0L);
+            // 溢れたあとも EP 0x84 の読みは進み、捨てた数が増え続ける
+            var reads = device.TsReads;
+            var dropped = tuner.Dropped;
+            while ((device.TsReads < reads + 50 || tuner.Dropped <= dropped) && DateTime.UtcNow < deadline) Thread.Sleep(10);
+            await Assert.That(device.TsReads).IsGreaterThanOrEqualTo(reads + 50);
+            await Assert.That(tuner.Dropped).IsGreaterThan(dropped);
+            // 読む側が読み始めれば、また届く
+            await Assert.That(Flowing(tuner)).IsTrue();
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
     public async Task TS_のバッファを捨てるときは入力を全部閉じてリセットし_開け直す()
     {
         await Task.Yield();

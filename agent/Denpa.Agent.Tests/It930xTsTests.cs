@@ -411,7 +411,7 @@ public class It930xTsTests
         await Assert.That(text).Contains("飛ばした 0 バイト、知らない同期バイトのパケット 1 個、揃いが外れた 0 回");
         // 読みを出してから入力を開け、終わったら入力を閉じて EP 0x84 をリセットしてから読みを閉じる。そのあと REBOOT する
         var log = usb.Log;
-        var opened = log.IndexOf("TS 65424 16");
+        var opened = log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}");
         await Assert.That(opened).IsGreaterThan(log.IndexOf("W DA7C=67"));
         await Assert.That(log.Skip(opened + 1).Take(6)).IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
         var closed = log.IndexOf("TS 閉じる");

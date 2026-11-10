@@ -206,7 +206,7 @@ public class It930xDeviceTests
         var device = Open(usb, "9-27", new FakeClock());
         List<string> log;
         lock (usb.Log) log = [.. usb.Log];
-        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。読みを出し (TS 65424 16)、そのあと入力 0〜4 を開ける (IT930x_probe の順)
+        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。読みを出し (TS 65424 64)、そのあと入力 0〜4 を開ける (IT930x_probe の順)
         var configured = log.IndexOf("W DA7C=67");
         var reading = log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}");
         await Assert.That(log.IndexOf("W DA4C=00")).IsLessThan(configured);
@@ -232,6 +232,111 @@ public class It930xDeviceTests
         var error = Assert.Throws<IOException>(() => Open(usb, "9-28", new FakeClock()));
         await Assert.That(error.Message).Contains("読みを始められませんでした");
         await Assert.That(usb.Log).DoesNotContain("W DA4C=01");
+    }
+
+    [Test]
+    public async Task 開くときに溢れが立っていれば_SDK_の順で_TS_の経路をリセットし直してから読みを出す()
+    {
+        var (usb, _, _) = Fake();
+        // 全体の溢れと入力 2 の溢れ (PX-MLT5PE の受信機 2)。偽物では書いても下りない (実機と同じ)
+        usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        usb.Registers[It930xBridge.TsOverflow1 + 1] = 1;
+        var device = Open(usb, "9-40", new FakeClock());
+        List<string> log;
+        lock (usb.Log) log = [.. usb.Log];
+        device.Release();
+        It930xDevice.CloseIfIdle("9-40", TimeSpan.Zero);
+        var configured = log.IndexOf("W DA7C=67");
+        string[] overflow = ["R DA39 1", "R DA57 1", "R DA8B 4"];
+        string[] expected =
+        [
+            // 溢れを読む
+            .. overflow,
+            // DRV_ResetRxPort の閉じる側: 入力を全部閉じる → 10 ms → 0xDA1D に 1、0
+            "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00",
+            // init_work_queue の「Clean PSB buffer」: 0xDA05 に 1
+            "W DA05=01",
+            // IT9300_configOutput (0xDA05 を 0 に戻す)
+            "R DA1D 1", "W DA1D=01",
+            "R DD11 1", "W DD11=00",
+            "R DD13 1", "W DD13=00",
+            "R DD11 1", "W DD11=20",
+            "W DD88=E43F", "W DD0C=80",
+            "R DA05 1", "W DA05=00",
+            "R DA06 1", "W DA06=00",
+            "R DA1D 1", "W DA1D=00",
+            "W D920=00",
+            // 下りたかを読み直す
+            .. overflow,
+        ];
+        await Assert.That(log.Skip(configured + 1).Take(expected.Length)).IsEquivalentTo(expected);
+        // リセットし直してから電源を入れ、EP 0x84 の読みを出す
+        await Assert.That(log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}")).IsGreaterThan(configured + expected.Length);
+        var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-40")).ToList();
+        await Assert.That(lines.Any(text => text.Contains("開いたときに TS のバッファが溢れていました") && text.Contains("入力ごとの溢れ (0xDA57・0xDA8B〜) 0 0 1 0 0、受信機 2"))).IsTrue();
+        await Assert.That(lines.Any(text => text.Contains("リセットしても溢れたままです") && text.Contains("電源を抜いて"))).IsTrue();
+    }
+
+    [Test]
+    public async Task 開くときに溢れていなければ読むだけでリセットし直さない()
+    {
+        var (usb, _, _) = Fake();
+        var device = Open(usb, "9-41", new FakeClock());
+        List<string> log;
+        lock (usb.Log) log = [.. usb.Log];
+        device.Release();
+        It930xDevice.CloseIfIdle("9-41", TimeSpan.Zero);
+        var configured = log.IndexOf("W DA7C=67");
+        await Assert.That(log.Skip(configured + 1).Take(4)).IsEquivalentTo(new[] { "R DA39 1", "R DA57 1", "R DA8B 4", "W D8C3=00" });
+    }
+
+    [Test]
+    public async Task 溢れが下りれば記録に出して続ける()
+    {
+        var (usb, _, _) = Fake();
+        usb.Registers[It930xBridge.TsOverflow0] = 1;
+        // TS の経路をリセットし直すと下りる偽物
+        usb.OnNote = line =>
+        {
+            if (line == "W DA05=01") usb.Registers[It930xBridge.TsOverflow0] = 0;
+        };
+        var device = Open(usb, "9-42", new FakeClock());
+        device.Release();
+        It930xDevice.CloseIfIdle("9-42", TimeSpan.Zero);
+        var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-42")).ToList();
+        await Assert.That(lines.Any(text => text.Contains("溢れが下りました"))).IsTrue();
+        await Assert.That(lines.Any(text => text.Contains("リセットしても溢れたまま"))).IsFalse();
+    }
+
+    [Test]
+    public async Task EP_0x84_の読みが失敗したら_返されるのを待たずに入力を全部閉じる()
+    {
+        var (usb, _, _) = Fake();
+        using var fail = new ManualResetEventSlim();
+        usb.TsSource = () => fail.IsSet ? throw new IOException("fake-it930x の EP 0x84 の読みが失敗しました") : null;
+        var device = Open(usb, "9-43", new FakeClock());
+        try
+        {
+            int opened;
+            lock (usb.Log) opened = usb.Log.LastIndexOf("W DA5A=1F");
+            fail.Set();
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (!device.Faulted && DateTime.UtcNow < deadline) Thread.Sleep(5);
+            await Assert.That(device.Faulted).IsTrue();
+            // 使っている側はまだ返していないが、読む側のいない入力を開けたままにしない
+            List<string> after;
+            do
+            {
+                Thread.Sleep(5);
+                lock (usb.Log) after = [.. usb.Log.Skip(opened + 1).Where(TsRouteWrite)];
+            }
+            while (after.Count < 7 && DateTime.UtcNow < deadline);
+            await Assert.That(after).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+        }
+        finally
+        {
+            device.Release();
+        }
     }
 
     /// <summary>TS の経路のレジスタ (5 つの入力で共有するもの) への書き込み</summary>
