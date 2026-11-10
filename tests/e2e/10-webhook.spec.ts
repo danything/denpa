@@ -132,7 +132,8 @@ test.describe("通知", () => {
     // 何も変わっていない (増えない・無効にならない・消えない・送っていない)
     await goto(page, "/settings/integrations");
     await expect(row).toHaveCount(1);
-    await expect(row).not.toContainText("無効");
+    // 有効のままなので、切り替えのボタンは「無効化」のまま
+    await expect(row.getByTestId("webhook-toggle")).toHaveText("無効化");
     await expect(row).toContainText("未送信");
     const state = await (
       await request.get(`${stack.webhookUrl}/__control/state`)
