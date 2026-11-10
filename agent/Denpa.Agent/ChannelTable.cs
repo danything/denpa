@@ -4,8 +4,8 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 選局表。**チャンネル名を周波数に直す。** 値は <a href="https://github.com/kazuki0824/recisdb-rs">recisdb-rs</a> の
-/// <c>channels.rs</c> と <c>dvbv5_channels_isdbs.conf</c> から取った (J.83B の <c>H01</c>〜<c>H105</c> だけは MLT5 系の仕様書 7.1 から)。
-/// **地上波と J.83B は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、同期しないだけ)。docs/agent.md「選局表」
+/// <c>channels.rs</c> と <c>dvbv5_channels_isdbs.conf</c> から取った (J.83B の <c>H01</c>〜<c>H105</c> と ISDB-C は MLT5 系の仕様書 7.1・7A.2 から)。
+/// **地上波と J.83B と ISDB-C は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、同期しないだけ)。docs/agent.md「選局表」
 ///
 /// <para>
 /// **衛星は名前だけで選局できる。** 名前に中継器と TSID が入っている (<c>BS15:16625</c>)。中継器の周波数は規格で
@@ -42,7 +42,7 @@ public static class ChannelTable
     /// <summary>
     /// 1 つの物理チャンネルを選局するのに要るもの、全部。
     /// </summary>
-    /// <param name="Type">denpa の種別 (GR / BS / CS / SKY)</param>
+    /// <param name="Type">denpa の種別 (GR / BS / CS / SKY。ISDB-C は仮の <see cref="Catv"/>)</param>
     /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/> / <see cref="SysDvbcAnnexB"/> / <see cref="SysIsdbc"/>)</param>
     /// <param name="Frequency">**地上波と J.83B と ISDB-C は Hz、衛星は kHz**</param>
     /// <param name="StreamId">
@@ -99,11 +99,16 @@ public static class ChannelTable
         {
             /*
              * CATV の周波数変換パススルー。地デジの電波をそのまま CATV のチャンネルの周波数に移して送るので、
-             * 選局は地上波と同じで周波数だけが違う。ミッドバンド C13-C22 (108-168MHz) と
+             * 選局は地上波と同じで周波数だけが違う。ミッドバンド C13-C22 (108-170MHz。C22 だけは 2 MHz 上の 164-170MHz) と
              * スーパーハイバンド C23-C63 (222-468MHz)。真ん中から 1/7 MHz ずれるのも地上波と同じ
              */
             if (!Number(name[1..], out var channel) || channel is < 13 or > 63) return null;
-            var center = channel <= 22 ? 111000000 + (channel - 13) * 6000000 : 225000000 + (channel - 23) * 6000000;
+            var center = channel switch
+            {
+                <= 21 => 111000000 + (channel - 13) * 6000000,
+                22 => 167000000,
+                _ => 225000000 + (channel - 23) * 6000000,
+            };
             return new Tuning("GR", SysIsdbt, (uint)(center + 142857), NoStreamId);
         }
 
