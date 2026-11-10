@@ -346,6 +346,46 @@ test.describe("チューナーの設定", () => {
     });
   });
 
+  /*
+   * **続けて押しても、押したぶん全部を保存する** (`autosave` の `edits`)。前の保存の返事で画面を読み直すと、
+   * その間に押したスイッチが元に戻り、その値のまま次を送っていた (0.2 秒おきに 5 つ押すと 2 つしか残らなかった)
+   */
+  test("「使う」を続けて押しても、全部を保存する", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await goto(page, "/settings/reception");
+    const card = page.getByTestId("tuner-section");
+    const rows = card.getByTestId("tuner-list").getByTestId("tuner-row");
+    await expect(rows).toHaveCount(4);
+
+    const disabled = async () => {
+      const res = await request.get(`${stack.agentUrl}/denpa/tuners`);
+      const { tuners } = (await res.json()) as {
+        tuners: { disabled: boolean }[];
+      };
+      return tuners.map((tuner) => tuner.disabled);
+    };
+    for (let i = 0; i < 4; i++) {
+      await rows.nth(i).getByTestId("tuner-use").click();
+      await page.waitForTimeout(200);
+    }
+    await expect.poll(disabled).toEqual([true, true, true, true]);
+    await expect(card.getByTestId("saved-result")).toBeVisible();
+    for (let i = 0; i < 4; i++)
+      await expect(rows.nth(i).getByTestId("tuner-use")).not.toBeChecked();
+
+    // 戻すときも同じ
+    for (let i = 0; i < 4; i++) {
+      await rows.nth(i).getByTestId("tuner-use").click();
+      await page.waitForTimeout(200);
+    }
+    await expect.poll(disabled).toEqual([false, false, false, false]);
+    for (let i = 0; i < 4; i++)
+      await expect(rows.nth(i).getByTestId("tuner-use")).toBeChecked();
+  });
+
   test("画面から台数と種別を変えられる", async ({ page }) => {
     await goto(page, "/settings/reception");
 
