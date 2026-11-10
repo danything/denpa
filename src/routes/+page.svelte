@@ -486,7 +486,7 @@
   const futureRows = $derived(
     reversed
       ? lines.future.slice(pageStart(lines.future, futureShown))
-      : lines.future.slice(0, futureShown),
+      : lines.future.slice(0, pageEnd(lines.future, futureShown)),
   );
   /** 描いている録れたものの範囲 (`lines.past` の [pastFrom, pastTo)) */
   const pastFrom = $derived(
