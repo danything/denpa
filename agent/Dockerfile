@@ -15,7 +15,7 @@
 # 名前の付け方は上流ごとにばらばら (amd64 / x86_64 / x64、arm64 / aarch64) なので、
 # 各段の冒頭で読み替える。それ以外の arch は配布物が無いので、amd64 のものを
 # 代わりに入れず、そこで止める。sdk:10.0 の既定がそのまま trixie (`-trixie` というタグは無い)
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:212fe4cb74627d5adf9817a4088906ae3edff1bd853bb27565d4b46731efe61e AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:fe0fd4e93bd2fbb47c883b7a6369e5c8d3db8bf01cdc5981f6ee35fbdf3ff4fb AS build
 ARG TARGETARCH
 WORKDIR /build
 # AOT のリンクに clang と zlib が要る
