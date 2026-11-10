@@ -16,7 +16,7 @@ import { EpgReader } from "@danything/arib/eit";
 import { ServiceReader } from "@danything/arib/psi";
 import { max } from "drizzle-orm";
 
-import { decodable } from "../types";
+import { decodable, isSatellite } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
 import {
@@ -321,10 +321,7 @@ async function collectChannel(
      * **衛星は放送の一覧 (NIT) も読み、変わっていればチャンネルを書き換える** (`lineup-follow.ts`)。
      * どの中継器にもネットワークの全部の TS が載っている。読むのは最初の `lineup-follow.ts` の `WATCH_FOR` だけ (SDT[other] がそろうまで)
      */
-    lineup =
-      channel.type === "BS" || channel.type === "CS"
-        ? new LineupWatch(channel.type)
-        : null;
+    lineup = isSatellite(channel.type) ? new LineupWatch(channel.type) : null;
     for await (const chunk of chunks(stream)) {
       received ||= chunk.length > 0;
       lineup?.feed(chunk);

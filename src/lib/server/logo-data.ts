@@ -17,6 +17,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { toHalfWidth } from "../fold";
 import { coherence, decodeModel } from "../ts/logo-detect";
 import { PNG_SIGNATURE, pngChunk } from "../ts/png";
+import { decodable } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
 import { currentServices } from "./epg";
@@ -276,10 +277,13 @@ export function stats(): { have: number; total: number } {
         id: services.id,
         network_id: services.network_id,
         name: services.name,
+        type: services.type,
       })
       .from(services)
       .where(and(currentServices(), eq(services.service_type, DIGITAL_TV)))
-      .all(),
+      .all()
+      // 復号できない種別 (SKY) の局は録れないので、CM のロゴを覚えることも無い (`decodable`)
+      .filter((service) => decodable(service.type)),
   );
   return {
     have: current.filter((service) => learned(service.id)).length,

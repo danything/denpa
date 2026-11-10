@@ -8,7 +8,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { TsHead } from "#lib/ts/ts-head.js";
 
-import type { Recording, Reservation } from "../types";
+import { isSatellite, type Recording, type Reservation } from "../types";
 import { fileSize } from "./chase";
 import { config } from "./config";
 import { now, orm } from "./db";
@@ -533,10 +533,7 @@ async function pump(
                  * **衛星で選局できなかったら、放送の一覧を読み直す** (`lineup-follow.refreshLineup`)。
                  * 再編で TS が移ったのなら、書き換えたあとの掛け直しで録れる
                  */
-                if (
-                  error instanceof TuneError &&
-                  (service.type === "BS" || service.type === "CS")
-                ) {
+                if (error instanceof TuneError && isSatellite(service.type)) {
                   void refreshLineup(service.type).catch(() => undefined);
                 }
                 throw error;

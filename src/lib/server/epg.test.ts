@@ -64,6 +64,7 @@ const {
   savePrograms,
   SERVICE_ORDER,
   SERVICE_TYPE_ORDER,
+  serviceCounts,
   settle,
   syncServicesOnly,
   typeRank,
@@ -983,5 +984,13 @@ describe("SERVICE_ORDER", () => {
     expect(
       ["SKY", "CS", "GR", "BS"].sort((a, b) => typeRank(a) - typeRank(b)),
     ).toEqual(["GR", "BS", "CS", "SKY"]);
+  });
+
+  test("局が無いときの案内に使う数には、復号できない種別 (SKY) を入れない", () => {
+    orm().delete(services).run();
+    put(1000600, 600, "SKY", "H40", null, "プレミアム");
+    expect(serviceCounts()).toEqual({});
+    put(400151, 151, "BS", "BS01_3", null, "BS朝日1");
+    expect(serviceCounts()).toEqual({ BS: 1 });
   });
 });

@@ -162,7 +162,9 @@ export async function readUntil(
   });
   const timer = setTimeout(stop, timeout);
   timer.unref?.();
-  abort?.addEventListener("abort", stop, { once: true });
+  // 呼ぶ前に中止されていれば、合図はもう来ない
+  if (abort?.aborted) stop();
+  else abort?.addEventListener("abort", stop, { once: true });
 
   const read = (async () => {
     for (;;) {

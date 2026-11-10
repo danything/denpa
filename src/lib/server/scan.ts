@@ -23,7 +23,7 @@
 import { type EitEvent, EpgReader } from "@danything/arib/eit";
 import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
-import { type ChannelType, decodable } from "../types";
+import { type ChannelType, decodable, isSatellite } from "../types";
 import { CaObserver, describe, type Observed } from "./ca-observe";
 import { config } from "./config";
 import { savePrograms, settle, sync, typeRank } from "./epg";
@@ -57,14 +57,8 @@ const BUSY_RETRY = 10_000;
 /** 記録しておく行数。総当たりは何十行も流れる */
 const LOG_LIMIT = 400;
 
-/** スキャンできる種別。地上波と SKY (スカパー！プレミアム) は総当たり、BS と CS は放送の一覧から */
-type ScannableType = ChannelType;
-
 /** 地上波の UHF の範囲 */
 const UHF_RANGE = { min: 13, max: 62 };
-
-const isSatellite = (type: ScannableType): type is SatelliteType =>
-  type === "BS" || type === "CS";
 
 /**
  * スキャンの種類。**`CATV` は地上波の局として、UHF に加えて CATV の周波数変換パススルー (C13〜C63) も回す。**
@@ -182,7 +176,7 @@ export async function readServices(
 
 /** スキャンで分かったことを 1 件にまとめる */
 export function channelEntry(
-  type: ScannableType,
+  type: ChannelType,
   channel: string,
   services: FoundService[],
 ): AgentChannel {
@@ -276,7 +270,7 @@ interface Progress {
 
 /** 総当たりの 1 件。どの種別のどの物理チャンネルか */
 interface Job {
-  type: ScannableType;
+  type: ChannelType;
   channel: string;
 }
 
@@ -286,7 +280,7 @@ class Scanner {
   private readonly aborter = new AbortController();
   private readonly found = new Map<string, AgentChannel>();
   /** 電波が来た(TS が 1 バイトでも出た)チャンネル数。種別ごと */
-  private readonly tuned = new Map<ScannableType, number>();
+  private readonly tuned = new Map<ChannelType, number>();
   /** 電波は来たのに局情報が揃わなかったチャンネル。1 周したあとで回し直す */
   private retry: Job[] = [];
   /** 放送の一覧を読めた衛星の種別。読めなかった種別は控えを書き換えない (`runScan`) */
@@ -315,7 +309,7 @@ class Scanner {
    * targets は [種別, チャンネル一覧] の並び。見つかったチャンネル定義を返す。
    * 衛星 (BS・CS) は総当たりせず、放送の一覧を読む (`satellite`)。地上波と SKY の総当たりと同時に進む
    */
-  async run(targets: [ScannableType, string[]][]): Promise<AgentChannel[]> {
+  async run(targets: [ChannelType, string[]][]): Promise<AgentChannel[]> {
     const tuners = (await getTuners().catch(() => [])).filter(
       (tuner) => !tuner.disabled,
     );
@@ -422,7 +416,7 @@ class Scanner {
 
   /** 地上波と SKY の総当たり。チューナーの台数ぶん並べる */
   private async ground(
-    targets: [ScannableType, string[]][],
+    targets: [ChannelType, string[]][],
     tuners: AgentTuner[],
   ): Promise<void> {
     const queue: Job[] = [];
@@ -440,7 +434,7 @@ class Scanner {
     /** そのチューナーで引けるものが 1 つでもあるチューナーだけ動かす */
     const wanted = new Set(queue.map((job) => job.type));
     const workers = tuners.filter((tuner) =>
-      tuner.types.some((type) => wanted.has(type as ScannableType)),
+      tuner.types.some((type) => wanted.has(type)),
     );
 
     if (workers.length > 0) {
@@ -591,7 +585,7 @@ interface ScanOptions {
   types: ScanKind[];
 }
 
-async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
+async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
   const scanner = new Scanner((progress) => push(progress.line, progress));
   running = scanner;
   try {
@@ -684,7 +678,7 @@ async function runScan(targets: [ScannableType, string[]][]): Promise<void> {
  */
 export function scanTargets(
   chosen: readonly ScanKind[],
-): [ScannableType, string[]][] {
+): [ChannelType, string[]][] {
   const types = new Set(chosen.filter((kind) => SCAN_KINDS.includes(kind)));
   if (types.has("CATV")) types.delete("GR");
   return [...types].map((type) =>

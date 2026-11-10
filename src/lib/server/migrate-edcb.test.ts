@@ -338,6 +338,17 @@ describe("ルールに写す", () => {
     });
   });
 
+  test("無料放送だけの条件は外して入れ、記す", () => {
+    expect(
+      convertRule(rule({ andKey: "テスト", freeCA: 1 }), known),
+    ).toMatchObject({
+      values: { keyword: "テスト", enabled: true },
+      notes: [
+        "無料放送だけの条件は外して取り込みました (有料放送にも当たります)",
+      ],
+    });
+  });
+
   test("写せないものは飛ばす", () => {
     const skip = (over: Partial<EdcbRule>) =>
       (

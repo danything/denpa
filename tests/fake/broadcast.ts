@@ -245,7 +245,7 @@ export function on(type: string, channel: string): FakeService[] {
  * TS の TSID。衛星は名前に入っている (`BS11:18000`)。地上波はネットワーク ID と同じ値
  * (ARIB TR-B14: 地上波の transport_stream_id は network_id と同じ)
  */
-export function tsidOf(service: FakeService): number {
+function tsidOf(service: FakeService): number {
   const at = service.channel.indexOf(":");
   return at < 0 ? service.networkId : Number(service.channel.slice(at + 1));
 }

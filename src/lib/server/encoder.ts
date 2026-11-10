@@ -719,9 +719,9 @@ const ETA_MIN_SPAN_MS = 4_000;
  * エンコード後のコマ数。進み具合の分母。測れなければ NaN。
  *
  * **入力のコマ数から出す** (尺 × 入力の毎秒コマ数)。出力の毎秒コマ数を
- * 決め打ちにはしない。インタレ解除 (`deinterlace`) は入力 1 コマから
- * 60 コマ指定なら 2 コマ、30 コマ指定なら 1 コマ作るので、入力が 29.97 でも
- * 59.94 (720p の局) でも、この掛け算なら同じ式で当たる。
+ * 決め打ちにはしない。インタレ解除 (`deinterlace`) はインタレのコマ (29.97 の 1080i) 1 つから
+ * 60 コマ指定なら 2 コマ、30 コマ指定なら 1 コマ作る。プログレッシブのコマ (59.94 の 720p の局) は
+ * 倍にしないので、入力が 50 コマ以上なら 60 コマ指定でも掛けない (掛けると 50% で止まる)。
  *
  * 先頭を捨てるぶん (`-ss`) はもうエンコードしないので引く
  */
@@ -734,7 +734,7 @@ export function expectedFrames(
   const seconds = probed.duration - (Number.isFinite(skipSec) ? skipSec : 0);
   if (!(Number.isFinite(seconds) && seconds > 0)) return NaN;
   if (!(Number.isFinite(probed.fps) && probed.fps > 0)) return NaN;
-  return seconds * probed.fps * (smooth ? 2 : 1);
+  return seconds * probed.fps * (smooth && probed.fps < 50 ? 2 : 1);
 }
 
 /**

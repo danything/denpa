@@ -24,7 +24,7 @@ import {
 } from "@danything/arib/psi";
 
 /** B-CAS の CA_system_id (ARIB STD-B25) */
-export const BCAS_SYSTEM_ID = 0x0005;
+const BCAS_SYSTEM_ID = 0x0005;
 
 const PID_CAT = 0x0001;
 const PID_CDT = 0x0029;
@@ -32,10 +32,10 @@ const PID_CDT = 0x0029;
 const EIT_PIDS = new Set([0x0012, 0x0026, 0x0027]);
 
 /** セクションが読めたか (`readable`)・スクランブルされていて読めないか (`scrambled`)・来ていないか (`absent`) */
-export type Arrival = "readable" | "scrambled" | "absent";
+type Arrival = "readable" | "scrambled" | "absent";
 
 /** CA 記述子 1 つ。`serviceId` は PMT のもの (CAT のものは null) */
-export interface CaEntry {
+interface CaEntry {
   serviceId: number | null;
   caSystemId: number;
   /** PMT なら ECM、CAT なら EMM の PID */
