@@ -132,9 +132,13 @@ internal sealed class FakeIt930x : IUsbDevice
 
     private volatile Func<byte[]?>? _tsSource;
 
+    /// <summary>EP 0x84 の読みを出せない (OpenInStream が IOException を投げる)</summary>
+    public bool TsOpenFails { get; set; }
+
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
     {
         if (endpoint != 0x84) throw new InvalidOperationException($"EP 0x{endpoint:X2} の読みを出した");
+        if (TsOpenFails) throw new IOException("fake-it930x の EP 0x84 の読みを出せません");
         Note($"TS {transferSize} {depth}");
         return new FakeTsIn(this);
     }

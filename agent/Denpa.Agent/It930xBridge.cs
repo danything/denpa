@@ -21,6 +21,36 @@ public sealed record It930xPsb(byte Da98, byte Da99)
 }
 
 /// <summary>
+/// ブリッジの TS の経路の状態 (<see cref="It930xBridge.ReadTsStatus"/>)。値は読んだままのバイトで、何を表すかは brRegister.h の名前からの推定。
+/// EP 0x84 の 3 つ (<c>0xDD11</c>〜<c>0xDD13</c>) と <c>0xDD1E</c> は bit 5 が EP 0x84
+/// </summary>
+public sealed record It930xTsStatus(
+    It930xPsb Psb,
+    byte PsbEmpty,
+    byte SyncByteLocked,
+    ushort LostPackets,
+    byte SysBufOverflow,
+    IReadOnlyList<byte> Overflow,
+    IReadOnlyList<byte> Enabled,
+    byte Mp2Reset,
+    byte Ep4Enable,
+    byte Ep4Stall,
+    byte Ep4Nak,
+    byte Ep4Active,
+    byte LinkFixRom)
+{
+    /// <summary>1 行で (<c>--tune</c> が出す)</summary>
+    public string Describe() =>
+        $"ブリッジ: 残りのバッファ {Psb} (0xDA07 空 = {PsbEmpty})  入力の開閉 (0xDA4C〜) {string.Join(" ", Enabled)}  "
+        + $"入力ごとの溢れ (0xDA57・0xDA8B〜) {string.Join(" ", Overflow)}  全体の溢れ (0xDA39) {SysBufOverflow}  "
+        + $"同期バイトのロック (0xDA19) {SyncByteLocked}  落ちたパケット (0xDA21) {LostPackets}  0xDA1D = {Mp2Reset:X2}  "
+        + $"EP 0x84 (bit 5): 有効 {Bit5(Ep4Enable)} ストール {Bit5(Ep4Stall)} NAK {Bit5(Ep4Nak)} 動作中 {Bit5(Ep4Active)} (0xDD11 = {Ep4Enable:X2}、0xDD12 = {Ep4Stall:X2}、0xDD13 = {Ep4Nak:X2}、0xDD1E = {Ep4Active:X2})  "
+        + $"0xF53A = {LinkFixRom:X2}";
+
+    private static int Bit5(byte value) => (value >> 5) & 1;
+}
+
+/// <summary>
 /// IT930x (USB ブリッジ) 1 つ。コマンドの送受信、レジスタの読み書き、ファームウェアの読み込みと REBOOT。
 ///
 /// <para>
@@ -92,8 +122,18 @@ public sealed class It930xBridge
     /// <summary>EP 0x84 の 1 回の転送の大きさ (SDK の <c>URB_BUFSIZE</c>。188 × 348 = 65,424 バイト)</summary>
     public const int TsTransferSize = 188 * 348;
 
-    /// <summary>EP 0x84 に出しっぱなしにする読みの数 (CECH-ZD1 J と同じ 16 から始める。5 受信機で足りるかは実機で測る)</summary>
+    /// <summary>
+    /// EP 0x84 に出したままにする読みの数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>) で、その倍にしている (CECH-ZD1 J と同じ 16)。
+    /// 16 × 65,424 バイトは約 1 MB で、5 つの入力の合計が 200 Mbps でも約 40 ms ぶんを受けておける。
+    /// PX-MLT5PE の実機で、5 つの受信機がそれぞれ約 30 Mbps を流しても足りた (2026-11-10)
+    /// </summary>
     public const int TsDepth = 16;
+
+    /// <summary>SDK が EP 0x84 に出したままにする読みの数 (<c>BR_URB_COUNT</c>)。<see cref="TsDepth"/> はこれより少なくしない</summary>
+    public const int SdkTsDepth = 8;
+
+    /// <summary>入力を全部閉じてから EP 0x84 をリセットするまでの待ち (ms。SDK の <c>DRV_ResetRxPort</c> の <c>mdelay(10)</c>)</summary>
+    public const int InputsOffSettleMs = 10;
 
     /// <summary>EP 0x84 の最大パケット長 (<c>IT9300User_USB20_MAX_PACKET_SIZE</c>)</summary>
     private const int TsMaxPacket = 512;
@@ -123,7 +163,7 @@ public sealed class It930xBridge
     public const uint MpegParallel = 0xDA06;
     /// <summary><c>p_br_reg_top_host_reverse</c></summary>
     public const uint HostReverse = 0xD920;
-    /// <summary>ブリッジの中に残っている TS のバッファの数 (SDK のコメントの「psb counter」。<c>IT9300_initialize</c> が読む 2 バイト)</summary>
+    /// <summary>ブリッジの中に残っている TS のバッファの数 (<c>r_br_mp2if_psb_count_7_0</c> と続く <c>_12_8</c>。SDK は <c>DRV_IT930x_Initialize</c> で記録に出す)</summary>
     public const uint PsbCount = 0xDA98;
     /// <summary><c>p_br_reg_ts_in_src</c> + 入力 (入力 0・1 だけ。シリアルは 0、パラレルは 1)</summary>
     public const uint TsInSource = 0xDA58;
@@ -135,6 +175,27 @@ public sealed class It930xBridge
     public const uint TsEnable = 0xDA4C;
     /// <summary><c>p_br_reg_ts_fail_ignore</c> (入力ごとに 1 ビット)</summary>
     public const uint TsFailIgnore = 0xDA5A;
+
+    // TS の経路の状態を見るレジスタ (brRegister.h)。SDK が読むのは 0xF53A と 0xDA98・0xDA99 だけ (DRV_IT930x_Initialize が記録に出す)。
+    // ほかは --tune の記録に出すためだけに読み、書かない。何を表すかは brRegister.h の名前からの推定
+    /// <summary><c>r_br_mp2if_psb_empty</c> (bit 0)</summary>
+    public const uint PsbEmpty = 0xDA07;
+    /// <summary><c>r_br_mp2if_sync_byte_locked</c> (bit 0)</summary>
+    public const uint SyncByteLocked = 0xDA19;
+    /// <summary><c>r_br_mp2if_lost_pkt_cnt_l</c> と続く <c>_h</c></summary>
+    public const uint LostPackets = 0xDA21;
+    /// <summary><c>p_br_reg_sys_buf_overflow</c> (bit 0)</summary>
+    public const uint SysBufOverflow = 0xDA39;
+    /// <summary><c>p_br_reg_ts0_overflow</c> (bit 0)。入力 1〜4 は <see cref="TsOverflow1"/> から並ぶ</summary>
+    public const uint TsOverflow0 = 0xDA57;
+    /// <summary><c>p_br_reg_ts1_overflow</c>〜<c>p_br_reg_ts4_overflow</c> (bit 0)</summary>
+    public const uint TsOverflow1 = 0xDA8B;
+    /// <summary><c>p_br_reg_p_link_fix_rom_en</c>。SDK が開くときに 0xDA98・0xDA99 と一緒に記録に出す (<c>DRV_IT930x_Initialize</c>)</summary>
+    public const uint LinkFixRom = 0xF53A;
+    /// <summary><c>p_br_reg_ep4_tx_stall</c> (bit 5)</summary>
+    public const uint Ep4Stall = 0xDD12;
+    /// <summary><c>r_br_reg_ep4_tx_active</c> (bit 5)</summary>
+    public const uint Ep4Active = 0xDD1E;
 
     /// <summary><c>p_br_reg_lnk2ofdm_data_63_56</c>。I2C のバス 2 の速さ (仕様書 1.3 は <c>0xF103</c> と一緒に 0x07 を書く)</summary>
     public const uint Lnk2OfdmData = 0xF6A7;
@@ -306,12 +367,13 @@ public sealed class It930xBridge
 
     /// <summary>
     /// TS の経路を設定する。入力 0〜4 のパケットの先頭を <see cref="SyncBytes"/> に付け替えて 1 本にまとめ、EP 0x84 から出す。
-    /// **入力はまだ開けない** (<see cref="EnableTsInput"/>)。
+    /// 入力はまだ開けない (<see cref="EnableTsInputs"/>)。
     ///
     /// <para>
-    /// 順は SDK と同じで、<c>IT9300_initialize</c> の TS の部分 (同期バイトを無視しない → <c>IT9300_setOutTsType</c> →
-    /// <c>IT9300_configOutput</c> → 残っている TS を捨てる)、<c>DRV_IT930x_Initialize</c> の入力ごとの設定 (<c>IT9300_setInTsType</c>・
-    /// <c>IT9300_setSyncByteMode</c>)、<c>IT9300_setIgnoreFail</c>。
+    /// 最初に入力 0〜4 を閉じる (<c>IT9300_disableTsPort</c>)。前のプロセスが入力を開けたまま終わっていても、閉じた状態から設定する。
+    /// そのあとの順は SDK と同じで、<c>IT9300_initialize</c> の TS の部分 (同期バイトを無視しない → <c>IT9300_setOutTsType</c> →
+    /// <c>IT9300_configOutput</c>)、残っている TS を捨てる (<c>init_work_queue</c> の「Clean PSB buffer」)、<c>DRV_IT930x_Initialize</c> の入力ごとの設定
+    /// (<c>IT9300_setInTsType</c>・<c>IT9300_setSyncByteMode</c>)。
     /// <c>IT9300_initialize</c> のうち端子の駆動の強さと次の段の I2C の相手は <see cref="ConfigureReceivers"/>、GPIO は <see cref="GpioSetup"/>
     /// </para>
     /// </summary>
@@ -320,6 +382,7 @@ public sealed class It930xBridge
     public (It930xPsb Before, It930xPsb After) ConfigureTs(IReadOnlyList<bool> parallel)
     {
         if (parallel.Count != TsInputs) throw new ArgumentException($"入力は {TsInputs} つです ({parallel.Count})", nameof(parallel));
+        for (var port = 0; port < TsInputs; port++) WriteRegister(TsEnable + (uint)port, 0);
         WriteRegister(IgnoreSyncByte, 0);
 
         // IT9300_setOutTsType (出力は USB。シリアル・パラレルの出力ではないので、その 2 つはここでは触らない)
@@ -340,7 +403,7 @@ public sealed class It930xBridge
         WriteRegisterBits(Mp2Reset, 0, 1, 0);
         WriteRegister(HostReverse, 0);
 
-        // 前に開いたときの TS がブリッジに残っていれば捨てる (IT9300_initialize。SDK は 0xDA05 に 1 を書いてから 0 を書く)
+        // 前に開いたときの TS がブリッジに残っていれば捨てる (SDK の init_work_queue は 0xDA05 に 1 を書き、そのあと IT9300_configOutput が 0 に戻す)
         var before = ReadPsb();
         if (!before.Empty)
         {
@@ -355,9 +418,58 @@ public sealed class It930xBridge
             WriteRegister(TsAggregateMode + (uint)port, 1);
             WriteRegister(TsSyncByte + (uint)port, SyncBytes[port]);
         }
+        return (before, after);
+    }
+
+    /// <summary>
+    /// 入力 0〜4 を全部開ける (SDK の <c>IT930x_probe</c> の「Enable TsPort」: <c>IT9300_enableTsPort</c> を入力ごと → <c>IT9300_setIgnoreFail</c>)。
+    /// 開けるのは機材を開いたときの 1 回で、受信機ごとには開け閉めしない。SDK も、受信を始める・止めるときは EP 0x84 の読みだけを出し入れし、入力には触らない。
+    /// 5 つの入力は 1 つの経路にまとまるので、ほかの入力が流している間に 1 つだけ開け閉めしない
+    /// </summary>
+    public void EnableTsInputs()
+    {
+        for (var port = 0; port < TsInputs; port++) WriteRegister(TsEnable + (uint)port, 1);
         // 誤りのあるパケットも通す (SDK も通している。TEI の付いたパケットを受信機ごとに数えるため)
         WriteRegister(TsFailIgnore, 0x1F);
-        return (before, after);
+    }
+
+    /// <summary>
+    /// 入力 0〜4 を全部閉じ、<see cref="InputsOffSettleMs"/> 待ってから EP 0x84 をリセットする (SDK の <c>DRV_ResetRxPort</c> の閉じる側。
+    /// <c>p_br_reg_mp2_sw_rst</c> に 1 を書いてから 0 を書く)。機材を閉じるときと、TS が届かないときにブリッジのバッファを捨てるときに使う
+    /// </summary>
+    public void DisableTsInputs()
+    {
+        for (var port = 0; port < TsInputs; port++) WriteRegister(TsEnable + (uint)port, 0);
+        _sleep(InputsOffSettleMs);
+        WriteRegister(Mp2Reset, 1);
+        WriteRegister(Mp2Reset, 0);
+    }
+
+    /// <summary>
+    /// TS の経路の状態を読む (<c>--tune</c> の記録に出す)。読むだけで書かない。SDK が読むのは 0xF53A と 0xDA98・0xDA99 だけで、
+    /// ほかの値が何を表すかは brRegister.h の名前からの推定
+    /// </summary>
+    public It930xTsStatus ReadTsStatus()
+    {
+        var psb = ReadPsb();
+        var enabled = ReadRegisters(TsEnable, TsInputs);
+        var lost = ReadRegisters(LostPackets, 2);
+        byte[] overflow = [ReadRegister(TsOverflow0), .. ReadRegisters(TsOverflow1, TsInputs - 1)];
+        var endpoint = ReadRegisters(Ep4Enable, 3);
+        return new It930xTsStatus(
+            psb,
+            ReadRegister(PsbEmpty),
+            ReadRegister(SyncByteLocked),
+            (ushort)(lost[0] | (lost[1] << 8)),
+            ReadRegister(SysBufOverflow),
+            overflow,
+            enabled,
+            ReadRegister(Mp2Reset),
+            endpoint[0],
+            endpoint[1],
+            endpoint[2],
+            ReadRegister(Ep4Active),
+            ReadRegister(LinkFixRom));
     }
 
     /// <summary>
@@ -437,14 +549,6 @@ public sealed class It930xBridge
 
     /// <summary>出力にしてある GPIOH の値を書く</summary>
     public void Gpio(int pin, bool value) => WriteRegister(GpioOutput(pin), (byte)(value ? 1 : 0));
-
-    /// <summary>入力 <paramref name="port"/> (0〜4) を開ける・閉じる (<c>IT9300_enableTsPort</c>・<c>IT9300_disableTsPort</c>)</summary>
-    public void EnableTsInput(int port, bool on)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(port);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(port, TsInputs);
-        WriteRegister(TsEnable + (uint)port, (byte)(on ? 1 : 0));
-    }
 
     /// <summary>
     /// GPIOH を入力にして値を読む (<c>IT9300_bcasDetectCard</c> と同じ順: 機能を有効にし、出力をやめ、入力の値を読む)

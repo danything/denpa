@@ -200,24 +200,76 @@ public class It930xDeviceTests
     }
 
     [Test]
-    public async Task 選局するとその受信機の_TS_入力を開け_捨てるとスリープにして閉じる()
+    public async Task 開くと_EP_0x84_の読みを出してから入力を全部開け_閉じるときは入力を閉じてから読みを止める()
+    {
+        var (usb, _, _) = Fake();
+        var device = Open(usb, "9-27", new FakeClock());
+        List<string> log;
+        lock (usb.Log) log = [.. usb.Log];
+        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。読みを出し (TS 65424 16)、そのあと入力 0〜4 を開ける (IT930x_probe の順)
+        var configured = log.IndexOf("W DA7C=67");
+        var reading = log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}");
+        await Assert.That(log.IndexOf("W DA4C=00")).IsLessThan(configured);
+        await Assert.That(reading).IsGreaterThan(configured);
+        await Assert.That(log.Skip(reading + 1).Take(6)).IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
+        // 電源を入れたあとに開ける
+        await Assert.That(reading).IsGreaterThan(log.LastIndexOf("W D8B7=01"));
+        device.Release();
+        It930xDevice.CloseIfIdle("9-27", TimeSpan.Zero);
+        lock (usb.Log) log = [.. usb.Log];
+        // 閉じるときは、入力を全部閉じて EP 0x84 をリセットし (DRV_ResetRxPort)、読みを止めてから電源を切る
+        var disabled = log.LastIndexOf("W DA4C=00");
+        await Assert.That(log.Skip(disabled).Take(7)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+        await Assert.That(log.IndexOf("TS 閉じる")).IsGreaterThan(disabled);
+        await Assert.That(log[^1]).IsEqualTo("W D8C3=01");
+    }
+
+    [Test]
+    public async Task EP_0x84_の読みを始められなければ_入力を開けずに開くのを失敗にする()
+    {
+        var (usb, _, _) = Fake();
+        usb.TsOpenFails = true;
+        var error = Assert.Throws<IOException>(() => Open(usb, "9-28", new FakeClock()));
+        await Assert.That(error.Message).Contains("読みを始められませんでした");
+        await Assert.That(usb.Log).DoesNotContain("W DA4C=01");
+    }
+
+    /// <summary>TS の経路のレジスタ (5 つの入力で共有するもの) への書き込み</summary>
+    internal static bool TsRouteWrite(string line)
+    {
+        if (!line.StartsWith('W') || line.Length < 6 || !uint.TryParse(line.AsSpan(2, 4), System.Globalization.NumberStyles.HexNumber, null, out var address)) return false;
+        return address is (>= 0xDA00 and <= 0xDAFF) or (>= 0xDD00 and <= 0xDDFF);
+    }
+
+    [Test]
+    public async Task 選局しても捨ててもブリッジの_TS_の経路には書かず_その受信機の出口だけを付け外しする()
     {
         var (usb, bus1, _) = Fake();
         var clock = new FakeClock();
         var u = It930x.Find(0x0511, 0x084E)!;
-        // PX-MLT5U の受信機 2 は TS 入力 1 (仕様書 1.2)
+        // PX-MLT5U の受信機 2 は TS 入力 1 (仕様書 1.2)。入力 1 のパケットだけがこの受信機に届く
+        byte[] packet = [It930xBridge.SyncBytes[1], 0x01, 0x00, 0x10, .. new byte[184]];
+        byte[] other = [It930xBridge.SyncBytes[0], 0x01, 0x00, 0x10, .. new byte[184]];
+        usb.TsSource = () => [.. packet, .. other, .. packet, .. other];
         var tuner = new It930xTuner("test", 2, () => Open(usb, "9-3", clock, u), () => It930xDevice.CloseIfIdle("9-3", TimeSpan.Zero));
         tuner.Tune(ChannelTable.Parse("T27")!);
+        int opened;
+        lock (usb.Log) opened = usb.Log.LastIndexOf("W DA5A=1F");
         await Assert.That(tuner.Tuned).IsTrue();
-        await Assert.That(tuner.Output).IsNotNull();
-        await Assert.That(usb.Log).Contains($"W {It930xBridge.TsEnable + 1:X4}=01");
         await Assert.That(bus1.Log).Contains("64 X 17=06");
         await Assert.That(tuner.Signal()!.Locked).IsTrue();
+        var buffer = new byte[188];
+        var got = 0;
+        while (got < buffer.Length) got += tuner.Output.Read(buffer, got, buffer.Length - got);
+        await Assert.That(buffer[0]).IsEqualTo((byte)0x47);
+        // 選局の間、ブリッジの TS の経路には書かない (入力は開いたときから全部開いている)
+        List<string> during;
+        lock (usb.Log) during = [.. usb.Log.Skip(opened + 1).Where(TsRouteWrite)];
+        await Assert.That(during).IsEmpty();
         tuner.Dispose();
-        await Assert.That(usb.Log).Contains($"W {It930xBridge.TsEnable + 1:X4}=00");
-        // スリープの最後 (仕様書 2.4) と、電源を切ってから閉じる
+        // スリープの最後 (仕様書 2.4) と、入力を全部閉じてから読みを止め、電源を切って閉じる
         await Assert.That(bus1.Log).Contains("64 X 17=01");
-        await Assert.That(usb.Log).Contains("TS 閉じる");
+        await Assert.That(usb.Log.IndexOf("TS 閉じる")).IsGreaterThan(usb.Log.LastIndexOf("W DA1D=00"));
         await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
     }
 

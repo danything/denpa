@@ -245,45 +245,188 @@ public partial class It930xConcurrencyTests
         }
     }
 
+    /// <summary>EP 0x84 に、入力 0〜4 のパケットを 1 つずつ混ぜて流し続ける (どの受信機も流している TS の代わり)</summary>
+    private static Func<byte[]?> AllInputs()
+    {
+        var number = 0;
+        return () =>
+        {
+            var chunk = new List<byte>();
+            for (var i = 0; i < 20; i++, number++)
+            {
+                for (var input = 0; input < It930xBridge.TsInputs; input++)
+                {
+                    var packet = new byte[188];
+                    packet[0] = It930xBridge.SyncBytes[input];
+                    packet[1] = (byte)input;
+                    packet[2] = (byte)number;
+                    chunk.AddRange(packet);
+                }
+            }
+            return [.. chunk];
+        };
+    }
+
+    /// <summary>出口から 1 パケット読めるか (2 秒で打ち切る)</summary>
+    private static bool Flowing(It930xTuner tuner)
+    {
+        var read = Task.Run(() =>
+        {
+            var buffer = new byte[188];
+            var got = 0;
+            while (got < buffer.Length)
+            {
+                var n = tuner.Output.Read(buffer, got, buffer.Length - got);
+                if (n == 0) return false;
+                got += n;
+            }
+            return buffer[0] == 0x47;
+        });
+        return read.Wait(TimeSpan.FromSeconds(2)) && read.Result;
+    }
+
+    /// <summary>TS の経路のレジスタ (5 つの入力で共有する 0xDA00〜0xDAFF と EP の 0xDD00〜0xDDFF) への書き込みを、<paramref name="from"/> 行目から並べる</summary>
+    private static List<string> RouteWrites(FakeIt930x usb, int from)
+    {
+        lock (usb.Log) return [.. usb.Log.Skip(from).Where(It930xDeviceTests.TsRouteWrite)];
+    }
+
     [Test]
-    public async Task 選局と捨てるのを繰り返しても_TS_入力は使っている受信機のものだけが開いている()
+    public async Task 受信機を_1_つから_5_つまで足しても_捨てても_流している間はブリッジの_TS_の経路を書き換えない()
     {
         await Task.Yield();
         var (usb, _, _) = Fake();
+        usb.TsSource = AllInputs();
         var clock = new SharedClock();
         var tuners = Pe.Receivers.Select(receiver => Tuner(usb, "11-4", clock, receiver.Index)).ToArray();
-        // 受信機 0 だけは最後まで使い続ける (機材を閉じないように)
-        tuners[0].Tune(ChannelTable.Parse("T27")!);
         try
         {
-            var errors = Together(tuners.Length - 1, index =>
-            {
-                var tuner = tuners[index + 1];
-                for (var i = 0; i < 5; i++)
-                {
-                    tuner.Tune(ChannelTable.Parse(i % 2 == 0 ? "T22" : "T27")!);
-                    // 読み出しを止めるのと同じく、選局のあと TS を止める (StopOutput) のは次の選局
-                }
-            });
-            await Assert.That(errors.Select(error => error.ToString())).IsEmpty();
-            await Assert.That(Interleaving(usb, Pe)).IsEmpty();
-            // 開いている TS 入力は、選局している 5 つの受信機のぶん
+            // 1 つ目の選局で機材を開く。入力 0〜4 はそのとき全部開ける
+            tuners[0].Tune(ChannelTable.Parse("T27")!);
+            int opened;
+            lock (usb.Log) opened = usb.Log.LastIndexOf("W DA5A=1F") + 1;
+            await Assert.That(opened).IsGreaterThan(0);
             foreach (var receiver in Pe.Receivers)
             {
                 await Assert.That(usb.Registers.GetValueOrDefault(It930xBridge.TsEnable + (uint)receiver.TsInput)).IsEqualTo((byte)1);
             }
-            for (var index = 1; index < tuners.Length; index++) tuners[index].Dispose();
-            // 捨てた受信機の入力は閉じ、使っている受信機 0 の入力は開いたまま
-            foreach (var receiver in Pe.Receivers)
+            await Assert.That(Flowing(tuners[0])).IsTrue();
+            // 2 つ目から 5 つ目を 1 つずつ足す。足すたびに、流している受信機はどれも流れ続け、TS の経路には書かない
+            for (var count = 2; count <= tuners.Length; count++)
             {
-                var expected = (byte)(receiver.Index == 0 ? 1 : 0);
-                await Assert.That(usb.Registers.GetValueOrDefault(It930xBridge.TsEnable + (uint)receiver.TsInput)).IsEqualTo(expected);
+                tuners[count - 1].Tune(ChannelTable.Parse(count % 2 == 0 ? "T22" : "T27")!);
+                for (var index = 0; index < count; index++) await Assert.That(Flowing(tuners[index])).IsTrue();
+                await Assert.That(RouteWrites(usb, opened)).IsEmpty();
             }
+            // 並べて選局し直しても、捨てても書かない (受信機 0 は使い続けて、機材を閉じない)
+            var errors = Together(tuners.Length - 1, index =>
+            {
+                var tuner = tuners[index + 1];
+                for (var i = 0; i < 3; i++) tuner.Tune(ChannelTable.Parse(i % 2 == 0 ? "T27" : "T22")!);
+                tuner.Dispose();
+            });
+            await Assert.That(errors.Select(error => error.ToString())).IsEmpty();
+            await Assert.That(Interleaving(usb, Pe)).IsEmpty();
+            await Assert.That(RouteWrites(usb, opened)).IsEmpty();
             await Assert.That(tuners[0].Tuned).IsTrue();
+            await Assert.That(Flowing(tuners[0])).IsTrue();
         }
         finally
         {
             foreach (var tuner in tuners) tuner.Dispose();
+        }
+        // 最後の受信機を捨てて閉じるときに、入力を全部閉じて EP 0x84 をリセットする (DRV_ResetRxPort)。そのあと読みを止める
+        var after = RouteWrites(usb, 0).SkipWhile(line => line != "W DA5A=1F").Skip(1).ToList();
+        await Assert.That(after).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+        await Assert.That(usb.Log.IndexOf("TS 閉じる")).IsGreaterThan(usb.Log.LastIndexOf("W DA1D=00"));
+    }
+
+    [Test]
+    public async Task TS_のバッファを捨てるときは入力を全部閉じてリセットし_開け直す()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        usb.TsSource = AllInputs();
+        var clock = new SharedClock();
+        var tuner = Tuner(usb, "11-12", clock, 1);
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("T27")!);
+            int from;
+            lock (usb.Log) from = usb.Log.Count;
+            tuner.FlushTs();
+            // SDK の DRV_ResetRxPort (閉じる側) のあと、IT930x_probe と同じ順で開け直す
+            await Assert.That(RouteWrites(usb, from)).IsEquivalentTo(new[]
+            {
+                "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00",
+                "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F",
+            });
+            await Assert.That(Flowing(tuner)).IsTrue();
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task TS_のバッファを捨てるときに入力を閉じられなければ_開け直さずにその失敗を返す()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        var device = It930xDevice.Acquire("11-13", () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
+        try
+        {
+            int from;
+            lock (usb.Log) from = usb.Log.Count;
+            // 入力を閉じる最初の書き込みに応答しない
+            usb.Silent = 1;
+            Assert.Throws<It930xException>(device.FlushTs);
+            await Assert.That(RouteWrites(usb, from).Where(line => line.EndsWith("=01", StringComparison.Ordinal))).IsEmpty();
+        }
+        finally
+        {
+            device.Release();
+            It930xDevice.CloseIfIdle("11-13", TimeSpan.Zero);
+        }
+    }
+
+    [Test]
+    public async Task 閉じた機材では_TS_のバッファを捨てず_閉じた入力を開け直さない()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        var device = It930xDevice.Acquire("11-14", () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
+        device.Release();
+        It930xDevice.CloseIfIdle("11-14", TimeSpan.Zero);
+        int from;
+        lock (usb.Log) from = usb.Log.Count;
+        device.FlushTs();
+        await Assert.That(RouteWrites(usb, from)).IsEmpty();
+        await Assert.That(usb.Registers.GetValueOrDefault(It930xBridge.TsEnable)).IsEqualTo((byte)0);
+    }
+
+    [Test]
+    public async Task TS_のバッファを捨てるのと閉じるのが重なっても_閉じたあとに入力は開いていない()
+    {
+        await Task.Yield();
+        for (var round = 0; round < 20; round++)
+        {
+            var (usb, _, _) = Fake();
+            var port = $"11-15-{round}";
+            var device = It930xDevice.Acquire(port, () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
+            device.Release();
+            var errors = Together(2, index =>
+            {
+                if (index == 0) device.FlushTs();
+                else It930xDevice.CloseIfIdle(port, TimeSpan.Zero);
+            });
+            await Assert.That(errors.Select(error => error.ToString())).IsEmpty();
+            // 最後に書いたのは閉じる処理で、入力はどれも閉じている
+            foreach (var receiver in Pe.Receivers)
+            {
+                await Assert.That(usb.Registers.GetValueOrDefault(It930xBridge.TsEnable + (uint)receiver.TsInput)).IsEqualTo((byte)0);
+            }
         }
     }
 
@@ -297,9 +440,9 @@ public partial class It930xConcurrencyTests
         device.Release();
         var before = clock.Sleeps.Count;
         It930xDevice.CloseIfIdle("11-5", TimeSpan.Zero);
-        // GPIOH2 ← 0、GPIOH7 ← 1 のあと 100 ms (仕様書 1.5・10.3・11)
+        // GPIOH2 ← 0、GPIOH7 ← 1 のあと 100 ms (仕様書 1.5・10.3・11)。その前の 10 ms は、入力を全部閉じてから EP 0x84 をリセットするまでの待ち (DRV_ResetRxPort)
         await Assert.That(usb.Log.TakeLast(2)).IsEquivalentTo(new[] { "W D8B7=00", "W D8C3=01" });
-        await Assert.That(clock.Sleeps.Skip(before)).IsEquivalentTo(new[] { It930xDevice.PowerOffSettleMs });
+        await Assert.That(clock.Sleeps.Skip(before)).IsEquivalentTo(new[] { It930xBridge.InputsOffSettleMs, It930xDevice.PowerOffSettleMs });
         await Assert.That(It930xDevice.PowerOffSettleMs).IsEqualTo(100);
     }
 
@@ -372,7 +515,8 @@ public partial class It930xConcurrencyTests
             first.Release();
             It930xDevice.CloseIfIdle("11-8", TimeSpan.Zero);
         }
-        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読みを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
+        await Assert.That(usb.Log.Last(entry => entry.StartsWith("W ", StringComparison.Ordinal))).IsEqualTo("W D8C3=01");
     }
 
     [Test]
@@ -387,7 +531,8 @@ public partial class It930xConcurrencyTests
         await Assert.That(Closed(usb)).IsFalse();
         for (var i = 0; i < 100 && !Closed(usb); i++) await Task.Delay(50);
         await Assert.That(Closed(usb)).IsTrue();
-        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読みを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
+        await Assert.That(usb.Log.Last(entry => entry.StartsWith("W ", StringComparison.Ordinal))).IsEqualTo("W D8C3=01");
         // 閉じた機材は使わず、次の Acquire は開き直す
         usb.ResetSequence();
         var again = OpenAt(usb, "11-9");
@@ -414,7 +559,8 @@ public partial class It930xConcurrencyTests
         // CloseAll と同じ処理を、このテストのポートだけに
         It930xDevice.CloseAll(port => port == "11-10");
         await Assert.That(Closed(usb)).IsTrue();
-        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読みを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
+        await Assert.That(usb.Log.Last(entry => entry.StartsWith("W ", StringComparison.Ordinal))).IsEqualTo("W D8C3=01");
     }
 
     [Test]

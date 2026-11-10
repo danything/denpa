@@ -3,7 +3,7 @@ using System.IO.Pipelines;
 namespace Denpa.Agent.Tests;
 
 /*
- * IT930x の TS の経路 (It930xBridge.ConfigureTs・EnableTsInput)、分け方 (It930xTsDemux)、受信機ごとの出口 (It930xTsOutput)、
+ * IT930x の TS の経路 (It930xBridge.ConfigureTs・EnableTsInputs・DisableTsInputs・ReadTsStatus)、分け方 (It930xTsDemux)、受信機ごとの出口 (It930xTsOutput)、
  * --it930x-probe --ts。レジスタの並びは ITE の SDK と照らし、期待値に SDK の関数名を添える。同期バイトの値はこちらで決めたもの。
  */
 public class It930xTsTests
@@ -22,6 +22,8 @@ public class It930xTsTests
         await Assert.That(after.Empty).IsTrue();
         await Assert.That(usb.Log).IsEquivalentTo(new[]
         {
+            // 入力 0〜4 を閉じる (IT9300_disableTsPort。前のプロセスが開けたままでも、閉じた状態から設定する)
+            "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00",
             // IT9300_initialize: p_br_mp2if_ignore_sync_byte
             "W DA1A=00",
             // IT9300_setOutTsType: dvbt_inten (bit 2) を 1、mpeg_full_speed を 0、dvbt_en を 1 (IT9300_writeRegisterBits は読んでから書く)
@@ -51,9 +53,10 @@ public class It930xTsTests
             "W DA75=01", "W DA7A=37",
             "W DA76=01", "W DA7B=57",
             "W DA77=01", "W DA7C=67",
-            // IT9300_setIgnoreFail
-            "W DA5A=1F",
         });
+        // 入力はまだ開けない (誤りのあるパケットを通す設定も、入力を開けるときに書く)
+        await Assert.That(usb.Log).DoesNotContain("W DA4C=01");
+        await Assert.That(usb.Log).DoesNotContain("W DA5A=1F");
     }
 
     [Test]
@@ -86,23 +89,61 @@ public class It930xTsTests
         var usb = new FakeIt930x();
         var bridge = new It930xBridge(usb, _ => { });
         bridge.ConfigureTs([true, false, true, true, true]);
-        await Assert.That(usb.Log.Where(line => line.StartsWith("W DA5", StringComparison.Ordinal)))
-            .IsEquivalentTo(new[] { "W DA58=01", "W DA59=00", "W DA5A=1F" });
+        await Assert.That(usb.Log.Where(line => line.StartsWith("W DA58", StringComparison.Ordinal) || line.StartsWith("W DA59", StringComparison.Ordinal)))
+            .IsEquivalentTo(new[] { "W DA58=01", "W DA59=00" });
         Assert.Throws<ArgumentException>(() => bridge.ConfigureTs(new bool[4]));
     }
 
     [Test]
-    public async Task 入力は_1_つずつ開けて閉じる()
+    public async Task 入力は全部まとめて開け_閉じるときは_10_ms_待って_EP_0x84_をリセットする()
     {
         var usb = new FakeIt930x();
-        var bridge = new It930xBridge(usb, _ => { });
-        bridge.EnableTsInput(0, true);
-        bridge.EnableTsInput(4, true);
-        bridge.EnableTsInput(4, false);
-        // IT9300_enableTsPort・IT9300_disableTsPort (p_br_reg_ts0_en + 入力)
-        await Assert.That(usb.Log).IsEquivalentTo(new[] { "W DA4C=01", "W DA50=01", "W DA50=00" });
-        Assert.Throws<ArgumentOutOfRangeException>(() => bridge.EnableTsInput(5, true));
-        Assert.Throws<ArgumentOutOfRangeException>(() => bridge.EnableTsInput(-1, true));
+        var sleeps = new List<int>();
+        var bridge = new It930xBridge(usb, sleeps.Add);
+        bridge.EnableTsInputs();
+        // IT930x_probe の「Enable TsPort」: IT9300_enableTsPort を入力ごと (p_br_reg_ts0_en + 入力) → IT9300_setIgnoreFail
+        await Assert.That(usb.Log).IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
+        usb.Log.Clear();
+        bridge.DisableTsInputs();
+        // DRV_ResetRxPort の閉じる側: IT9300_disableTsPort を入力ごと → mdelay(10) → 0xDA1D に 1、0
+        await Assert.That(usb.Log).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+        await Assert.That(sleeps).IsEquivalentTo(new[] { It930xBridge.InputsOffSettleMs });
+        await Assert.That(It930xBridge.InputsOffSettleMs).IsEqualTo(10);
+    }
+
+    [Test]
+    public async Task TS_の経路の状態は読むだけで書かない()
+    {
+        var usb = new FakeIt930x();
+        usb.Registers[0xDA99] = 1;
+        usb.Registers[It930xBridge.TsEnable + 2] = 1;
+        usb.Registers[It930xBridge.TsOverflow1 + 1] = 1;
+        usb.Registers[It930xBridge.LostPackets] = 0x34;
+        usb.Registers[It930xBridge.LostPackets + 1] = 0x12;
+        usb.Registers[It930xBridge.Ep4Stall] = 0x20;
+        var status = new It930xBridge(usb, _ => { }).ReadTsStatus();
+        await Assert.That(usb.Log.Any(line => line.StartsWith('W'))).IsFalse();
+        await Assert.That(status.Psb).IsEqualTo(new It930xPsb(0, 1));
+        await Assert.That(status.Enabled).IsEquivalentTo(new byte[] { 0, 0, 1, 0, 0 });
+        // 入力 0 は 0xDA57、入力 1〜4 は 0xDA8B から
+        await Assert.That(status.Overflow).IsEquivalentTo(new byte[] { 0, 0, 1, 0, 0 });
+        await Assert.That(status.LostPackets).IsEqualTo((ushort)0x1234);
+        var text = status.Describe();
+        await Assert.That(text).Contains("入力の開閉 (0xDA4C〜) 0 0 1 0 0");
+        await Assert.That(text).Contains("ストール 1");
+        await Assert.That(text).Contains("0xF53A = 00");
+    }
+
+    [Test]
+    public async Task EP_0x84_の読みは_SDK_と同じ大きさで_SDK_より多く出す()
+    {
+        // URB_BUFSIZE (188 × 348) は 188 バイトのパケットの区切りで、EP 0x84 の転送の大きさ (0xDD88) は 4 バイト単位
+        await Assert.That(It930xBridge.TsTransferSize).IsEqualTo(188 * 348);
+        await Assert.That(It930xBridge.TsTransferSize % 188).IsEqualTo(0);
+        await Assert.That(It930xBridge.TsTransferSize % 4).IsEqualTo(0);
+        // BR_URB_COUNT (8) より少なくしない
+        await Assert.That(It930xBridge.SdkTsDepth).IsEqualTo(8);
+        await Assert.That(It930xBridge.TsDepth).IsGreaterThanOrEqualTo(It930xBridge.SdkTsDepth);
     }
 
     // ---------------------------------------------------------------------
@@ -368,13 +409,32 @@ public class It930xTsTests
         await Assert.That(text).Contains("2 回で 1128 バイト");
         await Assert.That(text).Contains("入力ごとのパケット: 0 (0x17) 3、1 (0x27) 0、2 (0x37) 0、3 (0x57) 0、4 (0x67) 2");
         await Assert.That(text).Contains("飛ばした 0 バイト、知らない同期バイトのパケット 1 個、揃いが外れた 0 回");
-        // 読みを出してから入力を開け、終わったら入力を閉じてから読みを閉じる。そのあと REBOOT する
+        // 読みを出してから入力を開け、終わったら入力を閉じて EP 0x84 をリセットしてから読みを閉じる。そのあと REBOOT する
         var log = usb.Log;
         var opened = log.IndexOf("TS 65424 16");
-        await Assert.That(opened).IsGreaterThan(log.IndexOf("W DA5A=1F"));
-        await Assert.That(log.Skip(opened + 1).Take(5)).IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01" });
+        await Assert.That(opened).IsGreaterThan(log.IndexOf("W DA7C=67"));
+        await Assert.That(log.Skip(opened + 1).Take(6)).IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
         var closed = log.IndexOf("TS 閉じる");
-        await Assert.That(log.Skip(closed - 5).Take(5)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00" });
+        await Assert.That(log.Skip(closed - 7).Take(7)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
         await Assert.That(log.IndexOf("REBOOT")).IsGreaterThan(closed);
+        // 閉じたあとにブリッジの TS の経路の状態を出す
+        await Assert.That(text).Contains("ブリッジ: 残りのバッファ");
+    }
+
+    // ---------------------------------------------------------------------
+    // --tune --steps
+    // ---------------------------------------------------------------------
+
+    [Test]
+    public async Task steps_は受信機の数を増えていく並びで書く()
+    {
+        await Assert.That(It930xSteps.ParseSteps("2,3,5", 5)).IsEquivalentTo(new[] { 2, 3, 5 });
+        await Assert.That(It930xSteps.ParseSteps("1", 1)).IsEquivalentTo(new[] { 1 });
+        await Assert.That(It930xSteps.ParseSteps("2,2", 5)).IsNull();
+        await Assert.That(It930xSteps.ParseSteps("3,2", 5)).IsNull();
+        await Assert.That(It930xSteps.ParseSteps("2,6", 5)).IsNull();
+        await Assert.That(It930xSteps.ParseSteps("0,2", 5)).IsNull();
+        await Assert.That(It930xSteps.ParseSteps("2,x", 5)).IsNull();
+        await Assert.That(It930xSteps.ParseSteps(null, 5)).IsNull();
     }
 }

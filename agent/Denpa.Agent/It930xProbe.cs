@@ -190,7 +190,7 @@ public static class It930xProbe
 
     /// <summary>
     /// TS の経路を設定し、入力 0〜4 を開けて EP 0x84 を <paramref name="length"/> だけ読み、入力ごとのパケットの数と捨てた数を出す。
-    /// 終わったら入力を閉じる。入力の形はどれもシリアルにする (It930xDevice と同じ。PX-MLT5PE はこの形で TS を受けられた)
+    /// 終わったら入力を全部閉じて EP 0x84 をリセットし、ブリッジの TS の経路の状態を出す。入力の形はどれもシリアルにする (It930xDevice と同じ。PX-MLT5PE はこの形で TS を受けられた)
     /// </summary>
     private static void CheckTs(It930xBridge bridge, IUsbDevice usb, TimeSpan length, TextWriter output)
     {
@@ -208,7 +208,7 @@ public static class It930xProbe
         {
             try
             {
-                for (var port = 0; port < It930xBridge.TsInputs; port++) bridge.EnableTsInput(port, true);
+                bridge.EnableTsInputs();
                 started = clock.Elapsed;
                 while (clock.Elapsed - started < length)
                 {
@@ -221,19 +221,18 @@ public static class It930xProbe
             }
             finally
             {
-                for (var port = 0; port < It930xBridge.TsInputs; port++)
+                // 読みを止める前に、入力を全部閉じて EP 0x84 をリセットする (SDK の DRV_ResetRxPort。It930xDevice が閉じるときと同じ)
+                try
                 {
-                    try
-                    {
-                        bridge.EnableTsInput(port, false);
-                    }
-                    catch (It930xException error)
-                    {
-                        output.WriteLine($"入力 {port} を閉じられませんでした: {error.Message}");
-                    }
+                    bridge.DisableTsInputs();
+                }
+                catch (It930xException error)
+                {
+                    output.WriteLine($"入力を閉じられませんでした: {error.Message}");
                 }
             }
         }
+        output.WriteLine(bridge.ReadTsStatus().Describe());
         var seconds = (clock.Elapsed - started).TotalSeconds;
         output.WriteLine($"TS: EP 0x{It930xBridge.TsIn:X2} を {seconds:F1} 秒読み、{reads} 回で {bytes} バイト ({bytes * 8 / Math.Max(seconds, 0.001) / 1e6:F2} Mbps)");
         output.WriteLine("入力ごとのパケット: " + string.Join("、", Enumerable.Range(0, It930xBridge.TsInputs)
