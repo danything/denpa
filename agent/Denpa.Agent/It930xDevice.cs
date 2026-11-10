@@ -236,7 +236,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 待機中の地上波の RF 入力の整合を保つ設定を、機材の全受信機で立てる (仕様書 4.7)。電源を入れてから最初に J.83B を選局するときに、
+    /// 待機中の地上波の RF 入力の整合を保つ設定を、機材の全受信機で立てる (仕様書 4.7)。電源を入れてから最初に J.83B か ISDB-C を選局するときに、
     /// その受信機 (<paramref name="receiver"/>) のチューナーが呼ぶ。2 回目からは何もしない。
     /// 地上波・ケーブルの RF 入力は全チューナーに分配しているので、あるチューナーが待機と動作を切り替えると隣の受信機の 256QAM に誤りが出たため。
     /// 閉じている受信機 (スリープか、まだ使っていない) は初期化し直して待機させ、動作中の受信機は設定だけを立てて止めるときに書く。
@@ -249,7 +249,7 @@ public sealed class It930xDevice
             if (_matching) return;
             _matching = true;
         }
-        Log.Write($"[{Label}] J.83B を選局するので、全受信機を待機中の RF 入力の整合を保つ設定にします");
+        Log.Write($"[{Label}] J.83B か ISDB-C を選局するので、全受信機を待機中の RF 入力の整合を保つ設定にします");
         foreach (var other in Model.Receivers.Select(item => item.Index))
         {
             try
@@ -432,7 +432,7 @@ public sealed class It930xDevice
 }
 
 /// <summary>
-/// IT930x の機材の受信機 1 つ (設定の <c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c>)。地上波 (ISDB-T)・衛星 (ISDB-S)・J.83B (スカパー！プレミアムサービス光) を同じ受信機で切り替えて選局する。
+/// IT930x の機材の受信機 1 つ (設定の <c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c>)。地上波 (ISDB-T)・衛星 (ISDB-S)・J.83B (スカパー！プレミアムサービス光)・ISDB-C (ケーブルテレビのトランスモジュレーション方式) を同じ受信機で切り替えて選局する。
 /// J.83B の TS はスクランブルされたまま流す (スカパー！プレミアムのカードはまだ扱わない。<see cref="Lease"/> は B-CAS のカードに問い合わせない)。
 /// 機材 (<see cref="It930xDevice"/>) は最初の選局で取り、捨てるときに返す。
 /// 選局のたびに新しい出口 (<see cref="It930xTsOutput"/>。Pipe と DeviceStream) を作り、前の選局のパケットと混ぜない
@@ -536,6 +536,10 @@ public sealed class It930xTuner : ITuneDevice
         lock (_gate)
         {
             StopOutput();
+            CableFrequency = null;
+            IsdbcLocked = false;
+            Tsmf = null;
+            IsdbcFailedSignal = null;
             // 抜けた・TS を読めなくなった機材は返して、開き直す
             if (_device is { Faulted: true }) Drop();
             try
@@ -554,7 +558,19 @@ public sealed class It930xTuner : ITuneDevice
                 {
                     _device.Lnb(_receiver, false);
                     _device.KeepMatching(_receiver);
-                    locked = TuneCable(_frontend, tuning);
+                    locked = TuneCable(tuning, _frontend.TuneJ83b);
+                }
+                else if (tuning.IsdbC)
+                {
+                    /*
+                     * ISDB-C (仕様書 7A.4)。手順 1 の「ブリッジが NULL パケットを落とさないようにする」(仕様書 3.4) は、denpa のブリッジの層が
+                     * どの方式でも PID で落とす設定を使っていないので、切り替える書き込みは無い。TSMF の判定の状態は、選局のたびに TsmfSelector を作り直して最初に戻す。
+                     * 整合を保つ設定 (仕様書 4.7) は J.83B と同じく、最初の選局で全受信機に立てる
+                     */
+                    _device.Lnb(_receiver, false);
+                    _device.KeepMatching(_receiver);
+                    locked = TuneCable(tuning, _frontend.TuneIsdbc);
+                    IsdbcLocked = locked;
                 }
                 else
                 {
@@ -562,9 +578,13 @@ public sealed class It930xTuner : ITuneDevice
                     locked = _frontend.TuneIsdbt(Khz(tuning.Frequency));
                 }
                 if (!locked) throw new IOException(ITuneDevice.SyncFailed);
-                var output = new It930xTsOutput();
+                // TSMF で TS を選ぶ処理は ISDB-C のときだけ通す (仕様書 10.1)。ロックのあとで作る (仕様書 7A.7 の「パケットごとの処理」の 1)
+                var tsmf = tuning.IsdbC ? new TsmfSelector(tuning.TsmfIndex) : null;
+                Tsmf = tsmf;
+                var output = new It930xTsOutput(tsmf);
                 _device.Attach(_receiver, output);
                 _output = output;
+                if (tsmf is not null) WaitTsmf(_frontend, tsmf);
             }
             catch (IOException error)
             {
@@ -589,19 +609,20 @@ public sealed class It930xTuner : ITuneDevice
     }
 
     /// <summary>
-    /// J.83B で、地域によってずらして送られることがあるチャンネル (<see cref="ChannelTable.Tuning.ShiftedFrequency"/>) の、最後にロックした周波数 (Hz)。
+    /// J.83B と ISDB-C で、ずらして送られることがあるチャンネル (<see cref="ChannelTable.Tuning.ShiftedFrequency"/>) の、最後にロックした周波数 (Hz)。
     /// 選局表の周波数をキーにする。次の選局はこちらを先に試す (毎回 1 秒の時間切れを待たないため。仕様書に無い)
     /// </summary>
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, uint> CableLocked = new();
 
-    /// <summary>最後の J.83B の選局で受けた周波数 (Hz。<c>--tune</c> が出す)。J.83B でなければ null</summary>
+    /// <summary>最後の J.83B か ISDB-C の選局で受けた周波数 (Hz。<c>--tune</c> が出す)。ロックしなかったか、ほかの方式なら null</summary>
     public uint? CableFrequency { get; private set; }
 
     /// <summary>
-    /// J.83B を選局する (仕様書 7.4)。ずらして送られることがあるチャンネル (仕様書 7.1) は、選局表の周波数とずらした周波数の両方を試し、
+    /// J.83B か ISDB-C を選局する (仕様書 7.4・7A.4)。<paramref name="tune"/> は中心周波数の kHz を受け取って選局し、ロックしたかを返す。
+    /// ずらして送られることがあるチャンネル (仕様書 7.1。ISDB-C の C24〜C27 は仕様書 7A.2 の推定の使い方) は、選局表の周波数とずらした周波数の両方を試し、
     /// 前にロックしたほうを先にする。どちらもロックしなければ false
     /// </summary>
-    private bool TuneCable(Cxd2856Frontend frontend, ChannelTable.Tuning tuning)
+    private bool TuneCable(ChannelTable.Tuning tuning, Func<uint, bool> tune)
     {
         CableFrequency = null;
         uint[] tries = tuning.ShiftedFrequency is { } shifted
@@ -609,7 +630,7 @@ public sealed class It930xTuner : ITuneDevice
             : [tuning.Frequency];
         foreach (var hertz in tries)
         {
-            if (!frontend.TuneJ83b(Khz(hertz))) continue;
+            if (!tune(Khz(hertz))) continue;
             if (tuning.ShiftedFrequency is not null) CableLocked[tuning.Frequency] = hertz;
             CableFrequency = hertz;
             return true;
@@ -617,11 +638,54 @@ public sealed class It930xTuner : ITuneDevice
         return false;
     }
 
-    /// <summary>最後の J.83B の選局で読んだ変調 (<c>256QAM</c> など。<see cref="Signal"/> を読んだあと)。<c>--tune</c> だけが出す</summary>
+    /// <summary>ISDB-C で「指定した TS が無い」ときの失敗の文の先頭 (仕様書 7A.7。ロックしないときの <see cref="ITuneDevice.SyncFailed"/> とは別の失敗)</summary>
+    public const string TsmfMissing = "指定した TS がありません";
+
+    /// <summary>TSMF の判定の時間切れ (ms。仕様書 7A.7・11 の 3 秒)。変えるのはテストのため</summary>
+    internal int TsmfTimeoutMs { get; init; } = TsmfSelector.TimeoutMs;
+
+    /// <summary>最後の選局が ISDB-C で、復調器がロックしたか (<c>--tune</c> が出す)</summary>
+    public bool IsdbcLocked { get; private set; }
+
+    /// <summary>最後の ISDB-C の選局の TSMF の判定 (<c>--tune</c> が出す)。選局に失敗したあとも残す。ISDB-C でないか、ロックしなかったなら null</summary>
+    public TsmfSelector? Tsmf { get; private set; }
+
+    /// <summary>ISDB-C でロックしたあと TSMF の判定で失敗したときに、TS を止める前に読んだ信号品質 (<c>--tune</c> が出す)。読めなければ null</summary>
+    public TunerSignal? IsdbcFailedSignal { get; private set; }
+
+    /// <summary>
+    /// TSMF の判定を待つ (仕様書 7A.4 の手順 6・7A.7 の「判定の待ち」)。判定には TS が要るので、ブリッジの入力を開けてから呼ぶ。
+    /// 3 秒で決まらなければロックしないときと同じ失敗、「指定した TS が無い」は別の失敗にして、TS を止める
+    /// </summary>
+    private void WaitTsmf(Cxd2856Frontend frontend, TsmfSelector tsmf)
+    {
+        var decision = tsmf.Wait(TsmfTimeoutMs);
+        if (decision is TsmfDecision.Selected or TsmfDecision.Passthrough) return;
+        // --tune が失敗の様子を出せるよう、止める前に変調と C/N を読んでおく
+        try
+        {
+            IsdbcFailedSignal = frontend.Signal();
+        }
+        catch (IOException)
+        {
+            // 元の失敗を返す
+        }
+        StopOutput();
+        if (decision == TsmfDecision.Pending) throw new IOException(ITuneDevice.SyncFailed);
+        var detail = tsmf.FirstHeader is { } header
+            ? $"TSMF の有効な TS は {header.ValidStreams.Count} 本で、{tsmf.Index} 本目 (0 から数える) を指定した"
+            : $"TSMF を使わない搬送波で、TS は 0 本目だけ。{tsmf.Index} 本目を指定した";
+        throw new IOException($"{TsmfMissing} ({detail})");
+    }
+
+    /// <summary>最後の J.83B か ISDB-C の選局で読んだ変調 (<c>256QAM</c> など。<see cref="Signal"/> を読んだあと)。<c>--tune</c> だけが出す</summary>
     public string? CableModulation => _frontend?.CableModulation;
 
-    /// <summary>最後の J.83B の選局で読んだ PER (<see cref="Signal"/> を読んだあと。J.83B で値が正しいかは未確認)。<c>--tune</c> だけが出す</summary>
+    /// <summary>最後の J.83B か ISDB-C の選局で読んだ PER (<see cref="Signal"/> を読んだあと。値が正しいかは未確認)。<c>--tune</c> だけが出す</summary>
     public double? CablePer => _frontend?.CablePer;
+
+    /// <summary>最後の ISDB-C の選局で、ほかに読めた値 (仕様書 8.4A。<see cref="Signal"/> を読んだあと)。<c>--tune</c> だけが出す</summary>
+    public CxdIsdbcDetail? IsdbcDetail => _frontend?.IsdbcDetail;
 
     /// <summary>流している TS を止める</summary>
     private void StopOutput()

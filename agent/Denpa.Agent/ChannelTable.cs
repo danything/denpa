@@ -27,6 +27,15 @@ public static class ChannelTable
     /// <summary>スカパー！プレミアムサービス光 (J.83B) の種別。サーバの <c>ChannelType</c> の <c>SKY</c></summary>
     public const string Sky = "SKY";
 
+    /// <summary>`linux/dvb/frontend.h` の <c>SYS_ISDBC</c> (J.83 Annex C。ケーブルテレビのトランスモジュレーション方式。仕様書 7A)</summary>
+    public const int SysIsdbc = 10;
+
+    /// <summary>
+    /// ケーブルテレビのトランスモジュレーション方式 (ISDB-C) の種別。いまは <c>--tune</c> で確かめるための仮の名前で、
+    /// サーバの <c>ChannelType</c> には無い (受けられる種別にも挙げない)
+    /// </summary>
+    public const string Catv = "CATV";
+
     /// <summary>TS を選り分けない (<c>NO_STREAM_ID_FILTER</c>)</summary>
     public const uint NoStreamId = ~0U;
 
@@ -34,8 +43,8 @@ public static class ChannelTable
     /// 1 つの物理チャンネルを選局するのに要るもの、全部。
     /// </summary>
     /// <param name="Type">denpa の種別 (GR / BS / CS / SKY)</param>
-    /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/> / <see cref="SysDvbcAnnexB"/>)</param>
-    /// <param name="Frequency">**地上波と J.83B は Hz、衛星は kHz**</param>
+    /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/> / <see cref="SysDvbcAnnexB"/> / <see cref="SysIsdbc"/>)</param>
+    /// <param name="Frequency">**地上波と J.83B と ISDB-C は Hz、衛星は kHz**</param>
     /// <param name="StreamId">
     /// 復調器に渡す TSID。BS で名前に TSID があるときだけ入る。無ければ <see cref="NoStreamId"/> (選り分けない) で、
     /// その中継器の先頭の TS が来る (NIT を読む入口の <c>BS15</c> はこれ)
@@ -45,15 +54,23 @@ public static class ChannelTable
     /// いまはどの機材も番組を選り分けず、TS をまるごと流す
     /// </param>
     /// <param name="ShiftedFrequency">
-    /// J.83B で、地域によってずらして送られることがあるチャンネルの、ずらした周波数 (Hz)。ほかは null。
+    /// J.83B と ISDB-C で、ずらして送られることがあるチャンネルの、ずらした周波数 (Hz)。ほかは null。
     /// どちらで送られているかは選局するまで分からないので、受ける側が両方を試す (<see cref="It930xTuner"/>)
     /// </param>
-    public sealed record Tuning(string Type, int Delivery, uint Frequency, uint StreamId, int? ServiceId = null, uint? ShiftedFrequency = null)
+    /// <param name="TsmfIndex">
+    /// ISDB-C で受ける TS。TSMF のフレームにある有効な TS を、相対 TS 番号の小さい順に並べたときの何本目か (0〜14。仕様書 7A.7)。
+    /// 名前に <c>:2</c> のように付いているときだけ入り、無ければ 0。ほかの方式では使わない
+    /// </param>
+    public sealed record Tuning(
+        string Type, int Delivery, uint Frequency, uint StreamId, int? ServiceId = null, uint? ShiftedFrequency = null, int TsmfIndex = 0)
     {
         public bool Satellite => Delivery == SysIsdbs;
 
         /// <summary>J.83B (スカパー！プレミアムサービス光)</summary>
         public bool Cable => Delivery == SysDvbcAnnexB;
+
+        /// <summary>ISDB-C (J.83 Annex C。ケーブルテレビのトランスモジュレーション方式)。J.83B (<see cref="Cable"/>) とは別の方式</summary>
+        public bool IsdbC => Delivery == SysIsdbc;
     }
 
     /// <summary>
@@ -61,7 +78,9 @@ public static class ChannelTable
     ///
     /// <para>
     /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (CATV) / <c>BS01</c>–<c>BS23</c> / <c>CS02</c>–<c>CS24</c> /
-    /// <c>H01</c>–<c>H105</c> (スカパー！プレミアムサービス光。J.83B)。
+    /// <c>H01</c>–<c>H105</c> (スカパー！プレミアムサービス光。J.83B) /
+    /// <c>QC13</c>–<c>QC63</c>・<c>QU13</c>–<c>QU62</c>・<c>QV1</c>–<c>QV12</c> (ISDB-C。CATV・UHF・VHF の帯域。<c>--tune</c> で確かめるための仮の名前)。
+    /// ISDB-C は <c>:k</c> を付けて TSMF の TS を指す (<c>QC30:2</c>。有効な TS の 0〜14 本目)。付けなければ 0 本目。
     /// 衛星は <c>:TSID</c> を付けて TS を指す (<c>BS15:16625</c>)。付けなければ中継器の先頭の TS。
     /// 衛星は BS が奇数、CS が偶数で、**BS-7 と BS-17 だけは受け取らない。**
     /// あそこは 4K/8K (ISDB-S3) で、この構成のチューナーでは復調できない。
@@ -105,6 +124,49 @@ public static class ChannelTable
             };
             var center = (uint)(93_250_000 + (channel - 1) * 6_500_000);
             return new Tuning(Sky, SysDvbcAnnexB, center, NoStreamId, ShiftedFrequency: shift == 0 ? null : center + shift);
+        }
+
+        if (name.StartsWith("Q", StringComparison.Ordinal))
+        {
+            /*
+             * ISDB-C (ケーブルテレビのトランスモジュレーション方式)。中心周波数で、地上波や CATV のパススルー (C13〜C63) と違って 1/7 MHz は足さない (仕様書 7A.2)。
+             * QC は CATV の帯域 (C13〜C63)、QU は UHF 13〜62、QV は VHF 1〜12。C22 と VHF 4〜7 は 6 MHz おきの並びから 2 MHz ずれている。
+             * C24〜C27 は、2 MHz ずらした周波数を載せた資料もあるので (どちらで送られているかは未確認)、ずらした周波数も持つ (仕様書 7A.2 の推定の使い方)
+             */
+            if (name.Length < 3) return null;
+            var body = name[2..];
+            var index = 0;
+            var colon = body.IndexOf(':');
+            if (colon >= 0)
+            {
+                var text = body[(colon + 1)..];
+                if (text.Length is 0 or > 2 || !text.All(char.IsAsciiDigit)
+                    || !int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out index) || index > TsmfSelector.MaxIndex) return null;
+                body = body[..colon];
+            }
+            if (!Number(body, out var channel)) return null;
+            uint? khz = name[1] switch
+            {
+                'C' => channel switch
+                {
+                    >= 13 and <= 21 => (uint)(111_000 + 6_000 * (channel - 13)),
+                    22 => 167_000u,
+                    >= 23 and <= 63 => (uint)(225_000 + 6_000 * (channel - 23)),
+                    _ => null,
+                },
+                'U' => channel is >= 13 and <= 62 ? (uint)(473_000 + 6_000 * (channel - 13)) : null,
+                'V' => channel switch
+                {
+                    >= 1 and <= 3 => (uint)(93_000 + 6_000 * (channel - 1)),
+                    >= 4 and <= 7 => (uint)(173_000 + 6_000 * (channel - 4)),
+                    >= 8 and <= 12 => (uint)(195_000 + 6_000 * (channel - 8)),
+                    _ => null,
+                },
+                _ => null,
+            };
+            if (khz is not { } center) return null;
+            var shifted = name[1] == 'C' && channel is >= 24 and <= 27;
+            return new Tuning(Catv, SysIsdbc, center * 1000, NoStreamId, ShiftedFrequency: shifted ? (center + 2_000) * 1000 : null, TsmfIndex: index);
         }
 
         if (name.StartsWith("BS", StringComparison.Ordinal))

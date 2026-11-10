@@ -80,6 +80,7 @@
         <Compile Include="../Denpa.Agent/It930xCard.cs" />
         <Compile Include="../Denpa.Agent/Cxd2856.cs" />
         <Compile Include="../Denpa.Agent/Cxd2858.cs" />
+        <Compile Include="../Denpa.Agent/Tsmf.cs" />
         <Compile Include="../Denpa.Agent/ContinuityCount.cs" />
         <Compile Include="../Denpa.Agent/Probe.cs" />
         <Compile Include="../Denpa.Agent/TsObservation.cs" />

@@ -121,6 +121,17 @@ internal sealed class FakeIt930x : IUsbDevice
     /// <summary>EP 0x84 の読みが返すバイト列 (1 つが 1 回の読み)。尽きたら時間切れ (0) を返す</summary>
     public Queue<byte[]> Ts { get; } = new();
 
+    /// <summary>
+    /// <see cref="Ts"/> が尽きているときに、EP 0x84 の読みが返すバイト列を作る (流れ続ける TS の代わり。読むスレッドから呼ぶ)。null を返したら時間切れ
+    /// </summary>
+    public Func<byte[]?>? TsSource
+    {
+        get => _tsSource;
+        set => _tsSource = value;
+    }
+
+    private volatile Func<byte[]?>? _tsSource;
+
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
     {
         if (endpoint != 0x84) throw new InvalidOperationException($"EP 0x{endpoint:X2} の読みを出した");
@@ -135,8 +146,10 @@ internal sealed class FakeIt930x : IUsbDevice
         {
             if (!owner.Ts.TryDequeue(out var chunk))
             {
+                chunk = owner.TsSource?.Invoke();
+                // 流れ続ける TS でも、ほかのスレッドが動けるように待つ
                 Thread.Sleep(1);
-                return 0;
+                if (chunk is null) return 0;
             }
             chunk.CopyTo(buffer);
             return chunk.Length;

@@ -267,9 +267,16 @@ public static class Probe
                 return 1;
             }
 
+            if (tuning.IsdbC && tuner is not It930xTuner)
+            {
+                Console.Error.WriteLine($"{name}: ISDB-C を選局できるのは {It930x.Scheme} の受信機だけです");
+                return 1;
+            }
+
             var streamId = tuning.StreamId;
             var unit = tuning.Satellite ? "kHz" : "Hz";
-            var filter = streamId == ChannelTable.NoStreamId ? "" : $" TSID={streamId}";
+            var filter = streamId != ChannelTable.NoStreamId ? $" TSID={streamId}"
+                : tuning.IsdbC ? $" ISDB-C  TSMF の有効な TS の {tuning.TsmfIndex} 本目 (0 から数える)" : "";
             var shifted = tuning.ShiftedFrequency is { } other ? $" (ずらした周波数 {other} Hz も試す)" : "";
             Console.WriteLine($"--- {name}  {tuning.Frequency} {unit}{filter}{shifted}");
             // スカパー！プレミアムのカードはまだ扱わないので、--decode でも B-CAS のカードに渡さない (TunerPool の Lease と同じ)
@@ -284,6 +291,18 @@ public static class Probe
             catch (IOException error)
             {
                 Console.Error.WriteLine($"{name}: {error.Message}");
+                // ISDB-C は、どこで失敗したか (ロック・TSMF の判定) と、ロックしていれば変調と C/N も出す
+                if (tuning.IsdbC && tuner is It930xTuner failed)
+                {
+                    Console.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+                    if (failed.CableFrequency is { } tried) Console.WriteLine($"    ロックした周波数 {tried} Hz");
+                    foreach (var line in TsmfLines(failed.IsdbcLocked, failed.Tsmf)) Console.WriteLine($"    {line}");
+                    if (failed.IsdbcFailedSignal is { } last)
+                    {
+                        Console.WriteLine($"    {(last.Locked ? "ロック中" : "ロックしていない")}  C/N {(last.Cn is { } lastCn ? $"{lastCn:F1} dB" : "-")}  強度 {(last.StrengthDbm is { } lastDbm ? $"{lastDbm:F1} dBm (目安)" : "-")}");
+                        foreach (var line in IsdbcSignalLines(failed.CableModulation, failed.CablePer, failed.IsdbcDetail)) Console.WriteLine($"    {line}");
+                    }
+                }
                 continue;
             }
             Console.WriteLine($"    同期 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
@@ -297,6 +316,11 @@ public static class Probe
                     Console.WriteLine($"    TMCC の TSID  {string.Join(" ", streams.Select((tsid, relative) => $"{relative}:{tsid}"))}");
                 }
                 if (it930x.CableFrequency is { } locked) Console.WriteLine($"    受けた周波数 {locked} Hz");
+                // ISDB-C は TSMF の判定と、ヘッダーにある TS の一覧も出す (仕様書 7A.7)
+                if (tuning.IsdbC)
+                {
+                    foreach (var line in TsmfLines(it930x.IsdbcLocked, it930x.Tsmf)) Console.WriteLine($"    {line}");
+                }
             }
             Measure(tuner.Output, name, descramble ? new Descrambler(source) : null, seconds);
             // IT930x の機材は C/N と強度も出す (受け終えたあとの値)
@@ -311,10 +335,98 @@ public static class Probe
                 {
                     Console.WriteLine($"    変調 {receiver.CableModulation ?? "-"}  PER {(receiver.CablePer is { } per ? $"{per:G3} (未確認の値)" : "-")}");
                 }
+                // ISDB-C は変調と PER と、ほかに読める値 (仕様書 8.4A。どれも実機で読んだ記録が無い)
+                if (tuning.IsdbC)
+                {
+                    foreach (var line in IsdbcSignalLines(receiver.CableModulation, receiver.CablePer, receiver.IsdbcDetail)) Console.WriteLine($"    {line}");
+                }
+            }
+            // ISDB-C は、受け終えたあとの TSMF の数と、出力した TS の PAT の TSID も出す
+            if (tuning.IsdbC && tuner is It930xTuner measured && measured.Tsmf is { } tsmf)
+            {
+                foreach (var line in TsmfAfterLines(tsmf)) Console.WriteLine($"    {line}");
             }
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// <c>--tune</c> が ISDB-C で出す、ロックと TSMF の判定 (仕様書 7A.6・7A.7)。ヘッダーを受けていれば、相対 TS 番号ごとの TSID・original_network_id・有効かどうか・
+    /// スロットの数と、選んだ TS、ヘッダーの 188 バイトも出す。TSID と original_network_id の並びは仕様書の推定なので、そう書いて出す
+    /// </summary>
+    internal static IEnumerable<string> TsmfLines(bool locked, TsmfSelector? tsmf)
+    {
+        if (!locked || tsmf is null)
+        {
+            yield return $"ISDB-C: ロックしませんでした ({Cxd2856Frontend.IsdbcLockTimeoutMs} ms の間に、復調と TS のロックがそろわなかった)";
+            yield break;
+        }
+        yield return "ISDB-C: ロックしました";
+        var decision = tsmf.Decision;
+        if (tsmf.FirstHeader is not { } header)
+        {
+            yield return decision switch
+            {
+                TsmfDecision.Passthrough => $"TSMF: ヘッダーなし ({TsmfSelector.NoHeaderPackets} パケットの間に来なかった)。TS が 1 つの搬送波として、そのまま出力します",
+                TsmfDecision.Missing => $"TSMF: ヘッダーなし ({TsmfSelector.NoHeaderPackets} パケットの間に来なかった)。TS は 0 本目だけで、指定した {tsmf.Index} 本目はありません",
+                _ => $"TSMF: 判定できませんでした (ロックしたが、{tsmf.Received} パケットしか届かなかった。最初の {TsmfSelector.DiscardPackets} パケットは判定に使わずに捨て、"
+                    + $"そのあとヘッダーか、ヘッダーの無い {TsmfSelector.NoHeaderPackets} パケットが要る)",
+            };
+            yield break;
+        }
+        var valid = header.ValidStreams;
+        yield return $"TSMF: ヘッダーあり (バージョン {header.Version}、フレームの種類 {header.FrameType})。有効な TS は {valid.Count} 本";
+        for (var relative = 1; relative <= TsmfHeader.Streams; relative++)
+        {
+            var (tsid, onid) = header.Ids[relative - 1];
+            var slots = header.SlotsOf(relative);
+            // 無効で、スロットも ID も無い相対 TS 番号は出さない
+            if (!header.IsValid(relative) && slots == 0 && tsid == 0 && onid == 0) continue;
+            var index = header.IsValid(relative) ? valid.ToList().IndexOf(relative) : -1;
+            var order = index < 0 ? "" : $"  {index} 本目{(decision == TsmfDecision.Selected && relative == tsmf.Relative ? " (選んだ TS)" : "")}";
+            yield return $"  相対 TS 番号 {relative}: {(header.IsValid(relative) ? "有効" : "無効")}  TSID 0x{tsid:X4} ({tsid})  ONID 0x{onid:X4}  "
+                + $"{(header.IsTs(relative) ? "MPEG-2 TS" : "分割 TLV")}  スロット {slots}{order}";
+        }
+        yield return "  (TSID と ONID の並びは仕様書の推定。下の PAT の TSID と比べる)";
+        if (decision == TsmfDecision.Missing)
+        {
+            yield return valid.Count == 0
+                ? $"指定した {tsmf.Index} 本目はありません (有効な TS が 1 本も無い)"
+                : $"指定した {tsmf.Index} 本目はありません (:0〜:{valid.Count - 1} を指定する)";
+        }
+        yield return $"  受信の状態と緊急のフラグ (バイト 69〜72。並びは推定) {Convert.ToHexString(header.Status)}";
+        yield return $"  ヘッダーのパケット {Convert.ToHexString(header.Raw)}";
+    }
+
+    /// <summary><c>--tune</c> が ISDB-C で受け終えたあとに出す、TSMF の数と、出力した TS の PAT の TSID (ヘッダーの TSID の並びの推定を確かめるため。仕様書 7A.7)</summary>
+    internal static IEnumerable<string> TsmfAfterLines(TsmfSelector tsmf)
+    {
+        yield return $"TSMF: 受けたパケット {tsmf.Received}  ヘッダー {tsmf.Headers}  CRC が合わないヘッダー {tsmf.BadHeaders}  そろわずに捨てたフレーム {tsmf.BrokenFrames}";
+        if (tsmf.Decision == TsmfDecision.Selected && tsmf.LastHeader is { } last && !last.IsValid(tsmf.Relative))
+        {
+            yield return $"TSMF: 選んだ相対 TS 番号 {tsmf.Relative} が、最後のヘッダーでは無効になっています (出力を止めている)";
+        }
+        var listed = tsmf.Decision == TsmfDecision.Selected && tsmf.FirstHeader is { } first ? first.Ids[tsmf.Relative - 1].Tsid : (ushort?)null;
+        yield return tsmf.PatTsid is { } pat
+            ? $"出力した TS の PAT の TSID 0x{pat:X4} ({pat}){(listed is { } tsid ? tsid == pat ? "  ヘッダーの TSID と同じ" : $"  ヘッダーの TSID 0x{tsid:X4} と違う" : "")}"
+            : "出力した TS の PAT は来ませんでした";
+    }
+
+    /// <summary>
+    /// <c>--tune</c> が ISDB-C で出す、変調と PER (仕様書 8.4) と、ほかに読める値 (仕様書 8.4A)。PER と 8.4A の値は ISDB-C の実機で読んだ記録が無いので、未確認と書いて出す
+    /// </summary>
+    internal static IEnumerable<string> IsdbcSignalLines(string? modulation, double? per, CxdIsdbcDetail? detail)
+    {
+        yield return $"変調 {modulation ?? "-"}  PER {(per is { } value ? $"{value:G3} (未確認の値)" : "-")}";
+        if (detail is null) yield break;
+        yield return "ほかの値 (未確認の読み方)  "
+            + $"反転 {(detail.Inverted is { } inverted ? inverted ? "あり" : "なし" : "-")}  "
+            + $"搬送波のずれ {(detail.CarrierOffsetKhz is { } offset ? $"{offset:F1} kHz" : "-")}  "
+            + $"シンボルレート {(detail.SymbolRateMsps is { } rate ? $"{rate:F4} Msps" : "-")}  "
+            + $"RS の前の BER {(detail.PreRsBer is { } ber ? $"{ber:G3}" : "-")}  "
+            + $"直せなかったパケット {(detail.Uncorrected is { } count ? $"{count}" : "-")}  "
+            + $"IF の AGC {detail.IfAgc}";
     }
 
     /// <summary>
