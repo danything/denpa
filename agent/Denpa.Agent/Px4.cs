@@ -666,7 +666,7 @@ public sealed record Px4Receiver(int Index, bool Terrestrial, bool Satellite, bo
     /// <para>
     /// <c>receiver=0 device=1 local=0 system=ISDB-S</c> の行が受信機の数だけ並ぶ。
     /// <c>system</c> は <c>ISDB-T</c> / <c>ISDB-S</c> / <c>ISDB-T/S</c> (どちらも)。
-    /// ***対応していない値は飛ばして続ける。** px4-userland が新しくなって方式が増えても、
+    /// **対応していない値は飛ばして続ける。** px4-userland が新しくなって方式が増えても、
     /// 分かる受信機は使えるように。飛ばしたことは <paramref name="warn"/> で残す。
     /// </para>
     /// </summary>
@@ -957,7 +957,7 @@ public abstract class UserlandDaemon(string name, string id)
 }
 
 /// <summary>
-/// <c>px4d</c> 1 つ。***ready になったら受信機を問い合わせる** (<c>px4ctl list</c>、<see cref="UserlandDaemon.Receivers"/>)。
+/// <c>px4d</c> 1 つ。**ready になったら受信機を問い合わせる** (<c>px4ctl list</c>、<see cref="UserlandDaemon.Receivers"/>)。
 /// いくつあって何を受けられるかは筐体の応答を使う。
 /// </summary>
 public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
@@ -1228,7 +1228,7 @@ public sealed class Px4Tuner : ITuneDevice
     }
 
     /// <summary>
-    /// 選局したときの C/N。***px4d は C/N を TUNE の応答でしか返さない** (STATS には無い) ので、受信中は選局したときの値のまま。
+    /// 選局したときの C/N。**px4d は C/N を TUNE の応答でしか返さない** (STATS には無い) ので、受信中は選局したときの値のまま。
     /// 取得し直すには選局し直すしかなく、それでは受信が途切れる。
     /// **ロックを取らない。** STATS の定期取得が <c>_gate</c> を握ったまま筐体の順番を最長数秒待つので、取ると TunerPool.ReadSignals がそこで止まる
     /// (3 つを別々に読む。選局し直しの最中に前の値か null が返るだけ)
@@ -1801,7 +1801,7 @@ internal sealed class Px4Stream
         }
     }
 
-    /// <summary>書いたぶんを読む側に渡す (<see cref="TsBuffer.Flush"/>)。***バッファが空かないまま <see cref="_stallLimit"/> 経ったらやめる** (読む側がいない)</summary>
+    /// <summary>書いたぶんを読む側に渡す (<see cref="TsBuffer.Flush"/>)。**バッファが空かないまま <see cref="_stallLimit"/> 経ったらやめる** (読む側がいない)</summary>
     private bool Flush(PipeWriter writer) => TsBuffer.Flush(writer, () => _stopped, _stallLimit,
         () => End($"読む側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました (受信機は取ったまま)"),
         // 読み出し側が閉じた (こちらで止めた。理由は End が残さない)

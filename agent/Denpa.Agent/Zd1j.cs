@@ -86,7 +86,7 @@ public static class Zd1j
     private static readonly HashSet<(string From, string To)> Followed = [];
 
     /// <summary>
-    /// ***1 台だけなら、挿し替えたポートに追従する。** 設定のポートに見当たらず、ほかにちょうど 1 台挿さっていればそのポート。
+    /// **1 台だけなら、挿し替えたポートに追従する。** 設定のポートに見当たらず、ほかにちょうど 1 台挿さっていればそのポート。
     /// それ以外 (設定のポートにある・1 台も無い・2 台以上ある) は設定のまま (2 台以上はポートでしか見分けられない)
     /// </summary>
     internal static string Follow(string port, IReadOnlyList<string> present) =>

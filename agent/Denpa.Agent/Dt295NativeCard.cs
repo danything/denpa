@@ -118,7 +118,7 @@ public sealed class Dt295NativeCard : ICardLink
     }
 
     /// <summary>
-    /// 電源を入れて ATR を返す。***電源が入って T=1 の取り決め (IFSD) が済んでいて、カードが挿さっていれば、入れ直さずにその ATR を返す**
+    /// 電源を入れて ATR を返す。**電源が入って T=1 の取り決め (IFSD) が済んでいて、カードが挿さっていれば、入れ直さずにその ATR を返す**
     /// (機材を開いたあと、選局と並べて準備しておくため。<see cref="Dt295NativeDevice.WarmCard"/>)。送受信が失敗したあとは入れ直す
     /// </summary>
     public byte[] Reset()

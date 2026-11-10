@@ -1,7 +1,7 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * 偽の IT930x (It930xTests.cs が使う)。振る舞いは ITE の SDK (api/brCmd.c・api/IT9300.c) から決めた。
+ * 偽の IT930x (It930x*Tests.cs が使う)。振る舞いは ITE の SDK (api/brCmd.c・api/IT9300.c) から決めた。
  * EP 0x02 に来たフレームの長さ・チェックサム・シーケンス番号を検査し、合わなければテストを失敗にする (InvalidOperationException)。
  */
 

@@ -26,7 +26,7 @@ public enum TsmfDecision
 
 /// <summary>
 /// TSMF のヘッダーのパケットを読んだもの (仕様書 7A.7 の「ヘッダーの中身」)。相対 TS 番号は 1〜15。
-/// **TSID と original_network_id の並び (バイト 9〜68) は推定** で、実機では確かめられていない (仕様書 7A.7・13)。
+/// **TSID と original_network_id の並び (バイト 9〜68) は推定** (仕様書 7A.7・13)。PX-MLT5PE の実機では、選んだ TS の TSID が出力した TS の PAT の TSID と同じだった。original_network_id は確かめられていない。
 /// 受信の状態と緊急のフラグ (バイト 69〜72) も並びが推定なので、分けずに 4 バイトのまま持つ
 /// </summary>
 /// <param name="Version">バイト 6 の bit7:5</param>

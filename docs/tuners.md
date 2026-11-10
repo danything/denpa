@@ -65,6 +65,7 @@ Amazon で見る (広告): [PT3](https://www.amazon.co.jp/dp/B00857CQAM?tag=doa0
 | Linux DVB (PT3 など)                 | 受信の状態と C/N (dB)。ドライバが C/N を返さなければ C/N なし | ドライバが返す値 (`DTV_STAT_CNR`)。相対値で返すドライバは「C/N (生の値)」 |
 | px4-userland・asicen-userland の機材 | 受信の状態と C/N (dB)。どちらも選局したときの値               | px4d・asicend の選局の応答 (`cnr_mdb`)                                    |
 | CECH-ZD1 J                           | 受信の状態と C/N (dB)                                         | DiB8000 の仕様書の式                                                      |
+| PX-MLT5 系                           | 受信の状態と C/N (dB)                                         | CXD2856ER の仕様書の式と表                                                |
 | PIX-DT295                            | 受信の状態と C/N (dB)                                         | TC90522 系の換算式 (下記)                                                 |
 | PX-S1UD (siano-userland)             | 出ない                                                        | siano-ts が C/N を返さない                                                |
 
@@ -73,7 +74,9 @@ DVB と px4-userland の C/N を画面まで通す流れは、実機では確か
 
 **電波の強度は、dBm で測れる機材だけ C/N の前に出します** (「同期しています・強度: -35.0 dBm・C/N: 25.3 dB」)。
 Linux DVB はドライバが `DTV_STAT_SIGNAL_STRENGTH` を dBm (`FE_SCALE_DECIBEL`) で返すときだけで、相対値 (0〜65535) で返すドライバでは出しません。
-CECH-ZD1 J は DiB8000 の仕様書 8.2 の表から求めた値です (別の DiB8000 の機材で測った表なので目安)。px4-userland・asicen-userland・PIX-DT295・PX-S1UD では出ません。
+CECH-ZD1 J は DiB8000 の仕様書 8.2 の表から求めた値です (別の DiB8000 の機材で測った表なので目安)。
+PX-MLT5 系は地上波とスカパー！プレミアムで出ます。チューナーの AGC の値から仕様書の式で求めた値です (衛星は dBm として扱えるかが分からないので出しません)。
+px4-userland・asicen-userland・PIX-DT295・PX-S1UD では出ません。
 強度に目安の値や判定は付けていません。dBm はドライバや表しだいで校正されておらず、機種どうしでもテレビの「アンテナレベル」とも比べられないためです。
 強度も実機では確かめていません。
 
@@ -108,7 +111,8 @@ CATV の地デジには送り方が 2 つあります。
   見つかった局は地上波の局として入り、チャンネルは `C25` のように出ます
 
 C のチャンネルには ISDB-C (64QAM) も入っています (BS・CS をまとめ直して送るトランスモジュレーションや、CATV 局の独自の放送)。
-対応しているチューナーは地デジ (OFDM) と衛星の復調しかできないので、**QAM の局は受けられず、スキャンでは素通りします**。
+画面から選局できるのは地デジ (OFDM) と衛星だけなので、**QAM の局は受けられず、スキャンでは素通りします**。
+PX-MLT5 系は、`denpa-agent --tune` でだけ ISDB-C を選局できます ([下記](#実機で確かめたこと))。
 BS・CS を衛星の周波数のまま流す「BS・CS パススルー」なら、ふつうの BS・CS のスキャンで受かります。
 
 ## PX-W3U3 は asicen-userland で (試験的。上流のリリース待ち)
@@ -401,6 +405,7 @@ ATR とカードの番号を出す)。
       "card": true,
       "ids": ["0000012345678901"],
       "active": true,
+      "disabled": false,
       "tuners": ["PT3-T1", "PT3-S1"]
     },
     {
@@ -408,6 +413,7 @@ ATR とカードの番号を出す)。
       "card": false,
       "ids": [],
       "active": false,
+      "disabled": false,
       "tuners": []
     }
   ]
