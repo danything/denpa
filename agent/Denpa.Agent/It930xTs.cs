@@ -150,14 +150,20 @@ internal sealed class It930xTsOutput
     private bool _closed;
     private volatile string? _reason;
 
-    public It930xTsOutput() : this(TsBuffer.New())
+    private readonly TsmfSelector? _tsmf;
+    private readonly TsmfEmit _store;
+
+    /// <param name="tsmf">ISDB-C のとき、TSMF から TS を 1 つ選ぶ処理 (仕様書 7A.7)。ほかの方式は通さない (仕様書 10.1) ので null</param>
+    public It930xTsOutput(TsmfSelector? tsmf = null) : this(TsBuffer.New(), tsmf)
     {
     }
 
     /// <summary>Pipe を渡すのはテストのため (溢れる大きさを小さくする)</summary>
-    internal It930xTsOutput(Pipe pipe)
+    internal It930xTsOutput(Pipe pipe, TsmfSelector? tsmf = null)
     {
         _writer = pipe.Writer;
+        _tsmf = tsmf;
+        _store = Store;
         Output = new DeviceStream(pipe.Reader, () => _reason);
     }
 
@@ -178,8 +184,17 @@ internal sealed class It930xTsOutput
         }
     }
 
-    /// <summary>パケットを 1 つ詰める (まだ渡さない。<see cref="Commit"/> で渡す)。溢れていれば捨てて数える</summary>
+    /// <summary>
+    /// パケットを 1 つ詰める (まだ渡さない。<see cref="Commit"/> で渡す)。溢れていれば捨てて数える。
+    /// ISDB-C のときは TSMF の処理に通し、選んだ TS のパケットだけを詰める (仕様書 7A.7)
+    /// </summary>
     public void Write(ReadOnlySpan<byte> packet)
+    {
+        if (_tsmf is { } tsmf) tsmf.Push(packet, _store);
+        else Store(packet);
+    }
+
+    private void Store(ReadOnlySpan<byte> packet)
     {
         lock (_gate)
         {

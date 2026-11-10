@@ -5,10 +5,10 @@ namespace Denpa.Agent;
  *
  * クリーンルームで、仕様書 (denpa-spec の mlt5/spec.md。PLEX MLT5 系の CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
  * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は仕様書の節の番号で、表の値と順はその節の表のまま持つ。
- * 仕様書に無くて決めた所は「仕様書に無い」と書いてある。地上波 (ISDB-T)・衛星 (ISDB-S)・J.83B (スカパー！プレミアムサービス光) の分がある。
+ * 仕様書に無くて決めた所は「仕様書に無い」と書いてある。地上波 (ISDB-T)・衛星 (ISDB-S)・J.83B (スカパー！プレミアムサービス光)・ISDB-C (ケーブルテレビのトランスモジュレーション方式) の分がある。
  */
 
-/// <summary>チューナーの状態 (仕様書 4.1)。J.83B は地上波側を使う</summary>
+/// <summary>チューナーの状態 (仕様書 4.1)。J.83B と ISDB-C は地上波側を使う</summary>
 internal enum Cxd2858Side
 {
     Stopped,
@@ -118,6 +118,20 @@ internal sealed class Cxd2858(CxdLink link)
     }
 
     /// <summary>
+    /// ISDB-C の周波数を設定する (仕様書 4.5A)。<paramref name="khz"/> は中心周波数の kHz (仕様書 7A.2。周波数の補正はしない)。並びと値は J.83B (仕様書 4.5) と同じで、
+    /// 手順 8 の 2 バイトだけが違う。手順 8 のあと 50 ms 待つ。地上波側を使うので、地上波側のまま (ISDB-T・J.83B から) なら止めずに書き、
+    /// 衛星側で動作中なら先に衛星側を止める (仕様書 10.2)
+    /// </summary>
+    public void TuneIsdbc(uint khz)
+    {
+        if (khz > MaxTerrestrialKhz) throw new IOException($"ISDB-C の周波数は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");
+        if (Side == Cxd2858Side.Satellite) StopSatellite();
+        // 書き始めたら動作中とみなす (地上波と同じ。仕様書に無い)
+        Side = Cxd2858Side.Terrestrial;
+        link.Run(IsdbcRows(khz));
+    }
+
+    /// <summary>
     /// 衛星 (ISDB-S) の周波数を設定する (仕様書 4.4)。<paramref name="khz"/> は衛星の IF (LNB の出力) の kHz (仕様書 6.1)。
     /// 手順 8 のあと 10 ms、手順 10 のあと 50 ms 待つ (仕様書 4.4 の表。50 ms は資料で分かれていて、仕様書 12.3 はどちらでもよいとしている。表のとおり待つ)。
     /// 地上波側で動作中なら、先に地上波側を止める (手順 0。仕様書 10.2)
@@ -181,6 +195,25 @@ internal sealed class Cxd2858(CxdLink link)
         CxdRow.B(U, 0x5E, 0xEE, 0x02, 0x1E, 0x67, 0x10, 0x1C, 0x78, 0x08, 0x1C),
         CxdRow.W(U, 0x67, 0x00, mask: 0x02),
         CxdRow.B(U, 0x68, 0x00, 0x84, 0x00, 0x02, 0x21, 0x00, 0x1B, 0x02,
+            (byte)khz, (byte)(khz >> 8), (byte)((khz >> 16) & 0x0F), 0xFF, 0x01, 0xD9, 0x0F, 0x24, 0x87) with { WaitMs = 50 },
+        CxdRow.W(U, 0x88, 0x00),
+        CxdRow.W(U, 0x87, 0xC0),
+    ];
+
+    /// <summary>
+    /// 仕様書 4.5A の手順 1〜10 (周波数を埋めたもの)。J.83B (<see cref="CableRows"/>) と違うのは、手順 8 の <c>6E</c> (IF のずらし -6 の <c>1A</c>) と
+    /// <c>6F</c> (帯域のずらし -4 の <c>1C</c>) だけ。帯域は 6 MHz (<c>6D</c> = <c>00</c>)
+    /// </summary>
+    internal static CxdRow[] IsdbcRows(uint khz) =>
+    [
+        CxdRow.W(U, 0x01, 0x00),
+        CxdRow.W(U, 0x74, 0x02),
+        CxdRow.B(U, 0x87, 0xC4, 0x40),
+        CxdRow.B(U, 0x91, 0x16, 0x26),
+        CxdRow.B(U, 0x9C, 0x00, 0x00),
+        CxdRow.B(U, 0x5E, 0xEE, 0x02, 0x1E, 0x67, 0x10, 0x1C, 0x78, 0x08, 0x1C),
+        CxdRow.W(U, 0x67, 0x00, mask: 0x02),
+        CxdRow.B(U, 0x68, 0x00, 0x84, 0x00, 0x02, 0x21, 0x00, 0x1A, 0x1C,
             (byte)khz, (byte)(khz >> 8), (byte)((khz >> 16) & 0x0F), 0xFF, 0x01, 0xD9, 0x0F, 0x24, 0x87) with { WaitMs = 50 },
         CxdRow.W(U, 0x88, 0x00),
         CxdRow.W(U, 0x87, 0xC0),

@@ -289,9 +289,9 @@ public sealed class TunerPool(
                     {
                         var tuning = ChannelTable.Parse(channel)
                             ?? throw new IOException($"{channel} は選局表にありません");
-                        // J.83B を選局できるのは IT930x の機材だけ (ほかの機材は ISDB の選局として扱ってしまう)
-                        if (tuning.Cable && held.Device is not It930xTuner)
-                            throw new IOException($"{channel} (J.83B) を選局できるのは {It930x.Scheme} の受信機だけです");
+                        // J.83B と ISDB-C を選局できるのは IT930x の機材だけ (ほかの機材は ISDB-T の選局として扱ってしまう)
+                        if ((tuning.Cable || tuning.IsdbC) && held.Device is not It930xTuner)
+                            throw new IOException($"{channel} ({(tuning.IsdbC ? "ISDB-C" : "J.83B")}) を選局できるのは {It930x.Scheme} の受信機だけです");
                         // 途中で落ちたら「どこにも合っていない」。次は必ず選局し直す
                         held.Channel = null;
                         held.Device.Tune(tuning);
