@@ -326,13 +326,13 @@ public class It930xCardTests
     }
 
     [Test]
-    public async Task カードリーダーはエージェントが持つポートの機材だけで_px4d_が使っている筐体のポートは並べない()
+    public async Task カードリーダーは挿さっている機材のぶんだけ並べる()
     {
-        var claimed = new HashSet<string>(StringComparer.Ordinal) { "1-1", "1-2" };
-        var found = new List<(string, It930xModel)> { ("1-1", Pe), ("1-2", Pe), ("1-3", Pe) };
-        var cards = It930x.Cards(claimed, found, ["1-2"]);
-        await Assert.That(cards.Select(card => card.Name)).IsEquivalentTo(new[] { "PLEX PX-MLT5PE 1-1 Card Reader" });
-        await Assert.That(It930x.Cards(new HashSet<string>(), found, [])).IsEmpty();
+        var found = new List<(string, It930xModel)> { ("1-1", Pe), ("1-3", It930x.Find(0x0511, 0x924E)!) };
+        var cards = It930x.Cards(found);
+        await Assert.That(cards.Select(card => card.Name)).IsEquivalentTo(
+            new[] { "PLEX PX-MLT5PE 1-1 Card Reader", "e-Better DTV02A-5TS-P 1-3 Card Reader" }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(It930x.Cards([])).IsEmpty();
     }
 
     [Test]

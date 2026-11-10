@@ -1,7 +1,7 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * IT930x の機材 (It930xDevice.cs)、ブリッジの I2C と GPIO (It930xBridge.cs)、設定の device の形と px4d との持ち主の決まり (It930x.cs・Px4.cs)。
+ * IT930x の機材 (It930xDevice.cs)、ブリッジの I2C と GPIO (It930xBridge.cs)、設定の device の形と自動検出 (It930x.cs)。
  * 偽のブリッジ (It930xFakes.cs) の I2C を、偽の復調器とチューナー (Cxd2856Fakes.cs) につなぐ。
  * ブリッジのレジスタの番地は ITE の SDK (brRegister.h・brVariable.h) のもの、値と順は仕様書 (denpa-spec の mlt5/spec.md) の節。
  */
@@ -472,7 +472,7 @@ public class It930xDeviceTests
     }
 
     // ---------------------------------------------------------------------
-    // 設定の device と持ち主の決まり
+    // 設定の device と自動検出
     // ---------------------------------------------------------------------
 
     [Test]
@@ -487,32 +487,68 @@ public class It930xDeviceTests
     }
 
     [Test]
-    public async Task 使う受信機が_1_つでもあればそのポートはエージェントが持つ()
+    public async Task 挿さっている機材は受信機_5_つを_it930x_のチューナーとして挙げる()
     {
-        var claimed = It930x.Claimed(
-        [
-            new TunerSpec("a", ["GR"], false, "it930x:1-2:0"),
-            new TunerSpec("b", ["GR"], true, "it930x:1-3:0"),
-            new TunerSpec("c", ["GR"], true, "it930x:1-4:0"),
-            new TunerSpec("d", ["GR"], false, "it930x:1-4:1"),
-            new TunerSpec("e", ["GR"], false, "px4:0001:0"),
-        ]);
-        await Assert.That(claimed.Order()).IsEquivalentTo(new[] { "1-2", "1-4" });
+        var found = It930x.Specs([("1-2", Pe), ("4-12.1", It930x.Find(0x0511, 0x084E)!)]);
+
+        await Assert.That(found.Select(spec => spec.Device)).IsEquivalentTo(
+            new[]
+            {
+                "it930x:1-2:0", "it930x:1-2:1", "it930x:1-2:2", "it930x:1-2:3", "it930x:1-2:4",
+                "it930x:4-12.1:0", "it930x:4-12.1:1", "it930x:4-12.1:2", "it930x:4-12.1:3", "it930x:4-12.1:4",
+            },
+            TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(found[0].Name).IsEqualTo("PLEX PX-MLT5PE 1-2 #0");
+        await Assert.That(found[9].Name).IsEqualTo("PLEX PX-MLT5U 4-12.1 #4");
+        // 最初に選ぶ種別は地上波・BS・CS (SKY は受けられるが、最初からは選ばない)。「使う」で並ぶ
+        await Assert.That(found.All(spec => spec.Types.SequenceEqual(["GR", "BS", "CS"]) && !spec.Disabled)).IsTrue();
+        // 名前は重ならない (チューナーを名前で見分ける)
+        await Assert.That(found.Select(spec => spec.Name).Distinct().Count()).IsEqualTo(10);
+        await Assert.That(It930x.Specs([])).IsEmpty();
     }
 
     [Test]
-    public async Task エージェントが持つポートの筐体は_px4d_の筐体として挙げない()
+    public async Task sysfs_の_MLT5_系を自動検出の形式で挙げる()
     {
-        var notes = new List<string>();
-        var enclosures = new List<Px4Userland.Enclosure>
+        // sysfs は Linux だけ (It930xTests の sysfs のテストと同じ)
+        if (OperatingSystem.IsWindows()) return;
+        var dir = Directory.CreateTempSubdirectory("it930xdetect");
+        try
         {
-            new("0001", "PX-MLT5PE", []) { Places = ["1-2"] },
-            new("0002", "PX-Q3U4", []) { Places = ["1-5"] },
-        };
-        var kept = Px4Userland.Yield(enclosures, new HashSet<string> { "1-2" }, notes.Add);
-        await Assert.That(kept.Select(enclosure => enclosure.Id)).IsEquivalentTo(new[] { "0002" });
-        await Assert.That(notes.Single()).Contains("エージェントが持つ");
-        // 動いている px4d の筐体なら、起動する顔ぶれから外す (Prepare が止める)
-        await Assert.That(Px4Daemon.Yielding(["0001", "0002", "0003"], enclosures, new HashSet<string> { "1-2" })).IsEquivalentTo(new[] { "0002", "0003" });
+            void Usb(string name, string vendor, string product)
+            {
+                var at = Directory.CreateDirectory(Path.Combine(dir.FullName, name)).FullName;
+                File.WriteAllText(Path.Combine(at, "idVendor"), vendor + "\n");
+                File.WriteAllText(Path.Combine(at, "idProduct"), product + "\n");
+            }
+            Usb("3-1", "0511", "024e");
+            Usb("3-2", "0511", "084a");
+            var found = It930x.Specs(It930x.Found(dir.FullName, null));
+            await Assert.That(found.Count).IsEqualTo(5);
+            await Assert.That(found[4].Device).IsEqualTo("it930x:3-1:4");
+            // 受けられる種別も返す (設定の画面が SKY を選ばせる)
+            await Assert.That(DeviceProbe.Receivable("it930x:3-1:4")!).IsEquivalentTo(new[] { "GR", "BS", "CS", "SKY" });
+        }
+        finally
+        {
+            dir.Delete(true);
+        }
+    }
+
+    [Test]
+    [Arguments("0511:024e", "PX-MLT5PE", "PLEX PX-MLT5PE")]
+    [Arguments("0511:084E", "px4", "PLEX PX-MLT5U")]
+    [Arguments("0511:924e", null, "e-Better DTV02A-5TS-P")]
+    // USB の ID が読めなかったときだけ、機種の名前で見分ける
+    [Arguments(null, "PX-MLT5U", "PLEX PX-MLT5U")]
+    [Arguments(null, "DTV02A-5TS-P", "e-Better DTV02A-5TS-P")]
+    [Arguments("0511:084a", "PX-Q3U4", null)]
+    // USB の ID が読めていれば、名前では決めない
+    [Arguments("0511:084a", "PX-MLT5PE", null)]
+    [Arguments(null, "PX-Q3U4", null)]
+    [Arguments(null, null, null)]
+    public async Task px4d_の一覧の筐体が_MLT5_系かは_USB_の_ID_で見分ける(string? usb, string? model, string? expected)
+    {
+        await Assert.That(It930x.Listed(usb, model)?.Name).IsEqualTo(expected);
     }
 }
