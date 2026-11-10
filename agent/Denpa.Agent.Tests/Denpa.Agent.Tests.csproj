@@ -78,6 +78,7 @@
         <Compile Include="../Denpa.Agent/It930xTs.cs" />
         <Compile Include="../Denpa.Agent/It930xDevice.cs" />
         <Compile Include="../Denpa.Agent/It930xCard.cs" />
+        <Compile Include="../Denpa.Agent/It930xSteps.cs" />
         <Compile Include="../Denpa.Agent/Cxd2856.cs" />
         <Compile Include="../Denpa.Agent/Cxd2858.cs" />
         <Compile Include="../Denpa.Agent/Tsmf.cs" />

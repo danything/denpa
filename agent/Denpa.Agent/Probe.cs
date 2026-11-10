@@ -22,6 +22,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N] [--repeat N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS (と復号できたパケット)・2 回目の選局の時間と C/N を出す
 /// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。ロックまでの時間と C/N と強度も出す (衛星は BS15:16625 --lnb 15v、J.83B は H40 のように)
 /// denpa-agent --tune it930x:4-12.1:0+it930x:4-12.1:1 QC14,T27   # 「+」で並べた受信機を同時に選局する (そろって始め、受信機ごとにまとめて出す)
+/// denpa-agent --tune it930x:4-12.1:0+…+it930x:4-12.1:4 T27,T22 --steps 2,3,5   # 流す受信機を 2 → 3 → 5 と足し、ブリッジの状態を出す。TS が止まったらその先は足さない
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)。CA_system_id と番組表が来ているかも出す
 /// denpa-agent --card                                      # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
@@ -37,7 +38,7 @@ namespace Denpa.Agent;
 public static class Probe
 {
     // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
-    public const string TuneUsage = "denpa-agent --tune <device[+device...]> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)]";
+    public const string TuneUsage = "denpa-agent --tune <device[+device...]> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)] [--steps 2,3,5 (it930x: のとき)]";
     public const string DecodeUsage = "denpa-agent --decode-file <in.ts> [<out.ts>]";
     public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート> | {It930x.Scheme}<USB のポート>]";
 
@@ -249,6 +250,18 @@ public static class Probe
 
         // 「+」で並べると、同じプロセスで複数の受信機を同時に選局する (常駐のときの並べたスキャンと同じ形を、サーバ無しで試す)
         var devices = device.Split('+', StringSplitOptions.RemoveEmptyEntries);
+        // --steps 2,3,5: IT930x の機材で、TS を流す受信機を段階を追って増やす (It930xSteps)
+        var stepsAt = Array.IndexOf(args, "--steps");
+        if (stepsAt >= 0)
+        {
+            if (It930xSteps.ParseSteps(args.ElementAtOrDefault(stepsAt + 1), devices.Length) is not { } steps)
+            {
+                Console.Error.WriteLine($"--steps は、受信機の数を 1〜{devices.Length} の増えていく並びで書きます (2,3,5 など)");
+                return 2;
+            }
+            using var closingSteps = new Closing(It930xDevice.CloseAll);
+            return It930xSteps.Run(devices, channels, lnb, steps, seconds, Console.Out);
+        }
         if (devices.Length > 1) return RunTogether(devices, channels, lnb, decode, cardAt >= 0, seconds);
 
         var source = KeysFor(device, decode, cardAt >= 0);
@@ -421,12 +434,13 @@ public static class Probe
             if (measured.Bytes == 0 && tuner is It930xTuner stalled)
             {
                 ShowTsOutput(stalled, output);
-                output.WriteLine("    ブリッジの TS のバッファを捨てて (0xDA1D の bit0)、もう一度受けます");
+                output.WriteLine("    ブリッジの入力を全部閉じて EP 0x84 をリセットし (0xDA1D)、入力を開け直してから、もう一度受けます");
                 try
                 {
                     stalled.FlushTs();
                     var again = Count(tuner.Output, name, null, seconds, 0, output, error);
                     output.WriteLine(again.Bytes > 0 ? "    バッファを捨てたあと TS が届きました" : "    バッファを捨てても TS は届きません");
+                    ShowBridge(stalled.Device, output);
                 }
                 catch (IOException failure)
                 {
@@ -471,7 +485,7 @@ public static class Probe
         output.WriteLine($"    初期化の前のチューナーの 62: {value:X2} (前に ISDB-C か J.83B を選局していて 10 なら、電源が切れていなかった。推定)");
     }
 
-    /// <summary>TS を止める復調器のレジスタ 4 つと、ロックの状態を出す (仕様書 3.6)</summary>
+    /// <summary>TS を止める復調器のレジスタ 4 つと、ロックの状態と、ブリッジの TS の経路の状態を出す (仕様書 3.6)</summary>
     private static void ShowTsOutput(It930xTuner tuner, TextWriter output)
     {
         try
@@ -482,6 +496,22 @@ public static class Probe
         {
             output.WriteLine($"    復調器の TS の出力のレジスタを読めませんでした ({failure.Message})");
         }
+        ShowBridge(tuner.Device, output);
+    }
+
+    /// <summary>ブリッジの TS の経路の状態 (<see cref="It930xBridge.ReadTsStatus"/>) と、EP 0x84 の読みの数え (<see cref="It930xDevice.DescribeTsCounters"/>) を出す</summary>
+    internal static void ShowBridge(It930xDevice? device, TextWriter output, string indent = "    ")
+    {
+        if (device is null) return;
+        try
+        {
+            output.WriteLine($"{indent}{device.Bridge.ReadTsStatus().Describe()}");
+        }
+        catch (IOException failure)
+        {
+            output.WriteLine($"{indent}ブリッジの TS の経路の状態を読めませんでした ({failure.Message})");
+        }
+        output.WriteLine($"{indent}{device.DescribeTsCounters()}");
     }
 
     /// <summary>
@@ -491,7 +521,7 @@ public static class Probe
     private static void RetryAfterFlush(It930xTuner tuner, ChannelTable.Tuning tuning, string name, TextWriter output)
     {
         ShowTsOutput(tuner, output);
-        output.WriteLine("    ロックしたのに TS が届きませんでした。ブリッジの TS のバッファを捨てて (0xDA1D の bit0)、選局し直します");
+        output.WriteLine("    ロックしたのに TS が届きませんでした。ブリッジの入力を全部閉じて EP 0x84 をリセットし (0xDA1D)、入力を開け直してから選局し直します");
         try
         {
             tuner.FlushTs();

@@ -37,12 +37,6 @@ public class It930xIsdbcTests
         };
     }
 
-    /// <summary>受信機 0 の TS 入力を、最後に閉じたままか (開ける書き込みより、閉じる書き込みがあと)</summary>
-    private static bool InputClosed(FakeIt930x usb)
-    {
-        lock (usb.Log) return usb.Log.LastIndexOf($"W {TsEnable:X4}=00") > usb.Log.LastIndexOf($"W {TsEnable:X4}=01");
-    }
-
     /// <summary>TSMF の搬送波の TS (相対 TS 番号 2 と 3 が有効で、スロットを交互に使う)。1 回の読みで 4 フレーム</summary>
     private static Func<byte[]?> TsmfCarrier()
     {
@@ -94,7 +88,7 @@ public class It930xIsdbcTests
             await Assert.That(tuner.Tuned).IsTrue();
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.CableFrequency).IsEqualTo(393_000_000u);
-            // 復調の方式は ISDB-C (仕様書 7A.3)。TS 入力はロックのあとに開ける
+            // 復調の方式は ISDB-C (仕様書 7A.3)。ブリッジの入力は機材を開いたときに開けてあり、出口はロックのあとに付ける
             await Assert.That(bus3.Log).Contains("65 X 17=09");
             await Assert.That(usb.Log).Contains($"W {TsEnable:X4}=01");
             // 有効な TS は相対 TS 番号 2 と 3。1 本目 (0 から数える) は 3
@@ -165,7 +159,10 @@ public class It930xIsdbcTests
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.Tsmf!.Decision).IsEqualTo(TsmfDecision.Missing);
             await Assert.That(tuner.IsdbcFailedSignal!.Locked).IsTrue();
-            await Assert.That(InputClosed(usb)).IsTrue();
+            // 止めるのは出口だけで、ブリッジの入力は閉じない (閉じる書き込みは、開いたときの TS の経路の設定の 1 回だけ)
+            int closes;
+            lock (usb.Log) closes = usb.Log.Count(line => line == $"W {TsEnable:X4}=00");
+            await Assert.That(closes).IsEqualTo(1);
 
             // ヘッダーの無い搬送波で 1 本目を指定したときも同じ失敗
             usb.TsSource = PlainCarrier();
