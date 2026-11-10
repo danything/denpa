@@ -475,7 +475,7 @@ function serviceIdIndex(): Map<string, number> {
   );
 }
 
-/** `serviceIdIndex` の鍵。CATV かどうか・original_network_id・service_id */
+/** `serviceIdIndex` のキー。CATV かどうか・original_network_id・service_id */
 function indexKey(type: string, networkId: number, serviceId: number): string {
   return `${type === "CATV"}:${networkId}:${serviceId}`;
 }

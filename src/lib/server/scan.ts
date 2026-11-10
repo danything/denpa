@@ -424,7 +424,7 @@ class Scanner {
     const { kept, dropped } = dedupeCatv(sorted);
     for (const { entry, kept: first } of dropped)
       this.onProgress({
-        line: `${entry.channel}: ${first} と同じ TS なので入れません`,
+        line: `${entry.channel}: ${first} と同じ TS のため、スキャンの結果に入れませんでした`,
       });
     return kept;
   }
@@ -613,12 +613,13 @@ class Scanner {
         stream = opened.stream;
         /*
          * TSMF で束ねた搬送波なら、2 つ目からの TS も回す (`tsmfJobs`)。束ねた数は選局してから分かるので、
-         * そのつど列に足して進み具合の分母も増やす。回し直し (`first` が false) では足さない
+         * そのつど列の先頭に足して進み具合の分母も増やす。先頭に足すのは、列が尽きて止まったチューナーには渡らないため
+         * (ほかのチューナーがまだ動いているうちに引かせる)。回し直し (`first` が false) では足さない
          */
         const extra =
           type === "CATV" && first ? tsmfJobs(channel, opened.tsmfStreams) : [];
         if (extra.length > 0) {
-          queue.push(...extra.map((name) => ({ type, channel: name })));
+          queue.unshift(...extra.map((name) => ({ type, channel: name })));
           this.onProgress({
             line: `${channel}: TSMF で ${opened.tsmfStreams} つの TS を束ねています`,
             added: extra.length,

@@ -133,7 +133,7 @@ export interface TunerConfig {
 }
 
 /**
- * CATV の局の ID を、アンテナで受けた局と分ける下駄 (`serviceKey`)。network_id は 16 ビットなので、足すと重ならない
+ * CATV の局の ID に足すオフセット (`serviceKey`)。アンテナで受けた局と分ける。network_id は 16 ビットなので、足すと重ならない
  */
 const CATV_NETWORK_OFFSET = 0x10000;
 
