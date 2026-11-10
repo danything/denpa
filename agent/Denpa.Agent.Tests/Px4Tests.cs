@@ -326,10 +326,10 @@ public class Px4Tests
         // 受信機の番号はそのまま、USB のポートは一覧のもの
         var problem = Px4Userland.NativeProblem("000000000012345", 3, native);
         await Assert.That(problem).Contains("PLEX PX-MLT5PE はエージェントが直に持つ機材になったので、px4: のチューナーとしては使えません");
-        await Assert.That(problem).Contains("設定の device を it930x:1-2:3 に書き換えてください。");
+        await Assert.That(problem).Contains("device を it930x:1-2:3 に書き換えてください");
         await Assert.That(problem).Contains("「自動検出に戻す」");
         // px4d を起動するとき (受信機が決まっていない) と、USB のポートが分からないとき
-        await Assert.That(Px4Userland.NativeProblem("000000000012345", null, native)).Contains("it930x:1-2:<受信機> に書き換えてください (受信機の番号はそのまま)。");
+        await Assert.That(Px4Userland.NativeProblem("000000000012345", null, native)).Contains("it930x:1-2:<受信機> に書き換えてください (受信機の番号はそのまま)");
         await Assert.That(Px4Userland.NativeProblem("000000000054321", 0, native)).Contains("it930x:<USB のポート>:0 に");
         // 番号と USB ポートの名前で書いてあっても、番号で突き合わせる
         await Assert.That(Px4Userland.NativeProblem("000000000012345_1-2", 0, native)).Contains("it930x:1-2:0");

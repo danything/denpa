@@ -97,12 +97,12 @@ public static class It930x
 
     /// <summary>
     /// <c>px4d --list-json</c> の筐体が、この表の機種か。**この表の機種は px4d に持たせない** (<see cref="Px4Userland.ParseJson"/>)。
-    /// USB の ID (<c>0511:024e</c>) で見分ける。ID が読めなかったときだけ、機種の名前 (<c>PX-MLT5PE</c>) で見分ける
+    /// USB の ID (<c>0511:024e</c>) で見分ける。ID が読めなかったときだけ、機種の名前 (<c>PX-MLT5PE</c>。メーカーを除いた部分と同じか) で見分ける
     /// </summary>
     public static It930xModel? Listed(string? usb, string? model)
     {
         if (usb?.Split(':') is [var vendor, var product] && Hex(vendor) is { } vid && Hex(product) is { } pid) return Find(vid, pid);
-        return model is { Length: > 0 } ? Family.FirstOrDefault(known => known.Name.EndsWith(model, StringComparison.OrdinalIgnoreCase)) : null;
+        return model is { Length: > 0 } ? Family.FirstOrDefault(known => known.Name[(known.Name.LastIndexOf(' ') + 1)..].Equals(model, StringComparison.OrdinalIgnoreCase)) : null;
     }
 
     /// <summary>画面に出す受信機の名前 (<c>PLEX PX-MLT5PE 4-12.1 #0</c>)</summary>

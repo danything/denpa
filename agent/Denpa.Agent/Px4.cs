@@ -575,9 +575,9 @@ public static class Px4Userland
         if (!natives.TryGetValue(cut < 0 ? id : id[..cut], out var found)) return null;
         var device = $"{It930x.Scheme}{found.Port ?? "<USB のポート>"}:{receiver?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "<受信機>"}";
         return $"{found.Model.Name} はエージェントが直に持つ機材になったので、{Scheme} のチューナーとしては使えません。"
-            + $"設定の device を {device} に書き換えてください"
-            + (receiver is null ? " (受信機の番号はそのまま)" : "")
-            + "。チューナーを削除して機材を挿し直すか、「自動検出に戻す」を押しても、検出し直します";
+            + $"設定の「自動検出に戻す」を押すと、{It930x.Scheme} のチューナーとして検出し直します。"
+            + $"定義を残すときは、device を {device} に書き換えてください"
+            + (receiver is null ? " (受信機の番号はそのまま)" : "");
     }
 
     /// <summary>筐体の一覧から、設定の形式に組み立てる</summary>
