@@ -21,6 +21,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune asicen:1-2:1 T27                       # asicen-userland の機材 (PX-W3U3。試験的。受信機 1 は地上波)
 /// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N] [--repeat N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS (と復号できたパケット)・2 回目の選局の時間と C/N を出す
 /// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。ロックまでの時間と C/N と強度も出す (衛星は BS15:16625 --lnb 15v、J.83B は H40 のように)
+/// denpa-agent --tune it930x:4-12.1:0+it930x:4-12.1:1 QC14,T27   # 「+」で並べた受信機を同時に選局する (そろって始め、受信機ごとにまとめて出す)
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)。CA_system_id と番組表が来ているかも出す
 /// denpa-agent --card                                      # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
@@ -36,7 +37,7 @@ namespace Denpa.Agent;
 public static class Probe
 {
     // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
-    public const string TuneUsage = "denpa-agent --tune <device> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)]";
+    public const string TuneUsage = "denpa-agent --tune <device[+device...]> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)]";
     public const string DecodeUsage = "denpa-agent --decode-file <in.ts> [<out.ts>]";
     public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート> | {It930x.Scheme}<USB のポート>]";
 
@@ -246,31 +247,117 @@ public static class Probe
             return RunZd1j(zd1j, channels, decode ? keys : null, seconds, repeat);
         }
 
-        // PIX-DT295 と IT930x の機材は、鍵もその機材のカードリーダーだけから (試験でほかのリーダーに触らない)。--card-url があればそちら
-        IKeySource source = cardAt >= 0 ? Keys.Source
-            : Dt295.Parse(device) is { } dt295 ? new LocalCard(() => [Dt295.Card(dt295)])
-            : decode && It930x.Parse(device) is { } it930xReceiver && It930xCardAt(it930xReceiver.Port) is { } it930xCard ? new LocalCard(() => [it930xCard])
-            : Keys.Source;
-        using var closing = Dt295.Is(device) ? new Closing(Dt295NativeDevice.CloseAll)
-            : It930x.Is(device) ? new Closing(It930xDevice.CloseAll)
-            : null;
+        // 「+」で並べると、同じプロセスで複数の受信機を同時に選局する (常駐のときの並べたスキャンと同じ形を、サーバ無しで試す)
+        var devices = device.Split('+', StringSplitOptions.RemoveEmptyEntries);
+        if (devices.Length > 1) return RunTogether(devices, channels, lnb, decode, cardAt >= 0, seconds);
+
+        var source = KeysFor(device, decode, cardAt >= 0);
+        using var closing = Closer(device);
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
+        return TuneChannels(tuner, channels, decode, source, seconds, Console.Out, Console.Error, null).Error ? 1 : 0;
+    }
 
+    /// <summary>その機材の鍵の出どころ。PIX-DT295 と IT930x の機材は、その機材のカードリーダーだけ (試験でほかのリーダーに触らない)。--card-url があればそちら</summary>
+    private static IKeySource KeysFor(string device, bool decode, bool cardUrl) =>
+        cardUrl ? Keys.Source
+        : Dt295.Parse(device) is { } dt295 ? new LocalCard(() => [Dt295.Card(dt295)])
+        : decode && It930x.Parse(device) is { } it930xReceiver && It930xCardAt(it930xReceiver.Port) is { } it930xCard ? new LocalCard(() => [it930xCard])
+        : Keys.Source;
+
+    /// <summary>終わりに機材を閉じる (PIX-DT295 と IT930x の機材。ほかは null)</summary>
+    private static Closing? Closer(string device) =>
+        Dt295.Is(device) ? new Closing(Dt295NativeDevice.CloseAll)
+        : It930x.Is(device) ? new Closing(It930xDevice.CloseAll)
+        : null;
+
+    /// <summary>1 つのチャンネルの結果 (<see cref="RunTogether"/> の終わりのまとめに使う)</summary>
+    private sealed record ChannelResult(string Channel, bool Locked, string? Rate, long Bytes, string? Failure);
+
+    /// <summary>チャンネルの並びを選局した結果。<see cref="Error"/> は選局表に無いなどで途中でやめたとき</summary>
+    private sealed record TuneResults(List<ChannelResult> Channels, bool Error);
+
+    /// <summary>
+    /// <c>--tune it930x:3-1:0+it930x:3-1:1 …</c>: 並べた受信機ごとにスレッドを立て、そろって始めてから、それぞれがチャンネルの並びを順に選局する。
+    /// 出力は受信機ごとにまとめて、終わってから受信機の順に出す (行が混ざらないように)。行は 1 つで選局するときと同じで、チャンネルごとに、そろって始めてからの時間を添える。
+    /// 最後に、受信機とチャンネルごとのロックと Mbps を並べる
+    /// </summary>
+    private static int RunTogether(string[] devices, string[] channels, string? lnb, bool decode, bool cardUrl, TimeSpan seconds)
+    {
+        if (devices.FirstOrDefault(Zd1j.Is) is { } zd1j)
+        {
+            Console.Error.WriteLine($"{zd1j}: CECH-ZD1 J は 1 つずつ試します (+ で並べられません)");
+            return 2;
+        }
+        // 閉じるのはどの受信機も終わってから 1 回 (同じ機材をほかの受信機が使っている間に閉じない)
+        using var closing = devices.Any(It930x.Is) ? new Closing(It930xDevice.CloseAll) : null;
+        using var closingDt295 = devices.Any(Dt295.Is) ? new Closing(Dt295NativeDevice.CloseAll) : null;
+        Console.WriteLine($"{devices.Length} つの受信機で同時に選局します: {string.Join(" ", devices)}  チャンネル {string.Join(",", channels)}{(lnb is null ? "" : $"  (LNB {lnb})")}");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        using var start = new Barrier(devices.Length, _ => clock.Restart());
+        var outputs = devices.Select(_ => new StringWriter()).ToArray();
+        var results = new TuneResults?[devices.Length];
+        var threads = devices.Select((name, index) => new Thread(() =>
+        {
+            var output = outputs[index];
+            var waiting = true;
+            try
+            {
+                using var tuner = TunerPool.OpenDevice(name, lnb);
+                // 機材を開くのは最初の選局 (そろって始めたあと)。開く・初期化するところも同時に始める
+                start.SignalAndWait();
+                waiting = false;
+                results[index] = TuneChannels(tuner, channels, decode, KeysFor(name, decode, cardUrl), seconds, output, output, clock);
+            }
+            catch (Exception error) when (error is IOException or ArgumentException or InvalidOperationException)
+            {
+                output.WriteLine($"{name}: {error.Message}");
+                if (waiting) start.RemoveParticipant();
+            }
+        })
+        { IsBackground = true, Name = $"tune-{index}" }).ToList();
+        threads.ForEach(thread => thread.Start());
+        threads.ForEach(thread => thread.Join());
+
+        for (var index = 0; index < devices.Length; index++)
+        {
+            Console.WriteLine($"=== {devices[index]}");
+            Console.Write(outputs[index].ToString());
+        }
+        Console.WriteLine("=== まとめ (受信機・チャンネル・ロック・Mbps)");
+        for (var index = 0; index < devices.Length; index++)
+        {
+            foreach (var row in results[index]?.Channels ?? [])
+            {
+                Console.WriteLine($"{devices[index]}  {row.Channel}  {(row.Locked ? "ロック" : "失敗")}  {row.Rate ?? "-"} Mbps  {row.Bytes / 1024} KiB{(row.Failure is { } why ? $"  {why}" : "")}");
+            }
+        }
+        return results.Any(result => result is null or { Error: true }) ? 1 : 0;
+    }
+
+    /// <summary>
+    /// 開いたチューナーでチャンネルを順に選局し、受けた TS を数えて <paramref name="output"/> に書く (<c>--tune</c> の本体)。
+    /// <paramref name="together"/> があれば、チャンネルごとに、そろって始めてからの時間 (ms) も添える (<see cref="RunTogether"/>)
+    /// </summary>
+    private static TuneResults TuneChannels(
+        ITuneDevice tuner, string[] channels, bool decode, IKeySource source, TimeSpan seconds, TextWriter output, TextWriter error, System.Diagnostics.Stopwatch? together)
+    {
+        var results = new List<ChannelResult>();
+        var powerProbeShown = false;
         foreach (var name in channels)
         {
             var tuning = ChannelTable.Parse(name);
             if (tuning is null)
             {
-                Console.Error.WriteLine($"{name}: 選局表にありません");
-                return 1;
+                error.WriteLine($"{name}: 選局表にありません");
+                return new TuneResults(results, true);
             }
 
             if (tuning.IsdbC && tuner is not It930xTuner)
             {
-                Console.Error.WriteLine($"{name}: ISDB-C を選局できるのは {It930x.Scheme} の受信機だけです");
-                return 1;
+                error.WriteLine($"{name}: ISDB-C を選局できるのは {It930x.Scheme} の受信機だけです");
+                return new TuneResults(results, true);
             }
 
             var streamId = tuning.StreamId;
@@ -278,77 +365,143 @@ public static class Probe
             var filter = streamId != ChannelTable.NoStreamId ? $" TSID={streamId}"
                 : tuning.IsdbC ? $" ISDB-C  TSMF の有効な TS の {tuning.TsmfIndex} 本目 (0 から数える)" : "";
             var shifted = tuning.ShiftedFrequency is { } other ? $" (ずらした周波数 {other} Hz も試す)" : "";
-            Console.WriteLine($"--- {name}  {tuning.Frequency} {unit}{filter}{shifted}");
+            var at = together is null ? "" : $"  (そろって始めてから {together.ElapsedMilliseconds} ms)";
+            output.WriteLine($"--- {name}  {tuning.Frequency} {unit}{filter}{shifted}{at}");
             // スカパー！プレミアムのカードはまだ扱わないので、--decode でも B-CAS のカードに渡さない (TunerPool の Lease と同じ)
             var descramble = decode && !tuning.Cable;
-            if (decode && tuning.Cable) Console.WriteLine("    J.83B はスクランブルされたまま受けます (スカパー！プレミアムのカードはまだ扱いません)");
+            if (decode && tuning.Cable) output.WriteLine("    J.83B はスクランブルされたまま受けます (スカパー！プレミアムのカードはまだ扱いません)");
 
             var started = DateTime.UtcNow;
             try
             {
                 tuner.Tune(tuning);
             }
-            catch (IOException error)
+            catch (IOException failure)
             {
-                Console.Error.WriteLine($"{name}: {error.Message}");
+                error.WriteLine($"{name}: {failure.Message}");
+                results.Add(new ChannelResult(name, false, null, 0, failure.Message));
+                ShowPowerProbe(tuner, output, ref powerProbeShown);
                 // ISDB-C は、どこで失敗したか (ロック・TSMF の判定) と、ロックしていれば変調と C/N も出す
                 if (tuning.IsdbC && tuner is It930xTuner failed)
                 {
-                    Console.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
-                    if (failed.CableFrequency is { } tried) Console.WriteLine($"    ロックした周波数 {tried} Hz");
-                    foreach (var line in TsmfLines(failed.IsdbcLocked, failed.Tsmf)) Console.WriteLine($"    {line}");
+                    output.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+                    if (failed.CableFrequency is { } tried) output.WriteLine($"    ロックした周波数 {tried} Hz");
+                    foreach (var line in TsmfLines(failed.IsdbcLocked, failed.Tsmf)) output.WriteLine($"    {line}");
                     if (failed.IsdbcFailedSignal is { } last)
                     {
-                        Console.WriteLine($"    {(last.Locked ? "ロック中" : "ロックしていない")}  C/N {(last.Cn is { } lastCn ? $"{lastCn:F1} dB" : "-")}  強度 {(last.StrengthDbm is { } lastDbm ? $"{lastDbm:F1} dBm (目安)" : "-")}");
-                        foreach (var line in IsdbcSignalLines(failed.CableModulation, failed.CablePer, failed.IsdbcDetail)) Console.WriteLine($"    {line}");
+                        output.WriteLine($"    {(last.Locked ? "ロック中" : "ロックしていない")}  C/N {(last.Cn is { } lastCn ? $"{lastCn:F1} dB" : "-")}  強度 {(last.StrengthDbm is { } lastDbm ? $"{lastDbm:F1} dBm (目安)" : "-")}");
+                        foreach (var line in IsdbcSignalLines(failed.CableModulation, failed.CablePer, failed.IsdbcDetail)) output.WriteLine($"    {line}");
                     }
+                    // ロックしたのに TS が 1 パケットも届かなかった (仕様書 3.6)。TS を止めるレジスタを読み、ブリッジのバッファを捨てて選局し直す
+                    if (failed.IsdbcLocked && failed.Tsmf is { Received: 0 }) RetryAfterFlush(failed, tuning, name, output);
                 }
                 continue;
             }
-            Console.WriteLine($"    同期 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+            output.WriteLine($"    同期 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+            ShowPowerProbe(tuner, output, ref powerProbeShown);
 
             if (tuner is It930xTuner it930x)
             {
-                Console.WriteLine($"    ロックまで {it930x.LockMs} ms (ロックを確かめ始めてから){(it930x.Device is { } opened ? $"  機材を開くのに {opened.OpenMs} ms" : "")}");
+                output.WriteLine($"    ロックまで {it930x.LockMs} ms (ロックを確かめ始めてから){(it930x.Device is { } opened ? $"  機材を開くのに {opened.OpenMs} ms" : "")}");
                 // 衛星は TMCC にある TSID も出す (相対 TS 0〜7 の順。TSID で選んだ TS がこの中継器にあるかを確かめるため)
                 if (tuning.Satellite && it930x.SatelliteStreams() is { } streams)
                 {
-                    Console.WriteLine($"    TMCC の TSID  {string.Join(" ", streams.Select((tsid, relative) => $"{relative}:{tsid}"))}");
+                    output.WriteLine($"    TMCC の TSID  {string.Join(" ", streams.Select((tsid, relative) => $"{relative}:{tsid}"))}");
                 }
-                if (it930x.CableFrequency is { } locked) Console.WriteLine($"    受けた周波数 {locked} Hz");
+                if (it930x.CableFrequency is { } locked) output.WriteLine($"    受けた周波数 {locked} Hz");
                 // ISDB-C は TSMF の判定と、ヘッダーにある TS の一覧も出す (仕様書 7A.7)
                 if (tuning.IsdbC)
                 {
-                    foreach (var line in TsmfLines(it930x.IsdbcLocked, it930x.Tsmf)) Console.WriteLine($"    {line}");
+                    foreach (var line in TsmfLines(it930x.IsdbcLocked, it930x.Tsmf)) output.WriteLine($"    {line}");
                 }
             }
-            Measure(tuner.Output, name, descramble ? new Descrambler(source) : null, seconds);
+            var measured = Count(tuner.Output, name, descramble ? new Descrambler(source) : null, seconds, 0, output, error);
+            results.Add(new ChannelResult(name, true, measured.Rate, measured.Bytes, measured.Bytes == 0 ? "TS が届かない" : null));
+            // ロックしたのに TS が 1 バイトも届かなかった (仕様書 3.6)。TS を止めるレジスタを読み、ブリッジのバッファを捨ててからもう一度受ける
+            if (measured.Bytes == 0 && tuner is It930xTuner stalled)
+            {
+                ShowTsOutput(stalled, output);
+                output.WriteLine("    ブリッジの TS のバッファを捨てて (0xDA1D の bit0)、もう一度受けます");
+                try
+                {
+                    stalled.FlushTs();
+                    var again = Count(tuner.Output, name, null, seconds, 0, output, error);
+                    output.WriteLine(again.Bytes > 0 ? "    バッファを捨てたあと TS が届きました" : "    バッファを捨てても TS は届きません");
+                }
+                catch (IOException failure)
+                {
+                    output.WriteLine($"    バッファを捨てられませんでした ({failure.Message})");
+                }
+            }
             // IT930x の機材は C/N と強度も出す (受け終えたあとの値)
             if (tuner is It930xTuner receiver && tuner.Signal() is { } signal)
             {
                 // 衛星の強度は仕様書の式の dB で、dBm として扱えるかは未確認 (画面には出さない)
                 var strength = signal.StrengthDbm is { } dbm ? $"{dbm:F1} dBm (目安)"
                     : receiver.SatelliteLevelDb is { } db ? $"{db:F1} dB (仕様書の式。dBm かは未確認)" : "-";
-                Console.WriteLine($"    {(signal.Locked ? "ロック中" : "ロックしていない")}  C/N {(signal.Cn is { } cn ? $"{cn:F1} dB" : "-")}  強度 {strength}");
+                output.WriteLine($"    {(signal.Locked ? "ロック中" : "ロックしていない")}  C/N {(signal.Cn is { } cn ? $"{cn:F1} dB" : "-")}  強度 {strength}");
                 // J.83B は変調と PER も出す (PER は J.83B で値が正しいかを確かめていない)
                 if (tuning.Cable)
                 {
-                    Console.WriteLine($"    変調 {receiver.CableModulation ?? "-"}  PER {(receiver.CablePer is { } per ? $"{per:G3} (未確認の値)" : "-")}");
+                    output.WriteLine($"    変調 {receiver.CableModulation ?? "-"}  PER {(receiver.CablePer is { } per ? $"{per:G3} (未確認の値)" : "-")}");
                 }
                 // ISDB-C は変調と PER と、ほかに読める値 (仕様書 8.4A。値が正しいかは、ほかの受信機と比べていない)
                 if (tuning.IsdbC)
                 {
-                    foreach (var line in IsdbcSignalLines(receiver.CableModulation, receiver.CablePer, receiver.IsdbcDetail)) Console.WriteLine($"    {line}");
+                    foreach (var line in IsdbcSignalLines(receiver.CableModulation, receiver.CablePer, receiver.IsdbcDetail)) output.WriteLine($"    {line}");
                 }
             }
             // ISDB-C は、受け終えたあとの TSMF の数と、出力した TS の PAT の TSID も出す
-            if (tuning.IsdbC && tuner is It930xTuner measured && measured.Tsmf is { } tsmf)
+            if (tuning.IsdbC && tuner is It930xTuner after && after.Tsmf is { } tsmf)
             {
-                foreach (var line in TsmfAfterLines(tsmf)) Console.WriteLine($"    {line}");
+                foreach (var line in TsmfAfterLines(tsmf)) output.WriteLine($"    {line}");
             }
         }
 
-        return 0;
+        return new TuneResults(results, false);
+    }
+
+    /// <summary>
+    /// 初期化の前に読んだチューナーの <c>62</c> を、受信機ごとに 1 回出す (仕様書 10.3。前に ISDB-C か J.83B を選局していて <c>10</c> なら、電源が切れていなかったと推定する)
+    /// </summary>
+    private static void ShowPowerProbe(ITuneDevice tuner, TextWriter output, ref bool shown)
+    {
+        if (shown || tuner is not It930xTuner { PowerProbe: { } value }) return;
+        shown = true;
+        output.WriteLine($"    初期化の前のチューナーの 62: {value:X2} (前に ISDB-C か J.83B を選局していて 10 なら、電源が切れていなかった。推定)");
+    }
+
+    /// <summary>TS を止める復調器のレジスタ 4 つと、ロックの状態を出す (仕様書 3.6)</summary>
+    private static void ShowTsOutput(It930xTuner tuner, TextWriter output)
+    {
+        try
+        {
+            if (tuner.ReadTsOutput() is { } registers) output.WriteLine($"    {registers.Describe()}");
+        }
+        catch (IOException failure)
+        {
+            output.WriteLine($"    復調器の TS の出力のレジスタを読めませんでした ({failure.Message})");
+        }
+    }
+
+    /// <summary>
+    /// ISDB-C でロックしたのに TS が 1 パケットも届かず、TSMF の判定で失敗したとき (仕様書 3.6)。TS を止めるレジスタを読み、
+    /// ブリッジのバッファを捨ててから同じチャンネルを選局し直して、TS が届くようになったかを出す
+    /// </summary>
+    private static void RetryAfterFlush(It930xTuner tuner, ChannelTable.Tuning tuning, string name, TextWriter output)
+    {
+        ShowTsOutput(tuner, output);
+        output.WriteLine("    ロックしたのに TS が届きませんでした。ブリッジの TS のバッファを捨てて (0xDA1D の bit0)、選局し直します");
+        try
+        {
+            tuner.FlushTs();
+            tuner.Tune(tuning);
+            output.WriteLine($"    バッファを捨てたあと TS が届きました ({tuner.Tsmf?.Received ?? 0} パケット)");
+        }
+        catch (IOException failure)
+        {
+            output.WriteLine($"    バッファを捨てて選局し直しても失敗しました: {name}: {failure.Message}{(tuner.Tsmf is { } tsmf ? $" ({tsmf.Received} パケット)" : "")}");
+        }
     }
 
     /// <summary>
@@ -551,7 +704,14 @@ public static class Probe
     /// 読めたバイト数と、それが TS の形式になっているか。復号させたなら復号できたか。<paramref name="lockedAt"/> (Stopwatch の時刻) を渡せば、
     /// そこから最初の復号できたパケット (スクランブルされていた PID の、スクランブルされていないペイロード) までの ms を出して返す (最初の ECM を待つ時間)
     /// </summary>
-    internal static double? Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration, long lockedAt = 0)
+    internal static double? Measure(Stream stream, string name, Descrambler? b25, TimeSpan duration, long lockedAt = 0) =>
+        Count(stream, name, b25, duration, lockedAt, Console.Out, Console.Error).DecodedMs;
+
+    /// <summary><see cref="Count"/> の結果。Rate は書き出した Mbps の文字 (測れなければ null)</summary>
+    private readonly record struct Counted(double? DecodedMs, long Bytes, string? Rate);
+
+    /// <summary><see cref="Measure"/> の本体。書き出す先を選べる (<c>--tune</c> で受信機を並べたときは、受信機ごとの出力に書く)</summary>
+    private static Counted Count(Stream stream, string name, Descrambler? b25, TimeSpan duration, long lockedAt, TextWriter output, TextWriter error)
     {
         var scrambledPids = new HashSet<int>();
         long decodedAt = 0;
@@ -609,35 +769,35 @@ public static class Probe
             }
         }
 
-        var mbps = Rate(total, firstChunk, last - first) is { } rate ? $"{rate:F2}" : "-";
+        var rated = Rate(total, firstChunk, last - first) is { } rate ? $"{rate:F2}" : null;
         var ratio = packets == 0 ? 0 : 100.0 * sync / packets;
-        Console.WriteLine(
+        output.WriteLine(
             $"    最初の 1 バイト {first.TotalMilliseconds:F0} ms  "
-            + $"{total / 1024} KiB  {mbps} Mbps  同期バイト {ratio:F1}%");
-        if (total == 0) Console.Error.WriteLine($"    {name}: 1 バイトも来ていません");
-        Console.WriteLine($"    連続性の飛び {continuity.Jumps} 回 ({continuity.Places.Count} か所。最初の 1 秒は数えない){(continuity.Places.Count == 0 ? "" : "  " + string.Join(" ", continuity.Places.Take(20).Select(place => $"{place.At.TotalSeconds:F1}s({place.Pids} PID)")))}");
+            + $"{total / 1024} KiB  {rated ?? "-"} Mbps  同期バイト {ratio:F1}%");
+        if (total == 0) error.WriteLine($"    {name}: 1 バイトも来ていません");
+        output.WriteLine($"    連続性の飛び {continuity.Jumps} 回 ({continuity.Places.Count} か所。最初の 1 秒は数えない){(continuity.Places.Count == 0 ? "" : "  " + string.Join(" ", continuity.Places.Take(20).Select(place => $"{place.At.TotalSeconds:F1}s({place.Pids} PID)")))}");
 
-        foreach (var line in observation.Describe()) Console.WriteLine($"    {line}");
+        foreach (var line in observation.Describe()) output.WriteLine($"    {line}");
 
         var before = packets == 0 ? 0 : 100.0 * scrambledIn / packets;
         if (b25 is null)
         {
-            Console.WriteLine($"    スクランブルされたパケット {before:F1}%");
-            return null;
+            output.WriteLine($"    スクランブルされたパケット {before:F1}%");
+            return new Counted(null, total, rated);
         }
 
         var after = outPackets == 0 ? 0 : 100.0 * scrambledOut / outPackets;
-        Console.WriteLine($"    スクランブルされたパケット {before:F1}% -> 復号したあと {after:F1}% ({outPackets} 個)"
+        output.WriteLine($"    スクランブルされたパケット {before:F1}% -> 復号したあと {after:F1}% ({outPackets} 個)"
             + (b25.LastError is { } why ? $"  {why}" : ""));
-        if (lockedAt == 0) return null;
+        if (lockedAt == 0) return new Counted(null, total, rated);
         if (decodedAt == 0)
         {
-            Console.WriteLine("    ロックから最初の復号できたパケット - (まだ)");
-            return null;
+            output.WriteLine("    ロックから最初の復号できたパケット - (まだ)");
+            return new Counted(null, total, rated);
         }
         var ms = System.Diagnostics.Stopwatch.GetElapsedTime(lockedAt, decodedAt).TotalMilliseconds;
-        Console.WriteLine($"    ロックから最初の復号できたパケット {ms:F0} ms");
-        return ms;
+        output.WriteLine($"    ロックから最初の復号できたパケット {ms:F0} ms");
+        return new Counted(ms, total, rated);
     }
 
     /// <summary>

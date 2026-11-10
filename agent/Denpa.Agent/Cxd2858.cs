@@ -142,14 +142,27 @@ internal sealed class Cxd2858(CxdLink link)
         if (Side == Cxd2858Side.Terrestrial) StopTerrestrial();
         // 書き始めたら動作中とみなす (地上波と同じ。仕様書に無い)
         Side = Cxd2858Side.Satellite;
-        link.Run(SatelliteRows(khz));
+        link.Run(SatelliteRows(khz, KeepMatching));
     }
 
-    /// <summary>仕様書 4.4 の手順 1〜10 (周波数を埋めたもの)。q は 4 kHz 単位に丸めた値 (<c>(f + 2) / 4</c>。整数の割り算)</summary>
-    internal static CxdRow[] SatelliteRows(uint khz)
+    /// <summary>
+    /// 地上波側の <c>62</c> を読む (仕様書 10.3 の「電源が本当に切れたかの確かめ方」。推定)。<c>10</c> はケーブルの選局でだけ書く値なので、
+    /// 電源を入れたあとの初期化の前に <c>10</c> が読めたら、チューナーの電源は切れていなかった。中継を開けている間に呼ぶ
+    /// </summary>
+    public byte ReadPowerProbe() => link.Read(U, 0x62, 1)[0];
+
+    /// <summary>手順 1A の行 (仕様書 4.4。<c>67</c> の bit1 を 0 にする。推定の手順)</summary>
+    internal static readonly CxdRow SatelliteMatchingOffRow = CxdRow.W(U, 0x67, 0x00, mask: 0x02);
+
+    /// <summary>
+    /// 仕様書 4.4 の手順 1〜10 (周波数を埋めたもの)。q は 4 kHz 単位に丸めた値 (<c>(f + 2) / 4</c>。整数の割り算)。
+    /// 整合を保つ設定 (仕様書 4.7) のときは、手順 1 のあとに手順 1A を入れ、<c>67</c> の bit1 を 0 にしてから衛星を受ける。
+    /// 設定を使っていなければ bit1 は既に 0 なので、手順 1A は省く (仕様書 4.4 が省いてよいとしている)
+    /// </summary>
+    internal static CxdRow[] SatelliteRows(uint khz, bool keepMatching = false)
     {
         var q = (khz + 2) / 4;
-        return
+        CxdRow[] rows =
         [
             CxdRow.W(U, 0x15, 0x02),
             CxdRow.W(U, 0x43, 0x06),
@@ -163,6 +176,7 @@ internal sealed class Cxd2858(CxdLink link)
             CxdRow.W(U, 0x05, 0x00),
             CxdRow.W(U, 0x04, 0xC0, wait: 50),
         ];
+        return keepMatching ? [rows[0], SatelliteMatchingOffRow, .. rows[1..]] : rows;
     }
 
     /// <summary>仕様書 4.3 の手順 1〜10 (周波数を埋めたもの)</summary>

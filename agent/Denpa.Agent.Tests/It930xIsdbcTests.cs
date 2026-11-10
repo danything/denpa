@@ -31,7 +31,7 @@ public class It930xIsdbcTests
     {
         var clock = new FakeClock();
         return new It930xTuner(
-            "test", 0, () => It930xDevice.Acquire(port, () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle(port))
+            "test", 0, () => It930xDevice.Acquire(port, () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle(port, TimeSpan.Zero))
         {
             TsmfTimeoutMs = tsmfTimeoutMs,
         };
@@ -180,7 +180,7 @@ public class It930xIsdbcTests
     }
 
     [Test]
-    public async Task ロックしても_TS_が来なければ_時間切れで同期しなかった文で失敗にする()
+    public async Task ロックしても_TS_が来なければ_時間切れで_TS_が届かない文で失敗にする()
     {
         await Task.Yield();
         var (usb, _, _) = Fake();
@@ -188,7 +188,8 @@ public class It930xIsdbcTests
         try
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("QC51")!));
-            await Assert.That(error.Message).IsEqualTo(ITuneDevice.SyncFailed);
+            // 1 パケットも届かないのは、電波ではなくブリッジから先で止まっている (仕様書 3.6)。同期しなかった文とは分ける
+            await Assert.That(error.Message).IsEqualTo(It930xTuner.TsMissing);
             await Assert.That(tuner.Tuned).IsFalse();
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.Tsmf!.Decision).IsEqualTo(TsmfDecision.Pending);

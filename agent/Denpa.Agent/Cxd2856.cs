@@ -80,6 +80,18 @@ internal readonly record struct CxdIsdbcSignal(
 /// <param name="IfAgc">IF の AGC の出力 (12 ビット)</param>
 public sealed record CxdIsdbcDetail(bool? Inverted, double? CarrierOffsetKhz, double? SymbolRateMsps, double? PreRsBer, int? Uncorrected, int IfAgc);
 
+/// <summary>TS を止める復調器のレジスタ 4 つ (仕様書 3.6。どれもバンク 00)</summary>
+public readonly record struct CxdTsOutput(byte C3, byte R81, byte R32, byte C4)
+{
+    /// <summary>TS を出しているときの値と同じか (<c>C3</c> = <c>00</c>、<c>81</c> の bit0 = 0、<c>32</c> の bit0 = 1、<c>C4</c> の bit7 = 1)</summary>
+    public bool Normal => C3 == 0x00 && (R81 & 0x01) == 0 && (R32 & 0x01) == 1 && (C4 & 0x80) != 0;
+
+    /// <summary><c>--tune</c> が出す 1 行</summary>
+    public string Describe() =>
+        $"復調器の TS の出力 (バンク 00)  C3={C3:X2} (00 で出す)  81={R81:X2} (bit0 が 0 で出す)  32={R32:X2} (bit0 が 1 でクロックが動く)  C4={C4:X2} (bit7 が 1 でシリアル)"
+        + (Normal ? "  どれも TS を出す値" : "  TS を出す値でないものがある");
+}
+
 /// <summary>
 /// 受信機 1 つぶんの I2C。相手からアドレスを決める (X は T + 2、チューナーは <see cref="Cxd2858.Address"/>。仕様書 1.1)。
 /// **ロックは持たない。** 同じバスの受信機と交わらないようにするのは <see cref="Cxd2856Frontend"/> のバスのロック
@@ -615,6 +627,13 @@ internal sealed class Cxd2856(CxdLink link)
         link.Run([CxdRow.W(T, 0x81, (byte)(on ? 0x00 : 0xFF), mask)]);
     }
 
+    /// <summary>TS を止めるレジスタ 4 つを読む (仕様書 3.6。バンク 00 の <c>C3</c>・<c>81</c>・<c>32</c>・<c>C4</c>)</summary>
+    public CxdTsOutput ReadTsOutput()
+    {
+        link.Write(T, 0x00, 0x00);
+        return new CxdTsOutput(link.Read(T, 0xC3, 1)[0], link.Read(T, 0x81, 1)[0], link.Read(T, 0x32, 1)[0], link.Read(T, 0xC4, 1)[0]);
+    }
+
     /// <summary>
     /// ISDB-T の状態と C/N の元の値を読む (仕様書 8.1)。値を固めて (T の <c>01</c> ← <c>01</c>) から読み、読み終えたら (途中で失敗しても) <c>00</c> に戻す (仕様書 2.3)。
     /// 復調がロックしていなければ C/N の値は 0
@@ -1085,6 +1104,12 @@ public sealed class Cxd2856Frontend
     /// <summary>識別のレジスタの値 (初期化のあと。0x90 なら CXD2856、0x91 なら CXD2857)</summary>
     public byte ChipId { get; private set; }
 
+    /// <summary>
+    /// 最後の初期化で、チューナーの初期化 (仕様書 4.2) の前に読んだ <c>62</c> (仕様書 10.3)。前に ISDB-C か J.83B を選局していて <c>10</c> なら、
+    /// チューナーの電源が切れていなかったと推定する。初期化していなければ null
+    /// </summary>
+    public byte? PowerProbe { get; private set; }
+
     /// <summary>最後の選局で、ロックを確かめ始めてからロックするまで (ms)。ロックしなければ -1</summary>
     public long LockMs { get; private set; } = -1;
 
@@ -1126,11 +1151,28 @@ public sealed class Cxd2856Frontend
             lock (_busLock)
             {
                 ChipId = _demod.Init();
-                Relay(_tuner.Init);
+                // チューナーの初期化 (仕様書 4.2) の前に 62 を読む (仕様書 10.3 の、電源が切れていたかの確かめ方。推定)
+                Relay(() =>
+                {
+                    PowerProbe = _tuner.ReadPowerProbe();
+                    _tuner.Init();
+                });
                 _demod.TsForm();
             }
             _state = State.Sleep;
             _started = State.Sleep;
+        }
+    }
+
+    /// <summary>
+    /// TS を止めるレジスタ 4 つ (仕様書 3.6。バンク 00 の <c>C3</c>・<c>81</c>・<c>32</c>・<c>C4</c>) を読む。ロックしているのに TS が届かないときに <c>--tune</c> が出す。
+    /// 値の読み方は <see cref="CxdTsOutput.Describe"/>
+    /// </summary>
+    public CxdTsOutput ReadTsOutput()
+    {
+        lock (_op)
+        {
+            lock (_busLock) return _demod.ReadTsOutput();
         }
     }
 
@@ -1144,8 +1186,14 @@ public sealed class Cxd2856Frontend
     {
         lock (_op)
         {
+            var already = _tuner.KeepMatching;
             _tuner.KeepMatching = true;
             if (!standby || Running(_state)) return;
+            /*
+             * 設定を立てたあとに初期化したか止めたなら、チューナーは既に整合を保つ待機 (67 の bit1 が 1) にある。初期化し直さない。
+             * 選局するスレッドが整合を保つ設定で初期化した直後に、機材の KeepMatching がもう一度初期化して、待機と動作の切り替えを増やしていた
+             */
+            if (already && _state == State.Sleep) return;
             if (_state == State.Unknown) Sleep();
             Init();
         }
