@@ -211,7 +211,7 @@ describe("本チャンネルとサブチャンネル", () => {
     const gr2 = station(41, 1025, "QC20", "CATV", 0x7fe0);
     const bs1 = station(42, 151, "QC30", "CATV", 4);
     const bs2 = station(43, 152, "QC30", "CATV", 4);
-    // CS の再送信と、ケーブルテレビの自主放送
+    // CS の再送信と、ケーブルの自主放送
     const cs1 = station(44, 296, "QC40", "CATV", 7);
     const cs2 = station(45, 298, "QC40", "CATV", 7);
     const own1 = station(46, 101, "QC50", "CATV", 0xfffe);

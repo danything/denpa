@@ -874,7 +874,7 @@ export interface FoundService extends Service {
  * 「受信できた」とみなす。SDT だけ取れても、どのネットワークのものか
  * 分からないと設定に書けない。
  *
- * **ケーブルテレビ (`requireNit: false`) は SDT[actual] だけで揃ったとみなす。** 1 つのネットワークが
+ * **ケーブル (`requireNit: false`) は SDT[actual] だけで揃ったとみなす。** 1 つのネットワークが
  * 地上波・BS の再送信と自主放送の TS をまとめて流していて、NIT は CATV のネットワークのもの
  * (局の元の放送とは別)。どの放送の局かは SDT の original_network_id で分かる。
  * NIT が先に来ていれば、その TS のリモコン番号だけを使う。

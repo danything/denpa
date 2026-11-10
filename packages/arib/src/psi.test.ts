@@ -17,7 +17,7 @@ import {
   terrestrialDeliveryDescriptor,
 } from "./synth.js";
 
-describe("ケーブルテレビの TS (NIT を待たない)", () => {
+describe("ケーブルの TS (NIT を待たない)", () => {
   test("SDT[actual] だけで揃い、ネットワーク ID は SDT の original_network_id", () => {
     const reader = new ServiceReader({ requireNit: false });
     expect(

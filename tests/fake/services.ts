@@ -10,7 +10,7 @@ export interface FakeService {
   channel: string;
   /**
    * TS の TSID。省けば、衛星は名前に入っている値 (`BS11:18000`)、ほかはネットワーク ID と同じ値 (`broadcast.tsidOf`)。
-   * ケーブルテレビは同じネットワークの TS が搬送波ごとに分かれるので、TS ごとに決める
+   * ケーブルは同じネットワークの TS が搬送波ごとに分かれるので、TS ごとに決める
    */
   tsid?: number;
   /**
@@ -135,7 +135,7 @@ const TEST_SERVICES: FakeService[] = [
     noPrograms: true,
   },
   /*
-   * ケーブルテレビ (ISDB-C。種別 CATV) の局。**既定のチャンネルには入れない** (偽エージェントの `saved`)。
+   * ケーブル (ISDB-C。種別 CATV) の局。**既定のチャンネルには入れない** (偽エージェントの `saved`)。
    * 受けられる機材 (`it930x:`) で CATV を選び、スキャンしたときだけ入る (`65-catv.spec.ts`)。搬送波は 3 つ。
    * - QC20 … BS の再送信 (ネットワーク ID 4)。TSMF ではない搬送波
    * - QC30 … TSMF で TS を 2 つ束ねた搬送波 (`X-Denpa-Tsmf-Streams: 2`)。0 番目が地上波の再送信、1 番目 (`QC30:1`) が自主放送
@@ -219,7 +219,7 @@ export const BS_NO_LOGO = TEST_SERVICES[4]!;
 export const SKY_TEST = TEST_SERVICES.find((s) => s.type === "SKY")!;
 const catv = (channel: string) =>
   TEST_SERVICES.find((s) => s.type === "CATV" && s.channel === channel)!;
-/** ケーブルテレビの局 (上の CATV の局の説明) */
+/** ケーブルの局 (上の CATV の局の説明) */
 export const CATV_BS = catv("QC20");
 export const CATV_GR = catv("QC30");
 export const CATV_OWN = catv("QC30:1");

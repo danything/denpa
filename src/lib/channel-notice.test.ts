@@ -17,7 +17,7 @@ describe("channelNotice", () => {
     expect(channelNotice({ GR: 8, BS: 0, CS: 0 }, 8)).toBeNull();
   });
 
-  test("ケーブルテレビだけの家でも、復号できる局があれば出さない", () => {
+  test("ケーブルだけの家でも、復号できる局があれば出さない", () => {
     expect(channelNotice({ CATV: 5 }, 7)).toBeNull();
   });
 

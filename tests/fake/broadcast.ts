@@ -242,7 +242,7 @@ export function on(type: string, channel: string): FakeService[] {
 }
 
 /**
- * ケーブルテレビの搬送波に TSMF で束ねてある TS の数 (本物のエージェントの `X-Denpa-Tsmf-Streams`。docs/agent.md)。
+ * ケーブルの搬送波に TSMF で束ねてある TS の数 (本物のエージェントの `X-Denpa-Tsmf-Streams`。docs/agent.md)。
  * 偽の放送では、2 つ目からの TS の局を `QC30:1` のように番号を付けたチャンネルに置く。TSMF でない搬送波とほかの種別は null
  */
 export function tsmfStreams(type: string, channel: string): number | null {
@@ -256,7 +256,7 @@ export function tsmfStreams(type: string, channel: string): number | null {
 }
 
 /**
- * TS の TSID。決めてある局 (ケーブルテレビ) はその値。衛星は名前に入っている (`BS11:18000`)。地上波はネットワーク ID と同じ値
+ * TS の TSID。決めてある局 (ケーブル) はその値。衛星は名前に入っている (`BS11:18000`)。地上波はネットワーク ID と同じ値
  * (ARIB TR-B14: 地上波の transport_stream_id は network_id と同じ)
  */
 function tsidOf(service: FakeService): number {
@@ -306,7 +306,7 @@ const channelOf = (service: FakeService) => ({
 
 /**
  * 物理チャンネルの一覧。本物はスキャンの結果 (channels.json)。
- * **CATV (ケーブルテレビ) と SKY (スカパー！プレミアム) は入れない。** 受けられる機材は既定に無く、スキャンしたときだけ入る
+ * **CATV (ケーブル) と SKY (スカパー！プレミアム) は入れない。** 受けられる機材は既定に無く、スキャンしたときだけ入る
  * (`64-sky.spec.ts`・`65-catv.spec.ts`)。放送には流れている (`on`) ので、スキャンすれば見つかる
  */
 export function channels() {
@@ -546,7 +546,7 @@ function logoPackets(service: FakeService): Uint8Array {
 const SKY_CA_SYSTEM_ID = 0x000b;
 
 /**
- * 局の PMT に置く CA 記述子 (ECM の PID 0x0901)。SKY の局と、CA_system_id を決めてある局 (`caSystemId`。ケーブルテレビ) だけに置く
+ * 局の PMT に置く CA 記述子 (ECM の PID 0x0901)。SKY の局と、CA_system_id を決めてある局 (`caSystemId`。ケーブル) だけに置く
  */
 function caDescriptor(service: FakeService): number[] {
   const id =

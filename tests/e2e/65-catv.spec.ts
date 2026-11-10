@@ -2,7 +2,7 @@ import { CATV_BS, CATV_GR, CATV_LOCKED, CATV_OWN } from "../fake/services";
 import { expect, goto, syncEpg, test } from "./helpers";
 
 /**
- * ケーブルテレビ (種別 CATV。ISDB-C) の受信の設定・スキャン・番組表・ライブ。
+ * ケーブル (種別 CATV。ISDB-C) の受信の設定・スキャン・番組表・ライブ。
  *
  * **CATV を受けられるのは、エージェントが直に持つ IT930x の機材 (`it930x:`) だけ。** 偽エージェントもその機材にだけ
  * `receivable` に CATV を返す。既定のチューナーには無いので、このファイルの間だけ 1 台足す。
@@ -27,7 +27,7 @@ const MLT = {
   disabled: false,
 };
 
-test.describe("ケーブルテレビ", () => {
+test.describe("ケーブル", () => {
   test.beforeAll(async ({ request, stack }) => {
     await request.put(`${stack.agentUrl}/denpa/tuners`, {
       data: { tuners: [...DEFAULT_TUNERS, MLT] },
@@ -46,7 +46,7 @@ test.describe("ケーブルテレビ", () => {
     await syncEpg(request);
   });
 
-  test("受けられる機材でだけケーブルテレビを選べ、選ぶとスキャンの選び方と「すべて」に入る", async ({
+  test("受けられる機材でだけケーブルを選べ、選ぶとスキャンの選び方と「すべて」に入る", async ({
     page,
     request,
     stack,
@@ -68,9 +68,9 @@ test.describe("ケーブルテレビ", () => {
     const select = page
       .getByTestId("channel-section")
       .getByLabel("スキャンする種別");
-    await expect(
-      select.locator("option", { hasText: "ケーブルテレビ" }),
-    ).toHaveCount(0);
+    await expect(select.locator("option", { hasText: "ケーブル" })).toHaveCount(
+      0,
+    );
     await expect(select.locator("option").first()).toHaveAttribute(
       "value",
       "GR,BS,CS",
@@ -87,9 +87,9 @@ test.describe("ケーブルテレビ", () => {
         return list.find((tuner) => tuner.device === MLT.device)?.types;
       })
       .toEqual(["GR", "CATV"]);
-    await expect(
-      select.locator("option", { hasText: "ケーブルテレビ" }),
-    ).toHaveCount(1);
+    await expect(select.locator("option", { hasText: "ケーブル" })).toHaveCount(
+      1,
+    );
     // 「すべて」にも入る (SKY と同じ)
     await expect(select.locator("option").first()).toHaveAttribute(
       "value",
@@ -146,17 +146,17 @@ test.describe("ケーブルテレビ", () => {
     ).toContainText("CA 記述子なし");
   });
 
-  test("復号できる局は番組表の「ケーブルテレビ」とライブに出て観られ、復号できない局は出ず、ライブでは断る", async ({
+  test("復号できる局は番組表の「ケーブル」とライブに出て観られ、復号できない局は出ず、ライブでは断る", async ({
     page,
     request,
     stack,
   }) => {
     await syncEpg(request);
 
-    // 番組表は、ケーブルテレビの局があるときだけタブを足す
+    // 番組表は、ケーブルの局があるときだけタブを足す
     await goto(page, "/guide");
     const tab = page.getByTestId("type-CATV");
-    await expect(tab).toHaveText("ケーブルテレビ");
+    await expect(tab).toHaveText("ケーブル");
     await tab.click();
     await expect(page).toHaveURL(/type=CATV/);
     const grid = page.getByTestId("guide-grid");
@@ -182,7 +182,7 @@ test.describe("ケーブルテレビ", () => {
       "B-CAS 以外の方式でスクランブルされた局のため",
     );
 
-    // ライブのタブにも「ケーブルテレビ」が出て、選ぶとその局を選局する
+    // ライブのタブにも「ケーブル」が出て、選ぶとその局を選局する
     await goto(page, "/live");
     await page.getByTestId("live-type-CATV").click();
     await expect(

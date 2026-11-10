@@ -311,7 +311,7 @@ function tunerStatus() {
       pin: plain.device ?? plain.name,
       /*
        * 機材が受けられる種別は、挿してある機材の種別。挿していないデバイスは分からない (本物の `DeviceProbe.Receivable`)。
-       * `it930x:` の受信機は、挿していなくても地上波・衛星・ケーブルテレビ・SKY を受けられると返す (本物の `It930x.Types`)
+       * `it930x:` の受信機は、挿していなくても地上波・衛星・ケーブル・SKY を受けられると返す (本物の `It930x.Types`)
        */
       receivable: plain.device?.startsWith("it930x:")
         ? ["GR", "BS", "CS", "CATV", "SKY"]
