@@ -5,7 +5,7 @@
  *
  * 動かさないもの: 外のアプリ・予約・電話回線 (PPP)。選局 (epgTune) と Hybridcast の起動
  * (startAITControlledApp) は denpa の画面に任せる (エンジンは「この局へ」「アプリを」と知らせるだけ)。
- * Hybridcast を開けない (双方向がオフ・AIT にアプリが無い) ときは、AIT の問い合わせに 0 と答える。
+ * Hybridcast を開けない (双方向がオフ・データ放送を開いていない・AIT にアプリが無い) ときは、AIT の問い合わせに 0 と答える。
  *
  * 通信の文書 (http・https から取った文書) からは、NVRAM の局の領域を読み書きさせない。使えるのは
  * 通信の文書向けの `nvram://local_web/` と、受信機の設定 (`nvram://receiverinfo/`) を読むことだけ
@@ -31,6 +31,7 @@ import {
   JSDate,
   JSFunction,
   JSObject,
+  MAX_ARRAY,
   type NativeResult,
   Suspend,
   toNumber,
@@ -92,7 +93,7 @@ export interface BrowserHost {
   loadDrcs(ref: string): NativeResult;
   binaryTable(ref: string): Promise<Uint8Array | null>;
   log(message: string): void;
-  /** Hybridcast のアプリを開けるか (双方向がオンで、AIT にアプリがある)。無ければ開けない */
+  /** Hybridcast のアプリを開けるか (双方向がオンで、データ放送を開いていて、AIT にアプリがある)。無ければ開けない */
   canStartApp?(): boolean;
   /**
    * Hybridcast のアプリを開く (startAITControlledApp)。`hint` は数の引数 (どのアプリかの手がかり。
@@ -100,7 +101,7 @@ export interface BrowserHost {
    */
   startApp?(hint: number[]): boolean;
   /**
-   * XML の AIT を取得できるか (双方向がオン)。**電波に AIT が無くても開ける局がある。** NHK は AIT を電波に載せず、
+   * XML の AIT を取得できるか (双方向がオンで、データ放送を開いている)。**電波に AIT が無くても開ける局がある。** NHK は AIT を電波に載せず、
    * 文書が XML の AIT の URL を渡してくる (`AITTransportMethod` の XML・HTTP を訊く)
    */
   canFetchAit?(): boolean;
@@ -649,7 +650,7 @@ export function defineBinaryTable(host: BrowserHost): JSFunction {
   method("toArray", (table, args) => {
     const start = toNumber(args[0]);
     const count = toNumber(args[1]);
-    if (!(start >= 0) || !(count >= 0) || count > 65536) return null;
+    if (!(start >= 0) || !(count >= 0) || count > MAX_ARRAY) return null;
     return array(
       Array.from({ length: count }, (_, i) => {
         const row = table.rows[start + i];

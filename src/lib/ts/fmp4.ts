@@ -599,5 +599,5 @@ export function opusHead(dOps: Uint8Array): Uint8Array | null {
 
 /** 先頭が `OpusHead` か */
 function isOpusHead(bytes: Uint8Array): boolean {
-  return new TextDecoder().decode(bytes.subarray(0, 8)) === "OpusHead";
+  return ascii(bytes, 0, 8) === "OpusHead";
 }

@@ -177,8 +177,8 @@ export function createRealm(options: RealmOptions): Realm {
   method(realm.arrayProto, "shift", (self) => items(self).shift());
   method(realm.arrayProto, "unshift", (self, args) => {
     const list = items(self);
-    (self as JSArray).setLength(list.length + args.length);
-    list.splice(list.length - args.length, args.length);
+    if (list.length + args.length > MAX_ARRAY)
+      throw new ScriptError("配列が大きすぎます");
     list.unshift(...args);
     return list.length;
   });
