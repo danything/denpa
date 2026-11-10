@@ -175,6 +175,12 @@ public sealed class TsmfSelector
     public TsmfHeader? LastHeader => _last;
 
     /// <summary>
+    /// 判定に使ったヘッダーにある有効な TS の数 (1〜15。<c>/denpa/stream</c> の <c>X-Denpa-Tsmf-Streams</c>)。
+    /// TS を選んだ (<see cref="TsmfDecision.Selected"/>) ときだけで、ヘッダーの無い搬送波やまだ決まっていないときは null
+    /// </summary>
+    public int? Streams => Decision == TsmfDecision.Selected && _first is { } header ? header.ValidStreams.Count : null;
+
+    /// <summary>
     /// 出力した TS の PAT にあった transport_stream_id (<c>--tune</c> が、ヘッダーの TSID の並びの推定を確かめるために出す。仕様書 7A.7)。
     /// PAT をまだ出力していなければ null。PAT のセクションの CRC は確かめない (目安)
     /// </summary>

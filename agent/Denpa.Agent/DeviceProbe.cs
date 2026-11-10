@@ -40,7 +40,7 @@ public static class DeviceProbe
     /// 受けられる方式から denpa の種別に直す。
     ///
     /// <para>
-    /// ISDB-S は BS と CS の両方に使う (どちらも同じ復調)。ほかの方式 (ケーブルの ISDB-C など) は種別にしない。
+    /// ISDB-S は BS と CS の両方に使う (どちらも同じ復調)。ほかの方式 (ケーブルの ISDB-C など) は種別にしない (ISDB-C と J.83B を選局できるのは IT930x の機材だけ)。
     /// </para>
     /// </summary>
     public static string[] TypesFor(IEnumerable<int> delivery) =>
@@ -187,7 +187,7 @@ public static class DeviceProbe
 
     /// <summary>
     /// 機材が受けられる種別。**最後に <see cref="Detect"/> したときに見つけた機材と、設定の <c>it930x:</c> の受信機だけ**で、ほかは null (分からない)。
-    /// <c>it930x:</c> の受信機は、抜いてあっても地上波・衛星・J.83B を受けられると返す (<see cref="It930x.Types"/>。機種がどれでも同じ)。
+    /// <c>it930x:</c> の受信機は、抜いてあっても地上波・衛星・ISDB-C・J.83B を受けられると返す (<see cref="It930x.Types"/>。機種がどれでも同じ)。
     ///
     /// <para>
     /// <c>GET /denpa/tuners</c> の <c>receivable</c> に入れ、denpa はこれに無い種別を設定で選ばせず、保存でも断る。

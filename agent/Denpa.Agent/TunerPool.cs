@@ -298,6 +298,8 @@ public sealed class TunerPool(
                         held.Channel = channel;
                         lease.TunedMs = lease.Clock.ElapsedMilliseconds;
                     }
+                    // 選局し直さずに済んだときも、TSMF の判定はそのチャンネルを選局したときのまま残っている。読み出しを始める前に写す (Sink.TsmfStreams)
+                    lease.TsmfStreams = (held.Device as It930xTuner)?.Tsmf?.Streams;
                     lease.StartNative(held.Device, () => OnExit(lease));
                     // 閉じる側 (Held.Close) は、この読み出しが止まるのを待ってから閉じる
                     held.Reader = lease;
@@ -474,7 +476,10 @@ public sealed class TunerPool(
                 if (removed && lease.Sinks.Count == 0) ScheduleRelease(lease);
             }
             onChange();
-        });
+        })
+        {
+            Owner = lease,
+        };
         lock (lease.Sinks) lease.Sinks.Add(sink);
         // 溢れの報告に名前を残す。**抜けたあとに報告が回っても名乗れるように**
         lease.Saw(use);
@@ -686,7 +691,7 @@ public sealed class TunerPool(
                     ["rank"] = ranks[index],
                     ["name"] = spec.Name,
                     ["types"] = Json.Strings(spec.Types),
-                    // 機材が受けられる種別 (見つけていない機材は null。設定の it930x: は GR・BS・CS・SKY)。denpa はこれに無い種別を設定で選ばせない (DeviceProbe.Receivable)
+                    // 機材が受けられる種別 (見つけていない機材は null。設定の it930x: は GR・BS・CS・CATV・SKY)。denpa はこれに無い種別を設定で選ばせない (DeviceProbe.Receivable)
                     ["receivable"] = DeviceProbe.Receivable(spec.Device) is { } receivable ? Json.Strings(receivable) : null,
                     ["disabled"] = spec.Disabled,
                     // 画面がそのまま編集できるように、定義もいっしょに返す
@@ -840,6 +845,18 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
     /// <summary>取り上げられた理由。**失敗として伝えるために持つ**</summary>
     public string? FailedWith { get; private set; }
 
+    /// <summary>共有している選局。プールの外で作った利用者 (テスト) は null</summary>
+    internal Lease? Owner { get; init; }
+
+    /// <summary><c>/denpa/stream</c> が TSMF の有効な TS の数を返すレスポンスヘッダー (<see cref="TsmfStreams"/>)</summary>
+    public const string TsmfStreamsHeader = "X-Denpa-Tsmf-Streams";
+
+    /// <summary>
+    /// ISDB-C の搬送波で、TSMF のヘッダーにある有効な TS の数 (<see cref="TsmfSelector.Streams"/>)。TSMF を使わない搬送波とほかの方式は null。
+    /// **最初の TS が届いてから読む。** 共有に入った利用者は選局が終わる前に戻ることがあり、値は選局と TSMF の判定が終わってから入る
+    /// </summary>
+    public int? TsmfStreams => Owner?.TsmfStreams;
+
     public void Push(byte[] chunk)
     {
         if (_left != 0) return;
@@ -906,6 +923,9 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     /// <summary>同期した時点。選局し直さずに済んだら -1</summary>
     public long TunedMs { get; set; } = -1;
+
+    /// <summary>TSMF のヘッダーにある有効な TS の数 (<see cref="Sink.TsmfStreams"/>)。読み出しを始める前に入れる</summary>
+    public int? TsmfStreams { get; set; }
 
     private long _firstReadMs = -1;
 

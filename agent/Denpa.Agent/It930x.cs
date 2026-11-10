@@ -63,10 +63,10 @@ public static class It930x
     ];
 
     /// <summary>
-    /// 受信機が受けられる種別 (<c>GET /denpa/tuners</c> の <c>receivable</c>)。どの受信機も ISDB-T・ISDB-S・J.83B を受けられる (仕様書 1.2)。
-    /// <c>SKY</c> (スカパー！プレミアムサービス光) を受けられるのは、いまはこの機材だけ
+    /// 受信機が受けられる種別 (<c>GET /denpa/tuners</c> の <c>receivable</c>)。どの受信機も ISDB-T・ISDB-S・ISDB-C・J.83B を受けられる (仕様書 1.2)。
+    /// <c>CATV</c> (ケーブルテレビのトランスモジュレーション方式) と <c>SKY</c> (スカパー！プレミアムサービス光) を受けられるのは、いまはこの機材だけ
     /// </summary>
-    public static readonly IReadOnlyList<string> Types = ["GR", "BS", "CS", ChannelTable.Sky];
+    public static readonly IReadOnlyList<string> Types = ["GR", "BS", "CS", ChannelTable.Catv, ChannelTable.Sky];
 
     /// <summary>機材をまとめて呼ぶ名前 (見つからないときの文言)</summary>
     public const string Model = "IT930x の機材 (PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P)";
@@ -115,8 +115,9 @@ public static class It930x
     public static List<TunerSpec> Detect() => Specs(Found(Log.Write));
 
     /// <summary>
-    /// 自動で見つけた受信機に付ける種別。<c>SKY</c> は受けられる種別 (<see cref="Types"/>) には入るが、最初からは選ばない
-    /// (光の回線でしか受けられず、選ぶとチャンネルスキャンに H01〜H105 が足される。J.83B は実機で確かめていない)
+    /// 自動で見つけた受信機に付ける種別。<c>CATV</c> と <c>SKY</c> は受けられる種別 (<see cref="Types"/>) には入るが、最初からは選ばない。
+    /// <c>CATV</c> はケーブルテレビの回線でしか受けられず、選ぶとチャンネルスキャンに QC13〜QV12 の 113 チャンネルが足される。
+    /// <c>SKY</c> は光の回線でしか受けられず、選ぶとチャンネルスキャンに H01〜H105 が足される (J.83B は実機で確かめていない)
     /// </summary>
     public static readonly IReadOnlyList<string> DetectedTypes = ["GR", "BS", "CS"];
 
