@@ -107,12 +107,13 @@ public static class UsbDevices
     }
 
     /// <summary>そのポートの機材を開く (Windows・macOS)。無ければ投げる</summary>
-    public static IUsbDevice Open(string port, int vendor, int product)
+    /// <param name="selectAlternate">代替設定 0 を選ぶ。IT930x は選ばない (<see cref="UsbFsDevice.Open"/> と同じ理由)</param>
+    public static IUsbDevice Open(string port, int vendor, int product, bool selectAlternate = true)
     {
         var found = List(vendor, product).FirstOrDefault(location => location.Port == port)
             ?? throw new IOException($"USB のポート {port} に {vendor:x4}:{product:x4} が見当たりません");
-        if (OperatingSystem.IsWindows()) return WinUsbDevice.Open(found);
-        if (OperatingSystem.IsMacOS()) return IoKitDevice.Open(found, vendor, product);
+        if (OperatingSystem.IsWindows()) return WinUsbDevice.Open(found, selectAlternate);
+        if (OperatingSystem.IsMacOS()) return IoKitDevice.Open(found, vendor, product, selectAlternate);
         throw new PlatformNotSupportedException();
     }
 

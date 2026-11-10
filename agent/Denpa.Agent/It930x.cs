@@ -192,5 +192,5 @@ public static class It930x
     public static IUsbDevice OpenUsb(string port, It930xModel model) =>
         OperatingSystem.IsLinux()
             ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, model.Vendor, model.Product, selectAlternate: false)
-            : UsbDevices.Open(port, model.Vendor, model.Product);
+            : UsbDevices.Open(port, model.Vendor, model.Product, selectAlternate: false);
 }

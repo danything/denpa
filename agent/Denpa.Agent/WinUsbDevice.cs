@@ -222,8 +222,8 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         return end > 0 ? text[..end] : null;
     }
 
-    /// <summary>開いて、インターフェース 0 の代替設定 0 を選ぶ</summary>
-    public static WinUsbDevice Open(UsbLocation location)
+    /// <summary>開いて、インターフェース 0 の代替設定 0 を選ぶ (<paramref name="selectAlternate"/> が false なら選ばない)</summary>
+    public static WinUsbDevice Open(UsbLocation location, bool selectAlternate = true)
     {
         var name = $"usb {location.Port}";
         var file = CreateFileW(location.Path, GenericRead | GenericWrite, FileShareRead | FileShareWrite, 0, OpenExisting,
@@ -245,7 +245,7 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
             throw new IOException($"{name}: {Busy}");
         }
         var device = new WinUsbDevice(name, file, handle);
-        if (WinUsb_SetCurrentAlternateSetting(handle, 0) == 0)
+        if (selectAlternate && WinUsb_SetCurrentAlternateSetting(handle, 0) == 0)
         {
             var error = device.Failure("代替設定を選べません");
             device.Dispose();
