@@ -100,7 +100,7 @@ public class It930xDeviceTests
         finally
         {
             device.Release();
-            It930xDevice.CloseIfIdle("9-1");
+            It930xDevice.CloseIfIdle("9-1", TimeSpan.Zero);
         }
         // 閉じると電源を切る (仕様書 1.5: GPIOH2 ← 0、GPIOH7 ← 1)
         await Assert.That(usb.Log.Where(line => line.StartsWith("W D8", StringComparison.Ordinal)).TakeLast(2)).IsEquivalentTo(new[] { "W D8B7=00", "W D8C3=01" });
@@ -157,7 +157,7 @@ public class It930xDeviceTests
         };
         try
         {
-            It930xDevice.CloseIfIdle("9-6");
+            It930xDevice.CloseIfIdle("9-6", TimeSpan.Zero);
             await Assert.That(started).IsEqualTo(1);
             await Assert.That(reopening.Join(TimeSpan.FromSeconds(10))).IsTrue();
             await Assert.That(failure).IsNull();
@@ -172,7 +172,7 @@ public class It930xDeviceTests
         {
             usb.OnNote = null;
             second?.Release();
-            It930xDevice.CloseIfIdle("9-6");
+            It930xDevice.CloseIfIdle("9-6", TimeSpan.Zero);
         }
     }
 
@@ -195,7 +195,7 @@ public class It930xDeviceTests
         finally
         {
             device.Release();
-            It930xDevice.CloseIfIdle("9-2");
+            It930xDevice.CloseIfIdle("9-2", TimeSpan.Zero);
         }
     }
 
@@ -206,7 +206,7 @@ public class It930xDeviceTests
         var clock = new FakeClock();
         var u = It930x.Find(0x0511, 0x084E)!;
         // PX-MLT5U の受信機 2 は TS 入力 1 (仕様書 1.2)
-        var tuner = new It930xTuner("test", 2, () => Open(usb, "9-3", clock, u), () => It930xDevice.CloseIfIdle("9-3"));
+        var tuner = new It930xTuner("test", 2, () => Open(usb, "9-3", clock, u), () => It930xDevice.CloseIfIdle("9-3", TimeSpan.Zero));
         tuner.Tune(ChannelTable.Parse("T27")!);
         await Assert.That(tuner.Tuned).IsTrue();
         await Assert.That(tuner.Output).IsNotNull();
@@ -226,7 +226,7 @@ public class It930xDeviceTests
     {
         var (usb, _, bus3) = Fake();
         bus3[0x65].Status = _ => 0x10;
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-4", new FakeClock()), () => It930xDevice.CloseIfIdle("9-4"));
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-4", new FakeClock()), () => It930xDevice.CloseIfIdle("9-4", TimeSpan.Zero));
         try
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!));
@@ -253,7 +253,7 @@ public class It930xDeviceTests
     public async Task 衛星は_TSID_で選局し_15V_なら_LNB_の給電を入れる()
     {
         var (usb, _, bus3) = Fake();
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-7", new FakeClock()), () => It930xDevice.CloseIfIdle("9-7"), "15v");
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-7", new FakeClock()), () => It930xDevice.CloseIfIdle("9-7", TimeSpan.Zero), "15v");
         tuner.Tune(ChannelTable.Parse("BS15:16625")!);
         await Assert.That(tuner.Tuned).IsTrue();
         // 給電を入れてから選局する (GPIOH11 ← 1。仕様書 9)
@@ -275,7 +275,7 @@ public class It930xDeviceTests
         var (usb, _, _) = Fake();
         var clock = new FakeClock();
         var tuners = new[] { 0, 1 }.Select(receiver =>
-            new It930xTuner($"test {receiver}", receiver, () => Open(usb, "9-8", clock), () => It930xDevice.CloseIfIdle("9-8"), "15v")).ToList();
+            new It930xTuner($"test {receiver}", receiver, () => Open(usb, "9-8", clock), () => It930xDevice.CloseIfIdle("9-8", TimeSpan.Zero), "15v")).ToList();
         try
         {
             tuners[0].Tune(ChannelTable.Parse("BS15:16625")!);
@@ -300,7 +300,7 @@ public class It930xDeviceTests
     public async Task LNB_を設定していなければ衛星でも給電しない()
     {
         var (usb, _, _) = Fake();
-        var tuner = new It930xTuner("test", 2, () => Open(usb, "9-9", new FakeClock()), () => It930xDevice.CloseIfIdle("9-9"), "");
+        var tuner = new It930xTuner("test", 2, () => Open(usb, "9-9", new FakeClock()), () => It930xDevice.CloseIfIdle("9-9", TimeSpan.Zero), "");
         try
         {
             tuner.Tune(ChannelTable.Parse("CS4")!);
@@ -318,7 +318,7 @@ public class It930xDeviceTests
     {
         var (usb, _, bus3) = Fake();
         bus3[0x65].SatelliteStatus = _ => 0x00;
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-11", new FakeClock()), () => It930xDevice.CloseIfIdle("9-11"), "15v");
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-11", new FakeClock()), () => It930xDevice.CloseIfIdle("9-11", TimeSpan.Zero), "15v");
         try
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("BS15:16625")!));
@@ -343,7 +343,7 @@ public class It930xDeviceTests
     public async Task 同じ受信機で地上波と衛星を切り替える()
     {
         var (usb, _, bus3) = Fake();
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-10", new FakeClock()), () => It930xDevice.CloseIfIdle("9-10"), "15v");
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-10", new FakeClock()), () => It930xDevice.CloseIfIdle("9-10", TimeSpan.Zero), "15v");
         try
         {
             tuner.Tune(ChannelTable.Parse("T27")!);
@@ -368,8 +368,8 @@ public class It930xDeviceTests
     {
         var (usb, bus1, bus3) = Fake();
         var clock = new FakeClock();
-        var ground = new It930xTuner("test 1", 1, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12"));
-        var cable = new It930xTuner("test 0", 0, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12"), "15v");
+        var ground = new It930xTuner("test 1", 1, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12", TimeSpan.Zero));
+        var cable = new It930xTuner("test 0", 0, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12", TimeSpan.Zero), "15v");
         try
         {
             // 受信機 1 は地上波で動作中
@@ -418,7 +418,7 @@ public class It930xDeviceTests
             var khz = demod.Tuner.GetValueOrDefault((byte)0x70) | (demod.Tuner.GetValueOrDefault((byte)0x71) << 8) | ((demod.Tuner.GetValueOrDefault((byte)0x72) & 0x0F) << 16);
             return khz == 374950 ? (byte)0x01 : (byte)0x00;
         };
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-13", new FakeClock()), () => It930xDevice.CloseIfIdle("9-13"));
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-13", new FakeClock()), () => It930xDevice.CloseIfIdle("9-13", TimeSpan.Zero));
         try
         {
             tuner.Tune(ChannelTable.Parse("H44")!);
@@ -441,7 +441,7 @@ public class It930xDeviceTests
     {
         var (usb, _, bus3) = Fake();
         bus3[0x65].CableStatus = _ => 0x00;
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-14", new FakeClock()), () => It930xDevice.CloseIfIdle("9-14"));
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-14", new FakeClock()), () => It930xDevice.CloseIfIdle("9-14", TimeSpan.Zero));
         try
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("H11")!));

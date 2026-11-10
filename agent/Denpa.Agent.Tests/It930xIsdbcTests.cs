@@ -31,7 +31,7 @@ public class It930xIsdbcTests
     {
         var clock = new FakeClock();
         return new It930xTuner(
-            "test", 0, () => It930xDevice.Acquire(port, () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle(port))
+            "test", 0, () => It930xDevice.Acquire(port, () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle(port, TimeSpan.Zero))
         {
             TsmfTimeoutMs = tsmfTimeoutMs,
         };

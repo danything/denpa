@@ -15,7 +15,8 @@ internal sealed class It930xI2cBus(It930xBridge bridge, byte bus) : ICxdBus
 ///
 /// <para>
 /// **初めて要るときに開き、使っている側がいる間は開いたまま。** チューナー (<see cref="It930xTuner"/>) は最初の選局で取り、捨てるときに返す。
-/// 誰も使わなくなったら閉じて電源を切る (<see cref="CloseIfIdle"/>)。内蔵カードリーダーは受信機と同じ電源なので (仕様書 1.5)、
+/// 誰も使わなくなったら、30 秒 (<see cref="IdleGrace"/>) 待ってから閉じて電源を切る (<see cref="CloseIfIdle(string)"/>)。その間に取り直せば開いたまま使う。
+/// エージェントを止めるとき (<see cref="CloseAll"/>) はすぐ閉じる。内蔵カードリーダーは受信機と同じ電源なので (仕様書 1.5)、
 /// カード (<see cref="It930xCard"/>) も使う側として数え、カードを使っている間は受信機を全部閉じても電源を切らない。
 /// </para>
 ///
@@ -113,6 +114,8 @@ public sealed class It930xDevice
             {
                 if (!device.Faulted)
                 {
+                    // 閉じるのを待っている間に取り直したら、開いて電源の入ったままの機材を使う
+                    device.CancelIdle();
                     lock (device._gate) device._users++;
                     return device;
                 }
@@ -403,10 +406,17 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 誰も使っていなければ閉じる (チューナーが捨てられたとき。定義が変わった・止める)。
-    /// 閉じ終わるまで Registry を持つので、同じポートの Acquire は閉じ終えてから開く (古いほうの電源を切る書き込みが、新しく開いた機材に届かない)
+    /// 誰も使っていなければ、<see cref="IdleGrace"/> のあとに閉じる (チューナーが捨てられたとき・カードを閉じたとき)。
+    /// 待つ間に取り直されたら閉じない。すぐには電源を切らない (下の <paramref name="grace"/>)
     /// </summary>
-    public static void CloseIfIdle(string port)
+    public static void CloseIfIdle(string port) => CloseIfIdle(port, IdleGrace);
+
+    /// <summary>
+    /// 誰も使っていなければ、<paramref name="grace"/> のあとに閉じる。0 ならすぐ閉じる (テストと <c>--it930x-cycle</c>)。
+    /// 閉じ終わるまで Registry を持つので、同じポートの Acquire は閉じ終えてから開く (古いほうの電源を切る書き込みが、新しく開いた機材に届かない)。
+    /// 待つ間に <see cref="Acquire(string)"/> が取り直せば、開いて電源の入ったままの機材をそのまま使う
+    /// </summary>
+    internal static void CloseIfIdle(string port, TimeSpan grace)
     {
         lock (Registry)
         {
@@ -415,26 +425,90 @@ public sealed class It930xDevice
             {
                 if (device._users > 0) return;
             }
+            if (grace > TimeSpan.Zero)
+            {
+                device.ScheduleIdle(grace);
+                return;
+            }
             Devices.Remove(port);
             device.Close();
         }
     }
 
+    /// <summary>
+    /// 最後の利用者が返してから閉じるまでの間。**電源を切って入れ直すのを続けて繰り返さない。**
+    /// 本番では、カードの状態を確かめるたび (使っていない内蔵カードリーダーを開いて閉じる) に電源を切って入れ直し、続けて 13 回入り切りしたあと、
+    /// 全受信機の TS が電源を抜くまで止まった (仕様書 12.5)。短い間の入り切りを、いちばん疑っている
+    /// </summary>
+    public static readonly TimeSpan IdleGrace = TimeSpan.FromSeconds(30);
+
+    /// <summary>閉じるのを待っている間の時計 (取り直したら止める)。Registry の中で読み書きする</summary>
+    private Timer? _idle;
+
+    /// <summary><paramref name="grace"/> のあとに、まだ誰も使っていなければ閉じる。前に待っていたものは置き換える。Registry の中で呼ぶ</summary>
+    private void ScheduleIdle(TimeSpan grace)
+    {
+        CancelIdle();
+        Timer? timer = null;
+        timer = new Timer(_ =>
+        {
+            lock (Registry)
+            {
+                // 取り直されたか、置き換えられたか、もう閉じた
+                if (_idle != timer || !Devices.TryGetValue(Port, out var current) || current != this) return;
+                _idle = null;
+                timer!.Dispose();
+                lock (_gate)
+                {
+                    if (_users > 0) return;
+                }
+                Devices.Remove(Port);
+                Close();
+            }
+        });
+        _idle = timer;
+        timer.Change(grace, Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>閉じるのを待っているのをやめる (取り直したとき・すぐ閉じるとき)。Registry の中で呼ぶ</summary>
+    private void CancelIdle()
+    {
+        _idle?.Dispose();
+        _idle = null;
+    }
+
+    /// <summary>
+    /// 電源を切ったあと USB を閉じるまでの待ち (ms。ふだんは <see cref="PowerOffSettleMs"/>)。
+    /// 0 にするのは、待たずに入り切りを繰り返した前の動きを再現する <c>--it930x-cycle --no-wait</c> だけ
+    /// </summary>
+    internal int PowerOffWaitMs { get; set; } = PowerOffSettleMs;
+
     /// <summary>全部閉じる (エージェントを止めるとき。<c>--tune</c> の終わり)。使っている側がいても閉じる</summary>
-    public static void CloseAll()
+    public static void CloseAll() => CloseAll(_ => true);
+
+    /// <summary>
+    /// <paramref name="which"/> のポートを、閉じるのを待っている間でもすぐ閉じる (<see cref="CloseAll()"/> の本体。
+    /// テストは、並んで走るほかのテストの機材を閉じないように自分のポートだけを渡す)
+    /// </summary>
+    internal static void CloseAll(Func<string, bool> which)
     {
         lock (Registry)
         {
-            foreach (var device in Devices.Values) device.Close();
-            Devices.Clear();
+            foreach (var (port, device) in Devices.Where(entry => which(entry.Key)).ToList())
+            {
+                device.Close();
+                Devices.Remove(port);
+            }
         }
     }
 
     /// <summary>
-    /// 受信機を全部スリープにし、電源を切って (仕様書 1.5: GPIOH2 ← 0、GPIOH7 ← 1)、USB を閉じる。抜けていれば書かずに閉じる
+    /// 受信機を全部スリープにし、電源を切って (仕様書 1.5: GPIOH2 ← 0、GPIOH7 ← 1)、USB を閉じる。抜けていれば書かずに閉じる。
+    /// 閉じるのを待っていたら、その待ちはやめる。Registry の中で呼ぶ
     /// </summary>
     private void Close()
     {
+        CancelIdle();
         lock (_gate)
         {
             if (_closed) return;
@@ -452,7 +526,7 @@ public sealed class It930xDevice
                 Bridge.Gpio(7, true);
                 // 電源が落ちきる前に入れ直さないよう、USB を閉じる前に待つ (仕様書 1.5・10.3・11)。閉じている間は Registry を持っているので、
                 // 同じポートを開き直す Acquire (次の GPIOH7 ← 0) もこの待ちのあとになる
-                _sleep(PowerOffSettleMs);
+                _sleep(PowerOffWaitMs);
             }
             catch (IOException error)
             {

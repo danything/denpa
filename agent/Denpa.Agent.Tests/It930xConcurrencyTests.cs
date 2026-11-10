@@ -43,7 +43,7 @@ public partial class It930xConcurrencyTests
     private static It930xTuner Tuner(FakeIt930x usb, string port, SharedClock clock, int receiver) =>
         new($"test {receiver}", receiver,
             () => It930xDevice.Acquire(port, () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code),
-            () => It930xDevice.CloseIfIdle(port));
+            () => It930xDevice.CloseIfIdle(port, TimeSpan.Zero));
 
     /// <summary>受信機ごとのスレッドを、そろって始めて走らせる。どれかが投げた例外を返す (固まったら失敗)</summary>
     private static List<Exception> Together(int count, Action<int> body)
@@ -296,7 +296,7 @@ public partial class It930xConcurrencyTests
         var device = It930xDevice.Acquire("11-5", () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code);
         device.Release();
         var before = clock.Sleeps.Count;
-        It930xDevice.CloseIfIdle("11-5");
+        It930xDevice.CloseIfIdle("11-5", TimeSpan.Zero);
         // GPIOH2 ← 0、GPIOH7 ← 1 のあと 100 ms (仕様書 1.5・10.3・11)
         await Assert.That(usb.Log.TakeLast(2)).IsEquivalentTo(new[] { "W D8B7=00", "W D8C3=01" });
         await Assert.That(clock.Sleeps.Skip(before)).IsEquivalentTo(new[] { It930xDevice.PowerOffSettleMs });
@@ -310,14 +310,14 @@ public partial class It930xConcurrencyTests
         var (usb, _, bus3) = Fake();
         var clock = new FakeClock();
         var cable = new It930xTuner("test 0", 0,
-            () => It930xDevice.Acquire("11-6", () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle("11-6"));
+            () => It930xDevice.Acquire("11-6", () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle("11-6", TimeSpan.Zero));
         cable.Tune(ChannelTable.Parse("H40")!);
         await Assert.That(cable.Device!.Frontend(3).KeepsMatching).IsTrue();
         // 全部閉じて電源を切る。開き直すと (GPIOH7 ← 0)、整合を保つ設定は使わないところから (仕様書 1.5)
         cable.Dispose();
         usb.ResetSequence();
         var ground = new It930xTuner("test 3", 3,
-            () => It930xDevice.Acquire("11-6", () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle("11-6"));
+            () => It930xDevice.Acquire("11-6", () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle("11-6", TimeSpan.Zero));
         try
         {
             var lines = bus3.Log.Count;
@@ -330,6 +330,91 @@ public partial class It930xConcurrencyTests
         {
             ground.Dispose();
         }
+    }
+
+    /// <summary>電源の GPIOH7 の値の書き込み (仕様書 1.5)。開いたときの設定のぶんも数える</summary>
+    private static int PowerWrites(FakeIt930x usb)
+    {
+        lock (usb.Log) return usb.Log.Count(line => line.StartsWith("W D8C3=", StringComparison.Ordinal));
+    }
+
+    /// <summary>EP 0x84 の読みを閉じたか (機材を閉じた)</summary>
+    private static bool Closed(FakeIt930x usb)
+    {
+        lock (usb.Log) return usb.Log.Contains("TS 閉じる");
+    }
+
+    private static It930xDevice OpenAt(FakeIt930x usb, string port) =>
+        It930xDevice.Acquire(port, () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
+
+    [Test]
+    public async Task 返してから待つ間に取り直すと_電源を入り切りせずに同じ機材を使う()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        var first = OpenAt(usb, "11-8");
+        try
+        {
+            var powered = PowerWrites(usb);
+            // カードの状態を確かめるたびに、使っていない内蔵カードリーダーを開いて閉じるのと同じ
+            for (var i = 0; i < 5; i++)
+            {
+                first.Release();
+                It930xDevice.CloseIfIdle("11-8", TimeSpan.FromSeconds(30));
+                await Assert.That(OpenAt(usb, "11-8")).IsSameReferenceAs(first);
+            }
+            await Assert.That(PowerWrites(usb)).IsEqualTo(powered);
+            await Assert.That(usb.Log.Count(line => line == "BOOT")).IsEqualTo(1);
+            await Assert.That(It930xDevice.IdleGrace).IsEqualTo(TimeSpan.FromSeconds(30));
+        }
+        finally
+        {
+            first.Release();
+            It930xDevice.CloseIfIdle("11-8", TimeSpan.Zero);
+        }
+        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+    }
+
+    [Test]
+    public async Task 待つ間に取り直されなければ_そのあと閉じて電源を切る()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        var device = OpenAt(usb, "11-9");
+        device.Release();
+        It930xDevice.CloseIfIdle("11-9", TimeSpan.FromMilliseconds(100));
+        // まだ閉じていない
+        await Assert.That(Closed(usb)).IsFalse();
+        for (var i = 0; i < 100 && !Closed(usb); i++) await Task.Delay(50);
+        await Assert.That(Closed(usb)).IsTrue();
+        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+        // 閉じた機材は使わず、次の Acquire は開き直す
+        usb.ResetSequence();
+        var again = OpenAt(usb, "11-9");
+        try
+        {
+            await Assert.That(again).IsNotSameReferenceAs(device);
+        }
+        finally
+        {
+            again.Release();
+            It930xDevice.CloseIfIdle("11-9", TimeSpan.Zero);
+        }
+    }
+
+    [Test]
+    public async Task エージェントを止めるときは待たずに閉じる()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        var device = OpenAt(usb, "11-10");
+        device.Release();
+        It930xDevice.CloseIfIdle("11-10", TimeSpan.FromSeconds(30));
+        await Assert.That(Closed(usb)).IsFalse();
+        // CloseAll と同じ処理を、このテストのポートだけに
+        It930xDevice.CloseAll(port => port == "11-10");
+        await Assert.That(Closed(usb)).IsTrue();
+        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
     }
 
     [Test]
@@ -351,7 +436,7 @@ public partial class It930xConcurrencyTests
         finally
         {
             device.Release();
-            It930xDevice.CloseIfIdle("11-7");
+            It930xDevice.CloseIfIdle("11-7", TimeSpan.Zero);
         }
     }
 }

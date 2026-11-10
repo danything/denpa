@@ -257,4 +257,52 @@ public static class It930xProbe
             }
         }
     }
+
+    public const string CycleUsage = "denpa-agent --it930x-cycle <USB のポート> <回数> [--no-wait]";
+
+    /// <summary><c>--it930x-cycle</c> の回数の上限</summary>
+    internal const int MaxCycles = 100;
+
+    /// <summary>
+    /// <c>--it930x-cycle &lt;USB のポート&gt; &lt;回数&gt; [--no-wait]</c>: 機材を開いて電源を入れ、すぐ電源を切って閉じるのを、続けて決めた回数だけ繰り返す。
+    /// 常駐のエージェントは最後の利用者が返しても 30 秒は閉じないが (<see cref="It930xDevice.IdleGrace"/>)、ここでは待たずに閉じる。
+    /// 本番で続けて 13 回入り切りしたあと、全受信機の TS が電源を抜くまで止まったので、その入り切りを再現するための入口。
+    /// <c>--no-wait</c> を付けると、電源を切ったあとの 100 ms (仕様書 1.5) も待たない (待ちを入れる前の動き)。受信機の初期化と選局はしない。
+    /// 終えたあと TS が出るかは、続けて <c>--tune</c> で確かめる
+    /// </summary>
+    public static int Cycle(string[] args)
+    {
+        var port = args.ElementAtOrDefault(1);
+        if (port is null || port.StartsWith("--", StringComparison.Ordinal)
+            || !int.TryParse(args.ElementAtOrDefault(2), NumberStyles.None, CultureInfo.InvariantCulture, out var count) || count is < 1 or > MaxCycles)
+        {
+            Console.Error.WriteLine($"usage: {CycleUsage} (回数は 1〜{MaxCycles})");
+            return 2;
+        }
+        var noWait = args.Contains("--no-wait");
+        Console.WriteLine($"{port} を {count} 回、開いて電源を入れ、すぐ電源を切って閉じます (電源を切ったあと {(noWait ? "待たない" : $"{It930xDevice.PowerOffSettleMs} ms 待つ")})");
+        try
+        {
+            for (var round = 1; round <= count; round++)
+            {
+                var started = Stopwatch.StartNew();
+                var device = It930xDevice.Acquire(port);
+                var opened = started.ElapsedMilliseconds;
+                if (noWait) device.PowerOffWaitMs = 0;
+                device.Release();
+                It930xDevice.CloseIfIdle(port, TimeSpan.Zero);
+                Console.WriteLine($"{round} 回目: 開いて電源を入れるまで {opened} ms (うちファームウェアから電源まで {device.OpenMs} ms)、電源を切って閉じるまで {started.ElapsedMilliseconds - opened} ms");
+            }
+            return 0;
+        }
+        catch (IOException error)
+        {
+            Console.Error.WriteLine($"{port}: {UsbDevices.Reason(error)}");
+            return 1;
+        }
+        finally
+        {
+            It930xDevice.CloseAll();
+        }
+    }
 }
