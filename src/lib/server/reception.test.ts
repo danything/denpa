@@ -116,12 +116,15 @@ describe("設定に出す受信の様子", () => {
       { type: "BS", channel: "BS01:16400" },
       { type: "BS", channel: "BS03:16432" },
       { type: "CS", channel: "CS02:24608" },
+      // SKY はスキャンで受信できたものだけが入り、番組表の取得では確かめない
+      { type: "SKY", channel: "H40" },
     ]);
     expect([...state.values()]).toEqual([
       "ok",
       "ok",
       "unreceivable",
       "checking",
+      "ok",
     ]);
   });
 

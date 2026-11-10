@@ -227,7 +227,7 @@ interface FakeChannel {
 }
 
 /** 種別の並び。知らない種別は後ろ (本物の `Config.TypeOrder`) */
-const TYPE_ORDER: Record<string, number> = { GR: 0, BS: 1, CS: 2 };
+const TYPE_ORDER: Record<string, number> = { GR: 0, BS: 1, CS: 2, SKY: 3 };
 
 /** 本物が channels.json に書く順 (種別ごと、その中はチャンネルの文字の順。`Config.SaveChannels`) */
 function sortChannels<T extends FakeChannel>(list: T[]): T[] {

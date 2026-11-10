@@ -63,6 +63,7 @@ import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import { KeyGate } from "#lib/ts/key-gate.js";
 import { MkvSplitter } from "#lib/ts/mkv.js";
 import { BUSY } from "#lib/ts/playback.js";
+import { decodable, UNDECODABLE } from "#lib/types.js";
 
 import {
   captionFeed,
@@ -3376,6 +3377,15 @@ export function attend(connection: Connection): void {
     }
     const { channelType, channel, serviceId, audio, caption, raw, tuner } =
       asked;
+    // 復号できない種別 (SKY) は選局しない。流してもスクランブルされたままで映らない (`decodable`。HTTP のライブも同じに断る)
+    if (!decodable(channelType)) {
+      connection.send(
+        CHANNEL.control,
+        0n,
+        json({ type: "error", message: UNDECODABLE } satisfies Notice),
+      );
+      return;
+    }
     /*
      * **H.265 を出せなければ H.264 にする** (`liveHevc`。GPU が無い・印を外した・最近落ちた)。画面は答え (`tuned`) の
      * コーデックで受け取るので、そのまま観られる。替えたことは断り書きで言う

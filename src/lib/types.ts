@@ -53,6 +53,14 @@ export function decodable(type: string): boolean {
   return type !== "SKY";
 }
 
+/**
+ * 放送の一覧 (NIT) から作る種別か (BS・CS)。地上波と SKY は総当たりのスキャンで見つける (`server/satellite.ts`・`server/scan.ts`)。
+ * BS と CS は同じ衛星のチューナーで受ける
+ */
+export function isSatellite(type: string): type is "BS" | "CS" {
+  return type === "BS" || type === "CS";
+}
+
 /** 復号できない局 (`decodable`) をライブで開こうとしたときの理由 */
 export const UNDECODABLE =
   "スカパー！プレミアムの局は、スクランブルを復号できないため観られません。スカパー！プレミアムのカードには、これから対応する予定です";

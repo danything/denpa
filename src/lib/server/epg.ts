@@ -57,7 +57,7 @@ export function currentServices() {
 
 /**
  * いま選局できる局の数を種別ごとに。局が無いときの案内に使う (`#lib/channel-notice.ts`)。
- * 局が 1 つも無い種別は入らない
+ * 局が 1 つも無い種別は入らない。復号できない種別 (SKY) は番組表とライブに出ないので数えない (`decodable`)
  */
 export function serviceCounts(): Record<string, number> {
   const rows = orm()
@@ -66,7 +66,9 @@ export function serviceCounts(): Record<string, number> {
     .where(currentServices())
     .groupBy(services.type)
     .all();
-  return Object.fromEntries(rows.map((row) => [row.type, row.n]));
+  return Object.fromEntries(
+    rows.filter((row) => decodable(row.type)).map((row) => [row.type, row.n]),
+  );
 }
 
 /**
