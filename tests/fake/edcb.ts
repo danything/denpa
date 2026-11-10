@@ -12,7 +12,7 @@ import { createServer, type Socket } from "node:net";
  */
 
 /** 振る舞いを変えるつまみ。テストから途中で変える */
-export interface FakeEdcbMode {
+interface FakeEdcbMode {
   /** 応答の ver。null ならリクエストされた ver (2 未満は 2。本物と同じ) */
   ver: number | null;
   /** 一覧の 1 件ずつの構造体の後ろに、知らない欄としてこのバイト数を足す (新しい EDCB の代わり) */
@@ -29,7 +29,7 @@ export interface FakeEdcbMode {
   claimSize: number | null;
 }
 
-export const DEFAULT_EDCB_MODE: FakeEdcbMode = {
+const DEFAULT_EDCB_MODE: FakeEdcbMode = {
   ver: null,
   extra: 0,
   deny: false,
@@ -191,7 +191,7 @@ export interface FakeRecInfo {
   epgStartAt?: number | null;
 }
 
-export interface FakeEdcbData {
+interface FakeEdcbData {
   autoAdd: FakeRule[];
   reserve: FakeReserve[];
   recInfo: FakeRecInfo[];
@@ -203,7 +203,7 @@ function extraBytes(w: Writer, extra: number): void {
 }
 
 /** `REC_SETTING_DATA`。denpa が読むのは録画モードだけだが、並びは本物どおり書く */
-export function writeRecSetting(w: Writer, recMode: number, ver: number): void {
+function writeRecSetting(w: Writer, recMode: number, ver: number): void {
   w.struct((s) => {
     s.u8(recMode)
       .u8(2) // priority
@@ -339,7 +339,7 @@ export function writeRecInfo(
 }
 
 /** 一覧のコマンドの本文 (`WORD ver` + 配列) */
-export function listBody(
+function listBody(
   command: number,
   data: FakeEdcbData,
   ver: number,
@@ -366,7 +366,7 @@ export const MX: FakeService = {
 const START = Date.UTC(2026, 8, 1, 12, 0, 0);
 
 /** e2e で返すもの。1 つ目のルールは無効の印付き (予約を立ててほかのテストを乱さない)、2 つ目は正規表現なので飛ぶ */
-export const DEFAULT_EDCB_DATA: FakeEdcbData = {
+const DEFAULT_EDCB_DATA: FakeEdcbData = {
   autoAdd: [
     { id: 1, andKey: "^!{999}引き継ぎテスト", services: [MX] },
     { id: 2, andKey: "テスト.*", regExp: true, services: [MX] },
@@ -396,7 +396,7 @@ export const DEFAULT_EDCB_DATA: FakeEdcbData = {
   ],
 };
 
-export interface FakeEdcb {
+interface FakeEdcb {
   port: number;
   /** `127.0.0.1:<port>` */
   target: string;

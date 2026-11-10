@@ -107,7 +107,7 @@ interface RecordingRow extends Recording {
   has_logo: boolean | null;
   /**
    * 一覧の「残り」の位置と尺 (ms)。観る物差しに直したもの (`playback.watchProgress`)。続きが無ければ null。
-   * `resume_ms` は元の TS の物差しなので、エンコードしたものの尺とそのまま比べると、捨てた先頭 (v2.36 までに CM を切ったものは切った CM も) のぶん食い違う
+   * `resume_ms` は元の TS の物差しなので、エンコードしたものの尺とそのまま比べると、捨てた先頭 (v2.37 までに CM を切ったものは切った CM も) のぶん食い違う
    */
   progress: { at: number; length: number } | null;
   /** 「まとめて表示」でまとめるキーと見出し (`seriesGroup`) */
@@ -443,9 +443,8 @@ export const actions = {
 
   reconcile: () => {
     // 「ファイルと照合」ボタン。外から消した分をすぐ一覧に反映したいとき用
+    // 行が変わったら `reconcile` が知らせるので、押した本人以外の画面も更新される
     const result = reconcile();
-    // 押した本人以外の画面も更新する。同じものを見ている端末が食い違うのを防ぐ
-    emit("recordings");
     return { success: true, reconcile: result };
   },
 

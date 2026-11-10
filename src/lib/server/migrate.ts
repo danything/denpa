@@ -32,7 +32,7 @@ import { parseSearchFields, SEARCH_FIELDS } from "#lib/search.js";
 import { toHalfWidth } from "../fold";
 import { size as formatSize } from "../format";
 import type { Slot } from "../rule-time";
-import type { Recording } from "../types";
+import { ALL_CHANNEL_TYPES, type Recording } from "../types";
 import { config } from "./config";
 import { now, orm } from "./db";
 import { freeBytes } from "./disk";
@@ -287,7 +287,7 @@ export function chooseFile(recorded: EpgstationRecorded): VideoChoice | null {
     id: file.id,
     size: file.size,
     raw,
-    // 拡張子の無い名前で `lastIndexOf('.')` が -1 になると、末尾の 1 文字を拡張子と読んでしまう
+    // 拡張子の無い名前は、ファイルの種類から決める
     extension: extname(text(file["filename"])) || (raw ? ".m2ts" : ".mkv"),
   };
 }
@@ -714,9 +714,7 @@ export function convertRule(
   if (times === null)
     return { skip: "時間帯が 2 つ以上あるので取り込めません" };
 
-  const types = (["GR", "BS", "CS", "SKY"] as const).filter((type) =>
-    flag(search[type]),
-  );
+  const types = ALL_CHANNEL_TYPES.filter((type) => flag(search[type]));
   if (flag(search["BS4K"])) {
     // 種別を空にすると全種別に当たる。BS4K だけで絞っていたルールは写せない
     if (types.length === 0)
