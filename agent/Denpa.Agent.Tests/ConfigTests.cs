@@ -144,6 +144,17 @@ public class ChannelStoreTests
     }
 
     [Test]
+    public async Task ケーブルテレビは_CS_のあと_スカパー_プレミアムの前に並べる()
+    {
+        var config = Fresh();
+        var merged = config.SaveChannels(
+            Entries(("SKY", "H01"), ("CATV", "QC51"), ("CS", "CS02:24608"), ("CATV", "QC30:1"), ("GR", "T21"), ("BS", "BS03:16432")),
+            ["GR", "BS", "CS", "CATV", "SKY"]);
+
+        await Assert.That(merged.Select(entry => entry!["channel"]!.GetValue<string>())).IsEquivalentTo(["T21", "BS03:16432", "CS02:24608", "QC30:1", "QC51", "H01"], CollectionOrdering.Matching);
+    }
+
+    [Test]
     public async Task 局名はエスケープせずそのまま書く()
     {
         /*

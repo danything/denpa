@@ -456,9 +456,9 @@ public class It930xDeviceTests
     }
 
     [Test]
-    public async Task 設定の_it930x_の受信機は地上波と衛星と_SKY_を受けられる()
+    public async Task 設定の_it930x_の受信機は地上波と衛星と_CATV_と_SKY_を受けられる()
     {
-        await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:0")).IsEquivalentTo(new[] { "GR", "BS", "CS", "SKY" });
+        await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:0")).IsEquivalentTo(new[] { "GR", "BS", "CS", "CATV", "SKY" });
         // 形式が違えば it930x: の受信機として扱わない
         await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:9")).IsNull();
     }
@@ -500,7 +500,7 @@ public class It930xDeviceTests
             TUnit.Assertions.Enums.CollectionOrdering.Matching);
         await Assert.That(found[0].Name).IsEqualTo("PLEX PX-MLT5PE 1-2 #0");
         await Assert.That(found[9].Name).IsEqualTo("PLEX PX-MLT5U 4-12.1 #4");
-        // 最初に選ぶ種別は地上波・BS・CS (SKY は受けられるが、最初からは選ばない)。「使う」で並ぶ
+        // 最初に選ぶ種別は地上波・BS・CS (CATV と SKY は受けられるが、最初からは選ばない)。「使う」で並ぶ
         await Assert.That(found.All(spec => spec.Types.SequenceEqual(["GR", "BS", "CS"]) && !spec.Disabled)).IsTrue();
         // 名前は重ならない (チューナーを名前で見分ける)
         await Assert.That(found.Select(spec => spec.Name).Distinct().Count()).IsEqualTo(10);
@@ -527,7 +527,7 @@ public class It930xDeviceTests
             await Assert.That(found.Count).IsEqualTo(5);
             await Assert.That(found[4].Device).IsEqualTo("it930x:3-1:4");
             // 受けられる種別も返す (設定の画面が SKY を選ばせる)
-            await Assert.That(DeviceProbe.Receivable("it930x:3-1:4")!).IsEquivalentTo(new[] { "GR", "BS", "CS", "SKY" });
+            await Assert.That(DeviceProbe.Receivable("it930x:3-1:4")!).IsEquivalentTo(new[] { "GR", "BS", "CS", "CATV", "SKY" });
         }
         finally
         {

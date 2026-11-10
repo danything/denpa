@@ -392,6 +392,13 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     {
         await foreach (var chunk in sink.Reader.ReadAllAsync(http.RequestAborted))
         {
+            /*
+             * **ISDB-C の TSMF の有効な TS の数は、最初の TS を書く前にヘッダーに入れる** (docs/agent.md「/denpa/stream」)。
+             * レスポンスヘッダーは最初に書いたときに送られ、TS が届くのは選局と TSMF の判定が終わってから。
+             * 選局の途中で共有に入った利用者は Open から先に戻るので、戻った時点ではまだ値が無いことがある
+             */
+            if (!sent && sink.TsmfStreams is { } streams)
+                http.Response.Headers[Sink.TsmfStreamsHeader] = streams.ToString(System.Globalization.CultureInfo.InvariantCulture);
             await http.Response.Body.WriteAsync(chunk, http.RequestAborted);
             await http.Response.Body.FlushAsync(http.RequestAborted);
             sink.Consumed(chunk.Length);
