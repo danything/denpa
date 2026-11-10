@@ -1,13 +1,17 @@
 # PX-Q3U4・PX-W3U4 など (px4-userland)
 
-PLEX の PX-Q3U4・PX-W3U4 などの USB / PCIe チューナーです。**同時に取れるチャンネルは受信機の数だけ**で、
-数と種別 (地上波・衛星・両方) は筐体ごとに px4-userland に問い合わせて決めます (Q3U4 は受信機ごとに地上波か衛星か決まっている)。
-**内蔵のカードリーダーがある機種は、それも使えます。** Linux・Mac (Apple Silicon)・Windows (x64) で使えます。
+PLEX の PX-Q3U4・PX-W3U4 などの USB / PCIe チューナーです。**同時に取れるチャンネルは受信機の数だけ**です。
+**内蔵のカードリーダーがある機種は、それも使えます。**
 
-**PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P は px4-userland では扱いません。** エージェントが USB を直に持ち、px4d はこの 3 機種を挙げず、起動もしません ([tuners.md](tuners.md#px-mlt5-系))。
-設定に `px4:` で書いてある PX-MLT5 系のチューナーは選局できないので、`device` を `it930x:<USB のポート>:<受信機>` に書き換えます。
+**px4-userland が扱う機種は、いまはどれも px4-userland を使いません。** エージェントが USB を直に持ち、px4d はその機種を挙げず、起動もしません。
+PX-MLT5 系は [tuners.md](tuners.md#px-mlt5-系)、PX-Q3・PX-W3 系・PX-MLT8PE・DTV02A-4TS-P・受信機が 1 つの機種 (DTV02-1T1S-U・DTV02A-1T1S-U・PX-M1UR・PX-S1UR・DTV03A-1TU) は
+[tuners.md](tuners.md#px-q3px-w3-系とit930x-のほかの機種) にあります。PX-MLT5PE のほかは、エージェントが直に持つ形では実機で確かめていません。
+設定に `px4:` で書いてあるチューナーは選局できないので、`device` を `it930x:<USB のポート>:<受信機>` に書き換えます (チューナーの行に、書き換える先が出ます)。
 
-チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#px4-userland-の作り)。
+**この文書の「設定」「衛星の LNB 給電」「確かめたこと」は、px4d が筐体を持っていたときの説明です。** px4-userland はまだ同梱していますが、挙げる筐体がありません。
+px4-userland の同梱とこの説明は、次の変更で消す予定です。ファームウェアの節は、エージェントが直に持つ形でも同じです。
+
+チューナーの一覧は [tuners.md](tuners.md)、Windows で使うときは [install-windows.md](install-windows.md)。エージェントの中でどう扱っているかは [agent.md](agent.md#it930x-の機材を直に持つ作り)。
 
 「Amazon で見る」は広告のリンクです ([tuners.md](tuners.md))。
 
@@ -18,7 +22,8 @@ PLEX の PX-Q3U4・PX-W3U4 などの USB / PCIe チューナーです。**同時
 
 ## 対応機種
 
-PX-Q3U4 / PX-W3U4、e-Better / Digibest 系など (USB・PCIe)。px4-userland の対応機種は、PX-MLT5 系 (PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P) のほかはそのまま使います ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
+PX-Q3U4 / PX-W3U4、e-Better / Digibest 系など (USB・PCIe)。px4-userland の対応機種 ([一覧](https://github.com/Khronos31/px4-userland#対応機種動作環境)) は、どれもエージェントが直に持ちます。
+機種ごとの USB の ID・受信機の数・種別は [tuners.md](tuners.md#px-q3px-w3-系とit930x-のほかの機種) の表にあります。
 
 Amazon で見る (広告): [PX-W3U4](https://www.amazon.co.jp/dp/B01MR4SLB6?tag=doa08-22)、[DTV02A-1T1S-U](https://www.amazon.co.jp/dp/B08MTGFV39?tag=doa08-22)
 

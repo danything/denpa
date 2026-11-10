@@ -123,9 +123,9 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
 
 ## 使えるもの
 
-- **px4-userland の機材** (PX-Q3U4 / PX-M1UR / PX-S1UR など)。px4-userland の Windows 用 (0.2.0 から。
-  入れるのは 0.2.1) は、ドライバを WinUSB にすれば動きます。Linux・Mac と同じく px4d の制御ソケットで
-  受信機を使い、内蔵カードリーダーも読みます (IPC は Windows でも AF_UNIX)。配布 zip のうち使うのは
+- **px4-userland の対応機種** (PX-Q3U4 / PX-M1UR / PX-S1UR など)。PX-MLT5 系と同じく、エージェントが WinUSB で USB を直に持ちます
+  ([tuners.md](tuners.md#px-q3px-w3-系とit930x-のほかの機種))。ドライバを WinUSB にします。エージェントが直に持つ形は、Windows の実機では確かめていません。
+  px4-userland の Windows 用 (入れるのは 0.2.1) はまだ置いていますが、px4d はこの機種を挙げず、起動もしません。配布 zip のうち置くのは
   `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
   置きません。エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらが読み込まれてしまいます。
   IT930x のファームウェアは Mac と同じくエージェントに同梱しています ([tuner-px4.md](tuner-px4.md#ファームウェア))
@@ -150,12 +150,12 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
 - px4・Siano・PX-MLT5 系・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
-  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーと CECH-ZD1 J の差し込み口も
+  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。PX-MLT5 系・px4-userland の対応機種の内蔵リーダーと CECH-ZD1 J の差し込み口も
   並びます (USB のリーダーが先)
 - **エンコードは GPU (NVIDIA の NVENC・Intel の QSV・AMD の AMF) があれば使い、無ければソフトウェアで** (SVT-AV1・x264)。起動時の試しのエンコードで決める ([encode.md](encode.md#windows-でエンコードする))
   (使える GPU は設定の「録画」の「エンコード」に出る)。GPU のエンコーダは Windows の実機では確かめていない
 
-**px4-userland の機材で Windows だけ違うところ。**
+**px4-userland の機材で Windows だけ違うところ。** px4-userland が扱う機種はエージェントが直に持つようになったので、いまは px4d を起動しません。下は px4d が筐体を持っていたときの説明で、px4-userland の同梱と一緒に消す予定です。
 
 - **px4d は標準入力で止めます** (`--exit-on-stdin-eof`)。Windows には SIGTERM が無いので、エージェントは px4d の
   標準入力を開けたまま持ち、止めるときに閉じます。px4d は後片付け (LNB を 0V に戻す・ソケットを消す) をしてから

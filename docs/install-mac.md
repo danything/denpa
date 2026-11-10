@@ -144,10 +144,10 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
 
 ## Linux と違うところ
 
-- **チューナーは px4-userland と siano-userland の機材と PX-MLT5 系・Sony CECH-ZD1 J・PIXELA PIX-DT295 (試験的) だけ。** macOS には DVB が無いので、
-  PT2/PT3 のような PCI の機材は使えません。PX-MLT5 系 ([tuners.md](tuners.md#px-mlt5-系)) と CECH-ZD1 J と PIX-DT295 はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
+- **チューナーは PX-MLT5 系・px4-userland の対応機種 (PX-Q3U4 など)・siano-userland の機材・Sony CECH-ZD1 J・PIXELA PIX-DT295 (試験的) だけ。** macOS には DVB が無いので、
+  PT2/PT3 のような PCI の機材は使えません。PX-MLT5 系 ([tuners.md](tuners.md#px-mlt5-系)) と px4-userland の対応機種 ([tuners.md](tuners.md#px-q3px-w3-系とit930x-のほかの機種)) と CECH-ZD1 J と PIX-DT295 はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
   Mac の実機ではまだ確かめていません)
-- **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に問い合わせる)。PX-MLT5 系の内蔵リーダーと CECH-ZD1 J の差し込み口もエージェントが直に読みます。USB のリーダーは
+- **カードリーダー**: PX-MLT5 系と px4-userland の対応機種の内蔵リーダーと、CECH-ZD1 J の差し込み口は、エージェントが直に読みます (PX-Q3 系の内蔵リーダーは、Mac では自動で並びません)。USB のリーダーは
   usbfs を直接扱えないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に扱います
   (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます ([読めないとき](#カードが読めないとき))。動いている間はリーダーを
   排他で使うので、他のアプリはカードを使えません
