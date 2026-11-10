@@ -515,7 +515,8 @@ public partial class It930xConcurrencyTests
             first.Release();
             It930xDevice.CloseIfIdle("11-8", TimeSpan.Zero);
         }
-        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読みを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
+        await Assert.That(usb.Log.Last(entry => entry.StartsWith("W ", StringComparison.Ordinal))).IsEqualTo("W D8C3=01");
     }
 
     [Test]
@@ -530,7 +531,8 @@ public partial class It930xConcurrencyTests
         await Assert.That(Closed(usb)).IsFalse();
         for (var i = 0; i < 100 && !Closed(usb); i++) await Task.Delay(50);
         await Assert.That(Closed(usb)).IsTrue();
-        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読みを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
+        await Assert.That(usb.Log.Last(entry => entry.StartsWith("W ", StringComparison.Ordinal))).IsEqualTo("W D8C3=01");
         // 閉じた機材は使わず、次の Acquire は開き直す
         usb.ResetSequence();
         var again = OpenAt(usb, "11-9");
@@ -557,7 +559,8 @@ public partial class It930xConcurrencyTests
         // CloseAll と同じ処理を、このテストのポートだけに
         It930xDevice.CloseAll(port => port == "11-10");
         await Assert.That(Closed(usb)).IsTrue();
-        await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
+        // 最後に書いたレジスタが電源を切る GPIOH7 (TS の読みを閉じた印は、読むスレッドが電源を切ったあとに残すことがある)
+        await Assert.That(usb.Log.Last(entry => entry.StartsWith("W ", StringComparison.Ordinal))).IsEqualTo("W D8C3=01");
     }
 
     [Test]
