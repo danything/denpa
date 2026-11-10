@@ -329,7 +329,8 @@ public class Cxd2856CableTests
         frontend.KeepMatching(standby: true);
         await Assert.That(frontend.KeepsMatching).IsTrue();
         await Assert.That(bus.Log.Take(2)).IsEquivalentTo(new[] { "X 00=00", "X 10=01" });
-        await Assert.That(Relayed(bus.Log).Take(2)).IsEquivalentTo(new[] { "U 01=00", "U 67=02" });
+        // 中継を開けてすぐ、初期化の前に 62 を読む (仕様書 10.3)
+        await Assert.That(Relayed(bus.Log).Take(3)).IsEquivalentTo(new[] { "U 62?", "U 01=00", "U 67=02" });
 
         // 選局では bit1 を 0 にし (仕様書 4.5 の手順 7)、止めるときに 02 に戻す (仕様書 4.6 の手順 2)
         bus.Log.Clear();
@@ -339,8 +340,13 @@ public class Cxd2856CableTests
         frontend.Sleep();
         await Assert.That(Relayed(bus.Log).Take(3)).IsEquivalentTo(new[] { "U 74=02", "U 67?", "U 67=02" });
 
-        // 衛星側の停止のあとにも 67 の bit1 を立てる (仕様書 4.6)
+        // 衛星を受ける前に、手順 1A で 67 の bit1 を 0 にする (仕様書 4.4。推定の手順)。地上波側の停止 (仕様書 4.6) で立てた bit1 を戻す
+        bus.Log.Clear();
         frontend.TuneIsdbs(Bs15, new CxdStream(16625));
+        await Assert.That(Relayed(bus.Log).Take(3)).IsEquivalentTo(new[] { "U 15=02", "U 67?", "U 67=00" });
+        await Assert.That(Relayed(bus.Log)[3]).IsEqualTo("U 43=06");
+
+        // 衛星側の停止のあとにも 67 の bit1 を立てる (仕様書 4.6)
         bus.Log.Clear();
         frontend.Sleep();
         await Assert.That(Relayed(bus.Log)).IsEquivalentTo(new[] { "U 15=02", "U 43=07", "U 0C=140000", "U 01=00", "U 05=00", "U 04=C0", "U 67?", "U 67=02" });

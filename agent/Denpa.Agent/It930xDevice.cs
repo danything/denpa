@@ -23,11 +23,26 @@ internal sealed class It930xI2cBus(It930xBridge bridge, byte bus) : ICxdBus
 /// 受信機の初期化は、その受信機を初めて使うときに 1 回 (仕様書 2.2)。初期化に失敗した受信機だけを使えなくし、ほかの受信機はそのまま使う。
 /// 失敗した受信機は、次の選局でもう一度試す。
 /// </para>
+///
+/// <para>
+/// **ロックの順。** 受信機は並べて選局されるので (常駐のスキャン)、ロックは次の順でだけ取り、逆には取らない。
+/// <c>Registry</c> → この機材の <c>_gate</c> (使っている側の数)。
+/// <see cref="It930xTuner"/> の <c>_gate</c> → 受信機ごとの <c>_receiverGates</c> (<see cref="Frontend"/>・<see cref="KeepMatching"/>) → <see cref="Cxd2856Frontend"/> の受信機の操作 →
+/// 同じバスの受信機で 1 つのバスのロック (<c>_buses</c>) → <see cref="It930xBridge"/> のコマンドのロック。LNB の給電の <c>_lnbGate</c> → ブリッジのコマンドのロック。
+/// <see cref="KeepMatching"/> はほかの受信機の <c>_receiverGates</c> と受信機の操作を取るが、その受信機の <see cref="It930xTuner"/> の <c>_gate</c> は取らない
+/// (選局の途中なら、受信機の操作のロックで選局が終わるのを待つ)。I2C の並びが同じバスで交わらないことは It930xConcurrencyTests.cs で確かめる
+/// </para>
 /// </summary>
 public sealed class It930xDevice
 {
     /// <summary>EP 0x84 の 1 回の読みの待ち</summary>
     private const int TsReadTimeoutMs = 200;
+
+    /// <summary>電源を切ったあと (GPIOH7 ← 1 のあと) の待ち (ms。仕様書 1.5・11)</summary>
+    internal const int PowerOffSettleMs = 100;
+
+    /// <summary>ブリッジの TS のバッファを捨てる間 (ms)。仕様書 3.6 に値は無く、ブリッジの 1 回の転送 (約 65 KB) が流れきる長さとして決めた</summary>
+    private const int FlushMs = 50;
 
     private static readonly Lock Registry = new();
     private static readonly Dictionary<string, It930xDevice> Devices = [];
@@ -171,7 +186,9 @@ public sealed class It930xDevice
         _sleep(20);
         // 受信機の TS 入力はどれもシリアル (仕様書 1.2・3.4)
         Bridge.ConfigureTs(new bool[It930xBridge.TsInputs]);
-        // 電源を入れる (仕様書 1.5): GPIOH7 ← 0、80 ms、GPIOH2 ← 1 (リセットを解く)、20 ms
+        // 電源を入れる (仕様書 1.5): GPIOH7 ← 0、80 ms、GPIOH2 ← 1 (リセットを解く)、20 ms。
+        // 電源を入れるたびに、整合を保つ設定 (仕様書 4.7) を「使わない」に戻す (仕様書 1.5)。この機材の受信機はまだ 1 つも初期化していない
+        _matching = false;
         Bridge.Gpio(7, false);
         _sleep(80);
         Bridge.Gpio(2, true);
@@ -225,8 +242,26 @@ public sealed class It930xDevice
                 Fail(error);
                 throw new IOException($"{Label} の受信機 {receiver} を初期化できません: {error.Message}", error);
             }
-            Log.Write($"[{Label}] 受信機 {receiver} を初期化しました (復調器 0x{frontend.ChipId:X2})");
+            // 初期化の前に読んだチューナーの 62 (仕様書 10.3)。前に ISDB-C か J.83B を選局していて 10 なら、電源が切れていなかったと推定する
+            Log.Write($"[{Label}] 受信機 {receiver} を初期化しました (復調器 0x{frontend.ChipId:X2}、初期化の前のチューナーの 62 は {frontend.PowerProbe:X2})");
             return _frontends[receiver] = frontend;
+        }
+    }
+
+    /// <summary>
+    /// ブリッジの TS のバッファを捨てる (仕様書 3.6。px4_drv が受信を始めるたびにすること。<c>0xDA1D</c> の bit0 を 1 にし、待ってから 0 に戻す)。
+    /// その間に EP 0x84 から読んだ TS は、ふだんどおり受信機ごとの出口に渡す。ロックしているのに TS が届かないときに <c>--tune</c> が試す
+    /// </summary>
+    public void FlushTs()
+    {
+        Bridge.WriteRegisterBits(It930xBridge.Mp2Reset, 0, 1, 1);
+        try
+        {
+            _sleep(FlushMs);
+        }
+        finally
+        {
+            Bridge.WriteRegisterBits(It930xBridge.Mp2Reset, 0, 1, 0);
         }
     }
 
@@ -415,6 +450,9 @@ public sealed class It930xDevice
                 for (var receiver = 0; receiver < _frontends.Length; receiver++) Rest(receiver);
                 Bridge.Gpio(2, false);
                 Bridge.Gpio(7, true);
+                // 電源が落ちきる前に入れ直さないよう、USB を閉じる前に待つ (仕様書 1.5・10.3・11)。閉じている間は Registry を持っているので、
+                // 同じポートを開き直す Acquire (次の GPIOH7 ← 0) もこの待ちのあとになる
+                _sleep(PowerOffSettleMs);
             }
             catch (IOException error)
             {
@@ -500,6 +538,21 @@ public sealed class It930xTuner : ITuneDevice
             _gate.Exit();
         }
     }
+
+    /// <summary>TS を止める復調器のレジスタ 4 つ (仕様書 3.6)。ロックしているのに TS が届かないときに <c>--tune</c> が出す。初期化していなければ null</summary>
+    public CxdTsOutput? ReadTsOutput()
+    {
+        lock (_gate) return _frontend?.ReadTsOutput();
+    }
+
+    /// <summary>ブリッジの TS のバッファを捨てる (仕様書 3.6。<see cref="It930xDevice.FlushTs"/>)。<c>--tune</c> が、TS が届かないときに試す</summary>
+    public void FlushTs()
+    {
+        lock (_gate) _device?.FlushTs();
+    }
+
+    /// <summary>初期化の前に読んだチューナーの <c>62</c> (仕様書 10.3。<see cref="Cxd2856Frontend.PowerProbe"/>)。<c>--tune</c> が出す</summary>
+    public byte? PowerProbe => _frontend?.PowerProbe;
 
     /// <summary>周波数 (Hz) を kHz に丸める (チューナーに渡すのは中心周波数の kHz。仕様書 5.1)</summary>
     internal static uint Khz(uint hertz) => (uint)((hertz + 500L) / 1000);
@@ -636,6 +689,9 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>ISDB-C で「指定した TS が無い」ときの失敗の文の先頭 (仕様書 7A.7。ロックしないときの <see cref="ITuneDevice.SyncFailed"/> とは別の失敗)</summary>
     public const string TsmfMissing = "指定した TS がありません";
 
+    /// <summary>ISDB-C でロックしたのに、TSMF の判定の時間切れまで TS が 1 パケットも届かなかったときの失敗の文 (仕様書 3.6)</summary>
+    public const string TsMissing = "ロックしましたが、TS が 1 パケットも届きません (ブリッジから先で TS が止まっています)";
+
     /// <summary>TSMF の判定の時間切れ (ms。仕様書 7A.7・11 の 3 秒)。変えるのはテストのため</summary>
     internal int TsmfTimeoutMs { get; init; } = TsmfSelector.TimeoutMs;
 
@@ -666,6 +722,8 @@ public sealed class It930xTuner : ITuneDevice
             // 元の失敗を返す
         }
         StopOutput();
+        // 1 パケットも届かなかったときは、電波ではなくブリッジから先で TS が止まっている (仕様書 3.6)。同期しなかった文 (放送休止と読まれる) と分ける
+        if (decision == TsmfDecision.Pending && tsmf.Received == 0) throw new IOException(TsMissing);
         if (decision == TsmfDecision.Pending) throw new IOException(ITuneDevice.SyncFailed);
         var detail = tsmf.FirstHeader is { } header
             ? $"TSMF の有効な TS は {header.ValidStreams.Count} 本で、{tsmf.Index} 本目 (0 から数える) を指定した"
