@@ -327,3 +327,28 @@ test("コマを捨てて間が空いたら、そこからまた音量を上げ�
   const second = context.sources[1]!.starts[0]![0]!;
   expect(fade.gain.events.at(-1)).toEqual(["ramp", 1, second + 0.008]);
 });
+
+// WebKit は、バッファが空になって映像が止まっても waiting を出さないことがある
+test("映像の時刻が止まったまま音だけ進んだら、映像が動き出すまで音を予約しない", () => {
+  const { video, worker, context } = setup();
+  worker.pcm(1, 10.1);
+  context.currentTime = 50.1; // 映像は 10 秒のまま
+  for (let i = 1; i < 10; i++) worker.pcm(1, 10.1 + (i * 1024) / 48000);
+  const count = context.sources.length;
+  context.currentTime = 50.3;
+  worker.pcm(1, 10.3);
+  expect(context.sources).toHaveLength(count);
+  // 動き出したら、その位置から鳴らす
+  video.currentTime = 10.25;
+  worker.pcm(1, 10.31);
+  expect(context.sources.length).toBeGreaterThan(count);
+});
+test("映像が進んでいて時計だけずれたときは、組み直してすぐ鳴らす", () => {
+  const { video, worker, context } = setup();
+  worker.pcm(1, 10.1);
+  const count = context.sources.length;
+  context.currentTime = 50.1;
+  video.currentTime = 10.2; // 映像が 100 ms 先へ飛んだ
+  worker.pcm(1, 10.3);
+  expect(context.sources.length).toBeGreaterThan(count);
+});

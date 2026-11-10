@@ -33,6 +33,8 @@ const RESYNC_SECONDS = 0.08;
 const FADE_SECONDS = 0.008;
 /** 前の音の終わりとこれだけ離れて鳴らし始めたら、途切れのあととみなして音量を上げる (秒) */
 const GAP_SECONDS = 0.001;
+/** 映像の時刻の動きがこれより小さければ、映像は止まっているとみなす (秒) */
+const FROZEN_SECONDS = 0.001;
 
 /** AudioContext の `at` 秒に、映像は `position` 秒を `rate` 倍で進んでいた */
 interface Clock {
@@ -71,6 +73,12 @@ export class NativeAudio {
   /** 映像の時計と AudioContext の時計の対応。組み直すまで同じものを使う */
   private last: Clock | null = null;
   private clockLatency = 0;
+  /**
+   * 映像の時刻がこの位置から動かないまま、音だけ進んで組み直した。動き出すまで音を予約しない。
+   * WebKit は、バッファが空になって映像が止まっても `waiting` を出さず、`readyState` も 3 のままにすることがある。
+   * 予約し続けると、80 ms 鳴っては組み直すのを繰り返して「ブツブツ」と途切れる
+   */
+  private frozenAt: number | null = null;
   constructor(
     private readonly video: HTMLVideoElement,
     private readonly failed: (reason: string) => void,
@@ -240,6 +248,11 @@ export class NativeAudio {
       this.context.state !== "running"
     )
       return;
+    // 映像が進まないまま止まっている間は鳴らさない (下の組み直しで止めた位置から動いていない)
+    if (this.frozenAt !== null) {
+      if (Math.abs(position - this.frozenAt) < FROZEN_SECONDS) return;
+      this.frozenAt = null;
+    }
     const rate = video.playbackRate;
     const follow = (last: Clock) => last.position + (now - last.at) * last.rate;
     // 映像と音の対応は 1 つに保つ。21ms の AAC の 1 コマごとに video.currentTime を読み直すと、
@@ -247,8 +260,14 @@ export class NativeAudio {
     if (
       this.last !== null &&
       Math.abs(follow(this.last) - position) > RESYNC_SECONDS
-    )
+    ) {
+      const frozen = Math.abs(position - this.last.position) < FROZEN_SECONDS;
       this.flush();
+      if (frozen) {
+        this.frozenAt = position;
+        return;
+      }
+    }
     if (this.last === null) {
       this.last = { at: now, position, rate };
       const { baseLatency, outputLatency } = this.context;
