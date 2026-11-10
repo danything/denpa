@@ -142,7 +142,8 @@ public sealed class It930xBridge
     /// EP 0x84 に出したままにする読みの数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>)。
     /// 64 × 65,424 バイトは約 4 MB で、5 つの入力の合計が 200 Mbps でも約 160 ms ぶんを受けておける。
     /// 読みのスレッドが CPU の制限や GC で止まっても、ブリッジのバッファを溢れさせないため。溢れると、電源を抜くまで TS が届かなかった
-    /// (<see cref="It930xOverflow"/>)。Linux の usbfs が全部の機材で使える量の既定は 16 MB で、IT930x の機材 3 台と CECH-ZD1 J・PIX-DT295 を足しても収まる。
+    /// (<see cref="It930xOverflow"/>)。Linux の usbfs が全機材で使える量 (既定 16 MB) に、IT930x の機材 3 台 (約 12.6 MB) と
+    /// CECH-ZD1 J (約 1 MB)・PIX-DT295 (約 0.5 MB) を足した約 14.1 MB が収まる。
     /// 16 のときも、PX-MLT5PE の実機で 5 つの受信機がそれぞれ約 30 Mbps を流して足りた (2026-11-10)
     /// </summary>
     public const int TsDepth = 64;
