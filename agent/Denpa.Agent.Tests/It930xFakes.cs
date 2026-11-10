@@ -58,8 +58,23 @@ internal sealed class FakeIt930x : IUsbDevice
     /// <summary>カードから受けて、まだ UART_READ で読まれていないバイト</summary>
     public Queue<byte> UartRx { get; } = new();
 
-    /// <summary>カードに渡したブロック (OVA_UART_REALSEND のあとの UART_WRITE までをまとめたもの)</summary>
+    /// <summary>カードに渡したブロック (OVA_UART_REALSEND のあとの UART_WRITE までをまとめたもの)。S(IFS) の要求は <see cref="UartIfs"/> に分ける</summary>
     public List<byte[]> UartBlocks { get; } = [];
+
+    /// <summary>カードに渡した S(IFS) の要求の値 (こちらが受けられる情報欄の長さ)</summary>
+    public List<byte> UartIfs { get; } = [];
+
+    /// <summary>偽のカードが S(IFS) の要求に、同じ値の S(IFS) の応答を返すか。false なら何も返さない</summary>
+    public bool CardAnswersIfs { get; set; } = true;
+
+    /// <summary>
+    /// カードの応答が届く速さ。0 ならすぐに全部届く。1 以上なら、受けた数 (OVA_UART_RX_LENGTH) を読むたびにこのバイト数ずつ届き、
+    /// 届き終わる前の UART_READ はテストを失敗にする (実機では、届いている途中に読むとバイトが落ちた)
+    /// </summary>
+    public int UartArrival { get; set; }
+
+    /// <summary>カードが送って、まだブリッジに届いていないバイト</summary>
+    private readonly Queue<byte> _uartArriving = new();
 
     private readonly List<byte> _uartPending = [];
 
@@ -152,7 +167,11 @@ internal sealed class FakeIt930x : IUsbDevice
                 var values = new byte[length];
                 for (var i = 0; i < length; i++) values[i] = Registers.GetValueOrDefault(address + (uint)i);
                 // 受けたバイトの数 (OVA_UART_RX_LENGTH) は、偽のカードの受けの列から
-                if (address == UartRxLength && length == 1) values[0] = (byte)Math.Min(255, UartRx.Count);
+                if (address == UartRxLength && length == 1)
+                {
+                    for (var i = 0; i < UartArrival && _uartArriving.Count > 0; i++) UartRx.Enqueue(_uartArriving.Dequeue());
+                    values[0] = (byte)Math.Min(255, UartRx.Count);
+                }
                 Reply(sequence, values);
                 break;
             }
@@ -193,11 +212,19 @@ internal sealed class FakeIt930x : IUsbDevice
                     Registers[UartRealSend] = 0;
                     var block = _uartPending.ToArray();
                     _uartPending.Clear();
-                    UartBlocks.Add(block);
-                    if (CardResponder?.Invoke(block) is { } answer)
+                    byte[]? answer;
+                    if (block is [_, 0xC1, 1, var ifs, _])
                     {
-                        foreach (var b in answer) UartRx.Enqueue(b);
+                        // S(IFS) の要求には、同じ値の S(IFS) の応答 (PCB 0xE1) を返す
+                        UartIfs.Add(ifs);
+                        answer = CardAnswersIfs ? T1Protocol.Block(0xE1, [ifs]) : null;
                     }
+                    else
+                    {
+                        UartBlocks.Add(block);
+                        answer = CardResponder?.Invoke(block);
+                    }
+                    foreach (var b in answer ?? []) (UartArrival > 0 ? _uartArriving : UartRx).Enqueue(b);
                 }
                 Reply(sequence, []);
                 break;
@@ -207,6 +234,7 @@ internal sealed class FakeIt930x : IUsbDevice
                 if (payload.Length != 1) throw new InvalidOperationException($"UART_READ の中身が 1 バイトでない ({payload.Length})");
                 var length = payload[0];
                 if (length is 0 or > 32) throw new InvalidOperationException($"UART_READ が 1〜32 バイトでない ({length})");
+                if (_uartArriving.Count > 0) throw new InvalidOperationException($"カードの応答が届き終わる前に UART_READ で読んだ (残り {_uartArriving.Count} バイト)");
                 if (length > UartRx.Count) throw new InvalidOperationException($"受けた数 ({UartRx.Count}) より多く読んだ ({length})");
                 Note($"UART R {length}");
                 var bytes = new byte[length];

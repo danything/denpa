@@ -22,7 +22,7 @@ public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte De
 
 /// <summary>
 /// IT930x を積んだ機材 1 機種。受信機ごとの割り当ては仕様書 1.2 の表。
-/// LNB の給電は 3 機種とも同じブリッジの GPIOH11 (仕様書 1.5・9)、カードは SDK の GPIOH6・GPIOH14 (It930xCard.cs。実機で確かめていない) なので、表には持たない
+/// LNB の給電は 3 機種とも同じブリッジの GPIOH11 (仕様書 1.5・9)、カードは SDK の GPIOH6・GPIOH14 (It930xCard.cs。PX-MLT5PE の実機でカードを読めた。ほかの 2 機種は確かめていない) なので、表には持たない
 /// </summary>
 public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnlyList<It930xReceiver> Receivers);
 
@@ -51,7 +51,8 @@ public static class It930x
 
     /// <summary>
     /// いま扱う機種 (MLT5 系の 3 機種)。どれも IT930x に復調器とチューナーの組が 5 つと、内蔵のカードリーダーが付く。
-    /// USB の ID と割り当ては実機ではまだ確かめていない。DTV02A-5TS-P は PX-MLT5PE と同じ割り当てとして扱う (仕様書 1.2 も未確認としている)
+    /// PX-MLT5PE は、USB の ID と受信機 0〜4 の割り当てを実機で確かめた (5 台とも選局できた)。
+    /// PX-MLT5U と DTV02A-5TS-P は、USB の ID も割り当ても実機で確かめていない。DTV02A-5TS-P は PX-MLT5PE と同じ割り当てとして扱う (仕様書 1.2 も未確認としている)
     /// </summary>
     public static readonly IReadOnlyList<It930xModel> Family =
     [
@@ -197,6 +198,6 @@ public static class It930x
     /// </summary>
     public static IUsbDevice OpenUsb(string port, It930xModel model) =>
         OperatingSystem.IsLinux()
-            ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, model.Vendor, model.Product)
+            ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, model.Vendor, model.Product, selectAlternate: false)
             : UsbDevices.Open(port, model.Vendor, model.Product);
 }

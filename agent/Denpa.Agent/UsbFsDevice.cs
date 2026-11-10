@@ -89,7 +89,11 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
     /// sysfs のポート (<c>4-12.1</c>) の機材を開き、USB の ID を突き合わせ、インターフェース 0 を確保して代替設定 0 を選ぶ。
     /// 番号 (<c>DDD</c>) は挿し直すたびに振り直されるので、見つけてから開くまでに挿し替わっていないかを ID で確かめる
     /// </summary>
-    public static UsbFsDevice Open(string sysfs, string devUsb, string port, int vendor, int product)
+    /// <param name="selectAlternate">
+    /// 代替設定 0 を選ぶ (SET_INTERFACE)。IT930x は、ファームウェアが動いているときに選び直すと最初のコマンドに応答しなくなる
+    /// (PX-MLT5PE の実機で確かめた) ので選ばない
+    /// </param>
+    public static UsbFsDevice Open(string sysfs, string devUsb, string port, int vendor, int product, bool selectAlternate = true)
     {
         var dir = Path.Combine(sysfs, port);
         if (!int.TryParse(UsbSysfs.Read(dir, "busnum"), NumberStyles.None, CultureInfo.InvariantCulture, out var bus)
@@ -116,7 +120,7 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
                     : $"USB のポート {port} のインターフェースを確保できません ({Marshal.GetPInvokeErrorMessage(errno)})");
             }
             var request = new SetInterfaceRequest { Interface = 0, AltSetting = 0 };
-            if (Sys.Ioctl(fd, SetInterface, (nint)(&request)) < 0)
+            if (selectAlternate && Sys.Ioctl(fd, SetInterface, (nint)(&request)) < 0)
             {
                 throw new IOException($"USB のポート {port} の代替設定を選べません ({Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError())})");
             }
