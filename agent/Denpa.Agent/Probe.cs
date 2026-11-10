@@ -181,7 +181,7 @@ public static class Probe
             return OneCard(Zd1j.Card(port), Zd1jBoard.CloseAll);
         }
         Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
-        foreach (var found in Px4Card.Find().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
+        foreach (var found in Px4Card.Find().Concat(It930x.Cards()).Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
         Zd1j.DescribeCards(Zd1j.Cards(), Console.Out);
         Dt295.DescribeCards(Dt295.Cards(), Console.Out);
         try
@@ -335,7 +335,7 @@ public static class Probe
                 {
                     Console.WriteLine($"    変調 {receiver.CableModulation ?? "-"}  PER {(receiver.CablePer is { } per ? $"{per:G3} (未確認の値)" : "-")}");
                 }
-                // ISDB-C は変調と PER と、ほかに読める値 (仕様書 8.4A。どれも実機で読んだ記録が無い)
+                // ISDB-C は変調と PER と、ほかに読める値 (仕様書 8.4A。値が正しいかは、ほかの受信機と比べていない)
                 if (tuning.IsdbC)
                 {
                     foreach (var line in IsdbcSignalLines(receiver.CableModulation, receiver.CablePer, receiver.IsdbcDetail)) Console.WriteLine($"    {line}");
@@ -414,7 +414,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// <c>--tune</c> が ISDB-C で出す、変調と PER (仕様書 8.4) と、ほかに読める値 (仕様書 8.4A)。PER と 8.4A の値は ISDB-C の実機で読んだ記録が無いので、未確認と書いて出す
+    /// <c>--tune</c> が ISDB-C で出す、変調と PER (仕様書 8.4) と、ほかに読める値 (仕様書 8.4A)。PER と 8.4A の値は、正しいかをほかの受信機と比べていないので、未確認と書いて出す
     /// </summary>
     internal static IEnumerable<string> IsdbcSignalLines(string? modulation, double? per, CxdIsdbcDetail? detail)
     {
@@ -506,7 +506,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// <c>--card zd1j:&lt;ポート&gt;</c> (<c>dt295:</c> も): **その機材の差し込み口だけ**を開いて、ATR とかかった時間、カードの番号を出す。
+    /// <c>--card zd1j:&lt;ポート&gt;</c> (<c>dt295:</c>・<c>it930x:</c> も): **その機材の差し込み口だけ**を開いて、ATR とかかった時間、カードの番号を出す。
     /// ほかのリーダー (本番が使っている USB のリーダーなど) には触らない
     /// </summary>
     private static int OneCard(CardLinkCandidate found, Action close)

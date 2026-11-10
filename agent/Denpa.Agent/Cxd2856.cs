@@ -70,7 +70,7 @@ internal readonly record struct CxdIsdbcSignal(
     byte Search, byte Ts, byte? Modulation, int CnRaw, byte[]? Per, byte[]? Locked, byte BerLength, byte[]? Ber, byte[]? Uncorrected, int IfAgc);
 
 /// <summary>
-/// ISDB-C でほかに読める値 (仕様書 8.4A)。出どころは PLEX の公開ドライバーに入っている Sony の手順だけで、実機で読んだ記録は無い (仕様書 13)。<c>--tune</c> の出力にだけ出す。値が無ければ null
+/// ISDB-C でほかに読める値 (仕様書 8.4A)。出どころは PLEX の公開ドライバーに入っている Sony の手順だけ (仕様書 13)。PX-MLT5PE の実機で読めたが、値が正しいかはほかの受信機と比べていない。<c>--tune</c> の出力にだけ出す。値が無ければ null
 /// </summary>
 /// <param name="Inverted">復調器がスペクトルの反転を見つけたか</param>
 /// <param name="CarrierOffsetKhz">搬送波のずれ (kHz)</param>
@@ -204,7 +204,7 @@ internal sealed class Cxd2856(CxdLink link)
 
     /// <summary>
     /// TS クロックの設定 (仕様書 3.3 の手順 3〜15)。方式で違うのは、手順 3 のパケットの間の隙間 <paramref name="gap"/> と手順 10 の周波数 <paramref name="frequency"/>。
-    /// 周波数は資料で値が分かれていて、仕様書 3.5 が選んだ値 (ISDB-T は低い・半分の速さ、ISDB-S と J.83B は高い・半分の速さ)
+    /// 周波数は資料で値が分かれていて、仕様書 3.5 が選んだ値 (ISDB-T は低い・半分の速さ、ISDB-S と J.83B と ISDB-C は高い・半分の速さ)
     /// </summary>
     internal static CxdRow[] TsClockRows(byte gap, byte frequency) =>
     [
@@ -334,7 +334,7 @@ internal sealed class Cxd2856(CxdLink link)
         CxdRow.W(T, 0x81, 0x01),
     ];
 
-    /// <summary>スリープの共通の後始末 (仕様書 2.4。ISDB-T と J.83B で使う)</summary>
+    /// <summary>スリープの共通の後始末 (仕様書 2.4。ISDB-T と J.83B と ISDB-C で使う)</summary>
     internal static readonly CxdRow[] SleepCommonRows =
     [
         CxdRow.W(X, 0x00, 0x00),
@@ -814,7 +814,7 @@ internal sealed class Cxd2856(CxdLink link)
     /// ISDB-C の状態と、変調・C/N・PER (仕様書 8.4) と、ほかに読める値 (仕様書 8.4A) の元の値を読む。
     /// 変調・C/N と「ロックが前提」の値 (反転・搬送波のずれ・シンボルレート) は、値を固めて (T の <c>01</c> ← <c>01</c>) 自動の探索のロック (<c>88</c> の bit0) を確かめてから読み、
     /// 読み終えたら (途中で失敗しても) 戻す (仕様書 2.3)。PER・RS の前の BER・直せなかったパケットの数・IF の AGC は固めずに読む (仕様書 8.4・8.4A)。
-    /// 8.4A の値と PER は、ISDB-C の実機で読んだ記録が無い (仕様書 13)
+    /// 8.4A の値と PER は、値が正しいかをほかの受信機と比べていない (仕様書 13)
     /// </summary>
     public CxdIsdbcSignal ReadIsdbcSignal()
     {

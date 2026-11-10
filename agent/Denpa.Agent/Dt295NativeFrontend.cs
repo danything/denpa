@@ -530,7 +530,7 @@ public sealed class Dt295NativeFrontend(Dt295NativeI2c i2c, Action<int> sleep, D
         using var scope = timeline.Step("受信の確認と TSID の選択 (衛星)", "7.3.4");
         var polls = 0;
         var waited = 0;
-        void Report() => scope?.Note($"{polls} 周、周の間の待ち {waited} ms (1 回 {SatellitePollMs} ms。段 3 の待ちは {SatellitePollMs} ms)");
+        void Report() => scope?.Note($"{polls} 周、周の間の待ち {waited} ms (1 回 {SatellitePollMs} ms)");
         while (clock.Elapsed <= timeout)
         {
             polls++;

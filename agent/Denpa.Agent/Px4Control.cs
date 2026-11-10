@@ -233,7 +233,7 @@ internal sealed class Px4Control : IDisposable
     /// <para>
     /// <see cref="ConnectWithin"/> の ConnectAsync で、.NET はソケットを内部で非ブロッキングにする。
     /// そのあとの同期の Receive は .NET の epoll の待ち受けから通知を受ける作りで、その通知がスレッド
-    /// プールに回ると、プールが塞がっている間は***応答が届いていても戻らない** (CI で、28 バイトの応答が
+    /// プールに回ると、プールが塞がっている間は**応答が届いていても戻らない** (CI で、28 バイトの応答が
     /// 受信バッファにあるまま 4 秒の上限で TimedOut になった)。Poll は poll(2) を直に呼ぶのでプールに
     /// 依存しない。読めると分かってから読めば Receive は待たずに返る
     /// </para>

@@ -188,6 +188,9 @@ internal sealed class Dt295Fake : IUsbDevice
     /// <summary>true なら I2C のブロック (0xFD8FE0〜) は 0 しか読めず、書いても効かない (主 CPU から I2C が動かない機材)</summary>
     public bool I2cDead;
 
+    /// <summary>true なら I2C の 1 バイトが終わらない (制御の bit0 が立たない)</summary>
+    public bool I2cStuck;
+
     /// <summary>true なら制御転送がすべて時間切れになる (実機の USB が止まった様子)</summary>
     public bool Wedged;
 
@@ -212,7 +215,7 @@ internal sealed class Dt295Fake : IUsbDevice
             case 0xFD8FE0:
                 return (_busy ? 0x80u : 0) | (_nack && _busy ? 0x10u : 0);
             case 0xFD8FE4:
-                return _control | (_done ? 1u : 0);
+                return _control | (_done && !I2cStuck ? 1u : 0);
             case 0xFD8FF0:
                 return _data;
             case 0xFDBD0C:

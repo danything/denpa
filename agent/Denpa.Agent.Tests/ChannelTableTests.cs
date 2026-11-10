@@ -23,12 +23,12 @@ public class ChannelTableTests
     [Test]
     public async Task CATV_は地上波と同じ選局で周波数だけが違う()
     {
-        // ミッドバンド C13-C22 (C13 = 111.142857 MHz) とスーパーハイバンド C23-C63 (C23 = 225.142857 MHz)
+        // ミッドバンド C13-C22 (C13 = 111.142857 MHz。C22 だけは 6 MHz おきの並びから 2 MHz 上) とスーパーハイバンド C23-C63 (C23 = 225.142857 MHz)
         var c13 = ChannelTable.Parse("C13")!;
         await Assert.That(c13.Type).IsEqualTo("GR");
         await Assert.That(c13.Delivery).IsEqualTo(ChannelTable.SysIsdbt);
         await Assert.That(c13.Frequency).IsEqualTo(111_142_857u);
-        await Assert.That(ChannelTable.Parse("C22")!.Frequency).IsEqualTo(165_142_857u);
+        await Assert.That(ChannelTable.Parse("C22")!.Frequency).IsEqualTo(167_142_857u);
         await Assert.That(ChannelTable.Parse("C23")!.Frequency).IsEqualTo(225_142_857u);
         await Assert.That(ChannelTable.Parse("C25")!.Frequency).IsEqualTo(237_142_857u);
         await Assert.That(ChannelTable.Parse("C63")!.Frequency).IsEqualTo(465_142_857u);

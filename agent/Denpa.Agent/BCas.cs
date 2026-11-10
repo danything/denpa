@@ -368,7 +368,7 @@ public sealed class BCas : IKeySource, IDisposable
 
     /// <summary>
     /// 開いた接続でカードに電源を入れ、INT と IDI を読む。**B-CAS でなければ投げる。**
-    /// 予備のリーダーを確かめるのにも使う (Card.cs の Peek、Probe.cs の `--card zd1j:`・`--card dt295:`、Dt295NativeProbe.cs)
+    /// 予備のリーダーを確かめるのにも使う (Card.cs の Peek、Probe.cs の `--card zd1j:`・`--card dt295:`・`--card it930x:`、Dt295NativeProbe.cs)
     /// </summary>
     internal static CardInit Read(ICardLink link)
     {
@@ -403,7 +403,7 @@ public sealed class BCas : IKeySource, IDisposable
     {
         var response = link.Transmit([0x90, 0x30, 0x00, 0x00, 0x00]);
         if (response.Length < InitLength) throw new IOException($"INT の応答が短すぎます ({response.Length} バイト)");
-        var code = BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(4));
+        var code = Code(response);
         if (code != InitOk) throw new IOException($"INT を拒否されました (返り値 0x{code:x4})。B-CAS カードか確かめてください");
         return (response[16..48], response[48..56], BinaryPrimitives.ReadUInt16BigEndian(response.AsSpan(6)));
     }

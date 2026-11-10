@@ -190,7 +190,7 @@ public static class It930xProbe
 
     /// <summary>
     /// TS の経路を設定し、入力 0〜4 を開けて EP 0x84 を <paramref name="length"/> だけ読み、入力ごとのパケットの数と捨てた数を出す。
-    /// 終わったら入力を閉じる。入力の形は SDK の既定のシリアルにする (PLEX の基板の値は確かめていない)
+    /// 終わったら入力を閉じる。入力の形はどれもシリアルにする (It930xDevice と同じ。PX-MLT5PE はこの形で TS を受けられた)
     /// </summary>
     private static void CheckTs(It930xBridge bridge, IUsbDevice usb, TimeSpan length, TextWriter output)
     {
