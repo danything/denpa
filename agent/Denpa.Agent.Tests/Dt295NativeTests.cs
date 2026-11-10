@@ -229,6 +229,20 @@ public class Dt295NativeTests
     }
 
     [Test]
+    public async Task I2C_はアドレスのバイトが終わらなければ_STOP_を出して失敗にする()
+    {
+        var fake = new Dt295Fake { I2cStuck = true };
+        var i2c = new Dt295NativeI2c(new Dt295NativeLink(fake));
+        Assert.Throws<Dt295NativeException>(() => i2c.Write(0x10, 0x01, 0x23));
+        // 開始 (bit4) を立てたままにしない。最後に制御へ書くのは STOP (開始・再スタート・ACK・待つ側の印を落とした値)
+        await Assert.That(fake.Stores.Last(s => s.Address == Dt295NativeI2c.Control).Value & 0x39).IsEqualTo(0u);
+        // 失敗のあとも続けて使える
+        fake.I2cStuck = false;
+        i2c.Write(0x10, 0x01, 0x23);
+        await Assert.That(fake.Terrestrial.Regs[0x01]).IsEqualTo((byte)0x23);
+    }
+
+    [Test]
     public async Task USB_コアの割り込み_クロックのレジスタは許可しないと書けない()
     {
         var fake = new Dt295Fake();
