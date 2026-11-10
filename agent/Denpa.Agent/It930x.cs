@@ -51,7 +51,7 @@ public static class It930x
 
     /// <summary>
     /// いま扱う機種 (MLT5 系の 3 機種)。どれも IT930x に復調器とチューナーの組が 5 つと、内蔵のカードリーダーが付く。
-    /// PX-MLT5PE は、USB の ID と受信機 0〜3 の割り当てを実機で確かめた (受信機 0〜3 で選局できた)。受信機 4 は確かめていない。
+    /// PX-MLT5PE は、USB の ID と受信機 0〜4 の割り当てを実機で確かめた (5 台とも選局できた)。
     /// PX-MLT5U と DTV02A-5TS-P は、USB の ID も割り当ても実機で確かめていない。DTV02A-5TS-P は PX-MLT5PE と同じ割り当てとして扱う (仕様書 1.2 も未確認としている)
     /// </summary>
     public static readonly IReadOnlyList<It930xModel> Family =

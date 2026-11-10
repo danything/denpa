@@ -652,7 +652,7 @@ TunerPool ── Dt295NativeTuner (選局・TS)    CardLinks ── Dt295NativeC
 
 PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P を px4d を使わずに持つための層です ([#1578](https://github.com/danything/denpa/issues/1578))。いまは地上波と衛星 (BS・CS) とスカパー！プレミアムサービス光 (J.83B。種別は `SKY`) の選局と、内蔵カードリーダーの読み取りができます。
 **設定の `device` に `it930x:<USB のポート>:<受信機>` と書いたときだけエージェントが持ち、自動検出 (`DeviceProbe`) は px4d のままです。**
-試し方と、実機で確かめた範囲 (PX-MLT5PE の受信機 0〜3 と内蔵カードリーダー) は [tuners.md](tuners.md#px-mlt5-系をエージェントが直に持つ-準備中)。
+試し方と、実機で確かめた範囲 (PX-MLT5PE の受信機 0〜4 と内蔵カードリーダー) は [tuners.md](tuners.md#px-mlt5-系をエージェントが直に持つ-準備中)。
 
 ```
 TunerPool ── It930xTuner (受信機 1 つ。地上波と衛星と J.83B の選局・LNB の給電の要求・TS・C/N)
@@ -735,7 +735,7 @@ It930xProbe (--it930x-probe。ブリッジだけを試す)
 - **受信機ごとの出口 (`It930xTsOutput`) は選局のたびに新しく作る `Pipe` (8 MB) で、読み出し側は `DeviceStream` です** (px4d・CECH-ZD1 J と同じ)。
   読む側が詰まって `Pipe` が溢れたら、その受信機のパケットだけを捨てて数えます。EP 0x84 の読みは 5 つの受信機で 1 本なので、待つとほかの受信機も欠けるためです
 - **機種の表 (`It930x.Family`) は、USB の ID と名前と受信機ごとの割り当て (I2C のバス・復調器のアドレス・ブリッジの TS 入力) です。** 割り当ては仕様書の表のとおりで、TS 入力の番号だけが PX-MLT5U で違います。
-  PX-MLT5PE は、USB の ID と受信機 0〜3 の割り当てを実機で確かめました (受信機 4 は確かめていない)。PX-MLT5U は実機で確かめていません。
+  PX-MLT5PE は、USB の ID と受信機 0〜4 の割り当てを実機で確かめました。PX-MLT5U は実機で確かめていません。
   DTV02A-5TS-P は PX-MLT5PE と同じ割り当てとして扱っています (実機で確かめていない)。LNB の給電 (GPIOH11) とカードの GPIO (GPIOH6・GPIOH14) は 3 機種で同じとして、表には持ちません
 - **内蔵カードリーダー (`It930xCard`) は、ブリッジの UART と GPIO を SDK の `IT9300_bcas*` の手順で動かします。** 機材を開くたびに 1 回 `UART_SET_MODE` に 1 を送り、
   カードの有無は GPIOH6 (0 ならある)、リセットは GPIOH14 を 0 にし、UART の状態 (`0x7904`) に 2、速さを 9600 にして 5 ms 待ってから 1 に戻します。
