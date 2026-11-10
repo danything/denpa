@@ -10,6 +10,7 @@
  * DB を読むのは呼ぶ側 (`rules.applyRules` とルールの下見 (`rule-preview.ts`))。
  */
 import { toHalfWidth } from "../fold";
+import { origin } from "../types";
 import {
   displayTitle,
   hasSeason,
@@ -333,8 +334,12 @@ export function captioned(name: string): boolean {
   return /\[字\]|【字】|🈑/u.test(toHalfWidth(name));
 }
 
-/** 衛星 (BS/CS)。地上波と同時に流れているなら、地方の差し替えが無いぶんこちらを録る */
-function satellite(type: string): boolean {
+/**
+ * 衛星 (BS/CS)。地上波と同時に流れているなら、地方の差し替えが無いぶんこちらを録る。
+ * CATV は元の放送で見る (`types.origin`)。地上波の再送信は地上波、ほかは衛星と同じ扱い
+ */
+function satellite(type: string, networkId: number): boolean {
+  if (type === "CATV") return origin(networkId) !== "GR";
   return type !== "GR";
 }
 
@@ -343,8 +348,10 @@ export interface Airing extends Described {
   start_at: number;
   end_at: number;
   service_id: number;
-  /** 局の種別 (GR/BS/CS/SKY) */
+  /** 局の種別 (GR/BS/CS/CATV/SKY) */
   type: string;
+  /** original_network_id。CATV の局の元の放送を見る (`satellite`) */
+  network_id: number;
 }
 
 /**
@@ -373,7 +380,8 @@ export type Skip<T extends Airing> =
 function better<T extends Airing>(a: T, b: T): number {
   return (
     Number(captioned(b.name)) - Number(captioned(a.name)) ||
-    Number(satellite(b.type)) - Number(satellite(a.type)) ||
+    Number(satellite(b.type, b.network_id)) -
+      Number(satellite(a.type, a.network_id)) ||
     a.start_at - b.start_at ||
     a.service_id - b.service_id ||
     a.id - b.id

@@ -16,7 +16,7 @@ import { EpgReader } from "@danything/arib/eit";
 import { ServiceReader } from "@danything/arib/psi";
 import { max } from "drizzle-orm";
 
-import { decodable, isSatellite } from "../types";
+import { isSatellite } from "../types";
 import { config } from "./config";
 import { orm } from "./db";
 import {
@@ -35,6 +35,7 @@ import { programs, services } from "./schema";
 import { chunks } from "./stream";
 import {
   type AgentChannel,
+  decodableChannel,
   getChannels,
   getTuners,
   openChannelStream,
@@ -106,7 +107,9 @@ function perChannel(
 ): number[] {
   return channel.services
     .map((service) =>
-      perService.get(serviceKey(channel.networkId, service.serviceId)),
+      perService.get(
+        serviceKey(channel.networkId, service.serviceId, channel.type),
+      ),
     )
     .filter((value) => value !== undefined);
 }
@@ -294,7 +297,7 @@ async function collectChannel(
      * 書けなかったぶんは `reader` に戻しておく
      */
     try {
-      saved += savePrograms(batch);
+      saved += savePrograms(batch, { type: channel.type });
       emit("programs");
     } catch (error) {
       reader.requeue(batch);
@@ -336,6 +339,7 @@ async function collectChannel(
             widenServices(
               sdt.transport.originalNetworkId,
               sdt.transport.services,
+              channel.type,
             );
           } catch (error) {
             console.warn(`[epg] ${label} の局名を書けませんでした: ${error}`);
@@ -480,26 +484,29 @@ const WHOLE_ONLY = new Set(["CS"]);
  * 同じ周回の続きで必ず回る。CS は詳細が無いので、いつも全局読み (`WHOLE_ONLY`)。
  *
  * 「初回」は、そのネットワークの局に番組が 1 件も無いとき。受信できない局が
- * 残っていても、ほかの局が埋まっていれば動かない (毎周回 6 分ずつ塞がない)
+ * 残っていても、ほかの局が埋まっていれば動かない (毎周回 6 分ずつ塞がない)。
+ *
+ * **地上波と CATV は全局読みをしない。** CATV は自分の TS の番組表だけを読む (地上波と同じ)。
+ * BS を再送信する CATV の TS はネットワーク ID が BS と同じ 4 なので、束ねる鍵には種別も入れる
  */
 export function firstSweeps(
   channels: AgentChannel[],
   reach: Map<number, number>,
   lastOf: (channel: AgentChannel) => number = () => 0,
 ): AgentChannel[] {
-  const byNetwork = new Map<number, AgentChannel[]>();
+  const byNetwork = new Map<string, AgentChannel[]>();
   for (const channel of channels) {
-    if (channel.type === "GR" || WHOLE_ONLY.has(channel.type)) continue;
-    byNetwork.set(channel.networkId, [
-      ...(byNetwork.get(channel.networkId) ?? []),
-      channel,
-    ]);
+    if (!isSatellite(channel.type) || WHOLE_ONLY.has(channel.type)) continue;
+    const network = `${channel.type}:${channel.networkId}`;
+    byNetwork.set(network, [...(byNetwork.get(network) ?? []), channel]);
   }
   const sweeps: AgentChannel[] = [];
   for (const members of byNetwork.values()) {
     const filled = members.some((channel) =>
       channel.services.some((service) =>
-        reach.has(serviceKey(channel.networkId, service.serviceId)),
+        reach.has(
+          serviceKey(channel.networkId, service.serviceId, channel.type),
+        ),
       ),
     );
     // いちばん長く行っていない中継から。受信できない中継に当たり続けない
@@ -579,8 +586,8 @@ async function run(): Promise<number> {
   // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
   syncServices(all);
   forgetGround(all);
-  // 復号できない種別 (SKY) は番組表を取得しない (`decodable`。番組表とライブに出さないので要らない)
-  const channels = all.filter((channel) => decodable(channel.type));
+  // 復号できる局が 1 つも無いチャンネル (SKY など) は番組表を取得しない (`decodableChannel`。番組表とライブに出さないので要らない)
+  const channels = all.filter(decodableChannel);
   if (channels.length === 0) return 0;
 
   const reach = coverage();
@@ -599,7 +606,10 @@ async function run(): Promise<number> {
       ? Math.max(
           0,
           ...channels
-            .filter((c) => c.networkId === channel.networkId)
+            .filter(
+              (c) =>
+                c.type === channel.type && c.networkId === channel.networkId,
+            )
             .map(lastOf),
         )
       : lastOf(channel);
@@ -643,9 +653,11 @@ async function run(): Promise<number> {
   );
   const expect = (sweep: AgentChannel) =>
     channels
-      .filter((c) => c.type !== "GR" && c.networkId === sweep.networkId)
+      .filter((c) => c.type === sweep.type && c.networkId === sweep.networkId)
       .flatMap((c) => c.services.map((service) => service.serviceId))
-      .filter((serviceId) => known.has(serviceKey(sweep.networkId, serviceId)));
+      .filter((serviceId) =>
+        known.has(serviceKey(sweep.networkId, serviceId, sweep.type)),
+      );
 
   const tuners = (await getTuners().catch(() => [])).filter(
     (tuner) => !tuner.disabled,

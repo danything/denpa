@@ -14,6 +14,7 @@ import { parseSearchFields } from "#lib/search.js";
 
 import { toHalfWidth } from "../fold";
 import type { Slot } from "../rule-time";
+import { origin } from "../types";
 import { now } from "./db";
 import {
   EdcbClient,
@@ -258,9 +259,13 @@ export function convertRule(
   };
 }
 
-/** 局の内部 ID。denpa の局に無ければ undefined */
+/**
+ * 局の内部 ID。denpa の局に無ければ undefined。
+ * EDCB の局は ONID と SID だけで、アンテナとケーブルテレビの再送信を分けない。種別は元の放送で読む (`types.origin`)。
+ * 地上波・BS・CS の再送信はアンテナの局に、ケーブルテレビの自主放送は CATV の局に当たる
+ */
 function serviceOf(networkId: number, serviceId: number): number | undefined {
-  return serviceById(serviceKey(networkId, serviceId))?.id;
+  return serviceById(serviceKey(networkId, serviceId, origin(networkId)))?.id;
 }
 
 /** 記録に出すルールの呼び名 */
@@ -341,7 +346,12 @@ export async function importEdcbReservations(
       continue;
     }
     await importReservation(
-      programKey(row.networkId, row.serviceId, row.eventId),
+      programKey(
+        row.networkId,
+        row.serviceId,
+        row.eventId,
+        origin(row.networkId),
+      ),
       row.title,
       options,
     );
@@ -376,7 +386,11 @@ export function importEdcbHistory(
     entries.push({
       sources: [`edcb:recinfo:${key}`, `edcb:recinfo2:${key}`],
       name: row.title,
-      serviceId: serviceKey(row.networkId, row.serviceId),
+      serviceId: serviceKey(
+        row.networkId,
+        row.serviceId,
+        origin(row.networkId),
+      ),
       serviceName: row.serviceName,
       endAt: row.startAt + row.duration,
     });

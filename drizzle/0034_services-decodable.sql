@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `decodable` integer DEFAULT 1 NOT NULL;

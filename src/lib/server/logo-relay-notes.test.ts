@@ -142,7 +142,7 @@ orm()
   .insert(services)
   .values(
     STATIONS.map((s) => ({
-      id: serviceKey(s.network, s.sid),
+      id: serviceKey(s.network, s.sid, s.type),
       service_id: s.sid,
       network_id: s.network,
       name: `局${s.sid}`,
@@ -166,7 +166,7 @@ describe("外れの控えが間違っていても当たり直せる", () => {
     for (let i = 0; i < 100 && sweepState().running; i++) await Bun.sleep(20);
     expect(sweepState().running).toBe(false);
     expect(opened).toContain("BS15_0");
-    expect(readLogo(serviceKey(4, 211))).not.toBeNull();
-    expect(readLogo(serviceKey(7, 330))).not.toBeNull();
+    expect(readLogo(serviceKey(4, 211, "BS"))).not.toBeNull();
+    expect(readLogo(serviceKey(7, 330, "CS"))).not.toBeNull();
   });
 });

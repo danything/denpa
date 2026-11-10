@@ -33,6 +33,7 @@ function airing(
     end_at: at + HOUR / 2,
     service_id: 1000 + id,
     type: "GR",
+    network_id: 0x7fe0,
     ...fields,
   };
 }
@@ -533,6 +534,23 @@ describe("firstAirings", () => {
     const gr = airing("テストアニメ #1", base);
     const bs = airing("テストアニメ #1", base, { type: "BS" });
     expect(kept([gr, bs])).toEqual([bs.id]);
+  });
+
+  test("CATV の局は元の放送で見る。地上波の再送信は地上波、BS の再送信は衛星", () => {
+    // 地上波の再送信 (original_network_id が地上波の範囲) は衛星に勝たない
+    const cableGr = airing("テストアニメ #1", base, {
+      type: "CATV",
+      network_id: 0x7fe0,
+    });
+    const bs = airing("テストアニメ #1", base, { type: "BS", network_id: 4 });
+    expect(kept([cableGr, bs])).toEqual([bs.id]);
+    // BS の再送信は衛星として地上波に勝つ
+    const gr = airing("テストアニメ #1", base);
+    const cableBs = airing("テストアニメ #1", base, {
+      type: "CATV",
+      network_id: 4,
+    });
+    expect(kept([gr, cableBs])).toEqual([cableBs.id]);
   });
 
   test("少しずれて重なっているのも同時放送として選ぶ", () => {

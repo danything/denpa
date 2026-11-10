@@ -234,6 +234,13 @@ export const services = sqliteTable("services", {
   has_logo: flag("has_logo")
     .notNull()
     .default(sql`0`),
+  /**
+   * スクランブルを復号できる局か (`types.decodableService`)。取り込みのたびに決め直す (`epg.syncServices`)。
+   * 復号できない局 (SKY と、B-CAS 以外の方式でスクランブルされた CATV の局) は、番組表・ライブ・ロゴに出さない
+   */
+  decodable: flag("decodable")
+    .notNull()
+    .default(sql`1`),
   updated_at: integer("updated_at").notNull(),
   /**
    * 番組表の取得 (`epg-collect.ts`) がこの局の番組を最後に書いた時刻。まだなら null。

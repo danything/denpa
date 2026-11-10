@@ -595,7 +595,7 @@ async function pump(
               }
               if (Date.now() - savedEpgAt >= EPG_SAVE_INTERVAL) {
                 savedEpgAt = Date.now();
-                savePrograms(epg.all());
+                savePrograms(epg.all(), { type: service.type });
               }
             }
 
@@ -670,7 +670,7 @@ async function pump(
         sink.end((error?: Error | null) => (error ? reject(error) : resolve()));
       });
       // 途中で終わっても、読めたぶんの番組表は残す
-      savePrograms(epg.all());
+      savePrograms(epg.all(), { type: service.type });
     }
   } catch (error) {
     // 終了時刻に達して自分で abort した場合は正常終了。それ以外だけ失敗にする
