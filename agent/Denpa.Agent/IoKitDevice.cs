@@ -256,8 +256,8 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
         return hr == 0 ? result : null;
     }
 
-    /// <summary>開いて、最初のインターフェースを開き、代替設定 0 を選ぶ</summary>
-    public static IoKitDevice Open(UsbLocation location, int vendor, int product)
+    /// <summary>開いて、最初のインターフェースを開き、代替設定 0 を選ぶ (<paramref name="selectAlternate"/> が false なら選ばない)</summary>
+    public static IoKitDevice Open(UsbLocation location, int vendor, int product, bool selectAlternate = true)
     {
         var name = $"usb {location.Port}";
         var services = Services(vendor, product);
@@ -315,7 +315,7 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
                     ? $"{name} はほかのソフト (かドライバ) が使っています"
                     : $"{name} のインターフェースを開けません (IOReturn 0x{opened:X8})");
             }
-            Check(name, "代替設定を選べません", ((delegate* unmanaged[Cdecl]<void*, byte, int>)Slot(@interface, SetAlternateInterface))(@interface, 0));
+            if (selectAlternate) Check(name, "代替設定を選べません", ((delegate* unmanaged[Cdecl]<void*, byte, int>)Slot(@interface, SetAlternateInterface))(@interface, 0));
             result.MapPipes(location.Path);
             return result;
         }
