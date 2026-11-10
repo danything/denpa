@@ -187,14 +187,7 @@ public sealed class Dt295NativeLink
     public uint Read32(uint address)
     {
         Span<byte> data = stackalloc byte[4];
-        if (address < DirectEnd)
-        {
-            DirectRead(address, data);
-        }
-        else
-        {
-            DirectRead(Alias(address, ReadWindow, ref _readBank), data);
-        }
+        DirectRead(address < DirectEnd ? address : Alias(address, ReadWindow, ref _readBank), data);
         var result = BinaryPrimitives.ReadUInt32BigEndian(data);
         _trace?.Invoke($"読む 0x{address:X8} = 0x{result:X8}");
         return result;

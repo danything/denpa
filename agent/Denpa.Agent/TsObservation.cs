@@ -57,12 +57,6 @@ public sealed class TsObservation
     private bool _cat;
     private long _packets, _eitActual, _eitOther, _eitScrambled, _cdt, _cdtScrambled;
 
-    /// <summary>番組表 (EIT) のセクションが 1 つでも読めたか</summary>
-    public bool EitReadable => _eitActual + _eitOther > 0;
-
-    /// <summary>番組表 (EIT) の PID にスクランブルされたパケットが来たか</summary>
-    public bool EitScrambled => _eitScrambled > 0;
-
     /// <summary>PMT と CAT で見た CA_system_id (重なりなし・小さい順)</summary>
     public IReadOnlyList<int> CaSystemIds =>
         _ecms.Values.SelectMany(set => set).Concat(_emms).Select(ca => ca.System).Distinct().Order().ToList();
@@ -88,7 +82,7 @@ public sealed class TsObservation
     }
 
     /// <summary>
-    /// 分かったことを 1 行ずつ。**報告にそのまま貼れる形にする** (docs/tuners.md「スカパー！プレミアムの観測」)
+    /// 分かったことを 1 行ずつ。**報告にそのまま貼れる形にする** (docs/tuners.md「スカパー！プレミアムでカード無しで分かること」)
     /// </summary>
     public IEnumerable<string> Describe()
     {
@@ -154,10 +148,8 @@ public sealed class TsObservation
             shape.Add(section, syntax ? Descrambler.Crc32(section) == 0 : null);
             return;
         }
-        // CRC を持つ形式は CRC で確かめる。化けたセクションで嘘の CA_system_id を出さない
-        if (syntax && (section.Length < 12 || Descrambler.Crc32(section) != 0)) return;
-        // ここから先の PSI/SI はどれも CRC を持つ形式
-        if (!syntax) return;
+        // ここから先の PSI/SI はどれも CRC を持つ形式。CRC で確かめ、化けたセクションで嘘の CA_system_id を出さない
+        if (!syntax || section.Length < 12 || Descrambler.Crc32(section) != 0) return;
         var table = section[0];
         if (pid == PatPid && table == 0x00) OnPat(section);
         else if (pid == CatPid && table == 0x01) OnCat(section);
