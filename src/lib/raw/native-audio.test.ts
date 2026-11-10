@@ -3,8 +3,25 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { NativeAudio } from "./native-audio";
 import type { AudioInput, AudioOutput } from "./native-audio-protocol";
 
+class Param {
+  value = 1;
+  /** 予約した変化 (`[種類, 値, 時刻]`)。取り消しは `cancel` */
+  events: [string, number, number][] = [];
+  setValueAtTime(value: number, at: number) {
+    this.events.push(["set", value, at]);
+  }
+  linearRampToValueAtTime(value: number, at: number) {
+    this.events.push(["ramp", value, at]);
+  }
+  cancelScheduledValues(at: number) {
+    this.events.push(["cancel", 0, at]);
+  }
+}
 class Node {
-  gain = { value: 1 };
+  gain = new Param();
+  stopAt: number | undefined;
+  /** つないだ先 */
+  outputs: Node[] = [];
   threshold = { value: 0 };
   knee = { value: 0 };
   ratio = { value: 0 };
@@ -15,10 +32,13 @@ class Node {
   stopped = false;
   starts: number[][] = [];
   onended: (() => void) | null = null;
-  connect() {}
+  connect(to: Node) {
+    this.outputs.push(to);
+  }
   disconnect() {}
-  stop() {
+  stop(at?: number) {
     this.stopped = true;
+    this.stopAt = at;
   }
   start(...args: number[]) {
     this.starts.push(args);
@@ -263,4 +283,47 @@ test("音の経路を組めなかったら、作りかけの AudioContext を閉
   expect(threw).toBe(true);
   expect(Context.all[0]!.state).toBe("closed");
   expect(TestWorker.all).toHaveLength(0);
+});
+
+// #2474。波形が途中で 0 に飛ぶ・0 から飛ぶと「プツッ」と聞こえる
+test("映像が止まったら、鳴っている音を絞りきってから止める", () => {
+  const { video, worker, context } = setup();
+  worker.pcm(1, 10.0);
+  const node = context.sources[0]!;
+  const fade = node.outputs[0]!;
+  context.currentTime = 50.01;
+  video.dispatchEvent(new Event("waiting"));
+  expect(node.stopAt).toBeCloseTo(50.018, 8);
+  expect(fade.gain.events.at(-1)).toEqual(["ramp", 0, node.stopAt!]);
+});
+test("止めたあとに鳴らす音は、絞っている音量とは別に、音量を上げながら鳴らす", () => {
+  const { video, worker, context } = setup();
+  worker.pcm(1, 10.0);
+  const before = context.sources[0]!.outputs[0]!;
+  context.currentTime = 50.01;
+  video.dispatchEvent(new Event("waiting"));
+  video.dispatchEvent(new Event("playing"));
+  worker.pcm(1, 10.1);
+  const after = context.sources.at(-1)!;
+  expect(after.outputs[0]).not.toBe(before);
+  const when = after.starts[0]![0]!;
+  expect(after.outputs[0]!.gain.events.slice(-2)).toEqual([
+    ["set", 0, when],
+    ["ramp", 1, when + 0.008],
+  ]);
+});
+test("続いているコマの間では音量を動かさない", () => {
+  const { worker, context } = setup();
+  for (let i = 0; i < 5; i++) worker.pcm(1, 10.1 + (i * 1024) / 48000);
+  const fade = context.sources[0]!.outputs[0]!;
+  // 1 つ目のコマで上げるだけ
+  expect(fade.gain.events.filter(([kind]) => kind === "ramp")).toHaveLength(1);
+});
+test("コマを捨てて間が空いたら、そこからまた音量を上げながら鳴らす", () => {
+  const { worker, context } = setup();
+  worker.pcm(1, 10.1);
+  worker.pcm(1, 10.1 + (2 * 1024) / 48000); // 1 コマ抜けた
+  const fade = context.sources[0]!.outputs[0]!;
+  const second = context.sources[1]!.starts[0]![0]!;
+  expect(fade.gain.events.at(-1)).toEqual(["ramp", 1, second + 0.008]);
 });
