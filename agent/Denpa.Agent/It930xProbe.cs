@@ -280,7 +280,7 @@ public static class It930xProbe
             return 2;
         }
         var noWait = args.Contains("--no-wait");
-        Console.WriteLine($"{port} を {count} 回、開いて電源を入れ、すぐ電源を切って閉じます (電源を切ったあと {(noWait ? "待たない" : $"{It930xDevice.PowerOffSettleMs} ms 待つ")})");
+        Console.WriteLine($"{port} を {count} 回、開いて電源を入れ、すぐ電源を切って閉じます ({(noWait ? "電源を切ったあとは待たない" : $"電源を切ったあと {It930xDevice.PowerOffSettleMs} ms 待つ")})");
         try
         {
             for (var round = 1; round <= count; round++)
