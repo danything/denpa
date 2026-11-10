@@ -8,9 +8,22 @@ import {
   knownHost,
   sameOrigin,
   sharedNetworks,
+  tokenRefusal,
   trusted,
 } from "./auth";
 import { config } from "./config";
+
+describe("アクセストークンでは使わせない操作", () => {
+  test("アクセストークンで入った相手には断る理由を返す", () => {
+    expect(tokenRefusal({ token: 3 })).toBe(
+      "アクセストークンでは使えません。ブラウザから操作してください",
+    );
+  });
+
+  test("ブラウザの人 (信頼するネットワーク・OIDC) は通す", () => {
+    expect(tokenRefusal({})).toBeNull();
+  });
+});
 
 describe("同じサイトからの呼び出しか", () => {
   const url = new URL("http://192.168.1.20:3000/settings/integrations");

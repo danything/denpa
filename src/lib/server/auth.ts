@@ -135,6 +135,20 @@ export function sameOrigin(request: Request, url: URL): boolean {
 }
 
 /**
+ * **アクセストークン (テレビのアプリ) では使わせない操作を断る理由。** ブラウザの人 (信頼するネットワーク・OIDC) なら null。
+ * 呼ぶ側は 403 と、この文を `message` にして返す。端末に渡した資格で次のことをさせない (docs/auth.md「アプリのペアリング」)
+ *
+ * - DB を持ち出す・入れ替える (denpa を別の機械へ移す、EPGStation・EDCB からの引き継ぎ)
+ * - 録画の通知を送る先 (Webhook) を追加・切り替え・削除・テスト送信する
+ * - 世帯のニコニコのアカウントを差し替える
+ */
+export function tokenRefusal(locals: { token?: number }): string | null {
+  return locals.token === undefined
+    ? null
+    : "アクセストークンでは使えません。ブラウザから操作してください";
+}
+
+/**
  * **何も聞かずに通す相手か。** 見るのはアドレス (`TRUSTED_NETWORKS`、CIDR の
  * カンマ区切り)。名前は `foreignHost` で別に確かめる (hooks が両方を見る)。
  *

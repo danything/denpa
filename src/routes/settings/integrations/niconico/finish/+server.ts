@@ -1,9 +1,9 @@
 import { json } from "@sveltejs/kit";
 
-import { sameOrigin } from "#lib/server/auth.js";
+import { sameOrigin, tokenRefusal } from "#lib/server/auth.js";
 import { finishLink } from "#lib/server/niconico.js";
 
-import { refusal, takeFlow, who } from "../flow.server";
+import { takeFlow, who } from "../flow.server";
 
 /**
  * **連携の結果を受け取って保存する** (戻り先の画面 `../return` がフラグメントから読んで送ってくる)。
@@ -13,7 +13,7 @@ import { refusal, takeFlow, who } from "../flow.server";
  */
 export async function POST(event) {
   const { request, cookies, url } = event;
-  const refused = refusal(event);
+  const refused = tokenRefusal(event.locals);
   if (refused !== null) return json({ message: refused }, { status: 403 });
   if (!sameOrigin(request, url))
     return json({ message: "ほかのサイトからは使えません" }, { status: 403 });

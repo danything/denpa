@@ -1,4 +1,4 @@
-import { expect, goto, test } from "./helpers";
+import { expect, goto, pairToken, test } from "./helpers";
 
 /**
  * **ニコニコのアカウントとの連携** (設定の「連携」の「実況」。`server/niconico.ts`)。
@@ -77,19 +77,7 @@ test.describe("ニコニコとの連携", () => {
   test("アクセストークン (テレビのアプリ) では連携を始められない", async ({
     request,
   }) => {
-    // テレビのアプリと同じようにペアリングしてアクセストークンを貰う (31-device と同じ手順)
-    const code = await (
-      await request.post("/api/device/code", { data: { name: "E2E の連携" } })
-    ).json();
-    expect(
-      (await request.post("/device", { form: { code: code.userCode } })).ok(),
-    ).toBe(true);
-    const { token } = await (
-      await request.post("/api/device/token", {
-        data: { deviceCode: code.deviceCode },
-      })
-    ).json();
-    expect(token).toMatch(/^denpa_/);
+    const token = await pairToken(request, "E2E の連携");
     const res = await request.get("/settings/integrations/niconico/link", {
       headers: { authorization: `Bearer ${token}` },
       maxRedirects: 0,

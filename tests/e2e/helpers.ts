@@ -72,6 +72,54 @@ export async function syncEpg(request: APIRequestContext): Promise<void> {
 }
 
 /**
+ * テレビのアプリと同じようにペアリングしてアクセストークンを受け取る (31-device と同じ手順)。
+ * 普段のスタックはローカルを信頼しているので、`/device` はログインなしで済ませられる
+ */
+export async function pairToken(
+  request: APIRequestContext,
+  name: string,
+): Promise<string> {
+  const code = await (
+    await request.post("/api/device/code", { data: { name } })
+  ).json();
+  expect(
+    (await request.post("/device", { form: { code: code.userCode } })).ok(),
+  ).toBe(true);
+  const { token } = await (
+    await request.post("/api/device/token", {
+      data: { deviceCode: code.deviceCode },
+    })
+  ).json();
+  expect(token).toMatch(/^denpa_/);
+  return token;
+}
+
+/**
+ * フォームの action をアクセストークン付きで送り、断られることを確かめる (`tokenRefusal`。403)。
+ * 画面と同じ送り方 (`use:enhance` の `x-sveltekit-action`) で送り、返ってくる JSON の `status` を見る
+ */
+export async function expectTokenRefused(
+  request: APIRequestContext,
+  token: string,
+  origin: string,
+  action: string,
+  form: Record<string, string> = {},
+): Promise<void> {
+  const res = await request.post(`/settings/integrations?/${action}`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+      origin,
+      accept: "application/json",
+      "x-sveltekit-action": "true",
+    },
+    form,
+  });
+  const body = await res.json();
+  expect(body, action).toMatchObject({ type: "failure", status: 403 });
+  expect(body.data, action).toContain("アクセストークンでは使えません");
+}
+
+/**
  * 検索の結果の行の、放送の始まり (`10/22(木) 21:30〜22:00` の頭)。年は出ないので、いまに近いほうの年にする
  * (画面もテストも TZ=Asia/Tokyo)。
  *

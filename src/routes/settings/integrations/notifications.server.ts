@@ -2,6 +2,7 @@ import { type Actions, fail } from "@sveltejs/kit";
 import { eq, not } from "drizzle-orm";
 
 import { parseId } from "#lib/id.js";
+import { tokenRefusal } from "#lib/server/auth.js";
 import { now, orm } from "#lib/server/db.js";
 import { webhooks } from "#lib/server/schema.js";
 import { send, webhookUrl } from "#lib/server/webhook.js";
@@ -14,8 +15,11 @@ export function load() {
   };
 }
 
+/** **どれもアクセストークン (テレビのアプリ) では断る** (403。`tokenRefusal`)。端末に渡した資格で、録画の通知を送る先を変えさせない */
 export const actions = {
-  addWebhook: async ({ request }) => {
+  addWebhook: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const form = await request.formData();
     const url = String(form.get("url") ?? "").trim();
     // 先頭の綴りだけでなく URL として読めるかまで見る (`http://` だけ、のようなものを残さない)
@@ -32,7 +36,9 @@ export const actions = {
     return { success: true, webhookAdded: true };
   },
 
-  toggleWebhook: async ({ request }) => {
+  toggleWebhook: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const form = await request.formData();
     const id = parseId(form.get("id"));
     if (id === null) return fail(400, { message: "ID が不正です" });
@@ -44,7 +50,9 @@ export const actions = {
     return { success: true };
   },
 
-  deleteWebhook: async ({ request }) => {
+  deleteWebhook: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const form = await request.formData();
     const id = parseId(form.get("id"));
     if (id === null) return fail(400, { message: "ID が不正です" });
@@ -52,7 +60,9 @@ export const actions = {
     return { success: true };
   },
 
-  testWebhook: async ({ request }) => {
+  testWebhook: async ({ request, locals }) => {
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const form = await request.formData();
     const id = parseId(form.get("id"));
     if (id === null) return fail(400, { message: "ID が不正です" });
