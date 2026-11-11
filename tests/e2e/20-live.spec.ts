@@ -699,25 +699,33 @@ test.describe("ライブ視聴", () => {
 
   /*
    * **ページのチケットを断られたら、`/api/live/ticket` から取り直して繋ぐ。** 戻るで開き直したページは、
-   * ブラウザが手元に持っていた HTML (使い終えたチケットが入っている) を出すことがある。ここでは HTML の中のチケットを
-   * 配っていないものに書き換えて、サーバに断らせる
+   * ブラウザが手元に持っていた HTML (使い終えたチケットが入っている) を出すことがある。ここでは最初に繋ぐ URL の
+   * チケットを配っていないものに書き換えて、サーバに断らせる。HTML を `route.fulfill` で書き換えると、
+   * Chromium がそのページを外のネットワークのものと扱い、127.0.0.1 への WebSocket を止めてしまう
+   * (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`)
    */
   test("ページのチケットを断られたら、取り直して繋ぐ", async ({ page }) => {
-    let replaced = false;
-    await page.route(
-      (url) => url.pathname === "/live",
-      async (route) => {
-        const response = await route.fetch();
-        const body = (await response.text()).replace(
-          /ticket:"[0-9a-f-]{36}"/,
-          () => {
-            replaced = true;
-            return 'ticket:"00000000-0000-4000-8000-000000000000"';
-          },
-        );
-        await route.fulfill({ response, body });
-      },
-    );
+    await page.addInitScript(() => {
+      const seen = window as unknown as { __replaced: boolean };
+      seen.__replaced = false;
+      const Original = window.WebSocket;
+      window.WebSocket = class extends Original {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          const text = String(url);
+          const first = !seen.__replaced && text.includes("ticket=");
+          if (first) seen.__replaced = true;
+          super(
+            first
+              ? text.replace(
+                  /ticket=[^&]+/,
+                  "ticket=00000000-0000-4000-8000-000000000000",
+                )
+              : url,
+            protocols,
+          );
+        }
+      };
+    });
     const asked: string[] = [];
     page.on("request", (request) => {
       if (request.url().includes("/api/live/ticket")) asked.push(request.url());
@@ -730,7 +738,13 @@ test.describe("ライブ視聴", () => {
     });
 
     await goto(page, "/live");
-    expect(replaced, "HTML の中にチケットが見つからない").toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as unknown as { __replaced: boolean }).__replaced,
+        ),
+      )
+      .toBe(true);
     await expect.poll(() => asked.length).toBe(1);
     await expect.poll(() => frames).toBeGreaterThan(0);
     await expect(page.getByText("繋がりませんでした")).toHaveCount(0);
