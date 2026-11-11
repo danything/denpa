@@ -344,6 +344,9 @@ public sealed class It930xDevice
     /// <summary>開くときに EP 0x84 の読みを出し終えるのを待つ長さ</summary>
     internal static readonly TimeSpan ReaderStartTimeout = TimeSpan.FromSeconds(2);
     private volatile bool _stopping;
+
+    /// <summary>閉じ始めた (<see cref="Close"/>)。読みのスレッドは、閉じる側が入力を閉じるので自分では閉じない (電源を切ったあとにブリッジへ書かない)</summary>
+    private volatile bool _closing;
     private int _users;
     private bool _closed;
     private volatile bool _faulted;
@@ -624,7 +627,8 @@ public sealed class It930xDevice
         }
         catch (IOException error)
         {
-            if (_stopping) return;
+            // 閉じている途中の失敗 (入力を閉じて EP 0x84 をリセットした読み) は、閉じる側が片付ける
+            if (_stopping || _closing) return;
             // EP 0x84 の読みは全部の受信機で 1 本なので、読めなくなったら機材ごと使えないものとし、次の選局で開き直す
             _faulted = true;
             Log.Write($"[{Label}] TS を読めなくなりました: {UsbDevices.Reason(error)}");
@@ -997,6 +1001,7 @@ public sealed class It930xDevice
             if (_closed) return;
             _closed = true;
         }
+        _closing = true;
         // 入力を閉じて EP 0x84 をリセットしてから読みを止める (SDK の DRV_ResetRxPort)。読む側がいないまま、ブリッジに TS を溜めない
         if (!Faulted)
         {
