@@ -152,7 +152,7 @@ test.describe("ケーブル", () => {
     });
     // QC13〜QV12 の 113 チャンネルと、TSMF で束ねた 2 つ目の TS (QC30:1)
     await expect(card.getByTestId("scan-count")).toContainText("114 / 114");
-    await expect(card.getByTestId("scan-found")).toContainText("5");
+    await expect(card.getByTestId("scan-found")).toContainText("6");
 
     // 取り込み直した表を読み直す
     await goto(page, "/settings/reception");
