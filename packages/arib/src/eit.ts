@@ -723,28 +723,33 @@ export class EpgReader {
     for (const packet of this.packets.feed(chunk)) {
       for (const raw of this.sections.feed(packet)) {
         const section = parseEit(raw, this.options);
-        if (section === null) continue;
-        if (section.tableId >= SCHEDULE_ACTUAL_MIN) {
-          if (!this.progress.has(section.serviceId))
-            this.lastNewService = this.now();
-          const progress =
-            this.progress.get(section.serviceId) ??
-            new ScheduleProgress(this.now);
-          progress.add(section);
-          this.progress.set(section.serviceId, progress);
-        }
-        for (const event of section.events) {
-          if (
-            section.tableId === TABLE_PF_ACTUAL &&
-            this.onAir(section, event)
-          ) {
-            this.present.set(event.serviceId, event);
-          }
-          if (event.startAt === null || event.duration === null) continue;
-          this.merge(event);
-          added = true;
-        }
+        if (section !== null && this.add(section)) added = true;
       }
+    }
+    return added;
+  }
+
+  /**
+   * 読んだセクションを 1 つ足す。番組が 1 つでも増えたら true。
+   * 4K の放送の番組表 (`mh-eit.ts` の `MmtEpgReader`) は、読み方だけを替えてここに渡す
+   */
+  protected add(section: EitSection): boolean {
+    let added = false;
+    if (section.tableId >= SCHEDULE_ACTUAL_MIN) {
+      if (!this.progress.has(section.serviceId))
+        this.lastNewService = this.now();
+      const progress =
+        this.progress.get(section.serviceId) ?? new ScheduleProgress(this.now);
+      progress.add(section);
+      this.progress.set(section.serviceId, progress);
+    }
+    for (const event of section.events) {
+      if (section.tableId === TABLE_PF_ACTUAL && this.onAir(section, event)) {
+        this.present.set(event.serviceId, event);
+      }
+      if (event.startAt === null || event.duration === null) continue;
+      this.merge(event);
+      added = true;
     }
     return added;
   }

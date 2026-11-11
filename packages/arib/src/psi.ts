@@ -64,7 +64,7 @@ const CRC32_TABLE = (() => {
 })();
 
 /** MPEG-2 の CRC32。セクション末尾の 4 バイトを含めて回すと 0 になる */
-function crc32(data: Uint8Array): number {
+export function crc32(data: Uint8Array): number {
   let crc = 0xffffffff;
   for (const byte of data) {
     crc =
