@@ -547,6 +547,12 @@ jobs:
       - name: Publish the tray (Native AOT, win-x64)
         run: dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
 
+      # wdi-simple.exe (libwdi。Zadig のコマンドライン版)。リリースと同じスクリプトで、決めたタグのソースからビルドする
+      # (取ってくるものはコミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)。エージェントと同じ zip に入れる
+      - name: Build wdi-simple (libwdi)
+        shell: pwsh
+        run: ./scripts/build-wdi-simple.ps1 -Out out\libwdi
+
       # 起こして、落ちずに動き続けることを見る (denpa はいないので、注意のアイコンのまま)。メニューは人が開くものなので見ない。
       # 2 つ目は二重に起こしたときで、すぐ終わる
       - name: Smoke test (tray)
@@ -631,7 +637,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          Compress-Archive -Path out\denpa-agent.exe, out\denpa-tray.exe -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
+          Compress-Archive -Path out\denpa-agent.exe, out\denpa-tray.exe, out\libwdi -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
           $env:DENPA_AGENT_ZIP = "$env:RUNNER_TEMP\denpa-agent.zip"
           $script = [scriptblock]::Create((Get-Content install.ps1 -Raw -Encoding UTF8))
           & $script -AgentOnly -NoOpen
