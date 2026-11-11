@@ -206,7 +206,7 @@ PX-W3U3 V2・PX-S3U2・PX-S3U は系統が別で、上流も実機では確か�
 ## Sony CECH-ZD1 J
 
 PS3 の torne の地デジチューナー (USB `054c:04b2`)。**外のデーモンもファームウェアも要らず、エージェントが USB を直に持ちます**
-(Linux は usbfs、Windows は WinUSB、Mac は IOKit。Windows はドライバを Zadig で WinUSB にします。[install-windows.md](install-windows.md)。
+(Linux は usbfs、Windows は WinUSB、Mac は IOKit。Windows はドライバを WinUSB に替えます。[install-windows.md](install-windows.md#チューナーのドライバを-winusb-に替える)。
 Windows と Mac は実機ではまだ確かめていません)。
 
 - **設定の `device` は `zd1j:<USB のポート>`** (`zd1j:4-12.1`)。シリアルが無いので、ポートで見分けます。**設定に CECH-ZD1 J が 1 台だけなら、
@@ -235,7 +235,7 @@ Windows と Mac は実機ではまだ確かめていません)。
 ## PIXELA PIX-DT295
 
 PIXELA の USB チューナー (USB `06b8:103b`。地上波・BS・CS。B-CAS の差し込み口つき)。**外のデーモンもファームウェアも要らず、エージェントが機材のレジスタを USB で直に書いて動かします**
-(Linux は usbfs、Windows は WinUSB、Mac は IOKit。Windows はドライバを Zadig で WinUSB にします。[install-windows.md](install-windows.md))。
+(Linux は usbfs、Windows は WinUSB、Mac は IOKit。Windows はドライバを WinUSB に替えます。[install-windows.md](install-windows.md#チューナーのドライバを-winusb-に替える))。
 同梱するものもありません。
 
 - **設定の `device` は `dt295:<USB のポート>`** (`dt295:4-12.1`)。ポートで見分けるので、挿すポートを変えると別のチューナーになります。

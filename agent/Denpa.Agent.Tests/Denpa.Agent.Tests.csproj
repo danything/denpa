@@ -55,6 +55,7 @@
         <Compile Include="../Denpa.Agent/Fr30.cs" />
         <Compile Include="../Denpa.Agent/UsbFsDevice.cs" />
         <Compile Include="../Denpa.Agent/WinUsbDevice.cs" />
+        <Compile Include="../Denpa.Agent/WinUsbTargets.cs" />
         <Compile Include="../Denpa.Agent/IoKitDevice.cs" />
         <Compile Include="../Denpa.Agent/Dib8096.cs" />
         <Compile Include="../Denpa.Agent/Zd1j.cs" />

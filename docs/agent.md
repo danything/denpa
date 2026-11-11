@@ -599,7 +599,7 @@ TunerPool ── Zd1jTuner (選局・TS)      CardLinks ── Zd1jCard (T=1 は
   そのまま使う)。リセットと IFSD の取り決めは 1 回だけで、あとはつないだまま。抜き差しの通知は無いので、APDU の前ごとに見ます
 - **前面の LED は流している間ずっと赤** (DiB8000 の GPIO 1)。選局しなおしでは触らず、止めたら緑に戻します
 - **USB は OS ごとに P/Invoke だけで持ちます** (外のライブラリなし)。Linux は usbfs の ioctl (TS は URB を 16 本出しっぱなし。ioctl の番号・errno・開けないときの文言は USB のカードリーダーと同じ `UsbFs`)、
-  Windows は WinUSB (利用者が Zadig で WinUSB を当てる。`OVERLAPPED` の読みを 16 本)、macOS は IOKit の IOUSBLib (カーネルの拡張なし。
+  Windows は WinUSB (利用者が install.ps1 の `-WinUsb` か Zadig でドライバを WinUSB に替える。`OVERLAPPED` の読みを 16 本)、macOS は IOKit の IOUSBLib (カーネルの拡張なし。
   `ReadPipeAsync` を 16 本、CFRunLoop を回す専用のスレッドで受ける)。IOKit では済んだ読みをその場で出し直すので、読む側が詰まったときに
   溜めるのは、ほかの OS と同じく読みの本数ぶんまでにし、越えたぶんは捨てます。IOUSBLib では interrupt の読みに時間切れが効かないので、
   コア 1 の応答の EP 0x83 は時間切れの無い `ReadPipe` を専用のスレッドで出し続け、届いた応答を自前の時間切れで待ちます (`UsbReadPump`)。
@@ -1199,6 +1199,8 @@ compose と Helm は同じ合言葉を環境変数で両方に渡し、Mac と W
 - **様子を見る:** `denpa-agent --status`。動いているエージェントに**自分の証明書** (`agent.key`) で繋いで `/denpa/tuners` を
   そのまま出します (繋がらなければ理由を出して 1 で終わる)。インストーラが使います。自分の証明書で来た相手は組んでいなくても
   通します。`agent.key` を読めるのはその機械の管理者 (Windows は `~/denpa` の持ち主) だけだからです
+- **USB を直に持つ機材の USB ID を見る:** `denpa-agent --usb-ids`。`[{"usb":"054c:04b2","name":"Sony CECH-ZD1 J"}, …]` を出して終わります。
+  Windows の `install.ps1 -WinUsb` がこれを読み、挿さっている機材のドライバを WinUSB に替えます ([install-windows.md](install-windows.md#チューナーのドライバを-winusb-に替える))
 - **合言葉を変える:** `pair-token` を消してエージェントを起動し直します (環境変数で渡しているならその値を変える)。新しい合言葉で denpa の
   `TUNER_AGENT_URL` を書き直してください。組んだ denpa を外したいときは `clients` からその行を消して起動し直します
 - **エージェントの証明書を作り直した** (`tls/` を消したなど) **ときは**、denpa は合わない証明書に繋がず、合言葉があれば組み直します
