@@ -109,7 +109,7 @@ export interface HwDevice {
 export interface HwEncode {
   /** 一度でも確かめ終わったか。false のうちは画面が `probe()` を待つ (settings/recording/+page.server.ts) */
   probed: boolean;
-  /** 見つかったデバイス、`HW_DEVICES` に当たった順 (そのあとに NVIDIA の GPU、Rockchip MPP は最後)。空なら GPU が見えていない */
+  /** 見つかったデバイス、Linux では `HW_DEVICES` に当たった順 (そのあとに NVIDIA の GPU、Rockchip MPP は最後)。Windows と Mac は `probeWindows`・`probeMac` が並べた順。空なら GPU が見えていない */
   devices: HwDevice[];
   /** 画面に出す一言。何が使えて、使えないなら何が理由か */
   message: string;
@@ -143,7 +143,7 @@ export function hwEncode(): HwEncode {
  *
  * **デバイスは `turn` で回す。** GPU が 2 枚あって両方が同じコーデックをエンコードできるなら、
  * 1 本エンコードするごとに先頭を入れ替えて、2 本並べてエンコードするとき片方に寄らないようにする。
- * 同じデバイスの中では VA-API → MPP → NVENC (`HW_KINDS` の順)
+ * 同じデバイスの中では `HW_KINDS` の順
  */
 export function hwChain(
   codec: HwCodec,
@@ -256,7 +256,7 @@ function wayOf(device: HwDevice, kind: HwKind, codec: HwCodec): HwWay {
  * ## NVENC もビットレートで指定する
  *
  * NVENC は `-global_quality` (ICQ) を受けない (FFmpeg の nvenc.c が断る)。Rockchip MPP と同じ表のビットレートを
- * **VBR** で渡す (`nvencRate`)。GPU は番号 (`-gpu`) で選び、デバイスは開かない。CPU で作ったフレームを nv12 で
+ * **VBR** で渡す (`vbrRate`)。GPU は番号 (`-gpu`) で選び、デバイスは開かない。CPU で作ったフレームを nv12 で
  * 渡すのも、`-g 250` も MPP と同じ。`-preset p4` は 7 段 (p1〜p7) の真ん中。遅い段は録画の時間が延びるので、
  * p7 などへ変えるなら実機で測ってから別の変更で行う。**実機では測っていない** (手元に NVIDIA の GPU が無い)
  *
@@ -325,7 +325,7 @@ export function hwArgs(
         ...nvencGpu(way),
         "-preset",
         "p4",
-        ...nvencRate(hwBitrate(codec, picture)),
+        ...vbrRate("vbr", hwBitrate(codec, picture)),
         "-g",
         "250",
       ],
@@ -353,7 +353,7 @@ export function hwArgs(
       encoder: [
         `${codec}_amf`,
         ...amfPreset(way),
-        ...amfRate(hwBitrate(codec, picture)),
+        ...vbrRate("vbr_peak", hwBitrate(codec, picture)),
         "-g",
         "250",
       ],
@@ -532,14 +532,15 @@ function rkmppRate(bps: number): string[] {
 }
 
 /**
- * NVENC のレート制御の引数。**VBR で、平均を表の値に寄せる** (MPP の VBR と違い、NVENC は平均を目指す)。
+ * NVENC と AMF のレート制御の引数。**VBR で、平均を表の値に寄せる** (MPP の VBR と違い、平均を目指す)。
+ * `rc` は NVENC が `vbr`、AMF がピークを抑えた `vbr_peak`。
  * 上限は目標の 2 倍。動きの多い場面に量を寄せられる幅として置いたもので、測っていない。
  * バッファは上限と同じ (FFmpeg の nvenc.c が何も渡さないときに置く値は平均の 2 倍で、それと同じ)
  */
-function nvencRate(bps: number): string[] {
+function vbrRate(rc: "vbr" | "vbr_peak", bps: number): string[] {
   return [
     "-rc",
-    "vbr",
+    rc,
     "-b:v",
     String(bps),
     "-maxrate",
@@ -595,23 +596,6 @@ function amfPreset(way: HwWay): string[] {
   return way.amfTranscoding === true
     ? ["-usage", "transcoding", "-quality", "quality"]
     : ["-usage", "high_quality", "-quality", "high_quality"];
-}
-
-/**
- * AMF のレート制御の引数。**ピークを抑えた VBR (`vbr_peak`) で、平均を表の値に寄せる。**
- * 上限は NVENC と同じく目標の 2 倍で、測っていない。バッファは上限と同じ
- */
-function amfRate(bps: number): string[] {
-  return [
-    "-rc",
-    "vbr_peak",
-    "-b:v",
-    String(bps),
-    "-maxrate",
-    String(bps * 2),
-    "-bufsize",
-    String(bps * 2),
-  ];
 }
 
 /** VideoToolbox の H.264 は High にする (`hwArgs` の説明)。H.265 はエンコーダの既定の Main のまま */
@@ -726,7 +710,7 @@ export function liveHw(
  *
  * 回線に合わせて下げた段 (`#lib/rungs.ts`) では、`cap` に段の高さとビットレートの上限を渡す。
  *
- * - Rockchip MPP・NVENC は、表の値 (`hwBitrate`) の代わりに段の上限を同じレート制御 (`rkmppRate`・`nvencRate`) に渡す
+ * - Rockchip MPP・NVENC は、表の値 (`hwBitrate`) の代わりに段の上限を同じレート制御 (`rkmppRate`・`vbrRate`) に渡す
  * - QSV は ICQ をやめて **VBR** にする (`-b:v` に段の上限、`-maxrate` にその 2 倍。NVENC・AMF と同じ幅)。FFmpeg の qsvenc.c は
  *   `-maxrate` が `-b:v` と同じだと CBR を、上回ると VBR を選ぶ
  * - VA-API は CQP をやめて **VBR で上限を決める** (`-b:v` と `-maxrate:v` に同じ値)。CQP は量を場面に任せるので、回線に収まる保証が無い
@@ -822,7 +806,7 @@ export function liveHwArgs(
         "p2",
         "-tune",
         "ll",
-        ...nvencRate(bps),
+        ...vbrRate("vbr", bps),
         "-bf",
         "0",
         "-zerolatency",

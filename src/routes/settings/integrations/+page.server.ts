@@ -9,9 +9,9 @@ import * as tv from "./tv.server";
  * 読み込みと保存 (actions) は節ごとのファイルが持ち、ここでまとめる。
  * 返す値の名前と action の名前は節どうしで重ならない
  */
-export function load() {
+export function load({ locals }) {
   return {
-    ...notifications.load(),
+    ...notifications.load(locals),
     ...tv.load(),
     ...jikkyo.load(),
     ...migrate.load(),

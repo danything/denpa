@@ -245,6 +245,25 @@ describe("EIT の解析", () => {
     expect(parsed?.events[0]?.audios[0]).not.toHaveProperty("text");
   });
 
+  /** 短く切れた component・audio_component は読まない。読むと「480i」や言語が空の音声が出る */
+  test("短すぎる映像・音声の記述子は読まない", () => {
+    const parsed = parseEit(
+      section([
+        event({
+          audios: [{ type: 3 }],
+          rawDescriptors: [
+            0x50, 0x01, 0xf1, 0xc4, 0x05, 2, 3, 0x10, 0x0f, 0xff,
+          ],
+        }),
+      ]),
+    );
+    const found = parsed?.events[0];
+    expect(found?.video).toBeNull();
+    expect(found?.audios).toEqual([
+      { componentType: 3, langs: ["jpn"], samplingRate: 48000, main: true },
+    ]);
+  });
+
   test("有料放送は free_CA_mode で分かる", () => {
     expect(parseEit(section([event()]))?.events[0]?.isFree).toBe(true);
     expect(

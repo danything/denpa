@@ -10,6 +10,7 @@ import { join } from "node:path";
 
 import { and, eq, ne } from "drizzle-orm";
 
+import { beforeJapanese, typeNames } from "../format";
 import {
   LogoCollector,
   logoTypeOfPng,
@@ -383,11 +384,12 @@ interface Feed {
  * 置き場ごと消えることは実際に起きる (PVC の作り直しなど)。
  * DB とファイルのどちらが正しいかを迷わないよう、**ファイルを正とする**。
  *
- * ついでに、色の表の入っていない古いファイルを直す。放送から取得したままの
+ * 起動したときは (`repaintOld`)、色の表の入っていない古いファイルも直す。放送から取得したままの
  * PNG はパレットが抜けていて、ブラウザは何も描かない (logo-palette.ts)。
- * 取得し直すと局によっては何時間もかかるので、置いてあるものを直す。
+ * 取得し直すと局によっては何時間もかかるので、置いてあるものを直す。取得のたびには直さない
+ * (今のコードが書くものには色の表が入っているので、全局の PNG を読み直すだけになる)
  */
-export function reconcile(): number {
+export function reconcile(repaintOld = false): number {
   const rows = orm()
     .select({ id: services.id, has_logo: services.has_logo })
     .from(services)
@@ -396,7 +398,7 @@ export function reconcile(): number {
   orm().transaction((tx) => {
     for (const row of rows) {
       const actual = existsSync(logoPath(row.id));
-      if (actual) repaint(row.id);
+      if (actual && repaintOld) repaint(row.id);
       if (actual === row.has_logo) continue;
       tx.update(services)
         .set({ has_logo: actual })
@@ -979,7 +981,7 @@ async function drain(
         full.add(target.type);
         update({
           done: state.done + 1,
-          message: `${target.type} の空きチューナーが無くなったため、残りは取りやめました`,
+          message: `${beforeJapanese(typeNames([target.type]))}の空きチューナーが無くなったため、残りは取りやめました`,
         });
         continue;
       }

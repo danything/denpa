@@ -2,7 +2,13 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// <a href="https://github.com/Khronos31/asicen-userland">asicen-userland</a> に任せる機材
-/// (PLEX PX-W3U3。ASICEN 系)。**試験的。上流がまだリリースを出していない。**
+/// (PLEX PX-W3U3。ASICEN 系)。**試験的。上流の 2026-10-09 のコミットに合わせた実装で、v1.0.0-beta とは通信できない。**
+///
+/// <para>
+/// v1.0.0-beta (2026-11-05) は通信の形式 (UDTV 1.0) も asicend の引数 (<c>--device usb:…</c>) も違う。
+/// PX-W3U2 (<c>0b06:0004</c>) など、v1.0.0-beta が見分けるほかの機種は、この実装が合わせている asicend が
+/// 受け付けないので <see cref="Scan"/> に足していない。足すのは UDTV 1.0 に対応するとき (docs/tuners.md「上流が見分ける機種」)。
+/// </para>
 ///
 /// <para>
 /// **配布物が無ければ何もしない** (<see cref="Installed"/>。agent/Dockerfile の <c>ASICEN_USERLAND_VERSION=0.0.0</c> が「まだ無い」の印)。

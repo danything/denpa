@@ -67,6 +67,51 @@ export function isDecoded(path: string): boolean {
   );
 }
 
+/** `ServiceFilter.streams` (`種別:PID` の並び) から、映像・音声・字幕の PID。PMT を読む前は空 */
+export function mediaPids(streams: string | null): Set<number> {
+  const pids = new Set<number>();
+  for (const one of streams?.split(",") ?? []) {
+    const pid = Number(one.split(":")[1]);
+    if (Number.isInteger(pid)) pids.add(pid);
+  }
+  return pids;
+}
+
+/**
+ * **1 局に絞った TS で、映像・音声・字幕のパケットのうちスクランブルされたまま届いたものを数える** (契約の復号テストとライブ)。
+ *
+ * エージェントは、カードが鍵を返さなかった ES (未契約) をスクランブルされたまま流す ([docs/agent.md](../../../docs/agent.md))。
+ * denpa が読むのはその印 (transport_scrambling_control)。PAT・PMT・ECM・EIT のようなセクションは掛からないので数えない
+ * (割合が下がって、復号できたように見える)。ペイロードの無いパケットもスクランブルの対象にならないので数えない
+ */
+export class ScrambleCount {
+  total = 0;
+  scrambled = 0;
+
+  /** @param limit これだけ数えたら、あとは数えない */
+  constructor(readonly limit: number) {}
+
+  /** `limit` まで数え終えた */
+  get full(): boolean {
+    return this.total >= this.limit;
+  }
+
+  /** パケットを 1 つ (188 バイト)。`media` はその局の映像・音声・字幕の PID (`mediaPids`) */
+  feed(packet: Uint8Array, media: Set<number>): void {
+    if (this.full || packet[0] !== SYNC) return;
+    if (!media.has(((packet[1]! & 0x1f) << 8) | packet[2]!)) return;
+    if ((packet[3]! & 0x10) === 0) return;
+    this.total++;
+    // 4 バイト目の上位 2 ビットが transport_scrambling_control
+    if ((packet[3]! & 0xc0) !== 0) this.scrambled++;
+  }
+
+  /** 掛かったままと言えるか。数えたのが `least` 個に満たなければ言えない (false) */
+  stillScrambled(least: number): boolean {
+    return this.total >= least && this.scrambled / this.total > THRESHOLD;
+  }
+}
+
 /** 先頭から `SAMPLE` 個までのパケットの数と、そのうちスクランブルされている数。読めない・同期が取れていないファイルは null */
 function countPackets(
   path: string,

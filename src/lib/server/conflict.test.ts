@@ -87,7 +87,7 @@ describe("assign", () => {
     expect(rejected).toHaveLength(1);
     expect(rejected[0]!.reservation.id).toBe(3);
     expect(rejected[0]!.reason).toContain(
-      "GR を受けられるチューナーが足りません",
+      "地上波を受けられるチューナーが足りません",
     );
   });
 
@@ -659,7 +659,7 @@ describe("兼用のチューナーがあるとき (#668)", () => {
     ).toEqual([1, 2, 3]);
     expect(rejected.map((r) => r.reservation.id)).toEqual([4]);
     expect(rejected[0]?.reason).toContain(
-      "BS/CS を受けられるチューナーが足りません",
+      "BS・CS を受けられるチューナーが足りません",
     );
   });
 

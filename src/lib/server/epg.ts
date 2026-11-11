@@ -96,8 +96,8 @@ export function listedServices(): number {
  */
 export const SERVICE_ORDER =
   "remote_control_key IS NULL, remote_control_key, service_id";
-/** 種別ごとの順。地上波 → BS → CS → CATV → SKY。テレビの切り替えもこの順 */
-export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 WHEN 'CS' THEN 2 WHEN 'CATV' THEN 3 ELSE 4 END`;
+/** 種別ごとの順 (SQL)。地上波 → BS → CS → CATV → SKY (`ALL_CHANNEL_TYPES` の順。`typeRank` と同じ)。テレビの切り替えもこの順 */
+export const SERVICE_TYPE_ORDER = `CASE type ${ALL_CHANNEL_TYPES.map((type, rank) => `WHEN '${type}' THEN ${rank}`).join(" ")} ELSE ${ALL_CHANNEL_TYPES.length} END`;
 /** 地上波 → BS → CS → CATV → SKY を JS で並べるときのキー。知らない種別は後ろ */
 export function typeRank(type: string): number {
   const at = (ALL_CHANNEL_TYPES as readonly string[]).indexOf(type);
@@ -146,7 +146,7 @@ const ENDED_NAME = /^[\s\-－]*$/u;
  * 別の局が映る**。実機の NHKEテレ2/3 で起きた (本チャンネルと同じ番組を流しているサブチャンネルは、
  * 分割放送をしていない間は名前の無い枠が並ぶ)。
  *
- * 局は種別で絞らない (ライブ画面も地上波・BS・CS をまとめて扱っている)。
+ * 局は種別で絞らない (ライブ画面も全種別をまとめて扱っている)。
  * 外すのは、ライブ画面も外している復号できない局 (`services.decodable`) だけ
  *
  * **出す画面ごとに書かない。** 番組表と検索で別々に書いていると、片方だけ

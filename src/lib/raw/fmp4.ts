@@ -301,7 +301,12 @@ export class Fmp4Video {
       this.host.fail("映像を再生できません");
       return;
     }
-    // 失敗したデコーダは閉じている。作り直す
+    /*
+     * 作り直す。`error` で来たときのデコーダは閉じているが、`decode` が投げたとき (`decode` の `catch`) は
+     * 開いたまま。閉じずに手放すと、GPU の置き場を持ったまま残り、渡してあったコマのフレームも `output` に出てくる
+     */
+    if (this.decoder !== null && this.decoder.state !== "closed")
+      this.decoder.close();
     this.decoder = null;
     this.open();
     /*

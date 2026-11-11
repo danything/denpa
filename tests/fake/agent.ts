@@ -604,6 +604,11 @@ const options: Bun.ServeOptions = {
       knobs.scrambled = url.searchParams.get("on") === "1";
       return json({ scrambled: knobs.scrambled });
     }
+    // カードは読めているが局の契約が無い (`Knobs.unentitled`)
+    if (url.pathname === "/__control/unentitled" && request.method === "POST") {
+      knobs.unentitled = url.searchParams.get("on") === "1";
+      return json({ unentitled: knobs.unentitled });
+    }
     // 選局した直後に表を流さない (`Knobs.tablesLate`)
     if (
       url.pathname === "/__control/tables-late" &&
@@ -687,6 +692,14 @@ const options: Bun.ServeOptions = {
           emit("channels");
           return json(saved);
         });
+    }
+    if (url.pathname === "/denpa/channels" && request.method === "DELETE") {
+      // 1 つの種別を全部消す (本物は agent/Denpa.Agent/Program.cs。受けられるチューナーが無くなった種別を、設定の画面から)
+      const type = url.searchParams.get("type") ?? "";
+      if (type === "") return json({ error: "type が必要です" }, 400);
+      saved = saved.filter((c) => c.type !== type);
+      emit("channels");
+      return json(saved);
     }
 
     // 使わないカードリーダーを入れ替える (本物は agent/Denpa.Agent/CardChoice.cs)

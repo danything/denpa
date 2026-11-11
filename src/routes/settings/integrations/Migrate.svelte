@@ -22,7 +22,7 @@
       <h2>EPGStation からの引き継ぎ</h2>
     </div>
     <Lead>
-      EPGStation (v2・v3) から<strong>ルール・手動予約・録画</strong
+      EPGStation (v2・v3) から<strong>ルール・手動予約・録画と録画の履歴</strong
       >を取り込みます
       {#snippet more()}
         <p>

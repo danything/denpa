@@ -21,11 +21,21 @@ import { DIGITAL_TV, services } from "#lib/server/schema.js";
 import type { ChannelType } from "#lib/types.js";
 
 /**
+ * 局ロゴの具合。復号できない局と CATV の局のロゴは取得しない (logo.ts の `tunableServices`) ので `skipped`。
+ * ただし CATV の再送信の局は ONID・SID がアンテナの局と同じで、アンテナの局のロゴが同じ行にも書かれる (`logo.store`)。持っていれば `have`
+ */
+function logoOf(id: number, type: string, decodable: boolean) {
+  if (!decodable) return "skipped" as const;
+  if (type !== "CATV") return logoState(id);
+  return logoState(id) === "have" ? ("have" as const) : ("skipped" as const);
+}
+
+/**
  * 局ごとのロゴ。**番組表に出す局ロゴと、CM 検出のために覚えたロゴは別物** (logo.ts と logo-data.ts) だが、
  * 確かめたいのはどちらも「この局のロゴが取れているか・合っているか」なので、受信できるチャンネルの表の局の行に
  * 列を 2 つ並べる (`Channels.svelte`。局名と種別を別の表で繰り返さない)。
  *
- * - `logo` … 局ロゴの具合 (`logo.logoState`)。取得しない局 (復号できない局と CATV の局) は `skipped`
+ * - `logo` … 局ロゴの具合 (`logo.logoState`)。取得しない局 (復号できない局と CATV の局) は `skipped` (`logoOf`)
  * - `cm` … CM 検出のロゴを覚えた時刻 (`logo-data.learnedAt`)。覚えていなければ null。
  *   CM 検出の対象でない局 (テレビでない局・同じ映像を流しているサブチャンネル) もいつも null
  */
@@ -58,8 +68,7 @@ function stationLogos() {
       id,
       name,
       type: type as ChannelType,
-      // 復号できない局と CATV の局のロゴは取得しない (`logo.tunableServices`)
-      logo: decodable && type !== "CATV" ? logoState(id) : ("skipped" as const),
+      logo: logoOf(id, type, decodable),
       cm: cmShown.has(id) ? learnedAt(id) : null,
     }))
     .sort((a, b) => typeRank(a.type) - typeRank(b.type));

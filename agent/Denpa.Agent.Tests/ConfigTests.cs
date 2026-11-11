@@ -133,6 +133,18 @@ public class ChannelStoreTests
     }
 
     [Test]
+    public async Task 空の結果で_その種別のチャンネルだけを消せる()
+    {
+        // DELETE /denpa/channels?type=CATV が使う (受けられるチューナーが無くなり、スキャンし直して消せない種別)
+        var config = Fresh();
+        config.SaveChannels(Entries(("GR", "T16"), ("CATV", "QC30")), ["GR", "CATV"]);
+
+        var merged = config.SaveChannels([], ["CATV"]);
+
+        await Assert.That(merged.Select(entry => entry!["channel"]!.GetValue<string>())).IsEquivalentTo(["T16"], CollectionOrdering.Matching);
+    }
+
+    [Test]
     public async Task 種別ごとにまとめて並べる()
     {
         var config = Fresh();

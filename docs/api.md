@@ -159,7 +159,7 @@
 - **何度押しても二重には録りません** (予約は番組ごとに 1 本)。予約済み・録画中でも同じ答えが返ります
 - `reserved` が `false` なら予約はあるものの録らない状態です。たいていはチューナーが足りない**競合**
   (どれを録るかは予約どうしの優先度で決まります。手動の予約は 2、ルールの予約はルールの優先度)
-- `state` と `reason` は [番組表](#番組表-get-apiprogramstypegrbscsfromunix-mstounix-ms) の `reservation` と同じ物差しです
+- `state` と `reason` は [番組表](#番組表-get-apiprogramstypegrbscscatvfromunix-mstounix-ms) の `reservation` と同じ物差しです
 - 番組表にいまの番組が無ければ `404`、予約できなければ (放送が終わったところなど) `400`。
   どちらも `message` に画面に出せる理由が入ります
 
@@ -814,7 +814,7 @@ CM 飛ばしの行き先です。観る画面とテレビのアプリが使っ�
 ```
 
 - `programs` はまだ終わっていない番組 (始まる順)。`reservation_state` は予約が立っていればその状態
-  ([番組表](#番組表-get-apiprogramstypegrbscsfromunix-mstounix-ms) の `reservation.state` と同じ物差し)
+  ([番組表](#番組表-get-apiprogramstypegrbscscatvfromunix-mstounix-ms) の `reservation.state` と同じ物差し)
 - `recordings` は消していない録画 (新しい順)。`watch` は観る画面 (録っている最中は追っかけ再生 `chase/<id>`)。観られなければ `null`
 - `reservations` はこれから録るもの・録っている最中のもの・録画しないもの (`state` が `skipped`。コピー禁止のものと、録り始めてから同じ回と分かってやめたもの)。`chase` は録っている最中なら追っかけ再生
 - `q` が空なら、どの節も空で返します。100 字を超えた分は切って探します (結果の画面 `/search?q=` も同じ)
@@ -919,7 +919,7 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 
 - 名前: `recordings` `reservations` `services` `programs` `tuners` `encode` ほか (画面向けのもの)。知らない名前は読み捨ててください
 - `reservations` は予約が変わったとき (予約した・取り消した・チューナーの割り振りを数え直した)、`recordings` は録画が始まった・終わったときに来ます。
-  どちらも [番組表](#番組表-get-apiprogramstypegrbscsfromunix-mstounix-ms) を読み直すと `reservation`・`recordingId` が追いつきます
+  どちらも [番組表](#番組表-get-apiprogramstypegrbscscatvfromunix-mstounix-ms) を読み直すと `reservation`・`recordingId` が追いつきます
 - `programs` は番組表を集めたときのほか、**ライブで開いている局の番組が放送で替わった・延びた**ときにも来ます
   (EIT[p/f] が番組表と違ったとき)。局の一覧 (`GET /api/services`) の `now` を読み直せば、いまの番組に追いつきます
 - `clips` は切り抜きが増えた・消えた・字幕やコメントを切り替えたことの通知 ([切り抜き](#切り抜き-post-apiclips))
@@ -954,7 +954,8 @@ data: {"recordingId":12,"percent":0.425,"etaMs":600000,"log":"…"}
 無効にした・知らないアクセストークンを出したときは `{"error":"invalid_token"}` の 401 (`WWW-Authenticate: Bearer error="invalid_token"`) で、
 信頼するネットワークの中でも通しません (ペアリングし直しの合図)。仕組みと守りは [auth.md](auth.md#アプリのペアリング)。
 
-ログイン方法を何も設定していない denpa は 403 で断り、ペアリングもできません ([auth.md](auth.md#ログイン方法が無ければ全部断る))。
+ログイン方法を何も設定していない denpa は 403 で断ります ([auth.md](auth.md#ログイン方法が無ければ全部断る))。ペアリングコードは出しますが、
+済ませる画面 (`/device`) が開けないので、ペアリングはできません。
 
 ## ペアリング `POST /api/device/code` → `POST /api/device/token`
 
