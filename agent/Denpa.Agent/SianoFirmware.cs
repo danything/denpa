@@ -7,6 +7,7 @@ namespace Denpa.Agent;
  *
  * クリーンルームで、仕様書 (denpa-spec の siano/spec.md) だけから書いた。Linux カーネルの Siano のドライバと siano-userland のコードは読んでいない。
  * ファイルの中身は解析しない。読むのは仕様書 4.2 にある先頭 12 バイトの 3 つの欄だけで、本体は配られているバイト列のまま機材に送る。
+ * ファイルは linux-firmware に入っているものを無改変で同梱している (firmware/README.md)。
  */
 
 /// <summary>
@@ -22,6 +23,42 @@ internal sealed record SianoFirmware(uint Address, uint Length, byte[] Data)
 {
     /// <summary>ファイルの先頭にある 3 つの欄の長さ</summary>
     public const int HeaderSize = 12;
+
+    public const string FileName = "isdbt_rio.inp";
+
+    /// <summary>
+    /// 同梱しているファームウェアの SHA-256 (linux-firmware の <c>isdbt_rio.inp</c>、85,840 バイト。firmware/README.md)。
+    /// テストが埋め込んだファイルと突き合わせる
+    /// </summary>
+    internal const string Sha256 = "054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818";
+
+    /// <summary>
+    /// 機材に送るファームウェア。**エージェントに同梱している** (firmware/isdbt_rio.inp を実行ファイルに埋め込む。Siano の許諾で無改変なら再配布できる)。
+    /// 環境変数 <c>SIANO_FIRMWARE</c> でファイルを指定すると、同梱のものの代わりにそのファイルを読む (SHA-256 は確かめない)
+    /// </summary>
+    public static SianoFirmware Default()
+    {
+        var configured = Environment.GetEnvironmentVariable("SIANO_FIRMWARE");
+        if (!string.IsNullOrEmpty(configured)) return Load(configured);
+        try
+        {
+            return Parse(Bundled());
+        }
+        catch (InvalidDataException error)
+        {
+            throw new IOException($"{error.Message}: 同梱の {FileName}", error);
+        }
+    }
+
+    /// <summary>実行ファイルに埋め込んだファームウェア (Denpa.Agent.csproj の LogicalName)</summary>
+    internal static byte[] Bundled()
+    {
+        using var stream = typeof(SianoFirmware).Assembly.GetManifestResourceStream(FileName)
+            ?? throw new IOException($"同梱の {FileName} が実行ファイルに入っていません");
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
 
     /// <summary>ファイルが 12 バイトより短い・本体の長さがファイルに収まらないときは投げる (機材に何も送らずに失敗にする。仕様書 4.2・10)</summary>
     public static SianoFirmware Parse(ReadOnlySpan<byte> file)

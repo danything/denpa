@@ -32,7 +32,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex   #
 - **Linux** (amd64 / arm64): 全部 Docker Compose。`~/denpa` に compose.prod.yml を `compose.yml` として置いて起動します
 - **Mac** (Apple Silicon): denpa 本体もエージェントも Mac の上で直接 (root の LaunchDaemon)。Docker は要りません。sudo で流します ([install-mac.md](install-mac.md))
 - **Windows** (x64): denpa 本体もエージェントも Windows の上で直接 (タスク スケジューラの SYSTEM のタスク)。WSL・Docker Desktop は要りません。管理者の PowerShell で流します。
-  チューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と PX-MLT5 系と Sony CECH-ZD1 J と PIXELA PIX-DT295。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
+  チューナーは px4-userland の機材 (PX-Q3U4 など) と PX-S1UD と PX-MLT5 系と Sony CECH-ZD1 J と PIXELA PIX-DT295。ドライバは Zadig で WinUSB に ([install-windows.md](install-windows.md))
 - **Docker は入れません** (Linux)。無ければ入れ方 (<https://get.docker.com>) を示して止まります
 - **入口は [genkan](https://github.com/danything/genkan)** (ホスト名で振り分けるリバースプロキシ。Linux)。
   動いていればそれを使い、無ければ 80 と 443 が空いているときだけ `~/genkan` に入れて <http://denpa.localhost> で開きます。
@@ -69,7 +69,6 @@ docker compose up -d
 
 ```sh
 docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
-  --cap-add SYS_RESOURCE \
   --device-cgroup-rule 'c 189:* rmw' --device-cgroup-rule 'c 212:* rmw' \
   -v /dev/bus/usb:/dev/bus/usb -v /dev/dvb:/dev/dvb \
   -e TRUSTED_NETWORKS=192.168.0.0/16,10.0.0.0/8 \
@@ -80,8 +79,7 @@ docker run -d --name denpa --restart unless-stopped --stop-timeout 21900 \
 - エージェントの設定 (`tuners.json` / `channels.json`) は `/config`、DB は `/data`、録画は `/media` の下
   (元の TS は `raw`、エンコードしたものは `encoded`)。前のバージョンから上げるときは [config.md](config.md#置き場を変えた-前のバージョンから上げるとき)
 - 本体とエージェントが組むときの合言葉 ([agent.md](agent.md)) は、入口が `/config/tls/pair-token` に無いときだけ作って両方に渡します
-- `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可と、pipe を広げる
-  `SYS_RESOURCE` だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
+- `--privileged` は要りません。USB (189) と DVB (212) のデバイスを開く許可だけ渡します。デバイスはディレクトリごと見せるので、挿し直しても再起動は要りません
 - 止めるときは録画の終わりを待つので、`--stop-timeout` を長くしておきます (compose の `stop_grace_period` と同じ)。
   どちらかのプロセスが落ちたらコンテナごと終わり、起動し直すのは `--restart` の役目です
 

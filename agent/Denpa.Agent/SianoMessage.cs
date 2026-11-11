@@ -9,7 +9,7 @@ namespace Denpa.Agent;
  * Linux カーネルの Siano のドライバ (smsusb・smscoreapi・smsdvb など) と siano-userland のコードは読んでいない。
  * コメントの「仕様書 x.y」は仕様書の節の番号で、メッセージの番号と欄の位置はその節の表のまま持つ。仕様書に無くて決めた所は「仕様書に無い」と書いてある。
  * 機材を開いて動かす側は SianoDevice.cs、ファームウェアのファイルは SianoFirmware.cs、TS を 188 バイトに揃える側は SianoTs.cs、
- * 設定と自動検出は SianoNative.cs。実機では確かめていない (docs/tuner-px-s1ud.md)。
+ * 設定と自動検出は Siano.cs。実機では確かめていない (docs/tuner-px-s1ud.md)。
  */
 
 /// <summary>メッセージの番号・ID と、ヘッダの組み立て・読み取り (仕様書 3)。複数バイトの数はどれもリトルエンディアン</summary>

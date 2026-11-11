@@ -10,22 +10,21 @@
 
 - **チューナー**: 挿してあれば自動で見つけ、種別 (地上波 / 衛星) も見分けます
 
-  | チューナー                                                                                                                                                                           | 使う仕組み                                                                                        | ホストに入れるもの                                                        |
-  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-  | PT3 ([tuner-pt3.md](tuner-pt3.md))                                                                                                                                                   | Linux DVB                                                                                         | ドライバ                                                                  |
-  | **実機で確かめていない**: PT1 / PT2、PX-BCUD、PX-S1UD、Friio (白)、南米の地デジ (ISDB-Tb) の機材、DiB8096 のリファレンス基板 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材)) | Linux DVB                                                                                         | ドライバ (機材によってはファームウェアも)                                 |
-  | **実機で確かめていない** (カーネルに入っていないドライバを自分で入れる): PX-Q3PE、PX-W3PE Rev1.3 ([tuner-pt3.md](tuner-pt3.md#カーネルに入っていないドライバで使う機材))             | Linux DVB                                                                                         | ドライバ (PX-W3PE はファームウェアも)                                     |
-  | PX-Q3U4 / PX-W3U4 など (px4-userland の対応機種。Mac・Windows も。[tuner-px4.md](tuner-px4.md))                                                                                      | px4-userland (同梱)                                                                               | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
-  | PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P (Linux の PX-MLT5PE の実機で確かめた。Windows・Mac は未確認。[下記](#px-mlt5-系))                                                                | エージェントが USB を直に                                                                         | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
-  | PX-S1UD (smsusb を blacklist したとき。Mac・Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md))                                                                                        | siano-userland (同梱)                                                                             | なし (Windows はドライバを WinUSB に)                                     |
-  | **実機で確かめていない**: Siano の Rio 系の USB チューナー (USB `187f:0600`・`187f:0302`。smsusb を blacklist したとき。[下記](#siano-の-rio-系の-usb-チューナー))                   | siano-userland (同梱)                                                                             | なし (Windows はドライバを WinUSB に)                                     |
-  | PX-W3U3・PX-W3U2 など ([下記](#px-w3u3-など-asicen-userlandまだ使えない))                                                                                                            | asicen-userland (**まだ使えない**。エージェントが上流の v1.0.0-beta の通信の形式に対応していない) | なし                                                                      |
-  | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                            | エージェントが USB を直に                                                                         | なし                                                                      |
-  | PIXELA PIX-DT295 (Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295))                                    | エージェントが USB を直に                                                                         | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
+  | チューナー                                                                                                                                                                                                                         | 使う仕組み                                                                                        | ホストに入れるもの                                                        |
+  | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+  | PT3 ([tuner-pt3.md](tuner-pt3.md))                                                                                                                                                                                                 | Linux DVB                                                                                         | ドライバ                                                                  |
+  | **実機で確かめていない**: PT1 / PT2、PX-BCUD、PX-S1UD、Friio (白)、南米の地デジ (ISDB-Tb) の機材、DiB8096 のリファレンス基板 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))                                               | Linux DVB                                                                                         | ドライバ (機材によってはファームウェアも)                                 |
+  | **実機で確かめていない** (カーネルに入っていないドライバを自分で入れる): PX-Q3PE、PX-W3PE Rev1.3 ([tuner-pt3.md](tuner-pt3.md#カーネルに入っていないドライバで使う機材))                                                           | Linux DVB                                                                                         | ドライバ (PX-W3PE はファームウェアも)                                     |
+  | PX-Q3U4 / PX-W3U4 など (px4-userland の対応機種。Mac・Windows も。[tuner-px4.md](tuner-px4.md))                                                                                                                                    | px4-userland (同梱)                                                                               | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
+  | PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P (Linux の PX-MLT5PE の実機で確かめた。Windows・Mac は未確認。[下記](#px-mlt5-系))                                                                                                              | エージェントが USB を直に                                                                         | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
+  | **実機で確かめていない**: PX-S1UD と、Siano の Rio 系の USB チューナー (USB `187f:0600`)。Linux は smsusb を blacklist したとき。Mac・Windows も ([tuner-px-s1ud.md](tuner-px-s1ud.md)、[下記](#siano-の-rio-系の-usb-チューナー)) | エージェントが USB を直に                                                                         | なし (ファームウェアはエージェントに同梱。Windows はドライバを WinUSB に) |
+  | PX-W3U3・PX-W3U2 など ([下記](#px-w3u3-など-asicen-userlandまだ使えない))                                                                                                                                                          | asicen-userland (**まだ使えない**。エージェントが上流の v1.0.0-beta の通信の形式に対応していない) | なし                                                                      |
+  | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                                                                          | エージェントが USB を直に                                                                         | なし                                                                      |
+  | PIXELA PIX-DT295 (Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295))                                                                                  | エージェントが USB を直に                                                                         | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
 
   「実機で確かめていない」機材は、ドライバと denpa の選局の手順を照らし合わせて動くはずと見ているものです。
-  PX-S1UD は、エージェントの環境変数に `SIANO_NATIVE=1` を付けると、siano-userland の代わりにエージェントが USB を直に持ちます
-  (実機で確かめていないので既定ではありません。[tuner-px-s1ud.md](tuner-px-s1ud.md#エージェントが-usb-を直に持つ-実機で確かめていない) に、確かめる順があります)。
+  PX-S1UD を Linux DVB を使わずに動かす実装 (エージェントが USB を直に持つ) は、仕様書だけから書いたもので、実機ではまだ確かめていません。
+  Linux で動かなければ、カーネルのドライバで DVB として使えます ([tuner-px-s1ud.md](tuner-px-s1ud.md) に、その方法と実機で確かめる順があります)。
   使ってみたら、動いたか動かなかったかを [Issue](https://github.com/danything/denpa/issues) で教えてください
   (設定の「その他」→「ログ」の「Issue にする」から作れます。[tuner-pt3.md](tuner-pt3.md#動いたか教えてください))
 
@@ -71,8 +70,7 @@ Amazon で見る (広告): [PT3](https://www.amazon.co.jp/dp/B00857CQAM?tag=doa0
 | CECH-ZD1 J                           | 受信の状態と C/N (dB)                                         | DiB8000 の仕様書の式                                                      |
 | PX-MLT5 系                           | 受信の状態と C/N (dB)                                         | CXD2856ER の仕様書の式と表                                                |
 | PIX-DT295                            | 受信の状態と C/N (dB)                                         | TC90522 系の換算式 (下記)                                                 |
-| PX-S1UD (siano-userland)             | 出ない                                                        | siano-ts が C/N を返さない                                                |
-| PX-S1UD (`SIANO_NATIVE=1`)           | 受信の状態と C/N (dB) と強度 (dBm)。実機で確かめていない      | 機材の統計の応答にある SNR と受信電力                                     |
+| PX-S1UD (エージェントが USB を直に)  | 受信の状態と C/N (dB) と強度 (dBm)。実機で確かめていない      | 機材の統計の応答にある SNR と受信電力                                     |
 
 px4d は受信の状態と C/N を選局の応答でしか返さないので、受信中も選局したときの値のままで、C/N に「(選局したとき)」と添えます。測り直すには選局し直すしかなく、それでは受信が途切れます。
 DVB と px4-userland の C/N を画面まで通す流れは、実機では確かめていません (値を読む部分は単体テストで確かめた)。
@@ -81,7 +79,8 @@ DVB と px4-userland の C/N を画面まで通す流れは、実機では確か
 Linux DVB はドライバが `DTV_STAT_SIGNAL_STRENGTH` を dBm (`FE_SCALE_DECIBEL`) で返すときだけで、相対値 (0〜65535) で返すドライバでは出しません。
 CECH-ZD1 J は DiB8000 の仕様書 8.2 の表から求めた値です (別の DiB8000 の機材で測った表なので目安)。
 PX-MLT5 系は地上波とスカパー！プレミアムで出ます。チューナーの AGC の値から仕様書の式で求めた値です (衛星は dBm として扱えるかが分からないので出しません)。
-px4-userland・asicen-userland・PIX-DT295・PX-S1UD では出ません。
+PX-S1UD (エージェントが USB を直に持つとき) は、機材の統計の応答にある受信電力をそのまま出します。
+px4-userland・asicen-userland・PIX-DT295 では出ません。
 強度に目安の値や判定は付けていません。dBm はドライバや表しだいで校正されておらず、機種どうしでもテレビの「アンテナレベル」とも比べられないためです。
 強度も実機では確かめていません。
 
@@ -146,13 +145,13 @@ PX-MLT5PE と J:COM の回線 (2026-11-10) で確かめました。18 の搬送�
 
 ## Siano の Rio 系の USB チューナー
 
-**同梱の siano-userland (0.1.10) は、PX-S1UD (`3275:0080`) のほかに USB `187f:0600` と `187f:0302` の機材も、同じ ISDB-T の機材として受け付けます。**
-エージェントは USB ID の表を持たず、`siano-ts --list` が返した機材をそのまま使うので、この 2 つも挿してあれば PX-S1UD と同じ手順で見つけます
-(`siano-ts --list` が付ける名前は `Siano-Rio-0600` と `Siano-Rio-0302`)。
+**エージェントは、PX-S1UD (`3275:0080`) のほかに USB `187f:0600` の機材も、同じ ISDB-T の機材として USB を直に持って動かします。**
+`187f:0600` は Siano の Rio の標準の ID で、挿してあれば PX-S1UD と同じ手順で見つけ、`Siano RIO <ポート>` の名前で並べます。
 
-- 根拠は siano-userland 0.1.10 の `siano-ts.c` (`is_rio_id`) と README の対応機種です。README は、実機で受信を確かめたのは PX-S1UD だけで、この 2 つは実機未検証としています
-- denpa でも実機では確かめていません。どの製品がこの USB ID を持つかも確かめていません
-- 入れ方と設定は PX-S1UD と同じです ([tuner-px-s1ud.md](tuner-px-s1ud.md))。Linux では smsusb を blacklist したときだけ siano-userland が使います
+- **どちらも実機では確かめていません。** エージェントの実装は仕様書 (denpa-spec の `siano/spec.md`) だけから書いたものです。`187f:0600` は、受信の記録がある資料もありません。どの製品がこの USB ID を持つかも確かめていません
+- `187f:0302` は対象にしていません。公開の資料で扱いが食い違うので、仕様書が対象から外しています。挿しても並びません
+- 入れ方と設定は PX-S1UD と同じです ([tuner-px-s1ud.md](tuner-px-s1ud.md))。Linux では、smsusb を blacklist したときだけエージェントが USB を持ちます。
+  blacklist していなければカーネルのドライバが使い、DVB として見つかります
 
 ## PX-W3U3 など (asicen-userland。まだ使えない)
 

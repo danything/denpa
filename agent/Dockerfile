@@ -48,7 +48,7 @@ RUN --mount=type=bind,from=sdk,source=/usr/share/dotnet,target=/usr/share/dotnet
     /usr/share/dotnet/dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
 
 # ---------------------------------------------------------------------------
-# 外から取ってくるもの (3 つの userland)。**取ってくる道具は実行イメージに残さない**
+# 外から取ってくるもの (px4-userland と asicen-userland)。**取ってくる道具は実行イメージに残さない**
 # (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
 # 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る。
 # 土台は digest で留める (Dockerfile の ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
@@ -74,24 +74,6 @@ RUN set -eu && mkdir -p /opt/px4-userland && cd /tmp && \
     $CURL -O "${base}/${archive}" && $CURL -O "${base}/SHA256SUMS" && \
     sha256sum -c --ignore-missing SHA256SUMS && \
     tar -xzf "${archive}" -C /opt/px4-userland && \
-    rm -rf /tmp/*
-
-# PLEX PX-S1UD などの Siano RIO 系は、**カーネルが使っていなければ** siano-userland で動かす
-# (Siano.cs)。smsusb が使っていれば今までどおり /dev/dvb で動かす。こちらからは取り上げない。
-# siano-ts は libusb を静的にリンクした libc 非依存の ELF。**ファームウェア (isdbt_rio.inp) は
-# アーカイブに入っている** (Siano の許諾で無改変なら再配布できる。LICENCE.siano も一緒に置く)。
-# README が示す SHA-256 とも突き合わせる。
-# renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
-ARG SIANO_USERLAND_VERSION=0.1.10
-ARG ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
-RUN set -eu && cd /tmp && \
-    case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; esac && \
-    base="https://github.com/Khronos31/siano-userland/releases/download/v${SIANO_USERLAND_VERSION}" && \
-    archive="siano-ts-${SIANO_USERLAND_VERSION}-linux-${arch}.tar.gz" && \
-    $CURL -O "${base}/${archive}" && $CURL -O "${base}/SHA256SUMS" && \
-    sha256sum -c --ignore-missing SHA256SUMS && \
-    mkdir -p /opt/siano-userland && tar -xzf "${archive}" -C /opt/siano-userland && \
-    echo "${ISDBT_RIO_SHA256}  /opt/siano-userland/firmware/isdbt_rio.inp" | sha256sum -c - && \
     rm -rf /tmp/*
 
 # PLEX PX-W3U3 などの ASICEN 系は asicen-userland で動かす (Asicen.cs)。**試験的。**
@@ -150,7 +132,7 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 # エージェントのポート (AGENT_PORT) は denpa と証明書で確かめ合う HTTPS なので、libssl を常に使う (AgentTls.cs)。
 # CARD_URL を https で指したときも .NET の HttpClient が libssl を読み、
 # 相手の証明書は ca-certificates で確かめる。
-# 子プロセスは px4d / px4ctl / siano-ts / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起動する。
+# 子プロセスは px4d / px4ctl / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起動する。
 # シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
 # 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。
 #
@@ -172,6 +154,11 @@ RUN ["/usr/local/bin/denpa-agent", "--version"]
 FROM runtime
 
 COPY --from=fetch /opt/ /opt/
+
+# PLEX PX-S1UD などの Siano RIO 系の機材は、エージェントが USB を直に持って動かす (Siano.cs)。外から取ってくるものは無い。
+# ISDB-T のファームウェア (isdbt_rio.inp) はエージェントの実行ファイルに埋め込んである (SianoFirmware.cs。agent/Denpa.Agent/firmware/README.md)。
+# Siano の許諾は、無改変で再配布するときに著作権表示と免責の文面を添えることを求めるので、文面をここに置く
+COPY agent/Denpa.Agent/firmware/LICENCE.siano /usr/share/doc/denpa-agent/LICENCE.siano
 
 # 設定は PVC (/config) に置く (/config/tuners.json と /config/channels.json はエージェントの既定。Config.cs)。
 # **どちらも denpa の画面が書き、どちらも無くて構わない。** tuners.json が無ければ挿さっている機材を

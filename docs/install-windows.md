@@ -34,7 +34,7 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 
 - 録画中に上げ直す・外すと、install.ps1 が録画の終わりを待ってから止めます (録画中かは `denpa-agent --status` で確かめる。
   エージェントの API は組んだ denpa にしか応答しないので、エージェント自身の証明書で呼ぶもの)。エンコードの途中なら、次に起きたときにやり直します
-- ドライバは入れません (下)。挿さっている px4-userland と siano-userland のチューナーが WinUSB でなければ、そう言います
+- ドライバは入れません (下)。挿さっている px4-userland の機材と PX-S1UD などの Siano の機材が WinUSB でなければ、そう言います
   (px4-userland の機材は `px4d --list-json` で問い合わせるので、機種の表は持ちません)
 - genkan (`http://denpa.localhost`) には繋ぎません。この PC からは <http://localhost:3000>、LAN のほかの機器からは `http://<この PC の名前か IP>:3000` で開きます。
   LAN のほかの機器から開けないときは、Windows の設定でこの PC のネットワークを「プライベート」にします (パブリックのネットワークには開けない)
@@ -42,7 +42,7 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 
 | 置き場                    | 中身                                                                                                                                                                                                        |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・siano-userland・本体 (`server\`)・エージェントを起動する `denpa-agent.cmd`                            |
+| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・本体 (`server\`)・エージェントを起動する `denpa-agent.cmd`                                            |
 | `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起動する `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる |
 | `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                               |
 | `C:\denpa-run`            | px4d のソケットの置き場 (下)                                                                                                                                                                                |
@@ -129,8 +129,8 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
   `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
   置きません。エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらが読み込まれてしまいます。
   IT930x のファームウェアは Mac と同じくエージェントに同梱しています ([tuner-px4.md](tuner-px4.md#ファームウェア))
-- **siano-userland の機材** (PX-S1UD など。地上波)。siano-userland の Windows 用 (`siano-ts.exe` と libusb) も、
-  ドライバを WinUSB にすれば動きます
+- **PX-S1UD** (地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません)。Zadig で `3275:0080` に WinUSB を当てます。
+  この実装は Windows でも Linux でも実機で確かめていません ([tuner-px-s1ud.md](tuner-px-s1ud.md))
 - **PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P**。エージェントが WinUSB で USB を直に持ちます (px4d は使いません。内蔵カードリーダーも読みます)。
   Zadig で WinUSB を当てます。Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#px-mlt5-系))
 - **Sony CECH-ZD1 J** (PS3 の torne。地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません。
@@ -180,14 +180,11 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 - PX-W3U3 (asicen-userland) は使えません。Windows 用がありません
 - **止めるときに録画を待てません。** Windows にはプロセスに「止まれ」を伝える手 (SIGTERM) が無く、
   止めればその場で落ちます。上げ直し・外すときは install.ps1 が録画の終わりを待ってから止めますが、
-  再起動・シャットダウンでは待たずに切れます (録画中に Windows を落とさないこと)。
-  siano-ts も同じく、止めるときに `quit` を読めなければ Kill になります (USB は OS が閉じる)
+  再起動・シャットダウンでは待たずに切れます (録画中に Windows を落とさないこと)
 
 ## Linux・Mac と違うところ
 
-- 子の標準出力は poll できないので、裏のスレッドが読みます (`DeviceStream`)。pipe は 4KB ほどで広げられず、
-  読む側が少し止まったぶんは siano-ts の中のバッファ (16KB × 256) が吸収します。px4d から受ける TS は pipe を使わないので 8MB のバッファ
-- エージェントのタスクの優先度は普通にしてあります (既定の「低い」だと、エンコードで CPU が埋まる間 siano-ts や px4d が後回しになる)。
+- エージェントのタスクの優先度は普通にしてあります (既定の「低い」だと、エンコードで CPU が埋まる間エージェントや px4d が後回しになる)。
   エンコードの ffmpeg は、本体が自分でいちばん低い優先度にします
 - エージェントは全部のインターフェースで待ち受けます (`-AgentOnly` で別の機械の denpa から繋ぐため)。同じ PC の本体は 127.0.0.1 で繋ぎます。
   LAN から届かないようにするのは Windows ファイアウォールの役目です (25252 の受信を許さないままにする)。LAN のほかの機械からエージェントに繋ぐとき

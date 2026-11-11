@@ -47,7 +47,7 @@ export const overrides: Record<string, PageOverride> = {
   "tuner-px-s1ud": {
     title: "PX-S1UD で録画サーバを立てる",
     description:
-      "PX-S1UD を、ホストに何も入れずに録画サーバで使う方法 (siano-userland)。カーネルのドライバ (smsusb) と取り合わないための blacklist も。",
+      "PX-S1UD を録画サーバで使う方法。エージェントが USB を直に持つ実装 (実機では確かめていない) と、カーネルのドライバ (smsusb) との使い分け。",
   },
   migrate: {
     title: "EPGStation から denpa に乗り換える",
