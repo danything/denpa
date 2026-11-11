@@ -135,6 +135,33 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
 
     private int Fd => _fd >= 0 ? _fd : throw new ObjectDisposedException(Name);
 
+    /// <summary>構成ディスクリプタを読む上限</summary>
+    private const int ConfigDescriptorsSize = 1024;
+
+    private IReadOnlyList<UsbPipe>? _pipes;
+
+    /// <summary>
+    /// usbfs の fd の続きを読む。開いたときにデバイスディスクリプタ (18 バイト) を読んであるので、続きは構成ディスクリプタ。
+    /// 初めて呼ばれたときに 1 回だけ読む (ほかの機材の開き方は変えない)
+    /// </summary>
+    public IReadOnlyList<UsbPipe> Pipes()
+    {
+        lock (_gate)
+        {
+            if (_pipes is not null) return _pipes;
+            var blob = stackalloc byte[ConfigDescriptorsSize];
+            var got = Sys.ReadFd(Fd, blob, ConfigDescriptorsSize);
+            if (got < 0) throw Failure("構成ディスクリプタを読めません");
+            return _pipes = UsbDescriptors.Pipes(new ReadOnlySpan<byte>(blob, (int)got), 0);
+        }
+    }
+
+    void IUsbDevice.ClearHalt(byte endpoint)
+    {
+        var number = (uint)endpoint;
+        if (Sys.Ioctl(Fd, ClearHalt, (nint)(&number)) < 0) throw Failure($"EP 0x{endpoint:X2} のストールをクリアできません");
+    }
+
     public int ControlIn(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)
     {
         fixed (byte* start = data)
@@ -309,6 +336,35 @@ public sealed unsafe class UsbFsDevice : IUsbDevice
                     _head = (_head + 1) % _urbs.Length;
                 }
                 if (copied > 0) return copied;
+                var wait = deadline - Environment.TickCount64;
+                if (wait <= 0) return 0;
+                var poll = new PollFd { Fd = _owner.Fd, Events = PollOut };
+                if (Sys.Poll((byte*)&poll, 1, (int)Math.Min(wait, int.MaxValue)) < 0 && Marshal.GetLastPInvokeError() != UsbFs.Eintr)
+                {
+                    throw _owner.Failure("TS の読みを待てません");
+                }
+            }
+        }
+
+        public int ReadTransfer(Span<byte> buffer, int timeoutMs)
+        {
+            ObjectDisposedException.ThrowIf(_closed, this);
+            var deadline = Environment.TickCount64 + timeoutMs;
+            for (; ; )
+            {
+                Reap();
+                while (_done[_head])
+                {
+                    var urb = _urbs[_head];
+                    if (urb->Status != 0) Fail(urb);
+                    else _stalls = 0;
+                    var take = Math.Min(urb->ActualLength - _offset, buffer.Length);
+                    new ReadOnlySpan<byte>((byte*)urb->Buffer + _offset, take).CopyTo(buffer);
+                    _offset = 0;
+                    Submit(_head);
+                    _head = (_head + 1) % _urbs.Length;
+                    if (take > 0) return take;
+                }
                 var wait = deadline - Environment.TickCount64;
                 if (wait <= 0) return 0;
                 var poll = new PollFd { Fd = _owner.Fd, Events = PollOut };

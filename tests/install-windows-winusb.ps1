@@ -4,7 +4,7 @@ param([string]$Installer = (Join-Path $PSScriptRoot '../install.ps1'))
 # 入れずに関数だけを取り出して動かすので、Linux の pwsh でも流せる (test.yml の install-linux)。
 # 見ること: wdi-simple.exe が無ければ止まる / 機材が無ければ止まる / WinUSB の機材には何もしない / 聞いて y のときだけ替える /
 # -Yes なら聞かずに替える / 同じ USB ID は 1 回で替える / wdi-simple が失敗したら終了コードを添えて止まる (ほかの機材は続ける) /
-# px4d が開けなかった機材と Siano の機材も対象になる
+# px4d が開けなかった機材も対象になる
 $ErrorActionPreference = 'Stop'
 $tokens = $null
 $parseErrors = $null
@@ -20,13 +20,13 @@ foreach ($name in 'Say', 'Get-UsbPnp', 'Get-WinUsbTarget', 'Get-WinUsbDevice', '
 }
 
 $Installer = 'https://example.invalid/install.ps1'
-$SianoUsbIds = @('3275:0080')
 $root = Join-Path ([IO.Path]::GetTempPath()) "denpa-winusb-test-$([Guid]::NewGuid().ToString('N'))"
 
 # 外を呼ぶところを偽物にする (機材の一覧・エージェントの表・px4d の答え・wdi-simple・人の答え・エージェントの起動し直し)
 function Get-PnpDevice { return $script:pnp }
 function Get-AgentUsbId {
-    return @([pscustomobject]@{ usb = '054c:04b2'; name = 'Sony CECH-ZD1 J' }, [pscustomobject]@{ usb = '06b8:103b'; name = 'PIXELA PIX-DT295' })
+    return @([pscustomobject]@{ usb = '054c:04b2'; name = 'Sony CECH-ZD1 J' }, [pscustomobject]@{ usb = '06b8:103b'; name = 'PIXELA PIX-DT295' },
+        [pscustomobject]@{ usb = '3275:0080'; name = 'PLEX PX-S1UD' })
 }
 function Get-Px4List { return $script:px4 }
 function Invoke-WdiSimple([string]$Usb, [string]$Name, [string]$Work) {

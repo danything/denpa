@@ -2,7 +2,7 @@
 #
 # チューナーを挿した機械でそのまま全部動かすとき (NAS・Home Assistant のアドオンなど) 用。
 # 組み直さない。main で組んだ `denpa` に、`denpa-agent` の実行ファイルと
-# px4-userland / siano-userland / asicen-userland を写すだけ (増えるのは数 MB)。RUN が無いので、
+# px4-userland / asicen-userland を写すだけ (増えるのは数 MB)。RUN が無いので、
 # arm64 もエミュレーション無しで数秒で組める。
 #
 # **libssl はエージェントのイメージから写す。** 本体の土台は libssl の無い distroless (base-nossl。
@@ -34,7 +34,9 @@ FROM ${DENPA}
 COPY --from=ssl / /
 COPY --from=agent /usr/local/bin/denpa-agent /usr/local/bin/denpa-agent
 COPY --from=agent /opt/px4-userland /opt/px4-userland
-COPY --from=agent /opt/siano-userland /opt/siano-userland
+# エージェントに埋め込んだ Siano のファームウェアの許諾の文面 (agent/Dockerfile と同じ場所に置く)。
+# エージェントのイメージからは写さない (PR の確認は main で組んだエージェントのイメージを使うので、足したばかりのファイルが無いことがある)
+COPY agent/Denpa.Agent/firmware/LICENCE.siano /usr/share/doc/denpa-agent/LICENCE.siano
 COPY --from=agent /opt/asicen-userland /opt/asicen-userland
 COPY .github/aio-entrypoint.ts /usr/local/lib/denpa-aio.ts
 # エージェントは同じコンテナの中。元の TS の置き場は既定が両方 `/media/raw` なので書かない。

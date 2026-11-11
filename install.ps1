@@ -11,7 +11,7 @@
 # **denpa 本体もエージェントも Windows の上でそのまま動かす** (コンテナは使わない)。本体は配布物の bun と ffmpeg で、
 # エージェントは .NET の実行ファイル。どちらもタスク スケジューラの「起動したら起こす」タスクに **SYSTEM で**載せるので、
 # 誰もログインしていなくても録画でき、外から観られる。そのために管理者で流す。
-# **Windows で使えるチューナーは px4-userland の機材 (PX-Q3U4 など) と siano-userland の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)**
+# **Windows で使えるチューナーは px4-userland の機材 (PX-Q3U4 など) と Siano の機材 (PX-S1UD など) と Sony CECH-ZD1 J と PIXELA PIX-DT295 (試験的)**
 # (DVB は無い)。**入れるときにはドライバを替えない。** WinUSB にするのは、人が -WinUsb を付けて流したときだけ
 # (エージェントの zip に入っている libwdi の wdi-simple.exe で。Zadig でもよい。docs/install-windows.md)。
 #
@@ -19,7 +19,7 @@
 # 前のバージョン (本体を wslc のコンテナで動かしていた) からは、DB を写して移る (Move-FromWslc)。
 #
 # 置き場:
-#   %ProgramFiles%\denpa\                 エージェントと通知領域のアイコン (bin\)・px4-userland・siano-userland・本体 (server\。bun・アプリ・ffmpeg・字・デコーダ)・
+#   %ProgramFiles%\denpa\                 エージェントと通知領域のアイコン (bin\)・px4-userland・本体 (server\。bun・アプリ・ffmpeg・字・デコーダ)・
 #                                         エージェントを起こす denpa-agent.cmd (管理者しか書けない。SYSTEM で動かすものを、ほかの人に書き換えさせない)
 #   %ProgramData%\denpa\                  DB (denpa.db) とその隣のもの (局ロゴ・鍵)・denpa.env (本体の環境変数。無いときだけ雛形を作る)・本体を起こす denpa.cmd。
 #                                         SYSTEM と管理者だけが読み書きできる
@@ -36,12 +36,9 @@
 # ---------------------------------------------------------------------------
 param([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [switch]$WinUsb, [switch]$Yes)
 
-# siano-userland のバージョン。**agent/Dockerfile・install.sh と揃える** (Renovate が一緒に上げる)。
-# 中身は配布元の SHA256SUMS で確かめるので、バージョンを上げてもここのハッシュは要らない
-# renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
-$SianoUserlandVersion = '0.1.10'
-$IsdbtRioSha256 = '054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818'
-# px4-userland のバージョンも同じ。**0.2.1 より下げない** (Windows 対応は 0.2.0 から、--runtime-dir を明示したときの
+# px4-userland のバージョン。**agent/Dockerfile・install.sh と揃える** (Renovate が一緒に上げる)。
+# 中身は配布元の SHA256SUMS で確かめるので、バージョンを上げてもここのハッシュは要らない。
+# **0.2.1 より下げない** (Windows 対応は 0.2.0 から、--runtime-dir を明示したときの
 # 起動の不具合が直ったのが 0.2.1)
 # renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
 $Px4UserlandVersion = '0.2.1'
@@ -49,8 +46,6 @@ $Px4UserlandVersion = '0.2.1'
 # 配布 zip から取り出すもの。**使うのは px4d.exe と px4ctl.exe だけ** (受信機もカードも px4d の制御ソケットで直に話す)。
 # px4-ts.exe と WinSCard.dll (B25 のアプリの横に置く代わりの DLL) は置かない。残りはライセンスの文書
 $Px4Keep = @('px4d.exe', 'px4ctl.exe', 'LICENSE', 'DEPENDENCY-NOTICE.txt', 'THIRD_PARTY_NOTICES.md', 'libusb/*', 'toolchain/*')
-# siano-userland の機材の USB ID (PX-S1UD など)。siano-ts が USB を持つので、エージェントの表 (denpa-agent --usb-ids) には入っていない
-$SianoUsbIds = @('3275:0080', '187f:0600', '187f:0302')
 # 入れ方の 1 行 (案内に出す)
 $Installer = 'https://raw.githubusercontent.com/danything/denpa/main/install.ps1'
 $WinUsbCommand = "& ([scriptblock]::Create((irm $Installer))) -WinUsb"
@@ -183,7 +178,7 @@ function Test-Recording([string]$Exe) {
 
 # 止める。**録画中なら終わるまで待つ** (Windows にはプロセスに「止まれ」を伝える手が無く、止めればその場で落ちる。
 # Linux・Mac のように録画を待ってから畳むことができないので、ここで待つ)。
-# タスクを止めても、.cmd の下で起きたもの (bun・ffmpeg・エージェント・siano-ts・px4d) までは止まらないので、
+# タスクを止めても、.cmd の下で起きたもの (bun・ffmpeg・エージェント・px4d) までは止まらないので、
 # コマンドラインに置き場が入っているもので見つけて落とす (前のバージョンの置き場のものも)。
 # **px4d は先に落とさない。** エージェントが終われば px4d は標準入力が閉じたのを見て、後片付け
 # (LNB を 0V に戻す・ソケットを消す) をして自分で終わる。10 秒待っても残っていれば落とす。
@@ -191,7 +186,8 @@ function Test-Recording([string]$Exe) {
 # -Server を付けなければエージェントだけ (-AgentOnly のとき)。エンコードの途中なら、次に起きたときにやり直す
 function Stop-Denpa([string]$Exe, [switch]$Server) {
     $tasks = @($TaskName)
-    # 通知領域のアイコン (denpa-tray.exe) もエージェントと同じ bin\ にあるので、入れ替える前に落とす
+    # 通知領域のアイコン (denpa-tray.exe) もエージェントと同じ bin\ にあるので、入れ替える前に落とす。
+    # siano-ts.exe は前のバージョンのエージェントが起動していたもの (いまは置かない)
     $names = @('conhost.exe', 'cmd.exe', 'denpa-agent.exe', 'denpa-tray.exe', 'siano-ts.exe', 'px4d.exe', 'px4ctl.exe')
     if ($Server) {
         $tasks += $DenpaTask
@@ -387,12 +383,11 @@ function Get-Px4List {
     return ConvertFrom-Json $json
 }
 
-# Windows でドライバが WinUSB でないと使えない機材の USB ID と名前。エージェントが USB を直に持つ機材 (Get-AgentUsbId) と
-# siano-userland の機材。-Px4 を付けると、px4d が開けなかった px4-userland の機材も足す (USB ID は px4d が返す)
+# Windows でドライバが WinUSB でないと使えない機材の USB ID と名前。エージェントが USB を直に持つ機材 (Get-AgentUsbId。
+# PX-S1UD などの Siano の機材もここに入る)。-Px4 を付けると、px4d が開けなかった px4-userland の機材も足す (USB ID は px4d が返す)
 function Get-WinUsbTarget([switch]$Px4) {
     $targets = @()
     foreach ($entry in @(Get-AgentUsbId)) { $targets += [pscustomobject]@{ Usb = [string]$entry.usb; Name = [string]$entry.name } }
-    foreach ($usb in $SianoUsbIds) { $targets += [pscustomobject]@{ Usb = $usb; Name = 'Siano のチューナー (PX-S1UD など)' } }
     if ($Px4) {
         $list = Get-Px4List
         foreach ($device in @(if ($list) { $list.ungrouped_usb_devices }) | Where-Object { $_ -and $_.status -eq 'open_failed' }) {
@@ -412,7 +407,7 @@ function Get-WinUsbDevice([object[]]$Targets) {
     }
 }
 
-# エージェントが USB を直に持つ機材と Siano のチューナーが挿さっていれば、ドライバが WinUSB かを見る。
+# エージェントが USB を直に持つ機材が挿さっていれば、ドライバが WinUSB かを見る。
 # **ここでは替えない** (ほかのソフトで使っていた機材を、聞かずに使えなくしない)。替える 1 行を案内する (Invoke-WinUsb)
 function Show-Tuner {
     $devices = @(Get-WinUsbDevice (Get-WinUsbTarget))
@@ -598,7 +593,7 @@ function Show-Px4 {
     }
 }
 
-# 置くものを $Work\new に揃える。エージェント (bin)・px4-userland・siano-userland と、-AgentOnly でなければ本体 (server)。
+# 置くものを $Work\new に揃える。エージェント (bin)・px4-userland と、-AgentOnly でなければ本体 (server)。
 # $Ref が空なら手元の zip (DENPA_AGENT_ZIP・DENPA_SERVER_ZIP)
 function Get-Payload([string]$Ref, [string]$Work, [switch]$Server) {
     # --- エージェント本体 (GitHub のリリース。$Ref が空なら手元の zip) ---
@@ -614,18 +609,6 @@ function Get-Payload([string]$Ref, [string]$Work, [switch]$Server) {
         }
     }
     Expand-Zip $agent "$Work\new\bin"
-
-    # --- siano-userland (PX-S1UD など) ---
-    Say "siano-userland $SianoUserlandVersion"
-    $base = "https://github.com/Khronos31/siano-userland/releases/download/v$SianoUserlandVersion"
-    $siano = "siano-ts-$SianoUserlandVersion-windows-x64.zip"
-    Get-Url "$base/$siano" "$Work\$siano"
-    Get-Url "$base/SHA256SUMS" "$Work\siano.sums"
-    $line = Get-Content -LiteralPath "$Work\siano.sums" | Where-Object { ($_ -split '\s+')[1] -in $siano, "*$siano" }
-    if (-not $line) { throw "SHA256SUMS に $siano が載っていません" }
-    Assert-Hash "$Work\$siano" (($line -split '\s+')[0])
-    Expand-Zip "$Work\$siano" "$Work\new\siano-userland"
-    Assert-Hash "$Work\new\siano-userland\firmware\isdbt_rio.inp" $IsdbtRioSha256
 
     # --- px4-userland (PX-Q3U4 など) ---
     Get-Px4Userland $Work "$Work\new\px4-userland"
@@ -655,13 +638,12 @@ function Get-Payload([string]$Ref, [string]$Work, [switch]$Server) {
 
 # エージェントを起こす .cmd とタスク。環境変数はコンテナで既定にしている置き場を Windows の置き場に向け直すものだけ
 # (Mac の plist と同じ。合言葉は環境変数で渡さず、エージェントが tls\pair-token から読む。Get-PairToken)。
-# **優先度は普通 (4) に。** 既定の 7 だと、本体のエンコードが CPU を食っている間に siano-ts が USB を読みに行けず
+# **優先度は普通 (4) に。** 既定の 7 だと、本体のエンコードが CPU を使っている間にエージェントが USB を読みに行けず
 # TS を落としうる (Mac の ProcessType Interactive と同じ理由)
 function Register-Agent {
     $cmd = "$Prefix\denpa-agent.cmd"
     $vars = [ordered]@{
         AGENT_PORT = $Port; TUNERS_FILE = "$DenpaDir\config\tuners.json"; CHANNELS_FILE = "$DenpaDir\config\channels.json"
-        SIANO_USERLAND_DIR = "$Prefix\siano-userland"; SIANO_FIRMWARE = "$Prefix\siano-userland\firmware\isdbt_rio.inp"
         PX4_USERLAND_DIR = "$Prefix\px4-userland"
         PX4_RUNTIME_DIR = $Px4Runtime
         RAW_DIR = "$Media\recorded"
@@ -757,7 +739,7 @@ function Register-Tray {
 function Install-Denpa([string]$Ref, [string]$Token, [switch]$AgentOnly) {
     $work = Join-Path ([IO.Path]::GetTempPath()) "denpa-install-$([Guid]::NewGuid().ToString('N'))"
     New-Item -ItemType Directory -Force -Path "$work\new" | Out-Null
-    $parts = @('bin', 'px4-userland', 'siano-userland')
+    $parts = @('bin', 'px4-userland')
     if (-not $AgentOnly) { $parts += 'server' }
     try {
         Get-Payload $Ref $work -Server:(-not $AgentOnly)
@@ -773,6 +755,8 @@ function Install-Denpa([string]$Ref, [string]$Token, [switch]$AgentOnly) {
             if (Test-Path -LiteralPath "$Prefix\$part") { Remove-Item -Recurse -Force -LiteralPath "$Prefix\$part" }
             Move-Item -LiteralPath "$work\new\$part" -Destination "$Prefix\$part"
         }
+        # 前のバージョンが置いていた siano-userland (いまは Siano の機材をエージェントが USB で直に動かすので要らない)
+        if (Test-Path -LiteralPath "$Prefix\siano-userland") { Remove-Item -Recurse -Force -LiteralPath "$Prefix\siano-userland" }
     } finally {
         Remove-Item -Recurse -Force -LiteralPath $work -ErrorAction SilentlyContinue
     }
@@ -858,7 +842,7 @@ function Invoke-Main([switch]$NoOpen, [switch]$Uninstall, [switch]$AgentOnly, [s
         return
     }
 
-    if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw '対応しているのは x64 の Windows だけです (px4-userland / siano-userland に ARM 用がありません)' }
+    if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw '対応しているのは x64 の Windows だけです (px4-userland に ARM 用がありません)' }
 
     $ref = if ($env:DENPA_AGENT_ZIP) { '' } else { Get-Version }
     # エージェントを起こす前に置いておく (無ければエージェントが自分で作り、そちらと食い違わないように)

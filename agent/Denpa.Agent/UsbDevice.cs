@@ -31,6 +31,17 @@ public interface IUsbDevice : IDisposable
     /// 止める (Dispose) と出していた読みを取り消して全部回収する
     /// </summary>
     IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth);
+
+    /// <summary>
+    /// インターフェース 0 (代替設定 0) の端点の一覧。端点のアドレスを決め打ちにできない機材 (Siano。SianoDevice.cs) が、開いたあとに読む。
+    /// 読めない実装は投げる
+    /// </summary>
+    IReadOnlyList<UsbPipe> Pipes() => throw new NotSupportedException($"{Name} は端点の一覧を読めません");
+
+    /// <summary>端点のストールをクリアする (CLEAR_FEATURE の ENDPOINT_HALT)。できなければ投げる。持たない実装は何もしない</summary>
+    void ClearHalt(byte endpoint)
+    {
+    }
 }
 
 /// <summary>出しっぱなしの IN の読み</summary>
@@ -38,6 +49,21 @@ public interface IUsbInStream : IDisposable
 {
     /// <summary>済んだ転送から順に詰めて返す。<paramref name="timeoutMs"/> の間に何も来なければ 0</summary>
     int Read(Span<byte> buffer, int timeoutMs);
+
+    /// <summary>
+    /// 済んだ転送を 1 つだけ返す (転送の区切りを残す)。<paramref name="buffer"/> に入りきらないぶんは捨てる。0 バイトの転送は飛ばす。
+    /// <paramref name="timeoutMs"/> の間に何も来なければ 0。1 回の転送が 1 つのメッセージになる機材 (Siano) が使う。
+    /// <see cref="Read"/> と混ぜて呼ばない
+    /// </summary>
+    int ReadTransfer(Span<byte> buffer, int timeoutMs) => throw new NotSupportedException("転送ごとの読みを持たない実装です");
+}
+
+/// <summary>端点 1 つ。<paramref name="Type"/> は USB の決まりの番号 (0 = control、1 = isochronous、2 = bulk、3 = interrupt)</summary>
+public readonly record struct UsbPipe(byte Endpoint, int Type, int MaxPacket)
+{
+    public bool In => (Endpoint & 0x80) != 0;
+
+    public bool Bulk => Type == 2;
 }
 
 /// <summary>機材が抜けた (挿し直すまで使えない)</summary>

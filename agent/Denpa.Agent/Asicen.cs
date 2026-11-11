@@ -41,7 +41,7 @@ public static class AsicenUserland
     ///
     /// <para>
     /// 挿した直後の機材は「ファームウェア待ち」で現れ、asicend が起動するときに流し込む (<c>--firmware</c> は必須。上流 README)。
-    /// 再配布の権利は確かめられていない (上流 README と、アーカイブの licenses/VENDOR-FIRMWARE-NOTICE.txt)。
+    /// 再配布の許諾は確かめられていない。上流と同じ判断でイメージに同梱している (docs/licenses.md「ASICEN のファームウェアを同梱している判断」)。
     /// </para>
     /// </summary>
     public static string Firmware =>

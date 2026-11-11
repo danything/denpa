@@ -257,7 +257,8 @@ jobs:
           dotnet-version: "11.0.100"
 
       # 名前はタグから `v` を落としたバージョンで (denpa-agent-1.2.3-darwin-arm64.tar.gz)。
-      # 中身はエージェントとメニューバーのアプリ (tray/mac。ad-hoc で署名する) の実行ファイル 2 個。.sha256 は install.sh が確かめる
+      # 中身はエージェントとメニューバーのアプリ (tray/mac。ad-hoc で署名する) の実行ファイル 2 個と、エージェントに埋め込んだ Siano のファームウェアの許諾の文面 (LICENCE.siano)。
+      # .sha256 は install.sh が確かめる
       - name: Build
         id: build
         run: |
@@ -270,7 +271,9 @@ jobs:
           # ad-hoc 署名 (curl で取ったものには隔離の印が付かないので、Developer ID の署名と公証は要らない。docs/install-mac.md)
           codesign --force --sign - out/denpa-agent out/denpa-tray
           asset="denpa-agent-${tag#v}-darwin-arm64.tar.gz"
-          tar -czf "$asset" -C out denpa-agent denpa-tray
+          # Siano のファームウェアはエージェントに埋め込んである。許諾の文面を添える (agent/Denpa.Agent/firmware/README.md)
+          cp agent/Denpa.Agent/firmware/LICENCE.siano out/
+          tar -czf "$asset" -C out denpa-agent denpa-tray LICENCE.siano
           shasum -a 256 "$asset" > "$asset.sha256"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
@@ -314,7 +317,8 @@ jobs:
         run: ./scripts/build-wdi-simple.ps1 -Out out\libwdi
 
       # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe と、通知領域のアイコンの denpa-tray.exe (tray/Denpa.Tray) と、
-      # wdi-simple.exe とそのライセンスの文書を入れた libwdi フォルダ) と .sha256 (shasum と同じ形式)
+      # wdi-simple.exe とそのライセンスの文書を入れた libwdi フォルダと、エージェントに埋め込んだ Siano のファームウェアの許諾の文面 LICENCE.siano) と
+      # .sha256 (shasum と同じ形式)
       - name: Build
         id: build
         shell: bash
@@ -324,7 +328,9 @@ jobs:
           dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -p:InformationalVersion="$tag" -o out
           dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
           asset="denpa-agent-${tag#v}-windows-x64.zip"
-          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe, out/libwdi -DestinationPath '$asset'"
+          # Siano のファームウェアはエージェントに埋め込んである。許諾の文面を添える (agent/Denpa.Agent/firmware/README.md)
+          cp agent/Denpa.Agent/firmware/LICENCE.siano out/
+          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe, out/libwdi, out/LICENCE.siano -DestinationPath '$asset'"
           sha256sum "$asset" > "$asset.sha256"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"

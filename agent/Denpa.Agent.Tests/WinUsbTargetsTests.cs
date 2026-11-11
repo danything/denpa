@@ -15,6 +15,10 @@ public class WinUsbTargetsTests
         await Assert.That(ids).Contains((Zd1j.Vendor, Zd1j.Product));
         await Assert.That(ids).Contains((Dt295.Vendor, Dt295.Product));
         foreach (var model in It930x.Family) await Assert.That(ids).Contains((model.Vendor, model.Product));
+        // PX-S1UD などの Siano の機材も、エージェントが USB を直に持つ。資料で扱いが食い違う 187f:0302 は入らない
+        foreach (var model in Siano.Models) await Assert.That(ids).Contains((model.Vendor, model.Product));
+        await Assert.That(ids).Contains((0x3275, 0x0080));
+        await Assert.That(ids).DoesNotContain((0x187F, 0x0302));
         await Assert.That(ids.Distinct().Count()).IsEqualTo(ids.Count);
     }
 

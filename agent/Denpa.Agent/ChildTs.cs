@@ -1,103 +1,15 @@
-using System.Diagnostics;
-using System.IO.Pipes;
-using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
-
 namespace Denpa.Agent;
 
 /// <summary>
-/// 選局した TS を **pipe で受け取る**ときの共通部分。子プロセス (siano-ts) の標準出力を
-/// 読み出し側にするところ (<see cref="Stdout"/>) と、pipe の扱い (<see cref="WidenPipe"/> /
-/// <see cref="ReaderDrain"/>)。px4d・CECH-ZD1 J・DT295 から受けた TS のバッファ
-/// (Px4Stream・Zd1jStream・Dt295NativeStream。pipe ではなく Pipelines) も、閉じ方 (<see cref="ReaderDrain"/>) はここに揃える。
-///
-/// <para>
-/// **読み出し側は <see cref="DeviceStream"/> に載せる。** Unix は pipe をそのまま fd として poll で待ち、
-/// Windows は裏のスレッドに読ませる。どちらでも、電波が来なくても畳めるし、チューナーを取り上げられた
-/// 読む側は 200ms で抜ける (DVB と同じ振る舞い)。
-/// </para>
+/// 機材から受けた TS のバッファ (Px4Stream・Zd1jStream・Dt295NativeStream・SianoStream。OS の pipe ではなく Pipelines) を閉じるときの決まり。
+/// 読み出し側はどれも <see cref="DeviceStream"/> に載せる
 /// </summary>
 internal static class ChildTs
 {
     /// <summary>
-    /// pipe の深さ。
-    ///
-    /// <para>
-    /// 既定 (64KB) だと地上波の 18Mbit/秒 で **30ms** しか無い。読む側が GC で
-    /// 一瞬止まるだけで書き手が詰まり、siano-ts の中のバッファも埋まれば
-    /// 溢れたぶんが捨てられる。DVB のリングバッファ (8MB = 3.5 秒) に揃える。
-    /// 上限 (<c>/proc/sys/fs/pipe-max-size</c>、既定 1MB) を超えるには CAP_SYS_RESOURCE が要る。
-    /// 無ければ 1MB で妥協する
-    /// </para>
-    ///
-    /// <para>
-    /// **1MB も断られることがある。** uid ごとの pipe の合計が上限
-    /// (<c>/proc/sys/fs/pipe-user-pages-soft</c>、既定 64MB) を超えていると、CAP_SYS_RESOURCE が無い限り
-    /// 広げる要求は <c>EPERM</c> になり、新しい pipe は最小 (数 KB) のまま。Home Assistant OS の
-    /// アドオンはホスト中の root (Supervisor やほかのアドオン) と uid 0 を分け合うので、ここに当たる
-    /// (アドオンの作者が実機の記録で見つけた)。数 KB では読む側が数ミリ秒止まるだけで詰まり、
-    /// TS が欠ける。そういう環境では CAP_SYS_RESOURCE を渡してもらう
-    /// </para>
-    /// </summary>
-    private const int PipeSize = 8 * 1024 * 1024;
-
-    private const int FallbackPipeSize = 1024 * 1024;
-
-    /// <summary>
-    /// 読む側が抜けきるまで待つ上限。<see cref="DeviceStream"/> は 200ms ごとに
-    /// 印を確かめるので、fd を閉じるのは読む側が戻ってから (閉じた番号を
-    /// 次の pipe が使い回すと、抜けかけの読む側が新しい pipe を読んでしまう)。
-    /// 待つのは読みかけがいるときだけ (<see cref="DeviceStream.WaitReaders"/>)。
-    /// siano-ts の後始末 (SianoTuner.Drop) と、px4d・CECH-ZD1 J・DT295 の TS の後始末 (Px4Stream.Stop・Zd1jStream.Stop・Dt295NativeStream.Stop) で使う
+    /// 読む側が抜けきるまで待つ上限。<see cref="DeviceStream"/> は 200ms ごとに印を確かめるので、
+    /// バッファを閉じるのは読む側が戻ってから。待つのは読みかけがいるときだけ (<see cref="DeviceStream.WaitReaders"/>)。
+    /// px4d・CECH-ZD1 J・DT295・Siano の機材の TS の後始末 (Px4Stream.Stop・Zd1jStream.Stop・Dt295NativeStream.Stop・SianoStream.Stop) で使う
     /// </summary>
     internal static readonly TimeSpan ReaderDrain = TimeSpan.FromMilliseconds(300);
-
-    /// <summary>
-    /// 子の標準出力の fd。.NET 10 以降の Unix では <c>AnonymousPipeClientStream</c>。
-    /// 閉じるのは <c>process.StandardOutput</c> を閉じたとき (SianoTuner.Drop)。
-    /// こちらが閉じると読み出し側が二重に閉じる。
-    /// </summary>
-    internal static SafeFileHandle StdoutHandle(Process process)
-    {
-        var stream = process.StandardOutput.BaseStream;
-        if (stream is FileStream file) return file.SafeFileHandle;
-        if (stream is PipeStream pipe)
-        {
-            return new SafeFileHandle(pipe.SafePipeHandle.DangerousGetHandle(), ownsHandle: false);
-        }
-        throw new IOException($"子の標準出力を使えません ({stream.GetType().Name})");
-    }
-
-    /// <summary>
-    /// pipe を広げる (<see cref="PipeSize"/>)。通らなければ記録に残して続ける。
-    ///
-    /// <para>
-    /// **macOS では何もしない。** <c>F_SETPIPE_SZ</c> が無く、pipe の深さは OS 任せ
-    /// (書き手が詰まると 64KB まで自分で伸びる)。バッファは siano-ts の側にもあるので、
-    /// 読む側が一瞬止まる程度なら持つ。ただし Linux の 8MB より浅いことは変わらない
-    /// </para>
-    /// </summary>
-    internal static void WidenPipe(int fd, string name)
-    {
-        if (!OperatingSystem.IsLinux()) return;
-        if (Sys.Fcntl(fd, Sys.SetPipeSize, PipeSize) < 0 && Sys.Fcntl(fd, Sys.SetPipeSize, FallbackPipeSize) < 0)
-        {
-            var why = Marshal.GetLastPInvokeErrorMessage();
-            Log.Write($"[{name}] pipe を広げられませんでした ({why}。いまの深さ {Sys.Fcntl(fd, Sys.GetPipeSize, 0)} バイト)。"
-                + "pipe の合計が uid ごとの上限 (pipe-user-pages-soft) を超えているかもしれません。"
-                + "コンテナに CAP_SYS_RESOURCE を渡すと広げられます (docs/tuner-px-s1ud.md)");
-        }
-    }
-
-    /// <summary>
-    /// 子の標準出力を読み出し側にする (siano-ts)。Unix は fd を poll で待ち (pipe を広げてから)、
-    /// **Windows は .NET の Stream のまま** (<see cref="DeviceStream(Stream, Func{string?}?)"/>)
-    /// </summary>
-    internal static DeviceStream Stdout(Process process, string name, Func<string?> ended)
-    {
-        if (OperatingSystem.IsWindows()) return new DeviceStream(process.StandardOutput.BaseStream, ended);
-        var handle = StdoutHandle(process);
-        WidenPipe((int)handle.DangerousGetHandle(), name);
-        return new DeviceStream(handle, ended);
-    }
 }

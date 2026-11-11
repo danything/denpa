@@ -27,6 +27,10 @@
         <Compile Include="../Denpa.Agent/Px4.cs" />
         <Compile Include="../Denpa.Agent/Px4Firmware.cs" />
         <Compile Include="../Denpa.Agent/Siano.cs" />
+        <Compile Include="../Denpa.Agent/SianoDevice.cs" />
+        <Compile Include="../Denpa.Agent/SianoMessage.cs" />
+        <Compile Include="../Denpa.Agent/SianoFirmware.cs" />
+        <Compile Include="../Denpa.Agent/SianoTs.cs" />
         <Compile Include="../Denpa.Agent/Asicen.cs" />
         <Compile Include="../Denpa.Agent/AsicenUdtv.cs" />
         <Compile Include="../Denpa.Agent/ChildTs.cs" />
@@ -91,6 +95,8 @@
         <Compile Include="../Denpa.Agent/TlvObservation.cs" />
         <!-- 本体と同じ名前で埋め込む (Px4Firmware.Bundled が読む) -->
         <EmbeddedResource Include="../Denpa.Agent/firmware/it930x-firmware.bin" LogicalName="it930x-firmware.bin" />
+        <!-- 本体と同じ名前で埋め込む (SianoFirmware.Bundled が読む) -->
+        <EmbeddedResource Include="../Denpa.Agent/firmware/isdbt_rio.inp" LogicalName="isdbt_rio.inp" />
         <!--
           PX-MLT5PE と J:COM の QC26 (BS4K の再送信) を受けて、TSMF から選んだ分割 TLV の単位 1,082 個 (198 KiB)。
           中身は放送の信号とスクランブルされたままの映像・音声だけ (SplitTlvTests・TlvObservationTests)
