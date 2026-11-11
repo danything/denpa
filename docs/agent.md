@@ -501,7 +501,12 @@ ATTACH_STREAM` (SPEC 6.3)。返す (`RELEASE`) のはデバイスを閉じると
 
 ### asicen-userland の作り
 
-いまの様子・設定・ファームウェアは [tuners.md](tuners.md#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち)。
+いまの様子・設定・ファームウェアは [tuners.md](tuners.md#px-w3u3-など-asicen-userlandまだ使えない)。
+
+**ここに書いてあるのは、上流の 2026-10-09 のコミット (`.github/workflows/test.yml` の `ASICEN_USERLAND_REF`) に合わせた実装です。**
+上流が 2026-11-05 に出した v1.0.0-beta は、通信の形式 (UDTV 1.0) も asicend を起動する引数も違うので、この実装のままでは通信できません
+([tuners.md](tuners.md#px-w3u3-など-asicen-userlandまだ使えない))。v1.0.0-beta が見分ける PX-W3U2・PX-W3U3 V2・PX-S3U2・PX-S3U は、
+2026-10-09 のコミットの asicend が受け付けないので、USB ID の判定には足していません。足すのは、エージェントを UDTV 1.0 に対応させるときです。
 
 - **IPC は px4d と同じ。** asicen-userland は px4-userland の portable IPC を取り込み、枠の先頭 (`ASCN`) と
   ソケットの置き場 (`<ランタイム>/asicen-userland/<instance>/`) だけ変えています。受信機の取得と返却・
