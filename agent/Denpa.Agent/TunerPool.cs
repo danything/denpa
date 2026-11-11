@@ -300,6 +300,8 @@ public sealed class TunerPool(
                     }
                     // 選局し直さずに済んだときも、TSMF の判定はそのチャンネルを選局したときのまま残っている。読み出しを始める前に写す (Sink.TsmfStreams)
                     lease.TsmfStreams = (held.Device as It930xTuner)?.Tsmf?.Streams;
+                    // 流すバイト列の形式 (Sink.Format)。TSMF の有効な TS の数と同じく、選局したときの判定のまま
+                    lease.Format = held.Device.Format;
                     lease.StartNative(held.Device, () => OnExit(lease));
                     // 閉じる側 (Held.Close) は、この読み出しが止まるのを待ってから閉じる
                     held.Reader = lease;
@@ -857,6 +859,18 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
     /// </summary>
     public int? TsmfStreams => Owner?.TsmfStreams;
 
+    /// <summary>
+    /// 流すバイト列の形式 (<see cref="ITuneDevice.Format"/>)。<see cref="TsmfStreams"/> と同じく、**最初の塊が届いてから読む**
+    /// (共有に入った利用者は、選局が終わる前に戻ることがある)
+    /// </summary>
+    public StreamFormat Format => Owner?.Format ?? StreamFormat.Ts;
+
+    /// <summary><c>/denpa/stream</c> の Content-Type (<see cref="Format"/> から決める)。最初の塊を書く前に入れる</summary>
+    public string ContentType => ContentTypeOf(Format);
+
+    /// <summary>形式ごとの Content-Type。TLV は登録された媒体の種類が無いので <c>x-</c> を付ける (中身は ARIB の TLV のバイト列)</summary>
+    public static string ContentTypeOf(StreamFormat format) => format == StreamFormat.Tlv ? "application/x-arib-tlv" : "video/MP2T";
+
     public void Push(byte[] chunk)
     {
         if (_left != 0) return;
@@ -926,6 +940,9 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     /// <summary>TSMF のヘッダーにある有効な TS の数 (<see cref="Sink.TsmfStreams"/>)。読み出しを始める前に入れる</summary>
     public int? TsmfStreams { get; set; }
+
+    /// <summary>流すバイト列の形式 (<see cref="Sink.Format"/>)。読み出しを始める前に入れる。TLV ならデスクランブラに通さない</summary>
+    public StreamFormat Format { get; set; }
 
     private long _firstReadMs = -1;
 
@@ -1079,9 +1096,13 @@ internal sealed class Lease(int tuner, string type, string channel)
         // 契約の更新 (EMM) は、どの用途の選局でもカードに渡す (Emm.cs)
         /*
          * **スカパー！プレミアム (SKY) はスクランブルされたまま流す。** B-CAS ではない専用のカードで、まだ扱っていない。
-         * Descrambler に通すと B-CAS のカードに ECM と EMM を渡してしまうので、通さない
+         * Descrambler に通すと B-CAS のカードに ECM と EMM を渡してしまうので、通さない。
+         * **4K の TLV も同じく通さない。** MMT の ECM と EMM は B-CAS のものではなく、ACAS にはまだ対応していない
          */
-        var b25 = Type == ChannelTable.Sky ? null : new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared);
+        var undecoded = Type == ChannelTable.Sky ? "スカパー！プレミアム"
+            : Format == StreamFormat.Tlv ? "4K。ACAS には対応していません"
+            : null;
+        var b25 = undecoded is null ? new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared) : null;
         _descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         var pushed = false;
@@ -1094,7 +1115,7 @@ internal sealed class Lease(int tuner, string type, string channel)
                 string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
                 Log.Write(b25 is null
                     ? $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
-                        + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms / 復号しない (スカパー！プレミアム)"
+                        + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms / 復号しない ({undecoded})"
                     : $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
                         + $"最初の TS {At(_firstReadMs)} / {b25.HeldAt()} / 送り出し {Clock.ElapsedMilliseconds}ms / {b25.CardUse()}"
                         + (b25.Undecodable > 0 ? $" (スクランブルされたまま {b25.Undecodable} パケット)" : ""));
