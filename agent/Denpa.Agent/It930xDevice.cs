@@ -555,10 +555,10 @@ public sealed class It930xDevice
     private volatile It930xOverflow? _overflow;
 
     /// <summary>
-    /// TS のバッファの溢れを読み、前に読んだときから変わっていれば記録に出す (流し始める・止めるとき、閉じるとき)。
+    /// TS のバッファの溢れを読み、前に読んだときから変わっていれば記録に出す (選局したあと、流し始める・止めるとき、LNB の給電を切り替えたあと、閉じるとき)。
     /// 読めなければ何もしない (抜けたかどうかは EP 0x84 の読みとほかの操作が決める)
     /// </summary>
-    private void WatchOverflow(string when)
+    internal void WatchOverflow(string when)
     {
         It930xOverflow overflow;
         try
@@ -844,6 +844,8 @@ public sealed class It930xDevice
                 throw;
             }
             Log.Write($"[{Label}] LNB の給電を{(after > 0 ? "入れました" : "切りました")}");
+            // PX-Q3PE4 で衛星の選局のときだけブリッジの出力が止まったので、給電の切り替えがきっかけかを記録で絞る (2026-11-11)
+            WatchOverflow($"LNB の給電を{(after > 0 ? "入れた" : "切った")}あと");
         }
     }
 
@@ -1278,6 +1280,8 @@ public sealed class It930xTuner : ITuneDevice
                 var locked = _frontend.Tune(tuning);
                 if (tuning.IsdbC) IsdbcLocked = locked;
                 if (!locked) throw new IOException(ITuneDevice.SyncFailed);
+                // 選局 (起動・RT710・ロック) のあいだに溢れが立ったかを、流し始める前に記録で絞る (PX-Q3PE4 の衛星。2026-11-11)
+                _device.WatchOverflow($"受信機 {_receiver} を選局したあと");
                 // TSMF で TS を選ぶ処理は ISDB-C のときだけ通す (MLT5 の仕様書 10.1)。ロックのあとで作る (仕様書 7A.7 の「パケットごとの処理」の 1)。
                 // TSMF の判定の状態は、選局のたびに TsmfSelector を作り直して最初に戻す
                 var tsmf = tuning.IsdbC ? new TsmfSelector(tuning.TsmfIndex) : null;
