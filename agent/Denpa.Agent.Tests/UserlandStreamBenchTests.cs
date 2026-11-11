@@ -3,19 +3,19 @@ using System.Diagnostics;
 namespace Denpa.Agent.Tests;
 
 /*
- * px4d から TS を受けて読む側に渡すところ (Px4Stream) の重さを測る。
+ * 常駐から TS を受けて読む側に渡すところ (UserlandStream) の重さを測る。
  *
- * 偽の px4d (Px4TunerTests.FakePx4d) を 8 台立て、それぞれ 5MB/秒 (合計 40MB/秒。地上波 1 本が 2.3MB/秒ほど
+ * 偽の常駐 (UserlandTunerTests.FakeDaemon) を 8 台立て、それぞれ 5MB/秒 (合計 40MB/秒。地上波 1 本が 2.3MB/秒ほど
  * なので、8 本ぶんを超える) で流し、読む側が読み続ける間の CPU 時間と確保量を出す。
- * 偽の px4d も同じプロセスにいるので、数字はその分も含む (比べるときは同じテストを書き換えの前後で流す)。
+ * 偽の常駐も同じプロセスにいるので、数字はその分も含む (比べるときは同じテストを書き換えの前後で流す)。
  * 合否は「流したぶんが読む側に届いたか」だけで、数字は記録に出す。
  */
 // **名指ししたときだけ流す** (Explicit)。並べずに 1 本で流れるので、毎回の単体テストが 5 秒以上延びていた。測るときは
-// dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --treenode-filter '/*/*/Px4StreamBenchTests/*'
+// dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --output detailed --treenode-filter '/*/*/UserlandStreamBenchTests/*'
 [Explicit]
 [NotInParallel]
 [Timeout(120_000)]
-public class Px4StreamBenchTests
+public class UserlandStreamBenchTests
 {
     private const int Streams = 8;
     private const double Rate = 5 * 1024 * 1024;
@@ -26,8 +26,8 @@ public class Px4StreamBenchTests
     public async Task 合計_40MB_毎秒を流したときの_CPU_と確保量(CancellationToken cancel)
     {
         await Task.Yield();
-        var fakes = new List<Px4TunerTests.FakePx4d>();
-        var tuners = new List<Px4Tuner>();
+        var fakes = new List<UserlandTunerTests.FakeDaemon>();
+        var tuners = new List<UserlandTuner>();
         var counts = new long[Streams];
         var running = true;
         var readers = new List<Thread>();
@@ -35,9 +35,9 @@ public class Px4StreamBenchTests
         {
             for (var i = 0; i < Streams; i++)
             {
-                var px4d = new Px4TunerTests.FakePx4d { Rate = Rate };
-                fakes.Add(px4d);
-                var tuner = new Px4Tuner("00001205000960", 2, null, px4d.Runtime.FullName, () => null);
+                var daemon = new UserlandTunerTests.FakeDaemon { Rate = Rate };
+                fakes.Add(daemon);
+                var tuner = new UserlandTuner("1-2", 2, null, daemon.Runtime.FullName, () => null);
                 tuners.Add(tuner);
                 tuner.Tune(ChannelTable.Parse("T27")!);
                 var output = tuner.Output;
@@ -82,7 +82,7 @@ public class Px4StreamBenchTests
             var mbps = moved / elapsed.TotalSeconds / 1024 / 1024;
 
             var line =
-                $"[bench] Px4Stream {Streams} 本 × {Rate / 1024 / 1024:F0}MB/秒 を {elapsed.TotalSeconds:F1} 秒: "
+                $"[bench] UserlandStream {Streams} 本 × {Rate / 1024 / 1024:F0}MB/秒 を {elapsed.TotalSeconds:F1} 秒: "
                 + $"届いた {mbps:F1}MB/秒、CPU {usedCpu.TotalMilliseconds / elapsed.TotalSeconds / 10:F1}% (1 コアに対して)、"
                 + $"確保 {usedBytes / elapsed.TotalSeconds / 1024:F0}KB/秒、gen0 GC {collections} 回 ({System.Runtime.InteropServices.RuntimeInformation.OSDescription})";
             Console.WriteLine(line);
@@ -100,7 +100,7 @@ public class Px4StreamBenchTests
             Volatile.Write(ref running, false);
             foreach (var tuner in tuners) tuner.Dispose();
             foreach (var reader in readers) reader.Join(TimeSpan.FromSeconds(5));
-            foreach (var px4d in fakes) px4d.Dispose();
+            foreach (var daemon in fakes) daemon.Dispose();
         }
     }
 }

@@ -3,35 +3,35 @@ using System.Buffers.Binary;
 namespace Denpa.Agent;
 
 /// <summary>
-/// px4d の内蔵カードリーダー。**px4d の制御ソケットに直に APDU を送る。**
+/// 常駐 (asicend) の内蔵カードリーダー。**常駐の制御ソケットに直に APDU を送る。**
 ///
 /// <para>
-/// px4-userland のカードは px4d が持っていて (T=1 の枠組みも向こう)、同梱の IFD ハンドラと
-/// 同じやり取り (SPEC 6 節の portable IPC) をこちらでする (Px4Control.cs)。pcscd も IFD ハンドラも使わない。
+/// カードは常駐が持っていて (T=1 の枠組みも向こう)、制御ソケットの IPC (SPEC 6 節) でやり取りする (UserlandControl.cs)。
+/// pcscd も IFD ハンドラも使わない。
 /// </para>
 ///
 /// <para>
-/// ソケットの置き場は <see cref="Px4Control"/> と同じ。1 本の接続で送れる要求は同時に 1 つだけで、順番は <see cref="BCas"/> が守る。
+/// ソケットの置き場は <see cref="UserlandControl"/> と同じ。1 本の接続で送れる要求は同時に 1 つだけで、順番は <see cref="BCas"/> が守る。
 /// </para>
 /// </summary>
-public sealed class Px4Card : ICardLink
+public sealed class UserlandCard : ICardLink
 {
-    /// <summary>HELLO で要求する機能。bit 1 = CARD。**要求していない型は px4d が断る**</summary>
+    /// <summary>HELLO で要求する機能。bit 1 = CARD。**要求していない型は常駐が断る**</summary>
     private const uint CardCapability = 1 << 1;
 
     /// <summary>
-    /// 1 回のやり取りの上限。px4d は APDU 1 つを 3 秒で打ち切る (SPEC 5.3) ので、
+    /// 1 回のやり取りの上限。常駐は APDU 1 つを 3 秒で打ち切る (SPEC 5.3) ので、
     /// それより長く待ってからやめる
     /// </summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    private readonly Px4Control _control;
+    private readonly UserlandControl _control;
     private readonly string _daemon;
     private ulong _handle;
 
     public string Name { get; }
 
-    private Px4Card(string name, Px4Control control, string daemon)
+    private UserlandCard(string name, UserlandControl control, string daemon)
     {
         Name = name;
         _control = control;
@@ -39,36 +39,19 @@ public sealed class Px4Card : ICardLink
     }
 
     /// <summary>
-    /// px4d が起動している筐体ぶん。**挙げるだけで、繋ぐのは候補を開いたとき。**
-    ///
-    /// <para>
-    /// 筐体は制御ソケットがあるかで見る。px4d は起動すると筐体ごとに
-    /// <c>control.sock</c> を作り、止まるときに消す (Px4Daemon が px4d に渡すのと同じ
-    /// ランタイムディレクトリ)。**px4d を起動していない筐体は出てこない**ので、
-    /// px4d を起動してから探す。
-    /// </para>
-    /// </summary>
-    public static IReadOnlyList<CardLinkCandidate> Find() => Find(Px4Userland.RuntimeDir);
-
-    internal static IReadOnlyList<CardLinkCandidate> Find(string runtimeDir) => Find(
-        runtimeDir, Px4Wire.Px4, id => id.Length >= 4 && Px4Userland.ValidId(id), ReaderName);
-
-    /// <summary>筐体の内蔵カードリーダーの名前。pcscd に見せていた頃と同じ (画面で見分けがつくように)</summary>
-    public static string ReaderName(string id) => $"px4-userland {Px4Userland.Label(id)} Internal Card Reader";
-
-    /// <summary>
-    /// <paramref name="wire"/> のデーモンが起動している筐体ぶん。asicen-userland の asicend も
-    /// 内蔵カードを同じ IPC で出すので、置き場と名前だけ変えて使う (Asicen.cs)
+    /// <paramref name="wire"/> のデーモンが起動している筐体ぶん。**挙げるだけで、繋ぐのは候補を開いたとき。**
+    /// 筐体は制御ソケットがあるかで見る (常駐は起動すると筐体ごとに <c>control.sock</c> を作り、止まるときに消す)。
+    /// **常駐を起動していない筐体は出てこない** (Asicen.cs)
     /// </summary>
     internal static IReadOnlyList<CardLinkCandidate> Find(
-        string runtimeDir, Px4Wire wire, Func<string, bool> valid, Func<string, string> name)
+        string runtimeDir, UserlandWire wire, Func<string, bool> valid, Func<string, string> name)
     {
         var root = Path.Combine(runtimeDir, wire.Product);
         if (!Directory.Exists(root)) return [];
         return
         [
             .. Directory.EnumerateDirectories(root)
-                .Select(dir => (Id: Path.GetFileName(dir), Socket: Px4Control.Endpoint(runtimeDir, Path.GetFileName(dir), "control.sock", wire)))
+                .Select(dir => (Id: Path.GetFileName(dir), Socket: UserlandControl.Endpoint(runtimeDir, Path.GetFileName(dir), "control.sock", wire)))
                 .Where(found => valid(found.Id) && File.Exists(found.Socket))
                 .OrderBy(found => found.Id, StringComparer.Ordinal)
                 .Select(found =>
@@ -80,16 +63,16 @@ public sealed class Px4Card : ICardLink
     }
 
     /// <summary>ソケットに繋いで HELLO まで済ませる。**カードにはまだ触らない** (<see cref="Reset"/>)</summary>
-    public static Px4Card Open(string name, string socketPath, Px4Wire? wire = null)
+    public static UserlandCard Open(string name, string socketPath, UserlandWire? wire = null)
     {
-        wire ??= Px4Wire.Px4;
-        var control = Px4Control.Connect(socketPath, CardCapability, Timeout, wire);
+        wire ??= UserlandWire.Asicen;
+        var control = UserlandControl.Connect(socketPath, CardCapability, Timeout, wire);
         if ((control.Capabilities & CardCapability) == 0)
         {
             control.Dispose();
             throw new IOException($"{wire.Daemon} がカードに対応していません");
         }
-        return new Px4Card(name, control, wire.Daemon);
+        return new UserlandCard(name, control, wire.Daemon);
     }
 
     /// <summary>
@@ -104,7 +87,7 @@ public sealed class Px4Card : ICardLink
     {
         if (_handle == 0)
         {
-            var answer = _control.Request(Px4Control.CardConnect, [1]);
+            var answer = _control.Request(UserlandControl.CardConnect, [1]);
             if (answer.Length < 9 || answer.Length != 9 + answer[8])
             {
                 throw new IOException($"{_daemon} の CARD_CONNECT の応答が崩れています ({answer.Length} バイト)");
@@ -113,7 +96,7 @@ public sealed class Px4Card : ICardLink
             return answer[9..];
         }
 
-        var atr = _control.Request(Px4Control.CardReset, Px4Control.WithId(_handle));
+        var atr = _control.Request(UserlandControl.CardReset, UserlandControl.WithId(_handle));
         if (atr.Length < 1 || atr.Length != 1 + atr[0])
         {
             throw new IOException($"{_daemon} の CARD_RESET の応答が崩れています ({atr.Length} バイト)");
@@ -122,18 +105,18 @@ public sealed class Px4Card : ICardLink
     }
 
     /// <summary>
-    /// APDU を 1 つ。**失敗は全部 <see cref="IOException"/>** (Px4Control.Request)。
+    /// APDU を 1 つ。**失敗は全部 <see cref="IOException"/>** (UserlandControl.Request)。
     /// 繋ぎ直すかどうかを決めるのは <see cref="BCas"/> で、そちらは IOException だけを見る。
     /// </summary>
     public byte[] Transmit(ReadOnlySpan<byte> apdu)
     {
         if (_handle == 0) throw new IOException("カードに繋いでいません (Reset を先に)");
 
-        var payload = Px4Control.WithId(_handle, 12 + apdu.Length);
+        var payload = UserlandControl.WithId(_handle, 12 + apdu.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8), (uint)apdu.Length);
         apdu.CopyTo(payload.AsSpan(12));
 
-        var answer = _control.Request(Px4Control.CardTransmit, payload);
+        var answer = _control.Request(UserlandControl.CardTransmit, payload);
         if (answer.Length < 4 || answer.Length != 4 + BinaryPrimitives.ReadUInt32LittleEndian(answer))
         {
             throw new IOException($"{_daemon} の CARD_TRANSMIT の応答が崩れています ({answer.Length} バイト)");
@@ -149,11 +132,11 @@ public sealed class Px4Card : ICardLink
             try
             {
                 // handle と disposition (0 = そのまま)
-                _control.Request(Px4Control.CardDisconnect, Px4Control.WithId(_handle, 9));
+                _control.Request(UserlandControl.CardDisconnect, UserlandControl.WithId(_handle, 9));
             }
             catch (IOException)
             {
-                // 閉じれば px4d の側で手放される (SPEC 6.4)。ここで CARD_DISCONNECT を送るのは、手順をそろえるためだけ
+                // 閉じれば常駐の側で手放される (SPEC 6.4)。ここで CARD_DISCONNECT を送るのは、手順をそろえるためだけ
             }
             _handle = 0;
         }

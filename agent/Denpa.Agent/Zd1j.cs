@@ -524,7 +524,7 @@ public sealed class Zd1jTuner : ITuneDevice
 
 /// <summary>
 /// TS を 1 回流すぶん。EP 0x81 の読みを 16 本出しっぱなしにして、192 バイトの単位から取り出し、
-/// <see cref="Pipe"/> (8MB) に詰める。読み出し側は <see cref="DeviceStream"/> (px4d から受けるときと同じ形)
+/// <see cref="Pipe"/> (8MB) に詰める。読み出し側は <see cref="DeviceStream"/> (asicend から受けるときと同じ形)
 /// </summary>
 internal sealed class Zd1jStream
 {
@@ -635,7 +635,7 @@ internal sealed class Zd1jStream
 
 /// <summary>
 /// CECH-ZD1 J の内蔵の差し込み口。ブリッジの UART を読み書きし、**T=1 の枠組みはこちらで組む** (<see cref="T1Protocol"/>)。
-/// リセットと IFSD の取り決めは 1 回だけで、あとはつないだまま。並ぶ順は USB のリーダー → px4d → PX-MLT5 系 → asicend → これ → PIX-DT295 (CardLinks)
+/// リセットと IFSD の取り決めは 1 回だけで、あとはつないだまま。並ぶ順は USB のリーダー → IT930x の機材 → asicend → これ → PIX-DT295 (CardLinks)
 /// </summary>
 public sealed class Zd1jCard : ICardLink
 {

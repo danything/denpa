@@ -112,7 +112,7 @@ const AGENT_TUNER = object({
   /**
    * 受信の状態と C/N と強度。使用中で、機材が測れるときだけ (エージェントが 5 秒ごとに読む)。
    * `unit` が `raw` なら dB ではなく、機材やドライバが返した値のまま (同じチューナーで比べる目安)。
-   * `atTune` は選局したときの値 (px4d は選局の答えでしか返さない)。docs/tuners.md「信号レベル」
+   * `atTune` は選局したときの値 (asicend は選局の答えでしか返さない)。docs/tuners.md「信号レベル」
    */
   signal: nullable(SIGNAL),
 });

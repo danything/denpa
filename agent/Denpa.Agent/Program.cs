@@ -13,11 +13,11 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *
  * denpa から触れないものが 3 つある。
  *
- * - B-CASカード … USB のリーダーも px4d / asicend・PX-MLT5 系の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
+ * - B-CASカード … USB のリーダーも asicend・IT930x の機材の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
- * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland / siano-userland /
- *   asicen-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs / Asicen.cs)。PX-MLT5 系と CECH-ZD1 J と PIX-DT295 は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs)
+ * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。siano-userland /
+ *   asicen-userland の機材は同梱のものに USB を扱わせる (Siano.cs / Asicen.cs)。IT930x の機材と CECH-ZD1 J と PIX-DT295 は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
  * 復号に要る PAT・PMT・ECM と、契約の更新に要る CAT・EMM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -177,13 +177,12 @@ var tune = new TuneOptions(
 var pool = new TunerPool(tuners, () => events.Emit("tuners"), tune) { Detected = detected };
 
 /*
- * **px4-userland の筐体の px4d を起動する。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
- * 使う受信機が無くなった筐体の px4d は止める (内蔵カードリーダーを復号に使っていれば止めない。UserlandDaemon.Prepare)。
- * 筐体も受信機も px4d --list-json で分かっているので、ここで顔ぶれは変わらない (Px4.cs)。
+ * **asicen-userland の筐体の asicend を起動する。** 顔ぶれ (設定か、自動で見つけたもの) のうち、使う受信機がある筐体ぶん。
+ * 使う受信機が無くなった筐体の asicend は止める (内蔵カードリーダーを復号に使っていれば止めない。UserlandDaemon.Prepare)。
  * 画面からの書き換えと抜き差しで同時に呼ばれても、あとから呼んだほうが最後の設定で揃えるよう 1 つずつ通す
  */
 var daemonsGate = new Lock();
-// 止めるときに px4d / asicend を止めたら立てる。そのあとの抜き差しや設定の書き換えで起動し直さない
+// 止めるときに asicend を止めたら立てる。そのあとの抜き差しや設定の書き換えで起動し直さない
 var daemonsStopped = false;
 void PrepareDaemons()
 {
@@ -191,9 +190,7 @@ void PrepareDaemons()
     {
         if (daemonsStopped) return;
         bool CardInUse(string name) => Keys.Local.Name == name;
-        // 設定に px4: で残っている、エージェントが直に持つ機種の筐体は起動せず、理由を記録する (Px4Daemon.Ensure)
-        UserlandDaemon.Prepare<Px4Daemon>([.. Px4Userland.IdsIn(pool.Tuners)], Px4Daemon.For, CardInUse);
-        // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
+        // 配布物が無ければ顔ぶれにも出ない (Asicen.cs)
         UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For, CardInUse);
     }
 }
@@ -536,7 +533,7 @@ app.MapPut("/denpa/tuners", async (HttpContext http) =>
     {
         lock (tunersGate) ApplyTuners([.. next.OfType<TunerSpec>()]);
     });
-    // 新しく書かれた筐体があれば px4d / asicend を起動する。数秒かかるので応答は待たせない
+    // 新しく書かれた筐体があれば asicend を起動する。数秒かかるので応答は待たせない
     _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, TunerList());
 });
@@ -625,7 +622,7 @@ app.MapPut("/denpa/card/readers", async (HttpContext http) =>
             else if (Zd1j.Parse(device) is { } zd1j) Zd1jBoard.CloseIfIdle(zd1j);
         }
     });
-    // 内蔵カードリーダーのためだけに動かしていた px4d / asicend を止める (UserlandDaemon.Prepare)。応答は待たせない
+    // 内蔵カードリーダーのためだけに動かしていた asicend を止める (UserlandDaemon.Prepare)。応答は待たせない
     _ = Task.Run(PrepareDaemons);
     await Respond.Write(http, new JsonObject { ["disabled"] = Json.Strings(disabled.Order(StringComparer.Ordinal)) });
 });
@@ -687,12 +684,12 @@ app.MapFallback((HttpContext http) =>
     Respond.Write(http, new JsonObject { ["ok"] = false, ["error"] = "not found" }, 404));
 
 /*
- * **px4d / asicend は背景で起動する。** ready までファームウェアの流し込みで
+ * **asicend は背景で起動する。** ready までファームウェアの流し込みで
  * 数秒、駄目な筐体なら 30 秒待つので、ここで待つと HTTP の API (= PT3 など他の
  * チューナーの提供) まで遅れる。筐体が無ければ何もしない。
  *
  * **手元のカードは起動したときに開いておく** (LocalCard.Warm)。最初の選局がカードを開くのを待たない。
- * px4d / asicend の内蔵リーダーは起動してからでないと見えないので、起動し終えたらもう一度試す
+ * asicend の内蔵リーダーは起動してからでないと見えないので、起動し終えたらもう一度試す
  * (開けていれば何もしない)。鍵を受け取る拠点 (CARD_URL) で配りもしないなら、手元のカードは使わない
  */
 var warmCard = cardUrl is not { Length: > 0 } || sharing is not null;
@@ -741,7 +738,7 @@ app.Lifetime.ApplicationStopped.Register(() =>
     Dt295NativeDevice.CloseAll();
     // IT930x の機材は受信機をスリープにし、電源を切ってから閉じる
     It930xDevice.CloseAll();
-    // 利用者を全部離してから px4d / asicend を止める。SIGTERM で LNB を 0V に戻して終わる
+    // 利用者を全部離してから asicend を止める。SIGTERM で LNB を 0V に戻して終わる
     lock (daemonsGate) daemonsStopped = true;
     UserlandDaemon.StopAll();
 });

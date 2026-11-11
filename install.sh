@@ -28,8 +28,8 @@
 #   Linux        ~/denpa (DENPA_HOME で変えられる)    compose.yml (上げ直すたびに上書き)・compose.override.yml
 #                                                     (手を入れるならここ。無いときだけ雛形を作り、あれば触らない)・config/・
 #                                                     .env (denpa とエージェントが組むときの合言葉 AGENT_PAIR_TOKEN。無いときだけ足す)
-#   Mac          /Library/Application Support/denpa/  エージェント (bin/)・px4-userland・siano-userland・本体 (server/。bun・アプリ・ffmpeg・
-#                                                     字・デコーダ)・run/ (px4d のソケット)・data/ (DB とその隣のもの・denpa.env・
+#   Mac          /Library/Application Support/denpa/  エージェント (bin/)・siano-userland・本体 (server/。bun・アプリ・ffmpeg・
+#                                                     字・デコーダ)・data/ (DB とその隣のもの・denpa.env・
 #                                                     本体を起こす denpa.sh。root だけが読み書きできる)
 #                /Library/LaunchDaemons/io.github.danything.{denpa,denpa-agent}.plist  起動したら起こし、落ちたら起こし直す
 #                /Library/LaunchAgents/io.github.danything.denpa-tray.plist          メニューバーのアプリ (bin/denpa-tray) をログインしたら起こす
@@ -48,14 +48,11 @@
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
-# px4-userland / siano-userland のバージョン (Mac)。**agent/Dockerfile・install.ps1 と揃える** (Renovate がいっしょに上げる)。
+# siano-userland のバージョン (Mac)。**agent/Dockerfile・install.ps1 と揃える** (Renovate がいっしょに上げる)。
 # 中身は配布元の SHA256SUMS で確かめるので、バージョンを上げてもここのハッシュは要らない
-# renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
-PX4_USERLAND_VERSION=0.2.1
 # renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
 SIANO_USERLAND_VERSION=0.1.10
 ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
-# IT930x のファームウェアはエージェントに同梱している (agent/Denpa.Agent/Px4Firmware.cs)。ここでは置かない
 
 REPO=danything/denpa
 URL=http://localhost:3000
@@ -338,9 +335,6 @@ SERVER_LABEL=io.github.danything.denpa
 PREFIX="/Library/Application Support/denpa"
 # DB・denpa.env・本体を起こす denpa.sh (合言葉が入る)。root だけが読み書きできる
 DATA="$PREFIX/data"
-# px4d の制御ソケットの置き場。**短く保つ。** Unix ソケットのパスは macOS だと 104 バイトまでで、
-# この下に px4-userland/<筐体の番号>/control.sock (42 文字) が付く。px4d は置き場の持ち主が自分 (root) であることを求める
-RUNTIME="$PREFIX/run"
 AGENT_PLIST="/Library/LaunchDaemons/$LABEL.plist"
 SERVER_PLIST="/Library/LaunchDaemons/$SERVER_LABEL.plist"
 # メニューバーのアプリ (tray/mac)。エージェントと同じ tar.gz に入っていて、ログインしたら /Library/LaunchAgents から起きる
@@ -522,8 +516,6 @@ mac_register_agent() {
 $agent_host
     <key>TUNERS_FILE</key><string>$DENPA_DIR/config/tuners.json</string>
     <key>CHANNELS_FILE</key><string>$DENPA_DIR/config/channels.json</string>
-    <key>PX4_USERLAND_DIR</key><string>$PREFIX/px4-userland</string>
-    <key>PX4_RUNTIME_DIR</key><string>$RUNTIME</string>
     <key>SIANO_USERLAND_DIR</key><string>$PREFIX/siano-userland</string>
     <key>SIANO_FIRMWARE</key><string>$PREFIX/siano-userland/firmware/isdbt_rio.inp</string>
     <key>RAW_DIR</key><string>$MEDIA/recorded</string>
@@ -633,7 +625,7 @@ EOF
   die "denpa が応答しません。ログを見てください: $LOGS/denpa.log"
 }
 
-# 置くものを $work/new に揃える。エージェント (bin)・px4-userland・siano-userland と、--agent-only でなければ本体 (server)。
+# 置くものを $work/new に揃える。エージェント (bin)・siano-userland と、--agent-only でなければ本体 (server)。
 # $1 (バージョン) が空なら手元の tar.gz (DENPA_AGENT_TARBALL・DENPA_SERVER_TARBALL)
 mac_payload() {
   # --- エージェント本体 (GitHub のリリース) -------------------------------
@@ -647,15 +639,6 @@ mac_payload() {
     check "$agent" "$(awk '{print $1}' "$agent.sha256")"
   fi
   mkdir -p new/bin && tar -xzf "$agent" -C new/bin
-
-  # --- px4-userland (PX-Q3U4 など) ----------------------------------------
-  say "px4-userland $PX4_USERLAND_VERSION"
-  base="https://github.com/Khronos31/px4-userland/releases/download/v$PX4_USERLAND_VERSION"
-  px4="px4-userland-$PX4_USERLAND_VERSION-darwin-arm64.tar.gz"
-  fetch "$base/$px4" "$px4"
-  fetch "$base/SHA256SUMS" px4.sums
-  check_listed "$px4" px4.sums
-  mkdir -p new/px4-userland && tar -xzf "$px4" -C new/px4-userland
 
   # --- siano-userland (PX-S1UD など) --------------------------------------
   say "siano-userland $SIANO_USERLAND_VERSION"
@@ -715,13 +698,13 @@ mac_main() {
     mac_remove_launch_agent
     mac_stop_tray
     rm -f "$SERVER_PLIST" "$AGENT_PLIST" "$TRAY_PLIST" "$DATA/denpa.sh" "$DATA/wake-at"
-    for part in bin px4-userland siano-userland server run; do rm -rf "${PREFIX:?}/$part"; done
+    for part in bin siano-userland server; do rm -rf "${PREFIX:?}/$part"; done
     say "外しました。残してあるもの (要らなければ手で消してください):"
     say "  DB と denpa.env $DATA / エージェントの設定 $DENPA_DIR / 録画 $MEDIA / ログ $LOGS"
     return 0
   fi
 
-  [ "$(uname -m)" = arm64 ] || die "対応しているのは Apple Silicon (arm64) の Mac だけです (px4-userland / siano-userland に Intel Mac 用がありません)"
+  [ "$(uname -m)" = arm64 ] || die "対応しているのは Apple Silicon (arm64) の Mac だけです (siano-userland に Intel Mac 用がありません)"
 
   # 作業場所は /tmp の下に、その人も入れるように作る (sudo -u で docker を呼ぶとき、今いる場所を読めないと sh が警告を出す)
   work=$(mktemp -d /tmp/denpa-install.XXXXXX)
@@ -745,16 +728,13 @@ mac_main() {
   mkdir -p "$PREFIX" "$LOGS"
   chown root:wheel "$PREFIX"
   chmod 755 "$PREFIX"
-  parts="bin px4-userland siano-userland"
+  parts="bin siano-userland"
   [ "$agent_only" = yes ] || parts="$parts server"
   for part in $parts; do
     rm -rf "${PREFIX:?}/$part"
     mv "new/$part" "$PREFIX/$part"
     chown -R root:wheel "$PREFIX/$part"
   done
-  mkdir -p "$RUNTIME"
-  chown root:wheel "$RUNTIME"
-  chmod 700 "$RUNTIME"
   # その人のフォルダは、その人のものとして作る
   as_user mkdir -p "$DENPA_DIR/config" "$MEDIA/recorded" "$MEDIA/library"
 

@@ -24,8 +24,8 @@
         <Compile Include="../Denpa.Agent/DeviceProbe.cs" />
         <Compile Include="../Denpa.Agent/ChannelTable.cs" />
         <Compile Include="../Denpa.Agent/Tuning.cs" />
-        <Compile Include="../Denpa.Agent/Px4.cs" />
-        <Compile Include="../Denpa.Agent/Px4Firmware.cs" />
+        <Compile Include="../Denpa.Agent/Userland.cs" />
+        <Compile Include="../Denpa.Agent/TunerNotice.cs" />
         <Compile Include="../Denpa.Agent/Siano.cs" />
         <Compile Include="../Denpa.Agent/Asicen.cs" />
         <Compile Include="../Denpa.Agent/ChildTs.cs" />
@@ -36,8 +36,8 @@
         <Compile Include="../Denpa.Agent/CardLan.cs" />
         <Compile Include="../Denpa.Agent/Cas.cs" />
         <Compile Include="../Denpa.Agent/BCas.cs" />
-        <Compile Include="../Denpa.Agent/Px4Card.cs" />
-        <Compile Include="../Denpa.Agent/Px4Control.cs" />
+        <Compile Include="../Denpa.Agent/UserlandCard.cs" />
+        <Compile Include="../Denpa.Agent/UserlandControl.cs" />
         <Compile Include="../Denpa.Agent/CardLinks.cs" />
         <Compile Include="../Denpa.Agent/CardChoice.cs" />
         <Compile Include="../Denpa.Agent/UsbFs.cs" />
@@ -90,7 +90,7 @@
         <Compile Include="../Denpa.Agent/Probe.cs" />
         <Compile Include="../Denpa.Agent/TsObservation.cs" />
         <Compile Include="../Denpa.Agent/TlvObservation.cs" />
-        <!-- 本体と同じ名前で埋め込む (Px4Firmware.Bundled が読む) -->
+        <!-- 本体と同じ名前で埋め込む (It930xFirmware.Embedded が読む) -->
         <EmbeddedResource Include="../Denpa.Agent/firmware/it930x-firmware.bin" LogicalName="it930x-firmware.bin" />
         <!--
           PX-MLT5PE と J:COM の QC26 (BS4K の再送信) を受けて、TSMF から選んだ分割 TLV の単位 1,082 個 (198 KiB)。

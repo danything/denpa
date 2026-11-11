@@ -4,12 +4,12 @@ using System.Globalization;
 namespace Denpa.Agent;
 
 /*
- * IT930x の USB ブリッジを積んだ機材を、px4d を使わずにエージェントが直に持つための層 (#1578)。
+ * IT930x の USB ブリッジを積んだ機材を、エージェントが直に持つための層 (#1578)。
  *
  * ブリッジ (It930xBridge.cs)、受信機ごとに TS を分ける層 (It930xTs.cs)、機材とチューナー (It930xDevice.cs)、
  * 受信機の後ろのチップ (CXD2856ER と CXD2858ER は Cxd2856.cs・Cxd2858.cs、TC90522 と R850・RT710 は Tc90522.cs・R850.cs・Rt710.cs)、
  * 実機で試す入口 (It930xProbe.cs の --it930x-probe と、Probe.cs の --tune it930x:… と --card it930x:…) がある。
- * **この表の機種 (Family) は、いつもエージェントが持つ。** 自動検出 (Detect) が it930x:<USB のポート>:<受信機> で挙げ、px4d は挙げず、起動もしない (Px4Userland.ParseJson)。
+ * 自動検出 (Detect) が、この表の機種 (Family) を it930x:<USB のポート>:<受信機> で挙げる。
  * 受信機ごとの割り当ては仕様書 (denpa-spec の mlt5/spec.md の 1.2 と、px4/spec.md の 1・2.2・13) から。
  * コメントの「MLT5 の仕様書」は mlt5/spec.md、「px4 の仕様書」は px4/spec.md。
  */
@@ -307,16 +307,6 @@ public static class It930x
         if (!UsbSysfs.IsPort(port)) return null;
         if (!int.TryParse(rest[(colon + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var receiver) || receiver is < 0 or > 4) return null;
         return (port, receiver);
-    }
-
-    /// <summary>
-    /// <c>px4d --list-json</c> の筐体が、この表の機種か。**この表の機種は px4d に持たせない** (<see cref="Px4Userland.ParseJson"/>)。
-    /// USB の ID (<c>0511:024e</c>) で見分ける。ID が読めなかったときだけ、機種の名前 (<c>PX-MLT5PE</c>。メーカーを除いた部分と同じか) で見分ける
-    /// </summary>
-    public static It930xModel? Listed(string? usb, string? model)
-    {
-        if (usb?.Split(':') is [var vendor, var product] && Hex(vendor) is { } vid && Hex(product) is { } pid) return Find(vid, pid);
-        return model is { Length: > 0 } ? Family.FirstOrDefault(known => known.Name[(known.Name.LastIndexOf(' ') + 1)..].Equals(model, StringComparison.OrdinalIgnoreCase)) : null;
     }
 
     /// <summary>画面に出す受信機の名前 (<c>PLEX PX-MLT5PE 4-12.1 #0</c>)</summary>

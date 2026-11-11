@@ -651,7 +651,7 @@ public class It930xDeviceTests
         await Assert.That(It930x.Parse("it930x:1-2.3:5")).IsNull();
         await Assert.That(It930x.Parse("it930x:1-2.3")).IsNull();
         await Assert.That(It930x.Parse("it930x:foo:0")).IsNull();
-        await Assert.That(It930x.Parse("px4:0001:0")).IsNull();
+        await Assert.That(It930x.Parse("asicen:1-2:0")).IsNull();
     }
 
     [Test]
@@ -701,27 +701,5 @@ public class It930xDeviceTests
         {
             dir.Delete(true);
         }
-    }
-
-    [Test]
-    [Arguments("0511:024e", "PX-MLT5PE", "PLEX PX-MLT5PE")]
-    [Arguments("0511:084E", "px4", "PLEX PX-MLT5U")]
-    [Arguments("0511:924e", null, "e-Better DTV02A-5TS-P")]
-    // USB の ID が読めなかったときだけ、機種の名前で見分ける
-    [Arguments(null, "PX-MLT5U", "PLEX PX-MLT5U")]
-    [Arguments(null, "DTV02A-5TS-P", "e-Better DTV02A-5TS-P")]
-    [Arguments("0511:084a", "PX-Q3U4", "PLEX PX-Q3U4")]
-    [Arguments("0511:0855", "px4", "PLEX PX-S1UR")]
-    // 表に無い機種 (PX-MLT8UT) は px4d の筐体のまま
-    [Arguments("0511:0051", "PX-MLT8UT", null)]
-    // USB の ID が読めていれば、名前では決めない
-    [Arguments("0511:084a", "PX-MLT5PE", "PLEX PX-Q3U4")]
-    [Arguments("0511:0051", "PX-MLT5PE", null)]
-    [Arguments(null, "PX-Q3U4", "PLEX PX-Q3U4")]
-    [Arguments(null, "PX-MLT8UT", null)]
-    [Arguments(null, null, null)]
-    public async Task px4d_の一覧の筐体が_MLT5_系かは_USB_の_ID_で見分ける(string? usb, string? model, string? expected)
-    {
-        await Assert.That(It930x.Listed(usb, model)?.Name).IsEqualTo(expected);
     }
 }

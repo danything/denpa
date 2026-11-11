@@ -34,8 +34,8 @@ public static partial class Interop
     /// 1 つのプロセスに SIGTERM。**待たない。**
     ///
     /// <para>
-    /// px4-userland の <c>px4d</c> は SIGTERM で LNB を 0V に戻してから終わるので、
-    /// まず SIGTERM を送り、終わらなければ呼んだ側が SIGKILL を送る (Px4.cs / Siano.cs)
+    /// asicend と siano-ts は SIGTERM で後片付けをしてから終わるので、
+    /// まず SIGTERM を送り、終わらなければ呼んだ側が SIGKILL を送る (Userland.cs / Siano.cs)
     /// </para>
     ///
     /// <para>

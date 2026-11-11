@@ -97,12 +97,6 @@ public sealed class Config(string tunersFile, string channelsFile)
     /// <summary>CECH-ZD1 J がチャンネルごとに記録したロックの値 (tuners.json の隣。消してよい。Zd1j.cs の <see cref="Zd1jLocks"/>)</summary>
     public string Zd1jLocksFile => Path.Combine(Dir, "zd1j-locks.json");
 
-    /// <summary>
-    /// px4-userland の機材に流し込む IT930x のファームウェアを、書き出して置く場所 (tuners.json の隣。
-    /// 同梱のものを書き出す。<see cref="Px4Firmware"/>)
-    /// </summary>
-    public string Px4FirmwareFile => Path.Combine(Dir, Px4Firmware.FileName);
-
     /// <summary>使わないカードリーダーの名前 (tuners.json の隣。画面から書く。<see cref="CardChoice"/>)</summary>
     public string CardsFile => Path.Combine(Dir, "cards.json");
 

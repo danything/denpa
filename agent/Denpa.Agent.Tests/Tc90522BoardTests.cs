@@ -464,7 +464,7 @@ public class Tc90522BoardTests
         await Assert.That(It930x.Receivable("it930x:3-1:4", Identify)!).IsEmpty();
         // 機種が分からない (抜いてある) ときは、どの機種かを決められないので全部
         await Assert.That(It930x.Receivable("it930x:3-9:0", Identify)!).IsEquivalentTo(new[] { "GR", "BS", "CS", "CATV", "SKY" }, CollectionOrdering.Matching);
-        await Assert.That(It930x.Receivable("px4:00001205000960:0", Identify)).IsNull();
+        await Assert.That(It930x.Receivable("asicen:1-2:0", Identify)).IsNull();
     }
 
     [Test]

@@ -362,7 +362,7 @@ jobs:
           cat agent.log
 
       # 入れ方を通しで (エージェントだけ。denpa 本体ごとは下の server-macos)。エージェントはリリースから取らずにいまビルドしたものを入れ、
-      # px4-userland / siano-userland / ファームウェアは本物を取ってきてハッシュを確かめ、
+      # siano-userland とそのファームウェアは本物を取ってきてハッシュを確かめ、
       # root の LaunchDaemon に載せて API が答えるまで。最後に消す。
       # sudo は環境変数を落とすので -E で渡す (PATH も。ランナーの sudo は PATH を決め直しうる)
       - name: install.sh end to end
@@ -394,18 +394,15 @@ jobs:
           # 上げ直しても合言葉は変えない
           sudo -E env PATH="$PATH" bash install.sh --agent-only
           test "$(cat "$HOME/denpa/config/tls/pair-token")" = "$token"
-          ls -l "$prefix/px4-userland" "$prefix/siano-userland"
-          # px4d のソケットの置き場は root のもので、ほかの人は入れない (px4d がそう求める)
-          test "$(stat -f '%Su %Lp' "$prefix/run")" = "root 700"
+          ls -l "$prefix/siano-userland"
           # libusb は中に抱えている (Homebrew のものに繋がない)。ランナーには Homebrew の libusb が
           # 入りうるので、動いたことでは確かめられない。繋ぎ先を直に見る
-          for bin in px4-userland/px4d siano-userland/siano-ts; do
+          for bin in siano-userland/siano-ts; do
             otool -L "$prefix/$bin"
             if otool -L "$prefix/$bin" | grep -q libusb; then
               echo "$bin が外の libusb に繋いでいます" >&2; exit 1
             fi
           done
-          "$prefix/px4-userland/px4d" --list || true
           sudo -E env PATH="$PATH" bash install.sh --uninstall
           test ! -e "$plist"
           test ! -e "$prefix/bin"
@@ -623,7 +620,7 @@ jobs:
           exit 0
 
       # 入れ方を通しで (エージェントだけ。denpa 本体ごとは下の server-windows)。エージェントはいまビルドしたものを zip にして入れ、
-      # px4-userland・siano-userland と siano のファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに
+      # siano-userland と siano のファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに
       # SYSTEM で載せて API が答えるまで。IT930x のファームウェアはエージェントに同梱しているので、install.ps1 は置かない。
       # 1 回目は irm | iex と同じやり方 (取ってきた中身を scriptblock にして) で流す。2 回目は上げ直し
       # (動いているエージェントを止めて入れ替える)。最後に外す
@@ -653,50 +650,11 @@ jobs:
           & "$prefix\siano-userland\siano-ts.exe" --list
           "siano-ts --list: exit $LASTEXITCODE"
           Get-Content "$prefix\denpa-agent.cmd"
-          if (Select-String -LiteralPath "$prefix\denpa-agent.cmd" -SimpleMatch 'PX4_FIRMWARE' -Quiet) { throw 'PX4_FIRMWARE should not be in the .cmd (the agent uses its bundled firmware)' }
           # -AgentOnly installs no server
           if (Get-ScheduledTask -TaskName denpa -ErrorAction SilentlyContinue) { throw 'denpa task with -AgentOnly' }
           if (Test-Path "$prefix\server") { throw 'server installed with -AgentOnly' }
           # No tray at sign-in either (it shows the server)
           if (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name denpa -ErrorAction SilentlyContinue) { throw 'tray registered with -AgentOnly' }
-
-          # px4-userland: only px4d.exe / px4ctl.exe / license files, no px4-ts.exe or WinSCard.dll, no firmware (bundled in the agent).
-          # No tuner on the runner, so check that the real binaries run and take our arguments.
-          # px4d wants a runtime dir owned by the user running it (C:\denpa-run is SYSTEM's), so make one for this user
-          $px4 = "$prefix\px4-userland"
-          foreach ($file in 'px4d.exe', 'px4ctl.exe', 'LICENSE', 'DEPENDENCY-NOTICE.txt') {
-            if (-not (Test-Path "$px4\$file")) { throw "px4-userland: $file missing" }
-          }
-          foreach ($file in 'px4-ts.exe', 'winscard', 'firmware\it930x-firmware.bin') {
-            if (Test-Path "$px4\$file") { throw "px4-userland: $file should not be installed" }
-          }
-          $rt = 'C:\denpa-run-test'
-          New-Item -ItemType Directory -Force $rt | Out-Null
-          $me = [Security.Principal.WindowsIdentity]::GetCurrent().User
-          $rtAcl = New-Object Security.AccessControl.DirectorySecurity
-          $rtAcl.SetOwner($me)
-          $rtAcl.SetAccessRuleProtection($true, $false)
-          foreach ($sid in $me, (New-Object Security.Principal.SecurityIdentifier 'S-1-5-18')) {
-            $rtAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule $sid, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))
-          }
-          (Get-Item $rt).SetAccessControl($rtAcl)
-          $ErrorActionPreference = 'Continue'
-          $json = & "$px4\px4d.exe" --list-json
-          "px4d --list-json: exit $LASTEXITCODE $json"
-          if ($LASTEXITCODE -ne 0 -or $json -notmatch '"enclosures"') { throw 'px4d --list-json failed' }
-          & "$px4\px4d.exe" --device 00000000000000 --firmware agent\Denpa.Agent\firmware\it930x-firmware.bin --runtime-dir $rt --allow-lnb-power --exit-on-stdin-eof
-          "px4d without a tuner: exit $LASTEXITCODE"
-          if ($LASTEXITCODE -ne 3) { throw 'px4d should say NOT_FOUND (exit 3)' }
-          & "$px4\px4ctl.exe" --device 00000000000000 --runtime-dir $rt status
-          "px4ctl status without px4d: exit $LASTEXITCODE"
-          if ($LASTEXITCODE -eq 0) { throw 'px4ctl status should fail without px4d' }
-          $ErrorActionPreference = 'Stop'
-          # C:\denpa-run: owned by SYSTEM (the agent runs as SYSTEM), protected DACL with SYSTEM and Administrators only
-          $acl = Get-Acl C:\denpa-run
-          $acl.Access | Format-Table IdentityReference, FileSystemRights, IsInherited -AutoSize
-          $owner = (New-Object Security.Principal.NTAccount $acl.Owner).Translate([Security.Principal.SecurityIdentifier]).Value
-          if ($owner -ne 'S-1-5-18') { throw "C:\denpa-run owner is $($acl.Owner)" }
-          if (-not $acl.AreAccessRulesProtected -or @($acl.Access).Count -ne 2) { throw 'C:\denpa-run DACL is not the expected one' }
 
           # install.ps1 waits until denpa-agent --status answers again, and keeps the pair token
           & $script -AgentOnly -NoOpen
@@ -705,7 +663,6 @@ jobs:
           & $script -Uninstall
           if (Get-ScheduledTask -TaskName denpa-agent -ErrorAction SilentlyContinue) { throw 'task left' }
           if (Test-Path $prefix) { throw "$prefix left" }
-          if (Test-Path C:\denpa-run) { throw 'C:\denpa-run left' }
           if (Get-Process denpa-agent -ErrorAction SilentlyContinue) { throw 'agent still running' }
           # keeps ~/denpa/config
           if (-not (Test-Path "$env:USERPROFILE\denpa\config")) { throw '~/denpa/config removed' }

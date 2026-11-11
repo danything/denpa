@@ -29,12 +29,12 @@ public static class SianoUserland
     /// </summary>
     public sealed record Stick(string Port, string Model, string[] Types, string? Driver);
 
-    /// <summary>配布アーカイブを展開した場所 (Linux は Dockerfile の <c>/opt</c>。Mac と Windows は実行ファイルの隣。<see cref="Px4Userland.Beside"/>)</summary>
+    /// <summary>配布アーカイブを展開した場所 (Linux は Dockerfile の <c>/opt</c>。Mac と Windows は実行ファイルの隣。<see cref="Userland.Beside"/>)</summary>
     public static string Dir =>
-        Environment.GetEnvironmentVariable("SIANO_USERLAND_DIR") ?? Px4Userland.Beside("siano-userland", "/opt/siano-userland");
+        Environment.GetEnvironmentVariable("SIANO_USERLAND_DIR") ?? Userland.Beside("siano-userland", "/opt/siano-userland");
 
     /// <summary>siano-ts の実行ファイル。Windows だけ <c>.exe</c> が付く (配布 zip の中身のまま)</summary>
-    public static string Executable(string dir) => Px4Userland.Executable(dir, "siano-ts");
+    public static string Executable(string dir) => Userland.Executable(dir, "siano-ts");
 
     /// <summary>ISDB-T のファームウェア。**同梱してある** (配布アーカイブに入っている。Dockerfile)</summary>
     public static string Firmware =>
@@ -83,7 +83,7 @@ public static class SianoUserland
     ///
     /// <para>
     /// <c>model=… usb=… bus=… address=… port=… status=ready receivers=N</c> の行のあとに、
-    /// <c>px4ctl list</c> と同じ形式の受信機の行が N 行続く (<see cref="Px4Receiver.ParseList"/>)。
+    /// <c>asicenctl list</c> と同じ形式の受信機の行が N 行続く (<see cref="UserlandReceiver.ParseList"/>)。
     /// 対応外の機材は <c>rejected …</c> の行で来るので、理由を <paramref name="warn"/> で残す。
     /// ポートが分からない (<c>port=-</c>) 機材は見分けられないので使わない。
     /// </para>
@@ -109,7 +109,7 @@ public static class SianoUserland
             }
             else
             {
-                var types = Px4Receiver.ParseList(receivers.ToString(), warn)
+                var types = UserlandReceiver.ParseList(receivers.ToString(), warn)
                     .SelectMany(receiver => receiver.Types)
                     .Distinct(StringComparer.Ordinal)
                     .ToArray();
@@ -125,7 +125,7 @@ public static class SianoUserland
             if (line.StartsWith("model=", StringComparison.Ordinal))
             {
                 Flush();
-                current = Px4Receiver.Fields(line);
+                current = UserlandReceiver.Fields(line);
             }
             else if (line.StartsWith("receiver=", StringComparison.Ordinal))
             {
@@ -134,7 +134,7 @@ public static class SianoUserland
             else if (line.StartsWith("rejected ", StringComparison.Ordinal))
             {
                 Flush();
-                var fields = Px4Receiver.Fields(line["rejected ".Length..]);
+                var fields = UserlandReceiver.Fields(line["rejected ".Length..]);
                 warn($"{fields.GetValueOrDefault("model")} ({fields.GetValueOrDefault("usb")}, port={fields.GetValueOrDefault("port")}) は使えません: {fields.GetValueOrDefault("status")}");
             }
         }

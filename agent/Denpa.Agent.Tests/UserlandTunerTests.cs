@@ -5,9 +5,9 @@ using System.Net.Sockets;
 namespace Denpa.Agent.Tests;
 
 /*
- * px4d の制御ソケットで受信機を取ったまま選局し直すところ (Px4Tuner。Px4.cs)。
+ * 常駐の制御ソケットで受信機を取ったまま選局し直すところ (UserlandTuner。Userland.cs)。
  *
- * px4d は無い。control.sock と stream.sock を開いて偽の px4d として動く (Px4CardTests と同じ流儀)。
+ * 常駐は無い。control.sock と stream.sock を開いて偽の常駐として動く (UserlandCardTests と同じ流儀)。
  ** 偽物が従うのは SPEC 6.3 の決まりだけ。取った lease で TUNE → START_STREAM → stream.sock に
  * ATTACH_STREAM (lease と nonce) で TS_DATA が流れ、STOP_STREAM で STREAM_END。
  * TS の中身は周波数の印 (パケットの 2 バイト目) にして、どの選局の TS かを見分ける。
@@ -19,16 +19,16 @@ namespace Denpa.Agent.Tests;
  * 同期の処理 (Tune・Dispose) を Task の中に入れる。待つところには打ち切りの合図 (cancel) を渡す
  */
 [Timeout(60_000)]
-public class Px4TunerTests
+public class UserlandTunerTests
 {
-    private const string Id = "00001205000960";
+    private const string Id = "1-2";
 
     private static readonly byte[] Nonce = [.. Enumerable.Range(1, 16).Select(i => (byte)i)];
 
     /// <summary>周波数から TS の印を作る</summary>
     internal static byte Mark(ulong khz) => (byte)(khz % 251);
 
-    internal sealed class FakePx4d : IDisposable
+    internal sealed class FakeDaemon : IDisposable
     {
         private readonly Socket _control;
         private readonly Socket _stream;
@@ -46,7 +46,7 @@ public class Px4TunerTests
         private volatile bool _closed;
         private readonly Task[] _serving;
 
-        public DirectoryInfo Runtime { get; } = Directory.CreateTempSubdirectory("px4");
+        public DirectoryInfo Runtime { get; } = Directory.CreateTempSubdirectory("userland");
 
         /// <summary>制御ソケットに来た型 (来た順)</summary>
         public List<ushort> Received { get; } = [];
@@ -86,11 +86,11 @@ public class Px4TunerTests
         private int _statsCalls;
 
         /// <summary>どちらとして動くか (asicend はフレームのヘッダとソケットの置き場だけ違う。AsicenTests)</summary>
-        public Px4Wire Wire { get; }
+        public UserlandWire Wire { get; }
 
-        public FakePx4d(Px4Wire? wire = null, string id = Id)
+        public FakeDaemon(UserlandWire? wire = null, string id = Id)
         {
-            Wire = wire ?? Px4Wire.Px4;
+            Wire = wire ?? UserlandWire.Asicen;
             var dir = Path.Combine(Runtime.FullName, Wire.Product, id);
             Directory.CreateDirectory(dir);
             _control = Listen(Path.Combine(dir, "control.sock"));
@@ -112,12 +112,12 @@ public class Px4TunerTests
         }
 
         /// <summary>
-        /// 繋いできたものを 1 本ずつ専用のスレッドで (Px4CardTests と同じ理由でスレッドプールを使わない)。
+        /// 繋いできたものを 1 本ずつ専用のスレッドで (UserlandCardTests と同じ理由でスレッドプールを使わない)。
         ///
         /// <para>
         /// **Accept で待たない。** Poll で 100ms ずつ待ち、来ているときだけ Accept する。
         /// macOS は待ち受けを閉じても Accept が戻らず、.NET の Socket.Dispose は Accept が
-        /// 戻るのを待つので、片付け (Dispose) ごと止まる。1 本繋いで Accept を戻す方法 (Px4CardTests) は
+        /// 戻るのを待つので、片付け (Dispose) ごと止まる。1 本繋いで Accept を戻す方法 (UserlandCardTests) は
         /// 1 本しか受けない偽物なら効くが、ここは受け続けるので、戻してもすぐ次の Accept に
         /// 戻って同じことになる (Mac の CI で Unit tests が 8 分で打ち切られた)
         /// </para>
@@ -168,10 +168,10 @@ public class Px4TunerTests
             {
                 while (true)
                 {
-                    var (type, _, id, payload) = Px4Control.ReadFrame(client, Px4Control.MaxPayload, Wire);
+                    var (type, _, id, payload) = UserlandControl.ReadFrame(client, UserlandControl.MaxPayload, Wire);
                     lock (Received) Received.Add(type);
                     var (flags, answer) = Answer(type, payload);
-                    Px4Control.SendAll(client, Px4Control.Encode(type, flags, id, answer, Wire));
+                    UserlandControl.SendAll(client, UserlandControl.Encode(type, flags, id, answer, Wire));
                 }
             }
             finally
@@ -190,21 +190,21 @@ public class Px4TunerTests
 
         private (ushort, byte[]) Answer(ushort type, byte[] payload)
         {
-            const ushort ok = Px4Control.ResponseFlag;
-            const ushort failed = Px4Control.ResponseFlag | Px4Control.ErrorFlag;
+            const ushort ok = UserlandControl.ResponseFlag;
+            const ushort failed = UserlandControl.ResponseFlag | UserlandControl.ErrorFlag;
             lock (_gate)
             {
                 var lease = payload.Length >= 8 ? BinaryPrimitives.ReadUInt64LittleEndian(payload) : 0;
                 switch (type)
                 {
-                    case Px4Control.Hello:
+                    case UserlandControl.Hello:
                     {
                         var hello = new byte[8];
                         BinaryPrimitives.WriteUInt16LittleEndian(hello, 1);
-                        if (Stats is not null) BinaryPrimitives.WriteUInt32LittleEndian(hello.AsSpan(4), Px4Control.StreamStatsCapability);
+                        if (Stats is not null) BinaryPrimitives.WriteUInt32LittleEndian(hello.AsSpan(4), UserlandControl.StreamStatsCapability);
                         return (ok, hello);
                     }
-                    case Px4Control.Acquire:
+                    case UserlandControl.Acquire:
                     {
                         if (AcquireError != 0) return (failed, Error(AcquireError));
                         _lease = ++_nextLease;
@@ -213,7 +213,7 @@ public class Px4TunerTests
                         Nonce.CopyTo(answer, 8);
                         return (ok, answer);
                     }
-                    case Px4Control.Tune:
+                    case UserlandControl.Tune:
                     {
                         if (lease != _lease || _lease == 0) return (failed, Error(3));
                         if (_armed || _active) return (failed, Error(4));
@@ -228,25 +228,25 @@ public class Px4TunerTests
                         BinaryPrimitives.WriteInt32LittleEndian(answer.AsSpan(1), CnrMdb);
                         return (ok, answer);
                     }
-                    case Px4Control.StartStream:
+                    case UserlandControl.StartStream:
                         if (lease != _lease || _lease == 0) return (failed, Error(3));
                         if (!_tuned) return (failed, Error(5));
                         if (_armed || _active) return (failed, Error(4));
                         _armed = true;
                         return (ok, []);
-                    case Px4Control.StopStream:
+                    case UserlandControl.StopStream:
                         if (lease != _lease || _lease == 0) return (failed, Error(3));
                         if (!_active) return (failed, Error(5));
                         _active = false;
                         return (ok, new byte[64]);
-                    case Px4Control.Stats when Stats is not null:
+                    case UserlandControl.Stats when Stats is not null:
                     {
                         if (lease != _lease || _lease == 0) return (failed, Error(3));
                         var counters = new byte[64];
                         BinaryPrimitives.WriteUInt64LittleEndian(counters.AsSpan(40), Stats(++_statsCalls));
                         return (ok, counters);
                     }
-                    case Px4Control.Release:
+                    case UserlandControl.Release:
                         if (lease != _lease || _lease == 0) return (failed, Error(3));
                         _lease = 0;
                         _tuned = _armed = _active = false;
@@ -259,16 +259,16 @@ public class Px4TunerTests
 
         private void ServeStream(Socket client)
         {
-            var (type, _, id, payload) = Px4Control.ReadFrame(client, Px4Control.MaxPayload, Wire);
+            var (type, _, id, payload) = UserlandControl.ReadFrame(client, UserlandControl.MaxPayload, Wire);
             int attachment;
             ulong khz;
             lock (_gate)
             {
-                var good = ++_attachTries != RejectAttach && type == Px4Control.AttachStream && payload.Length == 24 && _armed
+                var good = ++_attachTries != RejectAttach && type == UserlandControl.AttachStream && payload.Length == 24 && _armed
                     && BinaryPrimitives.ReadUInt64LittleEndian(payload) == _lease && payload.AsSpan(8).SequenceEqual(Nonce);
                 if (!good)
                 {
-                    Px4Control.SendAll(client, Px4Control.Encode(Px4Control.AttachStream, 3, id, Error(3), Wire));
+                    UserlandControl.SendAll(client, UserlandControl.Encode(UserlandControl.AttachStream, 3, id, Error(3), Wire));
                     return;
                 }
                 _armed = false;
@@ -276,7 +276,7 @@ public class Px4TunerTests
                 attachment = ++_attachments;
                 khz = _khz;
             }
-            Px4Control.SendAll(client, Px4Control.Encode(Px4Control.AttachStream, Px4Control.ResponseFlag, id, [], Wire));
+            UserlandControl.SendAll(client, UserlandControl.Encode(UserlandControl.AttachStream, UserlandControl.ResponseFlag, id, [], Wire));
 
             try
             {
@@ -289,7 +289,7 @@ public class Px4TunerTests
                     frame[20 + i * 188 + 1] = Mark(khz);
                 }
                 // フレームは 1 度だけ作り、番号だけ書き換えて送る (速さを測るテストで、偽物の確保を数に入れない)
-                var encoded = Px4Control.Encode(Px4Control.TsData, 0, 0, frame, Wire);
+                var encoded = UserlandControl.Encode(UserlandControl.TsData, 0, 0, frame, Wire);
                 var paced = Stopwatch.StartNew();
                 long sent = 0;
                 for (ulong sequence = 0; ; sequence++)
@@ -313,13 +313,13 @@ public class Px4TunerTests
                         var body = new byte[68];
                         if (ending) BinaryPrimitives.WriteUInt32LittleEndian(body.AsSpan(64), EndFirstStream!.Value.Code);
                         lock (_gate) if (ending) _active = false;
-                        Px4Control.SendAll(client, Px4Control.Encode(Px4Control.StreamEnd, 0, 0, body, Wire));
+                        UserlandControl.SendAll(client, UserlandControl.Encode(UserlandControl.StreamEnd, 0, 0, body, Wire));
                         // 本物と同じく、閉じるのは相手
                         while (client.Receive(new byte[16]) > 0) { }
                         return;
                     }
-                    BinaryPrimitives.WriteUInt64LittleEndian(encoded.AsSpan(Px4Control.HeaderSize), sequence);
-                    Px4Control.SendAll(client, encoded);
+                    BinaryPrimitives.WriteUInt64LittleEndian(encoded.AsSpan(UserlandControl.HeaderSize), sequence);
+                    UserlandControl.SendAll(client, encoded);
                     sent += frame.Length - 20;
                     if (Rate is null)
                     {
@@ -342,7 +342,7 @@ public class Px4TunerTests
             }
         }
 
-        /// <summary>px4d が落ちたときを再現する。繋がっている制御ソケットを切る</summary>
+        /// <summary>常駐が落ちたときを再現する。繋がっている制御ソケットを切る</summary>
         public void DropControl()
         {
             lock (_gate)
@@ -360,7 +360,7 @@ public class Px4TunerTests
             _closed = true;
             if (!Task.WaitAll(_serving, TimeSpan.FromSeconds(5)))
             {
-                throw new TimeoutException("偽の px4d の受け手が 5 秒で抜けません");
+                throw new TimeoutException("偽の常駐の受け手が 5 秒で抜けません");
             }
             _control.Dispose();
             _stream.Dispose();
@@ -386,8 +386,8 @@ public class Px4TunerTests
         }
     }
 
-    private static Px4Tuner Open(FakePx4d px4d, TimeSpan? stallLimit = null) =>
-        new(Id, 2, null, px4d.Runtime.FullName, () => null) { StallLimit = stallLimit ?? Px4Stream.DefaultStallLimit };
+    private static UserlandTuner Open(FakeDaemon daemon, TimeSpan? stallLimit = null) =>
+        new(Id, 2, null, daemon.Runtime.FullName, () => null) { StallLimit = stallLimit ?? UserlandStream.DefaultStallLimit };
 
     /// <summary>TS を 1 パケットぶん読んで、その印を返す</summary>
     internal static byte ReadMark(Stream output)
@@ -414,8 +414,8 @@ public class Px4TunerTests
     public async Task 取ったまま_2_回選局できて_2_回目は取り直さない(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d();
-        var tuner = Open(px4d);
+        using var daemon = new FakeDaemon();
+        var tuner = Open(daemon);
 
         tuner.Tune(T27);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T27.Frequency / 1000));
@@ -426,42 +426,42 @@ public class Px4TunerTests
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
 
         tuner.Dispose();
-        await Assert.That(px4d.Received.ToArray()).IsEquivalentTo(
+        await Assert.That(daemon.Received.ToArray()).IsEquivalentTo(
             new ushort[]
             {
-                Px4Control.Hello, Px4Control.Acquire, Px4Control.Tune, Px4Control.StartStream,
-                Px4Control.StopStream, Px4Control.Tune, Px4Control.StartStream,
-                Px4Control.StopStream, Px4Control.Release,
+                UserlandControl.Hello, UserlandControl.Acquire, UserlandControl.Tune, UserlandControl.StartStream,
+                UserlandControl.StopStream, UserlandControl.Tune, UserlandControl.StartStream,
+                UserlandControl.StopStream, UserlandControl.Release,
             },
             TUnit.Assertions.Enums.CollectionOrdering.Matching);
     }
 
     /// <summary>
-    /// ***流している間、px4d の数 (STATS) を問い合わせる** (#1210)。途切れたときに、受信機の側で落ちていたのかを
-    /// 記録から見分けるため。STATS を持たない px4d (HELLO で認めない) には問い合わせない
+    /// ***流している間、常駐の数 (STATS) を問い合わせる** (#1210)。途切れたときに、受信機の側で落ちていたのかを
+    /// 記録から見分けるため。STATS を持たない常駐 (HELLO で認めない) には問い合わせない
     /// </summary>
     [Test]
-    public async Task 流している間は_STATS_を問い合わせ_持たない_px4d_には問い合わせない(CancellationToken cancel)
+    public async Task 流している間は_STATS_を問い合わせ_持たない常駐には問い合わせない(CancellationToken cancel)
     {
         await Task.Yield();
-        using (var px4d = new FakePx4d { Stats = calls => (ulong)calls })
+        using (var daemon = new FakeDaemon { Stats = calls => (ulong)calls })
         {
-            var tuner = new Px4Tuner(Id, 2, null, px4d.Runtime.FullName, () => null) { StatsEvery = TimeSpan.FromMilliseconds(50) };
+            var tuner = new UserlandTuner(Id, 2, null, daemon.Runtime.FullName, () => null) { StatsEvery = TimeSpan.FromMilliseconds(50) };
             tuner.Tune(T27);
-            while (px4d.Count(Px4Control.Stats) < 2) await Task.Delay(20, cancel);
+            while (daemon.Count(UserlandControl.Stats) < 2) await Task.Delay(20, cancel);
             tuner.Dispose();
-            var after = px4d.Count(Px4Control.Stats);
+            var after = daemon.Count(UserlandControl.Stats);
             await Task.Delay(200, cancel);
             // 畳んだら問い合わせない
-            await Assert.That(px4d.Count(Px4Control.Stats)).IsEqualTo(after);
+            await Assert.That(daemon.Count(UserlandControl.Stats)).IsEqualTo(after);
         }
-        using (var px4d = new FakePx4d())
+        using (var daemon = new FakeDaemon())
         {
-            var tuner = new Px4Tuner(Id, 2, null, px4d.Runtime.FullName, () => null) { StatsEvery = TimeSpan.FromMilliseconds(50) };
+            var tuner = new UserlandTuner(Id, 2, null, daemon.Runtime.FullName, () => null) { StatsEvery = TimeSpan.FromMilliseconds(50) };
             tuner.Tune(T27);
             await Task.Delay(300, cancel);
             tuner.Dispose();
-            await Assert.That(px4d.Count(Px4Control.Stats)).IsEqualTo(0);
+            await Assert.That(daemon.Count(UserlandControl.Stats)).IsEqualTo(0);
         }
     }
 
@@ -470,8 +470,8 @@ public class Px4TunerTests
     {
         await Task.Yield();
         var silent = T28.Frequency / 1000;
-        using var px4d = new FakePx4d { TuneError = khz => khz == silent ? 6u : 0u };
-        using var tuner = Open(px4d);
+        using var daemon = new FakeDaemon { TuneError = khz => khz == silent ? 6u : 0u };
+        using var tuner = Open(daemon);
 
         var error = Assert.Throws<IOException>(() => tuner.Tune(T28));
         await Assert.That(error.Message).Contains("同期しませんでした");
@@ -479,35 +479,35 @@ public class Px4TunerTests
 
         tuner.Tune(T27);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T27.Frequency / 1000));
-        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
-        await Assert.That(px4d.Count(Px4Control.Release)).IsEqualTo(0);
+        await Assert.That(daemon.Count(UserlandControl.Acquire)).IsEqualTo(1);
+        await Assert.That(daemon.Count(UserlandControl.Release)).IsEqualTo(0);
     }
 
     [Test]
-    public async Task px4d_との接続が切れたら次の選局で取り直す(CancellationToken cancel)
+    public async Task 常駐との接続が切れたら次の選局で取り直す(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d();
-        using var tuner = Open(px4d);
+        using var daemon = new FakeDaemon();
+        using var tuner = Open(daemon);
         tuner.Tune(T27);
         ReadMark(tuner.Output);
 
-        px4d.DropControl();
+        daemon.DropControl();
         // 本物は取ったものを返してストリームも畳む。TS が尽きれば Tuned が落ちる
         await WaitUntil(() => !tuner.Tuned, cancel);
 
         tuner.Tune(T28);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
-        await Assert.That(px4d.Count(Px4Control.Hello)).IsEqualTo(2);
-        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(2);
+        await Assert.That(daemon.Count(UserlandControl.Hello)).IsEqualTo(2);
+        await Assert.That(daemon.Count(UserlandControl.Acquire)).IsEqualTo(2);
     }
 
     [Test]
-    public async Task px4d_がストリームを止めたら理由を添えて終わり_次は取ったまま選局し直す(CancellationToken cancel)
+    public async Task 常駐がストリームを止めたら理由を添えて終わり_次は取ったまま選局し直す(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d { EndFirstStream = (5, 15) };
-        using var tuner = Open(px4d);
+        using var daemon = new FakeDaemon { EndFirstStream = (5, 15) };
+        using var tuner = Open(daemon);
         tuner.Tune(T27);
 
         var output = tuner.Output;
@@ -522,15 +522,15 @@ public class Px4TunerTests
         // 同じチャンネルでも選局し直す (TunerPool は Tuned を見る)。lease はそのまま
         tuner.Tune(T27);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T27.Frequency / 1000));
-        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
+        await Assert.That(daemon.Count(UserlandControl.Acquire)).IsEqualTo(1);
     }
 
     [Test]
     public async Task 選局の応答の_CN_を_選局したときの値として返す(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d { CnrMdb = 25_340 };
-        using var tuner = Open(px4d);
+        using var daemon = new FakeDaemon { CnrMdb = 25_340 };
+        using var tuner = Open(daemon);
         await Assert.That(((ITuneDevice)tuner).Signal()).IsNull();
 
         tuner.Tune(T27);
@@ -540,55 +540,55 @@ public class Px4TunerTests
     [Test]
     public async Task 選局の応答に_CN_が無ければ_CN_は_null()
     {
-        await Assert.That(Px4Tuner.TuneSignal([1, 0, 0, 0, 0x80])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
-        await Assert.That(Px4Tuner.TuneSignal([1])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
+        await Assert.That(UserlandTuner.TuneSignal([1, 0, 0, 0, 0x80])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
+        await Assert.That(UserlandTuner.TuneSignal([1])).IsEqualTo(new TunerSignal(true, null, TunerSignal.Db, AtTune: true));
     }
 
     [Test]
     public async Task ATTACH_を断られたらその場で取り直さず_次の選局で取り直す(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d { RejectAttach = 2 };
-        using var tuner = Open(px4d);
+        using var daemon = new FakeDaemon { RejectAttach = 2 };
+        using var tuner = Open(daemon);
         tuner.Tune(T27);
 
         // 2 回目の ATTACH_STREAM を断られる。接続が切れたわけではないので、その場では取り直さない (1 度で投げる)
         var error = Assert.Throws<IOException>(() => tuner.Tune(T28));
         await Assert.That(error.Message).Contains("TS を受け取れません");
-        await Assert.That(px4d.Count(Px4Control.StartStream)).IsEqualTo(2);
-        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
+        await Assert.That(daemon.Count(UserlandControl.StartStream)).IsEqualTo(2);
+        await Assert.That(daemon.Count(UserlandControl.Acquire)).IsEqualTo(1);
         await Assert.That(tuner.Tuned).IsFalse();
 
-        // px4d の lease は armed のまま残る (本物は TUNE が BUSY になる) ので、返して取り直す
+        // 常駐の lease は armed のまま残る (本物は TUNE が BUSY になる) ので、返して取り直す
         tuner.Tune(T28);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
-        await Assert.That(px4d.Count(Px4Control.Release)).IsEqualTo(1);
-        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(2);
+        await Assert.That(daemon.Count(UserlandControl.Release)).IsEqualTo(1);
+        await Assert.That(daemon.Count(UserlandControl.Acquire)).IsEqualTo(2);
     }
 
     [Test]
     public async Task 利用者がいなければストリームを閉じ_受信機は取ったまま(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d();
-        using var tuner = Open(px4d, TimeSpan.FromMilliseconds(300));
+        using var daemon = new FakeDaemon();
+        using var tuner = Open(daemon, TimeSpan.FromMilliseconds(300));
         tuner.Tune(T27);
 
         // 誰も読まない。バッファが埋まって空かなければ stream.sock を閉じる
         await WaitUntil(() => !tuner.Tuned, cancel, TimeSpan.FromSeconds(20));
-        await WaitUntil(() => Volatile.Read(ref px4d.StreamsClosed) == 1, cancel);
+        await WaitUntil(() => Volatile.Read(ref daemon.StreamsClosed) == 1, cancel);
 
         tuner.Tune(T28);
         await Assert.That(ReadMark(tuner.Output)).IsEqualTo(Mark(T28.Frequency / 1000));
-        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
+        await Assert.That(daemon.Count(UserlandControl.Acquire)).IsEqualTo(1);
     }
 
     [Test]
     public async Task 取れなければ理由を返す(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d { AcquireError = 4 };
-        using var tuner = Open(px4d);
+        using var daemon = new FakeDaemon { AcquireError = 4 };
+        using var tuner = Open(daemon);
 
         var error = Assert.Throws<IOException>(() => tuner.Tune(T27));
         await Assert.That(error.Message).Contains("受信機 2 を取れません");
@@ -596,12 +596,12 @@ public class Px4TunerTests
     }
 
     [Test]
-    public async Task px4d_が動いていなければ理由を返す(CancellationToken cancel)
+    public async Task 常駐が動いていなければ理由を返す(CancellationToken cancel)
     {
         await Task.Yield();
-        using var tuner = new Px4Tuner(Id, 0, null, "/nonexistent", () => null);
+        using var tuner = new UserlandTuner(Id, 0, null, "/nonexistent", () => null);
         var error = Assert.Throws<IOException>(() => tuner.Tune(T27));
-        await Assert.That(error.Message).Contains("px4d に繋がりません");
+        await Assert.That(error.Message).Contains("asicend に繋がりません");
     }
 
     /// <summary>選局し直すたびに stream.sock を作る。閉じ忘れれば fd が 1 本ずつ増える</summary>
@@ -613,17 +613,17 @@ public class Px4TunerTests
         if (!OperatingSystem.IsLinux()) return;
         static int Fds() => Directory.GetFiles("/proc/self/fd").Length;
 
-        using var px4d = new FakePx4d();
-        using var tuner = Open(px4d);
+        using var daemon = new FakeDaemon();
+        using var tuner = Open(daemon);
         tuner.Tune(T27);
         var before = Fds();
         for (var i = 0; i < 30; i++) tuner.Tune(i % 2 == 0 ? T28 : T27);
-        // 偽の px4d の後始末 (閉じた stream.sock を向こうが閉じる) が追いつくのを少し待つ
+        // 偽の常駐の後始末 (閉じた stream.sock を向こうが閉じる) が追いつくのを少し待つ
         await Task.Delay(300, cancel);
         // 漏れていれば選局 1 回につき stream.sock で 30 本以上増える。並んで走る他のテストと
-        // 偽の px4d の揺れは数本 (CI でちょうど 5 本だったことがある) なので、間を大きく取る
+        // 偽の常駐の揺れは数本 (CI でちょうど 5 本だったことがある) なので、間を大きく取る
         await Assert.That(Fds() - before).IsLessThan(15);
-        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
+        await Assert.That(daemon.Count(UserlandControl.Acquire)).IsEqualTo(1);
     }
 
     private static async Task WaitUntil(Func<bool> condition, CancellationToken cancel, TimeSpan? limit = null)
@@ -640,20 +640,20 @@ public class Px4TunerTests
     public async Task _15V_を出せない受信機には_0V_でリクエストし_画面に理由を出す(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d();
+        using var daemon = new FakeDaemon();
         // PX-M1UR のような受信機 (衛星も受けるが 15V は出せない)。設定には 15v と書いてある
-        IReadOnlyList<Px4Receiver> receivers = [new(2, true, true, false)];
-        var tuner = new Px4Tuner(Id, 2, "15v", px4d.Runtime.FullName, () => receivers);
+        IReadOnlyList<UserlandReceiver> receivers = [new(2, true, true, false)];
+        var tuner = new UserlandTuner(Id, 2, "15v", daemon.Runtime.FullName, () => receivers);
         var bs = ChannelTable.Parse("BS15:16625")!;
 
         tuner.Tune(bs);
         tuner.Tune(bs);
-        await Assert.That(px4d.Lnbs.ToArray()).IsEquivalentTo(new byte[] { 0, 0 }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
-        await Assert.That(Px4Userland.Notice(Px4Userland.Device(Id, 2))).Contains("15V を出せない");
+        await Assert.That(daemon.Lnbs.ToArray()).IsEquivalentTo(new byte[] { 0, 0 }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(TunerNotice.Get(AsicenUserland.Device(Id, 2))).Contains("15V を出せない");
 
         // 閉じたら消す (設定を変えて開き直したとき、古い注意書きを残さない)
         tuner.Dispose();
-        await Assert.That(Px4Userland.Notice(Px4Userland.Device(Id, 2))).IsNull();
+        await Assert.That(TunerNotice.Get(AsicenUserland.Device(Id, 2))).IsNull();
     }
 
     /// <summary>
@@ -664,9 +664,9 @@ public class Px4TunerTests
     public async Task バッファが埋まったら決めた時間で畳む(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d { Rate = 0 };
+        using var daemon = new FakeDaemon { Rate = 0 };
         var limit = TimeSpan.FromSeconds(1);
-        using var tuner = Open(px4d, limit);
+        using var tuner = Open(daemon, limit);
         var since = Stopwatch.StartNew();
         tuner.Tune(T27);
 
@@ -675,7 +675,7 @@ public class Px4TunerTests
         // バッファは 8MB。流せるだけ流すので埋まるのはすぐ。そこから 1 秒 (と定期チェックの 50ms) で畳む
         await Assert.That(took).IsGreaterThanOrEqualTo(limit);
         await Assert.That(took).IsLessThan(limit + TimeSpan.FromSeconds(4));
-        await Assert.That(px4d.Count(Px4Control.Acquire)).IsEqualTo(1);
+        await Assert.That(daemon.Count(UserlandControl.Acquire)).IsEqualTo(1);
     }
 
     /// <summary>
@@ -686,8 +686,8 @@ public class Px4TunerTests
     public async Task 待っている読む側は止める指示を受けたらすぐ抜ける(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d { FramesThenSilence = 1 };
-        using var tuner = Open(px4d);
+        using var daemon = new FakeDaemon { FramesThenSilence = 1 };
+        using var tuner = Open(daemon);
         tuner.Tune(T27);
         var output = (DeviceStream)tuner.Output;
 
@@ -713,8 +713,8 @@ public class Px4TunerTests
     public async Task 流している最中でもすぐ止まる(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new FakePx4d { Rate = 0 };
-        using var tuner = Open(px4d);
+        using var daemon = new FakeDaemon { Rate = 0 };
+        using var tuner = Open(daemon);
         tuner.Tune(T27);
         var output = tuner.Output;
 
@@ -744,11 +744,11 @@ public class Px4TunerTests
     }
 
     /// <summary>
-    /// 受信機ごとに接続を持ち、**要求を全部 1 つのキューで順に片付ける** 偽の px4d (#1713)。
-    /// 本物の px4d も同じブリッジの受信機の要求は 1 つずつ処理する。
+    /// 受信機ごとに接続を持ち、**要求を全部 1 つのキューで順に片付ける** 偽の常駐 (#1713)。
+    /// 本物の常駐も同じブリッジの受信機の要求は 1 つずつ処理する。
     /// TUNE は <see cref="TuneTakes"/> かけて「同期しませんでした」(TIMEOUT) で応答する
     /// </summary>
-    private sealed class QueuedPx4d : IDisposable
+    private sealed class QueuedDaemon : IDisposable
     {
         private readonly Socket _control;
         private readonly Lock _queue = new();
@@ -757,20 +757,20 @@ public class Px4TunerTests
         private volatile bool _closed;
         private ulong _nextLease = 0x1000;
 
-        public DirectoryInfo Runtime { get; } = Directory.CreateTempSubdirectory("px4");
+        public DirectoryInfo Runtime { get; } = Directory.CreateTempSubdirectory("userland");
 
         public TimeSpan TuneTakes { get; init; }
 
         public int Acquired;
 
-        public QueuedPx4d()
+        public QueuedDaemon()
         {
-            var dir = Path.Combine(Runtime.FullName, Px4Wire.Px4.Product, Id);
+            var dir = Path.Combine(Runtime.FullName, UserlandWire.Asicen.Product, Id);
             Directory.CreateDirectory(dir);
             _control = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             _control.Bind(new UnixDomainSocketEndPoint(Path.Combine(dir, "control.sock")));
             _control.Listen();
-            // 待ち方は FakePx4d.Serve と同じ (Accept で待たない)
+            // 待ち方は FakeDaemon.Serve と同じ (Accept で待たない)
             _serving = Task.Factory.StartNew(() =>
             {
                 while (!_closed)
@@ -792,9 +792,9 @@ public class Px4TunerTests
                         {
                             while (true)
                             {
-                                var (type, _, id, _) = Px4Control.ReadFrame(client, Px4Control.MaxPayload, Px4Wire.Px4);
+                                var (type, _, id, _) = UserlandControl.ReadFrame(client, UserlandControl.MaxPayload, UserlandWire.Asicen);
                                 var (flags, answer) = Answer(type);
-                                Px4Control.SendAll(client, Px4Control.Encode(type, flags, id, answer, Px4Wire.Px4));
+                                UserlandControl.SendAll(client, UserlandControl.Encode(type, flags, id, answer, UserlandWire.Asicen));
                             }
                         }
                         catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException)
@@ -811,19 +811,19 @@ public class Px4TunerTests
 
         private (ushort, byte[]) Answer(ushort type)
         {
-            const ushort ok = Px4Control.ResponseFlag;
-            const ushort failed = Px4Control.ResponseFlag | Px4Control.ErrorFlag;
+            const ushort ok = UserlandControl.ResponseFlag;
+            const ushort failed = UserlandControl.ResponseFlag | UserlandControl.ErrorFlag;
             lock (_queue)
             {
                 switch (type)
                 {
-                    case Px4Control.Hello:
+                    case UserlandControl.Hello:
                     {
                         var hello = new byte[8];
                         BinaryPrimitives.WriteUInt16LittleEndian(hello, 1);
                         return (ok, hello);
                     }
-                    case Px4Control.Acquire:
+                    case UserlandControl.Acquire:
                     {
                         Interlocked.Increment(ref Acquired);
                         var answer = new byte[24];
@@ -831,19 +831,19 @@ public class Px4TunerTests
                         Nonce.CopyTo(answer, 8);
                         return (ok, answer);
                     }
-                    case Px4Control.Tune:
+                    case UserlandControl.Tune:
                     {
                         Thread.Sleep(TuneTakes);
                         var error = new byte[6];
-                        BinaryPrimitives.WriteUInt32LittleEndian(error, Px4Error.Timeout);
+                        BinaryPrimitives.WriteUInt32LittleEndian(error, UserlandError.Timeout);
                         return (failed, error);
                     }
-                    case Px4Control.Release:
+                    case UserlandControl.Release:
                         return (ok, []);
                     default:
                     {
                         var error = new byte[6];
-                        BinaryPrimitives.WriteUInt32LittleEndian(error, Px4Error.InvalidArgument);
+                        BinaryPrimitives.WriteUInt32LittleEndian(error, UserlandError.InvalidArgument);
                         return (failed, error);
                     }
                 }
@@ -853,7 +853,7 @@ public class Px4TunerTests
         public void Dispose()
         {
             _closed = true;
-            if (!_serving.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("偽の px4d の受け手が 5 秒で抜けません");
+            if (!_serving.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("偽の常駐の受け手が 5 秒で抜けません");
             _control.Dispose();
             lock (_open)
             {
@@ -874,10 +874,10 @@ public class Px4TunerTests
     }
 
     /// <summary>
-    /// **同じ筐体の受信機を同時に選局しても、px4d の順番待ちで時間切れにしない** (#1713)。
+    /// **同じ筐体の受信機を同時に選局しても、常駐の順番待ちで時間切れにしない** (#1713)。
     ///
     /// <para>
-    /// 複数のチューナーでスキャンすると、4 つの TUNE が px4d のキューに並ぶ。同期しないチャンネルは
+    /// 複数のチューナーでスキャンすると、4 つの TUNE が常駐のキューに並ぶ。同期しないチャンネルは
     /// 1 つ 5 秒かかるので、後ろのほうは応答が来るまでに待つ上限 (7 秒) を過ぎていた。
     /// 時間切れを「接続が切れた」とみなして受信機を返し、取り直しは BUSY で断られ、
     /// そのチャンネルがスキャンの結果から落ちていた
@@ -887,9 +887,9 @@ public class Px4TunerTests
     public async Task 同じ筐体の受信機を同時に選局しても時間切れにならない(CancellationToken cancel)
     {
         await Task.Yield();
-        using var px4d = new QueuedPx4d { TuneTakes = TimeSpan.FromSeconds(2.5) };
+        using var daemon = new QueuedDaemon { TuneTakes = TimeSpan.FromSeconds(2.5) };
         var tuners = Enumerable.Range(0, 4)
-            .Select(receiver => new Px4Tuner(Id, receiver, null, px4d.Runtime.FullName, () => null))
+            .Select(receiver => new UserlandTuner(Id, receiver, null, daemon.Runtime.FullName, () => null))
             .ToList();
         try
         {
@@ -910,7 +910,7 @@ public class Px4TunerTests
 
             // どれも「同期しませんでした」で終わる。時間切れ (TimedOut) や取り直し (BUSY) にならない
             await Assert.That(messages).IsEquivalentTo(Enumerable.Repeat(ITuneDevice.SyncFailed, 4).ToArray());
-            await Assert.That(px4d.Acquired).IsEqualTo(4);
+            await Assert.That(daemon.Acquired).IsEqualTo(4);
         }
         finally
         {

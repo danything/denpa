@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
  * asicen-userland の機材 (Asicen.cs)。
  *
  * 機材は無い。sysfs を模したディレクトリから USB 機能を探すところ、筐体へのまとめ方、device の文字列、
- * IPC の違い (フレームのヘッダとソケットの置き場) を、偽の px4d (Px4TunerTests.FakePx4d を asicend の代わりにしたもの) で確かめる。
+ * IPC の違い (フレームのヘッダとソケットの置き場) を、偽の常駐 (UserlandTunerTests.FakeDaemon を asicend の代わりにしたもの) で確かめる。
  * 本物の asicend の模擬 (`--mock`) が手元にあれば (ASICEN_USERLAND_DIR)、それともやり取りする。
  */
 public class AsicenTests
@@ -114,19 +114,18 @@ public class AsicenTests
     [Arguments("asicen:00001205000960:0")]
     [Arguments("asicen:../x:0")]
     [Arguments("asicen:1-:0")]
-    [Arguments("px4:1-2:0")]
+    [Arguments("siano:1-2")]
     public async Task 形式の違う_device_は断る(string device)
     {
         await Assert.That(AsicenUserland.Parse(device)).IsNull();
     }
 
     [Test]
-    public async Task フレームのヘッダとソケットの置き場が_px4d_と違う()
+    public async Task フレームのヘッダとソケットの置き場は_asicen_userland_のもの()
     {
-        var frame = Px4Control.Encode(Px4Control.Hello, 0, 1, [], Px4Wire.Asicen);
+        var frame = UserlandControl.Encode(UserlandControl.Hello, 0, 1, [], UserlandWire.Asicen);
         await Assert.That(frame.AsSpan(0, 4).SequenceEqual("ASCN"u8)).IsTrue();
-        await Assert.That(Px4Control.Encode(Px4Control.Hello, 0, 1, []).AsSpan(0, 4).SequenceEqual("PX4U"u8)).IsTrue();
-        await Assert.That(Px4Control.Endpoint("/run/x", "1-2", "control.sock", Px4Wire.Asicen))
+        await Assert.That(UserlandControl.Endpoint("/run/x", "1-2", "control.sock", UserlandWire.Asicen))
             .IsEqualTo(Path.Combine("/run/x", "asicen-userland", "1-2", "control.sock"));
     }
 
@@ -177,7 +176,7 @@ public class AsicenTests
     }
 }
 
-/// <summary>偽の asicend (偽の px4d を ASCN のヘッダと asicen-userland の置き場にしたもの) とやり取りする</summary>
+/// <summary>偽の asicend (偽の常駐を ASCN のヘッダと asicen-userland の置き場にしたもの) とやり取りする</summary>
 [ExcludeOn(OS.Windows)]
 [Timeout(60_000)]
 public class AsicenTunerTests
@@ -185,46 +184,46 @@ public class AsicenTunerTests
     private static readonly ChannelTable.Tuning T27 = ChannelTable.Parse("T27")!;
     private static readonly ChannelTable.Tuning Bs15 = ChannelTable.Parse("BS15:16625")!;
 
-    private static Px4Tuner Open(Px4TunerTests.FakePx4d asicend, int receiver, string? lnb) => new(
+    private static UserlandTuner Open(UserlandTunerTests.FakeDaemon asicend, int receiver, string? lnb) => new(
         "1-2", receiver, lnb, asicend.Runtime.FullName, () => AsicenUserland.Receivers(),
-        Px4Wire.Asicen, AsicenUserland.Device("1-2", receiver), $"asicen-1-2 #{receiver}");
+        UserlandWire.Asicen, AsicenUserland.Device("1-2", receiver), $"asicen-1-2 #{receiver}");
 
     [Test]
     public async Task 受信機を取って選局できる(CancellationToken cancel)
     {
         await Task.Yield();
-        using var asicend = new Px4TunerTests.FakePx4d(Px4Wire.Asicen, "1-2");
+        using var asicend = new UserlandTunerTests.FakeDaemon(UserlandWire.Asicen, "1-2");
         using var tuner = Open(asicend, 1, null);
 
         tuner.Tune(T27);
-        await Assert.That(Px4TunerTests.ReadMark(tuner.Output)).IsEqualTo(Px4TunerTests.Mark(T27.Frequency / 1000));
-        await Assert.That(asicend.Count(Px4Control.Acquire)).IsEqualTo(1);
+        await Assert.That(UserlandTunerTests.ReadMark(tuner.Output)).IsEqualTo(UserlandTunerTests.Mark(T27.Frequency / 1000));
+        await Assert.That(asicend.Count(UserlandControl.Acquire)).IsEqualTo(1);
     }
 
     [Test]
     public async Task 地上波の受信機に衛星はリクエストしない(CancellationToken cancel)
     {
         await Task.Yield();
-        using var asicend = new Px4TunerTests.FakePx4d(Px4Wire.Asicen, "1-2");
+        using var asicend = new UserlandTunerTests.FakeDaemon(UserlandWire.Asicen, "1-2");
         using var tuner = Open(asicend, 1, null);
 
         var error = Assert.Throws<IOException>(() => tuner.Tune(Bs15));
         await Assert.That(error!.Message).Contains("GR 用");
-        await Assert.That(asicend.Count(Px4Control.Hello)).IsEqualTo(0);
+        await Assert.That(asicend.Count(UserlandControl.Hello)).IsEqualTo(0);
     }
 
     [Test]
     public async Task LNB_15V_と書いてあっても_0V_で選局して画面に理由を出す(CancellationToken cancel)
     {
         await Task.Yield();
-        using var asicend = new Px4TunerTests.FakePx4d(Px4Wire.Asicen, "1-2");
+        using var asicend = new UserlandTunerTests.FakeDaemon(UserlandWire.Asicen, "1-2");
         var tuner = Open(asicend, 0, "15v");
 
         tuner.Tune(Bs15);
         await Assert.That(asicend.Lnbs.ToArray()).IsEquivalentTo(new byte[] { 0 });
-        await Assert.That(Px4Userland.Notice("asicen:1-2:0")).Contains("15V");
+        await Assert.That(TunerNotice.Get("asicen:1-2:0")).Contains("15V");
         tuner.Dispose();
-        await Assert.That(Px4Userland.Notice("asicen:1-2:0")).IsNull();
+        await Assert.That(TunerNotice.Get("asicen:1-2:0")).IsNull();
     }
 }
 
@@ -257,8 +256,8 @@ public class AsicenMockTests
             await Assert.That(daemon.Receivers!.Select(r => string.Join("/", r.Types)).ToArray())
                 .IsEquivalentTo(new[] { "BS/CS", "GR", "BS/CS", "GR" });
 
-            using (var tuner = new Px4Tuner(
-                "1-2", 1, null, runtime.FullName, () => daemon.Receivers, Px4Wire.Asicen, "asicen:1-2:1", "asicen-1-2 #1"))
+            using (var tuner = new UserlandTuner(
+                "1-2", 1, null, runtime.FullName, () => daemon.Receivers, UserlandWire.Asicen, "asicen:1-2:1", "asicen-1-2 #1"))
             {
                 foreach (var channel in new[] { "T27", "T21" })
                 {

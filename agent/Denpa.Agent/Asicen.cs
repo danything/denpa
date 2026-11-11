@@ -6,8 +6,8 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **配布物が無ければ何もしない** (<see cref="Installed"/>。agent/Dockerfile の <c>ASICEN_USERLAND_VERSION=0.0.0</c> が「まだ無い」の印)。
-/// **IPC は px4-userland と同じ**で、違うのはフレームのヘッダとソケットの置き場だけ (<see cref="Px4Wire.Asicen"/>)。
-/// 受信機・TS・内蔵カードは px4d と同じ経路 (<see cref="Px4Tuner"/> / <see cref="Px4Card"/>) を通す。
+/// **IPC は px4-userland の portable IPC を取り込んだもの**で、フレームのヘッダとソケットの置き場だけが違う (<see cref="UserlandWire.Asicen"/>)。
+/// 受信機・TS・内蔵カードは <see cref="UserlandTuner"/> / <see cref="UserlandCard"/> を通す (Userland.cs)。
 /// 機材は sysfs で見つける (<see cref="Scan"/>。上流に並べる道具がまだ無い)。作りは docs/agent.md「asicen-userland の作り」。
 /// </para>
 ///
@@ -58,7 +58,7 @@ public static class AsicenUserland
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
     /// <summary><c>asicen:1-2:1</c> を割る。形式が違えば null</summary>
-    public static (string Id, int Receiver)? Parse(string device) => Px4Userland.Parse(device, Scheme, ValidId);
+    public static (string Id, int Receiver)? Parse(string device) => Userland.Parse(device, Scheme, ValidId);
 
     /// <summary>
     /// ポート (<c>1-2</c>、<c>3-1.4</c>)。筐体の名前もこの形式で、asicend の <c>--instance</c> に
@@ -86,7 +86,7 @@ public static class AsicenUserland
     /// 筐体 1 台。asicend には USB 機能を 2 つとも渡す (<c>--primary</c> が内蔵ハブの <c>.1</c>、
     /// <c>--sibling</c> が <c>.2</c>。上流がこの並び以外を断る)
     /// </summary>
-    public sealed record Enclosure(string Id, string Model, Function Primary, Function Sibling, IReadOnlyList<Px4Receiver> Receivers);
+    public sealed record Enclosure(string Id, string Model, Function Primary, Function Sibling, IReadOnlyList<UserlandReceiver> Receivers);
 
     /// <summary>
     /// sysfs から ASICEN の USB 機能を探す。**上流の asicend が受け付ける USB ID だけ。**
@@ -147,10 +147,10 @@ public static class AsicenUserland
     /// <summary>
     /// 受信機の並び。**上流の決まり (<c>0:S, 1:T, 2:S, 3:T</c>。USB 機能ごとに衛星・地上波の順)。**
     /// asicend を起動したあとは <c>asicenctl list</c> の出力で置き換える (<see cref="AsicenDaemon"/>)。
-    /// LNB の給電はできない (上流が断る) ので、15V と書いてあっても 0V で選局する (<see cref="Px4Tuner.Lnb"/>)
+    /// LNB の給電はできない (上流が断る) ので、15V と書いてあっても 0V で選局する (<see cref="UserlandTuner.Lnb"/>)
     /// </summary>
-    public static List<Px4Receiver> Receivers() =>
-        [.. Enumerable.Range(0, 4).Select(index => new Px4Receiver(index, index % 2 == 1, index % 2 == 0, false))];
+    public static List<UserlandReceiver> Receivers() =>
+        [.. Enumerable.Range(0, 4).Select(index => new UserlandReceiver(index, index % 2 == 1, index % 2 == 0, false))];
 
     /// <summary>挿さっている筐体 (ファームウェア待ちのものには先に流し込む)。配布物が無ければ空</summary>
     public static List<Enclosure> Enclosures(Action<string>? warn = null)
@@ -231,13 +231,13 @@ public static class AsicenUserland
     public static List<TunerSpec> Detect() => Specs(Enclosures());
 
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
-        Px4Userland.Specs(enclosures.Select(enclosure => (enclosure.Id, enclosure.Model, enclosure.Receivers)), Name, Device);
+        Userland.Specs(enclosures.Select(enclosure => (enclosure.Id, enclosure.Model, enclosure.Receivers)), Name, Device);
 
     /// <summary>設定に出てくる筐体。asicend を起動する対象</summary>
-    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Px4Userland.IdsIn(specs, Parse);
+    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Userland.IdsIn(specs, Parse);
 
-    /// <summary>受信機 1 つを開く。**受信機の取得・返却と選局は px4d と同じ経路** (<see cref="Px4Tuner"/>)</summary>
-    public static ITuneDevice Open(string id, int receiver, string? lnb) => new Px4Tuner(
+    /// <summary>受信機 1 つを開く。**受信機の取得・返却と選局は制御ソケットで** (<see cref="UserlandTuner"/>)</summary>
+    public static ITuneDevice Open(string id, int receiver, string? lnb) => new UserlandTuner(
         id, receiver, lnb, RuntimeDir,
         () =>
         {
@@ -246,20 +246,20 @@ public static class AsicenUserland
             // 受信機の並びを取得できなかったときも上流の決まりの並びで扱う。null だと 15V をそのまま指定して断られる
             return daemon.Receivers ?? Receivers();
         },
-        Px4Wire.Asicen, Device(id, receiver), $"asicen-{id} #{receiver}");
+        UserlandWire.Asicen, Device(id, receiver), $"asicen-{id} #{receiver}");
 
-    /// <summary>asicend が起動している筐体の内蔵カードリーダー (px4d と同じ IPC。<see cref="Px4Card"/>)</summary>
+    /// <summary>asicend が起動している筐体の内蔵カードリーダー (<see cref="UserlandCard"/>)</summary>
     public static IReadOnlyList<CardLinkCandidate> Cards() => Cards(RuntimeDir);
 
     internal static IReadOnlyList<CardLinkCandidate> Cards(string runtimeDir) =>
-        Px4Card.Find(runtimeDir, Px4Wire.Asicen, ValidId, ReaderName);
+        UserlandCard.Find(runtimeDir, UserlandWire.Asicen, ValidId, ReaderName);
 
     /// <summary>筐体の内蔵カードリーダーの名前</summary>
     public static string ReaderName(string id) => $"asicen-userland {id} Internal Card Reader";
 }
 
 /// <summary>
-/// <c>asicend</c> 1 つ (<see cref="UserlandDaemon"/>。px4d と同じ扱い)。
+/// <c>asicend</c> 1 つ (<see cref="UserlandDaemon"/>)。
 ///
 /// <para>
 /// asicend には USB のアドレスとポートを 2 組とも渡す (<c>--hardware --primary BUS:ADDR --primary-port …

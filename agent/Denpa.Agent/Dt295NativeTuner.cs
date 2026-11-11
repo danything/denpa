@@ -384,10 +384,10 @@ public sealed class Dt295NativeTuner : ITuneDevice
             catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or TimeoutException)
             {
                 // 開けない、設定を書けない。空いているときも画面に出す
-                Px4Userland.SetNotice(_key, this, error.Message);
+                TunerNotice.Set(_key, this, error.Message);
                 throw new IOException(error.Message, error);
             }
-            Px4Userland.ClearNotice(_key, this);
+            TunerNotice.Clear(_key, this);
             var device = _device;
             var timeline = device.Timeline;
             // 同じ機材のカードの準備を、選局と並べて始める (復号は TS が届いてからすぐ始められる)

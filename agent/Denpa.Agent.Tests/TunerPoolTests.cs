@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
  * 偽のチューナー (FakeTuner) は、選局と読み出しの最中に閉じられたか、閉じたあとに使われたかを数える。
  * 本物なら閉じた fd を読むところ。選局と 1 回の読み出しに掛かる時間はテストごとに決める。
  *
- * **固まったら失敗にする** (Px4TunerTests と同じ)。Timeout が効くのはテストが Task を返してからなので、
+ * **固まったら失敗にする** (UserlandTunerTests と同じ)。Timeout が効くのはテストが Task を返してからなので、
  * 各テストは最初に `await Task.Yield()` する。待つところには打ち切りの合図 (cancel) を渡す
  */
 [Timeout(30_000)]

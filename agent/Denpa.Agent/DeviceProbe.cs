@@ -140,12 +140,6 @@ public static class DeviceProbe
         }
 
         /*
-         * px4-userland の機材は、筐体も受信機も px4d --list-json に問い合わせる。
-         * デバイスノードは出ない (Px4.cs)
-         */
-        found.AddRange(Px4Userland.Detect());
-
-        /*
          * siano-userland の機材 (PX-S1UD など) は、**どのドライバにも繋がっていないものだけ。**
          * smsusb が使っていれば上の /dev/dvb で見つかっている (Siano.cs)
          */
@@ -168,7 +162,7 @@ public static class DeviceProbe
         found.AddRange(Dt295.Detect());
 
         /*
-         * IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) も並べるだけで開かない (開くとファームウェアを起動して電源を入れる)。px4d はこれらの機種を挙げない (It930x.cs)
+         * IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) も並べるだけで開かない (開くとファームウェアを起動して電源を入れる) (It930x.cs)
          */
         found.AddRange(It930x.Detect());
 
@@ -192,7 +186,7 @@ public static class DeviceProbe
     /// <para>
     /// <c>GET /denpa/tuners</c> の <c>receivable</c> に入れ、denpa はこれに無い種別を設定で選ばせず、保存でも断る。
     /// 定義の <c>types</c> は画面から書き換えられるので、BS/CS 専用の受信機に GR を入れて保存でき、
-    /// その台に割り振られた地上波の選局が受信機の確認 (<see cref="Px4Tuner.Check"/>) で全部断られていた (#2386)
+    /// その台に割り振られた地上波の選局が受信機の確認 (<see cref="UserlandTuner.Check"/>) で全部断られていた (#2386)
     /// </para>
     /// </summary>
     public static string[]? Receivable(string? device) =>

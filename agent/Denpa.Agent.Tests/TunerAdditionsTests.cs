@@ -40,12 +40,12 @@ public sealed class TunerAdditionsTests
     public async Task 受けられる種別は見つけた機材のもので_見つけていない機材は_null()
     {
         DeviceProbe.Remember([
-            new TunerSpec("PX-W3U4-3141 #0", ["BS", "CS"], false, "px4:test-2386:0"),
-            new TunerSpec("PX-W3U4-3141 #2", ["GR"], false, "px4:test-2386:2"),
+            new TunerSpec("PX-W3U3 2-3 #0", ["BS", "CS"], false, "asicen:2-3:0"),
+            new TunerSpec("PX-W3U3 2-3 #2", ["GR"], false, "asicen:2-3:2"),
         ]);
-        await Assert.That(DeviceProbe.Receivable("px4:test-2386:0")).IsEquivalentTo(new[] { "BS", "CS" });
-        await Assert.That(DeviceProbe.Receivable("px4:test-2386:2")).IsEquivalentTo(new[] { "GR" });
-        await Assert.That(DeviceProbe.Receivable("px4:test-2386:9")).IsNull();
+        await Assert.That(DeviceProbe.Receivable("asicen:2-3:0")).IsEquivalentTo(new[] { "BS", "CS" });
+        await Assert.That(DeviceProbe.Receivable("asicen:2-3:2")).IsEquivalentTo(new[] { "GR" });
+        await Assert.That(DeviceProbe.Receivable("asicen:2-3:9")).IsNull();
         await Assert.That(DeviceProbe.Receivable(null)).IsNull();
     }
 }

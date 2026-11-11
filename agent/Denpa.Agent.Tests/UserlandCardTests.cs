@@ -4,30 +4,30 @@ using System.Net.Sockets;
 namespace Denpa.Agent.Tests;
 
 /*
- * px4d の制御ソケット越しのカード (Px4Card.cs)。
+ * 常駐の制御ソケット越しのカード (UserlandCard.cs)。
  *
- * px4d は無い。同じ場所に Unix ソケットを開いて偽の px4d にし、
+ * 常駐は無い。同じ場所に Unix ソケットを開いて偽の常駐にし、
  * **やり取りするバイト列が SPEC 6 節の通りか**を見る。
  */
-public class Px4CardTests
+public class UserlandCardTests
 {
-    private const string Id = "00001205000960";
+    private const string Id = "1-2";
 
     private sealed record Frame(ushort Type, ushort Flags, uint RequestId, byte[] Payload);
 
-    /// <summary>偽の px4d。受け取った要求を残し、<c>answer</c> が返したものを返す (null なら切る)</summary>
-    private sealed class FakePx4d : IDisposable
+    /// <summary>偽の常駐。受け取った要求を残し、<c>answer</c> が返したものを返す (null なら切る)</summary>
+    private sealed class FakeDaemon : IDisposable
     {
         private readonly Socket _listener;
         private readonly Task _serving;
 
-        public DirectoryInfo Runtime { get; } = Directory.CreateTempSubdirectory("px4");
+        public DirectoryInfo Runtime { get; } = Directory.CreateTempSubdirectory("userland");
         public List<Frame> Received { get; } = [];
         public string SocketPath { get; }
 
-        public FakePx4d(Func<Frame, (ushort Flags, byte[] Payload)?> answer)
+        public FakeDaemon(Func<Frame, (ushort Flags, byte[] Payload)?> answer)
         {
-            var dir = Path.Combine(Runtime.FullName, "px4-userland", Id);
+            var dir = Path.Combine(Runtime.FullName, "asicen-userland", Id);
             Directory.CreateDirectory(dir);
             SocketPath = Path.Combine(dir, "control.sock");
             _listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
@@ -70,7 +70,7 @@ public class Px4CardTests
         public static byte[] Encode(ushort type, ushort flags, uint requestId, byte[] payload)
         {
             var frame = new byte[20 + payload.Length];
-            "PX4U"u8.CopyTo(frame);
+            "ASCN"u8.CopyTo(frame);
             BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(4), 1);
             BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(8), type);
             BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(10), flags);
@@ -127,7 +127,7 @@ public class Px4CardTests
         return payload;
     }
 
-    /// <summary>正しく応答する px4d</summary>
+    /// <summary>正しく応答する常駐</summary>
     private static (ushort, byte[])? Healthy(Frame frame)
     {
         switch (frame.Type)
@@ -161,35 +161,35 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task 起動している_px4d_の筐体を挙げる()
+    public async Task 起動している常駐の筐体を挙げる()
     {
-        using var px4d = new FakePx4d(Healthy);
-        Directory.CreateDirectory(Path.Combine(px4d.Runtime.FullName, "px4-userland", "000000000012345"));  // ソケットが無い
-        Directory.CreateDirectory(Path.Combine(px4d.Runtime.FullName, "px4-userland", "tmp"));
+        using var daemon = new FakeDaemon(Healthy);
+        Directory.CreateDirectory(Path.Combine(daemon.Runtime.FullName, "asicen-userland", "3-4"));  // ソケットが無い
+        Directory.CreateDirectory(Path.Combine(daemon.Runtime.FullName, "asicen-userland", "tmp"));
 
-        var found = Px4Card.Find(px4d.Runtime.FullName);
+        var found = AsicenUserland.Cards(daemon.Runtime.FullName);
 
-        await Assert.That(found.Select(c => c.Name)).IsEquivalentTo(new[] { "px4-userland 0960 Internal Card Reader" });
-        await Assert.That(Px4Card.Find(Path.Combine(px4d.Runtime.FullName, "none"))).IsEmpty();
+        await Assert.That(found.Select(c => c.Name)).IsEquivalentTo(new[] { "asicen-userland 1-2 Internal Card Reader" });
+        await Assert.That(AsicenUserland.Cards(Path.Combine(daemon.Runtime.FullName, "none"))).IsEmpty();
     }
 
     [Test]
     public async Task HELLO_から_APDU_まで仕様の通りに送る()
     {
-        using var px4d = new FakePx4d(Healthy);
-        var link = Px4Card.Find(px4d.Runtime.FullName)[0].Open();
+        using var daemon = new FakeDaemon(Healthy);
+        var link = AsicenUserland.Cards(daemon.Runtime.FullName)[0].Open();
 
         var atr = link.Reset();
         var answer = link.Transmit([0x90, 0x30, 0x00, 0x00, 0x00]);
         var again = link.Reset();
         link.Dispose();
-        px4d.Wait();
+        daemon.Wait();
 
         await Assert.That(atr).IsEquivalentTo(Atr);
         await Assert.That(again).IsEquivalentTo(Atr);
         await Assert.That(answer).IsEquivalentTo(new byte[] { 0x30, 0x90, 0x00 });
 
-        var sent = px4d.Received;
+        var sent = daemon.Received;
         await Assert.That(sent.Select(f => f.Type)).IsEquivalentTo(new ushort[] { 0x0001, 0x0031, 0x0035, 0x0034, 0x0033 });
         await Assert.That(sent.All(f => f.Flags == 0)).IsTrue();
         await Assert.That(sent.Select(f => f.RequestId)).IsEquivalentTo(new uint[] { 1, 2, 3, 4, 5 });
@@ -210,8 +210,8 @@ public class Px4CardTests
     [Test]
     public async Task エラーの応答は理由を付けて投げる()
     {
-        using var px4d = new FakePx4d(frame => frame.Type == 0x0031 ? (3, Error(12, "slot empty")) : Healthy(frame));
-        using var link = Px4Card.Find(px4d.Runtime.FullName)[0].Open();
+        using var daemon = new FakeDaemon(frame => frame.Type == 0x0031 ? (3, Error(12, "slot empty")) : Healthy(frame));
+        using var link = AsicenUserland.Cards(daemon.Runtime.FullName)[0].Open();
 
         var error = Assert.Throws<IOException>(() => link.Reset());
         await Assert.That(error.Message).Contains("カードが挿さっていません");
@@ -219,10 +219,10 @@ public class Px4CardTests
     }
 
     [Test]
-    public async Task カードを扱わない_px4d_には繋がない()
+    public async Task カードを扱わない常駐には繋がない()
     {
-        using var px4d = new FakePx4d(frame => frame.Type == 0x0001 ? (1, HelloOk(0)) : null);
-        var candidate = Px4Card.Find(px4d.Runtime.FullName)[0];
+        using var daemon = new FakeDaemon(frame => frame.Type == 0x0001 ? (1, HelloOk(0)) : null);
+        var candidate = AsicenUserland.Cards(daemon.Runtime.FullName)[0];
 
         var error = Assert.Throws<IOException>(() => candidate.Open());
         await Assert.That(error.Message).Contains("カードに対応していません");
@@ -231,26 +231,26 @@ public class Px4CardTests
     [Test]
     public async Task 途中で切れたら_IOException()
     {
-        using var px4d = new FakePx4d(frame => frame.Type == 0x0035 ? null : Healthy(frame));
-        using var link = Px4Card.Find(px4d.Runtime.FullName)[0].Open();
+        using var daemon = new FakeDaemon(frame => frame.Type == 0x0035 ? null : Healthy(frame));
+        using var link = AsicenUserland.Cards(daemon.Runtime.FullName)[0].Open();
         link.Reset();
 
         var error = Assert.Throws<IOException>(() => link.Transmit([0x90, 0x34]));
-        await Assert.That(error.Message).Contains("px4d");
+        await Assert.That(error.Message).Contains("asicend");
     }
 
     [Test]
-    public async Task 起動していない_px4d_は_IOException()
+    public async Task 起動していない常駐は_IOException()
     {
-        var error = Assert.Throws<IOException>(() => Px4Card.Open("none", "/nonexistent/control.sock"));
-        await Assert.That(error.Message).Contains("px4d に繋がりません");
+        var error = Assert.Throws<IOException>(() => UserlandCard.Open("none", "/nonexistent/control.sock"));
+        await Assert.That(error.Message).Contains("asicend に繋がりません");
     }
 
     [Test]
     public async Task 崩れた応答は受けない()
     {
-        using var px4d = new FakePx4d(frame => frame.Type == 0x0001 ? ((ushort)1, HelloOk()) : ((ushort)1, new byte[] { 0 }));
-        using var link = Px4Card.Find(px4d.Runtime.FullName)[0].Open();
+        using var daemon = new FakeDaemon(frame => frame.Type == 0x0001 ? ((ushort)1, HelloOk()) : ((ushort)1, new byte[] { 0 }));
+        using var link = AsicenUserland.Cards(daemon.Runtime.FullName)[0].Open();
 
         // CARD_CONNECT の応答として 1 バイトしか来ない
         var error = Assert.Throws<IOException>(() => link.Reset());

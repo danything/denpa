@@ -130,7 +130,7 @@ public class SianoTests
         await Assert.That(SianoUserland.Parse("siano:1-2:1.0")).IsNull();
         await Assert.That(SianoUserland.Parse("siano:usb1")).IsNull();
         await Assert.That(SianoUserland.Parse("siano:1-2;reboot")).IsNull();
-        await Assert.That(SianoUserland.Parse("px4:00001205000960:2")).IsNull();
+        await Assert.That(SianoUserland.Parse("asicen:1-2:1")).IsNull();
         await Assert.That(TunerPool.OpenDevice("siano:1-2", null)).IsTypeOf<SianoTuner>();
     }
 
