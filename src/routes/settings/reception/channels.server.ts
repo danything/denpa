@@ -18,6 +18,9 @@ import {
 } from "#lib/server/reception.js";
 import {
   observedOf,
+  REMOVABLE_TYPES,
+  type RemovableType,
+  removeType,
   SCAN_KINDS,
   type ScanKind,
   scanState,
@@ -195,6 +198,23 @@ export const actions = {
   seenLineup: () => {
     seenLineupChanges();
     return { success: true };
+  },
+
+  /**
+   * ケーブルかスカパー！プレミアムのチャンネルと局を消す。受信できるチューナーが無く、スキャンし直して消せないときだけ (`scan.ts` の `removeType`)。
+   * 画面は押し間違いを防ぐ 2 回目 (「削除を確定」) で送ってくる
+   */
+  removeType: async ({ request }) => {
+    const type = String((await request.formData()).get("type") ?? "");
+    if (!REMOVABLE_TYPES.includes(type as RemovableType))
+      return fail(400, { message: "削除する種別の指定が不正です" });
+    try {
+      const result = await removeType(type as RemovableType);
+      if (!result.removed) return fail(409, { message: result.message });
+      return { success: true, scan: result.message };
+    } catch (error) {
+      return fail(502, { message: `局を削除できませんでした: ${error}` });
+    }
   },
 
   /** 走っているスキャンを中断する。設定は書き換えないまま止まる */
