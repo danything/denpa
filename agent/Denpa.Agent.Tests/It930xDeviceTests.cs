@@ -3,7 +3,7 @@ namespace Denpa.Agent.Tests;
 /*
  * IT930x の機材 (It930xDevice.cs)、ブリッジの I2C と GPIO (It930xBridge.cs)、設定の device の形と自動検出 (It930x.cs)。
  * 偽のブリッジ (It930xFakes.cs) の I2C を、偽の復調器とチューナー (Cxd2856Fakes.cs) につなぐ。
- * ブリッジのレジスタの番地は ITE の SDK (brRegister.h・brVariable.h) のもの、値と順は仕様書 (denpa-spec の mlt5/spec.md) の節。
+ * ブリッジのレジスタの番地は ITE の SDK (brRegister.h・brVariable.h) のもの、値と順は仕様書 (denpa-spec の cxd2856/spec.md) の節。
  */
 public class It930xDeviceTests
 {
@@ -63,11 +63,11 @@ public class It930xDeviceTests
         await Assert.That(valid).IsEqualTo((byte)1);
         await Assert.That(usb.Log).IsEquivalentTo(new[]
         {
-            // I2C の速さ (仕様書 1.3)
+            // I2C の速さ (IT930x の仕様書 4.2)
             "W F6A7=07", "W F103=07",
             // 端子の駆動の強さ (IT9300_initialize)
             "W D833=01", "W D830=00", "W D831=01", "W D832=00",
-            // 受信機 0〜4 の T の 8 ビットのアドレスとバス (仕様書 1.3)
+            // 受信機 0〜4 の T の 8 ビットのアドレスとバス (IT930x の仕様書 4.2・5.1)
             "W 4975=CA", "W 4971=03", "W 4974=D8", "W 4970=01", "W 4973=C8", "W 496F=01", "W 4972=D8", "W 496E=03", "W 4964=C8", "W 4963=03",
             "R 4979 1",
         });
@@ -85,14 +85,14 @@ public class It930xDeviceTests
             await Assert.That(log).IsEquivalentTo(new[]
             {
                 "W D833=01", "W D830=00", "W D831=01", "W D832=00",
-                // 開いたとき (仕様書 1.5): GPIOH7 = 1 (電源を切る)、GPIOH2 = 0 (リセット中)、GPIOH11 = 0 (LNB を切る)。出力にする・有効・値の順
+                // 開いたとき (IT930x の仕様書 7.2): GPIOH7 = 1 (電源を切る)、GPIOH2 = 0 (リセット中)、GPIOH11 = 0 (LNB を切る)。出力にする・有効・値の順
                 "W D8C4=01", "W D8C5=01", "W D8C3=01",
                 "W D8B8=01", "W D8B9=01", "W D8B7=00",
                 "W D8D4=01", "W D8D5=01", "W D8D3=00",
                 // 電源を入れる: GPIOH7 ← 0、80 ms、GPIOH2 ← 1、20 ms
                 "W D8C3=00", "W D8B7=01",
             });
-            // BOOT のあと 20 ms (SDK)、GPIO のあと 20 ms (仕様書 11)、電源の 80 ms と 20 ms (仕様書 1.5)
+            // BOOT のあと 20 ms (SDK)、GPIO のあと 20 ms (仕様書 11)、電源の 80 ms と 20 ms (IT930x の仕様書 7.2)
             await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 20, 20, 80, 20 });
             // 受信機には、使うまで触らない
             await Assert.That(usb.Log.Any(line => line.StartsWith("I2C", StringComparison.Ordinal))).IsFalse();
@@ -102,7 +102,7 @@ public class It930xDeviceTests
             device.Release();
             It930xDevice.CloseIfIdle("9-1", TimeSpan.Zero);
         }
-        // 閉じると電源を切る (仕様書 1.5: GPIOH2 ← 0、GPIOH7 ← 1)
+        // 閉じると電源を切る (IT930x の仕様書 7.2: GPIOH2 ← 0、GPIOH7 ← 1)
         await Assert.That(usb.Log.Where(line => line.StartsWith("W D8", StringComparison.Ordinal)).TakeLast(2)).IsEquivalentTo(new[] { "W D8B7=00", "W D8C3=01" });
     }
 
@@ -407,7 +407,7 @@ public class It930xDeviceTests
         }
     }
 
-    /// <summary>LNB の給電 (GPIOH11 の値。仕様書 1.5・9) の書き込みを、開いたときの設定のあとから拾う</summary>
+    /// <summary>LNB の給電 (GPIOH11 の値。IT930x の仕様書 7.2・8) の書き込みを、開いたときの設定のあとから拾う</summary>
     private static List<string> LnbWrites(FakeIt930x usb)
     {
         lock (usb.Log)
@@ -424,7 +424,7 @@ public class It930xDeviceTests
         var tuner = new It930xTuner("test", 0, () => Open(usb, "9-7", new FakeClock()), () => It930xDevice.CloseIfIdle("9-7", TimeSpan.Zero), "15v");
         tuner.Tune(ChannelTable.Parse("BS15:16625")!);
         await Assert.That(tuner.Tuned).IsTrue();
-        // 給電を入れてから選局する (GPIOH11 ← 1。仕様書 9)
+        // 給電を入れてから選局する (GPIOH11 ← 1。IT930x の仕様書 8)
         await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01" });
         await Assert.That(bus3.Log).Contains("65 T E9=40F100");
         await Assert.That(bus3.Log).Contains("65 X 17=0C");
@@ -448,7 +448,7 @@ public class It930xDeviceTests
         {
             tuners[0].Tune(ChannelTable.Parse("BS15:16625")!);
             tuners[1].Tune(ChannelTable.Parse("BS01:16400")!);
-            // 2 つ目の受信機が求めても書かない (給電は 5 つの受信機で 1 つ。仕様書 9)
+            // 2 つ目の受信機が求めても書かない (給電は 5 つの受信機で 1 つ。IT930x の仕様書 8)
             await Assert.That(LnbWrites(usb)).IsEquivalentTo(new[] { "W D8D3=01" });
             await Assert.That(tuners[0].Device!.LnbUsers).IsEqualTo(2);
             // 1 つ目が地上波に替わっても、2 つ目が求めているので切らない
@@ -550,14 +550,14 @@ public class It930xDeviceTests
             // J.83B は衛星ではないので、LNB の給電は要求しない
             await Assert.That(LnbWrites(usb)).IsEmpty();
 
-            // まだ使っていない受信機 2・3・4 は、整合を保つ設定で初期化して待機させる (仕様書 4.7。初期化の手順 2 が 02)
+            // まだ使っていない受信機 2・3・4 は、整合を保つ設定で初期化して待機させる (仕様書 4.8。初期化の手順 2 が 02)
             await Assert.That(bus1.Log).Contains("64 U 67=02");
             await Assert.That(bus3.Log).Contains("6C U 67=02");
             await Assert.That(bus3.Log).Contains("64 U 67=02");
             // 選局する受信機 0 と、動作中の受信機 1 は初期化し直さない
             await Assert.That(bus3.Log.Count(line => line == "65 X 10=01")).IsEqualTo(1);
             await Assert.That(bus1.Log.Count(line => line == "6C X 10=01")).IsEqualTo(1);
-            // 動作中の受信機 1 は、止めるときに 67 の bit1 を立てる (仕様書 4.6)
+            // 動作中の受信機 1 は、止めるときに 67 の bit1 を立てる (仕様書 4.7)
             ground.Dispose();
             var stop = bus1.Log.LastIndexOf("6C U 74=02");
             await Assert.That(bus1.Log.Skip(stop).Take(3)).IsEquivalentTo(new[] { "6C U 74=02", "6C U 67?", "6C U 67=02" });

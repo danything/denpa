@@ -6,19 +6,19 @@ namespace Denpa.Agent.Tests;
  * TC90522 の機種を、機材 (It930xDevice) とチューナー (It930xTuner) を通して確かめる。
  * Q3・W3 系の開く・閉じるの順 (Tc90522Board)、Q3 の 2 つの側の電源の連動、受信機が 1 つの機種 (Tc90522Single)、
  * 機種の表と自動検出 (It930x.cs)、--it930x-probe --chips。
- * 偽のブリッジ (It930xFakes.cs) の I2C を、偽の TC90522 のバス (Tc90522Fakes.cs) につなぐ。期待値は仕様書 (denpa-spec の px4/spec.md) の節の値と順。
+ * 偽のブリッジ (It930xFakes.cs) の I2C を、偽の TC90522 のバス (Tc90522Fakes.cs) につなぐ。期待値は仕様書 (denpa-spec の tc90522/spec.md) の節の値と順。
  */
 public class Tc90522BoardTests
 {
     private static readonly It930xModel W3 = It930x.Find(0x0511, 0x083F)!;
     private static readonly It930xModel Q3 = It930x.Find(0x0511, 0x024A)!;
 
-    /// <summary>R850 の水晶の駆動の強さを調べるときに書く 40 バイト (仕様書 7.3。種類 0)</summary>
+    /// <summary>R850 の水晶の駆動の強さを調べるときに書く 40 バイト (仕様書 6.3。種類 0)</summary>
     private const string R850Trial = "CAC0725000E0003086BBF8B0D281CD46374089925505080021F9845FC420A96C53AB5B46B3936E40";
 
     private static readonly string Zeros = new('0', 80);
 
-    /// <summary>偽の R850 (電源を入れたときの 08〜2F は 0) を初期化したときの控え (仕様書 7.3)。<paramref name="demod"/> は中継に使う復調器</summary>
+    /// <summary>偽の R850 (電源を入れたときの 08〜2F は 0) を初期化したときの控え (仕様書 6.3)。<paramref name="demod"/> は中継に使う復調器</summary>
     private static string[] R850Init(string demod) =>
     [
         $"{demod} R850 ?1", $"{demod} R850 ?1", $"{demod} R850 ?1", $"{demod} R850 ?1", $"{demod} R850 ?48",
@@ -28,18 +28,18 @@ public class Tc90522BoardTests
         $"{demod} R850 08={Zeros}",
     ];
 
-    /// <summary>地上波の起動の 12 行 (仕様書 4.2)</summary>
+    /// <summary>地上波の起動の 12 行 (仕様書 3.2)</summary>
     private static string[] WakeTerrestrial(string demod) =>
     [
         $"{demod} B0=A0", $"{demod} B2=3D", $"{demod} B3=25", $"{demod} B4=8B", $"{demod} B5=4B", $"{demod} B6=3F", $"{demod} B7=FF", $"{demod} B8=C0",
         $"{demod} 1F=00", $"{demod} 75=00", $"{demod} 1D=A8", $"{demod} 03=00",
     ];
 
-    /// <summary>衛星の起動の 7 行 (仕様書 4.2)</summary>
+    /// <summary>衛星の起動の 7 行 (仕様書 3.2)</summary>
     private static string[] WakeSatellite(string demod) =>
         [$"{demod} 15=00", $"{demod} 1D=00", $"{demod} 04=02", $"{demod} 1C=80", $"{demod} 1F=22", $"{demod} 13=00", $"{demod} 17=00"];
 
-    /// <summary>衛星のスリープ (RT710 の待機と復調器。仕様書 4.1 の 3)</summary>
+    /// <summary>衛星のスリープ (RT710 の待機と復調器。仕様書 3.1 の 3)</summary>
     private static string[] SleepSatellite(string demod) => [$"{demod} RT710 00={Tc90522Tests.Rt710Standby}", $"{demod} 13=80", $"{demod} 17=FF"];
 
     private static (FakeIt930x Usb, FakeTcBus Bus) Fake()
@@ -68,7 +68,7 @@ public class Tc90522BoardTests
     // ---------------------------------------------------------------------
 
     [Test]
-    public async Task W3_を開くと仕様書_2_3_の値でブリッジを設定し_電源を入れる()
+    public async Task W3_を開くとIT930x_の仕様書_5_4_の値でブリッジを設定し_電源を入れる()
     {
         var (usb, bus) = Fake();
         var clock = new FakeClock();
@@ -88,7 +88,7 @@ public class Tc90522BoardTests
                 "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA58=00", "W DA59=00",
                 "W DA74=01", "W DA79=17", "W DA75=01", "W DA7A=27", "W DA76=01", "W DA7B=37", "W DA77=01", "W DA7C=47",
             }, CollectionOrdering.Matching);
-            // GPIO (仕様書 2.5): GPIOH7 = 1、GPIOH2 = 0、GPIOH11 = 0 にしてから、電源を入れる (GPIOH7 ← 0、80 ms、GPIOH2 ← 1、20 ms)
+            // GPIO (IT930x の仕様書 7.2): GPIOH7 = 1、GPIOH2 = 0、GPIOH11 = 0 にしてから、電源を入れる (GPIOH7 ← 0、80 ms、GPIOH2 ← 1、20 ms)
             await Assert.That(Lines(usb, line => Starts(line, "W D8B", "W D8C", "W D8D"))).IsEquivalentTo(new[]
             {
                 "W D8C4=01", "W D8C5=01", "W D8C3=01",
@@ -117,7 +117,7 @@ public class Tc90522BoardTests
         var device = Open(usb, "6-2", new FakeClock(), W3);
         try
         {
-            // 受信機 2 (地上波 0x10) を開く (仕様書 4.1)
+            // 受信機 2 (地上波 0x10) を開く (仕様書 3.1)
             var frontend = device.Frontend(2);
             await Assert.That(bus.Log).IsEquivalentTo((string[])
             [
@@ -127,12 +127,12 @@ public class Tc90522BoardTests
                 .. SleepSatellite("11"), .. SleepSatellite("13"), "12 03=F0",
                 // 4: 開く受信機の起動
                 .. WakeTerrestrial("10"),
-                // 5: TS 出力の共通設定 (仕様書 4.4)。受信機 0 の衛星のアドレスと、受信機 2 の地上波のアドレスに書く
+                // 5: TS 出力の共通設定 (仕様書 3.4)。受信機 0 の衛星のアドレスと、受信機 2 の地上波のアドレスに書く
                 "11 07=31", "11 08=77", "10 0E=77", "10 0F=13",
             ], CollectionOrdering.Matching);
             await Assert.That(frontend.Chips).IsEqualTo("TC90522 0x10 + R850 (種類 0、水晶の駆動の強さ 3)");
 
-            // 2 つ目からは起動だけ (仕様書 4.2)
+            // 2 つ目からは起動だけ (仕様書 3.2)
             bus.Log.Clear();
             await Assert.That(device.Frontend(1).Chips).IsEqualTo("TC90522 0x13 + RT710");
             await Assert.That(bus.Log).IsEquivalentTo(WakeSatellite("13"), CollectionOrdering.Matching);
@@ -141,14 +141,14 @@ public class Tc90522BoardTests
             device.Frontend(2);
             await Assert.That(bus.Log).IsEmpty();
 
-            // 閉じる (仕様書 11.3): ほかに開いている受信機があればスリープにする。最後の受信機は何も書かない
+            // 閉じる (仕様書 9.3): ほかに開いている受信機があればスリープにする。最後の受信機は何も書かない
             device.Rest(1);
             await Assert.That(bus.Log).IsEquivalentTo(SleepSatellite("13"), CollectionOrdering.Matching);
             bus.Log.Clear();
             device.Rest(2);
             await Assert.That(bus.Log).IsEmpty();
 
-            // 電源が入ったまま、開いている受信機が無い状態から開くときは、初期化からやり直す (仕様書 2.6)
+            // 電源が入ったまま、開いている受信機が無い状態から開くときは、初期化からやり直す (IT930x の仕様書 7.4)
             device.Frontend(0);
             await Assert.That(bus.Log.Take(2)).IsEquivalentTo(new[] { "11 RT710 ?4", "13 RT710 ?4" }, CollectionOrdering.Matching);
             await Assert.That(bus.Log.TakeLast(11)).IsEquivalentTo((string[])
@@ -332,7 +332,7 @@ public class Tc90522BoardTests
         var tuner = Tuner(usb, "6-4", 2, clock, W3);
         tuner.Tune(ChannelTable.Parse("T27")!);
         await Assert.That(tuner.Tuned).IsTrue();
-        // 受信機 2 は TS 入力 3 (仕様書 2.2)。ブリッジの入力は受信機を開いて初期化したあとに開け、選局したら復調器の TS の端子を出す (仕様書 11.1)
+        // 受信機 2 は TS 入力 3 (仕様書 1.2)。ブリッジの入力は受信機を開いて初期化したあとに開け、選局したら復調器の TS の端子を出す (仕様書 9.1)
         await Assert.That(Lines(usb, line => Starts(line, "W DA4F", "I2C W 2 10 1D"))).IsEquivalentTo(new[] { "W DA4F=00", "I2C W 2 10 1DA8", "W DA4F=01", "I2C W 2 10 1D00" }, CollectionOrdering.Matching);
         await Assert.That(bus.Log).Contains($"10 R850 08={Tc90522Tests.R850Ch27}");
         var signal = tuner.Signal()!;
@@ -349,7 +349,7 @@ public class Tc90522BoardTests
 
         bus.Log.Clear();
         tuner.Dispose();
-        // 受信の停止 (仕様書 11.2): 端子を止める。最後の受信機なのでスリープは書かない (仕様書 11.3)。機材を閉じるときにブリッジの入力を閉じる
+        // 受信の停止 (仕様書 9.2): 端子を止める。最後の受信機なのでスリープは書かない (仕様書 9.3)。機材を閉じるときにブリッジの入力を閉じる
         await Assert.That(Lines(usb, line => Starts(line, "W DA4F")).Last()).IsEqualTo("W DA4F=00");
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "10 1D=A8" }, CollectionOrdering.Matching);
         // 電源を切ってから閉じる
@@ -374,19 +374,19 @@ public class Tc90522BoardTests
             await Assert.That(log.IndexOf("W D8D3=01", setup)).IsLessThan(log.IndexOf("I2C W 2 11 0A00"));
             await Assert.That(log.IndexOf("W D8D3=01", setup)).IsGreaterThan(0);
             await Assert.That(first.SatelliteStreams()).IsNotNull();
-            // 給電している間は、--tune に短絡の検出の入力も出す (仕様書 10。GPIOH10 を有効にして入力にし、値を読む)
+            // 給電している間は、--tune に短絡の検出の入力も出す (IT930x の仕様書 8。GPIOH10 を有効にして入力にし、値を読む)
             await Assert.That(first.Notes()[^1]).IsEqualTo("LNB の短絡の検出 (GPIOH10)  0 (短絡)  (未確認の値)");
             usb.Registers[0xD8D6] = 1;
             await Assert.That(first.Notes()[^1]).IsEqualTo("LNB の短絡の検出 (GPIOH10)  1 (正常)  (未確認の値)");
             await Assert.That(Lines(usb, line => Starts(line, "W D8D9", "W D8D8", "R D8D6")).TakeLast(3)).IsEquivalentTo(new[] { "W D8D9=01", "W D8D8=00", "R D8D6 1" }, CollectionOrdering.Matching);
-            // 2 つ目の衛星の受信機が求めても、給電は 1 つなので書かない (仕様書 10)。地上波の受信機は 15v の設定でも求めない
+            // 2 つ目の衛星の受信機が求めても、給電は 1 つなので書かない (IT930x の仕様書 8)。地上波の受信機は 15v の設定でも求めない
             second.Tune(ChannelTable.Parse("BS01:16400")!);
             ground.Tune(ChannelTable.Parse("T27")!);
             await Assert.That(Lines(usb, line => line == "W D8D3=01").Count).IsEqualTo(1);
             await Assert.That(first.Device!.LnbUsers).IsEqualTo(2);
             first.Dispose();
             await Assert.That(Lines(usb, line => line == "W D8D3=00").Count).IsEqualTo(1);
-            // 最後の衛星の受信機を閉じるとき、給電を切ってからスリープにする (仕様書 11.3 の 1・2)
+            // 最後の衛星の受信機を閉じるとき、給電を切ってからスリープにする (仕様書 9.3 の 1・2)
             bus.Log.Clear();
             second.Dispose();
             lock (usb.Log) log = [.. usb.Log];
@@ -484,7 +484,7 @@ public class Tc90522BoardTests
     {
         await Assert.That(It930x.Side("000012050009601")!.Value).IsEqualTo(("00001205000960", 1));
         await Assert.That(It930x.Side("000012050009602")!.Value).IsEqualTo(("00001205000960", 2));
-        // 15 桁の数字でない・末尾が 1 でも 2 でもないものは組にしない (仕様書 1.5)
+        // 15 桁の数字でない・末尾が 1 でも 2 でもないものは組にしない (IT930x の仕様書 2.1)
         await Assert.That(It930x.Side("000012050009603")).IsNull();
         await Assert.That(It930x.Side("00001205000961")).IsNull();
         await Assert.That(It930x.Side("00001205000960A")).IsNull();
@@ -512,7 +512,7 @@ public class Tc90522BoardTests
         await Assert.That(It930x.Partner("3-6", Q3, found, Serial)).IsNull();
         await Assert.That(It930x.Partner("3-4", W3, found, Serial)).IsNull();
         await Assert.That(It930x.Partner("3-5", q3u4, found, Serial)).IsNull();
-        // 同じ筐体の番号で同じ側が 2 つ見えたら、どれも選ばない (仕様書 1.5)
+        // 同じ筐体の番号で同じ側が 2 つ見えたら、どれも選ばない (IT930x の仕様書 2.1)
         found.Add(("3-7", Q3));
         serials["3-7"] = "000012050009601";
         await Assert.That(It930x.Partner("3-1", Q3, found, Serial)).IsNull();
@@ -521,7 +521,7 @@ public class Tc90522BoardTests
     [Test]
     public async Task Q3_は側_1_の受信機_4_つのあとに側_2_の_4_つを並べ_受信機ごとの種別を付ける()
     {
-        // 側 2 が先に見つかっても、側 1 を先に並べる (仕様書 1.5)。片側だけの Q3 と W3 は見つけた順のまま
+        // 側 2 が先に見つかっても、側 1 を先に並べる (IT930x の仕様書 2.1)。片側だけの Q3 と W3 は見つけた順のまま
         var found = new List<(string Port, It930xModel Model)> { ("3-1", Q3), ("3-2", W3), ("3-3", Q3), ("3-4", Q3) };
         var serials = new Dictionary<string, string?> { ["3-1"] = "000012050009602", ["3-3"] = "000099990000011", ["3-4"] = "000012050009601" };
         var specs = It930x.Specs(found, port => serials.GetValueOrDefault(port));
@@ -532,10 +532,10 @@ public class Tc90522BoardTests
             "it930x:3-2:0", "it930x:3-2:1", "it930x:3-2:2", "it930x:3-2:3",
             "it930x:3-3:0", "it930x:3-3:1", "it930x:3-3:2", "it930x:3-3:3",
         }, CollectionOrdering.Matching);
-        // 受信機 0・1 は衛星 (BS・CS)、2・3 は地上波 (仕様書 2.2)
+        // 受信機 0・1 は衛星 (BS・CS)、2・3 は地上波 (仕様書 1.2)
         await Assert.That(specs.Take(4).Select(spec => string.Join("/", spec.Types))).IsEquivalentTo(new[] { "BS/CS", "BS/CS", "GR", "GR" }, CollectionOrdering.Matching);
         await Assert.That(specs[0].Name).IsEqualTo("PLEX PX-Q3PE4 3-4 #0");
-        // カードリーダーは、Q3 は末尾が 1 の側だけ (仕様書 1.4)。W3 はその USB デバイス
+        // カードリーダーは、Q3 は末尾が 1 の側だけ (IT930x の仕様書 9)。W3 はその USB デバイス
         await Assert.That(It930x.Cards(found, port => serials.GetValueOrDefault(port)).Select(card => card.Name)).IsEquivalentTo(new[]
         {
             "PLEX PX-W3U4 3-2 Card Reader", "PLEX PX-Q3PE4 3-3 Card Reader", "PLEX PX-Q3PE4 3-4 Card Reader",
@@ -571,7 +571,7 @@ public class Tc90522BoardTests
         tuner.Tune(ChannelTable.Parse("T27")!);
         await Assert.That(tuner.Tuned).IsTrue();
         await Assert.That((linked, tuner.Device!.Linked)).IsEqualTo((1, true));
-        // 側 1 は、ファームウェアを起動して電源を入れただけ (仕様書 2.6)。チップは初期化していない
+        // 側 1 は、ファームウェアを起動して電源を入れただけ (IT930x の仕様書 7.4)。チップは初期化していない
         await Assert.That(Lines(side1, line => Starts(line, "W D8C3", "W D8B7")).TakeLast(2)).IsEquivalentTo(new[] { "W D8C3=00", "W D8B7=01" }, CollectionOrdering.Matching);
         await Assert.That(bus1.Log).IsEmpty();
         await Assert.That(bus2.Log).Contains($"10 R850 08={Tc90522Tests.R850Ch27}");
@@ -605,7 +605,7 @@ public class Tc90522BoardTests
             var before = Lines(side1, _ => true).Count;
             bus1.Log.Clear();
             first.Dispose();
-            // 側 1 は、側 2 の受信機が開いているので電源を切らない (仕様書 2.6 の 3)。最後の受信機なのでスリープも書かない (仕様書 11.3)
+            // 側 1 は、側 2 の受信機が開いているので電源を切らない (IT930x の仕様書 7.4 の 3)。最後の受信機なのでスリープも書かない (仕様書 9.3)
             var after = Lines(side1, _ => true).Skip(before).ToList();
             await Assert.That(after.Any(line => Starts(line, "W D8C3", "W D8B7"))).IsFalse();
             await Assert.That(bus1.Log).IsEquivalentTo(new[] { "10 1D=A8" }, CollectionOrdering.Matching);
@@ -662,7 +662,7 @@ public class Tc90522BoardTests
             return null;
         }), () => It930xDevice.CloseIfIdle("7-8", TimeSpan.Zero), clock.Sleep);
         await Assert.That(card.Reset().Length).IsEqualTo(13);
-        // 電源を入れてからカードを読む (仕様書 1.4)。もう片方の側は取らず (仕様書 2.6)、チップも初期化しない
+        // 電源を入れてからカードを読む (IT930x の仕様書 9)。もう片方の側は取らず (IT930x の仕様書 7.4)、チップも初期化しない
         await Assert.That(Lines(usb, line => Starts(line, "W D8C3")).Last()).IsEqualTo("W D8C3=00");
         await Assert.That(linked).IsEqualTo(0);
         await Assert.That(bus.Log).IsEmpty();
@@ -671,7 +671,7 @@ public class Tc90522BoardTests
     }
 
     // ---------------------------------------------------------------------
-    // 受信機が 1 つの機種 (仕様書 13.3・13.4)
+    // 受信機が 1 つの機種 (仕様書 11.1・11.2)
     // ---------------------------------------------------------------------
 
     /// <summary>ISDB2056 系の偽の機材。バス 3 に地上波 0x10 (先に R850) と衛星のアドレス (先に RT710。PX-S1UR は無い)</summary>
@@ -708,7 +708,7 @@ public class Tc90522BoardTests
         var device = Open(usb, "5-1", clock, model);
         try
         {
-            // ブリッジの設定 (仕様書 13.3): 中継の相手は 1 つ目の欄だけ (0x20、バス 3)。TS 入力 0 に同期バイト 0x47、入力 1〜4 は使わないので開けない
+            // ブリッジの設定 (IT930x の仕様書 5.5): 中継の相手は 1 つ目の欄だけ (0x20、バス 3)。TS 入力 0 に同期バイト 0x47、入力 1〜4 は使わないので開けない
             await Assert.That(Lines(usb, line => Starts(line, "W 4975", "W 4974", "W 4973", "W 4972", "W 4964", "W 4971", "W 4970", "W 496F", "W 496E", "W 4963"))).IsEquivalentTo(new[] { "W 4975=20", "W 4971=03" }, CollectionOrdering.Matching);
             await Assert.That(Lines(usb, line => Starts(line, "W DA7", "W DA4", "W DA50", "W DA58"))).IsEquivalentTo(new[]
             {
@@ -727,12 +727,12 @@ public class Tc90522BoardTests
             await Assert.That(clock.Sleeps.Skip(2).Take(2)).IsEquivalentTo(new[] { 100, 20 }, CollectionOrdering.Matching);
             await Assert.That(bus.Log).IsEquivalentTo((string[])
             [
-                // 開く (仕様書 13.3): R850 と RT710 の初期化、地上波の初期の設定 8 行、端子を止めてスリープ、衛星の側も端子を止めてスリープ
+                // 開く (仕様書 11.1): R850 と RT710 の初期化、地上波の初期の設定 8 行、端子を止めてスリープ、衛星の側も端子を止めてスリープ
                 .. R850Init("10"), "11 RT710 ?4",
                 "10 B0=A0", "10 B2=3D", "10 B3=25", "10 B4=8B", "10 B5=4B", "10 B6=3F", "10 B7=FF", "10 B8=C0",
                 "10 1D=A8", "10 03=F0",
                 "11 15=00", "11 1D=00", "11 1C=80", "11 1F=22", "11 13=80", "11 17=FF",
-                // 地上波の選局 (仕様書 13.3 の 1〜14)
+                // 地上波の選局 (仕様書 11.1 の 1〜14)
                 "10 47=30", "10 25=00", "10 20=00", "10 23=4D", "10 01=50",
                 "11 13=80", "11 17=FF",
                 "10 0E=77", "10 0F=10", "10 71=20", "10 03=00", "10 76=0C", "10 1F=30",
@@ -747,7 +747,7 @@ public class Tc90522BoardTests
             await Assert.That(clock.Sleeps.Skip(4)).IsEquivalentTo(new[] { 10, 100, 350 }, CollectionOrdering.Matching);
             await Assert.That(Lines(usb, line => Starts(line, "W DA4C")).Last()).IsEqualTo("W DA4C=01");
 
-            // 衛星に切り替える (仕様書 13.3 の衛星の選局)。先に受信を止める
+            // 衛星に切り替える (仕様書 11.1 の衛星の選局)。先に受信を止める
             bus.Log.Clear();
             tuner.Tune(ChannelTable.Parse("BS15:16625")!);
             await Assert.That(bus.Log).IsEquivalentTo((string[])
@@ -824,7 +824,7 @@ public class Tc90522BoardTests
         {
             tuner.Tune(ChannelTable.Parse("T27")!);
             await Assert.That(tuner.Tuned).IsTrue();
-            // RT710 は無いので読まない。衛星のアドレス 0x11 への 6 行は書く (仕様書 13.3)
+            // RT710 は無いので読まない。衛星のアドレス 0x11 への 6 行は書く (仕様書 11.1)
             await Assert.That(bus.Log.Any(line => line.Contains("RT710", StringComparison.Ordinal))).IsFalse();
             await Assert.That(bus.Log.Where(line => line.StartsWith("11 ", StringComparison.Ordinal)).Take(6)).IsEquivalentTo(new[]
             {
@@ -868,14 +868,14 @@ public class Tc90522BoardTests
         var clock = new FakeClock();
         var card = new It930xCard("ISDB2056 のカード", () => Open(usb, "5-5", clock, model), () => It930xDevice.CloseIfIdle("5-5", TimeSpan.Zero), clock.Sleep);
         await Assert.That(card.Reset().Length).IsEqualTo(13);
-        // 基板の電源 (GPIOH3) は切ったまま (仕様書 1.4・13.3)
+        // 基板の電源 (GPIOH3) は切ったまま (IT930x の仕様書 7.3・9)
         await Assert.That(Lines(usb, line => line == "W D8B3=00")).IsEmpty();
         await Assert.That(bus.Log).IsEmpty();
         card.Dispose();
     }
 
     [Test]
-    public async Task DTV03A_1TU_は仕様書_13_4_の値で開いて選局する()
+    public async Task DTV03A_1TU_は仕様書_11_2_の値で開いて選局する()
     {
         var model = It930x.Find(0x0511, 0x0052)!;
         var (usb, bus) = Single(model);
@@ -927,7 +927,7 @@ public class Tc90522BoardTests
     [Arguments(0x084A, "PLEX PX-Q3U4", 4, true)]
     [Arguments(0x024A, "PLEX PX-Q3PE4", 4, true)]
     [Arguments(0x074A, "PLEX PX-Q3PE5", 4, true)]
-    public async Task Q3_W3_系の_6_機種は仕様書_2_2_の割り当て(int product, string name, int receivers, bool paired)
+    public async Task Q3_W3_系の_6_機種は仕様書_1_2_の割り当て(int product, string name, int receivers, bool paired)
     {
         var model = It930x.Find(0x0511, product)!;
         await Assert.That((model.Name, model.Receivers.Count, model.Paired, model.Lnb, model.Card, model.PowerPin)).IsEqualTo((name, receivers, paired, true, true, 7));
@@ -943,7 +943,7 @@ public class Tc90522BoardTests
     }
 
     [Test]
-    public async Task PX_MLT8PE_と_DTV02A_4TS_P_は_MLT5_系と同じチップで_割り当ては仕様書_13_1_と_13_2()
+    public async Task PX_MLT8PE_と_DTV02A_4TS_P_は_MLT5_系と同じチップで_割り当ては_CXD2856_の仕様書_1_2()
     {
         var five = It930x.Find(0x0511, 0x0253)!;
         var three = It930x.Find(0x0511, 0x0252)!;
@@ -961,7 +961,7 @@ public class Tc90522BoardTests
         {
             (3, 0x65, 0), (1, 0x6C, 1), (1, 0x64, 2), (3, 0x64, 4),
         }, CollectionOrdering.Matching);
-        // カードリーダーは 5 受信機の側だけ (仕様書 1.4)。2 つの USB デバイスは組にしない
+        // カードリーダーは 5 受信機の側だけ (IT930x の仕様書 9)。2 つの USB デバイスは組にしない
         await Assert.That((five.Card, three.Card, four.Card, five.Paired, three.Paired)).IsEqualTo((true, false, true, false, false));
         foreach (var model in new[] { five, three, four })
         {
@@ -986,7 +986,7 @@ public class Tc90522BoardTests
         {
             tuner.Tune(ChannelTable.Parse("T27")!);
             await Assert.That(tuner.Tuned).IsTrue();
-            // 中継の相手は 3 つ目の欄まで。TS 入力 1・2 は閉じ、受信機 1 は TS 入力 3 を開ける (仕様書 13.1)
+            // 中継の相手は 3 つ目の欄まで。TS 入力 1・2 は閉じ、受信機 1 は TS 入力 3 を開ける (IT930x の仕様書 5.2)
             await Assert.That(Lines(usb, line => Starts(line, "W 4975", "W 4974", "W 4973", "W 4972", "W 4964", "W 4971", "W 4970", "W 496F", "W 496E", "W 4963"))).IsEquivalentTo(new[]
             {
                 "W 4975=CA", "W 4971=03", "W 4974=D8", "W 4970=03", "W 4973=C8", "W 496F=03",
@@ -1009,7 +1009,7 @@ public class Tc90522BoardTests
     [Arguments(0x084B, "Digibest ISDB2056N", 0x13, true, "GR/BS/CS", It930xTunerChip.R850Rt710)]
     [Arguments(0x0854, "PLEX PX-M1UR", 0x11, false, "GR/BS/CS", It930xTunerChip.R850Rt710)]
     [Arguments(0x0855, "PLEX PX-S1UR", 0x11, false, "GR", It930xTunerChip.R850)]
-    public async Task ISDB2056_系は仕様書_13_3_の割り当て(int product, string name, int satellite, bool second, string types, It930xTunerChip chip)
+    public async Task ISDB2056_系は仕様書_11_1_の割り当て(int product, string name, int satellite, bool second, string types, It930xTunerChip chip)
     {
         var model = It930x.Find(0x0511, product)!;
         var wiring = model.Receivers.Single();
@@ -1020,7 +1020,7 @@ public class Tc90522BoardTests
     }
 
     [Test]
-    public async Task DTV03A_1TU_は仕様書_13_4_の割り当て()
+    public async Task DTV03A_1TU_は仕様書_11_2_の割り当て()
     {
         var model = It930x.Find(0x0511, 0x0052)!;
         var wiring = model.Receivers.Single();

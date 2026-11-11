@@ -26,7 +26,7 @@ public interface IIt930xFrontend
     bool Tune(ChannelTable.Tuning tuning);
 
     /// <summary>
-    /// 復調器の TS の端子を出す・止める (px4 の仕様書 4.5・11)。受信を始めるときに出し、終えるときに止める。
+    /// 復調器の TS の端子を出す・止める (TC90522 の仕様書 3.5・9)。受信を始めるときに出し、終えるときに止める。
     /// CXD2856ER は端子を操作しない (ブリッジの入力の開け閉めだけで止める) ので何もしない
     /// </summary>
     void Stream(bool on);
@@ -53,7 +53,7 @@ public interface IIt930xFrontend
     double? CablePer => null;
 
     /// <summary>
-    /// 最後の ISDB-C の選局で、ほかに読めた値 (MLT5 の仕様書 8.4A。CXD2856ER だけ)。<c>--tune</c> だけが出す。
+    /// 最後の ISDB-C の選局で、ほかに読めた値 (CXD2856 の仕様書 9.5。CXD2856ER だけ)。<c>--tune</c> だけが出す。
     /// J.83B と ISDB-C を選局できるのは CXD2856ER の受信機だけで、ほかの受信機の <see cref="Tune"/> は何も書かずに断る
     /// </summary>
     CxdIsdbcDetail? IsdbcDetail => null;
@@ -82,7 +82,7 @@ internal interface IIt930xBoard
 }
 
 /// <summary>
-/// CXD2856ER + CXD2858ER の受信機 (MLT5 の仕様書)。<see cref="Cxd2856Frontend"/> に、選局表の値からの振り分けと、J.83B の周波数の試し方を足す
+/// CXD2856ER + CXD2858ER の受信機 (CXD2856 の仕様書)。<see cref="Cxd2856Frontend"/> に、選局表の値からの振り分けと、J.83B の周波数の試し方を足す
 /// </summary>
 internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching) : IIt930xFrontend
 {
@@ -94,7 +94,7 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
 
     public Cxd2856Frontend Chip => frontend;
 
-    /// <summary>初期化の前に読んだチューナーの 62 も出す (MLT5 の仕様書 10.3)。前に ISDB-C か J.83B を選局していて 10 なら、電源が切れていなかったと推定する</summary>
+    /// <summary>初期化の前に読んだチューナーの 62 も出す (CXD2856 の仕様書 10.3)。前に ISDB-C か J.83B を選局していて 10 なら、電源が切れていなかったと推定する</summary>
     public string Chips => $"復調器 0x{frontend.ChipId:X2}、初期化の前のチューナーの 62 は {frontend.PowerProbe:X2}";
 
     public long LockMs => frontend.LockMs;
@@ -112,7 +112,7 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
     public bool Tune(ChannelTable.Tuning tuning)
     {
         CableFrequency = null;
-        // 衛星は選局表の周波数が IF の kHz (MLT5 の仕様書 6.1)
+        // 衛星は選局表の周波数が IF の kHz (CXD2856 の仕様書 6.1)
         if (tuning.Satellite) return frontend.TuneIsdbs(tuning.Frequency, CxdStream.From(tuning.StreamId));
         if (tuning.Cable)
         {
@@ -122,9 +122,9 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
         if (tuning.IsdbC)
         {
             /*
-             * ISDB-C (MLT5 の仕様書 7A.4)。手順 1 の「ブリッジが NULL パケットを落とさないようにする」(仕様書 3.4) は、denpa のブリッジの層が
+             * ISDB-C (CXD2856 の仕様書 8.4)。手順 1 の「ブリッジが NULL パケットを落とさないようにする」(IT930x の仕様書 6.2) は、denpa のブリッジの層が
              * どの方式でも PID で落とす設定を使っていないので、切り替える書き込みは無い。
-             * 整合を保つ設定 (仕様書 4.7) は J.83B と同じく、最初の選局で全受信機に立てる。TSMF で TS を選ぶのは <see cref="It930xTuner"/>
+             * 整合を保つ設定 (CXD2856 の仕様書 4.8) は J.83B と同じく、最初の選局で全受信機に立てる。TSMF で TS を選ぶのは <see cref="It930xTuner"/>
              */
             keepMatching();
             return TuneCable(tuning, frontend.TuneIsdbc);
@@ -133,7 +133,7 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
     }
 
     /// <summary>
-    /// J.83B を選局する (MLT5 の仕様書 7.4)。ずらして送られることがあるチャンネル (仕様書 7.1) は、選局表の周波数とずらした周波数の両方を試し、
+    /// J.83B を選局する (CXD2856 の仕様書 7.4)。ずらして送られることがあるチャンネル (CXD2856 の仕様書 7.1) は、選局表の周波数とずらした周波数の両方を試し、
     /// 前にロックしたほうを先にする。どちらもロックしなければ false
     /// </summary>
     private bool TuneCable(ChannelTable.Tuning tuning, Func<uint, bool> tune)
@@ -163,7 +163,7 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
 
 /// <summary>
 /// CXD2856ER の機種の受信機の組 (MLT5 系・PX-MLT8PE・DTV02A-4TS-P)。
-/// 受信機の初期化は、その受信機を初めて使うときに 1 回 (MLT5 の仕様書 2.2)。初期化に失敗した受信機だけを使えなくし、ほかの受信機はそのまま使う。
+/// 受信機の初期化は、その受信機を初めて使うときに 1 回 (CXD2856 の仕様書 2.2)。初期化に失敗した受信機だけを使えなくし、ほかの受信機はそのまま使う。
 /// 失敗した受信機は、次の選局でもう一度試す。閉じるときはチューナーを止めて復調器をスリープにする
 /// </summary>
 internal sealed class CxdBoard : IIt930xBoard
@@ -179,7 +179,7 @@ internal sealed class CxdBoard : IIt930xBoard
     private readonly CxdReceiver?[] _frontends;
     private readonly Lock[] _receiverGates;
 
-    /// <summary>待機中の地上波の RF 入力の整合を保つ設定にしたか (MLT5 の仕様書 4.7。<see cref="KeepMatching"/>)。電源を切るまで (この機材を閉じるまで) 立てたまま</summary>
+    /// <summary>待機中の地上波の RF 入力の整合を保つ設定にしたか (CXD2856 の仕様書 4.8。<see cref="KeepMatching"/>)。電源を切るまで (この機材を閉じるまで) 立てたまま</summary>
     private volatile bool _matching;
 
     /// <param name="fail">I2C の失敗を機材に伝える (USB の抜けなら機材を使えないものとする)</param>
@@ -193,11 +193,11 @@ internal sealed class CxdBoard : IIt930xBoard
         _fail = fail;
         _frontends = new CxdReceiver?[model.Receivers.Count];
         _receiverGates = [.. model.Receivers.Select(_ => new Lock())];
-        // 中継を開けてから閉じるまでを、バスごとに 1 つの区切りにする (MLT5 の仕様書 1.4)
+        // 中継を開けてから閉じるまでを、バスごとに 1 つの区切りにする (CXD2856 の仕様書 1.4)
         foreach (var receiver in model.Receivers) _buses.TryAdd(receiver.I2cBus, new Lock());
     }
 
-    /// <summary>受信機の復調器とチューナー。初めてのときに初期化する (MLT5 の仕様書 2.2)</summary>
+    /// <summary>受信機の復調器とチューナー。初めてのときに初期化する (CXD2856 の仕様書 2.2)</summary>
     public IIt930xFrontend Open(int receiver)
     {
         var wiring = _model.Receivers[receiver];
@@ -205,14 +205,14 @@ internal sealed class CxdBoard : IIt930xBoard
         {
             if (_frontends[receiver] is { } ready) return ready;
             var frontend = new Cxd2856Frontend(new It930xI2cBus(_bridge, wiring.I2cBus), _buses[wiring.I2cBus], wiring.DemodAddress, _sleep, _nowMs);
-            // 整合を保つ設定にしたあとに初めて使う受信機は、その設定で初期化する (MLT5 の仕様書 4.7)
+            // 整合を保つ設定にしたあとに初めて使う受信機は、その設定で初期化する (CXD2856 の仕様書 4.8)
             if (_matching) frontend.KeepMatching(standby: false);
             frontend.Init();
             return _frontends[receiver] = new CxdReceiver(frontend, () => KeepMatching(receiver));
         }
     }
 
-    /// <summary>使い終えた受信機のチューナーを止め、復調器をスリープにする (MLT5 の仕様書 10.3 の手順 2〜3)</summary>
+    /// <summary>使い終えた受信機のチューナーを止め、復調器をスリープにする (CXD2856 の仕様書 10.3 の手順 2〜3)</summary>
     public void Close(int receiver)
     {
         CxdReceiver? frontend;
@@ -221,7 +221,7 @@ internal sealed class CxdBoard : IIt930xBoard
     }
 
     /// <summary>
-    /// 待機中の地上波の RF 入力の整合を保つ設定を、機材の全受信機で立てる (MLT5 の仕様書 4.7)。電源を入れてから最初に J.83B か ISDB-C を選局するときに、
+    /// 待機中の地上波の RF 入力の整合を保つ設定を、機材の全受信機で立てる (CXD2856 の仕様書 4.8)。電源を入れてから最初に J.83B か ISDB-C を選局するときに、
     /// その受信機 (<paramref name="receiver"/>) が呼ぶ。2 回目からは何もしない。
     /// 地上波・ケーブルの RF 入力は全チューナーに分配しているので、あるチューナーが待機と動作を切り替えると隣の受信機の 256QAM に誤りが出たため。
     /// 閉じている受信機 (スリープか、まだ使っていない) は初期化し直して待機させ、動作中の受信機は設定だけを立てて止めるときに書く。
@@ -263,16 +263,16 @@ internal sealed class CxdBoard : IIt930xBoard
 /// **初めて要るときに開き、使っている側がいる間は開いたまま。** チューナー (<see cref="It930xTuner"/>) は最初の選局で取り、捨てるときに返す。
 /// 誰も使わなくなったら、30 秒 (<see cref="IdleGrace"/>) 待ってから閉じて電源を切る (<see cref="CloseIfIdle(string)"/>)。その間に取り直せば開いたまま使う。
 /// エージェントを止めるとき (<see cref="CloseAll"/>) はすぐ閉じる。電源が GPIOH7 の機種は、内蔵カードリーダーが受信機と同じ電源なので
-/// (MLT5 の仕様書 1.5、px4 の仕様書 2.5)、カード (<see cref="It930xCard"/>) も使う側として数え、カードを使っている間は受信機を全部閉じても電源を切らない。
-/// 電源が GPIOH3 の機種 (受信機が 1 つの機種) は、受信機を開いている間だけ電源を入れ、カードのためには入れない (px4 の仕様書 13.3)。
+/// (IT930x の仕様書 7.2)、カード (<see cref="It930xCard"/>) も使う側として数え、カードを使っている間は受信機を全部閉じても電源を切らない。
+/// 電源が GPIOH3 の機種 (受信機が 1 つの機種) は、受信機を開いている間だけ電源を入れ、カードのためには入れない (IT930x の仕様書 7.3)。
 /// </para>
 ///
 /// <para>
 /// **Q3 は、2 つの USB デバイスをそれぞれ別の機材として持つ** (<c>it930x:&lt;側 1 のポート&gt;:0〜3</c> と <c>it930x:&lt;側 2 のポート&gt;:0〜3</c>)。
-/// px4 の仕様書 1.5 の受信機の番号 0〜7 は、側 1 の 0〜3 と側 2 の 0〜3 に当たる。設定の形とポートの見つけ方がほかの機種と同じになり、片側だけが見えていても使える。
-/// 電源の連動 (px4 の仕様書 2.6) は、受信機を開いている間、もう片方の側の機材も取っておくことで行う (機材を開いている間は電源が入る)。
+/// IT930x の仕様書 2.1 の受信機の番号 0〜7 は、側 1 の 0〜3 と側 2 の 0〜3 に当たる。設定の形とポートの見つけ方がほかの機種と同じになり、片側だけが見えていても使える。
+/// 電源の連動 (IT930x の仕様書 7.4) は、受信機を開いている間、もう片方の側の機材も取っておくことで行う (機材を開いている間は電源が入る)。
 /// 連動で電源だけが入った側は、チップを初期化していない。その側の受信機を最初に開くときに初期化する。
-/// もう片方の側が見つからない・開けないときは、記録に出して見つかった側だけを使う (px4 の仕様書 15.3 の「片側だけ見えている Q3」)。
+/// もう片方の側が見つからない・開けないときは、記録に出して見つかった側だけを使う (TC90522 の仕様書 13.3 の「片側だけ見えている Q3」)。
 /// </para>
 ///
 /// <para>
@@ -289,7 +289,7 @@ public sealed class It930xDevice
     /// <summary>EP 0x84 の 1 回の読みの待ち</summary>
     private const int TsReadTimeoutMs = 200;
 
-    /// <summary>電源を切ったあと (GPIOH7 ← 1 のあと) の待ち (ms。仕様書 1.5・11)</summary>
+    /// <summary>電源を切ったあと (GPIOH7 ← 1 のあと) の待ち (ms。IT930x の仕様書 7.2・10)</summary>
     internal const int PowerOffSettleMs = 100;
 
     private static readonly Lock Registry = new();
@@ -334,7 +334,7 @@ public sealed class It930xDevice
     /// <summary>Q3 のもう片方の側の機材を取る (無ければ null を返す)。Q3 でなければ null</summary>
     private readonly Func<It930xDevice?>? _link;
 
-    /// <summary>電源の連動のために取っている、Q3 のもう片方の側 (px4 の仕様書 2.6)</summary>
+    /// <summary>電源の連動のために取っている、Q3 のもう片方の側 (IT930x の仕様書 7.4)</summary>
     private It930xDevice? _linked;
 
     private Thread? _reader;
@@ -390,7 +390,7 @@ public sealed class It930xDevice
         _board = model.Demod switch
         {
             It930xDemod.Cxd2856 => new CxdBoard(bridge, model, Label, sleep, nowMs, Fail),
-            // Q3・W3 系は 4 つの受信機がどれもバス 2 にある (px4 の仕様書 2.1)
+            // Q3・W3 系は 4 つの受信機がどれもバス 2 にある (TC90522 の仕様書 1.1)
             It930xDemod.Tc90522T or It930xDemod.Tc90522S =>
                 new Tc90522Board(new It930xI2cBus(bridge, model.Receivers[0].I2cBus), new Lock(), model, sleep, nowMs),
             _ => new Tc90522Single(new It930xI2cBus(bridge, model.Receivers[0].I2cBus), new Lock(), model.Receivers[0], Power, sleep, nowMs),
@@ -441,7 +441,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 開く。ファームウェアを起動し、次の段の I2C と GPIO と TS の経路を設定する (MLT5 の仕様書 1.3・1.5、px4 の仕様書 2.3・2.5)。
+    /// 開く。ファームウェアを起動し、次の段の I2C と GPIO と TS の経路を設定する (IT930x の仕様書 4.2・5・7.2)。
     /// REBOOT で USB がつなぎ直されたときは、機材が戻るのを待って 1 回だけ開き直す
     /// </summary>
     private static It930xDevice Open(
@@ -487,7 +487,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// ブリッジの設定と電源 (MLT5 の仕様書 1.3・1.5、px4 の仕様書 2.3・2.5・13.3)。そのあと EP 0x84 を読み始める。
+    /// ブリッジの設定と電源 (IT930x の仕様書 4.2・5・7.2・7.3)。そのあと EP 0x84 を読み始める。
     /// 入力は、最初の受信機を開いたときに機種が使うものを全部開ける (<see cref="OpenInputs"/>)
     /// </summary>
     private void Setup()
@@ -496,13 +496,13 @@ public sealed class It930xDevice
         {
             Log.Write($"[{Label}] EEPROM の設定を読めていません (0x{It930xBridge.EepromValid:X4} が 0)。続けます");
         }
-        // 開いたとき: 電源を切り (GPIOH7 か GPIOH3 = 1)、リセット中 (GPIOH2 = 0)、LNB を切る (GPIOH11 = 0)。そのあと 20 ms 待つ (MLT5 の仕様書 11)。
-        // 受信機が 1 つの機種は GPIOH11 を設定も操作もしない (px4 の仕様書 13.3)
+        // 開いたとき: 電源を切り (GPIOH7 か GPIOH3 = 1)、リセット中 (GPIOH2 = 0)、LNB を切る (GPIOH11 = 0)。そのあと 20 ms 待つ (CXD2856 の仕様書 11)。
+        // 受信機が 1 つの機種は GPIOH11 を設定も操作もしない (IT930x の仕様書 8)
         Bridge.GpioSetup(Model.PowerPin, true);
         Bridge.GpioSetup(2, false);
         if (Model.Lnb) Bridge.GpioSetup(11, false);
         _sleep(20);
-        // 受信機の TS 入力はどれもシリアル (MLT5 の仕様書 1.2・3.4、px4 の仕様書 2.3)。同期バイトが 0 の入力は使わないので、開けない (px4 の仕様書 2.3・13)
+        // 受信機の TS 入力はどれもシリアル (IT930x の仕様書 5・6.1)。同期バイトが 0 の入力は使わないので、開けない (IT930x の仕様書 5)
         Bridge.ConfigureTs(new bool[It930xBridge.TsInputs], Model.SyncBytes);
         RecoverOverflow();
         if (Model.PowerWhileOpen) Power(true);
@@ -582,7 +582,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 受信機の基板の電源を入れる・切る (MLT5 の仕様書 1.5、px4 の仕様書 2.5・13.3)。
+    /// 受信機の基板の電源を入れる・切る (IT930x の仕様書 7.2・7.3)。
     /// 入れる: 電源の GPIOH ← 0、80 ms (GPIOH3 の機種は 100 ms)、GPIOH2 ← 1 (リセットを解く)、20 ms。切る: GPIOH2 ← 0、電源の GPIOH ← 1
     /// </summary>
     internal void Power(bool on)
@@ -654,7 +654,7 @@ public sealed class It930xDevice
     /// <summary>
     /// 受信機 <paramref name="receiver"/> を開いて、後ろのチップを返す。開いていれば、そのまま返す。
     /// 開けなければ <see cref="IOException"/> (その受信機だけ。次の呼び出しでもう一度試す)。
-    /// Q3 は、この側で最初の受信機を開くときに、もう片方の側の機材も取る (電源の連動。px4 の仕様書 2.6)
+    /// Q3 は、この側で最初の受信機を開くときに、もう片方の側の機材も取る (電源の連動。IT930x の仕様書 7.4)
     /// </summary>
     public IIt930xFrontend Frontend(int receiver)
     {
@@ -673,7 +673,7 @@ public sealed class It930xDevice
                 {
                     /*
                      * 電源を入れた直後の初期化に失敗したら、電源を入れ直して 1 回だけやり直す (仕様書に無い)。リセットが足りずにチップが応答しないまま、
-                     * 機材を閉じるまで直らないことを避ける。切る → 20 ms → 入れる、の順と待ちは開くときと同じ (px4 の仕様書 2.5)。
+                     * 機材を閉じるまで直らないことを避ける。切る → 20 ms → 入れる、の順と待ちは開くときと同じ (IT930x の仕様書 7.2)。
                      * 電源が GPIOH3 の機種は、開くのに失敗したときに電源を切ってあり、開き直すと入れ直す
                      */
                     Log.Write($"[{Label}] 受信機 {receiver} を初期化できませんでした ({error.Message})。電源を入れ直して、もう一度試します");
@@ -724,7 +724,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// ブリッジの TS のバッファを捨てる (仕様書 3.6)。SDK の <c>DRV_ResetRxPort</c> と同じく、入力を全部閉じ、10 ms 待ってから <c>0xDA1D</c> に 1 と 0 を書き、
+    /// ブリッジの TS のバッファを捨てる (IT930x の仕様書 6.3)。SDK の <c>DRV_ResetRxPort</c> と同じく、入力を全部閉じ、10 ms 待ってから <c>0xDA1D</c> に 1 と 0 を書き、
     /// 入力を全部開け直す。流しているほかの受信機の TS も、その間は欠ける。ロックしているのに TS が届かないときに <c>--tune</c> が試す。
     /// 閉じた機材では何もしない (閉じる処理が閉じた入力を開け直さない)。閉じる処理とは <c>_gate</c> で交わらないようにする
     /// </summary>
@@ -742,7 +742,7 @@ public sealed class It930xDevice
     /// <summary>
     /// 初期化の失敗のあと、電源を入れ直してよいか。この機材で開いている受信機が無く、使っている側がいまの 1 つだけのとき
     /// (カードや、Q3 のもう片方の側の受信機が使っていれば、その側の動作を止めてしまうので入れ直さない)。USB が抜けたときは入れ直さない。
-    /// CXD2856ER の機種は、受信機ごとに初期化して、失敗した受信機だけを次の選局でやり直すので、入れ直さない (MLT5 の仕様書 2.2)
+    /// CXD2856ER の機種は、受信機ごとに初期化して、失敗した受信機だけを次の選局でやり直すので、入れ直さない (CXD2856 の仕様書 2.2)
     /// </summary>
     private bool CanRepower(IOException error)
     {
@@ -806,8 +806,8 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 使い終えた受信機を閉じ、LNB の給電の要求を取り下げる。
-    /// CXD2856ER の機種は、チューナーを止めて復調器をスリープにしてから取り下げる (MLT5 の仕様書 10.3 の手順 2〜4)。
-    /// TC90522 の機種は、取り下げてから閉じる (px4 の仕様書 11.3 の 1〜3)。閉じるのに失敗しても給電の要求は取り下げる
+    /// CXD2856ER の機種は、チューナーを止めて復調器をスリープにしてから取り下げる (CXD2856 の仕様書 10.3 の手順 2〜4)。
+    /// TC90522 の機種は、取り下げてから閉じる (TC90522 の仕様書 9.3 の 1〜3)。閉じるのに失敗しても給電の要求は取り下げる
     /// </summary>
     public void Rest(int receiver)
     {
@@ -839,7 +839,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 受信機 <paramref name="receiver"/> が LNB の給電を要求する・要求を取り下げる (MLT5 の仕様書 9、px4 の仕様書 10)。給電は機材 (Q3 は側) の受信機で 1 つ (ブリッジの GPIOH11。1 で入る) なので、
+    /// 受信機 <paramref name="receiver"/> が LNB の給電を要求する・要求を取り下げる (IT930x の仕様書 8、IT930x の仕様書 8)。給電は機材 (Q3 は側) の受信機で 1 つ (ブリッジの GPIOH11。1 で入る) なので、
     /// 給電を要求している受信機の数が 0 から 1 になるときに入れ、1 から 0 になるときに切る。書き込みに失敗したら、要求している受信機の数は書く前に戻す
     /// </summary>
     public void Lnb(int receiver, bool on)
@@ -879,7 +879,7 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// LNB に給電している間の、短絡の検出の入力 (px4 の仕様書 10。GPIOH10 を有効にして入力にし、値を読む。true で正常、false で短絡)。
+    /// LNB に給電している間の、短絡の検出の入力 (IT930x の仕様書 8。GPIOH10 を有効にして入力にし、値を読む。true で正常、false で短絡)。
     /// 検出の端子が無い機種と、給電していないときは null。<c>--tune</c> の出力にだけ使う (実機で確かめた記録の無い値)
     /// </summary>
     public bool? LnbSense()
@@ -946,7 +946,7 @@ public sealed class It930xDevice
     /// <summary>
     /// 最後の利用者が返してから閉じるまでの間。**電源を切って入れ直すのを続けて繰り返さない。**
     /// 本番では、カードの状態を確かめるたび (使っていない内蔵カードリーダーを開いて閉じる) に電源を切って入れ直し、続けて 13 回入り切りしたあと、
-    /// 全受信機の TS が電源を抜くまで止まった (仕様書 12.5)。短い間の入り切りを、いちばん疑っている
+    /// 全受信機の TS が電源を抜くまで止まった (CXD2856 の仕様書 12.5)。短い間の入り切りを、いちばん疑っている
     /// </summary>
     public static readonly TimeSpan IdleGrace = TimeSpan.FromSeconds(30);
 
@@ -1052,7 +1052,7 @@ public sealed class It930xDevice
                 if (Model.PowerWhileOpen)
                 {
                     Power(false);
-                    // 電源が落ちきる前に入れ直さないよう、USB を閉じる前に待つ (MLT5 の仕様書 1.5・10.3・11)。閉じている間は Registry を持っているので、
+                    // 電源が落ちきる前に入れ直さないよう、USB を閉じる前に待つ (IT930x の仕様書 7.2・10、CXD2856 の仕様書 10.3)。閉じている間は Registry を持っているので、
                     // 同じポートを開き直す Acquire (次に電源を入れる書き込み) もこの待ちのあとになる
                     _sleep(PowerOffWaitMs);
                 }
@@ -1078,7 +1078,7 @@ public sealed class It930xDevice
 /// </summary>
 public sealed class It930xTuner : ITuneDevice
 {
-    /// <summary>LNB の給電の設定で受け付ける値。給電は 15 V だけ (MLT5 の仕様書 9、px4 の仕様書 10。0 か 15 V のほかは断る)</summary>
+    /// <summary>LNB の給電の設定で受け付ける値。給電は 15 V だけ (IT930x の仕様書 8、IT930x の仕様書 8。0 か 15 V のほかは断る)</summary>
     public const string Lnb15v = "15v";
 
     private readonly string _name;
@@ -1155,22 +1155,22 @@ public sealed class It930xTuner : ITuneDevice
         }
     }
 
-    /// <summary>TS を止める復調器のレジスタ 4 つ (MLT5 の仕様書 3.6)。ロックしているのに TS が届かないときに <c>--tune</c> が出す。CXD2856ER の機種で初期化していなければ null</summary>
+    /// <summary>TS を止める復調器のレジスタ 4 つ (CXD2856 の仕様書 3.5)。ロックしているのに TS が届かないときに <c>--tune</c> が出す。CXD2856ER の機種で初期化していなければ null</summary>
     public CxdTsOutput? ReadTsOutput()
     {
         lock (_gate) return (_frontend as CxdReceiver)?.Chip.ReadTsOutput();
     }
 
-    /// <summary>ブリッジの TS のバッファを捨てる (仕様書 3.6。<see cref="It930xDevice.FlushTs"/>)。<c>--tune</c> が、TS が届かないときに試す</summary>
+    /// <summary>ブリッジの TS のバッファを捨てる (IT930x の仕様書 6.3。<see cref="It930xDevice.FlushTs"/>)。<c>--tune</c> が、TS が届かないときに試す</summary>
     public void FlushTs()
     {
         lock (_gate) _device?.FlushTs();
     }
 
-    /// <summary>初期化の前に読んだチューナーの <c>62</c> (MLT5 の仕様書 10.3。<see cref="Cxd2856Frontend.PowerProbe"/>)。<c>--tune</c> が出す。CXD2856ER の機種だけ</summary>
+    /// <summary>初期化の前に読んだチューナーの <c>62</c> (CXD2856 の仕様書 10.3。<see cref="Cxd2856Frontend.PowerProbe"/>)。<c>--tune</c> が出す。CXD2856ER の機種だけ</summary>
     public byte? PowerProbe => (_frontend as CxdReceiver)?.Chip.PowerProbe;
 
-    /// <summary>周波数 (Hz) を kHz に丸める (チューナーに渡すのは中心周波数の kHz。MLT5 の仕様書 5.1、px4 の仕様書 5.1)</summary>
+    /// <summary>周波数 (Hz) を kHz に丸める (チューナーに渡すのは中心周波数の kHz。CXD2856 の仕様書 5.1、TC90522 の仕様書 4.1)</summary>
     internal static uint Khz(uint hertz) => (uint)((hertz + 500L) / 1000);
 
     /// <summary>衛星で受けているとき、TMCC から読んだ相対 TS 0〜7 の TSID (<c>--tune</c> が出す)。読めなければ null</summary>
@@ -1199,7 +1199,7 @@ public sealed class It930xTuner : ITuneDevice
             {
                 if (_output is null || _frontend is null || _device is null) return [];
                 var notes = _frontend.Notes();
-                // 給電しているときは、短絡の検出の入力も出す (px4 の仕様書 14 の 15)
+                // 給電しているときは、短絡の検出の入力も出す (TC90522 の仕様書 12 の 15)
                 return _device.LnbSense() is { } ok
                     ? [.. notes, $"LNB の短絡の検出 (GPIOH10)  {(ok ? "1 (正常)" : "0 (短絡)")}  (未確認の値)"]
                     : notes;
@@ -1267,7 +1267,7 @@ public sealed class It930xTuner : ITuneDevice
 
     public void Tune(ChannelTable.Tuning tuning)
     {
-        // 給電は 15 V だけ (MLT5 の仕様書 9、px4 の仕様書 10)。11 V は機材を開く前に断る
+        // 給電は 15 V だけ (IT930x の仕様書 8、IT930x の仕様書 8)。11 V は機材を開く前に断る
         if (tuning.Satellite && _lnb is not null && _lnb != Lnb15v)
         {
             throw new IOException($"{_name} の LNB の給電は 15V だけです (設定は {_lnb})");
@@ -1294,7 +1294,7 @@ public sealed class It930xTuner : ITuneDevice
                     Check(tuning, _model);
                 }
                 _frontend = _device.Frontend(_receiver);
-                // 給電を入れてから選局する (順は px4 の仕様書 10。LNB が出力を出すまでの待ちは仕様書に無く、ロックの待ち (3 秒) に含める)
+                // 給電を入れてから選局する (順は IT930x の仕様書 8。LNB が出力を出すまでの待ちは仕様書に無く、ロックの待ち (3 秒) に含める)
                 _device.Lnb(_receiver, tuning.Satellite && _lnb == Lnb15v);
                 _attempted = true;
                 var locked = _frontend.Tune(tuning);
@@ -1302,7 +1302,7 @@ public sealed class It930xTuner : ITuneDevice
                 if (!locked) throw new IOException(ITuneDevice.SyncFailed);
                 // 選局 (起動・RT710・ロック) のあいだに溢れが立ったかを、流し始める前に記録で絞る (PX-Q3PE4 の衛星。2026-11-11)
                 _device.WatchOverflow($"受信機 {_receiver} を選局したあと");
-                // TSMF で TS を選ぶ処理は ISDB-C のときだけ通す (MLT5 の仕様書 10.1)。ロックのあとで作る (仕様書 7A.7 の「パケットごとの処理」の 1)。
+                // TSMF で TS を選ぶ処理は ISDB-C のときだけ通す (CXD2856 の仕様書 10.1)。ロックのあとで作る (CXD2856 の仕様書 8.7 の「パケットごとの処理」の 1)。
                 // TSMF の判定の状態は、選局のたびに TsmfSelector を作り直して最初に戻す
                 var tsmf = tuning.IsdbC ? new TsmfSelector(tuning.TsmfIndex) : null;
                 Tsmf = tsmf;
@@ -1312,7 +1312,7 @@ public sealed class It930xTuner : ITuneDevice
                 var output = new It930xTsOutput(tsmf, tlv);
                 _device.Attach(_receiver, output);
                 _output = output;
-                // 受信を始めるときに、復調器の TS の端子を出す (px4 の仕様書 11.1)
+                // 受信を始めるときに、復調器の TS の端子を出す (TC90522 の仕様書 9.1)
                 _frontend.Stream(true);
                 if (tsmf is not null) WaitTsmf(_frontend, tsmf);
             }
@@ -1320,7 +1320,7 @@ public sealed class It930xTuner : ITuneDevice
             {
                 if (_device is { } device)
                 {
-                    // 選局できなかった受信機は給電の要求を取り下げる (受けていない受信機のために LNB を入れたままにしない。px4 の仕様書 10 は前の指定に戻すと書く)
+                    // 選局できなかった受信機は給電の要求を取り下げる (受けていない受信機のために LNB を入れたままにしない。IT930x の仕様書 8 は前の指定に戻すと書く)
                     try
                     {
                         device.Lnb(_receiver, false);
@@ -1347,13 +1347,13 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>最後の J.83B の選局で読んだ PER (<see cref="Signal"/> を読んだあと。J.83B で値が正しいかは未確認)。<c>--tune</c> だけが出す</summary>
     public double? CablePer => _frontend?.CablePer;
 
-    /// <summary>ISDB-C で「指定した TS が無い」ときの失敗の文の先頭 (MLT5 の仕様書 7A.7。ロックしないときの <see cref="ITuneDevice.SyncFailed"/> とは別の失敗)</summary>
+    /// <summary>ISDB-C で「指定した TS が無い」ときの失敗の文の先頭 (CXD2856 の仕様書 8.7。ロックしないときの <see cref="ITuneDevice.SyncFailed"/> とは別の失敗)</summary>
     public const string TsmfMissing = "指定した TS がありません";
 
-    /// <summary>ISDB-C でロックしたのに、TSMF の判定の時間切れまで TS が 1 パケットも届かなかったときの失敗の文 (MLT5 の仕様書 3.6)</summary>
+    /// <summary>ISDB-C でロックしたのに、TSMF の判定の時間切れまで TS が 1 パケットも届かなかったときの失敗の文 (IT930x の仕様書 6.3)</summary>
     public const string TsMissing = "ロックしましたが、TS が 1 パケットも届きません (ブリッジから先で TS が止まっています)";
 
-    /// <summary>TSMF の判定の時間切れ (ms。MLT5 の仕様書 7A.7・11 の 3 秒)。変えるのはテストのため</summary>
+    /// <summary>TSMF の判定の時間切れ (ms。CXD2856 の仕様書 8.7・11 の 3 秒)。変えるのはテストのため</summary>
     internal int TsmfTimeoutMs { get; init; } = TsmfSelector.TimeoutMs;
 
     /// <summary>最後の選局が ISDB-C で、復調器がロックしたか (<c>--tune</c> が出す)</summary>
@@ -1371,11 +1371,11 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>ISDB-C でロックしたあと TSMF の判定で失敗したときに、TS を止める前に読んだ信号品質 (<c>--tune</c> が出す)。読めなければ null</summary>
     public TunerSignal? IsdbcFailedSignal { get; private set; }
 
-    /// <summary>最後の ISDB-C の選局で、ほかに読めた値 (MLT5 の仕様書 8.4A。<see cref="Signal"/> を読んだあと)。<c>--tune</c> だけが出す</summary>
+    /// <summary>最後の ISDB-C の選局で、ほかに読めた値 (CXD2856 の仕様書 9.5。<see cref="Signal"/> を読んだあと)。<c>--tune</c> だけが出す</summary>
     public CxdIsdbcDetail? IsdbcDetail => _frontend?.IsdbcDetail;
 
     /// <summary>
-    /// TSMF の判定を待つ (MLT5 の仕様書 7A.4 の手順 6・7A.7 の「判定の待ち」)。判定には TS が要るので、受信機の出口を付けてから呼ぶ。
+    /// TSMF の判定を待つ (CXD2856 の仕様書 8.4 の手順 6・8.7 の「判定の待ち」)。判定には TS が要るので、受信機の出口を付けてから呼ぶ。
     /// 3 秒で決まらなければロックしないときと同じ失敗、「指定した TS が無い」は別の失敗にして、TS を止める
     /// </summary>
     private void WaitTsmf(IIt930xFrontend frontend, TsmfSelector tsmf)
@@ -1392,7 +1392,7 @@ public sealed class It930xTuner : ITuneDevice
             // 元の失敗を返す
         }
         StopOutput();
-        // 1 パケットも届かなかったときは、電波ではなくブリッジから先で TS が止まっている (仕様書 3.6)。同期しなかった文 (放送休止と読まれる) と分ける
+        // 1 パケットも届かなかったときは、電波ではなくブリッジから先で TS が止まっている (IT930x の仕様書 6.3)。同期しなかった文 (放送休止と読まれる) と分ける
         if (decision == TsmfDecision.Pending && tsmf.Received == 0) throw new IOException(TsMissing);
         if (decision == TsmfDecision.Pending) throw new IOException(ITuneDevice.SyncFailed);
         var detail = tsmf.FirstHeader is { } header
@@ -1401,7 +1401,7 @@ public sealed class It930xTuner : ITuneDevice
         throw new IOException($"{TsmfMissing} ({detail})");
     }
 
-    /// <summary>流している TS を止める (ブリッジの入力を閉じてから、復調器の TS の端子を止める。px4 の仕様書 11.2)</summary>
+    /// <summary>流している TS を止める (ブリッジの入力を閉じてから、復調器の TS の端子を止める。TC90522 の仕様書 9.2)</summary>
     private void StopOutput()
     {
         if (_output is null) return;

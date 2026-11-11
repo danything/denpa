@@ -271,7 +271,7 @@ public class It930xTests
         await Assert.That(It930x.Find(0x0511, 0x084E)?.Name).IsEqualTo("PLEX PX-MLT5U");
         await Assert.That(It930x.Find(0x0511, 0x024E)?.Name).IsEqualTo("PLEX PX-MLT5PE");
         await Assert.That(It930x.Find(0x0511, 0x924E)?.Name).IsEqualTo("e-Better DTV02A-5TS-P");
-        // PX-MLT8UT (0511:0051) は扱わない (px4 の仕様書 1.1 の範囲の外)
+        // PX-MLT8UT (0511:0051) は扱わない (IT930x の仕様書 1.1 の範囲の外)
         await Assert.That(It930x.Find(0x0511, 0x0051)).IsNull();
     }
 

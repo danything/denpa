@@ -216,7 +216,7 @@ public sealed class It930xBridge
     /// <summary><c>r_br_reg_ep4_tx_active</c> (bit 5)</summary>
     public const uint Ep4Active = 0xDD1E;
 
-    /// <summary><c>p_br_reg_lnk2ofdm_data_63_56</c>。I2C のバス 2 の速さ (仕様書 1.3 は <c>0xF103</c> と一緒に 0x07 を書く)</summary>
+    /// <summary><c>p_br_reg_lnk2ofdm_data_63_56</c>。I2C のバス 2 の速さ (IT930x の仕様書 4.2 は <c>0xF103</c> と一緒に 0x07 を書く)</summary>
     public const uint Lnk2OfdmData = 0xF6A7;
 
     // 端子の駆動の強さ (brRegister.h の p_br_reg_top_padmiscdrsr・padmiscdr2・padmiscdr4・padmiscdr8)
@@ -227,14 +227,14 @@ public sealed class It930xBridge
 
     /// <summary>
     /// ファームウェアに次の段の I2C の相手を教える欄 (brVariable.h の <c>next_level_*_i2c_address</c>・<c>OVA_NEXT_LEVEL_FIFTH_I2C_ADDR</c>)。
-    /// 欄 i に受信機 i の復調器の 8 ビットのアドレスを書く (仕様書 1.3)
+    /// 欄 i に受信機 i の復調器の 8 ビットのアドレスを書く (IT930x の仕様書 4.2)
     /// </summary>
     public static readonly IReadOnlyList<uint> NextLevelAddress = [0x4975, 0x4974, 0x4973, 0x4972, 0x4964];
 
     /// <summary>同じ欄のバス (<c>next_level_*_i2c_bus</c>・<c>OVA_NEXT_LEVEL_FIFTH_I2C_BUS</c>)</summary>
     public static readonly IReadOnlyList<uint> NextLevelBus = [0x4971, 0x4970, 0x496F, 0x496E, 0x4963];
 
-    /// <summary><c>OVA_EEPROM_CFG_VALID</c>。0 なら EEPROM の設定を読めていない (仕様書 1.3 は記録に出すだけで続ける)</summary>
+    /// <summary><c>OVA_EEPROM_CFG_VALID</c>。0 なら EEPROM の設定を読めていない (IT930x の仕様書 3。px4_drv は記録に出し、初期化を失敗にはしない)</summary>
     public const uint EepromValid = 0x4979;
 
     /// <summary>
@@ -494,7 +494,7 @@ public sealed class It930xBridge
     /// 開けるのは機材を開いたときの 1 回で、受信機ごとには開け閉めしない。SDK も、受信を始める・止めるときは EP 0x84 の読みだけを出し入れし、入力には触らない。
     /// 5 つの入力は 1 つの経路にまとまるので、ほかの入力が流している間に 1 つだけ開け閉めしない
     /// </summary>
-    /// <remarks>使わない入力は閉じたままにする (px4 の仕様書 2.3・13)</remarks>
+    /// <remarks>使わない入力は閉じたままにする (IT930x の仕様書 5)</remarks>
     public void EnableTsInputs()
     {
         for (var port = 0; port < TsInputs; port++)
@@ -545,17 +545,17 @@ public sealed class It930xBridge
     }
 
     /// <summary>
-    /// 次の段の I2C の設定 (<c>IT9300_initialize</c> の後半。仕様書 1.3)。I2C の速さ、端子の駆動の強さ、受信機ごとの I2C の相手。
+    /// 次の段の I2C の設定 (<c>IT9300_initialize</c> の後半。IT930x の仕様書 4.2)。I2C の速さ、端子の駆動の強さ、受信機ごとの I2C の相手。
     /// 終わりに <c>OVA_EEPROM_CFG_VALID</c> を読んで返す
     /// </summary>
-    /// <param name="receivers">受信機ごとの I2C のバスと復調器の T のアドレス (7 ビット)。ブリッジの欄は受信機の番号で並ぶ (仕様書 1.3)</param>
+    /// <param name="receivers">受信機ごとの I2C のバスと復調器の T のアドレス (7 ビット)。ブリッジの欄は受信機の番号で並ぶ (IT930x の仕様書 4.2)</param>
     public byte ConfigureReceivers(IReadOnlyList<It930xReceiver> receivers)
     {
         if (receivers.Any(receiver => receiver.Index < 0 || receiver.Index >= NextLevelAddress.Count))
         {
             throw new ArgumentException($"受信機の番号は 0〜{NextLevelAddress.Count - 1} です", nameof(receivers));
         }
-        // I2C の速さ (仕様書 1.3。IT9300_initialize と _IT9300_loadFirmware の値と同じ)
+        // I2C の速さ (IT930x の仕様書 4.2。IT9300_initialize と _IT9300_loadFirmware の値と同じ)
         WriteRegister(Lnk2OfdmData, I2cSpeed);
         WriteRegister(OneCycleCounterTuner, I2cSpeed);
         // 端子の駆動の強さ (IT9300_initialize がどの基板でも書く値。仕様書に無い)
@@ -572,7 +572,7 @@ public sealed class It930xBridge
     }
 
     /// <summary>
-    /// 次の段の I2C に書く (<c>IT9300_writeGenericRegisters</c>)。<paramref name="address"/> は 7 ビットで、ブリッジには 1 ビット左にずらして渡す (仕様書 1.3)。
+    /// 次の段の I2C に書く (<c>IT9300_writeGenericRegisters</c>)。<paramref name="address"/> は 7 ビットで、ブリッジには 1 ビット左にずらして渡す (IT930x の仕様書 4.1)。
     /// 1 回の I2C の書き込みで、<see cref="MaxI2cWrite"/> バイトまで
     /// </summary>
     public void I2cWrite(byte bus, byte address, ReadOnlySpan<byte> data)
@@ -594,9 +594,9 @@ public sealed class It930xBridge
     }
 
     /// <summary>
-    /// GPIOH の値のレジスタ (<c>p_br_reg_top_gpiohN_o</c>)。出力にする (<c>_en</c>) は + 1、機能を有効にする (<c>_on</c>) は + 2 (brRegister.h。仕様書 1.5 の番地と同じ)。
+    /// GPIOH の値のレジスタ (<c>p_br_reg_top_gpiohN_o</c>)。出力にする (<c>_en</c>) は + 1、機能を有効にする (<c>_on</c>) は + 2 (brRegister.h。IT930x の仕様書 7.2 の番地と同じ)。
     /// 入力の値 (<c>r_br_reg_top_gpiohN_i</c>) は - 1。いま使う 7 つだけ (GPIOH6・GPIOH14 はカード。<c>IT9300_bcasDetectCard</c>・<c>IT9300_bcasResetCard</c>)。
-    /// GPIOH3 (受信機が 1 つの機種の電源。px4 の仕様書 13.3) と GPIOH10 (LNB の短絡の検出。px4 の仕様書 10) の番地は px4 の仕様書の値で、ほかの GPIOH と同じ並び
+    /// GPIOH3 (受信機が 1 つの機種の電源。IT930x の仕様書 7.3) と GPIOH10 (LNB の短絡の検出。IT930x の仕様書 8) の番地は IT930x の仕様書 7.1 の値で、ほかの GPIOH と同じ並び
     /// </summary>
     public static uint GpioOutput(int pin) => pin switch
     {
@@ -613,7 +613,7 @@ public sealed class It930xBridge
     /// <summary>GPIOH の入力の値のレジスタ (<c>r_br_reg_top_gpiohN_i</c>)</summary>
     public static uint GpioInput(int pin) => GpioOutput(pin) - 1;
 
-    /// <summary>GPIOH を出力にして有効にし、値を書く (仕様書 1.5 の「出力・有効にして」。SDK の IT9300_initialize と同じ順)</summary>
+    /// <summary>GPIOH を出力にして有効にし、値を書く (IT930x の仕様書 7.2 の「出力・有効にして」。SDK の IT9300_initialize と同じ順)</summary>
     public void GpioSetup(int pin, bool value)
     {
         var output = GpioOutput(pin);

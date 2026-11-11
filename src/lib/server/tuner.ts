@@ -65,7 +65,7 @@ const AGENT_CHANNEL = object({
 export type AgentChannel = Infer<typeof AGENT_CHANNEL>;
 
 /**
- * 復号できる局が 1 つでも入っているチャンネルか。**チャンネルごとに決めること (スキャンで番組表も読むか・番組表の取得に行くか) はこれで見る。**
+ * 復号できる局が 1 つでも入っているチャンネルか。**番組表の取得に行くかは、チャンネルごとにこれで見る。**
  * 局ごとの判断は局の行の `services.decodable` (`epg.syncServices`)
  */
 export function decodableChannel(channel: AgentChannel): boolean {
@@ -217,6 +217,28 @@ export async function putChannels(
     array(AGENT_CHANNEL),
     await res.json(),
     "エージェントの PUT /denpa/channels",
+  );
+}
+
+/**
+ * 1 つの種別のチャンネルを全部消す (エージェントの `DELETE /denpa/channels?type=…`)。
+ * 受けられるチューナーが無くなった種別は、スキャンし直して消すことができないので、設定の画面からこれで消す (`scan.ts` の `removeType`)
+ */
+export async function deleteChannels(
+  type: ChannelType,
+): Promise<AgentChannel[]> {
+  const res = await agentFetch(
+    `/denpa/channels?type=${encodeURIComponent(type)}`,
+    { method: "DELETE", signal: AbortSignal.timeout(30_000) },
+  );
+  if (!res.ok)
+    throw new Error(
+      `チャンネルを消せません (${res.status}) ${await res.text()}`,
+    );
+  return tolerate(
+    array(AGENT_CHANNEL),
+    await res.json(),
+    "エージェントの DELETE /denpa/channels",
   );
 }
 

@@ -21,7 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 **LaunchDaemon は root で動くので、誰もログインしていなくても録画でき、外から観られます。** そのために sudo で流します
 (sudo を付けなければ、install.sh がそう言って止まる)。
 
-- **要るのは macOS だけです。** Homebrew も要りません。px4-userland / siano-userland の Mac 用は libusb を中に抱え、
+- **要るのは macOS だけです。** Homebrew も要りません。エージェントは USB を OS の IOKit で直に扱い、
   同梱の ffmpeg も macOS に最初からあるものにしか繋ぎません
 - **Developer ID の署名と公証はしていません。** curl で取ったファイルには「インターネットから来た」印 (隔離) が付かないので、
   Gatekeeper に止められません。ブラウザで落とした tar.gz を手で渡したとき (`DENPA_AGENT_TARBALL` など) は、install.sh が印を外します。
@@ -32,16 +32,16 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/install.sh | s
 - genkan (`http://denpa.localhost`) には繋ぎません。この Mac からは <http://localhost:3000>、LAN のほかの機器からは `http://<Mac の名前>.local:3000` で開きます
 - 本体とエージェントの tar.gz は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
 
-| 置き場                                     | 中身                                                                                                                                     |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `/Library/Application Support/denpa/`      | エージェントとメニューバーのアプリ (`bin/`)・px4-userland・siano-userland・本体 (`server/`)・px4d のソケットの置き場 (`run/`。root だけ) |
-| `/Library/Application Support/denpa/data/` | DB (`denpa.db`) と、その隣の局ロゴ・鍵・本体の環境変数 `denpa.env`・本体を起こす `denpa.sh` (エージェントと組む合言葉が入る)。root だけ  |
-| `/Library/LaunchDaemons/`                  | `io.github.danything.denpa.plist`・`io.github.danything.denpa-agent.plist`                                                               |
-| `/Library/LaunchAgents/`                   | `io.github.danything.denpa-tray.plist` (メニューバーのアプリをログインしたら起こす)                                                      |
-| `/Library/Logs/denpa/`                     | ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント。回さずに足していく)                                                          |
-| `~/denpa/config/` (`DENPA_HOME`)           | エージェントの `tuners.json` / `channels.json`・`tls/` (`tls/pair-token` は組むときの合言葉)                                             |
-| `~/Movies/denpa/recorded`                  | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                      |
-| `~/Movies/denpa/library`                   | 出来上がった録画 (`ENCODED_DIR`。Finder から見える)                                                                                      |
+| 置き場                                     | 中身                                                                                                                                    |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `/Library/Application Support/denpa/`      | エージェントとメニューバーのアプリ (`bin/`)・本体 (`server/`)                                                                           |
+| `/Library/Application Support/denpa/data/` | DB (`denpa.db`) と、その隣の局ロゴ・鍵・本体の環境変数 `denpa.env`・本体を起こす `denpa.sh` (エージェントと組む合言葉が入る)。root だけ |
+| `/Library/LaunchDaemons/`                  | `io.github.danything.denpa.plist`・`io.github.danything.denpa-agent.plist`                                                              |
+| `/Library/LaunchAgents/`                   | `io.github.danything.denpa-tray.plist` (メニューバーのアプリをログインしたら起こす)                                                     |
+| `/Library/Logs/denpa/`                     | ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント。回さずに足していく)                                                         |
+| `~/denpa/config/` (`DENPA_HOME`)           | エージェントの `tuners.json` / `channels.json`・`tls/` (`tls/pair-token` は組むときの合言葉)                                            |
+| `~/Movies/denpa/recorded`                  | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                     |
+| `~/Movies/denpa/library`                   | 出来上がった録画 (`ENCODED_DIR`。Finder から見える)                                                                                     |
 
 `~` は sudo を流した人のホームです。`data/` を root だけのものにしてあるのは、root で動くものの環境変数と合言葉を、ほかの人やほかのプログラムに
 読ませたり書き換えさせたりしないためです (`/Library/LaunchDaemons` の plist はだれでも読めるので、合言葉は書かない)。
@@ -58,10 +58,8 @@ root が書いた録画も Finder から消したり動かしたりできます�
 - 手元でビルドした tar.gz を入れるとき (開発と CI) は、`DENPA_AGENT_TARBALL`・`DENPA_SERVER_TARBALL` に絶対パスを書き、`sudo -E` で環境変数を渡します
 
 LaunchDaemon の環境変数は、コンテナ既定の置き場を Mac の置き場に向け直すものです。エージェントは
-`AGENT_PORT` (25252 のまま) `AGENT_HOST` `TUNERS_FILE` `CHANNELS_FILE` `PX4_USERLAND_DIR` `PX4_RUNTIME_DIR` `SIANO_USERLAND_DIR` `SIANO_FIRMWARE` `RAW_DIR`
+`AGENT_PORT` (25252 のまま) `AGENT_HOST` `TUNERS_FILE` `CHANNELS_FILE` `RAW_DIR`
 で、本体は `denpa.sh` が `DENPA_DB`・`RAW_DIR`・`ENCODED_DIR`・`FFMPEG`・`FFPROBE`・`MPEG2_DIR`・`FONT_DIR`・`TUNER_AGENT_URL`・`PORT`・`DENPA_VERSION` を決めます。
-`PX4_RUNTIME_DIR` を `/Library/Application Support/denpa/run` と短くしているのは、px4d の制御ソケットのパスが macOS では 104 バイトまでだからです。
-px4d は、持ち主が自分 (root) でほかの人が書けないフォルダしか使わないので、install.sh が root の 700 で作ります。
 IT930x のファームウェアはエージェントに同梱しているので、install.sh は置きません。
 
 ## メニューバーのアプリ
@@ -144,20 +142,18 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
 
 ## Linux と違うところ
 
-- **チューナーは PX-MLT5 系・px4-userland の対応機種 (PX-Q3U4 など)・siano-userland の機材・Sony CECH-ZD1 J・PIXELA PIX-DT295 (試験的) だけ。** macOS には DVB が無いので、
-  PT2/PT3 のような PCI の機材は使えません。PX-MLT5 系 ([tuners.md](tuners.md#px-mlt5-系)) と px4-userland の対応機種 ([tuners.md](tuners.md#px-q3px-w3-系とit930x-のほかの機種)) と CECH-ZD1 J と PIX-DT295 はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
+- **チューナーは IT930x の機材 (PX-MLT5 系・PX-Q3U4 など)・PX-S1UD・Sony CECH-ZD1 J・PIXELA PIX-DT295 だけ。** macOS には DVB が無いので、
+  PT2/PT3 のような PCI の機材は使えません。IT930x の機材 ([tuner-it930x.md](tuner-it930x.md)) と PX-S1UD ([tuner-px-s1ud.md](tuner-px-s1ud.md)) と CECH-ZD1 J と PIX-DT295 はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
   Mac の実機ではまだ確かめていません)
-- **カードリーダー**: PX-MLT5 系と px4-userland の対応機種の内蔵リーダーと、CECH-ZD1 J の差し込み口は、エージェントが直に読みます (PX-Q3 系は、Mac ではカードスロットのある側を見分けられないので、2 つの USB デバイスの内蔵リーダーが両方並びます)。USB のリーダーは
+- **カードリーダー**: IT930x の機材の内蔵リーダーと、CECH-ZD1 J の差し込み口は、エージェントが直に読みます (PX-Q3 系は、Mac ではカードスロットのある側を見分けられないので、2 つの USB デバイスの内蔵リーダーが両方並びます)。USB のリーダーは
   usbfs を直接扱えないので、**macOS 標準の PC/SC (PCSC.framework) 越し**に扱います
   (`Pcsc.cs`)。`denpa-agent --card` はそのリーダーを並べます ([読めないとき](#カードが読めないとき))。動いている間はリーダーを
   排他で使うので、他のアプリはカードを使えません
 - **エンコードは Apple の VideoToolbox (H.264・H.265) を使えれば使い、使えなければソフトウェアで** (SVT-AV1・x264)。
   起動時の試しのエンコードで決めます ([encode.md](encode.md#mac-でエンコードする))。AV1 はソフトウェアだけです
-- pipe を広げられない (`F_SETPIPE_SZ` が無い) ので、siano-ts から受けるバッファは Linux より浅い
-  (px4d から受けるバッファは pipe を使わないので、Linux と同じ 8MB)
 - エンコードの進み具合は、エンコードできたコマ数から出します。Linux のように ffmpeg の読み位置 (`/proc`) は読めないので、
   尺が測れなかった録画は割合が動きません (出来上がりは変わらない)
-- **Apple Silicon だけ** (Intel Mac 用の px4-userland / siano-userland が無い)
+- **Apple Silicon だけ** (配布物は `darwin-arm64` だけ)
 
 ## 確かめたこと
 
@@ -167,7 +163,7 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
   本体を `bun server.js` で起こして画面・字・デコーダが返ることを見る。install.sh で本体ごと入れて root の LaunchDaemon で動き、
   本体がエージェントと組むところまで。Docker の本体からの移行は偽の docker で流す (`tests/install-mac-migrate.sh`)。メニューバーのアプリは、組んで起こして落ちないこと・
   LaunchAgent に載ること・上げ直すと動いているものを止めること・外すと消えることまで
-- **Mac の実機でチューナーとカードを繋いで確かめたのは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 の報告 (#2218) だけです** ([tuners.md](tuners.md#pixela-pix-dt295-試験的))。それも前のバージョン
+- **Mac の実機でチューナーとカードを繋いで確かめたのは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 の報告 (#2218) だけです** ([tuners.md](tuners.md#pixela-pix-dt295))。それも前のバージョン
   (エージェントがユーザーの LaunchAgent) のときのものです
 - **まだ確かめていないこと**: root の LaunchDaemon で動くエージェントから USB の機材とカードリーダー (PC/SC) を使えるか、VideoToolbox で
   エンコードした録画の画質と大きさ、スリープから起こす予約で録画が始まるか、実機の Docker からの移行、メニューバーのアプリの見た目と、

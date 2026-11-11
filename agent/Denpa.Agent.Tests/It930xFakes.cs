@@ -367,7 +367,8 @@ internal sealed class FakeIt930x : IUsbDevice
         return reply.Length;
     }
 
-    public void Dispose()
-    {
-    }
+    /// <summary>機材が USB を閉じた (閉じる処理の最後。TS の読みを閉じた「TS 閉じる」は、電源を切るより前に残る)</summary>
+    public volatile bool Disposed;
+
+    public void Dispose() => Disposed = true;
 }

@@ -27,8 +27,9 @@ denpa だけで録って観るなら、次のものは要りません。
 - **B25 のデコーダ**。復号はエージェントがします。Linux では pcscd も要りません (USB のカードリーダーを直接扱う。[tuners.md](tuners.md#カードリーダー))
 - **チャンネルの設定ファイル**。設定の「受信」の「チャンネル」でスキャンします。衛星は最初から局が入っています
 - **データベースのサーバ** (MariaDB など)。denpa は SQLite を自分で持ちます ([config.md](config.md))
-- **PX-Q3U4・PX-S1UD などのホストのドライバ**。px4-userland・siano-userland を同梱しています (Linux はイメージに、Mac と Windows はインストーラが入れる)
-  ([tuner-px4.md](tuner-px4.md)・[tuner-px-s1ud.md](tuner-px-s1ud.md))。PT3 などの DVB のドライバは要ります ([tuner-pt3.md](tuner-pt3.md))
+- **PX-MLT5 系・PX-Q3U4・PX-S1UD などのホストのドライバ**。IT930x の機材 (PX-MLT5 系・PX-Q3U4 など) と PX-S1UD は、エージェントが USB を直に持ちます
+  (PX-S1UD の実装は実機で確かめていません。Linux ではカーネルのドライバでも使えます)
+  ([tuner-it930x.md](tuner-it930x.md)・[tuner-px-s1ud.md](tuner-px-s1ud.md))。PT3 などの DVB のドライバは要ります ([tuner-pt3.md](tuner-pt3.md))
 
 ## 移せるもの・移せないもの
 
@@ -53,13 +54,39 @@ Mirakurun・KonomiTV から取り込む仕組みはありません。チャン�
 ほかのソフトと同じ機械で動かすときに、コードで確かめてある振る舞いです。
 
 - **チューナーの設定を保存するまでは、見つけたチューナーを全部使います。** エージェントは `/dev/dvb` のアダプタと、
-  px4-userland・siano-userland の機材を自分で探します
+  asicen-userland の機材と、USB を直に持つ機材 (IT930x の機材・PX-S1UD など) を自分で探します
 - **一度選局したチューナーは、エージェントを止めるか、チューナーの設定を変えるまで開いたままです。**
   同じチューナーをほかのソフトと分け合う仕組みはありません
 - **ほかのソフトに残すチューナーは、設定の「受信」の「チューナー」で「使う」のスイッチを外します。** 外したチューナーは選局に使いません
-- **px4-userland・asicen-userland の機材 (PX-Q3U4・PX-W3U3 など) は、筐体の受信機を全部外すと px4d・asicend を止めて USB を手放します** ([agent.md](agent.md#px4-userland-の作り))。
-  内蔵カードリーダーで復号しているときは止まらないので、同じ画面のカードリーダーの表で、そのリーダーの「使う」も外します。
+- **asicen-userland の機材 (PX-W3U3 など) は、筐体の受信機を全部外すと asicend を止めて USB を手放します** ([agent.md](agent.md#asicen-userland-の作り))。
   1 つでも「使う」に戻すと、また起こします
+- **IT930x の機材 (PX-Q3U4 など) は、受信機を全部外すと、30 秒待ってから電源を切って USB を手放します** ([tuner-it930x.md](tuner-it930x.md#設定))。
+  内蔵カードリーダーで復号しているときは手放さないので、同じ画面のカードリーダーの表で、そのリーダーの「使う」も外します
 - **Linux では、ホストや別のコンテナで pcscd が動いていると USB のカードリーダーを使えません**
   (「別のプロセスがカードリーダーを使用中です」と出ます。[tuners.md](tuners.md#直らないとき))
-- **PX-S1UD は、カーネルのドライバが使っているものには siano-userland から触りません** ([tuner-px-s1ud.md](tuner-px-s1ud.md))
+- **PX-S1UD は、カーネルのドライバが使っているものにはエージェントから触りません** ([tuner-px-s1ud.md](tuner-px-s1ud.md))
+- **Linux に px4_drv (PX-Q3U4・PX-W3U4・PX-MLT5PE などのカーネルドライバ) が入っていると、その機材はエージェントから開けません。**
+  px4_drv が機材を使っている間は、エージェントは USB を開けず「ほかのソフトが使っています」と返します。denpa で使うなら、ホストで px4_drv を
+  blacklist して再起動します。Mirakurun など px4_drv の機材を使っていたソフトは、その機材を使えなくなります
+
+  ```sh
+  printf 'blacklist px4_drv\n' | sudo tee /etc/modprobe.d/denpa-px4.conf
+  sudo reboot
+  ```
+
+## いまの環境を残して denpa を足す
+
+**px4_drv と Mirakurun を外さずに denpa を使うなら、エージェントの代わりに Mirakurun へ中継するブリッジを置きます。**
+チューナーは Mirakurun が持ったままで、denpa は Mirakurun を通して選局します。EPGStation などほかのソフトと同じチューナーを共有できます。
+
+- [denpa-mirakurun-bridge](https://github.com/multiverse2011/denpa-mirakurun-bridge) (multiverse2011 さん作、Apache-2.0)。
+  denpa のチューナーエージェントの API を Mirakurun に中継します。denpa v2.28.0 以降が要ります。
+  denpa の `compose.override.yml` で `tuner-agent` をこのブリッジのイメージに差し替えます。
+  Mirakurun の `channels.yml` の書き方に条件があります。手順と条件はブリッジの README にあります
+
+このブリッジは denpa とは別の人が作っています。Doa では動作を確かめていません。内蔵カードリーダー・信号レベル・ケーブルの受信のように
+エージェントが受け持つ機能がどこまで使えるかも確かめていません。不具合や質問はブリッジのリポジトリへ送ってください。
+
+同じ役目のものは、2026 年 11 月の時点でほかに見つかっていません。別の人が作っているものには、Home Assistant に denpa を入れるアドオン
+([Khronos31/hassio-addons](https://github.com/Khronos31/hassio-addons)) もあります。こちらはチューナーをほかの録画ソフトと共有しません。
+同梱する denpa のバージョンは、アドオンの側で決まります。

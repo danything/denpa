@@ -10,26 +10,26 @@ namespace Denpa.Agent;
  * 受信機の後ろのチップ (CXD2856ER と CXD2858ER は Cxd2856.cs・Cxd2858.cs、TC90522 と R850・RT710 は Tc90522.cs・R850.cs・Rt710.cs)、
  * 実機で試す入口 (It930xProbe.cs の --it930x-probe と、Probe.cs の --tune it930x:… と --card it930x:…) がある。
  * 自動検出 (Detect) が、この表の機種 (Family) を it930x:<USB のポート>:<受信機> で挙げる。
- * 受信機ごとの割り当ては仕様書 (denpa-spec の mlt5/spec.md の 1.2 と、px4/spec.md の 1・2.2・13) から。
- * コメントの「MLT5 の仕様書」は mlt5/spec.md、「px4 の仕様書」は px4/spec.md。
+ * 受信機ごとの割り当ては仕様書 (denpa-spec の it930x/spec.md の 1 と、cxd2856/spec.md の 1.2 と、tc90522/spec.md の 1.2・11) から。
+ * コメントの「IT930x の仕様書」は it930x/spec.md、「CXD2856 の仕様書」は cxd2856/spec.md、「TC90522 の仕様書」は tc90522/spec.md。
  */
 
 /// <summary>受信機の復調器</summary>
 public enum It930xDemod
 {
-    /// <summary>CXD2856ER。地上波・衛星・J.83B を 1 つで受ける (MLT5 の仕様書)</summary>
+    /// <summary>CXD2856ER。地上波・衛星・J.83B を 1 つで受ける (CXD2856 の仕様書)</summary>
     Cxd2856,
 
-    /// <summary>TC90522 の地上波のアドレス (px4 の仕様書 2.2)。地上波だけ</summary>
+    /// <summary>TC90522 の地上波のアドレス (TC90522 の仕様書 1.2)。地上波だけ</summary>
     Tc90522T,
 
-    /// <summary>TC90522 の衛星のアドレス (px4 の仕様書 2.2)。衛星だけ</summary>
+    /// <summary>TC90522 の衛星のアドレス (TC90522 の仕様書 1.2)。衛星だけ</summary>
     Tc90522S,
 
-    /// <summary>TC90522 (か TC90532) の地上波と衛星のアドレスを、選局のたびに切り替えて使う受信機 (px4 の仕様書 13.3)</summary>
+    /// <summary>TC90522 (か TC90532) の地上波と衛星のアドレスを、選局のたびに切り替えて使う受信機 (TC90522 の仕様書 11.1)</summary>
     Tc90522Switch,
 
-    /// <summary>DTV03A-1TU の復調器 (型番は未確認。TC90522 と同じ読み書きの形で、初期化の値が違う。px4 の仕様書 13.4)</summary>
+    /// <summary>DTV03A-1TU の復調器 (型番は未確認。TC90522 と同じ読み書きの形で、初期化の値が違う。TC90522 の仕様書 11.2)</summary>
     Isdbt2071,
 }
 
@@ -50,10 +50,10 @@ public enum It930xTunerChip
 }
 
 /// <summary>
-/// 受信機 1 つの割り当て (MLT5 の仕様書 1.2、px4 の仕様書 2.2・13)。<paramref name="DemodAddress"/> は復調器のアドレス (7 ビット)。
-/// CXD2856ER は T のアドレス (X は T + 2。MLT5 の仕様書 1.1)、TC90522 はその受信機が使うアドレス (切り替える受信機は地上波のアドレス)
+/// 受信機 1 つの割り当て (CXD2856 の仕様書 1.2、TC90522 の仕様書 1.2・11)。<paramref name="DemodAddress"/> は復調器のアドレス (7 ビット)。
+/// CXD2856ER は T のアドレス (X は T + 2。CXD2856 の仕様書 1.1)、TC90522 はその受信機が使うアドレス (切り替える受信機は地上波のアドレス)
 /// </summary>
-/// <param name="Index">受信機の番号 (設定の <c>it930x:&lt;ポート&gt;:&lt;Index&gt;</c>)。ブリッジの「次の段の I2C」の欄もこの番号で並ぶ (MLT5 の仕様書 1.3、px4 の仕様書 2.3)</param>
+/// <param name="Index">受信機の番号 (設定の <c>it930x:&lt;ポート&gt;:&lt;Index&gt;</c>)。ブリッジの「次の段の I2C」の欄もこの番号で並ぶ (IT930x の仕様書 4.2・5)</param>
 /// <param name="TsInput">ブリッジの TS 入力 (0〜4)</param>
 /// <param name="I2cBus">ブリッジの I2C のバス</param>
 public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte DemodAddress)
@@ -63,24 +63,24 @@ public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte De
     public It930xTunerChip Tuner { get; init; } = It930xTunerChip.Cxd2858;
 
     /// <summary>
-    /// ブリッジがこの受信機のパケットの先頭に付ける同期バイト。CXD2856ER の機種は入力の番号で決めた値 (<see cref="It930xBridge.SyncBytes"/>。こちらで決めてよい値。px4 の仕様書 13.1)、
-    /// TC90522 の機種は px4 の仕様書 2.2・13.3・13.4 の値
+    /// ブリッジがこの受信機のパケットの先頭に付ける同期バイト。CXD2856ER の機種は入力の番号で決めた値 (<see cref="It930xBridge.SyncBytes"/>。こちらで決めてよい値。IT930x の仕様書 5.2)、
+    /// TC90522 の機種は TC90522 の仕様書 1.2・11 の値
     /// </summary>
     public byte SyncByte { get; init; } = It930xBridge.SyncBytes[TsInput];
 
     /// <summary>受けられる種別 (<c>GET /denpa/tuners</c> の <c>receivable</c>)。受けられない種別の選局は、機材に触る前に断る (<see cref="It930xTuner"/>)</summary>
     public IReadOnlyList<string> Types { get; init; } = It930x.Types;
 
-    /// <summary>衛星の「2 つ目」の印 (px4 の仕様書 2.2・6.2。AGC の <c>10</c> の値が変わる)</summary>
+    /// <summary>衛星の「2 つ目」の印 (TC90522 の仕様書 1.2・5.2。AGC の <c>10</c> の値が変わる)</summary>
     public bool Second { get; init; }
 
-    /// <summary>R850 のループスルー (px4 の仕様書 2.2・7.2)</summary>
+    /// <summary>R850 のループスルー (TC90522 の仕様書 1.2・6.2)</summary>
     public bool Loopthrough { get; init; }
 
-    /// <summary>切り替える受信機の、衛星のアドレス (px4 の仕様書 13.3 の S)。ほかは 0</summary>
+    /// <summary>切り替える受信機の、衛星のアドレス (TC90522 の仕様書 11.1 の S)。ほかは 0</summary>
     public byte SatelliteAddress { get; init; }
 
-    /// <summary>切り替える受信機で、TS の設定を書く衛星のアドレス (px4 の仕様書 13.3 の S0)。ほかは 0</summary>
+    /// <summary>切り替える受信機で、TS の設定を書く衛星のアドレス (TC90522 の仕様書 11.1 の S0)。ほかは 0</summary>
     public byte SatelliteTsAddress { get; init; }
 
     /// <summary>自動で見つけたときに最初に選ぶ種別。<c>CATV</c> と <c>SKY</c> は受けられても最初からは選ばない (<see cref="It930x.DetectedTypes"/>)</summary>
@@ -90,36 +90,36 @@ public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte De
     public bool Takes(string type) => Types.Contains(type);
 
     /// <summary>
-    /// その選局を受けられるか。ISDB-C (種別は <c>CATV</c>。<c>--tune</c> だけで選局する) は、受けられる種別には入れておらず、CXD2856ER の受信機だけが受けられる (MLT5 の仕様書 7A)。
+    /// その選局を受けられるか。ISDB-C (種別は <c>CATV</c>。<c>--tune</c> だけで選局する) は、受けられる種別には入れておらず、CXD2856ER の受信機だけが受けられる (CXD2856 の仕様書 8)。
     /// ほかは種別で決める
     /// </summary>
     public bool Takes(ChannelTable.Tuning tuning) => tuning.IsdbC ? Demod == It930xDemod.Cxd2856 : Takes(tuning.Type);
 }
 
 /// <summary>
-/// IT930x を積んだ機材 1 機種。受信機ごとの割り当ては MLT5 の仕様書 1.2 と、px4 の仕様書 2.2・13 の表
+/// IT930x を積んだ機材 1 機種。受信機ごとの割り当ては CXD2856 の仕様書 1.2 と、TC90522 の仕様書 1.2・11 の表
 /// </summary>
 public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnlyList<It930xReceiver> Receivers)
 {
     /// <summary>
-    /// LNB に給電できるか (ブリッジの GPIOH11。15 V だけ。MLT5 の仕様書 9、px4 の仕様書 10)。
-    /// 受信機が 1 つの機種 (px4 の仕様書 13.3・13.4) は給電の操作が無いので false (15 V の指定は断る)
+    /// LNB に給電できるか (ブリッジの GPIOH11。15 V だけ。IT930x の仕様書 8、IT930x の仕様書 8)。
+    /// 受信機が 1 つの機種 (IT930x の仕様書 8) は給電の操作が無いので false (15 V の指定は断る)
     /// </summary>
     public bool Lnb { get; init; } = true;
 
-    /// <summary>内蔵カードリーダーがあるか (px4 の仕様書 1.4)。PX-MLT8PE の 3 受信機の側だけ無い</summary>
+    /// <summary>内蔵カードリーダーがあるか (IT930x の仕様書 9)。PX-MLT8PE の 3 受信機の側だけ無い</summary>
     public bool Card { get; init; } = true;
 
-    /// <summary>2 つの USB デバイスで 1 つの筐体になる機種 (Q3。px4 の仕様書 1.5)</summary>
+    /// <summary>2 つの USB デバイスで 1 つの筐体になる機種 (Q3。IT930x の仕様書 2.1)</summary>
     public bool Paired { get; init; }
 
     /// <summary>
-    /// 受信機の基板の電源の GPIOH (0 で入る)。7 の機種は機材を開いている間 (受信機かカードを使っている間) 入れておく (MLT5 の仕様書 1.5、px4 の仕様書 2.5)。
-    /// 3 の機種は受信機を開いている間だけ入れ、カードのためには入れない (px4 の仕様書 13.3)
+    /// 受信機の基板の電源の GPIOH (0 で入る)。7 の機種は機材を開いている間 (受信機かカードを使っている間) 入れておく (IT930x の仕様書 7.2)。
+    /// 3 の機種は受信機を開いている間だけ入れ、カードのためには入れない (IT930x の仕様書 7.3)
     /// </summary>
     public int PowerPin { get; init; } = 7;
 
-    /// <summary>電源を入れてからリセットを解くまでの待ち (ms)。GPIOH7 の機種は 80、GPIOH3 の機種は 100 (px4 の仕様書 12)</summary>
+    /// <summary>電源を入れてからリセットを解くまでの待ち (ms)。GPIOH7 の機種は 80、GPIOH3 の機種は 100 (IT930x の仕様書 10)</summary>
     public int PowerWaitMs => PowerPin == 7 ? 80 : 100;
 
     /// <summary>機材を開いている間、電源を入れておく機種か</summary>
@@ -129,7 +129,7 @@ public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnly
     public It930xDemod Demod => Receivers[0].Demod;
 
     /// <summary>
-    /// LNB の給電の短絡の検出の GPIOH (入力。1 で正常、0 で短絡)。Q3・W3 系だけ (px4 の仕様書 2.5・10。PLEX の公開ドライバーだけにある情報で、実機で確かめた記録は無い)。
+    /// LNB の給電の短絡の検出の GPIOH (入力。1 で正常、0 で短絡)。Q3・W3 系だけ (IT930x の仕様書 7.1・8。PLEX の公開ドライバーだけにある情報で、実機で確かめた記録は無い)。
     /// 選局には使わず、<c>--tune</c> の出力にだけ出す
     /// </summary>
     public int? LnbSensePin => Demod is It930xDemod.Tc90522T or It930xDemod.Tc90522S ? 10 : null;
@@ -150,7 +150,7 @@ public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnly
 public static class It930x
 {
     /// <summary>
-    /// CXD2856ER の受信機が受けられる種別。ISDB-T・ISDB-S・ISDB-C・J.83B を受けられる (MLT5 の仕様書 1.2)。
+    /// CXD2856ER の受信機が受けられる種別。ISDB-T・ISDB-S・ISDB-C・J.83B を受けられる (CXD2856 の仕様書 1.2)。
     /// 機種が分からない <c>it930x:</c> の受信機にも、これを返す (<see cref="Receivable"/>)。<c>CATV</c> (ケーブルテレビのトランスモジュレーション方式) と <c>SKY</c> (スカパー！プレミアムサービス光) を受けられるのは、いまは CXD2856ER の機種だけ
     /// </summary>
     public static readonly IReadOnlyList<string> Types = ["GR", "BS", "CS", ChannelTable.Catv, ChannelTable.Sky];
@@ -164,7 +164,7 @@ public static class It930x
     /// <summary>地上波と衛星を切り替える受信機 (J.83B は受けられない)</summary>
     private static readonly IReadOnlyList<string> Both = ["GR", "BS", "CS"];
 
-    /// <summary>PX-MLT5PE・DTV02A-5TS-P の割り当て (MLT5 の仕様書 1.2)。T のアドレスとバスは 3 機種で同じで、TS 入力は受信機の番号と同じ</summary>
+    /// <summary>PX-MLT5PE・DTV02A-5TS-P の割り当て (CXD2856 の仕様書 1.2)。T のアドレスとバスは 3 機種で同じで、TS 入力は受信機の番号と同じ</summary>
     private static readonly IReadOnlyList<It930xReceiver> Mlt5pe =
     [
         new(0, 0, 3, 0x65),
@@ -174,7 +174,7 @@ public static class It930x
         new(4, 4, 3, 0x64),
     ];
 
-    /// <summary>PX-MLT5U の割り当て (MLT5 の仕様書 1.2)。TS 入力の番号だけが PX-MLT5PE と違う</summary>
+    /// <summary>PX-MLT5U の割り当て (CXD2856 の仕様書 1.2)。TS 入力の番号だけが PX-MLT5PE と違う</summary>
     private static readonly IReadOnlyList<It930xReceiver> Mlt5u =
     [
         new(0, 4, 3, 0x65),
@@ -185,7 +185,7 @@ public static class It930x
     ];
 
     /// <summary>
-    /// Q3・W3 系の USB デバイス 1 つ分 (W3 の全体、Q3 の片側) の割り当て (px4 の仕様書 2.2)。受信機 0・1 が衛星 (RT710)、2・3 が地上波 (R850)。
+    /// Q3・W3 系の USB デバイス 1 つ分 (W3 の全体、Q3 の片側) の割り当て (TC90522 の仕様書 1.2)。受信機 0・1 が衛星 (RT710)、2・3 が地上波 (R850)。
     /// 復調器 TC90522 の 4 つのアドレスがバス 2 にあり、TS 入力は 1〜4。同期バイトは仕様書の値で、受信機 3 は 0x47
     /// </summary>
     private static readonly IReadOnlyList<It930xReceiver> W3 =
@@ -196,7 +196,7 @@ public static class It930x
         new(3, 4, 2, 0x12) { Demod = It930xDemod.Tc90522T, Tuner = It930xTunerChip.R850, SyncByte = 0x47, Types = Terrestrial },
     ];
 
-    /// <summary>PX-MLT8PE の 5 受信機の側の割り当て (px4 の仕様書 13.1)。チップと手順は MLT5 系と同じ</summary>
+    /// <summary>PX-MLT8PE の 5 受信機の側の割り当て (CXD2856 の仕様書 1.2)。チップと手順は MLT5 系と同じ</summary>
     private static readonly IReadOnlyList<It930xReceiver> Mlt8pe5 =
     [
         new(0, 0, 1, 0x65),
@@ -206,7 +206,7 @@ public static class It930x
         new(4, 4, 3, 0x64),
     ];
 
-    /// <summary>PX-MLT8PE の 3 受信機の側の割り当て (px4 の仕様書 13.1)。TS 入力 1・2 は使わない</summary>
+    /// <summary>PX-MLT8PE の 3 受信機の側の割り当て (CXD2856 の仕様書 1.2)。TS 入力 1・2 は使わない</summary>
     private static readonly IReadOnlyList<It930xReceiver> Mlt8pe3 =
     [
         new(0, 0, 3, 0x65),
@@ -214,7 +214,7 @@ public static class It930x
         new(2, 4, 3, 0x64),
     ];
 
-    /// <summary>DTV02A-4TS-P の割り当て (px4 の仕様書 13.2)。PX-MLT5PE の受信機 3 が無い形で、TS 入力 3 は使わない</summary>
+    /// <summary>DTV02A-4TS-P の割り当て (CXD2856 の仕様書 1.2)。PX-MLT5PE の受信機 3 が無い形で、TS 入力 3 は使わない</summary>
     private static readonly IReadOnlyList<It930xReceiver> Dtv02a4ts =
     [
         new(0, 0, 3, 0x65),
@@ -223,7 +223,7 @@ public static class It930x
         new(3, 4, 3, 0x64),
     ];
 
-    /// <summary>受信機が 1 つで、地上波と衛星を切り替える機種の割り当て (px4 の仕様書 13.3)。<paramref name="satellite"/> は衛星のアドレス</summary>
+    /// <summary>受信機が 1 つで、地上波と衛星を切り替える機種の割り当て (TC90522 の仕様書 11.1)。<paramref name="satellite"/> は衛星のアドレス</summary>
     private static IReadOnlyList<It930xReceiver> Single(byte satellite, bool second = false) =>
     [
         new(0, 0, 3, 0x10)
@@ -234,15 +234,15 @@ public static class It930x
     ];
 
     /// <summary>
-    /// いま扱う機種。px4_drv と px4-userland が扱う USB の ID の全部 (MLT5 の仕様書 1.1、px4 の仕様書 1.1)。
+    /// いま扱う機種。px4_drv と px4-userland が扱う USB の ID の全部 (CXD2856 の仕様書 1.1、IT930x の仕様書 1.1)。
     ///
     /// <list type="bullet">
     /// <item>MLT5 系 (CXD2856ER + CXD2858ER): PX-MLT5PE は、USB の ID と受信機 0〜4 の割り当てを実機で確かめた (5 台とも選局できた)。
-    /// PX-MLT5U と DTV02A-5TS-P は実機で確かめていない。DTV02A-5TS-P は PX-MLT5PE と同じ割り当てとして扱う (MLT5 の仕様書 1.2 も未確認としている)</item>
+    /// PX-MLT5U と DTV02A-5TS-P は実機で確かめていない。DTV02A-5TS-P は PX-MLT5PE と同じ割り当てとして扱う (CXD2856 の仕様書 1.2 も未確認としている)</item>
     /// <item>Q3・W3 系 (TC90522 + R850 + RT710): どの機種も、このドライバーでは実機で確かめていない (#1578)</item>
     /// <item>PX-MLT8PE・DTV02A-4TS-P (MLT5 系と同じチップで、割り当てだけが違う): 実機で確かめていない</item>
     /// <item>受信機が 1 つの機種 (ISDB2056・ISDB2056N・PX-M1UR・PX-S1UR・DTV03A-1TU): 実機で確かめていない。
-    /// 電源は GPIOH3 で、LNB には給電できない (px4 の仕様書 13.3・13.4)</item>
+    /// 電源は GPIOH3 で、LNB には給電できない (IT930x の仕様書 7.3・8)</item>
     /// </list>
     /// </summary>
     public static readonly IReadOnlyList<It930xModel> Family =
@@ -257,14 +257,14 @@ public static class It930x
         new(0x0511, 0x024A, "PLEX PX-Q3PE4", W3) { Paired = true },
         new(0x0511, 0x074A, "PLEX PX-Q3PE5", W3) { Paired = true },
         new(0x0511, 0x0253, "PLEX PX-MLT8PE", Mlt8pe5),
-        // 3 受信機の側。カードリーダーは 5 受信機の側だけ (px4 の仕様書 1.4)。2 つの USB デバイスは組にしない (組にする手順が公開の資料に無い。px4 の仕様書 13.1)
+        // 3 受信機の側。カードリーダーは 5 受信機の側だけ (IT930x の仕様書 9)。2 つの USB デバイスは組にしない (組にする手順が公開の資料に無い。IT930x の仕様書 2.1)
         new(0x0511, 0x0252, "PLEX PX-MLT8PE", Mlt8pe3) { Card = false },
         new(0x0511, 0x0254, "e-Better DTV02A-4TS-P", Dtv02a4ts),
         new(0x0511, 0x004B, "Digibest ISDB2056", Single(0x11)) { PowerPin = 3, Lnb = false },
-        // ISDB2056N は衛星のアドレスが 0x13 で、「2 つ目」の印が有る (px4 の仕様書 13.3)
+        // ISDB2056N は衛星のアドレスが 0x13 で、「2 つ目」の印が有る (TC90522 の仕様書 11.1)
         new(0x0511, 0x084B, "Digibest ISDB2056N", Single(0x13, second: true)) { PowerPin = 3, Lnb = false },
         new(0x0511, 0x0854, "PLEX PX-M1UR", Single(0x11)) { PowerPin = 3, Lnb = false },
-        // PX-S1UR は地上波だけ (RT710 が無い)。衛星のアドレス 0x11 には初期化の書き込みだけをする (px4 の仕様書 13.3)
+        // PX-S1UR は地上波だけ (RT710 が無い)。衛星のアドレス 0x11 には初期化の書き込みだけをする (TC90522 の仕様書 11.1)
         new(0x0511, 0x0855, "PLEX PX-S1UR",
         [
             new(0, 0, 3, 0x10)
@@ -315,7 +315,7 @@ public static class It930x
     /// <summary>
     /// 挿さっている機材の受信機を、設定に書いたのと同じ形式で。並べるだけで開かない (開くとファームウェアを起動して電源を入れる)。
     /// 受信機ごとに、受けられる種別のうち最初に選ぶもの (<see cref="It930xReceiver.DetectedTypes"/>) を付ける。
-    /// Q3 は 2 つの USB デバイスを続けて並べ、シリアル番号の末尾が 1 の側を先にする (px4 の仕様書 1.5)
+    /// Q3 は 2 つの USB デバイスを続けて並べ、シリアル番号の末尾が 1 の側を先にする (IT930x の仕様書 2.1)
     /// </summary>
     public static List<TunerSpec> Detect() => Specs(Found(Log.Write), Serial);
 
@@ -376,7 +376,7 @@ public static class It930x
 
     /// <summary>
     /// 挿さっている機材から (渡せるのはテストのため)。カードリーダーの無い機種 (PX-MLT8PE の 3 受信機の側) は挙げない。
-    /// Q3 は、シリアル番号の末尾が 1 の側だけを挙げる (px4 の仕様書 1.4。PX-Q3PE4・PX-Q3PE5 でも末尾 1 の側につながっているかは未確認。
+    /// Q3 は、シリアル番号の末尾が 1 の側だけを挙げる (IT930x の仕様書 9。PX-Q3PE4・PX-Q3PE5 でも末尾 1 の側につながっているかは未確認。
     /// 末尾 2 の側は、<c>--card it930x:&lt;ポート&gt;</c> で名指しすれば試せる)。
     /// **シリアル番号から側が分からない Q3 (macOS ではいつも読めない。Windows の読み方は未確認) は、どちらの側かを決められないので両方を挙げる。**
     /// カードの無い側は、カードが挿さっていないリーダーとして飛ばされる (<see cref="CardLinks"/>)。理由はポートごとに 1 度だけ <paramref name="warn"/> に出す
@@ -414,7 +414,7 @@ public static class It930x
 
     /// <summary>
     /// そのポートの受信機の TS を復号するときに使う、内蔵のカードリーダーのポート (<c>--tune … --decode</c>)。
-    /// Q3 の末尾が 2 の側は、同じ筐体の末尾が 1 の側 (px4 の仕様書 1.4)。もう片方の側が見つからないときと、ほかの機種は、そのポート
+    /// Q3 の末尾が 2 の側は、同じ筐体の末尾が 1 の側 (IT930x の仕様書 9)。もう片方の側が見つからないときと、ほかの機種は、そのポート
     /// </summary>
     public static string CardHost(string port) => Side(Serial(port))?.Side == 2 && Partner(port) is { } other ? other : port;
 
@@ -503,14 +503,14 @@ public static class It930x
         path.Split('#') is [_, _, var serial, ..] && serial.Length > 0 && !serial.Contains('&') ? serial : null;
 
     /// <summary>
-    /// Q3 のシリアル番号を、筐体の番号 (先頭の 14 桁) と側 (末尾の 1 桁。1 か 2) に分ける (px4 の仕様書 1.5)。
+    /// Q3 のシリアル番号を、筐体の番号 (先頭の 14 桁) と側 (末尾の 1 桁。1 か 2) に分ける (IT930x の仕様書 2.1)。
     /// 10 進の数字 15 桁でないか、末尾が 1 でも 2 でもなければ null
     /// </summary>
     internal static (string Enclosure, int Side)? Side(string? serial) =>
         serial is { Length: 15 } && serial.All(char.IsAsciiDigit) && serial[14] is '1' or '2' ? (serial[..14], serial[14] - '0') : null;
 
     /// <summary>
-    /// Q3 の、同じ筐体のもう片方の側のポート (px4 の仕様書 1.5)。Q3 でない・自分のシリアル番号が読めない・相手が見つからないときは null。
+    /// Q3 の、同じ筐体のもう片方の側のポート (IT930x の仕様書 2.1)。Q3 でない・自分のシリアル番号が読めない・相手が見つからないときは null。
     /// 同じ筐体の番号で同じ側の USB デバイスが 2 つ以上見えたら、どれも選ばない
     /// </summary>
     public static string? Partner(string port) =>

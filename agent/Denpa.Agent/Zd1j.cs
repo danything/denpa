@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 /// <para>
 /// 中身は富士通 MB86H47A の USB ブリッジ (Mb86h47.cs) と DiB8096 (Dib8096.cs)。ファームウェアは要らず、
 /// ホストがメモリ要求でレジスタを読み書きする。B-CAS の差し込み口もブリッジの UART で、CCID ではない (<see cref="Zd1jCard"/>)。
-/// 作りは docs/agent.md「CECH-ZD1 J の作り」。USB は Linux の usbfs・Windows の WinUSB (Zadig で当てる)・macOS の IOKit。
+/// 作りは docs/agent.md「CECH-ZD1 J の作り」。USB は Linux の usbfs・Windows の WinUSB (install.ps1 の -WinUsb か Zadig で替える)・macOS の IOKit。
 /// </para>
 ///
 /// <para>
@@ -635,7 +635,7 @@ internal sealed class Zd1jStream
 
 /// <summary>
 /// CECH-ZD1 J の内蔵の差し込み口。ブリッジの UART を読み書きし、**T=1 の枠組みはこちらで組む** (<see cref="T1Protocol"/>)。
-/// リセットと IFSD の取り決めは 1 回だけで、あとはつないだまま。並ぶ順は USB のリーダー → IT930x の機材 → asicend → これ → PIX-DT295 (CardLinks)
+/// リセットと IFSD の取り決めは 1 回だけで、あとはつないだまま。並ぶ順は USB のリーダー → IT930x の機材 → これ → PIX-DT295 (CardLinks)
 /// </summary>
 public sealed class Zd1jCard : ICardLink
 {

@@ -112,8 +112,8 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 - [docs/tuners.md](docs/tuners.md) — **使えるチューナー** (一覧・カードリーダー・B-CAS・直らないとき)
 - [docs/tuner-pt3.md](docs/tuner-pt3.md) — PT3 など (Linux DVB。実機で確かめていない機材も)
-- [docs/tuner-px4.md](docs/tuner-px4.md) — PX-Q3U4・PX-W3U4 など (px4-userland)
-- [docs/tuner-px-s1ud.md](docs/tuner-px-s1ud.md) — PX-S1UD (siano-userland)
+- [docs/tuner-it930x.md](docs/tuner-it930x.md) — PX-MLT5 系・PX-Q3U4・PX-W3U4 など (IT930x の機材)
+- [docs/tuner-px-s1ud.md](docs/tuner-px-s1ud.md) — PX-S1UD
 
 **乗り換え**
 
@@ -196,7 +196,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 **土台にしている仕事**:
 
-- [px4-userland](https://github.com/Khronos31/px4-userland) / [siano-userland](https://github.com/Khronos31/siano-userland) (@Khronos31) — ホストにドライバを入れずにチューナーを使えるのはこれのおかげです。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
+- [px4-userland](https://github.com/Khronos31/px4-userland) (@Khronos31) — ホストにドライバを入れずにチューナーを使う形は、これが先に示してくれました。前のバージョンまでは px4-userland と、同じ作者の [siano-userland](https://github.com/Khronos31/siano-userland) を同梱して、PX-Q3U4 などと PX-S1UD を動かしていました。いまは同じ作者の [asicen-userland](https://github.com/Khronos31/asicen-userland) を同梱しています (PX-W3U3 など。試験的)。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
 
 ## ライセンス
 

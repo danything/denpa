@@ -1,11 +1,11 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * 偽の I2C のバス 1 本と、その上の TC90522 のアドレスと、中継の先のチューナー (R850・RT710)。振る舞いは仕様書 (denpa-spec の px4/spec.md) から決めた。
- * - 復調器のレジスタの番号は 1 バイトで、バンクは無い (仕様書 3.1)。書いた値 (Written) と、読むと返る値 (Status) は別に持つ
+ * 偽の I2C のバス 1 本と、その上の TC90522 のアドレスと、中継の先のチューナー (R850・RT710)。振る舞いは仕様書 (denpa-spec の tc90522/spec.md) から決めた。
+ * - 復調器のレジスタの番号は 1 バイトで、バンクは無い (仕様書 2.1)。書いた値 (Written) と、読むと返る値 (Status) は別に持つ
  *   (初期化で書く B0 と、ロックの判定で読む B0 のように、同じ番号を書く用途と読む用途で使うため)
- * - チューナーは、復調器のレジスタ FE に包んだ通信だけが届く (仕様書 3.2)。読むときは「00 を 1 バイト書く」「読む側のアドレスを書く」「復調器から読む」の順で、
- *   順が違えばテストを失敗にする (InvalidOperationException)。読んだ値は 1 バイトごとにビットの並びを逆にして返す (仕様書 7.1)
+ * - チューナーは、復調器のレジスタ FE に包んだ通信だけが届く (仕様書 2.2)。読むときは「00 を 1 バイト書く」「読む側のアドレスを書く」「復調器から読む」の順で、
+ *   順が違えばテストを失敗にする (InvalidOperationException)。読んだ値は 1 バイトごとにビットの並びを逆にして返す (仕様書 6.1)
  */
 
 /// <summary>
@@ -82,7 +82,7 @@ internal sealed class FakeTcDemod(byte address)
     {
         var count = Reads[register] = Reads.GetValueOrDefault(register) + 1;
         if (OnRead?.Invoke(register, count) is { } value) return value;
-        // 選ばれている TSID (E6・E7) は、書かれた 8F・90 を返す (仕様書 6.4)
+        // 選ばれている TSID (E6・E7) は、書かれた 8F・90 を返す (仕様書 5.4)
         if (register is 0xE6 or 0xE7 && !Status.ContainsKey(register)) return Written.GetValueOrDefault((byte)(register - 0xE6 + 0x8F));
         return Status.GetValueOrDefault(register);
     }
@@ -108,7 +108,7 @@ internal sealed class FakeTcBus : ICxdBus
     public FakeTcDemod this[byte address] => _demods[address];
 
     /// <summary>
-    /// Q3・W3 系の USB デバイス 1 つ分 (仕様書 2.2)。衛星のアドレス 0x11・0x13 の先に RT710、地上波のアドレス 0x10・0x12 の先に R850。
+    /// Q3・W3 系の USB デバイス 1 つ分 (仕様書 1.2)。衛星のアドレス 0x11・0x13 の先に RT710、地上波のアドレス 0x10・0x12 の先に R850。
     /// どの受信機もロックしている状態 (地上波は 80 = 00・B0 = 88、衛星は C3 = 00)
     /// </summary>
     public static FakeTcBus W3()

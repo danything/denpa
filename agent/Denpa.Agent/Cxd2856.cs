@@ -3,13 +3,13 @@ namespace Denpa.Agent;
 /*
  * Sony CXD2856ER (復調器) と、受信機 1 つぶんの復調器とチューナー (Cxd2856Frontend)。
  *
- * クリーンルームで、仕様書 (denpa-spec の mlt5/spec.md。PLEX MLT5 系の CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
- * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は仕様書の節の番号で、表の値と順はその節の表のまま持つ。
+ * クリーンルームで、仕様書 (denpa-spec の cxd2856/spec.md。CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
+ * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は cxd2856/spec.md の節の番号 (ブリッジの側の it930x/spec.md は「IT930x の仕様書 x.y」と書く) で、表の値と順はその節の表のまま持つ。
  * 仕様書に無くて決めた所は「仕様書に無い」と書いてある。地上波 (ISDB-T)・衛星 (ISDB-S)・J.83B (スカパー！プレミアムサービス光)・ISDB-C (ケーブルテレビのトランスモジュレーション方式) の分がある。
  */
 
 /// <summary>
-/// 1 本の I2C のバス (IT930x のブリッジの <c>GENERIC_WRITE</c>・<c>GENERIC_READ</c>)。アドレスは 7 ビット (仕様書 1.3)
+/// 1 本の I2C のバス (IT930x のブリッジの <c>GENERIC_WRITE</c>・<c>GENERIC_READ</c>)。アドレスは 7 ビット (IT930x の仕様書 4.1)
 /// </summary>
 public interface ICxdBus
 {
@@ -54,13 +54,13 @@ public readonly record struct CxdStream(ushort? Tsid, byte Relative = 0)
 }
 
 /// <summary>
-/// J.83B の状態と信号品質の元の値 (仕様書 7.5・8.4)。<see cref="Search"/> はバンク <c>40</c> の <c>88</c>、<see cref="Ts"/> は <c>10</c>。
+/// J.83B の状態と信号品質の元の値 (仕様書 7.5・9.4)。<see cref="Search"/> はバンク <c>40</c> の <c>88</c>、<see cref="Ts"/> は <c>10</c>。
 /// 自動の探索がロックしていなければ <see cref="Modulation"/> と <see cref="Per"/> は null で、<see cref="CnRaw"/> は 0
 /// </summary>
 internal readonly record struct CxdJ83bSignal(byte Search, byte Ts, byte? Modulation, int CnRaw, byte[]? Per);
 
 /// <summary>
-/// ISDB-C の状態と信号品質の元の値 (仕様書 7A.6・8.4・8.4A)。どれもバンク <c>40</c>。<see cref="Search"/> は <c>88</c>、<see cref="Ts"/> は <c>10</c>。
+/// ISDB-C の状態と信号品質の元の値 (仕様書 8.6・9.4・9.5)。どれもバンク <c>40</c>。<see cref="Search"/> は <c>88</c>、<see cref="Ts"/> は <c>10</c>。
 /// 自動の探索がロックしていなければ <see cref="Modulation"/> と <see cref="Locked"/> は null で、<see cref="CnRaw"/> は 0。
 /// <see cref="Locked"/> は固めて読んだ 10 バイト (<c>19</c>、<c>15</c>〜<c>16</c>、<c>1A</c>〜<c>1B</c>、<c>9B</c>〜<c>9F</c> の順)。
 /// <see cref="Per"/> は <c>5C</c>〜<c>5F</c>、<see cref="BerLength"/> は <c>60</c>、<see cref="Ber"/> は <c>62</c>〜<c>64</c>、<see cref="Uncorrected"/> は <c>EA</c>〜<c>EC</c>、
@@ -70,7 +70,7 @@ internal readonly record struct CxdIsdbcSignal(
     byte Search, byte Ts, byte? Modulation, int CnRaw, byte[]? Per, byte[]? Locked, byte BerLength, byte[]? Ber, byte[]? Uncorrected, int IfAgc);
 
 /// <summary>
-/// ISDB-C でほかに読める値 (仕様書 8.4A)。出どころは PLEX の公開ドライバーに入っている Sony の手順だけ (仕様書 13)。PX-MLT5PE の実機で読めたが、値が正しいかはほかの受信機と比べていない。<c>--tune</c> の出力にだけ出す。値が無ければ null
+/// ISDB-C でほかに読める値 (仕様書 9.5)。出どころは PLEX の公開ドライバーに入っている Sony の手順だけ (仕様書 13)。PX-MLT5PE の実機で読めたが、値が正しいかはほかの受信機と比べていない。<c>--tune</c> の出力にだけ出す。値が無ければ null
 /// </summary>
 /// <param name="Inverted">復調器がスペクトルの反転を見つけたか</param>
 /// <param name="CarrierOffsetKhz">搬送波のずれ (kHz)</param>
@@ -80,7 +80,7 @@ internal readonly record struct CxdIsdbcSignal(
 /// <param name="IfAgc">IF の AGC の出力 (12 ビット)</param>
 public sealed record CxdIsdbcDetail(bool? Inverted, double? CarrierOffsetKhz, double? SymbolRateMsps, double? PreRsBer, int? Uncorrected, int IfAgc);
 
-/// <summary>TS を止める復調器のレジスタ 4 つ (仕様書 3.6。どれもバンク 00)</summary>
+/// <summary>TS を止める復調器のレジスタ 4 つ (仕様書 3.5。どれもバンク 00)</summary>
 public readonly record struct CxdTsOutput(byte C3, byte R81, byte R32, byte C4)
 {
     /// <summary>TS を出しているときの値と同じか (<c>C3</c> = <c>00</c>、<c>81</c> の bit0 = 0、<c>32</c> の bit0 = 1、<c>C4</c> の bit7 = 1)</summary>
@@ -150,7 +150,7 @@ internal sealed class CxdLink(ICxdBus bus, byte demodAddress, Action<int> sleep)
 }
 
 /// <summary>
-/// CXD2856ER の書き込みの並び (仕様書 2・3・5・6・7・7A・8)。状態 (スリープか、どの方式で動作中か) は <see cref="Cxd2856Frontend"/> が覚える (仕様書 2.1)
+/// CXD2856ER の書き込みの並び (仕様書 2・3・5・6・7・8・9)。状態 (スリープか、どの方式で動作中か) は <see cref="Cxd2856Frontend"/> が覚える (仕様書 2.1)
 /// </summary>
 internal sealed class Cxd2856(CxdLink link)
 {
@@ -202,10 +202,10 @@ internal sealed class Cxd2856(CxdLink link)
     /// <summary>TS クロックの周波数。ISDB-S は高い (<c>00</c>)</summary>
     internal const byte TsClockIsdbs = 0x00;
 
-    /// <summary>TS クロックの周波数。J.83B は高い (<c>00</c>。仕様書 3.5 の番号 3。38.4 Mbps の設定では J.83B の TS が収まらない)</summary>
+    /// <summary>TS クロックの周波数。J.83B は高い (<c>00</c>。仕様書 3.4 の番号 3。38.4 Mbps の設定では J.83B の TS が収まらない)</summary>
     internal const byte TsClockJ83b = 0x00;
 
-    /// <summary>TS クロックの周波数。ISDB-C は高い (<c>00</c>。仕様書 3.5 の番号 3。256QAM の TS は約 38.9 Mbps で、低い設定の 38.4 Mbps に収まらない)</summary>
+    /// <summary>TS クロックの周波数。ISDB-C は高い (<c>00</c>。仕様書 3.4 の番号 3。256QAM の TS は約 38.9 Mbps で、低い設定の 38.4 Mbps に収まらない)</summary>
     internal const byte TsClockIsdbc = 0x00;
 
     /// <summary>パケットの間の隙間 (仕様書 3.3 の手順 3 の <c>D3</c>)。ISDB-T・ISDB-S・ISDB-C は入れない (<c>01</c>)</summary>
@@ -216,7 +216,7 @@ internal sealed class Cxd2856(CxdLink link)
 
     /// <summary>
     /// TS クロックの設定 (仕様書 3.3 の手順 3〜15)。方式で違うのは、手順 3 のパケットの間の隙間 <paramref name="gap"/> と手順 10 の周波数 <paramref name="frequency"/>。
-    /// 周波数は資料で値が分かれていて、仕様書 3.5 が選んだ値 (ISDB-T は低い・半分の速さ、ISDB-S と J.83B と ISDB-C は高い・半分の速さ)
+    /// 周波数は資料で値が分かれていて、仕様書 3.4 が選んだ値 (ISDB-T は低い・半分の速さ、ISDB-S と J.83B と ISDB-C は高い・半分の速さ)
     /// </summary>
     internal static CxdRow[] TsClockRows(byte gap, byte frequency) =>
     [
@@ -490,7 +490,7 @@ internal sealed class Cxd2856(CxdLink link)
     ];
 
     /// <summary>
-    /// ISDB-C の起動の最初 (仕様書 7A.3 の手順 1〜2)。TSMF の処理をしない設定 (バンク <c>49</c> の <c>36</c> の bit4:3 を 0。多重した TS をそのまま出す。仕様書 7A.7)。
+    /// ISDB-C の起動の最初 (仕様書 8.3 の手順 1〜2)。TSMF の処理をしない設定 (バンク <c>49</c> の <c>36</c> の bit4:3 を 0。多重した TS をそのまま出す。仕様書 8.7)。
     /// TS クロックの設定より前に書く。スリープでも戻さない
     /// </summary>
     internal static readonly CxdRow[] StartIsdbcHeadRows =
@@ -500,9 +500,9 @@ internal sealed class Cxd2856(CxdLink link)
     ];
 
     /// <summary>
-    /// ISDB-C の起動 (スリープから。仕様書 7A.3 の手順 4〜30)。このあと <see cref="StartIsdbtTailRows"/> (手順 31〜32)。
-    /// IF 3.7 MHz (<c>13 BB BC</c>)、QAM の探す範囲 <c>14</c> (64QAM と 256QAM。変調は復調器が見分ける)、シンボルレートの探す値 <c>07 08 07 08</c> (5.274 Msps。仕様書 7A.1)。
-    /// J.83B (仕様書 7.2) と違い、帯域の設定を分けずに起動の中で 1 回だけ書く。スペクトルの反転の設定は書かない (仕様書 7A.1)
+    /// ISDB-C の起動 (スリープから。仕様書 8.3 の手順 4〜30)。このあと <see cref="StartIsdbtTailRows"/> (手順 31〜32)。
+    /// IF 3.7 MHz (<c>13 BB BC</c>)、QAM の探す範囲 <c>14</c> (64QAM と 256QAM。変調は復調器が見分ける)、シンボルレートの探す値 <c>07 08 07 08</c> (5.274 Msps。仕様書 8.1)。
+    /// J.83B (仕様書 7.2) と違い、帯域の設定を分けずに起動の中で 1 回だけ書く。スペクトルの反転の設定は書かない (仕様書 8.1)
     /// </summary>
     internal static readonly CxdRow[] StartIsdbcRows =
     [
@@ -535,11 +535,11 @@ internal sealed class Cxd2856(CxdLink link)
         CxdRow.B(T, 0x26, 0x07, 0x08, 0x07, 0x08),
     ];
 
-    /// <summary>ISDB-C からのスリープの最初 (仕様書 7A.5 の手順 1〜3。このあと TS のデータ端子を高インピーダンスにする)。ISDB-T の最初 (5.7) と同じ並び</summary>
+    /// <summary>ISDB-C からのスリープの最初 (仕様書 8.5 の手順 1〜3。このあと TS のデータ端子を高インピーダンスにする)。ISDB-T の最初 (5.7) と同じ並び</summary>
     internal static readonly CxdRow[] SleepIsdbcHeadRows = SleepIsdbtHeadRows;
 
     /// <summary>
-    /// ISDB-C からのスリープの残り (仕様書 7A.5 の手順 5〜11)。このあと共通の後始末 (仕様書 2.4)。
+    /// ISDB-C からのスリープの残り (仕様書 8.5 の手順 5〜11)。このあと共通の後始末 (仕様書 2.4)。
     /// 起動で書いたものの一部しか戻さない (バンク <c>11</c> の <c>6A</c>・<c>33</c>〜<c>35</c>、バンク <c>10</c> の <c>A5</c>〜<c>B3</c>・<c>B6</c>〜<c>B8</c>、バンク <c>00</c> の <c>CE</c>〜<c>CF</c>、
     /// バンク <c>40</c> の <c>26</c>〜<c>29</c>、バンク <c>49</c> の <c>36</c> は ISDB-C の値のまま残る)。ISDB-T と J.83B の起動は使うものを書き直す
     /// </summary>
@@ -627,7 +627,7 @@ internal sealed class Cxd2856(CxdLink link)
         link.Run([CxdRow.W(T, 0x81, (byte)(on ? 0x00 : 0xFF), mask)]);
     }
 
-    /// <summary>TS を止めるレジスタ 4 つを読む (仕様書 3.6。バンク 00 の <c>C3</c>・<c>81</c>・<c>32</c>・<c>C4</c>)</summary>
+    /// <summary>TS を止めるレジスタ 4 つを読む (仕様書 3.5。バンク 00 の <c>C3</c>・<c>81</c>・<c>32</c>・<c>C4</c>)</summary>
     public CxdTsOutput ReadTsOutput()
     {
         link.Write(T, 0x00, 0x00);
@@ -635,7 +635,7 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// ISDB-T の状態と C/N の元の値を読む (仕様書 8.1)。値を固めて (T の <c>01</c> ← <c>01</c>) から読み、読み終えたら (途中で失敗しても) <c>00</c> に戻す (仕様書 2.3)。
+    /// ISDB-T の状態と C/N の元の値を読む (仕様書 9.1)。値を固めて (T の <c>01</c> ← <c>01</c>) から読み、読み終えたら (途中で失敗しても) <c>00</c> に戻す (仕様書 2.3)。
     /// 復調がロックしていなければ C/N の値は 0
     /// </summary>
     public (byte Status, ushort Cn) ReadIsdbtCn()
@@ -694,8 +694,8 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// ISDB-S の C/N の元の値 (仕様書 8.2)。バンク <c>A1</c> の <c>10</c>〜<c>12</c> を読み、計算が終わっていなければ (b0 の bit0 が 0) null、
-    /// 終わっていれば 13 ビットの値 <c>((b1 &amp; 0x1F) &lt;&lt; 8) | b2</c>。仕様書 8.2 の手順に値を固める書き込みは無いので、固めずに読む
+    /// ISDB-S の C/N の元の値 (仕様書 9.2)。バンク <c>A1</c> の <c>10</c>〜<c>12</c> を読み、計算が終わっていなければ (b0 の bit0 が 0) null、
+    /// 終わっていれば 13 ビットの値 <c>((b1 &amp; 0x1F) &lt;&lt; 8) | b2</c>。仕様書 9.2 の手順に値を固める書き込みは無いので、固めずに読む
     /// </summary>
     public ushort? ReadIsdbsCn()
     {
@@ -705,7 +705,7 @@ internal sealed class Cxd2856(CxdLink link)
         return (ushort)(((b[1] & 0x1F) << 8) | b[2]);
     }
 
-    /// <summary>ISDB-S の入力のレベルの元の値 (仕様書 8.6 の衛星。バンク <c>A0</c> の <c>1F</c>〜<c>20</c> から <c>((x0 &amp; 0x1F) &lt;&lt; 8) | x1</c>)</summary>
+    /// <summary>ISDB-S の入力のレベルの元の値 (仕様書 9.7 の衛星。バンク <c>A0</c> の <c>1F</c>〜<c>20</c> から <c>((x0 &amp; 0x1F) &lt;&lt; 8) | x1</c>)</summary>
     public int ReadIsdbsAgc()
     {
         link.Write(T, 0x00, 0xA0);
@@ -775,9 +775,9 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// J.83B の状態と、変調・C/N・PER の元の値を読む (仕様書 8.4)。値を固めて (T の <c>01</c> ← <c>01</c>) から読み、読み終えたら (途中で失敗しても) 戻す (仕様書 2.3)。
-    /// 自動の探索がロックしていなければ (<c>88</c> の bit0 が 0) 値を読まない (仕様書 8.4 が PLEX の公開ドライバーの手順として書く形)。
-    /// PER も複数のレジスタにまたがる誤り率なので、同じ固めた間に読む (仕様書に無い。8.4 は PER を固めるかを書いていないので、2.3 の一般の決まりから決めた)
+    /// J.83B の状態と、変調・C/N・PER の元の値を読む (仕様書 9.4)。値を固めて (T の <c>01</c> ← <c>01</c>) から読み、読み終えたら (途中で失敗しても) 戻す (仕様書 2.3)。
+    /// 自動の探索がロックしていなければ (<c>88</c> の bit0 が 0) 値を読まない (仕様書 9.4 が PLEX の公開ドライバーの手順として書く形)。
+    /// PER も複数のレジスタにまたがる誤り率なので、同じ固めた間に読む (仕様書に無い。9.4 は PER を固めるかを書いていないので、2.3 の一般の決まりから決めた)
     /// </summary>
     public CxdJ83bSignal ReadJ83bSignal()
     {
@@ -800,7 +800,7 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// ISDB-C の起動 (スリープから。仕様書 7A.3)。TSMF の処理をしない設定 → TS クロックの設定 (ISDB-C。パケットの間の隙間を入れず、周波数は高い。仕様書 3.3) →
+    /// ISDB-C の起動 (スリープから。仕様書 8.3)。TSMF の処理をしない設定 → TS クロックの設定 (ISDB-C。パケットの間の隙間を入れず、周波数は高い。仕様書 3.3) →
     /// 手順 4〜32 → TS のデータ端子を出力にする
     /// </summary>
     public void StartIsdbc()
@@ -813,14 +813,14 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// ISDB-C のままの選局し直し (仕様書 7A.4。T <c>00</c> ← <c>00</c>、<c>C3</c> ← <c>01</c> の 2 行だけ)。帯域や IF、TSMF の設定は起動で書いた値のままにする
+    /// ISDB-C のままの選局し直し (仕様書 8.4。T <c>00</c> ← <c>00</c>、<c>C3</c> ← <c>01</c> の 2 行だけ)。帯域や IF、TSMF の設定は起動で書いた値のままにする
     /// </summary>
     public void RetuneIsdbc() => link.Run(RetuneRows);
 
-    /// <summary>ISDB-C のロックの状態 (仕様書 7A.6)。読むレジスタも判定も J.83B (仕様書 7.5) と同じ</summary>
+    /// <summary>ISDB-C のロックの状態 (仕様書 8.6)。読むレジスタも判定も J.83B (仕様書 7.5) と同じ</summary>
     public (byte Search, byte Ts) IsdbcStatus() => J83bStatus();
 
-    /// <summary>ISDB-C からのスリープ (仕様書 7A.5)</summary>
+    /// <summary>ISDB-C からのスリープ (仕様書 8.5)</summary>
     public void SleepIsdbc()
     {
         link.Run(SleepIsdbcHeadRows);
@@ -830,10 +830,10 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// ISDB-C の状態と、変調・C/N・PER (仕様書 8.4) と、ほかに読める値 (仕様書 8.4A) の元の値を読む。
+    /// ISDB-C の状態と、変調・C/N・PER (仕様書 9.4) と、ほかに読める値 (仕様書 9.5) の元の値を読む。
     /// 変調・C/N と「ロックが前提」の値 (反転・搬送波のずれ・シンボルレート) は、値を固めて (T の <c>01</c> ← <c>01</c>) 自動の探索のロック (<c>88</c> の bit0) を確かめてから読み、
-    /// 読み終えたら (途中で失敗しても) 戻す (仕様書 2.3)。PER・RS の前の BER・直せなかったパケットの数・IF の AGC は固めずに読む (仕様書 8.4・8.4A)。
-    /// 8.4A の値と PER は、値が正しいかをほかの受信機と比べていない (仕様書 13)
+    /// 読み終えたら (途中で失敗しても) 戻す (仕様書 2.3)。PER・RS の前の BER・直せなかったパケットの数・IF の AGC は固めずに読む (仕様書 9.4・9.5)。
+    /// 9.5 の値と PER は、値が正しいかをほかの受信機と比べていない (仕様書 13)
     /// </summary>
     public CxdIsdbcSignal ReadIsdbcSignal()
     {
@@ -874,13 +874,13 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// ISDB-C の C/N (dB。仕様書 8.4)。変調は 64QAM (2) か 256QAM (4) だけを使い、r を 126 以上にして <c>-9.5 × ln(r) + 95.941</c>。ほかの変調は誤りとして null
+    /// ISDB-C の C/N (dB。仕様書 9.4)。変調は 64QAM (2) か 256QAM (4) だけを使い、r を 126 以上にして <c>-9.5 × ln(r) + 95.941</c>。ほかの変調は誤りとして null
     /// </summary>
     public static double? IsdbcCnDb(byte modulation, int raw) => modulation is 2 or 4 ? J83bCnDb(modulation, raw) : null;
 
     /// <summary>
-    /// ISDB-C でほかに読める値 (仕様書 8.4A) を、元の値から求める。「ロックが前提」の値は、自動の探索がロックしていなければ null。
-    /// スペクトルの「反転」はこちらで設定しない (仕様書 7A.1) ので、反転と搬送波のずれの符号は読んだまま
+    /// ISDB-C でほかに読める値 (仕様書 9.5) を、元の値から求める。「ロックが前提」の値は、自動の探索がロックしていなければ null。
+    /// スペクトルの「反転」はこちらで設定しない (仕様書 8.1) ので、反転と搬送波のずれの符号は読んだまま
     /// </summary>
     public static CxdIsdbcDetail IsdbcDetail(CxdIsdbcSignal read)
     {
@@ -909,7 +909,7 @@ internal sealed class Cxd2856(CxdLink link)
         return new CxdIsdbcDetail(inverted, offsetKhz, symbolRate, ber, uncorrected, read.IfAgc);
     }
 
-    /// <summary>J.83B の変調の名前 (バンク <c>40</c> の <c>19</c> の下位 3 ビット。仕様書 8.4)。表に無い値は null</summary>
+    /// <summary>J.83B の変調の名前 (バンク <c>40</c> の <c>19</c> の下位 3 ビット。仕様書 9.4)。表に無い値は null</summary>
     public static string? J83bModulationName(byte modulation) => modulation switch
     {
         0 => "16QAM",
@@ -921,7 +921,7 @@ internal sealed class Cxd2856(CxdLink link)
     };
 
     /// <summary>
-    /// J.83B の C/N (dB。仕様書 8.4 の手順 6・7)。64QAM・256QAM は r を 126 以上にして <c>-9.5 × ln(r) + 95.941</c>、
+    /// J.83B の C/N (dB。仕様書 9.4 の手順 6・7)。64QAM・256QAM は r を 126 以上にして <c>-9.5 × ln(r) + 95.941</c>、
     /// 32QAM・128QAM は r を 69 以上にして <c>-8.8 × ln(r) + 86.99</c>。16QAM と表に無い値は式が仕様書に無いので null
     /// </summary>
     public static double? J83bCnDb(byte modulation, int raw) => modulation switch
@@ -932,9 +932,9 @@ internal sealed class Cxd2856(CxdLink link)
     };
 
     /// <summary>
-    /// J.83B の PER (仕様書 8.4)。バンク <c>40</c> の <c>5C</c>〜<c>5F</c> の 4 バイト b0〜b3 から、b1 の bit2 が 0 なら値は無い (null)。
+    /// J.83B の PER (仕様書 9.4)。バンク <c>40</c> の <c>5C</c>〜<c>5F</c> の 4 バイト b0〜b3 から、b1 の bit2 が 0 なら値は無い (null)。
     /// 誤りパケットの数 e = <c>((b1 &amp; 0x03) &lt;&lt; 16) | (b2 &lt;&lt; 8) | b3</c>、測った長さの指数 n = <c>b0 &amp; 0x1F</c>、PER = e / 2^n。
-    /// e が 2^n を超えたら値が壊れているので null。J.83B で値が正しいかは実機で確かめられていない (仕様書 8.4・13)
+    /// e が 2^n を超えたら値が壊れているので null。J.83B で値が正しいかは実機で確かめられていない (仕様書 9.4・13)
     /// </summary>
     public static double? J83bPer(byte[]? raw)
     {
@@ -981,7 +981,7 @@ internal sealed class Cxd2856(CxdLink link)
     })];
 
     /// <summary>
-    /// ISDB-S の C/N (dB) を付録 A の表で求める (仕様書 8.2 の手順 5)。r が表の最初 (<c>0x05AF</c>) 以上なら 0.0 dB、最後 (<c>0x0014</c>) 以下なら 20.0 dB。
+    /// ISDB-S の C/N (dB) を付録 A の表で求める (仕様書 9.2 の手順 5)。r が表の最初 (<c>0x05AF</c>) 以上なら 0.0 dB、最後 (<c>0x0014</c>) 以下なら 20.0 dB。
     /// それ以外は、表の値のうち r 以上で最も小さいものの dB
     /// </summary>
     public static double IsdbsCnDb(ushort raw)
@@ -999,7 +999,7 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// 衛星の入力のレベル (dB。仕様書 8.6 の衛星): 利得 (dB × 100) = <c>v × (-1400) / 403 + 9700</c> (四捨五入)、レベル = -利得 / 100
+    /// 衛星の入力のレベル (dB。仕様書 9.7 の衛星): 利得 (dB × 100) = <c>v × (-1400) / 403 + 9700</c> (四捨五入)、レベル = -利得 / 100
     /// </summary>
     public static double IsdbsLevelDb(int agc)
     {
@@ -1045,15 +1045,15 @@ public sealed class Cxd2856Frontend
     /// </summary>
     public const int J83bLockTimeoutMs = 1000;
 
-    /// <summary>ISDB-T の入力のレベルの補正 (dB × 100。仕様書 8.6)</summary>
+    /// <summary>ISDB-T の入力のレベルの補正 (dB × 100。仕様書 9.7)</summary>
     private const int IsdbtLevelCorrection = -450;
 
     /// <summary>
-    /// ISDB-C のロックの時間切れ (仕様書 7A.6・11 の 1 秒)。「信号が無いと分かった」ビット (<c>88</c> の bit1) はスキャン専用の設定でだけ働き、その設定は使わない (仕様書 7A.6)
+    /// ISDB-C のロックの時間切れ (仕様書 8.6・11 の 1 秒)。「信号が無いと分かった」ビット (<c>88</c> の bit1) はスキャン専用の設定でだけ働き、その設定は使わない (仕様書 8.6)
     /// </summary>
     public const int IsdbcLockTimeoutMs = 1000;
 
-    /// <summary>J.83B と ISDB-C の入力のレベルの補正 (dB × 100。仕様書 8.6)</summary>
+    /// <summary>J.83B と ISDB-C の入力のレベルの補正 (dB × 100。仕様書 9.7)</summary>
     private const int J83bLevelCorrection = -150;
 
     private enum State
@@ -1114,23 +1114,23 @@ public sealed class Cxd2856Frontend
     public long LockMs { get; private set; } = -1;
 
     /// <summary>
-    /// 衛星で最後に <see cref="Signal"/> を読んだときの強度 (仕様書 8.6 の衛星の式。dB)。dBm として扱えるかは未確認なので、
+    /// 衛星で最後に <see cref="Signal"/> を読んだときの強度 (仕様書 9.7 の衛星の式。dB)。dBm として扱えるかは未確認なので、
     /// 画面に出す強度 (<see cref="TunerSignal.StrengthDbm"/>) には入れず、<c>--tune</c> の出力にだけ出す。読んでいなければ null
     /// </summary>
     public double? SatelliteLevelDb { get; private set; }
 
-    /// <summary>J.83B と ISDB-C で最後に <see cref="Signal"/> を読んだときの変調 (<c>256QAM</c> など。仕様書 8.4)。<c>--tune</c> の出力にだけ出す。読めていなければ null</summary>
+    /// <summary>J.83B と ISDB-C で最後に <see cref="Signal"/> を読んだときの変調 (<c>256QAM</c> など。仕様書 9.4)。<c>--tune</c> の出力にだけ出す。読めていなければ null</summary>
     public string? CableModulation { get; private set; }
 
     /// <summary>
-    /// J.83B と ISDB-C で最後に <see cref="Signal"/> を読んだときの PER (仕様書 8.4)。どちらも値が正しいかは実機で確かめられていないので、<c>--tune</c> の出力にだけ出す。読めていなければ null
+    /// J.83B と ISDB-C で最後に <see cref="Signal"/> を読んだときの PER (仕様書 9.4)。どちらも値が正しいかは実機で確かめられていないので、<c>--tune</c> の出力にだけ出す。読めていなければ null
     /// </summary>
     public double? CablePer { get; private set; }
 
-    /// <summary>ISDB-C で最後に <see cref="Signal"/> を読んだときの、ほかに読める値 (仕様書 8.4A)。<c>--tune</c> の出力にだけ出す。読んでいなければ null</summary>
+    /// <summary>ISDB-C で最後に <see cref="Signal"/> を読んだときの、ほかに読める値 (仕様書 9.5)。<c>--tune</c> の出力にだけ出す。読んでいなければ null</summary>
     public CxdIsdbcDetail? IsdbcDetail { get; private set; }
 
-    /// <summary>待機中の地上波の RF 入力の整合を保つ設定になっているか (仕様書 4.7。<see cref="KeepMatching"/>)。テストのため。受信機の操作のロックを取るので、選局の間は待つ</summary>
+    /// <summary>待機中の地上波の RF 入力の整合を保つ設定になっているか (仕様書 4.8。<see cref="KeepMatching"/>)。テストのため。受信機の操作のロックを取るので、選局の間は待つ</summary>
     internal bool KeepsMatching
     {
         get
@@ -1165,7 +1165,7 @@ public sealed class Cxd2856Frontend
     }
 
     /// <summary>
-    /// TS を止めるレジスタ 4 つ (仕様書 3.6。バンク 00 の <c>C3</c>・<c>81</c>・<c>32</c>・<c>C4</c>) を読む。ロックしているのに TS が届かないときに <c>--tune</c> が出す。
+    /// TS を止めるレジスタ 4 つ (仕様書 3.5。バンク 00 の <c>C3</c>・<c>81</c>・<c>32</c>・<c>C4</c>) を読む。ロックしているのに TS が届かないときに <c>--tune</c> が出す。
     /// 値の読み方は <see cref="CxdTsOutput.Describe"/>
     /// </summary>
     public CxdTsOutput ReadTsOutput()
@@ -1177,10 +1177,10 @@ public sealed class Cxd2856Frontend
     }
 
     /// <summary>
-    /// 待機中の地上波の RF 入力の整合を保つ設定にする (仕様書 4.7)。J.83B か ISDB-C を初めて選局するときに、機材の全受信機に呼ぶ (<see cref="It930xDevice.KeepMatching"/>)。
+    /// 待機中の地上波の RF 入力の整合を保つ設定にする (仕様書 4.8)。J.83B か ISDB-C を初めて選局するときに、機材の全受信機に呼ぶ (<see cref="It930xDevice.KeepMatching"/>)。
     /// 一度立てたら、電源を切るまで (この受信機を作り直すまで) 立てたまま。
-    /// <paramref name="standby"/> が true で、受信機が閉じている (スリープか、まだ初期化していない・状態が分からない) なら、初期化し直して待機させる (仕様書 4.7)。
-    /// 状態が分からないときは、起動を書き始めていた方式のスリープを先に送る。動作中なら設定だけを立て、止めるときに書く (仕様書 4.6)
+    /// <paramref name="standby"/> が true で、受信機が閉じている (スリープか、まだ初期化していない・状態が分からない) なら、初期化し直して待機させる (仕様書 4.8)。
+    /// 状態が分からないときは、起動を書き始めていた方式のスリープを先に送る。動作中なら設定だけを立て、止めるときに書く (仕様書 4.7)
     /// </summary>
     public void KeepMatching(bool standby)
     {
@@ -1259,11 +1259,11 @@ public sealed class Cxd2856Frontend
     }
 
     /// <summary>
-    /// ISDB-C (ケーブルテレビのトランスモジュレーション方式) を選局し、ロックを待つ (仕様書 7A.4 の手順 2〜5)。<paramref name="khz"/> は中心周波数の kHz (仕様書 7A.2)。
-    /// 変調 (64QAM か 256QAM か) は復調器が見分けるので、変調を指定する書き込みは無い (仕様書 7A.1)。
+    /// ISDB-C (ケーブルテレビのトランスモジュレーション方式) を選局し、ロックを待つ (仕様書 8.4 の手順 2〜5)。<paramref name="khz"/> は中心周波数の kHz (仕様書 8.2)。
+    /// 変調 (64QAM か 256QAM か) は復調器が見分けるので、変調を指定する書き込みは無い (仕様書 8.1)。
     /// ほかの方式 (J.83B を含む) で動作中なら、その方式のスリープから起動し直す (仕様書 10.1)。チューナーは地上波側のまま周波数を書く (衛星側なら止めてから。仕様書 10.2)。
     /// ロックしなければ false (復調器は ISDB-C で動作中のまま残す)。I2C の失敗は <see cref="IOException"/>。
-    /// ロックは搬送波の TS が同期したことを示すだけで、TSMF で選ぶ TS があるかは受け取った TS から決める (<see cref="TsmfSelector"/>。仕様書 7A.7)
+    /// ロックは搬送波の TS が同期したことを示すだけで、TSMF で選ぶ TS があるかは受け取った TS から決める (<see cref="TsmfSelector"/>。仕様書 8.7)
     /// </summary>
     public bool TuneIsdbc(uint khz)
     {
@@ -1295,8 +1295,8 @@ public sealed class Cxd2856Frontend
         if (_state == State.Unknown)
         {
             /*
-             * J.83B か ISDB-C の起動が途中で終わっていたら、その方式のスリープからやり直す (仕様書 7.4・7A.3・10.1。初期化では戻らないレジスタがある)。
-             * スリープが失敗したら、ほかの方式の起動を始めずに失敗を返し、次の選局か停止でまたスリープからやり直す (仕様書 7.4・7A.5)
+             * J.83B か ISDB-C の起動が途中で終わっていたら、その方式のスリープからやり直す (仕様書 7.4・8.3・10.1。初期化では戻らないレジスタがある)。
+             * スリープが失敗したら、ほかの方式の起動を始めずに失敗を返し、次の選局か停止でまたスリープからやり直す (仕様書 7.4・8.5)
              */
             if (_started is State.J83b or State.Isdbc) Sleep();
             Init();
@@ -1334,7 +1334,7 @@ public sealed class Cxd2856Frontend
         }
     }
 
-    /// <summary>方式の起動 (スリープから。仕様書 5.2・6.2・7.2・7A.3)。バスのロックの中で呼ぶ</summary>
+    /// <summary>方式の起動 (スリープから。仕様書 5.2・6.2・7.2・8.3)。バスのロックの中で呼ぶ</summary>
     private void Start(State mode)
     {
         switch (mode)
@@ -1354,7 +1354,7 @@ public sealed class Cxd2856Frontend
         }
     }
 
-    /// <summary>同じ方式のままの選局し直し (仕様書 5.4・6.3・7.4・7A.4)。バスのロックの中で呼ぶ</summary>
+    /// <summary>同じ方式のままの選局し直し (仕様書 5.4・6.3・7.4・8.4)。バスのロックの中で呼ぶ</summary>
     private void Retune(State mode)
     {
         switch (mode)
@@ -1446,8 +1446,8 @@ public sealed class Cxd2856Frontend
     }
 
     /// <summary>
-    /// ISDB-C のロックを待つ (仕様書 7A.6)。J.83B と同じレジスタを 10 ms ごとに読み、復調のロック (バンク <c>40</c> の <c>88</c> の bit0) と TS のロック (<c>10</c> の bit5) がどちらも立てばロック、1 秒で時間切れ。
-    /// ロックのあとの待ちは無い (仕様書 7A.6)
+    /// ISDB-C のロックを待つ (仕様書 8.6)。J.83B と同じレジスタを 10 ms ごとに読み、復調のロック (バンク <c>40</c> の <c>88</c> の bit0) と TS のロック (<c>10</c> の bit5) がどちらも立てばロック、1 秒で時間切れ。
+    /// ロックのあとの待ちは無い (仕様書 8.6)
     /// </summary>
     private bool WaitIsdbc()
     {
@@ -1469,14 +1469,14 @@ public sealed class Cxd2856Frontend
     }
 
     /// <summary>
-    /// 受信の状態と C/N と強度。動作中のときだけ読む (仕様書 8)。動作中でなければ null。
-    /// ISDB-T は C/N を <c>10 × log10(r / 8)</c> dB (仕様書 8.1。復調がロックしていないか r が 0 なら null)、強度をチューナーの AGC から求めた dBm (仕様書 8.6)。
-    /// ISDB-S は C/N を付録 A の表で (仕様書 8.2。計算が終わっていなければ null)。強度は復調器の AGC から求めた値 (仕様書 8.6 の衛星) を
+    /// 受信の状態と C/N と強度。動作中のときだけ読む (仕様書 9)。動作中でなければ null。
+    /// ISDB-T は C/N を <c>10 × log10(r / 8)</c> dB (仕様書 9.1。復調がロックしていないか r が 0 なら null)、強度をチューナーの AGC から求めた dBm (仕様書 9.7)。
+    /// ISDB-S は C/N を付録 A の表で (仕様書 9.2。計算が終わっていなければ null)。強度は復調器の AGC から求めた値 (仕様書 9.7 の衛星) を
     /// <see cref="SatelliteLevelDb"/> にだけ入れ、<see cref="TunerSignal.StrengthDbm"/> には入れない (仕様書は dB とだけ書いていて、dBm として扱えるかは未確認。仕様書 13)。
-    /// J.83B は C/N を変調ごとの式で (仕様書 8.4。自動の探索がロックしていないか、式の無い変調なら null)、強度を地上波と同じチューナーの AGC から求めた dBm (仕様書 8.6。補正は -1.5 dB)。
+    /// J.83B は C/N を変調ごとの式で (仕様書 9.4。自動の探索がロックしていないか、式の無い変調なら null)、強度を地上波と同じチューナーの AGC から求めた dBm (仕様書 9.7。補正は -1.5 dB)。
     /// 変調と PER は <see cref="CableModulation"/>・<see cref="CablePer"/> にだけ入れる。
-    /// ISDB-C は J.83B と同じレジスタと式で (仕様書 8.4。変調が 64QAM・256QAM でなければ C/N は null)、強度の補正も J.83B と同じ -1.5 dB (仕様書 8.6)。
-    /// ほかに読める値 (仕様書 8.4A) は <see cref="IsdbcDetail"/> にだけ入れる
+    /// ISDB-C は J.83B と同じレジスタと式で (仕様書 9.4。変調が 64QAM・256QAM でなければ C/N は null)、強度の補正も J.83B と同じ -1.5 dB (仕様書 9.7)。
+    /// ほかに読める値 (仕様書 9.5) は <see cref="IsdbcDetail"/> にだけ入れる
     /// </summary>
     public TunerSignal? Signal()
     {
@@ -1568,10 +1568,10 @@ public sealed class Cxd2856Frontend
     }
 
     /// <summary>
-    /// 使い終えたときに、チューナーを止めて (仕様書 4.6) から復調器をスリープにする (方式ごと。仕様書 5.7・6.5・7.4)。この順は仕様書 2.4 のもので、
+    /// 使い終えたときに、チューナーを止めて (仕様書 4.7) から復調器をスリープにする (方式ごと。仕様書 5.7・6.5・7.4)。この順は仕様書 2.4 のもので、
     /// 仕様書 10.3 も順による違いは知られていないとしている。TS は、その前に呼ぶ側 (<see cref="It930xTuner"/>) が受信機の出口を外して止めている。
     /// 動作中でなければ何もしない。選局の途中で失敗して状態が分からないときも、起動を書き始めていればその方式のスリープの書き込みを送る。
-    /// そのときは、次の選局を初期化からやり直す (仕様書に無い)。J.83B か ISDB-C のスリープが途中で失敗したら、起動を書き始めた方式をそのまま残し、次の選局か停止でスリープからやり直す (仕様書 7.4・7A.5)
+    /// そのときは、次の選局を初期化からやり直す (仕様書に無い)。J.83B か ISDB-C のスリープが途中で失敗したら、起動を書き始めた方式をそのまま残し、次の選局か停止でスリープからやり直す (仕様書 7.4・8.5)
     /// </summary>
     public void Sleep()
     {

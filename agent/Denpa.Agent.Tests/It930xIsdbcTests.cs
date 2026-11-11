@@ -1,7 +1,7 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * IT930x の受信機の ISDB-C の選局 (It930xDevice.cs の It930xTuner)。ロックのあとに TS 入力を開け、受け取った TS から TSMF の TS を選ぶ (仕様書 7A.4・7A.7)。
+ * IT930x の受信機の ISDB-C の選局 (It930xDevice.cs の It930xTuner)。ロックのあとに TS 入力を開け、受け取った TS から TSMF の TS を選ぶ (CXD2856 の仕様書 8.4・8.7)。
  * 偽のブリッジ (It930xFakes.cs) の EP 0x84 に、流れ続ける TS を作って渡す。ロックの状態は偽の復調器 (Cxd2856Fakes.cs) の CableStatus で決める。
  *
  * **固まったら失敗にする。** 各テストは最初に `await Task.Yield()` する
@@ -11,7 +11,7 @@ public class It930xIsdbcTests
 {
     private static readonly It930xModel Pe = It930x.Find(0x0511, 0x024E)!;
 
-    /// <summary>PX-MLT5PE の受信機 0 の TS 入力の同期バイト (仕様書 1.2・3.4)</summary>
+    /// <summary>PX-MLT5PE の受信機 0 の TS 入力の同期バイト (CXD2856 の仕様書 1.2、IT930x の仕様書 6.1)</summary>
     private static readonly byte Sync = It930xBridge.SyncBytes[Pe.Receivers.First(item => item.Index == 0).TsInput];
 
     private static readonly uint TsEnable = It930xBridge.TsEnable + (uint)Pe.Receivers.First(item => item.Index == 0).TsInput;
@@ -88,7 +88,7 @@ public class It930xIsdbcTests
             await Assert.That(tuner.Tuned).IsTrue();
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.CableFrequency).IsEqualTo(393_000_000u);
-            // 復調の方式は ISDB-C (仕様書 7A.3)。ブリッジの入力は受信機を開いたときに開け、出口はロックのあとに付ける
+            // 復調の方式は ISDB-C (CXD2856 の仕様書 8.3)。ブリッジの入力は受信機を開いたときに開け、出口はロックのあとに付ける
             await Assert.That(bus3.Log).Contains("65 X 17=09");
             await Assert.That(usb.Log).Contains($"W {TsEnable:X4}=01");
             // 有効な TS は相対 TS 番号 2 と 3。1 本目 (0 から数える) は 3
@@ -98,11 +98,11 @@ public class It930xIsdbcTests
             await Assert.That(packets.Count).IsEqualTo(60);
             await Assert.That(packets.All(packet => packet[0] == 0x47 && TsmfFake.Pid(packet) == 0x300)).IsTrue();
             await Assert.That(tuner.Signal()!.Locked).IsTrue();
-            // 初めての ISDB-C の選局で、まだ使っていない受信機を整合を保つ設定で初期化して待機させる (仕様書 4.7・10.1)
+            // 初めての ISDB-C の選局で、まだ使っていない受信機を整合を保つ設定で初期化して待機させる (CXD2856 の仕様書 4.8・10.1)
             await Assert.That(bus1.Log).Contains("64 U 67=02");
             await Assert.That(bus3.Log).Contains("6C U 67=02");
 
-            // ほかの方式を選局したら TSMF の処理は通さない (仕様書 10.1)
+            // ほかの方式を選局したら TSMF の処理は通さない (CXD2856 の仕様書 10.1)
             usb.TsSource = PlainCarrier();
             // 前の搬送波の、読んでいる途中だったぶんが届き終わるのを待つ (地上波には、ロックのあとに捨てる処理が無い)
             Thread.Sleep(50);
@@ -185,12 +185,12 @@ public class It930xIsdbcTests
         try
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("QC51")!));
-            // 1 パケットも届かないのは、電波ではなくブリッジから先で止まっている (仕様書 3.6)。同期しなかった文とは分ける
+            // 1 パケットも届かないのは、電波ではなくブリッジから先で止まっている (IT930x の仕様書 6.3)。同期しなかった文とは分ける
             await Assert.That(error.Message).IsEqualTo(It930xTuner.TsMissing);
             await Assert.That(tuner.Tuned).IsFalse();
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.Tsmf!.Decision).IsEqualTo(TsmfDecision.Pending);
-            // 判定の時間切れは 3 秒 (仕様書 7A.7・11)
+            // 判定の時間切れは 3 秒 (CXD2856 の仕様書 8.7・11)
             await Assert.That(TsmfSelector.TimeoutMs).IsEqualTo(3000);
         }
         finally
@@ -206,7 +206,7 @@ public class It930xIsdbcTests
         var (usb, _, bus3) = Fake();
         usb.TsSource = PlainCarrier();
         var demod = bus3[0x65];
-        // どちらでもロックしない: 231000 kHz と 233000 kHz を試して、同期しなかった文で失敗にする (仕様書 7A.2 の推定の使い方)
+        // どちらでもロックしない: 231000 kHz と 233000 kHz を試して、同期しなかった文で失敗にする (CXD2856 の仕様書 8.2 の推定の使い方)
         demod.CableStatus = _ => 0x00;
         var tuner = Tuner(usb, "10-5");
         try

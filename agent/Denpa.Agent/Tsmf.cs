@@ -1,14 +1,14 @@
 namespace Denpa.Agent;
 
 /*
- * ISDB-C の TSMF (1 つの搬送波に複数の TS を入れる多重フレーム) から、TS を 1 つ選ぶ (仕様書 7A.7)。
+ * ISDB-C の TSMF (1 つの搬送波に複数の TS を入れる多重フレーム) から、TS を 1 つ選ぶ (仕様書 8.7)。
  *
- * クリーンルームで、仕様書 (denpa-spec の mlt5/spec.md。PLEX MLT5 系の CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
- * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は仕様書の節の番号。仕様書に無くて決めた所は「仕様書に無い」、
- * 仕様書が推定としている所は「推定」と書いてある。復調器は TSMF の処理をせず (仕様書 7A.3 の手順 2)、多重した TS をヘッダーごと出す。
+ * クリーンルームで、仕様書 (denpa-spec の cxd2856/spec.md。CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
+ * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は cxd2856/spec.md の節の番号 (ブリッジの側の it930x/spec.md は「IT930x の仕様書 x.y」と書く)。仕様書に無くて決めた所は「仕様書に無い」、
+ * 仕様書が推定としている所は「推定」と書いてある。復調器は TSMF の処理をせず (仕様書 8.3 の手順 2)、多重した TS をヘッダーごと出す。
  */
 
-/// <summary>TSMF の判定 (仕様書 7A.7 の「判定の待ち」)</summary>
+/// <summary>TSMF の判定 (仕様書 8.7 の「判定の待ち」)</summary>
 public enum TsmfDecision
 {
     /// <summary>まだ決まっていない (ヘッダーも、ヘッダーの無い搬送波と決める数のパケットも来ていない)</summary>
@@ -25,8 +25,8 @@ public enum TsmfDecision
 }
 
 /// <summary>
-/// TSMF のヘッダーのパケットを読んだもの (仕様書 7A.7 の「ヘッダーの中身」)。相対 TS 番号は 1〜15。
-/// **TSID と original_network_id の並び (バイト 9〜68) は推定** (仕様書 7A.7・13)。PX-MLT5PE の実機では、選んだ TS の TSID が出力した TS の PAT の TSID と同じだった。original_network_id は確かめられていない。
+/// TSMF のヘッダーのパケットを読んだもの (仕様書 8.7 の「ヘッダーの中身」)。相対 TS 番号は 1〜15。
+/// **TSID と original_network_id の並び (バイト 9〜68) は推定** (仕様書 8.7・13)。PX-MLT5PE の実機では、選んだ TS の TSID が出力した TS の PAT の TSID と同じだった。original_network_id は確かめられていない。
 /// 受信の状態と緊急のフラグ (バイト 69〜72) も並びが推定なので、分けずに 4 バイトのまま持つ
 /// </summary>
 /// <param name="Version">バイト 6 の bit7:5</param>
@@ -44,23 +44,23 @@ public sealed record TsmfHeader(
     /// <summary>相対 TS 番号の数</summary>
     public const int Streams = 15;
 
-    /// <summary>1 フレームのスロットの数 (ヘッダーを除く。仕様書 7A.7)</summary>
+    /// <summary>1 フレームのスロットの数 (ヘッダーを除く。仕様書 8.7)</summary>
     public const int SlotCount = 52;
 
     /// <summary>相対 TS 番号 <paramref name="relative"/> (1〜15) が有効か</summary>
     public bool IsValid(int relative) => relative is >= 1 and <= Streams && (Valid & (0x8000 >> (relative - 1))) != 0;
 
-    /// <summary>相対 TS 番号 <paramref name="relative"/> (1〜15) が MPEG-2 TS か (false なら分割 TLV。仕様書 7A.7)</summary>
+    /// <summary>相対 TS 番号 <paramref name="relative"/> (1〜15) が MPEG-2 TS か (false なら分割 TLV。仕様書 8.7)</summary>
     public bool IsTs(int relative) => relative is >= 1 and <= Streams && (TsType & (0x8000 >> (relative - 1))) != 0;
 
-    /// <summary>有効な TS の相対 TS 番号を、小さい順に並べたもの (仕様書 7A.7 の「TS の指定」)</summary>
+    /// <summary>有効な TS の相対 TS 番号を、小さい順に並べたもの (仕様書 8.7 の「TS の指定」)</summary>
     public IReadOnlyList<int> ValidStreams => [.. Enumerable.Range(1, Streams).Where(IsValid)];
 
     /// <summary>相対 TS 番号 <paramref name="relative"/> に割り当てたスロットの数</summary>
     public int SlotsOf(int relative) => Slots.Count(slot => slot == relative);
 
     /// <summary>
-    /// パケットが TSMF のヘッダーか (仕様書 7A.7 の「ヘッダーのパケットの見分け方」)。同期バイト (バイト 0) は見ない。
+    /// パケットが TSMF のヘッダーか (仕様書 8.7 の「ヘッダーのパケットの見分け方」)。同期バイト (バイト 0) は見ない。
     /// PID が <c>0x002F</c> で誤りのフラグ・開始のフラグ・優先のフラグが 0、バイト 3 の上位 4 ビットが 1、フレーム同期が <c>1A86</c> か <c>0579</c>、
     /// バイト 6 の bit4 が 0 でフレームの種類が 1 か 2、バイト 4〜187 の CRC-32 が 0
     /// </summary>
@@ -74,7 +74,7 @@ public sealed record TsmfHeader(
         return Descrambler.Crc32(packet[4..]) == 0;
     }
 
-    /// <summary>PID が TSMF のヘッダーのもの (<c>0x002F</c>) か。CRC が合わなかったヘッダーを見分ける (仕様書 7A.7 の「パケットごとの処理」の 4)</summary>
+    /// <summary>PID が TSMF のヘッダーのもの (<c>0x002F</c>) か。CRC が合わなかったヘッダーを見分ける (仕様書 8.7 の「パケットごとの処理」の 4)</summary>
     public static bool HasHeaderPid(ReadOnlySpan<byte> packet) => (((packet[1] & 0x1F) << 8) | packet[2]) == 0x002F;
 
     /// <summary>ヘッダーのパケット (<see cref="IsHeader"/> が true のもの) を読む</summary>
@@ -100,7 +100,7 @@ public sealed record TsmfHeader(
 public delegate void TsmfEmit(ReadOnlySpan<byte> packet);
 
 /// <summary>
-/// 受け取った TS から、TSMF の TS を 1 つ選ぶ (仕様書 7A.7)。選局のたびに新しく作る (判定の状態を最初に戻す。仕様書 7A.4 の手順 1)。
+/// 受け取った TS から、TSMF の TS を 1 つ選ぶ (仕様書 8.7)。選局のたびに新しく作る (判定の状態を最初に戻す。仕様書 8.4 の手順 1)。
 ///
 /// <para>
 /// TS は「有効な TS を相対 TS 番号の小さい順に並べたときの k 本目」(k = 0〜14) で指定する。選局してから最初に受けたヘッダーで k 本目の相対 TS 番号 r を決め、
@@ -110,7 +110,7 @@ public delegate void TsmfEmit(ReadOnlySpan<byte> packet);
 ///
 /// <para>
 /// ヘッダーの位置 (前のヘッダーから 53 パケット目) に正しいヘッダーが来なかったときは、続くフレームを前のヘッダーのスロットの割り当てでためておき、
-/// 次の正しいヘッダーで確かめてから出力する (<see cref="MaxHeldFrames"/>)。仕様書 7A.7 の「パケットごとの処理」の 4 は、
+/// 次の正しいヘッダーで確かめてから出力する (<see cref="MaxHeldFrames"/>)。仕様書 8.7 の「パケットごとの処理」の 4 は、
 /// 次の正しいヘッダーまで何もためないとしている。そのとおりにすると、ヘッダーの受信の誤り 1 回ごとに選んだ TS の 1 フレーム分 (52 スロットのうち選んだ TS の分) が欠ける。
 /// 次の正しいヘッダーが 53 パケットごとの位置に来れば、間でパケットは欠けていない。そのヘッダーのスロットの割り当てが前の正しいヘッダーと同じなら、
 /// ためたフレームも同じ割り当てだったとみなして出力し、違えば捨てる (仕様書に無い。割り当てが変わって間のフレームだけで戻ることは無いと推定)。
@@ -120,7 +120,7 @@ public delegate void TsmfEmit(ReadOnlySpan<byte> packet);
 /// <para>
 /// <see cref="Push"/> は 1 つのスレッド (<see cref="It930xTsDemux"/>) から呼ぶ。判定 (<see cref="Decision"/>・<see cref="Wait"/>) と
 /// <c>--tune</c> が出す値は、ほかのスレッドから読んでよい。
-/// 選局のたびに作り直すので、仕様書 7A.7 の「受信を止めて始め直したときに判定を保つ」場面は無い。
+/// 選局のたびに作り直すので、仕様書 8.7 の「受信を止めて始め直したときに判定を保つ」場面は無い。
 /// NULL パケットは除かない (ほかの方式と同じく、選んだ TS をそのまま流す)。選んだ TS が分割 TLV のときも 188 バイトの単位のまま出力し、
 /// TLV パケットに組み立てるのは受け取る側 (<see cref="SplitTlv"/>。仕様書 13 の範囲の外)。受け取る側は <see cref="Format"/> で形式を、
 /// <see cref="Gaps"/> で出力が前と続いていない所を知る
@@ -128,20 +128,20 @@ public delegate void TsmfEmit(ReadOnlySpan<byte> packet);
 /// </summary>
 public sealed class TsmfSelector
 {
-    /// <summary>ヘッダーの無い搬送波と決めるまでのパケットの数 (8 フレーム分。仕様書 7A.7・11)</summary>
+    /// <summary>ヘッダーの無い搬送波と決めるまでのパケットの数 (8 フレーム分。仕様書 8.7・11)</summary>
     public const int NoHeaderPackets = 424;
 
     /// <summary>
-    /// ロックのあと、判定に使わずに捨てるパケットの数 (仕様書 7A.7 の「パケットごとの処理」の 1・11)。選局し直した直後は、前の搬送波の TS がブリッジに残っていて、
+    /// ロックのあと、判定に使わずに捨てるパケットの数 (仕様書 8.7 の「パケットごとの処理」の 1・11)。選局し直した直後は、前の搬送波の TS がブリッジに残っていて、
     /// 新しい搬送波のロックのあとに届くため。仕様書は「ブリッジの転送 1 回分」と書き、参考にした実装の値 (816 パケット) と、残りが最大 710 パケットだった記録を挙げる。
     /// denpa の転送 1 回分 (<see cref="It930xBridge.TsTransferSize"/>) は 348 パケットで記録の 710 より小さいので、816 を使う (推定。残る量が転送の大きさで決まるかは仕様書に無い)
     /// </summary>
     public const int DiscardPackets = 816;
 
-    /// <summary>判定の時間切れ (ロックのあと 3 秒。仕様書 7A.7・11)</summary>
+    /// <summary>判定の時間切れ (ロックのあと 3 秒。仕様書 8.7・11)</summary>
     public const int TimeoutMs = 3000;
 
-    /// <summary>指定できる k の最大 (TS0〜TS14。仕様書 7A.7)</summary>
+    /// <summary>指定できる k の最大 (TS0〜TS14。仕様書 8.7)</summary>
     public const int MaxIndex = TsmfHeader.Streams - 1;
 
     /// <summary>
@@ -215,7 +215,7 @@ public sealed class TsmfSelector
     public int? Streams => Decision == TsmfDecision.Selected && _first is { } header ? header.ValidStreams.Count : null;
 
     /// <summary>
-    /// 出力した TS の PAT にあった transport_stream_id (<c>--tune</c> が、ヘッダーの TSID の並びの推定を確かめるために出す。仕様書 7A.7)。
+    /// 出力した TS の PAT にあった transport_stream_id (<c>--tune</c> が、ヘッダーの TSID の並びの推定を確かめるために出す。仕様書 8.7)。
     /// PAT をまだ出力していなければ null。PAT のセクションの CRC は確かめない (目安)
     /// </summary>
     public ushort? PatTsid => _patTsid < 0 ? null : (ushort)_patTsid;
@@ -276,7 +276,7 @@ public sealed class TsmfSelector
 
     /// <summary>
     /// 判定が決まる (<see cref="TsmfDecision.Pending"/> でなくなる) まで待つ。<paramref name="timeoutMs"/> で打ち切る。
-    /// 仕様書 7A.7 は 20 ms ごとに確かめるとしているが、決まったときの合図を待つ (決まり次第戻る。時間切れは同じ)
+    /// 仕様書 8.7 は 20 ms ごとに確かめるとしているが、決まったときの合図を待つ (決まり次第戻る。時間切れは同じ)
     /// </summary>
     public TsmfDecision Wait(int timeoutMs)
     {
@@ -291,7 +291,7 @@ public sealed class TsmfSelector
     }
 
     /// <summary>
-    /// 受け取ったパケットを 1 つ渡す (188 バイト)。出力するパケットを <paramref name="emit"/> に渡す (仕様書 7A.7 の「パケットごとの処理」)。
+    /// 受け取ったパケットを 1 つ渡す (188 バイト)。出力するパケットを <paramref name="emit"/> に渡す (仕様書 8.7 の「パケットごとの処理」)。
     /// TSMF の TS は、フレームの 52 パケットがそろったことを次のヘッダーで確かめてから出力する (位置がずれたフレームから別の TS のパケットを出さないため)
     /// </summary>
     public void Push(ReadOnlySpan<byte> packet, TsmfEmit emit)
@@ -348,7 +348,7 @@ public sealed class TsmfSelector
         Interlocked.Increment(ref badHeader ? ref _badHeaders : ref _missedHeaders);
         if (badHeader && _pending == 0 && _borrowed == 0)
         {
-            // 直前のフレームは正しいヘッダーで始まり、ヘッダーの位置にヘッダーの PID が来た。52 パケットがそろったので出力する (仕様書 7A.7 の 4)
+            // 直前のフレームは正しいヘッダーで始まり、ヘッダーの位置にヘッダーの PID が来た。52 パケットがそろったので出力する (仕様書 8.7 の 4)
             Flush(emit);
         }
         else if (++_pending >= MaxHeldFrames)
@@ -363,7 +363,7 @@ public sealed class TsmfSelector
         _position = 0;
     }
 
-    /// <summary>正しいヘッダーを受けた (仕様書 7A.7 の「パケットごとの処理」の 2)</summary>
+    /// <summary>正しいヘッダーを受けた (仕様書 8.7 の「パケットごとの処理」の 2)</summary>
     private void Header(TsmfHeader header, TsmfEmit emit)
     {
         var previous = _last;

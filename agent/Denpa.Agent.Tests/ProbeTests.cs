@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
 /*
  * 実機で確かめる小道具 (--tune・--dt295-probe) のうち、偽物で確かめられるところ。
  *
- * **固まったら失敗にする** (UserlandTunerTests と同じ)。各テストは最初に `await Task.Yield()` する
+ * **固まったら失敗にする。**各テストは最初に `await Task.Yield()` する
  */
 [Timeout(30_000)]
 public class ProbeTests

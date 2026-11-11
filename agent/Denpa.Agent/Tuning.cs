@@ -21,9 +21,9 @@ namespace Denpa.Agent;
 ///
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
-/// <item><see cref="UserlandTuner"/> … asicen-userland の機材 (PX-W3U3)。<c>asicend</c> が持ち、受信機を取ったまま制御ソケットで選局し直す (Userland.cs)</item>
 /// <item><see cref="It930xTuner"/> … IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など)。エージェントが USB を直に持つ (It930xDevice.cs)</item>
-/// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起動したまま標準入力で選局し直す (Siano.cs)</item>
+/// <item><see cref="AsicenTuner"/> … asicen-userland の機材 (PX-W3U3 など。試験的)。<c>asicend</c> が持ち、選局のたびに受信機を取り直す (AsicenUdtv.cs)</item>
+/// <item><see cref="SianoTuner"/> … Siano の機材 (PX-S1UD などをカーネルに使わせていないとき)。エージェントが USB を直に持ち、機材を開いたまま選局のメッセージを送り直す (Siano.cs)</item>
 /// <item><see cref="Zd1jTuner"/> … Sony CECH-ZD1 J。エージェントが USB を直に持ち、ボードを開いたまま周波数まわりだけ書き換える (Zd1j.cs)</item>
 /// <item><see cref="Dt295NativeTuner"/> … PIXELA PIX-DT295。エージェントが USB を直に持ち、機材を初めての選局で開いたまま選局し直す (Dt295NativeTuner.cs)</item>
 /// </list>
@@ -85,7 +85,7 @@ public enum StreamFormat
 /// libc の関数 (open・ioctl・poll など。kill だけは Interop.cs)。
 ///
 /// <para>
-/// **macOS でも同じ関数で動く** (Mac で siano-ts の pipe を読むため)。"libc" は
+/// **macOS でも同じ関数で動く。**"libc" は
 /// macOS でも <c>/usr/lib/libc.dylib</c> (libSystem の別名) で引ける。ただし**数値が
 /// OS ごとに違うもの** (<c>O_NONBLOCK</c>、errno) は決め打ちにできないので、ここと
 /// <see cref="DeviceStream"/> で OS を見て選ぶ。
@@ -100,7 +100,7 @@ internal static unsafe partial class Sys
 
     /// <summary>
     /// <c>O_CLOEXEC</c>。Linux は 0x80000、macOS は 0x1000000。.NET の Process.Start は付いていない fd を閉じないので、
-    /// 付けずに開くと、あとから起動した asicend・siano-ts がデバイスを開いたまま持ち続け、閉じたあとに開き直すと Device or resource busy になる
+    /// 付けずに開くと、あとから起動した asicend がデバイスを開いたまま持ち続け、閉じたあとに開き直すと Device or resource busy になる
     /// </summary>
     public static readonly int CloseOnExec = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
 
@@ -116,17 +116,8 @@ internal static unsafe partial class Sys
     [LibraryImport("libc", EntryPoint = "poll", SetLastError = true)]
     public static partial int Poll(byte* fds, nuint count, int timeout);
 
-    [LibraryImport("libc", EntryPoint = "fcntl", SetLastError = true)]
-    public static partial int Fcntl(int fd, int command, int argument);
-
     [LibraryImport("libc", EntryPoint = "close")]
     public static partial int Close(int fd);
-
-    /// <summary><c>F_SETPIPE_SZ</c>。pipe の深さを変える (**Linux だけ**。macOS には無い)</summary>
-    public const int SetPipeSize = 1031;
-
-    /// <summary><c>F_GETPIPE_SZ</c>。いまの pipe の深さ (広げられなかったときに記録へ出す)</summary>
-    public const int GetPipeSize = 1032;
 
     /// <summary>開けなければ errno を添えて投げる。デバイスが無い・使用中の区別が要る</summary>
     public static SafeFileHandle Must(string path, int flags)
@@ -146,7 +137,7 @@ internal static unsafe partial class Sys
 }
 
 /// <summary>
-/// 機材から読んだ TS を読む側 (<see cref="TunerPool"/>) へ渡すバッファ。asicend (<see cref="UserlandStream"/>)、CECH-ZD1 J (<c>Zd1jStream</c>)、
+/// 機材から読んだ TS を読む側 (<see cref="TunerPool"/>) へ渡すバッファ。asicend (<see cref="AsicenStream"/>)、CECH-ZD1 J (<c>Zd1jStream</c>)、
 /// PIX-DT295 (<see cref="Dt295NativeStream"/>) の TS のストリームが使う。OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った)
 /// </summary>
 internal static class TsBuffer
@@ -217,9 +208,9 @@ internal static class TsBuffer
 /// </para>
 ///
 /// <para>
-/// **Windows には poll が無い。** 子 (siano-ts) の標準出力の pipe は .NET の <see cref="Stream"/> を
+/// **Windows には poll が無い。** .NET の <see cref="Stream"/> で渡された pipe (子プロセスの標準出力。いまこの形で読む機材は無い) は
 /// 裏のスレッドに読ませ、こちらは同じく 200ms ごとに印を確かめる (<see cref="Background"/>)。
-/// asicend・CECH-ZD1 J・DT295 から受けた TS はどの OS でも fd を使わない (<see cref="Piped"/>)。
+/// asicend・CECH-ZD1 J・DT295・Siano の機材から受けた TS はどの OS でも fd を使わない (<see cref="Piped"/>)。
 /// </para>
 /// </summary>
 /// <param name="handle">読む fd。DVB の dvr でも、子プロセスの標準出力の pipe でも同じ</param>
@@ -246,7 +237,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>Pipe に詰めた TS の読み出し側 (<see cref="Piped"/>)。あれば fd は使わない</summary>
     private readonly Piped? _piped;
 
-    /// <summary>Pipe に詰めた TS (UserlandStream・Zd1jStream・Dt295NativeStream) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
+    /// <summary>Pipe に詰めた TS (AsicenStream・Zd1jStream・Dt295NativeStream・SianoStream) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
     public DeviceStream(PipeReader reader, Func<string?>? ended = null)
         : this(new SafeFileHandle(), ended) => _piped = new Piped(reader);
 
@@ -367,7 +358,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
         }
 
         /// <summary>
-        /// 読むのをやめる。書く側はもう終わっている (UserlandStream などが先に閉じる) ので、待っている読みも戻っている。
+        /// 読むのをやめる。書く側はもう終わっている (AsicenStream などが先に閉じる) ので、待っている読みも戻っている。
         /// **読む側がまだ中にいれば触らない** (同時に触ると PipeReader が投げる。バッファは GC が回収する)
         /// </summary>
         public void Complete()

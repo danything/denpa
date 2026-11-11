@@ -322,7 +322,7 @@ public class It930xTsTests
     [Test]
     public async Task Q3_W3_系の同期バイトは入力_1_から_4_に分け_使わない入力_0_には渡さない()
     {
-        // px4 の仕様書 2.2: 受信機 0〜3 は TS 入力 1〜4 で、同期バイトは 0x17・0x27・0x37・0x47。入力 0 は使わない (0)
+        // TC90522 の仕様書 1.2: 受信機 0〜3 は TS 入力 1〜4 で、同期バイトは 0x17・0x27・0x37・0x47。入力 0 は使わない (0)
         var sync = It930x.Find(0x0511, 0x024A)!.SyncBytes;
         await Assert.That(sync).IsEquivalentTo(new byte[] { 0x00, 0x17, 0x27, 0x37, 0x47 });
         var demux = new It930xTsDemux(sync);
@@ -332,7 +332,7 @@ public class It930xTsTests
             pipes[input] = SmallPipe();
             demux.Attach(input, new It930xTsOutput(pipes[input]));
         }
-        // 受信機 3 (入力 4) のパケットは 0x47 のまま届く。bit7 が立った先頭 (0x97) は同期バイトとみなさない (px4 の仕様書 2.4)
+        // 受信機 3 (入力 4) のパケットは 0x47 のまま届く。bit7 が立った先頭 (0x97) は同期バイトとみなさない (IT930x の仕様書 6.1)
         demux.Push([.. Packet(1, 0, 0x17), .. Packet(4, 0, 0x47), .. Packet(2, 0, 0x27), .. Packet(3, 0, 0x97), .. Packet(3, 1, 0x37), .. Packet(4, 1, 0x47), .. Packet(1, 1, 0x17)]);
         await Assert.That(Received(pipes[1])).IsEquivalentTo(new[] { (1, 0), (1, 1) });
         await Assert.That(Received(pipes[2])).IsEquivalentTo(new[] { (2, 0) });
@@ -345,7 +345,7 @@ public class It930xTsTests
     [Test]
     public async Task 受信機が_1_つの機種は_0x47_のままのパケットをその入力に渡す()
     {
-        // px4 の仕様書 13.3: TS 入力 0、同期バイト 0x47 (振り分け無し)。13.4 の DTV03A-1TU は TS 入力 4
+        // IT930x の仕様書 5.5・6.1: TS 入力 0、同期バイト 0x47 (振り分け無し)。5.6 の DTV03A-1TU は TS 入力 4
         var demux = new It930xTsDemux(It930x.Find(0x0511, 0x0854)!.SyncBytes);
         var pipe = SmallPipe();
         demux.Attach(0, new It930xTsOutput(pipe));

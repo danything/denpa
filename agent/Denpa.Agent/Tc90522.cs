@@ -5,20 +5,20 @@ namespace Denpa.Agent;
 /*
  * 東芝 TC90522 (復調器) と、その先の R850・RT710 を組にした受信機。Q3・W3 系 (Tc90522Board) と、受信機が 1 つの機種 (Tc90522Single)。
  *
- * クリーンルームで、仕様書 (denpa-spec の px4/spec.md) だけから書いた。参考にした実装のソースは見ていない。
- * コメントの「仕様書 x.y」は px4/spec.md の節の番号で、表の値と順はその節の表のまま持つ。
+ * クリーンルームで、仕様書 (denpa-spec の tc90522/spec.md) だけから書いた。参考にした実装のソースは見ていない。
+ * コメントの「仕様書 x.y」は tc90522/spec.md の節の番号 (ブリッジの側の it930x/spec.md は「IT930x の仕様書 x.y」と書く) で、表の値と順はその節の表のまま持つ。
  * 仕様書に無くて決めた所は「仕様書に無い」と書いてある。**どの機種も、このドライバーでは実機で確かめていない** (#1578)。
  */
 
-/// <summary>復調器の 1 行の書き込み (レジスタと値。仕様書 4・5・6・13 の表の 1 行)</summary>
+/// <summary>復調器の 1 行の書き込み (レジスタと値。仕様書 3・4・5・11 の表の 1 行)</summary>
 internal readonly record struct TcRow(byte Register, byte Value);
 
 /// <summary>
-/// TC90522 の 1 つのアドレス (仕様書 3.1)。レジスタの番号は 1 バイトで、バンクの切り替えは無い。**ロックは持たない** (呼ぶ側がバスのロックを持つ)
+/// TC90522 の 1 つのアドレス (仕様書 2.1)。レジスタの番号は 1 バイトで、バンクの切り替えは無い。**ロックは持たない** (呼ぶ側がバスのロックを持つ)
 /// </summary>
 internal sealed class Tc90522Link(ICxdBus bus, byte address)
 {
-    /// <summary>チューナーへの中継のレジスタ (仕様書 3.2)</summary>
+    /// <summary>チューナーへの中継のレジスタ (仕様書 2.2)</summary>
     public const byte Relay = 0xFE;
 
     public byte Address => address;
@@ -47,11 +47,11 @@ internal sealed class Tc90522Link(ICxdBus bus, byte address)
         foreach (var row in rows) Write(row.Register, row.Value);
     }
 
-    /// <summary>このアドレスを通した、チューナーへの通信 (仕様書 3.2)</summary>
+    /// <summary>このアドレスを通した、チューナーへの通信 (仕様書 2.2)</summary>
     public ITunerPort Tuner(byte tunerAddress) => new Port(bus, address, tunerAddress);
 
     /// <summary>
-    /// チューナーあての通信を、復調器のレジスタ <c>FE</c> に 1 回ごとに包んで送る (仕様書 3.2)。
+    /// チューナーあての通信を、復調器のレジスタ <c>FE</c> に 1 回ごとに包んで送る (仕様書 2.2)。
     /// 読むときは「<c>00</c> を 1 バイト書く」「読む側のアドレスを書く」「復調器から読む」の 3 回で、間にほかの I2C を挟まない (呼ぶ側がバスのロックを持つ)
     /// </summary>
     private sealed class Port(ICxdBus bus, byte demod, byte tuner) : ITunerPort
@@ -76,7 +76,7 @@ internal sealed class Tc90522Link(ICxdBus bus, byte address)
         }
     }
 
-    /// <summary>1 バイトのビットの並びを逆にする (bit7 と bit0、bit6 と bit1、…。仕様書 7.1)</summary>
+    /// <summary>1 バイトのビットの並びを逆にする (bit7 と bit0、bit6 と bit1、…。仕様書 6.1)</summary>
     internal static byte Reverse(byte value)
     {
         var result = 0;
@@ -89,77 +89,77 @@ internal sealed class Tc90522Link(ICxdBus bus, byte address)
 }
 
 /// <summary>
-/// TC90522 の受信機に共通の手順と表 (仕様書 4〜6・9)。バスのロック・待ち・時計を持つ。
+/// TC90522 の受信機に共通の手順と表 (仕様書 3〜5・8)。バスのロック・待ち・時計を持つ。
 /// I2C の並びはバスのロックの中で送る。ロックを確かめる 10 ms おきの待ち (PLL・復調器・TSID) の間は、ロックを持たない。
-/// チューナーの周波数を書く並びの中の短い待ち (R850 は 10〜40 ms、RT710 は 10 ms。仕様書 7.5 (5)・8.3 (2)) だけは、
+/// チューナーの周波数を書く並びの中の短い待ち (R850 は 10〜40 ms、RT710 は 10 ms。仕様書 6.5 (5)・7.3 (2)) だけは、
 /// 復調器の書き込みからチューナーの最後の書き込みまでを 1 つの並びとして送るために、ロックを持ったまま待つ。
 /// その間、同じバスのほかの受信機の I2C は最大 40 ms 遅れるだけで、TS は I2C を通らないので受信は乱れない
 /// </summary>
 internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<long> nowMs) : IIt930xFrontend
 {
-    /// <summary>確かめる間隔 (ms。仕様書 12)</summary>
+    /// <summary>確かめる間隔 (ms。仕様書 10)</summary>
     public const int PollMs = 10;
 
-    /// <summary>チューナーの PLL のロックを確かめる回数 (仕様書 12。約 0.5 秒)</summary>
+    /// <summary>チューナーの PLL のロックを確かめる回数 (仕様書 10。約 0.5 秒)</summary>
     public const int PllPolls = 50;
 
-    /// <summary>復調器のロックを確かめる回数 (仕様書 12。ISDB-T も ISDB-S も約 3 秒)</summary>
+    /// <summary>復調器のロックを確かめる回数 (仕様書 10。ISDB-T も ISDB-S も約 3 秒)</summary>
     public const int LockPolls = 300;
 
-    /// <summary>ISDB-T でロックを確かめ始めてから成功を返すまでの最短の回数 (仕様書 5.3。350 ms)</summary>
+    /// <summary>ISDB-T でロックを確かめ始めてから成功を返すまでの最短の回数 (仕様書 4.3。350 ms)</summary>
     public const int SettlePolls = 35;
 
-    /// <summary>ISDB-S の TMCC の TSID が読めるまで・TSID が切り替わるまでに確かめる回数 (仕様書 12。約 1 秒)</summary>
+    /// <summary>ISDB-S の TMCC の TSID が読めるまで・TSID が切り替わるまでに確かめる回数 (仕様書 10。約 1 秒)</summary>
     public const int StreamPolls = 100;
 
-    /// <summary>地上波の起動 (仕様書 4.2 の 1〜12)。受信機が 1 つの機種は先頭の 8 行だけを使う (仕様書 13.3)</summary>
+    /// <summary>地上波の起動 (仕様書 3.2 の 1〜12)。受信機が 1 つの機種は先頭の 8 行だけを使う (仕様書 11.1)</summary>
     internal static readonly TcRow[] WakeTerrestrialRows =
     [
         new(0xB0, 0xA0), new(0xB2, 0x3D), new(0xB3, 0x25), new(0xB4, 0x8B), new(0xB5, 0x4B), new(0xB6, 0x3F), new(0xB7, 0xFF), new(0xB8, 0xC0),
         new(0x1F, 0x00), new(0x75, 0x00), new(0x1D, 0xA8), new(0x03, 0x00),
     ];
 
-    /// <summary>衛星の起動 (仕様書 4.2 の 1〜7)</summary>
+    /// <summary>衛星の起動 (仕様書 3.2 の 1〜7)</summary>
     internal static readonly TcRow[] WakeSatelliteRows =
     [
         new(0x15, 0x00), new(0x1D, 0x00), new(0x04, 0x02), new(0x1C, 0x80), new(0x1F, 0x22), new(0x13, 0x00), new(0x17, 0x00),
     ];
 
-    /// <summary>地上波のスリープ (仕様書 4.3)</summary>
+    /// <summary>地上波のスリープ (仕様書 3.3)</summary>
     internal static readonly TcRow[] SleepTerrestrialRows = [new(0x03, 0xF0)];
 
-    /// <summary>衛星のスリープ (仕様書 4.3。この順)</summary>
+    /// <summary>衛星のスリープ (仕様書 3.3。この順)</summary>
     internal static readonly TcRow[] SleepSatelliteRows = [new(0x13, 0x80), new(0x17, 0xFF)];
 
-    /// <summary>地上波の TS の端子を出す・止める (仕様書 4.5)</summary>
+    /// <summary>地上波の TS の端子を出す・止める (仕様書 3.5)</summary>
     internal static readonly TcRow[] TsOnTerrestrialRows = [new(0x1D, 0x00)];
 
     internal static readonly TcRow[] TsOffTerrestrialRows = [new(0x1D, 0xA8)];
 
-    /// <summary>衛星の TS の端子を出す・止める (仕様書 4.5)</summary>
+    /// <summary>衛星の TS の端子を出す・止める (仕様書 3.5)</summary>
     internal static readonly TcRow[] TsOnSatelliteRows = [new(0x1C, 0x00), new(0x1F, 0x00)];
 
     internal static readonly TcRow[] TsOffSatelliteRows = [new(0x1C, 0x80), new(0x1F, 0x22)];
 
-    /// <summary>ISDB-T の選局の、R850 の前 (仕様書 5.2 の 1〜6)</summary>
+    /// <summary>ISDB-T の選局の、R850 の前 (仕様書 4.2 の 1〜6)</summary>
     internal static readonly TcRow[] TuneTerrestrialHeadRows =
     [
         new(0x47, 0x30), new(0x25, 0x00), new(0x20, 0x00), new(0x23, 0x4D), new(0x01, 0x50), new(0x76, 0x0C),
     ];
 
-    /// <summary>ISDB-T の選局の、R850 のあと (仕様書 5.2 の 9〜15)</summary>
+    /// <summary>ISDB-T の選局の、R850 のあと (仕様書 4.2 の 9〜15)</summary>
     internal static readonly TcRow[] TuneTerrestrialTailRows =
     [
         new(0x25, 0x00), new(0x20, 0x00), new(0x23, 0x4C), new(0x01, 0x50), new(0x71, 0x21), new(0x72, 0x25), new(0x75, 0x08),
     ];
 
-    /// <summary>ISDB-S の選局の、RT710 の前 (仕様書 6.2 の 1〜6)。<paramref name="second"/> は「2 つ目」の印 (<c>10</c> の値が違う)</summary>
+    /// <summary>ISDB-S の選局の、RT710 の前 (仕様書 5.2 の 1〜6)。<paramref name="second"/> は「2 つ目」の印 (<c>10</c> の値が違う)</summary>
     internal static TcRow[] TuneSatelliteHeadRows(bool second) =>
     [
         new(0x0A, 0x00), new(0x10, (byte)(second ? 0x30 : 0xB0)), new(0x11, 0x02), new(0x03, 0x01), new(0x8E, 0x06), new(0xA3, 0xF7),
     ];
 
-    /// <summary>ISDB-S の選局の、RT710 のあと (仕様書 6.2 の 9〜12)</summary>
+    /// <summary>ISDB-S の選局の、RT710 のあと (仕様書 5.2 の 9〜12)</summary>
     internal static TcRow[] TuneSatelliteTailRows(bool second) =>
     [
         new(0x0A, 0xFF), new(0x10, (byte)(second ? 0x32 : 0xB2)), new(0x11, 0x00), new(0x03, 0x01),
@@ -190,7 +190,7 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
     }
 
     /// <summary>
-    /// チューナーの PLL のロックを待つ (仕様書 5.2 の 8・6.2 の 8)。10 ms おきに 50 回まで。ロックしなければ <see cref="IOException"/>
+    /// チューナーの PLL のロックを待つ (仕様書 4.2 の 8・5.2 の 8)。10 ms おきに 50 回まで。ロックしなければ <see cref="IOException"/>
     /// (電波の有無によらない失敗なので、「同期しませんでした」とは分ける。仕様書に無い)
     /// </summary>
     protected void WaitPll(Func<bool> locked, string chip)
@@ -205,12 +205,12 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
         throw new IOException($"{chip} の PLL がロックしませんでした");
     }
 
-    /// <summary>ISDB-T がロックしているか (仕様書 5.3)。<c>80</c> の bit5・bit3 がどちらも 0 で、<c>B0</c> の下位 4 ビットが 8 以上。バスのロックの中で呼ぶ</summary>
+    /// <summary>ISDB-T がロックしているか (仕様書 4.3)。<c>80</c> の bit5・bit3 がどちらも 0 で、<c>B0</c> の下位 4 ビットが 8 以上。バスのロックの中で呼ぶ</summary>
     protected static bool TerrestrialLocked(Tc90522Link link) =>
         (link.Read(0x80, 1)[0] & 0x28) == 0 && (link.Read(0xB0, 1)[0] & 0x0F) >= 8;
 
     /// <summary>
-    /// ISDB-T のロックを待つ (仕様書 5.3)。10 ms おきに 300 回まで。350 ms より早くロックしたら、確かめ始めてから 350 ms になるまで待ってから返す
+    /// ISDB-T のロックを待つ (仕様書 4.3)。10 ms おきに 300 回まで。350 ms より早くロックしたら、確かめ始めてから 350 ms になるまで待ってから返す
     /// </summary>
     protected bool WaitTerrestrial(Tc90522Link link)
     {
@@ -231,10 +231,10 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
         return false;
     }
 
-    /// <summary>ISDB-S がロックしているか (仕様書 6.3)。<c>C3</c> の bit4 が 0。バスのロックの中で呼ぶ</summary>
+    /// <summary>ISDB-S がロックしているか (仕様書 5.3)。<c>C3</c> の bit4 が 0。バスのロックの中で呼ぶ</summary>
     protected static bool SatelliteLocked(Tc90522Link link) => (link.Read(0xC3, 1)[0] & 0x10) == 0;
 
-    /// <summary>ISDB-S のロックを待つ (仕様書 6.3)。10 ms おきに 300 回まで</summary>
+    /// <summary>ISDB-S のロックを待つ (仕様書 5.3)。10 ms おきに 300 回まで</summary>
     protected bool WaitSatellite(Tc90522Link link)
     {
         LockMs = -1;
@@ -254,7 +254,7 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
     }
 
     /// <summary>
-    /// ISDB-S の TS を選ぶ (仕様書 6.4)。ロックのあとに呼ぶ。相対 TS 番号で指定されたときは TMCC から TSID を読む。
+    /// ISDB-S の TS を選ぶ (仕様書 5.4)。ロックのあとに呼ぶ。相対 TS 番号で指定されたときは TMCC から TSID を読む。
     /// TSID を書き、選ばれている TSID が同じになるまで待つ。その TS が無い・切り替わらないときは false (選局表の TSID が古いときに起きるので、同期しなかったものとして扱う。仕様書に無い)
     /// </summary>
     protected bool SelectStream(Tc90522Link link, CxdStream stream)
@@ -287,7 +287,7 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
         return false;
     }
 
-    /// <summary>ISDB-T の受信の状態と C/N (仕様書 9.1)。ロックを確かめてから <c>8B</c> の 3 バイトを読む。式は <see cref="TunerSignal.Tc90522Db"/></summary>
+    /// <summary>ISDB-T の受信の状態と C/N (仕様書 8.1)。ロックを確かめてから <c>8B</c> の 3 バイトを読む。式は <see cref="TunerSignal.Tc90522Db"/></summary>
     protected TunerSignal TerrestrialSignal(Tc90522Link link)
     {
         lock (BusLock)
@@ -298,7 +298,7 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
         }
     }
 
-    /// <summary>ISDB-S の受信の状態と C/N (仕様書 9.2)。ロックを確かめてから <c>BC</c> の 2 バイトを読む</summary>
+    /// <summary>ISDB-S の受信の状態と C/N (仕様書 8.2)。ロックを確かめてから <c>BC</c> の 2 バイトを読む</summary>
     protected TunerSignal SatelliteSignal(Tc90522Link link)
     {
         lock (BusLock)
@@ -310,7 +310,7 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
     }
 
     /// <summary>
-    /// TMCC にある TSID の一覧 (相対 TS 番号 0〜7 の順。0 はその番号の TS が無い。仕様書 6.4)。
+    /// TMCC にある TSID の一覧 (相対 TS 番号 0〜7 の順。0 はその番号の TS が無い。仕様書 5.4)。
     /// 読む前とあとにロックを確かめ、どちらかでロックしていなければ null
     /// </summary>
     protected ushort[]? Streams(Tc90522Link link)
@@ -325,8 +325,8 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
     }
 
     /// <summary>
-    /// ISDB-T の <c>--tune</c> だけに出す値 (仕様書 5.4・9.3)。伝送モード・ガードインターバル・部分受信の有無と、階層ごとの誤り率。
-    /// 誤り率は、この基板で値を確かめた記録が無い (仕様書 9.3)
+    /// ISDB-T の <c>--tune</c> だけに出す値 (仕様書 4.4・8.3)。伝送モード・ガードインターバル・部分受信の有無と、階層ごとの誤り率。
+    /// 誤り率は、この基板で値を確かめた記録が無い (仕様書 8.3)
     /// </summary>
     protected List<string> TerrestrialNotes(Tc90522Link link)
     {
@@ -350,7 +350,7 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
         ];
     }
 
-    /// <summary>ISDB-S の <c>--tune</c> だけに出す値 (仕様書 9.3)。高階層・低階層の誤り率。この基板で値を確かめた記録が無い</summary>
+    /// <summary>ISDB-S の <c>--tune</c> だけに出す値 (仕様書 8.3)。高階層・低階層の誤り率。この基板で値を確かめた記録が無い</summary>
     protected List<string> SatelliteNotes(Tc90522Link link)
     {
         byte[] errors;
@@ -365,17 +365,17 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
         return [$"誤り率 (未確認の値)  高階層 {rates.ElementAt(0)}  低階層 {rates.ElementAt(1)}"];
     }
 
-    /// <summary>誤り率 = 誤りの数 ÷ (パケットの数 × 204 × 8) (仕様書 9.3)。パケットの数が 0 なら「-」</summary>
+    /// <summary>誤り率 = 誤りの数 ÷ (パケットの数 × 204 × 8) (仕様書 8.3)。パケットの数が 0 なら「-」</summary>
     internal static string Rate(int errors, int packets) =>
         packets == 0 ? "-" : (errors / (packets * 204.0 * 8)).ToString("G3", CultureInfo.InvariantCulture);
 
-    /// <summary>R850 について <c>--tune</c> に出す行 (付録 C.1 と比べるため。仕様書 14 の 6)</summary>
+    /// <summary>R850 について <c>--tune</c> に出す行 (付録 C.1 と比べるため。仕様書 12 の 6)</summary>
     protected static string R850Note(R850 tuner) => tuner.Written is { } plan
         ? $"R850  種類 {tuner.Kind} (00 = 0x{tuner.Id:X2})  水晶の駆動の強さ {tuner.XtalDrive}  M {plan.Divider}  N {plan.N}  S {plan.Fraction:X4}  "
             + $"08〜2F {Convert.ToHexString(plan.Registers)}  2F {plan.Final:X2}"
         : $"R850  種類 {tuner.Kind} (00 = 0x{tuner.Id:X2})  水晶の駆動の強さ {tuner.XtalDrive}";
 
-    /// <summary>RT710 について <c>--tune</c> に出す行。入力のレベルは RT710 だけ (仕様書 9.4。単位は 0.001 dBm と推定されている)</summary>
+    /// <summary>RT710 について <c>--tune</c> に出す行。入力のレベルは RT710 だけ (仕様書 8.4。単位は 0.001 dBm と推定されている)</summary>
     protected string Rt710Note(Rt710 tuner, uint khz)
     {
         int? level;
@@ -400,7 +400,7 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
 
     /// <summary>
     /// 地上波の選局のあと、ロックしたかによらずに出す行 (<c>--tune</c> が失敗のあとに出す)。
-    /// R850 に書いた値・R850 の PLL の状態 (<c>02</c>)・ロックの判定で読む復調器の <c>80</c> と <c>B0</c> (仕様書 5.3・7.6)
+    /// R850 に書いた値・R850 の PLL の状態 (<c>02</c>)・ロックの判定で読む復調器の <c>80</c> と <c>B0</c> (仕様書 4.3・6.6)
     /// </summary>
     protected List<string> DiagnoseTerrestrial(Tc90522Link link, R850 tuner) =>
     [
@@ -413,8 +413,8 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
     ];
 
     /// <summary>
-    /// 衛星の選局のあと、ロックしたかによらずに出す行。RT710 か RT720 かと書いた値・PLL の状態 (<c>02</c>)・ロックの判定で読む復調器の <c>C3</c> (仕様書 6.3・8.4)、
-    /// TMCC にある TSID の一覧と、選ばれている TSID (仕様書 6.4。ロックを確かめずに、読めた値のまま出す)
+    /// 衛星の選局のあと、ロックしたかによらずに出す行。RT710 か RT720 かと書いた値・PLL の状態 (<c>02</c>)・ロックの判定で読む復調器の <c>C3</c> (仕様書 5.3・7.4)、
+    /// TMCC にある TSID の一覧と、選ばれている TSID (仕様書 5.4。ロックを確かめずに、読めた値のまま出す)
     /// </summary>
     protected List<string> DiagnoseSatellite(Tc90522Link link, Rt710 tuner) =>
     [
@@ -439,7 +439,7 @@ internal abstract class Tc90522Frontend(Lock busLock, Action<int> sleep, Func<lo
 }
 
 /// <summary>
-/// Q3・W3 系の地上波の受信機 (TC90522 の地上波のアドレス + R850。仕様書 2.2)。開く・閉じるの順は <see cref="Tc90522Board"/> が決める
+/// Q3・W3 系の地上波の受信機 (TC90522 の地上波のアドレス + R850。仕様書 1.2)。開く・閉じるの順は <see cref="Tc90522Board"/> が決める
 /// </summary>
 internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
 {
@@ -465,14 +465,14 @@ internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
         lock (BusLock) _tuner.Init();
     }
 
-    /// <summary>起動 (仕様書 4.2)。R850 の方式は ISDB-T・6 MHz・IF 4063 kHz に決まっていて、チューナーへは何も書かない</summary>
+    /// <summary>起動 (仕様書 3.2)。R850 の方式は ISDB-T・6 MHz・IF 4063 kHz に決まっていて、チューナーへは何も書かない</summary>
     public void Wake()
     {
         _tuned = false;
         Run(_link, WakeTerrestrialRows);
     }
 
-    /// <summary>スリープ (仕様書 4.1 の 3・11.3)。復調器だけ。R850 には何も書かない (仕様書 7.7)</summary>
+    /// <summary>スリープ (仕様書 3.1 の 3・9.3)。復調器だけ。R850 には何も書かない (仕様書 6.7)</summary>
     public void Rest()
     {
         _tuned = false;
@@ -481,7 +481,7 @@ internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
 
     public void Forget() => _tuned = _attempted = false;
 
-    /// <summary>ISDB-T を選局し、ロックを待つ (仕様書 5.2)。ロックしなければ false</summary>
+    /// <summary>ISDB-T を選局し、ロックを待つ (仕様書 4.2)。ロックしなければ false</summary>
     public override bool Tune(ChannelTable.Tuning tuning)
     {
         if (tuning.Satellite || tuning.Cable || tuning.IsdbC) throw Refuse(tuning, "地上波");
@@ -500,7 +500,7 @@ internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
         return WaitTerrestrial(_link);
     }
 
-    /// <summary>TS の端子を出す・止める (仕様書 4.5)</summary>
+    /// <summary>TS の端子を出す・止める (仕様書 3.5)</summary>
     public override void Stream(bool on) => Run(_link, on ? TsOnTerrestrialRows : TsOffTerrestrialRows);
 
     public override TunerSignal? Signal() => _tuned ? TerrestrialSignal(_link) : null;
@@ -511,7 +511,7 @@ internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
 }
 
 /// <summary>
-/// Q3・W3 系の衛星の受信機 (TC90522 の衛星のアドレス + RT710。仕様書 2.2)。開く・閉じるの順は <see cref="Tc90522Board"/> が決める
+/// Q3・W3 系の衛星の受信機 (TC90522 の衛星のアドレス + RT710。仕様書 1.2)。開く・閉じるの順は <see cref="Tc90522Board"/> が決める
 /// </summary>
 internal sealed class Tc90522Satellite : Tc90522Frontend, ITc90522Receiver
 {
@@ -540,14 +540,14 @@ internal sealed class Tc90522Satellite : Tc90522Frontend, ITc90522Receiver
         lock (BusLock) _tuner.Init();
     }
 
-    /// <summary>起動 (仕様書 4.2)。RT710 には何も書かない (選局のたびに全部のレジスタを書く)</summary>
+    /// <summary>起動 (仕様書 3.2)。RT710 には何も書かない (選局のたびに全部のレジスタを書く)</summary>
     public void Wake()
     {
         _tuned = false;
         Run(_link, WakeSatelliteRows);
     }
 
-    /// <summary>スリープ (仕様書 4.1 の 3・11.3)。RT710 を待機にして (仕様書 8.5)、続けて復調器をスリープにする</summary>
+    /// <summary>スリープ (仕様書 3.1 の 3・9.3)。RT710 を待機にして (仕様書 7.5)、続けて復調器をスリープにする</summary>
     public void Rest()
     {
         _tuned = false;
@@ -561,7 +561,7 @@ internal sealed class Tc90522Satellite : Tc90522Frontend, ITc90522Receiver
     public void Forget() => _tuned = _attempted = false;
 
     /// <summary>
-    /// ISDB-S を選局し、ロックを待って TS を選ぶ (仕様書 6.2)。周波数は LNB で変換したあとの kHz (仕様書 6.1)。
+    /// ISDB-S を選局し、ロックを待って TS を選ぶ (仕様書 5.2)。周波数は LNB で変換したあとの kHz (仕様書 5.1)。
     /// ロックしない・TS を選べなければ false
     /// </summary>
     public override bool Tune(ChannelTable.Tuning tuning)
@@ -581,7 +581,7 @@ internal sealed class Tc90522Satellite : Tc90522Frontend, ITc90522Receiver
         return WaitSatellite(_link) && SelectStream(_link, CxdStream.From(tuning.StreamId));
     }
 
-    /// <summary>TS の端子を出す・止める (仕様書 4.5)</summary>
+    /// <summary>TS の端子を出す・止める (仕様書 3.5)</summary>
     public override void Stream(bool on) =>
         Run(_link, on ? TsOnSatelliteRows : TsOffSatelliteRows);
 
@@ -599,39 +599,39 @@ internal interface ITc90522Receiver : IIt930xFrontend
 {
     Tc90522Link Link { get; }
 
-    /// <summary>チューナーの初期化 (仕様書 7.3・8.2)</summary>
+    /// <summary>チューナーの初期化 (仕様書 6.3・7.2)</summary>
     void InitTuner();
 
-    /// <summary>起動 (仕様書 4.2)</summary>
+    /// <summary>起動 (仕様書 3.2)</summary>
     void Wake();
 
-    /// <summary>スリープ (仕様書 4.1 の 3・11.3)</summary>
+    /// <summary>スリープ (仕様書 3.1 の 3・9.3)</summary>
     void Rest();
 
-    /// <summary>何も書かずに、選局していない状態に戻す (最後の受信機を閉じるとき。仕様書 11.3)</summary>
+    /// <summary>何も書かずに、選局していない状態に戻す (最後の受信機を閉じるとき。仕様書 9.3)</summary>
     void Forget();
 }
 
 /// <summary>
-/// Q3・W3 系の USB デバイス 1 つ分 (W3 の全体、Q3 の片側) の 4 つの受信機 (仕様書 2・4・11)。
+/// Q3・W3 系の USB デバイス 1 つ分 (W3 の全体、Q3 の片側) の 4 つの受信機 (仕様書 1・3・9)。
 ///
 /// <para>
-/// **開いている受信機が無い状態から開くとき** (仕様書 4.1): 4 つのチューナーを受信機 0 から 3 の順に初期化し、開く受信機のほかの 3 つをスリープにし、
-/// 開く受信機を起動して、TS 出力の共通設定 (仕様書 4.4) を書く。2 つ目からは起動だけ (仕様書 4.2)。
+/// **開いている受信機が無い状態から開くとき** (仕様書 3.1): 4 つのチューナーを受信機 0 から 3 の順に初期化し、開く受信機のほかの 3 つをスリープにし、
+/// 開く受信機を起動して、TS 出力の共通設定 (仕様書 3.4) を書く。2 つ目からは起動だけ (仕様書 3.2)。
 /// 電源は機材 (<see cref="It930xDevice"/>) が開いている間入っているので、ここでは操作しない。カードや Q3 のもう片方の側のために電源だけが入っていたときも、
-/// 最初の受信機を開くたびに初期化からやり直す (仕様書 2.6)。
+/// 最初の受信機を開くたびに初期化からやり直す (IT930x の仕様書 7.4)。
 /// </para>
 ///
 /// <para>
-/// **閉じるとき** (仕様書 11.3): ほかに開いている受信機があればスリープにする。最後の受信機は何も書かない (電源を切るか、次に開くときに初期化からやり直す)。
+/// **閉じるとき** (仕様書 9.3): ほかに開いている受信機があればスリープにする。最後の受信機は何も書かない (電源を切るか、次に開くときに初期化からやり直す)。
 /// </para>
 /// </summary>
 internal sealed class Tc90522Board : IIt930xBoard
 {
-    /// <summary>TS 出力の共通設定 (仕様書 4.4)。受信機 0 の衛星のアドレスに書く 2 行</summary>
+    /// <summary>TS 出力の共通設定 (仕様書 3.4)。受信機 0 の衛星のアドレスに書く 2 行</summary>
     internal static readonly TcRow[] CommonSatelliteRows = [new(0x07, 0x31), new(0x08, 0x77)];
 
-    /// <summary>TS 出力の共通設定 (仕様書 4.4)。受信機 2 の地上波のアドレスに書く 2 行</summary>
+    /// <summary>TS 出力の共通設定 (仕様書 3.4)。受信機 2 の地上波のアドレスに書く 2 行</summary>
     internal static readonly TcRow[] CommonTerrestrialRows = [new(0x0E, 0x77), new(0x0F, 0x13)];
 
     private readonly Lock _gate = new();
@@ -666,15 +666,15 @@ internal sealed class Tc90522Board : IIt930xBoard
             if (_open.Contains(receiver)) return frontend;
             if (_open.Count == 0)
             {
-                // 4 つのチューナーを受信機 0 から 3 の順に初期化する (仕様書 4.1 の 2)
+                // 4 つのチューナーを受信機 0 から 3 の順に初期化する (仕様書 3.1 の 2)
                 foreach (var each in _receivers) each.InitTuner();
-                // これから開く受信機を除く 3 つをスリープにする (仕様書 4.1 の 3)
+                // これから開く受信機を除く 3 つをスリープにする (仕様書 3.1 の 3)
                 for (var other = 0; other < _receivers.Length; other++)
                 {
                     if (other != receiver) _receivers[other].Rest();
                 }
                 frontend.Wake();
-                // TS 出力の共通設定 (仕様書 4.4)。相手がスリープ中でも書く
+                // TS 出力の共通設定 (仕様書 3.4)。相手がスリープ中でも書く
                 lock (_busLock)
                 {
                     _receivers[0].Link.Run(CommonSatelliteRows);
@@ -702,13 +702,13 @@ internal sealed class Tc90522Board : IIt930xBoard
 }
 
 /// <summary>
-/// 受信機が 1 つの機種 (ISDB2056・ISDB2056N・PX-M1UR・PX-S1UR と DTV03A-1TU。仕様書 13.3・13.4)。
+/// 受信機が 1 つの機種 (ISDB2056・ISDB2056N・PX-M1UR・PX-S1UR と DTV03A-1TU。仕様書 11.1・11.2)。
 /// ISDB2056 系は、地上波と衛星を選局のたびに切り替える (PX-S1UR は地上波だけ)。DTV03A-1TU は地上波だけで、復調器の初期化と選局の値が違う。
 /// **受信機を開くたびに電源を入れ、閉じるたびに切る** (カードのためには入れない)。LNB の給電の操作は無い
 /// </summary>
 internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
 {
-    /// <summary>DTV03A-1TU を開くときに復調器へ書く 17 行 (仕様書 13.4)</summary>
+    /// <summary>DTV03A-1TU を開くときに復調器へ書く 17 行 (仕様書 11.2)</summary>
     internal static readonly TcRow[] OpenIsdbt2071Rows =
     [
         new(0x04, 0x00), new(0x10, 0x00), new(0x11, 0x2D), new(0x12, 0x02), new(0x13, 0x62), new(0x14, 0x60), new(0x15, 0x00), new(0x16, 0x00),
@@ -716,19 +716,19 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
         new(0x39, 0x1C),
     ];
 
-    /// <summary>DTV03A-1TU の選局の、R850 の前 (仕様書 13.4 の 1〜7)</summary>
+    /// <summary>DTV03A-1TU の選局の、R850 の前 (仕様書 11.2 の 1〜7)</summary>
     internal static readonly TcRow[] TuneIsdbt2071HeadRows =
     [
         new(0x47, 0x30), new(0x25, 0x00), new(0x20, 0x00), new(0x23, 0x4D), new(0x01, 0x50),
         new(0x76, 0x03), new(0x77, 0x01), new(0x3B, 0x10), new(0x3C, 0x10), new(0x3D, 0x24),
     ];
 
-    /// <summary>AGC を止める・動かす 4 行 (仕様書 13.3 の地上波の 2・11、13.4 の 2・9)</summary>
+    /// <summary>AGC を止める・動かす 4 行 (仕様書 11.1 の地上波の 2・11、11.2 の 2・9)</summary>
     internal static readonly TcRow[] AgcStopRows = [new(0x25, 0x00), new(0x20, 0x00), new(0x23, 0x4D), new(0x01, 0x50)];
 
     internal static readonly TcRow[] AgcRunRows = [new(0x25, 0x00), new(0x20, 0x00), new(0x23, 0x4C), new(0x01, 0x50)];
 
-    /// <summary>選局のあと、ロックを待つ前の待ち (ms。仕様書 12・13.3・13.4)</summary>
+    /// <summary>選局のあと、ロックを待つ前の待ち (ms。仕様書 10・11.1・11.2)</summary>
     public const int AfterTuneMs = 100;
 
     private enum Mode
@@ -771,7 +771,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
     public override string Chips =>
         $"{(Isdbt2071 ? "復調器" : "TC90522")} 0x{_t.Address:X2} + R850 (種類 {_r850.Kind}、水晶の駆動の強さ {_r850.XtalDrive})" + (_rt710 is { } rt710 ? $" + {rt710.Name}" : "");
 
-    /// <summary>開く (仕様書 13.3・13.4 の「受信機を開く」)。電源を入れ、チューナーを初期化して、復調器を止めた状態にする。失敗したら電源を切る</summary>
+    /// <summary>開く (仕様書 11.1・11.2 の「受信機を開く」)。電源を入れ、チューナーを初期化して、復調器を止めた状態にする。失敗したら電源を切る</summary>
     public IIt930xFrontend Open(int receiver)
     {
         lock (_gate)
@@ -795,7 +795,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
                         _t.Run(WakeTerrestrialRows.AsSpan(0, 8));
                         // TS の端子を止めて、地上波の側をスリープにする
                         _t.Run([new(0x1D, 0xA8), new(0x03, 0xF0)]);
-                        // 衛星の側。PX-S1UR でも書く (相手は 0x11。仕様書 13.3)
+                        // 衛星の側。PX-S1UR でも書く (相手は 0x11。仕様書 11.1)
                         _s!.Run([new(0x15, 0x00), new(0x1D, 0x00), new(0x1C, 0x80), new(0x1F, 0x22), new(0x13, 0x80), new(0x17, 0xFF)]);
                     }
                 }
@@ -817,7 +817,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
         }
     }
 
-    /// <summary>閉じる (仕様書 13.3)。電源を切る。スリープの書き込みはしない</summary>
+    /// <summary>閉じる (仕様書 11.1)。電源を切る。スリープの書き込みはしない</summary>
     public void Close(int receiver)
     {
         lock (_gate)
@@ -845,7 +845,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
             }
             else
             {
-                // 仕様書 13.3 の地上波の選局の 1〜9
+                // 仕様書 11.1 の地上波の選局の 1〜9
                 _t.Run([new(0x47, 0x30)]);
                 _t.Run(AgcStopRows);
                 _s!.Run(SleepSatelliteRows);
@@ -864,7 +864,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
         return WaitTerrestrial(_t);
     }
 
-    /// <summary>衛星の選局 (仕様書 13.3)。ISDB2056N (「2 つ目」の印が有る) は <c>10</c> と <c>08</c> の値が違う</summary>
+    /// <summary>衛星の選局 (仕様書 11.1)。ISDB2056N (「2 つ目」の印が有る) は <c>10</c> と <c>08</c> の値が違う</summary>
     private bool TuneSatellite(ChannelTable.Tuning tuning, Rt710 rt710)
     {
         var second = _wiring.Second;
@@ -886,7 +886,7 @@ internal sealed class Tc90522Single : Tc90522Frontend, IIt930xBoard
         return WaitSatellite(_s) && SelectStream(_s, CxdStream.From(tuning.StreamId));
     }
 
-    /// <summary>いま選局している方式の TS の端子を出す・止める (仕様書 13.3・13.4。値は 4.5 と同じ)</summary>
+    /// <summary>いま選局している方式の TS の端子を出す・止める (仕様書 11.1・11.2。値は 3.5 と同じ)</summary>
     public override void Stream(bool on)
     {
         switch (_mode)

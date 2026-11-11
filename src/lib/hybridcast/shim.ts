@@ -571,7 +571,8 @@ export function shim(init: ShimInit): void {
     const p = state.program;
     if (p === null || p.serviceId === null) return null;
     const onid = p.originalNetworkId ?? 0;
-    // BS は 4、CS は 6・7。ほかは地上波
+    // BS (4)・CS (6・7) は 11、地上波とケーブルの自主放送は 12。ケーブルの値は確かめていない。
+    // 文字にして差し込む関数なので、`#lib/types.ts` の `origin` は呼べない
     const idType = onid === 4 || onid === 6 || onid === 7 ? 11 : 12;
     return {
       channelType: 0,

@@ -37,7 +37,7 @@ internal sealed class It930xTsDemux
     /// <param name="syncBytes">
     /// 入力 0、1、… の同期バイト (<see cref="It930xBridge.SyncBytes"/> か、機種ごとの <see cref="It930xModel.SyncBytes"/>)。0 の入力は使わない。
     /// CXD2856ER の機種には 0x47 を使わない (書き換えていないパケットと見分けるため)。Q3・W3 系の受信機 3 と、受信機が 1 つの機種は、
-    /// px4 の仕様書 (2.2・13.3・13.4) の値が 0x47 なので、そのまま受ける
+    /// TC90522 の仕様書 (1.2・11.1・11.2) の値が 0x47 なので、そのまま受ける
     /// </param>
     public It930xTsDemux(IReadOnlyList<byte> syncBytes)
     {
@@ -163,7 +163,7 @@ internal sealed class It930xTsOutput
     /// <summary>選局の途中で、TSMF のヘッダーにある選んだ TS の種類が変わったときに、読む側に伝える理由 (<see cref="TsmfSelector.FormatChanged"/>)</summary>
     public const string FormatChangedReason = "選んだ TS の形式が変わりました";
 
-    /// <param name="tsmf">ISDB-C のとき、TSMF から TS を 1 つ選ぶ処理 (仕様書 7A.7)。ほかの方式は通さない (仕様書 10.1) ので null</param>
+    /// <param name="tsmf">ISDB-C のとき、TSMF から TS を 1 つ選ぶ処理 (CXD2856 の仕様書 8.7)。ほかの方式は通さない (CXD2856 の仕様書 10.1) ので null</param>
     /// <param name="tlv">ISDB-C のとき、選んだ TS が分割 TLV なら TLV パケットに組み立てる処理。<paramref name="tsmf"/> と組で渡す</param>
     public It930xTsOutput(TsmfSelector? tsmf = null, SplitTlv? tlv = null) : this(TsBuffer.New(), tsmf, tlv)
     {
@@ -199,7 +199,7 @@ internal sealed class It930xTsOutput
 
     /// <summary>
     /// パケットを 1 つ詰める (まだ渡さない。<see cref="Commit"/> で渡す)。溢れていれば捨てて数える。
-    /// ISDB-C のときは TSMF の処理に通し、選んだ TS のパケットだけを詰める (仕様書 7A.7)。選んだ TS が分割 TLV なら、TLV パケットに組み立ててから詰める。
+    /// ISDB-C のときは TSMF の処理に通し、選んだ TS のパケットだけを詰める (CXD2856 の仕様書 8.7)。選んだ TS が分割 TLV なら、TLV パケットに組み立ててから詰める。
     /// 選局の途中で選んだ TS の種類が変わったら、出力を止めて読む側に理由を伝える (形式の違うバイト列を混ぜて流さない)
     /// </summary>
     public void Write(ReadOnlySpan<byte> packet)

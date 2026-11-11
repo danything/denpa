@@ -18,8 +18,8 @@ export interface Cue {
 
 /** 出しておく長さ (`CaptionPage.duration`) を過ぎていれば消す。**次の 1 枚を待たずに消える字幕がある** */
 export function showing(cue: Cue | null, at: number): CaptionPage | null {
-  const page = cue?.page ?? null;
-  if (page === null || cue === null) return null;
+  if (cue === null || cue.page === null) return null;
+  const page = cue.page;
   if (page.duration !== null && at >= cue.at + page.duration / 1000)
     return null;
   return page;

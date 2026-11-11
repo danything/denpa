@@ -3,37 +3,37 @@ namespace Denpa.Agent;
 /*
  * RafaelMicro R850 (地上波チューナー) と、R850・RT710 で同じ PLL の計算。
  *
- * クリーンルームで、仕様書 (denpa-spec の px4/spec.md。PLEX PX-Q3・PX-W3 系の TC90522・R850・RT710 の動作を書いたもの) だけから書いた。
- * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は px4/spec.md の節の番号で、表の値は仕様書の付録 A のまま持つ。
+ * クリーンルームで、仕様書 (denpa-spec の tc90522/spec.md。TC90522・R850・RT710 の動作を書いたもの) だけから書いた。
+ * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は tc90522/spec.md の節の番号 (ブリッジの側の it930x/spec.md は「IT930x の仕様書 x.y」と書く) で、表の値は仕様書の付録 A のまま持つ。
  * 仕様書に無くて決めた所は「仕様書に無い」、仕様書の文から読み取って決めた所は「推定」と書いてある。**実機では確かめていない。**
  */
 
 /// <summary>
-/// チューナーへの通信 (復調器の中継を通す。仕様書 3.2)。R850 と RT710 は読むレジスタを選べず、いつも <c>00</c> から読む (仕様書 7.1・8.1)
+/// チューナーへの通信 (復調器の中継を通す。仕様書 2.2)。R850 と RT710 は読むレジスタを選べず、いつも <c>00</c> から読む (仕様書 6.1・7.1)
 /// </summary>
 internal interface ITunerPort
 {
     /// <summary>「レジスタの番号 + データ」を 1 回で書く</summary>
     void Write(ReadOnlySpan<byte> data);
 
-    /// <summary><c>00</c> から <paramref name="length"/> バイトを読み、1 バイトごとにビットの並びを直して返す (仕様書 7.1)</summary>
+    /// <summary><c>00</c> から <paramref name="length"/> バイトを読み、1 バイトごとにビットの並びを直して返す (仕様書 6.1)</summary>
     byte[] Read(int length);
 }
 
-/// <summary>R850 の 1 回の選局で書く値 (仕様書 7.5)</summary>
-/// <param name="Registers"><c>08</c>〜<c>2F</c> に書く 40 バイト (仕様書 7.5 (5) の手順 1)</param>
+/// <summary>R850 の 1 回の選局で書く値 (仕様書 6.5)</summary>
+/// <param name="Registers"><c>08</c>〜<c>2F</c> に書く 40 バイト (仕様書 6.5 (5) の手順 1)</param>
 /// <param name="Final">待ったあと <c>2F</c> に書く値 (手順 3)</param>
 /// <param name="WaitMs">40 バイトを書いたあとの待ち (手順 2)</param>
-/// <param name="Divider">VCO の分周 M (仕様書 7.5 (4) の手順 6)</param>
+/// <param name="Divider">VCO の分周 M (仕様書 6.5 (4) の手順 6)</param>
 /// <param name="N">PLL の整数の部分 (丸めたあと)</param>
 /// <param name="Fraction">PLL の小数の部分 S (16 ビット)</param>
 internal sealed record R850Plan(byte[] Registers, byte Final, int WaitMs, int Divider, int N, int Fraction);
 
-/// <summary>R850 と RT710 で同じ PLL の計算 (仕様書 7.5 (4) の手順 12〜15、8.3 (2))</summary>
+/// <summary>R850 と RT710 で同じ PLL の計算 (仕様書 6.5 (4) の手順 12〜15、7.3 (2))</summary>
 internal static class RafaelPll
 {
     /// <summary>
-    /// VCO の周波数と水晶 (分周したあと) から、整数の部分 N と小数の部分 S (16 ビット) を求める。割り算はどれも整数の割り算 (仕様書 7.5 (4))
+    /// VCO の周波数と水晶 (分周したあと) から、整数の部分 N と小数の部分 S (16 ビット) を求める。割り算はどれも整数の割り算 (仕様書 6.5 (4))
     /// </summary>
     public static (int N, int Fraction, bool Integer) Divide(long vco, int xtal)
     {
@@ -70,27 +70,27 @@ internal static class RafaelPll
 }
 
 /// <summary>
-/// R850 (地上波チューナー) 1 つ。初期化 (仕様書 7.3)、周波数の設定 (7.5)、PLL のロック (7.6)。
-/// 方式は ISDB-T・6 MHz・IF 4063 kHz だけ (仕様書 7.2)。イメージ除去とフィルタの校正はせず、決まった値を使う (仕様書 7.2)。
-/// 待機にはしない (仕様書 7.7)。**ロックは持たない** (呼ぶ側がバスのロックを持つ)
+/// R850 (地上波チューナー) 1 つ。初期化 (仕様書 6.3)、周波数の設定 (6.5)、PLL のロック (6.6)。
+/// 方式は ISDB-T・6 MHz・IF 4063 kHz だけ (仕様書 6.2)。イメージ除去とフィルタの校正はせず、決まった値を使う (仕様書 6.2)。
+/// 待機にはしない (仕様書 6.7)。**ロックは持たない** (呼ぶ側がバスのロックを持つ)
 /// </summary>
 internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
 {
-    /// <summary>I2C のアドレス (7 ビット。仕様書 7.1)</summary>
+    /// <summary>I2C のアドレス (7 ビット。仕様書 6.1)</summary>
     public const byte Address = 0x7C;
 
-    /// <summary>受け付ける RF の範囲 (kHz。仕様書 5.1・7.5)</summary>
+    /// <summary>受け付ける RF の範囲 (kHz。仕様書 4.1・6.5)</summary>
     public const uint MinKhz = 40000;
 
     public const uint MaxKhz = 1002000;
 
-    /// <summary>IF (kHz。仕様書 7.2)。LO は RF より低い側 (仕様書 7.4)</summary>
+    /// <summary>IF (kHz。仕様書 6.2)。LO は RF より低い側 (仕様書 6.4)</summary>
     public const int IfKhz = 4063;
 
-    /// <summary>レジスタの数 (<c>00</c>〜<c>2F</c>。仕様書 7.1)</summary>
+    /// <summary>レジスタの数 (<c>00</c>〜<c>2F</c>。仕様書 6.1)</summary>
     public const int Registers = 48;
 
-    /// <summary>書くレジスタの先頭 (<c>08</c>〜<c>2F</c> の 40 個を書く。仕様書 7.1)</summary>
+    /// <summary>書くレジスタの先頭 (<c>08</c>〜<c>2F</c> の 40 個を書く。仕様書 6.1)</summary>
     public const int FirstWritable = 0x08;
 
     /// <summary>初期値 (仕様書 付録 A.1)。<c>00</c>〜<c>07</c> は読むだけのレジスタで、0 にしておく</summary>
@@ -117,30 +117,30 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
         [5, 0x5A, 1, 5, 6, 0x6B, 5, 3, 2, 14, 4, 3, 1, 1, 3],
     ];
 
-    /// <summary>チップの種類 (0 か 1。仕様書 7.3 の手順 1)。初期化するまでは 0</summary>
+    /// <summary>チップの種類 (0 か 1。仕様書 6.3 の手順 1)。初期化するまでは 0</summary>
     public int Kind { get; private set; }
 
     /// <summary>種類を見分けるときに読んだ <c>00</c> の値 (ビットの並びを直したあと)。<c>--it930x-probe</c> と <c>--tune</c> が出す</summary>
     public byte Id { get; private set; }
 
-    /// <summary>水晶の駆動の強さ (1〜3。仕様書 7.3)。初期化するまでは 3</summary>
+    /// <summary>水晶の駆動の強さ (1〜3。仕様書 6.3)。初期化するまでは 3</summary>
     public int XtalDrive { get; private set; } = 3;
 
-    /// <summary>初期化のときに読んで書き戻した <c>08</c>〜<c>2F</c> (仕様書 7.3 の手順 2・4)。<c>--it930x-probe</c> が出す</summary>
+    /// <summary>初期化のときに読んで書き戻した <c>08</c>〜<c>2F</c> (仕様書 6.3 の手順 2・3)。<c>--it930x-probe</c> が出す</summary>
     public byte[]? Saved { get; private set; }
 
-    /// <summary>最後の選局で書いた値。<c>--tune</c> が出す (付録 C.1 と比べるため。仕様書 14 の 6)</summary>
+    /// <summary>最後の選局で書いた値。<c>--tune</c> が出す (付録 C.1 と比べるため。仕様書 12 の 6)</summary>
     public R850Plan? Written { get; private set; }
 
     /// <summary>
-    /// 初期化 (電源を入れたあと 1 回。仕様書 7.3)。種類を見分け、<c>08</c>〜<c>2F</c> を読んで取っておき、水晶の駆動の強さを調べ、取っておいた値を書き戻す
+    /// 初期化 (電源を入れたあと 1 回。仕様書 6.3)。種類を見分け、<c>08</c>〜<c>2F</c> を読んで取っておき、水晶の駆動の強さを調べ、取っておいた値を書き戻す
     /// </summary>
     public void Init()
     {
         /*
          * 種類を見分ける (手順 1)。00 を読み、(値 & 0x98) が 0 でなければ種類 1。4 回読んでも当てはまらなければ種類 0。
-         * 4 回目の読み出しが I2C の誤りなら失敗。値はビットの並びを直したあとのものを見る (仕様書 7.1 は読んだ値をいつも直すと書く。
-         * 0x98 を当てるのが直す前か後かは、仕様書 7.3 の注記「ビットを入れ替えたあと」から後と読んだ。推定)
+         * 4 回目の読み出しが I2C の誤りなら失敗。値はビットの並びを直したあとのものを見る (仕様書 6.1 は読んだ値をいつも直すと書く。
+         * 0x98 を当てるのが直す前か後かは、仕様書 6.3 の注記「ビットを入れ替えたあと」から後と読んだ。推定)
          */
         Kind = 0;
         IOException? failed = null;
@@ -167,7 +167,7 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
         WriteAll(Saved);
     }
 
-    /// <summary>水晶の駆動の強さを調べる (仕様書 7.3)。書き込みと読み出しの間に待ちは無い</summary>
+    /// <summary>水晶の駆動の強さを調べる (仕様書 6.3)。書き込みと読み出しの間に待ちは無い</summary>
     private int MeasureXtalDrive()
     {
         var trial = Initial[FirstWritable..];
@@ -190,10 +190,10 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
         return 3;
     }
 
-    /// <summary>水晶の駆動の強さを調べるときに、<c>22</c> へ順に書く値 (仕様書 7.3)</summary>
+    /// <summary>水晶の駆動の強さを調べるときに、<c>22</c> へ順に書く値 (仕様書 6.3)</summary>
     private static readonly byte[] XtalTrials = [0x84, 0x94, 0xA4, 0xB4];
 
-    /// <summary><c>02</c> の値 (<c>00</c> から 3 バイト読んだ 3 つ目。bit6 が PLL のロック。仕様書 7.6)</summary>
+    /// <summary><c>02</c> の値 (<c>00</c> から 3 バイト読んだ 3 つ目。bit6 が PLL のロック。仕様書 6.6)</summary>
     public byte Status() => port.Read(3)[2];
 
     private void WriteAll(ReadOnlySpan<byte> registers)
@@ -205,8 +205,8 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
     }
 
     /// <summary>
-    /// 周波数を設定する (仕様書 7.5)。<paramref name="khz"/> は RF の中心周波数。範囲の外は何も書かずに断る。
-    /// 控えは選局のたびに初期値から作り直す (仕様書 7.5 の終わりが勧める形。前の選局の <c>2F</c> の bit3〜2 が残らない)
+    /// 周波数を設定する (仕様書 6.5)。<paramref name="khz"/> は RF の中心周波数。範囲の外は何も書かずに断る。
+    /// 控えは選局のたびに初期値から作り直す (仕様書 6.5 の終わりが勧める形。前の選局の <c>2F</c> の bit3〜2 が残らない)
     /// </summary>
     public void SetFrequency(uint khz)
     {
@@ -218,7 +218,7 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
         Written = plan;
     }
 
-    /// <summary>PLL がロックしているか (仕様書 7.6)。<c>02</c> の bit6</summary>
+    /// <summary>PLL がロックしているか (仕様書 6.6)。<c>02</c> の bit6</summary>
     public bool PllLocked() => (Status() & 0x40) != 0;
 
     /// <summary><c>00</c>〜<c>2F</c> を読む (<c>--it930x-probe</c> が、書き戻せたかを確かめる)</summary>
@@ -242,12 +242,12 @@ internal sealed class R850(ITunerPort port, bool loopthrough, Action<int> sleep)
     }
 
     /// <summary>
-    /// 1 回の選局で書く値を計算する (仕様書 7.5 の (1)〜(5))。チップには触らない。付録 C.1 の計算例と照合できる
+    /// 1 回の選局で書く値を計算する (仕様書 6.5 の (1)〜(5))。チップには触らない。付録 C.1 の計算例と照合できる
     /// </summary>
     /// <param name="rf">RF の中心周波数 (kHz)</param>
     /// <param name="kind">チップの種類 (0 か 1)</param>
-    /// <param name="loopthrough">ループスルーが有りか (受信機 2 は有り、受信機 3 は無し。仕様書 2.2)</param>
-    /// <param name="xtalDrive">水晶の駆動の強さ (1〜3。仕様書 7.3)</param>
+    /// <param name="loopthrough">ループスルーが有りか (受信機 2 は有り、受信機 3 は無し。仕様書 1.2)</param>
+    /// <param name="xtalDrive">水晶の駆動の強さ (1〜3。仕様書 6.3)</param>
     internal static R850Plan Plan(uint rf, int kind, bool loopthrough, int xtalDrive)
     {
         var s = (byte[])Initial.Clone();

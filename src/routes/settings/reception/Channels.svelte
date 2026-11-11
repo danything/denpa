@@ -5,7 +5,9 @@
   import { resolve } from "$app/paths";
 
   import { submitting } from "#lib/actions.js";
+  import { arming } from "#lib/arming.svelte.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
+  import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import JobProgress from "#lib/components/JobProgress.svelte";
   import Lead from "#lib/components/Lead.svelte";
   import LogoZoom from "#lib/components/LogoZoom.svelte";
@@ -114,6 +116,22 @@
   const hasCatv = $derived(
     data.channels.some((channel) => channel.type === "CATV"),
   );
+  /**
+   * 局はあるのに、受信できる種別に選んだ (使う) チューナーが無い種別 (CATV・SKY)。スキャンの選び方から消えて、スキャンし直して消せないので、
+   * 表の上に「<種別>の局を削除」を出す (`channels.server.ts` の `removeType`。引っ越してケーブルが無くなったときなど)。
+   * チューナーの一覧が届くまでと、エージェントから受け取れないときは出さない (分からないうちに「受信できない」と決めない)
+   */
+  const orphanTypes = $derived(
+    tunerList.value?.list === undefined
+      ? []
+      : (["CATV", "SKY"] as const).filter(
+          (type) =>
+            !extraScans.includes(type) &&
+            data.channels.some((channel) => channel.type === type),
+        ),
+  );
+  const removing = arming('[data-testid^="remove-type"]');
+
   const hasUndecodableCatv = $derived(
     data.channels.some(
       (channel) =>
@@ -462,6 +480,30 @@
         <div class="actions">{@render scanControl()}</div>
       </div>
     {:else}
+      {#each orphanTypes as type, index (type)}
+        <!--
+                    受信できるチューナーが無い種別。スキャンし直して消せないので、ここで消す (`removeType`)。
+                    あとでまた受信できるようになれば、スキャンし直して戻せる
+                -->
+        <div class="cluster orphan-type" data-testid="orphan-type">
+          <p class="small muted">
+            {SERVICE_TYPE_LABEL[
+              type
+            ]}を受信できるチューナーがありません。{SERVICE_TYPE_LABEL[
+              type
+            ]}の局が要らなければ削除できます (またスキャンすれば戻せます)
+          </p>
+          <ArmedDelete
+            deleting={removing}
+            armKey={index}
+            action="?/removeType"
+            fields={{ type }}
+            class="small"
+            testid={`remove-type-${type}`}
+            label={`${SERVICE_TYPE_LABEL[type]}の局を削除`}
+          />
+        </div>
+      {/each}
       {#if hasSky || hasUndecodableCatv}
         <!--
                     復号できない局は表にだけ並ぶ。番組表とライブに出ないわけを、表のすぐ上で言う (`services.decodable`)。

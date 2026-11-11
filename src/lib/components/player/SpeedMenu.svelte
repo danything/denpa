@@ -55,7 +55,7 @@
     ボタンは 1 つのまま、アイコンと数字を差し替える (`{#if}` で ControlButton ごと出し分けない)
 -->
 {#snippet number()}
-  <span style="font-variant-numeric: tabular-nums">{speed}</span>
+  <span class="num">{speed}</span>
 {/snippet}
 
 <Menu
@@ -86,7 +86,6 @@
       onclick={() => onselect(value)}
       data-testid={testid && `${testid}-option`}
       data-speed={value}
-      data-active={value === speed ? "" : undefined}
     >
       ×{value}
     </button>

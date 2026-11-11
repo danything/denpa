@@ -1,44 +1,32 @@
+using System.Buffers;
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
+using System.IO.Pipelines;
 
 namespace Denpa.Agent;
 
-/// <summary>
-/// <a href="https://github.com/Khronos31/siano-userland">siano-userland</a> に任せる機材
-/// (PLEX PX-S1UD などの Siano RIO 系。地上波だけ)。
-///
-/// <para>
-/// **カーネルが使っている機材には触らない。** PX-S1UD は mainline の <c>smsusb</c> + <c>smsdvb</c> で
-/// Linux DVB になり、そちらで使える (DvbTuner)。siano-ts は 0.1.8 からカーネルの使っている機材を断り (終了コード 4)、
-/// こちらも自動検出ではどのドライバにも繋がっていない機材だけを並べる (blacklist の手順は docs/tuner-px-s1ud.md)。
-/// **機材はポートで指す** (番号は libusb が並べた順でずれる)。作りは docs/agent.md「siano-userland の作り」。
-/// </para>
-///
-/// <para>
-/// 設定の <c>device</c> は <c>siano:&lt;USB のポート&gt;</c> (<c>siano:1-2.3</c>。S1UD にはシリアルが無い)。
-/// 挿さっていれば <see cref="Detect"/> が見つけて組み立てるので、普通は書かなくてよい。
-/// </para>
-/// </summary>
-public static class SianoUserland
+/*
+ * Siano RIO 系の ISDB-T 用 USB チューナー (PLEX PX-S1UD など。地上波だけ) を、エージェントが USB を直に持って使う入口。
+ *
+ * クリーンルームで、仕様書 (denpa-spec の siano/spec.md) だけから書いた。Linux カーネルの Siano のドライバと siano-userland のコードは読んでいない。
+ * 機材を動かす手順は SianoDevice.cs。ここは、対象の機材の表 (仕様書 1.1)、自動検出、チューナー (ITuneDevice)、TS を読む側へ渡すバッファ。
+ * **実機では確かめていない** (docs/tuner-px-s1ud.md)。
+ *
+ * **カーネルが使っている機材には触らない。** PX-S1UD は mainline の smsusb + smsdvb で Linux DVB になり、そちらで使える (DvbTuner)。
+ * 自動検出ではどのドライバにも繋がっていない機材だけを並べる (blacklist の手順は docs/tuner-px-s1ud.md)。
+ * 設定の device は siano:<USB のポート> (siano:1-2.3。S1UD にはシリアルが無い)。以前は同じ形式の設定で siano-userland (siano-ts) を起動していた。
+ * 挿さっていれば Detect が見つけて組み立てるので、普通は書かなくてよい。
+ */
+
+/// <summary>対象の機材 1 機種 (仕様書 1.1)</summary>
+public sealed record SianoModel(int Vendor, int Product, string Name);
+
+/// <summary>エージェントが直に持つ Siano の機材の表・自動検出・開き方</summary>
+public static class Siano
 {
-    /// <summary>設定の <c>device</c> の接頭辞。これで始まっていれば siano-userland で使う</summary>
+    /// <summary>設定の <c>device</c> の接頭辞。これで始まっていれば Siano の機材として開く</summary>
     public const string Scheme = "siano:";
-
-    /// <summary>
-    /// 挿さっている 1 台。<c>Types</c> は受けられる方式 (siano-ts --list の受信機の行)、
-    /// <c>Driver</c> はどれかのインターフェースを使っているドライバ (無ければ null)
-    /// </summary>
-    public sealed record Stick(string Port, string Model, string[] Types, string? Driver);
-
-    /// <summary>配布アーカイブを展開した場所 (Linux は Dockerfile の <c>/opt</c>。Mac と Windows は実行ファイルの隣。<see cref="Userland.Beside"/>)</summary>
-    public static string Dir =>
-        Environment.GetEnvironmentVariable("SIANO_USERLAND_DIR") ?? Userland.Beside("siano-userland", "/opt/siano-userland");
-
-    /// <summary>siano-ts の実行ファイル。Windows だけ <c>.exe</c> が付く (配布 zip の中身のまま)</summary>
-    public static string Executable(string dir) => Userland.Executable(dir, "siano-ts");
-
-    /// <summary>ISDB-T のファームウェア。**同梱してある** (配布アーカイブに入っている。Dockerfile)</summary>
-    public static string Firmware =>
-        Environment.GetEnvironmentVariable("SIANO_FIRMWARE") ?? Path.Combine(Dir, "firmware", "isdbt_rio.inp");
 
     public static string Device(string port) => $"{Scheme}{port}";
 
@@ -50,483 +38,336 @@ public static class SianoUserland
     /// <summary>画面に出す名前</summary>
     public static string Name(string model, string port) => $"{model} {port}";
 
-    /// <summary>
-    /// 挿さっている機材。**カーネルが使っているものも挙げる** (<c>Driver</c> で分かる)。
-    ///
-    /// <para>
-    /// 機材は <c>siano-ts --list</c> に問い合わせる (siano-userland 0.1.7 から)。USB ID の表は持たず、
-    /// ポートと受けられる方式も siano-ts が libusb で見たものを使う。デバイスを開かないので、
-    /// 別の siano-ts が使っていても問い合わせられる。
-    /// </para>
-    ///
-    /// <para>
-    /// **カーネルが使っているかだけは sysfs で見る** (インターフェースの <c>driver</c> のリンク)。
-    /// <c>--list</c> はそこを教えてくれず、並べると同じ機材が DVB と siano の 2 台になる。
-    /// 選局のときは siano-ts 自身が断るので (0.1.8。終了コード 4)、ここは並べ方のためだけ。
-    /// </para>
-    /// </summary>
-    public static List<Stick> Sticks()
-    {
-        var program = Executable(Dir);
-        if (!File.Exists(program)) return [];
-        var (code, output) = Shell.Run(program, ["--list"], TimeSpan.FromSeconds(15));
-        if (code != 0)
-        {
-            Log.Write($"siano-userland の機材を挙げられません (siano-ts --list exit {code}: {output})");
-            return [];
-        }
-        return ParseList(output, port => UsbSysfs.Driver(UsbSysfs.Devices, port), Log.Write);
-    }
+    /// <summary>そのポートの機材のチューナー</summary>
+    public static ITuneDevice Open(string port) => new SianoTuner(port);
 
     /// <summary>
-    /// <c>siano-ts --list</c> の出力を読む。**使えるのは <c>status=ready</c> の機材だけ。**
-    ///
-    /// <para>
-    /// <c>model=… usb=… bus=… address=… port=… status=ready receivers=N</c> の行のあとに、
-    /// <c>asicenctl list</c> と同じ形式の受信機の行が N 行続く (<see cref="UserlandReceiver.ParseList"/>)。
-    /// 対応外の機材は <c>rejected …</c> の行で来るので、理由を <paramref name="warn"/> で残す。
-    /// ポートが分からない (<c>port=-</c>) 機材は見分けられないので使わない。
-    /// </para>
+    /// 対象の機材 (仕様書 1.1)。資料で受信が確かめられているのは PX-S1UD だけで、<c>187f:0600</c> は同じ手順で扱うが記録が無い。
+    /// <c>187f:0302</c> は資料で扱いが食い違うので対象にしない。VID が同じでも、この表に無い PID の機材は開かない
     /// </summary>
-    public static List<Stick> ParseList(string output, Func<string, string?> driver, Action<string> warn)
-    {
-        var found = new List<Stick>();
-        Dictionary<string, string>? current = null;
-        var receivers = new System.Text.StringBuilder();
-
-        void Flush()
-        {
-            if (current is null) return;
-            var model = current.GetValueOrDefault("model") ?? "Siano";
-            var port = current.GetValueOrDefault("port") ?? "-";
-            if (current.GetValueOrDefault("status") != "ready")
-            {
-                warn($"{model} {port} は使えません (siano-ts --list: status={current.GetValueOrDefault("status")})");
-            }
-            else if (!UsbSysfs.IsPort(port))
-            {
-                warn($"{model} の USB のポートが分からないので使いません (port={port})");
-            }
-            else
-            {
-                var types = UserlandReceiver.ParseList(receivers.ToString(), warn)
-                    .SelectMany(receiver => receiver.Types)
-                    .Distinct(StringComparer.Ordinal)
-                    .ToArray();
-                found.Add(new Stick(port, model, types, driver(port)));
-            }
-            current = null;
-            receivers.Clear();
-        }
-
-        foreach (var raw in output.Split('\n'))
-        {
-            var line = raw.Trim();
-            if (line.StartsWith("model=", StringComparison.Ordinal))
-            {
-                Flush();
-                current = UserlandReceiver.Fields(line);
-            }
-            else if (line.StartsWith("receiver=", StringComparison.Ordinal))
-            {
-                if (current is not null) receivers.AppendLine(line);
-            }
-            else if (line.StartsWith("rejected ", StringComparison.Ordinal))
-            {
-                Flush();
-                var fields = UserlandReceiver.Fields(line["rejected ".Length..]);
-                warn($"{fields.GetValueOrDefault("model")} ({fields.GetValueOrDefault("usb")}, port={fields.GetValueOrDefault("port")}) は使えません: {fields.GetValueOrDefault("status")}");
-            }
-        }
-        Flush();
-        return found;
-    }
-
-    /// <summary>
-    /// siano-ts に渡せる機材を、設定に書いたのと同じ形式で。
-    ///
-    /// <para>
-    /// **ドライバに繋がっているものは挙げない。** smsusb が使っていれば
-    /// <c>/dev/dvb</c> に出ているので、DVB の側で見つかる (DeviceProbe)。
-    /// </para>
-    /// </summary>
-    public static List<TunerSpec> Detect() => Specs(Sticks());
-
-    /// <summary>機材の一覧から、設定の形式に組み立てる (ドライバに繋がっているもの・受けられる方式が無いものは除く)</summary>
-    public static List<TunerSpec> Specs(IEnumerable<Stick> sticks) =>
+    public static readonly IReadOnlyList<SianoModel> Models =
     [
-        .. sticks
-            .Where(stick => stick.Driver is null && stick.Types.Length > 0)
-            .Select(stick => new TunerSpec(Name(stick.Model, stick.Port), stick.Types, false, Device(stick.Port))),
+        new(0x3275, 0x0080, "PLEX PX-S1UD"),
+        new(0x187F, 0x0600, "Siano RIO"),
     ];
 
+    /// <summary>機材をまとめて呼ぶ名前 (見つからないときの文言)</summary>
+    public const string Family = "Siano の機材 (PX-S1UD など)";
+
+    public static SianoModel? Find(int vendor, int product) =>
+        Models.FirstOrDefault(model => model.Vendor == vendor && model.Product == product);
+
     /// <summary>
-    /// siano-ts の終了コードに、どうすればいいかを添える (0.1.8 で体系化された)。
-    /// 分からないコードは何も足さない
+    /// 挿さっているポートと機種。**開かない。** Linux はカーネルのドライバ (smsusb) が使っているものを並べない
+    /// (動いているドライバから機材を取ると、カーネルの側で異常が出た記録がある。仕様書 1.4)
     /// </summary>
-    public static string Hint(int code) => code switch
+    public static List<(string Port, SianoModel Model)> Found(Action<string>? warn = null)
     {
-        // Windows は libusb が WinUSB 越しにしか開けない。ドライバが違えば開くところで落ちる
-        1 or 4 when OperatingSystem.IsWindows() =>
-            "。チューナーのドライバが WinUSB になっていないか、別のプロセスが使っています (Zadig で WinUSB に。docs/install-windows.md)",
-        3 => "。そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
-        // macOS にはカーネルのドライバ (smsusb) が無い
-        4 when OperatingSystem.IsMacOS() => "。別のプロセスが使っています",
-        4 => "。カーネルのドライバ (smsusb) か別のプロセスが使っています。/dev/dvb に出ていればそちらで使えます。"
-            + "siano-userland で使うなら smsusb / smsdvb / smsmdtv を blacklist して再起動してください",
-        10 => "。ファームウェアが無いか壊れています",
-        _ => "",
-    };
+        try
+        {
+            return OperatingSystem.IsLinux()
+                ? Found(UsbSysfs.Devices, warn)
+                : [.. Models.SelectMany(model => UsbDevices.List(model.Vendor, model.Product).Select(found => (found.Port, model)))];
+        }
+        catch (Exception error) when (error is IOException or DllNotFoundException or EntryPointNotFoundException)
+        {
+            warn?.Invoke($"{Family} を探せません ({error.Message})");
+            return [];
+        }
+    }
+
+    /// <summary>Linux の sysfs から (場所を渡せるのはテストのため)</summary>
+    internal static List<(string Port, SianoModel Model)> Found(string sysfs, Action<string>? warn) =>
+        UsbDevices.Scan(sysfs, dir => Identify(sysfs, Path.GetFileName(dir)), model => model.Name, warn);
+
+    internal static SianoModel? Identify(string sysfs, string port)
+    {
+        var dir = Path.Combine(sysfs, port);
+        return Hex(UsbSysfs.Read(dir, "idVendor")) is { } vendor && Hex(UsbSysfs.Read(dir, "idProduct")) is { } product ? Find(vendor, product) : null;
+    }
+
+    /// <summary>そのポートの機種 (Linux は sysfs、Windows・macOS は OS に問い合わせる)。**開かない**</summary>
+    public static SianoModel? Identify(string port) =>
+        OperatingSystem.IsLinux() ? Identify(UsbSysfs.Devices, port) : Found().FirstOrDefault(item => item.Port == port).Model;
+
+    private static int? Hex(string? text) =>
+        int.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value) ? value : null;
+
+    /// <summary>設定に書いたのと同じ形式で (<c>siano:&lt;USB のポート&gt;</c>)。種別は地上波だけ</summary>
+    public static List<TunerSpec> Detect() => Specs(Found(Log.Write));
+
+    internal static List<TunerSpec> Specs(IEnumerable<(string Port, SianoModel Model)> found) =>
+        [.. found.Select(item => new TunerSpec(Name(item.Model.Name, item.Port), ["GR"], false, Device(item.Port)))];
+
+    /// <summary>
+    /// 開く (Linux は usbfs、Windows は WinUSB、macOS は IOKit)。インターフェース 0 を確保する。代替設定は選び直さない (仕様書 2.1・12.3)。
+    /// ほかのソフトやカーネルのドライバが使っていれば、OS の理由のまま失敗する (横から取らない)
+    /// </summary>
+    internal static IUsbDevice OpenUsb(string port, SianoModel model) =>
+        OperatingSystem.IsLinux()
+            ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, model.Vendor, model.Product, selectAlternate: false)
+            : UsbDevices.Open(port, model.Vendor, model.Product, selectAlternate: false);
+
+    /// <summary>未確認の値を記録に出したポート。エージェントが動いている間、ポートごとに 1 回だけ出す</summary>
+    private static readonly HashSet<string> Described = [];
+
+    /// <summary>そのポートの機材を開いて起動する (ファームウェアが入っていなければ送る)</summary>
+    internal static SianoDevice OpenDevice(string port)
+    {
+        var model = Identify(port) ?? throw new IOException($"USB のポート {port} に {Family} が見当たりません (抜けたか、挿し替えた?)");
+        bool describe;
+        lock (Described) describe = Described.Add(port);
+        var usb = OpenUsb(port, model);
+        var device = new SianoDevice(usb, Name(model.Name, port), SianoFirmware.Default, describe: describe);
+        try
+        {
+            device.Start();
+            return device;
+        }
+        catch
+        {
+            device.Dispose();
+            throw;
+        }
+    }
 }
 
 /// <summary>
-/// siano-userland の機材 1 台。**<c>siano-ts --control</c> を 1 つ起動したまま、標準入力で選局し直す。**
+/// エージェントが直に持つ Siano の機材のチューナー (地上波だけ)。**機材は最初の選局で開き、捨てられるまで開いたままにする。**
 ///
 /// <para>
-/// 起動するのは最初の選局のときだけで、以降は <c>tune &lt;Hz&gt;</c> を 1 行書き、stderr の <c>tuned &lt;Hz&gt;</c>
-/// (駄目なら <c>control: tune failed: …</c>) を待つ。TS は選局を跨いで同じ標準出力に流れ続けるので、
-/// 読み出し側 (<see cref="DeviceStream"/>) も 1 つを使い回す (DVB と同じ)。
-/// </para>
-///
-/// <para>
-/// **選局し直す間は、標準出力を読んで捨てる。** siano-ts は 1 本のループで「TS を書く → 標準入力を読む」を
-/// 回していて、pipe が埋まると <c>tune</c> を読みに来ない。読んで捨てれば前のチャンネルの残りも消える
-/// (docs/agent.md「siano-userland の作り」)。
+/// 選局し直すときは、開いたまま選局のメッセージを送り直すだけで、止める手順は挟まない (仕様書 5.4)。
+/// 選局し直しを始めたら TS を渡すのをやめ、ロックを確かめてから新しいバッファへ渡す (前のチャンネルの TS を混ぜない。仕様書 6.3)。
+/// ロックしなかったときは機材を開いたままにする。機材が応答しなかった・送れなかった・抜かれたときは閉じて、次の選局で開き直す
+/// (バージョンの問い合わせからやり直せば、ファームウェアが残っていても消えていても動く。仕様書 8)。
 /// </para>
 /// </summary>
 public sealed class SianoTuner : ITuneDevice
 {
-    /// <summary>
-    /// 選局を待つ上限。siano-ts 自身が同期を 10 秒待つ (<c>LOCK_TIMEOUT_MS</c>) ので、
-    /// それより少し長く。最初の選局はファームウェアの流し込みもここに入る
-    /// </summary>
-    private static readonly TimeSpan TuneTimeout = TimeSpan.FromSeconds(15);
-
     private readonly string _name;
-    private readonly Func<ProcessStartInfo> _start;
-    private readonly TimeSpan _tuneTimeout;
+    private readonly Func<SianoDevice> _open;
     private readonly Lock _gate = new();
-    private Child? _child;
-    private DeviceStream? _stream;
-
-    /// <summary>
-    /// siano-ts 1 つぶん。stderr の行は <see cref="Lines"/> にも流す (選局の応答を待つため)。
-    /// **フラグは子ごとに持つ。** 止めたかどうかを 1 つのフラグで持つと、前の子の後始末が次の子のフラグを読む
-    /// (起動し直した直後に前の子の終了が回ってくる)
-    /// </summary>
-    private sealed class Child(Process process)
-    {
-        public Process Process { get; } = process;
-
-        /// <summary>stderr の最後の行。失敗・終わった理由はここに出る</summary>
-        public volatile string Stderr = "";
-
-        /// <summary>こちらから止めたか。**自分で止めた終わりは失敗ではない**</summary>
-        public volatile bool Dropped;
-
-        public string Exited(int code) =>
-            $"siano-ts が終了しました (exit {code}{(Stderr is { Length: > 0 } stderr ? $": {stderr}" : "")})";
-
-        /// <summary>
-        /// 読み出し側が尽きたときの理由 (DeviceStream の <c>ended</c>)。EOF は子が終わったということなので、
-        /// 終了コードと stderr の末尾を添える
-        /// </summary>
-        public string? EndReason() =>
-            Dropped ? null
-            : !Process.WaitForExit(TimeSpan.FromSeconds(2)) ? "siano-ts が応答しなくなりました"
-            : Exited(Process.ExitCode);
-
-        public System.Threading.Channels.Channel<string> Lines { get; } =
-            System.Threading.Channels.Channel.CreateUnbounded<string>();
-
-        /// <summary>標準入力へ書く行。**書くのは <see cref="Feed"/> の 1 本だけ**</summary>
-        public System.Threading.Channels.Channel<string> Commands { get; } =
-            System.Threading.Channels.Channel.CreateUnbounded<string>();
-
-        public Task Feeding { get; set; } = Task.CompletedTask;
-    }
+    private SianoDevice? _device;
+    private SianoStream? _stream;
 
     public SianoTuner(string port)
-        : this($"siano {port}", () =>
-        {
-            var program = SianoUserland.Executable(SianoUserland.Dir);
-            if (!File.Exists(program)) throw new IOException($"siano-userland が入っていません: {program}");
-            if (!File.Exists(SianoUserland.Firmware))
-            {
-                throw new IOException($"ファームウェアがありません: {SianoUserland.Firmware}");
-            }
-            // 抜けた・カーネルが使っている、は siano-ts が終了コードで返す (Hint)
-            return StartInfo(port, SianoUserland.Dir, SianoUserland.Firmware);
-        })
+        : this($"siano {port}", () => Siano.OpenDevice(port))
     {
     }
 
-    /// <summary>起動のしかたと待ちの上限を差し替える (テスト。偽の siano-ts を起動する)</summary>
-    internal SianoTuner(string name, Func<ProcessStartInfo> start, TimeSpan? tuneTimeout = null)
+    /// <summary>開き方を差し替える (テスト。偽の USB の上の機材を返す)</summary>
+    internal SianoTuner(string name, Func<SianoDevice> open)
     {
         _name = name;
-        _start = start;
-        _tuneTimeout = tuneTimeout ?? TuneTimeout;
+        _open = open;
     }
 
-    public Stream Output => _stream ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
+    public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
-    /// <summary>siano-ts が動いていれば、最後に合わせたチャンネルのまま流れている</summary>
     public bool Tuned
     {
         get
         {
-            lock (_gate) return _stream is not null && _child is { Process.HasExited: false };
+            lock (_gate) return _stream is { Ended: false } && _device is { Faulted: false };
         }
-    }
-
-    /// <summary>
-    /// 起動するもの。**機材は USB のポートで指す** (<c>--device 1-2.3</c>)。
-    ///
-    /// <para>
-    /// 選局は起動したあとに標準入力で指示するので、ここでは周波数を渡さない。
-    /// PID は絞らない (全部。B25 と記録は TS 全体を要る)。
-    /// </para>
-    /// </summary>
-    public static ProcessStartInfo StartInfo(string port, string dir, string firmware) =>
-        new(SianoUserland.Executable(dir), ["--device", port, "--control", "--firmware", firmware]);
-
-    /// <summary>選局を指示する 1 行。周波数は選局表の Hz のまま (地上波の表は Hz)</summary>
-    public static string TuneCommand(ChannelTable.Tuning tuning)
-    {
-        if (tuning.Satellite) throw new IOException($"Siano の機材は地上波だけです ({tuning.Type} は受けられません)");
-        return $"tune {tuning.Frequency}";
     }
 
     public void Tune(ChannelTable.Tuning tuning)
     {
-        var command = TuneCommand(tuning);
+        if (tuning.Satellite) throw new IOException($"Siano の機材は地上波だけです ({tuning.Type} は受けられません)");
         lock (_gate)
         {
-            if (_child is not { Process.HasExited: false } || _stream is null)
-            {
-                Drop();
-                Start();
-            }
-            Retune(_child!, _stream!, command);
-        }
-    }
-
-    private void Start()
-    {
-        var start = _start();
-        start.RedirectStandardInput = true;
-        start.RedirectStandardOutput = true;
-        start.RedirectStandardError = true;
-        start.UseShellExecute = false;
-
-        var process = Process.Start(start) ?? throw new IOException("siano-ts を起動できません");
-        var child = new Child(process);
-        _ = Task.Run(async () =>
-        {
-            using var reader = process.StandardError;
-            while (await reader.ReadLineAsync() is { } line)
-            {
-                var trimmed = line.Trim();
-                if (trimmed.Length == 0) continue;
-                child.Stderr = trimmed;
-                child.Lines.Writer.TryWrite(trimmed);
-            }
-            child.Lines.Writer.TryComplete();
-        });
-
-        child.Feeding = Task.Factory.StartNew(
-            () => Feed(child), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-        _child = child;
-        _stream = ChildTs.Stdout(process, _name, child.EndReason);
-        _ = process.WaitForExitAsync().ContinueWith(_ =>
-        {
-            if (child.Dropped) return;
-            // USB が抜けたのもここに来る。次の選局で起動し直す (Tuned が false になる)
-            Log.Write($"[{_name}] {Why(child, process.ExitCode)}");
-        }, TaskScheduler.Default);
-    }
-
-    /// <summary>
-    /// 標準入力に書く 1 本。渡された行を順に書く (0.1.8 までの Windows で要った空行の詰め物は、
-    /// 0.1.9 で直ったのでもう無い。siano-userland #13)
-    /// </summary>
-    private static void Feed(Child child)
-    {
-        var input = child.Process.StandardInput;
-        var commands = child.Commands.Reader;
-        try
-        {
-            for (; ; ) input.Write(commands.ReadAsync().AsTask().GetAwaiter().GetResult() + "\n");
-        }
-        catch (Exception error) when (error is IOException or ObjectDisposedException
-            or System.Threading.Channels.ChannelClosedException)
-        {
-            // 子が終わった (pipe が閉じた) か、止めた (Drop)
-        }
-    }
-
-    /// <summary>
-    /// <c>tune</c> を書いて応答を待つ。**待つ間は標準出力を読んで捨てる** (上の説明)。
-    /// 駄目なら理由を添えて投げる。siano-ts は生かしたまま (次の選局で使い回す)
-    /// </summary>
-    private void Retune(Child child, DeviceStream stream, string command)
-    {
-        // 前の選局の応答が残っていれば捨てる
-        while (child.Lines.Reader.TryRead(out _))
-        {
-        }
-
-        var answered = 0;
-        var drain = Task.Run(() =>
-        {
-            var buffer = new byte[64 * 1024];
+            StopStream();
+            if (_device is { Faulted: true }) Close();
+            bool locked;
             try
             {
-                while (Volatile.Read(ref answered) == 0)
-                {
-                    if (stream.Read(buffer, 0, buffer.Length, () => Volatile.Read(ref answered) != 0) <= 0) break;
-                }
+                _device ??= _open();
+                locked = _device.Tune(tuning.Frequency);
             }
-            catch (IOException)
+            catch (Exception error) when (error is IOException or ObjectDisposedException or NotSupportedException or PlatformNotSupportedException)
             {
-                // 子が終わった。理由は下で stderr から読み取る
+                // 機材の状態が分からないので閉じる。次の選局で開き直す
+                Close();
+                if (error is UsbGoneException) throw new IOException($"{error.Message}。挿し直してください");
+                if (error is IOException) throw;
+                throw new IOException(UsbDevices.Reason(error), error);
             }
-        });
-
-        string? failure = null;
-        // 応答を当てにできなくなった。子を捨てて、次の選局で起動し直す
-        var uncertain = false;
-        try
-        {
-            // 子が終わっていれば書けないが、それは stderr が閉じることで分かる (Await)
-            child.Commands.Writer.TryWrite(command);
-            (failure, uncertain) = Await(child, command, _tuneTimeout);
-        }
-        finally
-        {
-            Volatile.Write(ref answered, 1);
-            /*
-             * **読み捨てのループを抜けきるまで返さない。** 抜けないまま返すと、次の読む側と
-             * 同じ fd を取り合う。Read は 200ms ごとに戻ってフラグを確かめるので普通は
-             * すぐ抜けるが、抜けなければ子ごと捨てる (Drop が読み出し側を止めて閉じる)
-             */
-            if (!drain.Wait(TimeSpan.FromSeconds(2)))
-            {
-                failure ??= "siano-ts の標準出力の読み捨てが止まりません";
-                uncertain = true;
-            }
-        }
-        if (uncertain) Drop();
-        if (failure is not null) throw new IOException(failure);
-    }
-
-    /// <summary>終わった理由に、終了コードから分かる手当てを添える (<see cref="SianoUserland.Hint"/>)</summary>
-    private static string Why(Child child, int code) => child.Exited(code) + SianoUserland.Hint(code);
-
-    /// <summary>
-    /// 応答を待つ。<c>tuned &lt;指定した Hz&gt;</c> なら成功 (null)、駄目なら理由。
-    ///
-    /// <para>
-    /// **時間内に来なかったら、その子の応答はもう使わない** (<c>Uncertain</c>)。siano-ts は
-    /// まだ前の選局を続けていて、その応答 (<c>tuned</c> / <c>tune failed</c>) が次の選局の
-    /// 応答に紛れ込むため。<c>tuned</c> は指定した周波数と突き合わせるが、<c>tune failed</c> には
-    /// 周波数が付かないので、子ごと捨てて起動し直すしかない。応答でない行 (警告など) は飛ばす
-    /// </para>
-    /// </summary>
-    private static (string? Failure, bool Uncertain) Await(Child child, string command, TimeSpan limit)
-    {
-        var expected = $"tuned {command["tune ".Length..]}";
-        using var timeout = new CancellationTokenSource(limit);
-        var before = "";
-        try
-        {
-            for (; ; )
-            {
-                var line = child.Lines.Reader.ReadAsync(timeout.Token).AsTask().GetAwaiter().GetResult();
-                if (line == expected) return (null, false);
-                if (line.StartsWith("control: tune failed", StringComparison.Ordinal) || line == "control: invalid")
-                {
-                    // 直前の行のほうが分かりやすい (no demod lock など)
-                    return (before.Length == 0 ? line : $"{before} ({line})", false);
-                }
-                before = line;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            return (ITuneDevice.SyncFailed, true);
-        }
-        catch (System.Threading.Channels.ChannelClosedException)
-        {
-            child.Process.WaitForExit(TimeSpan.FromSeconds(2));
-            return (Why(child, child.Process.HasExited ? child.Process.ExitCode : -1), true);
+            if (!locked) throw new IOException(ITuneDevice.SyncFailed);
+            var stream = new SianoStream(_name, () => Task.Run(Stall));
+            _device.Attach(stream.Push, stream.Fail);
+            _stream = stream;
         }
     }
 
     /// <summary>
-    /// siano-ts を止める。<c>quit</c> を送り、終了しなければ SIGTERM、それでも残れば SIGKILL。
-    /// 読む側が抜けきってから fd を閉じる (<see cref="ChildTs.ReaderDrain"/>)。
-    ///
-    /// <para>
-    /// **<c>quit</c> を読ませる間は標準出力を読み捨てる** (<see cref="Retune"/> と同じ理由)。
-    /// 誰も読まないと siano-ts は書くところで止まって <c>quit</c> を読みに来ない。
-    /// Linux / macOS は SIGTERM で抜けられるが、**Windows には SIGTERM が無く**、読まれなければ
-    /// Kill (TerminateProcess) になる。USB は OS が閉じるが、siano-ts の後始末は飛ぶ
-    /// </para>
+    /// 受信の状態と C/N と強度。統計の要求を 1 回送って応答を読む (仕様書 7)。C/N は応答の SNR (dB)、強度は帯域の中の受信電力 (dBm)。
+    /// どちらの欄も、仕様書では 1 つの資料だけによる位置で、実機で確かめていない
     /// </summary>
-    private void Drop()
+    public TunerSignal? Signal()
     {
-        var child = _child;
+        lock (_gate)
+        {
+            if (_stream is not { Ended: false } || _device is not { Faulted: false } device) return null;
+            try
+            {
+                return device.ReadStats() is { } stats ? new TunerSignal(stats.Locked, stats.SnrDb, TunerSignal.Db, StrengthDbm: stats.PowerDbm) : null;
+            }
+            catch (Exception error) when (error is IOException or ObjectDisposedException)
+            {
+                // 送れなかった・抜かれた。TS の側が同じ理由で終わるので、ここでは測れなかったことだけを返す
+                return null;
+            }
+        }
+    }
+
+    /// <summary>読む側がいなくなった。TS を渡すのをやめる (機材は開いたまま。機材には何も送らない。仕様書 6.4)</summary>
+    private void Stall()
+    {
+        lock (_gate)
+        {
+            if (_stream is { Ended: true }) StopStream();
+        }
+    }
+
+    private void StopStream()
+    {
         var stream = _stream;
-        _child = null;
         _stream = null;
-        if (child is null) return;
-
-        child.Dropped = true;
-        var process = child.Process;
-        child.Commands.Writer.TryWrite("quit");
-        var grace = Stopwatch.StartNew();
-        var buffer = new byte[64 * 1024];
-        bool Done() => process.HasExited || grace.ElapsedMilliseconds > 500;
-        try
-        {
-            while (stream is not null && !Done() && stream.Read(buffer, 0, buffer.Length, Done) > 0)
-            {
-            }
-        }
-        catch (IOException)
-        {
-            // 子が終わった
-        }
+        _device?.Detach();
         stream?.Stop();
-        var stopped = Stopwatch.StartNew();
-        if (!process.WaitForExit(TimeSpan.FromMilliseconds(100)))
-        {
-            // Windows では何もせず、猶予のあと Kill になる (Interop.Terminate)
-            Interop.Terminate(process.Id);
-            if (!process.WaitForExit(TimeSpan.FromSeconds(2))) process.Kill();
-        }
-        // 書く 1 本を降ろす。子がいなくなれば pipe が閉じて、書きかけのところからも抜ける
-        child.Commands.Writer.TryComplete();
-        child.Feeding.Wait(TimeSpan.FromSeconds(2));
-        stream?.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
-        stream?.Dispose();
-        // 同期読みにした標準出力は Process.Dispose が閉じない。閉じないと GC まで fd が残り、起動し直すたびに増える
-        process.StandardOutput.Dispose();
-        try
-        {
-            process.StandardInput.Dispose();
-        }
-        catch (IOException)
-        {
-            // 子がもういないと、書き残した quit を書き出すところで投げる
-        }
-        process.Dispose();
+    }
+
+    private void Close()
+    {
+        var device = _device;
+        _device = null;
+        device?.Dispose();
     }
 
     public void Dispose()
     {
-        lock (_gate) Drop();
+        lock (_gate)
+        {
+            StopStream();
+            Close();
+        }
+    }
+}
+
+/// <summary>
+/// TS を 1 回流すぶん。機材の読みのスレッドから受けた TS のメッセージの中身を上限つきのキューに入れ、別のスレッドで 188 バイトに揃えて
+/// <see cref="Pipe"/> に詰める。読み出し側は <see cref="DeviceStream"/> (CECH-ZD1 J と同じ形)。
+///
+/// <para>
+/// **機材の読みのスレッドは待たせない。** 制御の応答も同じ端点に届くので、読む側が詰まっても読みは止めず、
+/// キューに入りきらない TS を捨てて数える (仕様書 6.3。キューの深さも仕様書の 16,384 バイト × 256 個)
+/// </para>
+/// </summary>
+internal sealed class SianoStream
+{
+    /// <summary>キューに溜めるメッセージの数の上限 (仕様書 6.3)</summary>
+    internal const int QueueDepth = 256;
+
+    private readonly Pipe _pipe = TsBuffer.New();
+    private readonly BlockingCollection<(byte[] Buffer, int Length)> _queue = new(new ConcurrentQueue<(byte[], int)>(), QueueDepth);
+    private readonly SianoTsAligner _aligner = new();
+    private readonly string _name;
+    private readonly Action _stalled;
+    private readonly Thread _writer;
+    private volatile bool _stopped;
+    private volatile bool _ended;
+    private volatile string? _reason;
+    private long _dropped;
+    private long _droppedLogged;
+
+    public DeviceStream Output { get; }
+
+    /// <summary>流し終わった (抜けた・読む側がいない・止めた)</summary>
+    public bool Ended => _ended;
+
+    /// <summary>キューに入りきらずに捨てた TS のバイト数</summary>
+    public long Dropped => Interlocked.Read(ref _dropped);
+
+    /// <param name="stalled">読む側がいないまま <see cref="Zd1jTuner.StallLimit"/> 経ったときに呼ぶ</param>
+    public SianoStream(string name, Action stalled)
+    {
+        _name = name;
+        _stalled = stalled;
+        Output = new DeviceStream(_pipe.Reader, () => _reason);
+        _writer = new Thread(Write) { IsBackground = true, Name = $"{name} TS" };
+        _writer.Start();
+    }
+
+    /// <summary>TS のメッセージの中身を受ける (機材の読みのスレッドから)。待たない</summary>
+    public void Push(ReadOnlySpan<byte> ts)
+    {
+        if (_ended || ts.Length == 0) return;
+        var buffer = ArrayPool<byte>.Shared.Rent(ts.Length);
+        ts.CopyTo(buffer);
+        if (_queue.TryAdd((buffer, ts.Length))) return;
+        ArrayPool<byte>.Shared.Return(buffer);
+        Interlocked.Add(ref _dropped, ts.Length);
+    }
+
+    /// <summary>機材の読みが失敗した (抜かれたなど)。理由を読む側に渡して終える</summary>
+    public void Fail(string reason)
+    {
+        if (_stopped) return;
+        _reason = reason;
+        _ended = true;
+    }
+
+    private void Write()
+    {
+        var writer = _pipe.Writer;
+        Action<ReadOnlySpan<byte>> sink = packets => writer.Write(packets);
+        try
+        {
+            while (!_stopped && !_ended)
+            {
+                if (!_queue.TryTake(out var chunk, 200)) continue;
+                var before = _aligner.Packets;
+                _aligner.Push(chunk.Buffer.AsSpan(0, chunk.Length), sink);
+                ArrayPool<byte>.Shared.Return(chunk.Buffer);
+                ReportDropped();
+                if (_aligner.Packets == before) continue;
+                if (!Zd1jTuner.Flush(writer, () => _stopped || _ended, () =>
+                    {
+                        _ended = true;
+                        _stalled();
+                    }))
+                {
+                    return;
+                }
+            }
+        }
+        finally
+        {
+            _ended = true;
+            writer.Complete();
+        }
+    }
+
+    /// <summary>捨てた TS が増えていれば、1 MB ごとに記録に出す</summary>
+    private void ReportDropped()
+    {
+        var dropped = Dropped;
+        if (dropped - _droppedLogged < 1024 * 1024) return;
+        _droppedLogged = dropped;
+        Log.Write($"[{_name}] 読む側が追いつかず、TS を捨てています (これまでに {dropped} バイト)");
+    }
+
+    /// <summary>止める。書くスレッドが戻り、読んでいる途中の呼び出しが戻ってからバッファを閉じる</summary>
+    public void Stop()
+    {
+        _stopped = true;
+        var stopped = Stopwatch.StartNew();
+        Output.Stop();
+        _writer.Join(TimeSpan.FromSeconds(2));
+        Output.WaitReaders(ChildTs.ReaderDrain - stopped.Elapsed);
+        Output.Dispose();
+        _ended = true;
+        while (_queue.TryTake(out var chunk)) ArrayPool<byte>.Shared.Return(chunk.Buffer);
     }
 }

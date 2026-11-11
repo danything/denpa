@@ -49,7 +49,7 @@ import {
 } from "@danything/arib/psi";
 
 /** 33 ビットで一周する長さ (秒)。26.5 時間ほど */
-const WRAP = PTS_WRAP / CLOCK;
+export const PCR_WRAP = PTS_WRAP / CLOCK;
 /** 組を選び直す区切り (ms)。水晶どうしのずれは 30 秒で 1ms にも届かない */
 const WINDOW = 30_000;
 
@@ -145,7 +145,7 @@ export class BroadcastClock {
     // 一周した (または選局で飛んだ)。結びつけ直す
     if (
       Number.isFinite(this.pcr) &&
-      (at < this.pcr - 1 || at > this.pcr + WRAP / 2)
+      (at < this.pcr - 1 || at > this.pcr + PCR_WRAP / 2)
     ) {
       this.current = null;
       this.previous = null;

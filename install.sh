@@ -28,7 +28,7 @@
 #   Linux        ~/denpa (DENPA_HOME で変えられる)    compose.yml (上げ直すたびに上書き)・compose.override.yml
 #                                                     (手を入れるならここ。無いときだけ雛形を作り、あれば触らない)・config/・
 #                                                     .env (denpa とエージェントが組むときの合言葉 AGENT_PAIR_TOKEN。無いときだけ足す)
-#   Mac          /Library/Application Support/denpa/  エージェント (bin/)・siano-userland・本体 (server/。bun・アプリ・ffmpeg・
+#   Mac          /Library/Application Support/denpa/  エージェント (bin/)・本体 (server/。bun・アプリ・ffmpeg・
 #                                                     字・デコーダ)・data/ (DB とその隣のもの・denpa.env・
 #                                                     本体を起こす denpa.sh。root だけが読み書きできる)
 #                /Library/LaunchDaemons/io.github.danything.{denpa,denpa-agent}.plist  起動したら起こし、落ちたら起こし直す
@@ -47,12 +47,6 @@
 # macOS の bash は 3.2 なので、4 以降の書き方 (連想配列・mapfile など) は使わない。
 # ---------------------------------------------------------------------------
 set -euo pipefail
-
-# siano-userland のバージョン (Mac)。**agent/Dockerfile・install.ps1 と揃える** (Renovate がいっしょに上げる)。
-# 中身は配布元の SHA256SUMS で確かめるので、バージョンを上げてもここのハッシュは要らない
-# renovate: datasource=github-releases depName=Khronos31/siano-userland extractVersion=^v(?<version>.*)$
-SIANO_USERLAND_VERSION=0.1.10
-ISDBT_RIO_SHA256=054520642d5d09cb7ab7d08dbd6fd9ba9365de56adf2e7d7d06927f9845ff818
 
 REPO=danything/denpa
 URL=http://localhost:3000
@@ -358,12 +352,6 @@ mac_stop() {
 check() {
   [ "$(shasum -a 256 "$1" | awk '{print $1}')" = "$2" ] || die "$1 のハッシュが合いません (ダウンロード中に壊れた可能性があります。もう一度流してください)"
 }
-# SHA256SUMS から 1 行引いて確かめる
-check_listed() {
-  expected=$(awk -v name="$1" '$2 == name || $2 == "*" name {print $1}' "$2")
-  [ -n "$expected" ] || die "$2 に $1 が載っていません"
-  check "$1" "$expected"
-}
 
 # sudo を流した人として (Docker と、その人のフォルダを作るとき)。PATH はそのまま渡す (OrbStack の docker は ~/.orbstack/bin にもある)
 as_user() { sudo -u "$USER_NAME" -H env PATH="$PATH" "$@"; }
@@ -516,8 +504,6 @@ mac_register_agent() {
 $agent_host
     <key>TUNERS_FILE</key><string>$DENPA_DIR/config/tuners.json</string>
     <key>CHANNELS_FILE</key><string>$DENPA_DIR/config/channels.json</string>
-    <key>SIANO_USERLAND_DIR</key><string>$PREFIX/siano-userland</string>
-    <key>SIANO_FIRMWARE</key><string>$PREFIX/siano-userland/firmware/isdbt_rio.inp</string>
     <key>RAW_DIR</key><string>$MEDIA/recorded</string>
   </dict>
 </dict>
@@ -625,7 +611,7 @@ EOF
   die "denpa が応答しません。ログを見てください: $LOGS/denpa.log"
 }
 
-# 置くものを $work/new に揃える。エージェント (bin)・siano-userland と、--agent-only でなければ本体 (server)。
+# 置くものを $work/new に揃える。エージェント (bin) と、--agent-only でなければ本体 (server)。
 # $1 (バージョン) が空なら手元の tar.gz (DENPA_AGENT_TARBALL・DENPA_SERVER_TARBALL)
 mac_payload() {
   # --- エージェント本体 (GitHub のリリース) -------------------------------
@@ -639,16 +625,6 @@ mac_payload() {
     check "$agent" "$(awk '{print $1}' "$agent.sha256")"
   fi
   mkdir -p new/bin && tar -xzf "$agent" -C new/bin
-
-  # --- siano-userland (PX-S1UD など) --------------------------------------
-  say "siano-userland $SIANO_USERLAND_VERSION"
-  base="https://github.com/Khronos31/siano-userland/releases/download/v$SIANO_USERLAND_VERSION"
-  siano="siano-ts-$SIANO_USERLAND_VERSION-darwin-arm64.tar.gz"
-  fetch "$base/$siano" "$siano"
-  fetch "$base/SHA256SUMS" siano.sums
-  check_listed "$siano" siano.sums
-  mkdir -p new/siano-userland && tar -xzf "$siano" -C new/siano-userland
-  check new/siano-userland/firmware/isdbt_rio.inp "$ISDBT_RIO_SHA256"
 
   # --- denpa 本体 (bun・アプリ・ffmpeg・字・デコーダ)。エージェントと同じバージョン ---
   # 本体のバージョン (denpa.sh の DENPA_VERSION)。手元の tar.gz なら空 (dev)
@@ -698,13 +674,13 @@ mac_main() {
     mac_remove_launch_agent
     mac_stop_tray
     rm -f "$SERVER_PLIST" "$AGENT_PLIST" "$TRAY_PLIST" "$DATA/denpa.sh" "$DATA/wake-at"
-    for part in bin siano-userland server; do rm -rf "${PREFIX:?}/$part"; done
+    for part in bin px4-userland siano-userland server run; do rm -rf "${PREFIX:?}/$part"; done
     say "外しました。残してあるもの (要らなければ手で消してください):"
     say "  DB と denpa.env $DATA / エージェントの設定 $DENPA_DIR / 録画 $MEDIA / ログ $LOGS"
     return 0
   fi
 
-  [ "$(uname -m)" = arm64 ] || die "対応しているのは Apple Silicon (arm64) の Mac だけです (siano-userland に Intel Mac 用がありません)"
+  [ "$(uname -m)" = arm64 ] || die "対応しているのは Apple Silicon (arm64) の Mac だけです (エージェントの配布物が arm64 用だけです)"
 
   # 作業場所は /tmp の下に、その人も入れるように作る (sudo -u で docker を呼ぶとき、今いる場所を読めないと sh が警告を出す)
   work=$(mktemp -d /tmp/denpa-install.XXXXXX)
@@ -728,13 +704,16 @@ mac_main() {
   mkdir -p "$PREFIX" "$LOGS"
   chown root:wheel "$PREFIX"
   chmod 755 "$PREFIX"
-  parts="bin siano-userland"
+  parts="bin"
   [ "$agent_only" = yes ] || parts="$parts server"
   for part in $parts; do
     rm -rf "${PREFIX:?}/$part"
     mv "new/$part" "$PREFIX/$part"
     chown -R root:wheel "$PREFIX/$part"
   done
+  # 前のバージョンが置いていた siano-userland・px4-userland と px4d のソケットの置き場 (run/)。
+  # いまは Siano と IT930x の機材をエージェントが USB で直に動かすので要らない
+  rm -rf "${PREFIX:?}/siano-userland" "${PREFIX:?}/px4-userland" "${PREFIX:?}/run"
   # その人のフォルダは、その人のものとして作る
   as_user mkdir -p "$DENPA_DIR/config" "$MEDIA/recorded" "$MEDIA/library"
 

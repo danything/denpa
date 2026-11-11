@@ -140,10 +140,10 @@ public static class DeviceProbe
         }
 
         /*
-         * siano-userland の機材 (PX-S1UD など) は、**どのドライバにも繋がっていないものだけ。**
+         * Siano の機材 (PX-S1UD など) は、**どのドライバにも繋がっていないものだけ。**
          * smsusb が使っていれば上の /dev/dvb で見つかっている (Siano.cs)
          */
-        found.AddRange(SianoUserland.Detect());
+        found.AddRange(Siano.Detect());
 
         /*
          * asicen-userland の機材 (PX-W3U3 など。試験的)。配布物が無ければ何もしない (Asicen.cs)。
@@ -157,7 +157,7 @@ public static class DeviceProbe
         found.AddRange(Zd1j.Detect());
 
         /*
-         * PIXELA PIX-DT295 も並べるだけで開かない (開くと機材に設定を書く。試験的。Dt295.cs)
+         * PIXELA PIX-DT295 も並べるだけで開かない (開くと機材に設定を書く。Dt295.cs)
          */
         found.AddRange(Dt295.Detect());
 
@@ -186,7 +186,7 @@ public static class DeviceProbe
     /// <para>
     /// <c>GET /denpa/tuners</c> の <c>receivable</c> に入れ、denpa はこれに無い種別を設定で選ばせず、保存でも断る。
     /// 定義の <c>types</c> は画面から書き換えられるので、BS/CS 専用の受信機に GR を入れて保存でき、
-    /// その台に割り振られた地上波の選局が受信機の確認 (<see cref="UserlandTuner.Check"/>) で全部断られていた (#2386)
+    /// その台に割り振られた地上波の選局が受信機の確認 (<see cref="UserlandReceiver.Check"/>) で全部断られていた (#2386)
     /// </para>
     /// </summary>
     public static string[]? Receivable(string? device) =>

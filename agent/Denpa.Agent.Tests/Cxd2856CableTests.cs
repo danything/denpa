@@ -3,7 +3,7 @@ namespace Denpa.Agent.Tests;
 /*
  * 復調器 CXD2856ER とチューナー CXD2858ER の J.83B (スカパー！プレミアムサービス光) と、ほかの方式との切り替え、
  * 待機中の地上波の RF 入力の整合を保つ設定 (Cxd2856.cs・Cxd2858.cs)。
- * 偽のバス (Cxd2856Fakes.cs) の上で、書く順番と値を仕様書 (denpa-spec の mlt5/spec.md) の表と照らす。添えた番号は仕様書の節。
+ * 偽のバス (Cxd2856Fakes.cs) の上で、書く順番と値を仕様書 (denpa-spec の cxd2856/spec.md) の表と照らす。添えた番号は仕様書の節。
  * 読んでから書く行 (マスクが FF でない行) は、読み (T C4?) のあとに書いた値が並ぶ。偽物のレジスタは書くまで 0
  */
 public class Cxd2856CableTests
@@ -168,7 +168,7 @@ public class Cxd2856CableTests
         var log = bus.Log;
         // ISDB-S のスリープ (仕様書 6.5) → J.83B の起動 (仕様書 10.1)
         await Assert.That(log.IndexOf("X 17=08")).IsGreaterThan(log.IndexOf("X 28=13"));
-        // 衛星側の停止 (仕様書 4.6) → J.83B の周波数 (仕様書 4.5・10.2)
+        // 衛星側の停止 (仕様書 4.7) → J.83B の周波数 (仕様書 4.5・10.2)
         await Assert.That(Relayed(log)).IsEquivalentTo(new[] { "U 15=02", "U 43=07", "U 0C=140000", "U 01=00", "U 05=00", "U 04=C0" }.Concat(CableTunerLog));
     }
 
@@ -188,7 +188,7 @@ public class Cxd2856CableTests
         await Assert.That(sleep).IsGreaterThan(1);
         await Assert.That(common).IsGreaterThan(sleep);
         await Assert.That(start).IsGreaterThan(common);
-        // チューナーは地上波側を止めてから衛星の周波数 (仕様書 4.6・10.2)
+        // チューナーは地上波側を止めてから衛星の周波数 (仕様書 4.7・10.2)
         await Assert.That(Relayed(log).Take(6)).IsEquivalentTo(new[] { "U 74=02", "U 67?", "U 67=00", "U 5E=150000", "U 88=00", "U 87=C0" });
     }
 
@@ -201,7 +201,7 @@ public class Cxd2856CableTests
         frontend.Sleep();
         await Assert.That(bus.Log).IsEquivalentTo(new[]
         {
-            // 仕様書 4.6 の地上波側の停止 (中継の中で)
+            // 仕様書 4.7 の地上波側の停止 (中継の中で)
             "X 08=01", "U 74=02", "U 67?", "U 67=00", "U 5E=150000", "U 88=00", "U 87=C0", "X 08=00",
             // 仕様書 7.4 の手順 1〜3
             "T 00=00", "T C3=01", "T 80?", "T 80=1F",
@@ -268,15 +268,15 @@ public class Cxd2856CableTests
         var signal = frontend.Signal()!;
         await Assert.That(bus.Log).IsEquivalentTo(new[]
         {
-            // 仕様書 8.4 (固めて読む。仕様書 2.3)
+            // 仕様書 9.4 (固めて読む。仕様書 2.3)
             "T 01=01", "T 00=40", "T 88?", "T 10?", "T 19?", "T 4C?", "T 5C?", "T 01=00",
-            // 仕様書 8.6 の地上波・J.83B (チューナーから読む)
+            // 仕様書 9.7 の地上波・J.83B (チューナーから読む)
             "X 08=01", "U 87=C441", "U 59=0501", "U 5B?", "U 59=0301", "U 5B?", "U 59=04", "U 88=00", "U 87=C0", "U 69?", "X 08=00",
         });
         await Assert.That(signal.Locked).IsTrue();
         await Assert.That(signal.Cn).IsEqualTo(-9.5 * Math.Log(1032) + 95.941);
         await Assert.That(signal.Unit).IsEqualTo(TunerSignal.Db);
-        // 偽物の AGC は 0、IF の帯域通過フィルタの利得の番号は選局で書いた 84 の下位 4 ビット。J.83B の補正は -1.5 dB (仕様書 8.6)
+        // 偽物の AGC は 0、IF の帯域通過フィルタの利得の番号は選局で書いた 84 の下位 4 ビット。J.83B の補正は -1.5 dB (仕様書 9.7)
         await Assert.That(signal.StrengthDbm).IsEqualTo(Cxd2858.InputLevel(0, 0, 4, H40, -150) / 100.0);
         await Assert.That(frontend.CableModulation).IsEqualTo("256QAM");
         await Assert.That(frontend.CablePer).IsEqualTo(2 / 1024.0);
@@ -295,7 +295,7 @@ public class Cxd2856CableTests
     [Test]
     public async Task C_N_は変調ごとの式で_r_の下限をそろえて求める()
     {
-        // 64QAM・256QAM は r を 126 以上に、32QAM・128QAM は 69 以上にする (仕様書 8.4 の手順 6・7)
+        // 64QAM・256QAM は r を 126 以上に、32QAM・128QAM は 69 以上にする (仕様書 9.4 の手順 6・7)
         await Assert.That(Cxd2856.J83bCnDb(4, 0)).IsEqualTo(-9.5 * Math.Log(126) + 95.941);
         await Assert.That(Cxd2856.J83bCnDb(2, 100)).IsEqualTo(Cxd2856.J83bCnDb(2, 126));
         await Assert.That(Cxd2856.J83bCnDb(2, 2000)).IsEqualTo(-9.5 * Math.Log(2000) + 95.941);
@@ -311,7 +311,7 @@ public class Cxd2856CableTests
     [Test]
     public async Task PER_は値の印が無いか壊れていれば出さない()
     {
-        // b1 の bit2 が 0 なら値は無い (仕様書 8.4)
+        // b1 の bit2 が 0 なら値は無い (仕様書 9.4)
         await Assert.That(Cxd2856.J83bPer([0x0A, 0x00, 0x00, 0x02])).IsNull();
         // e = ((b1 & 0x03) << 16) | (b2 << 8) | b3。e > 2^n は壊れている
         await Assert.That(Cxd2856.J83bPer([0x02, 0x04, 0x00, 0x05])).IsNull();
@@ -325,14 +325,14 @@ public class Cxd2856CableTests
     public async Task 整合を保つ設定は閉じている受信機を初期化し直し_待機にする書き込みで_67_の_bit1_を立てる()
     {
         var (frontend, bus, _) = Make();
-        // 閉じている (スリープの) 受信機は、初期化し直して待機させる (仕様書 4.7)。初期化の手順 2 が 02 (仕様書 4.2)
+        // 閉じている (スリープの) 受信機は、初期化し直して待機させる (仕様書 4.8)。初期化の手順 2 が 02 (仕様書 4.2)
         frontend.KeepMatching(standby: true);
         await Assert.That(frontend.KeepsMatching).IsTrue();
         await Assert.That(bus.Log.Take(2)).IsEquivalentTo(new[] { "X 00=00", "X 10=01" });
         // 中継を開けてすぐ、初期化の前に 62 を読む (仕様書 10.3)
         await Assert.That(Relayed(bus.Log).Take(3)).IsEquivalentTo(new[] { "U 62?", "U 01=00", "U 67=02" });
 
-        // 選局では bit1 を 0 にし (仕様書 4.5 の手順 7)、止めるときに 02 に戻す (仕様書 4.6 の手順 2)
+        // 選局では bit1 を 0 にし (仕様書 4.5 の手順 7)、止めるときに 02 に戻す (仕様書 4.7 の手順 2)
         bus.Log.Clear();
         frontend.TuneJ83b(H40);
         await Assert.That(Relayed(bus.Log)).Contains("U 67=00");
@@ -340,13 +340,13 @@ public class Cxd2856CableTests
         frontend.Sleep();
         await Assert.That(Relayed(bus.Log).Take(3)).IsEquivalentTo(new[] { "U 74=02", "U 67?", "U 67=02" });
 
-        // 衛星を受ける前に、手順 1A で 67 の bit1 を 0 にする (仕様書 4.4。推定の手順)。地上波側の停止 (仕様書 4.6) で立てた bit1 を戻す
+        // 衛星を受ける前に、手順 1A で 67 の bit1 を 0 にする (仕様書 4.4。推定の手順)。地上波側の停止 (仕様書 4.7) で立てた bit1 を戻す
         bus.Log.Clear();
         frontend.TuneIsdbs(Bs15, new CxdStream(16625));
         await Assert.That(Relayed(bus.Log).Take(3)).IsEquivalentTo(new[] { "U 15=02", "U 67?", "U 67=00" });
         await Assert.That(Relayed(bus.Log)[3]).IsEqualTo("U 43=06");
 
-        // 衛星側の停止のあとにも 67 の bit1 を立てる (仕様書 4.6)
+        // 衛星側の停止のあとにも 67 の bit1 を立てる (仕様書 4.7)
         bus.Log.Clear();
         frontend.Sleep();
         await Assert.That(Relayed(bus.Log)).IsEquivalentTo(new[] { "U 15=02", "U 43=07", "U 0C=140000", "U 01=00", "U 05=00", "U 04=C0", "U 67?", "U 67=02" });

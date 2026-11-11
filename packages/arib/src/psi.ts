@@ -1,7 +1,7 @@
 /**
  * TS の土台 (パケットの切り出し・セクションの組み立て・PAT/PMT) と、局の一覧。
  * 局の一覧はチャンネルスキャンで「この物理チャンネルに何が入っているか」を知るために使い、
- * 読むのは NIT と SDT の 2 つ。
+ * 読むのは NIT と SDT の 2 つ。ケーブルでは、局の無い TS を見分けるのに PAT も読む (`ServiceReader`)。
  *
  * - NIT (PID 0x0010) … ネットワーク ID と、地上波ならリモコン番号。衛星はネットワークの全部の TS
  *   (TSID・周波数・サービスの一覧) が載っている (`NitReader`)
@@ -566,8 +566,6 @@ interface NitSection {
   other: boolean;
   networkId: number;
   version: number;
-  /** current_next_indicator。0 (これから使う表) のものは `NitReader` が読まない */
-  current: boolean;
   sectionNumber: number;
   lastSectionNumber: number;
   remoteControlKeyId: number | null;
@@ -629,7 +627,6 @@ function parseNitSection(section: Uint8Array): NitSection | null {
     other: tableId === TABLE_NIT_OTHER,
     networkId: u16(section, 3),
     version: (section[5]! >> 1) & 0x1f,
-    current: (section[5]! & 0x01) !== 0,
     sectionNumber: section[6]!,
     lastSectionNumber: section[7]!,
     remoteControlKeyId,

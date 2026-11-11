@@ -35,6 +35,11 @@
             実行ファイルに埋め込み、1 個のまま配れるようにする。機材を開くたびに流し込む (It930xFirmware.cs)
         -->
         <EmbeddedResource Include="firmware/it930x-firmware.bin" LogicalName="it930x-firmware.bin" />
+        <!--
+            Siano RIO 系の機材 (PX-S1UD など) の ISDB-T のファームウェア (Siano の許諾で無改変なら再配布できる。firmware/README.md)。
+            実行ファイルに埋め込み、機材を開くたびにそのまま送る (SianoFirmware.cs)。許諾の文面 (firmware/LICENCE.siano) は配布物に添える
+        -->
+        <EmbeddedResource Include="firmware/isdbt_rio.inp" LogicalName="isdbt_rio.inp" />
     </ItemGroup>
 
 </Project>

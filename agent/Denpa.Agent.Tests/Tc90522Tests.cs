@@ -4,7 +4,7 @@ namespace Denpa.Agent.Tests;
 
 /*
  * TC90522 の受信機 (Tc90522.cs)。Q3・W3 系の地上波の受信機と衛星の受信機を、偽のバス (Tc90522Fakes.cs) につないで確かめる。
- * 期待値は仕様書 (denpa-spec の px4/spec.md) の節の表の値と順。機材 (It930xDevice) を通した順は Tc90522BoardTests.cs。
+ * 期待値は仕様書 (denpa-spec の tc90522/spec.md) の節の表の値と順。機材 (It930xDevice) を通した順は Tc90522BoardTests.cs。
  */
 public class Tc90522Tests
 {
@@ -13,10 +13,10 @@ public class Tc90522Tests
     /// <summary>T27 (557143 kHz) で R850 に書く 40 バイト (仕様書 付録 C.1。種類 0・ループスルー有り)</summary>
     internal const string R850Ch27 = "CAC0725000E400308FBBB8B7D210CD6587428193162E0B2321F10C5FC4209A5AC1996B4453576E40";
 
-    /// <summary>RT710 の選局の最初に書く 16 バイト (仕様書 8.3 (1))</summary>
+    /// <summary>RT710 の選局の最初に書く 16 バイト (仕様書 7.3 (1))</summary>
     internal const string Rt710Start = "401D20104150ED250758396438F79035";
 
-    /// <summary>RT710 の待機の 16 バイト (仕様書 8.5)</summary>
+    /// <summary>RT710 の待機の 16 バイト (仕様書 7.5)</summary>
     internal const string Rt710Standby = "FF5C883041C8ED2547FC48A2080FF359";
 
     private static (Tc90522Terrestrial Frontend, FakeTcBus Bus, FakeClock Clock) Terrestrial(int receiver = 2)
@@ -52,7 +52,7 @@ public class Tc90522Tests
     [Test]
     public async Task チューナーあての通信は復調器の_FE_に包む()
     {
-        // 仕様書 3.2 の例。受信機 2 の R850 (0x7C) の 08 へ 2 バイト → 復調器 0x10 へ FE F8 08 xx yy
+        // 仕様書 2.2 の例。受信機 2 の R850 (0x7C) の 08 へ 2 バイト → 復調器 0x10 へ FE F8 08 xx yy
         var bus = new RawBus();
         new Tc90522Link(bus, 0x10).Tuner(R850.Address).Write([0x08, 0xAB, 0xCD]);
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "W 10 FEF808ABCD" }, CollectionOrdering.Matching);
@@ -76,7 +76,7 @@ public class Tc90522Tests
     }
 
     [Test]
-    public async Task 地上波の起動とスリープは仕様書_4_2_と_4_3_の表()
+    public async Task 地上波の起動とスリープは仕様書_3_2_と_3_3_の表()
     {
         var (frontend, bus, clock) = Terrestrial();
         frontend.Wake();
@@ -87,26 +87,26 @@ public class Tc90522Tests
         }, CollectionOrdering.Matching);
         bus.Log.Clear();
         frontend.Rest();
-        // R850 には何も書かない (仕様書 7.7)
+        // R850 には何も書かない (仕様書 6.7)
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "10 03=F0" }, CollectionOrdering.Matching);
         await Assert.That(clock.Sleeps).IsEmpty();
     }
 
     [Test]
-    public async Task 衛星の起動とスリープは仕様書_4_2_と_4_3_の表()
+    public async Task 衛星の起動とスリープは仕様書_3_2_と_3_3_の表()
     {
         var (frontend, bus, clock) = Satellite();
         frontend.Wake();
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "11 15=00", "11 1D=00", "11 04=02", "11 1C=80", "11 1F=22", "11 13=00", "11 17=00" }, CollectionOrdering.Matching);
         bus.Log.Clear();
         frontend.Rest();
-        // RT710 を待機にして、続けて復調器をスリープにする (仕様書 4.1 の 3)
+        // RT710 を待機にして、続けて復調器をスリープにする (仕様書 3.1 の 3)
         await Assert.That(bus.Log).IsEquivalentTo(new[] { $"11 RT710 00={Rt710Standby}", "11 13=80", "11 17=FF" }, CollectionOrdering.Matching);
         await Assert.That(clock.Sleeps).IsEmpty();
     }
 
     [Test]
-    public async Task 地上波の選局は仕様書_5_2_の順に書いてロックを待つ()
+    public async Task 地上波の選局は仕様書_4_2_の順に書いてロックを待つ()
     {
         var (frontend, bus, clock) = Terrestrial();
         var locked = frontend.Tune(ChannelTable.Parse("T27")!);
@@ -124,7 +124,7 @@ public class Tc90522Tests
             // 16: ロック (80 と B0)
             "10 80?", "10 B0?",
         }, CollectionOrdering.Matching);
-        // R850 の 40 バイトのあと 10 ms。ロックが早いので、確かめ始めてから 350 ms になるまで待つ (仕様書 5.3)
+        // R850 の 40 バイトのあと 10 ms。ロックが早いので、確かめ始めてから 350 ms になるまで待つ (仕様書 4.3)
         await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 10, 350 }, CollectionOrdering.Matching);
         await Assert.That(frontend.LockMs).IsEqualTo(0L);
     }
@@ -160,7 +160,7 @@ public class Tc90522Tests
         bus[0x10].Status[(byte)register] = (byte)value;
         await Assert.That(frontend.Tune(ChannelTable.Parse("T27")!)).IsFalse();
         await Assert.That(bus[0x10].Reads[0x80]).IsEqualTo(Tc90522Frontend.LockPolls);
-        // R850 の待ちのあと、10 ms を 300 回 (仕様書 12)
+        // R850 の待ちのあと、10 ms を 300 回 (仕様書 10)
         await Assert.That(clock.Sleeps.Skip(1)).IsEquivalentTo(Enumerable.Repeat(10, 300), CollectionOrdering.Matching);
         await Assert.That(frontend.LockMs).IsEqualTo(-1L);
         // ロックしていないときは C/N を読まない
@@ -196,7 +196,7 @@ public class Tc90522Tests
     }
 
     [Test]
-    public async Task 衛星の選局は仕様書_6_2_の順に書き_ロックのあと_TSID_で_TS_を選ぶ()
+    public async Task 衛星の選局は仕様書_5_2_の順に書き_ロックのあと_TSID_で_TS_を選ぶ()
     {
         var (frontend, bus, clock) = Satellite();
         // BS15 は 1318000 kHz (IF)。TSID 16625 = 0x40F1
@@ -215,7 +215,7 @@ public class Tc90522Tests
             "11 0A=FF", "11 10=B2", "11 11=00", "11 03=01",
             // 13: ロック (C3 の bit4)
             "11 C3?",
-            // 14: TSID を 2 バイトで書き、選ばれている TSID を読む (仕様書 6.4)
+            // 14: TSID を 2 バイトで書き、選ばれている TSID を読む (仕様書 5.4)
             "11 8F=40F1", "11 E6?2",
         }, CollectionOrdering.Matching);
         // RT710 の PLL の値を書いたあとの 10 ms だけ。ISDB-S はロックのあとに待ち足さない
@@ -227,7 +227,7 @@ public class Tc90522Tests
     {
         var (frontend, bus, _) = Satellite(receiver: 1);
         await Assert.That(frontend.Tune(ChannelTable.Parse("BS15:16625")!)).IsTrue();
-        // 受信機 1 (0x13) は 30・32 (仕様書 6.2 の「2 つ目」の値)
+        // 受信機 1 (0x13) は 30・32 (仕様書 5.2 の「2 つ目」の値)
         await Assert.That(bus.Log.Where(line => line.StartsWith("13 10=", StringComparison.Ordinal))).IsEquivalentTo(new[] { "13 10=30", "13 10=32" }, CollectionOrdering.Matching);
         await Assert.That(bus.Log.All(line => line.StartsWith("13 ", StringComparison.Ordinal))).IsTrue();
     }
@@ -305,7 +305,7 @@ public class Tc90522Tests
     }
 
     [Test]
-    public async Task TS_の端子は仕様書_4_5_の値で出して止める()
+    public async Task TS_の端子は仕様書_3_5_の値で出して止める()
     {
         var (terrestrial, bus, _) = Terrestrial(receiver: 3);
         terrestrial.Stream(true);
@@ -329,7 +329,7 @@ public class Tc90522Tests
         bus[0x10].Status[0x8D] = 0x39;
         bus.Log.Clear();
         var signal = frontend.Signal()!;
-        // ロックを確かめてから、8B から 3 バイト (上位が先) を読む (仕様書 9.1)
+        // ロックを確かめてから、8B から 3 バイト (上位が先) を読む (仕様書 8.1)
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "10 80?", "10 B0?", "10 8B?3" }, CollectionOrdering.Matching);
         await Assert.That(signal.Locked).IsTrue();
         await Assert.That(signal.Unit).IsEqualTo(TunerSignal.Db);
@@ -354,7 +354,7 @@ public class Tc90522Tests
         bus.Log.Clear();
         var signal = frontend.Signal()!;
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "11 C3?", "11 BC?2" }, CollectionOrdering.Matching);
-        // r = 7000。p = sqrt(7000 − 3000) / 64 = 0.988…、C/N は 5 次の式で 20.9 dB ほど (仕様書 9.2)
+        // r = 7000。p = sqrt(7000 − 3000) / 64 = 0.988…、C/N は 5 次の式で 20.9 dB ほど (仕様書 8.2)
         var p = Math.Sqrt(7000 - 3000) / 64;
         var expected = -1.6346 * Math.Pow(p, 5) + 14.341 * Math.Pow(p, 4) - 50.259 * Math.Pow(p, 3) + 88.977 * p * p - 89.565 * p + 58.857;
         await Assert.That(Math.Abs(signal.Cn!.Value - expected)).IsLessThan(1e-9);

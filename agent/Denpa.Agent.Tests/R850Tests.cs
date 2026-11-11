@@ -3,7 +3,7 @@ using TUnit.Assertions.Enums;
 namespace Denpa.Agent.Tests;
 
 /*
- * R850 (R850.cs) と RT710 (Rt710.cs)。期待値は仕様書 (denpa-spec の px4/spec.md) の節と付録の値で、付録 C の計算例は全部の行を照らす。
+ * R850 (R850.cs) と RT710 (Rt710.cs)。期待値は仕様書 (denpa-spec の tc90522/spec.md) の節と付録の値で、付録 C の計算例は全部の行を照らす。
  * チューナーは、偽の TC90522 のアドレス (Tc90522Fakes.cs) の中継の先に置く。
  */
 public class R850Tests
@@ -45,7 +45,7 @@ public class R850Tests
     [Test]
     public async Task 水晶の駆動の強さは_LO_が_130000_kHz_より低い選局だけで_22_の_bit5_4_に入る()
     {
-        // 仕様書 7.5 (4) の手順 2。LO = RF − 4063
+        // 仕様書 6.5 (4) の手順 2。LO = RF − 4063
         byte Drive(uint rf, int strength) => (byte)((R850.Plan(rf, 0, true, strength).Registers[0x22 - 8] >> 4) & 3);
         // LO < 100000: 強さ 2 以上は 3 − 強さ、1 は 2
         await Assert.That(new[] { Drive(93143, 1), Drive(93143, 2), Drive(93143, 3) }).IsEquivalentTo(new byte[] { 2, 1, 0 }, CollectionOrdering.Matching);
@@ -67,7 +67,7 @@ public class R850Tests
             .IsEquivalentTo(new byte[] { 0x5A, 0x5A, 0x5A, 0x5B, 0x5B, 0x5A }, CollectionOrdering.Matching);
         // 680000〜691999 の行は a13 (0A の bit6) が 0。それ以外の行 (698000) は 1
         await Assert.That((R850.Plan(680000, 0, true, 3).Registers[0x0A - 8] & 0x40, R850.Plan(698000, 0, true, 3).Registers[0x0A - 8] & 0x40)).IsEqualTo((0, 0x40));
-        // 水晶を 4 で割るのは 478000 ≦ RF < 482000 だけ (仕様書 7.5 (4) の手順 7)。種類 1 の 2F の bit3〜2 も、481999 までは 00
+        // 水晶を 4 で割るのは 478000 ≦ RF < 482000 だけ (仕様書 6.5 (4) の手順 7)。種類 1 の 2F の bit3〜2 も、481999 までは 00
         await Assert.That(new[] { 477999u, 478000u, 481999u, 482000u }.Select(rf => R850.Plan(rf, 1, true, 3).WaitMs)).IsEquivalentTo(new[] { 10, 40, 40, 10 }, CollectionOrdering.Matching);
         await Assert.That(new[] { 477999u, 478000u, 481999u, 482000u }.Select(rf => R850.Plan(rf, 1, true, 3).Final & 0x0C)).IsEquivalentTo(new[] { 4, 0, 0, 4 }, CollectionOrdering.Matching);
         // 受け付ける範囲の両端 (40000・1002000 kHz) も計算できる。VCO の分周は 6 回 (M = 128) まで
@@ -80,7 +80,7 @@ public class R850Tests
     }
 
     [Test]
-    public async Task PLL_の小数の丸めは仕様書_7_5_の手順_13()
+    public async Task PLL_の小数の丸めは仕様書_6_5_の手順_13()
     {
         // 水晶 24000。VCO = 2 × 24000 × N + F
         const int x = 24000;
@@ -121,7 +121,7 @@ public class R850Tests
         var trial = "CAC0725000E0003086BBF8B0D281CD46374089925505080021F9845FC420A96C53AB5B46B3936E40";
         await Assert.That(bus.Log).IsEquivalentTo(new[]
         {
-            // 種類を見分ける (仕様書 7.3 の手順 1)。00 が (値 & 0x98) == 0 のままなので 4 回読んで種類 0
+            // 種類を見分ける (仕様書 6.3 の手順 1)。00 が (値 & 0x98) == 0 のままなので 4 回読んで種類 0
             "10 R850 ?1", "10 R850 ?1", "10 R850 ?1", "10 R850 ?1",
             // 08〜2F を読んで取っておく (00 から 48 バイト)
             "10 R850 ?48",
@@ -131,7 +131,7 @@ public class R850Tests
             // 取っておいた 40 バイトを書き戻す
             $"10 R850 08={Convert.ToHexString(power)}",
         }, CollectionOrdering.Matching);
-        // 待ちは無い (仕様書 12)
+        // 待ちは無い (仕様書 10)
         await Assert.That(clock.Sleeps).IsEmpty();
     }
 
@@ -197,9 +197,9 @@ public class R850Tests
             "10 R850 08=CAC0725000E400309FBBB8B7D210CD65874281CB58B80B2321F10F5FC420A98CC1996B4453576E40",
             "10 R850 2F=42",
         }, CollectionOrdering.Matching);
-        // 水晶を 4 で割る選局は 40 ms 待つ (仕様書 7.5 (5))
+        // 水晶を 4 で割る選局は 40 ms 待つ (仕様書 6.5 (5))
         await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 40 }, CollectionOrdering.Matching);
-        // 前の選局の値を引き継がない (選局のたびに初期値から作り直す。仕様書 7.5 の終わり)。14ch のあとの 13ch も付録 C.1 と同じ
+        // 前の選局の値を引き継がない (選局のたびに初期値から作り直す。仕様書 6.5 の終わり)。14ch のあとの 13ch も付録 C.1 と同じ
         bus.Log.Clear();
         tuner.SetFrequency(473143);
         await Assert.That(bus.Log[0]).IsEqualTo("10 R850 08=CAC0725000E400309FBBB8B7D210CD6587428190162E092321F10C5FC420A98CC1996B4453576E40");
@@ -226,7 +226,7 @@ public class R850Tests
         await Assert.That(tuner.PllLocked()).IsTrue();
         chip.Status[0x02] = 0xBF;
         await Assert.That(tuner.PllLocked()).IsFalse();
-        // 02 は、00 から 3 バイト読んだ 3 つ目 (仕様書 7.6)
+        // 02 は、00 から 3 バイト読んだ 3 つ目 (仕様書 6.6)
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "10 R850 ?3", "10 R850 ?3" }, CollectionOrdering.Matching);
     }
 }
@@ -260,14 +260,14 @@ public class Rt710Tests
         tuner.SetFrequency(khz);
         await Assert.That(bus.Log).IsEquivalentTo(new[]
         {
-            // 最初に 16 バイト (仕様書 8.3 (1))
+            // 最初に 16 バイト (仕様書 7.3 (1))
             "11 RT710 00=401D20104150ED250758396438F79035",
             $"11 RT710 04={first04}", $"11 RT710 05={r05}", $"11 RT710 04={second04}", $"11 RT710 07={r07}", $"11 RT710 06={r06}",
             $"11 RT710 0A={r0A}", $"11 RT710 02={r02}", $"11 RT710 08={r08}", $"11 RT710 0E={r0E}",
             // 最後に帯域
             "11 RT710 0F=45",
         }, CollectionOrdering.Matching);
-        // PLL の値を書いたあと 10 ms (仕様書 8.3 (2) の手順 10)。06 のあと、0A の前
+        // PLL の値を書いたあと 10 ms (仕様書 7.3 (2) の手順 10)。06 のあと、0A の前
         await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 10 }, CollectionOrdering.Matching);
         var plan = Rt710.Plan(khz, rt720: false);
         await Assert.That(plan.FindIndex(write => write.Register == Rt710.Wait)).IsEqualTo(6);
@@ -276,11 +276,11 @@ public class Rt710Tests
     [Test]
     public async Task VCO_の分周は_2350000_から_4700000_に入るまで_2_倍にする()
     {
-        // 04 の bit0 は分周の番号 k の bit0。M = 2 は k = 1、M = 4 は k = 0 (仕様書 8.3 (2) の手順 1〜3)
+        // 04 の bit0 は分周の番号 k の bit0。M = 2 は k = 1、M = 4 は k = 0 (仕様書 7.3 (2) の手順 1〜3)
         byte First04(uint khz) => Rt710.Plan(khz, false)[1].Values[0];
         await Assert.That(new[] { First04(1175000), First04(1174999), First04(2350000), First04(587500), First04(587499) })
             .IsEquivalentTo(new byte[] { 0x41, 0x40, 0x41, 0x40, 0x40 }, CollectionOrdering.Matching);
-        // 周波数で変える値の区切り (仕様書 8.3 (3)): 1600000 と 1950000 と 2000000
+        // 周波数で変える値の区切り (仕様書 7.3 (3)): 1600000 と 1950000 と 2000000
         (byte R02, byte R0A, byte R0E) Late(uint khz)
         {
             var plan = Rt710.Plan(khz, false);
@@ -296,14 +296,14 @@ public class Rt710Tests
     public async Task RT720_は初期値と書く順が違う()
     {
         var (tuner, bus, chip, _) = Fake();
-        // 03 の上位 4 ビットが 7 でなければ RT720 (仕様書 8.2)
+        // 03 の上位 4 ビットが 7 でなければ RT720 (仕様書 7.2)
         chip.Status[0x03] = 0x60;
         tuner.Init();
         await Assert.That((tuner.Rt720, tuner.Name, tuner.Id)).IsEqualTo((true, "RT720", (byte)0x60));
         // 初期化は 03 を読むだけ (00 から 4 バイト読んで 4 つ目)。チップへは何も書かない
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "11 RT710 ?4" }, CollectionOrdering.Matching);
         bus.Log.Clear();
-        // BS-1 (M = 4、k = 0)。08 の bit4 ← k の bit1、04 の bit7〜6 ← 01、0C の bit4 ← 1 を書き、周波数で変える値は 0B だけ (仕様書 8.3)
+        // BS-1 (M = 4、k = 0)。08 の bit4 ← k の bit1、04 の bit7〜6 ← 01、0C の bit4 ← 1 を書き、周波数で変える値は 0B だけ (仕様書 7.3)
         tuner.SetFrequency(1049480);
         await Assert.That(bus.Log).IsEquivalentTo(new[]
         {
@@ -330,7 +330,7 @@ public class Rt710Tests
         tuner.Standby();
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "11 RT710 00=FF5C883041C8ED2547FC48A2080FF359" }, CollectionOrdering.Matching);
         await Assert.That(tuner.PllLocked()).IsTrue();
-        // R850 のロックのビット (bit6) では、RT710 はロックとみなさない (仕様書 8.4)
+        // R850 のロックのビット (bit6) では、RT710 はロックとみなさない (仕様書 7.4)
         chip.Status[0x02] = 0x40;
         await Assert.That(tuner.PllLocked()).IsFalse();
     }
@@ -338,7 +338,7 @@ public class Rt710Tests
     [Test]
     public async Task 入力のレベルは_01_の利得の番号と周波数から求める()
     {
-        // 仕様書 9.4。g = (値 >> 4) | ((値 & 1) << 4)。g ≦ 2 は n = 0、基準は f < 1200000 が 190
+        // 仕様書 8.4。g = (値 >> 4) | ((値 & 1) << 4)。g ≦ 2 は n = 0、基準は f < 1200000 が 190
         await Assert.That(Rt710.Level(0x20, 1049480)).IsEqualTo(-100 * (190 + 0));
         // g = 5 → n = 3 (表は 74)。1200000 ≦ f < 1800000 は 170
         await Assert.That(Rt710.Level(0x50, 1318000)).IsEqualTo(-100 * (170 + 74));

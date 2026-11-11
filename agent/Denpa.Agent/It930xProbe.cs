@@ -14,14 +14,14 @@ namespace Denpa.Agent;
 /// </code>
 ///
 /// <para>
-/// 最初に、見つけた機材を USB の ID・ポート・シリアル番号と一緒に並べる (Q3 は、同じ筐体のもう片方の側のポートも出す。px4 の仕様書 14 の 1)。
+/// 最初に、見つけた機材を USB の ID・ポート・シリアル番号と一緒に並べる (Q3 は、同じ筐体のもう片方の側のポートも出す。TC90522 の仕様書 12 の 1)。
 /// そのあとチップのバージョン、ストラップ、EEPROM の設定の写しを読み、ファームウェアを読み込んで起動し、そのバージョンを出す。
 /// 読む順は SDK と同じで、EEPROM の写しはファームウェアを読み込む前に読む。<c>--chips</c> を付けなければ、**復調器とチューナーには触らない。**
 /// 終わりに REBOOT して、挿した直後と同じ (ファームウェアが動いていない) 状態に戻す。REBOOT で USB がつなぎ直されたかも出す。終了コードは、うまくいけば 0、どこかで止まれば 1
 /// </para>
 ///
 /// <para>
-/// <c>--chips</c> を付けると、起動したあと受信機の電源を入れ、TC90522 の機種のチップを読んで見分ける (px4 の仕様書 14 の 2〜5)。
+/// <c>--chips</c> を付けると、起動したあと受信機の電源を入れ、TC90522 の機種のチップを読んで見分ける (TC90522 の仕様書 12 の 2〜5)。
 /// 復調器のアドレスが応答するか、中継の先の R850 の種類と水晶の駆動の強さ、RT710 か RT720 かを出し、終わったら電源を切る。
 /// 選局はしない (<c>--tune it930x:…</c> で確かめる)
 /// </para>
@@ -86,7 +86,7 @@ public static class It930xProbe
     }
 
     /// <summary>
-    /// 見つけた機材を 1 行ずつ出す (px4 の仕様書 14 の 1)。USB の ID・ポート・シリアル番号と、Q3 は側と、同じ筐体のもう片方の側のポート
+    /// 見つけた機材を 1 行ずつ出す (TC90522 の仕様書 12 の 1)。USB の ID・ポート・シリアル番号と、Q3 は側と、同じ筐体のもう片方の側のポート
     /// </summary>
     internal static void List(IReadOnlyList<(string Port, It930xModel Model)> found, Func<string, string?> serial, TextWriter output)
     {
@@ -274,7 +274,7 @@ public static class It930xProbe
     }
 
     /// <summary>
-    /// 受信機の電源を入れて、TC90522 の機種のチップを読んで見分ける (px4 の仕様書 14 の 2〜5)。終わったら電源を切る。
+    /// 受信機の電源を入れて、TC90522 の機種のチップを読んで見分ける (TC90522 の仕様書 12 の 2〜5)。終わったら電源を切る。
     /// 読めなかったチップは理由を出して次へ進む (どこまで通ったかを 1 回で見るため)。USB が抜けたときだけ止まる
     /// </summary>
     internal static void CheckChips(It930xBridge bridge, It930xModel model, TextWriter output, Action<int> sleep)
@@ -286,7 +286,7 @@ public static class It930xProbe
         }
         var valid = bridge.ConfigureReceivers(model.Receivers);
         output.WriteLine($"次の段の I2C: 設定しました。ファームウェアを読み込んだあとの EEPROM の有効の印 0x{valid:X2} (0x{EepromValid:X4}。0 なら設定を読めていない)");
-        // 開いたときの GPIO と、電源を入れる手順 (px4 の仕様書 2.5・13.3。It930xDevice と同じ)
+        // 開いたときの GPIO と、電源を入れる手順 (IT930x の仕様書 7.2・7.3。It930xDevice と同じ)
         bridge.GpioSetup(model.PowerPin, true);
         bridge.GpioSetup(2, false);
         if (model.Lnb) bridge.GpioSetup(11, false);
@@ -332,7 +332,7 @@ public static class It930xProbe
         }
     }
 
-    /// <summary>復調器のアドレスが応答するか (px4 の仕様書 14 の 3)。読めた値か、読めなかった理由を出す</summary>
+    /// <summary>復調器のアドレスが応答するか (TC90522 の仕様書 12 の 3)。読めた値か、読めなかった理由を出す</summary>
     private static void Answer(TextWriter output, string label, Func<string> read)
     {
         try
@@ -346,7 +346,7 @@ public static class It930xProbe
     }
 
     /// <summary>
-    /// 中継の先の R850 を初期化の手順で読む (px4 の仕様書 7.3、14 の 4・5)。種類・水晶の駆動の強さと、読んだ <c>08</c>〜<c>2F</c>、書き戻したあとに読み直した値を出す
+    /// 中継の先の R850 を初期化の手順で読む (TC90522 の仕様書 6.3、12 の 4・5)。種類・水晶の駆動の強さと、読んだ <c>08</c>〜<c>2F</c>、書き戻したあとに読み直した値を出す
     /// </summary>
     private static void CheckR850(TextWriter output, string label, R850 tuner)
     {
@@ -365,7 +365,7 @@ public static class It930xProbe
         }
     }
 
-    /// <summary>中継の先の RT710 の種類を読む (px4 の仕様書 8.2、14 の 4)</summary>
+    /// <summary>中継の先の RT710 の種類を読む (TC90522 の仕様書 7.2、12 の 4)</summary>
     private static void CheckRt710(TextWriter output, string label, Rt710 tuner)
     {
         try
@@ -408,7 +408,7 @@ public static class It930xProbe
     /// <c>--it930x-cycle &lt;USB のポート&gt; &lt;回数&gt; [--no-wait]</c>: 機材を開いて電源を入れ、すぐ電源を切って閉じるのを、続けて決めた回数だけ繰り返す。
     /// 常駐のエージェントは最後の利用者が返しても 30 秒は閉じないが (<see cref="It930xDevice.IdleGrace"/>)、ここでは待たずに閉じる。
     /// 本番で続けて 13 回入り切りしたあと、全受信機の TS が電源を抜くまで止まったので、その入り切りを再現するための入口。
-    /// <c>--no-wait</c> を付けると、電源を切ったあとの 100 ms (仕様書 1.5) も待たない (待ちを入れる前の動き)。受信機の初期化と選局はしない。
+    /// <c>--no-wait</c> を付けると、電源を切ったあとの 100 ms (IT930x の仕様書 7.2) も待たない (待ちを入れる前の動き)。受信機の初期化と選局はしない。
     /// 終えたあと TS が出るかは、続けて <c>--tune</c> で確かめる
     /// </summary>
     public static int Cycle(string[] args)
