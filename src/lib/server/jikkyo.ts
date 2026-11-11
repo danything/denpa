@@ -40,6 +40,7 @@ export function recordingJikkyo(recording: Recording): RecordingJikkyo | null {
     .select({
       type: services.type,
       service_id: services.service_id,
+      network_id: services.network_id,
     })
     .from(services)
     .where(eq(services.id, recording.service_id))

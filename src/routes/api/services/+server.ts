@@ -32,6 +32,7 @@ export function GET() {
       id: services.id,
       type: services.type,
       serviceId: services.service_id,
+      networkId: services.network_id,
       name: services.name,
       remoteControlKey: services.remote_control_key,
       hasLogo: services.has_logo,
@@ -98,6 +99,7 @@ export function GET() {
         ? jikkyoChannel({
             type: row.type,
             service_id: row.serviceId,
+            network_id: row.networkId,
           })
         : null,
     })),
