@@ -11,10 +11,11 @@
 - データ放送は DSM-CC のカルーセルからモジュールとファイルを組み立てる (`dsmcc`、`multipart`、`bml`、形式は `bml-protocol`)
 - Hybridcast の AIT を読む (`ait`)。1 つの局だけを抜き出す (`service-filter`)
 - 4K の放送 (MMT/TLV。ARIB STD-B32・B60) の土台として、TLV パケットの切り出し (`tlv`)、IP とヘッダー圧縮した IP から UDP の中身を取り出す処理 (`tlv-ip`)、MMTP のヘッダーとスクランブルの印、信号メッセージの分割と集約 (`mmtp`)
-- 4K の放送の表は、TLV-NIT・PLT・MPT・MH-SDT・MH-TOT (`mmt-si`)。局の一覧と、局ごとの CA_system_id (MPT のアクセス制御記述子) をそろえて読む `TlvServiceReader` もここ (TS の `psi` の `ServiceReader` に当たる)。番組表の MH-EIT は TS と同じ形式の番組にする (`mh-eit`)。1 つの局だけを TLV のまま抜き出す (`mmt-service-filter`)。スクランブルの復号と、映像・音声の取り出しはまだ無い
+- 4K の放送の表は、TLV-NIT・PLT・MPT・MH-SDT・MH-TOT (`mmt-si`)。局の一覧と、局ごとの CA_system_id (MPT のアクセス制御記述子) をそろえて読む `TlvServiceReader` もここ (TS の `psi` の `ServiceReader` に当たる)。番組表の MH-EIT は TS と同じ形式の番組にする (`mh-eit`)。1 つの局だけを TLV のまま抜き出す (`mmt-service-filter`)
+- 4K の放送の映像 (HEVC)・音声 (AAC)・字幕 (TTML) のアクセスユニットを、MPT の記述子から付けた PTS・DTS (90 kHz) と一緒に取り出す (`mmt-media`)。音声は LATM を外した AAC のフレームと AudioSpecificConfig、映像は NAL ユニットの並び。字幕の TTML は、TS の字幕と同じ字幕の文字の配置にする (`ttml`)。スクランブルの復号は無い
 - 試験用の TS (PSI・EIT・字幕・カルーセル・映像と音声) を組み立てる (`synth`、`synth-caption`、`synth-av`)
-- 試験用の TLV (TLV・IP・MMTP・MMT-SI) を組み立てる (`synth-mmt`)
-- ほかのモジュールが使う道具として、バイト列 (`bytes`)、言語の名前 (`language`)、文字の表 (`b24-tables`)、字幕の外字の画像をなめらかにする処理 (`drcs-smooth`)
+- 試験用の TLV (TLV・IP・MMTP・MMT-SI と、MPU の中身・時刻の記述子・LATM) を組み立てる (`synth-mmt`)
+- ほかのモジュールが使う道具として、バイト列 (`bytes`)、ビット単位の読み取り (`bits`)、言語の名前 (`language`)、文字の表 (`b24-tables`)、字幕の外字の画像をなめらかにする処理 (`drcs-smooth`)
 
 依存するパッケージはありません。
 
@@ -61,6 +62,26 @@ const epg = new MmtEpgReader();
 for await (const chunk of tlv) {
   if (epg.feed(chunk)) {
     for (const event of epg.takeChanged()) console.log(event.name); // "🈑報道１９３０"
+  }
+}
+```
+
+映像・音声・字幕は、1 局に絞った TLV のバイト列から取り出します。局 (MMT_package_id = service_id) を渡します。
+
+```ts
+import { MmtMediaReader } from "@danything/arib/mmt-media";
+import { ttmlPages } from "@danything/arib/ttml";
+
+const media = new MmtMediaReader(0xa1);
+for await (const chunk of tlv) {
+  for (const unit of media.feed(chunk)) {
+    if (unit.kind === "assets") continue; // 選んだアセットが変わった (受け側を作り直す)
+    if (unit.kind === "video") decodeHevc(unit.nals, unit.pts, unit.dts); // 時刻は 90 kHz
+    if (unit.kind === "audio")
+      decodeAac(unit.frame, unit.config.audioSpecificConfig);
+    if (unit.kind === "caption")
+      for (const { at, page } of ttmlPages(unit.document, unit.pts))
+        draw(at, page);
   }
 }
 ```
