@@ -11,9 +11,9 @@
       ]
     },
     {
-      "description": "入れ方 (install.sh は Mac で px4-userland / siano-userland を、install.ps1 は Windows で px4-userland / siano-userland を取ってくる) の `# renovate:` 付きの変数 (sh は `NAME=1.2.3`、PowerShell は `$Name = '1.2.3'`)。Dockerfile と同じ px4-userland / siano-userland を指していて、同じ依存なので1つの PR で揃って上がる",
+      "description": "入れ方 (install.sh は Mac で px4-userland / siano-userland を、install.ps1 は Windows で px4-userland / siano-userland を取ってくる) の `# renovate:` 付きの変数 (sh は `NAME=1.2.3`、PowerShell は `$Name = '1.2.3'`)。Dockerfile と同じ px4-userland / siano-userland を指していて、同じ依存なので1つの PR で揃って上がる。scripts/build-wdi-simple.ps1 は、Windows のエージェントの zip に入れる wdi-simple.exe をビルドする libwdi のバージョン",
       "customType": "regex",
-      "managerFilePatterns": ["/^install\\.(sh|ps1)$/"],
+      "managerFilePatterns": ["/^install\\.(sh|ps1)$/", "/^scripts/build-wdi-simple\\.ps1$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+(?:[A-Z0-9_]+=|\\$\\w+ = ')(?<currentValue>[^'\\s]+)"
       ]
@@ -41,6 +41,15 @@
       "matchPackageNames": ["Khronos31/asicen-userland"],
       "groupName": "asicen-userland",
       "groupSlug": "asicen-userland",
+      "automerge": false,
+      "addLabels": ["needs-review"]
+    },
+    {
+      "description": "libwdi (scripts/build-wdi-simple.ps1。Windows でチューナーのドライバを WinUSB に替える wdi-simple.exe) は、タグのコミットもスクリプトに書いてあり、バージョンだけ上げるとビルドが止まる。コミットを人が確かめて書き換えるので、自動ではマージせず、別の PR に分ける。バージョンは vX.Y.Z のタグだけ (b755 のようなビルド番号のリリースは extractVersion で外れる)",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["pbatard/libwdi"],
+      "groupName": "libwdi",
+      "groupSlug": "libwdi",
       "automerge": false,
       "addLabels": ["needs-review"]
     },

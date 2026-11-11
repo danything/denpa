@@ -307,8 +307,14 @@ jobs:
         with:
           dotnet-version: "11.0.100"
 
-      # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe と、通知領域のアイコンの denpa-tray.exe。tray/Denpa.Tray) と
-      # .sha256 (shasum と同じ形式)
+      # wdi-simple.exe (libwdi。Zadig のコマンドライン版)。install.ps1 -WinUsb がチューナーのドライバを WinUSB に替えるのに使う。
+      # libwdi のリリースには Zadig しか無いので、決めたタグのソースからビルドする (コミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)
+      - name: Build wdi-simple (libwdi)
+        shell: pwsh
+        run: ./scripts/build-wdi-simple.ps1 -Out out\libwdi
+
+      # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe と、通知領域のアイコンの denpa-tray.exe (tray/Denpa.Tray) と、
+      # wdi-simple.exe とそのライセンスの文書を入れた libwdi フォルダ) と .sha256 (shasum と同じ形式)
       - name: Build
         id: build
         shell: bash
@@ -318,7 +324,7 @@ jobs:
           dotnet publish agent/Denpa.Agent/Denpa.Agent.csproj -c Release -r win-x64 -p:InformationalVersion="$tag" -o out
           dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
           asset="denpa-agent-${tag#v}-windows-x64.zip"
-          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe -DestinationPath '$asset'"
+          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe, out/libwdi -DestinationPath '$asset'"
           sha256sum "$asset" > "$asset.sha256"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"

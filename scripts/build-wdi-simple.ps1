@@ -12,7 +12,8 @@
 #
 # 埋め込む WinUSB のファイル (winusbcoinstaller2.dll・WdfCoInstaller01011.dll) は Microsoft の WDK 8.0 の再配布物で、
 # 上流の CI・Zadig と同じ MSI から取り出す。取ってくるものはコミットと sha256 で確かめる。
-# $Out に置くもの: wdi-simple.exe・COPYING (GPL-3.0)・COPYING-LGPL (LGPL-3.0)・README.txt (出どころ)
+# $Out に置くもの: wdi-simple.exe・COPYING (GPL-3.0)・COPYING-LGPL (LGPL-3.0)・README.txt (出どころ)・
+# WDK-License.rtf と WDK-redist.txt (WDK の再配布物の許諾。MSI に入っているもの)
 # ---------------------------------------------------------------------------
 param([Parameter(Mandatory)][string]$Out)
 
@@ -55,7 +56,9 @@ try {
     foreach ($file in 'redist\wdf\x64\WdfCoInstaller01011.dll', 'redist\wdf\x64\winusbcoinstaller2.dll') {
         if (-not (Test-Path -LiteralPath (Join-Path $wdk $file))) { throw "$file is not in wdfcoinstaller.msi" }
     }
-    Get-ChildItem -Recurse -File $extracted | ForEach-Object { $_.FullName.Substring($extracted.Length + 1) }
+    foreach ($file in 'redist\wdf\License.rtf', 'redist\wdf\x64\redist.txt') {
+        if (-not (Test-Path -LiteralPath (Join-Path $wdk $file))) { throw "$file is not in wdfcoinstaller.msi" }
+    }
 
     # --- msvc/config.h。WDK の場所を書き、libusb-win32 と libusbK の埋め込みを外す。3 行とも当たらなければ止める ---
     $configPath = Join-Path $src 'msvc\config.h'
@@ -75,12 +78,15 @@ try {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
     if (-not $msbuild) { throw 'MSBuild not found' }
-    Invoke-Native 'msbuild' { & $msbuild (Join-Path $src 'libwdi.sln') /m /nologo /v:minimal /t:wdi-simple '/p:Configuration=Release,Platform=x64' }
+    Invoke-Native 'msbuild' { & $msbuild (Join-Path $src 'libwdi.sln') /m /nologo /v:minimal '/p:Configuration=Release,Platform=x64' }
     $exe = Join-Path $src 'x64\Release\examples\wdi-simple.exe'
     if (-not (Test-Path -LiteralPath $exe)) { throw 'wdi-simple.exe was not built' }
 
     New-Item -ItemType Directory -Force -Path $Out | Out-Null
     Copy-Item -LiteralPath $exe, (Join-Path $src 'COPYING'), (Join-Path $src 'COPYING-LGPL') -Destination $Out
+    # 埋め込んだ WDK の再配布物の許諾 (MSI に入っているもの)
+    Copy-Item -LiteralPath (Join-Path $wdk 'redist\wdf\License.rtf') -Destination (Join-Path $Out 'WDK-License.rtf')
+    Copy-Item -LiteralPath (Join-Path $wdk 'redist\wdf\x64\redist.txt') -Destination (Join-Path $Out 'WDK-redist.txt')
     $readme = @(
         "wdi-simple.exe (libwdi $LibwdiVersion)",
         '',
@@ -93,14 +99,14 @@ try {
         'Changes to the source: msvc/config.h only (the WDK location; libusb-win32 and libusbK are not embedded).',
         '',
         'The executable embeds the WinUSB co-installers (winusbcoinstaller2.dll, WdfCoInstaller01011.dll)',
-        'from the Microsoft Windows Driver Kit 8.0 redistributable components:',
+        'from the Microsoft Windows Driver Kit 8.0 redistributable components (WDK-License.rtf, WDK-redist.txt):',
         "  $WdkUrl",
         "  sha256 $WdkSha256",
         ''
     )
     [IO.File]::WriteAllText((Join-Path $Out 'README.txt'), ($readme -join "`r`n"))
 
-    # --- 動くことを確かめる (--help は管理者でなくても答える…はずだが、実行ファイルは管理者を求めるマニフェスト付き) ---
+    # --- 起動できることを確かめる。実行ファイルは管理者の権限を求める (マニフェスト) ので、管理者で流す (ランナーは管理者) ---
     $built = Join-Path $Out 'wdi-simple.exe'
     $help = & $built --help | Out-String
     if ($LASTEXITCODE -ne 0 -or $help -notmatch '--vid') { throw "wdi-simple --help failed (exit $LASTEXITCODE): $help" }

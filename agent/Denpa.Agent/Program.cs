@@ -39,6 +39,12 @@ if (args is ["--version"])
     Console.WriteLine(About.Version);
     return 0;
 }
+// エージェントが USB を直に持つ機材の USB ID を出して終わる。install.ps1 -WinUsb が読む (WinUsbTargets.cs)
+if (args is ["--usb-ids"])
+{
+    Console.WriteLine(WinUsbTargets.ToJson());
+    return 0;
+}
 // 実機で選局と復号だけ試す入口。サーバは立てない (Probe.cs)
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
