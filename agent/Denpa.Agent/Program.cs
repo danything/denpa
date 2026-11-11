@@ -13,11 +13,11 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *
  * denpa から触れないものが 3 つある。
  *
- * - B-CASカード … USB のリーダーも px4d / asicend・PX-MLT5 系の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
+ * - B-CASカード … USB のリーダーも px4d・PX-MLT5 系の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
- * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland / siano-userland /
- *   asicen-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs / Asicen.cs)。PX-MLT5 系と CECH-ZD1 J と PIX-DT295 は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs)
+ * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland /
+ *   asicen-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Asicen.cs)。PX-MLT5 系と CECH-ZD1 J と PIX-DT295 と Siano の機材 (PX-S1UD など) は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs / Siano.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
  * 復号に要る PAT・PMT・ECM と、契約の更新に要る CAT・EMM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -37,6 +37,12 @@ if (OperatingSystem.IsWindows()) Console.OutputEncoding = Encoding.UTF8;
 if (args is ["--version"])
 {
     Console.WriteLine(About.Version);
+    return 0;
+}
+// エージェントが USB を直に持つ機材の USB ID を出して終わる。install.ps1 -WinUsb が読む (WinUsbTargets.cs)
+if (args is ["--usb-ids"])
+{
+    Console.WriteLine(WinUsbTargets.ToJson());
     return 0;
 }
 // 実機で選局と復号だけ試す入口。サーバは立てない (Probe.cs)
@@ -194,7 +200,8 @@ void PrepareDaemons()
         bool CardInUse(string name) => Keys.Local.Name == name;
         // 設定に px4: で残っている MLT5 系の筐体は起動せず、理由を記録する (Px4Daemon.Ensure)
         UserlandDaemon.Prepare<Px4Daemon>([.. Px4Userland.IdsIn(pool.Tuners)], Px4Daemon.For, CardInUse);
-        // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
+        // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない。LNB 15V の設定は起動の引数に効くので先に控える
+        AsicenUserland.Configure(pool.Tuners);
         UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For, CardInUse);
     }
 }
@@ -578,6 +585,25 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
      * 局が入れ替わった。denpa は**これを合図に取り込み直す。**
      * こちらは何も再起動しない (録画中のものも切れない)
      */
+    events.Emit("channels");
+    await Respond.Write(http, merged);
+});
+
+/*
+ * 1 つの種別のチャンネルを全部消す (`?type=CATV`)。**呼ぶのは denpa の設定の画面だけ。**
+ * その種別を受けられるチューナーが無くなると、スキャンし直して消すことができないため (引っ越してケーブルが無くなったなど)。
+ * PUT は 1 件も無い結果を断る (スキャンで何も見つからなかったときに消さない) ので、消すのはこちらに分ける
+ */
+app.MapDelete("/denpa/channels", async (HttpContext http) =>
+{
+    var type = http.Request.Query["type"].ToString();
+    if (type.Length == 0)
+    {
+        await Respond.Error(http, "type が必要です", 400);
+        return;
+    }
+    var merged = config.SaveChannels([], [type]);
+    Log.Write($"チャンネルを消しました ({type})");
     events.Emit("channels");
     await Respond.Write(http, merged);
 });

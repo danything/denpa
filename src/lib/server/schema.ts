@@ -401,7 +401,7 @@ export const rules = sqliteTable("rules", {
   search_fields: text("search_fields").notNull().default("name"),
   /** JSON 配列。NULL は全局 */
   service_ids: json("service_ids", numbers),
-  /** JSON 配列 (GR/BS/CS/SKY)。個別の局 (`service_ids`) との OR で効く */
+  /** JSON 配列 (`ChannelType`)。個別の局 (`service_ids`) との OR で効く */
   service_types: json("service_types", strings),
   /** JSON 配列。`"7"` (大分類) か `"7-0"` (中分類まで)。NULL は全ジャンル */
   genres: json("genres", strings),

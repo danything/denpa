@@ -73,7 +73,7 @@
   color: var(--dp-muted);
   overflow-wrap: anywhere;
 }
-/* ルール名のリンクは淡い地向けの主の色。Pico の主の色のままでは、指を乗せた件の面の上で 4.5:1 に届かないことがある */
+/* ルール名のリンクは淡い地向けの主の色。Pico の主の色のままでは、指を乗せた件の面で 4.5:1 に届かないことがある */
 .board .row-meta a {
   color: var(--dp-primary-text);
 }
@@ -631,8 +631,11 @@
 .board .a-state dt {
   min-width: 0;
 }
-/* 絞り込みのうち手を止めてほしいもの (競合・失敗など)。注意の色の字とアイコン。選んでいるときもほかの行と同じく線と太字で、塗らない */
-.board .a-warn {
+/*
+ * 絞り込みのうち手を止めてほしいもの (競合・失敗など)。注意の色の字とアイコン。選んでいるときもほかの行と同じく線と太字で、塗らない。
+ * 字は選んでいても注意の色のまま (下のチップと同じ)。`app.css` の選んでいる行の字の色 (`.side-item:is([aria-pressed="true"])`) と同じ詳細度にして、後に読むこちらを勝たせる
+ */
+.board .side-item.a-warn {
   color: var(--dp-warn-text);
 }
 .board .a-warn .side-sub {

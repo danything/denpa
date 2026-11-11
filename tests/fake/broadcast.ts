@@ -95,6 +95,11 @@ const TITLES = [
 export interface Knobs {
   /** カードが読めていない状態。掛かったままの TS を流す */
   scrambled: boolean;
+  /**
+   * **カードは読めているが、局の契約が無い状態** (未契約)。本物のエージェントはカードが鍵を返さなかった ES を
+   * スクランブルされたまま流すので、掛かったままの TS を流す。`scrambled` と違ってカードの状態は読めているまま
+   */
+  unentitled: boolean;
   /** 放送の延長。EIT[p/f] の尺にこれを足す */
   extendedMs: number;
   /** EIT[p/f] を流さない。延長に追従できない局の見え方を確かめる */
@@ -127,6 +132,7 @@ export interface Knobs {
 
 export const DEFAULT_KNOBS: Knobs = {
   scrambled: false,
+  unentitled: false,
   extendedMs: 0,
   noPresentFollowing: false,
   eitCopyNever: [],
@@ -891,7 +897,7 @@ export function broadcast(
      */
     for (let index = 0; index < services.length; index++) {
       send(
-        now.scrambled
+        now.scrambled || now.unentitled
           ? payload(pidsOf(index).video, 10, true)
           : avPackets(index, av[index]!),
       );

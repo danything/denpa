@@ -22,22 +22,22 @@ export const overrides: Record<string, PageOverride> = {
   install: {
     title: "テレビ録画サーバ denpa を立てる",
     description:
-      "自宅用のテレビ録画サーバ denpa の入れ方。1行で入れる方法、Compose・1コンテナ・Helm、誰を通すか、リバースプロキシの後ろに置くとき。Mirakurun や EPGStation は要りません。",
+      "自宅用のテレビ録画サーバ denpa の入れ方。1 行で入れる方法、Compose・1 コンテナ・Helm、誰を通すか、リバースプロキシの後ろに置くとき。Mirakurun や EPGStation は要りません。",
   },
   "install-mac": {
     title: "Mac でテレビ録画サーバを立てる",
     description:
-      "Apple Silicon の Mac に、テレビ録画サーバ denpa を1行で入れる方法。Docker は要らず、denpa 本体もエージェントも Mac の上でそのまま動かします。",
+      "Apple Silicon の Mac に、テレビ録画サーバ denpa を 1 行で入れる方法。Docker は要らず、denpa 本体もエージェントも Mac の上でそのまま動かします。",
   },
   "install-windows": {
     title: "Windows でテレビ録画サーバを立てる",
     description:
-      "x64 の Windows に、PowerShell の1行でテレビ録画サーバ denpa を入れる方法。Docker Desktop も WSL も要らず、denpa 本体もエージェントも Windows の上でそのまま動かします。",
+      "x64 の Windows に、PowerShell の 1 行でテレビ録画サーバ denpa を入れる方法。Docker Desktop も WSL も要らず、denpa 本体もエージェントも Windows の上でそのまま動かします。",
   },
   tuners: {
     title: "使えるチューナー (PT3・PX-Q3U4・PX-W3U4・PX-S1UD ほか)",
     description:
-      "テレビ録画サーバ denpa で使えるチューナーの一覧と、カードリーダー・B-CASカード・うまく動かないときのこと。Mirakurun を立てなくても、挿せば自動で見つけます。",
+      "テレビ録画サーバ denpa で使えるチューナーの一覧と、カードリーダー・B-CAS カード・うまく動かないときのこと。Mirakurun を立てなくても、挿せば自動で見つけます。",
   },
   "tuner-px4": {
     title: "PX-Q3U4・PX-W3U4・PX-MLT で録画サーバを立てる",
@@ -47,7 +47,7 @@ export const overrides: Record<string, PageOverride> = {
   "tuner-px-s1ud": {
     title: "PX-S1UD で録画サーバを立てる",
     description:
-      "PX-S1UD を、ホストに何も入れずに録画サーバで使う方法 (siano-userland)。カーネルのドライバ (smsusb) と取り合わないための blacklist も。",
+      "PX-S1UD を録画サーバで使う方法。エージェントが USB を直に持つ実装 (実機では確かめていない) と、カーネルのドライバ (smsusb) との使い分け。",
   },
   migrate: {
     title: "EPGStation から denpa に乗り換える",
@@ -72,7 +72,7 @@ export const topSections: {
 }[] = [
   { key: "features", heading: "できること" },
   { key: "usage", heading: "使ってよい範囲" },
-  { key: "install", heading: "2. 入れる", label: "1行で入れる" },
+  { key: "install", heading: "2. 入れる", label: "1 行で入れる" },
   { key: "thanks", heading: "謝辞", end: true },
 ];
 

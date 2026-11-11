@@ -29,12 +29,15 @@
  * 予約どうしの割り振りはそれらに左右されない。
  */
 
+import { beforeJapanese, typeNames } from "../format";
+import { isSatellite } from "../types";
+
 export interface Assignable {
   id: number;
   start_at: number;
   end_at: number;
   priority: number;
-  /** 局の種別 (GR/BS/CS)。受けられるかはチューナーごとに決まる (`Capacity`) */
+  /** 局の種別 (`ChannelType`)。受けられるかはチューナーごとに決まる (`Capacity`) */
   type: string;
   /** 物理チャンネル。同じチャンネルなら 1 台のチューナーを共有できる */
   channel: string;
@@ -79,10 +82,10 @@ interface Margins {
 }
 
 /**
- * **チューナー不足の文言で使う単位。** BS と CS は同じ衛星チューナーで受けるので 1 つに言う
+ * **チューナー不足の文言で使う単位。** 画面の名前で言い、BS と CS は同じ衛星チューナーで受けるので 1 つに言う (「BS・CS」)
  */
 function poolOf(type: string): string {
-  return type === "BS" || type === "CS" ? "BS/CS" : type;
+  return typeNames(isSatellite(type) ? ["BS", "CS"] : [type]);
 }
 
 /** 同じ `rank` のチューナーの組。受けられる種別は同じ (エージェントとの約束) */
@@ -372,7 +375,7 @@ export function assign<T extends Assignable>(
     if (found === null) {
       rejected.push({
         reservation: candidate,
-        reason: `${poolOf(candidate.type)} を受けられるチューナーが足りません (同時に ${worst(capacity, candidate, mine, rivals, busy)} チャンネル必要です)`,
+        reason: `${beforeJapanese(poolOf(candidate.type))}を受けられるチューナーが足りません (同時に ${worst(capacity, candidate, mine, rivals, busy)} チャンネル必要です)`,
       });
       continue;
     }

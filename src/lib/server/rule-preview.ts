@@ -140,7 +140,7 @@ interface Pending {
   name: string;
   service_id: number;
   service_name: string;
-  /** 局の種別 (GR/BS/CS)。受けられるかはチューナーごとに決まる (`conflict.Capacity`) */
+  /** 局の種別 (`ChannelType`)。受けられるかはチューナーごとに決まる (`conflict.Capacity`) */
   type: string;
   /** 物理チャンネル。同じチャンネルなら 1 台のチューナーで足りる */
   channel: string;

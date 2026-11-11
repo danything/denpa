@@ -14,7 +14,6 @@ import { parseSearchFields } from "#lib/search.js";
 
 import { toHalfWidth } from "../fold";
 import type { Slot } from "../rule-time";
-import { origin } from "../types";
 import { now } from "./db";
 import {
   EdcbClient,
@@ -36,11 +35,10 @@ import {
   ruleImported,
   type RuleValues,
   running,
-  serviceById,
+  serviceOf,
   SlotWindows,
   track,
 } from "./migrate";
-import { programKey, serviceKey } from "./tuner";
 
 /**
  * EDCB のジャンル 1 件を denpa の書き方 (`"7"` / `"7-0"`) に。写せないものは null。
@@ -259,15 +257,6 @@ export function convertRule(
   };
 }
 
-/**
- * 局の内部 ID。denpa の局に無ければ undefined。
- * EDCB の局は ONID と SID だけで、アンテナとケーブルの再送信を分けない。種別は元の放送で読む (`types.origin`)。
- * 地上波・BS・CS の再送信はアンテナの局に、ケーブルの自主放送は CATV の局に当たる
- */
-function serviceOf(networkId: number, serviceId: number): number | undefined {
-  return serviceById(serviceKey(networkId, serviceId, origin(networkId)))?.id;
-}
-
 /** 記録に出すルールの呼び名 */
 function ruleLabel(rule: EdcbRule): string {
   const keyword = splitAndKey(rule.andKey).keyword.trim();
@@ -297,7 +286,10 @@ export function importEdcbRules(
       tally.skipped++;
       continue;
     }
-    const converted = convertRule(rule, serviceOf);
+    const converted = convertRule(
+      rule,
+      (networkId, serviceId) => serviceOf(networkId, serviceId)?.id,
+    );
     if ("skip" in converted) {
       record(`${converted.skip}: ${ruleLabel(rule)}`);
       tally.skipped++;
@@ -314,7 +306,7 @@ export function importEdcbRules(
 
 /**
  * 手で入れた予約を入れる。ルールが作った予約 (`EPG自動予約` で始まるコメント) は、ルールを入れれば
- * denpa が作り直すので触らない。番組は ONID・SID・event_id で引く (`programKey`。EPGStation と同じく番組の ID で予約する)
+ * denpa が作り直すので触らない。番組は ONID・SID・event_id で引く (`importReservation`)
  */
 export async function importEdcbReservations(
   list: EdcbReserve[],
@@ -346,13 +338,8 @@ export async function importEdcbReservations(
       continue;
     }
     await importReservation(
-      programKey(
-        row.networkId,
-        row.serviceId,
-        row.eventId,
-        origin(row.networkId),
-      ),
-      row.title,
+      [row.networkId, row.serviceId, row.eventId],
+      row.title || `${row.networkId}-${row.serviceId}-${row.eventId}`,
       options,
     );
   }
@@ -386,12 +373,8 @@ export function importEdcbHistory(
     entries.push({
       sources: [`edcb:recinfo:${key}`, `edcb:recinfo2:${key}`],
       name: row.title,
-      serviceId: serviceKey(
-        row.networkId,
-        row.serviceId,
-        origin(row.networkId),
-      ),
-      serviceName: row.serviceName,
+      serviceName:
+        serviceOf(row.networkId, row.serviceId)?.name ?? row.serviceName,
       endAt: row.startAt + row.duration,
     });
   }

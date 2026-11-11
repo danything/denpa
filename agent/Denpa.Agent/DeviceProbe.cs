@@ -146,10 +146,10 @@ public static class DeviceProbe
         found.AddRange(Px4Userland.Detect());
 
         /*
-         * siano-userland の機材 (PX-S1UD など) は、**どのドライバにも繋がっていないものだけ。**
+         * Siano の機材 (PX-S1UD など) は、**どのドライバにも繋がっていないものだけ。**
          * smsusb が使っていれば上の /dev/dvb で見つかっている (Siano.cs)
          */
-        found.AddRange(SianoUserland.Detect());
+        found.AddRange(Siano.Detect());
 
         /*
          * asicen-userland の機材 (PX-W3U3 など。試験的)。配布物が無ければ何もしない (Asicen.cs)。
@@ -163,7 +163,7 @@ public static class DeviceProbe
         found.AddRange(Zd1j.Detect());
 
         /*
-         * PIXELA PIX-DT295 も並べるだけで開かない (開くと機材に設定を書く。試験的。Dt295.cs)
+         * PIXELA PIX-DT295 も並べるだけで開かない (開くと機材に設定を書く。Dt295.cs)
          */
         found.AddRange(Dt295.Detect());
 

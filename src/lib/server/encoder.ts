@@ -1284,8 +1284,12 @@ async function runJob(jobId: number): Promise<void> {
   const { signal, recording } = startJob(jobId);
   const input = recording === undefined ? null : encodeSource(recording);
 
-  if (recording === undefined || input === null) {
-    markFailed(jobId, "元の TS がありません");
+  if (recording === undefined) {
+    markFailed(jobId, "録画が見つかりません");
+    return;
+  }
+  if (input === null) {
+    fail(jobId, recording, "元の TS がありません");
     return;
   }
 
@@ -1424,12 +1428,18 @@ async function runJob(jobId: number): Promise<void> {
 
   /*
    * コマ数を本編映像から実測する (measureSmoothMotion)。
-   * CM はまだ分からないので、録画全体に窓を散らす
+   * CM はまだ分からないので、録画全体に窓を散らす。散らす範囲は TS の実際の尺
+   * (先頭が欠けた・途中で切れた録画を番組の尺で散らすと、後ろの窓がファイルの外に出て測れない)
    */
   setStep(jobId, "フレームレートを確かめています");
+  // 画面の大きさ・画素の縦横比・冒頭の音声だけの区間をエンコードする前に測っておく。
+  // 尺と毎秒コマ数は進み具合の分母にもなる (encodeProgress。下で probed に渡す)
+  const measured = await probeVideo(sourceTs);
   encodeOptions.smoothMotion = await measureSmoothMotion(
     sourceTs,
-    (recording.end_at - recording.start_at) / 1000,
+    Number.isFinite(measured.duration)
+      ? measured.duration
+      : (recording.end_at - recording.start_at) / 1000,
     signal,
   );
   // ここから先の下調べ (ffprobe) は合図を受け取らない。測っている間に押されていたら、その前でやめる
@@ -1437,9 +1447,6 @@ async function runJob(jobId: number): Promise<void> {
 
   setPhase(jobId, "encode", "");
 
-  // 画面の大きさ・画素の縦横比・冒頭の音声だけの区間をエンコードする前に測っておく。
-  // 尺と毎秒コマ数は進み具合の分母にもなる (encodeProgress。下で probed に渡す)
-  const measured = await probeVideo(sourceTs);
   encodeOptions.probed = { duration: measured.duration, fps: measured.fps };
   encodeOptions.height = measured.height;
   encodeOptions.audioStreams = await probeLiveAudio(
@@ -2068,8 +2075,8 @@ async function runCmJob(jobId: number): Promise<void> {
    */
   let skip = recording.encode_skip ?? 0;
   /** 元の TS を測るのは 1 回だけ (先頭を捨てる長さの見積もりと、切ってエンコードしたものかの見分けで使う) */
-  let tsProbe: ReturnType<typeof probeVideo> | undefined;
-  const probeTs = (path: string) => (tsProbe ??= probeVideo(path));
+  let tsProbed: ReturnType<typeof probeVideo> | undefined;
+  const probeTs = (path: string) => (tsProbed ??= probeVideo(path));
   if (recording.encode_skip === null && ts !== null) {
     const probed = await probeTs(ts);
     skip = headSkip(

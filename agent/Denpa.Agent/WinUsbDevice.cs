@@ -5,11 +5,11 @@ using System.Text;
 namespace Denpa.Agent;
 
 /// <summary>
-/// Windows の WinUSB (<c>winusb.dll</c>) の <see cref="IUsbDevice"/>。機材にドライバが無いので、利用者が Zadig で WinUSB を当てる
+/// Windows の WinUSB (<c>winusb.dll</c>) の <see cref="IUsbDevice"/>。機材にドライバが無いので、利用者が WinUSB に替える (install.ps1 の -WinUsb か Zadig)
 /// (docs/install-windows.md)。Microsoft の公開の資料 (SetupAPI・WinUSB の関数) どおりに P/Invoke だけで呼ぶ。
 ///
 /// <para>
-/// 並べるのは SetupAPI の <c>GUID_DEVINTERFACE_USB_DEVICE</c> (Zadig で入れたものも同じ GUID で見える)。ポートの名前は Linux の sysfs と
+/// 並べるのは SetupAPI の <c>GUID_DEVINTERFACE_USB_DEVICE</c> (libwdi (wdi-simple・Zadig) で入れたものも同じ GUID で見える)。ポートの名前は Linux の sysfs と
 /// 同じ形 (<c>1-3.2</c>) にする (<c>SPDRP_LOCATION_PATHS</c> から。<see cref="UsbDevices.WindowsPort"/>)。**挿すポートを変えると別の名前になる。**
 /// </para>
 /// </summary>
@@ -128,9 +128,25 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
     private static partial int WinUsb_AbortPipe(nint handle, byte pipe);
 
     [LibraryImport("winusb.dll", SetLastError = true)]
+    private static partial int WinUsb_ResetPipe(nint handle, byte pipe);
+
+    /// <summary>WINUSB_PIPE_INFORMATION (12 バイト)。<see cref="Type"/> は USBD_PIPE_TYPE で、USB の決まりの番号と同じ並び</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PipeInformation
+    {
+        public int Type;
+        public byte Id;
+        public ushort MaximumPacketSize;
+        public byte Interval;
+    }
+
+    [LibraryImport("winusb.dll", SetLastError = true)]
+    private static partial int WinUsb_QueryPipe(nint handle, byte alternate, byte index, PipeInformation* information);
+
+    [LibraryImport("winusb.dll", SetLastError = true)]
     private static partial int WinUsb_GetOverlappedResult(nint handle, nint overlapped, uint* transferred, int wait);
 
-    private const string Busy = "ほかのソフトが使っているか、WinUSB になっていません (Zadig で WinUSB を当ててください)";
+    private const string Busy = "ほかのソフトが使っているか、WinUSB になっていません (install.ps1 に -WinUsb を付けて流すと WinUSB に替えられます。Zadig でも替えられます。docs/install-windows.md)";
 
     private readonly Lock _gate = new();
     private readonly Dictionary<byte, uint> _timeouts = [];
@@ -324,6 +340,25 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
         }
     }
 
+    /// <summary>インターフェース 0 の代替設定 0 の端点を、WinUSB に順に問い合わせる (無い番号で失敗するまで)。実機で確かめていない</summary>
+    public IReadOnlyList<UsbPipe> Pipes()
+    {
+        var pipes = new List<UsbPipe>();
+        for (byte index = 0; index < 32; index++)
+        {
+            PipeInformation information;
+            if (WinUsb_QueryPipe(Handle, 0, index, &information) == 0) break;
+            pipes.Add(new UsbPipe(information.Id, information.Type, information.MaximumPacketSize));
+        }
+        return pipes;
+    }
+
+    /// <summary>端点のストールをクリアする (WinUsb_ResetPipe)。実機で確かめていない</summary>
+    public void ClearHalt(byte endpoint)
+    {
+        if (WinUsb_ResetPipe(Handle, endpoint) == 0) throw Failure($"EP 0x{endpoint:X2} のストールをクリアできません");
+    }
+
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
     {
         // 出しっぱなしの読みは待ち続ける (時間切れは Read の待ちで見る)。RAW_IO で WinUSB の詰め直しを省く
@@ -438,6 +473,38 @@ public sealed unsafe partial class WinUsbDevice : IUsbDevice
                 _head = (_head + 1) % _overlapped.Length;
             }
             return copied;
+        }
+
+        /// <summary>先頭の読みが済むのを待って、その転送を 1 つ返す (0 バイトの転送と、捨てた読みは飛ばす)。実機で確かめていない</summary>
+        public int ReadTransfer(Span<byte> buffer, int timeoutMs)
+        {
+            ObjectDisposedException.ThrowIf(_closed, this);
+            var deadline = Environment.TickCount64 + timeoutMs;
+            for (var round = 0; ; round++)
+            {
+                if (_length < 0)
+                {
+                    var wait = Math.Max(0, deadline - Environment.TickCount64);
+                    if (WaitForSingleObject(_overlapped[_head]->EventHandle, (uint)wait) != 0) return 0;
+                    uint done = 0;
+                    _pending[_head] = false;
+                    if (WinUsb_GetOverlappedResult(_owner.Handle, (nint)_overlapped[_head], &done, 0) == 0)
+                    {
+                        // Read と同じく、端点の止まりと取り消しはその読みだけ捨てて出し直す。出し直しは 1 回の呼び出しで深さの分まで
+                        var error = Marshal.GetLastPInvokeError();
+                        if (error is not (ErrorGenFailure or ErrorOperationAborted) || round >= _overlapped.Length) throw Failure(_owner.Name, "TS の読みが失敗しました", error);
+                        done = 0;
+                    }
+                    _length = (int)done;
+                    _offset = 0;
+                }
+                var take = Math.Min(_length - _offset, buffer.Length);
+                new ReadOnlySpan<byte>(_buffers[_head] + _offset, take).CopyTo(buffer);
+                _length = -1;
+                Submit(_head);
+                _head = (_head + 1) % _overlapped.Length;
+                if (take > 0) return take;
+            }
         }
 
         /// <summary>読みを取り消し (WinUsb_AbortPipe)、全部済むのを待ってから返す</summary>

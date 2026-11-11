@@ -236,7 +236,7 @@ export function start(): void {
    * 起動のたびに、印 (`has_logo`) とファイルを突き合わせ直す。置き場ごと
    * 消えることは実際にあり、印だけ残っていると番組表に壊れた画像が並ぶ
    */
-  void guard("logo", logoReconcile);
+  void guard("logo", () => logoReconcile(true));
   every(config.logoSweepInterval, "logo", sweep);
 }
 

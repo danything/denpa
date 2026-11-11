@@ -9,7 +9,7 @@ namespace Denpa.Agent;
  *                 選局のときは CAT から EMM も取り出し、自分宛てだけを渡し先に渡す (Emm.cs)
  * - IKeySource  … ECM を渡すと鍵を返す相手。手元のカード (LocalCard → BCas.cs) か、別の拠点 (RemoteCard)。どちらも CardShare.cs
  * - ICardLink   … カードと APDU をやり取りする接続。USB の CCID リーダーを直接扱う (Ccid.cs。
- *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、px4d・asicend の内蔵リーダー (Px4Card.cs) か、
+ *                 macOS / Windows は OS の PC/SC 越し、Pcsc.cs) か、px4d の内蔵リーダー (Px4Card.cs) か、
  *                 CECH-ZD1 J と PIX-DT295 の差し込み口 (Zd1j.cs の Zd1jCard・Dt295NativeCard.cs の Dt295NativeCard) か、
  *                 IT930x の機材の内蔵リーダー (It930xCard.cs)
  */

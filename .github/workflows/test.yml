@@ -120,14 +120,15 @@ jobs:
       - name: Conformance
         run: bun run test:conformance
 
-  # asicen-userland (PX-W3U3。試験的) の模擬の asicend と話す。上流はまだリリースが無いので、
-  # 決めたコミットを手元で組んで `asicend --mock` を起こす (AsicenMockTests。機材にもファームウェアにも
-  # 触らない)。**必須チェックにはしない** (上流の取得と組み立てで揺れる・必須の context を増やさない)。
-  # 0.1.0 が出たら配布物を取る方式に替える (docs/tuners.md)
+  # asicen-userland (PX-W3U3 など。試験的) の模擬のデーモンと通信する (AsicenMockTests。機材にもファームウェアにも触らない)。
+  # 模擬 (asicend-mock) は配布物に入っていないので、v1.0.0-beta のコミットをここで組む (組むだけで、ソースは変えない)。
+  # エージェントが固定しているバージョン (agent/Dockerfile の ASICEN_USERLAND_VERSION) と同じコミットにする。
+  # **必須チェックにはしない** (上流の取得とビルドで揺れる・必須の context を増やさない)
   agent-asicen-mock:
     runs-on: ubuntu-latest
     env:
-      ASICEN_USERLAND_REF: 2718916cce028055290d5561ffde2df2d0153312
+      # v1.0.0-beta
+      ASICEN_USERLAND_REF: ed215c847979634245fb6a189c582831c462cf44
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -141,16 +142,16 @@ jobs:
 
       - name: Build asicen-userland (mock)
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake g++ pkg-config libusb-1.0-0-dev
-          cmake -S asicen-userland -B asicen-build -DCMAKE_BUILD_TYPE=Release
-          cmake --build asicen-build --parallel 4 --target asicend asicenctl
+          sudo apt-get update && sudo apt-get install --no-install-recommends -y cmake ninja-build g++ pkg-config libusb-1.0-0-dev
+          cmake -S asicen-userland -B asicen-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DASICEN_BUILD_TESTS=ON
+          cmake --build asicen-build --target asicend-mock asicenctl
 
       - name: Set up .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "11.0.100"
 
-      - name: Unit tests (.NET agent, asicend --mock)
+      - name: Unit tests (.NET agent, asicend-mock)
         run: ASICEN_USERLAND_DIR="$PWD/asicen-build" dotnet test --project agent/Denpa.Agent.Tests/Denpa.Agent.Tests.csproj --treenode-filter '/*/*/AsicenMockTests/*'
 
   # 入れ方 (install.sh) を Linux で通しで。compose.prod.yml を置いて、本物のイメージを引いて起こし、
@@ -188,6 +189,12 @@ jobs:
       - name: Windows migration from wslc with a fake wslc
         shell: pwsh
         run: ./tests/install-windows-migrate.ps1
+
+      # チューナーのドライバを WinUSB に替えるところ (install.ps1 -WinUsb)。ランナーに機材は無いので、偽の機材と偽の wdi-simple で。
+      # 見るのは、聞いてから替える分岐と、止まるとき (機材が無い・wdi-simple が失敗した) のメッセージ
+      - name: Windows WinUSB step with fake tuners
+        shell: pwsh
+        run: ./tests/install-windows-winusb.ps1
 
       - name: install.sh end to end
         env:
@@ -362,13 +369,14 @@ jobs:
           cat agent.log
 
       # 入れ方を通しで (エージェントだけ。denpa 本体ごとは下の server-macos)。エージェントはリリースから取らずにいまビルドしたものを入れ、
-      # px4-userland / siano-userland / ファームウェアは本物を取ってきてハッシュを確かめ、
+      # px4-userland は本物を取ってきてハッシュを確かめ、
       # root の LaunchDaemon に載せて API が答えるまで。最後に消す。
       # sudo は環境変数を落とすので -E で渡す (PATH も。ランナーの sudo は PATH を決め直しうる)
       - name: install.sh end to end
         run: |
           set -euo pipefail
-          tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent
+          cp agent/Denpa.Agent/firmware/LICENCE.siano out/
+          tar -czf "$RUNNER_TEMP/denpa-agent.tar.gz" -C out denpa-agent LICENCE.siano
           export DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent.tar.gz"
           prefix="/Library/Application Support/denpa"
           plist=/Library/LaunchDaemons/io.github.danything.denpa-agent.plist
@@ -394,12 +402,15 @@ jobs:
           # 上げ直しても合言葉は変えない
           sudo -E env PATH="$PATH" bash install.sh --agent-only
           test "$(cat "$HOME/denpa/config/tls/pair-token")" = "$token"
-          ls -l "$prefix/px4-userland" "$prefix/siano-userland"
+          ls -l "$prefix/px4-userland"
+          # Siano のファームウェアはエージェントに埋め込んである。許諾の文面を実行ファイルの隣に置き、siano-userland は置かない
+          test -f "$prefix/bin/LICENCE.siano"
+          test ! -e "$prefix/siano-userland"
           # px4d のソケットの置き場は root のもので、ほかの人は入れない (px4d がそう求める)
           test "$(stat -f '%Su %Lp' "$prefix/run")" = "root 700"
           # libusb は中に抱えている (Homebrew のものに繋がない)。ランナーには Homebrew の libusb が
           # 入りうるので、動いたことでは確かめられない。繋ぎ先を直に見る
-          for bin in px4-userland/px4d siano-userland/siano-ts; do
+          for bin in px4-userland/px4d; do
             otool -L "$prefix/$bin"
             if otool -L "$prefix/$bin" | grep -q libusb; then
               echo "$bin が外の libusb に繋いでいます" >&2; exit 1
@@ -547,6 +558,12 @@ jobs:
       - name: Publish the tray (Native AOT, win-x64)
         run: dotnet publish tray/Denpa.Tray/Denpa.Tray.csproj -c Release -r win-x64 -o out
 
+      # wdi-simple.exe (libwdi。Zadig のコマンドライン版)。リリースと同じスクリプトで、決めたタグのソースからビルドする
+      # (取ってくるものはコミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)。エージェントと同じ zip に入れる
+      - name: Build wdi-simple (libwdi)
+        shell: pwsh
+        run: ./scripts/build-wdi-simple.ps1 -Out out\libwdi
+
       # 起こして、落ちずに動き続けることを見る (denpa はいないので、注意のアイコンのまま)。メニューは人が開くものなので見ない。
       # 2 つ目は二重に起こしたときで、すぐ終わる
       - name: Smoke test (tray)
@@ -623,15 +640,16 @@ jobs:
           exit 0
 
       # 入れ方を通しで (エージェントだけ。denpa 本体ごとは下の server-windows)。エージェントはいまビルドしたものを zip にして入れ、
-      # px4-userland・siano-userland と siano のファームウェアは本物を取ってきてハッシュを確かめ、タスク スケジューラに
-      # SYSTEM で載せて API が答えるまで。IT930x のファームウェアはエージェントに同梱しているので、install.ps1 は置かない。
+      # px4-userland は本物を取ってきてハッシュを確かめ、タスク スケジューラに
+      # SYSTEM で載せて API が答えるまで。IT930x と Siano のファームウェアはエージェントに同梱しているので、install.ps1 は置かない。
       # 1 回目は irm | iex と同じやり方 (取ってきた中身を scriptblock にして) で流す。2 回目は上げ直し
       # (動いているエージェントを止めて入れ替える)。最後に外す
       - name: install.ps1 end to end
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          Compress-Archive -Path out\denpa-agent.exe, out\denpa-tray.exe -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
+          Copy-Item agent\Denpa.Agent\firmware\LICENCE.siano out\
+          Compress-Archive -Path out\denpa-agent.exe, out\denpa-tray.exe, out\libwdi, out\LICENCE.siano -DestinationPath "$env:RUNNER_TEMP\denpa-agent.zip"
           $env:DENPA_AGENT_ZIP = "$env:RUNNER_TEMP\denpa-agent.zip"
           $script = [scriptblock]::Create((Get-Content install.ps1 -Raw -Encoding UTF8))
           & $script -AgentOnly -NoOpen
@@ -650,8 +668,9 @@ jobs:
           $log = "$env:USERPROFILE\denpa\denpa-agent.log"
           for ($i = 0; $i -lt 15 -and -not (Select-String -LiteralPath $log -SimpleMatch "#pair=$token" -Quiet); $i++) { Start-Sleep 1 }
           if (-not (Select-String -LiteralPath $log -SimpleMatch "#pair=$token" -Quiet)) { throw 'agent does not log the pairing URL with the token' }
-          & "$prefix\siano-userland\siano-ts.exe" --list
-          "siano-ts --list: exit $LASTEXITCODE"
+          # The Siano firmware is bundled in the agent: its licence text sits next to the executable, and siano-userland is not installed
+          if (-not (Test-Path "$prefix\bin\LICENCE.siano")) { throw 'LICENCE.siano is not next to the agent' }
+          if (Test-Path "$prefix\siano-userland") { throw 'siano-userland should not be installed' }
           Get-Content "$prefix\denpa-agent.cmd"
           if (Select-String -LiteralPath "$prefix\denpa-agent.cmd" -SimpleMatch 'PX4_FIRMWARE' -Quiet) { throw 'PX4_FIRMWARE should not be in the .cmd (the agent uses its bundled firmware)' }
           # -AgentOnly installs no server
@@ -659,6 +678,38 @@ jobs:
           if (Test-Path "$prefix\server") { throw 'server installed with -AgentOnly' }
           # No tray at sign-in either (it shows the server)
           if (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' -Name denpa -ErrorAction SilentlyContinue) { throw 'tray registered with -AgentOnly' }
+
+          # libwdi's wdi-simple.exe comes in the agent zip (bin\libwdi) with its license files, and the agent lists
+          # the USB IDs install.ps1 -WinUsb reads
+          $wdi = "$prefix\bin\libwdi"
+          foreach ($file in 'wdi-simple.exe', 'COPYING', 'COPYING-LGPL', 'README.txt', 'WDK-License.rtf', 'WDK-redist.txt') {
+            if (-not (Test-Path "$wdi\$file")) { throw "libwdi: $file missing" }
+          }
+          $ids = & "$prefix\bin\denpa-agent.exe" --usb-ids | ConvertFrom-Json
+          "usb ids: $($ids | ConvertTo-Json -Compress)"
+          if (-not ($ids | Where-Object { $_.usb -eq '054c:04b2' })) { throw '--usb-ids has no CECH-ZD1 J' }
+          # The agent opens Siano tuners itself, so their IDs come from the agent too (187f:0302 is not supported)
+          if (-not ($ids | Where-Object { $_.usb -eq '3275:0080' })) { throw '--usb-ids has no PX-S1UD' }
+          if ($ids | Where-Object { $_.usb -eq '187f:0302' }) { throw '--usb-ids lists 187f:0302' }
+          # -WinUsb without a tuner on the runner: stops before wdi-simple and changes nothing
+          $stopped = $false
+          try { & $script -WinUsb -Yes } catch { $stopped = $true }
+          if (-not $stopped) { throw '-WinUsb should stop without a tuner' }
+          if (Get-ChildItem Cert:\LocalMachine\TrustedPublisher | Where-Object { $_.Subject -like '*libwdi autogenerated*' }) { throw '-WinUsb without a tuner left a certificate' }
+          # wdi-simple itself, with the arguments install.ps1 gives it. No such device on the runner, so it only pre-installs
+          # the WinUSB driver package it generates (self-signed certificate, driver store). This shows that the build embeds
+          # what it needs; replacing the driver of a real tuner is not covered here
+          $ErrorActionPreference = 'Continue'
+          & "$wdi\wdi-simple.exe" --vid 0x054c --pid 0x04b2 --type 0 --name 'Sony CECH-ZD1 J' --dest "$env:RUNNER_TEMP\wdi"
+          "wdi-simple: exit $LASTEXITCODE"
+          if ($LASTEXITCODE -ne 0) { throw 'wdi-simple failed' }
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem "$env:RUNNER_TEMP\wdi" -Recurse | ForEach-Object FullName
+          Get-ChildItem Cert:\LocalMachine\TrustedPublisher, Cert:\LocalMachine\Root | Where-Object { $_.Subject -like '*libwdi autogenerated*' } | Format-List PSParentPath, Subject, HasPrivateKey
+          if (@(Get-ChildItem Cert:\LocalMachine\TrustedPublisher | Where-Object { $_.Subject -like '*VID_054C&PID_04B2*libwdi autogenerated*' }).Count -ne 1) { throw 'no libwdi certificate in TrustedPublisher' }
+          $driver = Get-WindowsDriver -Online | Where-Object { $_.OriginalFileName -like '*usb_device.inf' }
+          $driver | Format-List Driver, OriginalFileName, ProviderName, ClassName, Version
+          if (-not $driver) { throw 'the WinUSB driver package is not in the driver store' }
 
           # px4-userland: only px4d.exe / px4ctl.exe / license files, no px4-ts.exe or WinSCard.dll, no firmware (bundled in the agent).
           # No tuner on the runner, so check that the real binaries run and take our arguments.
@@ -952,7 +1003,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/agent/denpa-agent.tar.gz" -C "$bundle"
           cp "$RUNNER_TEMP/tray/denpa-tray" "$bundle/denpa-tray"
           chmod 755 "$bundle/denpa-agent" "$bundle/denpa-tray"
-          tar -czf "$RUNNER_TEMP/denpa-agent-tray.tar.gz" -C "$bundle" denpa-agent denpa-tray
+          tar -czf "$RUNNER_TEMP/denpa-agent-tray.tar.gz" -C "$bundle" denpa-agent denpa-tray LICENCE.siano
           export DENPA_AGENT_TARBALL="$RUNNER_TEMP/denpa-agent-tray.tar.gz"
           tray_plist=/Library/LaunchAgents/io.github.danything.denpa-tray.plist
           DENPA_SERVER_TARBALL=$(ls "$RUNNER_TEMP"/server/denpa-*-darwin-arm64.tar.gz)

@@ -11,9 +11,12 @@
       ]
     },
     {
-      "description": "入れ方 (install.sh は Mac で px4-userland / siano-userland を、install.ps1 は Windows で px4-userland / siano-userland を取ってくる) の `# renovate:` 付きの変数 (sh は `NAME=1.2.3`、PowerShell は `$Name = '1.2.3'`)。Dockerfile と同じ px4-userland / siano-userland を指していて、同じ依存なので1つの PR で揃って上がる",
+      "description": "入れ方 (install.sh は Mac で、install.ps1 は Windows で px4-userland を取ってくる) の `# renovate:` 付きの変数 (sh は `NAME=1.2.3`、PowerShell は `$Name = '1.2.3'`)。Dockerfile と同じ px4-userland を指していて、同じ依存なので1つの PR で揃って上がる。scripts/build-wdi-simple.ps1 は、Windows のエージェントの zip に入れる wdi-simple.exe をビルドする libwdi のバージョン",
       "customType": "regex",
-      "managerFilePatterns": ["/^install\\.(sh|ps1)$/"],
+      "managerFilePatterns": [
+        "/^install\\.(sh|ps1)$/",
+        "/^scripts/build-wdi-simple\\.ps1$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+(?:[A-Z0-9_]+=|\\$\\w+ = ')(?<currentValue>[^'\\s]+)"
       ]
@@ -36,11 +39,20 @@
       "pinDigests": true
     },
     {
-      "description": "asicen-userland (PX-W3U3、試験的) は agent/Dockerfile で 0.0.0 (= まだリリースが無い) にしてあり、バージョンが上がると初めてイメージに入る。最初のバージョンは配布物の名前・形式・ファームウェアの同梱を人が確かめてから入れたいので、自動ではマージしない (docs/tuners.md)。共有の設定は非 major を全部「all dependencies」の1つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
+      "description": "asicen-userland (PX-W3U3 など、試験的) は agent/Dockerfile でプレリリースの 1.0.0-beta に固定してある (versioning=semver で、次のプレリリースと正式版を追う)。エージェントは通信の形式の一部をこのバージョンの通信を記録して起こしていて、asicen-userland 1.0.0 でなければ断る。バージョンを上げるときは、通信を記録し直して Asicen.cs・AsicenUdtv.cs と Dockerfile の SHA-256 を合わせる必要があるので、自動ではマージしない (docs/tuners.md。PR は SHA-256 が合わずに CI で落ちる)。共有の設定は非 major を全部「all dependencies」の1つにまとめて自動マージするので、ここだけ別の PR に分ける (同じ PR に入ると、ほかの依存の自動マージまで止まる)",
       "matchDatasources": ["github-releases"],
       "matchPackageNames": ["Khronos31/asicen-userland"],
       "groupName": "asicen-userland",
       "groupSlug": "asicen-userland",
+      "automerge": false,
+      "addLabels": ["needs-review"]
+    },
+    {
+      "description": "libwdi (scripts/build-wdi-simple.ps1。Windows でチューナーのドライバを WinUSB に替える wdi-simple.exe) は、タグのコミットもスクリプトに書いてあり、バージョンだけ上げるとビルドが止まる。コミットを人が確かめて書き換えるので、自動ではマージせず、別の PR に分ける。バージョンは vX.Y.Z のタグだけ (b755 のようなビルド番号のリリースは extractVersion で外れる)",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": ["pbatard/libwdi"],
+      "groupName": "libwdi",
+      "groupSlug": "libwdi",
       "automerge": false,
       "addLabels": ["needs-review"]
     },

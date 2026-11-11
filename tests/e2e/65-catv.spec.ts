@@ -209,4 +209,39 @@ test.describe("ケーブル", () => {
       })
       .toBe(true);
   });
+
+  test("ケーブルを受けられるチューナーが無くなったら、ケーブルの局を 2 回押しで消せる", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await syncEpg(request);
+    // 受けられる機材があるうちは、スキャンし直せば入れ替わるので出さない
+    await goto(page, "/settings/reception");
+    await expect(page.getByTestId("channel-list")).toContainText(CATV_GR.name);
+    await expect(page.getByTestId("orphan-type")).toHaveCount(0);
+
+    // 機材を外す (引っ越してケーブルが無くなった)。スキャンの選び方から「ケーブル」が消え、表の上に削除が出る
+    await request.put(`${stack.agentUrl}/denpa/tuners`, {
+      data: { tuners: DEFAULT_TUNERS },
+    });
+    await goto(page, "/settings/reception");
+    await expect(
+      page.locator('select[name="types"] option', { hasText: "ケーブル" }),
+    ).toHaveCount(0);
+    const orphan = page.getByTestId("orphan-type");
+    await expect(orphan).toHaveCount(1);
+    await orphan.getByTestId("remove-type-CATV").click();
+    await orphan.getByTestId("remove-type-CATV-confirm").click();
+
+    await expect(page.getByTestId("orphan-type")).toHaveCount(0);
+    await expect(page.getByTestId("channel-list")).not.toContainText(
+      CATV_GR.name,
+    );
+    const channels = (await (
+      await request.get(`${stack.agentUrl}/denpa/channels`)
+    ).json()) as { type: string }[];
+    expect(channels.some((channel) => channel.type === "CATV")).toBe(false);
+    expect(channels.some((channel) => channel.type === "GR")).toBe(true);
+  });
 });

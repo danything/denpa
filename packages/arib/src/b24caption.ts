@@ -413,11 +413,13 @@ export class B24CaptionDecoder {
     if (languages === 0 || languages > 8) return;
     const found: CaptionLanguage[] = [];
     for (let i = 0; i < languages; i++) {
-      if (at + 6 > data.length) return;
+      if (at + 5 > data.length) return;
       const tag = data[at]! >> 5;
       const dmf = data[at]! & 0x0f;
       at += 1;
+      // DC (表示モード) が 1 バイト挟まる
       if (dmf === 0b1100 || dmf === 0b1101 || dmf === 0b1110) at += 1;
+      if (at + 4 > data.length) return;
       const code = ascii(data, at, 3);
       at += 3; // ISO 639
       const format = data[at]! >> 4;

@@ -8,9 +8,13 @@ import { webhooks } from "#lib/server/schema.js";
 import { send, webhookUrl } from "#lib/server/webhook.js";
 import { EVENTS } from "#lib/webhook-events.js";
 
-export function load() {
+/** 通知先の一覧。**アクセストークンには返さない** (URL を読めれば、通知先へ直に送れてしまう) */
+export function load(locals: { token?: number }) {
   return {
-    webhooks: orm().select().from(webhooks).orderBy(webhooks.id).all(),
+    webhooks:
+      tokenRefusal(locals) === null
+        ? orm().select().from(webhooks).orderBy(webhooks.id).all()
+        : [],
     events: EVENTS,
   };
 }
