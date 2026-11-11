@@ -197,10 +197,16 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>溜めている間の内訳を測る時計。選局の時計を渡せば、選局の内訳と同じ物差しで並ぶ (TunerPool.cs)</summary>
     private readonly Stopwatch _clock = clock ?? Stopwatch.StartNew();
 
-    /// <summary>溜めている間に、PAT が来た・PMT がそろった・最後の ECM の応答が来た時刻 (ミリ秒。まだなら -1)</summary>
+    /// <summary>溜めている間に、PAT が来た・PMT がそろった・最後のカードの応答が来た時刻 (ミリ秒。まだなら -1)</summary>
     private long _patMs = -1, _pmtMs = -1, _ecmMs = -1;
-    /// <summary>最後に応答が来た ECM の PID</summary>
+    /// <summary>最後にカードの応答が来た ECM の PID</summary>
     private int _lastEcm = -1;
+    /// <summary>
+    /// 溜めるのをやめたときに待っていた ECM (観る局の PMT が挙げたもの) のうち、最初のセクションがいちばん遅く届いた時刻とその PID (<see cref="Arrived"/>)。
+    /// PMT を待たずにカードへ問い合わせたらどれだけ縮むかを、本番の記録から割るため (カードの応答の時刻とは別)
+    /// </summary>
+    private long _arrivedMs = -1;
+    private int _arrivedEcm = -1;
     /// <summary>
     /// 溜めている間に鍵の出どころへ問い合わせた回数・キャッシュした応答を使った回数・未契約の回数と、往復とロックの待ちの合計・
     /// カードの定数を受け取るのにかかった時間
@@ -215,8 +221,9 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     public string HeldAt()
     {
         var last = _lastEcm < 0 ? "" : $" (0x{_lastEcm:X4})";
+        var arrived = _arrivedEcm < 0 ? "" : $" (0x{_arrivedEcm:X4})";
         var only = _settledFor is null ? "" : $" (局 {_settledFor})";
-        return $"PAT {At(_patMs)} / PMT {At(_pmtMs)}{only} / ECM {At(_ecmMs)}{last}";
+        return $"PAT {At(_patMs)} / PMT {At(_pmtMs)}{only} / ECM 着 {At(_arrivedMs)}{arrived} / カード応答 {At(_ecmMs)}{last}";
     }
 
     /// <summary>溜めている間に鍵の出どころへ問い合わせた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ 1 行に足す</summary>
@@ -578,6 +585,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     {
         _holding = false;
         _settledFor = narrowed ? string.Join("・", Narrowed()!.Order()) : null;
+        Arrived();
         // 先回りして取っておいたもので、PAT・PMT が挙げなかったものは使わない
         _earlyEcms.Clear();
         _earlyPmtSections.Clear();
@@ -617,6 +625,29 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             kept++;
         }
         _held = kept;
+    }
+
+    /// <summary>
+    /// 待っていた ECM (<see cref="Waits"/>) の届いた時刻のうち、いちばん遅いもの (<see cref="_arrivedMs"/>)。
+    /// まだ届いていないものがあれば、時刻は「-」にしてその PID を出す。待つ ECM が無ければ両方「-」
+    /// </summary>
+    private void Arrived()
+    {
+        _arrivedMs = -1;
+        _arrivedEcm = -1;
+        foreach (var ecm in _ecms.Values.OrderBy(ecm => ecm.Pid))
+        {
+            if (!Waits(ecm)) continue;
+            if (ecm.ArrivedMs < 0)
+            {
+                _arrivedMs = -1;
+                _arrivedEcm = ecm.Pid;
+                return;
+            }
+            if (ecm.ArrivedMs < _arrivedMs) continue;
+            _arrivedMs = ecm.ArrivedMs;
+            _arrivedEcm = ecm.Pid;
+        }
     }
 
     /// <summary>
@@ -832,7 +863,10 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             return;
         }
         _pmts[number] = section.ToArray();
+        // PMT が届いた時刻は、取っておいた ECM を問い合わせる (Rebuild) 前に測る。後で測るとカードの往復が入る
+        var arrived = _clock.ElapsedMilliseconds;
         Rebuild();
+        if (_holding && _pmtMs < 0 && TablesReady()) _pmtMs = arrived;
     }
 
     /// <summary>
@@ -960,8 +994,11 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// </summary>
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
     {
+        if (section[0] != 0x82) return;
+        // 届いた時刻は、PMT が挙げる前に先回りして取っておいたもの (Early) でも数える
+        if (_holding && ecm.ArrivedMs < 0) ecm.ArrivedMs = _clock.ElapsedMilliseconds;
         // 鍵の要らない利用者だけならカードに問い合わせない (Rehold で問い合わせ直す)
-        if (section[0] != 0x82 || !_keys) return;
+        if (!_keys) return;
         var listed = _ecms.GetValueOrDefault(ecm.Pid) == ecm;
         // 溜めるのをやめる合図にするのは、待っている PMT が挙げた ECM だけ。先回りして取っておいただけのもの (Early) は PAT・PMT を待たせない
         if (_holding && ecm.Last is not null && Waits(ecm) && TablesReady()) Settle(Narrowed() is not null);
@@ -1091,6 +1128,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         public bool Told;
         /// <summary>鍵を受け取れなかった。読んだパケットの数がここを過ぎたら、同じ中身でも問い合わせ直す</summary>
         public long RetryAt = long.MaxValue;
+        /// <summary>溜めている間に最初のセクションが届いた時刻 (ミリ秒。まだなら -1)。<see cref="Forget"/> でも戻さない (記録に出すのは選局して最初の 1 回だけ)</summary>
+        public long ArrivedMs = -1;
         /// <summary>溜めている間に最初の中身を受けた位置 (溜めたパケットの中の番号)。まだなら -1</summary>
         public int Seen = -1;
         /// <summary>そのあとで最初に来た、この鍵の ES のパケットの位置</summary>
