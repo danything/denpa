@@ -135,7 +135,7 @@ public class ChannelStoreTests
     [Test]
     public async Task 空の結果で_その種別のチャンネルだけを消せる()
     {
-        // DELETE /denpa/channels?type=CATV が使う (受けられるチューナーが無くなり、スキャンし直して消せない種別)
+        // DELETE /denpa/channels?type=CATV が使う (設定の画面の「局を削除」。スキャンし直しても消えない種別)
         var config = Fresh();
         config.SaveChannels(Entries(("GR", "T16"), ("CATV", "QC30")), ["GR", "CATV"]);
 

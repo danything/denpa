@@ -256,7 +256,7 @@ export async function putChannels(
 
 /**
  * 1 つの種別のチャンネルを全部消す (エージェントの `DELETE /denpa/channels?type=…`)。
- * 受けられるチューナーが無くなった種別は、スキャンし直して消すことができないので、設定の画面からこれで消す (`scan.ts` の `removeType`)
+ * 設定の「チャンネル」の「局を削除」から呼ぶ (`scan.ts` の `removeType`。種別もチューナーの有無も問わない)
  */
 export async function deleteChannels(
   type: ChannelType,

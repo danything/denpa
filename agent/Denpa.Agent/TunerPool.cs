@@ -294,9 +294,11 @@ public sealed class TunerPool(
                             throw new IOException($"{channel} ({(tuning.IsdbC ? "ISDB-C" : "J.83B")}) を選局できるのは {It930x.Scheme} の受信機だけです");
                         // 途中で落ちたら「どこにも合っていない」。次は必ず選局し直す
                         held.Channel = null;
+                        lease.TuneStartMs = lease.Clock.ElapsedMilliseconds;
                         held.Device.Tune(tuning);
                         held.Channel = channel;
                         lease.TunedMs = lease.Clock.ElapsedMilliseconds;
+                        lease.LockMs = (held.Device as It930xTuner)?.LockMs ?? -1;
                     }
                     // 選局し直さずに済んだときも、TSMF の判定はそのチャンネルを選局したときのまま残っている。読み出しを始める前に写す (Sink.TsmfStreams)
                     lease.TsmfStreams = (held.Device as It930xTuner)?.Tsmf?.Streams;
@@ -936,6 +938,12 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// <summary>同期した時点。選局し直さずに済んだら -1</summary>
     public long TunedMs { get; set; } = -1;
 
+    /// <summary>選局を始めた時点 (前の読み出しを待ったあと)。選局し直さずに済んだら -1</summary>
+    public long TuneStartMs { get; set; } = -1;
+
+    /// <summary>復調器がロックを確かめ始めてからロックするまで (IT930x の機材だけ。ほかは -1)。同期の内訳のうち、書き込みと待ち足しを割るため</summary>
+    public long LockMs { get; set; } = -1;
+
     /// <summary>TSMF のヘッダーにある有効な TS の数 (<see cref="Sink.TsmfStreams"/>)。読み出しを始める前に入れる</summary>
     public int? TsmfStreams { get; set; }
 
@@ -1111,10 +1119,12 @@ internal sealed class Lease(int tuner, string type, string channel)
             {
                 pushed = true;
                 string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
+                // 同期の内訳: 選局を始めた時点と、ロックまで (IT930x の機材。地上波は、ロックが早くても確かめ始めてから 350 ms は待ってから流す)
+                var tuned = TuneStartMs >= 0 && LockMs >= 0 ? $"{At(TunedMs)} (始め {TuneStartMs}ms・ロックまで {LockMs}ms)" : At(TunedMs);
                 Log.Write(b25 is null
-                    ? $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
+                    ? $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {tuned} / "
                         + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms / 復号しない ({undecoded})"
-                    : $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
+                    : $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {tuned} / "
                         + $"最初の TS {At(_firstReadMs)} / {b25.HeldAt()} / 送り出し {Clock.ElapsedMilliseconds}ms / {b25.CardUse()}"
                         + (b25.Undecodable > 0 ? $" (スクランブルされたまま {b25.Undecodable} パケット)" : ""));
             }
