@@ -15,13 +15,9 @@
  */
 
 import { parseTimeTable, PID_TIME } from "@danything/arib/eit";
-import { CLOCK, WRAP } from "@danything/arib/pes";
 import { PacketStream, SectionAssembler } from "@danything/arib/psi";
 
-import { BroadcastClock } from "./clock";
-
-/** 33 ビットで一周する長さ (秒) */
-const PCR_WRAP = WRAP / CLOCK;
+import { BroadcastClock, PCR_WRAP } from "./clock";
 
 export class TsHead {
   private readonly packets = new PacketStream();

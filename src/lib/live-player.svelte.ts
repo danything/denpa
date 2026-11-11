@@ -2231,11 +2231,23 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (rawProblem === undefined) rawProblem = await rawUnsupported();
   }
 
+  /**
+   * `begin` を呼んだ回数。待っている間 (デコードできるかの確認・運転中の注意・チケット) に選び直された・画面を離れたら、
+   * 古いほうはそこでやめる (`superseded`)。続けると WebSocket が 2 本開き、閉じられないほうが前の局を流し続ける
+   */
+  let begun = 0;
+
+  /** `mine` 回目の `begin` より後に選び直されたか、画面を離れたか */
+  function superseded(mine: number): boolean {
+    return mine !== begun || left;
+  }
+
   /** 繋いでリクエストする。選局 (`tune`) と追っかけ (`openChase`) の共通の後半 */
   async function begin(
     video: HTMLVideoElement,
     keepList: boolean,
   ): Promise<void> {
+    const mine = ++begun;
     element = video;
     left = false;
     // リクエストし直すのはこれ。観終えるのを待っていたなら、もう待たない (`resumeChase`)
@@ -2249,7 +2261,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       rawProblem = await rawUnsupported();
     }
     await prepareCompat();
-    if (!pickFormat()) return;
+    if (superseded(mine) || !pickFormat()) return;
     // 数え直す。再エンコードでも MediaSource から作り直しになるので、前の数は続きではない
     stalls = 0;
     /*
@@ -2311,11 +2323,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       if (!res.ok) throw new Error(String(res.status));
       ticket = ((await res.json()) as { ticket: string }).ticket;
     } catch {
+      if (superseded(mine)) return;
       // 繋ぎ直しの最中なら、サーバからまだ応答が無いだけ。待ち直す
       if (attempts > 0) reconnect();
       else fail("繋がりませんでした");
       return;
     }
+    if (superseded(mine)) return;
 
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     // このエンドポイントは SvelteKit のルートではない (server.js が受ける) ので、型の付いた `resolve` に
