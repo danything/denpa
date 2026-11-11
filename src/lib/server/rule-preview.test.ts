@@ -550,7 +550,7 @@ describe("復号できない局", () => {
       kind: "undecodable",
     });
 
-    // 保存したルールも同じ。予約を立てるのは MX の放送だけ
+    // 保存したルールも同じ。予約を立てるのは MX の放送だけ。局が復号できなくなる前に立てた予約は引っ込める
     const { applyRules } = await import("./rules");
     orm()
       .insert(ruleTable)
@@ -562,7 +562,20 @@ describe("復号できない局", () => {
         created_at: now(),
       })
       .run();
-    applyRules();
+    orm()
+      .insert(reservations)
+      .values({
+        program_id: 1,
+        rule_id: 9,
+        service_id: CABLE_4K,
+        name: "テスト魔法 #1",
+        start_at: base + 5 * HOUR,
+        end_at: base + 6 * HOUR,
+        created_at: now(),
+        updated_at: now(),
+      })
+      .run();
+    expect(applyRules()).toMatchObject({ created: 1, dropped: 1 });
     expect(
       orm()
         .select({ program_id: reservations.program_id })

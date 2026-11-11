@@ -115,7 +115,7 @@ test.describe("外から使う番組表", () => {
     await syncEpg(request);
     for (const query of [
       "",
-      "?type=SKY",
+      "?type=TV",
       "?type=GR&from=x",
       "?type=GR&from=2&to=1",
     ])

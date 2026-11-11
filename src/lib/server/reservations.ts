@@ -60,6 +60,7 @@ export async function reserve(programId: number): Promise<Reservation> {
   if (program.copy_never) throw new Error(COPY_NEVER_REASON);
   /*
    * **復号できない局の番組も録らない** (`services.decodable`)。番組表を読める局は番組表に出るが、録ってもスクランブルのままで観られない
+   * (局の行が無い番組は断らない。番組は局の行がある局にしか書かないので、ふつうは起きない)
    */
   const service = orm()
     .select({
