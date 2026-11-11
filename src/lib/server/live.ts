@@ -3497,7 +3497,7 @@ export function attend(connection: Connection): void {
         0n,
         json({
           type: "error",
-          message: undecodableReason(row.type),
+          message: undecodableReason(row.type, row.transport),
         } satisfies Notice),
       );
       return;
@@ -3931,6 +3931,7 @@ function serviceOf(serviceId: number) {
       service_id: services.service_id,
       network_id: services.network_id,
       decodable: services.decodable,
+      transport: services.transport,
     })
     .from(services)
     .where(eq(services.id, serviceId))

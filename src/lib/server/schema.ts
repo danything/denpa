@@ -15,7 +15,12 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import type { Audio } from "../arib";
-import type { ChannelType, ReservationState, VideoLoss } from "../types";
+import type {
+  ChannelType,
+  ReservationState,
+  Transport,
+  VideoLoss,
+} from "../types";
 import type { Range } from "./cm";
 import { config } from "./config";
 
@@ -236,11 +241,16 @@ export const services = sqliteTable("services", {
     .default(sql`0`),
   /**
    * スクランブルを復号できる局か (`types.decodableService`)。取り込みのたびに決め直す (`epg.syncServices`)。
-   * 復号できない局 (SKY と、B-CAS 以外の方式でスクランブルされた CATV の局) は、番組表・ライブ・ロゴに出さない
+   * 復号できない局 (SKY と、B-CAS 以外の方式でスクランブルされた CATV の局と、CATV の 4K の局) は、番組表・ライブ・ロゴに出さない
    */
   decodable: flag("decodable")
     .notNull()
     .default(sql`1`),
+  /**
+   * チャンネルの伝送の形式 (`types.Transport`)。`tlv` はケーブルで受けた 4K の局 (MMT/TLV)。
+   * スキャンがチャンネルの控えに書き、取り込みのたびに入れ直す (`epg.syncServices`)。選局の前に読み方と復号できるかを決めるのに使う
+   */
+  transport: text("transport").$type<Transport>().notNull().default("ts"),
   updated_at: integer("updated_at").notNull(),
   /**
    * 番組表の取得 (`epg-collect.ts`) がこの局の番組を最後に書いた時刻。まだなら null。

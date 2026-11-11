@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { concatBytes } from "@danything/arib/bytes";
 import { EpgReader } from "@danything/arib/eit";
 import {
   eitSection,
@@ -9,6 +10,18 @@ import {
   programMap,
   sdtSection,
 } from "@danything/arib/synth";
+import {
+  compressedIp,
+  m2SectionMessage,
+  mhSdtSection,
+  mptTable,
+  paMessage,
+  pltTable,
+  signalingPackets,
+  tlvNitSection,
+  tlvPacket,
+  tlvSi,
+} from "@danything/arib/synth-mmt";
 
 import { CaObserver } from "./ca-observe";
 import {
@@ -17,11 +30,12 @@ import {
   channelsFor,
   dedupeCatv,
   readServices,
+  readTlvServices,
   scanTargets,
   skyChannels,
   tsmfJobs,
 } from "./scan";
-import type { AgentChannel } from "./tuner";
+import { type AgentChannel, decodableChannel } from "./tuner";
 
 /**
  * 総当たりそのもの (`Scanner`) はここでは試さない。**エージェントに選局を
@@ -433,5 +447,102 @@ describe("ケーブルの局", () => {
     );
     expect(services).toBeNull();
     expect(error).toBe("SDT を受信できませんでした");
+  });
+});
+
+/**
+ * ケーブルで受けた 4K の局。エージェントは TSMF から選んだ分割 TLV を TLV のバイト列に組み立てて、`application/x-arib-tlv` で流す。
+ * 値は実機 (QC26 の BS4K) のもの
+ */
+describe("ケーブルの 4K の局 (TLV)", () => {
+  const ONID = 0x000b;
+  const TLV_STREAM = 0xb111;
+  const SERVICE = 161;
+  const ip = (bytes: Uint8Array) => compressedIp(1, bytes);
+  const nit = tlvSi(
+    tlvNitSection(ONID, "高度ＢＳデジタル放送", [
+      [TLV_STREAM, ONID, [[SERVICE, 1]]],
+    ]),
+  );
+  const sdt = signalingPackets(0x8004, [
+    m2SectionMessage(
+      mhSdtSection(TLV_STREAM, ONID, [
+        { serviceId: SERVICE, name: "ＢＳでんぱ　４Ｋ" },
+      ]),
+    ),
+  ]).map(ip);
+  const plt = signalingPackets(0x0000, [
+    paMessage(pltTable([[SERVICE, 0xff01]])),
+  ]).map(ip);
+  const mpt = signalingPackets(0xff01, [
+    paMessage(
+      mptTable({
+        packageId: SERVICE,
+        access: { caSystemId: 0x0005, ecmPacketId: 0xfff1 },
+        assets: [{ type: "hev1", packetId: 0xf100 }],
+      }),
+    ),
+  ]).map(ip);
+
+  test("TLV-NIT と MH-SDT で局が入り、MPT の CA_system_id 0x0005 の局は復号できない", async () => {
+    const started = Bun.nanoseconds();
+    const result = await readTlvServices(
+      fromBytes(concatBytes([nit, ...plt, ...mpt, ...sdt]), true),
+      30_000,
+    );
+    expect(result.error).toBeNull();
+    // MPT まで揃ったら、局の情報を待つ上限まで読まずに打ち切る
+    expect((Bun.nanoseconds() - started) / 1e9).toBeLessThan(5);
+    const entry = channelEntry(
+      "CATV",
+      "QC26",
+      result.services!,
+      result.caSystemIdsOf,
+      "tlv",
+    );
+    expect(entry).toEqual({
+      type: "CATV",
+      channel: "QC26",
+      networkId: ONID,
+      transportStreamId: TLV_STREAM,
+      remoteControlKeyId: null,
+      transport: "tlv",
+      services: [
+        {
+          serviceId: SERVICE,
+          serviceType: 1,
+          name: "ＢＳでんぱ　４Ｋ",
+          caSystemIds: [0x0005],
+        },
+      ],
+    });
+    // 4K の局 (TLV) は、番組表・ライブ・録画にまだ対応していないので扱わない (B-CAS と同じ 0x0005 でも ACAS が要る)
+    expect(decodableChannel(entry)).toBe(false);
+    // TS の CATV の局なら、同じ CA_system_id で復号できる
+    expect(decodableChannel({ ...entry, transport: "ts" })).toBe(true);
+  });
+
+  test("TS のチャンネルの控えには transport を書かない", () => {
+    const entry = channelEntry("CATV", "QC30", [], undefined);
+    expect("transport" in entry).toBe(false);
+  });
+
+  test("MH-SDT が来なければ MH-SDT が無いと返す", async () => {
+    const result = await readTlvServices(
+      fromBytes(concatBytes([nit, ...plt, ...mpt]), true),
+      500,
+    );
+    expect(result.services).toBeNull();
+    expect(result.error).toBe("MH-SDT を受信できませんでした");
+  });
+
+  test("TLV-NIT が来なければ TLV-NIT が無いと返す", async () => {
+    const result = await readTlvServices(
+      // 同期を取る最初のパケットは、次のパケットの先頭が届くまで出ない (`TlvStream`)
+      fromBytes(concatBytes([...sdt, tlvPacket(0xff, [0, 0])]), true),
+      500,
+    );
+    expect(result.services).toBeNull();
+    expect(result.error).toBe("TLV-NIT を受信できませんでした");
   });
 });

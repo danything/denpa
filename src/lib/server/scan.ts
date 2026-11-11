@@ -11,7 +11,8 @@
  *
  * - 地上波は 13〜62ch を総当たり (パススルーも選ぶと C13〜C63 も)
  * - ケーブル (CATV。ISDB-C) は QC13〜QC63・QU13〜QU62・QV1〜QV12 を総当たり。TSMF で束ねた搬送波は、
- *   束ねた TS をそれぞれ選局する (`QC30:1`…。`tsmfJobs`)。局ごとの CA_system_id も数え、復号できるかを決める (`ca-observe.ts`)
+ *   束ねた TS をそれぞれ選局する (`QC30:1`…。`tsmfJobs`)。局ごとの CA_system_id も数え、復号できるかを決める (`ca-observe.ts`)。
+ *   選局の答えが TLV (分割 TLV から組み立てた 4K の放送。`tuner.openChannel` の `transport`) なら、TLV の表で局を読む (`readTlvServices`)
  * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。番組表は取得しない (`services.decodable`)。
  *   代わりに、カード無しで分かること (CA_system_id・番組表とロゴが来ているか) を数えて記録と受信の設定に出す (`ca-observe.ts`)
  * - 1 チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす。CATV は SDT だけで揃ったとみなす
@@ -24,9 +25,10 @@
  */
 
 import { type EitEvent, EpgReader } from "@danything/arib/eit";
+import { type AccessControl, TlvServiceReader } from "@danything/arib/mmt-si";
 import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
-import { type ChannelType, isSatellite } from "../types";
+import { type ChannelType, isSatellite, type Transport } from "../types";
 import { CaObserver, describe, type Observed } from "./ca-observe";
 import { config } from "./config";
 import { savePrograms, settle, sync, typeRank } from "./epg";
@@ -246,14 +248,90 @@ export async function readServices(
   );
 }
 
+/** TLV (4K の放送) を読んだ結果。局ごとの CA_system_id と ECM の packet_id も返す (MPT のアクセス制御記述子) */
+interface TlvScanResult extends ScanResult {
+  caSystemIdsOf: (serviceId: number) => number[];
+  accessOf: (serviceId: number) => AccessControl[];
+}
+
 /**
- * スキャンで分かったことを 1 件にまとめる。`caSystemIdsOf` を渡すと、局ごとの CA_system_id も入れる (CATV。`CaObserver`)
+ * 流れてくる TLV (選局の答えが `application/x-arib-tlv`) を、TLV-NIT と MH-SDT[actual] が揃うまで読む (`TlvServiceReader`)。
+ * TS の `readServices` に当たる。局が揃ってからも、PLT にある局の MPT が全部来るまで、読み始めから `OBSERVE_WAIT` までは読み続ける
+ * (局ごとの CA_system_id を MPT から読む。TS の PMT と同じ)。番組表 (MH-EIT) はまだ読まない
+ */
+export async function readTlvServices(
+  stream: ReadableStream<Uint8Array>,
+  timeout = TUNE_TIMEOUT,
+  abort?: AbortSignal,
+): Promise<TlvScanResult> {
+  const reader = new TlvServiceReader();
+  let bytes = 0;
+  const started = Date.now();
+  const tail = await readUntil(
+    stream,
+    (chunk) => {
+      bytes += chunk.byteLength;
+      return (
+        reader.feed(chunk) &&
+        (reader.mptsKnown || Date.now() - started >= OBSERVE_WAIT)
+      );
+    },
+    timeout,
+    abort,
+  );
+
+  const signal = bytes > 0;
+  const result = {
+    signal,
+    caSystemIdsOf: (serviceId: number) => reader.caSystemIdsOf(serviceId),
+    accessOf: (serviceId: number) => reader.accessOf(serviceId),
+  };
+  if (reader.complete)
+    return { ...result, services: reader.services(), error: null };
+  const detail = tail === "" ? "" : ` (${tail})`;
+  const why = !signal
+    ? "受信できませんでした"
+    : reader.network === null && reader.transport === null
+      ? "受信はできましたが、局の情報を読み取れません"
+      : `${reader.network === null ? "TLV-NIT" : "MH-SDT"} を受信できませんでした`;
+  return { ...result, services: null, error: `${why}${detail}` };
+}
+
+const hex = (value: number) =>
+  `0x${value.toString(16).toUpperCase().padStart(4, "0")}`;
+
+/**
+ * TLV のチャンネルについて、スキャンの記録の 1 行に足す説明。局ごとの CA_system_id と ECM の packet_id (MPT のアクセス制御記述子)。
+ * B-CAS と同じ `0x0005` でも B-CAS のカードでは復号できないので、TS の `describe` と違って B-CAS とは書かない
+ */
+function describeTlv(
+  services: readonly FoundService[],
+  accessOf: (serviceId: number) => AccessControl[],
+): string {
+  const found = services.flatMap((service) =>
+    accessOf(service.serviceId).map(
+      (entry) =>
+        `CA_system_id ${hex(entry.caSystemId)} ECM ${entry.location.packetId === null ? "不明" : hex(entry.location.packetId)}`,
+    ),
+  );
+  return [
+    "4K (MMT/TLV)",
+    found.length === 0
+      ? "アクセス制御記述子なし"
+      : [...new Set(found)].join("・"),
+  ].join("、");
+}
+
+/**
+ * スキャンで分かったことを 1 件にまとめる。`caSystemIdsOf` を渡すと、局ごとの CA_system_id も入れる (CATV。`CaObserver`・`TlvServiceReader`)。
+ * `transport` は TLV (4K の放送) のときだけ書く。無ければ TS
  */
 export function channelEntry(
   type: ChannelType,
   channel: string,
   services: FoundService[],
   caSystemIdsOf?: (serviceId: number) => number[],
+  transport: Transport = "ts",
 ): AgentChannel {
   const first = services[0];
   return {
@@ -262,6 +340,7 @@ export function channelEntry(
     networkId: first?.networkId ?? 0,
     transportStreamId: first?.transportStreamId ?? 0,
     remoteControlKeyId: first?.remoteControlKeyId ?? null,
+    ...(transport === "ts" ? {} : { transport }),
     services: services
       .map((service) => ({
         serviceId: service.serviceId,
@@ -603,6 +682,7 @@ class Scanner {
        */
       const closer = new AbortController();
       let stream: ReadableStream<Uint8Array>;
+      let transport: Transport = "ts";
       try {
         const opened = await openChannel(
           type,
@@ -612,6 +692,7 @@ class Scanner {
           config.priority.scan,
         );
         stream = opened.stream;
+        transport = opened.transport;
         /*
          * TSMF で束ねた搬送波なら、2 つ目からの TS も回す (`tsmfJobs`)。束ねた数は選局してから分かるので、
          * そのつど列の先頭に足して進み具合の分母も増やす。先頭に足すのは、列が尽きて止まったチューナーには渡らないため
@@ -640,6 +721,13 @@ class Scanner {
         }
         const counts = first ? { scanned: 1 } : {};
         this.onProgress({ line: `${channel}: ${error}`, ...counts });
+        continue;
+      }
+
+      // TSMF から選んだ TS が分割 TLV (4K の放送) なら、TLV の表で局を読む
+      if (transport === "tlv") {
+        await this.tlv(job, stream, closer, first);
+        if (this.aborted) return;
         continue;
       }
 
@@ -712,6 +800,47 @@ class Scanner {
         channels: 1,
       });
     }
+  }
+
+  /**
+   * TLV (4K の放送) のチャンネルを読む。局は MH-SDT[actual] から、局ごとの CA_system_id は MPT から (`readTlvServices`)。
+   * 揃わなければ CATV の TS と同じく「局なし」として入れず、回し直さない。番組表はまだ取得しない
+   */
+  private async tlv(
+    job: Job,
+    stream: ReadableStream<Uint8Array>,
+    closer: AbortController,
+    first: boolean,
+  ): Promise<void> {
+    const { type, channel } = job;
+    const result = await readTlvServices(
+      stream,
+      TUNE_TIMEOUT,
+      this.aborter.signal,
+    );
+    closer.abort();
+    if (this.aborted) return;
+    const counts = first ? { scanned: 1 } : {};
+    if (first && result.signal)
+      this.tuned.set(type, (this.tuned.get(type) ?? 0) + 1);
+    const services = result.services ?? [];
+    if (result.error !== null || services.length === 0) {
+      const why = result.error === null ? "" : ` (${result.error})`;
+      this.onProgress({
+        line: `${channel}: 局なし${why}  4K (MMT/TLV)`,
+        ...counts,
+      });
+      return;
+    }
+    this.found.set(
+      `${type}:${channel}`,
+      channelEntry(type, channel, services, result.caSystemIdsOf, "tlv"),
+    );
+    this.onProgress({
+      line: `${channel}: ${services.length} 局  ${describeTlv(services, result.accessOf)}`,
+      ...counts,
+      channels: 1,
+    });
   }
 }
 

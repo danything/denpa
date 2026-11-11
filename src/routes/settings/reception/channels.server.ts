@@ -29,7 +29,12 @@ import {
 } from "#lib/server/scan.js";
 import { programs, services } from "#lib/server/schema.js";
 import { measureSignal } from "#lib/server/signal-quality.js";
-import { type ChannelType, origin } from "#lib/types.js";
+import {
+  type ChannelType,
+  type Origin,
+  origin,
+  type Transport,
+} from "#lib/types.js";
 
 /** 物理チャンネル 1 本と、そこに入っている局 */
 interface Coverage {
@@ -41,7 +46,9 @@ interface Coverage {
    * CATV のチャンネルが再送信している元の放送 (`types.origin`。original_network_id で決める)。
    * ケーブルの自主放送と、ほかの種別は null
    */
-  origin: "GR" | "BS" | "CS" | null;
+  origin: Exclude<Origin, "CATV"> | null;
+  /** 伝送の形式 (`services.transport`)。チャンネルごとに 1 つで、同じチャンネルに TS と TLV の局は混ざらない (形式は選んだ TS で決まる)。`tlv` はケーブルで受けた 4K の局 */
+  transport: Transport;
   /** `decodable` は番組表とライブに出す局か (`services.decodable`)。復号できない局も表には並べる */
   services: {
     id: number;
@@ -83,6 +90,7 @@ function coverage(): Coverage[] {
       channel: services.channel,
       network_id: services.network_id,
       decodable: services.decodable,
+      transport: services.transport,
       programs: count(programs.id),
       until: sql`COALESCE(MAX(${programs.end_at}), 0)`.mapWith(Number),
       current: sql`CASE WHEN ${currentServices()} THEN 1 ELSE 0 END`.mapWith(
@@ -118,6 +126,7 @@ function coverage(): Coverage[] {
       channel,
       reception: "ok" as Reception,
       origin: from === "CATV" ? null : from,
+      transport: row.transport,
       services: [],
       observed: observation(type, channel),
     };

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { decodableService, guideTabs, origin, shownTypes } from "./types";
+import {
+  decodableService,
+  guideTabs,
+  origin,
+  shownTypes,
+  undecodableReason,
+} from "./types";
 
 describe("種別", () => {
   test("受信の設定に並べる種別は、CATV と SKY を受けられる機材があるときだけ足す", () => {
@@ -27,17 +33,31 @@ describe("種別", () => {
   });
 
   test("復号できないのは SKY と、B-CAS 以外の CA_system_id しか無い局", () => {
-    expect(decodableService("GR", [])).toBe(true);
-    expect(decodableService("SKY", [])).toBe(false);
+    expect(decodableService("GR", "ts", [])).toBe(true);
+    expect(decodableService("SKY", "ts", [])).toBe(false);
     // CA 記述子の無い CATV の局 (スクランブルされていない) と、B-CAS の局は復号できる
-    expect(decodableService("CATV", [])).toBe(true);
-    expect(decodableService("CATV", [0x0005])).toBe(true);
-    expect(decodableService("CATV", [0x0005, 0x000a])).toBe(true);
-    expect(decodableService("CATV", [0x000a])).toBe(false);
+    expect(decodableService("CATV", "ts", [])).toBe(true);
+    expect(decodableService("CATV", "ts", [0x0005])).toBe(true);
+    expect(decodableService("CATV", "ts", [0x0005, 0x000a])).toBe(true);
+    expect(decodableService("CATV", "ts", [0x000a])).toBe(false);
+  });
+
+  test("4K の局 (TLV) は、CA_system_id によらず扱わない (番組表・ライブ・録画にまだ対応していない)", () => {
+    // B-CAS と同じ 0x0005 でも、B-CAS のカードでは復号できない (ACAS が要る)
+    expect(decodableService("CATV", "tlv", [0x0005])).toBe(false);
+    expect(decodableService("CATV", "tlv", [0x0006])).toBe(false);
+    // スクランブルしていなくても、TS として開かない
+    expect(decodableService("CATV", "tlv", [])).toBe(false);
+    expect(undecodableReason("CATV", "tlv")).toBe(
+      "ケーブルの 4K の局は、まだ番組表・ライブ・録画に対応していないため観られません",
+    );
+    expect(undecodableReason("CATV", "ts")).toContain("B-CAS 以外");
   });
 
   test("局の元の放送を original_network_id で見分ける", () => {
     expect(origin(4)).toBe("BS");
+    // BS の 4K (高度 BS)。ケーブルで受けた BS4K の局の original_network_id
+    expect(origin(0x000b)).toBe("BS4K");
     expect(origin(6)).toBe("CS");
     expect(origin(7)).toBe("CS");
     expect(origin(0x7880)).toBe("GR");

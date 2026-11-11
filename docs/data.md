@@ -64,9 +64,18 @@ denpa は写さない。聞けなければ、その部分だけ出さない。
 同じ ID にすると番組表や録画が混ざる。network_id は 16 ビットなので、ケーブルの局は 6,553,600,000 から上に入り、
 アンテナの局の ID (6,553,565,535 まで) と重ならない。番組の ID もいちばん大きくて約 1.3 × 10^15 で、JS の整数で正しく持てる。
 `services.network_id` は局の元の放送の original_network_id (BS の再送信なら 4) のまま持つ。
+ケーブルで受けた 4K の局 (TLV) も種別は `CATV` で、局の ID の作り方は同じ。元の放送は original_network_id `0x000B` の `BS4K` (`types.origin`) で、
+BS-TBS 4K は `(0x10000 + 0x000B) * 100000 + 161` = 6,554,700,161 になり、ケーブルで受けた 2K の BS-TBS (6,554,000,161) と重ならない。
+service_id が同じでも 2K の局とは結び付けず、別の局として入れる。
 
 `services.decodable` はスクランブルを復号できる局か (`types.decodableService`)。取り込みのたびに決め直す (`epg.syncServices`)。
-SKY の局と、PMT の CA 記述子に B-CAS の CA_system_id (`0x0005`) が無い CATV の局は復号できない。
+**伝送の形式 (`services.transport`。`ts` か `tlv`) と CA_system_id で決める。**
+TS の局は、CA_system_id が無い (スクランブルしていない) か、その形式の表 (`types.DESCRAMBLABLE`) にある CA_system_id があれば復号できる。表は TS が B-CAS (`0x0005`) だけで、TLV は空 (ACAS にまだ対応していない)。
+SKY の局と、PMT の CA 記述子に B-CAS の CA_system_id が無い CATV の局は復号できない。
+**4K の局 (`tlv`) は、CA_system_id によらず復号できない局として扱う** (`types.READABLE_TRANSPORTS`)。番組表の取得・ライブ・録画が TLV をまだ読めず、
+スクランブルしていない 4K の局を通すと、TS として開いてしまうため。4K の番組表・ライブ・録画が入ったら `READABLE_TRANSPORTS` に `tlv` を足す。
+4K の局の CA_system_id は B-CAS と同じ `0x0005` でも、B-CAS のカードでは復号できない。形式を見ずに `0x0005` で決めると、復号できると取り違える。
+free_CA_mode は使わない (実機の BS4K は 0 なのに、映像と音声はスクランブルされていた)。
 復号できない局は「受信できるチャンネル」にだけ出し、番組表・ライブ・ロゴには出さない (番組表も書かない。`epg.serviceIdIndex`)。
 
 ### 番組表を写している理由
@@ -288,6 +297,12 @@ TSID で呼べば写しは出ず、詰められても名前が変わらない。
   - 局ごとに PMT の CA 記述子の CA_system_id を数えてチャンネルの控えに入れ (`caSystemIds`。CA 記述子が無ければ空)、`services.decodable` を決める。
     局が揃ってからも、PAT にある局の PMT が全部来るまで、読み始めから 10 秒までは読み続ける
   - 番組表は自分の TS のぶんだけを読む (地上波と同じ)。ロゴはまだ取得しない
+  - 選局の答えの Content-Type が `application/x-arib-tlv` なら、TSMF から選んだ TS が分割 TLV (4K の放送) で、流れてくるのは TLV のバイト列 (`tuner.openChannel` の `transport`)。
+    TLV の表で局を読む (`readTlvServices`・`@danything/arib/mmt-si` の `TlvServiceReader`)。TLV-NIT と MH-SDT[actual] が揃ったら揃ったとみなし、
+    局の元の放送は MH-SDT の original_network_id、TSID の代わりに tlv_stream_id を控えに入れる。リモコン番号は無い。
+    局ごとの CA_system_id は MPT (PLT から package を引く) のアクセス制御記述子から読み、局が揃ってからも PLT にある局の MPT が全部来るまで、読み始めから 10 秒までは読み続ける。
+    チャンネルの控えに `transport: "tlv"` を書き (無ければ TS)、取り込みで `services.transport` に入れる。番組表はまだ読まない。
+    知らない Content-Type なら、エージェントと denpa のバージョンが合っていないと記録に出して TS として読む
 - スカパー！プレミアム (`SKY`) は `H01`〜`H105` を総当たり。選べるのは SKY を受信できる種別に選んだチューナーがあるときだけ。
   見つけた局は `services` に入るが、スクランブルを復号できないので番組表・ロゴは取得せず (スキャン中に流れてきた番組表も書かない)、
   番組表とライブには出さない (`services.decodable`。[tuner-it930x.md](tuner-it930x.md#スカパープレミアムサービス光-j83b))。

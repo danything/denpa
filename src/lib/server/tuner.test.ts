@@ -13,6 +13,7 @@ import {
   recordingUse,
   retryWhileBusy,
   serviceKey,
+  streamTransport,
   tsmfStreams,
   TunerBusyError,
 } from "./tuner";
@@ -30,6 +31,9 @@ describe("局と番組の ID", () => {
     expect(cable).not.toBe(antenna);
     expect(cable).toBe((0x10000 + 4) * 100000 + 151);
     expect(programKey(4, 151, 1, "CATV")).not.toBe(programKey(4, 151, 1, "BS"));
+    // ケーブルで受けた 4K の BS-TBS 4K (0x000B) と、ケーブルで受けた 2K の BS-TBS (4) は重ならない
+    expect(serviceKey(0x000b, 161, "CATV")).toBe(6_554_700_161);
+    expect(serviceKey(4, 161, "CATV")).toBe(6_554_000_161);
     // いちばん大きい番組の ID も、JS の整数で正しく持てる
     expect(
       Number.isSafeInteger(programKey(0xffff, 0xffff, 0xffff, "CATV")),
@@ -43,6 +47,23 @@ describe("TSMF で束ねた TS の数", () => {
     expect(tsmfStreams(new Headers({ "X-Denpa-Tsmf-Streams": "x" }))).toBe(1);
     expect(tsmfStreams(new Headers({ "X-Denpa-Tsmf-Streams": "0" }))).toBe(1);
     expect(tsmfStreams(new Headers({ "X-Denpa-Tsmf-Streams": "3" }))).toBe(3);
+  });
+});
+
+describe("流れてくるバイト列の形式", () => {
+  test("application/x-arib-tlv なら TLV、video/MP2T なら TS", () => {
+    const of = (type: string) =>
+      streamTransport(new Headers({ "Content-Type": type }));
+    expect(of("application/x-arib-tlv")).toBe("tlv");
+    expect(of("Application/X-ARIB-TLV; charset=binary")).toBe("tlv");
+    expect(of("video/MP2T")).toBe("ts");
+  });
+
+  test("知らない形式と Content-Type の無い答えは、TS として読む", () => {
+    expect(streamTransport(new Headers({ "Content-Type": "text/plain" }))).toBe(
+      "ts",
+    );
+    expect(streamTransport(new Headers())).toBe("ts");
   });
 });
 

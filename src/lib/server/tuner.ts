@@ -21,7 +21,7 @@ import {
   string,
   tolerate,
 } from "../shape";
-import { type ChannelType, decodableService } from "../types";
+import { type ChannelType, decodableService, type Transport } from "../types";
 import { agentFetch } from "./agent-client";
 import { config } from "./config";
 import type { Busy } from "./conflict";
@@ -49,14 +49,19 @@ const AGENT_CHANNEL = object({
   networkId: number,
   transportStreamId: number,
   remoteControlKeyId: nullable(number),
+  /**
+   * 伝送の形式。スキャンが選局の答えの Content-Type から書く (`openChannel`)。`tlv` (4K の放送) のときだけ書き、無ければ TS。
+   * エージェントは値を解釈せず、そのまま返す
+   */
+  transport: optional(literal("ts", "tlv")),
   services: array(
     object({
       serviceId: number,
       serviceType: number,
       name: string,
       /**
-       * PMT の CA 記述子にあった CA_system_id (`ca-observe.ts`)。スキャンで PMT を読む CATV の局だけが持つ。
-       * CA 記述子が無ければ空。復号できるかはこれで決める (`types.decodableService`)
+       * PMT の CA 記述子にあった CA_system_id (`ca-observe.ts`)。TLV なら MPT のアクセス制御記述子のもの (`TlvServiceReader`)。
+       * スキャンで PMT か MPT を読む CATV の局だけが持つ。CA 記述子が無ければ空。復号できるかはこれで決める (`types.decodableService`)
        */
       caSystemIds: optional(array(number)),
     }),
@@ -70,7 +75,11 @@ export type AgentChannel = Infer<typeof AGENT_CHANNEL>;
  */
 export function decodableChannel(channel: AgentChannel): boolean {
   return channel.services.some((service) =>
-    decodableService(channel.type, service.caSystemIds ?? []),
+    decodableService(
+      channel.type,
+      channel.transport ?? "ts",
+      service.caSystemIds ?? [],
+    ),
   );
 }
 
@@ -390,6 +399,8 @@ const TSMF_STREAMS = "X-Denpa-Tsmf-Streams";
  *
  * `tsmfStreams` は、選局した搬送波に TSMF (ARIB STD-B32。1 つの搬送波に複数の TS を束ねる) で束ねてある TS の数。
  * エージェントが `X-Denpa-Tsmf-Streams` で返す。返さなければ (TSMF でない・古いエージェント) 1
+ *
+ * `transport` は流れてくるバイト列の形式 (`streamTransport`)。TSMF から選んだ TS が分割 TLV なら `tlv`
  */
 export async function openChannel(
   type: string,
@@ -399,7 +410,11 @@ export async function openChannel(
   priority = config.priority.recording,
   after: readonly StreamUse[] = [],
   pin: string | null = null,
-): Promise<{ stream: ReadableStream<Uint8Array>; tsmfStreams: number }> {
+): Promise<{
+  stream: ReadableStream<Uint8Array>;
+  tsmfStreams: number;
+  transport: Transport;
+}> {
   const query = new URLSearchParams({
     type,
     channel,
@@ -417,13 +432,38 @@ export async function openChannel(
       throw new TunerBusyError(`チューナーに空きがありません ${detail}`);
     throw new TuneError(`選局できません (${res.status}) ${detail}`);
   }
-  return { stream: res.body, tsmfStreams: tsmfStreams(res.headers) };
+  return {
+    stream: res.body,
+    tsmfStreams: tsmfStreams(res.headers),
+    transport: streamTransport(res.headers),
+  };
 }
 
 /** `X-Denpa-Tsmf-Streams` を読む。無い・読めなければ 1 (TSMF ではない) */
 export function tsmfStreams(headers: Headers): number {
   const value = Number(headers.get(TSMF_STREAMS));
   return Number.isInteger(value) && value >= 1 ? value : 1;
+}
+
+/** 選局の答えの Content-Type。TS は `video/MP2T`、TLV (4K の放送) は `application/x-arib-tlv` (docs/agent.md「通信は HTTPS」) */
+const CONTENT_TS = "video/mp2t";
+const CONTENT_TLV = "application/x-arib-tlv";
+
+/**
+ * 選局の答えの Content-Type から、流れてくるバイト列の形式を読む。**想定していない形式は TS として読む。**
+ * エージェントと denpa のバージョンがずれただけで選局を止めないため (外から来る形式のずれは警告を出して続ける)
+ */
+export function streamTransport(headers: Headers): Transport {
+  const type = (headers.get("content-type") ?? "")
+    .split(";")[0]!
+    .trim()
+    .toLowerCase();
+  if (type === CONTENT_TLV) return "tlv";
+  if (type !== CONTENT_TS)
+    console.warn(
+      `[tuner] エージェントが想定していない形式 (${type || "Content-Type なし"}) で流しています。TS として読みます。エージェントと denpa のバージョンが合っているか確かめてください`,
+    );
+  return "ts";
 }
 
 /** 空き待ちで掛け直す回数と間隔 (ms)。待つのは前のチャンネルが離れるまで */
