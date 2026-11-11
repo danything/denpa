@@ -150,7 +150,7 @@ const bcd = (value: number) =>
   ((Math.floor(value / 10) << 4) | (value % 10)) & 0xff;
 
 /** epoch ms → MJD + BCD の 5 バイト。放送の時刻は日本時間で書く */
-function mjdTime(at: number): number[] {
+export function mjdTime(at: number): number[] {
   const jst = Math.floor(at / 1000) + 9 * 3600;
   const mjd = Math.floor(jst / 86400) + 40587;
   const rest = ((jst % 86400) + 86400) % 86400;
@@ -163,7 +163,7 @@ function mjdTime(at: number): number[] {
 }
 
 /** ms → BCD 3 バイトの尺 */
-function bcdDuration(ms: number): number[] {
+export function bcdDuration(ms: number): number[] {
   const total = Math.floor(ms / 1000);
   return [
     bcd(Math.floor(total / 3600)),

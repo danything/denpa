@@ -1,6 +1,6 @@
 # @danything/arib
 
-日本のデジタル放送 (ISDB-T / ISDB-S / ISDB-C、ARIB 規格) の MPEG-TS を TypeScript で読むライブラリです。
+日本のデジタル放送 (ISDB-T / ISDB-S / ISDB-C、ARIB 規格) の MPEG-TS と、4K の放送の MMT/TLV を TypeScript で読むライブラリです。
 録画サーバ [denpa](https://github.com/danything/denpa) の中で使っているものを切り出しました。
 
 - PSI (`psi`): パケットの切り出し、セクションの組み立て、PAT / PMT / SDT / NIT。衛星はネットワークの全部の TS の NIT と、ほかの TS の SDT もそろえて読む。ケーブルは SDT だけで局をそろえる
@@ -10,7 +10,10 @@
 - 字幕は STD-B24 の字幕文を、字の置き場所まで決めた JSON にする (`b24caption`、形式は `caption-text`)
 - データ放送は DSM-CC のカルーセルからモジュールとファイルを組み立てる (`dsmcc`、`multipart`、`bml`、形式は `bml-protocol`)
 - Hybridcast の AIT を読む (`ait`)。1 つの局だけを抜き出す (`service-filter`)
+- 4K の放送 (MMT/TLV。ARIB STD-B32・B60) の土台として、TLV パケットの切り出し (`tlv`)、IP とヘッダー圧縮した IP から UDP の中身を取り出す処理 (`tlv-ip`)、MMTP のヘッダーとスクランブルの印、信号メッセージの分割と集約 (`mmtp`)
+- 4K の放送の表は、TLV-NIT・PLT・MPT・MH-SDT・MH-TOT (`mmt-si`)。番組表の MH-EIT は TS と同じ形式の番組にする (`mh-eit`)。1 つの局だけを TLV のまま抜き出す (`mmt-service-filter`)。スクランブルの復号と、映像・音声の取り出しはまだ無い
 - 試験用の TS (PSI・EIT・字幕・カルーセル・映像と音声) を組み立てる (`synth`、`synth-caption`、`synth-av`)
+- 試験用の TLV (TLV・IP・MMTP・MMT-SI) を組み立てる (`synth-mmt`)
 - ほかのモジュールが使う道具として、バイト列 (`bytes`)、言語の名前 (`language`)、文字の表 (`b24-tables`)、字幕の外字の画像をなめらかにする処理 (`drcs-smooth`)
 
 依存するパッケージはありません。
@@ -47,6 +50,19 @@ for await (const chunk of stream) {
 import { decodeAribText } from "@danything/arib/aribtext";
 
 decodeAribText(bytes); // "🈟ニュース"
+```
+
+4K の放送は TLV のバイト列を渡します。番組は TS の `EpgReader` と同じ形式 (`EitEvent`) で返ります。
+
+```ts
+import { MmtEpgReader } from "@danything/arib/mh-eit";
+
+const epg = new MmtEpgReader();
+for await (const chunk of tlv) {
+  if (epg.feed(chunk)) {
+    for (const event of epg.takeChanged()) console.log(event.name); // "🈑報道１９３０"
+  }
+}
 ```
 
 ```ts
