@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 設定の <c>device</c> の形 (<c>&lt;接頭辞&gt;&lt;筐体&gt;:&lt;受信機&gt;</c>) と、受信機 (<see cref="UserlandReceiver"/>)、
-/// 常駐の起動と見張り (<see cref="UserlandDaemon"/>)。制御ソケットでのやり取りは AsicenUdtv.cs、
+/// 常駐の起動・停止と、落ちたときの起動し直し (<see cref="UserlandDaemon"/>)。制御ソケットでのやり取りは AsicenUdtv.cs、
 /// 作りは docs/agent.md「asicen-userland の作り」。
 /// </para>
 /// </summary>
