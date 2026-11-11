@@ -12,7 +12,7 @@
 #   - ARM64 の Windows 用のインストーラを埋め込まない (denpa の Windows 版は x64 だけ。msvc/config.h とプロジェクトの参照を書き換える)
 #
 # 埋め込む WinUSB のファイル (winusbcoinstaller2.dll・WdfCoInstaller01011.dll) は Microsoft の WDK 8.0 の再配布物で、
-# 上流の CI・Zadig と同じ MSI から取り出す。取ってくるものはコミットと sha256 で確かめる。
+# 上流の CI が Zadig のビルドに使うものと同じ MSI から取り出す。取ってくるものはコミットと sha256 で確かめる。
 # $Out に置くもの: wdi-simple.exe・COPYING (GPL-3.0)・COPYING-LGPL (LGPL-3.0)・README.txt (出どころ)・
 # WDK-License.rtf と WDK-redist.txt (WDK の再配布物の許諾。MSI に入っているもの)
 # ---------------------------------------------------------------------------
