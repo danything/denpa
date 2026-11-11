@@ -15,6 +15,7 @@
 import { ascii, u16 } from "./bytes.js";
 import { parseMjdTime } from "./eit.js";
 import {
+  MESSAGE_M2_SECTION,
   MESSAGE_PA,
   messageTables,
   parseMessage,
@@ -24,7 +25,7 @@ import {
 } from "./mmtp.js";
 import { crc32, descriptors, type Service } from "./psi.js";
 import { ipv6Text, TlvIpReader } from "./tlv-ip.js";
-import { TLV_SIGNALING, TlvStream } from "./tlv.js";
+import { TLV_COMPRESSED_IP, TLV_SIGNALING, TlvStream } from "./tlv.js";
 
 export const TABLE_MPT = 0x20;
 export const TABLE_PLT = 0x80;
@@ -67,16 +68,15 @@ export function* mmtDescriptors(
   }
 }
 
-/** セクションの形式の表か (section_syntax_indicator)。立っていれば末尾に CRC32 がある */
-function hasSyntax(section: Uint8Array): boolean {
-  return section.length >= 3 && (section[1]! & 0x80) !== 0;
-}
-
-/** セクションの長さが合い、CRC32 があるなら合っているか */
-function sectionIntact(section: Uint8Array): boolean {
+/**
+ * セクションの長さが合い、`crc` なら末尾の CRC32 も合っているか。
+ * TLV-SI と M2 セクションはいつも CRC32 を持つ (MH-TOT のように section_syntax_indicator が 0 の表も)。
+ * M2 短セクションは持たない
+ */
+function sectionIntact(section: Uint8Array, crc: boolean): boolean {
   if (section.length < 3) return false;
   if (3 + (u16(section, 1) & 0x0fff) !== section.length) return false;
-  return !hasSyntax(section) || crc32(section) === 0;
+  return !crc || (section.length >= 7 && crc32(section) === 0);
 }
 
 /** TLV-SI の中身を、セクションに切り分ける。詰め物 (0xFF) から先は無い。壊れたセクションは落とす */
@@ -87,7 +87,7 @@ export function tlvSiSections(payload: Uint8Array): Uint8Array[] {
     const end = at + 3 + (u16(payload, at + 1) & 0x0fff);
     if (end > payload.length) break;
     const section = payload.subarray(at, end);
-    if (sectionIntact(section)) out.push(section);
+    if (sectionIntact(section, true)) out.push(section);
     at = end;
   }
   return out;
@@ -475,6 +475,8 @@ export class MmtTableStream {
           yield { flow: null, packetId: null, table };
         continue;
       }
+      // MMTP はヘッダー圧縮した IP で来る。圧縮していない IP (NTP) を MMTP として読まない
+      if (packet.type !== TLV_COMPRESSED_IP) continue;
       const datagram = this.ip.read(packet);
       if (datagram === null) continue;
       const mmtp = parseMmtp(datagram.payload);
@@ -484,7 +486,10 @@ export class MmtTableStream {
         if (message === null) continue;
         for (const table of messageTables(message)) {
           // PA メッセージの表 (MPT・PLT) はセクションの形式ではなく、CRC32 も無い
-          if (message.messageId !== MESSAGE_PA && !sectionIntact(table))
+          if (
+            message.messageId !== MESSAGE_PA &&
+            !sectionIntact(table, message.messageId === MESSAGE_M2_SECTION)
+          )
             continue;
           yield { flow: datagram.flow, packetId: mmtp.packetId, table };
         }

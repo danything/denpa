@@ -183,9 +183,17 @@ export function messageTables(message: SignalingMessage): Uint8Array[] {
   }
 }
 
+/**
+ * 組み立て中のメッセージの大きさの上限。PA メッセージの表は長さが 16 ビット (64 KiB まで) で、M2 セクションは 4 KiB まで。
+ * 最後の断片が来ないまま途中の断片が続いても、溜め続けない
+ */
+const PENDING_MOST = 256 * 1024;
+
 /** 組み立て中の、分割された信号メッセージ */
 interface Pending {
   parts: Uint8Array[];
+  /** 溜めたバイト数 */
+  size: number;
   /** 最後に受けた断片の packet_sequence_number */
   sequence: number;
 }
@@ -204,7 +212,7 @@ interface Pending {
  */
 export class SignalingAssembler {
   private readonly pending = new Map<string, Pending>();
-  /** 欠けて捨てた、組み立て中のメッセージの数 */
+  /** 欠けたか大きすぎて捨てた、組み立て中のメッセージの数 */
   dropped = 0;
 
   /** 信号メッセージを運ぶ MMTP のパケットを 1 つ渡す。そろったメッセージを返す */
@@ -227,12 +235,17 @@ export class SignalingAssembler {
       // 断片を持ち越すのでコピーする (中身は届いたチャンクの一部を指す。`TlvStream`)
       this.pending.set(key, {
         parts: [body.slice()],
+        size: body.length,
         sequence: packet.sequenceNumber,
       });
     } else {
       const held = this.pending.get(key);
       if (held === undefined) return [];
-      if (packet.sequenceNumber !== (held.sequence + 1) >>> 0) {
+      held.size += body.length;
+      if (
+        packet.sequenceNumber !== (held.sequence + 1) >>> 0 ||
+        held.size > PENDING_MOST
+      ) {
         this.pending.delete(key);
         this.dropped++;
         return [];

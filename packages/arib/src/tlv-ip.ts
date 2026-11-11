@@ -40,7 +40,7 @@ export interface UdpAddress {
 
 export interface UdpDatagram {
   /**
-   * 同じ宛先の並びを見分ける鍵。圧縮したものは `cid:<CID>`、圧縮していないものは宛先のアドレスとポート。
+   * 同じ宛先の並びを見分けるキー。圧縮したものは `cid:<CID>`、圧縮していないものは宛先のアドレスとポート。
    * MMTP の packet_id はこの並びの中でだけ決まっている
    */
   flow: string;

@@ -83,6 +83,21 @@ describe("SignalingAssembler", () => {
     expect(assembler.dropped).toBe(1);
   });
 
+  test("最後の断片が来ないまま途中の断片が続いたら、上限で捨てる", () => {
+    const [first, middle] = signalingPackets(0x8000, [message(3000, 1)], {
+      fragment: 1000,
+    });
+    const assembler = new SignalingAssembler();
+    let sequenceNumber = 0;
+    const packet = (bytes: Uint8Array) => ({
+      ...parseMmtp(bytes)!,
+      sequenceNumber: sequenceNumber++,
+    });
+    expect(assembler.feed("cid:1", packet(first!))).toEqual([]);
+    for (let i = 0; i < 300; i++) assembler.feed("cid:1", packet(middle!));
+    expect(assembler.dropped).toBe(1);
+  });
+
   test("集約したメッセージを、16 ビットと 32 ビットの長さで切り分ける", () => {
     const messages = [message(10, 1), message(20, 2), message(30, 3)];
     for (const aggregate of ["short", "long"] as const) {

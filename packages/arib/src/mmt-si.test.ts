@@ -13,6 +13,7 @@ import {
 } from "./mmt-si.js";
 import {
   compressedIp,
+  ipv6Udp,
   m2SectionMessage,
   mhSdtSection,
   mhTotSection,
@@ -166,6 +167,8 @@ describe("MmtTableStream", () => {
     const nit = tlvNitSection(ONID, "高度ＢＳデジタル放送", []);
     const broken = sdt.slice();
     broken[12] = broken[12]! ^ 0xff;
+    const tot = mhTotSection(Date.UTC(2026, 10, 11));
+    tot[1] = tot[1]! & 0x7f;
     const ip = (bytes: Uint8Array) => compressedIp(1, bytes);
     const data = concatBytes([
       tlvSi(nit),
@@ -179,6 +182,14 @@ describe("MmtTableStream", () => {
       ...signalingPackets(0x8004, [m2SectionMessage(broken)], {
         sequenceNumber: 9,
       }).map(ip),
+      // section_syntax_indicator が 0 の表 (MH-TOT) も、CRC が合わなければ落とす
+      ...signalingPackets(0x8003, [m2SectionMessage(tot)]).map(ip),
+      // 圧縮していない IP (NTP) は、中身が MMTP に見えても読まない
+      ipv6Udp(
+        "ff02::101",
+        123,
+        signalingPackets(0x0000, [paMessage(plt)], { sequenceNumber: 5 })[0]!,
+      ),
       tlvPacket(0xff, [0, 0]),
     ]);
     const out = [...new MmtTableStream().feed(data)].map((t) => [
