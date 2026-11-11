@@ -200,20 +200,30 @@ public class It930xDeviceTests
     }
 
     [Test]
-    public async Task 開くと_EP_0x84_の読みを出してから入力を全部開け_閉じるときは入力を閉じてから読みを止める()
+    public async Task 開くと_EP_0x84_の読みを出し_最初の受信機を開くときに入力を全部開け_閉じるときは入力を閉じてから読みを止める()
     {
         var (usb, _, _) = Fake();
         var device = Open(usb, "9-27", new FakeClock());
         List<string> log;
         lock (usb.Log) log = [.. usb.Log];
-        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。読みを出し (TS 65424 64)、そのあと入力 0〜4 を開ける (IT930x_probe の順)
+        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。電源を入れてから読みを出す (TS 65424 64)
         var configured = log.IndexOf("W DA7C=67");
         var reading = log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}");
         await Assert.That(log.IndexOf("W DA4C=00")).IsLessThan(configured);
         await Assert.That(reading).IsGreaterThan(configured);
-        await Assert.That(log.Skip(reading + 1).Take(6)).IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
-        // 電源を入れたあとに開ける
         await Assert.That(reading).IsGreaterThan(log.LastIndexOf("W D8B7=01"));
+        // 機材を開いただけでは入力を開けない (電源を入れただけで初期化していない復調器の入力が溢れたため)
+        await Assert.That(log).DoesNotContain("W DA4C=01");
+        // 最初の受信機を開いたときに、入力 0〜4 を全部開ける
+        device.Frontend(0);
+        lock (usb.Log) log = [.. usb.Log];
+        var opened = log.IndexOf("W DA4C=01");
+        await Assert.That(opened).IsGreaterThan(reading);
+        await Assert.That(log.Skip(opened).Take(6)).IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
+        // 2 つ目の受信機では開け直さない
+        device.Frontend(1);
+        lock (usb.Log) log = [.. usb.Log];
+        await Assert.That(log.Count(line => line == "W DA4C=01")).IsEqualTo(1);
         device.Release();
         It930xDevice.CloseIfIdle("9-27", TimeSpan.Zero);
         lock (usb.Log) log = [.. usb.Log];
@@ -317,6 +327,7 @@ public class It930xDeviceTests
         var device = Open(usb, "9-43", new FakeClock());
         try
         {
+            device.Frontend(0);
             int opened;
             lock (usb.Log) opened = usb.Log.LastIndexOf("W DA5A=1F");
             fail.Set();

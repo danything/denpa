@@ -82,12 +82,11 @@ public class Tc90522BoardTests
             }, CollectionOrdering.Matching);
             // I2C の速さ
             await Assert.That(Lines(usb, line => Starts(line, "W F6A7", "W F103")).TakeLast(2)).IsEquivalentTo(new[] { "W F6A7=07", "W F103=07" }, CollectionOrdering.Matching);
-            // 入力を全部閉じてから、TS 入力 1〜4 にまとめる設定と同期バイト (0x17・0x27・0x37・0x47)。入力 0 には書かない。読みを出してから、使う入力 1〜4 を開ける
+            // 入力を全部閉じてから、TS 入力 1〜4 にまとめる設定と同期バイト (0x17・0x27・0x37・0x47)。入力 0 には書かない。入力を開けるのは最初の受信機を開いたとき
             await Assert.That(Lines(usb, line => Starts(line, "W DA7", "W DA4", "W DA58", "W DA59"))).IsEquivalentTo(new[]
             {
                 "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA58=00", "W DA59=00",
                 "W DA74=01", "W DA79=17", "W DA75=01", "W DA7A=27", "W DA76=01", "W DA7B=37", "W DA77=01", "W DA7C=47",
-                "W DA4D=01", "W DA4E=01", "W DA4F=01",
             }, CollectionOrdering.Matching);
             // GPIO (仕様書 2.5): GPIOH7 = 1、GPIOH2 = 0、GPIOH11 = 0 にしてから、電源を入れる (GPIOH7 ← 0、80 ms、GPIOH2 ← 1、20 ms)
             await Assert.That(Lines(usb, line => Starts(line, "W D8B", "W D8C", "W D8D"))).IsEquivalentTo(new[]
@@ -333,8 +332,8 @@ public class Tc90522BoardTests
         var tuner = Tuner(usb, "6-4", 2, clock, W3);
         tuner.Tune(ChannelTable.Parse("T27")!);
         await Assert.That(tuner.Tuned).IsTrue();
-        // 受信機 2 は TS 入力 3 (仕様書 2.2)。ブリッジの入力は機材を開いたときに開けてあり、選局したら復調器の TS の端子を出す (仕様書 11.1)
-        await Assert.That(Lines(usb, line => Starts(line, "W DA4F", "I2C W 2 10 1D"))).IsEquivalentTo(new[] { "W DA4F=00", "W DA4F=01", "I2C W 2 10 1DA8", "I2C W 2 10 1D00" }, CollectionOrdering.Matching);
+        // 受信機 2 は TS 入力 3 (仕様書 2.2)。ブリッジの入力は受信機を開いて初期化したあとに開け、選局したら復調器の TS の端子を出す (仕様書 11.1)
+        await Assert.That(Lines(usb, line => Starts(line, "W DA4F", "I2C W 2 10 1D"))).IsEquivalentTo(new[] { "W DA4F=00", "I2C W 2 10 1DA8", "W DA4F=01", "I2C W 2 10 1D00" }, CollectionOrdering.Matching);
         await Assert.That(bus.Log).Contains($"10 R850 08={Tc90522Tests.R850Ch27}");
         var signal = tuner.Signal()!;
         await Assert.That((signal.Locked, signal.Unit)).IsEqualTo((true, TunerSignal.Db));
@@ -713,7 +712,7 @@ public class Tc90522BoardTests
             await Assert.That(Lines(usb, line => Starts(line, "W 4975", "W 4974", "W 4973", "W 4972", "W 4964", "W 4971", "W 4970", "W 496F", "W 496E", "W 4963"))).IsEquivalentTo(new[] { "W 4975=20", "W 4971=03" }, CollectionOrdering.Matching);
             await Assert.That(Lines(usb, line => Starts(line, "W DA7", "W DA4", "W DA50", "W DA58"))).IsEquivalentTo(new[]
             {
-                "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA58=00", "W DA73=01", "W DA78=47", "W DA4C=01",
+                "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA58=00", "W DA73=01", "W DA78=47",
             }, CollectionOrdering.Matching);
             // GPIOH3 = 1 (電源を切った状態)、GPIOH2 = 0。GPIOH11 (LNB) は設定も操作もしない
             await Assert.That(Lines(usb, line => Starts(line, "W D8B", "W D8C", "W D8D"))).IsEquivalentTo(new[]

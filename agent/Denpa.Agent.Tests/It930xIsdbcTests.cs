@@ -88,7 +88,7 @@ public class It930xIsdbcTests
             await Assert.That(tuner.Tuned).IsTrue();
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.CableFrequency).IsEqualTo(393_000_000u);
-            // 復調の方式は ISDB-C (仕様書 7A.3)。ブリッジの入力は機材を開いたときに開けてあり、出口はロックのあとに付ける
+            // 復調の方式は ISDB-C (仕様書 7A.3)。ブリッジの入力は受信機を開いたときに開け、出口はロックのあとに付ける
             await Assert.That(bus3.Log).Contains("65 X 17=09");
             await Assert.That(usb.Log).Contains($"W {TsEnable:X4}=01");
             // 有効な TS は相対 TS 番号 2 と 3。1 本目 (0 から数える) は 3

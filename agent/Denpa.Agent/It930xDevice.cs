@@ -487,8 +487,8 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// ブリッジの設定と電源 (MLT5 の仕様書 1.3・1.5、px4 の仕様書 2.3・2.5・13.3)。そのあと EP 0x84 を読み始め、機種が使う入力を全部開ける。
-    /// 入力は閉じるまで開けたままにし、受信機ごとには開け閉めしない (<see cref="It930xBridge.EnableTsInputs"/>)
+    /// ブリッジの設定と電源 (MLT5 の仕様書 1.3・1.5、px4 の仕様書 2.3・2.5・13.3)。そのあと EP 0x84 を読み始める。
+    /// 入力は、最初の受信機を開いたときに機種が使うものを全部開ける (<see cref="OpenInputs"/>)
     /// </summary>
     private void Setup()
     {
@@ -516,13 +516,7 @@ public sealed class It930xDevice
             {
                 throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読みを始められませんでした");
             }
-            Bridge.EnableTsInputs();
-            // 開ける前後に読みが失敗していたら、読む側のいない入力を開けたままにしない (読みのスレッドが閉じるのと前後しても、最後に閉じる)
-            if (_faulted)
-            {
-                CloseInputs();
-                throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読みが、開いている間に失敗しました");
-            }
+            if (_faulted) throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読みが、開いている間に失敗しました");
         }
         catch
         {
@@ -691,6 +685,7 @@ public sealed class It930xDevice
                     }
                     frontend = _board.Open(receiver);
                 }
+                OpenInputs();
                 if (_openReceivers.Add(receiver)) Log.Write($"[{Label}] 受信機 {receiver} を開きました ({frontend.Chips})");
                 return frontend;
             }
@@ -699,6 +694,31 @@ public sealed class It930xDevice
                 Fail(error);
                 if (_openReceivers.Count == 0) Unlink();
                 throw new IOException($"{Label} の受信機 {receiver} を初期化できません: {error.Message}", error);
+            }
+        }
+    }
+
+    /// <summary>ブリッジの入力を開けたか (<see cref="OpenInputs"/>)。<c>_gate</c> の中で読み書きする</summary>
+    private bool _inputsOpen;
+
+    /// <summary>
+    /// 機種が使う入力を全部開ける (<see cref="It930xBridge.EnableTsInputs"/>)。最初の受信機を開いたときの 1 回で、閉じるまで開けたままにし、受信機ごとには開け閉めしない
+    /// (SDK も受信を始める・止めるときは EP 0x84 の読みだけを出し入れする)。
+    /// 機材を開いただけ (Q3 のもう片方の側の電源のため、カードのため) では開けない。PX-Q3PE4 で、電源を入れただけで初期化していない TC90522 の入力が溢れ、
+    /// そのブリッジは電源を抜くまで TS を出さなくなった (2026-11-11。受信機を開いた側は、初期化のあとに入力を開けても溢れなかった)
+    /// </summary>
+    private void OpenInputs()
+    {
+        lock (_gate)
+        {
+            if (_inputsOpen || _closed) return;
+            Bridge.EnableTsInputs();
+            _inputsOpen = true;
+            // 開ける前後に読みが失敗していたら、読む側のいない入力を開けたままにしない (読みのスレッドが閉じるのと前後しても、最後に閉じる)
+            if (_faulted)
+            {
+                CloseInputs();
+                throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読みが、開いている間に失敗しました");
             }
         }
     }
@@ -715,7 +735,7 @@ public sealed class It930xDevice
             if (_closed) return;
             // 閉じるのに失敗したら、そのまま投げる。閉じきったか分からない入力を開け直さず、元の失敗を隠さない
             Bridge.DisableTsInputs();
-            Bridge.EnableTsInputs();
+            if (_inputsOpen) Bridge.EnableTsInputs();
         }
     }
 
