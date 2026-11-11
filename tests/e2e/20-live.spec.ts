@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
-import { SERVICES } from "../fake/services";
+import { BS_NO_LOGO, SERVICES } from "../fake/services";
 import {
   airing,
   captureSockets,
@@ -604,6 +604,25 @@ test.describe("ライブ視聴", () => {
       '[data-testid="live-channel"][data-current="true"]',
     );
     await expect(row).toHaveAttribute("data-service", target.serviceId);
+  });
+
+  /*
+   * **番組表の局名から、その局で開く。** 番組がまだ 1 つも無い局 (BSテレ東) も空の列で出ていて、
+   * マスが無くても見出しからライブへ行ける
+   */
+  test("番組表の局名から、その局で開く。番組の無い局も", async ({ page }) => {
+    const empty = BS_NO_LOGO;
+    await goto(page, "/guide?type=BS");
+    const head = page.getByRole("link", {
+      name: `${empty.name} をライブで観る`,
+    });
+    await expect(head).toBeVisible();
+    await head.click();
+
+    await expect(page).toHaveURL(new RegExp(`/live\\?service=${empty.id}$`));
+    await expect(
+      page.locator('[data-testid="live-channel"][data-current="true"]'),
+    ).toHaveAttribute("data-service", String(empty.id));
   });
 
   /*

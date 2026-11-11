@@ -1034,23 +1034,22 @@
             {#if headSkeleton}
               <!-- 別の種別へ移る途中。局の並びが届くまで名前は出さない (上の `switching`。形は `app.css` の `.guide-frame .skeleton-head`) -->
               <span class="skeleton-head" aria-hidden="true"></span>
-            {:else}
+            {:else if watchable.has(service.id)}
               <!--
-                        ロゴを持たない局もあるので、有るものだけ出す。場所は
-                        どちらでも空けておく。局名の始まりが列ごとにずれると、
-                        横に並べたときにどれがどの局か追いにくい
+                        押すとその局でライブを開く (詳細の「視聴」と同じ行き先)。番組がまだ無い局もここから観られる。
+                        いまライブに出ない局 (分割放送をしていない時間のサブ) は、押した先で別の局が映るのでリンクにしない
                     -->
-              <ServiceLogo
-                id={service.id}
-                has={service.has_logo}
-                style="display: block; width: 2rem; height: 1.25rem"
-                fallback=""
-              />
-              <!-- テレビに出ている番号 (`channelNumber`) -->
-              {#if channelNumber(service) !== null}
-                <span class="ch-number">{channelNumber(service)}</span>
-              {/if}
-              <span class="truncate broadcast">{service.name}</span>
+              <a
+                class="service-link"
+                href={resolve(`live?service=${service.id}`)}
+                aria-label="{service.name} をライブで観る"
+                draggable="false"
+                data-testid="guide-service-live"
+              >
+                {@render head(service)}
+              </a>
+            {:else}
+              {@render head(service)}
             {/if}
           </div>
         {/each}
@@ -1181,6 +1180,25 @@
     </div>
   {/if}
 </div>
+
+<!--
+    列の見出しの中身。ロゴを持たない局もあるので、有るものだけ出す。場所は
+    どちらでも空けておく。局名の始まりが列ごとにずれると、
+    横に並べたときにどれがどの局か追いにくい
+-->
+{#snippet head(service: (typeof columns)[number])}
+  <ServiceLogo
+    id={service.id}
+    has={service.has_logo}
+    style="display: block; width: 2rem; height: 1.25rem"
+    fallback=""
+  />
+  <!-- テレビに出ている番号 (`channelNumber`) -->
+  {#if channelNumber(service) !== null}
+    <span class="ch-number">{channelNumber(service)}</span>
+  {/if}
+  <span class="truncate broadcast">{service.name}</span>
+{/snippet}
 
 <!-- 時刻へ送るメニューの項目 (「⋯」と、狭い画面の日付のメニュー) -->
 {#snippet jumpItems()}
@@ -1619,6 +1637,28 @@
     /* 行の高さ (= 時刻の数字が止まる位置 headHeight) は 36px */
     line-height: 1.25rem;
     font-weight: var(--dp-weight);
+  }
+  /*
+     * 局名の見出しはその局のライブへのリンク。見出しの枠いっぱいを押せるようにし、字は見出しのまま。
+     * 指を乗せたら地をごく薄く (日付と同じ `--dp-hover-soft`)。焦点の線は見出しが `overflow: hidden` なので内側に引く
+     */
+  .service-link {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: inherit;
+    min-width: 0;
+    margin: calc(-1 * var(--dp-space-2));
+    padding: var(--dp-space-2);
+    border-radius: var(--dp-bar-radius);
+    color: inherit;
+    text-decoration: none;
+  }
+  .service-link:hover {
+    background: var(--dp-hover-soft);
+  }
+  .service-link:focus-visible {
+    outline-offset: -2px;
   }
   /* 番号は事実なのでバッジにしない (docs/design.md の「印の意味」)。ライブの一覧の `.channel-number` と同じ字 */
   .ch-number {
