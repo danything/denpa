@@ -477,7 +477,7 @@ internal sealed class AsicenTuner : ITuneDevice
         _name = $"asicen-{id} #{receiver}";
     }
 
-    /// <summary>読む側がいないままバッファが空かなければ、この時間で TS のストリームを畳む</summary>
+    /// <summary>読み出し側がいないままバッファが一杯のとき、この時間が経ったら TS のストリームを閉じる</summary>
     internal TimeSpan StallLimit { get; init; } = AsicenStream.DefaultStallLimit;
 
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
@@ -741,7 +741,7 @@ internal static class AsicenLnb
                 }
                 catch (UdtvError error) when (error.Code == UdtvError.Unsupported)
                 {
-                    throw new IOException($"asicend が LNB の給電を断りました ({error.Message})。asicend を給電を許可せずに起動しています。設定を保存し直すと起動し直します", error);
+                    throw new IOException($"asicend が LNB の給電を断りました ({error.Message})。asicend が給電を許可しない引数で起動しています。設定を保存し直すと、給電を許可して起動し直します", error);
                 }
                 Log.Write($"[asicend {id}] LNB の給電をオンにしました");
             }
@@ -995,7 +995,7 @@ internal sealed class AsicenStream
     }
 
     private bool Flush(PipeWriter writer) => TsBuffer.Flush(writer, () => _stopped || _draining, _stallLimit,
-        () => End($"読む側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました"),
+        () => End($"読み出し側がいないまま {_stallLimit.TotalSeconds:F0} 秒経ったので TS のストリームを閉じました"),
         () => End("TS を渡せません (読み出し側が閉じました)"));
 
     private void End(string reason)
