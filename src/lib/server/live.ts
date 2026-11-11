@@ -58,6 +58,7 @@ import {
   RUNG_AUDIO_KBPS,
   RUNG_SPECS,
 } from "#lib/rungs.js";
+import { tsPathOf } from "#lib/source.js";
 import { BroadcastClock, parseStart } from "#lib/ts/clock.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import { KeyGate } from "#lib/ts/key-gate.js";
@@ -3723,8 +3724,8 @@ function openChase(
 }
 
 /**
- * 追っかけ・録画の字幕で読む録画と、その元の TS。消した・元の TS が無いものは undefined。
- * `size` は元の TS のいまの大きさで、読めなければ 0 (まだ何も録画されていない)
+ * 追っかけ・録画の字幕で読む録画と、その元の TS (`tsPathOf`。「エンコードしない」録画は置き場の TS)。
+ * 消した・元の TS が無いものは undefined。`size` は元の TS のいまの大きさで、読めなければ 0 (まだ何も録画されていない)
  */
 function chaseSource(
   recordingId: number,
@@ -3736,9 +3737,10 @@ function chaseSource(
     .from(recordings)
     .where(eq(recordings.id, recordingId))
     .get();
-  if (rec === undefined || rec.deleted_at !== null || rec.ts_path === null)
+  const path = rec === undefined ? null : tsPathOf(rec);
+  if (rec === undefined || rec.deleted_at !== null || path === null)
     return undefined;
-  return { rec, path: rec.ts_path, size: recordingSize(rec.ts_path) ?? 0 };
+  return { rec, path, size: recordingSize(path) ?? 0 };
 }
 
 /** もう書き足されないか。録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり */

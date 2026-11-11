@@ -1,13 +1,13 @@
 import type { CardReaderState } from "./server/scramble";
 import type { TunerSignal } from "./server/tuner";
-import type { VideoLoss } from "./types";
+import { origin, type VideoLoss } from "./types";
 
 export const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 /**
  * チャンネル種別の見出し。**どれを出すか (並び) は画面ごとに決める**。
- * ここは名前だけ。5 画面が同じ表をコピーしていたのを 1 つに (CATV と SKY が並ぶのはルールの条件と、
- * 受けられる機材があるときの受信の設定だけ。`types.ts` の `shownTypes`)
+ * ここは名前だけ。5 画面が同じ表をコピーしていたのを 1 つに (SKY が並ぶのはルールの条件と、
+ * 受けられる機材があるときの受信の設定だけ。`types.ts` の `shownTypes`。CATV はそれに加えて、局があれば番組表とライブにも並ぶ)
  */
 export const SERVICE_TYPE_LABEL: Record<string, string> = {
   GR: "地上波",
@@ -20,6 +20,11 @@ export const SERVICE_TYPE_LABEL: Record<string, string> = {
 /** 種別の並びを画面の名前で (「地上波・BS・CS」)。知らない種別は符号のまま */
 export function typeNames(types: readonly string[]): string {
   return types.map((type) => SERVICE_TYPE_LABEL[type] ?? type).join("・");
+}
+
+/** 名前のあとに日本語を続けるときの形。半角で終わる名前 (BS・CS) だけ、あとに空白を入れる (「地上波の」「BS・CS の」) */
+export function beforeJapanese(name: string): string {
+  return /[!-~]$/.test(name) ? `${name} ` : name;
 }
 
 export function pad(n: number): string {
@@ -597,17 +602,21 @@ export function linkify(text: string): TextPart[] {
 }
 
 /**
- * **テレビに出ている番号。** 地上波はリモコン番号、BS/CS はサービス ID がそのまま 3 桁番号
+ * **テレビに出ている番号。** 地上波はリモコン番号、BS・CS はサービス ID がそのまま 3 桁番号
  * (BS朝日1=151)。局名だけだと、テレビで覚えている番号から探せない。
- * 地上波でリモコン番号が分からなければ null (出さない)
+ * ケーブルの局は再送信している元の放送 (`origin`) で決める。
+ * リモコン番号が分からない地上波とケーブルの自主放送は null (出さない。サービス ID はテレビの番号ではない)
  */
 export function channelNumber(service: {
   type: string;
+  network_id: number;
   remote_control_key: number | null;
   service_id: number;
 }): number | null {
+  const kind =
+    service.type === "CATV" ? origin(service.network_id) : service.type;
   return (
     service.remote_control_key ??
-    (service.type === "GR" ? null : service.service_id)
+    (kind === "GR" || kind === "CATV" ? null : service.service_id)
   );
 }
