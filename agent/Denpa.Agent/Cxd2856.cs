@@ -601,6 +601,61 @@ internal sealed class Cxd2856(CxdLink link)
         return link.Read(T, 0x10, 1)[0];
     }
 
+    /// <summary>TMCC の 13 バイト (バンク <c>60</c> の <c>32</c>〜<c>3E</c> と <c>62</c>〜<c>6E</c>。仕様書 5.8)</summary>
+    public const int TmccLength = 13;
+
+    /// <summary>
+    /// プリセット選局の設定 (仕様書 5.8)。<paramref name="tmcc"/> があればバンク <c>60</c> の <c>59</c>〜<c>5A</c> に <c>01 01</c>、<c>62</c>〜<c>6E</c> にその 13 バイトを書く。
+    /// null なら <c>59</c>〜<c>5A</c> に <c>00 00</c> を書いて外す。選局を終える書き込み (<see cref="Finish"/>) より前に呼ぶ
+    /// </summary>
+    public void Preset(byte[]? tmcc)
+    {
+        link.Write(T, 0x00, 0x60);
+        if (tmcc is null)
+        {
+            link.Write(T, 0x59, 0x00, 0x00);
+            return;
+        }
+        link.Write(T, 0x59, 0x01, 0x01);
+        link.Write(T, 0x62, tmcc);
+    }
+
+    /// <summary>
+    /// TS がロックしているときの TMCC の 13 バイト (仕様書 5.8)。値を固めて (T の <c>01</c> ← <c>01</c>) からバンク <c>60</c> の <c>32</c>〜<c>3E</c> を読み、
+    /// 読み終えたら (途中で失敗しても) <c>00</c> に戻す (仕様書 2.3)
+    /// </summary>
+    public byte[] ReadTmcc()
+    {
+        link.Write(T, 0x01, 0x01);
+        try
+        {
+            link.Write(T, 0x00, 0x60);
+            return link.Read(T, 0x32, TmccLength);
+        }
+        finally
+        {
+            link.Write(T, 0x01, 0x00);
+        }
+    }
+
+    /// <summary>
+    /// 復調器が見つけたモードとガードインターバル (バンク <c>60</c> の <c>40</c>。仕様書 5.8)。値を固めて読む。<c>--tune</c> だけが読む。
+    /// bit3:2 が 0 ならモード 1、1 ならモード 3、2 ならモード 2。bit1:0 が 0 なら 1/32、1 なら 1/16、2 なら 1/8、3 なら 1/4
+    /// </summary>
+    public byte ReadModeGuard()
+    {
+        link.Write(T, 0x01, 0x01);
+        try
+        {
+            link.Write(T, 0x00, 0x60);
+            return link.Read(T, 0x40, 1)[0];
+        }
+        finally
+        {
+            link.Write(T, 0x01, 0x00);
+        }
+    }
+
     /// <summary>ISDB-T からのスリープ (仕様書 5.7)</summary>
     public void SleepIsdbt()
     {
@@ -1091,11 +1146,13 @@ public sealed class Cxd2856Frontend
     /// <param name="demodAddress">復調器の T のアドレス (7 ビット。仕様書 1.2)</param>
     /// <param name="sleep">待つ (ms)。テストは時計を進めるだけにする</param>
     /// <param name="nowMs">いまの時刻 (ms)。ロックの待ちを測る</param>
-    public Cxd2856Frontend(ICxdBus bus, Lock busLock, byte demodAddress, Action<int> sleep, Func<long> nowMs)
+    /// <param name="presets">地上波のプリセット (仕様書 5.8) を覚える先。省けば機材と受信機をまたいで 1 つの <see cref="SharedPresets"/>。テストは受信機ごとに分ける</param>
+    public Cxd2856Frontend(ICxdBus bus, Lock busLock, byte demodAddress, Action<int> sleep, Func<long> nowMs, System.Collections.Concurrent.ConcurrentDictionary<uint, byte[]>? presets = null)
     {
         _busLock = busLock;
         _sleep = sleep;
         _nowMs = nowMs;
+        _presets = presets ?? SharedPresets;
         _link = new CxdLink(bus, demodAddress, sleep);
         _demod = new Cxd2856(_link);
         _tuner = new Cxd2858(_link);
@@ -1202,7 +1259,9 @@ public sealed class Cxd2856Frontend
     /// <summary>
     /// 地上波 (ISDB-T 6 MHz) を選局し、ロックを待つ (仕様書 5.4)。<paramref name="khz"/> は中心周波数の kHz (仕様書 5.1)。
     /// ほかの方式で動作中なら、その方式のスリープから起動し直す (仕様書 10.1)。チューナーは衛星側を止めてから地上波の周波数を書く (仕様書 10.2)。
-    /// ロックしなければ false (例外にしない。スキャンで続くため)。I2C の失敗は <see cref="IOException"/>
+    /// ロックしなければ false (例外にしない。スキャンで続くため)。I2C の失敗は <see cref="IOException"/>。
+    /// この周波数の TMCC を覚えていれば、プリセット選局にする (仕様書 5.8)。プリセットを使ってロックしなければ、プリセットを外して 1 回だけ選局し直し、覚えた値を消す。
+    /// チャンネルスキャンでも同じに扱う (覚えているのは、このプロセスで一度ロックした周波数だけ。食い違っていれば外して選局し直す)
     /// </summary>
     public bool TuneIsdbt(uint khz)
     {
@@ -1211,9 +1270,79 @@ public sealed class Cxd2856Frontend
         lock (_op)
         {
             ClearReadings();
-            Tune(State.Isdbt, () => { }, () => _tuner.TuneTerrestrial(khz));
-            _khz = khz;
-            return WaitIsdbt();
+            var preset = _presets.TryGetValue(khz, out var known) ? known : null;
+            if (TuneIsdbtOnce(khz, preset)) return true;
+            if (preset is null) return false;
+            // ほかの受信機がその間に覚え直した値は消さない
+            _presets.TryRemove(new KeyValuePair<uint, byte[]>(khz, preset));
+            _tuneLines.Add("プリセットを使った選局がロックしなかったため、プリセットを外して選局し直しました");
+            return TuneIsdbtOnce(khz, null);
+        }
+    }
+
+    /// <summary>
+    /// TS がロックしたときに読んだ TMCC の 13 バイト (仕様書 5.8)。周波数 (kHz) ごとに、機材と受信機をまたいで 1 つ。プロセスの中だけで覚える
+    /// (放送の TMCC はめったに変わらず、変わっても選局し直しで覚え直すため)
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, byte[]> SharedPresets = new();
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, byte[]> _presets;
+
+    /// <summary>最後の地上波の選局の経過 (<c>--tune</c> だけが出す。機材からは読まずに、選局の途中で書き留める)</summary>
+    private readonly List<string> _tuneLines = [];
+
+    /// <summary>
+    /// 地上波の選局を 1 回 (書き込みからロックを待つまで)。<paramref name="preset"/> は書く TMCC の 13 バイトで、null ならプリセットを外す。
+    /// チューナーの手順 8 のあとの 50 ms は待たずに選局を終え、ロックを待つ間に手順 9〜10 を書く (仕様書 5.4)
+    /// </summary>
+    private bool TuneIsdbtOnce(uint khz, byte[]? preset)
+    {
+        var entered = _nowMs();
+        long tuned = 0;
+        Tune(State.Isdbt, () => { }, () =>
+        {
+            _tuner.TuneTerrestrial(khz);
+            tuned = _nowMs();
+        }, () => _demod.Preset(preset));
+        _khz = khz;
+        _tuneLines.Add($"選局の書き込み {_nowMs() - entered} ms  プリセット {(preset is null ? "使わない" : $"使った ({Hex(preset)})")}");
+        return WaitIsdbt(khz, tuned);
+    }
+
+    private static string Hex(byte[] bytes) => string.Join(" ", bytes.Select(value => value.ToString("X2")));
+
+    /// <summary>最後の地上波の選局の経過 (プリセットを使ったか、ロックのビットが立った時刻、TMCC の 13 バイト)。<c>--tune</c> だけが出す。機材からは読まない</summary>
+    public IReadOnlyList<string> TuneLines()
+    {
+        lock (_op) return [.. _tuneLines];
+    }
+
+    /// <summary>
+    /// 最後の地上波の選局がロックしていれば、選局の経過 (<see cref="TuneLines"/>) と、復調器が見つけたモードとガードインターバル (仕様書 5.8)。
+    /// <c>--tune</c> だけが呼ぶ。モードとガードインターバルは機材から読む
+    /// </summary>
+    public IReadOnlyList<string> IsdbtNotes()
+    {
+        lock (_op)
+        {
+            if (_state != State.Isdbt || LockMs < 0) return [];
+            byte value;
+            lock (_busLock) value = _demod.ReadModeGuard();
+            var mode = ((value >> 2) & 0x03) switch
+            {
+                0 => "1",
+                1 => "3",
+                2 => "2",
+                _ => "?",
+            };
+            var guard = (value & 0x03) switch
+            {
+                0 => "1/32",
+                1 => "1/16",
+                2 => "1/8",
+                _ => "1/4",
+            };
+            return [.. _tuneLines, $"モード {mode}  ガードインターバル {guard} (60 の 40 = {value:X2})"];
         }
     }
 
@@ -1284,13 +1413,15 @@ public sealed class Cxd2856Frontend
         CableModulation = null;
         CablePer = null;
         IsdbcDetail = null;
+        _tuneLines.Clear();
     }
 
     /// <summary>
     /// 選局の書き込み (仕様書 5.4・6.3・7.4 の手順のうち、ロックを待つ前まで)。<paramref name="select"/> (ISDB-S の TS を選ぶ書き込み) →
-    /// 選局し直しか方式の起動 (ほかの方式で動作中なら、その方式のスリープを先に。仕様書 10.1) → 中継の中で <paramref name="tune"/> (チューナーの周波数) → 選局を終える 3 行 (仕様書 2.3)
+    /// 選局し直しか方式の起動 (ほかの方式で動作中なら、その方式のスリープを先に。仕様書 10.1) → 中継の中で <paramref name="tune"/> (チューナーの周波数) →
+    /// <paramref name="beforeFinish"/> (ISDB-T のプリセット。仕様書 5.8) → 選局を終える 3 行 (仕様書 2.3)
     /// </summary>
-    private void Tune(State target, Action select, Action tune)
+    private void Tune(State target, Action select, Action tune, Action? beforeFinish = null)
     {
         if (_state == State.Unknown)
         {
@@ -1323,6 +1454,7 @@ public sealed class Cxd2856Frontend
                 }
                 _state = target;
                 Relay(tune);
+                beforeFinish?.Invoke();
                 _demod.Finish();
             }
         }
@@ -1376,27 +1508,65 @@ public sealed class Cxd2856Frontend
 
     /// <summary>
     /// ISDB-T のロックを待つ (仕様書 5.6)。10 ms ごとに読み、TS のロック (bit0) でロック、信号が無いと分かれば (bit4) すぐ失敗、1.5 秒で時間切れ。
-    /// 確かめ始めてから 350 ms より早くロックしたら、350 ms になるまで待ってから返す
+    /// 確かめ始めてから 350 ms より早くロックしたら、350 ms になるまで待ってから返す。
+    /// 待つ間に、チューナーの手順 8 (<paramref name="tuned"/> の時刻) から 50 ms たったら手順 9〜10 を書く (仕様書 5.4)。ロックか失敗がそれより早ければ、50 ms まで待ってから書く。
+    /// ロックしたら TMCC を読み、<paramref name="khz"/> のプリセットとして覚える (仕様書 5.8)
     /// </summary>
-    private bool WaitIsdbt()
+    private bool WaitIsdbt(uint khz, long tuned)
     {
         LockMs = -1;
         var started = _nowMs();
+        long demodLock = -1, noSignal = -1, tunerFinished = -1;
+        bool locked;
         while (true)
         {
+            if (tunerFinished < 0 && _nowMs() - tuned >= Cxd2858.TerrestrialSettleMs) tunerFinished = FinishTuner(started);
             byte status;
             lock (_busLock) status = _demod.IsdbtStatus();
             var elapsed = _nowMs() - started;
+            if (demodLock < 0 && (status & 0x02) != 0) demodLock = elapsed;
             if ((status & 0x01) != 0)
             {
                 LockMs = elapsed;
-                if (elapsed < IsdbtSettleMs) _sleep((int)(IsdbtSettleMs - elapsed));
-                return true;
+                locked = true;
+                break;
             }
-            if ((status & 0x10) != 0) return false;
-            if (elapsed >= IsdbtLockTimeoutMs) return false;
-            _sleep(LockPollMs);
+            if ((status & 0x10) != 0) noSignal = elapsed;
+            if (noSignal >= 0 || elapsed >= IsdbtLockTimeoutMs)
+            {
+                locked = false;
+                break;
+            }
+            // 手順 9〜10 がまだなら、50 ms ちょうどに書けるよう、その前の待ちを縮める
+            _sleep(tunerFinished < 0 ? (int)Math.Clamp(Cxd2858.TerrestrialSettleMs - (_nowMs() - tuned), 1, LockPollMs) : LockPollMs);
         }
+        if (locked)
+        {
+            byte[] tmcc;
+            lock (_busLock) tmcc = _demod.ReadTmcc();
+            _presets[khz] = tmcc;
+            _tuneLines.Add($"TMCC の 13 バイト (60 の 32〜3E) {Hex(tmcc)}");
+        }
+        if (tunerFinished < 0)
+        {
+            var left = Cxd2858.TerrestrialSettleMs - (_nowMs() - tuned);
+            if (left > 0) _sleep((int)left);
+            tunerFinished = FinishTuner(started);
+        }
+        static string At(long ms) => ms < 0 ? "-" : $"{ms} ms";
+        _tuneLines.Add($"ロックを確かめ始めてから  bit1 (復調のロック) {At(demodLock)}  bit0 (TS のロック) {At(LockMs)}  bit4 (信号が無い) {At(noSignal)}"
+            + $"  チューナーの 88・87 {At(tunerFinished)}");
+        if (!locked) return false;
+        var settled = _nowMs() - started;
+        if (settled < IsdbtSettleMs) _sleep((int)(IsdbtSettleMs - settled));
+        return true;
+    }
+
+    /// <summary>地上波のチューナーの手順 9〜10 を書き (仕様書 4.3)、ロックを確かめ始めた <paramref name="started"/> からの時間 (ms) を返す</summary>
+    private long FinishTuner(long started)
+    {
+        lock (_busLock) Relay(_tuner.FinishTerrestrial);
+        return _nowMs() - started;
     }
 
     /// <summary>

@@ -14,7 +14,7 @@ public class Cxd2856Tests
         var bus = new FakeCxdBus(Demod);
         setup?.Invoke(bus[Demod]);
         var clock = new FakeClock();
-        return (new Cxd2856Frontend(bus, new Lock(), Demod, clock.Sleep, () => clock.Now), bus, clock);
+        return (new Cxd2856Frontend(bus, new Lock(), Demod, clock.Sleep, () => clock.Now, new()), bus, clock);
     }
 
     /// <summary>初期化 (仕様書 2.2 → 4.2 → 3.2)</summary>
@@ -82,15 +82,15 @@ public class Cxd2856Tests
         "T 00=00", "T 80?", "T 80=08",
         // 仕様書 5.5 (出力にする。C4 & 88 が 80 なのでマスクは 01)
         "T 00=00", "T C4?", "T 00=00", "T 81?", "T 81=00",
-        // 仕様書 4.3 (中継の中で)
+        // 仕様書 4.3 の手順 1〜8 (中継の中で。50 ms は待たない)
         "X 08=01",
         "U 01=00", "U 74=02", "U 87=C440", "U 91=1020", "U 9C=0000", "U 5E=EE021E6702B4780830", "U 67?", "U 67=00",
-        "U 68=0088000B2200171B578008FF0199002487", "U 88=00", "U 87=C0",
+        "U 68=0088000B2200171B578008FF0199002487",
         "X 08=00",
-        // 仕様書 2.3
-        "T 00=00", "T FE=01", "T C3=00",
-        // 仕様書 5.6
-        "T 00=60", "T 10?",
+        // 仕様書 5.8 (覚えていない周波数なのでプリセットを外す) と 2.3
+        "T 00=60", "T 59=0000", "T 00=00", "T FE=01", "T C3=00",
+        // 仕様書 5.6 (すぐロックする)、5.8 (TMCC を読んで覚える)、4.3 の手順 9〜10 (50 ms たってから)
+        "T 00=60", "T 10?", "T 01=01", "T 00=60", "T 32?", "T 01=00", "X 08=01", "U 88=00", "U 87=C0", "X 08=00",
     ];
 
     [Test]
@@ -102,8 +102,8 @@ public class Cxd2856Tests
         clock.Sleeps.Clear();
         await Assert.That(frontend.TuneIsdbt(It930xTuner.Khz(ChannelTable.Parse("T27")!.Frequency))).IsTrue();
         await Assert.That(bus.Log).IsEquivalentTo(FirstTuneLog);
-        // 周波数の設定のあと 50 ms (仕様書 4.3)。すぐロックしたので、確かめ始めてから 350 ms になるまで待つ (仕様書 5.6)
-        await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 50, 350 });
+        // すぐロックしたので、手順 8 から 50 ms たつまで待って手順 9〜10 を書き (仕様書 4.3)、確かめ始めてから 350 ms になるまで待つ (仕様書 5.6)
+        await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 50, 300 });
         await Assert.That(frontend.LockMs).IsEqualTo(0);
     }
 
@@ -133,9 +133,9 @@ public class Cxd2856Tests
         frontend.Init();
         clock.Sleeps.Clear();
         await Assert.That(frontend.TuneIsdbt(557143)).IsFalse();
-        // 50 ms のあと、10 ms ごとに 1.5 秒まで
-        await Assert.That(clock.Sleeps.Skip(1).All(ms => ms == Cxd2856Frontend.LockPollMs)).IsTrue();
-        await Assert.That(clock.Sleeps.Skip(1).Sum()).IsEqualTo(Cxd2856Frontend.IsdbtLockTimeoutMs);
+        // 10 ms ごとに 1.5 秒まで (手順 9〜10 は読みの間に書く)
+        await Assert.That(clock.Sleeps.All(ms => ms == Cxd2856Frontend.LockPollMs)).IsTrue();
+        await Assert.That(clock.Sleeps.Sum()).IsEqualTo(Cxd2856Frontend.IsdbtLockTimeoutMs);
         await Assert.That(frontend.LockMs).IsEqualTo(-1);
     }
 
@@ -146,7 +146,8 @@ public class Cxd2856Tests
         frontend.Init();
         clock.Sleeps.Clear();
         await Assert.That(frontend.TuneIsdbt(557143)).IsFalse();
-        await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 50, 10, 10 });
+        // 20 ms で失敗と分かり、手順 8 から 50 ms たつまで待って手順 9〜10 を書く
+        await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 10, 10, 30 });
     }
 
     [Test]
@@ -157,7 +158,7 @@ public class Cxd2856Tests
         clock.Sleeps.Clear();
         await Assert.That(frontend.TuneIsdbt(557143)).IsTrue();
         await Assert.That(frontend.LockMs).IsEqualTo(400);
-        await Assert.That(clock.Sleeps.Skip(1).All(ms => ms == Cxd2856Frontend.LockPollMs)).IsTrue();
+        await Assert.That(clock.Sleeps.All(ms => ms == Cxd2856Frontend.LockPollMs)).IsTrue();
     }
 
     [Test]
@@ -330,7 +331,7 @@ public class Cxd2856Tests
             {
                 clock.Sleep(ms);
                 Thread.Sleep(Math.Min(ms, 2));
-            }, () => clock.Now);
+            }, () => clock.Now, new());
         }).ToList();
         var tasks = frontends.Select(frontend => Task.Run(() =>
         {

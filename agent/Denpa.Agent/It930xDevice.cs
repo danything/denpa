@@ -99,6 +99,12 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
 
     public long LockMs => frontend.LockMs;
 
+    /// <summary>地上波は、選局の経過 (プリセットを使ったか、ロックのビットが立った時刻、TMCC) とモードとガードインターバル (CXD2856 の仕様書 5.8)</summary>
+    public IReadOnlyList<string> Notes() => frontend.IsdbtNotes();
+
+    /// <summary>地上波は、ロックしなかった選局の経過 (機材からは読まない)</summary>
+    public IReadOnlyList<string> Diagnose() => frontend.TuneLines();
+
     public double? SatelliteLevelDb => frontend.SatelliteLevelDb;
 
     public uint? CableFrequency { get; private set; }
@@ -1213,7 +1219,7 @@ public sealed class It930xTuner : ITuneDevice
     }
 
     /// <summary>
-    /// 選局に失敗したあとに <c>--tune</c> が出す行 (<see cref="IIt930xFrontend.Diagnose"/>)。受信機を開く前に失敗したときと、CXD2856ER の受信機は空。
+    /// 選局に失敗したあとに <c>--tune</c> が出す行 (<see cref="IIt930xFrontend.Diagnose"/>)。受信機を開く前に失敗したときは空。CXD2856ER の受信機は地上波の選局の経過だけ。
     /// 選局に失敗しても受信機は開いたままなので、チューナーと復調器を読める
     /// </summary>
     public IReadOnlyList<string> Diagnose()

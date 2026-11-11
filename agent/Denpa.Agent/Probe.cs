@@ -407,7 +407,8 @@ public static class Probe
                 error.WriteLine($"{name}: {failure.Message}");
                 results.Add(new ChannelResult(name, false, null, 0, failure.Message));
                 ShowPowerProbe(tuner, output, ref powerProbeShown);
-                // TC90522 の機種は、失敗したあとも、チューナーに書いた値と PLL の状態、ロックの判定で読む復調器のレジスタを出す (どこで止まったかを切り分けるため)
+                // TC90522 の機種は、失敗したあとも、チューナーに書いた値と PLL の状態、ロックの判定で読む復調器のレジスタを出す (どこで止まったかを切り分けるため)。
+                // CXD2856ER の地上波は、プリセットを使ったかとロックのビットが立った時刻を出す
                 if (tuner is It930xTuner diagnosed && diagnosed.Diagnose() is { Count: > 0 } lines)
                 {
                     output.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
@@ -499,7 +500,8 @@ public static class Probe
                     foreach (var line in SplitTlvLines(split)) output.WriteLine($"    {line}");
                 }
             }
-            // TC90522 の機種は、TMCC・誤り率・チューナーに書いた値も出す (実機の値を仕様書と照らすため。TC90522 の仕様書 12)
+            // TC90522 の機種は、TMCC・誤り率・チューナーに書いた値も出す (実機の値を仕様書と照らすため。TC90522 の仕様書 12)。
+            // CXD2856ER の地上波は、プリセットを使ったか、ロックのビットが立った時刻、TMCC、モードとガードインターバルを出す (CXD2856 の仕様書 5.8)
             if (tuner is It930xTuner noted)
             {
                 foreach (var note in noted.Notes()) Console.WriteLine($"    {note}");
@@ -855,6 +857,8 @@ public static class Probe
         long outPackets = 0;
         long scrambledOut = 0;
         var continuity = new ContinuityCount();
+        // ContinuityCount が数えない最初の 1 秒の、連続性の飛びと transport_error_indicator が 1 のパケット (選局を速くしたぶん誤りが増えていないかを見るため)
+        var firstSecond = new ContinuityTracker();
         // カード無しで分かること (CA_system_id・番組表が来ているか)。復号する前の TS で数える
         var observation = new TsObservation();
 
@@ -876,6 +880,7 @@ public static class Probe
                 packets++;
                 if (buffer[at] == 0x47) sync++;
                 continuity.Push(buffer.AsSpan(at, 188), DateTime.UtcNow - started);
+                if (DateTime.UtcNow - started < TimeSpan.FromSeconds(1)) firstSecond.Push(buffer.AsSpan(at, 188));
                 observation.Push(buffer.AsSpan(at, 188));
                 if (!Scrambled(buffer.AsSpan(at))) continue;
                 scrambledIn++;
@@ -901,6 +906,7 @@ public static class Probe
             $"    最初の 1 バイト {first.TotalMilliseconds:F0} ms  "
             + $"{total / 1024} KiB  {rated ?? "-"} Mbps  同期バイト {ratio:F1}%");
         if (total == 0) error.WriteLine($"    {name}: 1 バイトも来ていません");
+        output.WriteLine($"    最初の 1 秒  連続性の飛び {firstSecond.Jumps} 回  transport_error_indicator が 1 のパケット {firstSecond.Errors} 個");
         output.WriteLine($"    連続性の飛び {continuity.Jumps} 回 ({continuity.Places.Count} か所。最初の 1 秒は数えない){(continuity.Places.Count == 0 ? "" : "  " + string.Join(" ", continuity.Places.Take(20).Select(ContinuityCount.Describe)))}");
 
         foreach (var line in observation.Describe()) output.WriteLine($"    {line}");

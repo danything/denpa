@@ -91,11 +91,19 @@ internal sealed class Cxd2858(CxdLink link)
         link.Run(InitTail);
     }
 
+    /// <summary>地上波の手順 8 から手順 9〜10 を書くまでの待ち (仕様書 4.3 の 50 ms)</summary>
+    public const int TerrestrialSettleMs = 50;
+
     /// <summary>
-    /// 地上波 (ISDB-T 6 MHz) の周波数を設定する (仕様書 4.3)。<paramref name="khz"/> は中心周波数の kHz。手順 8 のあと 50 ms 待つ。
+    /// 地上波 (ISDB-T 6 MHz) の周波数を設定する (仕様書 4.3 の手順 0〜8)。<paramref name="khz"/> は中心周波数の kHz。
+    /// 手順 8 のあとの 50 ms (<see cref="TerrestrialSettleMs"/>) は待たずに返す。呼んだ側は復調器の選局を終え、ロックを待つ間に
+    /// 50 ms たったら <see cref="FinishTerrestrial"/> で手順 9〜10 を書く (仕様書 5.4)。
     /// 衛星側で動作中なら、先に衛星側を止める (手順 0。仕様書 10.2)。地上波側のままなら止めずに書く
     /// </summary>
     public void TuneTerrestrial(uint khz) => TuneTerrestrialSide("地上波の周波数", khz, TerrestrialRows);
+
+    /// <summary>地上波の手順 9〜10 (<c>88</c> ← <c>00</c>、<c>87</c> ← <c>C0</c>。仕様書 4.3)。手順 8 から 50 ms たってから、中継を開けている間に呼ぶ</summary>
+    public void FinishTerrestrial() => link.Run(TerrestrialTailRows);
 
     /// <summary>
     /// J.83B の周波数を設定する (仕様書 4.5)。<paramref name="khz"/> は中心周波数の kHz (仕様書 7.1)。並びは地上波 (仕様書 4.3) と同じで、手順 4・6・8 の値だけが違う。
@@ -167,7 +175,7 @@ internal sealed class Cxd2858(CxdLink link)
         return keepMatching ? [rows[0], SatelliteMatchingOffRow, .. rows[1..]] : rows;
     }
 
-    /// <summary>仕様書 4.3 の手順 1〜10 (周波数を埋めたもの)</summary>
+    /// <summary>仕様書 4.3 の手順 1〜8 (周波数を埋めたもの)。手順 8 のあとの 50 ms と手順 9〜10 (<see cref="TerrestrialTailRows"/>) は呼んだ側が受け持つ</summary>
     internal static CxdRow[] TerrestrialRows(uint khz) =>
     [
         CxdRow.W(U, 0x01, 0x00),
@@ -178,7 +186,12 @@ internal sealed class Cxd2858(CxdLink link)
         CxdRow.B(U, 0x5E, 0xEE, 0x02, 0x1E, 0x67, 0x02, 0xB4, 0x78, 0x08, 0x30),
         CxdRow.W(U, 0x67, 0x00, mask: 0x02),
         CxdRow.B(U, 0x68, 0x00, 0x88, 0x00, 0x0B, 0x22, 0x00, 0x17, 0x1B,
-            (byte)khz, (byte)(khz >> 8), (byte)((khz >> 16) & 0x0F), 0xFF, 0x01, 0x99, 0x00, 0x24, 0x87) with { WaitMs = 50 },
+            (byte)khz, (byte)(khz >> 8), (byte)((khz >> 16) & 0x0F), 0xFF, 0x01, 0x99, 0x00, 0x24, 0x87),
+    ];
+
+    /// <summary>仕様書 4.3 の手順 9〜10</summary>
+    internal static readonly CxdRow[] TerrestrialTailRows =
+    [
         CxdRow.W(U, 0x88, 0x00),
         CxdRow.W(U, 0x87, 0xC0),
     ];
