@@ -23,7 +23,13 @@ import {
   PAYLOAD_SIGNALING,
   SignalingAssembler,
 } from "./mmtp.js";
-import { crc32, descriptors, type Service } from "./psi.js";
+import {
+  crc32,
+  descriptors,
+  type FoundService,
+  type Service,
+  SERVICE_TYPES,
+} from "./psi.js";
 import { ipv6Text, TlvIpReader } from "./tlv-ip.js";
 import { TLV_COMPRESSED_IP, TLV_SIGNALING, TlvStream } from "./tlv.js";
 
@@ -495,5 +501,83 @@ export class MmtTableStream {
         }
       }
     }
+  }
+}
+
+/**
+ * 流れてくる TLV を読んで、局の一覧を作る。**TS の `ServiceReader` に当たる** (チャンネルスキャンで使う)。
+ *
+ * TLV-NIT[actual] と MH-SDT[actual] が両方来たら揃ったとみなす。局は MH-SDT[actual] のもので、
+ * 局の元の放送は MH-SDT の original_network_id (ケーブルで受けた BS4K なら 0x000B)、TSID の代わりに tlv_stream_id を入れる。
+ * TLV にはリモコン番号が無い (TLV-NIT に見当たらない) ので null。
+ *
+ * 局ごとの CA_system_id は、PLT から package (= service_id) の MPT を引き、そのアクセス制御記述子から読む (`caSystemIdsOf`)。
+ * free_CA_mode は使わない。実機の BS4K は 0 なのに、映像と音声はスクランブルされていた
+ */
+export class TlvServiceReader {
+  private readonly tables = new MmtTableStream();
+  private plt: Plt | null = null;
+  /** package_id (= service_id) → MPT */
+  private readonly mpts = new Map<number, Mpt>();
+
+  network: TlvNetwork | null = null;
+  transport: MhSdt | null = null;
+
+  get complete(): boolean {
+    return this.network !== null && this.transport !== null;
+  }
+
+  /** PLT が来て、そこにある package の MPT が全部 1 回は来たか。スキャンで、局ごとの CA_system_id が分かるまで少し長く読むのに使う */
+  get mptsKnown(): boolean {
+    return (
+      this.plt !== null &&
+      this.plt.packages.every((entry) => this.mpts.has(entry.packageId))
+    );
+  }
+
+  /** 任意の長さのバイト列を渡す。揃ったら true */
+  feed(chunk: Uint8Array): boolean {
+    for (const { table } of this.tables.feed(chunk)) {
+      const tableId = table[0];
+      if (tableId === TABLE_PLT) this.plt = parsePlt(table) ?? this.plt;
+      else if (tableId === TABLE_MPT) {
+        const mpt = parseMpt(table);
+        if (mpt !== null) this.mpts.set(mpt.packageId, mpt);
+      } else if (tableId === TABLE_TLV_NIT_ACTUAL && this.network === null)
+        this.network = parseTlvNit(table);
+      else if (tableId === TABLE_MH_SDT_ACTUAL && this.transport === null)
+        this.transport = parseMhSdt(table);
+    }
+    return this.complete;
+  }
+
+  /** 録るに値する局だけ (`psi.SERVICE_TYPES`)。揃うまでは空 */
+  services(): FoundService[] {
+    const transport = this.transport;
+    if (this.network === null || transport === null) return [];
+    return transport.services
+      .filter((service) => SERVICE_TYPES.has(service.serviceType))
+      .map((service) => ({
+        serviceId: service.serviceId,
+        serviceType: service.serviceType,
+        name: service.name,
+        networkId: transport.originalNetworkId,
+        transportStreamId: transport.tlvStreamId,
+        remoteControlKeyId: null,
+      }));
+  }
+
+  /** その局の MPT のアクセス制御記述子 (package 全体とアセットのもの)。MPT が来なかった局は空 */
+  accessOf(serviceId: number): AccessControl[] {
+    const mpt = this.mpts.get(serviceId);
+    if (mpt === undefined) return [];
+    return [...mpt.access, ...mpt.assets.flatMap((asset) => asset.access)];
+  }
+
+  /** その局の CA_system_id (重なりなし・小さい順)。アクセス制御記述子が無い・MPT が来なかった局は空 */
+  caSystemIdsOf(serviceId: number): number[] {
+    return [
+      ...new Set(this.accessOf(serviceId).map((entry) => entry.caSystemId)),
+    ].sort((a, b) => a - b);
   }
 }

@@ -72,23 +72,42 @@ export function shownTypes(
 export const BCAS_SYSTEM_ID = 0x0005;
 
 /**
+ * チャンネルの伝送の形式。**エージェントが選局の答えの Content-Type で返す** (`server/tuner.openChannel`)。
+ * `tlv` はケーブルの TSMF から選んだ TS が分割 TLV のときで、エージェントは TLV のバイト列 (4K の放送。MMT/TLV) を流す。
+ * スキャンがチャンネルの控え (`transport`) に書き、取り込みで局の行 (`services.transport`) に入れる
+ */
+export type Transport = "ts" | "tlv";
+
+/**
+ * エージェントが復号できる CA_system_id。伝送の形式ごと。**持ち主の方針で、ここにだけ持つ。**
+ * 4K の放送 (TLV) の CA_system_id は B-CAS と同じ `0x0005` でも、B-CAS のカードでは復号できない (ACAS が要る)。
+ * ACAS に対応したら `tlv` に足す
+ */
+export const DESCRAMBLABLE: Record<Transport, readonly number[]> = {
+  ts: [BCAS_SYSTEM_ID],
+  tlv: [],
+};
+
+/**
  * スクランブルを復号できる局か。**結果は局の行の `services.decodable` に入れて使う** (`epg.syncServices` が取り込みのたびに決める)。
  *
  * - SKY (スカパー！プレミアム) は復号できない。B-CAS ではない専用のカードが要り、そのカードにまだ対応していない
  *   (エージェントもスクランブルされたまま流す。#1578)
- * - ほかの種別は、PMT の CA 記述子に B-CAS の CA_system_id (`0x0005`) があるか、CA 記述子が無ければ復号できる。
- *   ケーブルには B-CAS 以外の方式でスクランブルする局がある。CA_system_id はスキャンで PMT を読んだ CATV の局だけが持ち
- *   (`caSystemIds`)、ほかの種別は空なので復号できる
+ * - ほかの種別は、CA_system_id が無い (スクランブルしていない) か、その伝送の形式の `DESCRAMBLABLE` にある CA_system_id があれば復号できる。
+ *   CA_system_id はスキャンで PMT (TS) か MPT (TLV) を読んだ CATV の局だけが持ち (`caSystemIds`)、ほかの種別は空なので復号できる。
+ *   ケーブルには B-CAS 以外の方式でスクランブルする局と、4K の局 (TLV。ACAS にまだ対応していない) がある
  *
  * 復号できない局は受信の設定の「受信できるチャンネル」にだけ出し、番組表・ライブ・ロゴは取得しない
  */
 export function decodableService(
   type: ChannelType,
+  transport: Transport,
   caSystemIds: readonly number[],
 ): boolean {
   return (
     type !== "SKY" &&
-    (caSystemIds.length === 0 || caSystemIds.includes(BCAS_SYSTEM_ID))
+    (caSystemIds.length === 0 ||
+      caSystemIds.some((id) => DESCRAMBLABLE[transport].includes(id)))
   );
 }
 
@@ -100,23 +119,29 @@ export function isSatellite(type: string): type is "BS" | "CS" {
   return type === "BS" || type === "CS";
 }
 
+/** 局の元の放送 (`origin`)。`CATV` はケーブルの自主放送 */
+export type Origin = "GR" | "BS" | "BS4K" | "CS" | "CATV";
+
 /**
  * 局の元の放送。**CATV の局を、再送信している元の放送で見分ける** (サブチャンネルの束ね方・同じ回のどれを録るか)。
- * original_network_id で決める。BS は 4、CS は 6・7、地上波は 0x7880〜0x7FE8 (ARIB TR-B14・TR-B15)。
+ * original_network_id で決める。BS は 4、BS の 4K (高度 BS) は 0x000B、CS は 6・7、地上波は 0x7880〜0x7FE8 (ARIB TR-B14・TR-B15)。
  * ほかはケーブルの自主放送 (`CATV`)
  */
-export function origin(networkId: number): "GR" | "BS" | "CS" | "CATV" {
+export function origin(networkId: number): Origin {
   if (networkId === 4) return "BS";
+  if (networkId === 0x000b) return "BS4K";
   if (networkId === 6 || networkId === 7) return "CS";
   if (networkId >= 0x7880 && networkId <= 0x7fe8) return "GR";
   return "CATV";
 }
 
 /** 復号できない局 (`services.decodable`) をライブで開こうとしたときの理由 */
-export function undecodableReason(type: string): string {
-  return type === "SKY"
-    ? "スカパー！プレミアムの局は、スクランブルを復号できないため観られません。スカパー！プレミアムのカードには、これから対応する予定です"
-    : "B-CAS 以外の方式でスクランブルされた局のため、復号できず観られません";
+export function undecodableReason(type: string, transport: Transport): string {
+  if (type === "SKY")
+    return "スカパー！プレミアムの局は、スクランブルを復号できないため観られません。スカパー！プレミアムのカードには、これから対応する予定です";
+  if (transport === "tlv")
+    return "4K の放送のスクランブル (ACAS) には、まだ対応していないため観られません";
+  return "B-CAS 以外の方式でスクランブルされた局のため、復号できず観られません";
 }
 
 /**

@@ -132,13 +132,16 @@
   );
   const removing = arming('[data-testid^="remove-type"]');
 
-  const hasUndecodableCatv = $derived(
+  /** 復号できない局のあるケーブルのチャンネル。TS (B-CAS 以外の方式) と TLV (4K の放送) でわけが違うので分けて言う */
+  const undecodableCatv = (transport: "ts" | "tlv") =>
     data.channels.some(
       (channel) =>
         channel.type === "CATV" &&
+        channel.transport === transport &&
         channel.services.some((service) => !service.decodable),
-    ),
-  );
+    );
+  const hasUndecodableCatv = $derived(undecodableCatv("ts"));
+  const hasUndecodable4k = $derived(undecodableCatv("tlv"));
 
   const undecodableNote = $derived(
     [
@@ -147,6 +150,9 @@
         : null,
       hasUndecodableCatv
         ? "ケーブルの局のうち「復号できません」の局は、B-CAS 以外の方式でスクランブルされているため、番組表とライブに出しません"
+        : null,
+      hasUndecodable4k
+        ? "ケーブルの 4K の局は、スクランブル (ACAS) の復号にまだ対応していないため、番組表とライブに出しません"
         : null,
     ]
       .filter((text) => text !== null)
@@ -157,6 +163,7 @@
   const ORIGIN_TEXT = {
     GR: "地上波の再送信",
     BS: "BS の再送信",
+    BS4K: "BS4K の再送信",
     CS: "CS の再送信",
   } as const;
   /*
@@ -504,7 +511,7 @@
           />
         </div>
       {/each}
-      {#if hasSky || hasUndecodableCatv}
+      {#if hasSky || hasUndecodableCatv || hasUndecodable4k}
         <!--
                     復号できない局は表にだけ並ぶ。番組表とライブに出ないわけを、表のすぐ上で言う (`services.decodable`)。
                     どの局かは、局名の後ろの「復号できません」で示す

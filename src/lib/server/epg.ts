@@ -229,8 +229,10 @@ export function syncServices(channels: AgentChannel[]): number {
             remote_control_key: channel.remoteControlKeyId,
             decodable: decodableService(
               channel.type,
+              channel.transport ?? "ts",
               service.caSystemIds ?? [],
             ),
+            transport: channel.transport ?? "ts",
             // ロゴは放送波から取得したときに立てる (logo.ts)
             has_logo: false,
             updated_at: at,
@@ -246,6 +248,7 @@ export function syncServices(channels: AgentChannel[]): number {
               channel: sql`excluded.channel`,
               remote_control_key: sql`excluded.remote_control_key`,
               decodable: sql`excluded.decodable`,
+              transport: sql`excluded.transport`,
               updated_at: sql`excluded.updated_at`,
             },
           })

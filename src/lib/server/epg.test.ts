@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 
 import { count, eq, sql } from "drizzle-orm";
 
+import type { ChannelType, Transport } from "../types";
 import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
 
 /**
@@ -1088,6 +1089,7 @@ describe("ケーブルの局", () => {
   const BS_ASAHI = 400151;
   const CABLE_ASAHI = (0x10000 + 4) * 100000 + 151;
   const CABLE_PAY = (0x10000 + 4) * 100000 + 152;
+  const CABLE_4K = (0x10000 + 0x000b) * 100000 + 161;
 
   function event(serviceId: number, eventId: number) {
     return {
@@ -1109,7 +1111,7 @@ describe("ケーブルの局", () => {
     } as Parameters<typeof savePrograms>[0][number];
   }
 
-  test("取り込みのたびに復号できるかを決め、CATV の局はアンテナの局と別の ID で入れる", async () => {
+  test("取り込みのたびに復号できるかと伝送の形式を決め、CATV の局はアンテナの局と別の ID で入れる", async () => {
     orm().delete(programs).run();
     orm().delete(services).run();
     offered = [
@@ -1143,6 +1145,23 @@ describe("ケーブルの局", () => {
           },
         ],
       },
+      // 4K の局 (TLV)。CA_system_id は B-CAS と同じ 0x0005 でも、ACAS が要るので復号できない
+      {
+        type: "CATV",
+        channel: "QC26",
+        networkId: 0x000b,
+        transportStreamId: 0xb111,
+        remoteControlKeyId: null,
+        transport: "tlv",
+        services: [
+          {
+            serviceId: 161,
+            serviceType: 1,
+            name: "ＢＳでんぱ　４Ｋ",
+            caSystemIds: [0x0005],
+          },
+        ],
+      },
       {
         type: "SKY",
         channel: "H40",
@@ -1160,15 +1179,24 @@ describe("ケーブルの局", () => {
         type: services.type,
         network_id: services.network_id,
         decodable: services.decodable,
+        transport: services.transport,
       })
       .from(services)
       .orderBy(services.id)
       .all();
+    const row = (
+      id: number,
+      type: ChannelType,
+      network_id: number,
+      decodable: boolean,
+      transport: Transport = "ts",
+    ) => ({ id, type, network_id, decodable, transport });
     expect(rows).toEqual([
-      { id: BS_ASAHI, type: "BS", network_id: 4, decodable: true },
-      { id: 1000600, type: "SKY", network_id: 10, decodable: false },
-      { id: CABLE_ASAHI, type: "CATV", network_id: 4, decodable: true },
-      { id: CABLE_PAY, type: "CATV", network_id: 4, decodable: false },
+      row(BS_ASAHI, "BS", 4, true),
+      row(1000600, "SKY", 10, false),
+      row(CABLE_ASAHI, "CATV", 4, true),
+      row(CABLE_PAY, "CATV", 4, false),
+      row(CABLE_4K, "CATV", 0x000b, false, "tlv"),
     ]);
     expect(serviceCounts()).toEqual({ BS: 1, CATV: 1 });
   });

@@ -11,7 +11,7 @@
 - データ放送は DSM-CC のカルーセルからモジュールとファイルを組み立てる (`dsmcc`、`multipart`、`bml`、形式は `bml-protocol`)
 - Hybridcast の AIT を読む (`ait`)。1 つの局だけを抜き出す (`service-filter`)
 - 4K の放送 (MMT/TLV。ARIB STD-B32・B60) の土台として、TLV パケットの切り出し (`tlv`)、IP とヘッダー圧縮した IP から UDP の中身を取り出す処理 (`tlv-ip`)、MMTP のヘッダーとスクランブルの印、信号メッセージの分割と集約 (`mmtp`)
-- 4K の放送の表は、TLV-NIT・PLT・MPT・MH-SDT・MH-TOT (`mmt-si`)。番組表の MH-EIT は TS と同じ形式の番組にする (`mh-eit`)。1 つの局だけを TLV のまま抜き出す (`mmt-service-filter`)。スクランブルの復号と、映像・音声の取り出しはまだ無い
+- 4K の放送の表は、TLV-NIT・PLT・MPT・MH-SDT・MH-TOT (`mmt-si`)。局の一覧と、局ごとの CA_system_id (MPT のアクセス制御記述子) をそろえて読む `TlvServiceReader` もここ (TS の `psi` の `ServiceReader` に当たる)。番組表の MH-EIT は TS と同じ形式の番組にする (`mh-eit`)。1 つの局だけを TLV のまま抜き出す (`mmt-service-filter`)。スクランブルの復号と、映像・音声の取り出しはまだ無い
 - 試験用の TS (PSI・EIT・字幕・カルーセル・映像と音声) を組み立てる (`synth`、`synth-caption`、`synth-av`)
 - 試験用の TLV (TLV・IP・MMTP・MMT-SI) を組み立てる (`synth-mmt`)
 - ほかのモジュールが使う道具として、バイト列 (`bytes`)、言語の名前 (`language`)、文字の表 (`b24-tables`)、字幕の外字の画像をなめらかにする処理 (`drcs-smooth`)

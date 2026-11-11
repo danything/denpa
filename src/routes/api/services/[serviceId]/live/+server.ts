@@ -29,19 +29,23 @@ import { undecodableReason } from "#lib/types.js";
  * (`live.rungCodec`)。同じ段を誰も観ていなければその場で変換する本数の枠を使い、埋まっていれば 503。
  * `?audio=only` に段を付けると、音声のビットレートだけを下げる (`viewing.liveAudioOnly`。枠は使わない)。
  * 画面の視聴者と同じチューナーの取り合いに加わり、閉じれば抜ける (live.ts の liveStream)。
- * 復号できない局 (`services.decodable`。スカパー！プレミアムと、B-CAS 以外の方式でスクランブルされたケーブルの局) は 409 で断る
+ * 復号できない局 (`services.decodable`。スカパー！プレミアムと、B-CAS 以外の方式でスクランブルされたケーブルの局と、ケーブルの 4K の局) は 409 で断る
  */
 export function GET({ params, url }) {
   const serviceId = parseId(params.serviceId);
   if (serviceId === null) error(400, "局 ID が不正です");
   // 復号できない局は選局せずに断る。流してもスクランブルされたままで映らない
   const row = orm()
-    .select({ type: services.type, decodable: services.decodable })
+    .select({
+      type: services.type,
+      transport: services.transport,
+      decodable: services.decodable,
+    })
     .from(services)
     .where(eq(services.id, serviceId))
     .get();
   if (row !== undefined && !row.decodable)
-    error(409, undecodableReason(row.type));
+    error(409, undecodableReason(row.type, row.transport));
   const asked = liveAudioOnly(url) ?? askedFormat(url, "live");
   if (asked === null) error(406, NO_FORMAT);
   const { codec, rung } = asked;

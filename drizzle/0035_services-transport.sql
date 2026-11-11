@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `transport` text DEFAULT 'ts' NOT NULL;

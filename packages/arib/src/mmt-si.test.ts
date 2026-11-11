@@ -9,6 +9,7 @@ import {
   parseMpt,
   parsePlt,
   parseTlvNit,
+  TlvServiceReader,
   tlvSiSections,
 } from "./mmt-si.js";
 import {
@@ -203,5 +204,91 @@ describe("MmtTableStream", () => {
       ["cid:1", 0xff01, 0x20],
       ["cid:1", 0x8004, 0x9f],
     ]);
+  });
+});
+
+describe("TlvServiceReader", () => {
+  const ip = (bytes: Uint8Array) => compressedIp(1, bytes);
+  const NULL = tlvPacket(0xff, [0, 0]);
+  const nit = tlvSi(
+    tlvNitSection(ONID, "高度ＢＳデジタル放送", [
+      [TLV_STREAM, ONID, [[SERVICE, 1]]],
+    ]),
+  );
+  const sdt = (
+    services: { serviceId: number; name: string; serviceType?: number }[],
+  ) =>
+    signalingPackets(0x8004, [
+      m2SectionMessage(mhSdtSection(TLV_STREAM, ONID, services)),
+    ]).map(ip);
+  const plt = (packages: [number, number][]) =>
+    signalingPackets(0x0000, [paMessage(pltTable(packages))]).map(ip);
+  const mpt = (packetId: number, caSystemId?: number) =>
+    signalingPackets(packetId, [
+      paMessage(
+        mptTable({
+          packageId: SERVICE,
+          ...(caSystemId === undefined
+            ? {}
+            : { access: { caSystemId, ecmPacketId: 0xfff1 } }),
+          assets: [{ type: "hev1", packetId: 0xf100 }],
+        }),
+      ),
+    ]).map(ip);
+
+  test("TLV-NIT と MH-SDT[actual] が揃うと、局を tlv_stream_id と original_network_id 付きで返す", () => {
+    const reader = new TlvServiceReader();
+    // MH-SDT[other] だけでは揃わない
+    const other = signalingPackets(0x8004, [
+      m2SectionMessage(
+        mhSdtSection(0xb070, ONID, [{ serviceId: 0x97, name: "ほか" }], true),
+      ),
+    ]).map(ip);
+    expect(reader.feed(concatBytes([nit, ...other]))).toBe(false);
+    expect(reader.services()).toEqual([]);
+    const actual = sdt([
+      { serviceId: SERVICE, name: "ＢＳでんぱ　４Ｋ" },
+      // データ放送の局は入れない
+      { serviceId: 0xa2, name: "データ", serviceType: 0xff },
+    ]);
+    expect(reader.feed(concatBytes(actual))).toBe(true);
+    expect(reader.services()).toEqual([
+      {
+        serviceId: SERVICE,
+        serviceType: 1,
+        name: "ＢＳでんぱ　４Ｋ",
+        networkId: ONID,
+        transportStreamId: TLV_STREAM,
+        remoteControlKeyId: null,
+      },
+    ]);
+  });
+
+  test("TLV-NIT が来なければ揃わない", () => {
+    const reader = new TlvServiceReader();
+    // 同期を取る最初のパケットは、次のパケットの先頭が届くまで出ない (`TlvStream`)
+    const actual = [...sdt([{ serviceId: SERVICE, name: "局" }]), NULL];
+    expect(reader.feed(concatBytes(actual))).toBe(false);
+    expect(reader.transport).not.toBeNull();
+    expect(reader.network).toBeNull();
+  });
+
+  test("局の CA_system_id を、PLT が指す MPT のアクセス制御記述子から読む", () => {
+    const reader = new TlvServiceReader();
+    reader.feed(concatBytes(plt([[SERVICE, 0xff01]])));
+    // PLT にある package の MPT が来るまでは分からない
+    expect(reader.mptsKnown).toBe(false);
+    expect(reader.caSystemIdsOf(SERVICE)).toEqual([]);
+    reader.feed(concatBytes(mpt(0xff01, 0x0005)));
+    expect(reader.mptsKnown).toBe(true);
+    expect(reader.caSystemIdsOf(SERVICE)).toEqual([0x0005]);
+    expect(reader.accessOf(SERVICE)[0]!.location.packetId).toBe(0xfff1);
+  });
+
+  test("アクセス制御記述子の無い MPT の局は、CA_system_id が空", () => {
+    const reader = new TlvServiceReader();
+    reader.feed(concatBytes([...plt([[SERVICE, 0xff01]]), ...mpt(0xff01)]));
+    expect(reader.mptsKnown).toBe(true);
+    expect(reader.caSystemIdsOf(SERVICE)).toEqual([]);
   });
 });
