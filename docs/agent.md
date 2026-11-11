@@ -14,7 +14,7 @@
 - **選局そのもの**: DVB はデバイスを ioctl で直接操作します
   ([下記](#net-で書き直すまで-経緯と実測))。PX-Q3U4 などは同梱の px4-userland、
   PX-S1UD は (カーネルが使っていなければ) 同梱の siano-userland に USB を扱わせます
-  ([下記](#px4-userland-の作り))。PX-W3U3 は同梱の asicen-userland に扱わせる予定です (試験的。[下記](#asicen-userland-の作り))。
+  ([下記](#px4-userland-の作り))。PX-W3U3 などは同梱の asicen-userland に扱わせます (試験的。実機では確かめていない。[下記](#asicen-userland-の作り))。
   CECH-ZD1 J と PIX-DT295 はエージェントが USB を直に持ちます ([下記](#cech-zd1-j-の作り)、[下記](#pix-dt295-の作り))
 
 持っている仕事は 3 つ。
@@ -285,7 +285,7 @@ CM 検出用のロゴはチューナーを使いません。録れたものか�
 | DVB             | `/dev/dvb/*` を開いて `DTV_ENUM_DELSYS` で受けられる方式を問い合わせる (実機の PT3 で adapter0/2 が ISDB-S、adapter1/3 が ISDB-T)。sysfs にはこれを返す項目が無い |
 | px4-userland    | `px4d --list-json` (0.1.9 以上が要る。[下記](#px4-userland-の作り))                                                                                               |
 | siano-userland  | `siano-ts --list` ([下記](#siano-userland-の作り))                                                                                                                |
-| asicen-userland | `/sys/bus/usb/devices` の USB ID を読む (試験的。配布物が無ければ挙げない。[下記](#asicen-userland-の作り))                                                       |
+| asicen-userland | `asicend --list-json` に問い合わせる (試験的。配布物が無ければ挙げない。[下記](#asicen-userland-の作り))                                                          |
 | CECH-ZD1 J      | Linux は `/sys/bus/usb/devices` の USB ID、Windows・macOS は OS に問い合わせる。並べるだけで開かない ([下記](#cech-zd1-j-の作り))                                 |
 | PIX-DT295       | CECH-ZD1 J と同じ。開くと機材に設定を書くので並べるだけ ([tuners.md](tuners.md#pixela-pix-dt295))                                                                 |
 | PX-MLT5 系      | CECH-ZD1 J と同じ。開くとファームウェアを起動して電源を入れるので並べるだけ ([下記](#it930x-の機材を直に持つ作り))                                                |
@@ -464,7 +464,7 @@ ATTACH_STREAM` (SPEC 6.3)。返す (`RELEASE`) のはデバイスを閉じると
   「使う」に戻したら起動し直します。エージェントの起動時も、使う受信機が無い筐体の px4d は起動しません。
   止めるのは、ほかのソフトに機材を渡せるようにするためです ([switch.md](switch.md#並べて動かすとき))。
   ただし、内蔵カードリーダーをいま復号に使っている間は止めません。止めると、ほかのチューナーの復号まで止まるためです。
-  カードリーダーの表でそのリーダーの「使う」も外すと止まります。asicend も同じです
+  カードリーダーの表でそのリーダーの「使う」も外すと止まります。asicend は内蔵カードリーダーを扱わないので、受信機を全部外すと止まります
 - **IT930x のファームウェアはエージェントに同梱しています。** px4d を起動する前に `Px4Firmware.Ensure` が `tuners.json` の隣に書き出し、
   SHA-256 を確かめてから `--firmware` に渡します。違えば px4d を起動せず、理由を px4-userland の受信機すべての `error` に出します
   ([tuner-px4.md](tuner-px4.md#ファームウェア))
@@ -501,31 +501,46 @@ ATTACH_STREAM` (SPEC 6.3)。返す (`RELEASE`) のはデバイスを閉じると
 
 ### asicen-userland の作り
 
-いまの様子・設定・ファームウェアは [tuners.md](tuners.md#px-w3u3-など-asicen-userlandまだ使えない)。
+いまの様子・設定・ファームウェアは [tuners.md](tuners.md#px-w3u3-など-asicen-userland試験的)。
 
-**ここに書いてあるのは、上流の 2026-10-09 のコミット (`.github/workflows/test.yml` の `ASICEN_USERLAND_REF`) に合わせた実装です。**
-上流が 2026-11-05 に出した v1.0.0-beta は、通信の形式 (UDTV 1.0) も asicend を起動する引数も違うので、この実装のままでは通信できません
-([tuners.md](tuners.md#px-w3u3-など-asicen-userlandまだ使えない))。v1.0.0-beta が見分ける PX-W3U2・PX-W3U3 V2・PX-S3U2・PX-S3U は、
-2026-10-09 のコミットの asicend が受け付けないので、USB ID の判定には足していません。足すのは、エージェントを UDTV 1.0 に対応させるときです。
+**上流のプレリリース v1.0.0-beta に固定した実装です。実機では確かめていません。** 確かめたのは、上流の模擬のデーモン (`asicend-mock`) との通信までです。
 
-- **IPC は px4d と同じ。** asicen-userland は px4-userland の portable IPC を取り込み、枠の先頭 (`ASCN`) と
-  ソケットの置き場 (`<ランタイム>/asicen-userland/<instance>/`) だけ変えています。受信機の取得と返却・
-  選局し直し・TS・内蔵カードは `Px4Tuner` / `Px4Card` をそのまま使い、違いは `Px4Wire` に閉じ込めました。
-  同梱の `asicen-ts` (1 回 1 チャンネルの CLI。チャンネルの書き方は px4-ts と同じ) は使いません
-  (px4-ts を使わないのと同じ理由)。上流の `asicend --mock` と通信するテストがあります (`AsicenTests.cs` の `AsicenMockTests`。
-  CI では上流の決めたコミットを組んで回す `agent-asicen-mock`。必須にはしない)
-- **機材は sysfs で見つけます** (`AsicenUserland.Scan`)。上流の配布物 (`bin/` の asicend・asicenctl・asicen-ts) には
-  機材を並べる道具が無く (`asicen-probe` はファームウェアの流し込みにだけ使う。`asicend --list` も実機ではまだ並べない)、asicend には
-  USB のアドレスとポートを 2 組とも渡す決まり (`--primary` が `.1`、`--sibling` が `.2`) なので、
-  `/sys/bus/usb/devices` の USB ID とアドレスを読みます。見る USB ID は上流の asicend が受け付けるもの
-  (`0b06:0005`、ファームウェア待ちの `1738:5211` / `1738:5216`) だけ。`.1` がファームウェア待ちの筐体は使いません
-  (`.2` は待ちのままでも asicend が受け付ける)。上流が一覧を返す API を出したら、そちらに問い合わせるよう変えます
-- **asicend は筐体 1 台につき 1 つ、エージェントの起動時に立ち上げます** (`AsicenDaemon`。使う受信機が無い筐体は px4d と同じく止める)。アドレスは挿し直すたびに変わるので
-  立ち上げる直前に読み直し、ready は `asicenctl list` が通ることで見ます (`status` はカードの様子も要る)。
-  受信機も `asicenctl list` で問い合わせます (形式は `px4ctl list` と同じ)
-- **カードは asicend の内蔵リーダーを、px4d と同じ IPC で読みます** (`AsicenUserland.Cards`)。上流が用意する
-  pcscd 用の `libifd-asicen.so` (recisdb で復号するための部品) は使いません。B25 は今までどおりエージェントが復号します
-  ([下記](#b25-の復号もカードリーダーも自前))
+- **asicend と UDTV 1.0 で通信します** (`AsicenUdtv.cs`)。px4d の IPC (`Px4Control`・`Px4Tuner`) とは別の実装です。
+  ソケットは `<ランタイム>/asicen-userland/v1/<筐体の名前>/` の `control.sock` (要求と応答) と `stream.sock` (TS)。
+  同梱の `asicen-ts` (1 回 1 チャンネルの CLI) は使いません (px4-ts を使わないのと同じ理由)
+- **形式の出どころは 2 つです。** ヘッダ、HELLO と ACQUIRE、LNB の給電 (LNB_POWER)、型の符号化、手順は、上流の dtv-userland-core の契約の文書
+  (`docs/external-contract-1.0.0.md`・`wire-subset.md`・`wire-records.md`・`control-client.md`) にあります。
+  **文書に無い部分 (操作の番号、選局・開始・停止・TS のレコードのバイト配置、エラーの中身) は、配布物の公式のクライアント (`asicen-ts`・`asicenctl`) と
+  模擬のデーモンの間に中継を挟み、通信を記録して起こしました。上流のソースは読んでいません。** 模擬のデーモンは配布物に入っていないので、
+  v1.0.0-beta のソースから組んだだけです。起こした形式と、欄ごとの確かさ (文書にある・記録で確かめた・推定・不明) は、
+  リポジトリの外の仕様書 (denpa-spec の `asicen-udtv/spec.md`) に書いてあります
+- **推測を機材に送らないための決まり** (`AsicenUdtv.cs` の冒頭):
+  - 意味を確かめていない欄には、公式のクライアントが送っていたバイト列をそのまま送る。値を変えて送るのは、記録で意味を確かめた欄
+    (受信機の番号・方式・周波数・TSID とスロット・時間切れ) だけ
+  - **バージョンを固定する。** HELLO の応答が asicen-userland 1.0.0 (UDTV 1.0) でなければ、その先を送らずに断る。`asicend --list-json` の
+    `producer` が asicen 1.0.0 でなければ、機材を挙げない。上流がバージョンを上げると動かなくなることがある
+  - 応答の長さや値が記録と違えば、読み進めずに失敗にする (`UdtvShapeError`。応答の先頭を理由に添える)
+- **選局のたびに、公式のクライアントと同じ並びを最初から送ります** (`AsicenTuner`)。繋ぐ → HELLO → LIST → STATUS → ACQUIRE → TUNE → START →
+  (stream.sock で) ATTACH_STREAM → TS_DATA。止めるときは STOP → STREAM_END を待つ → RELEASE → 閉じる。
+  受信機を取ったまま選局し直す並びは公式のクライアントが送らないので使わず、局を替えるたびに受信機を返して取り直します。
+  選局が失敗したときは、公式のクライアントと同じく何も送らずに接続を閉じます (受信機は asicend が返す)
+- **機材は `asicend --list-json` で見つけます** (`AsicenUserland.Enclosures`。dtv-userland-core の `docs/json-discovery.md` の形式)。
+  使うのは上流が見分ける 5 機種 (`AsicenUserland.Models`) で、状態が `ready`、USB 機能の数が機種と合う筐体だけ。
+  機材をつないだときの出力は見ていないので、読み方は文書の例から書きました。受信機が出力に無ければ、機種の表の並びを使います。
+  筐体の名前は USB のポートから作ります (USB 機能が 2 つなら内蔵ハブのポート、1 つならその機能のポート)
+- **asicend は筐体 1 台につき 1 つ、エージェントの起動時に立ち上げます** (`AsicenDaemon`。使う受信機が無い筐体は px4d と同じく止める)。
+  引数は `--device usb:<ポート>[,<ポート>] --firmware <ファイル> --runtime-dir … --instance <筐体の名前>`。
+  ready は `asicenctl list` が通ることで見て、その出力から機種と受信機を読みます
+- **ファームウェアは asicend が流し込みます。** 設定に書いてある筐体は、起動したときに流し込まれます。まだ設定に無いファームウェア待ちの機材
+  (sysfs で USB ID `1738:5211`・`1738:5216` を探す) は、asicend を 1 度起動して流し込ませ、止めてから一覧を取ります (`AsicenUserland.Boot`)。
+  ファームウェア待ちの間は機種も受信機も分からないためです
+- **LNB の給電は LNB_POWER だけで操作します** (`AsicenLnb`。`asicenctl lnb-on`・`lnb-off` と同じやり取り)。選局の要求の中身は、給電するときも変えません。
+  設定に `15v` と書いた受信機がある筐体で、機種が PX-W3U2・PX-W3U3・PX-W3U3 V2 のときだけ、asicend に `--allow-lnb-power` を渡します。
+  給電が要るチューナーが衛星を選局するときにオンにし、そのチューナーを全部閉じたらオフにします。PX-S3U・PX-S3U2 は給電せずに選局し、理由を画面に出します
+- **内蔵カードリーダーは扱いません** (`AsicenUserland.Cards` は空)。カードの操作は形式が契約の文書に無く、模擬のデーモンがカードに対応していないので、
+  通信を記録できませんでした。B25 は今までどおりエージェントが復号し、カードは USB のリーダーで読みます ([下記](#b25-の復号もカードリーダーも自前))
+- **テスト** (`AsicenTests.cs`): 記録したバイト列 (`AsicenRecorded`) のとおりに応答する偽の asicend に対する単体テストと、上流の模擬のデーモンと通信するテスト
+  (`AsicenMockTests`。CI では `agent-asicen-mock` が v1.0.0-beta のコミットを組んで回す。必須にはしない)。**模擬は実機ではありません**
 
 ### CECH-ZD1 J の作り
 
@@ -810,7 +825,7 @@ It930xProbe (--it930x-probe。ブリッジだけを試す。--it930x-cycle。開
 - **IT930x の機材を開くときは、代替設定を選び直しません** (`selectAlternate`。Linux は SET_INTERFACE を送らず、Windows と macOS も代替設定を選ぶ呼び出しをしない)。
   ファームウェアが動いているときに選び直すと、ブリッジが最初のコマンドに応答しなくなりました (PX-MLT5PE の実機。2 回目からの開き直しと、px4d が使ったあと)。Windows と macOS は同じ理由で合わせたもので、実機では確かめていません
 - **カードリーダーとして並ぶのは、挿さっている機材のぶんです** (`It930x.Cards`)。px4d はこの機種を起動しないので、同じカードが `Px4Card` と 2 つ並ぶことはありません。
-  並ぶ順は px4d の内蔵リーダーのすぐ後ろ、asicend・CECH-ZD1 J・PIX-DT295 の前です (`CardLinks.All`。px4d が持っていた頃と同じ順で選ぶ)。
+  並ぶ順は px4d の内蔵リーダーのすぐ後ろ、CECH-ZD1 J・PIX-DT295 の前です (`CardLinks.All`。px4d が持っていた頃と同じ順で選ぶ)。
   機材は最初にカードを使うときに取り、カードを閉じたら返します。受信機も使っていなければ、30 秒待ってから閉じます (上の開く順の項)
 - テストは偽の機材 (`It930xFakes.cs`) の上で、フレームの形とコマンドの順番を SDK と照らします (`It930xTests.cs`)。
   TS の経路の設定の並びと、分け方 (混ざった 5 本・境目で切れた塊・知らない同期バイト・揃っていない先頭・途中の欠け)、溢れたときの数え方は `It930xTsTests.cs` です。
@@ -832,7 +847,7 @@ Descrambler (B25.cs)   PAT → PMT → CA 記述子で ES と ECM を結び、�
    │ ECM
 IKeySource             手元のカード (LocalCard → BCas) か、別の拠点 (RemoteCard)。どちらも CardShare.cs
    │ APDU
-ICardLink              USB のリーダーを usbfs で直に (Ccid。Linux) か OS の PC/SC 越し (PcscLink。Mac・Windows) / px4d・asicend の内蔵リーダー (どちらも Px4Card) / CECH-ZD1 J・PIX-DT295 の差し込み口 (Zd1jCard・Dt295NativeCard) / IT930x の機材の内蔵リーダー (It930xCard)
+ICardLink              USB のリーダーを usbfs で直に (Ccid。Linux) か OS の PC/SC 越し (PcscLink。Mac・Windows) / px4d の内蔵リーダー (Px4Card) / CECH-ZD1 J・PIX-DT295 の差し込み口 (Zd1jCard・Dt295NativeCard) / IT930x の機材の内蔵リーダー (It930xCard)
 ```
 
 libaribb25 はスレッドセーフでなく、カードに繋ぎ直さず、配布物も OS と arch ごとだったのでやめました。

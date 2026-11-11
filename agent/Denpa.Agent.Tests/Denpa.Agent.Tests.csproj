@@ -28,6 +28,7 @@
         <Compile Include="../Denpa.Agent/Px4Firmware.cs" />
         <Compile Include="../Denpa.Agent/Siano.cs" />
         <Compile Include="../Denpa.Agent/Asicen.cs" />
+        <Compile Include="../Denpa.Agent/AsicenUdtv.cs" />
         <Compile Include="../Denpa.Agent/ChildTs.cs" />
         <Compile Include="../Denpa.Agent/Card.cs" />
         <Compile Include="../Denpa.Agent/Shell.cs" />
