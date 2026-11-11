@@ -15,6 +15,9 @@ import {
  * エージェントが C/N を読む間隔 (5 秒) と同じにして、終わるまでに 1 回は読まれるようにする
  */
 const MEASURE = 5_000;
+
+/** 速さを出すのに要る、最初のパケットからの長さ (ms)。PX-MLT8PE で同期が数ミリ秒で外れ、1561 Mbps と出た */
+const RATE_MIN = 1_000;
 /**
  * エージェントが C/N を読む間隔 (ms。agent の `TunerSignal.Every`) に、読み終わるまでの 1 秒を足したもの。
  * エージェントは選局と関係ない時刻に 5 秒ごとに読むので、選局からこれだけ待てば 1 回は読まれている
@@ -57,8 +60,10 @@ export interface SignalQuality {
   errors: number;
   /** 連続性カウンタの飛びから数えた、欠けたパケットの数 */
   drops: number;
-  /** 受け取った速さ (Mbps) */
-  mbps: number;
+  /** 受け取った速さ (Mbps)。測れた長さが 1 秒に満たなければ null (数ミリ秒で割ると、ありえない値になる) */
+  mbps: number | null;
+  /** 測り終える前に TS が止まった (同期が外れたなど)。画面を閉じたときは false */
+  stopped: boolean;
   /** 測っている間のチューナーの受信の状態と C/N。機材が測れなければ null (docs/tuners.md「信号レベル」) */
   signal: TunerSignal | null;
 }
@@ -169,7 +174,8 @@ export async function measureSignal(
       packets,
       errors,
       drops,
-      mbps: ms > 0 ? (packets * PACKET * 8) / ms / 1000 : 0,
+      mbps: ms >= RATE_MIN ? (packets * PACKET * 8) / ms / 1000 : null,
+      stopped: !measured && !signal.aborted,
       // 画面を閉じたなら、読み終わるのを待たない。測り終える前にストリームが終わったなら、チューナーはもう放しているので
       // 読む間隔 (SIGNAL_READ) を待っても値は返らない。それまでに読めた値を使う
       signal: signal.aborted ? null : measured ? await tuned : early,
