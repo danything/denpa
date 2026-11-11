@@ -19,14 +19,21 @@ public class TunerPoolTests
         private int _busy;
         private volatile bool _closed;
 
-        public FakeTuner(string path, TimeSpan tune, TimeSpan read)
+        public FakeTuner(string path, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts)
         {
             Path = path;
             _tune = tune;
+            Format = format;
             _output = new Ts(this, read);
         }
 
         public string Path { get; }
+
+        /// <summary>TLV なら、読み出しは TLV のヌルパケットを返す (<see cref="NullTlv"/>)</summary>
+        public StreamFormat Format { get; }
+
+        /// <summary>TLV のヌルパケット (長さ 96)。188 バイトの並びにならない長さにして、デスクランブラに通していないことを確かめる</summary>
+        public static readonly byte[] NullTlv = [0x7F, 0xFF, 0x00, 0x60, .. new byte[0x60]];
         public int Tunes;
         /// <summary>選局か読み出しの最中に閉じられた回数</summary>
         public int ClosedWhileBusy;
@@ -77,6 +84,11 @@ public class TunerPoolTests
                 try
                 {
                     Thread.Sleep(read);
+                    if (owner.Format == StreamFormat.Tlv)
+                    {
+                        NullTlv.CopyTo(buffer.AsSpan(offset));
+                        return NullTlv.Length;
+                    }
                     var packet = buffer.AsSpan(offset, 188);
                     packet.Clear();
                     packet[0] = 0x47;
@@ -108,11 +120,11 @@ public class TunerPoolTests
     {
         private readonly List<FakeTuner> _opened = [];
 
-        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read)
+        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts)
         {
             Pool = new TunerPool(specs, () => { }, new TuneOptions(), spec =>
             {
-                var tuner = new FakeTuner(spec.Device!, tune, read);
+                var tuner = new FakeTuner(spec.Device!, tune, read, format);
                 lock (_opened) _opened.Add(tuner);
                 return tuner;
             });
@@ -272,6 +284,54 @@ public class TunerPoolTests
             await Assert.That(tuner.Closed).IsTrue();
             await Assert.That(tuner.ClosedWhileBusy).IsEqualTo(0).Because(tuner.Path);
             await Assert.That(tuner.UsedAfterClose).IsEqualTo(0).Because(tuner.Path);
+        }
+    }
+
+    [Test]
+    public async Task TLV_はデスクランブラに通さずにそのまま配り_共有に入った利用者にも同じ形式を返す(CancellationToken cancel)
+    {
+        await Task.Yield();
+        var rig = new Rig([Spec("A", "fake:a")], TimeSpan.Zero, TimeSpan.FromMilliseconds(10), StreamFormat.Tlv);
+        try
+        {
+            var first = rig.Pool.Open("GR", "T27", 3, "rec 1");
+            var chunk = await first.Reader.ReadAsync(cancel);
+            // デスクランブラは 188 バイトのパケットに区切るので、96 バイトのまま届けば通していない
+            await Assert.That(chunk.AsSpan(0, FakeTuner.NullTlv.Length).SequenceEqual(FakeTuner.NullTlv)).IsTrue();
+            await Assert.That(chunk.Length % FakeTuner.NullTlv.Length).IsEqualTo(0);
+            await Assert.That(first.Format).IsEqualTo(StreamFormat.Tlv);
+            await Assert.That(first.ContentType).IsEqualTo("application/x-arib-tlv");
+
+            // 同じチャンネルは選局し直さずに共有する。形式は選局したときのまま
+            var second = rig.Pool.Open("GR", "T27", 3, "live 1");
+            await FirstChunk(second, cancel);
+            await Assert.That(second.ContentType).IsEqualTo("application/x-arib-tlv");
+            await Assert.That(rig.Opened("fake:a").Single().Tunes).IsEqualTo(1);
+            first.Leave();
+            second.Leave();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    [Test]
+    public async Task TS_の_Content_Type_は今までの_video_MP2T(CancellationToken cancel)
+    {
+        await Task.Yield();
+        var rig = new Rig([Spec("A", "fake:a")], TimeSpan.Zero, TimeSpan.FromMilliseconds(10));
+        try
+        {
+            var sink = rig.Pool.Open("GR", "T27", 3, "epg T27");
+            await FirstChunk(sink, cancel);
+            await Assert.That(sink.Format).IsEqualTo(StreamFormat.Ts);
+            await Assert.That(sink.ContentType).IsEqualTo("video/MP2T");
+            sink.Leave();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
         }
     }
 
