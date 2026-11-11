@@ -9,17 +9,25 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// 覚えていない周波数では、ほかの周波数で最後にロックしたときの値を代わりに渡す。同じ地域の地上波は TMCC がそろうことが多いため
-/// (東京の実機で、放送のある 7 チャンネルが全部同じ値だった)。代わりの値が合わなかった周波数には、このプロセスの間は代わりの値を渡さない。
+/// (東京の実機で、放送のある 7 チャンネルが全部同じ値だった)。どの周波数の値も覚えていなければ (入れた直後など)、既定の値 (<see cref="DefaultTmcc"/>) を渡す。
+/// 代わりの値 (ほかの周波数の値と既定の値) が合わなかった周波数には、このプロセスの間は代わりの値を渡さない。
 /// </para>
 ///
 /// <para>
 /// ファイル (<see cref="Config.TmccPresetsFile"/>) に書き、再起動をまたぐ。書くのはロックして値が新しくなったときだけで、
-/// 読めない・壊れているファイルは捨てて空から始める (選局し直しで覚え直すため)。
+/// 読めない・壊れているファイルは捨てて空から始める (選局し直しで覚え直すため)。既定の値は覚えた値ではないので書かない。
 /// </para>
 /// </summary>
 public sealed class TmccPresets
 {
     private const int Version = 1;
+
+    /// <summary>
+    /// どの周波数の値も覚えていないときに書く値。仕様書 5.8 にある <c>62</c>〜<c>6E</c> の既定の値 (Sony の資料のレジスタの既定)。
+    /// 東京の実機 (PX-MLT8PE) で、放送のある地上波 7 チャンネルのどれも、ロックして読んだ値がこれと同じだった。
+    /// 日本の地上波のふつうの組み方 (ワンセグとハイビジョン) を表していると推定している
+    /// </summary>
+    private static readonly byte[] DefaultTmcc = [0x3D, 0x25, 0x8B, 0x4B, 0x3F, 0xFF, 0x25, 0x8B, 0x4B, 0x3F, 0xFF, 0xFF, 0xFC];
 
     private readonly string? _path;
     private readonly Lock _gate = new();
@@ -62,17 +70,17 @@ public sealed class TmccPresets
     }
 
     /// <summary>
-    /// その周波数で書く値。覚えていればその値、無ければほかの周波数で最後にロックしたときの値 (<c>Fallback</c> が true)。
-    /// 代わりの値が合わなかった周波数と、どの値も無いときは null
+    /// その周波数で書く値と、その出どころ。覚えていればその値、無ければほかの周波数で最後にロックしたときの値、
+    /// どの周波数の値も無ければ既定の値。代わりの値が合わなかった周波数では null (<see cref="TmccPresetSource.None"/>)
     /// </summary>
-    public (byte[]? Tmcc, bool Fallback) For(uint khz)
+    public (byte[]? Tmcc, TmccPresetSource Source) For(uint khz)
     {
         lock (_gate)
         {
-            if (_values.TryGetValue(khz, out var own)) return (own.Tmcc, false);
-            if (_noFallback.Contains(khz)) return (null, false);
-            var latest = _values.Count == 0 ? null : _values.MaxBy(pair => pair.Value.Order).Value.Tmcc;
-            return (latest, latest is not null);
+            if (_values.TryGetValue(khz, out var own)) return (own.Tmcc, TmccPresetSource.Own);
+            if (_noFallback.Contains(khz)) return (null, TmccPresetSource.None);
+            if (_values.Count == 0) return ([.. DefaultTmcc], TmccPresetSource.Default);
+            return (_values.MaxBy(pair => pair.Value.Order).Value.Tmcc, TmccPresetSource.Other);
         }
     }
 
@@ -90,13 +98,13 @@ public sealed class TmccPresets
 
     /// <summary>
     /// <paramref name="tmcc"/> を書いた選局がロックしなかった。その周波数の値なら消す (その間にほかの受信機が覚え直した値は消さない)。
-    /// 代わりの値なら消さず (ほかの周波数の値のため)、その周波数には次から代わりの値を渡さない
+    /// 代わりの値 (ほかの周波数の値か既定の値) なら消さず、その周波数には次から代わりの値を渡さない
     /// </summary>
-    public void Failed(uint khz, byte[] tmcc, bool fallback)
+    public void Failed(uint khz, byte[] tmcc, TmccPresetSource source)
     {
         lock (_gate)
         {
-            if (fallback) _noFallback.Add(khz);
+            if (source != TmccPresetSource.Own) _noFallback.Add(khz);
             else if (_values.TryGetValue(khz, out var known) && ReferenceEquals(known.Tmcc, tmcc)) _values.Remove(khz);
         }
     }
@@ -120,4 +128,20 @@ public sealed class TmccPresets
             Log.Write($"{_path} に書けません: {error.Message}");
         }
     }
+}
+
+/// <summary><see cref="TmccPresets.For"/> が返す値の出どころ</summary>
+public enum TmccPresetSource
+{
+    /// <summary>値が無い (プリセットを外す)</summary>
+    None,
+
+    /// <summary>その周波数でロックしたときの値</summary>
+    Own,
+
+    /// <summary>ほかの周波数で最後にロックしたときの値</summary>
+    Other,
+
+    /// <summary>どの周波数の値も無いときの既定の値</summary>
+    Default,
 }
