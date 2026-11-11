@@ -137,7 +137,7 @@ export async function deleteRule(id: number): Promise<number> {
     .run();
   orm().delete(ruleTable).where(eq(ruleTable.id, id)).run();
   const dropped = await reapply();
-  // 引き取り手を探したあとも消したルールを指している行 (録り逃し・番組表から消えた放送) は、紐付けを外して「(削除済み)」にする
+  // 代わりに予約するルールを探したあとも消したルールを指している行 (録り逃し・番組表から消えた放送) は、紐付けを外して「(削除済み)」にする
   orm()
     .update(reservations)
     .set({ rule_id: null })
