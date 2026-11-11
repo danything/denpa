@@ -2,7 +2,8 @@ namespace Denpa.Agent.Tests;
 
 /*
  * CXD2856ER の地上波の選局を速くする 2 つの手順 (Cxd2856.cs)。偽のバス (Cxd2856Fakes.cs) の上で、書く順番を仕様書と照らす。
- * - プリセット選局 (仕様書 5.8): ロックしたら TMCC の 13 バイトを周波数ごとに覚え、次の選局で選局を終える前に書く。覚えていない周波数では、ほかの周波数で最後にロックした値を書く
+ * - プリセット選局 (仕様書 5.8): ロックしたら TMCC の 13 バイトを周波数ごとに覚え、次の選局で選局を終える前に書く。覚えていない周波数では、ほかの周波数で最後にロックした値を書き、
+ *   どの値も無ければ既定の値を書く
  * - 覚えた値のファイル (tmcc-presets.json。TmccPresets.cs)
  * - チューナーの手順 8 のあとの 50 ms (仕様書 4.3) を待たずに選局を終え、ロックを待つ間に手順 9〜10 を書く (仕様書 5.4)
  */
@@ -11,6 +12,9 @@ public class Cxd2856PresetTests
     private const byte Demod = 0x65;
 
     private static readonly string Tmcc = "A0A1A2A3A4A5A6A7A8A9AAABAC";
+
+    /// <summary>どの値も覚えていないときに書く既定の値 (仕様書 5.8)</summary>
+    private const string DefaultTmcc = "3D258B4B3FFF258B4B3FFFFFFC";
 
     private static (Cxd2856Frontend Frontend, FakeCxdBus Bus, FakeClock Clock, TmccPresets Presets) Make(Action<FakeCxdReceiver>? setup = null, TmccPresets? presets = null)
     {
@@ -29,23 +33,31 @@ public class Cxd2856PresetTests
 
     /// <summary>その周波数で覚えた値 (16 進)。無ければ null</summary>
     private static string? Own(TmccPresets presets, uint khz) =>
-        presets.For(khz) is ({ } tmcc, false) ? Convert.ToHexString(tmcc) : null;
+        presets.For(khz) is ({ } tmcc, TmccPresetSource.Own) ? Convert.ToHexString(tmcc) : null;
 
     private static string Temp() => Path.Combine(Directory.CreateTempSubdirectory("tmcc-presets").FullName, "tmcc-presets.json");
 
     [Test]
-    public async Task どの値も無ければプリセットを外し_ロックしたら次の選局で覚えた_13_バイトを選局を終える前に書く()
+    public async Task どの値も無ければ既定の値を書き_ロックしたら次の選局で覚えた_13_バイトを選局を終える前に書く()
     {
         const uint khz = 503143;
-        var (frontend, bus, _, presets) = Make();
+        var path = Temp();
+        var (frontend, bus, _, presets) = Make(presets: new TmccPresets(path));
+        await Assert.That(presets.For(khz).Source).IsEqualTo(TmccPresetSource.Default);
+        // 既定の値は覚えた値ではないので、ファイルに書かない
+        await Assert.That(File.Exists(path)).IsFalse();
         frontend.Init();
         bus.Log.Clear();
         await Assert.That(frontend.TuneIsdbt(khz)).IsTrue();
-        var finish = bus.Log.IndexOf("T FE=01");
-        await Assert.That(bus.Log.IndexOf("T 59=0000")).IsGreaterThan(-1);
-        await Assert.That(bus.Log.IndexOf("T 59=0000")).IsLessThan(finish);
-        await Assert.That(bus.Log.Any(line => line.StartsWith("T 62=", StringComparison.Ordinal))).IsFalse();
-        // TS がロックしたら、値を固めて TMCC を読んで覚える
+        var initial = bus.Log.IndexOf($"T 62={DefaultTmcc}");
+        await Assert.That(initial).IsGreaterThan(0);
+        await Assert.That(bus.Log[initial - 1]).IsEqualTo("T 59=0101");
+        await Assert.That(initial).IsLessThan(bus.Log.IndexOf("T FE=01"));
+        await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(1);
+        await Assert.That(frontend.TuneLines().Any(line => line.Contains("プリセット 使った (既定の値 3D 25 8B", StringComparison.Ordinal))).IsTrue();
+        // TS がロックしたら、値を固めて TMCC を読んで覚える (ファイルにあるのは読んだ値だけ)
+        await Assert.That(File.ReadAllText(path)).Contains($"\"{khz}\": \"{Tmcc}\"");
+        await Assert.That(File.ReadAllText(path)).DoesNotContain(DefaultTmcc);
         await Assert.That(Own(presets, khz)).IsEqualTo(Tmcc);
 
         bus.Log.Clear();
@@ -98,7 +110,32 @@ public class Cxd2856PresetTests
         await Assert.That(bus.Log).DoesNotContain("T 59=0101");
         await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(1);
         // ほかの周波数では、まだ代わりの値を使う
-        await Assert.That(presets.For(521143).Fallback).IsTrue();
+        await Assert.That(presets.For(521143).Source).IsEqualTo(TmccPresetSource.Other);
+    }
+
+    [Test]
+    public async Task 既定の値でロックしなければ外して選局し直し_その周波数では次から既定の値を使わない()
+    {
+        const uint khz = 515143;
+        var path = Temp();
+        // 放送の無いチャンネル。プリセットがあっても無くても「信号が無い」
+        var (frontend, bus, _, presets) = Make(demod => demod.Status = _ => 0x10, new TmccPresets(path));
+        await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
+        await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(2);
+        await Assert.That(bus.Log).Contains($"T 62={DefaultTmcc}");
+        await Assert.That(bus.Log.LastIndexOf("T 59=0000")).IsGreaterThan(bus.Log.IndexOf($"T 62={DefaultTmcc}"));
+        await Assert.That(frontend.TuneLines().Any(line => line.StartsWith("既定の値のプリセットでロックしなかったため", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(File.Exists(path)).IsFalse();
+
+        bus.Log.Clear();
+        await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
+        await Assert.That(bus.Log).DoesNotContain("T 59=0101");
+        await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(1);
+        // ほかの周波数では、まだ既定の値を使う
+        await Assert.That(presets.For(521143).Source).IsEqualTo(TmccPresetSource.Default);
+        // ほかの周波数でロックしても、この周波数ではその値も使わない
+        presets.Locked(503143, Convert.FromHexString(Tmcc));
+        await Assert.That(presets.For(khz).Tmcc).IsNull();
     }
 
     [Test]
@@ -161,9 +198,9 @@ public class Cxd2856PresetTests
         var path = Temp();
         File.WriteAllText(path, body);
         var (frontend, bus, _, presets) = Make(presets: new TmccPresets(path));
-        await Assert.That(presets.For(503143).Tmcc).IsNull();
+        await Assert.That(presets.For(503143).Source).IsEqualTo(TmccPresetSource.Default);
         await Assert.That(frontend.TuneIsdbt(503143)).IsTrue();
-        await Assert.That(bus.Log).DoesNotContain("T 59=0101");
+        await Assert.That(bus.Log).Contains($"T 62={DefaultTmcc}");
         // ロックしたら書き直す
         await Assert.That(Own(new TmccPresets(path), 503143)).IsEqualTo(Tmcc);
     }
@@ -198,8 +235,12 @@ public class Cxd2856PresetTests
         presets.Locked(khz, Convert.FromHexString(Tmcc));
         await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
         await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(2);
-        await Assert.That(presets.For(khz).Tmcc).IsNull();
-        // 次の選局はプリセットを使わず、選局し直しもしない
+        // 覚えた値が無くなったので、次の選局は代わりの値 (ここでは既定の値) を使う
+        await Assert.That(presets.For(khz).Source).IsEqualTo(TmccPresetSource.Default);
+        bus.Log.Clear();
+        await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
+        await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(2);
+        // それも合わなかったので、その次はプリセットを使わず、選局し直しもしない
         bus.Log.Clear();
         await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
         await Assert.That(bus.Log).Contains("T 59=0000");

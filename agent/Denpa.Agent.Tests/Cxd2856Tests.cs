@@ -9,12 +9,24 @@ public class Cxd2856Tests
 {
     private const byte Demod = 0x65;
 
-    private static (Cxd2856Frontend Frontend, FakeCxdBus Bus, FakeClock Clock) Make(Action<FakeCxdReceiver>? setup = null)
+    private static (Cxd2856Frontend Frontend, FakeCxdBus Bus, FakeClock Clock) Make(Action<FakeCxdReceiver>? setup = null, TmccPresets? presets = null)
     {
         var bus = new FakeCxdBus(Demod);
         setup?.Invoke(bus[Demod]);
         var clock = new FakeClock();
-        return (new Cxd2856Frontend(bus, new Lock(), Demod, clock.Sleep, () => clock.Now, new(null)), bus, clock);
+        return (new Cxd2856Frontend(bus, new Lock(), Demod, clock.Sleep, () => clock.Now, presets ?? new(null)), bus, clock);
+    }
+
+    /// <summary>
+    /// <paramref name="khz"/> でプリセットを使わない (既定の値が合わなかった周波数にする)。ロックを待つ 1 回の選局だけを確かめるため
+    /// (既定の値でロックしないと、外して選局し直す。Cxd2856PresetTests.cs)
+    /// </summary>
+    private static TmccPresets WithoutPreset(uint khz)
+    {
+        var presets = new TmccPresets(null);
+        var (tmcc, source) = presets.For(khz);
+        presets.Failed(khz, tmcc!, source);
+        return presets;
     }
 
     /// <summary>初期化 (仕様書 2.2 → 4.2 → 3.2)</summary>
@@ -87,8 +99,8 @@ public class Cxd2856Tests
         "U 01=00", "U 74=02", "U 87=C440", "U 91=1020", "U 9C=0000", "U 5E=EE021E6702B4780830", "U 67?", "U 67=00",
         "U 68=0088000B2200171B578008FF0199002487",
         "X 08=00",
-        // 仕様書 5.8 (覚えていない周波数なのでプリセットを外す) と 2.3
-        "T 00=60", "T 59=0000", "T 00=00", "T FE=01", "T C3=00",
+        // 仕様書 5.8 (どの周波数の値も覚えていないので既定の値を書く) と 2.3
+        "T 00=60", "T 59=0101", "T 62=3D258B4B3FFF258B4B3FFFFFFC", "T 00=00", "T FE=01", "T C3=00",
         // 仕様書 5.6 (すぐロックする)、5.8 (TMCC を読んで覚える)、4.3 の手順 9〜10 (50 ms たってから)
         "T 00=60", "T 10?", "T 01=01", "T 00=60", "T 32?", "T 01=00", "X 08=01", "U 88=00", "U 87=C0", "X 08=00",
     ];
@@ -129,7 +141,7 @@ public class Cxd2856Tests
     [Test]
     public async Task ロックしなければ_1_5_秒で時間切れにする()
     {
-        var (frontend, _, clock) = Make(demod => demod.Status = _ => 0x00);
+        var (frontend, _, clock) = Make(demod => demod.Status = _ => 0x00, WithoutPreset(557143));
         frontend.Init();
         clock.Sleeps.Clear();
         await Assert.That(frontend.TuneIsdbt(557143)).IsFalse();
@@ -142,7 +154,7 @@ public class Cxd2856Tests
     [Test]
     public async Task 信号が無いと分かれば待たずに失敗にする()
     {
-        var (frontend, _, clock) = Make(demod => demod.Status = read => read < 3 ? (byte)0x00 : (byte)0x10);
+        var (frontend, _, clock) = Make(demod => demod.Status = read => read < 3 ? (byte)0x00 : (byte)0x10, WithoutPreset(557143));
         frontend.Init();
         clock.Sleeps.Clear();
         await Assert.That(frontend.TuneIsdbt(557143)).IsFalse();
