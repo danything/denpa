@@ -26,8 +26,8 @@ import { run } from "#lib/server/stream.js";
  * エンコードが終わると物差しが変わるので、こちらは覚えない (同時に来たリクエストだけ、1 回の取り出しを共有する)
  *
  * **4K の局の録画 (TTML) は ffmpeg を通さない** (`playback.uhdCaptionSource`)。エンコード済みがあれば、その隣に置いた
- * 文字の配置 (`….captions.json`) をそのまま渡す。無ければ元の録画 (`.mmts`) を denpa が読む (`mmts.mmtsCaptions`。
- * 元の TS と同じく丸ごと読むので覚えない)
+ * 文字の配置 (`….captions.json`) をそのまま渡す。無ければ元の録画 (`.mmts`) を denpa が丸ごと読む (`mmts.mmtsCaptions`)。
+ * 録り終えた `.mmts` はエンコードするまで変わらず、物差しも変わらないので、読んだものは覚える (元の TS と違う)
  */
 
 /** 待ち時間の上限。壊れたファイルで ffmpeg を待ち続けない。元の TS は大きいぶん長く待つ */
@@ -85,7 +85,6 @@ async function build(argv: string[], ts: boolean): Promise<Made> {
 /** 4K の局の録画の字幕を渡す (`uhdCaptionSource`) */
 async function uhdCaptions(
   source: NonNullable<Awaited<ReturnType<typeof uhdCaptionSource>>>,
-  id: number,
   request: Request,
 ): Promise<Response> {
   if ("missing" in source) error(404, MISSING);
@@ -102,7 +101,8 @@ async function uhdCaptions(
       return new Response(null, { status: 304, headers });
     return new Response(Bun.file(source.sidecar), { headers });
   }
-  const result = await extracting(String(id), async (): Promise<Made> => {
+  // 録り終えた `.mmts` は変わらないので、同じファイル (大きさ・更新時刻) なら覚えたものを返す (丸ごと読み直さない)
+  const result = await made.get(source.mmts.path, async (): Promise<Made> => {
     const pages = await mmtsCaptions(source.mmts, source.serviceId);
     return pages.pages.length === 0
       ? { missing: MISSING }
@@ -120,7 +120,7 @@ async function uhdCaptions(
 export async function GET({ params, request }) {
   const recording = recordingOr404(params.id);
   const uhd = await uhdCaptionSource(recording);
-  if (uhd !== null) return uhdCaptions(uhd, recording.id, request);
+  if (uhd !== null) return uhdCaptions(uhd, request);
   const args = await captionArgs(recording);
   if (args === null) error(404, MISSING);
   const { argv, path } = args;

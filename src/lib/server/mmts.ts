@@ -248,6 +248,7 @@ export async function remuxMmts(
     for await (const chunk of chunks(recordingStream(path))) {
       if (signal?.aborted === true) break;
       write(reader.feed(chunk));
+      // 書けるまで待ってから次を読む (待たないと、書き出しが読み込みに追いつかないぶんがメモリに溜まる)
       await sink.flush();
     }
     if (signal?.aborted !== true) write(reader.end());

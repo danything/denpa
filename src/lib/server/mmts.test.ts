@@ -88,6 +88,9 @@ describe("4K の局の録画", () => {
   test("途中から読んでも、時刻は録画の物差しのまま (バイト比例で当たりを付ける)", async () => {
     const path = record("seek.mmts", 60);
     const file = await probe(path);
+    // 先頭の 1 秒 (頭出しできるコマを含めるぶん) の内と、尺が分からないときは先頭から
+    expect(mmtsOffset(file, 0.5)).toBe(0);
+    expect(mmtsOffset({ ...file, duration: null }, 5)).toBe(0);
     const offset = mmtsOffset(file, 5);
     expect(offset).toBeGreaterThan(0);
     const [init, first] = await collect(mmtsFmp4(file, SERVICE, offset));
