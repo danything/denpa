@@ -7,7 +7,8 @@ import { TERRESTRIAL } from "./terrestrial";
  * 局と実況のチャンネルの対応表。どれも局の番号 (service_id) で引く
  */
 
-const gr = (service_id: number) => jikkyoChannel({ type: "GR", service_id });
+const gr = (service_id: number) =>
+  jikkyoChannel({ type: "GR", service_id, network_id: 0x7fe0 });
 
 describe("jikkyoChannel", () => {
   test("関東の局", () => {
@@ -42,15 +43,30 @@ describe("jikkyoChannel", () => {
 
   test("BS・CS は局の番号で引く。サブチャンネルは当てない", () => {
     const bs = (service_id: number) =>
-      jikkyoChannel({ type: "BS", service_id });
+      jikkyoChannel({ type: "BS", service_id, network_id: 4 });
     expect(bs(101)).toBe("jk101");
     expect(bs(102)).toBeNull();
     expect(bs(142)).toBeNull();
     expect(bs(211)).toBe("jk211");
     expect(bs(231)).toBeNull();
-    expect(jikkyoChannel({ type: "CS", service_id: 333 })).toBe("jk333");
+    expect(jikkyoChannel({ type: "CS", service_id: 333, network_id: 7 })).toBe(
+      "jk333",
+    );
     // 地上波の番号でも、BS の局は BS の表でしか引かない
-    expect(jikkyoChannel({ type: "BS", service_id: 1024 })).toBeNull();
+    expect(
+      jikkyoChannel({ type: "BS", service_id: 1024, network_id: 4 }),
+    ).toBeNull();
+  });
+
+  test("ケーブルの再送信は元の放送の表で引き、自主放送は当てない", () => {
+    const catv = (service_id: number, network_id: number) =>
+      jikkyoChannel({ type: "CATV", service_id, network_id });
+    // BSよしもと (BS の再送信)、TBS (地上波の再送信)、ショップチャンネル (CS の再送信)
+    expect(catv(265, 4)).toBe("jk265");
+    expect(catv(1048, 0x7fe0)).toBe("jk6");
+    expect(catv(333, 7)).toBe("jk333");
+    // ケーブルの自主放送 (ネットワークの番号が放送のどれでもない)
+    expect(catv(101, 0x0031)).toBeNull();
   });
 
   test("地上波の表は NX-Jikkyo の地上波のチャンネル (jk1〜14、jk3 は無い) だけを指す", () => {
