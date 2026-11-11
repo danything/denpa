@@ -1,6 +1,6 @@
 /**
  * 試験用の TLV のバイト列 (TLV・IP・MMTP・MMT-SI) を組み立てる。TS の `synth.ts` と同じ役で、
- * 読む側 (`tlv.ts`・`tlv-ip.ts`・`mmtp.ts`・`mmt-si.ts`・`mh-eit.ts`・`mmt-service-filter.ts`) と対になる書く側。
+ * 読む側 (`tlv.ts`・`tlv-ip.ts`・`mmtp.ts`・`mmt-si.ts`・`mh-eit.ts`・`mmt-service-filter.ts`・`mmt-media.ts`) と対になる書く側。
  *
  * スクランブルは印 (ヘッダー拡張) だけを付け、中身は暗号にしない。
  */
@@ -161,6 +161,182 @@ export function mpuPayload(
   return Uint8Array.from([...be(body.length), ...body]);
 }
 
+/** MFU のデータユニット 1 つ。同じ `sample` のものが 1 つのアクセスユニット */
+export interface SynthDataUnit {
+  sample: number;
+  data: Uint8Array | number[];
+}
+
+/** MFU の運び方 */
+export interface SynthMfuOptions {
+  /** 最初のパケットの packet_sequence_number */
+  sequenceNumber?: number;
+  /** データユニットを 1 つのパケットに集約する */
+  aggregate?: boolean;
+  /** データユニットを分割するときの、1 つのパケットに載せる中身の上限 (バイト)。省くと分割しない */
+  fragment?: number;
+  /** 最初のパケットに RAP_flag を立てる */
+  rap?: boolean;
+}
+
+/** 時刻のあるデータユニットのヘッダー (14 バイト。offset はサンプルの中の位置) */
+function timedHeader(sample: number, offset: number): number[] {
+  return [...be32(0), ...be32(sample), ...be32(offset), 0x00, 0x00];
+}
+
+/**
+ * MPU の中身 (MFU) を運ぶ MMTP のパケットの並び。データユニットは時刻のあるもの (映像・音声・字幕)。
+ * 分割したデータユニットは、断片ごとにヘッダーを付ける
+ */
+export function mfuPackets(
+  packetId: number,
+  mpuSequenceNumber: number,
+  units: SynthDataUnit[],
+  options: SynthMfuOptions = {},
+): Uint8Array[] {
+  const start = options.sequenceNumber ?? 0;
+  let sequenceNumber = start;
+  const packet = (indicator: number, aggregated: boolean, body: number[]) => {
+    const payload = [
+      // fragment_type 2 (MFU)、timed、分割の印、集約の印
+      0x28 | (indicator << 1) | (aggregated ? 0x01 : 0),
+      0x00,
+      ...be32(mpuSequenceNumber),
+      ...body,
+    ];
+    return mmtpPacket({
+      packetId,
+      payloadType: 0,
+      rap: sequenceNumber === start && options.rap === true,
+      sequenceNumber: sequenceNumber++,
+      payload: [...be(payload.length), ...payload],
+    });
+  };
+  if (options.aggregate === true) {
+    const body = units.flatMap((unit) => {
+      const du = [...timedHeader(unit.sample, 0), ...unit.data];
+      return [...be(du.length), ...du];
+    });
+    return [packet(0, true, body)];
+  }
+  const out: Uint8Array[] = [];
+  for (const unit of units) {
+    const data = [...unit.data];
+    const size = options.fragment ?? data.length;
+    if (data.length <= size) {
+      out.push(packet(0, false, [...timedHeader(unit.sample, 0), ...data]));
+      continue;
+    }
+    for (let at = 0; at < data.length; at += size) {
+      const indicator = at === 0 ? 1 : at + size >= data.length ? 3 : 2;
+      out.push(
+        packet(indicator, false, [
+          ...timedHeader(unit.sample, at),
+          ...data.slice(at, at + size),
+        ]),
+      );
+    }
+  }
+  return out;
+}
+
+/** NTP の 64 ビットの時刻 `[秒, 端数 (1/2^32 秒)]` */
+export type SynthNtp = [number, number];
+
+/** MPU タイムスタンプ記述子。MPU ごとに `[mpu_sequence_number, 最初の提示時刻]` */
+export function mpuTimestampDescriptor(mpus: [number, SynthNtp][]): number[] {
+  return mmtDescriptor(
+    0x0001,
+    mpus.flatMap(([sequence, [seconds, fraction]]) => [
+      ...be32(sequence),
+      ...be32(seconds),
+      ...be32(fraction),
+    ]),
+  );
+}
+
+export interface SynthExtendedMpu {
+  sequence: number;
+  /** mpu_decoding_time_offset */
+  decodingOffset: number;
+  /** アクセスユニットごとの dts_pts_offset (デコードの順) */
+  dtsPtsOffsets: number[];
+  /** アクセスユニットごとの pts_offset。`duration` を渡さないときに書く (種類 2) */
+  durations?: number[];
+}
+
+/**
+ * MPU 拡張タイムスタンプ記述子。`duration` を渡せば pts_offset をどれも同じ値で書き (種類 1。実機の BS4K はこれ)、
+ * 渡さなければアクセスユニットごとに書く (種類 2)
+ */
+export function mpuExtendedTimestampDescriptor(
+  timescale: number,
+  mpus: SynthExtendedMpu[],
+  duration?: number,
+): number[] {
+  const type = duration === undefined ? 2 : 1;
+  return mmtDescriptor(0x8026, [
+    0xf8 | (type << 1) | 0x01,
+    ...be32(timescale),
+    ...(duration === undefined ? [] : be(duration)),
+    ...mpus.flatMap((mpu) => [
+      ...be32(mpu.sequence),
+      0x3f,
+      ...be(mpu.decodingOffset),
+      mpu.dtsPtsOffsets.length,
+      ...mpu.dtsPtsOffsets.flatMap((offset, i) => [
+        ...be(offset),
+        ...(type === 2 ? be(mpu.durations?.[i] ?? 0) : []),
+      ]),
+    ]),
+  ]);
+}
+
+/** ビットを詰めていく (LATM を書くため) */
+class BitWriter {
+  private readonly bytes: number[] = [];
+  private at = 0;
+
+  put(value: number, count: number): this {
+    for (let i = count - 1; i >= 0; i--) {
+      if (this.at % 8 === 0) this.bytes.push(0);
+      if (Math.floor(value / 2 ** i) % 2)
+        this.bytes[this.bytes.length - 1]! |= 0x80 >> (this.at % 8);
+      this.at++;
+    }
+    return this;
+  }
+
+  get done(): Uint8Array {
+    return Uint8Array.from(this.bytes);
+  }
+}
+
+/**
+ * LATM の AudioMuxElement (muxConfigPresent = 1。LOAS の同期のヘッダーは付けない)。
+ * `audioSpecificConfig` を渡せば StreamMuxConfig を書き、渡さなければ「前と同じ」にする。
+ * AudioSpecificConfig は、長さがバイトの区切りに揃うもの (AAC LC の 2 バイトなど) を渡す
+ */
+export function latmElement(
+  frame: Uint8Array | number[],
+  audioSpecificConfig?: Uint8Array | number[],
+): Uint8Array {
+  const bits = new BitWriter();
+  bits.put(audioSpecificConfig === undefined ? 1 : 0, 1);
+  if (audioSpecificConfig !== undefined) {
+    // audioMuxVersion 0、allStreamsSameTimeFraming 1、サブフレーム・番組・層は 1 つずつ
+    bits.put(0, 1).put(1, 1).put(0, 6).put(0, 4).put(0, 3);
+    for (const byte of audioSpecificConfig) bits.put(byte, 8);
+    // frameLengthType 0、latmBufferFullness 0xFF、otherData なし、CRC なし
+    bits.put(0, 3).put(0xff, 8).put(0, 1).put(0, 1);
+  }
+  let left = frame.length;
+  for (; left >= 255; left -= 255) bits.put(255, 8);
+  bits.put(left, 8);
+  for (const byte of frame) bits.put(byte, 8);
+  return bits.done;
+}
+
 /** PA メッセージ。表 (MPT・PLT) を並べる */
 export function paMessage(...tables: Uint8Array[]): Uint8Array {
   const body = [
@@ -263,6 +439,8 @@ export interface SynthAsset {
   type: string;
   packetId: number;
   componentTag?: number;
+  /** ほかに載せる記述子 (`mpuTimestampDescriptor` など) */
+  descriptors?: number[];
 }
 
 export interface SynthMpt {
@@ -285,10 +463,12 @@ export function mptTable(mpt: SynthMpt): Uint8Array {
           ...be(mpt.access.ecmPacketId),
         ]);
   const assets = mpt.assets.flatMap((asset) => {
-    const assetDescriptors =
-      asset.componentTag === undefined
+    const assetDescriptors = [
+      ...(asset.componentTag === undefined
         ? []
-        : mmtDescriptor(0x8011, be(asset.componentTag));
+        : mmtDescriptor(0x8011, be(asset.componentTag))),
+      ...(asset.descriptors ?? []),
+    ];
     return [
       0x00, // identifier_type
       ...be32(0), // asset_id_scheme
