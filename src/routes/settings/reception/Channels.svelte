@@ -107,7 +107,7 @@
   ]);
 
   /**
-   * 受信できるチャンネルに、番組表とライブに出さない局 (復号できない局) があるか。種別ごとにわけを表のすぐ上に添える。
+   * 受信できるチャンネルに、ライブと録画に使えない局 (復号できない局) があるか。種別ごとにわけを表のすぐ上に添える。
    * SKY の局はどれも復号できない。CATV は B-CAS 以外の方式でスクランブルされた局だけ (`services.decodable`)
    */
   const hasSky = $derived(
@@ -143,17 +143,21 @@
   const hasUndecodableCatv = $derived(undecodableCatv("ts"));
   const hasUndecodable4k = $derived(undecodableCatv("tlv"));
 
+  /**
+   * 復号できない局のわけ。番組表を読める局 (`services.epg_readable`) は番組表に出るので、最後にそのことを足す
+   */
   const undecodableNote = $derived(
     [
       hasSky
-        ? "スカパー！プレミアムの局は、スクランブルを復号できないため、番組表とライブに出しません。スカパー！プレミアムのカードには、これから対応する予定です"
+        ? "スカパー！プレミアムの局は、スクランブルを復号できないため、ライブと録画に使えません。スカパー！プレミアムのカードには、これから対応する予定です"
         : null,
       hasUndecodableCatv
-        ? "ケーブルの局のうち「復号できません」の局は、B-CAS 以外の方式でスクランブルされているため、番組表とライブに出しません"
+        ? "ケーブルの局のうち「復号できません」の局は、B-CAS 以外の方式でスクランブルされているため、ライブと録画に使えません"
         : null,
       hasUndecodable4k
-        ? "ケーブルの 4K の局は、まだ番組表・ライブ・録画に対応していないため、番組表とライブに出しません"
+        ? "ケーブルの 4K の局は、まだライブと録画に対応していません"
         : null,
+      "番組表を読める局は、番組表に「観られません」の列で出します",
     ]
       .filter((text) => text !== null)
       .join("。"),
@@ -518,7 +522,7 @@
       {/each}
       {#if hasSky || hasUndecodableCatv || hasUndecodable4k}
         <!--
-                    復号できない局は表にだけ並ぶ。番組表とライブに出ないわけを、表のすぐ上で言う (`services.decodable`)。
+                    復号できない局はライブと録画に使えない。そのわけを、表のすぐ上で言う (`services.decodable`)。
                     どの局かは、局名の後ろの「復号できません」で示す
                 -->
         <p class="small muted" data-testid="undecodable-note">
@@ -596,7 +600,7 @@
                         {@render cmLogo(service.id, service.name, false)}
                       </span>
                       <span class="broadcast">{service.name}</span>
-                      <!-- 番組表とライブに出さない局 (わけは表の上の 1 行) -->
+                      <!-- ライブと録画に使えない局 (わけは表の上の 1 行) -->
                       {#if !service.decodable}
                         <span
                           class="tiny muted nowrap"
@@ -682,7 +686,7 @@
     </span>
   {:else if state === "skipped" && column}
     <!--
-      復号できない局 (番組表とライブに出さない) と CATV の局 (まだ取得しない) のロゴは集めない (`logos.server.ts`)。
+      復号できない局 (ライブと録画に使えない) と CATV の局 (まだ取得しない) のロゴは集めない (`logos.server.ts`)。
       復号できない局は SKY の局と CATV の局だけ
     -->
     <span

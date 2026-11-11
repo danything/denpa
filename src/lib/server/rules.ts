@@ -892,7 +892,8 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   const at = now();
   // 録画のしかたは全体で 1 つ。ルールごとに持たせるとどこで決まったか分からなくなる
   const recording = settings();
-  // 種別でも絞り込めるよう、番組に局の種別と物理チャンネルを添えて取る
+  // 種別でも絞り込めるよう、番組に局の種別と物理チャンネルを添えて取る。
+  // **復号できない局の番組は当てない** (`services.decodable`)。番組表を読めて番組表に出ている局でも、録ってもスクランブルのままで観られない
   const programs = orm()
     .select({
       ...getTableColumns(programTable),
@@ -901,7 +902,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
     })
     .from(programTable)
     .innerJoin(services, eq(services.id, programTable.service_id))
-    .where(gt(programTable.start_at, at))
+    .where(and(gt(programTable.start_at, at), eq(services.decodable, true)))
     .orderBy(programTable.start_at)
     .all();
 

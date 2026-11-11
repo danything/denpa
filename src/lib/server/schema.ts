@@ -241,9 +241,17 @@ export const services = sqliteTable("services", {
     .default(sql`0`),
   /**
    * スクランブルを復号できる局か (`types.decodableService`)。取り込みのたびに決め直す (`epg.syncServices`)。
-   * 復号できない局 (SKY と、B-CAS 以外の方式でスクランブルされた CATV の局と、CATV の 4K の局) は、番組表・ライブ・ロゴに出さない
+   * 復号できない局 (SKY と、B-CAS 以外の方式でスクランブルされた CATV の局と、CATV の 4K の局) は、ライブ・録画・ロゴに使わない
    */
   decodable: flag("decodable")
+    .notNull()
+    .default(sql`1`),
+  /**
+   * 番組表を読める局か (`types.epgReadableService`)。取り込みのたびに決め直す (`epg.syncServices`)。**番組表に出すのはこの局。**
+   * 復号できる局はいつも読める。復号できない局は、番組表の表がスクランブルされずに来ているとスキャンが控えに書いた局だけ
+   * (TLV は MH-EIT が信号のメッセージで来るのでいつも、SKY と CATV の TS は EIT の観測 `ca-observe.ts` で決める)
+   */
+  epg_readable: flag("epg_readable")
     .notNull()
     .default(sql`1`),
   /**

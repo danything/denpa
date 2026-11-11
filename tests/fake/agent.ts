@@ -14,6 +14,7 @@ import { resolve } from "node:path";
 import { answerPairing, fakeAgentTls } from "../../src/lib/server/fake-agent";
 import {
   broadcast,
+  broadcastTlv,
   channels,
   DEFAULT_KNOBS,
   type Knobs,
@@ -193,13 +194,19 @@ function unscramble(
   return { ok: true, error: "" };
 }
 
+/** 4K の局 (TLV) の搬送波か */
+const isTlv = (services: FakeService[]) =>
+  services.some((service) => service.transport === "tlv");
+
 function fakeStream(
   signal: AbortSignal,
   services: FakeService[],
 ): ReadableStream<Uint8Array> {
+  // 4K の局 (TLV) は TLV のバイト列を流す (本物は分割 TLV を組み立てたもの)。1 つの搬送波に TS と TLV は混ざらない
+  const play = isTlv(services) ? broadcastTlv : broadcast;
   return new ReadableStream({
     start(controller) {
-      const stop = broadcast(
+      const stop = play(
         services,
         () => knobs,
         (data) => {
@@ -517,11 +524,11 @@ function openStream(url: URL, signal: AbortSignal): Response {
     emit("tuners");
   });
 
-  // TSMF で束ねた搬送波は、束ねた TS の数をヘッダーで返す (本物の `Sink.TsmfStreamsHeader`)
+  // TSMF で束ねた搬送波は、束ねた TS の数をヘッダーで返す (本物の `Sink.TsmfStreamsHeader`)。TLV は Content-Type で言う (本物の `StreamFormat`)
   const streams = tsmfStreams(type, channel);
   return new Response(fakeStream(ended, services), {
     headers: {
-      "Content-Type": "video/MP2T",
+      "Content-Type": isTlv(services) ? "application/x-arib-tlv" : "video/MP2T",
       ...(streams === null ? {} : { "X-Denpa-Tsmf-Streams": String(streams) }),
     },
   });

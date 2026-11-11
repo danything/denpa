@@ -49,7 +49,7 @@ interface Coverage {
   origin: Exclude<Origin, "CATV"> | null;
   /** 伝送の形式 (`services.transport`)。チャンネルごとに 1 つで、同じチャンネルに TS と TLV の局は混ざらない (形式は選んだ TS で決まる)。`tlv` はケーブルで受けた 4K の局 */
   transport: Transport;
-  /** `decodable` は番組表とライブに出す局か (`services.decodable`)。復号できない局も表には並べる */
+  /** `decodable` はライブと録画に使える局か (`services.decodable`)。復号できない局も表には並べる */
   services: {
     id: number;
     name: string;

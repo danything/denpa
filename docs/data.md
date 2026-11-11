@@ -72,11 +72,30 @@ service_id が同じでも 2K の局とは結び付けず、別の局として�
 **伝送の形式 (`services.transport`。`ts` か `tlv`) と CA_system_id で決める。**
 TS の局は、CA_system_id が無い (スクランブルしていない) か、その形式の表 (`types.DESCRAMBLABLE`) にある CA_system_id があれば復号できる。表は TS が B-CAS (`0x0005`) だけで、TLV は空 (ACAS にまだ対応していない)。
 SKY の局と、PMT の CA 記述子に B-CAS の CA_system_id が無い CATV の局は復号できない。
-**4K の局 (`tlv`) は、CA_system_id によらず復号できない局として扱う** (`types.READABLE_TRANSPORTS`)。番組表の取得・ライブ・録画が TLV をまだ読めず、
-スクランブルしていない 4K の局を通すと、TS として開いてしまうため。4K の番組表・ライブ・録画が入ったら `READABLE_TRANSPORTS` に `tlv` を足す。
+**4K の局 (`tlv`) は、CA_system_id によらず復号できない局として扱う** (`types.READABLE_TRANSPORTS`)。ライブと録画が TLV をまだ読めず、
+スクランブルしていない 4K の局を通すと、TS として開いてしまうため。4K のライブと録画が入ったら `READABLE_TRANSPORTS` に `tlv` を足す。
 4K の局の CA_system_id は B-CAS と同じ `0x0005` でも、B-CAS のカードでは復号できない。形式を見ずに `0x0005` で決めると、復号できると取り違える。
 free_CA_mode は使わない (実機の BS4K は 0 なのに、映像と音声はスクランブルされていた)。
-復号できない局は「受信できるチャンネル」にだけ出し、番組表・ライブ・ロゴには出さない (番組表も書かない。`epg.serviceIdIndex`)。
+復号できない局は、ライブ・録画・ロゴ・CM のロゴの学習に使わない。ルールは当てず、予約とライブは `types.undecodableReason` の文で断る。
+
+**番組表に出すのは、番組表を読める局 (`services.epg_readable`。`types.epgReadableService`)。** 番組表の表は映像と別にスクランブルされるので、
+復号できない局でも読めることがある。種別ごとの例外は作らず、次の 1 つの決まりで決める。取り込みのたびに決め直す (`epg.syncServices`)。
+
+- 復号できる局はいつも読める
+- 復号できない局は、番組表の表がスクランブルされずに来るとスキャンがチャンネルの控えに書いた局 (`epgReadable`) だけ読める
+  - 4K の局 (TLV) は、MH-EIT が信号のメッセージで来てスクランブルされない (実機の BS4K で確かめた) ので、いつも書く
+  - SKY の局と、B-CAS 以外の方式でスクランブルされた CATV の局は、スキャンで EIT がスクランブルされずに来たときだけ書く (`ca-observe.ts`。チャンネルごとに数える)
+
+番組表の取得 (`epg-collect.ts`) は、番組表を読める局が 1 つでもあるチャンネルを回る (`tuner.epgReadableChannel`)。
+4K の局 (TLV) のチャンネルは MH-EIT を読む (`@danything/arib/mh-eit` の `MmtEpgReader`。table_id を TS の番号に直すので、揃ったかの数え方は TS と同じ)。
+自分の TLV ストリームの局のぶんだけが来る (実機の BS4K で確かめた)。予定が全部揃うまでの時間は実機でまだ測っていない。
+番組表 (`guide.stationsOf`)・番組表のタブと局が無いときの案内 (`epg.serviceCounts`)・番組を書く局 (`epg.serviceIdIndex`) も同じ条件にする。検索は番組を書いた局から引くので同じになる。
+読めるが復号できない局は、番組表の列の局名の下に「観られません」と出し、番組の詳細では予約と視聴のボタンの代わりにわけを出す (`epg.unwatchableServices`)。
+
+選局したときに、エージェントの答えの Content-Type (`tuner.streamTransport`) が局の行の形式 (`services.transport`。控えの `transport`) と違ったら、
+その選局は失敗にして「チャンネルの形式が変わりました。ケーブルをスキャンし直してください」と記録に出す (`tuner.expectTransport`)。
+形式は選局の前に読み方と復号できるかを決めるのに使っていて、答えと合わないときに黙って読み方を変えないため。
+いま確かめているのは番組表の取得だけ (ライブと録画は TLV の局を選局しない)。
 
 ### 番組表を写している理由
 
@@ -295,19 +314,21 @@ TSID で呼べば写しは出ず、詰められても名前が変わらない。
   - PAT に局が無い TS と SDT が来ない TS は「局なし」として入れない。同じ TS (original_network_id と TSID) が 2 つのチャンネルで見つかったら、
     チャンネル名の順で先のほうだけを入れる
   - 局ごとに PMT の CA 記述子の CA_system_id を数えてチャンネルの控えに入れ (`caSystemIds`。CA 記述子が無ければ空)、`services.decodable` を決める。
-    局が揃ってからも、PAT にある局の PMT が全部来るまで、読み始めから 10 秒までは読み続ける
+    EIT がスクランブルされずに来たかも控えに書く (`epgReadable`。`services.epg_readable` を決める)。
+    局が揃ってからも、PAT にある局の PMT が全部来て EIT の具合が分かるまで、読み始めから 10 秒までは読み続ける (PAT に局が無い TS は待たない)
   - 番組表は自分の TS のぶんだけを読む (地上波と同じ)。ロゴはまだ取得しない
   - 選局の答えの Content-Type が `application/x-arib-tlv` なら、TSMF から選んだ TS が分割 TLV (4K の放送) で、流れてくるのは TLV のバイト列 (`tuner.openChannel` の `transport`)。
     TLV の表で局を読む (`readTlvServices`・`@danything/arib/mmt-si` の `TlvServiceReader`)。TLV-NIT と MH-SDT[actual] が揃ったら揃ったとみなし、
     局の元の放送は MH-SDT の original_network_id、TSID の代わりに tlv_stream_id を控えに入れる。リモコン番号は無い。
     局ごとの CA_system_id は MPT (PLT から package を引く) のアクセス制御記述子から読み、局が揃ってからも PLT にある局の MPT が全部来るまで、読み始めから 10 秒までは読み続ける。
-    チャンネルの控えに `transport: "tlv"` を書き (無ければ TS)、取り込みで `services.transport` に入れる。番組表はまだ読まない。
+    チャンネルの控えに `transport: "tlv"` を書き (無ければ TS)、取り込みで `services.transport` に入れる。
+    番組表 (MH-EIT) はスクランブルされないので、どの局にも `epgReadable` を書く。スキャン中に流れてきた MH-EIT も読む (`@danything/arib/mh-eit` の `MmtEpgReader`)。
     知らない Content-Type なら、エージェントと denpa のバージョンが合っていないと記録に出して TS として読む
 - スカパー！プレミアム (`SKY`) は `H01`〜`H105` を総当たり。選べるのは SKY を受信できる種別に選んだチューナーがあるときだけ。
-  見つけた局は `services` に入るが、スクランブルを復号できないので番組表・ロゴは取得せず (スキャン中に流れてきた番組表も書かない)、
-  番組表とライブには出さない (`services.decodable`。[tuner-it930x.md](tuner-it930x.md#スカパープレミアムサービス光-j83b))。
-  代わりに、カード無しで分かること (PMT と CAT の CA_system_id、EIT と CDT が来ているか) を数えて記録に出す (`ca-observe.ts`)。
-  局が揃ってからも、EIT が来ているかスクランブルされていると分かるまで、読み始めから 10 秒までは読み続ける。番組表を取り込むかは、この観測の報告を見てから決める
+  見つけた局は `services` に入るが、スクランブルを復号できないのでライブと録画には使わず、ロゴも取得しない (`services.decodable`。[tuner-it930x.md](tuner-it930x.md#スカパープレミアムサービス光-j83b))。
+  カード無しで分かること (PMT と CAT の CA_system_id、EIT と CDT が来ているか) を数えて記録に出す (`ca-observe.ts`)。
+  局が揃ってからも、EIT が来ているかスクランブルされていると分かるまで、読み始めから 10 秒までは読み続ける。
+  EIT がスクランブルされずに来ていれば、控えに `epgReadable` を書き、番組表に「観られません」の列で出す ([上記](#denpa-が持つもの)。CATV と同じ決まり)
   ([tuner-it930x.md](tuner-it930x.md#スカパープレミアムでカード無しで分かること))
 - 1 チャンネル最大 30 秒。NIT と SDT が両方揃って受信できたとみなす (SDT だけでは
   どのネットワークのものか分からず、設定に書けない。ケーブルは上のとおり SDT だけで決める)。局名も SDT から `packages/arib/src/aribtext.ts` で読む

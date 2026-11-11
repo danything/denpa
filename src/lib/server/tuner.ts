@@ -21,7 +21,12 @@ import {
   string,
   tolerate,
 } from "../shape";
-import { type ChannelType, decodableService, type Transport } from "../types";
+import {
+  type ChannelType,
+  decodableService,
+  epgReadableService,
+  type Transport,
+} from "../types";
 import { agentFetch } from "./agent-client";
 import { config } from "./config";
 import type { Busy } from "./conflict";
@@ -64,22 +69,42 @@ const AGENT_CHANNEL = object({
        * スキャンで PMT か MPT を読む CATV の局だけが持つ。CA 記述子が無ければ空。復号できるかはこれで決める (`types.decodableService`)
        */
       caSystemIds: optional(array(number)),
+      /**
+       * 番組表の表がスクランブルされずに来るか。スキャンが書く (TLV はいつも、SKY と CATV の TS は EIT を観測して)。
+       * 無ければ読めない。復号できる局はこれによらず読める (`types.epgReadableService`)
+       */
+      epgReadable: optional(boolean),
     }),
   ),
 });
 export type AgentChannel = Infer<typeof AGENT_CHANNEL>;
 
 /**
- * 復号できる局が 1 つでも入っているチャンネルか。**番組表の取得に行くかは、チャンネルごとにこれで見る。**
- * 局ごとの判断は局の行の `services.decodable` (`epg.syncServices`)
+ * 控えの局が復号できるか (`types.decodableService`) と、番組表を読めるか (`types.epgReadableService`)。
+ * 局の行の `services.decodable`・`services.epg_readable` にはこれを入れる (`epg.syncServices`)
  */
-export function decodableChannel(channel: AgentChannel): boolean {
-  return channel.services.some((service) =>
-    decodableService(
-      channel.type,
-      channel.transport ?? "ts",
-      service.caSystemIds ?? [],
-    ),
+export function serviceAbilities(
+  channel: AgentChannel,
+  service: AgentChannel["services"][number],
+): { decodable: boolean; epgReadable: boolean } {
+  const decodable = decodableService(
+    channel.type,
+    channel.transport ?? "ts",
+    service.caSystemIds ?? [],
+  );
+  return {
+    decodable,
+    epgReadable: epgReadableService(decodable, service.epgReadable === true),
+  };
+}
+
+/**
+ * 番組表を読める局が 1 つでも入っているチャンネルか。**番組表の取得に行くかは、チャンネルごとにこれで見る。**
+ * 局ごとの判断は局の行の `services.epg_readable` (`epg.syncServices`)
+ */
+export function epgReadableChannel(channel: AgentChannel): boolean {
+  return channel.services.some(
+    (service) => serviceAbilities(channel, service).epgReadable,
   );
 }
 
@@ -464,6 +489,28 @@ export function streamTransport(headers: Headers): Transport {
       `[tuner] エージェントが想定していない形式 (${type || "Content-Type なし"}) で流しています。TS として読みます。エージェントと denpa のバージョンが合っているか確かめてください`,
     );
   return "ts";
+}
+
+/**
+ * **選局の答えの形式が、局の行の形式 (`services.transport`。控えの `transport`) と違った。** 読み方を黙って変えずに、その選局を失敗にする。
+ * 形式はスキャンが決め、選局の前に読み方と復号できるかを決めるのに使っている。違うのはケーブル局が搬送波の中身を入れ替えたときで、スキャンし直せば合う
+ */
+export class TransportChangedError extends Error {
+  constructor() {
+    super("チャンネルの形式が変わりました。ケーブルをスキャンし直してください");
+  }
+}
+
+/**
+ * 開いたストリームの形式が `expected` と同じか確かめる。同じならストリームを返し、違えばストリームを閉じて `TransportChangedError` を投げる
+ */
+export async function expectTransport(
+  opened: { stream: ReadableStream<Uint8Array>; transport: Transport },
+  expected: Transport,
+): Promise<ReadableStream<Uint8Array>> {
+  if (opened.transport === expected) return opened.stream;
+  await opened.stream.cancel().catch(() => {});
+  throw new TransportChangedError();
 }
 
 /** 空き待ちで掛け直す回数と間隔 (ms)。待つのは前のチャンネルが離れるまで */

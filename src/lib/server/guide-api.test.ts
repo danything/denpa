@@ -54,6 +54,7 @@ const { broadcastDayStart, guideOf, HOUR, programRange, programsOf } =
 const { cancelProgram, recordedBody, recordProgram } =
   await import("./reservations");
 const { COPY_NEVER_REASON, NOT_CANCELABLE_REASON } = await import("../format");
+const { undecodableReason } = await import("../types");
 
 const MINUTE = 60_000;
 const NOW = Date.now();
@@ -350,6 +351,62 @@ describe("番組表", () => {
     });
     expect(byId.get(5)).toMatchObject({ copyNever: true, reservation: null });
     expect(byId.get(6)).toMatchObject({ reservation: null, recordingId: null });
+  });
+});
+
+/**
+ * 番組表を読めるが復号できない局 (ケーブルの 4K の局。`services.epg_readable`)。番組表には出すが、予約は断る
+ */
+describe("観られない局", () => {
+  const CABLE_4K = (0x10000 + 0x000b) * 100000 + 161;
+  const CABLE_LOCKED = (0x10000 + 0xfff0) * 100000 + 201;
+  orm()
+    .insert(services)
+    .values([
+      {
+        id: CABLE_4K,
+        service_id: 161,
+        network_id: 0x000b,
+        name: "ＢＳでんぱ　４Ｋ",
+        type: "CATV",
+        channel: "QC26",
+        decodable: false,
+        epg_readable: true,
+        transport: "tlv",
+        updated_at: 0,
+      },
+      // 番組表もスクランブルされている局。番組表に出さない
+      {
+        id: CABLE_LOCKED,
+        service_id: 201,
+        network_id: 0xfff0,
+        name: "ケーブル有料",
+        type: "CATV",
+        channel: "QC40",
+        decodable: false,
+        epg_readable: false,
+        updated_at: 0,
+      },
+    ])
+    .run();
+
+  test("番組表を読める局は、復号できなくても番組表に出す。読めない局は出さない", () => {
+    reset();
+    program(1, CABLE_4K, NOW - 30 * MINUTE, NOW + 30 * MINUTE);
+    const guide = guideOf("CATV", FROM, TO);
+    expect(guide.services.map((s) => s.id)).toEqual([CABLE_4K]);
+    expect(guide.services[0]?.programs.map((p) => p.id)).toEqual([1]);
+  });
+
+  test("復号できない局の番組は予約しない (400)。わけはライブで断るときと同じ", async () => {
+    reset();
+    program(1, CABLE_4K, NOW + 30 * MINUTE, NOW + 60 * MINUTE);
+    expect(await recordProgram(1)).toEqual({
+      ok: false,
+      status: 400,
+      message: undecodableReason("CATV", "tlv"),
+    });
+    expect(orm().select().from(reservations).all()).toHaveLength(0);
   });
 });
 

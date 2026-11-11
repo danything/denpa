@@ -68,7 +68,7 @@ export function stationsOf(
   end: number,
 ): { services: Service[]; split: number[] } {
   // テレビと同じ並びにする (SERVICE_ORDER)。
-  // 取り残しの局は出さない (currentServices)。出すと番組表に空の列が並ぶ。復号できない局も出さない (番組が来ない)
+  // 取り残しの局は出さない (currentServices)。出すと番組表に空の列が並ぶ。番組表を読めない局も出さない (番組が来ない。`services.epg_readable`)
   const services: Service[] = orm()
     .select()
     .from(serviceTable)
@@ -76,7 +76,7 @@ export function stationsOf(
       and(
         eq(serviceTable.type, type),
         currentServices(),
-        eq(serviceTable.decodable, true),
+        eq(serviceTable.epg_readable, true),
       ),
     )
     .orderBy(sql.raw(SERVICE_ORDER))

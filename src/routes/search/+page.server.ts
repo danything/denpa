@@ -5,7 +5,11 @@ import { parseId } from "#lib/id.js";
 import { countClips, findClips } from "#lib/server/clips.js";
 import { reserveWarning } from "#lib/server/contracts.js";
 import { now, orm } from "#lib/server/db.js";
-import { currentServices, watchableServices } from "#lib/server/epg.js";
+import {
+  currentServices,
+  unwatchableServices,
+  watchableServices,
+} from "#lib/server/epg.js";
 import { removeRecording } from "#lib/server/files.js";
 import { relative } from "#lib/server/paths.js";
 import { recordingFromForm } from "#lib/server/recording.js";
@@ -166,6 +170,8 @@ export function load({ url }) {
     focus: focusOf(url),
     // 詳細の「視聴」を出すかどうか。決め方は番組表と揃えてある (watchableServices)
     watchable: watchableServices(now()),
+    /** 番組表に出すが観られない局と、そのわけ (`unwatchableServices`)。予約のボタンを出さず、詳細でわけを出す。番組表と同じ */
+    unwatchable: unwatchableServices(),
     /** 右の書く欄 */
     draft: {
       editing: editing ?? null,

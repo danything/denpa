@@ -11,6 +11,7 @@
  * どうかをテストで確かめられない。
  */
 
+import { concatBytes } from "@danything/arib/bytes";
 import { CLOCK } from "@danything/arib/pes";
 import {
   aitSection,
@@ -39,6 +40,19 @@ import {
   pes,
   silentAac,
 } from "@danything/arib/synth-av";
+import {
+  compressedIp,
+  m2SectionMessage,
+  mhEitSection,
+  mhSdtSection,
+  mptTable,
+  paMessage,
+  pltTable,
+  signalingPackets,
+  type SynthMhEvent,
+  tlvNitSection,
+  tlvSi,
+} from "@danything/arib/synth-mmt";
 
 import { docsColor, docsLogo, docsProgram } from "./docs";
 import { type FakeService, SERVICES } from "./services";
@@ -555,10 +569,28 @@ const SKY_CA_SYSTEM_ID = 0x000b;
  * 局の PMT に置く CA 記述子 (ECM の PID 0x0901)。SKY の局と、CA_system_id を決めてある局 (`caSystemId`。ケーブル) だけに置く
  */
 function caDescriptor(service: FakeService): number[] {
-  const id =
-    service.caSystemId ??
-    (service.type === "SKY" ? SKY_CA_SYSTEM_ID : undefined);
+  const id = caSystemIdOf(service);
   return id === undefined ? [] : [0x09, 0x04, id >> 8, id & 0xff, 0xe9, 0x01];
+}
+
+/** 局の CA_system_id。SKY の局は作り物の値、ほかは決めてある局 (`caSystemId`) だけ */
+const caSystemIdOf = (service: FakeService): number | undefined =>
+  service.caSystemId ?? (service.type === "SKY" ? SKY_CA_SYSTEM_ID : undefined);
+
+/**
+ * 番組表 (EIT) もスクランブルして流す局か。**B-CAS 以外の方式でスクランブルした局** (SKY の局も)。
+ * denpa はスキャンで EIT がスクランブルされていると数え、番組表を読めない局にする (`ca-observe.ts`)
+ */
+const eitScrambled = (service: FakeService): boolean => {
+  const id = caSystemIdOf(service);
+  return id !== undefined && id !== 0x0005;
+};
+
+/** TS パケットの並びに、スクランブルの印 (transport_scrambling_control) を付ける。中身は暗号にしない */
+function scrambled(packets: Uint8Array): Uint8Array {
+  for (let at = 0; at + 188 <= packets.length; at += 188)
+    packets[at + 3] = (packets[at + 3]! & 0x3f) | 0x80;
+  return packets;
 }
 
 function tables(services: FakeService[], knobs: Knobs): Uint8Array {
@@ -694,7 +726,8 @@ function schedule(services: FakeService[], knobs: Knobs): Uint8Array {
   const push = (service: FakeService, tableId: number) => {
     const events = programsWith(service, knobs);
     for (const section of scheduleSections(service, events, tableId)) {
-      parts.push(...packetize(0x0012, section));
+      const packets = packetize(0x0012, section);
+      parts.push(...(eitScrambled(service) ? scrambled(packets) : packets));
     }
   };
   for (const service of services) push(service, 0x50);
@@ -722,8 +755,8 @@ function nowOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
     const events = programsWith(service, knobs);
     const current = present(events);
     if (current === undefined) continue;
-    const section = (sectionNumber: number, event: SynthEvent) =>
-      packetize(
+    const section = (sectionNumber: number, event: SynthEvent) => {
+      const packets = packetize(
         0x0012,
         eitSection({
           tableId: 0x4e,
@@ -735,6 +768,8 @@ function nowOnAir(services: FakeService[], knobs: Knobs): Uint8Array {
           events: [event],
         }),
       );
+      return eitScrambled(service) ? scrambled(packets) : packets;
+    };
     const extended = {
       ...current,
       duration: current.duration + knobs.extendedMs,
@@ -904,5 +939,159 @@ export function broadcast(
     }
   }, TICK);
 
+  return () => clearInterval(timer);
+}
+
+/** 偽の 4K の放送の信号の packet_id。PLT は 0x0000、MPT は局ごと、M2 セクション (MH-SDT・MH-EIT) は 0x8000 */
+const TLV_PLT = 0x0000;
+const TLV_MPT = 0x9000;
+const TLV_M2 = 0x8000;
+
+/** ヘッダー圧縮した IP (ヘッダー無しの 0x61) に MMTP のパケットを載せる */
+const overIp = (packets: Uint8Array[]): Uint8Array[] =>
+  packets.map((packet) => compressedIp(1, packet));
+
+/** M2 セクションを 1 つずつ MMTP のパケットにする (分割しない) */
+const m2Packets = (sections: Uint8Array[]): Uint8Array[] =>
+  overIp(
+    signalingPackets(
+      TLV_M2,
+      sections.map((section) => m2SectionMessage(section)),
+    ),
+  );
+
+/** TS の番組 (`programsFor`) を MH-EIT の番組にする。映像は 2160p */
+const mhEvent = (event: SynthEvent): SynthMhEvent => ({
+  eventId: event.eventId,
+  startAt: event.startAt,
+  duration: event.duration,
+  name: event.name,
+  ...(event.description === undefined
+    ? {}
+    : { description: event.description }),
+  ...(event.extended === undefined
+    ? {}
+    : { extended: Object.entries(event.extended) }),
+  ...(event.genres === undefined ? {} : { genres: event.genres }),
+  resolution: 6,
+});
+
+/**
+ * TLV の表。TLV-NIT・PLT・局ごとの MPT (アクセス制御記述子に `caSystemId`)・MH-SDT[actual]。
+ * 値の並びは実機のケーブルの BS4K (QC26) に合わせてある (docs/data.md)
+ */
+function tlvTables(services: FakeService[]): Uint8Array {
+  const first = services[0]!;
+  const stream = tsidOf(first);
+  return concatBytes([
+    tlvSi(
+      tlvNitSection(first.networkId, "高度ＢＳデジタル放送", [
+        [
+          stream,
+          first.networkId,
+          services.map((s) => [s.serviceId, s.serviceType]),
+        ],
+      ]),
+    ),
+    ...overIp(
+      signalingPackets(TLV_PLT, [
+        paMessage(pltTable(services.map((s, i) => [s.serviceId, TLV_MPT + i]))),
+      ]),
+    ),
+    ...services.flatMap((service, i) => {
+      const id = caSystemIdOf(service);
+      return overIp(
+        signalingPackets(TLV_MPT + i, [
+          paMessage(
+            mptTable({
+              packageId: service.serviceId,
+              ...(id === undefined
+                ? {}
+                : { access: { caSystemId: id, ecmPacketId: 0xfff1 } }),
+              assets: [{ type: "hev1", packetId: 0xf100 + i * 0x10 }],
+            }),
+          ),
+        ]),
+      );
+    }),
+    ...m2Packets([
+      mhSdtSection(
+        stream,
+        first.networkId,
+        services.map((s) => ({
+          serviceId: s.serviceId,
+          serviceType: s.serviceType,
+          name: s.name,
+        })),
+      ),
+    ]),
+  ]);
+}
+
+/**
+ * MH-EIT の予定 (基本 0x8C) と p/f (0x8B)。**スクランブルしない** (実機の BS4K も、カード無しで読めた)。
+ * 予定はセクションに 10 番組ずつ。segment_last_section_number は last_section_number と同じ値になる (`synth-mmt.mhEitSection`) が、
+ * 全部のセクションを流すので揃う
+ */
+function tlvEpg(services: FakeService[], knobs: Knobs): Uint8Array {
+  const sections: Uint8Array[] = [];
+  for (const service of services) {
+    const events = programsWith(service, knobs).map(mhEvent);
+    const base = {
+      serviceId: service.serviceId,
+      tlvStreamId: tsidOf(service),
+      originalNetworkId: service.networkId,
+    };
+    const groups: SynthMhEvent[][] = [];
+    for (let at = 0; at < events.length; at += 10)
+      groups.push(events.slice(at, at + 10));
+    if (groups.length === 0) groups.push([]);
+    for (const [index, chunk] of groups.entries())
+      sections.push(
+        mhEitSection({
+          ...base,
+          tableId: 0x8c,
+          sectionNumber: index,
+          lastSectionNumber: groups.length - 1,
+          events: chunk,
+        }),
+      );
+    const at = Date.now();
+    const now = events.findIndex(
+      (event) => event.startAt <= at && at < event.startAt + event.duration,
+    );
+    if (now >= 0)
+      sections.push(
+        mhEitSection({
+          ...base,
+          tableId: 0x8b,
+          lastSectionNumber: 0,
+          runningStatus: 4,
+          events: [events[now]!],
+        }),
+      );
+  }
+  return concatBytes(m2Packets(sections));
+}
+
+/**
+ * **偽の 4K の放送** (ケーブルの分割 TLV を組み立てた TLV のバイト列。`FakeService.transport` が `tlv` の局)。
+ * 本物のエージェントが `application/x-arib-tlv` で流すものと同じ並び。denpa が読む表と番組表だけを流し、映像と音声は流さない
+ * (4K のライブと録画はまだ無い。denpa は復号できない局として選局しない)
+ */
+export function broadcastTlv(
+  services: FakeService[],
+  knobs: () => Knobs,
+  send: (data: Uint8Array) => void,
+): () => void {
+  send(tlvTables(services));
+  send(tlvEpg(services, knobs()));
+  let ticks = 0;
+  const timer = setInterval(() => {
+    ticks++;
+    // 表は繰り返し流れてくる。番組表は数秒おきに流し直す (途中から読んでも揃うように)
+    send(tlvTables(services));
+    if (ticks % 30 === 0) send(tlvEpg(services, knobs()));
+  }, TICK * 10);
   return () => clearInterval(timer);
 }

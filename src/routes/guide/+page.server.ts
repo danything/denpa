@@ -7,6 +7,7 @@ import { reserveWarning } from "#lib/server/contracts.js";
 import {
   listedServices,
   serviceCounts,
+  unwatchableServices,
   watchableServices,
 } from "#lib/server/epg.js";
 import {
@@ -63,10 +64,12 @@ export function load({ url, cookies }) {
     split,
     // 詳細の「視聴」を出すかどうか。決め方はライブ画面と揃えてある (watchableServices)
     watchable: watchableServices(Date.now()),
+    /** 番組表に出すが観られない局と、そのわけ (`unwatchableServices`)。列の「観られません」と、詳細で予約とライブの代わりに出す */
+    unwatchable: unwatchableServices(),
     /** サブチャンネルも出すか (`#lib/subchannels.ts`)。端末ごとに覚える */
     subchannels: storedSubchannels(cookies.get(SUBCHANNELS_COOKIE)),
     typeEmpty,
-    /** 種別のタブ (`guideTabs`)。CATV は局があるときだけ */
+    /** 種別のタブ (`guideTabs`)。CATV と SKY は番組表に出す局があるときだけ */
     types: guideTabs(counts, type),
     channelNotice: typeEmpty ? null : channelNotice(counts, listedServices()),
     channelAlert: channelAlert(),

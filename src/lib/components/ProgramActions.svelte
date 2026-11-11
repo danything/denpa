@@ -21,6 +21,7 @@
     cancel,
     recordingId = null,
     watchable,
+    refusal = null,
     clock,
     message = null,
     onsubmit,
@@ -40,6 +41,11 @@
     recordingId?: number | null;
     /** ライブ画面が持っている局か */
     watchable: boolean;
+    /**
+     * 番組表に出すが観られない局 (番組表を読めるが復号できない局) なら、そのわけ (`types.undecodableReason`)。
+     * 予約と視聴のボタンの代わりにこの文を出す (押しても断るだけ)。観られる局なら null
+     */
+    refusal?: string | null;
     /** いまの時刻 (画面の時計。分で刻む) */
     clock: number;
     /** この番組の詳細から送って断られた理由。無ければ null */
@@ -55,7 +61,10 @@
    * 押した先で別の局が映る (分割放送をしていない間のサブチャンネル)
    */
   const canWatch = $derived(
-    program.start_at <= clock && program.end_at > clock && watchable,
+    refusal === null &&
+      program.start_at <= clock &&
+      program.end_at > clock &&
+      watchable,
   );
   const canCancel = $derived(
     // サーバの取消 (`reservations.cancelProgram`) と同じ判定。録画中は止めて、そこまでを残す
@@ -63,7 +72,8 @@
   );
   /** 録画のしかたは選ばせない (`reservations.reserve`)。コピー禁止の番組には出さない (押しても断るだけ。理由は詳細の「コピー禁止」) */
   const canReserve = $derived(
-    !canCancel &&
+    refusal === null &&
+      !canCancel &&
       program.reservation_state === null &&
       program.end_at > clock &&
       !program.copy_never,
@@ -75,6 +85,11 @@
 
 {#if message !== null}
   <div class="notice error" data-testid="detail-refused">{message}</div>
+{/if}
+
+{#if refusal !== null}
+  <!-- 観られない局。予約と視聴のボタンを出さないわけを、ボタンの並びの場所で言う -->
+  <div class="notice info" data-testid="detail-unwatchable">{refusal}</div>
 {/if}
 
 <!--

@@ -350,6 +350,15 @@
    * 同じ決め方でないと、押した先で別の局が映る
    */
   const watchable = $derived(new Set(data.watchable));
+  /**
+   * 番組表に出すが観られない局 (番組表を読めるが復号できない局) と、そのわけ。**決めているのはサーバ** (`+page.server.ts` の `unwatchable`)。
+   * 列の局名の下に「観られません」を出し、詳細では予約とライブのボタンの代わりにわけを出す
+   */
+  const unwatchable = $derived(
+    new Map(
+      Object.entries(data.unwatchable).map(([id, why]) => [Number(id), why]),
+    ),
+  );
 
   const HOUR = 60 * 60 * 1000;
   /** 5 分を 1 マスにする。細かすぎると行数が増えるだけ、粗いと短い番組が潰れる */
@@ -1197,7 +1206,17 @@
   {#if channelNumber(service) !== null}
     <span class="ch-number">{channelNumber(service)}</span>
   {/if}
-  <span class="truncate broadcast">{service.name}</span>
+  {#if unwatchable.has(service.id)}
+    <!-- 番組表は読めるが復号できない局。局名の下に添える (わけは番組の詳細で) -->
+    <span class="service-names">
+      <span class="truncate broadcast">{service.name}</span>
+      <span class="tiny muted" data-testid="guide-service-unwatchable"
+        >観られません</span
+      >
+    </span>
+  {:else}
+    <span class="truncate broadcast">{service.name}</span>
+  {/if}
 {/snippet}
 
 <!-- 時刻へ送るメニューの項目 (「⋯」と、狭い画面の日付のメニュー) -->
@@ -1256,6 +1275,7 @@
         cancel={{ programId: program.id }}
         recordingId={playableRecordingId(program)}
         watchable={watchable.has(program.service_id)}
+        refusal={unwatchable.get(program.service_id) ?? null}
         {clock}
         message={failedFor === program.id ? (form?.message ?? null) : null}
         onsubmit={closeOnSuccess}
@@ -1659,6 +1679,15 @@
   }
   .service-link:focus-visible {
     outline-offset: -2px;
+  }
+  /*
+     * 観られない局 (番組表を読めるが復号できない局) の局名と、その下の「観られません」。2 行になるのはこの局の見出しだけで、
+     * 行の高さ (`headHeight`) は測っているので、時刻の数字はそのぶん下で止まる
+     */
+  .service-names {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
   /* 番号は事実なのでバッジにしない (docs/design.md の「印の意味」)。ライブの一覧の `.channel-number` と同じ字 */
   .ch-number {

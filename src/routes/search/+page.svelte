@@ -108,6 +108,12 @@
   const minute = minuteClock();
   const clock = $derived(minute.now);
   const watchable = $derived(new Set(data.watchable));
+  /** 番組表に出すが観られない局と、そのわけ (サーバの `unwatchable`。番組表と同じ) */
+  const unwatchable = $derived(
+    new Map(
+      Object.entries(data.unwatchable).map(([id, why]) => [Number(id), why]),
+    ),
+  );
   /** 切り抜きの節の行き先。同じ言葉のまま切り抜きの画面へ */
   const clipsHref = $derived(resolve(`clips?${new URLSearchParams({ q })}`));
 
@@ -426,7 +432,7 @@
                         取消
                       </ActionButton>
                     {/if}
-                  {:else if !program.copy_never}
+                  {:else if !program.copy_never && !unwatchable.has(program.service_id)}
                     <ActionButton
                       action="?/reserve"
                       fields={{ programId: program.id }}
@@ -812,6 +818,7 @@
             ? {}
             : { reservationId: opened.reservation_id }}
           watchable={watchable.has(opened.service_id)}
+          refusal={unwatchable.get(opened.service_id) ?? null}
           {clock}
           message={fromDetail && failedFor === opened.program_id
             ? (form?.message ?? null)

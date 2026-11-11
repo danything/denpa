@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `epg_readable` integer DEFAULT 1 NOT NULL;

@@ -1,4 +1,10 @@
-import { CATV_BS, CATV_GR, CATV_LOCKED, CATV_OWN } from "../fake/services";
+import {
+  CATV_4K,
+  CATV_BS,
+  CATV_GR,
+  CATV_LOCKED,
+  CATV_OWN,
+} from "../fake/services";
 import { expect, goto, syncEpg, test } from "./helpers";
 
 /**
@@ -6,9 +12,9 @@ import { expect, goto, syncEpg, test } from "./helpers";
  *
  * **CATV を受けられるのは、エージェントが直に持つ IT930x の機材 (`it930x:`) だけ。** 偽エージェントもその機材にだけ
  * `receivable` に CATV を返す。既定のチューナーには無いので、このファイルの間だけ 1 台足す。
- * 偽の放送の搬送波は 3 つ (`tests/fake/services.ts`): BS の再送信 (QC20)、TSMF で 2 つの TS を束ねたもの (QC30。地上波の再送信と自主放送)、
- * B-CAS 以外の CA_system_id だけでスクランブルした局 (QC40)。復号できない局は受信の設定の「受信できるチャンネル」にだけ出て、
- * 番組表とライブには出ない
+ * 偽の放送の搬送波は 4 つ (`tests/fake/services.ts`): BS の再送信 (QC20)、BS4K の再送信 (QC26。TLV)、TSMF で 2 つの TS を束ねたもの
+ * (QC30。地上波の再送信と自主放送)、B-CAS 以外の CA_system_id だけでスクランブルした局 (QC40。番組表もスクランブルしている)。
+ * 復号できない局はライブに出ない。番組表を読める局 (4K の局) は、番組表に「観られません」の列で出る
  */
 
 /** 偽エージェントの既定のチューナー (`tests/fake/agent.ts` の `plugged`) */
@@ -110,7 +116,7 @@ test.describe("ケーブル", () => {
     });
     // QC13〜QV12 の 113 チャンネルと、TSMF で束ねた 2 つ目の TS (QC30:1)
     await expect(card.getByTestId("scan-count")).toContainText("114 / 114");
-    await expect(card.getByTestId("scan-found")).toContainText("4");
+    await expect(card.getByTestId("scan-found")).toContainText("5");
 
     // 取り込み直した表を読み直す
     await goto(page, "/settings/reception");
@@ -128,14 +134,29 @@ test.describe("ケーブル", () => {
     await expect(row("QC30:1")).toContainText(CATV_OWN.name);
     await expect(row("QC30:1").getByTestId("channel-origin")).toHaveCount(0);
 
-    // 復号できない局は表にだけ並べ、印と、番組表とライブに出ないわけを添える
+    // 復号できない局は印と、ライブと録画に使えないわけを添える
     await expect(row("QC40")).toContainText(CATV_LOCKED.name);
     await expect(row("QC40").getByTestId("service-undecodable")).toHaveText(
       "復号できません",
     );
-    await expect(card.getByTestId("service-undecodable")).toHaveCount(1);
-    await expect(card.getByTestId("undecodable-note")).toContainText(
+    // 4K の局 (TLV) は、元の放送が BS4K で、まだ復号できない (CA_system_id が B-CAS と同じ 0x0005 でも ACAS が要る)
+    await expect(row("QC26")).toContainText(CATV_4K.name);
+    await expect(row("QC26").getByTestId("channel-origin")).toHaveText(
+      "BS4K の再送信",
+    );
+    await expect(row("QC26").getByTestId("service-undecodable")).toHaveText(
+      "復号できません",
+    );
+    await expect(card.getByTestId("service-undecodable")).toHaveCount(2);
+    const note = card.getByTestId("undecodable-note");
+    await expect(note).toContainText(
       "B-CAS 以外の方式でスクランブルされているため",
+    );
+    await expect(note).toContainText(
+      "ケーブルの 4K の局は、まだライブと録画に対応していません",
+    );
+    await expect(note).toContainText(
+      "番組表を読める局は、番組表に「観られません」の列で出します",
     );
     // スキャンで分かったこと (CA_system_id) を、チャンネルの行の下に出す
     await expect(
@@ -162,7 +183,17 @@ test.describe("ケーブル", () => {
     const grid = page.getByTestId("guide-grid");
     await expect(grid).toContainText(CATV_GR.name);
     await expect(grid).toContainText(CATV_BS.name);
+    // 番組表がスクランブルされている局 (QC40) は出さない
     await expect(grid).not.toContainText(CATV_LOCKED.name);
+    // 4K の局は番組表を読めるので、局名の下に「観られません」を添えて出す。局名はライブへのリンクにしない
+    const head4k = grid
+      .getByTestId("guide-service")
+      .filter({ hasText: CATV_4K.name });
+    await expect(head4k.getByTestId("guide-service-unwatchable")).toHaveText(
+      "観られません",
+    );
+    await expect(head4k.getByTestId("guide-service-live")).toHaveCount(0);
+    await expect(grid.getByTestId("guide-service-unwatchable")).toHaveCount(1);
 
     // 局の一覧には入るが、復号できない局はライブの一覧に出ない (`airing` が false)。ライブは選局せずに断る
     const services = (await (await request.get("/api/services")).json()) as {
@@ -208,6 +239,55 @@ test.describe("ケーブル", () => {
         );
       })
       .toBe(true);
+  });
+
+  test("4K の局の番組は、詳細で予約とライブの代わりにわけを出し、予約を断る", async ({
+    page,
+    request,
+  }) => {
+    await syncEpg(request);
+    await goto(page, "/guide?type=CATV");
+    const cells = page
+      .getByTestId("guide-grid")
+      .locator(`[data-testid=grid-program][data-service-id="${CATV_4K.id}"]`);
+    await expect(cells.first()).toBeAttached();
+    // マスは少しずつ描くので、描き終わるのを待ってから探す
+    await expect(page.getByTestId("guide-grid")).not.toHaveAttribute(
+      "data-drawing",
+      "",
+    );
+    // これから始まる番組を開く (始まった番組には、どの局でも予約のボタンが出ない)
+    const later = await cells.evaluateAll((nodes) =>
+      nodes.findIndex(
+        (node) =>
+          Number((node as HTMLElement).dataset["startAt"]) >
+          Date.now() + 60_000,
+      ),
+    );
+    expect(later).toBeGreaterThanOrEqual(0);
+    const cell = cells.nth(later);
+    const programId = Number(await cell.getAttribute("data-program-id"));
+    await cell.getByTestId("program-button").click();
+    await expect(page.getByTestId("detail-unwatchable")).toHaveText(
+      "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません",
+    );
+    await expect(page.getByTestId("detail-reserve")).toHaveCount(0);
+    await expect(page.getByTestId("detail-watch")).toHaveCount(0);
+
+    // 外から使う API の予約も、同じわけで断る (`reservations.reserve`)
+    const refused = await request.post(`/api/programs/${programId}/record`, {
+      headers: { accept: "application/json" },
+    });
+    expect(refused.status()).toBe(400);
+    expect((await refused.json()).message).toContain(
+      "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません",
+    );
+
+    // ライブも選局せずに断る
+    const live = await request.get(`/api/services/${CATV_4K.id}/live`, {
+      headers: { accept: "application/json" },
+    });
+    expect(live.status()).toBe(409);
   });
 
   test("ケーブルを受けられるチューナーが無くなったら、ケーブルの局を 2 回押しで消せる", async ({
