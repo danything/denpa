@@ -6,9 +6,10 @@
 # wdi-simple は Zadig と同じ libwdi のコマンドライン版で、install.ps1 -WinUsb がチューナーのドライバを WinUSB に
 # 替えるのに使う (docs/install-windows.md)。**libwdi のリリースには Zadig しか無い**ので、ここでビルドして
 # エージェントの zip に入れる (.github/workflows/release.yml・test.yml)。上流の CI (.github/workflows/vs2022.yml) と
-# 同じ手順で、違うのは次の 2 つ。
+# 同じ手順で、違うのは次の 3 つ。
 #   - x64 の Release だけをビルドする
-#   - 埋め込むドライバを WinUSB だけにする (libusb-win32 と libusbK のファイルは取ってこない。msvc/config.h の 3 行を書き換える)
+#   - 埋め込むドライバを WinUSB だけにする (libusb-win32 と libusbK のファイルは取ってこない。msvc/config.h を書き換える)
+#   - ARM64 の Windows 用のインストーラを埋め込まない (denpa の Windows 版は x64 だけ。msvc/config.h とプロジェクトの参照を書き換える)
 #
 # 埋め込む WinUSB のファイル (winusbcoinstaller2.dll・WdfCoInstaller01011.dll) は Microsoft の WDK 8.0 の再配布物で、
 # 上流の CI・Zadig と同じ MSI から取り出す。取ってくるものはコミットと sha256 で確かめる。
@@ -60,19 +61,38 @@ try {
         if (-not (Test-Path -LiteralPath (Join-Path $wdk $file))) { throw "$file is not in wdfcoinstaller.msi" }
     }
 
-    # --- msvc/config.h。WDK の場所を書き、libusb-win32 と libusbK の埋め込みを外す。3 行とも当たらなければ止める ---
+    # --- msvc/config.h。WDK の場所を書き、libusb-win32・libusbK・ARM64 用のインストーラの埋め込みを外す。4 行とも当たらなければ止める ---
     $configPath = Join-Path $src 'msvc\config.h'
     $config = [IO.File]::ReadAllText($configPath)
     $edits = @(
         @('#define WDK_DIR "C:/Program Files (x86)/Windows Kits/8.0"', "#define WDK_DIR `"$($wdk.Replace('\', '/'))`""),
         @('#define LIBUSB0_DIR "D:/libusb-win32"', '/* libusb-win32 is not embedded */'),
-        @('#define LIBUSBK_DIR "D:/libusbK/bin"', '/* libusbK is not embedded */')
+        @('#define LIBUSBK_DIR "D:/libusbK/bin"', '/* libusbK is not embedded */'),
+        @('#define OPT_ARM', '/* the ARM64 installer is not embedded */')
     )
     foreach ($edit in $edits) {
         if (-not $config.Contains($edit[0])) { throw "msvc/config.h has no line: $($edit[0])" }
         $config = $config.Replace($edit[0], $edit[1])
     }
     [IO.File]::WriteAllText($configPath, $config)
+
+    # --- ARM64 用のインストーラ (installer_arm64) をビルドから外す。denpa の Windows 版は x64 だけで、ランナーの Visual Studio に
+    # このプロジェクトが求める ARM64 のツールセット (v143) が無い。ソリューションの「ビルドする」の行と、ライブラリからの参照を消す ---
+    $slnPath = Join-Path $src 'libwdi.sln'
+    $sln = [IO.File]::ReadAllText($slnPath)
+    if ($sln -notmatch '"installer_arm64", "[^"]+", "(\{[0-9A-Fa-f-]+\})"') { throw 'libwdi.sln has no installer_arm64 project' }
+    $build = "(?m)^\s*$([regex]::Escape($Matches[1]))\.[^\r\n=]+\.Build\.0 = [^\r\n]+\r?\n"
+    if (-not [regex]::IsMatch($sln, $build)) { throw 'libwdi.sln does not build installer_arm64' }
+    [IO.File]::WriteAllText($slnPath, [regex]::Replace($sln, $build, ''))
+    $reference = '(?s)\s*<ProjectReference Include="installer_arm64\.vcxproj">.*?</ProjectReference>'
+    $patched = 0
+    foreach ($project in Get-ChildItem -LiteralPath (Join-Path $src 'libwdi\.msvc') -Filter '*.vcxproj') {
+        $text = [IO.File]::ReadAllText($project.FullName)
+        if (-not [regex]::IsMatch($text, $reference)) { continue }
+        [IO.File]::WriteAllText($project.FullName, [regex]::Replace($text, $reference, ''))
+        $patched++
+    }
+    if ($patched -eq 0) { throw 'no project references installer_arm64' }
 
     # --- ビルド (Visual Studio の MSBuild。ランナーに入っている) ---
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -96,7 +116,8 @@ try {
         "Source:  https://github.com/pbatard/libwdi/tree/v$LibwdiVersion (commit $LibwdiCommit)",
         'License: LGPL-3.0-or-later (COPYING-LGPL, COPYING)',
         'Built by https://github.com/danything/denpa/blob/main/scripts/build-wdi-simple.ps1 with Visual Studio (x64, Release).',
-        'Changes to the source: msvc/config.h only (the WDK location; libusb-win32 and libusbK are not embedded).',
+        'Changes to the source (build configuration only): msvc/config.h sets the WDK location and leaves out libusb-win32,',
+        'libusbK and the ARM64 installer; libwdi.sln and the libwdi projects do not build installer_arm64.',
         '',
         'The executable embeds the WinUSB co-installers (winusbcoinstaller2.dll, WdfCoInstaller01011.dll)',
         'from the Microsoft Windows Driver Kit 8.0 redistributable components (WDK-License.rtf, WDK-redist.txt):',

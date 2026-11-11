@@ -168,7 +168,7 @@ public static class SianoUserland
     {
         // Windows は libusb が WinUSB 越しにしか開けない。ドライバが違えば開くところで落ちる
         1 or 4 when OperatingSystem.IsWindows() =>
-            "。チューナーのドライバが WinUSB になっていないか、別のプロセスが使っています (Zadig で WinUSB に。docs/install-windows.md)",
+            "。チューナーのドライバが WinUSB になっていないか、別のプロセスが使っています (install.ps1 に -WinUsb を付けて流すと WinUSB に替えられます。Zadig でも替えられます。docs/install-windows.md)",
         3 => "。そのポートに Siano の機材が見当たりません (抜けたか、挿し替えた?)",
         // macOS にはカーネルのドライバ (smsusb) が無い
         4 when OperatingSystem.IsMacOS() => "。別のプロセスが使っています",

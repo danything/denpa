@@ -11,7 +11,7 @@ namespace Denpa.Agent;
 /// <para>
 /// 中身は富士通 MB86H47A の USB ブリッジ (Mb86h47.cs) と DiB8096 (Dib8096.cs)。ファームウェアは要らず、
 /// ホストがメモリ要求でレジスタを読み書きする。B-CAS の差し込み口もブリッジの UART で、CCID ではない (<see cref="Zd1jCard"/>)。
-/// 作りは docs/agent.md「CECH-ZD1 J の作り」。USB は Linux の usbfs・Windows の WinUSB (Zadig で当てる)・macOS の IOKit。
+/// 作りは docs/agent.md「CECH-ZD1 J の作り」。USB は Linux の usbfs・Windows の WinUSB (install.ps1 の -WinUsb か Zadig で替える)・macOS の IOKit。
 /// </para>
 ///
 /// <para>
