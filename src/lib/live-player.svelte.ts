@@ -85,6 +85,7 @@ import {
   mseType,
   type Notice,
   SOCKET_PATH,
+  TICKET_LIFETIME,
   type Tuned,
   type YieldedRecording,
 } from "#lib/live.js";
@@ -307,6 +308,11 @@ interface LivePlayerOptions {
    * 追っかけは渡しても使わない (段 0 の追っかけは H.265 を出さない。段を下げた変換はサーバが `playable` から選ぶ)
    */
   hevc?: boolean;
+  /**
+   * 最初に繋ぐときのチケット (`server/tickets.ts`)。ライブのページを組むときにサーバが配る。**1 回だけ使う** (`takePageTicket`)。
+   * 追っかけは渡さない (`/api/live/ticket` で取る)
+   */
+  ticket?: string | null;
 }
 
 export function livePlayer(options: LivePlayerOptions = {}) {
@@ -391,13 +397,21 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /** 測った回線の速さ (`AdaptSample.capacity`。`probeLink`)。まだ測っていなければ null */
   let capacity: { bps: number; at: number } | null = null;
 
-  /** 最初のコマを映した (`at` は `performance.now()`)。`startup` の内訳を 1 行出す。video の経路は映した 1 枚、canvas の経路は描き始めたとき */
+  /**
+   * 最初のコマを映した (`at` は `performance.now()`)。`startup` の内訳を 1 行出す。video の経路は映した 1 枚、canvas の経路は
+   * 新しい局の 1 枚目を描いたとき (`RawEvents.shown`)。
+   *
+   * **`tuned` が届く前に来たものは前の局のコマなので数えない。** 繋がっている接続で局を替えると、`tuned` が届くまで
+   * 前の局を映し続けている (canvas の経路では前の局のまま動いていて、10〜38ms で出ていた)
+   */
   function reportStartup(at: number): void {
-    if (startup === null) return;
+    if (startup?.tuned === undefined) return;
     const ms = (value?: number) =>
       value === undefined ? "-" : `${Math.round(value)}ms`;
+    const ticket =
+      startup.ticket === "page" ? "ページから" : ms(startup.ticket);
     console.info(
-      `[live] 開くまで チケット ${ms(startup.ticket)} / 繋がる ${ms(startup.open)} / tuned ${ms(startup.tuned)} / 最初のバイト ${ms(startup.bytes)} / 最初のコマ ${ms(at - startup.at)}`,
+      `[live] 開くまで チケット ${ticket} / 繋がる ${ms(startup.open)} / tuned ${ms(startup.tuned)} / 最初のバイト ${ms(startup.bytes)} / 最初のコマ ${ms(at - startup.at)}`,
     );
     startup = null;
   }
@@ -411,7 +425,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   let startup: {
     at: number;
-    ticket?: number;
+    /** チケットを受け取った。ページを組むときに受け取ったもの (`takePageTicket`) を使ったときは `page` */
+    ticket?: number | "page";
     open?: number;
     tuned?: number;
     bytes?: number;
@@ -2260,6 +2275,27 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    */
   let begun = 0;
 
+  /**
+   * ページと一緒に受け取ったチケット (`options.ticket`) と、受け取った時刻 (`performance.now()`)。使ったら・古くなったら null
+   */
+  let pageTicket =
+    typeof options.ticket === "string"
+      ? { token: options.ticket, at: performance.now() }
+      : null;
+
+  /**
+   * ページと一緒に受け取ったチケットを 1 回だけ渡す。**繋ぐのに使えるのは最初の 1 回だけ** (`tickets.ts` で 1 回使ったら消える)。
+   * 受け取ってから寿命の半分 (`TICKET_LIFETIME`) を過ぎていたら渡さない (運転中の注意を待った・裏のタブで開いた)。
+   * 渡せなければ null で、`/api/live/ticket` から取る
+   */
+  function takePageTicket(): string | null {
+    const given = pageTicket;
+    pageTicket = null;
+    if (given === null || performance.now() - given.at > TICKET_LIFETIME / 2)
+      return null;
+    return given.token;
+  }
+
   /** `mine` 回目の `begin` より後に選び直されたか、画面を離れたか */
   function superseded(mine: number): boolean {
     return mine !== begun || left;
@@ -2339,22 +2375,37 @@ export function livePlayer(options: LivePlayerOptions = {}) {
 
     /*
      * **チケットを先に取る。** ブラウザは WebSocket の握手に `Authorization` を
-     * 付けてくれないので、認証を通れることをここで示す (`tickets.ts`)
+     * 付けてくれないので、認証を通れることをここで示す (`tickets.ts`)。
+     * 最初の 1 回はページと一緒に受け取ったものを使い、`/api/live/ticket` の往復を省く (`takePageTicket`)
      */
+    const fromPage = takePageTicket();
     let ticket: string;
-    try {
-      const res = await fetch(resolve("api/live/ticket"), { method: "POST" });
-      if (!res.ok) throw new Error(String(res.status));
-      ticket = ((await res.json()) as { ticket: string }).ticket;
-      if (startup !== null) startup.ticket = performance.now() - startup.at;
-    } catch {
+    if (fromPage !== null) {
+      ticket = fromPage;
+      if (startup !== null) startup.ticket = "page";
+    } else {
+      try {
+        const res = await fetch(resolve("api/live/ticket"), {
+          method: "POST",
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        ticket = ((await res.json()) as { ticket: string }).ticket;
+        if (startup !== null) startup.ticket = performance.now() - startup.at;
+      } catch {
+        if (superseded(mine)) return;
+        // 繋ぎ直しの最中なら、サーバからまだ応答が無いだけ。待ち直す
+        if (attempts > 0) reconnect();
+        else fail("繋がりませんでした");
+        return;
+      }
       if (superseded(mine)) return;
-      // 繋ぎ直しの最中なら、サーバからまだ応答が無いだけ。待ち直す
-      if (attempts > 0) reconnect();
-      else fail("繋がりませんでした");
-      return;
     }
-    if (superseded(mine)) return;
+    /*
+     * ページと一緒に受け取ったチケットで繋がらなかったか。**断られたら `/api/live/ticket` から取り直す**。
+     * 戻るで開き直したページは、ブラウザが手元に持っていた HTML (使い終えたチケットが入っている) を出すことがある。
+     * サーバを起動し直していても、配ったチケットは残っていない
+     */
+    let opened = false;
 
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     // このエンドポイントは SvelteKit のルートではない (server.js が受ける) ので、型の付いた `resolve` に
@@ -2366,6 +2417,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     socket = ws;
 
     ws.onopen = () => {
+      opened = true;
       if (startup !== null) startup.open = performance.now() - startup.at;
       // 繋がった。次に切れたときはまた 1 秒から待ち直す
       attempts = 0;
@@ -2377,8 +2429,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     };
 
     ws.onerror = () => {
-      // 繋ぎ直しの最中。すぐ後ろに `onclose` が来るので、そちらで待ち直す
-      if (attempts > 0) return;
+      // 繋ぎ直しの最中か、ページと一緒に受け取ったチケットを断られた。すぐ後ろに `onclose` が来るので、そちらで待ち直す
+      if (attempts > 0 || (fromPage !== null && !opened)) return;
       if (state !== "playing") fail("繋がりませんでした");
     };
 
@@ -2386,6 +2438,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     ws.onclose = () => {
       if (socket !== ws || state === "error") return;
       socket = null;
+      // ページと一緒に受け取ったチケットを断られた。`/api/live/ticket` から取って繋ぎ直す (もう `takePageTicket` は渡さない)
+      if (fromPage !== null && !opened && !left && element !== null) {
+        void begin(element, keepList);
+        return;
+      }
       if (left || (tuned === null && chase === null) || element === null) {
         state = "idle";
         return;
@@ -2829,7 +2886,11 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           still,
           target,
           {
-            shown: () => thaw(),
+            // 新しい局の 1 枚目を描いた。動き出すのは貯まってから (`rawPace`) だが、開くまでの時間はここで出す
+            shown: () => {
+              thaw();
+              reportStartup(performance.now());
+            },
             stalled: onWaiting,
             gaveUp: (reason) => fallBack(reason, input),
             // ロック画面・車の操作で `<audio>` を直に止められた・再開された
@@ -2954,7 +3015,6 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (!running && engine.playing) {
       running = true;
       state = "playing";
-      reportStartup(performance.now());
       // 自動再生で断られた。**押すまで映像だけ進める** (壁時計。`RawEngine.blocked`)。
       // 音も消しておく。他を押したついでに鳴りだすと、画面の「消音」と食い違う
       if (engine.blocked) mute();
