@@ -132,13 +132,9 @@ export class DecodeBudget {
    *   数えると、続けて止める・再開するだけで打ち切っていた
    */
   reset(until = Number.NEGATIVE_INFINITY): void {
-    this.quietUntil = until;
-    this.samples = [];
-    this.from = Number.NaN;
-    this.worstLate = 0;
-    this.leastQueued = Number.POSITIVE_INFINITY;
     this.strikes = 0;
-    this.droppedFrom = Number.NaN;
+    this.quietUntil = Number.NEGATIVE_INFINITY;
+    this.pause(until);
   }
 
   /**

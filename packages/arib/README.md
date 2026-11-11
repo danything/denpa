@@ -1,9 +1,9 @@
 # @danything/arib
 
-日本のデジタル放送 (ISDB-T / ISDB-S、ARIB 規格) の MPEG-TS を TypeScript で読むライブラリです。
+日本のデジタル放送 (ISDB-T / ISDB-S / ISDB-C、ARIB 規格) の MPEG-TS を TypeScript で読むライブラリです。
 録画サーバ [denpa](https://github.com/danything/denpa) の中で使っているものを切り出しました。
 
-- PSI (`psi`): パケットの切り出し、セクションの組み立て、PAT / PMT / SDT / NIT。衛星はネットワークの全部の TS の NIT と、ほかの TS の SDT もそろえて読む
+- PSI (`psi`): パケットの切り出し、セクションの組み立て、PAT / PMT / SDT / NIT。衛星はネットワークの全部の TS の NIT と、ほかの TS の SDT もそろえて読む。ケーブルは SDT だけで局をそろえる
 - 映像・音声の PES と ADTS を取り出す (`pes`)
 - 番組表の EIT[p/f] と EIT[schedule] を、ジャンル・音声・拡張形式イベント・シリーズ記述子まで読む。放送の時刻 (TDT / TOT) もここ (`eit`)
 - ARIB STD-B24 の 8 単位符号 (JIS X 0213 の 1 面・2 面まで) と ARIB 外字を文字列にする (`aribtext`、`aribtext-gaiji`)

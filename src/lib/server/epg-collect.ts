@@ -538,7 +538,7 @@ const WHOLE_ONLY = new Set(["CS"]);
  * 残っていても、ほかの局が埋まっていれば動かない (毎周回 6 分ずつ塞がない)。
  *
  * **地上波と CATV は全局読みをしない。** CATV は自分の TS の番組表だけを読む (地上波と同じ)。
- * BS を再送信する CATV の TS はネットワーク ID が BS と同じ 4 なので、束ねるキーには種別も入れる
+ * BS を再送信する CATV の TS はネットワーク ID が BS と同じ 4 だが、`isSatellite` で外れるので BS の束に混ざらない
  */
 export function firstSweeps(
   channels: AgentChannel[],

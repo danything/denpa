@@ -117,7 +117,6 @@ export interface CheckResult {
 }
 
 interface TransferStatus {
-  exporting: boolean;
   /** まだ使っていない denpa か (取り込めるのはこのときだけ) */
   empty: boolean;
   upload: (UploadMeta & { received: number }) | null;
@@ -127,7 +126,7 @@ interface TransferStatus {
   ready: boolean;
   /** いちばん近い予約の始まり。書き出したあと古い denpa を止めてもらうために出す */
   nextReservation: number | null;
-  /** 録画中か、エンコードを待っている・している録画の数 (`busyRecordings`)。0 でなければ書き出す前に断る */
+  /** 録画中か、エンコードを待っている・している録画の数 (`busyRecordings`)。0 でなければ書き出しの上に件数を出す (書き出しは止めない) */
   working: number;
 }
 
@@ -208,7 +207,6 @@ export function status(): TransferStatus {
     .limit(1)
     .get();
   return {
-    exporting,
     empty: isEmpty(),
     upload: meta === null ? null : { ...meta, received: received() },
     prepared: existsSync(prepared()),
@@ -224,7 +222,7 @@ export function status(): TransferStatus {
  * **録画中か、エンコードを待っている・している録画の数。** エンコードには CM 検出・スクランブル復号も入る
  * (どれも `encode_jobs` の待ち・実行中)。書き出したあとも、この録画のファイルは作り直されることがある。
  * 再エンコードは置いてあるファイルを消してから書き直す (`encoder.ts` の `stalePaths`) ので、その間に録画の
- * フォルダを写すと、移した先で「置き場に無い」になる。画面で断るだけで、書き出しは止めない
+ * フォルダを写すと、移した先で「置き場に無い」になる。画面で知らせるだけで、書き出しは止めない
  */
 function busyRecordings(): number {
   const queued = orm()
