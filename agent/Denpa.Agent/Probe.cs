@@ -250,6 +250,8 @@ public static class Probe
             return RunZd1j(zd1j, channels, decode ? keys : null, seconds, repeat);
         }
 
+        // CXD2856ER の地上波のプリセットに使う TMCC も、常駐のときと同じファイルを読み書きする
+        Cxd2856Frontend.Presets = new TmccPresets(Config.FromEnvironment().TmccPresetsFile);
         // 「+」で並べると、同じプロセスで複数の受信機を同時に選局する (常駐のときの並べたスキャンと同じ形を、サーバ無しで試す)
         var devices = device.Split('+', StringSplitOptions.RemoveEmptyEntries);
         // --steps 2,3,5: IT930x の機材で、TS を流す受信機を段階を追って増やす (It930xSteps)

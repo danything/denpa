@@ -1,10 +1,9 @@
-using System.Collections.Concurrent;
-
 namespace Denpa.Agent.Tests;
 
 /*
  * CXD2856ER の地上波の選局を速くする 2 つの手順 (Cxd2856.cs)。偽のバス (Cxd2856Fakes.cs) の上で、書く順番を仕様書と照らす。
- * - プリセット選局 (仕様書 5.8): ロックしたら TMCC の 13 バイトを周波数ごとに覚え、次の選局で選局を終える前に書く
+ * - プリセット選局 (仕様書 5.8): ロックしたら TMCC の 13 バイトを周波数ごとに覚え、次の選局で選局を終える前に書く。覚えていない周波数では、ほかの周波数で最後にロックした値を書く
+ * - 覚えた値のファイル (tmcc-presets.json。TmccPresets.cs)
  * - チューナーの手順 8 のあとの 50 ms (仕様書 4.3) を待たずに選局を終え、ロックを待つ間に手順 9〜10 を書く (仕様書 5.4)
  */
 public class Cxd2856PresetTests
@@ -13,7 +12,7 @@ public class Cxd2856PresetTests
 
     private static readonly string Tmcc = "A0A1A2A3A4A5A6A7A8A9AAABAC";
 
-    private static (Cxd2856Frontend Frontend, FakeCxdBus Bus, FakeClock Clock, ConcurrentDictionary<uint, byte[]> Presets) Make(Action<FakeCxdReceiver>? setup = null)
+    private static (Cxd2856Frontend Frontend, FakeCxdBus Bus, FakeClock Clock, TmccPresets Presets) Make(Action<FakeCxdReceiver>? setup = null, TmccPresets? presets = null)
     {
         var bus = new FakeCxdBus(Demod);
         var demod = bus[Demod];
@@ -21,15 +20,21 @@ public class Cxd2856PresetTests
         for (byte at = 0; at < Cxd2856.TmccLength; at++) demod.T[(0x60, (byte)(0x32 + at))] = (byte)(0xA0 + at);
         setup?.Invoke(demod);
         var clock = new FakeClock();
-        var presets = new ConcurrentDictionary<uint, byte[]>();
+        presets ??= new TmccPresets(null);
         return (new Cxd2856Frontend(bus, new Lock(), Demod, clock.Sleep, () => clock.Now, presets), bus, clock, presets);
     }
 
     /// <summary>プリセットを有効にした行 (バンク 60 の 59〜5A ← 01 01) を書いたあとか</summary>
     private static bool PresetOn(FakeCxdReceiver demod) => demod.T.GetValueOrDefault(((byte)0x60, (byte)0x59)) == 0x01;
 
+    /// <summary>その周波数で覚えた値 (16 進)。無ければ null</summary>
+    private static string? Own(TmccPresets presets, uint khz) =>
+        presets.For(khz) is ({ } tmcc, false) ? Convert.ToHexString(tmcc) : null;
+
+    private static string Temp() => Path.Combine(Directory.CreateTempSubdirectory("tmcc-presets").FullName, "tmcc-presets.json");
+
     [Test]
-    public async Task 覚えていない周波数ではプリセットを外し_ロックしたら次の選局で覚えた_13_バイトを選局を終える前に書く()
+    public async Task どの値も無ければプリセットを外し_ロックしたら次の選局で覚えた_13_バイトを選局を終える前に書く()
     {
         const uint khz = 503143;
         var (frontend, bus, _, presets) = Make();
@@ -41,7 +46,7 @@ public class Cxd2856PresetTests
         await Assert.That(bus.Log.IndexOf("T 59=0000")).IsLessThan(finish);
         await Assert.That(bus.Log.Any(line => line.StartsWith("T 62=", StringComparison.Ordinal))).IsFalse();
         // TS がロックしたら、値を固めて TMCC を読んで覚える
-        await Assert.That(Convert.ToHexString(presets[khz])).IsEqualTo(Tmcc);
+        await Assert.That(Own(presets, khz)).IsEqualTo(Tmcc);
 
         bus.Log.Clear();
         await Assert.That(frontend.TuneIsdbt(khz)).IsTrue();
@@ -56,14 +61,104 @@ public class Cxd2856PresetTests
     }
 
     [Test]
-    public async Task 周波数が違えばプリセットを使わない()
+    public async Task 覚えていない周波数では_ほかの周波数で最後にロックしたときの値を書き_ロックしたらその周波数の値として覚える()
     {
-        var (frontend, bus, _, _) = Make();
-        await Assert.That(frontend.TuneIsdbt(503143)).IsTrue();
+        const string older = "00000000000000000000000001", newer = "00000000000000000000000002";
+        var (frontend, bus, _, presets) = Make();
+        presets.Locked(503143, Convert.FromHexString(newer));
+        presets.Locked(509143, Convert.FromHexString(older));
+        // 503143 で最後にロックした
+        presets.Locked(503143, Convert.FromHexString(newer));
+        await Assert.That(frontend.TuneIsdbt(515143)).IsTrue();
+        var preset = bus.Log.IndexOf($"T 62={newer}");
+        await Assert.That(preset).IsGreaterThan(0);
+        await Assert.That(bus.Log[preset - 1]).IsEqualTo("T 59=0101");
+        await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(1);
+        await Assert.That(frontend.TuneLines().Any(line => line.Contains("プリセット 使った (ほかのチャンネルの値 00 00", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(Own(presets, 515143)).IsEqualTo(Tmcc);
+    }
+
+    [Test]
+    public async Task 代わりの値でロックしなければ外して選局し直し_その周波数では次から代わりの値を使わない()
+    {
+        const uint khz = 515143;
+        // 放送の無いチャンネル。プリセットがあっても無くても「信号が無い」
+        var (frontend, bus, _, presets) = Make(demod => demod.Status = _ => 0x10);
+        presets.Locked(503143, Convert.FromHexString(Tmcc));
+        await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
+        await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(2);
+        await Assert.That(bus.Log).Contains($"T 62={Tmcc}");
+        await Assert.That(bus.Log.LastIndexOf("T 59=0000")).IsGreaterThan(bus.Log.IndexOf($"T 62={Tmcc}"));
+        await Assert.That(frontend.TuneLines().Any(line => line.StartsWith("ほかのチャンネルの値のプリセットでロックしなかったため", StringComparison.Ordinal))).IsTrue();
+        // ほかの周波数の値は消さない
+        await Assert.That(Own(presets, 503143)).IsEqualTo(Tmcc);
+
         bus.Log.Clear();
-        await Assert.That(frontend.TuneIsdbt(509143)).IsTrue();
-        await Assert.That(bus.Log).Contains("T 59=0000");
+        await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
         await Assert.That(bus.Log).DoesNotContain("T 59=0101");
+        await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(1);
+        // ほかの周波数では、まだ代わりの値を使う
+        await Assert.That(presets.For(521143).Fallback).IsTrue();
+    }
+
+    [Test]
+    public async Task 書いたファイルを作り直したエージェントが読み_覚えた値をプリセットにする()
+    {
+        const uint khz = 503143;
+        var path = Temp();
+        var (frontend, _, _, _) = Make(presets: new TmccPresets(path));
+        await Assert.That(frontend.TuneIsdbt(khz)).IsTrue();
+        await Assert.That(File.ReadAllText(path)).Contains($"\"{khz}\": \"{Tmcc}\"");
+
+        // 再起動した (ファイルから読む)
+        var (again, bus, _, presets) = Make(presets: new TmccPresets(path));
+        await Assert.That(Own(presets, khz)).IsEqualTo(Tmcc);
+        await Assert.That(again.TuneIsdbt(khz)).IsTrue();
+        await Assert.That(bus.Log).Contains($"T 62={Tmcc}");
+    }
+
+    [Test]
+    public async Task ファイルの後ろほど新しく_読み直しても最後にロックした値を代わりに使う()
+    {
+        var path = Temp();
+        var presets = new TmccPresets(path);
+        presets.Locked(509143, Convert.FromHexString("00000000000000000000000001"));
+        presets.Locked(503143, Convert.FromHexString("00000000000000000000000002"));
+        presets.Locked(509143, Convert.FromHexString("00000000000000000000000003"));
+        await Assert.That(Convert.ToHexString(new TmccPresets(path).For(515143).Tmcc!)).IsEqualTo("00000000000000000000000003");
+    }
+
+    [Test]
+    public async Task 値が新しくなったときだけファイルに書く()
+    {
+        var path = Temp();
+        var presets = new TmccPresets(path);
+        presets.Locked(503143, Convert.FromHexString(Tmcc));
+        File.Delete(path);
+        presets.Locked(503143, Convert.FromHexString(Tmcc));
+        await Assert.That(File.Exists(path)).IsFalse();
+        presets.Locked(509143, Convert.FromHexString(Tmcc));
+        await Assert.That(File.Exists(path)).IsTrue();
+    }
+
+    [Test]
+    [Arguments("{")]
+    [Arguments("[]")]
+    [Arguments("{\"version\": 2, \"tmcc\": {}}")]
+    [Arguments("{\"version\": 1, \"tmcc\": {\"503143\": \"A0A1\"}}")]
+    [Arguments("{\"version\": 1, \"tmcc\": {\"503143\": \"ZZ\"}}")]
+    [Arguments("{\"version\": 1, \"tmcc\": {\"T21\": \"A0A1A2A3A4A5A6A7A8A9AAABAC\"}}")]
+    [Arguments("{\"version\": 1, \"tmcc\": {\"503143\": 1}}")]
+    public async Task 壊れたファイルは無視して空から始める(string body)
+    {
+        var path = Temp();
+        File.WriteAllText(path, body);
+        var (frontend, bus, _, presets) = Make(presets: new TmccPresets(path));
+        await Assert.That(presets.For(503143).Tmcc).IsNull();
+        await Assert.That(frontend.TuneIsdbt(503143)).IsTrue();
+        await Assert.That(bus.Log).DoesNotContain("T 59=0101");
+        // ロックしたら書き直す
+        await Assert.That(Own(new TmccPresets(path), 503143)).IsEqualTo(Tmcc);
     }
 
     [Test]
@@ -75,7 +170,7 @@ public class Cxd2856PresetTests
         {
             demod.Status = _ => PresetOn(demod) ? (byte)0x10 : (byte)0x03;
         });
-        presets[khz] = Convert.FromHexString("00000000000000000000000004");
+        presets.Locked(khz, Convert.FromHexString("00000000000000000000000004"));
         await Assert.That(frontend.TuneIsdbt(khz)).IsTrue();
         await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(2);
         var spoiled = bus.Log.IndexOf("T 62=00000000000000000000000004");
@@ -84,7 +179,7 @@ public class Cxd2856PresetTests
         await Assert.That(bus.Log.LastIndexOf("T 59=0000")).IsGreaterThan(spoiled);
         await Assert.That(bus.Log.LastIndexOf("T 59=0000")).IsLessThan(second);
         // 2 回目でロックしたので、読んだ TMCC を覚え直す
-        await Assert.That(Convert.ToHexString(presets[khz])).IsEqualTo(Tmcc);
+        await Assert.That(Own(presets, khz)).IsEqualTo(Tmcc);
         await Assert.That(frontend.TuneLines()).Contains("プリセットを使った選局がロックしなかったため、プリセットを外して選局し直しました");
     }
 
@@ -93,10 +188,10 @@ public class Cxd2856PresetTests
     {
         const uint khz = 515143;
         var (frontend, bus, _, presets) = Make(demod => demod.Status = _ => 0x10);
-        presets[khz] = Convert.FromHexString(Tmcc);
+        presets.Locked(khz, Convert.FromHexString(Tmcc));
         await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
         await Assert.That(bus.Log.Count(line => line == "T FE=01")).IsEqualTo(2);
-        await Assert.That(presets.ContainsKey(khz)).IsFalse();
+        await Assert.That(presets.For(khz).Tmcc).IsNull();
         // 次の選局はプリセットを使わず、選局し直しもしない
         bus.Log.Clear();
         await Assert.That(frontend.TuneIsdbt(khz)).IsFalse();
