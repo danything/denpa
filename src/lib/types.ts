@@ -89,11 +89,18 @@ export const DESCRAMBLABLE: Record<Transport, readonly number[]> = {
 };
 
 /**
+ * 番組表の取得・ライブ・録画で読める伝送の形式。**TLV (4K の放送) はまだ読めない** (MMT の番組表・映像と音声の取り出しが無い)。
+ * TLV の局は、スクランブルされていなくても `services.decodable` を落とし、TS として開かない。4K の番組表・ライブ・録画が入ったら `tlv` を足す
+ */
+export const READABLE_TRANSPORTS: readonly Transport[] = ["ts"];
+
+/**
  * スクランブルを復号できる局か。**結果は局の行の `services.decodable` に入れて使う** (`epg.syncServices` が取り込みのたびに決める)。
  *
  * - SKY (スカパー！プレミアム) は復号できない。B-CAS ではない専用のカードが要り、そのカードにまだ対応していない
  *   (エージェントもスクランブルされたまま流す。#1578)
- * - ほかの種別は、CA_system_id が無い (スクランブルしていない) か、その伝送の形式の `DESCRAMBLABLE` にある CA_system_id があれば復号できる。
+ * - 番組表の取得・ライブ・録画で読めない伝送の形式 (TLV。`READABLE_TRANSPORTS`) の局は、CA_system_id によらず扱わない
+ * - ほかは、CA_system_id が無い (スクランブルしていない) か、その伝送の形式の `DESCRAMBLABLE` にある CA_system_id があれば復号できる。
  *   CA_system_id はスキャンで PMT (TS) か MPT (TLV) を読んだ CATV の局だけが持ち (`caSystemIds`)、ほかの種別は空なので復号できる。
  *   ケーブルには B-CAS 以外の方式でスクランブルする局と、4K の局 (TLV。ACAS にまだ対応していない) がある
  *
@@ -106,6 +113,7 @@ export function decodableService(
 ): boolean {
   return (
     type !== "SKY" &&
+    READABLE_TRANSPORTS.includes(transport) &&
     (caSystemIds.length === 0 ||
       caSystemIds.some((id) => DESCRAMBLABLE[transport].includes(id)))
   );
@@ -139,8 +147,8 @@ export function origin(networkId: number): Origin {
 export function undecodableReason(type: string, transport: Transport): string {
   if (type === "SKY")
     return "スカパー！プレミアムの局は、スクランブルを復号できないため観られません。スカパー！プレミアムのカードには、これから対応する予定です";
-  if (transport === "tlv")
-    return "4K の放送のスクランブル (ACAS) には、まだ対応していないため観られません";
+  if (!READABLE_TRANSPORTS.includes(transport))
+    return "ケーブルの 4K の局は、まだ番組表・ライブ・録画に対応していないため観られません";
   return "B-CAS 以外の方式でスクランブルされた局のため、復号できず観られません";
 }
 

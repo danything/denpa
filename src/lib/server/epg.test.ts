@@ -1145,7 +1145,8 @@ describe("ケーブルの局", () => {
           },
         ],
       },
-      // 4K の局 (TLV)。CA_system_id は B-CAS と同じ 0x0005 でも、ACAS が要るので復号できない
+      // 4K の局 (TLV)。番組表・ライブ・録画にまだ対応していないので、CA_system_id によらず扱わない
+      // (0x0005 は B-CAS と同じ値でも ACAS が要る。スクランブルしていない局も TS として開かない)
       {
         type: "CATV",
         channel: "QC26",
@@ -1159,6 +1160,12 @@ describe("ケーブルの局", () => {
             serviceType: 1,
             name: "ＢＳでんぱ　４Ｋ",
             caSystemIds: [0x0005],
+          },
+          {
+            serviceId: 162,
+            serviceType: 1,
+            name: "無料の 4K",
+            caSystemIds: [],
           },
         ],
       },
@@ -1197,6 +1204,7 @@ describe("ケーブルの局", () => {
       row(CABLE_ASAHI, "CATV", 4, true),
       row(CABLE_PAY, "CATV", 4, false),
       row(CABLE_4K, "CATV", 0x000b, false, "tlv"),
+      row(CABLE_4K + 1, "CATV", 0x000b, false, "tlv"),
     ]);
     expect(serviceCounts()).toEqual({ BS: 1, CATV: 1 });
   });

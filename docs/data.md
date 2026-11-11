@@ -69,9 +69,11 @@ BS-TBS 4K は `(0x10000 + 0x000B) * 100000 + 161` = 6,554,700,161 になり、�
 service_id が同じでも 2K の局とは結び付けず、別の局として入れる。
 
 `services.decodable` はスクランブルを復号できる局か (`types.decodableService`)。取り込みのたびに決め直す (`epg.syncServices`)。
-**伝送の形式 (`services.transport`。`ts` か `tlv`) と CA_system_id の組の表 (`types.DESCRAMBLABLE`) で決める。**
-CA_system_id が無い (スクランブルしていない) か、その形式の表にある CA_system_id があれば復号できる。表は TS が B-CAS (`0x0005`) だけで、TLV は空 (ACAS にまだ対応していない)。
-SKY の局と、PMT の CA 記述子に B-CAS の CA_system_id が無い CATV の局と、MPT のアクセス制御記述子に CA_system_id がある 4K の局は復号できない。
+**伝送の形式 (`services.transport`。`ts` か `tlv`) と CA_system_id で決める。**
+TS の局は、CA_system_id が無い (スクランブルしていない) か、その形式の表 (`types.DESCRAMBLABLE`) にある CA_system_id があれば復号できる。表は TS が B-CAS (`0x0005`) だけで、TLV は空 (ACAS にまだ対応していない)。
+SKY の局と、PMT の CA 記述子に B-CAS の CA_system_id が無い CATV の局は復号できない。
+**4K の局 (`tlv`) は、CA_system_id によらず復号できない局として扱う** (`types.READABLE_TRANSPORTS`)。番組表の取得・ライブ・録画が TLV をまだ読めず、
+スクランブルしていない 4K の局を通すと、TS として開いてしまうため。4K の番組表・ライブ・録画が入ったら `READABLE_TRANSPORTS` に `tlv` を足す。
 4K の局の CA_system_id は B-CAS と同じ `0x0005` でも、B-CAS のカードでは復号できない。形式を見ずに `0x0005` で決めると、復号できると取り違える。
 free_CA_mode は使わない (実機の BS4K は 0 なのに、映像と音声はスクランブルされていた)。
 復号できない局は「受信できるチャンネル」にだけ出し、番組表・ライブ・ロゴには出さない (番組表も書かない。`epg.serviceIdIndex`)。

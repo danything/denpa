@@ -516,7 +516,7 @@ describe("ケーブルの 4K の局 (TLV)", () => {
         },
       ],
     });
-    // B-CAS と同じ値でも、4K の放送は B-CAS のカードでは復号できない (ACAS が要る)
+    // 4K の局 (TLV) は、番組表・ライブ・録画にまだ対応していないので扱わない (B-CAS と同じ 0x0005 でも ACAS が要る)
     expect(decodableChannel(entry)).toBe(false);
     // TS の CATV の局なら、同じ CA_system_id で復号できる
     expect(decodableChannel({ ...entry, transport: "ts" })).toBe(true);

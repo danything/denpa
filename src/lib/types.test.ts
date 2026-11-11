@@ -42,14 +42,15 @@ describe("種別", () => {
     expect(decodableService("CATV", "ts", [0x000a])).toBe(false);
   });
 
-  test("4K の局 (TLV) は、B-CAS と同じ CA_system_id 0x0005 でも復号できない", () => {
-    // ACAS にまだ対応していない。形式を見ずに 0x0005 で決めると、復号できると取り違える
+  test("4K の局 (TLV) は、CA_system_id によらず扱わない (番組表・ライブ・録画にまだ対応していない)", () => {
+    // B-CAS と同じ 0x0005 でも、B-CAS のカードでは復号できない (ACAS が要る)
     expect(decodableService("CATV", "tlv", [0x0005])).toBe(false);
     expect(decodableService("CATV", "tlv", [0x0006])).toBe(false);
-    expect(decodableService("CATV", "tlv", [0x0005, 0x0006])).toBe(false);
-    // アクセス制御記述子が無ければ (スクランブルしていない) 復号は要らない
-    expect(decodableService("CATV", "tlv", [])).toBe(true);
-    expect(undecodableReason("CATV", "tlv")).toContain("ACAS");
+    // スクランブルしていなくても、TS として開かない
+    expect(decodableService("CATV", "tlv", [])).toBe(false);
+    expect(undecodableReason("CATV", "tlv")).toBe(
+      "ケーブルの 4K の局は、まだ番組表・ライブ・録画に対応していないため観られません",
+    );
     expect(undecodableReason("CATV", "ts")).toContain("B-CAS 以外");
   });
 
