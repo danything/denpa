@@ -39,15 +39,8 @@ public class Tc90522BoardTests
     private static string[] WakeSatellite(string demod) =>
         [$"{demod} 15=00", $"{demod} 1D=00", $"{demod} 04=02", $"{demod} 1C=80", $"{demod} 1F=22", $"{demod} 13=00", $"{demod} 17=00"];
 
-    /// <summary>衛星のスリープ (TS の端子を止め (仕様書に無い)、RT710 の待機と復調器。仕様書 4.1 の 3)</summary>
-    private static string[] SleepSatellite(string demod) =>
-        [$"{demod} 1C=80", $"{demod} 1F=22", $"{demod} RT710 00={Tc90522Tests.Rt710Standby}", $"{demod} 13=80", $"{demod} 17=FF"];
-
-    /// <summary>地上波のスリープ (TS の端子を止め (仕様書に無い)、復調器。仕様書 4.1 の 3)</summary>
-    private static string[] SleepTerrestrial(string demod) => [$"{demod} 1D=A8", $"{demod} 03=F0"];
-
-    /// <summary>電源を入れたあと、受信機を開く前に 4 つの TS の端子を止める (仕様書 4.5 の値。受信機 0 から 3 の順)</summary>
-    private static readonly string[] StopOutputs = ["11 1C=80", "11 1F=22", "13 1C=80", "13 1F=22", "10 1D=A8", "12 1D=A8"];
+    /// <summary>衛星のスリープ (RT710 の待機と復調器。仕様書 4.1 の 3)</summary>
+    private static string[] SleepSatellite(string demod) => [$"{demod} RT710 00={Tc90522Tests.Rt710Standby}", $"{demod} 13=80", $"{demod} 17=FF"];
 
     private static (FakeIt930x Usb, FakeTcBus Bus) Fake()
     {
@@ -105,13 +98,8 @@ public class Tc90522BoardTests
                 "W D8C3=00", "W D8B7=01",
             }, CollectionOrdering.Matching);
             await Assert.That(clock.Sleeps).IsEquivalentTo(new[] { 20, 20, 80, 20 }, CollectionOrdering.Matching);
-            // 受信機には、開くまで TS の端子を止める書き込みだけをする。電源を入れたあと、TS 入力を開ける前に止める (仕様書に無い)
-            await Assert.That(bus.Log).IsEquivalentTo(StopOutputs, CollectionOrdering.Matching);
-            List<string> log;
-            lock (usb.Log) log = [.. usb.Log];
-            await Assert.That(log.IndexOf("W D8B7=01")).IsLessThan(log.IndexOf("I2C W 2 11 1C80"));
-            await Assert.That(log.IndexOf("I2C W 2 12 1DA8")).IsLessThan(log.IndexOf("W DA4D=01"));
-            bus.Log.Clear();
+            // 受信機には、開くまで触らない
+            await Assert.That(bus.Log).IsEmpty();
         }
         finally
         {
@@ -134,12 +122,10 @@ public class Tc90522BoardTests
             var frontend = device.Frontend(2);
             await Assert.That(bus.Log).IsEquivalentTo((string[])
             [
-                // 機材を開いて電源を入れたときに、4 つの TS の端子を止めてある (仕様書に無い)
-                .. StopOutputs,
                 // 2: チューナーの初期化。受信機 0・1 は RT710 (03 を読む)、2・3 は R850
                 "11 RT710 ?4", "13 RT710 ?4", .. R850Init("10"), .. R850Init("12"),
-                // 3: 開く受信機のほかの 3 つをスリープに。どれも TS の端子を止めてから (仕様書に無い)、衛星は RT710 の待機と復調器、地上波は復調器だけ
-                .. SleepSatellite("11"), .. SleepSatellite("13"), .. SleepTerrestrial("12"),
+                // 3: 開く受信機のほかの 3 つをスリープに。衛星は RT710 の待機と復調器、地上波は復調器だけ
+                .. SleepSatellite("11"), .. SleepSatellite("13"), "12 03=F0",
                 // 4: 開く受信機の起動
                 .. WakeTerrestrial("10"),
                 // 5: TS 出力の共通設定 (仕様書 4.4)。受信機 0 の衛星のアドレスと、受信機 2 の地上波のアドレスに書く
@@ -229,8 +215,7 @@ public class Tc90522BoardTests
                 "W D8B7=00", "W D8C3=01", "W D8C3=00", "W D8B7=01",
             }, CollectionOrdering.Matching);
             await Assert.That(clock.Sleeps.Skip(before).Take(3)).IsEquivalentTo(new[] { 20, 80, 20 }, CollectionOrdering.Matching);
-            // 電源を入れ直したら TS の端子を止め直し、やり直しはチューナーの初期化の先頭から
-            await Assert.That(bus.Log.Take(14)).IsEquivalentTo((string[])[.. StopOutputs, "11 RT710 ?4", .. StopOutputs, "11 RT710 ?4"], CollectionOrdering.Matching);
+            // やり直しは、チューナーの初期化の先頭から
             await Assert.That(bus.Log.Count(line => line == "11 RT710 ?4")).IsEqualTo(2);
             await Assert.That(bus.Log[^1]).IsEqualTo("10 0F=13");
         }
@@ -238,46 +223,6 @@ public class Tc90522BoardTests
         {
             device.Release();
             It930xDevice.CloseIfIdle("6-7", TimeSpan.Zero);
-        }
-    }
-
-    /// <summary>最初の <paramref name="failures"/> 回の書き込みを I2C の誤りにするバス (ほかは <paramref name="inner"/> に渡す)</summary>
-    private sealed class FailingWrites(ICxdBus inner, int failures) : ICxdBus
-    {
-        private int _left = failures;
-
-        public void Write(byte address, ReadOnlySpan<byte> data)
-        {
-            if (Interlocked.Decrement(ref _left) >= 0) throw new It930xException($"0x{address:X2} が応答しません (偽物)");
-            inner.Write(address, data);
-        }
-
-        public void Read(byte address, Span<byte> data) => inner.Read(address, data);
-    }
-
-    [Test]
-    public async Task 電源を入れたあとに_TS_の端子を止められなくても開き_最初の受信機を開くときにほかの端子を止める()
-    {
-        var usb = new FakeIt930x();
-        var bus = FakeTcBus.W3();
-        usb.I2c[2] = new FailingWrites(bus, 1);
-        var device = Open(usb, "6-20", new FakeClock(), W3);
-        try
-        {
-            // 最初の 1 つ (受信機 0 の 1C) で誤りになり、そこで止める。機材は開き、TS 入力も開ける
-            await Assert.That(bus.Log).IsEmpty();
-            await Assert.That(Lines(usb, line => line == "W DA4D=01").Count).IsEqualTo(1);
-            device.Frontend(2);
-            // 開く受信機のほかの 3 つは、スリープにするときに端子を止める
-            foreach (var line in (string[])[.. SleepSatellite("11"), .. SleepSatellite("13"), .. SleepTerrestrial("12")])
-            {
-                await Assert.That(bus.Log).Contains(line);
-            }
-        }
-        finally
-        {
-            device.Release();
-            It930xDevice.CloseIfIdle("6-20", TimeSpan.Zero);
         }
     }
 
@@ -388,12 +333,8 @@ public class Tc90522BoardTests
         var tuner = Tuner(usb, "6-4", 2, clock, W3);
         tuner.Tune(ChannelTable.Parse("T27")!);
         await Assert.That(tuner.Tuned).IsTrue();
-        // 受信機 2 は TS 入力 3 (仕様書 2.2)。ブリッジの入力は機材を開いたときに、復調器の TS の端子を止めてから開けてあり、
-        // 起動 (仕様書 4.2) でも端子を止めたまま、選局したら出す (仕様書 11.1)
-        await Assert.That(Lines(usb, line => Starts(line, "W DA4F", "I2C W 2 10 1D"))).IsEquivalentTo(new[]
-        {
-            "W DA4F=00", "I2C W 2 10 1DA8", "W DA4F=01", "I2C W 2 10 1DA8", "I2C W 2 10 1D00",
-        }, CollectionOrdering.Matching);
+        // 受信機 2 は TS 入力 3 (仕様書 2.2)。ブリッジの入力は機材を開いたときに開けてあり、選局したら復調器の TS の端子を出す (仕様書 11.1)
+        await Assert.That(Lines(usb, line => Starts(line, "W DA4F", "I2C W 2 10 1D"))).IsEquivalentTo(new[] { "W DA4F=00", "W DA4F=01", "I2C W 2 10 1DA8", "I2C W 2 10 1D00" }, CollectionOrdering.Matching);
         await Assert.That(bus.Log).Contains($"10 R850 08={Tc90522Tests.R850Ch27}");
         var signal = tuner.Signal()!;
         await Assert.That((signal.Locked, signal.Unit)).IsEqualTo((true, TunerSignal.Db));
@@ -495,8 +436,7 @@ public class Tc90522BoardTests
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!));
             await Assert.That(error.Message).Contains("PLEX PX-W3U4 の受信機 0) は地上波を受けられません");
-            // 開いたときに TS の端子を止めた書き込みのほかは、何も書かない
-            await Assert.That(bus.Log).IsEquivalentTo(StopOutputs, CollectionOrdering.Matching);
+            await Assert.That(bus.Log).IsEmpty();
             // 受けられる種別はそのまま選局できる
             tuner.Tune(ChannelTable.Parse("BS15:16625")!);
             await Assert.That(tuner.Tuned).IsTrue();
@@ -632,13 +572,9 @@ public class Tc90522BoardTests
         tuner.Tune(ChannelTable.Parse("T27")!);
         await Assert.That(tuner.Tuned).IsTrue();
         await Assert.That((linked, tuner.Device!.Linked)).IsEqualTo((1, true));
-        // 側 1 は、ファームウェアを起動して電源を入れただけ (仕様書 2.6)。チップは初期化せず、TS 入力を開ける前に 4 つの TS の端子を止める (仕様書に無い)
+        // 側 1 は、ファームウェアを起動して電源を入れただけ (仕様書 2.6)。チップは初期化していない
         await Assert.That(Lines(side1, line => Starts(line, "W D8C3", "W D8B7")).TakeLast(2)).IsEquivalentTo(new[] { "W D8C3=00", "W D8B7=01" }, CollectionOrdering.Matching);
-        await Assert.That(bus1.Log).IsEquivalentTo(StopOutputs, CollectionOrdering.Matching);
-        List<string> log1;
-        lock (side1.Log) log1 = [.. side1.Log];
-        await Assert.That(log1.IndexOf("I2C W 2 12 1DA8")).IsLessThan(log1.IndexOf("W DA4D=01"));
-        bus1.Log.Clear();
+        await Assert.That(bus1.Log).IsEmpty();
         await Assert.That(bus2.Log).Contains($"10 R850 08={Tc90522Tests.R850Ch27}");
         // 選局し直しても、取り直さない
         tuner.Tune(ChannelTable.Parse("T21")!);
@@ -727,10 +663,10 @@ public class Tc90522BoardTests
             return null;
         }), () => It930xDevice.CloseIfIdle("7-8", TimeSpan.Zero), clock.Sleep);
         await Assert.That(card.Reset().Length).IsEqualTo(13);
-        // 電源を入れてからカードを読む (仕様書 1.4)。もう片方の側は取らず (仕様書 2.6)、チップも初期化しない (TS の端子を止めるだけ)
+        // 電源を入れてからカードを読む (仕様書 1.4)。もう片方の側は取らず (仕様書 2.6)、チップも初期化しない
         await Assert.That(Lines(usb, line => Starts(line, "W D8C3")).Last()).IsEqualTo("W D8C3=00");
         await Assert.That(linked).IsEqualTo(0);
-        await Assert.That(bus.Log).IsEquivalentTo(StopOutputs, CollectionOrdering.Matching);
+        await Assert.That(bus.Log).IsEmpty();
         card.Dispose();
         await Assert.That(Lines(usb, line => Starts(line, "W D8C3")).Last()).IsEqualTo("W D8C3=01");
     }
