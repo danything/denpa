@@ -196,7 +196,7 @@ OS ごとの置き場、Compose を手で置くとき、上げ方と設定の書
 
 **土台にしている仕事**:
 
-- [px4-userland](https://github.com/Khronos31/px4-userland) (@Khronos31) — ホストにドライバを入れずにチューナーを使う形は、これが先に示してくれました。前のバージョンまでは px4-userland と、同じ作者の [siano-userland](https://github.com/Khronos31/siano-userland) を同梱して、PX-Q3U4 などと PX-S1UD を動かしていました。いまは同じ作者の [asicen-userland](https://github.com/Khronos31/asicen-userland) を同梱しています (PX-W3U3 など。試験的)。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
+- [px4-userland](https://github.com/Khronos31/px4-userland)・[siano-userland](https://github.com/Khronos31/siano-userland)・[asicen-userland](https://github.com/Khronos31/asicen-userland) (@Khronos31) が、ホストにドライバを入れずにチューナーを使う形を先に示してくれました。いまは asicen-userland を同梱しています (PX-W3U3 など。試験的)。PX-MLT5PE / DTV02A-5TS-P の対応は @siketyan
 
 ## ライセンス
 
