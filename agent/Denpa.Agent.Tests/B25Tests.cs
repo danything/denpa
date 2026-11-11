@@ -1221,8 +1221,54 @@ public class B25Tests
 
         Run(descrambler, ts.Wire.ToArray());
 
-        await Assert.That(descrambler.HeldAt()).Matches(@"^PAT \d+ms / PMT \d+ms / ECM \d+ms \(0x0902\)$");
+        // 局を決めていないので、どちらの ECM も待つ。届いたのが遅いほう (0x0902) を出す
+        await Assert.That(descrambler.HeldAt()).Matches(@"^PAT \d+ms / PMT \d+ms / ECM 着 \d+ms \(0x0902\) / カード応答 \d+ms \(0x0902\)$");
         await Assert.That(descrambler.CardUse()).Matches(@"^カード 2 回 計 \d+ms \(待ち 14ms・キャッシュ 2 回・未契約 0 回・準備 \d+ms\)$");
+    }
+
+    /// <summary>
+    /// **ECM が届いた時刻とカードの応答の時刻を分けて出す。** PMT より先に届いた ECM は、PMT が挙げてから問い合わせるので、
+    /// 応答は PMT のあと。届いた時刻は PMT より前に残る (PMT を待たずに問い合わせたらどれだけ縮むかを、本番の記録から割るため)
+    /// </summary>
+    [Test]
+    public async Task 内訳は_ECM_の届いた時刻とカードの応答を分ける()
+    {
+        var ts = new Ts().Ecm(EcmPid, 1)
+            .Pat((0x0400, PmtPid))
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Videos(2, 1);
+        // カードの往復を 50ms にする
+        var cards = new Cards { Fail = _ => { Thread.Sleep(50); return null; } };
+        var descrambler = new Descrambler(cards);
+
+        Run(descrambler, ts.Wire.ToArray());
+
+        var match = System.Text.RegularExpressions.Regex.Match(descrambler.HeldAt(),
+            @"^PAT (\d+)ms / PMT (\d+)ms / ECM 着 (\d+)ms \(0x0901\) / カード応答 (\d+)ms \(0x0901\)$");
+        await Assert.That(match.Success).IsTrue();
+        var pmt = long.Parse(match.Groups[2].Value);
+        var arrived = long.Parse(match.Groups[3].Value);
+        var answered = long.Parse(match.Groups[4].Value);
+        await Assert.That(arrived).IsLessThanOrEqualTo(pmt);
+        // PMT の時刻にカードの往復を含めない
+        await Assert.That(answered - pmt).IsGreaterThanOrEqualTo(50);
+    }
+
+    /// <summary>**観る局が決まっていれば、ECM の届いた時刻もその局の PMT が挙げた ECM だけで出す** (ほかの局の ECM があとに届いても使わない)</summary>
+    [Test]
+    public async Task 内訳の_ECM_の届いた時刻は観る局の_ECM_から出す()
+    {
+        var ts = new Ts()
+            .Pat((0x0400, PmtPid), (0x0401, OtherPmt))
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Pmt(OtherPmt, 0x0401, Ca(OtherEcm), (OtherVideo, []))
+            .Ecm(EcmPid, 1).Ecm(OtherEcm, 9)
+            .Videos(2, 1);
+        var descrambler = new Descrambler(new Cards(), services: () => new HashSet<int> { 0x0400 });
+
+        Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(descrambler.HeldAt()).Matches(@" / ECM 着 \d+ms \(0x0901\) / ");
     }
 
     [Test]
@@ -1243,7 +1289,7 @@ public class B25Tests
 
         Run(descrambler, new Ts().Videos(3, null).Wire.ToArray(), flush: false);
 
-        await Assert.That(descrambler.HeldAt()).IsEqualTo("PAT - / PMT - / ECM -");
+        await Assert.That(descrambler.HeldAt()).IsEqualTo("PAT - / PMT - / ECM 着 - / カード応答 -");
         await Assert.That(descrambler.CardUse()).IsEqualTo("カード 0 回 計 0ms (待ち 0ms・キャッシュ 0 回・未契約 0 回・準備 -)");
     }
 
