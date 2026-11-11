@@ -882,6 +882,31 @@ public class B25Tests
     }
 
     /// <summary>
+    /// **流し始めたあと、捨てている間に局を決めない利用者 (録画) が入っても、鍵を持てないパケットは捨て続ける。**
+    /// 流しても復号できないので、録画にはスクランブルされたまま残さずに、ほかの局の PMT と ECM の答えが来たところから復号して渡す
+    /// </summary>
+    [Test]
+    public async Task 捨てている間に録画が入っても鍵を持てないパケットは捨てる()
+    {
+        var (head, rest) = TwoPrograms();
+        IReadOnlySet<int>? services = new HashSet<int> { 0x0400 };
+        var descrambler = new Descrambler(new Cards(), services: () => services);
+        var output = new ArrayBufferWriter<byte>();
+        var wire = head.Wire.ToArray();
+        var settled = wire.Length - 2 * 188;
+
+        // 観る局の映像まで読んで流し始めたところで、録画が入る
+        descrambler.Decode(wire.AsSpan(0, settled), output);
+        services = null;
+        descrambler.Decode(wire.AsSpan(settled), output);
+        descrambler.Decode(rest.Wire.ToArray(), output);
+        descrambler.Flush(output);
+
+        await Assert.That(Diff(output.WrittenSpan.ToArray(), [.. Without(Expected(head), OtherVideo), .. Expected(rest)])).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+    }
+
+    /// <summary>
     /// **溜めている間に局を決めない利用者 (録画) が共有に入ったら、全部の局を待つ** (いちばん厳しい条件に合わせる)。
     /// PAT に無い局を渡されたときも全部を待つ
     /// </summary>
