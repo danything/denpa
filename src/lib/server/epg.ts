@@ -105,43 +105,37 @@ export function typeRank(type: string): number {
 }
 
 /**
- * 番組表とライブに出す局。**名前の付いた番組が 1 つも無い局は出さない。**
+ * 番組表とライブに出す局。
+ *
+ * - **本チャンネルは、番組が無くても出す。** スキャンしたばかりのケーブルの局や、番組表を読めない 4K の局も
+ *   選べるようにする。入れたばかりで番組表がまだ空のときも、ここから先へ進める
+ * - **終わったチャンネルは出さない。** 局名が空か「-」だけの局。BS103 (旧 NHK BSプレミアム) は
+ *   2024 年 3 月で放送を終えたが、SDT には枠が残っていて、局名は「-」に消されている
+ * - **サブチャンネルは、分割放送の間だけ出す** (`splitOf`。番組表と同じ決め方)。NHK総合2 や Eテレ2/3 は、
+ *   マルチ編成をしていないときは本チャンネルと同じ映像を流していて、EIT には名前の無い番組か、
+ *   重なる時間の本チャンネルの番組と同じ名前の番組が並ぶ。番組が 1 つも無いサブも、同じ番組を流しているものとして外す
  *
  * 番組表はこれを放送局 (同じ TS) ごとに当てる (サブチャンネルの列は分割放送のある日だけ立てる。
  * `#lib/subchannels.ts`)。
  *
- * 出したくないものが 2 種類ある。どちらも「枠はあるが放送していない」。
- *
- * - **終わったチャンネル。** BS103 (旧 NHK BSプレミアム) は 2024 年 3 月で放送を
- *   終えたが、SDT には枠が残っている (局名も消されて「-」)。番組は 1 つも来ない
- * - **本チャンネルと同じ番組を流しているサブチャンネル。** NHK総合2 や Eテレ2/3 は、マルチ編成をして
- *   いないときは本チャンネルと同じ映像を流していて、EIT には**名前の無い番組**が
- *   並ぶ。**名前が付いていても本チャンネルと同じ番組**のこともある (重なる時間の
- *   本チャンネルの番組と同じ名前)。どちらも同じ番組を流しているものとして外す。決め方は番組表と同じ
- *   (`splitOf`)
- *
  * **局の行も、スキャンの結果も消さない。** マルチ編成が始まればその日の番組表に
- * 名前が付いて出てくるし、放送が再開されれば勝手に戻る。
- *
- * **1 局も残らないときは全部出す。** 入れたばかりで番組表がまだ空のときに
- * 列ごと消えると、何も映らない画面から先へ進めない
+ * 名前が付いて出てくるし、放送が再開されれば局名が戻って出てくる
  */
-export function airing<S extends Station, P extends Omit<Airing, "id">>(
-  services: S[],
-  programs: P[],
-): S[] {
+export function airing<
+  S extends Station & { name: string },
+  P extends Omit<Airing, "id">,
+>(services: S[], programs: P[]): S[] {
   const main = mainOf(services);
   const split = splitOf(programs, main);
-  const named = new Set(
-    programs.filter((program) => program.name !== "").map((p) => p.service_id),
+  return services.filter((service) =>
+    main.get(service.id) === service.id
+      ? !ENDED_NAME.test(service.name)
+      : split.has(service.id),
   );
-  const shown = services.filter(
-    (service) =>
-      named.has(service.id) &&
-      (main.get(service.id) === service.id || split.has(service.id)),
-  );
-  return shown.length === 0 ? services : shown;
 }
+
+/** 放送を終えた枠の局名。空か「-」だけ (BS103。全角の「－」で来ても同じに見る) */
+const ENDED_NAME = /^[\s\-－]*$/u;
 
 /**
  * **いまライブで選べる局。** 番組の詳細に「視聴」を出すかどうかに使う
@@ -152,8 +146,7 @@ export function airing<S extends Station, P extends Omit<Airing, "id">>(
  * 別の局が映る**。実機の NHKEテレ2/3 で起きた (本チャンネルと同じ番組を流しているサブチャンネルは、
  * 分割放送をしていない間は名前の無い枠が並ぶ)。
  *
- * 局は種別で絞らない。ライブ画面が地上波・BS・CS をまとめて扱っているので、
- * 絞ると `airing` の「1 局も残らなければ全部出す」の効き方がずれる。
+ * 局は種別で絞らない (ライブ画面も地上波・BS・CS をまとめて扱っている)。
  * 外すのは、ライブ画面も外している復号できない局 (`services.decodable`) だけ
  *
  * **出す画面ごとに書かない。** 番組表と検索で別々に書いていると、片方だけ
@@ -164,6 +157,7 @@ export function watchableServices(at: number): number[] {
     orm()
       .select({
         id: services.id,
+        name: services.name,
         service_id: services.service_id,
         network_id: services.network_id,
         channel: services.channel,

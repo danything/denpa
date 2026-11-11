@@ -841,15 +841,21 @@ describe("savePrograms", () => {
 });
 
 /**
- * 枠はあるが放送していない局を、番組表から外す。
+ * 番組表とライブに出す局。本チャンネルは番組が無くても出し、外すのは次の 2 つ。
  *
- * - 終わったチャンネル (BS103 は 2024 年 3 月で放送終了。SDT に枠だけ残る)
+ * - 終わったチャンネル (BS103 は 2024 年 3 月で放送終了。SDT に枠だけ残り、局名は「-」)
  * - 本チャンネルと同じ番組を流しているサブチャンネル (NHK総合2 は、マルチ編成でない間ずっと名前が無い)
  */
 describe("番組表に出す局", () => {
   // 別々の放送局 (TS が違う)。サブチャンネルは下で別に作る
-  const service = (id: number, channel = `T${id}`, type = "GR") => ({
+  const service = (
+    id: number,
+    channel = `T${id}`,
+    type = "GR",
+    name = `局${id}`,
+  ) => ({
     id,
+    name,
     service_id: 1024 + id,
     network_id: 0x7fe0,
     channel,
@@ -862,25 +868,45 @@ describe("番組表に出す局", () => {
     end_at: end,
   });
 
-  test("名前の付いた番組が 1 つも無い局は出さない", () => {
-    const services = [service(1), service(2), service(3)];
-    const programs = [
-      program(1, "ニュース"),
-      // 本チャンネルと同じ番組を流しているサブチャンネル。名前の無い番組だけが並ぶ
-      program(2, ""),
-      program(2, ""),
-      // 3 は終わったチャンネル。番組が 1 つも来ない
+  test("番組が無くても本チャンネルは出す", () => {
+    // スキャンしたばかりのケーブルの局や、番組表を読めない 4K の局
+    const services = [service(1), service(2)];
+
+    expect(airing(services, [program(1, "ニュース")]).map((s) => s.id)).toEqual(
+      [1, 2],
+    );
+    expect(airing(services, []).map((s) => s.id)).toEqual([1, 2]);
+  });
+
+  test("局名が「-」の終わったチャンネルは出さない", () => {
+    const services = [
+      service(1),
+      service(2, "T2", "GR", "-"),
+      service(3, "T3", "GR", " "),
+      service(4, "T4", "GR", "－"),
     ];
+
+    expect(airing(services, []).map((s) => s.id)).toEqual([1]);
+  });
+
+  test("番組の無いサブチャンネルと、名前の無い番組だけのサブチャンネルは出さない", () => {
+    // 1 が本チャンネル、2・3 はサブ (同じ TS)。どちらも本チャンネルと同じ番組を流している
+    const services = [service(1, "T9"), service(2, "T9"), service(3, "T9")];
+    const programs = [program(1, "ニュース"), program(3, ""), program(3, "")];
 
     expect(airing(services, programs).map((s) => s.id)).toEqual([1]);
   });
 
-  test("1 つでも名前が付いていれば出す", () => {
-    // マルチ編成の日だけサブチャンネルにも名前が付く
-    const services = [service(1), service(2)];
-    const programs = [program(2, ""), program(2, "大相撲")];
+  test("分割放送をしているサブチャンネルは出す", () => {
+    // マルチ編成の日だけサブチャンネルにも本チャンネルと違う名前が付く
+    const services = [service(1, "T9"), service(2, "T9")];
+    const programs = [
+      program(1, "ニュース"),
+      program(2, ""),
+      program(2, "大相撲"),
+    ];
 
-    expect(airing(services, programs).map((s) => s.id)).toEqual([2]);
+    expect(airing(services, programs).map((s) => s.id)).toEqual([1, 2]);
   });
 
   test("本チャンネルと同じ名前の番組を流しているサブチャンネルは出さない", () => {
@@ -898,6 +924,7 @@ describe("番組表に出す局", () => {
   test("BS も同じ TS のサブは同じ番組を流している間は出さない。TS が別なら同じ会社でも出す", () => {
     const bs = (sid: number, channel: string) => ({
       id: sid,
+      name: `BS${sid}`,
       service_id: sid,
       network_id: 4,
       channel,
@@ -941,13 +968,6 @@ describe("番組表に出す局", () => {
     const programs = [program(1, "ニュース"), program(2, "ニュース")];
 
     expect(airing(services, programs).map((s) => s.id)).toEqual([1, 2]);
-  });
-
-  test("1 局も残らないときは全部出す", () => {
-    // 入れたばかりで番組表が空のとき。列ごと消えると先へ進めない
-    const services = [service(1), service(2)];
-
-    expect(airing(services, []).map((s) => s.id)).toEqual([1, 2]);
   });
 });
 
