@@ -604,6 +604,11 @@ const options: Bun.ServeOptions = {
       knobs.scrambled = url.searchParams.get("on") === "1";
       return json({ scrambled: knobs.scrambled });
     }
+    // カードは読めているが局の契約が無い (`Knobs.unentitled`)
+    if (url.pathname === "/__control/unentitled" && request.method === "POST") {
+      knobs.unentitled = url.searchParams.get("on") === "1";
+      return json({ unentitled: knobs.unentitled });
+    }
     // 選局した直後に表を流さない (`Knobs.tablesLate`)
     if (
       url.pathname === "/__control/tables-late" &&

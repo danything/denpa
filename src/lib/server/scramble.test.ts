@@ -6,7 +6,9 @@ import { join } from "node:path";
 import {
   isDecoded,
   isScrambled,
+  mediaPids,
   readCardStatus,
+  ScrambleCount,
   scrambledRatio,
 } from "./scramble";
 
@@ -153,5 +155,53 @@ describe("カードリーダーの状態", () => {
     expect(card.remote).toBe("http://card:25252");
     expect(card.ids).toEqual(["0000001234567890"]);
     expect(card.tuners).toEqual(["PT3-T1"]);
+  });
+});
+
+describe("局のパケットのスクランブルを数える (ScrambleCount)", () => {
+  /** PID とスクランブルの印、ペイロードの有無を指定した 1 パケット */
+  function packet(pid: number, scrambled: boolean, payload = true): Uint8Array {
+    const buffer = new Uint8Array(PACKET);
+    buffer[0] = 0x47;
+    buffer[1] = (pid >> 8) & 0x1f;
+    buffer[2] = pid & 0xff;
+    buffer[3] = (scrambled ? 0x80 : 0) | (payload ? 0x10 : 0x20);
+    return buffer;
+  }
+  const media = mediaPids("2:256,15:272,6:304");
+
+  test("ServiceFilter.streams から映像・音声・字幕の PID を読む", () => {
+    expect([...media]).toEqual([256, 272, 304]);
+    expect(mediaPids(null).size).toBe(0);
+  });
+
+  test("局の ES のうちペイロードのあるものだけを数え、上限で止める", () => {
+    const count = new ScrambleCount(3);
+    // PMT (局の ES ではない) とペイロードの無いパケットは数えない
+    count.feed(packet(0x1f0, true), media);
+    count.feed(packet(256, true, false), media);
+    count.feed(packet(256, true), media);
+    count.feed(packet(272, false), media);
+    expect(count.full).toBe(false);
+    count.feed(packet(304, true), media);
+    count.feed(packet(256, true), media);
+    expect(count.full).toBe(true);
+    expect({ total: count.total, scrambled: count.scrambled }).toEqual({
+      total: 3,
+      scrambled: 2,
+    });
+  });
+
+  test("掛かったままと言えるのは、半分を超えて掛かっていて、数が足りるときだけ", () => {
+    const count = new ScrambleCount(500);
+    for (let i = 0; i < 49; i++) count.feed(packet(256, true), media);
+    // 49 個ではまだ言えない
+    expect(count.stillScrambled(50)).toBe(false);
+    count.feed(packet(256, true), media);
+    expect(count.stillScrambled(50)).toBe(true);
+    // 復号できている局は、先頭から掛かっていない
+    const clear = new ScrambleCount(500);
+    for (let i = 0; i < 500; i++) clear.feed(packet(256, false), media);
+    expect(clear.stillScrambled(500)).toBe(false);
   });
 });

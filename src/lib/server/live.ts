@@ -92,6 +92,7 @@ import {
   tsFileHead,
 } from "./chase";
 import { config } from "./config";
+import { scrambledLiveNotice } from "./contracts";
 import { DataBroadcast, type ResponseMessage } from "./databroadcast";
 import { orm } from "./db";
 import { deinterlace } from "./encoder";
@@ -109,6 +110,7 @@ import { tunerOf, yieldedTo } from "./live-yield";
 import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
 import { recordingSize } from "./recording-io";
 import { programs, recordings, services } from "./schema";
+import { mediaPids, ScrambleCount } from "./scramble";
 import { settings } from "./settings";
 import { chunks, endInput, lines, sideOutput } from "./stream";
 import { holdTranscode, transcodeRoom } from "./transcode";
@@ -960,6 +962,35 @@ const RUNG_BUSY = "サーバが混んでいるため、画質を下げられま�
 const HEVC_TO_H264 =
   "H.265 を GPU でエンコードできないため、H.264 に切り替えました";
 
+/**
+ * **局の映像・音声・字幕がスクランブルされたまま届いていないかを、先頭のこれだけのパケットで決める** (`Session.tap`)。
+ *
+ * エージェントは鍵がそろうまで溜めてから流し始めるので、復号できている局は先頭から掛かっていない (docs/agent.md)。
+ * カードが鍵を返さない局 (未契約) は、ずっと掛かったまま届く。それを ffmpeg に渡すと、局の ES を読み取れずに
+ * `Failed to set value '0:p:201:s:0' for option 'map'` で降りる (BS10プレミアムをケーブルで受けたときに実機で出た)。
+ * 500 個は BS の 1 局で 0.05 秒ほど。ffmpeg が `-probesize` (100KB、530 個ほど) を読み終えて降りるより先に決まる
+ */
+const SCRAMBLE_PACKETS = 500;
+/** ffmpeg が `SCRAMBLE_PACKETS` を数え終える前に降りたら、ここまで数えていれば決める (契約の復号テストと同じ 50 個) */
+const SCRAMBLE_LEAST = 50;
+
+/** ffmpeg が局の映像・音声を指定できなかったときの行 (`Failed to set value '0:p:1032:v:0' for option 'map'`) */
+const MAP_FAILED = /Failed to set value '[^']*:([va]):\d+\??' for option 'map'/;
+
+/**
+ * **ffmpeg が局の映像か音声を見つけられずに降りた行か。** 見つけられなかったほうを返す。字幕 (`:s:`) は
+ * 字幕なしで起こし直すので、ここでは見ない (`NO_SUBTITLE`)
+ */
+export function missingMedia(line: string): "映像" | "音声" | null {
+  const kind = MAP_FAILED.exec(line)?.[1];
+  return kind === "v" ? "映像" : kind === "a" ? "音声" : null;
+}
+
+/** `missingMedia` のときに画面へ出す文 */
+export function missingMediaMessage(kind: "映像" | "音声"): string {
+  return `この局の放送から${kind}を見つけられなかったため、映像を出せませんでした`;
+}
+
 function hwKey(codec: StreamCodec, hw: LiveHw): string {
   return `${codec}:${hw.way.device}:${hw.way.kind}:${hw.full}`;
 }
@@ -1182,6 +1213,15 @@ class Session {
   private languages: CaptionLanguage[] = [];
   /** 字幕が無いと言われたか。言われたら字幕なしで再エンコードする */
   private noSubtitle = false;
+  /** いまの ffmpeg が、局の映像か音声を見つけられずに降りたか (`missingMedia`) */
+  private noMedia: "映像" | "音声" | null = null;
+  /** 局の映像・音声・字幕がスクランブルされたまま届いていないかを数える (`tap`。ライブだけ)。決めたら null */
+  private scramble: ScrambleCount | null = new ScrambleCount(SCRAMBLE_PACKETS);
+  /**
+   * スクランブルされたまま届いたので、理由を伝えて畳んでいる最中 (`endScrambled`)。
+   * そのあいだに ffmpeg が降りても、ほかの理由 (`died`) は伝えない
+   */
+  private ending: Promise<void> | null = null;
   /**
    * データ放送をデコードする側。**求められてから作り、誰も出していなければ畳む**
    * (理由と引き換えは databroadcast.ts の冒頭)
@@ -1586,6 +1626,7 @@ class Session {
         }
         this.produced = false;
         this.busy = false;
+        this.noMedia = null;
         this.software = hw === null;
         // 遅れと速さは ffmpeg ごとに数え直す (前の ffmpeg の遅れと、起こし直した直後の速さを合わせない)
         this.lag.reset();
@@ -1654,13 +1695,23 @@ class Session {
         // チューナーから外された。ffmpeg が降りたのは入力が尽きたからで、エンコード方式のせいではない
         if (this.cut && this.fed) return await this.lose(label);
         /*
+         * **局の映像・音声がスクランブルされたまま届いていたら、それが降りた理由。** エンコード方式のせいでも
+         * 字幕のせいでもないので、起こし直さない (`SCRAMBLE_LEAST`。伝えるのは `endScrambled`)
+         */
+        if (
+          this.ending !== null ||
+          (!this.produced && this.judgeScrambled(SCRAMBLE_LEAST))
+        )
+          return;
+        /*
          * **降りた理由を読み終えてから決める。** `proc.exited` は最後の
          * 行より先に来るので、待たずに見ると「字幕が無い」を取り
          * こぼして、**再エンコードに来られない**。標準エラーは相手が終了すれば
          * 必ず閉じるので、ここで待つのは安全 (流し込みのほうは閉じても
-         * 例外にならないことがあるので待てない)
+         * 例外にならないことがあるので待てない)。映像を出す前に降りたときは、局の映像・音声を
+         * 見つけられなかった行 (`missingMedia`) も取りこぼさないように待つ
          */
-        if (wanted !== null || hw !== null)
+        if (wanted !== null || hw !== null || !this.produced)
           await watching.catch(() => undefined);
         /*
          * 追っかけが**録れているところまで読み切った** (ffmpeg が入力を
@@ -1683,6 +1734,7 @@ class Session {
         if (
           hw !== null &&
           !this.produced &&
+          this.noMedia === null &&
           !(wanted !== null && this.noSubtitle)
         ) {
           /*
@@ -1705,6 +1757,18 @@ class Session {
           this.blame = { hw, busy: this.busy };
           hw = null;
           continue;
+        }
+        /*
+         * **局の映像か音声を指定できずに降りた。** 字幕を外しても、エンコード方式を替えても同じところで降りるので、
+         * 起こし直さずに理由を伝える (映像の無い局・`-probesize` のうちに見つけられなかった局)
+         */
+        if (this.noMedia !== null) {
+          this.died(
+            label,
+            `ffmpeg が局の${this.noMedia}を指定できずに終了しました`,
+            missingMediaMessage(this.noMedia),
+          );
+          return;
         }
         if (wanted === null || !this.noSubtitle) {
           // ここまで来たのは ffmpeg が自分で降りたとき
@@ -1732,6 +1796,8 @@ class Session {
           : "録画を読めませんでした",
       );
     } finally {
+      // スクランブルの理由を伝え終えてから畳む (`endScrambled`)
+      await this.ending;
       this.stop();
     }
   }
@@ -1742,9 +1808,43 @@ class Session {
    * `-map 0:p:…` を解決できずに ffmpeg が降りていた)。こちらから畳んだとき (`stop`) は言わない
    */
   private died(label: string, why: string, message: string): void {
-    if (this.stopped) return;
+    if (this.stopped || this.ending !== null) return;
     console.warn(`[live] ${label}: ${why}`);
     this.tell({ type: "error", message });
+  }
+
+  /**
+   * **局の映像・音声・字幕がスクランブルされたまま届いているかを決める** (`SCRAMBLE_PACKETS`)。掛かったままなら
+   * 理由を伝えて畳み始め (`endScrambled`)、true を返す。数えたのが `least` 個に満たなければ決めずに数え続ける。
+   * 掛かっていないと決めたら、あとは数えない
+   */
+  private judgeScrambled(least: number): boolean {
+    const count = this.scramble;
+    if (count === null) return false;
+    if (!count.stillScrambled(least)) {
+      if (count.full) this.scramble = null;
+      return false;
+    }
+    this.scramble = null;
+    this.ending = this.endScrambled(count);
+    return true;
+  }
+
+  /**
+   * **スクランブルされたまま届いたことを、理由を添えて伝えて畳む。** ffmpeg の指定の失敗
+   * (`Failed to set value … for option 'map'`) や「映像を出せませんでした」では、契約が無いことが分からない。
+   * 理由はカードと契約の状態から決める (`contracts.scrambledLiveMessage`)
+   */
+  private async endScrambled(count: ScrambleCount): Promise<void> {
+    const message = await scrambledLiveNotice(this.serviceId).catch(
+      () => "スクランブルを復号できませんでした",
+    );
+    if (this.stopped) return;
+    console.warn(
+      `[live] ${this.channelType}:${this.channel}: 局の映像・音声がスクランブルされたまま届きました (${count.scrambled} / ${count.total} パケット): ${message}`,
+    );
+    this.tell({ type: "error", message });
+    this.stop();
   }
 
   /** エージェントに名乗る利用者の印。同じ局を観ている人どうしで同じになる (チューナーも共有) */
@@ -1875,13 +1975,20 @@ class Session {
     const onAir = this.onAir;
     let switched = false;
     const found: Ait[] = [];
+    // 追っかけ (録画のファイル) は数えない。掛かったまま録れていても、録画のほうで復号する (`encoder.ts`)
+    const scramble =
+      filter !== null && this.source === undefined ? this.scramble : null;
+    const media =
+      filter === null || scramble === null ? null : mediaPids(filter.streams);
     for (const packet of this.packets.feed(out)) {
+      if (media !== null) scramble?.feed(packet, media);
       data?.feedPacket(packet);
       this.clock.feedPacket(packet, receivedAt);
       ait?.feedPacket(packet, found);
       if (onAir?.feedPacket(packet) === true) switched = true;
     }
     if (found.length > 0) this.findHybridcast(found);
+    if (scramble?.full === true) this.judgeScrambled(SCRAMBLE_PACKETS);
     if (
       onAir !== null &&
       (switched || receivedAt - this.followedAt >= ON_AIR_EVERY)
@@ -2317,6 +2424,8 @@ class Session {
       }
       // 字幕が無い放送。**映像ごと落ちる**ので、字幕なしで再エンコードする (`run`)
       if (NO_SUBTITLE.test(line)) this.noSubtitle = true;
+      // 局の映像か音声が無い。字幕なしで起こし直しても同じところで降りる (`run`)
+      this.noMedia ??= missingMedia(line);
       // NVENC の同時に開ける数を超えた。GPU から降りても方式は覚えない (`run`・`blameGpu`)
       if (nvencBusy(line)) this.busy = true;
       if (worthLogging(line)) {
@@ -2476,6 +2585,8 @@ class Session {
       );
     } finally {
       captioner?.stop();
+      // スクランブルの理由を伝え終えてから畳む (`endScrambled`)
+      await this.ending;
       this.stop();
     }
   }
