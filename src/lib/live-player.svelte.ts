@@ -390,6 +390,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   const lagMeter = new LagMeter();
   /** 測った回線の速さ (`AdaptSample.capacity`。`probeLink`)。まだ測っていなければ null */
   let capacity: { bps: number; at: number } | null = null;
+
+  /** 最初のコマを映した (`at` は `performance.now()`)。`startup` の内訳を 1 行出す。video の経路は映した 1 枚、canvas の経路は描き始めたとき */
+  function reportStartup(at: number): void {
+    if (startup === null) return;
+    const ms = (value?: number) =>
+      value === undefined ? "-" : `${Math.round(value)}ms`;
+    console.info(
+      `[live] 開くまで チケット ${ms(startup.ticket)} / 繋がる ${ms(startup.open)} / tuned ${ms(startup.tuned)} / 最初のバイト ${ms(startup.bytes)} / 最初のコマ ${ms(at - startup.at)}`,
+    );
+    startup = null;
+  }
   /** いまの MediaSource に流しているエンコード方式。`<video>` がエラーになったら、これをやめる (`onMediaError`) */
   let mseCodec: LiveCodec | null = null;
   /** 最後にコマが映った時刻 (`performance.now`。`stuckNow`)。測れない・選局し直したあとまだ映っていなければ 0 */
@@ -803,14 +814,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       // 映した 1 枚の時刻と再生位置の差 (`slip`)。`requestVideoFrameCallback` を持つブラウザでだけ測れる
       if (frame !== undefined) {
         lastFrameAt = performance.now();
-        if (startup !== null) {
-          const ms = (value?: number) =>
-            value === undefined ? "-" : `${Math.round(value)}ms`;
-          console.info(
-            `[live] 開くまで チケット ${ms(startup.ticket)} / 繋がる ${ms(startup.open)} / tuned ${ms(startup.tuned)} / 最初のバイト ${ms(startup.bytes)} / 最初のコマ ${ms(lastFrameAt - startup.at)}`,
-          );
-          startup = null;
-        }
+        reportStartup(lastFrameAt);
         // 飛んだ直後の 1 コマは飛ぶ前の時刻を持っていることがあるので測らない (`unslipper`)
         const measured = unslipping.measure(video, frame.mediaTime);
         if (measured !== null) {
@@ -2950,6 +2954,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     if (!running && engine.playing) {
       running = true;
       state = "playing";
+      reportStartup(performance.now());
       // 自動再生で断られた。**押すまで映像だけ進める** (壁時計。`RawEngine.blocked`)。
       // 音も消しておく。他を押したついでに鳴りだすと、画面の「消音」と食い違う
       if (engine.blocked) mute();
