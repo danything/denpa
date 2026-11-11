@@ -14,7 +14,7 @@
 - 4K の放送の表は、TLV-NIT・PLT・MPT・MH-SDT・MH-TOT (`mmt-si`)。局の一覧と、局ごとの CA_system_id (MPT のアクセス制御記述子) をそろえて読む `TlvServiceReader` もここ (TS の `psi` の `ServiceReader` に当たる)。番組表の MH-EIT は TS と同じ形式の番組にする (`mh-eit`)。1 つの局だけを TLV のまま抜き出す (`mmt-service-filter`)
 - 4K の放送の映像 (HEVC)・音声 (AAC)・字幕 (TTML) のアクセスユニットを、MPT の記述子から付けた PTS・DTS (90 kHz) と一緒に取り出す (`mmt-media`)。音声は LATM を外した AAC のフレームと AudioSpecificConfig、映像は NAL ユニットの並び。字幕の TTML は、TS の字幕と同じ字幕の文字の配置にする (`ttml`)。スクランブルの復号は無い
 - 試験用の TS (PSI・EIT・字幕・カルーセル・映像と音声) を組み立てる (`synth`、`synth-caption`、`synth-av`)
-- 試験用の TLV (TLV・IP・MMTP・MMT-SI と、MPU の中身・時刻の記述子・LATM) を組み立てる (`synth-mmt`)
+- 試験用の TLV (TLV・IP・MMTP・MMT-SI と、MPU の中身・時刻の記述子・LATM) を組み立てる (`synth-mmt`)。本物の HEVC と AAC を時刻を進めて流し続ける (`synth-mmt-av`)
 - ほかのモジュールが使う道具として、バイト列 (`bytes`)、ビット単位の読み取り (`bits`)、言語の名前 (`language`)、文字の表 (`b24-tables`)、字幕の外字の画像をなめらかにする処理 (`drcs-smooth`)
 
 依存するパッケージはありません。

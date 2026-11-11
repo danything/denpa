@@ -6,7 +6,7 @@ import {
   audioTracks,
   pickTrack,
 } from "#lib/arib.js";
-import { CHANNEL, codecsFor } from "#lib/live.js";
+import { BROADCAST_HEVC, CHANNEL, codecsFor } from "#lib/live.js";
 
 import type { LiveHw } from "./hwenc";
 import {
@@ -16,13 +16,16 @@ import {
   encodeArgs,
   EncodeLag,
   encodeSpeed,
+  HLG_TO_SDR,
   keepLight,
   key,
   type Light,
   LIGHT_LAG,
   lightNotices,
   LIVE_STREAM_BACKLOG,
+  liveForm,
   liveHwFailed,
+  liveRungCodec,
   missingMedia,
   missingMediaMessage,
   nextLight,
@@ -1256,5 +1259,113 @@ describe("エンコードの速さ", () => {
   test("放送そのままと音声だけは null (音声だけで 0 と返すと、画面がエンコードの遅れと読む)", () => {
     expect(encodeSpeed(true, "h264", () => 0)).toBeNull();
     expect(encodeSpeed(false, "audio", () => 0)).toBeNull();
+  });
+});
+
+/**
+ * **4K の局 (MMT/TLV) のライブ** (`encodeArgs` の `transport`・`liveForm`・`liveRungCodec`)。入力は denpa が詰め替えた fMP4
+ * (HEVC 2160p・10 ビット・HLG) で、放送のままは詰め替えだけ、エンコードするときは縮めて SDR にする
+ */
+describe("4K の局のライブ", () => {
+  const uhd = (codec: "h264" | "av1" | "audio", rung: 0 | 1 | 2 | 3 = 0) =>
+    encodeArgs(161, stereo, codec, null, null, rung, false, "pipe:3", "tlv");
+  const filter = (args: string[]) => args[args.indexOf("-vf") + 1] ?? "";
+
+  test("局は 1 つなので番号で名指しせず、字幕の出力も付けない (字幕は denpa が TTML から作る)", () => {
+    const args = uhd("h264");
+    expect(args.join(" ")).toContain("-map 0:v:0");
+    expect(args.join(" ")).toContain("-map 0:a:0");
+    expect(args.join(" ")).not.toContain("0:p:");
+    expect(args).not.toContain("pipe:3");
+    expect(args).not.toContain("-c:s");
+  });
+
+  test("1080p に縮めてから HLG を SDR の 8 ビットに直す。インタレ解除はしない", () => {
+    const vf = filter(uhd("h264"));
+    expect(vf).toBe(["scale=-2:1080", ...HLG_TO_SDR].join(","));
+    expect(vf).not.toContain("bwdif");
+    expect(vf.endsWith("format=yuv420p")).toBe(true);
+    // 段 0 は 60 コマのまま、キーフレームは 1 秒ごと
+    expect(uhd("h264").join(" ")).toContain("-g 60");
+    expect(uhd("av1").join(" ")).toContain("libsvtav1");
+  });
+
+  test("段を下げると段の高さと 29.97 コマにし、上限つきの x264 にする", () => {
+    const args = uhd("h264", 2);
+    expect(filter(args)).toBe(
+      ["fps=30000/1001", "scale=-2:540", ...HLG_TO_SDR].join(","),
+    );
+    expect(args.join(" ")).toContain("-maxrate:v 1500000");
+    expect(args.join(" ")).toContain("-g 30");
+  });
+
+  test("GPU でエンコードするときも、縮めて直したものを上げて渡す (デコードは CPU)", () => {
+    const args = encodeArgs(
+      161,
+      stereo,
+      "h264",
+      null,
+      { way: { device: "/dev/dri/renderD128", kind: "vaapi" }, full: true },
+      0,
+      false,
+      "pipe:3",
+      "tlv",
+    );
+    expect(filter(args)).toBe(
+      ["scale=-2:1080", ...HLG_TO_SDR, "format=nv12", "hwupload"].join(","),
+    );
+    expect(args).not.toContain("-hwaccel");
+    expect(args.join(" ")).toContain("-c:v h264_vaapi");
+  });
+
+  test("H.265 にはエンコードしない (4K の局の hevc は詰め替えだけ)", () => {
+    expect(() =>
+      encodeArgs(161, stereo, "hevc", null, null, 0, false, "pipe:3", "tlv"),
+    ).toThrow();
+  });
+
+  test("音声だけは映像をエンコードしない", () => {
+    const args = uhd("audio");
+    expect(args).not.toContain("-vf");
+    expect(args.join(" ")).toContain("-map 0:a:0");
+  });
+
+  test("放送のままは HEVC の詰め替え。GPU が無くても出せる。TS の局の H.265 は GPU が無ければ H.264", () => {
+    const noGpu = () => false;
+    expect(liveForm("tlv", "h264", true, noGpu)).toEqual({
+      codec: "hevc",
+      raw: false,
+      downgraded: false,
+    });
+    expect(liveForm("tlv", "hevc", false, noGpu)).toEqual({
+      codec: "hevc",
+      raw: false,
+      downgraded: false,
+    });
+    expect(liveForm("ts", "hevc", false, noGpu)).toEqual({
+      codec: "h264",
+      raw: false,
+      downgraded: true,
+    });
+    expect(liveForm("ts", "h264", true, noGpu)).toEqual({
+      codec: "h264",
+      raw: true,
+      downgraded: false,
+    });
+  });
+
+  test("段を下げるときは H.265 を外して選ぶ (端末が H.265 を再生できても)", () => {
+    const hw: LiveHw = { way: { device: "d", kind: "rkmpp" }, full: false };
+    const rk = (codec: string) =>
+      codec === "hevc" || codec === "h264" ? hw : null;
+    expect(liveRungCodec(["hevc", "h264"], "tlv", rk)).toBe("h264");
+    expect(liveRungCodec(["hevc", "h264"], "ts", rk)).toBe("hevc");
+  });
+
+  test("詰め替えた fMP4 の codecs は Main 10・Level 5.1 の hev1", () => {
+    expect(codecsFor("hevc", "hevc")).toBe(BROADCAST_HEVC);
+    expect(BROADCAST_HEVC).toContain("hev1.2.4.L153");
+    // TS の局の H.265 (GPU でエンコードしたもの) は今までどおり
+    expect(codecsFor("hevc")).toContain("hvc1.1.6.L123");
   });
 });

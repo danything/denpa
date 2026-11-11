@@ -1,20 +1,56 @@
+import { rmSync, writeFileSync } from "node:fs";
+
 import {
   CATV_4K,
+  CATV_4K_FREE,
   CATV_BS,
   CATV_GR,
   CATV_LOCKED,
   CATV_OWN,
 } from "../fake/services";
-import { expect, goto, syncEpg, test } from "./helpers";
+import { encodeRuns, expect, goto, syncEpg, test } from "./helpers";
+
+/**
+ * HTTP のライブを開いて、`enough` が true になるまで (20 秒まで) 読む。読み終えたら閉じる。
+ * 中身は 1 バイト 1 文字の文字列にする (箱の名前を探す)
+ */
+async function streamHead(
+  url: string,
+  enough: (text: string) => boolean,
+): Promise<{
+  status: number;
+  type: string | null;
+  codec: string | null;
+  text: string;
+}> {
+  const controller = new AbortController();
+  const res = await fetch(url, { signal: controller.signal });
+  let text = "";
+  const reader = res.body?.getReader();
+  const deadline = Date.now() + 20_000;
+  while (reader !== undefined && !enough(text) && Date.now() < deadline) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    text += Buffer.from(value).toString("latin1");
+  }
+  controller.abort();
+  return {
+    status: res.status,
+    type: res.headers.get("content-type"),
+    codec: res.headers.get("x-denpa-codec"),
+    text,
+  };
+}
 
 /**
  * ケーブル (種別 CATV。ISDB-C) の受信の設定・スキャン・番組表・ライブ。
  *
  * **CATV を受けられるのは、エージェントが直に持つ IT930x の機材 (`it930x:`) だけ。** 偽エージェントもその機材にだけ
  * `receivable` に CATV を返す。既定のチューナーには無いので、このファイルの間だけ 1 台足す。
- * 偽の放送の搬送波は 4 つ (`tests/fake/services.ts`): BS の再送信 (QC20)、BS4K の再送信 (QC26。TLV)、TSMF で 2 つの TS を束ねたもの
+ * 偽の放送の搬送波は 5 つ (`tests/fake/services.ts`): BS の再送信 (QC20)、BS4K の再送信 (QC26。TLV)、スクランブルしていない 4K の局 (QC28。TLV)、TSMF で 2 つの TS を束ねたもの
  * (QC30。地上波の再送信と自主放送)、B-CAS 以外の CA_system_id だけでスクランブルした局 (QC40。番組表もスクランブルしている)。
- * 復号できない局はライブに出ない。番組表を読める局 (4K の局) は、番組表に「観られません」の列で出る
+ * 復号できない局はライブに出ない。番組表を読める局 (ACAS の 4K の局) は、番組表に「観られません」の列で出る。
+ * スクランブルしていない 4K の局はライブで観られる (放送の HEVC の詰め替えと、縮めたエンコード)
  */
 
 /** 偽エージェントの既定のチューナー (`tests/fake/agent.ts` の `plugged`) */
@@ -153,7 +189,7 @@ test.describe("ケーブル", () => {
       "B-CAS 以外の方式でスクランブルされているため",
     );
     await expect(note).toContainText(
-      "ケーブルの 4K の局は、まだライブと録画に対応していません",
+      "4K の放送のスクランブル (ACAS) にまだ対応していないため",
     );
     await expect(note).toContainText(
       "番組表を読める局は、番組表に「観られません」の列で出します",
@@ -269,7 +305,7 @@ test.describe("ケーブル", () => {
     const programId = Number(await cell.getAttribute("data-program-id"));
     await cell.getByTestId("program-button").click();
     await expect(page.getByTestId("detail-unwatchable")).toHaveText(
-      "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません",
+      "4K の放送のスクランブル (ACAS) には、まだ対応していないため観られません",
     );
     await expect(page.getByTestId("detail-reserve")).toHaveCount(0);
     await expect(page.getByTestId("detail-watch")).toHaveCount(0);
@@ -280,7 +316,7 @@ test.describe("ケーブル", () => {
     });
     expect(refused.status()).toBe(400);
     expect((await refused.json()).message).toContain(
-      "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません",
+      "4K の放送のスクランブル (ACAS) には、まだ対応していないため観られません",
     );
 
     // ライブも選局せずに断る
@@ -288,6 +324,151 @@ test.describe("ケーブル", () => {
       headers: { accept: "application/json" },
     });
     expect(live.status()).toBe(409);
+  });
+
+  test("スクランブルしていない 4K の局はライブで観られる。放送の HEVC は詰め替えて送る", async ({
+    page,
+    request,
+    baseURL,
+  }) => {
+    await syncEpg(request);
+    const live = `${baseURL}/api/services/${CATV_4K_FREE.id}/live`;
+
+    // 放送の HEVC と AAC を、エンコードせずに fMP4 に詰め替えて流す (`codec=hevc`)
+    const hevc = await streamHead(`${live}?codec=hevc`, (text) =>
+      text.includes("mdat"),
+    );
+    expect(hevc.status).toBe(200);
+    expect(hevc.type).toBe("video/mp4");
+    expect(hevc.codec).toBe("hevc");
+    for (const box of ["hev1", "hvcC", "mp4a", "moof", "mdat"])
+      expect(hevc.text).toContain(box);
+    // 1 局に絞った TLV そのもの (`codec=raw`)。頭は TLV のパケットの 0x7F
+    const raw = await streamHead(`${live}?codec=raw`, (text) => text !== "");
+    expect(raw.type).toBe("application/x-arib-tlv");
+    expect(raw.text.charCodeAt(0)).toBe(0x7f);
+    // 自動は MPEG-2 の TS を読めること (`raw`) を候補にしない。家の中は HEVC → H.264
+    const auto = (playable: string) =>
+      streamHead(`${live}?codec=auto&playable=${playable}`, () => true);
+    expect((await auto("raw,h264")).codec).toBe("h264");
+    expect((await auto("hevc,h264")).codec).toBe("hevc");
+
+    /*
+     * 画面は放送の HEVC (2160p・10 ビット・HLG) を再生できる端末で詰め替えをリクエストする (`#lib/hevc-4k.ts`)。
+     * 試験のブラウザは HEVC をデコードできないので、再生できると答えさせて、届いた答え (`tuned`) と init だけを見る
+     */
+    await page.addInitScript(() => {
+      const seen = window as unknown as {
+        __tuned: unknown[];
+        __init: string[];
+      };
+      seen.__tuned = [];
+      seen.__init = [];
+      const support = MediaSource.isTypeSupported.bind(MediaSource);
+      MediaSource.isTypeSupported = (type) =>
+        type.includes("hev1") || support(type);
+      Object.defineProperty(navigator.mediaCapabilities, "decodingInfo", {
+        value: async () => ({
+          supported: true,
+          smooth: true,
+          powerEfficient: true,
+        }),
+      });
+      const Original = window.WebSocket;
+      window.WebSocket = class extends Original {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          super(url, protocols);
+          this.addEventListener("message", (event) => {
+            if (!(event.data instanceof ArrayBuffer)) return;
+            const bytes = new Uint8Array(event.data);
+            const body = new TextDecoder("latin1").decode(bytes.subarray(9));
+            if (bytes[0] === 0x00) seen.__init.push(body);
+            if (bytes[0] !== 0x40) return;
+            const notice = JSON.parse(body) as { type: string };
+            if (notice.type === "tuned") seen.__tuned.push(notice);
+          });
+        }
+      };
+    });
+    await goto(page, "/live");
+    await page.getByTestId("live-type-CATV").click();
+    await page
+      .locator(`[data-testid=live-channel][data-service="${CATV_4K_FREE.id}"]`)
+      .click();
+    // 開いたときは前回の局か一覧の先頭を選局するので、4K の局への答えを探す
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (channel) =>
+            (
+              window as unknown as { __tuned: { channel: string }[] }
+            ).__tuned.find((tuned) => tuned.channel === channel) ?? null,
+          CATV_4K_FREE.channel,
+        ),
+      )
+      .toMatchObject({
+        codec: "hevc",
+        raw: false,
+        codecs: expect.stringContaining("hev1.2.4"),
+      });
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          (window as unknown as { __init: string[] }).__init.some((init) =>
+            init.includes("hvcC"),
+          ),
+        ),
+      )
+      .toBe(true);
+  });
+
+  test("4K の局を再生できない端末では、縮めて SDR にした H.264 で観る", async ({
+    page,
+    request,
+    stack,
+  }) => {
+    await syncEpg(request);
+    // 偽の ffmpeg に本物の H.264 の fMP4 を流させる (渡した fMP4 は読まない)
+    writeFileSync(stack.liveFmp4File, "");
+    try {
+      await goto(page, "/live");
+      await page.getByTestId("live-type-CATV").click();
+      await page
+        .locator(
+          `[data-testid=live-channel][data-service="${CATV_4K_FREE.id}"]`,
+        )
+        .click();
+      await expect(page.getByTestId("live-title")).toBeVisible();
+      /*
+       * ffmpeg には詰め替えた fMP4 を渡し (局は 1 つなので番号で名指ししない)、1080p に縮めて HLG を SDR に直す。
+       * 開いたときは前回の局か一覧の先頭も選局するので、4K の局のエンコード (zscale があるもの) を待つ
+       */
+      const uhd = () =>
+        encodeRuns(stack.liveArgsFile).find((run) =>
+          run.some((arg) => arg.includes("zscale")),
+        );
+      await expect.poll(() => uhd() !== undefined).toBe(true);
+      expect(uhd()).toContain("libx264");
+      expect(uhd()).toContain("0:v:0");
+      expect(uhd()?.find((arg) => arg.includes("zscale"))).toContain(
+        "scale=-2:1080",
+      );
+      // 家の中の自動は HEVC → H.264。試験のブラウザは 4K の HEVC を再生できない
+      await expect(page.getByTestId("live-codec")).toContainText(
+        "自動 (H.264)",
+      );
+      await expect
+        .poll(
+          () =>
+            page
+              .getByTestId("live-video")
+              .evaluate((video) => (video as HTMLVideoElement).currentTime),
+          { timeout: 20_000 },
+        )
+        .toBeGreaterThan(0.5);
+    } finally {
+      rmSync(stack.liveFmp4File, { force: true });
+    }
   });
 
   test("ケーブルを受けられるチューナーがあっても、ケーブルの局を種別を選んで 2 回押しで消せる", async ({

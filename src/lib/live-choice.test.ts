@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { autoCodec, autoOrder, readChoice } from "./live-choice";
+import {
+  autoCodec,
+  autoOrder,
+  broadcastCodec,
+  broadcastFormat,
+  formatLabel,
+  readChoice,
+} from "./live-choice";
 
 const all = { rawOk: true, av1: true, hevc: true, h264: true };
 const where = { indoor: false, compat: false };
@@ -105,5 +112,48 @@ describe("覚えていた選択の読み方", () => {
   test("メニューに並べない H.264 と H.265 を選んでいた端末も自動", () => {
     expect(readChoice("h264")).toBe("auto");
     expect(readChoice("hevc")).toBe("auto");
+  });
+});
+
+/** **4K の局** (`broadcast` が `hevc`)。放送のまま (MPEG-2) の場所に HEVC の詰め替えが入り、H.265 にはエンコードしない */
+describe("4K の局の自動", () => {
+  const uhd = { broadcast: "hevc" as const };
+
+  test("家の中は HEVC → H.264 → AV1、外は AV1 → H.264、互換モードは AV1 → H.264 → HEVC", () => {
+    expect(autoOrder({ indoor: true, compat: false, ...uhd })).toEqual([
+      "hevc",
+      "h264",
+      "av1",
+    ]);
+    expect(autoOrder({ indoor: false, compat: false, ...uhd })).toEqual([
+      "av1",
+      "h264",
+    ]);
+    expect(autoOrder({ indoor: true, compat: true, ...uhd })).toEqual([
+      "av1",
+      "h264",
+      "hevc",
+    ]);
+  });
+
+  test("hevc は放送の HEVC を再生できるか。MPEG-2 をデコードできても使わない", () => {
+    const indoor = { ...where, indoor: true, ...uhd };
+    expect(autoCodec({ ...all, ...indoor })).toBe("hevc");
+    expect(autoCodec({ ...all, ...indoor, hevc: false })).toBe("h264");
+    // 外では放送のままを選ばない
+    expect(autoCodec({ ...all, ...where, ...uhd })).toBe("av1");
+    expect(autoCodec({ ...all, ...where, ...uhd, av1: false })).toBe("h264");
+    expect(
+      autoCodec({ ...all, ...where, ...uhd, av1: false, h264: false }),
+    ).toBe(null);
+  });
+
+  test("伝送の形式から放送のコーデック、放送のままでリクエストする形式と名前", () => {
+    expect(broadcastCodec("tlv")).toBe("hevc");
+    expect(broadcastCodec("ts")).toBe("mpeg2");
+    expect(broadcastFormat("hevc")).toBe("hevc");
+    expect(broadcastFormat("mpeg2")).toBe("raw");
+    expect(formatLabel("raw", "hevc")).toBe("H.265");
+    expect(formatLabel("raw")).toBe("MPEG-2");
   });
 });

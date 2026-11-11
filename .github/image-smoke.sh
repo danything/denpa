@@ -112,6 +112,10 @@ denpa)
     # ライブと録画の変換 (live.ts・playback.ts)。fMP4、主音声だけ、H.264 の mkv の変換、音声だけ
     ff -i in.ts -vf bwdif=mode=send_frame -af "pan=stereo|c0=c0|c1=c0" -c:v libx264 -preset ultrafast -g 60 \
         -c:a aac -b:a 256k -ac 2 -f mp4 -movflags frag_keyframe+empty_moov+default_base_moof live.mp4
+    # 4K の局のライブ (live.ts の uhdVideoArgs)。10 ビットの映像を縮めて、HLG を SDR に直す (HLG_TO_SDR)
+    ff -f lavfi -i testsrc2=size=640x360:rate=60000/1001:duration=1 \
+        -vf "format=yuv420p10le,scale=-2:180,setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc:range=tv,zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p" \
+        -c:v libx264 -preset ultrafast -f mp4 uhd.mp4
     ff -ss 0.5 -i h264.mkv -c:v libx264 -preset ultrafast -c:a aac -ac 2 \
         -f mp4 -movflags frag_keyframe+empty_moov stream.mp4
     ff -i h264.mkv -vn -c:a aac -f adts audio.aac
@@ -144,7 +148,7 @@ denpa)
     docker run --rm -v "$PWD:/src:ro" -v "$work:/work" -w /work --entrypoint /usr/local/bin/bun "$image" \
         /src/scripts/fps-smoke.ts /work
     run /usr/local/bin/bun -e '
-        for (const name of ["in.ts", "h264.mkv", "av1.mkv", "live.mp4", "stream.mp4", "audio.aac", "cuts.txt", "logo.raw", "chapters.mkv", "thumb.jpg", "full.avif", "small.avif", "layered.avif", "layered-small.avif"]) {
+        for (const name of ["in.ts", "h264.mkv", "av1.mkv", "live.mp4", "uhd.mp4", "stream.mp4", "audio.aac", "cuts.txt", "logo.raw", "chapters.mkv", "thumb.jpg", "full.avif", "small.avif", "layered.avif", "layered-small.avif"]) {
             const size = Bun.file(name).size;
             console.log(`${name}: ${size} バイト`);
             if (size === 0) process.exit(1);

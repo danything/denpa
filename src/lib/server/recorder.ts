@@ -432,6 +432,16 @@ async function pump(
     active.delete(recording.id);
     return;
   }
+  /*
+   * **4K の局 (TLV) はまだ録らない。** 4K の録画 (1 局に絞った TLV を `.mmts` で置く) はまだ無く、TS として読むと 1 バイトも書けない。
+   * スクランブルしていない 4K の局はライブで観られる (`types.decodableService`) ので予約は立つが、ここで理由を添えて失敗にする
+   */
+  if (service.transport === "tlv") {
+    announceOnce();
+    fail(recording.id, "ケーブルの 4K の局は、まだ録画に対応していません");
+    active.delete(recording.id);
+    return;
+  }
 
   /*
    * **物理チャンネルを丸ごと開いて、こちらで局を選り分ける。**

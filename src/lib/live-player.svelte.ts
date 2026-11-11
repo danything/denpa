@@ -49,6 +49,7 @@ import {
   slipHidden,
   unslipper,
 } from "#lib/components/player/unslip.js";
+import { broadcastHevcPlayable } from "#lib/hevc-4k.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
   LagMeter,
@@ -67,6 +68,8 @@ import {
 import { holdStep, rawChasePosition } from "#lib/live-chase.js";
 import {
   autoCodec,
+  type BroadcastCodec,
+  broadcastFormat,
   formatLabel,
   type LiveChoice,
   type LiveFormat,
@@ -1953,9 +1956,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     requestAgain();
   }
 
-  /** 選んでいるものから決まる形式が、MPEG-2 になりうるか (デコードできるかを確かめる要るか) */
+  /** 選んでいるものから決まる形式が、MPEG-2 になりうるか (デコードできるかを確かめる要るか)。4K の局の放送のままは HEVC */
   function needsRawCheck(): boolean {
-    return choice === "raw" || (choice === "auto" && options.indoor === true);
+    return (
+      broadcastKind() === "mpeg2" &&
+      (choice === "raw" || (choice === "auto" && options.indoor === true))
+    );
+  }
+
+  /** いまの局の放送のコーデック (`Tuned.broadcast`)。追っかけは録画 (MPEG-2 の TS) を読むので MPEG-2 */
+  function broadcastKind(): BroadcastCodec {
+    return chase === null ? (tuned?.broadcast ?? "mpeg2") : "mpeg2";
   }
 
   /** MSE で受け取れるか (`#lib/live.ts` の `codecsFor` で問い合わせる。サーバが渡すものと同じ) */
@@ -1964,33 +1975,46 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   }
 
   /**
+   * 4K の局の放送の HEVC を再生できるか (`#lib/hevc-4k.ts`)。4K の局を初めて開くときに 1 回だけ調べる (`begin`)。
+   * 調べるまでは undefined
+   */
+  let broadcastHevc: boolean | undefined;
+
+  /** H.265 を使えるか。4K の局は放送の HEVC の詰め替えを再生できるか、TS の局はサーバが GPU でエンコードできて受け取れるか */
+  function hevcCan(): boolean {
+    if (compat || hevcGaveUp) return false;
+    if (broadcastKind() === "hevc") return broadcastHevc === true;
+    return chase === null && options.hevc === true && mseCan("hevc");
+  }
+
+  /**
    * **選んでいるものから、リクエストする形式を決める。** 自動なら `autoCodec`。選んだものは使えればそのまま、
    * 使えなければ外と同じ順 (AV1 → H.265 → H.264、互換モードは AV1 → H.264 → MPEG-2) で代わりを探す。何も使えなければ null。
    * 使えるかは、MPEG-2 はデコードできて打ち切っていないか、AV1・H.265・H.264 は受け取れて (互換モードなら描けて) 打ち切っていないか。
    * H.265 はそのうえで、ライブのエンコーダが GPU のときだけ (`options.hevc`)。互換モードと追っかけでは使わない。
-   * ライブと追っかけで決め方は同じ (使えない形式を外すだけ)
+   * ライブと追っかけで決め方は同じ (使えない形式を外すだけ)。
+   * **4K の局は、放送のままが HEVC の詰め替え** (`BroadcastCodec`)。MPEG-2 の場所に HEVC が入り (`autoOrder`)、H.265 は
+   * 放送の HEVC を再生できるか (`hevcCan`) で決める
    */
   function decideFormat(): LiveFormat | null {
+    const kind = broadcastKind();
     const can = {
-      rawOk: rawProblem === null && !rawGaveUp,
+      rawOk: kind === "mpeg2" && rawProblem === null && !rawGaveUp,
       av1: compat
         ? !compatGaveUp && compatSupport?.av1 === true
         : !av1GaveUp && mseCan("av1"),
-      hevc:
-        !compat &&
-        chase === null &&
-        options.hevc === true &&
-        !hevcGaveUp &&
-        mseCan("hevc"),
+      hevc: hevcCan(),
       h264: compat
         ? !compatGaveUp && compatSupport?.h264 === true
         : mseCan("h264"),
       compat,
+      broadcast: kind,
     };
     if (choice === "auto")
       return autoCodec({ ...can, indoor: options.indoor === true });
-    const ok = choice === "raw" ? can.rawOk : can[choice];
-    return ok ? choice : autoCodec({ ...can, indoor: false });
+    const wanted = choice === "raw" ? broadcastFormat(kind) : choice;
+    const ok = wanted === "raw" ? can.rawOk : can[wanted];
+    return ok ? wanted : autoCodec({ ...can, indoor: false });
   }
 
   /**
@@ -1998,8 +2022,13 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 理由を断り書きに出す (先に出ている理由があればそちら)。何も使えなければ理由を出して false
    */
   function pickFormat(): boolean {
+    const kind = broadcastKind();
     // MPEG-2 を選んでいてもデコードできない端末では、選択を自動に戻して覚え直す (開くたびに断り書きが出る)
-    if (choice === "raw" && typeof rawProblem === "string") {
+    if (
+      choice === "raw" &&
+      kind === "mpeg2" &&
+      typeof rawProblem === "string"
+    ) {
       warning = `MPEG-2 を再生できません: ${rawProblem}`;
       choice = "auto";
       if (tuned !== null) remember(tuned, choice);
@@ -2009,8 +2038,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       fail("再生できる形式がありません");
       return false;
     }
-    if (choice !== "auto" && next !== choice && warning === "")
-      warning = `${formatLabel(choice)} を再生できないため、${formatLabel(next)} に切り替えました`;
+    const wanted = choice === "raw" ? broadcastFormat(kind) : choice;
+    if (choice !== "auto" && next !== wanted && warning === "")
+      warning = `${formatLabel(choice, kind)} を再生できないため、${formatLabel(next)} に切り替えました`;
     rawChosen = next === "raw";
     if (next !== "raw") codec = next;
     if (tuned !== null) tuned = { ...tuned, codec, raw: rawChosen };
@@ -2283,6 +2313,19 @@ export function livePlayer(options: LivePlayerOptions = {}) {
      */
     if (needsRawCheck() && rawProblem === undefined) {
       rawProblem = await rawUnsupported();
+    }
+    // 4K の局なら、放送の HEVC を再生できるかを先に確かめる (1 回だけ。`#lib/hevc-4k.ts`)
+    if (broadcastKind() === "hevc" && broadcastHevc === undefined) {
+      const source = pickMediaSource()?.Source;
+      broadcastHevc = await broadcastHevcPlayable({
+        isTypeSupported: (type) => source?.isTypeSupported(type) ?? false,
+        ...(typeof navigator.mediaCapabilities?.decodingInfo === "function"
+          ? {
+              decodingInfo: (config) =>
+                navigator.mediaCapabilities.decodingInfo(config),
+            }
+          : {}),
+      });
     }
     await prepareCompat();
     if (superseded(mine) || !pickFormat()) return;
@@ -3019,6 +3062,10 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     /** いま観ている形式 (コーデックのメニューの「自動 (…)」に添える)。MPEG-2 なら `raw` */
     get format(): LiveFormat {
       return raw ? "raw" : codec;
+    },
+    /** いまの局の放送のコーデック。コーデックのメニューの「放送のまま」の名前に使う (4K の局は H.265) */
+    get broadcast(): BroadcastCodec {
+      return broadcastKind();
     },
     /**
      * canvas で描いているか (放送のままの MPEG-2 か、互換モードのエンコードしたものか)。**操作バーの出し分けに使う**。

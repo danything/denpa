@@ -2,6 +2,7 @@ import type { CaptionLanguage } from "@danything/arib/caption-text";
 
 import { type Step, stepLabel } from "#lib/adapt.js";
 import {
+  type BroadcastCodec,
   formatLabel,
   HIDDEN_CODECS,
   type LiveChoice,
@@ -72,7 +73,8 @@ const AUTO = "auto";
  * 回線に合わせて段を下げていれば高さも添える (「自動 (H.264 540p)」「自動 (音声だけ)」)。
  *
  * 末尾に **MPEG-2** が並ぶ (ライブも追っかけも)。エンコードせずに放送そのままを
- * この端末でデコードする経路 (docs/stream.md#放送そのままmpeg-2を送る)。
+ * この端末でデコードする経路 (docs/stream.md#放送そのままmpeg-2を送る)。4K の局 (`broadcast` が `hevc`) では同じ場所が **H.265** で、
+ * 放送の HEVC をエンコードせずに詰め替えたもの (docs/stream.md「4K の局のライブ」)。
  * **H.264 と H.265 は並べない** (`#lib/live-choice.ts` の `HIDDEN_CODECS`)。AV1 を再生できない端末では自動がそれを選び、値に出す。
  * `unavailable` に挙げた形式は、並べるが押せない (`live-player.svelte.ts` の `unavailable`)
  */
@@ -84,9 +86,12 @@ export function liveCodecs(opts: {
   format: LiveFormat;
   /** 回線に合わせて下げた段 (`live-player.svelte.ts` の `step`)。自動の行の値に高さを添える (「自動 (H.264 540p)」)。省くと 0 */
   step?: Step;
+  /** いまの局の放送のコーデック。省くと MPEG-2 */
+  broadcast?: BroadcastCodec;
   unavailable: LiveCodec[];
   onselect: (choice: LiveChoice) => void;
 }): SettingChoice {
+  const broadcast = opts.broadcast ?? "mpeg2";
   const codecs = LIVE_CODECS.filter(
     (c) => !(HIDDEN_CODECS as readonly LiveCodec[]).includes(c.id),
   );
@@ -97,7 +102,7 @@ export function liveCodecs(opts: {
     value:
       opts.choice === "auto"
         ? `自動 (${stepLabel(opts.step ?? 0, formatLabel(opts.format))})`
-        : formatLabel(opts.choice),
+        : formatLabel(opts.choice, broadcast),
     options: [
       { key: AUTO, label: "自動", active: opts.choice === "auto" },
       ...codecs.map((c) => {
@@ -109,7 +114,11 @@ export function liveCodecs(opts: {
           disabled: off,
         };
       }),
-      { key: MPEG2, label: "MPEG-2", active: opts.choice === "raw" },
+      {
+        key: MPEG2,
+        label: formatLabel("raw", broadcast),
+        active: opts.choice === "raw",
+      },
     ],
     pick: (key) => {
       if (key === MPEG2) opts.onselect("raw");

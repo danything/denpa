@@ -568,7 +568,7 @@ describe("ケーブルの 4K の局 (TLV)", () => {
         },
       ],
     });
-    // 4K の局 (TLV) は、ライブと録画にまだ対応していないので復号できない (B-CAS と同じ 0x0005 でも ACAS が要る)。
+    // 4K の局 (TLV) は、B-CAS と同じ 0x0005 でも ACAS が要るので復号できない。
     // 番組表は読めるので、番組表の取得には行く
     expect(serviceAbilities(entry, entry.services[0]!)).toEqual({
       decodable: false,

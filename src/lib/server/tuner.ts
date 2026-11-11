@@ -470,9 +470,9 @@ export function tsmfStreams(headers: Headers): number {
   return Number.isInteger(value) && value >= 1 ? value : 1;
 }
 
-/** 選局の答えの Content-Type。TS は `video/MP2T`、TLV (4K の放送) は `application/x-arib-tlv` (docs/agent.md「通信は HTTPS」) */
+/** 選局の答えの Content-Type。TS は `video/MP2T`、TLV (4K の放送) は `application/x-arib-tlv` (docs/agent.md「通信は HTTPS」)。HTTP のライブの `codec=raw` も同じ名前で返す */
 const CONTENT_TS = "video/mp2t";
-const CONTENT_TLV = "application/x-arib-tlv";
+export const TLV_TYPE = "application/x-arib-tlv";
 
 /**
  * 選局の答えの Content-Type から、流れてくるバイト列の形式を読む。**想定していない形式は TS として読む。**
@@ -483,7 +483,7 @@ export function streamTransport(headers: Headers): Transport {
     .split(";")[0]!
     .trim()
     .toLowerCase();
-  if (type === CONTENT_TLV) return "tlv";
+  if (type === TLV_TYPE) return "tlv";
   if (type !== CONTENT_TS)
     console.warn(
       `[tuner] エージェントが想定していない形式 (${type || "Content-Type なし"}) で流しています。TS として読みます。エージェントと denpa のバージョンが合っているか確かめてください`,

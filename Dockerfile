@@ -189,7 +189,7 @@ ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-time
 # GPU が無ければ試しのエンコードが落ちて使わないだけなのは VA-API と同じ。
 # デコードとインタレ解除は CPU でするので、NVIDIA のデコーダ (nvdec) と CUDA のフィルタは組まない
 # (GPU に寄せるときは `--enable-nvdec`・`--enable-cuda-llvm` と clang を足す。docs/encode.md「NVIDIA でエンコードする」)
-ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libx264-dev libdav1d-dev libva-dev"
+ENV DEV="curl ca-certificates build-essential cmake pkg-config nasm patch zlib1g-dev libx264-dev libdav1d-dev libva-dev libzimg-dev"
 
 # renovate: datasource=github-tags depName=FFmpeg/FFmpeg extractVersion=^n(?<version>.*)$
 ENV FFMPEG_VERSION=9.0.2
@@ -243,6 +243,8 @@ COPY patches/ /patches/
 # - overlay は切り抜きに字幕・コメントを重ねる (clips.ts)
 # - scale_vaapi は回線に合わせて画質を下げたライブ・変換で、VA-API でデコードした映像を GPU の上で縮める
 #   (hwenc.ts の liveHwArgs の `cap`。フレームを CPU に降ろさないため)
+# - setparams・zscale・tonemap (libzimg) は 4K の局のライブで、HLG (BT.2020・10 ビット) を SDR (BT.709・8 ビット) に直す
+#   (live.ts の HLG_TO_SDR)
 # - testsrc2・sine・telecine・tinterlace・noise は denpa は使わず、イメージの確かめで素材を作るためだけ
 #   (.github/image-smoke.sh と scripts/fps-smoke.ts)。合わせても数百 KB
 RUN case "${TARGETARCH}" in \
@@ -286,6 +288,7 @@ RUN case "${TARGETARCH}" in \
       --enable-libsvtav1 \
       --enable-libx264 \
       --enable-libdav1d \
+      --enable-libzimg \
       --enable-vaapi \
       $arch_flags \
       --disable-everything \
@@ -297,7 +300,7 @@ RUN case "${TARGETARCH}" in \
       --enable-muxer=matroska,mp4,adts,avif,rawvideo,null,image2,mpegts \
       --enable-parser=mpegvideo,h264,aac,av1,opus,png,mjpeg,webp,hevc,ac3,mpegaudio,aac_latm \
       --enable-bsf=aac_adtstoasc,extract_extradata \
-      --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,scale_vaapi,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay \
+      --enable-filter=buffer,buffersink,abuffer,abuffersink,null,anull,format,aformat,scale,aresample,trim,atrim,fps,transpose,hflip,vflip,rotate,bwdif,setsar,scdet,metadata,ametadata,silencedetect,channelsplit,pan,hwupload,deinterlace_vaapi,scale_vaapi,crop,split,vstack,field,separatefields,signalstats,thumbnail,nullsrc,testsrc2,sine,telecine,tinterlace,noise,overlay,setparams,zscale,tonemap \
       --enable-indev=lavfi \
       --enable-protocol=file,pipe \
     && \
@@ -446,7 +449,7 @@ RUN case "${TARGETARCH}" in \
     sed -i 's/^Components: main$/Components: main non-free/' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     apt-get -y --no-install-recommends install \
-      libx264-164 libdav1d7 \
+      libx264-164 libdav1d7 libzimg2 \
       libva2 libva-drm2 $gpu && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
