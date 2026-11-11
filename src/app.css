@@ -134,7 +134,7 @@
   --dp-bar-pad: 0.375rem;
   /*
    * 字の大きさ。本文は 16px のまま (番組表のマスなど rem で組んだ寸法が変わらない)。使い分けは docs/design.md の「作り方」。
-   * `-2xs` (11px) は幅か高さの決まった所だけ (下のタブの名前・番組表の時の列の「いま」・カレンダーの曜日・バーの先の「いま」・番組表のマスの「コピー禁止」)
+   * `-2xs` (11px) は幅か高さの決まった所だけ (下のタブの名前・番組表で時の列に置く「いま」・カレンダーの曜日・バーの先の「いま」・番組表のマスの「コピー禁止」)
    */
   --dp-text-2xs: 0.6875rem;
   --dp-text-xs: 0.75rem;
@@ -828,7 +828,7 @@ progress[value]::-webkit-progress-value {
     calc(-1 * var(--dp-gutter));
   height: var(--page-h);
 }
-/* 1 行に収める。表との間に線は引かない (表の頭の局の行が区切りになる) */
+/* 1 行に収める。表との間に線は引かない (表の頭にある局名の行が区切りになる) */
 .guide-bar {
   display: flex;
   flex: none;
@@ -1464,7 +1464,7 @@ a.button {
 /* ---- 入力欄 ---- */
 /*
  * **入力欄は浮かせず平ら** (docs/design.md の「入力欄」)。線も凹みの影も付けず、地より一段濃い面 (`--dp-field`) だけで示す。
- * 角は `--dp-radius`。字を打っている間 (焦点) は、ほかの焦点と同じ外側の 2px の主の色の線
+ * 角は `--dp-radius`。字を打っている間 (焦点) は、ほかの焦点と同じく外側に 2px の線を引く (主の色)
  */
 :where(
   input:not(
@@ -2133,12 +2133,12 @@ button.text-button:hover {
     background: var(--dp-video-panel);
   }
 }
-.overlay-menu .option[data-active] {
+.overlay-menu .option[aria-checked="true"] {
   color: var(--dp-on-video-on);
   font-weight: var(--dp-weight-bold);
 }
 /* 左の縦線は `.menu-item` の選んでいる項目と同じ (`menuitemradio`)。色だけ空色の字に合わせる */
-.overlay-menu .option[data-active]::before {
+.overlay-menu .option[aria-checked="true"]::before {
   background: currentColor;
 }
 /* 映像の上に出す短い通知 (`StageNote`・追っかけの「続きは観る画面で」・ライブの「録画が始まったため、局を切り替えました」) */
@@ -2661,7 +2661,7 @@ dialog[open] > article {
 /*
  * **選び直すと、左の縦線が前の場所から縦に滑る** (タブの下線と同じ「滑る印」。上の `.segmented` の説明)。
  * 並び (`.side-list`) の疑似要素 1 本を、選んでいる行に CSS のアンカーで付ける。行ごとに線を描くと、選び直したときに
- * 前の線が消えて次の線が出るだけで、滑らなかった (ライブの局を替えたとき)。並びをまたぐ (設定の別の節の束) ときはその場に出る。
+ * 前の線が消えて次の線が出るだけで、滑らなかった (ライブの局を替えたとき)。並びをまたぐ (設定でほかの節の束へ移る) ときはその場に出る。
  * 並びの外の行 (並びに入れずに使う `.side-item`) とアンカーに対応していないブラウザは、上の行ごとの線のまま
  */
 @supports (anchor-name: --a) {

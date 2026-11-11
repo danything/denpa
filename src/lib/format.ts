@@ -7,7 +7,7 @@ export const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 /**
  * チャンネル種別の見出し。**どれを出すか (並び) は画面ごとに決める**。
  * ここは名前だけ。5 画面が同じ表をコピーしていたのを 1 つに (SKY が並ぶのはルールの条件と、
- * 受けられる機材があるときの受信の設定だけ。`types.ts` の `shownTypes`。CATV はそれに加えて、局があれば番組表とライブにも並ぶ)
+ * 受けられる機材があるときの受信の設定だけ。CATV は局があれば番組表とライブにも並ぶ。`types.ts` の `shownTypes`)
  */
 export const SERVICE_TYPE_LABEL: Record<string, string> = {
   GR: "地上波",
