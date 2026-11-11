@@ -144,7 +144,7 @@ internal sealed class SianoDevice : IDisposable
             Note($"ディスクリプタにバルク OUT の EP 0x{OutEndpoint:X2} がありません。EP 0x{OutEndpoint:X2} に送ります");
         }
 
-        // 止まりを解く要求は、失敗しても続ける (仕様書 2.2 の 4)
+        // ストールをクリアする要求は、失敗しても続ける (仕様書 2.2 の 4)
         foreach (var endpoint in new[] { input.Endpoint, OutEndpoint })
         {
             try
@@ -180,7 +180,7 @@ internal sealed class SianoDevice : IDisposable
         catch (Exception error) when (error is IOException or ObjectDisposedException)
         {
             if (_closing) return;
-            // 入出力の誤り・端点の止まり・機材が無い、のどれも機材が使えなくなったものとして扱う (仕様書 10)
+            // 入出力の誤り・端点のストール・機材が無い、のどれも機材が使えなくなったものとして扱う (仕様書 10)
             var reason = error is UsbGoneException ? $"{error.Message}。挿し直してください" : $"機材から読めなくなりました ({error.Message})";
             lock (_sync)
             {
@@ -378,6 +378,8 @@ internal sealed class SianoDevice : IDisposable
         {
             lock (_sync) _locked = false;
             Request(SianoMessage.Build(SianoMessage.Tune, SianoMessage.FromTuner, frequencyHz, FullSeg, Crystal, 0), "選局");
+            // 選局の応答より前に届いた統計と通知は、前の周波数のもの (遅れて届いた応答など)。その印は使わない
+            lock (_sync) _locked = false;
             // 選局の応答は、要求を受け取ったという意味だけ。ここからロックを待つ
             var started = Stopwatch.GetTimestamp();
             var requests = 0;
@@ -460,8 +462,7 @@ internal sealed class SianoDevice : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_closing) return;
-        _closing = true;
+        if (Interlocked.Exchange(ref _closing, true)) return;
         Detach();
         lock (_sync) Monitor.PulseAll(_sync);
         lock (_gate)
