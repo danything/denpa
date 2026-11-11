@@ -379,9 +379,13 @@ public static class It930xProbe
         }
     }
 
-    /// <summary>機材が戻るのを、100 ms ごとに最大 5 秒待って開く (REBOOT で USB がつなぎ直されたとき)</summary>
+    /// <summary>
+    /// 機材が戻るのを待って開く (REBOOT で USB がつなぎ直されたとき)。外れきる前の機材を開かないよう、先に 500 ms 待ってから、100 ms ごとに最大 10 秒。
+    /// PX-Q3PE4 は、つなぎ直しが続く 2 回の開き直しより長くかかった (2026-11-11 の実機の記録。5 秒では足りないと推定する)
+    /// </summary>
     internal static IUsbDevice Reopen(Func<IUsbDevice> open, Action<int> sleep)
     {
+        sleep(500);
         for (var i = 0; ; i++)
         {
             sleep(100);
@@ -389,7 +393,7 @@ public static class It930xProbe
             {
                 return open();
             }
-            catch (IOException) when (i < 49)
+            catch (IOException) when (i < 99)
             {
             }
         }

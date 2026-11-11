@@ -1013,9 +1013,20 @@ public sealed class It930xDevice
         for (var input = 0; input < It930xBridge.TsInputs; input++) _demux.Detach(input)?.Complete();
         if (!Faulted)
         {
+            // 受信機 1 つのスリープに失敗しても、ほかの受信機と電源は切る (USB が抜けたときは、電源を切る書き込みも失敗して下で記録に出る)
+            foreach (var receiver in Model.Receivers)
+            {
+                try
+                {
+                    Rest(receiver.Index, linked: false);
+                }
+                catch (IOException error)
+                {
+                    Log.Write($"[{Label}] 受信機 {receiver.Index} をスリープにできませんでした ({error.Message})");
+                }
+            }
             try
             {
-                foreach (var receiver in Model.Receivers) Rest(receiver.Index, linked: false);
                 if (Model.PowerWhileOpen)
                 {
                     Power(false);

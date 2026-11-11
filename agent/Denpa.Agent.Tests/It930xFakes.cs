@@ -93,6 +93,9 @@ internal sealed class FakeIt930x : IUsbDevice
     /// <summary>REBOOT で USB がつなぎ直される (そのあとの読み書きは <see cref="UsbGoneException"/>)</summary>
     public bool RebootGone { get; init; }
 
+    /// <summary>REBOOT で外れている間の読み書きを、抜けではないふつうの失敗 (EPROTO) にする (PX-Q3PE4 の実機で見た形)。<see cref="RebootGone"/> と組で使う</summary>
+    public bool GoneAsProtocolError { get; init; }
+
     /// <summary>REBOOT のあと、このコマンドの数だけ応答しない</summary>
     public int SilentAfterReboot { get; init; }
 
@@ -164,7 +167,7 @@ internal sealed class FakeIt930x : IUsbDevice
 
     public void BulkWrite(byte endpoint, ReadOnlySpan<byte> data, int timeoutMs)
     {
-        if (_gone) throw new UsbGoneException("fake-it930x が抜かれました");
+        if (_gone) throw GoneAsProtocolError ? new IOException("fake-it930x: Protocol error") : new UsbGoneException("fake-it930x が抜かれました");
         if (endpoint != 0x02) throw new InvalidOperationException($"EP 0x{endpoint:X2} に送った");
         if (data.Length > 63) throw new InvalidOperationException($"フレームが 63 バイトを超えた ({data.Length})");
         if (data[0] != data.Length - 1) throw new InvalidOperationException($"長さのバイトが違う ({data[0]}、フレーム {data.Length} バイト)");
@@ -345,7 +348,7 @@ internal sealed class FakeIt930x : IUsbDevice
 
     public int Read(byte endpoint, Span<byte> buffer, int timeoutMs)
     {
-        if (_gone) throw new UsbGoneException("fake-it930x が抜かれました");
+        if (_gone) throw GoneAsProtocolError ? new IOException("fake-it930x: Protocol error") : new UsbGoneException("fake-it930x が抜かれました");
         if (endpoint != 0x81) throw new InvalidOperationException($"EP 0x{endpoint:X2} から読んだ");
         if (_late.TryDequeue(out var late)) return Copy(late, buffer);
         if (!_replies.TryDequeue(out var reply)) return 0;

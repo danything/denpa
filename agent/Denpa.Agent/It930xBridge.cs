@@ -733,7 +733,7 @@ public sealed class It930xBridge
     /// </summary>
     /// <remarks>
     /// SDK のこの関数は、待ったあとに必ず失敗を返す形になっている (比べる変数に 1 を入れたまま比べている)。
-    /// 意図は「REBOOT のあとはバージョンが 0 に戻る」と推定し、それを確かめる。REBOOT で USB がつなぎ直されるかは実機で確かめていない
+    /// 意図は「REBOOT のあとはバージョンが 0 に戻る」と推定し、それを確かめる。USB がつなぎ直されたら (PX-Q3PE4) <see cref="UsbGoneException"/>
     /// </remarks>
     public void Reboot()
     {
@@ -752,6 +752,14 @@ public sealed class It930xBridge
             {
                 last = error;
                 _sleep(10);
+            }
+            catch (IOException error) when (error is not UsbGoneException)
+            {
+                /*
+                 * PX-Q3PE4 は REBOOT で USB から一度外れ、つなぎ直されると推定する (2026-11-11 の実機の記録。REBOOT の直後の QUERYINFO が EPROTO になり、もう片方の側も一覧から消えた)。外れている間に送った QUERYINFO は
+                 * EPROTO などのふつうの IOException になるので、つなぎ直されたものとして呼ぶ側に開き直させる
+                 */
+                throw new UsbGoneException($"REBOOT のあと USB がつなぎ直されています ({error.Message})");
             }
         }
         if (version is null) throw new It930xException($"IT930x が REBOOT のあと応答しません ({last?.Message})");

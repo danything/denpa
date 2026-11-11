@@ -331,6 +331,20 @@ public class It930xTests
     }
 
     [Test]
+    public async Task REBOOT_のあとの読み書きがふつうの失敗でも_つなぎ直されたものとして開き直す()
+    {
+        // PX-Q3PE4 は REBOOT で USB から外れ、その間の QUERYINFO は EPROTO (抜けではない IOException) になった
+        var first = new FakeIt930x { Running = FakeIt930x.BootVersion, RebootGone = true, GoneAsProtocolError = true };
+        var second = new FakeIt930x();
+        var opened = 0;
+        var output = new StringWriter();
+        var code = It930xProbe.Execute(() => ++opened == 1 ? first : second, () => It930xFirmware.Code, output, _ => { }, null);
+        await Assert.That(code).IsEqualTo(0);
+        await Assert.That(opened).IsEqualTo(2);
+        await Assert.That(output.ToString()).Contains("REBOOT のあと USB がつなぎ直されました");
+    }
+
+    [Test]
     public async Task probe_は_REBOOT_で_USB_がつなぎ直されたら_1_回だけ開き直す()
     {
         var first = new FakeIt930x { Running = FakeIt930x.BootVersion, RebootGone = true };
