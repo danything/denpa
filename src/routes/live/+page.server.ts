@@ -21,6 +21,7 @@ import { linkState } from "#lib/server/niconico.js";
 import { recordAiring } from "#lib/server/reservations.js";
 import { programs, services as stations } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
+import { issue } from "#lib/server/tickets.js";
 import { liveStart, readKept, viewingOptions } from "#lib/server/viewing.js";
 import type { Service } from "#lib/types.js";
 
@@ -164,6 +165,11 @@ export function load(event) {
     channelNotice: channelNotice(serviceCounts(), listedServices()),
     channelAlert: channelAlert(),
     start,
+    /**
+     * WebSocket に繋ぐチケット (`server/tickets.ts`)。**最初の 1 回はこれで繋ぎ**、`/api/live/ticket` の往復 (100ms ほど) を省く。
+     * このページも認証を通った人にしか返らないので、`/api/live/ticket` で配るのと同じ。開く局が無ければ配らない
+     */
+    ticket: start === null ? null : issue(),
     /** コーデックのメニューで選んでいるもの (端末ごと。`LAST_COOKIE`) */
     choice: kept.choice,
     /** 開いた名前が家の中か (`#lib/host.ts` の `indoorHost`)。「自動」の形式を画面が決めるのに使う */

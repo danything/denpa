@@ -6,15 +6,14 @@
  * チューナーを使う API をそのまま開けておくわけにはいかない。
  *
  * そこで、**認証を通った画面だけが取れるチケット**を 1 枚配り、それを URL に付けて
- * 繋いでもらう。チケットの発行 (`/api/live/ticket`) は普通の HTTP なので、
- * OIDC も信頼するネットワークも**そのまま効く**。
+ * 繋いでもらう。配るのはライブのページを組むとき (`routes/live/+page.server.ts` の `load`) と
+ * `/api/live/ticket` で、どちらも普通の HTTP なので、OIDC も信頼するネットワークも**そのまま効く**。
  *
  * **1 回使ったら消す。** URL は履歴にもログにも残るので、残しておくと見た人が
  * 繋げてしまう。
  */
 
-/** チケットの寿命。取ってすぐ繋ぐだけなので短くてよい */
-const LIFETIME = 30_000;
+import { TICKET_LIFETIME } from "#lib/live.js";
 
 const issued = new Map<string, number>();
 
@@ -29,7 +28,7 @@ function sweep(at: number): void {
 export function issue(at: number = Date.now()): string {
   sweep(at);
   const token = crypto.randomUUID();
-  issued.set(token, at + LIFETIME);
+  issued.set(token, at + TICKET_LIFETIME);
   return token;
 }
 

@@ -128,6 +128,8 @@
     choice: untrack(() => data.choice),
     indoor: untrack(() => data.indoor),
     hevc: untrack(() => data.hevc),
+    // 最初の 1 回に繋ぐチケット。ページと一緒に受け取る (`+page.server.ts`)
+    ticket: untrack(() => data.ticket),
   });
   /** 映像と重ねもの (MediaStack が組む)。bind で受けるので開くまでは null */
   let video = $state<HTMLVideoElement | null>(null);

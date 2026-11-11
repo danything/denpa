@@ -679,6 +679,78 @@ test.describe("ライブ視聴", () => {
   });
 
   /*
+   * **開いた最初の 1 回は、ページと一緒に受け取ったチケットで繋ぐ** (`+page.server.ts` の `ticket`)。
+   * `/api/live/ticket` の往復を省く (docs/stream.md#繋ぐときの認証)
+   */
+  test("開いた最初の 1 回は、ページと一緒に受け取ったチケットで繋ぐ", async ({
+    page,
+  }) => {
+    const asked: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/api/live/ticket")) asked.push(request.url());
+    });
+    const socket = page.waitForEvent("websocket", (ws) =>
+      ws.url().includes("/api/live/socket"),
+    );
+    await goto(page, "/live");
+    await (await socket).waitForEvent("framereceived");
+    expect(asked, "ページのチケットを使わずに取りに行った").toEqual([]);
+  });
+
+  /*
+   * **ページのチケットを断られたら、`/api/live/ticket` から取り直して繋ぐ。** 戻るで開き直したページは、
+   * ブラウザが手元に持っていた HTML (使い終えたチケットが入っている) を出すことがある。ここでは最初に繋ぐ URL の
+   * チケットを配っていないものに書き換えて、サーバに断らせる。HTML を `route.fulfill` で書き換えると、
+   * Chromium がそのページを外のネットワークのものと扱い、127.0.0.1 への WebSocket を止めてしまう
+   * (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`)
+   */
+  test("ページのチケットを断られたら、取り直して繋ぐ", async ({ page }) => {
+    await page.addInitScript(() => {
+      const seen = window as unknown as { __replaced: boolean };
+      seen.__replaced = false;
+      const Original = window.WebSocket;
+      window.WebSocket = class extends Original {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          const text = String(url);
+          const first = !seen.__replaced && text.includes("ticket=");
+          if (first) seen.__replaced = true;
+          super(
+            first
+              ? text.replace(
+                  /ticket=[^&]+/,
+                  "ticket=00000000-0000-4000-8000-000000000000",
+                )
+              : url,
+            protocols,
+          );
+        }
+      };
+    });
+    const asked: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/api/live/ticket")) asked.push(request.url());
+    });
+    let frames = 0;
+    page.on("websocket", (ws) => {
+      ws.on("framereceived", () => {
+        frames += 1;
+      });
+    });
+
+    await goto(page, "/live");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as unknown as { __replaced: boolean }).__replaced,
+        ),
+      )
+      .toBe(true);
+    await expect.poll(() => asked.length).toBe(1);
+    await expect.poll(() => frames).toBeGreaterThan(0);
+    await expect(page.getByText("繋がりませんでした")).toHaveCount(0);
+  });
+
+  /*
    * **同じ局を押し直したときこそ、答えないといけない。**
    *
    * 画面側は `tune` のたびにプレイヤーを捨てて、`tuned` と init が来てから作り直す

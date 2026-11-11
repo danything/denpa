@@ -400,6 +400,13 @@ type TuneCommand = {
 /** WebSocket の宛先 */
 export const SOCKET_PATH = "/api/live/socket";
 
+/**
+ * WebSocket に繋ぐチケットの寿命 (ms。`server/tickets.ts`)。取ってすぐ繋ぐだけなので短くてよい。
+ * 画面は、ページを組むときに受け取ったチケットをこの半分までしか使わない (`live-player.svelte.ts` の `takePageTicket`)。
+ * サーバと端末の時計は合わせていないので、端末の時計で受け取ってからの時間を数え、HTML が届くまでのぶんを半分の余裕で覆う
+ */
+export const TICKET_LIFETIME = 30_000;
+
 /** どの局を、どの音声で開くか。**画面もサーバも同じ形式で扱う** */
 export interface Tuned {
   channelType: string;

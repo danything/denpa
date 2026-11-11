@@ -17,6 +17,8 @@
  *   JS が見せる時刻まで待たせるには参照を移して取っておくしかない
  * - `dec_peek` / `dec_pop` … いちばん古い 1 枚を覗く・捨てる。表示順で並んでいる
  *   (B フレームの並べ替えはデコーダが済ませている)
+ * - `dec_still` … 選局したての I フレームを、別に開いたデコーダでその場で 1 枚出す。本体は次の参照フレームを
+ *   読むまで I を出さないので、新しい局の 1 枚目を描くのがそのぶん遅れる
  *
  * スレッドは使わない。スレッドを使うビルドは COOP/COEP (crossOriginIsolated) が要り、効く端末が限られる
  * (docs/stream.md#スライスのスレッドを見送った理由)。
@@ -47,6 +49,27 @@ static int skip_nonref;
 /** JS へ渡す 1 枚ぶんの控え (dec_peek) */
 static int info[12];
 static double info_pts;
+/**
+ * `dec_still` で先に出したフレームの時刻。**本体が同じフレームか、それより前に映るフレームを出したら捨てる**
+ * (同じコマを 2 枚持たない・並びを崩さない)。本体がそれより後のフレームを出したら、もう来ないので忘れる
+ */
+static int64_t still_pts = AV_NOPTS_VALUE;
+
+/** フレームの時刻 (90kHz)。無ければ AV_NOPTS_VALUE */
+static int64_t frame_pts(const AVFrame *f) {
+    return f->pts != AV_NOPTS_VALUE ? f->pts : f->best_effort_timestamp;
+}
+
+/** 待たせるフレームに足す。**溢れたら古いほうから捨てる** */
+static void enqueue(AVFrame *frame) {
+    if (count == QUEUE) {
+        av_frame_free(&queue[head]);
+        head = (head + 1) % QUEUE;
+        count--;
+    }
+    queue[(head + count) % QUEUE] = frame;
+    count++;
+}
 
 static void clear_queue(void) {
     for (int i = 0; i < count; i++) av_frame_free(&queue[(head + i) % QUEUE]);
@@ -62,6 +85,7 @@ EMSCRIPTEN_KEEPALIVE int dec_open(void) {
     const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_MPEG2VIDEO);
     if (codec == NULL) return -1;
     clear_queue();
+    still_pts = AV_NOPTS_VALUE;
     if (parser != NULL) av_parser_close(parser);
     avcodec_free_context(&ctx);
     parser = av_parser_init(codec->id);
@@ -87,13 +111,25 @@ static void receive(void) {
             av_frame_free(&frame);
             return;
         }
-        if (count == QUEUE) {
-            av_frame_free(&queue[head]);
-            head = (head + 1) % QUEUE;
-            count--;
+        if (still_pts != AV_NOPTS_VALUE) {
+            int64_t at = frame_pts(frame);
+            if (at == still_pts) {
+                // `dec_still` で先に出したもの
+                still_pts = AV_NOPTS_VALUE;
+                av_frame_free(&frame);
+                continue;
+            }
+            /*
+             * 先に出した I より前に映るコマ (途中から入ったときに I の後ろに届く B)。並びが I の後ろになり、
+             * 映す順が崩れるので持たない。ふつうは参照が足りずにデコーダが捨てている
+             */
+            if (at != AV_NOPTS_VALUE && at < still_pts) {
+                av_frame_free(&frame);
+                continue;
+            }
+            if (at != AV_NOPTS_VALUE) still_pts = AV_NOPTS_VALUE;
         }
-        queue[(head + count) % QUEUE] = frame;
-        count++;
+        enqueue(frame);
     }
 }
 
@@ -124,6 +160,71 @@ EMSCRIPTEN_KEEPALIVE int dec_push(const uint8_t *data, int len, double pts) {
         if (used == 0 && size == 0) break;
     }
     last_ms = emscripten_get_now() - started;
+    return count;
+}
+
+/**
+ * I フレームを 1 枚、**本体とは別に開いたデコーダでその場で出す。** 返すのは待っている枚数。
+ *
+ * 本体 (`dec_push`) は I を読んでも、次の参照フレーム (P) を読むまで出さない (B フレームを並べ替えるため、
+ * 参照フレームは 1 枚遅れて出す決まり)。放送は I・B・B・P の順に届くので、選局したての 1 枚目が
+ * 3 コマぶん遅れ、parser が次のコマの先頭を待つぶんでさらに 1 コマ遅れる。ここでは I だけを渡し、
+ * parser にもデコーダにも持っているものを最後まで出させるので、読んだその場で出る。デコードは 1 枚ぶん増える。
+ *
+ * **本体にも別に渡す** (`dec_push`。後ろの P と B はこの I を参照する)。本体が同じコマを出したら捨てる (`still_pts`)。
+ * 渡したものに複数のコマが入っていても、出すのは最初の 1 枚だけ
+ */
+EMSCRIPTEN_KEEPALIVE int dec_still(const uint8_t *data, int len, double pts) {
+    const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_MPEG2VIDEO);
+    if (codec == NULL) return count;
+    AVCodecParserContext *cut = av_parser_init(codec->id);
+    AVCodecContext *one = avcodec_alloc_context3(codec);
+    AVPacket *packet = av_packet_alloc();
+    AVFrame *frame = av_frame_alloc();
+    int ready = cut != NULL && one != NULL && packet != NULL && frame != NULL;
+    if (ready) {
+        one->pkt_timebase = (AVRational){1, 90000};
+        one->flags2 |= AV_CODEC_FLAG2_FAST;
+        ready = avcodec_open2(one, codec, NULL) == 0;
+    }
+    if (ready) {
+        int64_t stamp = pts < 0 ? AV_NOPTS_VALUE : (int64_t)pts;
+        // 渡したものを切り終えたら、長さ 0 で 1 回呼ぶ。parser は次のコマの先頭を待たずに、持っている最後のコマを出す
+        for (int flushing = 0; flushing < 2; flushing++) {
+            for (;;) {
+                if (!flushing && len <= 0) break;
+                uint8_t *out = NULL;
+                int size = 0;
+                int used = av_parser_parse2(cut, one, &out, &size, flushing ? NULL : data, flushing ? 0 : len,
+                                            stamp, stamp, 0);
+                stamp = AV_NOPTS_VALUE;
+                if (!flushing) {
+                    data += used;
+                    len -= used;
+                }
+                if (size > 0) {
+                    packet->data = out;
+                    packet->size = size;
+                    packet->pts = cut->pts;
+                    packet->dts = cut->dts;
+                    avcodec_send_packet(one, packet);
+                }
+                if (flushing || (used == 0 && size == 0)) break;
+            }
+        }
+        // 参照フレームとして持っている I を出させる
+        avcodec_send_packet(one, NULL);
+        // 時刻が無ければ出さない。本体が同じコマを出したときに見分けられず、2 枚並ぶ
+        if (avcodec_receive_frame(one, frame) == 0 && frame_pts(frame) != AV_NOPTS_VALUE) {
+            still_pts = frame_pts(frame);
+            enqueue(frame);
+            frame = NULL;
+        }
+    }
+    av_frame_free(&frame);
+    av_packet_free(&packet);
+    avcodec_free_context(&one);
+    if (cut != NULL) av_parser_close(cut);
     return count;
 }
 

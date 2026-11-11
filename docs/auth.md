@@ -18,7 +18,8 @@ OIDC も `TRUSTED_NETWORKS` も設定していなければ、`OPEN_PATHS` のほ
 仕組みでは WebSocket のハンドシェイクを扱えないためで、`hooks.server.ts` に届かず、ここに書いた守り方は効きません。
 
 **ブラウザは WebSocket のハンドシェイクに `Authorization` を付けてくれない**ので、画面が先に
-`POST /api/live/ticket` で使い捨てのチケットを取り、URL に付けて繋ぎます。チケットの発行は
+`POST /api/live/ticket` で使い捨てのチケットを取り、URL に付けて繋ぎます。ライブのページを開いたときの
+最初の 1 回は、ページを組むときにサーバが配ったチケットを使います。チケットの発行はどちらも
 普通の HTTP なので、OIDC も信頼するネットワークもそのまま効きます。チケットは 1 回使ったら
 消し、寿命は 30 秒 (`src/lib/server/tickets.ts`、詳しくは [stream.md](stream.md#繋ぐときの認証))。
 

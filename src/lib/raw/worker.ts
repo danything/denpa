@@ -90,6 +90,11 @@ const UNDER_PER_TICK = 4;
 interface Decoder extends AudioDecoder {
   _dec_open(): number;
   _dec_push(data: number, length: number, pts: number): number;
+  /**
+   * I フレームを別のデコーダでその場で 1 枚出す (`still`)。前のバージョンのデコーダ (オフラインで観るときに
+   * service worker が持っているもの) には無い
+   */
+  _dec_still?(data: number, length: number, pts: number): number;
   _dec_count(): number;
   _dec_peek(): number;
   _dec_peek_pts(): number;
@@ -376,6 +381,15 @@ function decode(item: Pending): void {
   budget.record(decoder._dec_last_ms());
 }
 
+/**
+ * `decode` したばかりの I を、別のデコーダでその場で 1 枚出させる (`wasm/decoder.c` の `dec_still`)。**選局したての 1 枚目だけ**。
+ * WASM のメモリには `decode` が写したものがそのまま残っているので、写し直さない。デコードの重さ (`budget`) には数えない
+ */
+function still(item: Pending): void {
+  if (decoder?._dec_still === undefined || input.pointer === 0) return;
+  decoder._dec_still(input.pointer, item.data.length, item.pts);
+}
+
 /** いちばん古いデコードできたフレームをテクスチャへ上げて、`current` にする */
 function take(): void {
   if (decoder === null || renderer === null) return;
@@ -506,16 +520,20 @@ function tick(): void {
    *
    * **録画で飛んだあとは、飛び先より前をデコードして捨てる** (`floor`)。それまでは前のフレームのまま
    * (CM を飛ばしたなら本編の映像のまま)。1 回にデコードするのは `UNDER_PER_TICK` 枚まで
+   *
+   * **1 枚目の I は、デコーダが出すのを待たずに出す** (`still`)。デコーダは次の参照フレーム (P) を読むまで
+   * I を出さないので、届いてから 3〜4 コマぶん (0.1 秒ほど) 待っていた
    */
   if (!shownSinceReset) {
-    const limit =
-      floor !== null || floorRaw !== null
-        ? UNDER_PER_TICK
-        : Number.POSITIVE_INFINITY;
+    const seeking = floor !== null || floorRaw !== null;
+    const limit = seeking ? UNDER_PER_TICK : Number.POSITIVE_INFINITY;
     for (let i = 0; ; i++) {
       dropUnder();
       if (decoder._dec_count() > 0 || pending.length === 0 || i >= limit) break;
-      decode(shift());
+      const item = shift();
+      decode(item);
+      // 飛び先より前の I は描かないので、先に出させない
+      if (item.key && !seeking && decoder._dec_count() === 0) still(item);
     }
     if (decoder._dec_count() > 0) {
       take();
