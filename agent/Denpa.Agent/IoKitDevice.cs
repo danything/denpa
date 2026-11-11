@@ -478,6 +478,17 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
 
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth) => new InStream(this, Pipe(endpoint).Ref, transferSize, depth);
 
+    /// <summary>開いたときに IOKit から読んだ端点の一覧 (<see cref="MapPipes"/>)</summary>
+    public IReadOnlyList<UsbPipe> Pipes() =>
+        [.. _pipes.OrderBy(pair => pair.Value.Ref).Select(pair => new UsbPipe(pair.Key, pair.Value.Type, pair.Value.MaxPacket & 0x7FF))];
+
+    /// <summary>端点のストールをクリアする (ClearPipeStall)。実機で確かめていない</summary>
+    public void ClearHalt(byte endpoint)
+    {
+        var pipe = Pipe(endpoint).Ref;
+        Check(Name, $"EP 0x{endpoint:X2} のストールをクリアできません", ((delegate* unmanaged[Cdecl]<void*, byte, int>)Slot(Interface, ClearPipeStall))(Interface, pipe));
+    }
+
     public void Dispose()
     {
         lock (_gate)
@@ -643,6 +654,18 @@ public sealed unsafe partial class IoKitDevice : IUsbDevice
                 _offset = 0;
             }
             return copied;
+        }
+
+        /// <summary>届いた転送を 1 つ返す (0 バイトの転送はバッファに入れていない)。実機で確かめていない</summary>
+        public int ReadTransfer(Span<byte> buffer, int timeoutMs)
+        {
+            if (_error is not (Success or Aborted)) throw Failure(_owner.Name, "TS の読みが失敗しました", _error);
+            if (_current is null && !_chunks.TryTake(out _current, timeoutMs)) return 0;
+            var take = Math.Min(_current!.Length - _offset, buffer.Length);
+            _current.AsSpan(_offset, take).CopyTo(buffer);
+            _current = null;
+            _offset = 0;
+            return take;
         }
 
         public void Dispose()

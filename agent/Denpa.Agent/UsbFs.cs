@@ -55,6 +55,33 @@ public static class UsbDescriptors
     }
 
     /// <summary>
+    /// usbfs の fd を読んだ中身 (デバイスディスクリプタ + 全部の構成ディスクリプタ) から、最初の構成にあるインターフェース
+    /// <paramref name="interfaceNumber"/> (代替設定 0) の端点を並べる。途中で切れているディスクリプタはその手前までを読む
+    /// </summary>
+    public static List<UsbPipe> Pipes(ReadOnlySpan<byte> blob, int interfaceNumber)
+    {
+        var pipes = new List<UsbPipe>();
+        var at = 0;
+        var configs = 0;
+        var inTarget = false;
+        while (at + 2 <= blob.Length)
+        {
+            int length = blob[at];
+            var type = blob[at + 1];
+            if (length < 2 || at + length > blob.Length) break;
+            var d = blob.Slice(at, length);
+            if (type == TypeConfig && ++configs > 1) break;
+            if (type == TypeInterface && length >= 9) inTarget = d[2] == interfaceNumber && d[3] == 0;
+            if (type == TypeEndpoint && inTarget && length >= 7)
+            {
+                pipes.Add(new UsbPipe(d[2], d[3] & 0x03, BinaryPrimitives.ReadUInt16LittleEndian(d[4..]) & 0x7ff));
+            }
+            at += length;
+        }
+        return pipes;
+    }
+
+    /// <summary>
     /// usbfs の fd を読んだ中身 (デバイスディスクリプタ + 全部の構成ディスクリプタ) から、
     /// 指した構成・インターフェースの CCID の情報を読み取る。
     ///
