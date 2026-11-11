@@ -87,8 +87,8 @@ public class Tc90522Tests
         }, CollectionOrdering.Matching);
         bus.Log.Clear();
         frontend.Rest();
-        // R850 には何も書かない (仕様書 7.7)
-        await Assert.That(bus.Log).IsEquivalentTo(new[] { "10 03=F0" }, CollectionOrdering.Matching);
+        // TS の端子を止めてからスリープにする (端子は仕様書に無い)。R850 には何も書かない (仕様書 7.7)
+        await Assert.That(bus.Log).IsEquivalentTo(new[] { "10 1D=A8", "10 03=F0" }, CollectionOrdering.Matching);
         await Assert.That(clock.Sleeps).IsEmpty();
     }
 
@@ -100,8 +100,8 @@ public class Tc90522Tests
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "11 15=00", "11 1D=00", "11 04=02", "11 1C=80", "11 1F=22", "11 13=00", "11 17=00" }, CollectionOrdering.Matching);
         bus.Log.Clear();
         frontend.Rest();
-        // RT710 を待機にして、続けて復調器をスリープにする (仕様書 4.1 の 3)
-        await Assert.That(bus.Log).IsEquivalentTo(new[] { $"11 RT710 00={Rt710Standby}", "11 13=80", "11 17=FF" }, CollectionOrdering.Matching);
+        // TS の端子を止め (仕様書に無い)、RT710 を待機にして、続けて復調器をスリープにする (仕様書 4.1 の 3)
+        await Assert.That(bus.Log).IsEquivalentTo(new[] { "11 1C=80", "11 1F=22", $"11 RT710 00={Rt710Standby}", "11 13=80", "11 17=FF" }, CollectionOrdering.Matching);
         await Assert.That(clock.Sleeps).IsEmpty();
     }
 

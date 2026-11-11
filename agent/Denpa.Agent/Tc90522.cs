@@ -472,11 +472,18 @@ internal sealed class Tc90522Terrestrial : Tc90522Frontend, ITc90522Receiver
         Run(_link, WakeTerrestrialRows);
     }
 
-    /// <summary>スリープ (仕様書 4.1 の 3・11.3)。復調器だけ。R850 には何も書かない (仕様書 7.7)</summary>
+    /// <summary>
+    /// スリープ (仕様書 4.1 の 3・11.3)。復調器だけ。R850 には何も書かない (仕様書 7.7)。
+    /// スリープの前に TS の端子を止める (仕様書に無い。<see cref="ITc90522Receiver.Rest"/>)
+    /// </summary>
     public void Rest()
     {
         _tuned = false;
-        Run(_link, SleepTerrestrialRows);
+        lock (BusLock)
+        {
+            _link.Run(TsOffTerrestrialRows);
+            _link.Run(SleepTerrestrialRows);
+        }
     }
 
     public void Forget() => _tuned = _attempted = false;
@@ -547,12 +554,16 @@ internal sealed class Tc90522Satellite : Tc90522Frontend, ITc90522Receiver
         Run(_link, WakeSatelliteRows);
     }
 
-    /// <summary>スリープ (仕様書 4.1 の 3・11.3)。RT710 を待機にして (仕様書 8.5)、続けて復調器をスリープにする</summary>
+    /// <summary>
+    /// スリープ (仕様書 4.1 の 3・11.3)。RT710 を待機にして (仕様書 8.5)、続けて復調器をスリープにする。
+    /// その前に TS の端子を止める (仕様書に無い。<see cref="ITc90522Receiver.Rest"/>)
+    /// </summary>
     public void Rest()
     {
         _tuned = false;
         lock (BusLock)
         {
+            _link.Run(TsOffSatelliteRows);
             _tuner.Standby();
             _link.Run(SleepSatelliteRows);
         }
@@ -605,7 +616,12 @@ internal interface ITc90522Receiver : IIt930xFrontend
     /// <summary>起動 (仕様書 4.2)</summary>
     void Wake();
 
-    /// <summary>スリープ (仕様書 4.1 の 3・11.3)</summary>
+    /// <summary>
+    /// TS の端子を止めて (仕様書 4.5)、スリープにする (仕様書 4.1 の 3・11.3)。仕様書のスリープは端子を止めないが、ここでは止める (仕様書に無い)。
+    /// PX-Q3PE4 の実機で、開いていない受信機 (仕様書 4.1 の 3 でスリープにしただけで、起動していない受信機) の TS 入力にブリッジのバッファの溢れが立ち、
+    /// そのあと電源を抜くまでその側の TS が届かなくなった。ブリッジの入力は開いたときから全部開けてあるので (<see cref="It930xDevice"/>)、
+    /// 起動していない復調器が電源を入れたときのまま端子を出していて、その入力にデータが入って溢れると推定している (確かめてはいない)
+    /// </summary>
     void Rest();
 
     /// <summary>何も書かずに、選局していない状態に戻す (最後の受信機を閉じるとき。仕様書 11.3)</summary>
@@ -624,6 +640,12 @@ internal interface ITc90522Receiver : IIt930xFrontend
 ///
 /// <para>
 /// **閉じるとき** (仕様書 11.3): ほかに開いている受信機があればスリープにする。最後の受信機は何も書かない (電源を切るか、次に開くときに初期化からやり直す)。
+/// </para>
+///
+/// <para>
+/// **TS の端子は、流している受信機のものだけを出す** (仕様書に無い。<see cref="ITc90522Receiver.Rest"/>)。電源を入れたら、開く前に 4 つの端子を止め (<see cref="StopOutputs"/>)、
+/// スリープにする受信機も端子を止めてからスリープにする。Q3 の連動で電源だけが入った側も、機材を開いたときに止める。
+/// 流し始めるときに出し、止めるときに止めるのは受信機 (<see cref="IIt930xFrontend.Stream"/>)。
 /// </para>
 /// </summary>
 internal sealed class Tc90522Board : IIt930xBoard
@@ -697,6 +719,19 @@ internal sealed class Tc90522Board : IIt930xBoard
             if (!_open.Remove(receiver)) return;
             if (_open.Count > 0) _receivers[receiver].Rest();
             else _receivers[receiver].Forget();
+        }
+    }
+
+    /// <summary>
+    /// 4 つの受信機の TS の端子を止める (仕様書 4.5 の値。電源を入れたあと、受信機を開く前に書くのは仕様書に無い。<see cref="ITc90522Receiver.Rest"/>)。
+    /// 電源を入れた直後の復調器が端子を出しているかは、資料に無い。開いている受信機があれば何もしない
+    /// </summary>
+    public void StopOutputs()
+    {
+        lock (_gate)
+        {
+            if (_open.Count > 0) return;
+            foreach (var each in _receivers) each.Stream(false);
         }
     }
 }

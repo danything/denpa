@@ -79,6 +79,14 @@ internal interface IIt930xBoard
 
     /// <summary>受信機を閉じる (止めてスリープにする)。開いていなければ何もしない</summary>
     void Close(int receiver);
+
+    /// <summary>
+    /// 電源を入れたあと、受信機を開く前に、復調器の TS の端子を全部止める (<see cref="Tc90522Board.StopOutputs"/>)。
+    /// CXD2856ER の機種は端子を操作しない。受信機が 1 つの機種は、開くたびに電源を入れて端子を止めるので、何もしない
+    /// </summary>
+    void StopOutputs()
+    {
+    }
 }
 
 /// <summary>
@@ -505,7 +513,12 @@ public sealed class It930xDevice
         // 受信機の TS 入力はどれもシリアル (MLT5 の仕様書 1.2・3.4、px4 の仕様書 2.3)。同期バイトが 0 の入力は使わないので、開けない (px4 の仕様書 2.3・13)
         Bridge.ConfigureTs(new bool[It930xBridge.TsInputs], Model.SyncBytes);
         RecoverOverflow();
-        if (Model.PowerWhileOpen) Power(true);
+        if (Model.PowerWhileOpen)
+        {
+            Power(true);
+            // 入力を開ける前に、復調器の TS の端子を止める (Q3・W3 系。Q3 の連動で電源だけを入れる側も、ここを通る)
+            StopOutputs();
+        }
         // SDK (IT930x_probe) と同じく、EP 0x84 の読みを出して残りを読み捨ててから入力を開ける。ブリッジに来たパケットは読み続け、出口の無い入力のものは捨てる
         _reader = new Thread(ReadTs) { IsBackground = true, Name = "it930x-ts" };
         _reader.Start();
@@ -644,6 +657,22 @@ public sealed class It930xDevice
         }
     }
 
+    /// <summary>
+    /// 電源を入れたあとに、復調器の TS の端子を全部止める (<see cref="IIt930xBoard.StopOutputs"/>)。I2C の誤りは記録に出して続ける
+    /// (最初の受信機を開くときに、ほかの受信機の端子も止め直す。初期化の失敗とやり直しは、開くときに扱う)
+    /// </summary>
+    private void StopOutputs()
+    {
+        try
+        {
+            _board.StopOutputs();
+        }
+        catch (IOException error) when (error is not UsbGoneException)
+        {
+            Log.Write($"[{Label}] 復調器の TS の端子を止められませんでした ({error.Message})");
+        }
+    }
+
     /// <summary>入力を全部閉じて EP 0x84 をリセットする (<see cref="It930xBridge.DisableTsInputs"/>)。閉じられなければ記録に出す</summary>
     private void CloseInputs()
     {
@@ -688,6 +717,7 @@ public sealed class It930xDevice
                         Power(false);
                         _sleep(20);
                         Power(true);
+                        StopOutputs();
                     }
                     frontend = _board.Open(receiver);
                 }
