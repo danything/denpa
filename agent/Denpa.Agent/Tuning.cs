@@ -21,7 +21,8 @@ namespace Denpa.Agent;
 ///
 /// <list type="bullet">
 /// <item><see cref="DvbTuner"/> … 標準の Linux DVB v5。PT2/PT3、PX-S1UD、PX-BCUD。カーネルが持つ</item>
-/// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など) と asicen-userland の機材 (PX-W3U3。同じ IPC)。<c>px4d</c> (asicen なら <c>asicend</c>) が持ち、受信機を取ったまま制御ソケットで選局し直す (Px4.cs)</item>
+/// <item><see cref="Px4Tuner"/> … px4-userland の機材 (PX-Q3U4 など)。<c>px4d</c> が持ち、受信機を取ったまま制御ソケットで選局し直す (Px4.cs)</item>
+/// <item><see cref="AsicenTuner"/> … asicen-userland の機材 (PX-W3U3 など。試験的)。<c>asicend</c> が持ち、選局のたびに受信機を取り直す (AsicenUdtv.cs)</item>
 /// <item><see cref="SianoTuner"/> … Siano の機材 (PX-S1UD などをカーネルに使わせていないとき)。エージェントが USB を直に持ち、機材を開いたまま選局のメッセージを送り直す (Siano.cs)</item>
 /// <item><see cref="Zd1jTuner"/> … Sony CECH-ZD1 J。エージェントが USB を直に持ち、ボードを開いたまま周波数まわりだけ書き換える (Zd1j.cs)</item>
 /// <item><see cref="Dt295NativeTuner"/> … PIXELA PIX-DT295。エージェントが USB を直に持ち、機材を初めての選局で開いたまま選局し直す (Dt295NativeTuner.cs)</item>
@@ -136,7 +137,7 @@ internal static unsafe partial class Sys
 }
 
 /// <summary>
-/// 機材から読んだ TS を読む側 (<see cref="TunerPool"/>) へ渡すバッファ。px4d・asicend (<see cref="Px4Stream"/>)、CECH-ZD1 J (<c>Zd1jStream</c>)、
+/// 機材から読んだ TS を読む側 (<see cref="TunerPool"/>) へ渡すバッファ。px4d (<see cref="Px4Stream"/>)、asicend (<see cref="AsicenStream"/>)、CECH-ZD1 J (<c>Zd1jStream</c>)、
 /// PIX-DT295 (<see cref="Dt295NativeStream"/>) の TS のストリームが使う。OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った)
 /// </summary>
 internal static class TsBuffer

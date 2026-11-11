@@ -76,52 +76,59 @@ RUN set -eu && mkdir -p /opt/px4-userland && cd /tmp && \
     tar -xzf "${archive}" -C /opt/px4-userland && \
     rm -rf /tmp/*
 
-# PLEX PX-W3U3 などの ASICEN 系は asicen-userland で動かす (Asicen.cs)。**試験的。**
+# PLEX PX-W3U3 などの ASICEN 系は asicen-userland で動かす (Asicen.cs / AsicenUdtv.cs)。**試験的。実機では確かめていない。**
 #
-# **いまは何も入らない。** バージョンの 0.0.0 は「まだ入れない」の印で、この段は空の /opt/asicen-userland を
-# 作るだけ (エージェントは配布物が無ければ機材を挙げない)。正式なリリースが出れば Renovate がバージョンを上げる
-# PR を出し、そこで初めて取ってくる (自動では入れない。renovate.json)。
+# **上流のプレリリース v1.0.0-beta (2026-11-05) に固定する。** エージェントは asicend と UDTV 1.0 で通信し、その形式の一部は
+# このバージョンの通信を観察して起こした (docs/agent.md「asicen-userland の作り」)。HELLO の応答が asicen-userland 1.0.0 でなければ
+# エージェントが断るので、**バージョンを上げるときは、通信を観察し直して Asicen.cs・AsicenUdtv.cs を合わせ、下の SHA-256 も入れ替える。**
+# Renovate はバージョンを上げる PR を出すだけで、自動ではマージしない (renovate.json)。その PR は、下の SHA-256 が合わずに CI で落ちる。
 #
-# **上流は 2026-11-05 にプレリリースの v1.0.0-beta を出したが、Asicen.cs はまだ対応していない** (docs/tuners.md)。
-# 通信の形式 (UDTV 1.0) と asicend の引数が変わり、ファームウェアの SHA-256 も下の値と違う。
-# バージョンを上げる前に、Asicen.cs と下の SHA-256 を合わせる。
+# **タグとアーカイブの名前でバージョンが違う。** タグは v1.0.0-beta、アーカイブは asicen-userland-1.0.0-linux-glibc-<arch>.tar.gz で、
+# `--version` も 1.0.0 と出力する (上流のリリースノートの「既知の問題」)。アーカイブの名前には、タグのプレリリースの部分 (-beta) を
+# 落としたものを使う。正式な 1.0.0 が同じ名前のアーカイブで出るので、SHA256SUMS に加えて、**アーカイブそのものの SHA-256 をここに固定する。**
 #
-# 取ってくるのは px4-userland と同じ名前の付け方を見込んだ配布アーカイブ (上流の
-# scripts/package-linux-variant.py の形式: 先頭に 1 段のディレクトリ、bin/ にコマンド 3 つ、musl の
-# 完全静的 ELF)。名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、
-# コマンドはどちらも同じ musl の静的 ELF。名前や形式が違えば、バージョンを上げる PR の CI (イメージをビルドする) で落ちて分かる
-# (SHA256SUMS にそのアーカイブの行が無ければ落とす。--ignore-missing は行が無くても通るので使わない)。
-# 受信機もカードも asicend の制御ソケットで直に通信するので、asicen-ts と IFD ハンドラは使わない。
-# 上流の第一弾は Linux x86_64 だけなので、arm64 では入れずに先へ進む。
+# アーカイブにはフォルダ分けが無く、コマンド 3 つ (asicend・asicenctl・asicen-ts。musl の完全静的 ELF) が直下にある。
+# 名前の glibc / musl は同梱の IFD ハンドラ (使わない) の libc の違いで、コマンドはどちらも同じ。
+# 受信機は asicend の制御ソケットで直に通信するので、IFD ハンドラと mdev の設定は消す。ライセンスの文書はそのまま置く。
 #
-# **ファームウェアは上流のアーカイブに入っているものをそのまま使う** (上流 NOTICES.md:
-# Git には入れず、配布物には入れる)。再配布の権利は確かめられていない。上流が添える
-# licenses/VENDOR-FIRMWARE-NOTICE.txt (権利未確定・元の成果物・大きさ・SHA-256) も一緒に置く。
-# 入っていれば上流の記録 (HARDWARE-VALIDATION.md) の SHA-256 と突き合わせる。
-# 入っていなければビルドは止めず、エージェントが「ファームウェアがありません」と記録して
-# その機材を使わない。
-# renovate: datasource=github-releases depName=Khronos31/asicen-userland extractVersion=^v(?<version>.*)$
-ARG ASICEN_USERLAND_VERSION=0.0.0
-ARG ASICEN_FIRMWARE_SHA256=b45d510200a1690b3ca358d93de13f40e1d3567b663c17e773349ad96f597aa8
+# **ファームウェアは上流のアーカイブに入っているものをそのまま使う** (asicend が起動するときに機材へ流し込む)。
+# SHA-256 は下の ASICEN_FIRMWARE_SHA256 (上流のリリースノートの値) と突き合わせる。
+#
+# **再配布の許諾は確かめられていない。上流と同じ判断で同梱している。権利を持つ人から申し出があれば外す。** 分かっている事実
+# (docs/licenses.md「ASICEN のファームウェアを同梱している判断」):
+# - PLEX の Windows 用ドライバ (Loader.sys) から上流 (Khronos31/asicen-userland) が取り出した 16,384 バイトのイメージ
+# - チップの会社 ASICEN (昇亮科技股份有限公司 / Asicen Technology、台湾) は解散し、2017-02-23 に清算が完結したと登記されている。
+#   台湾の会社情報サイト (https://www.twincn.com/item.aspx?no=80342850) の記載で、経済部の公式の登記では確かめていない
+# - PLEX は 2026-11 の時点で、公式サイトの「旧製品ドライバ」のページ (https://plex-net.co.jp/old-driver/) で PX-W3U3・PX-W3U3 V2・
+#   PX-S3U2 の Windows 用ドライバを配っている。そのページにも、上流が調べた公式のパッケージにも、再配布を認める文は無い
+# - PLEX が以前配っていた Linux 用ドライバのモジュールには license=GPL の表示があり、同じファームウェアが埋め込まれている。
+#   それだけではファームウェア自体のライセンスは決まらない (上流の NOTICES.md の整理)
+# 上流が添える通知 (licenses/VENDOR-FIRMWARE-NOTICE.txt など) は、配布物のまま置く。
+# renovate: datasource=github-releases depName=Khronos31/asicen-userland versioning=semver extractVersion=^v(?<version>.*)$
+ARG ASICEN_USERLAND_VERSION=1.0.0-beta
+ARG ASICEN_ARCHIVE_SHA256_AMD64=7e2264adee65cb3d0616b19550a36ff299098bcca8f350cec6155b434c0390da
+ARG ASICEN_ARCHIVE_SHA256_ARM64=20c043f27954685a338e7c13402d98dd8bbf6c22b093b792a32721e600e9a7e6
+ARG ASICEN_FIRMWARE_SHA256=5db39facda140bdcb3a238dad10da5aac752a1ba3aaf17e2239f8d79a0ad6a2a
 RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
-    if [ "${ASICEN_USERLAND_VERSION}" = 0.0.0 ]; then \
-      echo "asicen-userland: まだリリースが無いので入れません"; \
-    elif [ "${TARGETARCH}" != amd64 ]; then \
-      echo "asicen-userland: ${TARGETARCH} の配布物はまだ無いので入れません"; \
+    case "${TARGETARCH}" in \
+      amd64) arch=x86_64; sum="${ASICEN_ARCHIVE_SHA256_AMD64}" ;; \
+      arm64) arch=aarch64; sum="${ASICEN_ARCHIVE_SHA256_ARM64}" ;; \
+      *) arch= ;; \
+    esac && \
+    if [ -z "${arch}" ]; then \
+      echo "asicen-userland: ${TARGETARCH} の配布物は無いので入れません"; \
     else \
       base="https://github.com/Khronos31/asicen-userland/releases/download/v${ASICEN_USERLAND_VERSION}" && \
-      archive="asicen-userland-${ASICEN_USERLAND_VERSION}-linux-glibc-x86_64.tar.gz" && \
+      archive="asicen-userland-${ASICEN_USERLAND_VERSION%%-*}-linux-glibc-${arch}.tar.gz" && \
       $CURL -O "${base}/${archive}" && $CURL -O "${base}/SHA256SUMS" && \
       grep -E "^[0-9a-f]{64} [ *]${archive}\$" SHA256SUMS > archive.sum && \
       sha256sum -c archive.sum && \
-      tar -xzf "${archive}" -C /opt/asicen-userland --strip-components=1 && \
-      for bin in asicend asicenctl; do test -x "/opt/asicen-userland/bin/${bin}"; done && \
-      if [ -f /opt/asicen-userland/firmware/asicen-loader.bin ]; then \
-        echo "${ASICEN_FIRMWARE_SHA256}  /opt/asicen-userland/firmware/asicen-loader.bin" | sha256sum -c - && \
-        test -f /opt/asicen-userland/licenses/VENDOR-FIRMWARE-NOTICE.txt; \
-      else \
-        echo "asicen-userland: ファームウェアがありません (配布物に入っていませんでした)" >&2; \
-      fi; \
+      echo "${sum}  ${archive}" | sha256sum -c - && \
+      tar -xzf "${archive}" -C /opt/asicen-userland && \
+      rm -rf /opt/asicen-userland/ifd /opt/asicen-userland/mdev /opt/asicen-userland/reader.conf.d && \
+      for bin in asicend asicenctl; do test -x "/opt/asicen-userland/${bin}"; done && \
+      echo "${ASICEN_FIRMWARE_SHA256}  /opt/asicen-userland/firmware/asicen-loader.bin" | sha256sum -c - && \
+      test -f /opt/asicen-userland/licenses/VENDOR-FIRMWARE-NOTICE.txt; \
     fi && \
     rm -rf /tmp/*
 

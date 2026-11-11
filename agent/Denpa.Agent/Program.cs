@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *
  * denpa から触れないものが 3 つある。
  *
- * - B-CASカード … USB のリーダーも px4d / asicend・PX-MLT5 系の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
+ * - B-CASカード … USB のリーダーも px4d・PX-MLT5 系の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland /
@@ -199,7 +199,8 @@ void PrepareDaemons()
         bool CardInUse(string name) => Keys.Local.Name == name;
         // 設定に px4: で残っている MLT5 系の筐体は起動せず、理由を記録する (Px4Daemon.Ensure)
         UserlandDaemon.Prepare<Px4Daemon>([.. Px4Userland.IdsIn(pool.Tuners)], Px4Daemon.For, CardInUse);
-        // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない
+        // asicen-userland の筐体の asicend も同じ折に (Asicen.cs)。配布物が無ければ顔ぶれにも出ない。LNB 15V の設定は起動の引数に効くので先に控える
+        AsicenUserland.Configure(pool.Tuners);
         UserlandDaemon.Prepare<AsicenDaemon>([.. AsicenUserland.IdsIn(pool.Tuners)], AsicenDaemon.For, CardInUse);
     }
 }

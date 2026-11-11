@@ -32,6 +32,7 @@
         <Compile Include="../Denpa.Agent/SianoFirmware.cs" />
         <Compile Include="../Denpa.Agent/SianoTs.cs" />
         <Compile Include="../Denpa.Agent/Asicen.cs" />
+        <Compile Include="../Denpa.Agent/AsicenUdtv.cs" />
         <Compile Include="../Denpa.Agent/ChildTs.cs" />
         <Compile Include="../Denpa.Agent/Card.cs" />
         <Compile Include="../Denpa.Agent/Shell.cs" />
