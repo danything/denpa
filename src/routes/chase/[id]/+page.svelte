@@ -398,9 +398,9 @@
           </Extras>
 
           <!--
-                    いま録れているところへ (ライブの「ライブ」の場所)。録り終わっていたら端は動かず、
-                    ただの「終わりへ飛ぶ」になるので出さない
-                -->
+            いま録れているところへ (ライブの「ライブ」の場所)。録り終わっていたら端は動かず、
+            ただの「終わりへ飛ぶ」になるので出さない
+          -->
           {#if line !== null && !line.finished}
             <EdgeButton
               active={recorded - pos < 20}
@@ -511,9 +511,9 @@
     {#snippet notes()}
       {#if encoded}
         <!--
-                    エンコードが終わったら、この先はみな観る画面の話なのでこれだけを出す。
-                    StageNote は押せないので、ここだけ押せる形で置く (見た目は同じ)
-                -->
+          エンコードが終わったら、この先はみな観る画面の話なのでこれだけを出す。
+          StageNote は押せないので、ここだけ押せる形で置く (見た目は同じ)
+        -->
         <span class="encoded" data-testid="chase-encoded">
           <a
             class="stage-note to-watch"

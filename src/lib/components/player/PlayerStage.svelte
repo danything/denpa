@@ -460,13 +460,14 @@
     display: none;
   }
   /*
-     * 二段組では、枠を映像の形にして使える広さに収める (上の `aspect`)。幅は列の幅 (`100cqw`) と
-     * 「高さ × 縦横比」(`100cqh`) の小さいほう。上に寄せて横は真ん中 (E2E の `expectSideFrame`)。
-     * 測る箱は `.room`。`<main>` の列にすると `position: absolute` の基準になり、`AmbientGlow` の位置がずれる
-     */
-  /* 横にしたスマホ (下) は 1000px を超えても二段組にしないので、ここから外す (`PlayerLayout` の `PHONE_LANDSCAPE`) */
+   * 二段組では、枠を映像の形にして使える広さに収める (上の `aspect`)。幅は列の幅 (`100cqw`) と
+   * 「高さ × 縦横比」(`100cqh`) の小さいほう。上に寄せて横は真ん中 (E2E の `expectSideFrame`)。
+   * 測る箱は `.room`。`<main>` の列にすると `position: absolute` の基準になり、`AmbientGlow` の位置がずれる。
+   * 横にしたスマホ (下) は 1000px を超えても二段組にしないので、ここから外す (`PlayerLayout` の `PHONE_LANDSCAPE`)
+   */
   @media (min-width: 1000px) and (not ((orientation: landscape) and (max-height: 500px) and (pointer: coarse))) {
     .room {
+      position: relative;
       display: flex;
       flex: 1 1 0%;
       min-height: 0;
@@ -474,20 +475,15 @@
       align-items: center;
       container-type: size;
     }
-    .stage {
-      aspect-ratio: var(--dp-aspect, 16 / 9);
-      width: min(100cqw, max(100cqh, 14rem) * var(--dp-aspect, 16 / 9));
-    }
     /*
      * 枠の外を流れるコメント (上の `outside`)。縦は置き場の中、横は窓の端から端まで (左と幅は上の `place` が書く)。
      * はみ出したぶんは切る。右の列 (位置を持つ。`AmbientGlow`) より上に描くため `z-index: 1` にし、
      * 枠も同じ 1 にして文書の順で上に保つ (外のコメントは枠の下)
      */
-    .room {
-      position: relative;
-    }
     .stage {
       z-index: 1;
+      aspect-ratio: var(--dp-aspect, 16 / 9);
+      width: min(100cqw, max(100cqh, 14rem) * var(--dp-aspect, 16 / 9));
     }
     .outside {
       display: block;
@@ -500,9 +496,9 @@
     }
   }
   /*
-     * テーブルトップ (`#lib/phone-form.ts` の `TABLETOP`) では、上の段の幅と高さいっぱいに収める (縦横比は保つ。object-fit: contain と同じ)。
-     * 段が低いので高さの下限は外し、真ん中に置く。上下か左右の余りは上の段の黒い地 (`PlayerLayout`)。幅を問わず当てる
-     */
+   * テーブルトップ (`#lib/phone-form.ts` の `TABLETOP`) では、上の段の幅と高さいっぱいに収める (縦横比は保つ。object-fit: contain と同じ)。
+   * 段が低いので高さの下限は外し、真ん中に置く。上下か左右の余りは上の段の黒い地 (`PlayerLayout`)。幅を問わず当てる
+   */
   @media (device-posture: folded) and (vertical-viewport-segments: 2) {
     .room {
       display: flex;
@@ -546,9 +542,9 @@
     display: none;
   }
   /*
-     * 縦に積む幅 (1000px 未満。横にしたスマホは下) では映像を画面の端から端まで (余白 `--dp-gutter` のぶんはみ出させる。
-     * スマホの 358px の枠では小さく、周りが黒く縁取られて見えた)。高さの下限も外して枠をちょうど 16:9 にする。全画面では UA が margin を消す
-     */
+   * 縦に積む幅 (1000px 未満。横にしたスマホは下) では映像を画面の端から端まで (余白 `--dp-gutter` のぶんはみ出させる。
+   * スマホの 358px の枠では小さく、周りが黒く縁取られて見えた)。高さの下限も外して枠をちょうど 16:9 にする。全画面では UA が margin を消す
+   */
   @media (max-width: 999.98px) and (not ((orientation: landscape) and (max-height: 500px) and (pointer: coarse))) {
     .stage {
       margin-inline: calc(-1 * var(--dp-gutter, 1rem));
@@ -556,9 +552,9 @@
     }
   }
   /*
-     * 横にしたスマホでは、枠を 16:9 にして真ん中に置く (画面の幅いっぱいだと左右の黒帯の上に操作バーの端が出て
-     * 潜って見えた)。条件は `PlayerLayout` の `PHONE_LANDSCAPE` と同じ
-     */
+   * 横にしたスマホでは、枠を 16:9 にして真ん中に置く (画面の幅いっぱいだと左右の黒帯の上に操作バーの端が出て
+   * 潜って見えた)。条件は `PlayerLayout` の `PHONE_LANDSCAPE` と同じ
+   */
   @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
     /* 二段組の置き場 (上) は使わない (箱を持たないまま)。枠は `PlayerLayout` の `.main` (画面の高さ) に直に置く */
     .stage:not([data-pseudo]) {
@@ -570,9 +566,9 @@
     }
   }
   /*
-     * 広げた全画面 (iPhone。`fullscreen.svelte.ts`)。画面いっぱいに被せ、縦横比・高さの上下限・余白は外す。
-     * 端は安全域の内側で止める (操作バーを指の届く所に置く)。外側は `html[data-stage-fullscreen]` の黒 (`app.css`)
-     */
+   * 広げた全画面 (iPhone。`fullscreen.svelte.ts`)。画面いっぱいに被せ、縦横比・高さの上下限・余白は外す。
+   * 端は安全域の内側で止める (操作バーを指の届く所に置く)。外側は `html[data-stage-fullscreen]` の黒 (`app.css`)
+   */
   .stage[data-pseudo] {
     position: fixed;
     top: env(safe-area-inset-top, 0px);

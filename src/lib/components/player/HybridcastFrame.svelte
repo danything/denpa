@@ -397,9 +397,10 @@
   }
   .corner {
     position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
-    z-index: var(--dp-z-stage-controls);
+    top: var(--dp-space-3);
+    right: var(--dp-space-3);
+    /* データ放送の箱 (`DataBroadcast` の `.data`) の中だけの前後 */
+    z-index: 1;
     display: flex;
   }
 </style>
