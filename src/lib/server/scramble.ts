@@ -112,6 +112,71 @@ export class ScrambleCount {
   }
 }
 
+/**
+ * **ライブで、局の映像・音声・字幕がスクランブルされたまま届き続けているかを決める** (`live.ts`)。
+ *
+ * 復号できる局でも、選局したての数百パケットがスクランブルされたまま届くことがある。鍵がそろう前のパケットで、
+ * 本番 (2026-11-11、PT3 の地上波) ではエージェントが PMT の来ていない番組の ES をそのまま流していた ([docs/agent.md](../../../docs/agent.md))。
+ * カードが鍵を返さない (未契約の) 局は、そのあともスクランブルされたまま届く。先頭だけで決めると、無料の局を「契約されていない」として止める。
+ *
+ * そこで `window` 個ずつ数え、スクランブルされているのが半分以下の窓が 1 つ来たら、復号できているとして数えるのをやめる (`verdict` が `clear`)。
+ * 半分を超えてスクランブルされた窓が 2 つ以上、`lasting` ミリ秒続いたら、スクランブルされたままと決める (`scrambled`)。
+ * 窓を 2 つ要るのは、500 個に何秒もかかる低いビットレートの局で、先頭の窓 1 つだけで決めないため
+ */
+export class LastingScramble {
+  /** 決めた結果。決まるまで null */
+  verdict: "clear" | "scrambled" | null = null;
+  private count: ScrambleCount;
+  /** 最後に数え終えた窓 */
+  private done: ScrambleCount | null = null;
+  /** いまの窓の最初のパケットを数えた時刻 */
+  private openedAt = 0;
+  /** スクランブルされた窓が続き始めた時刻。そういう窓がまだ無ければ null */
+  private since: number | null = null;
+  /** スクランブルされた窓が続いている数 */
+  private runs = 0;
+
+  constructor(
+    readonly window: number,
+    readonly lasting: number,
+  ) {
+    this.count = new ScrambleCount(window);
+  }
+
+  /** パケットを 1 つ (188 バイト)。`media` はその局の映像・音声・字幕の PID (`mediaPids`)、`now` は受けた時刻 (ミリ秒) */
+  feed(packet: Uint8Array, media: Set<number>, now: number): void {
+    if (this.verdict !== null) return;
+    const empty = this.count.total === 0;
+    this.count.feed(packet, media);
+    if (empty && this.count.total > 0) this.openedAt = now;
+    if (!this.count.full) return;
+    this.done = this.count;
+    this.count = new ScrambleCount(this.window);
+    if (!this.done.stillScrambled(this.window)) {
+      this.verdict = "clear";
+      return;
+    }
+    this.since ??= this.openedAt;
+    this.runs++;
+    if (this.runs >= 2 && now - this.since >= this.lasting)
+      this.verdict = "scrambled";
+  }
+
+  /** いちばん新しく数えた窓。いまの窓が `least` 個に届いていればそれ、届いていなければ最後に数え終えた窓 */
+  newest(least: number): ScrambleCount | null {
+    return this.count.total >= least ? this.count : this.done;
+  }
+
+  /**
+   * **いまスクランブルされたままと言えるか** (ffmpeg が `verdict` の決まる前に降りたとき)。いちばん新しく数えた窓 (`newest`) で決める。
+   * 窓がまだ無ければ言えない (false)
+   */
+  stillScrambled(least: number): boolean {
+    if (this.verdict !== null) return this.verdict === "scrambled";
+    return this.newest(least)?.stillScrambled(least) ?? false;
+  }
+}
+
 /** 先頭から `SAMPLE` 個までのパケットの数と、そのうちスクランブルされている数。読めない・同期が取れていないファイルは null */
 function countPackets(
   path: string,

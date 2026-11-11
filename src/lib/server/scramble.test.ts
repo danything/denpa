@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   isDecoded,
   isScrambled,
+  LastingScramble,
   mediaPids,
   readCardStatus,
   ScrambleCount,
@@ -203,5 +204,73 @@ describe("局のパケットのスクランブルを数える (ScrambleCount)", 
     const clear = new ScrambleCount(500);
     for (let i = 0; i < 500; i++) clear.feed(packet(256, false), media);
     expect(clear.stillScrambled(500)).toBe(false);
+  });
+});
+
+describe("ライブで局がスクランブルされたまま届き続けているかを決める (LastingScramble)", () => {
+  function packet(scrambled: boolean): Uint8Array {
+    const buffer = new Uint8Array(PACKET);
+    buffer[0] = 0x47;
+    buffer[1] = 0x01;
+    buffer[2] = 0x00;
+    buffer[3] = (scrambled ? 0x80 : 0) | 0x10;
+    return buffer;
+  }
+  const media = mediaPids("2:256");
+  function feed(
+    watch: LastingScramble,
+    count: number,
+    scrambled: boolean,
+    at: number,
+  ): void {
+    for (let i = 0; i < count; i++) watch.feed(packet(scrambled), media, at);
+  }
+
+  /*
+   * 本番 (2026-11-11、PT3 の地上波 T19) では、選局したての 500 パケットがみなスクランブルされたまま届き、
+   * 先頭の 500 個で決めていたので、無料の局を「契約されていない」として止めた。復号できる局は、鍵がそろえばそこから掛からない
+   */
+  test("先頭だけ掛かっていて、そのあと復号できていれば掛かったままとは言わない", () => {
+    const watch = new LastingScramble(500, 3000);
+    feed(watch, 500, true, 0);
+    expect(watch.verdict).toBeNull();
+    feed(watch, 500, false, 100);
+    expect(watch.verdict).toBe("clear");
+    expect(watch.stillScrambled(50)).toBe(false);
+  });
+
+  test("掛かったまま決めた長さ続いたら、掛かったままと言う", () => {
+    const watch = new LastingScramble(500, 3000);
+    feed(watch, 500, true, 0);
+    feed(watch, 500, true, 2000);
+    expect(watch.verdict).toBeNull();
+    feed(watch, 500, true, 3000);
+    expect(watch.verdict).toBe("scrambled");
+    expect(watch.newest(50)?.scrambled).toBe(500);
+  });
+
+  test("500 個に 3 秒以上かかる局でも、先頭の窓 1 つだけでは決めない", () => {
+    const watch = new LastingScramble(500, 3000);
+    feed(watch, 1, true, 0);
+    feed(watch, 499, true, 4000);
+    expect(watch.verdict).toBeNull();
+    feed(watch, 500, true, 8000);
+    expect(watch.verdict).toBe("scrambled");
+  });
+
+  test("決める前に ffmpeg が降りたら、いちばん新しく数えたぶんで決める", () => {
+    const watch = new LastingScramble(500, 3000);
+    feed(watch, 49, true, 0);
+    // 49 個ではまだ言えない
+    expect(watch.stillScrambled(50)).toBe(false);
+    feed(watch, 1, true, 0);
+    expect(watch.stillScrambled(50)).toBe(true);
+    // 数え終えた窓のあと、次の窓が足りなければ数え終えた窓で決める
+    feed(watch, 450, true, 0);
+    feed(watch, 10, false, 100);
+    expect(watch.stillScrambled(50)).toBe(true);
+    // 次の窓で 50 個を超えて復号できていれば、掛かったままとは言わない
+    feed(watch, 40, false, 100);
+    expect(watch.stillScrambled(50)).toBe(false);
   });
 });

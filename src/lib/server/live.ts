@@ -110,7 +110,7 @@ import { tunerOf, yieldedTo } from "./live-yield";
 import { PACE_CHECK, PaceMeter, SpeedMeter, VideoLength } from "./pace";
 import { recordingSize } from "./recording-io";
 import { programs, recordings, services } from "./schema";
-import { mediaPids, ScrambleCount } from "./scramble";
+import { LastingScramble, mediaPids } from "./scramble";
 import { settings } from "./settings";
 import { chunks, endInput, lines, sideOutput } from "./stream";
 import { holdTranscode, transcodeRoom } from "./transcode";
@@ -963,15 +963,21 @@ const HEVC_TO_H264 =
   "H.265 を GPU でエンコードできないため、H.264 に切り替えました";
 
 /**
- * **局の映像・音声・字幕がスクランブルされたまま届いていないかを、先頭のこれだけのパケットで決める** (`Session.tap`)。
+ * **局の映像・音声・字幕がスクランブルされたまま届いていないかを、これだけのパケットずつ数えて決める** (`Session.tap`。`LastingScramble`)。
  *
- * エージェントは鍵がそろうまで溜めてから流し始めるので、復号できている局は先頭から掛かっていない (docs/agent.md)。
- * カードが鍵を返さない局 (未契約) は、ずっと掛かったまま届く。それを ffmpeg に渡すと、局の ES を読み取れずに
+ * カードが鍵を返さない局 (未契約) は、ずっとスクランブルされたまま届く。それを ffmpeg に渡すと、局の ES を読み取れずに
  * `Failed to set value '0:p:201:s:0' for option 'map'` で降りる (BS10プレミアムをケーブルで受けたときに実機で出た)。
- * 500 個は BS の 1 局で 0.05 秒ほど。ffmpeg が `-probesize` (100KB、530 個ほど) を読み終えて降りるより先に決まる
+ * 復号できる局でも、選局したての数百パケットはスクランブルされたまま届くことがあるので、先頭の 500 個だけでは決めない
+ * (本番の地上波で、無料の局を「契約されていない」として止めた)。500 個は BS の 1 局で 0.05 秒ほど
  */
 const SCRAMBLE_PACKETS = 500;
-/** ffmpeg が `SCRAMBLE_PACKETS` を数え終える前に降りたら、ここまで数えていれば決める (契約の復号テストと同じ 50 個) */
+/**
+ * スクランブルされたまま届くのがこれだけ続いたら、スクランブルされたままと決める (ミリ秒)。エージェントは鍵を受け取れなかった ECM を
+ * 2 秒ほど流れてから問い合わせ直す (`Descrambler.RetryPackets`) ので、それより長くする。未契約の局は、たいてい ffmpeg がこれより先に降りて
+ * そこで決まる (`SCRAMBLE_LEAST`)。ffmpeg を通さない放送のままの経路では、未契約の局を止めるまでにこの長さがかかる
+ */
+const SCRAMBLE_LASTING_MS = 3000;
+/** ffmpeg が決まる前に降りたら、いちばん新しく数えたぶんがここまであれば決める (契約の復号テストと同じ 50 個) */
 const SCRAMBLE_LEAST = 50;
 
 /** ffmpeg が局の映像・音声を指定できなかったときの行 (`Failed to set value '0:p:1032:v:0' for option 'map'`) */
@@ -1216,7 +1222,10 @@ class Session {
   /** いまの ffmpeg が、局の映像か音声を見つけられずに降りたか (`missingMedia`) */
   private noMedia: "映像" | "音声" | null = null;
   /** 局の映像・音声・字幕がスクランブルされたまま届いていないかを数える (`tap`。ライブだけ)。決めたら null */
-  private scramble: ScrambleCount | null = new ScrambleCount(SCRAMBLE_PACKETS);
+  private scramble: LastingScramble | null = new LastingScramble(
+    SCRAMBLE_PACKETS,
+    SCRAMBLE_LASTING_MS,
+  );
   /**
    * スクランブルされたまま届いたので、理由を伝えて畳んでいる最中 (`endScrambled`)。
    * そのあいだに ffmpeg が降りても、ほかの理由 (`died`) は伝えない
@@ -1814,19 +1823,18 @@ class Session {
   }
 
   /**
-   * **局の映像・音声・字幕がスクランブルされたまま届いているかを決める** (`SCRAMBLE_PACKETS`)。掛かったままなら
-   * 理由を伝えて畳み始め (`endScrambled`)、true を返す。数えたのが `least` 個に満たなければ決めずに数え続ける。
-   * 掛かっていないと決めたら、あとは数えない
+   * **局の映像・音声・字幕がスクランブルされたまま届いているかを決める** (`LastingScramble`)。掛かったままなら
+   * 理由を伝えて畳み始め (`endScrambled`)、true を返す。いちばん新しく数えたぶんが `least` 個に満たなければ決めずに数え続ける。
+   * 掛かっていないと決まったら、あとは数えない
    */
   private judgeScrambled(least: number): boolean {
-    const count = this.scramble;
-    if (count === null) return false;
-    if (!count.stillScrambled(least)) {
-      if (count.full) this.scramble = null;
-      return false;
-    }
+    const watch = this.scramble;
+    if (watch === null) return false;
+    if (watch.verdict === "clear") this.scramble = null;
+    if (!watch.stillScrambled(least)) return false;
     this.scramble = null;
-    this.ending = this.endScrambled(count);
+    const count = watch.newest(least);
+    this.ending = this.endScrambled(count?.scrambled ?? 0, count?.total ?? 0);
     return true;
   }
 
@@ -1835,13 +1843,13 @@ class Session {
    * (`Failed to set value … for option 'map'`) や「映像を出せませんでした」では、契約が無いことが分からない。
    * 理由はカードと契約の状態から決める (`contracts.scrambledLiveMessage`)
    */
-  private async endScrambled(count: ScrambleCount): Promise<void> {
+  private async endScrambled(scrambled: number, total: number): Promise<void> {
     const message = await scrambledLiveNotice(this.serviceId).catch(
       () => "スクランブルを復号できませんでした",
     );
     if (this.stopped) return;
     console.warn(
-      `[live] ${this.channelType}:${this.channel}: 局の映像・音声がスクランブルされたまま届きました (${count.scrambled} / ${count.total} パケット): ${message}`,
+      `[live] ${this.channelType}:${this.channel}: 局の映像・音声がスクランブルされたまま届きました (${scrambled} / ${total} パケット): ${message}`,
     );
     this.tell({ type: "error", message });
     this.stop();
@@ -1981,14 +1989,15 @@ class Session {
     const media =
       filter === null || scramble === null ? null : mediaPids(filter.streams);
     for (const packet of this.packets.feed(out)) {
-      if (media !== null) scramble?.feed(packet, media);
+      if (media !== null) scramble?.feed(packet, media, receivedAt);
       data?.feedPacket(packet);
       this.clock.feedPacket(packet, receivedAt);
       ait?.feedPacket(packet, found);
       if (onAir?.feedPacket(packet) === true) switched = true;
     }
     if (found.length > 0) this.findHybridcast(found);
-    if (scramble?.full === true) this.judgeScrambled(SCRAMBLE_PACKETS);
+    if (scramble !== null && scramble.verdict !== null)
+      this.judgeScrambled(SCRAMBLE_PACKETS);
     if (
       onAir !== null &&
       (switched || receivedAt - this.followedAt >= ON_AIR_EVERY)

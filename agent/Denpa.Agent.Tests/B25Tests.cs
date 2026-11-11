@@ -756,6 +756,89 @@ public class B25Tests
         await Assert.That(descrambler.Decoded).IsEqualTo(7);
     }
 
+    /// <summary>
+    /// **ワンセグの PMT がくり返し来ても、表に無い PID のスクランブルされたパケットが流れている間は溜め続ける。**
+    /// 本番 (2026-11-11、PT3 の地上波 T19) では、ワンセグの PMT が 2 回来た時点で「来ない PMT は来ない」として溜めるのをやめ、
+    /// 番組の PMT と ECM が来る前のパケットをスクランブルされたまま流していた (カード 0 回・1345 パケット)。
+    /// 流れている ES は、その番組の PMT がまだ来ていないだけ
+    /// </summary>
+    [Test]
+    public async Task ワンセグの_PMT_がくり返し来ても番組の_PMT_と_ECM_を待つ()
+    {
+        const int onesegPmt = 0x1FC8;
+        var ts = new Ts()
+            .Pmt(onesegPmt, 0x05A8, [], (0x0181, []))
+            .Pat((0x0400, PmtPid), (0x0401, PmtPid + 1), (0x05A8, onesegPmt))
+            .Videos(3, 1)
+            .Pmt(onesegPmt, 0x05A8, [], (0x0181, []))
+            .Videos(3, 1)
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Ecm(EcmPid, 1).Videos(3, 1);
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards);
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+        await Assert.That(Generations(cards)).IsEqualTo("1");
+    }
+
+    /// <summary>
+    /// **ECM が 2 回来ても、PMT がそろうまでは溜めるのをやめない。** 本番 (2026-11-11、PT3 の地上波 T27・T23・T26) では、ほかの番組の
+    /// PMT が挙げた ECM が 2 回来た時点で溜めるのをやめ、まだ PMT の来ていない番組の ES をスクランブルされたまま流していた
+    /// (「PMT -」で 138〜538 パケット)。denpa はそれを「契約されていない」と読んで止めた
+    /// </summary>
+    [Test]
+    public async Task ECM_が_2_回来ても_PMT_がそろうまでは溜める()
+    {
+        const int pmt2 = 0x0102, video2 = 0x0121;
+        var ts = new Ts()
+            .Pat((0x0400, PmtPid), (0x0401, pmt2))
+            .Pmt(pmt2, 0x0401, Ca(EcmPid), (video2, []))
+            .Ecm(EcmPid, 1).Videos(3, 1).Payload(video2, 1)
+            .Ecm(EcmPid, 1).Videos(2, 1)
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Videos(2, 1);
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards);
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+        await Assert.That(Generations(cards)).IsEqualTo("1");
+    }
+
+    /// <summary>
+    /// **PMT を待つ間に ECM が変わったら、新しい鍵で復号するのは新しい ECM を挟んで続く偶奇の並びだけ。**
+    /// その前の並びは前の鍵で、新しい鍵で復号すると化けたものを「復号できた」として流す
+    /// </summary>
+    [Test]
+    public async Task PMT_を待つ間に_ECM_が変わったら前の並びは復号しない()
+    {
+        const int pmt2 = 0x0102, video2 = 0x0121;
+        var ts = new Ts()
+            .Pat((0x0400, PmtPid), (0x0401, pmt2))
+            .Pmt(pmt2, 0x0401, Ca(EcmPid), (video2, []))
+            .Ecm(EcmPid, 1).Payload(video2, 1).Videos(3, 1, even: true);
+        var run = ts.Wire.Count;
+        ts.Ecm(EcmPid, 2).Videos(2, 2, even: false)
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Videos(2, 2, even: false);
+        var wire = ts.Wire.ToArray();
+        var descrambler = new Descrambler(new Cards());
+
+        var output = Run(descrambler, wire);
+
+        // 前の鍵の並び (video2 の 1 つと映像の 3 つ) はスクランブルされたまま、新しい ECM のあとは復号できる
+        var head = 3 * 188;
+        await Assert.That(Diff(output[head..run], wire[head..run])).IsEqualTo(-1);
+        await Assert.That(Diff(output[run..], Expected(ts)[run..])).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(4);
+        await Assert.That(descrambler.Decoded).IsEqualTo(4);
+    }
+
     [Test]
     public async Task 化けた_ECM_はカードに渡さない()
     {

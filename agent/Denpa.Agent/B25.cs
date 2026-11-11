@@ -90,8 +90,19 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private readonly Dictionary<int, Section> _pmtSections = [];
     /// <summary>program_number → 最後に受けた PMT。CA の方式が変わったら読み直せるように丸ごと持つ</summary>
     private readonly Dictionary<int, byte[]> _pmts = [];
-    /// <summary>PAT の PMT がみな来た / PAT が変わってから同じ PMT がもう一度来た (1 周で来ない PMT は来ない)</summary>
+    /// <summary>
+    /// PAT の PMT がみな来た / PAT が変わってから同じ PMT がもう一度来た (1 周で来ない PMT は来ない。ただし <see cref="_stray"/> が無いときだけ)
+    /// </summary>
     private bool _allPmts, _pmtRepeated;
+    /// <summary>どの PMT が挙げた ES か (PID ごと)。挙げた ES は、ECM が無くても <see cref="_stray"/> に入れない</summary>
+    private readonly bool[] _listed = new bool[8192];
+    /// <summary>
+    /// **溜めている間に来た、どの PMT も挙げていない PID のスクランブルされたパケット。** その番組の PMT がまだ来ていないだけなので、
+    /// これがある間は来ていない PMT を待ち続ける (<see cref="PmtsReady"/>)。PMT の来ない番組 (地上波の臨時の番組) は ES も流れていないとみなす
+    /// (確かめたのは本番の記録とテストの並びまで)。PMT の無いままスクランブルされた ES が流れ続ける TS でも、待つのは <see cref="HoldLimit"/>
+    /// (地上波で 3 秒ほど) までで、そこで流し始める
+    /// </summary>
+    private readonly HashSet<int> _stray = [];
     private readonly Dictionary<int, Ecm> _ecms = [];
     /// <summary>ES の PID → 鍵。表を引くだけにして、パケットごとの手間を無くす</summary>
     private readonly Ecm?[] _route = new Ecm?[8192];
@@ -286,8 +297,14 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             _hold ??= new byte[PacketSize * 1024];
             if ((_held + 1) * PacketSize > _hold.Length) Array.Resize(ref _hold, _hold.Length * 2);
             packet.CopyTo(_hold.AsSpan(_held++ * PacketSize));
-            // ECM のあとで最初に来た、その鍵の ES のパケット (Settle)
-            if ((packet[1] & 0x80) == 0 && packet[3] >> 6 != 0 && Route(packet) is { Seen: >= 0, After: int.MaxValue } ecm) ecm.After = _held - 1;
+            if ((packet[1] & 0x80) == 0 && packet[3] >> 6 != 0)
+            {
+                var ecm = Route(packet);
+                // どの PMT もまだ挙げていない ES。その PMT を待つ (PmtsReady)
+                if (ecm is null) _stray.Add(((packet[1] & 0x1F) << 8) | packet[2]);
+                // ECM のあとで最初に来た、その鍵の ES のパケット (Settle)
+                else if (ecm is { Seen: >= 0, After: int.MaxValue }) ecm.After = _held - 1;
+            }
             if (Ready()) Settle();
         }
         Release(output);
@@ -386,7 +403,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>
     /// 溜めるのをやめてよいか。**PAT と、その PMT がみな来て、どの ECM も 1 回は応答を受け取った** (libaribb25 と同じ)
     /// うえで、ECM のあとにその鍵の ES のパケットが 1 つ来た (<see cref="Settle"/>)。
-    /// 来ない PMT は 1 周で待つのをやめ、同じ ECM が 2 回来たら来ない ECM も待たない (<see cref="OnEcm"/>)
+    /// 来ない PMT は 1 周で待つのをやめ (<see cref="PmtsReady"/>)、PMT がそろってから同じ ECM が 2 回来たら来ない ECM も待たない (<see cref="OnEcm"/>)
     /// </summary>
     private bool Ready()
     {
@@ -395,13 +412,28 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             Log.Write($"PAT・PMT・ECM が揃う前に {HoldLimit / 1024 / 1024}MB 溜まったので、待たずに流します");
             return true;
         }
-        if (_patLast is null || !(_allPmts || _pmtRepeated)) return false;
+        if (!PmtsReady()) return false;
         if (_pmtMs < 0) _pmtMs = _clock.ElapsedMilliseconds;
         foreach (var ecm in _ecms.Values)
         {
             if (ecm.Last is null || (ecm.Seen >= 0 && ecm.After == int.MaxValue)) return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// **PAT と、来る PMT がそろったか。** PAT の PMT がみな来たらそろった。来ない PMT (地上波の臨時の番組) は、PAT が変わってから
+    /// 同じ PMT がもう一度来たら待つのをやめる。**ただし、どの PMT も挙げていない PID のスクランブルされたパケットが来ていたら待ち続ける**
+    /// (<see cref="_stray"/>)。PMT の間隔は番組ごとに違い、本番の地上波ではワンセグの PMT が番組の PMT より先にくり返し来ていた。
+    /// そこで待つのをやめると、番組の ES をスクランブルされたまま流す
+    /// </summary>
+    private bool PmtsReady()
+    {
+        if (_patLast is null) return false;
+        if (_allPmts) return true;
+        if (!_pmtRepeated) return false;
+        _stray.RemoveWhere(pid => _listed[pid]);
+        return _stray.Count == 0;
     }
 
     /// <summary>
@@ -425,6 +457,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         _earlyEcms.Clear();
         _earlyPmtSections.Clear();
         _earlyPmts.Clear();
+        _stray.Clear();
         if (_held == 0) return;
         var usable = new bool[_held];
         for (var at = _held - 1; at >= 0; at--)
@@ -671,7 +704,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     {
         var streams = new List<(int Es, int Ecm, int Type)>();
         var wanted = new HashSet<int>();
-        foreach (var pmt in _pmts.Values) Streams(pmt, _caSystemId, streams, wanted);
+        Array.Clear(_listed);
+        foreach (var pmt in _pmts.Values) Streams(pmt, _caSystemId, streams, wanted, _listed);
         foreach (var pid in _ecms.Keys.Except(wanted).ToList()) _ecms.Remove(pid);
         // PMT より先に来ていた ECM なら、取っておいた中身ごと引き取る (Early)
         foreach (var pid in wanted) _ecms.TryAdd(pid, _earlyEcms.Remove(pid, out var early) ? early : new Ecm(pid));
@@ -694,8 +728,11 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         }
     }
 
-    /// <summary>PMT から、スクランブルされた ES とその ECM の PID を読み取る。**ES ごとの CA 記述子が番組全体のものより優先する**</summary>
-    private static void Streams(ReadOnlySpan<byte> pmt, int caSystemId, List<(int Es, int Ecm, int Type)> streams, HashSet<int> ecms)
+    /// <summary>
+    /// PMT から、スクランブルされた ES とその ECM の PID を読み取る。**ES ごとの CA 記述子が番組全体のものより優先する**。
+    /// ECM の有無によらず、挙げた ES の PID は <paramref name="listed"/> に印を付ける
+    /// </summary>
+    private static void Streams(ReadOnlySpan<byte> pmt, int caSystemId, List<(int Es, int Ecm, int Type)> streams, HashSet<int> ecms, bool[] listed)
     {
         var end = pmt.Length - 4;
         var at = 12 + (BinaryPrimitives.ReadUInt16BigEndian(pmt[10..]) & 0x0FFF);
@@ -711,6 +748,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             if (at + length > end) return;
             var own = CaPid(pmt.Slice(at, length), caSystemId);
             at += length;
+            listed[es] = true;
             var ecm = own >= 0 ? own : common;
             if (ecm < 0) continue;
             ecms.Add(ecm);
@@ -765,8 +803,14 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     /// <summary>
     /// ECM を受けた。**中身が変わっていたら、その場で鍵を受け取る。** 同じ中身なら、受け取れなかったものだけ
-    /// 少し置いて問い合わせ直す。溜めている間に同じ PID の ECM がもう一度来たら、そこで溜めるのをやめる。
-    /// 1 周しても来ない ECM は来ないし、中身が変わる前に溜めたぶんを最初の鍵で復号しておく (<see cref="Settle"/>)
+    /// 少し置いて問い合わせ直す。溜めている間に、PMT がそろってから同じ PID の ECM がもう一度来たら、そこで溜めるのをやめる。
+    /// 1 周しても来ない ECM は来ないし、中身が変わる前に溜めたぶんを最初の鍵で復号しておく (<see cref="Settle"/>)。
+    ///
+    /// <para>
+    /// **PMT がそろうまでは、ECM がもう一度来ても溜めるのをやめない** (<see cref="PmtsReady"/>)。ECM は PMT より短い間隔で来ることがあり、
+    /// 本番の地上波では、まだ PMT の来ていない番組の ES をスクランブルされたまま流していた。待つ間に中身が変わったら、
+    /// 新しい中身を受けた位置から数え直す (それより前は、新しい ECM を挟んで続く偶奇の並びだけを新しい鍵で復号する)
+    /// </para>
     /// </summary>
     private void OnEcm(Ecm ecm, ReadOnlySpan<byte> section)
     {
@@ -774,14 +818,18 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         if (section[0] != 0x82 || !_keys) return;
         var listed = _ecms.GetValueOrDefault(ecm.Pid) == ecm;
         // 溜めるのをやめる合図にするのは PMT が挙げた ECM だけ。先回りして取っておいただけのもの (Early) は PAT・PMT を待たせない
-        if (_holding && ecm.Last is not null && listed) Settle();
+        if (_holding && ecm.Last is not null && listed && PmtsReady()) Settle();
         if (ecm.Last is { } last && section.SequenceEqual(last))
         {
             if (_packets >= ecm.RetryAt) Ask(ecm);
             return;
         }
         ecm.Last = section.ToArray();
-        if (_holding) ecm.Seen = _held;
+        if (_holding)
+        {
+            ecm.Seen = _held;
+            ecm.After = int.MaxValue;
+        }
         // PMT がまだ挙げていないものは取っておくだけ。挙げたら Rebuild が問い合わせる
         if (listed) Ask(ecm);
         else ecm.Pending = true;
