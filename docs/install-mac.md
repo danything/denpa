@@ -144,7 +144,7 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
 
 ## Linux と違うところ
 
-- **チューナーは px4-userland と siano-userland の機材と PX-MLT5 系・Sony CECH-ZD1 J・PIXELA PIX-DT295 (試験的) だけ。** macOS には DVB が無いので、
+- **チューナーは px4-userland と siano-userland の機材と PX-MLT5 系・Sony CECH-ZD1 J・PIXELA PIX-DT295 だけ。** macOS には DVB が無いので、
   PT2/PT3 のような PCI の機材は使えません。PX-MLT5 系 ([tuners.md](tuners.md#px-mlt5-系)) と CECH-ZD1 J と PIX-DT295 はエージェントが IOKit で USB を直に持ちます (カーネルの拡張は要りません。
   Mac の実機ではまだ確かめていません)
 - **カードリーダー**: px4-userland の内蔵リーダーはそのまま (px4d に問い合わせる)。PX-MLT5 系の内蔵リーダーと CECH-ZD1 J の差し込み口もエージェントが直に読みます。USB のリーダーは
@@ -167,7 +167,7 @@ Docker Desktop か OrbStack を起こすよう言います。途中で止まっ�
   本体を `bun server.js` で起こして画面・字・デコーダが返ることを見る。install.sh で本体ごと入れて root の LaunchDaemon で動き、
   本体がエージェントと組むところまで。Docker の本体からの移行は偽の docker で流す (`tests/install-mac-migrate.sh`)。メニューバーのアプリは、組んで起こして落ちないこと・
   LaunchAgent に載ること・上げ直すと動いているものを止めること・外すと消えることまで
-- **Mac の実機でチューナーとカードを繋いで確かめたのは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 の報告 (#2218) だけです** ([tuners.md](tuners.md#pixela-pix-dt295-試験的))。それも前のバージョン
+- **Mac の実機でチューナーとカードを繋いで確かめたのは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 の報告 (#2218) だけです** ([tuners.md](tuners.md#pixela-pix-dt295))。それも前のバージョン
   (エージェントがユーザーの LaunchAgent) のときのものです
 - **まだ確かめていないこと**: root の LaunchDaemon で動くエージェントから USB の機材とカードリーダー (PC/SC) を使えるか、VideoToolbox で
   エンコードした録画の画質と大きさ、スリープから起こす予約で録画が始まるか、実機の Docker からの移行、メニューバーのアプリの見た目と、

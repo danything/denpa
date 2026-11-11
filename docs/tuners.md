@@ -21,7 +21,7 @@
   | **実機で確かめていない**: Siano の Rio 系の USB チューナー (USB `187f:0600`・`187f:0302`。smsusb を blacklist したとき。[下記](#siano-の-rio-系の-usb-チューナー))                   | siano-userland (同梱)                                                                             | なし (Windows はドライバを WinUSB に)                                     |
   | PX-W3U3・PX-W3U2 など ([下記](#px-w3u3-など-asicen-userlandまだ使えない))                                                                                                            | asicen-userland (**まだ使えない**。エージェントが上流の v1.0.0-beta の通信の形式に対応していない) | なし                                                                      |
   | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                            | エージェントが USB を直に                                                                         | なし                                                                      |
-  | PIXELA PIX-DT295 (**試験的**。Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295-試験的))                 | エージェントが USB を直に                                                                         | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
+  | PIXELA PIX-DT295 (Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295))                                    | エージェントが USB を直に                                                                         | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
 
   「実機で確かめていない」機材は、ドライバと denpa の選局の手順を照らし合わせて動くはずと見ているものです。
   使ってみたら、動いたか動かなかったかを [Issue](https://github.com/danything/denpa/issues) で教えてください
@@ -232,7 +232,7 @@ Windows と Mac は実機ではまだ確かめていません)。
 
 エージェントの中でどう扱っているかは [agent.md](agent.md#cech-zd1-j-の作り)。
 
-## PIXELA PIX-DT295 (試験的)
+## PIXELA PIX-DT295
 
 PIXELA の USB チューナー (USB `06b8:103b`。地上波・BS・CS。B-CAS の差し込み口つき)。**外のデーモンもファームウェアも要らず、エージェントが機材のレジスタを USB で直に書いて動かします**
 (Linux は usbfs、Windows は WinUSB、Mac は IOKit。Windows はドライバを Zadig で WinUSB にします。[install-windows.md](install-windows.md))。
