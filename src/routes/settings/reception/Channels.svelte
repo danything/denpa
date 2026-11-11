@@ -180,8 +180,13 @@
         : [
             `誤り ${rate(quality.errors, quality.packets)}`,
             `ドロップ ${rate(quality.drops, quality.packets + quality.drops)}`,
-            `${quality.mbps.toFixed(1)} Mbps`,
+            ...(quality.mbps === null
+              ? []
+              : [`${quality.mbps.toFixed(1)} Mbps`]),
           ];
+    // 同期が外れるなどで途中で止まったら、止まったことを出す (速さは 1 秒に満たないと出さない)
+    if (quality.packets > 0 && quality.stopped)
+      parts.push("測り終える前に受信が止まりました");
     if (quality.signal !== null) parts.push(signalText(quality.signal));
     return parts.join("・");
   }
