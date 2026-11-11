@@ -50,8 +50,8 @@ static int skip_nonref;
 static int info[12];
 static double info_pts;
 /**
- * `dec_still` で先に出したフレームの時刻。**本体が同じフレームを出したら捨てる** (同じコマを 2 枚持たない)。
- * 本体がそれより後のフレームを出したら、もう来ないので忘れる
+ * `dec_still` で先に出したフレームの時刻。**本体が同じフレームか、それより前に映るフレームを出したら捨てる**
+ * (同じコマを 2 枚持たない・並びを崩さない)。本体がそれより後のフレームを出したら、もう来ないので忘れる
  */
 static int64_t still_pts = AV_NOPTS_VALUE;
 
@@ -119,7 +119,15 @@ static void receive(void) {
                 av_frame_free(&frame);
                 continue;
             }
-            if (at != AV_NOPTS_VALUE && at > still_pts) still_pts = AV_NOPTS_VALUE;
+            /*
+             * 先に出した I より前に映るコマ (途中から入ったときに I の後ろに届く B)。並びが I の後ろになり、
+             * 映す順が崩れるので持たない。ふつうは参照が足りずにデコーダが捨てている
+             */
+            if (at != AV_NOPTS_VALUE && at < still_pts) {
+                av_frame_free(&frame);
+                continue;
+            }
+            if (at != AV_NOPTS_VALUE) still_pts = AV_NOPTS_VALUE;
         }
         enqueue(frame);
     }
@@ -206,7 +214,8 @@ EMSCRIPTEN_KEEPALIVE int dec_still(const uint8_t *data, int len, double pts) {
         }
         // 参照フレームとして持っている I を出させる
         avcodec_send_packet(one, NULL);
-        if (avcodec_receive_frame(one, frame) == 0) {
+        // 時刻が無ければ出さない。本体が同じコマを出したときに見分けられず、2 枚並ぶ
+        if (avcodec_receive_frame(one, frame) == 0 && frame_pts(frame) != AV_NOPTS_VALUE) {
             still_pts = frame_pts(frame);
             enqueue(frame);
             frame = NULL;
