@@ -401,8 +401,9 @@ public sealed class TsmfSelector
             if (Index < valid.Count)
             {
                 _relative = valid[Index];
-                // 形式は判定を知らせる前に決める (選局が戻ったときに読む。ITuneDevice.Format)
-                _format = (int)(header.IsTs(_relative) ? StreamFormat.Ts : StreamFormat.Tlv);
+                // 形式は判定を知らせる前に決める (選局が戻ったときに読む。ITuneDevice.Format)。そのまま出力していたときは、
+                // 読む側に TS と伝えたあとなので変えない。選んだ TS が TLV なら、下で形式が変わったとして止める
+                if (Decision != TsmfDecision.Passthrough) _format = (int)(header.IsTs(_relative) ? StreamFormat.Ts : StreamFormat.Tlv);
                 Decide(TsmfDecision.Selected);
             }
             else

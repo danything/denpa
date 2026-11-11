@@ -258,6 +258,23 @@ public class TsmfTests
     }
 
     [Test]
+    public async Task そのまま出力したあとのヘッダーで選んだ_TS_が_TLV_なら_形式は_TS_のまま止める()
+    {
+        var slots = TsmfFake.Alternate();
+        var (selector, sink) = Make(index: 0);
+        sink.Push(Enumerable.Range(0, TsmfSelector.NoHeaderPackets).Select(number => TsmfFake.Packet(0x100, number)));
+        sink.Out.Clear();
+        // 相対 TS 番号 2 (bit14) が TLV
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3, tsType: 0xBFFE));
+        sink.Push(TsmfFake.Frame(slots, 0));
+        sink.Push(TsmfFake.Header(slots, TsmfFake.Valid2And3, tsType: 0xBFFE));
+        // 読む側には TS と伝えてあるので、TLV を混ぜずに止める
+        await Assert.That(selector.Format).IsEqualTo(StreamFormat.Ts);
+        await Assert.That(selector.FormatChanged).IsTrue();
+        await Assert.That(sink.Out.Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task ロックのあとの最初のパケットは判定に使わずに捨て_前の搬送波のヘッダーで決めない()
     {
         // 前の搬送波 (TSMF。相対 TS 番号 1 だけが有効) の残りが、新しい搬送波 (ヘッダーなし) のロックのあとに届く (仕様書 8.7 の「パケットごとの処理」の 1)

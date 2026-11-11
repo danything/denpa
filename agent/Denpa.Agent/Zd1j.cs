@@ -181,6 +181,8 @@ public sealed class Zd1jBoard : IDibTime
                 lock (board._gate) board._users++;
                 return board;
             }
+            // 使えなくなったものは閉じてから開き直す (コア 1 が応答しないだけなら、古い USB がインターフェースを確保したまま)
+            board?.Close();
             Boards.Remove(port);
 
             var started = Stopwatch.StartNew();
@@ -252,8 +254,9 @@ public sealed class Zd1jBoard : IDibTime
                 if (board._users > 0) return;
             }
             Boards.Remove(port);
+            // 閉じ終えるまで Registry を持つ。同じポートを開き直す Acquire が、閉じる前の USB とぶつからないように
+            board.Close();
         }
-        board.Close();
     }
 
     /// <summary>失敗が USB の抜けなら使えないものとする (次に取る側は開き直す)</summary>
@@ -435,7 +438,7 @@ public sealed class Zd1jTuner : ITuneDevice
 
     public void Tune(ChannelTable.Tuning tuning)
     {
-        if (tuning.Satellite) throw new IOException($"{Zd1j.Model} は地上波だけです ({tuning.Type} は受けられません)");
+        if (tuning.Delivery != ChannelTable.SysIsdbt) throw new IOException($"{Zd1j.Model} は地上波だけです ({tuning.Type} は受けられません)");
         lock (_gate)
         {
             Stop(keepLed: true);

@@ -8,7 +8,7 @@ namespace Denpa.Agent;
  * 外のライブラリ (libusb など) は使わない。iso の転送は持たない (要る機材が無い)。
  */
 
-/// <summary>開いた USB の機材 1 台。インターフェース 0 の代替設定 0 を選んだところから使う</summary>
+/// <summary>開いた USB の機材 1 台。インターフェース 0 を確保したところから使う。代替設定 0 を選ぶかは開く側が決める (IT930x は選ばない)</summary>
 public interface IUsbDevice : IDisposable
 {
     /// <summary>記録に出す名前</summary>

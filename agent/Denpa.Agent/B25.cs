@@ -484,6 +484,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         ecm.Pending = false;
         ecm.Cipher?.Clear();
         ecm.Unentitled = false;
+        ecm.Told = false;
         ecm.RetryAt = long.MaxValue;
         ecm.Seen = -1;
         ecm.After = int.MaxValue;
@@ -830,8 +831,12 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             // 0x0200・0x0400・0x0800 が「視聴できる」。それ以外は契約が無い
             if (!entitled)
             {
+                // 同じ TS の有料局は鍵が変わるたびにここへ来るので、記録は ECM ごとに 1 回だけ出す。
+                // Report を通すと、受け取れた局の「受け取れるようになりました」と交互に出続ける
                 ecm.Unentitled = true;
-                Report($"カードが鍵を返しません (未契約か、別の方式の局です: 0x{answer.Code:X4})");
+                LastError = $"カードが鍵を返しません (未契約か、別の方式の局です: 0x{answer.Code:X4})";
+                if (!ecm.Told) Log.Write($"鍵を受け取れません: {LastError} (ECM 0x{ecm.Pid:X4})");
+                ecm.Told = true;
                 return;
             }
             ecm.Cipher ??= new Multi2(_init.SystemKey, _init.InitCbc);
@@ -888,6 +893,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         public Multi2? Cipher;
         /// <summary>カードが「契約が無い」と返した</summary>
         public bool Unentitled;
+        /// <summary>契約が無いことを記録に出した。その ECM を忘れる (<c>Forget</c>) まで 1 回だけ出す (問い合わせ直しのたびに出すと、鍵が変わるたびに記録が並ぶ)</summary>
+        public bool Told;
         /// <summary>鍵を受け取れなかった。読んだパケットの数がここを過ぎたら、同じ中身でも問い合わせ直す</summary>
         public long RetryAt = long.MaxValue;
         /// <summary>溜めている間に最初の中身を受けた位置 (溜めたパケットの中の番号)。まだなら -1</summary>

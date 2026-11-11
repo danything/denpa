@@ -144,11 +144,11 @@ internal sealed class CardShareServer(CardLanPolicy policy, int port)
 
     private static async Task Confirm(HttpContext http)
     {
-        // MJD 2B + verification 最大 253B = 最大 255B
-        var body = await CardWire.ReadUpTo(http.Request.Body, 255);
+        // MJD の 2 バイトと契約確認データ
+        var body = await CardWire.ReadUpTo(http.Request.Body, 2 + CardWire.MaxVerification);
         if (body is null)
         {
-            await Respond.Error(http, "契約確認のデータが長すぎます (255 バイトまで)", 400);
+            await Respond.Error(http, $"契約確認のデータが長すぎます ({2 + CardWire.MaxVerification} バイトまで)", 400);
             return;
         }
         if (body.Length < 3)

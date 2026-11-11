@@ -106,8 +106,9 @@ public sealed class SplitTlv
         var body = unit[(HeaderSize + 1)..];
         if (pointer >= body.Length)
         {
-            // pointer が単位の外を指している。この単位では始められない
-            Lose(body.Length);
+            // pointer が単位の外を指している。この単位では始められない (合わせ直した回数に数えるのは、合っていたときだけ)
+            if (_synced) Lose(body.Length);
+            else _droppedBytes += body.Length;
             return;
         }
         if (_synced)

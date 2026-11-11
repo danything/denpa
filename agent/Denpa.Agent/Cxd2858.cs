@@ -95,40 +95,28 @@ internal sealed class Cxd2858(CxdLink link)
     /// 地上波 (ISDB-T 6 MHz) の周波数を設定する (仕様書 4.3)。<paramref name="khz"/> は中心周波数の kHz。手順 8 のあと 50 ms 待つ。
     /// 衛星側で動作中なら、先に衛星側を止める (手順 0。仕様書 10.2)。地上波側のままなら止めずに書く
     /// </summary>
-    public void TuneTerrestrial(uint khz)
-    {
-        if (khz > MaxTerrestrialKhz) throw new IOException($"地上波の周波数は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");
-        if (Side == Cxd2858Side.Satellite) StopSatellite();
-        // 書き始めたら動作中とみなす (途中で失敗しても、使い終えたときに止める書き込みを送れるように。仕様書に無い)
-        Side = Cxd2858Side.Terrestrial;
-        link.Run(TerrestrialRows(khz));
-    }
+    public void TuneTerrestrial(uint khz) => TuneTerrestrialSide("地上波の周波数", khz, TerrestrialRows);
 
     /// <summary>
     /// J.83B の周波数を設定する (仕様書 4.5)。<paramref name="khz"/> は中心周波数の kHz (仕様書 7.1)。並びは地上波 (仕様書 4.3) と同じで、手順 4・6・8 の値だけが違う。
     /// 手順 8 のあと 50 ms 待つ。J.83B も地上波側を使うので、地上波側のままなら止めずに書き、衛星側で動作中なら先に衛星側を止める (仕様書 10.2)
     /// </summary>
-    public void TuneCable(uint khz)
-    {
-        if (khz > MaxTerrestrialKhz) throw new IOException($"J.83B の周波数は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");
-        if (Side == Cxd2858Side.Satellite) StopSatellite();
-        // 書き始めたら動作中とみなす (地上波と同じ。仕様書に無い)
-        Side = Cxd2858Side.Terrestrial;
-        link.Run(CableRows(khz));
-    }
+    public void TuneCable(uint khz) => TuneTerrestrialSide("J.83B の周波数", khz, CableRows);
 
     /// <summary>
     /// ISDB-C の周波数を設定する (仕様書 4.6)。<paramref name="khz"/> は中心周波数の kHz (仕様書 8.2。周波数の補正はしない)。並びと値は J.83B (仕様書 4.5) と同じで、
     /// 手順 8 の 2 バイトだけが違う。手順 8 のあと 50 ms 待つ。地上波側を使うので、地上波側のまま (ISDB-T・J.83B から) なら止めずに書き、
     /// 衛星側で動作中なら先に衛星側を止める (仕様書 10.2)
     /// </summary>
-    public void TuneIsdbc(uint khz)
+    public void TuneIsdbc(uint khz) => TuneTerrestrialSide("ISDB-C の周波数", khz, IsdbcRows);
+
+    private void TuneTerrestrialSide(string what, uint khz, Func<uint, CxdRow[]> rows)
     {
-        if (khz > MaxTerrestrialKhz) throw new IOException($"ISDB-C の周波数は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");
+        if (khz > MaxTerrestrialKhz) throw new IOException($"{what}は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");
         if (Side == Cxd2858Side.Satellite) StopSatellite();
-        // 書き始めたら動作中とみなす (地上波と同じ。仕様書に無い)
+        // 書き始めたら動作中とみなす (途中で失敗しても、使い終えたときに止める書き込みを送れるように。仕様書に無い)
         Side = Cxd2858Side.Terrestrial;
-        link.Run(IsdbcRows(khz));
+        link.Run(rows(khz));
     }
 
     /// <summary>

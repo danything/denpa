@@ -174,7 +174,7 @@ public sealed class SianoTuner : ITuneDevice
 
     public void Tune(ChannelTable.Tuning tuning)
     {
-        if (tuning.Satellite) throw new IOException($"Siano の機材は地上波だけです ({tuning.Type} は受けられません)");
+        if (tuning.Delivery != ChannelTable.SysIsdbt) throw new IOException($"Siano の機材は地上波だけです ({tuning.Type} は受けられません)");
         lock (_gate)
         {
             StopStream();

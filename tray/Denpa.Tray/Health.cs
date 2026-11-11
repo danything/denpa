@@ -1,5 +1,5 @@
 // denpa の様子と、それを通知領域に出す文言。Win32 に触らないので、テスト (tray/Denpa.Tray.Tests) は Linux でも流れる。
-// Mac のメニューバーのアプリ (tray/mac/Sources/DenpaTrayCore/Health.swift) も同じ文言にそろえる。
+// Mac のメニューバーのアプリ (tray/mac/Sources/DenpaTrayCore/Health.swift) も、メニューと確認の文言はそろえる (更新の知らせ方は Mac だけ違う)。
 
 using System.Text;
 using System.Text.Json;

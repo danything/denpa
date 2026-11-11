@@ -75,7 +75,9 @@ public sealed class Dt295NativeCard : ICardLink
     public bool Present()
     {
         var bit10 = (Link.Read32(Status) >> 10) & 1;
-        return (bit10 ^ (Pins().Insert & 1u)) == 1;
+        // 使うのは F00224 だけ。APDU のたびに通るので、ほかの 2 語は読まない
+        var insert = (byte)(Link.Read32(PinWordB) >> 24);
+        return (bit10 ^ (insert & 1u)) == 1;
     }
 
     private void Write(uint address, uint value) => Link.Write32(address, value);

@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 契約の更新 (EMM) の渡し先。**プロセスで 1 つ**で、どの選局の <see cref="Descrambler"/> もここに渡す
-/// (docs/agent.md「契約の更新 (EMM) もカードに渡す」)。
+/// (docs/agent.md「B25 の復号もカードリーダーも自前」)。
 ///
 /// <para>
 /// **自分宛てかどうかは、復号のスレッドの中で決める** (<see cref="Section"/>)。EMM はカード ID ごとに並んでいて、
@@ -205,7 +205,8 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
         var card = source();
         /*
          * **送る直前に番号を取り直して選び直す。** カードを替えていたら、古い番号で選んだものは送らない。
-         * 手元のカードは繋ぎ直すと INT・IDI からやり直すので、そのとき番号も替わる
+         * 手元のカードは繋ぎ直すと INT・IDI からやり直すので、そのとき番号も替わる。配る側のカード (RemoteCard) は
+         * 一度受け取った番号を持ち続け、取り直すのは画面の確認 (Check) のときだけ
          */
         long[] ids;
         try

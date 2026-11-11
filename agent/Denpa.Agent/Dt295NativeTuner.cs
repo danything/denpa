@@ -404,7 +404,7 @@ public sealed class Dt295NativeTuner : ITuneDevice
                 // 同じ機材が同じチャンネルに合ったまま (機材は開いたまま) なら、選局を省いて、受信が続いているかだけ確かめる
                 var reuse = false;
                 if (before is { } was && ReferenceEquals(was.Device, device) && was.Tuning == tuning && was.StreamId == streamId
-                    && frontend.IsTuned(tuning.Satellite, tuning.Satellite ? (uint)tuning.Frequency : (uint)((tuning.Frequency + 500UL) / 1000)))
+                    && frontend.IsTuned(tuning.Satellite, tuning.Satellite ? tuning.Frequency : ChannelTable.Khz(tuning.Frequency)))
                 {
                     using (timeline.Step("同じチャンネル: 受信が続いているかを確かめる", "選局を省く"))
                     {
@@ -421,7 +421,7 @@ public sealed class Dt295NativeTuner : ITuneDevice
                     }
                     else
                     {
-                        using (timeline.Step("選局 (地上波の周波数の設定)", "仕様書 7.2.2")) frontend.TuneTerrestrial((uint)((tuning.Frequency + 500UL) / 1000));
+                        using (timeline.Step("選局 (地上波の周波数の設定)", "仕様書 7.2.2")) frontend.TuneTerrestrial(ChannelTable.Khz(tuning.Frequency));
                     }
                 }
                 // 取り込みの設定は、受信の確認を待つ間に済ませておく (TS はまだ出ない)

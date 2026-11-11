@@ -147,10 +147,10 @@ internal sealed class CardUart(Func<uint, uint> read32, Action<uint, uint> write
         var since = Stopwatch.StartNew();
         while (since.Elapsed < limit)
         {
-            var want = received.Count < 3 ? 3 - received.Count : received[2] + 4 - received.Count;
-            if (want <= 0) return [.. received];
-            var got = read(want);
+            var got = read(received.Count < 3 ? 3 - received.Count : received[2] + 4 - received.Count);
             received.AddRange(got);
+            // 揃ったかは読んだ直後に見る。待ちの最後に揃ったものを捨てて送り直させない
+            if (received.Count >= 3 && received.Count >= received[2] + 4) return [.. received];
             if (got.Length == 0) delay(1);
         }
         return null;

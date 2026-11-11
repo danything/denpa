@@ -56,7 +56,7 @@ public static class Dt295NativeProbe
         {
             var device = acquire(timeline);
             var frontend = device.Frontend;
-            frontend.TuneTerrestrial((uint)((options.Tuning.Frequency + 500UL) / 1000));
+            frontend.TuneTerrestrial(ChannelTable.Khz(options.Tuning.Frequency));
             var samples = new List<(double Ms, byte[] Regs)>();
             var clock = Stopwatch.StartNew();
             double? lockedAt = null;
@@ -139,7 +139,7 @@ public static class Dt295NativeProbe
                     {
                         // 前の選局から離す。ロックは待たない
                         if (altTuning.Satellite) open.Frontend.TuneSatellite(altTuning.Frequency);
-                        else open.Frontend.TuneTerrestrial((uint)((altTuning.Frequency + 500UL) / 1000));
+                        else open.Frontend.TuneTerrestrial(ChannelTable.Khz(altTuning.Frequency));
                     }
                     catch (Exception error) when (error is IOException or InvalidOperationException)
                     {

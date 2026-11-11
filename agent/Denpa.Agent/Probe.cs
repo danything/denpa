@@ -685,7 +685,7 @@ public static class Probe
                     ? $"カードが鍵を返しました (0x{answer.Code:X4})。その鍵で MMT を復号できるかは、この試験では確かめていません"
                     : $"カードが鍵を返しません (0x{answer.Code:X4})");
         }
-        catch (IOException error)
+        catch (Exception error) when (error is IOException or InvalidOperationException or CardRefusedException)
         {
             result = $"カードとやり取りできませんでした ({error.Message})";
         }
