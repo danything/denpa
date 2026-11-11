@@ -581,6 +581,25 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
     await Respond.Write(http, merged);
 });
 
+/*
+ * 1 つの種別のチャンネルを全部消す (`?type=CATV`)。**呼ぶのは denpa の設定の画面だけ。**
+ * その種別を受けられるチューナーが無くなると、スキャンし直して消すことができないため (引っ越してケーブルが無くなったなど)。
+ * PUT は 1 件も無い結果を断る (スキャンで何も見つからなかったときに消さない) ので、消すのはこちらに分ける
+ */
+app.MapDelete("/denpa/channels", async (HttpContext http) =>
+{
+    var type = http.Request.Query["type"].ToString();
+    if (type.Length == 0)
+    {
+        await Respond.Error(http, "type が必要です", 400);
+        return;
+    }
+    var merged = config.SaveChannels([], [type]);
+    Log.Write($"チャンネルを消しました ({type})");
+    events.Emit("channels");
+    await Respond.Write(http, merged);
+});
+
 // --- カードとスクランブルの復号 -------------------------------------------
 /*
  * 鍵を配る API そのもの (/denpa/card/init・/denpa/card/ecm) は、このポートには無い (CardShareServer.cs)

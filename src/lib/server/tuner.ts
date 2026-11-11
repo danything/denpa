@@ -220,6 +220,28 @@ export async function putChannels(
   );
 }
 
+/**
+ * 1 つの種別のチャンネルを全部消す (エージェントの `DELETE /denpa/channels?type=…`)。
+ * 受けられるチューナーが無くなった種別は、スキャンし直して消すことができないので、設定の画面からこれで消す (`scan.ts` の `removeType`)
+ */
+export async function deleteChannels(
+  type: ChannelType,
+): Promise<AgentChannel[]> {
+  const res = await agentFetch(
+    `/denpa/channels?type=${encodeURIComponent(type)}`,
+    { method: "DELETE", signal: AbortSignal.timeout(30_000) },
+  );
+  if (!res.ok)
+    throw new Error(
+      `チャンネルを消せません (${res.status}) ${await res.text()}`,
+    );
+  return tolerate(
+    array(AGENT_CHANNEL),
+    await res.json(),
+    "エージェントの DELETE /denpa/channels",
+  );
+}
+
 /** 一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を 1 度に */
 export function tunerList(): Promise<Infer<typeof TUNERS>> {
   return get("/denpa/tuners", TUNERS);

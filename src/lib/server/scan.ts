@@ -38,6 +38,7 @@ import { readUntil } from "./stream";
 import {
   type AgentChannel,
   type AgentTuner,
+  deleteChannels,
   getChannels,
   getTuners,
   openChannel,
@@ -864,6 +865,36 @@ export function stop(): { stopped: boolean; message: string } {
   running.stop();
   push("中断しています...", {}, { phase: "中断中" });
   return { stopped: true, message: "チャンネルスキャンを中断しています" };
+}
+
+/** チューナーが無くなったときに消せる種別 (`removeType`)。地上波・BS・CS はふだんのチューナーで受けるので、スキャンし直せば入れ替わる */
+export const REMOVABLE_TYPES = ["CATV", "SKY"] as const;
+export type RemovableType = (typeof REMOVABLE_TYPES)[number];
+
+/**
+ * 1 つの種別 (ケーブルかスカパー！プレミアム) のチャンネルと局を消す。設定の「チャンネル」の「削除を確定」から。
+ *
+ * **その種別を受けられる「使う」チューナーが無いときだけ。** 引っ越してケーブルが無くなるとスキャンの選び方から種別が消え、
+ * スキャンし直して消すことができないため。受けられるチューナーがあれば、スキャンし直せば入れ替わるので断る。
+ * 局の行は消さず、取り込み直したときに見かけなかった局として画面から外れる (録画は残る。`currentServices`)
+ */
+export async function removeType(
+  type: RemovableType,
+): Promise<{ removed: boolean; message: string }> {
+  if (current.state === "running")
+    return { removed: false, message: "スキャンの実行中は削除できません" };
+  const tuners = await getTuners();
+  if (tuners.some((tuner) => !tuner.disabled && tuner.types.includes(type)))
+    return {
+      removed: false,
+      message: "受信できるチューナーがあるので、スキャンし直してください",
+    };
+  await deleteChannels(type);
+  for (const key of [...observations.keys()])
+    if (key.startsWith(`${type}:`)) observations.delete(key);
+  await sync().catch(() => undefined);
+  emit("services");
+  return { removed: true, message: "局を削除しました" };
 }
 
 /** いまの状況。走らせているのは denpa 自身なので、denpa を入れ替えれば `idle` に戻る */
