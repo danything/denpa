@@ -2901,7 +2901,7 @@
             busy
             {resuming}
             error={problem}
-            actions={busy && lighter.length > 0 ? lighterChoices : undefined}
+            actions={lighter.length > 0 ? lighterChoices : undefined}
             testid="watch-status"
           />
         {/if}

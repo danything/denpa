@@ -95,7 +95,7 @@
       next === null
         ? pane?.querySelector<HTMLElement>(`[data-setting="${from}"]`)
         : (pane?.querySelector<HTMLElement>(
-            ".option[data-active]:not([data-disabled])",
+            '.option[aria-checked="true"]:not([data-disabled])',
           ) ??
           pane?.querySelector<HTMLElement>(".option:not([data-disabled])"));
     target?.focus({ preventScroll: true });
@@ -250,7 +250,6 @@
           aria-checked={option.active}
           aria-disabled={option.disabled === true ? "true" : undefined}
           data-disabled={option.disabled === true ? "" : undefined}
-          data-active={option.active ? "" : undefined}
           data-testid="{prefix}-{opened.id}-option"
           {...{ [`data-${opened.id}`]: option.key }}
           onclick={() => {
