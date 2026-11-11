@@ -19,7 +19,7 @@ import { type Airing, mainOf, splitOf, type Station } from "../subchannels";
 import {
   ALL_CHANNEL_TYPES,
   type ChannelType,
-  decodableService,
+  undecodableReason,
 } from "../types";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
@@ -39,6 +39,7 @@ import {
   type AgentChannel,
   getChannels,
   programKey,
+  serviceAbilities,
   serviceKey,
 } from "./tuner";
 
@@ -60,14 +61,14 @@ export function currentServices() {
 }
 
 /**
- * いま選局できる局の数を種別ごとに。局が無いときの案内に使う (`#lib/channel-notice.ts`)。
- * 局が 1 つも無い種別は入らない。復号できない局 (SKY など) は番組表とライブに出ないので数えない (`services.decodable`)
+ * 番組表に出す局の数を種別ごとに。番組表のタブ (`#lib/types.ts` の `guideTabs`) と、局が無いときの案内に使う (`#lib/channel-notice.ts`)。
+ * 局が 1 つも無い種別は入らない。番組表を読めない局 (EIT がスクランブルされた SKY の局など) は番組表に出ないので数えない (`services.epg_readable`)
  */
 export function serviceCounts(): Record<string, number> {
   const rows = orm()
     .select({ type: services.type, n: count() })
     .from(services)
-    .where(and(currentServices(), eq(services.decodable, true)))
+    .where(and(currentServices(), eq(services.epg_readable, true)))
     .groupBy(services.type)
     .all();
   return Object.fromEntries(rows.map((row) => [row.type, row.n]));
@@ -81,6 +82,31 @@ export function listedServices(): number {
   return (
     orm().select({ n: count() }).from(services).where(currentServices()).get()
       ?.n ?? 0
+  );
+}
+
+/**
+ * **番組表に出すが観られない局** (番組表を読めるが復号できない局。`types.epgReadableService`) と、観られないわけ (`types.undecodableReason`)。
+ * 番組表の列の「観られません」と、番組の詳細で予約とライブのボタンの代わりに出す文に使う (番組表・検索)
+ */
+export function unwatchableServices(): Record<number, string> {
+  const rows = orm()
+    .select({
+      id: services.id,
+      type: services.type,
+      transport: services.transport,
+    })
+    .from(services)
+    .where(
+      and(
+        currentServices(),
+        eq(services.epg_readable, true),
+        eq(services.decodable, false),
+      ),
+    )
+    .all();
+  return Object.fromEntries(
+    rows.map((row) => [row.id, undecodableReason(row.type, row.transport)]),
   );
 }
 
@@ -107,7 +133,7 @@ export function typeRank(type: string): number {
 /**
  * 番組表とライブに出す局。
  *
- * - **本チャンネルは、番組が無くても出す。** スキャンしたばかりのケーブルの局や、番組表を読めない 4K の局も
+ * - **本チャンネルは、番組が無くても出す。** スキャンしたばかりのケーブルの局のように、番組表がまだ無い局も
  *   選べるようにする。入れたばかりで番組表がまだ空のときも、ここから先へ進める
  * - **終わったチャンネルは出さない。** 局名が空か「-」だけの局。BS103 (旧 NHK BSプレミアム) は
  *   2024 年 3 月で放送を終えたが、SDT には枠が残っていて、局名は「-」に消されている
@@ -217,6 +243,7 @@ export function syncServices(channels: AgentChannel[]): number {
           continue;
         }
         seen.add(id);
+        const abilities = serviceAbilities(channel, service);
         tx.insert(services)
           .values({
             id,
@@ -227,11 +254,8 @@ export function syncServices(channels: AgentChannel[]): number {
             service_type: service.serviceType,
             channel: channel.channel,
             remote_control_key: channel.remoteControlKeyId,
-            decodable: decodableService(
-              channel.type,
-              channel.transport ?? "ts",
-              service.caSystemIds ?? [],
-            ),
+            decodable: abilities.decodable,
+            epg_readable: abilities.epgReadable,
             transport: channel.transport ?? "ts",
             // ロゴは放送波から取得したときに立てる (logo.ts)
             has_logo: false,
@@ -248,6 +272,7 @@ export function syncServices(channels: AgentChannel[]): number {
               channel: sql`excluded.channel`,
               remote_control_key: sql`excluded.remote_control_key`,
               decodable: sql`excluded.decodable`,
+              epg_readable: sql`excluded.epg_readable`,
               transport: sql`excluded.transport`,
               updated_at: sql`excluded.updated_at`,
             },
@@ -459,7 +484,8 @@ export function syncServicesOnly(channels: AgentChannel[]): number {
  * 番組が丸ごと出なくなる。networkId と合わせて引き直す。
  *
  * **受信できないチャンネルの局は入れない** (`reception.ts`)。衛星はほかの中継器からもその局の番組表が届くので、
- * 入れるとルールが録れない予約を立てる。**復号できない局も入れない** (`services.decodable`。番組表に出さず、録れない)。
+ * 入れるとルールが録れない予約を立てる。**番組表を読めない局も入れない** (`services.epg_readable`。番組表に出さない)。
+ * 読めるが復号できない局の番組は入れる (番組表に「観られません」で出す)。ルールはその番組に当てない (`rules.applyRules`)。
  *
  * **CATV の局とアンテナの局は分ける** (`indexKey`)。CATV が再送信する BS の EIT には、アンテナの BS と同じ
  * original_network_id と service_id が入っている。分けないと、CATV で読んだ番組表がアンテナの局に入る
@@ -475,7 +501,7 @@ function serviceIdIndex(): Map<string, number> {
       channel: services.channel,
     })
     .from(services)
-    .where(eq(services.decodable, true))
+    .where(eq(services.epg_readable, true))
     .all()
     .filter((s) => !blocked.has(`${s.type}:${s.channel}`));
   return new Map(

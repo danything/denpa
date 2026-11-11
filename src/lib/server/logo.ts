@@ -502,7 +502,7 @@ function markGaveUp(channel: string): void {
 
 /**
  * いま選局できる局。取り残しは見に行かない。
- * 復号できない局も見に行かない (`services.decodable`。番組表とライブに出さないので、ロゴは要らない)。
+ * 復号できない局も見に行かない (`services.decodable`。ライブに出さず、ケーブルとスカパー！プレミアムの局のロゴはまだ集めない)。
  * **CATV の局もまだ見に行かない。** ここから先は地上波でない局を衛星として扱う (カルーセルを当たりの中継で待つ) ので、CATV を入れると衛星に数えてしまう
  */
 function tunableServices(): {

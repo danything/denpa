@@ -13,8 +13,9 @@
  * - ケーブル (CATV。ISDB-C) は QC13〜QC63・QU13〜QU62・QV1〜QV12 を総当たり。TSMF で束ねた搬送波は、
  *   束ねた TS をそれぞれ選局する (`QC30:1`…。`tsmfJobs`)。局ごとの CA_system_id も数え、復号できるかを決める (`ca-observe.ts`)。
  *   選局の答えが TLV (分割 TLV から組み立てた 4K の放送。`tuner.openChannel` の `transport`) なら、TLV の表で局を読む (`readTlvServices`)
- * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。番組表は取得しない (`services.decodable`)。
- *   代わりに、カード無しで分かること (CA_system_id・番組表とロゴが来ているか) を数えて記録と受信の設定に出す (`ca-observe.ts`)
+ * - SKY (スカパー！プレミアムサービス光) は H01〜H105 を総当たり。局は復号できない (`services.decodable`)。
+ *   カード無しで分かること (CA_system_id・番組表とロゴが来ているか) を数えて記録と受信の設定に出す (`ca-observe.ts`)
+ * - SKY と CATV は、番組表 (EIT) がスクランブルされずに来たかを控えに書く。読めれば復号できない局も番組表に出す (`types.epgReadableService`)
  * - 1 チャンネルにつき最大 30 秒待ち、NIT と SDT が**両方**揃ったら受信できたとみなす。CATV は SDT だけで揃ったとみなす
  *   (`ServiceReader` の `requireNit`)
  * - Mirakurun と同じサービス種別を残す (`psi.SERVICE_TYPES`。ラジオ・データも入り、
@@ -25,6 +26,7 @@
  */
 
 import { type EitEvent, EpgReader } from "@danything/arib/eit";
+import { MmtEpgReader } from "@danything/arib/mh-eit";
 import { type AccessControl, TlvServiceReader } from "@danything/arib/mmt-si";
 import { type FoundService, ServiceReader } from "@danything/arib/psi";
 
@@ -200,7 +202,8 @@ export async function readServices(
   epg?: EpgReader,
   /**
    * 同じストリームで、カード無しで分かること (CA_system_id・番組表が来ているか) も数える (SKY と CATV の局だけ)。
-   * 局が揃っても、SKY は番組表の具合が、CATV は局ごとの CA_system_id (PMT) が分かるまで、`OBSERVE_WAIT` までは読み続ける
+   * 局が揃っても、番組表 (EIT) がスクランブルされているかと、CATV は局ごとの CA_system_id (PMT) が分かるまで、`OBSERVE_WAIT` までは読み続ける
+   * (番組表を読めるかを控えに書く。`types.epgReadableService`)
    */
   observer?: CaObserver,
   /** ケーブル (ISDB-C) の TS か。SDT だけで揃ったとみなす (`ServiceReader` の `requireNit`) */
@@ -209,8 +212,12 @@ export async function readServices(
   const reader = new ServiceReader({ requireNit: !cable });
   let bytes = 0;
   const started = Date.now();
+  // 局の無い TS (PAT が空) は、番組表の具合を待たない (書く局が無い)
   const observed = (watching: CaObserver) =>
-    cable ? watching.pmtsKnown : watching.epgKnown;
+    cable
+      ? watching.pmtsKnown &&
+        (watching.epgKnown || reader.services().length === 0)
+      : watching.epgKnown;
   const tail = await readUntil(
     stream,
     (chunk) => {
@@ -257,12 +264,14 @@ interface TlvScanResult extends ScanResult {
 /**
  * 流れてくる TLV (選局の答えが `application/x-arib-tlv`) を、TLV-NIT と MH-SDT[actual] が揃うまで読む (`TlvServiceReader`)。
  * TS の `readServices` に当たる。局が揃ってからも、PLT にある局の MPT が全部来るまで、読み始めから `OBSERVE_WAIT` までは読み続ける
- * (局ごとの CA_system_id を MPT から読む。TS の PMT と同じ)。番組表 (MH-EIT) はまだ読まない
+ * (局ごとの CA_system_id を MPT から読む。TS の PMT と同じ)
  */
 export async function readTlvServices(
   stream: ReadableStream<Uint8Array>,
   timeout = TUNE_TIMEOUT,
   abort?: AbortSignal,
+  /** 同じストリームから番組表 (MH-EIT) も取得する。読む時間は延ばさない (`readServices` と同じ) */
+  epg?: MmtEpgReader,
 ): Promise<TlvScanResult> {
   const reader = new TlvServiceReader();
   let bytes = 0;
@@ -271,6 +280,7 @@ export async function readTlvServices(
     stream,
     (chunk) => {
       bytes += chunk.byteLength;
+      epg?.feed(chunk);
       return (
         reader.feed(chunk) &&
         (reader.mptsKnown || Date.now() - started >= OBSERVE_WAIT)
@@ -324,7 +334,8 @@ function describeTlv(
 
 /**
  * スキャンで分かったことを 1 件にまとめる。`caSystemIdsOf` を渡すと、局ごとの CA_system_id も入れる (CATV。`CaObserver`・`TlvServiceReader`)。
- * `transport` は TLV (4K の放送) のときだけ書く。無ければ TS
+ * `transport` は TLV (4K の放送) のときだけ書く。無ければ TS。
+ * `epgReadable` は番組表の表がスクランブルされずに来るか (`types.epgReadableService`)。渡したときだけ、どの局にも書く
  */
 export function channelEntry(
   type: ChannelType,
@@ -332,6 +343,7 @@ export function channelEntry(
   services: FoundService[],
   caSystemIdsOf?: (serviceId: number) => number[],
   transport: Transport = "ts",
+  epgReadable?: boolean,
 ): AgentChannel {
   const first = services[0];
   return {
@@ -349,6 +361,7 @@ export function channelEntry(
         ...(caSystemIdsOf === undefined
           ? {}
           : { caSystemIds: caSystemIdsOf(service.serviceId) }),
+        ...(epgReadable === undefined ? {} : { epgReadable }),
       }))
       .sort((a, b) => a.serviceId - b.serviceId),
   };
@@ -386,7 +399,7 @@ let current: ScanState = IDLE;
 /**
  * 最後のスキャンで、SKY と CATV のチャンネルについて分かったこと (`種別:チャンネル` → 中身)。
  * 受信の設定の「受信できるチャンネル」に出す。**denpa の中にだけ持つ** (再起動で消える。もう一度スキャンすれば出る)。
- * SKY の局の番組表を取り込むかは、この観測の報告を見てから決める (docs/tuner-it930x.md)。
+ * 番組表を読めるかは、この観測で決めてチャンネルの控えに入れる (`channelEntry` の `epgReadable`)。
  * CATV の局ごとの CA_system_id は、これとは別にチャンネルの控えに入れる (`channelEntry`)
  */
 const observations = new Map<string, Observed>();
@@ -732,12 +745,12 @@ class Scanner {
       }
 
       /*
-       * SKY は番組表を取得しない (復号できない。番組表とライブに出さないので要らない)。
        * SKY と CATV は、カード無しで分かること (CA_system_id・番組表が来ているか) を数えて記録に出す (`ca-observe.ts`)。
-       * CATV は局ごとの CA_system_id をチャンネルの控えにも入れ、復号できるかを決める (`types.decodableService`)
+       * CATV は局ごとの CA_system_id をチャンネルの控えにも入れ、復号できるかを決める (`types.decodableService`)。
+       * 番組表 (EIT) がスクランブルされずに来たかも控えに書く。復号できない局でも、読めれば番組表に出す (`types.epgReadableService`)
        */
       const cable = type === "CATV";
-      const epg = type === "SKY" ? undefined : new EpgReader();
+      const epg = new EpgReader();
       const observer = type === "SKY" || cable ? new CaObserver() : undefined;
       const { services, error, signal } = await readServices(
         stream,
@@ -791,9 +804,11 @@ class Scanner {
         cable && observer !== undefined
           ? (serviceId) => observer.caSystemIdsOf(serviceId)
           : undefined,
+        "ts",
+        observed === undefined ? undefined : observed.epg === "readable",
       );
       this.found.set(`${type}:${channel}`, entry);
-      if (epg !== undefined) this.keep(type, epg);
+      this.keep(type, epg);
       this.onProgress({
         line: `${channel}: ${services.length} 局${note}`,
         ...counts,
@@ -804,7 +819,8 @@ class Scanner {
 
   /**
    * TLV (4K の放送) のチャンネルを読む。局は MH-SDT[actual] から、局ごとの CA_system_id は MPT から (`readTlvServices`)。
-   * 揃わなければ CATV の TS と同じく「局なし」として入れず、回し直さない。番組表はまだ取得しない
+   * 揃わなければ CATV の TS と同じく「局なし」として入れず、回し直さない。
+   * 番組表 (MH-EIT) は信号のメッセージで来てスクランブルされないので、どの局も番組表を読めると控えに書く (`types.epgReadableService`)
    */
   private async tlv(
     job: Job,
@@ -813,10 +829,12 @@ class Scanner {
     first: boolean,
   ): Promise<void> {
     const { type, channel } = job;
+    const epg = new MmtEpgReader();
     const result = await readTlvServices(
       stream,
       TUNE_TIMEOUT,
       this.aborter.signal,
+      epg,
     );
     closer.abort();
     if (this.aborted) return;
@@ -834,8 +852,9 @@ class Scanner {
     }
     this.found.set(
       `${type}:${channel}`,
-      channelEntry(type, channel, services, result.caSystemIdsOf, "tlv"),
+      channelEntry(type, channel, services, result.caSystemIdsOf, "tlv", true),
     );
+    this.keep(type, epg);
     this.onProgress({
       line: `${channel}: ${services.length} 局  ${describeTlv(services, result.accessOf)}`,
       ...counts,

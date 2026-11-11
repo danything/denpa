@@ -69,6 +69,7 @@ const {
   settle,
   syncServicesOnly,
   typeRank,
+  unwatchableServices,
   widenServices,
 } = await import("./epg");
 const { subscribe } = await import("./events");
@@ -870,7 +871,7 @@ describe("番組表に出す局", () => {
   });
 
   test("番組が無くても本チャンネルは出す", () => {
-    // スキャンしたばかりのケーブルの局や、番組表を読めない 4K の局
+    // スキャンしたばかりのケーブルの局のように、番組表がまだ無い局
     const services = [service(1), service(2)];
 
     expect(airing(services, [program(1, "ニュース")]).map((s) => s.id)).toEqual(
@@ -988,6 +989,8 @@ describe("SERVICE_ORDER", () => {
     name: string,
     /** 取り込みが決める値 (`syncServices`)。ここでは SKY だけを復号できないものにする */
     decodable = type !== "SKY",
+    /** 番組表を読めるか (`syncServices`)。復号できる局はいつも読める */
+    epgReadable = decodable,
   ) {
     orm()
       .insert(services)
@@ -1001,6 +1004,7 @@ describe("SERVICE_ORDER", () => {
         channel,
         remote_control_key: key,
         decodable,
+        epg_readable: epgReadable,
         updated_at: 1,
       })
       .run();
@@ -1070,15 +1074,19 @@ describe("SERVICE_ORDER", () => {
     ).toEqual(["GR", "BS", "CS", "CATV", "SKY"]);
   });
 
-  test("局が無いときの案内に使う数には、復号できない局を入れない", () => {
+  test("番組表のタブと局が無いときの案内に使う数には、番組表を読めない局を入れない", () => {
     orm().delete(services).run();
     put(1000600, 600, "SKY", "H40", null, "プレミアム");
-    // B-CAS 以外の方式でスクランブルされた CATV の局
+    // B-CAS 以外の方式でスクランブルされた CATV の局。番組表もスクランブルされている
     put(6553900102, 102, "CATV", "QC31", null, "ケーブル2", false);
     expect(serviceCounts()).toEqual({});
     put(400151, 151, "BS", "BS01_3", null, "BS朝日1");
     put(6553900101, 101, "CATV", "QC30", null, "ケーブル1");
     expect(serviceCounts()).toEqual({ BS: 1, CATV: 1 });
+    // 復号できなくても、番組表を読める局は数える (番組表に「観られません」で出る)
+    put(1000601, 601, "SKY", "H41", null, "プレミアム2", false, true);
+    put(6554700161, 161, "CATV", "QC26", null, "ＢＳでんぱ　４Ｋ", false, true);
+    expect(serviceCounts()).toEqual({ BS: 1, CATV: 2, SKY: 1 });
   });
 });
 
@@ -1111,7 +1119,7 @@ describe("ケーブルの局", () => {
     } as Parameters<typeof savePrograms>[0][number];
   }
 
-  test("取り込みのたびに復号できるかと伝送の形式を決め、CATV の局はアンテナの局と別の ID で入れる", async () => {
+  test("取り込みのたびに復号できるか・番組表を読めるか・伝送の形式を決め、CATV の局はアンテナの局と別の ID で入れる", async () => {
     orm().delete(programs).run();
     orm().delete(services).run();
     offered = [
@@ -1136,17 +1144,18 @@ describe("ケーブルの局", () => {
             name: "BS朝日1",
             caSystemIds: [0x0005],
           },
-          // B-CAS 以外の方式でスクランブルされた局
+          // B-CAS 以外の方式でスクランブルされた局。スキャンで番組表もスクランブルされていると分かった
           {
             serviceId: 152,
             serviceType: 1,
             name: "有料の局",
             caSystemIds: [0x000a],
+            epgReadable: false,
           },
         ],
       },
-      // 4K の局 (TLV)。番組表・ライブ・録画にまだ対応していないので、CA_system_id によらず扱わない
-      // (0x0005 は B-CAS と同じ値でも ACAS が要る。スクランブルしていない局も TS として開かない)
+      // 4K の局 (TLV)。ライブと録画にまだ対応していないので、CA_system_id によらず復号できない
+      // (0x0005 は B-CAS と同じ値でも ACAS が要る。スクランブルしていない局も TS として開かない)。番組表 (MH-EIT) は読める
       {
         type: "CATV",
         channel: "QC26",
@@ -1160,12 +1169,14 @@ describe("ケーブルの局", () => {
             serviceType: 1,
             name: "ＢＳでんぱ　４Ｋ",
             caSystemIds: [0x0005],
+            epgReadable: true,
           },
           {
             serviceId: 162,
             serviceType: 1,
             name: "無料の 4K",
             caSystemIds: [],
+            epgReadable: true,
           },
         ],
       },
@@ -1186,6 +1197,7 @@ describe("ケーブルの局", () => {
         type: services.type,
         network_id: services.network_id,
         decodable: services.decodable,
+        epg_readable: services.epg_readable,
         transport: services.transport,
       })
       .from(services)
@@ -1196,17 +1208,27 @@ describe("ケーブルの局", () => {
       type: ChannelType,
       network_id: number,
       decodable: boolean,
+      epg_readable: boolean,
       transport: Transport = "ts",
-    ) => ({ id, type, network_id, decodable, transport });
+    ) => ({ id, type, network_id, decodable, epg_readable, transport });
     expect(rows).toEqual([
-      row(BS_ASAHI, "BS", 4, true),
-      row(1000600, "SKY", 10, false),
-      row(CABLE_ASAHI, "CATV", 4, true),
-      row(CABLE_PAY, "CATV", 4, false),
-      row(CABLE_4K, "CATV", 0x000b, false, "tlv"),
-      row(CABLE_4K + 1, "CATV", 0x000b, false, "tlv"),
+      row(BS_ASAHI, "BS", 4, true, true),
+      // スキャンが番組表を読めると書いていない (EIT がスクランブルされている) SKY の局は、番組表にも出さない
+      row(1000600, "SKY", 10, false, false),
+      row(CABLE_ASAHI, "CATV", 4, true, true),
+      row(CABLE_PAY, "CATV", 4, false, false),
+      row(CABLE_4K, "CATV", 0x000b, false, true, "tlv"),
+      row(CABLE_4K + 1, "CATV", 0x000b, false, true, "tlv"),
     ]);
-    expect(serviceCounts()).toEqual({ BS: 1, CATV: 1 });
+    // 番組表に出す局の数。番組表を読める 4K の局は、復号できなくても数える
+    expect(serviceCounts()).toEqual({ BS: 1, CATV: 3 });
+    // 番組表に出すが観られない局と、そのわけ
+    expect(unwatchableServices()).toEqual({
+      [CABLE_4K]:
+        "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません",
+      [CABLE_4K + 1]:
+        "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません",
+    });
   });
 
   test("CATV で読んだ番組表は CATV の局にだけ書き、アンテナの BS には書かない", () => {
@@ -1228,7 +1250,21 @@ describe("ケーブルの局", () => {
       { id: CABLE_ASAHI * 100000 + 1, service_id: CABLE_ASAHI },
     ]);
 
-    // 復号できない局の番組は書かない (番組表に出さず、録れない)
+    // 番組表を読めない局の番組は書かない (番組表に出さない)
     expect(savePrograms([event(152, 2)], { type: "CATV" })).toBe(0);
+    // 番組表を読める 4K の局の番組は、復号できなくても書く (番組表に「観られません」で出す)
+    expect(
+      savePrograms(
+        [
+          {
+            ...event(161, 3),
+            originalNetworkId: 0x000b,
+            transportStreamId: 0xb111,
+          },
+        ],
+        { type: "CATV" },
+      ),
+    ).toBe(1);
+    expect(owners().map((row) => row.service_id)).toContain(CABLE_4K);
   });
 });

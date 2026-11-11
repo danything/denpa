@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   decodableService,
+  epgReadableService,
   guideTabs,
   origin,
   shownTypes,
@@ -22,14 +23,21 @@ describe("種別", () => {
     ]);
   });
 
-  test("番組表のタブは地上波・BS・CS がいつも並び、CATV は局があるときだけ足す", () => {
+  test("番組表のタブは地上波・BS・CS がいつも並び、CATV と SKY は番組表に出す局があるときだけ足す", () => {
     expect(guideTabs({})).toEqual(["GR", "BS", "CS"]);
     expect(guideTabs({ GR: 8, CATV: 0 })).toEqual(["GR", "BS", "CS"]);
     expect(guideTabs({ GR: 8, CATV: 3 })).toEqual(["GR", "BS", "CS", "CATV"]);
     // 開いている種別は、局が無くなってもタブに残す
     expect(guideTabs({ GR: 8 }, "CATV")).toEqual(["GR", "BS", "CS", "CATV"]);
-    // SKY の局は数えない (復号できない) ので、タブにならない
-    expect(guideTabs({ SKY: 2 })).toEqual(["GR", "BS", "CS"]);
+    // 番組表を読める SKY の局があれば足す (数えるのは `serviceCounts`。番組表を読めない局は数えない)
+    expect(guideTabs({ SKY: 0 })).toEqual(["GR", "BS", "CS"]);
+    expect(guideTabs({ SKY: 2, CATV: 1 })).toEqual([
+      "GR",
+      "BS",
+      "CS",
+      "CATV",
+      "SKY",
+    ]);
   });
 
   test("復号できないのは SKY と、B-CAS 以外の CA_system_id しか無い局", () => {
@@ -42,16 +50,23 @@ describe("種別", () => {
     expect(decodableService("CATV", "ts", [0x000a])).toBe(false);
   });
 
-  test("4K の局 (TLV) は、CA_system_id によらず扱わない (番組表・ライブ・録画にまだ対応していない)", () => {
+  test("4K の局 (TLV) は、CA_system_id によらず復号できない (ライブと録画にまだ対応していない)", () => {
     // B-CAS と同じ 0x0005 でも、B-CAS のカードでは復号できない (ACAS が要る)
     expect(decodableService("CATV", "tlv", [0x0005])).toBe(false);
     expect(decodableService("CATV", "tlv", [0x0006])).toBe(false);
     // スクランブルしていなくても、TS として開かない
     expect(decodableService("CATV", "tlv", [])).toBe(false);
     expect(undecodableReason("CATV", "tlv")).toBe(
-      "ケーブルの 4K の局は、まだ番組表・ライブ・録画に対応していないため観られません",
+      "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません",
     );
     expect(undecodableReason("CATV", "ts")).toContain("B-CAS 以外");
+  });
+
+  test("番組表を読めるのは、復号できる局と、番組表の表がスクランブルされずに来るとスキャンが書いた局", () => {
+    expect(epgReadableService(true, false)).toBe(true);
+    // 4K の局・番組表がスクランブルされていない SKY と B-CAS 以外の CATV の局
+    expect(epgReadableService(false, true)).toBe(true);
+    expect(epgReadableService(false, false)).toBe(false);
   });
 
   test("局の元の放送を original_network_id で見分ける", () => {

@@ -1,4 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { concatBytes } from "@danything/arib/bytes";
+import {
+  compressedIp,
+  m2SectionMessage,
+  mhEitSection,
+  signalingPackets,
+  tlvPacket,
+} from "@danything/arib/synth-mmt";
 
 import type { Last, Outcome } from "./epg-collect";
 import type { AgentChannel } from "./tuner";
@@ -11,7 +23,17 @@ import type { AgentChannel } from "./tuner";
  * なっていた ([config.ts](config.ts) の epgChannelTimeout)。
  */
 const { config } = await import("./config");
+// 番組表を集める回 (`collectOnce`) は DB に書く。置き場は一時ディレクトリに (`./fake-agent` の証明書もここ)
+const testDir = mkdtempSync(join(tmpdir(), "denpa-epg-collect-"));
+const realAgent = config.agentUrl;
+config.dataDir = testDir;
+config.dbPath = join(testDir, "denpa.db");
+afterAll(() => {
+  config.agentUrl = realAgent;
+  rmSync(testDir, { recursive: true, force: true });
+});
 const {
+  collectOnce,
   drain,
   firstSweepDone,
   firstSweeps,
@@ -531,5 +553,168 @@ describe("受信できなかったと数える回 (receptionFailed)", () => {
         received: true,
       }),
     ).toBe(false);
+  });
+});
+
+/**
+ * **番組表を読めるが復号できない局も集める** (`tuner.epgReadableChannel`)。ケーブルの 4K の局 (TLV) は MH-EIT を読む (`MmtEpgReader`)。
+ * 選局の答えの形式が控えと違えば読まない (`tuner.expectTransport`)
+ */
+describe("番組表を読める局を集める", () => {
+  const ONID_4K = 0x000b;
+  const START = Math.floor((Date.now() + 60 * 60_000) / 60_000) * 60_000;
+  const offered: AgentChannel[] = [
+    // 4K の局。CA_system_id は B-CAS と同じ 0x0005 でも復号できない。番組表は読める
+    {
+      type: "CATV",
+      channel: "QC26",
+      networkId: ONID_4K,
+      transportStreamId: 0xb111,
+      remoteControlKeyId: null,
+      transport: "tlv",
+      services: [
+        {
+          serviceId: 161,
+          serviceType: 1,
+          name: "ＢＳでんぱ　４Ｋ",
+          caSystemIds: [0x0005],
+          epgReadable: true,
+        },
+      ],
+    },
+    // 控えは TLV なのに、エージェントが TS で答える (ケーブル局が搬送波の中身を入れ替えた)
+    {
+      type: "CATV",
+      channel: "QC27",
+      networkId: ONID_4K,
+      transportStreamId: 0xb112,
+      remoteControlKeyId: null,
+      transport: "tlv",
+      services: [
+        {
+          serviceId: 171,
+          serviceType: 1,
+          name: "ＢＳでんぱ　４Ｋ２",
+          caSystemIds: [0x0005],
+          epgReadable: true,
+        },
+      ],
+    },
+    // B-CAS 以外の方式でスクランブルされ、番組表もスクランブルされている局。集めに行かない
+    {
+      type: "CATV",
+      channel: "QC40",
+      networkId: 0xfff0,
+      transportStreamId: 2,
+      remoteControlKeyId: null,
+      services: [
+        {
+          serviceId: 201,
+          serviceType: 1,
+          name: "ケーブル有料",
+          caSystemIds: [0x0006],
+          epgReadable: false,
+        },
+      ],
+    },
+  ];
+  const tuner = {
+    index: 0,
+    name: "PX-MLT5PE",
+    types: ["CATV"],
+    disabled: false,
+    rank: 0,
+    device: "it930x:1-1:0",
+    pin: "it930x:1-1:0",
+    lnb: null,
+    channel: null,
+    users: [],
+    error: null,
+    signal: null,
+  };
+  /** QC26 の TLV。MH-EIT の予定 (基本) 1 つで揃う。最後のパケットは次のパケットの先頭が届くまで出ないので、詰め物を 1 つ足す */
+  const tlv = concatBytes([
+    ...signalingPackets(0x8000, [
+      m2SectionMessage(
+        mhEitSection({
+          tableId: 0x8c,
+          serviceId: 161,
+          tlvStreamId: 0xb111,
+          originalNetworkId: ONID_4K,
+          events: [
+            {
+              eventId: 1,
+              startAt: START,
+              duration: 60 * 60_000,
+              name: "🈑報道１９３０",
+              description: "きょうのニュース",
+              resolution: 6,
+            },
+          ],
+        }),
+      ),
+    ]).map((packet) => compressedIp(1, packet)),
+    tlvPacket(0xff, [0]),
+  ]);
+
+  test("4K の局の番組表を MH-EIT で読み、形式が控えと違うチャンネルと番組表を読めない局は読まない", async () => {
+    const { fakeAgentUrl, serveFakeAgent } = await import("./fake-agent");
+    const { orm } = await import("./db");
+    const { programs, services } = await import("./schema");
+    const tuned: string[] = [];
+    const server = serveFakeAgent((request) => {
+      const url = new URL(request.url);
+      if (url.pathname === "/denpa/channels") return Response.json(offered);
+      if (url.pathname === "/denpa/tuners")
+        return Response.json({ tuners: [tuner], detected: false });
+      if (url.pathname === "/denpa/stream") {
+        const channel = url.searchParams.get("channel") ?? "";
+        tuned.push(channel);
+        if (channel === "QC26")
+          return new Response(tlv, {
+            headers: { "Content-Type": "application/x-arib-tlv" },
+          });
+        return new Response(new Uint8Array(188 * 8), {
+          headers: { "Content-Type": "video/MP2T" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    try {
+      config.agentUrl = fakeAgentUrl(server.port ?? 0);
+      expect(await collectOnce()).toBe(1);
+      expect(tuned.sort()).toEqual(["QC26", "QC27"]);
+      expect(
+        orm()
+          .select({
+            service_id: programs.service_id,
+            name: programs.name,
+            start_at: programs.start_at,
+            video_resolution: programs.video_resolution,
+          })
+          .from(programs)
+          .all(),
+      ).toEqual([
+        {
+          service_id: serviceKey(ONID_4K, 161, "CATV"),
+          name: "🈑報道１９３０",
+          start_at: START,
+          video_resolution: "2160p",
+        },
+      ]);
+      // 番組表を書いた局には、集めた時刻が付く (次に行くかをこれで決める)
+      const at = orm()
+        .select({ id: services.id, epg_at: services.epg_at })
+        .from(services)
+        .all();
+      expect(
+        at.find((row) => row.id === serviceKey(ONID_4K, 161, "CATV"))?.epg_at,
+      ).toBeNumber();
+      expect(
+        at.find((row) => row.id === serviceKey(ONID_4K, 171, "CATV"))?.epg_at,
+      ).toBeNull();
+    } finally {
+      server.stop(true);
+    }
   });
 });

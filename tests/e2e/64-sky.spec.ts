@@ -109,7 +109,8 @@ test.describe("スカパー！プレミアム", () => {
     await expect(card.getByTestId("scan-count")).toContainText("105 / 105");
     await expect(card.getByTestId("scan-found")).toContainText("1");
 
-    // 受信できるチャンネルには出し、番組表とライブに出ないわけを添える (取り込み直した表を読み直す)
+    // 受信できるチャンネルには出し、ライブと録画に使えないわけを添える (取り込み直した表を読み直す)。
+    // 偽の放送の SKY の局は番組表もスクランブルしているので、番組表にも出ない
     await goto(page, "/settings/reception");
     await expect(
       card.locator(`[data-testid="channel-row"][data-channel="H40"]`),
@@ -145,5 +146,10 @@ test.describe("スカパー！プレミアム", () => {
 
     await goto(page, "/live");
     await expect(page.getByText(SKY_TEST.name)).toHaveCount(0);
+
+    // 番組表 (EIT) がスクランブルされている局は、番組表にも出さない (タブも足さない)
+    await goto(page, "/guide");
+    await expect(page.getByTestId("type-tabs")).toBeVisible();
+    await expect(page.getByTestId("type-SKY")).toHaveCount(0);
   });
 });

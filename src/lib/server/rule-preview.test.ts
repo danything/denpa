@@ -513,3 +513,74 @@ describe("枝番の局で同じ放送", () => {
     });
   });
 });
+
+/**
+ * 番組表を読めるが復号できない局 (ケーブルの 4K の局など。`types.epgReadableService`)。番組表には出るが、ルールは当てない
+ */
+describe("復号できない局", () => {
+  const CABLE_4K = (0x10000 + 0x000b) * 100000 + 161;
+
+  test("下見では「録らない」(復号できない局)。同じ回をまとめる相手にもせず、予約も立てない", async () => {
+    orm()
+      .insert(services)
+      .values({
+        id: CABLE_4K,
+        service_id: 161,
+        network_id: 0x000b,
+        name: "ＢＳでんぱ　４Ｋ",
+        type: "CATV",
+        service_type: 1,
+        channel: "QC26",
+        decodable: false,
+        epg_readable: true,
+        transport: "tlv",
+        updated_at: now(),
+      })
+      .run();
+    // 4K の局のほうが先に流す同じ回。まとめる相手にすると、あとの MX の放送が「同じ回」で落ちる
+    program(1, "テスト魔法 #1", 5 * HOUR, CABLE_4K);
+    program(2, "テスト魔法 #1", 8 * HOUR);
+    const rule = draftRule(form({ keyword: "テスト魔法" }))!;
+    const preview = await previewFor(rule, { ids: [1, 2] });
+    expect(preview.verdicts).toEqual({
+      1: { kind: "skip", reason: "undecodable" },
+      2: { kind: "record" },
+    });
+    expect(preview.programs.find((row) => row.id === 1)?.skip).toEqual({
+      kind: "undecodable",
+    });
+
+    // 保存したルールも同じ。予約を立てるのは MX の放送だけ。局が復号できなくなる前に立てた予約は引っ込める
+    const { applyRules } = await import("./rules");
+    orm()
+      .insert(ruleTable)
+      .values({
+        id: 9,
+        name: "テスト魔法",
+        keyword: "テスト魔法",
+        enabled: true,
+        created_at: now(),
+      })
+      .run();
+    orm()
+      .insert(reservations)
+      .values({
+        program_id: 1,
+        rule_id: 9,
+        service_id: CABLE_4K,
+        name: "テスト魔法 #1",
+        start_at: base + 5 * HOUR,
+        end_at: base + 6 * HOUR,
+        created_at: now(),
+        updated_at: now(),
+      })
+      .run();
+    expect(applyRules()).toMatchObject({ created: 1, dropped: 1 });
+    expect(
+      orm()
+        .select({ program_id: reservations.program_id })
+        .from(reservations)
+        .all(),
+    ).toEqual([{ program_id: 2 }]);
+  });
+});

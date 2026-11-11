@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
 import {
   type AgentTuner,
+  expectTransport,
   openChannelStream,
   programKey,
   recordingHolds,
@@ -14,6 +15,7 @@ import {
   retryWhileBusy,
   serviceKey,
   streamTransport,
+  TransportChangedError,
   tsmfStreams,
   TunerBusyError,
 } from "./tuner";
@@ -64,6 +66,30 @@ describe("流れてくるバイト列の形式", () => {
       "ts",
     );
     expect(streamTransport(new Headers())).toBe("ts");
+  });
+
+  test("選局の答えの形式が控えと違えば、ストリームを閉じて読まない", async () => {
+    let canceled = false;
+    const stream = () =>
+      new ReadableStream<Uint8Array>({
+        cancel() {
+          canceled = true;
+        },
+      });
+    const same = stream();
+    expect(
+      await expectTransport({ stream: same, transport: "tlv" }, "tlv"),
+    ).toBe(same);
+    expect(canceled).toBe(false);
+    const changed = expectTransport(
+      { stream: stream(), transport: "ts" },
+      "tlv",
+    );
+    await expect(changed).rejects.toThrow(TransportChangedError);
+    expect(canceled).toBe(true);
+    expect(new TransportChangedError().message).toBe(
+      "チャンネルの形式が変わりました。ケーブルをスキャンし直してください",
+    );
   });
 });
 

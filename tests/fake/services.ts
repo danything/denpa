@@ -15,9 +15,16 @@ export interface FakeService {
   tsid?: number;
   /**
    * PMT の CA 記述子に置く CA_system_id。省けば CA 記述子を置かない (SKY は作り物の 0x000B。`broadcast.caDescriptor`)。
-   * B-CAS (0x0005) 以外の値を置いた CATV の局は、denpa が復号できない局として扱う (`types.decodableService`)
+   * B-CAS (0x0005) 以外の値を置いた CATV の局は、denpa が復号できない局として扱う (`types.decodableService`)。
+   * B-CAS 以外の値の局 (SKY も) は、番組表 (EIT) もスクランブルして流す (`broadcast.schedule`。denpa は番組表を読めない局として扱う)。
+   * TLV の局は MPT のアクセス制御記述子に置く
    */
   caSystemId?: number;
+  /**
+   * 伝送の形式。`tlv` はケーブルで受けた 4K の局で、偽エージェントは TLV のバイト列を `application/x-arib-tlv` で流す
+   * (`broadcast.broadcastTlv`)。番組表 (MH-EIT) はスクランブルしない。省けば TS
+   */
+  transport?: "tlv";
   /**
    * 1 番組の長さ。
    * 地上波は本物らしい 30 分にして番組表のグリッドが成立するようにし、
@@ -136,10 +143,12 @@ const TEST_SERVICES: FakeService[] = [
   },
   /*
    * ケーブル (ISDB-C。種別 CATV) の局。**既定のチャンネルには入れない** (偽エージェントの `saved`)。
-   * 受けられる機材 (`it930x:`) で CATV を選び、スキャンしたときだけ入る (`65-catv.spec.ts`)。搬送波は 3 つ。
+   * 受けられる機材 (`it930x:`) で CATV を選び、スキャンしたときだけ入る (`65-catv.spec.ts`)。搬送波は 4 つ。
    * - QC20 … BS の再送信 (ネットワーク ID 4)。TSMF ではない搬送波
+   * - QC26 … BS4K の再送信 (TLV。ネットワーク ID 0x000B、tlv_stream_id 0xB111。実機の QC26 と同じ値)。CA_system_id は B-CAS と同じ 0x0005 でも
+   *   ACAS が要るので、denpa は復号できない局として扱う。番組表 (MH-EIT) は読めるので、番組表に「観られません」で出る
    * - QC30 … TSMF で TS を 2 つ束ねた搬送波 (`X-Denpa-Tsmf-Streams: 2`)。0 番目が地上波の再送信、1 番目 (`QC30:1`) が自主放送
-   * - QC40 … B-CAS 以外の CA_system_id (0x0006) だけでスクランブルした自主放送。denpa は復号できない局として扱う
+   * - QC40 … B-CAS 以外の CA_system_id (0x0006) だけでスクランブルした自主放送。番組表もスクランブルしているので、denpa は番組表にも出さない
    * 局の ID は `(0x10000 + network_id) * 100000 + service_id` (`server/tuner.ts`)。自主放送のネットワーク ID は作り物
    */
   {
@@ -152,6 +161,19 @@ const TEST_SERVICES: FakeService[] = [
     channel: "QC20",
     slotMs: 30 * 60_000,
     serviceType: 1,
+  },
+  {
+    id: (0x10000 + 0x000b) * 100000 + 161,
+    serviceId: 161,
+    networkId: 0x000b,
+    tsid: 0xb111,
+    name: "ＢＳでんぱ　４Ｋ",
+    type: "CATV",
+    channel: "QC26",
+    slotMs: 30 * 60_000,
+    serviceType: 1,
+    caSystemId: 0x0005,
+    transport: "tlv",
   },
   {
     id: (0x10000 + 0x7fe0) * 100000 + 1024,
@@ -190,7 +212,8 @@ const TEST_SERVICES: FakeService[] = [
   /*
    * スカパー！プレミアムサービス光 (J.83B) の局。**既定のチャンネルには入れない** (偽エージェントの `saved`)。
    * 受けられる機材 (`it930x:`) を足して SKY をスキャンしたときだけ入る (`64-sky.spec.ts`)。
-   * ネットワーク ID は実機のスカパー！プレミアムの 10。番組表は載せない (denpa は SKY の番組表を取得しない)
+   * ネットワーク ID は実機のスカパー！プレミアムの 10。番組は載せず、CA_system_id が B-CAS 以外 (作り物の 0x000B) なので番組表 (EIT) もスクランブルして流す
+   * (denpa は番組表を読めない局として扱い、番組表に出さない)
    */
   {
     id: 1000600,
@@ -224,3 +247,4 @@ export const CATV_BS = catv("QC20");
 export const CATV_GR = catv("QC30");
 export const CATV_OWN = catv("QC30:1");
 export const CATV_LOCKED = catv("QC40");
+export const CATV_4K = catv("QC26");

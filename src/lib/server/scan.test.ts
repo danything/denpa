@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { concatBytes } from "@danything/arib/bytes";
 import { EpgReader } from "@danything/arib/eit";
+import { MmtEpgReader } from "@danything/arib/mh-eit";
 import {
   eitSection,
   nitSection,
@@ -13,6 +14,7 @@ import {
 import {
   compressedIp,
   m2SectionMessage,
+  mhEitSection,
   mhSdtSection,
   mptTable,
   paMessage,
@@ -35,7 +37,11 @@ import {
   skyChannels,
   tsmfJobs,
 } from "./scan";
-import { type AgentChannel, decodableChannel } from "./tuner";
+import {
+  type AgentChannel,
+  epgReadableChannel,
+  serviceAbilities,
+} from "./tuner";
 
 /**
  * 総当たりそのもの (`Scanner`) はここでは試さない。**エージェントに選局を
@@ -393,6 +399,17 @@ describe("ケーブルの局", () => {
           [152, 0x01, "BS朝日2"],
         ]),
       ),
+      // 番組表 (EIT[p/f])。スクランブルされずに来たので、どちらの局も番組表を読める
+      ...packetize(
+        0x0012,
+        eitSection({
+          tableId: 0x4e,
+          serviceId: 152,
+          transportStreamId: 16400,
+          originalNetworkId: 4,
+          events: [],
+        }),
+      ),
     ]);
     const { services, error } = await readServices(
       fromBytes(data, true),
@@ -408,13 +425,24 @@ describe("ケーブルの局", () => {
       [151, 4],
       [152, 4],
     ]);
-    const entry = channelEntry("CATV", "QC30", services!, (id) =>
-      observer.caSystemIdsOf(id),
+    const entry = channelEntry(
+      "CATV",
+      "QC30",
+      services!,
+      (id) => observer.caSystemIdsOf(id),
+      "ts",
+      observer.result().epg === "readable",
     );
     expect(entry.networkId).toBe(4);
     expect(entry.services.map((s) => s.caSystemIds)).toEqual([
       [0x0005],
       [0x000a],
+    ]);
+    expect(entry.services.map((s) => s.epgReadable)).toEqual([true, true]);
+    // B-CAS 以外の方式の局 (152) は復号できないが、番組表は読めるので番組表に出す
+    expect(entry.services.map((s) => serviceAbilities(entry, s))).toEqual([
+      { decodable: true, epgReadable: true },
+      { decodable: false, epgReadable: true },
     ]);
   });
 
@@ -483,12 +511,34 @@ describe("ケーブルの 4K の局 (TLV)", () => {
       }),
     ),
   ]).map(ip);
+  /** 番組表 (MH-EIT の予定)。信号のメッセージで来て、スクランブルされない */
+  const eit = signalingPackets(0x8000, [
+    m2SectionMessage(
+      mhEitSection({
+        tableId: 0x8c,
+        serviceId: SERVICE,
+        tlvStreamId: TLV_STREAM,
+        originalNetworkId: ONID,
+        events: [
+          {
+            eventId: 1,
+            startAt: Date.UTC(2026, 10, 11, 10, 30),
+            duration: 60 * 60_000,
+            name: "4K のテスト番組",
+          },
+        ],
+      }),
+    ),
+  ]).map(ip);
 
-  test("TLV-NIT と MH-SDT で局が入り、MPT の CA_system_id 0x0005 の局は復号できない", async () => {
+  test("TLV-NIT と MH-SDT で局が入り、MPT の CA_system_id 0x0005 の局は復号できないが、番組表 (MH-EIT) は読める", async () => {
     const started = Bun.nanoseconds();
+    const epg = new MmtEpgReader();
     const result = await readTlvServices(
-      fromBytes(concatBytes([nit, ...plt, ...mpt, ...sdt]), true),
+      fromBytes(concatBytes([nit, ...plt, ...mpt, ...eit, ...sdt]), true),
       30_000,
+      undefined,
+      epg,
     );
     expect(result.error).toBeNull();
     // MPT まで揃ったら、局の情報を待つ上限まで読まずに打ち切る
@@ -499,6 +549,7 @@ describe("ケーブルの 4K の局 (TLV)", () => {
       result.services!,
       result.caSystemIdsOf,
       "tlv",
+      true,
     );
     expect(entry).toEqual({
       type: "CATV",
@@ -513,13 +564,26 @@ describe("ケーブルの 4K の局 (TLV)", () => {
           serviceType: 1,
           name: "ＢＳでんぱ　４Ｋ",
           caSystemIds: [0x0005],
+          epgReadable: true,
         },
       ],
     });
-    // 4K の局 (TLV) は、番組表・ライブ・録画にまだ対応していないので扱わない (B-CAS と同じ 0x0005 でも ACAS が要る)
-    expect(decodableChannel(entry)).toBe(false);
+    // 4K の局 (TLV) は、ライブと録画にまだ対応していないので復号できない (B-CAS と同じ 0x0005 でも ACAS が要る)。
+    // 番組表は読めるので、番組表の取得には行く
+    expect(serviceAbilities(entry, entry.services[0]!)).toEqual({
+      decodable: false,
+      epgReadable: true,
+    });
+    expect(epgReadableChannel(entry)).toBe(true);
     // TS の CATV の局なら、同じ CA_system_id で復号できる
-    expect(decodableChannel({ ...entry, transport: "ts" })).toBe(true);
+    expect(
+      serviceAbilities({ ...entry, transport: "ts" }, entry.services[0]!)
+        .decodable,
+    ).toBe(true);
+    // 同じストリームから番組表 (MH-EIT) も読める
+    expect(epg.all().map((event) => [event.serviceId, event.name])).toEqual([
+      [SERVICE, "4K のテスト番組"],
+    ]);
   });
 
   test("TS のチャンネルの控えには transport を書かない", () => {

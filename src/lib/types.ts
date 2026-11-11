@@ -24,9 +24,10 @@ export interface VideoLoss {
 }
 
 /**
- * 番組表のタブにいつも並べる種別とその順 (地上波・BS・CS)。CATV のタブは局があるときだけ足す (`guideTabs`)。
+ * 番組表のタブにいつも並べる種別とその順 (地上波・BS・CS)。CATV と SKY のタブは番組表に出す局があるときだけ足す (`guideTabs`)。
  * CATV (ケーブル) と SKY (スカパー！プレミアム) は、受信の設定では受けられる機材か選んだチューナーがあるときだけ並べる (`shownTypes`)。
- * SKY の局は復号できないので番組表とライブには出さない (`services.decodable`)。ルールの条件では局があれば選べる (`RuleDraft`)
+ * SKY の局は復号できないのでライブには出さず、番組表を読める局だけ番組表に出す (`services.epg_readable`)。
+ * ルールの条件では局があれば選べる (`RuleDraft`)
  */
 export const CHANNEL_TYPES: readonly ChannelType[] = ["GR", "BS", "CS"];
 
@@ -37,11 +38,11 @@ export const ALL_CHANNEL_TYPES: readonly ChannelType[] = [
   "SKY",
 ];
 
-/** 番組表を組める種別 (`/api/programs`・`/api/guide` の `type`)。SKY の局は復号できないので番組表を持たない */
-export const GUIDE_TYPES: readonly ChannelType[] = ["GR", "BS", "CS", "CATV"];
+/** 番組表を組める種別 (`/api/programs`・`/api/guide` の `type`)。全部の種別 */
+export const GUIDE_TYPES: readonly ChannelType[] = ALL_CHANNEL_TYPES;
 
 /**
- * 番組表のタブに並べる種別。**地上波・BS・CS はいつも、CATV は復号できる局があるときだけ** (`counts` は `server/epg.ts` の `serviceCounts`)。
+ * 番組表のタブに並べる種別。**地上波・BS・CS はいつも、CATV と SKY は番組表に出す局があるときだけ** (`counts` は `server/epg.ts` の `serviceCounts`)。
  * ケーブルを使わない家のタブは今までのまま。`current` (開いている種別) は局が無くてもタブに残す (選んでいるタブが消えない)
  */
 export function guideTabs(
@@ -89,8 +90,9 @@ export const DESCRAMBLABLE: Record<Transport, readonly number[]> = {
 };
 
 /**
- * 番組表の取得・ライブ・録画で読める伝送の形式。**TLV (4K の放送) はまだ読めない** (MMT の番組表・映像と音声の取り出しが無い)。
- * TLV の局は、スクランブルされていなくても `services.decodable` を落とし、TS として開かない。4K の番組表・ライブ・録画が入ったら `tlv` を足す
+ * ライブと録画で読める伝送の形式。**TLV (4K の放送) はまだ読めない** (映像と音声の取り出しが無い)。
+ * TLV の局は、スクランブルされていなくても `services.decodable` を落とし、TS として開かない。4K のライブと録画が入ったら `tlv` を足す。
+ * 番組表は TLV でも読む (`epgReadableService`。MH-EIT は `@danything/arib/mh-eit` で読む)
  */
 export const READABLE_TRANSPORTS: readonly Transport[] = ["ts"];
 
@@ -99,12 +101,12 @@ export const READABLE_TRANSPORTS: readonly Transport[] = ["ts"];
  *
  * - SKY (スカパー！プレミアム) は復号できない。B-CAS ではない専用のカードが要り、そのカードにまだ対応していない
  *   (エージェントもスクランブルされたまま流す。#1578)
- * - 番組表の取得・ライブ・録画で読めない伝送の形式 (TLV。`READABLE_TRANSPORTS`) の局は、CA_system_id によらず扱わない
+ * - ライブと録画で読めない伝送の形式 (TLV。`READABLE_TRANSPORTS`) の局は、CA_system_id によらず扱わない
  * - ほかは、CA_system_id が無い (スクランブルしていない) か、その伝送の形式の `DESCRAMBLABLE` にある CA_system_id があれば復号できる。
  *   CA_system_id はスキャンで PMT (TS) か MPT (TLV) を読んだ CATV の局だけが持ち (`caSystemIds`)、ほかの種別は空なので復号できる。
  *   ケーブルには B-CAS 以外の方式でスクランブルする局と、4K の局 (TLV。ACAS にまだ対応していない) がある
  *
- * 復号できない局は受信の設定の「受信できるチャンネル」にだけ出し、番組表・ライブ・ロゴは取得しない
+ * 復号できない局はライブ・録画・ロゴに使わない。番組表に出すかは別に決める (`epgReadableService`)
  */
 export function decodableService(
   type: ChannelType,
@@ -117,6 +119,25 @@ export function decodableService(
     (caSystemIds.length === 0 ||
       caSystemIds.some((id) => DESCRAMBLABLE[transport].includes(id)))
   );
+}
+
+/**
+ * 番組表を読める局か。**結果は局の行の `services.epg_readable` に入れて使い、番組表に出すのはこの局** (`epg.syncServices`)。
+ *
+ * 番組表の表は映像と別にスクランブルされるので、復号できない局でも読めることがある。種別ごとの例外は作らず、これ 1 つで決める。
+ *
+ * - 復号できる局 (`decodable`) はいつも読める
+ * - 復号できない局は、番組表の表がスクランブルされずに来るとスキャンが控えに書いた局 (`epgReadable`) だけ読める。
+ *   TLV (4K の放送) は MH-EIT が信号のメッセージで来てスクランブルされないので、いつも書く。
+ *   SKY と CATV の TS は、スキャンで EIT がスクランブルされずに来たときだけ書く (`server/ca-observe.ts`)
+ *
+ * 読めるが復号できない局は、番組表に「観られません」の列で出す。ルールは当てず、予約とライブは断る
+ */
+export function epgReadableService(
+  decodable: boolean,
+  epgReadable: boolean,
+): boolean {
+  return decodable || epgReadable;
 }
 
 /**
@@ -143,12 +164,12 @@ export function origin(networkId: number): Origin {
   return "CATV";
 }
 
-/** 復号できない局 (`services.decodable`) をライブで開こうとしたときの理由 */
+/** 復号できない局 (`services.decodable`) をライブで開こうとしたとき・予約しようとしたときの理由。番組表の詳細にも出す */
 export function undecodableReason(type: string, transport: Transport): string {
   if (type === "SKY")
     return "スカパー！プレミアムの局は、スクランブルを復号できないため観られません。スカパー！プレミアムのカードには、これから対応する予定です";
   if (!READABLE_TRANSPORTS.includes(transport))
-    return "ケーブルの 4K の局は、まだ番組表・ライブ・録画に対応していないため観られません";
+    return "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません";
   return "B-CAS 以外の方式でスクランブルされた局のため、復号できず観られません";
 }
 

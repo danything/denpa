@@ -13,6 +13,7 @@
  */
 
 import { EpgReader } from "@danything/arib/eit";
+import { MmtEpgReader } from "@danything/arib/mh-eit";
 import { ServiceReader } from "@danything/arib/psi";
 import { max } from "drizzle-orm";
 
@@ -36,11 +37,14 @@ import { chunks } from "./stream";
 import {
   type AgentChannel,
   type AgentTuner,
-  decodableChannel,
+  epgReadableChannel,
+  expectTransport,
   getChannels,
   getTuners,
-  openWhenFree,
+  openChannel,
+  retryWhileBusy,
   serviceKey,
+  TransportChangedError,
   TuneError,
   TunerBusyError,
 } from "./tuner";
@@ -269,11 +273,15 @@ async function collectChannel(
   failed: boolean;
   outcome: Outcome;
 }> {
-  const reader = new EpgReader(Date.now, {
-    other: whole !== null,
-    settle: config.epgSweepSettle,
-    expect: whole ?? [],
-  });
+  // TLV (4K の放送) の番組表は MH-EIT。読み方のほかは TS の EIT と同じ (`MmtEpgReader`)。TLV はケーブルだけなので全局読みは無い
+  const tlv = (channel.transport ?? "ts") === "tlv";
+  const reader = tlv
+    ? new MmtEpgReader(Date.now)
+    : new EpgReader(Date.now, {
+        other: whole !== null,
+        settle: config.epgSweepSettle,
+        expect: whole ?? [],
+      });
   const controller = new AbortController();
   /** 上限まで読んだか。開けたのに上限まで何も来なかったら、受信できなかったと数える (`reception.ts`) */
   let timedOut = false;
@@ -304,6 +312,8 @@ async function collectChannel(
   let busy = false;
   /** 開けたあと、こちらが閉じる前にストリームが切れたか */
   let cut = false;
+  /** 選局の答えの形式が控えの形式と違ったか (`TransportChangedError`) */
+  let changed = false;
   /*
    * **読みながら少しずつ保存する。** 揃うまで待ってからまとめて書くと、全局読みの
    * 数分のあいだ画面に何も出ない。今日・明日の番組は先に流れてくるので、開いて
@@ -330,24 +340,31 @@ async function collectChannel(
   };
   try {
     /*
-     * **空きが無ければ少し待って掛け直す** (`openWhenFree`)。前のチャンネルを閉じたことがエージェントに
-     * 届くのは非同期なので、閉じた直後に次を開くと、自分が使っていたチューナーがまだ塞がって見える
+     * **空きが無ければ少し待って掛け直す** (`retryWhileBusy`)。前のチャンネルを閉じたことがエージェントに
+     * 届くのは非同期なので、閉じた直後に次を開くと、自分が使っていたチューナーがまだ塞がって見える。
+     * **選局の答えの形式が控えと違えば読まない** (`expectTransport`)。TS の読み方で TLV を読んでも、その逆でも、何も取れない
      */
-    const stream = await openWhenFree(
-      channel.type,
-      channel.channel,
-      controller.signal,
-      `epg ${channel.channel}`,
-      // 押されている間は、開くたびに高い優先度で取る
-      boosted ? config.priority.epgNow : config.priority.epg,
-      () => controller.signal.aborted,
+    const stream = await expectTransport(
+      await retryWhileBusy(
+        () =>
+          openChannel(
+            channel.type,
+            channel.channel,
+            controller.signal,
+            `epg ${channel.channel}`,
+            // 押されている間は、開くたびに高い優先度で取る
+            boosted ? config.priority.epgNow : config.priority.epg,
+          ),
+        () => controller.signal.aborted,
+      ),
+      channel.transport ?? "ts",
     );
     opened = true;
     /*
      * **局の名前の幅も放送から取り直す** (`epg.widenServices`)。SDT は 1 秒足らずで来るので、
      * 読めたら手放す (その先のパケットまで 2 度パースしない)。来ないまま `SDT_LIMIT` を過ぎても手放す
      */
-    let sdt: ServiceReader | null = new ServiceReader();
+    let sdt: ServiceReader | null = tlv ? null : new ServiceReader();
     let sdtBytes = 0;
     /*
      * **衛星は放送の一覧 (NIT) も読み、変わっていればチャンネルを書き換える** (`lineup-follow.ts`)。
@@ -389,6 +406,7 @@ async function collectChannel(
     refused = error instanceof TuneError;
     busy = error instanceof TunerBusyError;
     cut = opened && !controller.signal.aborted;
+    changed = error instanceof TransportChangedError;
   } finally {
     clearTimeout(timer);
     controller.abort();
@@ -416,6 +434,11 @@ async function collectChannel(
   }
   // 地上波は外さずに知らせる (続けて選局できない・局の顔ぶれがスキャンの結果と違う)
   if (channel.type === "GR") alertGround();
+  /*
+   * 形式が控えと違った回も「行った」と覚える。スキャンし直すまで答えは変わらないので、周回のたびに選び直さない
+   * (電波は来ているので、受信できなかったとは数えない)
+   */
+  if (changed) collected.set(key(channel), Date.now());
 
   /*
    * **どれだけ使っていたかと、なぜ離したかを残す。**
@@ -789,8 +812,8 @@ async function run(): Promise<number> {
   // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
   syncServices(all);
   forgetGround(all);
-  // 復号できる局が 1 つも無いチャンネル (SKY など) は番組表を取得しない (`decodableChannel`。番組表とライブに出さないので要らない)
-  const channels = all.filter(decodableChannel);
+  // 番組表を読める局が 1 つも無いチャンネル (EIT がスクランブルされた SKY など) は番組表を取得しない (`epgReadableChannel`。番組表に出さないので要らない)
+  const channels = all.filter(epgReadableChannel);
   if (channels.length === 0) return 0;
 
   const reach = coverage();

@@ -892,12 +892,15 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   const at = now();
   // 録画のしかたは全体で 1 つ。ルールごとに持たせるとどこで決まったか分からなくなる
   const recording = settings();
-  // 種別でも絞り込めるよう、番組に局の種別と物理チャンネルを添えて取る
+  // 種別でも絞り込めるよう、番組に局の種別と物理チャンネルを添えて取る。
+  // 復号できるか (`services.decodable`) も添える。当てないのは下のループで、番組そのものは引く (下の `listed`。
+  // 局が復号できなくなったあとに残った予約を、条件から外れたものとして引っ込める)
   const programs = orm()
     .select({
       ...getTableColumns(programTable),
       service_type: services.type,
       channel: services.channel,
+      decodable: services.decodable,
     })
     .from(programTable)
     .innerJoin(services, eq(services.id, programTable.service_id))
@@ -934,6 +937,11 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   // 有料放送は契約中と確かめた局だけ当てる (`contracts.paidAllowed`)。当てはめ 1 回につき 1 回読む
   const paidOk = paidAllowed();
   for (const program of programs) {
+    /*
+     * **復号できない局の番組は当てない** (`services.decodable`)。番組表を読めて番組表に出ている局でも、
+     * 録ってもスクランブルのままで観られない
+     */
+    if (!program.decodable) continue;
     const textOf = textCache(program);
     // 先勝ちの持ち主のほかに、当たったルールを全部見る (下の dedupe / skip_earlier の対象)
     const matched = searching

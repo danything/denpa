@@ -7,7 +7,11 @@ import {
   NOT_CANCELABLE_REASON,
 } from "../format";
 import { parseId } from "../id";
-import type { Reservation, ReservationState } from "../types";
+import {
+  type Reservation,
+  type ReservationState,
+  undecodableReason,
+} from "../types";
 import { now, orm } from "./db";
 import { stopRecording } from "./recorder";
 import { resolveConflicts } from "./scheduler";
@@ -17,6 +21,7 @@ import {
   recordings,
   reservations,
   reservationState,
+  services,
 } from "./schema";
 import { settings } from "./settings";
 
@@ -53,6 +58,21 @@ export async function reserve(programId: number): Promise<Reservation> {
    * 予約を立てても「録画しない」になるだけで、押した人には録れたように見えてしまう
    */
   if (program.copy_never) throw new Error(COPY_NEVER_REASON);
+  /*
+   * **復号できない局の番組も録らない** (`services.decodable`)。番組表を読める局は番組表に出るが、録ってもスクランブルのままで観られない
+   * (局の行が無い番組は断らない。番組は局の行がある局にしか書かないので、ふつうは起きない)
+   */
+  const service = orm()
+    .select({
+      type: services.type,
+      transport: services.transport,
+      decodable: services.decodable,
+    })
+    .from(services)
+    .where(eq(services.id, program.service_id))
+    .get();
+  if (service !== undefined && !service.decodable)
+    throw new Error(undecodableReason(service.type, service.transport));
   // 手動で入れたものはルール由来 (既定 1) より上。**予約どうしだけの物差し**
   const priority = 2;
   // 録画のしかたは全体で 1 つ。「エンコードするか否か」だけ予約時に固定する。

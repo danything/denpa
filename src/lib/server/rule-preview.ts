@@ -60,12 +60,13 @@ const stillHeld = () =>
  * `earlier` は前の回 (先の回 `number` 話を録った・予約した。`episode.earlierAirings`)。
  * `copy-never` はコピー禁止の番組 (`format.COPY_NEVER_REASON`)。`declined` は人が取り消した放送
  * (ルールは立て直さない。`rules.canceledBroadcasts`)。`simulcast` は本チャンネルと同じ番組を流している
- * 枝番の局 (本チャンネルのほうを録る。`rules.oneBroadcast`)
+ * 枝番の局 (本チャンネルのほうを録る。`rules.oneBroadcast`)。`undecodable` は番組表に出ているが復号できない局
+ * (`services.decodable`。予約を立てるときも当てない。`rules.applyRules`)
  */
 type Skip =
   | { kind: "repeat" | "recorded"; service_name: string; start_at: number }
   | { kind: "earlier"; number: number }
-  | { kind: "copy-never" | "declined" | "simulcast" }
+  | { kind: "copy-never" | "declined" | "simulcast" | "undecodable" }
   | null;
 
 /**
@@ -265,6 +266,7 @@ async function countPreview(
     service_type: serviceTable.type,
     service_name: serviceTable.name,
     service_channel: serviceTable.channel,
+    service_decodable: serviceTable.decodable,
   };
   const all = orm()
     .select(select)
@@ -288,9 +290,9 @@ async function countPreview(
     declined.has({ ...p, channel: p.service_channel });
   /*
    * **同じ放送が枝番の局 (MX1 の 23608 / 23609) に載っていたら、小さいほうだけ録る** (`rules.oneBroadcast`。
-   * 予約を立てるときと同じく、取り消した放送を除いてから)。もう片方は「録らない」の行に出し、同じ回をまとめる相手にもしない
+   * 予約を立てるときと同じく、取り消した放送と復号できない局の番組を除いてから)。もう片方は「録らない」の行に出し、同じ回をまとめる相手にもしない
    */
-  const open = hits.filter((p) => !isDeclined(p));
+  const open = hits.filter((p) => p.service_decodable && !isDeclined(p));
   const kept = new Set(oneBroadcast(open, (p) => p.service_channel));
 
   /*
@@ -301,6 +303,8 @@ async function countPreview(
   const once = hits.filter((p) => kept.has(p));
   const skips = previewSkips(once, at, conditions);
   const skipOf = (p: (typeof hits)[number]): Skip => {
+    // 復号できない局は録らない。同じ回をまとめる相手にもしない (上の `open`)
+    if (!p.service_decodable) return { kind: "undecodable" };
     // コピー禁止の番組は録らない (`format.COPY_NEVER_REASON`)。手動でも同じ
     if (p.copy_never) return { kind: "copy-never" };
     if (isDeclined(p)) return { kind: "declined" };
