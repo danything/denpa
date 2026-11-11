@@ -5,7 +5,7 @@ namespace Denpa.Agent;
 ///
 /// <list type="bullet">
 /// <item>ペイロードの無いパケット (adaptation_field_control が 2) は数を進めないので、比べない</item>
-/// <item>同じ数の 2 回目は重送 (規格で 1 回まで許される) として飛びにしない</item>
+/// <item>前と同じ数は重送として飛びにしない (規格が許すのは 1 回までだが、何回続いても数えない)</item>
 /// <item>discontinuity_indicator が立っていれば、そこからやり直す</item>
 /// <item>NULL パケット (PID 0x1FFF) と、transport_error_indicator が 1 のパケットは見ない (PID も崩れているため)</item>
 /// </list>

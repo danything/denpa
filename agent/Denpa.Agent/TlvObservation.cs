@@ -51,14 +51,8 @@ public sealed class TlvObservation
     private string? _networkName;
     private (int Service, string Name)? _eitSample;
 
-    /// <summary>MH-EIT のセクション (CRC が合ったもの) の数</summary>
-    public long EitSections => _eit;
-
     /// <summary>MH-SDT のセクション (CRC が合ったもの) の数</summary>
-    public long SdtSections => _sdtActual + _sdtOther;
-
-    /// <summary>TLV-NIT のセクション (CRC が合ったもの) の数</summary>
-    public long NitSections => _nit;
+    private long SdtSections => _sdtActual + _sdtOther;
 
     /// <summary>MPT の package (MMT_package_id が 2 バイトならその値。service_id と同じ)。MPT が来ていなければ null</summary>
     public int? Package => _package;

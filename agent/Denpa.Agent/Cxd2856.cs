@@ -1403,67 +1403,36 @@ public sealed class Cxd2856Frontend
     /// ISDB-S のロックを待つ (仕様書 6.3)。10 ms ごとに読み、TS のロック (バンク <c>A0</c> の <c>12</c> の bit6) でロック、3 秒で時間切れ。
     /// ロックのあとに待ち足すのは ISDB-T だけ (仕様書 5.6) なので、ここでは待たない
     /// </summary>
-    private bool WaitIsdbs()
-    {
-        LockMs = -1;
-        var started = _nowMs();
-        while (true)
-        {
-            byte[] status;
-            lock (_busLock) status = _demod.IsdbsStatus();
-            var elapsed = _nowMs() - started;
-            if (Cxd2856.IsdbsLocked(status))
-            {
-                LockMs = elapsed;
-                return true;
-            }
-            if (elapsed >= IsdbsLockTimeoutMs) return false;
-            _sleep(LockPollMs);
-        }
-    }
+    private bool WaitIsdbs() => WaitLock(() => Cxd2856.IsdbsLocked(_demod.IsdbsStatus()), IsdbsLockTimeoutMs);
 
     /// <summary>
     /// J.83B のロックを待つ (仕様書 7.5)。10 ms ごとに読み、復調のロック (バンク <c>40</c> の <c>88</c> の bit0) と TS のロック (<c>10</c> の bit5) がどちらも立てばロック、1 秒で時間切れ。
     /// ロックのあとに待ち足すのは ISDB-T だけ (仕様書 5.6) なので、ここでは待たない
     /// </summary>
-    private bool WaitJ83b()
-    {
-        LockMs = -1;
-        var started = _nowMs();
-        while (true)
-        {
-            (byte Search, byte Ts) status;
-            lock (_busLock) status = _demod.J83bStatus();
-            var elapsed = _nowMs() - started;
-            if (Cxd2856.J83bLocked(status))
-            {
-                LockMs = elapsed;
-                return true;
-            }
-            if (elapsed >= J83bLockTimeoutMs) return false;
-            _sleep(LockPollMs);
-        }
-    }
+    private bool WaitJ83b() => WaitLock(() => Cxd2856.J83bLocked(_demod.J83bStatus()), J83bLockTimeoutMs);
 
     /// <summary>
     /// ISDB-C のロックを待つ (仕様書 7A.6)。J.83B と同じレジスタを 10 ms ごとに読み、復調のロック (バンク <c>40</c> の <c>88</c> の bit0) と TS のロック (<c>10</c> の bit5) がどちらも立てばロック、1 秒で時間切れ。
     /// ロックのあとの待ちは無い (仕様書 7A.6)
     /// </summary>
-    private bool WaitIsdbc()
+    private bool WaitIsdbc() => WaitLock(() => Cxd2856.J83bLocked(_demod.IsdbcStatus()), IsdbcLockTimeoutMs);
+
+    /// <summary><paramref name="locked"/> が true を返すまで <see cref="LockPollMs"/> ごとに読む。<paramref name="timeoutMs"/> を過ぎたら false。読むのはバスのロックの中</summary>
+    private bool WaitLock(Func<bool> locked, int timeoutMs)
     {
         LockMs = -1;
         var started = _nowMs();
         while (true)
         {
-            (byte Search, byte Ts) status;
-            lock (_busLock) status = _demod.IsdbcStatus();
+            bool done;
+            lock (_busLock) done = locked();
             var elapsed = _nowMs() - started;
-            if (Cxd2856.J83bLocked(status))
+            if (done)
             {
                 LockMs = elapsed;
                 return true;
             }
-            if (elapsed >= IsdbcLockTimeoutMs) return false;
+            if (elapsed >= timeoutMs) return false;
             _sleep(LockPollMs);
         }
     }

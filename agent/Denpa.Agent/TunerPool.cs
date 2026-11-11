@@ -790,7 +790,7 @@ public sealed class TunerPool(
     {
         get
         {
-            lock (_gate) return _leases.Values.Any(lease => lease.Sinks.Any(sink => sink.Use == "rec" || sink.Use.StartsWith("rec ", StringComparison.Ordinal)));
+            lock (_gate) return _leases.Values.Any(lease => lease.Sinks.Any(sink => sink.Use.StartsWith("rec ", StringComparison.Ordinal)));
         }
     }
 

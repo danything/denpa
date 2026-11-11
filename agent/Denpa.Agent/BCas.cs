@@ -124,7 +124,14 @@ public sealed class BCas : IKeySource, IDisposable
     {
         lock (_gate)
         {
-            if (_disposed || _link is null || !names.Contains(_link.Name)) return;
+            if (_disposed) return;
+            // 繋ぎ直しに失敗したあとなら、その記録を消して次の ECM ですぐ探し直す (壊れたリーダーを外したばかりかもしれない)
+            if (_link is null)
+            {
+                _failed = null;
+                return;
+            }
+            if (!names.Contains(_link.Name)) return;
             var was = _link.Name;
             Drop();
             _failed = null;
@@ -180,7 +187,7 @@ public sealed class BCas : IKeySource, IDisposable
     public EcmAnswer Ecm(ReadOnlySpan<byte> ecm)
     {
         // Lc は 1 バイト。**切り詰めて送ると別の ECM になる**ので、送らずに断る
-        if (ecm.Length is < 1 or > 255) throw new IOException($"ECM の長さがおかしいです ({ecm.Length} バイト)");
+        if (ecm.Length is < 1 or > CardWire.MaxEcm) throw new IOException($"ECM の長さがおかしいです ({ecm.Length} バイト)");
 
         var name = Convert.ToBase64String(ecm);
         if (Cached(name) is { } hit) return hit with { Cached = true };

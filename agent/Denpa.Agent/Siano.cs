@@ -294,7 +294,7 @@ public sealed class SianoTuner : ITuneDevice
     /// <summary>選局を指示する 1 行。周波数は選局表の Hz のまま (地上波の表は Hz)</summary>
     public static string TuneCommand(ChannelTable.Tuning tuning)
     {
-        if (tuning.Satellite) throw new IOException($"Siano の機材は地上波だけです ({tuning.Type} は受けられません)");
+        if (tuning.Delivery != ChannelTable.SysIsdbt) throw new IOException($"Siano の機材は地上波だけです ({tuning.Type} は受けられません)");
         return $"tune {tuning.Frequency}";
     }
 

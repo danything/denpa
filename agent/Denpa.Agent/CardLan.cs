@@ -79,7 +79,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         var networks = DefaultNetworks;
         if (Given(env("CARD_SHARE_NETWORKS")) is { } networksText)
         {
-            networks = [.. networksText.Split([',', ' ', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(Network)];
+            networks = [.. networksText.Split([',', ' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(Network)];
             if (networks.Count == 0) throw new ArgumentException("CARD_SHARE_NETWORKS に範囲が 1 つもありません");
             // IPNetwork は struct なので、FirstOrDefault では「無い」が 0.0.0.0/0 になる。null にできる形で探す
             if (networks.Where(network => !Inside(network)).Cast<IPNetwork?>().FirstOrDefault() is { } outside)

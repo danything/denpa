@@ -100,6 +100,7 @@ if (args.Length > 0)
     Console.Error.WriteLine($"       {Probe.CardUsage}");
     Console.Error.WriteLine($"       {Dt295NativeProbe.Usage}");
     Console.Error.WriteLine($"       {It930xProbe.Usage}");
+    Console.Error.WriteLine($"       {It930xProbe.CycleUsage}");
     return 2;
 }
 
@@ -583,7 +584,8 @@ app.MapPut("/denpa/channels", async (HttpContext http) =>
 
 // --- カードとスクランブルの復号 -------------------------------------------
 /*
- * 鍵を配る API そのもの (/denpa/card/init・/denpa/card/ecm) は、このポートには無い (CardShareServer.cs)
+ * 鍵を配る API (/denpa/card/init・/denpa/card/ecm・/denpa/card/emm と、バイト列で受ける /denpa/card/confirm) は、
+ * このポートには無い (CardShareServer.cs)。ここの /denpa/card/confirm は自分の denpa が JSON で呼ぶもの
  */
 app.MapGet("/denpa/card", async (HttpContext http) =>
 {
@@ -646,7 +648,7 @@ app.MapPost("/denpa/card/confirm", async (HttpContext http) =>
     {
     }
     var date = body?["date"] is JsonValue value && value.TryGetValue<int>(out var mjd) ? mjd : -1;
-    if (verification is not { Length: >= 1 and <= 253 } || date is < 0 or > 65535)
+    if (verification is not { Length: >= 1 and <= CardWire.MaxVerification } || date is < 0 or > 65535)
     {
         await Respond.Error(http, "verification (Base64 で 1〜253 バイト) と date (MJD) が必要です", 400);
         return;

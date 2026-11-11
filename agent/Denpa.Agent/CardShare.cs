@@ -283,10 +283,13 @@ public static class CardWire
     /// <summary>配る側が受け取る ECM の上限 (バイト。CardShareServer.cs)。カードに渡す APDU の Lc が 1 バイトなので 255 (<see cref="BCas.Ecm"/>)</summary>
     internal const int MaxEcm = 255;
 
+    /// <summary>契約確認データの上限 (バイト)。前に MJD の 2 バイトを付けて、APDU の Lc の 1 バイトに収める</summary>
+    internal const int MaxVerification = 253;
+
     /// <summary>契約確認データの長さを確かめる (1〜253 バイト。<see cref="BCas.Confirm"/> と配る側に渡す前で同じ)</summary>
     internal static void CheckConfirm(ReadOnlySpan<byte> verificationData)
     {
-        if (verificationData.Length is < 1 or > 253)
+        if (verificationData.Length is < 1 or > MaxVerification)
         {
             throw new IOException($"契約確認データの長さがおかしいです ({verificationData.Length} バイト)");
         }

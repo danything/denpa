@@ -70,11 +70,14 @@ public static class ChannelTable
         public bool IsdbC => Delivery == SysIsdbc;
     }
 
+    /// <summary>地上波とケーブルの周波数 (Hz) を、復調器やチューナーに渡す kHz に丸める (衛星の周波数ははじめから kHz)</summary>
+    public static uint Khz(uint hertz) => (uint)((hertz + 500UL) / 1000);
+
     /// <summary>
     /// チャンネル名を読む。**読めなければ null。**
     ///
     /// <para>
-    /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (CATV) / <c>BS01</c>–<c>BS23</c> / <c>CS02</c>–<c>CS24</c> /
+    /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (ケーブルテレビのパススルー。種別は GR) / <c>BS01</c>–<c>BS23</c> / <c>CS02</c>–<c>CS24</c> /
     /// <c>H01</c>–<c>H105</c> (スカパー！プレミアムサービス光。J.83B) /
     /// <c>QC13</c>–<c>QC63</c>・<c>QU13</c>–<c>QU62</c>・<c>QV1</c>–<c>QV12</c> (ISDB-C。種別 <c>CATV</c>。CATV・UHF・VHF の帯域)。
     /// ISDB-C は <c>:k</c> を付けて TSMF の TS を指す (<c>QC30:2</c>。有効な TS の 0〜14 本目)。付けなければ 0 本目。

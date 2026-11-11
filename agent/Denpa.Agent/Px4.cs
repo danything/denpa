@@ -596,7 +596,7 @@ public static class Px4Userland
     ];
 
     /// <summary>
-    /// 受信機ごとの注意書き (<c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> → 文)。選局は通るが設定どおりには
+    /// チューナーごとの注意書き (設定の device → 文。<c>px4:&lt;番号&gt;:&lt;受信機&gt;</c> と、開けなかった理由を入れる <c>dt295:&lt;ポート&gt;</c>)。選局は通るが設定どおりには
     /// 動いていないこと (15V を出せない受信機で 0V にした、など。<see cref="Px4Tuner.Lnb"/>) を
     /// チューナー画面に出す (<see cref="TunerPool.Status"/> の <c>error</c>)
     /// </summary>
@@ -980,7 +980,7 @@ public sealed class Px4Daemon(string id) : UserlandDaemon("px4d", id)
     {
         if (Running) return;
         /*
-         * ***15V を出せるかは起動する前に一覧で問い合わせておく。** px4ctl list (LIST) には載らない。
+         * **15V を出せるかは起動する前に一覧で問い合わせておく。** px4ctl list (LIST) には載らない。
          * 一覧は筐体を開かないが、起動したあとだと OS によっては開けない。ロックの外で問い合わせる。
          * 一覧は最悪 15 秒待つので、ロックの中だとその間 Dispose も選局も待たされる。
          * 使えない筐体の理由は Detect が残すので、ここでは記録しない

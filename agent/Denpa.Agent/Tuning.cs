@@ -15,7 +15,7 @@ namespace Denpa.Agent;
 /// </para>
 ///
 /// <para>
-/// 方式は 5 つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
+/// 方式は 6 つある。どれも「開く → 選局 → 流し始める → 読む → 選局し直す」で、
 /// 違うのは誰がデバイスを持っているか。
 /// </para>
 ///
@@ -25,6 +25,7 @@ namespace Denpa.Agent;
 /// <item><see cref="SianoTuner"/> … siano-userland の機材 (PX-S1UD などをカーネルに使わせていないとき)。<c>siano-ts</c> を起動したまま標準入力で選局し直す (Siano.cs)</item>
 /// <item><see cref="Zd1jTuner"/> … Sony CECH-ZD1 J。エージェントが USB を直に持ち、ボードを開いたまま周波数まわりだけ書き換える (Zd1j.cs)</item>
 /// <item><see cref="Dt295NativeTuner"/> … PIXELA PIX-DT295。エージェントが USB を直に持ち、機材を初めての選局で開いたまま選局し直す (Dt295NativeTuner.cs)</item>
+/// <item><see cref="It930xTuner"/> … IT930x の機材 (PX-MLT5PE など)。エージェントが USB を直に持ち、機材を初めての選局で開いたまま受信機ごとに選局し直す (It930xDevice.cs)</item>
 /// </list>
 ///
 /// <para>
@@ -146,7 +147,7 @@ internal static unsafe partial class Sys
 
 /// <summary>
 /// 機材から読んだ TS を読む側 (<see cref="TunerPool"/>) へ渡すバッファ。px4d・asicend (<see cref="Px4Stream"/>)、CECH-ZD1 J (<c>Zd1jStream</c>)、
-/// PIX-DT295 (<see cref="Dt295NativeStream"/>) の TS のストリームが使う。OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った)
+/// PIX-DT295 (<see cref="Dt295NativeStream"/>)、IT930x (<see cref="It930xTsOutput"/>) の TS のストリームが使う。OS の pipe は使わない (Windows に poll が無く、深さも OS ごとに違った)
 /// </summary>
 internal static class TsBuffer
 {
@@ -218,7 +219,7 @@ internal static class TsBuffer
 /// <para>
 /// **Windows には poll が無い。** 子 (siano-ts) の標準出力の pipe は .NET の <see cref="Stream"/> を
 /// 裏のスレッドに読ませ、こちらは同じく 200ms ごとに印を確かめる (<see cref="Background"/>)。
-/// px4d・CECH-ZD1 J・DT295 から受けた TS はどの OS でも fd を使わない (<see cref="Piped"/>)。
+/// px4d・CECH-ZD1 J・DT295・IT930x から受けた TS はどの OS でも fd を使わない (<see cref="Piped"/>)。
 /// </para>
 /// </summary>
 /// <param name="handle">読む fd。DVB の dvr でも、子プロセスの標準出力の pipe でも同じ</param>
@@ -245,7 +246,7 @@ internal sealed unsafe class DeviceStream(SafeFileHandle handle, Func<string?>? 
     /// <summary>Pipe に詰めた TS の読み出し側 (<see cref="Piped"/>)。あれば fd は使わない</summary>
     private readonly Piped? _piped;
 
-    /// <summary>Pipe に詰めた TS (Px4Stream・Zd1jStream・Dt295NativeStream) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
+    /// <summary>Pipe に詰めた TS (Px4Stream・Zd1jStream・Dt295NativeStream・It930xTsOutput) を読む部分。fd は無いので、空の (無効な) ハンドルを持たせておく</summary>
     public DeviceStream(PipeReader reader, Func<string?>? ended = null)
         : this(new SafeFileHandle(), ended) => _piped = new Piped(reader);
 
