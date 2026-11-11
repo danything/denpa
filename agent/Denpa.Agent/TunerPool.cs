@@ -187,8 +187,13 @@ public sealed class TunerPool(
     /// docs/agent.md「デバッグ用の名指し」)。受けられない種別・無効のとき、別のチャンネルを同じか優先度の高い利用者が読んでいるときは、ほかへ振り替えずに断る。
     /// 同じチャンネルをほかのチューナーが読んでいても共有せず、指定のチューナーで選局する
     /// </para>
+    ///
+    /// <para>
+    /// **<paramref name="service"/> は観る局 (program_number)。** 選局の先頭で、その局の PMT と ECM の答えがそろえば流し始める (<see cref="Sink.Service"/>)。
+    /// チューナーの選び方と共有には使わない
+    /// </para>
     /// </summary>
-    public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null, string? pin = null)
+    public Sink Open(string type, string channel, int priority, string use, IReadOnlySet<string>? after = null, string? pin = null, int? service = null)
     {
         int index;
         TunerSpec spec;
@@ -212,7 +217,7 @@ public sealed class TunerPool(
                     if (open.Type != type || open.Channel != channel) continue;
                     bool strong;
                     lock (open.Sinks) strong = open.Sinks.Any(sink => !after.Contains(sink.Use) && sink.Priority >= priority);
-                    if (strong) return Join(open, priority, use);
+                    if (strong) return Join(open, priority, use, service);
                 }
             }
 
@@ -234,7 +239,7 @@ public sealed class TunerPool(
                 // 同じチャンネルなら、選局し直さずにそのまま共有する (余韻ならそのまま使い回し、優先度の低い利用者も残す)
                 if (victim.Type == type && victim.Channel == channel)
                 {
-                    return Join(victim, priority, use);
+                    return Join(victim, priority, use, service);
                 }
                 // 取り上げる相手がいれば先に片付ける。同じチューナーを 2 つの選局が使わないように。
                 // 誰に譲ったかを理由に入れる (記録から、取り上げたのが録画か番組表の取得かを追えるように。#1939)
@@ -251,7 +256,7 @@ public sealed class TunerPool(
              * 入れないまま放すと `Pick` に「誰も読んでいないチューナー」と見えて、
              * まだ選局している最中のチューナーを次の要求が持っていく
              */
-            sink = Join(lease, priority, use);
+            sink = Join(lease, priority, use, service);
         }
 
         /*
@@ -464,7 +469,7 @@ public sealed class TunerPool(
         onChange();
     }
 
-    private Sink Join(Lease lease, int priority, string use)
+    private Sink Join(Lease lease, int priority, string use, int? service)
     {
         lease.CancelLinger();
         var sink = new Sink(use, priority, leaving =>
@@ -481,6 +486,7 @@ public sealed class TunerPool(
         })
         {
             Owner = lease,
+            Service = service,
         };
         lock (lease.Sinks) lease.Sinks.Add(sink);
         // 溢れの報告に名前を残す。**抜けたあとに報告が回っても名乗れるように**
@@ -838,6 +844,12 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
     /// </summary>
     public bool WantsKeys { get; } = !KeylessUses.Contains(use.Split(' ', 2)[0]);
 
+    /// <summary>
+    /// **観る局 (program_number)。** ライブのように 1 局だけを観る利用者が <c>/denpa/stream</c> の <c>service</c> で渡す。
+    /// 選局の先頭で溜めるのをやめる前に、この局の PMT と ECM の答えだけをそろえる (<see cref="Descrambler"/>)。null は TS をまるごと使う (録画)
+    /// </summary>
+    public int? Service { get; init; }
+
     /// <summary>鍵の要らない利用者の名乗り (denpa の <c>StreamUse</c>)</summary>
     private static readonly HashSet<string> KeylessUses = ["epg", "logo", "scan"];
 
@@ -1047,6 +1059,26 @@ internal sealed class Lease(int tuner, string type, string channel)
         lock (Sinks) return Sinks.Count == 0 ? null : Sinks.Any(sink => sink.WantsKeys);
     }
 
+    /// <summary>
+    /// 先頭で溜めるのをやめる前にそろえる局 (<see cref="Sink.Service"/>)。**利用者どうしでいちばん厳しい条件に合わせる。**
+    /// 鍵の要る利用者に局を決めない者 (録画) が 1 人でもいれば null (全部の局)、みな局を決めていればその局を全部。
+    /// 鍵の要る利用者がいなければ null (溜めないので使わない)
+    /// </summary>
+    internal IReadOnlySet<int>? Services()
+    {
+        lock (Sinks)
+        {
+            HashSet<int>? services = null;
+            foreach (var sink in Sinks)
+            {
+                if (!sink.WantsKeys) continue;
+                if (sink.Service is not { } service) return null;
+                (services ??= []).Add(service);
+            }
+            return services;
+        }
+    }
+
     /// <summary>読み出し。読んだぶんを写してキューへ入れる。終わったらキューを閉じる</summary>
     private void Read(ITuneDevice tuner, ChannelWriter<(byte[] Rented, int Length)> queue)
     {
@@ -1108,7 +1140,7 @@ internal sealed class Lease(int tuner, string type, string channel)
         var undecoded = Type == ChannelTable.Sky ? "スカパー！プレミアム"
             : Format == StreamFormat.Tlv ? "4K。ACAS には対応していません"
             : null;
-        var b25 = undecoded is null ? new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared) : null;
+        var b25 = undecoded is null ? new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared, Services) : null;
         _descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         var pushed = false;

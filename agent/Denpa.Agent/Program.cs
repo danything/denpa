@@ -352,11 +352,22 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     var after = query["after"].Where(value => !string.IsNullOrEmpty(value)).Select(value => value!).ToHashSet();
     // デバッグ用の名指し。指定のデバイスのチューナーだけで選局する (TunerPool.Open の pin)
     var pin = query["tuner"].ToString() is { Length: > 0 } pinned ? pinned : null;
+    // 観る局 (program_number)。先頭で溜めるのをやめる前に、この局の PMT と ECM の答えだけをそろえる (Sink.Service)。無ければ全部の局を待つ
+    int? service = null;
+    if (query["service"].ToString() is { Length: > 0 } numbered)
+    {
+        if (!int.TryParse(numbered, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) || number is < 1 or > 0xFFFF)
+        {
+            await Respond.Error(http, "service は 1〜65535 の番組番号です", 400);
+            return;
+        }
+        service = number;
+    }
 
     Sink sink;
     try
     {
-        sink = pool.Open(type, channel, priority, use, after, pin);
+        sink = pool.Open(type, channel, priority, use, after, pin, service);
     }
     catch (TunerPool.TunerPinException error)
     {

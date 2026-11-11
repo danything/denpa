@@ -429,6 +429,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     ticket?: number | "page";
     open?: number;
     tuned?: number;
+    /** `tuned` のあとで、元の TS の最初の塊が届いた (前の局の残りを数えない) */
     bytes?: number;
   } | null = null;
   /** 段を動かした断り書きを引っ込める時計 (`act`) */
@@ -2460,7 +2461,12 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       // 元の TS。写さずに worker へ移す (`RawEngine.feed`。先頭の 9 バイトは種別と時刻)
       if (kind === CHANNEL.rawTs) {
         arrived();
-        if (startup !== null) startup.bytes ??= performance.now() - startup.at;
+        /*
+         * **`tuned` より前に届いたものは前の局の残りなので数えない。** 繋がっている接続で局を替えると、サーバは `tuned` を
+         * 新しい局のデータより先に送る。数えていた頃は、前の局の残りで 6〜10ms と出ていた
+         */
+        if (startup?.tuned !== undefined)
+          startup.bytes ??= performance.now() - startup.at;
         // 届く間隔は数えない (`arrive`)。元の TS はチューナーから読めたぶんずつ来るので、塊の間合いが決まっていない
         engine?.feed(data, 9);
         return;

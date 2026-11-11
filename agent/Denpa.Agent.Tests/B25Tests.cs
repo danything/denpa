@@ -811,6 +811,103 @@ public class B25Tests
     }
 
     /// <summary>
+    /// 観る局 (0x0400) の PMT と ECM が来たところまでと、そのあとに来るほかの局 (0x0401) の PMT・ECM・ES。
+    /// ほかの局の ES は、その PMT より前に 2 つ流れている
+    /// </summary>
+    private static (Ts Head, Ts Tail) TwoPrograms()
+    {
+        var head = new Ts()
+            .Pat((0x0400, PmtPid), (0x0401, OtherPmt))
+            .Pmt(PmtPid, 0x0400, Ca(EcmPid), (VideoPid, []))
+            .Ecm(EcmPid, 1).Videos(3, 1)
+            .Payload(OtherVideo, 9).Payload(OtherVideo, 9);
+        var rest = new Ts()
+            .Pmt(OtherPmt, 0x0401, Ca(OtherEcm), (OtherVideo, []))
+            .Ecm(OtherEcm, 9).Payload(OtherVideo, 9).Videos(2, 1);
+        return (head, rest);
+    }
+
+    private const int OtherPmt = 0x0102, OtherVideo = 0x0121, OtherEcm = 0x0902;
+
+    /// <summary><paramref name="pid"/> のパケットを抜いた TS</summary>
+    private static byte[] Without(byte[] ts, int pid) =>
+        ts.Chunk(188).Where(packet => (((packet[1] & 0x1F) << 8) | packet[2]) != pid).SelectMany(packet => packet).ToArray();
+
+    /// <summary>
+    /// **観る局が決まっていれば、その局の PMT と ECM の答えがそろった時点で、ほかの局の PMT を待たずに流し始める** (ライブ)。
+    /// 本番 (2026-11-11、地上波の局の切り替え) では、ほかの局の PMT を待つぶん、送り出しが 170〜300ms 遅れていた。
+    /// ほかの局の ES は、その PMT と ECM の答えが来るまで捨て、来たあとは復号して流す
+    /// </summary>
+    [Test]
+    public async Task 観る局の_PMT_と_ECM_がそろえばほかの局の_PMT_を待たない()
+    {
+        var (head, rest) = TwoPrograms();
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards, services: () => new HashSet<int> { 0x0400 });
+        var output = new ArrayBufferWriter<byte>();
+
+        descrambler.Decode(head.Wire.ToArray(), output);
+
+        // ほかの局の PMT が来る前に、観る局は復号して流れている。ほかの局の ES (鍵を持てない) は捨てた
+        await Assert.That(Diff(output.WrittenSpan.ToArray(), Without(Expected(head), OtherVideo))).IsEqualTo(-1);
+        await Assert.That(descrambler.HeldAt()).Contains("(局 1024)");
+
+        output.ResetWrittenCount();
+        descrambler.Decode(rest.Wire.ToArray(), output);
+        descrambler.Flush(output);
+
+        // ほかの局も、PMT と ECM の答えが来たあとは復号して流す
+        await Assert.That(Diff(output.WrittenSpan.ToArray(), Expected(rest))).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+        await Assert.That(Generations(cards)).IsEqualTo("1,9");
+    }
+
+    /// <summary>**局を決めない利用者 (録画) は、今までどおり PAT の全部の局の PMT と ECM を待つ。** TS をまるごと残すので、先頭も全部の局を復号する</summary>
+    [Test]
+    public async Task 局を決めなければ全部の局の_PMT_を待つ()
+    {
+        var (head, rest) = TwoPrograms();
+        var descrambler = new Descrambler(new Cards());
+        var output = new ArrayBufferWriter<byte>();
+
+        descrambler.Decode(head.Wire.ToArray(), output);
+        await Assert.That(output.WrittenCount).IsEqualTo(0);
+
+        descrambler.Decode(rest.Wire.ToArray(), output);
+        descrambler.Flush(output);
+
+        await Assert.That(Diff(output.WrittenSpan.ToArray(), [.. Expected(head), .. Expected(rest)])).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+        await Assert.That(descrambler.HeldAt()).DoesNotContain("(局");
+    }
+
+    /// <summary>
+    /// **溜めている間に局を決めない利用者 (録画) が共有に入ったら、全部の局を待つ** (いちばん厳しい条件に合わせる)。
+    /// PAT に無い局を渡されたときも全部を待つ
+    /// </summary>
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task 局を決めない利用者が入るか_PAT_に無い局なら全部を待つ(bool unknown)
+    {
+        var (head, rest) = TwoPrograms();
+        IReadOnlySet<int>? services = new HashSet<int> { unknown ? 0x0999 : 0x0400 };
+        var descrambler = new Descrambler(new Cards(), services: () => services);
+        var output = new ArrayBufferWriter<byte>();
+        var wire = head.Wire.ToArray();
+
+        // PAT と観る局の PMT (ECM の前) まで読んだところで、局を決めない利用者が入る
+        descrambler.Decode(wire.AsSpan(0, 2 * 188), output);
+        if (!unknown) services = null;
+        descrambler.Decode(wire.AsSpan(2 * 188), output);
+        await Assert.That(output.WrittenCount).IsEqualTo(0);
+
+        descrambler.Decode(rest.Wire.ToArray(), output);
+        descrambler.Flush(output);
+        await Assert.That(Diff(output.WrittenSpan.ToArray(), [.. Expected(head), .. Expected(rest)])).IsEqualTo(-1);
+    }
+
+    /// <summary>
     /// **PMT を待つ間に ECM が変わったら、新しい鍵で復号するのは新しい ECM を挟んで続く偶奇の並びだけ。**
     /// その前の並びは前の鍵で、新しい鍵で復号すると化けたものを「復号できた」として流す
     /// </summary>

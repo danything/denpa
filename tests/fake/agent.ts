@@ -298,13 +298,15 @@ const leases = new Map<number, Lease>();
  *
  * 使っている最中の見た目は一瞬で消える (偽エージェントは本物より速い) ので、
  * 「その優先度で取得した」ことを試験から確かめるには記録が要る
- * (`16-scan.spec.ts`)。溜め続けないよう直近だけ持つ
+ * (`16-scan.spec.ts`)。観る局 (`service`) を渡したかも残す (`65-catv.spec.ts`)。溜め続けないよう直近だけ持つ
  */
 const opens: {
   use: string;
   priority: number;
   type: string;
   channel: string;
+  /** 観る局 (`/denpa/stream` の `service`)。渡さなければ null */
+  service: number | null;
 }[] = [];
 const OPENS_KEEP = 200;
 
@@ -474,6 +476,17 @@ function openStream(url: URL, signal: AbortSignal): Response {
   const after = new Set(url.searchParams.getAll("after"));
   if (type === "" || channel === "")
     return json({ error: "type と channel が必要です" }, 400);
+  /*
+   * 観る局 (program_number)。本物はこの局の PMT と鍵がそろえば流し始める (B25.cs の Descrambler)。偽の放送は
+   * スクランブルしないので待たない。断り方だけ本物とそろえ、渡されたかを記録に残す
+   */
+  const numbered = url.searchParams.get("service");
+  const service = numbered === null || numbered === "" ? null : numbered;
+  if (
+    service !== null &&
+    (!/^\d+$/.test(service) || Number(service) < 1 || Number(service) > 0xffff)
+  )
+    return json({ error: "service は 1〜65535 の番組番号です" }, 400);
   const services = on(type, channel);
 
   // 優先度が自分と同じか高い利用者が同じチャンネルを読んでいれば選局を共有 (約束の 3)。無ければ選ぶ
@@ -510,7 +523,13 @@ function openStream(url: URL, signal: AbortSignal): Response {
   const kick = new AbortController();
   kicks.set(user, kick);
   lease.users.push(user);
-  opens.push({ use, priority, type, channel });
+  opens.push({
+    use,
+    priority,
+    type,
+    channel,
+    service: service === null ? null : Number(service),
+  });
   if (opens.length > OPENS_KEEP) opens.shift();
   emit("tuners");
 
