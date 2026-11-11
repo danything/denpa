@@ -34,8 +34,9 @@ FROM ${DENPA}
 COPY --from=ssl / /
 COPY --from=agent /usr/local/bin/denpa-agent /usr/local/bin/denpa-agent
 COPY --from=agent /opt/px4-userland /opt/px4-userland
-# エージェントに埋め込んだ Siano のファームウェアの許諾の文面 (agent/Dockerfile)
-COPY --from=agent /usr/share/doc/denpa-agent /usr/share/doc/denpa-agent
+# エージェントに埋め込んだ Siano のファームウェアの許諾の文面 (agent/Dockerfile と同じ場所に置く)。
+# エージェントのイメージからは写さない (PR の確認は main で組んだエージェントのイメージを使うので、足したばかりのファイルが無いことがある)
+COPY agent/Denpa.Agent/firmware/LICENCE.siano /usr/share/doc/denpa-agent/LICENCE.siano
 COPY --from=agent /opt/asicen-userland /opt/asicen-userland
 COPY .github/aio-entrypoint.ts /usr/local/lib/denpa-aio.ts
 # エージェントは同じコンテナの中。元の TS の置き場は既定が両方 `/media/raw` なので書かない。
