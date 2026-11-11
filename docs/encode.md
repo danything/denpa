@@ -198,7 +198,7 @@ Helm は既定で `/dev/dri` を hostPath で渡してあります (`denpa.gpu.h
 | ------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | x264         | `veryfast`・`-crf 23 -maxrate <上限> -bufsize <上限>` (上限つき crf) | CPU (`bwdif=mode=send_frame:deint=interlaced,fps=30000/1001` か `fps`、`scale=-2:<高さ>`) |
 | Rockchip MPP | 今の AVBR (`hwenc.rkmppRate`) に段の上限を渡す                       | CPU                                                                                       |
-| NVENC        | 今の VBR (`hwenc.nvencRate`) に段の上限を渡す                        | CPU                                                                                       |
+| NVENC        | 今の VBR (`hwenc.vbrRate`) に段の上限を渡す                          | CPU                                                                                       |
 | VA-API       | CQP をやめて VBR (`-b:v` と `-maxrate:v` に上限)                     | デコードから GPU なら GPU (`deinterlace_vaapi=rate=frame,scale_vaapi`)、ほかは CPU        |
 | QSV          | ICQ をやめて VBR (`-b:v` に上限、`-maxrate` にその 2 倍)             | CPU                                                                                       |
 

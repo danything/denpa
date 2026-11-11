@@ -65,7 +65,7 @@ const AGENT_CHANNEL = object({
 export type AgentChannel = Infer<typeof AGENT_CHANNEL>;
 
 /**
- * 復号できる局が 1 つでも入っているチャンネルか。**チャンネルごとに決めること (スキャンで番組表も読むか・番組表の取得に行くか) はこれで見る。**
+ * 復号できる局が 1 つでも入っているチャンネルか。**番組表の取得に行くかは、チャンネルごとにこれで見る。**
  * 局ごとの判断は局の行の `services.decodable` (`epg.syncServices`)
  */
 export function decodableChannel(channel: AgentChannel): boolean {

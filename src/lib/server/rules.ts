@@ -892,7 +892,7 @@ export function applyRules(options: { rule?: number } = {}): RuleSync {
   const at = now();
   // 録画のしかたは全体で 1 つ。ルールごとに持たせるとどこで決まったか分からなくなる
   const recording = settings();
-  // 種別 (GR/BS/CS) でも絞り込めるよう、番組に局の種別と物理チャンネルを添えて取る
+  // 種別でも絞り込めるよう、番組に局の種別と物理チャンネルを添えて取る
   const programs = orm()
     .select({
       ...getTableColumns(programTable),

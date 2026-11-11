@@ -1,6 +1,7 @@
 import { type Actions, fail } from "@sveltejs/kit";
 
 import { parseId } from "#lib/id.js";
+import { tokenRefusal } from "#lib/server/auth.js";
 import { liveTokens, revokeToken } from "#lib/server/device-auth.js";
 
 export function load() {
@@ -10,7 +11,10 @@ export function load() {
 
 export const actions = {
   /** テレビのアクセストークンを無効にする。テレビは次に API を呼んだときに 401 を受けて、ペアリングし直しになる */
-  revokeDevice: async ({ request }) => {
+  revokeDevice: async ({ request, locals }) => {
+    // 盗まれたアクセストークンで、ほかのテレビのアクセストークンを取り消させない
+    const refused = tokenRefusal(locals);
+    if (refused !== null) return fail(403, { message: refused });
     const form = await request.formData();
     const id = parseId(form.get("id"));
     if (id === null) return fail(400, { message: "ID が不正です" });

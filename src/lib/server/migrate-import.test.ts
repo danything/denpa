@@ -243,7 +243,7 @@ describe("取り込み (v3)", () => {
       .insert(programs)
       .values({
         id: 323912360800001,
-        service_id: 23608,
+        service_id: KNOWN_CHANNEL,
         network_id: 32391,
         event_id: 1,
         start_at: at + 3600_000,

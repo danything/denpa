@@ -85,7 +85,7 @@ export function recordFailed(
   const failures = (row?.failures ?? 0) + (recount ? 1 : 0);
   const since = row?.failing_since ?? at;
   const others = othersReceived(type, channel, since);
-  // 地上波は外さない (スキャンで受信できたものだけが入っている。続けて選局できないときは知らせるだけ)
+  // 外すのは衛星だけ。地上波・CATV・SKY はスキャンで受信できたものだけが入っている (続けて選局できないときは知らせるだけ)
   const unreceivable = isSatellite(type) && failures >= MARK_AFTER && others;
   orm()
     .insert(channelReception)
