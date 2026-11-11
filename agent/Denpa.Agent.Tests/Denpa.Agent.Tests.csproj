@@ -50,6 +50,7 @@
         <Compile Include="../Denpa.Agent/Pcsc.cs" />
         <Compile Include="../Denpa.Agent/Multi2.cs" />
         <Compile Include="../Denpa.Agent/B25.cs" />
+        <Compile Include="../Denpa.Agent/PsiMemory.cs" />
         <Compile Include="../Denpa.Agent/Emm.cs" />
         <Compile Include="../Denpa.Agent/UsbDevice.cs" />
         <Compile Include="../Denpa.Agent/CardUart.cs" />

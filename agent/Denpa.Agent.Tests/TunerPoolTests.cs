@@ -1,3 +1,5 @@
+using TUnit.Assertions.Enums;
+
 namespace Denpa.Agent.Tests;
 
 /*
@@ -19,12 +21,13 @@ public class TunerPoolTests
         private int _busy;
         private volatile bool _closed;
 
-        public FakeTuner(string path, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts)
+        public FakeTuner(string path, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null)
         {
             Path = path;
             _tune = tune;
             Format = format;
             _output = new Ts(this, read);
+            Content = content;
         }
 
         public string Path { get; }
@@ -40,6 +43,9 @@ public class TunerPoolTests
         /// <summary>閉じたあとに選局・読み出しを始めた回数</summary>
         public int UsedAfterClose;
         public bool Closed => _closed;
+        /// <summary>TS の読み出しが返すパケットの並び。くり返し 1 パケットずつ返す。null ならヌルパケット</summary>
+        public byte[]? Content { get; }
+        private int _at;
         public readonly ManualResetEventSlim Tuning = new();
 
         private void Enter()
@@ -90,6 +96,12 @@ public class TunerPoolTests
                         return NullTlv.Length;
                     }
                     var packet = buffer.AsSpan(offset, 188);
+                    if (owner.Content is { } content)
+                    {
+                        content.AsSpan(owner._at, 188).CopyTo(packet);
+                        owner._at = (owner._at + 188) % content.Length;
+                        return 188;
+                    }
                     packet.Clear();
                     packet[0] = 0x47;
                     packet[1] = 0x1F;
@@ -120,11 +132,11 @@ public class TunerPoolTests
     {
         private readonly List<FakeTuner> _opened = [];
 
-        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts)
+        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null)
         {
             Pool = new TunerPool(specs, () => { }, new TuneOptions(), spec =>
             {
-                var tuner = new FakeTuner(spec.Device!, tune, read, format);
+                var tuner = new FakeTuner(spec.Device!, tune, read, format, content);
                 lock (_opened) _opened.Add(tuner);
                 return tuner;
             });
@@ -369,5 +381,102 @@ public class TunerPoolTests
         {
             rig.Pool.CloseAll();
         }
+    }
+
+    /*
+     * 覚えた PAT・PMT (PsiMemory)。偽のチューナーは、スクランブルされていない 2 局の TS (映像が先、PAT・PMT があと) をくり返し返す。
+     * 覚えたものを使えば、ライブの最初の塊は差し込んだ PAT から始まる。使わなければ本物の PMT まで溜めるので、映像から始まる
+     */
+    private const int Service = 0x0400, OtherService = 0x0401, OtherPmt = 0x0102, OtherVideo = 0x0121;
+
+    /// <summary>2 局の TS の 1 周。<paramref name="other"/> が false なら 2 局目の PMT を入れない</summary>
+    private static byte[] TwoServices(bool other = true)
+    {
+        var ts = new B25Tests.Ts().Videos(5, null)
+            .Pat((Service, B25Tests.PmtPid), (OtherService, OtherPmt))
+            .Pmt(B25Tests.PmtPid, Service, [], (B25Tests.VideoPid, []));
+        if (other) ts.Pmt(OtherPmt, OtherService, [], (OtherVideo, []));
+        return [.. ts.Videos(5, null).Wire];
+    }
+
+    private static int[] Pids(byte[] ts) => [.. ts.Chunk(188).Select(packet => ((packet[1] & 0x1F) << 8) | packet[2])];
+
+    /// <summary><paramref name="bytes"/> バイト読むまで待つ</summary>
+    private static async Task ReadBytes(Sink sink, int bytes, CancellationToken cancel)
+    {
+        var read = 0;
+        while (read < bytes) read += (await sink.Reader.ReadAsync(cancel)).Length;
+    }
+
+    /// <summary>**番組表の選局で覚えた PAT・PMT を、同じチャンネルのライブの選局がほかのチューナーで使う**</summary>
+    [Test]
+    public async Task 番組表の選局で覚えた_PMT_を同じチャンネルのライブがほかのチューナーで使う(CancellationToken cancel)
+    {
+        await Task.Yield();
+        var content = TwoServices();
+        var rig = new Rig([Spec("A", "fake:a"), Spec("B", "fake:b")], TimeSpan.Zero, TimeSpan.FromMilliseconds(1), content: content);
+        try
+        {
+            var epg = rig.Pool.Open("GR", "T27", 1, "epg T27", pin: "fake:a");
+            await ReadBytes(epg, content.Length, cancel);
+
+            var live = rig.Pool.Open("GR", "T27", 5, "live 1", pin: "fake:b", service: Service);
+            var first = await live.Reader.ReadAsync(cancel);
+
+            // 最初の 1 パケットは並びを合わせるのに次を待つので、差し込みのあとに映像が 2 つ並ぶ
+            await Assert.That(Pids(first)).IsEquivalentTo(new[] { 0, B25Tests.PmtPid, B25Tests.VideoPid, B25Tests.VideoPid }, CollectionOrdering.Matching);
+            epg.Leave();
+            live.Leave();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    /// <summary>
+    /// **2 局のライブが 1 つの選局を共有しているときは、両方の局の PMT を覚えていなければ使わない。** 片方だけなら本物の PAT・PMT を待つ
+    /// </summary>
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task 共有している_2_局のライブは両方の局を覚えているときだけ使う(bool both, CancellationToken cancel)
+    {
+        await Task.Yield();
+        var rig = new Rig([Spec("A", "fake:a")], TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(1), content: TwoServices());
+        try
+        {
+            // 番組表の選局で読んだことにする (both が false なら 2 局目の PMT は流れてこなかった)
+            var remembered = TwoServices(other: both);
+            new Descrambler(new NoCard(), keysWanted: () => false, memory: rig.Pool.Psi.For("GR", "T27"))
+                .DecodeAll(new MemoryStream(remembered), Stream.Null);
+
+            // 1 局目のライブが選局している間に、2 局目のライブが共有に入る
+            var opening = Background(() => rig.Pool.Open("GR", "T27", 5, "live 1", service: Service));
+            while (rig.Opened("fake:a").Count == 0) await Task.Delay(10, cancel);
+            await Assert.That(rig.Opened("fake:a").Single().Tuning.Wait(TimeSpan.FromSeconds(10), cancel)).IsTrue();
+            var second = rig.Pool.Open("GR", "T27", 5, "live 2", service: OtherService);
+            var first = await opening;
+            var chunk = await first.Reader.ReadAsync(cancel);
+
+            var pids = Pids(chunk);
+            if (both) await Assert.That(pids[..3]).IsEquivalentTo(new[] { 0, B25Tests.PmtPid, OtherPmt }, CollectionOrdering.Matching);
+            else await Assert.That(pids[0]).IsEqualTo(B25Tests.VideoPid);
+            first.Leave();
+            second.Leave();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    /// <summary>鍵の要らない選局だけで使うカード。問い合わせられたら失敗にする</summary>
+    private sealed class NoCard : IKeySource
+    {
+        public CardInit Init() => throw new InvalidOperationException("カードに問い合わせました");
+        public EcmAnswer Ecm(ReadOnlySpan<byte> ecm) => throw new InvalidOperationException("カードに問い合わせました");
+        public int Emm(ReadOnlySpan<byte> payload) => throw new InvalidOperationException("カードに問い合わせました");
+        public int Confirm(ReadOnlySpan<byte> verificationData, ushort dateMjd) => throw new InvalidOperationException("カードに問い合わせました");
     }
 }

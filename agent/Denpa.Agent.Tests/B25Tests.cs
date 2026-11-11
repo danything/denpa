@@ -12,8 +12,8 @@ namespace Denpa.Agent.Tests;
  */
 public class B25Tests
 {
-    private const int PmtPid = 0x0101;
-    private const int VideoPid = 0x0111;
+    internal const int PmtPid = 0x0101;
+    internal const int VideoPid = 0x0111;
     private const int AudioPid = 0x0112;
     private const int EcmPid = 0x0901;
 
@@ -61,7 +61,7 @@ public class B25Tests
         Enumerable.Range(0, 8).Select(i => (byte)(generation * 31 + i * 5 + (even ? 100 : 0))).ToArray();
 
     /// <summary>TS を組み立てる。**スクランブルする前の中身** (Plain) と**流す中身** (Wire) を並べて持つ</summary>
-    private sealed class Ts
+    internal sealed class Ts
     {
         private readonly Dictionary<int, int> _counters = [];
         public List<byte> Wire { get; } = [];
@@ -100,7 +100,7 @@ public class B25Tests
         }
 
         public Ts Pat(params (int Number, int Pid)[] programs) =>
-            Section(0, Psi(0x00, 1, programs.SelectMany(p => new[]
+            Section(0, Psi(0x00, Tsid, programs.SelectMany(p => new[]
             {
                 (byte)(p.Number >> 8), (byte)p.Number, (byte)(0xE0 | (p.Pid >> 8)), (byte)p.Pid,
             }).ToArray()));
@@ -118,6 +118,9 @@ public class B25Tests
         }
 
         public int Version { get; set; }
+
+        /// <summary>PAT の transport_stream_id</summary>
+        public int Tsid { get; set; } = 1;
 
         /// <summary>ECM。中身は鍵の世代 1 バイトと、それらしい長さにする詰め物</summary>
         public Ts Ecm(int pid, byte generation) =>
@@ -169,7 +172,7 @@ public class B25Tests
 
     private static byte[] Ca(int ecmPid) => [0x09, 4, 0x00, 0x05, (byte)(0xE0 | (ecmPid >> 8)), (byte)ecmPid];
 
-    private static byte[] Psi(byte tableId, int extension, byte[] body, int version = 0)
+    internal static byte[] Psi(byte tableId, int extension, byte[] body, int version = 0)
     {
         var length = 5 + body.Length + 4;
         var section = new List<byte>
@@ -1483,5 +1486,271 @@ public class B25Tests
             release.Set();
             stop.Cancel();
         }
+    }
+
+    /*
+     * 覚えた PAT・PMT (PsiMemory)。覚えるのは鍵の要らない選局 (番組表) で読ませ、使うのはライブ (観る局を決めた選局)
+     */
+    private const int Service = 0x0400;
+    private static readonly HashSet<int> Watched = [Service];
+
+    /// <summary><paramref name="ts"/> を鍵の要らない利用者 (番組表) の選局として読ませて、PAT・PMT を覚えさせる</summary>
+    private static PsiMemory.Slot Remember(Ts ts, PsiMemory? memory = null)
+    {
+        var slot = (memory ?? new PsiMemory()).For("GR", "T27");
+        Run(new Descrambler(new Cards(), keysWanted: () => false, memory: slot), ts.Wire.ToArray());
+        return slot;
+    }
+
+    /// <summary>出力のパケットの PID を並べる</summary>
+    private static int[] Pids(byte[] ts) => [.. ts.Chunk(188).Select(packet => ((packet[1] & 0x1F) << 8) | packet[2])];
+
+    /// <summary>出力の先頭に差し込んだ PAT と PMT (1 パケットずつ) を除いた残り</summary>
+    private static byte[] AfterHead(byte[] output) => output[(2 * 188)..];
+
+    /// <summary>1 つずつ渡し、最初に何か出てくるまでに渡したパケットの数</summary>
+    private static int FedUntilOutput(Descrambler descrambler, byte[] wire, ArrayBufferWriter<byte> output)
+    {
+        var fed = 0;
+        while (output.WrittenCount == 0 && fed * 188 < wire.Length)
+        {
+            descrambler.Decode(wire.AsSpan(fed * 188, 188), output);
+            fed++;
+        }
+        return fed;
+    }
+
+    [Test]
+    public async Task 鍵の要らない利用者だけの選局でも_PAT_と_PMT_を覚える()
+    {
+        var slot = Remember(Channel().Ecm(EcmPid, 1).Videos(2, 1));
+
+        var recalled = slot.Recall(Watched);
+
+        await Assert.That(recalled).IsNotNull();
+        await Assert.That(recalled!.Pmts[Service].Pid).IsEqualTo(PmtPid);
+        // 覚えていない局を含めば使わない
+        await Assert.That(slot.Recall(new HashSet<int> { Service, 0x0401 })).IsNull();
+    }
+
+    /// <summary>
+    /// **覚えた PAT・PMT があれば、本物の PAT・PMT を待たずに、先に来た ECM の答えで流し始める。** 出力の先頭には覚えた PAT と PMT を
+    /// ES より前に差し込む。あとから来た本物が覚えたものと同じなら、作り直さず、カードに問い合わせ直さない
+    /// </summary>
+    [Test]
+    public async Task 覚えた_PAT_PMT_で本物を待たずに流し始め_先頭に差し込む()
+    {
+        var slot = Remember(Channel());
+        var ts = new Ts().Ecm(EcmPid, 1).Videos(3, 1)
+            .Pat((Service, PmtPid))
+            .Pmt(PmtPid, Service, Ca(EcmPid), (VideoPid, []), (AudioPid, []))
+            .Videos(2, 1);
+        var wire = ts.Wire.ToArray();
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards, services: () => Watched, memory: slot);
+        var output = new ArrayBufferWriter<byte>();
+
+        // ECM と、そのあとの映像 1 つで流し始める (本物の PAT は 4 つ後ろ)
+        var fed = FedUntilOutput(descrambler, wire, output);
+        await Assert.That(fed).IsEqualTo(2);
+        await Assert.That(Pids(output.WrittenSpan.ToArray())).IsEquivalentTo(new[] { 0, PmtPid, EcmPid, VideoPid }, CollectionOrdering.Matching);
+        await Assert.That(descrambler.HeldAt()).StartsWith("PAT 覚え / PMT 覚え (局 1024) / ");
+        await Assert.That(descrambler.TakeChecked()).IsNull();
+
+        descrambler.Decode(wire.AsSpan(fed * 188), output);
+        descrambler.Flush(output);
+
+        var all = output.WrittenSpan.ToArray();
+        await Assert.That(Diff(AfterHead(all), Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+        await Assert.That(Generations(cards)).IsEqualTo("1");
+        await Assert.That(descrambler.TakeChecked()).Matches(@"^覚えた PAT・PMT は本物と同じでした \(本物の PAT \d+ms・PMT \d+ms・捨てたのは 0 パケット\)$");
+        await Assert.That(descrambler.TakeChecked()).IsNull();
+    }
+
+    /// <summary>
+    /// **差し込む PAT・PMT の連続性カウンタは、溜めたぶんの同じ PID のパケットへ続ける。** 本物の PAT が先に溜まっていれば、その手前の値にする
+    /// </summary>
+    [Test]
+    public async Task 差し込むパケットの連続性カウンタは溜めたぶんへ続ける()
+    {
+        var slot = Remember(Channel());
+        // 本物の PAT を 3 回流してから選局したところ (カウンタは 3 から)
+        var ts = new Ts().Pat((Service, PmtPid)).Pat((Service, PmtPid)).Pat((Service, PmtPid));
+        var start = ts.Wire.Count;
+        ts.Pat((Service, PmtPid)).Ecm(EcmPid, 1).Videos(1, 1);
+        var descrambler = new Descrambler(new Cards(), services: () => Watched, memory: slot);
+
+        var output = Run(descrambler, ts.Wire.ToArray()[start..], flush: false);
+
+        var pids = Pids(output);
+        await Assert.That(pids[0]).IsEqualTo(0);
+        await Assert.That(pids[2]).IsEqualTo(0);
+        await Assert.That(output[3] & 0x0F).IsEqualTo(2);
+        await Assert.That(output[2 * 188 + 3] & 0x0F).IsEqualTo(3);
+    }
+
+    /// <summary>
+    /// **本物の PMT の ECM の PID が覚えたものと違えば、本物で作り直して新しい ECM で復号し、覚えたものを書き換える。**
+    /// 確かめ待ちの間、覚えた ECM の鍵で合わなかったパケットはスクランブルされたまま流さずに捨てる
+    /// </summary>
+    [Test]
+    public async Task 本物の_PMT_の_ECM_が違えば作り直して新しい_ECM_で復号し_覚えたものを書き換える()
+    {
+        const int moved = 0x0902;
+        var memory = new PsiMemory();
+        var slot = Remember(Channel(), memory);
+        // 覚えた ECM の PID には別の鍵 (7) が流れていて、映像は新しい ECM の鍵 (2) でスクランブルされている
+        var before = new Ts().Ecm(EcmPid, 7).Payload(VideoPid, 2, pes: true).Videos(2, 2);
+        var after = new Ts().Pat((Service, PmtPid))
+            .Pmt(PmtPid, Service, Ca(moved), (VideoPid, []))
+            .Ecm(moved, 2).Payload(VideoPid, 2, pes: true).Videos(2, 2);
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards, services: () => Watched, memory: slot);
+
+        var output = Run(descrambler, [.. before.Wire, .. after.Wire]);
+
+        await Assert.That(Pids(output)[..2]).IsEquivalentTo(new[] { 0, PmtPid }, CollectionOrdering.Matching);
+        await Assert.That(Diff(AfterHead(output), [.. Without(Expected(before), VideoPid), .. Expected(after)])).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+        await Assert.That(Generations(cards)).IsEqualTo("7,2");
+        await Assert.That(descrambler.TakeChecked()).Matches(@"^覚えた PAT・PMT が本物と違ったので、本物で作り直しました \(.*捨てたのは 3 パケット\)$");
+        // 次の選局は新しい ECM の PMT を使う
+        var recalled = memory.For("GR", "T27").Recall(Watched)!.Pmts[Service].Section;
+        await Assert.That(Convert.ToHexString(recalled)).Contains("09040005E902");
+    }
+
+    /// <summary>
+    /// **本物の PMT が覚えたものに無い ES を挙げていたら、確かめ待ちの間はその ES を捨て、本物が来たら流す** (音声が増えた・字幕が付いた)
+    /// </summary>
+    [Test]
+    public async Task 覚えた_PMT_に無い_ES_は確かめ待ちの間は捨て_本物が来たら流す()
+    {
+        var slot = Remember(new Ts().Pat((Service, PmtPid)).Pmt(PmtPid, Service, Ca(EcmPid), (VideoPid, [])));
+        var before = new Ts().Ecm(EcmPid, 1).Videos(2, 1).Payload(AudioPid, 1);
+        var after = new Ts().Pat((Service, PmtPid))
+            .Pmt(PmtPid, Service, Ca(EcmPid), (VideoPid, []), (AudioPid, []))
+            .Payload(AudioPid, 1).Videos(1, 1);
+        var cards = new Cards();
+        var descrambler = new Descrambler(cards, services: () => Watched, memory: slot);
+
+        var output = Run(descrambler, [.. before.Wire, .. after.Wire]);
+
+        await Assert.That(Diff(AfterHead(output), [.. Without(Expected(before), AudioPid), .. Expected(after)])).IsEqualTo(-1);
+        await Assert.That(descrambler.Undecodable).IsEqualTo(0);
+        await Assert.That(Generations(cards)).IsEqualTo("1");
+    }
+
+    /// <summary>**本物の PAT が観る局を挙げていなければ、覚えたものを捨てて全部の局を待つ** (臨時の番組が終わった)。次の選局でも使わない</summary>
+    [Test]
+    public async Task PAT_が観る局を挙げていなければ覚えたものを捨てて全部の局を待つ()
+    {
+        var memory = new PsiMemory();
+        var slot = Remember(Channel(), memory);
+        var ts = new Ts().Pat((0x0401, OtherPmt))
+            .Pmt(OtherPmt, 0x0401, Ca(OtherEcm), (OtherVideo, []))
+            .Ecm(OtherEcm, 9).Payload(OtherVideo, 9).Payload(OtherVideo, 9);
+        var descrambler = new Descrambler(new Cards(), services: () => Watched, memory: slot);
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        await Assert.That(Diff(output, Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.HeldAt()).DoesNotContain("覚え");
+        await Assert.That(slot.Recall(Watched)).IsNull();
+    }
+
+    /// <summary>**本物の PAT の transport_stream_id が違えば、そのチャンネルの覚えた PMT を全部捨てる** (別の中継を受けた)</summary>
+    [Test]
+    public async Task PAT_の_transport_stream_id_が違えばそのチャンネルの覚えたものを捨てる()
+    {
+        var memory = new PsiMemory();
+        var slot = Remember(Channel(), memory);
+        var ts = new Ts { Tsid = 2 }.Pat((Service, PmtPid)).Ecm(EcmPid, 1).Videos(2, 1);
+        var descrambler = new Descrambler(new Cards(), services: () => Watched, memory: slot);
+
+        var output = Run(descrambler, ts.Wire.ToArray(), flush: false);
+
+        // 覚えた PMT を捨てたので、本物の PMT を待って溜めたまま
+        await Assert.That(output.Length).IsEqualTo(0);
+        await Assert.That(slot.Recall(Watched)).IsNull();
+    }
+
+    /// <summary>
+    /// **局を決めない利用者 (録画) がいれば、覚えたものがあっても使わない。** 溜めている間に録画が入ったときも、本物の PAT・PMT を待ち、先頭に差し込まない
+    /// </summary>
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task 局を決めない利用者がいれば覚えたものを使わない(bool joined)
+    {
+        var slot = Remember(Channel());
+        var ts = new Ts().Ecm(EcmPid, 1)
+            .Pat((Service, PmtPid))
+            .Pmt(PmtPid, Service, Ca(EcmPid), (VideoPid, []), (AudioPid, []))
+            .Videos(2, 1);
+        IReadOnlySet<int>? services = joined ? Watched : null;
+        var descrambler = new Descrambler(new Cards(), services: () => services, memory: slot);
+        var output = new ArrayBufferWriter<byte>();
+        var wire = ts.Wire.ToArray();
+
+        // ECM まで読んだところで録画が入る
+        descrambler.Decode(wire.AsSpan(0, 188), output);
+        services = null;
+        descrambler.Decode(wire.AsSpan(188), output);
+        descrambler.Flush(output);
+
+        await Assert.That(Diff(output.WrittenSpan.ToArray(), Expected(ts))).IsEqualTo(-1);
+        await Assert.That(descrambler.HeldAt()).DoesNotContain("覚え");
+    }
+
+    /// <summary>**本物の PAT・PMT が来ないまま溜める上限と同じ量を読んだら、捨てるのをやめて流す**</summary>
+    [Test]
+    public async Task 本物が来ないまま上限まで読んだら捨てるのをやめて流す()
+    {
+        const int unknown = 0x0130, extra = 46_000;
+        var slot = Remember(Channel());
+        var ts = new Ts().Ecm(EcmPid, 1).Videos(1, 1);
+        for (var i = 0; i < extra; i++) ts.Payload(unknown, 1);
+        var descrambler = new Descrambler(new Cards(), services: () => Watched, memory: slot);
+
+        var output = Run(descrambler, ts.Wire.ToArray());
+
+        var passed = Pids(output).Count(pid => pid == unknown);
+        var limit = Descrambler.HoldLimit / 188;
+        await Assert.That(passed).IsGreaterThan(0);
+        await Assert.That(extra - passed).IsBetween(limit - 2, limit);
+        await Assert.That(descrambler.TakeChecked()).StartsWith("覚えた PAT・PMT を本物で確かめられないまま 8MB 読んだので、捨てずに流します");
+    }
+
+    /// <summary>覚えておく側は、種別とチャンネルごとに別に持ち、新しい PMT で書き換え、PAT の transport_stream_id が変わればそのチャンネルだけ捨てる</summary>
+    [Test]
+    public async Task 覚えておく側は種別とチャンネルごとに持ち_書き換え_チャンネルごとに捨てる()
+    {
+        var memory = new PsiMemory();
+        byte[] Pat(int tsid) => Psi(0x00, tsid, [0x04, 0x00, 0xE1, 0x01]);
+        byte[] Pmt(int version) => Psi(0x02, Service, [0xE1, 0x11, 0xF0, 0x00], version);
+        var t27 = memory.For("GR", "T27");
+        var bs = memory.For("BS", "T27");
+        var t28 = memory.For("GR", "T28");
+        foreach (var slot in new[] { t27, bs, t28 })
+        {
+            slot.Pat(Pat(1));
+            slot.Pmt(Service, PmtPid, Pmt(0));
+        }
+        // PAT が挙げていない PID の PMT は覚えない
+        t27.Pmt(Service, 0x0105, Pmt(5));
+        await Assert.That(t27.Recall(Watched)!.Pmts[Service].Section).IsEquivalentTo(Pmt(0), CollectionOrdering.Matching);
+
+        t27.Pmt(Service, PmtPid, Pmt(1));
+        await Assert.That(t27.Recall(Watched)!.Pmts[Service].Section).IsEquivalentTo(Pmt(1), CollectionOrdering.Matching);
+        await Assert.That(bs.Recall(Watched)!.Pmts[Service].Section).IsEquivalentTo(Pmt(0), CollectionOrdering.Matching);
+
+        // 同じ transport_stream_id の PAT なら PMT は残る。違えばそのチャンネルだけ捨てる
+        t27.Pat(Pat(1));
+        await Assert.That(t27.Recall(Watched)).IsNotNull();
+        t27.Pat(Pat(2));
+        await Assert.That(t27.Recall(Watched)).IsNull();
+        await Assert.That(bs.Recall(Watched)).IsNotNull();
+        await Assert.That(t28.Recall(Watched)).IsNotNull();
     }
 }

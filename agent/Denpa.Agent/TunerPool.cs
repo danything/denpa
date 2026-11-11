@@ -120,6 +120,12 @@ public sealed class TunerPool(
 
     private IReadOnlyList<TunerSpec> _specs = specs;
 
+    /// <summary>
+    /// **選局で読んだ PAT と PMT** (<see cref="PsiMemory"/>)。どの選局 (番組表・ロゴ・スキャンも) も読んだものを覚え、ライブの選局が本物を待たずに流し始めるのに使う。
+    /// 機材と受信機をまたいで 1 つ
+    /// </summary>
+    internal PsiMemory Psi { get; } = new();
+
     public IReadOnlyList<TunerSpec> Tuners => _specs;
 
     /// <summary>自動検出で決めたのか、書いてあるものを読んだのか。画面に出す</summary>
@@ -248,7 +254,7 @@ public sealed class TunerPool(
             }
 
             spec = Tuners[index];
-            lease = new Lease(index, type, channel);
+            lease = new Lease(index, type, channel) { Psi = Psi };
             _leases[index] = lease;
             _signals ??= new Timer(_ => ReadSignals(), null, TunerSignal.Every, TunerSignal.Every);
             /*
@@ -962,6 +968,9 @@ internal sealed class Lease(int tuner, string type, string channel)
     /// <summary>流すバイト列の形式 (<see cref="Sink.Format"/>)。読み出しを始める前に入れる。TLV ならデスクランブラに通さない</summary>
     public StreamFormat Format { get; set; }
 
+    /// <summary>覚えた PAT・PMT の置き場 (<see cref="TunerPool.Psi"/>)。プールの外で作った選局 (テスト) は null で、覚えも使いもしない</summary>
+    public PsiMemory? Psi { get; init; }
+
     private long _firstReadMs = -1;
 
     /// <summary>
@@ -1140,7 +1149,7 @@ internal sealed class Lease(int tuner, string type, string channel)
         var undecoded = Type == ChannelTable.Sky ? "スカパー！プレミアム"
             : Format == StreamFormat.Tlv ? "4K。ACAS には対応していません"
             : null;
-        var b25 = undecoded is null ? new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared, Services) : null;
+        var b25 = undecoded is null ? new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared, Services, Psi?.For(Type, Channel)) : null;
         _descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         var pushed = false;
@@ -1181,6 +1190,8 @@ internal sealed class Lease(int tuner, string type, string channel)
                         ArrayPool<byte>.Shared.Return(chunk.Rented);
                     }
                     Push();
+                    // 覚えた PAT・PMT で流し始めた選局は、本物で確かめ終わったときにもう 1 行残す (docs/stream.md「本番の記録で割る」)
+                    if (b25?.TakeChecked() is { } verdict) Log.Write($"[{Tuner}] {Channel}: {verdict}");
                 }
             }
             if (!_stopped)

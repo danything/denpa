@@ -112,6 +112,69 @@ describe("PesDemuxer", () => {
     demuxer.feed(head());
     expect(demuxer.audioPid).toBe(AUDIO[0]);
   });
+
+  /*
+   * エージェントは、覚えた PAT・PMT で流し始めたとき、その 1 組を先頭に差し込む (docs/agent.md「素の TS を流す」)。
+   * 差し込んだぶんのあとに本物の PAT・PMT が続き、連続性カウンタは本物とつながらない
+   */
+  test("先頭に差し込んだ PAT・PMT で読み始め、あとから来た同じ本物の PAT・PMT (連続性カウンタが飛ぶ) では作り直さない", () => {
+    const demuxer = new PesDemuxer();
+    const frames = [0, 1, 2].map((n) => mpeg2Frame(n));
+    let counter = 0;
+    const video = (n: number) => {
+      const out = packetizePes(
+        VIDEO,
+        pes(0xe0, 90_000 + n * FRAME_TICKS, frames[n]!),
+        counter,
+        80_000,
+      );
+      counter = out.counter;
+      return out.packets;
+    };
+    const real = Uint8Array.from([
+      ...packetize(0x0000, patSection([[1024, 0x1f0]]), 7),
+      ...packetize(
+        0x1f0,
+        programMap(1024, VIDEO, [
+          [0x02, VIDEO],
+          [0x0f, AUDIO[0]],
+          [0x0f, AUDIO[1]],
+        ]),
+        11,
+      ),
+    ]);
+
+    const first = demuxer.feed(Uint8Array.from([...head(), ...video(0)]));
+    expect(first.changed).toBe(true);
+    const second = demuxer.feed(
+      Uint8Array.from([...real, ...video(1), ...video(2)]),
+    );
+    expect(second.changed).toBe(false);
+    expect(second.pes.map((p) => p.pts)).toEqual([
+      90_000,
+      90_000 + FRAME_TICKS,
+    ]);
+    expect(second.pes[0]!.data).toEqual(frames[0]!);
+  });
+
+  test("先頭に差し込んだ PMT とあとから来た本物の PMT が違えば、本物の ES に移る", () => {
+    const demuxer = new PesDemuxer();
+    demuxer.feed(head());
+    expect(demuxer.audioPid).toBe(AUDIO[0]);
+    const changed = demuxer.feed(
+      packetize(
+        0x1f0,
+        programMap(1024, VIDEO, [
+          [0x02, VIDEO],
+          [0x0f, 0x112],
+        ]),
+        9,
+      ),
+    ).changed;
+    expect(changed).toBe(true);
+    expect(demuxer.streams).toEqual({ video: VIDEO, audio: [0x112] });
+    expect(demuxer.audioPid).toBe(0x112);
+  });
 });
 
 describe("parsePes", () => {

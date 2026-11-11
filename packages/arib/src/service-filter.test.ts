@@ -210,6 +210,77 @@ describe("局の選り分け", () => {
     // 残っているのは新しいほう (いちばん最後に届いたもので終わる)
     expect(out[out.length - PACKET + 3]! & 0x0f).toBe((many - 1) & 0x0f);
   });
+
+  /*
+   * エージェントは、覚えた PAT・PMT で流し始めたとき、その 1 組を先頭に差し込む (docs/agent.md「素の TS を流す」)。
+   * 差し込んだぶんのあとに本物の PAT・PMT が続き、連続性カウンタは本物とつながらない
+   */
+  test("先頭に差し込んだ PAT・PMT で通し始め、あとから来た本物の PAT・PMT (連続性カウンタが飛ぶ) も読む", () => {
+    const filter = new ServiceFilter(MX1);
+    const head = filter.filter(
+      Uint8Array.from([...pat(), ...pmt1(), ...payload(0x100, 5)]),
+    );
+    expect(pids(head)).toEqual([0x0000, PMT1, 0x100]);
+
+    // 同じ本物の PAT・PMT。カウンタは差し込んだぶんから飛ぶ
+    const same = filter.filter(
+      Uint8Array.from([
+        ...packetize(
+          0x0000,
+          patSection(
+            [
+              [MX1, PMT1],
+              [MX2, PMT2],
+            ],
+            TSID,
+          ),
+          9,
+        ),
+        ...packetize(
+          PMT1,
+          programMap(
+            MX1,
+            0x100,
+            [
+              [0x02, 0x100],
+              [0x0f, 0x110],
+            ],
+            0x900,
+          ),
+          12,
+        ),
+        ...payload(0x100, 6),
+        ...payload(0x110, 6),
+      ]),
+    );
+    expect(pids(same)).toEqual([0x0000, PMT1, 0x100, 0x110]);
+    expect(filter.streams).toBe("2:256,15:272");
+  });
+
+  test("先頭に差し込んだ PMT とあとから来た本物の PMT が違えば、通す PID を本物のものに入れ替える", () => {
+    const filter = new ServiceFilter(MX1);
+    filter.filter(Uint8Array.from([...pat(), ...pmt1()]));
+    expect(filter.streams).toBe("2:256,15:272");
+
+    // 本物では音声の PID が変わっていた
+    const out = filter.filter(
+      Uint8Array.from([
+        ...packetize(
+          PMT1,
+          programMap(MX1, 0x100, [
+            [0x02, 0x100],
+            [0x0f, 0x111],
+          ]),
+          7,
+        ),
+        ...payload(0x110, 1),
+        ...payload(0x111, 1),
+        ...payload(0x100, 1),
+      ]),
+    );
+    expect(pids(out)).toEqual([PMT1, 0x111, 0x100]);
+    expect(filter.streams).toBe("2:256,15:273");
+  });
 });
 
 /*
