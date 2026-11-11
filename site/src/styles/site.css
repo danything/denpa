@@ -43,8 +43,6 @@
   --sl-color-hairline-light: #2e3037;
   --sl-color-hairline: #26282e;
   --sl-color-hairline-shade: #26282e;
-  /* 上の帯を透かすときの地 (bg を 80% に) */
-  --dp-nav-glass: rgb(11 12 15 / 0.8);
   --dp-surface: #1a1b20; /* 表の見出しの面 */
 }
 
@@ -76,7 +74,6 @@
   --sl-color-hairline-light: #e6e9ef;
   --sl-color-hairline: #e6e9ef;
   --sl-color-hairline-shade: #e6e9ef;
-  --dp-nav-glass: rgb(255 255 255 / 0.8);
   --dp-surface: #f4f5f8;
 }
 
@@ -116,15 +113,6 @@
     var(--sl-color-bg)
   );
   color: var(--sl-color-bg);
-}
-
-/* 上の帯は貼り付いたまま、下を流れる本文を少し透かしてぼかす。ぼかせないブラウザでは地の色のまま */
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .page > .header {
-    background-color: var(--dp-nav-glass);
-    -webkit-backdrop-filter: saturate(1.5) blur(12px);
-    backdrop-filter: saturate(1.5) blur(12px);
-  }
 }
 
 /* 表の見出しは面で分ける (見出しの面があるので、端の字も詰めずに内側へ寄せる) */

@@ -37,6 +37,12 @@ EDCB (EpgTimer) からは、ルール・手動予約・録画の履歴を EpgTim
 Windows ファイアウォールを確かめます ([EDCB からの引き継ぎ](migrate.md#edcb-からの引き継ぎ))。
 [switch.md](switch.md)・[migrate.md](migrate.md)。
 
+### Mirakurun や px4_drv を残したまま使えますか
+
+付属のエージェントは、px4_drv が使っている機材を開けません。Mirakurun と px4_drv を外さずに使うなら、エージェントの代わりに
+Mirakurun へ中継するブリッジを置きます。別の人が作っているもので、Doa では動作を確かめていません
+([switch.md](switch.md#いまの環境を残して-denpa-を足す))。
+
 ## チューナーとカード
 
 ### カードリーダーが NG のままです
