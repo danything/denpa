@@ -484,6 +484,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         ecm.Pending = false;
         ecm.Cipher?.Clear();
         ecm.Unentitled = false;
+        ecm.Told = false;
         ecm.RetryAt = long.MaxValue;
         ecm.Seen = -1;
         ecm.After = int.MaxValue;
@@ -892,7 +893,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         public Multi2? Cipher;
         /// <summary>カードが「契約が無い」と返した</summary>
         public bool Unentitled;
-        /// <summary>契約が無いことを記録に出した</summary>
+        /// <summary>契約が無いことを記録に出した。その ECM を忘れる (<c>Forget</c>) まで 1 回だけ出す (問い合わせ直しのたびに出すと、鍵が変わるたびに記録が並ぶ)</summary>
         public bool Told;
         /// <summary>鍵を受け取れなかった。読んだパケットの数がここを過ぎたら、同じ中身でも問い合わせ直す</summary>
         public long RetryAt = long.MaxValue;

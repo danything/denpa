@@ -34,7 +34,7 @@ public readonly record struct EcmAnswer(byte[] Odd, byte[] Even, int Code, bool 
 /// (順番に通すのは実装の側)。
 ///
 /// <para>
-/// 失敗は投げる (<see cref="IOException"/>。カードが使えない応答を返したときは <see cref="CardRefusedException"/>)。カードを抜き差ししたり px4d を起動し直したりしても
+/// 失敗は <see cref="IOException"/> で投げる。カードが使えない応答を返したときは <see cref="CardRefusedException"/> を投げる。カードを抜き差ししたり px4d を起動し直したりしても
 /// 次の ECM では読めているように、繋ぎ直せるものは中で繋ぎ直してから投げる。
 /// </para>
 /// </summary>
