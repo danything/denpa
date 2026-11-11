@@ -115,6 +115,12 @@ public class Cxd2856PresetTests
         await Assert.That(Own(presets, khz)).IsEqualTo(Tmcc);
         await Assert.That(again.TuneIsdbt(khz)).IsTrue();
         await Assert.That(bus.Log).Contains($"T 62={Tmcc}");
+
+        // 覚えていない周波数は、読んだ値を代わりに使い、ロックしたらその周波数の値としてファイルに書く
+        bus.Log.Clear();
+        await Assert.That(again.TuneIsdbt(509143)).IsTrue();
+        await Assert.That(again.TuneLines().Any(line => line.Contains("プリセット 使った (ほかのチャンネルの値 A0", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(Own(new TmccPresets(path), 509143)).IsEqualTo(Tmcc);
     }
 
     [Test]
@@ -149,6 +155,7 @@ public class Cxd2856PresetTests
     [Arguments("{\"version\": 1, \"tmcc\": {\"503143\": \"ZZ\"}}")]
     [Arguments("{\"version\": 1, \"tmcc\": {\"T21\": \"A0A1A2A3A4A5A6A7A8A9AAABAC\"}}")]
     [Arguments("{\"version\": 1, \"tmcc\": {\"503143\": 1}}")]
+    [Arguments("{\"version\": 1, \"tmcc\": {\"503143\": \"A0A1A2A3A4A5A6A7A8A9AAABAC\", \"503143\": \"A0A1A2A3A4A5A6A7A8A9AAABAC\"}}")]
     public async Task 壊れたファイルは無視して空から始める(string body)
     {
         var path = Temp();

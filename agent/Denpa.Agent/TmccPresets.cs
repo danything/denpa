@@ -54,7 +54,7 @@ public sealed class TmccPresets
                 _values[khz] = (tmcc, ++_order);
             }
         }
-        catch (Exception error) when (error is System.Text.Json.JsonException or FormatException or InvalidOperationException or IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is System.Text.Json.JsonException or FormatException or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException)
         {
             Log.Write($"{path} を読めないので捨てて、空から覚え直します: {error.Message}");
             _values.Clear();
@@ -83,6 +83,7 @@ public sealed class TmccPresets
         {
             var changed = !_values.TryGetValue(khz, out var known) || !known.Tmcc.AsSpan().SequenceEqual(tmcc);
             _values[khz] = ([.. tmcc], ++_order);
+            // 値が同じなら書かない。ファイルの順は、最後に書いたときの順になる
             if (changed) Save();
         }
     }
