@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { Outcome } from "./epg-collect";
 import type { AgentChannel } from "./tuner";
 
 /**
@@ -11,8 +12,11 @@ import type { AgentChannel } from "./tuner";
  */
 const { config } = await import("./config");
 const {
+  drain,
   firstSweepDone,
   firstSweeps,
+  laneTypes,
+  receptionFailed,
   lastOf,
   networkSweeps,
   pickChannels,
@@ -310,5 +314,220 @@ describe("初回の全局読みを数える (firstSweepDone)", () => {
     expect(firstSweepDone({ channel: bs("BS05_0"), whole: [] }, first)).toBe(
       false,
     );
+  });
+});
+
+/**
+ * **並べる数をチューナーの空きに合わせる。** 実機で、ライブを見ながら「番組表をいますぐ集める」を押すと、
+ * 溢れた処理が 409 で断られるたびにすぐ次のチャンネルを取って落とし、50 チャンネルのうち 4 つしか読めなかった
+ */
+describe("並べる数 (laneTypes)", () => {
+  const tuner = (types: string[], users: number[] = [], disabled = false) => ({
+    types: types as AgentChannel["type"][],
+    disabled,
+    rank: disabled ? null : 0,
+    users: users.map((priority) => ({ use: "x", priority })),
+  });
+  const MLT = ["GR", "BS", "CS", "CATV"];
+
+  test("無効なチューナーと、同じか優先度の高い利用者がいるチューナーは数えない", () => {
+    const tuners = [
+      tuner(["BS", "CS"]),
+      tuner(["BS", "CS"], [], true),
+      tuner(["BS", "CS"]),
+      tuner(["BS", "CS"], [], true),
+      tuner(["BS", "CS"], [], true),
+      tuner(MLT, [config.priority.live]),
+      tuner(MLT),
+      tuner(MLT, [config.priority.logo]),
+      tuner(MLT),
+      tuner(MLT),
+    ];
+    expect(laneTypes(tuners, config.priority.epgNow)).toHaveLength(6);
+  });
+
+  test("ふだんの優先度では、衛星のロゴを待つ選局にも譲る", () => {
+    expect(
+      laneTypes(
+        [tuner(["BS"], [config.priority.carousel]), tuner(["GR"])],
+        config.priority.epg,
+      ),
+    ).toEqual([["GR"]]);
+  });
+});
+
+/**
+ * 偽のエージェント。`TunerPool.Pick` と同じく、受けられて選ぶ順 (`rank`) がいちばん小さい空きのチューナーを使う。
+ * 空きが無ければ busy、`noSignal` のチューナーに入れば untuned、`preempt` の回数だけ途中で切れる
+ */
+function fakeAgent(
+  tuners: { types: string[]; rank: number; noSignal?: boolean }[],
+  preempt = new Map<string, number>(),
+) {
+  const held = new Set<number>();
+  const log: { name: string; outcome: Outcome; last: boolean }[] = [];
+  const attempt = async (
+    job: { channel: { type: string; channel: string } },
+    last: boolean,
+  ): Promise<Outcome> => {
+    const { type, channel: name } = job.channel;
+    const done = (outcome: Outcome) => {
+      log.push({ name, outcome, last });
+      return outcome;
+    };
+    // リクエストは非同期に届く。選んだらすぐ押さえる (`TunerPool.Open` はロックの中で利用者を入れる)
+    await Bun.sleep(0);
+    const index = tuners
+      .map((tuner, at) => ({ ...tuner, at }))
+      .filter((tuner) => tuner.types.includes(type) && !held.has(tuner.at))
+      .sort((a, b) => a.rank - b.rank)[0]?.at;
+    if (index === undefined) return done("busy");
+    held.add(index);
+    try {
+      await Bun.sleep(2);
+      if (tuners[index]!.noSignal) return done("untuned");
+      const left = preempt.get(name) ?? 0;
+      if (left > 0) {
+        preempt.set(name, left - 1);
+        return done("cut");
+      }
+      await Bun.sleep(3);
+      return done("read");
+    } finally {
+      held.delete(index);
+    }
+  };
+  return { attempt, log };
+}
+
+const job = (type: string, name: string) => ({
+  channel: { type, channel: name },
+});
+
+describe("列を引き切る (drain)", () => {
+  const MLT = ["GR", "BS", "CS", "CATV"];
+
+  test("並べた数がチューナーより多くても、空きを待って全部読む", async () => {
+    // 7 つ並べたが、エージェントが使わせるのは 4 台 (残りはライブ・録画)
+    const agent = fakeAgent([
+      { types: ["BS", "CS"], rank: 0 },
+      { types: MLT, rank: 1 },
+      { types: MLT, rank: 1 },
+      { types: MLT, rank: 1 },
+    ]);
+    const jobs = [
+      ...Array.from({ length: 12 }, (_, i) => job("GR", `T${i}`)),
+      ...Array.from({ length: 6 }, (_, i) => job("BS", `BS${i}`)),
+      ...Array.from({ length: 6 }, (_, i) => job("CATV", `C${i}`)),
+    ];
+    const dropped: unknown[] = [];
+    await drain(
+      [...jobs],
+      [["BS", "CS"], ["BS", "CS"], MLT, MLT, MLT, MLT, MLT],
+      agent.attempt,
+      { backoff: 1, dropped: (gone) => dropped.push(...gone) },
+    );
+
+    const read = agent.log.filter((entry) => entry.outcome === "read");
+    expect(read).toHaveLength(jobs.length);
+    expect(new Set(read.map((entry) => entry.name)).size).toBe(jobs.length);
+    expect(agent.log.some((entry) => entry.outcome === "busy")).toBe(true);
+    expect(dropped).toEqual([]);
+  });
+
+  test("途中で切れた 1 件は列へ戻して読み直す", async () => {
+    const agent = fakeAgent([{ types: MLT, rank: 0 }], new Map([["C1", 2]]));
+    await drain(
+      [job("CATV", "C1"), job("GR", "T1")],
+      [MLT, MLT],
+      agent.attempt,
+      { backoff: 1 },
+    );
+    expect(
+      agent.log
+        .filter((entry) => entry.name === "C1" && entry.outcome !== "busy")
+        .map((entry) => entry.outcome),
+    ).toEqual(["cut", "cut", "read"]);
+    expect(agent.log.filter((entry) => entry.outcome === "read")).toHaveLength(
+      2,
+    );
+  });
+
+  test("切れ続ける 1 件は、上限で諦める (周回が終わる)", async () => {
+    const agent = fakeAgent([{ types: MLT, rank: 0 }], new Map([["C1", 100]]));
+    await drain([job("CATV", "C1")], [MLT], agent.attempt, { backoff: 1 });
+    expect(agent.log.map((entry) => entry.outcome)).toEqual([
+      "cut",
+      "cut",
+      "cut",
+      "cut",
+    ]);
+  });
+
+  /*
+   * どのチューナーを使うかはエージェントが決める (docs/agent.md「選ぶ順の約束」)。電波の来ていない
+   * チューナーが順位で先頭なら、空いている限りそこに入る。選局できなかった 1 件は 1 回だけ読み直し、
+   * 最初の回は受信できなかったと数えない (`last` が false)
+   */
+  test("選局できなかった 1 件は 1 回だけ読み直し、最後の回だけ数える", async () => {
+    const agent = fakeAgent([{ types: ["BS", "CS"], rank: 0, noSignal: true }]);
+    await drain([job("BS", "BS1")], [["BS", "CS"]], agent.attempt, {
+      backoff: 1,
+    });
+    expect(agent.log).toEqual([
+      { name: "BS1", outcome: "untuned", last: false },
+      { name: "BS1", outcome: "untuned", last: true },
+    ]);
+  });
+
+  test("チューナーがずっと塞がっていれば、待つのを上限で打ち切って残りを落とす", async () => {
+    const agent = fakeAgent([]);
+    const dropped: unknown[] = [];
+    await drain(
+      [job("GR", "T1"), job("GR", "T2")],
+      [["GR"], ["GR"]],
+      agent.attempt,
+      { backoff: 1, idleLimit: 3, dropped: (gone) => dropped.push(...gone) },
+    );
+    expect(dropped).toHaveLength(2);
+    expect(agent.log.every((entry) => entry.outcome === "busy")).toBe(true);
+  });
+});
+
+describe("受信できなかったと数える回 (receptionFailed)", () => {
+  const none = {
+    received: false,
+    refused: false,
+    opened: false,
+    timedOut: false,
+    last: true,
+  };
+
+  test("空きが無かった回と、途中で切れた回は数えない", () => {
+    // 409 (開いていない)
+    expect(receptionFailed(none)).toBe(false);
+    // 開けたが、上限より前に切れた (優先度の高い要求に譲った)
+    expect(receptionFailed({ ...none, opened: true })).toBe(false);
+  });
+
+  test("選局できなかった回は、読み直さない最後の回だけ数える", () => {
+    expect(receptionFailed({ ...none, refused: true, last: false })).toBe(
+      false,
+    );
+    expect(receptionFailed({ ...none, refused: true })).toBe(true);
+  });
+
+  test("開けたのに上限まで何も来なかった回は数える。1 バイトでも来れば数えない", () => {
+    expect(receptionFailed({ ...none, opened: true, timedOut: true })).toBe(
+      true,
+    );
+    expect(
+      receptionFailed({
+        ...none,
+        opened: true,
+        timedOut: true,
+        received: true,
+      }),
+    ).toBe(false);
   });
 });
