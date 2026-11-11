@@ -30,7 +30,7 @@ export interface HevcProbe {
   }) => Promise<{ supported: boolean }>;
 }
 
-/** 4K の局の放送の HEVC を再生できるか。聞いて失敗したら再生できないとみる */
+/** 4K の局の放送の HEVC を再生できるか。`decodingInfo` が例外を投げたときは、再生できないとみなす */
 export async function broadcastHevcPlayable(
   probe: HevcProbe,
 ): Promise<boolean> {
