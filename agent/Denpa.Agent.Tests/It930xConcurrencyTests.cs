@@ -77,8 +77,8 @@ public partial class It930xConcurrencyTests
     /// <summary>
     /// 偽のブリッジが受けた I2C を、バスごとの順で確かめる。見つけた食い違いを返す (無ければ空)。
     /// <list type="bullet">
-    /// <item>中継を開けてから (X <c>08</c> ← <c>01</c>) 閉じるまで、同じバスのほかの復調器 (T・X) に届いていない (チューナーは同じアドレス 0x60 なので、中継の区切りは交えない。仕様書 1.4)</item>
-    /// <item>読む番地を書いた (1 バイトの書き込み) 次の同じバスの I2C は、同じ相手からの読み (仕様書 1.3)</item>
+    /// <item>中継を開けてから (X <c>08</c> ← <c>01</c>) 閉じるまで、同じバスのほかの復調器 (T・X) に届いていない (チューナーは同じアドレス 0x60 なので、中継の区切りは交えない。CXD2856 の仕様書 1.4)</item>
+    /// <item>読む番地を書いた (1 バイトの書き込み) 次の同じバスの I2C は、同じ相手からの読み (IT930x の仕様書 4.1)</item>
     /// </list>
     /// </summary>
     private static List<string> Interleaving(FakeIt930x usb, It930xModel model)
@@ -204,8 +204,8 @@ public partial class It930xConcurrencyTests
                 await Assert.That(tuners.All(tuner => tuner.Signal() is { Locked: true })).IsTrue();
                 // どの受信機も整合を保つ設定になった
                 var device = tuners[0].Device!;
-                foreach (var receiver in Pe.Receivers) await Assert.That(device.Frontend(receiver.Index).KeepsMatching).IsTrue();
-                // 初期化は受信機ごとに 2 回まで (設定の前に初期化した受信機を、待機させるためにもう一度初期化する。仕様書 4.7)
+                foreach (var receiver in Pe.Receivers) await Assert.That(device.Cxd(receiver.Index).KeepsMatching).IsTrue();
+                // 初期化は受信機ごとに 2 回まで (設定の前に初期化した受信機を、待機させるためにもう一度初期化する。CXD2856 の仕様書 4.8)
                 foreach (var receiver in Pe.Receivers)
                 {
                     var x = $"I2C W {receiver.I2cBus} {receiver.DemodAddress + 2:X2} 1001";
@@ -233,7 +233,7 @@ public partial class It930xConcurrencyTests
             cable.Tune(ChannelTable.Parse("H40")!);
             await Assert.That(bus3.Log.Count(line => line == "6C X 10=01")).IsEqualTo(1);
             // 初期化済みで待機中の受信機に、もう一度整合を保つ設定を求めても初期化し直さない
-            cable.Device!.Frontend(3).KeepMatching(standby: true);
+            cable.Device!.Cxd(3).KeepMatching(standby: true);
             await Assert.That(bus3.Log.Count(line => line == "6C X 10=01")).IsEqualTo(1);
             ground.Tune(ChannelTable.Parse("T27")!);
             await Assert.That(bus3.Log.Count(line => line == "6C X 10=01")).IsEqualTo(1);
@@ -474,7 +474,7 @@ public partial class It930xConcurrencyTests
         device.Release();
         var before = clock.Sleeps.Count;
         It930xDevice.CloseIfIdle("11-5", TimeSpan.Zero);
-        // GPIOH2 ← 0、GPIOH7 ← 1 のあと 100 ms (仕様書 1.5・10.3・11)。その前の 10 ms は、入力を全部閉じてから EP 0x84 をリセットするまでの待ち (DRV_ResetRxPort)
+        // GPIOH2 ← 0、GPIOH7 ← 1 のあと 100 ms (IT930x の仕様書 7.2・10、CXD2856 の仕様書 10.3)。その前の 10 ms は、入力を全部閉じてから EP 0x84 をリセットするまでの待ち (DRV_ResetRxPort)
         await Assert.That(usb.Log.TakeLast(2)).IsEquivalentTo(new[] { "W D8B7=00", "W D8C3=01" });
         await Assert.That(clock.Sleeps.Skip(before)).IsEquivalentTo(new[] { It930xBridge.InputsOffSettleMs, It930xDevice.PowerOffSettleMs });
         await Assert.That(It930xDevice.PowerOffSettleMs).IsEqualTo(100);
@@ -489,8 +489,8 @@ public partial class It930xConcurrencyTests
         var cable = new It930xTuner("test 0", 0,
             () => It930xDevice.Acquire("11-6", () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle("11-6", TimeSpan.Zero));
         cable.Tune(ChannelTable.Parse("H40")!);
-        await Assert.That(cable.Device!.Frontend(3).KeepsMatching).IsTrue();
-        // 全部閉じて電源を切る。開き直すと (GPIOH7 ← 0)、整合を保つ設定は使わないところから (仕様書 1.5)
+        await Assert.That(cable.Device!.Cxd(3).KeepsMatching).IsTrue();
+        // 全部閉じて電源を切る。開き直すと (GPIOH7 ← 0)、整合を保つ設定は使わないところから (IT930x の仕様書 7.2)
         cable.Dispose();
         usb.ResetSequence();
         var ground = new It930xTuner("test 3", 3,
@@ -499,8 +499,8 @@ public partial class It930xConcurrencyTests
         {
             var lines = bus3.Log.Count;
             ground.Tune(ChannelTable.Parse("T27")!);
-            await Assert.That(ground.Device!.Frontend(3).KeepsMatching).IsFalse();
-            // 初期化の手順 2 は 00 (仕様書 4.2)
+            await Assert.That(ground.Device!.Cxd(3).KeepsMatching).IsFalse();
+            // 初期化の手順 2 は 00 (CXD2856 の仕様書 4.2)
             await Assert.That(bus3.Log.Skip(lines)).Contains("6C U 67=00");
         }
         finally
@@ -509,7 +509,7 @@ public partial class It930xConcurrencyTests
         }
     }
 
-    /// <summary>電源の GPIOH7 の値の書き込み (仕様書 1.5)。開いたときの設定のぶんも数える</summary>
+    /// <summary>電源の GPIOH7 の値の書き込み (IT930x の仕様書 7.2)。開いたときの設定のぶんも数える</summary>
     private static int PowerWrites(FakeIt930x usb)
     {
         lock (usb.Log) return usb.Log.Count(line => line.StartsWith("W D8C3=", StringComparison.Ordinal));
@@ -608,9 +608,9 @@ public partial class It930xConcurrencyTests
         var device = It930xDevice.Acquire("11-7", () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code);
         try
         {
-            var frontend = device.Frontend(0);
+            var frontend = device.Cxd(0);
             await Assert.That(frontend.PowerProbe).IsEqualTo((byte)0x10);
-            // 中継を開けてすぐ、仕様書 4.2 の手順 1 より前に読む (仕様書 10.3)
+            // 中継を開けてすぐ、CXD2856 の仕様書 4.2 の手順 1 より前に読む (CXD2856 の仕様書 10.3)
             var open = bus3.Log.IndexOf("65 X 08=01");
             await Assert.That(bus3.Log.Skip(open).Take(3)).IsEquivalentTo(new[] { "65 X 08=01", "65 U 62?", "65 U 01=00" });
         }
@@ -620,4 +620,10 @@ public partial class It930xConcurrencyTests
             It930xDevice.CloseIfIdle("11-7", TimeSpan.Zero);
         }
     }
+}
+
+/// <summary>CXD2856ER の機種の受信機のチップを取る (整合を保つ設定と初期化の前の <c>62</c> は、この機種のチップにしかない)</summary>
+internal static class CxdFrontendExtensions
+{
+    public static Cxd2856Frontend Cxd(this It930xDevice device, int receiver) => ((CxdReceiver)device.Frontend(receiver)).Chip;
 }

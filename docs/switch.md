@@ -27,9 +27,9 @@ denpa だけで録って観るなら、次のものは要りません。
 - **B25 のデコーダ**。復号はエージェントがします。Linux では pcscd も要りません (USB のカードリーダーを直接扱う。[tuners.md](tuners.md#カードリーダー))
 - **チャンネルの設定ファイル**。設定の「受信」の「チャンネル」でスキャンします。衛星は最初から局が入っています
 - **データベースのサーバ** (MariaDB など)。denpa は SQLite を自分で持ちます ([config.md](config.md))
-- **PX-Q3U4・PX-S1UD などのホストのドライバ**。PX-Q3U4 などは px4-userland を同梱しています (Linux はイメージに、Mac と Windows はインストーラが入れる)。
-  PX-S1UD はエージェントが USB を直に持ちます (この実装は実機で確かめていません。Linux ではカーネルのドライバでも使えます)
-  ([tuner-px4.md](tuner-px4.md)・[tuner-px-s1ud.md](tuner-px-s1ud.md))。PT3 などの DVB のドライバは要ります ([tuner-pt3.md](tuner-pt3.md))
+- **PX-MLT5 系・PX-Q3U4・PX-S1UD などのホストのドライバ**。IT930x の機材 (PX-MLT5 系・PX-Q3U4 など) と PX-S1UD は、エージェントが USB を直に持ちます
+  (PX-S1UD の実装は実機で確かめていません。Linux ではカーネルのドライバでも使えます)
+  ([tuner-it930x.md](tuner-it930x.md)・[tuner-px-s1ud.md](tuner-px-s1ud.md))。PT3 などの DVB のドライバは要ります ([tuner-pt3.md](tuner-pt3.md))
 
 ## 移せるもの・移せないもの
 
@@ -54,18 +54,19 @@ Mirakurun・KonomiTV から取り込む仕組みはありません。チャン�
 ほかのソフトと同じ機械で動かすときに、コードで確かめてある振る舞いです。
 
 - **チューナーの設定を保存するまでは、見つけたチューナーを全部使います。** エージェントは `/dev/dvb` のアダプタと、
-  px4-userland の機材と、USB を直に持つ機材 (PX-S1UD など) を自分で探します
+  asicen-userland の機材と、USB を直に持つ機材 (IT930x の機材・PX-S1UD など) を自分で探します
 - **一度選局したチューナーは、エージェントを止めるか、チューナーの設定を変えるまで開いたままです。**
   同じチューナーをほかのソフトと分け合う仕組みはありません
 - **ほかのソフトに残すチューナーは、設定の「受信」の「チューナー」で「使う」のスイッチを外します。** 外したチューナーは選局に使いません
-- **px4-userland・asicen-userland の機材 (PX-Q3U4・PX-W3U3 など) は、筐体の受信機を全部外すと px4d・asicend を止めて USB を手放します** ([agent.md](agent.md#px4-userland-の作り))。
-  内蔵カードリーダーで復号しているときは止まらないので、同じ画面のカードリーダーの表で、そのリーダーの「使う」も外します。
+- **asicen-userland の機材 (PX-W3U3 など) は、筐体の受信機を全部外すと asicend を止めて USB を手放します** ([agent.md](agent.md#asicen-userland-の作り))。
   1 つでも「使う」に戻すと、また起こします
+- **IT930x の機材 (PX-Q3U4 など) は、受信機を全部外すと、30 秒待ってから電源を切って USB を手放します** ([tuner-it930x.md](tuner-it930x.md#設定))。
+  内蔵カードリーダーで復号しているときは手放さないので、同じ画面のカードリーダーの表で、そのリーダーの「使う」も外します
 - **Linux では、ホストや別のコンテナで pcscd が動いていると USB のカードリーダーを使えません**
   (「別のプロセスがカードリーダーを使用中です」と出ます。[tuners.md](tuners.md#直らないとき))
 - **PX-S1UD は、カーネルのドライバが使っているものにはエージェントから触りません** ([tuner-px-s1ud.md](tuner-px-s1ud.md))
 - **Linux に px4_drv (PX-Q3U4・PX-W3U4・PX-MLT5PE などのカーネルドライバ) が入っていると、その機材はエージェントから開けません。**
-  px4_drv が機材を使っている間、px4d は `BUSY` で失敗します (px4-userland の README)。denpa で使うなら、ホストで px4_drv を
+  px4_drv が機材を使っている間は、エージェントは USB を開けず「ほかのソフトが使っています」と返します。denpa で使うなら、ホストで px4_drv を
   blacklist して再起動します。Mirakurun など px4_drv の機材を使っていたソフトは、その機材を使えなくなります
 
   ```sh

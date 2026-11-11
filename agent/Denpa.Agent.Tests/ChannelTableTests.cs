@@ -149,7 +149,7 @@ public class ChannelTableTests
     [Test]
     public async Task J83B_は_H01_から_H105_の名前で_SKY_の選局になる()
     {
-        // 93.25 MHz から 6.5 MHz おきの中心周波数 (仕様書 7.1)。地上波と同じく Hz で、1/7 MHz はずらさない
+        // 93.25 MHz から 6.5 MHz おきの中心周波数 (CXD2856 の仕様書 7.1)。地上波と同じく Hz で、1/7 MHz はずらさない
         var h01 = ChannelTable.Parse("H01")!;
         await Assert.That(h01.Type).IsEqualTo("SKY");
         await Assert.That(h01.Delivery).IsEqualTo(ChannelTable.SysDvbcAnnexB);
@@ -176,7 +176,7 @@ public class ChannelTableTests
     [Arguments("H44", 372_750_000u, 374_950_000u)]  // +2.2 MHz
     public async Task 地域によってずらして送られるチャンネルはずらした周波数も持つ(string name, uint frequency, uint shifted)
     {
-        // 仕様書 7.1。どちらで送られているかは選局してみるまで分からない
+        // CXD2856 の仕様書 7.1。どちらで送られているかは選局してみるまで分からない
         var tuning = ChannelTable.Parse(name)!;
         await Assert.That(tuning.Frequency).IsEqualTo(frequency);
         await Assert.That(tuning.ShiftedFrequency).IsEqualTo(shifted);
@@ -200,7 +200,7 @@ public class ChannelTableTests
     [Arguments("QU62", 767_000_000u)]
     public async Task ISDB_C_は_QC_QU_QV_の名前で中心周波数の選局になる(string name, uint frequency)
     {
-        // 仕様書 7A.2 の表。地上波や CATV のパススルー (C13〜C63) と違って 1/7 MHz は足さない
+        // CXD2856 の仕様書 8.2 の表。地上波や CATV のパススルー (C13〜C63) と違って 1/7 MHz は足さない
         var tuning = ChannelTable.Parse(name)!;
         await Assert.That(tuning.Frequency).IsEqualTo(frequency);
         await Assert.That(tuning.Type).IsEqualTo(ChannelTable.Catv);
@@ -216,7 +216,7 @@ public class ChannelTableTests
     [Test]
     public async Task ISDB_C_の名前の後ろに_TSMF_の何本目の_TS_かを付けられる()
     {
-        // 有効な TS を相対 TS 番号の小さい順に並べたときの 0〜14 本目 (仕様書 7A.7)
+        // 有効な TS を相対 TS 番号の小さい順に並べたときの 0〜14 本目 (CXD2856 の仕様書 8.7)
         var plain = ChannelTable.Parse("QC30")!;
         var third = ChannelTable.Parse("QC30:2")!;
         await Assert.That(third.TsmfIndex).IsEqualTo(2);
@@ -238,7 +238,7 @@ public class ChannelTableTests
     [Arguments("QC27", 249_000_000u, 251_000_000u)]
     public async Task ISDB_C_の_C24_から_C27_は_2_MHz_ずらした周波数も持つ(string name, uint frequency, uint shifted)
     {
-        // どちらで送られているかは確かめられていない (仕様書 7A.2)。表の周波数を先に試す
+        // どちらで送られているかは確かめられていない (CXD2856 の仕様書 8.2)。表の周波数を先に試す
         var tuning = ChannelTable.Parse(name)!;
         await Assert.That(tuning.Frequency).IsEqualTo(frequency);
         await Assert.That(tuning.ShiftedFrequency).IsEqualTo(shifted);

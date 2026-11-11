@@ -48,7 +48,7 @@ public class CardStatusTests
     {
         CardLinkCandidate[] found =
         [
-            Present("PX4 内蔵リーダー", 1),
+            Present("asicen-userland 内蔵リーダー", 1),
             new("Gemplus (usb 4-11)", () => throw new InvalidOperationException("使っているリーダーを開き直しました")),
             Failing("空のリーダー (usb 1-2)", new CardAbsentException("空のリーダー にカードが挿さっていません")),
             Failing("壊れたリーダー (usb 1-3)", new IOException("別のプロセスがリーダーを使っています")),

@@ -2,7 +2,7 @@ namespace Denpa.Agent.Tests;
 
 /*
  * 復調器 CXD2856ER とチューナー CXD2858ER の衛星 (ISDB-S) と、地上波との切り替え (Cxd2856.cs・Cxd2858.cs)。
- * 偽のバス (Cxd2856Fakes.cs) の上で、書く順番と値を仕様書 (denpa-spec の mlt5/spec.md) の表と照らす。添えた番号は仕様書の節。
+ * 偽のバス (Cxd2856Fakes.cs) の上で、書く順番と値を仕様書 (denpa-spec の cxd2856/spec.md) の表と照らす。添えた番号は仕様書の節。
  * 読んでから書く行 (マスクが FF でない行) は、読み (T C4?) のあとに書いた値が並ぶ。偽物のレジスタは書くまで 0
  */
 public class Cxd2856SatelliteTests
@@ -156,7 +156,7 @@ public class Cxd2856SatelliteTests
         await Assert.That(sleptAt).IsGreaterThan(sleep);
         await Assert.That(start).IsGreaterThan(sleptAt);
         await Assert.That(log).Contains("T 33=00");
-        // チューナーは地上波側を止めてから衛星の周波数 (仕様書 4.4 の手順 0・4.6・10.2)
+        // チューナーは地上波側を止めてから衛星の周波数 (仕様書 4.4 の手順 0・4.7・10.2)
         await Assert.That(Relayed(log)).IsEquivalentTo(new[]
         {
             "U 74=02", "U 67?", "U 67=00", "U 5E=150000", "U 88=00", "U 87=C0",
@@ -182,7 +182,7 @@ public class Cxd2856SatelliteTests
         // ISDB-S のスリープは共通の後始末 (2.4) を使わない
         await Assert.That(log).DoesNotContain("T 49=33");
         await Assert.That(log).Contains("T 33=02");
-        // チューナーは衛星側を止めてから地上波の周波数 (仕様書 4.3 の手順 0・4.6・10.2)
+        // チューナーは衛星側を止めてから地上波の周波数 (仕様書 4.3 の手順 0・4.7・10.2)
         var relayed = Relayed(log);
         await Assert.That(relayed.Take(7)).IsEquivalentTo(new[] { "U 15=02", "U 43=07", "U 0C=140000", "U 01=00", "U 05=00", "U 04=C0", "U 01=00" });
         await Assert.That(relayed).Contains("U 68=0088000B2200171B578008FF0199002487");
@@ -197,7 +197,7 @@ public class Cxd2856SatelliteTests
         frontend.Sleep();
         await Assert.That(bus.Log).IsEquivalentTo(new[]
         {
-            // 仕様書 4.6 の衛星側の停止 (中継の中で)
+            // 仕様書 4.7 の衛星側の停止 (中継の中で)
             "X 08=01", "U 15=02", "U 43=07", "U 0C=140000", "U 01=00", "U 05=00", "U 04=C0", "X 08=00",
             // 仕様書 6.5 の手順 1〜3
             "T 00=00", "T C3=01", "T 80?", "T 80=1F",
@@ -227,7 +227,7 @@ public class Cxd2856SatelliteTests
         failing = false;
         bus.Log.Clear();
         frontend.Sleep();
-        // チューナーの衛星側を止め (仕様書 4.6)、ISDB-S のスリープ (仕様書 6.5) を送る
+        // チューナーの衛星側を止め (仕様書 4.7)、ISDB-S のスリープ (仕様書 6.5) を送る
         await Assert.That(bus.Log).Contains("U 0C=140000");
         await Assert.That(bus.Log).Contains("X 28=13");
         await Assert.That(bus.Log).DoesNotContain("T 49=33");
@@ -243,11 +243,11 @@ public class Cxd2856SatelliteTests
         var (frontend, bus, _) = Make();
         frontend.TuneIsdbs(Bs15, Tsid16625);
         var demod = bus[Demod];
-        // b0 の bit0 が 1 (計算が終わった)。b1 の上位 3 ビットは使わない (13 ビット。仕様書 8.2)。r = 0x0130 → 8.0 dB
+        // b0 の bit0 が 1 (計算が終わった)。b1 の上位 3 ビットは使わない (13 ビット。仕様書 9.2)。r = 0x0130 → 8.0 dB
         demod.T[(0xA1, 0x10)] = 0x01;
         demod.T[(0xA1, 0x11)] = 0xE1;
         demod.T[(0xA1, 0x12)] = 0x30;
-        // v = 0x0193 = 403 (x0 の上位 3 ビットは使わない)。利得 = 403 × (-1400) / 403 + 9700 = 8300 → -83.0 (仕様書 8.6 の衛星)
+        // v = 0x0193 = 403 (x0 の上位 3 ビットは使わない)。利得 = 403 × (-1400) / 403 + 9700 = 8300 → -83.0 (仕様書 9.7 の衛星)
         demod.T[(0xA0, 0x1F)] = 0xE1;
         demod.T[(0xA0, 0x20)] = 0x93;
         bus.Log.Clear();
@@ -270,7 +270,7 @@ public class Cxd2856SatelliteTests
         // 付録 A は 192 行で、値の大きいほうから並ぶ
         await Assert.That(Cxd2856.IsdbsCnTable.Count).IsEqualTo(192);
         await Assert.That(Cxd2856.IsdbsCnTable.Zip(Cxd2856.IsdbsCnTable.Skip(1)).All(pair => pair.First.Raw > pair.Second.Raw)).IsTrue();
-        // 表の最初以上は 0.0 dB、最後以下は 20.0 dB (仕様書 8.2 の手順 5)
+        // 表の最初以上は 0.0 dB、最後以下は 20.0 dB (仕様書 9.2 の手順 5)
         await Assert.That(Cxd2856.IsdbsCnDb(0x05AF)).IsEqualTo(0.0);
         await Assert.That(Cxd2856.IsdbsCnDb(0x1FFF)).IsEqualTo(0.0);
         await Assert.That(Cxd2856.IsdbsCnDb(0x0014)).IsEqualTo(20.0);

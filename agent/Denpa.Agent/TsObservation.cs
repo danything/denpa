@@ -82,7 +82,7 @@ public sealed class TsObservation
     }
 
     /// <summary>
-    /// 分かったことを 1 行ずつ。**報告にそのまま貼れる形にする** (docs/tuners.md「スカパー！プレミアムでカード無しで分かること」)
+    /// 分かったことを 1 行ずつ。**報告にそのまま貼れる形にする** (docs/tuner-it930x.md「スカパー！プレミアムでカード無しで分かること」)
     /// </summary>
     public IEnumerable<string> Describe()
     {

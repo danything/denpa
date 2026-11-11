@@ -282,8 +282,8 @@ public sealed class TunerPool(
                     if (lease.Stopped) return sink;
                     /*
                      * **合っていても、続いていなければ選局し直す。** DVB は合ったまま
-                     * だが、px4-userland は利用者がいなくなると TS のストリームを畳む
-                     * (受信機は取ったまま。Px4.cs)。合っている印だけ残っていて中身が無い場合を、合っているとみなさない
+                     * だが、asicen-userland は利用者がいなくなると TS のストリームを畳む
+                     * (受信機は取ったまま。AsicenUdtv.cs)。合っている印だけ残っていて中身が無い場合を、合っているとみなさない
                      */
                     if (held.Channel != channel || !held.Device.Tuned)
                     {
@@ -376,12 +376,11 @@ public sealed class TunerPool(
     ///
     /// <list type="bullet">
     /// <item><c>/dev/dvb/adapterN/frontendM</c> … Linux DVB (Tuning.cs)</item>
-    /// <item><c>px4:&lt;筐体の番号&gt;:&lt;受信機&gt;</c> … px4-userland の機材 (Px4.cs)</item>
     /// <item><c>siano:&lt;USB のポート&gt;</c> … Siano の機材 (PX-S1UD など。Siano.cs)。エージェントが USB を直に持つ (Linux・Windows・macOS)。カーネルが使っていれば開かない</item>
     /// <item><c>asicen:&lt;USB ポート&gt;:&lt;受信機&gt;</c> … asicen-userland の機材 (Asicen.cs。試験的)</item>
     /// <item><c>zd1j:&lt;USB のポート&gt;</c> … Sony CECH-ZD1 J (Zd1j.cs)。エージェントが USB を直に持つ (Linux・Windows・macOS)</item>
     /// <item><c>dt295:&lt;USB のポート&gt;</c> … PIXELA PIX-DT295 (Dt295NativeTuner.cs)。エージェントが USB を直に持ち、機材のレジスタを直に書いて動かす</item>
-    /// <item><c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c> … IT930x の機材 (PX-MLT5U など。It930xDevice.cs)。エージェントが USB を直に持つ。地上波と衛星 (LNB の給電は 15V だけ) と J.83B (SKY)</item>
+    /// <item><c>it930x:&lt;USB のポート&gt;:&lt;受信機&gt;</c> … IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など。It930xDevice.cs)。エージェントが USB を直に持つ。受けられる種別は受信機ごとに決まっている (地上波・衛星・J.83B (SKY)。LNB の給電は 15V だけ)</item>
     /// </list>
     ///
     /// <para>それ以外は投げる。<c>px4_drv</c> の chardev はもう受け取らない</para>
@@ -390,23 +389,22 @@ public sealed class TunerPool(
     public static ITuneDevice OpenDevice(string path, string? lnb, bool followZd1j = false)
     {
         /*
-         * **Windows は px4-userland の機材と、エージェントが USB を直に持つ機材 (Siano・CECH-ZD1 J・PIX-DT295・IT930x) だけ。** DVB は無く、asicen-userland は Windows を出していない。
+         * **Windows は、エージェントが USB を直に持つ機材 (Siano・CECH-ZD1 J・PIX-DT295・IT930x) だけ。** DVB は無く、asicen-userland は Windows を出していない。
          * 書いてあっても開かない (開けば libc を呼びにいって落ちる)
          */
-        if (OperatingSystem.IsWindows() && !Siano.Is(path) && !Zd1j.Is(path) && !Dt295.Is(path) && !It930x.Is(path) && Px4Userland.Parse(path) is null)
+        if (OperatingSystem.IsWindows() && !Siano.Is(path) && !Zd1j.Is(path) && !Dt295.Is(path) && !It930x.Is(path))
         {
             throw new IOException(
-                $"{path} は Windows では使えません (Windows で使えるのは {Px4Userland.Scheme}<筐体の番号>:<受信機> と {Siano.Scheme}<USB のポート> と {Zd1j.Scheme}<USB のポート> と {Dt295.Scheme}<USB のポート> と {It930x.Scheme}<USB のポート>:<受信機> だけ)");
+                $"{path} は Windows では使えません (Windows で使えるのは {Siano.Scheme}<USB のポート> と {Zd1j.Scheme}<USB のポート> と {Dt295.Scheme}<USB のポート> と {It930x.Scheme}<USB のポート>:<受信機> だけ)");
         }
         if (Zd1j.Parse(path) is { } zd1j) return new Zd1jTuner(zd1j, followZd1j);
         if (Dt295.Parse(path) is { } dt295) return new Dt295NativeTuner(dt295);
         if (It930x.Parse(path) is { } it930x) return new It930xTuner(it930x.Port, it930x.Receiver, lnb);
-        if (Px4Userland.Parse(path) is { } px4) return new Px4Tuner(px4.Id, px4.Receiver, lnb);
         if (Siano.Parse(path) is { } port) return Siano.Open(port);
         if (AsicenUserland.Parse(path) is { } asicen) return AsicenUserland.Open(asicen.Id, asicen.Receiver, lnb);
         if (path.Contains("/dvb/", StringComparison.Ordinal)) return new DvbTuner(path, lnb);
         throw new IOException(
-            $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Px4Userland.Scheme}<筐体の番号>:<受信機> か {Siano.Scheme}<USB のポート> か {AsicenUserland.Scheme}<USB のポート>:<受信機> か {Zd1j.Scheme}<USB のポート> か {Dt295.Scheme}<USB のポート> か {It930x.Scheme}<USB のポート>:<受信機>)");
+            $"{path} は対応していないデバイスです (/dev/dvb/adapterN/frontendM か {Siano.Scheme}<USB のポート> か {AsicenUserland.Scheme}<USB のポート>:<受信機> か {Zd1j.Scheme}<USB のポート> か {Dt295.Scheme}<USB のポート> か {It930x.Scheme}<USB のポート>:<受信機>)");
     }
 
     /// <summary>
@@ -707,9 +705,9 @@ public sealed class TunerPool(
                     ["users"] = users,
                     /*
                      * 選局の失敗が無ければ、受信機の注意書き (15V を出せないので 0V にした、など。
-                     * Px4Userland.Notice)。画面は空いているチューナーの error を出すので、新しい欄は作らない
+                     * TunerNotice.Get)。画面は空いているチューナーの error を出すので、新しい欄は作らない
                      */
-                    ["error"] = lease?.Error ?? Px4Userland.Notice(spec.Device),
+                    ["error"] = lease?.Error ?? TunerNotice.Get(spec.Device),
                     // 受信の状態と C/N。使用中で、機材が測れるときだけ (ReadSignals)
                     ["signal"] = lease?.Signal?.ToJson(),
                 });

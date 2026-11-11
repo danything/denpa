@@ -546,7 +546,7 @@ internal sealed class AsicenTuner : ITuneDevice
         lock (_gate)
         {
             var listed = _prepare();
-            Px4Tuner.Check(listed?.Receivers, _receiver, tuning);
+            UserlandReceiver.Check(listed?.Receivers, _receiver, tuning);
             Finish();
             Power(listed, tuning);
             try
@@ -574,7 +574,7 @@ internal sealed class AsicenTuner : ITuneDevice
             var notice = listed is null
                 ? "機種が分からないので、LNB に給電せずに選局しています (設定の LNB 15V は効きません)"
                 : $"{listed.Model} は LNB の給電を操作できないので、給電せずに選局しています (設定の LNB 15V は効きません。アンテナへの給電はほかの機器から)";
-            Px4Userland.SetNotice(_device, this, notice);
+            TunerNotice.Set(_device, this, notice);
             if (!_lnbWarned) Log.Write($"[{_name}] {notice}");
             _lnbWarned = true;
             return;
@@ -709,7 +709,7 @@ internal sealed class AsicenTuner : ITuneDevice
                 AsicenLnb.Drop(_id, this, _runtimeDir);
             }
         }
-        Px4Userland.ClearNotice(_device, this);
+        TunerNotice.Clear(_device, this);
     }
 }
 
@@ -779,7 +779,7 @@ internal static class AsicenLnb
 ///
 /// <para>
 /// <c>stream.sock</c> に繋いで ATTACH_STREAM を送ると、asicend が TS_DATA のフレームを送り続け、STOP のあとに STREAM_END が来る。
-/// 中身はソケットから <see cref="Pipe"/> のメモリへ直に受ける (px4d の <see cref="Px4Stream"/> と同じ作り)。
+/// 中身はソケットから <see cref="Pipe"/> のメモリへ直に受ける (CECH-ZD1 J の <c>Zd1jStream</c> と同じく Pipelines)。
 /// </para>
 /// </summary>
 internal sealed class AsicenStream
@@ -1011,7 +1011,7 @@ internal sealed class AsicenStream
     /// <summary>STREAM_END (か切断) まで待つ</summary>
     public bool WaitEnd(TimeSpan limit) => _ended || _end.Wait(limit);
 
-    /// <summary>止める (<see cref="Px4Stream.Stop"/> と同じ順)</summary>
+    /// <summary>止める</summary>
     public void Stop()
     {
         _stopped = true;

@@ -16,11 +16,10 @@ namespace Denpa.Agent;
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27
 /// denpa-agent --tune /dev/dvb/adapter0/frontend0 BS15:16625 --lnb 15v
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27,T21   # 確保したまま切り替える
-/// denpa-agent --tune px4:00001205000960:2 T27               # px4-userland の機材。Q3U4 なら受信機 2 は地上波
 /// denpa-agent --tune siano:1-2 T27                          # Siano の機材 (smsusb を blacklist した PX-S1UD)。エージェントが USB を直に持つ
 /// denpa-agent --tune asicen:1-2:1 T27                       # asicen-userland の機材 (PX-W3U3。試験的。受信機 1 は地上波)
 /// denpa-agent --tune zd1j:4-12.1 27 [--decode] [--seconds N] [--repeat N]   # Sony CECH-ZD1 J。開く・ロック・最初の TS (と復号できたパケット)・2 回目の選局の時間と C/N を出す
-/// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。ロックまでの時間と C/N と強度も出す (衛星は BS15:16625 --lnb 15v、J.83B は H40 のように)
+/// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) の受信機 0。ロックまでの時間と C/N と強度も出す (衛星は BS15:16625 --lnb 15v、J.83B は H40 のように)。TC90522 の機種は TMCC とチューナーに書いた値も出す
 /// denpa-agent --tune it930x:4-12.1:0+it930x:4-12.1:1 QC14,T27   # 「+」で並べた受信機を同時に選局する (そろって始め、受信機ごとにまとめて出す)
 /// denpa-agent --tune it930x:4-12.1:0+…+it930x:4-12.1:4 T27,T22 --steps 2,3,5   # 流す受信機を 2 → 3 → 5 と足し、ブリッジの状態を出す。TS が止まったらその先は足さない
 /// denpa-agent --tune it930x:3-1:1 QC26 --seconds 10 --ecm-test   # ケーブルの 4K (分割 TLV)。組み立てた TLV の数と TlvObservation を出し、ECM を 1 つカードに渡す
@@ -184,7 +183,7 @@ public static class Probe
             return OneCard(Zd1j.Card(port), Zd1jBoard.CloseAll);
         }
         Console.WriteLine(OperatingSystem.IsLinux() ? Ccid.Describe() : PcscLink.Describe());
-        foreach (var found in Px4Card.Find().Concat(It930x.Cards()).Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
+        foreach (var found in It930x.Cards().Concat(AsicenUserland.Cards())) Console.WriteLine($"内蔵 {found.Name}");
         Zd1j.DescribeCards(Zd1j.Cards(), Console.Out);
         Dt295.DescribeCards(Dt295.Cards(), Console.Out);
         try
@@ -280,7 +279,7 @@ public static class Probe
     private static IKeySource KeysFor(string device, bool decode, bool cardUrl) =>
         cardUrl ? Keys.Source
         : Dt295.Parse(device) is { } dt295 ? new LocalCard(() => [Dt295.Card(dt295)])
-        : decode && It930x.Parse(device) is { } it930xReceiver && It930xCardAt(it930xReceiver.Port) is { } it930xCard ? new LocalCard(() => [it930xCard])
+        : decode && It930x.Parse(device) is { } it930xReceiver && It930xCardAt(It930x.CardHost(it930xReceiver.Port)) is { } it930xCard ? new LocalCard(() => [it930xCard])
         : Keys.Source;
 
     /// <summary>終わりに機材を閉じる (PIX-DT295 と IT930x の機材。ほかは null)</summary>
@@ -408,6 +407,12 @@ public static class Probe
                 error.WriteLine($"{name}: {failure.Message}");
                 results.Add(new ChannelResult(name, false, null, 0, failure.Message));
                 ShowPowerProbe(tuner, output, ref powerProbeShown);
+                // TC90522 の機種は、失敗したあとも、チューナーに書いた値と PLL の状態、ロックの判定で読む復調器のレジスタを出す (どこで止まったかを切り分けるため)
+                if (tuner is It930xTuner diagnosed && diagnosed.Diagnose() is { Count: > 0 } lines)
+                {
+                    output.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+                    foreach (var line in lines) output.WriteLine($"    {line}");
+                }
                 // ISDB-C は、どこで失敗したか (ロック・TSMF の判定) と、ロックしていれば変調と C/N も出す
                 if (tuning.IsdbC && tuner is It930xTuner failed)
                 {
@@ -419,7 +424,7 @@ public static class Probe
                         output.WriteLine($"    {(last.Locked ? "ロック中" : "ロックしていない")}  C/N {(last.Cn is { } lastCn ? $"{lastCn:F1} dB" : "-")}  強度 {(last.StrengthDbm is { } lastDbm ? $"{lastDbm:F1} dBm (目安)" : "-")}");
                         foreach (var line in IsdbcSignalLines(failed.CableModulation, failed.CablePer, failed.IsdbcDetail)) output.WriteLine($"    {line}");
                     }
-                    // ロックしたのに TS が 1 パケットも届かなかった (仕様書 3.6)。TS を止めるレジスタを読み、ブリッジのバッファを捨てて選局し直す
+                    // ロックしたのに TS が 1 パケットも届かなかった (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、ブリッジのバッファを捨てて選局し直す
                     if (failed.IsdbcLocked && failed.Tsmf is { Received: 0 }) RetryAfterFlush(failed, tuning, name, output);
                 }
                 continue;
@@ -436,7 +441,7 @@ public static class Probe
                     output.WriteLine($"    TMCC の TSID  {string.Join(" ", streams.Select((tsid, relative) => $"{relative}:{tsid}"))}");
                 }
                 if (it930x.CableFrequency is { } locked) output.WriteLine($"    受けた周波数 {locked} Hz");
-                // ISDB-C は TSMF の判定と、ヘッダーにある TS の一覧も出す (仕様書 7A.7)
+                // ISDB-C は TSMF の判定と、ヘッダーにある TS の一覧も出す (CXD2856 の仕様書 8.7)
                 if (tuning.IsdbC)
                 {
                     foreach (var line in TsmfLines(it930x.IsdbcLocked, it930x.Tsmf)) output.WriteLine($"    {line}");
@@ -450,7 +455,7 @@ public static class Probe
                 ? CountTlv(tuner.Output, name, options.EcmTest ? source : null, seconds, output, error)
                 : Count(tuner.Output, name, descramble ? new Descrambler(source) : null, seconds, 0, output, error);
             results.Add(new ChannelResult(name, true, measured.Rate, measured.Bytes, measured.Bytes == 0 ? "TS が届かない" : null));
-            // ロックしたのに TS が 1 バイトも届かなかった (仕様書 3.6)。TS を止めるレジスタを読み、ブリッジのバッファを捨ててからもう一度受ける
+            // ロックしたのに TS が 1 バイトも届かなかった (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、ブリッジのバッファを捨ててからもう一度受ける
             if (measured.Bytes == 0 && tuner is It930xTuner stalled)
             {
                 ShowTsOutput(stalled, output);
@@ -479,7 +484,7 @@ public static class Probe
                 {
                     output.WriteLine($"    変調 {receiver.CableModulation ?? "-"}  PER {(receiver.CablePer is { } per ? $"{per:G3} (未確認の値)" : "-")}");
                 }
-                // ISDB-C は変調と PER と、ほかに読める値 (仕様書 8.4A。値が正しいかは、ほかの受信機と比べていない)
+                // ISDB-C は変調と PER と、ほかに読める値 (CXD2856 の仕様書 9.5。値が正しいかは、ほかの受信機と比べていない)
                 if (tuning.IsdbC)
                 {
                     foreach (var line in IsdbcSignalLines(receiver.CableModulation, receiver.CablePer, receiver.IsdbcDetail)) output.WriteLine($"    {line}");
@@ -494,13 +499,18 @@ public static class Probe
                     foreach (var line in SplitTlvLines(split)) output.WriteLine($"    {line}");
                 }
             }
+            // TC90522 の機種は、TMCC・誤り率・チューナーに書いた値も出す (実機の値を仕様書と照らすため。TC90522 の仕様書 12)
+            if (tuner is It930xTuner noted)
+            {
+                foreach (var note in noted.Notes()) Console.WriteLine($"    {note}");
+            }
         }
 
         return new TuneResults(results, false);
     }
 
     /// <summary>
-    /// 初期化の前に読んだチューナーの <c>62</c> を、受信機ごとに 1 回出す (仕様書 10.3。前に ISDB-C か J.83B を選局していて <c>10</c> なら、電源が切れていなかったと推定する)
+    /// 初期化の前に読んだチューナーの <c>62</c> を、受信機ごとに 1 回出す (CXD2856 の仕様書 10.3。前に ISDB-C か J.83B を選局していて <c>10</c> なら、電源が切れていなかったと推定する)
     /// </summary>
     private static void ShowPowerProbe(ITuneDevice tuner, TextWriter output, ref bool shown)
     {
@@ -509,7 +519,7 @@ public static class Probe
         output.WriteLine($"    初期化の前のチューナーの 62: {value:X2} (前に ISDB-C か J.83B を選局していて 10 なら、電源が切れていなかった。推定)");
     }
 
-    /// <summary>TS を止める復調器のレジスタ 4 つと、ロックの状態と、ブリッジの TS の経路の状態を出す (仕様書 3.6)</summary>
+    /// <summary>TS を止める復調器のレジスタ 4 つと、ロックの状態と、ブリッジの TS の経路の状態を出す (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)</summary>
     private static void ShowTsOutput(It930xTuner tuner, TextWriter output)
     {
         try
@@ -539,7 +549,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// ISDB-C でロックしたのに TS が 1 パケットも届かず、TSMF の判定で失敗したとき (仕様書 3.6)。TS を止めるレジスタを読み、
+    /// ISDB-C でロックしたのに TS が 1 パケットも届かず、TSMF の判定で失敗したとき (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、
     /// ブリッジのバッファを捨ててから同じチャンネルを選局し直して、TS が届くようになったかを出す
     /// </summary>
     private static void RetryAfterFlush(It930xTuner tuner, ChannelTable.Tuning tuning, string name, TextWriter output)
@@ -559,7 +569,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// <c>--tune</c> が ISDB-C で出す、ロックと TSMF の判定 (仕様書 7A.6・7A.7)。ヘッダーを受けていれば、相対 TS 番号ごとの TSID・original_network_id・有効かどうか・
+    /// <c>--tune</c> が ISDB-C で出す、ロックと TSMF の判定 (CXD2856 の仕様書 8.6・8.7)。ヘッダーを受けていれば、相対 TS 番号ごとの TSID・original_network_id・有効かどうか・
     /// スロットの数と、選んだ TS、ヘッダーの 188 バイトも出す。TSID と original_network_id の並びは仕様書の推定なので、そう書いて出す
     /// </summary>
     internal static IEnumerable<string> TsmfLines(bool locked, TsmfSelector? tsmf)
@@ -608,7 +618,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// <c>--tune</c> が ISDB-C で受け終えたあとに出す、TSMF の数と、出力した TS の PAT の TSID (ヘッダーの TSID の並びの推定を確かめるため。仕様書 7A.7)。
+    /// <c>--tune</c> が ISDB-C で受け終えたあとに出す、TSMF の数と、出力した TS の PAT の TSID (ヘッダーの TSID の並びの推定を確かめるため。CXD2856 の仕様書 8.7)。
     /// 選んだ TS のパケットが欠けたときに、選ぶ前 (搬送波から受けたまま) で欠けていたのか、選ぶ処理で欠けたのかを分けられるように、
     /// 選んだ TS のスロットに来た数と出力した数、選ぶ前とあとの連続性の飛びも出す
     /// </summary>
@@ -683,7 +693,7 @@ public static class Probe
     }
 
     /// <summary>
-    /// <c>--tune</c> が ISDB-C で出す、変調と PER (仕様書 8.4) と、ほかに読める値 (仕様書 8.4A)。PER と 8.4A の値は、正しいかをほかの受信機と比べていないので、未確認と書いて出す
+    /// <c>--tune</c> が ISDB-C で出す、変調と PER (CXD2856 の仕様書 9.4) と、ほかに読める値 (CXD2856 の仕様書 9.5)。PER と 9.5 の値は、正しいかをほかの受信機と比べていないので、未確認と書いて出す
     /// </summary>
     internal static IEnumerable<string> IsdbcSignalLines(string? modulation, double? per, CxdIsdbcDetail? detail)
     {

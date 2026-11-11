@@ -6,7 +6,7 @@
 
 ### どのチューナーが使えますか
 
-PT3 (Linux DVB)、PX-Q3U4・PX-W3U4 など (px4-userland)、PX-MLT5 系、PX-S1UD、Sony CECH-ZD1 J、PIXELA PIX-DT295 です。
+PT3 (Linux DVB)、IT930x の機材 (PX-MLT5 系・PX-Q3・PX-W3 系など)、PX-S1UD、Sony CECH-ZD1 J、PIXELA PIX-DT295 です。
 PX-S1UD は Linux DVB では動きますが、DVB を使わずにエージェントが USB を直に持つ実装 (Mac・Windows はこれだけ) は実機で確かめていません ([tuner-px-s1ud.md](tuner-px-s1ud.md))。
 ほかに、PT1 / PT2・PX-BCUD・Friio (白) など、実機では確かめていないものの Linux DVB で動くはずの機材があります
 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))。使ってみたら、動いたかどうかを [Issue](https://github.com/danything/denpa/issues) で教えてください。
@@ -16,7 +16,7 @@ PX-S1UD は Linux DVB では動きますが、DVB を使わずにエージェン
 ### Mac や Windows でも動きますか
 
 Apple Silicon の Mac と x64 の Windows で動きます。どちらも denpa 本体とエージェントが OS の上で直接動きます (コンテナは使わない)。
-使えるチューナーは px4-userland の機材と PX-MLT5 系・PX-S1UD・Sony CECH-ZD1 J・PIXELA PIX-DT295 です (DVB は Linux だけ)。
+使えるチューナーは IT930x の機材 (PX-MLT5 系・PX-Q3U4 など。エージェントが USB を直に持つ)・PX-S1UD・Sony CECH-ZD1 J・PIXELA PIX-DT295 です (DVB は Linux だけ)。
 [install-mac.md](install-mac.md)・[install-windows.md](install-windows.md)。
 
 ### arm64 でも動きますか

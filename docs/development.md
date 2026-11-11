@@ -214,7 +214,7 @@ release は組み直さず、main で組んだイメージにバージョンを 
 
 **イメージは amd64 と arm64 の 2 つ**で、同じタグに束ねてあります (理由と組み方は
 [architecture.md](architecture.md#イメージのタグ))。Dockerfile は BuildKit の `TARGETARCH`
-で配布物 (px4-userland) の名前と .NET の RID を読み替え、
+で配布物 (asicen-userland) の名前と .NET の RID を読み替え、
 Intel と AMD の VA-API ドライバは amd64 だけに入れます
 (Debian の arm64 には Intel のドライバが無く、AMD の GPU を載せた arm の機械はまず無い)。Dockerfile やそこへ入るもの (`agent/`・`patches/`・依存) を
 触った PR では、`Docker build check` が両方の arch を本物のランナーで組みます
@@ -238,7 +238,7 @@ denpa が起こすのは ffmpeg / ffprobe だけで、シェルを通しませ�
 
 ### 外から持ってくるものはバージョンで固定する
 
-ffmpeg・SVT-AV1・emsdk・Denpa Font・px4-userland / asicen-userland は、どれも
+ffmpeg・SVT-AV1・emsdk・Denpa Font・asicen-userland は、どれも
 `ARG` / `ENV` にバージョン (タグかコミット) を書いてから取ってきます。同じコミットからビルドすれば同じ中身になります。
 
 **土台のイメージと GitHub Actions は digest で留めます。** Dockerfile の `FROM`・`COPY --from=` は

@@ -39,10 +39,10 @@ export const overrides: Record<string, PageOverride> = {
     description:
       "テレビ録画サーバ denpa で使えるチューナーの一覧と、カードリーダー・B-CAS カード・うまく動かないときのこと。Mirakurun を立てなくても、挿せば自動で見つけます。",
   },
-  "tuner-px4": {
-    title: "PX-Q3U4・PX-W3U4・PX-MLT で録画サーバを立てる",
+  "tuner-it930x": {
+    title: "PX-Q3U4・PX-W3U4・PX-MLT5 で録画サーバを立てる (IT930x の機材)",
     description:
-      "PX-Q3U4・PX-W3U4・PX-MLT を、ホストにドライバ (px4_drv) を入れずに録画サーバで使う方法。px4-userland をエージェントに同梱していて、Mirakurun も要りません。",
+      "PX-Q3U4・PX-W3U4・PX-MLT5 などの IT930x の機材を、ホストにドライバ (px4_drv) を入れずに録画サーバで使う方法。エージェントが USB を直に持つので、Mirakurun も要りません。",
   },
   "tuner-px-s1ud": {
     title: "PX-S1UD で録画サーバを立てる",
@@ -79,7 +79,11 @@ export const topSections: {
 /** トップの入口のカード。doc のページの説明を出し、more は下に並べるリンク。まだ無い文書は出さない */
 export const topEntrances: { label: string; doc: string; more?: string[] }[] = [
   { label: "入れ方", doc: "install", more: ["install-mac", "install-windows"] },
-  { label: "チューナー", doc: "tuners", more: ["tuner-px4", "tuner-px-s1ud"] },
+  {
+    label: "チューナー",
+    doc: "tuners",
+    more: ["tuner-it930x", "tuner-px-s1ud"],
+  },
   { label: "乗り換え", doc: "migrate" },
   { label: "よくある質問", doc: "faq" },
 ];
@@ -120,7 +124,7 @@ export const sidebarGroups: { label: string; items: string[] }[] = [
   },
   {
     label: "チューナー",
-    items: ["tuners", "tuner-pt3", "tuner-px4", "tuner-px-s1ud"],
+    items: ["tuners", "tuner-pt3", "tuner-it930x", "tuner-px-s1ud"],
   },
   { label: "乗り換え", items: ["switch", "migrate"] },
   { label: "使う", items: ["watch", "offline", "library"] },
