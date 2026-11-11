@@ -23,6 +23,8 @@ import {
   lightNotices,
   LIVE_STREAM_BACKLOG,
   liveHwFailed,
+  missingMedia,
+  missingMediaMessage,
   nextLight,
   openingLine,
   parseCommand,
@@ -489,6 +491,39 @@ describe("使えなかった理由", () => {
     expect(whyNotTuned("ffmpeg が終了しました (1)", until)).toBe(
       "選局できませんでした",
     );
+  });
+});
+
+describe("ffmpeg が局の映像・音声を指定できずに降りた (missingMedia)", () => {
+  test("映像か音声の指定で降りた行なら、どちらかを返す", () => {
+    expect(
+      missingMedia(
+        "Failed to set value '0:p:24632:v:0' for option 'map': Invalid argument",
+      ),
+    ).toBe("映像");
+    expect(
+      missingMedia(
+        "Failed to set value '0:p:1032:a:1' for option 'map': Invalid argument",
+      ),
+    ).toBe("音声");
+    expect(missingMediaMessage("映像")).toBe(
+      "この局の放送から映像を見つけられなかったため、映像を出せませんでした",
+    );
+  });
+
+  /*
+   * 字幕の指定で降りたのは、字幕なしで起こし直す (`NO_SUBTITLE`)。実機の BS10プレミアム (未契約) で出た行。
+   * スクランブルされたままだったことは、届いた TS の印で別に決める (`ScrambleCount`)
+   */
+  test("字幕の指定とほかの行は見ない", () => {
+    expect(
+      missingMedia(
+        "Failed to set value '0:p:201:s:0' for option 'map': Invalid argument",
+      ),
+    ).toBeNull();
+    expect(
+      missingMedia("Error opening output files: Invalid argument"),
+    ).toBeNull();
   });
 });
 

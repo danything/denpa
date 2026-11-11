@@ -6,7 +6,7 @@
  * TS パケットのスクランブル制御ビットを数え、復号できるかを確かめる。
  */
 
-import { PACKET, SYNC } from "@danything/arib/psi";
+import { PACKET } from "@danything/arib/psi";
 import { ServiceFilter } from "@danything/arib/service-filter";
 import { and, desc, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
@@ -14,7 +14,12 @@ import { agentFetch } from "./agent-client";
 import { config } from "./config";
 import { orm } from "./db";
 import { cardContracts, programs, services } from "./schema";
-import { type CardStatus, cardStatus } from "./scramble";
+import {
+  type CardStatus,
+  cardStatus,
+  mediaPids,
+  ScrambleCount,
+} from "./scramble";
 import { openChannelStream } from "./tuner";
 
 interface ConfirmResult {
@@ -45,7 +50,7 @@ function freshDecode(
  * 行が無い局と、カードが答えておらず (`code` が無い)、新しい復号の結果も無い局が `unverified`。
  * `subscribed` は、`paidAllowed` が録ってよいとする局と同じ
  */
-type ContractStatus = ContractState | "unverified";
+export type ContractStatus = ContractState | "unverified";
 
 export interface ContractRow {
   cardId: string;
@@ -374,16 +379,6 @@ interface DecodeTarget {
 /** 局ごとにパケットを数える長さ。これだけ数えたら、15 秒を待たずに判定する */
 const DECODE_PACKETS = 2000;
 
-/** `ServiceFilter.streams` (`種別:PID` の並び) から、映像・音声・字幕の PID。PMT を読む前は空 */
-function mediaPids(streams: string | null): Set<number> {
-  const pids = new Set<number>();
-  for (const one of streams?.split(",") ?? []) {
-    const pid = Number(one.split(":")[1]);
-    if (Number.isInteger(pid)) pids.add(pid);
-  }
-  return pids;
-}
-
 /**
  * **同じ物理チャンネルの局を 1 つの組にまとめる** (`testDecodeUnverified`)。1 つの組は 1 回の選局で確かめる。
  * 組と組の中の並びは、渡した順
@@ -525,8 +520,7 @@ async function decodeOnChannel(
   const counts = targets.map((target) => ({
     target,
     filter: new ServiceFilter(target.arib),
-    total: 0,
-    scrambled: 0,
+    count: new ScrambleCount(DECODE_PACKETS),
   }));
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), 15_000);
@@ -542,7 +536,7 @@ async function decodeOnChannel(
     );
 
     const reader = stream.getReader();
-    while (counts.some((count) => count.total < DECODE_PACKETS)) {
+    while (counts.some(({ count }) => !count.full)) {
       // 15 秒で打ち切ったら、それまでに数えたぶんで判定する
       const next = await reader.read().catch((error: unknown) => {
         if (abortController.signal.aborted)
@@ -552,20 +546,11 @@ async function decodeOnChannel(
       const { done, value } = next;
       if (done || !value) break;
 
-      for (const count of counts) {
-        const own = count.filter.filter(value);
-        const media = mediaPids(count.filter.streams);
-        for (let offset = 0; offset + PACKET <= own.length; offset += PACKET) {
-          if (own[offset] !== SYNC) continue;
-          // PAT・PMT・ECM・EIT のようなセクションは掛からないので数えない (割合が下がって、復号できたように見える)
-          if (!media.has(((own[offset + 1]! & 0x1f) << 8) | own[offset + 2]!))
-            continue;
-          // ペイロードの無いパケットはスクランブルの対象にならない
-          if ((own[offset + 3]! & 0x10) === 0) continue;
-          count.total++;
-          // 4 バイト目の上位 2 ビットが transport_scrambling_control
-          if ((own[offset + 3]! & 0xc0) !== 0) count.scrambled++;
-        }
+      for (const { filter, count } of counts) {
+        const own = filter.filter(value);
+        const media = mediaPids(filter.streams);
+        for (let offset = 0; offset + PACKET <= own.length; offset += PACKET)
+          count.feed(own.subarray(offset, offset + PACKET), media);
       }
     }
 
@@ -588,7 +573,10 @@ async function decodeOnChannel(
   }
 
   // 書くのは受け終えてから (書けなかったときに、選局の失敗と取り違えない)
-  for (const { target, total, scrambled } of counts) {
+  for (const {
+    target,
+    count: { total, scrambled },
+  } of counts) {
     if (total < 50) {
       results.set(target.id, {
         ok: false,
@@ -698,8 +686,23 @@ export function reserveWarning(
     .get();
   if (program === undefined || program.isFree) return null;
   if (paidAllowed(now)(program.serviceId)) return null;
-  // 状態の決め方はダイアログと同じ (`contractStatus`)。カードが複数あれば、期限切れ → 未契約 → 確かめていない の順に強いほうを出す
-  const statuses = new Set(
+  // カードが複数あれば、期限切れ → 未契約 → 確かめていない の順に強いほうを出す
+  const statuses = serviceContracts(program.serviceId, now);
+  const tail = "録画がスクランブルのまま残ることがあります";
+  if (statuses.has("expired"))
+    return `予約しました。この局は契約の期限が切れているため、${tail}`;
+  if (statuses.has("unsubscribed"))
+    return `予約しました。この局は未契約のため、${tail}`;
+  // 行が無い、カードに聞けず復号の結果も無いか古い
+  return `予約しました。この局の契約を確かめていないため、${tail}。設定の「受信」にある「有料契約を確認」で確かめられます`;
+}
+
+/** 局の契約の状態 (カードごと)。決め方はダイアログと同じ (`contractStatus`)。行が無ければ空 */
+function serviceContracts(
+  serviceId: number,
+  now = Date.now(),
+): Set<ContractStatus> {
+  return new Set(
     orm()
       .select({
         state: cardContracts.state,
@@ -708,17 +711,40 @@ export function reserveWarning(
         decodedAt: cardContracts.decoded_at,
       })
       .from(cardContracts)
-      .where(eq(cardContracts.service_id, program.serviceId))
+      .where(eq(cardContracts.service_id, serviceId))
       .all()
       .map((row) => contractStatus(row, now)),
   );
-  const tail = "録画がスクランブルのまま残ることがあります";
+}
+
+/**
+ * **ライブで局の映像・音声がスクランブルされたまま届いたときの文** (`live.ts`)。
+ *
+ * エージェントは、カードが鍵を返さなかった (未契約の) ES をスクランブルされたまま流す。カードを読めないときも同じ形で届くので、
+ * 先にカードの状態で分ける。読めているなら、残る理由は契約。期限切れと分かっている局はそう言い、契約中と確かめた局は
+ * カードが鍵を返さなかったことだけを言う。それ以外 (未契約・確かめていない・行が無い) は契約されていないと言う。
+ * B-CAS 以外の方式の局は、選局する前に断っている (`services.decodable`)
+ *
+ * @param cardReadable エージェントがカードを読めているか (`CardStatus.ok`)
+ * @param statuses その局の契約の状態 (`serviceContracts`)
+ */
+export function scrambledLiveMessage(
+  cardReadable: boolean,
+  statuses: ReadonlySet<ContractStatus>,
+): string {
+  const tail = "スクランブルを復号できませんでした";
+  if (!cardReadable) return `B-CAS カードを読めないため、${tail}`;
   if (statuses.has("expired"))
-    return `予約しました。この局は契約の期限が切れているため、${tail}`;
-  if (statuses.has("unsubscribed"))
-    return `予約しました。この局は未契約のため、${tail}`;
-  // 行が無い、カードに聞けず復号の結果も無いか古い
-  return `予約しました。この局の契約を確かめていないため、${tail}。設定の「受信」にある「有料契約を確認」で確かめられます`;
+    return `この局は契約の期限が切れているため、${tail}`;
+  if (statuses.size > 0 && [...statuses].every((s) => s === "subscribed"))
+    return `カードが鍵を返さないため、${tail}`;
+  return `この局は契約されていないため、${tail}`;
+}
+
+/** `scrambledLiveMessage` を、いまのカードと契約の状態で */
+export async function scrambledLiveNotice(serviceId: number): Promise<string> {
+  const card = await cardStatus();
+  return scrambledLiveMessage(card.ok, serviceContracts(serviceId));
 }
 
 /**

@@ -11,6 +11,8 @@ import {
   stream,
 } from "@danything/arib/synth";
 
+import type { ContractStatus } from "./contracts";
+
 const { config } = await import("./config");
 const realAgent = config.agentUrl;
 const realData = config.dataDir;
@@ -36,6 +38,7 @@ const {
   noteStillScrambled,
   paidAllowed,
   reserveWarning,
+  scrambledLiveMessage,
   testDecode,
   toMjd,
 } = await import("./contracts");
@@ -1133,5 +1136,34 @@ describe("有料放送を録ってよい局 (paidAllowed)", () => {
       server.stop();
     }
     expect(getContractRows(card)).toHaveLength(0);
+  });
+});
+
+describe("ライブで局がスクランブルされたまま届いたときの文 (scrambledLiveMessage)", () => {
+  test("カードを読めないときは、契約より先にそう言う", () => {
+    expect(
+      scrambledLiveMessage(false, new Set<ContractStatus>(["subscribed"])),
+    ).toBe("B-CAS カードを読めないため、スクランブルを復号できませんでした");
+  });
+
+  test("カードを読めていれば、契約の状態で理由を決める", () => {
+    expect(
+      scrambledLiveMessage(true, new Set<ContractStatus>(["expired"])),
+    ).toBe(
+      "この局は契約の期限が切れているため、スクランブルを復号できませんでした",
+    );
+    // 未契約・確かめていない・行が無いは、どれも契約されていない (カードが鍵を返さなかった)
+    for (const statuses of [
+      new Set<ContractStatus>(["unsubscribed"]),
+      new Set<ContractStatus>(["unverified"]),
+      new Set<ContractStatus>(),
+    ])
+      expect(scrambledLiveMessage(true, statuses)).toBe(
+        "この局は契約されていないため、スクランブルを復号できませんでした",
+      );
+    // 契約中と確かめた局は、契約が無いとは言わない
+    expect(
+      scrambledLiveMessage(true, new Set<ContractStatus>(["subscribed"])),
+    ).toBe("カードが鍵を返さないため、スクランブルを復号できませんでした");
   });
 });
