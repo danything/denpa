@@ -6,7 +6,7 @@
 
 ### どのチューナーが使えますか
 
-PT3 (Linux DVB)、PX-Q3U4・PX-W3U4 など (px4-userland)、PX-MLT5 系、PX-S1UD (siano-userland)、Sony CECH-ZD1 J、PIXELA PIX-DT295 (試験的) です。
+PT3 (Linux DVB)、PX-Q3U4・PX-W3U4 など (px4-userland)、PX-MLT5 系、PX-S1UD (siano-userland)、Sony CECH-ZD1 J、PIXELA PIX-DT295 です。
 ほかに、PT1 / PT2・PX-BCUD・Friio (白) など、実機では確かめていないものの Linux DVB で動くはずの機材があります
 ([tuner-pt3.md](tuner-pt3.md#実機で確かめていない機材))。使ってみたら、動いたかどうかを [Issue](https://github.com/danything/denpa/issues) で教えてください。
 挿してあれば自動で見つけ、地上波か衛星かも見分けます。
@@ -15,7 +15,7 @@ PT3 (Linux DVB)、PX-Q3U4・PX-W3U4 など (px4-userland)、PX-MLT5 系、PX-S1U
 ### Mac や Windows でも動きますか
 
 Apple Silicon の Mac と x64 の Windows で動きます。どちらも denpa 本体とエージェントが OS の上で直接動きます (コンテナは使わない)。
-使えるチューナーは px4-userland と siano-userland の機材と PX-MLT5 系・Sony CECH-ZD1 J・PIXELA PIX-DT295 (試験的) です (DVB は Linux だけ)。
+使えるチューナーは px4-userland と siano-userland の機材と PX-MLT5 系・Sony CECH-ZD1 J・PIXELA PIX-DT295 です (DVB は Linux だけ)。
 [install-mac.md](install-mac.md)・[install-windows.md](install-windows.md)。
 
 ### arm64 でも動きますか
@@ -36,6 +36,12 @@ Mirakurun や EPGStation・EDCB の役目は denpa が受け持ちます。EPGSt
 EDCB (EpgTimer) からは、ルール・手動予約・録画の履歴を EpgTimerSrv から TCP で移せます。繋がらないときは、EpgTimerSrv のアクセス制御と
 Windows ファイアウォールを確かめます ([EDCB からの引き継ぎ](migrate.md#edcb-からの引き継ぎ))。
 [switch.md](switch.md)・[migrate.md](migrate.md)。
+
+### Mirakurun や px4_drv を残したまま使えますか
+
+付属のエージェントは、px4_drv が使っている機材を開けません。Mirakurun と px4_drv を外さずに使うなら、エージェントの代わりに
+Mirakurun へ中継するブリッジを置きます。別の人が作っているもので、Doa では動作を確かめていません
+([switch.md](switch.md#いまの環境を残して-denpa-を足す))。
 
 ## チューナーとカード
 

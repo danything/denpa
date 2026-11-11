@@ -23,6 +23,7 @@ namespace Denpa.Agent;
 /// denpa-agent --tune it930x:4-12.1:0 T27                    # IT930x の機材 (PX-MLT5U など) の受信機 0。ロックまでの時間と C/N と強度も出す (衛星は BS15:16625 --lnb 15v、J.83B は H40 のように)
 /// denpa-agent --tune it930x:4-12.1:0+it930x:4-12.1:1 QC14,T27   # 「+」で並べた受信機を同時に選局する (そろって始め、受信機ごとにまとめて出す)
 /// denpa-agent --tune it930x:4-12.1:0+…+it930x:4-12.1:4 T27,T22 --steps 2,3,5   # 流す受信機を 2 → 3 → 5 と足し、ブリッジの状態を出す。TS が止まったらその先は足さない
+/// denpa-agent --tune it930x:3-1:1 QC26 --seconds 10 --ecm-test   # ケーブルの 4K (分割 TLV)。組み立てた TLV の数と TlvObservation を出し、ECM を 1 つカードに渡す
 /// denpa-agent --tune /dev/dvb/adapter1/frontend0 T27 --decode [--card-url http://…]
 /// denpa-agent --decode-file in.ts out.ts                    # チューナーを使わずに B25 だけ (/denpa/decode と同じ)。CA_system_id と番組表が来ているかも出す
 /// denpa-agent --card                                      # カードリーダーを並べ、カードに INT を通す (エージェントを止めて)
@@ -38,7 +39,7 @@ namespace Denpa.Agent;
 public static class Probe
 {
     // 使い方の 1 行 (引数が合わないときにここと Program.cs が出す)
-    public const string TuneUsage = "denpa-agent --tune <device[+device...]> <channel[,channel...]> [--lnb 15v] [--decode] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)] [--steps 2,3,5 (it930x: のとき)]";
+    public const string TuneUsage = "denpa-agent --tune <device[+device...]> <channel[,channel...]> [--lnb 15v] [--decode] [--ecm-test (TLV のとき)] [--card-url <url>] [--seconds N] [--repeat N (zd1j: のとき)] [--steps 2,3,5 (it930x: のとき)]";
     public const string DecodeUsage = "denpa-agent --decode-file <in.ts> [<out.ts>]";
     public const string CardUsage = $"denpa-agent --card [{Zd1j.Scheme}<USB のポート> | {Dt295.Scheme}<USB のポート> | {It930x.Scheme}<USB のポート>]";
 
@@ -227,6 +228,8 @@ public static class Probe
         var lnbAt = Array.IndexOf(args, "--lnb");
         var lnb = lnbAt >= 0 ? args.ElementAtOrDefault(lnbAt + 1) : null;
         var decode = args.Contains("--decode");
+        // 選んだ TS が TLV (4K) のとき、MPT が指す ECM を 1 つカードに渡して、鍵を返すかを出す (EcmTestLines)
+        var ecmTest = args.Contains("--ecm-test");
         // 手元にカードが無い拠点。鍵だけ受け取る (CardShare.cs)。--card-url が無ければ、--decode-file と同じく CARD_URL を読む
         var cardAt = Array.IndexOf(args, "--card-url");
         // 鍵を受け取る接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
@@ -262,14 +265,15 @@ public static class Probe
             using var closingSteps = new Closing(It930xDevice.CloseAll);
             return It930xSteps.Run(devices, channels, lnb, steps, seconds, Console.Out);
         }
-        if (devices.Length > 1) return RunTogether(devices, channels, lnb, decode, cardAt >= 0, seconds);
+        var options = new TuneProbe(decode, ecmTest);
+        if (devices.Length > 1) return RunTogether(devices, channels, lnb, options, cardAt >= 0, seconds);
 
-        var source = KeysFor(device, decode, cardAt >= 0);
+        var source = KeysFor(device, options.UsesCard, cardAt >= 0);
         using var closing = Closer(device);
         using var tuner = TunerPool.OpenDevice(device, lnb);
 
         Console.WriteLine($"{device} を開きました{(lnb is null ? "" : $" (LNB {lnb})")}");
-        return TuneChannels(tuner, channels, decode, source, seconds, Console.Out, Console.Error, null).Error ? 1 : 0;
+        return TuneChannels(tuner, channels, options, source, seconds, Console.Out, Console.Error, null).Error ? 1 : 0;
     }
 
     /// <summary>その機材の鍵の出どころ。PIX-DT295 と IT930x の機材は、その機材のカードリーダーだけ (試験でほかのリーダーに触らない)。--card-url があればそちら</summary>
@@ -285,6 +289,15 @@ public static class Probe
         : It930x.Is(device) ? new Closing(It930xDevice.CloseAll)
         : null;
 
+    /// <summary><c>--tune</c> でカードを使う指定</summary>
+    /// <param name="Decode">TS を B25 で復号する (<c>--decode</c>)</param>
+    /// <param name="EcmTest">TLV の ECM を 1 つカードに渡す (<c>--ecm-test</c>)</param>
+    private sealed record TuneProbe(bool Decode, bool EcmTest)
+    {
+        /// <summary>カードを開くか</summary>
+        public bool UsesCard => Decode || EcmTest;
+    }
+
     /// <summary>1 つのチャンネルの結果 (<see cref="RunTogether"/> の終わりのまとめに使う)</summary>
     private sealed record ChannelResult(string Channel, bool Locked, string? Rate, long Bytes, string? Failure);
 
@@ -296,7 +309,7 @@ public static class Probe
     /// 出力は受信機ごとにまとめて、終わってから受信機の順に出す (行が混ざらないように)。行は 1 つで選局するときと同じで、チャンネルごとに、そろって始めてからの時間を添える。
     /// 最後に、受信機とチャンネルごとのロックと Mbps を並べる
     /// </summary>
-    private static int RunTogether(string[] devices, string[] channels, string? lnb, bool decode, bool cardUrl, TimeSpan seconds)
+    private static int RunTogether(string[] devices, string[] channels, string? lnb, TuneProbe options, bool cardUrl, TimeSpan seconds)
     {
         if (devices.FirstOrDefault(Zd1j.Is) is { } zd1j)
         {
@@ -321,7 +334,7 @@ public static class Probe
                 // 機材を開くのは最初の選局 (そろって始めたあと)。開く・初期化するところも同時に始める
                 start.SignalAndWait();
                 waiting = false;
-                results[index] = TuneChannels(tuner, channels, decode, KeysFor(name, decode, cardUrl), seconds, output, output, clock);
+                results[index] = TuneChannels(tuner, channels, options, KeysFor(name, options.UsesCard, cardUrl), seconds, output, output, clock);
             }
             catch (Exception error) when (error is IOException or ArgumentException or InvalidOperationException)
             {
@@ -354,8 +367,9 @@ public static class Probe
     /// <paramref name="together"/> があれば、チャンネルごとに、そろって始めてからの時間 (ms) も添える (<see cref="RunTogether"/>)
     /// </summary>
     private static TuneResults TuneChannels(
-        ITuneDevice tuner, string[] channels, bool decode, IKeySource source, TimeSpan seconds, TextWriter output, TextWriter error, System.Diagnostics.Stopwatch? together)
+        ITuneDevice tuner, string[] channels, TuneProbe options, IKeySource source, TimeSpan seconds, TextWriter output, TextWriter error, System.Diagnostics.Stopwatch? together)
     {
+        var decode = options.Decode;
         var results = new List<ChannelResult>();
         var powerProbeShown = false;
         foreach (var name in channels)
@@ -428,7 +442,13 @@ public static class Probe
                     foreach (var line in TsmfLines(it930x.IsdbcLocked, it930x.Tsmf)) output.WriteLine($"    {line}");
                 }
             }
-            var measured = Count(tuner.Output, name, descramble ? new Descrambler(source) : null, seconds, 0, output, error);
+            // 選んだ TS が分割 TLV なら、組み立てた TLV を数える。B-CAS のカードに MMT の ECM を渡さないので --decode でも復号しない (TunerPool の Lease と同じ)
+            var tlv = tuner.Format == StreamFormat.Tlv;
+            if (tlv && descramble) output.WriteLine("    4K の TLV はスクランブルされたまま受けます (ACAS には対応していません)");
+            if (!tlv && options.EcmTest) output.WriteLine("    --ecm-test は、選んだ TS が TLV のときだけ試します");
+            var measured = tlv
+                ? CountTlv(tuner.Output, name, options.EcmTest ? source : null, seconds, output, error)
+                : Count(tuner.Output, name, descramble ? new Descrambler(source) : null, seconds, 0, output, error);
             results.Add(new ChannelResult(name, true, measured.Rate, measured.Bytes, measured.Bytes == 0 ? "TS が届かない" : null));
             // ロックしたのに TS が 1 バイトも届かなかった (仕様書 3.6)。TS を止めるレジスタを読み、ブリッジのバッファを捨ててからもう一度受ける
             if (measured.Bytes == 0 && tuner is It930xTuner stalled)
@@ -469,6 +489,10 @@ public static class Probe
             if (tuning.IsdbC && tuner is It930xTuner after && after.Tsmf is { } tsmf)
             {
                 foreach (var line in TsmfAfterLines(tsmf)) output.WriteLine($"    {line}");
+                if (tlv && after.Tlv is { } split)
+                {
+                    foreach (var line in SplitTlvLines(split)) output.WriteLine($"    {line}");
+                }
             }
         }
 
@@ -572,6 +596,7 @@ public static class Probe
                 + $"{(header.IsTs(relative) ? "MPEG-2 TS" : "分割 TLV")}  スロット {slots}{order}";
         }
         yield return "  (TSID と ONID の並びは仕様書の推定。下の PAT の TSID と比べる)";
+        if (decision == TsmfDecision.Selected && tsmf.Format == StreamFormat.Tlv) yield return "TSMF: 選んだ TS は分割 TLV です。TLV に組み立てて出力します";
         if (decision == TsmfDecision.Missing)
         {
             yield return valid.Count == 0
@@ -604,10 +629,57 @@ public static class Probe
         {
             yield return $"TSMF: 選んだ相対 TS 番号 {tsmf.Relative} が、最後のヘッダーでは無効になっています (出力を止めている)";
         }
+        if (tsmf.FormatChanged) yield return $"TSMF: 選んだ TS の種類がヘッダーで変わったため、出力を止めました ({It930xTsOutput.FormatChangedReason})";
+        // 分割 TLV には PAT が無い (TLV の数は SplitTlvLines が出す)
+        if (tsmf.Format == StreamFormat.Tlv) yield break;
         var listed = tsmf.Decision == TsmfDecision.Selected && tsmf.FirstHeader is { } first ? first.Ids[tsmf.Relative - 1].Tsid : (ushort?)null;
         yield return tsmf.PatTsid is { } pat
             ? $"出力した TS の PAT の TSID 0x{pat:X4} ({pat}){(listed is { } tsid ? tsid == pat ? "  ヘッダーの TSID と同じ" : $"  ヘッダーの TSID 0x{tsid:X4} と違う" : "")}"
             : "出力した TS の PAT は来ませんでした";
+    }
+
+    /// <summary><c>--tune</c> が、選んだ TS が分割 TLV のときに受け終えたあとに出す、TLV パケットに組み立てた数 (<see cref="SplitTlv"/>)</summary>
+    internal static IEnumerable<string> SplitTlvLines(SplitTlv tlv)
+    {
+        yield return $"分割 TLV: 受けた単位 {tlv.Units}  開始の単位 {tlv.Starts}  組み立てた TLV パケット {tlv.Packets}  "
+            + $"捨てたバイト {tlv.DroppedBytes}  合わせ直した回数 (中身の食い違い) {tlv.Resyncs}  (フレームの欠け) {tlv.Breaks}";
+        var types = string.Join("  ", tlv.ByType.Select(pair => $"{SplitTlv.Types.GetValueOrDefault(pair.Type, "?")} (0x{pair.Type:X2}) {pair.Count}"));
+        yield return $"分割 TLV: TLV パケットの種類 {(types.Length == 0 ? "-" : types)}";
+        if (tlv.OtherHeaders > 0) yield return $"分割 TLV: ヘッダーが 47 00 2D・47 40 2D でない単位 {tlv.OtherHeaders} (読み方は変えていない)";
+    }
+
+    /// <summary>
+    /// <c>--ecm-test</c>: TLV で受けた ECM のセクション (<see cref="TlvObservation.Ecm"/>) を、B-CAS の ECM と同じ切り方 (先頭 8 バイトと末尾の CRC を除いた中身。
+    /// <see cref="Descrambler"/> と同じ) でカードに渡し、鍵を返したかを出す。MMT の復号はしない (4K の放送を B-CAS のカードで復号できるかを確かめるだけ)
+    /// </summary>
+    internal static IEnumerable<string> EcmTestLines(TlvObservation observation, IKeySource source)
+    {
+        if (observation.Ecm is not { } ecm)
+        {
+            yield return observation.AccessControl.Count == 0
+                ? "ECM の試験: MPT のアクセス制御記述子が来なかったため、ECM の packet_id が分かりません"
+                : $"ECM の試験: 受けた間に ECM ({string.Join(" ", observation.AccessControl.Select(ca => $"0x{ca.Pid:X4}"))}) が来ませんでした";
+            yield break;
+        }
+        var section = ecm.Section;
+        yield return $"ECM の試験: packet_id 0x{ecm.Pid:X4} の ECM (table_id 0x{section[0]:X2}、{section.Length} バイト。カードに渡すのは {section.Length - 12} バイト) をカードに渡します";
+        string result;
+        try
+        {
+            var init = source.Init();
+            var answer = source.Ecm(section.AsSpan(8, section.Length - 12));
+            // 0x0200・0x0400・0x0800 が「視聴できる」(Descrambler と同じ)
+            var entitled = answer.Code is 0x0200 or 0x0400 or 0x0800;
+            result = $"カードの CA_system_id 0x{init.CaSystemId:X4}。"
+                + (entitled
+                    ? $"カードが鍵を返しました (0x{answer.Code:X4})。その鍵で MMT を復号できるかは、この試験では確かめていません"
+                    : $"カードが鍵を返しません (0x{answer.Code:X4})");
+        }
+        catch (IOException error)
+        {
+            result = $"カードとやり取りできませんでした ({error.Message})";
+        }
+        yield return $"ECM の試験: {result}";
     }
 
     /// <summary>
@@ -842,6 +914,44 @@ public static class Probe
         var ms = System.Diagnostics.Stopwatch.GetElapsedTime(lockedAt, decodedAt).TotalMilliseconds;
         output.WriteLine($"    ロックから最初の復号できたパケット {ms:F0} ms");
         return new Counted(ms, total, rated);
+    }
+
+    /// <summary>
+    /// TLV (4K。<see cref="StreamFormat.Tlv"/>) を受けて、量とカード無しで分かること (<see cref="TlvObservation"/>) を書く。
+    /// <paramref name="ecm"/> があれば、受け終えたあとに ECM を 1 つカードに渡す (<c>--ecm-test</c>。<see cref="EcmTestLines"/>)
+    /// </summary>
+    private static Counted CountTlv(Stream stream, string name, IKeySource? ecm, TimeSpan duration, TextWriter output, TextWriter error)
+    {
+        var buffer = new byte[188 * 1024];
+        var started = DateTime.UtcNow;
+        var deadline = started + duration;
+        var first = TimeSpan.Zero;
+        var last = TimeSpan.Zero;
+        long firstChunk = 0;
+        long total = 0;
+        var observation = new TlvObservation();
+        while (DateTime.UtcNow < deadline)
+        {
+            var read = stream is DeviceStream device ? device.Read(buffer, 0, buffer.Length, () => DateTime.UtcNow >= deadline) : stream.Read(buffer);
+            if (read <= 0) break;
+            last = DateTime.UtcNow - started;
+            if (total == 0)
+            {
+                first = last;
+                firstChunk = read;
+            }
+            total += read;
+            observation.Feed(buffer.AsSpan(0, read));
+        }
+        var rated = Rate(total, firstChunk, last - first) is { } rate ? $"{rate:F2}" : null;
+        output.WriteLine($"    最初の 1 バイト {first.TotalMilliseconds:F0} ms  {total / 1024} KiB  {rated ?? "-"} Mbps  (TLV)");
+        if (total == 0) error.WriteLine($"    {name}: 1 バイトも来ていません");
+        foreach (var line in observation.Describe()) output.WriteLine($"    {line}");
+        if (ecm is not null)
+        {
+            foreach (var line in EcmTestLines(observation, ecm)) output.WriteLine($"    {line}");
+        }
+        return new Counted(null, total, rated);
     }
 
     /// <summary>

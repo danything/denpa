@@ -60,8 +60,24 @@ public interface ITuneDevice : IDisposable
     /// </summary>
     TunerSignal? Signal() => null;
 
+    /// <summary>
+    /// <see cref="Output"/> が流すバイト列の形式。<see cref="Tune"/> が戻ったあとに読む。
+    /// ISDB-C で TSMF から選んだ TS が分割 TLV なら <see cref="StreamFormat.Tlv"/> (<see cref="TsmfSelector.Format"/>)。ほかの方式はどれも TS
+    /// </summary>
+    StreamFormat Format => StreamFormat.Ts;
+
     /// <summary>同期しなかったときの文言 (どの方式でも同じにする)</summary>
     const string SyncFailed = "同期しませんでした (電波が来ていないか、その周波数に放送がありません)";
+}
+
+/// <summary>チューナーが流すバイト列の形式 (<see cref="ITuneDevice.Format"/>。<c>/denpa/stream</c> の Content-Type)</summary>
+public enum StreamFormat
+{
+    /// <summary>MPEG-2 TS (188 バイトのパケット)</summary>
+    Ts,
+
+    /// <summary>ARIB STD-B32 の TLV パケットの並び (4K の MMT/TLV。ケーブルの分割 TLV から組み立てたもの。SplitTlv.cs)</summary>
+    Tlv,
 }
 
 /// <summary>

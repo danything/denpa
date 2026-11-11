@@ -10,9 +10,12 @@
  * - **地上波**は KonomiTV の表を写したもの (`terrestrial.ts`)。系列の地方局はキー局のチャンネルに当たる
  *   (例: 毎日放送 → jk6)。地方局が独自の番組を流している間もキー局のコメントが流れる (見分けられないので、そのまま)。
  *
+ * - **ケーブル (CATV)** の再送信は、元の放送 (`origin`。original_network_id) の表で引く。ケーブルの自主放送は当てない
+ *
  * **サブチャンネル (マルチ編成の 2 つ目・3 つ目、MX2 など) は当てない (コメントなし)。** 動いているときは
  * たいてい本チャンネルと別の番組なので、本チャンネルのコメントや勢いを出すと食い違う
  */
+import { origin } from "../types";
 import { TERRESTRIAL } from "./terrestrial";
 
 /** BS の局の番号 → チャンネル。本チャンネルだけ */
@@ -43,13 +46,18 @@ const CS: ReadonlyMap<number, string> = new Map([[333, "jk333"]]);
 export interface JikkyoStation {
   type: string;
   service_id: number;
+  /** original_network_id。ケーブル (CATV) の局で、元の放送 (地上波・BS・CS) を見分けるのに使う (`origin`) */
+  network_id: number;
 }
 
 /** その局の実況のチャンネル (`jk1` など)。コメントの無い局は null */
 export function jikkyoChannel(station: JikkyoStation): string | null {
-  if (station.type === "BS") return BS.get(station.service_id) ?? null;
-  if (station.type === "CS") return CS.get(station.service_id) ?? null;
-  if (station.type !== "GR") return null;
+  // ケーブルの再送信は、元の放送の局と同じ番号で引く (BS の再送信は BS の表、地上波の再送信は地上波の表)。ケーブルの自主放送は当てない
+  const type =
+    station.type === "CATV" ? origin(station.network_id) : station.type;
+  if (type === "BS") return BS.get(station.service_id) ?? null;
+  if (type === "CS") return CS.get(station.service_id) ?? null;
+  if (type !== "GR") return null;
   const jk = TERRESTRIAL.get(station.service_id);
   return jk === undefined ? null : `jk${jk}`;
 }

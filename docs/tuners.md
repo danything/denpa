@@ -19,7 +19,7 @@
   | PX-S1UD (smsusb を blacklist したとき。Mac・Windows も。[tuner-px-s1ud.md](tuner-px-s1ud.md))                                                                                        | siano-userland (同梱)                                            | なし (Windows はドライバを WinUSB に)                                     |
   | PX-W3U3 ([下記](#px-w3u3-は-asicen-userland-で-試験的上流のリリース待ち))                                                                                                            | asicen-userland (**試験的**。上流のリリース待ちで、まだ入らない) | なし                                                                      |
   | Sony CECH-ZD1 J (PS3 の torne。Windows・Mac も。[下記](#sony-cech-zd1-j))                                                                                                            | エージェントが USB を直に                                        | なし                                                                      |
-  | PIXELA PIX-DT295 (**試験的**。Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295-試験的))                 | エージェントが USB を直に                                        | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
+  | PIXELA PIX-DT295 (Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295))                                    | エージェントが USB を直に                                        | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
 
   「実機で確かめていない」機材は、ドライバと denpa の選局の手順を照らし合わせて動くはずと見ているものです。
   使ってみたら、動いたか動かなかったかを [Issue](https://github.com/danything/denpa/issues) で教えてください
@@ -137,7 +137,7 @@ B-CAS 以外の方式 (0x0006 など) だけでスクランブルされた局は
 ケーブルの局のロゴは、まだ集めません。
 
 PX-MLT5PE と J:COM の回線 (2026-11-10) で確かめました。18 の搬送波がロックし、どれも 64QAM で、BS と地上波の再送信が入っていました。
-256QAM の搬送波と、TSMF で複数の TS を束ねた搬送波は確かめていません。4K の放送には対応していません。
+256QAM の搬送波と、TSMF で複数の TS を束ねた搬送波は確かめていません。4K の放送 (分割 TLV) は、エージェントが TLV のまま流しますが、denpa はまだ局として読みません ([下記](#ケーブルの-4k-を確かめる))。
 
 ## PX-W3U3 は asicen-userland で (試験的。上流のリリース待ち)
 
@@ -190,7 +190,7 @@ Windows と Mac は実機ではまだ確かめていません)。
 
 エージェントの中でどう扱っているかは [agent.md](agent.md#cech-zd1-j-の作り)。
 
-## PIXELA PIX-DT295 (試験的)
+## PIXELA PIX-DT295
 
 PIXELA の USB チューナー (USB `06b8:103b`。地上波・BS・CS。B-CAS の差し込み口つき)。**外のデーモンもファームウェアも要らず、エージェントが機材のレジスタを USB で直に書いて動かします**
 (Linux は usbfs、Windows は WinUSB、Mac は IOKit。Windows はドライバを Zadig で WinUSB にします。[install-windows.md](install-windows.md))。
@@ -384,6 +384,28 @@ Linux の PX-MLT5PE の実機で確かめました ([下記](#実機で確かめ
 CA 記述子の行 (「局 0x…」「CAT」)、「ECM・EMM」の行、「番組表 (EIT)」と「ロゴ (CDT)」の行が入っていれば足ります。光か衛星かも添えてください。
 
 **番組表がスクランブルされていない (EIT が読める) と分かっても、SKY の局の番組表はまだ取り込みません。** 取り込むかは、報告を見てから決めます。ロゴ (CDT) も同じです。
+
+### ケーブルの 4K を確かめる
+
+**ケーブルで再送信している BS4K (MMT/TLV) は、エージェントが TLV パケットの並びに組み立てて、形式を変えずに流します** ([agent.md](agent.md#it930x-の機材を直に持つ作り))。
+denpa はまだ TLV を読まないので、スキャンしても局は入りません。受けられるか、カード無しで何が分かるかは、エージェントを止めてから `--tune` で確かめます。
+
+```sh
+denpa-agent --tune it930x:<USB のポート>:<受信機> QC26 --seconds 10
+denpa-agent --tune it930x:<USB のポート>:<受信機> QC26 --seconds 10 --ecm-test
+```
+
+- TSMF のヘッダーの一覧で選んだ TS が「分割 TLV」なら、「TSMF: 選んだ TS は分割 TLV です。TLV に組み立てて出力します」と出ます
+- 受け終えたあとに、組み立ての数を出します。受けた単位、開始の単位 (pointer のある単位)、組み立てた TLV パケット、捨てたバイト、合わせ直した回数 (中身の食い違いとフレームの欠け)、TLV パケットの種類ごとの数です。
+  最初の開始の単位より前のバイトは捨てるので、捨てたバイトは欠けが無くても 0 になるとは限りません
+- カード無しで分かること (`TlvObservation`) を出します。MMTP の packet_id ごとのスクランブルの印 (なし・偶数・奇数) の数、MPT のアクセス制御記述子の CA_system_id と ECM の packet_id、
+  TLV-NIT・MH-SDT・MH-EIT が来ていて CRC が合うか (局名と番組名を 1 つずつ) です
+- `--ecm-test` は、MPT が指す packet_id に来た ECM のセクションを 1 つ、B-CAS の ECM と同じ切り方 (先頭 8 バイトと末尾の CRC を除いた中身) でカードに渡し、返り値を出します。
+  カードは、その機材の内蔵カードリーダーです (`--card-url` があればそちら)。鍵を返したかで、B-CAS のカードで復号できる見込みがあるかが分かります。MMT の復号はしません
+- `--decode` を付けても、TLV は復号しません (B-CAS のカードに MMT の ECM を渡さないため。`--ecm-test` だけが渡します)
+
+PX-MLT5PE と J:COM の回線で受けた QC26 (2026-11-11、先頭の 4 MB) は、TSMF の有効な TS が 1 本で、分割 TLV でした。MPT のアクセス制御記述子の CA_system_id は B-CAS と同じ `0x0005`、ECM の packet_id は `0xFFF1` で、
+映像と音声はどれも奇数の鍵でスクランブルされ、信号 (MPT・ECM・MH-EIT・MH-SDT・TLV-NIT) はスクランブルされていませんでした。カードが ECM に鍵を返すかは、まだ確かめていません。
 
 ## カードリーダー
 

@@ -35,12 +35,14 @@ import { programs, services } from "./schema";
 import { chunks } from "./stream";
 import {
   type AgentChannel,
+  type AgentTuner,
   decodableChannel,
   getChannels,
   getTuners,
-  openChannelStream,
+  openWhenFree,
   serviceKey,
   TuneError,
+  TunerBusyError,
 } from "./tuner";
 
 /**
@@ -240,15 +242,33 @@ export function pickChannels(
 }
 
 /**
+ * 1 回読んだ結果。`drain` が列へ戻すかを決める。
+ *
+ * - `read`: 開けて読んだ。揃った・上限で切った・受信できなかった (`failed`) のどれも入る
+ * - `busy`: チューナーに空きが無かった (409)。チューナーは使っていない
+ * - `cut`: 開けたが、こちらが閉じる前にストリームが切れた (優先度の高い要求に譲った・エージェントが切断した)
+ * - `untuned`: エージェントが「選局できない」と返した (`TuneError`。同期しない・デバイスが無い)
+ */
+export type Outcome = "read" | "busy" | "cut" | "untuned";
+
+/**
  * 1 チャンネル開いて、番組表が揃うまで読む。
  *
  * `whole` のときは**ほかの TS の局の番組表も読む** (`firstSweeps`)。
+ *
+ * `last` が false の回は、選局できなくても受信できなかったと数えない。この周回で読み直すため (`drain`)
  */
 async function collectChannel(
   channel: AgentChannel,
   /** 全局読みのとき、来るはずの局 (service_id)。普段 (自分の中継だけ) は null */
-  whole: number[] | null = null,
-): Promise<{ programs: number; complete: boolean; failed: boolean }> {
+  whole: number[] | null,
+  last: boolean,
+): Promise<{
+  programs: number;
+  complete: boolean;
+  failed: boolean;
+  outcome: Outcome;
+}> {
   const reader = new EpgReader(Date.now, {
     other: whole !== null,
     settle: config.epgSweepSettle,
@@ -280,6 +300,10 @@ async function collectChannel(
   const ground = channel.type === "GR" ? new GroundWatch(channel) : null;
   /** エージェントが「選局できない」と返したか (空き待ちやエージェントに繋がらないのは入れない) */
   let refused = false;
+  /** 空きが無かったか (409) */
+  let busy = false;
+  /** 開けたあと、こちらが閉じる前にストリームが切れたか */
+  let cut = false;
   /*
    * **読みながら少しずつ保存する。** 揃うまで待ってからまとめて書くと、全局読みの
    * 数分のあいだ画面に何も出ない。今日・明日の番組は先に流れてくるので、開いて
@@ -305,13 +329,18 @@ async function collectChannel(
     }
   };
   try {
-    const stream = await openChannelStream(
+    /*
+     * **空きが無ければ少し待って掛け直す** (`openWhenFree`)。前のチャンネルを閉じたことがエージェントに
+     * 届くのは非同期なので、閉じた直後に次を開くと、自分が使っていたチューナーがまだ塞がって見える
+     */
+    const stream = await openWhenFree(
       channel.type,
       channel.channel,
       controller.signal,
       `epg ${channel.channel}`,
       // 押されている間は、開くたびに高い優先度で取る
       boosted ? config.priority.epgNow : config.priority.epg,
+      () => controller.signal.aborted,
     );
     opened = true;
     /*
@@ -358,6 +387,8 @@ async function collectChannel(
       console.warn(`[epg] ${label} を集められませんでした: ${error}`);
     }
     refused = error instanceof TuneError;
+    busy = error instanceof TunerBusyError;
+    cut = opened && !controller.signal.aborted;
   } finally {
     clearTimeout(timer);
     controller.abort();
@@ -367,11 +398,12 @@ async function collectChannel(
   /*
    * **受信できたかを残す** (`reception.ts`)。BS と CS は放送の一覧から作るので、受信できないチャンネルも入る。
    * 選局できなかった回も「行った」と覚える (受信できないチャンネルを周回のたびに選び直さない)。
-   * 開けたのに何も来ないまま終わった回は、上限まで待ったときだけ数える (録画やライブに譲った・止めたときは数えない)
+   * 開けたのに何も来ないまま終わった回は、上限まで待ったときだけ数える (録画やライブに譲った・止めたときは数えない)。
+   * 選局できなかった回も、この周回で読み直すとき (`last` が false) はまだ数えない
    */
   lineup?.follow();
   ground?.compare();
-  const failed = !received && (refused || (opened && timedOut));
+  const failed = receptionFailed({ received, refused, opened, timedOut, last });
   if (received) {
     recordReceived(channel.type, channel.channel);
   } else if (failed) {
@@ -417,7 +449,26 @@ async function collectChannel(
     programs: Math.min(saved, reader.all().length),
     complete: opened && reader.complete,
     failed,
+    outcome: busy ? "busy" : cut ? "cut" : refused ? "untuned" : "read",
   };
+}
+
+/**
+ * 1 回読んだ結果を「受信できなかった」に数えるか (`reception.ts`)。数えるのは、選局できなかった最後の回
+ * (`last`) と、開けたのに上限まで待っても何も来なかった回だけ。空きが無かった回 (開いていない) と、
+ * 途中で切れた回 (上限より前に終わる) は数えない
+ */
+export function receptionFailed(read: {
+  received: boolean;
+  refused: boolean;
+  opened: boolean;
+  timedOut: boolean;
+  last: boolean;
+}): boolean {
+  return (
+    !read.received &&
+    ((read.refused && read.last) || (read.opened && read.timedOut))
+  );
 }
 
 /** SDT を待つ上限 (`collectChannel`)。BS の数秒ぶん。SDT は 2 秒に 1 回は流れる */
@@ -580,6 +631,158 @@ export function firstSweepDone(
   return job.whole !== null && first.includes(job.channel);
 }
 
+/**
+ * **並べる処理の数と、それぞれが引く種別。** 番組表の取得がいま使えるチューナー 1 台につき 1 つ。
+ *
+ * 使えるのは、無効でなく (`rank` がある)、**自分と同じか優先度の高い利用者がいない**チューナー
+ * (エージェントの選び方と同じ。docs/agent.md「選ぶ順の約束」の 2)。ライブや録画が使っているチューナーまで
+ * 数えていた頃は、溢れた処理がエージェントに 409 で断られ続け、断られるたびにすぐ次のチャンネルを取って
+ * 落としていた (実機で、ライブを見ながら「いますぐ集める」を押すと 50 チャンネルのうち 4 つしか読めなかった)
+ */
+export function laneTypes(
+  tuners: readonly Pick<AgentTuner, "disabled" | "rank" | "types" | "users">[],
+  priority: number,
+): string[][] {
+  return tuners
+    .filter(
+      (tuner) =>
+        !tuner.disabled &&
+        tuner.rank !== null &&
+        tuner.users.every((user) => user.priority < priority),
+    )
+    .map((tuner) => [...tuner.types]);
+}
+
+/** 空きが無かった処理が、ほかに読んでいる処理が無いときに待つ長さ (ms。`drain`) */
+const BUSY_BACKOFF = 30_000;
+
+/**
+ * ほかに読んでいる処理が無いのに空きが無かった回を、続けて何回まで待つか (`drain`)。
+ * 録画とライブで全部のチューナーが塞がっているとき、周回を `BUSY_BACKOFF` × この回数 (5 分) で終える
+ */
+const IDLE_LIMIT = 10;
+
+/** 途中で切れた 1 件を、この周回で何回まで読み直すか (`drain`) */
+const CUT_LIMIT = 3;
+
+/**
+ * この回で終わったら列へ戻さないか (`drain`)。`tune` は選局できなかったとき、`cut` は途中で切れたとき。
+ * `tune` が true の回だけ、選局できなかったことを受信できなかったと数える
+ */
+export interface Last {
+  tune: boolean;
+  cut: boolean;
+}
+
+/**
+ * **列を、並べた処理 (`lanes`。1 つが引く種別) で引き切る。** 空きが無かった・途中で切れた 1 件は落とさずに列へ戻す。
+ *
+ * - **空きが無かった (`busy`)** ら列の先頭へ戻す。ほかに読んでいる処理があれば、どれかが 1 件を終えるまで待つ
+ *   (チューナーが 1 台空く)。無ければ `backoff` だけ待って掛け直し、それが続けて `idleLimit` 回を超えたら
+ *   この周回は残りを読まずに終える (次の周回で選び直す)
+ * - **途中で切れた (`cut`)** ら列の先頭へ戻す。1 件につき `CUT_LIMIT` 回まで
+ * - **選局できなかった (`untuned`)** ら 1 回だけ列の後ろへ戻す。どのチューナーを使うかはエージェントが決めるので
+ *   (docs/agent.md「選ぶ順の約束」)、読み直しが別のチューナーに入るのは、先のチューナーが塞がっているときだけ。
+ *
+ * `attempt` には、この回で終わったら列へ戻さないか (`Last`) を渡す。戻さない回は、読み終えたあとの処理
+ * (全局読みの読み直し・中継の替え) をする
+ *
+ * 空きが無かった・選局できなかった回は「受信できない」に数えない (`collectChannel`)
+ */
+export async function drain<J extends { channel: { type: string } }>(
+  queue: J[],
+  lanes: readonly (readonly string[])[],
+  attempt: (job: J, last: Last) => Promise<Outcome>,
+  options: {
+    backoff?: number;
+    idleLimit?: number;
+    /** 待つ。`freed` はどれかの処理が 1 件を終えたら解ける */
+    wait?: (ms: number, freed: Promise<void>) => Promise<void>;
+    /** 1 件を列へ戻したとき (進み具合の残りを足す) */
+    requeued?: (job: J) => void;
+    /** 空きを待ちきれず、列に残っていたものを読まずに落としたとき */
+    dropped?: (jobs: J[]) => void;
+  } = {},
+): Promise<void> {
+  const backoff = options.backoff ?? BUSY_BACKOFF;
+  const idleLimit = options.idleLimit ?? IDLE_LIMIT;
+  const wait =
+    options.wait ??
+    ((ms: number, freed: Promise<void>) =>
+      Promise.race([freed, Bun.sleep(ms)]));
+  const cuts = new Map<J, number>();
+  const retuned = new Set<J>();
+  /** いま読んでいる (チューナーを使っているかもしれない) 処理の数 */
+  let reading = 0;
+  /** ほかに読んでいる処理が無いのに空きが無かった回 (続けて) */
+  let idle = 0;
+  let gaveUp = false;
+  let release = () => {};
+  let freed = new Promise<void>((resolve) => (release = resolve));
+  const free = () => {
+    release();
+    freed = new Promise<void>((resolve) => (release = resolve));
+  };
+  const back = (job: J, front: boolean) => {
+    if (front) queue.unshift(job);
+    else queue.push(job);
+    options.requeued?.(job);
+  };
+  const take = (types: readonly string[]) => {
+    if (gaveUp) return undefined;
+    const at = queue.findIndex((job) => types.includes(job.channel.type));
+    return at === -1 ? undefined : queue.splice(at, 1)[0];
+  };
+
+  const lane = async (types: readonly string[]) => {
+    try {
+      for (;;) {
+        const job = take(types);
+        if (job === undefined) return;
+        reading++;
+        let outcome: Outcome;
+        try {
+          outcome = await attempt(job, {
+            tune: retuned.has(job),
+            cut: (cuts.get(job) ?? 0) >= CUT_LIMIT,
+          });
+        } finally {
+          reading--;
+        }
+        if (outcome === "busy") {
+          back(job, true);
+          if (reading > 0) {
+            await freed;
+            continue;
+          }
+          if (++idle > idleLimit) {
+            gaveUp = true;
+            options.dropped?.(queue.splice(0));
+            return;
+          }
+          await wait(backoff, freed);
+          continue;
+        }
+        idle = 0;
+        if (outcome === "cut") {
+          const times = (cuts.get(job) ?? 0) + 1;
+          cuts.set(job, times);
+          // 超えたら戻さない (切れた理由は `collectChannel` が回ごとに出力している)
+          if (times <= CUT_LIMIT) back(job, true);
+        } else if (outcome === "untuned" && !retuned.has(job)) {
+          retuned.add(job);
+          back(job, false);
+        }
+        free();
+      }
+    } finally {
+      // 抜けたことも知らせる。待っている処理が、読んでいる処理のいないまま待ち続けない
+      free();
+    }
+  };
+  await Promise.all(lanes.map(lane));
+}
+
 async function run(): Promise<number> {
   const all = await getChannels().catch(() => [] as AgentChannel[]);
   if (all.length === 0) return 0;
@@ -659,8 +862,10 @@ async function run(): Promise<number> {
         known.has(serviceKey(sweep.networkId, serviceId, sweep.type)),
       );
 
-  const tuners = (await getTuners().catch(() => [])).filter(
-    (tuner) => !tuner.disabled,
+  // 押されている間は高い優先度で開く (`collectChannel`)。並べる数も、その優先度で使えるチューナーで数える
+  const lanes = laneTypes(
+    await getTuners().catch(() => []),
+    boosted ? config.priority.epgNow : config.priority.epg,
   );
 
   update({
@@ -679,7 +884,8 @@ async function run(): Promise<number> {
      * **1 台に 1 つの処理。** 種別ごとに「その種別のチューナー台数」だけ並べていた頃は、
      * BS と CS を同時に集めると衛星の台数を二重に数えていた (同じ 2 台が
      * BS でも CS でも 1 台ぶんに見える)。溢れたぶんは 409 で弾かれ、その回は
-     * 集められないまま落ちる。1 つの列を全チューナーで引けば数は合う
+     * 集められないまま落ちる。1 つの列を全チューナーで引けば数は合う。
+     * 数えるのは番組表の取得がいま使えるチューナーだけ (`laneTypes`)。それでも断られたら列へ戻す (`drain`)
      */
     let sweepsLeft = first.length;
     /** 全局読みが受信できず、この周回でほかの中継に替えたネットワーク */
@@ -689,54 +895,74 @@ async function run(): Promise<number> {
       ...sweeps.map((channel) => ({ channel, whole: expect(channel) })),
       ...rest.map((channel) => ({ channel, whole: null })),
     ];
-    const take = (types: string[]) => {
-      const at = queue.findIndex((job) => types.includes(job.channel.type));
-      return at === -1 ? undefined : queue.splice(at, 1)[0];
-    };
-    const lane = async (types: string[]) => {
-      for (;;) {
-        const job = take(types);
-        if (job === undefined) return;
-        update({ pending: state.pending - 1 });
-        const result = await collectChannel(job.channel, job.whole);
-        programs += result.programs;
-        /*
-         * 全局読みが揃わないまま上限で切れたら、その中継の詳細も欠けている。
-         * 列の後ろへ戻して、いつもどおり自分の中継ぶんを読み直す
-         * (詳細の無い種別は、読み直しても取れるものが無い)
-         */
-        if (
-          job.whole !== null &&
-          !result.complete &&
-          !WHOLE_ONLY.has(job.channel.type)
-        ) {
-          queue.push({ channel: job.channel, whole: null });
-          update({ pending: state.pending + 1, total: state.total + 1 });
-        }
-        /*
-         * 詳細の無い種別の全局読みが受信できなかったら、**この周回のうちに次の中継で読み直す。**
-         * 受信できない中継の番が来ても、そのネットワークの番組表を止めない
-         * (失敗した中継も「行った」と覚えるので、そのままだと次に集め直すときまで延びる)。
-         * 替えるのはネットワークごとに 1 回まで。どれも受信できないとき (アンテナの不調) に、
-         * 中継を全部開いて回らない
-         */
-        const next = replacement(job, result.failed, replaced, (network) =>
-          sweepOrder(channels, network, checkedOf),
-        );
-        if (next !== undefined) {
-          queue.push(next);
-          update({ pending: state.pending + 1, total: state.total + 1 });
-        }
-        if (firstSweepDone(job, first) && --sweepsLeft === 0)
-          update({ sweeping: false });
+    const attempt = async (
+      job: (typeof queue)[number],
+      last: Last,
+    ): Promise<Outcome> => {
+      update({ pending: state.pending - 1 });
+      const result = await collectChannel(job.channel, job.whole, last.tune);
+      /*
+       * 列へ戻る回 (空きが無かった・途中で切れた・選局をやり直す) は、読み終えたあとの処理をしない。
+       * 取り込んだ番組も数えない (読み直した回に同じ番組をもう一度数える)
+       */
+      if (
+        result.outcome === "busy" ||
+        (result.outcome === "cut" && !last.cut) ||
+        (result.outcome === "untuned" && !last.tune)
+      )
+        return result.outcome;
+      programs += result.programs;
+      /*
+       * 全局読みが揃わないまま上限で切れたら、その中継の詳細も欠けている。
+       * 列の後ろへ戻して、いつもどおり自分の中継ぶんを読み直す
+       * (詳細の無い種別は、読み直しても取れるものが無い)
+       */
+      if (
+        job.whole !== null &&
+        !result.complete &&
+        !WHOLE_ONLY.has(job.channel.type)
+      ) {
+        queue.push({ channel: job.channel, whole: null });
+        update({ pending: state.pending + 1, total: state.total + 1 });
       }
+      /*
+       * 詳細の無い種別の全局読みが受信できなかったら、**この周回のうちに次の中継で読み直す。**
+       * 受信できない中継の番が来ても、そのネットワークの番組表を止めない
+       * (失敗した中継も「行った」と覚えるので、そのままだと次に集め直すときまで延びる)。
+       * 替えるのはネットワークごとに 1 回まで。どれも受信できないとき (アンテナの不調) に、
+       * 中継を全部開いて回らない
+       */
+      const next = replacement(job, result.failed, replaced, (network) =>
+        sweepOrder(channels, network, checkedOf),
+      );
+      if (next !== undefined) {
+        queue.push(next);
+        update({ pending: state.pending + 1, total: state.total + 1 });
+      }
+      if (firstSweepDone(job, first) && --sweepsLeft === 0)
+        update({ sweeping: false });
+      return result.outcome;
     };
 
-    // エージェントに聞けなかったときは 1 台だけで回す (聞けないだけで、チューナーはある)
-    await Promise.all(
-      tuners.length === 0
-        ? [lane([...new Set(queue.map((job) => job.channel.type))])]
-        : tuners.map((tuner) => lane(tuner.types)),
+    /*
+     * エージェントに聞けなかったとき・使えるチューナーが 1 台も無いときは、1 つだけで回す
+     * (聞けないだけで、チューナーはある。塞がっていれば `drain` が待つ)
+     */
+    await drain(
+      queue,
+      lanes.length === 0
+        ? [[...new Set(queue.map((job) => job.channel.type))]]
+        : lanes,
+      attempt,
+      {
+        requeued: () => update({ pending: state.pending + 1 }),
+        dropped: (jobs) => {
+          update({ pending: state.pending - jobs.length });
+          console.warn(
+            `[epg] チューナーが空かないため、${jobs.map((job) => key(job.channel)).join("・")} はこの周回では読みませんでした`,
+          );
+        },
+      },
     );
   } finally {
     update({

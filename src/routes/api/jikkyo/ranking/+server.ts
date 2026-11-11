@@ -28,6 +28,7 @@ export async function GET() {
       id: services.id,
       type: services.type,
       service_id: services.service_id,
+      network_id: services.network_id,
     })
     .from(services)
     .where(currentServices())

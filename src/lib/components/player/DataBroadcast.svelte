@@ -848,8 +848,8 @@
   /* 「取得中」は右上の隅。テレビと同じ場所 (舞台の通知の列には積まない) */
   .corner {
     position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
+    top: var(--dp-space-3);
+    right: var(--dp-space-3);
     /* データ放送の箱 (`.data`) の中だけの前後 */
     z-index: 1;
     display: flex;

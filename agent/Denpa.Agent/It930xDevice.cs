@@ -83,6 +83,9 @@ public sealed class It930xDevice
     /// <summary>開くときに EP 0x84 の読みを出し終えるのを待つ長さ</summary>
     internal static readonly TimeSpan ReaderStartTimeout = TimeSpan.FromSeconds(2);
     private volatile bool _stopping;
+
+    /// <summary>閉じ始めた (<see cref="Close"/>)。読みのスレッドは、閉じる側が入力を閉じるので自分では閉じない (電源を切ったあとにブリッジへ書かない)</summary>
+    private volatile bool _closing;
     private int _users;
     private bool _closed;
     private volatile bool _faulted;
@@ -341,7 +344,8 @@ public sealed class It930xDevice
         }
         catch (IOException error)
         {
-            if (_stopping) return;
+            // 閉じている途中の失敗 (入力を閉じて EP 0x84 をリセットした読み) は、閉じる側が片付ける
+            if (_stopping || _closing) return;
             // EP 0x84 の読みは 5 つの受信機で 1 本なので、読めなくなったら機材ごと使えないものとし、次の選局で開き直す
             _faulted = true;
             Log.Write($"[{Label}] TS を読めなくなりました: {UsbDevices.Reason(error)}");
@@ -661,6 +665,7 @@ public sealed class It930xDevice
             if (_closed) return;
             _closed = true;
         }
+        _closing = true;
         // 入力を閉じて EP 0x84 をリセットしてから読みを止める (SDK の DRV_ResetRxPort)。読む側がいないまま、ブリッジに TS を溜めない
         if (!Faulted)
         {
@@ -817,6 +822,7 @@ public sealed class It930xTuner : ITuneDevice
             CableFrequency = null;
             IsdbcLocked = false;
             Tsmf = null;
+            Tlv = null;
             IsdbcFailedSignal = null;
             // 抜けた・TS を読めなくなった機材は返して、開き直す
             if (_device is { Faulted: true }) Drop();
@@ -859,7 +865,10 @@ public sealed class It930xTuner : ITuneDevice
                 // TSMF で TS を選ぶ処理は ISDB-C のときだけ通す (仕様書 10.1)。ロックのあとで作る (仕様書 7A.7 の「パケットごとの処理」の 1)
                 var tsmf = tuning.IsdbC ? new TsmfSelector(tuning.TsmfIndex) : null;
                 Tsmf = tsmf;
-                var output = new It930xTsOutput(tsmf);
+                // 選んだ TS が分割 TLV なら TLV パケットに組み立てる (どちらかは TSMF の判定で決まるので、ISDB-C なら作っておく)
+                var tlv = tsmf is null ? null : new SplitTlv();
+                Tlv = tlv;
+                var output = new It930xTsOutput(tsmf, tlv);
                 _device.Attach(_receiver, output);
                 _output = output;
                 if (tsmf is not null) WaitTsmf(_frontend, tsmf);
@@ -930,6 +939,12 @@ public sealed class It930xTuner : ITuneDevice
 
     /// <summary>最後の ISDB-C の選局の TSMF の判定 (<c>--tune</c> が出す)。選局に失敗したあとも残す。ISDB-C でないか、ロックしなかったなら null</summary>
     public TsmfSelector? Tsmf { get; private set; }
+
+    /// <summary>最後の ISDB-C の選局で、分割 TLV を組み立てる処理 (<c>--tune</c> が数を出す)。選んだ TS が MPEG-2 TS なら何も数えない。ISDB-C でなければ null</summary>
+    public SplitTlv? Tlv { get; private set; }
+
+    /// <summary>流しているバイト列の形式。TSMF から選んだ TS が分割 TLV なら <see cref="StreamFormat.Tlv"/> (<see cref="TsmfSelector.Format"/>)</summary>
+    public StreamFormat Format => Tsmf?.Format ?? StreamFormat.Ts;
 
     /// <summary>ISDB-C でロックしたあと TSMF の判定で失敗したときに、TS を止める前に読んだ信号品質 (<c>--tune</c> が出す)。読めなければ null</summary>
     public TunerSignal? IsdbcFailedSignal { get; private set; }

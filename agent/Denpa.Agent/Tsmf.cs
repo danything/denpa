@@ -121,7 +121,9 @@ public delegate void TsmfEmit(ReadOnlySpan<byte> packet);
 /// <see cref="Push"/> は 1 つのスレッド (<see cref="It930xTsDemux"/>) から呼ぶ。判定 (<see cref="Decision"/>・<see cref="Wait"/>) と
 /// <c>--tune</c> が出す値は、ほかのスレッドから読んでよい。
 /// 選局のたびに作り直すので、仕様書 7A.7 の「受信を止めて始め直したときに判定を保つ」場面は無い。
-/// NULL パケットは除かない (ほかの方式と同じく、選んだ TS をそのまま流す)。分割 TLV の取り出しはしない (仕様書 13 の範囲の外)
+/// NULL パケットは除かない (ほかの方式と同じく、選んだ TS をそのまま流す)。選んだ TS が分割 TLV のときも 188 バイトの単位のまま出力し、
+/// TLV パケットに組み立てるのは受け取る側 (<see cref="SplitTlv"/>。仕様書 13 の範囲の外)。受け取る側は <see cref="Format"/> で形式を、
+/// <see cref="Gaps"/> で出力が前と続いていない所を知る
 /// </para>
 /// </summary>
 public sealed class TsmfSelector
@@ -179,6 +181,9 @@ public sealed class TsmfSelector
     private long _emitted;
     private volatile int _fewestSlots = -1;
     private volatile int _mostSlots = -1;
+    private volatile int _format = (int)StreamFormat.Ts;
+    private volatile bool _formatChanged;
+    private long _gaps;
 
     /// <param name="index">有効な TS を相対 TS 番号の小さい順に並べたときの何本目か (0〜14)</param>
     /// <param name="discard">最初に、判定に使わずに捨てるパケットの数</param>
@@ -241,6 +246,24 @@ public sealed class TsmfSelector
 
     /// <summary>出力したパケットの数</summary>
     public long Emitted => Interlocked.Read(ref _emitted);
+
+    /// <summary>
+    /// 選んだ TS の形式。最初のヘッダーで TS を選んだときに、その相対 TS 番号の TS の種類 (<see cref="TsmfHeader.IsTs"/>) で決め、そのあとは変えない。
+    /// TS を選ぶまでと、ヘッダーの無い搬送波は <see cref="StreamFormat.Ts"/>
+    /// </summary>
+    public StreamFormat Format => (StreamFormat)_format;
+
+    /// <summary>
+    /// 選局のあと、ヘッダーにある選んだ TS の種類が <see cref="Format"/> と変わった。変わったあとは何も出力しない (形式の違うバイト列を混ぜて流さないため)。
+    /// 起きるかは確かめていない
+    /// </summary>
+    public bool FormatChanged => _formatChanged;
+
+    /// <summary>
+    /// 出力が前と続いていない所の数。フレームを捨てたときと、選んだ TS がヘッダーで無効になって出力を止めたときに増える。
+    /// TLV に組み立てる側 (<see cref="SplitTlv"/>) は、この値が変わったら組み立て中の TLV パケットを捨てる (単位に連続性の番号が無いため)
+    /// </summary>
+    public long Gaps => Interlocked.Read(ref _gaps);
 
     /// <summary>選んだ TS に割り当てたスロットの数の、ヘッダーごとの最小と最大 (1 フレームの 52 スロットのうち)。TS を選んでいなければ null</summary>
     public (int Fewest, int Most)? SlotsPerFrame => _fewestSlots < 0 ? null : (_fewestSlots, _mostSlots);
@@ -378,6 +401,8 @@ public sealed class TsmfSelector
             if (Index < valid.Count)
             {
                 _relative = valid[Index];
+                // 形式は判定を知らせる前に決める (選局が戻ったときに読む。ITuneDevice.Format)
+                _format = (int)(header.IsTs(_relative) ? StreamFormat.Ts : StreamFormat.Tlv);
                 Decide(TsmfDecision.Selected);
             }
             else
@@ -387,8 +412,11 @@ public sealed class TsmfSelector
         }
         _position = 0;
         _inFrame = true;
-        // r がヘッダーで無効になったら何も出さない
-        _collect = Decision == TsmfDecision.Selected && header.IsValid(_relative);
+        // r がヘッダーで無効になったら何も出さない。TS の種類が変わったら、そのあとは何も出さない
+        var collecting = _collect;
+        if (Decision == TsmfDecision.Selected && header.IsValid(_relative) && header.IsTs(_relative) != (Format == StreamFormat.Ts)) _formatChanged = true;
+        _collect = Decision == TsmfDecision.Selected && header.IsValid(_relative) && !_formatChanged;
+        if (collecting && !_collect) Interlocked.Increment(ref _gaps);
         if (_collect)
         {
             var slots = header.SlotsOf(_relative);
@@ -401,6 +429,7 @@ public sealed class TsmfSelector
     private void Drop(int frames)
     {
         Interlocked.Add(ref _brokenFrames, frames);
+        Interlocked.Increment(ref _gaps);
         _frameUsed = 0;
         _pending = 0;
         _borrowed = 0;
