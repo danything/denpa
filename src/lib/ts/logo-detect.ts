@@ -3,7 +3,7 @@
  *
  * logoframe はロゴを「色と濃さ (α)」で覚えていた。濃さを測るには**ロゴの後ろが
  * のっぺりしたコマ**が要り、BSテレ東 のように後ろが明るいセットばかりの局では
- * `initial logo estimate contains too few active pixels` で止まっていた (`docs/cm.md`)。
+ * `initial logo estimate contains too few active pixels` で止まっていた (`docs/cm.md`「logoframe から乗り換えた」)。
  *
  * こちらが覚えるのは**線の向き**だけ。ロゴは後ろが何であれ毎コマ同じ所に同じ向きの
  * 縁を出し、中身の縁の向きはコマごとにばらばら。画素ごとに勾配の向きを足し合わせると、

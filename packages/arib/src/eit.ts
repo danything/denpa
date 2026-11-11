@@ -295,10 +295,11 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
   for (const [tag, data] of descriptors(body)) {
     switch (tag) {
       case DESC_SHORT_EVENT: {
+        if (data.length < 4) break;
         const nameLength = data[3]!;
         const textAt = 4 + nameLength;
         event.name = decodeAribText(data.subarray(4, textAt));
-        const textLength = data[textAt]!;
+        const textLength = data[textAt] ?? 0;
         event.description = decodeAribText(
           data.subarray(textAt + 1, textAt + 1 + textLength),
         );
@@ -337,6 +338,8 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
         break;
       }
       case DESC_COMPONENT: {
+        // 短いものを読むと、種別 0 の「480i」と出る
+        if (data.length < 2) break;
         const streamContent = data[0]! & 0x0f;
         const componentType = data[1]!;
         event.video = {
@@ -359,6 +362,8 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
        *     [残り]   text_char … **放送が付けた名前**
        */
       case DESC_AUDIO_COMPONENT: {
+        // 言語の符号まで無いものを読むと、言語が空の音声が 1 本増える
+        if (data.length < 9) break;
         const flags = data[5]!;
         const multiLingual = (flags & 0x80) !== 0;
         const langs = [lang(data, 6)];
@@ -383,7 +388,7 @@ function readDescriptors(event: EitEvent, body: Uint8Array): void {
       }
       case DESC_CA_CONTRACT_INFO: {
         if (data.length < 4) break;
-        const caSystemId = (data[0]! << 8) | data[1]!;
+        const caSystemId = u16(data, 0);
         const numOfComponent = data[2]! & 0x0f;
         let at = 3 + numOfComponent;
         if (at >= data.length) break;
