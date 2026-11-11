@@ -394,6 +394,17 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   let mseCodec: LiveCodec | null = null;
   /** 最後にコマが映った時刻 (`performance.now`。`stuckNow`)。測れない・選局し直したあとまだ映っていなければ 0 */
   let lastFrameAt = 0;
+  /**
+   * 開いてから最初のコマまでの内訳 (ms。`begin` を呼んだ時点から)。最初のコマを映したときに 1 行だけコンソールに出す。
+   * 選局の遅さが端末・サーバ・エージェントのどこにあるかを、エージェントの記録 (`TunerPool` の「同期・送り出し」) と突き合わせて割るため
+   */
+  let startup: {
+    at: number;
+    ticket?: number;
+    open?: number;
+    tuned?: number;
+    bytes?: number;
+  } | null = null;
   /** 段を動かした断り書きを引っ込める時計 (`act`) */
   let noteTimer: ReturnType<typeof setTimeout> | null = null;
   /** 次の選局で繋ぎ直すか (足りなくて下げるとき。`tune`) */
@@ -792,6 +803,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       // 映した 1 枚の時刻と再生位置の差 (`slip`)。`requestVideoFrameCallback` を持つブラウザでだけ測れる
       if (frame !== undefined) {
         lastFrameAt = performance.now();
+        if (startup !== null) {
+          const ms = (value?: number) =>
+            value === undefined ? "-" : `${Math.round(value)}ms`;
+          console.info(
+            `[live] 開くまで チケット ${ms(startup.ticket)} / 繋がる ${ms(startup.open)} / tuned ${ms(startup.tuned)} / 最初のバイト ${ms(startup.bytes)} / 最初のコマ ${ms(lastFrameAt - startup.at)}`,
+          );
+          startup = null;
+        }
         // 飛んだ直後の 1 コマは飛ぶ前の時刻を持っていることがあるので測らない (`unslipper`)
         const measured = unslipping.measure(video, frame.mediaTime);
         if (measured !== null) {
@@ -2248,6 +2267,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     keepList: boolean,
   ): Promise<void> {
     const mine = ++begun;
+    startup = { at: performance.now() };
     element = video;
     left = false;
     // リクエストし直すのはこれ。観終えるのを待っていたなら、もう待たない (`resumeChase`)
@@ -2322,6 +2342,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       const res = await fetch(resolve("api/live/ticket"), { method: "POST" });
       if (!res.ok) throw new Error(String(res.status));
       ticket = ((await res.json()) as { ticket: string }).ticket;
+      if (startup !== null) startup.ticket = performance.now() - startup.at;
     } catch {
       if (superseded(mine)) return;
       // 繋ぎ直しの最中なら、サーバからまだ応答が無いだけ。待ち直す
@@ -2341,6 +2362,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     socket = ws;
 
     ws.onopen = () => {
+      if (startup !== null) startup.open = performance.now() - startup.at;
       // 繋がった。次に切れたときはまた 1 秒から待ち直す
       attempts = 0;
       const command = wantedCommand();
@@ -2377,6 +2399,7 @@ export function livePlayer(options: LivePlayerOptions = {}) {
       // 元の TS。写さずに worker へ移す (`RawEngine.feed`。先頭の 9 バイトは種別と時刻)
       if (kind === CHANNEL.rawTs) {
         arrived();
+        if (startup !== null) startup.bytes ??= performance.now() - startup.at;
         // 届く間隔は数えない (`arrive`)。元の TS はチューナーから読めたぶんずつ来るので、塊の間合いが決まっていない
         engine?.feed(data, 9);
         return;
@@ -2499,6 +2522,8 @@ export function livePlayer(options: LivePlayerOptions = {}) {
           finishStream();
           engine?.finish();
         } else if (notice.type === "tuned") {
+          if (startup !== null)
+            startup.tuned ??= performance.now() - startup.at;
           // 選べる音声はここで初めて分かる (いま流れている番組次第)
           audios = notice.audios;
           audio = notice.audio;
