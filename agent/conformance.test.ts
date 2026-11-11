@@ -647,6 +647,34 @@ describe("チューナー", () => {
     expect((await get("/denpa/stream?type=GR")).status).toBe(400);
   });
 
+  /*
+   * 観る局 (`service`) を渡しても同じように流れる。エージェントはその局の PMT と鍵がそろえば流し始め、
+   * PAT に無い局なら全部の局を待つ (docs/agent.md「B25 の復号もカードリーダーも自前」)。番組番号でなければ 400
+   */
+  test("観る局を渡しても素の TS が流れ、番組番号でなければ 400", async () => {
+    const aborter = new AbortController();
+    const res = await get(
+      "/denpa/stream?type=GR&channel=T16&use=live%20GR%2FT16&priority=5&service=1024",
+      aborter.signal,
+    );
+    expect(res.status).toBe(200);
+    const { value } = await (res.body as ReadableStream<Uint8Array>)
+      .getReader()
+      .read();
+    expect((value as Uint8Array)[0]).toBe(SYNC);
+    aborter.abort();
+
+    for (const service of ["0", "65536", "abc"]) {
+      const refused = await get(
+        `/denpa/stream?type=GR&channel=T16&use=live&priority=5&service=${service}`,
+      );
+      expect({ service, status: refused.status }).toEqual({
+        service,
+        status: 400,
+      });
+    }
+  });
+
   test("用途と優先度がそのまま見える", async () => {
     const stream = await open("type=GR&channel=T16&use=rec%2012&priority=10");
     await stream.reader?.read();

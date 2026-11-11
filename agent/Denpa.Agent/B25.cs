@@ -39,6 +39,12 @@ namespace Denpa.Agent;
 /// EMM セクション (0x84) を組み立てて渡し先に渡す。自分宛てかを比べるのは渡し先で、ここではカードに送らず応答も待たない。
 /// 鍵の要らない利用者だけのときも読むので、番組表・ロゴ・スキャンの選局でも EMM はカードに届く。
 /// </para>
+///
+/// <para>
+/// **観る局が決まっていれば、その局の PMT と ECM の答えがそろった時点で溜めるのをやめる** (<paramref name="services"/>)。ライブは 1 局しか観ないので、
+/// ワンセグやデータ放送の局の PMT を待たない。まだ PMT か ECM の答えが無い局のスクランブルされたパケットは、そろうまで捨てる (<see cref="Drops"/>)。
+/// 局を決めない利用者 (録画) がいれば、今までどおり PAT の全部の局を待つ。
+/// </para>
 /// </summary>
 /// <param name="keysWanted">
 /// いま鍵が要るか。塊を受けるたびに呼ぶ。null は「どちらとも決まらない」(利用者がいない) で、今のままにする。
@@ -48,7 +54,11 @@ namespace Denpa.Agent;
 /// 契約の更新 (EMM) の渡し先 (<see cref="Emm"/>)。渡したときだけ CAT と EMM を読む。チューナーの選局 (TunerPool.cs) だけが渡し、
 /// 録れたものの復号と実機での試験は渡さない (古い録画の EMM は期限切れや古い更新番号で、渡す意味が無い)
 /// </param>
-public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null, Emm? emm = null)
+/// <param name="services">
+/// 先頭で溜めるのをやめる前にそろえる局 (program_number)。塊を受けるたびに呼ぶ。null か空なら PAT の全部の局を待つ。
+/// PAT に無い局があっても全部を待つ。渡さなければいつも全部 (録れたものの復号・実機での試験)
+/// </param>
+public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null, Emm? emm = null, Func<IReadOnlySet<int>?>? services = null)
 {
     /// <summary>いま鍵を問い合わせて復号しているか (<c>keysWanted</c>)</summary>
     private bool _keys = true;
@@ -82,6 +92,20 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private byte[]? _hold;
     private int _held;
 
+    /// <summary>いまそろえる局 (<c>services</c>)。塊を受けるたびに読み直す。null なら全部</summary>
+    private IReadOnlySet<int>? _services;
+    /// <summary>
+    /// **観る局だけで溜めるのをやめたあと、ほかの局の PMT と ECM の答えがそろうまでの間は true。** この間は、PMT か ECM の答えがまだ無い
+    /// スクランブルされたパケットを捨てる (<see cref="Drops"/>)。そろったら、または <see cref="_drainUntil"/> を過ぎたらやめる
+    /// </summary>
+    private bool _draining;
+    /// <summary>捨てるのをやめる位置 (読んだパケットの数)。溜める上限 (<see cref="HoldLimit"/>) と同じ量を過ぎたら、そろわなくても流す</summary>
+    private long _drainUntil;
+    /// <summary>捨てたパケットの数</summary>
+    private long _dropped;
+    /// <summary>観る局だけで溜めるのをやめたときの局 (<see cref="HeldAt"/> に出す)。全部を待ったなら null</summary>
+    private string? _settledFor;
+
     private readonly Section _pat = new(null);
     private byte[]? _patLast;
     /// <summary>program_number → PMT の PID</summary>
@@ -90,6 +114,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private readonly Dictionary<int, Section> _pmtSections = [];
     /// <summary>program_number → 最後に受けた PMT。CA の方式が変わったら読み直せるように丸ごと持つ</summary>
     private readonly Dictionary<int, byte[]> _pmts = [];
+    /// <summary>program_number → その PMT が挙げた ECM の PID。観る局だけを待つとき (<see cref="Waits"/>) に引く</summary>
+    private readonly Dictionary<int, HashSet<int>> _programEcms = [];
     /// <summary>
     /// PAT の PMT がみな来た / PAT が変わってから同じ PMT がもう一度来た (1 周で来ない PMT は来ない。ただし <see cref="_stray"/> が無いときだけ)
     /// </summary>
@@ -189,7 +215,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     public string HeldAt()
     {
         var last = _lastEcm < 0 ? "" : $" (0x{_lastEcm:X4})";
-        return $"PAT {At(_patMs)} / PMT {At(_pmtMs)} / ECM {At(_ecmMs)}{last}";
+        var only = _settledFor is null ? "" : $" (局 {_settledFor})";
+        return $"PAT {At(_patMs)} / PMT {At(_pmtMs)}{only} / ECM {At(_ecmMs)}{last}";
     }
 
     /// <summary>溜めている間に鍵の出どころへ問い合わせた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ 1 行に足す</summary>
@@ -210,6 +237,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             if (wanted) Rehold();
             else StopKeys(output);
         }
+        if (services is not null) _services = services();
         if (_carryLength > 0)
         {
             // 前の尻尾 (188 バイト以下) に続けて読む
@@ -305,10 +333,11 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
                 // ECM のあとで最初に来た、その鍵の ES のパケット (Settle)
                 else if (ecm is { Seen: >= 0, After: int.MaxValue }) ecm.After = _held - 1;
             }
-            if (Ready()) Settle();
+            if (Ready(out var narrowed)) Settle(narrowed);
         }
         Release(output);
         if (held) return;
+        if (_draining && Drain(packet)) return;
 
         var room = output.GetSpan(PacketSize)[..PacketSize];
         packet.CopyTo(room);
@@ -403,22 +432,117 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// <summary>
     /// 溜めるのをやめてよいか。**PAT と、その PMT がみな来て、どの ECM も 1 回は応答を受け取った** (libaribb25 と同じ)
     /// うえで、ECM のあとにその鍵の ES のパケットが 1 つ来た (<see cref="Settle"/>)。
-    /// 来ない PMT は 1 周で待つのをやめ (<see cref="PmtsReady"/>)、PMT がそろってから同じ ECM が 2 回来たら来ない ECM も待たない (<see cref="OnEcm"/>)
+    /// 来ない PMT は 1 周で待つのをやめ (<see cref="PmtsReady"/>)、PMT がそろってから同じ ECM が 2 回来たら来ない ECM も待たない (<see cref="OnEcm"/>)。
+    /// 観る局が決まっていれば、PAT とその局の PMT、その PMT が挙げた ECM だけを待つ (<see cref="TablesReady"/>・<see cref="Waits"/>)。
+    /// そうして溜めるのをやめたら <paramref name="narrowed"/> が true
     /// </summary>
-    private bool Ready()
+    private bool Ready(out bool narrowed)
     {
+        narrowed = false;
         if ((long)_held * PacketSize >= HoldLimit)
         {
             Log.Write($"PAT・PMT・ECM が揃う前に {HoldLimit / 1024 / 1024}MB 溜まったので、待たずに流します");
             return true;
         }
-        if (!PmtsReady()) return false;
+        if (!TablesReady()) return false;
         if (_pmtMs < 0) _pmtMs = _clock.ElapsedMilliseconds;
         foreach (var ecm in _ecms.Values)
         {
+            if (!Waits(ecm)) continue;
             if (ecm.Last is null || (ecm.Seen >= 0 && ecm.After == int.MaxValue)) return false;
         }
+        narrowed = Narrowed() is not null;
         return true;
+    }
+
+    /// <summary>
+    /// **観る局だけを待つときの、その局の並び。** 全部を待つなら null。局が決まっていない・PAT が来ていない・PAT に無い局がある
+    /// (別のチャンネルの番号を渡された・臨時の番組が終わった) ときも null で、全部を待つ
+    /// </summary>
+    private IReadOnlySet<int>? Narrowed()
+    {
+        if (_services is not { Count: > 0 } wanted || _patLast is null) return null;
+        foreach (var number in wanted)
+        {
+            if (!_programs.ContainsKey(number)) return null;
+        }
+        return wanted;
+    }
+
+    /// <summary>
+    /// 溜めるのをやめる前に待つ PAT・PMT がそろったか。観る局が決まっていれば PAT とその局の PMT、決まっていなければ全部の局 (<see cref="PmtsReady"/>)
+    /// </summary>
+    private bool TablesReady()
+    {
+        if (_patLast is null) return false;
+        if (Narrowed() is not { } wanted) return PmtsReady();
+        foreach (var number in wanted)
+        {
+            if (!_pmts.ContainsKey(number)) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// 溜めるのをやめる前に答えを待つ ECM か。PMT が挙げた ECM のうち、観る局が決まっていればその局の PMT が挙げたものだけ。
+    /// 先回りして取っておいただけのもの (<see cref="Early"/>) は待たない
+    /// </summary>
+    private bool Waits(Ecm ecm)
+    {
+        if (_ecms.GetValueOrDefault(ecm.Pid) != ecm) return false;
+        if (Narrowed() is not { } wanted) return true;
+        foreach (var number in wanted)
+        {
+            if (_programEcms.TryGetValue(number, out var pids) && pids.Contains(ecm.Pid)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>全部の局の PMT がそろい、どの ECM も 1 回は答えを受けたか。観る局だけで溜めるのをやめたあと、捨てるのをやめる合図 (<see cref="Drain"/>)</summary>
+    private bool AllReady()
+    {
+        if (!PmtsReady()) return false;
+        foreach (var ecm in _ecms.Values)
+        {
+            if (ecm.Last is null) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// **まだ PMT か ECM の答えが無いので鍵を持てない、スクランブルされたパケットか。** 観る局だけで溜めるのをやめたあと、ほかの局の ES を
+    /// スクランブルされたまま流さずに捨てる。ライブのサーバは 1 局に絞るので読まず、同じ選局をあとから共有した録画には、
+    /// スクランブルされたままの ES が混ざるより途中から始まるほうが扱いやすい。鍵を受け取れなかった・契約が無い ECM の ES は、今までどおりそのまま流す
+    /// </summary>
+    private bool Drops(ReadOnlySpan<byte> packet) =>
+        (packet[1] & 0x80) == 0 && packet[3] >> 6 != 0 && Route(packet) is not { Last: not null };
+
+    /// <summary>
+    /// 溜めるのをやめたあとの 1 パケット。捨てるなら true。ほかの局の PMT と ECM の答えがそろったら捨てるのをやめる。
+    /// どの PMT も挙げていない PID のスクランブルされたパケットは <see cref="_stray"/> に入れ、来ない PMT を待つかを決める (<see cref="PmtsReady"/>)
+    /// </summary>
+    private bool Drain(ReadOnlySpan<byte> packet)
+    {
+        var drop = _keys && Drops(packet);
+        if (drop && Route(packet) is null) _stray.Add(((packet[1] & 0x1F) << 8) | packet[2]);
+        if (!_keys || AllReady())
+        {
+            StopDraining();
+        }
+        else if (_packets >= _drainUntil)
+        {
+            Log.Write($"ほかの局の PMT・ECM がそろわないので、捨てずに流します (捨てたのは {_dropped} パケット)");
+            StopDraining();
+        }
+        if (!_draining || !drop) return false;
+        _dropped++;
+        return true;
+    }
+
+    private void StopDraining()
+    {
+        _draining = false;
+        _stray.Clear();
     }
 
     /// <summary>
@@ -450,14 +574,18 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// 戻ったのを検出できない
     /// </para>
     /// </summary>
-    private void Settle()
+    private void Settle(bool narrowed = false)
     {
         _holding = false;
+        _settledFor = narrowed ? string.Join("・", Narrowed()!.Order()) : null;
         // 先回りして取っておいたもので、PAT・PMT が挙げなかったものは使わない
         _earlyEcms.Clear();
         _earlyPmtSections.Clear();
         _earlyPmts.Clear();
         _stray.Clear();
+        // 観る局だけで溜めるのをやめた。ほかの局の PMT と ECM の答えがそろうまで、鍵を持てないものは捨てる (Drops)
+        _draining = narrowed && _keys && !AllReady();
+        _drainUntil = _packets + HoldLimit / PacketSize;
         if (_held == 0) return;
         var usable = new bool[_held];
         for (var at = _held - 1; at >= 0; at--)
@@ -474,12 +602,21 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             }
             usable[at] = ecm is { Seen: >= 0 } && (at > ecm.Seen || ecm.Change > ecm.After);
         }
-        // 復号するのは前から。PES の先頭で鍵が合わなかったら、その PES の残りも復号しない (Unscramble)
+        // 復号するのは前から。PES の先頭で鍵が合わなかったら、その PES の残りも復号しない (Unscramble)。鍵を持てないほかの局のものは詰めて捨てる
+        var kept = 0;
         for (var at = 0; at < _held; at++)
         {
             var packet = _hold.AsSpan(at * PacketSize, PacketSize);
+            if (_draining && Drops(packet))
+            {
+                _dropped++;
+                continue;
+            }
             Unscramble(packet, Route(packet), usable[at]);
+            if (kept != at) packet.CopyTo(_hold.AsSpan(kept * PacketSize));
+            kept++;
         }
+        _held = kept;
     }
 
     /// <summary>
@@ -490,6 +627,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     {
         _keys = false;
         if (_holding) Settle();
+        StopDraining();
         Release(output);
         foreach (var ecm in _ecms.Values) Forget(ecm);
     }
@@ -507,6 +645,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
          */
         _keys = true;
         _holding = true;
+        StopDraining();
         foreach (var ecm in _ecms.Values) Forget(ecm);
     }
 
@@ -705,7 +844,14 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         var streams = new List<(int Es, int Ecm, int Type)>();
         var wanted = new HashSet<int>();
         Array.Clear(_listed);
-        foreach (var pmt in _pmts.Values) Streams(pmt, _caSystemId, streams, wanted, _listed);
+        _programEcms.Clear();
+        foreach (var (number, pmt) in _pmts)
+        {
+            var own = new HashSet<int>();
+            Streams(pmt, _caSystemId, streams, own, _listed);
+            _programEcms[number] = own;
+            wanted.UnionWith(own);
+        }
         foreach (var pid in _ecms.Keys.Except(wanted).ToList()) _ecms.Remove(pid);
         // PMT より先に来ていた ECM なら、取っておいた中身ごと引き取る (Early)
         foreach (var pid in wanted) _ecms.TryAdd(pid, _earlyEcms.Remove(pid, out var early) ? early : new Ecm(pid));
@@ -817,8 +963,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         // 鍵の要らない利用者だけならカードに問い合わせない (Rehold で問い合わせ直す)
         if (section[0] != 0x82 || !_keys) return;
         var listed = _ecms.GetValueOrDefault(ecm.Pid) == ecm;
-        // 溜めるのをやめる合図にするのは PMT が挙げた ECM だけ。先回りして取っておいただけのもの (Early) は PAT・PMT を待たせない
-        if (_holding && ecm.Last is not null && listed && PmtsReady()) Settle();
+        // 溜めるのをやめる合図にするのは、待っている PMT が挙げた ECM だけ。先回りして取っておいただけのもの (Early) は PAT・PMT を待たせない
+        if (_holding && ecm.Last is not null && Waits(ecm) && TablesReady()) Settle(Narrowed() is not null);
         if (ecm.Last is { } last && section.SequenceEqual(last))
         {
             if (_packets >= ecm.RetryAt) Ask(ecm);

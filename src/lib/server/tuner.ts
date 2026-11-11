@@ -411,9 +411,15 @@ export async function openChannelStream(
   after: readonly StreamUse[] = [],
   /** デバッグ用の名指し。このチューナーだけで選局し、ほかへ振り替えない (docs/agent.md「デバッグ用の名指し」) */
   pin: string | null = null,
+  /**
+   * 観る局 (放送の service_id)。1 局だけを観るとき (ライブ) に渡す。エージェントは選局の先頭で、この局の PMT と鍵がそろえば
+   * ほかの局を待たずに流し始める (docs/agent.md「B25 の復号もカードリーダーも自前」)。TS をまるごと使う録画は渡さない
+   */
+  service: number | null = null,
 ): Promise<ReadableStream<Uint8Array>> {
-  return (await openChannel(type, channel, signal, use, priority, after, pin))
-    .stream;
+  return (
+    await openChannel(type, channel, signal, use, priority, after, pin, service)
+  ).stream;
 }
 
 /** 選局の答えのヘッダ。TSMF で束ねた TS の数 (無ければ TSMF ではない) */
@@ -435,6 +441,7 @@ export async function openChannel(
   priority = config.priority.recording,
   after: readonly StreamUse[] = [],
   pin: string | null = null,
+  service: number | null = null,
 ): Promise<{
   stream: ReadableStream<Uint8Array>;
   tsmfStreams: number;
@@ -448,6 +455,7 @@ export async function openChannel(
   });
   for (const leaving of after) query.append("after", leaving);
   if (pin !== null) query.set("tuner", pin);
+  if (service !== null) query.set("service", String(service));
   const res = await agentFetch(`/denpa/stream?${query}`, {
     signal,
   });
@@ -539,9 +547,12 @@ export function openWhenFree(
   priority: number,
   giveUp: () => boolean,
   pin: string | null = null,
+  /** 観る局 (放送の service_id)。`openChannelStream` の `service` */
+  service: number | null = null,
 ): Promise<ReadableStream<Uint8Array>> {
   return retryWhileBusy(
-    () => openChannelStream(type, channel, signal, use, priority, [], pin),
+    () =>
+      openChannelStream(type, channel, signal, use, priority, [], pin, service),
     giveUp,
   );
 }

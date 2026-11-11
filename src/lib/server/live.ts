@@ -1987,7 +1987,10 @@ class Session {
 
   /**
    * チューナーを使う。**空きが無ければ待って掛け直す** (チャンネルを変える一瞬は 2 台要る)。
-   * 使えたら、どのチューナーに入ったかを覚えておく (`locate`。待たない)
+   * 使えたら、どのチューナーに入ったかを覚えておく (`locate`。待たない)。
+   *
+   * **観る局 (`program`) を渡す。** 1 局に絞って流すので、エージェントはその局の PMT と鍵がそろえば
+   * ほかの局 (ワンセグ・データ放送の局) の PMT を待たずに流し始める (docs/agent.md「B25 の復号もカードリーダーも自前」)
    */
   private async tune(): Promise<ReadableStream<Uint8Array>> {
     const stream = await openWhenFree(
@@ -1998,6 +2001,7 @@ class Session {
       config.priority.live,
       () => this.stopped,
       this.pin,
+      this.program > 0 ? this.program : null,
     );
     this.locating = this.locate();
     this.settle();

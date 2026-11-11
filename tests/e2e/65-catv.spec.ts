@@ -249,7 +249,7 @@ test.describe("ケーブル", () => {
       "B-CAS 以外の方式でスクランブルされた局のため",
     );
 
-    // ライブのタブにも「ケーブル」が出て、選ぶとその局を選局する
+    // ライブのタブにも「ケーブル」が出て、選ぶとその局を選局する。観る局 (service_id) も渡す (エージェントはその局の PMT と鍵で流し始める)
     await goto(page, "/live");
     await page.getByTestId("live-type-CATV").click();
     await expect(
@@ -265,13 +265,19 @@ test.describe("ケーブル", () => {
       .poll(async () => {
         const res = await request.get(`${stack.agentUrl}/__control/opens`);
         const { opens } = (await res.json()) as {
-          opens: { use: string; type: string; channel: string }[];
+          opens: {
+            use: string;
+            type: string;
+            channel: string;
+            service: number | null;
+          }[];
         };
         return opens.some(
           (open) =>
             open.use.startsWith("live ") &&
             open.type === "CATV" &&
-            open.channel === CATV_GR.channel,
+            open.channel === CATV_GR.channel &&
+            open.service === CATV_GR.serviceId,
         );
       })
       .toBe(true);
