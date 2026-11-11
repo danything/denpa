@@ -5,7 +5,12 @@ import { encodedFile } from "#lib/server/library.js";
 import { fileAudioBody } from "#lib/server/playback.js";
 import { recordingOr404 } from "#lib/server/recording.js";
 import { serveFile } from "#lib/server/serve.js";
-import { type FileSource, parseFileSource, tsPathOf } from "#lib/source.js";
+import {
+  type FileSource,
+  parseFileSource,
+  recordedTransport,
+  tsPathOf,
+} from "#lib/source.js";
 
 /** **音声だけ** (`?audio=only`。中身は `playback.fileAudioBody`) */
 function audioOnly(path: string, request: Request): Response {
@@ -70,7 +75,12 @@ function respond(
    */
   return serveFile(
     path,
-    path.endsWith(".mkv") ? "video/x-matroska" : "video/mp2t",
+    path.endsWith(".mkv")
+      ? "video/x-matroska"
+      : // 4K の局の元の録画 (`.mmts`) は 1 局に絞った TLV (ライブの 4K の局の `codec=raw` と同じ)
+        recordedTransport(path) === "tlv"
+        ? "application/x-arib-tlv"
+        : "video/mp2t",
     request,
   );
 }

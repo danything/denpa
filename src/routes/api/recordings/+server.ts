@@ -9,6 +9,7 @@ import { encodedFiles } from "#lib/server/library.js";
 import { rulerOf } from "#lib/server/playback.js";
 import { recordings } from "#lib/server/schema.js";
 import { displayTitle } from "#lib/server/title.js";
+import { recordedTransport } from "#lib/source.js";
 import { fromTsTime } from "#lib/ts/watch.js";
 
 /**
@@ -91,7 +92,10 @@ export function GET({ url }) {
           ["ts", row.ts],
         ] as const
       ).flatMap(([source, path]) =>
-        path === null || (path.endsWith(".mkv") && !present.has(path))
+        // 4K の局の元の録画 (`.mmts`。TLV) はアプリがそのまま読めないので並べない。観るのは `playback` の `auto` から
+        path === null ||
+        (path.endsWith(".mkv") && !present.has(path)) ||
+        recordedTransport(path) === "tlv"
           ? []
           : [
               {

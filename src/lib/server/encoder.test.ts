@@ -10,6 +10,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { concatBytes } from "@danything/arib/bytes";
+import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
+import { SynthMmtAv } from "@danything/arib/synth-mmt-av";
+
 import { config } from "./config";
 import {
   buildArgs,
@@ -27,7 +31,9 @@ import {
   rereadArgs,
 } from "./encoder";
 import { hwBitrate, type HwWay } from "./hwenc";
+import { remuxMmts } from "./mmts";
 import { tsProbe } from "./ts-probe";
+import { HLG_PARAMS } from "./uhd";
 
 function argValue(args: string[], key: string): string | undefined {
   const i = args.indexOf(key);
@@ -399,6 +405,38 @@ describe("エンコードの引数 (入れ物・コーデック・字幕・先�
     expect(argValue(buildArgs("/in.m2ts", "/out.mkv", 1, null), "-vf")).toBe(
       "bwdif=mode=send_frame:deint=interlaced,format=yuv420p",
     );
+  });
+});
+
+describe("4K の局の録画 (詰め替えた MP4 が入力)", () => {
+  const uhd = (codec: "av1" | "h264" | "hevc", hardware?: HwWay) =>
+    buildArgs("/raw/a.mmts.remux.mp4", "/out.mkv", 1, null, codec, {
+      uhd: true,
+      smoothMotion: true,
+      hardware,
+    });
+
+  test("AV1 は 2160p・10 ビット・HLG のまま。インタレ解除も縮めもしない", () => {
+    const args = uhd("av1");
+    // 色はコマに書き込む (映像に VUI が無くても、出したものに HLG の印が付く)
+    expect(argValue(args, "-vf")).toBe(`${HLG_PARAMS},format=yuv420p10le`);
+    expect(args).toContain("libsvtav1");
+  });
+
+  test("H.264 は今の録画と同じ 1080p・8 ビットの SDR に縮めて直す (ライブの 4K の局と同じ)", () => {
+    const vf = argValue(uhd("h264"), "-vf")!;
+    expect(vf.startsWith("scale=-2:1080,setparams=")).toBe(true);
+    expect(vf).toContain("tonemap=tonemap=hable");
+    expect(vf.endsWith("format=yuv420p")).toBe(true);
+    expect(vf).not.toContain("bwdif");
+  });
+
+  test("H.265 は GPU で、縮めて SDR に直してから GPU へ上げる。ビットレートは 1080p の値", () => {
+    const args = uhd("hevc", { device: "/dev/dri/renderD128", kind: "vaapi" });
+    const vf = argValue(args, "-vf")!;
+    expect(vf.startsWith("scale=-2:1080,")).toBe(true);
+    expect(vf.endsWith("format=nv12,hwupload")).toBe(true);
+    expect(args).toContain("hevc_vaapi");
   });
 });
 
@@ -785,3 +823,75 @@ describe("番組の始まりと、CM 検出をやり直すときの探り", () =
     expect(rereadArgs(measured, false)).toEqual([]);
   });
 });
+
+/**
+ * 本物の ffmpeg で、4K の局の録画をエンコードする。偽の放送と同じ素材 (HEVC Main10 と AAC。`synth-mmt-av`) を録画と同じく
+ * 1 局に絞って書き、詰め替えた MP4 (`mmts.remuxMmts`) を `buildArgs` の引数でエンコードする。入っていない所 (CI の単体) では飛ばす
+ */
+const ffmpeg = Bun.which("ffmpeg");
+const ffprobeBin = Bun.which("ffprobe");
+test.skipIf(ffmpeg === null || ffprobeBin === null)(
+  "本物の ffmpeg: 4K の局の録画を、AV1 は 10 ビットの HLG のまま、H.264 は 1080p の SDR にする",
+  async () => {
+    const dir = mkdtempSync(join(tmpdir(), "denpa-uhd-"));
+    const av = new SynthMmtAv({
+      serviceId: 301,
+      mptPacketId: 0x9000,
+      startMs: Date.UTC(2026, 10, 11, 12),
+    });
+    const filter = new MmtServiceFilter(301);
+    const source = join(dir, "a.mmts");
+    writeFileSync(
+      source,
+      concatBytes(Array.from({ length: 30 }, () => filter.filter(av.next()))),
+    );
+    const remuxed = join(dir, "a.mmts.remux.mp4");
+    expect((await remuxMmts(source, 301, remuxed)).wrote).toBe(true);
+
+    const encode = (codec: "av1" | "h264") => {
+      const output = join(dir, `${codec}.mkv`);
+      const done = Bun.spawnSync([
+        ffmpeg!,
+        "-v",
+        "error",
+        ...buildArgs(remuxed, output, 1, null, codec, {
+          uhd: true,
+          smoothMotion: true,
+          progress: "/dev/null",
+        }),
+      ]);
+      if (done.exitCode !== 0) console.error(done.stderr.toString());
+      expect(done.exitCode).toBe(0);
+      const probed = Bun.spawnSync([
+        ffprobeBin!,
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=codec_name,pix_fmt,height,color_transfer,color_primaries",
+        "-of",
+        "json",
+        output,
+      ]);
+      return (
+        JSON.parse(probed.stdout.toString()) as {
+          streams: Record<string, string | number>[];
+        }
+      ).streams[0]!;
+    };
+    expect(encode("av1")).toMatchObject({
+      codec_name: "av1",
+      pix_fmt: "yuv420p10le",
+      height: 64,
+      color_transfer: "arib-std-b67",
+      color_primaries: "bt2020",
+    });
+    expect(encode("h264")).toMatchObject({
+      codec_name: "h264",
+      pix_fmt: "yuv420p",
+      height: 1080,
+    });
+  },
+  120_000,
+);

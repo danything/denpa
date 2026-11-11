@@ -106,7 +106,9 @@ export function autoFormat(o: {
     indoor: o.indoor,
     rawOk: !uhd && has("raw"),
     av1: has("av1"),
-    hevc: o.scene === "live" && has("hevc") && (uhd || (o.hevc ?? liveHevc())),
+    // 4K の局の H.265 は放送の HEVC の詰め替えなので、追っかけ (4K の局の録画) でも出す
+    hevc:
+      has("hevc") && (uhd || (o.scene === "live" && (o.hevc ?? liveHevc()))),
     h264: has("h264"),
     compat: false,
     broadcast: uhd ? "hevc" : "mpeg2",
@@ -120,7 +122,8 @@ export function autoFormat(o: {
  * - `codec=h264` (省いたとき・知らない値も) / `av1` / `raw`、ライブなら `hevc` も … そのまま。H.265 を出せなければ H.264 にする
  *   (応答ヘッダで分かる。WebSocket の `tune` と同じ)。段を下げるならコーデックは `rungCodec` が `?playable=` から選ぶ
  * - `raw` は段を下げない
- * - 4K の局 (`transport` が `tlv`) の `hevc` は放送の HEVC の詰め替えで、GPU は要らない。`raw` は 1 局に絞った TLV
+ * - 4K の局 (`transport` が `tlv`) の `hevc` は放送の HEVC の詰め替えで、GPU は要らない。`raw` は 1 局に絞った TLV。
+ *   追っかけでも同じ (4K の局の録画 `.mmts` を読む)
  *
  * `hevc` と `pick` はテストで差し替えるときだけ渡す
  */
@@ -146,7 +149,7 @@ export function askedFormat(
     });
     return codec === null ? null : { codec, rung: codec === "raw" ? 0 : rung };
   }
-  const hevc = scene === "live" && asked === "hevc";
+  const hevc = asked === "hevc" && (scene === "live" || transport === "tlv");
   const plain: LiveFormat =
     asked === "av1" || asked === "raw"
       ? asked

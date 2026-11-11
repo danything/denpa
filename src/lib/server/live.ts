@@ -59,7 +59,7 @@ import {
   RUNG_AUDIO_KBPS,
   RUNG_SPECS,
 } from "#lib/rungs.js";
-import { tsPathOf } from "#lib/source.js";
+import { recordedTransport, tsPathOf } from "#lib/source.js";
 import { type Anchor, BroadcastClock, parseStart } from "#lib/ts/clock.js";
 import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import { KeyGate } from "#lib/ts/key-gate.js";
@@ -117,6 +117,7 @@ import { settings } from "./settings";
 import { chunks, endInput, lines, sideOutput } from "./stream";
 import { holdTranscode, transcodeRoom } from "./transcode";
 import { getTuners, openWhenFree, type StreamUse } from "./tuner";
+import { HLG_TO_SDR, UHD_HEIGHT } from "./uhd";
 import type { Connection } from "./ws";
 
 /**
@@ -634,26 +635,6 @@ function rungX264(bps: number, gop: string[]): string[] {
   ];
 }
 
-/** 4K の局の映像を縮める高さ (段 0)。段 1〜3 は段の高さ */
-const UHD_HEIGHT = 1080;
-
-/**
- * **HLG (BT.2020・10 ビット) を SDR (BT.709・8 ビット) に直すフィルタ** (`uhdVideoArgs`)。
- * 光の量に戻して (`npl=100`)、BT.709 の色域に移し、明るいところを hable で丸めてから BT.709 のガンマに戻す。
- * **入力の色の扱いはコマに書き込む** (`setparams`)。映像の VUI に頼ると、色の印の無い映像で zscale が止まる
- * (`no path between colorspaces`)。zscale の `tin`・`pin`・`min` で名指ししても、同じところで止まった (Debian の ffmpeg 7 で確かめた)。
- * 4K の放送は HLG で送っていると見ている (推定)
- */
-export const HLG_TO_SDR = [
-  "setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc:range=tv",
-  "zscale=t=linear:npl=100",
-  "format=gbrpf32le",
-  "zscale=p=bt709",
-  "tonemap=tonemap=hable:desat=0",
-  "zscale=t=bt709:m=bt709:r=tv",
-  "format=yuv420p",
-];
-
 /**
  * **4K の局の映像** (`encodeArgs` の `transport` が `tlv`)。入力は放送の HEVC (2160p・59.94 コマ・10 ビット・HLG) を詰め替えた fMP4。
  *
@@ -665,7 +646,7 @@ export const HLG_TO_SDR = [
  * - エンコーダは TS の局と同じ (段 0 はソフトウェアの x264 か SVT-AV1、段 1〜3 は上限つきの x264)。H.265 にはエンコードしない
  *   (4K の局の `hevc` は詰め替えだけ。`#lib/live-choice.ts` の `BroadcastCodec`)
  */
-function uhdVideoArgs(
+export function uhdVideoArgs(
   codec: LiveCodec,
   hw: LiveHw | null,
   rung: Rung,
@@ -2228,7 +2209,7 @@ class Session {
         consumed += next.value.length;
         if (mmt !== null) {
           const read = mmt.feed(next.value);
-          if (!this.takeMmt(read, mmt)) break;
+          if (!this.takeMmt(read, mmt, consumed)) break;
           for (const segment of read.segments) {
             await writer.write(segment.data);
             await writer.flush();
@@ -2367,9 +2348,9 @@ class Session {
    * 続けてよければ true。番組が替わってアセットの並びが変わったら作り直し (`restart`)、映像・音声がスクランブルされたまま
    * 届いていたら理由を伝えて畳む (どちらも false)。4K の局のスクランブルは ACAS で、まだ復号できない (`types.DESCRAMBLABLE`)
    */
-  private takeMmt(read: MmtOut, mmt: MmtLive): boolean {
+  private takeMmt(read: MmtOut, mmt: MmtLive, consumed: number): boolean {
     if (read.changed) {
-      this.restart(0);
+      this.restart(consumed);
       return false;
     }
     if (!this.produced && mmt.scrambled >= SCRAMBLE_PACKETS) {
@@ -2796,17 +2777,21 @@ class Session {
    *
    *     エージェント (TLV) → 1 局に絞る → 映像・音声を取り出して fMP4 に詰め替える (`live-mmt.ts`) → WebSocket → MSE
    *
-   * ffmpeg は起こさない。字幕も denpa が TTML から作る。途切れたときの扱いは放送そのまま (`runRaw`) と同じ
+   * ffmpeg は起こさない。字幕も denpa が TTML から作る。途切れたときの扱いは放送そのまま (`runRaw`) と同じ。
+   * **追っかけも同じ** (`source`。4K の局の録画 `.mmts` を読む)。読み切ったら `ended` を伝えて閉じる
    */
   private async runMmt(label: string): Promise<void> {
+    const chase = this.source !== undefined;
     try {
-      const tuned = await this.tune();
-      this.opening.tuned = this.since();
+      const tuned = this.source?.() ?? (await this.tune());
+      if (!chase) this.opening.tuned = this.since();
       this.way = "hevc・詰め替え";
       const mmt = new MmtLive(this.program);
+      let consumed = 0;
       await this.readTlv(label, tuned, (chunk) => {
+        consumed += chunk.length;
         const read = mmt.feed(chunk);
-        if (!this.takeMmt(read, mmt)) return false;
+        if (!this.takeMmt(read, mmt, consumed)) return false;
         for (const segment of read.segments) this.deliver(segment, true);
         return true;
       });
@@ -2814,7 +2799,9 @@ class Session {
       this.died(
         label,
         String(error),
-        whyNotTuned(String(error), resting(this.serviceId)),
+        chase
+          ? "録画を読めませんでした"
+          : whyNotTuned(String(error), resting(this.serviceId)),
       );
     } finally {
       this.stop();
@@ -2845,18 +2832,29 @@ class Session {
     tuned: ReadableStream<Uint8Array>,
     each: (chunk: Uint8Array) => boolean,
   ): Promise<void> {
+    // 追っかけ (`source`) は録画のファイルを読む。読み切ったら終わり (`rawEnding`)
+    const chase = this.source !== undefined;
+    let left = false;
     try {
       for await (const chunk of chunks(tuned)) {
         if (this.stopped) break;
         this.fed = true;
         this.opening.firstByte ??= this.since();
-        if (!each(chunk)) break;
+        if (!each(chunk)) {
+          left = true;
+          break;
+        }
       }
     } catch (error) {
-      // 届く前に切れたのは選局の失敗 (呼ぶ側の catch)。届いたあとなら外された
-      if (!this.fed) throw error;
+      // 届く前に切れたのは選局の失敗 (呼ぶ側の catch)。届いたあとなら外された。追っかけは読めなかった
+      if (!this.fed || chase) throw error;
     }
-    switch (rawEnding({ chase: false, fed: this.fed, stopped: this.stopped })) {
+    // 作り直す (`restart`)・畳む (`takeMmt`) と決めて抜けたなら、終わりの扱いはそちらで済んでいる
+    if (left) return;
+    switch (rawEnding({ chase, fed: this.fed, stopped: this.stopped })) {
+      case "ended":
+        this.tell({ type: "ended" });
+        return;
       case "lost":
         return await this.lose(label);
       case "died":
@@ -3148,7 +3146,9 @@ export function chaseStream(
       recordingDone(rec.id),
     );
   }
-  const release = holdTranscode();
+  // 4K の局の録画の H.265 は放送の HEVC の詰め替え (`openChase`)。エンコードしないので枠を使わない
+  const whole = codec === "hevc" && recordedTransport(source.path) === "tlv";
+  const release = whole ? () => undefined : holdTranscode();
   if (release === null) return "busy";
   return sessionStream((viewer, hold) =>
     openChase(
@@ -3681,8 +3681,11 @@ export function parseCommand(message: Record<string, unknown>): Asked | null {
       return { type: "hold", on: message["on"] === true };
     case "chase": {
       const at = Number(message["at"]);
-      // 追っかけは段 0 では H.265 を出さない (`#lib/live.ts` の `LiveCodec`)。段を下げるときは `playable` から選ぶ
-      const chased = codec === "hevc" ? "h264" : codec;
+      /*
+       * 追っかけは段 0 では H.265 にエンコードしない (`#lib/live.ts` の `LiveCodec`)。段を下げるときは `playable` から選ぶ。
+       * 4K の局の録画の H.265 は放送の HEVC の詰め替えなので通す (`openChase` が TS の録画では H.264 に読み替える)
+       */
+      const chased = codec;
       return {
         type: "chase",
         recordingId: Number(message["recordingId"]),
@@ -4034,16 +4037,37 @@ function openChase(
     return refuse(text);
   };
 
-  const { recordingId, at, audio: wanted, codec, caption, raw } = asked;
-  // 段を下げた追っかけも使う枠は 1 つ (下げないときと同じ)。コーデックは呼ぶ側が選んである (`rungCodec`)
-  const rung = raw ? 0 : asked.rung;
+  const { recordingId, at, audio: wanted, caption } = asked;
   const source = Number.isInteger(recordingId)
     ? chaseSource(recordingId)
     : undefined;
   if (source === undefined) return refuseHeld("録画が見つかりません");
   const { rec, path, size } = source;
   if (size === 0) return refuseHeld("まだ何も録画されていません");
-  const release = raw ? (held ?? (() => undefined)) : (held ?? holdTranscode());
+  /*
+   * **4K の局の録画 (`.mmts`) は TS を経由しない** (`Session.transport`。ライブの 4K の局と同じ)。放送のままは放送の HEVC の詰め替えで
+   * (`passthrough`。ffmpeg も枠も使わない)、エンコードするときは詰め替えた fMP4 を ffmpeg に渡す。
+   * TS の録画の H.265 は段 0 では作らない (`#lib/live.ts` の `LiveCodec`) ので H.264 にする
+   */
+  const transport = recordedTransport(path);
+  const uhd = transport === "tlv";
+  const lowered = asked.rung !== 0 && !asked.raw;
+  const codec: StreamCodec = !uhd
+    ? asked.codec === "hevc" && !lowered
+      ? "h264"
+      : asked.codec
+    : asked.raw
+      ? "hevc"
+      : // 4K の局の段を下げた変換は H.265 にしない (`liveRungCodec`。呼ぶ側は TS の録画の決め方で選んでいる)
+        lowered && asked.codec === "hevc"
+        ? liveRungCodec(asked.playable, "tlv")
+        : asked.codec;
+  const raw = asked.raw && !uhd;
+  const whole = uhd && codec === "hevc" && !lowered;
+  // 段を下げた追っかけも使う枠は 1 つ (下げないときと同じ)。コーデックは呼ぶ側が選んである (`rungCodec`)
+  const rung = raw || whole ? 0 : asked.rung;
+  const release =
+    raw || whole ? (held ?? (() => undefined)) : (held ?? holdTranscode());
   if (release === null) return refuse(BUSY);
   /*
    * **畳んだら読むのをやめる** (`session.whenStopped` で立てる)。止めている間 (`hold`) に畳まれると、`followFile` は
@@ -4076,7 +4100,7 @@ function openChase(
     type: "tuned",
     channelType: "chase",
     channel: String(rec.id),
-    codecs: codecsFor(codec),
+    codecs: codecsFor(codec, broadcastCodec(transport)),
     codec,
     raw,
     rung,
@@ -4118,6 +4142,7 @@ function openChase(
       (consumed) => rememberResume(rec.id, resumeFrom(plan, consumed)),
       null,
       rung,
+      transport,
     );
   } catch (failure) {
     // 起こせなかった。取った枠は返す
@@ -4163,6 +4188,15 @@ function chaseSource(
   if (rec === undefined || rec.deleted_at !== null || path === null)
     return undefined;
   return { rec, path, size: recordingSize(path) ?? 0 };
+}
+
+/**
+ * 追っかけで読む録画の伝送の形式 (`recordedTransport`)。HTTP の追っかけの `codec=raw` の Content-Type を決める
+ * (TS は `video/mp2t`、4K の局は 1 局に絞った TLV の `application/x-arib-tlv`)。録画が無ければ TS
+ */
+export function chaseTransport(recordingId: number): Transport {
+  const source = chaseSource(recordingId);
+  return source === undefined ? "ts" : recordedTransport(source.path);
 }
 
 /** もう書き足されないか。録り終えたら (行が消えたときも)、尻に着いた時点で読み終わり */

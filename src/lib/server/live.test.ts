@@ -16,7 +16,6 @@ import {
   encodeArgs,
   EncodeLag,
   encodeSpeed,
-  HLG_TO_SDR,
   keepLight,
   key,
   type Light,
@@ -42,6 +41,7 @@ import {
   videoArgs,
   whyNotTuned,
 } from "./live";
+import { HLG_TO_SDR } from "./uhd";
 
 /** 1 本目の音声をそのまま。番組表が何も言っていないときの既定 */
 const stereo = audioTracks([])[0]!;
@@ -1224,7 +1224,7 @@ describe("段の指示 (parseCommand)", () => {
     expect(parseCommand({ ...tune, rung: "1" })).toMatchObject({ rung: 1 });
   });
 
-  test("追っかけも同じ。段 0 の H.265 は H.264 にする", () => {
+  test("追っかけも同じ。H.265 はそのまま受ける (TS の録画の段 0 は `openChase` が H.264 にし、4K の局の録画は放送の HEVC の詰め替え)", () => {
     expect(
       parseCommand({ type: "chase", recordingId: 3, rung: 3 }),
     ).toMatchObject({ rung: 3, playable: ["h264"] });
@@ -1236,7 +1236,7 @@ describe("段の指示 (parseCommand)", () => {
         rung: 1,
         playable: ["hevc"],
       }),
-    ).toMatchObject({ codec: "h264", rung: 1, playable: ["hevc"] });
+    ).toMatchObject({ codec: "hevc", rung: 1, playable: ["hevc"] });
   });
 
   test("音声だけ (codec: audio) は選局でだけ受け、追っかけでは H.264 にする", () => {

@@ -1,14 +1,22 @@
 import { once } from "node:events";
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, extname } from "node:path";
 
 import { type EitEvent, EpgReader } from "@danything/arib/eit";
+import { MmtEpgReader } from "@danything/arib/mh-eit";
+import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
 import { ServiceFilter } from "@danything/arib/service-filter";
 import { and, eq, sql } from "drizzle-orm";
 
+import { RECORDED_EXT, recordedTransport } from "#lib/source.js";
 import { TsHead } from "#lib/ts/ts-head.js";
 
-import { isSatellite, type Recording, type Reservation } from "../types";
+import {
+  isSatellite,
+  type Recording,
+  type Reservation,
+  type Transport,
+} from "../types";
 import { fileSize } from "./chase";
 import { config } from "./config";
 import { now, orm } from "./db";
@@ -146,13 +154,19 @@ function createRecording(reservation: Reservation): Recording {
     })
     .returning({ id: recordings.id })
     .get()!;
-  // ファイル名は録画 ID を含めるため、行を作ってからでないと決まらない
-  const path = recordedPath({
-    id,
-    series: parsed.series,
-    subtitle: parsed.subtitle,
-    start_at: reservation.start_at,
-  });
+  /*
+   * ファイル名は録画 ID を含めるため、行を作ってからでないと決まらない。
+   * 拡張子は伝送の形式で決まる (`RECORDED_EXT`。4K の局は 1 局に絞った TLV を `.mmts` で置く)
+   */
+  const path = recordedPath(
+    {
+      id,
+      series: parsed.series,
+      subtitle: parsed.subtitle,
+      start_at: reservation.start_at,
+    },
+    RECORDED_EXT[service?.transport ?? "ts"],
+  );
   orm()
     .update(recordings)
     .set({ ts_path: path })
@@ -433,29 +447,20 @@ async function pump(
     return;
   }
   /*
-   * **4K の局 (TLV) はまだ録らない。** 4K の録画 (1 局に絞った TLV を `.mmts` で置く) はまだ無く、TS として読むと 1 バイトも書けない。
-   * スクランブルしていない 4K の局はライブで観られる (`types.decodableService`) ので予約は立つが、ここで理由を添えて失敗にする
-   */
-  if (service.transport === "tlv") {
-    announceOnce();
-    fail(recording.id, "ケーブルの 4K の局は、まだ録画に対応していません");
-    active.delete(recording.id);
-    return;
-  }
-
-  /*
    * **物理チャンネルを丸ごと開いて、こちらで局を選り分ける。**
    *
    * エージェントは中身を読まないので、1 本の TS にその中継に入っている局が
    * 全部流れてくる。そのまま保存すると 1 つの録画に複数の番組が入る
    * (実機の TOKYO MX は MX1 と MX2 が同居している)。
+   * 4K の局 (TLV) も同じで、1 局に絞った TLV のまま置く (`MmtServiceFilter`。画質を落とさない。docs/library.md)
    */
-  const filter = new ServiceFilter(service.service_id);
+  const filter = recordFilter(service.transport, service.service_id);
   /*
    * 同じ TS から番組表も読む。**延長の追従はここから。**
-   * 番組情報を誰かに聞き直す必要は無い
+   * 番組情報を誰かに聞き直す必要は無い。4K の局は MH-EIT を読む (`MmtEpgReader`)
    */
-  const epg = new EpgReader();
+  const epg =
+    service.transport === "tlv" ? new MmtEpgReader() : new EpgReader();
   const eventId =
     recording.program_id === null ? null : recording.program_id % 100000;
 
@@ -474,10 +479,13 @@ async function pump(
   /*
    * **書いた TS の先頭の放送時刻を測る** (`recordings.ts_head`。実況のコメントを録画中の追っかけでも合わせるため)。
    * 測れるのはファイルの先頭から書くときだけ。再起動をまたいで続きを足すときは、もう先頭が過ぎている
-   * (そのときはエンコードのときに測る。`recorded-bml.ts`)。測れたら行に書いて、あとは渡さない
+   * (そのときはエンコードのときに測る。`recorded-bml.ts`)。測れたら行に書いて、あとは渡さない。
+   * 4K の局 (TLV) は PCR を持たないので測らない (実況のコメントは録り始める予定の時刻で合わせる。`recording.tsHeadOf`)
    */
   let measure =
-    recording.ts_head === null && (fileSize(path) ?? 0) === 0
+    service.transport === "ts" &&
+    recording.ts_head === null &&
+    (fileSize(path) ?? 0) === 0
       ? new TsHead()
       : null;
   /*
@@ -487,7 +495,7 @@ async function pump(
    */
   let pf =
     eventId !== null && (fileSize(path) ?? 0) === 0
-      ? new PfEvent(service.service_id, eventId)
+      ? new PfEvent(service.service_id, eventId, service.transport)
       : null;
   // p/f を読まないものは、同じ回を確かめ直せないので録ると決まっている。開始はすぐ知らせる
   if (pf === null) announceOnce();
@@ -752,10 +760,12 @@ function finish(recordingId: number, size: number): void {
     return;
   }
 
-  // エンコードしない設定なら元の TS をそのまま保存先へ移す
-  const dest = libraryPath(recording, ".m2ts");
+  // エンコードしない設定なら元の TS をそのまま保存先へ移す。拡張子 (伝送の形式) はそのまま (`.m2ts`・`.mmts`)
+  const dest = libraryPath(recording, extname(recording.ts_path!));
   moveFile(recording.ts_path!, dest);
-  void writeThumbnail(dest, (recording.end_at - recording.start_at) / 1000);
+  // 4K の録画 (TLV) は ffmpeg が読めないので、サムネイルを作らない (エンコードすれば、詰め替えた MP4 から作る。`encoder.ts`)
+  if (recordedTransport(dest) === "ts")
+    void writeThumbnail(dest, (recording.end_at - recording.start_at) / 1000);
   // 保存先に置いた時点で「視聴可能」になる
   orm()
     .update(recordings)
@@ -863,6 +873,33 @@ export function failStrayRecordings(
     fail(rec.id, "録画が中断されたまま終了時刻を過ぎました");
   }
   return stray.length;
+}
+
+/** 録画が通す、1 局に絞る道具 (`ServiceFilter`・`MmtServiceFilter`) の共通の形 */
+interface RecordFilter {
+  /** 塊を受けて、その局のぶんだけを返す */
+  filter(chunk: Uint8Array): Uint8Array;
+  /** 局の並び (PMT・MPT) を読めたか。読めるまでは書かない */
+  readonly ready: boolean;
+  /** いまの番組がコピー禁止か (PMT のデジタルコピー制御記述子) */
+  readonly copyNever: boolean;
+}
+
+/**
+ * **伝送の形式ごとに、1 局に絞る道具を選ぶ。** TS は `ServiceFilter`、4K の局 (TLV) は `MmtServiceFilter`。
+ * 4K の局のコピー禁止は番組表 (MH-EIT のコンテンツコピー制御記述子) で予約の時点に止める (`format.COPY_NEVER_REASON`)。
+ * 録っている最中に MPT からは読まない (MPT のコピー制御の読み方を確かめていない)
+ */
+function recordFilter(transport: Transport, serviceId: number): RecordFilter {
+  if (transport === "ts") return new ServiceFilter(serviceId);
+  const mmt = new MmtServiceFilter(serviceId);
+  return {
+    filter: (chunk) => mmt.filter(chunk),
+    get ready() {
+      return mmt.ready;
+    },
+    copyNever: false,
+  };
 }
 
 /** 局のいまのチャンネルの名前 (`services.channel`)。局が無ければ null */

@@ -745,7 +745,7 @@ const ENCODE_STATES = [
  * エンコードの段階。`encode` 以外は ffmpeg が回る前の下ごしらえで、長いものだと
  * 数十分かかる。進み具合が出せない代わりにこれを状態として出す
  */
-export const ENCODE_PHASES = ["descramble", "cm", "encode"] as const;
+export const ENCODE_PHASES = ["descramble", "remux", "cm", "encode"] as const;
 
 /**
  * ジョブの種類。`encode` はエンコードする (CM 検出も一緒に行う)、`cm` は**CM 検出だけやり直す**

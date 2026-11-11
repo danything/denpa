@@ -8,7 +8,14 @@ import {
   CATV_LOCKED,
   CATV_OWN,
 } from "../fake/services";
-import { encodeRuns, expect, goto, syncEpg, test } from "./helpers";
+import {
+  encodeRuns,
+  expect,
+  goto,
+  setRecording,
+  syncEpg,
+  test,
+} from "./helpers";
 
 /**
  * HTTP のライブを開いて、`enough` が true になるまで (20 秒まで) 読む。読み終えたら閉じる。
@@ -468,6 +475,129 @@ test.describe("ケーブル", () => {
         .toBeGreaterThan(0.5);
     } finally {
       rmSync(stack.liveFmp4File, { force: true });
+    }
+  });
+
+  /*
+   * **4K の局の録画は、1 局に絞った TLV のまま `.mmts` で置く** (`recorder.ts`)。エンコードしない設定で録り、
+   * 録っている最中は追っかけ (HTTP は放送の HEVC の詰め替えと 1 局に絞った TLV、画面は縮めて SDR にした H.264)、
+   * 録り終えたら観る画面の詰め替えで観る
+   */
+  test("スクランブルしていない 4K の局を TLV のまま録り、追っかけと観る画面で観る", async ({
+    page,
+    request,
+    stack,
+    baseURL,
+  }) => {
+    test.setTimeout(180_000);
+    await syncEpg(request);
+    await setRecording(request, { codecs: [] });
+    const listed = (await (await request.get("/api/services")).json()) as {
+      id: number;
+      now: { id: number } | null;
+    }[];
+    const programId = listed.find((s) => s.id === CATV_4K_FREE.id)?.now?.id;
+    expect(programId, "4K の局にいま放送中の番組が要る").toBeDefined();
+    let id = 0;
+    try {
+      // いまの番組を録る (ライブの録画ボタンと同じ API)
+      expect(
+        (
+          await request.post("/live?/record", {
+            form: { service: String(CATV_4K_FREE.id) },
+          })
+        ).ok(),
+      ).toBe(true);
+      await expect(async () => {
+        const list = (await (await request.get("/api/recordings")).json()) as {
+          id: number;
+          serviceId: number;
+          recording: boolean;
+        }[];
+        const rec = list.find(
+          (item) => item.recording && item.serviceId === CATV_4K_FREE.id,
+        );
+        expect(rec).toBeDefined();
+        id = rec!.id;
+      }).toPass({ timeout: 60_000, intervals: [500] });
+
+      // 追っかけの HTTP。放送の HEVC と AAC の詰め替え (エンコードしない) と、1 局に絞った TLV
+      const chase = `${baseURL}/api/recordings/${id}/chase`;
+      await expect(async () => {
+        const hevc = await streamHead(`${chase}?codec=hevc`, (text) =>
+          text.includes("moof"),
+        );
+        expect(hevc.status).toBe(200);
+        expect(hevc.codec).toBe("hevc");
+        expect(hevc.text).toContain("moof");
+      }).toPass({ timeout: 30_000 });
+      const raw = await streamHead(
+        `${chase}?codec=raw`,
+        (text) => text.length > 0,
+      );
+      expect(raw.type).toBe("application/x-arib-tlv");
+      expect(raw.text.charCodeAt(0)).toBe(0x7f);
+
+      // 追っかけの画面。試験のブラウザは 4K の HEVC を再生できないので、縮めて SDR にした H.264 で観る
+      writeFileSync(stack.liveFmp4File, "");
+      // 前のテストのライブの引数を消してから数える
+      writeFileSync(stack.liveArgsFile, "");
+      try {
+        await goto(page, `/chase/${id}`);
+        await expect
+          .poll(
+            () =>
+              page
+                .getByTestId("chase-video")
+                .evaluate((video) => (video as HTMLVideoElement).currentTime),
+            { timeout: 30_000 },
+          )
+          .toBeGreaterThan(0.5);
+        expect(
+          encodeRuns(stack.liveArgsFile).some(
+            (run) =>
+              run.includes("pipe:0") &&
+              run.some((arg) => arg.includes("zscale")),
+          ),
+        ).toBe(true);
+      } finally {
+        rmSync(stack.liveFmp4File, { force: true });
+      }
+    } finally {
+      // ケーブルの偽番組は 30 分あるので、止めて録り終える
+      await request.post("/guide?/cancel", {
+        form: { programId: String(programId) },
+      });
+    }
+
+    try {
+      // 録り終えたら、元の録画 (`.mmts`) を詰め替えて観る。MPEG-2 の TS ではないので MPEG-2 は出さない
+      await expect(async () => {
+        const info = (await (
+          await request.get(`/api/recordings/${id}/playback`)
+        ).json()) as {
+          broadcast?: string;
+          offers: { codec: string; way: string; codecs?: string }[];
+        };
+        expect(info.broadcast).toBe("hevc");
+        expect(info.offers).toContainEqual({
+          codec: "hevc",
+          way: "stream",
+          codecs: "hev1.2.4.L153.B0,mp4a.40.2",
+        });
+        expect(info.offers.some((offer) => offer.codec === "mpeg2")).toBe(
+          false,
+        );
+      }).toPass({ timeout: 60_000, intervals: [1000] });
+      const stream = await streamHead(
+        `${baseURL}/api/recordings/${id}/stream?codec=hevc`,
+        (text) => text.includes("moof"),
+      );
+      expect(stream.status).toBe(200);
+      expect(stream.codec).toBe("hevc");
+      expect(stream.text).toContain("ftyp");
+    } finally {
+      await setRecording(request, {});
     }
   });
 

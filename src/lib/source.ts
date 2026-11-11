@@ -8,6 +8,25 @@
  * EPGStation 側でエンコードが済んでいなかったものは移行のときに作業領域へ入る。
  */
 
+import type { Transport } from "./types";
+
+/**
+ * **元の録画の拡張子。伝送の形式ごと** (`server/recorder.ts` が付ける)。TS の局は 1 局に絞った TS (`.m2ts`)、
+ * 4K の局 (TLV) は 1 局に絞った TLV (`.mmts`)。どちらも放送のまま、変換せずに置く
+ */
+export const RECORDED_EXT: Record<Transport, string> = {
+  ts: ".m2ts",
+  tlv: ".mmts",
+};
+
+/**
+ * **元の録画の伝送の形式を、拡張子から引く。** 形式は録画の行に持たず、ファイルの名前で分かる (`RECORDED_EXT`)。
+ * 読み方 (TS か MMT か) を決める所は、どこもこれで決める
+ */
+export function recordedTransport(path: string): Transport {
+  return /\.mmts$/i.test(path) ? "tlv" : "ts";
+}
+
 /** エンコードの元にできるファイル。無ければ null */
 export function encodeSource(recording: {
   ts_path: string | null;
