@@ -79,23 +79,26 @@ export function parseMpuTimestamps(body: Uint8Array): [number, number][] {
 export interface MpuExtendedTimestamp {
   mpuSequenceNumber: number;
   timescale: number;
-  /** 最初の提示時刻から、最初のアクセスユニットの DTS までの戻り (mpu_decoding_time_offset) */
+  /** mpu_decoding_time_offset。最初のアクセスユニットの DTS が、最初の提示時刻より前にずれる長さ */
   decodingOffset: number;
   /** アクセスユニットごとの、DTS から PTS までのずれ (デコードの順) */
   dtsPtsOffsets: number[];
-  /** アクセスユニットごとの、次のアクセスユニットの DTS までの長さ (pts_offset。種類 0 なら 0) */
+  /** アクセスユニットごとの、次のアクセスユニットの DTS までの長さ (pts_offset) */
   durations: number[];
 }
 
 /**
- * MPU 拡張タイムスタンプ記述子を読む。timescale を持たないもの (MPU のメタデータの mdhd を見る、の意味) は、
- * 放送ではメタデータを送らないので読めず、空を返す
+ * MPU 拡張タイムスタンプ記述子を読む。次のものは DTS を進められないので、空を返す (その MPU は時刻が分からないものとして捨てる)
+ *
+ * - timescale を持たないもの (MPU のメタデータの mdhd を見る、の意味)。放送ではメタデータを送らない
+ * - pts_offset を持たないもの (pts_offset_type 0)。コマの長さが分からない
  */
 export function parseMpuExtendedTimestamps(
   body: Uint8Array,
 ): MpuExtendedTimestamp[] {
   if (body.length < 5 || (body[0]! & 0x01) === 0) return [];
   const offsetType = (body[0]! >> 1) & 0x03;
+  if (offsetType === 0) return [];
   const timescale = u32(body, 1);
   let at = 5;
   let fixed = 0;
@@ -361,7 +364,7 @@ interface Track {
   fragment: Uint8Array[] | null;
   /** 最後に受けた packet_sequence_number */
   sequence: number | null;
-  /** 組み立て中のアクセスユニットの一部が欠けた */
+  /** 組み立て中のアクセスユニットのパケットが欠けた */
   broken: boolean;
   latm: LatmReader;
 }
@@ -420,7 +423,7 @@ const utf8 = new TextDecoder();
  * - 局 (`serviceId` = MMT_package_id) の MPT を読んで、映像・音声・字幕のそれぞれ最初のアセットを選ぶ。
  *   アセットは MPT と同じ IP の並びのもの (在りかの種類 0) だけを読む
  * - 時刻は MPT の記述子から引く。時刻がまだ分からない MPU (最初の MPT より先に来たもの) は数えて捨てる (`untimed`)
- * - 欠け (packet_sequence_number が続かない) があったアクセスユニットは捨てる (`dropped`)
+ * - パケットが欠けた (packet_sequence_number が続かない) アクセスユニットは捨てる (`dropped`)
  * - アクセスユニットは、次のアクセスユニット (か次の MPU) の始まりが来たときに返す。最後のものは `end` で返す
  */
 export class MmtMediaReader {
@@ -435,7 +438,7 @@ export class MmtMediaReader {
   scrambled = 0;
   /** 時刻が分からずに捨てたアクセスユニットの数 */
   untimed = 0;
-  /** 欠けたか読めずに捨てたアクセスユニットの数 */
+  /** パケットが欠けたか、中身を読めずに捨てたアクセスユニットの数 */
   dropped = 0;
 
   constructor(private readonly serviceId: number) {}
@@ -468,7 +471,7 @@ export class MmtMediaReader {
       if (mmtp.payloadType !== PAYLOAD_MPU) continue;
       const track = this.tracks.get(`${datagram.flow}/${mmtp.packetId}`);
       if (track === undefined) continue;
-      // 欠けたら、組み立て中のアクセスユニットはもう組めない
+      // パケットが欠けたら、組み立て中のアクセスユニットはもう組めない
       if (
         track.sequence !== null &&
         mmtp.sequenceNumber !== (track.sequence + 1) >>> 0

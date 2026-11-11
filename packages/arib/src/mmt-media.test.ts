@@ -84,6 +84,12 @@ describe("MPU の時刻", () => {
       [],
     );
   });
+
+  test("pts_offset の無い拡張タイムスタンプ (種類 0) は、コマの長さが分からないので読まない", () => {
+    expect(
+      parseMpuExtendedTimestamps(hex("f9000075300000000a3f0000010000")),
+    ).toEqual([]);
+  });
 });
 
 describe("LatmReader", () => {

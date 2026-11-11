@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { concatBytes } from "@danything/arib/bytes";
-import { CLOCK, MmtMediaReader } from "@danything/arib/mmt-media";
+import {
+  type AudioUnit,
+  CLOCK,
+  type MediaAsset,
+  MmtMediaReader,
+  type VideoUnit,
+} from "@danything/arib/mmt-media";
 import {
   compressedIp,
   mfuPackets,
@@ -353,6 +359,40 @@ describe("MmtFmp4 (ffmpeg の HEVC と AAC)", () => {
       Array.from({ length: AUDIO_FRAMES }, (_, i) => 3003 + i * 1920),
     );
     expect(audio.every((s) => s.duration === 1920)).toBe(true);
+  });
+
+  test("音声の設定より先に映像の MPU が終わったら、次の頭出しできるコマから始め直し、そこを時刻 0 にする", () => {
+    const reader = new MmtMediaReader(SERVICE);
+    const units: (VideoUnit | AudioUnit)[] = [];
+    let assets: MediaAsset[] = [];
+    for (const event of [...reader.feed(tlv()), ...reader.end()]) {
+      if (event.kind === "assets") assets = event.assets;
+      else if (event.kind !== "caption") units.push(event);
+    }
+    // 最初の MPU の映像と、次の MPU の最初のコマを、音声より前に渡す
+    const first = units.filter(
+      (u) => u.kind === "video" && u.mpuSequenceNumber === 100,
+    );
+    first.push(
+      units.find((u) => u.kind === "video" && u.mpuSequenceNumber === 101)!,
+    );
+    const muxer = new MmtFmp4(assets);
+    const out = [...first, ...units.filter((u) => !first.includes(u))].flatMap(
+      (u) => muxer.push(u),
+    );
+    out.push(...muxer.flush());
+    expect(out.map((s) => s.kind)).toEqual(["init", "media"]);
+    const tracks = readInit(out[0]!.data);
+    const samples = readFragment(out[1]!.data, tracks);
+    const video = samples.filter((s) => s.track === 1);
+    expect(video).toHaveLength(GOP);
+    expect(video[0]!.dts).toBe(0);
+    expect(video[0]!.key).toBe(true);
+    // 2 つ目の MPU の最初の DTS (18018 / 180000 秒)
+    expect(muxer.origin).toBe(SECONDS * CLOCK - 3003 + (18018 + 6006) / 2);
+    expect(samples.filter((s) => s.track === 2).every((s) => s.dts >= 0)).toBe(
+      true,
+    );
   });
 });
 

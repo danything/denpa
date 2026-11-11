@@ -9,6 +9,7 @@
  * - **時刻 0 は、最初に使う映像の頭出しできるコマの DTS。** それより前の音声は捨てる。字幕も同じ 0 で数える (`origin`)
  * - 断片は映像の MPU (頭出しできる所から次の頭出しできる所まで) ごとに 1 つ出す。音声は、映像の断片の終わりまでのぶんを一緒に出す
  * - 初期化セグメントは、映像の VPS・SPS・PPS と、音声の設定がそろったときに 1 回だけ出す。
+ *   そろう前に映像の MPU が終わったら、それまでのコマを捨て、次の頭出しできるコマから始め直す (時刻 0 もそのコマにする)。
  *   アセットが変わったら (`MediaEvent` の `assets`) 作り直すのは使う側
  */
 
@@ -101,6 +102,12 @@ export class MmtFmp4 {
     const out: Fmp4Segment[] = [];
     if (unit.kind === "video") {
       if (!this.hasVideo) return out;
+      const last = this.videoSamples.at(-1);
+      if (
+        last !== undefined &&
+        last.unit.mpuSequenceNumber !== unit.mpuSequenceNumber
+      )
+        out.push(...this.cut(unit.dts));
       if (this.video === null) {
         // 頭出しできるコマから始める。それまでのコマは前のコマが無いとデコードできない
         if (!unit.keyframe) return out;
@@ -108,12 +115,6 @@ export class MmtFmp4 {
         if (this.video === null) return out;
         this.origin = unit.dts;
       }
-      const last = this.videoSamples.at(-1);
-      if (
-        last !== undefined &&
-        last.unit.mpuSequenceNumber !== unit.mpuSequenceNumber
-      )
-        out.push(...this.cut(unit.dts));
       this.videoSamples.push({
         dts: unit.dts,
         unit,
@@ -170,9 +171,11 @@ export class MmtFmp4 {
       (!this.hasAudio || this.audio !== null);
     if (this.origin === null) return out;
     if (!ready) {
-      // 設定がそろうまでのコマは、初期化セグメントより前なので使えない。溜め続けずに捨てる
-      this.videoSamples = this.videoSamples.filter((p) => p.dts >= until);
-      this.audioSamples = this.audioSamples.filter((p) => p.dts >= until);
+      // 設定がそろう前のコマは溜め続けずに捨て、次の頭出しできるコマから始め直す (時刻 0 もそのコマにする)
+      this.videoSamples = [];
+      this.audioSamples = [];
+      this.video = null;
+      this.origin = null;
       return out;
     }
     if (!this.started) {
