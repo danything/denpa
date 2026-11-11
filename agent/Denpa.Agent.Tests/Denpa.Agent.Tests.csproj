@@ -4,7 +4,7 @@
         <!-- TUnit のテストは自分で実行できるアプリ (Microsoft.Testing.Platform)。
              Microsoft.NET.Test.Sdk は持たない (TUnit の検出を壊す) -->
         <OutputType>Exe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <IsPackable>false</IsPackable>

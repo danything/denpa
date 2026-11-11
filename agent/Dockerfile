@@ -14,21 +14,38 @@
 # `TARGETARCH` (BuildKit が入れる) から、RID と取ってくる配布物の名前を引く。
 # 名前の付け方は上流ごとにばらばら (amd64 / x86_64 / x64、arm64 / aarch64) なので、
 # 各段の冒頭で読み替える。それ以外の arch は配布物が無いので、amd64 のものを
-# 代わりに入れず、そこで止める。sdk:10.0 の既定がそのまま trixie (`-trixie` というタグは無い)
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:fe0fd4e93bd2fbb47c883b7a6369e5c8d3db8bf01cdc5981f6ee35fbdf3ff4fb AS build
+# 代わりに入れず、そこで止める。
+#
+# **SDK のイメージの中ではリンクしない。** sdk:11.0 の土台は Ubuntu 26.04 (glibc 2.43) で、
+# 実行イメージの distroless は Debian 13 (glibc 2.41)。Debian の SDK のイメージは 11.0 から無い。
+# Native AOT はリンクした段の glibc に対してシンボルのバージョンを決めるので、Ubuntu の上でリンクすると
+# 実行イメージの glibc に無いバージョンを要求する実行ファイルができることがある。SDK はこの段から
+# 下の build 段へマウントして使う (SDK そのものは古い glibc 向けに組んであり、Debian 13 で動く)
+FROM mcr.microsoft.com/dotnet/sdk:11.0@sha256:65f3c7c6a25a239ab3e6719f2896147e7b68242ff2d8818dd70498bde6ef8bea AS sdk
+
+# **リンクする段は実行イメージと同じ Debian 13 (trixie)。** 実行イメージの Debian を上げるときは、ここも一緒に上げる
+FROM docker.io/library/debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS build
 ARG TARGETARCH
 WORKDIR /build
-# AOT のリンクに clang と zlib が要る
+# AOT のリンクに clang と zlib が要る。ca-certificates は SDK が NuGet から ILCompiler を取得するため
+# (SDK が読む libssl と libstdc++ は、ca-certificates と clang の依存で入る)
 RUN apt-get update && \
-    apt-get -y --no-install-recommends install clang zlib1g-dev && \
+    apt-get -y --no-install-recommends install clang zlib1g-dev ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+# SDK を ICU 無しで動かす (libicu はパッケージ名に Debian ごとのバージョンが入るので入れない)。
+# ほかは SDK のイメージが決めているものと同じ
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
+    DOTNET_NOLOGO=true \
+    DOTNET_GENERATE_ASPNET_CERTIFICATE=false \
+    NUGET_XMLDOC_MODE=skip
 COPY agent/Denpa.Agent/ Denpa.Agent/
-RUN case "${TARGETARCH}" in \
+RUN --mount=type=bind,from=sdk,source=/usr/share/dotnet,target=/usr/share/dotnet \
+    case "${TARGETARCH}" in \
       amd64) rid=linux-x64 ;; \
       arm64) rid=linux-arm64 ;; \
       *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; \
     esac && \
-    dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
+    /usr/share/dotnet/dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
 
 # ---------------------------------------------------------------------------
 # 外から取ってくるもの (3 つの userland)。**取ってくる道具は実行イメージに残さない**
@@ -124,7 +141,7 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
     rm -rf /tmp/*
 
 # ---------------------------------------------------------------------------
-# **土台は distroless (Debian 13 = trixie。組む段の sdk:10.0 と同じバージョンなので glibc も合う)。**
+# **土台は distroless (Debian 13 = trixie。リンクした build 段と同じバージョンなので glibc も合う)。**
 # 入っているのは glibc・libssl・ca-certificates・libstdc++ と tzdata くらいで、シェルも apt も無い。
 # エージェントが要るのはこれで全部。実行ファイルが直に繋ぐのは libc と libm だけで、libssl は .NET が読む。
 # エージェントのポート (AGENT_PORT) は denpa と証明書で確かめ合う HTTPS なので、libssl を常に使う (AgentTls.cs)。
@@ -139,7 +156,17 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 #
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
 # px4d のソケットを /run/px4-userland に作るので、今までどおり root で動かす
-FROM gcr.io/distroless/cc-debian13:latest@sha256:e1f5543d45a2cd7c02a5b43dda5f0ff30729b4832113759d01ed39b0b152cddb
+FROM gcr.io/distroless/cc-debian13:latest@sha256:e1f5543d45a2cd7c02a5b43dda5f0ff30729b4832113759d01ed39b0b152cddb AS runtime
+
+# **実行イメージの glibc で実行ファイルを読み込めることを、組むときに確かめる。**
+# 実行ファイルが要求する GLIBC のバージョンが土台に無ければ、ローダーがここで止めてビルドが落ちる
+# (build 段と土台の Debian がずれたときに、起動してからではなくここで分かる)。
+# シェルが無いので exec の形で起動する。`--version` はバージョンを出して終わる (Program.cs)
+FROM runtime AS loaded
+COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
+RUN ["/usr/local/bin/denpa-agent", "--version"]
+
+FROM runtime
 
 COPY --from=fetch /opt/ /opt/
 
@@ -150,7 +177,9 @@ COPY --from=fetch /opt/ /opt/
 # px4-userland の機材に流し込む IT930x のファームウェアも、px4d に渡すときに
 # エージェントが同梱のものをここに書き出す (/config/it930x-firmware.bin。Px4Firmware.cs)。
 # denpa と組むための鍵・証明書・合言葉 (/config/tls。AgentTls.cs) も同じ所に置く。
-COPY --from=build /out/denpa-agent /usr/local/bin/denpa-agent
+#
+# 実行ファイルは、上で読み込めることを確かめた loaded 段から写す
+COPY --from=loaded /usr/local/bin/denpa-agent /usr/local/bin/denpa-agent
 
 EXPOSE 25252
 ENTRYPOINT ["/usr/local/bin/denpa-agent"]
