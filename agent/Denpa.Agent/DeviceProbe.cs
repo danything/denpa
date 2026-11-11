@@ -163,7 +163,7 @@ public static class DeviceProbe
         found.AddRange(Zd1j.Detect());
 
         /*
-         * PIXELA PIX-DT295 も並べるだけで開かない (開くと機材に設定を書く。試験的。Dt295.cs)
+         * PIXELA PIX-DT295 も並べるだけで開かない (開くと機材に設定を書く。Dt295.cs)
          */
         found.AddRange(Dt295.Detect());
 
