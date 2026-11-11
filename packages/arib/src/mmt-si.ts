@@ -551,7 +551,7 @@ export class TlvServiceReader {
     return this.complete;
   }
 
-  /** 録るに値する局だけ (`psi.SERVICE_TYPES`)。揃うまでは空 */
+  /** 録画の対象になる種類の局だけ (`psi.SERVICE_TYPES`)。揃うまでは空 */
   services(): FoundService[] {
     const transport = this.transport;
     if (this.network === null || transport === null) return [];

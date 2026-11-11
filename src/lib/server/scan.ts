@@ -248,7 +248,7 @@ export async function readServices(
   );
 }
 
-/** TLV (4K の放送) を読んだ結果。局ごとの CA_system_id と ECM の在りかも返す (MPT のアクセス制御記述子) */
+/** TLV (4K の放送) を読んだ結果。局ごとの CA_system_id と ECM の packet_id も返す (MPT のアクセス制御記述子) */
 interface TlvScanResult extends ScanResult {
   caSystemIdsOf: (serviceId: number) => number[];
   accessOf: (serviceId: number) => AccessControl[];

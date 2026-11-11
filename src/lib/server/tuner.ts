@@ -51,7 +51,7 @@ const AGENT_CHANNEL = object({
   remoteControlKeyId: nullable(number),
   /**
    * 伝送の形式。スキャンが選局の答えの Content-Type から書く (`openChannel`)。`tlv` (4K の放送) のときだけ書き、無ければ TS。
-   * エージェントは中身を見ずに預かる
+   * エージェントは値を解釈せず、そのまま返す
    */
   transport: optional(literal("ts", "tlv")),
   services: array(
@@ -450,7 +450,7 @@ const CONTENT_TS = "video/mp2t";
 const CONTENT_TLV = "application/x-arib-tlv";
 
 /**
- * 選局の答えの Content-Type から、流れてくるバイト列の形式を読む。**知らない形式は TS として読む。**
+ * 選局の答えの Content-Type から、流れてくるバイト列の形式を読む。**想定していない形式は TS として読む。**
  * エージェントと denpa のバージョンがずれただけで選局を止めないため (外から来る形式のずれは警告を出して続ける)
  */
 export function streamTransport(headers: Headers): Transport {
@@ -461,7 +461,7 @@ export function streamTransport(headers: Headers): Transport {
   if (type === CONTENT_TLV) return "tlv";
   if (type !== CONTENT_TS)
     console.warn(
-      `[tuner] エージェントが知らない形式 (${type || "Content-Type なし"}) で流しています。TS として読みます。エージェントと denpa のバージョンが合っているか確かめてください`,
+      `[tuner] エージェントが想定していない形式 (${type || "Content-Type なし"}) で流しています。TS として読みます。エージェントと denpa のバージョンが合っているか確かめてください`,
     );
   return "ts";
 }
