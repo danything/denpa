@@ -18,8 +18,6 @@ import {
 } from "#lib/server/reception.js";
 import {
   observedOf,
-  REMOVABLE_TYPES,
-  type RemovableType,
   removeType,
   SCAN_KINDS,
   type ScanKind,
@@ -30,6 +28,7 @@ import {
 import { programs, services } from "#lib/server/schema.js";
 import { measureSignal } from "#lib/server/signal-quality.js";
 import {
+  ALL_CHANNEL_TYPES,
   type ChannelType,
   type Origin,
   origin,
@@ -210,15 +209,15 @@ export const actions = {
   },
 
   /**
-   * ケーブルかスカパー！プレミアムのチャンネルと局を消す。受信できるチューナーが無く、スキャンし直して消せないときだけ (`scan.ts` の `removeType`)。
+   * 1 つの種別のチャンネルと局を消す。種別はどれでもよく、チューナーの有無も問わない (`scan.ts` の `removeType`)。
    * 画面は押し間違いを防ぐ 2 回目 (「削除を確定」) で送ってくる
    */
   removeType: async ({ request }) => {
     const type = String((await request.formData()).get("type") ?? "");
-    if (!REMOVABLE_TYPES.includes(type as RemovableType))
+    if (!ALL_CHANNEL_TYPES.includes(type as ChannelType))
       return fail(400, { message: "削除する種別の指定が不正です" });
     try {
-      const result = await removeType(type as RemovableType);
+      const result = await removeType(type as ChannelType);
       if (!result.removed) return fail(409, { message: result.message });
       return { success: true, scan: result.message };
     } catch (error) {

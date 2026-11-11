@@ -996,28 +996,19 @@ export function stop(): { stopped: boolean; message: string } {
   return { stopped: true, message: "チャンネルスキャンを中断しています" };
 }
 
-/** チューナーが無くなったときに消せる種別 (`removeType`)。地上波・BS・CS はふだんのチューナーで受けるので、スキャンし直せば入れ替わる */
-export const REMOVABLE_TYPES = ["CATV", "SKY"] as const;
-export type RemovableType = (typeof REMOVABLE_TYPES)[number];
-
 /**
- * 1 つの種別 (ケーブルかスカパー！プレミアム) のチャンネルと局を消す。設定の「チャンネル」の「削除を確定」から。
+ * 1 つの種別のチャンネルと局を消す。設定の「チャンネル」の「削除を確定」から。
  *
- * **その種別を受けられる「使う」チューナーが無いときだけ。** 引っ越してケーブルが無くなるとスキャンの選び方から種別が消え、
- * スキャンし直して消すことができないため。受けられるチューナーがあれば、スキャンし直せば入れ替わるので断る。
- * 局の行は消さず、取り込み直したときに見かけなかった局として画面から外れる (録画は残る。`currentServices`)
+ * **局がある種別なら、チューナーの有無によらず消せる** (種別ごとの例外は作らない)。スキャンは 1 件も見つからない結果を書かない
+ * (アンテナを抜いたまま回して全部消えるのを防ぐ) ので、チューナーが挿さったまま回線だけが無くなったとき (引っ越しでケーブルが無くなったなど) は、
+ * スキャンし直しても消えないため。スキャンの実行中だけ断る。
+ * 局の行は消さず、取り込み直したときに見かけなかった局として画面から外れる (録画は残る。`currentServices`)。スキャンし直せば戻る
  */
 export async function removeType(
-  type: RemovableType,
+  type: ChannelType,
 ): Promise<{ removed: boolean; message: string }> {
   if (current.state === "running")
     return { removed: false, message: "スキャンの実行中は削除できません" };
-  const tuners = await getTuners();
-  if (tuners.some((tuner) => !tuner.disabled && tuner.types.includes(type)))
-    return {
-      removed: false,
-      message: "受信できるチューナーがあるので、スキャンし直してください",
-    };
   await deleteChannels(type);
   for (const key of [...observations.keys()])
     if (key.startsWith(`${type}:`)) observations.delete(key);
