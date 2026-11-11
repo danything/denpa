@@ -15,7 +15,7 @@ export function storedAmbient(saved: string | null): boolean {
 
 /**
  * 写す大きさ。**32x18 (16:9)。** ぼかして広げるので、これより細かくしても見た目は変わらない。
- * 縮めるのは写す側 (`<video>` はブラウザ、worker は worker の中) で、元の大きさの画素は読まない
+ * 縮めるのは写す側 (`<video>` のコマは `glance-worker.ts`。`VideoFrame` の無いブラウザだけ画面の側。canvas は描いている worker の中) で、元の大きさの画素は読まない
  */
 export const GLANCE = { width: 32, height: 18 } as const;
 

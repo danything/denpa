@@ -155,28 +155,37 @@ internal sealed class It930xTsOutput
     private volatile string? _reason;
 
     private readonly TsmfSelector? _tsmf;
-    private readonly TsmfEmit _store;
+    private readonly SplitTlv? _tlv;
+    private readonly TsmfEmit _route;
+    private readonly TlvEmit _storeTlv;
+    private long _gaps;
+
+    /// <summary>選局の途中で、TSMF のヘッダーにある選んだ TS の種類が変わったときに、読む側に伝える理由 (<see cref="TsmfSelector.FormatChanged"/>)</summary>
+    public const string FormatChangedReason = "選んだ TS の形式が変わりました";
 
     /// <param name="tsmf">ISDB-C のとき、TSMF から TS を 1 つ選ぶ処理 (仕様書 7A.7)。ほかの方式は通さない (仕様書 10.1) ので null</param>
-    public It930xTsOutput(TsmfSelector? tsmf = null) : this(TsBuffer.New(), tsmf)
+    /// <param name="tlv">ISDB-C のとき、選んだ TS が分割 TLV なら TLV パケットに組み立てる処理。<paramref name="tsmf"/> と組で渡す</param>
+    public It930xTsOutput(TsmfSelector? tsmf = null, SplitTlv? tlv = null) : this(TsBuffer.New(), tsmf, tlv)
     {
     }
 
     /// <summary>Pipe を渡すのはテストのため (溢れる大きさを小さくする)</summary>
-    internal It930xTsOutput(Pipe pipe, TsmfSelector? tsmf = null)
+    internal It930xTsOutput(Pipe pipe, TsmfSelector? tsmf = null, SplitTlv? tlv = null)
     {
         _writer = pipe.Writer;
         _tsmf = tsmf;
-        _store = Store;
+        _tlv = tlv;
+        _route = Route;
+        _storeTlv = Store;
         Output = new DeviceStream(pipe.Reader, () => _reason);
     }
 
     public DeviceStream Output { get; }
 
-    /// <summary>詰めたパケットの数</summary>
+    /// <summary>詰めたパケットの数 (TLV に組み立てているときは TLV パケットの数)</summary>
     public long Packets { get; private set; }
 
-    /// <summary>Pipe が溢れていて捨てたパケットの数</summary>
+    /// <summary>Pipe が溢れていて捨てたパケットの数 (TLV に組み立てているときは TLV パケットの数)</summary>
     public long Dropped { get; private set; }
 
     /// <summary>読む側が閉じたか、止めた</summary>
@@ -190,12 +199,36 @@ internal sealed class It930xTsOutput
 
     /// <summary>
     /// パケットを 1 つ詰める (まだ渡さない。<see cref="Commit"/> で渡す)。溢れていれば捨てて数える。
-    /// ISDB-C のときは TSMF の処理に通し、選んだ TS のパケットだけを詰める (仕様書 7A.7)
+    /// ISDB-C のときは TSMF の処理に通し、選んだ TS のパケットだけを詰める (仕様書 7A.7)。選んだ TS が分割 TLV なら、TLV パケットに組み立ててから詰める。
+    /// 選局の途中で選んだ TS の種類が変わったら、出力を止めて読む側に理由を伝える (形式の違うバイト列を混ぜて流さない)
     /// </summary>
     public void Write(ReadOnlySpan<byte> packet)
     {
-        if (_tsmf is { } tsmf) tsmf.Push(packet, _store);
-        else Store(packet);
+        if (_tsmf is not { } tsmf)
+        {
+            Store(packet);
+            return;
+        }
+        tsmf.Push(packet, _route);
+        if (tsmf.FormatChanged) Complete(FormatChangedReason);
+    }
+
+    /// <summary>TSMF から選んだ単位を、TS ならそのまま、分割 TLV なら組み立ててから詰める</summary>
+    private void Route(ReadOnlySpan<byte> unit)
+    {
+        if (_tlv is not { } tlv || _tsmf!.Format != StreamFormat.Tlv)
+        {
+            Store(unit);
+            return;
+        }
+        // フレームが欠けたあとの単位は、前と続いていない。組み立て中の TLV パケットを捨てる
+        var gaps = _tsmf.Gaps;
+        if (gaps != _gaps)
+        {
+            _gaps = gaps;
+            tlv.Break();
+        }
+        tlv.Push(unit, _storeTlv);
     }
 
     private void Store(ReadOnlySpan<byte> packet)

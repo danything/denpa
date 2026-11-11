@@ -106,7 +106,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// (<see cref="Unscramble"/>)
     /// </summary>
     private readonly bool[] _pes = new bool[8192];
-    /// <summary>ES の PID → いまの PES の先頭がどの鍵でも合わなかった。次の PES の先頭まで、その PID は復号せずに流す</summary>
+    /// <summary>ES の PID → いまの PES の先頭で鍵が合わなかった。次の PES の先頭まで、その PID は復号せずに流す</summary>
     private readonly bool[] _garbled = new bool[8192];
     /// <summary>最後に記録へ出した、鍵の合わなかった理由。同じものを続けて出さない</summary>
     private string? _mismatch;
@@ -337,7 +337,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         var unitStart = _pes[pid] && (packet[1] & 0x40) != 0;
         if (!unitStart || payload.Length < 3)
         {
-            // 先頭が短くて確かめられない PES は、前の PES が合わなかったことを引き継がない (前の PES の「合わない」を引き継いで、この PES をスクランブルされたまま流さないように)
+            // 先頭が短くて確かめられない PES は、前の PES が合わなかったことを引き継がずに、今の鍵で復号する
             if (unitStart) _garbled[pid] = false;
             if (_garbled[pid])
             {

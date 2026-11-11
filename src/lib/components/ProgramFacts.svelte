@@ -14,7 +14,7 @@
     linkify,
     time,
   } from "#lib/format.js";
-  import type { ProgramDetail } from "#lib/types.js";
+  import type { DetailNote, ProgramDetail } from "#lib/types.js";
 
   /**
    * 番組の中身そのもの。**枠は持たない。**
@@ -40,7 +40,7 @@
      * どちらも「エンコードに失敗しました」と書いていた頃は、録画が失敗した
      * 行を開くと嘘の見出しが出ていた
      */
-    notes?: { title: string; text: string }[];
+    notes?: DetailNote[];
     /** 何を使って検出したか (ロゴ / 無音)。判定の当てにできるか分かる */
     cmNote?: string | null;
     /**
@@ -162,10 +162,18 @@
 {/if}
 
 {#each notes as note (note.title)}
-  <div class="block" data-testid="detail-error">
-    <div class="text-error small head">{note.title}</div>
-    <pre class="note">{note.text}</pre>
-  </div>
+  {#if note.tone === "warning"}
+    <!-- 録れてはいるが欠けがある録画。一覧の行と同じ注意の色で、失敗の赤にしない (`types.ts` の `DetailNote`) -->
+    <div class="block" data-testid="detail-warning">
+      <div class="warn small head">{note.title}</div>
+      <div class="tiny muted">{note.text}</div>
+    </div>
+  {:else}
+    <div class="block" data-testid="detail-error">
+      <div class="text-error small head">{note.title}</div>
+      <pre class="note">{note.text}</pre>
+    </div>
+  {/if}
 {/each}
 
 <style>
@@ -211,6 +219,9 @@
   }
   .head {
     font-weight: var(--dp-weight);
+  }
+  .warn {
+    color: var(--dp-warn-text);
   }
   .pre {
     white-space: pre-wrap;

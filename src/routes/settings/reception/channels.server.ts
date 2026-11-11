@@ -26,7 +26,7 @@ import {
 } from "#lib/server/scan.js";
 import { programs, services } from "#lib/server/schema.js";
 import { measureSignal } from "#lib/server/signal-quality.js";
-import { type ChannelType, decodable } from "#lib/types.js";
+import { type ChannelType, origin } from "#lib/types.js";
 
 /** 物理チャンネル 1 本と、そこに入っている局 */
 interface Coverage {
@@ -34,9 +34,21 @@ interface Coverage {
   channel: string;
   /** 受信できるか。受信できないチャンネルも、印を付けて出す (`reception.ts`) */
   reception: Reception;
-  services: { id: number; name: string; programs: number; until: number }[];
   /**
-   * 復号できない種別 (SKY) のチャンネルで、最後のスキャンで分かったこと (`ca-observe.ts`)。CA_system_id と番組表・ロゴが来ているか。
+   * CATV のチャンネルが再送信している元の放送 (`types.origin`。original_network_id で決める)。
+   * ケーブルの自主放送と、ほかの種別は null
+   */
+  origin: "GR" | "BS" | "CS" | null;
+  /** `decodable` は番組表とライブに出す局か (`services.decodable`)。復号できない局も表には並べる */
+  services: {
+    id: number;
+    name: string;
+    programs: number;
+    until: number;
+    decodable: boolean;
+  }[];
+  /**
+   * SKY と CATV のチャンネルで、最後のスキャンで分かったこと (`ca-observe.ts`)。CA_system_id と番組表・ロゴが来ているか。
    * スキャンしていない (denpa を再起動した) ものと、ほかの種別は null
    */
   observed: { caSystemIds: string[]; epg: string; logo: string } | null;
@@ -66,6 +78,8 @@ function coverage(): Coverage[] {
       name: services.name,
       type: services.type,
       channel: services.channel,
+      network_id: services.network_id,
+      decodable: services.decodable,
       programs: count(programs.id),
       until: sql`COALESCE(MAX(${programs.end_at}), 0)`.mapWith(Number),
       current: sql`CASE WHEN ${currentServices()} THEN 1 ELSE 0 END`.mapWith(
@@ -92,16 +106,19 @@ function coverage(): Coverage[] {
     );
 
   const channels = new Map<string, Coverage>();
-  for (const { id, name, type, channel, programs, until } of rows) {
+  for (const row of rows) {
+    const { id, name, type, channel, programs, until, decodable } = row;
     const key = `${type}:${channel}`;
+    const from = type === "CATV" ? origin(row.network_id) : null;
     const entry = channels.get(key) ?? {
       type,
       channel,
       reception: "ok" as Reception,
+      origin: from === "CATV" ? null : from,
       services: [],
       observed: observation(type, channel),
     };
-    entry.services.push({ id, name, programs, until });
+    entry.services.push({ id, name, programs, until, decodable });
     channels.set(key, entry);
   }
   const list = [...channels.values()];
@@ -115,9 +132,9 @@ function coverage(): Coverage[] {
   );
 }
 
-/** 最後のスキャンで分かったことを、画面に出す文字にする。復号できる種別は出さない */
+/** 最後のスキャンで分かったことを、画面に出す文字にする。数えるのは SKY と CATV だけ (`scan.ts`) */
 function observation(type: ChannelType, channel: string): Coverage["observed"] {
-  const observed = decodable(type) ? undefined : observedOf(type, channel);
+  const observed = observedOf(type, channel);
   if (observed === undefined) return null;
   return {
     caSystemIds: caSystemIds(observed).map(caName),
@@ -160,7 +177,7 @@ export const actions = {
     const form = await request.formData();
     const types = form
       .getAll("types")
-      // 画面の選ぶ欄は 1 つ。「すべて」は `GR,BS,CS` (SKY を選んだチューナーがあれば `GR,BS,CS,SKY`)、CATV は `CATV` で来る
+      // 画面の選ぶ欄は 1 つ。「すべて」は `GR,BS,CS` (CATV・SKY を選んだチューナーがあれば `GR,BS,CS,CATV,SKY` のように足す)、パススルーも回す地上波は `PASSTHROUGH` で来る
       .flatMap((value) => String(value).split(","))
       .filter((t): t is ScanKind => SCAN_KINDS.includes(t as ScanKind));
     if (types.length === 0)

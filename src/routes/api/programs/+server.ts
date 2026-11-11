@@ -1,7 +1,7 @@
 import { error, json } from "@sveltejs/kit";
 
 import { guideOf, programRange } from "#lib/server/guide.js";
-import { CHANNEL_TYPES } from "#lib/types.js";
+import { GUIDE_TYPES } from "#lib/types.js";
 
 /**
  * **外から使う番組表** (テレビのアプリの番組表。docs/api.md)。
@@ -11,8 +11,8 @@ import { CHANNEL_TYPES } from "#lib/types.js";
  * `subchannels=1` のときだけサブチャンネルの列も返す (ほかの値と省いたときは本チャンネルだけ)
  */
 export function GET({ url }) {
-  const type = CHANNEL_TYPES.find((t) => t === url.searchParams.get("type"));
-  if (type === undefined) error(400, "type は GR・BS・CS のどれかです");
+  const type = GUIDE_TYPES.find((t) => t === url.searchParams.get("type"));
+  if (type === undefined) error(400, "type は GR・BS・CS・CATV のどれかです");
   const range = programRange(
     url.searchParams.get("from"),
     url.searchParams.get("to"),

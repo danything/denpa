@@ -13,11 +13,11 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
  *
  * denpa から触れないものが 3 つある。
  *
- * - B-CASカード … USB のリーダーも px4d / asicend の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
+ * - B-CASカード … USB のリーダーも px4d / asicend・PX-MLT5 系の内蔵リーダーも CECH-ZD1 J・PIX-DT295 の差し込み口も、こちらが直接扱う (CardLinks.cs。
  *   macOS / Windows の USB リーダーだけは OS の PC/SC 越し)
  * - チューナーデバイス … `/dev/dvb/*` と `/dev/bus/usb` が見えているのはこちらだけ
  * - 選局そのもの … デバイスを使って ioctl で選局する (Tuning.cs)。px4-userland / siano-userland /
- *   asicen-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs / Asicen.cs)。CECH-ZD1 J と PIX-DT295 は USB を直に持つ (Zd1j.cs / Dt295.cs)
+ *   asicen-userland の機材は同梱のものに USB を扱わせる (Px4.cs / Siano.cs / Asicen.cs)。PX-MLT5 系と CECH-ZD1 J と PIX-DT295 は USB を直に持つ (It930x.cs / Zd1j.cs / Dt295.cs)
  *
  * **番組や局の中身は読まない。** NIT も SDT も EIT も解析せず、TS をそのまま流す (読むのは
  * 復号に要る PAT・PMT・ECM と、契約の更新に要る CAT・EMM だけ。B25.cs)。番組や局を読むのは denpa (`packages/arib`) で、局を選り分けるのも番組表を組み立てるのも、
@@ -82,6 +82,8 @@ if (args is ["--status"])
 if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295NativeProbe.Run(args);
 // IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) のブリッジを確かめる。ファームウェアを起動してバージョンと EEPROM の写しを出す。--chips でチップも読む (It930xProbe.cs)
 if (args.ElementAtOrDefault(0) == "--it930x-probe") return It930xProbe.Run(args);
+// IT930x の機材を、開いて電源を入れ・すぐ電源を切って閉じるのを続けて繰り返す (電源の短い入り切りを再現する。It930xProbe.cs)
+if (args.ElementAtOrDefault(0) == "--it930x-cycle") return It930xProbe.Cycle(args);
 /*
  * **対応していない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
  * 打ち間違い (`--help` など) で本番と同じ機材を取り合うことになる
@@ -374,7 +376,6 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
         return;
     }
 
-    http.Response.ContentType = "video/MP2T";
     // 溜めない。数パケット届いたらそのまま流す (64KB 貯めると 25ms 積み上がる)
     http.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
 
@@ -392,6 +393,18 @@ app.MapGet("/denpa/stream", async (HttpContext http) =>
     {
         await foreach (var chunk in sink.Reader.ReadAllAsync(http.RequestAborted))
         {
+            /*
+             * **Content-Type と ISDB-C の TSMF の有効な TS の数は、最初の塊を書く前にヘッダーに入れる** (docs/agent.md「/denpa/stream」)。
+             * レスポンスヘッダーは最初に書いたときに送られ、塊が届くのは選局と TSMF の判定が終わってから。
+             * 選局の途中で共有に入った利用者は Open から先に戻るので、戻った時点ではまだ値が無いことがある。
+             * TSMF から選んだ TS が分割 TLV なら、組み立てた TLV のバイト列を application/x-arib-tlv で流す (Sink.Format)
+             */
+            if (!sent)
+            {
+                http.Response.ContentType = sink.ContentType;
+                if (sink.TsmfStreams is { } streams)
+                    http.Response.Headers[Sink.TsmfStreamsHeader] = streams.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
             await http.Response.Body.WriteAsync(chunk, http.RequestAborted);
             await http.Response.Body.FlushAsync(http.RequestAborted);
             sink.Consumed(chunk.Length);

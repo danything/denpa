@@ -53,7 +53,7 @@ internal static class ChildTs
     internal static readonly TimeSpan ReaderDrain = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
-    /// 子の標準出力の fd。.NET 10 の Unix では <c>AnonymousPipeClientStream</c>。
+    /// 子の標準出力の fd。.NET 10 以降の Unix では <c>AnonymousPipeClientStream</c>。
     /// 閉じるのは <c>process.StandardOutput</c> を閉じたとき (SianoTuner.Drop)。
     /// こちらが閉じると読み出し側が二重に閉じる。
     /// </summary>

@@ -54,7 +54,8 @@ export function requestedDay(raw: string | null): number {
 /**
  * 表に出す局と、分割放送のあるサブチャンネル。
  *
- * **放送していない局は出さない** (終わったチャンネル)。放送局ごとに決める。
+ * 出す局はライブの一覧と同じ決め方にする (`epg.airing`)。**終わったチャンネルは出さず**、
+ * 番組がまだ無い本チャンネルは空の列で出す。放送局ごとに決める。
  * どれか 1 つが放送していれば揃って残し、サブの列を立てるかは画面が決める
  * (分割放送のある日だけ。`#lib/subchannels.ts`)。
  *
@@ -67,11 +68,17 @@ export function stationsOf(
   end: number,
 ): { services: Service[]; split: number[] } {
   // テレビと同じ並びにする (SERVICE_ORDER)。
-  // 取り残しの局は出さない (currentServices)。出すと番組表に空の列が並ぶ
+  // 取り残しの局は出さない (currentServices)。出すと番組表に空の列が並ぶ。復号できない局も出さない (番組が来ない)
   const services: Service[] = orm()
     .select()
     .from(serviceTable)
-    .where(and(eq(serviceTable.type, type), currentServices()))
+    .where(
+      and(
+        eq(serviceTable.type, type),
+        currentServices(),
+        eq(serviceTable.decodable, true),
+      ),
+    )
     .orderBy(sql.raw(SERVICE_ORDER))
     .all();
   const slots = orm()

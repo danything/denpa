@@ -63,6 +63,7 @@ import { Fmp4Splitter } from "#lib/ts/fmp4.js";
 import { KeyGate } from "#lib/ts/key-gate.js";
 import { MkvSplitter } from "#lib/ts/mkv.js";
 import { BUSY } from "#lib/ts/playback.js";
+import { undecodableReason } from "#lib/types.js";
 
 import {
   captionFeed,
@@ -1901,7 +1902,7 @@ class Session {
       (event) => event !== null,
     );
     try {
-      followOnAir(events);
+      followOnAir(events, this.channelType);
     } catch (error) {
       console.warn(
         `[live] ${this.channelType}:${this.channel}: いまの番組を番組表に写せませんでした: ${error}`,
@@ -3376,6 +3377,19 @@ export function attend(connection: Connection): void {
     }
     const { channelType, channel, serviceId, audio, caption, raw, tuner } =
       asked;
+    // 復号できない局 (`services.decodable`) は選局しない。流してもスクランブルされたままで映らない (HTTP のライブも同じに断る)
+    const row = serviceOf(serviceId);
+    if (row !== undefined && !row.decodable) {
+      connection.send(
+        CHANNEL.control,
+        0n,
+        json({
+          type: "error",
+          message: undecodableReason(row.type),
+        } satisfies Notice),
+      );
+      return;
+    }
     /*
      * **H.265 を出せなければ H.264 にする** (`liveHevc`。GPU が無い・印を外した・最近落ちた)。画面は答え (`tuned`) の
      * コーデックで受け取るので、そのまま観られる。替えたことは断り書きで言う
@@ -3803,6 +3817,7 @@ function serviceOf(serviceId: number) {
       channel: services.channel,
       service_id: services.service_id,
       network_id: services.network_id,
+      decodable: services.decodable,
     })
     .from(services)
     .where(eq(services.id, serviceId))

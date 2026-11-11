@@ -21,6 +21,11 @@ kind: Application
 metadata:
   name: denpa-chart
   namespace: argocd
+  annotations:
+    # **差分はクライアント側で出す。** サーバ側で出すと、PVC の dataSourceRef (作ったあとは変えられない欄) を
+    # 載せたまま適用を試してから比べるので、下の ignoreDifferences が効く前に毎回失敗する
+    # (`spec is immutable after creation`)。比べられないと自動の同期も止まり、2026-11-10 は 01:42 (UTC) 以降の新しいイメージが入らなかった
+    argocd.argoproj.io/compare-options: ServerSideDiff=false
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -47,8 +52,8 @@ spec:
         # **入れ替えの合図。** CI が「そのイメージの中身を最後に変えたコミット」を書く。
         # 手で触らない
         imageMarks:
-          denpa: sha-fedbcf188936
-          agent: sha-ba1d90985ff7
+          denpa: sha-f3106e9438f9
+          agent: sha-07f67d965f8e
 
         denpa:
           # LAN から来たときだけ何も聞かずに通す (docs/auth.md)

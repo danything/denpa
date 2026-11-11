@@ -178,7 +178,7 @@ orm()
   .insert(services)
   .values(
     STATIONS.map((s) => ({
-      id: serviceKey(s.network, s.sid),
+      id: serviceKey(s.network, s.sid, s.type),
       service_id: s.sid,
       network_id: s.network,
       name: `局${s.sid}`,
@@ -190,8 +190,9 @@ orm()
   .run();
 
 const logos = () =>
-  STATIONS.filter((s) => readLogo(serviceKey(s.network, s.sid)) !== null)
-    .length;
+  STATIONS.filter(
+    (s) => readLogo(serviceKey(s.network, s.sid, s.type)) !== null,
+  ).length;
 
 async function finished(): Promise<void> {
   while (sweepState().running) await Bun.sleep(20);
@@ -213,7 +214,9 @@ describe("BS と CS で共通のチューナー 2 台で「ロゴをいますぐ
 
   test("当たりと分かっている中継を外れ探しより先に開き、揃ったら残りの中継は開かない", async () => {
     for (const s of STATIONS)
-      rmSync(join(root, "logos", `${serviceKey(s.network, s.sid)}.png`));
+      rmSync(
+        join(root, "logos", `${serviceKey(s.network, s.sid, s.type)}.png`),
+      );
     opened.length = 0;
     // 1 台は番組表の取得が使っている。空きは 1 台なので 1 つずつ回る
     tuners = [

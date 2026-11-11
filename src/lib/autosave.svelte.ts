@@ -10,6 +10,7 @@ import { submitting } from "#lib/actions.js";
  *
  * - 送っている間にまた変わったら、返事を待ってからもう 1 度送る (後から来た古い返事で
  *   新しい値を上書きしない)。「保存しました」は**最後の返事のあとだけ**出す
+ * - 保存できた返事で画面を読み直している間も送らない。読み直しが欄を書き換えても、まだ保存できていない人の変更は入れ直してから送る
  * - 断られたら、最後に保存できた値に**戻して**理由を出す。画面とサーバの値を食い違わせない
  * - 送るだけの欄ではないもの (その場の操作のボタンなど) は `data-no-autosave` で外す
  */
@@ -56,9 +57,19 @@ export const SAVED_FOR = 2500;
 
 export function autosave(node: HTMLFormElement, status: SaveState) {
   let snapshot = take(node);
+  /**
+   * 送っている最中か、保存できた返事で画面を読み直している最中か。どちらの間も新しく送らず、`pending` にしておく
+   */
   let inFlight = false;
   let pending = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * **人が変えた値のうち、まだ保存できたと分かっていないもの。** 読み直した画面 (古い返事や、ほかの通知で読み直した値) が
+   * 欄を書き換えても、送る前と読み直したあとに入れ直す。続けて押すと、前の保存の読み直しが後から押した欄を元に戻し、
+   * その値のまま次を送って変更が消えていた (チューナーの「使う」を 0.2 秒おきに 5 つ押すと 2 つしか残らなかった)
+   */
+  const edits: Snapshot = new Map();
+  const reapply = (): void => restore(edits);
 
   const send = (): void => {
     clearTimeout(timer);
@@ -68,6 +79,7 @@ export function autosave(node: HTMLFormElement, status: SaveState) {
       pending = true;
       return;
     }
+    reapply();
     // 検証 (required・pattern など) に落ちると requestSubmit は submit を起こさず、
     // inFlight が戻らないまま以降の変更が送られなくなる。先に見て、落ちたら知らせて止める
     if (!node.checkValidity()) {
@@ -80,39 +92,65 @@ export function autosave(node: HTMLFormElement, status: SaveState) {
   };
 
   const onChange = (event: Event): void => {
+    const target = event.target;
     if (
-      event.target instanceof Element &&
-      event.target.closest("[data-no-autosave]") !== null
+      target instanceof Element &&
+      target.closest("[data-no-autosave]") !== null
     )
       return;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLSelectElement ||
+      target instanceof HTMLTextAreaElement
+    ) {
+      const one = take(node).get(target);
+      if (one !== undefined) edits.set(target, one);
+    }
     send();
   };
   node.addEventListener("change", onChange);
 
-  const enhanced = submitting(node, () => async (options) => {
-    inFlight = false;
-    if (pending) {
-      // 返事を待つ間に変わった。今の値でもう 1 度送る (この返事では画面を書き換えない)
+  const enhanced = submitting(node, () => {
+    // この回で送った値。保存できたら、`edits` のうち同じ値のものは片付く
+    const sent = new Map(edits);
+    return async (options) => {
+      if (pending) {
+        // 返事を待つ間に変わった。今の値でもう 1 度送る (この返事では画面を書き換えない)
+        inFlight = false;
+        pending = false;
+        send();
+        return;
+      }
+      if (options.result.type === "success") {
+        // 読み直している間に変わったものは、読み直しが終わってから送る (`inFlight` のまま)
+        await options.update({ reset: false });
+        for (const [element, value] of sent)
+          if (edits.get(element) === value) edits.delete(element);
+        snapshot = take(node);
+        reapply();
+        inFlight = false;
+        if (pending) {
+          pending = false;
+          send();
+          return;
+        }
+        status.state = "saved";
+        timer = setTimeout(() => {
+          if (status.state === "saved") status.state = "idle";
+        }, SAVED_FOR);
+        return;
+      }
+      inFlight = false;
       pending = false;
-      send();
-      return;
-    }
-    if (options.result.type === "success") {
-      await options.update({ reset: false });
-      snapshot = take(node);
-      status.state = "saved";
-      timer = setTimeout(() => {
-        if (status.state === "saved") status.state = "idle";
-      }, SAVED_FOR);
-      return;
-    }
-    restore(snapshot);
-    const data =
-      options.result.type === "failure" ? options.result.data : undefined;
-    const message =
-      typeof data?.["message"] === "string" ? data["message"] : "";
-    status.state = "error";
-    status.message = message;
+      edits.clear();
+      restore(snapshot);
+      const data =
+        options.result.type === "failure" ? options.result.data : undefined;
+      const message =
+        typeof data?.["message"] === "string" ? data["message"] : "";
+      status.state = "error";
+      status.message = message;
+    };
   });
 
   return {

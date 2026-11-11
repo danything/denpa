@@ -7,7 +7,7 @@ import {
   WINDOW_HOURS,
 } from "#lib/server/guide.js";
 import type { GuideSheet } from "#lib/types.js";
-import { CHANNEL_TYPES } from "#lib/types.js";
+import { GUIDE_TYPES } from "#lib/types.js";
 
 /**
  * 番組表のマス (`guide/+page.ts` が取る)。**外枠 (局の並び・日付) とは別に取る。**
@@ -20,7 +20,7 @@ import { CHANNEL_TYPES } from "#lib/types.js";
  */
 export function GET({ url }) {
   const type =
-    CHANNEL_TYPES.find((t) => t === url.searchParams.get("type")) ?? "GR";
+    GUIDE_TYPES.find((t) => t === url.searchParams.get("type")) ?? "GR";
   const start = requestedDay(url.searchParams.get("start"));
   try {
     return json({

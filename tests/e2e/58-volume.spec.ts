@@ -588,6 +588,34 @@ test.describe("音のボタンの縦のつまみ", () => {
     await page.keyboard.press("Escape");
     await expect(pop).toBeHidden();
   });
+
+  /*
+   * **つまみが遅れて閉じても、開いている ⚙ のぶんは操作バーを残す** (`controls.svelte.ts` の `holdOpen`)。
+   * 開いているかを真偽 1 つで持っていた頃は、つまみが外れて 0.4 秒後に閉じたときに ⚙ のぶんまで下ろし、
+   * ⚙ を開いたまま操作バーが引っ込んでいた
+   */
+  test("つまみを出したまま ⚙ を開いても、⚙ を開いている間は操作バーが残る", async ({
+    page,
+  }) => {
+    await goto(page, "/live");
+    await page.getByTestId("live-channel").first().click();
+    await expect(page.getByTestId("live-title")).toBeVisible();
+    const bar = page.getByTestId("live-controls");
+    const pop = page.getByTestId("live-sound-pop");
+
+    await wakeControls(page, STAGE.live);
+    await page.getByTestId("live-sound").hover();
+    await expect(pop).toBeVisible();
+    // つまみが閉じる前に ⚙ を開く
+    await page.getByTestId("live-settings").click();
+    const menu = page.getByTestId("live-settings-menu");
+    await expect(menu).toBeVisible();
+    await expect(pop).toBeHidden();
+    // 触らずに操作バーの時計 (2.5 秒) より長く待っても、⚙ を開いている間は残る
+    await page.waitForTimeout(3500);
+    await expect(menu).toBeVisible();
+    await expect(bar).toHaveAttribute("data-shown", "true");
+  });
 });
 
 test.describe("指の端末の音のボタン", () => {

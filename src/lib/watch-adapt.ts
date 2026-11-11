@@ -110,17 +110,13 @@ export function watchAdapt(host: WatchAdaptHost): WatchAdapt {
       // 止めていた間のバッファの伸びを、回線のぶんとして読まない
       if (idle) adapter.reset(at);
       idle = false;
-      poll(s.paceId, at);
+      const { paceId, ...sample } = s;
+      poll(paceId, at);
       const decision = adapter.tick({
+        ...sample,
         now: at,
         route: "watch",
-        current: s.current,
-        manual: s.manual,
-        throughput: s.throughput,
-        ahead: s.ahead,
-        waiting: s.waiting,
         pace,
-        baseKbps: s.baseKbps,
       });
       if (decision !== null) host.decide(decision);
     },

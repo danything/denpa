@@ -391,6 +391,8 @@ export class NiconicoLive {
     const session = this.sessions.get(channel);
     if (session !== undefined && !session.ended) {
       session.touch();
+      // 繋がったあとの失敗は、前と同じ理由でも記録に残す (`open` は繋ぎ始めたところで返るので、繋がったかはここで見る)
+      if (session.state === "ready") this.lastReason = null;
       return session.state;
     }
     const downAt = this.down.get(channel);
@@ -421,7 +423,6 @@ export class NiconicoLive {
     );
     this.sessions.set(channel, session);
     void session.open().then(() => {
-      if (session.state === "ready") this.lastReason = null;
       // 繋げなかった (連携していない・切れた・断られた) ものは閉じる。次に呼ばれたら試し直す
       if (session.state === "unlinked" || session.state === "down")
         session.close();

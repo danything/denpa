@@ -21,7 +21,7 @@ public class It930xCardTests
         var usb = new FakeIt930x { CardAtr = BcasAtr, CardResponder = Respond };
         var clock = new FakeClock();
         var card = new It930xCard(
-            "テストのカード", () => Open(usb, port, clock), () => It930xDevice.CloseIfIdle(port), clock.Sleep);
+            "テストのカード", () => Open(usb, port, clock), () => It930xDevice.CloseIfIdle(port, TimeSpan.Zero), clock.Sleep);
         return (usb, clock, card);
     }
 
@@ -270,7 +270,7 @@ public class It930xCardTests
         var tuner = Open(usb, "8-7", clock);
         await Assert.That(tuner).IsSameReferenceAs(card.Device);
         tuner.Release();
-        It930xDevice.CloseIfIdle("8-7");
+        It930xDevice.CloseIfIdle("8-7", TimeSpan.Zero);
         await Assert.That(usb.Log).DoesNotContain("W D8C3=01");
         // カードを閉じると、誰も使っていないので電源を切る (GPIOH2 ← 0、GPIOH7 ← 1)
         card.Dispose();
@@ -293,7 +293,7 @@ public class It930xCardTests
         finally
         {
             tuner.Release();
-            It930xDevice.CloseIfIdle("8-8");
+            It930xDevice.CloseIfIdle("8-8", TimeSpan.Zero);
         }
         await Assert.That(usb.Log).Contains("W D8C3=01");
     }

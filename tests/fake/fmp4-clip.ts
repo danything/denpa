@@ -12,7 +12,7 @@ interface Box {
   end: number;
 }
 
-export interface Fmp4Fragment {
+interface Fmp4Fragment {
   data: Uint8Array;
   /** トラックごとの tfdt の在りか (data の中の位置) と、バージョン (1 なら 64 ビット) */
   stamps: { track: number; at: number; wide: boolean }[];
@@ -20,7 +20,7 @@ export interface Fmp4Fragment {
   seconds: number;
 }
 
-export interface Fmp4Clip {
+interface Fmp4Clip {
   /** ftyp + moov */
   head: Uint8Array;
   fragments: Fmp4Fragment[];

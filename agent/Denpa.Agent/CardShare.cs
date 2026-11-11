@@ -41,8 +41,8 @@ public static class Keys
 /// 開いたあとの繋ぎ直しは <see cref="BCas"/> がやる。
 /// </para>
 /// </summary>
-/// <param name="find">探すリーダー。既定は見えているもの全部 (<see cref="CardLinks.Find"/>)。<c>--tune zd1j:… --decode</c> は
-/// そのボードの内蔵の差し込み口だけを渡す (試験でほかの機材に触らない)</param>
+/// <param name="find">探すリーダー。既定は見えているもの全部 (<see cref="CardLinks.Find"/>)。<c>--tune zd1j:… --decode</c> (<c>dt295:</c>・<c>it930x:</c> も) は
+/// その機材の内蔵の差し込み口だけを渡す (試験でほかの機材に触らない)</param>
 /// <param name="open">カードを開く。既定は <paramref name="find"/> から探して開く (テストは偽のリーダーを開く関数を渡す)</param>
 public sealed class LocalCard(Func<IReadOnlyList<CardLinkCandidate>>? find = null, Func<BCas>? open = null) : IKeySource
 {

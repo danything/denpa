@@ -106,7 +106,7 @@ public sealed class Dib8096
 
     private int? _temperatureLast;
 
-    /// <summary>最後の選局の経路 (探索した / 保存した値で合わせた / 既定で合わせた)</summary>
+    /// <summary>最後の選局の経路 (「保存した値で合わせた」「既定 (8K) でガードだけ探した」「探索した」と、合わずに探索し直したとき)</summary>
     public string LastPath { get; private set; } = "";
 
     /// <summary>DiB8000 のバージョン (D[897]: 0x8000〜0x8002)</summary>
@@ -1662,7 +1662,6 @@ public sealed class Dib8096
     private SearchKind _search;
     private DemodState _demodState;
     private double _deadline;
-    private int _longest;
 
     /// <summary>1 シンボルの長さ (ms)。6MHz では計算上いつも 0.1ms (参考の実装の振る舞い)</summary>
     private const double Symbol = 0.1;
@@ -1915,14 +1914,12 @@ public sealed class Dib8096
             {
                 if (((D(1291) >> 9) & 1) == 0) return (Step.Stop, 0);
                 var value = 0;
-                _longest = 0;
                 for (var i = 0; i < 3; i++)
                 {
                     if (_layers[i].Interleave >= value && _layers[i].Segments > 0)
                     {
                         // 参考の実装の振る舞い (値は階層 A のインターリーブ)
                         value = _layers[0].Interleave;
-                        _longest = i;
                     }
                 }
                 var count = value switch
@@ -1941,14 +1938,14 @@ public sealed class Dib8096
                 // 仕様書の段 10 は「最長の階層」のビットだけを待ち、時間切れのときに 0x00E0 (どれかの階層) で判定する。
                 // 最長の階層は参考の実装の振る舞いで 1 セグメントの階層 A になりがちで、そのインターリーブが深いぶん待つ
                 // (実機で 600ms)。時間切れのときの判定 (と 8.1 の「データが出る」) と同じく、どれかの階層が揃えば先へ進む
-                if ((k & (1 << (7 - _longest))) != 0 || (k & 0x00E0) != 0)
+                if ((k & 0x00E0) != 0)
                 {
                     _demodState = DemodState.DataLocked;
                     return (Step.Stop, 0);
                 }
                 if (_time.NowMs > _deadline)
                 {
-                    _demodState = (k & 0x00E0) != 0 ? DemodState.DataLocked : DemodState.Failed;
+                    _demodState = DemodState.Failed;
                     return (Step.Stop, 0);
                 }
                 return (Step.Step10, 0);

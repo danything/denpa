@@ -266,6 +266,16 @@ describe("readUntil", () => {
     expect(state.cancelled).toBe(true);
   });
 
+  test("呼ぶ前に中止されていたら、時間切れを待たずに返る", async () => {
+    const { stream, state } = source([]);
+    const started = Date.now();
+    expect(
+      await readUntil(stream, () => false, 60_000, AbortSignal.abort()),
+    ).toBe("");
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(state.cancelled).toBe(true);
+  });
+
   test("読み元が失敗したら、理由の最後の行を返す", async () => {
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {

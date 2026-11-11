@@ -407,9 +407,9 @@ public sealed class SianoTuner : ITuneDevice
         {
             Volatile.Write(ref answered, 1);
             /*
-             * ***読み捨てのループを抜けきるまで返さない。** 抜けないまま返すと、次の読む側と
+             * **読み捨てのループを抜けきるまで返さない。** 抜けないまま返すと、次の読む側と
              * 同じ fd を取り合う。Read は 200ms ごとに戻ってフラグを確かめるので普通は
-             ** すぐ抜けるが、抜けなければ子ごと捨てる (Drop が読み出し側を止めて閉じる)
+             * すぐ抜けるが、抜けなければ子ごと捨てる (Drop が読み出し側を止めて閉じる)
              */
             if (!drain.Wait(TimeSpan.FromSeconds(2)))
             {
@@ -428,7 +428,7 @@ public sealed class SianoTuner : ITuneDevice
     /// 応答を待つ。<c>tuned &lt;指定した Hz&gt;</c> なら成功 (null)、駄目なら理由。
     ///
     /// <para>
-    /// ***時間内に来なかったら、その子の応答はもう使わない** (<c>Uncertain</c>)。siano-ts は
+    /// **時間内に来なかったら、その子の応答はもう使わない** (<c>Uncertain</c>)。siano-ts は
     /// まだ前の選局を続けていて、その応答 (<c>tuned</c> / <c>tune failed</c>) が次の選局の
     /// 応答に紛れ込むため。<c>tuned</c> は指定した周波数と突き合わせるが、<c>tune failed</c> には
     /// 周波数が付かないので、子ごと捨てて起動し直すしかない。応答でない行 (警告など) は飛ばす

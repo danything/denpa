@@ -199,9 +199,9 @@ export function parseXml(source: string): XmlElement | null {
     open.at(-1)!.children.push(element);
     // 中身を持たない要素 (閉じずに書かれても、後ろを飲み込まない)
     if (selfClosing || VOID.has(name)) continue;
-    // script と style の中身は文字のまま (中の < をタグと見ない)
+    // script と style の中身は文字のまま (中の < をタグと見ない)。閉じタグも前置き (`</bml:script>`) を許す
     if (name === "script" || name === "style") {
-      const closer = new RegExp(`</${name}`, "ig");
+      const closer = new RegExp(`</(?:[\\w.-]+:)?${name}`, "ig");
       closer.lastIndex = at;
       const end = closer.exec(source)?.index ?? source.length;
       const body = source.slice(at, end);

@@ -583,16 +583,7 @@
   flex-shrink: 0;
   margin: 0;
 }
-/*
- * 表示の切り替えが既定から変わっているときは「⋯」にオンの短い下線 (`app.css` の `aria-pressed` と同じ印)。
- * 主の色の点は「まだ見ていないもの」の印なので使わない (1 つの見た目に 1 つの意味)
- */
-.board .t-more[data-on] {
-  background-image: linear-gradient(var(--pico-primary), var(--pico-primary));
-  background-repeat: no-repeat;
-  background-position: center bottom 0.2rem;
-  background-size: 1rem var(--dp-mark);
-}
+/* 表示の切り替えが既定から変わっているときの「⋯」の短い下線は `app.css` の `button[data-on]` */
 /* 「⋯」の中。切り替えは右にスイッチ、空きは押せない 1 行 */
 .board .view-menu {
   min-width: 15rem;

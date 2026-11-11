@@ -160,7 +160,7 @@ describe("外から来た JSON の形式", () => {
     // 同じ相手なら、違いの中身 (値) が変わっても繰り返さない
     tolerate(
       TUNER,
-      { index: 0, name: "PT3", types: ["CATV"] },
+      { index: 0, name: "PT3", types: ["BS4K"] },
       "エージェントの /denpa/tuners",
       warn,
     );

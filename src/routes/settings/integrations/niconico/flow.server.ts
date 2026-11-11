@@ -25,16 +25,6 @@ export function takeFlow(cookies: Cookies): string | undefined {
   return flow;
 }
 
-/**
- * 連携を始める・終える・外すのを断るわけ。通すなら null。
- * **アクセストークン (テレビのアプリ) では断る。** 端末に渡した資格で、世帯のニコニコのアカウントを差し替えさせない
- */
-export function refusal(event: RequestEvent): string | null {
-  if (event.locals.token !== undefined)
-    return "アクセストークンでは使えません。ブラウザから操作してください";
-  return null;
-}
-
 /** 連携した人。OIDC なら sub、信頼するネットワークからなら 'trusted-network' (`apiTokens.created_by` と同じ) */
 export function who(event: RequestEvent): string {
   return event.locals.user?.subject ?? "trusted-network";

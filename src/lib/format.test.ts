@@ -16,6 +16,7 @@ import {
   recordingLeft,
   signalText,
   splitReaderName,
+  typeNames,
   videoLossNote,
 } from "./format";
 
@@ -363,5 +364,17 @@ describe("映像が欠けた録画の表示", () => {
   test("欠けた長さが 1 分に満たない録画と、測っていない録画は出さない", () => {
     expect(videoLossNote({ span: 1800, lost: 59, tail: true })).toBeNull();
     expect(videoLossNote(null)).toBeNull();
+  });
+});
+
+describe("種別の並びの名前", () => {
+  test("画面の名前を「・」でつなぐ。SKY はスカパー！プレミアム", () => {
+    expect(typeNames(["GR", "BS", "CS", "SKY"])).toBe(
+      "地上波・BS・CS・スカパー！プレミアム",
+    );
+  });
+
+  test("知らない種別は符号のまま", () => {
+    expect(typeNames(["GR", "XX"])).toBe("地上波・XX");
   });
 });

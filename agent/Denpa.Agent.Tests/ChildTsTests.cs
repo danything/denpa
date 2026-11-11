@@ -6,7 +6,7 @@ namespace Denpa.Agent.Tests;
 /*
  * 子プロセスの標準出力を fd として使うところ (siano-ts)。
  *
- * .NET 10 の Unix ではリダイレクトした標準出力が FileStream ではない。
+ * .NET 10 以降の Unix ではリダイレクトした標準出力が FileStream ではない。
  * FileStream へキャストすると Specified cast is not valid で、
  * 選局の前に全チャンネルが落ちる。本物のチューナーは要らない。
  */

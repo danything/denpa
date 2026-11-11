@@ -285,8 +285,8 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     // ---------------------------------------------------------------------
 
     /// <summary>
-    /// 仕様書 8.4 の 1〜7 を順に。保護レジスタ 0xFD814C に対象の組の番号 (1・2・6・8) を書いてから対象を書き、終わったら 0xF に戻す。
-    /// 元の値を読んで保存してから書き、読み戻しが合わなければ保存した値を戻して失敗する。
+    /// 仕様書 8.4 のうち 2・6・7 の bulk IN の端点の設定だけを書く (書かないものは本体のコメント)。保護レジスタ 0xFD814C に対象の組の番号 (1・2・8) を書いてから対象を書き、終わったら 0xF に戻す。
+    /// 元の値を読んで保存してから書き、変えようとしたビットが読み戻しで 1 つも変わっていなければ、保存した値を戻して失敗する。
     /// 補助 CPU の割り込み・端点の設定は書かない (本体のコメント)
     /// </summary>
     public void SetUpUsb()
@@ -312,13 +312,11 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
             if (saved.All(item => item.Address != address)) saved.Add((address, value));
             return value;
         }
-        void Put(uint group, uint address, uint value, bool verify = true)
+        void Put(uint group, uint address, uint value)
         {
             var before = Original(address);
-            link.Write32(Dt295NativePrograms.Protect, group);
-            link.Write32(address, value);
-            link.Write32(Dt295NativePrograms.Protect, 0xF);
-            if (verify) Verify(address, before, value);
+            Guarded(group, address, value);
+            Verify(address, before, value);
         }
 
         try
@@ -473,7 +471,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     }
 
     /// <summary>
-    /// 取り込みを始める。**0x1902010 に書く値は 0x02000000 (既定)。** 仕様書 8.1.4 は 0x00000200 と書くが、それを書いても
+    /// 取り込みを始める。**0x1902010 に書く値は 0x02000000。** 仕様書 8.1.4 は 0x00000200 と書くが、それを書いても
     /// 0x1902010 は 0 のままでリングに何も書かれなかった (実機)。実機の常駐イメージが取り込みを始めたとき、0x1902010 は 0x02000000 になった。
     /// 仕様書 8.1.4 の 0x200 と、5.1 の STOP の 0x04000000 は、バイトの並びが違う書き方 (5.1 と表の値と同じ並びの 0x02000000 を使う)。
     /// リングの先頭・長さ・読み出し位置を読んで確かめる (仕様書 8.2.1: 長さが 0x2FF 以下か、読み出し位置が長さ以上なら断る)
@@ -511,7 +509,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
         }
     }
 
-    /// <summary>取り込みの設定を戻す (仕様書 8.1.4 の「戻し」: #27 から #2 の逆順、#1、#0、最後に 0x1900404)</summary>
+    /// <summary>取り込みの設定を戻す (仕様書 8.1.4 の「戻し」: #27 から #2 の逆順、#1、#0、0x1900404、最後に 0x1900020)</summary>
     public void RestoreCapture(CaptureSaved saved)
     {
         for (var i = CaptureTable.Length - 1; i >= 0; i--)

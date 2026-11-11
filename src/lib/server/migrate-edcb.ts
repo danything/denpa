@@ -14,6 +14,7 @@ import { parseSearchFields } from "#lib/search.js";
 
 import { toHalfWidth } from "../fold";
 import type { Slot } from "../rule-time";
+import { origin } from "../types";
 import { now } from "./db";
 import {
   EdcbClient,
@@ -226,6 +227,11 @@ export function convertRule(
   if (rule.aimai) notes.push("あいまい検索は普通の検索として取り込みました");
   if (caseSensitive)
     notes.push("大文字と小文字の区別は普通の検索として取り込みました");
+  // denpa のルールに無料放送だけの条件は無い (EPGStation の `isFree` と同じ扱い。`migrate.ts`)
+  if (rule.freeCA === 1)
+    notes.push(
+      "無料放送だけの条件は外して取り込みました (有料放送にも当たります)",
+    );
   const recording = rule.recMode >= 0 && rule.recMode <= 3;
   if (!disabled && !recording)
     notes.push("録画しないルールなので無効にして取り込みました");
@@ -253,9 +259,13 @@ export function convertRule(
   };
 }
 
-/** 局の内部 ID。denpa の局に無ければ undefined */
+/**
+ * 局の内部 ID。denpa の局に無ければ undefined。
+ * EDCB の局は ONID と SID だけで、アンテナとケーブルの再送信を分けない。種別は元の放送で読む (`types.origin`)。
+ * 地上波・BS・CS の再送信はアンテナの局に、ケーブルの自主放送は CATV の局に当たる
+ */
 function serviceOf(networkId: number, serviceId: number): number | undefined {
-  return serviceById(serviceKey(networkId, serviceId))?.id;
+  return serviceById(serviceKey(networkId, serviceId, origin(networkId)))?.id;
 }
 
 /** 記録に出すルールの呼び名 */
@@ -298,7 +308,7 @@ export function importEdcbRules(
     for (const note of notes) record(`  ${note}: ${ruleLabel(rule)}`);
     tally.imported++;
     // 優先度 (EDCB の 1〜5) と録画の設定は写さない (`insertRule`)
-    if (options.apply) insertRule({ ...values, service_types: null }, source);
+    if (options.apply) insertRule(values, source);
   }
 }
 
@@ -336,7 +346,12 @@ export async function importEdcbReservations(
       continue;
     }
     await importReservation(
-      programKey(row.networkId, row.serviceId, row.eventId),
+      programKey(
+        row.networkId,
+        row.serviceId,
+        row.eventId,
+        origin(row.networkId),
+      ),
       row.title,
       options,
     );
@@ -371,7 +386,11 @@ export function importEdcbHistory(
     entries.push({
       sources: [`edcb:recinfo:${key}`, `edcb:recinfo2:${key}`],
       name: row.title,
-      serviceId: serviceKey(row.networkId, row.serviceId),
+      serviceId: serviceKey(
+        row.networkId,
+        row.serviceId,
+        origin(row.networkId),
+      ),
       serviceName: row.serviceName,
       endAt: row.startAt + row.duration,
     });

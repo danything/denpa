@@ -1,9 +1,10 @@
 import { redirect } from "@sveltejs/kit";
 
+import { tokenRefusal } from "#lib/server/auth.js";
 import { startLink } from "#lib/server/niconico.js";
 import { publicBase, relative } from "#lib/server/paths.js";
 
-import { refusal, setFlow } from "../flow.server";
+import { setFlow } from "../flow.server";
 
 /**
  * **ニコニコとの連携を始める** (設定の「連携」の「実況」にある「ニコニコと連携」のリンク)。
@@ -19,7 +20,7 @@ export async function GET(event) {
       303,
       `${relative(url, "/settings/integrations")}?niconico_error=${encodeURIComponent(message)}#jikkyo`,
     );
-  const refused = refusal(event);
+  const refused = tokenRefusal(event.locals);
   if (refused !== null) back(refused);
   // よそのサイトから踏ませて連携の途中 (サーバのメモリに持つ。上限あり) を積ませない。
   // 設定の画面のリンクからは same-origin で来る。ヘッダーを付けない古いブラウザは通す

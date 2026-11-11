@@ -1,8 +1,8 @@
 # IT930x のファームウェア
 
-`it930x-firmware.bin` は、px4-userland の機材 (PX-Q3U4 / PX-W3U4 / PX-MLT 系など) の USB ブリッジ IT930x に、
+`it930x-firmware.bin` は、USB ブリッジ IT930x を積んだ機材 (px4-userland の PX-Q3U4 / PX-W3U4 などと、エージェントが直に持つ PX-MLT5 系) に、
 挿すたびに流し込むファームウェアです。エージェントの実行ファイルに埋め込んで配ります (`../Px4Firmware.cs`)。
-エージェントが IT930x に直に流し込むとき (`--it930x-probe`) も、同じものを SDK の区切りの表どおりに分けて送ります (`../It930xFirmware.cs`)。
+エージェントが IT930x に直に流し込むとき (PX-MLT5 系と `--it930x-probe`) も、同じものを SDK の区切りの表どおりに分けて送ります (`../It930xFirmware.cs`)。
 
 - 大きさ: 2,169 バイト
 - SHA-256: `5213a5a38872661277a2cc1b2dfdfe88faf06f41205f460f3b51857f0568b484`

@@ -6,15 +6,21 @@ export const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 /**
  * チャンネル種別の見出し。**どれを出すか (並び) は画面ごとに決める**。
- * ここは名前だけ。5 画面が同じ表をコピーしていたのを 1 つに (SKY が並ぶのはルールの条件と、
+ * ここは名前だけ。5 画面が同じ表をコピーしていたのを 1 つに (CATV と SKY が並ぶのはルールの条件と、
  * 受けられる機材があるときの受信の設定だけ。`types.ts` の `shownTypes`)
  */
 export const SERVICE_TYPE_LABEL: Record<string, string> = {
   GR: "地上波",
   BS: "BS",
   CS: "CS",
+  CATV: "ケーブル",
   SKY: "スカパー！プレミアム",
 };
+
+/** 種別の並びを画面の名前で (「地上波・BS・CS」)。知らない種別は符号のまま */
+export function typeNames(types: readonly string[]): string {
+  return types.map((type) => SERVICE_TYPE_LABEL[type] ?? type).join("・");
+}
 
 export function pad(n: number): string {
   return String(n).padStart(2, "0");

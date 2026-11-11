@@ -11,14 +11,14 @@
  * 偽の放送にいるのは地上波 T16・T21、衛星 BS11:18000・BS03:16432 だけ (`tests/fake/services.ts`)。
  */
 
-export interface SceneTuner {
+interface SceneTuner {
   name: string;
   types: string[];
   /** エージェントが返すはずの順位 (`GET /denpa/tuners` の `rank`) */
   rank: number;
 }
 
-export type SceneStep =
+type SceneStep =
   /**
    * 開く。`rank` は入るはずのチューナーの順位、null なら断られる (409)。
    * `after` は引き継ぐ利用者 (もう離れたものとして選ぶ)。`ended` は、この選局で正常に

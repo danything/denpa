@@ -70,7 +70,7 @@ internal readonly record struct CxdIsdbcSignal(
     byte Search, byte Ts, byte? Modulation, int CnRaw, byte[]? Per, byte[]? Locked, byte BerLength, byte[]? Ber, byte[]? Uncorrected, int IfAgc);
 
 /// <summary>
-/// ISDB-C でほかに読める値 (仕様書 8.4A)。出どころは PLEX の公開ドライバーに入っている Sony の手順だけで、実機で読んだ記録は無い (仕様書 13)。<c>--tune</c> の出力にだけ出す。値が無ければ null
+/// ISDB-C でほかに読める値 (仕様書 8.4A)。出どころは PLEX の公開ドライバーに入っている Sony の手順だけ (仕様書 13)。PX-MLT5PE の実機で読めたが、値が正しいかはほかの受信機と比べていない。<c>--tune</c> の出力にだけ出す。値が無ければ null
 /// </summary>
 /// <param name="Inverted">復調器がスペクトルの反転を見つけたか</param>
 /// <param name="CarrierOffsetKhz">搬送波のずれ (kHz)</param>
@@ -79,6 +79,18 @@ internal readonly record struct CxdIsdbcSignal(
 /// <param name="Uncorrected">RS で直せなかったパケットの数</param>
 /// <param name="IfAgc">IF の AGC の出力 (12 ビット)</param>
 public sealed record CxdIsdbcDetail(bool? Inverted, double? CarrierOffsetKhz, double? SymbolRateMsps, double? PreRsBer, int? Uncorrected, int IfAgc);
+
+/// <summary>TS を止める復調器のレジスタ 4 つ (仕様書 3.6。どれもバンク 00)</summary>
+public readonly record struct CxdTsOutput(byte C3, byte R81, byte R32, byte C4)
+{
+    /// <summary>TS を出しているときの値と同じか (<c>C3</c> = <c>00</c>、<c>81</c> の bit0 = 0、<c>32</c> の bit0 = 1、<c>C4</c> の bit7 = 1)</summary>
+    public bool Normal => C3 == 0x00 && (R81 & 0x01) == 0 && (R32 & 0x01) == 1 && (C4 & 0x80) != 0;
+
+    /// <summary><c>--tune</c> が出す 1 行</summary>
+    public string Describe() =>
+        $"復調器の TS の出力 (バンク 00)  C3={C3:X2} (00 で出す)  81={R81:X2} (bit0 が 0 で出す)  32={R32:X2} (bit0 が 1 でクロックが動く)  C4={C4:X2} (bit7 が 1 でシリアル)"
+        + (Normal ? "  どれも TS を出す値" : "  TS を出す値でないものがある");
+}
 
 /// <summary>
 /// 受信機 1 つぶんの I2C。相手からアドレスを決める (X は T + 2、チューナーは <see cref="Cxd2858.Address"/>。仕様書 1.1)。
@@ -204,7 +216,7 @@ internal sealed class Cxd2856(CxdLink link)
 
     /// <summary>
     /// TS クロックの設定 (仕様書 3.3 の手順 3〜15)。方式で違うのは、手順 3 のパケットの間の隙間 <paramref name="gap"/> と手順 10 の周波数 <paramref name="frequency"/>。
-    /// 周波数は資料で値が分かれていて、仕様書 3.5 が選んだ値 (ISDB-T は低い・半分の速さ、ISDB-S と J.83B は高い・半分の速さ)
+    /// 周波数は資料で値が分かれていて、仕様書 3.5 が選んだ値 (ISDB-T は低い・半分の速さ、ISDB-S と J.83B と ISDB-C は高い・半分の速さ)
     /// </summary>
     internal static CxdRow[] TsClockRows(byte gap, byte frequency) =>
     [
@@ -334,7 +346,7 @@ internal sealed class Cxd2856(CxdLink link)
         CxdRow.W(T, 0x81, 0x01),
     ];
 
-    /// <summary>スリープの共通の後始末 (仕様書 2.4。ISDB-T と J.83B で使う)</summary>
+    /// <summary>スリープの共通の後始末 (仕様書 2.4。ISDB-T と J.83B と ISDB-C で使う)</summary>
     internal static readonly CxdRow[] SleepCommonRows =
     [
         CxdRow.W(X, 0x00, 0x00),
@@ -615,6 +627,13 @@ internal sealed class Cxd2856(CxdLink link)
         link.Run([CxdRow.W(T, 0x81, (byte)(on ? 0x00 : 0xFF), mask)]);
     }
 
+    /// <summary>TS を止めるレジスタ 4 つを読む (仕様書 3.6。バンク 00 の <c>C3</c>・<c>81</c>・<c>32</c>・<c>C4</c>)</summary>
+    public CxdTsOutput ReadTsOutput()
+    {
+        link.Write(T, 0x00, 0x00);
+        return new CxdTsOutput(link.Read(T, 0xC3, 1)[0], link.Read(T, 0x81, 1)[0], link.Read(T, 0x32, 1)[0], link.Read(T, 0xC4, 1)[0]);
+    }
+
     /// <summary>
     /// ISDB-T の状態と C/N の元の値を読む (仕様書 8.1)。値を固めて (T の <c>01</c> ← <c>01</c>) から読み、読み終えたら (途中で失敗しても) <c>00</c> に戻す (仕様書 2.3)。
     /// 復調がロックしていなければ C/N の値は 0
@@ -814,7 +833,7 @@ internal sealed class Cxd2856(CxdLink link)
     /// ISDB-C の状態と、変調・C/N・PER (仕様書 8.4) と、ほかに読める値 (仕様書 8.4A) の元の値を読む。
     /// 変調・C/N と「ロックが前提」の値 (反転・搬送波のずれ・シンボルレート) は、値を固めて (T の <c>01</c> ← <c>01</c>) 自動の探索のロック (<c>88</c> の bit0) を確かめてから読み、
     /// 読み終えたら (途中で失敗しても) 戻す (仕様書 2.3)。PER・RS の前の BER・直せなかったパケットの数・IF の AGC は固めずに読む (仕様書 8.4・8.4A)。
-    /// 8.4A の値と PER は、ISDB-C の実機で読んだ記録が無い (仕様書 13)
+    /// 8.4A の値と PER は、値が正しいかをほかの受信機と比べていない (仕様書 13)
     /// </summary>
     public CxdIsdbcSignal ReadIsdbcSignal()
     {
@@ -1085,6 +1104,12 @@ public sealed class Cxd2856Frontend
     /// <summary>識別のレジスタの値 (初期化のあと。0x90 なら CXD2856、0x91 なら CXD2857)</summary>
     public byte ChipId { get; private set; }
 
+    /// <summary>
+    /// 最後の初期化で、チューナーの初期化 (仕様書 4.2) の前に読んだ <c>62</c> (仕様書 10.3)。前に ISDB-C か J.83B を選局していて <c>10</c> なら、
+    /// チューナーの電源が切れていなかったと推定する。初期化していなければ null
+    /// </summary>
+    public byte? PowerProbe { get; private set; }
+
     /// <summary>最後の選局で、ロックを確かめ始めてからロックするまで (ms)。ロックしなければ -1</summary>
     public long LockMs { get; private set; } = -1;
 
@@ -1126,11 +1151,28 @@ public sealed class Cxd2856Frontend
             lock (_busLock)
             {
                 ChipId = _demod.Init();
-                Relay(_tuner.Init);
+                // チューナーの初期化 (仕様書 4.2) の前に 62 を読む (仕様書 10.3 の、電源が切れていたかの確かめ方。推定)
+                Relay(() =>
+                {
+                    PowerProbe = _tuner.ReadPowerProbe();
+                    _tuner.Init();
+                });
                 _demod.TsForm();
             }
             _state = State.Sleep;
             _started = State.Sleep;
+        }
+    }
+
+    /// <summary>
+    /// TS を止めるレジスタ 4 つ (仕様書 3.6。バンク 00 の <c>C3</c>・<c>81</c>・<c>32</c>・<c>C4</c>) を読む。ロックしているのに TS が届かないときに <c>--tune</c> が出す。
+    /// 値の読み方は <see cref="CxdTsOutput.Describe"/>
+    /// </summary>
+    public CxdTsOutput ReadTsOutput()
+    {
+        lock (_op)
+        {
+            lock (_busLock) return _demod.ReadTsOutput();
         }
     }
 
@@ -1144,8 +1186,14 @@ public sealed class Cxd2856Frontend
     {
         lock (_op)
         {
+            var already = _tuner.KeepMatching;
             _tuner.KeepMatching = true;
             if (!standby || Running(_state)) return;
+            /*
+             * 設定を立てたあとに初期化したか止めたなら、チューナーは既に整合を保つ待機 (67 の bit1 が 1) にある。初期化し直さない。
+             * 選局するスレッドが整合を保つ設定で初期化した直後に、機材の KeepMatching がもう一度初期化して、待機と動作の切り替えを増やしていた
+             */
+            if (already && _state == State.Sleep) return;
             if (_state == State.Unknown) Sleep();
             Init();
         }
@@ -1521,7 +1569,7 @@ public sealed class Cxd2856Frontend
 
     /// <summary>
     /// 使い終えたときに、チューナーを止めて (仕様書 4.6) から復調器をスリープにする (方式ごと。仕様書 5.7・6.5・7.4)。この順は仕様書 2.4 のもので、
-    /// 仕様書 10.3 も順による違いは知られていないとしている。TS は、その前に呼ぶ側 (<see cref="It930xTuner"/>) がブリッジの入力を閉じて止めている。
+    /// 仕様書 10.3 も順による違いは知られていないとしている。TS は、その前に呼ぶ側 (<see cref="It930xTuner"/>) が受信機の出口を外して止めている。
     /// 動作中でなければ何もしない。選局の途中で失敗して状態が分からないときも、起動を書き始めていればその方式のスリープの書き込みを送る。
     /// そのときは、次の選局を初期化からやり直す (仕様書に無い)。J.83B か ISDB-C のスリープが途中で失敗したら、起動を書き始めた方式をそのまま残し、次の選局か停止でスリープからやり直す (仕様書 7.4・7A.5)
     /// </summary>

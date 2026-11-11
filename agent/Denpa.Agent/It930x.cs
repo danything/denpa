@@ -83,8 +83,8 @@ public sealed record It930xReceiver(int Index, int TsInput, byte I2cBus, byte De
     /// <summary>切り替える受信機で、TS の設定を書く衛星のアドレス (px4 の仕様書 13.3 の S0)。ほかは 0</summary>
     public byte SatelliteTsAddress { get; init; }
 
-    /// <summary>自動で見つけたときに最初に選ぶ種別。<c>SKY</c> は受けられても最初からは選ばない (<see cref="It930x.DetectedTypes"/>)</summary>
-    public string[] DetectedTypes => [.. Types.Where(type => type != ChannelTable.Sky)];
+    /// <summary>自動で見つけたときに最初に選ぶ種別。<c>CATV</c> と <c>SKY</c> は受けられても最初からは選ばない (<see cref="It930x.DetectedTypes"/>)</summary>
+    public string[] DetectedTypes => [.. Types.Where(It930x.DetectedTypes.Contains)];
 
     /// <summary>種別を受けられるか (<c>GR</c>・<c>BS</c>・<c>CS</c>・<c>SKY</c>)</summary>
     public bool Takes(string type) => Types.Contains(type);
@@ -150,10 +150,10 @@ public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnly
 public static class It930x
 {
     /// <summary>
-    /// CXD2856ER の受信機が受けられる種別。ISDB-T・ISDB-S・J.83B を受けられる (MLT5 の仕様書 1.2)。
-    /// 機種が分からない <c>it930x:</c> の受信機にも、これを返す (<see cref="Receivable"/>)。<c>SKY</c> (スカパー！プレミアムサービス光) を受けられるのは、いまは CXD2856ER の機種だけ
+    /// CXD2856ER の受信機が受けられる種別。ISDB-T・ISDB-S・ISDB-C・J.83B を受けられる (MLT5 の仕様書 1.2)。
+    /// 機種が分からない <c>it930x:</c> の受信機にも、これを返す (<see cref="Receivable"/>)。<c>CATV</c> (ケーブルテレビのトランスモジュレーション方式) と <c>SKY</c> (スカパー！プレミアムサービス光) を受けられるのは、いまは CXD2856ER の機種だけ
     /// </summary>
-    public static readonly IReadOnlyList<string> Types = ["GR", "BS", "CS", ChannelTable.Sky];
+    public static readonly IReadOnlyList<string> Types = ["GR", "BS", "CS", ChannelTable.Catv, ChannelTable.Sky];
 
     /// <summary>地上波だけの受信機</summary>
     private static readonly IReadOnlyList<string> Terrestrial = ["GR"];
@@ -330,8 +330,9 @@ public static class It930x
     public static List<TunerSpec> Detect() => Specs(Found(Log.Write), Serial);
 
     /// <summary>
-    /// 自動で見つけた CXD2856ER の受信機に付ける種別。<c>SKY</c> は受けられる種別 (<see cref="Types"/>) には入るが、最初からは選ばない
-    /// (光の回線でしか受けられず、選ぶとチャンネルスキャンに H01〜H105 が足される。J.83B は実機で確かめていない)
+    /// 自動で見つけた CXD2856ER の受信機に付ける種別。<c>CATV</c> と <c>SKY</c> は受けられる種別 (<see cref="Types"/>) には入るが、最初からは選ばない。
+    /// <c>CATV</c> はケーブルテレビの回線でしか受けられず、選ぶとチャンネルスキャンに QC13〜QV12 の 113 チャンネルが足される。
+    /// <c>SKY</c> は光の回線でしか受けられず、選ぶとチャンネルスキャンに H01〜H105 が足される (J.83B は実機で確かめていない)
     /// </summary>
     public static readonly IReadOnlyList<string> DetectedTypes = ["GR", "BS", "CS"];
 
@@ -546,5 +547,5 @@ public static class It930x
     public static IUsbDevice OpenUsb(string port, It930xModel model) =>
         OperatingSystem.IsLinux()
             ? UsbFsDevice.Open(UsbSysfs.Devices, UsbSysfs.DevUsb, port, model.Vendor, model.Product, selectAlternate: false)
-            : UsbDevices.Open(port, model.Vendor, model.Product);
+            : UsbDevices.Open(port, model.Vendor, model.Product, selectAlternate: false);
 }

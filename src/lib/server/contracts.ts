@@ -17,13 +17,13 @@ import { cardContracts, programs, services } from "./schema";
 import { type CardStatus, cardStatus } from "./scramble";
 import { openChannelStream } from "./tuner";
 
-export interface ConfirmResult {
+interface ConfirmResult {
   ok: boolean;
   code: number;
   error?: string | undefined;
 }
 
-export type ContractState = "subscribed" | "unsubscribed" | "expired";
+type ContractState = "subscribed" | "unsubscribed" | "expired";
 
 /**
  * **復号テストで確かめた契約を信じる長さ (31 日)。** 番組表に契約の情報 (0xCB) が無い局はカードに聞けないので、
@@ -45,7 +45,7 @@ function freshDecode(
  * 行が無い局と、カードが答えておらず (`code` が無い)、新しい復号の結果も無い局が `unverified`。
  * `subscribed` は、`paidAllowed` が録ってよいとする局と同じ
  */
-export type ContractStatus = ContractState | "unverified";
+type ContractStatus = ContractState | "unverified";
 
 export interface ContractRow {
   cardId: string;
@@ -349,7 +349,7 @@ export function getContractRows(
 }
 
 /** 復号を確かめた 1 局の結果。`ok` が false なら確かめられなかった (`error` に理由) */
-export interface DecodeResult {
+interface DecodeResult {
   ok: boolean;
   decodeOk: boolean;
   error?: string;

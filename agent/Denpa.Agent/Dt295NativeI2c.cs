@@ -54,19 +54,19 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         _saved.Clear();
         // 実機の 0xFD8010 は 4 で、0x10 をそのまま書くと USB の制御が止まった (bit2 が要る)。足して書く。
         // 0xFD80C0 は実機で 3 から 0 になった (常駐イメージ)。仕様書 6.4 の「1 → 0」の終わりと同じ
-        Set(0xFD8010, link.Read32(0xFD8010) | 0x10, verify: false);
+        Set(0xFD8010, link.Read32(0xFD8010) | 0x10);
         // 0xFD8014 は bit4 だけを落とす (読み・落とす・書き)。実機の常駐イメージは 0x0F3F001B を 0x0F3F000B にした。
         // bit4 は I2C のブロックのリセットで、0xFD8010 の bit4 がそのクロックと見立てる (推定。仕様書に無い)。
         // 0x08080000 を足す書き込みはしない (書くと USB の制御がすべて時間切れになった)
-        Set(0xFD8014, link.Read32(0xFD8014) & ~0x10u, verify: false);
-        Set(0xFD80B0, link.Read32(0xFD80B0) | 1, verify: false);
-        Set(0xFD80C0, 0, verify: false);
+        Set(0xFD8014, link.Read32(0xFD8014) & ~0x10u);
+        Set(0xFD80B0, link.Read32(0xFD80B0) | 1);
+        Set(0xFD80C0, 0);
         // 書いた値が読めないことがある (主 CPU からは、クロックを入れる前に 0xFD8FF8 に 6 を書いても 0 が読めた)。失敗にはせず、
         // 続く I2C の転送が通るかを Alive で確かめる
-        Set(0xFD8FF8, 6, verify: false);
-        Set(0xFD8FF4, 0x10, verify: false);
-        Set(0xFD8FE8, 0x3C, verify: false);
-        Set(0xFD8FE4, 0x42, verify: false);
+        Set(0xFD8FF8, 6);
+        Set(0xFD8FF4, 0x10);
+        Set(0xFD8FE8, 0x3C);
+        Set(0xFD8FE4, 0x42);
         _control = 0x42;
         Alive = (link.Read32(Control) & ~1u) == 0x42 && link.Read32(0xFD8FF8) == 6 && link.Read32(0xFD8FF4) == 0x10;
         trace?.Invoke($"I2C の準備のあと: 制御 0x{link.Read32(Control):X}、0xFD8FE8 = 0x{link.Read32(0xFD8FE8):X}、{(Alive ? "書いた値で読めました" : "書いた値で読めません")}");
@@ -87,31 +87,14 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         if (_saved.All(item => item.Address != address)) _saved.Add((address, link.Read32(address)));
     }
 
-    private void Set(uint address, uint value, bool verify = true)
+    private void Set(uint address, uint value)
     {
         Save(address);
-        var before = _saved.First(item => item.Address == address).Value;
         link.Write32(address, value);
-        // 読み戻しは、確かめるとき (verify) か記録を出すときだけ。使わない読みは制御転送の無駄
-        if (!verify && trace is null) return;
-        var back = link.Read32(address);
-        if (!verify)
-        {
-            var line = $"I2C の準備 0x{address:X}: 0x{value:X} を書いて 0x{back:X} が読めた (書く前 0x{before:X})";
-            trace?.Invoke(line);
-            return;
-        }
-        // 制御の bit0 は待つ側の印で、読み戻しの値は書いた値と違ってよい (仕様書に無い)
-        var mask = address == Control ? ~1u : uint.MaxValue;
-        if ((back & mask) == (value & mask)) return;
-        // 変えようとしたビットが 1 つも変わらなければ失敗。一部だけなら通して記録に出す (Dt295NativeBoard.SetUpUsb の読み戻しと同じ。
-        // 仕様書に比べるビットが無い)
-        var tried = (before ^ value) & mask;
-        if (tried != 0 && ((back ^ before) & tried) == 0)
-        {
-            throw new Dt295NativeException($"I2C の準備で 0x{address:X} に 0x{value:X} を書いたが 0x{back:X} が読めた (書く前 0x{before:X})");
-        }
-        trace?.Invoke($"I2C の準備 0x{address:X}: 0x{value:X} を書いて 0x{back:X} が読めた (書く前 0x{before:X})");
+        // 読み戻すのは記録を出すときだけ (使わない読みは制御転送の無駄)。比べるビットが仕様書に無いので、読み戻しでは失敗にしない
+        if (trace is null) return;
+        var before = _saved.First(item => item.Address == address).Value;
+        trace($"I2C の準備 0x{address:X}: 0x{value:X} を書いて 0x{link.Read32(address):X} が読めた (書く前 0x{before:X})");
     }
 
     /// <summary>I2C の異常からの戻し (仕様書 6.4 の初期化)</summary>
@@ -138,7 +121,18 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         link.Write32(Data, (uint)((address << 1) | (write.IsEmpty ? 1 : 0)));
         _control |= 0x10;
         link.Write32(Control, _control);
-        var control = WaitByte();
+        uint control;
+        try
+        {
+            control = WaitByte();
+        }
+        catch (Dt295NativeException)
+        {
+            // アドレスのバイトが終わらなかった。STOP を出し、次の転送はバスが空くのを待ってから始める
+            Stop(_control);
+            _checkIdle = true;
+            throw;
+        }
         // 4. アドレスの直後に ACK が来なかったら失敗
         CheckAck(address);
         var result = new byte[read];

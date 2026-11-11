@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// **dB に直せる根拠があるものだけ dB にする。** dB で返すドライバやデーモン (DVB の <c>DTV_STAT_CNR</c>・px4d の <c>cnr_mdb</c>) と、
-/// dB の式がある仕様書 (DiB8000) の値と、同じ系統の復調で使われてきた換算式がある PIX-DT295 (TC90522 系。<see cref="Tc90522Db"/>) は <see cref="Unit"/> が <c>dB</c>。
+/// dB の式がある仕様書 (DiB8000・CXD2856ER) の値と、同じ系統の復調で使われてきた換算式がある PIX-DT295 (TC90522 系。<see cref="Tc90522Db"/>) は <see cref="Unit"/> が <c>dB</c>。
 /// DVB のドライバが相対値 (0〜65535) で返すものは、来た値のまま <c>raw</c> にする。
 /// raw は同じ機材でチャンネルや配線を比べる目安。大きいほど良いかどうかも、機材ごとに違ってよい (docs/tuners.md「信号レベル」)
 /// </para>
@@ -17,7 +17,7 @@ namespace Denpa.Agent;
 /// <param name="Unit"><c>dB</c> か <c>raw</c> (<see cref="Db"/>・<see cref="Raw"/>)</param>
 /// <param name="AtTune">選局したときに測った値。px4d は選局の応答でしか C/N を返さないので、受信中は変わらない</param>
 /// <param name="StrengthDbm">
-/// 電波の強度 (dBm)。dBm で返す機材 (DVB のドライバが <c>FE_SCALE_DECIBEL</c> で返すもの・DiB8000 の表) だけで、ほかは null。
+/// 電波の強度 (dBm)。dBm で返す機材 (DVB のドライバが <c>FE_SCALE_DECIBEL</c> で返すもの・DiB8000 の表・IT930x の機材の地上波と J.83B) だけで、ほかは null。
 /// 機材ごとに校正されておらず、機種どうしでは比べられない。JSON の <c>strengthDbm</c> は後から足したもので、古いサーバは読まずに捨てる
 /// </param>
 public sealed record TunerSignal(bool Locked, double? Cn, string Unit, bool AtTune = false, double? StrengthDbm = null)

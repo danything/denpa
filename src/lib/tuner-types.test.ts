@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { receives, showsSky, unreceivable } from "./tuner-types";
+import { extraTypes, receives, unreceivable } from "./tuner-types";
 
 describe("機材が受けられる種別", () => {
   test("BS/CS 専用の受信機では GR だけが受けられない", () => {
@@ -17,34 +17,43 @@ describe("機材が受けられる種別", () => {
     expect(receives(null, "GR")).toBe(true);
   });
 
-  test("SKY は receivable に SKY がある機材だけが受けられる", () => {
+  test("CATV と SKY は receivable にその種別がある機材だけが受けられる", () => {
     expect(receives(["GR", "BS", "CS", "SKY"], "SKY")).toBe(true);
     expect(receives(["GR", "BS", "CS"], "SKY")).toBe(false);
     expect(receives(null, "SKY")).toBe(false);
     expect(receives(undefined, "SKY")).toBe(false);
-    expect(unreceivable(["GR", "SKY"], null)).toEqual(["SKY"]);
+    expect(receives(["GR", "CATV"], "CATV")).toBe(true);
+    expect(receives(["GR", "BS", "CS"], "CATV")).toBe(false);
+    expect(receives(null, "CATV")).toBe(false);
+    expect(unreceivable(["GR", "SKY", "CATV"], null)).toEqual(["SKY", "CATV"]);
   });
 });
 
-describe("受信の設定に SKY を並べるか", () => {
-  test("SKY を受けられる機材も SKY を選んだチューナーも無ければ並べない", () => {
-    expect(showsSky([])).toBe(false);
+describe("受信の設定に足して並べる種別", () => {
+  test("CATV と SKY を受けられる機材も選んだチューナーも無ければ足さない", () => {
+    expect(extraTypes([])).toEqual([]);
     expect(
-      showsSky([
+      extraTypes([
         { types: ["GR"], receivable: ["GR"] },
         { types: ["BS", "CS"], receivable: null },
         { types: ["GR"] },
       ]),
-    ).toBe(false);
+    ).toEqual([]);
   });
 
-  test("SKY を受けられる機材があれば、まだ選んでいなくても並べる", () => {
+  test("受けられる機材があれば、まだ選んでいなくても足す", () => {
     expect(
-      showsSky([{ types: ["GR"], receivable: ["GR", "BS", "CS", "SKY"] }]),
-    ).toBe(true);
+      extraTypes([{ types: ["GR"], receivable: ["GR", "BS", "CS", "SKY"] }]),
+    ).toEqual(["SKY"]);
+    expect(
+      extraTypes([{ types: ["GR"], receivable: ["GR", "CATV", "SKY"] }]),
+    ).toEqual(["SKY", "CATV"]);
   });
 
-  test("SKY を選んだチューナーがあれば、機材が分からなくても並べる (保存で SKY が外れないように)", () => {
-    expect(showsSky([{ types: ["SKY"], receivable: null }])).toBe(true);
+  test("選んだチューナーがあれば、機材が分からなくても足す (保存でその種別が外れないように)", () => {
+    expect(extraTypes([{ types: ["SKY"], receivable: null }])).toEqual(["SKY"]);
+    expect(extraTypes([{ types: ["CATV"], receivable: null }])).toEqual([
+      "CATV",
+    ]);
   });
 });

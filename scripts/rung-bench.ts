@@ -29,7 +29,7 @@ const REALTIME = 30000 / 1001;
 /** 同時に動かす本数の上限 */
 const PARALLEL_MOST = 8;
 
-export type BenchEncoder = "hevc_rkmpp" | "h264_rkmpp" | "libx264";
+type BenchEncoder = "hevc_rkmpp" | "h264_rkmpp" | "libx264";
 
 /**
  * 段 1〜3 の映像のフィルタとエンコーダ (`-c:v` のあと)。`live.ts` の `rungVideo` と同じ (GPU は Rockchip MPP、

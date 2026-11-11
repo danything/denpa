@@ -116,12 +116,15 @@ describe("設定に出す受信の様子", () => {
       { type: "BS", channel: "BS01:16400" },
       { type: "BS", channel: "BS03:16432" },
       { type: "CS", channel: "CS02:24608" },
+      // SKY はスキャンで受信できたものだけが入り、番組表の取得では確かめない
+      { type: "SKY", channel: "H40" },
     ]);
     expect([...state.values()]).toEqual([
       "ok",
       "ok",
       "unreceivable",
       "checking",
+      "ok",
     ]);
   });
 
@@ -204,14 +207,14 @@ describe("受信できないチャンネルの局の番組表", () => {
         services: [{ serviceId: 191, serviceType: 1, name: "局191" }],
       },
     ]);
-    expect(savePrograms([event(191)])).toBe(1);
+    expect(savePrograms([event(191)], { type: "BS" })).toBe(1);
     recordReceived("BS", "BS01:16400", T0);
     recordFailed("BS", "BS03:16432", T0 + HOUR);
     recordReceived("BS", "BS01:16400", T0 + 2 * HOUR);
     recordFailed("BS", "BS03:16432", T0 + 3 * HOUR);
-    expect(savePrograms([event(191)])).toBe(0);
+    expect(savePrograms([event(191)], { type: "BS" })).toBe(0);
     recordReceived("BS", "BS03:16432", T0 + 4 * HOUR);
-    expect(savePrograms([event(191)])).toBe(1);
+    expect(savePrograms([event(191)], { type: "BS" })).toBe(1);
   });
 });
 

@@ -21,14 +21,14 @@
     SETTINGS_GROUPS.find((g) => g.slug === current) ?? null,
   );
 
-  /** 見えている節 (左の一覧と、狭い画面の上の行で印を付ける) */
+  /** 見えている節 (左の一覧と、狭い画面の節へ飛ぶ行で印を付ける) */
   let active = $state<string | null>(null);
 
   let main = $state<HTMLElement>();
 
   /**
-   * **グループを移ったら頭に戻す。** 巻き取るのはどの幅でも window (`routes/+layout.svelte` の `FILLED` に入れない)。
-   * 頭へは SvelteKit も戻すが、節へ滑らかに巻く設定 (下の `scroll-behavior`) のせいで、前のグループの下から頭まで巻く途中が見える。
+   * **グループを移ったら先頭に戻す。** 巻き取るのはどの幅でも window (`routes/+layout.svelte` の `FILLED` に入れない)。
+   * 先頭へは SvelteKit も戻すが、節へ滑らかに巻く設定 (下の `scroll-behavior`) のせいで、前のグループの下から先頭まで巻く途中が見える。
    * 戻る・進むはブラウザが前の位置へ帰すので触らない。`#<節>` 付きで来たらその節へ (飛ぶ途中を見せても意味が無いので、ここも滑らかにしない)
    */
   afterNavigate(({ from, to, type }) => {
@@ -126,7 +126,7 @@
     };
 
     /*
-     * 飛んだ節の頭が止まる所から下を数える。浮いたヘッダー (`html` の `scroll-padding-top` が px で持つ。スマホは 0) と、
+     * 飛んだ節の先頭が止まる所から下を数える。浮いたヘッダー (`html` の `scroll-padding-top` が px で持つ。スマホは 0) と、
      * 節の巻き取りの余白 (スマホの形は上の安全域のぶんも入っている。下の style)。
      * ここより上に残る前の節の終わりは数えない (スマホで節へ飛んだあと、前の節に印が戻っていた)。rootMargin は px か % だけ (rem を渡すと例外になる)
      */

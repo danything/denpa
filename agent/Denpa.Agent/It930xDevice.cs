@@ -94,7 +94,8 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
 
     public Cxd2856Frontend Chip => frontend;
 
-    public string Chips => $"復調器 0x{frontend.ChipId:X2}";
+    /// <summary>初期化の前に読んだチューナーの 62 も出す (MLT5 の仕様書 10.3)。前に ISDB-C か J.83B を選局していて 10 なら、電源が切れていなかったと推定する</summary>
+    public string Chips => $"復調器 0x{frontend.ChipId:X2}、初期化の前のチューナーの 62 は {frontend.PowerProbe:X2}";
 
     public long LockMs => frontend.LockMs;
 
@@ -260,7 +261,8 @@ internal sealed class CxdBoard : IIt930xBoard
 ///
 /// <para>
 /// **初めて要るときに開き、使っている側がいる間は開いたまま。** チューナー (<see cref="It930xTuner"/>) は最初の選局で取り、捨てるときに返す。
-/// 誰も使わなくなったら閉じて電源を切る (<see cref="CloseIfIdle"/>)。電源が GPIOH7 の機種は、内蔵カードリーダーが受信機と同じ電源なので
+/// 誰も使わなくなったら、30 秒 (<see cref="IdleGrace"/>) 待ってから閉じて電源を切る (<see cref="CloseIfIdle(string)"/>)。その間に取り直せば開いたまま使う。
+/// エージェントを止めるとき (<see cref="CloseAll"/>) はすぐ閉じる。電源が GPIOH7 の機種は、内蔵カードリーダーが受信機と同じ電源なので
 /// (MLT5 の仕様書 1.5、px4 の仕様書 2.5)、カード (<see cref="It930xCard"/>) も使う側として数え、カードを使っている間は受信機を全部閉じても電源を切らない。
 /// 電源が GPIOH3 の機種 (受信機が 1 つの機種) は、受信機を開いている間だけ電源を入れ、カードのためには入れない (px4 の仕様書 13.3)。
 /// </para>
@@ -272,14 +274,47 @@ internal sealed class CxdBoard : IIt930xBoard
 /// 連動で電源だけが入った側は、チップを初期化していない。その側の受信機を最初に開くときに初期化する。
 /// もう片方の側が見つからない・開けないときは、記録に出して見つかった側だけを使う (px4 の仕様書 15.3 の「片側だけ見えている Q3」)。
 /// </para>
+///
+/// <para>
+/// **ロックの順。** 受信機は並べて選局されるので (常駐のスキャン)、ロックは次の順でだけ取り、逆には取らない。
+/// <c>Registry</c> → この機材の <c>_gate</c> (使っている側の数)。
+/// <see cref="It930xTuner"/> の <c>_gate</c> → 受信機ごとの <c>_receiverGates</c> (<see cref="Frontend"/>・<see cref="KeepMatching"/>) → <see cref="Cxd2856Frontend"/> の受信機の操作 →
+/// 同じバスの受信機で 1 つのバスのロック (<c>_buses</c>) → <see cref="It930xBridge"/> のコマンドのロック。<see cref="FlushTs"/> は <c>_gate</c> を持ったままブリッジのコマンドを送る (<c>_gate</c> → ブリッジのコマンドのロック)。LNB の給電の <c>_lnbGate</c> → ブリッジのコマンドのロック。
+/// <see cref="KeepMatching"/> はほかの受信機の <c>_receiverGates</c> と受信機の操作を取るが、その受信機の <see cref="It930xTuner"/> の <c>_gate</c> は取らない
+/// (選局の途中なら、受信機の操作のロックで選局が終わるのを待つ)。I2C の並びが同じバスで交わらないことは It930xConcurrencyTests.cs で確かめる
+/// </para>
 /// </summary>
 public sealed class It930xDevice
 {
     /// <summary>EP 0x84 の 1 回の読みの待ち</summary>
     private const int TsReadTimeoutMs = 200;
 
+    /// <summary>電源を切ったあと (GPIOH7 ← 1 のあと) の待ち (ms。仕様書 1.5・11)</summary>
+    internal const int PowerOffSettleMs = 100;
+
     private static readonly Lock Registry = new();
     private static readonly Dictionary<string, It930xDevice> Devices = [];
+
+    /// <summary>
+    /// プロセスが終わるとき (SIGTERM で終わる <c>--tune</c> などの CLI も) に機材を閉じる。開けたままの入力に読む側がいなくなると、
+    /// ブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなるため (<see cref="It930xOverflow"/>)。エージェントは止まるときに閉じ終えているので何もしない。
+    /// ほかのスレッドが機材の一覧を持ったまま止まっていたら、終わるのを待たせないように 2 秒であきらめる
+    /// </summary>
+    static It930xDevice()
+    {
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            if (!Registry.TryEnter(TimeSpan.FromSeconds(2))) return;
+            try
+            {
+                CloseAll();
+            }
+            finally
+            {
+                Registry.Exit();
+            }
+        };
+    }
 
     private readonly IUsbDevice _usb;
     private readonly Action<int> _sleep;
@@ -303,6 +338,11 @@ public sealed class It930xDevice
     private It930xDevice? _linked;
 
     private Thread? _reader;
+    private readonly ManualResetEventSlim _readerOpened = new();
+    private volatile bool _readerRunning;
+
+    /// <summary>開くときに EP 0x84 の読みを出し終えるのを待つ長さ</summary>
+    internal static readonly TimeSpan ReaderStartTimeout = TimeSpan.FromSeconds(2);
     private volatile bool _stopping;
     private int _users;
     private bool _closed;
@@ -314,6 +354,23 @@ public sealed class It930xDevice
 
     /// <summary>開くのにかかった時間 (ファームウェアの起動から電源を入れるまで)</summary>
     public long OpenMs { get; private set; }
+
+    private long _tsBytes;
+    private long _tsReads;
+
+    /// <summary>EP 0x84 から読んだバイトの数 (開いてから。<c>--tune</c> が出す)</summary>
+    public long TsBytes => Interlocked.Read(ref _tsBytes);
+
+    /// <summary>EP 0x84 の読みで、1 バイト以上届いた回数</summary>
+    public long TsReads => Interlocked.Read(ref _tsReads);
+
+    /// <summary>
+    /// EP 0x84 の読みの数え (<c>--tune</c> が出す)。EP 0x84 からバイトが届いているのに入力ごとのパケットが増えなければ、ブリッジは流しているが分け方で揃っていない。
+    /// バイトが増えなければ、ブリッジから先で止まっている
+    /// </summary>
+    public string DescribeTsCounters() =>
+        $"EP 0x84: {TsReads} 回で {TsBytes} バイト  入力ごとのパケット {string.Join(" ", _demux.Packets)}  "
+        + $"揃え直しで飛ばした {_demux.Skipped} バイト  知らない同期バイト {_demux.Unknown}  揃え直し {_demux.Lost} 回";
 
     /// <summary>USB が抜けたなどで使えなくなった。使っている側が返したらすぐ閉じる</summary>
     public bool Faulted => _faulted;
@@ -364,6 +421,8 @@ public sealed class It930xDevice
             {
                 if (!device.Faulted)
                 {
+                    // 閉じるのを待っている間に取り直したら、開いて電源の入ったままの機材を使う
+                    device.CancelIdle();
                     lock (device._gate) device._users++;
                     return device;
                 }
@@ -424,7 +483,10 @@ public sealed class It930xDevice
         }
     }
 
-    /// <summary>ブリッジの設定と電源 (MLT5 の仕様書 1.3・1.5、px4 の仕様書 2.3・2.5・13.3)。そのあと EP 0x84 を読み始める</summary>
+    /// <summary>
+    /// ブリッジの設定と電源 (MLT5 の仕様書 1.3・1.5、px4 の仕様書 2.3・2.5・13.3)。そのあと EP 0x84 を読み始め、機種が使う入力を全部開ける。
+    /// 入力は閉じるまで開けたままにし、受信機ごとには開け閉めしない (<see cref="It930xBridge.EnableTsInputs"/>)
+    /// </summary>
     private void Setup()
     {
         if (Bridge.ConfigureReceivers(Model.Receivers) == 0)
@@ -437,17 +499,89 @@ public sealed class It930xDevice
         Bridge.GpioSetup(2, false);
         if (Model.Lnb) Bridge.GpioSetup(11, false);
         _sleep(20);
-        // 受信機の TS 入力はどれもシリアル (MLT5 の仕様書 1.2・3.4、px4 の仕様書 2.3)
-        var syncBytes = Model.SyncBytes;
-        Bridge.ConfigureTs(new bool[It930xBridge.TsInputs], syncBytes);
-        // 使わない入力は閉じておく (px4 の仕様書 2.3・13)。使う入力は、受信を始めるときに開ける (Attach)
-        for (var input = 0; input < It930xBridge.TsInputs; input++)
-        {
-            if (syncBytes[input] == 0) Bridge.EnableTsInput(input, false);
-        }
+        // 受信機の TS 入力はどれもシリアル (MLT5 の仕様書 1.2・3.4、px4 の仕様書 2.3)。同期バイトが 0 の入力は使わないので、開けない (px4 の仕様書 2.3・13)
+        Bridge.ConfigureTs(new bool[It930xBridge.TsInputs], Model.SyncBytes);
+        RecoverOverflow();
         if (Model.PowerWhileOpen) Power(true);
+        // SDK (IT930x_probe) と同じく、EP 0x84 の読みを出して残りを読み捨ててから入力を開ける。ブリッジに来たパケットは読み続け、出口の無い入力のものは捨てる
         _reader = new Thread(ReadTs) { IsBackground = true, Name = "it930x-ts" };
         _reader.Start();
+        try
+        {
+            // 読みを出し終える (読みのスレッドが OpenInStream から戻る) まで待つ。出せなかったら、入力を開けずに開くのを失敗にする
+            if (!_readerOpened.Wait(ReaderStartTimeout) || !_readerRunning)
+            {
+                throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読みを始められませんでした");
+            }
+            Bridge.EnableTsInputs();
+            // 開ける前後に読みが失敗していたら、読む側のいない入力を開けたままにしない (読みのスレッドが閉じるのと前後しても、最後に閉じる)
+            if (_faulted)
+            {
+                CloseInputs();
+                throw new IOException($"{Label} の TS (EP 0x{It930xBridge.TsIn:X2}) の読みが、開いている間に失敗しました");
+            }
+        }
+        catch
+        {
+            // 開くのに失敗した機材は呼ぶ側が USB を閉じるので、その前に読みを止める
+            _stopping = true;
+            _reader.Join(TimeSpan.FromSeconds(2));
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 開くときに TS のバッファの溢れ (<see cref="It930xOverflow"/>) が立っていたら、記録に出して TS の経路をリセットし直す (<see cref="It930xBridge.ResetTs"/>)。
+    /// EP 0x84 の読みを出す前に呼ぶ。リセットしても立ったままなら、電源を抜くように記録に出して開くのは続ける
+    /// (TS が届くかは選局してから分かる。溢れの値が何を表すかは brRegister.h の名前からの推定)
+    /// </summary>
+    private void RecoverOverflow()
+    {
+        var overflow = Bridge.ReadOverflow();
+        _overflow = overflow;
+        if (!overflow.Any) return;
+        Log.Write($"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。TS の経路をリセットし直します");
+        overflow = Bridge.ResetTs();
+        _overflow = overflow;
+        Log.Write(overflow.Any
+            ? $"[{Label}] リセットしても溢れたままです ({overflow})。TS が届かなければ、機材の電源を抜いて入れ直してください (REBOOT や受信機の電源の入れ直しでは戻りません)"
+            : $"[{Label}] 溢れが下りました");
+    }
+
+    /// <summary>最後に読んだ溢れ (変わったときだけ記録に出すため)</summary>
+    private volatile It930xOverflow? _overflow;
+
+    /// <summary>
+    /// TS のバッファの溢れを読み、前に読んだときから変わっていれば記録に出す (流し始める・止めるとき、閉じるとき)。
+    /// 読めなければ何もしない (抜けたかどうかは EP 0x84 の読みとほかの操作が決める)
+    /// </summary>
+    private void WatchOverflow(string when)
+    {
+        It930xOverflow overflow;
+        try
+        {
+            overflow = Bridge.ReadOverflow();
+        }
+        catch (IOException)
+        {
+            return;
+        }
+        var before = _overflow;
+        _overflow = overflow;
+        if (before is not null && before.System == overflow.System && before.Inputs.SequenceEqual(overflow.Inputs)) return;
+        if (!overflow.Any && before is not { Any: true }) return;
+        Log.Write(overflow.Any
+            ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。EP 0x84 の読みが追いつかなかったと推定します"
+            : $"[{Label}] {when}に TS のバッファの溢れが下りていました");
+    }
+
+    /// <summary>溢れた入力の受信機 (「、受信機 2」)</summary>
+    private string Receivers(It930xOverflow overflow)
+    {
+        var receivers = overflow.Overflowed
+            .SelectMany(input => Model.Receivers.Where(receiver => receiver.TsInput == input).Select(receiver => receiver.Index))
+            .ToList();
+        return receivers.Count == 0 ? "" : $"、受信機 {string.Join("・", receivers)}";
     }
 
     /// <summary>
@@ -476,11 +610,16 @@ public sealed class It930xDevice
         try
         {
             using var input = _usb.OpenInStream(It930xBridge.TsIn, It930xBridge.TsTransferSize, It930xBridge.TsDepth);
+            _readerRunning = true;
+            _readerOpened.Set();
             var buffer = new byte[It930xBridge.TsTransferSize];
             while (!_stopping)
             {
                 var got = input.Read(buffer, TsReadTimeoutMs);
-                if (got > 0) _demux.Push(buffer.AsSpan(0, got));
+                if (got <= 0) continue;
+                Interlocked.Add(ref _tsBytes, got);
+                Interlocked.Increment(ref _tsReads);
+                _demux.Push(buffer.AsSpan(0, got));
             }
         }
         catch (IOException error)
@@ -489,7 +628,28 @@ public sealed class It930xDevice
             // EP 0x84 の読みは全部の受信機で 1 本なので、読めなくなったら機材ごと使えないものとし、次の選局で開き直す
             _faulted = true;
             Log.Write($"[{Label}] TS を読めなくなりました: {UsbDevices.Reason(error)}");
+            // 読む側がいないまま入力を開けておくと、ブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなる (It930xOverflow)。
+            // 閉じるのは使っている側が返してからなので、それまで待たずにここで入力を閉じる
+            if (error is not UsbGoneException) CloseInputs();
             for (var input = 0; input < It930xBridge.TsInputs; input++) _demux.Detach(input)?.Complete(error.Message);
+        }
+        finally
+        {
+            // どの終わり方でも、開くのを待っている Setup を待たせたままにしない (読みを始められていなければ _readerRunning は false のまま)
+            _readerOpened.Set();
+        }
+    }
+
+    /// <summary>入力を全部閉じて EP 0x84 をリセットする (<see cref="It930xBridge.DisableTsInputs"/>)。閉じられなければ記録に出す</summary>
+    private void CloseInputs()
+    {
+        try
+        {
+            Bridge.DisableTsInputs();
+        }
+        catch (IOException error)
+        {
+            Log.Write($"[{Label}] TS の入力を閉じられませんでした ({error.Message})");
         }
     }
 
@@ -540,6 +700,22 @@ public sealed class It930xDevice
     }
 
     /// <summary>
+    /// ブリッジの TS のバッファを捨てる (仕様書 3.6)。SDK の <c>DRV_ResetRxPort</c> と同じく、入力を全部閉じ、10 ms 待ってから <c>0xDA1D</c> に 1 と 0 を書き、
+    /// 入力を全部開け直す。流しているほかの受信機の TS も、その間は欠ける。ロックしているのに TS が届かないときに <c>--tune</c> が試す。
+    /// 閉じた機材では何もしない (閉じる処理が閉じた入力を開け直さない)。閉じる処理とは <c>_gate</c> で交わらないようにする
+    /// </summary>
+    public void FlushTs()
+    {
+        lock (_gate)
+        {
+            if (_closed) return;
+            // 閉じるのに失敗したら、そのまま投げる。閉じきったか分からない入力を開け直さず、元の失敗を隠さない
+            Bridge.DisableTsInputs();
+            Bridge.EnableTsInputs();
+        }
+    }
+
+    /// <summary>
     /// 初期化の失敗のあと、電源を入れ直してよいか。この機材で開いている受信機が無く、使っている側がいまの 1 つだけのとき
     /// (カードや、Q3 のもう片方の側の受信機が使っていれば、その側の動作を止めてしまうので入れ直さない)。USB が抜けたときは入れ直さない。
     /// CXD2856ER の機種は、受信機ごとに初期化して、失敗した受信機だけを次の選局でやり直すので、入れ直さない (MLT5 の仕様書 2.2)
@@ -566,37 +742,41 @@ public sealed class It930xDevice
         }
     }
 
-    /// <summary>取っていたもう片方の側を返す。そちらも誰も使っていなければ閉じる (電源が切れる)</summary>
+    /// <summary>
+    /// 取っていたもう片方の側を返す。そちらも誰も使っていなければ、待たずに閉じる (電源が切れる)。
+    /// この側は閉じる前に <see cref="IdleGrace"/> を待ち終えていて、もう片方の側はこの側の電源のために取っていただけなので、もう一度は待たない
+    /// </summary>
     private void Unlink()
     {
         if (Interlocked.Exchange(ref _linked, null) is not { } partner) return;
         partner.Release();
-        CloseIfIdle(partner.Port);
+        CloseIfIdle(partner.Port, TimeSpan.Zero);
     }
 
     private It930xReceiver Wiring(int receiver) =>
         Model.Receivers.FirstOrDefault(item => item.Index == receiver)
         ?? throw new IOException($"{Model.Name} に受信機 {receiver} はありません (0〜{Model.Receivers.Count - 1})");
 
-    /// <summary>受信機の TS を <paramref name="output"/> に流し始める (ブリッジの入力を開ける)</summary>
+    /// <summary>
+    /// 受信機の TS を <paramref name="output"/> に流し始める。ブリッジには書かない (入力は開いたときから全部開いている。<see cref="Setup"/>)。
+    /// 5 つの入力は 1 つの経路にまとまるので、ほかの受信機が流している間にブリッジの TS の経路を書き換えないため。
+    /// 流し始める前に溢れを読み、立っていれば記録に出す (<see cref="WatchOverflow"/>)
+    /// </summary>
     internal void Attach(int receiver, It930xTsOutput output)
     {
         var input = Wiring(receiver).TsInput;
+        WatchOverflow($"受信機 {receiver} の TS を流し始めるとき");
         _demux.Attach(input, output)?.Complete();
-        Bridge.EnableTsInput(input, true);
     }
 
-    /// <summary>受信機の TS を止める (ブリッジの入力を閉じ、出口を止める)</summary>
+    /// <summary>受信機の TS を止める (出口を外して止める)。ブリッジには書かず、その入力のパケットはこのあと捨てる。止めたあとに溢れを読む</summary>
     public void Detach(int receiver)
     {
         var input = Wiring(receiver).TsInput;
-        try
+        if (_demux.Detach(input) is { } output)
         {
-            Bridge.EnableTsInput(input, false);
-        }
-        finally
-        {
-            _demux.Detach(input)?.Complete();
+            output.Complete();
+            WatchOverflow($"受信機 {receiver} の TS を止めるとき");
         }
     }
 
@@ -708,10 +888,17 @@ public sealed class It930xDevice
     }
 
     /// <summary>
-    /// 誰も使っていなければ閉じる (チューナーが捨てられたとき。定義が変わった・止める)。
-    /// 閉じ終わるまで Registry を持つので、同じポートの Acquire は閉じ終えてから開く (古いほうの電源を切る書き込みが、新しく開いた機材に届かない)
+    /// 誰も使っていなければ、<see cref="IdleGrace"/> のあとに閉じる (チューナーが捨てられたとき・カードを閉じたとき)。
+    /// 待つ間に取り直されたら閉じない。すぐには電源を切らない (下の <paramref name="grace"/>)
     /// </summary>
-    public static void CloseIfIdle(string port)
+    public static void CloseIfIdle(string port) => CloseIfIdle(port, IdleGrace);
+
+    /// <summary>
+    /// 誰も使っていなければ、<paramref name="grace"/> のあとに閉じる。0 ならすぐ閉じる (テストと <c>--it930x-cycle</c>)。
+    /// 閉じ終わるまで Registry を持つので、同じポートの Acquire は閉じ終えてから開く (古いほうの電源を切る書き込みが、新しく開いた機材に届かない)。
+    /// 待つ間に <see cref="Acquire(string)"/> が取り直せば、開いて電源の入ったままの機材をそのまま使う
+    /// </summary>
+    internal static void CloseIfIdle(string port, TimeSpan grace)
     {
         lock (Registry)
         {
@@ -720,33 +907,101 @@ public sealed class It930xDevice
             {
                 if (device._users > 0) return;
             }
+            if (grace > TimeSpan.Zero)
+            {
+                device.ScheduleIdle(grace);
+                return;
+            }
             Devices.Remove(port);
             device.Close();
         }
     }
 
+    /// <summary>
+    /// 最後の利用者が返してから閉じるまでの間。**電源を切って入れ直すのを続けて繰り返さない。**
+    /// 本番では、カードの状態を確かめるたび (使っていない内蔵カードリーダーを開いて閉じる) に電源を切って入れ直し、続けて 13 回入り切りしたあと、
+    /// 全受信機の TS が電源を抜くまで止まった (仕様書 12.5)。短い間の入り切りを、いちばん疑っている
+    /// </summary>
+    public static readonly TimeSpan IdleGrace = TimeSpan.FromSeconds(30);
+
+    /// <summary>閉じるのを待っている間の時計 (取り直したら止める)。Registry の中で読み書きする</summary>
+    private Timer? _idle;
+
+    /// <summary><paramref name="grace"/> のあとに、まだ誰も使っていなければ閉じる。前に待っていたものは置き換える。Registry の中で呼ぶ</summary>
+    private void ScheduleIdle(TimeSpan grace)
+    {
+        CancelIdle();
+        Timer? timer = null;
+        timer = new Timer(_ =>
+        {
+            lock (Registry)
+            {
+                // 取り直されたか、置き換えられたか、もう閉じた
+                if (_idle != timer || !Devices.TryGetValue(Port, out var current) || current != this) return;
+                _idle = null;
+                timer!.Dispose();
+                lock (_gate)
+                {
+                    if (_users > 0) return;
+                }
+                Devices.Remove(Port);
+                Close();
+            }
+        });
+        _idle = timer;
+        timer.Change(grace, Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>閉じるのを待っているのをやめる (取り直したとき・すぐ閉じるとき)。Registry の中で呼ぶ</summary>
+    private void CancelIdle()
+    {
+        _idle?.Dispose();
+        _idle = null;
+    }
+
+    /// <summary>
+    /// 電源を切ったあと USB を閉じるまでの待ち (ms。ふだんは <see cref="PowerOffSettleMs"/>)。
+    /// 0 にするのは、待たずに入り切りを繰り返した前の動きを再現する <c>--it930x-cycle --no-wait</c> だけ
+    /// </summary>
+    internal int PowerOffWaitMs { get; set; } = PowerOffSettleMs;
+
     /// <summary>全部閉じる (エージェントを止めるとき。<c>--tune</c> の終わり)。使っている側がいても閉じる</summary>
-    public static void CloseAll()
+    public static void CloseAll() => CloseAll(_ => true);
+
+    /// <summary>
+    /// <paramref name="which"/> のポートを、閉じるのを待っている間でもすぐ閉じる (<see cref="CloseAll()"/> の本体。
+    /// テストは、並んで走るほかのテストの機材を閉じないように自分のポートだけを渡す)
+    /// </summary>
+    internal static void CloseAll(Func<string, bool> which)
     {
         lock (Registry)
         {
             // 閉じる途中で、Q3 のもう片方の側を返して一覧から外すことがあるので、写しを回す
-            var devices = Devices.Values.ToList();
-            Devices.Clear();
-            foreach (var device in devices) device.Close();
+            foreach (var (port, device) in Devices.Where(entry => which(entry.Key)).ToList())
+            {
+                device.Close();
+                Devices.Remove(port);
+            }
         }
     }
 
     /// <summary>
-    /// 受信機を全部閉じ、電源を切って (GPIOH2 ← 0、電源の GPIOH ← 1)、USB を閉じる。抜けていれば書かずに閉じる。
-    /// 電源が GPIOH3 の機種は、受信機を閉じたときに電源を切っている
+    /// ブリッジの入力を全部閉じ、受信機を全部スリープにし、電源を切って (GPIOH2 ← 0、電源の GPIOH ← 1)、USB を閉じる。抜けていれば書かずに閉じる。
+    /// 電源が GPIOH3 の機種は、受信機を閉じたときに電源を切っている。閉じるのを待っていたら、その待ちはやめる。Registry の中で呼ぶ
     /// </summary>
     private void Close()
     {
+        CancelIdle();
         lock (_gate)
         {
             if (_closed) return;
             _closed = true;
+        }
+        // 入力を閉じて EP 0x84 をリセットしてから読みを止める (SDK の DRV_ResetRxPort)。読む側がいないまま、ブリッジに TS を溜めない
+        if (!Faulted)
+        {
+            CloseInputs();
+            WatchOverflow("閉じるとき");
         }
         _stopping = true;
         _reader?.Join(TimeSpan.FromSeconds(2));
@@ -756,7 +1011,13 @@ public sealed class It930xDevice
             try
             {
                 foreach (var receiver in Model.Receivers) Rest(receiver.Index, linked: false);
-                if (Model.PowerWhileOpen) Power(false);
+                if (Model.PowerWhileOpen)
+                {
+                    Power(false);
+                    // 電源が落ちきる前に入れ直さないよう、USB を閉じる前に待つ (MLT5 の仕様書 1.5・10.3・11)。閉じている間は Registry を持っているので、
+                    // 同じポートを開き直す Acquire (次に電源を入れる書き込み) もこの待ちのあとになる
+                    _sleep(PowerOffWaitMs);
+                }
             }
             catch (IOException error)
             {
@@ -816,6 +1077,9 @@ public sealed class It930xTuner : ITuneDevice
 
     public Stream Output => _output?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");
 
+    /// <summary>いまの出口が、読む側が詰まって捨てたパケットの数 (<c>--tune --steps</c> が出す)</summary>
+    public long Dropped => _output?.Dropped ?? 0;
+
     public bool Tuned
     {
         get
@@ -852,6 +1116,21 @@ public sealed class It930xTuner : ITuneDevice
             _gate.Exit();
         }
     }
+
+    /// <summary>TS を止める復調器のレジスタ 4 つ (MLT5 の仕様書 3.6)。ロックしているのに TS が届かないときに <c>--tune</c> が出す。CXD2856ER の機種で初期化していなければ null</summary>
+    public CxdTsOutput? ReadTsOutput()
+    {
+        lock (_gate) return (_frontend as CxdReceiver)?.Chip.ReadTsOutput();
+    }
+
+    /// <summary>ブリッジの TS のバッファを捨てる (仕様書 3.6。<see cref="It930xDevice.FlushTs"/>)。<c>--tune</c> が、TS が届かないときに試す</summary>
+    public void FlushTs()
+    {
+        lock (_gate) _device?.FlushTs();
+    }
+
+    /// <summary>初期化の前に読んだチューナーの <c>62</c> (MLT5 の仕様書 10.3。<see cref="Cxd2856Frontend.PowerProbe"/>)。<c>--tune</c> が出す。CXD2856ER の機種だけ</summary>
+    public byte? PowerProbe => (_frontend as CxdReceiver)?.Chip.PowerProbe;
 
     /// <summary>周波数 (Hz) を kHz に丸める (チューナーに渡すのは中心周波数の kHz。MLT5 の仕様書 5.1、px4 の仕様書 5.1)</summary>
     internal static uint Khz(uint hertz) => (uint)((hertz + 500L) / 1000);
@@ -964,6 +1243,7 @@ public sealed class It930xTuner : ITuneDevice
             StopOutput();
             IsdbcLocked = false;
             Tsmf = null;
+            Tlv = null;
             IsdbcFailedSignal = null;
             // 抜けた・TS を読めなくなった機材は返して、開き直す
             if (_device is { Faulted: true }) Drop();
@@ -986,7 +1266,10 @@ public sealed class It930xTuner : ITuneDevice
                 // TSMF の判定の状態は、選局のたびに TsmfSelector を作り直して最初に戻す
                 var tsmf = tuning.IsdbC ? new TsmfSelector(tuning.TsmfIndex) : null;
                 Tsmf = tsmf;
-                var output = new It930xTsOutput(tsmf);
+                // 選んだ TS が分割 TLV なら TLV パケットに組み立てる (どちらかは TSMF の判定で決まるので、ISDB-C なら作っておく)
+                var tlv = tsmf is null ? null : new SplitTlv();
+                Tlv = tlv;
+                var output = new It930xTsOutput(tsmf, tlv);
                 _device.Attach(_receiver, output);
                 _output = output;
                 // 受信を始めるときに、復調器の TS の端子を出す (px4 の仕様書 11.1)
@@ -1027,6 +1310,9 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>ISDB-C で「指定した TS が無い」ときの失敗の文の先頭 (MLT5 の仕様書 7A.7。ロックしないときの <see cref="ITuneDevice.SyncFailed"/> とは別の失敗)</summary>
     public const string TsmfMissing = "指定した TS がありません";
 
+    /// <summary>ISDB-C でロックしたのに、TSMF の判定の時間切れまで TS が 1 パケットも届かなかったときの失敗の文 (MLT5 の仕様書 3.6)</summary>
+    public const string TsMissing = "ロックしましたが、TS が 1 パケットも届きません (ブリッジから先で TS が止まっています)";
+
     /// <summary>TSMF の判定の時間切れ (ms。MLT5 の仕様書 7A.7・11 の 3 秒)。変えるのはテストのため</summary>
     internal int TsmfTimeoutMs { get; init; } = TsmfSelector.TimeoutMs;
 
@@ -1036,6 +1322,12 @@ public sealed class It930xTuner : ITuneDevice
     /// <summary>最後の ISDB-C の選局の TSMF の判定 (<c>--tune</c> が出す)。選局に失敗したあとも残す。ISDB-C でないか、ロックしなかったなら null</summary>
     public TsmfSelector? Tsmf { get; private set; }
 
+    /// <summary>最後の ISDB-C の選局で、分割 TLV を組み立てる処理 (<c>--tune</c> が数を出す)。選んだ TS が MPEG-2 TS なら何も数えない。ISDB-C でなければ null</summary>
+    public SplitTlv? Tlv { get; private set; }
+
+    /// <summary>流しているバイト列の形式。TSMF から選んだ TS が分割 TLV なら <see cref="StreamFormat.Tlv"/> (<see cref="TsmfSelector.Format"/>)</summary>
+    public StreamFormat Format => Tsmf?.Format ?? StreamFormat.Ts;
+
     /// <summary>ISDB-C でロックしたあと TSMF の判定で失敗したときに、TS を止める前に読んだ信号品質 (<c>--tune</c> が出す)。読めなければ null</summary>
     public TunerSignal? IsdbcFailedSignal { get; private set; }
 
@@ -1043,7 +1335,7 @@ public sealed class It930xTuner : ITuneDevice
     public CxdIsdbcDetail? IsdbcDetail => _frontend?.IsdbcDetail;
 
     /// <summary>
-    /// TSMF の判定を待つ (MLT5 の仕様書 7A.4 の手順 6・7A.7 の「判定の待ち」)。判定には TS が要るので、ブリッジの入力を開けてから呼ぶ。
+    /// TSMF の判定を待つ (MLT5 の仕様書 7A.4 の手順 6・7A.7 の「判定の待ち」)。判定には TS が要るので、受信機の出口を付けてから呼ぶ。
     /// 3 秒で決まらなければロックしないときと同じ失敗、「指定した TS が無い」は別の失敗にして、TS を止める
     /// </summary>
     private void WaitTsmf(IIt930xFrontend frontend, TsmfSelector tsmf)
@@ -1060,6 +1352,8 @@ public sealed class It930xTuner : ITuneDevice
             // 元の失敗を返す
         }
         StopOutput();
+        // 1 パケットも届かなかったときは、電波ではなくブリッジから先で TS が止まっている (仕様書 3.6)。同期しなかった文 (放送休止と読まれる) と分ける
+        if (decision == TsmfDecision.Pending && tsmf.Received == 0) throw new IOException(TsMissing);
         if (decision == TsmfDecision.Pending) throw new IOException(ITuneDevice.SyncFailed);
         var detail = tsmf.FirstHeader is { } header
             ? $"TSMF の有効な TS は {header.ValidStreams.Count} 本で、{tsmf.Index} 本目 (0 から数える) を指定した"

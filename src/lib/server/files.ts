@@ -146,6 +146,8 @@ export function reconcile(): {
     .all();
 
   let removed = 0;
+  /** 行を書き換えたか。開いている画面に知らせる (定期チェックでも、押したときでも) */
+  let changed = false;
   for (const recording of placed) {
     // 主でないもの (H.265・H.264) だけが外から消えたら、その控えだけ外す。主は無事なので録画は残る
     let hevc = recording.hevc_path;
@@ -161,6 +163,7 @@ export function reconcile(): {
         .where(eq(recordings.id, recording.id))
         .run();
       removeSidecars(path);
+      changed = true;
       if (column === "hevc_path") hevc = null;
       else alt = null;
       console.log(
@@ -186,14 +189,18 @@ export function reconcile(): {
         .where(eq(recordings.id, recording.id))
         .run();
       console.log(`[files] 主が消えたので繰り上げました: ${recording.name}`);
+      changed = true;
       continue;
     }
     deleteRecordingFiles(recording, "保存先から消えていました");
     removed++;
+    changed = true;
     console.log(
       `[files] 保存先から消えていたので削除済みにしました: ${recording.name}`,
     );
   }
+
+  if (changed) emit("recordings");
 
   const left = sweepLeftovers();
   return { checked: placed.length, removed, ...left };

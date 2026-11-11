@@ -3,7 +3,7 @@
   import { onMount, type Snippet } from "svelte";
 
   import ProgramFacts from "#lib/components/ProgramFacts.svelte";
-  import type { ProgramDetail } from "#lib/types.js";
+  import type { DetailNote, ProgramDetail } from "#lib/types.js";
 
   /**
    * 番組の詳細を出すモーダル。
@@ -31,7 +31,7 @@
   }: {
     program: ProgramDetail;
     onclose: () => void;
-    notes?: { title: string; text: string }[];
+    notes?: DetailNote[];
     cmNote?: string | null;
     /** エンコードしたもののコマ数。録画から開いたときだけ入る (ProgramFacts へ素通し) */
     fps?: number | null;

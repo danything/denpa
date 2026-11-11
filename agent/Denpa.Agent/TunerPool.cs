@@ -298,6 +298,10 @@ public sealed class TunerPool(
                         held.Channel = channel;
                         lease.TunedMs = lease.Clock.ElapsedMilliseconds;
                     }
+                    // 選局し直さずに済んだときも、TSMF の判定はそのチャンネルを選局したときのまま残っている。読み出しを始める前に写す (Sink.TsmfStreams)
+                    lease.TsmfStreams = (held.Device as It930xTuner)?.Tsmf?.Streams;
+                    // 流すバイト列の形式 (Sink.Format)。TSMF の有効な TS の数と同じく、選局したときの判定のまま
+                    lease.Format = held.Device.Format;
                     lease.StartNative(held.Device, () => OnExit(lease));
                     // 閉じる側 (Held.Close) は、この読み出しが止まるのを待ってから閉じる
                     held.Reader = lease;
@@ -474,7 +478,10 @@ public sealed class TunerPool(
                 if (removed && lease.Sinks.Count == 0) ScheduleRelease(lease);
             }
             onChange();
-        });
+        })
+        {
+            Owner = lease,
+        };
         lock (lease.Sinks) lease.Sinks.Add(sink);
         // 溢れの報告に名前を残す。**抜けたあとに報告が回っても名乗れるように**
         lease.Saw(use);
@@ -686,7 +693,7 @@ public sealed class TunerPool(
                     ["rank"] = ranks[index],
                     ["name"] = spec.Name,
                     ["types"] = Json.Strings(spec.Types),
-                    // 機材が受けられる種別 (見つけていない機材は null。設定の it930x: は GR・BS・CS・SKY)。denpa はこれに無い種別を設定で選ばせない (DeviceProbe.Receivable)
+                    // 機材が受けられる種別 (見つけていない機材は null。設定の it930x: は GR・BS・CS・CATV・SKY)。denpa はこれに無い種別を設定で選ばせない (DeviceProbe.Receivable)
                     ["receivable"] = DeviceProbe.Receivable(spec.Device) is { } receivable ? Json.Strings(receivable) : null,
                     ["disabled"] = spec.Disabled,
                     // 画面がそのまま編集できるように、定義もいっしょに返す
@@ -840,6 +847,30 @@ public sealed class Sink(string use, int priority, Action<Sink> onLeave)
     /// <summary>取り上げられた理由。**失敗として伝えるために持つ**</summary>
     public string? FailedWith { get; private set; }
 
+    /// <summary>共有している選局。プールの外で作った利用者 (テスト) は null</summary>
+    internal Lease? Owner { get; init; }
+
+    /// <summary><c>/denpa/stream</c> が TSMF の有効な TS の数を返すレスポンスヘッダー (<see cref="TsmfStreams"/>)</summary>
+    public const string TsmfStreamsHeader = "X-Denpa-Tsmf-Streams";
+
+    /// <summary>
+    /// ISDB-C の搬送波で、TSMF のヘッダーにある有効な TS の数 (<see cref="TsmfSelector.Streams"/>)。TSMF を使わない搬送波とほかの方式は null。
+    /// **最初の TS が届いてから読む。** 共有に入った利用者は選局が終わる前に戻ることがあり、値は選局と TSMF の判定が終わってから入る
+    /// </summary>
+    public int? TsmfStreams => Owner?.TsmfStreams;
+
+    /// <summary>
+    /// 流すバイト列の形式 (<see cref="ITuneDevice.Format"/>)。<see cref="TsmfStreams"/> と同じく、**最初の塊が届いてから読む**
+    /// (共有に入った利用者は、選局が終わる前に戻ることがある)
+    /// </summary>
+    public StreamFormat Format => Owner?.Format ?? StreamFormat.Ts;
+
+    /// <summary><c>/denpa/stream</c> の Content-Type (<see cref="Format"/> から決める)。最初の塊を書く前に入れる</summary>
+    public string ContentType => ContentTypeOf(Format);
+
+    /// <summary>形式ごとの Content-Type。TLV は登録された媒体の種類が無いので <c>x-</c> を付ける (中身は ARIB の TLV のバイト列)</summary>
+    public static string ContentTypeOf(StreamFormat format) => format == StreamFormat.Tlv ? "application/x-arib-tlv" : "video/MP2T";
+
     public void Push(byte[] chunk)
     {
         if (_left != 0) return;
@@ -906,6 +937,12 @@ internal sealed class Lease(int tuner, string type, string channel)
 
     /// <summary>同期した時点。選局し直さずに済んだら -1</summary>
     public long TunedMs { get; set; } = -1;
+
+    /// <summary>TSMF のヘッダーにある有効な TS の数 (<see cref="Sink.TsmfStreams"/>)。読み出しを始める前に入れる</summary>
+    public int? TsmfStreams { get; set; }
+
+    /// <summary>流すバイト列の形式 (<see cref="Sink.Format"/>)。読み出しを始める前に入れる。TLV ならデスクランブラに通さない</summary>
+    public StreamFormat Format { get; set; }
 
     private long _firstReadMs = -1;
 
@@ -1059,9 +1096,13 @@ internal sealed class Lease(int tuner, string type, string channel)
         // 契約の更新 (EMM) は、どの用途の選局でもカードに渡す (Emm.cs)
         /*
          * **スカパー！プレミアム (SKY) はスクランブルされたまま流す。** B-CAS ではない専用のカードで、まだ扱っていない。
-         * Descrambler に通すと B-CAS のカードに ECM と EMM を渡してしまうので、通さない
+         * Descrambler に通すと B-CAS のカードに ECM と EMM を渡してしまうので、通さない。
+         * **4K の TLV も同じく通さない。** MMT の ECM と EMM は B-CAS のものではなく、ACAS にはまだ対応していない
          */
-        var b25 = Type == ChannelTable.Sky ? null : new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared);
+        var undecoded = Type == ChannelTable.Sky ? "スカパー！プレミアム"
+            : Format == StreamFormat.Tlv ? "4K。ACAS には対応していません"
+            : null;
+        var b25 = undecoded is null ? new Descrambler(Keys.Source, Clock, WantsKeys, Emm.Shared) : null;
         _descrambling = true;
         var decoded = new ArrayBufferWriter<byte>();
         var pushed = false;
@@ -1074,7 +1115,7 @@ internal sealed class Lease(int tuner, string type, string channel)
                 string At(long ms) => ms < 0 ? "-" : $"{ms}ms";
                 Log.Write(b25 is null
                     ? $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
-                        + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms / 復号しない (スカパー！プレミアム)"
+                        + $"最初の TS {At(_firstReadMs)} / 送り出し {Clock.ElapsedMilliseconds}ms / 復号しない ({undecoded})"
                     : $"[{Tuner}] {Channel}: 前の読み出し {At(KickedMs)} / 同期 {At(TunedMs)} / "
                         + $"最初の TS {At(_firstReadMs)} / {b25.HeldAt()} / 送り出し {Clock.ElapsedMilliseconds}ms / {b25.CardUse()}"
                         + (b25.Undecodable > 0 ? $" (スクランブルされたまま {b25.Undecodable} パケット)" : ""));

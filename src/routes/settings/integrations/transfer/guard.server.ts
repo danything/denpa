@@ -1,6 +1,6 @@
 import { json, type RequestEvent } from "@sveltejs/kit";
 
-import { sameOrigin } from "#lib/server/auth.js";
+import { sameOrigin, tokenRefusal } from "#lib/server/auth.js";
 import { running } from "#lib/server/migrate.js";
 import { OffsetMismatch, TransferError } from "#lib/server/transfer.js";
 
@@ -13,13 +13,8 @@ import { OffsetMismatch, TransferError } from "#lib/server/transfer.js";
  *   SvelteKit の Origin の確かめが掛からないので、`Sec-Fetch-Site` (無ければ `Origin`) を自分で見る
  */
 export function refuse(event: RequestEvent): Response | null {
-  if (event.locals.token !== undefined)
-    return json(
-      {
-        message: "アクセストークンでは使えません。ブラウザから操作してください",
-      },
-      { status: 403 },
-    );
+  const refused = tokenRefusal(event.locals);
+  if (refused !== null) return json({ message: refused }, { status: 403 });
   if (!sameOrigin(event.request, event.url))
     return json({ message: "ほかのサイトからは使えません" }, { status: 403 });
   return null;

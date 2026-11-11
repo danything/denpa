@@ -15,6 +15,24 @@ function load(source: string, css = ""): BmlDocument {
 }
 
 describe("XML", () => {
+  test("前置きを付けた script・style も、前置き付きの閉じタグで閉じる (後ろの文書を飲み込まない)", () => {
+    const xml = parseXml(
+      "<bml><head><bml:script>f();</bml:script><bml:style>p{}</bml:style></head><body><p>x</p></body></bml>",
+    );
+    const [head, body] = xml?.children ?? [];
+    if (head?.kind !== "element") throw new Error();
+    expect(
+      head.children.map((c) =>
+        c.kind === "element"
+          ? [c.name, c.children.map((t) => (t.kind === "text" ? t.text : ""))]
+          : null,
+      ),
+    ).toEqual([
+      ["script", ["f();"]],
+      ["style", ["p{}"]],
+    ]);
+    expect(body?.kind === "element" && body.name).toBe("body");
+  });
   test("寛容に読む: 閉じ忘れ・実体参照・CDATA・DOCTYPE・前置き", () => {
     const xml = parseXml(
       '<?xml version="1.0" encoding="EUC-JP"?><!DOCTYPE bml PUBLIC "x" "y"><bml><body><bml:p a="&quot;q&quot;" b=raw>A &amp; B &unknown;<![CDATA[<raw>]]></bml:p><div></body></bml>',

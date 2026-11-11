@@ -1,7 +1,7 @@
 namespace Denpa.Agent.Tests;
 
 /*
- * 偽の IT930x (It930xTests.cs が使う)。振る舞いは ITE の SDK (api/brCmd.c・api/IT9300.c) から決めた。
+ * 偽の IT930x (It930x*Tests.cs が使う)。振る舞いは ITE の SDK (api/brCmd.c・api/IT9300.c) から決めた。
  * EP 0x02 に来たフレームの長さ・チェックサム・シーケンス番号を検査し、合わなければテストを失敗にする (InvalidOperationException)。
  */
 
@@ -132,9 +132,13 @@ internal sealed class FakeIt930x : IUsbDevice
 
     private volatile Func<byte[]?>? _tsSource;
 
+    /// <summary>EP 0x84 の読みを出せない (OpenInStream が IOException を投げる)</summary>
+    public bool TsOpenFails { get; set; }
+
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
     {
         if (endpoint != 0x84) throw new InvalidOperationException($"EP 0x{endpoint:X2} の読みを出した");
+        if (TsOpenFails) throw new IOException("fake-it930x の EP 0x84 の読みを出せません");
         Note($"TS {transferSize} {depth}");
         return new FakeTsIn(this);
     }

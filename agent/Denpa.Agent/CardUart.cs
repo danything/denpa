@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// MB86H47 のスマートカードの UART (MB86H47 の仕様書 13 章)。PIX-DT295 の MB86M01 も同じアドレスと同じ手順なので、
-/// CECH-ZD1 J (<see cref="Mb86h47"/>・<see cref="Zd1jCard"/>) と PIX-DT295 (<see cref="Dt295NativeCard"/>) が使う。
+/// CECH-ZD1 J (<see cref="Mb86h47"/>・<see cref="Zd1jCard"/>) と PIX-DT295 (<see cref="Dt295NativeCard"/>) が使う。ATR と応答のブロックを受け切る手順と速さの読み方は、IT930x の機材の内蔵リーダー (<see cref="It930xCard"/>) も使う。
 ///
 /// <para>
 /// ここにあるのは両方で同じ所だけ: ATR から決める速さ、速さを変える、受けたバイトを読む、T=1 のブロックを送る、ATR と応答のブロックを受け切る。

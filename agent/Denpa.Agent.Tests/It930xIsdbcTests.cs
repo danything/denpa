@@ -31,16 +31,10 @@ public class It930xIsdbcTests
     {
         var clock = new FakeClock();
         return new It930xTuner(
-            "test", 0, () => It930xDevice.Acquire(port, () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle(port))
+            "test", 0, () => It930xDevice.Acquire(port, () => (usb, Pe), clock.Sleep, () => clock.Now, () => It930xFirmware.Code), () => It930xDevice.CloseIfIdle(port, TimeSpan.Zero))
         {
             TsmfTimeoutMs = tsmfTimeoutMs,
         };
-    }
-
-    /// <summary>受信機 0 の TS 入力を、最後に閉じたままか (開ける書き込みより、閉じる書き込みがあと)</summary>
-    private static bool InputClosed(FakeIt930x usb)
-    {
-        lock (usb.Log) return usb.Log.LastIndexOf($"W {TsEnable:X4}=00") > usb.Log.LastIndexOf($"W {TsEnable:X4}=01");
     }
 
     /// <summary>TSMF の搬送波の TS (相対 TS 番号 2 と 3 が有効で、スロットを交互に使う)。1 回の読みで 4 フレーム</summary>
@@ -94,7 +88,7 @@ public class It930xIsdbcTests
             await Assert.That(tuner.Tuned).IsTrue();
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.CableFrequency).IsEqualTo(393_000_000u);
-            // 復調の方式は ISDB-C (仕様書 7A.3)。TS 入力はロックのあとに開ける
+            // 復調の方式は ISDB-C (仕様書 7A.3)。ブリッジの入力は機材を開いたときに開けてあり、出口はロックのあとに付ける
             await Assert.That(bus3.Log).Contains("65 X 17=09");
             await Assert.That(usb.Log).Contains($"W {TsEnable:X4}=01");
             // 有効な TS は相対 TS 番号 2 と 3。1 本目 (0 から数える) は 3
@@ -165,7 +159,10 @@ public class It930xIsdbcTests
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.Tsmf!.Decision).IsEqualTo(TsmfDecision.Missing);
             await Assert.That(tuner.IsdbcFailedSignal!.Locked).IsTrue();
-            await Assert.That(InputClosed(usb)).IsTrue();
+            // 止めるのは出口だけで、ブリッジの入力は閉じない (閉じる書き込みは、開いたときの TS の経路の設定の 1 回だけ)
+            int closes;
+            lock (usb.Log) closes = usb.Log.Count(line => line == $"W {TsEnable:X4}=00");
+            await Assert.That(closes).IsEqualTo(1);
 
             // ヘッダーの無い搬送波で 1 本目を指定したときも同じ失敗
             usb.TsSource = PlainCarrier();
@@ -180,7 +177,7 @@ public class It930xIsdbcTests
     }
 
     [Test]
-    public async Task ロックしても_TS_が来なければ_時間切れで同期しなかった文で失敗にする()
+    public async Task ロックしても_TS_が来なければ_時間切れで_TS_が届かない文で失敗にする()
     {
         await Task.Yield();
         var (usb, _, _) = Fake();
@@ -188,7 +185,8 @@ public class It930xIsdbcTests
         try
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("QC51")!));
-            await Assert.That(error.Message).IsEqualTo(ITuneDevice.SyncFailed);
+            // 1 パケットも届かないのは、電波ではなくブリッジから先で止まっている (仕様書 3.6)。同期しなかった文とは分ける
+            await Assert.That(error.Message).IsEqualTo(It930xTuner.TsMissing);
             await Assert.That(tuner.Tuned).IsFalse();
             await Assert.That(tuner.IsdbcLocked).IsTrue();
             await Assert.That(tuner.Tsmf!.Decision).IsEqualTo(TsmfDecision.Pending);
@@ -237,11 +235,46 @@ public class It930xIsdbcTests
     }
 
     [Test]
-    public async Task ISDB_C_の種別は_受けられる種別に挙げない()
+    public async Task ISDB_C_の種別_CATV_は受けられる種別に挙げ_最初からは選ばない()
     {
         await Task.Yield();
-        // サーバに返す種別は増やしていない (CATV は --tune で確かめるための仮の種別)
-        await Assert.That(It930x.Types).DoesNotContain(ChannelTable.Catv);
-        await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:0")).IsEquivalentTo(new[] { "GR", "BS", "CS", "SKY" });
+        // 並びは GR → BS → CS → CATV → SKY (サーバの種別の並び)
+        await Assert.That(It930x.Types).IsEquivalentTo(new[] { "GR", "BS", "CS", ChannelTable.Catv, ChannelTable.Sky }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:0")).IsEquivalentTo(new[] { "GR", "BS", "CS", "CATV", "SKY" });
+        // ケーブルテレビの回線でしか受けられず、選ぶとチャンネルスキャンが 113 チャンネル増えるので、見つけた受信機には付けない
+        await Assert.That(It930x.DetectedTypes).IsEquivalentTo(new[] { "GR", "BS", "CS" }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    [Test]
+    public async Task TSMF_の有効な_TS_の数を_利用者に渡す()
+    {
+        await Task.Yield();
+        var (usb, _, _) = Fake();
+        usb.TsSource = TsmfCarrier();
+        var tuner = Tuner(usb, "10-6");
+        try
+        {
+            tuner.Tune(ChannelTable.Parse("QC51")!);
+            // 有効な TS は相対 TS 番号 2 と 3 の 2 本 (/denpa/stream の X-Denpa-Tsmf-Streams)
+            await Assert.That(tuner.Tsmf!.Streams).IsEqualTo(2);
+            var sink = new Sink("live", 5, _ => { }) { Owner = new Lease(0, ChannelTable.Catv, "QC51") { TsmfStreams = tuner.Tsmf!.Streams } };
+            await Assert.That(sink.TsmfStreams).IsEqualTo(2);
+            await Assert.That(Sink.TsmfStreamsHeader).IsEqualTo("X-Denpa-Tsmf-Streams");
+
+            // TSMF を使わない搬送波は数を渡さない (ヘッダーを付けない)
+            usb.TsSource = PlainCarrier();
+            Thread.Sleep(50);
+            tuner.Tune(ChannelTable.Parse("QU20")!);
+            await Assert.That(tuner.Tsmf!.Decision).IsEqualTo(TsmfDecision.Passthrough);
+            await Assert.That(tuner.Tsmf!.Streams).IsNull();
+            var plain = new Sink("live", 5, _ => { }) { Owner = new Lease(0, ChannelTable.Catv, "QU20") { TsmfStreams = tuner.Tsmf!.Streams } };
+            await Assert.That(plain.TsmfStreams).IsNull();
+            // プールの外で作った利用者 (選局の無いもの) も null
+            await Assert.That(new Sink("live", 5, _ => { }).TsmfStreams).IsNull();
+        }
+        finally
+        {
+            tuner.Dispose();
+        }
     }
 }

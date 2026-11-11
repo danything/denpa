@@ -82,12 +82,12 @@ public class Tc90522BoardTests
             }, CollectionOrdering.Matching);
             // I2C の速さ
             await Assert.That(Lines(usb, line => Starts(line, "W F6A7", "W F103")).TakeLast(2)).IsEquivalentTo(new[] { "W F6A7=07", "W F103=07" }, CollectionOrdering.Matching);
-            // TS 入力 1〜4 にまとめる設定と同期バイト (0x17・0x27・0x37・0x47)。入力 0 には書かず、閉じておく
+            // 入力を全部閉じてから、TS 入力 1〜4 にまとめる設定と同期バイト (0x17・0x27・0x37・0x47)。入力 0 には書かない。読みを出してから、使う入力 1〜4 を開ける
             await Assert.That(Lines(usb, line => Starts(line, "W DA7", "W DA4", "W DA58", "W DA59"))).IsEquivalentTo(new[]
             {
-                "W DA58=00", "W DA59=00",
+                "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA58=00", "W DA59=00",
                 "W DA74=01", "W DA79=17", "W DA75=01", "W DA7A=27", "W DA76=01", "W DA7B=37", "W DA77=01", "W DA7C=47",
-                "W DA4C=00",
+                "W DA4D=01", "W DA4E=01", "W DA4F=01",
             }, CollectionOrdering.Matching);
             // GPIO (仕様書 2.5): GPIOH7 = 1、GPIOH2 = 0、GPIOH11 = 0 にしてから、電源を入れる (GPIOH7 ← 0、80 ms、GPIOH2 ← 1、20 ms)
             await Assert.That(Lines(usb, line => Starts(line, "W D8B", "W D8C", "W D8D"))).IsEquivalentTo(new[]
@@ -104,7 +104,7 @@ public class Tc90522BoardTests
         finally
         {
             device.Release();
-            It930xDevice.CloseIfIdle("6-1");
+            It930xDevice.CloseIfIdle("6-1", TimeSpan.Zero);
         }
         // 閉じると電源を切る (GPIOH2 ← 0、GPIOH7 ← 1)。受信機を開いていなければ、チップには何も書かない
         await Assert.That(Lines(usb, line => Starts(line, "W D8")).TakeLast(2)).IsEquivalentTo(new[] { "W D8B7=00", "W D8C3=01" }, CollectionOrdering.Matching);
@@ -163,7 +163,7 @@ public class Tc90522BoardTests
         finally
         {
             device.Release();
-            It930xDevice.CloseIfIdle("6-2");
+            It930xDevice.CloseIfIdle("6-2", TimeSpan.Zero);
         }
     }
 
@@ -192,7 +192,7 @@ public class Tc90522BoardTests
         finally
         {
             device.Release();
-            It930xDevice.CloseIfIdle("6-3");
+            It930xDevice.CloseIfIdle("6-3", TimeSpan.Zero);
         }
     }
 
@@ -222,7 +222,7 @@ public class Tc90522BoardTests
         finally
         {
             device.Release();
-            It930xDevice.CloseIfIdle("6-7");
+            It930xDevice.CloseIfIdle("6-7", TimeSpan.Zero);
         }
     }
 
@@ -247,7 +247,7 @@ public class Tc90522BoardTests
         {
             other.Release();
             device.Release();
-            It930xDevice.CloseIfIdle("6-8");
+            It930xDevice.CloseIfIdle("6-8", TimeSpan.Zero);
         }
     }
 
@@ -333,8 +333,8 @@ public class Tc90522BoardTests
         var tuner = Tuner(usb, "6-4", 2, clock, W3);
         tuner.Tune(ChannelTable.Parse("T27")!);
         await Assert.That(tuner.Tuned).IsTrue();
-        // 受信機 2 は TS 入力 3 (仕様書 2.2)。ブリッジの入力を開けてから、復調器の TS の端子を出す (仕様書 11.1)
-        await Assert.That(Lines(usb, line => Starts(line, "W DA4F", "I2C W 2 10 1D"))).IsEquivalentTo(new[] { "I2C W 2 10 1DA8", "W DA4F=01", "I2C W 2 10 1D00" }, CollectionOrdering.Matching);
+        // 受信機 2 は TS 入力 3 (仕様書 2.2)。ブリッジの入力は機材を開いたときに開けてあり、選局したら復調器の TS の端子を出す (仕様書 11.1)
+        await Assert.That(Lines(usb, line => Starts(line, "W DA4F", "I2C W 2 10 1D"))).IsEquivalentTo(new[] { "W DA4F=00", "W DA4F=01", "I2C W 2 10 1DA8", "I2C W 2 10 1D00" }, CollectionOrdering.Matching);
         await Assert.That(bus.Log).Contains($"10 R850 08={Tc90522Tests.R850Ch27}");
         var signal = tuner.Signal()!;
         await Assert.That((signal.Locked, signal.Unit)).IsEqualTo((true, TunerSignal.Db));
@@ -349,7 +349,7 @@ public class Tc90522BoardTests
         await Assert.That((read, buffer[0], buffer[1])).IsEqualTo((188, (byte)0x47, (byte)0x12));
 
         bus.Log.Clear();
-        tuner.Dispose();
+        // 受信の停止 (仕様書 11.2): 端子を止める。最後の受信機なのでスリープは書かない (仕様書 11.3)。機材を閉じるときにブリッジの入力を閉じる
         // 受信の停止 (仕様書 11.2): ブリッジの入力を閉じ、端子を止める。最後の受信機なのでスリープは書かない (仕様書 11.3)
         await Assert.That(Lines(usb, line => Starts(line, "W DA4F")).Last()).IsEqualTo("W DA4F=00");
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "10 1D=A8" }, CollectionOrdering.Matching);
@@ -459,12 +459,12 @@ public class Tc90522BoardTests
         };
         await Assert.That(It930x.Receivable("it930x:3-1:0", Identify)!).IsEquivalentTo(new[] { "BS", "CS" }, CollectionOrdering.Matching);
         await Assert.That(It930x.Receivable("it930x:3-1:3", Identify)!).IsEquivalentTo(new[] { "GR" }, CollectionOrdering.Matching);
-        await Assert.That(It930x.Receivable("it930x:3-2:4", Identify)!).IsEquivalentTo(new[] { "GR", "BS", "CS", "SKY" }, CollectionOrdering.Matching);
+        await Assert.That(It930x.Receivable("it930x:3-2:4", Identify)!).IsEquivalentTo(new[] { "GR", "BS", "CS", "CATV", "SKY" }, CollectionOrdering.Matching);
         await Assert.That(It930x.Receivable("it930x:3-3:0", Identify)!).IsEquivalentTo(new[] { "GR" }, CollectionOrdering.Matching);
         // その機種に無い受信機の番号は、何も受けられない
         await Assert.That(It930x.Receivable("it930x:3-1:4", Identify)!).IsEmpty();
         // 機種が分からない (抜いてある) ときは、どの機種かを決められないので全部
-        await Assert.That(It930x.Receivable("it930x:3-9:0", Identify)!).IsEquivalentTo(new[] { "GR", "BS", "CS", "SKY" }, CollectionOrdering.Matching);
+        await Assert.That(It930x.Receivable("it930x:3-9:0", Identify)!).IsEquivalentTo(new[] { "GR", "BS", "CS", "CATV", "SKY" }, CollectionOrdering.Matching);
         await Assert.That(It930x.Receivable("px4:00001205000960:0", Identify)).IsNull();
     }
 
@@ -596,8 +596,8 @@ public class Tc90522BoardTests
         var clock = new FakeClock();
         It930xDevice One() => Open(side1, "7-3", clock, Q3, Two);
         It930xDevice Two() => Open(side2, "7-4", clock, Q3, One);
-        var first = new It930xTuner("側 1", 2, One, () => It930xDevice.CloseIfIdle("7-3"));
-        var second = new It930xTuner("側 2", 0, Two, () => It930xDevice.CloseIfIdle("7-4"));
+        var first = new It930xTuner("側 1", 2, One, () => It930xDevice.CloseIfIdle("7-3", TimeSpan.Zero));
+        var second = new It930xTuner("側 2", 0, Two, () => It930xDevice.CloseIfIdle("7-4", TimeSpan.Zero));
         try
         {
             first.Tune(ChannelTable.Parse("T27")!);
@@ -611,7 +611,7 @@ public class Tc90522BoardTests
             await Assert.That(after.Any(line => Starts(line, "W D8C3", "W D8B7"))).IsFalse();
             await Assert.That(bus1.Log).IsEquivalentTo(new[] { "10 1D=A8" }, CollectionOrdering.Matching);
             // そのあと側 1 の受信機を開くと、初期化からやり直す (電源は入れ直さない)
-            first = new It930xTuner("側 1", 3, One, () => It930xDevice.CloseIfIdle("7-3"));
+            first = new It930xTuner("側 1", 3, One, () => It930xDevice.CloseIfIdle("7-3", TimeSpan.Zero));
             first.Tune(ChannelTable.Parse("T27")!);
             await Assert.That(bus1.Log.Count(line => line.EndsWith("R850 ?48", StringComparison.Ordinal))).IsEqualTo(2);
             await Assert.That(Lines(side1, _ => true).Skip(before).Any(line => Starts(line, "W D8C3", "W D8B7"))).IsFalse();
@@ -661,7 +661,7 @@ public class Tc90522BoardTests
         {
             linked++;
             return null;
-        }), () => It930xDevice.CloseIfIdle("7-8"), clock.Sleep);
+        }), () => It930xDevice.CloseIfIdle("7-8", TimeSpan.Zero), clock.Sleep);
         await Assert.That(card.Reset().Length).IsEqualTo(13);
         // 電源を入れてからカードを読む (仕様書 1.4)。もう片方の側は取らず (仕様書 2.6)、チップも初期化しない
         await Assert.That(Lines(usb, line => Starts(line, "W D8C3")).Last()).IsEqualTo("W D8C3=00");
@@ -709,11 +709,11 @@ public class Tc90522BoardTests
         var device = Open(usb, "5-1", clock, model);
         try
         {
-            // ブリッジの設定 (仕様書 13.3): 中継の相手は 1 つ目の欄だけ (0x20、バス 3)。TS 入力 0 に同期バイト 0x47、入力 1〜4 は閉じる
+            // ブリッジの設定 (仕様書 13.3): 中継の相手は 1 つ目の欄だけ (0x20、バス 3)。TS 入力 0 に同期バイト 0x47、入力 1〜4 は使わないので開けない
             await Assert.That(Lines(usb, line => Starts(line, "W 4975", "W 4974", "W 4973", "W 4972", "W 4964", "W 4971", "W 4970", "W 496F", "W 496E", "W 4963"))).IsEquivalentTo(new[] { "W 4975=20", "W 4971=03" }, CollectionOrdering.Matching);
             await Assert.That(Lines(usb, line => Starts(line, "W DA7", "W DA4", "W DA50", "W DA58"))).IsEquivalentTo(new[]
             {
-                "W DA58=00", "W DA73=01", "W DA78=47", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00",
+                "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA58=00", "W DA73=01", "W DA78=47", "W DA4C=01",
             }, CollectionOrdering.Matching);
             // GPIOH3 = 1 (電源を切った状態)、GPIOH2 = 0。GPIOH11 (LNB) は設定も操作もしない
             await Assert.That(Lines(usb, line => Starts(line, "W D8B", "W D8C", "W D8D"))).IsEquivalentTo(new[]
@@ -776,7 +776,7 @@ public class Tc90522BoardTests
         {
             tuner.Dispose();
             device.Release();
-            It930xDevice.CloseIfIdle("5-1");
+            It930xDevice.CloseIfIdle("5-1", TimeSpan.Zero);
         }
         // 機材を閉じるときに、電源の GPIO をもう一度は書かない
         await Assert.That(Lines(usb, line => Starts(line, "W D8B3")).Count(line => line == "W D8B3=01")).IsEqualTo(2);
@@ -867,7 +867,7 @@ public class Tc90522BoardTests
         usb.CardAtr = Convert.FromHexString("3BF01200FF9181B17C451F0399");
         usb.CardResponder = _ => T1Protocol.Block(0x00, [0x90, 0x00]);
         var clock = new FakeClock();
-        var card = new It930xCard("ISDB2056 のカード", () => Open(usb, "5-5", clock, model), () => It930xDevice.CloseIfIdle("5-5"), clock.Sleep);
+        var card = new It930xCard("ISDB2056 のカード", () => Open(usb, "5-5", clock, model), () => It930xDevice.CloseIfIdle("5-5", TimeSpan.Zero), clock.Sleep);
         await Assert.That(card.Reset().Length).IsEqualTo(13);
         // 基板の電源 (GPIOH3) は切ったまま (仕様書 1.4・13.3)
         await Assert.That(Lines(usb, line => line == "W D8B3=00")).IsEmpty();
@@ -885,11 +885,11 @@ public class Tc90522BoardTests
         try
         {
             tuner.Tune(ChannelTable.Parse("T27")!);
-            // ブリッジの設定: 中継の相手 0x30 (0x18 の 8 ビット)、バス 3。TS 入力 4 に同期バイト 0x47、入力 0〜3 は閉じる
+            // ブリッジの設定: 中継の相手 0x30 (0x18 の 8 ビット)、バス 3。TS 入力 4 に同期バイト 0x47、入力 0〜3 は使わないので開けない
             await Assert.That(Lines(usb, line => Starts(line, "W 4975", "W 4974", "W 4973", "W 4972", "W 4964", "W 4971", "W 4970", "W 496F", "W 496E", "W 4963"))).IsEquivalentTo(new[] { "W 4975=30", "W 4971=03" }, CollectionOrdering.Matching);
             await Assert.That(Lines(usb, line => Starts(line, "W DA7", "W DA4", "W DA50"))).IsEquivalentTo(new[]
             {
-                "W DA77=01", "W DA7C=47", "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=01",
+                "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA77=01", "W DA7C=47", "W DA50=01",
             }, CollectionOrdering.Matching);
             await Assert.That(bus.Log).IsEquivalentTo((string[])
             [
@@ -992,7 +992,7 @@ public class Tc90522BoardTests
             {
                 "W 4975=CA", "W 4971=03", "W 4974=D8", "W 4970=03", "W 4973=C8", "W 496F=03",
             }, CollectionOrdering.Matching);
-            await Assert.That(Lines(usb, line => Starts(line, "W DA4"))).IsEquivalentTo(new[] { "W DA4D=00", "W DA4E=00", "W DA4F=01" }, CollectionOrdering.Matching);
+            await Assert.That(Lines(usb, line => Starts(line, "W DA4"))).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA4C=01", "W DA4F=01" }, CollectionOrdering.Matching);
             await Assert.That(bus3.Log.Any(line => line.StartsWith("6C T ", StringComparison.Ordinal))).IsTrue();
             // 機種に無い受信機の番号は断る
             var missing = Tuner(usb, "5-7", 3, new FakeClock(), three);
@@ -1066,7 +1066,7 @@ public class Tc90522BoardTests
             // 受信機の数: MLT5 系 5 × 3、Q3・W3 系 4 × 7 (Q3PE4 は 2 つの側)、MLT8PE 5 + 3、DTV02A-4TS-P 4、受信機が 1 つの機種 5
             await Assert.That(specs.Count).IsEqualTo(15 + 28 + 8 + 4 + 5);
             string Types(string device) => string.Join("/", specs.Single(spec => spec.Device == device).Types);
-            // CXD2856ER の受信機は GR・BS・CS (SKY は最初からは選ばない)。Q3・W3 系は受信機ごと。受信機が 1 つの機種は機種ごと
+            // CXD2856ER の受信機は GR・BS・CS (CATV と SKY は最初からは選ばない)。Q3・W3 系は受信機ごと。受信機が 1 つの機種は機種ごと
             var port = (int product) => $"1-{It930x.Family.ToList().FindIndex(model => model.Product == product) + 1}";
             await Assert.That(Types($"it930x:{port(0x024E)}:4")).IsEqualTo("GR/BS/CS");
             await Assert.That(Types($"it930x:{port(0x0252)}:2")).IsEqualTo("GR/BS/CS");

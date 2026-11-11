@@ -8,7 +8,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { TsHead } from "#lib/ts/ts-head.js";
 
-import type { Recording, Reservation } from "../types";
+import { isSatellite, type Recording, type Reservation } from "../types";
 import { fileSize } from "./chase";
 import { config } from "./config";
 import { now, orm } from "./db";
@@ -533,10 +533,7 @@ async function pump(
                  * **衛星で選局できなかったら、放送の一覧を読み直す** (`lineup-follow.refreshLineup`)。
                  * 再編で TS が移ったのなら、書き換えたあとの掛け直しで録れる
                  */
-                if (
-                  error instanceof TuneError &&
-                  (service.type === "BS" || service.type === "CS")
-                ) {
+                if (error instanceof TuneError && isSatellite(service.type)) {
                   void refreshLineup(service.type).catch(() => undefined);
                 }
                 throw error;
@@ -598,7 +595,7 @@ async function pump(
               }
               if (Date.now() - savedEpgAt >= EPG_SAVE_INTERVAL) {
                 savedEpgAt = Date.now();
-                savePrograms(epg.all());
+                savePrograms(epg.all(), { type: service.type });
               }
             }
 
@@ -673,7 +670,7 @@ async function pump(
         sink.end((error?: Error | null) => (error ? reject(error) : resolve()));
       });
       // 途中で終わっても、読めたぶんの番組表は残す
-      savePrograms(epg.all());
+      savePrograms(epg.all(), { type: service.type });
     }
   } catch (error) {
     // 終了時刻に達して自分で abort した場合は正常終了。それ以外だけ失敗にする

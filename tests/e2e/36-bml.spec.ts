@@ -312,7 +312,7 @@ test.describe("データ放送を常に受信する端末", () => {
     await expect(page.getByTestId("live-remote")).toBeVisible();
     await page.getByTestId("live-remote-22").click();
     await expect.poll(text).toBe("d1|k22,u22,");
-    // 受信は続けているので、開いても頼み直さない
+    // 受信は続けているので、開いてもリクエストし直さない
     expect(await asked(page)).toEqual([{ type: "data", on: true }]);
   });
 

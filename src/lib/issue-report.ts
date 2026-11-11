@@ -193,7 +193,7 @@ export function initialLogs(
 }
 
 /**
- * **開く URL。** 確かめる画面で書き足して上限を超えたら、ログの頭 (古いほう) から削り、削った数を頭に書く。
+ * **開く URL。** 確かめる画面で書き足して上限を超えたら、ログの先頭 (古いほう) から削り、削った数を先頭に書く。
  * タイトルと環境が長すぎるときは、それぞれの上限で切る
  */
 export function issueUrl(
@@ -217,7 +217,7 @@ export function issueUrl(
   const room = limit - baseLength(fields);
   let size = lines.reduce((sum, line) => sum + cost(line), 0) - 3; // 最後の行に改行は無い
   let dropped = 0;
-  const note = (count: number) => `(長いので頭の ${count} 行を省きました)`;
+  const note = (count: number) => `(長いので先頭の ${count} 行を省きました)`;
   while (dropped < lines.length && size + cost(note(dropped + 1)) > room) {
     size -= cost(lines[dropped]!);
     dropped += 1;
@@ -225,7 +225,7 @@ export function issueUrl(
   const kept = lines.slice(dropped);
   const logs = [note(dropped), ...kept].join("\n");
   const url = make(logs);
-  // 頭の 1 行も入らない (タイトルが上限まで長いなど) ときは、ログを空にする
+  // 先頭の 1 行も入らない (タイトルが上限まで長いなど) ときは、ログを空にする
   return url.length <= limit
     ? { url, dropped }
     : { url: make(""), dropped: lines.length };
@@ -281,7 +281,7 @@ const OS_NAME: Record<string, string> = {
 
 /**
  * denpa とエージェントのバージョンが同じか。**2 つは揃えて使うもの**。
- * 頭の `v` は見ない (`v1.2.3` と `1.2.3` は同じ)。どちらも `dev` (main で組んだもの) なら同じとみる
+ * 先頭の `v` は見ない (`v1.2.3` と `1.2.3` は同じ)。どちらも `dev` (main で組んだもの) なら同じとみる
  */
 export function sameVersion(a: string, b: string): boolean {
   const bare = (version: string) => version.trim().replace(/^v/, "");

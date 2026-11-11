@@ -16,7 +16,11 @@ import {
 
 import { toHalfWidth } from "../fold";
 import { type Airing, mainOf, splitOf, type Station } from "../subchannels";
-import { ALL_CHANNEL_TYPES, decodable } from "../types";
+import {
+  ALL_CHANNEL_TYPES,
+  type ChannelType,
+  decodableService,
+} from "../types";
 import { config } from "./config";
 import { affected, now, orm } from "./db";
 import { emit } from "./events";
@@ -57,16 +61,27 @@ export function currentServices() {
 
 /**
  * いま選局できる局の数を種別ごとに。局が無いときの案内に使う (`#lib/channel-notice.ts`)。
- * 局が 1 つも無い種別は入らない
+ * 局が 1 つも無い種別は入らない。復号できない局 (SKY など) は番組表とライブに出ないので数えない (`services.decodable`)
  */
 export function serviceCounts(): Record<string, number> {
   const rows = orm()
     .select({ type: services.type, n: count() })
     .from(services)
-    .where(currentServices())
+    .where(and(currentServices(), eq(services.decodable, true)))
     .groupBy(services.type)
     .all();
   return Object.fromEntries(rows.map((row) => [row.type, row.n]));
+}
+
+/**
+ * いま選局できる局の数。**復号できない局も数える** (受信の設定の「受信できるチャンネル」に並ぶ局)。
+ * 局が無いときの案内で、スキャンへ案内するか、復号できる局が無いことを言うかを分けるのに使う (`#lib/channel-notice.ts`)
+ */
+export function listedServices(): number {
+  return (
+    orm().select({ n: count() }).from(services).where(currentServices()).get()
+      ?.n ?? 0
+  );
 }
 
 /**
@@ -81,52 +96,46 @@ export function serviceCounts(): Record<string, number> {
  */
 export const SERVICE_ORDER =
   "remote_control_key IS NULL, remote_control_key, service_id";
-/** 種別ごとの順。地上波 → BS → CS → SKY。テレビの切り替えもこの順 */
-export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 WHEN 'CS' THEN 2 ELSE 3 END`;
-/** 地上波 → BS → CS → SKY を JS で並べるときのキー。知らない種別は後ろ */
+/** 種別ごとの順。地上波 → BS → CS → CATV → SKY。テレビの切り替えもこの順 */
+export const SERVICE_TYPE_ORDER = `CASE type WHEN 'GR' THEN 0 WHEN 'BS' THEN 1 WHEN 'CS' THEN 2 WHEN 'CATV' THEN 3 ELSE 4 END`;
+/** 地上波 → BS → CS → CATV → SKY を JS で並べるときのキー。知らない種別は後ろ */
 export function typeRank(type: string): number {
   const at = (ALL_CHANNEL_TYPES as readonly string[]).indexOf(type);
   return at === -1 ? ALL_CHANNEL_TYPES.length : at;
 }
 
 /**
- * 番組表とライブに出す局。**名前の付いた番組が 1 つも無い局は出さない。**
+ * 番組表とライブに出す局。
+ *
+ * - **本チャンネルは、番組が無くても出す。** スキャンしたばかりのケーブルの局や、番組表を読めない 4K の局も
+ *   選べるようにする。入れたばかりで番組表がまだ空のときも、ここから先へ進める
+ * - **終わったチャンネルは出さない。** 局名が空か「-」だけの局。BS103 (旧 NHK BSプレミアム) は
+ *   2024 年 3 月で放送を終えたが、SDT には枠が残っていて、局名は「-」に消されている
+ * - **サブチャンネルは、分割放送の間だけ出す** (`splitOf`。番組表と同じ決め方)。NHK総合2 や Eテレ2/3 は、
+ *   マルチ編成をしていないときは本チャンネルと同じ映像を流していて、EIT には名前の無い番組か、
+ *   重なる時間の本チャンネルの番組と同じ名前の番組が並ぶ。番組が 1 つも無いサブも、同じ番組を流しているものとして外す
  *
  * 番組表はこれを放送局 (同じ TS) ごとに当てる (サブチャンネルの列は分割放送のある日だけ立てる。
  * `#lib/subchannels.ts`)。
  *
- * 出したくないものが 2 種類ある。どちらも「枠はあるが放送していない」。
- *
- * - **終わったチャンネル。** BS103 (旧 NHK BSプレミアム) は 2024 年 3 月で放送を
- *   終えたが、SDT には枠が残っている (局名も消されて「-」)。番組は 1 つも来ない
- * - **本チャンネルと同じ番組を流しているサブチャンネル。** NHK総合2 や Eテレ2/3 は、マルチ編成をして
- *   いないときは本チャンネルと同じ映像を流していて、EIT には**名前の無い番組**が
- *   並ぶ。**名前が付いていても本チャンネルと同じ番組**のこともある (重なる時間の
- *   本チャンネルの番組と同じ名前)。どちらも同じ番組を流しているものとして外す。決め方は番組表と同じ
- *   (`splitOf`)
- *
  * **局の行も、スキャンの結果も消さない。** マルチ編成が始まればその日の番組表に
- * 名前が付いて出てくるし、放送が再開されれば勝手に戻る。
- *
- * **1 局も残らないときは全部出す。** 入れたばかりで番組表がまだ空のときに
- * 列ごと消えると、何も映らない画面から先へ進めない
+ * 名前が付いて出てくるし、放送が再開されれば局名が戻って出てくる
  */
-export function airing<S extends Station, P extends Omit<Airing, "id">>(
-  services: S[],
-  programs: P[],
-): S[] {
+export function airing<
+  S extends Station & { name: string },
+  P extends Omit<Airing, "id">,
+>(services: S[], programs: P[]): S[] {
   const main = mainOf(services);
   const split = splitOf(programs, main);
-  const named = new Set(
-    programs.filter((program) => program.name !== "").map((p) => p.service_id),
+  return services.filter((service) =>
+    main.get(service.id) === service.id
+      ? !ENDED_NAME.test(service.name)
+      : split.has(service.id),
   );
-  const shown = services.filter(
-    (service) =>
-      named.has(service.id) &&
-      (main.get(service.id) === service.id || split.has(service.id)),
-  );
-  return shown.length === 0 ? services : shown;
 }
+
+/** 放送を終えた枠の局名。空か「-」だけ (BS103。全角の「－」で来ても同じに見る) */
+const ENDED_NAME = /^[\s\-－]*$/u;
 
 /**
  * **いまライブで選べる局。** 番組の詳細に「視聴」を出すかどうかに使う
@@ -137,9 +146,8 @@ export function airing<S extends Station, P extends Omit<Airing, "id">>(
  * 別の局が映る**。実機の NHKEテレ2/3 で起きた (本チャンネルと同じ番組を流しているサブチャンネルは、
  * 分割放送をしていない間は名前の無い枠が並ぶ)。
  *
- * 局は種別で絞らない。ライブ画面が地上波・BS・CS をまとめて扱っているので、
- * 絞ると `airing` の「1 局も残らなければ全部出す」の効き方がずれる。
- * 外すのは、ライブ画面も外している復号できない種別 (SKY) だけ
+ * 局は種別で絞らない (ライブ画面も地上波・BS・CS をまとめて扱っている)。
+ * 外すのは、ライブ画面も外している復号できない局 (`services.decodable`) だけ
  *
  * **出す画面ごとに書かない。** 番組表と検索で別々に書いていると、片方だけ
  * 直したときに同じ番組の詳細でも「視聴」が出たり出なかったりする
@@ -149,15 +157,16 @@ export function watchableServices(at: number): number[] {
     orm()
       .select({
         id: services.id,
+        name: services.name,
         service_id: services.service_id,
+        network_id: services.network_id,
         channel: services.channel,
         type: services.type,
       })
       .from(services)
-      .where(currentServices())
-      .all()
-      // 復号できない種別 (SKY) の局はライブに出さない (`decodable`)
-      .filter((service) => decodable(service.type)),
+      // 復号できない局はライブに出さない
+      .where(and(currentServices(), eq(services.decodable, true)))
+      .all(),
     orm()
       .select({
         service_id: programs.service_id,
@@ -197,7 +206,11 @@ export function syncServices(channels: AgentChannel[]): number {
     for (const channel of channels) {
       if (blocked.has(`${channel.type}:${channel.channel}`)) continue;
       for (const service of channel.services) {
-        const id = serviceKey(channel.networkId, service.serviceId);
+        const id = serviceKey(
+          channel.networkId,
+          service.serviceId,
+          channel.type,
+        );
         // 映像の入っていないサービスは録っても仕方がない
         if (service.serviceType !== DIGITAL_TV) {
           dropped.push(id);
@@ -214,6 +227,10 @@ export function syncServices(channels: AgentChannel[]): number {
             service_type: service.serviceType,
             channel: channel.channel,
             remote_control_key: channel.remoteControlKeyId,
+            decodable: decodableService(
+              channel.type,
+              service.caSystemIds ?? [],
+            ),
             // ロゴは放送波から取得したときに立てる (logo.ts)
             has_logo: false,
             updated_at: at,
@@ -228,6 +245,7 @@ export function syncServices(channels: AgentChannel[]): number {
               service_type: sql`excluded.service_type`,
               channel: sql`excluded.channel`,
               remote_control_key: sql`excluded.remote_control_key`,
+              decodable: sql`excluded.decodable`,
               updated_at: sql`excluded.updated_at`,
             },
           })
@@ -283,11 +301,13 @@ function widthKept(current: string | undefined, incoming: string): string {
 export function widenServices(
   networkId: number,
   found: { serviceId: number; name: string }[],
+  /** 読んだチャンネルの種別。CATV の局はアンテナの局と ID が違う (`tuner.serviceKey`) */
+  type: ChannelType,
 ): number {
   let changed = 0;
   orm().transaction((tx) => {
     for (const service of found) {
-      const id = serviceKey(networkId, service.serviceId);
+      const id = serviceKey(networkId, service.serviceId, type);
       const row = tx
         .select({ name: services.name })
         .from(services)
@@ -436,7 +456,10 @@ export function syncServicesOnly(channels: AgentChannel[]): number {
  * 番組が丸ごと出なくなる。networkId と合わせて引き直す。
  *
  * **受信できないチャンネルの局は入れない** (`reception.ts`)。衛星はほかの中継器からもその局の番組表が届くので、
- * 入れるとルールが録れない予約を立てる
+ * 入れるとルールが録れない予約を立てる。**復号できない局も入れない** (`services.decodable`。番組表に出さず、録れない)。
+ *
+ * **CATV の局とアンテナの局は分ける** (`indexKey`)。CATV が再送信する BS の EIT には、アンテナの BS と同じ
+ * original_network_id と service_id が入っている。分けないと、CATV で読んだ番組表がアンテナの局に入る
  */
 function serviceIdIndex(): Map<string, number> {
   const blocked = unreceivableChannels();
@@ -449,9 +472,17 @@ function serviceIdIndex(): Map<string, number> {
       channel: services.channel,
     })
     .from(services)
+    .where(eq(services.decodable, true))
     .all()
     .filter((s) => !blocked.has(`${s.type}:${s.channel}`));
-  return new Map(rows.map((s) => [`${s.network_id}:${s.service_id}`, s.id]));
+  return new Map(
+    rows.map((s) => [indexKey(s.type, s.network_id, s.service_id), s.id]),
+  );
+}
+
+/** `serviceIdIndex` のキー。CATV かどうか・original_network_id・service_id */
+function indexKey(type: string, networkId: number, serviceId: number): string {
+  return `${type === "CATV"}:${networkId}:${serviceId}`;
 }
 
 /**
@@ -459,11 +490,13 @@ function serviceIdIndex(): Map<string, number> {
  *
  * 書いた局には番組表を集めた時刻 (`services.epg_at`) を付ける。番組表の取得が次に行くかをこれで決める
  * (`epg-collect.lastCollected`)。ライブが写す p/f (`followOnAir`) は `onAir` を渡して付けない。
- * p/f は現在と次の番組だけで、その先の番組表は埋まっていないため
+ * p/f は現在と次の番組だけで、その先の番組表は埋まっていないため。
+ *
+ * `type` は番組表を読んだチャンネルの種別。CATV で読んだ番組は CATV の局にだけ書く (`serviceIdIndex`)
  */
 export function savePrograms(
   events: EitEvent[],
-  { onAir = false }: { onAir?: boolean } = {},
+  { type, onAir = false }: { type: string; onAir?: boolean },
 ): number {
   const index = serviceIdIndex();
   /** その表がシリーズを言っていれば (`series_said`) 新しい値、言っていなければ前のまま */
@@ -569,7 +602,7 @@ export function savePrograms(
       if (!timed(event)) continue;
       // チャンネル設定に無いサービスの番組は録れないので捨てる
       const serviceId = index.get(
-        `${event.originalNetworkId}:${event.serviceId}`,
+        indexKey(type, event.originalNetworkId, event.serviceId),
       );
       if (serviceId === undefined) continue;
       const extended =
@@ -578,6 +611,7 @@ export function savePrograms(
         event.originalNetworkId,
         event.serviceId,
         event.eventId,
+        type,
       );
       const endAt = event.startAt + event.duration;
       overlap.run({
@@ -662,9 +696,14 @@ export function savePrograms(
  * 食い違うのは延長・繰り下げ・差し替えのときだけ。通知を受けた画面 (ライブの一覧・
  * テレビのアプリ) が読み直す
  *
+ * `type` は開いているチャンネルの種別 (`savePrograms`)
+ *
  * @returns 書いたか
  */
-export function followOnAir(events: readonly EitEvent[]): boolean {
+export function followOnAir(
+  events: readonly EitEvent[],
+  type: string,
+): boolean {
   const differs = events.some((event) => {
     // 時刻や尺が未定の番組は写せない (`savePrograms` も捨てる)
     if (!timed(event)) return false;
@@ -678,7 +717,12 @@ export function followOnAir(events: readonly EitEvent[]): boolean {
       .where(
         eq(
           programs.id,
-          programKey(event.originalNetworkId, event.serviceId, event.eventId),
+          programKey(
+            event.originalNetworkId,
+            event.serviceId,
+            event.eventId,
+            type,
+          ),
         ),
       )
       .get();
@@ -691,7 +735,7 @@ export function followOnAir(events: readonly EitEvent[]): boolean {
     );
   });
   // 知らない局 (チャンネル設定に無い) のぶんは書かれない。書けなければ知らせない
-  if (!differs || savePrograms([...events], { onAir: true }) === 0)
+  if (!differs || savePrograms([...events], { type, onAir: true }) === 0)
     return false;
   emit("programs");
   return true;

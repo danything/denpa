@@ -84,7 +84,7 @@ export const FILTERS = [
  * **見てほしいこと** (手を止めてほしいもの)。絞り込みと同じ仕組みで、件数があるときだけ出す
  * (広い画面はサイドバーの絞り込みの続き、狭い画面は絞り込みのチップの後ろ。どちらも注意の色)
  */
-export const ATTENTION_FILTERS = [
+const ATTENTION_FILTERS = [
   { id: "conflict", label: "競合" },
   { id: "failed", label: "失敗" },
   { id: "missed", label: "録り逃し" },

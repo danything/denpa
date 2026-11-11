@@ -9,6 +9,7 @@ import {
   expect,
   goto,
   makeRule,
+  pairToken,
   recordOne,
   setRecording,
   test,
@@ -77,19 +78,7 @@ test.describe("denpa を別の機械へ移す", () => {
   }
 
   test("アクセストークンでは断られる", async ({ request, stack }) => {
-    // テレビのアプリと同じようにペアリングしてアクセストークンを貰う (31-device と同じ手順)
-    const code = await (
-      await request.post("/api/device/code", { data: { name: "E2E の移す" } })
-    ).json();
-    expect(
-      (await request.post("/device", { form: { code: code.userCode } })).ok(),
-    ).toBe(true);
-    const { token } = await (
-      await request.post("/api/device/token", {
-        data: { deviceCode: code.deviceCode },
-      })
-    ).json();
-    expect(token).toMatch(/^denpa_/);
+    const token = await pairToken(request, "E2E の移す");
 
     const headers = {
       authorization: `Bearer ${token}`,

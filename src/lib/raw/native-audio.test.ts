@@ -343,6 +343,41 @@ test("映像の時刻が止まったまま音だけ進んだら、映像が動�
   worker.pcm(1, 10.31);
   expect(context.sources.length).toBeGreaterThan(count);
 });
+test("しばらく再生したあとで映像の時刻が止まったときも、組み直したあとに音を予約しない", () => {
+  const { video, worker, context } = setup();
+  worker.pcm(1, 10.1);
+  // 2 秒は映像と音がそろって進んだ
+  context.currentTime = 52;
+  video.currentTime = 12;
+  worker.pcm(1, 12.05);
+  const count = context.sources.length;
+  // そこで映像だけ止まった
+  context.currentTime = 52.1;
+  worker.pcm(1, 12.1);
+  expect(context.sources).toHaveLength(count);
+  expect(context.sources.at(-1)!.stopped).toBe(true);
+  // 動き出したら、その位置から鳴らす
+  context.currentTime = 52.5;
+  video.currentTime = 12.02;
+  worker.pcm(1, 12.15);
+  expect(context.sources.length).toBeGreaterThan(count);
+});
+test("数秒待たされてから再生に戻ったら、最初の組み直しで止まったとみずに音を予約する", () => {
+  const { video, worker, context } = setup();
+  worker.pcm(1, 10.1);
+  // WebKit は waiting を出さずに readyState だけ落とすことがある。その間の刻み
+  video.readyState = 2;
+  for (let i = 1; i <= 5; i++) {
+    context.currentTime = 50 + i;
+    worker.pcm(1, 10.1 + (i * 1024) / 48000);
+  }
+  const count = context.sources.length;
+  // 再生に戻った。時計は 5 秒進んだので組み直すが、映像はこれから動く
+  video.readyState = 4;
+  context.currentTime = 55.02;
+  worker.pcm(1, 10.2);
+  expect(context.sources.length).toBeGreaterThan(count);
+});
 test("映像が進んでいて時計だけずれたときは、組み直してすぐ鳴らす", () => {
   const { video, worker, context } = setup();
   worker.pcm(1, 10.1);

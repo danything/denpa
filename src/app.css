@@ -406,7 +406,7 @@
 
 /*
  * ---- 自分の書き込みの縦線 (`.mine-line`)。字の頭に短い縦線 ----
- * 実況の流れるコメントと一覧。「いまいる場所」の左の縦線 (`.menu-item` など) と同じ形 (幅 2px・角 1px・主の色) で、
+ * 実況の流れるコメントと一覧。「いまいる場所」の左の縦線 (`.menu-item` など) と同じ形 (幅 `--dp-mark`・両端は半円・主の色) で、
  * 「自分のもの」も同じ印で示す。映像の上では使う側が `--mine-line` で色を替える (`JikkyoLayer`)
  */
 .mine-line::before {
@@ -916,9 +916,6 @@ progress[value]::-webkit-progress-value {
   .guide-bar {
     padding-inline: var(--dp-space-2);
   }
-  .guide-bar > .segmented > a.button {
-    padding-inline: 0.375rem;
-  }
 }
 /*
  * **スマホの形 (下のタブがある形) では、ほかの画面の操作の 1 行と同じく、下のタブのすぐ上にカプセルで浮かせる** (下の `.dock`)。
@@ -1314,6 +1311,17 @@ input[type="checkbox"]:not([role="switch"]) {
   background-size: 1rem var(--dp-mark);
 }
 /*
+ * **メニューを開くボタンは、中の設定が既定から変わっているときに同じ短い下線を引く** (`data-on`。ホームの「⋯」・切り抜きの「絞り込み」)。
+ * 開いているかは `aria-expanded` で言うので `aria-pressed` は使わず、字の色も変えない。
+ * 主の色の点は「まだ見ていないもの」の印なので使わない (1 つの見た目に 1 つの意味)
+ */
+button[data-on] {
+  background-image: linear-gradient(var(--pico-primary), var(--pico-primary));
+  background-repeat: no-repeat;
+  background-position: center bottom 0.2rem;
+  background-size: 1rem var(--dp-mark);
+}
+/*
  * **選んでいるものの字の幅いっぱいの下線** (`.pick-line`。横に並ぶチップ・日付。docs/design.md の「印の意味」)。
  * 選んでいる項目 (`aria-pressed="true"`・`aria-current`・`.selected`) は主の色の太字と、疑似要素 1 本の下線
  * (`text-decoration` だと名前と数 (`.num`) に別々の線が付き、2 本に切れて見えた)。
@@ -1572,6 +1580,16 @@ a.button {
   margin: 0;
   border-radius: var(--dp-btn-radius);
   box-shadow: none;
+}
+/*
+ * **768px より狭い画面ではタブの左右の余白を詰める** (番組表とライブで同じ)。ケーブルの局がある家はタブが 4 つ
+ * (ライブは「実況」を足して 5 つ) になり、詰めないと 360px の幅に収まらない。
+ * それでも入りきらない並びは横に流す (番組表は操作の 1 行ごと、ライブはタブの並び。`live/+page.svelte` の `.type-tabs`)
+ */
+@media (max-width: 767.98px) {
+  [role="group"].segmented > :is(button, a.button) {
+    padding-inline: 0.375rem;
+  }
 }
 [role="group"].segmented > :is(button, a.button):hover {
   --pico-background-color: var(--dp-hover-soft);

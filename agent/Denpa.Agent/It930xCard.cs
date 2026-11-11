@@ -220,7 +220,7 @@ public sealed class It930xCard : ICardLink
             var waiting = (int)bridge.ReadRegister(RxLength);
             if (waiting > 0)
             {
-                // 255 バイトが 19200 ボーで届き切る時間 (約 150 ms) より長く待たない。増え続けるなら、そこまでに届いたぶんを読む
+                // 255 バイトが 19200 ボーで届き切る時間 (約 150 ms) を越える 256 ms (SettleLimit) より長く待たない。増え続けるなら、そこまでに届いたぶんを読む
                 for (var settle = 0; settle < SettleLimit; settle++)
                 {
                     _delay(SettleMs);

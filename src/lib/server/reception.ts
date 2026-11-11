@@ -11,15 +11,16 @@
  *   チューナーの問題で、チャンネルの問題ではないので決めない (受信できなくなってから、ほかのチャンネルが
  *   1 つも受信できていなければ決めない)
  * - 同じ周回の中の失敗は 1 回と数える (`RECOUNT_AFTER`)
- * - チューナーの空き待ちは失敗に数えない (呼ぶ側が渡さない)
+ * - チューナーの空き待ち・途中で切れた回・同じ周回で読み直す前の選局の失敗は、失敗に数えない (呼ぶ側が渡さない。`epg-collect.receptionFailed`)
  *
  * 受信できないチャンネルの局は、番組表・ライブ・ルールの対象から外す (`epg.syncServices`)。**外すのは BS と CS だけ。**
  * 地上波はスキャンで受信できたものだけが入っているので、続けて選局できなくても外さない (知らせるのは別)。
+ * CATV と SKY もスキャンで受信できたものだけが入るので外さない (SKY は番組表を取得しないので、ここでは確かめない)。
  * 番組表の取得はそのチャンネルにも行き続けるので、受信できるようになれば戻る
  */
 import { and, eq, gte, ne } from "drizzle-orm";
 
-import type { ChannelType } from "../types";
+import { type ChannelType, isSatellite } from "../types";
 import { now, orm } from "./db";
 import { channelReception } from "./schema";
 
@@ -85,7 +86,7 @@ export function recordFailed(
   const since = row?.failing_since ?? at;
   const others = othersReceived(type, channel, since);
   // 地上波は外さない (スキャンで受信できたものだけが入っている。続けて選局できないときは知らせるだけ)
-  const unreceivable = type !== "GR" && failures >= MARK_AFTER && others;
+  const unreceivable = isSatellite(type) && failures >= MARK_AFTER && others;
   orm()
     .insert(channelReception)
     .values({
@@ -138,7 +139,7 @@ export function checkedAt(): Map<string, number> {
 
 /**
  * チャンネルごとの受信の様子 (設定の「受信」に出す)。
- * 一度も確かめていない衛星のチャンネルは「確認中」。地上波はスキャンで受信できたものだけが入るので「確認中」にしない
+ * 一度も確かめていない衛星のチャンネルは「確認中」。地上波・CATV・SKY はスキャンで受信できたものだけが入るので「確認中」にしない
  */
 export function receptionOf(
   channels: readonly { type: string; channel: string }[],
@@ -156,7 +157,7 @@ export function receptionOf(
     const row = rows.get(key);
     if (row?.unreceivable === true) out.set(key, "unreceivable");
     else if (row?.ok_at === null || row?.ok_at === undefined)
-      out.set(key, type === "GR" ? "ok" : "checking");
+      out.set(key, isSatellite(type) ? "checking" : "ok");
     else out.set(key, "ok");
   }
   return out;

@@ -158,7 +158,7 @@ test.describe("ルールの一覧", () => {
     expect(Math.round((side?.y ?? 0) + (side?.height ?? 0))).toBe(768);
     await expect(page.getByTestId("rule-new")).toBeInViewport({ ratio: 1 });
 
-    // 絞り込みを替えても (当たる行が同じなら) 見ていた所から跳ばない
+    // 絞り込みを替えても (当たる行が同じなら) 見ていた所から飛ばない
     const before = await page.evaluate(() => scrollY);
     await page.getByTestId("rule-filter-on").click();
     await expect(page.getByTestId("rule-filter-on")).toHaveAttribute(

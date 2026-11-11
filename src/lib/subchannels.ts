@@ -13,6 +13,7 @@
  * いま本チャンネルと同じ番組を流しているサブを外す (`epg.airing`)。決め方はここ (`splitOf`) と同じ
  */
 import { toHalfWidth } from "./fold";
+import { origin } from "./types";
 
 /** 鍵ごとの並びに足す */
 function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
@@ -28,6 +29,8 @@ export interface Station {
   /** 物理チャンネル (`T27`、`BS01:16400`)。選局に使う名前で、1 つの TS を指す */
   channel: string;
   type: string;
+  /** original_network_id。CATV の局が元はどの放送かを見る (`types.origin`) */
+  network_id: number;
 }
 
 /** 表に置く番組 */
@@ -54,16 +57,21 @@ export interface Airing {
  *   BS朝日1・2・3 は 3 つとも `BS01:16400`。WOWOW のプライム・ライブ・シネマ (191〜193) は
  *   同じ会社でも TS が別々 (`BS03:16432` / `BS05:17488` / `BS05:17489`) で、それぞれが本チャンネル。
  *   サービス ID の番号の範囲や事業者 (broadcaster_id) で束ねると、ここを取り違える
+ * - **CATV は、地上波か BS を再送信している TS だけ束ねる** (`types.origin`)。中身は元の放送の TS のままなので、
+ *   地上波・BS と同じ決まりになる。CS の再送信と CATV の自主放送は束ねない
  * - **CS と SKY は束ねない。** 1 つの TS に別々の会社の局が入っていて、同じ TS でも
  *   同じ番組を流す仲間とは限らない
  *
  * チャンネルの名前は TS ごとに 1 つ (衛星は名前に TSID が入っている。`satellite.ts`)
  */
 export function mainOf(services: Station[]): Map<number, number> {
-  const tsOf = (service: Station) =>
-    service.type === "GR" || service.type === "BS"
+  const tsOf = (service: Station) => {
+    const kind =
+      service.type === "CATV" ? origin(service.network_id) : service.type;
+    return kind === "GR" || kind === "BS"
       ? `${service.type}:${service.channel}`
       : null;
+  };
   const first = new Map<string, Station>();
   for (const service of services) {
     const ts = tsOf(service);

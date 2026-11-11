@@ -100,7 +100,7 @@ public class It930xDeviceTests
         finally
         {
             device.Release();
-            It930xDevice.CloseIfIdle("9-1");
+            It930xDevice.CloseIfIdle("9-1", TimeSpan.Zero);
         }
         // 閉じると電源を切る (仕様書 1.5: GPIOH2 ← 0、GPIOH7 ← 1)
         await Assert.That(usb.Log.Where(line => line.StartsWith("W D8", StringComparison.Ordinal)).TakeLast(2)).IsEquivalentTo(new[] { "W D8B7=00", "W D8C3=01" });
@@ -157,7 +157,7 @@ public class It930xDeviceTests
         };
         try
         {
-            It930xDevice.CloseIfIdle("9-6");
+            It930xDevice.CloseIfIdle("9-6", TimeSpan.Zero);
             await Assert.That(started).IsEqualTo(1);
             await Assert.That(reopening.Join(TimeSpan.FromSeconds(10))).IsTrue();
             await Assert.That(failure).IsNull();
@@ -172,7 +172,7 @@ public class It930xDeviceTests
         {
             usb.OnNote = null;
             second?.Release();
-            It930xDevice.CloseIfIdle("9-6");
+            It930xDevice.CloseIfIdle("9-6", TimeSpan.Zero);
         }
     }
 
@@ -195,29 +195,186 @@ public class It930xDeviceTests
         finally
         {
             device.Release();
-            It930xDevice.CloseIfIdle("9-2");
+            It930xDevice.CloseIfIdle("9-2", TimeSpan.Zero);
         }
     }
 
     [Test]
-    public async Task 選局するとその受信機の_TS_入力を開け_捨てるとスリープにして閉じる()
+    public async Task 開くと_EP_0x84_の読みを出してから入力を全部開け_閉じるときは入力を閉じてから読みを止める()
+    {
+        var (usb, _, _) = Fake();
+        var device = Open(usb, "9-27", new FakeClock());
+        List<string> log;
+        lock (usb.Log) log = [.. usb.Log];
+        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。読みを出し (TS 65424 64)、そのあと入力 0〜4 を開ける (IT930x_probe の順)
+        var configured = log.IndexOf("W DA7C=67");
+        var reading = log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}");
+        await Assert.That(log.IndexOf("W DA4C=00")).IsLessThan(configured);
+        await Assert.That(reading).IsGreaterThan(configured);
+        await Assert.That(log.Skip(reading + 1).Take(6)).IsEquivalentTo(new[] { "W DA4C=01", "W DA4D=01", "W DA4E=01", "W DA4F=01", "W DA50=01", "W DA5A=1F" });
+        // 電源を入れたあとに開ける
+        await Assert.That(reading).IsGreaterThan(log.LastIndexOf("W D8B7=01"));
+        device.Release();
+        It930xDevice.CloseIfIdle("9-27", TimeSpan.Zero);
+        lock (usb.Log) log = [.. usb.Log];
+        // 閉じるときは、入力を全部閉じて EP 0x84 をリセットし (DRV_ResetRxPort)、読みを止めてから電源を切る
+        var disabled = log.LastIndexOf("W DA4C=00");
+        await Assert.That(log.Skip(disabled).Take(7)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+        await Assert.That(log.IndexOf("TS 閉じる")).IsGreaterThan(disabled);
+        await Assert.That(log[^1]).IsEqualTo("W D8C3=01");
+    }
+
+    [Test]
+    public async Task EP_0x84_の読みを始められなければ_入力を開けずに開くのを失敗にする()
+    {
+        var (usb, _, _) = Fake();
+        usb.TsOpenFails = true;
+        var error = Assert.Throws<IOException>(() => Open(usb, "9-28", new FakeClock()));
+        await Assert.That(error.Message).Contains("読みを始められませんでした");
+        await Assert.That(usb.Log).DoesNotContain("W DA4C=01");
+    }
+
+    [Test]
+    public async Task 開くときに溢れが立っていれば_SDK_の順で_TS_の経路をリセットし直してから読みを出す()
+    {
+        var (usb, _, _) = Fake();
+        // 全体の溢れと入力 2 の溢れ (PX-MLT5PE の受信機 2)。偽物では書いても下りない (実機と同じ)
+        usb.Registers[It930xBridge.SysBufOverflow] = 1;
+        usb.Registers[It930xBridge.TsOverflow1 + 1] = 1;
+        var device = Open(usb, "9-40", new FakeClock());
+        List<string> log;
+        lock (usb.Log) log = [.. usb.Log];
+        device.Release();
+        It930xDevice.CloseIfIdle("9-40", TimeSpan.Zero);
+        var configured = log.IndexOf("W DA7C=67");
+        string[] overflow = ["R DA39 1", "R DA57 1", "R DA8B 4"];
+        string[] expected =
+        [
+            // 溢れを読む
+            .. overflow,
+            // DRV_ResetRxPort の閉じる側: 入力を全部閉じる → 10 ms → 0xDA1D に 1、0
+            "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00",
+            // init_work_queue の「Clean PSB buffer」: 0xDA05 に 1
+            "W DA05=01",
+            // IT9300_configOutput (0xDA05 を 0 に戻す)
+            "R DA1D 1", "W DA1D=01",
+            "R DD11 1", "W DD11=00",
+            "R DD13 1", "W DD13=00",
+            "R DD11 1", "W DD11=20",
+            "W DD88=E43F", "W DD0C=80",
+            "R DA05 1", "W DA05=00",
+            "R DA06 1", "W DA06=00",
+            "R DA1D 1", "W DA1D=00",
+            "W D920=00",
+            // 下りたかを読み直す
+            .. overflow,
+        ];
+        await Assert.That(log.Skip(configured + 1).Take(expected.Length)).IsEquivalentTo(expected);
+        // リセットし直してから電源を入れ、EP 0x84 の読みを出す
+        await Assert.That(log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}")).IsGreaterThan(configured + expected.Length);
+        var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-40")).ToList();
+        await Assert.That(lines.Any(text => text.Contains("開いたときに TS のバッファが溢れていました") && text.Contains("入力ごとの溢れ (0xDA57・0xDA8B〜) 0 0 1 0 0、受信機 2"))).IsTrue();
+        await Assert.That(lines.Any(text => text.Contains("リセットしても溢れたままです") && text.Contains("電源を抜いて"))).IsTrue();
+    }
+
+    [Test]
+    public async Task 開くときに溢れていなければ読むだけでリセットし直さない()
+    {
+        var (usb, _, _) = Fake();
+        var device = Open(usb, "9-41", new FakeClock());
+        List<string> log;
+        lock (usb.Log) log = [.. usb.Log];
+        device.Release();
+        It930xDevice.CloseIfIdle("9-41", TimeSpan.Zero);
+        var configured = log.IndexOf("W DA7C=67");
+        await Assert.That(log.Skip(configured + 1).Take(4)).IsEquivalentTo(new[] { "R DA39 1", "R DA57 1", "R DA8B 4", "W D8C3=00" });
+    }
+
+    [Test]
+    public async Task 溢れが下りれば記録に出して続ける()
+    {
+        var (usb, _, _) = Fake();
+        usb.Registers[It930xBridge.TsOverflow0] = 1;
+        // TS の経路をリセットし直すと下りる偽物
+        usb.OnNote = line =>
+        {
+            if (line == "W DA05=01") usb.Registers[It930xBridge.TsOverflow0] = 0;
+        };
+        var device = Open(usb, "9-42", new FakeClock());
+        device.Release();
+        It930xDevice.CloseIfIdle("9-42", TimeSpan.Zero);
+        var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-42")).ToList();
+        await Assert.That(lines.Any(text => text.Contains("溢れが下りました"))).IsTrue();
+        await Assert.That(lines.Any(text => text.Contains("リセットしても溢れたまま"))).IsFalse();
+    }
+
+    [Test]
+    public async Task EP_0x84_の読みが失敗したら_返されるのを待たずに入力を全部閉じる()
+    {
+        var (usb, _, _) = Fake();
+        using var fail = new ManualResetEventSlim();
+        usb.TsSource = () => fail.IsSet ? throw new IOException("fake-it930x の EP 0x84 の読みが失敗しました") : null;
+        var device = Open(usb, "9-43", new FakeClock());
+        try
+        {
+            int opened;
+            lock (usb.Log) opened = usb.Log.LastIndexOf("W DA5A=1F");
+            fail.Set();
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (!device.Faulted && DateTime.UtcNow < deadline) Thread.Sleep(5);
+            await Assert.That(device.Faulted).IsTrue();
+            // 使っている側はまだ返していないが、読む側のいない入力を開けたままにしない
+            List<string> after;
+            do
+            {
+                Thread.Sleep(5);
+                lock (usb.Log) after = [.. usb.Log.Skip(opened + 1).Where(TsRouteWrite)];
+            }
+            while (after.Count < 7 && DateTime.UtcNow < deadline);
+            await Assert.That(after).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
+        }
+        finally
+        {
+            device.Release();
+        }
+    }
+
+    /// <summary>TS の経路のレジスタ (5 つの入力で共有するもの) への書き込み</summary>
+    internal static bool TsRouteWrite(string line)
+    {
+        if (!line.StartsWith('W') || line.Length < 6 || !uint.TryParse(line.AsSpan(2, 4), System.Globalization.NumberStyles.HexNumber, null, out var address)) return false;
+        return address is (>= 0xDA00 and <= 0xDAFF) or (>= 0xDD00 and <= 0xDDFF);
+    }
+
+    [Test]
+    public async Task 選局しても捨ててもブリッジの_TS_の経路には書かず_その受信機の出口だけを付け外しする()
     {
         var (usb, bus1, _) = Fake();
         var clock = new FakeClock();
         var u = It930x.Find(0x0511, 0x084E)!;
-        // PX-MLT5U の受信機 2 は TS 入力 1 (仕様書 1.2)
-        var tuner = new It930xTuner("test", 2, () => Open(usb, "9-3", clock, u), () => It930xDevice.CloseIfIdle("9-3"));
+        // PX-MLT5U の受信機 2 は TS 入力 1 (仕様書 1.2)。入力 1 のパケットだけがこの受信機に届く
+        byte[] packet = [It930xBridge.SyncBytes[1], 0x01, 0x00, 0x10, .. new byte[184]];
+        byte[] other = [It930xBridge.SyncBytes[0], 0x01, 0x00, 0x10, .. new byte[184]];
+        usb.TsSource = () => [.. packet, .. other, .. packet, .. other];
+        var tuner = new It930xTuner("test", 2, () => Open(usb, "9-3", clock, u), () => It930xDevice.CloseIfIdle("9-3", TimeSpan.Zero));
         tuner.Tune(ChannelTable.Parse("T27")!);
+        int opened;
+        lock (usb.Log) opened = usb.Log.LastIndexOf("W DA5A=1F");
         await Assert.That(tuner.Tuned).IsTrue();
-        await Assert.That(tuner.Output).IsNotNull();
-        await Assert.That(usb.Log).Contains($"W {It930xBridge.TsEnable + 1:X4}=01");
         await Assert.That(bus1.Log).Contains("64 X 17=06");
         await Assert.That(tuner.Signal()!.Locked).IsTrue();
+        var buffer = new byte[188];
+        var got = 0;
+        while (got < buffer.Length) got += tuner.Output.Read(buffer, got, buffer.Length - got);
+        await Assert.That(buffer[0]).IsEqualTo((byte)0x47);
+        // 選局の間、ブリッジの TS の経路には書かない (入力は開いたときから全部開いている)
+        List<string> during;
+        lock (usb.Log) during = [.. usb.Log.Skip(opened + 1).Where(TsRouteWrite)];
+        await Assert.That(during).IsEmpty();
         tuner.Dispose();
-        await Assert.That(usb.Log).Contains($"W {It930xBridge.TsEnable + 1:X4}=00");
-        // スリープの最後 (仕様書 2.4) と、電源を切ってから閉じる
+        // スリープの最後 (仕様書 2.4) と、入力を全部閉じてから読みを止め、電源を切って閉じる
         await Assert.That(bus1.Log).Contains("64 X 17=01");
-        await Assert.That(usb.Log).Contains("TS 閉じる");
+        await Assert.That(usb.Log.IndexOf("TS 閉じる")).IsGreaterThan(usb.Log.LastIndexOf("W DA1D=00"));
         await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");
     }
 
@@ -226,7 +383,7 @@ public class It930xDeviceTests
     {
         var (usb, _, bus3) = Fake();
         bus3[0x65].Status = _ => 0x10;
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-4", new FakeClock()), () => It930xDevice.CloseIfIdle("9-4"));
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-4", new FakeClock()), () => It930xDevice.CloseIfIdle("9-4", TimeSpan.Zero));
         try
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("T27")!));
@@ -253,7 +410,7 @@ public class It930xDeviceTests
     public async Task 衛星は_TSID_で選局し_15V_なら_LNB_の給電を入れる()
     {
         var (usb, _, bus3) = Fake();
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-7", new FakeClock()), () => It930xDevice.CloseIfIdle("9-7"), "15v");
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-7", new FakeClock()), () => It930xDevice.CloseIfIdle("9-7", TimeSpan.Zero), "15v");
         tuner.Tune(ChannelTable.Parse("BS15:16625")!);
         await Assert.That(tuner.Tuned).IsTrue();
         // 給電を入れてから選局する (GPIOH11 ← 1。仕様書 9)
@@ -275,7 +432,7 @@ public class It930xDeviceTests
         var (usb, _, _) = Fake();
         var clock = new FakeClock();
         var tuners = new[] { 0, 1 }.Select(receiver =>
-            new It930xTuner($"test {receiver}", receiver, () => Open(usb, "9-8", clock), () => It930xDevice.CloseIfIdle("9-8"), "15v")).ToList();
+            new It930xTuner($"test {receiver}", receiver, () => Open(usb, "9-8", clock), () => It930xDevice.CloseIfIdle("9-8", TimeSpan.Zero), "15v")).ToList();
         try
         {
             tuners[0].Tune(ChannelTable.Parse("BS15:16625")!);
@@ -300,7 +457,7 @@ public class It930xDeviceTests
     public async Task LNB_を設定していなければ衛星でも給電しない()
     {
         var (usb, _, _) = Fake();
-        var tuner = new It930xTuner("test", 2, () => Open(usb, "9-9", new FakeClock()), () => It930xDevice.CloseIfIdle("9-9"), "");
+        var tuner = new It930xTuner("test", 2, () => Open(usb, "9-9", new FakeClock()), () => It930xDevice.CloseIfIdle("9-9", TimeSpan.Zero), "");
         try
         {
             tuner.Tune(ChannelTable.Parse("CS4")!);
@@ -318,7 +475,7 @@ public class It930xDeviceTests
     {
         var (usb, _, bus3) = Fake();
         bus3[0x65].SatelliteStatus = _ => 0x00;
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-11", new FakeClock()), () => It930xDevice.CloseIfIdle("9-11"), "15v");
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-11", new FakeClock()), () => It930xDevice.CloseIfIdle("9-11", TimeSpan.Zero), "15v");
         try
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("BS15:16625")!));
@@ -343,7 +500,7 @@ public class It930xDeviceTests
     public async Task 同じ受信機で地上波と衛星を切り替える()
     {
         var (usb, _, bus3) = Fake();
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-10", new FakeClock()), () => It930xDevice.CloseIfIdle("9-10"), "15v");
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-10", new FakeClock()), () => It930xDevice.CloseIfIdle("9-10", TimeSpan.Zero), "15v");
         try
         {
             tuner.Tune(ChannelTable.Parse("T27")!);
@@ -368,8 +525,8 @@ public class It930xDeviceTests
     {
         var (usb, bus1, bus3) = Fake();
         var clock = new FakeClock();
-        var ground = new It930xTuner("test 1", 1, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12"));
-        var cable = new It930xTuner("test 0", 0, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12"), "15v");
+        var ground = new It930xTuner("test 1", 1, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12", TimeSpan.Zero));
+        var cable = new It930xTuner("test 0", 0, () => Open(usb, "9-12", clock), () => It930xDevice.CloseIfIdle("9-12", TimeSpan.Zero), "15v");
         try
         {
             // 受信機 1 は地上波で動作中
@@ -418,7 +575,7 @@ public class It930xDeviceTests
             var khz = demod.Tuner.GetValueOrDefault((byte)0x70) | (demod.Tuner.GetValueOrDefault((byte)0x71) << 8) | ((demod.Tuner.GetValueOrDefault((byte)0x72) & 0x0F) << 16);
             return khz == 374950 ? (byte)0x01 : (byte)0x00;
         };
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-13", new FakeClock()), () => It930xDevice.CloseIfIdle("9-13"));
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-13", new FakeClock()), () => It930xDevice.CloseIfIdle("9-13", TimeSpan.Zero));
         try
         {
             tuner.Tune(ChannelTable.Parse("H44")!);
@@ -441,7 +598,7 @@ public class It930xDeviceTests
     {
         var (usb, _, bus3) = Fake();
         bus3[0x65].CableStatus = _ => 0x00;
-        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-14", new FakeClock()), () => It930xDevice.CloseIfIdle("9-14"));
+        var tuner = new It930xTuner("test", 0, () => Open(usb, "9-14", new FakeClock()), () => It930xDevice.CloseIfIdle("9-14", TimeSpan.Zero));
         try
         {
             var error = Assert.Throws<IOException>(() => tuner.Tune(ChannelTable.Parse("H11")!));
@@ -456,9 +613,9 @@ public class It930xDeviceTests
     }
 
     [Test]
-    public async Task 設定の_it930x_の受信機は地上波と衛星と_SKY_を受けられる()
+    public async Task 設定の_it930x_の受信機は地上波と衛星と_CATV_と_SKY_を受けられる()
     {
-        await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:0")).IsEquivalentTo(new[] { "GR", "BS", "CS", "SKY" });
+        await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:0")).IsEquivalentTo(new[] { "GR", "BS", "CS", "CATV", "SKY" });
         // 形式が違えば it930x: の受信機として扱わない
         await Assert.That(DeviceProbe.Receivable("it930x:4-12.1:9")).IsNull();
     }
@@ -500,7 +657,7 @@ public class It930xDeviceTests
             TUnit.Assertions.Enums.CollectionOrdering.Matching);
         await Assert.That(found[0].Name).IsEqualTo("PLEX PX-MLT5PE 1-2 #0");
         await Assert.That(found[9].Name).IsEqualTo("PLEX PX-MLT5U 4-12.1 #4");
-        // 最初に選ぶ種別は地上波・BS・CS (SKY は受けられるが、最初からは選ばない)。「使う」で並ぶ
+        // 最初に選ぶ種別は地上波・BS・CS (CATV と SKY は受けられるが、最初からは選ばない)。「使う」で並ぶ
         await Assert.That(found.All(spec => spec.Types.SequenceEqual(["GR", "BS", "CS"]) && !spec.Disabled)).IsTrue();
         // 名前は重ならない (チューナーを名前で見分ける)
         await Assert.That(found.Select(spec => spec.Name).Distinct().Count()).IsEqualTo(10);
@@ -527,7 +684,7 @@ public class It930xDeviceTests
             await Assert.That(found.Count).IsEqualTo(5);
             await Assert.That(found[4].Device).IsEqualTo("it930x:3-1:4");
             // 受けられる種別も返す (設定の画面が SKY を選ばせる)
-            await Assert.That(DeviceProbe.Receivable("it930x:3-1:4")!).IsEquivalentTo(new[] { "GR", "BS", "CS", "SKY" });
+            await Assert.That(DeviceProbe.Receivable("it930x:3-1:4")!).IsEquivalentTo(new[] { "GR", "BS", "CS", "CATV", "SKY" });
         }
         finally
         {

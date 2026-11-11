@@ -24,7 +24,7 @@ import { settings } from "#lib/server/settings.js";
  * `jikkyo` は実況のチャンネル (`jk1` など。`#lib/jikkyo/channels.ts`)。実況の無い局と、世帯の設定 (連携の「実況」) が
  * オフのときは null。
  * `airing` はブラウザのライブの一覧に出る局か (`watchableServices`)。本チャンネルと同じ番組を流している
- * サブチャンネルと、番組が来ない局は false。アプリの局の一覧も、これを見て同じ局を外す
+ * サブチャンネルと、放送を終えた局 (局名が「-」) は false。番組がまだ無い本チャンネルは true。アプリの局の一覧も、これを見て同じ局を外す
  */
 export function GET() {
   const rows = orm()
@@ -32,6 +32,7 @@ export function GET() {
       id: services.id,
       type: services.type,
       serviceId: services.service_id,
+      networkId: services.network_id,
       name: services.name,
       remoteControlKey: services.remote_control_key,
       hasLogo: services.has_logo,
@@ -98,6 +99,7 @@ export function GET() {
         ? jikkyoChannel({
             type: row.type,
             service_id: row.serviceId,
+            network_id: row.networkId,
           })
         : null,
     })),

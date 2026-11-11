@@ -8,7 +8,7 @@
         エージェントと同じ zip に入れて配る (install.ps1 が %ProgramFiles%\denpa\bin に置く)。
     -->
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <!-- コンソールの窓を出さない -->
         <OutputType>WinExe</OutputType>
         <Nullable>enable</Nullable>

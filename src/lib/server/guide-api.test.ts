@@ -263,8 +263,10 @@ describe("番組表", () => {
     // 名前の無い枠は本チャンネルと同じ番組
     program(11, SUB, NOW - HOUR, NOW + HOUR, { name: "" });
 
+    // 番組の無い本チャンネル (OTHER) は空の列で出る
     expect(guideOf("GR", FROM, TO, true).services.map((s) => s.id)).toEqual([
       MAIN,
+      OTHER,
     ]);
   });
 

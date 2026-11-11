@@ -72,7 +72,7 @@ public sealed class Emm(Func<IKeySource> source, TimeProvider? clock = null, Act
     private DateTimeOffset _lastSend = DateTimeOffset.MinValue;
     private string? _logged;
 
-    /// <summary>比べるカードの番号。まだ取れていなければ空</summary>
+    /// <summary>比べるカードの番号。まだ取れていなければ null</summary>
     internal long[]? Ids => Volatile.Read(ref _ids);
 
     /// <summary>
@@ -330,7 +330,7 @@ public sealed class CardNotice(Action emit, TimeProvider? clock = null)
             var wait = _last + Every - now;
             if (wait > TimeSpan.Zero)
             {
-                _later ??= _clock.CreateTimer(_ => Later(), null, wait, Timeout.InfiniteTimeSpan);
+                _later = _clock.CreateTimer(_ => Later(), null, wait, Timeout.InfiniteTimeSpan);
                 return;
             }
             _last = now;

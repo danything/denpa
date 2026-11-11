@@ -1,19 +1,24 @@
 import type { ChannelType } from "./types";
 
 /**
+ * 機材が分からなければ受けられるものとして扱わない種別。CATV (ケーブル。J.83C・TSMF) と SKY (スカパー！プレミアム。J.83B) は、
+ * 選局できるのがエージェントが直に持つ IT930x の機材 (`it930x:`) だけで、エージェントはその機材にはいつも `receivable` を返す
+ */
+const DETECTED_ONLY: readonly ChannelType[] = ["SKY", "CATV"];
+
+/**
  * 機材がその種別を受けられるか。`receivable` はエージェントが見つけた機材の種別 (`GET /denpa/tuners` の `receivable`)。
  *
  * **分からなければ (null・古いエージェントで無い) 地上波・BS・CS は受けられるものとして扱う。** 手で書いたデバイスや抜いてある機材は
  * エージェントにも分からないので、選局の時点で断られるまで任せる。
- * **SKY (スカパー！プレミアム) は、`receivable` に SKY がある機材だけが受けられる。** J.83B を選局できるのはエージェントが
- * 直に持つ IT930x の機材 (`it930x:`) だけで、エージェントはその機材にはいつも `receivable` を返す
+ * **CATV と SKY は、`receivable` にその種別がある機材だけが受けられる** (`DETECTED_ONLY`)
  */
 export function receives(
   receivable: readonly ChannelType[] | null | undefined,
   type: ChannelType,
 ): boolean {
   return receivable === null || receivable === undefined
-    ? type !== "SKY"
+    ? !DETECTED_ONLY.includes(type)
     : receivable.includes(type);
 }
 
@@ -30,17 +35,19 @@ export function unreceivable(
 }
 
 /**
- * 受信の設定に SKY を並べるか (`types.ts` の `shownTypes`)。SKY を受けられる機材か、SKY を選んだチューナーが 1 台でもあれば並べる。
- * 選んだチューナーでも並べるのは、並べないと保存のたびに SKY が外れるため (送るのは並べた欄だけ)
+ * 受信の設定に足して並べる種別 (`types.ts` の `shownTypes`)。CATV と SKY のうち、受けられる機材か、その種別を選んだチューナーが
+ * 1 台でもあるもの。選んだチューナーでも並べるのは、並べないと保存のたびにその種別が外れるため (送るのは並べた欄だけ)
  */
-export function showsSky(
+export function extraTypes(
   tuners: readonly {
     types: readonly ChannelType[];
     receivable?: readonly ChannelType[] | null | undefined;
   }[],
-): boolean {
-  return tuners.some(
-    (tuner) =>
-      tuner.types.includes("SKY") || (tuner.receivable ?? []).includes("SKY"),
+): ChannelType[] {
+  return DETECTED_ONLY.filter((type) =>
+    tuners.some(
+      (tuner) =>
+        tuner.types.includes(type) || (tuner.receivable ?? []).includes(type),
+    ),
   );
 }

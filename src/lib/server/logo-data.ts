@@ -276,9 +276,17 @@ export function stats(): { have: number; total: number } {
         id: services.id,
         network_id: services.network_id,
         name: services.name,
+        type: services.type,
       })
       .from(services)
-      .where(and(currentServices(), eq(services.service_type, DIGITAL_TV)))
+      // 復号できない局は録れないので、CM のロゴを覚えることも無い (`services.decodable`)
+      .where(
+        and(
+          currentServices(),
+          eq(services.service_type, DIGITAL_TV),
+          eq(services.decodable, true),
+        ),
+      )
       .all(),
   );
   return {

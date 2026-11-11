@@ -11,7 +11,10 @@
   import { dragScroll } from "#lib/actions.js";
   import { GENRE_TREE } from "#lib/arib.js";
   import ChannelNotice from "#lib/components/ChannelNotice.svelte";
-  import { guideNavigation } from "#lib/components/GuidePending.svelte";
+  import {
+    guideNavigation,
+    rememberGuideTabs,
+  } from "#lib/components/GuidePending.svelte";
   import Menu from "#lib/components/Menu.svelte";
   import NowLine from "#lib/components/NowLine.svelte";
   import Icon from "#lib/components/player/Icon.svelte";
@@ -28,7 +31,7 @@
     stateLabel,
     time,
   } from "#lib/format.js";
-  import { cellRows } from "#lib/guide-cell.js";
+  import { cellRows, placeRows } from "#lib/guide-cell.js";
   import { skeletonMask } from "#lib/guide-skeleton.js";
   import { minuteClock } from "#lib/minute-clock.svelte.js";
   import { PHONE_FORM } from "#lib/phone-form.js";
@@ -41,7 +44,6 @@
     SUBCHANNELS_COOKIE,
   } from "#lib/subchannels.js";
   import {
-    CHANNEL_TYPES,
     type GridProgram,
     type GuideSheet,
     type ProgramDetail as Facts,
@@ -101,6 +103,8 @@
    * (同じ種別の別の日なら局の並びはほぼ同じなので、そのまま残す)
    */
   const toGuide = guideNavigation();
+  // ほかの画面から移る途中の姿も、同じタブを並べる (CATV のタブは局があるときだけ。`GuidePending`)
+  $effect(() => rememberGuideTabs(data.types));
   /** 押した先の種別。今と同じ日・同じ種別 (読み直し・同じリンク) なら null */
   const switching = $derived.by(() => {
     const to = toGuide.to;
@@ -203,6 +207,8 @@
   /** まだ描き終えていない。`data-drawing` で外から分かるようにする (表の箱。下のマークアップ) */
   const drawing = $derived(shownCells < cells.length);
   const visibleCells = $derived(drawing ? cells.slice(0, shownCells) : cells);
+  /** マスの行。同じ列のマスどうしで重ならないよう、描く前に全部のマスで出す (`placeRows`) */
+  const rowsOf = $derived.by(() => placeRows(cells, data.start, slots, SLOT));
 
   /**
    * **マスは局ごとの箱 (`.station`) に入れて置く。** 箱は本チャンネルとそのサブの列をまとめたもの
@@ -244,7 +250,9 @@
     for (const cell of visibleCells) {
       const group = groups[groupOf[cell.column] ?? -1];
       if (group === undefined) continue;
-      const row = cellRows(cell.start_at, cell.end_at, data.start, slots, SLOT);
+      const row =
+        rowsOf.get(cell.key) ??
+        cellRows(cell.start_at, cell.end_at, data.start, slots, SLOT);
       const span = row.to - row.from;
       group.cells.push({
         key: cell.key,
@@ -680,7 +688,7 @@
     -->
   <div class="toolbar guide-bar dock" data-testid="guide-toolbar">
     <div role="group" class="segmented" data-testid="type-tabs">
-      {#each CHANNEL_TYPES as type (type)}
+      {#each data.types as type (type)}
         <a
           class="button small {data.type === type ? '' : 'secondary outline'}"
           aria-current={data.type === type ? "page" : undefined}
@@ -1026,23 +1034,22 @@
             {#if headSkeleton}
               <!-- 別の種別へ移る途中。局の並びが届くまで名前は出さない (上の `switching`。形は `app.css` の `.guide-frame .skeleton-head`) -->
               <span class="skeleton-head" aria-hidden="true"></span>
-            {:else}
+            {:else if watchable.has(service.id)}
               <!--
-                        ロゴを持たない局もあるので、有るものだけ出す。場所は
-                        どちらでも空けておく。局名の始まりが列ごとにずれると、
-                        横に並べたときにどれがどの局か追いにくい
+                        押すとその局でライブを開く (詳細の「視聴」と同じ行き先)。番組がまだ無い局もここから観られる。
+                        いまライブに出ない局 (分割放送をしていない時間のサブ) は、押した先で別の局が映るのでリンクにしない
                     -->
-              <ServiceLogo
-                id={service.id}
-                has={service.has_logo}
-                style="display: block; width: 2rem; height: 1.25rem"
-                fallback=""
-              />
-              <!-- テレビに出ている番号 (`channelNumber`) -->
-              {#if channelNumber(service) !== null}
-                <span class="ch-number">{channelNumber(service)}</span>
-              {/if}
-              <span class="truncate broadcast">{service.name}</span>
+              <a
+                class="service-link"
+                href={resolve(`live?service=${service.id}`)}
+                aria-label="{service.name} をライブで観る"
+                draggable="false"
+                data-testid="guide-service-live"
+              >
+                {@render head(service)}
+              </a>
+            {:else}
+              {@render head(service)}
             {/if}
           </div>
         {/each}
@@ -1173,6 +1180,25 @@
     </div>
   {/if}
 </div>
+
+<!--
+    列の見出しの中身。ロゴを持たない局もあるので、有るものだけ出す。場所は
+    どちらでも空けておく。局名の始まりが列ごとにずれると、
+    横に並べたときにどれがどの局か追いにくい
+-->
+{#snippet head(service: (typeof columns)[number])}
+  <ServiceLogo
+    id={service.id}
+    has={service.has_logo}
+    style="display: block; width: 2rem; height: 1.25rem"
+    fallback=""
+  />
+  <!-- テレビに出ている番号 (`channelNumber`) -->
+  {#if channelNumber(service) !== null}
+    <span class="ch-number">{channelNumber(service)}</span>
+  {/if}
+  <span class="truncate broadcast">{service.name}</span>
+{/snippet}
 
 <!-- 時刻へ送るメニューの項目 (「⋯」と、狭い画面の日付のメニュー) -->
 {#snippet jumpItems()}
@@ -1612,6 +1638,28 @@
     line-height: 1.25rem;
     font-weight: var(--dp-weight);
   }
+  /*
+     * 局名の見出しはその局のライブへのリンク。見出しの枠いっぱいを押せるようにし、字は見出しのまま。
+     * 指を乗せたら地をごく薄く (日付と同じ `--dp-hover-soft`)。焦点の線は見出しが `overflow: hidden` なので内側に引く
+     */
+  .service-link {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: inherit;
+    min-width: 0;
+    margin: calc(-1 * var(--dp-space-2));
+    padding: var(--dp-space-2);
+    border-radius: var(--dp-bar-radius);
+    color: inherit;
+    text-decoration: none;
+  }
+  .service-link:hover {
+    background: var(--dp-hover-soft);
+  }
+  .service-link:focus-visible {
+    outline-offset: -2px;
+  }
   /* 番号は事実なのでバッジにしない (docs/design.md の「印の意味」)。ライブの一覧の `.channel-number` と同じ字 */
   .ch-number {
     flex-shrink: 0;
@@ -1885,14 +1933,21 @@
   }
   /*
      * 予約の状態。説明の代わりに太字で出す。印は時刻のすぐ後ろに添える (色だけに頼らない。説明の行が切れる短いマスでも見える)。
-     * 予約済みは主の色の ✓、録画中は録画の赤の ●、競合は赤い ⚠ (一覧の競合と同じ印)。
+     * 予約済みは主の色の ✓、録画中は録画の赤の ●、競合は赤い ⚠ (一覧の競合と同じ印)。失敗は赤、録り逃しは注意の色の字 (ホームの一覧と同じ色)。
      * **競合は予約済みと同じ青にしない**。青だと「録れる」に見え、チューナーが足りずに落ちる番組を見落とす
      */
   .program {
     --state: var(--dp-primary-text);
   }
-  .program:is([data-state="recording"], [data-state="conflict"]) {
+  .program:is(
+    [data-state="recording"],
+    [data-state="conflict"],
+    [data-state="failed"]
+  ) {
     --state: var(--dp-rec-text);
+  }
+  .program[data-state="missed"] {
+    --state: var(--dp-warn-text);
   }
   .state,
   .program .num::after {

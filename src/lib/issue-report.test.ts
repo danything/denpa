@@ -51,7 +51,7 @@ describe("Issue の URL", () => {
     expect(url.length).toBeLessThanOrEqual(URL_LIMIT);
     expect(dropped).toBeGreaterThan(0);
     const got = new URL(url).searchParams.get("logs")!.split("\n");
-    expect(got[0]).toBe(`(長いので頭の ${dropped} 行を省きました)`);
+    expect(got[0]).toBe(`(長いので先頭の ${dropped} 行を省きました)`);
     // 新しいほうは残る
     expect(got.at(-1)).toBe("ログの行 399");
     expect(got[1]).toBe(`ログの行 ${dropped}`);
@@ -216,7 +216,7 @@ describe("環境の欄", () => {
     browser: "Firefox",
   };
 
-  test("頭の v は見ずにバージョンを比べる", () => {
+  test("先頭の v は見ずにバージョンを比べる", () => {
     expect(sameVersion("v1.2.3", "1.2.3")).toBe(true);
     expect(sameVersion("dev", "dev")).toBe(true);
     expect(sameVersion("v1.2.3", "v1.2.4")).toBe(false);

@@ -77,7 +77,7 @@ async function refresh(): Promise<void> {
   const all = await videos.all();
   const next: Record<number, OfflineEntry> = {};
   for (const v of all) {
-    // 進み具合は IndexedDB に無い (watchProgress が訊きに行く)。読み直しで消さない
+    // 進み具合は IndexedDB に無い (watchProgress が取得する)。読み直しで消さない
     next[v.id] = { state: v.state, progress: entries[v.id]?.progress ?? null };
   }
   entries = next;
@@ -110,8 +110,8 @@ const inPage = new Map<number, AbortController>();
  * 数字が動かない。
  *
  * そこで **2 秒おきに get() で新しく取り直し、取り直したものに毎回 `progress` も
- * 付ける**。イベントが生きている間はコマ落ちなく動き、黙り込んだ個体は
- * 次の取り直しが引き取る。終わったかどうかはここでは決めない。成否は
+ * 付ける**。イベントが生きている間はコマ落ちなく動き、イベントが届かなくなった登録は
+ * 次の取り直しで進み具合を読む。終わったかどうかはここでは決めない。成否は
  * SW の受け取りが伝えてくる
  */
 function watchProgress(
@@ -259,7 +259,7 @@ async function playable(codec: "av1" | "hevc" | "h264"): Promise<boolean> {
 
 /** 保存に使ってよい残り容量か。動画そのもの + 一時領域ぶんの遊びを見る */
 async function ensureRoom(bytes: number): Promise<void> {
-  // 測れないブラウザでは黙って進む (入らなければ落とすところで転ぶ)
+  // 測れないブラウザではそのまま進む (入らなければ保存のところで失敗する)
   const { usage, quota } = await navigator.storage
     .estimate()
     .catch((): StorageEstimate => ({}));
@@ -582,7 +582,7 @@ export async function removeEverywhere(rec: {
   id: number;
   name: string;
 }): Promise<void> {
-  stopInPage(rec.id);
+  await stopFetching(rec.id);
   await videos.remove(rec.id);
   await outbox.put({
     id: rec.id,
@@ -608,15 +608,19 @@ async function abortRunning(
   }
 }
 
-/** 端末からだけ消す (サーバの録画は残す)。保存し直したいときや空けたいとき用 */
-export async function removeLocal(id: number): Promise<void> {
-  // 運んでいる最中なら、ブラウザに預けたぶん・ページで受け取っているぶんも取り消す
+/** 保存している最中なら、ブラウザに預けたぶん (Background Fetch) とページで受け取っているぶんを中止する */
+async function stopFetching(id: number): Promise<void> {
   stopInPage(id);
   try {
     await abortRunning(await navigator.serviceWorker.ready, id);
   } catch {
     // 預けていなければ何もない
   }
+}
+
+/** 端末からだけ消す (サーバの録画は残す)。保存し直したいときや空けたいとき用 */
+export async function removeLocal(id: number): Promise<void> {
+  await stopFetching(id);
   await videos.remove(id);
   await refresh();
 }

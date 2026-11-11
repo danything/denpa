@@ -234,6 +234,13 @@ export const services = sqliteTable("services", {
   has_logo: flag("has_logo")
     .notNull()
     .default(sql`0`),
+  /**
+   * スクランブルを復号できる局か (`types.decodableService`)。取り込みのたびに決め直す (`epg.syncServices`)。
+   * 復号できない局 (SKY と、B-CAS 以外の方式でスクランブルされた CATV の局) は、番組表・ライブ・ロゴに出さない
+   */
+  decodable: flag("decodable")
+    .notNull()
+    .default(sql`1`),
   updated_at: integer("updated_at").notNull(),
   /**
    * 番組表の取得 (`epg-collect.ts`) がこの局の番組を最後に書いた時刻。まだなら null。
@@ -646,7 +653,7 @@ export const recordings = sqliteTable(
      */
     video_loss: json("video_loss", videoLoss),
     /**
-     * v2.36 までに CM を切ってエンコードした録画の**残した区間** (入れ物の先頭からの秒)。NULL は切っていない。
+     * v2.37 までに CM を切ってエンコードした録画の**残した区間** (入れ物の先頭からの秒)。NULL は切っていない。
      * いまは CM を切らないので新しくは書かない (切らずに再エンコードしたら NULL に戻す)。
      * 切ったものからは CM を戻せないので、CM 検出のやり直しはこれを見て断る (再エンコードを促す)
      */

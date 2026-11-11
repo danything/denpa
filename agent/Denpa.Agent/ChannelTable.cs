@@ -4,8 +4,8 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 選局表。**チャンネル名を周波数に直す。** 値は <a href="https://github.com/kazuki0824/recisdb-rs">recisdb-rs</a> の
-/// <c>channels.rs</c> と <c>dvbv5_channels_isdbs.conf</c> から取った (J.83B の <c>H01</c>〜<c>H105</c> だけは MLT5 系の仕様書 7.1 から)。
-/// **地上波と J.83B は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、同期しないだけ)。docs/agent.md「選局表」
+/// <c>channels.rs</c> と <c>dvbv5_channels_isdbs.conf</c> から取った (J.83B の <c>H01</c>〜<c>H105</c> と ISDB-C は MLT5 系の仕様書 7.1・7A.2 から)。
+/// **地上波と J.83B と ISDB-C は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、同期しないだけ)。docs/agent.md「選局表」
 ///
 /// <para>
 /// **衛星は名前だけで選局できる。** 名前に中継器と TSID が入っている (<c>BS15:16625</c>)。中継器の周波数は規格で
@@ -30,10 +30,7 @@ public static class ChannelTable
     /// <summary>`linux/dvb/frontend.h` の <c>SYS_ISDBC</c> (J.83 Annex C。ケーブルテレビのトランスモジュレーション方式。仕様書 7A)</summary>
     public const int SysIsdbc = 10;
 
-    /// <summary>
-    /// ケーブルテレビのトランスモジュレーション方式 (ISDB-C) の種別。いまは <c>--tune</c> で確かめるための仮の名前で、
-    /// サーバの <c>ChannelType</c> には無い (受けられる種別にも挙げない)
-    /// </summary>
+    /// <summary>ケーブルテレビのトランスモジュレーション方式 (ISDB-C) の種別。サーバの <c>ChannelType</c> の <c>CATV</c> (画面では「ケーブル」)</summary>
     public const string Catv = "CATV";
 
     /// <summary>TS を選り分けない (<c>NO_STREAM_ID_FILTER</c>)</summary>
@@ -42,7 +39,7 @@ public static class ChannelTable
     /// <summary>
     /// 1 つの物理チャンネルを選局するのに要るもの、全部。
     /// </summary>
-    /// <param name="Type">denpa の種別 (GR / BS / CS / SKY)</param>
+    /// <param name="Type">denpa の種別 (GR / BS / CS / CATV / SKY)</param>
     /// <param name="Delivery">DVB の方式 (<see cref="SysIsdbt"/> / <see cref="SysIsdbs"/> / <see cref="SysDvbcAnnexB"/> / <see cref="SysIsdbc"/>)</param>
     /// <param name="Frequency">**地上波と J.83B と ISDB-C は Hz、衛星は kHz**</param>
     /// <param name="StreamId">
@@ -79,7 +76,7 @@ public static class ChannelTable
     /// <para>
     /// <c>T13</c>–<c>T62</c> / <c>C13</c>–<c>C63</c> (CATV) / <c>BS01</c>–<c>BS23</c> / <c>CS02</c>–<c>CS24</c> /
     /// <c>H01</c>–<c>H105</c> (スカパー！プレミアムサービス光。J.83B) /
-    /// <c>QC13</c>–<c>QC63</c>・<c>QU13</c>–<c>QU62</c>・<c>QV1</c>–<c>QV12</c> (ISDB-C。CATV・UHF・VHF の帯域。<c>--tune</c> で確かめるための仮の名前)。
+    /// <c>QC13</c>–<c>QC63</c>・<c>QU13</c>–<c>QU62</c>・<c>QV1</c>–<c>QV12</c> (ISDB-C。種別 <c>CATV</c>。CATV・UHF・VHF の帯域)。
     /// ISDB-C は <c>:k</c> を付けて TSMF の TS を指す (<c>QC30:2</c>。有効な TS の 0〜14 本目)。付けなければ 0 本目。
     /// 衛星は <c>:TSID</c> を付けて TS を指す (<c>BS15:16625</c>)。付けなければ中継器の先頭の TS。
     /// 衛星は BS が奇数、CS が偶数で、**BS-7 と BS-17 だけは受け取らない。**
@@ -99,11 +96,16 @@ public static class ChannelTable
         {
             /*
              * CATV の周波数変換パススルー。地デジの電波をそのまま CATV のチャンネルの周波数に移して送るので、
-             * 選局は地上波と同じで周波数だけが違う。ミッドバンド C13-C22 (108-168MHz) と
+             * 選局は地上波と同じで周波数だけが違う。ミッドバンド C13-C22 (108-170MHz。C22 だけは 2 MHz 上の 164-170MHz) と
              * スーパーハイバンド C23-C63 (222-468MHz)。真ん中から 1/7 MHz ずれるのも地上波と同じ
              */
             if (!Number(name[1..], out var channel) || channel is < 13 or > 63) return null;
-            var center = channel <= 22 ? 111000000 + (channel - 13) * 6000000 : 225000000 + (channel - 23) * 6000000;
+            var center = channel switch
+            {
+                <= 21 => 111000000 + (channel - 13) * 6000000,
+                22 => 167000000,
+                _ => 225000000 + (channel - 23) * 6000000,
+            };
             return new Tuning("GR", SysIsdbt, (uint)(center + 142857), NoStreamId);
         }
 
