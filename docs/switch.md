@@ -63,3 +63,28 @@ Mirakurun・KonomiTV から取り込む仕組みはありません。チャン�
 - **Linux では、ホストや別のコンテナで pcscd が動いていると USB のカードリーダーを使えません**
   (「別のプロセスがカードリーダーを使用中です」と出ます。[tuners.md](tuners.md#直らないとき))
 - **PX-S1UD は、カーネルのドライバが使っているものには siano-userland から触りません** ([tuner-px-s1ud.md](tuner-px-s1ud.md))
+- **Linux に px4_drv (PX-Q3U4・PX-W3U4・PX-MLT5PE などのカーネルドライバ) が入っていると、その機材はエージェントから開けません。**
+  px4_drv が機材を使っている間、px4d は `BUSY` で失敗します (px4-userland の README)。denpa で使うなら、ホストで px4_drv を
+  blacklist して再起動します。Mirakurun など px4_drv の機材を使っていたソフトは、その機材を使えなくなります
+
+  ```sh
+  printf 'blacklist px4_drv\n' | sudo tee /etc/modprobe.d/denpa-px4.conf
+  sudo reboot
+  ```
+
+## いまの環境を残して denpa を足す
+
+**px4_drv と Mirakurun を外さずに denpa を使うなら、エージェントの代わりに Mirakurun へ中継するブリッジを置きます。**
+チューナーは Mirakurun が持ったままで、denpa は Mirakurun を通して選局します。EPGStation などほかのソフトと同じチューナーを共有できます。
+
+- [denpa-mirakurun-bridge](https://github.com/multiverse2011/denpa-mirakurun-bridge) (multiverse2011 さん作、Apache-2.0)。
+  denpa のチューナーエージェントの API を Mirakurun に中継します。denpa v2.28.0 以降が要ります。
+  denpa の `compose.override.yml` で `tuner-agent` をこのブリッジのイメージに差し替えます。
+  Mirakurun の `channels.yml` の書き方に条件があります。手順と条件はブリッジの README にあります
+
+このブリッジは denpa とは別の人が作っています。Doa では動作を確かめていません。内蔵カードリーダー・信号レベル・ケーブルの受信のように
+エージェントが受け持つ機能がどこまで使えるかも確かめていません。不具合や質問はブリッジのリポジトリへ送ってください。
+
+同じ役目のものは、2026 年 11 月の時点でほかに見つかっていません。別の人が作っているものには、Home Assistant に denpa を入れるアドオン
+([Khronos31/hassio-addons](https://github.com/Khronos31/hassio-addons)) もあります。こちらはチューナーをほかの録画ソフトと共有しません。
+同梱する denpa のバージョンは、アドオンの側で決まります。
