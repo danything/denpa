@@ -13,13 +13,13 @@ describe("4K の HEVC を再生できるか", () => {
       : {
           decodingInfo: async (config: unknown) => {
             asked.push(config);
-            if (decode === "throw") throw new Error("聞けない");
+            if (decode === "throw") throw new Error("decodingInfo が失敗した");
             return { supported: decode };
           },
         }),
   });
 
-  test("MSE が受け取れなければ再生できない (decodingInfo は聞かない)", async () => {
+  test("MSE が受け取れなければ再生できない (decodingInfo は呼ばない)", async () => {
     asked.length = 0;
     expect(await broadcastHevcPlayable(probe(false, true))).toBe(false);
     expect(asked).toHaveLength(0);
@@ -40,7 +40,7 @@ describe("4K の HEVC を再生できるか", () => {
     expect(await broadcastHevcPlayable(probe(true, true))).toBe(true);
   });
 
-  test("decodingInfo が無ければ MSE だけで決め、失敗したら再生できないとみる", async () => {
+  test("decodingInfo が無ければ MSE だけで決め、例外を投げたら再生できないとみなす", async () => {
     expect(await broadcastHevcPlayable(probe(true))).toBe(true);
     expect(await broadcastHevcPlayable(probe(true, "throw"))).toBe(false);
   });
