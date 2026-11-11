@@ -2,7 +2,7 @@ namespace Denpa.Agent.Tests;
 
 /*
  * 復調器 CXD2856ER とチューナー CXD2858ER (Cxd2856.cs・Cxd2858.cs)。偽のバス (Cxd2856Fakes.cs) の上で、書く順番と値を仕様書の表と照らす。
- * 期待値は仕様書 (denpa-spec の mlt5/spec.md) の表を 1 行ずつ写したもので、添えた番号は仕様書の節。
+ * 期待値は仕様書 (denpa-spec の cxd2856/spec.md) の表を 1 行ずつ写したもので、添えた番号は仕様書の節。
  * 読んでから書く行 (マスクが FF でない行) は、読み (T C4?) のあとに書いた値が並ぶ。偽物のレジスタは書くまで 0
  */
 public class Cxd2856Tests
@@ -28,7 +28,7 @@ public class Cxd2856Tests
         "X 08=01",
         // 初期化の前にチューナーの 62 を読む (仕様書 10.3。電源が切れていたかの確かめ)
         "U 62?",
-        // 仕様書 4.2 (負荷容量は 4.8 の B3。VCO の電流は 19 の値 A5 の上位 4 ビット)
+        // 仕様書 4.2 (負荷容量は 4.9 の B3。VCO の電流は 19 の値 A5 の上位 4 ビット)
         "U 01=00", "U 67=00", "U 43=07", "U 5E=150000", "U 0C=14", "U 99=7A01", "U 81=1084B3000000C44010004575071C3F0210200A00", "U 9B=00",
         "U 1A?", "U 17=9006", "U 19?", "U 95=0A", "U 74=02", "U 88=00", "U 87=C0", "U 80=01", "U 41=0700",
         "X 08=00",
@@ -180,7 +180,7 @@ public class Cxd2856Tests
         frontend.Sleep();
         await Assert.That(bus.Log).IsEquivalentTo(new[]
         {
-            // 仕様書 4.6 の地上波側の停止 (中継の中で)
+            // 仕様書 4.7 の地上波側の停止 (中継の中で)
             "X 08=01", "U 74=02", "U 67?", "U 67=00", "U 5E=150000", "U 88=00", "U 87=C0", "X 08=00",
             // 仕様書 5.7 の手順 1〜3
             "T 00=00", "T C3=01", "T 80?", "T 80=1F",
@@ -210,7 +210,7 @@ public class Cxd2856Tests
         demod.Tuner[0x69] = 0x88;
         bus.Log.Clear();
         var signal = frontend.Signal()!;
-        // 仕様書 8.1 と 8.6
+        // 仕様書 9.1 と 9.7
         await Assert.That(bus.Log).IsEquivalentTo(new[]
         {
             "T 01=01", "T 00=60", "T 10?", "T 28?", "T 01=00",
@@ -248,7 +248,7 @@ public class Cxd2856Tests
     }
 
     [Test]
-    public async Task 入力のレベルは仕様書_8_6_の式で求める()
+    public async Task 入力のレベルは仕様書_9_7_の式で求める()
     {
         // a = b = 0、g = 8 (利得 10 dB)、557,143 kHz (M = 4170)、ISDB-T の補正 -4.5 dB
         // IF の利得 = 870 + 1000 + (769 × 9945 + 1275) / 2550 = 870 + 1000 + 2999 = 4869。RF の利得 = 4170
@@ -307,7 +307,7 @@ public class Cxd2856Tests
         failing = false;
         bus.Log.Clear();
         frontend.Sleep();
-        // チューナーを止めて (仕様書 4.6)、復調器をスリープにする (仕様書 5.7・2.4)
+        // チューナーを止めて (仕様書 4.7)、復調器をスリープにする (仕様書 5.7・2.4)
         await Assert.That(bus.Log).Contains("U 74=02");
         await Assert.That(bus.Log[^1]).IsEqualTo("X 17=01");
         // 次の選局は初期化から

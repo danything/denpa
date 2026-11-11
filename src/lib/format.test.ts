@@ -192,7 +192,7 @@ describe("カードリーダーの名前", () => {
   });
 
   test("括弧の無い名前はそのまま", () => {
-    const name = "px4-userland 0960 Internal Card Reader";
+    const name = "asicen-userland 1-2 Internal Card Reader";
     expect(splitReaderName(name)).toEqual({ name, where: null });
   });
 });

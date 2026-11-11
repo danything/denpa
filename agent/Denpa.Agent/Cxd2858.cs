@@ -3,8 +3,8 @@ namespace Denpa.Agent;
 /*
  * Sony CXD2858ER (チューナー)。PX-MLT5U・PX-MLT5PE・DTV02A-5TS-P の受信機ごとに 1 つ、復調器 CXD2856ER の I2C の中継の先にある。
  *
- * クリーンルームで、仕様書 (denpa-spec の mlt5/spec.md。PLEX MLT5 系の CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
- * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は仕様書の節の番号で、表の値と順はその節の表のまま持つ。
+ * クリーンルームで、仕様書 (denpa-spec の cxd2856/spec.md。CXD2856ER と CXD2858ER の動作を書いたもの) だけから書いた。
+ * 参考にした実装のソースは見ていない。コメントの「仕様書 x.y」は cxd2856/spec.md の節の番号 (ブリッジの側の it930x/spec.md は「IT930x の仕様書 x.y」と書く) で、表の値と順はその節の表のまま持つ。
  * 仕様書に無くて決めた所は「仕様書に無い」と書いてある。地上波 (ISDB-T)・衛星 (ISDB-S)・J.83B (スカパー！プレミアムサービス光)・ISDB-C (ケーブルテレビのトランスモジュレーション方式) の分がある。
  */
 
@@ -26,7 +26,7 @@ internal sealed class Cxd2858(CxdLink link)
     public const byte Address = 0x60;
 
     /// <summary>
-    /// 発振器の負荷容量 (仕様書 4.2 の手順 7 の <c>xx</c>)。資料で値が分かれていて、仕様書 4.8 が選んだ値 (この基板の PLEX の値)
+    /// 発振器の負荷容量 (仕様書 4.2 の手順 7 の <c>xx</c>)。資料で値が分かれていて、仕様書 4.9 が選んだ値 (この基板の PLEX の値)
     /// </summary>
     public const byte LoadCapacitance = 0xB3;
 
@@ -45,14 +45,14 @@ internal sealed class Cxd2858(CxdLink link)
     public Cxd2858Side Side { get; private set; }
 
     /// <summary>
-    /// 待機中の地上波の RF 入力の整合を保つ設定 (仕様書 4.7)。地上波・ケーブルの RF 入力を全チューナーに分配している機材で、
+    /// 待機中の地上波の RF 入力の整合を保つ設定 (仕様書 4.8)。地上波・ケーブルの RF 入力を全チューナーに分配している機材で、
     /// あるチューナーが待機と動作を切り替えると、隣の受信機の 256QAM に誤りが出たため。J.83B か ISDB-C を初めて選局したときに機材の全受信機で立てる (<see cref="It930xDevice.KeepMatching"/>)。
     /// 立てると、待機にする書き込み (初期化の手順 2・地上波側の停止の手順 2・衛星側の停止のあと) で <c>67</c> の bit1 を立てる。
     /// 選局の書き込み (仕様書 4.3・4.5 の手順 7) は、どちらでも bit1 を 0 にする
     /// </summary>
     public bool KeepMatching { get; set; }
 
-    /// <summary>仕様書 4.2 の手順 1〜8 (手順 9 の読みの前まで)。手順 2 は整合を保つ設定 (仕様書 4.7) なら <c>02</c></summary>
+    /// <summary>仕様書 4.2 の手順 1〜8 (手順 9 の読みの前まで)。手順 2 は整合を保つ設定 (仕様書 4.8) なら <c>02</c></summary>
     internal static CxdRow[] InitHead(bool keepMatching) =>
     [
         CxdRow.W(U, 0x01, 0x00),
@@ -104,7 +104,7 @@ internal sealed class Cxd2858(CxdLink link)
     public void TuneCable(uint khz) => TuneTerrestrialSide("J.83B の周波数", khz, CableRows);
 
     /// <summary>
-    /// ISDB-C の周波数を設定する (仕様書 4.5A)。<paramref name="khz"/> は中心周波数の kHz (仕様書 7A.2。周波数の補正はしない)。並びと値は J.83B (仕様書 4.5) と同じで、
+    /// ISDB-C の周波数を設定する (仕様書 4.6)。<paramref name="khz"/> は中心周波数の kHz (仕様書 8.2。周波数の補正はしない)。並びと値は J.83B (仕様書 4.5) と同じで、
     /// 手順 8 の 2 バイトだけが違う。手順 8 のあと 50 ms 待つ。地上波側を使うので、地上波側のまま (ISDB-T・J.83B から) なら止めずに書き、
     /// 衛星側で動作中なら先に衛星側を止める (仕様書 10.2)
     /// </summary>
@@ -144,7 +144,7 @@ internal sealed class Cxd2858(CxdLink link)
 
     /// <summary>
     /// 仕様書 4.4 の手順 1〜10 (周波数を埋めたもの)。q は 4 kHz 単位に丸めた値 (<c>(f + 2) / 4</c>。整数の割り算)。
-    /// 整合を保つ設定 (仕様書 4.7) のときは、手順 1 のあとに手順 1A を入れ、<c>67</c> の bit1 を 0 にしてから衛星を受ける。
+    /// 整合を保つ設定 (仕様書 4.8) のときは、手順 1 のあとに手順 1A を入れ、<c>67</c> の bit1 を 0 にしてから衛星を受ける。
     /// 設定を使っていなければ bit1 は既に 0 なので、手順 1A は省く (仕様書 4.4 が省いてよいとしている)
     /// </summary>
     internal static CxdRow[] SatelliteRows(uint khz, bool keepMatching = false)
@@ -203,7 +203,7 @@ internal sealed class Cxd2858(CxdLink link)
     ];
 
     /// <summary>
-    /// 仕様書 4.5A の手順 1〜10 (周波数を埋めたもの)。J.83B (<see cref="CableRows"/>) と違うのは、手順 8 の <c>6E</c> (IF のずらし -6 の <c>1A</c>) と
+    /// 仕様書 4.6 の手順 1〜10 (周波数を埋めたもの)。J.83B (<see cref="CableRows"/>) と違うのは、手順 8 の <c>6E</c> (IF のずらし -6 の <c>1A</c>) と
     /// <c>6F</c> (帯域のずらし -4 の <c>1C</c>) だけ。帯域は 6 MHz (<c>6D</c> = <c>00</c>)
     /// </summary>
     internal static CxdRow[] IsdbcRows(uint khz) =>
@@ -221,7 +221,7 @@ internal sealed class Cxd2858(CxdLink link)
         CxdRow.W(U, 0x87, 0xC0),
     ];
 
-    /// <summary>地上波側の停止 (仕様書 4.6)。手順 2 の <c>67</c> は、整合を保つ設定 (仕様書 4.7) なら <c>02</c>、そうでなければ <c>00</c> (bit0 は残す)</summary>
+    /// <summary>地上波側の停止 (仕様書 4.7)。手順 2 の <c>67</c> は、整合を保つ設定 (仕様書 4.8) なら <c>02</c>、そうでなければ <c>00</c> (bit0 は残す)</summary>
     internal static CxdRow[] StopTerrestrialRows(bool keepMatching) =>
     [
         CxdRow.W(U, 0x74, 0x02),
@@ -231,7 +231,7 @@ internal sealed class Cxd2858(CxdLink link)
         CxdRow.W(U, 0x87, 0xC0),
     ];
 
-    /// <summary>衛星側の停止 (仕様書 4.6)。整合を保つ設定 (仕様書 4.7) のときは、このあとに <see cref="KeepMatchingRow"/> を書く</summary>
+    /// <summary>衛星側の停止 (仕様書 4.7)。整合を保つ設定 (仕様書 4.8) のときは、このあとに <see cref="KeepMatchingRow"/> を書く</summary>
     internal static readonly CxdRow[] StopSatelliteRows =
     [
         CxdRow.W(U, 0x15, 0x02),
@@ -242,10 +242,10 @@ internal sealed class Cxd2858(CxdLink link)
         CxdRow.W(U, 0x04, 0xC0),
     ];
 
-    /// <summary>整合を保つ設定 (仕様書 4.7) のときに、衛星側の停止のあとに書く行 (<c>67</c> を <c>02</c>・マスク <c>02</c>。仕様書 4.6)</summary>
+    /// <summary>整合を保つ設定 (仕様書 4.8) のときに、衛星側の停止のあとに書く行 (<c>67</c> を <c>02</c>・マスク <c>02</c>。仕様書 4.7)</summary>
     internal static readonly CxdRow KeepMatchingRow = CxdRow.W(U, 0x67, 0x02, mask: 0x02);
 
-    /// <summary>止める (動作中の側だけを書く。止まっていれば何もしない。仕様書 4.6)</summary>
+    /// <summary>止める (動作中の側だけを書く。止まっていれば何もしない。仕様書 4.7)</summary>
     public void Stop()
     {
         switch (Side)
@@ -273,7 +273,7 @@ internal sealed class Cxd2858(CxdLink link)
     }
 
     /// <summary>
-    /// RF のレベルの元になる値を読む (仕様書 8.6 の地上波の表)。IF の AGC の値 a、RF の AGC の値 b、IF の帯域通過フィルタの利得の番号 g
+    /// RF のレベルの元になる値を読む (仕様書 9.7 の地上波の表)。IF の AGC の値 a、RF の AGC の値 b、IF の帯域通過フィルタの利得の番号 g
     /// </summary>
     public (byte IfAgc, byte RfAgc, int Gain) ReadAgc()
     {
@@ -289,11 +289,11 @@ internal sealed class Cxd2858(CxdLink link)
         return (a, b, g);
     }
 
-    /// <summary>IF の帯域通過フィルタの利得の番号ごとの利得 (dB。仕様書 8.6 の G の表)</summary>
+    /// <summary>IF の帯域通過フィルタの利得の番号ごとの利得 (dB。仕様書 9.7 の G の表)</summary>
     private static readonly int[] GainTable = [0, 0, 0, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 20, 20];
 
     /// <summary>
-    /// 入力のレベル (dBm × 100。仕様書 8.6 の計算)。<paramref name="correction"/> は方式の補正 (dB × 100。ISDB-T は -450、J.83B は -150)。
+    /// 入力のレベル (dBm × 100。仕様書 9.7 の計算)。<paramref name="correction"/> は方式の補正 (dB × 100。ISDB-T は -450、J.83B は -150)。
     /// 整数の割り算は仕様書の式のまま (式の中の足し算で四捨五入になっている)
     /// </summary>
     public static int InputLevel(byte ifAgc, byte rfAgc, int gain, uint khz, int correction)
@@ -315,7 +315,7 @@ internal sealed class Cxd2858(CxdLink link)
         return -ifGain - rfGain + correction;
     }
 
-    /// <summary>RF の利得の最大値 (dB × 100)。選局した周波数 (kHz) で決まる (仕様書 8.6)</summary>
+    /// <summary>RF の利得の最大値 (dB × 100)。選局した周波数 (kHz) で決まる (仕様書 9.7)</summary>
     internal static int MaxRfGain(uint khz) => khz switch
     {
         > 700000 => 4150,

@@ -11,12 +11,9 @@
       ]
     },
     {
-      "description": "入れ方 (install.sh は Mac で、install.ps1 は Windows で px4-userland を取ってくる) の `# renovate:` 付きの変数 (sh は `NAME=1.2.3`、PowerShell は `$Name = '1.2.3'`)。Dockerfile と同じ px4-userland を指していて、同じ依存なので1つの PR で揃って上がる。scripts/build-wdi-simple.ps1 は、Windows のエージェントの zip に入れる wdi-simple.exe をビルドする libwdi のバージョン",
+      "description": "scripts/build-wdi-simple.ps1 の `# renovate:` 付きの変数 (PowerShell の `$Name = '1.2.3'`)。Windows のエージェントの zip に入れる wdi-simple.exe をビルドする libwdi のバージョン",
       "customType": "regex",
-      "managerFilePatterns": [
-        "/^install\\.(sh|ps1)$/",
-        "/^scripts/build-wdi-simple\\.ps1$/"
-      ],
+      "managerFilePatterns": ["/^scripts/build-wdi-simple\\.ps1$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+?) depName=(?<depName>\\S+?)(?: extractVersion=(?<extractVersion>\\S+?))?\\s+(?:[A-Z0-9_]+=|\\$\\w+ = ')(?<currentValue>[^'\\s]+)"
       ]

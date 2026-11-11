@@ -216,7 +216,7 @@ public sealed class It930xBridge
     /// <summary><c>r_br_reg_ep4_tx_active</c> (bit 5)</summary>
     public const uint Ep4Active = 0xDD1E;
 
-    /// <summary><c>p_br_reg_lnk2ofdm_data_63_56</c>。I2C のバス 2 の速さ (仕様書 1.3 は <c>0xF103</c> と一緒に 0x07 を書く)</summary>
+    /// <summary><c>p_br_reg_lnk2ofdm_data_63_56</c>。I2C のバス 2 の速さ (IT930x の仕様書 4.2 は <c>0xF103</c> と一緒に 0x07 を書く)</summary>
     public const uint Lnk2OfdmData = 0xF6A7;
 
     // 端子の駆動の強さ (brRegister.h の p_br_reg_top_padmiscdrsr・padmiscdr2・padmiscdr4・padmiscdr8)
@@ -227,14 +227,14 @@ public sealed class It930xBridge
 
     /// <summary>
     /// ファームウェアに次の段の I2C の相手を教える欄 (brVariable.h の <c>next_level_*_i2c_address</c>・<c>OVA_NEXT_LEVEL_FIFTH_I2C_ADDR</c>)。
-    /// 欄 i に受信機 i の復調器の 8 ビットのアドレスを書く (仕様書 1.3)
+    /// 欄 i に受信機 i の復調器の 8 ビットのアドレスを書く (IT930x の仕様書 4.2)
     /// </summary>
     public static readonly IReadOnlyList<uint> NextLevelAddress = [0x4975, 0x4974, 0x4973, 0x4972, 0x4964];
 
     /// <summary>同じ欄のバス (<c>next_level_*_i2c_bus</c>・<c>OVA_NEXT_LEVEL_FIFTH_I2C_BUS</c>)</summary>
     public static readonly IReadOnlyList<uint> NextLevelBus = [0x4971, 0x4970, 0x496F, 0x496E, 0x4963];
 
-    /// <summary><c>OVA_EEPROM_CFG_VALID</c>。0 なら EEPROM の設定を読めていない (仕様書 1.3 は記録に出すだけで続ける)</summary>
+    /// <summary><c>OVA_EEPROM_CFG_VALID</c>。0 なら EEPROM の設定を読めていない (IT930x の仕様書 3。px4_drv は記録に出し、初期化を失敗にはしない)</summary>
     public const uint EepromValid = 0x4979;
 
     /// <summary>
@@ -384,6 +384,9 @@ public sealed class It930xBridge
         return new It930xPsb(ReadRegister(PsbCount), da99);
     }
 
+    /// <summary>入力ごとに、使うか (<see cref="ConfigureTs"/> の同期バイトが 0 でないか)。<see cref="EnableTsInputs"/> が開けるのはこれだけ</summary>
+    private bool[] _used = [true, true, true, true, true];
+
     /// <summary>
     /// TS の経路を設定する。入力 0〜4 のパケットの先頭を <see cref="SyncBytes"/> に付け替えて 1 本にまとめ、EP 0x84 から出す。
     /// 入力はまだ開けない (<see cref="EnableTsInputs"/>)。
@@ -397,10 +400,17 @@ public sealed class It930xBridge
     /// </para>
     /// </summary>
     /// <param name="parallel">入力 0〜4 がパラレルか (<c>IT9300_setInTsType</c>。設定するのは入力 0・1 だけ)。SDK の既定はどれもシリアル</param>
+    /// <param name="syncBytes">
+    /// 入力 0〜4 の同期バイト (機種ごとの値。<see cref="It930xModel.SyncBytes"/>)。0 の入力は使わないので、まとめる設定も同期バイトも書かない。
+    /// 渡さなければ <see cref="SyncBytes"/>
+    /// </param>
     /// <returns>ブリッジの中に残っていた TS のバッファの数 (捨てる前と後)</returns>
-    public (It930xPsb Before, It930xPsb After) ConfigureTs(IReadOnlyList<bool> parallel)
+    public (It930xPsb Before, It930xPsb After) ConfigureTs(IReadOnlyList<bool> parallel, IReadOnlyList<byte>? syncBytes = null)
     {
         if (parallel.Count != TsInputs) throw new ArgumentException($"入力は {TsInputs} つです ({parallel.Count})", nameof(parallel));
+        syncBytes ??= SyncBytes;
+        if (syncBytes.Count != TsInputs) throw new ArgumentException($"入力は {TsInputs} つです ({syncBytes.Count})", nameof(syncBytes));
+        _used = [.. syncBytes.Select(sync => sync != 0)];
         for (var port = 0; port < TsInputs; port++) WriteRegister(TsEnable + (uint)port, 0);
         WriteRegister(IgnoreSyncByte, 0);
 
@@ -423,8 +433,9 @@ public sealed class It930xBridge
         for (var port = 0; port < 2; port++) WriteRegister(TsInSource + (uint)port, (byte)(parallel[port] ? 1 : 0));
         for (var port = 0; port < TsInputs; port++)
         {
+            if (syncBytes[port] == 0) continue;
             WriteRegister(TsAggregateMode + (uint)port, 1);
-            WriteRegister(TsSyncByte + (uint)port, SyncBytes[port]);
+            WriteRegister(TsSyncByte + (uint)port, syncBytes[port]);
         }
         return (before, after);
     }
@@ -479,13 +490,17 @@ public sealed class It930xBridge
     }
 
     /// <summary>
-    /// 入力 0〜4 を全部開ける (SDK の <c>IT930x_probe</c> の「Enable TsPort」: <c>IT9300_enableTsPort</c> を入力ごと → <c>IT9300_setIgnoreFail</c>)。
+    /// 入力 0〜4 のうち使う入力 (<see cref="ConfigureTs"/> で同期バイトが 0 でないもの) を全部開ける (SDK の <c>IT930x_probe</c> の「Enable TsPort」: <c>IT9300_enableTsPort</c> を入力ごと → <c>IT9300_setIgnoreFail</c>)。
     /// 開けるのは機材を開いたときの 1 回で、受信機ごとには開け閉めしない。SDK も、受信を始める・止めるときは EP 0x84 の読みだけを出し入れし、入力には触らない。
     /// 5 つの入力は 1 つの経路にまとまるので、ほかの入力が流している間に 1 つだけ開け閉めしない
     /// </summary>
+    /// <remarks>使わない入力は閉じたままにする (IT930x の仕様書 5)</remarks>
     public void EnableTsInputs()
     {
-        for (var port = 0; port < TsInputs; port++) WriteRegister(TsEnable + (uint)port, 1);
+        for (var port = 0; port < TsInputs; port++)
+        {
+            if (_used[port]) WriteRegister(TsEnable + (uint)port, 1);
+        }
         // 誤りのあるパケットも通す (SDK も通している。TEI の付いたパケットを受信機ごとに数えるため)
         WriteRegister(TsFailIgnore, 0x1F);
     }
@@ -530,17 +545,17 @@ public sealed class It930xBridge
     }
 
     /// <summary>
-    /// 次の段の I2C の設定 (<c>IT9300_initialize</c> の後半。仕様書 1.3)。I2C の速さ、端子の駆動の強さ、受信機ごとの I2C の相手。
+    /// 次の段の I2C の設定 (<c>IT9300_initialize</c> の後半。IT930x の仕様書 4.2)。I2C の速さ、端子の駆動の強さ、受信機ごとの I2C の相手。
     /// 終わりに <c>OVA_EEPROM_CFG_VALID</c> を読んで返す
     /// </summary>
-    /// <param name="receivers">受信機ごとの I2C のバスと復調器の T のアドレス (7 ビット)。ブリッジの欄は受信機の番号で並ぶ (仕様書 1.3)</param>
+    /// <param name="receivers">受信機ごとの I2C のバスと復調器の T のアドレス (7 ビット)。ブリッジの欄は受信機の番号で並ぶ (IT930x の仕様書 4.2)</param>
     public byte ConfigureReceivers(IReadOnlyList<It930xReceiver> receivers)
     {
         if (receivers.Any(receiver => receiver.Index < 0 || receiver.Index >= NextLevelAddress.Count))
         {
             throw new ArgumentException($"受信機の番号は 0〜{NextLevelAddress.Count - 1} です", nameof(receivers));
         }
-        // I2C の速さ (仕様書 1.3。IT9300_initialize と _IT9300_loadFirmware の値と同じ)
+        // I2C の速さ (IT930x の仕様書 4.2。IT9300_initialize と _IT9300_loadFirmware の値と同じ)
         WriteRegister(Lnk2OfdmData, I2cSpeed);
         WriteRegister(OneCycleCounterTuner, I2cSpeed);
         // 端子の駆動の強さ (IT9300_initialize がどの基板でも書く値。仕様書に無い)
@@ -557,7 +572,7 @@ public sealed class It930xBridge
     }
 
     /// <summary>
-    /// 次の段の I2C に書く (<c>IT9300_writeGenericRegisters</c>)。<paramref name="address"/> は 7 ビットで、ブリッジには 1 ビット左にずらして渡す (仕様書 1.3)。
+    /// 次の段の I2C に書く (<c>IT9300_writeGenericRegisters</c>)。<paramref name="address"/> は 7 ビットで、ブリッジには 1 ビット左にずらして渡す (IT930x の仕様書 4.1)。
     /// 1 回の I2C の書き込みで、<see cref="MaxI2cWrite"/> バイトまで
     /// </summary>
     public void I2cWrite(byte bus, byte address, ReadOnlySpan<byte> data)
@@ -579,12 +594,15 @@ public sealed class It930xBridge
     }
 
     /// <summary>
-    /// GPIOH の値のレジスタ (<c>p_br_reg_top_gpiohN_o</c>)。出力にする (<c>_en</c>) は + 1、機能を有効にする (<c>_on</c>) は + 2 (brRegister.h。仕様書 1.5 の番地と同じ)。
-    /// 入力の値 (<c>r_br_reg_top_gpiohN_i</c>) は - 1。いま使う 5 つだけ (GPIOH6・GPIOH14 はカード。<c>IT9300_bcasDetectCard</c>・<c>IT9300_bcasResetCard</c>)
+    /// GPIOH の値のレジスタ (<c>p_br_reg_top_gpiohN_o</c>)。出力にする (<c>_en</c>) は + 1、機能を有効にする (<c>_on</c>) は + 2 (brRegister.h。IT930x の仕様書 7.2 の番地と同じ)。
+    /// 入力の値 (<c>r_br_reg_top_gpiohN_i</c>) は - 1。いま使う 7 つだけ (GPIOH6・GPIOH14 はカード。<c>IT9300_bcasDetectCard</c>・<c>IT9300_bcasResetCard</c>)。
+    /// GPIOH3 (受信機が 1 つの機種の電源。IT930x の仕様書 7.3) と GPIOH10 (LNB の短絡の検出。IT930x の仕様書 8) の番地は IT930x の仕様書 7.1 の値で、ほかの GPIOH と同じ並び
     /// </summary>
     public static uint GpioOutput(int pin) => pin switch
     {
         2 => 0xD8B7,
+        3 => 0xD8B3,
+        10 => 0xD8D7,
         6 => 0xD8C7,
         7 => 0xD8C3,
         11 => 0xD8D3,
@@ -595,7 +613,7 @@ public sealed class It930xBridge
     /// <summary>GPIOH の入力の値のレジスタ (<c>r_br_reg_top_gpiohN_i</c>)</summary>
     public static uint GpioInput(int pin) => GpioOutput(pin) - 1;
 
-    /// <summary>GPIOH を出力にして有効にし、値を書く (仕様書 1.5 の「出力・有効にして」。SDK の IT9300_initialize と同じ順)</summary>
+    /// <summary>GPIOH を出力にして有効にし、値を書く (IT930x の仕様書 7.2 の「出力・有効にして」。SDK の IT9300_initialize と同じ順)</summary>
     public void GpioSetup(int pin, bool value)
     {
         var output = GpioOutput(pin);
@@ -715,7 +733,7 @@ public sealed class It930xBridge
     /// </summary>
     /// <remarks>
     /// SDK のこの関数は、待ったあとに必ず失敗を返す形になっている (比べる変数に 1 を入れたまま比べている)。
-    /// 意図は「REBOOT のあとはバージョンが 0 に戻る」と推定し、それを確かめる。REBOOT で USB がつなぎ直されるかは実機で確かめていない
+    /// 意図は「REBOOT のあとはバージョンが 0 に戻る」と推定し、それを確かめる。USB がつなぎ直されたら (PX-Q3PE4) <see cref="UsbGoneException"/>
     /// </remarks>
     public void Reboot()
     {
@@ -734,6 +752,14 @@ public sealed class It930xBridge
             {
                 last = error;
                 _sleep(10);
+            }
+            catch (IOException error) when (error is not UsbGoneException)
+            {
+                /*
+                 * PX-Q3PE4 は REBOOT で USB から一度外れ、つなぎ直されると推定する (2026-11-11 の実機の記録。REBOOT の直後の QUERYINFO が EPROTO になり、もう片方の側も一覧から消えた)。外れている間に送った QUERYINFO は
+                 * EPROTO などのふつうの IOException になるので、つなぎ直されたものとして呼ぶ側に開き直させる
+                 */
+                throw new UsbGoneException($"REBOOT のあと USB がつなぎ直されています ({error.Message})");
             }
         }
         if (version is null) throw new It930xException($"IT930x が REBOOT のあと応答しません ({last?.Message})");

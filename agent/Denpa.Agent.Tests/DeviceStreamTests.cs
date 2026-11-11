@@ -112,7 +112,7 @@ public partial class DeviceStreamTests
             /*
              * **専用のスレッドで読む。** 共用のスレッドプールで読むと、他のテストがプールを塞いでいる間は
              * 読み始めることすらできず、書いてから 2 秒待っても返らない (CI で 1 度落ちた。
-             * 手元では 2 コアに絞っても出ない揺れ)。Px4CardTests の偽の px4d と同じ理由
+             * 手元では 2 コアに絞っても出ない揺れ)
              */
             var reading = Task.Factory.StartNew(
                 () => stream.Read(buffer, 0, buffer.Length, () => false),
@@ -213,7 +213,7 @@ public class DeviceStreamPipeTests
     }
 }
 /*
- * px4d から受けた TS (PipeReader) の読み出し側。待っている読みが済むと PipeReader が合図を呼ぶが、
+ * 機材から受けた TS (PipeReader) の読み出し側。待っている読みが済むと PipeReader が合図を呼ぶが、
  * **合図は済んだ印より少し遅れて届く** (書く側は印を立ててから、ロックの外で合図を呼ぶ)。
  * 読む側は印を見て先に読み進めるので、前の読みの合図が次の読みを待っている最中に届くことがある
  */
@@ -289,7 +289,7 @@ public class DeviceStreamPipedTests
     /*
      * **止めたら、待っている読む側はすぐ戻る** (200ms ごとの確認を待たない)。200ms ごとに
      * 印を確かめるだけだと、止めてから戻るまでに最大 200ms 掛かり、混んだ CI では 500ms を超えていた
-     * (Px4TunerTests の「待っている読む側は止める指示を受けたらすぐ抜ける」が落ちた)
+     * (px4d から TS を受けていた頃のテストの「待っている読む側は止める指示を受けたらすぐ抜ける」が落ちた)
      */
     [Test]
     public async Task 止めたら_待っている読む側はすぐ戻る(CancellationToken cancel)

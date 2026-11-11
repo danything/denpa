@@ -1,6 +1,6 @@
 namespace Denpa.Agent.Tests;
 
-/// <summary>テストで作る TSMF のヘッダーと TS のパケット (仕様書 7A.7 の「ヘッダーの中身」の並び)</summary>
+/// <summary>テストで作る TSMF のヘッダーと TS のパケット (仕様書 8.7 の「ヘッダーの中身」の並び)</summary>
 internal static class TsmfFake
 {
     /// <summary>相対 TS 番号 2 と 3 が有効 (バイト 7 の bit6 と bit5)</summary>
@@ -83,7 +83,7 @@ internal static class TsmfFake
 }
 
 /*
- * ISDB-C の TSMF から TS を 1 つ選ぶ処理 (Tsmf.cs)。期待値は仕様書 (denpa-spec の mlt5/spec.md) の 7A.7 から決めた。
+ * ISDB-C の TSMF から TS を 1 つ選ぶ処理 (Tsmf.cs)。期待値は仕様書 (denpa-spec の cxd2856/spec.md) の 8.7 から決めた。
  * ヘッダーのバイト 9〜72 (TSID・original_network_id・受信の状態) の並びは仕様書が推定としているもの。
  */
 public class TsmfTests
@@ -277,7 +277,7 @@ public class TsmfTests
     [Test]
     public async Task ロックのあとの最初のパケットは判定に使わずに捨て_前の搬送波のヘッダーで決めない()
     {
-        // 前の搬送波 (TSMF。相対 TS 番号 1 だけが有効) の残りが、新しい搬送波 (ヘッダーなし) のロックのあとに届く (仕様書 7A.7 の「パケットごとの処理」の 1)
+        // 前の搬送波 (TSMF。相対 TS 番号 1 だけが有効) の残りが、新しい搬送波 (ヘッダーなし) のロックのあとに届く (仕様書 8.7 の「パケットごとの処理」の 1)
         var stale = Enumerable.Repeat(1, TsmfHeader.SlotCount).ToArray();
         var (selector, sink) = Make(index: 0, discard: TsmfSelector.DiscardPackets);
         for (var frame = 0; frame < 13; frame++)

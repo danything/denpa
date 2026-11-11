@@ -262,7 +262,7 @@ public class It930xCardTests
     {
         var (usb, _, card) = Rig("8-7");
         var clock = new FakeClock();
-        // カードだけでも機材を開いて電源を入れる (GPIOH7 ← 0。仕様書 1.5)
+        // カードだけでも機材を開いて電源を入れる (GPIOH7 ← 0。IT930x の仕様書 7.2)
         card.Reset();
         await Assert.That(usb.Log).Contains("W D8C3=00");
         lock (usb.Log) usb.Log.Clear();

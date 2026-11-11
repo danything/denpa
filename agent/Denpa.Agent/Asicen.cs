@@ -62,7 +62,7 @@ public static class AsicenUserland
     public static string Device(string id, int receiver) => $"{Scheme}{id}:{receiver}";
 
     /// <summary><c>asicen:1-2:1</c> を割る。形式が違えば null</summary>
-    public static (string Id, int Receiver)? Parse(string device) => Px4Userland.Parse(device, Scheme, ValidId);
+    public static (string Id, int Receiver)? Parse(string device) => Userland.Parse(device, Scheme, ValidId);
 
     /// <summary>
     /// ポート (<c>1-2</c>、<c>3-1.4</c>)。筐体の名前もこの形式で、asicend の <c>--instance</c> に
@@ -100,7 +100,7 @@ public static class AsicenUserland
     /// 受信機 1 つを方式の名前から組み立てる。<c>ISDB-T</c>・<c>ISDB-S</c> をコンマか <c>/</c> で並べたもの。
     /// 対応していない方式が混じっていれば理由を残して null
     /// </summary>
-    internal static Px4Receiver? Receiver(int number, IEnumerable<string> systems, string model, Action<string> warn)
+    internal static UserlandReceiver? Receiver(int number, IEnumerable<string> systems, string model, Action<string> warn)
     {
         var names = systems.SelectMany(system => system.Split(',', '/')).Select(name => name.Trim()).Where(name => name.Length > 0).ToList();
         if (names.Count == 0 || names.Any(name => name is not ("ISDB-T" or "ISDB-S")))
@@ -109,14 +109,14 @@ public static class AsicenUserland
             return null;
         }
         var satellite = names.Contains("ISDB-S");
-        return new Px4Receiver(number, names.Contains("ISDB-T"), satellite, satellite && PowersLnb(model));
+        return new UserlandReceiver(number, names.Contains("ISDB-T"), satellite, satellite && PowersLnb(model));
     }
 
     /// <summary>筐体 1 台。<see cref="Ports"/> は USB 機能のポート (asicend の <c>--device usb:</c> に渡す)</summary>
-    public sealed record Enclosure(string Id, string Model, IReadOnlyList<string> Ports, IReadOnlyList<Px4Receiver> Receivers);
+    public sealed record Enclosure(string Id, string Model, IReadOnlyList<string> Ports, IReadOnlyList<UserlandReceiver> Receivers);
 
     /// <summary>動いている asicend に問い合わせた機種と受信機 (<c>asicenctl list</c>)</summary>
-    public sealed record Listed(string Model, IReadOnlyList<Px4Receiver> Receivers);
+    public sealed record Listed(string Model, IReadOnlyList<UserlandReceiver> Receivers);
 
     /// <summary>
     /// 筐体の名前。USB 機能が 2 つなら同じ内蔵ハブの <c>.1</c> と <c>.2</c> のはずで、そのハブのポート。1 つならそのポート。
@@ -192,7 +192,7 @@ public static class AsicenUserland
             var receivers = listed.Count > 0
                 ? listed.Select(receiver => receiver.Number is { } number ? Receiver(number, receiver.Systems, model.Name, warn) : null)
                 : model.Systems.Select((systems, index) => Receiver(index, [systems], model.Name, warn));
-            found.Add(new Enclosure(id, model.Name, ports, [.. receivers.OfType<Px4Receiver>().OrderBy(receiver => receiver.Index)]));
+            found.Add(new Enclosure(id, model.Name, ports, [.. receivers.OfType<UserlandReceiver>().OrderBy(receiver => receiver.Index)]));
         }
 
         foreach (var device in (root["ungrouped_usb_devices"] as JsonArray ?? []).OfType<JsonObject>())
@@ -220,7 +220,7 @@ public static class AsicenUserland
     public static Listed? ParseList(string output, Action<string> warn)
     {
         string? model = null;
-        var receivers = new List<Px4Receiver>();
+        var receivers = new List<UserlandReceiver>();
         foreach (var raw in output.Split('\n'))
         {
             var line = raw.Trim();
@@ -230,7 +230,7 @@ public static class AsicenUserland
                 model = line["model=".Length..];
                 continue;
             }
-            var fields = Px4Receiver.Fields(line);
+            var fields = UserlandReceiver.Fields(line);
             if (!fields.TryGetValue("receiver", out var index) || !fields.TryGetValue("system", out var system)) continue;
             if (int.TryParse(index, out var number) && model is not null && Receiver(number, [system], model, warn) is { } receiver) receivers.Add(receiver);
         }
@@ -368,10 +368,10 @@ public static class AsicenUserland
     public static List<TunerSpec> Detect() => Specs(Enclosures());
 
     public static List<TunerSpec> Specs(IEnumerable<Enclosure> enclosures) =>
-        Px4Userland.Specs(enclosures.Select(enclosure => (enclosure.Id, enclosure.Model, enclosure.Receivers)), Name, Device);
+        Userland.Specs(enclosures.Select(enclosure => (enclosure.Id, enclosure.Model, enclosure.Receivers)), Name, Device);
 
     /// <summary>設定に出てくる筐体。asicend を起動する対象</summary>
-    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Px4Userland.IdsIn(specs, Parse);
+    public static IEnumerable<string> IdsIn(IEnumerable<TunerSpec> specs) => Userland.IdsIn(specs, Parse);
 
     private static volatile HashSet<string> _lnb = [];
 

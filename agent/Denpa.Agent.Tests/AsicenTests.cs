@@ -234,7 +234,7 @@ public class AsicenTests
         await Assert.That(AsicenUserland.Parse("asicen:1-2:1")).IsEqualTo(("1-2", 1));
         await Assert.That(AsicenUserland.Parse("asicen:3-1.4:0")).IsEqualTo(("3-1.4", 0));
         await Assert.That(AsicenUserland.Parse("asicen:../x:0")).IsNull();
-        await Assert.That(AsicenUserland.Parse("px4:1-2:1")).IsNull();
+        await Assert.That(AsicenUserland.Parse("siano:1-2")).IsNull();
         await Assert.That(AsicenUserland.IdOf(["1-2.1", "1-2.2"])).IsEqualTo("1-2");
         await Assert.That(AsicenUserland.IdOf(["1-3"])).IsEqualTo("1-3");
         // 別々のハブの USB 機能は 1 つの筐体にしない
@@ -751,9 +751,9 @@ public class AsicenTunerTests
         tuner.Tune(Bs15);
         await ReadStream(tuner.Output, cancel);
         await Assert.That(asicend.Opcodes).DoesNotContain(Udtv.LnbPower);
-        await Assert.That(Px4Userland.Notice("asicen:5-8:0")).Contains("PX-S3U").And.Contains("15V");
+        await Assert.That(TunerNotice.Get("asicen:5-8:0")).Contains("PX-S3U").And.Contains("15V");
         tuner.Dispose();
-        await Assert.That(Px4Userland.Notice("asicen:5-8:0")).IsNull();
+        await Assert.That(TunerNotice.Get("asicen:5-8:0")).IsNull();
     }
 
     [Test]

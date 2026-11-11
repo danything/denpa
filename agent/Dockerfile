@@ -48,7 +48,7 @@ RUN --mount=type=bind,from=sdk,source=/usr/share/dotnet,target=/usr/share/dotnet
     /usr/share/dotnet/dotnet publish Denpa.Agent/Denpa.Agent.csproj -c Release -r "${rid}" -o /out
 
 # ---------------------------------------------------------------------------
-# 外から取ってくるもの (px4-userland と asicen-userland)。**取ってくる道具は実行イメージに残さない**
+# 外から取ってくるもの (asicen-userland)。**取ってくる道具は実行イメージに残さない**
 # (curl などはこの段だけ。実行イメージは distroless で、apt もシェルも無い)。
 # 中身は実行しないので、組む機械の arch で TARGETARCH の配布物を取る。
 # 土台は digest で留める (Dockerfile の ffmpeg 段の説明)。タグのままだと土台が入れ替わるたびにこの段が
@@ -59,22 +59,6 @@ ARG TARGETARCH
 ENV CURL="curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20"
 RUN apt-get update && apt-get -y --no-install-recommends install curl ca-certificates && \
     case "${TARGETARCH}" in amd64|arm64) ;; *) echo "対応していない arch: ${TARGETARCH}" >&2; exit 1 ;; esac
-
-# PLEX PX-Q3U4 などは px4-userland で動かす (Px4.cs)。**カーネルドライバを入れてもらわない。**
-# px4d / px4ctl は musl の完全静的 ELF。受信機もカードも px4d の制御ソケットで直に通信するので
-# (Px4.cs / Px4Card.cs)、配布物の px4-ts と IFD ハンドラ (ifd/*.so、pcscd 用) は使わない。
-# **0.1.9 より下げない。** 筐体は `px4d --list-json` (0.1.9 から) でしか問い合わせない。
-# IT930x のファームウェアはここでは入れない。エージェントの実行ファイルに埋め込んである (Px4Firmware.cs)。
-# renovate: datasource=github-releases depName=Khronos31/px4-userland extractVersion=^v(?<version>.*)$
-ARG PX4_USERLAND_VERSION=0.2.1
-RUN set -eu && mkdir -p /opt/px4-userland && cd /tmp && \
-    case "${TARGETARCH}" in amd64) arch=x86_64 ;; arm64) arch=aarch64 ;; esac && \
-    base="https://github.com/Khronos31/px4-userland/releases/download/v${PX4_USERLAND_VERSION}" && \
-    archive="px4-userland-${PX4_USERLAND_VERSION}-linux-glibc-${arch}.tar.gz" && \
-    $CURL -O "${base}/${archive}" && $CURL -O "${base}/SHA256SUMS" && \
-    sha256sum -c --ignore-missing SHA256SUMS && \
-    tar -xzf "${archive}" -C /opt/px4-userland && \
-    rm -rf /tmp/*
 
 # PLEX PX-W3U3 などの ASICEN 系は asicen-userland で動かす (Asicen.cs / AsicenUdtv.cs)。**試験的。実機では確かめていない。**
 #
@@ -139,15 +123,15 @@ RUN set -eu && mkdir -p /opt/asicen-userland && cd /tmp && \
 # エージェントのポート (AGENT_PORT) は denpa と証明書で確かめ合う HTTPS なので、libssl を常に使う (AgentTls.cs)。
 # CARD_URL を https で指したときも .NET の HttpClient が libssl を読み、
 # 相手の証明書は ca-certificates で確かめる。
-# 子プロセスは px4d / px4ctl / asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起動する。
+# 子プロセスは asicen-userland のコマンド (どれも libc に依らない静的な ELF) をシェルを通さずに起動する。
 # シェル (`setsid sh -c`) を使うのは適合テストの偽の選局 (`FAKE_TUNE`) だけで、これはホストで組んだ
 # 実行ファイルで回すのでイメージには要らない。時刻はどこも UTC で扱うので TZ も渡さない。
 #
 # **`recisdb` も libaribb25 も pcscd も入れない。** 選局は自分でやり (ioctl)、
-# B25 も自分で復号し (B25.cs)、カードリーダーとも自分で通信する (Ccid.cs / Px4Card.cs / It930xCard.cs / Zd1j.cs / Dt295NativeCard.cs)。
+# B25 も自分で復号し (B25.cs)、カードリーダーとも自分で通信する (Ccid.cs / It930xCard.cs / Zd1j.cs / Dt295NativeCard.cs)。
 #
 # **`latest` (root で動く) を使う。`nonroot` にはしない。** USB と DVB のデバイスを開き、
-# px4d のソケットを /run/px4-userland に作るので、今までどおり root で動かす
+# asicend のソケットを /run/asicen-userland に作るので、今までどおり root で動かす
 FROM gcr.io/distroless/cc-debian13:latest@sha256:e1f5543d45a2cd7c02a5b43dda5f0ff30729b4832113759d01ed39b0b152cddb AS runtime
 
 # **実行イメージの glibc で実行ファイルを読み込めることを、組むときに確かめる。**
@@ -171,8 +155,6 @@ COPY agent/Denpa.Agent/firmware/LICENCE.siano /usr/share/doc/denpa-agent/LICENCE
 # **どちらも denpa の画面が書き、どちらも無くて構わない。** tuners.json が無ければ挿さっている機材を
 # 自分で見つけるし、channels.json はスキャンするまで空でよい。
 #
-# px4-userland の機材に流し込む IT930x のファームウェアも、px4d に渡すときに
-# エージェントが同梱のものをここに書き出す (/config/it930x-firmware.bin。Px4Firmware.cs)。
 # denpa と組むための鍵・証明書・合言葉 (/config/tls。AgentTls.cs) も同じ所に置く。
 #
 # 実行ファイルは、上で読み込めることを確かめた loaded 段から写す

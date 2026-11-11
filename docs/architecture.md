@@ -169,9 +169,9 @@ NVIDIA の NVENC は amd64 に、Rockchip の MPP は arm64 にだけ入れて�
 - DNS で、denpa の名前が Gateway のアドレスを指すこと
 - チューナードライバ。エージェントは `privileged: true` かつ `/dev/bus`・`/dev/dvb` を
   hostPath でマウントするので、DVB の機材はノード側にドライバが読み込まれていること。
-  PX-Q3U4 など px4-userland の対応機種と、smsusb を blacklist した PX-S1UD はノードに
-  何も要らない (イメージ同梱のユーザー空間ドライバが `/dev/bus/usb` を使う。
-  [tuner-px4.md](tuner-px4.md))
+  PX-MLT5 系・PX-Q3U4 などの IT930x の機材と、smsusb を blacklist した PX-S1UD はノードに
+  何も要らない (エージェントが `/dev/bus/usb` で USB を直に持つ。
+  [tuner-it930x.md](tuner-it930x.md)・[tuner-px-s1ud.md](tuner-px-s1ud.md))
 - GHCR から `ghcr.io/danything/denpa-agent` と `.../denpa` を pull できること
 
 ## 画面で動いてよいもの (CSP)

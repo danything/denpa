@@ -4,7 +4,7 @@ namespace Denpa.Agent;
 
 /// <summary>
 /// 選局表。**チャンネル名を周波数に直す。** 値は <a href="https://github.com/kazuki0824/recisdb-rs">recisdb-rs</a> の
-/// <c>channels.rs</c> と <c>dvbv5_channels_isdbs.conf</c> から取った (J.83B の <c>H01</c>〜<c>H105</c> と ISDB-C は MLT5 系の仕様書 7.1・7A.2 から)。
+/// <c>channels.rs</c> と <c>dvbv5_channels_isdbs.conf</c> から取った (J.83B の <c>H01</c>〜<c>H105</c> と ISDB-C は CXD2856 の仕様書 7.1・8.2 から)。
 /// **地上波と J.83B と ISDB-C は Hz、衛星は kHz** (DVB API の決まり。取り違えても ioctl は通り、同期しないだけ)。docs/agent.md「選局表」
 ///
 /// <para>
@@ -27,7 +27,7 @@ public static class ChannelTable
     /// <summary>スカパー！プレミアムサービス光 (J.83B) の種別。サーバの <c>ChannelType</c> の <c>SKY</c></summary>
     public const string Sky = "SKY";
 
-    /// <summary>`linux/dvb/frontend.h` の <c>SYS_ISDBC</c> (J.83 Annex C。ケーブルテレビのトランスモジュレーション方式。仕様書 7A)</summary>
+    /// <summary>`linux/dvb/frontend.h` の <c>SYS_ISDBC</c> (J.83 Annex C。ケーブルテレビのトランスモジュレーション方式。CXD2856 の仕様書 8)</summary>
     public const int SysIsdbc = 10;
 
     /// <summary>ケーブルテレビのトランスモジュレーション方式 (ISDB-C) の種別。サーバの <c>ChannelType</c> の <c>CATV</c> (画面では「ケーブル」)</summary>
@@ -55,7 +55,7 @@ public static class ChannelTable
     /// どちらで送られているかは選局するまで分からないので、受ける側が両方を試す (<see cref="It930xTuner"/>)
     /// </param>
     /// <param name="TsmfIndex">
-    /// ISDB-C で受ける TS。TSMF のフレームにある有効な TS を、相対 TS 番号の小さい順に並べたときの何本目か (0〜14。仕様書 7A.7)。
+    /// ISDB-C で受ける TS。TSMF のフレームにある有効な TS を、相対 TS 番号の小さい順に並べたときの何本目か (0〜14。CXD2856 の仕様書 8.7)。
     /// 名前に <c>:2</c> のように付いているときだけ入り、無ければ 0。ほかの方式では使わない
     /// </param>
     public sealed record Tuning(
@@ -116,7 +116,7 @@ public static class ChannelTable
         {
             /*
              * スカパー！プレミアムサービス光 (J.83B)。93.25 MHz から 6.5 MHz おきに H01〜H105 (769.25 MHz まで) の中心周波数で、
-             * CATV と違って 1/7 MHz はずらさない (仕様書 7.1。Digital Devices のドライバーの表と同じとされる並び)。
+             * CATV と違って 1/7 MHz はずらさない (CXD2856 の仕様書 7.1。Digital Devices のドライバーの表と同じとされる並び)。
              * 地域によってずらして送られるもの (H11〜H12 は +1 MHz、H26〜H28 は +4 MHz、H44 は +2.2 MHz) は、ずらした周波数も持つ
              */
             if (!Number(name[1..], out var channel) || channel is < 1 or > 105) return null;
@@ -134,9 +134,9 @@ public static class ChannelTable
         if (name.StartsWith("Q", StringComparison.Ordinal))
         {
             /*
-             * ISDB-C (ケーブルテレビのトランスモジュレーション方式)。中心周波数で、地上波や CATV のパススルー (C13〜C63) と違って 1/7 MHz は足さない (仕様書 7A.2)。
+             * ISDB-C (ケーブルテレビのトランスモジュレーション方式)。中心周波数で、地上波や CATV のパススルー (C13〜C63) と違って 1/7 MHz は足さない (CXD2856 の仕様書 8.2)。
              * QC は CATV の帯域 (C13〜C63)、QU は UHF 13〜62、QV は VHF 1〜12。C22 と VHF 4〜7 は 6 MHz おきの並びから 2 MHz ずれている。
-             * C24〜C27 は、2 MHz ずらした周波数を載せた資料もあるので (どちらで送られているかは未確認)、ずらした周波数も持つ (仕様書 7A.2 の推定の使い方)
+             * C24〜C27 は、2 MHz ずらした周波数を載せた資料もあるので (どちらで送られているかは未確認)、ずらした周波数も持つ (CXD2856 の仕様書 8.2 の推定の使い方)
              */
             if (name.Length < 3) return null;
             var body = name[2..];

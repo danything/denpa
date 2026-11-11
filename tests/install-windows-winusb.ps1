@@ -3,8 +3,7 @@ param([string]$Installer = (Join-Path $PSScriptRoot '../install.ps1'))
 # install.ps1 の Invoke-WinUsb (-WinUsb。挿さっているチューナーのドライバを WinUSB に替える) を、偽の機材と偽の wdi-simple で流す。
 # 入れずに関数だけを取り出して動かすので、Linux の pwsh でも流せる (test.yml の install-linux)。
 # 見ること: wdi-simple.exe が無ければ止まる / 機材が無ければ止まる / WinUSB の機材には何もしない / 聞いて y のときだけ替える /
-# -Yes なら聞かずに替える / 同じ USB ID は 1 回で替える / wdi-simple が失敗したら終了コードを添えて止まる (ほかの機材は続ける) /
-# px4d が開けなかった機材も対象になる
+# -Yes なら聞かずに替える / 同じ USB ID は 1 回で替える / wdi-simple が失敗したら終了コードを添えて止まる (ほかの機材は続ける)
 $ErrorActionPreference = 'Stop'
 $tokens = $null
 $parseErrors = $null
@@ -22,13 +21,12 @@ foreach ($name in 'Say', 'Get-UsbPnp', 'Get-WinUsbTarget', 'Get-WinUsbDevice', '
 $Installer = 'https://example.invalid/install.ps1'
 $root = Join-Path ([IO.Path]::GetTempPath()) "denpa-winusb-test-$([Guid]::NewGuid().ToString('N'))"
 
-# 外を呼ぶところを偽物にする (機材の一覧・エージェントの表・px4d の答え・wdi-simple・人の答え・エージェントの起動し直し)
+# 外を呼ぶところを偽物にする (機材の一覧・エージェントの表・wdi-simple・人の答え・エージェントの起動し直し)
 function Get-PnpDevice { return $script:pnp }
 function Get-AgentUsbId {
     return @([pscustomobject]@{ usb = '054c:04b2'; name = 'Sony CECH-ZD1 J' }, [pscustomobject]@{ usb = '06b8:103b'; name = 'PIXELA PIX-DT295' },
         [pscustomobject]@{ usb = '3275:0080'; name = 'PLEX PX-S1UD' })
 }
-function Get-Px4List { return $script:px4 }
 function Invoke-WdiSimple([string]$Usb, [string]$Name, [string]$Work) {
     $script:replaced += $Usb
     if ($script:exitCodes.ContainsKey($Usb)) { return $script:exitCodes[$Usb] }
@@ -52,7 +50,6 @@ function Set-Case([object[]]$Pnp, [string]$Answer = '', [switch]$NoWdi, [switch]
     if (-not $NoAgent) { [IO.File]::WriteAllText((Join-Path $Prefix 'bin/denpa-agent.exe'), '') }
     if (-not $NoWdi) { [IO.File]::WriteAllText($WdiSimple, '') }
     $script:pnp = $Pnp
-    $script:px4 = $null
     $script:answer = $Answer
     $script:asked = 0
     $script:replaced = @()
@@ -126,17 +123,6 @@ try {
     Assert-Throw { Invoke-WinUsb -Yes } '054c:04b2.*終了コード -12.*Zadig' 'wdi-simple fails'
     Assert-Equal ($replaced -join ',') '054c:04b2,06b8:103b' 'wdi-simple fails: replaced'
     Assert-Equal $restarted 1 'wdi-simple fails: restarted'
-
-    # px4d が開けなかった px4-userland の機材も対象になる (USB ID は px4d が返す)。開けた機材は対象にしない
-    Set-Case @((New-Pnp '0511:083f' 'PXQ3U4'), (New-Pnp '0511:0841' 'WinUSB'))
-    $px4 = [pscustomobject]@{
-        enclosures = @()
-        ungrouped_usb_devices = @(
-            [pscustomobject]@{ usb = '0511:083f'; model = 'PX-Q3U4'; status = 'open_failed'; port = '1-2' },
-            [pscustomobject]@{ usb = '0511:0841'; model = 'PX-W3U4'; status = 'unsupported'; port = '1-3' })
-    }
-    Invoke-WinUsb -Yes
-    Assert-Equal ($replaced -join ',') '0511:083f' 'px4: replaced'
 
     'ok'
 } finally {

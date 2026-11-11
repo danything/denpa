@@ -307,7 +307,7 @@ let current: ScanState = IDLE;
 /**
  * 最後のスキャンで、SKY と CATV のチャンネルについて分かったこと (`種別:チャンネル` → 中身)。
  * 受信の設定の「受信できるチャンネル」に出す。**denpa の中にだけ持つ** (再起動で消える。もう一度スキャンすれば出る)。
- * SKY の局の番組表を取り込むかは、この観測の報告を見てから決める (docs/tuners.md)。
+ * SKY の局の番組表を取り込むかは、この観測の報告を見てから決める (docs/tuner-it930x.md)。
  * CATV の局ごとの CA_system_id は、これとは別にチャンネルの控えに入れる (`channelEntry`)
  */
 const observations = new Map<string, Observed>();

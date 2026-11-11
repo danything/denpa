@@ -40,14 +40,13 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
   LAN のほかの機器から開けないときは、Windows の設定でこの PC のネットワークを「プライベート」にします (パブリックのネットワークには開けない)
 - 本体とエージェントの zip は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
 
-| 置き場                    | 中身                                                                                                                                                                                                                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・ドライバを WinUSB に替える `wdi-simple.exe` (`bin\libwdi\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・本体 (`server\`)・エージェントを起動する `denpa-agent.cmd` |
-| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起動する `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる                   |
-| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                                                 |
-| `C:\denpa-run`            | px4d のソケットの置き場 (下)                                                                                                                                                                                                  |
-| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                                                                                           |
-| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                                                                                  |
+| 置き場                    | 中身                                                                                                                                                                                                        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・ドライバを WinUSB に替える `wdi-simple.exe` (`bin\libwdi\`)・本体 (`server\`)・エージェントを起動する `denpa-agent.cmd`                                          |
+| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起動する `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる |
+| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                               |
+| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                                                                         |
+| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                                                                |
 
 `%ProgramFiles%\denpa` と `%ProgramData%\denpa` を管理者だけのものにしてあるのは、SYSTEM で動くものと、その環境変数を
 ほかの人やほかのプログラムに書き換えさせないためです。ログはふつうのユーザーでも読めるように `~/denpa` に置きます (回さずに足していく)。
@@ -88,8 +87,8 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 | 「対応しているチューナーが挿さっていません」 | チューナーを挿して流し直す。デバイス マネージャーにも出ないときは、ケーブルとポートを変える                         |
 | 「wdi-simple.exe の終了コード …」            | 機材を挿し直して流し直す。終了コードは libwdi のエラーの番号 (`wdi_error`)。それでも替えられないときは Zadig を使う |
 
-**対象の機材は、エージェントと px4d に問い合わせて決めます。** エージェントが USB を直に持つ機材 (PX-MLT5 系・CECH-ZD1 J・PIX-DT295・PX-S1UD などの Siano の機材) の USB ID は
-`denpa-agent --usb-ids` が返し、px4-userland の機材は `px4d --list-json` が「開けなかった」と返したものを対象にします。
+**対象の機材は、エージェントに問い合わせて決めます。** エージェントが USB を直に持つ機材 (IT930x の機材・CECH-ZD1 J・PIX-DT295・PX-S1UD などの Siano の機材) の USB ID は
+`denpa-agent --usb-ids` が返します。
 install.ps1 は USB ID の表を持ちません。
 
 **Zadig で替えるときは**、Options → List All Devices → チューナーを選んで WinUSB → Replace Driver の順に操作します。結果は `-WinUsb` と同じです。
@@ -165,16 +164,11 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
 
 ## 使えるもの
 
-- **px4-userland の機材** (PX-Q3U4 / PX-M1UR / PX-S1UR など)。px4-userland の Windows 用 (0.2.0 から。
-  入れるのは 0.2.1) は、ドライバを WinUSB にすれば動きます。Linux・Mac と同じく px4d の制御ソケットで
-  受信機を使い、内蔵カードリーダーも読みます (IPC は Windows でも AF_UNIX)。配布 zip のうち使うのは
-  `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
-  置きません。エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらが読み込まれてしまいます。
-  IT930x のファームウェアは Mac と同じくエージェントに同梱しています ([tuner-px4.md](tuner-px4.md#ファームウェア))
+- **IT930x の機材** (PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P、PX-Q3U4 / PX-W3U4、PX-M1UR / PX-S1UR など)。エージェントが WinUSB で USB を直に持ちます (内蔵カードリーダーも読みます)。
+  ドライバを WinUSB にします。Windows の実機ではまだ確かめていません ([tuner-it930x.md](tuner-it930x.md))。
+  IT930x のファームウェアは Mac と同じくエージェントに同梱しています ([tuner-it930x.md](tuner-it930x.md#ファームウェア))
 - **PX-S1UD** (地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません)。`3275:0080` のドライバを WinUSB に替えます。
   この実装は Windows でも Linux でも実機で確かめていません ([tuner-px-s1ud.md](tuner-px-s1ud.md))
-- **PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P**。エージェントが WinUSB で USB を直に持ちます (px4d は使いません。内蔵カードリーダーも読みます)。
-  ドライバは WinUSB に替えます。Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#px-mlt5-系))
 - **Sony CECH-ZD1 J** (PS3 の torne。地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません。
   内蔵の差し込み口の B-CAS も読みます)。機材にドライバが無いので、`054c:04b2` のドライバを WinUSB に替えます。
   替えていないか、ほかのソフトが使っていると「ほかのソフトが使っているか、WinUSB になっていません」と返します。
@@ -184,37 +178,18 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
   機材のレジスタをエージェントが直に書く方式 (ファームウェアは入れません) は、Windows の実機では確かめていません。エージェントが途中で止まったあとなどは、機材を挿し直してください
   ([tuners.md](tuners.md#pixela-pix-dt295))
 - ドライバは `install.ps1 -WinUsb` で WinUSB に替えます ([チューナーのドライバを WinUSB に替える](#チューナーのドライバを-winusb-に替える)。Zadig でも替えられます)。
-  **PX-Q3U4 / PX-W3U4 は USB の機材が 2 つ並ぶので、両方とも替えます** (`-WinUsb` は同じ USB ID の機材をまとめて替える)。PLEX のドライバで TVTest などから使っていた
+  **PX-Q3 系と PX-MLT8PE は USB の機材が 2 つ並ぶので、両方とも替えます** (`-WinUsb` は挿さっている対応機材をまとめて替える)。PLEX のドライバで TVTest などから使っていた
   機材は、WinUSB にするとそちらからは見えなくなります。
   install.ps1 は、入れるときにはドライバを替えません (ほかのソフトで使っていた機材を、聞かずに使えなくしない)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
   (Windows の libusb は WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
-- px4・Siano・PX-MLT5 系・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
+- IT930x・Siano・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
 - **カードリーダー**: USB のリーダーを Windows の PC/SC (winscard.dll) 越しに扱います (`Pcsc.cs`。
   Mac と同じ作りで、違うのはハンドルの幅と関数の名前だけ)。ドライバは Windows 標準で足ります。
-  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。px4-userland の内蔵リーダーと CECH-ZD1 J の差し込み口も
+  `denpa-agent --card` がリーダーを並べ、動いている間はリーダーを独り占めします。IT930x の機材の内蔵リーダーと CECH-ZD1 J の差し込み口も
   並びます (USB のリーダーが先)
 - **エンコードは GPU (NVIDIA の NVENC・Intel の QSV・AMD の AMF) があれば使い、無ければソフトウェアで** (SVT-AV1・x264)。起動時の試しのエンコードで決める ([encode.md](encode.md#windows-でエンコードする))
   (使える GPU は設定の「録画」の「エンコード」に出る)。GPU のエンコーダは Windows の実機では確かめていない
-
-**px4-userland の機材で Windows だけ違うところ。**
-
-- **px4d は標準入力で止めます** (`--exit-on-stdin-eof`)。Windows には SIGTERM が無いので、エージェントは px4d の
-  標準入力を開けたまま持ち、止めるときに閉じます。px4d は後片付け (LNB を 0V に戻す・ソケットを消す) をしてから
-  終わります。エージェントが落ちても書く側が閉じるので、**px4d が USB を持ったまま残りません**
-- **ソケットの置き場は `C:\denpa-run`** (`PX4_RUNTIME_DIR`)。px4d は、持ち主が自分で、自分・SYSTEM・Administrators のほかに
-  書ける人がいないフォルダしか使いません。エージェント (と、それが起動する px4d) は SYSTEM で動くので、install.ps1 が持ち主を SYSTEM にし、
-  SYSTEM と Administrators だけが書ける ACL で作ります。ユーザーのフォルダの下にしないのは、
-  ソケットのパスが UTF-8 で 108 バイトまでで日本語のユーザー名だとすぐ溢れ、非 ASCII のパスだと px4d の ready の行が
-  途切れるため ([px4-userland #52](https://github.com/Khronos31/px4-userland/issues/52))。エージェントは px4d を起動する前に
-  持ち主・ACL・長さを確かめ、合わなければ理由を記録に出します
-- **px4d が使っている筐体は、一覧で開けない機材 (`open_failed`) に見えます。** エージェントは起動したときの筐体を
-  控えていて、動いている間は顔ぶれに残します。同じ番号の筐体を `--usb-path` で分けて起動するのは、
-  px4-userland も Windows では確かめていません
-- USB を抜くと px4d は終わり、次の選局で起動し直します (DISCONNECTED / USB_IO を返したまま動いていたら、エージェントが止める)
-
-機種では絞らず、px4-userland が ready を返した筐体は使います。px4-userland 側で Windows の実機で確かめてあるのは
-PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4-userland#対応機種動作環境))。
 
 ## 使えないもの
 
@@ -226,7 +201,7 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
 
 ## Linux・Mac と違うところ
 
-- エージェントのタスクの優先度は普通にしてあります (既定の「低い」だと、エンコードで CPU が埋まる間エージェントや px4d が後回しになる)。
+- エージェントのタスクの優先度は普通にしてあります (既定の「低い」だと、エンコードで CPU が埋まる間エージェントが後回しになる)。
   エンコードの ffmpeg は、本体が自分でいちばん低い優先度にします
 - エージェントは全部のインターフェースで待ち受けます (`-AgentOnly` で別の機械の denpa から繋ぐため)。同じ PC の本体は 127.0.0.1 で繋ぎます。
   LAN から届かないようにするのは Windows ファイアウォールの役目です (25252 の受信を許さないままにする)。LAN のほかの機械からエージェントに繋ぐとき
@@ -247,8 +222,8 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
   ランナーでは、ビルドした `wdi-simple.exe` が zip に入っていること、機材が無いと `-WinUsb` が何も変えずに止まること、`wdi-simple.exe` を同じ引数で流すと
   証明書とドライバのパッケージがランナーに入ることを見る
 - **Windows の実機で確かめたことのあるチューナーは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 だけで、いまの方式では確かめていません。** ほかのチューナーとカードは、CI で
-  ビルドして起動し、偽の px4d を相手に IPC と TS の受け渡しを流すところまでです
+  ビルドして起動し、偽の USB の機材を相手にした単体テストを流すところまでです
 - **まだ確かめていないこと**: `-WinUsb` で実機のチューナーのドライバが WinUSB に替わるか (CI のランナーに機材が無い。ほかのドライバが入っている機材・複合デバイスの機材も確かめていない)、
   SYSTEM で動くエージェントから WinUSB の機材とカードリーダー (PC/SC) を使えるか、スリープから復帰させるタスクで
-  録画が始まるか、wslc の本体からの移行 (実機の wslc で)、通知領域のアイコンの見た目とメニュー・通知と、そこから UAC を通して更新する流れ。実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`
+  録画が始まるか、wslc の本体からの移行 (実機の wslc で)、通知領域のアイコンの見た目とメニュー・通知と、そこから UAC を通して更新する流れ。実機で当てるのは `denpa-agent --tune it930x:<USB のポート>:2 T27` と `denpa-agent --card`
   (管理者の PowerShell で、エージェントのタスクを止めてから)
