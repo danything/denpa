@@ -144,6 +144,8 @@ if (tls.Token.Length < 32)
 }
 // CECH-ZD1 J がチャンネルごとに記録したロックの値 (tuners.json の隣。Zd1j.cs)
 Zd1jBoard.Locks = new Zd1jLocks(config.Zd1jLocksFile);
+// CXD2856ER の地上波のプリセットに使う TMCC (tuners.json の隣。TmccPresets.cs)
+Cxd2856Frontend.Presets = new TmccPresets(config.TmccPresetsFile);
 // 使わないカードリーダー (tuners.json の隣。CardChoice.cs)。カードを開く前に読む
 CardChoice.Load(config.CardsFile);
 var events = new Events();

@@ -97,6 +97,9 @@ public sealed class Config(string tunersFile, string channelsFile)
     /// <summary>CECH-ZD1 J がチャンネルごとに記録したロックの値 (tuners.json の隣。消してよい。Zd1j.cs の <see cref="Zd1jLocks"/>)</summary>
     public string Zd1jLocksFile => Path.Combine(Dir, "zd1j-locks.json");
 
+    /// <summary>CXD2856ER の地上波のプリセットに使う、周波数ごとの TMCC の 13 バイト (tuners.json の隣。消してよい。<see cref="TmccPresets"/>)</summary>
+    public string TmccPresetsFile => Path.Combine(Dir, "tmcc-presets.json");
+
     /// <summary>使わないカードリーダーの名前 (tuners.json の隣。画面から書く。<see cref="CardChoice"/>)</summary>
     public string CardsFile => Path.Combine(Dir, "cards.json");
 

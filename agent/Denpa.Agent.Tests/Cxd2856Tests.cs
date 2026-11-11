@@ -14,7 +14,7 @@ public class Cxd2856Tests
         var bus = new FakeCxdBus(Demod);
         setup?.Invoke(bus[Demod]);
         var clock = new FakeClock();
-        return (new Cxd2856Frontend(bus, new Lock(), Demod, clock.Sleep, () => clock.Now, new()), bus, clock);
+        return (new Cxd2856Frontend(bus, new Lock(), Demod, clock.Sleep, () => clock.Now, new(null)), bus, clock);
     }
 
     /// <summary>初期化 (仕様書 2.2 → 4.2 → 3.2)</summary>
@@ -331,7 +331,7 @@ public class Cxd2856Tests
             {
                 clock.Sleep(ms);
                 Thread.Sleep(Math.Min(ms, 2));
-            }, () => clock.Now, new());
+            }, () => clock.Now, new(null));
         }).ToList();
         var tasks = frontends.Select(frontend => Task.Run(() =>
         {

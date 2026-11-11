@@ -20,7 +20,7 @@ public class Cxd2856SatelliteTests
         var bus = new FakeCxdBus(Demod);
         setup?.Invoke(bus[Demod]);
         var clock = new FakeClock();
-        var frontend = new Cxd2856Frontend(bus, new Lock(), Demod, clock.Sleep, () => clock.Now, new());
+        var frontend = new Cxd2856Frontend(bus, new Lock(), Demod, clock.Sleep, () => clock.Now, new(null));
         frontend.Init();
         bus.Log.Clear();
         clock.Sleeps.Clear();

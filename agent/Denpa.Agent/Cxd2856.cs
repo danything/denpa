@@ -1146,13 +1146,13 @@ public sealed class Cxd2856Frontend
     /// <param name="demodAddress">復調器の T のアドレス (7 ビット。仕様書 1.2)</param>
     /// <param name="sleep">待つ (ms)。テストは時計を進めるだけにする</param>
     /// <param name="nowMs">いまの時刻 (ms)。ロックの待ちを測る</param>
-    /// <param name="presets">地上波のプリセット (仕様書 5.8) を覚える先。省けば機材と受信機をまたいで 1 つの <see cref="SharedPresets"/>。テストは受信機ごとに分ける</param>
-    public Cxd2856Frontend(ICxdBus bus, Lock busLock, byte demodAddress, Action<int> sleep, Func<long> nowMs, System.Collections.Concurrent.ConcurrentDictionary<uint, byte[]>? presets = null)
+    /// <param name="presets">地上波のプリセット (仕様書 5.8) を覚える先。省けば機材と受信機をまたいで 1 つの <see cref="Presets"/>。テストは受信機ごとに分ける</param>
+    public Cxd2856Frontend(ICxdBus bus, Lock busLock, byte demodAddress, Action<int> sleep, Func<long> nowMs, TmccPresets? presets = null)
     {
         _busLock = busLock;
         _sleep = sleep;
         _nowMs = nowMs;
-        _presets = presets ?? SharedPresets;
+        _presets = presets ?? Presets;
         _link = new CxdLink(bus, demodAddress, sleep);
         _demod = new Cxd2856(_link);
         _tuner = new Cxd2858(_link);
@@ -1260,8 +1260,9 @@ public sealed class Cxd2856Frontend
     /// 地上波 (ISDB-T 6 MHz) を選局し、ロックを待つ (仕様書 5.4)。<paramref name="khz"/> は中心周波数の kHz (仕様書 5.1)。
     /// ほかの方式で動作中なら、その方式のスリープから起動し直す (仕様書 10.1)。チューナーは衛星側を止めてから地上波の周波数を書く (仕様書 10.2)。
     /// ロックしなければ false (例外にしない。スキャンで続くため)。I2C の失敗は <see cref="IOException"/>。
-    /// この周波数の TMCC を覚えていれば、プリセット選局にする (仕様書 5.8)。プリセットを使ってロックしなければ、プリセットを外して 1 回だけ選局し直し、覚えた値を消す。
-    /// チャンネルスキャンでも同じに扱う (覚えているのは、このプロセスで一度ロックした周波数だけ。食い違っていれば外して選局し直す)
+    /// この周波数の TMCC を覚えていれば、プリセット選局にする (仕様書 5.8)。覚えていなければ、ほかの周波数で最後にロックしたときの値を代わりに使う (<see cref="TmccPresets"/>)。
+    /// プリセットを使ってロックしなければ、プリセットを外して 1 回だけ選局し直す。その周波数の値なら消し、代わりの値ならその周波数では次から代わりの値を使わない。
+    /// チャンネルスキャンでも同じに扱う (覚えているのは一度ロックした周波数の値だけ。食い違っていれば外して選局し直す)
     /// </summary>
     public bool TuneIsdbt(uint khz)
     {
@@ -1270,32 +1271,34 @@ public sealed class Cxd2856Frontend
         lock (_op)
         {
             ClearReadings();
-            var preset = _presets.TryGetValue(khz, out var known) ? known : null;
-            if (TuneIsdbtOnce(khz, preset)) return true;
+            var (preset, fallback) = _presets.For(khz);
+            if (TuneIsdbtOnce(khz, preset, fallback)) return true;
             if (preset is null) return false;
-            // ほかの受信機がその間に覚え直した値は消さない
-            _presets.TryRemove(new KeyValuePair<uint, byte[]>(khz, preset));
-            _tuneLines.Add("プリセットを使った選局がロックしなかったため、プリセットを外して選局し直しました");
-            return TuneIsdbtOnce(khz, null);
+            _presets.Failed(khz, preset, fallback);
+            _tuneLines.Add(fallback
+                ? "ほかのチャンネルの値のプリセットでロックしなかったため、プリセットを外して選局し直しました (このチャンネルでは次からほかのチャンネルの値を使いません)"
+                : "プリセットを使った選局がロックしなかったため、プリセットを外して選局し直しました");
+            return TuneIsdbtOnce(khz, null, false);
         }
     }
 
     /// <summary>
-    /// TS がロックしたときに読んだ TMCC の 13 バイト (仕様書 5.8)。周波数 (kHz) ごとに、機材と受信機をまたいで 1 つ。プロセスの中だけで覚える
-    /// (放送の TMCC はめったに変わらず、変わっても選局し直しで覚え直すため)
+    /// TS がロックしたときに読んだ TMCC の 13 バイト (仕様書 5.8)。周波数 (kHz) ごとに、機材と受信機をまたいで 1 つ。
+    /// 常駐と <c>--tune</c> は、tuners.json の隣のファイル (<see cref="Config.TmccPresetsFile"/>) を読み書きするものに置き換える
     /// </summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, byte[]> SharedPresets = new();
+    public static TmccPresets Presets { get; set; } = new(null);
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, byte[]> _presets;
+    private readonly TmccPresets _presets;
 
     /// <summary>最後の地上波の選局の経過 (<c>--tune</c> だけが出す。機材からは読まずに、選局の途中で書き留める)</summary>
     private readonly List<string> _tuneLines = [];
 
     /// <summary>
     /// 地上波の選局を 1 回 (書き込みからロックを待つまで)。<paramref name="preset"/> は書く TMCC の 13 バイトで、null ならプリセットを外す。
+    /// <paramref name="fallback"/> は、それがほかの周波数の値か (<c>--tune</c> に出すだけ)。
     /// チューナーの手順 8 のあとの 50 ms は待たずに選局を終え、ロックを待つ間に手順 9〜10 を書く (仕様書 5.4)
     /// </summary>
-    private bool TuneIsdbtOnce(uint khz, byte[]? preset)
+    private bool TuneIsdbtOnce(uint khz, byte[]? preset, bool fallback)
     {
         var entered = _nowMs();
         long tuned = 0;
@@ -1305,7 +1308,7 @@ public sealed class Cxd2856Frontend
             tuned = _nowMs();
         }, () => _demod.Preset(preset));
         _khz = khz;
-        _tuneLines.Add($"選局の書き込み {_nowMs() - entered} ms  プリセット {(preset is null ? "使わない" : $"使った ({Hex(preset)})")}");
+        _tuneLines.Add($"選局の書き込み {_nowMs() - entered} ms  プリセット {(preset is null ? "使わない" : $"使った ({(fallback ? "ほかのチャンネルの値 " : "")}{Hex(preset)})")}");
         return WaitIsdbt(khz, tuned);
     }
 
@@ -1544,7 +1547,7 @@ public sealed class Cxd2856Frontend
         {
             byte[] tmcc;
             lock (_busLock) tmcc = _demod.ReadTmcc();
-            _presets[khz] = tmcc;
+            _presets.Locked(khz, tmcc);
             _tuneLines.Add($"TMCC の 13 バイト (60 の 32〜3E) {Hex(tmcc)}");
         }
         if (tunerFinished < 0)
