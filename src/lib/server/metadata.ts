@@ -6,31 +6,39 @@ import { removeIfExists } from "./fsx";
 import { recordingInput } from "./recording-io";
 import { run } from "./stream";
 import { TS_PROBE } from "./ts-probe";
+import { HLG_TO_SDR } from "./uhd";
 
 /**
  * 動画の隣に置くサイドカー。番組情報そのものは DB が持ち、denpa の画面が出す。
  */
 
-/** サイドカーの接尾辞 (サムネ・データ放送の順)。名前を作る `sidecarPaths` も、片付けと孤児探し (files.ts) もこの一覧で見る */
-export const SIDECAR_SUFFIXES = ["-poster.jpg", ".bml.jsonl"] as const;
+/** サイドカーの接尾辞 (サムネ・データ放送・字幕の順)。名前を作る `sidecarPaths` も、片付けと孤児探し (files.ts) もこの一覧で見る */
+export const SIDECAR_SUFFIXES = [
+  "-poster.jpg",
+  ".bml.jsonl",
+  ".captions.json",
+] as const;
 
 /**
  * サイドカーの置き場。`foo.mkv` に対して `foo-poster.jpg`。
  *
  * サムネ (`-poster.jpg`) は denpa の画面 (`/api/recordings/<id>/poster`) が配る画像。
  *
- * **字幕は置かない。** コンテナの中に入っていて、取り出すのは実測で 0.1〜1 秒
+ * **TS の局の字幕は置かない。** コンテナの中に入っていて、取り出すのは実測で 0.1〜1 秒
  * (`api/recordings/<id>/captions.json`。一度取り出したものはメモリに覚えておく)。
+ * 4K の局の字幕 (TTML) は Matroska に入れられないので、文字の配置にして置く (`….captions.json`。`encoder.writeCaptions`)
  */
 export function sidecarPaths(videoPath: string): {
   thumbnail: string;
   dataBroadcast: string;
+  captions: string;
 } {
   const base = sidecarBase(videoPath);
   return {
     thumbnail: `${base}${SIDECAR_SUFFIXES[0]}`,
     // 録画のデータ放送 (再生位置つきの変化ログ)。d ボタンで出す (server/recorded-bml.ts)
     dataBroadcast: `${base}${SIDECAR_SUFFIXES[1]}`,
+    captions: `${base}${SIDECAR_SUFFIXES[2]}`,
   };
 }
 
@@ -69,12 +77,15 @@ interface ThumbnailPlace {
  * jpg の SAR は画面が使わない。
  * 縮めてから選ぶのは、`thumbnail` が候補を全部持つため (1080p のままだと候補 450 コマで 1.4GB ほど使う)。
  * 選ぶ基準 (ヒストグラム) は縮めても変わらない。
+ *
+ * **4K の局 (`hlg`) は、縮めたあとで HLG を SDR に直す** (`uhd.HLG_TO_SDR`)。直さないと色の薄い画像になる
  */
 export function buildThumbnailArgs(
   videoPath: string,
   thumbnail: string,
   place: ThumbnailPlace,
   before: readonly string[] = [],
+  hlg = false,
 ): string[] {
   const limit =
     place.limit !== undefined && place.limit > 0
@@ -90,7 +101,14 @@ export function buildThumbnailArgs(
     "-frames:v",
     "1",
     "-vf",
-    `field=top,setsar=sar/2,scale=${config.thumbnailWidth}:trunc(ow/dar/2)*2,setsar=1,thumbnail=${THUMBNAIL_CANDIDATES}`,
+    [
+      "field=top",
+      "setsar=sar/2",
+      `scale=${config.thumbnailWidth}:trunc(ow/dar/2)*2`,
+      "setsar=1",
+      ...(hlg ? HLG_TO_SDR : []),
+      `thumbnail=${THUMBNAIL_CANDIDATES}`,
+    ].join(","),
     thumbnail,
   ];
 }
@@ -140,13 +158,19 @@ export function thumbnailPlace(
 export async function writeThumbnail(
   videoPath: string,
   durationSec: number,
-  from?: { source: string; place: ThumbnailPlace },
+  from?: { source: string; place: ThumbnailPlace; hlg?: boolean },
 ): Promise<void> {
   const { thumbnail } = sidecarPaths(videoPath);
   const args =
     from === undefined
       ? buildThumbnailArgs(videoPath, thumbnail, thumbnailPlace(durationSec))
-      : buildThumbnailArgs(from.source, thumbnail, from.place, TS_PROBE);
+      : buildThumbnailArgs(
+          from.source,
+          thumbnail,
+          from.place,
+          TS_PROBE,
+          from.hlg === true,
+        );
   await run([config.ffmpeg, ...args]);
 }
 

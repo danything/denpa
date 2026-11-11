@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -138,4 +138,68 @@ test("コマを 1 つも読めなかったものは控えない (次も読み直
   expect((await finished(jobId)).state).toBe("done");
   // 偽 ffmpeg は無音しか返さない
   expect(loadMaterial(1)).toBeNull();
+});
+
+test("4K の局の元の録画 (.mmts) は、MP4 に詰め替えてから読み直し、録画の物差しのまま覚える。詰め替えたものは消す", async () => {
+  orm().delete(recordings).run();
+  orm().delete(encodeJobs).run();
+  const { services } = await import("./schema");
+  const { MmtServiceFilter } =
+    await import("@danything/arib/mmt-service-filter");
+  const { SynthMmtAv } = await import("@danything/arib/synth-mmt-av");
+  const { concatBytes } = await import("@danything/arib/bytes");
+  const SERVICE = 6_554_700_301;
+  orm()
+    .insert(services)
+    .values({
+      id: SERVICE,
+      service_id: 301,
+      network_id: 0x000b,
+      name: "4K テスト",
+      type: "CATV",
+      service_type: 1,
+      channel: "QC28",
+      transport: "tlv",
+      updated_at: now,
+    })
+    .run();
+  // 偽の放送と同じ素材を、録画と同じく 1 局に絞って書く (`recorder.ts`)
+  const av = new SynthMmtAv({
+    serviceId: 301,
+    mptPacketId: 0x9000,
+    startMs: now,
+  });
+  const filter = new MmtServiceFilter(301);
+  const mmts = join(root, "a.mmts");
+  writeFileSync(
+    mmts,
+    concatBytes(Array.from({ length: 20 }, () => filter.filter(av.next()))),
+  );
+  orm()
+    .insert(recordings)
+    .values({
+      id: 2,
+      service_id: SERVICE,
+      name: "4K の番組",
+      start_at: now,
+      end_at: now + 600_000,
+      finished_at: now + 600_000,
+      ts_path: mmts,
+      created_at: now,
+      updated_at: now,
+    })
+    .run();
+  const jobId = enqueue(2, "cm");
+  pump();
+  const job = await finished(jobId);
+  expect(job.error).toBeNull();
+  expect(job.state).toBe("done");
+  const rec = orm()
+    .select()
+    .from(recordings)
+    .where(eq(recordings.id, 2))
+    .get()!;
+  // 偽 ffmpeg の無音 (300・360)。詰め替えた MP4 の時刻は録画の物差しなので足し引きしない
+  expect(rec.cm_ranges).toEqual([{ start: 300, end: 360 }]);
+  expect(existsSync(`${mmts}.remux.mp4`)).toBe(false);
 });

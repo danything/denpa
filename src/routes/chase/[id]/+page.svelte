@@ -121,7 +121,13 @@
     if (still !== null && overlay !== null) player.attach(still, overlay);
     // 前に途中まで観ていたら、そこから
     if (video !== null)
-      void player.openChase(video, data.rec.id, data.rec.resumeSec);
+      void player.openChase(
+        video,
+        data.rec.id,
+        data.rec.resumeSec,
+        false,
+        data.broadcast,
+      );
     // 出演者などは番組表の側にある。押させずに、開いた時点で引く (観る画面と同じ)
     void detail.open(data.rec.program_id, facts);
     const ticker = setInterval(() => (clock = Date.now()), 1000);

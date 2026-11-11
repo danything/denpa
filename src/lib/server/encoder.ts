@@ -12,6 +12,10 @@ import {
 } from "node:fs";
 import { basename, dirname } from "node:path";
 
+import {
+  CAPTION_TEXT_VERSION,
+  type CaptionPages,
+} from "@danything/arib/caption-text";
 import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 
 import { audioChannels, audioTitles, DUAL_MONO } from "#lib/arib.js";
@@ -23,8 +27,13 @@ import {
   type HwCodec,
   SOFTWARE_CODECS,
 } from "../hw";
-import { encodeSource, tsPathOf } from "../source";
-import type { EncodeKind, EncodePhase, Recording } from "../types";
+import { encodeSource, recordedTransport, tsPathOf } from "../source";
+import {
+  type EncodeKind,
+  type EncodePhase,
+  type Recording,
+  undecodableReason,
+} from "../types";
 import { fileSize } from "./chase";
 import {
   chapterArgs,
@@ -73,15 +82,17 @@ import {
   thumbnailPlace,
   writeThumbnail,
 } from "./metadata";
+import { remuxMmts } from "./mmts";
 import { saveRecordedBml } from "./recorded-bml";
 import { recordingSummary, tsHeadOf } from "./recording";
 import { recordingInput } from "./recording-io";
-import { encodeJobs, programs, recordings } from "./schema";
+import { encodeJobs, programs, recordings, services } from "./schema";
 import { descramble, isDecoded, isScrambled } from "./scramble";
 import { settings } from "./settings";
 import { chunks, lines, lowerPriority, run, sideOutput } from "./stream";
 import { displayTitle } from "./title";
 import { tsProbe } from "./ts-probe";
+import { HLG_PARAMS, HLG_TO_SDR, UHD_HEIGHT } from "./uhd";
 import { saveVideoLoss } from "./video-loss";
 import { notify } from "./webhook";
 
@@ -210,8 +221,19 @@ function videoArgs(
   scale: string | null,
   hardware: HwWay | null,
   height = Number.NaN,
+  uhd = false,
 ): { filter: string; encoder: string[]; device: string[] } {
-  const steps = [deinterlace(smooth), ...(scale === null ? [] : [scale])];
+  /*
+   * **4K の局 (`uhd`) はインタレ解除も引き伸ばしもしない** (プログレッシブで、画素は正方形)。
+   * AV1 は 2160p・10 ビット・HLG のまま出す (`HLG_PARAMS` でコマに色を書き込む)。H.264・H.265 は今の録画と同じ 1080p・8 ビットの SDR に縮めて直す
+   * (`HLG_TO_SDR`。ライブの `uhdVideoArgs` と同じ)。理由は docs/encode.md「4K の局の録画」
+   */
+  const hdr = uhd && codec === "av1";
+  const steps = uhd
+    ? hdr
+      ? [HLG_PARAMS]
+      : [`scale=-2:${UHD_HEIGHT}`, ...HLG_TO_SDR]
+    : [deinterlace(smooth), ...(scale === null ? [] : [scale])];
   if (hardware !== null) {
     /*
      * **GPU (VA-API・NVENC・QSV・AMF・VideoToolbox・Rockchip MPP)。** インタレ解除も引き伸ばしも CPU のフィルタで
@@ -220,7 +242,10 @@ function videoArgs(
      * 使うかどうかは `hwChain` (起動時の試しのエンコードと設定)。**落ちたら次の方式か
      * ソフトウェアで再エンコードする** (runJob) ので、ここで保険はかけない
      */
-    const hw = hwArgs(hardware, codec, { height, smooth });
+    const hw = hwArgs(hardware, codec, {
+      height: uhd ? UHD_HEIGHT : height,
+      smooth,
+    });
     return {
       filter: [...steps, ...hw.filter].join(","),
       encoder: hw.encoder,
@@ -251,7 +276,7 @@ function videoArgs(
   if (codec === "hevc")
     throw new Error("H.265 はソフトウェアではエンコードしません");
   return {
-    filter: [...steps, "format=yuv420p"].join(","),
+    filter: [...steps, hdr ? "format=yuv420p10le" : "format=yuv420p"].join(","),
     device: [],
     encoder:
       codec === "h264"
@@ -345,6 +370,11 @@ interface EncodeOptions {
    * 測れなければ入力の読み位置に落ちるだけで、エンコードしたものには影響しない
    */
   probed?: { duration: number; fps: number };
+  /**
+   * 4K の局の録画か (`.mmts` を詰め替えた MP4 が入力)。インタレ解除と引き伸ばしをせず、AV1 は HLG のまま、
+   * H.264・H.265 は 1080p の SDR に直す (`videoArgs`)
+   */
+  uhd?: boolean;
 }
 
 /** これ以下は捨てない。1 コマにも満たないずれのために seek を掛けても得るものが無い */
@@ -426,6 +456,7 @@ export function buildArgs(
     squarePixels(options.displaySize),
     hardware,
     options.height,
+    options.uhd === true,
   );
 
   const args = ["-y"];
@@ -1142,6 +1173,87 @@ function paidRecording(recording: Recording): boolean {
  */
 function clearScratch(input: string): void {
   removeIfExists(`${input}.decoded.m2ts`);
+  removeIfExists(remuxedPath(input));
+}
+
+/**
+ * **4K の録画を詰め替えた作業ファイル** (`mmts.remuxMmts`)。ffmpeg と ffprobe は TLV を読めないので、エンコードと CM 検出の前に
+ * 映像と音声を MP4 に写し、あとは TS の録画と同じく読む。映像と音声をそのまま写すので、元と同じくらいの大きさになる
+ */
+function remuxedPath(input: string): string {
+  return `${input}.remux.mp4`;
+}
+
+/** 局の行の service_id (放送が名乗っている番号。MPT の MMT_package_id)。局が無ければ 0 */
+function broadcastServiceId(serviceId: number): number {
+  return (
+    orm()
+      .select({ id: services.service_id })
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .get()?.id ?? 0
+  );
+}
+
+/**
+ * **4K の録画を、作業ファイルの MP4 に詰め替える** (`runJob`・`runCmJob`)。字幕の文字の配置も返す (MP4 の時刻。秒)。
+ * 読めなければ理由を返す (スクランブルされたまま録れていれば ACAS の理由)。止めの合図が来たら null
+ */
+async function remuxForEncode(
+  input: string,
+  recording: Recording,
+  signal: AbortSignal,
+): Promise<
+  | { ok: true; path: string; captions: CaptionPages["pages"] }
+  | { ok: false; reason: string }
+  | null
+> {
+  const target = remuxedPath(input);
+  const result = await remuxMmts(
+    input,
+    broadcastServiceId(recording.service_id),
+    target,
+    signal,
+  );
+  if (signal.aborted) {
+    removeIfExists(target);
+    return null;
+  }
+  if (!result.wrote) {
+    removeIfExists(target);
+    return {
+      ok: false,
+      reason:
+        result.scrambled > 0
+          ? undecodableReason("CATV", "tlv")
+          : "4K の録画から映像と音声を読めませんでした",
+    };
+  }
+  return { ok: true, path: target, captions: result.captions };
+}
+
+/**
+ * **4K の録画の字幕を、エンコードしたものの隣に置く** (`….captions.json`。`api/recordings/<id>/captions.json` が配る)。
+ * 中身は観る画面に渡すものと同じ文字の配置 (`CaptionPages`)。Matroska には入れない。ffmpeg 7.1 の Matroska は TTML を書けない
+ * (`Subtitle codec 94232 is not supported`。Debian の ffmpeg 7.1 で確かめた)。
+ *
+ * 時刻は詰め替えた MP4 の秒なので、エンコードしたものの物差しに直す。ffmpeg は入力の先頭 (`start_time`) と
+ * 捨てた先頭 (`-ss`) のぶんを 0 に寄せるので、その和 (`shift`) を引く。0 より前に出ていた字幕は 0 に寄せて残す
+ * (エンコードしたものの頭で出ている字幕)。字幕が 1 つも無ければ置かない
+ */
+function writeCaptions(
+  path: string,
+  pages: CaptionPages["pages"],
+  shift: number,
+): void {
+  const moved = pages.map((p) => ({ at: p.at - shift, page: p.page }));
+  const first = moved.findLastIndex((p) => p.at <= 0);
+  const kept = moved
+    .slice(Math.max(0, first))
+    .map((p) => ({ at: Math.max(0, p.at), page: p.page }));
+  if (kept.length === 0) return;
+  const body: CaptionPages = { v: CAPTION_TEXT_VERSION, pages: kept };
+  writeFileSync(path, JSON.stringify(body));
 }
 
 /** ジョブを失敗にする (行を書くだけ。通知も画面の更新もしない) */
@@ -1344,7 +1456,22 @@ async function runJob(jobId: number): Promise<void> {
   /** 後始末で消す作業ファイル。元の TS を置き換えたときは残す側になるので null のまま */
   let decoded: string | null = null;
   let sourceTs = input;
-  if (isScrambled(input)) {
+  /** 4K の局の録画 (`.mmts`)。ffmpeg に渡す前に MP4 に詰め替える (`remuxForEncode`) */
+  const uhd = recordedTransport(input) === "tlv";
+  /** 4K の録画の字幕 (詰め替えた MP4 の時刻)。エンコードしたものの隣に置く (`writeCaptions`) */
+  let uhdCaptions: CaptionPages["pages"] = [];
+  if (uhd) {
+    setPhase(jobId, "remux", "4K の映像と音声を MP4 に詰め替えています");
+    const remuxed = await remuxForEncode(input, recording, signal);
+    if (remuxed === null) return finishCanceled(jobId, null);
+    if (!remuxed.ok) {
+      fail(jobId, recording, remuxed.reason);
+      return;
+    }
+    decoded = remuxed.path;
+    sourceTs = remuxed.path;
+    uhdCaptions = remuxed.captions;
+  } else if (isScrambled(input)) {
     setPhase(jobId, "descramble", "スクランブルを復号しています");
     const target = `${input}.decoded.m2ts`;
     const result = await descramble(input, target, signal);
@@ -1381,7 +1508,7 @@ async function runJob(jobId: number): Promise<void> {
    * カードが鍵を貰えた (`testDecode` が、いま有料の番組を流している間だけ確かめるのと同じ考え)。
    * `cardStatus` は失敗を答えで返すので、カードが読めなくてもエンコードは止まらない (`noteDecoded` が何も書かないだけ)
    */
-  if (paidRecording(recording) && isDecoded(sourceTs))
+  if (!uhd && paidRecording(recording) && isDecoded(sourceTs))
     await noteDecoded(recording.service_id);
 
   // コマ数 (`smoothMotion`) は、局ロゴを開いたあとに本編映像から実測して入れる (measureSmoothMotion)
@@ -1403,6 +1530,7 @@ async function runJob(jobId: number): Promise<void> {
     ),
     probeLead: programSpan(recording).programStart,
     mediaTitle: displayTitle(recording.name),
+    uhd,
   };
 
   /*
@@ -1435,13 +1563,19 @@ async function runJob(jobId: number): Promise<void> {
   // 画面の大きさ・画素の縦横比・冒頭の音声だけの区間をエンコードする前に測っておく。
   // 尺と毎秒コマ数は進み具合の分母にもなる (encodeProgress。下で probed に渡す)
   const measured = await probeVideo(sourceTs);
-  encodeOptions.smoothMotion = await measureSmoothMotion(
-    sourceTs,
-    Number.isFinite(measured.duration)
-      ? measured.duration
-      : (recording.end_at - recording.start_at) / 1000,
-    signal,
-  );
+  /*
+   * 4K の局はプログレッシブなので、フィールドを数えずに入力のコマ数のまま出す (59.94 コマなら 60 コマ。`fps` の列も 60)。
+   * 実測 (`measureSmoothMotion`) はインタレの放送の 24p 系・30p を見分けるためのもの
+   */
+  encodeOptions.smoothMotion = uhd
+    ? measured.fps >= 50
+    : await measureSmoothMotion(
+        sourceTs,
+        Number.isFinite(measured.duration)
+          ? measured.duration
+          : (recording.end_at - recording.start_at) / 1000,
+        signal,
+      );
   // ここから先の下調べ (ffprobe) は合図を受け取らない。測っている間に押されていたら、その前でやめる
   if (canceled.has(jobId)) return finishCanceled(jobId, decoded);
 
@@ -1609,9 +1743,15 @@ async function runJob(jobId: number): Promise<void> {
     },
   ) => {
     const software = SOFTWARE_CODECS.includes(codec);
+    /*
+     * **4K の局の AV1 は GPU を使わない。** GPU の経路は 8 ビット (nv12) で組んであり、2160p・10 ビットのまま GPU に渡す組み方を
+     * 確かめていない。H.264・H.265 は 1080p の 8 ビットに縮めてから渡すので、今までどおり GPU を使う
+     */
     const attempts = encodeAttempts(
       codec,
-      hwChain(codec, settings().hwAllow, hwTurn++),
+      uhd && codec === "av1"
+        ? []
+        : hwChain(codec, settings().hwAllow, hwTurn++),
     );
     const report = meter.part(codec);
     let result = { code: -1, stderrTail: "", outTimeUs: 0 };
@@ -1895,18 +2035,34 @@ async function runJob(jobId: number): Promise<void> {
   const output = primary.path;
 
   /*
+   * **4K の録画の字幕は、エンコードしたものの隣に文字の配置で置く** (`writeCaptions`)。
+   * 4K の局にはデータ放送 (BML) が無い (MMT のデータ放送は HTML5 で、まだ読まない) ので、下の取り出しはしない
+   */
+  if (uhd) {
+    for (const p of placed)
+      writeCaptions(
+        sidecarPaths(p.path).captions,
+        uhdCaptions,
+        (Number.isFinite(measured.formatStart) ? measured.formatStart : 0) +
+          p.skip,
+      );
+  }
+
+  /*
    * **decoded を消す前に、元の TS からデータ放送を取り出してサイドカーに置く。**
    * 録画でも d ボタンで出せるように、再生位置つきの変化ログを残す
    * (server/recorded-bml.ts)。付け足しなので、失敗してもエンコードは失敗にしない
    */
   try {
-    const changes = await saveRecordedBml(
-      sourceTs,
-      sidecarPaths(output).dataBroadcast,
-      recording,
-      // 録画の行に書くもの (`encode_skip`) と同じ。先頭から捨てたぶんを引く
-      primary.skip,
-    );
+    const changes = uhd
+      ? 0
+      : await saveRecordedBml(
+          sourceTs,
+          sidecarPaths(output).dataBroadcast,
+          recording,
+          // 録画の行に書くもの (`encode_skip`) と同じ。先頭から捨てたぶんを引く
+          primary.skip,
+        );
     if (changes > 0) {
       console.log(
         `[bml] 録画のデータ放送を保存しました: ${changes} 変化 (録画 ${recording.id})`,
@@ -1930,6 +2086,7 @@ async function runJob(jobId: number): Promise<void> {
       : undefined;
   await writeThumbnail(output, duration, {
     source: sourceTs,
+    hlg: uhd,
     place: thumbnailPlace(duration, {
       skip: primary.skip,
       content:
@@ -2060,8 +2217,44 @@ async function runCmJob(jobId: number): Promise<void> {
   // 掛かったままの元の TS は復号しない (エンコードするジョブの仕事)。エンコードしたものがあればそちらを読む
   // エンコードせずに置いた録画 (「エンコードしない」) は、置き場の TS が元の TS そのもの (`tsPathOf`)
   const raw = tsPathOf(recording);
-  const ts = raw !== null && !isScrambled(raw) ? raw : null;
   const files = encodedFiles(recording).map((entry) => entry.path);
+  /*
+   * **4K の録画 (`.mmts`) は、エンコードしたものがあればそちらから読む。** 無ければ MP4 に詰め替えてから読む
+   * (`remuxForEncode`。ffmpeg は TLV を読めない)。詰め替えた MP4 の時刻は録画の物差し (`mmts.ts`) と同じなので、
+   * 元の TS から読んだときと同じく境目をそのまま覚える
+   */
+  const uhd = raw !== null && recordedTransport(raw) === "tlv";
+  let scratch: string | null = null;
+  if (uhd && files.length === 0) {
+    setPhase(jobId, "remux", "4K の映像と音声を MP4 に詰め替えています");
+    const remuxed = await remuxForEncode(raw, recording, signal);
+    if (remuxed === null) return finishCanceled(jobId, null);
+    if (!remuxed.ok) {
+      fail(jobId, recording, remuxed.reason, what);
+      return;
+    }
+    scratch = remuxed.path;
+  }
+  const ts =
+    scratch ?? (raw !== null && !uhd && !isScrambled(raw) ? raw : null);
+  try {
+    await detectCm(jobId, signal, recording, ts, files);
+  } finally {
+    removeIfExists(scratch);
+  }
+}
+
+/**
+ * CM 検出だけやり直す (`runCmJob`) の続き。`ts` は読む元の TS (4K の録画は詰め替えた MP4)。無ければエンコードしたもの (`files`) から読む
+ */
+async function detectCm(
+  jobId: number,
+  signal: AbortSignal,
+  recording: Recording,
+  ts: string | null,
+  files: string[],
+): Promise<void> {
+  const what = "CM 検出";
   const input = ts ?? files[0];
   if (input === undefined) {
     fail(jobId, recording, "CM 検出に使えるファイルがありません", what);

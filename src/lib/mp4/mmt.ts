@@ -92,10 +92,22 @@ export class MmtFmp4 {
   private videoSamples: Pending<VideoUnit>[] = [];
   private audioSamples: Pending<AudioUnit>[] = [];
 
-  /** `assets` は `MmtMediaReader` が選んだアセット。映像も音声も無ければ何も出さない */
-  constructor(assets: readonly MediaAsset[]) {
+  /**
+   * @param assets `MmtMediaReader` が選んだアセット。映像も音声も無ければ何も出さない
+   * @param base 出す時刻の 0 に当てる放送の時刻 (90 kHz)。省けば `origin`。4K の録画 (`.mmts`) を途中から読むとき、
+   *   録画の先頭の時刻を渡して、録画の物差しの時刻で出す (`server/mmts.ts`)
+   */
+  constructor(
+    assets: readonly MediaAsset[],
+    private readonly base: number | null = null,
+  ) {
     this.hasVideo = assets.some((a) => a.kind === "video");
     this.hasAudio = assets.some((a) => a.kind === "audio");
+  }
+
+  /** 出す時刻の 0 に当たる放送の時刻 (90 kHz)。`base` か、無ければ `origin`。init を出すまでは `base` だけ */
+  get zero(): number | null {
+    return this.base ?? this.origin;
   }
 
   push(unit: VideoUnit | AudioUnit): Fmp4Segment[] {
@@ -192,7 +204,7 @@ export class MmtFmp4 {
           mediaSegment(
             this.sequence++,
             trackId,
-            taken[0]!.dts - this.origin!,
+            taken[0]!.dts - (this.base ?? this.origin!),
             taken.map((p) => p.sample),
           ),
         );

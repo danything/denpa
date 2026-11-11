@@ -2,7 +2,7 @@ import { error } from "@sveltejs/kit";
 
 import { askedTrack } from "#lib/arib.js";
 import { parseId } from "#lib/id.js";
-import { chaseStream } from "#lib/server/live.js";
+import { chaseStream, chaseTransport } from "#lib/server/live.js";
 import { askedFormat } from "#lib/server/viewing.js";
 import {
   BUSY,
@@ -22,12 +22,15 @@ import {
  * (知らないものは主音声、`raw` では効かない)。`?rung=1〜3` で回線に合わせて画質を下げる (`#lib/rungs.ts`。コーデックは `?playable=` から
  * サーバが選ぶ)。伸びているファイルを追い読みし、録り終えて末尾まで読んだら閉じる
  * (`live.ts` の `chaseStream`)。再エンコードはその場の変換の枠 (`server/transcode.ts`) を使い、
- * 埋まっていれば 503
+ * 埋まっていれば 503。
+ *
+ * 4K の局の録画 (`.mmts`) は、`hevc` が放送の HEVC の詰め替え (枠を使わない)、`raw` が 1 局に絞った TLV (`application/x-arib-tlv`)。
+ * `auto` と段の選び方も 4K の局のもの (`viewing.askedFormat` の `transport`)
  */
 export function GET({ params, url }) {
   const id = parseId(params.id);
   if (id === null) error(400, "録画 ID が不正です");
-  const asked = askedFormat(url, "chase");
+  const asked = askedFormat(url, "chase", {}, chaseTransport(id));
   if (asked === null) error(406, NO_FORMAT);
   const { codec, rung } = asked;
   const from = Number(url.searchParams.get("from") ?? 0);
@@ -42,7 +45,13 @@ export function GET({ params, url }) {
   if (stream === "busy") error(503, BUSY);
   return new Response(stream, {
     headers: {
-      "Content-Type": codec === "raw" ? "video/mp2t" : "video/mp4",
+      // 4K の局の録画の raw は 1 局に絞った TLV (ライブの 4K の局の `codec=raw` と同じ)
+      "Content-Type":
+        codec !== "raw"
+          ? "video/mp4"
+          : chaseTransport(id) === "tlv"
+            ? "application/x-arib-tlv"
+            : "video/mp2t",
       "Cache-Control": "no-store",
       [CODEC_HEADER]: codec,
       ...(codec === "raw" ? {} : { [RUNG_HEADER]: String(rung) }),

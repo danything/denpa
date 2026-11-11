@@ -2,12 +2,14 @@ import { error, redirect } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 
 import { parseId } from "#lib/id.js";
+import { broadcastCodec } from "#lib/live-choice.js";
 import { orm } from "#lib/server/db.js";
 import { recordingJikkyo } from "#lib/server/jikkyo.js";
 import { relative } from "#lib/server/paths.js";
 import { recordings } from "#lib/server/schema.js";
 import { settings } from "#lib/server/settings.js";
 import { viewingOptions } from "#lib/server/viewing.js";
+import { recordedTransport } from "#lib/source.js";
 
 import type { PageServerLoad } from "./$types";
 
@@ -57,6 +59,10 @@ export const load: PageServerLoad = ({ params, url }) => {
       series_last_episode: rec.series_last_episode,
       series_repeat: rec.series_repeat,
     },
+    /**
+     * 録画の放送のコーデック。4K の局の録画 (`.mmts`) は `hevc` で、放送のままは HEVC の詰め替え (`live-player` の `openChase`)
+     */
+    broadcast: broadcastCodec(recordedTransport(rec.ts_path)),
     /** 実況を流せるか (世帯の設定)。オンのときだけ ⚙ に「実況」の行を出す */
     jikkyoAllowed: settings().jikkyo,
     /** 実況の NG ワード (世帯の設定)。含むコメントは流さない */

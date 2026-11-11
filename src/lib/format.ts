@@ -305,6 +305,7 @@ export function encodeDetail(
  */
 const PHASE_LABEL: Record<string, string> = {
   descramble: "スクランブル復号中",
+  remux: "MP4 に詰め替え中",
   cm: "CM 検出中",
   encode: "エンコード中",
 };

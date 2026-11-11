@@ -207,7 +207,7 @@ export function reconcile(): {
 }
 
 /** 動画そのものの拡張子。これの隣に置くものが「サイドカー」 */
-const VIDEO_EXTENSIONS = ["m2ts", "ts", "mkv", "mp4"];
+const VIDEO_EXTENSIONS = ["m2ts", "mmts", "ts", "mkv", "mp4"];
 const VIDEO = new RegExp(`\\.(?:${VIDEO_EXTENSIONS.join("|")})$`, "i");
 /** 作業ファイル。動画の名前をまるごと先頭に持つ (`….m2ts.chapters.txt`) */
 const TRAILING = new RegExp(
@@ -293,7 +293,7 @@ function sweepLeftovers(): { swept: number; strays: number; pruned: number } {
     const videos = new Set(files.filter((path) => VIDEO.test(path)));
     for (const path of videos) {
       // 動画は消さない。手で置いたものかもしれないので、数えるだけ。
-      // エンコードの途中で作る復号した TS (`<入力>.decoded.m2ts`) を数に入れないよう、書きたては飛ばす
+      // エンコードの途中で作る復号した TS (`<入力>.decoded.m2ts`) と、4K の録画を詰め替えた MP4 (`<入力>.remux.mp4`) を数に入れないよう、書きたては飛ばす
       if (!known.has(path) && !settling(path, at)) strays++;
     }
     for (const path of files) {

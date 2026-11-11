@@ -9,6 +9,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { concatBytes } from "@danything/arib/bytes";
+import { MmtServiceFilter } from "@danything/arib/mmt-service-filter";
 import { CLOCK, WRAP } from "@danything/arib/pes";
 import { PACKET, SYNC } from "@danything/arib/psi";
 import {
@@ -17,6 +19,7 @@ import {
   packetizePes,
   pes,
 } from "@danything/arib/synth-av";
+import { SynthMmtAv } from "@danything/arib/synth-mmt-av";
 import { eq } from "drizzle-orm";
 
 import {
@@ -65,7 +68,7 @@ chmodSync(PROBE, 0o755);
 config.ffprobe = PROBE;
 
 const { orm } = await import("./db");
-const { recordings } = await import("./schema");
+const { recordings, services } = await import("./schema");
 const { saveSettings } = await import("./settings");
 const { holdTranscode, transcodesInUse } = await import("./transcode");
 const { readPace } = await import("./pace");
@@ -75,6 +78,7 @@ const {
   fileAudioBody,
   fileTranscodeArgs,
   mediaInfo,
+  mmtsTranscodeArgs,
   playbackPlan,
   presented,
   rulerOf,
@@ -132,6 +136,22 @@ const TS_START = 5_000_000;
 const ts = join(media, "a.m2ts");
 writeFileSync(ts, synthTs(TS_START, 60));
 
+/** 4K の局の元の録画 (`.mmts`)。偽の放送と同じ素材を 1 局に絞って書く (`recorder.ts`) */
+const UHD_SERVICE = 301;
+const mmts = join(media, "a.mmts");
+{
+  const av = new SynthMmtAv({
+    serviceId: UHD_SERVICE,
+    mptPacketId: 0x9000,
+    startMs: Date.UTC(2026, 10, 11, 12),
+  });
+  const filter = new MmtServiceFilter(UHD_SERVICE);
+  writeFileSync(
+    mmts,
+    concatBytes(Array.from({ length: 40 }, () => filter.filter(av.next()))),
+  );
+}
+
 const now = Date.now();
 let nextId = 1;
 /** 録画の行を作って読み戻す */
@@ -152,6 +172,27 @@ function seed(values: Partial<typeof recordings.$inferInsert>) {
     })
     .run();
   return orm().select().from(recordings).where(eq(recordings.id, id)).get()!;
+}
+
+/** 4K の局の元の録画だけを持つ録画の行。局の行も入れる (放送の service_id を引く。`live.aribServiceId`) */
+function uhdRecording() {
+  const id = 6_554_700_000 + UHD_SERVICE;
+  orm()
+    .insert(services)
+    .values({
+      id,
+      service_id: UHD_SERVICE,
+      network_id: 0x000b,
+      name: "4K テスト",
+      type: "CATV",
+      service_type: 1,
+      channel: "QC28",
+      transport: "tlv",
+      updated_at: now,
+    })
+    .onConflictDoNothing()
+    .run();
+  return seed({ service_id: id, ts_path: mmts });
 }
 
 describe("何を出せるか (playbackPlan)", () => {
@@ -257,6 +298,19 @@ describe("何を出せるか (playbackPlan)", () => {
     // 番組表の音声が無ければ「音声」1 つ (`arib.audioTracks`)
     expect(plan?.info.audios).toHaveLength(1);
     expect(plan?.ts?.head).toBe(TS_START);
+  });
+
+  test("4K の局の元の録画だけ: 放送の HEVC の詰め替えと H.264・AV1 への変換。MPEG-2 は出さない。物差しは録画の先頭", async () => {
+    const plan = await playbackPlan(uhdRecording());
+    expect(plan?.info.axis).toBe("ts");
+    expect(plan?.info.broadcast).toBe("hevc");
+    expect(plan?.info.offers).toEqual([
+      { codec: "hevc", way: "stream", codecs: "hev1.2.4.L153.B0,mp4a.40.2" },
+      { codec: "h264", way: "stream", codecs: "avc1.640029,mp4a.40.2" },
+      { codec: "av1", way: "stream", codecs: "av01.0.08M.08,Opus" },
+    ]);
+    expect(plan?.ts).toBeNull();
+    expect(plan?.mmts?.duration).toBeGreaterThan(3);
   });
 
   test("録っている最中の TS は出さない (追っかけ再生の受け持ち)。何も無ければ null", async () => {
@@ -478,6 +532,36 @@ describe("流す (streamResponse)", () => {
     await expect(
       streamResponse(rec, new URLSearchParams({ codec: "hevc" })),
     ).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("4K の局の元の録画の H.265 は、ffmpeg を起こさずに詰め替えて流す。MPEG-2 は 404", async () => {
+    config.ffmpeg = "false";
+    const rec = uhdRecording();
+    const res = await streamResponse(
+      rec,
+      new URLSearchParams({ codec: "hevc" }),
+    );
+    expect(res.headers.get(CODEC_HEADER)).toBe("hevc");
+    expect(res.headers.get("content-type")).toBe("video/mp4");
+    const reader = res.body!.getReader();
+    const init = (await reader.read()).value!;
+    expect(new TextDecoder().decode(init.subarray(4, 8))).toBe("ftyp");
+    await reader.cancel();
+    await expect(
+      streamResponse(rec, new URLSearchParams({ codec: "mpeg2" })),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("4K の局の元の録画の変換は、詰め替えたものを標準入力から渡し、縮めて SDR にする", async () => {
+    const args = mmtsTranscodeArgs("h264", null, 0);
+    expect(args.slice(args.indexOf("-i") - 2, args.indexOf("-i") + 2)).toEqual([
+      "-f",
+      "mp4",
+      "-i",
+      "pipe:0",
+    ]);
+    expect(args).toContain("-copyts");
+    expect(args[args.indexOf("-vf") + 1]).toContain("tonemap");
   });
 
   test("変換は枠を使い、埋まっていれば 503。詰め替えは数えない", async () => {
@@ -716,6 +800,7 @@ describe("ffprobe の読み (mediaInfo)", () => {
       audios: ["主音声", ""],
       duration: 1800.5,
       fps: null,
+      hlg: false,
     });
   });
 
@@ -770,6 +855,7 @@ describe("ffprobe の読み (mediaInfo)", () => {
       audios: [],
       duration: null,
       fps: null,
+      hlg: false,
     });
   });
 

@@ -7,7 +7,11 @@
  */
 
 import { codecsFor, type LiveCodec } from "../live";
-import { autoOrder, type LiveFormat } from "../live-choice";
+import {
+  autoOrder,
+  type BroadcastCodec,
+  type LiveFormat,
+} from "../live-choice";
 import type { Ruler } from "./watch";
 
 /** 出せる映像の形式。H.265 はエンコード済みがあるときだけ (ファイルそのままと詰め替え。その場の変換では作らない) */
@@ -69,6 +73,11 @@ export interface PlaybackInfo {
   ruler?: Ruler;
   /** サーバが選んだ観方 (`autoPick`)。**`?playable=` を付けて聞いたときだけ**ある。選べなければ null */
   auto?: AutoPick | null;
+  /**
+   * 放送のままのコーデック。**4K の局の元の録画 (`.mmts`) だけ** `hevc` (放送の HEVC の詰め替え)。省けば MPEG-2。
+   * 録画しか無いときの「自動」の順で、MPEG-2 の場所に HEVC を入れる (`autoOrder`。ライブの 4K の局と同じ)
+   */
+  broadcast?: BroadcastCodec;
 }
 
 /**
@@ -252,7 +261,8 @@ function byOrder(
  * 観られなければ、または `auto` なら端末に合わせる。
  *
  * **録画しか無い (エンコード済みが無い) ときは、ライブ・追っかけと同じ「その場でエンコード」の順** (`autoOrder`。家の中なら
- * MPEG-2 → H.264 → AV1、外なら AV1 → H.264。サーバは H.265 に変換しないので、H.265 は出てこない)。エンコード済みがあるときは次の順。
+ * MPEG-2 → H.264 → AV1、外なら AV1 → H.264。サーバは H.265 に変換しないので、H.265 は出てこない)。4K の局の録画
+ * (`broadcast` が `hevc`) は MPEG-2 の場所に放送の HEVC の詰め替えが入る (家の中なら HEVC → H.264 → AV1)。エンコード済みがあるときは次の順。
  *
  * 1. **そのまま読めるファイル** (AV1 → H.265 → H.264。小さいほうが先。同じ画質なら回線もディスクも使わない)
  * 2. MSE が受け取れる**詰め替え** (エンコード済みと同じコーデック。サーバは軽い。並びは 1 と同じ)
@@ -289,7 +299,11 @@ export function pickOffer(
     if (chosen !== undefined) return asPicked(chosen);
   }
   if (files.length === 0) {
-    for (const format of autoOrder({ indoor, compat: false })) {
+    for (const format of autoOrder({
+      indoor,
+      compat: false,
+      ...(info.broadcast === undefined ? {} : { broadcast: info.broadcast }),
+    })) {
       if (format === "raw") {
         if (raw) return RAW;
         continue;

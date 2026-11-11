@@ -12,6 +12,10 @@ describe("sidecarPaths", () => {
     expect(paths.dataBroadcast).toBe(
       "/library/番組/番組 - 2026-08-01 - 2130.bml.jsonl",
     );
+    // 4K の局の字幕 (Matroska に入れられない TTML を文字の配置にしたもの)
+    expect(paths.captions).toBe(
+      "/library/番組/番組 - 2026-08-01 - 2130.captions.json",
+    );
   });
 });
 
@@ -30,6 +34,19 @@ describe("buildThumbnailArgs", () => {
     expect(args).toContain("130");
     expect(args).not.toContain("-t");
     expect(args.at(-1)).toBe("/library/番組/a-poster.jpg");
+  });
+
+  test("4K の局は縮めたあとで HLG を SDR に直してから選ぶ", () => {
+    const args = buildThumbnailArgs(
+      "/raw/a.mmts.remux.mp4",
+      "/library/番組/a-poster.jpg",
+      { at: 130 },
+      [],
+      true,
+    );
+    const vf = args[args.indexOf("-vf") + 1]!;
+    expect(vf.indexOf("scale=")).toBeLessThan(vf.indexOf("zscale"));
+    expect(vf.indexOf("tonemap")).toBeLessThan(vf.indexOf("thumbnail="));
   });
 
   test("負の位置は 0 に丸める", () => {

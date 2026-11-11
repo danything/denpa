@@ -514,9 +514,14 @@ export function livePlayer(options: LivePlayerOptions = {}) {
   /**
    * 追っかけ再生 ([issue #16](https://github.com/danything/denpa/issues/16))。
    * 観ている録画と、**いまの ffmpeg が 0 と数える位置** (base 秒)。
-   * シークで再エンコードするたびに base が変わる。画面に見せる位置は base + position
+   * シークで再エンコードするたびに base が変わる。画面に見せる位置は base + position。
+   * `broadcast` は録画の放送のコーデック (4K の局の録画 `.mmts` は `hevc`。`openChase`)
    */
-  let chase = $state<{ recordingId: number; base: number } | null>(null);
+  let chase = $state<{
+    recordingId: number;
+    base: number;
+    broadcast: BroadcastCodec;
+  } | null>(null);
   /** 追っかけの物差し (`timeline` の通知)。録画中は右端を壁時計で伸ばして読む */
   let chaseTimeline = $state<{
     recordedSec: number;
@@ -1980,9 +1985,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     );
   }
 
-  /** いまの局の放送のコーデック (`Tuned.broadcast`)。追っかけは録画 (MPEG-2 の TS) を読むので MPEG-2 */
+  /** いまの局の放送のコーデック (`Tuned.broadcast`)。追っかけは録画の放送のコーデック (4K の局の録画は HEVC。`openChase`) */
   function broadcastKind(): BroadcastCodec {
-    return chase === null ? (tuned?.broadcast ?? "mpeg2") : "mpeg2";
+    return chase === null ? (tuned?.broadcast ?? "mpeg2") : chase.broadcast;
   }
 
   /** MSE で受け取れるか (`#lib/live.ts` の `codecsFor` で問い合わせる。サーバが渡すものと同じ) */
@@ -2162,16 +2167,24 @@ export function livePlayer(options: LivePlayerOptions = {}) {
    * 追っかけ再生を開く ([issue #16](https://github.com/danything/denpa/issues/16))。
    * **録画中の録画を、いま録れているところまで観る。** 再生の仕組みも接続のしかたもライブと
    * 同じで、送る指示だけ違う (`chase`)。範囲の外へのシークもこれ。
-   * サーバが ffmpeg ごと立て直す (選局し直しと同じ流儀)
+   * サーバが ffmpeg ごと立て直す (選局し直しと同じ流儀)。
+   * `broadcast` は録画の放送のコーデック (4K の局の録画は `hevc`。放送のままは HEVC の詰め替え)。省けば、同じ録画を開き直すなら前のまま
    */
   async function openChase(
     video: HTMLVideoElement,
     recordingId: number,
     at = 0,
     keepList = false,
+    broadcast?: BroadcastCodec,
   ): Promise<void> {
     tuned = null;
-    chase = { recordingId, base: Math.max(0, at) };
+    chase = {
+      recordingId,
+      base: Math.max(0, at),
+      broadcast:
+        broadcast ??
+        (chase?.recordingId === recordingId ? chase.broadcast : "mpeg2"),
+    };
     chaseEnded = false;
     drained = false;
     await begin(video, keepList);

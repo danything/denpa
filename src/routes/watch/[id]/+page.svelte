@@ -113,13 +113,14 @@
     size,
   } from "#lib/format.js";
   import { handoff, HANDOFF_GIVE_UP, handoffTarget } from "#lib/handoff.js";
+  import { broadcastHevcPlayable } from "#lib/hevc-4k.js";
   import { CODEC_LABEL } from "#lib/hw.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { jikkyoListSwitch, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
   import { read as stored, write as remind } from "#lib/keep.js";
   import { HIDDEN_CODECS } from "#lib/live-choice.js";
   import { liveUpdates } from "#lib/live-updates.svelte.js";
-  import { codecsFor, type LiveCodec } from "#lib/live.js";
+  import { BROADCAST_HEVC, codecsFor, type LiveCodec } from "#lib/live.js";
   import { type MkvSource, openMkv } from "#lib/mkv-source.js";
   import type { OfflineVideo } from "#lib/offline-db.js";
   import { loadOffline, offline, removeLocal } from "#lib/offline.svelte.js";
@@ -278,6 +279,11 @@
    * できれば互換モードと同じく canvas に描く (`pickOffer` の `raw`)。打ち切ったかは `rawGaveUp`
    */
   let rawCapable = $state(false);
+  /**
+   * 4K の局の元の録画の詰め替え (放送の HEVC。`PlaybackInfo.broadcast`) を再生できるか。`isTypeSupported` に加えて
+   * `decodingInfo` に放送の値を渡して決める (`#lib/hevc-4k.ts`。ライブの 4K の局と同じ)。4K の局の録画を開いたときに調べる
+   */
+  let broadcastHevc = false;
   /** MPEG-2 を描いている途中で打ち切ったか。**選び直すまで MPEG-2 にしない** (`canvasFallBack`) */
   let rawGaveUp = $state(false);
   /** この端末で描ける形式 (`raw/support.ts`)。調べるまで null */
@@ -663,7 +669,10 @@
   function ability(): MediaAbility {
     return {
       play: (type) => document.createElement("video").canPlayType(type) !== "",
-      mse: (type) => pickMediaSource()?.Source.isTypeSupported(type) ?? false,
+      mse: (type) =>
+        type === BROADCAST_HEVC
+          ? broadcastHevc
+          : (pickMediaSource()?.Source.isTypeSupported(type) ?? false),
       mpeg2: rawCapable && !rawGaveUp,
     };
   }
@@ -690,6 +699,18 @@
       // 元の TS をそのまま流せるなら、この端末でデコードできるかを先に確かめる (MPEG-2 を並べる・選ぶ元)
       if (got?.offers.some((offer) => offer.way === "raw") === true)
         rawCapable = (await rawUnsupported()) === null;
+      if (got?.broadcast === "hevc") {
+        const source = pickMediaSource()?.Source;
+        broadcastHevc = await broadcastHevcPlayable({
+          isTypeSupported: (type) => source?.isTypeSupported(type) ?? false,
+          ...(typeof navigator.mediaCapabilities?.decodingInfo === "function"
+            ? {
+                decodingInfo: (config) =>
+                  navigator.mediaCapabilities.decodingInfo(config),
+              }
+            : {}),
+        });
+      }
       /*
        * 聞けなかった (オフライン) ときは、今までどおりエンコード済みをそのまま渡す。
        * 端末に保存したものがあればそちら (下)
