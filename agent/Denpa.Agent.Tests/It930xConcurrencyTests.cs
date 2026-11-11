@@ -516,10 +516,11 @@ public partial class It930xConcurrencyTests
     }
 
     /// <summary>EP 0x84 の読みを閉じたか (機材を閉じた)</summary>
-    private static bool Closed(FakeIt930x usb)
-    {
-        lock (usb.Log) return usb.Log.Contains("TS 閉じる");
-    }
+    /// <summary>
+    /// 機材を閉じ終えた (USB を閉じた)。読みのスレッドが残す「TS 閉じる」は、閉じる処理が電源を切るより前に出るので、
+    /// それを待つと最後の書き込み (電源を切る) より先に確かめてしまう (Windows の CI で時々落ちていた)
+    /// </summary>
+    private static bool Closed(FakeIt930x usb) => usb.Disposed;
 
     private static It930xDevice OpenAt(FakeIt930x usb, string port) =>
         It930xDevice.Acquire(port, () => (usb, Pe), _ => { }, () => 0, () => It930xFirmware.Code);
