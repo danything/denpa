@@ -54,7 +54,7 @@ public class Tc90522BoardTests
         It930xDevice.Acquire(port, () => (usb, model), clock.Sleep, () => clock.Now, () => It930xFirmware.Code, link: link);
 
     private static It930xTuner Tuner(FakeIt930x usb, string port, int receiver, FakeClock clock, It930xModel model, string? lnb = null, Func<It930xDevice?>? link = null) =>
-        new($"test {receiver}", receiver, () => Open(usb, port, clock, model, link), () => It930xDevice.CloseIfIdle(port), lnb);
+        new($"test {receiver}", receiver, () => Open(usb, port, clock, model, link), () => It930xDevice.CloseIfIdle(port, TimeSpan.Zero), lnb);
 
     private static List<string> Lines(FakeIt930x usb, Func<string, bool> pick)
     {
@@ -349,8 +349,8 @@ public class Tc90522BoardTests
         await Assert.That((read, buffer[0], buffer[1])).IsEqualTo((188, (byte)0x47, (byte)0x12));
 
         bus.Log.Clear();
+        tuner.Dispose();
         // 受信の停止 (仕様書 11.2): 端子を止める。最後の受信機なのでスリープは書かない (仕様書 11.3)。機材を閉じるときにブリッジの入力を閉じる
-        // 受信の停止 (仕様書 11.2): ブリッジの入力を閉じ、端子を止める。最後の受信機なのでスリープは書かない (仕様書 11.3)
         await Assert.That(Lines(usb, line => Starts(line, "W DA4F")).Last()).IsEqualTo("W DA4F=00");
         await Assert.That(bus.Log).IsEquivalentTo(new[] { "10 1D=A8" }, CollectionOrdering.Matching);
         // 電源を切ってから閉じる
