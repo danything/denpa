@@ -149,8 +149,19 @@ public static class SianoUserland
     /// **ドライバに繋がっているものは挙げない。** smsusb が使っていれば
     /// <c>/dev/dvb</c> に出ているので、DVB の側で見つかる (DeviceProbe)。
     /// </para>
+    ///
+    /// <para>
+    /// 環境変数 <c>SIANO_NATIVE=1</c> のときは siano-ts に問い合わせず、エージェントが USB の ID で探す (<see cref="SianoNative.Detect"/>)。
+    /// 設定の形式は同じ
+    /// </para>
     /// </summary>
-    public static List<TunerSpec> Detect() => Specs(Sticks());
+    public static List<TunerSpec> Detect() => SianoNative.Enabled ? SianoNative.Detect() : Specs(Sticks());
+
+    /// <summary>
+    /// そのポートの機材のチューナー。環境変数 <c>SIANO_NATIVE=1</c> のときはエージェントが USB を直に持つ実装 (<see cref="SianoNativeTuner"/>。実機で確かめていない)、
+    /// 付けなければ siano-ts を起動する実装 (<see cref="SianoTuner"/>)
+    /// </summary>
+    public static ITuneDevice Open(string port) => SianoNative.Enabled ? new SianoNativeTuner(port) : new SianoTuner(port);
 
     /// <summary>機材の一覧から、設定の形式に組み立てる (ドライバに繋がっているもの・受けられる方式が無いものは除く)</summary>
     public static List<TunerSpec> Specs(IEnumerable<Stick> sticks) =>

@@ -22,6 +22,8 @@
   | PIXELA PIX-DT295 (Linux の実機で地上波・BS・CS の受信と差し込み口の B-CAS の読み取りを確かめた。Windows・Mac は未確認。[下記](#pixela-pix-dt295))                                    | エージェントが USB を直に                                        | なし (ファームウェアは入れない。Windows はドライバを WinUSB に)           |
 
   「実機で確かめていない」機材は、ドライバと denpa の選局の手順を照らし合わせて動くはずと見ているものです。
+  PX-S1UD は、エージェントの環境変数に `SIANO_NATIVE=1` を付けると、siano-userland の代わりにエージェントが USB を直に持ちます
+  (実機で確かめていないので既定ではありません。[tuner-px-s1ud.md](tuner-px-s1ud.md#エージェントが-usb-を直に持つ-実機で確かめていない) に、確かめる順があります)。
   使ってみたら、動いたか動かなかったかを [Issue](https://github.com/danything/denpa/issues) で教えてください
   (設定の「その他」→「ログ」の「Issue にする」から作れます。[tuner-pt3.md](tuner-pt3.md#動いたか教えてください))
 
@@ -68,6 +70,7 @@ Amazon で見る (広告): [PT3](https://www.amazon.co.jp/dp/B00857CQAM?tag=doa0
 | PX-MLT5 系                           | 受信の状態と C/N (dB)                                         | CXD2856ER の仕様書の式と表                                                |
 | PIX-DT295                            | 受信の状態と C/N (dB)                                         | TC90522 系の換算式 (下記)                                                 |
 | PX-S1UD (siano-userland)             | 出ない                                                        | siano-ts が C/N を返さない                                                |
+| PX-S1UD (`SIANO_NATIVE=1`)           | 受信の状態と C/N (dB) と強度 (dBm)。実機で確かめていない      | 機材の統計の応答にある SNR と受信電力                                     |
 
 px4d は受信の状態と C/N を選局の応答でしか返さないので、受信中も選局したときの値のままで、C/N に「(選局したとき)」と添えます。測り直すには選局し直すしかなく、それでは受信が途切れます。
 DVB と px4-userland の C/N を画面まで通す流れは、実機では確かめていません (値を読む部分は単体テストで確かめた)。

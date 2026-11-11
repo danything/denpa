@@ -99,6 +99,10 @@ IT930x のブリッジの層と内蔵カードリーダー (`It930x*.cs`。カ�
 同じ機材の復調器 (CXD2856ER) とチューナー (CXD2858ER) の層 (`Cxd2856.cs`・`Cxd2858.cs`) は、クリーンルームで仕様書だけから書いたもので、MPL-2.0 です。
 仕様書は別のエージェントが公開の資料から事実だけを書いたもの (denpa-spec の `mlt5/spec.md`) で、コードを書く側は px4_drv・px4-userland・cxd28xx と SDK の Sony のコードを読んでいません。
 書き込みの値の並びは仕様書に値のまま載っていたもので、チップに要る値として扱っています ([下](#リポジトリに写してあるもの借りた表))。
+PX-S1UD などの Siano RIO 系の機材をエージェントが USB で直に動かす層 (`SianoMessage.cs`・`SianoFirmware.cs`・`SianoDevice.cs`・`SianoTs.cs`・`SianoNative.cs`。環境変数 `SIANO_NATIVE=1` のときだけ使う) も、
+クリーンルームで仕様書だけから書いたもので、MPL-2.0 です。仕様書は別のエージェントが公開の資料から事実だけを書いたもの (denpa-spec の `siano/spec.md`) で、
+コードを書く側は Linux カーネルの Siano のドライバ (`smsusb`・`smscoreapi`・`smsdvb` など) と siano-userland のコードを読んでいません。
+ファームウェア (`isdbt_rio.inp`) は解析せず、上の表の配布物に入っているファイルを、仕様書の手順で区切ってそのまま機材に送ります。
 
 ### Mac に入れるもの (`install.sh`)
 
