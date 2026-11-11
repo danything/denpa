@@ -9,7 +9,7 @@ irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1 | iex
 ```
 
 引数を渡すときは `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -Uninstall`
-のようにします (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-AgentOnly` エージェントだけ)。
+のようにします (`-NoOpen` ブラウザを開かない / `-Uninstall` 止めて外す / `-AgentOnly` エージェントだけ / `-WinUsb` [チューナーのドライバを WinUSB に替える](#チューナーのドライバを-winusb-に替える))。
 
 **Windows 10 1809・Windows Server 2019 (ビルド 17763) 以降で動きます。** 本体の bun が 1809 より前の Windows を受けず、
 install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の Windows には無いためです。Windows Server 2016 では install.ps1 が止まります。
@@ -34,23 +34,65 @@ install.ps1 が使う `curl.exe`・`tar.exe` も 1803 / Server 2019 より前の
 
 - 録画中に上げ直す・外すと、install.ps1 が録画の終わりを待ってから止めます (録画中かは `denpa-agent --status` で確かめる。
   エージェントの API は組んだ denpa にしか応答しないので、エージェント自身の証明書で呼ぶもの)。エンコードの途中なら、次に起きたときにやり直します
-- ドライバは入れません (下)。挿さっている px4-userland の機材と PX-S1UD などの Siano の機材が WinUSB でなければ、そう言います
-  (px4-userland の機材は `px4d --list-json` で問い合わせるので、機種の表は持ちません)
+- 入れるときにはドライバを替えません。挿さっているチューナーのドライバが WinUSB でなければそれを表示し、替える 1 行を案内します
+  ([チューナーのドライバを WinUSB に替える](#チューナーのドライバを-winusb-に替える))
 - genkan (`http://denpa.localhost`) には繋ぎません。この PC からは <http://localhost:3000>、LAN のほかの機器からは `http://<この PC の名前か IP>:3000` で開きます。
   LAN のほかの機器から開けないときは、Windows の設定でこの PC のネットワークを「プライベート」にします (パブリックのネットワークには開けない)
 - 本体とエージェントの zip は、出所の証明でも確かめられます ([配布物を確かめる](install.md#配布物を確かめる))
 
-| 置き場                    | 中身                                                                                                                                                                                                        |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・本体 (`server\`)・エージェントを起動する `denpa-agent.cmd`                                            |
-| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起動する `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる |
-| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                               |
-| `C:\denpa-run`            | px4d のソケットの置き場 (下)                                                                                                                                                                                |
-| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                                                                         |
-| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                                                                |
+| 置き場                    | 中身                                                                                                                                                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `%ProgramFiles%\denpa\`   | エージェントと通知領域のアイコン (`bin\`)・ドライバを WinUSB に替える `wdi-simple.exe` (`bin\libwdi\`)・px4-userland (`px4d.exe`・`px4ctl.exe`・ライセンスの文書)・本体 (`server\`)・エージェントを起動する `denpa-agent.cmd` |
+| `%ProgramData%\denpa\`    | DB (`denpa.db`) と、その隣の局ロゴ・鍵 ([config.md](config.md) の `DENPA_DB`)・本体の環境変数 `denpa.env`・本体を起動する `denpa.cmd` (エージェントと組む合言葉が入る)。SYSTEM と管理者だけが読み書きできる                   |
+| `~/denpa/` (`DENPA_HOME`) | エージェントの `config/` (`tls/pair-token` は組むときの合言葉。無いときだけ作る)・ログ (`denpa.log` は本体、`denpa-agent.log` はエージェント)                                                                                 |
+| `C:\denpa-run`            | px4d のソケットの置き場 (下)                                                                                                                                                                                                  |
+| `~/Videos/denpa/recorded` | 元の TS (`RAW_DIR`。エージェントと本体の両方が使う)                                                                                                                                                                           |
+| `~/Videos/denpa/library`  | 出来上がった録画 (`ENCODED_DIR`。エクスプローラーから見える)                                                                                                                                                                  |
 
 `%ProgramFiles%\denpa` と `%ProgramData%\denpa` を管理者だけのものにしてあるのは、SYSTEM で動くものと、その環境変数を
 ほかの人やほかのプログラムに書き換えさせないためです。ログはふつうのユーザーでも読めるように `~/denpa` に置きます (回さずに足していく)。
+
+## チューナーのドライバを WinUSB に替える
+
+**USB のチューナーは、ドライバが WinUSB でないとエージェントから使えません。** denpa を入れたあと、チューナーを挿して、
+管理者の PowerShell で次の 1 行を流します。挿さっている対応機材のうち、WinUSB になっていないものだけを替えます。
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/danything/denpa/main/install.ps1))) -WinUsb
+```
+
+1. 替える前に、起きること (下の 3 つ) を表示します
+2. 機材ごとに、いまのドライバの名前を表示して「WinUSB に替えますか? [y/N]」と聞きます。`y` と答えた機材だけを替えます。
+   同じ USB ID の機材が 2 台以上挿さっているときは、1 回聞いてまとめて替えます
+3. 替えた機材があれば、エージェントを起動し直します (録画中なら、録画の終わりを待ってから)
+
+**替える前に知っておくこと。**
+
+- 替えた機材は、いまのドライバを使うソフト (PLEX のドライバで使う TVTest など) からは使えなくなります
+- 替えるのは [libwdi](https://github.com/pbatard/libwdi) の `wdi-simple.exe` (`%ProgramFiles%\denpa\bin\libwdi\`) で、[Zadig](https://zadig.akeo.ie) と同じ方法です。
+  libwdi はその PC で自己署名の証明書 (`CN=USB\VID_…&PID_… (libwdi autogenerated)`) を作ってドライバのパッケージに署名し、
+  証明書を Windows の証明書ストア (ローカル コンピューターの「信頼されたルート証明機関」と「信頼された発行元」) に入れます。秘密鍵は署名のあとで消します
+- 元のドライバに戻すときは、デバイス マネージャーでその機材を右クリックして「デバイスのアンインストール」を選び、
+  ドライバーを削除するチェックボックスをオンにして外してから、機材を挿し直します。証明書は `certlm.msc` の上の 2 つのストアから消せます。
+  denpa を外しても (`-Uninstall`)、替えたドライバと証明書は残ります
+
+**聞かずに替えるときは `-Yes` を足します** (`-WinUsb -Yes`)。無人で流すためのスイッチで、挿さっている対応機材のドライバを確認なしで替えます。
+
+**止まったとき。**
+
+| 表示                                         | すること                                                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 「管理者の PowerShell で流してください」     | スタートボタンを右クリックして「ターミナル (管理者)」を開き、流し直す                                               |
+| 「denpa が入っていません」                   | 先に denpa を入れる (この文書の冒頭の 1 行)                                                                         |
+| 「wdi-simple.exe がありません」              | 入っているバージョンが古い。冒頭の 1 行で上げ直してから流し直すか、Zadig を使う                                     |
+| 「対応しているチューナーが挿さっていません」 | チューナーを挿して流し直す。デバイス マネージャーにも出ないときは、ケーブルとポートを変える                         |
+| 「wdi-simple.exe の終了コード …」            | 機材を挿し直して流し直す。終了コードは libwdi のエラーの番号 (`wdi_error`)。それでも替えられないときは Zadig を使う |
+
+**対象の機材は、エージェントと px4d に問い合わせて決めます。** エージェントが USB を直に持つ機材 (PX-MLT5 系・CECH-ZD1 J・PIX-DT295・PX-S1UD などの Siano の機材) の USB ID は
+`denpa-agent --usb-ids` が返し、px4-userland の機材は `px4d --list-json` が「開けなかった」と返したものを対象にします。
+install.ps1 は USB ID の表を持ちません。
+
+**Zadig で替えるときは**、Options → List All Devices → チューナーを選んで WinUSB → Replace Driver の順に操作します。結果は `-WinUsb` と同じです。
 
 ## 通知領域のアイコン
 
@@ -129,22 +171,22 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
   `px4d.exe` と `px4ctl.exe` だけで、`px4-ts.exe` と `WinSCard.dll` (B25 のアプリの横に置く代わりの DLL) は
   置きません。エージェントは USB のリーダーを OS の winscard.dll で読むので、横に置くとそちらが読み込まれてしまいます。
   IT930x のファームウェアは Mac と同じくエージェントに同梱しています ([tuner-px4.md](tuner-px4.md#ファームウェア))
-- **PX-S1UD** (地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません)。Zadig で `3275:0080` に WinUSB を当てます。
+- **PX-S1UD** (地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません)。`3275:0080` のドライバを WinUSB に替えます。
   この実装は Windows でも Linux でも実機で確かめていません ([tuner-px-s1ud.md](tuner-px-s1ud.md))
 - **PX-MLT5U / PX-MLT5PE / DTV02A-5TS-P**。エージェントが WinUSB で USB を直に持ちます (px4d は使いません。内蔵カードリーダーも読みます)。
-  Zadig で WinUSB を当てます。Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#px-mlt5-系))
+  ドライバは WinUSB に替えます。Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#px-mlt5-系))
 - **Sony CECH-ZD1 J** (PS3 の torne。地上波)。エージェントが WinUSB で USB を直に持ちます (外のプログラムは要りません。
-  内蔵の差し込み口の B-CAS も読みます)。機材にドライバが無いので、Zadig で `054c:04b2` に WinUSB を当てます。
-  当てていないか、ほかのソフトが使っていると「ほかのソフトが使っているか、WinUSB になっていません」と返します。
+  内蔵の差し込み口の B-CAS も読みます)。機材にドライバが無いので、`054c:04b2` のドライバを WinUSB に替えます。
+  替えていないか、ほかのソフトが使っていると「ほかのソフトが使っているか、WinUSB になっていません」と返します。
   device の名前 (`zd1j:2-3.2` など) は、挿したポートから Linux と同じ形に作ります (1 台だけなら挿し替えても付いていく。[tuners.md](tuners.md#sony-cech-zd1-j))。
   Windows の実機ではまだ確かめていません ([tuners.md](tuners.md#sony-cech-zd1-j))
-- **PIXELA PIX-DT295** (地上波・BS・CS)。エージェントが WinUSB で USB を直に持ちます。Zadig で `06b8:103b` に WinUSB を当てます。
+- **PIXELA PIX-DT295** (地上波・BS・CS)。エージェントが WinUSB で USB を直に持ちます。`06b8:103b` のドライバを WinUSB に替えます。
   機材のレジスタをエージェントが直に書く方式 (ファームウェアは入れません) は、Windows の実機では確かめていません。エージェントが途中で止まったあとなどは、機材を挿し直してください
   ([tuners.md](tuners.md#pixela-pix-dt295))
-- WinUSB には [Zadig](https://zadig.akeo.ie) でします (Options → List All Devices → チューナーを選んで WinUSB → Replace Driver)。
-  **PX-Q3U4 / PX-W3U4 は USB の機材が 2 つ並ぶので、両方とも。** PLEX のドライバで TVTest などから使っていた
-  機材は、WinUSB にするとそちらからは見えなくなります (戻すときはデバイス マネージャーでドライバを戻す)。
-  installer はドライバを入れ替えません (ほかのソフトで使っていた機材を、知らせずに使えなくしない)。
+- ドライバは `install.ps1 -WinUsb` で WinUSB に替えます ([チューナーのドライバを WinUSB に替える](#チューナーのドライバを-winusb-に替える)。Zadig でも替えられます)。
+  **PX-Q3U4 / PX-W3U4 は USB の機材が 2 つ並ぶので、両方とも替えます** (`-WinUsb` は同じ USB ID の機材をまとめて替える)。PLEX のドライバで TVTest などから使っていた
+  機材は、WinUSB にするとそちらからは見えなくなります。
+  install.ps1 は、入れるときにはドライバを替えません (ほかのソフトで使っていた機材を、聞かずに使えなくしない)。
   WinUSB でないまま、またはほかのソフトが使っているまま選局すると、開けずに落ち、そう添えて返します
   (Windows の libusb は WinUSB の機材しか開けず、開けるのも 1 つのプロセスだけ)
 - px4・Siano・PX-MLT5 系・CECH-ZD1 J・PIX-DT295 の機材は同時に挿して使えます (それぞれ別の USB の機材として開く)
@@ -200,9 +242,13 @@ PX-Q3U4・PX-M1UR・PX-S1UR です ([対応表](https://github.com/Khronos31/px4
   進み具合を名前付きパイプ (`stream.sideOutput`) で受け、`SetThreadExecutionState` が `powercfg /requests` に出ることを見る。本体を `bun server.js` で起こして
   画面・字・デコーダが返ることを見る。install.ps1 で本体ごと入れて SYSTEM のタスクで動き、本体がエージェントと組むところまで。
   wslc からの移行は偽の wslc で流す (`tests/install-windows-migrate.ps1`)。通知領域のアイコンは、組んで起動して落ちないこと・二重に起動するとすぐ終わること・
-  Run に載ること・上げ直すと動いているものを止めること・外すと消えることまで
+  Run に載ること・上げ直すと動いているものを止めること・外すと消えることまで。
+  ドライバを WinUSB に替えるところ (`-WinUsb`) は、聞いてから替える分岐と止まるときの表示を偽の機材と偽の wdi-simple で流し (`tests/install-windows-winusb.ps1`)、
+  ランナーでは、ビルドした `wdi-simple.exe` が zip に入っていること、機材が無いと `-WinUsb` が何も変えずに止まること、`wdi-simple.exe` を同じ引数で流すと
+  証明書とドライバのパッケージがランナーに入ることを見る
 - **Windows の実機で確かめたことのあるチューナーは、以前の方式 (ファームウェアを入れる方式) の PIX-DT295 だけで、いまの方式では確かめていません。** ほかのチューナーとカードは、CI で
   ビルドして起動し、偽の px4d を相手に IPC と TS の受け渡しを流すところまでです
-- **まだ確かめていないこと**: SYSTEM で動くエージェントから WinUSB の機材とカードリーダー (PC/SC) を使えるか、スリープから復帰させるタスクで
+- **まだ確かめていないこと**: `-WinUsb` で実機のチューナーのドライバが WinUSB に替わるか (CI のランナーに機材が無い。ほかのドライバが入っている機材・複合デバイスの機材も確かめていない)、
+  SYSTEM で動くエージェントから WinUSB の機材とカードリーダー (PC/SC) を使えるか、スリープから復帰させるタスクで
   録画が始まるか、wslc の本体からの移行 (実機の wslc で)、通知領域のアイコンの見た目とメニュー・通知と、そこから UAC を通して更新する流れ。実機で当てるのは `denpa-agent --tune px4:<筐体の番号>:2 T27` と `denpa-agent --card`
   (管理者の PowerShell で、エージェントのタスクを止めてから)

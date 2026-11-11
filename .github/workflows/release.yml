@@ -310,8 +310,14 @@ jobs:
         with:
           dotnet-version: "11.0.100"
 
+      # wdi-simple.exe (libwdi。Zadig のコマンドライン版)。install.ps1 -WinUsb がチューナーのドライバを WinUSB に替えるのに使う。
+      # libwdi のリリースには Zadig しか無いので、決めたタグのソースからビルドする (コミットと sha256 で確かめる。scripts/build-wdi-simple.ps1)
+      - name: Build wdi-simple (libwdi)
+        shell: pwsh
+        run: ./scripts/build-wdi-simple.ps1 -Out out\libwdi
+
       # denpa-agent-1.2.3-windows-x64.zip (中身は denpa-agent.exe と、通知領域のアイコンの denpa-tray.exe (tray/Denpa.Tray) と、
-      # エージェントに埋め込んだ Siano のファームウェアの許諾の文面 LICENCE.siano) と
+      # wdi-simple.exe とそのライセンスの文書を入れた libwdi フォルダと、エージェントに埋め込んだ Siano のファームウェアの許諾の文面 LICENCE.siano) と
       # .sha256 (shasum と同じ形式)
       - name: Build
         id: build
@@ -324,7 +330,7 @@ jobs:
           asset="denpa-agent-${tag#v}-windows-x64.zip"
           # Siano のファームウェアはエージェントに埋め込んである。許諾の文面を添える (agent/Denpa.Agent/firmware/README.md)
           cp agent/Denpa.Agent/firmware/LICENCE.siano out/
-          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe, out/LICENCE.siano -DestinationPath '$asset'"
+          pwsh -NoProfile -Command "Compress-Archive -Path out/denpa-agent.exe, out/denpa-tray.exe, out/libwdi, out/LICENCE.siano -DestinationPath '$asset'"
           sha256sum "$asset" > "$asset.sha256"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"

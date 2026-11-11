@@ -51,7 +51,7 @@ sudo reboot
 - 自動検出が付ける名前は `PLEX PX-S1UD <ポート>` (`187f:0600` は `Siano RIO <ポート>`) です。`tuners.json` に書いてある名前は変わりません
 - **ファームウェアは置かなくて構いません。** ISDB-T のファームウェア (`isdbt_rio.inp`) はエージェントの実行ファイルに埋め込んであり、機材に入っていないときだけ送ります
   ([licenses.md](licenses.md#チューナーエージェントに同梱するファームウェア))。別のファイルを使うときだけ、環境変数 `SIANO_FIRMWARE` で指定します
-- Windows は、ドライバを Zadig で WinUSB にします ([install-windows.md](install-windows.md))
+- Windows は、ドライバを `install.ps1 -WinUsb` で WinUSB に替えます ([install-windows.md](install-windows.md#チューナーのドライバを-winusb-に替える))
 - 受信の状態と C/N (dB) と強度 (dBm) を、機材の統計の応答から出します。C/N と強度の欄の位置は公開の資料 1 つだけによるもので、値が正しいかは確かめていません
 - **地上波だけ。** 衛星は機材を開く前に断ります。ワンセグだけの受信と PID の絞り込みはしません
 - 別のモードのファームウェアが動いている機材は、挿し直しを求めて断ります

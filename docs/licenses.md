@@ -132,6 +132,15 @@ px4-userland の配布 zip から置くのは `px4d.exe`・`px4ctl.exe` と、�
 `WinSCard.dll` は置きません。libusb (LGPL-2.1+) が `px4d.exe` に静的リンクなのは上と同じです。
 asicen-userland は入れません (Windows 用が無い)。カードリーダーは Windows の WinSCard (`winscard.dll`。OS の一部) を呼びます。
 
+**同じ zip の `libwdi/` に、libwdi の `wdi-simple.exe` を別の実行ファイルとして入れます** (`install.ps1 -WinUsb` がチューナーのドライバを WinUSB に替えるときに起動する。
+エージェントにはリンクしていない)。libwdi のリリースには Zadig しか無いので、タグとコミットを決めたソースからリリースのたびにビルドします
+([scripts/build-wdi-simple.ps1](../scripts/build-wdi-simple.ps1)。バージョンとコミットもそこ)。
+
+| 名前                                                                                       | 何に                                                                                    | 出どころ                                                                                                                                                                           | ライセンス                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| libwdi の `wdi-simple.exe` (ライブラリと、examples の `wdi-simple.c`・getopt を静的リンク) | チューナーのドライバを WinUSB に替える (ドライバのパッケージを作り、自己署名して入れる) | <https://github.com/pbatard/libwdi> のタグのソース。変えるのはビルドの設定だけ (x64 だけ。libusb-win32・libusbK・ARM64 用のインストーラを埋め込まない。`libwdi/README.txt` に書く) | **LGPL-3.0-or-later** (ライブラリも `wdi-simple.c` も、ソースの冒頭の表示のとおり。静的リンクする getopt (GNU C Library 由来) は LGPL-2.1+、`tokenizer.c` は LGPL-2+。`COPYING-LGPL` と `COPYING` を同じ場所に置く)                          |
+| WinUSB のコインストーラー (`winusbcoinstaller2.dll`・`WdfCoInstaller01011.dll`)            | `wdi-simple.exe` に埋め込まれていて、ドライバのパッケージを作るときに書き出す           | Microsoft の Windows Driver Kit 8.0 の再配布物 (`wdfcoinstaller.msi`。上流の CI が Zadig のビルドに使うものと同じ。sha256 で確かめる)                                              | **Microsoft Windows Driver Frameworks 1.11 の許諾** (`REDIST.TXT` に並ぶファイルは、Windows で動かすプログラムの一部として、オブジェクトコードのまま配ってよい。許諾の 2.a。文面 `WDK-License.rtf` と一覧 `WDK-redist.txt` を同じ場所に置く) |
+
 **denpa 本体は、リリースに添えた `denpa-<バージョン>-windows-x64.zip` を入れます** ([.github/workflows/windows-server.yml](../.github/workflows/windows-server.yml))。
 中身は上のコンテナイメージ `denpa` と同じものを Windows 用にしたものです。アプリ (`app/`)・Denpa Font (`font/`)・ブラウザへ配るデコーダ (`mpeg2/`) は
 イメージと同じ段 (Dockerfile の `app-files`・`denpa-font`・`mpeg2wasm`) から写します。ライセンスの文書は zip の `licenses/` と `ffmpeg/licenses/` に置きます。
