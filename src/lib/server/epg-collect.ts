@@ -666,6 +666,15 @@ const IDLE_LIMIT = 10;
 const CUT_LIMIT = 3;
 
 /**
+ * この回で終わったら列へ戻さないか (`drain`)。`tune` は選局できなかったとき、`cut` は途中で切れたとき。
+ * `tune` が true の回だけ、選局できなかったことを受信できなかったと数える
+ */
+export interface Last {
+  tune: boolean;
+  cut: boolean;
+}
+
+/**
  * **列を、並べた処理 (`lanes`。1 つが引く種別) で引き切る。** 空きが無かった・途中で切れた 1 件は落とさずに列へ戻す。
  *
  * - **空きが無かった (`busy`)** ら列の先頭へ戻す。ほかに読んでいる処理があれば、どれかが 1 件を終えるまで待つ
@@ -674,14 +683,16 @@ const CUT_LIMIT = 3;
  * - **途中で切れた (`cut`)** ら列の先頭へ戻す。1 件につき `CUT_LIMIT` 回まで
  * - **選局できなかった (`untuned`)** ら 1 回だけ列の後ろへ戻す。どのチューナーを使うかはエージェントが決めるので
  *   (docs/agent.md「選ぶ順の約束」)、読み直しが別のチューナーに入るのは、先のチューナーが塞がっているときだけ。
- *   `attempt` の `last` は、この回で戻さないときに true (受信できなかったと数えるのはその回だけ)
+ *
+ * `attempt` には、この回で終わったら列へ戻さないか (`Last`) を渡す。戻さない回は、読み終えたあとの処理
+ * (全局読みの読み直し・中継の替え) をする
  *
  * 空きが無かった・選局できなかった回は「受信できない」に数えない (`collectChannel`)
  */
 export async function drain<J extends { channel: { type: string } }>(
   queue: J[],
   lanes: readonly (readonly string[])[],
-  attempt: (job: J, last: boolean) => Promise<Outcome>,
+  attempt: (job: J, last: Last) => Promise<Outcome>,
   options: {
     backoff?: number;
     idleLimit?: number;
@@ -731,7 +742,10 @@ export async function drain<J extends { channel: { type: string } }>(
         reading++;
         let outcome: Outcome;
         try {
-          outcome = await attempt(job, retuned.has(job));
+          outcome = await attempt(job, {
+            tune: retuned.has(job),
+            cut: (cuts.get(job) ?? 0) >= CUT_LIMIT,
+          });
         } finally {
           reading--;
         }
@@ -883,18 +897,21 @@ async function run(): Promise<number> {
     ];
     const attempt = async (
       job: (typeof queue)[number],
-      last: boolean,
+      last: Last,
     ): Promise<Outcome> => {
       update({ pending: state.pending - 1 });
-      const result = await collectChannel(job.channel, job.whole, last);
-      programs += result.programs;
-      // 列へ戻る回 (空きが無かった・途中で切れた・選局をやり直す) は、読み終えたあとの処理をしない
+      const result = await collectChannel(job.channel, job.whole, last.tune);
+      /*
+       * 列へ戻る回 (空きが無かった・途中で切れた・選局をやり直す) は、読み終えたあとの処理をしない。
+       * 取り込んだ番組も数えない (読み直した回に同じ番組をもう一度数える)
+       */
       if (
         result.outcome === "busy" ||
-        result.outcome === "cut" ||
-        (result.outcome === "untuned" && !last)
+        (result.outcome === "cut" && !last.cut) ||
+        (result.outcome === "untuned" && !last.tune)
       )
         return result.outcome;
+      programs += result.programs;
       /*
        * 全局読みが揃わないまま上限で切れたら、その中継の詳細も欠けている。
        * 列の後ろへ戻して、いつもどおり自分の中継ぶんを読み直す

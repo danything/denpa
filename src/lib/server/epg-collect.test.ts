@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Outcome } from "./epg-collect";
+import type { Last, Outcome } from "./epg-collect";
 import type { AgentChannel } from "./tuner";
 
 /**
@@ -365,14 +365,15 @@ function fakeAgent(
   preempt = new Map<string, number>(),
 ) {
   const held = new Set<number>();
-  const log: { name: string; outcome: Outcome; last: boolean }[] = [];
+  const log: { name: string; outcome: Outcome; last: boolean; cut: boolean }[] =
+    [];
   const attempt = async (
     job: { channel: { type: string; channel: string } },
-    last: boolean,
+    { tune: last, cut }: Last,
   ): Promise<Outcome> => {
     const { type, channel: name } = job.channel;
     const done = (outcome: Outcome) => {
-      log.push({ name, outcome, last });
+      log.push({ name, outcome, last, cut });
       return outcome;
     };
     // リクエストは非同期に届く。選んだらすぐ押さえる (`TunerPool.Open` はロックの中で利用者を入れる)
@@ -456,11 +457,12 @@ describe("列を引き切る (drain)", () => {
   test("切れ続ける 1 件は、上限で諦める (周回が終わる)", async () => {
     const agent = fakeAgent([{ types: MLT, rank: 0 }], new Map([["C1", 100]]));
     await drain([job("CATV", "C1")], [MLT], agent.attempt, { backoff: 1 });
-    expect(agent.log.map((entry) => entry.outcome)).toEqual([
-      "cut",
-      "cut",
-      "cut",
-      "cut",
+    // 戻さない最後の回だけ `cut` が立つ (読み終えたあとの処理をその回にする)
+    expect(agent.log.map((entry) => [entry.outcome, entry.cut])).toEqual([
+      ["cut", false],
+      ["cut", false],
+      ["cut", false],
+      ["cut", true],
     ]);
   });
 
@@ -475,8 +477,8 @@ describe("列を引き切る (drain)", () => {
       backoff: 1,
     });
     expect(agent.log).toEqual([
-      { name: "BS1", outcome: "untuned", last: false },
-      { name: "BS1", outcome: "untuned", last: true },
+      { name: "BS1", outcome: "untuned", last: false, cut: false },
+      { name: "BS1", outcome: "untuned", last: true, cut: false },
     ]);
   });
 
