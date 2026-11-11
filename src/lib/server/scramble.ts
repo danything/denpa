@@ -117,10 +117,11 @@ export class ScrambleCount {
  *
  * 復号できる局でも、選局したての数百パケットがスクランブルされたまま届くことがある。鍵がそろう前のパケットで、
  * 本番 (2026-11-11、PT3 の地上波) ではエージェントが PMT の来ていない番組の ES をそのまま流していた ([docs/agent.md](../../../docs/agent.md))。
- * カードが鍵を返さない (未契約の) 局は、そのあとも掛かったまま届く。先頭だけで決めると、無料の局を「契約されていない」として止める。
+ * カードが鍵を返さない (未契約の) 局は、そのあともスクランブルされたまま届く。先頭だけで決めると、無料の局を「契約されていない」として止める。
  *
- * そこで `window` 個ずつ数え、掛かっているのが半分以下の窓が 1 つ来たら、復号できているとして数えるのをやめる (`verdict` が `clear`)。
- * 半分を超えて掛かった窓が `lasting` ミリ秒続いたら、掛かったままと決める (`scrambled`)
+ * そこで `window` 個ずつ数え、スクランブルされているのが半分以下の窓が 1 つ来たら、復号できているとして数えるのをやめる (`verdict` が `clear`)。
+ * 半分を超えてスクランブルされた窓が 2 つ以上、`lasting` ミリ秒続いたら、スクランブルされたままと決める (`scrambled`)。
+ * 窓を 2 つ要るのは、500 個に何秒もかかる低いビットレートの局で、先頭の窓 1 つだけで決めないため
  */
 export class LastingScramble {
   /** 決めた結果。決まるまで null */
@@ -130,8 +131,10 @@ export class LastingScramble {
   private done: ScrambleCount | null = null;
   /** いまの窓の最初のパケットを数えた時刻 */
   private openedAt = 0;
-  /** 掛かった窓が続き始めた時刻。掛かった窓がまだ無ければ null */
+  /** スクランブルされた窓が続き始めた時刻。そういう窓がまだ無ければ null */
   private since: number | null = null;
+  /** スクランブルされた窓が続いている数 */
+  private runs = 0;
 
   constructor(
     readonly window: number,
@@ -154,7 +157,9 @@ export class LastingScramble {
       return;
     }
     this.since ??= this.openedAt;
-    if (now - this.since >= this.lasting) this.verdict = "scrambled";
+    this.runs++;
+    if (this.runs >= 2 && now - this.since >= this.lasting)
+      this.verdict = "scrambled";
   }
 
   /** いちばん新しく数えた窓。いまの窓が `least` 個に届いていればそれ、届いていなければ最後に数え終えた窓 */
@@ -163,7 +168,7 @@ export class LastingScramble {
   }
 
   /**
-   * **いま掛かったままと言えるか** (ffmpeg が `verdict` の決まる前に降りたとき)。いちばん新しく数えた窓 (`newest`) で決める。
+   * **いまスクランブルされたままと言えるか** (ffmpeg が `verdict` の決まる前に降りたとき)。いちばん新しく数えた窓 (`newest`) で決める。
    * 窓がまだ無ければ言えない (false)
    */
   stillScrambled(least: number): boolean {

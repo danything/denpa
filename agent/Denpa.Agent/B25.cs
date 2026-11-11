@@ -98,7 +98,9 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private readonly bool[] _listed = new bool[8192];
     /// <summary>
     /// **溜めている間に来た、どの PMT も挙げていない PID のスクランブルされたパケット。** その番組の PMT がまだ来ていないだけなので、
-    /// これがある間は来ていない PMT を待ち続ける (<see cref="PmtsReady"/>)。PMT の来ない番組 (地上波の臨時の番組) は ES も流れていない
+    /// これがある間は来ていない PMT を待ち続ける (<see cref="PmtsReady"/>)。PMT の来ない番組 (地上波の臨時の番組) は ES も流れていないとみなす
+    /// (確かめたのは本番の記録とテストの並びまで)。PMT の無いままスクランブルされた ES が流れ続ける TS でも、待つのは <see cref="HoldLimit"/>
+    /// (地上波で 3 秒ほど) までで、そこで流し始める
     /// </summary>
     private readonly HashSet<int> _stray = [];
     private readonly Dictionary<int, Ecm> _ecms = [];

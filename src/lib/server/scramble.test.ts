@@ -249,6 +249,15 @@ describe("ライブで局がスクランブルされたまま届き続けてい�
     expect(watch.newest(50)?.scrambled).toBe(500);
   });
 
+  test("500 個に 3 秒以上かかる局でも、先頭の窓 1 つだけでは決めない", () => {
+    const watch = new LastingScramble(500, 3000);
+    feed(watch, 1, true, 0);
+    feed(watch, 499, true, 4000);
+    expect(watch.verdict).toBeNull();
+    feed(watch, 500, true, 8000);
+    expect(watch.verdict).toBe("scrambled");
+  });
+
   test("決める前に ffmpeg が降りたら、いちばん新しく数えたぶんで決める", () => {
     const watch = new LastingScramble(500, 3000);
     feed(watch, 49, true, 0);
