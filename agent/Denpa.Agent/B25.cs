@@ -45,6 +45,14 @@ namespace Denpa.Agent;
 /// ワンセグやデータ放送の局の PMT を待たない。まだ PMT か ECM の答えが無い局のスクランブルされたパケットは、そろうまで捨てる (<see cref="Drops"/>)。
 /// 局を決めない利用者 (録画) がいれば、今までどおり PAT の全部の局を待つ。
 /// </para>
+///
+/// <para>
+/// **観る局の PAT と PMT を覚えていれば、本物を待たずにそれで流し始める** (<paramref name="memory"/>。<see cref="PsiMemory"/>)。
+/// 覚えたバイト列を本物と同じ <see cref="OnPat"/>・<see cref="OnPmt"/> に通して経路を組み、覚えた PMT が挙げる ECM の答えがそろえば流し始める。
+/// 出力の先頭には覚えた PAT と PMT のパケットを 1 組差し込む (サーバとクライアントは PMT を読むまで何も出さないため)。
+/// 本物が届いたら必ず突き合わせ、違えば本物で作り直す。確かめ終わるまでは、復号できないパケットと、どの PMT も挙げていない PID の
+/// スクランブルされたパケットを流さずに捨てる (<see cref="Check"/>)。使うのは、鍵の要る利用者がみな局を決めているときだけ
+/// </para>
 /// </summary>
 /// <param name="keysWanted">
 /// いま鍵が要るか。塊を受けるたびに呼ぶ。null は「どちらとも決まらない」(利用者がいない) で、今のままにする。
@@ -58,7 +66,13 @@ namespace Denpa.Agent;
 /// 先頭で溜めるのをやめる前にそろえる局 (program_number)。塊を受けるたびに呼ぶ。null か空なら PAT の全部の局を待つ。
 /// PAT に無い局があっても全部を待つ。渡さなければいつも全部 (録れたものの復号・実機での試験)
 /// </param>
-public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null, Emm? emm = null, Func<IReadOnlySet<int>?>? services = null)
+/// <param name="memory">
+/// このチャンネルの覚えた PAT・PMT。読んだ本物の PAT・PMT をここに覚え、次の選局で使う。チューナーの選局 (TunerPool.cs) だけが渡し、
+/// 録れたものの復号と実機での試験は渡さない (チャンネルが無い)
+/// </param>
+public sealed class Descrambler(
+    IKeySource source, Stopwatch? clock = null, Func<bool?>? keysWanted = null, Emm? emm = null, Func<IReadOnlySet<int>?>? services = null,
+    PsiMemory.Slot? memory = null)
 {
     /// <summary>いま鍵を問い合わせて復号しているか (<c>keysWanted</c>)</summary>
     private bool _keys = true;
@@ -91,6 +105,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private bool _holding = true;
     private byte[]? _hold;
     private int _held;
+    /// <summary>溜めたぶんの前に書き出す、覚えた PAT と PMT のパケット (<see cref="Head"/>)。書き出したら null</summary>
+    private byte[]? _head;
 
     /// <summary>いまそろえる局 (<c>services</c>)。塊を受けるたびに読み直す。null なら全部</summary>
     private IReadOnlySet<int>? _services;
@@ -105,6 +121,32 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     private long _dropped;
     /// <summary>観る局だけで溜めるのをやめたときの局 (<see cref="HeldAt"/> に出す)。全部を待ったなら null</summary>
     private string? _settledFor;
+
+    /// <summary>覚えた PAT・PMT を使うかを決めた (最初の塊で 1 回だけ。<see cref="Recall"/>)</summary>
+    private bool _recallTried;
+    /// <summary>覚えた PAT・PMT を <see cref="OnPat"/>・<see cref="OnPmt"/> に通している間は true。時刻を測らず、覚え直さない</summary>
+    private bool _recalling;
+    /// <summary>いまの PAT が覚えたもので、本物がまだ来ていない</summary>
+    private bool _patRecalled;
+    /// <summary>覚えた PMT で、本物がまだ来ていない局 (program_number → 覚えた PMT の PID)</summary>
+    private readonly Dictionary<int, int> _recalledPmts = [];
+    /// <summary>覚えた PAT・PMT の、どれかが本物と違った</summary>
+    private bool _recallDiffered;
+    /// <summary>覚えた PAT・PMT を使った選局で、本物の PAT が来た時刻と、観る局の本物の PMT が最後に来た時刻 (ミリ秒。まだなら -1)</summary>
+    private long _realPatMs = -1, _realPmtMs = -1;
+    /// <summary>本物で確かめ終わる前に、覚えた PAT・PMT で溜めるのをやめた (出力の先頭に差し込んだ)</summary>
+    private bool _settledOnRecall;
+    /// <summary>
+    /// **覚えた PAT・PMT で流し始め、本物で確かめ終わるまでの間は true。** この間は、復号できないパケットと、
+    /// どの PMT も挙げていない PID のスクランブルされたパケットを捨てる (<see cref="Check"/>)
+    /// </summary>
+    private bool _checking;
+    /// <summary>確かめ待ちで捨てるのをやめる位置 (読んだパケットの数)。<see cref="_drainUntil"/> と同じく、溜める上限と同じ量</summary>
+    private long _checkUntil;
+    /// <summary>確かめ待ちで捨てたパケットの数</summary>
+    private long _discarded;
+    /// <summary>確かめ終わったときの 1 行 (<see cref="TakeChecked"/>)</summary>
+    private string? _checked;
 
     private readonly Section _pat = new(null);
     private byte[]? _patLast;
@@ -223,7 +265,141 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         var last = _lastEcm < 0 ? "" : $" (0x{_lastEcm:X4})";
         var arrived = _arrivedEcm < 0 ? "" : $" (0x{_arrivedEcm:X4})";
         var only = _settledFor is null ? "" : $" (局 {_settledFor})";
-        return $"PAT {At(_patMs)} / PMT {At(_pmtMs)}{only} / ECM 着 {At(_arrivedMs)}{arrived} / カード応答 {At(_ecmMs)}{last}";
+        // 覚えた PAT・PMT で流し始めたら「覚え」。本物の時刻は確かめ終わったときの 1 行 (TakeChecked) に出す
+        var pat = _settledOnRecall && _patMs < 0 ? "覚え" : At(_patMs);
+        var pmt = _settledOnRecall ? "覚え" : At(_pmtMs);
+        return $"PAT {pat} / PMT {pmt}{only} / ECM 着 {At(_arrivedMs)}{arrived} / カード応答 {At(_ecmMs)}{last}";
+    }
+
+    /// <summary>
+    /// **覚えた PAT・PMT で流し始めた選局で、本物で確かめ終わったときの 1 行。** 1 回だけ返し、あとは null。
+    /// 本物と同じだったか・違って作り直したか・確かめられないまま上限を読んだかと、本物が来た時刻、捨てたパケットの数
+    /// </summary>
+    public string? TakeChecked()
+    {
+        var line = _checked;
+        _checked = null;
+        return line;
+    }
+
+    /// <summary>
+    /// **覚えた PAT・PMT を使えるなら、本物を待たずに経路を組む。** 選局して最初の塊で 1 回だけ決める。使うのは、鍵の要る利用者が
+    /// みな局を決めていて (<c>services</c> が null でない)、その局のどれも PMT を覚えていて、覚えた PAT が同じ PID で挙げているときだけ。
+    /// 覚えたものは本物と同じ <see cref="OnPat"/>・<see cref="OnPmt"/> に通す (読み方を 2 つにしない)
+    /// </summary>
+    private void Recall()
+    {
+        _recallTried = true;
+        if (memory is null || !_keys || !_holding || _packets > 0 || _services is not { Count: > 0 } wanted) return;
+        if (memory.Recall(wanted) is not { } recalled) return;
+        _recalling = true;
+        OnPat(recalled.Pat);
+        foreach (var (_, (pid, section)) in recalled.Pmts) OnPmt(pid, section);
+        _recalling = false;
+        _patRecalled = true;
+        foreach (var (number, (pid, _)) in recalled.Pmts) _recalledPmts[number] = pid;
+    }
+
+    /// <summary>覚えた PAT・PMT のうち、本物がまだ来ていないものがあるか</summary>
+    private bool Unconfirmed() => _patRecalled || _recalledPmts.Count > 0;
+
+    /// <summary>
+    /// 本物で確かめ終わったか。本物の PAT と、観る局の本物の PMT がそろい、観る局の ECM がどれも答えを受けた。
+    /// 本物の PMT で ECM が変わったら、新しい ECM の答えが来るまでを確かめ待ちに含める
+    /// </summary>
+    private bool Confirmed()
+    {
+        if (Unconfirmed() || !TablesReady()) return false;
+        foreach (var ecm in _ecms.Values)
+        {
+            if (Waits(ecm) && ecm.Last is null) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// 確かめ待ちの 1 パケット。捨てるなら true。どの PMT も挙げていない PID のスクランブルされたパケットを捨てる (覚えた PMT に無い新しい ES かもしれない)。
+    /// 復号できなかったパケットは、復号してから捨てる (<see cref="Take"/>)。本物で確かめ終わるか、溜める上限と同じ量を読んだらやめる
+    /// </summary>
+    private bool Check(ReadOnlySpan<byte> packet)
+    {
+        if (!_keys)
+        {
+            _checking = false;
+            return false;
+        }
+        if (Confirmed())
+        {
+            FinishCheck(_recallDiffered ? "覚えた PAT・PMT が本物と違ったので、本物で作り直しました" : "覚えた PAT・PMT は本物と同じでした");
+            return false;
+        }
+        if (_packets >= _checkUntil)
+        {
+            FinishCheck($"覚えた PAT・PMT を本物で確かめられないまま {HoldLimit / 1024 / 1024}MB 読んだので、捨てずに流します");
+            return false;
+        }
+        if (!Unlisted(packet)) return false;
+        _discarded++;
+        return true;
+    }
+
+    /// <summary>どの PMT も挙げていない PID の、スクランブルされたパケットか</summary>
+    private bool Unlisted(ReadOnlySpan<byte> packet) =>
+        (packet[1] & 0x80) == 0 && packet[3] >> 6 != 0 && !_listed[((packet[1] & 0x1F) << 8) | packet[2]];
+
+    private void FinishCheck(string result)
+    {
+        _checking = false;
+        _checked = $"{result} (本物の PAT {At(_realPatMs)}・PMT {At(_realPmtMs)}・捨てたのは {_discarded} パケット)";
+    }
+
+    /// <summary>
+    /// 出力の先頭に差し込む、いまの PAT と観る局の PMT のパケット。覚えたものを本物で作り直していれば本物。
+    /// 連続性カウンタは、溜めたぶんにその PID のパケットがあれば、そこへ続く値にする (無ければ 0 から)
+    /// </summary>
+    private byte[] Head(IReadOnlySet<int> wanted)
+    {
+        var head = new List<byte>();
+        Append(0, _patLast!);
+        foreach (var number in wanted.Order())
+        {
+            if (_pmts.TryGetValue(number, out var pmt) && _programs.TryGetValue(number, out var pid)) Append(pid, pmt);
+        }
+        return [.. head];
+
+        void Append(int pid, byte[] section)
+        {
+            var count = (section.Length + 1 + PacketSize - 5) / (PacketSize - 4);
+            var counter = FirstCounter(pid) is { } next ? next - count : 0;
+            var at = 0;
+            for (var index = 0; index < count; index++)
+            {
+                var packet = new byte[PacketSize];
+                Array.Fill(packet, (byte)0xFF);
+                packet[0] = SyncByte;
+                packet[1] = (byte)((index == 0 ? 0x40 : 0) | (pid >> 8));
+                packet[2] = (byte)pid;
+                packet[3] = (byte)(0x10 | ((counter + index) & 0x0F));
+                var start = 4;
+                // pointer_field 0
+                if (index == 0) packet[start++] = 0;
+                var take = Math.Min(PacketSize - start, section.Length - at);
+                section.AsSpan(at, take).CopyTo(packet.AsSpan(start));
+                at += take;
+                head.AddRange(packet);
+            }
+        }
+    }
+
+    /// <summary>溜めたぶんで最初に来た、その PID のパケットの連続性カウンタ。無ければ null</summary>
+    private int? FirstCounter(int pid)
+    {
+        for (var at = 0; at < _held; at++)
+        {
+            var packet = _hold.AsSpan(at * PacketSize, PacketSize);
+            if ((((packet[1] & 0x1F) << 8) | packet[2]) == pid) return packet[3] & 0x0F;
+        }
+        return null;
     }
 
     /// <summary>溜めている間に鍵の出どころへ問い合わせた回数と往復の合計 (ロックの待ちを含む)。<see cref="HeldAt"/> と同じ 1 行に足す</summary>
@@ -245,6 +421,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             else StopKeys(output);
         }
         if (services is not null) _services = services();
+        if (!_recallTried) Recall();
         if (_carryLength > 0)
         {
             // 前の尻尾 (188 バイト以下) に続けて読む
@@ -345,10 +522,20 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         Release(output);
         if (held) return;
         if (_draining && Drain(packet)) return;
+        if (_checking && Check(packet)) return;
 
         var room = output.GetSpan(PacketSize)[..PacketSize];
         packet.CopyTo(room);
-        Unscramble(room, Route(room), usable: true);
+        if (Unscramble(room, Route(room), usable: true))
+        {
+            // 確かめ待ちの間は、復号できなかったものを流さない (書きかけの場所は進めずに捨てる)
+            if (_checking)
+            {
+                _discarded++;
+                return;
+            }
+            _undecodable++;
+        }
         output.Advance(PacketSize);
     }
 
@@ -362,28 +549,28 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
     /// 確かめずに印を下ろすと、合わない鍵で化けた中身を「復号できた」として流し、契約の復号テストもそれで通ってしまう
     /// (PIX-DT295 で TS が欠けていた頃、CS の局で起きた。#2414)。偶奇の対応は STD-B25 のとおり 0b10 が偶数、0b11 が奇数の鍵で固定し、
     /// ほかの鍵は試さない。合わなければスクランブルされたまま流し、その PES の残りも
-    /// 次の PES の先頭までスクランブルされたまま流して <see cref="Undecodable"/> に数える
+    /// 次の PES の先頭までスクランブルされたまま流す
+    /// </para>
+    ///
+    /// <para>
+    /// 復号できずにスクランブルされたまま残したら true。呼ぶ側が <see cref="Undecodable"/> に数えるか、確かめ待ちなら捨てる (<see cref="Check"/>)
     /// </para>
     /// </summary>
-    private void Unscramble(Span<byte> packet, Ecm? ecm, bool usable)
+    private bool Unscramble(Span<byte> packet, Ecm? ecm, bool usable)
     {
         // 鍵の要らない利用者だけなら触らない (スクランブルされたままとしても数えない)
-        if (!_keys || (packet[1] & 0x80) != 0 || packet[3] >> 6 == 0) return;
+        if (!_keys || (packet[1] & 0x80) != 0 || packet[3] >> 6 == 0) return false;
         var start = PayloadStart(packet);
         if (start == PacketSize)
         {
             // 中身の無いパケット (アダプテーションだけ) は、印を下ろすだけで済む
             packet[3] &= 0x3F;
             _decoded++;
-            return;
+            return false;
         }
         // 契約が無い (同じ TS に入っている有料局)。復号の失敗には数えずにそのまま流す
-        if (ecm is { Unentitled: true }) return;
-        if (start < 0 || !usable || ecm?.Cipher is not { HasKeys: true } cipher)
-        {
-            _undecodable++;
-            return;
-        }
+        if (ecm is { Unentitled: true }) return false;
+        if (start < 0 || !usable || ecm?.Cipher is not { HasKeys: true } cipher) return true;
         var pid = ((packet[1] & 0x1F) << 8) | packet[2];
         var control = packet[3] >> 6;
         var payload = packet[start..];
@@ -392,21 +579,17 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         {
             // 先頭が短くて確かめられない PES は、前の PES が合わなかったことを引き継がずに、今の鍵で復号する
             if (unitStart) _garbled[pid] = false;
-            if (_garbled[pid])
-            {
-                _undecodable++;
-                return;
-            }
+            if (_garbled[pid]) return true;
             cipher.Decrypt(ecm.Even(control), payload);
         }
         else if (!Verify(payload, ecm, control, pid))
         {
             _garbled[pid] = true;
-            _undecodable++;
-            return;
+            return true;
         }
         packet[3] &= 0x3F;
         _decoded++;
+        return false;
     }
 
     /// <summary>
@@ -451,8 +634,8 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             Log.Write($"PAT・PMT・ECM が揃う前に {HoldLimit / 1024 / 1024}MB 溜まったので、待たずに流します");
             return true;
         }
-        if (!TablesReady()) return false;
-        if (_pmtMs < 0) _pmtMs = _clock.ElapsedMilliseconds;
+        if (!TablesSettle()) return false;
+        if (_pmtMs < 0 && !Unconfirmed()) _pmtMs = _clock.ElapsedMilliseconds;
         foreach (var ecm in _ecms.Values)
         {
             if (!Waits(ecm)) continue;
@@ -489,6 +672,12 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         }
         return true;
     }
+
+    /// <summary>
+    /// 溜めるのをやめてよい PAT・PMT か (<see cref="TablesReady"/>)。**全部の局を待つ (録画がいる) なら、覚えたものでは流し始めない。**
+    /// 覚えた PAT・PMT を使うのは観る局だけで溜めるのをやめるときに限る。録画は本物の PAT・PMT がそろうのを待つ
+    /// </summary>
+    private bool TablesSettle() => TablesReady() && (Narrowed() is not null || !Unconfirmed());
 
     /// <summary>
     /// 溜めるのをやめる前に答えを待つ ECM か。PMT が挙げた ECM のうち、観る局が決まっていればその局の PMT が挙げたものだけ。
@@ -594,6 +783,10 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         // 観る局だけで溜めるのをやめた。ほかの局の PMT と ECM の答えがそろうまで、鍵を持てないものは捨てる (Drops)
         _draining = narrowed && _keys && !AllReady();
         _drainUntil = _packets + HoldLimit / PacketSize;
+        // 覚えた PAT・PMT で流し始めた。本物で確かめ終わるまで、復号できないものを捨てる (Check)
+        var recalled = narrowed && _keys && Unconfirmed();
+        _checking = recalled;
+        _checkUntil = _packets + HoldLimit / PacketSize;
         if (_held == 0) return;
         var usable = new bool[_held];
         for (var at = _held - 1; at >= 0; at--)
@@ -620,11 +813,30 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
                 _dropped++;
                 continue;
             }
-            Unscramble(packet, Route(packet), usable[at]);
+            if (_checking && Unlisted(packet))
+            {
+                _discarded++;
+                continue;
+            }
+            if (Unscramble(packet, Route(packet), usable[at]))
+            {
+                if (_checking)
+                {
+                    _discarded++;
+                    continue;
+                }
+                _undecodable++;
+            }
             if (kept != at) packet.CopyTo(_hold.AsSpan(kept * PacketSize));
             kept++;
         }
         _held = kept;
+        // サーバとクライアントは PMT を読むまで何も出さないので、覚えた PAT と PMT を溜めたぶんの前に置く (1 回だけ)
+        if (recalled && !_settledOnRecall)
+        {
+            _settledOnRecall = true;
+            _head = Head(Narrowed()!);
+        }
     }
 
     /// <summary>
@@ -659,6 +871,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         _keys = false;
         if (_holding) Settle();
         StopDraining();
+        _checking = false;
         Release(output);
         foreach (var ecm in _ecms.Values) Forget(ecm);
     }
@@ -677,6 +890,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         _keys = true;
         _holding = true;
         StopDraining();
+        _checking = false;
         foreach (var ecm in _ecms.Values) Forget(ecm);
     }
 
@@ -697,7 +911,13 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     private void Release(IBufferWriter<byte> output)
     {
-        if (_holding || _held == 0) return;
+        if (_holding) return;
+        if (_head is not null)
+        {
+            output.Write(_head);
+            _head = null;
+        }
+        if (_held == 0) return;
         output.Write(_hold.AsSpan(0, _held * PacketSize));
         _hold = null;
         _held = 0;
@@ -817,9 +1037,15 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
 
     private void OnPat(ReadOnlySpan<byte> section)
     {
-        if (section[0] != 0x00 || (_patLast is not null && section.SequenceEqual(_patLast))) return;
+        if (section[0] != 0x00) return;
+        if (_patRecalled && !_recalling && !ConfirmPat(section)) return;
+        if (_patLast is not null && section.SequenceEqual(_patLast)) return;
         _patLast = section.ToArray();
-        if (_holding && _patMs < 0) _patMs = _clock.ElapsedMilliseconds;
+        if (!_recalling)
+        {
+            if (_holding && _patMs < 0) _patMs = _clock.ElapsedMilliseconds;
+            memory?.Pat(section);
+        }
         _programs.Clear();
         var loop = section[8..^4];
         for (var at = 0; at + 4 <= loop.Length; at += 4)
@@ -846,6 +1072,28 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         _earlyPmts.Clear();
     }
 
+    /// <summary>
+    /// **覚えた PAT のあとに来た、最初の本物の PAT。** 同じなら確かめ終わりで、false を返す (読み直さない)。違えば、覚えた PMT のうち
+    /// 本物が同じ PID で挙げていない局のもの (transport_stream_id が違えば全部) を捨てて true を返し、本物を読む。覚えておく側も同じように捨てる (<see cref="PsiMemory"/>)
+    /// </summary>
+    private bool ConfirmPat(ReadOnlySpan<byte> section)
+    {
+        _patRecalled = false;
+        _realPatMs = _clock.ElapsedMilliseconds;
+        if (_holding && _patMs < 0) _patMs = _realPatMs;
+        if (section.SequenceEqual(_patLast)) return false;
+        _recallDiffered = true;
+        var moved = PsiMemory.Tsid(section) != PsiMemory.Tsid(_patLast);
+        var programs = PsiMemory.Programs(section);
+        foreach (var (number, pid) in _recalledPmts.ToList())
+        {
+            if (!moved && programs.TryGetValue(number, out var listed) && listed == pid) continue;
+            _pmts.Remove(number);
+            _recalledPmts.Remove(number);
+        }
+        return true;
+    }
+
     private void OnPmt(int pid, ReadOnlySpan<byte> section)
     {
         if (section[0] != 0x02) return;
@@ -857,16 +1105,23 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
             return;
         }
         if (!_programs.TryGetValue(number, out var expected) || expected != pid) return;
-        if (_pmts.TryGetValue(number, out var last) && section.SequenceEqual(last))
-        {
-            _pmtRepeated = true;
-            return;
-        }
-        _pmts[number] = section.ToArray();
         // PMT が届いた時刻は、取っておいた ECM を問い合わせる (Rebuild) 前に測る。後で測るとカードの往復が入る
         var arrived = _clock.ElapsedMilliseconds;
+        // 覚えた PMT のあとに来た、その局の最初の本物の PMT。同じなら確かめ終わりで、作り直さない
+        var recalled = !_recalling && _recalledPmts.Remove(number);
+        if (recalled) _realPmtMs = arrived;
+        if (_pmts.TryGetValue(number, out var last) && section.SequenceEqual(last))
+        {
+            // 覚えたものと同じだったのは、PAT が変わってからのくり返しではない
+            if (!recalled) _pmtRepeated = true;
+            else if (_holding && _pmtMs < 0 && !Unconfirmed() && TablesReady()) _pmtMs = arrived;
+            return;
+        }
+        if (recalled) _recallDiffered = true;
+        _pmts[number] = section.ToArray();
+        if (!_recalling) memory?.Pmt(number, pid, section);
         Rebuild();
-        if (_holding && _pmtMs < 0 && TablesReady()) _pmtMs = arrived;
+        if (_holding && _pmtMs < 0 && !Unconfirmed() && TablesReady()) _pmtMs = arrived;
     }
 
     /// <summary>
@@ -1001,7 +1256,7 @@ public sealed class Descrambler(IKeySource source, Stopwatch? clock = null, Func
         if (!_keys) return;
         var listed = _ecms.GetValueOrDefault(ecm.Pid) == ecm;
         // 溜めるのをやめる合図にするのは、待っている PMT が挙げた ECM だけ。先回りして取っておいただけのもの (Early) は PAT・PMT を待たせない
-        if (_holding && ecm.Last is not null && Waits(ecm) && TablesReady()) Settle(Narrowed() is not null);
+        if (_holding && ecm.Last is not null && Waits(ecm) && TablesSettle()) Settle(Narrowed() is not null);
         if (ecm.Last is { } last && section.SequenceEqual(last))
         {
             if (_packets >= ecm.RetryAt) Ask(ecm);
