@@ -5,6 +5,7 @@ import { channelNotice } from "#lib/channel-notice.js";
 import { channelNumber } from "#lib/format.js";
 import { parseId } from "#lib/id.js";
 import { jikkyoChannel } from "#lib/jikkyo/channels.js";
+import { type BroadcastCodec, broadcastCodec } from "#lib/live-choice.js";
 import { LAST_COOKIE } from "#lib/live.js";
 import { channelAlert } from "#lib/server/channel-alert.js";
 import { orm } from "#lib/server/db.js";
@@ -59,6 +60,11 @@ export interface LiveChannel {
   /** 実況のチャンネル (`jk1` など。`#lib/jikkyo/channels.ts`)。実況の無い局と、世帯の設定 (連携の「実況」) がオフのときは null */
   jikkyo: string | null;
   hasLogo: boolean;
+  /**
+   * 放送のコーデック (`#lib/live-choice.ts` の `BroadcastCodec`)。4K の局は `hevc` で、画面は「放送のまま」を HEVC の詰め替えとして
+   * リクエストする。再生できるかも 4K の HEVC で確かめる (`#lib/hevc-4k.ts`)
+   */
+  broadcast: BroadcastCodec;
   /** いま流れている番組。無いこともある (番組表がまだ薄い局) */
   now: {
     id: number;
@@ -115,6 +121,7 @@ export function load(event) {
       serviceId: service.service_id,
       number: channelNumber(service),
       hasLogo: service.has_logo,
+      broadcast: broadcastCodec(service.transport),
       jikkyo: current.jikkyo ? jikkyoChannel(service) : null,
       now:
         program === undefined

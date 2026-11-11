@@ -72,8 +72,8 @@ service_id が同じでも 2K の局とは結び付けず、別の局として�
 **伝送の形式 (`services.transport`。`ts` か `tlv`) と CA_system_id で決める。**
 TS の局は、CA_system_id が無い (スクランブルしていない) か、その形式の表 (`types.DESCRAMBLABLE`) にある CA_system_id があれば復号できる。表は TS が B-CAS (`0x0005`) だけで、TLV は空 (ACAS にまだ対応していない)。
 SKY の局と、PMT の CA 記述子に B-CAS の CA_system_id が無い CATV の局は復号できない。
-**4K の局 (`tlv`) は、CA_system_id によらず復号できない局として扱う** (`types.READABLE_TRANSPORTS`)。ライブと録画が TLV をまだ読めず、
-スクランブルしていない 4K の局を通すと、TS として開いてしまうため。4K のライブと録画が入ったら `READABLE_TRANSPORTS` に `tlv` を足す。
+4K の局 (`tlv`) は、MPT にアクセス制御記述子が無い (スクランブルしていない) ときだけ復号できる。実際の 4K の放送は ACAS でスクランブルされているので、どの局も復号できない局になる。
+4K の録画はまだ無く、復号できる 4K の局の予約も、録画の始まりで理由を添えて失敗にする (`recorder.ts`)。
 4K の局の CA_system_id は B-CAS と同じ `0x0005` でも、B-CAS のカードでは復号できない。形式を見ずに `0x0005` で決めると、復号できると取り違える。
 free_CA_mode は使わない (実機の BS4K は 0 なのに、映像と音声はスクランブルされていた)。
 復号できない局は、ライブ・録画・ロゴ・CM のロゴの学習に使わない。ルールは当てず、予約とライブは `types.undecodableReason` の文で断る。

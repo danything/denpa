@@ -343,6 +343,16 @@ export class TrackList {
     return true;
   }
 
+  /**
+   * ffmpeg を通さずに分かった字幕を 1 本足す (4K の局の TTML。`live-mmt.ts` の `hasCaptions`)。
+   * もう 1 本あれば足さない。**足したら true**
+   */
+  add(lang: string | null): boolean {
+    if (this.found.length > 0) return false;
+    this.found.push({ index: 0, lang, label: label(0, lang) });
+    return true;
+  }
+
   get tracks(): CaptionTrack[] {
     return this.found;
   }

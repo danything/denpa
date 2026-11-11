@@ -53,6 +53,7 @@ import {
   tlvNitSection,
   tlvSi,
 } from "@danything/arib/synth-mmt";
+import { MPU_MS, SynthMmtAv } from "@danything/arib/synth-mmt-av";
 
 import { docsColor, docsLogo, docsProgram } from "./docs";
 import { type FakeService, SERVICES } from "./services";
@@ -977,8 +978,16 @@ const mhEvent = (event: SynthEvent): SynthMhEvent => ({
 });
 
 /**
+ * 映像と音声を流す 4K の局か。**スクランブルしていない局だけ** (`caSystemId` が無い)。偽の放送は ACAS の暗号を作らないので、
+ * スクランブルした局 (実機と同じ `0x0005`) は表と番組表だけを流す。流す局の MPT は映像と一緒に流す (`SynthMmtAv`)
+ */
+const tlvMedia = (service: FakeService): boolean =>
+  caSystemIdOf(service) === undefined;
+
+/**
  * TLV の表。TLV-NIT・PLT・局ごとの MPT (アクセス制御記述子に `caSystemId`)・MH-SDT[actual]。
- * 値の並びは実機のケーブルの BS4K (QC26) に合わせてある (docs/data.md)
+ * 値の並びは実機のケーブルの BS4K (QC26) に合わせてある (docs/data.md)。映像を流す局の MPT は載せない
+ * (映像と一緒に、時刻を並べた MPT を流す。`broadcastTlv`)
  */
 function tlvTables(services: FakeService[]): Uint8Array {
   const first = services[0]!;
@@ -999,6 +1008,7 @@ function tlvTables(services: FakeService[]): Uint8Array {
       ]),
     ),
     ...services.flatMap((service, i) => {
+      if (tlvMedia(service)) return [];
       const id = caSystemIdOf(service);
       return overIp(
         signalingPackets(TLV_MPT + i, [
@@ -1076,8 +1086,9 @@ function tlvEpg(services: FakeService[], knobs: Knobs): Uint8Array {
 
 /**
  * **偽の 4K の放送** (ケーブルの分割 TLV を組み立てた TLV のバイト列。`FakeService.transport` が `tlv` の局)。
- * 本物のエージェントが `application/x-arib-tlv` で流すものと同じ並び。denpa が読む表と番組表だけを流し、映像と音声は流さない
- * (4K のライブと録画はまだ無い。denpa は復号できない局として選局しない)
+ * 本物のエージェントが `application/x-arib-tlv` で流すものと同じ並び。表と番組表を流し、スクランブルしていない局 (`tlvMedia`) は
+ * 本物の HEVC と AAC と字幕を実時間で流す (`@danything/arib/synth-mmt-av`。映像の 1 MPU ごと。時刻はいまの時刻から)。
+ * スクランブルした局は映像も音声も流さない (denpa は復号できない局として選局しない)
  */
 export function broadcastTlv(
   services: FakeService[],
@@ -1093,5 +1104,38 @@ export function broadcastTlv(
     send(tlvTables(services));
     if (ticks % 30 === 0) send(tlvEpg(services, knobs()));
   }, TICK * 10);
-  return () => clearInterval(timer);
+  const startMs = Date.now();
+  const media = services.flatMap((service, i) =>
+    tlvMedia(service)
+      ? [
+          new SynthMmtAv({
+            serviceId: service.serviceId,
+            mptPacketId: TLV_MPT + i,
+            videoPacketId: 0xf100 + i * 0x10,
+            audioPacketId: 0xf110 + i * 0x10,
+            captionPacketId: 0xf130 + i * 0x10,
+            startMs,
+            caption: TLV_CAPTION,
+          }),
+        ]
+      : [],
+  );
+  /*
+   * 実時間で流す。遅れたぶんは次の刻みでまとめて流す (setInterval は間隔を守らない)。MPU は 1 つ約 0.13 秒
+   */
+  let sent = 0;
+  const pace =
+    media.length === 0
+      ? null
+      : setInterval(() => {
+          const due = Math.floor((Date.now() - startMs) / MPU_MS) + 1;
+          for (; sent < due; sent++) for (const av of media) send(av.next());
+        }, MPU_MS);
+  return () => {
+    clearInterval(timer);
+    if (pace !== null) clearInterval(pace);
+  };
 }
+
+/** 偽の 4K の局の字幕 (`broadcastTlv`)。ライブで字幕が出るかを見る */
+export const TLV_CAPTION = "４Ｋの字幕";

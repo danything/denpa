@@ -15,6 +15,7 @@ import type { CaptionLanguage } from "@danything/arib/caption-text";
 
 import type { AudioTrack } from "./arib";
 import { CODEC_LABEL } from "./hw";
+import type { BroadcastCodec } from "./live-choice";
 import type { Pace, Rung } from "./rungs";
 
 /**
@@ -54,13 +55,27 @@ export const LIVE_CODECS: { id: LiveCodec; label: string }[] = [
  *
  * **音声も組で決まる** (`server/live.ts` の `audioArgs`)。AV1 は Opus、H.264・H.265 は AAC
  * (H.265 を受け取りたいのは AV1 をデコードできない端末で、MP4 の Opus を受け取れるとは限らない)
+ *
+ * 4K の局 (`broadcast` が `hevc`) の `hevc` は、放送の HEVC と AAC をエンコードせずに詰め替えたもの (`BROADCAST_HEVC`)
  */
-export function codecsFor(codec: LiveCodec | "audio"): string {
+export function codecsFor(
+  codec: LiveCodec | "audio",
+  broadcast: BroadcastCodec = "mpeg2",
+): string {
   if (codec === "audio") return 'audio/mp4; codecs="mp4a.40.2"';
   if (codec === "av1") return 'video/mp4; codecs="av01.0.08M.08,Opus"';
-  if (codec === "hevc") return 'video/mp4; codecs="hvc1.1.6.L123.B0,mp4a.40.2"';
+  if (codec === "hevc")
+    return broadcast === "hevc"
+      ? BROADCAST_HEVC
+      : 'video/mp4; codecs="hvc1.1.6.L123.B0,mp4a.40.2"';
   return 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 }
+
+/**
+ * **4K の局の放送の HEVC と AAC を詰め替えた fMP4** (`server/live.ts` の 4K の経路。`mp4/mmt.ts`)。
+ * Main 10 Profile・Level 5.1 (2160p60)。入れ物の中の名前は `hev1` (VPS・SPS・PPS がコマの中にも来る。`mp4/mmt.ts`)
+ */
+export const BROADCAST_HEVC = 'video/mp4; codecs="hev1.2.4.L153.B0,mp4a.40.2"';
 
 /**
  * **MSE に渡す型。MP4 の `Opus` は、小文字の `opus` を受け取れる端末では小文字にする。**
@@ -422,6 +437,11 @@ export interface Tuned {
   codec?: LiveCodec;
   /** 先回りしている形式が MPEG-2 のままか。`codec` と同じく画面の `tune` は読まない */
   raw?: boolean;
+  /**
+   * 放送のコーデック (`#lib/live-choice.ts` の `BroadcastCodec`)。省くと MPEG-2。4K の局は `hevc` で、画面は「放送のまま」を
+   * HEVC の詰め替えとしてリクエストする (`pickFormat`)。サーバは読まない (局の行の `transport` で決める)
+   */
+  broadcast?: BroadcastCodec;
 }
 
 /**

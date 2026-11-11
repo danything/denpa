@@ -101,3 +101,17 @@
 - 互換モードでない MPEG-2 (canvas に描く) から下げるときは、ファイルの直再生と同じく裏の `<video>` で変換を用意して入れ替え、段 0 へ戻すと MPEG-2 に作り直します
 - 端末に保存した録画を描いている間は段を動かしません
 - **映像だけ遅れたら飛び直します** (`components/player/unslip.ts`。飛び直す決まりはライブと同じで、遅れが戻っても段は下げない。[stream.md](stream.md#映像だけが遅れる音と字幕は合っている))。段を替えたあと、Android の Chrome で映像だけ遅れたまま戻らなかったためです。CM の先へ飛んでいる最中と、canvas に描いている間は見ません。シークした直後の 1 コマは、飛ぶ前の時刻を持っていることがあるので測りません
+
+## ライブの 4K の局は、放送の HEVC を再生できるかで形式を決めます
+
+**4K の局の「放送のまま」は HEVC の詰め替えで、画面は端末がそれを再生できるかを先に確かめてから形式を決めます** (`live-player.svelte.ts` の `decideFormat`)。
+サーバの経路は [stream.md](stream.md#4k-の局のライブ) にあります。
+
+- 局の一覧の `broadcast` (`#lib/live-choice.ts` の `BroadcastCodec`。4K の局は `hevc`) を `Tuned.broadcast` に入れて選局します。
+  追っかけは録画 (MPEG-2 の TS) を読むので、いつも MPEG-2 として扱います
+- 4K の局を初めて開くときに 1 回だけ、`#lib/hevc-4k.ts` の `broadcastHevcPlayable` で調べて覚えます。MSE の `isTypeSupported` と、
+  `mediaCapabilities.decodingInfo` に放送の値 (3840x2160・59.94 コマ・10 ビット・HLG・BT.2020) を渡した答えの両方で決めます
+- 自動の順は `autoOrder` に `broadcast` を渡して決めます (家の中は HEVC → H.264 → AV1)。MPEG-2 のデコードを確かめること (`raw/support.ts`) は 4K の局ではしません
+- メニューで「放送のまま」を選んでいると、4K の局では `codec: "hevc"` でリクエストします。メニューの行は「MPEG-2」ではなく「H.265」と出します (`components/player/settings.ts` の `liveCodecs`)
+- 段を上げ下げする仕組み (`adapt.ts`・`RungAdapter`) は TS の局と同じです。詰め替えた HEVC は段 0 で、段を下げるとサーバが AV1 か H.264 を選びます
+  (4K の局は H.265 にエンコードしない)。MSE が HEVC を受け取れなかったら、ほかの形式と同じく打ち切って次の形式に移ります (`hevcGaveUp`)

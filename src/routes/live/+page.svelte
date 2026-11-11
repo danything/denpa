@@ -242,6 +242,9 @@
       channelType: channel.type,
       channel: channel.channel,
       serviceId: channel.id,
+      ...(channel.broadcast === "mpeg2"
+        ? {}
+        : { broadcast: channel.broadcast }),
     });
     return true;
   }
@@ -839,6 +842,7 @@
                 choice: player.choice,
                 format: player.format,
                 step: player.step,
+                broadcast: player.broadcast,
                 unavailable: player.unavailable,
                 onselect: (next) => player.setChoice(next),
               })}

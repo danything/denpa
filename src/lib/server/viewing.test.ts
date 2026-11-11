@@ -292,3 +292,69 @@ describe("形式をサーバに選ばせる (codec=auto)", () => {
     expect(audioArgs("audio", 0).join(" ")).toContain("-b:a 256k");
   });
 });
+
+/** **4K の局** (`transport` が `tlv`)。放送のままは HEVC の詰め替えで、GPU は要らない。`raw` (MPEG-2 の TS) は自動の候補にしない */
+describe("4K の局の形式", () => {
+  const at = (query: string) => new URL(`http://192.168.1.20/x?${query}`);
+  const outside = (query: string) =>
+    new URL(`https://dp.example.com/x?${query}`);
+  const noGpu = () => null;
+
+  test("自動は家の中が HEVC → H.264 → AV1、外が AV1 → H.264。GPU が無くても HEVC (詰め替え)", () => {
+    const base = {
+      scene: "live" as const,
+      rung: 0 as const,
+      hevc: false,
+      transport: "tlv" as const,
+    };
+    const all = ["raw", "av1", "hevc", "h264"] as const;
+    expect(autoFormat({ ...base, formats: all, indoor: true })).toBe("hevc");
+    expect(autoFormat({ ...base, formats: all, indoor: false })).toBe("av1");
+    expect(
+      autoFormat({ ...base, formats: ["raw", "h264"], indoor: true }),
+    ).toBe("h264");
+    expect(
+      autoFormat({ ...base, formats: ["hevc", "h264"], indoor: false }),
+    ).toBe("h264");
+  });
+
+  test("HTTP の codec。hevc は GPU が無くても詰め替え、段を下げるなら H.265 を外して選ぶ", () => {
+    const tlv = (url: URL) =>
+      askedFormat(url, "live", { hevc: false, pick: noGpu }, "tlv");
+    expect(tlv(at("codec=hevc"))).toEqual({ codec: "hevc", rung: 0 });
+    expect(tlv(at("codec=raw"))).toEqual({ codec: "raw", rung: 0 });
+    expect(tlv(at("codec=auto&playable=hevc,h264"))).toEqual({
+      codec: "hevc",
+      rung: 0,
+    });
+    expect(tlv(outside("codec=auto&playable=hevc,h264"))).toEqual({
+      codec: "h264",
+      rung: 0,
+    });
+    expect(tlv(at("codec=hevc&rung=2&playable=hevc,h264"))).toEqual({
+      codec: "h264",
+      rung: 2,
+    });
+    expect(tlv(at("codec=auto&rung=1&playable=hevc"))).toBeNull();
+  });
+
+  test("先回りは、放送のままを選んでいれば・家の中の自動なら HEVC の詰め替え", () => {
+    expect(warmFormat("raw", false, "hevc")).toBe("hevc");
+    expect(warmFormat("auto", true, "hevc")).toBe("hevc");
+    expect(warmFormat("auto", false, "hevc")).toBe("av1");
+    expect(
+      liveStart(
+        [{ id: 30, type: "CATV", channel: "QC28", broadcast: "hevc" }],
+        NaN,
+        { choice: "auto" },
+        true,
+      ),
+    ).toEqual({
+      channelType: "CATV",
+      channel: "QC28",
+      serviceId: 30,
+      codec: "hevc",
+      broadcast: "hevc",
+    });
+  });
+});

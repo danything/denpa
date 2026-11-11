@@ -1154,8 +1154,8 @@ describe("ケーブルの局", () => {
           },
         ],
       },
-      // 4K の局 (TLV)。ライブと録画にまだ対応していないので、CA_system_id によらず復号できない
-      // (0x0005 は B-CAS と同じ値でも ACAS が要る。スクランブルしていない局も TS として開かない)。番組表 (MH-EIT) は読める
+      // 4K の局 (TLV)。0x0005 は B-CAS と同じ値でも ACAS が要るので復号できない。スクランブルしていない局は復号できる。
+      // どちらも番組表 (MH-EIT) は読める
       {
         type: "CATV",
         channel: "QC26",
@@ -1218,16 +1218,14 @@ describe("ケーブルの局", () => {
       row(CABLE_ASAHI, "CATV", 4, true, true),
       row(CABLE_PAY, "CATV", 4, false, false),
       row(CABLE_4K, "CATV", 0x000b, false, true, "tlv"),
-      row(CABLE_4K + 1, "CATV", 0x000b, false, true, "tlv"),
+      row(CABLE_4K + 1, "CATV", 0x000b, true, true, "tlv"),
     ]);
     // 番組表に出す局の数。番組表を読める 4K の局は、復号できなくても数える
     expect(serviceCounts()).toEqual({ BS: 1, CATV: 3 });
     // 番組表に出すが観られない局と、そのわけ
     expect(unwatchableServices()).toEqual({
       [CABLE_4K]:
-        "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません",
-      [CABLE_4K + 1]:
-        "ケーブルの 4K の局は、まだライブと録画に対応していないため観られません",
+        "4K の放送のスクランブル (ACAS) には、まだ対応していないため観られません",
     });
   });
 
