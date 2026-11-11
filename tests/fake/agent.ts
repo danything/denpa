@@ -694,7 +694,7 @@ const options: Bun.ServeOptions = {
         });
     }
     if (url.pathname === "/denpa/channels" && request.method === "DELETE") {
-      // 1 つの種別を全部消す (本物は agent/Denpa.Agent/Program.cs。受けられるチューナーが無くなった種別を、設定の画面から)
+      // 1 つの種別を全部消す (本物は agent/Denpa.Agent/Program.cs。設定の画面の「局を削除」から)
       const type = url.searchParams.get("type") ?? "";
       if (type === "") return json({ error: "type が必要です" }, 400);
       saved = saved.filter((c) => c.type !== type);

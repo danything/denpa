@@ -20,6 +20,7 @@
   } from "#lib/format.js";
   import { held } from "#lib/live-updates.svelte.js";
   import type { SignalQuality } from "#lib/server/signal-quality.js";
+  import { ALL_CHANNEL_TYPES, type ChannelType } from "#lib/types.js";
 
   import type { ActionData, PageData } from "./$types";
 
@@ -117,18 +118,20 @@
     data.channels.some((channel) => channel.type === "CATV"),
   );
   /**
-   * 局はあるのに、受信できる種別に選んだ (使う) チューナーが無い種別 (CATV・SKY)。スキャンの選び方から消えて、スキャンし直して消せないので、
-   * 表の上に「<種別>の局を削除」を出す (`channels.server.ts` の `removeType`。引っ越してケーブルが無くなったときなど)。
-   * チューナーの一覧が届くまでと、エージェントから受け取れないときは出さない (分からないうちに「受信できない」と決めない)
+   * 局を削除できる種別 (`channels.server.ts` の `removeType`)。局がある種別なら、チューナーの有無によらずどれでも選べる。
+   * スキャンし直しても 1 件も見つからない結果は書かないので、ケーブルの回線が無くなったとき (引っ越しなど) はここで消す
    */
-  const orphanTypes = $derived(
-    tunerList.value?.list === undefined
-      ? []
-      : (["CATV", "SKY"] as const).filter(
-          (type) =>
-            !extraScans.includes(type) &&
-            data.channels.some((channel) => channel.type === type),
-        ),
+  const removableTypes = $derived(
+    ALL_CHANNEL_TYPES.filter((type) =>
+      data.channels.some((channel) => channel.type === type),
+    ),
+  );
+  /** 削除する種別の欄で選んだもの。選んだ種別の局が無くなったら、残っている先頭の種別に戻す */
+  let removeChoice = $state<ChannelType | null>(null);
+  const removeTarget = $derived(
+    removeChoice !== null && removableTypes.includes(removeChoice)
+      ? removeChoice
+      : (removableTypes[0] ?? null),
   );
   const removing = arming('[data-testid^="remove-type"]');
 
@@ -233,6 +236,41 @@
 {/snippet}
 
 <!--
+    **局の削除は、種別を選ぶ欄と「局を削除」の 1 組。** スキャンの欄の隣に置き、スキャンの実行中は出さない。
+    消すのはその種別のチャンネルと局だけで、録画は残り、スキャンし直せば戻る (`scan.ts` の `removeType`)
+-->
+{#snippet removeControl()}
+  {#if scan.state !== "running" && removeTarget !== null}
+    <div class="scan-control">
+      <select
+        aria-label="局を削除する種別"
+        value={removeTarget}
+        onchange={(event) => {
+          removeChoice = event.currentTarget.value as ChannelType;
+          removing.fire();
+        }}
+        data-testid="remove-type-select"
+      >
+        {#each removableTypes as type (type)}
+          <option value={type}>{SERVICE_TYPE_LABEL[type] ?? type}</option>
+        {/each}
+      </select>
+      <ArmedDelete
+        deleting={removing}
+        armKey={0}
+        action="?/removeType"
+        fields={{ type: removeTarget }}
+        class="small"
+        testid="remove-type"
+        label="局を削除"
+      />
+    </div>
+  {/if}
+{/snippet}
+
+<svelte:window onclick={removing.stand} />
+
+<!--
     **スキャンも、受信できるチャンネルの節の中に。** 押すものは見出しの行にまとめ (スキャン・番組表。スマホの形では下のタブの上)、
     回っている間の進み具合は見出しのすぐ下。チャンネルが 1 つも無いときは、空の表の場所の真ん中に
     スキャンの欄を出す (局が無いときの案内 `ChannelNotice` の行き先がここ)
@@ -244,6 +282,7 @@
       {#if coverage.length > 0}
         <div class="cluster section-bar dock" data-testid="channel-actions">
           {@render scanControl()}
+          {@render removeControl()}
           <!-- 入れたばかりのとき用 (`channels.server.ts` の `collectNow`) -->
           <ActionButton
             action="?/collectNow"
@@ -492,30 +531,6 @@
         <div class="actions">{@render scanControl()}</div>
       </div>
     {:else}
-      {#each orphanTypes as type, index (type)}
-        <!--
-                    受信できるチューナーが無い種別。スキャンし直して消せないので、ここで消す (`removeType`)。
-                    あとでまた受信できるようになれば、スキャンし直して戻せる
-                -->
-        <div class="cluster orphan-type" data-testid="orphan-type">
-          <p class="small muted">
-            {SERVICE_TYPE_LABEL[
-              type
-            ]}を受信できるチューナーがありません。{SERVICE_TYPE_LABEL[
-              type
-            ]}の局が要らなければ削除できます (またスキャンすれば戻せます)
-          </p>
-          <ArmedDelete
-            deleting={removing}
-            armKey={index}
-            action="?/removeType"
-            fields={{ type }}
-            class="small"
-            testid={`remove-type-${type}`}
-            label={`${SERVICE_TYPE_LABEL[type]}の局を削除`}
-          />
-        </div>
-      {/each}
       {#if hasSky || hasUndecodableCatv || hasUndecodable4k}
         <!--
                     復号できない局は表にだけ並ぶ。番組表とライブに出ないわけを、表のすぐ上で言う (`services.decodable`)。
@@ -723,7 +738,7 @@
 {/snippet}
 
 <style>
-  /* 種別を選ぶ欄とボタンを 1 組に。高さは隣の小さなボタンにそろえる */
+  /* 種別を選ぶ欄とボタンを 1 組に (スキャンと局の削除)。高さは隣の小さなボタンにそろえる */
   .scan-control {
     display: inline-flex;
     align-items: center;
