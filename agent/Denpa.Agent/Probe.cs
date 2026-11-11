@@ -234,6 +234,8 @@ public static class Probe
         // 鍵を受け取る接続の TTL は常駐のときと同じ CARD_TTL (既定 1。CardLan.cs)
         if (CardHops() is not { } hops) return 2;
         Keys.Configure(cardAt >= 0 ? args.ElementAtOrDefault(cardAt + 1) : Environment.GetEnvironmentVariable("CARD_URL"), hops);
+        // 試験用: CXD2856ER の地上波の選局で、ロックの経過とモード・ガードインターバル・TMCC を出す (IsdbtTry)
+        IsdbtTry.Observe = true;
 
         var secondsAt = Array.IndexOf(args, "--seconds");
         var seconds = secondsAt >= 0 && int.TryParse(args.ElementAtOrDefault(secondsAt + 1), out var given) && given > 0
@@ -407,6 +409,12 @@ public static class Probe
                 error.WriteLine($"{name}: {failure.Message}");
                 results.Add(new ChannelResult(name, false, null, 0, failure.Message));
                 ShowPowerProbe(tuner, output, ref powerProbeShown);
+                // 試験用: CXD2856ER の地上波は、失敗したときもロックの経過を出す (IsdbtTry)
+                if (!tuning.Satellite && !tuning.Cable && !tuning.IsdbC && tuner is It930xTuner tryTuner && tryTuner.TuneLines() is { Count: > 0 } tryLines)
+                {
+                    output.WriteLine($"    選局に失敗するまで {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
+                    foreach (var line in tryLines) output.WriteLine($"    {line}");
+                }
                 // TC90522 の機種は、失敗したあとも、チューナーに書いた値と PLL の状態、ロックの判定で読む復調器のレジスタを出す (どこで止まったかを切り分けるため)
                 if (tuner is It930xTuner diagnosed && diagnosed.Diagnose() is { Count: > 0 } lines)
                 {
@@ -435,6 +443,7 @@ public static class Probe
             if (tuner is It930xTuner it930x)
             {
                 output.WriteLine($"    ロックまで {it930x.LockMs} ms (ロックを確かめ始めてから){(it930x.Device is { } opened ? $"  機材を開くのに {opened.OpenMs} ms" : "")}");
+                foreach (var line in it930x.TuneLines()) output.WriteLine($"    {line}");
                 // 衛星は TMCC にある TSID も出す (相対 TS 0〜7 の順。TSID で選んだ TS がこの中継器にあるかを確かめるため)
                 if (tuning.Satellite && it930x.SatelliteStreams() is { } streams)
                 {
@@ -855,6 +864,8 @@ public static class Probe
         long outPackets = 0;
         long scrambledOut = 0;
         var continuity = new ContinuityCount();
+        // 試験用: ContinuityCount が数えない最初の 1 秒の、連続性の飛びと transport_error_indicator が 1 のパケット
+        var firstSecond = new ContinuityTracker();
         // カード無しで分かること (CA_system_id・番組表が来ているか)。復号する前の TS で数える
         var observation = new TsObservation();
 
@@ -876,6 +887,7 @@ public static class Probe
                 packets++;
                 if (buffer[at] == 0x47) sync++;
                 continuity.Push(buffer.AsSpan(at, 188), DateTime.UtcNow - started);
+                if (DateTime.UtcNow - started < TimeSpan.FromSeconds(1)) firstSecond.Push(buffer.AsSpan(at, 188));
                 observation.Push(buffer.AsSpan(at, 188));
                 if (!Scrambled(buffer.AsSpan(at))) continue;
                 scrambledIn++;
@@ -901,6 +913,7 @@ public static class Probe
             $"    最初の 1 バイト {first.TotalMilliseconds:F0} ms  "
             + $"{total / 1024} KiB  {rated ?? "-"} Mbps  同期バイト {ratio:F1}%");
         if (total == 0) error.WriteLine($"    {name}: 1 バイトも来ていません");
+        output.WriteLine($"    最初の 1 秒  連続性の飛び {firstSecond.Jumps} 回  transport_error_indicator が 1 のパケット {firstSecond.Errors} 個");
         output.WriteLine($"    連続性の飛び {continuity.Jumps} 回 ({continuity.Places.Count} か所。最初の 1 秒は数えない){(continuity.Places.Count == 0 ? "" : "  " + string.Join(" ", continuity.Places.Take(20).Select(ContinuityCount.Describe)))}");
 
         foreach (var line in observation.Describe()) output.WriteLine($"    {line}");

@@ -110,6 +110,22 @@ internal sealed class Cxd2858(CxdLink link)
     /// </summary>
     public void TuneIsdbc(uint khz) => TuneTerrestrialSide("ISDB-C の周波数", khz, IsdbcRows);
 
+    /// <summary>
+    /// 試験用 (<see cref="IsdbtTry"/> の tunerwait)。地上波の手順 1〜8 だけを書き、手順 8 のあとの 50 ms を待たない。
+    /// 手順 9〜10 (<c>88</c> ← <c>00</c>、<c>87</c> ← <c>C0</c>) は <see cref="TerrestrialTail"/> で後から書くか、書かない
+    /// </summary>
+    internal void TuneTerrestrialHead(uint khz)
+    {
+        if (khz > MaxTerrestrialKhz) throw new IOException($"地上波の周波数は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");
+        if (Side == Cxd2858Side.Satellite) StopSatellite();
+        Side = Cxd2858Side.Terrestrial;
+        var rows = TerrestrialRows(khz);
+        link.Run([.. rows[..^3], rows[^3] with { WaitMs = 0 }]);
+    }
+
+    /// <summary>試験用。地上波の手順 9〜10 (<c>88</c> ← <c>00</c>、<c>87</c> ← <c>C0</c>)。中継を開けている間に呼ぶ</summary>
+    internal void TerrestrialTail() => link.Run(TerrestrialRows(0)[^2..]);
+
     private void TuneTerrestrialSide(string what, uint khz, Func<uint, CxdRow[]> rows)
     {
         if (khz > MaxTerrestrialKhz) throw new IOException($"{what}は {MaxTerrestrialKhz} kHz までです ({khz} kHz)");

@@ -61,6 +61,9 @@ public interface IIt930xFrontend
     /// <summary><c>--tune</c> だけに出す、チップごとの読み値 (1 行ずつ)。機材から読むので、受け終えたあとに呼ぶ</summary>
     IReadOnlyList<string> Notes() => [];
 
+    /// <summary>試験用。最後の地上波の選局で <c>--tune</c> に足す行 (CXD2856ER だけ。<see cref="IsdbtTry"/>)。機材からは読まない</summary>
+    IReadOnlyList<string> TuneLines() => [];
+
     /// <summary>
     /// 選局のあと、ロックしたかによらずに <c>--tune</c> に出す行 (失敗の原因を切り分けるため)。チューナーに書いた値と PLL の状態、ロックの判定で読む復調器のレジスタ。
     /// 選局の書き込みを始めていなければ空。機材から読む
@@ -98,6 +101,8 @@ internal sealed class CxdReceiver(Cxd2856Frontend frontend, Action keepMatching)
     public string Chips => $"復調器 0x{frontend.ChipId:X2}、初期化の前のチューナーの 62 は {frontend.PowerProbe:X2}";
 
     public long LockMs => frontend.LockMs;
+
+    public IReadOnlyList<string> TuneLines() => frontend.TuneLines();
 
     public double? SatelliteLevelDb => frontend.SatelliteLevelDb;
 
@@ -1128,6 +1133,9 @@ public sealed class It930xTuner : ITuneDevice
 
     /// <summary>最後の選局で、ロックを確かめ始めてからロックするまで (ms)。<c>--tune</c> が出す</summary>
     public long LockMs => _frontend?.LockMs ?? -1;
+
+    /// <summary>試験用。最後の地上波の選局で <c>--tune</c> に足す行 (<see cref="IIt930xFrontend.TuneLines"/>)</summary>
+    public IReadOnlyList<string> TuneLines() => _frontend?.TuneLines() ?? [];
 
     /// <summary>衛星で最後に <see cref="Signal"/> を読んだときの強度 (dB。dBm として扱えるかは未確認)。<c>--tune</c> だけが出す</summary>
     public double? SatelliteLevelDb => _frontend?.SatelliteLevelDb;
