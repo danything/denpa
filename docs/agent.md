@@ -351,7 +351,7 @@ chart の既定の猶予は `SHUTDOWN_WAIT` と同じ 6 時間 (21900 秒) で�
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | DVB             | `/dev/dvb/*` を開いて `DTV_ENUM_DELSYS` で受けられる方式を問い合わせる (実機の PT3 で adapter0/2 が ISDB-S、adapter1/3 が ISDB-T)。sysfs にはこれを返す項目が無い |
 | Siano の機材    | Linux は `/sys/bus/usb/devices` の USB ID、Windows・macOS は OS に問い合わせる。並べるだけで開かない ([下記](#siano-の機材を直に持つ作り-実機で確かめていない))   |
-| asicen-userland | `asicend --list-json` に問い合わせる (試験的。配布物が無ければ挙げない。[下記](#asicen-userland-の作り))                                                          |
+| asicen-userland | `asicend --list-json` に問い合わせる。Android は受け取った機材の USB ID から組む (試験的。配布物が無ければ挙げない。[下記](#asicen-userland-の作り))              |
 | CECH-ZD1 J      | Linux は `/sys/bus/usb/devices` の USB ID、Windows・macOS は OS に問い合わせる。並べるだけで開かない ([下記](#cech-zd1-j-の作り))                                 |
 | PIX-DT295       | CECH-ZD1 J と同じ。開くと機材に設定を書くので並べるだけ ([tuners.md](tuners.md#pixela-pix-dt295))                                                                 |
 | IT930x の機材   | CECH-ZD1 J と同じ。開くとファームウェアを起動して電源を入れるので並べるだけ ([下記](#it930x-の機材を直に持つ作り))                                                |
@@ -513,6 +513,7 @@ asicen-userland のファームウェア待ち) と、抜き差しの受け取�
   複製はファイルの位置を共有するので、ディスクリプタは `pread` で読みます (sysfs から開くときも同じ読み方です)
 - 読めない行、fd の付いていない `attached`、名前からポートを作れない `attached` は、記録に出して捨てます
 - `USB_BROKER` があるときは、`TUNERS_FILE` などが無いときの置き場も `/config` ではなく `DENPA_HOME` の `config` です
+- asicen-userland の機材はエージェントが開かず、受け取った fd の複製を asicend に継がせます ([下記](#asicen-userland-の作り))
 
 ### Siano の機材を直に持つ作り (実機で確かめていない)
 
@@ -566,12 +567,12 @@ asicen-userland のファームウェア待ち) と、抜き差しの受け取�
   (stream.sock で) ATTACH_STREAM → TS_DATA。止めるときは STOP → STREAM_END を待つ → RELEASE → 閉じる。
   受信機を取ったまま選局し直す並びは公式のクライアントが送らないので使わず、局を替えるたびに受信機を返して取り直します。
   選局が失敗したときは、公式のクライアントと同じく何も送らずに接続を閉じます (受信機は asicend が返す)
-- **機材は `asicend --list-json` で見つけます** (`AsicenUserland.Enclosures`。dtv-userland-core の `docs/json-discovery.md` の形式)。
+- **機材は `asicend --list-json` で見つけます** (`AsicenUserland.Enclosures`。dtv-userland-core の `docs/json-discovery.md` の形式。Android は下記)。
   使うのは上流が見分ける 5 機種 (`AsicenUserland.Models`) で、状態が `ready`、USB 機能の数が機種と合う筐体だけ。
   機材をつないだときの出力は見ていないので、読み方は文書の例から書きました。受信機が出力に無ければ、機種の表の並びを使います。
   筐体の名前は USB のポートから作ります (USB 機能が 2 つなら内蔵ハブのポート、1 つならその機能のポート)
 - **asicend は筐体 1 台につき 1 つ、エージェントの起動時に立ち上げます** (`AsicenDaemon`)。使う受信機が無い筐体の asicend は止めて USB を手放します (ほかのソフトに機材を渡せるように。[switch.md](switch.md#並べて動かすとき))。
-  引数は `--device usb:<ポート>[,<ポート>] --firmware <ファイル> --runtime-dir … --instance <筐体の名前>`。
+  引数は `--device usb:<ポート>[,<ポート>] --firmware <ファイル> --runtime-dir … --instance <筐体の名前>` (Android は下記)。
   ready は `asicenctl list` が通ることで見て、その出力から機種と受信機を読みます
 - **ファームウェアは asicend が流し込みます。** 設定に書いてある筐体は、起動したときに流し込まれます。まだ設定に無いファームウェア待ちの機材
   (USB ID `1738:5211`・`1738:5216` で探す) は、asicend を 1 度起動して流し込ませ、止めてから一覧を取ります (`AsicenUserland.Boot`)。
@@ -581,8 +582,20 @@ asicen-userland のファームウェア待ち) と、抜き差しの受け取�
   給電が要るチューナーが衛星を選局するときにオンにし、そのチューナーを全部閉じたらオフにします。PX-S3U・PX-S3U2 は給電せずに選局し、理由を画面に出します
 - **内蔵カードリーダーは扱いません** (`AsicenUserland.Cards` は空)。カードの操作は形式が契約の文書に無く、模擬のデーモンがカードに対応していないので、
   通信を記録できませんでした。B25 は今までどおりエージェントが復号し、カードは USB のリーダーで読みます ([下記](#b25-の復号もカードリーダーも自前))
+- **Android は、アプリから受け取った機材の fd を asicend に継がせます** (`USB_BROKER` があるとき。[上記](#android-でアプリから-usb-を受け取る))。
+  - 筐体は `--list-json` でなく、受け取った機材の USB ID とポートから組みます (`AsicenUserland.Group`)。USB 機能が 2 つの機種は、同じ内蔵ハブの `.1` と `.2` に同じ ID が揃ったときだけ 1 台にします。
+    名前からポートを作ったとき (`001-004`。カーネルが 5.3 より前) は内蔵ハブが分からないので、2 つの機種は使いません
+  - 引数は `--device` の代わりに `--fd <番号>` (USB 機能ごと。`.1` が先) です。fd は `fcntl(F_DUPFD)` で close-on-exec の無い複製を作って継がせ、起動し終えたら複製を閉じます (`InheritedFds`・`BrokerUsbHost.Lend`)。
+    .NET 11 の `ProcessStartInfo.InheritedHandles` は使いません。ほかの fd を閉じるのに `close_range` (Linux 5.9 から) を使い、それより古いカーネルでは起動できない (ENOTSUP) ためです。
+    複製を作ってから起動し終えるまでは、ほかの常駐を起動しません (同じ時に起動した子も同じ fd を継ぐため。`Userland.Start`)
+  - ファームウェア待ちの機材には `asicend --fd … --firmware …` を起動し、終わるまで待ちます。`--fd` の asicend はつながり直した機材を追えず、流し込んだら終わるためです (上流の README)。
+    つながり直した機材はアプリから `attached` で届き、探し直したときに起動します。終了コードは見ずに、asicend の出力を記録に出します
+  - 実行ファイルは APK の `lib<名前>.so` (`AsicenUserland.Bin`)。アプリが `ASICEN_USERLAND_DIR` に nativeLibraryDir、`ASICEN_FIRMWARE` に書き出したファームウェア、
+    `ASICEN_RUNTIME_DIR` に `<dataDir>/r` を渡します。制御ソケットのパスが `sun_path` (108 バイト) に収まらないときは、asicend を起動せずに理由を記録に出します (`AsicenUserland.CheckSocketPath`)
+  - 起動したときに `asicend --version` を記録に出します (`AsicenUserland.LogVersion`。Linux も同じ)。Android では、アプリの子プロセスから起動できるかもこれで分かります
 - **テスト** (`AsicenTests.cs`): 記録したバイト列 (`AsicenRecorded`) のとおりに応答する偽の asicend に対する単体テストと、上流の模擬のデーモンと通信するテスト
-  (`AsicenMockTests`。CI では `agent-asicen-mock` が v1.0.0-beta のコミットを組んで回す。必須にはしない)。**模擬は実機ではありません**
+  (`AsicenMockTests`。CI では `agent-asicen-mock` が v1.0.0-beta のコミットを組んで回す)。**模擬は実機ではありません**。
+  Android の起動の仕方は、模擬の前に挟んだシェルのスクリプトが継いだ fd を確かめるテストと、`UsbBrokerTests` の `Lend` のテスト、エミュレータ (`.github/android-app-smoke.sh`) で見ます
 
 ### CECH-ZD1 J の作り
 

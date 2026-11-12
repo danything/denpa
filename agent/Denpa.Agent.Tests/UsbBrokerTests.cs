@@ -98,9 +98,9 @@ public sealed partial class UsbBrokerTests
     }
 
     /// <summary>中身を書いた memfd。書いたあとの位置は末尾 (先頭から読むなら pread が要る)</summary>
-    private static unsafe int Memfd(byte[] content)
+    private static unsafe int Memfd(byte[] content, string name = "usb")
     {
-        var fd = Native.MemfdCreate("usb", 1);
+        var fd = Native.MemfdCreate(name, 1);
         fixed (byte* start = content)
         {
             if (fd < 0 || Native.Write(fd, start, (nuint)content.Length) != content.Length) throw new IOException("memfd を作れません");
@@ -112,9 +112,9 @@ public sealed partial class UsbBrokerTests
     /// <paramref name="fd"/> を付けて attached を送り、送った側の fd は閉じる (アプリが持っていても、
     /// エージェントが受け取ったものは別の fd なので変わらない)
     /// </summary>
-    private static void Attach(App app, string name, int vendor, int product, byte[] descriptors, string interfaces = "[]", string serial = "null")
+    private static void Attach(App app, string name, int vendor, int product, byte[] descriptors, string interfaces = "[]", string serial = "null", string memfd = "usb")
     {
-        var fd = Memfd(descriptors);
+        var fd = Memfd(descriptors, memfd);
         app.Send($$"""{"type":"attached","name":"{{name}}","vendor":{{vendor}},"product":{{product}},"serial":{{serial}},"manufacturer":"Gemalto","productName":"PC Twin Reader","interfaces":{{interfaces}}}""", fd);
         Native.Close(fd);
     }
@@ -206,6 +206,38 @@ public sealed partial class UsbBrokerTests
 
         var gone = Assert.Throws<IOException>(() => agent.Host.Open("2-1", 0x0511, 0x0045));
         await Assert.That(gone.Message).Contains("USB のポート 2-1 に機材がありません");
+    }
+
+    [Test]
+    public async Task 子プロセスには受け取った_fd_の複製をポートの順に継がせ_起動し終えたら複製を閉じる()
+    {
+        using var agent = new Agent();
+        using var app = App.Connect(agent.Path);
+        Attach(app, "/dev/bus/usb/003/004", 0x0b06, 0x0005, DeviceDescriptor(0x0b06, 0x0005), memfd: "first");
+        Attach(app, "/dev/bus/usb/003/005", 0x0b06, 0x0005, DeviceDescriptor(0x0b06, 0x0005), memfd: "second");
+        app.Send("""{"type":"synced"}""");
+        await agent.Changed();
+
+        // 並べた順と逆に指定しても、指定した順に並ぶ
+        int[] numbers = [];
+        using var child = Userland.Start("/bin/sh", fds =>
+        {
+            numbers = [.. fds];
+            return ["-c", string.Join("; ", fds.Select(fd => $"readlink /proc/self/fd/{fd}"))];
+        }, () => agent.Host.Lend(["003-005", "003-004"]));
+        await Assert.That(numbers.All(fd => fd > 2)).IsTrue();
+        var output = await child.StandardOutput.ReadToEndAsync();
+        await child.WaitForExitAsync();
+        await Assert.That(output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            .IsEquivalentTo(new[] { "/memfd:second (deleted)", "/memfd:first (deleted)" });
+        // こちらの複製は閉じた (子プロセスの写しは子が持つ)。受け取った fd はそのまま
+        // (番号はほかのテストの fd に使い回されることがあるので、指す先で見る)
+        await Assert.That(numbers.Select(fd => new FileInfo($"/proc/self/fd/{fd}").LinkTarget)
+            .Any(target => target is "/memfd:first (deleted)" or "/memfd:second (deleted)")).IsFalse();
+        await Assert.That(agent.Host.Peek("003-004")).IsNotNull();
+
+        var gone = Assert.Throws<IOException>(() => agent.Host.Lend(["003-004", "9-9"]));
+        await Assert.That(gone.Message).Contains("USB のポート 9-9 に機材がありません");
     }
 
     [Test]

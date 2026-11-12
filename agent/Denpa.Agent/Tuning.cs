@@ -127,6 +127,15 @@ internal static unsafe partial class Sys
     /// <summary>close-on-exec を付けた複製 (<c>fcntl(F_DUPFD_CLOEXEC)</c>)。失敗は負</summary>
     public static int DupCloseOnExec(int fd) => Fcntl(fd, DupFdCloseOnExec, 0);
 
+    /// <summary>F_DUPFD (Linux)</summary>
+    private const int DupFd = 0;
+
+    /// <summary>
+    /// close-on-exec を付けない複製 (<c>fcntl(F_DUPFD)</c>。標準入出力の 0〜2 は避ける)。子プロセスに継がせる fd に使う
+    /// (<see cref="InheritedFds"/>)。失敗は負
+    /// </summary>
+    public static int DupInheritable(int fd) => Fcntl(fd, DupFd, 3);
+
     [LibraryImport("libc", EntryPoint = "poll", SetLastError = true)]
     public static partial int Poll(byte* fds, nuint count, int timeout);
 

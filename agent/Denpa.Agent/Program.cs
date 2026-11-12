@@ -731,7 +731,11 @@ app.MapFallback((HttpContext http) =>
  * 鍵を受け取る拠点 (CARD_URL) で配りもしないなら、手元のカードは使わない
  */
 if (cardUrl is not { Length: > 0 } || sharing is not null) _ = Task.Run(Keys.Local.Warm);
-_ = Task.Run(PrepareDaemons);
+_ = Task.Run(() =>
+{
+    AsicenUserland.LogVersion();
+    PrepareDaemons();
+});
 
 /*
  * 機材の抜き差しを受け取ったら、定義に足す (Rescan。DeviceWatch.cs)。偽の選局で動かす適合テストでは受け取らない。

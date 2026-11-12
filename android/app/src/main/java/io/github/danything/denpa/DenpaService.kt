@@ -138,8 +138,11 @@ class DenpaService : Service() {
             "AGENT_PORT" to AGENT_PORT.toString(),
             "TMPDIR" to cacheDir.path,
             "HOME" to filesDir.path,
-        )
+        ) + Asicen.environment(this, asicenFirmware)
     }
+
+    /** ASICEN のファームウェアを書き出した先 (最初にエージェントを起動するときに書き出す)。APK に入っていなければ null */
+    private val asicenFirmware by lazy { Asicen.firmware(this) }
 
     private fun startAgent() {
         restarting = false

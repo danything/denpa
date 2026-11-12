@@ -189,13 +189,26 @@ APK に入る依存は、Kotlin で書くと付いてくる下の 2 つだけで
 
 エージェントは `lib/<ABI>/libdenpa_agent.so` の名前で入れます。CI が `linux-bionic-arm64`・`linux-bionic-x64` の Native AOT で組み、リリースの APK には arm64 だけを入れます。
 中身は上の `denpa-agent` と同じ .NET のバイナリで、ファームウェア (IT930x と Siano) も同じく埋め込んであります。
-Android には OpenSSL が無いので、土台の libssl の代わりに OpenSSL を静的に入れます。asicen-userland はまだ入れません。
+Android には OpenSSL が無いので、土台の libssl の代わりに OpenSSL を静的に入れます。
 Siano のファームウェアの許諾の文面 (`LICENCE.siano`) と OpenSSL の `LICENSE.txt` (`LICENSE.openssl` の名前で) は、APK の `assets/licenses/` に入れています。
 
-| 名前                                                     | 何に                                                              | 出どころ                                                                                 | ライセンス                                                                          |
-| -------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| ASP.NET Core (linux の実行時パックの IL を AOT で埋める) | エージェントのポートの HTTPS (Kestrel)                            | <https://github.com/dotnet/aspnetcore>                                                   | MIT                                                                                 |
-| OpenSSL (3.5 系。NDK で組み、静的リンク)                 | エージェントのポートの HTTPS と、`CARD_URL` を https で指したとき | <https://github.com/openssl/openssl> のリリースの tarball (`.github/openssl-android.sh`) | Apache-2.0。組み上がりの置き場に `LICENSE.txt` を写してあり、APK に入れて一緒に配る |
+asicen-userland は、上流の Android 版 (Termux 用の `android-aarch64`・`android-x86_64`) の `asicend`・`asicenctl` を組み直さずに、
+`lib/<ABI>/libasicend.so`・`libasicenctl.so` の名前で入れます (`.github/asicen-android.sh`。アーカイブの SHA-256 を固定して取る)。
+バージョンはイメージと同じ v1.0.0-beta で、上流がコミット `ed215c847979634245fb6a189c582831c462cf44` から組んだものです (模擬のデーモンを組む CI の `ASICEN_USERLAND_REF` と同じ。ずれていれば組むのが止まる)。
+**GPL-2.0 の実行ファイルをそのまま配るので、対応するソースの入手先を添えます。** ソースは上流のリリースの
+[`asicen-userland-1.0.0-source.tar.gz`](https://github.com/Khronos31/asicen-userland/releases/download/v1.0.0-beta/asicen-userland-1.0.0-source.tar.gz)
+(SHA-256 `3d9f4a67786921e27dc3fcc866bb708b9ac911358a7c9024fccf0685adb747a3`) で、同じ入手先を APK の `assets/licenses/asicen-userland/SOURCE.txt` に書いてあります。
+配布物の `LICENSE`・`THIRD_PARTY_NOTICES.md`・`DEPENDENCY-NOTICE.txt` (`DEPENDENCY-NOTICE-android-aarch64.txt` の名前で)・`libusb/COPYING` (`COPYING.libusb`)・
+`licenses/VENDOR-FIRMWARE-NOTICE.txt`・`ndk/NOTICE` (`NOTICE.ndk`)・`ndk/NOTICE.toolchain` (`NOTICE.ndk-toolchain`) も同じ置き場に入れています。
+エージェントは asicend とソケットで通信するだけで、コードは取り込んでいません (イメージと同じ)。ファームウェアは実行しないので `assets/asicen/asicen-loader.bin` に入れ、
+アプリが起動のときに書き出します。扱いはイメージと同じです ([表の上](#asicen-のファームウェアを同梱している判断))。
+
+| 名前                                                      | 何に                                                                                                         | 出どころ                                                                                                                                           | ライセンス                                                                                                                                                       |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ASP.NET Core (linux の実行時パックの IL を AOT で埋める)  | エージェントのポートの HTTPS (Kestrel)                                                                       | <https://github.com/dotnet/aspnetcore>                                                                                                             | MIT                                                                                                                                                              |
+| OpenSSL (3.5 系。NDK で組み、静的リンク)                  | エージェントのポートの HTTPS と、`CARD_URL` を https で指したとき                                            | <https://github.com/openssl/openssl> のリリースの tarball (`.github/openssl-android.sh`)                                                           | Apache-2.0。組み上がりの置き場に `LICENSE.txt` を写してあり、APK に入れて一緒に配る                                                                              |
+| asicen-userland (上流の Android 版。v1.0.0-beta)          | PLEX PX-W3U3 などのユーザー空間ドライバ (試験的。実機では確かめていない)。エージェントが子プロセスで起動する | <https://github.com/Khronos31/asicen-userland> のリリースの `asicen-userland-1.0.0-android-*.tar.gz`                                               | **GPL-2.0**。静的リンクの libusb 1.0.30 は LGPL-2.1+、NDK の libc++ はそれぞれの条件。ソースの入手先と配布物の文書を `assets/licenses/asicen-userland/` に入れる |
+| ASICEN ファームウェア (`assets/asicen/asicen-loader.bin`) | 挿した直後の PX-W3U3 などに asicend が流し込む                                                               | 上の Android 版のアーカイブに入っているものをそのまま。SHA-256 はイメージと同じ `5db39facda140bdcb3a238dad10da5aac752a1ba3aaf17e2239f8d79a0ad6a2a` | **ライセンス無し・再配布の許諾は確かめられていない。** イメージと同じ判断で同梱している ([上](#asicen-のファームウェアを同梱している判断))                       |
 
 ### `denpa-aio`
 

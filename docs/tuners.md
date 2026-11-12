@@ -29,8 +29,8 @@
 
 - **B-CASカード** と USB のカードリーダー (IT930x の機材・CECH-ZD1 J・PIX-DT295 は内蔵リーダーでもよい。asicen-userland の機材の内蔵リーダーは使えない。[下記](#カードリーダー))
 - **OS**: Linux (amd64 / arm64)、Mac (Apple Silicon)、Windows (x64)。Talos Linux の 1 台に OS ごと入れるなら [install-talos.md](install-talos.md) (amd64・PT3。実機で確かめていない)。
-  Android (10 以上、arm64) の端末は、チューナーエージェントとして使えます。挿せるのはエージェントが USB を直に持つ機材と USB のカードリーダーです
-  (ASICEN 系は使えない。実機で確かめていない。[install-android.md](install-android.md))
+  Android (10 以上、arm64) の端末は、チューナーエージェントとして使えます。挿せるのはエージェントが USB を直に持つ機材、ASICEN 系 (試験的)、USB のカードリーダーです
+  (どれも Android の実機で確かめていない。[install-android.md](install-android.md))
 - **Docker** (Linux。Compose 込み)。Mac と Windows は要らない (denpa 本体もエージェントも OS の上でそのまま動かす)。
   Kubernetes なら Helm
 - あれば Intel か AMD の GPU (`/dev/dri` を渡す) か NVIDIA の GPU (NVIDIA Container Toolkit で渡す。[install.md](install.md#用意するもの))。無ければソフトウェアでエンコードします
@@ -167,6 +167,7 @@ ASICEN 系 (PLEX の USB チューナー) のユーザー空間ドライバで�
 **試験的です。実機では確かめていません** (手元に ASICEN 系の機材が無い)。確かめたのは、上流の模擬のデーモン (`asicend-mock`) との通信までです。
 
 エージェントのイメージ (Linux の amd64 と arm64) に、上流のプレリリース **v1.0.0-beta** (2026-11-05) の配布物を入れています (`agent/Dockerfile` の `ASICEN_USERLAND_VERSION`)。
+Android のアプリにも、同じバージョンの上流の Android 版を入れています ([下記](#android))。
 エージェントは筐体ごとに `asicend` を起動し、制御ソケットで UDTV 1.0 を送って選局し、TS を受け取ります。
 
 **通信の形式の一部は、上流の契約の文書に書かれていません。** 書かれていない部分 (操作の番号、選局や TS のレコードのバイト配置) は、
@@ -183,7 +184,7 @@ ASICEN 系 (PLEX の USB チューナー) のユーザー空間ドライバで�
 - **設定の `device` は `asicen:<USB ポート>:<受信機>`** (`asicen:1-2:1`)。USB の serial が無いので、ポートで筐体を見分けます。
   USB 機能が 2 つの機種 (PX-W3U2・PX-W3U3・PX-W3U3 V2) は内蔵ハブのポート、1 つの機種 (PX-S3U・PX-S3U2) はその機能のポートが筐体の名前です。
   **挿すポートを変えると別のチューナーになります**
-- **機材は `asicend --list-json` で見つけます。** 使うのは、上流が見分ける 5 機種 (下の表) で、状態が `ready` の筐体だけです。
+- **機材は `asicend --list-json` で見つけます** (Android は違う。[下記](#android))。使うのは、上流が見分ける 5 機種 (下の表) で、状態が `ready` の筐体だけです。
   使わない筐体は、理由と USB のポートを記録に出力します
 - **局を替えるたびに、受信機を返して取り直します。** 公式のクライアントが、受信機を取ったまま選局し直す並びを送らないためです。
   ほかのチューナーより局の切り替えとスキャンに時間がかかるかもしれません (実機では測っていない)
@@ -199,6 +200,20 @@ ASICEN 系 (PLEX の USB チューナー) のユーザー空間ドライバで�
   挿した直後のファームウェア待ちの機材には、asicend が起動するときに流し込みます
 - Mac と Windows の入れ方 (`install.sh`・`install.ps1`) は asicen-userland を取りません
 
+### Android
+
+Android のアプリ ([install-android.md](install-android.md)) は、上流の Android 版 (`android-aarch64`。Termux 用) の `asicend`・`asicenctl` を組み直さずに APK に入れています。
+使えるもの・使えないものは Linux と同じで、次の所が違います。
+
+- **機材を開くのはアプリです。** エージェントは、アプリから受け取った USB の fd の複製を `asicend --fd` に継がせて起動します。`asicend --list-json` は使わず (端末の機材を libusb で並べられない)、
+  アプリから受け取った機材の USB ID から筐体を組みます。受信機は機種の表 (下記) のもので、asicend が起動したあとは `asicenctl list` のものに替わります
+- **ファームウェア待ちの機材は、2 回の許可で動きます。** エージェントは `asicend --fd … --firmware …` でファームウェアを流し込ませ、asicend は流し込んだら終わります
+  (`--fd` の asicend は、つながり直した機材を追えない。上流の README)。つながり直した機材は別の USB ID なので、Android がもう一度許可を求めます。
+  許可すると、エージェントがその機材で asicend を起動します
+- **USB 機能が 2 つの機種 (PX-W3U2・PX-W3U3・PX-W3U3 V2) は、端末のカーネルが 5.3 以上のときだけ使えます。** それより古いカーネルではポートの名前を `001-004` の形で作るので、
+  2 つの機能が同じ内蔵ハブにあると分からず、記録に理由を出して使いません。USB 機能が 1 つの機種は、古いカーネルでも使えます (挿し直すと名前が変わる)
+- asicend のソケットは `<アプリの置き場>/r/asicen-userland/v1/<筐体>/control.sock` です。`sun_path` の 108 バイトに収まらないパスになるときは、asicend を起動せずに理由を記録に出します
+
 ### 確かめたこと・確かめていないこと
 
 模擬のデーモンで確かめたこと (CI の `agent-asicen-mock` と手元のコンテナ):
@@ -206,10 +221,19 @@ ASICEN 系 (PLEX の USB チューナー) のユーザー空間ドライバで�
 - 5 機種それぞれの模擬で、機種と受信機の問い合わせ、地上波と衛星 (TSID とスロット) の選局、TS の受け取り、選局し直し、受信機の返却
 - LNB の給電のオン/オフ (給電できる 3 機種)。給電を許可せずに起動した asicend が断ること
 - 同じ受信機を 2 つの接続で取ると、あとのほうが断られること
+- Android と同じ起動の仕方 (`libasicend.so` の名前、`--fd` で fd を継がせる) で、模擬の asicend が起動して選局できること。USB 機能の fd が `.1` から順に継がれていること
+
+Android のエミュレータ (x86_64。CI の `agent-android`) で確かめたこと:
+
+- エージェントがアプリの子プロセスで、APK の `asicend --version` を起動できること (SELinux に実行を断られない)
+- ファームウェア待ちの USB ID でファイルの fd を送ると、エージェントがその fd を `asicend --fd` に継がせ、asicend が受け取ること
+  (usbfs でないので、asicend は USB の読み書きの失敗で終わる)。このとき SELinux は、asicend が `/dev/bus/usb` の一覧を読むことと、
+  普通のファイルへの usbfs の ioctl を断る (API 29・35・36 で確かめた。一覧を読めなくても asicend は fd を使うところまで進む)
 
 確かめていないこと:
 
 - **実機での動作のすべて。** 同期・TS の中身・ファームウェアの流し込み・LNB の端子の電圧・機材を抜いたときの動き
+- Android の実機で、usbfs の fd を継いだ asicend が機材を使えるか (SELinux が ioctl を許すか)。ファームウェアを流し込んだあとに、2 回目の許可で動き出すか
 - 同期しないチャンネルの応答 (模擬は必ず同期する)。時間切れのエラーの番号は推定です
 - 機材をつないだときの `asicend --list-json` の出力 (文書の例から読み方を書いた)。ファームウェア待ちの機材がどう出るかも分かりません
 - 上流が未確認としていること: PX-W3U3 V2 で 4 つを同時に受けられるか、PX-S3U2 で地上波と衛星を同時に受けられるか、PX-S3U・PX-S3U2・PX-W3U3 V2 の実機での受信
@@ -237,14 +261,16 @@ LNB の給電と同時に受けられる数は、上流が未確認・未解明�
 権利を持つ人から申し出があれば外します。分かっている事実は次のとおりです ([licenses.md](licenses.md#asicen-のファームウェアを同梱している判断) にも同じ内容があります)。
 
 - ファームウェアは、PLEX の Windows 用ドライバ (`Loader.sys`) から上流が取り出した 16,384 バイトのイメージです。
-  上流の配布アーカイブに入っているものをそのまま使います。イメージを組むときに、SHA-256 が `5db39facda140bdcb3a238dad10da5aac752a1ba3aaf17e2239f8d79a0ad6a2a` であることを確かめます (`agent/Dockerfile` の `ASICEN_FIRMWARE_SHA256`)
+  上流の配布アーカイブに入っているものをそのまま使います。イメージを組むときに、SHA-256 が `5db39facda140bdcb3a238dad10da5aac752a1ba3aaf17e2239f8d79a0ad6a2a` であることを確かめます (`agent/Dockerfile` の `ASICEN_FIRMWARE_SHA256`)。
+  Android のアプリにも同じものを入れ、APK を組むときに同じ値を確かめます (`.github/asicen-android.sh`)
 - チップの会社 ASICEN (昇亮科技股份有限公司 / Asicen Technology、台湾) は解散し、2017-02-23 に清算が完結したと登記されています。
   台湾の会社情報サイト (<https://www.twincn.com/item.aspx?no=80342850>) の記載で、経済部の公式の登記では確かめていません
 - PLEX は 2026-11 の時点で、公式サイトの「旧製品ドライバ」のページ (<https://plex-net.co.jp/old-driver/>) で PX-W3U3・PX-W3U3 V2・PX-S3U2 の Windows 用ドライバを配っています。
   そのページにも、上流が調べた公式のパッケージにも、再配布を認める文はありません
 - PLEX が以前配っていた Linux 用ドライバのモジュールには `license=GPL` の表示があり、同じファームウェアが埋め込まれています。
   それだけではファームウェア自体のライセンスは決まりません (上流の `NOTICES.md` の整理)
-- 上流が添える通知 (`VENDOR-FIRMWARE-NOTICE.txt` など) は、配布物のままイメージに置いてあります (`/opt/asicen-userland/licenses/`)
+- 上流が添える通知 (`VENDOR-FIRMWARE-NOTICE.txt` など) は、配布物のままイメージに置いてあります (`/opt/asicen-userland/licenses/`)。
+  Android のアプリは APK の `assets/licenses/asicen-userland/` に入れています
 
 エージェントの中でどう扱っているかは [agent.md](agent.md#asicen-userland-の作り)。
 

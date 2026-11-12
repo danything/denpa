@@ -40,6 +40,104 @@ public static class Userland
         .Select(spec => parse(spec.Device!)?.Id)
         .OfType<string>()
         .Distinct(StringComparer.Ordinal);
+
+    /// <summary>
+    /// 常駐のランタイムルートを作る。常駐は下の階層しか作らない決まりで、asicend は持ち主だけが使えるもの (0700) を求める
+    /// </summary>
+    internal static void CreateRuntimeDir(string runtimeDir)
+    {
+        Directory.CreateDirectory(runtimeDir);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(runtimeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    /// <summary>
+    /// UNIX ドメインソケットのパスの上限 (Linux の <c>sun_path</c> は終わりの NUL を含めて 108 バイト)。
+    /// 超えるパスでは、asicend は起動のときに断る
+    /// </summary>
+    internal const int MaxSocketPath = 107;
+
+    /// <summary>fd を継がせて起動する間は、ほかの常駐を起動しない (<c>Start</c>)</summary>
+    private static readonly Lock SpawnGate = new();
+
+    /// <summary>常駐かそのコマンドを起動する。標準出力と標準エラーは受け取る</summary>
+    internal static Process Start(string program, IReadOnlyList<string> args) => Start(program, _ => args, null);
+
+    /// <summary>
+    /// fd を継がせて起動する。<paramref name="lend"/> で継がせる fd の複製を作り、その番号から <paramref name="args"/> で引数を組む。
+    /// 複製は起動し終えたところで閉じる (子プロセスは自分の写しを持つ)。起動できなかったときも閉じる。
+    ///
+    /// <para>
+    /// **複製を作ってから起動し終えるまでは、ほかの常駐を起動しない** (複製を作るのもこのロックの中)。同じ時にほかの子プロセスを起動すると、
+    /// その子も同じ fd を継ぐ (.NET の Process.Start は close-on-exec の無い fd を閉じない)。asicend が別の筐体の fd を持ち続けると、
+    /// その筐体の USB の確保が外れない。<see cref="Shell.Run"/> で起動する asicenctl などの短いコマンドはこのロックを取らないので、
+    /// 同じ時に起動すると継ぐことがあるが、終わるまでの間だけ
+    /// </para>
+    /// </summary>
+    internal static Process Start(string program, Func<IReadOnlyList<int>, IReadOnlyList<string>> args, Func<InheritedFds>? lend)
+    {
+        lock (SpawnGate)
+        {
+            using var inherit = lend?.Invoke();
+            var start = new ProcessStartInfo(program, args(inherit?.Numbers ?? []))
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                // 診断は UTF-8 (パスに日本語が入りうる)
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
+                UseShellExecute = false,
+            };
+            return Process.Start(start) ?? throw new IOException($"{Path.GetFileName(program)} を起動できません");
+        }
+    }
+}
+
+/// <summary>
+/// 子プロセスに継がせる fd (Android でアプリから受け取った USB の機材)。**close-on-exec の無い複製**で、
+/// <c>Userland.Start</c> が起動し終えたら閉じる。受け取った元の fd は <see cref="BrokerUsbHost"/> が持ち続ける。
+///
+/// <para>
+/// .NET 11 の <c>ProcessStartInfo.InheritedHandles</c> は使わない。ほかの fd を閉じるのに <c>close_range</c> (Linux 5.9 から) を使い、
+/// それより古いカーネルの端末では起動できない (ENOTSUP)
+/// </para>
+/// </summary>
+public sealed class InheritedFds : IDisposable
+{
+    private readonly int[] _fds;
+    private int _disposed;
+
+    private InheritedFds(int[] fds) => _fds = fds;
+
+    /// <summary>子プロセスの引数 (<c>--fd</c>) に書く番号。並びは複製した順</summary>
+    public IReadOnlyList<int> Numbers => _fds;
+
+    /// <summary>
+    /// fd を close-on-exec の無い形で複製する。どれかを複製できなければ、複製したものを閉じて <see cref="IOException"/>
+    /// </summary>
+    public static InheritedFds Duplicate(IReadOnlyList<(int Fd, string Port)> received)
+    {
+        var fds = new List<int>();
+        foreach (var (fd, port) in received)
+        {
+            var copy = Sys.DupInheritable(fd);
+            if (copy < 0)
+            {
+                var message = System.Runtime.InteropServices.Marshal.GetLastPInvokeErrorMessage();
+                foreach (var made in fds) Sys.Close(made);
+                throw new IOException($"USB のポート {port} の機材を子プロセスに渡せません ({message})");
+            }
+            fds.Add(copy);
+        }
+        return new InheritedFds([.. fds]);
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        foreach (var fd in _fds) Sys.Close(fd);
+    }
 }
 
 /// <summary>
@@ -178,11 +276,18 @@ public abstract class UserlandDaemon(string name, string id)
 
     /// <summary>
     /// 起動して、<paramref name="ready"/> が通るまで待つ。<paramref name="runtimeDir"/> (ランタイムルート) は
-    /// ここで作る (常駐は下の階層しか作らない決まり。Unix では本人だけが使えるようにする)
+    /// ここで作る (<see cref="Userland.CreateRuntimeDir"/>)
     /// </summary>
     /// <param name="hint">終了コードに添える手当て (<see cref="AsicenDaemon"/> の Hint など)</param>
     internal void Launch(
-        string program, IReadOnlyList<string> args, string runtimeDir, Func<bool> ready, Action onReady, Func<int, string>? hint = null)
+        string program, IReadOnlyList<string> args, string runtimeDir, Func<bool> ready, Action onReady, Func<int, string>? hint = null) =>
+        Launch(program, _ => args, runtimeDir, ready, onReady, hint, null);
+
+    /// <param name="args">引数を、継がせた fd の番号から組む (<c>Userland.Start</c>)</param>
+    /// <param name="lend">継がせる fd の複製を作る (Android)。起動する直前に呼ぶ</param>
+    internal void Launch(
+        string program, Func<IReadOnlyList<int>, IReadOnlyList<string>> args, string runtimeDir, Func<bool> ready, Action onReady,
+        Func<int, string>? hint, Func<InheritedFds>? lend)
     {
         lock (_gate)
         {
@@ -190,21 +295,8 @@ public abstract class UserlandDaemon(string name, string id)
             _process?.Dispose();
             _process = null;
 
-            Directory.CreateDirectory(runtimeDir);
-            if (!OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(runtimeDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-            }
-
-            var start = new ProcessStartInfo(program, args)
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                // 診断は UTF-8 (パスに日本語が入りうる)
-                StandardErrorEncoding = System.Text.Encoding.UTF8,
-                UseShellExecute = false,
-            };
-            var process = Process.Start(start) ?? throw new IOException($"{name} を起動できません");
+            Userland.CreateRuntimeDir(runtimeDir);
+            var process = Userland.Start(program, args, lend);
             _process = process;
             _stderr = "";
             _ = Task.Run(async () =>

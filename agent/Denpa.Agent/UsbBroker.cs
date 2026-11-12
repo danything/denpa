@@ -75,6 +75,15 @@ public sealed unsafe partial class BrokerUsbHost(string socketPath) : IUsbHost
         lock (_gate) return UsbFsPipe.Open(Received(port), port, vendor, product, config, interfaceNumber);
     }
 
+    /// <summary>
+    /// そのポートの機材の fd を、子プロセスに継がせる形 (close-on-exec の無い複製) で返す。asicend の <c>--fd</c> に渡す (Asicen.cs)。
+    /// 並びは <paramref name="ports"/> の順。受け取っていないポートがあれば <see cref="IOException"/>
+    /// </summary>
+    public InheritedFds Lend(IReadOnlyList<string> ports)
+    {
+        lock (_gate) return InheritedFds.Duplicate([.. ports.Select(port => (Received(port), port))]);
+    }
+
     public Action<string, TimeSpan>? PowerCycle => null;
 
     /// <summary>
