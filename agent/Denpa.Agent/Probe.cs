@@ -383,9 +383,9 @@ public static class Probe
                 return new TuneResults(results, true);
             }
 
-            if (tuning.IsdbC && tuner is not It930xTuner)
+            if (!tuner.Accepts(tuning))
             {
-                error.WriteLine($"{name}: ISDB-C を選局できるのは {It930x.Scheme} の受信機だけです");
+                error.WriteLine(TunerPool.Unaccepted(name, tuning));
                 return new TuneResults(results, true);
             }
 
@@ -431,6 +431,12 @@ public static class Probe
                     // ロックしたのに TS が 1 パケットも届かなかった (CXD2856 の仕様書 3.5、IT930x の仕様書 6.3)。TS を止めるレジスタを読み、ブリッジのバッファを捨てて選局し直す
                     if (failed.IsdbcLocked && failed.Tsmf is { Received: 0 }) RetryAfterFlush(failed, tuning, name, output);
                 }
+                // DVB の機材の ISDB-C は、渡した方式と、ロックしていれば TSMF の判定を出す (ロックしなければ Tsmf は null)
+                if (tuning.IsdbC && tuner is DvbTuner dvbFailed)
+                {
+                    output.WriteLine($"    {dvbFailed.CableSystemName}  64QAM  {DvbTuner.CableSymbolRate / 1000} kbaud");
+                    foreach (var line in TsmfLines(dvbFailed.Tsmf is not null, dvbFailed.Tsmf)) output.WriteLine($"    {line}");
+                }
                 continue;
             }
             output.WriteLine($"    同期 {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms");
@@ -450,6 +456,12 @@ public static class Probe
                 {
                     foreach (var line in TsmfLines(it930x.IsdbcLocked, it930x.Tsmf)) output.WriteLine($"    {line}");
                 }
+            }
+            // DVB の機材の ISDB-C は、渡した方式と受けた周波数、TSMF の判定を出す
+            if (tuning.IsdbC && tuner is DvbTuner dvb)
+            {
+                output.WriteLine($"    {dvb.CableSystemName}  64QAM  {DvbTuner.CableSymbolRate / 1000} kbaud  受けた周波数 {dvb.CableFrequency} Hz");
+                foreach (var line in TsmfLines(true, dvb.Tsmf)) output.WriteLine($"    {line}");
             }
             // 選んだ TS が分割 TLV なら、組み立てた TLV を数える。B-CAS のカードに MMT の ECM を渡さないので --decode でも復号しない (TunerPool の Lease と同じ)
             var tlv = tuner.Format == StreamFormat.Tlv;
@@ -494,11 +506,16 @@ public static class Probe
                     foreach (var line in IsdbcSignalLines(receiver.CableModulation, receiver.CablePer, receiver.IsdbcDetail)) output.WriteLine($"    {line}");
                 }
             }
+            // DVB の機材の ISDB-C も、受け終えたあとの C/N と強度を出す (dB や dBm に直すのはドライバ)
+            if (tuning.IsdbC && tuner is DvbTuner && tuner.Signal() is { } dvbSignal)
+            {
+                output.WriteLine($"    {(dvbSignal.Locked ? "ロック中" : "ロックしていない")}  C/N {(dvbSignal.Cn is { } dvbCn ? $"{dvbCn:F1} {dvbSignal.Unit}" : "-")}  強度 {(dvbSignal.StrengthDbm is { } dvbDbm ? $"{dvbDbm:F1} dBm" : "-")}");
+            }
             // ISDB-C は、受け終えたあとの TSMF の数と、出力した TS の PAT の TSID も出す
-            if (tuning.IsdbC && tuner is It930xTuner after && after.Tsmf is { } tsmf)
+            if (tuning.IsdbC && tuner.Tsmf is { } tsmf)
             {
                 foreach (var line in TsmfAfterLines(tsmf)) output.WriteLine($"    {line}");
-                if (tlv && after.Tlv is { } split)
+                if (tlv && ((tuner as It930xTuner)?.Tlv ?? (tuner as DvbTuner)?.Tlv) is { } split)
                 {
                     foreach (var line in SplitTlvLines(split)) output.WriteLine($"    {line}");
                 }
