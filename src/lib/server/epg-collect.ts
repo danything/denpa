@@ -18,11 +18,12 @@ import { ServiceReader } from "@danything/arib/psi";
 import { max } from "drizzle-orm";
 
 import { isSatellite } from "../types";
-import { type Agent, tuningAgents } from "./agents";
+import type { Place } from "./agent-order";
 import { config } from "./config";
 import { orm } from "./db";
 import {
   currentServices,
+  readChannels,
   savePrograms,
   settle,
   syncServices,
@@ -40,7 +41,6 @@ import {
   type AgentTuner,
   epgReadableChannel,
   expectTransport,
-  getChannels,
   getTuners,
   openChannel,
   retryWhileBusy,
@@ -264,8 +264,12 @@ export type Outcome = "read" | "busy" | "cut" | "untuned";
  * `last` が false の回は、選局できなくても受信できなかったと数えない。この周回で読み直すため (`drain`)
  */
 async function collectChannel(
-  /** 選局を送るエージェント (`agents.id`)。受信の記録をこのエージェントのものにする */
-  agent: number,
+  /**
+   * TS を受けられる所 (全部のエージェントのチャンネル)。どのエージェントで受けるかは振り分けに任せる (`tuner.openChannel`)。
+   * 受信の記録は選局を送ったエージェントのものにする
+   */
+  places: readonly Place[],
+  /** TS のチャンネル (並びのいちばん前のエージェントの控えのもの) */
   channel: AgentChannel,
   /** 全局読みのとき、来るはずの局 (service_id)。普段 (自分の中継だけ) は null */
   whole: number[] | null,
@@ -317,6 +321,8 @@ async function collectChannel(
   let cut = false;
   /** 選局の答えの形式が控えの形式と違ったか (`TransportChangedError`) */
   let changed = false;
+  /** 選局を送った所。受信できなかった記録はここに付ける */
+  let sentTo: Place | null = null;
   /*
    * **読みながら少しずつ保存する。** 揃うまで待ってからまとめて書くと、全局読みの
    * 数分のあいだ画面に何も出ない。今日・明日の番組は先に流れてくるので、開いて
@@ -347,21 +353,20 @@ async function collectChannel(
      * 届くのは非同期なので、閉じた直後に次を開くと、自分が使っていたチューナーがまだ塞がって見える。
      * **選局の答えの形式が控えと違えば読まない** (`expectTransport`)。TS の読み方で TLV を読んでも、その逆でも、何も取れない
      */
-    const stream = await expectTransport(
-      await retryWhileBusy(
-        () =>
-          openChannel(
-            channel.type,
-            channel.channel,
-            controller.signal,
-            `epg ${channel.channel}`,
-            // 押されている間は、開くたびに高い優先度で取る
-            boosted ? config.priority.epgNow : config.priority.epg,
-          ),
-        () => controller.signal.aborted,
-      ),
-      channel.transport ?? "ts",
+    const answer = await retryWhileBusy(
+      () =>
+        openChannel(
+          channel.type,
+          places,
+          controller.signal,
+          `epg ${channel.channel}`,
+          // 押されている間は、開くたびに高い優先度で取る
+          boosted ? config.priority.epgNow : config.priority.epg,
+        ),
+      () => controller.signal.aborted,
     );
+    sentTo = answer.place;
+    const stream = await expectTransport(answer, channel.transport ?? "ts");
     opened = true;
     /*
      * **局の名前の幅も放送から取り直す** (`epg.widenServices`)。SDT は 1 秒足らずで来るので、
@@ -407,6 +412,7 @@ async function collectChannel(
       console.warn(`[epg] ${label} を集められませんでした: ${error}`);
     }
     refused = error instanceof TuneError;
+    if (error instanceof TuneError) sentTo ??= error.place;
     busy = error instanceof TunerBusyError;
     cut = opened && !controller.signal.aborted;
     changed = error instanceof TransportChangedError;
@@ -428,7 +434,10 @@ async function collectChannel(
   const failed = receptionFailed({ received, refused, opened, timedOut, last });
   if (failed) {
     collected.set(key(channel), Date.now());
-    if (recordFailed(agent, channel.type, channel.channel)) {
+    if (
+      sentTo !== null &&
+      recordFailed(sentTo.agent, channel.type, sentTo.channel)
+    ) {
       console.warn(
         `[epg] ${label} を受信できないチャンネルにしました (続けて選局できませんでした)`,
       );
@@ -819,19 +828,67 @@ export async function drain<J extends { channel: { type: string } }>(
   );
 }
 
-async function run(): Promise<number> {
-  // 選局を送るエージェント (`openChannel` と同じ先頭の 1 台) の控えを回る
-  let target: Agent;
-  try {
-    target = tuningAgents()[0]!;
-  } catch {
-    return 0;
+/**
+ * **全部のエージェントの控えを、回るチャンネルの一覧にまとめる。** 番組表は TS ごとに 1 回取得し、どのエージェントで受けるかは
+ * 振り分け (`tuner.openChannel`) に任せる。
+ *
+ * - `channels`: 回るチャンネル。その TS を最初に控えに持っていたエージェント (並びの前のもの) の控えのチャンネルで、
+ *   ほかのエージェントの同じ TS のチャンネルは入れない。名前は進み具合とログに出る
+ * - `placesOf`: そのチャンネルの TS を受けられる所 (そのチャンネル、続けてほかのエージェントのチャンネル)
+ * - `homeOf`: そのチャンネルを控えに持つエージェント (受信の記録を引く)
+ *
+ * エージェントが 1 台なら、その控えのまま (同じ TS を指すチャンネルが 2 つあれば、今までどおり両方回る)
+ */
+export function byTransportStream(
+  read: readonly { agent: number; channels: readonly AgentChannel[] }[],
+): {
+  channels: AgentChannel[];
+  placesOf: (channel: AgentChannel) => Place[];
+  homeOf: (channel: AgentChannel) => number;
+} {
+  const tsKey = (c: AgentChannel) =>
+    [c.type, c.networkId, c.transportStreamId].join(":");
+  /** TS → 最初に控えに持っていたエージェント */
+  const owner = new Map<string, number>();
+  /** TS → ほかのエージェントで受ける所 (エージェントごとに控えの前のほう 1 つ) */
+  const others = new Map<string, Place[]>();
+  const home = new Map<AgentChannel, number>();
+  const channels: AgentChannel[] = [];
+  for (const { agent, channels: list } of read) {
+    for (const channel of list) {
+      const ts = tsKey(channel);
+      const first = owner.get(ts);
+      if (first === undefined) owner.set(ts, agent);
+      else if (first !== agent) {
+        const more = others.get(ts) ?? [];
+        if (!more.some((place) => place.agent === agent))
+          more.push({ agent, channel: channel.channel });
+        others.set(ts, more);
+        continue;
+      }
+      // 同じエージェントの中で同じ TS を指すチャンネルは、今までどおりそれぞれ回る
+      channels.push(channel);
+      home.set(channel, agent);
+    }
   }
-  const agent = target.id;
-  const all = await getChannels(target).catch(() => [] as AgentChannel[]);
-  if (all.length === 0) return 0;
+  return {
+    channels,
+    placesOf: (channel) => [
+      { agent: home.get(channel)!, channel: channel.channel },
+      ...(others.get(tsKey(channel)) ?? []),
+    ],
+    homeOf: (channel) => home.get(channel)!,
+  };
+}
+
+async function run(): Promise<number> {
+  // 全部のエージェントの控えを読む。読めなかったエージェントは飛ばす (`readChannels`)
+  const read = await readChannels().catch(() => []);
+  if (read.length === 0) return 0;
   // 局の一覧はここでも取り込んでおく。スキャンの直後に呼ばれることがある
-  syncServices([{ agent, channels: all }]);
+  syncServices(read);
+  const { channels: all, placesOf, homeOf } = byTransportStream(read);
+  if (all.length === 0) return 0;
   forgetGround(all);
   // 番組表を読める局が 1 つも無いチャンネル (EIT がスクランブルされた SKY など) は番組表を取得しない (`epgReadableChannel`。番組表に出さないので要らない)
   const channels = all.filter(epgReadableChannel);
@@ -876,8 +933,9 @@ async function run(): Promise<number> {
   const first = firstSweeps(channels, reach, lastOf).filter(
     (channel) => at - lastOf(channel) >= config.epgChannelRetry,
   );
-  const checked = checkedAt(agent);
-  const checkedOf = (channel: AgentChannel) => checked.get(key(channel)) ?? 0;
+  const checked = new Map(read.map((r) => [r.agent, checkedAt(r.agent)]));
+  const checkedOf = (channel: AgentChannel) =>
+    checked.get(homeOf(channel))?.get(key(channel)) ?? 0;
   const sweeps = [...first, ...networkSweeps(targets, channels, checkedOf)];
   // 全局ぶんを読んだ中継は、自分の中継の詳細もそこで取れている。続きでは回らない
   const rest = targets.filter(
@@ -945,7 +1003,7 @@ async function run(): Promise<number> {
     ): Promise<Outcome> => {
       update({ pending: state.pending - 1 });
       const result = await collectChannel(
-        agent,
+        placesOf(job.channel),
         job.channel,
         job.whole,
         last.tune,

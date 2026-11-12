@@ -1,11 +1,15 @@
 /**
  * 単体テスト用: 局の行を、エージェントのチャンネルに置く (`agent_channels` と `services.transport_stream_id`)。
- * 局からチャンネルを引く所 (`agent-channels.serviceChannel`) を通すテストが、局の行を入れたあとに呼ぶ。
- * 写しは環境変数のものでないエージェントの行に置く (無ければ足す)。
- * `config.dbPath` を決めてから呼ぶ
+ * 局からチャンネルを引く所 (`agent-channels.serviceChannel`・`servicePlaces`) を通すテストが、局の行を入れたあとに呼ぶ。
+ * 写しは、`config.agentUrl` にエージェントを書いてあれば並びの先頭のエージェントの行 (選局はそこへ送る)、
+ * 無ければ環境変数のものでないエージェントの行に置く (無ければ足す)。
+ * `config.dbPath` を決めてから呼ぶ。選局を送るテストは、`config.agentUrl` を決めてから呼ぶ
+ * (差し替えると、起動の突き合わせ `agents.syncEnvAgents` が前の行を写しごと消す)
  */
 import { and, eq } from "drizzle-orm";
 
+import { listAgents } from "./agents";
+import { config } from "./config";
 import { orm } from "./db";
 import { agentChannels, agents, services } from "./schema";
 
@@ -44,10 +48,16 @@ function fakeAgent(): number {
     .get().id;
 }
 
-/** `placed` の局を、それぞれのチャンネルに置く。`agent` を渡さなければ写しのための行 (`fakeAgent`) */
+/** 写しを置く行。環境変数にエージェントを書いてあれば並びの先頭、無ければ写しのための行 (`fakeAgent`) */
+function placeAgent(): number {
+  if (config.agentUrl.trim() === "") return fakeAgent();
+  return listAgents()[0]?.id ?? fakeAgent();
+}
+
+/** `placed` の局を、それぞれのチャンネルに置く。`agent` を渡さなければ `placeAgent` */
 export function placeServices(
   placed: readonly { id: number; channel: string }[],
-  agent = fakeAgent(),
+  agent = placeAgent(),
 ): void {
   for (const { id, channel } of placed) {
     const service = orm()

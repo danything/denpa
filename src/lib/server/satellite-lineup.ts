@@ -16,7 +16,7 @@
  * `RETRY_AFTER` たってから試し直す (局の一覧は 1 分ごとに読むので、そのたびに選局しない)
  */
 import type { ChannelType } from "../types";
-import { tuningAgents } from "./agents";
+import { primaryAgent } from "./agents";
 import { orm } from "./db";
 import { readFromAir } from "./lineup-follow";
 import {
@@ -28,7 +28,7 @@ import {
 import { scanState } from "./scan";
 import { services } from "./schema";
 import { store, stored as storedSetting } from "./settings";
-import { type AgentChannel, getTuners, putChannels } from "./tuner";
+import { type AgentChannel, putChannels, tunerList } from "./tuner";
 
 const TYPES: SatelliteType[] = ["BS", "CS"];
 
@@ -181,7 +181,9 @@ async function fill(
   now: number,
 ): Promise<ChannelType[]> {
   const receivable = new Set(
-    (await getTuners()).filter((t) => !t.disabled).flatMap((t) => t.types),
+    (await tunerList(primaryAgent())).tuners
+      .filter((t) => !t.disabled)
+      .flatMap((t) => t.types),
   );
   const known = knownNames(channels);
   const filled: ChannelType[] = [];
@@ -203,8 +205,8 @@ async function fill(
     if (scanState().state === "running") break;
     // 読んでいる間に設定から消された種別は書かない
     if (removedSatellites().includes(type)) continue;
-    // 預ける先は選局に使ったエージェント (`openChannel` と同じ先頭の 1 台)
-    await putChannels(lineup.channels, [type], tuningAgents()[0]);
+    // 預ける先は放送の一覧を読んだエージェント (並びの先頭の 1 台。`lineup-follow.readFromAir`)
+    await putChannels(lineup.channels, [type], primaryAgent());
     for (const network of goneNetworks(
       leftoverNetworks(channels, type, stored),
       lineup,

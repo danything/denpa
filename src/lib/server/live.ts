@@ -68,7 +68,8 @@ import { MkvSplitter } from "#lib/ts/mkv.js";
 import { BUSY } from "#lib/ts/playback.js";
 import { type Transport, undecodableReason } from "#lib/types.js";
 
-import { serviceChannel } from "./agent-channels";
+import { placesOfService, serviceChannel } from "./agent-channels";
+import type { Place } from "./agent-order";
 import {
   captionFeed,
   type CaptionOut,
@@ -900,6 +901,11 @@ export function pinnedNotTuned(
  */
 const LIVE_ANSWER_WAIT = 60_000;
 
+/** 1 台のエージェントのチューナー (`getTuners` から選ぶ)。チューナーの `index` はエージェントごとの番号なので、エージェントで絞ってから引く */
+async function tunersOf(agent: number) {
+  return (await getTuners()).filter((tuner) => tuner.agent === agent);
+}
+
 interface Viewer {
   /** 送り先。WebSocket の視聴者は Connection、HTTP の視聴者は映像か字幕だけを流すエンドポイント (`sessionStream`・`liveCaptions`) */
   connection: Pick<Connection, "send"> & Partial<Pick<Connection, "congested">>;
@@ -1394,11 +1400,11 @@ class Session {
   private tsid: number | null = null;
   private stopped = false;
   /**
-   * 自分の利用者がいるチューナー (`GET /denpa/tuners` の `index`)。使えたら覚える (`locate`)。
+   * 自分の利用者がいるチューナー (エージェントと、その一覧の `index`)。使えたら覚える (`locate`)。
    * **取り上げられたら、このチューナーにいる録画が取り上げた相手** (`live-yield.ts`)。取り上げられたあとでは自分の利用者が
    * 一覧から消えているので、前に覚えておくしかない
    */
-  private tuner: number | null = null;
+  private tuner: { agent: number; index: number } | null = null;
   /** チューナーを調べている最中 (`locate`)。外されたときは、調べ終わるのを待ってから読む (`lose`) */
   private locating: Promise<void> = Promise.resolve();
   /** チューナーから 1 塊でも届いたか。届く前に途切れたのは選局の失敗で、届いたあとなら外された (`lose`) */
@@ -2055,9 +2061,10 @@ class Session {
    * ほかの局 (ワンセグ・データ放送の局) の PMT を待たずに流し始める (docs/agent.md「B25 の復号もカードリーダーも自前」)
    */
   private async tune(): Promise<ReadableStream<Uint8Array>> {
-    const stream = await openWhenFree(
+    // どのエージェントに送るかは選局ごとに決まる (`tuner.openChannel`)。送った所は `place` で返る
+    const { stream, place } = await openWhenFree(
       this.channelType,
-      this.channel,
+      placesOfService(this.serviceId),
       this.aborter.signal,
       this.use,
       config.priority.live,
@@ -2067,7 +2074,7 @@ class Session {
       this.program > 0 ? this.program : null,
       LIVE_ANSWER_WAIT,
     );
-    this.locating = this.locate();
+    this.locating = this.locate(place);
     this.settle();
     return stream;
   }
@@ -2091,14 +2098,15 @@ class Session {
   }
 
   /** 自分の利用者がいるチューナーを覚える。訊けなければ覚えないまま (取り上げられても録画を名指しできないだけ) */
-  private async locate(): Promise<void> {
+  private async locate(place: Place): Promise<void> {
     try {
-      this.tuner = tunerOf(
-        await getTuners(),
+      const index = tunerOf(
+        await tunersOf(place.agent),
         this.channelType,
-        this.channel,
+        place.channel,
         this.use,
       );
+      this.tuner = index === null ? null : { agent: place.agent, index };
     } catch {
       this.tuner = null;
     }
@@ -2121,7 +2129,11 @@ class Session {
      * それでも一覧から自分が消えたあとに訊いていたら覚えられない (録画を名指しできず、リクエストし直すだけになる)
      */
     await this.locating;
-    const recording = await yieldedTo(this.tuner);
+    const where = this.tuner;
+    const recording =
+      where === null
+        ? null
+        : await yieldedTo(where.index, () => tunersOf(where.agent));
     if (this.stopped) return;
     console.warn(
       `[live] ${label}: チューナーから外されました${recording === null ? "" : ` (録画 ${recording.id} に譲った)`}`,

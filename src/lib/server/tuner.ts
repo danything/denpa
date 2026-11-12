@@ -28,8 +28,10 @@ import {
   epgReadableService,
   type Transport,
 } from "../types";
+import { NO_CHANNEL } from "./agent-channels";
 import { fetchAgent } from "./agent-client";
-import { type Agent, primaryAgent, tuningAgents } from "./agents";
+import { orderGroups, type Place } from "./agent-order";
+import { type Agent, listAgents, NO_AGENT, primaryAgent } from "./agents";
 import { config } from "./config";
 import type { Busy } from "./conflict";
 import { recordReceived } from "./reception";
@@ -211,10 +213,16 @@ export function programKey(
   return serviceKey(networkId, serviceId, type) * 100000 + eventId;
 }
 
-async function get<T>(agent: Agent, path: string, shape: Shape<T>): Promise<T> {
+async function get<T>(
+  agent: Agent,
+  path: string,
+  shape: Shape<T>,
+  /** 答えを待つ上限 (ms) */
+  wait = 10_000,
+): Promise<T> {
   const res = await fetchAgent(agent, path, {
     headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(wait),
   });
   if (!res.ok) {
     throw new Error(
@@ -300,24 +308,82 @@ export async function deleteChannels(
  * 1 台のエージェントの一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を 1 度に。
  * `agent` を渡さなければ並びの先頭のエージェント
  */
-export async function tunerList(agent?: Agent): Promise<TunerList> {
+export async function tunerList(
+  agent?: Agent,
+  /** 答えを待つ上限 (ms) */
+  wait?: number,
+): Promise<TunerList> {
   const target = agent ?? primaryAgent();
-  const got = await get(target, "/denpa/tuners", TUNERS);
-  return {
-    tuners: got.tuners.map((tuner) => ({ ...tuner, agent: target.id })),
-    detected: got.detected,
-  };
+  const got = await get(target, "/denpa/tuners", TUNERS, wait);
+  const tuners = got.tuners.map((tuner) => ({ ...tuner, agent: target.id }));
+  lastLists.set(target.id, tuners);
+  return { tuners, detected: got.detected };
 }
 
 /**
- * 選局に使う全部のエージェント (`tuningAgents`) のチューナーを、エージェントの並びの順につなげたもの。
- * 1 台でも取れなければ reject する (どのエージェントが落ちたかで割り振りが変わるので、欠けた一覧では数えない)
+ * **エージェントごとの、最後に返した一覧** (`agents.id` →)。メモリだけに持つ (DB には写さない)。
+ * 予約の割り振りは、落ちているエージェントをこれで数える (`tunerSnapshot`)
+ */
+const lastLists = new Map<number, AgentTuner[]>();
+
+/** 1 台のエージェントに一覧を訊いた結果。返さなければ `tuners` が null */
+interface Asked {
+  agent: Agent;
+  tuners: AgentTuner[] | null;
+  error: unknown;
+}
+
+/**
+ * 全部のエージェントに一覧を訊く (並びの順)。返したものは、それまでに出した選局の数え (`pending`) を片付ける。
+ * エージェントが 1 台も無ければ `NO_AGENT` を送出する
+ */
+async function askAll(wait?: number): Promise<Asked[]> {
+  const all = listAgents();
+  if (all.length === 0) throw new Error(NO_AGENT);
+  return Promise.all(
+    all.map(async (agent): Promise<Asked> => {
+      const askedAt = Date.now();
+      try {
+        const { tuners } = await tunerList(agent, wait);
+        settlePending(agent.id, askedAt);
+        return { agent, tuners, error: null };
+      } catch (error) {
+        return { agent, tuners: null, error };
+      }
+    }),
+  );
+}
+
+/**
+ * 全部のエージェントのチューナーを、エージェントの並びの順につなげたもの。**返さなかったエージェントのものは入れない。**
+ * どのエージェントも返さなければ reject する (エージェントが 1 台のときは、今までどおりそのエージェントの失敗)
  */
 export async function getTuners(): Promise<AgentTuner[]> {
-  const lists = await Promise.all(
-    tuningAgents().map((agent) => tunerList(agent)),
-  );
-  return lists.flatMap((list) => list.tuners);
+  const asked = await askAll();
+  if (asked.every((a) => a.tuners === null)) throw asked[0]!.error;
+  return asked.flatMap((a) => a.tuners ?? []);
+}
+
+/**
+ * **予約の割り振りで数える一覧** (`scheduler.tunerState`)。返さなかったエージェントは、最後に返した一覧で数える。
+ * 落ちている間に予約表が全部「競合」に変わって通知が出るのを避けるため。
+ * どのエージェントも返さないか、起動してから一度も返していないエージェントがあれば null (台数不明として、何も競合にしない)
+ */
+export async function tunerSnapshot(): Promise<AgentTuner[] | null> {
+  let asked: Asked[];
+  try {
+    asked = await askAll();
+  } catch {
+    return null;
+  }
+  if (asked.every((a) => a.tuners === null)) return null;
+  const out: AgentTuner[] = [];
+  for (const a of asked) {
+    const tuners = a.tuners ?? lastLists.get(a.agent.id);
+    if (tuners === undefined) return null;
+    out.push(...tuners);
+  }
+  return out;
 }
 
 /**
@@ -392,7 +458,7 @@ export function recordingOf(use: string): number | null {
 export function recordingHolds(
   tuners: readonly Pick<
     AgentTuner,
-    "disabled" | "rank" | "channel" | "users"
+    "agent" | "disabled" | "rank" | "channel" | "users"
   >[],
   untilOf: (recordingId: number) => number | undefined,
 ): Busy[] {
@@ -407,6 +473,7 @@ export function recordingHolds(
     if (ends.length === 0) return [];
     return [
       {
+        agent: tuner.agent,
         type: tuner.channel.type,
         channel: tuner.channel.channel,
         rank: tuner.rank,
@@ -438,10 +505,12 @@ export class TunerBusyError extends Error {
  * (ほかに数えるのは、開けたのに上限まで待っても何も来なかった回)
  */
 export class TuneError extends Error {
-  /** エージェントが返した理由 (本文の `error`)。読めなければ null */
   constructor(
     message: string,
+    /** エージェントが返した理由 (本文の `error`)。読めなければ null */
     readonly reason: string | null = null,
+    /** 選局を送った所 (エージェントとそのチャンネル)。受信できなかった記録はこのエージェントに付ける */
+    readonly place: Place | null = null,
   ) {
     super(message);
   }
@@ -470,7 +539,8 @@ function agentReason(detail: string): string | null {
  */
 export async function openChannelStream(
   type: string,
-  channel: string,
+  /** 局を受けられる所 (`openChannel` の `places`) */
+  places: readonly Place[],
   signal: AbortSignal,
   use: StreamUse,
   priority = config.priority.recording,
@@ -488,7 +558,7 @@ export async function openChannelStream(
   return (
     await openChannel(
       type,
-      channel,
+      places,
       signal,
       use,
       priority,
@@ -514,10 +584,14 @@ const TSMF_STREAMS = "X-Denpa-Tsmf-Streams";
  * `answerWithin` (ms) を渡すと、その間にエージェントが答え (レスポンスヘッダ) を返さなければリクエストを打ち切り、
  * `TuneError` を送出する。エージェントは最初の TS を送るときにヘッダを返すので、答えが来ないのは TS が届いていないとき。
  * 答えが来たあとのストリームには効かない
+ *
+ * **どのエージェントに送るかはここで決める** (`route`)。`places` は局を受けられる所 (エージェントとそのチャンネル。
+ * `agent-channels.servicePlaces`)。エージェントの中のどのチューナーかは、今までどおりエージェントが決める。
+ * 送った所は `place` で返す
  */
 export async function openChannel(
   type: string,
-  channel: string,
+  places: readonly Place[],
   signal: AbortSignal,
   use: StreamUse,
   priority = config.priority.recording,
@@ -529,13 +603,24 @@ export async function openChannel(
   stream: ReadableStream<Uint8Array>;
   tsmfStreams: number;
   transport: Transport;
+  place: Place;
 }> {
+  if (places.length === 0) throw new Error(NO_CHANNEL);
+  // 送る所を決めると同時に手元の数えに足す (`claim`)。決めてから足すまでの間に、ほかの選局が同じ空きを数えない
+  const sent = await claim({ type, places, priority, after, pin }, use);
+  const place: Place = { agent: sent.agent, channel: sent.channel };
+  const agent = listAgents().find((a) => a.id === place.agent);
+  if (agent === undefined) {
+    pending.delete(sent);
+    throw new Error(NO_AGENT);
+  }
   const query = new URLSearchParams({
     type,
-    channel,
+    channel: place.channel,
     priority: String(priority),
     use,
   });
+  // 引き継ぐ利用者は全部渡す。送った先にいなければ、エージェントはふつうに選ぶ (docs/agent.md「選ぶ順の約束」の 4)
   for (const leaving of after) query.append("after", leaving);
   if (pin !== null) query.set("tuner", pin);
   if (service !== null) query.set("service", String(service));
@@ -545,23 +630,23 @@ export async function openChannel(
       ? undefined
       : setTimeout(() => answer.abort(), answerWithin);
   let res: Response;
-  // 送る先は選局に使うエージェントの先頭 (今は 1 台だけ。`tuningAgents`)
-  const agent = tuningAgents()[0]!;
   try {
     res = await fetchAgent(agent, `/denpa/stream?${query}`, {
       signal:
         timer === undefined ? signal : AbortSignal.any([signal, answer.signal]),
     });
   } catch (error) {
+    pending.delete(sent);
     if (answer.signal.aborted && !signal.aborted) {
       const reason = `エージェントから選局の答えが ${Math.round((answerWithin ?? 0) / 1000)} 秒返りませんでした`;
-      throw new TuneError(`選局できません (${reason})`, reason);
+      throw new TuneError(`選局できません (${reason})`, reason, place);
     }
     throw error;
   } finally {
     clearTimeout(timer);
   }
   if (!res.ok || res.body === null) {
+    pending.delete(sent);
     const detail = await res.text().catch(() => "");
     const reason = agentReason(detail);
     if (res.status === 409)
@@ -569,14 +654,239 @@ export async function openChannel(
         `チューナーに空きがありません ${detail}`,
         reason,
       );
-    throw new TuneError(`選局できません (${res.status}) ${detail}`, reason);
+    throw new TuneError(
+      `選局できません (${res.status}) ${detail}`,
+      reason,
+      place,
+    );
   }
-  recordTuned(agent.id, type, channel);
+  sent.answeredAt = Date.now();
+  recordTuned(agent.id, type, place.channel);
   return {
     stream: res.body,
     tsmfStreams: tsmfStreams(res.headers),
     transport: streamTransport(res.headers),
+    place,
   };
+}
+
+/**
+ * **denpa が送った選局のうち、エージェントの一覧にまだ出ていないかもしれないもの。** 振り分け (`route`) はこれを一覧に足して数える。
+ * 一覧は訊いた時点のものなので、送ってから一覧に出るまでの間に次の選局を振り分けると、同じ空きを 2 本に数えてしまう。
+ * 利用者は全部 denpa が出したものなので、手元で足せば足りる (同じ定期チェックで録画が 2 本始まるときも、同じ組を取り合わない)
+ */
+interface Pending {
+  agent: number;
+  type: string;
+  channel: string;
+  use: string;
+  priority: number;
+  after: readonly string[];
+  /** エージェントが答えた時刻。答える前は null */
+  answeredAt: number | null;
+}
+
+const pending = new Set<Pending>();
+
+/** 答えてからこれより経った選局は、もう一覧に出ているものとして数えない (ms。一覧を訊かずにいる間に溜めない) */
+const PENDING_KEEP = 60_000;
+
+function addPending(entry: Pending): void {
+  const old = Date.now() - PENDING_KEEP;
+  for (const p of pending)
+    if (p.answeredAt !== null && p.answeredAt < old) pending.delete(p);
+  pending.add(entry);
+}
+
+/**
+ * エージェント `agent` の一覧を `askedAt` に訊いて返ってきた。それより前に答えた選局は、その一覧に出ている
+ * (エージェントは利用者を載せてから答える) か、もう終わっているので、手元の数えから外す
+ */
+function settlePending(agent: number, askedAt: number): void {
+  for (const p of pending)
+    if (p.agent === agent && p.answeredAt !== null && p.answeredAt <= askedAt)
+      pending.delete(p);
+}
+
+/** 振り分けで一覧を訊くときに答えを待つ上限 (ms)。落ちたエージェントのせいで、ライブの選局を長く待たせない */
+const ROUTE_ASK_WAIT = 3_000;
+
+/**
+ * 送る所を決めて、手元の数え (`pending`) に足す。**局を受けられるエージェントが 1 台だけなら一覧を訊かずにそこへ送る**
+ * (エージェントが 1 台のときの動きは変わらない)。2 台以上なら全部のエージェントに一覧を訊き、手元の数えを足して `route` で選ぶ。
+ * 選ぶのと足すのは、間に await を挟まずに続けてやる (同時に振り分ける選局が、同じ空きを 2 本に数えない)
+ */
+async function claim(request: RouteRequest, use: string): Promise<Pending> {
+  const agents = new Set(request.places.map((place) => place.agent));
+  let place = request.places[0]!;
+  if (agents.size > 1) {
+    const asked = await askAll(ROUTE_ASK_WAIT);
+    place = route(
+      withPending(
+        asked.map((a) => ({
+          agent: a.agent.id,
+          up: a.tuners !== null,
+          tuners: a.tuners ?? lastLists.get(a.agent.id) ?? [],
+        })),
+        [...pending],
+      ),
+      request,
+    );
+  }
+  const sent: Pending = {
+    agent: place.agent,
+    type: request.type,
+    channel: place.channel,
+    use,
+    priority: request.priority,
+    after: request.after,
+    answeredAt: null,
+  };
+  addPending(sent);
+  return sent;
+}
+
+/** 振り分けに要るチューナーの中身 */
+export type RoutedTuner = Pick<
+  AgentTuner,
+  "disabled" | "rank" | "types" | "channel" | "users" | "pin"
+>;
+
+/** 1 台のエージェントの一覧。`up` が false なら今は返さない (順を決めるのにだけ使う。最後に返した一覧か空) */
+export interface RoutedList {
+  agent: number;
+  up: boolean;
+  tuners: readonly RoutedTuner[];
+}
+
+/** 振り分ける選局 */
+export interface RouteRequest {
+  type: string;
+  places: readonly Place[];
+  priority: number;
+  after: readonly string[];
+  pin: string | null;
+}
+
+/** そのチューナーを使ってよいか。空いている (余韻だけ) か、引き継ぐ利用者と自分より優先度の低い利用者しかいない (約束の 2・4) */
+function usable(
+  tuner: RoutedTuner,
+  priority: number,
+  after: readonly string[],
+): boolean {
+  return (
+    !tuner.disabled &&
+    tuner.rank !== null &&
+    tuner.users.every((u) => after.includes(u.use) || u.priority < priority)
+  );
+}
+
+/**
+ * **送る所を選ぶ** (docs/architecture.md「エージェントを何台もつなぐ」)。エージェントの約束 (docs/agent.md「選ぶ順の約束」) を、
+ * 全部のエージェントをまとめた選ぶ順 (`agent-order.orderGroups`。予約の割り振りと同じ関数) に読み替える。
+ *
+ * 1. 局を受けられて、一覧を返したエージェントに絞る
+ * 2. 名指し (`pin`) なら、そのチューナーのあるエージェント
+ * 3. 同じチャンネルを、自分と同じか優先度の高い利用者が読んでいるエージェントがあれば、そこで共有する (約束の 3)
+ * 4. 選ぶ順に組を見て、その種別を受けられ、使ってよいチューナー (`usable`) のある最初のエージェント (約束の 2)
+ * 5. どこにも無ければ、局を受けられる最初のエージェントに送る (エージェントが 409 で断り、呼んだ側が空き待ちで掛け直す)
+ *
+ * どれも返さなければ `places` の先頭 (エージェントに繋がらない失敗をそのまま返す)
+ */
+export function route(
+  lists: readonly RoutedList[],
+  request: RouteRequest,
+): Place {
+  const { type, priority, after, pin } = request;
+  const listOf = new Map(lists.map((list) => [list.agent, list]));
+  const up = request.places.filter(
+    (place) => listOf.get(place.agent)?.up === true,
+  );
+  if (up.length === 0) return request.places[0]!;
+  if (pin !== null) {
+    return (
+      up.find((place) =>
+        listOf.get(place.agent)!.tuners.some((t) => t.pin === pin),
+      ) ?? up[0]!
+    );
+  }
+  const shared = up.find((place) =>
+    listOf
+      .get(place.agent)!
+      .tuners.some(
+        (t) =>
+          t.channel?.type === type &&
+          t.channel.channel === place.channel &&
+          t.users.some((u) => !after.includes(u.use) && u.priority >= priority),
+      ),
+  );
+  if (shared !== undefined) return shared;
+  const groups = orderGroups(
+    lists.flatMap((list) =>
+      list.tuners.map((t) => ({ agent: list.agent, ...t })),
+    ),
+  );
+  for (const group of groups) {
+    if (!group.types.has(type)) continue;
+    const place = up.find((p) => p.agent === group.agent);
+    if (place === undefined) continue;
+    if (
+      listOf
+        .get(group.agent)!
+        .tuners.some((t) => t.rank === group.rank && usable(t, priority, after))
+    )
+      return place;
+  }
+  return up[0]!;
+}
+
+/**
+ * 一覧に、手元の数え (`pending`) をまだ出ていない利用者として足す。足す先は、同じチャンネルの選局があればそれ、
+ * 無ければ受けられて使ってよいチューナーのうち `rank` のいちばん小さいもの (エージェントの選び方と同じ。約束の 2・3)。
+ * 一覧はそのまま残し、写しを返す
+ */
+export function withPending(
+  lists: readonly RoutedList[],
+  sent: readonly Omit<Pending, "answeredAt">[],
+): RoutedList[] {
+  const copies = lists.map((list) => ({
+    ...list,
+    tuners: list.tuners.map((t) => ({
+      ...t,
+      users: [...t.users],
+      channel: t.channel === null ? null : { ...t.channel },
+    })),
+  }));
+  for (const entry of sent) {
+    const list = copies.find((l) => l.agent === entry.agent);
+    if (list === undefined) continue;
+    if (list.tuners.some((t) => t.users.some((u) => u.use === entry.use)))
+      continue;
+    const user = { use: entry.use, priority: entry.priority };
+    const same = list.tuners.find(
+      (t) =>
+        !t.disabled &&
+        t.channel?.type === entry.type &&
+        t.channel.channel === entry.channel &&
+        t.users.some((u) => u.priority >= entry.priority),
+    );
+    if (same !== undefined) {
+      same.users.push(user);
+      continue;
+    }
+    const free = list.tuners
+      .filter(
+        (t) =>
+          t.types.includes(entry.type as ChannelType) &&
+          usable(t, entry.priority, entry.after),
+      )
+      .sort((a, b) => a.rank! - b.rank!)[0];
+    if (free === undefined) continue;
+    free.channel = { type: entry.type as ChannelType, channel: entry.channel };
+    // 取り上げた相手 (優先度の低い利用者・引き継いだ利用者) はいなくなる
+    free.users.splice(0, free.users.length, user);
+  }
+  return copies;
 }
 
 /**
@@ -668,7 +978,8 @@ const BUSY_WAIT = 700;
  */
 export function openWhenFree(
   type: string,
-  channel: string,
+  /** 局を受けられる所 (`openChannel` の `places`) */
+  places: readonly Place[],
   signal: AbortSignal,
   use: StreamUse,
   priority: number,
@@ -680,25 +991,24 @@ export function openWhenFree(
   service: number | null = null,
   /** 1 回のリクエストで答えを待つ上限 (ms)。`openChannel` の `answerWithin` */
   answerWithin: number | null = null,
-): Promise<ReadableStream<Uint8Array>> {
-  return retryWhileBusy(
-    async () =>
-      expectTransport(
-        await openChannel(
-          type,
-          channel,
-          signal,
-          use,
-          priority,
-          [],
-          pin,
-          service,
-          answerWithin,
-        ),
-        expected,
-      ),
-    giveUp,
-  );
+): Promise<{ stream: ReadableStream<Uint8Array>; place: Place }> {
+  return retryWhileBusy(async () => {
+    const opened = await openChannel(
+      type,
+      places,
+      signal,
+      use,
+      priority,
+      [],
+      pin,
+      service,
+      answerWithin,
+    );
+    return {
+      stream: await expectTransport(opened, expected),
+      place: opened.place,
+    };
+  }, giveUp);
 }
 
 /**

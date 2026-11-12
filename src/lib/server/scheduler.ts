@@ -36,12 +36,11 @@ import {
 } from "./schema";
 import { isDraining } from "./shutdown";
 import {
-  type AgentTuner,
-  getTuners,
   recordingHolds,
   recordingOf,
   recordingUse,
   type StreamUse,
+  tunerSnapshot,
 } from "./tuner";
 
 interface Candidate extends Reservation {
@@ -57,19 +56,16 @@ interface Candidate extends Reservation {
  * - `capacity`: 動いているチューナーを、エージェントが選ぶ順 (`rank`) に組にしたもの (`Capacity`)
  * - `busy`: 録画中の予約が、いまどのチューナーにいて、いつ離すか (tuner.ts の `recordingHolds`)
  *
- * エージェントに繋がらないときは空 (「制限なし」) を返し、予約を勝手に conflict にしない (実際に
- * 録画が始まるときにあちらが弾くので、予約表を壊すより実行時に失敗させるほうが害が小さい)。
+ * 数えるのは全部のエージェントのチューナー (`tunerSnapshot`)。落ちているエージェントは最後に返した一覧で数える。
+ * どのエージェントにも繋がらないか、起動してから一度も一覧を返していないエージェントがあれば空 (「制限なし」) を返し、
+ * 予約を勝手に conflict にしない (実際に録画が始まるときにあちらが弾くので、予約表を壊すより実行時に失敗させるほうが害が小さい)。
  */
 export async function tunerState(): Promise<{
   capacity: Capacity;
   busy: Busy[];
 }> {
-  let tuners: AgentTuner[];
-  try {
-    tuners = await getTuners();
-  } catch {
-    return { capacity: [], busy: [] };
-  }
+  const tuners = await tunerSnapshot();
+  if (tuners === null) return { capacity: [], busy: [] };
   const capacity = capacityOf(tuners);
   if (capacity.length === 0) return { capacity, busy: [] };
   const ids = tuners.flatMap((t) =>

@@ -108,7 +108,8 @@ describe("空きチューナーの数", () => {
  * 閉じた後に自分で開き直して衛星のチューナーを 1 台塞ぎ、「いますぐ」が CS の空きを 0 と見て諦めていた
  */
 describe("共有しに行く選局", () => {
-  const tuner = (channel: string | null, users: string[] = []) => ({
+  const tuner = (channel: string | null, users: string[] = [], agent = 1) => ({
+    agent,
     channel: channel === null ? null : { type: "BS" as const, channel },
     users: users.map((use) => ({ use, priority: 1 })),
   });
@@ -118,8 +119,10 @@ describe("共有しに行く選局", () => {
       tuner("BS03_0", ["logo BS/BS03_0"]),
       tuner("BS11_0", ["epg BS11_0", "logo BS/BS11_0"]),
       tuner("BS15_0", ["rec 3"]),
+      tuner("BS13_0", ["rec 4"], 2),
       tuner(null),
     ]);
-    expect([...open].sort()).toEqual(["BS11_0", "BS15_0"]);
+    // エージェントとそのチャンネルの組 (`agent-order.placesKey`)。共有しに行くのは開いているエージェントだけ
+    expect([...open].sort()).toEqual(["1	BS11_0", "1	BS15_0", "2	BS13_0"]);
   });
 });

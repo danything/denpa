@@ -8,6 +8,7 @@
  */
 import { eq, notInArray, type SQL, sql } from "drizzle-orm";
 
+import { parsePlaces, type Place } from "./agent-order";
 import { orm } from "./db";
 import { agentChannels, agents, channelReception, services } from "./schema";
 import type { AgentChannel } from "./tuner";
@@ -79,14 +80,13 @@ function sameTs(): SQL {
 }
 
 /**
- * **局を選局するときのチャンネルの名前** (`services` から読む select に入れる列)。
+ * **局のチャンネルの名前を 1 つ** (`services` から読む select に入れる列)。画面に出す名前と、エージェントを決めて開く所
+ * (契約を確かめる選局。`serviceAgent` と組で使う) に使う。どのエージェントに送るかを振り分ける選局は `servicePlaces` を使う。
  *
- * 局の TS を受けられるエージェントのうち、並びの先頭のものを使う (選局を送るのが並びの先頭の 1 台のため。`agents.tuningAgents`)。
+ * 局の TS を受けられるエージェントのうち、並びの先頭のもの。
  * 同じエージェントで同じ TS を 2 つのチャンネルで受けられるときは、受信できないと決めていないほう、次に控えの後ろのほう
  * (局の行にチャンネルを 1 つ持っていた頃は、取り込みで後から書いたほうが残っていた)。
- * **エージェントの並びが先で、受信できるかは同じエージェントの中でだけ比べる。** 先頭のエージェントで受信できないと決めたチャンネルでも、
- * 2 台目で受信できれば局は外れず (`unreceivableService`)、ここは先頭のエージェントのチャンネルを返す。選局を送るのが先頭の 1 台だけのため。
- * どのエージェントに送るかを選局ごとに決めるようになったら、送る先のエージェントのチャンネルを引く。
+ * **エージェントの並びが先で、受信できるかは同じエージェントの中でだけ比べる。**
  * どのエージェントの控えにも無い (上げてから一度も取り込んでいない) 局は null
  */
 export function serviceChannel(): SQL<string | null> {
@@ -108,12 +108,57 @@ function chosen(): SQL {
 }
 
 /**
+ * **局を受けられる所** (エージェントとそのチャンネル) を、エージェントの並びの順につないだもの (`agent-order.placesKey` の形)。
+ * 選局の振り分け (`tuner.openChannel`) と予約の割り振り (`conflict.ts`) はここから選ぶ。
+ *
+ * - エージェントごとに 1 つ。選び方は `serviceChannel` と同じ (受信できないと決めていないほう、次に控えの後ろのほう)
+ * - 受信できると決めているエージェントが 1 台でもあれば、受信できないと決めたエージェントは入れない (`reception.ts`)。
+ *   全部で受信できないと決めていれば全部入れる (エージェントが 1 台のときは `serviceChannel` と同じ所になる)
+ *
+ * どのエージェントの控えにも無い局は null
+ */
+export function servicePlaces(): SQL<string | null> {
+  return sql<
+    string | null
+  >`(SELECT group_concat(p.agent_id || char(9) || p.channel, char(10)) FROM (
+    SELECT ac.agent_id, ac.channel, COALESCE(r.unreceivable, 0) AS unreceivable,
+      ROW_NUMBER() OVER (PARTITION BY ac.agent_id ORDER BY COALESCE(r.unreceivable, 0), ac.rowid DESC) AS nth,
+      MIN(COALESCE(r.unreceivable, 0)) OVER () AS best
+    FROM agent_channels ac
+    JOIN agents a ON a.id = ac.agent_id
+    LEFT JOIN channel_reception r ON r.agent_id = ac.agent_id AND r.type = ac.type AND r.channel = ac.channel
+    WHERE ${sameTs()}
+    ORDER BY a.position, a.id) p
+    WHERE p.nth = 1 AND p.unreceivable = p.best)`;
+}
+
+/**
  * **チューナーを共有できるかを比べるときのキー** (同時に録る予約の割り振り・ルールの重なり)。
- * 選局するチャンネル (`serviceChannel`) で、無ければその局だけのキー (何とも共有しない)。
- * 名前だけで比べるのは、選局を送るのが先頭の 1 台だけのため。送る先を選局ごとに決めるようになったら、エージェントも含めたキーにする
+ * 局を受けられる所 (`servicePlaces`) で、無ければその局だけのキー (何とも共有しない)。
+ * 同じ TS の局は同じキーになる。割り振り (`conflict.ts`) は、この中の 1 つのエージェントのチャンネルに入れて数える
  */
 export function shareKey(): SQL<string> {
-  return sql<string>`COALESCE(${serviceChannel()}, '#' || ${services.id})`;
+  return sql<string>`COALESCE(${servicePlaces()}, '#' || ${services.id})`;
+}
+
+/** 局を受けられる所 (`servicePlaces`)。局が無いか、どの控えにも無ければ空 */
+export function placesOfService(serviceId: number): Place[] {
+  const key =
+    orm()
+      .select({ places: servicePlaces() })
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .get()?.places ?? null;
+  return key === null ? [] : strictPlaces(key);
+}
+
+/** `servicePlaces` の文字列を読む。DB から作ったものなので、どの所にもエージェントがある */
+export function strictPlaces(key: string): Place[] {
+  return parsePlaces(key).flatMap((place) =>
+    place.agent === null
+      ? []
+      : [{ agent: place.agent, channel: place.channel }],
+  );
 }
 
 /**

@@ -40,6 +40,8 @@ import {
 interface Coverage {
   type: ChannelType;
   channel: string;
+  /** このチャンネルを控えに持つエージェント (`agent-channels.serviceAgent`)。受信の様子と測定はこのエージェントのもの */
+  agent: number;
   /** 受信できるか。受信できないチャンネルも、印を付けて出す (`reception.ts`) */
   reception: Reception;
   /**
@@ -100,8 +102,6 @@ function coverage(): Coverage[] {
     .all();
 
   const channels = new Map<string, Coverage>();
-  /** チャンネル (`種別:名前`) を選局するエージェント。受信の様子はそのエージェントのものを出す */
-  const agents = new Map<string, number>();
   for (const row of rows) {
     const { id, name, type, channel, agent, programs, until, decodable } = row;
     // チャンネルの分からない局 (エージェントの控えの写しがまだ無い) は出さない
@@ -111,6 +111,7 @@ function coverage(): Coverage[] {
     const entry = channels.get(key) ?? {
       type,
       channel,
+      agent,
       reception: "ok" as Reception,
       origin: from === "CATV" ? null : from,
       transport: row.transport,
@@ -119,15 +120,9 @@ function coverage(): Coverage[] {
     };
     entry.services.push({ id, name, programs, until, decodable });
     channels.set(key, entry);
-    agents.set(key, agent);
   }
   const list = [...channels.values()];
-  const reception = receptionOf(
-    list.map((entry) => ({
-      ...entry,
-      agent: agents.get(`${entry.type}:${entry.channel}`)!,
-    })),
-  );
+  const reception = receptionOf(list);
   for (const entry of list)
     entry.reception = reception.get(`${entry.type}:${entry.channel}`) ?? "ok";
   return list.sort(
@@ -240,9 +235,13 @@ export const actions = {
     );
     if (found === undefined)
       return fail(400, { message: "チャンネルを選んでください" });
-    const { type, channel } = found;
+    const { type, channel, agent } = found;
     try {
-      const quality = await measureSignal(type, channel, request.signal);
+      const quality = await measureSignal(
+        type,
+        { agent, channel },
+        request.signal,
+      );
       return { success: true, measured: { type, channel, ...quality } };
     } catch (error) {
       return fail(502, {

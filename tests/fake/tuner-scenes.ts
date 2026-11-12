@@ -243,3 +243,114 @@ export const scenes: Scene[] = [
     ],
   },
 ];
+
+/**
+ * **エージェントが 2 台のときの場面。** どのエージェントに送るかは denpa が決める (`src/lib/server/tuner.ts` の `route`)。
+ * エージェントの中のチューナーは、それぞれのエージェントが上の約束どおりに選ぶ。
+ * 同じ場面を、予約の割り振り (`src/lib/server/conflict.test.ts` の `placements`) と、偽のエージェント 2 台に送る振り分け
+ * (`src/lib/server/agent-routing.test.ts`) の両方に通す。どちらも全部のエージェントの組をまとめた 1 つの順 (`agent-order.ts`) で数える
+ */
+export interface AgentScene {
+  name: string;
+  /** エージェントの並びの順 */
+  agents: {
+    name: string;
+    tuners: SceneTuner[];
+    /** 受けられる TS (場面の中の名前) と、そのエージェントの控えでのチャンネルの名前 */
+    channels: Record<string, string>;
+  }[];
+  steps: (
+    | {
+        open: string;
+        type: string;
+        /** 開く TS (場面の中の名前。`agents[].channels` のキー) */
+        ts: string;
+        priority: number;
+        /** 入るはずのエージェントの名前とチューナーの順位。null なら断られる */
+        at: { agent: string; rank: number } | null;
+      }
+    | { close: string }
+  )[];
+}
+
+const agentRec = (
+  open: string,
+  type: string,
+  ts: string,
+  at: { agent: string; rank: number } | null,
+) => ({ open, type, ts, priority: RECORDING, at });
+
+export const agentScenes: AgentScene[] = [
+  {
+    /*
+     * エージェントの並びだけで決めると、居間の兼用のチューナーに地上波が入り、あとの衛星が録れない (#668 と同じこと)。
+     * 受けられる種別が狭いほうを先に使うので、書斎の地上波専用に入る
+     */
+    name: "兼用と専用が別々のエージェントにあれば、受けられる種別が狭いほうを先に使う",
+    agents: [
+      {
+        name: "living",
+        tuners: [{ name: "mlt", types: ["GR", "BS", "CS"], rank: 0 }],
+        channels: { t16: "T16", t21: "T21", bs11: "BS11:18000" },
+      },
+      {
+        name: "study",
+        tuners: [{ name: "gr", types: ["GR"], rank: 0 }],
+        channels: { t16: "T16", t21: "T21" },
+      },
+    ],
+    steps: [
+      agentRec("a", "GR", "t16", { agent: "study", rank: 0 }),
+      agentRec("b", "BS", "bs11", { agent: "living", rank: 0 }),
+      agentRec("c", "GR", "t21", null),
+    ],
+  },
+  {
+    name: "同じ TS を両方が受けられるなら、塞がっていないほうに入る。共有は同じエージェントの同じチャンネルでだけ",
+    agents: [
+      {
+        name: "living",
+        tuners: [{ name: "gr", types: ["GR"], rank: 0 }],
+        channels: { t16: "T16", t21: "T21" },
+      },
+      {
+        // 中継局が違い、同じ TS を別のチャンネルで受ける
+        name: "study",
+        tuners: [{ name: "gr", types: ["GR"], rank: 0 }],
+        channels: { t16: "T27", t21: "T21" },
+      },
+    ],
+    steps: [
+      agentRec("a", "GR", "t16", { agent: "living", rank: 0 }),
+      agentRec("b", "GR", "t21", { agent: "study", rank: 0 }),
+      // 書斎の T27 も同じ TS だが、共有するのは居間の T16 を読んでいる選局
+      agentRec("c", "GR", "t16", { agent: "living", rank: 0 }),
+      { close: "a" },
+      { close: "c" },
+      agentRec("d", "GR", "t16", { agent: "living", rank: 0 }),
+    ],
+  },
+  {
+    name: "片方のエージェントだけが受けられる TS は、そのエージェントにだけ入る",
+    agents: [
+      {
+        name: "living",
+        tuners: [{ name: "gr", types: ["GR"], rank: 0 }],
+        channels: { t16: "T16" },
+      },
+      {
+        name: "study",
+        tuners: [
+          { name: "bs", types: ["BS", "CS"], rank: 0 },
+          { name: "gr", types: ["GR"], rank: 1 },
+        ],
+        channels: { t16: "T16", bs11: "BS11:18000", bs03: "BS03:16432" },
+      },
+    ],
+    steps: [
+      agentRec("a", "BS", "bs11", { agent: "study", rank: 0 }),
+      agentRec("b", "GR", "t16", { agent: "living", rank: 0 }),
+      agentRec("c", "BS", "bs03", null),
+    ],
+  },
+];

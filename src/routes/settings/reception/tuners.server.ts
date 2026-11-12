@@ -16,7 +16,6 @@ import { recordings } from "#lib/server/schema.js";
 import { cardStatus, putCardReaders } from "#lib/server/scramble.js";
 import {
   type AgentTuner,
-  getTuners,
   putTuners,
   recordingOf,
   type TunerConfig,
@@ -184,13 +183,17 @@ export const actions = {
     if (form.get("add") !== null) sources.push(slot("add"));
 
     /*
-     * 機材が受けられる種別 (デバイスごと)。画面は受けられない種別を選ばせないが、ここでも同じものと突き合わせて断る。
+     * 機材が受けられる種別 (デバイスごと。保存する先と同じ並びの先頭のエージェントのもの)。画面は受けられない種別を選ばせないが、ここでも同じものと突き合わせて断る。
      * エージェントに聞けなければ突き合わせない (送るところで同じく繋がらずに断られる)
      */
     const receivable = new Map(
-      (await getTuners().catch((): AgentTuner[] => [])).flatMap(
-        (tuner): [string, AgentTuner["receivable"]][] =>
-          tuner.device === null ? [] : [[tuner.device, tuner.receivable]],
+      (
+        await tunerList().then(
+          (list) => list.tuners,
+          (): AgentTuner[] => [],
+        )
+      ).flatMap((tuner): [string, AgentTuner["receivable"]][] =>
+        tuner.device === null ? [] : [[tuner.device, tuner.receivable]],
       ),
     );
 

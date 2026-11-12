@@ -4,8 +4,8 @@
  * - `TUNER_AGENT_URL` はカンマで区切って何台でも書ける。書いたものは起動のたびに行と突き合わせ、
  *   URL (`#` の前) が同じ行があればそれを使い、無ければ行を足す。**環境変数から消したものは行も消す**
  * - 組むときの合言葉 (`#pair=`) は DB に持たない。環境変数から読む
- * - 通知の購読・ログ・バージョンと、チャンネルの控えを読むのは全部の行 (`listAgents`)。選局とチューナーの一覧と、
- *   スキャンの結果を預けるのは `tuningAgents`。カード・復号は並びの先頭の 1 台 (`primaryAgent`) に送る
+ * - 通知の購読・ログ・バージョン・チャンネルの控え・チューナーの一覧と、選局の振り分けは全部の行 (`listAgents`。
+ *   振り分けは `tuner.openChannel`)。スキャンとその結果を預けるのと、カード・復号は並びの先頭の 1 台 (`primaryAgent`) に送る
  */
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
@@ -177,11 +177,6 @@ export function syncEnvAgents(): void {
       `[agent] TUNER_AGENT_URL から消えたエージェント (${row.origin}) の行を消しました`,
     );
   }
-  if (targets.length > 1) {
-    console.warn(
-      `[agent] TUNER_AGENT_URL に ${targets.length} 台書いてありますが、選局に使うのは最初の 1 台 (${targets[0]!.origin}) だけです`,
-    );
-  }
   const pairs = new Map<string, string>();
   for (const t of targets) if (t.pair !== null) pairs.set(t.origin, t.pair);
   synced = { raw, db: config.dbPath, pairs };
@@ -228,22 +223,13 @@ export const NO_AGENT =
   "エージェントがありません。TUNER_AGENT_URL に https://ホスト:25252#pair=<合言葉> を書きます (docs/agent.md)";
 
 /**
- * 並びの先頭のエージェント。カード・復号はここに送る。
+ * 並びの先頭のエージェント。カード・復号・チャンネルスキャンはここに送る。
  * 1 台も無ければ、TUNER_AGENT_URL の書き方を入れたエラーを送出する
  */
 export function primaryAgent(): Agent {
   const first = listAgents()[0];
   if (first === undefined) throw new Error(NO_AGENT);
   return first;
-}
-
-/**
- * 選局に使うエージェント。チューナーの一覧 (`getTuners`) はこの全部のものをつなげる。
- * 今は並びの先頭の 1 台だけ (どのエージェントで選局するかを選ぶ振り分けが、まだ無いため)。
- * 1 台も無ければ `primaryAgent` と同じエラーを送出する
- */
-export function tuningAgents(): Agent[] {
-  return [primaryAgent()];
 }
 
 /** 保存した証明書 (PEM)。まだ組んでいなければ null */

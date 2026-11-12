@@ -13,7 +13,6 @@ import {
   rememberAgentCert,
   syncEnvAgents,
   syncEnvAgentsOnBoot,
-  tuningAgents,
 } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
@@ -262,17 +261,17 @@ describe("syncEnvAgentsOnBoot", () => {
   });
 });
 
-describe("listAgents・tuningAgents", () => {
+describe("listAgents・primaryAgent", () => {
   // ほかのテストが画面から登録した行を残していても、ここでは環境変数のものだけにする
   beforeEach(() => orm().delete(agents).run());
 
-  test("全部の行を並びの順に返し、選局に使うのは先頭の 1 台だけ", () => {
+  test("全部の行を並びの順に返し、カードとスキャンに使うのは先頭の 1 台", () => {
     config.agentUrl = "https://b:2#pair=y,https://a:1";
     expect(listAgents().map((a) => [a.origin, a.pair])).toEqual([
       ["https://b:2", "y"],
       ["https://a:1", null],
     ]);
-    expect(tuningAgents().map((a) => a.origin)).toEqual(["https://b:2"]);
+    expect(primaryAgent().origin).toBe("https://b:2");
   });
 
   test("大文字と小文字だけが違うホスト名は 1 つの行にする", () => {

@@ -1,6 +1,6 @@
 import { json } from "@sveltejs/kit";
 
-import { getTuners } from "#lib/server/tuner.js";
+import { tunerList } from "#lib/server/tuner.js";
 
 /**
  * **チューナーごとの受信の状態と C/N だけを返す。** 設定の「チューナー」が、使用中のチューナーがある間 5 秒ごとに読む (`Tuners.svelte`)。
@@ -9,7 +9,8 @@ import { getTuners } from "#lib/server/tuner.js";
  */
 export async function GET() {
   try {
-    const tuners = await getTuners();
+    // 表と同じ並びの先頭のエージェントのもの (`index` はエージェントごとの番号)
+    const { tuners } = await tunerList();
     return json({
       tuners: tuners.map((tuner) => ({
         index: tuner.index,
