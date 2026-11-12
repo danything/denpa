@@ -493,6 +493,8 @@ export async function bootSpare(
   index: number,
   root: string,
   agentUrl: string,
+  /** 常駐処理 (予約・録画・エンコード・通知の購読) を回すか。既定は回さない */
+  autostart = false,
 ): Promise<Spare> {
   const port = APP_PORT + index * STRIDE + 6;
   const dir = `${root}/spare`;
@@ -514,9 +516,19 @@ export async function bootSpare(
       ENCODED_DIR: spare.encodedDir,
       FFMPEG: "./tests/fake/ffmpeg.sh",
       TUNER_AGENT_URL: agentUrl,
-      DENPA_AUTOSTART: "0",
+      DENPA_AUTOSTART: autostart ? "1" : "0",
       DENPA_VERSION: "v1.0.0",
       SHUTDOWN_WAIT: "0",
+      // 定期処理は止め、テストから API で走らせる (`boot` と同じ)
+      RECONCILE_INTERVAL: "86400000",
+      EPG_COLLECT_INTERVAL: "86400000",
+      CHANNEL_SYNC_INTERVAL: "86400000",
+      EPG_CHANNEL_TIMEOUT: "10000",
+      EPG_SWEEP_SETTLE: "500",
+      SCHEDULER_TICK: "500",
+      START_MARGIN: "0",
+      END_MARGIN: "500",
+      DISK_LOW_THRESHOLD: "0",
       TRUSTED_NETWORKS: "127.0.0.1",
     });
     try {
@@ -559,8 +571,10 @@ export async function bootSecondAgent(
   index: number,
   rawDir: string,
   name: string,
+  /** 範囲の中でずらす数。+2 か +4 (平文がこれ、TLS が次) */
+  offset: 2 | 4 = 2,
 ): Promise<SecondAgent> {
-  const port = AGENT_PORT + index * STRIDE + 2;
+  const port = AGENT_PORT + index * STRIDE + offset;
   const agent = start(["bun", "tests/fake/agent.ts"], {
     FAKE_AGENT_PORT: String(port),
     FAKE_AGENT_TLS_PORT: String(port + 1),

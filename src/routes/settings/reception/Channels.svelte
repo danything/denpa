@@ -136,6 +136,26 @@
   );
   const removing = arming('[data-testid^="remove-type"]');
 
+  /**
+   * **スキャンと局の削除の対象のエージェント** (チップ。2 台以上のときだけ出す。既定は全部)。
+   * 選んだものを `agents` にカンマで並べて送る (`channels.server.ts` の `chosenAgents`)。1 台なら送らない (全部)
+   */
+  let unchecked = $state<number[]>([]);
+  /** 受信の様子の前に付けるエージェントの名前 (「書斎: 」)。1 台なら付けない */
+  const agentPrefix = (id: number): string => {
+    if (data.agents.length < 2) return "";
+    const name = data.agents.find((agent) => agent.id === id)?.name;
+    return name === undefined ? "" : `${name}: `;
+  };
+  const scanAgents = $derived(
+    data.agents.length > 1
+      ? data.agents
+          .map((agent) => agent.id)
+          .filter((id) => !unchecked.includes(id))
+          .join(",")
+      : null,
+  );
+
   /** 復号できない局のあるケーブルのチャンネル。TS (B-CAS 以外の方式) と TLV (4K の放送) でわけが違うので分けて言う */
   const undecodableCatv = (transport: "ts" | "tlv") =>
     data.channels.some(
@@ -218,7 +238,35 @@
     探す範囲は決め打ち (放送で使う物理チャンネルは決まっていて、狭めても総当たりの時間が少し減るだけ)
 -->
 {#snippet scanControl()}
+  <!-- 2 台以上なら、スキャンと局の削除の対象のエージェントを選ぶチップ (既定は全部) -->
+  {#if data.agents.length > 1 && scan.state !== "running"}
+    <div
+      class="chips scan-agents"
+      role="group"
+      aria-label="スキャンするエージェント"
+      data-testid="scan-agents"
+    >
+      {#each data.agents as agent (agent.id)}
+        <label class="chip">
+          <input
+            type="checkbox"
+            checked={!unchecked.includes(agent.id)}
+            onchange={(event) =>
+              (unchecked = event.currentTarget.checked
+                ? unchecked.filter((id) => id !== agent.id)
+                : [...unchecked, agent.id])}
+          />
+          {agent.name}
+        </label>
+      {/each}
+    </div>
+  {/if}
   <form method="POST" action="?/scan" use:submitting class="scan-control">
+    {#if scanAgents !== null}<input
+        type="hidden"
+        name="agents"
+        value={scanAgents}
+      />{/if}
     {#if scan.state === "running"}
       <!--
                 十数分かかるので、途中で降りられるようにしてある。中断しても設定は書き換えない
@@ -264,7 +312,9 @@
         deleting={removing}
         armKey={0}
         action="?/removeType"
-        fields={{ type: removeTarget }}
+        fields={scanAgents === null
+          ? { type: removeTarget }
+          : { type: removeTarget, agents: scanAgents }}
         class="small"
         testid="remove-type"
         label="局を削除"
@@ -438,6 +488,20 @@
           unit="チャンネル"
           testid="scan-count"
         />
+        {#if scan.agents.length > 1}
+          <!-- エージェントごとの進み具合 (「居間 8 / 40 チャンネル」) -->
+          <ul
+            class="agent-progress small muted num"
+            data-testid="scan-agent-progress"
+          >
+            {#each scan.agents as entry (entry.id)}
+              <li>
+                {entry.name}
+                {entry.scanned} / {entry.total} チャンネル・見つかったチャンネル {entry.channels}
+              </li>
+            {/each}
+          </ul>
+        {/if}
         {#if scan.error}
           <div class="notice error">{scan.error}</div>
         {/if}
@@ -598,10 +662,22 @@
                     >
                       {channel.channel}
                       <!-- 受信できるかは番組表の取得のついでに確かめる (reception.ts)。受信できるものには何も付けない -->
+                      <!-- 2 台以上なら、受信の様子がどのエージェントのものかを添え、受けられるエージェントの名前を並べる -->
                       {#if channel.reception === "unreceivable"}
-                        <span class="reception tiny muted">受信できません</span>
+                        <span class="reception tiny muted"
+                          >{agentPrefix(channel.agent)}受信できません</span
+                        >
                       {:else if channel.reception === "checking"}
-                        <span class="reception tiny muted">確認中</span>
+                        <span class="reception tiny muted"
+                          >{agentPrefix(channel.agent)}確認中</span
+                        >
+                      {/if}
+                      {#if data.agents.length > 1 && channel.agents.length > 0}
+                        <span
+                          class="reception tiny muted"
+                          data-testid="channel-agents"
+                          >{channel.agents.join("・")}</span
+                        >
                       {/if}
                       <!-- CATV で地上波・BS・CS を再送信しているチャンネル。番組表とライブではケーブルの局として並ぶ -->
                       {#if channel.origin !== null}
@@ -759,6 +835,21 @@
 
 <style>
   /* 種別を選ぶ欄とボタンを 1 組に (スキャンと局の削除)。高さは隣の小さなボタンにそろえる */
+  /* チップは字の幅のまま (操作の 1 行に並べても伸ばさない) */
+  .scan-agents {
+    flex: none;
+  }
+  /* Pico の `[role="group"] > *` が伸ばすので戻す */
+  .scan-agents .chip {
+    flex: none;
+    width: auto;
+    margin: 0;
+  }
+  .agent-progress {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
   .scan-control {
     display: inline-flex;
     align-items: center;

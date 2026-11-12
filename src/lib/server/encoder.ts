@@ -1516,7 +1516,7 @@ async function runJob(jobId: number): Promise<void> {
    * `cardStatus` は失敗を答えで返すので、カードが読めなくてもエンコードは止まらない (`noteDecoded` が何も書かないだけ)
    */
   if (!uhd && paidRecording(recording) && isDecoded(sourceTs))
-    await noteDecoded(recording.service_id);
+    await noteDecoded(recording.service_id, recording.agent_id);
 
   // コマ数 (`smoothMotion`) は、局ロゴを開いたあとに本編映像から実測して入れる (measureSmoothMotion)
   const encodeOptions: EncodeOptions = {

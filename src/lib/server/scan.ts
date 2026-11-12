@@ -33,7 +33,7 @@ import { type FoundService, ServiceReader } from "@danything/arib/psi";
 import { type ChannelType, isSatellite, type Transport } from "../types";
 import { storeAgentChannels } from "./agent-channels";
 import { type Place } from "./agent-order";
-import { listAgents, primaryAgent } from "./agents";
+import { type Agent, listAgents, NO_AGENT } from "./agents";
 import { CaObserver, describe, hex, type Observed } from "./ca-observe";
 import { config } from "./config";
 import { savePrograms, settle, sync, typeRank, unlistType } from "./epg";
@@ -56,11 +56,11 @@ import {
 } from "./tuner";
 
 /**
- * スキャンで開く所。**スキャンは並びの先頭のエージェントで回す** (アンテナに何が映るかはエージェントごとに違うので、
+ * スキャンで開く所。**スキャンはエージェントごとに回す** (アンテナに何が映るかはエージェントごとに違うので、
  * 振り分けずに結果を預けるエージェントで選局する)
  */
-function onPrimary(channel: string): Place[] {
-  return [{ agent: primaryAgent().id, channel }];
+function on(agent: Agent, channel: string): Place[] {
+  return [{ agent: agent.id, channel }];
 }
 
 /**
@@ -376,16 +376,28 @@ export function channelEntry(
   };
 }
 
+/** 1 台のエージェントの進み具合 (エージェントごとに回すので、それぞれの数を持つ) */
+interface AgentProgress {
+  /** `agents.id` */
+  id: number;
+  name: string;
+  scanned: number;
+  total: number;
+  channels: number;
+}
+
 interface ScanState {
   state: "idle" | "running" | "done" | "failed" | "canceled";
   /** いま何をしているか。そのまま画面に出す */
   phase: string;
   log: string[];
-  /** 選局し終えた物理チャンネル数と、その総数。進捗バーに使う */
+  /** 選局し終えた物理チャンネル数と、その総数。進捗バーに使う (全部のエージェントの和) */
   scanned: number;
   total: number;
-  /** 見つかったチャンネル数 */
+  /** 見つかったチャンネル数 (全部のエージェントの和) */
   channels: number;
+  /** 回しているエージェントごとの数。画面は 2 台以上のときだけ出す */
+  agents: AgentProgress[];
   error: string | null;
   startedAt: number | null;
   finishedAt: number | null;
@@ -398,6 +410,7 @@ const IDLE: ScanState = {
   scanned: 0,
   total: 0,
   channels: 0,
+  agents: [],
   error: null,
   startedAt: null,
   finishedAt: null,
@@ -420,14 +433,20 @@ export function observedOf(
 ): Observed | undefined {
   return observations.get(`${type}:${channel}`);
 }
-/** 走っているスキャン。中断のために持っておく */
-let running: Scanner | null = null;
 
+/** 走っているスキャン (エージェントごとに 1 つ)。中断のために持っておく */
+let running: Scanner[] = [];
+
+/** 進み具合を足す。`agent` を渡せば、そのエージェントの数にも足す */
 function push(
   line?: string,
   counts: Omit<Progress, "line"> = {},
   fields: Partial<ScanState> = {},
+  agent?: number,
 ): void {
+  const scanned = (counts.scanned ?? 0) + (counts.skipped ?? 0);
+  const added = counts.added ?? 0;
+  const channels = counts.channels ?? 0;
   current = {
     ...current,
     ...fields,
@@ -435,9 +454,19 @@ function push(
       line === undefined
         ? current.log
         : [...current.log, line].slice(-LOG_LIMIT),
-    scanned: current.scanned + (counts.scanned ?? 0) + (counts.skipped ?? 0),
-    total: current.total + (counts.added ?? 0),
-    channels: current.channels + (counts.channels ?? 0),
+    scanned: current.scanned + scanned,
+    total: current.total + added,
+    channels: current.channels + channels,
+    agents: (fields.agents ?? current.agents).map((entry) =>
+      entry.id === agent
+        ? {
+            ...entry,
+            scanned: entry.scanned + scanned,
+            total: entry.total + added,
+            channels: entry.channels + channels,
+          }
+        : entry,
+    ),
   };
   emit("scan");
 }
@@ -478,7 +507,11 @@ class Scanner {
   /** SKY と CATV の、局が見つかったチャンネルで分かったこと (`種別:チャンネル` → 中身)。保存できたら `observations` に移す */
   readonly observed = new Map<string, Observed>();
 
-  constructor(private readonly onProgress: (progress: Progress) => void) {}
+  constructor(
+    /** 回すエージェント。結果もここに預ける */
+    readonly agent: Agent,
+    private readonly onProgress: (progress: Progress) => void,
+  ) {}
 
   /** 中断する (理由は外の `stop`) */
   stop(): void {
@@ -495,9 +528,9 @@ class Scanner {
    * 同じ TS が 2 つの CATV のチャンネルで見つかったら、先のほうだけを返す (`dedupeCatv`)
    */
   async run(targets: [ChannelType, string[]][]): Promise<AgentChannel[]> {
-    // スキャンは並びの先頭のエージェントで回す (結果もそこに預ける)
+    // このエージェントのチューナーで回す (結果もそこに預ける)
     const tuners = (
-      await tunerList(primaryAgent()).catch(() => ({ tuners: [] }))
+      await tunerList(this.agent).catch(() => ({ tuners: [] }))
     ).tuners.filter((tuner) => !tuner.disabled);
     const satellites = targets
       .map(([type]) => type)
@@ -554,7 +587,7 @@ class Scanner {
       });
       return;
     }
-    const current = await getChannels(primaryAgent()).catch(() => []);
+    const current = await getChannels(this.agent).catch(() => []);
     const known = knownNames(current);
     const lineup = await readLineup(
       type,
@@ -600,7 +633,7 @@ class Scanner {
       try {
         return await openChannelStream(
           type,
-          onPrimary(channel),
+          on(this.agent, channel),
           this.aborter.signal,
           `scan ${channel}`,
           config.priority.scan,
@@ -709,7 +742,7 @@ class Scanner {
       try {
         const opened = await openChannel(
           type,
-          onPrimary(channel),
+          on(this.agent, channel),
           closer.signal,
           `scan ${channel}`,
           config.priority.scan,
@@ -875,21 +908,55 @@ class Scanner {
 
 interface ScanOptions {
   types: ScanKind[];
+  /** 回すエージェント (`agents.id`)。渡さなければ全部 */
+  agents?: readonly number[] | undefined;
 }
 
-async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
-  const scanner = new Scanner((progress) => push(progress.line, progress));
-  running = scanner;
+/**
+ * **エージェントごとに回し、結果もそのエージェントに預ける** (アンテナに何が映るかはエージェントごとに違うため)。
+ * 全部のエージェントを同時に回し、台数はそれぞれのチューナーの数。1 台で 1 件も見つからなければ、そのエージェントの控えは書き換えない。
+ * どのエージェントでも 1 件も見つからなければ失敗にする
+ */
+async function runScan(
+  targets: [ChannelType, string[]][],
+  agents: readonly Agent[],
+): Promise<void> {
+  // 2 台以上なら、ログの行の前にエージェントの名前を付ける
+  const named = agents.length > 1;
+  const scanners = agents.map(
+    (agent) =>
+      new Scanner(agent, (progress) =>
+        push(
+          progress.line === undefined || !named
+            ? progress.line
+            : `${agent.name}: ${progress.line}`,
+          progress,
+          {},
+          agent.id,
+        ),
+      ),
+  );
+  running = scanners;
   try {
     push("チャンネルを探しています...", {}, { phase: "スキャン中" });
-    const found = await scanner.run(targets);
+    // 1 台が例外で終わったら、ほかのエージェントのスキャンも止める (回し続けてチューナーを使わない)
+    const results = await Promise.all(
+      scanners.map(async (scanner) => {
+        try {
+          return { scanner, found: await scanner.run(targets) };
+        } catch (error) {
+          for (const other of scanners) other.stop();
+          throw error;
+        }
+      }),
+    );
 
     /*
      * 中断されたら**何も書かない**。
      * 途中までの結果で上書きすると、まだ回っていない種別やチャンネルの
      * 定義が消える。押した人は「やめたい」だけで「消したい」ではない
      */
-    if (scanner.aborted) {
+    if (scanners.some((scanner) => scanner.aborted)) {
       push(
         "中断しました",
         {},
@@ -899,28 +966,39 @@ async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
     }
 
     // 1 件も見つからないまま上書きすると、今まで録れていた局まで消える
-    if (found.length === 0) {
+    if (results.every((result) => result.found.length === 0)) {
       throw new Error(
         "チャンネルが 1 件も見つかりませんでした。チューナーとアンテナを確認してください",
       );
     }
 
     push("チャンネルを保存しています...", {}, { phase: "保存" });
-    // 放送の一覧を読めなかった衛星の種別は置き換えない (今のチャンネルを消さない)
-    const replaced = targets
-      .map(([type]) => type)
-      .filter((type) => !isSatellite(type) || scanner.lineups.has(type));
-    // 預ける先はスキャンを回したエージェント (並びの先頭の 1 台)
-    await putChannels(found, replaced, primaryAgent());
+    const replacedTypes = new Set<ChannelType>();
+    for (const { scanner, found } of results) {
+      if (found.length === 0) {
+        push(
+          `${scanner.agent.name}: チャンネルが見つからなかったため、このエージェントのチャンネルは書き換えません`,
+        );
+        continue;
+      }
+      // 放送の一覧を読めなかった衛星の種別は置き換えない (今のチャンネルを消さない)
+      const replaced = targets
+        .map(([type]) => type)
+        .filter((type) => !isSatellite(type) || scanner.lineups.has(type));
+      // 預ける先はスキャンを回したエージェント
+      await putChannels(found, replaced, scanner.agent);
+      for (const type of replaced) replacedTypes.add(type);
+    }
     // 設定から消していた衛星の種別も、スキャンで入れ直したら放送の一覧から入れる側に戻す
-    markRemoved(replaced.filter(isSatellite), false);
+    markRemoved([...replacedTypes].filter(isSatellite), false);
     // 回した種別のぶんだけ、分かったことを入れ替える (チャンネルと同じく、回していない種別は残す)
     for (const [type] of targets) {
       for (const key of [...observations.keys()])
         if (key.startsWith(`${type}:`)) observations.delete(key);
     }
-    for (const [key, observed] of scanner.observed)
-      observations.set(key, observed);
+    for (const { scanner } of results)
+      for (const [key, observed] of scanner.observed)
+        observations.set(key, observed);
     push(
       "完了しました",
       {},
@@ -936,21 +1014,20 @@ async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
     await sync().catch(() => undefined);
     // 局が入ったので、スキャン中に取得した番組表を書ける
     // ついでの保存なので、失敗しても局の通知と番組表の取得は止めない
-    if (scanner.events.size > 0) {
-      try {
-        let saved = 0;
+    try {
+      let saved = 0;
+      for (const { scanner } of results)
         for (const [type, events] of scanner.events)
           saved += savePrograms(events, { type });
-        if (saved > 0) {
-          settle();
-          // 立った予約の取り合いを裁き直す (`settle` は裁かない。ほかの呼び手と同じ)
-          await resolveConflicts();
-        }
-      } catch (error) {
-        console.warn(
-          `[scan] スキャン中に取得した番組表を書けませんでした: ${error}`,
-        );
+      if (saved > 0) {
+        settle();
+        // 立った予約の取り合いを裁き直す (`settle` は裁かない。ほかの呼び手と同じ)
+        await resolveConflicts();
       }
+    } catch (error) {
+      console.warn(
+        `[scan] スキャン中に取得した番組表を書けませんでした: ${error}`,
+      );
     }
     emit("services");
     void collectOnce().catch(() => undefined);
@@ -961,7 +1038,7 @@ async function runScan(targets: [ChannelType, string[]][]): Promise<void> {
       { state: "failed", error: String(error), finishedAt: Date.now() },
     );
   } finally {
-    running = null;
+    running = [];
   }
 }
 
@@ -997,17 +1074,43 @@ export function start(options: ScanOptions): {
     return { started: false, message: "チャンネル種別の指定が不正です" };
   if (current.state === "running")
     return { started: false, message: "すでに実行中です" };
+  const agents = chosenAgents(options.agents);
+  if (agents.length === 0) return { started: false, message: NO_AGENT };
 
+  const perAgent = targets.reduce(
+    (sum, [, channels]) => sum + channels.length,
+    0,
+  );
   current = {
     ...IDLE,
     state: "running",
     phase: "準備中",
-    total: targets.reduce((sum, [, channels]) => sum + channels.length, 0),
+    total: perAgent * agents.length,
+    agents: agents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      scanned: 0,
+      total: perAgent,
+      channels: 0,
+    })),
     startedAt: Date.now(),
   };
   emit("scan");
-  void runScan(targets);
+  void runScan(targets, agents);
   return { started: true, message: "チャンネルスキャンを始めました" };
+}
+
+/** 選んだエージェント (並びの順)。渡さなければ全部。知らない ID は除く */
+function chosenAgents(ids: readonly number[] | undefined): Agent[] {
+  let all: Agent[];
+  try {
+    all = listAgents();
+  } catch {
+    return [];
+  }
+  return ids === undefined
+    ? all
+    : all.filter((agent) => ids.includes(agent.id));
 }
 
 /**
@@ -1018,41 +1121,47 @@ export function start(options: ScanOptions): {
  * 上書きすると、まだ回っていない局の定義が消える)。
  */
 export function stop(): { stopped: boolean; message: string } {
-  if (current.state !== "running" || running === null) {
+  if (current.state !== "running" || running.length === 0) {
     return { stopped: false, message: "実行中ではありません" };
   }
-  running.stop();
+  for (const scanner of running) scanner.stop();
   push("中断しています...", {}, { phase: "中断中" });
   return { stopped: true, message: "チャンネルスキャンを中断しています" };
 }
 
 /**
- * 1 つの種別のチャンネルと局を、全部のエージェントから消す。設定の「チャンネル」の「削除を確定」から。
+ * 1 つの種別のチャンネルと局を、選んだエージェント (渡さなければ全部) の控えから消す。設定の「チャンネル」の「削除を確定」から。
  *
  * **局がある種別なら、チューナーの有無によらず消せる** (種別ごとの例外は作らない)。スキャンは 1 件も見つからない結果を書かない
  * (アンテナを抜いたまま回して全部消えるのを防ぐ) ので、チューナーが挿さったまま回線だけが無くなったとき (引っ越しでケーブルが無くなったなど) は、
  * スキャンし直しても消えないため。スキャンの実行中だけ断る。
- * 局の行は消さず、その場で一覧から外す (録画は残る。`epg.unlistType`)。BS と CS は放送の一覧からも入れ直さない
- * (`removedSatellites`)。その種別をスキャンし直せば戻る
+ * 全部のエージェントから消したときは、局の行は消さずにその場で一覧から外す (録画は残る。`epg.unlistType`)。BS と CS は放送の一覧からも入れ直さない
+ * (`removedSatellites`)。その種別をスキャンし直せば戻る。一部のエージェントからだけ消したときは、ほかのエージェントで受けられる局は残る
  */
 export async function removeType(
   type: ChannelType,
+  ids?: readonly number[],
 ): Promise<{ removed: boolean; message: string }> {
   if (current.state === "running")
     return { removed: false, message: "スキャンの実行中は削除できません" };
+  const agents = chosenAgents(ids);
+  if (agents.length === 0) return { removed: false, message: NO_AGENT };
+  const everyone = agents.length === chosenAgents(undefined).length;
   /*
-   * 全部のエージェントの控えから消す。返ってきた残りをその場で写しに入れる (最後の種別を消すと空の一覧になり、
+   * エージェントの控えから消す。返ってきた残りをその場で写しに入れる (最後の種別を消すと空の一覧になり、
    * 取り込みは空の一覧を「返さなかった」と読んで前の写しを残すため)
    */
-  for (const agent of listAgents())
+  for (const agent of agents)
     storeAgentChannels({
       agent: agent.id,
       channels: await deleteChannels(type, agent),
     });
-  if (isSatellite(type)) markRemoved([type], true);
-  unlistType(type);
-  for (const key of [...observations.keys()])
-    if (key.startsWith(`${type}:`)) observations.delete(key);
+  if (everyone) {
+    if (isSatellite(type)) markRemoved([type], true);
+    unlistType(type);
+    for (const key of [...observations.keys()])
+      if (key.startsWith(`${type}:`)) observations.delete(key);
+  }
   await sync().catch(() => undefined);
   emit("services");
   return { removed: true, message: "局を削除しました" };

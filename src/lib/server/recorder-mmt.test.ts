@@ -36,7 +36,12 @@ mock.module("./tuner", () => ({
       },
     });
     // エージェントは 4K の局を TLV と答える (`tuner.streamTransport`)
-    return { stream, tsmfStreams: 1, transport: "tlv" as const };
+    return {
+      stream,
+      tsmfStreams: 1,
+      transport: "tlv" as const,
+      place: { agent: 1, channel: "QC28" },
+    };
   },
 }));
 

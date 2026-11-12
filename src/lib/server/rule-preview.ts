@@ -201,7 +201,8 @@ async function countPreview(
    * 取れなければ空 (= 何も競合として出さない)。エージェントが止まっているときに
    * 予約表を赤くしても直しようが無いので、スケジューラもそう振る舞う
    */
-  const { capacity, busy } = await tunerState();
+  // 受けられる所はカードの契約で絞る (予約の割り振りと同じ。`agent-cards.cardNarrower`)
+  const { capacity, busy, narrow } = await tunerState();
   // 使う区間は前後マージンぶん延びる。スケジューラと同じ物差しで数える
   const margins = { start: config.startMargin, end: config.endMargin };
   /** まだ録っていない予約。重なりの判定と、条件から外れた予約を出すのに使う */
@@ -349,7 +350,7 @@ async function countPreview(
       name: p.name,
       serviceName: p.service_name,
       type: p.service_type,
-      channel: p.service_channel,
+      channel: narrow(p.service_id, p.service_channel),
       start_at: p.start_at,
       end_at: p.end_at,
     });
@@ -361,7 +362,7 @@ async function countPreview(
       name: row.name,
       serviceName: row.service_name,
       type: row.type,
-      channel: row.channel,
+      channel: narrow(row.service_id, row.channel),
       start_at: row.start_at,
       end_at: row.end_at,
     });

@@ -16,7 +16,7 @@
  * `RETRY_AFTER` たってから試し直す (局の一覧は 1 分ごとに読むので、そのたびに選局しない)
  */
 import type { ChannelType } from "../types";
-import { primaryAgent } from "./agents";
+import type { Agent } from "./agents";
 import { orm } from "./db";
 import { readFromAir } from "./lineup-follow";
 import {
@@ -64,7 +64,10 @@ export function markRemoved(
 const RETRY_AFTER = 60 * 60_000;
 
 /** 最後に試して読めなかった時刻 (種別ごと) */
-const failedAt = new Map<SatelliteType, number>();
+const failedAt = new Map<string, number>();
+
+/** `failedAt` のキー。エージェントごとに数える */
+const failKey = (agent: Agent, type: SatelliteType) => `${agent.id}:${type}`;
 
 /**
  * 局の表に前の名前で残っていても、放送から無くなったと分かったネットワーク (`種別:ネットワーク ID`)。
@@ -76,8 +79,8 @@ const gone = new Set<string>();
 const withoutGone = (stored: readonly StoredService[]) =>
   stored.filter((row) => !gone.has(`${row.type}:${row.network_id}`));
 
-/** 走っている回。重なった呼び出しは何もしない */
-let running: Promise<ChannelType[]> | null = null;
+/** 走っている回 (エージェントごと)。同じエージェントに重なった呼び出しは何もしない */
+const running = new Map<number, Promise<ChannelType[]>>();
 
 /** 局の表 (`services`) の 1 行のうち、作り直すかを決めるのに使うところ */
 interface StoredService {
@@ -139,11 +142,13 @@ export function needsLineup(
  * 局を入れたらエージェントが `channels` を知らせてくるので、取り込み直しと番組表の集め直しはその通知で走る
  */
 export function fillSatellites(
+  /** 控えを読んだエージェント。放送の一覧から作った局はここに預ける (エージェントごとに決める) */
+  agent: Agent,
   channels: readonly AgentChannel[],
   now = Date.now(),
   stored: readonly StoredService[] = storedServices(),
 ): Promise<ChannelType[]> {
-  if (running !== null) return Promise.resolve([]);
+  if (running.has(agent.id)) return Promise.resolve([]);
   /*
    * **スキャンの最中は入れない。** スキャンは結果を最後にまとめて預けるので、そこへ割り込むと
    * スキャンの途中で一覧が入れ替わる
@@ -154,13 +159,14 @@ export function fillSatellites(
     (type) =>
       !removed.includes(type) &&
       needsLineup(channels, type, withoutGone(stored)) &&
-      now - (failedAt.get(type) ?? -Infinity) >= RETRY_AFTER,
+      now - (failedAt.get(failKey(agent, type)) ?? -Infinity) >= RETRY_AFTER,
   );
   if (wanted.length === 0) return Promise.resolve([]);
-  running = fill(channels, withoutGone(stored), wanted, now).finally(() => {
-    running = null;
-  });
-  return running;
+  const run = fill(agent, channels, withoutGone(stored), wanted, now).finally(
+    () => running.delete(agent.id),
+  );
+  running.set(agent.id, run);
+  return run;
 }
 
 function storedServices(): StoredService[] {
@@ -175,13 +181,14 @@ function storedServices(): StoredService[] {
 }
 
 async function fill(
+  agent: Agent,
   channels: readonly AgentChannel[],
   stored: readonly StoredService[],
   wanted: SatelliteType[],
   now: number,
 ): Promise<ChannelType[]> {
   const receivable = new Set(
-    (await tunerList(primaryAgent())).tuners
+    (await tunerList(agent)).tuners
       .filter((t) => !t.disabled)
       .flatMap((t) => t.types),
   );
@@ -189,13 +196,17 @@ async function fill(
   const filled: ChannelType[] = [];
   for (const type of wanted.filter((type) => receivable.has(type))) {
     // `busy` はチューナーが塞がっていて開けなかったか。それだけなら 1 時間待たず、次の取り込みで試し直す
-    const { lineup, busy } = await readFromAir(type, {
-      known,
-      previous: channels,
-      expected: leftoverNetworks(channels, type, stored),
-    });
+    const { lineup, busy } = await readFromAir(
+      type,
+      {
+        known,
+        previous: channels,
+        expected: leftoverNetworks(channels, type, stored),
+      },
+      agent,
+    );
     if (lineup.channels.length === 0) {
-      if (!busy) failedAt.set(type, now);
+      if (!busy) failedAt.set(failKey(agent, type), now);
       console.warn(
         `[channels] ${type} の放送の一覧を読めませんでした (${lineup.log.join(" / ")})`,
       );
@@ -205,8 +216,8 @@ async function fill(
     if (scanState().state === "running") break;
     // 読んでいる間に設定から消された種別は書かない
     if (removedSatellites().includes(type)) continue;
-    // 預ける先は放送の一覧を読んだエージェント (並びの先頭の 1 台。`lineup-follow.readFromAir`)
-    await putChannels(lineup.channels, [type], primaryAgent());
+    // 預ける先は放送の一覧を読んだエージェント (`lineup-follow.readFromAir` に渡したもの)
+    await putChannels(lineup.channels, [type], agent);
     for (const network of goneNetworks(
       leftoverNetworks(channels, type, stored),
       lineup,
@@ -226,14 +237,14 @@ async function fill(
       (lineup.missing.length > 0 ||
         needsLineup(rest, type, withoutGone(stored)))
     ) {
-      failedAt.set(type, now);
+      failedAt.set(failKey(agent, type), now);
       console.warn(
-        `[channels] ${type} の局を放送の一覧から入れましたが、読めなかったネットワークがあります (${lineup.log.join(" / ")})`,
+        `[channels] ${agent.name} の ${type} の局を放送の一覧から入れましたが、読めなかったネットワークがあります (${lineup.log.join(" / ")})`,
       );
     } else {
-      failedAt.delete(type);
+      failedAt.delete(failKey(agent, type));
       console.log(
-        `[channels] ${type} の局を放送の一覧から入れました (${lineup.channels.length} TS)`,
+        `[channels] ${agent.name} の ${type} の局を放送の一覧から入れました (${lineup.channels.length} TS)`,
       );
     }
   }

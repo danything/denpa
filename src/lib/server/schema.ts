@@ -636,6 +636,11 @@ export const recordings = sqliteTable(
     reservation_id: integer("reservation_id"),
     program_id: integer("program_id"),
     service_id: integer("service_id").notNull(),
+    /**
+     * 最後に録ったエージェント (`agents.id`)。取り直しで別のエージェントに入れば書き換える。
+     * 有料の番組を復号できて録れたとき、そのエージェントのカードを契約中にする (`contracts.noteDecoded`)。上げる前の行と、まだ選局していない行は null
+     */
+    agent_id: integer("agent_id"),
     service_name: text("service_name").notNull().default(""),
     name: text("name").notNull(),
     /** 保存先でシリーズとしてまとめる単位 */
