@@ -19,15 +19,25 @@ import java.util.concurrent.TimeUnit
  * - **assets に `server/` が無ければ起動しない。** 2 段目のリリースの APK には denpa 本体が入っていない。
  *   debug の APK には、エミュレータで確かめるための小さなサーバ (src/debug/assets/server/) が入る
  * - 置き場 (`DENPA_HOME`)・`HOME`・`TMPDIR` はエージェントと同じ。待ち受けるのは [PORT] (denpa の既定の 3000)。出力はエージェントと同じく logcat に流す (タグは [TAG])
+ * - ffmpeg・ffprobe も jniLibs に `libffmpeg.so`・`libffprobe.so` として入っている (.github/ffmpeg-android.sh)。そのパスを denpa と同じ環境変数
+ *   (`FFMPEG`・`FFPROBE`) で渡す ([tools])。libav* の共有ライブラリは、実行ファイルの RUNPATH (`$ORIGIN`) で同じ置き場から読まれる
  */
 internal object Server {
     const val TAG = "denpa-server"
     const val BUN_LIBRARY = "libbun.so"
+    const val FFMPEG_LIBRARY = "libffmpeg.so"
+    const val FFPROBE_LIBRARY = "libffprobe.so"
     const val PORT = 3000
     private const val ASSETS = "server"
     private const val ENTRY = "app/server.js"
 
     fun bun(context: Context) = File(context.applicationInfo.nativeLibraryDir, BUN_LIBRARY)
+
+    /** ffmpeg・ffprobe のパスを渡す環境変数。APK に入っていないもの (ffmpeg を置かずに組んだ APK) は渡さない */
+    fun tools(context: Context): Map<String, String> = listOf("FFMPEG" to FFMPEG_LIBRARY, "FFPROBE" to FFPROBE_LIBRARY)
+        .map { (name, library) -> name to File(context.applicationInfo.nativeLibraryDir, library) }
+        .filter { (_, file) -> file.isFile }
+        .associate { (name, file) -> name to file.path }
 
     /** APK の assets に動かすファイルが入っているか */
     fun bundled(context: Context): Boolean = !context.assets.list(ASSETS).isNullOrEmpty()

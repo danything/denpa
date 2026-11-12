@@ -12,8 +12,8 @@ APK はリリースに `denpa-<バージョン>-android-arm64.apk` として添�
 - 要るのは Android 10 以上で、arm64 の端末です。チューナーを挿すには、端末が USB のホストになれる必要があります
 - Play では配りません。省電力の対象から外すよう求めることと、子プロセスの使い方が Play の決まりと合わないためです
 - ASICEN 系の機材 (PX-W3U3 など。asicen-userland で動かすもの) も試験的に使えます ([下記](#asicen-系の機材を挿す試験的))
-- APK には、あとで denpa 本体もこの端末で動かすための bun が入っています。いまのアプリは bun を起動しません。
-  APK は bun の分だけ約 53 MB 大きく、入れると展開した bun が端末の容量を 113 MB ほど使います
+- APK には、あとで denpa 本体もこの端末で動かすための bun と ffmpeg が入っています。いまのアプリはどちらも起動しません。
+  APK は bun の分だけ約 53 MB、ffmpeg の分だけ約 7 MB 大きく、入れると展開した bun が 113 MB ほど、ffmpeg が 14 MB ほど端末の容量を使います
 
 ## 入れる
 
@@ -107,5 +107,5 @@ PX-W3U3・PX-W3U2・PX-W3U3 V2・PX-S3U2・PX-S3U は、APK に入れた asicen-
 - PC から `adb logcat -s denpa denpa-agent` でログを見られます。`denpa` はアプリ、`denpa-agent` はエージェントの出力です
 
 **実機ではまだ確かめていません。** エミュレータで確かめたのは、常駐サービス・通知・エージェントの起動と応答・アプリからエージェントへ fd を渡すこと・
-エージェントが asicend を起動して fd を継がせること・debug の APK で bun がアプリの子プロセスで動くこと・「終了」・端末の起動までです
+エージェントが asicend を起動して fd を継がせること・debug の APK で bun がアプリの子プロセスで動き、その bun から ffmpeg・ffprobe を流せること・「終了」・端末の起動までです
 ([development.md](development.md#android-のアプリ))。チューナーを挿して映るかと、画面を消したまま LAN から届くかは、実機で確かめる必要があります。

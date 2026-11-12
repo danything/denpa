@@ -10,10 +10,11 @@ name: Android
 # 3. アプリを Gradle で組む。2 を `libdenpa_agent.so` の名前で APK に入れる。asicen-userland の上流の Android 版も
 #    `libasicend.so`・`libasicenctl.so` の名前で入れる (.github/asicen-android.sh。SHA-256 を固定して取る)。CI は両方の ABI を入れ、
 #    lint と単体テストも流し、R8 で縮める release も debug の鍵で組む。リリースは arm64 だけを入れ、リリースの鍵で署名する。
-#    bun の公式の Android 版も `libbun.so` の名前で入れる (.github/bun-android.sh。SHA-256 を固定して取る)。x86_64 は CI のエミュレータ用
+#    bun の公式の Android 版も `libbun.so` の名前で入れる (.github/bun-android.sh。SHA-256 を固定して取る)。x86_64 は CI のエミュレータ用。
+#    ffmpeg・ffprobe は NDK で組み (.github/ffmpeg-android.sh。2 と並べて流す)、`libffmpeg.so`・`libffprobe.so` と libav* の共有ライブラリを入れる
 # 4. debug の APK をエミュレータ (minSdk の API 29 と、新しい API 35。x86_64) に入れ、常駐サービス・通知・エージェント・asicend の起動・
-#    bun の起動・「終了」・端末の起動を確かめる (.github/android-app-smoke.sh)。arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)。
-#    リリースでは流さない (同じコミットを main で確かめてある)
+#    bun の起動・ffmpeg と ffprobe (tests/native-smoke.ts を bun で流す)・「終了」・端末の起動を確かめる (.github/android-app-smoke.sh)。
+#    arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)。リリースでは流さない (同じコミットを main で確かめてある)
 #
 # 組むのは呼んだ workflow のコミット (リリースならタグ)。コミットを入力で受けて取り出すことはしない (windows-server.yml と同じく、キャッシュを汚させない)
 
@@ -39,7 +40,7 @@ permissions:
   contents: read
 
 env:
-  # NDK のバージョン (sdkmanager の名前)。上げたら OpenSSL のキャッシュも組み直しになる (鍵に入れている)
+  # NDK のバージョン (sdkmanager の名前)。上げたら OpenSSL と ffmpeg のキャッシュも組み直しになる (鍵に入れている)
   NDK_VERSION: "29.0.14206865"
 
 jobs:
@@ -126,9 +127,183 @@ jobs:
             out/LICENSE.openssl
           retention-days: 3
 
+  # ffmpeg・ffprobe と libav* を NDK で組む (.github/ffmpeg-android.sh)。**組んだものは actions/cache に置き、Dockerfile の ffmpeg 段と
+  # 組むスクリプトと NDK が変わるまで使い回す**。依存 (Opus・SVT-AV1・x264・dav1d・zimg) の組み上がりはそれぞれ別のキャッシュに置き、
+  # バージョンと組み方が変わるまで使い回す (macos-server.yml の ffmpeg と同じ作り)。リリースでも x86_64 を組むが、APK には入れない
+  ffmpeg:
+    name: ffmpeg (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64, x86_64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # 鍵は Dockerfile の ffmpeg 段 (土台の FROM の行は除く)、組むスクリプト、patches/、NDK。
+      # 依存の鍵はバージョンと、スクリプトの `# recipe:<名前>:begin` から `:end` までの組み方 (x264・dav1d・zimg はバージョンも中にある) と NDK
+      - name: Cache key
+        id: key
+        run: |
+          set -euo pipefail
+          stage=$(awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile)
+          base="ffmpeg-android-${{ matrix.abi }}-ndk$NDK_VERSION"
+          hash=$( { printf '%s\n' "$stage"; cat .github/ffmpeg-android.sh patches/*; } | sha256sum | cut -c1-16)
+          echo "key=$base-$hash" >> "$GITHUB_OUTPUT"
+          version() { sed -nE "s/^(ARG|ENV) $1=(.+)$/\2/p" <<< "$stage" | head -1; }
+          recipe() { sed -n "/^# recipe:$1:begin/,/^# recipe:$1:end/p" .github/ffmpeg-android.sh | sha256sum | cut -c1-16; }
+          # 読めなかったら止める (空のままだと、バージョンや組み方を変えても鍵が変わらない)
+          for v in OPUS_VERSION SVT_AV1_VERSION; do
+            test -n "$(version $v)" || { echo "Dockerfile の ffmpeg 段に $v がありません" >&2; exit 1; }
+          done
+          for r in opus svt-av1 x264 dav1d zimg; do
+            grep -q "^# recipe:$r:end" .github/ffmpeg-android.sh || { echo "ffmpeg-android.sh に recipe:$r がありません" >&2; exit 1; }
+          done
+          echo "opus=$base-opus-$(version OPUS_VERSION)-$(recipe opus)" >> "$GITHUB_OUTPUT"
+          echo "svtav1=$base-svt-av1-$(version SVT_AV1_VERSION)-$(recipe svt-av1)" >> "$GITHUB_OUTPUT"
+          echo "x264=$base-x264-$(recipe x264)" >> "$GITHUB_OUTPUT"
+          echo "dav1d=$base-dav1d-$(recipe dav1d)" >> "$GITHUB_OUTPUT"
+          echo "zimg=$base-zimg-$(recipe zimg)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore ffmpeg
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ffmpeg-out
+          key: ${{ steps.key.outputs.key }}
+
+      # x264・dav1d・SVT-AV1・ffmpeg の x86_64 のアセンブリは nasm で、dav1d は meson で、zimg は autotools で組む。cmake はランナーに入っている。
+      # NDK はランナーのイメージで変わるので、バージョンを決めて入れる (agent と同じ)
+      - name: Install build tools
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends nasm meson ninja-build autoconf automake libtool > /dev/null
+          (yes || true) | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      # 組み上がり (入れ先は .github/ffmpeg-android.sh の `deps`)。ffmpeg が当たらなかったときだけ使う
+      - name: Restore Opus
+        id: opus
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/opus
+          key: ${{ steps.key.outputs.opus }}
+
+      - name: Restore SVT-AV1
+        id: svtav1
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/svt-av1
+          key: ${{ steps.key.outputs.svtav1 }}
+
+      - name: Restore x264
+        id: x264
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/x264
+          key: ${{ steps.key.outputs.x264 }}
+
+      - name: Restore dav1d
+        id: dav1d
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/dav1d
+          key: ${{ steps.key.outputs.dav1d }}
+
+      - name: Restore zimg
+        id: zimg
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/zimg
+          key: ${{ steps.key.outputs.zimg }}
+
+      # 依存は組み終えた直後に保存する (ffmpeg のビルドが落ちても残る)。ffmpeg 本体は成功したときだけ保存する
+      - name: Build Opus
+        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
+        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" opus
+
+      - name: Save Opus
+        if: steps.cache.outputs.cache-hit != 'true' && steps.opus.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/opus
+          key: ${{ steps.key.outputs.opus }}
+
+      - name: Build SVT-AV1
+        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
+        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" svt-av1
+
+      - name: Save SVT-AV1
+        if: steps.cache.outputs.cache-hit != 'true' && steps.svtav1.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/svt-av1
+          key: ${{ steps.key.outputs.svtav1 }}
+
+      - name: Build x264
+        if: steps.cache.outputs.cache-hit != 'true' && steps.x264.outputs.cache-hit != 'true'
+        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" x264
+
+      - name: Save x264
+        if: steps.cache.outputs.cache-hit != 'true' && steps.x264.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/x264
+          key: ${{ steps.key.outputs.x264 }}
+
+      - name: Build dav1d
+        if: steps.cache.outputs.cache-hit != 'true' && steps.dav1d.outputs.cache-hit != 'true'
+        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" dav1d
+
+      - name: Save dav1d
+        if: steps.cache.outputs.cache-hit != 'true' && steps.dav1d.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/dav1d
+          key: ${{ steps.key.outputs.dav1d }}
+
+      - name: Build zimg
+        if: steps.cache.outputs.cache-hit != 'true' && steps.zimg.outputs.cache-hit != 'true'
+        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}" zimg
+
+      - name: Save zimg
+        if: steps.cache.outputs.cache-hit != 'true' && steps.zimg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ffmpeg-android-${{ matrix.abi }}-deps/zimg
+          key: ${{ steps.key.outputs.zimg }}
+
+      - name: Build ffmpeg
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash .github/ffmpeg-android.sh ffmpeg-out "${{ matrix.abi }}"
+
+      - name: Save ffmpeg
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ffmpeg-out
+          key: ${{ steps.key.outputs.key }}
+
+      # 入れ先の形 (jniLibs/<ABI>/ と assets/licenses/ffmpeg/) のまま渡す。app が 2 つの ABI を 1 つの置き場に重ねる
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ffmpeg-android-${{ matrix.abi }}
+          path: ffmpeg-out/
+          retention-days: 3
+
   # アプリ (android/)。CI は debug の鍵で署名する。リリースはリリースの鍵で署名し、arm64 の APK だけを渡す (release.yml が添える)
   app:
-    needs: agent
+    needs: [agent, ffmpeg]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -159,6 +334,20 @@ jobs:
           name: denpa-agent-android-x86_64
           path: agent-out/x86_64
 
+      # ffmpeg は android/ffmpeg/ に重ねる (android/app/build.gradle.kts の DENPA_FFMPEG)。ライセンスの文書は 2 つの ABI で同じもの
+      - name: Download ffmpeg (arm64)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ffmpeg-android-arm64
+          path: android/ffmpeg
+
+      - name: Download ffmpeg (x86_64)
+        if: inputs.tag == 'dev'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ffmpeg-android-x86_64
+          path: android/ffmpeg
+
       # エージェントは jniLibs の `<ABI>/libdenpa_agent.so` に、OpenSSL のライセンスの文書は agent-licenses/ に置く
       # (android/app/build.gradle.kts の DENPA_AGENT_LIBS・DENPA_AGENT_LICENSES)
       - name: Build APK (lint, unit tests, debug, release)
@@ -176,16 +365,17 @@ jobs:
           bash ../.github/bun-android.sh bun arm64 x86_64
           # release は R8 で縮めたものが組めるかを見る (鍵を渡さないので debug の鍵で署名される)
           ./gradlew lintDebug testDebugUnitTest assembleDebug assembleRelease --console=plain
-          # 両方の ABI のエージェントと asicen-userland と bun、ファームウェア、ライセンスの文書が入っていること
+          # 両方の ABI のエージェントと asicen-userland と bun と ffmpeg、ファームウェア、ライセンスの文書が入っていること
           for apk in app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release.apk; do
             unzip -l "$apk" > apk.txt
             for abi in arm64-v8a x86_64; do
-              for lib in libdenpa_agent libasicend libasicenctl libbun; do grep -E " lib/$abi/$lib\.so$" apk.txt; done
+              for lib in libdenpa_agent libasicend libasicenctl libbun libffmpeg libffprobe libavcodec libavdevice libavfilter libavformat libavutil libswresample libswscale; do grep -E " lib/$abi/$lib\.so$" apk.txt; done
             done
             grep -E ' assets/asicen/asicen-loader\.bin$' apk.txt
             grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
             grep -E ' assets/licenses/LICENSE\.openssl$' apk.txt
             grep -E ' assets/licenses/bun/LICENSE\.md$' apk.txt
+            grep -E ' assets/licenses/ffmpeg/(SOURCE\.txt|versions\.txt|ffmpeg/COPYING\.GPLv3|x264/COPYING)$' apk.txt | wc -l | grep -qx 4
             grep -E ' assets/licenses/asicen-userland/(LICENSE|SOURCE\.txt|COPYING\.libusb|VENDOR-FIRMWARE-NOTICE\.txt)$' apk.txt | wc -l | grep -qx 4
           done
           # bun で動かす確かめ用のサーバは debug にだけ入る (android/app/src/debug/assets/server/)
@@ -231,14 +421,15 @@ jobs:
           ./gradlew assembleRelease --console=plain
           rm -f "$RUNNER_TEMP/release.p12"
           apk=app/build/outputs/apk/release/app-release.apk
-          # 入っているネイティブのライブラリは arm64 のエージェントと asicen-userland と bun だけ。ファームウェアとライセンスの文書も入っていること
+          # 入っているネイティブのライブラリは arm64 のエージェントと asicen-userland と bun と ffmpeg だけ。ファームウェアとライセンスの文書も入っていること
           unzip -l "$apk" > apk.txt
-          test "$(grep -oE ' lib/[^ ]+$' apk.txt | sort | tr '\n' ' ')" = " lib/arm64-v8a/libasicenctl.so  lib/arm64-v8a/libasicend.so  lib/arm64-v8a/libbun.so  lib/arm64-v8a/libdenpa_agent.so "
+          test "$(grep -oE ' lib/[^ ]+$' apk.txt | sort | tr '\n' ' ')" = " lib/arm64-v8a/libasicenctl.so  lib/arm64-v8a/libasicend.so  lib/arm64-v8a/libavcodec.so  lib/arm64-v8a/libavdevice.so  lib/arm64-v8a/libavfilter.so  lib/arm64-v8a/libavformat.so  lib/arm64-v8a/libavutil.so  lib/arm64-v8a/libbun.so  lib/arm64-v8a/libdenpa_agent.so  lib/arm64-v8a/libffmpeg.so  lib/arm64-v8a/libffprobe.so  lib/arm64-v8a/libswresample.so  lib/arm64-v8a/libswscale.so "
           grep -E ' assets/asicen/asicen-loader\.bin$' apk.txt
           grep -E ' assets/licenses/LICENCE\.siano$' apk.txt
           grep -E ' assets/licenses/LICENSE\.openssl$' apk.txt
           grep -E ' assets/licenses/asicen-userland/SOURCE\.txt$' apk.txt
           grep -E ' assets/licenses/bun/LICENSE\.md$' apk.txt
+          grep -E ' assets/licenses/ffmpeg/(SOURCE\.txt|versions\.txt|ffmpeg/COPYING\.GPLv3|x264/COPYING)$' apk.txt | wc -l | grep -qx 4
           # 確かめ用のサーバ (debug にだけ入る) が無いこと。3 段目で denpa 本体が入るまで、リリースの APK は bun を起動しない
           if grep -E ' assets/server/' apk.txt; then exit 1; fi
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner
@@ -271,7 +462,7 @@ jobs:
     needs: app
     if: inputs.tag == 'dev'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -287,6 +478,20 @@ jobs:
           name: denpa-android-debug
           path: apk
 
+      # ffmpeg の確かめ (tests/native-smoke.ts) を 1 つのファイルにまとめ、エミュレータの中の bun で流す (.github/android-app-smoke.sh)。
+      # bun のバージョンは Dockerfile から読む (test.yml と同じ)
+      - name: Read bun version from Dockerfile
+        id: bun
+        run: echo "version=$(grep -oP 'oven/bun:\K[^-\s]+' Dockerfile | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Bundle native-smoke
+        run: bun build tests/native-smoke.ts --target=bun --outfile=smoke/native-smoke.js
+
       # android-emulator-runner の README のとおり
       - name: Enable KVM
         run: |
@@ -295,7 +500,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Smoke test
-        timeout-minutes: 20
+        timeout-minutes: 30
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: ${{ matrix.api-level }}
@@ -306,7 +511,7 @@ jobs:
           emulator-boot-timeout: 300
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash .github/android-app-smoke.sh apk/app-debug.apk smoke-results
+          script: bash .github/android-app-smoke.sh apk/app-debug.apk smoke-results smoke/native-smoke.js
 
       # 通っても落ちても残す (logcat・常駐サービスと通知の様子・応答)
       - if: always()
