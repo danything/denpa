@@ -466,7 +466,8 @@ internal sealed class AsicenTuner : ITuneDevice
     private bool _lnbHeld;
 
     /// <param name="prepare">選局の前に呼ぶ。asicend を起動して、機種と受信機を返す (分からなければ null)。テストは何もしない</param>
-    public AsicenTuner(string id, int receiver, string? lnb, string runtimeDir, Func<AsicenUserland.Listed?> prepare)
+    /// <param name="name">設定のチューナーの名前。無ければ機種名の代わりに「ASICEN の機材」と付ける (機種は asicend に問い合わせるまで分からない)</param>
+    public AsicenTuner(string id, int receiver, string? lnb, string runtimeDir, Func<AsicenUserland.Listed?> prepare, string? name = null)
     {
         _id = id;
         _receiver = receiver;
@@ -474,7 +475,7 @@ internal sealed class AsicenTuner : ITuneDevice
         _runtimeDir = runtimeDir;
         _prepare = prepare;
         _device = AsicenUserland.Device(id, receiver);
-        _name = $"asicen-{id} #{receiver}";
+        _name = name ?? AsicenUserland.Name("ASICEN の機材", id, receiver);
     }
 
     public Stream Output => _stream?.Output ?? throw new InvalidOperationException($"{_name} はまだ選局していません");

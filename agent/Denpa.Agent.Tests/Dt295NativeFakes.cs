@@ -361,7 +361,7 @@ internal sealed class Dt295Fake : IUsbDevice
 
     private readonly object _controlGate = new();
 
-    /// <summary>実機の USB は制御転送を 1 つずつ通す。偽物も、複数のスレッド (TS の要求と I2C の読み) から同時に呼ばれても 1 つずつ通す</summary>
+    /// <summary>実機の USB は制御転送を 1 つずつ通す。偽物も、複数のスレッド (TS の要求と I2C の読み出し) から同時に呼ばれても 1 つずつ通す</summary>
     public int ControlIn(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs)
     {
         lock (_controlGate) return ControlInCore(requestType, request, value, index, data, timeoutMs);

@@ -168,9 +168,9 @@ public partial class DeviceStreamTests
     private static unsafe partial nint WriteFd(int fd, byte* buffer, nuint count);
 }
 /*
- * 機材から受けた TS (PipeReader) の読み出し側。待っている読みが済むと PipeReader が合図を呼ぶが、
+ * 機材から受けた TS (PipeReader) の読み出し側。待っている読み出しが済むと PipeReader が合図を呼ぶが、
  * **合図は済んだ印より少し遅れて届く** (書く側は印を立ててから、ロックの外で合図を呼ぶ)。
- * 読む側は印を見て先に読み進めるので、前の読みの合図が次の読みを待っている最中に届くことがある
+ * 読む側は印を見て先に読み進めるので、前の読み出しの合図が次の読み出しを待っている最中に届くことがある
  */
 public class DeviceStreamPipedTests
 {
@@ -213,7 +213,7 @@ public class DeviceStreamPipedTests
     }
 
     [Test]
-    public async Task 前の読みの合図が遅れて届いても_次の読みを取り違えない(CancellationToken cancel)
+    public async Task 前の読み出しの合図が遅れて届いても_次の読み出しを取り違えない(CancellationToken cancel)
     {
         var scheduler = new HeldScheduler();
         var pipe = new Pipe(new System.IO.Pipelines.PipeOptions(readerScheduler: scheduler, writerScheduler: PipeScheduler.Inline, useSynchronizationContext: false));
@@ -228,7 +228,7 @@ public class DeviceStreamPipedTests
         await Assert.That(await first.WaitAsync(TimeSpan.FromSeconds(5), cancel)).IsEqualTo(2);
         await Assert.That(scheduler.Held).IsEqualTo(1);
 
-        // 2 回目の読みが待ちに入ってから、1 回目の合図を届ける
+        // 2 回目の読み出しが待ちに入ってから、1 回目の合図を届ける
         var second = Task.Run(() => stream.Read(buffer, 0, buffer.Length), cancel);
         while (stream.Readers == 0) await Task.Delay(5, cancel);
         await Task.Delay(100, cancel);

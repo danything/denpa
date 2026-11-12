@@ -28,7 +28,7 @@ namespace Denpa.Agent;
 ///
 /// <para>
 /// <c>--ts &lt;秒&gt;</c> を付けると、起動したあと TS の経路 (入力 0〜4 と EP 0x84) を設定し、入力を開けて EP 0x84 をその秒数だけ読み、
-/// 入力ごとのパケットの数と捨てた数を出す。復調器を動かさないので、ふつうはどの数も 0 になる。設定がエラーにならないことと、読みが詰まらないことを確かめる
+/// 入力ごとのパケットの数と捨てた数を出す。復調器を動かさないので、ふつうはどの数も 0 になる。設定がエラーにならないことと、読み出しが詰まらないことを確かめる
 /// </para>
 /// </summary>
 public static class It930xProbe
@@ -38,7 +38,7 @@ public static class It930xProbe
     /// <summary><c>--ts</c> の上限 (秒)</summary>
     internal const int MaxTsSeconds = 600;
 
-    /// <summary>EP 0x84 の 1 回の読みの待ち</summary>
+    /// <summary>EP 0x84 の 1 回の読み出しの待ち</summary>
     private const int TsReadTimeoutMs = 200;
 
     // 読むレジスタ (SDK の brRegister.h・brVariable.h)
@@ -253,7 +253,7 @@ public static class It930xProbe
             }
             finally
             {
-                // 読みを止める前に、入力を全部閉じて EP 0x84 をリセットする (SDK の DRV_ResetRxPort。It930xDevice が閉じるときと同じ)
+                // 読み出しを止める前に、入力を全部閉じて EP 0x84 をリセットする (SDK の DRV_ResetRxPort。It930xDevice が閉じるときと同じ)
                 try
                 {
                     bridge.DisableTsInputs();
@@ -286,15 +286,9 @@ public static class It930xProbe
         }
         var valid = bridge.ConfigureReceivers(model.Receivers);
         output.WriteLine($"次の段の I2C: 設定しました。ファームウェアを読み込んだあとの EEPROM の有効の印 0x{valid:X2} (0x{EepromValid:X4}。0 なら設定を読めていない)");
-        // 開いたときの GPIO と、電源を入れる手順 (IT930x の仕様書 7.2・7.3。It930xDevice と同じ)
-        bridge.GpioSetup(model.PowerPin, true);
-        bridge.GpioSetup(2, false);
-        if (model.Lnb) bridge.GpioSetup(11, false);
-        sleep(20);
-        bridge.Gpio(model.PowerPin, false);
-        sleep(model.PowerWaitMs);
-        bridge.Gpio(2, true);
-        sleep(20);
+        // 開いたときの GPIO と、電源を入れる手順 (機材を開くときと同じもの)
+        It930xDevice.SetupGpio(bridge, model, sleep);
+        It930xDevice.Power(bridge, model, true, sleep);
         output.WriteLine($"電源: 入れました (GPIOH{model.PowerPin} ← 0、{model.PowerWaitMs} ms、GPIOH2 ← 1、20 ms)");
         try
         {
@@ -321,8 +315,7 @@ public static class It930xProbe
         {
             try
             {
-                bridge.Gpio(2, false);
-                bridge.Gpio(model.PowerPin, true);
+                It930xDevice.Power(bridge, model, false, sleep);
                 output.WriteLine("電源: 切りました");
             }
             catch (IOException error)

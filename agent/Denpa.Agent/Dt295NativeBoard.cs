@@ -48,7 +48,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     /// <summary>
     /// 0xFD0090 (16 ビット) の手順 (仕様書 3.3 の 0xE1000)。外部メモリーの有効化と「推定」されている。
     /// bit1 を立て、bit4 が 0 になるまで読み、bit1 を落として bit0 を立てる。仕様書は最大 100000 回読むと書く。
-    /// ホストの読みは 1 回が制御転送 1 回なので、回数でなく 2 秒を上限にする (仕様書に無い)。
+    /// ホストの読み出しは 1 回が制御転送 1 回なので、回数でなく 2 秒を上限にする (仕様書に無い)。
     /// 仕様書の「= 0x0000」は初期値の記録と読み、書き込みにはしない
     /// </summary>
     public void EnableExternalMemory()
@@ -63,7 +63,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
             polls++;
             if (_clock.Elapsed > until) throw new Dt295NativeException("0xFD0090 の bit4 が 2 秒たっても落ちません");
         }
-        timeline?.Begin($"0xFD0090 の bit4 が落ちるまでの読み {polls} 回", "仕様書 3.3").Dispose();
+        timeline?.Begin($"0xFD0090 の bit4 が落ちるまでの読み出し {polls} 回", "仕様書 3.3").Dispose();
         link.Write16(Register, (ushort)(link.Read16(Register) & ~0x0002));
         link.Write16(Register, (ushort)(link.Read16(Register) | 0x0001));
     }
@@ -220,7 +220,7 @@ public sealed class Dt295NativeBoard(Dt295NativeLink link, Action<string>? log =
     }
 
     /// <summary>
-    /// 0xF10114 のビット 21 (0x00200000) を足す (読み・足す・書き)。仕様書に 0xF10114 の記述は無い。実機の常駐イメージが I2C のブロックを動かす
+    /// 0xF10114 のビット 21 (0x00200000) を足す (読み出し・足す・書き込み)。仕様書に 0xF10114 の記述は無い。実機の常駐イメージが I2C のブロックを動かす
     /// SERVICE で 0x80000000 から 0x80200000 にした。I2C の準備の直前に呼ぶ。読み戻しは記録に出し、失敗にはしない。
     /// 元の値を返すので、終わりに <see cref="RestoreF10114"/> で戻す
     /// </summary>

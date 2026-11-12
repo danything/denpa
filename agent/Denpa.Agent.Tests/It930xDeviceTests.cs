@@ -200,13 +200,13 @@ public class It930xDeviceTests
     }
 
     [Test]
-    public async Task 開くと_EP_0x84_の読みを出し_最初の受信機を開くときに入力を全部開け_閉じるときは入力を閉じてから読みを止める()
+    public async Task 開くと_EP_0x84_の転送要求を出し_最初の受信機を開くときに入力を全部開け_閉じるときは入力を閉じてから読み出しを止める()
     {
         var (usb, _, _) = Fake();
         var device = Open(usb, "9-27", new FakeClock());
         List<string> log;
         lock (usb.Log) log = [.. usb.Log];
-        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。電源を入れてから読みを出す (TS 65424 64)
+        // TS の経路の設定は入力を閉じたところから (ConfigureTs)。電源を入れてから転送要求を出す (TS 65424 64)
         var configured = log.IndexOf("W DA7C=67");
         var reading = log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}");
         await Assert.That(log.IndexOf("W DA4C=00")).IsLessThan(configured);
@@ -227,7 +227,7 @@ public class It930xDeviceTests
         device.Release();
         It930xDevice.CloseIfIdle("9-27", TimeSpan.Zero);
         lock (usb.Log) log = [.. usb.Log];
-        // 閉じるときは、入力を全部閉じて EP 0x84 をリセットし (DRV_ResetRxPort)、読みを止めてから電源を切る
+        // 閉じるときは、入力を全部閉じて EP 0x84 をリセットし (DRV_ResetRxPort)、読み出しを止めてから電源を切る
         var disabled = log.LastIndexOf("W DA4C=00");
         await Assert.That(log.Skip(disabled).Take(7)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
         await Assert.That(log.IndexOf("TS 閉じる")).IsGreaterThan(disabled);
@@ -235,17 +235,17 @@ public class It930xDeviceTests
     }
 
     [Test]
-    public async Task EP_0x84_の読みを始められなければ_入力を開けずに開くのを失敗にする()
+    public async Task EP_0x84_の読み出しを始められなければ_入力を開けずに開くのを失敗にする()
     {
         var (usb, _, _) = Fake();
         usb.TsOpenFails = true;
         var error = Assert.Throws<IOException>(() => Open(usb, "9-28", new FakeClock()));
-        await Assert.That(error.Message).Contains("読みを始められませんでした");
+        await Assert.That(error.Message).Contains("読み出しを始められませんでした");
         await Assert.That(usb.Log).DoesNotContain("W DA4C=01");
     }
 
     [Test]
-    public async Task 開くときに溢れが立っていれば_SDK_の順で_TS_の経路をリセットし直してから読みを出す()
+    public async Task 開くときに溢れが立っていれば_SDK_の順で_TS_の経路をリセットし直してから転送要求を出す()
     {
         var (usb, _, _) = Fake();
         // 全体の溢れと入力 2 の溢れ (PX-MLT5PE の受信機 2)。偽物では書いても下りない (実機と同じ)
@@ -280,7 +280,7 @@ public class It930xDeviceTests
             .. overflow,
         ];
         await Assert.That(log.Skip(configured + 1).Take(expected.Length)).IsEquivalentTo(expected);
-        // リセットし直してから電源を入れ、EP 0x84 の読みを出す
+        // リセットし直してから電源を入れ、EP 0x84 の転送要求を出す
         await Assert.That(log.IndexOf($"TS {It930xBridge.TsTransferSize} {It930xBridge.TsDepth}")).IsGreaterThan(configured + expected.Length);
         var lines = Log.Recent.Snapshot().Select(line => line.Text).Where(text => text.Contains("9-40")).ToList();
         await Assert.That(lines.Any(text => text.Contains("開いたときに TS のバッファが溢れていました") && text.Contains("入力ごとの溢れ (0xDA57・0xDA8B〜) 0 0 1 0 0、受信機 2"))).IsTrue();
@@ -348,11 +348,11 @@ public class It930xDeviceTests
     }
 
     /// <summary>
-    /// **受信機が流しているまま機材を閉じても (エージェントを止めるとき)、入力を閉じて EP 0x84 をリセットしてから読みを止め、そのあと受信機をスリープにして電源を切る。**
-    /// 読む側がいないまま、入力に TS を入れない (読みを先に止めると、ブリッジのバッファが溢れて電源を抜くまで戻らない)
+    /// **受信機が流しているまま機材を閉じても (エージェントを止めるとき)、入力を閉じて EP 0x84 をリセットしてから読み出しを止め、そのあと受信機をスリープにして電源を切る。**
+    /// 読む側がいないまま、入力に TS を入れない (読み出しを先に止めると、ブリッジのバッファが溢れて電源を抜くまで戻らない)
     /// </summary>
     [Test]
-    public async Task 流しているまま閉じても_入力を閉じてから読みを止め_そのあと受信機をスリープにする()
+    public async Task 流しているまま閉じても_入力を閉じてから読み出しを止め_そのあと受信機をスリープにする()
     {
         var (usb, _, _) = Fake();
         byte[] packet = [It930xBridge.SyncBytes[0], 0x01, 0x00, 0x10, .. new byte[184]];
@@ -371,9 +371,9 @@ public class It930xDeviceTests
         var stopped = log.IndexOf("TS 閉じる");
         await Assert.That(log.Skip(disabled).Take(7)).IsEquivalentTo(new[] { "W DA4C=00", "W DA4D=00", "W DA4E=00", "W DA4F=00", "W DA50=00", "W DA1D=01", "W DA1D=00" });
         await Assert.That(stopped).IsGreaterThan(disabled);
-        // 入力を閉じたあとは、読みを止めるまで入力を開け直さない
+        // 入力を閉じたあとは、読み出しを止めるまで入力を開け直さない
         await Assert.That(log.Skip(disabled).Take(stopped - disabled)).DoesNotContain("W DA4C=01");
-        // 受信機のスリープ (I2C) と電源を切るのは、読みを止めたあと
+        // 受信機のスリープ (I2C) と電源を切るのは、読み出しを止めたあと
         var slept = log.FindIndex(stopped, line => line.StartsWith("I2C W", StringComparison.Ordinal));
         await Assert.That(slept).IsGreaterThan(stopped);
         await Assert.That(log[^1]).IsEqualTo("W D8C3=01");
@@ -383,11 +383,11 @@ public class It930xDeviceTests
     }
 
     [Test]
-    public async Task EP_0x84_の読みが失敗したら_返されるのを待たずに入力を全部閉じる()
+    public async Task EP_0x84_の読み出しが失敗したら_返されるのを待たずに入力を全部閉じる()
     {
         var (usb, _, _) = Fake();
         using var fail = new ManualResetEventSlim();
-        usb.TsSource = () => fail.IsSet ? throw new IOException("fake-it930x の EP 0x84 の読みが失敗しました") : null;
+        usb.TsSource = () => fail.IsSet ? throw new IOException("fake-it930x の EP 0x84 の読み出しが失敗しました") : null;
         var device = Open(usb, "9-43", new FakeClock());
         try
         {
@@ -447,7 +447,7 @@ public class It930xDeviceTests
         lock (usb.Log) during = [.. usb.Log.Skip(opened + 1).Where(TsRouteWrite)];
         await Assert.That(during).IsEmpty();
         tuner.Dispose();
-        // スリープの最後 (仕様書 2.4) と、入力を全部閉じてから読みを止め、電源を切って閉じる
+        // スリープの最後 (仕様書 2.4) と、入力を全部閉じてから読み出しを止め、電源を切って閉じる
         await Assert.That(bus1.Log).Contains("64 X 17=01");
         await Assert.That(usb.Log.IndexOf("TS 閉じる")).IsGreaterThan(usb.Log.LastIndexOf("W DA1D=00"));
         await Assert.That(usb.Log[^1]).IsEqualTo("W D8C3=01");

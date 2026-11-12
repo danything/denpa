@@ -44,7 +44,7 @@ public static class Dt295NativePrograms
 
     private const int Target = 40, IdleLimit = 44;
 
-    /// <summary>I2C の順次実行 (操作 2) が作業域に持つもの。+48 直前の読みの先頭バイト、+52 結果の置き場の先頭、+56 転送の種類、+60 いまの転送の読みの置き場</summary>
+    /// <summary>I2C の順次実行 (操作 2) が作業域に持つもの。+48 直前の読み出しの先頭バイト、+52 結果の置き場の先頭、+56 転送の種類、+60 いまの転送の読み出しの置き場</summary>
     private const int LastRead = 48, ResultStart = 52, Kind = 56, ReadStart = 60;
 
     /// <summary>操作 2 の操作列と結果の置き場 (SDRAM の 0x80380000 台。仕様書で常駐イメージが置かれる場所で、常駐イメージを入れないいまは空いている。ホストからは 0x380000 台)。長い操作列だけここに置き、短いものは要求の中に入れる</summary>
@@ -374,9 +374,9 @@ public static class Dt295NativePrograms
     /// (Dt295NativeI2c の Transfer) のと同じ手順を、機材の中で実行する (制御転送 1 回が約 60 µs で、1 バイトに 3 回要る)。
     /// 要求: +4 操作 2、+8 操作列のアドレス (CPU)、+12 結果の置き場のアドレス (CPU)、+16 転送の数。
     /// 操作列は転送ごとに [アドレス 7 ビット][書く数][読む数][種類] と書くバイト。種類 1 は、書く数のうち最後の 1 バイトを
-    /// 「直前の読みの先頭バイト &amp; keep | set」にして、書くバイトのあとに keep・set の 2 バイトが付く。
+    /// 「直前の読み出しの先頭バイト &amp; keep | set」にして、書くバイトのあとに keep・set の 2 バイトが付く。
     /// 応答: +4 結果 (I2cOk・I2cNack・I2cBusError・I2cTimeout)、+8 止まった転送の番号 (全部済めば転送の数)、+12 読んだバイト数。
-    /// 失敗したら STOP を出して戻る。待つ回数の限度は 1 バイトにつき 0x20000 回の読み
+    /// 失敗したら STOP を出して戻る。待つ回数の限度は 1 バイトにつき 0x20000 回の読み出し
     /// </summary>
     private static void EmitI2c(Fr30Assembler asm)
     {
@@ -449,7 +449,7 @@ public static class Dt295NativePrograms
         asm.LdFp(Kind, R0);
         asm.CmpI(1, R0);
         asm.B(Fr30Cond.Ne, "w_lit");
-        // 種類 1 の最後の 1 バイト: (直前の読み & keep) | set
+        // 種類 1 の最後の 1 バイト: (直前の読み出し & keep) | set
         asm.LdubAc(R4, R0);
         asm.AddI(1, R4);
         asm.LdubAc(R4, R11);
@@ -560,7 +560,7 @@ public static class Dt295NativePrograms
 
         // 制御の bit0 (1 バイト終わった) が立つまで読む。R0 = 0 (済んだ)・2 (バスエラー、bit7)・3 (時間切れ)。済んだときの制御の値は R10
         asm.Label("wait_byte");
-        // 先に、制御の bit0 が 0 になっているのを少しの間 (64 回の読みまで) 確かめる。書いた値が効いて、前の転送の「終わった」の印が消えたことの確認で、
+        // 先に、制御の bit0 が 0 になっているのを少しの間 (64 回の読み出しまで) 確かめる。書いた値が効いて、前の転送の「終わった」の印が消えたことの確認で、
         // 確かめずに bit0 が立つのを待つと、書いた直後の古い bit0 を「終わった」と読み違えるおそれがある。0 が読めなくても (書いた直後にもう終わった)
         // 先へ進む。0 の間に「終わった」の印が立つのを待つのは、次の wb_loop
         asm.Ldi8(64, R12);

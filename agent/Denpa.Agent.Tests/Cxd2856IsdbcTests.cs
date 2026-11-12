@@ -3,7 +3,7 @@ namespace Denpa.Agent.Tests;
 /*
  * 復調器 CXD2856ER とチューナー CXD2858ER の ISDB-C (ケーブルテレビのトランスモジュレーション方式) と、ほかの方式との切り替え (Cxd2856.cs・Cxd2858.cs)。
  * 偽のバス (Cxd2856Fakes.cs) の上で、書く順番と値を仕様書 (denpa-spec の cxd2856/spec.md) の表と照らす。添えた番号は仕様書の節。
- * 読んでから書く行 (マスクが FF でない行) は、読み (T C4?) のあとに書いた値が並ぶ。偽物のレジスタは書くまで 0。
+ * 読んでから書く行 (マスクが FF でない行) は、読み出し (T C4?) のあとに書いた値が並ぶ。偽物のレジスタは書くまで 0。
  * ロックの状態は J.83B と同じレジスタ (バンク 40 の 88 と 10) なので、偽物の CableStatus・CableTs で決める
  */
 public class Cxd2856IsdbcTests
@@ -374,7 +374,7 @@ public class Cxd2856IsdbcTests
     }
 
     [Test]
-    public async Task ISDB_C_の_C_N_は_64QAM_と_256QAM_だけで求め_値の印が無い読みは出さない()
+    public async Task ISDB_C_の_C_N_は_64QAM_と_256QAM_だけで求め_値の印が無い読み出しは出さない()
     {
         // ISDB-C では変調 2 (64QAM) と 4 (256QAM) だけを使い、ほかは誤りとして C/N を返さない (仕様書 9.4)
         await Assert.That(Cxd2856.IsdbcCnDb(4, 0)).IsEqualTo(-9.5 * Math.Log(126) + 95.941);

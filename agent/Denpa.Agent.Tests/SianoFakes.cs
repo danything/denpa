@@ -81,7 +81,7 @@ internal sealed class FakeSianoUsb : IUsbDevice
 
     public void Deliver(ushort number, ReadOnlySpan<byte> payload = default) => Deliver(Message(number, payload));
 
-    /// <summary>機材を抜く (読みが「抜かれた」で終わる)</summary>
+    /// <summary>機材を抜く (読み出しが「抜かれた」で終わる)</summary>
     public void Unplug() => _gone = true;
 
     public byte[] VersionPayload()
@@ -117,7 +117,7 @@ internal sealed class FakeSianoUsb : IUsbDevice
         throw new InvalidOperationException("制御転送は使わない (仕様書 2.1)");
 
     public int Read(byte endpoint, Span<byte> buffer, int timeoutMs) =>
-        throw new InvalidOperationException("IN は出したままの読みで受ける (仕様書 2.3)");
+        throw new InvalidOperationException("IN は出したままの転送要求で受ける (仕様書 2.3)");
 
     public IReadOnlyList<UsbPipe> Pipes() => Endpoints;
 

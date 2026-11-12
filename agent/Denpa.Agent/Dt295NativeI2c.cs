@@ -55,7 +55,7 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         // 実機の 0xFD8010 は 4 で、0x10 をそのまま書くと USB の制御が止まった (bit2 が要る)。足して書く。
         // 0xFD80C0 は実機で 3 から 0 になった (常駐イメージ)。仕様書 6.4 の「1 → 0」の終わりと同じ
         Set(0xFD8010, link.Read32(0xFD8010) | 0x10);
-        // 0xFD8014 は bit4 だけを落とす (読み・落とす・書き)。実機の常駐イメージは 0x0F3F001B を 0x0F3F000B にした。
+        // 0xFD8014 は bit4 だけを落とす (読み出し・落とす・書き込み)。実機の常駐イメージは 0x0F3F001B を 0x0F3F000B にした。
         // bit4 は I2C のブロックのリセットで、0xFD8010 の bit4 がそのクロックと見立てる (推定。仕様書に無い)。
         // 0x08080000 を足す書き込みはしない (書くと USB の制御がすべて時間切れになった)
         Set(0xFD8014, link.Read32(0xFD8014) & ~0x10u);
@@ -91,7 +91,7 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
     {
         Save(address);
         link.Write32(address, value);
-        // 読み戻すのは記録を出すときだけ (使わない読みは制御転送の無駄)。比べるビットが仕様書に無いので、読み戻しでは失敗にしない
+        // 読み戻すのは記録を出すときだけ (使わない読み出しは制御転送の無駄)。比べるビットが仕様書に無いので、読み戻しでは失敗にしない
         if (trace is null) return;
         var before = _saved.First(item => item.Address == address).Value;
         trace($"I2C の準備 0x{address:X}: 0x{value:X} を書いて 0x{link.Read32(address):X} が読めた (書く前 0x{before:X})");
@@ -192,7 +192,7 @@ public sealed class Dt295NativeI2c(Dt295NativeLink link, Action<string>? trace =
         var results = new List<byte>();
         if (!UseSequencer)
         {
-            // 種類 1 (読み・変更・書き) の書く値は、直前に読んだ転送の先頭バイトから作る
+            // 種類 1 (リード・モディファイ・ライト) の書く値は、直前に読んだ転送の先頭バイトから作る
             byte lastRead = 0;
             foreach (var op in batch.Ops)
             {

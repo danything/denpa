@@ -139,16 +139,16 @@ public sealed class It930xBridge
     public const int TsTransferSize = 188 * 348;
 
     /// <summary>
-    /// EP 0x84 に出したままにする読みの数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>)。
+    /// EP 0x84 に出したままにする転送要求の数。SDK は 8 (<c>it930x-core.h</c> の <c>BR_URB_COUNT</c>)。
     /// 64 × 65,424 バイトは約 4 MB で、5 つの入力の合計が 200 Mbps でも約 160 ms ぶんを受けておける。
-    /// 読みのスレッドが CPU の制限や GC で止まっても、ブリッジのバッファを溢れさせないため。溢れると、電源を抜くまで TS が届かなかった
+    /// 読み出しのスレッドが CPU の制限や GC で止まっても、ブリッジのバッファを溢れさせないため。溢れると、電源を抜くまで TS が届かなかった
     /// (<see cref="It930xOverflow"/>)。Linux の usbfs が全機材で使える量 (既定 16 MB) に、IT930x の機材 3 台 (約 12.6 MB) と
     /// CECH-ZD1 J (約 1 MB)・PIX-DT295 (約 0.5 MB) を足した約 14.1 MB が収まる。
     /// 16 のときも、PX-MLT5PE の実機で 5 つの受信機がそれぞれ約 30 Mbps を流して足りた (2026-11-10)
     /// </summary>
     public const int TsDepth = 64;
 
-    /// <summary>SDK が EP 0x84 に出したままにする読みの数 (<c>BR_URB_COUNT</c>)。<see cref="TsDepth"/> はこれより少なくしない</summary>
+    /// <summary>SDK が EP 0x84 に出したままにする転送要求の数 (<c>BR_URB_COUNT</c>)。<see cref="TsDepth"/> はこれより少なくしない</summary>
     public const int SdkTsDepth = 8;
 
     /// <summary>入力を全部閉じてから EP 0x84 をリセットするまでの待ち (ms。SDK の <c>DRV_ResetRxPort</c> の <c>mdelay(10)</c>)</summary>
@@ -442,8 +442,8 @@ public sealed class It930xBridge
 
     /// <summary>
     /// <c>IT9300_configOutput</c>: EP 0x84 をリセット → 止める → NAK を外す → 有効 → 1 回の転送の大きさ → 最大パケット長 → シリアル・パラレルの出力を止める →
-    /// リセットを外す → <c>p_br_reg_top_host_reverse</c>。EP 0x84 を止めるので、EP 0x84 の読みを出している間は呼ばない
-    /// (実機で、出している読みが続けて失敗した。2026-11-11)
+    /// リセットを外す → <c>p_br_reg_top_host_reverse</c>。EP 0x84 を止めるので、EP 0x84 の転送要求を出している間は呼ばない
+    /// (実機で、出している転送要求が続けて失敗した。2026-11-11)
     /// </summary>
     private void ConfigureOutput()
     {
@@ -474,7 +474,7 @@ public sealed class It930xBridge
     /// <summary>
     /// TS の経路をリセットし直し、そのあとの溢れを返す。SDK に溢れを下ろす手順は無いので、SDK が TS の経路をリセットする手順を開くときと同じ順で通す。
     /// 入力を全部閉じて EP 0x84 をリセット (<c>DRV_ResetRxPort</c> の閉じる側) → 残っている TS を捨てる (<c>init_work_queue</c> の「Clean PSB buffer」で 0xDA05 に 1) →
-    /// <c>IT9300_configOutput</c> (0xDA05 を 0 に戻す)。入力は開けない (呼ぶ側が開ける)。EP 0x84 の読みを出す前に呼ぶ (<see cref="ConfigureOutput"/>)。
+    /// <c>IT9300_configOutput</c> (0xDA05 を 0 に戻す)。入力は開けない (呼ぶ側が開ける)。EP 0x84 の転送要求を出す前に呼ぶ (<see cref="ConfigureOutput"/>)。
     /// </summary>
     /// <remarks>
     /// PX-MLT5PE の実機で溢れが立ったまま (全体と入力 2) のときは、これでも、ファームウェアの REBOOT と読み込み直し、受信機の電源の入れ直し (GPIOH7)、
@@ -491,7 +491,7 @@ public sealed class It930xBridge
 
     /// <summary>
     /// 入力 0〜4 のうち使う入力 (<see cref="ConfigureTs"/> で同期バイトが 0 でないもの) を全部開ける (SDK の <c>IT930x_probe</c> の「Enable TsPort」: <c>IT9300_enableTsPort</c> を入力ごと → <c>IT9300_setIgnoreFail</c>)。
-    /// 開けるのは機材を開いたときの 1 回で、受信機ごとには開け閉めしない。SDK も、受信を始める・止めるときは EP 0x84 の読みだけを出し入れし、入力には触らない。
+    /// 開けるのは機材を開いたときの 1 回で、受信機ごとには開け閉めしない。SDK も、受信を始める・止めるときは EP 0x84 の転送要求だけを出し入れし、入力には触らない。
     /// 5 つの入力は 1 つの経路にまとまるので、ほかの入力が流している間に 1 つだけ開け閉めしない
     /// </summary>
     /// <remarks>使わない入力は閉じたままにする (IT930x の仕様書 5)</remarks>

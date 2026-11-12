@@ -176,7 +176,7 @@ public sealed class CcidLink : ICardLink
         {
             // 最初の命令から応答が無いなら、リーダーが固まっている。ポートをリセットして 1 回だけやり直す
             _portReset = true;
-            Log.Write($"{Name} が応答しないので、USB のポートをリセットします");
+            Log.Write($"[{Name}] 応答しないので、USB のポートをリセットします");
             _pipe.ResetPort();
             Call(CcidMessage.PowerOff, []);
         }

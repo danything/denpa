@@ -51,7 +51,7 @@ public class SinkTests
     [Test]
     public async Task 共有する利用者のいちばん厳しい条件で局を待つ()
     {
-        var lease = new Lease(0, "GR", "T27");
+        var lease = new Lease(0, "tuner0", "GR", "T27");
         lease.Sinks.Add(new Sink("live GR/T27", 5, _ => { }) { Service = 1024 });
         lease.Sinks.Add(new Sink("epg T27", 3, _ => { }));
         await Assert.That(string.Join(",", lease.Services()!.Order())).IsEqualTo("1024");

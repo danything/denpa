@@ -346,7 +346,7 @@ public static class AsicenUserland
                 try
                 {
                     loader.Ensure();
-                    Log.Write($"[asicen {id}] ファームウェアを流し込みました");
+                    Log.Write($"[asicend {id}] ファームウェアを流し込みました");
                 }
                 catch (IOException error)
                 {
@@ -385,14 +385,15 @@ public static class AsicenUserland
     public static bool WantsLnb(string id) => _lnb.Contains(id);
 
     /// <summary>受信機 1 つを開く</summary>
-    public static ITuneDevice Open(string id, int receiver, string? lnb) => new AsicenTuner(
+    public static ITuneDevice Open(string id, int receiver, string? lnb, string? name = null) => new AsicenTuner(
         id, receiver, lnb, RuntimeDir,
         () =>
         {
             var daemon = AsicenDaemon.For(id);
             daemon.Ensure();
             return daemon.Listed;
-        });
+        },
+        name);
 
     /// <summary>
     /// 内蔵カードリーダー。**挙げない。** カードの操作 (CARD_CONNECT・CARD_TRANSMIT など) は形式が契約の文書に無く、

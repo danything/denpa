@@ -27,8 +27,8 @@ public interface IUsbDevice : IDisposable
     int Read(byte endpoint, Span<byte> buffer, int timeoutMs);
 
     /// <summary>
-    /// IN の読みを <paramref name="depth"/> 本出しっぱなしにする。読みが出ていない間に来たものは抜ける機材 (TS) 向け。
-    /// 止める (Dispose) と出していた読みを取り消して全部回収する
+    /// IN の転送要求を <paramref name="depth"/> 本出しっぱなしにする。転送要求が出ていない間に来たものは抜ける機材 (TS) 向け。
+    /// 止める (Dispose) と出していた転送要求を取り消して全部回収する
     /// </summary>
     IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth);
 
@@ -55,7 +55,7 @@ public interface IUsbInStream : IDisposable
     /// <paramref name="timeoutMs"/> の間に何も来なければ 0。1 回の転送が 1 つのメッセージになる機材 (Siano) が使う。
     /// <see cref="Read"/> と混ぜて呼ばない
     /// </summary>
-    int ReadTransfer(Span<byte> buffer, int timeoutMs) => throw new NotSupportedException("転送ごとの読みを持たない実装です");
+    int ReadTransfer(Span<byte> buffer, int timeoutMs) => throw new NotSupportedException("転送ごとの読み出しを持たない実装です");
 }
 
 /// <summary>端点 1 つ。<paramref name="Type"/> は USB の決まりの番号 (0 = control、1 = isochronous、2 = bulk、3 = interrupt)</summary>
@@ -166,24 +166,24 @@ public static class UsbDevices
 }
 
 /// <summary>
-/// 端点の読みを 1 本ずつ出し続けて、届いた転送を順に溜める。**読む側の時間切れはバッファに届くのを待つ時間だけで、出した読みは取り消さない。**
+/// 端点の転送要求を 1 本ずつ出し続けて、届いた転送を順に溜める。**読む側の時間切れはバッファに届くのを待つ時間だけで、出した転送要求は取り消さない。**
 ///
 /// <para>
 /// macOS の IOUSBLib は interrupt のパイプに時間切れが効かない (IOUSBLib.h の <c>ReadPipeTO</c> の説明。interrupt は
-/// 時間切れの無い <c>ReadPipe</c> で読む)。そこで時間切れの無い読みを専用のスレッドで出し続け、読む側は自前の時間切れでバッファに届くのを待つ。
-/// 時間切れのたびに読みを取り消すと、取り消しと転送がすれ違ったときに届いた応答を取りこぼし、データトグルの食い違いを直す手当ても要る。
-/// 出し続けていれば取り消すのは閉じるときの 1 回だけで済み、時間切れのあとに届いた応答も次の読みで受け取れる
+/// 時間切れの無い <c>ReadPipe</c> で読む)。そこで時間切れの無い転送要求を専用のスレッドで出し続け、読む側は自前の時間切れでバッファに届くのを待つ。
+/// 時間切れのたびに転送要求を取り消すと、取り消しと転送がすれ違ったときに届いた応答を取りこぼし、データトグルの食い違いを直す手当ても要る。
+/// 出し続けていれば取り消すのは閉じるときの 1 回だけで済み、時間切れのあとに届いた応答も次の読み出しで受け取れる
 /// (CECH-ZD1 J は応答に通し番号を付けて古いものを捨てるので、遅れて届いた応答が混ざってもよい)。
 /// </para>
 ///
 /// <para>
 /// 1 回の転送が 1 つの応答。<see cref="Read"/> はバッファの先頭の転送を 1 つ渡し、バッファに入りきらないぶんは捨てる
-/// (Linux・Windows の 1 回の interrupt の読みと同じ振る舞い)。
+/// (Linux・Windows の 1 回の interrupt の転送要求と同じ振る舞い)。
 /// </para>
 /// </summary>
 internal sealed class UsbReadPump : IDisposable
 {
-    /// <summary>出した読みを取り消してスレッドが戻るまで待つ上限</summary>
+    /// <summary>出した転送要求を取り消してスレッドが戻るまで待つ上限</summary>
     private static readonly TimeSpan StopWait = TimeSpan.FromSeconds(2);
 
     /// <summary>
@@ -202,9 +202,9 @@ internal sealed class UsbReadPump : IDisposable
     private volatile Exception? _error;
 
     /// <param name="name">スレッドの名前</param>
-    /// <param name="size">1 回の読みの大きさ (端点の最大パケット長。それより大きいと、ちょうどの長さの応答で読みが終わらない)</param>
-    /// <param name="read">時間切れの無い読みを 1 回。受けたバイト数を返す (取り消されたら 0)。読めなければ例外を送出する</param>
-    /// <param name="cancel">出している読みを取り消す (<paramref name="read"/> を戻らせる)。閉じるときだけ呼ぶ</param>
+    /// <param name="size">1 回の転送要求の大きさ (端点の最大パケット長。それより大きいと、ちょうどの長さの応答で転送が終わらない)</param>
+    /// <param name="read">時間切れの無い転送要求を 1 回。受けたバイト数を返す (取り消されたら 0)。読めなければ例外を送出する</param>
+    /// <param name="cancel">出している転送要求を取り消す (<paramref name="read"/> を戻らせる)。閉じるときだけ呼ぶ</param>
     public UsbReadPump(string name, int size, Func<byte[], int> read, Action cancel)
     {
         _name = name;
@@ -217,7 +217,7 @@ internal sealed class UsbReadPump : IDisposable
 
     private void Run()
     {
-        // バッファは読みごとに新しく作る (渡した配列はバッファにそのまま入る)。取り消しが間に合わず戻らないままでも、
+        // バッファは転送要求ごとに新しく作る (渡した配列はバッファにそのまま入る)。取り消しが間に合わず戻らないままでも、
         // バッファはこのスレッドが持っているので、閉じた側が解放してしまうことはない
         while (!_closing)
         {
@@ -240,7 +240,7 @@ internal sealed class UsbReadPump : IDisposable
         _chunks.CompleteAdding();
     }
 
-    /// <summary>バッファの先頭の転送を 1 つ渡す。<paramref name="timeoutMs"/> の間に何も届かなければ 0。読みが失敗していれば例外を送出する</summary>
+    /// <summary>バッファの先頭の転送を 1 つ渡す。<paramref name="timeoutMs"/> の間に何も届かなければ 0。読み出しが失敗していれば例外を送出する</summary>
     public int Read(Span<byte> buffer, int timeoutMs)
     {
         ObjectDisposedException.ThrowIf(_closing, _name);
@@ -254,12 +254,12 @@ internal sealed class UsbReadPump : IDisposable
         return length;
     }
 
-    /// <summary>出している読みを取り消して、スレッドが戻るのを待つ</summary>
+    /// <summary>出している転送要求を取り消して、スレッドが戻るのを待つ</summary>
     public void Dispose() => Stop();
 
     /// <summary>
-    /// 出している読みを取り消して、スレッドが戻るのを <see cref="StopWait"/> まで待つ。戻ったら true
-    /// (戻らなければ、呼ぶ側は読みが使っているもの (インターフェース) を手放さない)
+    /// 出している転送要求を取り消して、スレッドが戻るのを <see cref="StopWait"/> まで待つ。戻ったら true
+    /// (戻らなければ、呼ぶ側は転送要求が使っているもの (インターフェース) を手放さない)
     /// </summary>
     public bool Stop()
     {

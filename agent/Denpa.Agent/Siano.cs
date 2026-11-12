@@ -39,7 +39,7 @@ public static class Siano
     public static string Name(string model, string port) => $"{model} {port}";
 
     /// <summary>そのポートの機材のチューナー</summary>
-    public static ITuneDevice Open(string port) => new SianoTuner(port);
+    public static ITuneDevice Open(string port, string? name = null) => new SianoTuner(port, name);
 
     /// <summary>
     /// 対象の機材 (仕様書 1.1)。資料で受信が確かめられているのは PX-S1UD だけで、<c>187f:0600</c> は同じ手順で扱うが記録が無い。
@@ -138,8 +138,8 @@ public sealed class SianoTuner : ITuneDevice
     private SianoDevice? _device;
     private SianoStream? _stream;
 
-    public SianoTuner(string port)
-        : this($"siano {port}", () => Siano.OpenDevice(port))
+    public SianoTuner(string port, string? name = null)
+        : this(name ?? Siano.Name(Siano.Identify(port)?.Name ?? Siano.Family, port), () => Siano.OpenDevice(port))
     {
     }
 
@@ -244,11 +244,11 @@ public sealed class SianoTuner : ITuneDevice
 }
 
 /// <summary>
-/// TS を 1 回流すぶん。機材の読みのスレッドから受けた TS のメッセージの中身を上限つきのキューに入れ、別のスレッドで 188 バイトに揃えて
+/// TS を 1 回流すぶん。機材の読み出しのスレッドから受けた TS のメッセージの中身を上限つきのキューに入れ、別のスレッドで 188 バイトに揃えて
 /// <see cref="Pipe"/> に詰める。読み出し側は <see cref="DeviceStream"/> (CECH-ZD1 J と同じ形)。
 ///
 /// <para>
-/// **機材の読みのスレッドは待たせない。** 制御の応答も同じ端点に届くので、読む側が詰まっても読みは止めず、
+/// **機材の読み出しのスレッドは待たせない。** 制御の応答も同じ端点に届くので、読む側が詰まっても読み出しは止めず、
 /// キューに入りきらない TS を捨てて数える (仕様書 6.3。キューの深さも仕様書の 16,384 バイト × 256 個)
 /// </para>
 /// </summary>
@@ -287,7 +287,7 @@ internal sealed class SianoStream
         _writer.Start();
     }
 
-    /// <summary>TS のメッセージの中身を受ける (機材の読みのスレッドから)。待たない</summary>
+    /// <summary>TS のメッセージの中身を受ける (機材の読み出しのスレッドから)。待たない</summary>
     public void Push(ReadOnlySpan<byte> ts)
     {
         if (_ended || ts.Length == 0) return;
@@ -298,7 +298,7 @@ internal sealed class SianoStream
         Interlocked.Add(ref _dropped, ts.Length);
     }
 
-    /// <summary>機材の読みが失敗した (抜かれたなど)。理由を読む側に渡して終える</summary>
+    /// <summary>機材の読み出しが失敗した (抜かれたなど)。理由を読む側に渡して終える</summary>
     public void Fail(string reason)
     {
         if (_stopped) return;

@@ -566,7 +566,7 @@ internal sealed class Cxd2856(CxdLink link)
     /// <summary>TS の形の設定 (仕様書 3.2)</summary>
     public void TsForm() => link.Run(TsFormRows);
 
-    /// <summary>TS クロックの設定 (仕様書 3.3)。手順 2 の読みは仕様書のとおり読むだけで使わない</summary>
+    /// <summary>TS クロックの設定 (仕様書 3.3)。手順 2 の読み出しは仕様書のとおり読むだけで使わない</summary>
     private void TsClock(byte gap, byte frequency)
     {
         link.Write(T, 0x00, 0x00);
@@ -666,7 +666,7 @@ internal sealed class Cxd2856(CxdLink link)
     }
 
     /// <summary>
-    /// TS のデータ端子を出力にする・高インピーダンスにする (仕様書 5.5)。マスクは <c>C4</c> の読みで決まる (仕様書 3.2 の設定では <c>01</c>)
+    /// TS のデータ端子を出力にする・高インピーダンスにする (仕様書 5.5)。マスクは <c>C4</c> を読んだ値で決まる (仕様書 3.2 の設定では <c>01</c>)
     /// </summary>
     public void Output(bool on)
     {
@@ -1069,7 +1069,7 @@ internal sealed class Cxd2856(CxdLink link)
 /// **同じバスの受信機と I2C を交えない。** 5 つのチューナーはどれも同じアドレスで、バス 1 とバス 3 に分かれている (仕様書 1.1)。
 /// 中継を開けてから閉じるまで、バスのロック (<c>busLock</c>。同じバスの受信機で 1 つ) を持ち続ける (仕様書 1.4)。
 /// 復調器だけへの書き込みも、読んでから書く行がほかの受信機と交わらないよう、同じロックの中で書く。
-/// ロックを待つ間 (10 ms ごとの読み) は、読むたびにロックを取り直すので、ほかの受信機の選局が間に入れる。
+/// ロックを待つ間 (10 ms ごとの読み出し) は、読むたびにロックを取り直すので、ほかの受信機の選局が間に入れる。
 /// </para>
 ///
 /// <para>

@@ -24,7 +24,7 @@ internal sealed class FakeIt930x : IUsbDevice
 
     public List<string> Log { get; } = [];
 
-    /// <summary>控えに 1 行足す (EP 0x84 の読みのスレッドからも呼ばれる)</summary>
+    /// <summary>控えに 1 行足す (EP 0x84 の読み出しのスレッドからも呼ばれる)</summary>
     public void Note(string line)
     {
         lock (Log) Log.Add(line);
@@ -99,7 +99,7 @@ internal sealed class FakeIt930x : IUsbDevice
     /// <summary>REBOOT のあと、このコマンドの数だけ応答しない</summary>
     public int SilentAfterReboot { get; init; }
 
-    /// <summary>この数のコマンドに応答しない。<see cref="KeepLate"/> なら、その応答は次の読みで遅れて届く</summary>
+    /// <summary>この数のコマンドに応答しない。<see cref="KeepLate"/> なら、その応答は次の読み出しで遅れて届く</summary>
     public int Silent { get; set; }
 
     public bool KeepLate { get; init; }
@@ -112,7 +112,7 @@ internal sealed class FakeIt930x : IUsbDevice
 
     private bool _gone;
 
-    /// <summary>遅れて届く応答を置く (次の読みで返る)</summary>
+    /// <summary>遅れて届く応答を置く (次の読み出しで返る)</summary>
     public void Late(byte[] reply) => _late.Enqueue(reply);
 
     public int ControlIn(byte requestType, byte request, ushort value, ushort index, Span<byte> data, int timeoutMs) =>
@@ -121,11 +121,11 @@ internal sealed class FakeIt930x : IUsbDevice
     public void ControlOut(byte requestType, byte request, ushort value, ushort index, ReadOnlySpan<byte> data, int timeoutMs) =>
         throw new NotSupportedException();
 
-    /// <summary>EP 0x84 の読みが返すバイト列 (1 つが 1 回の読み)。尽きたら時間切れ (0) を返す</summary>
+    /// <summary>EP 0x84 の読み出しが返すバイト列 (1 つが 1 回の読み出し)。尽きたら時間切れ (0) を返す</summary>
     public Queue<byte[]> Ts { get; } = new();
 
     /// <summary>
-    /// <see cref="Ts"/> が尽きているときに、EP 0x84 の読みが返すバイト列を作る (流れ続ける TS の代わり。読むスレッドから呼ぶ)。null を返したら時間切れ
+    /// <see cref="Ts"/> が尽きているときに、EP 0x84 の読み出しが返すバイト列を作る (流れ続ける TS の代わり。読むスレッドから呼ぶ)。null を返したら時間切れ
     /// </summary>
     public Func<byte[]?>? TsSource
     {
@@ -135,13 +135,13 @@ internal sealed class FakeIt930x : IUsbDevice
 
     private volatile Func<byte[]?>? _tsSource;
 
-    /// <summary>EP 0x84 の読みを出せない (OpenInStream が IOException を送出する)</summary>
+    /// <summary>EP 0x84 の転送要求を出せない (OpenInStream が IOException を送出する)</summary>
     public bool TsOpenFails { get; set; }
 
     public IUsbInStream OpenInStream(byte endpoint, int transferSize, int depth)
     {
-        if (endpoint != 0x84) throw new InvalidOperationException($"EP 0x{endpoint:X2} の読みを出した");
-        if (TsOpenFails) throw new IOException("fake-it930x の EP 0x84 の読みを出せません");
+        if (endpoint != 0x84) throw new InvalidOperationException($"EP 0x{endpoint:X2} の転送要求を出した");
+        if (TsOpenFails) throw new IOException("fake-it930x の EP 0x84 の転送要求を出せません");
         Note($"TS {transferSize} {depth}");
         return new FakeTsIn(this);
     }
@@ -367,7 +367,7 @@ internal sealed class FakeIt930x : IUsbDevice
         return reply.Length;
     }
 
-    /// <summary>機材が USB を閉じた (閉じる処理の最後。TS の読みを閉じた「TS 閉じる」は、電源を切るより前に残る)</summary>
+    /// <summary>機材が USB を閉じた (閉じる処理の最後。TS の読み出しを閉じた「TS 閉じる」は、電源を切るより前に残る)</summary>
     public volatile bool Disposed;
 
     public void Dispose() => Disposed = true;

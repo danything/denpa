@@ -75,7 +75,7 @@ internal sealed class FakeCxdReceiver(byte address)
 
 /// <summary>
 /// 偽の I2C のバス 1 本。読み書きを 1 行ずつ <see cref="Log"/> に控える。
-/// 書き込みは <c>T 00=60</c>・<c>X 08=01</c>・<c>U 5E=150000</c> (続けて書いたバイトは並べる)、読みは <c>T C4?</c> の形。
+/// 書き込みは <c>T 00=60</c>・<c>X 08=01</c>・<c>U 5E=150000</c> (続けて書いたバイトは並べる)、読み出しは <c>T C4?</c> の形。
 /// 受信機が 2 つ以上あるときは、先頭に復調器の T のアドレスを付ける (<c>64 T 00=60</c>)
 /// </summary>
 internal sealed class FakeCxdBus : ICxdBus
