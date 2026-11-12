@@ -1,5 +1,5 @@
 /**
- * **エージェントごとのカード** (docs/architecture.md「エージェントを何台もつなぐ」)。
+ * **エージェントごとのカード** (docs/architecture.md「全体」、docs/agent.md「エージェントが何台もあるとき」)。
  *
  * どのカードで復号するかは、エージェントの `/denpa/card` から読む。手元のカード (`source: local`) ならそのカードの番号、
  * 鍵を配る相手から貰う (`source: remote`。`CARD_URL`) なら配る相手のカードの番号 (`scramble.getActiveCardId`)。
@@ -125,6 +125,9 @@ async function routeCards(
  * どのエージェントも同じカードなら (勧めている組み方。カードは世帯で 1 枚)、カードを使える所はみな同じ順になり、絞っても変わらない。
  * `statusOf` はカードの番号から、その局の契約の状態 (`contract-status.contractStatus`。行が無ければ null)
  */
+/** 復号に使うカードが無いエージェントの順 (上の表の 3)。カードが分からないエージェントもこの順にする (`tuner.route`) */
+export const NO_KEY = 3;
+
 export function cardRanks(
   cards: Iterable<AgentCard>,
   statusOf: (card: string) => ReturnType<typeof contractStatus> | null,
@@ -132,7 +135,7 @@ export function cardRanks(
   const ranks = new Map<number, number>();
   for (const entry of cards) {
     if (entry.card === null) {
-      ranks.set(entry.agent, 3);
+      ranks.set(entry.agent, NO_KEY);
       continue;
     }
     const status = statusOf(entry.card);

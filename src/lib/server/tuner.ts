@@ -28,7 +28,7 @@ import {
   epgReadableService,
   type Transport,
 } from "../types";
-import { keyRanks } from "./agent-cards";
+import { keyRanks, NO_KEY } from "./agent-cards";
 import { NO_CHANNEL } from "./agent-channels";
 import { fetchAgent } from "./agent-client";
 import { orderGroups, type Place } from "./agent-order";
@@ -845,11 +845,8 @@ export async function pinGone(named: string): Promise<boolean> {
   }
 }
 
-/** カードが分からないエージェントの順 (`agent-cards.cardRanks` の、使えるカードが無いものと同じ) */
-const NO_KEY = 3;
-
 /**
- * **送る所を選ぶ** (docs/architecture.md「エージェントを何台もつなぐ」)。エージェントの約束 (docs/agent.md「選ぶ順の約束」) を、
+ * **送る所を選ぶ** (docs/architecture.md「全体」、docs/agent.md「エージェントが何台もあるとき」)。エージェントの約束 (docs/agent.md「選ぶ順の約束」) を、
  * 全部のエージェントをまとめた選ぶ順 (`agent-order.orderGroups`。予約の割り振りと同じ関数) に読み替える。
  *
  * 1. 局を受けられて、一覧を返したエージェントに絞る。名指し (`pin`) なら、そのチューナーのあるエージェントに送る (無ければ絞った所の先頭)。
