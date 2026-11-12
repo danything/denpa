@@ -47,6 +47,8 @@ class Node {
 class Context {
   static all: Context[] = [];
   static failGraph = false;
+  /** サンプルレートを指定できないブラウザ */
+  static rejectRate = false;
   state = "running";
   currentTime = 50;
   baseLatency = 0;
@@ -54,7 +56,11 @@ class Context {
   destination = new Node();
   sources: Node[] = [];
   onstatechange: (() => void) | null = null;
-  constructor() {
+  sampleRate: number;
+  constructor(options: { sampleRate?: number } = {}) {
+    if (Context.rejectRate && options.sampleRate !== undefined)
+      throw new Error("sampleRate unsupported");
+    this.sampleRate = options.sampleRate ?? 44_100;
     Context.all.push(this);
   }
   createGain() {
@@ -132,6 +138,7 @@ function set(name: string, value: unknown) {
 beforeEach(() => {
   Context.all = [];
   Context.failGraph = false;
+  Context.rejectRate = false;
   TestWorker.all = [];
   audio = null;
   set("AudioContext", Context);
@@ -386,4 +393,19 @@ test("映像が進んでいて時計だけずれたときは、組み直して�
   video.currentTime = 10.2; // 映像が 100 ms 先へ飛んだ
   worker.pcm(1, 10.3);
   expect(context.sources.length).toBeGreaterThan(count);
+});
+test("AudioContext を 48kHz で作り、続いたコマは前のコマの終わりのサンプルにつなぐ", () => {
+  const { worker, context, audio } = setup();
+  expect(context.sampleRate).toBe(48_000);
+  audio.setMuted(false);
+  // 2 コマ目の PTS が 1 tick (1/90000 秒) ずれていても、1 コマ目の終わりにつなぐ
+  worker.pcm(1, 10.1);
+  worker.pcm(1, 10.1 + 1024 / 48_000 + 1 / 90_000);
+  const [first, second] = context.sources.map((node) => node.starts[0]![0]!);
+  expect((second! - first!) * 48_000).toBeCloseTo(1024, 6);
+});
+test("サンプルレートを指定できないブラウザは、端末のサンプルレートのまま作る", () => {
+  Context.rejectRate = true;
+  const { context } = setup();
+  expect(context.sampleRate).toBe(44_100);
 });

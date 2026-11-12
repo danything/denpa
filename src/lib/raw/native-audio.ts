@@ -15,6 +15,7 @@ import {
   MAX_PENDING_BYTES,
   type PcmChunk,
 } from "./native-audio-protocol";
+import { audioContext, Seam } from "./seam";
 
 const TICK_MS = 20;
 /**
@@ -68,6 +69,8 @@ export class NativeAudio {
   private fade: GainNode;
   /** 最後に予約した音が鳴り終わる AudioContext の時刻。組み直すと null (次の音は音量を上げながら鳴らす) */
   private scheduledEnd: number | null = null;
+  /** 予約したコマを継ぎ目なく並べる (`seam.ts`)。組み直すと保持していた終わりを破棄する */
+  private readonly seam: Seam;
   private epoch = 0;
   /** まだ予約していない最初のコマ (`frames` の添字)。組み直す (`flush`) と 0 に戻る */
   private cursor = 0;
@@ -91,7 +94,8 @@ export class NativeAudio {
     private readonly failed: (reason: string) => void,
     decoder: string,
   ) {
-    this.context = new AudioContext({ latencyHint: "interactive" });
+    this.context = audioContext("interactive");
+    this.seam = new Seam(this.context.sampleRate);
     let outlet: Outlet | null = null;
     try {
       this.outlet = outlet = new Outlet(
@@ -238,6 +242,7 @@ export class NativeAudio {
       setTimeout(() => fade.disconnect(), FADE_SECONDS * 1000 + 100);
       this.fade = this.newFade();
     }
+    this.seam.reset();
     this.scheduledEnd = null;
     this.cursor = 0;
     this.last = null;
@@ -309,6 +314,7 @@ export class NativeAudio {
         latency,
       );
       if (plan === null) continue;
+      const when = this.seam.place(plan.when, plan.duration / rate);
       const buffer = this.context.createBuffer(
         frame.planes.length,
         length,
@@ -322,21 +328,21 @@ export class NativeAudio {
       // 途切れのあと (組み直した直後・コマを捨てた・途中から鳴らす) は、波形が 0 から飛ばないよう音量を上げながら鳴らす
       if (
         this.scheduledEnd === null ||
-        plan.when > this.scheduledEnd + GAP_SECONDS ||
+        when > this.scheduledEnd + GAP_SECONDS ||
         plan.offset > 0
       ) {
         const gain = this.fade.gain;
-        gain.cancelScheduledValues(plan.when);
-        gain.setValueAtTime(0, plan.when);
-        gain.linearRampToValueAtTime(1, plan.when + FADE_SECONDS);
+        gain.cancelScheduledValues(when);
+        gain.setValueAtTime(0, when);
+        gain.linearRampToValueAtTime(1, when + FADE_SECONDS);
       }
-      this.scheduledEnd = plan.when + plan.duration / rate;
+      this.scheduledEnd = when + plan.duration / rate;
       this.nodes.add(node);
       node.onended = () => {
         this.nodes.delete(node);
         node.disconnect();
       };
-      node.start(plan.when, plan.offset, plan.duration);
+      node.start(when, plan.offset, plan.duration);
     }
   }
   /** 自動再生を断られたら、通常の「音を出す」操作へ渡す。 */
