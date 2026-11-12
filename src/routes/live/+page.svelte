@@ -75,7 +75,7 @@
   } from "#lib/components/Toasts.svelte";
   import { programDetail } from "#lib/detail.svelte.js";
   import { driveGate } from "#lib/drive-gate.svelte.js";
-  import { SERVICE_TYPE_LABEL, time } from "#lib/format.js";
+  import { SERVICE_TYPE_LABEL, stateLabel, time } from "#lib/format.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { slides } from "#lib/jikkyo/ranking.js";
   import { JikkyoRanking } from "#lib/jikkyo/ranking.svelte.js";
@@ -437,18 +437,46 @@
 
   /** いまの 1 コマを字幕・コメントごと切り抜いてサーバに保存する (3 画面共通。`shot.svelte.ts`) */
   const shooter = snapshotter(controls);
+
+  /**
+   * 録画ボタンの結果の文。予約は残っても、競合 (チューナーが足りない) とコピー禁止では録らないので、
+   * 「始めます」とは言わずに理由 (`conflict_reason`) を添える
+   */
+  function recordNotice(
+    name: string,
+    state: string,
+    reason: string | null,
+  ): Notice {
+    const key = `record-${name}-${state}`;
+    if (state === "scheduled")
+      return { key, kind: "info", text: `「${name}」の録画を始めます` };
+    if (state === "recording")
+      return { key, kind: "info", text: `「${name}」は録画中です` };
+    if (state === "conflict")
+      return {
+        key,
+        kind: "warning",
+        text: `「${name}」を予約しましたが、競合のため録画できません${reason === null ? "" : `。${reason}`}`,
+      };
+    if (state === "skipped")
+      return {
+        key,
+        kind: "warning",
+        text: `「${name}」は録画しません${reason === null ? "" : `。${reason}`}`,
+      };
+    return {
+      key,
+      kind: "info",
+      text: `「${name}」の予約は「${stateLabel(state)}」です`,
+    };
+  }
+
   const notices = $derived<Notice[]>([
     ...shooter.notices,
     ...pip.notices,
-    // 録画ボタンの結果 (`?/record`)。押した本人へ、始まったか断られたかを言う
+    // 録画ボタンの結果 (`?/record`)。押した本人へ、始まったか、予約はしたが録らないか、断られたかを言う
     ...(form?.recorded
-      ? [
-          {
-            key: `record-${form.recorded}`,
-            kind: "info" as const,
-            text: `「${form.recorded}」の録画を始めます`,
-          },
-        ]
+      ? [recordNotice(form.recorded, form.state, form.reason)]
       : []),
     ...errorNotice(form, "record-error"),
   ]);

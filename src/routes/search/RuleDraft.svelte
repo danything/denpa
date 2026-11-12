@@ -332,8 +332,7 @@
 <!-- スマホの形で下から出しているときは、ほかの窓と同じく Esc でも閉じる (docs/design.md の「メニュー・ダイアログ・検索の候補」) -->
 <svelte:window
   onkeydown={(event) => {
-    if (open && event.key === "Escape" && !event.defaultPrevented)
-      open = false;
+    if (open && event.key === "Escape" && !event.defaultPrevented) open = false;
   }}
 />
 

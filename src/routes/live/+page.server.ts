@@ -219,6 +219,11 @@ export const actions = {
     // アプリの `POST /api/services/<id>/record` と同じ経路 (`recordAiring`)
     const result = await recordAiring(serviceId);
     if (!result.ok) return fail(result.status, { message: result.message });
-    return { recorded: result.name };
+    // 予約できても、競合・コピー禁止で録らないことがある。画面はそれを見て文を変える
+    return {
+      recorded: result.name,
+      state: result.state,
+      reason: result.reason,
+    };
   },
 } satisfies Actions;

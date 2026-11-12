@@ -278,7 +278,9 @@
           {#each data.logoRecords as record (record.id)}
             <li data-testid="logo-record-row">
               <span>{dateTime(record.started_at)}</span>
-              {record.channel}・{Math.round(record.opened_ms / 60_000)} 分・{OUTCOME_WORDS[record.outcome] ?? record.outcome}・ロゴのデータ
+              {record.channel}・{Math.round(record.opened_ms / 60_000)} 分・{OUTCOME_WORDS[
+                record.outcome
+              ] ?? record.outcome}・ロゴのデータ
               {record.es_packets} パケット・ダウンロードの通知 {record.sdtt} 回・{record.found}
               局
             </li>
