@@ -424,7 +424,7 @@ GPU の一覧を ffmpeg に問い合わせる方法も無いので、`hwenc.prob
 高画質の指定だけ落ちる AMD) を偽の ffmpeg の返事で流します。
 
 **実機で確かめていないこと** (手元の Windows に NVIDIA・Intel・AMD の GPU がありません): どの GPU でも試しのエンコードが通るか、上の値で見た目が今の
-H.264 と揃うか・どれだけ小さくなるか、libvpl を静的に繋いだ ffmpeg が Intel のランタイムを見つけるか、2 枚挿しや Intel + NVIDIA の
+H.264 と揃うか・どれだけ小さくなるか、同梱の libvpl の DLL が Intel のランタイムを見つけるか、2 枚挿しや Intel + NVIDIA の
 ノート PC でアダプタの番号が使いたい GPU に当たるか (libvpl が渡したアダプタ以外の Intel のランタイムを選ぶと、同じ GPU が `qsv0` と `qsv1` の 2 行に出ます)、
 AMF が開いてある Direct3D 11 のデバイスを使うか (FFmpeg の amfenc.c の読みで、実機では見ていない)、ライブの低遅延の指定、
 VCN 1.0 で落ちていたのが `high_quality` の指定だったか (報告から推定。古い世代向けの指定で通るかも、画質の差も見ていない)。

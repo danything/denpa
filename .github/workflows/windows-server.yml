@@ -45,13 +45,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # 鍵は Dockerfile の ffmpeg 段 (土台の FROM の行は除く。digest が上がるたびに組み直さない) と、組むスクリプトと patches/
+      # 鍵は Dockerfile の ffmpeg 段 (土台の FROM の行は除く。digest が上がるたびに組み直さない) と、組むスクリプトと patches/、
+      # 下の Set up MSYS2 で入れるパッケージの一覧
       - name: Cache key
         id: key
         shell: bash
         run: |
           set -euo pipefail
-          hash=$( { awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile; cat .github/ffmpeg-windows.sh patches/*; } | sha256sum | cut -c1-16)
+          packages=$(awk '/^ +install: >-$/ { f = 1; next } f && /^ *$/ { exit } f' .github/workflows/windows-server.yml)
+          test -n "$packages" || { echo "windows-server.yml から MSYS2 のパッケージの一覧を読めません" >&2; exit 1; }
+          hash=$( { awk '/^FROM .* AS ffmpeg$/ { f = 1; next } /^FROM / { f = 0 } f' Dockerfile; cat .github/ffmpeg-windows.sh patches/*; echo "$packages"; } | sha256sum | cut -c1-16)
           echo "key=ffmpeg-windows-x64-$hash" >> "$GITHUB_OUTPUT"
           # Opus と SVT-AV1 の組み上がりは、ffmpeg とは別のキャッシュ。鍵はバージョンと、スクリプトの
           # `# recipe:<名前>:begin` から `:end` までの組み方 (ffmpeg の configure の引数を変えても組み直さない)
@@ -75,6 +78,9 @@ jobs:
           path: ffmpeg-out
           key: ${{ steps.key.outputs.key }}
 
+      # x264 は CLI のパッケージ (mingw-w64-ucrt-x86_64-x264) ではなく、ライブラリだけの libx264 を入れる。CLI は ffms2 を通して
+      # MSYS2 の ffmpeg を入れ、その依存の opus・svt-av1 も入る。入っていると、ffmpeg を組むときにソースから組んだものではなく
+      # そちらの DLL (libopus-0.dll・libSvtAv1Enc-4.dll) を拾う
       - name: Set up MSYS2
         if: steps.cache.outputs.cache-hit != 'true'
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
@@ -89,7 +95,7 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-nasm
             mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-x264
+            mingw-w64-ucrt-x86_64-libx264
             mingw-w64-ucrt-x86_64-dav1d
             mingw-w64-ucrt-x86_64-zimg
             mingw-w64-ucrt-x86_64-zlib
@@ -202,6 +208,33 @@ jobs:
         with:
           name: windows-files
           path: files
+
+      # **zip に入る DLL を、決めた一覧と比べる** (名前の末尾の番号 `-<数字>.dll` は除く。MSYS2 のパッケージが上がると変わるため)。
+      # SVT-AV1 と Opus はソースから組んで静的に繋ぐので、一覧に入らない (.github/ffmpeg-windows.sh)。一覧はここだけに書く。
+      # ffmpeg.exe・ffprobe.exe から取り込み表 (objdump -p) を辿り、読まれない DLL が置かれていないかも見る
+      - name: Check ffmpeg DLLs
+        run: |
+          set -euo pipefail
+          want="libdav1d libgcc_s_seh libstdc++ libvpl libwinpthread libx264 libz libzimg"
+          base() { tr 'A-Z' 'a-z' | sed -E 's/(-[0-9]+)?\.dll$//'; }
+          have=$(cd ffmpeg && ls *.dll | base | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
+          echo "ffmpeg/ の DLL: $have"
+          test "$have" = "$want" || { echo "ffmpeg/ の DLL が決めた一覧 ($want) と違います" >&2; exit 1; }
+          declare -A used=()
+          queue=(ffmpeg/ffmpeg.exe ffmpeg/ffprobe.exe)
+          while [ "${#queue[@]}" -gt 0 ]; do
+            file=${queue[0]}
+            queue=("${queue[@]:1}")
+            echo "$(basename "$file"): $(objdump -p "$file" | sed -nE 's/^\s*DLL Name: (.+)$/\1/p' | tr -d '\r' | tr '\n' ' ')"
+            while read -r dll; do
+              [ -e "ffmpeg/$dll" ] && [ -z "${used[$dll]:-}" ] || continue
+              used[$dll]=1
+              queue+=("ffmpeg/$dll")
+            done < <(objdump -p "$file" | sed -nE 's/^\s*DLL Name: (.+)$/\1/p' | tr -d '\r')
+          done
+          for dll in $(cd ffmpeg && ls *.dll); do
+            test -n "${used[$dll]:-}" || { echo "ffmpeg/$dll はどの実行ファイルからも読まれません" >&2; exit 1; }
+          done
 
       # bun は公式のリリースの **baseline** (AVX2 の無い CPU でも動くもの)。録画用の古い PC や Celeron でも動くように。
       # バージョンは Dockerfile の `oven/bun` から読む (Renovate が上げるのはそこだけ)。中身は同じリリースの SHASUMS256.txt で照らす
