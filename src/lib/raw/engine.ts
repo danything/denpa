@@ -86,7 +86,7 @@ export class RawEngine {
   private readonly outlet: Outlet;
   private readonly playout: Playout<AudioChunk>;
   private readonly nodes = new Set<AudioBufferSourceNode>();
-  /** 予約したコマを継ぎ目なく並べる (`seam.ts`)。止めたら一緒に忘れる (`stopAll`) */
+  /** 予約したコマを継ぎ目なく並べる (`seam.ts`)。止めたら保持していた終わりを破棄する (`stopAll`) */
   private readonly seam: Seam;
   private readonly timer: ReturnType<typeof setInterval>;
   /** 画面の切り替わりを worker へ知らせる requestAnimationFrame (`cadence.ts`) */

@@ -69,7 +69,7 @@ export class NativeAudio {
   private fade: GainNode;
   /** 最後に予約した音が鳴り終わる AudioContext の時刻。組み直すと null (次の音は音量を上げながら鳴らす) */
   private scheduledEnd: number | null = null;
-  /** 予約したコマを継ぎ目なく並べる (`seam.ts`)。組み直すと一緒に忘れる */
+  /** 予約したコマを継ぎ目なく並べる (`seam.ts`)。組み直すと保持していた終わりを破棄する */
   private readonly seam: Seam;
   private epoch = 0;
   /** まだ予約していない最初のコマ (`frames` の添字)。組み直す (`flush`) と 0 に戻る */
