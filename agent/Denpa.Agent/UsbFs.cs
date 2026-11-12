@@ -215,6 +215,17 @@ internal static unsafe class UsbFs
         return fd;
     }
 
+    /// <summary>
+    /// 受け取った fd の複製 (close-on-exec を付ける)。複製はファイルの位置を共有するので、ディスクリプタは pread で読む。
+    /// 受け取った fd が閉じられていれば (抜かれた)、<see cref="IOException"/> を投げる
+    /// </summary>
+    internal static int Dup(int received, string port)
+    {
+        var fd = Sys.DupCloseOnExec(received);
+        if (fd < 0) throw new IOException($"USB のポート {port} の機材を開けません ({Marshal.GetLastPInvokeErrorMessage()})");
+        return fd;
+    }
+
     /// <summary>開けなかったときの文言</summary>
     internal static string OpenError(string path, int errno) => errno switch
     {
@@ -247,19 +258,30 @@ public sealed unsafe class UsbFsPipe : ICcidPipe
     /// 見つけてから開くまでに挿し替わると別の機材を開きうる。
     /// </para>
     /// </summary>
-    public static UsbFsPipe Open(string path, int vendor, int product, int configValue, int interfaceNumber)
-    {
-        var fd = UsbFs.Open(path);
+    public static UsbFsPipe Open(string path, int vendor, int product, int configValue, int interfaceNumber) =>
+        OpenFd(UsbFs.Open(path), path, vendor, product, configValue, interfaceNumber);
 
+    /// <summary>
+    /// アプリから受け取った usbfs の fd (<see cref="BrokerUsbHost"/>) で開く。受け取った fd は <c>dup</c> し、閉じるのは複製のほう。
+    /// 確かめることはパスから開くときと同じ
+    /// </summary>
+    public static UsbFsPipe Open(int received, string port, int vendor, int product, int configValue, int interfaceNumber) =>
+        OpenFd(UsbFs.Dup(received, port), $"USB のポート {port}", vendor, product, configValue, interfaceNumber);
+
+    /// <summary>開いた fd でディスクリプタを確かめ、インターフェースを確保する。失敗したら fd を閉じて投げる</summary>
+    /// <param name="path">文言に出す、開いたもの (パスかポート)</param>
+    private static UsbFsPipe OpenFd(int fd, string path, int vendor, int product, int configValue, int interfaceNumber)
+    {
         try
         {
-            // usbfs の fd を読むと、デバイスディスクリプタと全部の構成ディスクリプタが続けて返る
+            // usbfs の fd を読むと、デバイスディスクリプタと全部の構成ディスクリプタが続けて返る。
+            // dup した fd は位置を共有するので、位置を使わない pread で 0 から読む
             var blob = new byte[16 * 1024];
             var total = 0;
             fixed (byte* start = blob)
             {
                 nint got;
-                while (total < blob.Length && (got = Sys.ReadFd(fd, start + total, (nuint)(blob.Length - total))) > 0)
+                while (total < blob.Length && (got = Sys.PRead(fd, start + total, (nuint)(blob.Length - total), total)) > 0)
                 {
                     total += (int)got;
                 }

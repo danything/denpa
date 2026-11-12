@@ -23,7 +23,7 @@ public class CcidTests
     private static readonly byte[] BcasAtr = Convert.FromHexString("3BF01200FF9181B17C451F0399");
 
     /// <summary>PC Twin のデバイス + 構成ディスクリプタ (usbfs の fd を読んだときの並び)</summary>
-    private static byte[] TwinDescriptors()
+    internal static byte[] TwinDescriptors()
     {
         var blob = new List<byte>();
         void U16(int v) => blob.AddRange([(byte)v, (byte)(v >> 8)]);

@@ -6,7 +6,8 @@ namespace Denpa.Agent;
 /*
  * 挿さっている USB の機材を並べる・開く・抜き差しを受け取る、OS との境目 (IUsbHost)。機材ごとのコード (Zd1j・Dt295・Siano・It930x・
  * Ccid・AsicenUserland) と DeviceWatch は、ここだけを通して USB の機材を探し、開く。OS を見分けるのは UsbHost.Current の 1 か所だけ。
- * 実装は SysfsUsbHost (Linux の sysfs と usbfs)・WinUsbHost (Windows の WinUSB)・IoKitUsbHost (macOS の IOKit)。
+ * 実装は SysfsUsbHost (Linux の sysfs と usbfs)・WinUsbHost (Windows の WinUSB)・IoKitUsbHost (macOS の IOKit)・
+ * BrokerUsbHost (Android のアプリから受け取る。UsbBroker.cs)。
  */
 
 /// <summary>USB の ID (idVendor と idProduct)</summary>
@@ -37,7 +38,7 @@ public interface IUsbHost
 {
     /// <summary>
     /// 挿さっている機材のうち、ID が <paramref name="ids"/> のどれかのもの。**開かない。** カーネルのドライバが使っているものも並べる (<see cref="UsbFound.Driver"/>)。
-    /// 並びは、sysfs ならポートの名前の順、Windows・macOS は <paramref name="ids"/> の順に OS が返した順
+    /// 並びは、sysfs と Android (アプリから受け取ったもの) ならポートの名前の順、Windows・macOS は <paramref name="ids"/> の順に OS が返した順
     /// </summary>
     IReadOnlyList<UsbFound> List(IReadOnlyCollection<UsbId> ids);
 
@@ -68,7 +69,7 @@ public interface IUsbHost
     /// </summary>
     ICcidPipe OpenCcid(string port, int vendor, int product, int config, int interfaceNumber);
 
-    /// <summary>ポートの電源を入れ直し、機材がつながり直すまで待つ手段 (ポート, 待つ上限)。できない OS (Windows・macOS) は null</summary>
+    /// <summary>ポートの電源を入れ直し、機材がつながり直すまで待つ手段 (ポート, 待つ上限)。できない OS (Windows・macOS・Android) は null</summary>
     Action<string, TimeSpan>? PowerCycle { get; }
 
     /// <summary>
@@ -81,11 +82,18 @@ public interface IUsbHost
 /// <summary>今の OS の <see cref="IUsbHost"/></summary>
 public static class UsbHost
 {
-    /// <summary>起動のときに 1 回だけ選ぶ。Windows・macOS 以外は Linux の sysfs (Android の bionic も OS は Linux と答える)</summary>
+    /// <summary>
+    /// 起動のときに 1 回だけ選ぶ。Linux で <c>USB_BROKER</c> があればアプリから受け取る (Android。bionic も OS は Linux と答える)。
+    /// ほかの Linux は sysfs。<c>USB_BROKER</c> を見るのはここだけ
+    /// </summary>
     public static IUsbHost Current { get; } =
         OperatingSystem.IsWindows() ? new WinUsbHost()
         : OperatingSystem.IsMacOS() ? new IoKitUsbHost()
+        : OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("USB_BROKER") is { Length: > 0 } broker ? new BrokerUsbHost(broker)
         : new SysfsUsbHost(UsbSysfs.Devices, UsbSysfs.DevUsb);
+
+    /// <summary>アプリから USB を受け取っているか (Android で動いている印。About.Os と Config の既定の置き場が使う)</summary>
+    public static bool Brokered => Current is BrokerUsbHost;
 
     /// <summary>
     /// <paramref name="models"/> の機材が挿さっているポートと、その機材。**開かない。**

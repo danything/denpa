@@ -6,7 +6,8 @@ name: Android agent
 # 1. OpenSSL を NDK で静的ライブラリに組む (.github/openssl-android.sh)。**組んだものは actions/cache に置き、バージョン・組み方・NDK が
 #    変わるまで使い回す**
 # 2. エージェントを NDK の clang で組む。ASP.NET Core は linux の実行時パックの IL を使わせる (csproj の説明)
-# 3. x86_64 をエミュレータ (minSdk の API 29 と、新しい API 35) に `adb push` して起動し、組んで HTTP に答えるかを見る
+# 3. x86_64 をエミュレータ (minSdk の API 29 と、新しい API 35) に `adb push` して起動し、組んで HTTP に答えるかと、
+#    偽のアプリ (.github/fake-usb-broker.c) から USB_BROKER で fd を受け取れるかを見る
 #    (.github/android-agent-smoke.sh)。arm64 は組むところまで (GitHub のランナーで arm64 のエミュレータは遅すぎる)
 #
 # 組むのは呼んだ workflow のコミット。コミットを入力で受けて取り出すことはしない (windows-server.yml と同じく、キャッシュを汚させない)
@@ -89,11 +90,21 @@ jobs:
           for align in $($readelf -lW out/denpa-agent | awk '$1 == "LOAD" { print $NF }'); do test "$((align))" -ge 16384; done
           ls -l out/denpa-agent
 
+      # エミュレータで USB_BROKER に繋ぐ偽のアプリ (.github/fake-usb-broker.c)。動かすのは x86_64 だけ
+      - name: Build fake USB broker
+        if: matrix.abi == 'x86_64'
+        run: |
+          set -euo pipefail
+          "$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android29-clang" -O2 -Wall -Werror \
+            -o out/fake-usb-broker .github/fake-usb-broker.c
+
       - name: Upload agent
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: denpa-agent-android-${{ matrix.abi }}
-          path: out/denpa-agent
+          path: |
+            out/denpa-agent
+            out/fake-usb-broker
           retention-days: 3
 
   # **必須チェックにはしない** (エミュレータは起動や応答の時間がばらつき、コードと関係なく落ちることがある。docs/development.md「Android 向けのエージェント」)
@@ -136,7 +147,7 @@ jobs:
           emulator-boot-timeout: 300
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash .github/android-agent-smoke.sh agent-out/denpa-agent smoke-results
+          script: bash .github/android-agent-smoke.sh agent-out/denpa-agent agent-out/fake-usb-broker smoke-results
 
       # 通っても落ちても残す (エージェントのログ・logcat・応答)
       - if: always()
