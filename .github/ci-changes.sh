@@ -4,10 +4,9 @@
 # **絞るのは PR だけ。** main への push と手で回したとき (workflow_dispatch) は全部回す (PR の番号が無いとき)。
 # PR で飛ばしたものが壊れていれば、main で気づいて直す。
 #
-# 必須チェックのジョブ (e2e (n)・agent-windows・agent-windows-install・agent-macos) は飛ばすときも走らせ、
-# 中身の段を飛ばして成功で終え、飛ばした理由をジョブの注記に出す (test.yml)。Windows と Mac のジョブは、
-# 飛ばすときは ubuntu のランナーで走らせる (Mac と Windows のランナーを待たない)。
-# 必須ではないジョブ (tray-macos・agent-android・server-*) は、ジョブごと飛ばす。
+# e2e (n) は飛ばすときも走らせ、中身の段を飛ばして成功で終え、飛ばした理由をジョブの注記に出す (test.yml)。
+# ほかのジョブ (agent-windows・agent-windows-install・agent-macos・tray-macos・agent-android・server-*) は、
+# ジョブごと飛ばす。必須チェックのジョブも、if で飛ばしたものは成功として数えられる。
 #
 # 使い方 (GH_TOKEN と GITHUB_REPOSITORY が要る):
 #
@@ -19,7 +18,7 @@
 #
 # | 名前    | 中身を回すジョブ                                                          | true にするファイル                                      |
 # | ------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
-# | e2e     | e2e (1)〜(6)                                                              | 下の「E2E と関係ないもの」以外の全部                     |
+# | e2e     | e2e (1)〜(10)                                                             | 下の「E2E と関係ないもの」以外の全部                     |
 # | windows | agent-windows・agent-windows-install                                      | エージェント・Windows の通知領域のアプリ・install.ps1    |
 # | macos   | agent-macos・tray-macos                                                   | エージェント・Mac のメニューバーのアプリ・install.sh     |
 # | android | agent-android                                                             | エージェントと、Android で組んで確かめる部品             |
