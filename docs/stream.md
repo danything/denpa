@@ -822,8 +822,7 @@ AV1・H.265 の VBR がどのドライバでも通るか、段を下げた変換
   止まります (`no path between colorspaces`)。4K の放送は HLG で送っていると見ています (推定)。トーンマップの画質は実際の放送で見ていません
 - デコードは CPU です。4K の HEVC 10 ビットを実時間でデコードできるかはサーバの CPU で決まり、遅れたら今の決まり ([エンコードが遅れたとき](#エンコードが遅れたとき)) で軽くします。
   VA-API などでデコードから GPU に載せることはまだしていません
-- zscale・tonemap はイメージの ffmpeg (libzimg) にだけ組んであります。Mac と Windows の ffmpeg には無いので、4K の局をエンコードして観ることはできません
-  (詰め替えはできる)
+- zscale (libzimg)・tonemap は、イメージと Mac・Windows の配布物の ffmpeg のどれにも組んであります
 
 **字幕は ffmpeg を通しません。** MPU の TTML の文書を denpa が文字の配置にして (`@danything/arib/ttml`)、TS の字幕と同じ `0x22` で送ります。
 

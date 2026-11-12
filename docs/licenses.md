@@ -32,7 +32,7 @@ denpa 本体は AGPL-3.0-or-later で、GPLv3 のものと一緒に配れます�
 | x264                                                                            | H.264 のエンコード                                                                                     | <https://www.videolan.org/developers/x264.html> | GPL-2.0+                                                                  |
 | SVT-AV1 (ソースから組み、libavcodec に静的リンク)                               | AV1 のエンコード                                                                                       | <https://gitlab.com/AOMediaCodec/SVT-AV1>       | BSD-3-Clause-Clear + AOM 特許ライセンス                                   |
 | dav1d                                                                           | AV1 のデコード                                                                                         | <https://code.videolan.org/videolan/dav1d>      | BSD-2-Clause                                                              |
-| zimg (libzimg。Debian のパッケージ)                                             | 4K の局のライブで、HLG を SDR に直す (`zscale`)                                                        | <https://github.com/sekrit-twc/zimg>            | WTFPL                                                                     |
+| zimg (libzimg。Debian のパッケージ)                                             | 4K の局のライブと録画で、HLG を SDR に直す (`zscale`)                                                  | <https://github.com/sekrit-twc/zimg>            | WTFPL                                                                     |
 | Opus (libopus。ソースから組み、libavcodec に静的リンク)                         | 音声                                                                                                   | <https://opus-codec.org>                        | BSD-3-Clause                                                              |
 | libva / libva-drm                                                               | VA-API (GPU でエンコードする)                                                                          | <https://github.com/intel/libva>                | MIT                                                                       |
 | intel-media-va-driver-non-free (iHD。Debian の non-free 版)                     | Intel の VA-API ドライバ                                                                               | <https://github.com/intel/media-driver>         | MIT (一部 BSD)                                                            |
@@ -127,15 +127,15 @@ USB のカードリーダーは macOS の PCSC.framework (OS の一部) を呼�
 Windows (下) と同じく、上のコンテナイメージ `denpa` と同じものを Mac 用にしたものです。アプリ・Denpa Font・ブラウザへ配るデコーダは
 イメージと同じ段から写します。ライセンスの文書は tar.gz の `licenses/` と `ffmpeg/licenses/` に置きます。
 
-| 名前                                                                     | 何に                               | 出どころ                                                                              | ライセンス                                                       |
-| ------------------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Bun (`bun`。公式のリリースの `bun-darwin-aarch64.zip`)                   | denpa 本体を動かす                 | <https://github.com/oven-sh/bun>                                                      | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md` |
-| FFmpeg (`ffmpeg/`。CI の Mac のランナーで組み、libav* は静的リンク)      | 上のイメージの ffmpeg と同じ       | <https://ffmpeg.org>                                                                  | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+    |
-| SVT-AV1・Opus (ソースから組み、静的リンク)                               | イメージと同じ                     | 上の表のとおり                                                                        | 上の表のとおり                                                   |
-| x264・dav1d (ソースから組み、静的リンク。Debian trixie と同じバージョン) | H.264 のエンコード・AV1 のデコード | <https://code.videolan.org/videolan/x264>・<https://code.videolan.org/videolan/dav1d> | GPL-2.0+・BSD-2-Clause。`ffmpeg/licenses/` に文書                |
+| 名前                                                                           | 何に                                                                       | 出どころ                                                                                                                    | ライセンス                                                       |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Bun (`bun`。公式のリリースの `bun-darwin-aarch64.zip`)                         | denpa 本体を動かす                                                         | <https://github.com/oven-sh/bun>                                                                                            | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md` |
+| FFmpeg (`ffmpeg/`。CI の Mac のランナーで組み、libav* は静的リンク)            | 上のイメージの ffmpeg と同じ                                               | <https://ffmpeg.org>                                                                                                        | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+    |
+| SVT-AV1・Opus (ソースから組み、静的リンク)                                     | イメージと同じ                                                             | 上の表のとおり                                                                                                              | 上の表のとおり                                                   |
+| x264・dav1d・zimg (ソースから組み、静的リンク。Debian trixie と同じバージョン) | H.264 のエンコード・AV1 のデコード・4K の局の HLG を SDR に直す (`zscale`) | <https://code.videolan.org/videolan/x264>・<https://code.videolan.org/videolan/dav1d>・<https://github.com/sekrit-twc/zimg> | GPL-2.0+・BSD-2-Clause・WTFPL。`ffmpeg/licenses/` に文書         |
 
-VideoToolbox (GPU でのエンコード)・zlib・スレッドは macOS の一部を呼ぶので、tar.gz には入れません。
-ソースは Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball と、.github/ffmpeg-macos.sh に書いた x264 のコミット・dav1d のバージョンです。
+VideoToolbox (GPU でのエンコード)・zlib・スレッド・C++ の標準ライブラリ (zimg が使う libc++) は macOS の一部を呼ぶので、tar.gz には入れません。
+ソースは Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball と、.github/ffmpeg-macos.sh に書いた x264 のコミット・dav1d と zimg のバージョンです。
 
 ### Windows に入れるもの (`install.ps1`)
 
@@ -162,12 +162,13 @@ asicen-userland は入れません (上流には Windows 用の配布物があ�
 | Bun (`bun.exe`。公式のリリースの `bun-windows-x64-baseline.zip`)                                            | denpa 本体を動かす                                                                                              | <https://github.com/oven-sh/bun> | MIT (中の JavaScriptCore は LGPL-2.1)。`licenses/bun-LICENSE.md`                    |
 | FFmpeg (`ffmpeg/`。MSYS2 の UCRT64 で組み、libav* は静的リンク)                                             | 上のイメージの ffmpeg と同じ                                                                                    | <https://ffmpeg.org>             | イメージと同じく `--enable-gpl --enable-version3` で GPL-3.0+                       |
 | SVT-AV1・Opus (ソースから組み、libavcodec に静的リンク)                                                     | イメージと同じ                                                                                                  | 上の表のとおり                   | 上の表のとおり                                                                      |
-| x264・dav1d・zlib (MSYS2 のパッケージの DLL)                                                                | H.264 のエンコード・AV1 のデコード・PNG                                                                         | <https://packages.msys2.org>     | GPL-2.0+・BSD-2-Clause・zlib                                                        |
+| x264・dav1d・zimg・zlib (MSYS2 のパッケージの DLL)                                                          | H.264 のエンコード・AV1 のデコード・4K の局の HLG を SDR に直す (`zscale`)・PNG                                 | <https://packages.msys2.org>     | GPL-2.0+・BSD-2-Clause・WTFPL・zlib                                                 |
 | libvpl (静的リンク)・nv-codec-headers・AMF のヘッダ (MSYS2 のパッケージ。あとの 2 つは組むときのヘッダだけ) | GPU でエンコードする (Intel の QSV・NVIDIA の NVENC・AMD の AMF)。ドライバのライブラリは GPU のドライバが入れる | <https://packages.msys2.org>     | MIT。`ffmpeg/licenses/` に文書                                                      |
-| MinGW-w64 のランタイム (winpthreads など。ffmpeg が読む DLL だけ)                                           | スレッドなど                                                                                                    | <https://packages.msys2.org>     | パッケージのライセンスのとおり (MIT 系。GCC のものは GCC Runtime Library Exception) |
+| MinGW-w64 のランタイム (winpthreads・GCC の C++ の標準ライブラリなど。ffmpeg と zimg が読む DLL だけ)       | スレッド・C++ の標準ライブラリなど                                                                              | <https://packages.msys2.org>     | パッケージのライセンスのとおり (MIT 系。GCC のものは GCC Runtime Library Exception) |
 
 zip に入れる DLL は、組むときに ffmpeg.exe・ffprobe.exe の取り込み表から辿って決めます (.github/ffmpeg-windows.sh)。MSYS2 から写した DLL は、
 そのパッケージのライセンスの文書を `ffmpeg/licenses/<パッケージ>/` に、パッケージとバージョンを `ffmpeg/licenses/msys2-packages.txt` に書きます。
+パッケージに文書が無い x264 と zimg は、x264 には FFmpeg のソースにある GPLv2 の文を、zimg には上流の同じバージョンのタグの `COPYING` を置きます。
 ソースは、自分で組むもの (FFmpeg・SVT-AV1・Opus) は Dockerfile の `ffmpeg` 段と同じバージョンの上流の tarball、MSYS2 のパッケージは
 [msys2/MINGW-packages](https://github.com/msys2/MINGW-packages) の同じバージョンのものです。GPU のエンコーダ (NVENC・QSV・AMF) のヘッダとライブラリも MSYS2 のパッケージです。
 

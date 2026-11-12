@@ -10,7 +10,7 @@
 # configure が黙って外す。NVENC (h264_nvenc など) は Dockerfile の一覧にあるので、Windows でも組まれる。
 # patches/ の直しも Linux と同じく当てる。
 #
-# Linux と同じく、SVT-AV1 と Opus はソースから組んで libavcodec に静的に繋ぎ、x264 と dav1d は配布物
+# Linux と同じく、SVT-AV1 と Opus はソースから組んで libavcodec に静的に繋ぎ、x264・dav1d・zimg は配布物
 # (MSYS2 のパッケージ。Linux は Debian のもの) を使う。**libav* は Linux と違って静的に繋ぐ** (ffmpeg.exe と ffprobe.exe が
 # それぞれ抱える)。DLL にすると、libavfilter の DLL が libavformat の関数 (metadata フィルタの avio_closep) を解決できず組めない
 # (Linux の共有ライブラリは解決を実行時まで待つので組める)。
@@ -133,6 +133,7 @@ for p in "$root"/patches/ffmpeg-*.patch; do [ -e "$p" ] || continue; patch -p1 -
   --enable-libsvtav1 \
   --enable-libx264 \
   --enable-libdav1d \
+  --enable-libzimg \
   "${gpu[@]}" \
   --disable-everything \
   --disable-network \
@@ -145,6 +146,11 @@ make install
 encoders=$("$prefix/bin/ffmpeg.exe" -hide_banner -encoders)
 for e in h264_nvenc hevc_nvenc av1_nvenc h264_qsv hevc_qsv av1_qsv h264_amf hevc_amf av1_amf; do
   grep -qw "$e" <<< "$encoders" || { echo "ffmpeg に $e が組み込まれていません" >&2; exit 1; }
+done
+# 4K の局の HLG を SDR に直すフィルタ (uhd.HLG_TO_SDR)。zscale は libzimg が無いと configure が黙って外す
+filters=$("$prefix/bin/ffmpeg.exe" -hide_banner -filters)
+for f in setparams zscale tonemap; do
+  grep -qw "$f" <<< "$filters" || { echo "ffmpeg に $f が組み込まれていません" >&2; exit 1; }
 done
 mkdir -p "$out/licenses/ffmpeg" && cp COPYING.GPLv3 LICENSE.md "$out/licenses/ffmpeg/"
 
@@ -178,7 +184,7 @@ while [ "${#queue[@]}" -gt 0 ]; do
 done
 
 # MSYS2 から写した DLL と、静的に繋いだ MSYS2 のライブラリのパッケージの、ライセンスの文書とバージョン
-for lib in lib/libx264.a lib/libdav1d.a lib/libz.a lib/libwinpthread.a lib/libvpl.a include/ffnvcodec/nvEncodeAPI.h include/AMF/core/Version.h; do
+for lib in lib/libx264.a lib/libdav1d.a lib/libzimg.a lib/libz.a lib/libwinpthread.a lib/libvpl.a include/ffnvcodec/nvEncodeAPI.h include/AMF/core/Version.h; do
   if [ -e "/ucrt64/$lib" ]; then from_msys+=("/ucrt64/$lib"); fi
 done
 : > "$out/licenses/msys2-packages.txt"
@@ -201,6 +207,14 @@ for file in "${from_msys[@]}"; do
   fi
   # x264 は MSYS2 のパッケージに文書が入っていない。ライセンスは GPL-2.0-or-later だけなので、FFmpeg のソースにある GPLv2 の文を置く
   if [ "${#texts[@]}" -eq 0 ] && [ "${name:-}" = x264 ]; then texts=("$work/ffmpeg/COPYING.GPLv2"); fi
+  # zimg も MSYS2 のパッケージに文書が入っていない。上流の同じバージョンのタグ (release-<バージョン>) から COPYING (WTFPL) を取る
+  if [ "${#texts[@]}" -eq 0 ] && [ "${name:-}" = zimg ]; then
+    version=$(pacman -Q "$pkg" | awk '{ print $2 }')
+    version=${version%-*}
+    mkdir -p "$work/zimg-license"
+    $CURL -o "$work/zimg-license/COPYING" "https://raw.githubusercontent.com/sekrit-twc/zimg/release-${version}/COPYING"
+    texts=("$work/zimg-license/COPYING")
+  fi
   # winpthreads は MinGW-w64 の一部で、文書は MinGW-w64 の CRT のパッケージにある
   if [ "${#texts[@]}" -eq 0 ] && [[ "${name:-}" == winpthread* ]]; then
     mapfile -t texts < <(find /ucrt64/share/licenses/crt -type f 2>/dev/null || true)

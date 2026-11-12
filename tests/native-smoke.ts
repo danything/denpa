@@ -5,7 +5,7 @@
  *   bun tests/native-smoke.ts <配布物を開いた場所> <作業場所>
  *
  * - 同梱の ffmpeg で、denpa が使う経路の主なもの (.github/image-smoke.sh と同じ素材と引数) を流す。
- *   部品を Dockerfile から読んで組んでいるので、足りなければここで落ちる
+ *   部品を Dockerfile から読んで組んでいるので、足りなければここで落ちる。4K の局の HLG を SDR に直すフィルタ (uhd.HLG_TO_SDR) も流す
  * - GPU のエンコーダ (Windows は NVENC・QSV・AMF、Mac は VideoToolbox) が組み込まれ、denpa が渡すオプションを持つか。
  *   GPU で試せないランナーでは、試しのエンコードが全部落ちて、ソフトウェアでエンコードするか
  * - ffmpeg の 4 本目の出口 (stream.sideOutput。Windows では名前付きパイプ、Mac は `pipe:3`) で、進み具合と matroska を受けられるか
@@ -18,6 +18,7 @@ import { join } from "node:path";
 
 import { holdAwake, macPower } from "../src/lib/server/awake.ts";
 import { sideOutput } from "../src/lib/server/stream.ts";
+import { HLG_TO_SDR } from "../src/lib/server/uhd.ts";
 
 const [root, work] = process.argv.slice(2);
 if (root === undefined || work === undefined) {
@@ -174,6 +175,22 @@ await ff(
   "-movflags",
   "frag_keyframe+empty_moov+default_base_moof",
   at("live.mp4"),
+);
+// 4K の局のライブと録画の H.264・H.265 (live.uhdVideoArgs・encoder.ts)。10 ビットの映像を縮めて、HLG を SDR に直す
+await ff(
+  "-f",
+  "lavfi",
+  "-i",
+  "testsrc2=size=640x360:rate=60000/1001:duration=1",
+  "-vf",
+  ["format=yuv420p10le", "scale=-2:180", ...HLG_TO_SDR].join(","),
+  "-c:v",
+  "libx264",
+  "-preset",
+  "ultrafast",
+  "-f",
+  "mp4",
+  at("uhd.mp4"),
 );
 await ff(
   "-ss",
