@@ -236,11 +236,11 @@ export async function moveAgent(id: number, raw: string): Promise<Agent> {
         "合言葉 (#pair=…) が入っていません。エージェントが出した URL をそのまま貼ってください",
       );
     }
+    let res: Response;
     try {
-      const res = await fetchAt(origin, row.cert, "/denpa/about", {
+      res = await fetchAt(origin, row.cert, "/denpa/about", {
         signal: AbortSignal.timeout(10_000),
       });
-      if (!res.ok) throw new AgentAdminError(`${res.status}`);
     } catch (error) {
       if (error instanceof AgentTrustError) {
         throw new AgentAdminError(
@@ -249,6 +249,17 @@ export async function moveAgent(id: number, raw: string): Promise<Agent> {
       }
       throw new AgentAdminError(
         `${new URL(origin).host} に繋がりません。この denpa から届く名前か IP アドレスに書き換えてください`,
+      );
+    }
+    // 同じ証明書のエージェントだが、この denpa の登録が消えている (`tls/clients` から消された)。組み直すには合言葉が要る
+    if (await refusedAsUnpaired(res)) {
+      throw new AgentAdminError(
+        "エージェントにこの denpa の登録がありません。エージェントが出した登録用の URL (#pair=… の入ったもの) を貼ってください",
+      );
+    }
+    if (!res.ok) {
+      throw new AgentAdminError(
+        `${new URL(origin).host} のエージェントが答えませんでした (${res.status})`,
       );
     }
   }

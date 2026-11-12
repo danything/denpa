@@ -52,12 +52,12 @@ export function load(locals: { token?: number }, all: Agent[], lists: Lists) {
   };
 }
 
-/** 断りを画面の言葉にする。思いがけない失敗は理由を添える */
-function refusal(error: unknown) {
+/** 断りを画面の言葉にする。思いがけない失敗は、何ができなかったか (`what`) と理由を添える */
+function refusal(error: unknown, what: string) {
   if (error instanceof AgentAdminError)
     return fail(400, { message: error.message });
   return fail(502, {
-    message: `エージェントを登録できませんでした: ${error instanceof Error ? error.message : error}`,
+    message: `${what}: ${error instanceof Error ? error.message : error}`,
   });
 }
 
@@ -74,7 +74,7 @@ export const actions = {
       const agent = await addAgent(String(form.get("url") ?? ""));
       return { success: true, agentAdded: agent.name };
     } catch (error) {
-      return refusal(error);
+      return refusal(error, "エージェントを登録できませんでした");
     }
   },
 
@@ -88,7 +88,7 @@ export const actions = {
       renameAgent(id, String(form.get("name") ?? ""));
       return { success: true };
     } catch (error) {
-      return refusal(error);
+      return refusal(error, "名前を変えられませんでした");
     }
   },
 
@@ -102,7 +102,7 @@ export const actions = {
       const agent = await moveAgent(id, String(form.get("url") ?? ""));
       return { success: true, agentMoved: agent.name };
     } catch (error) {
-      return refusal(error);
+      return refusal(error, "URL を変えられませんでした");
     }
   },
 
@@ -122,7 +122,7 @@ export const actions = {
           : `${removed.name} に届かなかったため、エージェントの側にはこの denpa の登録が残っています`,
       };
     } catch (error) {
-      return refusal(error);
+      return refusal(error, "エージェントを削除できませんでした");
     }
   },
 } satisfies Actions;
