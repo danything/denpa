@@ -109,7 +109,7 @@
 
   /**
    * 受信できるチャンネルに、ライブと録画に使えない局 (復号できない局) があるか。種別ごとにわけを表のすぐ上に添える。
-   * SKY の局はどれも復号できない。CATV は B-CAS 以外の方式でスクランブルされた局だけ (`services.decodable`)
+   * SKY の局はどれも復号できない。CATV は B-CAS 以外の方式でスクランブルされた局と、4K の局 (ACAS) だけ (`services.decodable`)
    */
   const hasSky = $derived(
     data.channels.some((channel) => channel.type === "SKY"),

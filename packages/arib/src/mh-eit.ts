@@ -265,7 +265,7 @@ export class MmtEpgReader extends EpgReader {
 }
 
 /**
- * **1 局の「いま」と「次」(MH-EIT[p/f]) を追う。** TS の `PresentFollowing` の 4K の放送 (MMT/TLV) 版で、
+ * **1 局の「いま」と「次」(MH-EIT[p/f]) を追う。** TS の `PresentFollowing` を 4K の放送 (MMT/TLV) で使えるようにしたもので、
  * 違うのは読み方だけ (覚え方と、変わったかの比べ方は同じ)。ライブで番組の切り替わりを知るのに使う
  */
 export class MmtPresentFollowing extends PresentFollowing {

@@ -114,7 +114,7 @@
     size,
   } from "#lib/format.js";
   import { handoff, HANDOFF_GIVE_UP, handoffTarget } from "#lib/handoff.js";
-  import { broadcastHevcPlayable } from "#lib/hevc-4k.js";
+  import { broadcastHevcPlayable, browserHevcProbe } from "#lib/hevc-4k.js";
   import { CODEC_LABEL } from "#lib/hw.js";
   import { JikkyoFeed } from "#lib/jikkyo/feed.svelte.js";
   import { jikkyoListSwitch, jikkyoSwitch } from "#lib/jikkyo/switch.svelte.js";
@@ -705,16 +705,9 @@
       if (got?.offers.some((offer) => offer.way === "raw") === true)
         rawCapable = (await rawUnsupported()) === null;
       if (got?.broadcast === "hevc") {
-        const source = pickMediaSource()?.Source;
-        broadcastHevc = await broadcastHevcPlayable({
-          isTypeSupported: (type) => source?.isTypeSupported(type) ?? false,
-          ...(typeof navigator.mediaCapabilities?.decodingInfo === "function"
-            ? {
-                decodingInfo: (config) =>
-                  navigator.mediaCapabilities.decodingInfo(config),
-              }
-            : {}),
-        });
+        broadcastHevc = await broadcastHevcPlayable(
+          browserHevcProbe(pickMediaSource()?.Source),
+        );
       }
       /*
        * 聞けなかった (オフライン) ときは、今までどおりエンコード済みをそのまま渡す。

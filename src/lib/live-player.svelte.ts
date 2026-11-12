@@ -50,7 +50,7 @@ import {
   slipHidden,
   unslipper,
 } from "#lib/components/player/unslip.js";
-import { broadcastHevcPlayable } from "#lib/hevc-4k.js";
+import { broadcastHevcPlayable, browserHevcProbe } from "#lib/hevc-4k.js";
 import { forget, read, write } from "#lib/keep.js";
 import {
   LagMeter,
@@ -2381,16 +2381,9 @@ export function livePlayer(options: LivePlayerOptions = {}) {
     }
     // 4K の局なら、放送の HEVC を再生できるかを先に確かめる (1 回だけ。`#lib/hevc-4k.ts`)
     if (broadcastKind() === "hevc" && broadcastHevc === undefined) {
-      const source = pickMediaSource()?.Source;
-      broadcastHevc = await broadcastHevcPlayable({
-        isTypeSupported: (type) => source?.isTypeSupported(type) ?? false,
-        ...(typeof navigator.mediaCapabilities?.decodingInfo === "function"
-          ? {
-              decodingInfo: (config) =>
-                navigator.mediaCapabilities.decodingInfo(config),
-            }
-          : {}),
-      });
+      broadcastHevc = await broadcastHevcPlayable(
+        browserHevcProbe(pickMediaSource()?.Source),
+      );
     }
     await prepareCompat();
     if (superseded(mine) || !pickFormat()) return;
