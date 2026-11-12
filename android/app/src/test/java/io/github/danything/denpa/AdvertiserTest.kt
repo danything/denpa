@@ -9,7 +9,7 @@ class AdvertiserTest {
     private val id = "0123456789abcdef"
 
     @Test
-    fun instanceNameAddsFingerprintAndFitsOneLabel() {
+    fun インスタンスの名前は指紋を足し_1_つのラベルに収める() {
         assertEquals("居間 (01234567)", Advertiser.instanceName("居間", id))
         assertEquals("tuner-local (01234567)", Advertiser.instanceName("tuner.local", id))
         val long = Advertiser.instanceName("あ".repeat(40), id)
@@ -18,7 +18,7 @@ class AdvertiserTest {
     }
 
     @Test
-    fun txtHasOnlyVersionIdAndName() {
+    fun TXT_はバージョンと_id_と名前だけ() {
         assertEquals(listOf("v" to "1", "id" to id, "name" to "居間"), Advertiser.txt(id, "居間"))
     }
 }

@@ -53,7 +53,7 @@ public static class ChannelTable
     /// <param name="Frequency">**地上波と J.83B と ISDB-C は Hz、衛星は kHz**</param>
     /// <param name="StreamId">
     /// 復調器に渡す TSID。BS で名前に TSID があるときだけ入る。無ければ <see cref="NoStreamId"/> (選り分けない) で、
-    /// その中継器の先頭の TS が来る (NIT を読む入口の <c>BS15</c> はこれ)
+    /// その中継器の先頭の TS が来る (denpa が NIT を読むときに選局する <c>BS15</c> はこれ)
     /// </param>
     /// <param name="ServiceId">
     /// 受ける番組の番組番号 (service_id)。名前に <c>/152</c> のように付いているときだけ入る。無ければ null。
@@ -125,7 +125,7 @@ public static class ChannelTable
         {
             /*
              * スカパー！プレミアムサービス光 (J.83B)。93.25 MHz から 6.5 MHz おきに H01〜H105 (769.25 MHz まで) の中心周波数で、
-             * CATV と違って 1/7 MHz はずらさない (CXD2856 の仕様書 7.1。Digital Devices のドライバーの表と同じとされる並び)。
+             * CATV と違って 1/7 MHz はずらさない (CXD2856 の仕様書 7.1。Digital Devices のドライバの表と同じとされる並び)。
              * 地域によってずらして送られるもの (H11〜H12 は +1 MHz、H26〜H28 は +4 MHz、H44 は +2.2 MHz) は、ずらした周波数も持つ
              */
             if (!Number(name[1..], out var channel) || channel is < 1 or > 105) return null;

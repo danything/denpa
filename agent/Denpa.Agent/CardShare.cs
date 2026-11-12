@@ -190,7 +190,7 @@ public sealed class RemoteCard(string url, int hops) : IKeySource
         if (Volatile.Read(ref _emmMissing) == 1) throw new NotSupportedException(EmmMissing);
         try
         {
-            return CardWire.ReadCode(Post("emm", payload.ToArray(), "EMM の返り値"), "EMM ");
+            return CardWire.ReadCode(Post("emm", payload.ToArray(), "契約の更新 (EMM) の返り値"), "EMM ");
         }
         catch (ShareRefusedException error) when (error.Status == 404)
         {

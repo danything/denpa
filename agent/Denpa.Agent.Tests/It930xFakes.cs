@@ -146,7 +146,7 @@ internal sealed class FakeIt930x : IUsbDevice
         return new FakeTsIn(this);
     }
 
-    /// <summary>EP 0x84 の出しっぱなしの読み。閉じたら <see cref="Log"/> に控える</summary>
+    /// <summary>EP 0x84 の出したままの転送要求。閉じたら <see cref="Log"/> に控える</summary>
     private sealed class FakeTsIn(FakeIt930x owner) : IUsbInStream
     {
         public int Read(Span<byte> buffer, int timeoutMs)

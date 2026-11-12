@@ -35,7 +35,7 @@ public static partial class Interop
     ///
     /// <para>
     /// asicend は SIGTERM で後片付けをしてから終わるので、
-    /// まず SIGTERM を送り、終わらなければ呼んだ側が SIGKILL を送る (Userland.cs)
+    /// まず SIGTERM を送り、終わらなければ呼んだ側が SIGKILL を送る (Userland.cs・Asicen.cs)
     /// </para>
     ///
     /// <para>

@@ -483,7 +483,7 @@ public static class AsicenUserland
                 return;
             }
             var output = $"{stdout.GetAwaiter().GetResult()}{stderr.GetAwaiter().GetResult()}".Trim();
-            Log.Write($"[asicen {id}] ファームウェアの流し込みで asicend が終了しました (exit {process.ExitCode}: {output})。"
+            Log.Write($"[asicend {id}] ファームウェアの流し込みで asicend が終了しました (exit {process.ExitCode}: {output})。"
                 + "流し込めていれば、機材がつながり直してアプリから届きます");
         }
         catch (IOException error)

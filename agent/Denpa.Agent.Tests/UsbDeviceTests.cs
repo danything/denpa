@@ -192,7 +192,7 @@ public class UsbDeviceTests
     }
 
     [Test]
-    public async Task 取り消しても戻らない転送要求は_戻らなかったと知らせる()
+    public async Task 取り消しても転送要求が戻らなければ_Stop_は_false_を返す()
     {
         var release = new ManualResetEventSlim();
         var reading = new ManualResetEventSlim();

@@ -8,7 +8,7 @@ namespace Denpa.Agent;
  *
  * ブリッジ (It930xBridge.cs)、受信機ごとに TS を分ける層 (It930xTs.cs)、機材とチューナー (It930xDevice.cs)、
  * 受信機の後ろのチップ (CXD2856ER と CXD2858ER は Cxd2856.cs・Cxd2858.cs、TC90522 と R850・RT710 は Tc90522.cs・R850.cs・Rt710.cs)、
- * 実機で試す入口 (It930xProbe.cs の --it930x-probe と、Probe.cs の --tune it930x:… と --card it930x:…) がある。
+ * 実機で試すコマンド (It930xProbe.cs の --it930x-probe と、Probe.cs の --tune it930x:… と --card it930x:…) がある。
  * 自動検出 (Detect) が、この表の機種 (Family) を it930x:<USB のポート>:<受信機> で挙げる。
  * 受信機ごとの割り当ては仕様書 (denpa-spec の it930x/spec.md の 1 と、cxd2856/spec.md の 1.2 と、tc90522/spec.md の 1.2・11) から。
  * コメントの「IT930x の仕様書」は it930x/spec.md、「CXD2856 の仕様書」は cxd2856/spec.md、「TC90522 の仕様書」は tc90522/spec.md。
@@ -126,7 +126,7 @@ public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnly
     public It930xDemod Demod => Receivers[0].Demod;
 
     /// <summary>
-    /// LNB の給電の短絡を検出する GPIOH (入力。1 で正常、0 で短絡)。Q3・W3 系だけ (IT930x の仕様書 7.1・8。PLEX の公開ドライバーだけにある情報で、実機で確かめた記録は無い)。
+    /// LNB の給電の短絡を検出する GPIOH (入力。1 で正常、0 で短絡)。Q3・W3 系だけ (IT930x の仕様書 7.1・8。PLEX の公開ドライバだけにある情報で、実機で確かめた記録は無い)。
     /// 選局には使わず、<c>--tune</c> の出力にだけ出す
     /// </summary>
     public int? LnbSensePin => Demod is It930xDemod.Tc90522T or It930xDemod.Tc90522S ? 10 : null;
@@ -143,7 +143,7 @@ public sealed record It930xModel(int Vendor, int Product, string Name, IReadOnly
     }
 }
 
-/// <summary>IT930x を積んだ機材の識別と、挿さっているものを探す・開く。設定の <c>device</c> の形と、自動検出</summary>
+/// <summary>IT930x を積んだ機材の識別と、挿さっているものを探す・開く。設定の <c>device</c> の形式と、自動検出</summary>
 public static class It930x
 {
     /// <summary>

@@ -322,12 +322,10 @@ internal sealed class UdtvControl : IDisposable
         {
             ConnectWithin(socket, socketPath, timeout);
             control.Epoch = ParseHello(control.Request(Udtv.Hello, HelloRequest));
-            // LIST は epoch だけ、STATUS は epoch に 0 を 9 バイト。公式のクライアントが送るとおり。応答は読まない (epoch だけ確かめる)
+            // LIST は epoch だけ、STATUS は epoch に 0 を 9 バイト。公式のクライアントが送るとおり。応答は読まない (LIST の epoch だけ確かめる)
             var listed = new Udtv.Reader(control.Request(Udtv.List, control.Epoch), "LIST の応答");
             listed.Epoch(control.Epoch);
-            var status = new byte[Udtv.EpochSize + 9];
-            control.Epoch.CopyTo(status, 0);
-            control.Request(Udtv.Status, status);
+            control.Request(Udtv.Status, control.WithEpoch(new byte[9]));
             return control;
         }
         catch (Exception error)

@@ -81,7 +81,7 @@ public class Dt295Tests
     }
 
     [Test]
-    public async Task sysfs_から同じドライバーの機材を見分けて並べる()
+    public async Task sysfs_から同じドライバの機材を見分けて並べる()
     {
         if (OperatingSystem.IsWindows()) return;
         var dir = Directory.CreateTempSubdirectory("dt295family");

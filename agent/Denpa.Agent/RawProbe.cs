@@ -7,7 +7,7 @@ namespace Denpa.Agent;
 /// 元の TS の置き場 (<c>RAW_DIR</c>) が denpa と同じに見えているかを、denpa に確かめさせる (<c>POST /denpa/raw/probe</c>)。
 ///
 /// <para>
-/// denpa は <c>RAW_DIR/.denpa/probe-&lt;エージェントの ID&gt;</c> に乱数を書き、ここに置き場からの相対パスを渡す。
+/// denpa は <c>RAW_DIR/.denpa/probe-&lt;エージェントの ID&gt;-&lt;乱数&gt;</c> に乱数を書き、ここに置き場からの相対パスを渡す。
 /// こちらはその中身の SHA-256 を返し、denpa が書いたものと比べる (denpa の <c>scramble.ts</c> の <c>probeRaw</c>)。
 /// 合えば、後から復号する (<c>/denpa/decode</c>) ときに同じファイルを読める。エージェントが何台もあるとき、復号させる先を選ぶのに使う。
 /// </para>

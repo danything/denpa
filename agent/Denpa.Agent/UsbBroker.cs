@@ -10,9 +10,9 @@ namespace Denpa.Agent;
 /*
  * Android のアプリから USB の機材を受け取る仕組み (USB_BROKER)。Android ではアプリしか USB の機材を開けない (UsbManager の許可が要る) ので、
  * アプリが開いた usbfs の fd を UNIX ドメインソケットの SCM_RIGHTS でエージェントに渡す。エージェントは受け取った fd を持ち、
- * 開くたびに dup して使う (UsbFsDevice.Open・UsbFsPipe.Open の fd 版)。
+ * 開くたびに dup して使う (UsbFsDevice.Open・UsbFsPipe.Open の、fd を受け取るほう)。
  *
- * 取り決め (denpa-spec の android/design.md 3 章)
+ * 取り決め (docs/agent.md「Android でアプリから USB を受け取る」。設計は denpa-spec の android/design.md 3 章)
  * - エージェントが USB_BROKER のパスで待ち受け (AF_UNIX・SOCK_STREAM・0600)、アプリが繋ぐ。uid が自分と違う相手は切る
  *   (bind から chmod までの間に umask の権限で繋がれても、uid で切る。置き場はアプリだけが読める dataDir)
  * - 1 行 1 つの JSON (UTF-8)。`type` が attached・detached・synced。1 行は 1 回の write で送り、attached の write に fd を SCM_RIGHTS で 1 つ付ける

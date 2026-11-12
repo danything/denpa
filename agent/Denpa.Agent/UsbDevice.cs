@@ -129,7 +129,7 @@ public static class UsbDevices
         path.Split('#') is [_, _, var serial, ..] && serial.Length > 0 && !serial.Contains('&') ? serial : null;
 
     /// <summary>
-    /// <c>--card</c> の差し込み口の行: ATR と、開いてから ATR までの時間。**見つからなくても 1 行出す**
+    /// <c>--card</c> の差し込み口の行。ATR と、開いてから ATR までの時間。**見つからなくても 1 行出す**
     /// (macOS・Windows で OS に見えていないのか、開けないのかを分けるため)。どんな例外でも行にして次へ進む
     /// </summary>
     /// <param name="model">見つからないときに出す機材の名前</param>

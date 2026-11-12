@@ -81,7 +81,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
         {
             networks = [.. networksText.Split([',', ' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(Network)];
             if (networks.Count == 0) throw new ArgumentException("CARD_SHARE_NETWORKS に範囲が 1 つもありません");
-            // IPNetwork は struct なので、FirstOrDefault では「無い」が 0.0.0.0/0 になる。null にできる形で探す
+            // IPNetwork は struct なので、FirstOrDefault では「無い」が 0.0.0.0/0 になる。null にできる型で探す
             if (networks.Where(network => !Inside(network)).Cast<IPNetwork?>().FirstOrDefault() is { } outside)
             {
                 throw new ArgumentException(
@@ -186,7 +186,7 @@ public sealed record CardLanPolicy(int? Port, IReadOnlyList<IPNetwork> Networks,
     }
 
     /// <summary>
-    /// 比べる形に揃える。**IPv4 射影アドレス (::ffff:192.168.1.2) は IPv4 として**見る。
+    /// 比べられるように揃える。**IPv4 射影アドレス (::ffff:192.168.1.2) は IPv4 として**見る。
     /// そのままだと IPv4 の範囲に入らず、IPv6 の範囲 (::/0 など) には入ってしまう。スコープ (%eth0) は外す
     /// </summary>
     public static IPAddress Plain(IPAddress address)

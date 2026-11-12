@@ -996,7 +996,6 @@ public class SianoTests
     [Test]
     public async Task 設定の_device_は_siano_に_USB_のポートを続けた形式()
     {
-        // siano-userland を起動していたころの設定 (siano:<USB のポート>) を、そのまま読む
         await Assert.That(Siano.Is("siano:1-2.3")).IsTrue();
         await Assert.That(Siano.Parse("siano:1-2.3")).IsEqualTo("1-2.3");
         await Assert.That(Siano.Device("1-2.3")).IsEqualTo("siano:1-2.3");

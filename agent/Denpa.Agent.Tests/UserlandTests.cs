@@ -79,7 +79,7 @@ public class UserlandDaemonTests
         public override void Ensure()
         {
             if (Running) return;
-            Launch("sleep", ["60"], dir, () => true, () => { });
+            Launch("sleep", _ => ["60"], dir, () => true, () => { }, null, null);
         }
     }
 

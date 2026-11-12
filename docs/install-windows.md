@@ -202,7 +202,7 @@ install.ps1 は無いときだけ雛形 (`TZ`・`ENCODE_CONCURRENCY`・`TRUSTED_
 ## 使えないもの
 
 - PT2/PT3 などの DVB の機材は使えません。Windows に DVB はありません
-- PX-W3U3 など (asicen-userland) は使えません。エージェントが対応しているのは Linux だけです
+- PX-W3U3 など (asicen-userland) は使えません。エージェントが対応しているのは Linux と Android だけです
 - **止めるときに録画を待てません。** Windows にはプロセスに「止まれ」を伝える手 (SIGTERM) が無く、
   止めればその場で落ちます。上げ直し・外すときは install.ps1 が録画の終わりを待ってから止めますが、
   再起動・シャットダウンでは待たずに切れます (録画中に Windows を落とさないこと)

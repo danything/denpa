@@ -166,7 +166,7 @@ public interface ICcidPipe : IBulkPipe
 
 /// <summary>
 /// Linux の usbfs (<c>/dev/bus/usb/BBB/DDD</c>) を ioctl で直に扱うための共通の部品。<see cref="UsbFsPipe"/> (カードリーダー) と
-/// <see cref="UsbFsDevice"/> (チューナー) が使う。**libusb を使わない。**
+/// <see cref="UsbFsDevice"/> (チューナー) が使う。
 ///
 /// <para>
 /// ioctl の番号と構造体のレイアウトはカーネルの uapi (<c>linux/usbdevice_fs.h</c>) のもの。x64 と arm64 で同じ (どちらも LP64 で、

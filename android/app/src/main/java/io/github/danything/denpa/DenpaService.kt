@@ -79,7 +79,7 @@ class DenpaService : Service() {
     /** 出している通知の本文と URL と、QR を出しているか */
     private var shown: Triple<String, String?, Boolean>? = null
 
-    /** 「QR を表示」で出している登録用の URL の QR。出していなければ null。[QR_SHOWN] たったら消す */
+    /** 「QR を表示」で出している登録用の URL の QR。出していなければ null。[QR_SHOWN] 経ったら消す */
     private var qr: Bitmap? = null
     private val hideQr = Runnable {
         qr = null
@@ -244,7 +244,7 @@ class DenpaService : Service() {
 
     /**
      * エージェントの環境変数。合言葉はアプリが先に作っておく (エージェントは `config/tls/pair-token` から読む。
-     * 同じものを同じ端末の denpa に `TUNER_AGENT_URL` の `#pair=` で渡し、別の機械の denpa には組む URL で渡す)
+     * 同じものを同じ端末の denpa に `TUNER_AGENT_URL` の `#pair=` で渡し、別の機械の denpa には登録用の URL で渡す)
      */
     private fun agentEnvironment(): Map<String, String> {
         val config = File(home, "config").apply { mkdirs() }

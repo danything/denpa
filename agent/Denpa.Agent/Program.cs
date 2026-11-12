@@ -45,7 +45,7 @@ if (args is ["--usb-ids"])
     Console.WriteLine(WinUsbTargets.ToJson());
     return 0;
 }
-// 実機で選局と復号だけ試す入口。サーバは立てない (Probe.cs)
+// 実機で選局と復号だけを試すコマンド。サーバは立てない (Probe.cs)
 if (args.ElementAtOrDefault(0) == "--tune") return Probe.Run(args);
 if (args.ElementAtOrDefault(0) == "--decode-file") return Probe.Decode(args);
 if (args.ElementAtOrDefault(0) == "--card") return Probe.Card(args);

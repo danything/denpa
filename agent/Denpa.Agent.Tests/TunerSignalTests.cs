@@ -26,7 +26,7 @@ public class TunerSignalTests
     }
 
     [Test]
-    public async Task DVB_の相対値は_生の値のまま()
+    public async Task DVB_の相対値は_ドライバの値のまま_raw()
     {
         await Assert.That(DvbTuner.Cnr(true, Cnr(1, 2, 40_000))).IsEqualTo(new TunerSignal(true, 40_000, TunerSignal.Raw));
     }
@@ -105,7 +105,7 @@ public class TunerSignalTests
     }
 
     [Test]
-    public async Task JSON_は_dB_を小数_1_桁_生の値を整数にする()
+    public async Task JSON_は_dB_を小数_1_桁_raw_を整数にする()
     {
         var db = new TunerSignal(true, 25.345, TunerSignal.Db, AtTune: true).ToJson();
         await Assert.That(db.ToJsonString()).IsEqualTo("""{"locked":true,"cn":25.3,"unit":"dB","atTune":true,"strengthDbm":null}""");

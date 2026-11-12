@@ -3,7 +3,7 @@ using System.Text;
 namespace Denpa.Agent;
 
 /// <summary>
-/// 登録用の URL の QR コード (<c>--pair</c> が端末に描く。docs/agent.md「denpa と組む」)。
+/// 登録用の URL の QR コード (<c>--pair</c> が端末に描く。docs/agent.md「登録用の URL を出す」)。
 ///
 /// <para>
 /// **ライブラリを増やさないため、JIS X 0510 (ISO/IEC 18004) を読んで自前で書いた。** 扱うのは 8 ビットバイトのモードと、

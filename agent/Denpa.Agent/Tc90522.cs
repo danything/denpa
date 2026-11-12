@@ -650,14 +650,6 @@ internal sealed class Tc90522Board : IIt930xBoard
         ];
     }
 
-    public int OpenCount
-    {
-        get
-        {
-            lock (_gate) return _open.Count;
-        }
-    }
-
     public IIt930xFrontend Open(int receiver)
     {
         lock (_gate)
