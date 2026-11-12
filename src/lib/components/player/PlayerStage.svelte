@@ -519,9 +519,9 @@
   .quiet {
     cursor: none;
   }
-  /* 字幕の持ち上げ (上の `lift`)。操作バーの出入りと同じ `--dp-duration` で動かす (動かさない設定では一緒に止まる) */
+  /* 字幕の持ち上げ (上の `lift`)。場所が動くので `--dp-duration-move` (docs/design.md の「動き」。動きを減らす設定では止まる) */
   .stage :global(canvas[data-ink]) {
-    transition: translate var(--dp-duration) var(--dp-ease);
+    transition: translate var(--dp-duration-move) var(--dp-ease);
   }
   /* 通知の列。押せない (下の映像を押せるように)。押せる通知は自分で戻す */
   .notes {

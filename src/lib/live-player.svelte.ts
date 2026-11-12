@@ -284,7 +284,7 @@ function chooseSteering(): Steering {
 
 interface LivePlayerOptions {
   /**
-   * 運転中の注意を見せて、「わかりました」を待つ (互換モード。`canvas-video.ts`)。
+   * 運転中の注意を見せて、「了解」を待つ (互換モード。`canvas-video.ts`)。
    * **まだ見せていない端末で、canvas で描く前に 1 回だけ呼ぶ。** 押されるまで再生を始めない
    */
   confirm?: () => Promise<void>;

@@ -11,6 +11,7 @@
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
   import ProgramActions from "#lib/components/ProgramActions.svelte";
   import ProgramDetail from "#lib/components/ProgramDetail.svelte";
+  import ProgramState from "#lib/components/ProgramState.svelte";
   import ServiceLogo from "#lib/components/ServiceLogo.svelte";
   import Toasts, {
     errorNotice,
@@ -335,13 +336,14 @@
               data-testid="recent-clear">履歴を消す</button
             >
           </div>
-          <ul class="item-list" data-testid="recent-searches">
+          <!-- 1 行の並びなので件の面に乗せず、地に並べる (サイドバーと同じ行。docs/design.md の「3 つの層」) -->
+          <ul class="side-list recent-list" data-testid="recent-searches">
             {#each recent as word (word)}
-              <li class="hit item">
+              <li>
                 <a
-                  class="hit-main"
+                  class="side-item"
                   href={resolve(`search?q=${encodeURIComponent(word)}`)}
-                  >{word}</a
+                  ><span class="truncate">{word}</span></a
                 >
               </li>
             {/each}
@@ -723,8 +725,8 @@
               </span>
               <!-- 録るかどうかは事実なので補足の字で (docs/design.md の「印の意味」)。録らない行は薄くもなる (`.dim`) -->
               <span class="hit-meta small muted">
-                <span class="broadcast">{row.service_name}</span>・<span
-                  class="num">{dateTime(row.start_at)}〜{time(row.end_at)}</span
+                {@render service(row)}<span class="num"
+                  >{dateTime(row.start_at)}〜{time(row.end_at)}</span
                 >{#if !row.matched}・録らない (条件から外れました){:else if row.skip !== null}・録らない
                   ({SKIP_LABEL[
                     row.skip.kind
@@ -808,6 +810,14 @@
 
 {#if detail.current}
   <ProgramDetail program={detail.current} onclose={close}>
+    {#snippet status()}
+      {#if opened !== null}
+        <ProgramState
+          state={opened.reservation_state}
+          ended={opened.end_at <= clock}
+        />
+      {/if}
+    {/snippet}
     {#snippet actions()}
       <!-- 何を出すか・どれを主にするかは番組表の詳細と同じ (`ProgramActions`)。録画の再生は出さない (結果の録画の節から観る) -->
       {#if opened !== null}
@@ -891,6 +901,10 @@
   .summary {
     margin: 0;
   }
+  /* 最近の検索は節の見出しと字の始まりをそろえる (サイドバーの行は見出しより深く始まるので、その分を外す) */
+  .recent-list {
+    padding-inline-start: 0;
+  }
   /*
      * **節は見出しだけ** (カードで囲まず、線も引かない)。行は名前と小さな説明の 2 段で、
      * ホームの行と同じく 1 件ずつ件の面に乗せ、件の間は `--dp-list-gap`。指を乗せると面が一段変わる (押せる範囲は行の中身いっぱい)
@@ -935,7 +949,7 @@
   }
   .hits-head h2 {
     margin: 0;
-    font-size: var(--dp-text-base);
+    font-size: var(--dp-text-lg);
     font-weight: var(--dp-weight-bold);
   }
   .count {
@@ -951,7 +965,7 @@
     gap: var(--dp-space-2);
     padding-inline-end: var(--dp-space-2);
   }
-  /* 2 段の件は `--dp-item-h` (docs/design.md の「何行かある一覧」。ホームの行と同じ)。1 段の最近の検索は除く */
+  /* 2 段の件は `--dp-item-h` (docs/design.md の「何行かある一覧」。ホームの行と同じ) */
   .hit:has(.hit-meta) {
     min-height: var(--dp-item-h);
   }

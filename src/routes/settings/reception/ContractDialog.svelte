@@ -5,7 +5,6 @@
   import { untrack } from "svelte";
   import RefreshCw from "~icons/lucide/refresh-cw";
   import ShieldCheck from "~icons/lucide/shield-check";
-  import X from "~icons/lucide/x";
 
   import { fullDate, SERVICE_TYPE_LABEL } from "#lib/format.js";
   import type { ContractRow } from "#lib/server/contracts.js";
@@ -143,15 +142,6 @@
     onclick={() => dialog?.close()}
   ></button>
   <article class="modal-box modal-box-wide" bind:this={box} tabindex="-1">
-    <button
-      type="button"
-      class="ghost icon small modal-close"
-      onclick={() => dialog?.close()}
-      aria-label="閉じる"
-      data-testid="contract-close"
-    >
-      <X aria-hidden="true" />
-    </button>
     <h2 id="contract-dialog-title">有料契約の確認</h2>
     <p class="small muted intro">
       {#if cardId}
@@ -243,29 +233,37 @@
     {/if}
 
     <!-- 押すものは右下 (docs/design.md の「メニュー・ダイアログ・検索の候補」) -->
-    <footer class="modal-actions">
+    <footer class="modal-foot">
       <button
         type="button"
-        class="secondary"
-        disabled={busy !== null || !hasUnverified}
-        onclick={testUnverified}
-        data-testid="btn-test-decode-unverified"
+        class="secondary modal-close"
+        onclick={() => dialog?.close()}
+        data-testid="contract-close">閉じる</button
       >
-        <ShieldCheck aria-hidden="true" />
-        {busy === "unverified"
-          ? "確かめています…"
-          : "確かめていない局の復号を確かめる"}
-      </button>
-      <button
-        type="button"
-        class="secondary"
-        disabled={busy !== null}
-        onclick={checkContracts}
-        data-testid="btn-check-contracts"
-      >
-        <RefreshCw aria-hidden="true" />
-        {busy === "check" ? "確認しています…" : "契約を確認し直す"}
-      </button>
+      <div class="modal-actions">
+        <button
+          type="button"
+          class="secondary"
+          disabled={busy !== null || !hasUnverified}
+          onclick={testUnverified}
+          data-testid="btn-test-decode-unverified"
+        >
+          <ShieldCheck aria-hidden="true" />
+          {busy === "unverified"
+            ? "確かめています…"
+            : "確かめていない局の復号を確かめる"}
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          disabled={busy !== null}
+          onclick={checkContracts}
+          data-testid="btn-check-contracts"
+        >
+          <RefreshCw aria-hidden="true" />
+          {busy === "check" ? "確認しています…" : "契約を確認し直す"}
+        </button>
+      </div>
     </footer>
   </article>
 </dialog>

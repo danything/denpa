@@ -342,7 +342,7 @@
     transform: none;
   }
   .seek:has(input:focus-visible) {
-    outline: 2px solid var(--pico-primary);
+    outline: 2px solid var(--dp-video-focus);
     outline-offset: 2px;
   }
   /*

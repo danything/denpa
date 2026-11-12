@@ -33,7 +33,7 @@ function patPrograms(data: Buffer): number[] {
   for (let at = 0; at + 188 <= data.length; at += 188) {
     if (data[at] !== 0x47) continue;
     const pid = ((data[at + 1]! & 0x1f) << 8) | data[at + 2]!;
-    // 区切りの頭が入っているものだけ (payload_unit_start_indicator)
+    // 区切りの先頭が入っているものだけ (payload_unit_start_indicator)
     if (pid !== 0 || (data[at + 1]! & 0x40) === 0) continue;
     const start = at + 4 + 1 + data[at + 4]!;
     if (data[start] !== 0x00) continue;
@@ -296,7 +296,7 @@ test.describe("ライブ視聴", () => {
         Math.abs(tabs.x + tabs.width - (row.x + row.width)),
         `${at} の右`,
       ).toBeLessThanOrEqual(1);
-      // 面の中の余白も左右で同じ (ロゴの頭と (i) の印の外)
+      // 面の中の余白も左右で同じ (ロゴの先頭と (i) の印の外)
       if (size.width === 820) continue;
       const item = page
         .locator(".live-side .channel-item")
@@ -465,7 +465,7 @@ test.describe("ライブ視聴", () => {
     await expect(first).toBeVisible();
     // 地上波はリモコン番号
     await expect(first.getByTestId("live-number")).toHaveText(/^\d+$/);
-    // 番号は局名の頭 (ロゴの右)。ロゴの前に番号の列を取ると、狭い列で局名が潰れた
+    // 番号は局名の先頭 (ロゴの右)。ロゴの前に番号の列を取ると、狭い列で局名が潰れた
     const logo = (await first.locator(".logo").boundingBox())!;
     const number = (await first.getByTestId("live-number").boundingBox())!;
     expect(number.x).toBeGreaterThan(logo.x + logo.width);
@@ -774,7 +774,7 @@ test.describe("ライブ視聴", () => {
           super(url, protocols);
           this.addEventListener("message", (event) => {
             const data = (event as MessageEvent).data;
-            // 多重化の頭 1 バイトが種別。0x40 が制御で、中身は 9 バイト目から JSON
+            // 多重化の先頭 1 バイトが種別。0x40 が制御で、中身は 9 バイト目から JSON
             if (
               !(data instanceof ArrayBuffer) ||
               new Uint8Array(data)[0] !== 0x40

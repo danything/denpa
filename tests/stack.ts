@@ -74,7 +74,7 @@ export interface Stack {
    * 偽の放送の PMT は既定で字幕を載せない (`/__control/captions` で載せる)
    */
   liveNoCaptionsFile: string;
-  /** ライブ視聴で偽 ffmpeg に渡された TS の頭。1 局に絞れているかを見る */
+  /** ライブ視聴で偽 ffmpeg に渡された TS の先頭。1 局に絞れているかを見る */
   liveTsFile: string;
   /**
    * これを置くとライブの AV1 の偽 ffmpeg が、本物の AV1 + Opus の fMP4 を流す (`tests/fake/fmp4-loop.ts`)。

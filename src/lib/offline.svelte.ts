@@ -265,7 +265,7 @@ async function ensureRoom(bytes: number): Promise<void> {
     .catch((): StorageEstimate => ({}));
   if (quota !== undefined && usage !== undefined && quota - usage < bytes * 1.2)
     throw new Error(
-      `端末の空き容量が足りません (残り ${Math.round((quota - usage) / 1e6)}MB)`,
+      `端末の空き容量が足りません (残り ${Math.round((quota - usage) / 1e6)} MB)`,
     );
   // ブラウザの都合で勝手に消されないようにリクエストする。断られても致命ではない
   await navigator.storage.persist?.().catch(() => {});

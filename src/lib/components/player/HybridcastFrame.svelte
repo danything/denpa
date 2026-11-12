@@ -37,8 +37,6 @@
   import { read, write } from "#lib/keep.js";
   import type { HybridcastLink } from "#lib/live.js";
 
-  import StageNote from "./StageNote.svelte";
-
   type Place = Extract<FrameMessage, { type: "video" }>["place"];
 
   interface Props {
@@ -61,6 +59,8 @@
     onvideo: (place: Place) => void;
     /** リモコン (AribKeyCode) を渡す関数 (bind で受け取る)。戻る・d は閉じる */
     press?: ((code: number, down: boolean) => void) | null;
+    /** 映像の上に出す読み込みの通知 (bind で受け取る。読み込めたら空)。出すのは `DataBroadcast` を使う画面 (舞台の通知の列) */
+    note?: string;
   }
 
   let {
@@ -73,11 +73,20 @@
     oncaptions,
     onvideo,
     press = $bindable(null),
+    note = $bindable(""),
   }: Props = $props();
 
   let box = $state<HTMLDivElement | null>(null);
   let frame = $state<HTMLIFrameElement | null>(null);
   let phase = $state<"loading" | "ready" | "failed">("loading");
+  $effect(() => {
+    note =
+      phase === "loading"
+        ? "Hybridcast を読み込み中…"
+        : phase === "failed"
+          ? "Hybridcast のアプリを読み込めませんでした (戻るで閉じる)"
+          : "";
+  });
   let scale = $state("scale(1)");
   /** 渡す HTML (取れたら入る) と、iframe が受け取れるようになったか */
   let html: string | null = null;
@@ -367,15 +376,6 @@
     style:height="{VIEWPORT.height}px"
     style:transform={scale}
   ></iframe>
-  {#if phase !== "ready"}
-    <div class="corner">
-      <StageNote>
-        {phase === "loading"
-          ? "Hybridcast を読み込み中…"
-          : "Hybridcast のアプリを読み込めませんでした (戻るで閉じる)"}
-      </StageNote>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -394,13 +394,5 @@
     background: transparent;
     /* 中の文書と揃える (違うとブラウザが iframe を不透明に塗り、下の映像が隠れる) */
     color-scheme: light;
-  }
-  .corner {
-    position: absolute;
-    top: var(--dp-space-3);
-    right: var(--dp-space-3);
-    /* データ放送の箱 (`DataBroadcast` の `.data`) の中だけの前後 */
-    z-index: 1;
-    display: flex;
   }
 </style>

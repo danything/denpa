@@ -68,18 +68,18 @@ export function duration(startAt: number, endAt: number): string {
   return durationMs(endAt - startAt);
 }
 
-/** 「いま」の線に添える一言 (`NowLine`)。`short` は狭い幅で代わりに出す形 */
+/** 「いま」の行に添える一言 (`NowMark`)。`short` は狭い幅で代わりに出す形 */
 export interface NowStatus {
   text: string;
   short: string;
 }
 
 /**
- * **「いま」の線に添える一言。** 次の録画 (いまより後に始まる予約のうちいちばん早いもの) までを
+ * **「いま」の行に添える一言。** 次の録画 (いまより後に始まる予約のうちいちばん早いもの) までを
  * 「次の録画まで 3 時間 59 分」と言う。無ければ null (何も添えない)。録画中かどうかは言わない。
- * 録画中の行は線の上にあり、あと何分かは行の 3 段目が言う (`recordingLeft`)。
+ * 録画中の行は「いま」の行の上にあり、あと何分かは行の 3 段目が言う (`recordingLeft`)。
  *
- * 分は切り上げる。線の時刻は分を切り捨てて出すので、22:00 の録画は 18:01 の間ずっと「3 時間 59 分」になり、
+ * 分は切り上げる。「いま」の行の時刻は分を切り捨てて出すので、22:00 の録画は 18:01 の間ずっと「3 時間 59 分」になり、
  * 時刻と食い違わない。1 日より先は日数で
  */
 export function nowStatus(
@@ -215,7 +215,7 @@ export function size(bytes: number): string {
 
 /**
  * 進み具合のバー (`JobProgress`) に出す大きさの単位と換算。数百 GB をバイトで並べても読めないので、
- * 合計が 1GB 以上なら GB (小数 1 桁)、それより小さければ MB (引き継ぎ・別の機械へ移す)
+ * 合計が 1 GB 以上なら GB (小数 1 桁)、それより小さければ MB (引き継ぎ・別の機械へ移す)
  */
 export function byteScale(total: number): {
   unit: "GB" | "MB";
@@ -230,7 +230,7 @@ export function byteScale(total: number): {
 }
 
 /**
- * 録画の見出しに添える空きと残り時間 (`disk.capacity`)。「空き 1.2TB」と「約 900 時間」。
+ * 録画の見出しに添える空きと残り時間 (`disk.capacity`)。「空き 1.2 TB」と「約 900 時間」。
  * 分けて返すのは、列が狭いと時間のほうだけ落とすため。目安が無ければ `hours` は null。
  *
  * **細かく出さない。** 見出しの脇に小さく置くので短く、また値が少し動くたびに
@@ -244,10 +244,10 @@ export function capacityLabel(
   const tb = free / 1024 ** 4;
   const space =
     tb >= 1
-      ? `${tb.toFixed(1)}TB`
+      ? `${tb.toFixed(1)} TB`
       : free >= 1024 ** 3
-        ? `${Math.floor(free / 1024 ** 3)}GB`
-        : "1GB 未満";
+        ? `${Math.floor(free / 1024 ** 3)} GB`
+        : "1 GB 未満";
   if (hours === null) return { free: `空き ${space}`, hours: null };
   if (hours < 1) return { free: `空き ${space}`, hours: "1 時間未満" };
   const step = hours >= 1000 ? 100 : hours >= 100 ? 10 : 1;

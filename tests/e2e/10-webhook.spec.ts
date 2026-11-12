@@ -42,7 +42,7 @@ test.describe("通知", () => {
       "届きました",
     );
     /*
-     * 通知の種類は頭のアイコンで示す (docs/design.md の「通知」)。左の縦線は「選んでいる」の印なので引かない。
+     * 通知の種類は先頭のアイコンで示す (docs/design.md の「通知」)。左の縦線は「選んでいる」の印なので引かない。
      * アイコンだけが状態の色 (`--dp-ok-text`) で、地は操作の層の面 (`--dp-pop`)
      */
     const look = await page.getByTestId("webhook-tested").evaluate((el) => {

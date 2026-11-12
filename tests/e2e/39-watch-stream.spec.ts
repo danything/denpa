@@ -319,13 +319,13 @@ test.describe("観る画面でその場で流す", () => {
 
   /**
    * **段を替えるときは、いまの映像を映したまま裏の `<video>` で用意して入れ替える** (`handoff.ts`)。
-   * ファイルの直再生から段を下げた変換へ移っても、黒く塗った覆いを出さず、観ていない頭の CM を飛ばず
+   * ファイルの直再生から段を下げた変換へ移っても、黒く塗った覆いを出さず、観ていない先頭の CM を飛ばず
    * (「CM を飛ばしました」を出さない)、観ていた位置から続ける。同じ `<video>` を作り直していた頃は、
-   * 位置が 0 に戻った一瞬に頭の CM を飛び、映像も黒くなっていた。
+   * 位置が 0 に戻った一瞬に先頭の CM を飛び、映像も黒くなっていた。
    *
-   * ファイルは頭の 12 秒ぶんだけにし (届いたぶんを観終えそうになる)、映像は作り置きの fMP4 (`fmp4-clip.ts`) を使う
+   * ファイルは先頭の 12 秒ぶんだけにし (届いたぶんを観終えそうになる)、映像は作り置きの fMP4 (`fmp4-clip.ts`) を使う
    */
-  test("段を下げても黒くならず、頭の CM を飛ばず、観ていた位置から続ける", async ({
+  test("段を下げても黒くならず、先頭の CM を飛ばず、観ていた位置から続ける", async ({
     page,
     request,
   }) => {
@@ -357,7 +357,7 @@ test.describe("観る画面でその場で流す", () => {
           },
         }),
       );
-      // ファイルは頭の 12 秒ぶんしか無い。先のバッファが減り続けて 2 秒を切ると、段を下げる
+      // ファイルは先頭の 12 秒ぶんしか無い。先のバッファが減り続けて 2 秒を切ると、段を下げる
       const file = Buffer.from(clipFrom(clip, 0, 12));
       await page.route(`**/api/recordings/${id}/file?**`, (route) =>
         route.fulfill({ status: 200, contentType: "video/mp4", body: file }),
@@ -374,7 +374,7 @@ test.describe("観る画面でその場で流す", () => {
           body: Buffer.from(clipFrom(clip, from, 60)),
         });
       });
-      // 頭の 1 秒が CM
+      // 先頭の 1 秒が CM
       await page.route(`**/api/recordings/${id}/chapters`, (route) =>
         route.fulfill({
           json: {
@@ -400,7 +400,7 @@ test.describe("観る画面でその場で流す", () => {
       });
       const where = (): Promise<number> =>
         video.evaluate((v) => (v as HTMLVideoElement).currentTime);
-      // 頭の CM を飛んで本編を観る (ここで出る「CM を飛ばしました」は本当に飛んだもの)
+      // 先頭の CM を飛んで本編を観る (ここで出る「CM を飛ばしました」は本当に飛んだもの)
       await expect.poll(where, { timeout: 30_000 }).toBeGreaterThan(2);
       await expect(page.getByTestId("watch-skipped")).toHaveCount(0, {
         timeout: 10_000,
@@ -439,7 +439,7 @@ test.describe("観る画面でその場で流す", () => {
         { timeout: 30_000 },
       );
       await expect(video).not.toHaveAttribute("src", /file/);
-      // 入れ替えた側は観ていた位置から続ける (頭へ戻らない)
+      // 入れ替えた側は観ていた位置から続ける (先頭へ戻らない)
       await expect.poll(where).toBeGreaterThan(from);
       const seen = await page.evaluate(
         () => (globalThis as { seen?: unknown }).seen,

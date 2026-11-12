@@ -192,7 +192,7 @@ function programsFor(service: FakeService): SynthEvent[] {
   const span = Math.min(DAY, count * slotMs);
   /*
    * 少し過去から始める。全部を過去にすると予約できる番組が 1 つも無くなる。
-   * スクリーンショットを撮るときは前後 30 時間ずつ。いつ撮っても、その日の番組表 (4 時〜翌 4 時) が頭から埋まる
+   * スクリーンショットを撮るときは前後 30 時間ずつ。いつ撮っても、その日の番組表 (4 時〜翌 4 時) が先頭から埋まる
    */
   const base =
     Math.floor((Date.now() - (DOCS ? DAY : span / 3)) / slotMs) * slotMs;

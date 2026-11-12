@@ -267,7 +267,7 @@
     transition: opacity var(--dp-duration) var(--dp-ease);
   }
   .volume-slider:has(input:focus-visible) .capsule {
-    outline: 2px solid var(--pico-primary);
+    outline: 2px solid var(--dp-video-focus);
     outline-offset: 2px;
   }
   /*

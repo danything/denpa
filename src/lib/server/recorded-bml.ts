@@ -78,7 +78,7 @@ function programInfoOf(recording: Recording): ResponseMessage | null {
 }
 
 /**
- * 変化ログの頭に番組情報を足す。**サイドカーに書くときも、読むときも通す。**
+ * 変化ログの先頭に番組情報を足す。**サイドカーに書くときも、読むときも通す。**
  * 書く側は `event_id` が番組表から消える前に写し取るため (`epg.ts` の
  * `pruneOldPrograms`)、読む側は番組情報を書いていなかった頃のサイドカーのため
  */
@@ -130,8 +130,8 @@ async function capture(
  * 録画のデータ放送を取り出して、サイドカーに書く。
  *
  * 時刻は**エンコードしたものの再生位置**で書く (観る画面の物差し。`playbackPlan` の `axis`)。
- * 基準は元の TS の頭 (`DataBroadcastCapture.head`) で、番組の始まり (`start_at`) ではない。
- * 測った頭は、録画の行の `ts_head` が空なら書く (`recording.fillTsHead`。実況のコメントを合わせるのに使う)
+ * 基準は元の TS の先頭 (`DataBroadcastCapture.head`) で、番組の始まり (`start_at`) ではない。
+ * 測った先頭は、録画の行の `ts_head` が空なら書く (`recording.fillTsHead`。実況のコメントを合わせるのに使う)
  *
  * @param tsPath 元の TS (放送の実時刻 (TDT) が続いている)
  * @param sidecarPath 書き先 (`metadata.sidecarPaths` の `dataBroadcast`)
@@ -146,7 +146,7 @@ export async function saveRecordedBml(
   skip: number,
 ): Promise<number> {
   const { timeline, head } = await capture(tsPath);
-  // 頭の放送時刻は実況のコメントにも使う。録っている間に測れていなければここで書く (データ放送の有る無しに関わらず)
+  // 先頭の放送時刻は実況のコメントにも使う。録っている間に測れていなければここで書く (データ放送の有る無しに関わらず)
   if (head !== null) fillTsHead(recording.id, head);
   /*
    * **描けるモジュールが 1 つも無ければ書かない。** データ放送の載っていない局でも
@@ -155,7 +155,7 @@ export async function saveRecordedBml(
    */
   if (!timeline.some((item) => item.message.type === "moduleDownloaded"))
     return 0;
-  // TDT を一度も見ていなければ、どの変化も時刻を持たない (頭の 0 に並ぶ) ので基準は使われない
+  // TDT を一度も見ていなければ、どの変化も時刻を持たない (先頭の 0 に並ぶ) ので基準は使われない
   const placed = withProgramInfo(
     toPlaybackTimeline(timeline, head ?? 0, { kept: null, skip }),
     recording,

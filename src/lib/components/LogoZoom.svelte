@@ -2,7 +2,6 @@
   import "@anyblades/blades/components/modal";
   import { resolve } from "$app/paths";
   import { untrack } from "svelte";
-  import X from "~icons/lucide/x";
 
   import { submitting } from "#lib/actions.js";
   import { dateTime } from "#lib/format.js";
@@ -14,7 +13,7 @@
    * ロゴの形になっているかは並べたままでは見分けにくい。**整数倍で拡大し、画素をぼかさない**
    * (`image-rendering: pixelated`)。CM ロゴは高さ 36px ほどなので 8〜10 倍になる。
    *
-   * 窓は `<dialog>` を `showModal` で開く (×・Esc・幕を押すと閉じる)。見た目は `app.css` の `.modal-box`。
+   * 窓は `<dialog>` を `showModal` で開く (左下の「閉じる」・Esc・幕を押すと閉じる)。見た目は `app.css` の `.modal-box`。
    * **閉じても中身は残す**。閉じる動き (`app.css` のダイアログ) の間に空にならないように。
    * 見せていた CM ロゴが消えたら (「覚え直す」) 閉じる。表の行もその時に消える
    */
@@ -116,15 +115,6 @@
     onclick={() => dialog?.close()}
   ></button>
   <article class="modal-box" bind:this={box} tabindex="-1">
-    <button
-      type="button"
-      class="ghost icon small modal-close"
-      onclick={() => dialog?.close()}
-      aria-label="閉じる"
-      data-testid="logo-zoom-close"
-    >
-      <X aria-hidden="true" />
-    </button>
     {#if shown !== null}
       <h2 id="logo-zoom-title" class="broadcast">{shown.name}</h2>
       <p class="small muted kind">
@@ -151,27 +141,35 @@
           data-testid="logo-zoom-image"
         />
       </div>
-      {#if shown.kind === "cm" && shown.learnedAt !== null}
-        <footer class="modal-actions">
-          <span class="small muted learned" data-testid="logo-zoom-learned">
-            {dateTime(shown.learnedAt)} に覚えました{#if scale > 0}<span
-                class="num">・{scale} 倍</span
-              >{/if}
-          </span>
-          <!-- 「覚え直す」はこの窓の中だけ (表の行を低く保つ)。消えたら窓も閉じる -->
-          <form method="POST" action="?/logoForget" use:submitting>
-            <input type="hidden" name="serviceId" value={shown.id} />
-            <button
-              type="submit"
-              class="secondary"
-              aria-label={`${shown.name} の CM ロゴを覚え直す`}
-              data-testid="logo-zoom-forget"
-            >
-              覚え直す
-            </button>
-          </form>
-        </footer>
-      {/if}
+      <footer class="modal-foot">
+        <button
+          type="button"
+          class="secondary modal-close"
+          onclick={() => dialog?.close()}
+          data-testid="logo-zoom-close">閉じる</button
+        >
+        {#if shown.kind === "cm" && shown.learnedAt !== null}
+          <div class="modal-actions">
+            <span class="small muted learned" data-testid="logo-zoom-learned">
+              {dateTime(shown.learnedAt)} に覚えました{#if scale > 0}<span
+                  class="num">・{scale} 倍</span
+                >{/if}
+            </span>
+            <!-- 「覚え直す」はこの窓の中だけ (表の行を低く保つ)。消えたら窓も閉じる -->
+            <form method="POST" action="?/logoForget" use:submitting>
+              <input type="hidden" name="serviceId" value={shown.id} />
+              <button
+                type="submit"
+                class="secondary"
+                aria-label={`${shown.name} の CM ロゴを覚え直す`}
+                data-testid="logo-zoom-forget"
+              >
+                覚え直す
+              </button>
+            </form>
+          </div>
+        {/if}
+      </footer>
     {/if}
   </article>
 </dialog>

@@ -161,7 +161,7 @@
   function describeDay(day: number): string {
     const d = new Date(day);
     const count = marks.get(day) ?? 0;
-    return `${d.getMonth() + 1}月${d.getDate()}日、${count === 0 ? "なし" : `切り抜き ${count} 枚`}`;
+    return `${d.getMonth() + 1} 月 ${d.getDate()} 日、${count === 0 ? "なし" : `切り抜き ${count} 枚`}`;
   }
 
   const KINDS: { id: ClipKind | undefined; label: string }[] = [
@@ -353,6 +353,17 @@
   const selected = new SvelteSet<number>();
   /** 選ぶ形。1 枚でも選んでいる間だけ (全部外したら抜ける) */
   const selecting = $derived(selected.size > 0);
+  /**
+   * 選ぶ形の 1 行 (広い形の `.c-select-wide`) がヘッダーの下に貼り付く間は、ヘッダーも近い影にそろえる
+   * (`+layout.svelte` の `html[data-page-bar]`。docs/design.md の「浮かせ方」)
+   */
+  $effect(() => {
+    if (!selecting) return;
+    document.documentElement.dataset["pageBar"] = "";
+    return () => {
+      delete document.documentElement.dataset["pageBar"];
+    };
+  });
   /** Shift でまとめて選ぶときの起点 (最後に押した 1 枚) */
   let anchor: number | null = null;
   function endSelecting(): void {
@@ -1048,7 +1059,11 @@
     width: auto;
     margin: 0;
   }
-  /* 浮いた 1 行なので、中の主のボタン (削除を確定) は浮かせず太字だけ (docs/design.md の「3 つの層」。`app.css` の `.dock` と同じ値) */
+  /*
+   * ヘッダーの下に貼り付く操作の 1 行。形はヘッダーと同じ (`--dp-bar-*`)、上端では平らで、巻いて中身が裏に入ると
+   * 面と近い影が出る (`app.css` の `dp-bar-float`。時間の軸はヘッダーと同じ窓の巻いた量)。
+   * 浮いた 1 行なので、中の主のボタン (削除を確定) は浮かせず太字だけ (docs/design.md の「3 つの層」。`app.css` の `.dock` と同じ値)
+   */
   .c-select-wide {
     --dp-btn-solid: transparent;
     --dp-btn-solid-hover: var(--dp-btn-tonal-hover);
@@ -1059,13 +1074,21 @@
     display: flex;
     align-items: center;
     gap: var(--dp-space-2);
-    width: fit-content;
     margin-bottom: var(--dp-space-2);
-    padding: var(--dp-space-1) var(--dp-space-2) var(--dp-space-1)
-      var(--dp-space-4);
-    border-radius: var(--dp-radius-full);
+    padding: var(--dp-bar-pad) var(--dp-bar-pad) var(--dp-bar-pad)
+      var(--dp-space-3);
+    border-radius: var(--dp-bar-radius);
     background: var(--dp-float);
-    box-shadow: var(--dp-shadow-pop);
+    box-shadow: var(--dp-shadow-tight);
+  }
+  @supports (animation-timeline: scroll()) {
+    .c-select-wide {
+      background: transparent;
+      box-shadow: none;
+      animation: dp-bar-float linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 1.5rem;
+    }
   }
   :global(html[data-phone]) .c-select-wide {
     display: none;

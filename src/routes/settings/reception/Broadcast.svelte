@@ -95,6 +95,7 @@
         <label class="check-row">
           <input
             type="checkbox"
+            role="switch"
             name="bmlNetwork"
             checked={data.broadcast.bmlNetwork}
             data-testid="bml-network"

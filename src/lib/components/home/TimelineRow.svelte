@@ -249,7 +249,7 @@
     </div>
     <div class="row-actions">
       {#if res.recording_id !== null}
-        <!-- 追っかけ再生 (issue #16)。録っている最中でも頭から観られる -->
+        <!-- 追っかけ再生 (issue #16)。録っている最中でも先頭から観られる -->
         <a
           class="button"
           href={resolve(`chase/${res.recording_id}`)}
@@ -279,7 +279,7 @@
     </div>
     <!--
       録画中は、録り終わるまでの進み具合を行の下端に敷く (あと何分かは 3 段目に出る)。
-      いちばん上の録画中の行は、バーの先に「いま」の時刻を出す (線の代わり。`TimelineHeading`)
+      いちばん上の録画中の行は、バーの先に「いま」の時刻を出す (「いま」の行の代わり。`TimelineHeading`)
     -->
     {#if item.zone === "now" && res.end_at > res.start_at}
       {@const done = Math.min(

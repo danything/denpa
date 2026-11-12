@@ -1,6 +1,6 @@
 import type { CaptionLanguage } from "@danything/arib/caption-text";
 
-import { type Step, stepLabel } from "#lib/adapt.js";
+import { autoValue, type Step } from "#lib/adapt.js";
 import {
   type BroadcastCodec,
   formatLabel,
@@ -101,7 +101,7 @@ export function liveCodecs(opts: {
     icon: opts.icon,
     value:
       opts.choice === "auto"
-        ? `自動 (${stepLabel(opts.step ?? 0, formatLabel(opts.format))})`
+        ? autoValue(opts.step ?? 0, formatLabel(opts.format))
         : formatLabel(opts.choice, broadcast),
     options: [
       { key: AUTO, label: "自動", active: opts.choice === "auto" },

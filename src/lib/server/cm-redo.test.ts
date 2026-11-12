@@ -59,7 +59,7 @@ async function finished(jobId: number) {
   }
 }
 
-test("エンコードしたものから読み直し、入れ物の頭からの秒で覚える (エンコードしたときに捨てた頭を足す)", async () => {
+test("エンコードしたものから読み直し、入れ物の先頭からの秒で覚える (エンコードしたときに捨てた先頭を足す)", async () => {
   seed(null);
   const jobId = enqueue(1, "cm");
   pump();
@@ -90,11 +90,11 @@ test("同じ録画に 2 つは積まない (エンコードするジョブがあ
   expect(enqueue(1, "cm")).toBe(encode);
 });
 
-test("材料の控えがあれば読み直さずに決める (控えの物差しに頭を足す)", async () => {
+test("材料の控えがあれば読み直さずに決める (控えの物差しに先頭を足す)", async () => {
   seed(null);
   const { cmMaterials } = await import("./schema");
   const { saveMaterial } = await import("./cm-material-store");
-  // 控え: 尺 600 秒、100〜160 秒にロゴが無い (CM 60 秒)。継ぎ目は無音と切れ目。エンコードしたときに頭を 0.5 秒捨てた
+  // 控え: 尺 600 秒、100〜160 秒にロゴが無い (CM 60 秒)。継ぎ目は無音と切れ目。エンコードしたときに先頭を 0.5 秒捨てた
   const fps = 10;
   const times = Float64Array.from({ length: 6000 }, (_, i) => i / fps);
   const cuts = new Float32Array(6000);

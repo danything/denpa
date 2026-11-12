@@ -56,7 +56,7 @@ export function driveNoticeSeen(): boolean {
   return read(DRIVE_NOTICE) === "1";
 }
 
-/** 運転中の注意を見せた (「わかりました」を押した) */
+/** 運転中の注意を見せた (「了解」を押した) */
 export function seeDriveNotice(): void {
   write(DRIVE_NOTICE, "1");
 }

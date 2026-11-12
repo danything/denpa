@@ -80,7 +80,7 @@
       if (!(target instanceof Element)) return;
       if (!target.hasAttribute("data-retract-scroll")) return;
       const y = target.scrollTop;
-      // 初めて巻いた箱は頭 (0) から動いた。今の位置と比べると、頭から一度に大きく送った分を見落とす
+      // 初めて巻いた箱は先頭 (0) から動いた。今の位置と比べると、先頭から一度に大きく送った分を見落とす
       const before = boxes.get(target) ?? 0;
       boxes.set(target, y);
       if (touched instanceof Node && target.contains(touched))
@@ -259,7 +259,7 @@
 
   /**
    * いま開いている画面のナビの行き先。**設定はグループごとに経路が分かれている** (`/settings/reception` など) ので、
-   * その下も「設定」に数える。録画 (`/`) は頭が全部に合うので、ぴったりのときだけ
+   * その下も「設定」に数える。録画 (`/`) は先頭が全部に合うので、ぴったりのときだけ
    */
   const here = $derived.by(() => {
     const route = page.route.id ?? "";
@@ -313,7 +313,7 @@
   /** 映像の画面 (ライブ・観る画面・追っかけ)。画面ぴったりにする・下のタブを出す・テーブルトップで下の段に浮かべる、のどれもこの一覧で決める */
   const VIDEO_ROUTES = ["/live", "/watch/[id]", "/chase/[id]"];
   const FILLED = [...VIDEO_ROUTES, "/guide"];
-  // 比べるのは経路 (route.id)。URL は前段の接頭辞の下だと頭が付く (server/paths.ts)
+  // 比べるのは経路 (route.id)。URL は前段の接頭辞の下だと先頭が付く (server/paths.ts)
   const fill = $derived(
     pending !== null || FILLED.includes(page.route.id ?? ""),
   );
@@ -365,7 +365,7 @@
    */
   const alert = $derived(data.channelAlert);
   let menuOpen = $state(false);
-  /** 行き先を選んだら閉じる。開いたままだと次の画面の頭が隠れる */
+  /** 行き先を選んだら閉じる。開いたままだと次の画面の先頭が隠れる */
   $effect(() => {
     // pathname を読んでおくと、画面が変わるたびにこの効果が動き直す
     page.url.pathname;
@@ -1030,7 +1030,7 @@
     display: none;
   }
   /*
-     * **スマホの形では頭に 0.5rem 空ける。** ヘッダーが無いので、上の安全域のすぐ下から中身を始める。
+     * **スマホの形では先頭に 0.5rem 空ける。** ヘッダーが無いので、上の安全域のすぐ下から中身を始める。
      * 1rem では、録画の画面で日付の見出しの余白まで重なって、上に大きな空きが出ていた
      */
   :global(:where(html[data-phone])) .shell:has(.tabbar) main {
@@ -1136,13 +1136,17 @@
    */
   :global(:where(html:not([data-phone]))) {
     --dp-header-bottom: 3.75rem;
-    /* 中身の頭はヘッダーの下端から、操作の 1 行どうしと同じ隙間 (`--dp-bar-gap`) だけ離す */
+    /* 中身の先頭はヘッダーの下端から、操作の 1 行どうしと同じ隙間 (`--dp-bar-gap`) だけ離す */
     --dp-header-space: calc(var(--dp-header-bottom) + var(--dp-bar-gap));
-    /* 自分で巻き取る画面 (映像・番組表) の箱の頭。番組表は表をヘッダーの裏まで伸ばし、操作の 1 行の面をヘッダーの下 `--dp-bar-gap` に置く (`app.css` の `.guide-bar`) */
+    /* 自分で巻き取る画面 (映像・番組表) の箱の先頭。番組表は表をヘッダーの裏まで伸ばし、操作の 1 行の面をヘッダーの下 `--dp-bar-gap` に置く (`app.css` の `.guide-bar`) */
     --dp-fill-top: 4.25rem;
   }
   :global(:where(html:not([data-phone]))) main {
     --dp-page-top: var(--dp-header-space);
+  }
+  /* ヘッダーの下に操作の 1 行が貼り付いている間 (切り抜きの選ぶ形。印は使う画面が付ける) は、ヘッダーも近い影 */
+  :global(:where(html[data-page-bar]:not([data-phone]))) .navbar {
+    --navbar-shadow: var(--dp-shadow-tight);
   }
   /*
    * **局が無いときの案内の 1 行は、ヘッダーの下から始める。** 広い形のヘッダーは中身の上に浮かせて流れから外している (`position: fixed`) ので、
@@ -1235,7 +1239,7 @@
          * `position: relative` になるまで) の 1 秒ほど、窓にスクロールバーが出ていた。E2E 20 で毎コマ見る
          *
          * **自分で巻き取る画面 (番組表・映像の画面) は、浮いたヘッダーの下から始める** (docs/design.md の「浮かせ方」)。
-         * 箱のスクロールバーがヘッダーの透かしの裏に見えないように。番組表だけは表を上に伸ばし、スクロールバーを隠してヘッダーの裏まで使う (`app.css` の `.guide-frame`)。中では頭の空き (`--dp-page-top`) を 0 にする
+         * 箱のスクロールバーがヘッダーの透かしの裏に見えないように。番組表だけは表を上に伸ばし、スクロールバーを隠してヘッダーの裏まで使う (`app.css` の `.guide-frame`)。中では先頭の空き (`--dp-page-top`) を 0 にする
          */
     .shell.fill {
       position: relative;

@@ -140,7 +140,7 @@ function encodeGray(
 ): Uint8Array {
   const raw = new Uint8Array(height * (1 + width));
   for (let row = 0; row < height; row++) {
-    // 各行の頭にフィルタの種類 (0 = なし)
+    // 各行の先頭にフィルタの種類 (0 = なし)
     raw.set(
       gray.subarray(row * width, (row + 1) * width),
       row * (1 + width) + 1,

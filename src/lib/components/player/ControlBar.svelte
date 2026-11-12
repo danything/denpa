@@ -45,17 +45,18 @@
     position: absolute;
     color: var(--dp-on-video);
   }
+  /* 出てくるときは `--dp-duration-enter`、消えるときは `--dp-duration-exit` (docs/design.md の「動き」。開く・閉じると同じ時間と曲線) */
   .bar::before {
     content: "";
     position: absolute;
     z-index: var(--dp-z-stage-shade);
     pointer-events: none;
-    transition: opacity var(--dp-duration) var(--dp-ease);
+    transition: opacity var(--dp-duration-enter) var(--dp-ease);
   }
   .items {
     position: relative;
     z-index: var(--dp-z-stage-controls);
-    transition: opacity var(--dp-duration) var(--dp-ease);
+    transition: opacity var(--dp-duration-enter) var(--dp-ease);
   }
   .bar.away {
     pointer-events: none;
@@ -63,6 +64,7 @@
   .bar.away::before,
   .bar.away > .items {
     opacity: 0;
+    transition: opacity var(--dp-duration-exit) var(--dp-ease-exit);
   }
   .side {
     top: 0;

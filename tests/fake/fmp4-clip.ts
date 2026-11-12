@@ -1,9 +1,9 @@
 /**
  * **作り置きの fMP4 (`live-h264.mp4` / `live-av1.mp4`) を、時刻をずらして並べ直す。** 偽 ffmpeg (`fmp4-loop.ts`・
- * `fmp4-out.ts`) と E2E (`40-watch-compat`) が使う。作り方は `fmp4-loop.ts` の頭に。
+ * `fmp4-out.ts`) と E2E (`40-watch-compat`) が使う。作り方は `fmp4-loop.ts` の先頭に。
  *
  * 2 秒ぶんの媒体 (moof + mdat) の時刻 (tfdt) に足して、好きな位置から好きな長さだけ並べる。
- * 頭 (ftyp + moov) はそのまま。Bun にも Node にも依らない (E2E は Playwright の中で読む)
+ * 先頭 (ftyp + moov) はそのまま。Bun にも Node にも依らない (E2E は Playwright の中で読む)
  */
 
 interface Box {
@@ -158,7 +158,7 @@ export function shiftFragment(
 }
 
 /**
- * **`from` 秒から `length` 秒ぶん** を繰り返して並べた fMP4 (頭つき)。録画をその場で流す API
+ * **`from` 秒から `length` 秒ぶん** を繰り返して並べた fMP4 (先頭つき)。録画をその場で流す API
  * (`/api/recordings/<id>/stream`) の代わり。時刻はページの物差しのまま (`from` から始まる)
  */
 export function clipFrom(

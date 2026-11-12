@@ -10,7 +10,7 @@
  * 値・経路を変えるたびにホームを開き直す (worker は観る画面を開いたときに起こす)。
  *
  * - `Worker` を差し替え、raw/worker.ts のビルドしたものを読んで、比べている所の `DECODED_MOST` を書き換え、
- *   数える仕掛け (`PROBE`) を頭に足して Blob から起こす。WASM のデコーダ (`decoder.mjs`) も包んで数える
+ *   数える仕掛け (`PROBE`) を先頭に足して Blob から起こす。WASM のデコーダ (`decoder.mjs`) も包んで数える
  * - `fetch` を差し替え、`/stream` は作り物の映像 (`/bench/<path>`。`proxy.ts` が配る) を返す
  * - 画面の切り替わり (rAF) と、worker が描いた回 (WebGL の drawArrays・2D の drawImage) を控えて返す
  */

@@ -357,7 +357,7 @@ test.describe("ケーブル", () => {
     expect(hevc.codec).toBe("hevc");
     for (const box of ["hev1", "hvcC", "mp4a", "moof", "mdat"])
       expect(hevc.text).toContain(box);
-    // 1 局に絞った TLV そのもの (`codec=raw`)。頭は TLV のパケットの 0x7F
+    // 1 局に絞った TLV そのもの (`codec=raw`)。先頭は TLV のパケットの 0x7F
     const raw = await streamHead(`${live}?codec=raw`, (text) => text !== "");
     expect(raw.type).toBe("application/x-arib-tlv");
     expect(raw.text.charCodeAt(0)).toBe(0x7f);

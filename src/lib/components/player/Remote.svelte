@@ -153,13 +153,18 @@
     --pico-border-color: var(--paint);
     --pico-color: var(--ink);
     flex: 1;
-    height: 2rem;
+    /* 下の十字のキーと同じ高さ (車の中のタブレットでも指で押せる) */
+    height: 3rem;
     padding: 0;
     font-size: var(--dp-text-sm);
   }
-  /* 押したときの色は Pico (層の中) に勝つ上の変数のまま。明るさだけ上げる */
-  .color:is(:hover, :focus, :active) {
-    filter: brightness(1.1);
+  /*
+   * 指を乗せたら面を一段変える (ほかのボタンの「ごく薄い地」と同じ役目。色のキーは色そのものが意味なので、字の色を少し混ぜるだけ)。
+   * `filter` は乗せるたびにボタンを描き直すので使わない
+   */
+  .color:is(:hover, :active) {
+    --pico-background-color: color-mix(in srgb, var(--paint) 88%, var(--ink));
+    --pico-border-color: color-mix(in srgb, var(--paint) 88%, var(--ink));
   }
   .pad {
     display: grid;

@@ -193,7 +193,7 @@ test.describe("操作したときの反応", () => {
      */
     const hours = grid.locator("div.hour > span.hour-label");
     /*
-     * 見えている表の上端は左上の角 (局名の行の頭)。広い画面では箱がヘッダーの裏まで伸びていて、
+     * 見えている表の上端は左上の角 (局名の行の先頭)。広い画面では箱がヘッダーの裏まで伸びていて、
      * 箱の上端はヘッダーと操作の 1 行に隠れている (docs/design.md の「浮かせ方」)
      */
     const frame = (await grid.locator(".corner").boundingBox())!;
@@ -285,7 +285,7 @@ test.describe("操作したときの反応", () => {
       box.y + box.height,
       "下が画面からはみ出している",
     ).toBeLessThanOrEqual(view.height);
-    // タイトルは箱の中にある。中身が長くても、頭から読める
+    // タイトルは箱の中にある。中身が長くても、先頭から読める
     const title = (await detail.locator("h3").boundingBox())!;
     expect(title.y).toBeGreaterThanOrEqual(box.y);
   });
@@ -421,7 +421,7 @@ test.describe("操作したときの反応", () => {
     await expect(page.getByTestId("guide-more")).toBeHidden();
     const toolbar = page.getByTestId("guide-toolbar");
     const bar = (await toolbar.boundingBox())!;
-    // 上の余白 (画面の頭の余白 `--dp-page-top`。浮いたヘッダーのぶん) を除いて、1 行なら 70px ほど。2 行に折れると 110px を超える
+    // 上の余白 (画面の先頭の余白 `--dp-page-top`。浮いたヘッダーのぶん) を除いて、1 行なら 70px ほど。2 行に折れると 110px を超える
     const top = await toolbar.evaluate((el) =>
       Number.parseFloat(getComputedStyle(el).paddingTop),
     );
@@ -458,7 +458,7 @@ test.describe("操作したときの反応", () => {
       Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
     );
     const room = await grid.evaluate((el) => el.scrollHeight - el.clientHeight);
-    // 表の頭は 4:00、5 分で 0.75rem
+    // 表の先頭は 4:00、5 分で 0.75rem
     const at = (hour: number) => Math.min(room, (hour - 4) * 12 * 0.75 * rem);
     await page.getByTestId("guide-jump-6").click();
     await expect
@@ -471,7 +471,7 @@ test.describe("操作したときの反応", () => {
     // 操作の 1 行は動かない (畳まない)
     const top = (await page.getByTestId("guide-toolbar").boundingBox())!.y;
     await page.getByTestId("guide-jump-now").click();
-    const line = page.getByTestId("now-line");
+    const line = page.getByTestId("now-mark");
     await expect(line).toBeInViewport();
     expect((await page.getByTestId("guide-toolbar").boundingBox())!.y).toBe(
       top,
@@ -487,7 +487,7 @@ test.describe("操作したときの反応", () => {
   }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     const grid = page.getByTestId("guide-grid");
-    // 表の頭は 4:00、5 分で 0.75rem
+    // 表の先頭は 4:00、5 分で 0.75rem
     const at = (hour: number) =>
       grid.evaluate(
         (el, hour) =>
@@ -551,7 +551,7 @@ test.describe("操作したときの反応", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 900, height: 800 });
-    // ライブの種別のタブ (並びの印) と、ホームの頭の 1 行のチップ (自分の `::after`)
+    // ライブの種別のタブ (並びの印) と、ホームの先頭の 1 行のチップ (自分の `::after`)
     for (const [url, selector] of [
       ["/live", '[data-testid^="live-type-"][aria-pressed="true"]'],
       ["/", '[data-testid="filter-chip"][aria-pressed="true"]'],

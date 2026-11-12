@@ -417,18 +417,18 @@ test.describe("ホームと画面遷移", () => {
     await expect(page.getByTestId("grid-program").first()).toBeVisible();
     await page.getByTestId("type-GR").click();
 
-    // いまが何時かの線が出て、開いた時点でそこが見えているところまで動いている。
+    // 「いま」の行が出て、開いた時点でそこが見えているところまで動いている。
     // 位置を offsetTop で測っていた頃は、ナビや見出しの高さまで足し込まれて
-    // その分だけ行き過ぎ、線が上に流れて見えなくなっていた
-    await expect(page.getByTestId("now-line")).toBeVisible();
+    // その分だけ行き過ぎ、「いま」の行が上に流れて見えなくなっていた
+    await expect(page.getByTestId("now-mark")).toBeVisible();
     const view = await page.getByTestId("guide-grid").evaluate((el) => {
       const grid = el as HTMLElement;
       const line = grid.querySelector(
-        '[data-testid="now-line"]',
+        '[data-testid="now-mark"]',
       ) as HTMLElement;
       return {
         scrollTop: grid.scrollTop,
-        // グリッドの上端から見た「いま」の線の位置
+        // グリッドの上端から見た「いま」の行の位置
         offset:
           line.getBoundingClientRect().top - grid.getBoundingClientRect().top,
         height: grid.clientHeight,
@@ -440,7 +440,7 @@ test.describe("ホームと画面遷移", () => {
      * 置きたいのは画面の 4 分の 1 あたりだが、番組表は 4:00 から翌 4:00 までの
      * 範囲なので、**端では寄せきれない**:
      *
-     *     4 時台   … 「いま」がもともと上にあり、頭に貼り付く (offset ≒ 0)
+     *     4 時台   … 「いま」がもともと上にあり、先頭に貼り付く (offset ≒ 0)
      *     深夜 1 時 … 下端まで送られていて、それ以上は上がらない (offset が下へ寄る)
      *
      * どちらも正しい動きなので、**画面の中にあれば通す**。ここを
@@ -569,13 +569,13 @@ test.describe("ホームと画面遷移", () => {
     await expect(page.getByTestId("reconcile-result")).toHaveCount(0);
   });
 
-  test("一覧の頭は細い 1 行。照合と空きは「⋯」の中、狭い幅でも同じ", async ({
+  test("一覧の先頭は細い 1 行。照合と空きは「⋯」の中、狭い幅でも同じ", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await goto(page, "/");
 
-    // 狭い幅では右のサイドバーは出さない。頭の 1 行 (チップと「⋯」) は 44px に収まり、「⋯」は指で押せる高さ
+    // 狭い幅では右のサイドバーは出さない。先頭の 1 行 (チップと「⋯」) は 44px に収まり、「⋯」は指で押せる高さ
     await expect(page.getByTestId("sidebar")).toBeHidden();
     const bar = page.getByTestId("timeline-toolbar");
     expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(44);
@@ -596,7 +596,7 @@ test.describe("ホームと画面遷移", () => {
       return hit !== null && el.contains(hit) && el.matches(":popover-open");
     });
     expect(front).toBe(true);
-    // 状態 (空き) は狭い幅では「⋯」の頭に出す (広い幅はサイドバーのいちばん下)。次の録画は「いま」の線に出す
+    // 状態 (空き) は狭い幅では「⋯」の先頭に出す (広い幅はサイドバーのいちばん下)。次の録画は「いま」の行に出す
     await expect(menu.getByTestId("recordings-capacity-menu")).toBeVisible();
     await expect(menu.getByTestId("menu-summary")).not.toContainText(
       "次の録画",

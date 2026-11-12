@@ -92,7 +92,7 @@ export function mkvFromClip(
     throw new Error("映像と音が要ります");
 
   const frames: Frame[] = [];
-  // 媒体ごとに読む (頭の後ろから moof + mdat が並ぶ)
+  // 媒体ごとに読む (先頭の後ろから moof + mdat が並ぶ)
   const head = clip.head.length;
   for (const sample of readFragment(data.subarray(head), tracks)) {
     const track = tracks.find((t) => t.id === sample.track)!;
@@ -170,7 +170,7 @@ export function mkvFromClip(
   }
   flush();
 
-  // 位置は Segment の中身の頭から。SeekHead の大きさは中身で決まらない (8 バイト固定) ので、先に組める
+  // 位置は Segment の中身の先頭から。SeekHead の大きさは中身で決まらない (8 バイト固定) ので、先に組める
   const seekHead = (cuesAt: number) =>
     el(0x114d9b74, el(0x4dbb, el(0x53ab, id(0x1c53bb6b)), u(0x53ac, cuesAt)));
   const lead = seekHead(0).length + info.length + trackEntries.length;

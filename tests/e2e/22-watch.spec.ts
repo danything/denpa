@@ -221,7 +221,7 @@ test.describe("録画を観る", () => {
     const seek = page.getByTestId("watch-seek");
     // 続いている CM (400–415・415–430) は 1 本の区間
     await expect(seek).toHaveAttribute("data-cm", "0-10 400-430");
-    // 頭は CM。色だけに頼らず、読み上げる位置にチャプターの名前を添える
+    // 先頭は CM。色だけに頼らず、読み上げる位置にチャプターの名前を添える
     await expect(seek).toHaveAttribute("aria-valuetext", "0:00、CM");
 
     await page.getByTestId("watch-video").evaluate((video) => {
@@ -234,7 +234,7 @@ test.describe("録画を観る", () => {
       video.dispatchEvent(new Event("timeupdate"));
     });
     const parts = seek.locator("xpath=..").locator("[data-part]");
-    // 溝は CM の端で区切った 4 つ (頭の CM・本編・続いた CM・本編)
+    // 溝は CM の端で区切った 4 つ (先頭の CM・本編・続いた CM・本編)
     await expect
       .poll(() =>
         parts.evaluateAll((els) =>
@@ -248,7 +248,7 @@ test.describe("録画を観る", () => {
       await second.evaluate((el) => [el.style.left, el.style.width]),
     ).toEqual(["40%", "3%"]);
 
-    // CM と本編は色で分かれる。観たぶんは CM の中では濃い琥珀 (200 秒なので頭の CM は観終わり、本編は半ばまで)
+    // CM と本編は色で分かれる。観たぶんは CM の中では濃い琥珀 (200 秒なので先頭の CM は観終わり、本編は半ばまで)
     const look = (part: number) =>
       parts.nth(part).evaluate((el) => {
         const bar = el.firstElementChild as HTMLElement;
@@ -1778,7 +1778,7 @@ test.describe("スマホの縦で観る", () => {
     const full = await page.getByTestId("watch-full").boundingBox();
     expect(Math.abs((row?.y ?? 0) - (full?.y ?? -100))).toBeLessThan(2);
 
-    // 速さは畳まれていて、⚙ の頭の「再生の速さ」の行から選ぶ
+    // 速さは畳まれていて、⚙ の先頭の「再生の速さ」の行から選ぶ
     await expect(page.getByTestId("watch-speed")).toBeHidden();
     // 操作バーは引っ込んでいることがある (映像に重ねるので)。起こしてから押す
     await wakeControls(page, "watch-stage");
@@ -1835,7 +1835,7 @@ test.describe("スマホの縦で観る", () => {
   /*
    * **いちばん狭いスマホ (360px・320px) でも、操作バーのボタンは 1 行。** 折り返していた頃は、
    * 時刻が押すものの上に一行を取って操作バーが二段になっていた。残すのは再生・チャプター送り・
-   * 時刻・⚙・全画面だけで、時刻は短い形 (残りを省く)。畳んだもの (音など) は ⚙ の頭の行から押せる
+   * 時刻・⚙・全画面だけで、時刻は短い形 (残りを省く)。畳んだもの (音など) は ⚙ の先頭の行から押せる
    */
   test("幅 360px・320px でも操作バーのボタンは 1 行で、畳んだ音は ⚙ から押せる", async ({
     page,
@@ -1865,7 +1865,7 @@ test.describe("スマホの縦で観る", () => {
         path: test.info().outputPath(`watch-${width}.png`),
       });
 
-      // 畳んだ音は ⚙ の頭の「消音」の行。「ほか」(⋯) のボタンはもう無い
+      // 畳んだ音は ⚙ の先頭の「消音」の行。「ほか」(⋯) のボタンはもう無い
       const sound = page.getByTestId("watch-sound");
       await expect(sound).toBeHidden();
       await expect(page.getByTestId("watch-more")).toHaveCount(0);

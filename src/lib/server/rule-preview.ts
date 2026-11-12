@@ -82,6 +82,8 @@ export interface PreviewRow {
   /** 詳細から「視聴」でライブへ飛ぶときの局。番組表の詳細と同じ */
   service_id: number;
   service_name: string;
+  /** 局ロゴがあるか (検索のほかの行と同じく、局名の前にロゴを出す) */
+  has_logo: boolean;
   start_at: number;
   end_at: number;
   /** 立っている予約。取り消せるように id も持つ */
@@ -120,7 +122,6 @@ export interface Preview {
   /** 同じ回の 2 回目以降などで、録らないもの (`PreviewRow.skip`) */
   skipped: number;
   programs: PreviewRow[];
-  conflicts: number;
   /** 指定した番組 (`options.ids`) の「録るか」。番組 ID → 結果 */
   verdicts: Record<number, Verdict>;
   failed: string | null;
@@ -141,6 +142,7 @@ interface Pending {
   name: string;
   service_id: number;
   service_name: string;
+  has_logo: boolean;
   /** 局の種別 (`ChannelType`)。受けられるかはチューナーごとに決まる (`conflict.Capacity`) */
   type: string;
   /** 物理チャンネル。同じチャンネルなら 1 台のチューナーで足りる */
@@ -179,7 +181,6 @@ export async function previewFor(
       total: 0,
       skipped: 0,
       programs: [],
-      conflicts: 0,
       verdicts: {},
       failed: String(error),
     };
@@ -216,6 +217,7 @@ async function countPreview(
       state: reservations.state,
       conflict_reason: reservations.conflict_reason,
       service_name: serviceTable.name,
+      has_logo: serviceTable.has_logo,
       type: serviceTable.type,
       channel: serviceTable.channel,
     })
@@ -265,6 +267,7 @@ async function countPreview(
         : sql<Program["extended"]>`NULL`,
     service_type: serviceTable.type,
     service_name: serviceTable.name,
+    service_has_logo: serviceTable.has_logo,
     service_channel: serviceTable.channel,
     service_decodable: serviceTable.decodable,
   };
@@ -369,6 +372,7 @@ async function countPreview(
       name: p.name,
       service_id: p.service_id,
       service_name: p.service_name,
+      has_logo: p.service_has_logo,
       start_at: p.start_at,
       end_at: p.end_at,
       reservation_id: held?.id ?? null,
@@ -399,6 +403,7 @@ async function countPreview(
         name: held.name,
         service_id: held.service_id,
         service_name: held.service_name,
+        has_logo: held.has_logo,
         start_at: held.start_at,
         end_at: held.end_at,
         reservation_id: held.id,
@@ -424,8 +429,6 @@ async function countPreview(
    * さかのぼったぶん** (`settled`)。出さない番組とも取り合うので相手は減らせない。どのチューナーに
    * 入るかはその前に誰がどのチューナーに入ったかで変わる (#668) ので、時間帯の先頭からなぞると答えが
    * 変わる。誰も使っていない瞬間を挟めば振り出しに戻るので、そこより前と、時間帯より後は渡さない。
-   *
-   * 「競合 N 件」もその 100 件の中の数になる。画面ではそう書く
    */
   const shown = rows.slice(0, 100);
   const mine = shown.flatMap((row) =>
@@ -452,10 +455,6 @@ async function countPreview(
   return {
     total: rows.length,
     skipped: rows.filter((row) => row.skip !== null).length,
-    // 数えるのは**行の数**。1 行に 3 本重なっていても、困っている番組は 1 つ
-    conflicts: shown.filter(
-      (row) => row.conflicts.length > 0 || row.conflict_reason !== null,
-    ).length,
     programs: shown,
     verdicts: verdictsOf(ids),
   };

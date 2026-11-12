@@ -20,7 +20,7 @@
   }: {
     open: boolean;
     onaccept: () => void;
-    /** 渡すと「取消」を出す (再生の設定 ⚙ で入れたとき)。渡さなければ「わかりました」だけ (再生の前) */
+    /** 渡すと「取消」を出す (再生の設定 ⚙ で入れたとき)。渡さなければ「了解」だけ (再生の前) */
     oncancel?: () => void;
   } = $props();
 
@@ -61,7 +61,7 @@
         >
       {/if}
       <button type="button" onclick={onaccept} data-testid="drive-notice-accept"
-        >わかりました</button
+        >了解</button
       >
     </footer>
   </article>

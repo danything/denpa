@@ -13,7 +13,7 @@ import { deleteRule, expect, goto, homeTools, syncEpg, test } from "./helpers";
  * Playwright は CI では node で動くので、`bun:sqlite` は bun を 1 回起こして使う
  *
  * 録画の放送日は 2099 年にして、同じワーカーの他のスペックが残した録画より必ず新しく
- * (= 「いま」の線のすぐ下に) 来るようにする。予約は 2100 年 (いちばん先 = 一覧の頭)
+ * (= 「いま」の行のすぐ下に) 来るようにする。予約は 2100 年 (いちばん先 = 一覧の先頭)
  */
 const DAY = 86_400_000;
 const BASE = new Date(2099, 0, 1, 21, 0).getTime();
@@ -117,7 +117,7 @@ function seedReservations(db: string, rows: Seed[]): void {
 
 /**
  * 一覧に並んでいるもの (見出しは `group:名前`、行は番組名) を上から。
- * `zone` で「いま」の線の上 (録れたものと録画中) か下 (予約) かを選ぶ
+ * `zone` で「いま」の行の上 (録れたものと録画中) か下 (予約) かを選ぶ
  */
 async function listed(
   page: Page,
@@ -216,7 +216,7 @@ test.describe("ホームの一覧のまとめて表示", () => {
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await expect(page.getByTestId("view-toggle")).toHaveAttribute("data-on");
 
-    // 閉じた見出しと 1 本ものが、いちばん新しい回の日付で並ぶ (線のすぐ上がいちばん新しい)
+    // 閉じた見出しと 1 本ものが、いちばん新しい回の日付で並ぶ (「いま」の行のすぐ上がいちばん新しい)
     expect((await listed(page)).slice(-4)).toEqual([
       "グループ試験単発1",
       "group:グループ試験ニュース",
@@ -257,17 +257,17 @@ test.describe("ホームの一覧のまとめて表示", () => {
   });
 
   /**
-   * **予約もまとめる。** 同じ番組でも、録画は「いま」の線の上、予約は線の下と側ごとに別の見出しを立てる
-   * (1 つにすると、見出しの位置が時間の並びから外れ、開くと中身が線をまたぐ)。予約の番組は次の回の位置
+   * **予約もまとめる。** 同じ番組でも、録画は「いま」の行の上、予約は「いま」の行の下と側ごとに別の見出しを立てる
+   * (1 つにすると、見出しの位置が時間の並びから外れ、開くと中身が「いま」の行をまたぐ)。予約の番組は次の回の位置
    */
-  test("予約もまとめ、同じ番組でも線の上と下で別の見出しになる", async ({
+  test("予約もまとめ、同じ番組でも「いま」の行の上と下で別の見出しになる", async ({
     page,
   }) => {
     await goto(page, "/");
     await toggleGrouped(page);
     const future = await listed(page, "future");
     // 2100 年の予約はいちばん先なので、一覧の末尾に来る。番組は次の回が早い順
-    // (アニメの次の回 #4 は特番より早いので、線の側 = 上に来る)
+    // (アニメの次の回 #4 は特番より早いので、「いま」の行の側 = 上に来る)
     expect(future.slice(-2)).toEqual([
       "group:グループ試験アニメ",
       "グループ試験特番",
@@ -416,9 +416,9 @@ test.describe("ホームの一覧のまとめて表示", () => {
   /**
    * **開いたときの位置。** 観終えていない録画があれば、いちばん古いものを映す (溜まったぶんを古い順に
    * 片付けられるように)。描いていない所 (60 件より先) にあっても、そこまで描いてから送る。
-   * 無ければ「いま」の線
+   * 無ければ「いま」の行
    */
-  test("観終えていない録画のうち、いちばん古いものを映して開く。無ければ「いま」の線", async ({
+  test("観終えていない録画のうち、いちばん古いものを映して開く。無ければ「いま」の行", async ({
     page,
     stack,
   }) => {
@@ -433,7 +433,7 @@ test.describe("ホームの一覧のまとめて表示", () => {
       ),
     ) as number[];
     try {
-      // 観終えていないものが無ければ「いま」の線
+      // 観終えていないものが無ければ「いま」の行
       await open(page);
       await expect
         .poll(() => inView(page, '[data-testid="timeline-now"]'))
@@ -461,7 +461,7 @@ test.describe("ホームの一覧のまとめて表示", () => {
           ),
         )
         .toBe(true);
-      // 線は見えていない (ずっと下)
+      // 「いま」の行は見えていない (ずっと下)
       expect(await inView(page, '[data-testid="timeline-now"]')).toBe(false);
     } finally {
       sqlite(

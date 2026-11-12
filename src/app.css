@@ -214,6 +214,11 @@
      * 値は固定で書く。`var(--pico-primary)` はテーマで変わるが、映像の上はテーマで変えない
      */
   --dp-video-fill: rgb(1 114 173 / 0.8);
+  /*
+     * 映像の上の焦点の線。主の色 (azure-550) を透かさず固定で書く (暗いテーマの主の色 `#01aaff` は白い映像の上で 2.6:1 しかない)。
+     * 黒い舞台の上で 4.0:1、白い映像の上で 5.2:1 (線とアイコンの 3:1 を、どちらの映像の上でも保つ)
+     */
+  --dp-video-focus: #0172ad;
   --dp-video-veil: rgb(0 0 0 / 0.6);
   --dp-video-veil-strong: rgb(0 0 0 / 0.8);
   /* 再生位置のバーの CM の所。観ていないところは淡く、観たところは濃い琥珀色 (`SeekBar`) */
@@ -422,7 +427,7 @@
 }
 
 /*
- * ---- 自分の書き込みの縦線 (`.mine-line`)。字の頭に短い縦線 ----
+ * ---- 自分の書き込みの縦線 (`.mine-line`)。字の先頭に短い縦線 ----
  * 実況の流れるコメントと一覧。「いまいる場所」の左の縦線 (`.menu-item` など) と同じ形 (幅 `--dp-mark`・両端は半円・主の色) で、
  * 「自分のもの」も同じ印で示す。映像の上では使う側が `--mine-line` で色を替える (`JikkyoLayer`)
  */
@@ -845,7 +850,7 @@ progress[value]::-webkit-progress-value {
     calc(-1 * var(--dp-gutter));
   height: var(--page-h);
 }
-/* 1 行に収める。表との間に線は引かない (表の頭にある局名の行が区切りになる) */
+/* 1 行に収める。表との間に線は引かない (表の先頭にある局名の行が区切りになる) */
 .guide-bar {
   display: flex;
   flex: none;
@@ -878,9 +883,9 @@ progress[value]::-webkit-progress-value {
 /*
  * **広い形 (スマホの形でないとき) では表がヘッダーの裏まで伸びる** (docs/design.md の「浮かせ方」。番組表の `.grid-box`)。
  * 操作の 1 行はヘッダーの下端 (`--dp-header-bottom`) に付け、高さを決めておく (`--guide-bar-h`)。
- * 表の頭 (局名の行が貼り付く所) はその下端 `--guide-head`。マスはヘッダーと操作の 1 行の裏を流れる。
+ * 表の先頭 (局名の行が貼り付く所) はその下端 `--guide-head`。マスはヘッダーと操作の 1 行の裏を流れる。
  * 1 行の中身はどれも小さいボタンの高さなので、高さは字の大きさや押す的の大きさ (`--dp-btn-h-sm`) から決まる。
- * 1 行の面は、ほかの画面の操作の 1 行と同じくヘッダーの下 `--dp-bar-gap` に来る (箱の頭は `--dp-fill-top`)
+ * 1 行の面は、ほかの画面の操作の 1 行と同じくヘッダーの下 `--dp-bar-gap` に来る (箱の先頭は `--dp-fill-top`)
  */
 :where(html:not([data-phone])) .guide-frame {
   /*
@@ -1079,6 +1084,14 @@ progress[value]::-webkit-progress-value {
 input[type="checkbox"]:not([role="switch"]) {
   border-radius: 0.25rem;
 }
+/*
+ * **スイッチはどこも同じ大きさ** (36 × 20px、丸は 16px で縁から 2px。メニューの `.s-switch`・映像の上の ⚙ も同じ)。
+ * Pico は大きさを字の大きさ (em) で決め、縁は 1px で丸が 18px になる。字の大きさを本文にそろえ、縁を 2px にして丸を 16px にする (縁は溝と同じ色なので見えない)
+ */
+input[type="checkbox"][role="switch"] {
+  border-width: 0.125rem;
+  font-size: 1rem;
+}
 /* チェックボックス + 文 */
 .check {
   display: inline-flex;
@@ -1252,7 +1265,7 @@ input[type="checkbox"]:not([role="switch"]) {
  * **日付の見出し** (`.day-head`。録画の一覧と切り抜き)。ふだんは平ら。貼り付いて行がその裏を流れるときだけ、
  * ヘッダーと同じ半透明の面と影の小さなカプセルで浮かせる (docs/design.md の「浮かせ方」)。地の色で塗ると、半透明のヘッダーの下で塗った所だけが浮いて見えた。
  * 中は `.day-head-chip` に日の名前 (`.day-head-name`) と日付 (`.day-head-date`)。
- * 貼り付く位置は、いちばん上の見出しの置かれた位置 (main の頭の空き) と同じにし、巻き始めても動かない (上端ではカプセルにならない)
+ * 貼り付く位置は、いちばん上の見出しの置かれた位置 (main の先頭の空き) と同じにし、巻き始めても動かない (上端ではカプセルにならない)
  */
 .day-head {
   --day-head-gap: var(--dp-space-2);
@@ -1726,7 +1739,7 @@ ul.links a.button[aria-current="page"]::after {
 
 /* ---- 通知 ---- */
 /*
- * 一言の通知。**種類は頭のアイコンと言葉で示し、地は状態の色で塗らない** (docs/design.md の「通知」)。
+ * 一言の通知。**種類は先頭のアイコンと言葉で示し、地は状態の色で塗らない** (docs/design.md の「通知」)。
  * 状態の色は `-text` の側をアイコンにだけ使う。前は地に状態の色を混ぜ、左に色の線を引いていたが、
  * 左の縦線は「選んでいる」の印と重なっていた。
  * アイコンは lucide の形 (circle-x・triangle-alert・circle-check・info) を `mask` で切り抜いて塗る。
@@ -2008,8 +2021,8 @@ button.text-button:hover {
 .s-switch {
   position: relative;
   flex-shrink: 0;
-  width: 2rem;
-  height: 1.125rem;
+  width: 2.25rem;
+  height: 1.25rem;
   margin-inline-start: auto;
   border-radius: var(--dp-radius-full);
   background: var(--dp-line-strong);
@@ -2018,10 +2031,10 @@ button.text-button:hover {
 .s-switch::after {
   content: "";
   position: absolute;
-  top: 0.1875rem;
-  left: 0.1875rem;
-  width: 0.75rem;
-  height: 0.75rem;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 1rem;
+  height: 1rem;
   border-radius: var(--dp-radius-full);
   background: #fff;
   transition: transform var(--dp-duration-move) var(--dp-ease-spring);
@@ -2030,7 +2043,7 @@ button.text-button:hover {
   background: var(--pico-primary-background);
 }
 .s-switch.on::after {
-  transform: translateX(0.875rem);
+  transform: translateX(1rem);
 }
 
 /*
@@ -2201,8 +2214,7 @@ dialog {
   outline: none;
 }
 /*
- * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`・`ContractDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)。
- * 右上の ✕ は箱の角に置き、見出しはその分だけ右を空ける
+ * 幕を押したら閉じる窓 (`LogoZoom`・`IssueDialog`・`ContractDialog`) は、箱の後ろに全面のボタンを敷く (Tab では止まらない `tabindex="-1"`)
  */
 .modal-backdrop {
   position: fixed;
@@ -2217,22 +2229,25 @@ dialog {
   box-shadow: none;
   cursor: default;
 }
-.modal-close {
-  position: absolute;
-  top: var(--dp-space-3);
-  right: var(--dp-space-3);
-  z-index: 1;
-  color: var(--dp-muted);
+/*
+ * **閉じるのは左下の「閉じる」** (どの窓も同じ。番組の詳細の `.detail-actions` も同じ並べ方)。
+ * 窓の下の段 (`.modal-foot`) の左端に「閉じる」、右に残りの並び (`.modal-actions`)。
+ * 並びが折り返して上の段へ伸びても、「閉じる」は下の段に残る
+ */
+.modal-foot {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--dp-space-2);
+  margin: var(--dp-space-5) 0 0;
 }
-.modal-close:hover {
-  color: inherit;
+.modal-foot > .modal-close {
+  flex: none;
+  margin: 0;
 }
-.modal-close svg {
-  width: 1.125rem;
-  height: 1.125rem;
-}
-.modal-close ~ h2 {
-  margin: 0 2.5rem 0 0;
+.modal-foot > .modal-actions {
+  flex: 1 1 0%;
+  min-width: 0;
+  margin: 0;
 }
 .modal-actions {
   display: flex;
@@ -2373,7 +2388,8 @@ dialog[open] > article {
 .lead.indent + .more-body {
   margin-inline-start: 1.75rem;
 }
-.check:has(> [role="switch"]) ~ :is(.lead.indent, .lead.indent + .more-body) {
+:is(.check, .check-row):has(> [role="switch"])
+  ~ :is(.lead.indent, .lead.indent + .more-body) {
   margin-inline-start: 2.75rem;
 }
 /* 設定の表 (チューナー・チャンネル)。入りきらなければ横に巻き、欄の間は詰める。`.wide` の列が余った幅を取る */
@@ -2394,7 +2410,7 @@ dialog[open] > article {
  * **広い画面では「名前 (左) ｜ 操作 (右)」の 2 段組の行にする** (`.setting-rows` の中の `.field`)。
  * 名前・操作・説明を縦に積んでいた頃は、項目ごとに 3〜4 段の高さを取り、画面が縦に長くなっていた。
  * 名前 (`.field-label`) だけが左、それ以外 (欄・チェック・ボタンと、その下の説明) は右。
- * 説明を狭い左の列に入れていた頃は、数文字ずつで折り返し、右の欄と頭の高さもずれていた (GitHub の設定と同じ置き方)。
+ * 説明を狭い左の列に入れていた頃は、数文字ずつで折り返し、右の欄と先頭の高さもずれていた (GitHub の設定と同じ置き方)。
  * 狭い画面は縦に積んだまま。**切り替えは画面の幅ではなく右の列の幅で** (設定の `.main-inner` が container)。
  * 左に一覧が付くので、768px の画面でも右の列は 480px ほどしかない
  */

@@ -55,9 +55,9 @@ interface HomeContext {
   readonly clock: number;
   /** 分ごとに進むいまの時刻 (`#lib/minute-clock.svelte.ts`)。「いま」の時刻・あと何分か・進み具合のバーに使う。一覧は並べ直さない */
   readonly now: number;
-  /** 「いま」の線に添える一言 (次の録画まで)。次の予約が無ければ null */
+  /** 「いま」の行に添える一言 (次の録画まで)。次の予約が無ければ null */
   readonly nowStatus: NowStatus | null;
-  /** バーの先に「いま」の時刻を出す、いちばん上の録画中の行のキー (無ければ null で、「いま」の線を見せる。`TimelineHeading`) */
+  /** バーの先に「いま」の時刻を出す、いちばん上の録画中の行のキー (無ければ null で、「いま」の行を見せる。`TimelineHeading`) */
   readonly firstLiveKey: string | null;
   /** 削除の 2 回押し (録画と録り逃しで共用。録り逃しのキーは負の値) */
   readonly deleting: Arming;

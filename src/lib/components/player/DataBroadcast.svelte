@@ -28,7 +28,7 @@
    *
    * エンジンは押されてから (常に受信なら開く前から) `import()` で取得する (どのみちカルーセルが一周するのを待つので紛れる)。
    * エンジンの外でやるのは、d を受け付けている文書へ届ける (`knock`)・映像の入れ物を小窓へ寄せる (`placeVideo`)・
-   * 960x540 を枠に合わせて伸ばす (`fit`)・「データ取得中」を出す (`receiving`)・郵便番号を渡す (`receiver`)
+   * 960x540 を枠に合わせて伸ばす (`fit`)・映像の上の通知を知らせる (`note`)・郵便番号を渡す (`receiver`)
    */
   import { onDestroy, untrack } from "svelte";
 
@@ -46,7 +46,6 @@
   import type { HybridcastLink } from "#lib/live.js";
 
   import HybridcastFrame from "./HybridcastFrame.svelte";
-  import StageNote from "./StageNote.svelte";
 
   type Place = Extract<FrameMessage, { type: "video" }>["place"];
 
@@ -75,6 +74,11 @@
      * 受け付けていなければ false (`pressD`。局の待機ページは d を押されて初めてメニューを開く)
      */
     pressD?: (() => boolean) | null;
+    /**
+     * 映像の上に出す短い通知 (bind で受け取る。無ければ空)。「データ取得中…」と Hybridcast のアプリの読み込み。
+     * 出すのは使う画面で、舞台の通知の列 (`PlayerStage` の `notes`) に積む。右上の隅に置くと、右端の縦の列と重なっていた
+     */
+    note?: string;
     /** 郵便番号 (数字 7 桁。空なら渡さない)。受信機の設定として渡す (`nvram://receiverinfo/zipcode`) */
     postal: string;
     /** 都道府県 (`#lib/prefecture.js` の番号。未設定は 255。`nvram://receiverinfo/prefecture`) */
@@ -108,6 +112,7 @@
     listen,
     press = $bindable(null),
     pressD = $bindable(null),
+    note = $bindable(""),
     postal,
     prefecture,
     network,
@@ -125,6 +130,8 @@
   let appVideo: Place = "full";
   /** アプリへキーを渡す関数 (`HybridcastFrame` の `press`) */
   let appPress = $state<((code: number, down: boolean) => void) | null>(null);
+  /** アプリの読み込みの通知 (`HybridcastFrame` の `note`) */
+  let appNote = $state("");
   /** いまの番組 (放送の programInfo)。アプリへ渡す */
   let program = $state<HcState["program"]>(null);
   const hcState = $derived<HcState>({ program, serviceName, captions });
@@ -290,6 +297,16 @@
   let plane: Plane | null = null;
   /** まだ電波から取っている最中か。**エンジンが知らせる** (`onReceiving`)。テレビの「データ取得中…」と同じ表示 */
   let receiving = $state(false);
+  // テレビと同じ「データ取得中」。押されてから読み取り始めるので、テレビより待つ (実測で 8 秒)
+  $effect(() => {
+    note = !on
+      ? ""
+      : running !== null
+        ? appNote
+        : loading || receiving
+          ? "データ取得中…"
+          : "";
+  });
   /**
    * 一度でも出し切ったか。最初の 1 枚が揃うまでは映像のままにする。入口の文書はほぼ白紙のまま自分で
    * `invisible` を外すので、本体が届くまでの数秒が真っ白になる。出し切ったあとは引っ込めない (点滅する)
@@ -826,14 +843,9 @@
           place();
         }}
         bind:press={appPress}
+        bind:note={appNote}
       />
     {/key}
-  {/if}
-  <!-- テレビと同じ「データ取得中」。押されてから読み取り始めるので、テレビより待つ (実測で 8 秒) -->
-  {#if on && running === null && (loading || receiving)}
-    <div class="corner">
-      <StageNote>データ取得中…</StageNote>
-    </div>
   {/if}
 </div>
 
@@ -844,14 +856,5 @@
     inset: 0;
     z-index: var(--dp-z-stage-data);
     overflow: hidden;
-  }
-  /* 「取得中」は右上の隅。テレビと同じ場所 (舞台の通知の列には積まない) */
-  .corner {
-    position: absolute;
-    top: var(--dp-space-3);
-    right: var(--dp-space-3);
-    /* データ放送の箱 (`.data`) の中だけの前後 */
-    z-index: 1;
-    display: flex;
   }
 </style>

@@ -13,7 +13,7 @@
  *       -f mp4 -movflags +empty_moov+default_base_moof -frag_duration 50000 live-av1.mp4
  *
  * 形式はライブの ffmpeg と同じ (`server/live.ts` の `+empty_moov+default_base_moof`)。2 秒ぶんを
- * 頭 (ftyp + moov) を 1 回だけ出してから、媒体 (moof + mdat) を**時刻 (tfdt) を 1 周ぶんずつ
+ * 先頭 (ftyp + moov) を 1 回だけ出してから、媒体 (moof + mdat) を**時刻 (tfdt) を 1 周ぶんずつ
  * 足して**繰り返す。速さは実時間 (本物のライブと同じく、先へは溜めない)。
  *
  *     bun tests/fake/fmp4-loop.ts <fMP4>
@@ -43,7 +43,7 @@ void (async () => {
  * - `audioFirst` … 音声が映像より先に始まる作り置き (`live-h264-audio-first.mp4`。H.264 だけ) を流す。本物の ffmpeg が
  *   途中から読んだ放送で作るときのように、最初の塊が音声だけで、映像のキーフレームは次の塊に入る (`ts/key-gate.ts`)。
  *   作り方は上の H.264 に `-itsoffset 0.1` (映像の入力の前) を足したもの
- * - `headStartMs` (ms) … 頭のこの尺ぶんを、待たずにまとめて出す。本物の ffmpeg は立ち上がりで読み込んだぶんを
+ * - `headStartMs` (ms) … 先頭のこの尺ぶんを、待たずにまとめて出す。本物の ffmpeg は立ち上がりで読み込んだぶんを
  *   一度に出すので、選局の直後は貯まりが狙いより多く、画面はすぐ速めにかかる (`pacing`)
  */
 interface Rough {
@@ -91,7 +91,7 @@ const out = Bun.stdout.writer();
 out.write(clip.head);
 await out.flush();
 
-// 頭のぶんは、その尺だけ前に始めていたことにして待たずに出す
+// 先頭のぶんは、その尺だけ前に始めていたことにして待たずに出す
 const started = performance.now() - (rough.headStartMs ?? 0);
 for (let round = 0; ; round++) {
   for (const fragment of clip.fragments) {

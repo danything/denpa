@@ -52,7 +52,7 @@ describe("CM 検出の流れ", () => {
     expect(logoUnusable(found.note)).toBe(true);
   });
 
-  test("頭を捨ててエンコードしたなら、尺もそのぶん短い (時刻はエンコードしたものの物差し)", async () => {
+  test("先頭を捨ててエンコードしたなら、尺もそのぶん短い (時刻はエンコードしたものの物差し)", async () => {
     expect((await detect({ skip: 0.5 })).duration).toBe(599.5);
   });
 });

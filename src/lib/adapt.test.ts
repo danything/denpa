@@ -7,6 +7,7 @@ import {
   AUDIO_AFTER,
   AUDIO_SHARE,
   AUDIO_WINDOW,
+  autoValue,
   BASE_GUESS_KBPS,
   ENCODE_LAG,
   GRACE,
@@ -775,7 +776,7 @@ describe("サーバが切り替えなかったとき", () => {
   });
 });
 
-/** **画面に出す文** (`stepLabel`・`adaptNote`)。ライブも観る画面も同じ文 */
+/** **画面に出す文** (`stepLabel`・`autoValue`・`adaptNote`)。ライブも観る画面も同じ文 */
 describe("画面に出す文", () => {
   test("自動の行の値は、段 0 は形式だけ、下げたら高さを添える、音声だけはそう出す", () => {
     expect(stepLabel(0, "MPEG-2")).toBe("MPEG-2");
@@ -784,6 +785,13 @@ describe("画面に出す文", () => {
     // 応答を受ける前はコーデックが分からない
     expect(stepLabel(3, "")).toBe("360p");
     expect(stepLabel("audio", "H.264")).toBe("音声だけ");
+  });
+
+  test("「自動」の行は添えるものを括弧に入れ、添えるものが無ければ「自動」だけ", () => {
+    expect(autoValue(0, "MPEG-2")).toBe("自動 (MPEG-2)");
+    expect(autoValue(2, "H.264")).toBe("自動 (H.264 540p)");
+    expect(autoValue("audio", "")).toBe("自動 (音声だけ)");
+    expect(autoValue(0, "")).toBe("自動");
   });
 
   test("段を動かしたときは、理由と替えた先を書く", () => {

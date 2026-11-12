@@ -13,7 +13,7 @@ export const TABLETOP =
  * 横にしたスマホ (844px など) も幅で入る。開いた Fold の横持ち (1104px) は幅では入らないので、テーブルトップは残す。
  * 条件を足すときはこの並びに足す (どれか 1 つに当たればスマホの形)。
  *
- * CSS の `@media` には名前を付けて引けないので、`<html data-phone>` の印にして配る。`app.html` の頭のスクリプトが
+ * CSS の `@media` には名前を付けて引けないので、`<html data-phone>` の印にして配る。`app.html` の先頭のスクリプトが
  * 描く前に付け、当たり外れが変わるたびに付け直す (条件の文字は `hooks.server.ts` が差し込む)。
  * CSS は `html[data-phone]` と `html:not([data-phone])` で書き分け、JS は `new MediaQuery(PHONE_FORM)` で見る。
  * ダイアログを下から出す・行を折り返すなど、幅だけで決まるものは今までどおり幅の `@media` で書く

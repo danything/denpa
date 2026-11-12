@@ -287,7 +287,7 @@ test.describe("データ放送の双方向", () => {
     document.getElementById('out').textContent = JSON.stringify(out);
 })();
 </script></body></html>`;
-    // アプリの中のページ移動の行き先 (NHK のアプリと同じく、自分の名前の頭から組み立てる)
+    // アプリの中のページ移動の行き先 (NHK のアプリと同じく、自分の名前の先頭から組み立てる)
     const nextUrl = "https://hybridcast.example.jp/next.html";
     const asked: string[] = [];
     await page.route("**/api/bml/proxy**", (route) => {

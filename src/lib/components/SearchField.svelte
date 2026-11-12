@@ -371,11 +371,12 @@
       font-size: var(--dp-text-base);
     }
   }
+  /* 押すキーの印。線は付けず、淡い面だけ (docs/design.md の「入力欄」と同じ) */
   .key {
     padding: 0 0.375rem;
-    border: 1px solid var(--dp-line);
+    border: 0;
     border-radius: var(--dp-radius-sm);
-    background: transparent;
+    background: var(--dp-subtle);
     color: var(--dp-muted);
     font-size: var(--dp-text-xs);
     line-height: 1.4;
@@ -409,9 +410,31 @@
     background: var(--dp-pop);
     box-shadow: var(--dp-shadow-pop);
     transform: translateX(-50%);
+    transform-origin: top center;
+    transition:
+      opacity var(--dp-duration-enter) var(--dp-ease),
+      transform var(--dp-duration-enter) var(--dp-ease-spring);
+  }
+  /*
+     * **開き方と閉じ方はメニューと同じ** (`app.css` の `.menu`)。少し縮んで少し上にずれた透明な姿からばねで出て、
+     * 閉じるときは短く引っ込む。閉じる間も描いておくため、`display` も一緒に移す (`allow-discrete`。対応していないブラウザはすぐ消える)。
+     * 引っ込む間は押させない (下の行を押した手を取らない)
+     */
+  @starting-style {
+    .suggest:not([hidden]) {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-0.375rem) scale(0.94);
+    }
   }
   .suggest[hidden] {
     display: none;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(-0.375rem) scale(0.94);
+    transition:
+      opacity var(--dp-duration-exit) var(--dp-ease-exit),
+      transform var(--dp-duration-exit) var(--dp-ease-exit),
+      display var(--dp-duration-exit) allow-discrete;
   }
   /*
      * **節は縦に積む。** Pico は `role="group"` を横並びの組 (inline-flex。角を落とし、間に線) にするので、
