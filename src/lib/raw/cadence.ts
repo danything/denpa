@@ -86,17 +86,6 @@ export class Vsync {
     return this.anchor + count * this.interval;
   }
 
-  /**
-   * **いまデコードを始めてよいか。** 切り替わりの直後 (間隔の前半) だけ。1 枚のデコードは重いもので
-   * 10ms 近く掛かるので、後半に始めると、その次の切り替わりに出すフィールドを描く前に
-   * 回が延びる。切り替わりが分からなければいつでもよい
-   */
-  settled(at: number): boolean {
-    const next = this.next(at);
-    if (next === null || this.interval === null) return true;
-    return next - at > this.interval * SETTLED;
-  }
-
   clear(): void {
     this.anchor = null;
     this.interval = null;
@@ -104,14 +93,72 @@ export class Vsync {
   }
 }
 
+/**
+ * **描くものが次に変わる画面の切り替わりまでの時間 (ms)。** `at` は次の切り替わりの時点の PTS、`frame` は 1 コマの長さ (90kHz)。
+ * 飛び越し走査はフィールドの境目 (半コマごと)、プログレッシブはコマの境目で変わる。切り替わりが分からない・まだ何も出していなければ null
+ */
+export function untilChange(
+  vsync: Vsync,
+  wall: number,
+  at: number,
+  shown: Shown | null,
+  frame: number,
+): number | null {
+  const next = vsync.next(wall);
+  const period = vsync.period;
+  if (next === null || period === null || shown === null) return null;
+  const step = shown.interlaced ? frame / 2 : frame;
+  const boundary = shown.pts + (Math.floor((at - shown.pts) / step) + 1) * step;
+  const count = Math.max(
+    0,
+    Math.ceil((boundary - at) / (CLOCK / 1000) / period),
+  );
+  return next + count * period - wall;
+}
+
+/** デコードに掛かる時間の見積もりに使う、直近のデコードの数 */
+export const COST_SAMPLES = 8;
+/**
+ * 見積もりは直近の平均の (1 + これ × デコードできて待っているコマの数) 倍。平均より重いコマ (I フレーム・動きの多い絵) でも
+ * 間に合うように、待っているコマが多いうちは余裕のある間だけで始める。少なくなったら狭い間でも始める
+ */
+const COST_STEP = 0.15;
+/** 見積もりの倍率の上限 */
+const COST_MOST = 2;
+/** 見積もりに足す時間 (ms)。デコードしたあと、テクスチャを上げて描き、画面へ渡すまでのぶん */
+const COST_MARGIN = 2;
+
+/**
+ * **いまデコードを始めてよいか。** 描くものが次に変わる切り替わり (`untilChange`) までに、デコードを終えて
+ * 描けるときだけ。デコードしている間は描けないので、間に合わないと描くのが 1 回ぶん遅れ、同じフィールドが
+ * 余分に出て次が飛ぶ。同じフィールドを続けて出す切り替わり (120Hz なら 1 回おき) はまたいでよい。
+ * 間に合うかは、直近のデコード (`recent`。ms) の平均と、デコードできて待っているコマの数 (`ready`) から見積もる。
+ * 切り替わりが分からなければいつでもよい
+ */
+export function mayDecode(
+  vsync: Vsync,
+  wall: number,
+  at: number,
+  shown: Shown | null,
+  frame: number,
+  recent: readonly number[],
+  ready: number,
+): boolean {
+  const left = untilChange(vsync, wall, at, shown, frame);
+  if (left === null) return true;
+  const mean =
+    recent.length === 0
+      ? 0
+      : recent.reduce((sum, ms) => sum + ms, 0) / recent.length;
+  const scale = Math.min(COST_MOST, 1 + COST_STEP * ready);
+  return left > mean * scale + COST_MARGIN;
+}
+
 /** 真ん中の値。いちばん短い間は揺れて短く来たものかもしれないので使わない */
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)]!;
 }
-
-/** 切り替わりの間隔のうち、デコードを始めてよい前半の割合 (`settled`) */
-const SETTLED = 0.5;
 
 /** これより大きく食い違えば寄せずに合わせ直す (90kHz。50ms) */
 const SNAP = 0.05 * CLOCK;

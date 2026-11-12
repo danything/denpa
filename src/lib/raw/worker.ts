@@ -44,7 +44,15 @@ import {
 } from "@danything/arib/pes";
 
 import { DecodeBudget } from "./budget";
-import { fieldAt, type Shown, SmoothClock, Vsync, VsyncClock } from "./cadence";
+import {
+  COST_SAMPLES,
+  fieldAt,
+  mayDecode,
+  type Shown,
+  SmoothClock,
+  Vsync,
+  VsyncClock,
+} from "./cadence";
 import { downscale } from "./downscale";
 import {
   AHEAD,
@@ -131,6 +139,8 @@ const clock = new SmoothClock();
 const vsync = new Vsync();
 /** 画面の切り替わりごとの PTS (`cadence.ts`) */
 const locked = new VsyncClock();
+/** 直近にデコードした 1 枚ずつの時間 (ms)。デコードを始めてよいかの見積もりに使う (`mayDecode`) */
+let recentCost: number[] = [];
 /** いま出しているコマ */
 let current: Shown | null = null;
 /** 描く先。小窓へ書き込むときに、描いたものをここから写す (`toPip`) */
@@ -379,7 +389,10 @@ function decode(item: Pending): void {
   if (input.pointer === 0) return;
   decoder.HEAPU8.set(item.data, input.pointer);
   decoder._dec_push(input.pointer, item.data.length, item.pts);
-  budget.record(decoder._dec_last_ms());
+  const ms = decoder._dec_last_ms();
+  budget.record(ms);
+  recentCost.push(ms);
+  if (recentCost.length > COST_SAMPLES) recentCost.shift();
 }
 
 /**
@@ -557,11 +570,20 @@ function tick(): void {
     /*
      * **1 回にデコードするのは 1 枚まで** (遅れているときだけ 3 枚まで)。1 枚は重いもので 10ms 近くかかるので、
      * まとめてデコードするとその間コマを出せず、番を過ぎて捨てるコマが増える。
-     * 先にデコードしたものがあるうちは、画面の切り替わりの直後にだけ始める (`Vsync.settled`)
+     * 先にデコードしたものがあるうちは、描くものが次に変わる画面の切り替わりまでにデコードを終えて描けるときだけ始める
+     * (`mayDecode`。同じフィールドを続けて出す切り替わりはまたいでよい)
      */
     const ready =
       decoder._dec_count() === 0 ||
-      vsync.settled(performance.timeOrigin + performance.now());
+      mayDecode(
+        vsync,
+        performance.timeOrigin + performance.now(),
+        at,
+        current,
+        frameTicks,
+        recentCost,
+        decoder._dec_count(),
+      );
     for (
       let i = 0;
       ready &&
@@ -771,6 +793,7 @@ function reset(from: number | null): void {
   current = null;
   drawn = { pts: Number.NaN, field: Number.NaN };
   lastFramePts = null;
+  recentCost = [];
   shownSinceReset = false;
   budget.reset();
   mkv?.reset();
