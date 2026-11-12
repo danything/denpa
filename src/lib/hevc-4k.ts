@@ -31,8 +31,8 @@ export interface HevcProbe {
 }
 
 /**
- * ブラウザで調べるもの。MSE は `pickMediaSource` の `Source` (無ければ受け取れない)、`decodingInfo` は `navigator.mediaCapabilities` にあるときだけ。
- * ライブ (`live-player.svelte.ts`) と観る画面 (元の録画の詰め替え) で同じものを使う
+ * ブラウザで調べるもの。MSE は `pickMediaSource` の `Source` で調べ、`Source` が無ければ `isTypeSupported` はいつも false を返す。`decodingInfo` は `navigator.mediaCapabilities` にあるときだけ渡す。
+ * ライブ (`live-player.svelte.ts`) と観る画面 (4K の局の録画を、放送の HEVC のまま流すとき) で同じものを使う
  */
 export function browserHevcProbe(
   source: { isTypeSupported(type: string): boolean } | undefined,
