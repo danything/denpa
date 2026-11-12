@@ -21,7 +21,7 @@ const TABLE_PF_ACTUAL = 0x4e;
  *
  * 開始マージンのうちは前の番組が「いま」(section 0) で、録る番組は「次」(section 1) に載る。
  * どちらでも event_id が合えばそれを返す。番組表 (schedule) は数日前の内容のことがあり、
- * 局によっては話数を放送の直前の p/f にしか載せない (docs/data.md「同じ回は最初の放送だけ」)。
+ * 局によっては話数を放送の直前の p/f にしか載せない (docs/data.md「同じ回は最初の放送だけ録る」)。
  * 4K の局 (TLV) は MH-EIT[p/f] を読む (読み方は `@danything/arib/mh-eit`。ほかは同じ)
  */
 export class PfEvent {

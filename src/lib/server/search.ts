@@ -335,7 +335,7 @@ export function searchReservations(q: string, options: SearchOptions) {
   const where = and(
     or(
       and(inArray(r.state, TO_RECORD_STATES), isNull(r.started_at)),
-      // 録り始めてから同じ回と分かってやめたもの (`recorder.skipDuplicate`) は録り始めた時刻が入っている
+      // 録画しない予約 (コピー禁止の番組と、録り始めてから同じ回と分かってやめた `recorder.skipDuplicate`。後者は録り始めた時刻が入っている)
       eq(r.state, "skipped"),
       eq(rec.state, "recording"),
     ),

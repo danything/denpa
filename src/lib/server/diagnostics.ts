@@ -122,7 +122,7 @@ export async function agentAbout(known: Known): Promise<AgentAboutResult> {
 
 /**
  * **サーバの設定と DB にある、形式では見分けられない値。** 画面に送る前にログから消す
- * (OIDC のクライアントシークレット・登録してある Webhook の URL は、画面にも出さない)。
+ * (OIDC のクライアントシークレット・登録してある Webhook の URL・エージェントと組む合言葉は、画面にも出さない)。
  * ホスト名は画面にはそのまま出し、Issue に貼るときに伏せる (`redact`)。
  * エージェントに繋がらないときの一言 (`agentLogs`・`agentAbout` の `error`) だけは、ホスト名ごと伏せて返す
  */

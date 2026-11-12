@@ -20,7 +20,7 @@ import { settings as settingsTable } from "./schema";
  *
  * コーデックは、番組ごとに変えたくなることが実際にはほとんど無い。
  * ルールにも予約にも同じ選択肢を並べると、どこで決まったのか分からなくなるので
- * 全体で 1 つに寄せてある。初期値は config.ts が持ち、DB に値があればそちらが勝つ。
+ * 全体で 1 つに寄せてある。初期値は下の `settings()` が持ち (コーデックだけ config.ts)、DB に値があればそちらが勝つ。
  */
 
 interface Settings {

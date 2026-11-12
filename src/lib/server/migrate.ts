@@ -542,7 +542,7 @@ function splitId(id: number): [upper: number, lower: number] {
 }
 
 /** EPGStation のチャンネル ID で denpa の局を引く (`serviceOf`) */
-export function serviceByChannel(
+function serviceByChannel(
   channelId: number,
 ): { id: number; name: string } | undefined {
   return serviceOf(...splitId(channelId));
@@ -731,7 +731,7 @@ export function convertRule(
     return { skip: "検索期間のあるルールは取り込めません" };
   const times = parseTimes(search["times"]);
   if (times === null)
-    return { skip: "時間帯が 2 つ以上あるので取り込めません" };
+    return { skip: "時刻の違う時間帯が 2 つ以上あるので取り込めません" };
 
   const types = ALL_CHANNEL_TYPES.filter((type) => flag(search[type]));
   if (flag(search["BS4K"])) {

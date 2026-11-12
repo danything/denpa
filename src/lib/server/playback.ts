@@ -98,7 +98,7 @@ import {
   videoArgs,
 } from "./live";
 import { sidecarPaths } from "./metadata";
-import { type MmtsFile, mmtsFmp4, mmtsOffset, probeMmts } from "./mmts";
+import { LEAD, type MmtsFile, mmtsFmp4, mmtsOffset, probeMmts } from "./mmts";
 import { openPace, StreamPace } from "./pace";
 import {
   readRecording,
@@ -1077,9 +1077,6 @@ function spawnAttempt(attempt: Attempt) {
   };
 }
 
-/** TS を流しはじめる位置を、求められた時刻のこれだけ手前にする (秒)。キーフレームを 1 つ含めるため */
-const LEAD = 1;
-
 /** 物差しの `from` 秒を流すために、TS のどこから読むか (`ts/seek.ts`)。読めなければ null */
 function seekFrom(ts: TsFile, skip: number, from: number) {
   return seekTs(
@@ -1599,7 +1596,8 @@ export async function captionArgs(recording: Recording): Promise<{
 /**
  * **4K の局の録画の字幕の在り処** (`api/recordings/<id>/captions.json`)。TTML は ffmpeg では抜けないので (`captionArgs`)、
  * エンコード済みがあればその隣の文字の配置 (`….captions.json`。`encoder.writeCaptions`)、無ければ元の録画 (`.mmts`) を読む
- * (`mmts.mmtsCaptions`)。4K の局の録画でなければ null (TS の局の字幕は `captionArgs`)
+ * (`mmts.mmtsCaptions`)。エンコード済みの隣に文字の配置が無いとき (TS の局の録画と、字幕の無い 4K の局の録画) と、
+ * 元の録画が TS のときは null (TS の局の字幕は `captionArgs`)
  */
 export async function uhdCaptionSource(
   recording: Recording,

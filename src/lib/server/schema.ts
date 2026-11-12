@@ -189,7 +189,7 @@ export function latestReservationRecordingId(reservationId: AnySQLiteColumn) {
   return sql<number>`(SELECT id FROM recordings WHERE reservation_id = ${reservationId} ORDER BY id DESC LIMIT 1)`;
 }
 
-/** 画面から変えられる設定 (settings.ts)。初期値は config.ts が持ち、ここに行があればそちらが勝つ */
+/** 画面から変えられる設定 (settings.ts)。初期値は settings.ts が持ち (コーデックだけ config.ts)、ここに行があればそちらが勝つ */
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
