@@ -2148,7 +2148,7 @@ class Session {
 
   /**
    * 届いた塊を 1 局に絞り (`pump` の説明)、**絞ったあとを** データ放送・時計・
-   * Hybridcast・EIT[p/f]・スクランブルの判定 の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
+   * Hybridcast・EIT[p/f]・スクランブルの判定の読み取りへ分ける。データ放送は誰も出していなければデコードしない (`wantData`)
    */
   private tap(filter: ServiceFilter | null, chunk: Uint8Array): Uint8Array {
     const out = filter === null ? chunk : filter.filter(chunk);

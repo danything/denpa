@@ -39,7 +39,7 @@ denpa は写さない。聞けなければ、その部分だけ出さない。
 
 ## denpa が持つもの
 
-`DENPA_DB` の SQLite。DB に入れないものだけファイルにする (局ロゴ・CM 検出用に覚えたロゴ・衛星の中継の控え (`logos/`)、ニコニコとの連携の鍵、エージェントと組む鍵と証明書 (`tls/`) などは `DENPA_DB` の隣 ([config.md](config.md))、録画の隣のポスターとデータ放送 (4K の局の録画は字幕も) は保存先、切り抜きは `ENCODED_DIR/clips/` の AVIF)。
+`DENPA_DB` の SQLite。DB に入れないものだけファイルにする。`DENPA_DB` の隣に置くのは、局ロゴ・CM 検出用に覚えたロゴ・衛星の中継の控え (`logos/`)、ニコニコとの連携のトークンを開く鍵 (`niconico.key`)、エージェントと組む鍵と証明書 (`tls/`) など ([config.md](config.md))。録画の隣に置くのはポスターとデータ放送 (4K の局の録画は字幕も) で、保存先に入る。切り抜きは `ENCODED_DIR/clips/` の AVIF。
 
 録画そのものは、元の録画が `RAW_DIR` (TS の局は 1 局に絞った TS の `.m2ts`、4K の局は 1 局に絞った TLV の `.mmts`)、エンコードしたものが `ENCODED_DIR` にある。
 **元の録画の形式は列に持たず、拡張子で分かる** (`#lib/source.ts` の `recordedTransport`)。置き方は [library.md](library.md#4k-の局の録画)。
