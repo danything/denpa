@@ -272,7 +272,8 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
 
 CI は x86_64 の実行ファイルを Android 10 (API 29。minSdk) と Android 15 (API 35) のエミュレータに `adb push` し、shell のユーザーで起動します
 (`.github/android-agent-smoke.sh`)。`--version`・`--pair`、サーバの起動、denpa と同じ手順で組むこと、`/denpa/about`・`/denpa/tuners`・`/denpa/card`、SIGTERM で終わることを見ます。
-`USB_BROKER` も付けて起動し、偽のアプリ (`.github/fake-usb-broker.c`) から `synced` と、ファイルの fd を付けた `attached` を受け取れることを見ます ([agent.md](agent.md#android-でアプリから-usb-を受け取る))。
+そのあと SELinux を permissive にし (shell のユーザーの SELinux は `/data/local/tmp` にソケットのファイルを作らせない)、`USB_BROKER` を付けて起動し直して、
+偽のアプリ (`.github/fake-usb-broker.c`) から `synced` と、ファイルの fd を付けた `attached` を受け取れることを見ます ([agent.md](agent.md#android-でアプリから-usb-を受け取る))。
 アプリの子プロセス (SELinux の `untrusted_app` と、アプリに掛かる seccomp) では、まだ動かしていません。USB の機材はエミュレータに挿せないので、usbfs の fd は CI では見ません。
 
 文書の一覧は [README](../README.md#もっと詳しく) に。画面・docs・コメントの言葉の決まりは [writing.md](writing.md)。
