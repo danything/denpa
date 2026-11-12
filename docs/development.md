@@ -118,6 +118,46 @@ CI では 6 つに割って別のランナーに出し、3 ワーカー×5 台�
 そう) では 3 で固定**です (4 つ並べるとチューナー待ちで落ちる。実測は `playwright.config.ts` の冒頭)。
 混み具合でごく稀にブラウザ側が落ちるので、1 回だけやり直します (`retries: 1`)。
 
+## CI
+
+**PR の CI は、触ったファイルに関係するジョブだけ中身を回します。** main への push では全部回します。
+PR で飛ばしたものが main で赤くなったら、見て直します。
+
+main は ruleset の必須チェックで守ってあります。`check`・`agent`・`agent-asicen-mock`・`install-linux`・`talos`・
+`agent-windows`・`agent-windows-install`・`agent-macos`・`e2e (1)`〜`(6)`・`claude-review` と、CodeQL の
+`codeql / Analyze (actions・c-cpp・csharp・javascript-typescript)` です。確かめるには `gh api repos/danything/denpa/rules/branches/main`。
+
+### 中身を回すジョブを決める
+
+**必須チェックのジョブは、飛ばすときも走らせて成功で終えます。** 中身の段を飛ばし、飛ばした理由をジョブの注記に出します。
+
+- 決めるのは `.github/ci-changes.sh` です。PR の触ったファイルを GitHub の API から読み、下の組ごとに回すかを出します
+
+  | 組      | ジョブ                                                                           | 回すとき                                                                                      |
+  | ------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+  | e2e     | `e2e (1)`〜`(6)`                                                                 | エージェント・通知領域のアプリ・文書・入れ方・配備のほかを触ったとき                          |
+  | windows | `agent-windows`・`agent-windows-install`                                         | `agent/`・`tray/Denpa.Tray*`・`install.ps1`・`scripts/build-wdi-simple.ps1`                   |
+  | macos   | `agent-macos`・`tray-macos`                                                      | `agent/`・`tray/mac/`・`install.sh`                                                           |
+  | android | `agent-android`                                                                  | `agent/` と、android.yml・Android で組む部品                                                  |
+  | bundle  | `server-windows-bundle`・`server-windows`・`server-macos-bundle`・`server-macos` | 配布物の組み方・ffmpeg・入れ方・`tests/native-*`・依存と、OS ごとに扱いが違うサーバのファイル |
+
+- test.yml・ci-changes.sh・global.json を触ったときは全部回します。bundle を回すときは windows と macos も回します (配布物を確かめるジョブが、そちらで組んだエージェントを使う)
+- Windows と Mac のジョブは、飛ばすときは ubuntu のランナーで走らせます。混んだ Windows と Mac のランナーを待たずに済みます
+- 必須ではないジョブ (`tray-macos`・`agent-android`・`server-*`) はジョブごと飛ばします。回したか飛ばしたかは `changes` ジョブの Summary に出ます
+- e2e は `changes` を待たずに、それぞれのジョブの最初の段で決めます。E2E がいちばん長いので、始まりを遅らせないためです
+- `check`・`agent`・`agent-asicen-mock`・`install-linux`・`talos` はいつも回します。どれも ubuntu のランナーで 2 分かかりません
+- ジョブが読むファイルを足したら、ci-changes.sh の一覧にも足します。足さないと、そのファイルだけを触った PR でジョブの中身が回りません
+
+### キャッシュ
+
+**キャッシュの鍵は、中身を決めるものだけから作ります。** バージョン・csproj・組むスクリプトが変わったときだけ外れます。
+
+- .NET の SDK と NuGet は別のキャッシュに置き、置くのは main だけです。PR が置いたキャッシュはその PR でしか使えません。
+  前は PR ごとに SDK と NuGet を合わせて 840MB 置いていて、リポジトリの上限 (10GB) を超えるたびに、ffmpeg や Playwright のキャッシュが古いものから消されていました
+- csproj を変えた PR は main の前の NuGet を戻し、足りないぶんだけを取ります (`restore-keys`)
+- ffmpeg (Windows・Mac) の鍵は、Dockerfile の ffmpeg 段と組むスクリプトから作ります。そこを変えた PR と、それが main に入った直後の 1 回は組み直します (Windows で 15 分ほど)
+- wdi-simple の鍵は、組むスクリプトとランナーのイメージのバージョンです。イメージが上がるたびに組み直し、新しい MSVC で組めるかを見ます。置くのは main だけです
+
 ## DB の列を足す
 
 テーブルの定義は **`src/lib/server/schema.ts` にしか無い** (drizzle)。行の型
@@ -205,7 +245,7 @@ JSON で持つ列 (ジャンル・音声の構成・ルールの対象の局な�
 
 `Dockerfile` が denpa 本体、`agent/Dockerfile` がチューナー側です。
 CI が両方をビルドして `deploy/` の印を書き戻します。**main は直接 push できない**
-(ruleset の必須チェック `check` / `agent` / `e2e (1)`〜`(6)` / `claude-review`) ので、
+(ruleset の必須チェック。[CI](#ci)) ので、
 書き戻しは bot が PR を出し、必須チェックの status を自分で付けてマージします
 (手順と理由は `.github/bump-pr.sh`。release の Chart.yaml の書き戻しと README の謝辞の一覧も同じ)。
 release は組み直さず、main で組んだイメージにバージョンを 1 層足します
