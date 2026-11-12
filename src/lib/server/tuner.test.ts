@@ -17,6 +17,7 @@ import {
   streamTransport,
   TransportChangedError,
   tsmfStreams,
+  TuneError,
   TunerBusyError,
 } from "./tuner";
 
@@ -363,6 +364,103 @@ describe("選局できたら受信できたと残す", () => {
         await openChannelStream("GR", "T26", aborter.signal, "live T26");
         aborter.abort();
         expect(failingGround()).toEqual([]);
+      },
+    );
+  });
+});
+
+/**
+ * **答え (レスポンスヘッダ) を待つ上限** (`answerWithin`)。エージェントは最初の TS を送るときにヘッダを返すので、
+ * TS が届かないとリクエストが返らない。本番で、名指しのライブが答えを待ったまま「読み込み中」になり続けた
+ */
+describe("openChannelStream の答えを待つ上限", () => {
+  test("上限までに答えが来なければ、理由を付けて TuneError を送出する", async () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await withAgent(
+      // ヘッダを返さない (TS が届かないエージェント)
+      () => held.then(() => new Response("")) as unknown as Response,
+      async () => {
+        const aborter = new AbortController();
+        const error = await openChannelStream(
+          "GR",
+          "T27",
+          aborter.signal,
+          "live GR/T27",
+          4,
+          [],
+          "it930x:3-1:0",
+          null,
+          50,
+        ).catch((thrown: unknown) => thrown);
+        release();
+        expect(error).toBeInstanceOf(TuneError);
+        expect((error as TuneError).reason).toBe(
+          "エージェントから選局の答えが 0 秒返りませんでした",
+        );
+      },
+    );
+  });
+
+  test("答えが来たあとのストリームは打ち切らない", async () => {
+    await withAgent(
+      () =>
+        new Response(
+          new ReadableStream({
+            // 最初の塊でヘッダが返る。続きは上限より遅れて届く
+            async start(controller) {
+              controller.enqueue(new Uint8Array(188));
+              await Bun.sleep(150);
+              controller.enqueue(new Uint8Array(188));
+              controller.close();
+            },
+          }),
+          { headers: { "content-type": "video/MP2T" } },
+        ),
+      async () => {
+        const aborter = new AbortController();
+        const stream = await openChannelStream(
+          "GR",
+          "T27",
+          aborter.signal,
+          "live GR/T27",
+          4,
+          [],
+          null,
+          null,
+          50,
+        );
+        let bytes = 0;
+        for await (const chunk of stream) bytes += chunk.length;
+        expect(bytes).toBe(376);
+      },
+    );
+  });
+
+  test("エージェントの理由 (本文の error) を reason に持つ", async () => {
+    await withAgent(
+      () =>
+        Response.json(
+          {
+            error:
+              "PLEX PX-MLT8PE 3-1 #0 (it930x:3-1:0) は BS を受けられません",
+          },
+          { status: 400 },
+        ),
+      async () => {
+        const error = await openChannelStream(
+          "BS",
+          "BS15_0",
+          new AbortController().signal,
+          "live BS/BS15_0",
+          4,
+          [],
+          "it930x:3-1:0",
+        ).catch((thrown: unknown) => thrown);
+        expect(error).toBeInstanceOf(TuneError);
+        expect((error as TuneError).reason).toBe(
+          "PLEX PX-MLT8PE 3-1 #0 (it930x:3-1:0) は BS を受けられません",
+        );
       },
     );
   });

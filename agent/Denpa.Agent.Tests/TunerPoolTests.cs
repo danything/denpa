@@ -137,14 +137,18 @@ public class TunerPoolTests
         private readonly List<FakeTuner> _opened = [];
 
         /// <param name="deaf">選局しても同期しないデバイス</param>
-        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null, IReadOnlySet<string>? deaf = null)
+        /// <param name="firstTs">最初の TS を待つ上限 (<see cref="TunerPool.FirstTsLimit"/>)。省くと本物と同じ</param>
+        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null, IReadOnlySet<string>? deaf = null, TimeSpan? firstTs = null)
         {
             Pool = new TunerPool(specs, () => { }, new TuneOptions(), spec =>
             {
                 var tuner = new FakeTuner(spec.Device!, tune, read, format, content) { Deaf = deaf?.Contains(spec.Device!) == true };
                 lock (_opened) _opened.Add(tuner);
                 return tuner;
-            });
+            })
+            {
+                FirstTsLimit = firstTs ?? TunerPool.FirstTsWait,
+            };
         }
 
         public TunerPool Pool { get; }
@@ -396,6 +400,54 @@ public class TunerPoolTests
         new(specs, TimeSpan.Zero, TimeSpan.FromMilliseconds(1), deaf: deaf.ToHashSet());
 
     private static int Tunes(Rig rig, string path) => rig.Opened(path).Sum(tuner => tuner.Tunes);
+
+    /// <summary>
+    /// **最初の TS が上限までに届かなければ、選局を畳んで理由を返し、次の選局では選局し直す** (<see cref="TunerPool.FirstTsLimit"/>)。
+    /// 本番で、名指しのライブが PX-MLT8PE の受信機に入ったまま答えを返さず、同じ名指しのリクエストし直しもその選局を共有して止まり続けた
+    /// </summary>
+    [Test]
+    public async Task 最初のTSが上限までに届かなければ畳んで理由を返し_次は選局し直す(CancellationToken cancel)
+    {
+        await Task.Yield();
+        // 1 回の読み出しが上限より長く掛かる (TS が届かない受信機)
+        var rig = new Rig([Spec("A", "fake:a")], TimeSpan.Zero, TimeSpan.FromSeconds(2), firstTs: TimeSpan.FromMilliseconds(300));
+        try
+        {
+            var live = rig.Pool.Open("GR", "T27", 4, "live GR/T27", pin: "fake:a");
+            await Assert.That(await Drain(live, cancel)).Contains("A: ").And.Contains("TS が届きませんでした");
+            await Assert.That(rig.Pool.Status()[0]!["channel"]).IsNull();
+
+            // 共有せずに、選局し直す (合っている印が残っていれば、選局し直さずに同じ読み出しを始めていた)
+            var again = rig.Pool.Open("GR", "T27", 4, "live GR/T27", pin: "fake:a");
+            await Assert.That(Tunes(rig, "fake:a")).IsEqualTo(2);
+            again.Leave();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    /// <summary>**TS が届いた選局は、上限を過ぎても畳まない**</summary>
+    [Test]
+    public async Task TSが届いた選局は上限を過ぎても畳まない(CancellationToken cancel)
+    {
+        await Task.Yield();
+        var rig = new Rig([Spec("A", "fake:a")], TimeSpan.Zero, TimeSpan.FromMilliseconds(10), firstTs: TimeSpan.FromMilliseconds(300));
+        try
+        {
+            var sink = rig.Pool.Open("GR", "T27", 3, "epg T27");
+            await FirstChunk(sink, cancel);
+            await Task.Delay(600, cancel);
+            await Assert.That(sink.FailedWith).IsNull();
+            await Assert.That(rig.Pool.Status()[0]!["channel"]!["channel"]!.GetValue<string>()).IsEqualTo("T27");
+            sink.Leave();
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
 
     /// <summary>**同期しなければ、同じ組の空いているチューナーで選局し直してから答える**</summary>
     [Test]

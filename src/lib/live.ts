@@ -263,7 +263,15 @@ export type Notice =
        */
       type: "restart";
     }
-  | { type: "error"; message: string };
+  | {
+      type: "error";
+      message: string;
+      /**
+       * **名指しのチューナー (`TuneCommand.tuner`) がエージェントの一覧にもう無い。** 画面は名指しをやめて (`live-tuner.svelte.ts`)、
+       * 自動でリクエストし直す (docs/watch.md)
+       */
+      unpin?: true;
+    };
 
 /**
  * **ライブがチューナーを譲った録画** (`Notice` の `lost`、通知の `yielded`)。
