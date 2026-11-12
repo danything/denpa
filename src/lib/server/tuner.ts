@@ -32,7 +32,7 @@ import { keyRanks } from "./agent-cards";
 import { NO_CHANNEL } from "./agent-channels";
 import { fetchAgent } from "./agent-client";
 import { orderGroups, type Place } from "./agent-order";
-import { type Agent, listAgents, NO_AGENT, primaryAgent } from "./agents";
+import { type Agent, listAgents, NO_AGENT } from "./agents";
 import { config } from "./config";
 import type { Busy } from "./conflict";
 import { recordReceived } from "./reception";
@@ -243,12 +243,9 @@ function put(agent: Agent, path: string, body: unknown): Promise<Response> {
   });
 }
 
-/**
- * エージェントの控えのチャンネル。`agent` を渡さなければ並びの先頭のエージェント (`primaryAgent`)。
- * 先頭を決めるのも呼んだあとにするので、エージェントが無いときは送出せずに reject する (下の関数も同じ)
- */
-export async function getChannels(agent?: Agent): Promise<AgentChannel[]> {
-  return get(agent ?? primaryAgent(), "/denpa/channels", array(AGENT_CHANNEL));
+/** エージェントの控えのチャンネル */
+export async function getChannels(agent: Agent): Promise<AgentChannel[]> {
+  return get(agent, "/denpa/channels", array(AGENT_CHANNEL));
 }
 
 /**
@@ -264,9 +261,9 @@ export async function getChannels(agent?: Agent): Promise<AgentChannel[]> {
 export async function putChannels(
   found: AgentChannel[],
   scanned: ChannelType[],
-  agent?: Agent,
+  agent: Agent,
 ): Promise<AgentChannel[]> {
-  const res = await put(agent ?? primaryAgent(), "/denpa/channels", {
+  const res = await put(agent, "/denpa/channels", {
     channels: found,
     scanned,
   });
@@ -287,10 +284,10 @@ export async function putChannels(
  */
 export async function deleteChannels(
   type: ChannelType,
-  agent?: Agent,
+  agent: Agent,
 ): Promise<AgentChannel[]> {
   const res = await fetchAgent(
-    agent ?? primaryAgent(),
+    agent,
     `/denpa/channels?type=${encodeURIComponent(type)}`,
     { method: "DELETE", signal: AbortSignal.timeout(30_000) },
   );
@@ -306,19 +303,34 @@ export async function deleteChannels(
 }
 
 /**
- * 1 台のエージェントの一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を 1 度に。
- * `agent` を渡さなければ並びの先頭のエージェント
+ * 1 台のエージェントの一覧と、定義を書いていないので自分で見つけた状態か (`detected`。設定の「チューナー」に出す) を 1 度に
  */
 export async function tunerList(
-  agent?: Agent,
+  agent: Agent,
   /** 答えを待つ上限 (ms) */
   wait?: number,
 ): Promise<TunerList> {
-  const target = agent ?? primaryAgent();
-  const got = await get(target, "/denpa/tuners", TUNERS, wait);
-  const tuners = got.tuners.map((tuner) => ({ ...tuner, agent: target.id }));
-  lastLists.set(target.id, tuners);
+  const got = await get(agent, "/denpa/tuners", TUNERS, wait);
+  const tuners = got.tuners.map((tuner) => ({ ...tuner, agent: agent.id }));
+  lastLists.set(agent.id, tuners);
   return { tuners, detected: got.detected };
+}
+
+/**
+ * 1 台のエージェント (`agents.id`) のチューナー。チューナーの `index` はエージェントごとの番号なので、エージェントで絞ってから引く。
+ * ほかのエージェントには訊かない (遅いエージェントや落ちたエージェントを待たない)。もう無いエージェントなら空
+ */
+export async function tunersOf(
+  id: number,
+  /** 答えを待つ上限 (ms) */
+  wait?: number,
+): Promise<AgentTuner[]> {
+  const agent = listAgents().find((a) => a.id === id);
+  if (agent === undefined) return [];
+  const askedAt = Date.now();
+  const { tuners } = await tunerList(agent, wait);
+  settlePending(agent.id, askedAt);
+  return tuners;
 }
 
 /**
@@ -397,9 +409,9 @@ export async function tunerSnapshot(): Promise<AgentTuner[] | null> {
  */
 export async function putTuners(
   tuners: TunerConfig[],
-  agent?: Agent,
+  agent: Agent,
 ): Promise<void> {
-  const res = await put(agent ?? primaryAgent(), "/denpa/tuners", { tuners });
+  const res = await put(agent, "/denpa/tuners", { tuners });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const error =
@@ -813,6 +825,24 @@ export function splitPin(named: string): { agent: number | null; pin: string } {
   return found === null
     ? { agent: null, pin: named }
     : { agent: Number(found[1]), pin: found[2]! };
+}
+
+/**
+ * **名指しのチューナーがもう無いか** (ライブで名指しの選局が断られたとき。画面を自動に戻すか決める)。
+ * 名指しのエージェントがもう無ければ無い。一覧を取得できなければ無いとはみなさない (落ちているだけかもしれない)。
+ * エージェントの ID が付いていない前の名指しは、全部のエージェントで探す (`splitPin` と同じ)
+ */
+export async function pinGone(named: string): Promise<boolean> {
+  const { agent, pin } = splitPin(named);
+  try {
+    if (agent !== null)
+      return !(await tunersOf(agent)).some((tuner) => tuner.pin === pin);
+    const asked = await askAll();
+    if (asked.some((a) => a.tuners === null)) return false;
+    return !asked.some((a) => a.tuners!.some((tuner) => tuner.pin === pin));
+  } catch {
+    return false;
+  }
 }
 
 /** カードが分からないエージェントの順 (`agent-cards.cardRanks` の、使えるカードが無いものと同じ) */

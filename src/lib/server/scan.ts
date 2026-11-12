@@ -973,7 +973,6 @@ async function runScan(
     }
 
     push("チャンネルを保存しています...", {}, { phase: "保存" });
-    const replacedTypes = new Set<ChannelType>();
     for (const { scanner, found } of results) {
       if (found.length === 0) {
         push(
@@ -987,10 +986,9 @@ async function runScan(
         .filter((type) => !isSatellite(type) || scanner.lineups.has(type));
       // 預ける先はスキャンを回したエージェント
       await putChannels(found, replaced, scanner.agent);
-      for (const type of replaced) replacedTypes.add(type);
+      // 設定から消していた衛星の種別も、スキャンで入れ直したら放送の一覧から入れる側に戻す (このエージェントのぶん)
+      markRemoved(replaced.filter(isSatellite), false, [scanner.agent.id]);
     }
-    // 設定から消していた衛星の種別も、スキャンで入れ直したら放送の一覧から入れる側に戻す
-    markRemoved([...replacedTypes].filter(isSatellite), false);
     // 回した種別のぶんだけ、分かったことを入れ替える (チャンネルと同じく、回していない種別は残す)
     for (const [type] of targets) {
       for (const key of [...observations.keys()])
@@ -1135,8 +1133,9 @@ export function stop(): { stopped: boolean; message: string } {
  * **局がある種別なら、チューナーの有無によらず消せる** (種別ごとの例外は作らない)。スキャンは 1 件も見つからない結果を書かない
  * (アンテナを抜いたまま回して全部消えるのを防ぐ) ので、チューナーが挿さったまま回線だけが無くなったとき (引っ越しでケーブルが無くなったなど) は、
  * スキャンし直しても消えないため。スキャンの実行中だけ断る。
- * 全部のエージェントから消したときは、局の行は消さずにその場で一覧から外す (録画は残る。`epg.unlistType`)。BS と CS は放送の一覧からも入れ直さない
- * (`removedSatellites`)。その種別をスキャンし直せば戻る。一部のエージェントからだけ消したときは、ほかのエージェントで受けられる局は残る
+ * 全部のエージェントから消したときは、局の行は消さずにその場で一覧から外す (録画は残る。`epg.unlistType`)。一部のエージェントからだけ消したときは、
+ * ほかのエージェントで受けられる局は残る。BS と CS は、消したエージェントには放送の一覧からも入れ直さない (`removedSatellites`)。
+ * その種別をそのエージェントでスキャンし直せば戻る
  */
 export async function removeType(
   type: ChannelType,
@@ -1156,8 +1155,13 @@ export async function removeType(
       agent: agent.id,
       channels: await deleteChannels(type, agent),
     });
+  if (isSatellite(type))
+    markRemoved(
+      [type],
+      true,
+      agents.map((agent) => agent.id),
+    );
   if (everyone) {
-    if (isSatellite(type)) markRemoved([type], true);
     unlistType(type);
     for (const key of [...observations.keys()])
       if (key.startsWith(`${type}:`)) observations.delete(key);

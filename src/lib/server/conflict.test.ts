@@ -629,6 +629,43 @@ describe("エージェントが 2 台のときの場面", () => {
   }
 });
 
+describe("受けられる所が局ごとに違うとき (カードで絞った局)", () => {
+  test("離すのは自分が入った選局。同じ TS のほかの局が入った選局は離さない", () => {
+    const capacity = capacityOf([
+      { types: ["BS"], rank: 0, agent: 1 },
+      { types: ["BS"], rank: 0, agent: 2 },
+    ]);
+    const hold = (channel: string, from: number, to: number) => ({
+      type: "BS",
+      channel,
+      from,
+      to,
+    });
+    expect(
+      placements(
+        [
+          hold("1\tBS03", 0, 2),
+          // 1 が塞がっているので 2 に入る
+          hold("1\tBS01\n2\tBS01", 1, 5),
+          // カードで 1 に絞った同じ TS の局。1 が空いたので 1 に入る
+          hold("1\tBS01", 3, 10),
+          // 上の 2 つめが 5 で離れたので 2 が空いている
+          hold("2\tBS05", 6, 8),
+          // 1 は 3 つめが使い続けている
+          hold("1\tBS07", 6, 8),
+        ],
+        capacity,
+      ),
+    ).toEqual([
+      { agent: 1, rank: 0 },
+      { agent: 2, rank: 0 },
+      { agent: 1, rank: 0 },
+      { agent: 2, rank: 0 },
+      null,
+    ]);
+  });
+});
+
 const MIN = 60_000;
 const at = (h: number, m = 0) => (h * 60 + m) * MIN;
 const MARGINS = { start: 10_000, end: 15_000 };

@@ -183,6 +183,8 @@ export function liveAudioOnly(url: URL): { codec: "audio"; rung: Rung } | null {
 
 /** 前回の局と選択の控え (`LAST_COOKIE`)。前の形式 (`codec`・`raw`) は読まない */
 interface Kept {
+  /** 前回の局。無い (前のバージョンの控え) か一覧から消えていれば、種別とチャンネルで探す */
+  serviceId?: number;
   channelType?: string;
   channel?: string;
   audio?: string;
@@ -202,6 +204,8 @@ export function readKept(raw: string | undefined): Kept {
       const value = saved[key];
       if (typeof value === "string") kept[key] = value;
     }
+    const id = saved["serviceId"];
+    if (typeof id === "number" && Number.isInteger(id)) kept.serviceId = id;
     return kept;
   } catch {
     return { choice: "auto" };
@@ -266,11 +270,12 @@ export function liveStart(
   const named = channels.find((channel) => channel.id === asked);
   const saved =
     named === undefined
-      ? channels.find(
+      ? (channels.find((channel) => channel.id === kept.serviceId) ??
+        channels.find(
           (channel) =>
             channel.type === kept.channelType &&
             channel.channel === kept.channel,
-        )
+        ))
       : undefined;
   const target = named ?? saved ?? channels[0];
   if (target === undefined) return null;

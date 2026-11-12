@@ -1040,7 +1040,7 @@ export const logoRecords = sqliteTable(
  */
 export const agents = sqliteTable("agents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  /** 画面に出す名前。今は URL のホスト名 */
+  /** 画面に出す名前。エージェントが名乗る名前 (`agent-name.ts`)、名乗らない古いエージェントは URL のホスト名。設定で変えられる */
   name: text("name").notNull(),
   /** `https://ホスト:ポート` (`#` から後ろは持たない) */
   origin: text("origin").notNull(),

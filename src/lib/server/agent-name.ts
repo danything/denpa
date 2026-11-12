@@ -3,8 +3,12 @@
  * (エージェントの `AGENT_NAME`、無ければ機械の名前)。返さない古いエージェントはホスト名のまま
  */
 
+import { and, eq } from "drizzle-orm";
+
 import { fetchAgent } from "./agent-client";
 import type { Agent } from "./agents";
+import { orm } from "./db";
+import { agents } from "./schema";
 
 /** 名前の長さの上限 (字) */
 export const NAME_MAX = 40;
@@ -25,4 +29,30 @@ export async function aboutName(agent: Agent): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * **環境変数から足したエージェントにも、名乗る名前を付ける。** 行の名前がホスト名のまま (画面で変えていない) なら、
+ * `/denpa/about` の `name` に書き換える。画面から登録した行は登録したときに付けている (`agent-admin.addAgent`)。
+ * 通知の購読が始まるたびに呼ぶ (`runtime.ts`)。書き換えたら true
+ */
+export async function adoptName(agent: Agent): Promise<boolean> {
+  const row = orm()
+    .select({ name: agents.name, fromEnv: agents.from_env })
+    .from(agents)
+    .where(eq(agents.id, agent.id))
+    .get();
+  if (row?.fromEnv !== true || row.name !== new URL(agent.origin).hostname)
+    return false;
+  const name = await aboutName(agent);
+  if (name === null || name === row.name) return false;
+  // 訊いている間に画面で名前を変えていたら、そちらを残す
+  return (
+    orm()
+      .update(agents)
+      .set({ name })
+      .where(and(eq(agents.id, agent.id), eq(agents.name, row.name)))
+      .returning({ id: agents.id })
+      .all().length > 0
+  );
 }

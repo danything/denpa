@@ -185,9 +185,8 @@ export function renameAgent(id: number, raw: string): void {
     throw new AgentAdminError(`名前は ${NAME_MAX} 字までにしてください`);
   if (rowOf(id) === undefined)
     throw new AgentAdminError("このエージェントはもうありません");
+  // 繋がった・繋がらないの通知 (Webhook) は、知らせるときに今の名前を引く (`runtime.ts`)。購読は繋ぎ直さない
   orm().update(agents).set({ name }).where(eq(agents.id, id)).run();
-  // 繋がった・繋がらないの通知 (Webhook) に新しい名前を入れるため、購読を繋ぎ直す
-  watchAgent(agentOf(id));
   emit("tuners");
 }
 

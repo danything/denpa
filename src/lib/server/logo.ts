@@ -859,29 +859,42 @@ function logoUse(target: Target): StreamUse {
 export function countFree(
   tuners: readonly Pick<
     AgentTuner,
-    "disabled" | "types" | "channel" | "users"
+    "agent" | "disabled" | "types" | "channel" | "users"
   >[],
   type: string,
   leaving: readonly string[] = [],
+  /** 中継を受けられるエージェント (`agents.id`)。渡せば、そのエージェントのチューナーだけを数える */
+  agents?: readonly number[],
 ): number {
   return tuners.filter(
     (tuner) =>
       !tuner.disabled &&
+      (agents === undefined || agents.includes(tuner.agent)) &&
       tuner.types.includes(type as ChannelType) &&
       tuner.users.every((user) => leaving.includes(user.use)),
   ).length;
 }
 
 /**
- * 空きチューナーの数 (`countFree`)。無ければ自分では開かない。
+ * 空きチューナーの数 (`countFree`)。無ければ自分では開かない。`target` を渡せば、その中継を受けられるエージェントのチューナーだけを数える。
  * 譲る相手は優先度の数だけで決まるので、番組表の取得に譲る特別扱いは要らない (エージェントが断る・取り上げる)。
  */
 async function freeTuners(
   type: string,
   leaving: readonly string[] = [],
+  target?: Target,
 ): Promise<number> {
+  const agents =
+    target === undefined
+      ? []
+      : strictPlaces(target.places).map((place) => place.agent);
   try {
-    return countFree(await getTuners(), type, leaving);
+    return countFree(
+      await getTuners(),
+      type,
+      leaving,
+      agents.length === 0 ? undefined : agents,
+    );
   } catch {
     // エージェントに聞けないなら開きに行かない
     return 0;
@@ -1013,7 +1026,7 @@ async function drain(
         update({ done: state.done + 1 });
         continue;
       }
-      if ((await freeTuners(target.type, left)) === 0) {
+      if ((await freeTuners(target.type, left, target)) === 0) {
         if ((open.get(target.type) ?? 0) > 0) {
           queue.unshift(target);
           handedOver.add(target.type);
@@ -1237,7 +1250,7 @@ async function awaitCarousel(): Promise<number> {
   for (;;) {
     const target = carrierTarget() ?? unprobedRelay();
     if (target === null || collecting.has(target.channel)) return found;
-    if ((await freeTuners(target.type, left)) === 0) return found;
+    if ((await freeTuners(target.type, left, target)) === 0) return found;
     // 空きを訊いている間に、共有や「いますぐ」が同じ中継を開いたかもしれない
     if (collecting.has(target.channel) || state.running) return found;
     const controller = new AbortController();

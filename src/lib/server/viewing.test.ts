@@ -81,6 +81,7 @@ describe("前回の局と選択の控え (cookie)", () => {
         }),
       ),
     ).toEqual({
+      serviceId: 1,
       channelType: "GR",
       channel: "27",
       audio: "1:main",
@@ -137,6 +138,23 @@ describe("開いたときに先回りする形式と局", () => {
       audio: "1:sub",
       codec: "av1",
     });
+  });
+
+  test("前回の局は局の ID で探す (同じチャンネルのサブチャンネル)。無い ID ならチャンネルで探す", () => {
+    const sub = [
+      { id: 30, type: "GR", channel: "16" },
+      { id: 31, type: "GR", channel: "16" },
+    ];
+    const kept = {
+      serviceId: 31,
+      channelType: "GR",
+      channel: "16",
+      choice: "av1" as const,
+    };
+    expect(liveStart(sub, NaN, kept, true)?.serviceId).toBe(31);
+    expect(
+      liveStart(sub, NaN, { ...kept, serviceId: 99 }, true)?.serviceId,
+    ).toBe(30);
   });
 
   test("名指しの局が先。音声の控えは前回の局のときだけ。無い局なら一覧の先頭", () => {

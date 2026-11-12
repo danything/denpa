@@ -26,6 +26,7 @@ import {
 import {
   type AgentChannels,
   retainedServices,
+  serviceChannel,
   storeAgentChannels,
   unreceivableService,
 } from "./agent-channels";
@@ -202,7 +203,8 @@ const ENDED_NAME = /^[\s\-－]*$/u;
  * 分割放送をしていない間は名前の無い枠が並ぶ)。
  *
  * 局は種別で絞らない (ライブ画面も全種別をまとめて扱っている)。
- * 外すのは、ライブ画面も外している復号できない局 (`services.decodable`) だけ
+ * 外すのは、ライブ画面も外している復号できない局 (`services.decodable`) と、チャンネルの分からない局
+ * (どのエージェントの控えにも無い。エージェントを消した直後など) だけ
  *
  * **出す画面ごとに書かない。** 番組表と検索で別々に書いていると、片方だけ
  * 直したときに同じ番組の詳細でも「視聴」が出たり出なかったりする
@@ -219,8 +221,14 @@ export function watchableServices(at: number): number[] {
         type: services.type,
       })
       .from(services)
-      // 復号できない局はライブに出さない
-      .where(and(currentServices(), eq(services.decodable, true)))
+      // 復号できない局とチャンネルの分からない局はライブに出さない
+      .where(
+        and(
+          currentServices(),
+          eq(services.decodable, true),
+          sql`${serviceChannel()} IS NOT NULL`,
+        ),
+      )
       .all(),
     orm()
       .select({

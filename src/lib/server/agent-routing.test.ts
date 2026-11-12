@@ -36,7 +36,7 @@ const { checkContracts, getContractRows, testDecode } =
 const { orm } = await import("./db");
 const { placeServices } = await import("./fake-channels");
 const { cardContracts, programs, services } = await import("./schema");
-const { descramble, forgetRawProbe } = await import("./scramble");
+const { descramble, forgetRawProbe, probeRaw } = await import("./scramble");
 
 /** `/denpa/card` の答え。カードも `CARD_URL` も無い */
 const NO_CARD = {
@@ -174,7 +174,9 @@ class FakePool {
   /** 本物 (RawProbe.cs) と同じく、置き場の中身の SHA-256 を返す。置き場は denpa と同じ `config.rawDir` */
   private async probe(request: Request): Promise<Response> {
     this.probes++;
-    if (this.raw === "old") return new Response("", { status: 404 });
+    // 古いエージェントは知らない API に、ほかの知らない API と同じ答えを返す (エージェントの `MapFallback`)
+    if (this.raw === "old")
+      return Response.json({ ok: false, error: "not found" }, { status: 404 });
     const { path } = (await request.json()) as { path: string };
     const full = join(config.rawDir, path);
     if (this.raw === "missing" || !existsSync(full))
@@ -751,6 +753,15 @@ describe("後から復号させる先", () => {
     const { input, output } = await scrambled();
     await descramble(input, output);
     expect(pools.map((p) => p.decodes)).toEqual([0, 1]);
+  });
+
+  test("API の無い古いエージェント (知らない API への 404) は確かめられない。ファイルが無い 404 は見えない", async () => {
+    startAgents(pool(localCard(CARD_X)), pool(localCard(CARD_X)));
+    pools[0]!.raw = "missing";
+    pools[1]!.raw = "old";
+    const [missing, old] = listAgents();
+    expect(await probeRaw(missing!)).toBe(false);
+    expect(await probeRaw(old!)).toBeNull();
   });
 
   test("エージェントが 1 台なら、確かめずにそこへ送る (1 台のときの動きは変えない)", async () => {
