@@ -727,6 +727,47 @@ describe("通信の文書", () => {
       "https://www.example.com/d/lib/app.js",
     ]);
   });
+
+  test("通信の文書から unlockAllModulesOnMemory を呼んでも、放送の文書が押さえたものを外す", async () => {
+    const remote = bmlFile(
+      "x",
+      "",
+      `function start() {
+                var before = browser.getLockedModuleInfo().length;
+                browser.unlockAllModulesOnMemory();
+                browser.Ureg[1] = before + "," + browser.getLockedModuleInfo().length;
+            }`,
+    )[2];
+    const { bml } = open({
+      ip: {
+        connected: () => true,
+        transmit: async () => ({
+          resultCode: 0,
+          status: "",
+          body: new Uint8Array(),
+        }),
+        confirm: async () => null,
+        get: async () => ({
+          status: 200,
+          contentType: "text/X-arib-bml; charset=EUC-JP",
+          body: Uint8Array.from(Buffer.from(remote, "latin1")),
+        }),
+      },
+    });
+    feedAll(bml, [
+      PROGRAM,
+      ...carousel([
+        startup(
+          "",
+          'function start() { browser.lockModuleOnMemoryEx("/40/0000"); browser.launchDocument("https://www.example.com/d/menu.bml", "cut"); }',
+        ),
+      ]),
+    ]);
+    const { done } = await watch(() => inside(bml).ureg[1] !== "");
+    expect(done).toBe(true);
+    // Ex で押さえたものは文書を替えても残る。通信の文書からでも全部外れる
+    expect(inside(bml).ureg[1]).toBe("1,0");
+  });
 });
 
 describe("lockModuleOnMemoryEx", () => {

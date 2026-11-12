@@ -90,6 +90,12 @@ describe("MPU の時刻", () => {
       parseMpuExtendedTimestamps(hex("f9000075300000000a3f0000010000")),
     ).toEqual([]);
   });
+
+  test("予約の種類 3 の拡張タイムスタンプは読まない", () => {
+    expect(
+      parseMpuExtendedTimestamps(hex("ff000075300000000a3f0000010000")),
+    ).toEqual([]);
+  });
 });
 
 describe("LatmReader", () => {
@@ -348,6 +354,45 @@ describe("MmtMediaReader", () => {
     expect(reader.scrambled).toBe(1);
     expect(reader.media).toBeGreaterThan(reader.scrambled);
     // 欠けたコマ (sample 1) と、スクランブルのパケットが割り込んだコマ (sample 2)
+    expect(reader.dropped).toBe(2);
+  });
+
+  test("先頭の断片が欠けたコマも 1 つと数え、後ろのコマの時刻をずらさない", () => {
+    const reader = new MmtMediaReader(SERVICE);
+    const sample1 = mfuPackets(VIDEO, 10, [{ sample: 1, data: nal(1, 300) }], {
+      fragment: 100,
+      sequenceNumber: 1,
+    });
+    const events = read(
+      [
+        ...mpt(),
+        ...ip(
+          mfuPackets(VIDEO, 10, [{ sample: 0, data: nal(19, 10) }], {
+            rap: true,
+          }),
+        ),
+        // sample 1 の先頭の断片が欠ける
+        ...ip(sample1.slice(1)),
+        ...ip(
+          mfuPackets(VIDEO, 10, [{ sample: 2, data: nal(1, 10) }], {
+            sequenceNumber: 5,
+          }),
+        ),
+        ...ip(
+          mfuPackets(VIDEO, 11, [{ sample: 0, data: nal(19, 10) }], {
+            sequenceNumber: 6,
+          }),
+        ),
+      ],
+      reader,
+    );
+    // 欠けた所の手前のコマ (sample 0) は、欠けたのがどちらのコマか分からないので捨てる
+    const base = SECONDS * CLOCK;
+    expect(
+      units(events)
+        .filter((e) => e.kind === "video")
+        .map((v) => [v.dts - base, v.pts - base]),
+    ).toEqual([[3000, 3000]]);
     expect(reader.dropped).toBe(2);
   });
 

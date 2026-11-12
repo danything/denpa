@@ -122,6 +122,7 @@ function setup(
     screen: () => {},
     lock: () => 1,
     unlock: () => true,
+    unlockAll: () => {},
     locked: () => [],
     detect: () => 1,
     loadDrcs: () => 1,

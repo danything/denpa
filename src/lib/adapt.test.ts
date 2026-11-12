@@ -551,7 +551,7 @@ describe("手で選んでいるとき", () => {
 });
 
 describe("音声だけ", () => {
-  test("段 3 でも 10 秒続けて足りなければ音声だけにする", () => {
+  test("段 3 に移って 10 秒たっても足りないままなら音声だけにする", () => {
     const a = new RungAdapter();
     expect(
       first(a, 0, 60_000, { route: "live", current: 3, waiting: true }),

@@ -200,6 +200,28 @@ describe("どれで観るか (pickOffer)", () => {
     });
   });
 
+  test("4K の局の元の録画の H.265 は詰め替えなので、変換に数えない。H.264 は変換", () => {
+    const broadcast: PlaybackInfo = {
+      ...h264Only,
+      offers: [
+        {
+          codec: "hevc",
+          way: "stream",
+          codecs: "hvc1.2.4.L153.B0,mp4a.40.2",
+        },
+        { codec: "h264", way: "stream", codecs: "avc1.640029,mp4a.40.2" },
+      ],
+      broadcast: "hevc",
+    };
+    const hevc = 'video/mp4; codecs="hvc1.2.4.L153.B0,mp4a.40.2"';
+    expect(
+      transcodes(broadcast, { way: "stream", codec: "hevc", type: hevc }),
+    ).toBe(false);
+    expect(
+      transcodes(broadcast, { way: "stream", codec: "h264", type: H264_LIVE }),
+    ).toBe(true);
+  });
+
   test("中身が分からないファイルは、ほかが無ければそのまま渡す。何も無ければ null", () => {
     const unknown: PlaybackInfo = {
       ...h264Only,

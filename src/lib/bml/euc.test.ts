@@ -43,7 +43,7 @@ describe("EUC-JP", () => {
     );
   });
 
-  test("知らない字は 〓 (0xA2AE)", () => {
+  test("読めない字は 〓 (0xA2AE)", () => {
     expect(eucCode("😀".charCodeAt(0))).toBe(0xa2ae);
   });
 

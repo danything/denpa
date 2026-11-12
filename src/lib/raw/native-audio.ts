@@ -15,7 +15,7 @@ import {
   MAX_PENDING_BYTES,
   type PcmChunk,
 } from "./native-audio-protocol";
-import { audioContext, Seam } from "./seam";
+import { audioContext, Seam, SNAP } from "./seam";
 
 const TICK_MS = 20;
 /**
@@ -32,8 +32,6 @@ const RESYNC_SECONDS = 0.08;
  * 波形が途中で 0 に飛ぶ (または 0 から飛ぶ) と「プツッ」と聞こえる (#2474)。映像が一瞬止まる・先へ飛ぶたびに起きる
  */
 const FADE_SECONDS = 0.008;
-/** 前の音の終わりとこれだけ離れて鳴らし始めたら、途切れのあととみなして音量を上げる (秒) */
-const GAP_SECONDS = 0.001;
 /** 映像の時刻の動きがこれより小さければ、動いていないとみなす (秒) */
 const FROZEN_SECONDS = 0.001;
 /**
@@ -325,10 +323,11 @@ export class NativeAudio {
       node.buffer = buffer;
       node.playbackRate.value = rate;
       node.connect(this.fade);
-      // 途切れのあと (組み直した直後・コマを捨てた・途中から鳴らす) は、波形が 0 から飛ばないよう音量を上げながら鳴らす
+      // 途切れのあと (組み直した直後・コマを捨てた・途中から鳴らす) は、波形が 0 から飛ばないよう音量を上げながら鳴らす。
+      // 前の音の終わりから `SNAP` より離れていれば途切れ (`Seam` がつながなかった)
       if (
         this.scheduledEnd === null ||
-        when > this.scheduledEnd + GAP_SECONDS ||
+        when > this.scheduledEnd + SNAP ||
         plan.offset > 0
       ) {
         const gain = this.fade.gain;

@@ -45,7 +45,7 @@ describe("streamParts", () => {
     expect([...joined]).toEqual([1, 1, 1, 2, 2, 2, 2, 2, 3, 3]);
   });
 
-  test("書き込みは1つずつ (前が終わるまで次を書かない)", async () => {
+  test("書き込みは 1 つずつ (前が終わるまで次を書かない)", async () => {
     let writing = false;
     let overlapped = false;
     const order: number[] = [];

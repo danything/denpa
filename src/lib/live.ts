@@ -112,7 +112,7 @@ export const CHANNEL = {
   /** 映像の中身 (moof + mdat) */
   videoMedia: 0x01,
   /**
-   * **元の TS** (1局に絞っただけ。エンコードしない経路。[stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
+   * **元の TS** (1 局に絞っただけ。エンコードしない経路。[stream.md](../../docs/stream.md#放送そのままmpeg-2を送る))。
    * 映像・音声・PAT/PMT が入っていて、受け側が自分でデコードする (`raw/`)。init は無い
    */
   rawTs: 0x02,

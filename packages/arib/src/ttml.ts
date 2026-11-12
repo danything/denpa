@@ -15,7 +15,7 @@ import {
   type CaptionPage,
   type CaptionRun,
 } from "./caption-text.js";
-import { CLOCK } from "./mmt-media.js";
+import { CLOCK } from "./pes.js";
 
 /** XML の要素。名前と属性は名前空間の接頭辞を外したもの (`tts:color` → `color`) */
 interface XmlElement {
