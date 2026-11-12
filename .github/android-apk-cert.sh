@@ -20,8 +20,12 @@ if ! printf '%s' "$want" | grep -Eqx '[0-9a-f]{64}'; then
 fi
 
 apksigner=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner
-out=$("$apksigner" verify --verbose --print-certs "$apk") || { printf '%s
-' "$out"; echo "::error::apksigner が署名を確かめられませんでした"; exit 1; }
+# 落ちたときも出力をログに残す
+out=$("$apksigner" verify --verbose --print-certs "$apk") || {
+  printf '%s\n' "$out"
+  echo "::error::apksigner が署名を確かめられませんでした"
+  exit 1
+}
 printf '%s\n' "$out"
 
 # v2・v3 のどちらかで確かめられていること (v1 だけの署名は Android 11 以降で入れられない)
