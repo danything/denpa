@@ -32,7 +32,7 @@ public sealed class AgentTls
 {
     public const string PairPath = "/denpa/pair";
 
-    public const string NotPaired = "この denpa とはまだ組んでいません。TUNER_AGENT_URL に #pair=… を付けてください (docs/agent.md)";
+    public const string NotPaired = "この denpa とはまだ組んでいません。denpa の設定の「エージェントを追加」に登録用の URL を貼るか、TUNER_AGENT_URL に #pair=… を付けてください (docs/agent.md)";
     public const string WrongClient = "証明書が名乗りと違います";
     public const string WrongProof = "合言葉が違います";
 
@@ -209,6 +209,17 @@ public sealed class AgentTls
         }
     }
 
+    /// <summary>
+    /// <c>DELETE /denpa/pair</c>: 呼んだ denpa の指紋を <c>clients</c> から消す (denpa の設定でエージェントを削除したとき)。
+    /// ここへ来るのは組んだ相手だけ (<see cref="Decide"/>)。消したら true
+    /// </summary>
+    public bool Unpair(string? peer)
+    {
+        if (peer is null || !Clients.Remove(peer)) return false;
+        Log.Write($"denpa ({peer[..Math.Min(16, peer.Length)]}) の登録を消しました");
+        return true;
+    }
+
     /// <summary><c>POST /denpa/pair</c> の応答。断ったら <c>Error</c>、組めたら返す <c>Proof</c> が入る</summary>
     public readonly record struct PairResult(int Status, string? Error, string? Proof);
 
@@ -229,7 +240,15 @@ public sealed class AgentTls
             return new(403, WrongProof, null);
         }
 
-        if (Clients.Add(client)) Log.Write($"denpa ({client[..Math.Min(16, client.Length)]}) と組みました");
+        if (Clients.Add(client))
+        {
+            Log.Write($"denpa ({client[..Math.Min(16, client.Length)]}) と組みました");
+            /*
+             * 2 つの denpa が同じエージェントを使うと、チューナーの取り合いの約束 (1 つの denpa が全部の利用者を出す) が崩れる。
+             * 断りはしない (denpa を別の機械へ移すときに、新旧が並ぶため)
+             */
+            if (Clients.Count > 1) Log.Write($"ほかの denpa とも組んでいます ({Clients.Count} 台)。チューナーを使う denpa は 1 つにしてください");
+        }
         return new(200, null, Proof(Token, "agent", Fingerprint, client));
     }
 
@@ -331,6 +350,17 @@ public sealed class PairedClients
         get
         {
             lock (_gate) return _known.Count;
+        }
+    }
+
+    /// <summary>消す。無ければ何もしない (false)</summary>
+    public bool Remove(string fingerprint)
+    {
+        lock (_gate)
+        {
+            if (!_known.Remove(fingerprint)) return false;
+            AgentTls.WritePrivate(_file, string.Concat(_known.Order().Select(line => line + "\n")));
+            return true;
         }
     }
 

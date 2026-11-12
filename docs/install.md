@@ -97,7 +97,7 @@ helm install denpa oci://ghcr.io/danything/charts/denpa \
 ```
 
 チューナーを挿した機械にエージェントだけ置き、本体を別の所で動かすなら
-`oci://ghcr.io/danything/charts/denpa-agent` を使い、本体側は `TUNER_AGENT_URL` でそこを指します
+`oci://ghcr.io/danything/charts/denpa-agent` を使い、本体の設定の「受信」の「エージェントを追加」で登録するか、`TUNER_AGENT_URL` でそこを指します
 ([agent.md](agent.md#エージェントは別イメージ別プロセス))。`TUNER_AGENT_URL` には `#pair=<合言葉>` を付けます。組んだあとも `#pair=` は消しません ([上げるときの注意](config.md#エージェントを-db-に持つようにした-前のバージョンから上げるとき))。
 合言葉は chart が Secret `tuner-agent-pair` に作り、読み方は `helm install` のあとに出ます。
 本体の chart はエージェントと組む合言葉を自分で作って両方に渡すので、何も書かなくて構いません
@@ -136,7 +136,7 @@ curl -fsSL https://raw.githubusercontent.com/danything/denpa/main/talos/install.
 
 チューナーを挿した Android の端末 (Android 10 以上、arm64) の 1 台で、denpa 本体とチューナーエージェントを動かせます
 (実機では確かめていない)。別の機械で動かす denpa のチューナーエージェントにもできます。リリースの `denpa-<バージョン>-android-arm64.apk` を入れ、
-通知の「URL をコピー」で取った `http://<端末のアドレス>:3000` を同じ LAN のブラウザで開きます。エージェントとして足すなら、「組む URL をコピー」で取った URL を denpa の `TUNER_AGENT_URL` に書きます。
+通知の「URL をコピー」で取った `http://<端末のアドレス>:3000` を同じ LAN のブラウザで開きます。エージェントとして足すなら、「組む URL をコピー」で取った URL を denpa の設定の「エージェントを追加」に貼ります (`TUNER_AGENT_URL` に書いても足せる)。
 手順は [install-android.md](install-android.md)。
 
 ### イメージのタグ

@@ -44,11 +44,22 @@ public static class About
     };
 
     /// <summary>
-    /// <c>{"version","os","arch","runtime","ccidDriver"}</c>。<c>ccidDriver</c> は macOS だけ (ほかは null)。
+    /// 画面に出す名前の元。denpa は登録したときにこれで名前を付ける (設定の「受信」の「エージェント」)。
+    /// <c>AGENT_NAME</c> が空でなければそれ、無ければ機械の名前
+    /// </summary>
+    public static string Name => ResolveName(Environment.GetEnvironmentVariable("AGENT_NAME"), Environment.MachineName);
+
+    /// <summary><paramref name="environment"/> (<c>AGENT_NAME</c>) が空でなければそれ、無ければ <paramref name="machine"/></summary>
+    public static string ResolveName(string? environment, string machine) =>
+        environment?.Trim() is { Length: > 0 } given ? given : machine;
+
+    /// <summary>
+    /// <c>{"name","version","os","arch","runtime","ccidDriver"}</c>。<c>ccidDriver</c> は macOS だけ (ほかは null)。
     /// 呼ぶたびに `defaults` を高々 1 回起動する (<see cref="PcscLink.CcidDriver"/>)
     /// </summary>
     public static JsonObject ToJson() => new()
     {
+        ["name"] = Name,
         ["version"] = Version,
         ["os"] = Os,
         ["arch"] = Arch,

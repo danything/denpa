@@ -1,0 +1,1096 @@
+<script lang="ts">
+  import "@anyblades/blades/content/table";
+  import { resolve } from "$app/paths";
+  import Ellipsis from "~icons/lucide/ellipsis";
+  import ShieldCheck from "~icons/lucide/shield-check";
+
+  import { arming } from "#lib/arming.svelte.js";
+  import { autosave, SaveState } from "#lib/autosave.svelte.js";
+  import Lead from "#lib/components/Lead.svelte";
+  import Icon from "#lib/components/player/Icon.svelte";
+  import SaveNote from "#lib/components/SaveNote.svelte";
+  import {
+    READER_STATE_LABEL,
+    SERVICE_TYPE_LABEL,
+    SIGNAL_RAW_NOTE,
+    signalText,
+    splitReaderName,
+  } from "#lib/format.js";
+  import { held } from "#lib/live-updates.svelte.js";
+  import type { CardReaderState } from "#lib/server/scramble.js";
+  import type { TunerSignal } from "#lib/server/tuner.js";
+  import { extraTypes, receives } from "#lib/tuner-types.js";
+  import { CHANNEL_TYPES, type ChannelType, shownTypes } from "#lib/types.js";
+
+  import type { PageData } from "./$types";
+  import ContractDialog from "./ContractDialog.svelte";
+
+  /** 1 台のエージェントのチューナーとカード (`tuners.server.ts` の `tunerAgents` の 1 つ) */
+  let { agent }: { agent: PageData["tunerAgents"][number] } = $props();
+
+  /** 有料契約確認モーダルの開閉 */
+  let showContractDialog = $state(false);
+
+  /** チューナーの設定の保存の様子 (その場で保存する。`autosave`) */
+  const configSave = new SaveState();
+  /** チューナーの行の削除は 2 回押し (ほかの画面の削除と同じ。`arming`) */
+  const deleting = arming('[data-testid^="tuner-delete"]');
+  /** カードリーダーの「使う」の保存の様子 (その場で保存する) */
+  const readerSave = new SaveState();
+  /**
+   * **カードを読めている最後のカードリーダーをオフにするのは 2 回押し。** オフにすると復号できなくなるので、
+   * スイッチでは送らずに聞き返し、「オフを確定」で送る (削除の 2 回押しと同じ `arming`)
+   */
+  const turningOff = arming('[data-testid="card-reader-off-confirm"]');
+
+  /** 聞き返したリーダーのスイッチを外して送る。送るのは隠し欄の `change` (`autosave` が受け取る) */
+  function confirmOff(form: HTMLFormElement | null, index: number) {
+    turningOff.fire();
+    const use = form?.querySelector<HTMLInputElement>(
+      `input[name="reader-use.${index}"]`,
+    );
+    if (use === null || use === undefined) return;
+    use.checked = false;
+    form
+      ?.querySelector(`input[name="reader.${index}"]`)
+      ?.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  /**
+   * 衛星の給電の選び方。値はエージェントが読む字のまま (小文字。`agent/Denpa.Agent/Tuning.cs`)。
+   * 設定ファイルに手で書いた別の値は、消さずに選べるものとして足す (`lnbChoices`)
+   */
+  const LNB_CHOICES = [
+    { value: "", label: "なし" },
+    { value: "15v", label: "15V" },
+    { value: "11v", label: "11V" },
+  ];
+  function lnbChoices(lnb: string) {
+    return LNB_CHOICES.some((choice) => choice.value === lnb)
+      ? LNB_CHOICES
+      : [...LNB_CHOICES, { value: lnb, label: lnb }];
+  }
+  /**
+   * チューナーの表の骨組みの行の高さ (rem)。本物の行 (名前とデバイスの 2 行で 2.9rem) から行の間 (0.4rem) を
+   * 引いたもの。台数は届くまで分からないので、よくある 4 台ぶん
+   */
+  const TUNER_SKELETON = [2.5, 2.5, 2.5, 2.5];
+
+  /** 読み直しの間も前の中身を出したままにする (`held`) */
+  const shownTuners = held(() => agent.tuners);
+  const shownCard = held(() => agent.card);
+  const shownContracts = held(() => agent.contracts);
+
+  /** 行に並べる種別。CATV と SKY は受けられる機材か選んだチューナーがあるときだけ (`extraTypes`) */
+  const rowTypes = $derived(
+    shownTypes(extraTypes(shownTuners.value?.list ?? [])),
+  );
+
+  const activeCardId = $derived.by(() => {
+    const card = shownCard.value;
+    if (!card) return null;
+    if (card.source === "remote" && card.ids.length > 0)
+      return card.ids[0] ?? null;
+    const active = card.readers.find((r) => r.state === "active");
+    if (active && active.ids.length > 0) return active.ids[0] ?? null;
+    return card.readers.find((r) => r.ids.length > 0)?.ids[0] ?? null;
+  });
+
+  /**
+   * 「⋯」で開いている行 (名前・デバイス・LNB・削除)。開くのは 1 行だけ。
+   * **閉じていても欄は消さずに隠すだけ**。送る値は全部の行の欄から作るので
+   * (`tuners.server.ts`)、欄を消すとその行ごとチューナーが消える
+   */
+  let opened = $state<number | null>(null);
+  /** 「追加」で出す欄。足せたら (台数が増えたら) 閉じる。断られたら打った字を残したまま */
+  let adding = $state(false);
+  let lastCount = 0;
+  $effect(() => {
+    const count = shownTuners.value?.list.length ?? 0;
+    if (count > lastCount) adding = false;
+    if (count < lastCount) opened = null;
+    lastCount = count;
+  });
+
+  /**
+   * 受信の状態と C/N の新しい値 (チューナーの番号ごと)。**使用中のチューナーがある間、見えているときだけ 5 秒ごとに読む**
+   * (`signal/+server.ts`。エージェントが読む間隔と同じ)。画面ごと読み直すと、カードリーダーの表のためにカードへ INT を通してしまう。
+   * 一覧が読み直されたら (使い始めた・離した) 捨てて、一覧の値に戻る
+   */
+  let signals = $state<Record<number, TunerSignal | null> | null>(null);
+  $effect(() => {
+    const busy =
+      shownTuners.value?.list.some((tuner) => tuner.channel !== null) ?? false;
+    signals = null;
+    if (!busy) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void fetch(`${resolve("settings/reception/signal")}?agent=${agent.id}`)
+        .then(async (res) => {
+          if (!res.ok) return;
+          const body = (await res.json()) as {
+            tuners: { index: number; signal: TunerSignal | null }[];
+          };
+          signals = Object.fromEntries(
+            body.tuners.map((tuner) => [tuner.index, tuner.signal]),
+          );
+        })
+        .catch(() => {
+          // 読めなければ前の値のまま。次の周期で読む
+        });
+    }, 5000);
+    return () => clearInterval(timer);
+  });
+  const signalOf = (tuner: {
+    index: number;
+    signal: TunerSignal | null;
+  }): TunerSignal | null =>
+    signals !== null && tuner.index in signals
+      ? (signals[tuner.index] ?? null)
+      : tuner.signal;
+
+  /** カードリーダーの状態のバッジの色。ほかは色なし */
+  const READER_TONE: Partial<Record<CardReaderState, string>> = {
+    active: "success",
+    error: "error",
+  };
+</script>
+
+<svelte:window
+  onclick={(event) => {
+    deleting.stand(event);
+    turningOff.stand(event);
+  }}
+/>
+
+<!--
+  **選ばせる。打たせない。** エージェントが読むのは小文字の `15v` / `11v` だけで (`Tuning.cs`)、
+  `15V` と打つと黙って給電されない。見せる字は大文字 (電圧の書き方)
+-->
+{#snippet lnbField(name: string, lnb: string)}
+  <label class="field">
+    <span>LNB</span>
+    <select class="w-lnb" {name}>
+      {#each lnbChoices(lnb) as choice (choice.value)}
+        <option value={choice.value} selected={choice.value === lnb}>
+          {choice.label}
+        </option>
+      {/each}
+    </select>
+  </label>
+{/snippet}
+
+<!--
+  **機材が受けられない種別は選ばせない** (`receivable`。エージェントが見つけた機材の種別)。BS/CS 専用の受信機に GR を入れて
+  保存でき、その台に割り振られた地上波の選局が全部断られていた (#2386)。もう入っているものは外せるように押せるままにする。
+  足す欄は機材が分からない (`receivable` が無い) ので CATV と SKY を受けられず、並べない
+-->
+{#snippet typeChips(
+  prefix: string,
+  types: readonly ChannelType[],
+  receivable: readonly ChannelType[] | null | undefined,
+  choices: readonly ChannelType[],
+)}
+  <div class="chips types">
+    {#each choices as type (type)}
+      <label class="chip">
+        <input
+          type="checkbox"
+          name={`type.${prefix}.${type}`}
+          checked={types.includes(type)}
+          disabled={!types.includes(type) && !receives(receivable, type)}
+        />
+        {SERVICE_TYPE_LABEL[type]}
+      </label>
+    {/each}
+  </div>
+{/snippet}
+
+<!--
+    **チューナーは 1 つの表。** いまの様子 (空き・使っているもの) と設定 (種別・使うか) を同じ行に並べる。
+    空きの表と設定の表を分けていた頃は、名前と種別と無効が 2 つの表に 2 度ずつ出ていた。
+    名前・デバイス・LNB・削除は入れたときしか触らないので、行の「⋯」の中。
+    カードリーダーも同じ機材の話なので、同じ節の下に置く
+-->
+<div class="agent-block" data-testid="agent-tuners" data-agent={agent.id}>
+  <div class="agent-head">
+    <!-- エージェントの名前の見出し。1 台でも出す (2 台目を足したときに表の形を変えない) -->
+    <h3 data-testid="agent-tuners-name">{agent.name}</h3>
+    <SaveNote status={configSave} />
+  </div>
+  {#await agent.detected then detected}
+    {#if detected}
+      <Lead>
+        いまは<strong>挿さっているチューナーを自動で見つけて</strong
+        >使っています。どれかを変えると、この内容に固定します
+      </Lead>
+    {/if}
+  {/await}
+
+  <!--
+      エージェントの答え待ち。**本物の表と同じ形・同じ高さの枠を先に置く** (番組表・ルールの
+      下見と同じ骨組み)。字だけ出していた頃は、届いた拍子に表が出て下の節が押し下げられた
+    -->
+  {#snippet skeleton(label: string, rows: number[])}
+    <div class="skeleton" role="status" aria-label={label}>
+      <div class="skeleton-head" aria-hidden="true"></div>
+      {#each rows as height, row (row)}
+        <div
+          class="skeleton-block"
+          style="height: {height}rem"
+          aria-hidden="true"
+        ></div>
+      {/each}
+    </div>
+  {/snippet}
+  {#if shownTuners.value === undefined}
+    {@render skeleton("チューナーを確認しています", TUNER_SKELETON)}
+  {:else if shownTuners.value.error !== null}
+    <!--
+            繋がらなかったときに空の一覧だけ出すと「1 台も無い」と
+            見分けが付かない。理由をそのまま出す
+        -->
+    <div class="notice error small">
+      繋がりません: {shownTuners.value.error}
+    </div>
+  {:else}
+    {@const tuners = shownTuners.value.list}
+    <!--
+            **変えたらその場で保存する** (`autosave`。設定のほかの節と同じ)。文字の欄は離れたとき、
+            チェック・スイッチ・選択は変えたとき。
+            名前は空にできない (断って元に戻す)。行を消すのは「⋯」の中の 2 回押し。
+            **行の追加はボタンで**。足すための欄は、名前を打っている途中や
+            デバイスを入れる前に送らない (`data-no-autosave`)。自動検出に戻すのもボタン
+        -->
+    <form method="POST" action="?/tuners" use:autosave={configSave}>
+      <input type="hidden" name="agent" value={agent.id} />
+      {#if tuners.length === 0}
+        <p class="small muted">
+          チューナーがありません。「追加」から足してください。
+        </p>
+      {:else}
+        <div class="table-wrap tuners-wrap">
+          <table class="tuners">
+            <thead>
+              <tr>
+                <th>チューナー</th>
+                <th>受信できる種別</th>
+                <th class="wide">状態</th>
+                <th>使う</th>
+                <th><span class="visually-hidden">詳しく</span></th>
+              </tr>
+            </thead>
+            <tbody data-testid="tuner-list">
+              {#each tuners as tuner, index (tuner.index)}
+                {@const detailId = `tuner-detail-${agent.id}-${index}`}
+                <tr
+                  class="main"
+                  class:off={tuner.disabled}
+                  data-testid="tuner-row"
+                >
+                  <td class="name-cell">
+                    <div class="truncate">{tuner.name}</div>
+                    {#if tuner.device !== null}
+                      <div
+                        class="tiny muted mono truncate"
+                        data-testid="tuner-device"
+                      >
+                        {tuner.device}
+                      </div>
+                    {/if}
+                  </td>
+                  <td class="types-cell" data-label="受信できる種別">
+                    {@render typeChips(
+                      String(index),
+                      tuner.types,
+                      tuner.receivable,
+                      rowTypes,
+                    )}
+                  </td>
+                  <td class="state-cell small">
+                    <!--
+                                            空き・使用中と、使っているもの。**数字は出さない** (わけは `tuners.server.ts` の `USE_LABEL`)。
+                                            数は調べるとき用に `data-priority` にだけ残す。
+                                            目印は番号で。同じ用途が 2 つ並ぶこともあり、字を目印にすると落ちる
+                                        -->
+                    <div class="cluster state">
+                      {#if tuner.disabled}
+                        <span class="tag">無効</span>
+                      {:else if tuner.channel !== null}
+                        <span class="tag warning">使用中</span>
+                        <span class="mono">{tuner.channel.channel}</span>
+                      {:else}
+                        <span class="tag success">空き</span>
+                      {/if}
+                    </div>
+                    {#if !tuner.disabled && tuner.channel !== null}
+                      {@const signal = signalOf(tuner)}
+                      {#if signal !== null}
+                        <div
+                          class="tiny"
+                          class:text-error={!signal.locked}
+                          data-testid="tuner-signal"
+                        >
+                          {signalText(signal)}
+                        </div>
+                      {/if}
+                    {/if}
+                    {#each tuner.users as user, i (i)}
+                      <div
+                        class="truncate"
+                        data-testid="tuner-user"
+                        data-priority={user.priority}
+                      >
+                        {user.label}
+                      </div>
+                    {/each}
+                    {#if tuner.error !== null && tuner.channel === null}
+                      <div class="text-error tiny" data-testid="tuner-error">
+                        {tuner.error}
+                      </div>
+                    {/if}
+                  </td>
+                  <td class="use-cell">
+                    <!-- 使わないチューナーは選局しない (ほかのソフトに残すとき。docs/switch.md) -->
+                    <label class="hit">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        name={`use.${index}`}
+                        checked={!tuner.disabled}
+                        aria-checked={!tuner.disabled}
+                        aria-label={`${tuner.name} を使う`}
+                        data-testid="tuner-use"
+                      />
+                    </label>
+                  </td>
+                  <td class="more-cell">
+                    <button
+                      type="button"
+                      class="ghost more-button"
+                      aria-label={`${tuner.name} の名前・デバイス・LNB・削除`}
+                      aria-expanded={opened === index}
+                      aria-controls={detailId}
+                      onclick={() => (opened = opened === index ? null : index)}
+                      data-testid="tuner-more"
+                    >
+                      <Icon icon={Ellipsis} size="size-4" />
+                    </button>
+                  </td>
+                </tr>
+                <tr
+                  class="detail"
+                  class:open={opened === index}
+                  id={detailId}
+                  data-testid="tuner-detail"
+                >
+                  <td colspan="5">
+                    <div class="detail-body">
+                      <label class="field">
+                        <span>名前</span>
+                        <input
+                          class="w-name"
+                          name={`name.${index}`}
+                          value={tuner.name}
+                        />
+                      </label>
+                      <label class="field grow">
+                        <span>デバイス</span>
+                        <input
+                          class="mono"
+                          name={`device.${index}`}
+                          value={tuner.device ?? ""}
+                          placeholder="/dev/dvb/adapter0/frontend0"
+                        />
+                      </label>
+                      {@render lnbField(`lnb.${index}`, tuner.lnb ?? "")}
+                      <div class="delete-slot">
+                        {#if deleting.armed === index}
+                          <!--
+                                                        2 回目。この行を除いて保存する。2 回押しを戻すのは送り出したあと。
+                                                        押した場で下ろすと、送る前にこのボタンが消えて何も送られない
+                                                    -->
+                          <button
+                            type="submit"
+                            name="delete"
+                            value={index}
+                            class="small danger"
+                            onclick={() => setTimeout(() => deleting.fire())}
+                            data-testid="tuner-delete-confirm"
+                          >
+                            削除を確定
+                          </button>
+                        {:else}
+                          <button
+                            type="button"
+                            class="small outline danger"
+                            onclick={() => deleting.arm(index)}
+                            data-testid="tuner-delete"
+                          >
+                            削除
+                          </button>
+                        {/if}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+        <!-- 生の値 (機材やドライバが返したままの値) は dB ではない。何と比べるものかを言う (docs/tuners.md「信号レベル」) -->
+        {#if tuners.some((tuner) => tuner.channel !== null && signalOf(tuner)?.unit === "raw")}
+          <p class="tiny muted" data-testid="tuner-signal-raw-note">
+            {SIGNAL_RAW_NOTE}
+          </p>
+        {/if}
+      {/if}
+
+      {#if adding}
+        <!--
+                    足すための欄。名前は番号の代わりに `add` (`name.add` …) で、「追加」のボタン (`add`) で送ったときだけサーバが読む。
+                    ほかの行を変えたときの保存でも送られるが、そこでは読まれない (`tuners.server.ts`)
+                -->
+        <div class="add" data-no-autosave data-testid="tuner-add">
+          <input type="hidden" name="use.add" value="on" />
+          <label class="field">
+            <span>名前</span>
+            <input class="w-name" name="name.add" />
+          </label>
+          <label class="field grow">
+            <span>デバイス</span>
+            <input
+              class="mono"
+              name="device.add"
+              placeholder="/dev/dvb/adapter0/frontend0"
+            />
+          </label>
+          <div class="field">
+            <span>受信できる種別</span>
+            {@render typeChips("add", [], null, CHANNEL_TYPES)}
+          </div>
+          {@render lnbField("lnb.add", "")}
+        </div>
+      {/if}
+      <div class="cluster actions">
+        {#if adding}
+          <button
+            type="submit"
+            name="add"
+            value="1"
+            class="small"
+            data-testid="tuner-add-submit">追加</button
+          >
+          <button
+            type="button"
+            class="small ghost"
+            onclick={() => (adding = false)}>閉じる</button
+          >
+        {:else}
+          <button
+            type="button"
+            class="small secondary outline"
+            onclick={() => (adding = true)}
+            data-testid="tuner-add-open"
+          >
+            追加
+          </button>
+        {/if}
+        <button type="submit" class="small ghost" formaction="?/tunersAuto"
+          >自動検出に戻す</button
+        >
+      </div>
+    </form>
+  {/if}
+
+  <!--
+        カードリーダー。**同じ機材の話**なのでここに置く。
+        スクランブルが掛かったまま録れてしまうのを避けるには、録る前に気づけること。
+
+        **使うカードは 1 枚** (エージェントの Card.cs)。どのチューナーもその 1 枚の鍵で
+        復号するので、「使っているチューナー」は使用中の行にだけ並ぶ。ほかのリーダーは予備で、
+        使用中のカードが答えなくなったら繋ぎ直すときに使われる
+    -->
+  <!-- 繋がらないエージェントは、チューナーの表の場所の 1 行だけにする (カードリーダーの表も出さない) -->
+  {#if shownTuners.value?.error == null}
+    <div class="reader">
+      <div class="cluster">
+        <h4>カードリーダー</h4>
+        <SaveNote status={readerSave} />
+        {#if shownCard.value === undefined}
+          <!-- 答え待ち。「正常」「エラー」のバッジと同じ大きさの枠 -->
+          <span
+            class="skeleton skeleton-tag"
+            data-testid="status-card-reader"
+            aria-hidden="true"
+          ></span>
+        {:else}
+          {@const card = shownCard.value}
+          <span
+            class="tag {card.ok ? 'success' : 'error'}"
+            data-testid="status-card-reader"
+          >
+            {card.ok ? "正常" : "エラー"}
+          </span>
+          <button
+            type="button"
+            class="ghost small"
+            disabled={!card.ok}
+            onclick={() => (showContractDialog = true)}
+            data-testid="btn-open-contracts"
+          >
+            <ShieldCheck aria-hidden="true" />
+            有料契約を確認
+          </button>
+          {#if card.source === "remote"}
+            <!-- CARD_URL。手元のリーダーは使わず、鍵だけ受け取る -->
+            <span class="small">
+              {#if card.remoteName !== null}
+                {card.remoteName} から鍵を受け取っています
+              {:else}
+                別の拠点 <span class="mono break">{card.remote ?? "?"}</span>
+                から鍵を受け取っています
+              {/if}
+              {#if card.ids.length > 0}
+                <span class="mono">({card.ids.join(" / ")})</span>
+              {/if}
+              {#if card.tuners.length > 0}
+                (使っているチューナー: {card.tuners.join("、")})
+              {/if}
+            </span>
+          {/if}
+        {/if}
+      </div>
+      {#if shownCard.value === undefined}
+        <!-- リーダーは 1 つのことが多い。名前と場所の 2 行 -->
+        {@render skeleton("カードリーダーを確認しています", [2.35])}
+      {:else}
+        {@const card = shownCard.value}
+        <!-- 困っているときだけ。名前と番号は表に出る -->
+        {#if card.message !== ""}
+          <div
+            class={card.ok ? "tiny muted" : "notice error small"}
+            data-testid="card-message"
+          >
+            {card.message}
+          </div>
+        {/if}
+        {#if card.readers.length > 0}
+          <!-- カードを読めているリーダー (使用中と予備)。これが 1 台だけなら、外すと復号できなくなる -->
+          {@const reading = card.readers.filter(
+            (reader) => reader.state === "active" || reader.state === "standby",
+          ).length}
+          <!--
+            **使うかどうかはリーダーごと。** 使わないリーダーは開かない (PIX-DT295・CECH-ZD1 J の差し込み口なら、
+            チューナーも使っていなければ USB を閉じる)。変えたらその場で保存する (`autosave`)。
+            カードを読めている最後の 1 台だけは 2 回押し (`turningOff`)
+          -->
+          <form
+            method="POST"
+            action="?/cards"
+            use:autosave={readerSave}
+            data-testid="card-reader-form"
+          >
+            <input type="hidden" name="agent" value={agent.id} />
+            <div class="table-wrap row-cards-wrap">
+              <table class="row-cards">
+                <thead>
+                  <tr>
+                    <th>カードリーダー</th>
+                    <th>カード (番号)</th>
+                    <th>状態</th>
+                    <th class="wide">使っているチューナー</th>
+                    <th>使う</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- 同じ型のリーダーを 2 つ挿すと名前が並ぶ。目印は番号で -->
+                  {#each card.readers as reader, i (i)}
+                    {@const label = splitReaderName(reader.name)}
+                    {@const last =
+                      reading === 1 &&
+                      (reader.state === "active" || reader.state === "standby")}
+                    <tr
+                      data-testid="card-reader-row"
+                      data-state={reader.state}
+                      class:off={reader.state === "disabled"}
+                    >
+                      <!--
+                                        場所 (「usb 4-11」) は 2 行目に小さく。**文字の途中で折らない**。
+                                        break-all にしていた頃は、狭い列で「Gempl / us US / B Sma…」と
+                                        1 文字ずつ折れて読めなかった。折るのは単語の区切りで
+                                    -->
+                      <td class="reader-name span" data-label="カードリーダー">
+                        <span data-testid="card-reader-name">{label.name}</span>
+                        {#if label.where !== null}
+                          <div
+                            class="tiny muted mono"
+                            data-testid="card-reader-where"
+                          >
+                            {label.where}
+                          </div>
+                        {/if}
+                      </td>
+                      <td class="nowrap small mono" data-label="カード (番号)">
+                        {#if reader.ids.length > 0}
+                          {reader.ids.join(" / ")}
+                        {:else}
+                          <span class="muted">—</span>
+                        {/if}
+                      </td>
+                      <td class="nowrap" data-label="状態">
+                        <span class="tag {READER_TONE[reader.state] ?? ''}">
+                          {READER_STATE_LABEL[reader.state]}
+                        </span>
+                        {#if reader.error !== undefined}
+                          <div class="text-error tiny">
+                            {reader.error}
+                          </div>
+                        {/if}
+                      </td>
+                      <td class="small span" data-label="使っているチューナー">
+                        {#if reader.tuners.length > 0}
+                          {reader.tuners.join("、")}
+                        {:else}
+                          <span class="muted">—</span>
+                        {/if}
+                      </td>
+                      <td class="use-cell" data-label="使う">
+                        <input
+                          type="hidden"
+                          name={`reader.${i}`}
+                          value={reader.name}
+                        />
+                        <!--
+                        カードを読めている最後の 1 台は、スイッチでは送らない (`data-no-autosave`)。外したら戻して聞き返す
+                      -->
+                        <label class="hit">
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            name={`reader-use.${i}`}
+                            checked={reader.state !== "disabled"}
+                            aria-checked={reader.state !== "disabled"}
+                            aria-label={`${reader.name} を使う`}
+                            data-testid="card-reader-use"
+                            data-no-autosave={last ? "" : undefined}
+                            onchange={(event) => {
+                              if (!last) return;
+                              event.currentTarget.checked = true;
+                              turningOff.arm(i);
+                            }}
+                          />
+                        </label>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            {#if turningOff.armed !== null}
+              {@const index = turningOff.armed}
+              <div class="notice warning small cluster" role="alert">
+                <span>
+                  カードを読めるカードリーダーはこれだけです。オフにすると、スクランブルを復号できなくなります
+                </span>
+                <button
+                  type="button"
+                  class="small danger"
+                  data-no-autosave
+                  data-testid="card-reader-off-confirm"
+                  onclick={(event) =>
+                    confirmOff(event.currentTarget.closest("form"), index)}
+                >
+                  オフを確定
+                </button>
+              </div>
+            {/if}
+          </form>
+        {/if}
+      {/if}
+    </div>
+  {/if}
+
+  <ContractDialog
+    open={showContractDialog}
+    agent={agent.id}
+    cardId={activeCardId}
+    initialContracts={shownContracts.value ?? []}
+    onclose={() => (showContractDialog = false)}
+  />
+</div>
+
+<style>
+  /*
+   * **エージェントの見出しは控えた字** (docs/design.md の「メニュー・ダイアログ」と同じく、まとまりを線ではなく余白と控えた字の見出しで分ける)。
+   * エージェントどうしは余白で離す
+   */
+  .agent-head {
+    display: flex;
+    align-items: center;
+    gap: var(--dp-space-2);
+    margin-bottom: var(--dp-space-2);
+  }
+  .agent-head h3 {
+    margin: 0;
+    font-size: var(--dp-text-sm);
+    font-weight: var(--dp-weight);
+    color: var(--dp-muted);
+  }
+  .agent-block + :global(.agent-block) {
+    margin-top: var(--dp-space-5);
+  }
+  /*
+     * **チューナーの表は線で区切らない行**。触れると淡い地、
+     * 「⋯」で開いた中身は行のすぐ下に、行と一緒に左の縦線で。表 (`<table>`) のままにして、見出しと欄の縦を揃える。
+     * 広い画面では横に巻かせない。状態の列 (`.wide`) が余った幅を取り、ほかは中身の幅
+     */
+  .tuners-wrap {
+    container-type: inline-size;
+  }
+  .tuners {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  /* 見出しは小さく淡く (リーダーの表も) */
+  :is(.tuners, .reader) th {
+    border: 0;
+    font-size: var(--dp-text-xs);
+    font-weight: var(--dp-weight);
+    color: var(--dp-muted);
+  }
+  .tuners th {
+    white-space: nowrap;
+  }
+  .tuners td {
+    border: 0;
+    background: transparent;
+    vertical-align: middle;
+    transition: background-color var(--dp-duration) var(--dp-ease);
+  }
+  /* 「⋯」の中。閉じていても欄は送るので、消さずに隠す */
+  .detail:not(.open) {
+    display: none;
+  }
+  .detail td {
+    padding-top: 0;
+  }
+  .tuners .main:hover td {
+    background: var(--dp-hover-soft);
+  }
+  /*
+     * **「⋯」で開いている行は、左の縦線と主の色の太字の名前で示し、地は塗らない** (docs/design.md の選んでいる印)。
+     * 縦線は行の上から中身の下まで 1 本に続ける (行の先頭の欄と中身の欄に半分ずつ引く)
+     */
+  .tuners .main:has(+ .detail.open) .name-cell > .truncate:first-child {
+    color: var(--dp-primary-text);
+    font-weight: var(--dp-weight-bold);
+  }
+  .tuners .main:has(+ .detail.open) td:first-child,
+  .tuners .detail.open td {
+    position: relative;
+  }
+  .tuners .main:has(+ .detail.open) td:first-child::before,
+  .tuners .detail.open td::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: var(--dp-mark);
+    background: var(--pico-primary);
+  }
+  .tuners .main:has(+ .detail.open) td:first-child::before {
+    top: 0.5rem;
+    border-start-start-radius: var(--dp-mark);
+    border-start-end-radius: var(--dp-mark);
+  }
+  .tuners .detail.open td::before {
+    bottom: 0.5rem;
+    border-end-start-radius: var(--dp-mark);
+    border-end-end-radius: var(--dp-mark);
+  }
+  .tuners .main td:first-child {
+    border-start-start-radius: var(--dp-radius);
+    border-end-start-radius: var(--dp-radius);
+  }
+  .tuners .main td:last-child {
+    border-start-end-radius: var(--dp-radius);
+    border-end-end-radius: var(--dp-radius);
+  }
+  /* 使わないチューナーは名前と状態を控えた字にする (印の「無効」と合わせて、色だけに頼らない。透かすと 4.5:1 を割る) */
+  .tuners .main.off :is(.name-cell, .state-cell),
+  .row-cards tr.off :is(.reader-name, td:nth-child(2), td:nth-child(4)) {
+    color: var(--dp-muted);
+  }
+  .name-cell {
+    max-width: 16rem;
+    font-size: var(--dp-text-sm);
+  }
+  /*
+   * **種別は 1 段に 3 つまで並べ、4 つ目 (ケーブル・スカパー！プレミアム) からは次の段へ送る。**
+   * 1 段に全部並べると、5 つのときに表が広い窓 (1541px) でも枠からはみ出し、横に巻くようになっていた。
+   * 列の幅は中身に合わせて、段どうしで縦をそろえる
+   */
+  .types {
+    display: grid;
+    grid-template-columns: repeat(3, max-content);
+  }
+  .state {
+    gap: var(--dp-space-2);
+  }
+  .use-cell,
+  .more-cell {
+    width: 1%;
+    white-space: nowrap;
+  }
+  /* スイッチと「⋯」は押す的を広く取る (指で押す端末では 44px 角) */
+  .hit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.25rem;
+    min-height: 2rem;
+    margin: 0;
+    cursor: pointer;
+  }
+  .hit input {
+    margin: 0;
+  }
+  .more-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    min-height: 2rem;
+    margin: 0;
+    padding: var(--dp-space-1);
+    color: var(--dp-muted);
+  }
+  .more-button[aria-expanded="true"] {
+    color: inherit;
+  }
+  .detail-body,
+  .add {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--dp-space-2) var(--dp-space-3);
+    padding: var(--dp-space-2) 0 var(--dp-space-1);
+  }
+  .detail-body .field,
+  .add .field {
+    margin: 0;
+  }
+  .detail-body .grow,
+  .add .grow {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+  :is(.detail-body, .add) :is(input:not([type="checkbox"]), select) {
+    margin: 0;
+  }
+  .w-name {
+    width: 9rem;
+  }
+  .w-lnb {
+    width: 6rem;
+  }
+  .delete-slot {
+    margin-inline-start: auto;
+  }
+  .delete-slot button,
+  .actions button {
+    margin: 0;
+  }
+  .add {
+    margin-top: var(--dp-space-2);
+  }
+  .actions {
+    margin-top: var(--dp-space-2);
+  }
+  @media (pointer: coarse) {
+    .hit,
+    .more-button {
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+    }
+    .delete-slot button,
+    .actions button {
+      min-height: 2.75rem;
+    }
+  }
+  /*
+     * **狭い幅 (スマートフォン) では、1 台を 2〜3 段の行にする。** 1 段目に名前とスイッチ・「⋯」、
+     * 2 段目に状態、3 段目に受信できる種別。見出しの行は隠し、種別にだけ欄の名前を書く
+     */
+  @container (max-width: 36rem) {
+    .tuners,
+    .tuners tbody,
+    .tuners td {
+      display: block;
+    }
+    .tuners thead {
+      display: none;
+    }
+    .tuners .main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-areas:
+        "name use more"
+        "state state state"
+        "types types types";
+      align-items: center;
+      gap: var(--dp-space-1) var(--dp-space-2);
+      padding: var(--dp-space-2) var(--dp-space-2);
+      border-radius: var(--dp-radius);
+    }
+    /* 開いている行の縦線は、名前の欄ではなく行 (2〜3 段) の左に引く */
+    .tuners .main:has(+ .detail.open) {
+      position: relative;
+    }
+    .tuners .main:has(+ .detail.open) td:first-child {
+      position: static;
+    }
+    /* 開いた行の中身。行 (`.main`) と同じ左右の余白 */
+    .detail td {
+      padding: 0 var(--dp-space-2) var(--dp-space-2);
+    }
+    .tuners .main td,
+    .tuners .main:hover td,
+    .tuners .main:has(+ .detail.open) td {
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .tuners .main:hover {
+      background: var(--dp-hover-soft);
+    }
+    .name-cell {
+      grid-area: name;
+      max-width: none;
+    }
+    .use-cell {
+      grid-area: use;
+      width: auto;
+    }
+    .more-cell {
+      grid-area: more;
+      width: auto;
+    }
+    .state-cell {
+      grid-area: state;
+    }
+    .types-cell {
+      grid-area: types;
+    }
+    /* 狭い幅では行の幅いっぱいを使い、入りきらないものから折り返す */
+    .types {
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .tuners .detail.open {
+      display: block;
+    }
+    .detail-body .field,
+    .add .field {
+      flex: 1 1 100%;
+    }
+    .detail-body :is(.w-name, .w-lnb),
+    .add :is(.w-name, .w-lnb) {
+      width: 100%;
+    }
+    .delete-slot {
+      margin-inline-start: 0;
+    }
+  }
+
+  /*
+     * **カードリーダーは、スマートフォンの幅では表をやめて 1 行ずつのカードにする**。
+     * **名前を `.stack` にしない。** app.css の `.stack` (縦に積む flex) が広い画面でも表に当たり、
+     * 表が flex になって見出しと行が別々に詰められ、列がずれていた (#651 で入れたとき)。
+     * 見出しの行は隠し、欄ごとに見出しを上に書く (`data-label`)。
+     * 2 つずつ並べ、長いもの (`.span`) は 1 段を使う
+     */
+  .row-cards-wrap {
+    container-type: inline-size;
+  }
+  @container (max-width: 32rem) {
+    .row-cards,
+    .row-cards tbody,
+    .row-cards td {
+      display: block;
+    }
+    .row-cards thead {
+      display: none;
+    }
+    .row-cards tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--dp-space-2) var(--dp-space-3);
+      padding-block: var(--dp-space-3);
+    }
+    .table-wrap .row-cards td {
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+    .row-cards td::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: var(--dp-space-1);
+      font-size: var(--dp-text-xs);
+      font-weight: var(--dp-weight);
+      color: var(--dp-muted);
+    }
+    .row-cards .span {
+      grid-column: 1 / -1;
+    }
+  }
+  @container (max-width: 36rem) {
+    .types-cell[data-label]::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: var(--dp-space-1);
+      font-size: var(--dp-text-xs);
+      color: var(--dp-muted);
+    }
+  }
+  .reader {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dp-space-2);
+    margin-top: var(--dp-space-2);
+  }
+  /* リーダーの表もチューナーの表と同じく、線で区切らない行 */
+  .reader td {
+    border: 0;
+  }
+  .break {
+    word-break: break-all;
+  }
+  /* 名前の列は潰させない。長すぎる 1 語だけはその中で折る (ほかの語は区切りで折る) */
+  .reader-name {
+    min-width: 12rem;
+    overflow-wrap: break-word;
+  }
+  /*
+     * 答え待ちの骨組み (色と光の筋は `app.css` の `.skeleton`。番組表と同じ)。見出しの行だけ濃い。
+     * 高さは本物の表と同じにしてある (届いた拍子に下の節が動かない)
+     */
+  .skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dp-space-2);
+  }
+  .skeleton-head {
+    height: 1.8rem;
+  }
+  .skeleton-tag {
+    display: inline-block;
+    width: 2.5rem;
+    height: 1.1rem;
+    border-radius: var(--dp-radius-full);
+    background: var(--dp-subtle);
+  }
+</style>

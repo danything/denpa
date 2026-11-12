@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { SERVICE_TYPE_LABEL } from "#lib/format.js";
 import { parseId } from "#lib/id.js";
+import { type Agent, listAgents } from "#lib/server/agents.js";
 import { config } from "#lib/server/config.js";
 import {
   checkContracts as verifyContracts,
@@ -13,6 +14,7 @@ import {
 import { orm } from "#lib/server/db.js";
 import { recordings } from "#lib/server/schema.js";
 import {
+  type CardStatus,
   cardStatus,
   getActiveCardId,
   putCardReaders,
@@ -22,6 +24,7 @@ import {
   putTuners,
   recordingOf,
   type TunerConfig,
+  type TunerList,
   tunerList,
 } from "#lib/server/tuner.js";
 import { unreceivable } from "#lib/tuner-types.js";
@@ -108,48 +111,101 @@ function withLabels(
   }));
 }
 
-export async function load() {
-  // 一覧と「自動で見つけた状態か」は同じ答えに入っている。1 度だけ聞く
-  const answer = tunerList();
+/** 1 台のエージェントの一覧の答え (`+page.server.ts` が 1 度だけ訊き、エージェントの節と分け合う) */
+export type Lists = Map<number, Promise<TunerList>>;
+
+/**
+ * カードを配る側の URL を、登録したエージェントの名前に直す (ホストとポートが同じもの)。どれでもなければ null
+ */
+function remoteName(remote: string | undefined, all: Agent[]): string | null {
+  if (remote === undefined || !URL.canParse(remote)) return null;
+  const host = new URL(remote).hostname.toLowerCase();
+  return (
+    all.find((agent) => new URL(agent.origin).hostname === host)?.name ?? null
+  );
+}
+
+/**
+ * **チューナーとカードリーダーの表を、エージェントごとに** (見出しはエージェントの名前。1 台でも出す)。
+ * 相手待ちのものは promise のまま返して後から流し込む (待つと画面が出ない)。
+ * 繋がらなかった理由も一緒に返す。空の一覧だけ渡すと「チューナーが 1 台も無い」と区別が付かない
+ */
+export function load(all: Agent[], lists: Lists) {
   return {
-    /*
-     * 定義を書いていないので自動で見つけた状態か。
-     *
-     * 出さないと「画面の内容がどこから来たのか」が分からない。保存すると
-     * それが固定されるので、そこは言っておく必要がある
-     */
-    detected: answer.then((got) => got.detected === true).catch(() => false),
-    /*
-     * 以下は相手待ちなので promise のまま返して後から流し込む。
-     * 待つと画面が出ない
-     *
-     * 繋がらなかった理由も一緒に返す。空の一覧だけ渡すと「チューナーが
-     * 1 台も無い」と区別が付かない (以前はエージェントの生死を別の行に
-     * 出していたが、見るところが増えるだけだった)
-     */
-    tuners: answer
-      .then((got) => ({
-        list: withLabels(got.tuners),
-        error: null as string | null,
-      }))
-      .catch((error: unknown) => ({ list: [], error: reason(error) })),
+    tunerAgents: all.map((agent) => {
+      const answer = lists.get(agent.id) ?? tunerList(agent);
+      const card = cardStatus(agent).then((status) => ({
+        ...status,
+        // 配る側が登録したエージェントなら、その名前で「<名前> から鍵を貰っています」と出す
+        remoteName: remoteName(status.remote, all),
+      }));
+      return {
+        id: agent.id,
+        name: agent.name,
+        /*
+         * 定義を書いていないので自動で見つけた状態か。出さないと「画面の内容がどこから来たのか」が分からない。
+         * 保存するとそれが固定されるので、そこは言っておく
+         */
+        detected: answer
+          .then((got) => got.detected === true)
+          .catch(() => false),
+        tuners: answer
+          .then((got) => ({
+            list: withLabels(got.tuners),
+            error: null as string | null,
+          }))
+          .catch((error: unknown) => ({
+            list: [] as ReturnType<typeof withLabels>,
+            error: reason(error),
+          })),
+        card,
+        contracts: card.then(contractRows).catch(() => []),
+      };
+    }),
+    // 全部のエージェントのチューナー (チャンネルの節が、ケーブルとスカパー！プレミアムをスキャンに出すかに使う)。返さなかったエージェントのものは入れない
+    tuners: Promise.all(
+      all.map((agent) =>
+        (lists.get(agent.id) ?? tunerList(agent)).then(
+          (got) => got.tuners,
+          (): AgentTuner[] => [],
+        ),
+      ),
+    ).then((got) => ({ list: got.flat() })),
     // チューナーを譲り合う順。チューナーの節の「詳しく」に出す
     yieldOrder: yieldOrder(),
-    card: cardStatus(),
-    contracts: contractRows().catch(() => []),
   };
 }
 
-/** いま使っているカードの契約の一覧 (ダイアログ)。カードが無ければ空 */
-async function contractRows() {
-  const id = getActiveCardId(await cardStatus());
+/** そのエージェントが使うカードの契約の一覧 (ダイアログ)。カードが無ければ空 */
+function contractRows(card: CardStatus) {
+  const id = getActiveCardId(card);
   return id ? getContractRows(id) : [];
+}
+
+/** 送ってきたフォームの `agent` (行の ID) のエージェント。無ければ null */
+function agentFrom(form: FormData): Agent | null {
+  const id = parseId(form.get("agent"));
+  if (id === null) return null;
+  try {
+    return listAgents().find((agent) => agent.id === id) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const NO_SUCH_AGENT = "このエージェントはもうありません";
+
+/** ダイアログを開いたエージェントのカードの契約の一覧。エージェントが分からなければ並びの先頭 */
+async function rowsOf(agent: Agent | null) {
+  return contractRows(await cardStatus(agent ?? undefined));
 }
 
 export const actions = {
   /** 機材の定義を書き換える。渡すのはデバイスと種別だけ (選局はエージェントが組み立てる) */
   tuners: async ({ request }) => {
     const form = await request.formData();
+    const agent = agentFrom(form);
+    if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
 
     /*
      * 行ごとに `name.0` `device.0` … と名前を分けてある。
@@ -186,12 +242,12 @@ export const actions = {
     if (form.get("add") !== null) sources.push(slot("add"));
 
     /*
-     * 機材が受けられる種別 (デバイスごと。保存する先と同じ並びの先頭のエージェントのもの)。画面は受けられない種別を選ばせないが、ここでも同じものと突き合わせて断る。
+     * 機材が受けられる種別 (デバイスごと。保存する先のエージェントのもの)。画面は受けられない種別を選ばせないが、ここでも同じものと突き合わせて断る。
      * エージェントに聞けなければ突き合わせない (送るところで同じく繋がらずに断られる)
      */
     const receivable = new Map(
       (
-        await tunerList().then(
+        await tunerList(agent).then(
           (list) => list.tuners,
           (): AgentTuner[] => [],
         )
@@ -238,11 +294,15 @@ export const actions = {
       });
     }
 
-    return await save(tuners);
+    return await save(tuners, agent);
   },
 
   /** 定義を消して自動検出に戻す。挿さっている機材をエージェントが自分で見つける */
-  tunersAuto: () => save([]),
+  tunersAuto: async ({ request }) => {
+    const agent = agentFrom(await request.formData());
+    if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
+    return save([], agent);
+  },
 
   /**
    * 使わないカードリーダーを入れ替える。行ごとに `reader.<番号>` にリーダーの名前、`reader-use.<番号>` にスイッチ
@@ -250,6 +310,8 @@ export const actions = {
    */
   cards: async ({ request }) => {
     const form = await request.formData();
+    const agent = agentFrom(form);
+    if (agent === null) return fail(400, { message: NO_SUCH_AGENT });
     const disabled: string[] = [];
     for (const [key, value] of form.entries()) {
       const match = key.match(/^reader\.(\d+)$/);
@@ -257,7 +319,7 @@ export const actions = {
       if (form.get(`reader-use.${match[1]}`) === null) disabled.push(value);
     }
     try {
-      await putCardReaders(disabled);
+      await putCardReaders(disabled, agent);
     } catch (error) {
       return fail(502, {
         message: `カードリーダーの設定をエージェントへ送れませんでした: ${reason(error)}`,
@@ -267,10 +329,11 @@ export const actions = {
   },
 
   /** B-CAS カード内の CA 契約情報を確認し、各有料局の契約・有効期限を更新する */
-  checkContracts: async () => {
+  checkContracts: async ({ request }) => {
+    const agent = agentFrom(await request.formData());
     try {
-      const rows = await verifyContracts();
-      return { success: true, contracts: rows };
+      await verifyContracts();
+      return { success: true, contracts: await rowsOf(agent) };
     } catch (error) {
       return fail(500, {
         message: `カードの契約を確かめられませんでした: ${reason(error)}`,
@@ -281,12 +344,13 @@ export const actions = {
   /** 対象の局のストリームを数秒開いて、復号できるかを試す */
   testDecode: async ({ request }) => {
     const form = await request.formData();
+    const agent = agentFrom(form);
     const serviceId = parseId(form.get("serviceId"));
     if (serviceId === null || serviceId < 1) {
       return fail(400, { message: "serviceId が不正です" });
     }
     try {
-      const result = await testDecodeStream(serviceId);
+      const result = await testDecodeStream(serviceId, agent?.id);
       if (!result.ok) {
         return fail(500, {
           message:
@@ -298,7 +362,7 @@ export const actions = {
       return {
         success: true,
         decodeOk: result.decodeOk,
-        contracts: await contractRows(),
+        contracts: await rowsOf(agent),
       };
     } catch (error) {
       return fail(500, {
@@ -308,9 +372,10 @@ export const actions = {
   },
 
   /** 確かめていない有料の局を、物理チャンネルごとに 1 回の選局でまとめて確かめる */
-  testDecodeUnverified: async () => {
+  testDecodeUnverified: async ({ request }) => {
+    const agent = agentFrom(await request.formData());
     try {
-      const result = await testDecodeUnverified();
+      const result = await testDecodeUnverified(agent?.id);
       if (!result.ok) {
         return fail(500, {
           message: `復号を確かめられませんでした: ${result.error}`,
@@ -321,7 +386,7 @@ export const actions = {
         success: true,
         tested: all.filter((one) => one.ok).length,
         skipped: all.filter((one) => !one.ok).length,
-        contracts: await contractRows(),
+        contracts: await rowsOf(agent),
       };
     } catch (error) {
       return fail(500, {
@@ -332,9 +397,9 @@ export const actions = {
 } satisfies Actions;
 
 /** 定義をエージェントへ送る。画面はその場で保存して、見出しの横に「保存しました」を出す (`autosave`)。通知は出さない */
-async function save(tuners: TunerConfig[]) {
+async function save(tuners: TunerConfig[], agent: Agent) {
   try {
-    await putTuners(tuners);
+    await putTuners(tuners, agent);
   } catch (error) {
     return fail(502, {
       message: `チューナーの設定をエージェントへ送れませんでした: ${reason(error)}`,

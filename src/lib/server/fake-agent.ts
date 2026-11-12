@@ -29,16 +29,17 @@ export function fakeAgentTls(own: Identity = fakeAgentIdentity()): {
   return { key, cert, requestCert: true, rejectUnauthorized: false };
 }
 
-/** `POST /denpa/pair` なら答えを返す。ほかは null。`own` はこの偽のエージェントの鍵と証明書 */
+/**
+ * `POST /denpa/pair` (組む) と `DELETE /denpa/pair` (登録を消す) なら答えを返す。ほかは null。`own` はこの偽のエージェントの鍵と証明書。
+ * 組んだ相手を覚えないので、消しても 204 を返すだけ
+ */
 export async function answerPairing(
   request: Request,
   own: Identity = fakeAgentIdentity(),
 ): Promise<Response | null> {
-  if (
-    request.method !== "POST" ||
-    new URL(request.url).pathname !== "/denpa/pair"
-  )
-    return null;
+  if (new URL(request.url).pathname !== "/denpa/pair") return null;
+  if (request.method === "DELETE") return new Response(null, { status: 204 });
+  if (request.method !== "POST") return null;
   const body = (await request.json().catch(() => null)) as {
     client?: unknown;
     proof?: unknown;

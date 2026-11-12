@@ -7,6 +7,14 @@ namespace Denpa.Agent.Tests;
 public class AboutTests
 {
     [Test]
+    public async Task 名前は_AGENT_NAME_が無ければ機械の名前()
+    {
+        await Assert.That(About.ResolveName(" 書斎 ", "host")).IsEqualTo("書斎");
+        await Assert.That(About.ResolveName("", "host")).IsEqualTo("host");
+        await Assert.That(About.ResolveName(null, "host")).IsEqualTo("host");
+    }
+
+    [Test]
     public async Task 中に持っているバージョンを先に使う()
     {
         await Assert.That(About.ResolveVersion("v1.2.3", "v9.9.9")).IsEqualTo("v1.2.3");

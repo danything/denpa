@@ -62,6 +62,17 @@ export async function* blocks(
 }
 
 /**
+ * **繋がらないと知らせたエージェントと、繋がらなくなった時刻** (`agents.id` →)。猶予 (`agentDownGrace`) を超えて
+ * 繋がらないと決めたものだけ入れ、繋がったら消す。設定の「エージェント」の 2 段目に出す (`agentDownSince`)
+ */
+const down = new Map<number, number>();
+
+/** 猶予を超えて繋がらないエージェントの、繋がらなくなった時刻。繋がっている・猶予の中なら null */
+export function agentDownSince(agent: number): number | null {
+  return down.get(agent) ?? null;
+}
+
+/**
  * 1 台のエージェントに繋ぎっぱなしにして、届いたものを渡す。切れたら間を置いて繋ぎ直す。
  * エージェントごとに 1 つずつ呼ぶ (`runtime.ts` が全部のエージェントに)。
  * 戻り値を呼ぶと止まる。
@@ -99,6 +110,7 @@ export function listen(
         // 1 分待つ、ということにならないように
         retry = RETRY_MIN;
         downSince = null;
+        down.delete(agent.id);
         // 落ちていると知らせたあとに繋がったときだけ「復帰」を鳴らす
         if (reachable === false) onReachable?.(true);
         reachable = true;
@@ -125,6 +137,7 @@ export function listen(
         Date.now() - downSince >= config.agentDownGrace
       ) {
         reachable = false;
+        down.set(agent.id, downSince);
         onReachable?.(false);
       }
       if (stopped) return;
@@ -138,5 +151,6 @@ export function listen(
   return () => {
     stopped = true;
     controller.abort();
+    down.delete(agent.id);
   };
 }

@@ -725,6 +725,14 @@ app.MapPost("/denpa/raw/probe", async (HttpContext http) =>
     await Respond.Write(http, result, status);
 });
 
+// 組んだ denpa の登録を消す (denpa の設定でエージェントを削除したとき。AgentTls.Unpair)。ここへ来るのは組んだ相手だけ
+app.MapDelete(AgentTls.PairPath, (HttpContext http) =>
+{
+    tls.Unpair(http.Connection.ClientCertificate is { } client ? AgentTls.FingerprintOf(client) : null);
+    http.Response.StatusCode = 204;
+    return Task.CompletedTask;
+});
+
 // --- 診断 -----------------------------------------------------------------
 // 直近のログ。設定の「その他」の「ログ」が読む (Json.cs の Log)
 app.MapGet("/denpa/logs", (HttpContext http) => Respond.Write(http, Log.Recent.ToJson()));

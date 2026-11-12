@@ -123,6 +123,7 @@ import { holdTranscode, transcodeRoom } from "./transcode";
 import {
   getTuners,
   openWhenFree,
+  pinKey,
   type StreamUse,
   TransportChangedError,
   TuneError,
@@ -2000,7 +2001,7 @@ class Session {
       return;
     }
     const gone = await getTuners().then(
-      (tuners) => !tuners.some((tuner) => tuner.pin === pin),
+      (tuners) => !tuners.some((tuner) => pinKey(tuner) === pin),
       () => false,
     );
     this.died(

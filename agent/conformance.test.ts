@@ -468,6 +468,7 @@ describe("denpa と組む", () => {
       ["GET", "/denpa/stream?type=GR&channel=T16"],
       ["GET", "/denpa/nope"],
       ["GET", "/denpa/pair"],
+      ["DELETE", "/denpa/pair"],
       ["PUT", "/denpa/tuners"],
     ]) {
       const res = await call(
@@ -527,6 +528,30 @@ describe("denpa と組む", () => {
     );
     expect(log).toContain(
       `denpa (${newcomer.fingerprint.slice(0, 16)}) と組みました`,
+    );
+    // 2 つ目の denpa と組んだことはログに出す (断りはしない)
+    expect(log).toContain("ほかの denpa とも組んでいます");
+  });
+
+  test("DELETE /denpa/pair で呼んだ denpa の登録だけを消す", async () => {
+    const leaver = identity("leaver");
+    expect((await pair(main, leaver)).status).toBe(200);
+    const res = await call(
+      main,
+      "/denpa/pair",
+      { method: "DELETE", keepalive: false },
+      leaver,
+    );
+    expect(res.status).toBe(204);
+    expect(
+      (await call(main, "/denpa/tuners", { keepalive: false }, leaver)).status,
+    ).toBe(403);
+    // ほかの denpa はそのまま
+    expect(
+      (await call(main, "/denpa/tuners", { keepalive: false })).status,
+    ).toBe(200);
+    expect(readFileSync(join(paths().tls, "clients"), "utf8")).not.toContain(
+      leaver.fingerprint,
     );
   });
 
@@ -916,6 +941,9 @@ describe("診断", () => {
           : "linux",
     );
     expect(about["arch"]).toBe(process.arch === "arm64" ? "arm64" : "x64");
+    // 画面に出す名前の元。AGENT_NAME を渡していないので機械の名前
+    expect(typeof about["name"]).toBe("string");
+    expect((about["name"] as string).length).toBeGreaterThan(0);
     expect(typeof about["runtime"]).toBe("string");
     expect((about["runtime"] as string).length).toBeGreaterThan(0);
     if (process.platform === "darwin")

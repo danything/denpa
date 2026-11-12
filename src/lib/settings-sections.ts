@@ -24,6 +24,7 @@ export const SETTINGS_GROUPS = [
     slug: "reception",
     label: "受信",
     sections: [
+      { slug: "agents", label: "エージェント" },
       { slug: "tuners", label: "チューナー" },
       { slug: "channels", label: "チャンネル" },
       { slug: "broadcast", label: "データ放送" },

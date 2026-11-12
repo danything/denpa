@@ -52,7 +52,7 @@ root が書いた録画も Finder から消したり動かしたりできます�
 - もう一度流せば上げ直し (本体もエージェントも最新のリリースへ)。録画中なら、本体とエージェントが録画の終わりを待ってから入れ替わります
 - 消すときは `… | sudo bash -s -- --uninstall`。LaunchDaemon・プログラムを外し、DB と `denpa.env`・エージェントの設定・録画・ログは残して、消し方を言います
 - denpa 本体は別の機械で動かし、Mac にはエージェントだけ置くなら `… | sudo bash -s -- --agent-only`。
-  denpa の `TUNER_AGENT_URL` には、install.sh が最後に出す `https://<Mac の名前>.local:25252#pair=<合言葉>` を書きます
+  install.sh が最後に出す `https://<Mac の名前>.local:25252#pair=<合言葉>` を、denpa の設定の「受信」の「エージェントを追加」に貼るか、`TUNER_AGENT_URL` に書きます
   ([別の所に置く](agent.md#エージェントは別イメージ別プロセス)のと同じ構成)。このときエージェントは全部のインターフェースで待ち受けます。
   エージェントが応答するのは合言葉で組んだ denpa だけです ([agent.md](agent.md))
 - 手元でビルドした tar.gz を入れるとき (開発と CI) は、`DENPA_AGENT_TARBALL`・`DENPA_SERVER_TARBALL` に絶対パスを書き、`sudo -E` で環境変数を渡します
