@@ -338,10 +338,10 @@
     opacity: 0.5;
     /* 黒い縁。明るい場面でも読めるように */
     text-shadow:
-      -1px -1px 0 #000,
-      1px -1px 0 #000,
-      -1px 1px 0 #000,
-      1px 1px 0 #000;
+      -1px -1px 0 var(--dp-video),
+      1px -1px 0 var(--dp-video),
+      -1px 1px 0 var(--dp-video),
+      1px 1px 0 var(--dp-video);
     will-change: transform;
     animation-name: jikkyo-flow;
     animation-timing-function: linear;
@@ -361,7 +361,7 @@
     --mine-line: var(--dp-on-video-on);
   }
   .comment.mine-line::before {
-    box-shadow: 0 0 0 1px #000;
+    box-shadow: 0 0 0 1px var(--dp-video);
   }
   .jikkyo[data-paused] .comment,
   .trail[data-paused] .comment {

@@ -21,6 +21,16 @@
 
   let { data, form } = $props();
 
+  /** ロゴの記録の終わり方 (`logo.ts` の `Outcome`) を画面の言葉で。知らない値はそのまま出す */
+  const OUTCOME_WORDS: Record<string, string> = {
+    done: "読み切った",
+    miss: "ロゴの無い中継",
+    ranOut: "上限まで開いた",
+    yielded: "譲った",
+    busy: "空きが無い",
+    stopped: "止めた",
+  };
+
   // この端末で覚えている名指しを読む (サーバには置かない)
   $effect(() => liveTuner.load());
 
@@ -268,7 +278,7 @@
           {#each data.logoRecords as record (record.id)}
             <li data-testid="logo-record-row">
               <span>{dateTime(record.started_at)}</span>
-              {record.channel}・{Math.round(record.opened_ms / 60_000)} 分・{record.outcome}・ロゴのデータ
+              {record.channel}・{Math.round(record.opened_ms / 60_000)} 分・{OUTCOME_WORDS[record.outcome] ?? record.outcome}・ロゴのデータ
               {record.es_packets} パケット・ダウンロードの通知 {record.sdtt} 回・{record.found}
               局
             </li>

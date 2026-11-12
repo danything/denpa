@@ -206,15 +206,18 @@
 </dialog>
 
 <style>
-  .intro {
-    margin: var(--dp-space-1) 0 var(--dp-space-4);
-  }
   .fields {
     display: flex;
     flex-direction: column;
     gap: var(--dp-space-3);
     --pico-form-element-spacing-vertical: 0.25rem;
     --pico-form-element-spacing-horizontal: 0.625rem;
+  }
+  /* 指で押す端末では 40px 以上を保つ (設定の欄の `.sections` と同じ) */
+  @media (pointer: coarse) {
+    .fields {
+      --pico-form-element-spacing-vertical: 0.45rem;
+    }
   }
   .fields label {
     display: flex;

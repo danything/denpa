@@ -32,14 +32,12 @@
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { untrack } from "svelte";
-  import X from "~icons/lucide/x";
 
   import { submitting } from "#lib/actions.js";
   import { GENRE_TREE } from "#lib/arib.js";
   import type { Arming } from "#lib/arming.svelte.js";
   import ActionButton from "#lib/components/ActionButton.svelte";
   import ArmedDelete from "#lib/components/ArmedDelete.svelte";
-  import Icon from "#lib/components/player/Icon.svelte";
   import { SERVICE_TYPE_LABEL, WEEKDAYS } from "#lib/format.js";
   import { clockOf, minutesOf, slotSummary } from "#lib/rule-time.js";
   import {
@@ -331,6 +329,14 @@
   });
 </script>
 
+<!-- スマホの形で下から出しているときは、ほかの窓と同じく Esc でも閉じる (docs/design.md の「メニュー・ダイアログ・検索の候補」) -->
+<svelte:window
+  onkeydown={(event) => {
+    if (open && event.key === "Escape" && !event.defaultPrevented)
+      open = false;
+  }}
+/>
+
 <aside
   class="draft"
   class:open
@@ -338,29 +344,17 @@
   data-testid="rule-draft"
 >
   <div class="draft-head">
-    <div>
-      {#if draft.editing !== null}
-        <p class="eyebrow small" data-testid="rule-mode">
-          <span class="muted">編集中:</span>
-          <span class="bold">{draft.editing.name}</span>
-          {#if !draft.editing.enabled}<span class="tag">無効</span>{/if}
-        </p>
-        <h2>ルールを直す</h2>
-      {:else}
-        <p class="eyebrow small muted">この検索を</p>
-        <h2>ルールとして保存</h2>
-      {/if}
-    </div>
-    <!-- スマホの形だけ。下から出した欄を閉じる -->
-    <button
-      type="button"
-      class="ghost close"
-      aria-label="閉じる"
-      onclick={() => (open = false)}
-      data-testid="rule-draft-close"
-    >
-      <Icon icon={X} size="size-4" />
-    </button>
+    {#if draft.editing !== null}
+      <p class="eyebrow small" data-testid="rule-mode">
+        <span class="muted">編集中:</span>
+        <span class="bold">{draft.editing.name}</span>
+        {#if !draft.editing.enabled}<span class="tag">無効</span>{/if}
+      </p>
+      <h2>ルールを直す</h2>
+    {:else}
+      <p class="eyebrow small muted">この検索を</p>
+      <h2>ルールとして保存</h2>
+    {/if}
   </div>
 
   {#if draft.origin !== null}
@@ -700,19 +694,31 @@
         />
       </div>
     {/if}
-    <button
-      type="submit"
-      form="rule-draft-form"
-      class="save"
-      disabled={empty || slotError !== null}
-      data-testid={draft.editing !== null ? "rule-update" : "rule-submit"}
-    >
-      {draft.editing !== null
-        ? "更新"
-        : recordable === null || recordable === 0
-          ? "ルールを保存"
-          : `${recordable} 件を録るルールを保存`}
-    </button>
+    <!--
+      スマホの形で下から出しているときは、ほかの窓と同じく左下に「閉じる」、主の保存は右端
+      (右上の ✕ は置かない。docs/design.md の「メニュー・ダイアログ・検索の候補」)
+    -->
+    <div class="foot-actions">
+      <button
+        type="button"
+        class="secondary close"
+        onclick={() => (open = false)}
+        data-testid="rule-draft-close">閉じる</button
+      >
+      <button
+        type="submit"
+        form="rule-draft-form"
+        class="save"
+        disabled={empty || slotError !== null}
+        data-testid={draft.editing !== null ? "rule-update" : "rule-submit"}
+      >
+        {draft.editing !== null
+          ? "更新"
+          : recordable === null || recordable === 0
+            ? "ルールを保存"
+            : `${recordable} 件を録るルールを保存`}
+      </button>
+    </div>
   </div>
 </aside>
 <!-- スマホの形で下から出しているときの後ろの幕。押すと閉じる -->
@@ -789,23 +795,12 @@
     border-radius: 0;
     background: var(--dp-backdrop);
   }
-  .draft-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--dp-space-3);
-  }
   .draft-head h2 {
     margin: 0;
   }
   .eyebrow {
     margin: 0 0 0.125rem;
     overflow-wrap: anywhere;
-  }
-  .close {
-    width: auto;
-    margin: 0;
-    padding: var(--dp-space-1);
   }
   .draft-body {
     display: flex;
@@ -933,8 +928,18 @@
     flex-wrap: wrap;
     gap: var(--dp-space-2);
   }
-  .save {
-    width: 100%;
+  /* 広い形 (右の列) は保存だけを列の幅いっぱいに。スマホの形は「閉じる」を左端、保存を右端に置き、全幅にしない */
+  .foot-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dp-space-2);
+  }
+  .foot-actions > button {
+    width: auto;
     margin: 0;
+  }
+  :global(:where(html:not([data-phone]))) .save {
+    flex: 1 1 0%;
   }
 </style>

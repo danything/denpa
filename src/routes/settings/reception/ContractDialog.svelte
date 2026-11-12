@@ -280,9 +280,6 @@
   .modal-box-wide {
     max-width: 48rem;
   }
-  .intro {
-    margin: var(--dp-space-1) 0 var(--dp-space-4);
-  }
   table {
     width: 100%;
     font-size: var(--dp-text-sm);

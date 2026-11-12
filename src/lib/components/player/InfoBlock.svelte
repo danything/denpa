@@ -39,7 +39,7 @@
     <!-- 中黒の両側は同じ空き (`.sep`。文字の空白だと Svelte が `{/if}` の前を詰めた) -->
     <span class="keep">
       {#if range !== null}<span data-testid={rangeTestid}
-          >{time(range.start)} 〜 {time(range.end)}</span
+          >{time(range.start)}〜{time(range.end)}</span
         ><span class="sep">・</span>{/if}<span class="broadcast">{service}</span
       >
     </span>

@@ -353,8 +353,10 @@
     --c-on: var(--dp-on-video-on);
     --c-hover: var(--dp-on-video-hover);
     --c-face: var(--dp-video-menu);
-    --c-field: rgb(255 255 255 / 0.12);
+    --c-field: color-mix(in srgb, var(--dp-on-video) 12%, transparent);
     --c-shadow: var(--dp-video-shadow);
+    /* 焦点の線。映像の上はテーマで変えない (`app.css` の `--dp-video-focus`) */
+    --c-focus: var(--dp-video-focus);
     display: flex;
     flex-direction: column;
     gap: var(--dp-space-1);
@@ -369,6 +371,7 @@
     --c-face: transparent;
     --c-field: var(--dp-field);
     --c-shadow: none;
+    --c-focus: var(--pico-primary);
     /* 選ぶ行と先頭の字の間も、選ぶ行のまとまりの間と同じくらい空ける (詰めると選ぶ行の続きに見えた) */
     gap: var(--dp-space-3);
     margin: var(--dp-space-2) 0 0;
@@ -469,8 +472,11 @@
     color: var(--c-muted);
   }
   input:focus-visible {
-    outline: 2px solid var(--c-on);
+    outline: 2px solid var(--c-focus);
     outline-offset: 0;
+  }
+  button:focus-visible {
+    outline-color: var(--c-focus);
   }
   .left {
     font-size: var(--dp-text-xs);
@@ -514,7 +520,7 @@
   }
   .tint {
     display: inline-flex;
-    filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6));
+    filter: var(--dp-on-video-ink);
   }
   .choice {
     background: var(--pico-background-color);
@@ -527,6 +533,6 @@
     width: 1.25rem;
     height: 1.25rem;
     border-radius: 50%;
-    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--dp-video) 50%, transparent);
   }
 </style>

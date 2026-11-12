@@ -36,6 +36,12 @@
         kind: "success",
         text: `「${form.agentAdded}」を登録しました`,
       });
+    if (form?.agentMoved)
+      list.push({
+        key: "agent-moved",
+        kind: "success",
+        text: `「${form.agentMoved}」の URL を変えました`,
+      });
     // 削除できたが、エージェントに届かなかった (エージェントの側に登録が残る)
     if (form?.agentLeft)
       list.push({ key: "agent-left", kind: "warning", text: form.agentLeft });

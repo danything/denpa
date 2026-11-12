@@ -296,8 +296,8 @@
   .measure {
     pointer-events: none;
     position: fixed;
-    right: 0.25rem;
-    bottom: 0.25rem;
+    right: var(--dp-space-1);
+    bottom: var(--dp-space-1);
     z-index: var(--dp-z-measure);
     max-width: 95vw;
     padding: var(--dp-space-1) var(--dp-space-2);

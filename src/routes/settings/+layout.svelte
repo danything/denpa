@@ -311,9 +311,9 @@
   .group-hint {
     display: none;
   }
-  /* 新しいバージョンの点 (上の `freshGroup`)。名前の後ろに並べる */
+  /* 新しいバージョンの点 (上の `freshGroup`)。名前の後ろに、チャンネルのお知らせの印 (`.alert-dot`) と同じ間を空けて並べる */
   .group-link .fresh-dot {
-    margin-inline-start: 0.375rem;
+    margin-inline-start: var(--dp-space-1);
     vertical-align: 0.1em;
   }
   /*

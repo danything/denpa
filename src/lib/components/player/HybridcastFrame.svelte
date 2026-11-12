@@ -84,7 +84,7 @@
       phase === "loading"
         ? "Hybridcast を読み込み中…"
         : phase === "failed"
-          ? "Hybridcast のアプリを読み込めませんでした (戻るで閉じる)"
+          ? "Hybridcast のアプリを読み込めませんでした。「戻る」で閉じます"
           : "";
   });
   let scale = $state("scale(1)");

@@ -660,7 +660,7 @@ export async function wakeControls(page: Page, stage: string): Promise<void> {
 
 /**
  * GPU で描ける端末として開く。E2E のブラウザは GPU を切っていて `<html data-lite>` が付く (`#lib/lite.ts`) ので、
- * WebGL の描き手の名前を差し替える。時間で動き続けるもの (アンビエントの光など) を回したまま見るテストで使う
+ * WebGL のレンダラの名前を差し替える。時間で動き続けるもの (アンビエントの光など) を回したまま見るテストで使う
  */
 export async function pretendGpu(page: Page): Promise<void> {
   await page.addInitScript(() => {

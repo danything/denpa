@@ -1202,8 +1202,12 @@
     font-weight: var(--dp-weight-bold);
     font-size: var(--dp-text-xs);
   }
-  .back-live:hover:not(:disabled) {
+  .back-live:is(:hover, :focus-visible):not(:disabled) {
     background: var(--dp-on-video-hover);
+  }
+  /* 映像の上の焦点の線はテーマで変えない (`app.css` の `--dp-video-focus`。操作バーのボタンと同じ) */
+  :is(.relearn, .back-live):focus-visible {
+    outline-color: var(--dp-video-focus);
   }
   /* 押すものなので操作バーのボタンと同じ段 (実況のコメントより上。`ControlBar`) */
   .unmute {

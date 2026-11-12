@@ -337,7 +337,7 @@
     height: 1rem;
     border-radius: var(--dp-radius-full);
     background: var(--dp-on-video);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--dp-video) 30%, transparent);
     transition: transform var(--dp-duration-move) var(--dp-ease-spring);
   }
   /*

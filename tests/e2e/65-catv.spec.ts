@@ -512,7 +512,7 @@ test.describe("ケーブル", () => {
       await request.post(
         `${stack.agentUrl}/__control/extend?ms=${10 * 60_000}`,
       );
-      await expect(range).toHaveText(`${start} 〜 ${later(end ?? "", 10)}`);
+      await expect(range).toHaveText(`${start}〜${later(end ?? "", 10)}`);
 
       // 戻せば元の時刻に戻る
       await request.post(`${stack.agentUrl}/__control/extend?ms=0`);

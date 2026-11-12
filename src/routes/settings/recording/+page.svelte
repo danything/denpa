@@ -202,7 +202,7 @@
           <!-- 列の右側 (欄の下) に置くため、要点の行は div で包む -->
           <div class="hw-line">
             {#await data.hw}
-              <span class="hint" data-testid="hw-status">GPU を確認中…</span>
+              <span class="hint" data-testid="hw-status">GPU を確かめています…</span>
             {:then hw}
               <Lead>
                 <span data-testid="hw-status">{hw.message}</span>

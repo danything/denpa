@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { conditionSummary, upcomingLabel } from "./rule-summary";
 
-describe("ルールの条件を1行で", () => {
+describe("ルールの条件を 1 行で", () => {
   const base = {
     search_fields: "name",
     service_ids: null,
@@ -39,7 +39,7 @@ describe("ルールの条件を1行で", () => {
       ),
     ).toBe("番組名・概要、全局、同じ回は 1 度、前の回は録らない、除外: 再放送");
   });
-  test("局は2つまで名前、それより多いと数", () => {
+  test("局は 2 つまで名前、それより多いと数", () => {
     expect(conditionSummary({ ...base, service_ids: [2] }, name)).toBe(
       "番組名、BS11",
     );

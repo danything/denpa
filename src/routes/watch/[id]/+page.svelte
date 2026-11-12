@@ -1564,11 +1564,11 @@
   let receiveData = $state(false);
   /** 常に受信していて、この録画にデータ放送があるか */
   const receiving = $derived(receiveData && data.hasData);
-  /** 映像を入れる箱。BML はこれを動かす (`DataBroadcast` の place) */
+  /** 映像を入れる箱。BML はこれを動かす (`DataBroadcast` の `placeVideo`) */
   let mediaBox = $state<HTMLElement | null>(null);
   /** リモコンのキーを渡す関数と、d を文書へ渡す関数 (`DataBroadcast` の press / pressD) */
   let dataPress = $state<((code: number) => void) | null>(null);
-  /** データ放送の映像の上の通知 (`DataBroadcast` の `note`。舞台の通知の列に積む) */
+  /** データ放送が映像の上に出す通知 (`DataBroadcast` の `note`。舞台の通知の列に積む) */
   let dataNote = $state("");
   let dataButton = $state<(() => boolean) | null>(null);
   /** データ放送を作り直す合図 (`DataBroadcast` の channel)。戻ったら変えて、その時点まで積み直す */
@@ -2757,11 +2757,12 @@
 <PlayerLayout testid="watch">
   {#if !ready}
     <!-- 録っている最中は load が追っかけへ送るので、ここに来るのはエンコード済みも元の TS も無い録画 -->
-    <div class="panel stack">
-      <h2>まだ観られません</h2>
-      <p class="small muted">観られるファイルがありません。</p>
+    <!-- 1 つだけ言う画面 (`app.css` の `.solo`。開けなかったときと同じ置き方) -->
+    <div class="solo glow">
+      <h1>まだ観られません</h1>
+      <p>観られるファイルがありません。</p>
       {#if rec.encode_error}
-        <p class="small muted">{rec.encode_error}</p>
+        <p>{rec.encode_error}</p>
       {/if}
     </div>
   {:else}
@@ -2774,7 +2775,6 @@
       bind:element={stage}
     >
       {#snippet children(layout)}
-        <!-- svelte-ignore a11y_media_has_caption -->
         <!--
           **映像の箱。データ放送はこれを小窓へ寄せる** (`DataBroadcast` の `placeVideo`)。ライブと同じ。
           押すのは映像そのもので、ボタンはその上に重ねる (`--dp-z-stage-controls`)
@@ -3214,8 +3214,8 @@
   {/if}
 
   <!--
-    右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。押すものはこの録画の切り抜きへのリンクだけ
-    (閉じる・削除は映像の上の列。全画面のタブレットで映像から出ずに押す)
+    右は番組の中身。観ながら読めるよう、映像に被せず全部ここに出す。番組の中身の下で押すものは、この録画の切り抜きへのリンクだけ
+    (閉じる・削除は映像の上の列。全画面のタブレットで映像から出ずに押す)。データ放送のリモコンとコメントの一覧は、出している間だけ先頭に置く
   -->
   {#snippet aside()}
     <FactsAside testid="watch-facts">
@@ -3261,10 +3261,11 @@
 <!-- サーバが混んでいるときに勧める、変換させずに観られるもの (幕の「サーバが混んでいます」の下) -->
 {#snippet lighterChoices()}
   <div class="cluster choices">
-    {#each lighter as codec (codec)}
+    <!-- 主のボタンは先頭の 1 つだけ。残りは控え (docs/design.md の「ボタン」) -->
+    {#each lighter as codec, at (codec)}
       <button
         type="button"
-        class="small"
+        class={at === 0 ? "small" : "small secondary"}
         data-testid="watch-busy-switch"
         onclick={() => chooseCodec(codec)}
       >
