@@ -26,7 +26,7 @@ import { readRecording, recordingStream } from "./recording-io";
 import { chunks } from "./stream";
 
 /** 読んだ結果 (`MmtsReader`) */
-export interface MmtsOut {
+interface MmtsOut {
   /** 詰め替えた fMP4 (init と media) */
   segments: Fmp4Segment[];
   /** 字幕の文字の配置。`at` は物差しの秒 */
@@ -34,13 +34,13 @@ export interface MmtsOut {
 }
 
 /**
- * 1 局に絞った TLV を読んで、fMP4 と字幕を返す。`live-mmt.ts` の `MmtLive` の録画版で、違いは 2 つ。
+ * 1 局に絞った TLV を読んで、fMP4 と字幕を返す。`live-mmt.ts` の `MmtLive` を録画向けにしたもので、違いは 2 つ。
  *
  * - 時刻 0 を決めて渡せる (`base`)。途中から読んでも録画の物差しの時刻で出す
  * - 番組が替わってアセットの並び (MPT) が変わっても作り直さない。録画は 1 本の fMP4 にするので、init を出し直せない。
  *   アセットを選び直しても、映像と音声はそれぞれのトラックに続けて入れる (4K の局は番組が替わっても HEVC と AAC のままと見ている。推定)
  */
-export class MmtsReader {
+class MmtsReader {
   private readonly reader: MmtMediaReader;
   private muxer: MmtFmp4 | null = null;
 
@@ -213,7 +213,7 @@ export function mmtsFmp4(
 }
 
 /** 詰め替えた結果 (`remuxMmts`) */
-export interface Remuxed {
+interface Remuxed {
   /** 1 バイトでも書けたか */
   wrote: boolean;
   /** スクランブルされていて読めなかった MMTP のパケットの数 */

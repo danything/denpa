@@ -17,7 +17,7 @@ export function nalType(nal: Uint8Array): number {
 }
 
 /** SPS から読んだもの */
-export interface HevcSps {
+interface HevcSps {
   /** general_profile_space・general_tier_flag・general_profile_idc を詰めた 1 バイト (`hvcC` の 2 バイト目) */
   profileByte: number;
   /** general_profile_compatibility_flags (4 バイト) と constraint の 48 ビット (6 バイト) と general_level_idc (1 バイト) */

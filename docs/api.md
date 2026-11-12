@@ -126,7 +126,7 @@
 | `auto`  | `raw` (MPEG-2 の TS を読める) は候補にしない。家の中は `hevc` → `h264` → `av1`、外は `av1` → `h264`      | 選んだもの               |
 
 `hevc` には段がありません。`?rung=1〜3` を付けると、`?playable=` から H.265 を外して選んだコーデックでエンコードします。
-4K の局の字幕 (`GET /api/services/<id>/captions`) は `codec=hevc` で、映像と同じ形式を渡します。
+4K の局の字幕 (`GET /api/services/<id>/captions`) にも、映像と同じ `codec` (詰め替えなら `hevc`) を渡します。
 
 `?audio=only` で音声だけ (AAC の fragmented MP4、`audio/mp4`)。音声だけを聴くとき向け。
 映像をエンコードしないので軽い。録画の `audio` と同じ書き方です。`codec` と一緒に渡すと、`audio=only` を優先します。
