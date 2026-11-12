@@ -257,7 +257,7 @@ digest もタグと一緒に Renovate が上げ、タグだけで足した土台
 まだ配りません (APK を作る PR から配る)。組むのは `.github/workflows/android.yml` で、test.yml が呼びます。必須チェックではありません。
 
 - .NET の SDK は ASP.NET Core の実行時パックを bionic 向けに出していません。csproj でその除外を外し、linux の実行時パックの IL を AOT で組ませています。
-  SDK が支えていない使い方なので、SDK を上げたら Android の CI が通るかを見ます
+  SDK が対応していない使い方なので、SDK を上げたら Android の CI が通るかを見ます
 - Android には OpenSSL が無いので、NDK で組んだ OpenSSL の静的ライブラリを実行ファイルに入れます (`StaticOpenSslLinking`)。
   組むのは `.github/openssl-android.sh` で、CI は組み上がりを actions/cache に置き、バージョン・組み方・NDK が変わるまで使い回します
 - 出来上がりは `/system/bin/linker64` で動く PIE で、繋ぐのは libc・libm・libdl だけです。LOAD は 16 KB ページに揃えます。CI がこの 3 つを確かめます

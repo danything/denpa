@@ -96,7 +96,7 @@ jobs:
           path: out/denpa-agent
           retention-days: 3
 
-  # **必須チェックにはしない** (エミュレータは揺れやすい。docs/development.md「Android 向けのエージェント」)
+  # **必須チェックにはしない** (エミュレータは起動や応答の時間がばらつき、コードと関係なく落ちることがある。docs/development.md「Android 向けのエージェント」)
   emulator:
     name: emulator (API ${{ matrix.api-level }})
     needs: agent

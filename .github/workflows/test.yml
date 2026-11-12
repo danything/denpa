@@ -287,7 +287,7 @@ jobs:
           grep -q 'name: denpa-data-dst' ds.yaml
 
   # Android で動かすエージェント (android.yml が組み、x86_64 をエミュレータで起動して API が答えるかを見る。まだ配らない)。
-  # **必須チェックにはしない** (エミュレータは揺れやすい。docs/development.md「Android 向けのエージェント」)
+  # **必須チェックにはしない** (エミュレータは起動や応答の時間がばらつき、コードと関係なく落ちることがある。docs/development.md「Android 向けのエージェント」)
   agent-android:
     uses: ./.github/workflows/android.yml
 

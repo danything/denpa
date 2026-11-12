@@ -51,7 +51,7 @@ adb shell "$env ./denpa-agent --pair" | tr -d '\r' | tee "$logs/pair-url.txt"
 grep -qE "^https://[^:]+:$port#pair=$token\$" "$logs/pair-url.txt"
 
 # アプリと同じ起動の作り (sh が自分の PID を出してから exec する。exec は PID を変えない)。ここでは標準出力をログに回すので、PID はファイルに書く
-# 端末の側で背後に回すと adb shell が戻らないこと (API 35) と 255 で終わること (API 29) があったので、adb shell ごとランナーの側で背後に回す
+# 端末の側でバックグラウンドで実行すると adb shell が戻らないこと (API 35) と 255 で終わること (API 29) があったので、adb shell ごとランナーの側でバックグラウンドで実行する
 adb shell "$env /system/bin/sh -c 'echo \$\$ > $dir/agent.pid; exec \"\$0\" \"\$@\"' ./denpa-agent < /dev/null > $dir/agent.log 2>&1" &
 adb_pid=$!
 for _ in $(seq 30); do
