@@ -88,7 +88,7 @@ if (args is ["--status"])
 if (args.ElementAtOrDefault(0) == "--dt295-probe") return Dt295NativeProbe.Run(args);
 // IT930x の機材 (PX-MLT5・PX-Q3・PX-W3 系など) のブリッジを確かめる。ファームウェアを起動してバージョンと EEPROM の写しを出す。--chips でチップも読む (It930xProbe.cs)
 if (args.ElementAtOrDefault(0) == "--it930x-probe") return It930xProbe.Run(args);
-// IT930x の機材を、開いて電源を入れ・すぐ電源を切って閉じるのを続けて繰り返す (電源の短い入り切りを再現する。It930xProbe.cs)
+// IT930x の機材を、開いて電源を入れ・すぐ電源を切って閉じるのを続けて繰り返す (電源の短いオン/オフを再現する。It930xProbe.cs)
 if (args.ElementAtOrDefault(0) == "--it930x-cycle") return It930xProbe.Cycle(args);
 /*
  * **対応していない引数ではサーバを立てない。** 立ち上げると tuners.json が無ければ挿さっている機材を自分で見つけて使い始めるので、
