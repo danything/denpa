@@ -260,3 +260,20 @@ describe("Sightings", () => {
     expect(sightings.instances.size).toBe(0);
   });
 });
+
+test("控えるインスタンスは 64 までで、超えたら古いものから忘れる", () => {
+  const sightings = new Sightings();
+  for (let index = 0; index < 70; index++) {
+    const ptr = response([
+      {
+        name: "_denpa-agent._tcp.local",
+        type: 12,
+        data: name(`偽 ${index}._denpa-agent._tcp.local`),
+      },
+    ]);
+    sightings.take(readResponse(ptr)!, "192.168.1.66", index);
+  }
+  expect(sightings.instances.size).toBe(64);
+  expect(sightings.instances.has("偽 0._denpa-agent._tcp.local")).toBe(false);
+  expect(sightings.instances.has("偽 69._denpa-agent._tcp.local")).toBe(true);
+});

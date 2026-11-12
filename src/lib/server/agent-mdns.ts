@@ -8,8 +8,8 @@
  * - 登録したエージェントのアドレスが変わったら付け替える (`agent-admin.followAgent`)。保存した証明書で繋がった相手にだけ付け替えるので、
  *   偽の答えで起きるのは「繋がりません」だけ
  *
- * UDP 5353 を開いて 224.0.0.251 に入り、問いを送って答えと知らせを受ける。5353 を開けなければ空いたポートで問い、
- * 答えをこちらにだけ返してもらう (legacy unicast。知らせは受けられない)。
+ * UDP 5353 を開いて 224.0.0.251 に入り、問いを送って、答えとアナウンス (エージェントが起動したとき・アドレスが変わったときに送るもの) を受ける。5353 を開けなければ空いたポートで問い、
+ * 答えをこちらにだけ返してもらう (legacy unicast。アナウンスは受けられない)。
  * **コンテナのブリッジや Kubernetes の Pod のネットワークでは LAN のマルチキャストが届かない** (推定)。そのときは候補が出ないだけで、
  * 登録は URL か QR のまま
  */
@@ -25,14 +25,14 @@ export interface FoundAgent {
   /** IPv4 のアドレス。答えに A があればそれ、無ければ答えの送り元 */
   host: string;
   port: number;
-  /** 最後に答えか知らせを受けた時刻 */
+  /** 最後に答えかアナウンスを受けた時刻 */
   seenAt: number;
 }
 
 const GROUP = "224.0.0.251";
 const MDNS_PORT = 5353;
 const SERVICE = "_denpa-agent._tcp.local";
-/** 問い直す間。知らせ (起動したとき・アドレスが変わったとき) はそのつど受ける */
+/** 問い直す間。アナウンス (起動したとき・アドレスが変わったとき) はそのつど受ける */
 const QUERY_EVERY = 5 * 60_000;
 /** 問いを続けて送らない間 (設定の画面を何度開いても) */
 const QUERY_GAP = 5_000;
@@ -40,6 +40,8 @@ const QUERY_GAP = 5_000;
 const ANSWER_WAIT = 1_500;
 /** 答えなくなったものを忘れるまで */
 const FORGET_AFTER = 2 * QUERY_EVERY;
+/** 控えるインスタンスの数の上限。偽のインスタンス名を大量に送られても増え続けないよう、超えたら古いものから忘れる */
+const MAX_INSTANCES = 64;
 
 const TYPE_A = 1;
 const TYPE_PTR = 12;
@@ -212,6 +214,7 @@ export class Sightings {
       if (!key.endsWith(`.${SERVICE}`)) return null;
       let entry = this.instances.get(key);
       if (entry === undefined) {
+        if (this.instances.size >= MAX_INSTANCES) this.forgetOldest();
         entry = { source, seenAt: now };
         this.instances.set(key, entry);
       }
@@ -260,14 +263,28 @@ export class Sightings {
     return { missing, found };
   }
 
+  /** 答えなくなったもの (`FORGET_AFTER` を過ぎたもの) を忘れる。問い直すたびと `list` で呼ぶ */
+  prune(now = Date.now()): void {
+    for (const [key, entry] of this.instances) {
+      if (now - entry.seenAt > FORGET_AFTER) this.instances.delete(key);
+    }
+  }
+
+  /** いちばん古いものを 1 つ忘れる (上限を超えたとき) */
+  private forgetOldest(): void {
+    let oldest: [string, number] | null = null;
+    for (const [key, entry] of this.instances) {
+      if (oldest === null || entry.seenAt < oldest[1])
+        oldest = [key, entry.seenAt];
+    }
+    if (oldest !== null) this.instances.delete(oldest[0]);
+  }
+
   /** `since` より後に答えたエージェント。古いものはここで忘れる */
   list(since: number, now = Date.now()): FoundAgent[] {
+    this.prune(now);
     const found: FoundAgent[] = [];
-    for (const [key, entry] of this.instances) {
-      if (now - entry.seenAt > FORGET_AFTER) {
-        this.instances.delete(key);
-        continue;
-      }
+    for (const entry of this.instances.values()) {
       if (entry.seenAt < since) continue;
       const agent = agentOf(entry);
       if (agent !== null) found.push(agent);
@@ -315,6 +332,8 @@ let sightings = new Sightings();
 let lastQuery = 0;
 let timer: ReturnType<typeof setInterval> | null = null;
 let onFound: ((agent: FoundAgent) => void) | null = null;
+/** SRV と TXT を問い直した時刻 (インスタンス →)。PTR だけのパケットが続いても、1 つにつき `QUERY_GAP` に 1 回しか問わない */
+let asked = new Map<string, number>();
 
 /** 224.0.0.251 に、全部のインターフェースで入る (もう入っていれば何もしない) */
 function join(): void {
@@ -359,11 +378,17 @@ function query(): void {
 function receive(message: Buffer, source: string): void {
   const records = readResponse(new Uint8Array(message));
   if (records === null) return;
-  const { missing, found } = sightings.take(records, source);
-  if (missing.length > 0) {
+  const now = Date.now();
+  const { missing, found } = sightings.take(records, source, now);
+  const ask = missing.filter(
+    (name) => now - (asked.get(name) ?? 0) >= QUERY_GAP,
+  );
+  if (ask.length > 0) {
+    if (asked.size > 256) asked.clear();
+    for (const name of ask) asked.set(name, now);
     send(
       queryPacket(
-        missing.flatMap((name) => [
+        ask.flatMap((name) => [
           { name, type: TYPE_SRV },
           { name, type: TYPE_TXT },
         ]),
@@ -410,14 +435,17 @@ function open(port: number): void {
 }
 
 /**
- * **見つけ始める** (起動したときに 1 回。runtime.ts)。`found` は答えか知らせでエージェントがそろうたびに呼ぶ
+ * **検出を始める** (起動したときに 1 回。runtime.ts)。`found` は答えかアナウンスでエージェントがそろうたびに呼ぶ
  * (アドレスを追う。`agent-admin.followAgent`)
  */
 export function startDiscovery(found: (agent: FoundAgent) => void): void {
   if (timer !== null) return;
   onFound = found;
   open(MDNS_PORT);
-  timer = setInterval(query, QUERY_EVERY);
+  timer = setInterval(() => {
+    sightings.prune();
+    query();
+  }, QUERY_EVERY);
   timer.unref?.();
 }
 
@@ -429,12 +457,13 @@ export function stopDiscovery(): void {
   socket = null;
   onFound = null;
   sightings = new Sightings();
+  asked = new Map();
   lastQuery = 0;
 }
 
 /**
  * **いま LAN で答えるエージェント** (設定の「エージェントを追加」の候補)。問い直して少し待ち、問いのあとに答えたものを返す。
- * 見つけ始めていない (自動の処理を止めている) か、ソケットを開けなかったときは空
+ * 検出を始めていない (自動の処理を止めている) か、ソケットを開けなかったときは空
  */
 export async function discoverAgents(
   wait = ANSWER_WAIT,
