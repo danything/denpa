@@ -106,7 +106,7 @@ let synced: { raw: string; db: string; pairs: Map<string, string> } | null =
 
 /**
  * `TUNER_AGENT_URL` と `agents` の行を突き合わせる。起動したときに呼ぶ。
- * 読めない項目があれば何も変えずに投げる (1 つの書き間違いで、ほかの行の保存した証明書を消さないため)
+ * 読めない項目があれば、行を何も変えずにエラーを送出する (1 つの書き間違いで、ほかの行の保存した証明書を消さないため)
  */
 export function syncEnvAgents(): void {
   const raw = config.agentUrl;
@@ -180,7 +180,7 @@ function ensureSynced(): Map<string, string> {
 }
 
 /**
- * 呼ぶ先のエージェント (並びの先頭)。1 台も無ければ、書き方を言って投げる
+ * 呼ぶ先のエージェント (並びの先頭)。1 台も無ければ、TUNER_AGENT_URL の書き方を入れたエラーを送出する
  */
 export function primaryAgent(): Agent {
   const pairs = ensureSynced();
