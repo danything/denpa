@@ -1,4 +1,9 @@
-import { bootSecondAgent, bootSpare, type SecondAgent, type Spare } from "../stack";
+import {
+  bootSecondAgent,
+  bootSpare,
+  type SecondAgent,
+  type Spare,
+} from "../stack";
 import { expect, goto, test } from "./helpers";
 
 /**

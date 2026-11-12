@@ -213,11 +213,7 @@ describe("agentState", () => {
     const server = serve("書斎");
     try {
       const agent = await addAgent(fakeAgentUrl(server.port!));
-      const state = await agentState(
-        agent,
-        Promise.resolve([]),
-        () => null,
-      );
+      const state = await agentState(agent, Promise.resolve([]), () => null);
       expect(state.tuners).toBe(0);
       expect(state.version).toBe("dev");
       expect(state.trouble).toBeNull();
