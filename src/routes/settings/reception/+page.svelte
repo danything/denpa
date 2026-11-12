@@ -34,7 +34,7 @@
       list.push({
         key: "agent-added",
         kind: "success",
-        text: `${form.agentAdded} を登録しました`,
+        text: `「${form.agentAdded}」を登録しました`,
       });
     // 削除できたが、エージェントに届かなかった (エージェントの側に登録が残る)
     if (form?.agentLeft)

@@ -119,7 +119,7 @@ export const actions = {
         // 届かなければ、エージェントの側に登録が残ることを言う
         agentLeft: removed.reached
           ? null
-          : `${removed.name} に届かなかったため、エージェントの側にはこの denpa の登録が残っています`,
+          : `「${removed.name}」に届かなかったため、エージェントの側にはこの denpa の登録が残っています`,
       };
     } catch (error) {
       return refusal(error, "エージェントを削除できませんでした");
