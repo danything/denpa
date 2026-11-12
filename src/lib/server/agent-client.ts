@@ -2,12 +2,12 @@
  * エージェントへの呼び出し。**HTTPS で、お互いを証明書で確かめる** (docs/agent.md)。
  *
  * - こちらの証明書は自分で作る (`<dataDir>/tls/denpa.key` / `denpa.crt`。自己署名)
- * - エージェントの証明書は、組んだときに覚える (`<dataDir>/tls/agent.crt`)。その証明書そのものを
+ * - エージェントの証明書は、組んだときに DB の行に保存する (`agents.cert`)。その証明書そのものを
  *   `ca` にして繋ぐので、`TUNER_AGENT_URL` をどんな名前・IP で書いても通る (名前は見ない)
- * - 組むのは合言葉 (`TUNER_AGENT_URL` の `#pair=…`) が同じものどうしだけ。覚えた証明書で
+ * - 組むのは合言葉 (`TUNER_AGENT_URL` の `#pair=…`) が同じものどうしだけ。保存した証明書で
  *   繋がらない・エージェントに断られたときは、合言葉があれば組み直してもう 1 度だけ試す
  *
- * 合言葉はログにも不具合報告にも出さない (`agentSecrets`)。
+ * 合言葉はログにも不具合報告にも DB にも出さない (`agentSecrets`)。
  */
 import {
   createHash,
@@ -23,58 +23,17 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { connect } from "node:tls";
 
+import {
+  type Agent,
+  agentCert,
+  primaryAgent,
+  rememberAgentCert,
+} from "./agents";
 import { config } from "./config";
-
-/** `TUNER_AGENT_URL` を、送る先 (`origin`) と合言葉に分けたもの */
-interface AgentTarget {
-  /** `https://host:port` (末尾の `/` と `#` から後ろは除く) */
-  origin: string;
-  /** `#pair=` の値。無ければ null */
-  pair: string | null;
-}
-
-/** `TUNER_AGENT_URL` を読む。`https://` でなければ誤り */
-export function parseAgentUrl(raw: string): AgentTarget {
-  const hash = raw.indexOf("#");
-  const base = (hash < 0 ? raw : raw.slice(0, hash)).replace(/\/+$/, "");
-  const fragment = hash < 0 ? "" : raw.slice(hash + 1);
-  if (!/^https:\/\//i.test(base)) {
-    throw new Error(
-      "TUNER_AGENT_URL は https:// で書きます (エージェントとは TLS で繋ぎます。docs/agent.md)",
-    );
-  }
-  if (!URL.canParse(base) || new URL(base).hostname === "") {
-    throw new Error(
-      `TUNER_AGENT_URL のホストが読めません (${base})。https://ホスト:ポート の形で書きます (docs/agent.md)`,
-    );
-  }
-  const pair = new URLSearchParams(fragment).get("pair");
-  return { origin: base, pair: pair && pair.length > 0 ? pair : null };
-}
-
-/** 不具合報告で伏せる値 (合言葉) */
-export function agentSecrets(): string[] {
-  try {
-    const { pair } = parseAgentUrl(config.agentUrl);
-    return pair === null ? [] : [pair];
-  } catch {
-    return [];
-  }
-}
-
-/** エージェントの宛先のホスト名 (不具合報告で伏せるため) */
-export function agentHostname(): string | null {
-  try {
-    return new URL(parseAgentUrl(config.agentUrl).origin).hostname;
-  } catch {
-    return null;
-  }
-}
 
 // --- 証明書 -------------------------------------------------------------------
 
@@ -221,27 +180,6 @@ function loadIdentity(dir: string): Identity {
   return identity;
 }
 
-let remembered: { path: string; stamp: string; cert: string } | null = null;
-
-/**
- * 覚えているエージェントの証明書 (PEM)。まだ組んでいなければ null。
- * ファイルが変わっていなければ前に読んだものを使う (`tls` を毎回作り直さないため)
- */
-function agentCert(): string | null {
-  const path = `${tlsDir()}/agent.crt`;
-  if (!existsSync(path)) return null;
-  const { mtimeMs, size } = statSync(path);
-  const stamp = `${mtimeMs}:${size}`;
-  if (remembered?.path !== path || remembered.stamp !== stamp) {
-    remembered = { path, stamp, cert: readFileSync(path, "utf8") };
-  }
-  return remembered.cert;
-}
-
-function rememberAgent(cert: string): void {
-  writeSecret(`${tlsDir()}/agent.crt`, cert);
-}
-
 // --- 組む ---------------------------------------------------------------------
 
 /** 組むときの証し。base64url(HMAC-SHA256(合言葉, `denpa-pair/<役>\n<A>\n<D>`)) */
@@ -315,11 +253,11 @@ function makeTlsOptions(identity: Identity, ca: string) {
   };
 }
 
-let pairing: { origin: string; done: Promise<void> } | null = null;
+let pairing: { id: number; done: Promise<void> } | null = null;
 
-/** 合言葉で組む。同時に呼ばれても 1 度だけ */
-function pair(target: AgentTarget): Promise<void> {
-  if (pairing?.origin === target.origin) return pairing.done;
+/** 合言葉で組み、相手の証明書を行に保存する。同じエージェントに同時に呼ばれても 1 度だけ */
+function pair(target: Agent): Promise<void> {
+  if (pairing?.id === target.id) return pairing.done;
   const done = (async () => {
     const token = target.pair;
     if (token === null) {
@@ -357,10 +295,10 @@ function pair(target: AgentTarget): Promise<void> {
         "エージェントと組めません: 相手の合言葉が違います (別の相手に繋がっているかもしれません)",
       );
     }
-    rememberAgent(peerPem);
+    rememberAgentCert(target.id, peerPem, agent);
     console.log(`[agent] エージェント (${agent.slice(0, 16)}) と組みました`);
   })();
-  pairing = { origin: target.origin, done };
+  pairing = { id: target.id, done };
   const clear = () => {
     if (pairing?.done === done) pairing = null;
   };
@@ -389,17 +327,27 @@ async function notPaired(res: Response): Promise<boolean> {
 }
 
 /**
- * エージェントを呼ぶ。`path` は `/denpa/...`。返すのはふつうの `fetch` の応答。
- * まだ組んでいない・覚えた証明書と合わない・組んでいないと断られた、のどれかなら、合言葉で組み直して 1 度だけ試し直す。
- * 試し直すので、`init.body` は文字列など何度でも送れるものにする (いまの呼び出し元はどれも JSON の文字列か本文なし)
+ * エージェントを呼ぶ。`path` は `/denpa/...`。返すのはふつうの `fetch` の応答。宛先は並びの先頭のエージェント
  */
 export async function agentFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const target = parseAgentUrl(config.agentUrl);
+  return fetchAgent(primaryAgent(), path, init);
+}
+
+/**
+ * 決まったエージェントを呼ぶ。
+ * まだ組んでいない・保存した証明書と合わない・組んでいないと断られた、のどれかなら、合言葉で組み直して 1 度だけ試し直す。
+ * 試し直すので、`init.body` は文字列など何度でも送れるものにする (いまの呼び出し元はどれも JSON の文字列か本文なし)
+ */
+export async function fetchAgent(
+  target: Agent,
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
   const attempt = async (): Promise<Response> => {
-    const ca = agentCert();
+    const ca = agentCert(target.id);
     if (ca === null) throw new NeedsPairing();
     try {
       return await fetch(`${target.origin}${path}`, {

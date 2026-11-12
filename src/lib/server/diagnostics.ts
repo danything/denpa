@@ -2,7 +2,8 @@ import { arch, release, type } from "node:os";
 
 import { type AgentAbout, guessLevel, type LogLine } from "../issue-report";
 import { type Known, MASK, redact } from "../redact";
-import { agentFetch, agentHostname, agentSecrets } from "./agent-client";
+import { agentFetch } from "./agent-client";
+import { agentHostnames, agentSecrets } from "./agents";
 import { config } from "./config";
 import { orm } from "./db";
 import { serverLogs } from "./log-buffer";
@@ -137,9 +138,7 @@ export function knownValues(requestHost: string): {
   } catch {
     // DB が読めなくても、形式で伏せるぶんは効く
   }
-  const hosts = [requestHost];
-  const agentHost = agentHostname();
-  if (agentHost !== null) hosts.push(agentHost);
+  const hosts = [requestHost, ...agentHostnames()];
   // 自分の名前として通すものと同じ読み方 (`manifest.pwaNames`。`=` の無いものは名前にしない)
   for (const { host } of pwaNames()) hosts.push(host);
   return { secrets: secrets.filter(Boolean), hosts: hosts.filter(Boolean) };

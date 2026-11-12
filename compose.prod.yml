@@ -69,7 +69,7 @@ services:
       - tuner-agent
     environment:
       TZ: Asia/Tokyo
-      # エージェントの場所は既定 (https://tuner-agent:25252) と同じで、組むときの合言葉 (.env) を #pair= で足す。
+      # エージェントの場所 (同じ compose の tuner-agent:25252) に、組むときの合言葉 (.env) を #pair= で足す。
       # 置き場所は既定値のまま (src/lib/server/config.ts。同じ値を書き写さない)
       TUNER_AGENT_URL: "https://tuner-agent:25252#pair=${AGENT_PAIR_TOKEN:?同じ場所の .env に AGENT_PAIR_TOKEN (合言葉) を書きます。作り方はこのファイルの冒頭にあります}"
       ENCODE_CONCURRENCY: "2"
