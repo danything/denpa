@@ -72,6 +72,12 @@ public interface ITuneDevice : IDisposable
     const string SyncFailed = "同期しませんでした (電波が来ていないか、その周波数に放送がありません)";
 }
 
+/// <summary>
+/// **機材の電源を入れ直すまで、どのチャンネルを選局しても TS が届かないと分かっているときの失敗** (IT930x のブリッジの溢れ。<see cref="It930xDevice.Jammed"/>)。
+/// <see cref="TunerPool"/> は、このチューナーをどのチャンネルでも組の後ろに回し、同じ組の空いているチューナーで選局し直す
+/// </summary>
+public sealed class TunerUnusableException(string message) : IOException(message);
+
 /// <summary>チューナーが流すバイト列の形式 (<see cref="ITuneDevice.Format"/>。<c>/denpa/stream</c> の Content-Type)</summary>
 public enum StreamFormat
 {

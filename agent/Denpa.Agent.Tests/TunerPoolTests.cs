@@ -24,6 +24,9 @@ public class TunerPoolTests
         /// <summary>選局すると同期せずに例外を送出する (電波が届いていないチューナー)</summary>
         public bool Deaf { get; init; }
 
+        /// <summary>選局すると、電源を入れ直すまで使えないと答える (ブリッジの溢れが立ったままの IT930x の機材)</summary>
+        public bool Unusable { get; init; }
+
         public FakeTuner(string path, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null)
         {
             Path = path;
@@ -65,6 +68,7 @@ public class TunerPoolTests
             try
             {
                 Interlocked.Increment(ref Tunes);
+                if (Unusable) throw new TunerUnusableException("電源を抜いて入れ直してください");
                 if (Deaf) throw new IOException(ITuneDevice.SyncFailed);
                 Tuning.Set();
                 Thread.Sleep(_tune);
@@ -138,11 +142,11 @@ public class TunerPoolTests
 
         /// <param name="deaf">選局しても同期しないデバイス</param>
         /// <param name="firstTs">最初の TS を待つ上限 (<see cref="TunerPool.FirstTsLimit"/>)。省くと本物と同じ</param>
-        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null, IReadOnlySet<string>? deaf = null, TimeSpan? firstTs = null)
+        public Rig(IReadOnlyList<TunerSpec> specs, TimeSpan tune, TimeSpan read, StreamFormat format = StreamFormat.Ts, byte[]? content = null, IReadOnlySet<string>? deaf = null, TimeSpan? firstTs = null, IReadOnlySet<string>? unusable = null)
         {
             Pool = new TunerPool(specs, () => { }, new TuneOptions(), spec =>
             {
-                var tuner = new FakeTuner(spec.Device!, tune, read, format, content) { Deaf = deaf?.Contains(spec.Device!) == true };
+                var tuner = new FakeTuner(spec.Device!, tune, read, format, content) { Deaf = deaf?.Contains(spec.Device!) == true, Unusable = unusable?.Contains(spec.Device!) == true };
                 lock (_opened) _opened.Add(tuner);
                 return tuner;
             })
@@ -560,6 +564,75 @@ public class TunerPoolTests
         finally
         {
             rig.Pool.CloseAll();
+        }
+    }
+
+    private static Rig Unusable(IReadOnlyList<TunerSpec> specs, IReadOnlySet<string>? deaf, params string[] unusable) =>
+        new(specs, TimeSpan.Zero, TimeSpan.FromMilliseconds(1), deaf: deaf, unusable: unusable.ToHashSet());
+
+    /// <summary>
+    /// **電源を入れ直すまで使えないと答えたチューナーは、試した数に入れずに選局し直し、どのチャンネルでも後ろに回す** (ブリッジの溢れが立ったままの IT930x の機材。PX-MLT8PE)。
+    /// 同期しなかったときの上限 (<see cref="TunerPool.SyncTries"/>) より多く並んでいても、使えるチューナーまで選局し直す
+    /// </summary>
+    [Test]
+    public async Task 使えないと答えたチューナーは数えずに選局し直し_どのチャンネルでも後ろに回す(CancellationToken cancel)
+    {
+        await Task.Yield();
+        var rig = Unusable([Spec("A", "fake:a"), Spec("B", "fake:b"), Spec("C", "fake:c")], null, "fake:a", "fake:b");
+        try
+        {
+            var first = rig.Pool.Open("GR", "T26", 3, "epg T26");
+            await FirstChunk(first, cancel);
+            await Assert.That(Tunes(rig, "fake:a")).IsEqualTo(1);
+            await Assert.That(Tunes(rig, "fake:b")).IsEqualTo(1);
+            await Assert.That(rig.Pool.Status()[2]!["channel"]!["channel"]!.GetValue<string>()).IsEqualTo("T26");
+            first.Leave();
+            rig.Pool.CloseAll();
+
+            // ほかのチャンネルでも、使えないと答えたチューナーは試さない
+            var other = rig.Pool.Open("GR", "T28", 3, "epg T28");
+            await FirstChunk(other, cancel);
+            await Assert.That(Tunes(rig, "fake:a")).IsEqualTo(1);
+            await Assert.That(Tunes(rig, "fake:b")).IsEqualTo(1);
+            await Assert.That(Tunes(rig, "fake:c")).IsEqualTo(2);
+        }
+        finally
+        {
+            rig.Pool.CloseAll();
+        }
+    }
+
+    /// <summary>
+    /// **使えないチューナーのあとで同期しなければ、同期しなかったチューナーだけを 1 台のときの文言で返す** (denpa はこの文言で放送休止を見分ける)。
+    /// 使えないチューナーしか無ければ、その理由を返し、次の選局でも機材に確かめ直す (電源を入れ直したあとなら選局できる)
+    /// </summary>
+    [Test]
+    public async Task 使えるチューナーが残っていなければ最後の理由を返す(CancellationToken cancel)
+    {
+        await Task.Yield();
+        var mixed = Unusable([Spec("A", "fake:a"), Spec("B", "fake:b")], new HashSet<string> { "fake:b" }, "fake:a");
+        try
+        {
+            var error = Assert.Throws<IOException>(() => mixed.Pool.Open("GR", "T26", 3, "epg T26"));
+            await Assert.That(error.Message).IsEqualTo($"B: {ITuneDevice.SyncFailed}");
+            await Assert.That(Tunes(mixed, "fake:a")).IsEqualTo(1);
+        }
+        finally
+        {
+            mixed.Pool.CloseAll();
+        }
+
+        var only = Unusable([Spec("A", "fake:a")], null, "fake:a");
+        try
+        {
+            var error = Assert.Throws<IOException>(() => only.Pool.Open("GR", "T26", 3, "epg T26"));
+            await Assert.That(error.Message).IsEqualTo("A: 電源を抜いて入れ直してください");
+            Assert.Throws<IOException>(() => only.Pool.Open("GR", "T27", 3, "epg T27"));
+            await Assert.That(Tunes(only, "fake:a")).IsEqualTo(2);
+        }
+        finally
+        {
+            only.Pool.CloseAll();
         }
     }
 

@@ -167,6 +167,7 @@ public sealed class TunerPool(
             _specs = next;
             // 同期しなかった印はチューナーの番号で持っている。並べ替わると別のチューナーを指すので消す
             _unsynced.Clear();
+            _unusable.Clear();
             // 同じチューナーのまま使い続けてよいか。名前とデバイスが同じで、無効になっていない
             bool Kept(int index)
             {
@@ -239,6 +240,16 @@ public sealed class TunerPool(
     /// <summary>このチューナーがこのチャンネルで、<see cref="UnsyncedFor"/> の間に同期しなかったか</summary>
     private bool Unsynced(int index, string type, string channel) =>
         _unsynced.TryGetValue((index, type, channel), out var at) && Environment.TickCount64 - at < (long)UnsyncedFor.TotalMilliseconds;
+
+    /// <summary>
+    /// 電源を入れ直すまで使えないと答えたチューナー (<see cref="TunerUnusableException"/>) と、その時刻 (<see cref="Environment.TickCount64"/>)。
+    /// <see cref="UnsyncedFor"/> の間、どのチャンネルでも組の後ろに回す。<see cref="_gate"/> の中で読み書きする
+    /// </summary>
+    private readonly Dictionary<int, long> _unusable = [];
+
+    /// <summary>このチューナーが <see cref="UnsyncedFor"/> の間に、電源を入れ直すまで使えないと答えたか</summary>
+    private bool Unusable(int index) =>
+        _unusable.TryGetValue(index, out var at) && Environment.TickCount64 - at < (long)UnsyncedFor.TotalMilliseconds;
 
     /// <summary>同期しなかったときの失敗か (どの方式も <see cref="ITuneDevice.SyncFailed"/> の文言で例外を送出する)</summary>
     private static bool IsUnsynced(Exception error) => error.Message.Contains(ITuneDevice.SyncFailed, StringComparison.Ordinal);
@@ -400,20 +411,27 @@ public sealed class TunerPool(
              * 落ちたのはこれ)。次の選局で取り直す
              */
             var unsynced = IsUnsynced(error);
+            var unusable = error is TunerUnusableException;
             List<(int Index, string Name)> attempts = [.. tried, (index, spec.Name)];
             var reason = unsynced && tried.Count > 0 ? UnsyncedReason(attempts) : $"{spec.Name}: {error.Message}";
             /*
              * **同期しなければ、別のチューナーで選局し直す。** 名指し (pin) はほかへ振り替えない。スキャンは放送の無いチャンネルを
-             * 選局するのが普通で、選局し直すとスキャンの一周がそのぶん延びるので選局し直さない
+             * 選局するのが普通で、選局し直すとスキャンの一周がそのぶん延びるので選局し直さない。
+             * **電源を入れ直すまで使えないチューナーは、試した数 (SyncTries) に入れずに選局し直す。** 機材に触る前に断るので待ちが無く、
+             * 数に入れると、使えるチューナーを試す前に断ってしまう。選局し直す先は、そのチューナーが無かったものとして選ぶ (Pick は使えないものを外す。
+             * 同期しなかったあとなら、同じ組の中で選ぶ)
              */
-            var retry = unsynced && pin is null && !use.StartsWith("scan", StringComparison.Ordinal) && attempts.Count < SyncTries;
+            var retry = pin is null && !use.StartsWith("scan", StringComparison.Ordinal) && (unusable || unsynced && attempts.Count < SyncTries);
+            var from = unusable ? tried : attempts;
             // 選局し直す先 (記録に名前を出すため。入るのは下の Open が選び直したチューナー)
             string? next = null;
             lock (_gate)
             {
                 Forget(lease);
                 if (unsynced) _unsynced[(index, type, channel)] = Environment.TickCount64;
-                if (retry && Pick(type, channel, priority, after, attempts) is { } candidate) next = Tuners[candidate].Name;
+                if (unusable) _unusable[index] = Environment.TickCount64;
+                // 選び直した先も使えないなら選局し直さない (使えないチューナーしか残っていない)
+                if (retry && Pick(type, channel, priority, after, from) is { } candidate && !Unusable(candidate)) next = Tuners[candidate].Name;
                 else retry = false;
                 lock (lease.Sinks)
                 {
@@ -429,8 +447,10 @@ public sealed class TunerPool(
             onChange();
             if (retry)
             {
-                Log.Write($"[{spec.Name}] {channel}: 同期しなかったので ({lease.Clock.ElapsedMilliseconds}ms)、{next} で選局し直します");
-                return Open(type, channel, priority, use, after, pin, service, attempts);
+                Log.Write(unusable
+                    ? $"[{spec.Name}] {channel}: {error.Message}。{next} で選局し直します"
+                    : $"[{spec.Name}] {channel}: 同期しなかったので ({lease.Clock.ElapsedMilliseconds}ms)、{next} で選局し直します");
+                return Open(type, channel, priority, use, after, pin, service, from);
             }
             if (unsynced && tried.Count > 0) Log.Write($"[{spec.Name}] {channel}: {UnsyncedReason(attempts)}");
             throw new IOException(reason);
@@ -438,7 +458,11 @@ public sealed class TunerPool(
         // 同期した。前に同期しなかった印は消して、元の順に戻す (TS を待つ上限を過ぎて付けた印は残す)
         if (lease.TunedMs >= 0 && !lease.Starved)
         {
-            lock (_gate) _unsynced.Remove((index, type, channel));
+            lock (_gate)
+            {
+                _unsynced.Remove((index, type, channel));
+                _unusable.Remove(index);
+            }
         }
         return sink;
     }
@@ -715,7 +739,9 @@ public sealed class TunerPool(
     /// 組の中では、同じチャンネルの選局 → もうそのチャンネルに合っているもの (<see cref="Held.Channel"/>。
     /// 実測 0.6〜0.8 秒の選局し直しが 10ms になる) → ほかの余韻 (1 人の視聴で 2 台塞がない) → 空いているもの →
     /// いちばん優先度の低い相手が使っているもの、の順 (docs/agent.md「取り合いの決まり」)。
-    /// どの段でも、このチャンネルで同期しなかったチューナー (<see cref="UnsyncedFor"/> の間) は組の後ろに回す
+    /// どの段でも、このチャンネルで同期しなかったチューナー (<see cref="UnsyncedFor"/> の間) は組の後ろに回す。
+    /// 電源を入れ直すまで使えないと答えたチューナー (<see cref="Unusable"/>) は、ほかに選べるチューナーが無いときだけ選ぶ
+    /// (組を決めるときも、使っているチューナーと同じく数えない)
     /// </para>
     ///
     /// <para>
@@ -755,11 +781,15 @@ public sealed class TunerPool(
                 .Where(index => ranks[index] is not null && Tuners[index].Types.Contains(type) && Usable(index))
                 .ToList();
             if (usable.Count == 0) return null;
+            // 使えないと答えたチューナーは、使っているチューナーと同じく組を決めるのに数えない (ほかに選べるものが無いときだけ数える)
+            if (usable.Any(index => !Unusable(index))) usable = [.. usable.Where(index => !Unusable(index))];
             var best = usable.Min(index => ranks[index]);
             group = [.. usable.Where(index => ranks[index] == best)];
         }
         // 同期しなかったチューナーを後ろに回す (OrderBy は安定なので、ほかの並びは変わらない)
         group = [.. group.OrderBy(index => Unsynced(index, type, channel))];
+        // 電源を入れ直すまで使えないチューナーは、組にほかが無いときだけ選ぶ (空いていても、優先度の低い利用者がいるほかのチューナーを先にする)
+        if (group.Any(index => !Unusable(index))) group = [.. group.Where(index => !Unusable(index))];
 
         foreach (var index in group)
         {

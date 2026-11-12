@@ -302,25 +302,48 @@ public sealed class It930xDevice
     private static readonly Dictionary<string, It930xDevice> Devices = [];
 
     /// <summary>
-    /// プロセスが終わるとき (SIGTERM で終わる <c>--tune</c> などの CLI も) に機材を閉じる。開けたままの入力に読む側がいなくなると、
-    /// ブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなるため (<see cref="It930xOverflow"/>)。エージェントは止まるときに閉じ終えているので何もしない。
-    /// ほかのスレッドが機材の一覧を持ったまま止まっていたら、終わるのを待たせないように 2 秒であきらめる
+    /// プロセスが終わるとき (SIGTERM で終わる <c>--tune</c> などの CLI も) と、捕まえていない例外でプロセスが落ちるときに機材を閉じる。
+    /// 開けたままの入力に読む側がいなくなると、ブリッジのバッファが溢れ、電源を抜くまで TS が届かなくなるため (<see cref="It930xOverflow"/>)。
+    /// エージェントは止まるときに閉じ終えているので何もしない。SIGKILL (Pod の猶予切れ・OOM) で終わるときは、どちらも呼ばれない
     /// </summary>
     static It930xDevice()
     {
-        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => CloseBeforeExit();
+        AppDomain.CurrentDomain.UnhandledException += (_, _) => CloseBeforeExit();
+    }
+
+    /// <summary>
+    /// 終わる前に全部閉じる (<see cref="CloseAll()"/>)。別のスレッドで閉じ、<see cref="ExitCloseLimit"/> で待つのをやめる。
+    /// 落ちたスレッドが機材の一覧やブリッジのコマンドのロックを持ったまま止まっていても、プロセスが終わらなくならないため
+    /// </summary>
+    private static void CloseBeforeExit()
+    {
+        var closing = new Thread(() =>
         {
-            if (!Registry.TryEnter(TimeSpan.FromSeconds(2))) return;
+            if (!Registry.TryEnter(ExitCloseLimit)) return;
             try
             {
                 CloseAll();
+            }
+            catch (Exception error)
+            {
+                Log.Write($"終わる前に {It930x.Model} を閉じられませんでした ({error.Message})");
             }
             finally
             {
                 Registry.Exit();
             }
-        };
+        })
+        { IsBackground = true, Name = "it930x-exit" };
+        closing.Start();
+        closing.Join(ExitCloseLimit);
     }
+
+    /// <summary>
+    /// 終わる前に閉じるのを待つ上限 (<see cref="CloseBeforeExit"/>)。閉じるときは入力を閉じる 10 ms、EP 0x84 の読みが止まるまで (1 回の読みの待ちは 200 ms)、
+    /// 電源を切ったあとの 100 ms を待つ。機材が数台でも収まる長さにする
+    /// </summary>
+    private static readonly TimeSpan ExitCloseLimit = TimeSpan.FromSeconds(5);
 
     private readonly IUsbDevice _usb;
     private readonly Action<int> _sleep;
@@ -535,8 +558,8 @@ public sealed class It930xDevice
 
     /// <summary>
     /// 開くときに TS のバッファの溢れ (<see cref="It930xOverflow"/>) が立っていたら、記録に出して TS の経路をリセットし直す (<see cref="It930xBridge.ResetTs"/>)。
-    /// EP 0x84 の読みを出す前に呼ぶ。リセットしても立ったままなら、電源を抜くように記録に出して開くのは続ける
-    /// (TS が届くかは選局してから分かる。溢れの値が何を表すかは brRegister.h の名前からの推定)
+    /// EP 0x84 の読みを出す前に呼ぶ。リセットしても立ったままなら、電源を抜くように記録に出して開くのは続ける (カードは EP 0x84 を使わないので読める)。
+    /// 全体の溢れが立ったままなら、受信機の選局は断る (<see cref="Jammed"/>)。溢れの値が何を表すかは brRegister.h の名前からの推定
     /// </summary>
     private void RecoverOverflow()
     {
@@ -546,13 +569,23 @@ public sealed class It930xDevice
         Log.Write($"[{Label}] 開いたときに TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。TS の経路をリセットし直します");
         overflow = Bridge.ResetTs();
         _overflow = overflow;
-        Log.Write(overflow.Any
-            ? $"[{Label}] リセットしても溢れたままです ({overflow})。TS が届かなければ、機材の電源を抜いて入れ直してください (REBOOT や受信機の電源の入れ直しでは戻りません)"
-            : $"[{Label}] 溢れが下りました");
+        Log.Write(overflow switch
+        {
+            { System: true } => $"[{Label}] リセットしても溢れたままです ({overflow})。機材の電源を抜いて入れ直すまで、この機材の受信機では選局しません (REBOOT や受信機の電源の入れ直しでは戻りません)",
+            { Any: true } => $"[{Label}] リセットしても溢れたままです ({overflow})。TS が届かなければ、機材の電源を抜いて入れ直してください (REBOOT や受信機の電源の入れ直しでは戻りません)",
+            _ => $"[{Label}] 溢れが下りました",
+        });
     }
 
     /// <summary>最後に読んだ溢れ (変わったときだけ記録に出すため)</summary>
     private volatile It930xOverflow? _overflow;
+
+    /// <summary>
+    /// **全体の溢れ (<c>0xDA39</c>) が立ったままなら、その溢れ。立っていなければ null。** 立っている間は、どの受信機の選局も断る (<see cref="It930xTuner"/>)。
+    /// 立ったままの機材では、PX-MLT5PE (2026-11-11) でも PX-MLT8PE (2026-11-12) でも、ロックしても EP 0x84 から TS が届かず、電源を抜くまで戻らなかった。
+    /// 開くときの <see cref="RecoverOverflow"/> でも下りなかった値か、そのあと流している間に読んだ値。電源を抜くと USB から外れるので、次に開くのは新しい機材として読み直す
+    /// </summary>
+    internal It930xOverflow? Jammed => _overflow is { System: true } overflow ? overflow : null;
 
     /// <summary>
     /// TS のバッファの溢れを読み、前に読んだときから変わっていれば記録に出す (選局したあと、流し始める・止めるとき、LNB の給電を切り替えたあと、閉じるとき)。
@@ -573,8 +606,12 @@ public sealed class It930xDevice
         _overflow = overflow;
         if (before is not null && before.System == overflow.System && before.Inputs.SequenceEqual(overflow.Inputs)) return;
         if (!overflow.Any && before is not { Any: true }) return;
+        // 全体の溢れが前から立っていたなら、EP 0x84 から TS が出ないので、入力にも溜まって溢れる。読みの遅れとは分ける (PX-MLT8PE。2026-11-12)
+        var cause = before is { System: true }
+            ? "全体の溢れが前から立っていて EP 0x84 から TS が出ないため、入力にも溜まったと推定します"
+            : "EP 0x84 の読みが追いつかなかったと推定します";
         Log.Write(overflow.Any
-            ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。EP 0x84 の読みが追いつかなかったと推定します"
+            ? $"[{Label}] {when}に TS のバッファが溢れていました ({overflow}{Receivers(overflow)})。{cause}"
             : $"[{Label}] {when}に TS のバッファの溢れが下りていました");
     }
 
@@ -1299,6 +1336,15 @@ public sealed class It930xTuner : ITuneDevice
                     _model = _device.Model;
                     Check(tuning, _model);
                 }
+                // 全体の溢れが立ったままの機材は、ロックしても TS が届かない。30 秒待たせずに断り、ほかのチューナーへ回させる (TunerPool)。
+                // 機材は返す (カードも受信機も使っていなければ、待ってから閉じる。次に取るときに開き直して溢れを読み直す)
+                if (_device.Jammed is { } jammed)
+                {
+                    Drop();
+                    _closeIdle?.Invoke();
+                    throw new TunerUnusableException(
+                        $"ブリッジの TS のバッファが溢れたままで、TS が届きません ({jammed})。機材の電源を抜いて入れ直してください");
+                }
                 _frontend = _device.Frontend(_receiver);
                 // 給電を入れてから選局する (順は IT930x の仕様書 8。LNB が出力を出すまでの待ちは仕様書に無く、ロックの待ち (3 秒) に含める)
                 _device.Lnb(_receiver, tuning.Satellite && _lnb == Lnb15v);
@@ -1407,7 +1453,10 @@ public sealed class It930xTuner : ITuneDevice
         throw new IOException($"{TsmfMissing} ({detail})");
     }
 
-    /// <summary>流している TS を止める (ブリッジの入力を閉じてから、復調器の TS の端子を止める。TC90522 の仕様書 9.2)</summary>
+    /// <summary>
+    /// 流している TS を止める (出口を外してから、復調器の TS の端子を止める。TC90522 の仕様書 9.2)。ブリッジの入力は開けたままで、EP 0x84 の読みも続ける
+    /// (入力を閉じるのは機材を閉じるとき。<see cref="It930xDevice.Detach"/>)
+    /// </summary>
     private void StopOutput()
     {
         if (_output is null) return;
