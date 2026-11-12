@@ -1,7 +1,4 @@
-name: Android      - name: Publish (Native AOT, ${{ matrix.rid }})
-        env:
-          TAG: ${{ inputs.tag }}
-        run: |
+name: Android
 
 # **Android で denpa を動かすアプリ** (android/) と、中に入れるエージェント (`linux-bionic-arm64`・`linux-bionic-x64` の Native AOT) を組む。
 # CI (test.yml) は debug の APK をエミュレータで入れて起動して確かめ、リリース (release.yml) はリリースの鍵で署名した arm64 の APK
