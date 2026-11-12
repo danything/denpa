@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
-import { fieldAt, SmoothClock, Vsync, VsyncClock } from "./cadence";
+import {
+  COST_SAMPLES,
+  fieldAt,
+  mayDecode,
+  SmoothClock,
+  untilChange,
+  Vsync,
+  VsyncClock,
+} from "./cadence";
 
 /** 決まった並びの乱数 (mulberry32) */
 function random(seed: number): () => number {
@@ -83,7 +91,7 @@ describe("fieldAt", () => {
  * 20ms ごとに ±3ms 揺れて届く。
  *
  * - `aligned` … 次の画面の切り替わりの時点の PTS (`VsyncClock`) で選び、描いた回はデコードせず、
- *   デコードは切り替わりの直後に始める (いまの作り)
+ *   デコードは描くものが次に変わる切り替わりまでに終えられるときだけ始める (いまの作り。`mayDecode`)
  * - それ以外 … 刻んだ時刻のまま選び、デコードしてから描く (前の作り)
  */
 function simulate(
@@ -104,6 +112,7 @@ function simulate(
   const commits: { at: number; id: number }[] = [];
   let drawn = Number.NaN;
   let decoded = 0;
+  const recent: number[] = [];
 
   let nextVsync = 3.3;
   let nextClock = 0;
@@ -144,9 +153,33 @@ function simulate(
             nextTick = at + 4;
             continue;
           }
+          const shown =
+            Number.isNaN(drawn) || pts === null
+              ? null
+              : {
+                  pts: base + Math.floor(drawn / 2) * 3003,
+                  interlaced: true,
+                  topFirst: true,
+                };
           const decoding =
-            wanted && (urgent || vsync.settled(at)) ? duration : 0;
-          if (decoding > 0) decoded++;
+            wanted &&
+            (urgent ||
+              mayDecode(
+                vsync,
+                at,
+                pts ?? 0,
+                shown,
+                3003,
+                recent,
+                decoded - due,
+              ))
+              ? duration
+              : 0;
+          if (decoding > 0) {
+            decoded++;
+            recent.push(decoding);
+            if (recent.length > COST_SAMPLES) recent.shift();
+          }
           nextTick = at + Math.max(4, decoding);
           continue;
         }
@@ -278,5 +311,76 @@ describe("Vsync (覚えた間隔がずれたとき)", () => {
     at = play(vsync, at, 1000 / 60, 300, rand, 0.4);
     play(vsync, at, 1000 / 60, 100, rand);
     near(vsync, 1000 / 60);
+  });
+});
+
+describe("untilChange", () => {
+  const period = 1000 / 120;
+  /** 0ms から 120Hz で切り替わる画面。最後の切り替わりは 100 * period */
+  function screen(): Vsync {
+    const vsync = new Vsync();
+    for (let i = 0; i <= 100; i++) vsync.feed(i * period);
+    return vsync;
+  }
+  const frame = 3003;
+  const shown = { pts: 0, interlaced: true, topFirst: true };
+  const last = 100 * period;
+
+  test("飛び越し走査は、次のフィールドを出す切り替わりまで。同じフィールドを続けて出す切り替わりはまたぐ", () => {
+    const vsync = screen();
+    const wall = last + 1;
+    // 次の切り替わり (last + period) の PTS は 0。2 枚目のフィールドは 1501.5 からで、
+    // その 2 回後 (PTS 1500) ではまだ届かず、3 回後に出る
+    expect(untilChange(vsync, wall, 0, shown, frame)).toBeCloseTo(
+      last + 4 * period - wall,
+      6,
+    );
+    // 次の切り替わりで 2 枚目のフィールドになっている。その次に変わるのは次のコマ (3003) で、2 回後
+    expect(untilChange(vsync, wall, 1600, shown, frame)).toBeCloseTo(
+      last + 3 * period - wall,
+      6,
+    );
+  });
+
+  test("プログレッシブはコマの境目まで", () => {
+    const vsync = screen();
+    const wall = last + 1;
+    const progressive = { ...shown, interlaced: false };
+    expect(untilChange(vsync, wall, 0, progressive, frame)).toBeCloseTo(
+      last + 6 * period - wall,
+      6,
+    );
+  });
+
+  test("切り替わりが分からない・何も出していなければ null", () => {
+    expect(untilChange(new Vsync(), 0, 0, shown, frame)).toBeNull();
+    expect(untilChange(screen(), last + 1, 0, null, frame)).toBeNull();
+  });
+});
+
+describe("mayDecode", () => {
+  const period = 1000 / 120;
+  const vsync = new Vsync();
+  for (let i = 0; i <= 100; i++) vsync.feed(i * period);
+  const last = 100 * period;
+  const shown = { pts: 0, interlaced: true, topFirst: true };
+
+  test("描くものが変わるまでにデコードを終えられるときだけ始める", () => {
+    // 次のフィールドを出すまで 4 回ぶん - 1ms = 32.3ms。待っているのが 1 枚なら、見積もりは 13 * 1.15 + 2 = 16.95ms
+    const wall = last + 1;
+    expect(mayDecode(vsync, wall, 0, shown, 3003, [12, 14], 1)).toBe(true);
+    // 次の切り替わりの PTS が 850 なら、2 枚目のフィールドはその次に出る。残りは 2 回ぶん - 1ms = 15.67ms
+    expect(mayDecode(vsync, wall, 850, shown, 3003, [12, 14], 1)).toBe(false);
+  });
+
+  test("待っているコマが多いうちは、余裕のある間だけで始める", () => {
+    // 次のフィールドを出すまで 3 回ぶん - 1ms = 24ms。見積もりは 1 枚なら 12 * 1.15 + 2 = 15.8ms、8 枚なら 12 * 2 + 2 = 26ms
+    const wall = last + 1;
+    expect(mayDecode(vsync, wall, 1600, shown, 3003, [12, 12], 1)).toBe(true);
+    expect(mayDecode(vsync, wall, 1600, shown, 3003, [12, 12], 8)).toBe(false);
+  });
+
+  test("切り替わりが分からなければいつでもよい", () => {
+    expect(mayDecode(new Vsync(), 0, 0, shown, 3003, [30], 8)).toBe(true);
   });
 });
