@@ -47,7 +47,12 @@ class DenpaService : Service() {
     internal var broker: UsbBroker? = null
         private set
 
+    @Volatile
     private var agent: Part? = null
+
+    /** 動いているエージェントの PID (動いていなければ 0)。debug の受け口が使う */
+    internal val agentPid: Int get() = agent?.pid ?: 0
+
     private var status: AgentStatus? = null
     private var stopping = false
     private var restarting = false

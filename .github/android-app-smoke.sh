@@ -141,10 +141,10 @@ if adb logcat -d -s denpa-agent | grep -qF "fd の付いていない attached"; 
   exit 1
 fi
 
-# --- エージェントが異常終了したら、アプリが起動し直して繋ぎ直す (run-as はアプリと同じユーザーなので kill できる)
-echo "=== エージェントを kill -9 する"
+# --- エージェントが異常終了したら、アプリが起動し直して繋ぎ直す
+echo "=== エージェントに SIGKILL を送る"
 adb logcat -c
-adb shell run-as "$pkg" kill -9 "$pid"
+broadcast KILL_AGENT
 wait_log "起動し直します"
 wait_log "起動しました (PID"
 wait_until has_agent

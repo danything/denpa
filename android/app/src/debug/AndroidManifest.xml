@@ -12,6 +12,7 @@
             <intent-filter>
                 <action android:name="io.github.danything.denpa.debug.ATTACH_FILE" />
                 <action android:name="io.github.danything.denpa.debug.PRESS_STOP" />
+                <action android:name="io.github.danything.denpa.debug.KILL_AGENT" />
             </intent-filter>
         </receiver>
     </application>

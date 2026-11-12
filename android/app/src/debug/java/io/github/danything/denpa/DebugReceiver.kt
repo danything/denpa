@@ -4,6 +4,8 @@ import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import java.io.File
 import java.io.FileInputStream
@@ -15,12 +17,17 @@ import java.io.FileInputStream
  * - `ATTACH_FILE`: USB の機材の代わりに、ファイルの fd を付けた `attached` と `synced` を、本物と同じ [UsbBroker.send] で送る。
  *   ID は 1234:5678、名前は `/dev/bus/usb/001/004` (どの機種でもないので、チューナーには出ない)
  * - `PRESS_STOP`: 通知の「終了」のボタンの PendingIntent を、そのまま送る
+ * - `KILL_AGENT`: エージェントに SIGKILL を送る (異常終了の代わり。API 29 の run-as はアプリの子プロセスを kill できない)
  */
 class DebugReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             ATTACH_FILE -> attachFile(context)
             PRESS_STOP -> pressStop(context)
+            KILL_AGENT -> DenpaService.instance?.agentPid?.takeIf { it > 0 }?.let {
+                Os.kill(it, OsConstants.SIGKILL)
+                Log.i(TAG, "エージェントに SIGKILL を送りました (PID $it)")
+            }
         }
     }
 
@@ -50,5 +57,6 @@ class DebugReceiver : BroadcastReceiver() {
         const val TAG = "denpa"
         const val ATTACH_FILE = "io.github.danything.denpa.debug.ATTACH_FILE"
         const val PRESS_STOP = "io.github.danything.denpa.debug.PRESS_STOP"
+        const val KILL_AGENT = "io.github.danything.denpa.debug.KILL_AGENT"
     }
 }

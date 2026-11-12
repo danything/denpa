@@ -281,8 +281,8 @@ PATH=/opt/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH OPENSSL_ROOT_DIR=/
   入れるときに `nativeLibraryDir` へ展開させ (`useLegacyPackaging`)、そこから exec します。Android 10 からは、アプリのデータの置き場のファイルは実行できません
 - 挿したときにアプリを起こす機材の表 `res/xml/device_filter.xml` は手で書いています。エージェントが USB を直に持つ機材 (`WinUsbTargets.cs`) と食い違わないことを、
   エージェントの単体テスト (`AndroidDeviceFilterTests.cs`) で確かめます。機種を足したら表にも足します
-- debug の APK にだけ、エミュレータで確かめるための受け口 (`src/debug/` の `DebugReceiver`) が入ります。USB の機材の代わりにファイルの fd を送ることと、
-  通知の「終了」を押すことを `adb shell am broadcast` で代えます。DUMP の権限を持つもの (adb shell) からしか送れません
+- debug の APK にだけ、エミュレータで確かめるための受け口 (`src/debug/` の `DebugReceiver`) が入ります。USB の機材の代わりにファイルの fd を送ること、
+  通知の「終了」を押すこと、エージェントの異常終了の代わりに SIGKILL を送ることを `adb shell am broadcast` で代えます。DUMP の権限を持つもの (adb shell) からしか送れません
 
 手元で組むなら、JDK と Android SDK を入れ、エージェント (上の節) を置いてから流します。
 
