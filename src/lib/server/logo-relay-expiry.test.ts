@@ -5,7 +5,8 @@ import { join } from "node:path";
 
 import { packetize, patSection, stream } from "@danything/arib/synth";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 
 /**
  * **外れの控えが 1 週間 (`RELAY_RETRY`) を過ぎた中継をもう一度開いて、また外れだったら、控えの時刻を書き直す** (`logo.markRelay`)。

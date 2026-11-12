@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 
 import { eq } from "drizzle-orm";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 
 /**
  * **いま流れている番組を録る** (`recordAiring`) と、番組ごとの予約の状態 (`reservationStates`)。

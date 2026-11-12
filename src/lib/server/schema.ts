@@ -986,3 +986,30 @@ export const logoRecords = sqliteTable(
   },
   (t) => [index("logo_records_started").on(t.started_at)],
 );
+
+/**
+ * **つないだチューナーエージェント** (`agents.ts`。1 台 1 行)。
+ *
+ * - どのエージェントかは、組んだときに保存した証明書 (`cert`) で見分ける。URL と名前は変わってよい
+ * - `TUNER_AGENT_URL` に書いたもの (`from_env`) は、起動のたびに環境変数と突き合わせる。
+ *   環境変数から消したものは行も消す (環境変数が持ち主)
+ * - **組むときの合言葉は持たない。** 環境変数のものは環境変数から読む。DB は別の機械へ移すときの写しにも載るため
+ * - 別の機械へ移すときの写しからは消す (`transfer.ts`。組んだ相手は `tls/denpa.key` に結び付いていて、移した先では組み直す)
+ */
+export const agents = sqliteTable("agents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** 画面に出す名前。今は URL のホスト名 */
+  name: text("name").notNull(),
+  /** `https://ホスト:ポート` (`#` から後ろは持たない) */
+  origin: text("origin").notNull(),
+  /** 組んだときに保存したエージェントの証明書 (PEM)。組む前は null */
+  cert: text("cert"),
+  /** `cert` の指紋 (DER の SHA-256。小文字の 16 進)。組む前は null */
+  fingerprint: text("fingerprint").unique(),
+  /** `TUNER_AGENT_URL` に書いたものか */
+  from_env: flag("from_env").notNull(),
+  /** 並び。環境変数に書いた順が先 */
+  position: integer("position").notNull(),
+  /** 行を足した時刻 (unix ms) */
+  added_at: integer("added_at").notNull(),
+});

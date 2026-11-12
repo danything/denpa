@@ -6,7 +6,8 @@ import { dirname, join } from "node:path";
 import { count, eq, sql } from "drizzle-orm";
 
 import type { ChannelType, Transport } from "../types";
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 
 /**
  * 局だけの取り込み。

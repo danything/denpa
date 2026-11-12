@@ -21,7 +21,8 @@ import {
 
 import { CHANNEL } from "#lib/live.js";
 
-import { fakeAgentTls, fakeAgentUrl, trustFakeAgent } from "./fake-agent";
+import { fakeAgentTls, fakeAgentUrl } from "./fake-agent";
+import { trustFakeAgent } from "./fake-agent-trust";
 
 /**
  * アプリ向けの字幕 API (`liveCaptions` / `recordingCaptions`)。
